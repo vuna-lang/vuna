@@ -1,0 +1,4 @@
+module WmLib where
+
+export greeting : String
+greeting = "hello from wmapp"

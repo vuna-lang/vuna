@@ -15,10 +15,12 @@
   点键、内联表、表数组、多行字符串与 `\uXXXX` 转义；**不支持**浮点与日期时间（显式报错，
   不静默近似）。未知 section / key、以及 `[package]` 里出现其他 key 都是错误，不静默忽略
   （`[capabilities]` / `[trust]` / `[privileged]` 均不存在，出现即未知 section/key）。
-- **workspace 根即一个包**（Cargo 风格）：根 `vuna.toml` 同时含 `[workspace]` 与
-  `[package]`；成员是子目录，各自有自己的 `vuna.toml`。本仓库 = 根包 `vuna`（产品 CLI）+
-  成员包 `vuna-compiler`（编译器）+ 成员包 `vuna-base`（标准库）；依赖图
-  `vuna → vuna-compiler → vuna-base`，根包也直接依赖 `vuna-base`。
+- **workspace 根有两种形态**：根包（Cargo 风格，根 `vuna.toml` 同时含 `[workspace]` 与
+  `[package]`）与虚拟根（只有 `[workspace]`，没有 `[package]`）。成员是子目录，各自有自己的
+  `vuna.toml`。虚拟根只允许 `[workspace]` 与工具配置段（`[lint]` / `[diagnostics]` /
+  `[registry]`）；`[package]` / `[export]` / `[layers]` / `[dependencies]` 是包语义段，出现在
+  虚拟根是结构错误（不静默忽略）。虚拟根不是包：`run` / `test` / 代码生成按成员展开，
+  `compile <虚拟根>` 报 `PKG_NotPackage`。
 - 每包固定三目录：`lib/`（模块根）、`app/`（入口，恒为 `app/Main.vuna`）、`test/`
   （测试模块）。依赖只向下流：`app`/`test` 可用本包 `lib` + 依赖包 `lib`；依赖包之间是
   DAG（循环依赖报错）。

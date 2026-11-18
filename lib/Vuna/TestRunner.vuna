@@ -162,7 +162,7 @@ runPackageTestGroup opts pkg testDir files =
 -- ---------------------------------------------------------------
 -- | 内部：每个包一组；缺 `test/` 的包跳过（不是错误：库成员常常没有测试）。`--list`
 -- 模式只列「分组 + 文件」，不打印包数 / 汇总行（纯清单，exit 0）。
-runWorkspaceTests : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => TestOpts -> List Package -> Eff r Int
+export runWorkspaceTests : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => TestOpts -> List Package -> Eff r Int
 runWorkspaceTests opts pkgs = if opts.testListOnly then runWorkspaceList opts pkgs
 else do
   _ <- consolePrint "workspace: ${length pkgs} package(s)\n"

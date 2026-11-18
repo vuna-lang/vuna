@@ -1,0 +1,6 @@
+module WmApp where
+
+import WmLib
+
+export message : String
+message = greeting

@@ -33,3 +33,56 @@ run: "$VUNA" doc "$TMPDIR/multi/greet" "$TMPDIR/api.html" 2>&1
 exit: 0
 run: grep -q Greet "$TMPDIR/api.html"
 exit: 0
+
+# 虚拟 workspace 根（只有 [workspace]，没有 [package]）：check/build/run/test/fmt/lint/doc
+# 都按成员展开；根自己的 [lint] 被成员继承。
+run: rm -rf "$TMPDIR/vws"; cp -R corpus/packages/m40_virtual_ws "$TMPDIR/vws"; find "$TMPDIR/vws" -name vuna.toml -exec sed -i 's|^vuna-base = .*|vuna-base = "'"$VUNA_BASE"'"|' {} +
+exit: 0
+run: "$VUNA" check "$TMPDIR/vws" 2>&1
+exit: 0
+out-not-contains: [PKG_
+run: "$VUNA" build --out "$TMPDIR/vws-out" "$TMPDIR/vws" 2>&1
+exit: 0
+out-contains: skipped (library): wmlib
+run: "$TMPDIR/vws-out/wmapp/bin/wmapp" 2>&1
+exit: 0
+out-contains: hello from wmapp
+run: "$VUNA" run "$TMPDIR/vws" -- 2>&1
+exit: 0
+out-contains: hello from wmapp
+run: "$VUNA" test "$TMPDIR/vws" 2>&1
+exit: 0
+out-contains: workspace: 2 package(s)
+out-contains: 1 passed, 0 failed
+run: "$VUNA" fmt --check "$TMPDIR/vws" 2>&1
+exit: 0
+run: "$VUNA" lint "$TMPDIR/vws" 2>&1
+exit: 0
+run: "$VUNA" doc "$TMPDIR/vws" "$TMPDIR/vws-api.html" 2>&1
+exit: 0
+file-contains: $TMPDIR/vws-api.html WmLib
+# 单成员虚拟根：test 走单包路径，不做 workspace 聚合。
+run: rm -rf "$TMPDIR/vone"; cp -R corpus/packages/m41_virtual_ws_single "$TMPDIR/vone"; find "$TMPDIR/vone" -name vuna.toml -exec sed -i 's|^vuna-base = .*|vuna-base = "'"$VUNA_BASE"'"|' {} +
+exit: 0
+run: "$VUNA" check "$TMPDIR/vone" 2>&1
+exit: 0
+run: "$VUNA" test "$TMPDIR/vone" 2>&1
+exit: 0
+out-not-contains: workspace:
+out-contains: 1 passed, 0 failed
+# 负例：既没有 [package] 也没有 [workspace]。
+run: sh -c 'rm -rf "$TMPDIR/vbad1"; mkdir -p "$TMPDIR/vbad1"; : > "$TMPDIR/vbad1/vuna.toml"; "$VUNA" check "$TMPDIR/vbad1" 2>&1'
+exit: 1
+out-contains: PKG_MissingPackageName
+# 负例：虚拟根没有 members。
+run: sh -c 'rm -rf "$TMPDIR/vbad2"; mkdir -p "$TMPDIR/vbad2"; printf "[workspace]\nmembers = []\n" > "$TMPDIR/vbad2/vuna.toml"; "$VUNA" check "$TMPDIR/vbad2" 2>&1'
+exit: 1
+out-contains: PKG_EmptyWorkspace
+# 负例：虚拟根不能声明包语义段（不静默忽略）。
+run: sh -c 'rm -rf "$TMPDIR/vbad3"; mkdir -p "$TMPDIR/vbad3"; printf "[workspace]\nmembers = [\"x\"]\n\n[dependencies]\ny = \"../y\"\n" > "$TMPDIR/vbad3/vuna.toml"; "$VUNA" check "$TMPDIR/vbad3" 2>&1'
+exit: 1
+out-contains: PKG_PackageSectionInWorkspaceRoot
+# 负例：虚拟根不能当包使用（compile 的目录入口要求可执行包）。
+run: "$VUNA" compile "$TMPDIR/vws" "$TMPDIR/vws-c" 2>&1
+exit: 1
+out-contains: PKG_NotPackage

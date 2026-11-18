@@ -1,0 +1,4 @@
+module WmOnly where
+
+export value : Int
+value = 41

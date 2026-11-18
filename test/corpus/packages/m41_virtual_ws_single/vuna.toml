@@ -1,0 +1,3 @@
+# 单成员虚拟 workspace 根：包发现按 manifest 判定，不按包数。
+[workspace]
+members = ["wmonly"]

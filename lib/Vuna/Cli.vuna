@@ -400,17 +400,23 @@ testOptsOf parsed jobs =
     (flagSet parsed "fail-fast") (if flagSet parsed "only-file" then 1 else jobs)
     (flagValue parsed "only-file")
 
--- | 内部：在一个包目录上运行包内测试——目录必须先存在（exit 2），manifest 载入失败 exit 1。
+-- | 内部：在一个目录上运行包内测试——目录必须先存在（exit 2），manifest 载入失败 exit 1。
+-- 虚拟 workspace 根没有包：对成员逐个跑（只有一个成员时按单包跑）。
 testRun : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => TestOpts -> String -> Eff r Int
 testRun opts dir = do
   dirR <- requireDirectory dir
   case dirR of
     ErrC e => toolError (diagText e)
     OkC _ => do
-      pkgR <- loadPackage dir
-      case pkgR of
+      workspaceR <- loadWorkspace dir
+      case workspaceR of
         ErrC e => toolFailure (diagText e)
-        OkC pkg => runTests opts pkg
+        OkC workspace => case workspace.workspaceRoot of
+          Just pkg => runTests opts pkg
+          Nothing => case workspace.workspaceMembers of
+            [] => toolFailure "workspace has no packages"
+            [only] => runTests opts only
+            pkgs => runWorkspaceTests opts pkgs
 
 -- ---------------------------------------------------------------
 -- fmt

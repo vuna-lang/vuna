@@ -17,6 +17,8 @@ export data PkgErr(..) : Nat -> Type where
   EmptyMember : PkgErr Zero
   EmptyPackageName : PkgErr Zero
   MissingPackageName : PkgErr Zero
+  EmptyWorkspace : PkgErr Zero
+  NotPackage : PkgErr Zero
   -- arity 1
   DependencyPathNotString : String -> PkgErr (Succ Zero)
   DuplicateDependency : String -> PkgErr (Succ Zero)
@@ -51,6 +53,7 @@ export data PkgErr(..) : Nat -> Type where
   LayerInvalidTarget : String -> PkgErr (Succ Zero)
   LayerKeyMustBeQuoted : String -> PkgErr (Succ Zero)
   LayerCycle : String -> PkgErr (Succ Zero)
+  PackageSectionInWorkspaceRoot : String -> PkgErr (Succ Zero)
   -- arity 2
   UnknownKey : String -> String -> PkgErr (Succ (Succ Zero))
   UnknownSourceKey : String -> String -> PkgErr (Succ (Succ Zero))
@@ -65,6 +68,8 @@ pkgCode EmptyDependencyName = "PKG_EmptyDependencyName"
 pkgCode EmptyMember = "PKG_EmptyMember"
 pkgCode EmptyPackageName = "PKG_EmptyPackageName"
 pkgCode MissingPackageName = "PKG_MissingPackageName"
+pkgCode EmptyWorkspace = "PKG_EmptyWorkspace"
+pkgCode NotPackage = "PKG_NotPackage"
 pkgCode (DependencyPathNotString _) = "PKG_DependencyPathNotString"
 pkgCode (DuplicateDependency _) = "PKG_DuplicateDependency"
 pkgCode (EmptyDependencyPath _) = "PKG_EmptyDependencyPath"
@@ -89,6 +94,7 @@ pkgCode (LayerInvalidName _) = "PKG_LayerInvalidName"
 pkgCode (LayerInvalidTarget _) = "PKG_LayerInvalidTarget"
 pkgCode (LayerKeyMustBeQuoted _) = "PKG_LayerKeyMustBeQuoted"
 pkgCode (LayerCycle _) = "PKG_LayerCycle"
+pkgCode (PackageSectionInWorkspaceRoot _) = "PKG_PackageSectionInWorkspaceRoot"
 pkgCode (UnknownKey _ _) = "PKG_UnknownKey"
 pkgCode (UnknownSourceKey _ _) = "PKG_UnknownSourceKey"
 pkgCode (DependencySourceMissing _) = "PKG_DependencySourceMissing"
@@ -110,6 +116,9 @@ pkgTemplate EmptyDependencyName = "dependency name must not be empty"
 pkgTemplate EmptyMember = "workspace member must not be empty"
 pkgTemplate EmptyPackageName = "package name must not be empty"
 pkgTemplate MissingPackageName = "missing [package] name"
+pkgTemplate EmptyWorkspace = "workspace root without [package] must declare [workspace].members"
+pkgTemplate NotPackage =
+  "manifest has no [package] (a workspace root is not a package; run inside a member package)"
 pkgTemplate (DependencyPathNotString _) = "dependency \"<0>\" must have a string relative path"
 pkgTemplate (DuplicateDependency _) = "duplicate dependency \"<0>\""
 pkgTemplate (EmptyDependencyPath _) = "dependency \"<0>\" path must not be empty"
@@ -143,6 +152,8 @@ pkgTemplate (LayerInvalidTarget _) =
 pkgTemplate (LayerKeyMustBeQuoted _) =
   "layer \"<0>\" must be a quoted key in [layers] (\"<0>\" = [...])"
 pkgTemplate (LayerCycle _) = "layer dependency cycle: <0>"
+pkgTemplate (PackageSectionInWorkspaceRoot _) =
+  "section [<0>] is not allowed in a workspace root without [package]"
 pkgTemplate (UnknownKey _ _) = "unknown key \"<0>\" in [<1>]"
 pkgTemplate (UnknownSourceKey _ _) = "unknown key \"<0>\" in [dependencies.<1>]"
 pkgTemplate (DependencySourceMissing _) =
@@ -232,6 +243,8 @@ pkgAll =
     PkgEntry (pkgCode EmptyMember) (pkgTemplate EmptyMember) "workspace 成员为空",
     PkgEntry (pkgCode EmptyPackageName) (pkgTemplate EmptyPackageName) "包名为空",
     PkgEntry (pkgCode MissingPackageName) (pkgTemplate MissingPackageName) "缺 [package] 的 name",
+    PkgEntry (pkgCode EmptyWorkspace) (pkgTemplate EmptyWorkspace) "虚拟 workspace 根没有 members",
+    PkgEntry (pkgCode NotPackage) (pkgTemplate NotPackage) "workspace 根不能当包使用",
     PkgEntry (pkgCode (DependencyPathNotString "")) (pkgTemplate (DependencyPathNotString "")) "依赖路径必须是字符串",
     PkgEntry (pkgCode (DuplicateDependency "")) (pkgTemplate (DuplicateDependency "")) "重复依赖",
     PkgEntry (pkgCode (EmptyDependencyPath "")) (pkgTemplate (EmptyDependencyPath "")) "依赖路径为空",
@@ -256,6 +269,7 @@ pkgAll =
     PkgEntry (pkgCode (LayerInvalidTarget "")) (pkgTemplate (LayerInvalidTarget "")) "层目标非法",
     PkgEntry (pkgCode (LayerKeyMustBeQuoted "")) (pkgTemplate (LayerKeyMustBeQuoted "")) "层键未加引号",
     PkgEntry (pkgCode (LayerCycle "")) (pkgTemplate (LayerCycle "")) "层依赖循环",
+    PkgEntry (pkgCode (PackageSectionInWorkspaceRoot "")) (pkgTemplate (PackageSectionInWorkspaceRoot "")) "虚拟根出现包语义段",
     PkgEntry (pkgCode (UnknownKey "" "")) (pkgTemplate (UnknownKey "" "")) "section 内未知 key",
     PkgEntry (pkgCode (UnknownSourceKey "" "")) (pkgTemplate (UnknownSourceKey "" "")) "依赖表未知 key",
     PkgEntry (pkgCode (DependencySourceMissing "")) (pkgTemplate (DependencySourceMissing "")) "依赖未指定源",

@@ -2,7 +2,7 @@ module Vuna.Compiler.Frontend.Manifest where
 
 -- Vuna.Compiler.Frontend.Manifest：vuna.toml 的语义模型（包管理基础件）。
 -- 表约定：
---   [package]     name（必填）
+--   [package]     name（包目录必填；workspace 根可省略形成虚拟根）
 --   [workspace]   members = ["stdlib", "app"]（可选）
 --   [export]      modules = ["Base.List"]（可选；值必须是字符串数组）
 --   [diagnostics] format / warnings / max-errors / lang / deny-warnings（可选）
@@ -57,6 +57,8 @@ export record Layer(..) where
 export record Manifest(..) where
   manifestName : Maybe String
   manifestMembers : List String
+  -- | 声明了 `[workspace]`：该目录是 workspace 根（可同时是包）。
+  manifestIsWorkspace : Bool
   manifestExports : Maybe (List String)
   manifestDependencies : List Dependency
   manifestPath : String
@@ -436,40 +438,51 @@ validateDiagMax path Nothing = OkC 0
 validateDiagMax path (Just n) =
   if n >= 1 then OkC 0 else pkgPath1 path (InvalidDiagMaxErrors "${n}") "${n}"
 
+-- 某个 section 是否出现在 entries 里（`[dependencies.x]` 归到首段 `dependencies`）。
+sectionPresent : List TomlEntry -> String -> Bool
+sectionPresent [] name = False
+sectionPresent ((TomlEntry section key value line) :: rest) name =
+  if startsWithSection section name then True else sectionPresent rest name
+
+startsWithSection : List String -> String -> Bool
+startsWithSection [] name = False
+startsWithSection (first :: rest) name = first == name
+
+-- workspace 根的形态校验：没有 `[package]` 时只允许 `[workspace]` + 工具配置段。
+validateRootShape : String -> List TomlEntry -> Maybe String -> List String -> Check Int
+validateRootShape path entries name members = case name of
+  Just _ => OkC 0
+  Nothing =>
+    if not (sectionPresent entries "workspace") then pkgPath0 path MissingPackageName
+    else if members == [] then pkgPath0 path EmptyWorkspace
+    else checkRootSections path entries ["export", "layers", "dependencies"]
+
+checkRootSections : String -> List TomlEntry -> List String -> Check Int
+checkRootSections path entries [] = OkC 0
+checkRootSections path entries (name :: rest) =
+  if sectionPresent entries name then pkgPath1 path (PackageSectionInWorkspaceRoot name) name
+  else checkRootSections path entries rest
+
 buildManifest : String -> List TomlEntry -> Check Manifest
-buildManifest path entries = case checkEntries path entries of
-  ErrC e => ErrC e
-  OkC _ => case collectLayers path entries [] of
-    ErrC e => ErrC e
-    OkC layers => case stringField path ["package"] "name" entries of
-      ErrC e => ErrC e
-      OkC name => case stringListField path ["workspace"] "members" entries of
-        ErrC e => ErrC e
-        OkC members => case stringListField path ["export"] "modules" entries of
-          ErrC e => ErrC e
-          OkC exports => case collectDependencies path entries of
-            ErrC e => ErrC e
-            OkC deps => case stringField path ["diagnostics"] "format" entries of
-              ErrC e => ErrC e
-              OkC diagFmt => case boolField path ["diagnostics"] "warnings" entries of
-                ErrC e => ErrC e
-                OkC diagWarns => case intField path ["diagnostics"] "max-errors" entries of
-                  ErrC e => ErrC e
-                  OkC diagMax => case stringField path ["diagnostics"] "lang" entries of
-                    ErrC e => ErrC e
-                    OkC diagLang => case boolField path ["diagnostics"] "deny-warnings" entries of
-                      ErrC e => ErrC e
-                      OkC diagDeny => case stringField path ["registry"] "index" entries of
-                        ErrC e => ErrC e
-                        OkC regIndex => case validateDiagFormat path diagFmt of
-                          ErrC e => ErrC e
-                          OkC _ => case validateDiagMax path diagMax of
-                            ErrC e => ErrC e
-                            OkC _ => case validateDiagLang path diagLang of
-                              ErrC e => ErrC e
-                              OkC _ =>
-                                OkC
-                                  (Manifest name (orEmptyList members) exports deps path diagFmt diagWarns diagMax diagLang diagDeny regIndex layers)
+buildManifest path entries = do
+  _ <- checkEntries path entries
+  layers <- collectLayers path entries []
+  name <- stringField path ["package"] "name" entries
+  members <- stringListField path ["workspace"] "members" entries
+  _ <- validateRootShape path entries name (orEmptyList members)
+  exports <- stringListField path ["export"] "modules" entries
+  deps <- collectDependencies path entries
+  diagFmt <- stringField path ["diagnostics"] "format" entries
+  diagWarns <- boolField path ["diagnostics"] "warnings" entries
+  diagMax <- intField path ["diagnostics"] "max-errors" entries
+  diagLang <- stringField path ["diagnostics"] "lang" entries
+  diagDeny <- boolField path ["diagnostics"] "deny-warnings" entries
+  regIndex <- stringField path ["registry"] "index" entries
+  _ <- validateDiagFormat path diagFmt
+  _ <- validateDiagMax path diagMax
+  _ <- validateDiagLang path diagLang
+  pure
+    (Manifest name (orEmptyList members) (sectionPresent entries "workspace") exports deps path diagFmt diagWarns diagMax diagLang diagDeny regIndex layers)
 
 export parseManifest : String -> String -> Check Manifest
 parseManifest path contents =
@@ -505,9 +518,12 @@ validModuleTail (c :: rest) =
   if isUpperAlphaChar c || isLowerAlphaChar c || isDigitChar c || c == 95 then validModuleTail rest
   else False
 
-validateName : String -> Maybe String -> Check Int
-validateName path Nothing = pkgPath0 path MissingPackageName
-validateName path (Just n) =
+-- 包名：包目录必填；虚拟 workspace 根没有名字，校验放行（`validateRootShape` 已保证
+-- 它只有 `[workspace]` + 工具配置段）。
+validateName : Bool -> List String -> String -> Maybe String -> Check Int
+validateName isWorkspace members path Nothing =
+  if isWorkspace && length members > 0 then OkC 0 else pkgPath0 path MissingPackageName
+validateName isWorkspace members path (Just n) =
   if n == "" then pkgPath0 path EmptyPackageName
   else if validPackageName n then OkC 0 else pkgPath1 path (InvalidPackageName n) n
 
@@ -526,9 +542,14 @@ validateExports path Nothing = OkC 0
 validateExports path (Just modules) = validateModules path modules
 
 export validateManifest : Manifest -> Check Manifest
-validateManifest (Manifest name members exports deps path diagFmt diagWarns diagMax diagLang diagDeny regIndex layers) =
-  Vuna.Compiler.Base.Common.bind (validateName path name)
-    (\okName => Vuna.Compiler.Base.Common.bind (validateMembers path members) (\okMembers => Vuna.Compiler.Base.Common.bind (validateExports path exports) (\okExports => Vuna.Compiler.Base.Common.bind (validateDependencies path deps) (\okDeps => Vuna.Compiler.Base.Common.bind (validateLayers path layers layers) (\okLayers => OkC (Manifest name members exports deps path diagFmt diagWarns diagMax diagLang diagDeny regIndex layers))))))
+validateManifest (Manifest name members isWorkspace exports deps path diagFmt diagWarns diagMax diagLang diagDeny regIndex layers) = do
+  _ <- validateName isWorkspace members path name
+  _ <- validateMembers path members
+  _ <- validateExports path exports
+  _ <- validateDependencies path deps
+  _ <- validateLayers path layers layers
+  pure
+    (Manifest name members isWorkspace exports deps path diagFmt diagWarns diagMax diagLang diagDeny regIndex layers)
 
 -- manifest 所在目录：`a/b/vuna.toml` -> `a/b`；没有目录成分 -> "."。
 export manifestDir : String -> String

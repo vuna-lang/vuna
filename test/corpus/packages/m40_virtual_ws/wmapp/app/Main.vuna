@@ -1,0 +1,8 @@
+import WmApp
+import Base.EffConsole
+import Base.Eff
+
+main : Eff [ConsoleOp] Int
+main = do
+  _ <- consolePrint "${message}\n"
+  pure 0

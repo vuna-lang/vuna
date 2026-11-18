@@ -1,0 +1,5 @@
+[package]
+name = "wmonly"
+
+[dependencies]
+vuna-base = "../../../../../base"

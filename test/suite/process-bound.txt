@@ -34,7 +34,7 @@
 39_context.steps	build,check,compile,help,interp	build-link;cli-text;tooling-output
 40_eff_main_entry.steps	interp	cli-text
 40_toolchain_m30.steps	doc	tooling-output
-41_workspace_build.steps	build,check,test,fmt,doc	artifact-exec;build-link;cli-text;tooling-output
+41_workspace_build.steps	build,check,test,fmt,doc,lint,compile	artifact-exec;build-link;cli-text;tooling-output
 42_repl_test_ws.steps	repl,test	repl-session;artifact-exec;cli-text
 44a_summary.steps	check	cli-text
 44b_summary_root.steps	check	cli-contract

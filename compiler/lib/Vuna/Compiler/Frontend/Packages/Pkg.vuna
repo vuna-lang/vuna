@@ -1,8 +1,8 @@
 module Vuna.Compiler.Frontend.Packages.Pkg where
 
 -- Vuna.Compiler.Frontend.Packages.Pkg：包 / workspace 解析层（不碰 Loader / CLI）。
--- 每个包 = 带 vuna.toml 的目录；workspace 根同时是子包（Cargo 风格：
--- 根 vuna.toml 同时含 [workspace] 与 [package]）。
+-- 每个包 = 带 vuna.toml 的目录。workspace 根有两种形态：根包（根 vuna.toml 同时含
+-- [workspace] 与 [package]）与虚拟根（只有 [workspace]，没有 [package]）。
 -- 本模块用内建 fsReadFile / fsFileExists 读盘，不做 realpath：路径只做 lexical
 -- 规范化（合并 "//"、消去 "."、".."），循环检测与去重用规范化后的目录字符串。
 -- 包内目录约定：lib/、app/、test/；入口固定 app/Main.vuna。
@@ -310,18 +310,20 @@ else
     manifestR <- loadManifestAt "${normalized}/vuna.toml"
     case manifestR of
       ErrC e => pure (ErrC e)
-      OkC manifest =>
-        let
-          name = manifestNameString manifest
-        in if dependencyNameOk depName name then do
-          dependencyR <-
-            loadDependencyList (fuel - 1) (Pair normalized name :: stack) normalized
-              manifest.manifestDependencies
-          pure (case dependencyR of
-            ErrC e => ErrC e
-            OkC dependencies => OkC (Package manifest dependencies normalized)
-          )
-        else pure (pkgInvalid (mismatchMessage depName name))
+      OkC manifest => case manifest.manifestName of
+        Nothing => pure (pkgPath0 manifest.manifestPath NotPackage)
+        Just _ =>
+          let
+            name = manifestNameString manifest
+          in if dependencyNameOk depName name then do
+            dependencyR <-
+              loadDependencyList (fuel - 1) (Pair normalized name :: stack) normalized
+                manifest.manifestDependencies
+            pure (case dependencyR of
+              ErrC e => ErrC e
+              OkC dependencies => OkC (Package manifest dependencies normalized)
+            )
+          else pure (pkgInvalid (mismatchMessage depName name))
 
 -- ---------------------------------------------------------------- 包名唯一性
 -- 包名不是纯标签，它参与语义判定：`Loader.rootAllows` 的「同包永远可见」
@@ -394,22 +396,63 @@ loadMembers baseDir (rel :: rest) = do
 -- 根包 + [workspace].members（顺序同 manifest）；没有 members 时只含根包。
 -- 每个成员自己的依赖图已由 loadPackage 校验；这里再校验并集，捕获跨成员的
 -- 同名不同目录冲突。
-export workspacePackages : Member nFs FsOp r, Member nEnv EnvOp r => String -> Eff r (Check (List Package))
-workspacePackages rootBaseDir =
+-- 虚拟根（没有 [package]）只有成员，没有根包。
+export record Workspace(..) where
+  workspaceDir : String
+  workspaceRoot : Maybe Package
+  workspaceMembers : List Package
+
+export workspaceRootOf : Workspace -> Maybe Package
+workspaceRootOf workspace = workspace.workspaceRoot
+
+export workspaceMembersOf : Workspace -> List Package
+workspaceMembersOf workspace = workspace.workspaceMembers
+
+-- | workspace 内的全部包：有根包时在前，随后是成员（顺序同 manifest）。
+export workspaceAllPackages : Workspace -> List Package
+workspaceAllPackages workspace = case workspace.workspaceRoot of
+  Nothing => workspace.workspaceMembers
+  Just root => root :: workspace.workspaceMembers
+
+-- | 加载 workspace：根 manifest 有 `[package]` 时是根包 + 成员；没有时是虚拟根
+-- （只有成员，`[workspace]` 由 manifest 层强制）。
+export loadWorkspace : Member nFs FsOp r, Member nEnv EnvOp r => String -> Eff r (Check Workspace)
+loadWorkspace rootBaseDir =
   let
     base = normalizeDir rootBaseDir
   in do
-    rootR <- loadPackage base
-    case rootR of
+    manifestR <- loadManifestAt "${base}/vuna.toml"
+    case manifestR of
       ErrC e => pure (ErrC e)
-      OkC rootPackage => do
-        membersR <- loadMembers base rootPackage.packageManifest.manifestMembers
-        pure (case membersR of
-          ErrC e => ErrC e
-          OkC members => case checkUniquePackageNames (rootPackage :: members) of
+      OkC manifest => case manifest.manifestName of
+        Nothing => do
+          membersR <- loadMembers base manifest.manifestMembers
+          pure (case membersR of
             ErrC e => ErrC e
-            OkC _ => OkC (rootPackage :: members)
-        )
+            OkC members => case checkUniquePackageNames members of
+              ErrC e => ErrC e
+              OkC _ => OkC (Workspace base Nothing members)
+          )
+        Just _ => do
+          rootR <- loadPackage base
+          case rootR of
+            ErrC e => pure (ErrC e)
+            OkC root => do
+              membersR <- loadMembers base manifest.manifestMembers
+              pure (case membersR of
+                ErrC e => ErrC e
+                OkC members => case checkUniquePackageNames (root :: members) of
+                  ErrC e => ErrC e
+                  OkC _ => OkC (Workspace base (Just root) members)
+              )
+
+export workspacePackages : Member nFs FsOp r, Member nEnv EnvOp r => String -> Eff r (Check (List Package))
+workspacePackages rootBaseDir = do
+  workspaceR <- loadWorkspace rootBaseDir
+  pure (case workspaceR of
+    ErrC e => ErrC e
+    OkC workspace => OkC (workspaceAllPackages workspace)
+  )
 
 -- ---------------------------------------------------------------- 模块根
 dependencyRootOf : Package -> Root

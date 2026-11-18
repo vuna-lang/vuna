@@ -1,0 +1,7 @@
+# 虚拟 workspace 根：只有 [workspace] + 工具配置，没有 [package]。
+[workspace]
+members = ["wmlib", "wmapp"]
+
+[lint]
+preset = "recommended"
+max-warnings = 0

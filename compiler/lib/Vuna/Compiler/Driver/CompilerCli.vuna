@@ -766,13 +766,9 @@ checkPackages pkgs code o =
 checkPackagesSpawn : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => List Package -> Int -> CliOpts -> Eff r (Pair Int CliOpts)
 checkPackagesSpawn [] code o = pure (Pair code o)
 checkPackagesSpawn pkgs code o = do
-  classified <- mapEff (\pkg => do
-    root <- isWorkspaceRoot pkg
-    pure (Pair pkg root)
-  ) pkgs
   let
-    members = map firstOf (filter (\p => not (secondOf p)) classified)
-    roots = map firstOf (filter (\p => secondOf p) classified)
+    members = filter (\p => not (isWorkspaceRoot p)) pkgs
+    roots = filter isWorkspaceRoot pkgs
   in do
     started <- mapEff (\pkg => do
       pid <- processSpawn (checkSpawnArgs o (packageDir pkg))
@@ -789,13 +785,10 @@ checkPkgsInProcess (pkg :: rest) code o = do
   r <- checkPackageSeq pkg code o
   checkPkgsInProcess rest (firstOf r) (secondOf r)
 
-isWorkspaceRoot : Member nFs FsOp r, Member nEnv EnvOp r => Package -> Eff r Bool
-isWorkspaceRoot pkg = do
-  pkgsR <- workspacePackages (packageDir pkg)
-  pure (case pkgsR of
-    OkC ps => length ps > 1
-    ErrC e => False
-  )
+-- | 内部：包目录是否本身是 workspace 根（声明了 `[workspace]`）。用 manifest 段判定，
+-- 不用包数——单成员 workspace 也是一级 workspace。
+isWorkspaceRoot : Package -> Bool
+isWorkspaceRoot pkg = pkg.packageManifest.manifestIsWorkspace
 
 checkRootsSeq : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => List Package -> Int -> CliOpts -> Eff r (Pair Int CliOpts)
 checkRootsSeq [] code o = pure (Pair code o)
@@ -939,15 +932,21 @@ buildParse prog noCompile out dir pkg args o = case args of
 
 buildRun : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Bool -> String -> Maybe String -> Maybe String -> CliOpts -> Eff r (Pair Int CliOpts)
 buildRun noCompile dir outM pkgM o = do
-  pkgsR <- workspacePackages dir
-  case pkgsR of
+  workspaceR <- loadWorkspace dir
+  case workspaceR of
     ErrC e => printDiag o e
-    OkC pkgs => do
-      libOnly <- isSingleLibraryPackage pkgs
-      if libOnly then withOpts o (printErr (libraryOnlyMessage pkgs))
-      else case selectBuildTargets pkgM pkgs of
+    OkC workspace => do
+      libOnly <- isSingleLibraryPackage (workspaceAllPackages workspace)
+      if libOnly then withOpts o (printErr (libraryOnlyMessage (workspaceAllPackages workspace)))
+      else case selectBuildTargets pkgM (workspaceAllPackages workspace) of
         ErrC e => printDiag o e
-        OkC targets => buildTargets noCompile (length pkgs > 1) outM targets 0 o
+        OkC targets => buildTargets noCompile (workspaceMultiOut workspace) outM targets 0 o
+
+-- | 内部：`--out DIR` 的目录布局——workspace（含虚拟根）按 `DIR/<包名>` 分目录。
+workspaceMultiOut : Workspace -> Bool
+workspaceMultiOut workspace = case workspace.workspaceRoot of
+  Just root => isWorkspaceRoot root
+  Nothing => True
 
 -- 单包目录且是库包（没有 app/Main.vuna）→ build 必须报错（不是静默 skip）。
 -- workspace 根里的库成员仍走 skip（构建单元覆盖全部可执行成员）。

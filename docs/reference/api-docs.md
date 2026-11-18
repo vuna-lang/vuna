@@ -70,7 +70,7 @@ vuna doc [--check] [--package NAME] [DIR [OUT]]
 
 - 默认输出 **一个自包含 HTML 文件**：`DIR=.` → `docs/api.html`，其他 `DIR` →
   `DIR/docs/api.html`；父目录逐级创建。
-- `DIR` 是 workspace 根（含 `[workspace].members`）时渲染根包 + 所有成员包；是单个包时只
+- `DIR` 是 workspace 根（含 `[workspace].members`）时渲染所有包（根包存在时包含根包）；是单个包时只
   渲染该包；`--package NAME` 只保留指定包。
 - 每个包尊重自己的 `[export].modules`（按 manifest 顺序；缺模块是错误，exit 2）。
 - `--check` 不写文件：逐个报告**顶层符号**缺失 docstring（前置 `-- |` 与尾随 `-- ^` 都

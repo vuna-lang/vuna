@@ -157,8 +157,8 @@ in-process 走与 `vuna build` 同一条增量构建，然后执行 `<包目录>
 时构建到 `DIR/` 并从该处执行（相对 DIR 按调用方 cwd 解析），`--no-build` 直接使用现有产物；
 `--target wasm` 执行 `<OUT>/main.wasm`（`wasmtime run -W stack-switching=y -W gc=y
 -W function-references=y`），`--target native` 与 ocaml 一样执行 `<OUT>/bin/<包名>`；
-未知 target 与 `build` 一样是用法的错（exit 2）。`--` 之后的参数原样透传，子进程退出码原样返回。目标包选择：`--package` → workspace 根包（可执行时）→ 唯一可执行成员 →
-否则列出候选并 exit 2；库包 / 缺产物 / 构建失败都给出可操作错误。实现入口
+未知 target 与 `build` 一样是用法的错（exit 2）。`--` 之后的参数原样透传，子进程退出码原样返回。目标包选择：`--package` → 可执行的 workspace 根包 → 唯一的可执行成员
+（虚拟根没有根包，直接从成员里选）→ 否则列出候选并 exit 2；库包 / 缺产物 / 构建失败都给出可操作错误。实现入口
 `Vuna.Run.runRun`。
 
 资源限制 flag 只是**启动方式**，不进产物、不改 `main.s`：

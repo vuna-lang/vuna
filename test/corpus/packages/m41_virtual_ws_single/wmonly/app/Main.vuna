@@ -1,0 +1,4 @@
+import WmOnly
+
+main : Int
+main = value - 41
