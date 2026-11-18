@@ -83,24 +83,24 @@ let rec v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOf = (fun (mc0 : Vuna_dCompiler_
   | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrEffThunk (dtb__13, dtb__14, dtb__15, dtb__16, dtb__17) -> (v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOf dtb__17)
   | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrConcatMany (dtb__18) -> ((Base_dData_dList.v_Base_dData_dList_dconcatMap v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOf) dtb__18)
   | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrNatCase (dtb__19, dtb__20, dtb__21, dtb__22, dtb__23) -> ((Base_dData_dList.v_Base_dData_dList_dappend (v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOf dtb__19)) ((Base_dData_dList.v_Base_dData_dList_dappend (v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOfAltMaybe dtb__21)) ((Base_dData_dList.v_Base_dData_dList_dappend (v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOfAltMaybe dtb__22)) (v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOfAltMaybe dtb__23))))
-  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrCase (dtb__24, dtb__25) -> ((Base_dData_dList.v_Base_dData_dList_dappend (v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOf dtb__24)) ((Base_dData_dList.v_Base_dData_dList_dconcatMap v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOfAlt) dtb__25))
-  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrIf (dtb__26, dtb__27, dtb__28) -> ((Base_dData_dList.v_Base_dData_dList_dappend (v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOf dtb__26)) ((Base_dData_dList.v_Base_dData_dList_dappend (v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOf dtb__27)) (v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOf dtb__28)))
-  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrApp (dtb__29, dtb__30) -> ((Base_dData_dList.v_Base_dData_dList_dappend (v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOf dtb__29)) (v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOf dtb__30))
-  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrLam (dtb__31, dtb__32, dtb__33) -> (v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOf dtb__33)
-  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrLet (dtb__34, dtb__35, dtb__36) -> ((Base_dData_dList.v_Base_dData_dList_dappend (v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOf dtb__35)) (v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOf dtb__36))
-  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrFloatLit (dtb__37) -> Base_dData_dList.C_Base_dData_dList_dList_Nil
-  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrBool (dtb__38) -> Base_dData_dList.C_Base_dData_dList_dList_Nil
-  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrStr (dtb__39) -> Base_dData_dList.C_Base_dData_dList_dList_Nil
-  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrInt (dtb__40) -> Base_dData_dList.C_Base_dData_dList_dList_Nil
-  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrCast (dtb__41, dtb__42, dtb__43) -> (v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOf dtb__43)
-  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrRtApp (dtb__44, dtb__45) -> ((Base_dData_dList.v_Base_dData_dList_dappend (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ({ Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__44; Base_dData_dPair.f_Base_dData_dPair_dPair_second = (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just ((v_Vuna_dCompiler_dIr_dRuntime_dirListLength dtb__45))) }, Base_dData_dList.C_Base_dData_dList_dList_Nil))) ((Base_dData_dList.v_Base_dData_dList_dconcatMap v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOf) dtb__45))
-  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrRt (dtb__46) -> (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ({ Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__46; Base_dData_dPair.f_Base_dData_dPair_dPair_second = Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing }, Base_dData_dList.C_Base_dData_dList_dList_Nil))
-  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrRecUpd (dtb__47, dtb__48, dtb__49) -> ((Base_dData_dList.v_Base_dData_dList_dappend (v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOf dtb__47)) ((Base_dData_dList.v_Base_dData_dList_dconcatMap v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOfField) dtb__49))
-  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrProj (dtb__50, dtb__51, dtb__52) -> (v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOf dtb__50)
-  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrRecord (dtb__53, dtb__54) -> ((Base_dData_dList.v_Base_dData_dList_dconcatMap v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOfField) dtb__54)
-  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrCtor (dtb__55, dtb__56, dtb__57) -> ((Base_dData_dList.v_Base_dData_dList_dconcatMap v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOf) dtb__57)
-  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrGlobal (dtb__58) -> Base_dData_dList.C_Base_dData_dList_dList_Nil
-  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrVar (dtb__59) -> Base_dData_dList.C_Base_dData_dList_dList_Nil
+  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrCase (dtb__24, dtb__25, dtb__26) -> ((Base_dData_dList.v_Base_dData_dList_dappend (v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOf dtb__25)) ((Base_dData_dList.v_Base_dData_dList_dconcatMap v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOfAlt) dtb__26))
+  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrIf (dtb__27, dtb__28, dtb__29) -> ((Base_dData_dList.v_Base_dData_dList_dappend (v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOf dtb__27)) ((Base_dData_dList.v_Base_dData_dList_dappend (v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOf dtb__28)) (v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOf dtb__29)))
+  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrApp (dtb__30, dtb__31, dtb__32) -> ((Base_dData_dList.v_Base_dData_dList_dappend (v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOf dtb__31)) (v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOf dtb__32))
+  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrLam (dtb__33, dtb__34, dtb__35) -> (v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOf dtb__35)
+  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrLet (dtb__36, dtb__37, dtb__38) -> ((Base_dData_dList.v_Base_dData_dList_dappend (v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOf dtb__37)) (v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOf dtb__38))
+  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrFloatLit (dtb__39) -> Base_dData_dList.C_Base_dData_dList_dList_Nil
+  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrBool (dtb__40) -> Base_dData_dList.C_Base_dData_dList_dList_Nil
+  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrStr (dtb__41) -> Base_dData_dList.C_Base_dData_dList_dList_Nil
+  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrInt (dtb__42) -> Base_dData_dList.C_Base_dData_dList_dList_Nil
+  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrCast (dtb__43, dtb__44, dtb__45) -> (v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOf dtb__45)
+  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrRtApp (dtb__46, dtb__47) -> ((Base_dData_dList.v_Base_dData_dList_dappend (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ({ Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__46; Base_dData_dPair.f_Base_dData_dPair_dPair_second = (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just ((v_Vuna_dCompiler_dIr_dRuntime_dirListLength dtb__47))) }, Base_dData_dList.C_Base_dData_dList_dList_Nil))) ((Base_dData_dList.v_Base_dData_dList_dconcatMap v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOf) dtb__47))
+  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrRt (dtb__48) -> (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ({ Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__48; Base_dData_dPair.f_Base_dData_dPair_dPair_second = Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing }, Base_dData_dList.C_Base_dData_dList_dList_Nil))
+  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrRecUpd (dtb__49, dtb__50, dtb__51) -> ((Base_dData_dList.v_Base_dData_dList_dappend (v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOf dtb__49)) ((Base_dData_dList.v_Base_dData_dList_dconcatMap v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOfField) dtb__51))
+  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrProj (dtb__52, dtb__53, dtb__54) -> (v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOf dtb__52)
+  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrRecord (dtb__55, dtb__56) -> ((Base_dData_dList.v_Base_dData_dList_dconcatMap v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOfField) dtb__56)
+  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrCtor (dtb__57, dtb__58, dtb__59, dtb__60) -> ((Base_dData_dList.v_Base_dData_dList_dconcatMap v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOf) dtb__60)
+  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrGlobal (dtb__61) -> Base_dData_dList.C_Base_dData_dList_dList_Nil
+  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrVar (dtb__62) -> Base_dData_dList.C_Base_dData_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 # 446 "Vuna/Compiler/Ir/Runtime.vuna"
@@ -109,7 +109,7 @@ and v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOfField = (fun p -> (v_Vuna_dCompile
 and v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOfAlt = (fun alt -> (v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOf (Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirAltBodyOf alt)))
 # 452 "Vuna/Compiler/Ir/Runtime.vuna"
 and v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOfAltMaybe = (fun (mc0 : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrAlt Base_dData_dMaybe.t_Base_dData_dMaybe_dMaybe) -> (match mc0 with
-  | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__60) -> (v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOfAlt dtb__60)
+  | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__63) -> (v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOfAlt dtb__63)
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> Base_dData_dList.C_Base_dData_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
 ))
@@ -117,13 +117,13 @@ and v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOfAltMaybe = (fun (mc0 : Vuna_dCompi
 # 456 "Vuna/Compiler/Ir/Runtime.vuna"
 let v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOfDef = (fun d -> (match (Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirDefBody d) with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> Base_dData_dList.C_Base_dData_dList_dList_Nil
-  | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__61) -> (v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOf dtb__61)
+  | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__64) -> (v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOf dtb__64)
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 469 "Vuna/Compiler/Ir/Runtime.vuna"
 let v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOfEntry = (fun (mc0 : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrEntry Base_dData_dMaybe.t_Base_dData_dMaybe_dMaybe) -> (match mc0 with
-  | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__62) -> (v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOf (Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirEntryShowOf dtb__62))
+  | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__65) -> (v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOf (Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirEntryShowOf dtb__65))
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> Base_dData_dList.C_Base_dData_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
 ))
