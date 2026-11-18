@@ -422,7 +422,7 @@ env，**不进 codegen**（同一 IR 的产物逐字节确定）。解析失败�
   1. 活帧里**尚未清零的栈槽**仍被保守扫描；调用点实参槽与文本最后读取后会清零，所以
      `gc_low_live` 这类「分配后用掉、再尾递归」的形状不再按栈深度累计保留（死槽清零前
      `GC_LOG` live 从 0.9 MB 涨到 320 MB、墙钟 0.31 s → 9.5 s；清零后 322 ms / 5.4 MiB，
-     见 [performance.md](performance.md) §8.2）。仍在跨调用临时值里的对象会被多留；
+     见 [benchmarks.md](benchmarks.md) §1.2）。仍在跨调用临时值里的对象会被多留；
   2. 形似指针的 `Int` 会多留对象；非移动所以不会让指针失效；
   3. 空闲块按 2 的幂尺寸类复用、不合并相邻空块，内部碎片最多约 2×；
   4. 超过 64 MiB 的块单独占段、死块进 `rt_huge_free` 首次适配链（可复用，不 `munmap`）；
@@ -430,11 +430,11 @@ env，**不进 codegen**（同一 IR 的产物逐字节确定）。解析失败�
   6. 栈段（`resume` 迁移用的 32 MiB 预留窗口）不计入预算，见 §5.1。
 - **运行期性能与内存**：`nix run .#vuna-perf -- --target native`（或 `--target both`）
   在 16 个生成程序基准上测 native 产物；基线 `bench/native-baseline.json`，读数与口径见
-[performance.md](performance.md) §8.1。非尾深递归在默认 8 MiB 栈下仍会崩溃（exit 139），
+[benchmarks.md](benchmarks.md) §1.1。非尾深递归在默认 8 MiB 栈下仍会崩溃（exit 139），
   基准因此在 `ulimit -s unlimited` 下运行，JSON 的 `meta.stack_policy` 记录该口径、每项另有
   `default_stack_ok` 探针；峰值 RSS = 栈页 + live 堆，需与墙钟一起读。TCO 已落地：只覆盖
   直接饱和直调，`tco_mutual` / `tco_wide` / `arith` / `records` 的判定与实测读数见
-  [performance.md](performance.md) §8.2；§8.1 的 native 列是 TCO 前快照。
+  [benchmarks.md](benchmarks.md) §1.2；§1.1 的 native 列是 TCO 前快照。
 - 核数限制是**亲和性**，不是 CPU 配额：单核跑多久不管，长时间占用用
   `VUNA_NATIVE_TIMEOUT_MS`；cgroup 只读 v2 挂载根的 `cpu.max`。
 - `Int`/`Nat`/`Bool` 的 heap 布局、对象头/复用（Perceus RC 依赖这一层）。

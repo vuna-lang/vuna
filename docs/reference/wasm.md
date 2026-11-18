@@ -234,7 +234,7 @@ Component Model 的运行链路，而产物是核心模块，且测试宿主需�
 **执行边界（性能口径同源）**：V8 的 wasm 栈约 1 MB 且没有开关（`node --stack-size` 不改变
 wasm 栈），所以非尾深递归的生成程序在浏览器路径上会以 `Maximum call stack size exceeded`
 收口；尾调用（`return_call`）的形状不受影响。生成程序在浏览器路径上的读数与判定见
-[performance.md](performance.md) §8.3。
+[benchmarks.md](benchmarks.md) §1.3。
 
 ### 8.1 浏览器 wasm 能力矩阵
 
