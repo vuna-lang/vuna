@@ -39,7 +39,8 @@ documentHighlights line col text =
 identAt : List CstToken -> Int -> Int -> Maybe CstToken
 identAt [] line col = Nothing
 identAt (t :: rest) line col =
-  if t.cstTag == "ident" && spanStartLine t.cstSpan == line && col >= spanStartCol t.cstSpan && col <= spanEndCol t.cstSpan then Just t
+  if t.cstTag == "ident" && spanStartLine t.cstSpan == line && col >= spanStartCol t.cstSpan && col <= spanEndCol t.cstSpan then
+    Just t
   else identAt rest line col
 
 -- | 内部：所有同名 ident token 的 (行, 列)。
@@ -49,7 +50,8 @@ identHits toks name = mapMaybe (tokPosIfName name) toks
 -- | 内部：token 是 ident 且同名时返回其起始位置。
 tokPosIfName : String -> CstToken -> Maybe (Pair Int Int)
 tokPosIfName name t =
-  if t.cstTag == "ident" && t.cstText == name then Just (Pair (spanStartLine t.cstSpan) (spanStartCol t.cstSpan))
+  if t.cstTag == "ident" && t.cstText == name then
+    Just (Pair (spanStartLine t.cstSpan) (spanStartCol t.cstSpan))
   else Nothing
 
 -- | 内部：(行, 列) + 名字 → 起止列按 UTF-16 换算的 `DocumentHighlight`（kind = 1，Text）。

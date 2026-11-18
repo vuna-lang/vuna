@@ -54,7 +54,8 @@ else case forceVal ec v of
 -- 能保持 VCon 实参对齐；长度对不上（隐式非索引参数等边缘形态）退回 `TGlobal`。
 export nullaryCtorTerm : DtCtor -> List Term -> Term
 nullaryCtorTerm ctor metas =
-  if length metas == length (dtCtorTelescope ctor) then TCon (dtCtorName ctor) (zipTeleRigs metas (dtCtorTelescope ctor))
+  if length metas == length (dtCtorTelescope ctor) then
+    TCon (dtCtorName ctor) (zipTeleRigs metas (dtCtorTelescope ctor))
   else TGlobal (dtCtorName ctor)
 
 export zipTeleRigs : List Term -> List (Pair String Rig) -> List (Pair Term Rig)
@@ -78,7 +79,8 @@ boolCtorTerm name = case boolCtorValue name of
 -- 使其类型为 `List ?m`/`Maybe ?m`（值），而非 `{a}->List a`（函数）。
 export inferCtorRef : Ec -> Ctx -> String -> Term -> Check (Pair Term (Pair Value Ec))
 inferCtorRef ec ctx name tyTerm = case dtCtorLookupEc ec name of
-  Just ctor => if isBoolCanonical (dtCtorFamily ctor) then OkC (Pair (boolCtorTerm (dtCtorName ctor)) (Pair boolTyValue ec))
+  Just ctor => if isBoolCanonical (dtCtorFamily ctor) then
+    OkC (Pair (boolCtorTerm (dtCtorName ctor)) (Pair boolTyValue ec))
   else
     let
       ctorTy = eval [] tyTerm

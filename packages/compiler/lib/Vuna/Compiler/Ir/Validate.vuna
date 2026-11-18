@@ -55,8 +55,9 @@ firstUnorderedDepGo nameTbl visible (d :: rest) = case firstMissingDep nameTbl v
 firstMissingDep : HashMap String Bool -> HashMap String Bool -> String -> List String -> Maybe (Pair String String)
 firstMissingDep nameTbl visible self [] = Nothing
 firstMissingDep nameTbl visible self (dep :: rest) =
-  if HashMap.member dep nameTbl then if HashMap.member dep visible then firstMissingDep nameTbl visible self rest
-  else Just (Pair self dep)
+  if HashMap.member dep nameTbl then
+    if HashMap.member dep visible then firstMissingDep nameTbl visible self rest
+    else Just (Pair self dep)
   else firstMissingDep nameTbl visible self rest
 
 -- | 每个运行时符号都必须在 `Ir.Runtime` 契约里；饱和应用还必须与 `irInlineArity` 一致。
@@ -69,7 +70,9 @@ checkSymbolRefs (p :: rest) = case irRtLookup (firstOf p) of
     Nothing => checkSymbolRefs rest
     Just n =>
       if n > 0 && irInlineArity (firstOf p) == n then checkSymbolRefs rest
-      else icInternal "IR saturated runtime symbol `${firstOf p}` has the wrong arity (${strFromInt n})"
+      else
+        icInternal
+          "IR saturated runtime symbol `${firstOf p}` has the wrong arity (${strFromInt n})"
 
 -- | 程序级校验：单元级校验 + 入口引用的 main 必须在本单元定义里。
 export validateProgram : IrProgram -> Check Int

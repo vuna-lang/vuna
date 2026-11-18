@@ -34,7 +34,9 @@ runSearch args = case parseCmdArgs ["search"] args of
   OkC parsed =>
     let
       query = join " " parsed.positionals
-    in if query == "" then toolError "usage: vuna search [--type|--name|--doc] [--module PFX] [--limit N] [--json] <query>"
+    in if query == "" then
+      toolError
+        "usage: vuna search [--type|--name|--doc] [--module PFX] [--limit N] [--json] <query>"
     else case modeOf parsed query of
       ErrC e => toolError (diagText e)
       OkC mode => case limitOf parsed of

@@ -74,7 +74,8 @@ docRun dir out check pkgFilter = do
 
 -- | 内部：没有源文件时报错；`--check` 走缺失检查，否则渲染并写出。
 docWithFiles : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Bool -> List DocScope -> List (Pair DocScope (List String)) -> Eff r Int
-docWithFiles out check scopes files = if length (filesOf files) == 0 then docError "no vuna sources found under the given directory; pass a package or source directory"
+docWithFiles out check scopes files = if length (filesOf files) == 0 then
+  docError "no vuna sources found under the given directory; pass a package or source directory"
 else if check then do
   bookR <- buildBook scopes files
   case bookR of
@@ -226,7 +227,8 @@ missingInModule m = concatMap (missingInItem m) (moduleItems m)
 -- | 内部：条目本身缺 docstring 时的报告行；成员缺失不在这里检查。
 missingInItem : DocModule -> DocItem -> List String
 missingInItem m item =
-  if itemDoc item == "" then ["missing docstring: ${moduleName m}.${itemName item} (${modulePath m}:${itemLine item})"]
+  if itemDoc item == "" then
+    ["missing docstring: ${moduleName m}.${itemName item} (${modulePath m}:${itemLine item})"]
   else []
 
 -- ---------------------------------------------------------------

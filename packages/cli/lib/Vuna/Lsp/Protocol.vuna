@@ -121,7 +121,8 @@ export percentEncodeChars : List Int -> List Int -> List Int
 percentEncodeChars [] acc = acc
 percentEncodeChars (c :: rest) acc =
   if uriSafe c then percentEncodeChars rest (c :: acc)
-  else percentEncodeChars rest (hexDigitCode (c - c / 16 * 16) :: hexDigitCode (c / 16) :: 37 :: acc)
+  else
+    percentEncodeChars rest (hexDigitCode (c - c / 16 * 16) :: hexDigitCode (c / 16) :: 37 :: acc)
 
 -- | 文件系统路径 → `file://` URI（非安全字符走 %XX）。
 export pathToUri : String -> String

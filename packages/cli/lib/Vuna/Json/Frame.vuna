@@ -112,7 +112,8 @@ parseContentLength : String -> Maybe Int
 parseContentLength line =
   let
     trimmed = trim line
-  in if startsWith "content-length:" (asciiLower trimmed) then parseIntFull (trim (substring 15 (byteLength trimmed - 15) trimmed))
+  in if startsWith "content-length:" (asciiLower trimmed) then
+    parseIntFull (trim (substring 15 (byteLength trimmed - 15) trimmed))
   else Nothing
 
 -- | 内部：在多行 header 里找第一条可解析的 `Content-Length`。

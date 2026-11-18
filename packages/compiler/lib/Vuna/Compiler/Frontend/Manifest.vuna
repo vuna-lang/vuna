@@ -162,14 +162,15 @@ layerSeen name (x :: rest) = name == x || layerSeen name rest
 
 collectLayers : String -> List TomlEntry -> List String -> Check (List Layer)
 collectLayers path [] seen = OkC []
-collectLayers path ((TomlEntry section key value line) :: rest) seen = if sameSection section ["layers"] then if layerSeen key seen then collectLayers path rest seen
-else case value of
-  TArray xs => case arrayStrings xs of
-    Nothing => pkgAt1 path line (ExpectedStringArray key) key
-    Just uses =>
-      Vuna.Compiler.Base.Common.bind (collectLayers path rest (key :: seen))
-        (\ls => OkC (Layer key uses line :: ls))
-  _ => pkgAt1 path line (ExpectedStringArray key) key
+collectLayers path ((TomlEntry section key value line) :: rest) seen = if sameSection section ["layers"] then
+  if layerSeen key seen then collectLayers path rest seen
+  else case value of
+    TArray xs => case arrayStrings xs of
+      Nothing => pkgAt1 path line (ExpectedStringArray key) key
+      Just uses =>
+        Vuna.Compiler.Base.Common.bind (collectLayers path rest (key :: seen))
+          (\ls => OkC (Layer key uses line :: ls))
+    _ => pkgAt1 path line (ExpectedStringArray key) key
 else collectLayers path rest seen
 
 layerUsesOf : List Layer -> String -> List String
@@ -236,20 +237,29 @@ isDepSourceKey key =
 -- 只接受约定表；未知表 / 未知 key 报带行号的错误（防止字段拼写错误被静默忽略）。
 checkOneEntry : String -> TomlEntry -> Check Int
 checkOneEntry path (TomlEntry section key value line) = if sameSection section [] then pkgAt1 path line (UnexpectedTopLevelKey key) key
-else if sameSection section ["package"] then if key == "name" then OkC 0 else pkgAt2 path line (UnknownKey key "package") key "package"
-else if sameSection section ["workspace"] then if key == "members" then OkC 0 else pkgAt2 path line (UnknownKey key "workspace") key "workspace"
-else if sameSection section ["export"] then if key == "modules" then OkC 0 else pkgAt2 path line (UnknownKey key "export") key "export"
-else if sameSection section ["diagnostics"] then if key == "format" || key == "warnings" || key == "max-errors" || key == "lang" || key == "deny-warnings" then OkC 0
-else pkgAt2 path line (UnknownKey key "diagnostics") key "diagnostics"
+else if sameSection section ["package"] then
+  if key == "name" then OkC 0 else pkgAt2 path line (UnknownKey key "package") key "package"
+else if sameSection section ["workspace"] then
+  if key == "members" then OkC 0 else pkgAt2 path line (UnknownKey key "workspace") key "workspace"
+else if sameSection section ["export"] then
+  if key == "modules" then OkC 0 else pkgAt2 path line (UnknownKey key "export") key "export"
+else if sameSection section ["diagnostics"] then
+  if key == "format" || key == "warnings" || key == "max-errors" || key == "lang" || key == "deny-warnings" then
+    OkC 0
+  else pkgAt2 path line (UnknownKey key "diagnostics") key "diagnostics"
 else if sameSection section ["layers"] then case value of
   TArray _ => OkC 0
   _ => pkgAt1 path line (ExpectedStringArray key) key
-else if isLayersSection section then pkgAt1 path line (LayerKeyMustBeQuoted (joinDots (append section [key])))
-  (joinDots (append section [key]))
+else if isLayersSection section then
+  pkgAt1 path line (LayerKeyMustBeQuoted (joinDots (append section [key])))
+    (joinDots (append section [key]))
 else if sameSection section ["dependencies"] then OkC 0
-else if sameSection section ["registry"] then if key == "index" then OkC 0 else pkgAt2 path line (UnknownKey key "registry") key "registry"
-else if isDepTableSection section then if isDepSourceKey key then OkC 0
-else pkgAt2 path line (UnknownSourceKey key (depAliasOfSection section)) key (depAliasOfSection section)
+else if sameSection section ["registry"] then
+  if key == "index" then OkC 0 else pkgAt2 path line (UnknownKey key "registry") key "registry"
+else if isDepTableSection section then
+  if isDepSourceKey key then OkC 0
+  else pkgAt2 path line (UnknownSourceKey key (depAliasOfSection section)) key
+    (depAliasOfSection section)
 else if isLintSection section then OkC 0
 else pkgAt1 path line (UnknownSection (joinDots section)) (joinDots section)
 
@@ -322,9 +332,10 @@ applyDepEntry path alias key value line acc =
 
 collectTables : String -> List TomlEntry -> List DepAcc -> Check (List DepAcc)
 collectTables path [] acc = OkC acc
-collectTables path ((TomlEntry section key value line) :: rest) acc = if isDepTableSection section then case applyDepEntry path (depAliasOfSection section) key value line acc of
-  ErrC e => ErrC e
-  OkC acc2 => collectTables path rest acc2
+collectTables path ((TomlEntry section key value line) :: rest) acc = if isDepTableSection section then
+  case applyDepEntry path (depAliasOfSection section) key value line acc of
+    ErrC e => ErrC e
+    OkC acc2 => collectTables path rest acc2
 else collectTables path rest acc
 
 -- 字符串简写：`[dependencies] name = "相对路径"`。
@@ -418,7 +429,8 @@ else case checkIdentityForm path identityArg of
 
 validateDepsSeen : String -> List String -> List Dependency -> Check Int
 validateDepsSeen path seen [] = OkC 0
-validateDepsSeen path seen (dep :: rest) = if memName (depAliasOf dep) seen then pkgPath1 path (DuplicateDependency (depAliasOf dep)) (depAliasOf dep)
+validateDepsSeen path seen (dep :: rest) = if memName (depAliasOf dep) seen then
+  pkgPath1 path (DuplicateDependency (depAliasOf dep)) (depAliasOf dep)
 else case validateDependency path dep of
   ErrC e => ErrC e
   OkC ok => validateDepsSeen path (depAliasOf dep :: seen) rest

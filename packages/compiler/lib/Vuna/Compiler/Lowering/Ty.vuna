@@ -123,14 +123,16 @@ ctorFieldTys levels table datas (keep :: flags) (opq :: opqs) ((Pair name rig) :
   VPi pname implicit _ dom clo =>
     let
       next = applyClosure clo (VNeutral (NVar pname lvl []))
-    in if keep then if opq then Vuna.Compiler.Base.Common.bind (ctorFieldTys levels table datas flags opqs rest (lvl + 1) next slot) (\p => case p of
-      -- 不透明字段：整个字段渲染成不命名的运行时值；不消耗类型参数槽。
-      Pair tys slot3 => OkC (Pair (IrTyOpaque :: tys) slot3)
-    )
-    else case renderFieldTy levels table datas lvl dom slot of
-      Pair text slot2 => Vuna.Compiler.Base.Common.bind (ctorFieldTys levels table datas flags opqs rest (lvl + 1) next slot2) (\p => case p of
-        Pair tys slot3 => OkC (Pair (text :: tys) slot3)
-      )
+    in if keep then
+      if opq then
+        Vuna.Compiler.Base.Common.bind (ctorFieldTys levels table datas flags opqs rest (lvl + 1) next slot) (\p => case p of
+          -- 不透明字段：整个字段渲染成不命名的运行时值；不消耗类型参数槽。
+          Pair tys slot3 => OkC (Pair (IrTyOpaque :: tys) slot3)
+        )
+      else case renderFieldTy levels table datas lvl dom slot of
+        Pair text slot2 => Vuna.Compiler.Base.Common.bind (ctorFieldTys levels table datas flags opqs rest (lvl + 1) next slot2) (\p => case p of
+          Pair tys slot3 => OkC (Pair (text :: tys) slot3)
+        )
     else ctorFieldTys levels table datas flags opqs rest (lvl + 1) next slot
   _ => icInternal "constructor telescope does not match its type"
 else icInternal "constructor keep flag disagrees with telescope rig"

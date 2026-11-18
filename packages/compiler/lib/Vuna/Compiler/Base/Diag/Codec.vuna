@@ -317,36 +317,37 @@ encDiag (Diagnostic did dsev dphase dcat dcode dmsg dlabels dfields dtrace dnote
 
 decDiag : Int -> Cur -> Maybe (Pair Diagnostic Cur)
 decDiag fuel c = if fuel <= 0 then Nothing
-else thenPair (decInt (fuel - 1) c) (\id, b1 => thenPair (decTag (fuel - 1) b1) (\st, b2 => case sevOfTag st of
-  Nothing => Nothing
-  Just sev => thenPair (decTag (fuel - 1) b2) (\pt, b3 => case phaseOfTag pt of
+else
+  thenPair (decInt (fuel - 1) c) (\id, b1 => thenPair (decTag (fuel - 1) b1) (\st, b2 => case sevOfTag st of
     Nothing => Nothing
-    Just phase => thenPair (decTag (fuel - 1) b3) (\ct, b4 => case catOfTag ct of
+    Just sev => thenPair (decTag (fuel - 1) b2) (\pt, b3 => case phaseOfTag pt of
       Nothing => Nothing
-      Just cat => thenPair (decStr (fuel - 1) b4) (\code, b5 => thenPair (decStr (fuel - 1) b5) (\msg, b6 => thenPair (decList decLabel (fuel - 1) b6) (\labels, b7 => thenPair (decList decField (fuel - 1) b7) (\fields, b8 => thenPair (decList decTrace (fuel - 1) b8) (\trace, b9 => thenPair (decList decStr (fuel - 1) b9) (\notes, b10 => thenPair (decList decSuggestion (fuel - 1) b10) (\sugs, b11 => thenPair (decOrigin (fuel - 1) b11) (\origin, b12 => thenPair (decDiagList (fuel - 1) b12) (\kids, b13 => thenPair (decBool (fuel - 1) b13) (\internal, b14 => thenPair (decMaybe decIce (fuel - 1) b14) (\ice, b15 => thenPair (decMaybe decTag (fuel - 1) b15) (\mtag, b16 => case mtAbsent mtag of
+      Just phase => thenPair (decTag (fuel - 1) b3) (\ct, b4 => case catOfTag ct of
         Nothing => Nothing
-        Just absent => thenPair (decTag (fuel - 1) b16) (\stab, b17 => case stabilityOfTag stab of
+        Just cat => thenPair (decStr (fuel - 1) b4) (\code, b5 => thenPair (decStr (fuel - 1) b5) (\msg, b6 => thenPair (decList decLabel (fuel - 1) b6) (\labels, b7 => thenPair (decList decField (fuel - 1) b7) (\fields, b8 => thenPair (decList decTrace (fuel - 1) b8) (\trace, b9 => thenPair (decList decStr (fuel - 1) b9) (\notes, b10 => thenPair (decList decSuggestion (fuel - 1) b10) (\sugs, b11 => thenPair (decOrigin (fuel - 1) b11) (\origin, b12 => thenPair (decDiagList (fuel - 1) b12) (\kids, b13 => thenPair (decBool (fuel - 1) b13) (\internal, b14 => thenPair (decMaybe decIce (fuel - 1) b14) (\ice, b15 => thenPair (decMaybe decTag (fuel - 1) b15) (\mtag, b16 => case mtAbsent mtag of
           Nothing => Nothing
-          Just stability =>
-            Just
-              (Pair (Diagnostic id sev phase cat code msg labels fields trace notes sugs origin kids internal ice absent stability) b17)
+          Just absent => thenPair (decTag (fuel - 1) b16) (\stab, b17 => case stabilityOfTag stab of
+            Nothing => Nothing
+            Just stability =>
+              Just
+                (Pair (Diagnostic id sev phase cat code msg labels fields trace notes sugs origin kids internal ice absent stability) b17)
+          )
         )
-      )
-      )
-      )
-      )
-      )
-      )
-      )
-      )
-      )
-      )
-      )
+        )
+        )
+        )
+        )
+        )
+        )
+        )
+        )
+        )
+        )
+        )
       )
     )
   )
-)
-)
+  )
 
 -- 诊断子节点表（递归）。
 decDiagList : Int -> Cur -> Maybe (Pair (List Diagnostic) Cur)

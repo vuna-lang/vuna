@@ -255,10 +255,11 @@ else case a of
     VType j => if levelEq i j then OkC sols else mismatchAt depth a b
     _ => mismatchAt depth a b
   VPi name implicit rig dom cod => case b of
-    VPi name2 implicit2 rig2 dom2 cod2 => if implicit == implicit2 then Vuna.Compiler.Base.Common.bind (convFuel (fuel - 1) defs sols depth dom dom2) (\sols2 => let
-      v = freshVar name depth
-    in convFuel (fuel - 1) defs sols2 (depth + 1) (applyClosure cod v) (applyClosure cod2 v)
-    )
+    VPi name2 implicit2 rig2 dom2 cod2 => if implicit == implicit2 then
+      Vuna.Compiler.Base.Common.bind (convFuel (fuel - 1) defs sols depth dom dom2) (\sols2 => let
+        v = freshVar name depth
+      in convFuel (fuel - 1) defs sols2 (depth + 1) (applyClosure cod v) (applyClosure cod2 v)
+      )
     else mismatchAt depth a b
     _ => mismatchAt depth a b
   VLam name rig clo => case b of
@@ -287,8 +288,9 @@ else case a of
     _ => mismatchAt depth a b
   VCon c args => case b of
     VCon c2 args2 =>
-      if c == c2 then if isNatCtorName c then convNatChains defs sols depth a b args args2 fuel
-      else convValueListsFuel (fuel - 1) defs sols depth args args2
+      if c == c2 then
+        if isNatCtorName c then convNatChains defs sols depth a b args args2 fuel
+        else convValueListsFuel (fuel - 1) defs sols depth args args2
       else mismatchAt depth a b
     -- R3：卡住的投影与构造子不判等（与卡住的 case 同等保守）。
     _ => mismatchAt depth a b
@@ -367,11 +369,14 @@ convValueListsFuel fuel defs sols depth _ _ =
 convCaseAltsFuel : Int -> HashMap String Term -> Sols -> Int -> List VCaseAlt -> List VCaseAlt -> Check Sols
 convCaseAltsFuel fuel defs sols depth [] [] = if fuel <= 0 then icFuel "conv" else OkC sols
 convCaseAltsFuel fuel defs sols depth (a :: rest) (b :: rest2) = if fuel <= 0 then icFuel "conv"
-else if a.vCaseAltName == b.vCaseAltName then if length a.vCaseAltBinders == length b.vCaseAltBinders then case convOneAltFuel (fuel - 1) defs sols depth a b of
-  ErrC e => ErrC e
-  OkC sols2 => convCaseAltsFuel (fuel - 1) defs sols2 depth rest rest2
-else tcErr1NoLoc (TypeMismatchCaseVars a.vCaseAltName) a.vCaseAltName
-else tcErr2NoLoc (TypeMismatchCaseBranch a.vCaseAltName b.vCaseAltName) a.vCaseAltName b.vCaseAltName
+else if a.vCaseAltName == b.vCaseAltName then
+  if length a.vCaseAltBinders == length b.vCaseAltBinders then
+    case convOneAltFuel (fuel - 1) defs sols depth a b of
+      ErrC e => ErrC e
+      OkC sols2 => convCaseAltsFuel (fuel - 1) defs sols2 depth rest rest2
+  else tcErr1NoLoc (TypeMismatchCaseVars a.vCaseAltName) a.vCaseAltName
+else
+  tcErr2NoLoc (TypeMismatchCaseBranch a.vCaseAltName b.vCaseAltName) a.vCaseAltName b.vCaseAltName
 convCaseAltsFuel fuel defs sols depth _ _ =
   if fuel <= 0 then icFuel "conv" else tcErr0NoLoc TypeMismatchCaseCount
 
@@ -577,8 +582,9 @@ else case rhs of
     Just t => convFuel (fuel - 1) defs sols depth (applySpine (VMeta m sp) []) (applySpine t sp2)
     Nothing =>
       if m == n then convSpinesFuel (fuel - 1) defs sols depth sp sp2 (VMeta m sp) rhs
-      else Vuna.Compiler.Base.Common.bind (solveMetaFuel (fuel - 1) defs sols depth m [] (VMeta n []))
-        (\sols2 => convSpinesFuel (fuel - 1) defs sols2 depth sp sp2 (VMeta m sp) rhs)
+      else
+        Vuna.Compiler.Base.Common.bind (solveMetaFuel (fuel - 1) defs sols depth m [] (VMeta n []))
+          (\sols2 => convSpinesFuel (fuel - 1) defs sols2 depth sp sp2 (VMeta m sp) rhs)
   VNeutral n => case n of
     NGlobal g args =>
       solveMetaHeadLegacyFuel (fuel - 1) defs sols depth m sp (VNeutral n) (VNeutral (NGlobal g []))

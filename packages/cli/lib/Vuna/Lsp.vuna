@@ -362,7 +362,8 @@ handleDidOpen msg state =
     version = versionOfParams params
     text = textOfParams params
     docs = docSet (Doc uri version text) state.stateDocs
-  in if state.stateClientPull then pure (Pair False (Pair (setRootHintIfEmpty uri (setDocs docs state)) []))
+  in if state.stateClientPull then
+    pure (Pair False (Pair (setRootHintIfEmpty uri (setDocs docs state)) []))
   else do
     pair <- diagnoseCached uri version text state
     pure (Pair False (Pair (setRootHintIfEmpty uri (setDocs docs (firstOf pair))) [secondOf pair]))

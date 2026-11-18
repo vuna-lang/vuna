@@ -48,8 +48,9 @@ siteCollectBinds fuel comp ctors projs caller facts sizes region [] acc =
   if fuel <= 0 then acc else acc
 siteCollectBinds fuel comp ctors projs caller facts sizes region ((Pair pat val) :: rest) acc =
   if fuel <= 0 then acc
-  else siteCollectBinds (fuel - 1) comp ctors projs caller facts (extendSizesStrict sizes val pat) region
-    rest (siteWalkC (fuel - 1) comp ctors projs caller facts sizes region val acc)
+  else
+    siteCollectBinds (fuel - 1) comp ctors projs caller facts (extendSizesStrict sizes val pat)
+      region rest (siteWalkC (fuel - 1) comp ctors projs caller facts sizes region val acc)
 
 siteCollectStmts : Int -> List String -> List String -> List (Pair String (List Int)) -> String -> HashMap String (List Int) -> List (Pair String (Pair Int (Pair Int (List Int)))) -> List String -> List DoStmt -> List Site -> List Site
 siteCollectStmts fuel comp ctors projs caller facts sizes region [] acc =
@@ -118,7 +119,8 @@ else case groupHead comp fn of
       (Site caller callee args sizes region :: acc)
   Nothing => case fn of
     EVar nm nsp =>
-      if isMapLike nm then siteWalkEAppMap (fuel - 1) comp ctors projs caller facts sizes region fn args acc
+      if isMapLike nm then
+        siteWalkEAppMap (fuel - 1) comp ctors projs caller facts sizes region fn args acc
       else siteCollectList (fuel - 1) comp ctors projs caller facts sizes region args
         (siteWalkC (fuel - 1) comp ctors projs caller facts sizes region fn acc)
     _ =>
@@ -135,12 +137,14 @@ else case args of
     in siteWalkC (fuel - 1) comp ctors projs caller facts sizes2 region body acc1
   [cb, lst] => case cb of
     EApp (EVar g gsp) pargs cbsp =>
-      if memName g comp then siteWalkMapPartialInline (fuel - 1) comp ctors projs caller facts sizes region g pargs lst
-        cbsp acc
+      if memName g comp then
+        siteWalkMapPartialInline (fuel - 1) comp ctors projs caller facts sizes region g pargs lst
+          cbsp acc
       else siteCollectList (fuel - 1) comp ctors projs caller facts sizes region args acc
     EVar g gsp =>
-      if memName g comp then siteWalkMapPartialInline (fuel - 1) comp ctors projs caller facts sizes region g [] lst gsp
-        acc
+      if memName g comp then
+        siteWalkMapPartialInline (fuel - 1) comp ctors projs caller facts sizes region g [] lst gsp
+          acc
       else siteCollectList (fuel - 1) comp ctors projs caller facts sizes region args acc
     _ => siteCollectList (fuel - 1) comp ctors projs caller facts sizes region args acc
   _ => siteCollectList (fuel - 1) comp ctors projs caller facts sizes region args acc
@@ -181,7 +185,8 @@ insertEdge : ScEdge -> List ScEdge -> List ScEdge
 insertEdge e [] = [e]
 insertEdge e (x :: rest) =
   if e.edgeFrom < x.edgeFrom then e :: x :: rest
-  else if e.edgeFrom == x.edgeFrom then if e.edgeTo <= x.edgeTo then e :: x :: rest else x :: insertEdge e rest
+  else if e.edgeFrom == x.edgeFrom then
+    if e.edgeTo <= x.edgeTo then e :: x :: rest else x :: insertEdge e rest
   else x :: insertEdge e rest
 
 sortEdges : List ScEdge -> List ScEdge
@@ -196,7 +201,8 @@ compactEdges [] = []
 compactEdges (e :: rest) = case rest of
   [] => [e]
   x :: xs =>
-    if e.edgeFrom == x.edgeFrom then if e.edgeTo == x.edgeTo then mergeStrict e x :: compactEdges xs else e :: compactEdges rest
+    if e.edgeFrom == x.edgeFrom then
+      if e.edgeTo == x.edgeTo then mergeStrict e x :: compactEdges xs else e :: compactEdges rest
     else e :: compactEdges rest
 
 canonEdges : List ScEdge -> List ScEdge
@@ -205,8 +211,9 @@ canonEdges edges = compactEdges (sortEdges edges)
 edgesEqCanon : List ScEdge -> List ScEdge -> Bool
 edgesEqCanon [] [] = True
 edgesEqCanon (x :: xs) (y :: ys) =
-  if x.edgeFrom == y.edgeFrom then if x.edgeTo == y.edgeTo then if x.scStrictEdge == y.scStrictEdge then edgesEqCanon xs ys else False
-  else False
+  if x.edgeFrom == y.edgeFrom then
+    if x.edgeTo == y.edgeTo then if x.scStrictEdge == y.scStrictEdge then edgesEqCanon xs ys else False
+    else False
   else False
 edgesEqCanon (x :: xs) [] = False
 edgesEqCanon [] (y :: ys) = False
@@ -217,7 +224,9 @@ edgesEq a b = edgesEqCanon (canonEdges a) (canonEdges b)
 combineWith : ScEdge -> List ScEdge -> List ScEdge
 combineWith e [] = []
 combineWith e (x :: rest) =
-  if e.edgeTo == x.edgeFrom then ScEdge e.edgeFrom x.edgeTo (if e.scStrictEdge then True else x.scStrictEdge) :: combineWith e rest
+  if e.edgeTo == x.edgeFrom then
+    ScEdge e.edgeFrom x.edgeTo (if e.scStrictEdge then True else x.scStrictEdge)
+      :: combineWith e rest
   else combineWith e rest
 
 composeGo : List ScEdge -> List ScEdge -> List ScEdge
@@ -266,8 +275,9 @@ graphListSubset (g :: rest) b = graphListHas g b && graphListSubset rest b
 tableAddPair : String -> String -> List ScEdge -> List (Pair (Pair String String) (List (List ScEdge))) -> List (Pair (Pair String String) (List (List ScEdge)))
 tableAddPair f g edges [] = [Pair (Pair f g) [edges]]
 tableAddPair f g edges ((Pair (Pair f2 g2) gs) :: rest) =
-  if f == f2 then if g == g2 then Pair (Pair f g) (append gs [edges]) :: rest
-  else Pair (Pair f2 g2) gs :: tableAddPair f g edges rest
+  if f == f2 then
+    if g == g2 then Pair (Pair f g) (append gs [edges]) :: rest
+    else Pair (Pair f2 g2) gs :: tableAddPair f g edges rest
   else Pair (Pair f2 g2) gs :: tableAddPair f g edges rest
 
 tableAdd : String -> String -> List ScEdge -> List (Pair (Pair String String) (List (List ScEdge))) -> Pair (List (Pair (Pair String String) (List (List ScEdge)))) Bool
@@ -496,8 +506,9 @@ allWeakEdges ((Pair (Pair (Pair c g) m) sp) :: rest) =
 onlyUnguarded : List String -> List (Pair (Pair (Pair String String) Int) Span) -> List (Pair (Pair (Pair String String) Int) Span)
 onlyUnguarded unguarded [] = []
 onlyUnguarded unguarded ((Pair (Pair (Pair c g) m) sp) :: rest) =
-  if memName c unguarded then if memName g unguarded then Pair (Pair (Pair c g) m) sp :: onlyUnguarded unguarded rest
-  else onlyUnguarded unguarded rest
+  if memName c unguarded then
+    if memName g unguarded then Pair (Pair (Pair c g) m) sp :: onlyUnguarded unguarded rest
+    else onlyUnguarded unguarded rest
   else onlyUnguarded unguarded rest
 
 -- 不含守卫的子图是否有环：有环 ⇒ 存在一条永不触底的路径，判据不成立。
@@ -519,8 +530,9 @@ tryFuelThread comp defTbl ctors projs facts msg =
     sites = siteCollect comp ctors projs defTbl facts
     edges = fuelEdgesOf comp defTbl sites
     strictCount = length (filterModes (map edgeModeOf edges))
-  in if strictCount > 0 then if fuelAcceptable comp defTbl edges then if hasWeakCycle comp edges then ErrC msg else OkC 0
-  else ErrC msg
+  in if strictCount > 0 then
+    if fuelAcceptable comp defTbl edges then if hasWeakCycle comp edges then ErrC msg else OkC 0
+    else ErrC msg
   else ErrC msg
 
 -- | 取边上的参数关系编号。

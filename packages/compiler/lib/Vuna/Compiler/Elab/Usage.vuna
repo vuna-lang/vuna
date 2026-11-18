@@ -280,8 +280,9 @@ else case t of
   -- 类型层项不产生运行时闭包（λ 只在值层出现）。
   TPi name implicit rig dom cod => OkC 0
   TLam name rig _ body =>
-    if isLinClosureName name then if allowed then capCheckFuel (fuel - 1) ec sp body False
-    else tcErr1 sp (LinearCaptureEscapes (linClosureOrigName name)) (linClosureOrigName name)
+    if isLinClosureName name then
+      if allowed then capCheckFuel (fuel - 1) ec sp body False
+      else tcErr1 sp (LinearCaptureEscapes (linClosureOrigName name)) (linClosureOrigName name)
     else capCheckFuel (fuel - 1) ec sp body False
   TApp f a rig =>
     Vuna.Compiler.Base.Common.bind (capCheckFuel (fuel - 1) ec sp f True)
@@ -341,7 +342,8 @@ checkProgramUsage ec defs = checkProgramUsageGo ec defs
 checkProgramUsageGo : Ec -> List DtDef -> Check Ec
 checkProgramUsageGo ec [] = OkC ec
 checkProgramUsageGo ec (d :: rest) = if isTypeLevelDef ec d then checkProgramUsageGo ec rest
-else if isLinearType ec (eval [] (dtDefType d)) then tcErr1 (defSpanOf d) (LinearTopLevel (dtDefName d)) (dtDefName d)
+else if isLinearType ec (eval [] (dtDefType d)) then
+  tcErr1 (defSpanOf d) (LinearTopLevel (dtDefName d)) (dtDefName d)
 else case dtDefBody d of
   Nothing => checkProgramUsageGo ec rest
   Just body =>

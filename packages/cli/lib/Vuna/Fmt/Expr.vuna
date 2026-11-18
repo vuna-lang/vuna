@@ -49,12 +49,15 @@ renderTemplateTextGo : Bool -> List Int -> List Int -> List Int
 renderTemplateTextGo multi [] acc = acc
 renderTemplateTextGo multi (c :: rest) acc = if c == 92 then renderTemplateTextGo multi rest (92 :: 92 :: acc)
 else if c == 34 then renderTemplateTextGo multi rest (34 :: 92 :: acc)
-else if c == 10 then if multi then renderTemplateTextGo multi rest (10 :: acc)
-else renderTemplateTextGo multi rest (110 :: 92 :: acc)
-else if c == 9 then if multi then renderTemplateTextGo multi rest (9 :: acc)
-else renderTemplateTextGo multi rest (116 :: 92 :: acc)
-else if c == 13 then if multi then renderTemplateTextGo multi rest (13 :: acc)
-else renderTemplateTextGo multi rest (114 :: 92 :: acc)
+else if c == 10 then
+  if multi then renderTemplateTextGo multi rest (10 :: acc)
+  else renderTemplateTextGo multi rest (110 :: 92 :: acc)
+else if c == 9 then
+  if multi then renderTemplateTextGo multi rest (9 :: acc)
+  else renderTemplateTextGo multi rest (116 :: 92 :: acc)
+else if c == 13 then
+  if multi then renderTemplateTextGo multi rest (13 :: acc)
+  else renderTemplateTextGo multi rest (114 :: 92 :: acc)
 else if c == 36 then case rest of
   c2 :: rest2 =>
     if c2 == 123 then renderTemplateTextGo multi rest2 (123 :: 36 :: 92 :: acc)
@@ -890,31 +893,70 @@ else case body of
           :: prefixFirst (spaces (altInd + 2)) (renderExprGo (fuel - 1) env at (altInd + 2) body)
       Nothing => prefixFirst prefix (renderExprGo (fuel - 1) env at altInd body)
 
--- | 内部：关键字（`then` / `else`）后的体；`let` 体另起一行缩进 `lineInd + 2`。
-renderWhenBodyGo : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> String -> Expr -> List String
-renderWhenBodyGo fuel env at lineInd keyword e = if fuel <= 0 then []
-else case e of
-  ELet binds inner recFlag sp =>
-    (spaces lineInd ++ keyword)
-      :: prefixFirst (spaces (lineInd + 2)) (renderExprGo (fuel - 1) env at (lineInd + 2) e)
-  _ => prefixFirst "${spaces lineInd}${keyword} " (renderExprGo (fuel - 1) env at lineInd e)
+-- | 内部：`then` / `else` 之后必须独占一行的结构。
+--
+-- `ELet` 的 `in` 对齐到 `let`，跟在 `else` / `then` 后面会把 `in` 拉到关键字缩进。
+-- `if` 视情况处理（见 [renderThenPart]）：能单行就单行，否则按 `lineInd + 2` 换行。
+ownLineAfterKeyword : Expr -> Bool
+ownLineAfterKeyword e = case e of
+  ELet _ _ _ _ => True
+  _ => False
 
 -- | 内部：`if ... then ... else ...` 的块布局。
+--
+-- 判据：
+-- - `then` / `else` 后的首行放不下（超过 `maxWidth`）就在 `lineInd + 2` 另起一行，
+--   体也按 `lineInd + 2` 渲染，因此嵌套 `if` 的 `else` 与外层 `else` 不同缩进。
+-- - `then` 分支直接是 `if` 时强制换行；`else` 分支直接是 `if` 时写成 `else if`，
+--   但嵌套 `if` 按 `lineInd + 2` 渲染（它的 `else` 落在 `lineInd + 2`）。
 renderIfGo : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> Expr -> Expr -> List String
 renderIfGo fuel env at lineInd c t el = if fuel <= 0 then []
 else
   let
-    condLines = prefixFirst "if " (renderScrutGo (fuel - 1) env at lineInd c)
-    thenLines = case t of
-      ELet binds inner recFlag sp =>
-        append (appendLast " then" condLines)
-          (prefixFirst (spaces (lineInd + 2)) (renderExprGo (fuel - 1) env at (lineInd + 2) t))
-      _ =>
-        let
-          tLines = renderExprGo (fuel - 1) env at lineInd t
-        in append (appendLast " then ${firstLine tLines}" condLines) (restLines tLines)
-    elseLines = renderWhenBodyGo (fuel - 1) env at lineInd "else" el
-  in append thenLines elseLines
+    condLines = appendLast " then" (prefixFirst "if " (renderScrutGo (fuel - 1) env at lineInd c))
+  in append (renderThenPart (fuel - 1) env at lineInd condLines t)
+    (renderElsePart (fuel - 1) env at lineInd el)
+
+-- | 内部：`then` 分支；`condLines` 已含 `if ... then`。
+renderThenPart : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> List String -> Expr -> List String
+renderThenPart fuel env at lineInd condLines t = if fuel <= 0 then []
+else
+  let
+    ls = renderExprGo (fuel - 1) env at lineInd t
+    fitsHere = strWidth (lastLineOf condLines) + 1 + strWidth (firstLine ls) <= maxWidth
+    broken =
+      append condLines
+        (prefixFirst (spaces (lineInd + 2)) (renderExprGo (fuel - 1) env at (lineInd + 2) t))
+  in if ownLineAfterKeyword t then broken
+  else if nestedIf t then
+    if fitsHere && isNilList (restLines ls) then appendLast (" " ++ firstLine ls) condLines
+    else broken
+  else if fitsHere then append (appendLast (" " ++ firstLine ls) condLines) (restLines ls) else broken
+
+-- | 内部：多行 `if` 作为 `then` 体时必须按 `lineInd + 2` 渲染，否则它的 `else` 会与
+-- 外层 `else` 同缩进；单行形式由 `renderExprGo` 的 inline 路径给出，不受影响。
+nestedIf : Expr -> Bool
+nestedIf e = case e of
+  EIf _ _ _ _ => True
+  _ => False
+
+-- | 内部：`else` 分支，`else` 始终从 `lineInd` 开始。
+renderElsePart : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List String
+renderElsePart fuel env at lineInd el = if fuel <= 0 then []
+else
+  let
+    broken =
+      (spaces lineInd ++ "else")
+        :: prefixFirst (spaces (lineInd + 2)) (renderExprGo (fuel - 1) env at (lineInd + 2) el)
+  in case el of
+    EIf _ _ _ _ =>
+      prefixFirst (spaces lineInd ++ "else ") (renderExprGo (fuel - 1) env at lineInd el)
+    ELet _ _ _ _ => broken
+    _ =>
+      let
+        ls = renderExprGo (fuel - 1) env at lineInd el
+      in if lineInd + 5 + strWidth (firstLine ls) <= maxWidth then prefixFirst (spaces lineInd ++ "else ") ls
+      else broken
 
 -- | 内部：`let` 绑定块 + `in`（绑定缩进 `lineInd + 2`）。
 renderLetGo : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> List (Pair Pat Expr) -> Expr -> List String
@@ -982,7 +1024,8 @@ else case value of
       :: prefixFirst (spaces (lineInd + 2)) (renderExprGo (fuel - 1) env at (lineInd + 2) value)
   _ => case inlinePrecGo formatFuelBound env 0 value of
     Just s =>
-      if strWidth "${spaces lineInd}${prefixText} ${s}" <= maxWidth then ["${spaces lineInd}${prefixText} ${s}"]
+      if strWidth "${spaces lineInd}${prefixText} ${s}" <= maxWidth then
+        ["${spaces lineInd}${prefixText} ${s}"]
       else (spaces lineInd ++ prefixText)
         :: prefixFirst (spaces (lineInd + 2)) (renderExprGo (fuel - 1) env at (lineInd + 2) value)
     Nothing =>
@@ -1128,7 +1171,8 @@ else
     Nothing => appendApplyArgsGo (fuel - 1) env at lineInd headLines args
     Just texts => case headLines of
       [h] =>
-        if fitsLine lineInd (h ++ concatStrings (map (\t => " ${t}") texts)) then appendApplyArgsGo (fuel - 1) env at lineInd headLines args
+        if fitsLine lineInd (h ++ concatStrings (map (\t => " ${t}") texts)) then
+          appendApplyArgsGo (fuel - 1) env at lineInd headLines args
         else packApplyArgs lineInd [h] texts
       _ => appendApplyArgsGo (fuel - 1) env at lineInd headLines args
 
@@ -1136,7 +1180,8 @@ else
 packApplyArgs : Int -> List String -> List String -> List String
 packApplyArgs lineInd lines [] = lines
 packApplyArgs lineInd lines (t :: rest) =
-  if fitsLineWidth (lastLineWidth lineInd lines) t then packApplyArgs lineInd (appendLast " ${t}" lines) rest
+  if fitsLineWidth (lastLineWidth lineInd lines) t then
+    packApplyArgs lineInd (appendLast " ${t}" lines) rest
   else packApplyArgs lineInd (append lines [spaces (lineInd + 2) ++ t]) rest
 
 -- | 内部：已经渲染出的行的最后一行的绝对列宽（首行要算上 `lineInd`）。

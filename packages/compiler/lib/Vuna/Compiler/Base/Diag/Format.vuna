@@ -366,7 +366,8 @@ jsonTrace t = jsonTraceFuel 64 t
 jsonTraceFuel : Int -> TraceFrame -> String
 jsonTraceFuel fuel t =
   if fuel <= 0 then "{\"phase\":\"truncated\"}"
-  else "{\"phase\":${jsonStr (phaseName t.tracePhase)},\"text\":${jsonStr t.traceText},\"span\":${maybeJsonSpan t.traceSpan},\"children\":[${join "," (map (jsonTraceFuel (fuel - 1)) t.traceChildren)}]}"
+  else
+    "{\"phase\":${jsonStr (phaseName t.tracePhase)},\"text\":${jsonStr t.traceText},\"span\":${maybeJsonSpan t.traceSpan},\"children\":[${join "," (map (jsonTraceFuel (fuel - 1)) t.traceChildren)}]}"
 
 jsonIce : IceInfo -> String
 jsonIce i =

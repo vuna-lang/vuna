@@ -230,7 +230,8 @@ else case groupHead comp fn of
         (addEdgeMode caller callee rel sp acc)
   Nothing => case fn of
     EVar nm nsp =>
-      if isMapLike nm then strWalkEAppMap (fuel - 1) comp ctors projs p sizes caller facts region fn args acc
+      if isMapLike nm then
+        strWalkEAppMap (fuel - 1) comp ctors projs p sizes caller facts region fn args acc
       else strWalkApp (fuel - 1) comp ctors projs p sizes caller facts region fn args acc
     _ => strWalkApp (fuel - 1) comp ctors projs p sizes caller facts region fn args acc
 
@@ -244,12 +245,14 @@ else case args of
     in strWalk (fuel - 1) comp ctors projs p sizes2 caller facts region body acc1
   [cb, lst] => case cb of
     EApp (EVar g gsp) pargs cbsp =>
-      if memName g comp then strWalkMapPartialInline (fuel - 1) comp ctors projs p sizes caller facts region g pargs lst
-        cbsp acc
+      if memName g comp then
+        strWalkMapPartialInline (fuel - 1) comp ctors projs p sizes caller facts region g pargs lst
+          cbsp acc
       else strWalkArgs (fuel - 1) comp ctors projs p sizes caller facts region args acc
     EVar g gsp =>
-      if memName g comp then strWalkMapPartialInline (fuel - 1) comp ctors projs p sizes caller facts region g [] lst gsp
-        acc
+      if memName g comp then
+        strWalkMapPartialInline (fuel - 1) comp ctors projs p sizes caller facts region g [] lst gsp
+          acc
       else strWalkArgs (fuel - 1) comp ctors projs p sizes caller facts region args acc
     _ => strWalkArgs (fuel - 1) comp ctors projs p sizes caller facts region args acc
   _ => strWalkArgs (fuel - 1) comp ctors projs p sizes caller facts region args acc
@@ -293,8 +296,9 @@ strWalkBinds fuel comp ctors projs p sizes caller facts region [] acc =
   if fuel <= 0 then acc else acc
 strWalkBinds fuel comp ctors projs p sizes caller facts region ((Pair pat val) :: rest) acc =
   if fuel <= 0 then acc
-  else strWalkBinds (fuel - 1) comp ctors projs p (extendSizesStrict sizes val pat) caller facts region
-    rest (strWalk (fuel - 1) comp ctors projs p sizes caller facts region val acc)
+  else
+    strWalkBinds (fuel - 1) comp ctors projs p (extendSizesStrict sizes val pat) caller facts region
+      rest (strWalk (fuel - 1) comp ctors projs p sizes caller facts region val acc)
 
 strWalkFields : Int -> List String -> List String -> List (Pair String (List Int)) -> Int -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> HashMap String (List Int) -> List String -> List (Pair String Expr) -> Pair Bool (List (Pair (Pair (Pair String String) Int) Span)) -> Pair Bool (List (Pair (Pair (Pair String String) Int) Span))
 strWalkFields fuel comp ctors projs p sizes caller facts region [] acc =
@@ -398,8 +402,9 @@ tryMeasure comp defTbl ctors projs facts p maxP =
   tryMeasureGo comp defTbl ctors projs facts (maxP - p) maxP p [] (emptyFail p)
 
 tryMeasureGo : List String -> HashMap String (List (Pair (List Pat) Expr)) -> List String -> List (Pair String (List Int)) -> HashMap String (List Int) -> Int -> Int -> Int -> List (Pair (Pair (Pair String String) Int) Span) -> FailCandidate -> Check Int
-tryMeasureGo comp defTbl ctors projs facts remaining maxP lastP lastEdges best = if remaining <= 0 then if best.fcRank > 0 then ErrC (cannotProveMsgEdges comp best.fcPos best.fcEdges)
-else ErrC (cannotProveMsgEdges comp lastP lastEdges)
+tryMeasureGo comp defTbl ctors projs facts remaining maxP lastP lastEdges best = if remaining <= 0 then
+  if best.fcRank > 0 then ErrC (cannotProveMsgEdges comp best.fcPos best.fcEdges)
+  else ErrC (cannotProveMsgEdges comp lastP lastEdges)
 else
   let
     p = maxP - remaining
@@ -408,9 +413,12 @@ else
     OkC (Pair valid edges) => if valid then
       let
         modes = filterModes (map callMode edges)
-      in if notEmpty modes then if allSame modes then if hasWeakCycle comp edges then tryMeasureGo comp defTbl ctors projs facts (remaining - 1) maxP p edges best
-      else OkC 0
-      else tryMeasureGo comp defTbl ctors projs facts (remaining - 1) maxP p edges best
+      in if notEmpty modes then
+        if allSame modes then
+          if hasWeakCycle comp edges then
+            tryMeasureGo comp defTbl ctors projs facts (remaining - 1) maxP p edges best
+          else OkC 0
+        else tryMeasureGo comp defTbl ctors projs facts (remaining - 1) maxP p edges best
       else tryMeasureGo comp defTbl ctors projs facts (remaining - 1) maxP p edges best
     else tryMeasureGo comp defTbl ctors projs facts (remaining - 1) maxP p edges
       (betterFail p edges best)
@@ -486,8 +494,9 @@ anyOwnTbl ownTbl (n :: rest) = if HashMap.member n ownTbl then True else anyOwnT
 checkSccsWith : HashMap String Bool -> List (List String) -> HashMap String (List (Pair (List Pat) Expr)) -> List String -> List (Pair String (List Int)) -> HashMap String (List String) -> List (Pair String Int) -> Check Int
 checkSccsWith ownTbl [] defTbl ctors projs g facts = OkC 0
 checkSccsWith ownTbl (comp :: rest) defTbl ctors projs g facts =
-  if anyOwnTbl ownTbl comp then Vuna.Compiler.Base.Common.bind (checkComp comp defTbl ctors projs g facts)
-    (\n => Vuna.Compiler.Base.Common.bind (checkSccsWith ownTbl rest defTbl ctors projs g facts) (\m => OkC (n + m)))
+  if anyOwnTbl ownTbl comp then
+    Vuna.Compiler.Base.Common.bind (checkComp comp defTbl ctors projs g facts)
+      (\n => Vuna.Compiler.Base.Common.bind (checkSccsWith ownTbl rest defTbl ctors projs g facts) (\m => OkC (n + m)))
   else checkSccsWith ownTbl rest defTbl ctors projs g facts
 
 -- | 取调用边的参数关系编号。

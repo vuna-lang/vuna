@@ -145,7 +145,8 @@ parseExportNamespace st =
 -- 复用 `import` 之后的 qualified/模块名/as 解析。
 parseImportAfterKeyword : PState -> Check (Pair Import PState)
 parseImportAfterKeyword st =
-  if atKw st "qualified" then Vuna.Compiler.Base.Common.bind (expectKw st "qualified") (\st1 => parseImportAlias st1 True)
+  if atKw st "qualified" then
+    Vuna.Compiler.Base.Common.bind (expectKw st "qualified") (\st1 => parseImportAlias st1 True)
   else parseImportAlias st False
 
 parseReexportTail : Import -> PState -> Check (Pair (Pair Import (List ExportItem)) PState)
@@ -180,20 +181,23 @@ parseImportAlias st isQualified =
 -- import 区同时收 `export import` 的重导出项；列表顺序无语义。
 parseImports : Int -> PState -> Check (Pair (Pair (List Import) (List ExportItem)) PState)
 parseImports fuel st = if fuel <= 0 then icFuel "parser"
-else if atKw st "import" then Vuna.Compiler.Base.Common.step (parseImportSpec st) (\imp, st1 => Vuna.Compiler.Base.Common.step (parseImports (fuel - 1) st1) (\rest, st2 => case rest of
-  Pair imports reexports => OkC (Pair (Pair ((::) imp imports) reexports) st2)
-)
-)
-else if atIdentName st "export" && atKw (advance st) "import" then Vuna.Compiler.Base.Common.step (parseExportImport st) (\p, st1 => case p of
-  Pair imp reexports => Vuna.Compiler.Base.Common.step (parseImports (fuel - 1) st1) (\rest, st2 => case rest of
-    Pair imports reexports2 =>
-      OkC (Pair (Pair ((::) imp imports) (append reexports reexports2)) st2)
+else if atKw st "import" then
+  Vuna.Compiler.Base.Common.step (parseImportSpec st) (\imp, st1 => Vuna.Compiler.Base.Common.step (parseImports (fuel - 1) st1) (\rest, st2 => case rest of
+    Pair imports reexports => OkC (Pair (Pair ((::) imp imports) reexports) st2)
   )
-)
-else if atIdentName st "export" && atKw (advance st) "module" then Vuna.Compiler.Base.Common.step (parseExportNamespace st) (\item, st1 => Vuna.Compiler.Base.Common.step (parseImports (fuel - 1) st1) (\rest, st2 => case rest of
-  Pair imports reexports2 => OkC (Pair (Pair imports ((::) item reexports2)) st2)
-)
-)
+  )
+else if atIdentName st "export" && atKw (advance st) "import" then
+  Vuna.Compiler.Base.Common.step (parseExportImport st) (\p, st1 => case p of
+    Pair imp reexports => Vuna.Compiler.Base.Common.step (parseImports (fuel - 1) st1) (\rest, st2 => case rest of
+      Pair imports reexports2 =>
+        OkC (Pair (Pair ((::) imp imports) (append reexports reexports2)) st2)
+    )
+  )
+else if atIdentName st "export" && atKw (advance st) "module" then
+  Vuna.Compiler.Base.Common.step (parseExportNamespace st) (\item, st1 => Vuna.Compiler.Base.Common.step (parseImports (fuel - 1) st1) (\rest, st2 => case rest of
+    Pair imports reexports2 => OkC (Pair (Pair imports ((::) item reexports2)) st2)
+  )
+  )
 else OkC (Pair (Pair [] []) st)
 
 -- `infixl` / `infixr` / `infix` 声明与顶层声明穿插收集（声明本身不进入 Decl，
@@ -338,8 +342,9 @@ parseExportedPlain op st blockCol = case peekTok st of
     if tierFollows st then parseTieredExport ReprBoxed st blockCol p
     else ps1 st (ExpectedToken "value signature") "value signature"
   PTok (TIdent name) p =>
-    if (name == "alias" || name == "boxed") && tierFollows st then if opacityGiven op then ps1 st (ExpectedToken "value signature") "value signature"
-    else parseTieredExport (if name == "alias" then ReprAlias else ReprBoxed) st blockCol p
+    if (name == "alias" || name == "boxed") && tierFollows st then
+      if opacityGiven op then ps1 st (ExpectedToken "value signature") "value signature"
+      else parseTieredExport (if name == "alias" then ReprAlias else ReprBoxed) st blockCol p
     else parseExportedValue op st blockCol
   PTok (TSym _) _ => parseExportedValue op st blockCol
   _ => ps0 st ExpectedTopLevelDecl
@@ -498,12 +503,13 @@ record TraitHead where
   traitHeadSupers : List Expr
 
 parseTraitHead : PState -> Check (Pair TraitHead PState)
-parseTraitHead st = if traitSupersFollow st then Vuna.Compiler.Base.Common.bind (parseTraitSupers (stateFuel st) st) (\p => let
-  supers = firstOf p
-  st1 = secondOf p
-in Vuna.Compiler.Base.Common.step (expectIdent st1)
-  (\name, st2 => Vuna.Compiler.Base.Common.step (parseTraitParams (stateFuel st2) st2) (\params, st3 => OkC (Pair (TraitHead name params supers) st3)))
-)
+parseTraitHead st = if traitSupersFollow st then
+  Vuna.Compiler.Base.Common.bind (parseTraitSupers (stateFuel st) st) (\p => let
+    supers = firstOf p
+    st1 = secondOf p
+  in Vuna.Compiler.Base.Common.step (expectIdent st1)
+    (\name, st2 => Vuna.Compiler.Base.Common.step (parseTraitParams (stateFuel st2) st2) (\params, st3 => OkC (Pair (TraitHead name params supers) st3)))
+  )
 else Vuna.Compiler.Base.Common.step (expectIdent st)
   (\name, st1 => Vuna.Compiler.Base.Common.step (parseTraitParams (stateFuel st1) st1) (\params, st2 => OkC (Pair (TraitHead name params []) st2)))
 
@@ -717,21 +723,23 @@ else case peekPos st of
 
 parseBindingItem : Int -> PState -> Int -> Check (Pair BindingItem PState)
 parseBindingItem fuel st bindCol = if fuel <= 0 then icFuel "parser"
-else Vuna.Compiler.Base.Common.step (parsePatternSingle (stateFuel st) st bindCol) (\pat, st1 => case pat of
-  PVar name psp =>
-    if atSym st1 ":" then Vuna.Compiler.Base.Common.bind (expectSym st1 ":")
-      (\st2 => Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st2 bindCol) (\ty, st3 => Vuna.Compiler.Base.Common.bind (rejectCtxSuffix st3) (\st4 => OkC (Pair (BISig name ty (spanOf st st4)) st4))))
-    else parseBindingDef (fuel - 1) st st1 bindCol pat
-  _ => parseBindingDef (fuel - 1) st st1 bindCol pat
-)
+else
+  Vuna.Compiler.Base.Common.step (parsePatternSingle (stateFuel st) st bindCol) (\pat, st1 => case pat of
+    PVar name psp =>
+      if atSym st1 ":" then Vuna.Compiler.Base.Common.bind (expectSym st1 ":")
+        (\st2 => Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st2 bindCol) (\ty, st3 => Vuna.Compiler.Base.Common.bind (rejectCtxSuffix st3) (\st4 => OkC (Pair (BISig name ty (spanOf st st4)) st4))))
+      else parseBindingDef (fuel - 1) st st1 bindCol pat
+    _ => parseBindingDef (fuel - 1) st st1 bindCol pat
+  )
 
 -- 单条绑定：`pat = expr` 或函数子句 `name pats = expr`（desugar 成 λ）。
 parseBindingDef : Int -> PState -> PState -> Int -> Pat -> Check (Pair BindingItem PState)
 parseBindingDef fuel stStart st bindCol pat = if fuel <= 0 then icFuel "parser"
 else case pat of
   PVar name _ =>
-    if startsPatternAtom st && canContinue st bindCol then Vuna.Compiler.Base.Common.step (parseClausePatterns (stateFuel st) st bindCol)
-      (\pats, st2 => Vuna.Compiler.Base.Common.bind (checkBindersAt st pats) (\_ => Vuna.Compiler.Base.Common.bind (expectSym st2 "=") (\st3 => Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st3 bindCol) (\value, st4 => OkC (Pair (BIBind (Pair (PVar name (patSpan pat)) (ELocalFun [Pair pats value] (spanOf stStart st4)))) st4)))))
+    if startsPatternAtom st && canContinue st bindCol then
+      Vuna.Compiler.Base.Common.step (parseClausePatterns (stateFuel st) st bindCol)
+        (\pats, st2 => Vuna.Compiler.Base.Common.bind (checkBindersAt st pats) (\_ => Vuna.Compiler.Base.Common.bind (expectSym st2 "=") (\st3 => Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st3 bindCol) (\value, st4 => OkC (Pair (BIBind (Pair (PVar name (patSpan pat)) (ELocalFun [Pair pats value] (spanOf stStart st4)))) st4)))))
     else Vuna.Compiler.Base.Common.step (parseBindingValue (fuel - 1) st pat bindCol)
       (\b, st2 => OkC (Pair (BIBind b) st2))
   _ =>
@@ -767,7 +775,8 @@ bindingBindsGo (item :: rest) sigs bound acc = case item of
       Just (Pair ty sp) =>
         if memName (patBoundName pat) bound then ErrC
           (withLabel (Label (Just sp) "" LabelPrimary Nothing) (psMsg (WhereSigMultiClause (patBoundName pat)) [patBoundName pat]))
-        else bindingBindsGo rest sigs (patBoundName pat :: bound) (Pair pat (EAnn value ty sp) :: acc)
+        else
+          bindingBindsGo rest sigs (patBoundName pat :: bound) (Pair pat (EAnn value ty sp) :: acc)
       Nothing => bindingBindsGo rest sigs (patBoundName pat :: bound) (Pair pat value :: acc)
 
 -- 把相邻同名函数子句合并成一个 `ELocalFun` 绑定（where/let 多 clause）。
@@ -808,8 +817,9 @@ firstDanglingSig ((Pair name (Pair ty sp)) :: rest) bound =
 parseClausePatterns : Int -> PState -> Int -> Check (Pair (List Pat) PState)
 parseClausePatterns fuel st blockCol =
   if fuel <= 0 then icFuel "parser"
-  else if startsPatternAtom st && canContinue st blockCol then Vuna.Compiler.Base.Common.step (parsePatternAtom (stateFuel st) st blockCol)
-    (\pat, st1 => Vuna.Compiler.Base.Common.step (parseClausePatterns (fuel - 1) st1 blockCol) (\rest, st2 => OkC (Pair ((::) pat rest) st2)))
+  else if startsPatternAtom st && canContinue st blockCol then
+    Vuna.Compiler.Base.Common.step (parsePatternAtom (stateFuel st) st blockCol)
+      (\pat, st1 => Vuna.Compiler.Base.Common.step (parseClausePatterns (fuel - 1) st1 blockCol) (\rest, st2 => OkC (Pair ((::) pat rest) st2)))
   else OkC (Pair [] st)
 
 -- `lin data ...` / `lin record ...`。kwPos 指向 `linear`，声明 span 从这里开始。
@@ -1075,9 +1085,10 @@ else case peekTok st of
       (\name, st1 => Vuna.Compiler.Base.Common.bind (expectSym st1 "`") (\st2 => Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st2 blockCol) (\rhs, st3 => parseInfix (fuel - 1) st3 blockCol (EBacktick name lhs rhs (spanOf st st3)))))
     else OkC (Pair lhs st)
   PTok (TSym op) p =>
-    if canContinue st blockCol && not (isSyntaxSym op) then if closeParenNext st then OkC (Pair (ESectR lhs op (spanOf st (advance st))) (advance st))
-    else Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) (advance st) blockCol)
-      (\rhs, st2 => parseInfix (fuel - 1) st2 blockCol (EInfix op lhs rhs (spanOf st st2)))
+    if canContinue st blockCol && not (isSyntaxSym op) then
+      if closeParenNext st then OkC (Pair (ESectR lhs op (spanOf st (advance st))) (advance st))
+      else Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) (advance st) blockCol)
+        (\rhs, st2 => parseInfix (fuel - 1) st2 blockCol (EInfix op lhs rhs (spanOf st st2)))
     else OkC (Pair lhs st)
   -- 右 section `(e op)`。只消费 op；`)` 由外层 `(` 分支消费。
   _ => OkC (Pair lhs st)
@@ -1110,18 +1121,22 @@ else case peekTokAt st 1 of
 
 parseApplication : Int -> PState -> Int -> Check (Pair Expr PState)
 parseApplication fuel st blockCol = if fuel <= 0 then icFuel "parser"
-else Vuna.Compiler.Base.Common.step (parseAtom (fuel - 1) st blockCol) (\first, st1 => if atSym st1 "@" then Vuna.Compiler.Base.Common.step (parseAtPayload (fuel - 1) (advance st1) blockCol)
-  (\payload, st2 => Vuna.Compiler.Base.Common.step (parseArgs (fuel - 1) st2 blockCol) (\args, st3 => OkC (Pair (EApp (EVar appAtSyntax (spanOf st st3)) (first :: payload :: args) (spanOf st st3)) st3)))
-else Vuna.Compiler.Base.Common.step (parseArgs (fuel - 1) st1 blockCol) (\args, st2 => case args of
-  [] => OkC (Pair first st2)
-  _ =>
-    let
-      app = EApp first args (spanOf st st2)
-    in if atSym st2 "@" then Vuna.Compiler.Base.Common.step (parseAtPayload (fuel - 1) (advance st2) blockCol)
-      (\payload, st3 => OkC (Pair (EApp (EVar rowAtSyntax (spanOf st st3)) [app, payload] (spanOf st st3)) st3))
-    else OkC (Pair app st2)
-)
-)
+else
+  Vuna.Compiler.Base.Common.step (parseAtom (fuel - 1) st blockCol) (\first, st1 => if atSym st1 "@" then
+    Vuna.Compiler.Base.Common.step (parseAtPayload (fuel - 1) (advance st1) blockCol)
+      (\payload, st2 => Vuna.Compiler.Base.Common.step (parseArgs (fuel - 1) st2 blockCol) (\args, st3 => OkC (Pair (EApp (EVar appAtSyntax (spanOf st st3)) (first :: payload :: args) (spanOf st st3)) st3)))
+  else
+    Vuna.Compiler.Base.Common.step (parseArgs (fuel - 1) st1 blockCol) (\args, st2 => case args of
+      [] => OkC (Pair first st2)
+      _ =>
+        let
+          app = EApp first args (spanOf st st2)
+        in if atSym st2 "@" then
+          Vuna.Compiler.Base.Common.step (parseAtPayload (fuel - 1) (advance st2) blockCol)
+            (\payload, st3 => OkC (Pair (EApp (EVar rowAtSyntax (spanOf st st3)) [app, payload] (spanOf st st3)) st3))
+        else OkC (Pair app st2)
+    )
+  )
 
 -- `@` 后面的 payload 与行 `@` 同一规则：裸标识符是名字字面量，字符串/数字/括号表达式原样。
 parseAtPayload : Int -> PState -> Int -> Check (Pair Expr PState)
@@ -1140,8 +1155,9 @@ spanFromExpr e st2 =
 parseArgs : Int -> PState -> Int -> Check (Pair (List Expr) PState)
 parseArgs fuel st blockCol =
   if fuel <= 0 then icFuel "parser"
-  else if startsAtom st && canContinue st blockCol then Vuna.Compiler.Base.Common.step (parseAtom (fuel - 1) st blockCol)
-    (\arg, st1 => Vuna.Compiler.Base.Common.step (parseArgs (fuel - 1) st1 blockCol) (\rest, st2 => OkC (Pair ((::) arg rest) st2)))
+  else if startsAtom st && canContinue st blockCol then
+    Vuna.Compiler.Base.Common.step (parseAtom (fuel - 1) st blockCol)
+      (\arg, st1 => Vuna.Compiler.Base.Common.step (parseArgs (fuel - 1) st1 blockCol) (\rest, st2 => OkC (Pair ((::) arg rest) st2)))
   else OkC (Pair [] st)
 
 parseAtom : Int -> PState -> Int -> Check (Pair Expr PState)
@@ -1220,11 +1236,12 @@ else case peekTok st of
 -- 字面量结束位置写入 `lastPos`：多行字面量之后的布局判定与 decl span 都依赖它。
 parseTemplateAtom : Int -> PState -> Bool -> List TmplPart -> Pos -> Check (Pair Expr PState)
 parseTemplateAtom fuel st multi parts endP = if fuel <= 0 then icFuel "parser"
-else Vuna.Compiler.Base.Common.bind (parseTemplateParts (fuel - 1) (fileOf st) (pmodeOf st) (tokSpan st) parts) (\ps => let
-  advanced = advance st
-  st2 = mkStateAt (fileOf st) advanced.toksOf endP advanced.toksLeft (pmodeOf st)
-in OkC (Pair (EInterp multi ps (spanOf st st2)) st2)
-)
+else
+  Vuna.Compiler.Base.Common.bind (parseTemplateParts (fuel - 1) (fileOf st) (pmodeOf st) (tokSpan st) parts) (\ps => let
+    advanced = advance st
+    st2 = mkStateAt (fileOf st) advanced.toksOf endP advanced.toksLeft (pmodeOf st)
+  in OkC (Pair (EInterp multi ps (spanOf st st2)) st2)
+  )
 
 parseTemplateParts : Int -> String -> ParseMode -> Span -> List TmplPart -> Check (List InterpPart)
 parseTemplateParts fuel file mode fallback parts = if fuel <= 0 then icFuel "parser"
@@ -1407,11 +1424,12 @@ parseCaseAlts fuel st blockCol = if fuel <= 0 then icFuel "parser"
 else if isEof st then ps0 st CaseNeedsAlternative
 else case peekPos st of
   Pos line col _ _ => if col <= blockCol then ps0 st CaseAltNotIndented
-  else Vuna.Compiler.Base.Common.step (parseAltList (fuel - 1) st col) (\alts, st2 => if badCaseIndent st2 col then ps0 st2 UnexpectedIndentAfterCaseAlt
-  else case alts of
-    [] => ps0 st2 CaseNeedsAlternative
-    _ => OkC (Pair alts st2)
-  )
+  else
+    Vuna.Compiler.Base.Common.step (parseAltList (fuel - 1) st col) (\alts, st2 => if badCaseIndent st2 col then ps0 st2 UnexpectedIndentAfterCaseAlt
+    else case alts of
+      [] => ps0 st2 CaseNeedsAlternative
+      _ => OkC (Pair alts st2)
+    )
 
 parseAltList : Int -> PState -> Int -> Check (Pair (List (Pair Pat Expr)) PState)
 parseAltList fuel st altCol = if fuel <= 0 then icFuel "parser"
@@ -1465,13 +1483,14 @@ handleOpIndexBinder = "@vuna@handle@ix"
 -- | `handle comp { return? op-clause+ }`：解析并降到保留名标记。
 parseHandle : Int -> PState -> Int -> Check (Pair Expr PState)
 parseHandle fuel st blockCol = if fuel <= 0 then icFuel "parser"
-else Vuna.Compiler.Base.Common.bind (expectKw st "handle") (\st1 => Vuna.Compiler.Base.Common.step (parseHandleComp (fuel - 1) st1 blockCol) (\comp, st2 => Vuna.Compiler.Base.Common.bind (expectSym st2 "{") (\st3 => Vuna.Compiler.Base.Common.step (parseHandleBody (fuel - 1) st3 blockCol) (\blk, st4 => case handleExpr comp blk (spanOf st st4) of
-  ErrC e => ErrC e
-  OkC expr => OkC (Pair expr st4)
-)
-)
-)
-)
+else
+  Vuna.Compiler.Base.Common.bind (expectKw st "handle") (\st1 => Vuna.Compiler.Base.Common.step (parseHandleComp (fuel - 1) st1 blockCol) (\comp, st2 => Vuna.Compiler.Base.Common.bind (expectSym st2 "{") (\st3 => Vuna.Compiler.Base.Common.step (parseHandleBody (fuel - 1) st3 blockCol) (\blk, st4 => case handleExpr comp blk (spanOf st st4) of
+    ErrC e => ErrC e
+    OkC expr => OkC (Pair expr st4)
+  )
+  )
+  )
+  )
 
 -- | 解析被 handle 包裹的 comp：裸标识符紧跟 `{` 时直接收成 `EVar`（避免记录字面量歧义）。
 parseHandleComp : Int -> PState -> Int -> Check (Pair Expr PState)
@@ -1488,11 +1507,12 @@ parseHandleBody fuel st handleCol = if fuel <= 0 then icFuel "parser"
 else if atSym st "}" then ps0 st HandleNeedsOpClause
 else case peekPos st of
   Pos line col _ _ => if col <= handleCol then ps0 st HandleClauseNotIndented
-  else Vuna.Compiler.Base.Common.step (parseHandleClauses (fuel - 1) st col Nothing []) (\p, st2 => case p of
-    Pair retOpt ops =>
-      Vuna.Compiler.Base.Common.bind (expectSym st2 "}")
-        (\st3 => OkC (Pair (HandleBlock retOpt ops) st3))
-  )
+  else
+    Vuna.Compiler.Base.Common.step (parseHandleClauses (fuel - 1) st col Nothing []) (\p, st2 => case p of
+      Pair retOpt ops =>
+        Vuna.Compiler.Base.Common.bind (expectSym st2 "}")
+          (\st3 => OkC (Pair (HandleBlock retOpt ops) st3))
+    )
 
 -- | 子句头是否是 return 子句（`return` 不是全局关键字，只在子句头按标识符识别）。
 isReturnClauseHead : PState -> Bool
@@ -1506,16 +1526,17 @@ parseHandleClauses fuel st clauseCol retOpt acc = if fuel <= 0 then icFuel "pars
 else if isEof st then ps0 st UnexpectedEndOfInput
 else if atSym st "}" then OkC (Pair (Pair retOpt (reverse acc)) st)
 else case peekPos st of
-  Pos line col _ _ => if col == clauseCol then if isReturnClauseHead st then case retOpt of
-    Just _ => ps0 st HandleReturnMisplaced
-    Nothing => case acc of
-      _ :: _ => ps0 st HandleReturnMisplaced
-      [] => Vuna.Compiler.Base.Common.step (parseHandleRetClause (fuel - 1) st clauseCol) (\p, st2 => case p of
-        Pair x (Pair body rsp) =>
-          parseHandleClauses (fuel - 1) st2 clauseCol (Just (Pair x (Pair body rsp))) acc
-      )
-  else Vuna.Compiler.Base.Common.step (parseHandleOpClause (fuel - 1) st clauseCol)
-    (\op, st2 => parseHandleClauses (fuel - 1) st2 clauseCol retOpt (op :: acc))
+  Pos line col _ _ => if col == clauseCol then
+    if isReturnClauseHead st then case retOpt of
+      Just _ => ps0 st HandleReturnMisplaced
+      Nothing => case acc of
+        _ :: _ => ps0 st HandleReturnMisplaced
+        [] => Vuna.Compiler.Base.Common.step (parseHandleRetClause (fuel - 1) st clauseCol) (\p, st2 => case p of
+          Pair x (Pair body rsp) =>
+            parseHandleClauses (fuel - 1) st2 clauseCol (Just (Pair x (Pair body rsp))) acc
+        )
+    else Vuna.Compiler.Base.Common.step (parseHandleOpClause (fuel - 1) st clauseCol)
+      (\op, st2 => parseHandleClauses (fuel - 1) st2 clauseCol retOpt (op :: acc))
   else OkC (Pair (Pair retOpt (reverse acc)) st)
 
 -- | 解析 `return x -> body` 子句。
@@ -1528,16 +1549,17 @@ parseHandleRetClause fuel st clauseCol =
 -- | 解析一个 op 子句头：构造子模式 + 尾部续延 binder（`_` 允许，统一成 `_`）。
 parseHandleOpClause : Int -> PState -> Int -> Check (Pair HandleOp PState)
 parseHandleOpClause fuel st clauseCol = if fuel <= 0 then icFuel "parser"
-else Vuna.Compiler.Base.Common.step (parsePatternSingle (stateFuel st) st clauseCol) (\pat, st1 => Vuna.Compiler.Base.Common.bind (checkBindersAt st [pat]) (\_ => case pat of
-  PCon cname args psp => case reverse args of
-    [] => psErr0At psp HandleClauseNeedsCtor
-    last :: revRest => case last of
-      PVar kname _ => handleOpTail (fuel - 1) st1 clauseCol cname (reverse revRest) psp kname
-      PWild _ => handleOpTail (fuel - 1) st1 clauseCol cname (reverse revRest) psp "_"
-      _ => psErr0At psp HandleClauseNeedsCtor
-  _ => ps0 st HandleClauseNeedsCtor
-)
-)
+else
+  Vuna.Compiler.Base.Common.step (parsePatternSingle (stateFuel st) st clauseCol) (\pat, st1 => Vuna.Compiler.Base.Common.bind (checkBindersAt st [pat]) (\_ => case pat of
+    PCon cname args psp => case reverse args of
+      [] => psErr0At psp HandleClauseNeedsCtor
+      last :: revRest => case last of
+        PVar kname _ => handleOpTail (fuel - 1) st1 clauseCol cname (reverse revRest) psp kname
+        PWild _ => handleOpTail (fuel - 1) st1 clauseCol cname (reverse revRest) psp "_"
+        _ => psErr0At psp HandleClauseNeedsCtor
+    _ => ps0 st HandleClauseNeedsCtor
+  )
+  )
 
 -- | op 子句的 `-> body` 尾段。
 handleOpTail : Int -> PState -> Int -> String -> List Pat -> Span -> String -> Check (Pair HandleOp PState)
@@ -1593,14 +1615,16 @@ parseIf fuel st blockCol =
 -- 最后一条必须是裸表达式（do 本身不引入 pure，最后表达式即块结果）。
 parseDo : Int -> PState -> Int -> Check (Pair Expr PState)
 parseDo fuel st blockCol = if fuel <= 0 then icFuel "parser"
-else Vuna.Compiler.Base.Common.bind (expectKw st "do") (\st1 => if isEof st1 then ps0 st1 DoBlockNeedsStatement
-else case peekPos st1 of
-  Pos line col _ _ => if col <= blockCol then ps0 st1 DoStatementNotIndented
-  else Vuna.Compiler.Base.Common.step (parseDoStmts (fuel - 1) st1 col []) (\stmts, st2 => case reverse stmts of
-    (DExpr lastExpr lastSp) :: rest => OkC (Pair (EDo stmts (spanOf st st2)) st2)
-    _ => ps0 st2 DoBlockMustEndWithExpr
+else
+  Vuna.Compiler.Base.Common.bind (expectKw st "do") (\st1 => if isEof st1 then ps0 st1 DoBlockNeedsStatement
+  else case peekPos st1 of
+    Pos line col _ _ => if col <= blockCol then ps0 st1 DoStatementNotIndented
+    else
+      Vuna.Compiler.Base.Common.step (parseDoStmts (fuel - 1) st1 col []) (\stmts, st2 => case reverse stmts of
+        (DExpr lastExpr lastSp) :: rest => OkC (Pair (EDo stmts (spanOf st st2)) st2)
+        _ => ps0 st2 DoBlockMustEndWithExpr
+      )
   )
-)
 
 parseDoStmts : Int -> PState -> Int -> List DoStmt -> Check (Pair (List DoStmt) PState)
 parseDoStmts fuel st stmtCol acc = if fuel <= 0 then icFuel "parser"
@@ -1608,13 +1632,14 @@ else if isEof st then OkC (Pair (reverse acc) st)
 else case peekPos st of
   Pos line col _ _ => if col < stmtCol then OkC (Pair (reverse acc) st)
   else if col > stmtCol then ps0 st UnexpectedIndentInDo
-  else Vuna.Compiler.Base.Common.step (parseDoStmt (fuel - 1) st stmtCol) (\stmt, st1 => case peekPos st1 of
-    Pos line2 col2 _ _ =>
-      if isEof st1 then OkC (Pair (reverse (stmt :: acc)) st1)
-      else if col2 < stmtCol then OkC (Pair (reverse (stmt :: acc)) st1)
-      else if col2 > stmtCol then ps0 st1 UnexpectedIndentInDo
-      else parseDoStmts (fuel - 1) st1 stmtCol (stmt :: acc)
-  )
+  else
+    Vuna.Compiler.Base.Common.step (parseDoStmt (fuel - 1) st stmtCol) (\stmt, st1 => case peekPos st1 of
+      Pos line2 col2 _ _ =>
+        if isEof st1 then OkC (Pair (reverse (stmt :: acc)) st1)
+        else if col2 < stmtCol then OkC (Pair (reverse (stmt :: acc)) st1)
+        else if col2 > stmtCol then ps0 st1 UnexpectedIndentInDo
+        else parseDoStmts (fuel - 1) st1 stmtCol (stmt :: acc)
+    )
 
 parseDoStmt : Int -> PState -> Int -> Check (Pair DoStmt PState)
 parseDoStmt fuel st stmtCol = if fuel <= 0 then icFuel "parser"
@@ -1695,10 +1720,12 @@ else case peekTok st of
   PTok (TIdent name) p =>
     let
       st1 = advance st
-    in if ctorPatternStart name && atSym st1 "{" then Vuna.Compiler.Base.Common.step (parseRecordPatternFields (fuel - 1) st1 blockCol)
-      (\fields, st2 => OkC (Pair (PRecord name fields (spanOf st st2)) st2))
-    else if ctorPatternStart name then Vuna.Compiler.Base.Common.step (parsePatternAtoms (fuel - 1) st1 blockCol)
-      (\args, st2 => OkC (Pair (PCon name args (spanOf st st2)) st2))
+    in if ctorPatternStart name && atSym st1 "{" then
+      Vuna.Compiler.Base.Common.step (parseRecordPatternFields (fuel - 1) st1 blockCol)
+        (\fields, st2 => OkC (Pair (PRecord name fields (spanOf st st2)) st2))
+    else if ctorPatternStart name then
+      Vuna.Compiler.Base.Common.step (parsePatternAtoms (fuel - 1) st1 blockCol)
+        (\args, st2 => OkC (Pair (PCon name args (spanOf st st2)) st2))
     else parsePatternAtom (fuel - 1) st blockCol
   -- 符号构造子：`(sym) p1 p2`（无参时 `(sym)` 本身是空构造子模式）。
   PTok (TSym "(") _ => case peekTokAt st 1 of
@@ -1740,8 +1767,9 @@ else case peekTok st of
 parsePatternAtoms : Int -> PState -> Int -> Check (Pair (List Pat) PState)
 parsePatternAtoms fuel st blockCol =
   if fuel <= 0 then icFuel "parser"
-  else if startsPatternAtom st && canContinue st blockCol then Vuna.Compiler.Base.Common.step (parsePatternAtom (fuel - 1) st blockCol)
-    (\pat, st1 => Vuna.Compiler.Base.Common.step (parsePatternAtoms (fuel - 1) st1 blockCol) (\rest, st2 => OkC (Pair ((::) pat rest) st2)))
+  else if startsPatternAtom st && canContinue st blockCol then
+    Vuna.Compiler.Base.Common.step (parsePatternAtom (fuel - 1) st blockCol)
+      (\pat, st1 => Vuna.Compiler.Base.Common.step (parsePatternAtoms (fuel - 1) st1 blockCol) (\rest, st2 => OkC (Pair ((::) pat rest) st2)))
   else OkC (Pair [] st)
 
 parsePatternAtom : Int -> PState -> Int -> Check (Pair Pat PState)

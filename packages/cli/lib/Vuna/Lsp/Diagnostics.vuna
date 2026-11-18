@@ -124,8 +124,9 @@ labelRelatedJson : String -> List String -> Label -> List Json
 labelRelatedJson label lines (Label Nothing text _ _) = []
 labelRelatedJson label lines (Label (Just s) text _ _) =
   if text == "" then []
-  else [ JObj [Pair "location" (JObj [Pair "uri" (JStr (pathToUri label)), Pair "range" (labelRangeJson lines s)]), Pair "message" (JStr text)]
-  ]
+  else
+    [ JObj [Pair "location" (JObj [Pair "uri" (JStr (pathToUri label)), Pair "range" (labelRangeJson lines s)]), Pair "message" (JStr text)]
+    ]
 
 -- | 内部：一个结构化诊断字段 → `data` 数组项（机器消费，不解析散文）。
 fieldJson : DiagField -> Json
@@ -772,7 +773,8 @@ diagReportJson uri text diags =
 -- | 内部：诊断 code → LSP tags：未使用 / 冗余 / catch-all 之后不可达 → `1`（Unnecessary）。
 lspTagsOf : String -> List Json
 lspTagsOf code =
-  if startsWith "UN_Unused" code || startsWith "UN_Redundant" code || code == "UN_BranchAfterCatchAll" then [JNum 1]
+  if startsWith "UN_Unused" code || startsWith "UN_Redundant" code || code == "UN_BranchAfterCatchAll" then
+    [JNum 1]
   else []
 
 -- LSP 增量路径不重算 import 使用集：`UN_UnusedImport` 在编辑器侧可能误报，
@@ -796,4 +798,5 @@ originFields d = case d.diagOrigin of
 catalogFields : Diagnostic -> List Json
 catalogFields d =
   if d.diagCode == "" then []
-  else [JObj [Pair "kind" (JStr "catalog"), Pair "value" (JStr "vuna errors explain ${d.diagCode}")]]
+  else
+    [JObj [Pair "kind" (JStr "catalog"), Pair "value" (JStr "vuna errors explain ${d.diagCode}")]]

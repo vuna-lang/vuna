@@ -321,7 +321,8 @@ keepOutQualified : String -> HashMap String Bool -> HashMap String Bool -> List 
 keepOutQualified prefix banned preludeBanned [] = []
 keepOutQualified prefix banned preludeBanned (n :: rest) =
   if HashMap.member n preludeBanned then keepOutQualified prefix banned preludeBanned rest
-  else if HashMap.member (qualifiedKey prefix n) banned then keepOutQualified prefix banned preludeBanned rest
+  else if HashMap.member (qualifiedKey prefix n) banned then
+    keepOutQualified prefix banned preludeBanned rest
   else n :: keepOutQualified prefix banned preludeBanned rest
 
 keepOutTbl : HashMap String Bool -> List String -> List String

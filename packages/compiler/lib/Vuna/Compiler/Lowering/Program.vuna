@@ -150,7 +150,8 @@ else case HashMap.lookup name env.lwCtors of
 -- 桥接标记来自契约（`Ir.Runtime`，单一来源）。
 lowerBridgeGuard : LwEnv -> String -> Ir -> Check Ir
 lowerBridgeGuard env name ir =
-  if irRtBridgesList name then if env.lwHasListFamily then OkC ir else cgErr1 (ListBridgeRequired name) name
+  if irRtBridgesList name then
+    if env.lwHasListFamily then OkC ir else cgErr1 (ListBridgeRequired name) name
   else OkC ir
 
 effUnitTyIn : IrTy
@@ -188,9 +189,10 @@ else if rigIsErased rig then lowerTermFuel (fuel - 1) env st binders f
 else case flattenConApp (TApp f a rig) of
   Just (Pair c args) => lowerConAppFuel (fuel - 1) env st binders c args
   Nothing => case flattenConcatChainIn (TApp f a rig) of
-    Just parts => if listLength parts >= 3 then Vuna.Compiler.Base.Common.bind (lowerTermsFuel (fuel - 1) env st binders parts) (\p => case p of
-      Pair texts st2 => OkC (Pair (IrConcatMany texts) st2)
-    )
+    Just parts => if listLength parts >= 3 then
+      Vuna.Compiler.Base.Common.bind (lowerTermsFuel (fuel - 1) env st binders parts) (\p => case p of
+        Pair texts st2 => OkC (Pair (IrConcatMany texts) st2)
+      )
     else lowerPlainAppFuel (fuel - 1) env st binders (TApp f a rig)
     Nothing => lowerPlainAppFuel (fuel - 1) env st binders (TApp f a rig)
 
@@ -198,9 +200,10 @@ lowerPlainAppFuel : Int -> LwEnv -> LwSt -> List IrBinder -> Term -> Check (Pair
 lowerPlainAppFuel fuel env st binders t = if fuel <= 0 then icFuel "ir-lower"
 else case t of
   TApp f a rig => case flattenIntrinsicAppIn t of
-    Just (Pair name args) => if inlineArityMatchesIn name args then Vuna.Compiler.Base.Common.bind (lowerInlineArgsFuel (fuel - 1) env st binders args) (\p => case p of
-      Pair irs st2 => OkC (Pair (IrRtApp name irs) st2)
-    )
+    Just (Pair name args) => if inlineArityMatchesIn name args then
+      Vuna.Compiler.Base.Common.bind (lowerInlineArgsFuel (fuel - 1) env st binders args) (\p => case p of
+        Pair irs st2 => OkC (Pair (IrRtApp name irs) st2)
+      )
     else lowerAppFallbackFuel (fuel - 1) env st binders f a rig
     Nothing => lowerAppFallbackFuel (fuel - 1) env st binders f a rig
   _ => icInternal "lowerPlainApp expects an application"
@@ -284,9 +287,10 @@ alignCtorArgs label (keep :: flags) [] =
   if keep then icInternal "constructor ${label}: application has fewer arguments than its shape"
   else alignCtorArgs label flags []
 alignCtorArgs label (keep :: flags) ((Pair arg rig) :: rest) =
-  if keep then if rigIsErased rig then icInternal "constructor ${label}: runtime field marked erased"
-  else Vuna.Compiler.Base.Common.bind (alignCtorArgs label flags rest)
-    (\ts => OkC ((::) (Pair arg rig) ts))
+  if keep then
+    if rigIsErased rig then icInternal "constructor ${label}: runtime field marked erased"
+    else Vuna.Compiler.Base.Common.bind (alignCtorArgs label flags rest)
+      (\ts => OkC ((::) (Pair arg rig) ts))
   else if rigIsErased rig then alignCtorArgs label flags rest
   else alignCtorArgs label flags (Pair arg rig :: rest)
 
@@ -411,12 +415,13 @@ altEnvFullIn st label outer [] flags pats = case flags of
   _ :: _ => icInternal "constructor ${label}: case branch has fewer binders than its shape"
 altEnvFullIn st label outer ((Pair name rig) :: rest) flags pats = case flags of
   [] => icInternal "constructor ${label}: case branch has more binders than its shape"
-  keep :: flags2 => if flagMatchesRigIn keep rig then if keep then
-    let
-      fresh = st.lwNext
-      b = mkIrBinderArm fresh
-    in altEnvFullIn (LwSt (fresh + 1)) label (b :: outer) rest flags2 (b :: pats)
-  else altEnvFullIn st label (mkIrBinderErased :: outer) rest flags2 pats
+  keep :: flags2 => if flagMatchesRigIn keep rig then
+    if keep then
+      let
+        fresh = st.lwNext
+        b = mkIrBinderArm fresh
+      in altEnvFullIn (LwSt (fresh + 1)) label (b :: outer) rest flags2 (b :: pats)
+    else altEnvFullIn st label (mkIrBinderErased :: outer) rest flags2 pats
   else icInternal "constructor ${label}: case branch binder rig disagrees with its shape"
 
 altEnvKeptIn : LwSt -> String -> List IrBinder -> List (Pair String Rig) -> List IrBinder -> Check AltEnvIn
@@ -854,10 +859,14 @@ checkRuntimeContract =
       filter
         (\n => if memName n intrinsicNames then False else if memName n irRtSyntheticNames then False else True)
         contractNames
-  in if listLength missingFromContract > 0 then icInternal "runtime contract misses intrinsic `${firstOfList missingFromContract}`"
-  else if listLength extrasInContract > 0 then icInternal "runtime contract declares unknown symbol `${firstOfList extrasInContract}`"
-  else if listLength rtTextGaps > 0 then icInternal "OCaml runtime table misses contract symbol `${firstOfList rtTextGaps}`"
-  else if listLength rtTextExtras > 0 then icInternal "OCaml runtime table has symbol outside the contract: `${firstOfList rtTextExtras}`"
+  in if listLength missingFromContract > 0 then
+    icInternal "runtime contract misses intrinsic `${firstOfList missingFromContract}`"
+  else if listLength extrasInContract > 0 then
+    icInternal "runtime contract declares unknown symbol `${firstOfList extrasInContract}`"
+  else if listLength rtTextGaps > 0 then
+    icInternal "OCaml runtime table misses contract symbol `${firstOfList rtTextGaps}`"
+  else if listLength rtTextExtras > 0 then
+    icInternal "OCaml runtime table has symbol outside the contract: `${firstOfList rtTextExtras}`"
   else OkC 0
 
 firstOfList : List String -> String

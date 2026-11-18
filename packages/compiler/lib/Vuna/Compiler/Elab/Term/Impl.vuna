@@ -34,7 +34,8 @@ opaqueBranchIndices ec ctx n tele = opaqueBranchIndicesGo ec ctx n tele 0
 opaqueBranchIndicesGo : Ec -> Ctx -> Int -> List (Pair String Rig) -> Int -> List Int
 opaqueBranchIndicesGo ec ctx n [] j = []
 opaqueBranchIndicesGo ec ctx n (binder :: rest) j =
-  if branchBinderOpaque ec ctx (n - 1 - j) then (::) (n - 1 - j) (opaqueBranchIndicesGo ec ctx n rest (j + 1))
+  if branchBinderOpaque ec ctx (n - 1 - j) then
+    (::) (n - 1 - j) (opaqueBranchIndicesGo ec ctx n rest (j + 1))
   else opaqueBranchIndicesGo ec ctx n rest (j + 1)
 
 branchBinderOpaque : Ec -> Ctx -> Int -> Bool
@@ -56,25 +57,27 @@ else case findCtorIn cname (dtDataCtors dd) of
     tcErr2 psp (UnknownConstructorInCase (ctorDisplayName cname) (dtDataName dd))
       (ctorDisplayName cname) (dtDataName dd)
   Just ctor => Vuna.Compiler.Base.Common.bind (onErrDiag (withFallbackSpan psp) (bindCtorTele ctx (dtCtorType ctor) args)) (\p => case p of
-    Pair branchCtx (Pair binders leftover) => if nonEmpty leftover then tcErr1 psp (BranchTooManyArgs (ctorDisplayName cname)) (ctorDisplayName cname)
-    else Vuna.Compiler.Base.Common.bind (onErrDiag (withFallbackSpan psp) (unifyIdxListSized ec [] (ctxDepth branchCtx) (ctorResultValsIn branchCtx ctor) (map (\v => refineValue [] defaultFuel v) idxs))) (\refsIdx => case branchAfterUnify ec branchCtx refsIdx of
-      BranchImpossibleIndex => tcErr0 psp ImpossibleBranchIndex
-      BranchImpossibleEmptyCtx => tcErr0 psp ImpossibleBranchEmptyCtx
-      BranchOk => Vuna.Compiler.Base.Common.bind (reflectScrutinee ec (ctxDepth branchCtx) refsIdx (ctorValueIn branchCtx ctor) scrutVal) (\refs2 => let
-        refinedExpected = refineValue refs2 defaultFuel expected
-        branchCtx2 = ctxRefine branchCtx refs2
-      in Vuna.Compiler.Base.Common.bind (checkEFuel (fuel - 1) globals branchCtx2 ec body refinedExpected) (\pb => case pb of
-        Pair bodyTerm ec2 =>
-          let
-            n = length binders
-            opaqueIdxs = opaqueBranchIndices ec2 branchCtx2 n (binderPairs binders)
-            bodyTerm1 = wrapOpaqueUses opaqueIdxs bodyTerm
-            bodyTerm2 =
-              if isOpaqueRuntimeTyIn ec2 ctx expected then castErased bodyTerm1 else bodyTerm1
-          in OkC (Pair (CaseAlt cname binders bodyTerm2) ec2)
+    Pair branchCtx (Pair binders leftover) => if nonEmpty leftover then
+      tcErr1 psp (BranchTooManyArgs (ctorDisplayName cname)) (ctorDisplayName cname)
+    else
+      Vuna.Compiler.Base.Common.bind (onErrDiag (withFallbackSpan psp) (unifyIdxListSized ec [] (ctxDepth branchCtx) (ctorResultValsIn branchCtx ctor) (map (\v => refineValue [] defaultFuel v) idxs))) (\refsIdx => case branchAfterUnify ec branchCtx refsIdx of
+        BranchImpossibleIndex => tcErr0 psp ImpossibleBranchIndex
+        BranchImpossibleEmptyCtx => tcErr0 psp ImpossibleBranchEmptyCtx
+        BranchOk => Vuna.Compiler.Base.Common.bind (reflectScrutinee ec (ctxDepth branchCtx) refsIdx (ctorValueIn branchCtx ctor) scrutVal) (\refs2 => let
+          refinedExpected = refineValue refs2 defaultFuel expected
+          branchCtx2 = ctxRefine branchCtx refs2
+        in Vuna.Compiler.Base.Common.bind (checkEFuel (fuel - 1) globals branchCtx2 ec body refinedExpected) (\pb => case pb of
+          Pair bodyTerm ec2 =>
+            let
+              n = length binders
+              opaqueIdxs = opaqueBranchIndices ec2 branchCtx2 n (binderPairs binders)
+              bodyTerm1 = wrapOpaqueUses opaqueIdxs bodyTerm
+              bodyTerm2 =
+                if isOpaqueRuntimeTyIn ec2 ctx expected then castErased bodyTerm1 else bodyTerm1
+            in OkC (Pair (CaseAlt cname binders bodyTerm2) ec2)
+        )
+        )
       )
-      )
-    )
   )
 
 export elabCaseAltsFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Value -> DtData -> List Value -> Value -> Value -> List (Pair Pat Expr) -> List CaseAlt -> Check (Pair (List CaseAlt) Ec)
@@ -104,21 +107,23 @@ else
   let
     ctx2 = if pname == "_" then ctx else ctxBindValue pname scrutTy ctx
   in if nonEmpty rest then tcErr0 psp CatchAllNotLast
-  else Vuna.Compiler.Base.Common.bind (checkEFuel (fuel - 1) globals ctx2 ec body expected) (\pb => case pb of
-    Pair bodyTerm ec2 =>
-      let
-        -- 变量兜底要把变量作为分支 binder 记下来：Core 求值器与 codegen 都按 binder
-        -- 绑定 scrutinee：不记这个 binder，体里对变量的引用会变成自由变量。
-        binds =
-          if pname == "_" then []
-          else [Binder pname (rigOfLinearValue ec scrutTy) (spanAtName pname psp)]
-        -- 兜底 binder 是 scrutinee 类型；不可命名时同分支 binder 一样逐使用 cast。
-        bodyTerm1 =
-          if pname == "_" then bodyTerm
-          else if isOpaqueRuntimeTyIn ec2 ctx scrutTy then wrapOpaqueUses [0] bodyTerm else bodyTerm
-        bodyTerm2 = if isOpaqueRuntimeTyIn ec2 ctx expected then castErased bodyTerm1 else bodyTerm1
-      in OkC (Pair (reverse (CaseAlt "" binds bodyTerm2 :: acc)) ec2)
-  )
+  else
+    Vuna.Compiler.Base.Common.bind (checkEFuel (fuel - 1) globals ctx2 ec body expected) (\pb => case pb of
+      Pair bodyTerm ec2 =>
+        let
+          -- 变量兜底要把变量作为分支 binder 记下来：Core 求值器与 codegen 都按 binder
+          -- 绑定 scrutinee：不记这个 binder，体里对变量的引用会变成自由变量。
+          binds =
+            if pname == "_" then []
+            else [Binder pname (rigOfLinearValue ec scrutTy) (spanAtName pname psp)]
+          -- 兜底 binder 是 scrutinee 类型；不可命名时同分支 binder 一样逐使用 cast。
+          bodyTerm1 =
+            if pname == "_" then bodyTerm
+            else if isOpaqueRuntimeTyIn ec2 ctx scrutTy then wrapOpaqueUses [0] bodyTerm else bodyTerm
+          bodyTerm2 =
+            if isOpaqueRuntimeTyIn ec2 ctx expected then castErased bodyTerm1 else bodyTerm1
+        in OkC (Pair (reverse (CaseAlt "" binds bodyTerm2 :: acc)) ec2)
+    )
 
 -- case 的**唯一入口**，流程固定为三步：
 --   ① 源级校验（`checkCaseAltsFlat`：兜底位置 / 重复构造子 / 重复字面量）——与家族无关；
@@ -159,10 +164,13 @@ else
 export checkCaseFamFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Term -> Value -> List (Pair Pat Expr) -> Value -> Span -> Check (Pair Term Ec)
 checkCaseFamFuel fuel globals ctx ec scrutTerm scrutTy alts expected sp = if fuel <= 0 then icFuel "inference"
 else case forceVal ec scrutTy of
-  VNeutral (NGlobal fam idxs) => if isBoolCanonical fam && length idxs == 0 then checkBoolCaseFuel (fuel - 1) globals ctx ec scrutTerm alts expected sp
-  else if fam == natTypeName then if natLitCaseAlts alts then checkNatLitCaseFuel (fuel - 1) globals ctx ec (natToIntTerm scrutTerm) scrutTerm natTyValue alts
-    expected sp
-  else checkCaseOfFuel (fuel - 1) globals ctx ec scrutTerm scrutTy fam idxs alts expected sp
+  VNeutral (NGlobal fam idxs) => if isBoolCanonical fam && length idxs == 0 then
+    checkBoolCaseFuel (fuel - 1) globals ctx ec scrutTerm alts expected sp
+  else if fam == natTypeName then
+    if natLitCaseAlts alts then
+      checkNatLitCaseFuel (fuel - 1) globals ctx ec (natToIntTerm scrutTerm) scrutTerm natTyValue
+        alts expected sp
+    else checkCaseOfFuel (fuel - 1) globals ctx ec scrutTerm scrutTy fam idxs alts expected sp
   else case fam of
     "Int" => checkLitCaseFuel (fuel - 1) globals ctx ec scrutTerm "Int" alts expected sp
     "String" => checkLitCaseFuel (fuel - 1) globals ctx ec scrutTerm "String" alts expected sp
@@ -172,13 +180,14 @@ else case forceVal ec scrutTy of
 -- Bool 上的 case 降级成 if（`True` / `False` 是零参构造子形态的模式）。
 export checkBoolCaseFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Term -> List (Pair Pat Expr) -> Value -> Span -> Check (Pair Term Ec)
 checkBoolCaseFuel fuel globals ctx ec scrutTerm alts expected sp = if fuel <= 0 then icFuel "inference"
-else Vuna.Compiler.Base.Common.bind (boolAltFuel (fuel - 1) globals ctx ec alts boolTrueCtor expected sp) (\p => case p of
-  Pair trueBody (Pair catchAll ec1) => case catchAll of
-    Just falseBody => OkC (Pair (TIf scrutTerm trueBody falseBody) ec1)
-    Nothing => Vuna.Compiler.Base.Common.bind (boolAltFuel (fuel - 1) globals ctx ec1 alts boolFalseCtor expected sp) (\q => case q of
-      Pair falseBody (Pair _ ec2) => OkC (Pair (TIf scrutTerm trueBody falseBody) ec2)
-    )
-)
+else
+  Vuna.Compiler.Base.Common.bind (boolAltFuel (fuel - 1) globals ctx ec alts boolTrueCtor expected sp) (\p => case p of
+    Pair trueBody (Pair catchAll ec1) => case catchAll of
+      Just falseBody => OkC (Pair (TIf scrutTerm trueBody falseBody) ec1)
+      Nothing => Vuna.Compiler.Base.Common.bind (boolAltFuel (fuel - 1) globals ctx ec1 alts boolFalseCtor expected sp) (\q => case q of
+        Pair falseBody (Pair _ ec2) => OkC (Pair (TIf scrutTerm trueBody falseBody) ec2)
+      )
+  )
 
 -- 取 `True` / `False` 分支的体；变量/通配分支作为两边的兜底。
 export boolAltFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> List (Pair Pat Expr) -> String -> Value -> Span -> Check (Pair Term (Pair (Maybe Term) Ec))
@@ -194,9 +203,10 @@ else case catchAll of
 boolAltGoFuel fuel globals ctx ec (alt :: rest) target expected sp catchAll = if fuel <= 0 then icFuel "inference"
 else case alt of
   Pair pat body => case pat of
-    PCon cname args psp => if cname == target then Vuna.Compiler.Base.Common.bind (checkEFuel (fuel - 1) globals ctx ec body expected) (\p => case p of
-      Pair bodyTerm ec1 => OkC (Pair bodyTerm (Pair catchAll ec1))
-    )
+    PCon cname args psp => if cname == target then
+      Vuna.Compiler.Base.Common.bind (checkEFuel (fuel - 1) globals ctx ec body expected) (\p => case p of
+        Pair bodyTerm ec1 => OkC (Pair bodyTerm (Pair catchAll ec1))
+      )
     else boolAltGoFuel (fuel - 1) globals ctx ec rest target expected sp catchAll
     PVar pname psp => Vuna.Compiler.Base.Common.bind (checkEFuel (fuel - 1) globals ctx ec body expected) (\p => case p of
       Pair bodyTerm ec1 =>
@@ -212,10 +222,11 @@ else case alt of
 -- `case n of 0 => a; 1 => b; x => c` 变成 `if n == 0 then a else if n == 1 then b else c`。
 export checkLitCaseFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Term -> String -> List (Pair Pat Expr) -> Value -> Span -> Check (Pair Term Ec)
 checkLitCaseFuel fuel globals ctx ec scrutTerm tyName alts expected sp = if fuel <= 0 then icFuel "inference"
-else Vuna.Compiler.Base.Common.bind (checkLitAltsFuel (fuel - 1) globals ctx ec scrutTerm tyName alts expected sp) (\p => case p of
-  Pair term (Pair True ec1) => OkC (Pair term ec1)
-  Pair term (Pair False ec1) => tcErr0 sp IntStringCaseNeedsFallback
-)
+else
+  Vuna.Compiler.Base.Common.bind (checkLitAltsFuel (fuel - 1) globals ctx ec scrutTerm tyName alts expected sp) (\p => case p of
+    Pair term (Pair True ec1) => OkC (Pair term ec1)
+    Pair term (Pair False ec1) => tcErr0 sp IntStringCaseNeedsFallback
+  )
 
 -- Int / String 字面量列：每个字面量降成 `if n == lit then body else <rest>`；
 -- 变量/通配分支提供 fallback（并且把变量绑进上下文，让用户在体里能用它）。
@@ -241,13 +252,14 @@ else case alt of
 -- 字面量分支：`if n == lit then body else <rest>`（rest 提供 fallback）。
 export litAltStepFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Term -> String -> Term -> Expr -> List (Pair Pat Expr) -> Value -> Span -> Check (Pair Term (Pair Bool Ec))
 litAltStepFuel fuel globals ctx ec scrutTerm tyName litTerm body rest expected sp = if fuel <= 0 then icFuel "inference"
-else Vuna.Compiler.Base.Common.bind (checkEFuel (fuel - 1) globals ctx ec body expected) (\p => case p of
-  Pair bodyTerm ec1 => Vuna.Compiler.Base.Common.bind (checkLitAltsFuel (fuel - 1) globals ctx ec1 scrutTerm tyName rest expected sp) (\q => case q of
-    Pair restTerm (Pair hasDefault ec2) =>
-      OkC
-        (Pair (TIf (TApp (TApp (TGlobal (litEqName tyName)) scrutTerm Rig1) litTerm Rig1) bodyTerm restTerm) (Pair hasDefault ec2))
+else
+  Vuna.Compiler.Base.Common.bind (checkEFuel (fuel - 1) globals ctx ec body expected) (\p => case p of
+    Pair bodyTerm ec1 => Vuna.Compiler.Base.Common.bind (checkLitAltsFuel (fuel - 1) globals ctx ec1 scrutTerm tyName rest expected sp) (\q => case q of
+      Pair restTerm (Pair hasDefault ec2) =>
+        OkC
+          (Pair (TIf (TApp (TApp (TGlobal (litEqName tyName)) scrutTerm Rig1) litTerm Rig1) bodyTerm restTerm) (Pair hasDefault ec2))
+    )
   )
-)
 
 -- fallback 分支的体在「scrutinee 绑成该变量」的上下文里检查。
 export checkLitBoundVarFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Term -> String -> String -> Expr -> Value -> Span -> Span -> Check (Pair Term Ec)
@@ -277,10 +289,11 @@ natLitCaseAlts ((Pair pat body) :: rest) = case pat of
 
 checkNatLitCaseFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Term -> Term -> Value -> List (Pair Pat Expr) -> Value -> Span -> Check (Pair Term Ec)
 checkNatLitCaseFuel fuel globals ctx ec cmpTerm bindTerm binderTy alts expected sp = if fuel <= 0 then icFuel "inference"
-else Vuna.Compiler.Base.Common.bind (checkNatLitAltsFuel (fuel - 1) globals ctx ec cmpTerm bindTerm binderTy alts expected sp) (\p => case p of
-  Pair term (Pair True ec1) => OkC (Pair term ec1)
-  Pair term (Pair False ec1) => tcErr0 sp IntStringCaseNeedsFallback
-)
+else
+  Vuna.Compiler.Base.Common.bind (checkNatLitAltsFuel (fuel - 1) globals ctx ec cmpTerm bindTerm binderTy alts expected sp) (\p => case p of
+    Pair term (Pair True ec1) => OkC (Pair term ec1)
+    Pair term (Pair False ec1) => tcErr0 sp IntStringCaseNeedsFallback
+  )
 
 checkNatLitAltsFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Term -> Term -> Value -> List (Pair Pat Expr) -> Value -> Span -> Check (Pair Term (Pair Bool Ec))
 checkNatLitAltsFuel fuel globals ctx ec cmpTerm bindTerm binderTy [] expected sp =
@@ -302,13 +315,14 @@ else case alt of
 
 natLitAltStepFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Term -> Term -> Value -> Term -> Expr -> List (Pair Pat Expr) -> Value -> Span -> Check (Pair Term (Pair Bool Ec))
 natLitAltStepFuel fuel globals ctx ec cmpTerm bindTerm binderTy litTerm body rest expected sp = if fuel <= 0 then icFuel "inference"
-else Vuna.Compiler.Base.Common.bind (checkEFuel (fuel - 1) globals ctx ec body expected) (\p => case p of
-  Pair bodyTerm ec1 => Vuna.Compiler.Base.Common.bind (checkNatLitAltsFuel (fuel - 1) globals ctx ec1 cmpTerm bindTerm binderTy rest expected sp) (\q => case q of
-    Pair restTerm (Pair hasDefault ec2) =>
-      OkC
-        (Pair (TIf (TApp (TApp (TGlobal "bi_eq_int") cmpTerm Rig1) litTerm Rig1) bodyTerm restTerm) (Pair hasDefault ec2))
+else
+  Vuna.Compiler.Base.Common.bind (checkEFuel (fuel - 1) globals ctx ec body expected) (\p => case p of
+    Pair bodyTerm ec1 => Vuna.Compiler.Base.Common.bind (checkNatLitAltsFuel (fuel - 1) globals ctx ec1 cmpTerm bindTerm binderTy rest expected sp) (\q => case q of
+      Pair restTerm (Pair hasDefault ec2) =>
+        OkC
+          (Pair (TIf (TApp (TApp (TGlobal "bi_eq_int") cmpTerm Rig1) litTerm Rig1) bodyTerm restTerm) (Pair hasDefault ec2))
+    )
   )
-)
 
 checkNatLitBoundVarFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Term -> Value -> String -> Expr -> Value -> Span -> Span -> Check (Pair Term Ec)
 checkNatLitBoundVarFuel fuel globals ctx ec bindTerm binderTy name body expected binderSp sp = if fuel <= 0 then icFuel "inference"
@@ -540,7 +554,8 @@ handleDefaultRetBinder = "@vuna@handle@ret"
 -- | ret 实参：无 return 子句的哨兵换成恒等 λ，其余原样。
 handleRetArg : Expr -> Expr
 handleRetArg (EVar nm rsp) =
-  if isHandleNoRetSyntax nm then ELam [Pair handleDefaultRetBinder spanEmpty] (EVar handleDefaultRetBinder rsp) rsp
+  if isHandleNoRetSyntax nm then
+    ELam [Pair handleDefaultRetBinder spanEmpty] (EVar handleDefaultRetBinder rsp) rsp
   else EVar nm rsp
 handleRetArg e = e
 
@@ -633,8 +648,9 @@ else case expr of
       else if isOverCtorName name then Vuna.Compiler.Base.Common.bind
         (resolveOverCtor ec sp Nothing (overCtorShort name) (overCtorTargets name))
         (\t => inferVarRef globals ctx ec t sp)
-      else if isOverValueName name then tcErr2 sp (AmbiguousName (overValueShort name) (joinWithAt (overValueTargets name)))
-        (overValueShort name) (joinWithAt (overValueTargets name))
+      else if isOverValueName name then
+        tcErr2 sp (AmbiguousName (overValueShort name) (joinWithAt (overValueTargets name)))
+          (overValueShort name) (joinWithAt (overValueTargets name))
       else inferVarRef globals ctx ec name sp
   EInt n sp => OkC (Pair (TInt n) (Pair (VNeutral (NGlobal "Int" [])) ec))
   EStr s sp => OkC (Pair (TStr s) (Pair (VNeutral (NGlobal "String" [])) ec))
@@ -649,8 +665,10 @@ else case expr of
   EIf c t e sp => Vuna.Compiler.Base.Common.bind (checkCondBoolFuel (fuel - 1) globals ctx ec c sp) (\pc => case pc of
     Pair cTerm ec1 => Vuna.Compiler.Base.Common.bind (inferEFuel (fuel - 1) globals ctx ec1 t) (\pt => case pt of
       Pair tTerm (Pair tTy ec2) => Vuna.Compiler.Base.Common.bind (inferEFuel (fuel - 1) globals ctx ec2 e) (\pe => case pe of
-        Pair eTerm (Pair eTy ec3) => if isIntTy ec3 tTy && isNatTy ec3 eTy then OkC (Pair (TIf cTerm tTerm (natToIntTerm eTerm)) (Pair tTy ec3))
-        else if isNatTy ec3 tTy && isIntTy ec3 eTy then OkC (Pair (TIf cTerm (natToIntTerm tTerm) eTerm) (Pair intTyValue ec3))
+        Pair eTerm (Pair eTy ec3) => if isIntTy ec3 tTy && isNatTy ec3 eTy then
+          OkC (Pair (TIf cTerm tTerm (natToIntTerm eTerm)) (Pair tTy ec3))
+        else if isNatTy ec3 tTy && isIntTy ec3 eTy then
+          OkC (Pair (TIf cTerm (natToIntTerm tTerm) eTerm) (Pair intTyValue ec3))
         else Vuna.Compiler.Base.Common.bind (convEc ec3 (ctxDepth ctx) tTy eTy) (\ec4 => let
           branchOpaque = isOpaqueRuntimeTyIn ec4 ctx tTy
           tTerm2 = if branchOpaque then castErased tTerm else tTerm
@@ -662,8 +680,9 @@ else case expr of
   )
   ELet binds body rec_ sp => inferLetFuel (fuel - 1) globals ctx ec binds body rec_ sp
   ELocalFun clauses sp =>
-    if clausesHaveOverCtor clauses then tcErr2 sp (AmbiguousCtor "constructor pattern" "local function needs an explicit signature")
-      "constructor pattern" "local function needs an explicit signature"
+    if clausesHaveOverCtor clauses then
+      tcErr2 sp (AmbiguousCtor "constructor pattern" "local function needs an explicit signature")
+        "constructor pattern" "local function needs an explicit signature"
     else Vuna.Compiler.Base.Common.bind (expandLocalFuns ec (ELocalFun clauses sp))
       (\e2 => inferEFuel (fuel - 1) globals ctx ec e2)
   ECase scrut alts sp => inferCaseEFuel (fuel - 1) globals ctx ec scrut alts sp
@@ -911,14 +930,16 @@ else Vuna.Compiler.Base.Common.bind (checkTypeFuel (fuel - 1) globals ctx ec dom
       badLinQty = case qty of
         Just q => qtyIsZero q && isLinDom
         Nothing => False
-    in if badQty then if implicit then tcErr1 sp (MultiplicityImplicit name) name
-    else tcErr1 sp (MultiplicityTypeDomain name) name
+    in if badQty then
+      if implicit then tcErr1 sp (MultiplicityImplicit name) name
+      else tcErr1 sp (MultiplicityTypeDomain name) name
     else if badLinQty then tcErr1 sp (LinearTypeNeedsOne name) name
-    else Vuna.Compiler.Base.Common.bind (checkTypeFuel (fuel - 1) globals ctx2 ec1 cod) (\pc => case pc of
-      Pair codTerm (Pair codSort ec2) =>
-        OkC
-          (Pair (TPi name implicit (if isLinDom then Rig1 else if implicit then implicitBinderRig ec domVal else rigOfQty False isTypeDom qty) domTerm codTerm) (Pair (VType (levelMax domSort codSort)) ec2))
-    )
+    else
+      Vuna.Compiler.Base.Common.bind (checkTypeFuel (fuel - 1) globals ctx2 ec1 cod) (\pc => case pc of
+        Pair codTerm (Pair codSort ec2) =>
+          OkC
+            (Pair (TPi name implicit (if isLinDom then Rig1 else if implicit then implicitBinderRig ec domVal else rigOfQty False isTypeDom qty) domTerm codTerm) (Pair (VType (levelMax domSort codSort)) ec2))
+      )
 )
 
 -- 期望结果类型已知（带 hint）且名字是 `Base.Num` 方法投影、期望类型又不是内建
@@ -973,17 +994,19 @@ else case fn of
         Nothing => case globalsLookup name globals ec of
           -- 推断位置也要走 `==` / `/=` / 比较运算符的特化，否则 term 里留下裸
           -- `==`（codegen 默认映射成 bi_eq_int，字符串比较会生成类型错误的 OCaml）。
-          Just tyTerm => if skipArithSpecForHint ec name hint then Vuna.Compiler.Base.Common.bind (inferArgsFuel (fuel - 1) globals ctx ec (eval [] tyTerm) args sp hint) (\pa => case pa of
-            Pair argTerms (Pair resTy ec2) =>
-              OkC (Pair (ctorAppTermEc ec2 (TGlobal name) argTerms) (Pair resTy ec2))
-          )
-          else Vuna.Compiler.Base.Common.bind (specializeOpAppFuel (fuel - 1) globals ctx ec name args sp) (\mspec => case mspec of
-            Just pair => OkC pair
-            Nothing => Vuna.Compiler.Base.Common.bind (inferArgsFuel (fuel - 1) globals ctx ec (eval [] tyTerm) args sp hint) (\pa => case pa of
+          Just tyTerm => if skipArithSpecForHint ec name hint then
+            Vuna.Compiler.Base.Common.bind (inferArgsFuel (fuel - 1) globals ctx ec (eval [] tyTerm) args sp hint) (\pa => case pa of
               Pair argTerms (Pair resTy ec2) =>
                 OkC (Pair (ctorAppTermEc ec2 (TGlobal name) argTerms) (Pair resTy ec2))
             )
-          )
+          else
+            Vuna.Compiler.Base.Common.bind (specializeOpAppFuel (fuel - 1) globals ctx ec name args sp) (\mspec => case mspec of
+              Just pair => OkC pair
+              Nothing => Vuna.Compiler.Base.Common.bind (inferArgsFuel (fuel - 1) globals ctx ec (eval [] tyTerm) args sp hint) (\pa => case pa of
+                Pair argTerms (Pair resTy ec2) =>
+                  OkC (Pair (ctorAppTermEc ec2 (TGlobal name) argTerms) (Pair resTy ec2))
+              )
+            )
           -- `==` / `<` 等已不是 prelude globals（用户源码的运算符在 Loader 被
           -- 别名成方法名），但 `Elab.Derive`（deriving 展开）与 `Elab.Match`（字面量
           -- 模式）仍直接构造 `EVar "=="` 这类内部生成名，且实例方法体没有签名、走推断。
@@ -1155,74 +1178,81 @@ else
   let
     forced = forceVal ec ty
   in case forced of
-    VPi name implicit rig dom clo => if implicit then if isDictDomain ec dom then if dictArgUnsolvedMeta ec dom then deferDictBinderFuel (fuel - 1) globals ctx ec dom clo args sp hint
-    else Vuna.Compiler.Base.Common.bind (constrainDictDomFuel (fuel - 1) globals ec ctx dom args sp) (\ec0 => case searchInstanceIn globals ctx ec0 (forceVal ec0 dom) sp of
-      OkC (Pair instTerm ec1) =>
-        let
-          ty2 = applyClosure clo (evalCtx ctx instTerm)
-        in Vuna.Compiler.Base.Common.bind (inferArgsGo (fuel - 1) globals ctx ec1 ty2 args sp hint) (\q => case q of
-          Pair argTerms (Pair resTy ec2) =>
-            OkC (Pair ((::) (Pair instTerm RigOmega) argTerms) (Pair resTy ec2))
-        )
-      ErrC e =>
-        if hasUnsolvedMetaValue (ecSolsP ec0) (forceVal ec0 dom) then deferDictBinderFuel (fuel - 1) globals ctx ec0 dom clo args sp hint
-        else if isRigidDictArg ec0 (forceVal ec0 dom) then deferDictBinderFuel (fuel - 1) globals ctx ec0 dom clo args sp hint
-        else ErrC e
-    )
-    else if isMemberDomain ec dom then case memberLookup 64 (ctxDepth ctx) ec dom of
-      MemberFound proof ec1 => Vuna.Compiler.Base.Common.bind (inferArgsGo (fuel - 1) globals ctx ec1 (applyClosure clo proof) args sp hint) (\p => case p of
-        Pair argTerms (Pair resTy ec2) =>
-          OkC (Pair ((::) (Pair (quote (ctxDepth ctx) proof) Rig0) argTerms) (Pair resTy ec2))
-      )
-      MemberAbsent => tcErr1 sp (NoInstanceFound "row membership") "row membership"
-      -- 命名行歧义：这里先建 meta + 延迟约束；最终化在 resolveRowGoalsCtxGo
-      -- 报 TC_AmbiguousInstance（能拿到 span 与候选文本）。
-      MemberAmbiguous _ =>
-        let
-          m = ecNext ec
-        in case newMetaAt sp ctx ec of
-          Pair metaTerm ec1 =>
-            let
-              ec2 = ecAddConstraint ec1 CkRow m dom (Just sp) (ctxDepth ctx)
-            in Vuna.Compiler.Base.Common.bind (inferArgsGo (fuel - 1) globals ctx ec2 (applyClosure clo (eval (ctxEnv ctx) metaTerm)) args sp hint) (\p => case p of
-              Pair argTerms (Pair resTy ec3) =>
-                OkC (Pair ((::) (Pair metaTerm Rig0) argTerms) (Pair resTy ec3))
-            )
-      MemberStuck =>
-        let
-          m = ecNext ec
-        in case newMetaAt sp ctx ec of
-          Pair metaTerm ec1 =>
-            let
-              ec2 = ecAddConstraint ec1 CkRow m dom (Just sp) (ctxDepth ctx)
-            in Vuna.Compiler.Base.Common.bind (inferArgsGo (fuel - 1) globals ctx ec2 (applyClosure clo (eval (ctxEnv ctx) metaTerm)) args sp hint) (\p => case p of
-              Pair argTerms (Pair resTy ec3) =>
-                OkC (Pair ((::) (Pair metaTerm Rig0) argTerms) (Pair resTy ec3))
-            )
-    else if isImplicitDomain ctx ec dom then if isStringImplicitDomain ec dom then case args of
-      a :: rest => case instArgOperand a of
-        Just payload => Vuna.Compiler.Base.Common.bind (checkEFuel (fuel - 1) globals ctx ec payload dom) (\p => case p of
-          Pair payloadTerm ec1 => Vuna.Compiler.Base.Common.bind (inferArgsGo (fuel - 1) globals ctx ec1 (applyClosure clo (evalCtx ctx payloadTerm)) rest sp hint) (\q => case q of
-            Pair argTerms (Pair resTy ec2) =>
-              OkC (Pair ((::) (Pair payloadTerm rig) argTerms) (Pair resTy ec2))
+    VPi name implicit rig dom clo => if implicit then
+      if isDictDomain ec dom then
+        if dictArgUnsolvedMeta ec dom then
+          deferDictBinderFuel (fuel - 1) globals ctx ec dom clo args sp hint
+        else
+          Vuna.Compiler.Base.Common.bind (constrainDictDomFuel (fuel - 1) globals ec ctx dom args sp) (\ec0 => case searchInstanceIn globals ctx ec0 (forceVal ec0 dom) sp of
+            OkC (Pair instTerm ec1) =>
+              let
+                ty2 = applyClosure clo (evalCtx ctx instTerm)
+              in Vuna.Compiler.Base.Common.bind (inferArgsGo (fuel - 1) globals ctx ec1 ty2 args sp hint) (\q => case q of
+                Pair argTerms (Pair resTy ec2) =>
+                  OkC (Pair ((::) (Pair instTerm RigOmega) argTerms) (Pair resTy ec2))
+              )
+            ErrC e =>
+              if hasUnsolvedMetaValue (ecSolsP ec0) (forceVal ec0 dom) then
+                deferDictBinderFuel (fuel - 1) globals ctx ec0 dom clo args sp hint
+              else if isRigidDictArg ec0 (forceVal ec0 dom) then
+                deferDictBinderFuel (fuel - 1) globals ctx ec0 dom clo args sp hint
+              else ErrC e
           )
+      else if isMemberDomain ec dom then case memberLookup 64 (ctxDepth ctx) ec dom of
+        MemberFound proof ec1 => Vuna.Compiler.Base.Common.bind (inferArgsGo (fuel - 1) globals ctx ec1 (applyClosure clo proof) args sp hint) (\p => case p of
+          Pair argTerms (Pair resTy ec2) =>
+            OkC (Pair ((::) (Pair (quote (ctxDepth ctx) proof) Rig0) argTerms) (Pair resTy ec2))
         )
-        Nothing => case newMetaAt sp ctx ec of
+        MemberAbsent => tcErr1 sp (NoInstanceFound "row membership") "row membership"
+        -- 命名行歧义：这里先建 meta + 延迟约束；最终化在 resolveRowGoalsCtxGo
+        -- 报 TC_AmbiguousInstance（能拿到 span 与候选文本）。
+        MemberAmbiguous _ =>
+          let
+            m = ecNext ec
+          in case newMetaAt sp ctx ec of
+            Pair metaTerm ec1 =>
+              let
+                ec2 = ecAddConstraint ec1 CkRow m dom (Just sp) (ctxDepth ctx)
+              in Vuna.Compiler.Base.Common.bind (inferArgsGo (fuel - 1) globals ctx ec2 (applyClosure clo (eval (ctxEnv ctx) metaTerm)) args sp hint) (\p => case p of
+                Pair argTerms (Pair resTy ec3) =>
+                  OkC (Pair ((::) (Pair metaTerm Rig0) argTerms) (Pair resTy ec3))
+              )
+        MemberStuck =>
+          let
+            m = ecNext ec
+          in case newMetaAt sp ctx ec of
+            Pair metaTerm ec1 =>
+              let
+                ec2 = ecAddConstraint ec1 CkRow m dom (Just sp) (ctxDepth ctx)
+              in Vuna.Compiler.Base.Common.bind (inferArgsGo (fuel - 1) globals ctx ec2 (applyClosure clo (eval (ctxEnv ctx) metaTerm)) args sp hint) (\p => case p of
+                Pair argTerms (Pair resTy ec3) =>
+                  OkC (Pair ((::) (Pair metaTerm Rig0) argTerms) (Pair resTy ec3))
+              )
+      else if isImplicitDomain ctx ec dom then
+        if isStringImplicitDomain ec dom then case args of
+          a :: rest => case instArgOperand a of
+            Just payload => Vuna.Compiler.Base.Common.bind (checkEFuel (fuel - 1) globals ctx ec payload dom) (\p => case p of
+              Pair payloadTerm ec1 => Vuna.Compiler.Base.Common.bind (inferArgsGo (fuel - 1) globals ctx ec1 (applyClosure clo (evalCtx ctx payloadTerm)) rest sp hint) (\q => case q of
+                Pair argTerms (Pair resTy ec2) =>
+                  OkC (Pair ((::) (Pair payloadTerm rig) argTerms) (Pair resTy ec2))
+              )
+            )
+            Nothing => case newMetaAt sp ctx ec of
+              Pair metaTerm ec1 => Vuna.Compiler.Base.Common.bind (inferArgsGo (fuel - 1) globals ctx ec1 (applyClosure clo (evalCtx ctx metaTerm)) args sp hint) (\p => case p of
+                Pair argTerms (Pair resTy ec2) =>
+                  OkC (Pair ((::) (Pair metaTerm rig) argTerms) (Pair resTy ec2))
+              )
+          [] => case newMetaAt sp ctx ec of
+            Pair metaTerm ec1 => Vuna.Compiler.Base.Common.bind (inferArgsGo (fuel - 1) globals ctx ec1 (applyClosure clo (evalCtx ctx metaTerm)) args sp hint) (\p => case p of
+              Pair argTerms (Pair resTy ec2) =>
+                OkC (Pair ((::) (Pair metaTerm rig) argTerms) (Pair resTy ec2))
+            )
+        else case newMetaAt sp ctx ec of
           Pair metaTerm ec1 => Vuna.Compiler.Base.Common.bind (inferArgsGo (fuel - 1) globals ctx ec1 (applyClosure clo (evalCtx ctx metaTerm)) args sp hint) (\p => case p of
             Pair argTerms (Pair resTy ec2) =>
               OkC (Pair ((::) (Pair metaTerm rig) argTerms) (Pair resTy ec2))
           )
-      [] => case newMetaAt sp ctx ec of
-        Pair metaTerm ec1 => Vuna.Compiler.Base.Common.bind (inferArgsGo (fuel - 1) globals ctx ec1 (applyClosure clo (evalCtx ctx metaTerm)) args sp hint) (\p => case p of
-          Pair argTerms (Pair resTy ec2) =>
-            OkC (Pair ((::) (Pair metaTerm rig) argTerms) (Pair resTy ec2))
-        )
-    else case newMetaAt sp ctx ec of
-      Pair metaTerm ec1 => Vuna.Compiler.Base.Common.bind (inferArgsGo (fuel - 1) globals ctx ec1 (applyClosure clo (evalCtx ctx metaTerm)) args sp hint) (\p => case p of
-        Pair argTerms (Pair resTy ec2) =>
-          OkC (Pair ((::) (Pair metaTerm rig) argTerms) (Pair resTy ec2))
-      )
-    else tcErr0 sp ImplicitParamKind
+      else tcErr0 sp ImplicitParamKind
     else case args of
       [] => OkC (Pair [] (Pair forced ec))
       a :: rest =>
@@ -1286,9 +1316,10 @@ else case args of
       let
         forced = forceVal ec1 aTy
       in if isTypeValue forced then constrainDictDomGoKFuel (fuel - 1) globals ec1 ctx argTy argKind rest sp
-      else if argHeadMatchesKind globals ec1 ctx forced argKind then case convEc ec1 (ctxDepth ctx) argTy (neutralHeadOrSelf forced) of
-        OkC ec2 => OkC ec2
-        ErrC e => constrainDictDomGoKFuel (fuel - 1) globals ec1 ctx argTy argKind rest sp
+      else if argHeadMatchesKind globals ec1 ctx forced argKind then
+        case convEc ec1 (ctxDepth ctx) argTy (neutralHeadOrSelf forced) of
+          OkC ec2 => OkC ec2
+          ErrC e => constrainDictDomGoKFuel (fuel - 1) globals ec1 ctx argTy argKind rest sp
       else constrainDictDomGoKFuel (fuel - 1) globals ec1 ctx argTy argKind rest sp
 
 -- ---------------------------------------------------------------
@@ -1344,9 +1375,12 @@ coerceTerm ec expected actual term =
 -- 比较运算符：Nat 值直接按 Int 比较（运行时就是 int），混合时把 Nat 一侧提升。
 coerceNatOperands : Ec -> Value -> Value -> Term -> Term -> Maybe (Pair (Pair Value Value) (Pair Term Term))
 coerceNatOperands ec aTy bTy aTerm bTerm =
-  if isNatTy ec aTy && isNatTy ec bTy then Just (Pair (Pair intTyValue intTyValue) (Pair (natToIntTerm aTerm) (natToIntTerm bTerm)))
-  else if isNatTy ec aTy && isIntTy ec bTy then Just (Pair (Pair intTyValue bTy) (Pair (natToIntTerm aTerm) bTerm))
-  else if isIntTy ec aTy && isNatTy ec bTy then Just (Pair (Pair aTy intTyValue) (Pair aTerm (natToIntTerm bTerm)))
+  if isNatTy ec aTy && isNatTy ec bTy then
+    Just (Pair (Pair intTyValue intTyValue) (Pair (natToIntTerm aTerm) (natToIntTerm bTerm)))
+  else if isNatTy ec aTy && isIntTy ec bTy then
+    Just (Pair (Pair intTyValue bTy) (Pair (natToIntTerm aTerm) bTerm))
+  else if isIntTy ec aTy && isNatTy ec bTy then
+    Just (Pair (Pair aTy intTyValue) (Pair aTerm (natToIntTerm bTerm)))
   else Nothing
 
 -- 算术运算符名。内建 `+ - * /` 与 `Base.Num` 的方法投影（`add/sub/mul/div`）映射回
@@ -1404,21 +1438,24 @@ else case arithOpNameOf ec name of
 specializeArithCheckOpFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> String -> List Expr -> Value -> Span -> Check (Maybe (Pair Term Ec))
 specializeArithCheckOpFuel fuel globals ctx ec op args expected sp = if fuel <= 0 then icFuel "inference"
 else case args of
-  [a, b] => if isNatTy ec expected then Vuna.Compiler.Base.Common.bind (checkEFuel (fuel - 1) globals ctx ec a natTyValue) (\pa => case pa of
-    Pair aTerm ec1 => Vuna.Compiler.Base.Common.bind (checkEFuel (fuel - 1) globals ctx ec1 b natTyValue) (\pb => case pb of
-      Pair bTerm ec2 => OkC (Just (Pair (natApp2 op aTerm bTerm) ec2))
+  [a, b] => if isNatTy ec expected then
+    Vuna.Compiler.Base.Common.bind (checkEFuel (fuel - 1) globals ctx ec a natTyValue) (\pa => case pa of
+      Pair aTerm ec1 => Vuna.Compiler.Base.Common.bind (checkEFuel (fuel - 1) globals ctx ec1 b natTyValue) (\pb => case pb of
+        Pair bTerm ec2 => OkC (Just (Pair (natApp2 op aTerm bTerm) ec2))
+      )
     )
-  )
-  else if isIntTy ec expected then Vuna.Compiler.Base.Common.bind (checkEFuel (fuel - 1) globals ctx ec a intTyValue) (\pa => case pa of
-    Pair aTerm ec1 => Vuna.Compiler.Base.Common.bind (checkEFuel (fuel - 1) globals ctx ec1 b intTyValue) (\pb => case pb of
-      Pair bTerm ec2 => OkC (Just (Pair (intApp2 op aTerm bTerm) ec2))
+  else if isIntTy ec expected then
+    Vuna.Compiler.Base.Common.bind (checkEFuel (fuel - 1) globals ctx ec a intTyValue) (\pa => case pa of
+      Pair aTerm ec1 => Vuna.Compiler.Base.Common.bind (checkEFuel (fuel - 1) globals ctx ec1 b intTyValue) (\pb => case pb of
+        Pair bTerm ec2 => OkC (Just (Pair (intApp2 op aTerm bTerm) ec2))
+      )
     )
-  )
-  else if isFloatTy ec expected then Vuna.Compiler.Base.Common.bind (checkEFuel (fuel - 1) globals ctx ec a floatTyValue) (\pa => case pa of
-    Pair aTerm ec1 => Vuna.Compiler.Base.Common.bind (checkEFuel (fuel - 1) globals ctx ec1 b floatTyValue) (\pb => case pb of
-      Pair bTerm ec2 => OkC (Just (Pair (floatApp2 op aTerm bTerm) ec2))
+  else if isFloatTy ec expected then
+    Vuna.Compiler.Base.Common.bind (checkEFuel (fuel - 1) globals ctx ec a floatTyValue) (\pa => case pa of
+      Pair aTerm ec1 => Vuna.Compiler.Base.Common.bind (checkEFuel (fuel - 1) globals ctx ec1 b floatTyValue) (\pb => case pb of
+        Pair bTerm ec2 => OkC (Just (Pair (floatApp2 op aTerm bTerm) ec2))
+      )
     )
-  )
   else OkC Nothing
   _ => OkC Nothing
 
@@ -1436,9 +1473,12 @@ specializeArithAppOpFuel fuel globals ctx ec op args sp = if fuel <= 0 then icFu
 else case args of
   [a, b] => Vuna.Compiler.Base.Common.bind (inferEFuel (fuel - 1) globals ctx ec a) (\pa => case pa of
     Pair aTerm (Pair aTy ec1) => Vuna.Compiler.Base.Common.bind (inferEFuel (fuel - 1) globals ctx ec1 b) (\pb => case pb of
-      Pair bTerm (Pair bTy ec2) => if isNatTy ec2 aTy && isNatTy ec2 bTy then OkC (Just (Pair (natApp2 op aTerm bTerm) (Pair natTyValue ec2)))
-      else if isIntTy ec2 aTy && isIntTy ec2 bTy then OkC (Just (Pair (intApp2 op aTerm bTerm) (Pair intTyValue ec2)))
-      else if isFloatTy ec2 aTy && isFloatTy ec2 bTy then OkC (Just (Pair (floatApp2 op aTerm bTerm) (Pair floatTyValue ec2)))
+      Pair bTerm (Pair bTy ec2) => if isNatTy ec2 aTy && isNatTy ec2 bTy then
+        OkC (Just (Pair (natApp2 op aTerm bTerm) (Pair natTyValue ec2)))
+      else if isIntTy ec2 aTy && isIntTy ec2 bTy then
+        OkC (Just (Pair (intApp2 op aTerm bTerm) (Pair intTyValue ec2)))
+      else if isFloatTy ec2 aTy && isFloatTy ec2 bTy then
+        OkC (Just (Pair (floatApp2 op aTerm bTerm) (Pair floatTyValue ec2)))
       else if isNatTy ec2 aTy && isIntTy ec2 bTy then case isEIntExpr b of
         Just n =>
           Vuna.Compiler.Base.Common.bind (natLitResult (exprSpan b) n)
@@ -1596,18 +1636,20 @@ else case expr of
       Nothing => checkByInferFuel (fuel - 1) globals ctx ec expr expected
   EStr s sp => case forceVal ec expected of
     VNeutral (NGlobal g []) => if g == strTypeName then OkC (Pair (TStr s) ec)
-    else case literalTraitLower globals ctx ec fromStringTypeName fromStringMethodName expr expected sp of
-      Just (Pair lower ec1) => checkEFuel (fuel - 1) globals ctx ec1 lower expected
-      Nothing => checkByInferFuel (fuel - 1) globals ctx ec expr expected
+    else
+      case literalTraitLower globals ctx ec fromStringTypeName fromStringMethodName expr expected sp of
+        Just (Pair lower ec1) => checkEFuel (fuel - 1) globals ctx ec1 lower expected
+        Nothing => checkByInferFuel (fuel - 1) globals ctx ec expr expected
     VMeta _ _ => checkByInferFuel (fuel - 1) globals ctx ec expr expected
     _ => case literalTraitLower globals ctx ec fromStringTypeName fromStringMethodName expr expected sp of
       Just (Pair lower ec1) => checkEFuel (fuel - 1) globals ctx ec1 lower expected
       Nothing => checkByInferFuel (fuel - 1) globals ctx ec expr expected
   EFloat raw sp => case forceVal ec expected of
     VNeutral (NGlobal g []) => if g == floatTypeName then OkC (Pair (TFloat raw) ec)
-    else case literalTraitLower globals ctx ec fromFloatTypeName fromFloatMethodName expr expected sp of
-      Just (Pair lower ec1) => checkEFuel (fuel - 1) globals ctx ec1 lower expected
-      Nothing => checkByInferFuel (fuel - 1) globals ctx ec expr expected
+    else
+      case literalTraitLower globals ctx ec fromFloatTypeName fromFloatMethodName expr expected sp of
+        Just (Pair lower ec1) => checkEFuel (fuel - 1) globals ctx ec1 lower expected
+        Nothing => checkByInferFuel (fuel - 1) globals ctx ec expr expected
     VMeta _ _ => checkByInferFuel (fuel - 1) globals ctx ec expr expected
     _ => case literalTraitLower globals ctx ec fromFloatTypeName fromFloatMethodName expr expected sp of
       Just (Pair lower ec1) => checkEFuel (fuel - 1) globals ctx ec1 lower expected
@@ -1638,11 +1680,12 @@ else case expr of
   ECase scrut alts csp => checkCaseFuel (fuel - 1) globals ctx ec scrut alts expected csp
   ELet binds body rec_ sp => checkLetFuel (fuel - 1) globals ctx ec binds body rec_ expected sp
   -- 防御分支——正常路径已在绑定块入口展开；普通表达式位置直接降级后重查。
-  ELocalFun clauses sp => if clausesHaveOverCtor clauses then Vuna.Compiler.Base.Common.bind (resolveOverFunPats ec ctx expected clauses) (\r => case r of
-    Pair clauses2 ec1 =>
-      Vuna.Compiler.Base.Common.bind (multiToExpr (ctorFamilyTable ec1) clauses2)
-        (\bodyExpr => checkEFuel (fuel - 1) globals ctx ec1 bodyExpr expected)
-  )
+  ELocalFun clauses sp => if clausesHaveOverCtor clauses then
+    Vuna.Compiler.Base.Common.bind (resolveOverFunPats ec ctx expected clauses) (\r => case r of
+      Pair clauses2 ec1 =>
+        Vuna.Compiler.Base.Common.bind (multiToExpr (ctorFamilyTable ec1) clauses2)
+          (\bodyExpr => checkEFuel (fuel - 1) globals ctx ec1 bodyExpr expected)
+    )
   else Vuna.Compiler.Base.Common.bind (expandLocalFuns ec (ELocalFun clauses sp))
     (\e2 => checkEFuel (fuel - 1) globals ctx ec e2 expected)
   -- `EAnn` 在 check 位等价于「按标注类型检查内部表达式」。
@@ -1887,10 +1930,11 @@ else case stripPisWithMetas 64 ctx ec piTy of
   OkC (Pair res ec1) =>
     let
       forcedRes = forceVal ec1 res
-    in if isMetaHeadedValue ec1 forcedRes then if isRigidHeadValue ec1 expected then case convEc ec1 (ctxDepth ctx) expected forcedRes of
-      ErrC _ => Nothing
-      OkC ec2 => Just ec2
-    else Nothing
+    in if isMetaHeadedValue ec1 forcedRes then
+      if isRigidHeadValue ec1 expected then case convEc ec1 (ctxDepth ctx) expected forcedRes of
+        ErrC _ => Nothing
+        OkC ec2 => Just ec2
+      else Nothing
     else Nothing
 
 -- 与 inferEFuel 同形，只对 EApp 把期望结果类型传进 inferAppFuel（其余形状走常规推断）。
@@ -2139,8 +2183,9 @@ else
             -- 检查它是否落在「立即按 quantity 1 消费」的位置；不落则报
             -- TC_LinearCaptureEscapes（诊断码不变）。
             binderName =
-              if ctxHasLinear ec ctx then if termHasOuterLinear ec ctx2 inner then linClosureName sp (ctxDepth ctx) name
-              else name
+              if ctxHasLinear ec ctx then
+                if termHasOuterLinear ec ctx2 inner then linClosureName sp (ctxDepth ctx) name
+                else name
               else name
           in OkC (Pair (TLam binderName lamRig nameSp inner2) ec1)
       )
@@ -2197,9 +2242,10 @@ else case expr of
   EApp (EVar name sp) args asp => if name == "->" || name == "Type" then checkTypeInferFuel (fuel - 1) globals ctx ec expr
   else case ctxLookup name ctx of
     Just _ => checkTypeInferFuel (fuel - 1) globals ctx ec expr
-    Nothing => if isTypeName globals ec name then case inferAppUnderTypeFuel (fuel - 1) globals ctx ec name args sp of
-      ErrC _ => checkTypeInferFuel (fuel - 1) globals ctx ec expr
-      OkC p => OkC p
+    Nothing => if isTypeName globals ec name then
+      case inferAppUnderTypeFuel (fuel - 1) globals ctx ec name args sp of
+        ErrC _ => checkTypeInferFuel (fuel - 1) globals ctx ec expr
+        OkC p => OkC p
     else checkTypeInferFuel (fuel - 1) globals ctx ec expr
   _ => checkTypeInferFuel (fuel - 1) globals ctx ec expr
 
@@ -2236,7 +2282,8 @@ else case fn of
     Nothing => if isSortVal ec expected then case typeNameOfDualCtor ec name of
       Just fam => checkAppUnderTypeFuel (fuel - 1) globals ctx ec fam args expected vsp
       Nothing =>
-        if isTypeName globals ec name then checkAppUnderTypeFuel (fuel - 1) globals ctx ec name args expected vsp
+        if isTypeName globals ec name then
+          checkAppUnderTypeFuel (fuel - 1) globals ctx ec name args expected vsp
         else checkAppByValueFuel fuel globals ctx ec fn name args expected sp vsp
     else checkAppByValueFuel fuel globals ctx ec fn name args expected sp vsp
   _ => checkAppGeneralFuel (fuel - 1) globals ctx ec fn args expected sp
@@ -2255,11 +2302,12 @@ else case valueLookup globals ec name of
 -- 进入这里就说明这是类型位置 + 类型命名空间，退化会把命名空间判断又搅混。
 export checkAppUnderTypeFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> String -> List Expr -> Value -> Span -> Check (Pair Term Ec)
 checkAppUnderTypeFuel fuel globals ctx ec name args expected sp = if fuel <= 0 then icFuel "inference"
-else Vuna.Compiler.Base.Common.bind (inferAppUnderTypeFuel (fuel - 1) globals ctx ec name args sp) (\p => case p of
-  Pair term (Pair lvl ec1) =>
-    Vuna.Compiler.Base.Common.bind (convEc ec1 (ctxDepth ctx) expected (VType lvl))
-      (\ec2 => OkC (Pair term ec2))
-)
+else
+  Vuna.Compiler.Base.Common.bind (inferAppUnderTypeFuel (fuel - 1) globals ctx ec name args sp) (\p => case p of
+    Pair term (Pair lvl ec1) =>
+      Vuna.Compiler.Base.Common.bind (convEc ec1 (ctxDepth ctx) expected (VType lvl))
+        (\ec2 => OkC (Pair term ec2))
+  )
 
 export inferAppUnderTypeFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> String -> List Expr -> Span -> Check (Pair Term (Pair Level Ec))
 inferAppUnderTypeFuel fuel globals ctx ec name args sp = if fuel <= 0 then icFuel "inference"
@@ -2345,16 +2393,17 @@ else OkC Nothing
 export specializeOpAppFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> String -> List Expr -> Span -> Check (Maybe (Pair Term (Pair Value Ec)))
 specializeOpAppFuel fuel globals ctx ec name args sp = if fuel <= 0 then icFuel "inference"
 else if name == interpMethodName then specializeInterpPrimApp (fuel - 1) globals ctx ec name args sp
-else Vuna.Compiler.Base.Common.bind (specializeEqAppFuel (fuel - 1) globals ctx ec name args sp) (\r => case r of
-  Just pair => OkC (Just pair)
-  Nothing => Vuna.Compiler.Base.Common.bind (specializeCmpAppFuel (fuel - 1) globals ctx ec name args sp) (\r2 => case r2 of
+else
+  Vuna.Compiler.Base.Common.bind (specializeEqAppFuel (fuel - 1) globals ctx ec name args sp) (\r => case r of
     Just pair => OkC (Just pair)
-    Nothing => Vuna.Compiler.Base.Common.bind (specializeBoolAppFuel (fuel - 1) globals ctx ec name args sp) (\r3 => case r3 of
+    Nothing => Vuna.Compiler.Base.Common.bind (specializeCmpAppFuel (fuel - 1) globals ctx ec name args sp) (\r2 => case r2 of
       Just pair => OkC (Just pair)
-      Nothing => specializeArithAppFuel (fuel - 1) globals ctx ec name args sp
+      Nothing => Vuna.Compiler.Base.Common.bind (specializeBoolAppFuel (fuel - 1) globals ctx ec name args sp) (\r3 => case r3 of
+        Just pair => OkC (Just pair)
+        Nothing => specializeArithAppFuel (fuel - 1) globals ctx ec name args sp
+      )
     )
   )
-)
 
 -- 模板洞 `${e}` 由 Loader 降级成 `Base.Interp.interp e`。对**原始类型**可以按
 -- base 里的实例定义直接降级，省掉每个洞的字典目标与实例搜索（模板密集的源码自检会因此
@@ -2371,8 +2420,10 @@ else case args of
       let
         tyv = forceVal ec1 eTy
       in if isStringTyValue tyv then OkC (Just (Pair eTerm (Pair tyv ec1)))
-      else if isIntTy ec1 tyv && not (hasSpecificInterpInstance ec1 intTypeName) then OkC (Just (Pair (strFromIntTerm eTerm) (Pair strTyValue ec1)))
-      else if isNatTy ec1 tyv && not (hasSpecificInterpInstance ec1 natTypeName) then OkC (Just (Pair (strFromIntTerm (natToIntTerm eTerm)) (Pair strTyValue ec1)))
+      else if isIntTy ec1 tyv && not (hasSpecificInterpInstance ec1 intTypeName) then
+        OkC (Just (Pair (strFromIntTerm eTerm) (Pair strTyValue ec1)))
+      else if isNatTy ec1 tyv && not (hasSpecificInterpInstance ec1 natTypeName) then
+        OkC (Just (Pair (strFromIntTerm (natToIntTerm eTerm)) (Pair strTyValue ec1)))
       else if isFloatTy ec1 tyv then OkC (Just (Pair (strFromFloatTerm eTerm) (Pair strTyValue ec1)))
       else OkC Nothing
   )
@@ -2417,15 +2468,17 @@ checkAppGeneralFuel fuel globals ctx ec fn args expected sp = if fuel <= 0 then 
 else case fn of
   EVar name vsp => Vuna.Compiler.Base.Common.bind (specializeArithCheckFuel (fuel - 1) globals ctx ec name args expected sp) (\arith => case arith of
     Just (Pair term ec2) => OkC (Pair term ec2)
-    Nothing => if skipArithSpecForExpected ec name expected then checkByInferFuel (fuel - 1) globals ctx ec (EApp fn args sp) expected
-    else Vuna.Compiler.Base.Common.bind (specializeOpAppFuel (fuel - 1) globals ctx ec name args sp) (\mspec => case mspec of
-      Just (Pair term (Pair termTy ec1)) => case coerceTerm ec1 expected termTy term of
-        Just coerced => OkC (Pair coerced ec1)
-        Nothing =>
-          Vuna.Compiler.Base.Common.bind (convEc ec1 (ctxDepth ctx) expected termTy)
-            (\ec2 => OkC (Pair term ec2))
-      Nothing => checkByInferFuel (fuel - 1) globals ctx ec (EApp fn args sp) expected
-    )
+    Nothing => if skipArithSpecForExpected ec name expected then
+      checkByInferFuel (fuel - 1) globals ctx ec (EApp fn args sp) expected
+    else
+      Vuna.Compiler.Base.Common.bind (specializeOpAppFuel (fuel - 1) globals ctx ec name args sp) (\mspec => case mspec of
+        Just (Pair term (Pair termTy ec1)) => case coerceTerm ec1 expected termTy term of
+          Just coerced => OkC (Pair coerced ec1)
+          Nothing =>
+            Vuna.Compiler.Base.Common.bind (convEc ec1 (ctxDepth ctx) expected termTy)
+              (\ec2 => OkC (Pair term ec2))
+        Nothing => checkByInferFuel (fuel - 1) globals ctx ec (EApp fn args sp) expected
+      )
   )
   _ => checkByInferFuel (fuel - 1) globals ctx ec (EApp fn args sp) expected
 
@@ -2476,7 +2529,8 @@ ctorIdentitySpine fam ctor =
     args = ctorResultArgs (dtCtorType ctor)
   in case ctorSpineOfType (dropPis (dtCtorType ctor)) of
     Pair h _ =>
-      if h == fam then if length args > 0 then if length args < k then identityArgs 0 k args else False else False
+      if h == fam then
+        if length args > 0 then if length args < k then identityArgs 0 k args else False else False
       else False
 
 -- 取 telescope 前 n 个 binder 的 rig（族参数部分）。
@@ -2495,9 +2549,10 @@ ctorFamilyArgs ec ctx ctor expected =
     VNeutral (NGlobal gfam spine) =>
       let
         arity = length (ctorResultArgs (dtCtorType ctor))
-      in if gfam == fam then if length spine == arity then ctorFamilyArgsGo ec (eval [] (dtCtorType ctor)) spine (takeRigs arity (dtCtorTelescope ctor))
-        (ctxDepth ctx) []
-      else Nothing
+      in if gfam == fam then
+        if length spine == arity then ctorFamilyArgsGo ec (eval [] (dtCtorType ctor)) spine
+          (takeRigs arity (dtCtorTelescope ctor)) (ctxDepth ctx) []
+        else Nothing
       else Nothing
     _ => Nothing
   else Nothing
@@ -2507,7 +2562,8 @@ ctorFamilyArgsGo ec ty [] rigs depth acc = Just (Pair (reverse acc) (Pair ty ec)
 ctorFamilyArgsGo ec ty (v :: vs) [] depth acc = Nothing
 ctorFamilyArgsGo ec ty (v :: vs) (r :: rs) depth acc = case forceVal ec ty of
   VPi _ implicit _ dom clo =>
-    if implicit then ctorFamilyArgsGo ec (applyClosure clo v) vs rs depth (Pair (quote depth v) r :: acc)
+    if implicit then
+      ctorFamilyArgsGo ec (applyClosure clo v) vs rs depth (Pair (quote depth v) r :: acc)
     else Nothing
   _ => Nothing
 
@@ -2744,9 +2800,10 @@ data DoBindShape : Type where
 -- 返回显式实参、λ 位置与 λ binder 的 rig；形状不符返回 Nothing。
 bindShapeOf : Term -> Maybe DoBindShape
 bindShapeOf (TPi _ True _ _ (TPi _ True _ (TApp (TGlobal g) (TVar _ imD _) _) (TPi _ True _ _ (TPi _ True _ _ (TPi _ False rigE (TApp (TVar _ imE _) (TVar _ iaE _) _) (TPi _ False rigL (TPi _ False rigInner (TVar _ iaL _) (TApp (TVar _ imM _) (TVar _ ibL _) _)) (TApp (TVar _ imR _) (TVar _ ibR _) _))))))) =
-  if imD == 0 && imE == 3 && imM == 5 && imR == 5 then if iaE == 1 && iaL == 2 && ibL == 2 && ibR == 2 then Just (DoBindShape rigE rigL rigInner)
-  else if iaE == 0 && iaL == 1 && ibL == 3 && ibR == 3 then Just (DoBindShape rigE rigL rigInner)
-  else Nothing
+  if imD == 0 && imE == 3 && imM == 5 && imR == 5 then
+    if iaE == 1 && iaL == 2 && ibL == 2 && ibR == 2 then Just (DoBindShape rigE rigL rigInner)
+    else if iaE == 0 && iaL == 1 && ibL == 3 && ibR == 3 then Just (DoBindShape rigE rigL rigInner)
+    else Nothing
   else Nothing
 bindShapeOf _ = Nothing
 
@@ -2811,11 +2868,12 @@ planDoBlock fuel globals ctx ec sp bindName headTerm bindTyTerm shape mVal aVal 
 else case shape of
   DoBindShape rigE rigL rigInner => case forceVal ec (eval [] bindTyTerm) of
     VPi _ True _ _ cloM => case forceVal ec (applyClosure cloM mVal) of
-      VPi _ True _ domD _ => if isDictDomain ec domD then Vuna.Compiler.Base.Common.bind (doDictStep (fuel - 1) globals ctx ec sp domD) (\dp => case dp of
-        Pair dictTerm ec1 =>
-          OkC
-            (Just (DoPlan bindName headTerm (quote (ctxDepth ctx) mVal) mVal aVal dictTerm rigE rigL rigInner ec1))
-      )
+      VPi _ True _ domD _ => if isDictDomain ec domD then
+        Vuna.Compiler.Base.Common.bind (doDictStep (fuel - 1) globals ctx ec sp domD) (\dp => case dp of
+          Pair dictTerm ec1 =>
+            OkC
+              (Just (DoPlan bindName headTerm (quote (ctxDepth ctx) mVal) mVal aVal dictTerm rigE rigL rigInner ec1))
+        )
       else OkC Nothing
       _ => OkC Nothing
     _ => OkC Nothing
@@ -2832,7 +2890,8 @@ doBindAppTerm ecLinear ecPaper ctx sp binderSp plan binder aVal eTerm argRig lam
     ctx2 = ctxBindValue binder aVal ctx
     inner2 = if isOpaqueRuntimeTyIn ecPaper ctx aVal then wrapOpaqueUses [0] inner else inner
     binderName =
-      if ctxHasLinear ecLinear ctx then if termHasOuterLinear ecLinear ctx2 inner then linClosureName sp depth binder else binder
+      if ctxHasLinear ecLinear ctx then
+        if termHasOuterLinear ecLinear ctx2 inner then linClosureName sp depth binder else binder
       else binder
     lamTerm = TLam binderName lamRig binderSp inner2
     args =

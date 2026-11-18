@@ -257,8 +257,9 @@ dirOf path =
 
 stripPathPrefix : String -> String -> String
 stripPathPrefix base file =
-  if startsWith "${base}/" file then substring (natFromInt (strLength base + 1)) (natFromInt (strLength file - strLength base - 1))
-    file
+  if startsWith "${base}/" file then
+    substring (natFromInt (strLength base + 1)) (natFromInt (strLength file - strLength base - 1))
+      file
   else file
 
 splitSlash : String -> List String
@@ -486,8 +487,10 @@ export removedFlagHint : String -> Maybe String
 removedFlagHint flag =
   if flag == dashFlag "dt" then Just "DT is the only path; drop the flag"
   else if flag == dashFlag "package" then Just "use build or compile"
-  else if flag == dashFlag "split" then Just "split is the only output model; use build --out OUT [DIR] or compile <pkg-dir> OUT"
-  else if flag == dashFlag "root" then Just "module resolution is decided by the nearest vuna.toml; set VUNA_BASE for standalone files"
+  else if flag == dashFlag "split" then
+    Just "split is the only output model; use build --out OUT [DIR] or compile <pkg-dir> OUT"
+  else if flag == dashFlag "root" then
+    Just "module resolution is decided by the nearest vuna.toml; set VUNA_BASE for standalone files"
   else if flag == dashFlag "out" then Just "pass OUTDIR positionally to compile; build accepts --out DIR"
   else if flag == dashFlag "no-typecheck" then Just "checking is always enabled"
   else if flag == dashFlag "typecheck" then Just "checking is always enabled"
@@ -1261,7 +1264,8 @@ stripLangGo ("--lang" :: rest) acc lang = case rest of
   v :: more => stripLangGo more acc v
   [] => Pair (reverse acc) lang
 stripLangGo (arg :: rest) acc lang =
-  if startsWith "--lang=" arg then stripLangGo rest acc (substring (natFromInt 7) (natFromInt (strLength arg - 7)) arg)
+  if startsWith "--lang=" arg then
+    stripLangGo rest acc (substring (natFromInt 7) (natFromInt (strLength arg - 7)) arg)
   else stripLangGo rest (arg :: acc) lang
 
 -- | 参数里是否显式给了 --lang。

@@ -508,7 +508,8 @@ else
     rbs = runtimeBinders bs
     savedScope = st.gsScope
   in if listLengthB rbs /= 1 then Err "wasm target: only single-binder lambdas are supported yet"
-  else if listLengthB args /= 1 then Err "wasm target: only saturated single-argument lambda application is supported yet"
+  else if listLengthB args /= 1 then
+    Err "wasm target: only saturated single-argument lambda application is supported yet"
   else case args of
     [a] => case genExpr (fuel - 1) (noTail st) a of
       Err e => Err e
@@ -542,7 +543,8 @@ else case rtImplOf sym of
   RtFunc n name =>
     let
       argc = listLengthB args
-    in if argc == n then genArgsThen (fuel - 1) st args (if st.gsTail then IReturnCall name else ICall name)
+    in if argc == n then
+      genArgsThen (fuel - 1) st args (if st.gsTail then IReturnCall name else ICall name)
     else if argc < n then genApplyValue (fuel - 1) st (IrRt sym) args
     else case splitAt n args of
       Pair headArgs rest => case genArgsThen (fuel - 1) st headArgs (ICall name) of
@@ -674,7 +676,8 @@ genRecord : Int -> GenState -> String -> List (Pair String Ir) -> Result (Pair (
 genRecord fuel st family fields = if fuel <= 0 then Err "wasm codegen fuel exhausted"
 else case famOrFail st family of
   Err e => Err e
-  Ok fam => if listLengthB fields /= listLengthB fam.wasmFamRecordFields then Err "record `${family}` constructed with the wrong number of fields"
+  Ok fam => if listLengthB fields /= listLengthB fam.wasmFamRecordFields then
+    Err "record `${family}` constructed with the wrong number of fields"
   else case genExprs (fuel - 1) st (map (\p => secondOf p) fields) of
     Err e => Err e
     Ok p => Ok (Pair (append (firstOf p) [IStructNew (watFamName family)]) (secondOf p))
@@ -1306,8 +1309,9 @@ else case entry of
         append [IGlobalGet (watGlobalNameOf (irEntryMainOf e))] (append handlerInstrs runInstrs)
     in case genDefsInits (fuel - 1) st1 ordered of
       Err err => Err err
-      Ok p => if not printResult then if irEntryIsActionOf e then Ok (Pair (append (firstOf p) (append mainInstrs [IDrop])) (secondOf p))
-      else Ok p
+      Ok p => if not printResult then
+        if irEntryIsActionOf e then Ok (Pair (append (firstOf p) (append mainInstrs [IDrop])) (secondOf p))
+        else Ok p
       else case entryShowFunc (irEntryShowOf e) of
         Nothing => Err "wasm target: custom Show entry is not supported yet"
         Just showFn =>
@@ -1557,8 +1561,9 @@ buildModule fuel st ordered entry printResult effMode listFamM = case genDefFunc
             2 => append elems ["$rt_effThunk", "$rt_effResumeClo"]
             3 => append elems ["$rt_cpsResumeClo", "$rt_cpsRet"]
             5 => append elems ["$rt_selKComp", "$rt_selKValue"]
-            6 => append elems
-              ["$rt_mKComp", "$rt_mKDone", "$rt_mRes1", "$rt_mRes2", "$rt_mPureThunk1", "$rt_mPureThunk2", "$rt_mKAns"]
+            6 =>
+              append elems
+                ["$rt_mKComp", "$rt_mKDone", "$rt_mRes1", "$rt_mRes2", "$rt_mPureThunk1", "$rt_mPureThunk2", "$rt_mKAns"]
             _ => elems
           rtBase = selectRtFuncs False (rtFunctions st.gsConsts)
           rtBase0 = filter (\f => not (isCpsRtFunc f)) rtBase
@@ -1907,9 +1912,10 @@ build program printResult =
           Ok cpsOrdered => buildAnf cpsOrdered 3 (Just e) listFamM
         else buildAnf ordered (effModeOf (Just e) ordered) (Just e) listFamM
       in if directable then buildAnf (append rewritten [pureKDef]) 0 (Just entryClean) listFamM
-      else if (listNull (irEntryRowTagsOf e) || consoleOnly (irEntryRowTagsOf e)) && noStepUnsupported then case cpsDefsMachine ordered of
-        Ok cpsOrdered => buildAnf cpsOrdered 6 (Just e) listFamM
-        Err _ => fallbackEff
+      else if (listNull (irEntryRowTagsOf e) || consoleOnly (irEntryRowTagsOf e)) && noStepUnsupported then
+        case cpsDefsMachine ordered of
+          Ok cpsOrdered => buildAnf cpsOrdered 6 (Just e) listFamM
+          Err _ => fallbackEff
       else fallbackEff
 
 -- | `Show Float` 的实现（`Base.Float.floatRender`）；入口展示与用户 `show` 共用。

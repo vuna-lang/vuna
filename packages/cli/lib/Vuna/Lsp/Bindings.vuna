@@ -189,7 +189,8 @@ else
 wordOccurrencesGo : List Int -> List Int -> Int -> Int -> List Int -> List (Pair Int Int) -> List (Pair Int Int)
 wordOccurrencesGo [] needle prev idx starts acc = acc
 wordOccurrencesGo (c :: rest) needle prev idx starts acc =
-  if (prev < 0 || not (identCode prev)) && isPrefixChars needle (c :: rest) && afterBoundary (drop (length needle) (c :: rest)) then wordOccurrencesGo rest needle c (idx + 1) starts (posOfAbs starts idx :: acc)
+  if (prev < 0 || not (identCode prev)) && isPrefixChars needle (c :: rest) && afterBoundary (drop (length needle) (c :: rest)) then
+    wordOccurrencesGo rest needle c (idx + 1) starts (posOfAbs starts idx :: acc)
   else wordOccurrencesGo rest needle c (idx + 1) starts acc
 
 -- ---------------------------------------------------------------
@@ -283,7 +284,8 @@ bufferSymDoc buffers path kind name = case bufferedSource buffers path of
       let
         table = docTableOf sf.sourceFileModDecl sf.sourceFileDecls comments
         decls = sf.sourceFileDecls
-      in if isMemberKind kind then if hasMemberNamed decls name then Just (memberDocByName table name) else Nothing
+      in if isMemberKind kind then
+        if hasMemberNamed decls name then Just (memberDocByName table name) else Nothing
       else if hasDeclNamed decls name then Just (docForDecl table name) else Nothing
 
 -- | 内部：符号种类标签是否属于「成员」（构造子 / record 字段 / trait 方法）。
@@ -618,7 +620,8 @@ else case remaining of
 scanAtChars : List Int -> List Int -> Int -> Int -> Maybe Int
 scanAtChars [] word prev idx = Nothing
 scanAtChars (c :: rest) word prev idx =
-  if prev == 64 && isPrefixChars word (c :: rest) && afterBoundary (drop (length word) (c :: rest)) then Just idx
+  if prev == 64 && isPrefixChars word (c :: rest) && afterBoundary (drop (length word) (c :: rest)) then
+    Just idx
   else scanAtChars rest word c (idx + 1)
 
 -- | 内部：as-pattern 的名字位置：`x@pat`（span 起点）或 `(pat)@x`（`@` 之后）；都推导不出时

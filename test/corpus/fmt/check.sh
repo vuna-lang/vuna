@@ -91,6 +91,18 @@ for file in "$HERE"/*.vuna; do
   fi
 done
 
+# ---- 1b) 行宽契约：golden 每一行都不超过 maxWidth（100 列）。
+#      长字符串字面量按约定保持单行（拆开会改变内容），带 `"` 的行不参与断言。
+for file in "$HERE"/*.fmt; do
+  [ -f "$file" ] || continue
+  over=$(awk 'length($0) > 100 && index($0, "\"") == 0 { print NR; exit }' "$file")
+  if [ -n "$over" ]; then
+    bad "$(basename "$file") (line $over exceeds 100 columns)"
+  else
+    ok
+  fi
+done
+
 # ---- 2) 纯程序语义：格式化前后编译运行输出一致 ----
 for file in "$HERE"/run/*.vuna; do
   [ -f "$file" ] || continue

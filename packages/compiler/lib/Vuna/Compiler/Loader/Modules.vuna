@@ -442,8 +442,10 @@ collectModuleFiles (root :: rest) name importerPkg allowed hidden =
     path = modulePath root name
   in do
     exists <- fsFileExists path
-    if exists then if rootAllows importerPkg root name then collectModuleFiles rest name importerPkg (Pair path root :: allowed) hidden
-    else collectModuleFiles rest name importerPkg allowed (rootName root :: hidden)
+    if exists then
+      if rootAllows importerPkg root name then
+        collectModuleFiles rest name importerPkg (Pair path root :: allowed) hidden
+      else collectModuleFiles rest name importerPkg allowed (rootName root :: hidden)
     else collectModuleFiles rest name importerPkg allowed hidden
 
 _joinRootDirs : List Root -> String

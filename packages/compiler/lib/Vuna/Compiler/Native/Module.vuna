@@ -543,8 +543,10 @@ else case findDef name st.fgDefs of
   Just d =>
     let
       arity = irDefArity d
-    in if arity == length args then if isTail && tailCallFits st (nativeStackArgCount arity nativeMaxArgs) then genTailCall (fuel - 1) st (nativeFuncLabel name) args
-    else genSaturatedCall (fuel - 1) st (nativeFuncLabel name) args
+    in if arity == length args then
+      if isTail && tailCallFits st (nativeStackArgCount arity nativeMaxArgs) then
+        genTailCall (fuel - 1) st (nativeFuncLabel name) args
+      else genSaturatedCall (fuel - 1) st (nativeFuncLabel name) args
     else if arity == 0 then internal "zero-argument global used as a function"
     else genApplyHead (fuel - 1) st (IrGlobal name) args
 
@@ -631,7 +633,8 @@ genFloatLit st raw = case String.split "." raw of
     let
       num = floatDigitsOf (ip ++ fp)
       den = floatPow10 (strLength fp)
-    in if den == 1 then NOk (Pair [IMov (OpReg Rdi) (OpImm num), ICall (nativeRtLabel "float_from_int")] st)
+    in if den == 1 then
+      NOk (Pair [IMov (OpReg Rdi) (OpImm num), ICall (nativeRtLabel "float_from_int")] st)
     else
       let
         slotP = freshSlot st
@@ -681,12 +684,14 @@ else case ir of
   IrGlobal name => case findDef name st.fgDefs of
     Nothing => internal "undefined global in native codegen: ${name}"
     Just d =>
-      if irDefArity d == 0 then if isTail then NOk (Pair (tailCallSlotsInstrs (nativeFuncLabel name) []) st)
-      else NOk (Pair [ICall (nativeFuncLabel name)] st)
+      if irDefArity d == 0 then
+        if isTail then NOk (Pair (tailCallSlotsInstrs (nativeFuncLabel name) []) st)
+        else NOk (Pair [ICall (nativeFuncLabel name)] st)
       else genValueClosure st (modulePathOf name) (nativeGlobalValueLabel name) (irDefArity d)
         (nativeFuncLabel name)
   IrInt n =>
-    if n < 0 - 4611686018427387903 - 1 || n > 4611686018427387903 then unsupported "native target: integer literal outside the 63-bit range"
+    if n < 0 - 4611686018427387903 - 1 || n > 4611686018427387903 then
+      unsupported "native target: integer literal outside the 63-bit range"
     else NOk (Pair [IMov (OpReg Rax) (OpImm n)] st)
   IrStr s => case poolLabelOf s st.fgPool of
     Nothing => internal "string literal missing from native pool"
@@ -977,7 +982,8 @@ else case ctorTagIn ctors ctor of
   Just tag => case ctorArityIn ctors ctor of
     Nothing => internal "unknown constructor in native codegen: ${ctor}"
     Just n =>
-      if listLengthI args /= n then internal "constructor `${ctor}` applied to the wrong number of arguments"
+      if listLengthI args /= n then
+        internal "constructor `${ctor}` applied to the wrong number of arguments"
       else nbind (genArgs (fuel - 1) st args) (\p => genCtorFinish n tag p ctors)
 
 -- | 纯指令拼装（不再递归进 genExpr）：分配 + 写 tag + 写字段 + 补齐。
@@ -999,8 +1005,10 @@ genRecord fuel st family fields = if fuel <= 0 then internal "native codegen fue
 else case declOf family st.fgFams of
   Nothing => internal "unknown record family in native codegen: ${family}"
   Just (IrRecordDecl _ _ flds _) =>
-    if listLengthI fields /= listLengthI flds then internal "record `${family}` constructed with the wrong number of fields"
-    else nbind (genArgs (fuel - 1) st (map (\p => secondOf p) fields)) (\p => genRecordFinish p flds)
+    if listLengthI fields /= listLengthI flds then
+      internal "record `${family}` constructed with the wrong number of fields"
+    else
+      nbind (genArgs (fuel - 1) st (map (\p => secondOf p) fields)) (\p => genRecordFinish p flds)
   _ => internal "family `${family}` is not a record"
 
 genRecordFinish : Pair (List Instr) (Pair (List Int) FGen) -> List (Pair Int String) -> NRes (Pair (List Instr) FGen)
@@ -1236,13 +1244,14 @@ else nbind (genExpr (fuel - 1) st scrut) (\p => let
     Nothing => "sc"
 in if not (hasNatBranch zero catch) then internal "Nat case has no zero/catch branch"
 else if not (hasNatBranch succ catch) then internal "Nat case has no succ/catch branch"
-else nbind (genNatArm (fuel - 1) st4 isTail zeroAlt zeroMode slotSc) (\z => nbind (genNatArm (fuel - 1) (secondOf z) isTail succAlt succMode slotSc) (\s => let
-  body =
-    append (firstOf p)
-      (append (storeSlot slotSc) (append [ICmp (OpMem Rbp (nativeSlotOff slotSc)) (OpImm 0), IJcc "je" lz] (append (firstOf s) (append [IJmp lend, ILabel lz] (append (firstOf z) [ILabel lend])))))
-in NOk (Pair body (secondOf s))
-)
-)
+else
+  nbind (genNatArm (fuel - 1) st4 isTail zeroAlt zeroMode slotSc) (\z => nbind (genNatArm (fuel - 1) (secondOf z) isTail succAlt succMode slotSc) (\s => let
+    body =
+      append (firstOf p)
+        (append (storeSlot slotSc) (append [ICmp (OpMem Rbp (nativeSlotOff slotSc)) (OpImm 0), IJcc "je" lz] (append (firstOf s) (append [IJmp lend, ILabel lz] (append (firstOf z) [ILabel lend])))))
+  in NOk (Pair body (secondOf s))
+  )
+  )
 )
 
 -- ---------------------------------------------------------------
@@ -1292,16 +1301,17 @@ genDefFunc defs pools fams nextLabel (IrDef name arity _ body _ _ _) =
       let
         rbs = runtimeBinders bs
       in if length rbs /= arity then internal "function body lambda arity mismatch: ${name}"
-      else nbind (bindArgs rbs st0) (\bp => nbind (genExprAt 100000 (secondOf bp) True inner) (\q => let
-        st1 = secondOf q
-        frame = nativeFrameBytes st1.fgNextSlot
-        instrs = append (firstOf bp) (append (clearDeadSlots (firstOf q)) nativeEpilogue)
-        mainF =
-          NativeFunc (nativeFuncLabel name) frame
-            (append (nativePrologue frame) (append stackGuardInstrs instrs)) modPath
-      in NOk (Pair (append st1.fgLams [mainF]) st1.fgNextLabel)
-      )
-      )
+      else
+        nbind (bindArgs rbs st0) (\bp => nbind (genExprAt 100000 (secondOf bp) True inner) (\q => let
+          st1 = secondOf q
+          frame = nativeFrameBytes st1.fgNextSlot
+          instrs = append (firstOf bp) (append (clearDeadSlots (firstOf q)) nativeEpilogue)
+          mainF =
+            NativeFunc (nativeFuncLabel name) frame
+              (append (nativePrologue frame) (append stackGuardInstrs instrs)) modPath
+        in NOk (Pair (append st1.fgLams [mainF]) st1.fgNextLabel)
+        )
+        )
     _ => internal "function body is not a lambda: ${name}"
 
 -- | 每个模块的 `.L` 编号计数（`.L` 是文件局部符号，编号在模块内累加；同一模块的定义可能
@@ -1661,7 +1671,8 @@ build program printResult =
         runMainM = if irEntryIsActionOf e then irEntryRunMainOf e else Nothing
       in case findDef mainName defs of
         Nothing => NativeRejected (NativeUnsupported "native target: main definition not found")
-        Just mainDef => if irDefArity mainDef /= 0 then NativeRejected (NativeUnsupported "native target: main must be a zero-argument value")
+        Just mainDef => if irDefArity mainDef /= 0 then
+          NativeRejected (NativeUnsupported "native target: main must be a zero-argument value")
         else
           let
             kindM = if printResult then entryShowKind (irEntryShowOf e) else Just "none"

@@ -276,10 +276,12 @@ lintText opts env displayPath configPath source = do
 
 -- | 内部：lint 单个目标（文件或 `-` stdin），错误也作为结果。
 lintOne : Member nConsole ConsoleOp r, Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nStdin StdinOp r => LintOpts -> FixityEnv -> String -> Eff r (Pair FixityEnv FileOutcome)
-lintOne opts env path = if path == "-" then if opts.lintOptFix then pure (Pair env (FileOutcome "<stdin>" [] 0 (Just "--fix does not support stdin")))
-else do
-  source <- readStdinAll
-  lintText opts env "<stdin>" "stdin.vuna" source
+lintOne opts env path = if path == "-" then
+  if opts.lintOptFix then
+    pure (Pair env (FileOutcome "<stdin>" [] 0 (Just "--fix does not support stdin")))
+  else do
+    source <- readStdinAll
+    lintText opts env "<stdin>" "stdin.vuna" source
 else do
   textR <- readText path
   case textR of

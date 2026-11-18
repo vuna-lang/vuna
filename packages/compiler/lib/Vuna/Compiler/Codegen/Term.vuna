@@ -2105,7 +2105,8 @@ genDef st d = case irDefExtern d of
       Pair bodyText st1 =>
         let
           finalText =
-            if irDefInitGuard d then "(try ${bodyText} with e -> dt_report_exn e (Printexc.get_raw_backtrace ()); exit 2)"
+            if irDefInitGuard d then
+              "(try ${bodyText} with e -> dt_report_exn e (Printexc.get_raw_backtrace ()); exit 2)"
             else bodyText
         in OkC (Pair "${valueName (irDefName d)} = ${finalText}" st1)
     )

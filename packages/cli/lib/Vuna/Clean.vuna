@@ -57,7 +57,8 @@ runClean args = case parseCmdArgs ["store", "clean"] args of
     else case parsed.positionals of
       [] => cleanTargets wantStore wantPackages wantGc dry "."
       [dir] =>
-        if (wantStore || wantPackages) && not wantGc then cleanError "vuna store clean --store/--packages takes no directory"
+        if (wantStore || wantPackages) && not wantGc then
+          cleanError "vuna store clean --store/--packages takes no directory"
         else cleanTargets wantStore wantPackages wantGc dry dir
       _ => cleanError "too many arguments; expected at most one directory"
 

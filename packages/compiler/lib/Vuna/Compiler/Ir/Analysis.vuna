@@ -263,7 +263,8 @@ groupNeedsRec adjT group = True
 firstBadRecursiveValue : List IrDef -> Maybe String
 firstBadRecursiveValue [] = Nothing
 firstBadRecursiveValue (d :: rest) =
-  if irDefArity d == 0 then if irDefRecValueOk d then firstBadRecursiveValue rest else Just (irDefName d)
+  if irDefArity d == 0 then
+    if irDefRecValueOk d then firstBadRecursiveValue rest else Just (irDefName d)
   else firstBadRecursiveValue rest
 
 findDefByName : String -> List IrDef -> Maybe IrDef

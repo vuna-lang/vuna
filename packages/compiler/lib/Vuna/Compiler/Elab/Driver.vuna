@@ -406,8 +406,9 @@ checkAllDefinedGo ((Pair name (Pair ctx (Pair tyExpr sigSpan))) :: rest) globals
     if HashMap.member name funTbl then tcErr1 sp (AxiomWithDefinition name) name
     else checkAllDefinedGo rest globalsTbl funTbl axiomTbl
   Nothing =>
-    if HashMap.member name funTbl then if HashMap.member name globalsTbl then checkAllDefinedGo rest globalsTbl funTbl axiomTbl
-    else ErrC (withFallbackSpan sigSpan (tcMsg (SignatureNoDef name) [name]))
+    if HashMap.member name funTbl then
+      if HashMap.member name globalsTbl then checkAllDefinedGo rest globalsTbl funTbl axiomTbl
+      else ErrC (withFallbackSpan sigSpan (tcMsg (SignatureNoDef name) [name]))
     else ErrC (withFallbackSpan sigSpan (tcMsg (SignatureNoDef name) [name]))
 
 -- DFun 名字集合（`declFunNames` 已在前面定义；表语义 = 集合）。

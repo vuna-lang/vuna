@@ -230,7 +230,8 @@ profilerStart msg st = do
 -- | 内部：整份 trace 的 CPU 采样换算成 CDP Profile（`Convert.cpuProfileOf`）；没 start 就
 -- stop、或 trace 里没有 CPU 采样 = 内容性失败。
 profilerStop : Member nFs FsOp r, Member nConsole ConsoleOp r => Json -> ServeState -> Eff r (Pair Bool (Pair ServeState (List Json)))
-profilerStop msg st = if not st.serveStarted then stopError msg st "Profiler.start was not called on this connection before Profiler.stop"
+profilerStop msg st = if not st.serveStarted then
+  stopError msg st "Profiler.start was not called on this connection before Profiler.stop"
 else case cpuProfileOf st.serveRows of
   ErrC e => stopError msg st "Profiler.stop: ${diagText e}"
   OkC profile =>

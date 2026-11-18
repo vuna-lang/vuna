@@ -199,7 +199,8 @@ else case pathSegs of
     Just existing => case existing of
       NodeTable inner oldKind oldLine =>
         if kindIsExplicit kind && kindIsExplicit oldKind then failAt path line "duplicate table [${name}]"
-        else if kindIsExplicit kind && kindIsDotted oldKind then failAt path line "table [${name}] was already defined by dotted keys"
+        else if kindIsExplicit kind && kindIsDotted oldKind then
+          failAt path line "table [${name}] was already defined by dotted keys"
         else OkC (replaceField name (NodeTable inner kind oldLine) fields)
       _ => failAt path line "key \"${name}\" is not a table"
   name :: rest => case lookupField name fields of
@@ -363,8 +364,9 @@ skipGap cs = skipGapGo False cs
 
 skipGapGo : Bool -> TomlCursor -> TomlCursor
 skipGapGo inComment (TomlCursor [] line col) = TomlCursor [] line col
-skipGapGo inComment (TomlCursor (c :: rest) line col) = if inComment then if c == 10 then skipGapGo False (TomlCursor rest (line + 1) 1)
-else skipGapGo True (TomlCursor rest line (col + 1))
+skipGapGo inComment (TomlCursor (c :: rest) line col) = if inComment then
+  if c == 10 then skipGapGo False (TomlCursor rest (line + 1) 1)
+  else skipGapGo True (TomlCursor rest line (col + 1))
 else if isBlankChar c then skipGapGo False (TomlCursor rest line (col + 1))
 else case c of
   10 => skipGapGo False (TomlCursor rest (line + 1) 1)
@@ -432,7 +434,8 @@ else if fuel <= 0 then icFuel "toml"
 else case cs.cursorChars of
   [] => failAt path cs.cursorLine "unterminated unicode escape"
   c :: rest =>
-    if isHexDigit c then parseHexCode (fuel - 1) digits path (advanceCursor cs) (count + 1) (acc * 16 + hexValue c)
+    if isHexDigit c then
+      parseHexCode (fuel - 1) digits path (advanceCursor cs) (count + 1) (acc * 16 + hexValue c)
     else failAt path cs.cursorLine "invalid hex digit in unicode escape"
 
 -- literal string（单行）：`'...'`，不处理转义。
@@ -566,10 +569,12 @@ parseValue : Int -> String -> TomlCursor -> Check (Pair TomlValue TomlCursor)
 parseValue fuel path cs = if fuel <= 0 then icFuel "toml"
 else case cs.cursorChars of
   [] => failAt path cs.cursorLine "expected a value"
-  c :: rest => if c == 34 then if startsWithTripleOf 34 cs.cursorChars then parseMultilineValue True path cs
-  else parseSingleStringValue path cs
-  else if c == 39 then if startsWithTripleOf 39 cs.cursorChars then parseMultilineValue False path cs
-  else parseSingleStringValue path cs
+  c :: rest => if c == 34 then
+    if startsWithTripleOf 34 cs.cursorChars then parseMultilineValue True path cs
+    else parseSingleStringValue path cs
+  else if c == 39 then
+    if startsWithTripleOf 39 cs.cursorChars then parseMultilineValue False path cs
+    else parseSingleStringValue path cs
   else if c == 91 then parseArrayValue (fuel - 1) path cs
   else if c == 123 then parseInlineTable (fuel - 1) path cs
   else if c == 45 then parseIntValue path cs
@@ -640,7 +645,8 @@ parseInlineFields fuel path cs fields = if fuel <= 0 then icFuel "toml"
 else case skipBlank cs of
   TomlCursor chars line col => case chars of
     [] => failAt path line "unterminated inline table"
-    c :: rest => if c == 125 then OkC (Pair (TTable (rootValue fuel fields)) (advanceCursor (TomlCursor chars line col)))
+    c :: rest => if c == 125 then
+      OkC (Pair (TTable (rootValue fuel fields)) (advanceCursor (TomlCursor chars line col)))
     else case parseKeyPath path (TomlCursor chars line col) of
       ErrC e => ErrC e
       OkC (Pair keyPath afterKey) => case skipBlank afterKey of
@@ -674,8 +680,9 @@ parseIntegerDigits fuel path startCs cs count acc negative = if fuel <= 0 then i
 else case cs.cursorChars of
   [] => finishInteger path startCs cs count acc negative
   c :: rest =>
-    if isDigitChar c then parseIntegerDigits (fuel - 1) path startCs (advanceCursor cs) (count + 1) (acc * 10 + (c - 48))
-      negative
+    if isDigitChar c then
+      parseIntegerDigits (fuel - 1) path startCs (advanceCursor cs) (count + 1)
+        (acc * 10 + (c - 48)) negative
     else finishInteger path startCs cs count acc negative
 
 finishInteger : String -> TomlCursor -> TomlCursor -> Int -> Int -> Bool -> Check (Pair Int TomlCursor)
@@ -792,8 +799,9 @@ else case parseKeyPath path cs of
     TomlCursor chars line col => case chars of
       [] => failAt path cs.cursorLine "expected '=' after key"
       c :: rest =>
-        if c == 61 then parseEntryValue (fuel - 1) path (TomlCursor rest line (col + 1)) cs.cursorLine keyPath
-          currentPath fields
+        if c == 61 then
+          parseEntryValue (fuel - 1) path (TomlCursor rest line (col + 1)) cs.cursorLine keyPath
+            currentPath fields
         else failAt path cs.cursorLine "expected '=' after key"
 
 parseTomlLoop : Int -> String -> TomlCursor -> List String -> List (Pair String TomlNode) -> Check (List (Pair String TomlNode))

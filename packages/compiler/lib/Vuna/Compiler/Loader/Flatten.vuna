@@ -266,7 +266,8 @@ ownCtorEntriesNamed prefix name (d :: rest) = case d of
       (ownDataCtorEntries prefix dname (map ctorName (filter (\c => ctorName c == name) ctors)))
       (ownCtorEntriesNamed prefix name rest)
   DRecord dname params fields derivings viaField repr lin sp =>
-    if dname == name then append (ownCtorEntries prefix dname [dname]) (ownCtorEntriesNamed prefix name rest)
+    if dname == name then
+      append (ownCtorEntries prefix dname [dname]) (ownCtorEntriesNamed prefix name rest)
     else ownCtorEntriesNamed prefix name rest
   DTrait tname params supers methods sp =>
     append
@@ -443,8 +444,9 @@ abstractOpaquePrefix = ":"
 
 export opaqueBaseName : String -> String
 opaqueBaseName name =
-  if startsWith abstractOpaquePrefix name then strSubstring (strLength abstractOpaquePrefix) (strLength name - strLength abstractOpaquePrefix)
-    name
+  if startsWith abstractOpaquePrefix name then
+    strSubstring (strLength abstractOpaquePrefix) (strLength name - strLength abstractOpaquePrefix)
+      name
   else name
 
 export isAbstractOpaqueName : String -> Bool
@@ -838,8 +840,9 @@ resolveProjectKeeping release keep (Project decls imports implicit modules entry
 resolveModulesKeep : Bool -> List String -> List FixityDecl -> List Module -> Check (Pair (List Module) (List Diagnostic))
 resolveModulesKeep release keep fixes [] = OkC (Pair [] [])
 resolveModulesKeep release keep fixes ((Module name pkg imports implicit decls exports fixities reexports opacity idx) :: rest) =
-  if memName name keep then Vuna.Compiler.Base.Common.bind (resolveModulesKeep release keep fixes rest)
-    (\p2 => OkC (Pair ((::) (Module name pkg imports implicit decls exports fixities reexports opacity idx) (firstOf p2)) (secondOf p2)))
+  if memName name keep then
+    Vuna.Compiler.Base.Common.bind (resolveModulesKeep release keep fixes rest)
+      (\p2 => OkC (Pair ((::) (Module name pkg imports implicit decls exports fixities reexports opacity idx) (firstOf p2)) (secondOf p2)))
   else Vuna.Compiler.Base.Common.bind (reorderProgram (tableOf fixes) decls)
     (\decls2 => Vuna.Compiler.Base.Common.bind (expandDecls decls2) (\decls3 => Vuna.Compiler.Base.Common.bind (resolveProgram (Module name pkg imports implicit decls3 exports fixities reexports opacity idx :: rest) name name (namespacesOfWith release decls3) (append imports implicit) decls3) (\d1 => Vuna.Compiler.Base.Common.bind (unusedImportWarnings (Module name pkg imports implicit decls3 exports fixities reexports opacity idx :: rest) imports d1 decls3 reexports) (\warns => Vuna.Compiler.Base.Common.bind (resolveModulesKeep release keep fixes rest) (\p2 => OkC (Pair ((::) (Module name pkg imports implicit d1 exports fixities reexports opacity idx) (firstOf p2)) (append warns (secondOf p2))))))))
 

@@ -60,7 +60,8 @@ checkUniqueFixitiesGo (d :: rest) opSeen declSeen =
   let
     sp = d.fixitySpan
     declKey = "${d.fixityOp}@${spanFile sp}:${spanStartLine sp}:${spanStartCol sp}"
-  in if memName d.fixityOp builtinFixityOps then onErrDiag (withFallbackSpan sp) (rnNoLoc1 (BuiltinFixity d.fixityOp) d.fixityOp)
+  in if memName d.fixityOp builtinFixityOps then
+    onErrDiag (withFallbackSpan sp) (rnNoLoc1 (BuiltinFixity d.fixityOp) d.fixityOp)
   else case HashMap.lookup declKey declSeen of
     Just _ => checkUniqueFixitiesGo rest opSeen declSeen
     Nothing => case HashMap.lookup d.fixityOp opSeen of
@@ -128,8 +129,9 @@ fixityOf t c = case lookupFixity t c.chainOp of
 -- 供 fmt 打印（普通运算符仍是 `EApp (EVar op)`，fmt 按 fixity 打回中缀）。
 infixTerm : FixityTable -> ChainOp -> Expr -> Expr -> Span -> Expr
 infixTerm t c lhs rhs sp =
-  if renameMode t then if c.chainOp == ">>" then EApp (EVar ">>=" sp) [lhs, ELam [Pair "_" spanEmpty] rhs sp] sp
-  else EApp (EVar (aliasOf t c.chainOp) sp) [lhs, rhs] sp
+  if renameMode t then
+    if c.chainOp == ">>" then EApp (EVar ">>=" sp) [lhs, ELam [Pair "_" spanEmpty] rhs sp] sp
+    else EApp (EVar (aliasOf t c.chainOp) sp) [lhs, rhs] sp
   else if c.chainIsBacktick then EBacktick c.chainOp lhs rhs sp
   else EApp (EVar c.chainOp sp) [lhs, rhs] sp
 

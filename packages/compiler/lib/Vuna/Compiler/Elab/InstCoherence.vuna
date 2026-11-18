@@ -40,7 +40,8 @@ findInstanceClash ec name tele head seen =
 export anyInstanceExact : Ec -> Int -> Term -> List DtInst -> Bool
 anyInstanceExact ec n head [] = False
 anyInstanceExact ec n head (i :: rest) =
-  if length i.dtInstTele == n then if headsAlphaEqual ec n head i.dtInstHead then True else anyInstanceExact ec n head rest
+  if length i.dtInstTele == n then
+    if headsAlphaEqual ec n head i.dtInstHead then True else anyInstanceExact ec n head rest
   else anyInstanceExact ec n head rest
 
 -- 重叠扫描：blanket 与具体实例共存是**允许**的（blanket 是 fallback），所以任一侧是
@@ -49,7 +50,8 @@ anyInstanceOverlap : Ec -> Bool -> List (Pair String Term) -> Term -> List DtIns
 anyInstanceOverlap ec newBlanket [] head [] = Pair Nothing ec
 anyInstanceOverlap ec newBlanket (t :: ts) head [] = Pair Nothing ec
 anyInstanceOverlap ec newBlanket tele head (i :: rest) = if instanceExactQuiet ec (length tele) head i then anyInstanceOverlap ec newBlanket tele head rest
-else if newBlanket || isBlanketInstHead (length i.dtInstTele) i.dtInstHead then anyInstanceOverlap ec newBlanket tele head rest
+else if newBlanket || isBlanketInstHead (length i.dtInstTele) i.dtInstHead then
+  anyInstanceOverlap ec newBlanket tele head rest
 else case headsOverlap ec tele head i.dtInstTele i.dtInstHead of
   Pair True ec1 => Pair (Just ClashOverlap) ec1
   Pair False ec1 => anyInstanceOverlap ec newBlanket tele head rest

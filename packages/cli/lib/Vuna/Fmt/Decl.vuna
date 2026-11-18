@@ -363,8 +363,10 @@ renderTopDecls mods env at (d :: rest) =
 renderTopRest : FmtDeclMods -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Decl -> List Decl -> List String
 renderTopRest mods env at prev [] = []
 renderTopRest mods env at prev (d :: rest) =
-  if attachDecl prev d then append (applyDeclMods mods d (renderDeclAt env at 0 d)) (renderTopRest mods env at d rest)
-  else "" :: append (applyDeclMods mods d (renderDeclAt env at 0 d)) (renderTopRest mods env at d rest)
+  if attachDecl prev d then
+    append (applyDeclMods mods d (renderDeclAt env at 0 d)) (renderTopRest mods env at d rest)
+  else
+    "" :: append (applyDeclMods mods d (renderDeclAt env at 0 d)) (renderTopRest mods env at d rest)
 
 -- | 内部：下一条是否紧贴上一条（同名的函数子句，不空行）。
 attachDecl : Decl -> Decl -> Bool
@@ -561,7 +563,8 @@ anyWholeModule (i :: rest) = isWholeModuleReexport i || anyWholeModule rest
 renderReexportLine : Import -> List ExportItem -> String
 renderReexportLine imp items =
   if anyWholeModule items then "export ${renderImport imp}"
-  else "export ${renderImport imp} (${joinComma (map (renderSelectiveItem (importPrefixText imp)) items)})"
+  else
+    "export ${renderImport imp} (${joinComma (map (renderSelectiveItem (importPrefixText imp)) items)})"
 
 -- | 内部：是否 `export module ...` 命名空间重导出。
 isNamespaceReexport : ExportItem -> Bool

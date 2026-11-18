@@ -255,9 +255,10 @@ export branchVerdict : Ctx -> Ec -> List Value -> DtCtor -> BranchVerdict
 branchVerdict ctx ec idxs ctor = case bindCtorTele ctx (dtCtorType ctor) (wildArgs (ctorExplicitArity (dtCtorType ctor))) of
   ErrC e => BranchOk
   OkC (Pair branchCtx (Pair binders leftover)) => if nonEmpty leftover then BranchOk
-  else case unifyIdxListSized ec [] (ctxDepth branchCtx) (ctorResultValsIn branchCtx ctor) (map (\v => refineValue [] defaultFuel v) idxs) of
-    ErrC e => BranchImpossibleIndex
-    OkC refs => branchAfterUnify ec branchCtx refs
+  else
+    case unifyIdxListSized ec [] (ctxDepth branchCtx) (ctorResultValsIn branchCtx ctor) (map (\v => refineValue [] defaultFuel v) idxs) of
+      ErrC e => BranchImpossibleIndex
+      OkC refs => branchAfterUnify ec branchCtx refs
 
 export branchReachable : Ctx -> Ec -> List Value -> DtCtor -> Bool
 branchReachable ctx ec idxs ctor = branchIsReachable (branchVerdict ctx ec idxs ctor)
@@ -568,8 +569,9 @@ missingCtors : Ctx -> Ec -> List Value -> List String -> List DtCtor -> List (Pa
 missingCtors ctx ec idxs written [] = []
 missingCtors ctx ec idxs written (ctor :: rest) =
   if memName (dtCtorName ctor) written then missingCtors ctx ec idxs written rest
-  else if branchReachable ctx ec idxs ctor then (::) (Pair (ctorDisplayName (dtCtorName ctor)) ctor.dtCtorSpan)
-    (missingCtors ctx ec idxs written rest)
+  else if branchReachable ctx ec idxs ctor then
+    (::) (Pair (ctorDisplayName (dtCtorName ctor)) ctor.dtCtorSpan)
+      (missingCtors ctx ec idxs written rest)
   else missingCtors ctx ec idxs written rest
 
 export checkCaseDone : Ec -> Ctx -> DtData -> List Value -> List (Pair Pat Expr) -> Value -> Span -> Term -> List CaseAlt -> Check (Pair Term Ec)

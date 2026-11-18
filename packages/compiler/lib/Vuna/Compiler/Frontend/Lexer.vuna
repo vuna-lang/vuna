@@ -221,9 +221,11 @@ else
     c = charsPeek cs
     c2 = charsPeekAt 1 cs
   in if c2 < 0 then collectBlockBody (fuel - 1) (charsStep c cs) depth (c :: acc) (charsPos cs)
-  else if c == 123 && c2 == 45 then collectBlockBody (fuel - 1) (charsNext2 cs) (depth + 1) (c2 :: c :: acc) (charsPos2 cs)
-  else if c == 45 && c2 == 125 then if depth == 1 then OkC (Pair (strPack (reverse acc)) (Pair (charsNext2 cs) (charsPos2 cs)))
-  else collectBlockBody (fuel - 1) (charsNext2 cs) (depth - 1) (c2 :: c :: acc) (charsPos2 cs)
+  else if c == 123 && c2 == 45 then
+    collectBlockBody (fuel - 1) (charsNext2 cs) (depth + 1) (c2 :: c :: acc) (charsPos2 cs)
+  else if c == 45 && c2 == 125 then
+    if depth == 1 then OkC (Pair (strPack (reverse acc)) (Pair (charsNext2 cs) (charsPos2 cs)))
+    else collectBlockBody (fuel - 1) (charsNext2 cs) (depth - 1) (c2 :: c :: acc) (charsPos2 cs)
   else collectBlockBody (fuel - 1) (charsStep c cs) depth (c :: acc) (charsPos cs)
 
 -- | 跳过行注释正文（`--` 之后），返回其后位置。
@@ -245,8 +247,9 @@ else
     c2 = charsPeekAt 1 cs
   in if c2 < 0 then skipBlockComment (fuel - 1) depth (charsStep c cs)
   else if c == 123 && c2 == 45 then skipBlockComment (fuel - 1) (depth + 1) (charsNext2 cs)
-  else if c == 45 && c2 == 125 then if depth == 1 then OkC (charsNext2 cs)
-  else skipBlockComment (fuel - 1) (depth - 1) (charsNext2 cs)
+  else if c == 45 && c2 == 125 then
+    if depth == 1 then OkC (charsNext2 cs)
+    else skipBlockComment (fuel - 1) (depth - 1) (charsNext2 cs)
   else skipBlockComment (fuel - 1) depth (charsStep c cs)
 
 export commentSpanOf : Pos -> Pos -> Span
@@ -340,7 +343,8 @@ else
   let
     c = charsPeek cs
   in if isIdentChar c then collectIdent (fuel - 1) (charsStep c cs) (c :: acc)
-  else if c == 46 && isIdentStart (charsPeekAt 1 cs) then collectIdent (fuel - 1) (charsStep c cs) (c :: acc)
+  else if c == 46 && isIdentStart (charsPeekAt 1 cs) then
+    collectIdent (fuel - 1) (charsStep c cs) (c :: acc)
   else OkC (Pair (strPack (reverse acc)) cs)
 
 -- 63 位宿主 int 的上界（2^62 - 1）。字面量累加超过它就无法表示：在词法期报
@@ -454,24 +458,28 @@ else
     c2 = charsPeekAt 1 cs
     c3 = charsPeekAt 2 cs
     p = charsPos cs
-  in if c == 36 then if c2 == 123 then case lexHoleTokens (fuel - 1) 0 (charsNext2 cs) [] of
-    -- 插值洞：`${`
-    ErrC e => ErrC e
-    OkC (Pair toks cs2) =>
-      if charsPeek cs2 == 125 then scanTemplateText (fuel - 1) multi (charsNext cs2) [] (TPHole toks :: flushText acc parts)
-      else lexErr0At (lexSpanAt p) UnterminatedInterpolation
-  else scanTemplateText (fuel - 1) multi (charsStep c cs) (c :: acc) parts
-  else if c == 92 then if c2 < 0 then lexErr0At (lexSpanAt p) UnterminatedString
-  else case decodeEscape c2 of
-    -- 转义
-    Nothing => lexErr0At (lexSpanAt p) UnknownEscape
-    Just d => scanTemplateText (fuel - 1) multi (charsNext2 cs) (d :: acc) parts
-  else if multi && c == 34 then if c2 == 34 && c3 == 34 then
-    let
-      -- 多行结束 `"""`
-      pos3 = charsPos2 cs
-    in OkC (Pair (reverse (flushText acc parts)) (Pair (charsNext2 (charsNext cs)) pos3))
-  else scanTemplateText (fuel - 1) multi (charsStep c cs) (c :: acc) parts
+  in if c == 36 then
+    if c2 == 123 then case lexHoleTokens (fuel - 1) 0 (charsNext2 cs) [] of
+      -- 插值洞：`${`
+      ErrC e => ErrC e
+      OkC (Pair toks cs2) =>
+        if charsPeek cs2 == 125 then
+          scanTemplateText (fuel - 1) multi (charsNext cs2) [] (TPHole toks :: flushText acc parts)
+        else lexErr0At (lexSpanAt p) UnterminatedInterpolation
+    else scanTemplateText (fuel - 1) multi (charsStep c cs) (c :: acc) parts
+  else if c == 92 then
+    if c2 < 0 then lexErr0At (lexSpanAt p) UnterminatedString
+    else case decodeEscape c2 of
+      -- 转义
+      Nothing => lexErr0At (lexSpanAt p) UnknownEscape
+      Just d => scanTemplateText (fuel - 1) multi (charsNext2 cs) (d :: acc) parts
+  else if multi && c == 34 then
+    if c2 == 34 && c3 == 34 then
+      let
+        -- 多行结束 `"""`
+        pos3 = charsPos2 cs
+      in OkC (Pair (reverse (flushText acc parts)) (Pair (charsNext2 (charsNext cs)) pos3))
+    else scanTemplateText (fuel - 1) multi (charsStep c cs) (c :: acc) parts
   else if not multi && c == 34 then OkC (Pair (reverse (flushText acc parts)) (Pair (charsStep c cs) p))
   else if not multi && c == 10 then lexErr0At (lexSpanAt p) UnterminatedString
   else scanTemplateText (fuel - 1) multi (charsStep c cs) (c :: acc) parts
@@ -520,7 +528,8 @@ else
       ErrC e => ErrC e
       OkC (Pair n cs2) => OkC (Pair (PTok (TInt n) p) cs2)
   else if c == 34 then lexStringToken (fuel - 1) next p
-  else if c == 40 || c == 41 || c == 91 || c == 93 || c == 44 || c == 123 || c == 125 then OkC (Pair (PTok (TSym (strPack [c])) p) next)
+  else if c == 40 || c == 41 || c == 91 || c == 93 || c == 44 || c == 123 || c == 125 then
+    OkC (Pair (PTok (TSym (strPack [c])) p) next)
   else if c == 96 then OkC (Pair (PTok (TSym "`") p) next)
   else if isOpChar c then case collectOp (fuel - 1) next [c] of
     -- 反引号中缀的定界符。`96` 不在 isOpChar 里（否则会与相邻符号粘成一个 token），
@@ -533,9 +542,10 @@ else
 -- 单行且无洞 → `TStr`；其余（多行 / 含洞）→ `TTmpl`。
 export lexStringToken : Int -> Chars -> Pos -> Check (Pair PTok Chars)
 lexStringToken fuel cs p = if fuel <= 0 then icFuel "lexer"
-else if charsPeek cs == 34 && charsPeekAt 1 cs == 34 then case scanTemplateText (fuel - 1) True (dropOpeningNewline (charsNext2 cs)) [] [] of
-  ErrC e => ErrC e
-  OkC (Pair parts (Pair cs2 endP)) => OkC (Pair (PTok (TTmpl True parts endP) p) cs2)
+else if charsPeek cs == 34 && charsPeekAt 1 cs == 34 then
+  case scanTemplateText (fuel - 1) True (dropOpeningNewline (charsNext2 cs)) [] [] of
+    ErrC e => ErrC e
+    OkC (Pair parts (Pair cs2 endP)) => OkC (Pair (PTok (TTmpl True parts endP) p) cs2)
 else lexSingleStringToken (fuel - 1) cs p
 
 export lexSingleStringToken : Int -> Chars -> Pos -> Check (Pair PTok Chars)

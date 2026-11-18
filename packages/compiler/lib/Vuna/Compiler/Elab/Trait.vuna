@@ -362,7 +362,8 @@ elabInstance instDecls allDecls globals classes datas ec (Pair (DInstance ctxE h
   Pair info ec0 => case findClass (instSigClass info) classes of
     Nothing => tcErr0 msp InstanceHeadNotApp
     Just cls =>
-      if instanceLandingOk allDecls msp cls headExpr then elabInstanceWithClass globals allDecls cls info ec0 headExpr methods msp
+      if instanceLandingOk allDecls msp cls headExpr then
+        elabInstanceWithClass globals allDecls cls info ec0 headExpr methods msp
       else tcErr0 msp OrphanInstance
 )
 elabInstance instDecls allDecls globals classes datas ec (Pair d dsp) =
@@ -612,11 +613,12 @@ elabConstraintDomains classes globals ctx ((Pair cname argExprs) :: rest) sp ec 
       let
         _ = dbg! "constraint-dom: ${cname} args=${length argExprs} kinds=${length kindVals}"
       in if length kindVals /= length argExprs then tcErr0 sp ConstraintNotDict
-      else Vuna.Compiler.Base.Common.bind (checkArgsAtKinds globals ctx ec argExprs kindVals sp) (\q => case q of
-        Pair argTerms ec1 => Vuna.Compiler.Base.Common.bind (elabConstraintDomains classes globals ctx rest sp ec1) (\r => case r of
-          Pair tvs ec2 => OkC (Pair ((::) (ctorResultType cls argTerms) tvs) ec2)
+      else
+        Vuna.Compiler.Base.Common.bind (checkArgsAtKinds globals ctx ec argExprs kindVals sp) (\q => case q of
+          Pair argTerms ec1 => Vuna.Compiler.Base.Common.bind (elabConstraintDomains classes globals ctx rest sp ec1) (\r => case r of
+            Pair tvs ec2 => OkC (Pair ((::) (ctorResultType cls argTerms) tvs) ec2)
+          )
         )
-      )
 
 -- 实例方法体上下文：tele 之外再绑定 ctx 字典（第 k 个 ctx binder 的名字 `_ctx<k>`）。
 instBodyCtx : InstSigInfo -> Ctx
@@ -1169,7 +1171,8 @@ elabInstanceBodiesGo recover [] allDecls classes datas globals ec acc = OkC (Pai
 elabInstanceBodiesGo recover (d :: rest) allDecls classes datas globals ec acc = case elabInstance (d :: rest) allDecls globals classes datas ec d of
   -- 逐实例恢复：失败时记录诊断、回滚到实例之前的状态，继续下一个实例。
   ErrC e =>
-    if recover then elabInstanceBodiesGo recover rest allDecls classes datas globals (ecAddError ec e) acc
+    if recover then
+      elabInstanceBodiesGo recover rest allDecls classes datas globals (ecAddError ec e) acc
     else ErrC e
   OkC p => case p of
     Pair gs ec1 =>
@@ -1258,9 +1261,11 @@ else
     forced = forceVal ec expected
   in case forced of
     VPi name implicit rig dom clo =>
-      if implicit then if isDictDomain ec dom then bindDictBinderFuel (fuel - 1) globals ctx ec rig name dom clo [] body sp
-      else if isImplicitDomain ctx ec dom then bindIndexBinderFuel (fuel - 1) globals ctx ec rig name dom clo [] body sp
-      else tcErr0 sp ImplicitParamKind
+      if implicit then
+        if isDictDomain ec dom then bindDictBinderFuel (fuel - 1) globals ctx ec rig name dom clo [] body sp
+        else if isImplicitDomain ctx ec dom then
+          bindIndexBinderFuel (fuel - 1) globals ctx ec rig name dom clo [] body sp
+        else tcErr0 sp ImplicitParamKind
       else Vuna.Compiler.Base.Common.bind
         (obsCheck "vuna.elab.term.body" (\_ => checkBodyAtEndFuel (fuel - 1) globals ctx ec body expected sp))
         (\p => Vuna.Compiler.Base.Common.bind (obsCheck "vuna.elab.term.goals" (\_ => resolveRowGoalsCtx globals ctx (secondOf p) sp)) (\ec2 => OkC (Pair (firstOf p) ec2)))
@@ -1307,9 +1312,11 @@ else case body of
     Vuna.Compiler.Base.Common.bind (checkE globals ctx ec body expected)
       (\p => Vuna.Compiler.Base.Common.bind (resolveRowGoalsCtx globals ctx (secondOf p) sp) (\ec2 => OkC (Pair (firstOf p) ec2)))
   _ => case forceVal ec expected of
-    VPi name implicit rig dom clo => if implicit then if isDictDomain ec dom then bindDictBinderFuel (fuel - 1) globals ctx ec rig name dom clo [] body sp
-    else if isImplicitDomain ctx ec dom then bindIndexBinderFuel (fuel - 1) globals ctx ec rig name dom clo [] body sp
-    else tcErr0 sp ImplicitParamKind
+    VPi name implicit rig dom clo => if implicit then
+      if isDictDomain ec dom then bindDictBinderFuel (fuel - 1) globals ctx ec rig name dom clo [] body sp
+      else if isImplicitDomain ctx ec dom then
+        bindIndexBinderFuel (fuel - 1) globals ctx ec rig name dom clo [] body sp
+      else tcErr0 sp ImplicitParamKind
     else
       let
         lvl = ctxDepth ctx
@@ -1333,9 +1340,12 @@ else
   let
     forced = forceVal ec expected
   in case forced of
-    VPi name implicit rig dom clo => if implicit then if isDictDomain ec dom then bindDictBinderFuel (fuel - 1) globals ctx ec rig name dom clo (pat :: rest) body sp
-    else if isImplicitDomain ctx ec dom then bindIndexBinderFuel (fuel - 1) globals ctx ec rig name dom clo (pat :: rest) body sp
-    else tcErr0 sp ImplicitParamKind
+    VPi name implicit rig dom clo => if implicit then
+      if isDictDomain ec dom then
+        bindDictBinderFuel (fuel - 1) globals ctx ec rig name dom clo (pat :: rest) body sp
+      else if isImplicitDomain ctx ec dom then
+        bindIndexBinderFuel (fuel - 1) globals ctx ec rig name dom clo (pat :: rest) body sp
+      else tcErr0 sp ImplicitParamKind
     else case pat of
       PVar pname psp =>
         bindOnePatternFuel (fuel - 1) globals ctx ec rig pname rest body dom clo
@@ -1369,7 +1379,8 @@ else
 elabFunDefIn : List (Pair String Term) -> Ctx -> Ec -> List (Pair (List Pat) Expr) -> Value -> Span -> Check (Pair Term Ec)
 elabFunDefIn globals ctx0 ec [] expected sp = tcErr0 sp FunctionNoClauses
 elabFunDefIn globals ctx0 ec ([Pair pats body]) expected sp =
-  if allVarPats pats then obsCheck "vuna.elab.term" (\_ => checkDefIn globals ctx0 ec pats body expected sp)
+  if allVarPats pats then
+    obsCheck "vuna.elab.term" (\_ => checkDefIn globals ctx0 ec pats body expected sp)
   else elabFunDefMulti globals ctx0 ec [Pair pats body] expected sp
 elabFunDefIn globals ctx0 ec clauses expected sp =
   elabFunDefMulti globals ctx0 ec clauses expected sp

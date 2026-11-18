@@ -83,7 +83,8 @@ addAt dir spec dry noFetch = do
 -- 否则原子写回 manifest。三种成功路径都按 `--no-fetch` 决定是否继续调用 `fetchAt`。
 -- 别名已是子表形式（`[dependencies.<alias>]`）时报错让用户手改。
 writeAndFetch : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> String -> Release -> Bool -> Bool -> String -> Eff r Int
-writeAndFetch manifestPath raw alias release dry noFetch abs = if hasSubtable alias raw then addFailText "dependency ${alias} is a subtable; edit [dependencies.${alias}] manually"
+writeAndFetch manifestPath raw alias release dry noFetch abs = if hasSubtable alias raw then
+  addFailText "dependency ${alias} is a subtable; edit [dependencies.${alias}] manually"
 else
   let
     newLine = dependencyLine alias release
@@ -144,9 +145,11 @@ upsertGo alias newLine (line :: rest) inDeps done =
   let
     t = trim line
   in if t == "[dependencies]" then line :: upsertGo alias newLine rest True False
-  else if inDeps then if isSectionHeader t then append (if done then [] else [newLine]) (line :: upsertGo alias newLine rest False True)
-  else if isAliasLine alias t then newLine :: upsertGo alias newLine rest True True
-  else line :: upsertGo alias newLine rest inDeps done
+  else if inDeps then
+    if isSectionHeader t then
+      append (if done then [] else [newLine]) (line :: upsertGo alias newLine rest False True)
+    else if isAliasLine alias t then newLine :: upsertGo alias newLine rest True True
+    else line :: upsertGo alias newLine rest inDeps done
   else line :: upsertGo alias newLine rest False done
 
 -- | 内部：该行（已 trim）是否是段头。

@@ -61,7 +61,8 @@ fetchFuel = 4096
 -- 任一包失败即返回 1。
 fetchAll : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Int -> String -> String -> String -> Bool -> List String -> List String -> Eff r Int
 fetchAll fuel root pid proj locked [] visited = pure 0
-fetchAll fuel root pid proj locked (dir :: rest) visited = if fuel <= 0 then fetchFailText "fetch: dependency graph exceeds ${strFromInt fetchFuel} package visits"
+fetchAll fuel root pid proj locked (dir :: rest) visited = if fuel <= 0 then
+  fetchFailText "fetch: dependency graph exceeds ${strFromInt fetchFuel} package visits"
 else if memName dir visited then do
   _ <- consolePrint "fetch: ${dir} (cycle skipped)\n"
   fetchAll (fuel - 1) root pid proj locked rest visited
@@ -239,10 +240,11 @@ verifyPathDep dep ps = case depHashOf dep of
     _ <- consolePrint "fetch: ${depAliasOf dep} path unlocked (${contentHashOf ps})\n"
     pure 0
   else identityMismatch (depAliasOf dep) (fromMaybeText (depIdentityOf dep)) (identityHashOf ps)
-  Just expected => if verifyHash expected (contentHashOf ps) then if identityOkOf dep ps then do
-    _ <- consolePrint "fetch: ${depAliasOf dep} path ok\n"
-    pure 0
-  else identityMismatch (depAliasOf dep) (fromMaybeText (depIdentityOf dep)) (identityHashOf ps)
+  Just expected => if verifyHash expected (contentHashOf ps) then
+    if identityOkOf dep ps then do
+      _ <- consolePrint "fetch: ${depAliasOf dep} path ok\n"
+      pure 0
+    else identityMismatch (depAliasOf dep) (fromMaybeText (depIdentityOf dep)) (identityHashOf ps)
   else hashMismatch (depAliasOf dep) expected (contentHashOf ps)
 
 -- | 内部：`Maybe String` → 文本，`Nothing` 给空串（用于诊断里的「声明值」）。
@@ -292,14 +294,15 @@ verifyAndStore : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nProcess
 verifyAndStore root dep expected ps =
   let
     actual = contentHashOf ps
-  in if verifyHash expected actual then if identityOkOf dep ps then do
-    _ <- writeObjectEff root actual ps.psFiles
-    _ <- materializeEff root actual ps.psFiles
-    _ <- consolePrint "fetch: ${depAliasOf dep} ok\n"
-    pure (Just actual)
-  else do
-    _ <- identityMismatch (depAliasOf dep) (fromMaybeText (depIdentityOf dep)) (identityHashOf ps)
-    pure Nothing
+  in if verifyHash expected actual then
+    if identityOkOf dep ps then do
+      _ <- writeObjectEff root actual ps.psFiles
+      _ <- materializeEff root actual ps.psFiles
+      _ <- consolePrint "fetch: ${depAliasOf dep} ok\n"
+      pure (Just actual)
+    else do
+      _ <- identityMismatch (depAliasOf dep) (fromMaybeText (depIdentityOf dep)) (identityHashOf ps)
+      pure Nothing
   else do
     _ <- hashMismatch (depAliasOf dep) expected actual
     pure Nothing
@@ -515,7 +518,8 @@ identityLine info = "identity = \"sha256:${info.pinIdentity}\""
 -- | 内部：`[dependencies.<alias>]` 段头 → 别名。
 depSectionAlias : String -> Maybe String
 depSectionAlias t =
-  if startsWith "[dependencies." t && endsWith "]" t then Just (substring 14 (natFromInt (strLength t - 15)) t)
+  if startsWith "[dependencies." t && endsWith "]" t then
+    Just (substring 14 (natFromInt (strLength t - 15)) t)
   else Nothing
 
 -- | 内部：该行（已 trim）是否是段头。

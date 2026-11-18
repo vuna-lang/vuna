@@ -132,9 +132,10 @@ mapToUnit pairs = map (\q => Pair (firstOf q) (splitUnitOfModule (secondOf q))) 
 -- ---------------------------------------------------------------
 checkModuleDeclName : List String -> String -> String -> Check Int
 checkModuleDeclName knownModules mname name =
-  if containsDot name then if memName (modulePrefixOfName name) knownModules then OkC 0
-  else err
-    "DT: internal: module ${mname} declares `${name}` whose module prefix `${modulePrefixOfName name}` is not a known module (codegen requires Loader-resolved decls)"
+  if containsDot name then
+    if memName (modulePrefixOfName name) knownModules then OkC 0
+    else err
+      "DT: internal: module ${mname} declares `${name}` whose module prefix `${modulePrefixOfName name}` is not a known module (codegen requires Loader-resolved decls)"
   else err
     "DT: internal: module ${mname} has an unresolved declaration name `${name}` (codegen requires Loader-resolved decls)"
 
@@ -216,7 +217,8 @@ checkResolvedModules meta modules entryDecls runtime datas =
 splitStripPrefix : String -> String -> String
 splitStripPrefix prefix path =
   if prefix == "" then path
-  else if startsWith "${prefix}/" path then strSubstring (strLength "${prefix}/") (strLength path - strLength "${prefix}/") path
+  else if startsWith "${prefix}/" path then
+    strSubstring (strLength "${prefix}/") (strLength path - strLength "${prefix}/") path
   else path
 
 splitStripRoots : List String -> String -> String

@@ -347,7 +347,8 @@ codeActionsForCtx mgoals suggestions uri label ctx text reqStart reqStartCol req
       ErrC e => pure []
       OkC findings => do
         rawSplits <-
-          if refactorAllowed only then caseSplitActions uri label ctx mgoals text reqStart reqStartCol reqEnd reqEndCol
+          if refactorAllowed only then
+            caseSplitActions uri label ctx mgoals text reqStart reqStartCol reqEnd reqEndCol
           else pure []
         let
           diagActions =
@@ -525,7 +526,8 @@ data SplitTy : Type where
 findSplitIn : List Decl -> String -> Maybe SplitTy
 findSplitIn [] name = Nothing
 findSplitIn ((DData dname params kind ctors derivings viaField repr lin sp) :: rest) name =
-  if dname == name then if dataKindIsType kind && not (isEmptyList ctors) then Just (SplitData ctors) else Nothing
+  if dname == name then
+    if dataKindIsType kind && not (isEmptyList ctors) then Just (SplitData ctors) else Nothing
   else findSplitIn rest name
 findSplitIn ((DRecord dname params fields derivings viaField repr lin sp) :: rest) name =
   if dname == name then Just (SplitRecord dname (map fieldName fields)) else findSplitIn rest name

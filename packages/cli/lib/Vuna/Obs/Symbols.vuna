@@ -238,9 +238,11 @@ sortDefs defs = sortBy defLe defs
 -- | 内部：符号定义的排序谓词（`ocaml` → `unit` → `file` → `line`）。
 defLe : SymbolDef -> SymbolDef -> Bool
 defLe a b =
-  if a.symbolOcaml == b.symbolOcaml then if a.symbolUnit == b.symbolUnit then if a.symbolFile == b.symbolFile then a.symbolLine <= b.symbolLine
-  else a.symbolFile <= b.symbolFile
-  else a.symbolUnit <= b.symbolUnit
+  if a.symbolOcaml == b.symbolOcaml then
+    if a.symbolUnit == b.symbolUnit then
+      if a.symbolFile == b.symbolFile then a.symbolLine <= b.symbolLine
+      else a.symbolFile <= b.symbolFile
+    else a.symbolUnit <= b.symbolUnit
   else a.symbolOcaml <= b.symbolOcaml
 
 -- | 内部：符号表载荷（`{"schema":"vuna-symbols 1","defs":[...]}`，键序固定）。

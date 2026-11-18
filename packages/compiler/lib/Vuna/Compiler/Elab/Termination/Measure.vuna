@@ -539,7 +539,8 @@ export arithMinusBase : Int -> Expr -> Int -> List (Pair String (Pair Int (Pair 
 arithMinusBase p (EVar x xsp) k sizes caller facts region = case sizeOfVarStrict x sizes of
   Just sz => case sz of
     Pair baseIdx (Pair depth path) =>
-      if baseIdx == p then if depth == 0 then if posVarIn x p caller facts region then Just 4 else Nothing else Nothing
+      if baseIdx == p then
+        if depth == 0 then if posVarIn x p caller facts region then Just 4 else Nothing else Nothing
       else Nothing
   Nothing => Nothing
 arithMinusBase p _ k sizes caller facts region = Nothing
@@ -639,8 +640,9 @@ edgeStrict f g edges = edgeStrictGo f g edges False True
 export edgeStrictGo : String -> String -> List (Pair (Pair (Pair String String) Int) Span) -> Bool -> Bool -> Bool
 edgeStrictGo f g [] seen acc = seen && acc
 edgeStrictGo f g ((Pair (Pair (Pair cf cg) m) sp) :: rest) seen acc =
-  if cf == f then if cg == g then edgeStrictGo f g rest True (if m > 0 then acc else False)
-  else edgeStrictGo f g rest seen acc
+  if cf == f then
+    if cg == g then edgeStrictGo f g rest True (if m > 0 then acc else False)
+    else edgeStrictGo f g rest seen acc
   else edgeStrictGo f g rest seen acc
 
 export edgeTargets : String -> List (Pair (Pair (Pair String String) Int) Span) -> List String
@@ -670,7 +672,8 @@ else case frontier of
   n :: rest =>
     if n == start then True
     else if memName n visited then weakReachFuel (fuel - 1) comp edges start rest visited
-    else weakReachFuel (fuel - 1) comp edges start (append rest (weakAdj comp edges n)) (n :: visited)
+    else
+      weakReachFuel (fuel - 1) comp edges start (append rest (weakAdj comp edges n)) (n :: visited)
 
 export hasWeakCycle : List String -> List (Pair (Pair (Pair String String) Int) Span) -> Bool
 hasWeakCycle comp edges = hasWeakCycleGo comp edges comp

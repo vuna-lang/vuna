@@ -228,7 +228,8 @@ traceLine dir name = "trace: ${dir}/${name}"
 tracesAfter : Member nConsole ConsoleOp r => String -> List String -> Eff r Int
 tracesAfter dir names = do
   printers <- pure (map (traceLine dir) (filter isTraceName names))
-  if length printers == 0 then obsLine "no trace file produced in ${dir} (level 0, or the command did not honor VUNA_OBS*)"
+  if length printers == 0 then
+    obsLine "no trace file produced in ${dir} (level 0, or the command did not honor VUNA_OBS*)"
   else obsLines printers
 
 -- | 内部：目录项是否是 trace 文件（`vuna-` 前缀 + `.jsonl` 后缀）。

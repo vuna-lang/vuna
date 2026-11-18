@@ -108,7 +108,8 @@ listInfos : Member nConsole ConsoleOp r => List Info -> String -> Eff r Int
 listInfos [] prefix = pure 0
 listInfos (i :: rest) prefix = do
   _ <-
-    if prefix == "" || matchesPrefix prefix i.infoCode then fmap natToInt (consolePrint "${i.infoCode}  ${i.infoDesc}\n")
+    if prefix == "" || matchesPrefix prefix i.infoCode then
+      fmap natToInt (consolePrint "${i.infoCode}  ${i.infoDesc}\n")
     else pure 0
   listInfos rest prefix
 

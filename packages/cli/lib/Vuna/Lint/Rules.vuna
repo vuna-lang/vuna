@@ -354,7 +354,8 @@ blockBodyLines lines body target =
     firstIndent = indentOf (lineAt lines start)
     inline = startCol > firstIndent + 1
     raw =
-      if inline then append [tailFromCol (lineAt lines start) startCol] (rangeLines lines (start + 1) stop)
+      if inline then
+        append [tailFromCol (lineAt lines start) startCol] (rangeLines lines (start + 1) stop)
       else rangeLines lines start stop
   in case raw of
     [] => []
@@ -948,7 +949,8 @@ chainCollectFuel fuel src name acc expr = if fuel <= 0 then lintFuelExhausted "c
 else case expr of
   EIf cond yes no sp => case condShape src cond of
     Just (Pair other lit) =>
-      if other == name then chainCollectFuel (fuel - 1) src name (ChainItem lit (exprText src yes) yes :: acc) no
+      if other == name then
+        chainCollectFuel (fuel - 1) src name (ChainItem lit (exprText src yes) yes :: acc) no
       else ChainRes name (reverse acc) "_" (exprText src expr) expr
     Nothing => ChainRes name (reverse acc) "_" (exprText src expr) expr
   _ => ChainRes name (reverse acc) "_" (exprText src expr) expr
@@ -1249,8 +1251,9 @@ liftEdit src lane pat body name sp =
     target =
       if ownLine then spanStartCol sp - 1 else indentOf (lineAt src.lintSrcLines headLine) + 2
     newLines =
-      if ownLine then if exprSingleLine body then [newHead, spaces target ++ exprText src body]
-      else newHead :: blockBodyLines src.lintSrcLines body target
+      if ownLine then
+        if exprSingleLine body then [newHead, spaces target ++ exprText src body]
+        else newHead :: blockBodyLines src.lintSrcLines body target
       else if exprSingleLine body then ["${newHead} ${exprText src body}"]
       else newHead :: blockBodyLines src.lintSrcLines body target
   in Edit headLine (spanEndLine sp) newLines
@@ -1259,8 +1262,9 @@ liftEdit src lane pat body name sp =
 -- 外层其他变量冲突且可安全改写。
 liftCaseOk : LintSrc -> Lane -> Pat -> Expr -> String -> Span -> List Finding
 liftCaseOk src lane pat body name sp =
-  if countLaneVar name lane == 1 && True && not (intersectsNames (patVarFuel lintFuel pat) (removeName name (laneVars lane))) && liftablePat pat && liftFixable src lane pat body sp then [ mkFinding sp DispatchLift (lintMsg DispatchLift name) (Just (liftEdit src lane pat body name sp))
-  ]
+  if countLaneVar name lane == 1 && True && not (intersectsNames (patVarFuel lintFuel pat) (removeName name (laneVars lane))) && liftablePat pat && liftFixable src lane pat body sp then
+    [ mkFinding sp DispatchLift (lintMsg DispatchLift name) (Just (liftEdit src lane pat body name sp))
+    ]
   else []
 
 -- | 内部：外层上下文是否是顶层 clause。
@@ -1283,8 +1287,9 @@ liftCase src lane caseExpr scrut _ sp = []
 -- | 内部：对 `let pat = x` 的提升；右值不是变量或模式不可提升时不产出。
 liftLet : LintSrc -> Lane -> Span -> Pat -> Expr -> Expr -> List Finding
 liftLet src lane sp pat (EVar name nsp) body =
-  if liftablePat pat && countLaneVar name lane == 1 && True && not (intersectsNames (patVarFuel lintFuel pat) (removeName name (laneVars lane))) && liftLetFixable src lane pat body sp then [ mkFinding sp DispatchLift (lintMsg DispatchLift name) (Just (liftLetEdit src lane pat body name sp))
-  ]
+  if liftablePat pat && countLaneVar name lane == 1 && True && not (intersectsNames (patVarFuel lintFuel pat) (removeName name (laneVars lane))) && liftLetFixable src lane pat body sp then
+    [ mkFinding sp DispatchLift (lintMsg DispatchLift name) (Just (liftLetEdit src lane pat body name sp))
+    ]
   else []
 liftLet src lane sp pat _ body = []
 
@@ -1407,8 +1412,9 @@ caseToClausesEdit src x pats headLine sp alts =
 caseToClauses : LintSrc -> Int -> String -> List Pat -> Expr -> Bool -> List Finding
 caseToClauses src headLine name pats (ECase scrut alts sp) singleClause = case scrut of
   EVar x xsp =>
-    if singleClause && countVar x pats == 1 && atLeastTwo alts && altsLiftable x pats alts && caseToClausesFixable src pats headLine sp alts then [ mkFinding sp DispatchLift (lintMsg DispatchLift x) (Just (caseToClausesEdit src x pats headLine sp alts))
-    ]
+    if singleClause && countVar x pats == 1 && atLeastTwo alts && altsLiftable x pats alts && caseToClausesFixable src pats headLine sp alts then
+      [ mkFinding sp DispatchLift (lintMsg DispatchLift x) (Just (caseToClausesEdit src x pats headLine sp alts))
+      ]
     else []
   _ => []
 caseToClauses src headLine name pats _ singleClause = []
@@ -1976,8 +1982,9 @@ branchFinding src whole branch =
   let
     text = exprText src branch
   in if text == "" then []
-  else [ mkFindingAt (exprStartLine whole) (exprStartCol whole) (exprSpan whole) RedundantIf (lintMsg RedundantIf text) (exprEdit src whole text)
-  ]
+  else
+    [ mkFindingAt (exprStartLine whole) (exprStartCol whole) (exprSpan whole) RedundantIf (lintMsg RedundantIf text) (exprEdit src whole text)
+    ]
 
 -- | 内部：注释里的 TODO / FIXME / XXX 标记（每个注释最多一条）。
 todoFindings : List Comment -> List Finding

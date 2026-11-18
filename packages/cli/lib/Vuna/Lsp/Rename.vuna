@@ -139,7 +139,8 @@ wordColsInLine ln word =
 wordColsGo : List Int -> List Int -> Int -> Int -> List Int -> List Int
 wordColsGo [] needle prev idx acc = acc
 wordColsGo (c :: rest) needle prev idx acc =
-  if (prev < 0 || not (nameCode prev)) && isPrefixChars needle (c :: rest) && afterNameBoundary (drop (length needle) (c :: rest)) then wordColsGo rest needle c (idx + 1) (idx + 1 :: acc)
+  if (prev < 0 || not (nameCode prev)) && isPrefixChars needle (c :: rest) && afterNameBoundary (drop (length needle) (c :: rest)) then
+    wordColsGo rest needle c (idx + 1) (idx + 1 :: acc)
   else wordColsGo rest needle c (idx + 1) acc
 
 -- | 内部：行范围 `[start, end)` 内第一次出现的整词位置（1-based 行 / 列）。
@@ -346,7 +347,8 @@ fieldPositions lines kind name f =
 -- | 内部：trait 方法的声明位置（种类与名字都匹配时）。
 methodPositions : List String -> String -> String -> TraitMethod -> List (Pair Int Int)
 methodPositions lines kind name m =
-  if kindMatches kind "method" && traitMethodName m == name then firstInSpanOf lines (traitMethodSpan m) name
+  if kindMatches kind "method" && traitMethodName m == name then
+    firstInSpanOf lines (traitMethodSpan m) name
   else []
 
 -- | 内部：一条声明里目标名字的声明位置（类型名本身 + 其构造子 / 字段 / 方法）。
@@ -539,9 +541,10 @@ moduleLike _ = False
 -- 整词出现，兼容 end 落在名字前 / 后的两种实现。
 efieldNamePos : UseCtx -> Expr -> Span -> String -> List (Pair Int Int)
 efieldNamePos ctx base sp fname = if not (useFieldKind ctx) && not (moduleLike base) then []
-else case lastWordBefore ctx.ucLines (spanStartLine sp) (spanStartCol sp) (spanEndLine sp) (sp.spanEndCol + strLength fname) fname of
-  Nothing => []
-  Just pos => [pos]
+else
+  case lastWordBefore ctx.ucLines (spanStartLine sp) (spanStartCol sp) (spanEndLine sp) (sp.spanEndCol + strLength fname) fname of
+    Nothing => []
+    Just pos => [pos]
 
 -- lexer 把 `p.px` / `Dep.name` 合成单个标识符（含点），parser 因此给出 `EVar "p.px"`；
 -- 改名只替换最后一段。

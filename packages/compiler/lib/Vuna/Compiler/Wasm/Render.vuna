@@ -337,7 +337,8 @@ renderFunc f =
 
 renderExport : WatExport -> List String
 renderExport e =
-  if e.watExportKind == "memory" then [lineOf 2 "(memory (export \"${e.watExportName}\") ${e.watExportRef})"]
+  if e.watExportKind == "memory" then
+    [lineOf 2 "(memory (export \"${e.watExportName}\") ${e.watExportRef})"]
   else [lineOf 2 "(export \"${e.watExportName}\" (${e.watExportKind} ${e.watExportRef}))"]
 
 renderElem : List String -> List String

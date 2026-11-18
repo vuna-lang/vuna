@@ -147,7 +147,8 @@ export repairTruncatedJson : String -> Maybe String
 repairTruncatedJson raw =
   let
     scan = scanBrackets (strUnpack raw)
-  in if scan.scanBroken || scan.scanInString || scan.scanEscaped || length scan.scanOpen == 0 then Nothing
+  in if scan.scanBroken || scan.scanInString || scan.scanEscaped || length scan.scanOpen == 0 then
+    Nothing
   else Just (raw ++ join "" (map closerOf scan.scanOpen))
 
 -- | 内部：未闭合开括号对应的闭括号文本（其余一律 `]`，由调用方保证只传 `{` / `[`）。

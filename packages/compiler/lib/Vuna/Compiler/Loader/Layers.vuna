@@ -81,7 +81,8 @@ checkImports allRules matched srcName srcPkg modules (imp :: rest) = case findMo
   Nothing => checkImports allRules matched srcName srcPkg modules rest
   Just t =>
     if modulePackageOf t /= srcPkg then checkImports allRules matched srcName srcPkg modules rest
-    else if importAllowed allRules matched (moduleNameOf t) then checkImports allRules matched srcName srcPkg modules rest
+    else if importAllowed allRules matched (moduleNameOf t) then
+      checkImports allRules matched srcName srcPkg modules rest
     else onErrDiag (withImportSpan imp)
       (ldErr4 (LayerViolation "" "" "" "") srcName (moduleNameOf t) (labelOf allRules srcName) (labelOf allRules (moduleNameOf t)))
 
@@ -92,9 +93,10 @@ checkModules roots all (m :: rest) =
     rules = layersOfRoot roots (modulePackageOf m)
     matched = matchingLayers rules (moduleNameOf m)
   in if length matched == 0 then checkModules roots all rest
-  else case checkImports rules matched (moduleNameOf m) (modulePackageOf m) all (moduleAllImportsOf m) of
-    ErrC e => ErrC e
-    OkC _ => checkModules roots all rest
+  else
+    case checkImports rules matched (moduleNameOf m) (modulePackageOf m) all (moduleAllImportsOf m) of
+      ErrC e => ErrC e
+      OkC _ => checkModules roots all rest
 
 -- | 项目级层检查：逐个模块检查直接 import 边是否越过层边界。
 export checkProjectLayers : List Root -> Project -> Check Int

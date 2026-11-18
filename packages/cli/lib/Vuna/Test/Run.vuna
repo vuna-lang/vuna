@@ -600,17 +600,20 @@ goldenAssertions c expectedText wantInterp wantCheck wantCompile wantRun wantCom
   let
     interpA = if wantInterp then [assertEq "interp" expectedText (interpTextOf gr.grInterp)] else []
     checkA =
-      if wantCheck then [Assertion "check exit" (checkPassed gr.grCheck) "check failed:\n${diagBriefOf gr.grCheck}"]
+      if wantCheck then
+        [Assertion "check exit" (checkPassed gr.grCheck) "check failed:\n${diagBriefOf gr.grCheck}"]
       else []
     compileA =
-      if wantCompile then [ Assertion "compile exit" (checkPassed gr.grCompile) "compile failed:\n${diagBriefOf gr.grCompile}"
-      ]
+      if wantCompile then
+        [ Assertion "compile exit" (checkPassed gr.grCompile) "compile failed:\n${diagBriefOf gr.grCompile}"
+        ]
       else []
     syncA = if gr.grCompileOk then [assertExit "cache sync" gr.grSync] else []
     buildA = if gr.grCompileOk then [assertExit "build exit" (buildCodeOf gr)] else []
     runA = if gr.grRunOk then [assertEq "run" expectedText gr.grRunText] else []
     compareA =
-      if wantCompare && wantInterp && gr.grRunOk then [assertEq "interp == run" (interpTextOf gr.grInterp) gr.grRunText]
+      if wantCompare && wantInterp && gr.grRunOk then
+        [assertEq "interp == run" (interpTextOf gr.grInterp) gr.grRunText]
       else []
   in append [timeoutAssert c gr.grMs]
     (append interpA (append checkA (append compileA (append syncA (append buildA (append runA compareA))))))
@@ -635,11 +638,13 @@ goldenCase env c source expected wantInterp wantCheck wantCompile wantRun wantCo
     if wantCompile then compileFile source "${env.envTmp}/stage-${safeName c.caseId}"
     else pure (ErrC (caseSkipDiag "compile off"))
   syncCode <-
-    if wantCompile && checkPassed compileR then syncStaging env "${env.envTmp}/stage-${safeName c.caseId}"
+    if wantCompile && checkPassed compileR then
+      syncStaging env "${env.envTmp}/stage-${safeName c.caseId}"
     else pure 0
   buildR <-
-    if wantCompile && checkPassed compileR then runCmdMerged env "${c.caseId}-build" "${env.envTmp}/stage-${safeName c.caseId}" c.caseTimeout
-      ["sh", "build.sh", "prog"]
+    if wantCompile && checkPassed compileR then
+      runCmdMerged env "${c.caseId}-build" "${env.envTmp}/stage-${safeName c.caseId}" c.caseTimeout
+        ["sh", "build.sh", "prog"]
     else pure (CmdResult 1 "" "" False)
   runOk <- pure (wantRun && wantCompile && checkPassed compileR && buildR.cmdCode == 0)
   runR <-
@@ -706,24 +711,25 @@ runCrossTarget env c dir backend expected =
     out = "${dir}/${backend}"
     buildTag = "${c.caseId}-build-${backend}"
     prog =
-      if backend == "wasm" then if env.envWasmHost == "js" then [ "node",
-        "${env.envRoot}/test/suite/fixtures/wasm_js_host/run.mjs",
-        "${out}/main.wasm",
-        "--dir",
-        dir
-      ]
-      else [ "wasmtime",
-        "run",
-        "-W",
-        "stack-switching=y",
-        "-W",
-        "gc=y",
-        "-W",
-        "function-references=y",
-        "--dir",
-        dir,
-        "${out}/main.wasm"
-      ]
+      if backend == "wasm" then
+        if env.envWasmHost == "js" then [ "node",
+          "${env.envRoot}/test/suite/fixtures/wasm_js_host/run.mjs",
+          "${out}/main.wasm",
+          "--dir",
+          dir
+        ]
+        else [ "wasmtime",
+          "run",
+          "-W",
+          "stack-switching=y",
+          "-W",
+          "gc=y",
+          "-W",
+          "function-references=y",
+          "--dir",
+          dir,
+          "${out}/main.wasm"
+        ]
       else ["${out}/bin/p"]
   in do
     expectedPath <- expectedForBackend backend expected
@@ -783,16 +789,19 @@ errorAssertions env diagPath wantInterp wantCompile c er =
     checkA = case er.erActual of
       ErrC _ => [Assertion "check exit" True ""]
       OkC ds =>
-        if errExpected then [ Assertion "check exit" False "expected an error, check succeeded with ${strOfInt (listLength ds)} diagnostic(s)"
-        ]
+        if errExpected then
+          [ Assertion "check exit" False "expected an error, check succeeded with ${strOfInt (listLength ds)} diagnostic(s)"
+          ]
         else []
     interpA =
-      if wantInterp && errExpected then [ Assertion "interp exit" (not (checkPassed er.erInterp)) "interp should fail:\n${diagBriefOf er.erInterp}"
-      ]
+      if wantInterp && errExpected then
+        [ Assertion "interp exit" (not (checkPassed er.erInterp)) "interp should fail:\n${diagBriefOf er.erInterp}"
+        ]
       else []
     compileA =
-      if wantCompile && errExpected then [ Assertion "compile exit" (not (checkPassed er.erCompile)) "compile should fail:\n${diagBriefOf er.erCompile}"
-      ]
+      if wantCompile && errExpected then
+        [ Assertion "compile exit" (not (checkPassed er.erCompile)) "compile should fail:\n${diagBriefOf er.erCompile}"
+        ]
       else []
     absentA = if wantCompile && errExpected then [er.erAbsent] else []
   in append [timeoutAssert c er.erMs]
@@ -983,13 +992,14 @@ checkCase env c source expectPass expectedErr = do
   end <- clockNow
   base <-
     finishCase c.caseId start (checkCaseAsserts env expectedErr expectPass start end r expectedR)
-  if env.envBlessDiag then if expectPass then pure base
-  else case diagsOfCheck r of
-    [] => pure base
-    ds => do
-      _ <- fsWriteFile expectedErr "${blessDiagText env expectedErr ds}\n"
-      pure
-        (CaseResult c.caseId "blessed" base.resChecks 0 base.resChecks base.resMs ["blessed ${expectedErr}"])
+  if env.envBlessDiag then
+    if expectPass then pure base
+    else case diagsOfCheck r of
+      [] => pure base
+      ds => do
+        _ <- fsWriteFile expectedErr "${blessDiagText env expectedErr ds}\n"
+        pure
+          (CaseResult c.caseId "blessed" base.resChecks 0 base.resChecks base.resMs ["blessed ${expectedErr}"])
   else pure base
 
 -- | 内部：check 用例的断言：超时；通过路径要求 check 成功且无 error 级诊断，负例路径要求
@@ -1037,7 +1047,8 @@ relativeTestPath : Env -> String -> String
 relativeTestPath env source =
   let
     prefix = "${env.envRoot}/test/"
-  in if startsWith prefix source then substring (byteLength prefix) (byteLength source - byteLength prefix) source
+  in if startsWith prefix source then
+    substring (byteLength prefix) (byteLength source - byteLength prefix) source
   else source
 
 -- | 执行一个 lint 用例：进程内 lint，把 findings 渲染成文本与期望逐字比对；期望为空表示
@@ -1280,12 +1291,15 @@ applyDirective st t =
     n = byteLength t
   in if startsWith "exit:" t then SeOk (stepWithExit st (trim (substring 5 (n - 5) t)))
   else if startsWith "out-contains:" t then SeOk (stepWithContains st (trim (substring 13 (n - 13) t)))
-  else if startsWith "out-not-contains:" t then SeOk (stepWithNotContains st (trim (substring 17 (n - 17) t)))
-  else if startsWith "out-equals-file:" t then SeOk (stepWithEqualsFile st (trim (substring 16 (n - 16) t)))
+  else if startsWith "out-not-contains:" t then
+    SeOk (stepWithNotContains st (trim (substring 17 (n - 17) t)))
+  else if startsWith "out-equals-file:" t then
+    SeOk (stepWithEqualsFile st (trim (substring 16 (n - 16) t)))
   else if startsWith "out-equals:" t then SeOk (stepWithEquals st (trim (substring 11 (n - 11) t)))
   else if startsWith "file-exists:" t then SeOk (stepWithFile st (trim (substring 12 (n - 12) t)))
   else if startsWith "file-absent:" t then SeOk (stepWithAbsent st (trim (substring 12 (n - 12) t)))
-  else if startsWith "file-contains:" t then SeOk (stepWithFileContains st (splitFirstSpace (trim (substring 14 (n - 14) t))))
+  else if startsWith "file-contains:" t then
+    SeOk (stepWithFileContains st (splitFirstSpace (trim (substring 14 (n - 14) t))))
   else SeErr "unknown step directive: ${t}"
 
 -- | 内部：写入解析错误（保留其余字段）。
@@ -1312,7 +1326,9 @@ pushStep st step = setParseSteps st (step :: st.spSteps)
 flushGroup : StepParse -> StepParse
 flushGroup st =
   if listLength st.spSteps == 0 then st
-  else StepParse (StepGroup st.spGlob (reverse st.spSteps) :: st.spDone) st.spOpen st.spGlob [] st.spErr
+  else
+    StepParse (StepGroup st.spGlob (reverse st.spSteps) :: st.spDone) st.spOpen st.spGlob []
+      st.spErr
 
 -- 逐行解析用显式构造器而不是 foldl / 记录更新：把 `StepParse` 当多态 fold 的累加器、
 -- 或在递归函数里用记录更新，都会触发 QTT 擦除 binder 推断 bug。
@@ -1324,15 +1340,17 @@ parseLine st line =
     n = byteLength t
   in if st.spErr /= "" then st
   else if isBlankOrComment line then st
-  else if startsWith "for-each:" t then if st.spOpen then setParseErr st "nested for-each is not supported"
-  else
-    let
-      spec = trim (substring 9 (n - 9) t)
-      flushed = flushGroup st
-    in if byteLength spec == 0 then setParseErr st "for-each needs a shell word list"
-    else openGroup flushed spec
-  else if t == "end:" then if not st.spOpen then setParseErr st "end: without matching for-each"
-  else closeGroup (flushGroup st)
+  else if startsWith "for-each:" t then
+    if st.spOpen then setParseErr st "nested for-each is not supported"
+    else
+      let
+        spec = trim (substring 9 (n - 9) t)
+        flushed = flushGroup st
+      in if byteLength spec == 0 then setParseErr st "for-each needs a shell word list"
+      else openGroup flushed spec
+  else if t == "end:" then
+    if not st.spOpen then setParseErr st "end: without matching for-each"
+    else closeGroup (flushGroup st)
   else if startsWith "run:" t then pushStep st (stepWithRun (trim (substring 4 (n - 4) t)))
   else if startsWith "read:" t then pushStep st (stepWithRead (trim (substring 5 (n - 5) t)))
   else case st.spSteps of
@@ -1429,8 +1447,9 @@ exitAsserts : String -> Int -> List Assertion
 exitAsserts spec code =
   if spec == "" || spec == "0" then [assertExit "exit" code]
   else if spec == "nonzero" then [assertExitNonZero "exit" code]
-  else [ Assertion "exit" (code == fromMaybe 0 (parseLeadingInt spec)) "expected ${spec}, got ${strOfInt code}"
-  ]
+  else
+    [ Assertion "exit" (code == fromMaybe 0 (parseLeadingInt spec)) "expected ${spec}, got ${strOfInt code}"
+    ]
 
 -- | 内部：失败上下文文本：命令行前 240 字节 + 输出尾部 1600 字节（无输出时只有命令行）。
 -- 没有它时 steps case 只报 `exit: exit 1`，看不出是哪条命令失败、也看不到脚本自己打印的
@@ -1760,7 +1779,8 @@ summarize results =
     bad = filter isFailed results
     badCases = listLength bad
   in if failed == 0 && badCases == 0 then "vuna tests passed (${strOfInt checks} checks)"
-  else "${strOfInt checks} checks, ${strOfInt badCases} failed case(s): ${join ", " (map resIdOf bad)}"
+  else
+    "${strOfInt checks} checks, ${strOfInt badCases} failed case(s): ${join ", " (map resIdOf bad)}"
 
 -- | 打印被测编译器路径与指纹。
 printCompiler : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r => Env -> Eff r Int
@@ -2119,7 +2139,8 @@ containsFrom fuel needle hay i =
 allowedResult : List String -> CaseResult -> CaseResult
 allowedResult allowIds r =
   if r.resStatus /= "fail" then r
-  else if anyIdMatches allowIds r.resId then { r | resStatus = "allow", resMessages = append ["allowed-fail（参考通道用例）"] r.resMessages }
+  else if anyIdMatches allowIds r.resId then
+    { r | resStatus = "allow", resMessages = append ["allowed-fail（参考通道用例）"] r.resMessages }
   else r
 
 anyIdMatches : List String -> String -> Bool
@@ -2232,7 +2253,8 @@ stripRoot : Env -> String -> String
 stripRoot env path =
   let
     prefix = "${env.envRoot}/"
-  in if startsWith prefix path then substring (byteLength prefix) (byteLength path - byteLength prefix) path
+  in if startsWith prefix path then
+    substring (byteLength prefix) (byteLength path - byteLength prefix) path
   else path
 
 -- | 内部：`git diff --name-only <rev>` 的路径列表（相对仓库根）；git 失败给 `Nothing`。
@@ -2360,7 +2382,8 @@ claimTextPairs (c :: rest) = case c.caseKind of
 anyText : List (Pair String String) -> String -> Bool
 anyText [] rel = False
 anyText ((Pair _ text) :: rest) rel =
-  if contains (stripTestPrefix rel) text || contains (stripTestPrefix (corpusDirPrefix rel)) text then True
+  if contains (stripTestPrefix rel) text || contains (stripTestPrefix (corpusDirPrefix rel)) text then
+    True
   else anyText rest rel
 
 -- | 内部：该路径被某个 case 的目录根覆盖，或被 steps 文本提到。
@@ -2579,8 +2602,9 @@ runSuiteOnce opts suite =
       --   ① 已声明 family 目录里的孤儿夹具（精确 source 认领）；
       --   ② case 总数下限——整族从 suite.toml 消失时，①会连目录一起看不到。
       minCase =
-        if suite.suiteMinCases > 0 && listLength discovered < suite.suiteMinCases then [ Case "audit/min-cases" "audit" ["audit"] (CBroken "only ${strOfInt (listLength discovered)} case(s) discovered, suite.toml requires >= ${strOfInt suite.suiteMinCases}") 0 "e2e" "tool"
-        ]
+        if suite.suiteMinCases > 0 && listLength discovered < suite.suiteMinCases then
+          [ Case "audit/min-cases" "audit" ["audit"] (CBroken "only ${strOfInt (listLength discovered)} case(s) discovered, suite.toml requires >= ${strOfInt suite.suiteMinCases}") 0 "e2e" "tool"
+          ]
         else []
       cases0 = filterCases opts (append (append discovered (auditCases orphans)) minCase)
     in do
@@ -2614,8 +2638,9 @@ matchesIndex index count (Pair i _) = if count <= 0 then False else i - i / coun
 -- | 内部：把绝对源码路径转成相对 `base` 的路径（`.diag.json` 不写机器相关前缀）。
 relativeTo : String -> String -> String
 relativeTo base path =
-  if startsWith "${base}/" path then substring (natFromInt (strLength base + 1)) (natFromInt (strLength path - strLength base - 1))
-    path
+  if startsWith "${base}/" path then
+    substring (natFromInt (strLength base + 1)) (natFromInt (strLength path - strLength base - 1))
+      path
   else path
 
 -- 诊断 JSON 归一化用（`Base.String` 没有 replace）。
@@ -2635,8 +2660,9 @@ replaceAllGo needle replacement rest acc (_ :: fs) = replaceStep needle replacem
 replaceStep : String -> String -> List Int -> List Int -> List Int -> List Int
 replaceStep needle replacement [] acc fs = acc
 replaceStep needle replacement (c :: cs) acc fs =
-  if prefixOfInts (strUnpack needle) (c :: cs) then replaceAllGo needle replacement (dropNInts (length (strUnpack needle)) (c :: cs))
-    (append (reverse (strUnpack replacement)) acc) fs
+  if prefixOfInts (strUnpack needle) (c :: cs) then
+    replaceAllGo needle replacement (dropNInts (length (strUnpack needle)) (c :: cs))
+      (append (reverse (strUnpack replacement)) acc) fs
   else replaceAllGo needle replacement cs (c :: acc) fs
 
 -- | 内部：第一个字节列表是否为第二个的前缀。

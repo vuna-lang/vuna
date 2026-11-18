@@ -142,7 +142,8 @@ docBlocksGo marker (c :: rest) open acc = case c.commentKind of
       Nothing => docBlocksGo marker rest (Just (newOpenBlock body c)) acc
     Nothing => case open of
       Just ob =>
-        if continuesOpen ob c then docBlocksGo marker rest (Just (appendOpenLine ob (stripOneSpace c.commentText))) acc
+        if continuesOpen ob c then
+          docBlocksGo marker rest (Just (appendOpenLine ob (stripOneSpace c.commentText))) acc
         else docBlocksGo marker rest Nothing (closeOpenBlock open acc)
       Nothing => docBlocksGo marker rest Nothing acc
   CBlock => case blockDocMarker c.commentText of
@@ -318,7 +319,8 @@ assignBlocksGo comments targets (b :: rest) acc = case pickTarget comments targe
     let
       acc2 = case targetKind t of
         "module" =>
-          if acc.assignModuleDoc == "" then Assign acc.assignUsed acc.assignDecls acc.assignMembers b.docBlockText
+          if acc.assignModuleDoc == "" then
+            Assign acc.assignUsed acc.assignDecls acc.assignMembers b.docBlockText
           else acc
         "member" =>
           Assign acc.assignUsed acc.assignDecls
@@ -335,7 +337,8 @@ pickTarget : List Comment -> List (Pair Int DocTarget) -> List Int -> DocBlock -
 pickTarget comments [] used b = Nothing
 pickTarget comments ((Pair idx t) :: rest) used b =
   if memInt idx used then pickTarget comments rest used b
-  else if targetLine t > b.docBlockEndLine && targetCol t == b.docBlockCol && targetLine t - b.docBlockEndLine <= 2 && not (commentStartsBetween comments b.docBlockEndLine (targetLine t)) then Just (Pair idx t)
+  else if targetLine t > b.docBlockEndLine && targetCol t == b.docBlockCol && targetLine t - b.docBlockEndLine <= 2 && not (commentStartsBetween comments b.docBlockEndLine (targetLine t)) then
+    Just (Pair idx t)
   else pickTarget comments rest used b
 
 -- | 内部：在前置关联的结果上追加尾随 doc；只认非模块目标（模块头不参与），被前置占用的

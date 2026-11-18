@@ -344,7 +344,8 @@ dtCheckSource ctx label source = do
 missingDepModules : String -> List Module -> List String -> List String
 missingDepModules pkg [] _ = []
 missingDepModules pkg (m :: rest) ifaceNames =
-  if modulePackageOf m /= pkg && memName (moduleNameOf m) ifaceNames == False then (::) (moduleNameOf m) (missingDepModules pkg rest ifaceNames)
+  if modulePackageOf m /= pkg && memName (moduleNameOf m) ifaceNames == False then
+    (::) (moduleNameOf m) (missingDepModules pkg rest ifaceNames)
   else missingDepModules pkg rest ifaceNames
 
 export dtCheckSourceWithIfaces : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> String -> List ModuleIface -> Eff r (Check (List Diagnostic))
@@ -362,14 +363,15 @@ dtCheckSourceWithIfaces ctx label source ifaces =
             _ =
               if length missing > 0 then dbg! "iface-fallback=check missing=${join "," missing}"
               else 0
-          in if length missing == 0 then pure (case resolveProjectKeeping (contextRelease ctx) (preloadKeepOf ifaces mods) filtered of
-            ErrC e => ErrC e
-            OkC resolved => case shiftedDepPrograms (materializedDeps (contextPackageName ctx) (secondOf resolved) ifaces) of
+          in if length missing == 0 then
+            pure (case resolveProjectKeeping (contextRelease ctx) (preloadKeepOf ifaces mods) filtered of
               ErrC e => ErrC e
-              OkC deps => case dtCheckOursParts ctx resolved deps of
+              OkC resolved => case shiftedDepPrograms (materializedDeps (contextPackageName ctx) (secondOf resolved) ifaces) of
                 ErrC e => ErrC e
-                OkC p => OkC (firstOf p)
-          )
+                OkC deps => case dtCheckOursParts ctx resolved deps of
+                  ErrC e => ErrC e
+                  OkC p => OkC (firstOf p)
+            )
           else dtCheckSource ctx label source
 
 -- REPL 程序（入口声明）在依赖接口之上精化，不再重精化依赖。
@@ -443,15 +445,17 @@ replProgramWithIfacesAux ctx program exprSource ifaces cache =
             _ =
               if length missing > 0 then dbg! "iface-fallback=repl missing=${join "," missing}"
               else 0
-          in if length missing == 0 then pure (case resolveProjectKeeping (contextRelease ctx) (preloadKeepOf ifaces mods) filtered of
-            ErrC e => ErrC e
-            OkC resolved => case shiftedDepPrograms (materializedDeps (contextPackageName ctx) (secondOf resolved) ifaces) of
+          in if length missing == 0 then
+            pure (case resolveProjectKeeping (contextRelease ctx) (preloadKeepOf ifaces mods) filtered of
               ErrC e => ErrC e
-              OkC deps =>
-                let
-                  parts = secondOf resolved
-                in replCheckPartsAux (depStartOf deps) (contextPackageName ctx) deps parts ifaces cache
-          )
+              OkC resolved => case shiftedDepPrograms (materializedDeps (contextPackageName ctx) (secondOf resolved) ifaces) of
+                ErrC e => ErrC e
+                OkC deps =>
+                  let
+                    parts = secondOf resolved
+                  in replCheckPartsAux (depStartOf deps) (contextPackageName ctx) deps parts ifaces
+                    cache
+            )
           else do
             pR <- replProgramFull ctx program exprSource
             pure (case pR of
@@ -629,7 +633,8 @@ generalizeSignature ty taken =
       total = listLen entries
       body = substGenMetas ty entries 0 total
       sigText = showTypeSig (wrapGenMetas entries body)
-    in if contains "?" sigText then err "自动签名的结果仍含未解元变量，请先写类型签名"
+    in if contains "?" sigText then
+      err "自动签名的结果仍含未解元变量，请先写类型签名"
     else OkC sigText
 
 buildGenMetas : List Int -> List String -> Int -> Term -> List GenMeta
@@ -767,13 +772,14 @@ dtMainKind ctx entry = do
       OkC p => case findMainDef (secondOf p) of
         Nothing => cgErr0At (Span entry 1 1 1 1 0 0) NoMain
         Just mainDef => if mainActionKind (dtDefType mainDef) == "Eff" then OkC "Eff"
-        else case force (HashMap.fromList (defTableOf (secondOf p))) solsEmpty defaultFuel (eval [] (dtDefType mainDef)) of
-          VNeutral n => case n of
-            NGlobal g sp => case sp of
-              [] => mainKindForName g
+        else
+          case force (HashMap.fromList (defTableOf (secondOf p))) solsEmpty defaultFuel (eval [] (dtDefType mainDef)) of
+            VNeutral n => case n of
+              NGlobal g sp => case sp of
+                [] => mainKindForName g
+                _ => OkC "Other"
               _ => OkC "Other"
             _ => OkC "Other"
-          _ => OkC "Other"
   )
 
 -- `vuna test` 的 main 结果类型名（展示用）；其它类型归 `Other`。
@@ -1326,11 +1332,12 @@ dtCheckSourceIncremental ctx label source depIfaces cleanIfaces cache needPackag
               if length missing > 0 then dbg! "iface-fallback=check-incremental missing=${join "," missing}"
               else 0
           in if length missing > 0 then OkC (Pair False (Pair [] (Pair Nothing cache)))
-          else case resolveProjectKeeping (contextRelease ctx) (preloadKeepOf allIfaces mods) filtered of
-            ErrC e => ErrC e
-            OkC resolved => case dtIncrementalCheckedCore ctx resolved (materializedDeps pkgName (secondOf resolved) depIfaces) (materializedOwn pkgName (secondOf resolved) cleanIfaces) cache needPackage of
+          else
+            case resolveProjectKeeping (contextRelease ctx) (preloadKeepOf allIfaces mods) filtered of
               ErrC e => ErrC e
-              OkC r => OkC (Pair True r)
+              OkC resolved => case dtIncrementalCheckedCore ctx resolved (materializedDeps pkgName (secondOf resolved) depIfaces) (materializedOwn pkgName (secondOf resolved) cleanIfaces) cache needPackage of
+                ErrC e => ErrC e
+                OkC r => OkC (Pair True r)
     )
 
 -- 洞查询（hover / case split）的增量入口：与 `dtCheckSourceIncremental` 同一条装配
@@ -1352,11 +1359,12 @@ dtGoalsSourceIncremental ctx label source depIfaces cleanIfaces cache =
             missing = missingDepModules pkgName mods (map miNameOf allIfaces)
             _ = if length missing > 0 then obsMark "vuna.lsp.goals.fallback" else 0
           in if length missing > 0 then OkC (Pair False (Pair [] cache))
-          else case resolveProjectKeeping (contextRelease ctx) (preloadKeepOf allIfaces mods) filtered of
-            ErrC e => ErrC e
-            OkC resolved => case dtGoalsIncrementalCore ctx resolved (materializedDeps pkgName (secondOf resolved) depIfaces) (materializedOwn pkgName (secondOf resolved) cleanIfaces) cache of
+          else
+            case resolveProjectKeeping (contextRelease ctx) (preloadKeepOf allIfaces mods) filtered of
               ErrC e => ErrC e
-              OkC r => OkC (Pair True r)
+              OkC resolved => case dtGoalsIncrementalCore ctx resolved (materializedDeps pkgName (secondOf resolved) depIfaces) (materializedOwn pkgName (secondOf resolved) cleanIfaces) cache of
+                ErrC e => ErrC e
+                OkC r => OkC (Pair True r)
     )
 
 -- 会话化 interp。与 `dtCheckSourceIncremental` 同一条增量路径（依赖包 / 干净
@@ -1538,9 +1546,11 @@ splitGenerateCached ctx entry modules moduleParts entryDecls prog printResult ex
       keepNames = map (\p => unitCacheFileName (firstOf p) (secondOf p)) keys
     in do
       _ <- if enabled && pkg /= "" then unitCacheBucketGc dir keepNames else pure 0
-      if pkg == "" || not enabled then generateDtSplitProgram moduleParts entryDecls prog printResult roots cdir extraDefLocs
-      else generateDtSplitProgramWith (unitCacheLookup dir keys) (unitCacheStore dir keys) moduleParts
-        entryDecls prog printResult roots cdir extraDefLocs
+      if pkg == "" || not enabled then
+        generateDtSplitProgram moduleParts entryDecls prog printResult roots cdir extraDefLocs
+      else
+        generateDtSplitProgramWith (unitCacheLookup dir keys) (unitCacheStore dir keys) moduleParts
+          entryDecls prog printResult roots cdir extraDefLocs
 
 dtGenerateIncremental : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Pair (List Decl) (List Module) -> CheckedPackage -> Bool -> List (Pair String (Pair String Int)) -> Eff r (Check (Pair (List SplitFile) CheckedPackage))
 dtGenerateIncremental ctx entry parts checked printResult extraDefLocs =

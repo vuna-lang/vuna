@@ -50,7 +50,9 @@ replaceRange start stop newLines lines =
 applyEditList : List Edit -> List String -> Int -> Int -> Pair Int (List String)
 applyEditList [] lines limit count = Pair count lines
 applyEditList (e :: rest) lines limit count =
-  if e.editEnd < limit then applyEditList rest (replaceRange e.editStart e.editEnd e.editLines lines) e.editStart (count + 1)
+  if e.editEnd < limit then
+    applyEditList rest (replaceRange e.editStart e.editEnd e.editLines lines) e.editStart
+      (count + 1)
   else applyEditList rest lines limit count
 
 -- | 内部：收集并应用全部编辑；没有可用编辑时原样返回，应用后用 `parseSource` 复验，失败即

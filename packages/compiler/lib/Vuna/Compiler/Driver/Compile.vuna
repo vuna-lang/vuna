@@ -831,7 +831,8 @@ loadHeaderEff hasPrelude m = do
 
 withPrelude : Bool -> ClosureMod -> ModHeader -> List String
 withPrelude hasPrelude m h =
-  if hasPrelude && m.cmName /= "Prelude" && not (memName "Prelude" h.mhImports) then append h.mhImports ["Prelude"]
+  if hasPrelude && m.cmName /= "Prelude" && not (memName "Prelude" h.mhImports) then
+    append h.mhImports ["Prelude"]
   else h.mhImports
 
 modGraphEntry : ClosureMod -> Pair String (List String)
@@ -1097,7 +1098,8 @@ goPkgs ctx mods (p :: rest) acc = do
         -- 该依赖包**对外承诺**的模块面（`[export].modules`；根不限制导出 ⇒ 全部模块）。
         -- 完整性判据 = 「导出面 ⊆ 写侧顺序」——与写侧 `writeIfaceShadow` 的判据同口径。
         required = exportedDepModsOf ctx p mods
-      in if namesCurrent && allNamesIn (map modNameOf required) (map modNameOf picked) then goPkgs ctx mods rest (append acc picked)
+      in if namesCurrent && allNamesIn (map modNameOf required) (map modNameOf picked) then
+        goPkgs ctx mods rest (append acc picked)
       else pure Nothing
 
 -- 依赖包 p 的对外模块面（按 `mods` 的闭包枚举顺序）。
@@ -1343,7 +1345,8 @@ sourceFresh builtSec si = do
     else do
       m <- fmap (fromMaybe 0) (fsFileMtime path)
       sz <- fmap (\o => natToInt (fromMaybe Zero o)) (fsFileSize path)
-      if m == siMtimeOf si && sz == siSizeOf si && siMtimeOf si + mtimeSafetyWindowSec <= builtSec then pure True
+      if m == siMtimeOf si && sz == siSizeOf si && siMtimeOf si + mtimeSafetyWindowSec <= builtSec then
+        pure True
       else do
         content <- fsReadFile path
         pure (payloadDigest content == siHashOf si)
@@ -1466,7 +1469,8 @@ else case cleanPass depTbl pending cleanRev [] of
 
 cleanPass : List (Pair String String) -> List ModuleIface -> List ModuleIface -> List ModuleIface -> Pair (List ModuleIface) (List ModuleIface)
 cleanPass depTbl [] cleanRev acc = Pair [] (reverse acc)
-cleanPass depTbl (m :: rest) cleanRev acc = if moduleDepsOk depTbl cleanRev (miDepHashesOf m) then cleanPass depTbl rest (m :: cleanRev) (m :: acc)
+cleanPass depTbl (m :: rest) cleanRev acc = if moduleDepsOk depTbl cleanRev (miDepHashesOf m) then
+  cleanPass depTbl rest (m :: cleanRev) (m :: acc)
 else
   let
     p = cleanPass depTbl rest cleanRev acc
@@ -1533,7 +1537,8 @@ canonicalPath dir file =
   let
     d = canonicalDir dir
   in if d == "." || d == "" then file
-  else if startsWith "${d}/" file then substring (natFromInt (strLength d + 1)) (natFromInt (strLength file - strLength d - 1)) file
+  else if startsWith "${d}/" file then
+    substring (natFromInt (strLength d + 1)) (natFromInt (strLength file - strLength d - 1)) file
   else file
 
 resolveStoredPath : String -> String -> String

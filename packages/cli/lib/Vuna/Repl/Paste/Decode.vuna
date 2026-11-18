@@ -39,8 +39,9 @@ pasteFeed st b = if st.pasteDone then st
 else
   let
     cand = append st.pasteMatch [b]
-  in if lenInt cand == lenInt pasteTerminator then if isPrefixOf cand pasteTerminator then PasteState st.pasteContent [] True
-  else pasteFeedMismatch st cand
+  in if lenInt cand == lenInt pasteTerminator then
+    if isPrefixOf cand pasteTerminator then PasteState st.pasteContent [] True
+    else pasteFeedMismatch st cand
   else if isPrefixOf cand pasteTerminator then PasteState st.pasteContent cand False
   else pasteFeedMismatch st cand
 

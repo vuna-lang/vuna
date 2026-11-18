@@ -248,7 +248,8 @@ nextAnchorWithFallback anchors csp = case bestNextAnchor anchors csp of
   Just sp => case innermostEnclosing anchors csp of
     Nothing => Just sp
     Just enc =>
-      if posBeforeOrEq (spanStartLine enc) (spanStartCol enc) (spanStartLine sp) (spanStartCol sp) && posBeforeOrEq (spanStartLine sp) (spanStartCol sp) (spanEndLine enc) enc.spanEndCol then Just sp
+      if posBeforeOrEq (spanStartLine enc) (spanStartCol enc) (spanStartLine sp) (spanStartCol sp) && posBeforeOrEq (spanStartLine sp) (spanStartCol sp) (spanEndLine enc) enc.spanEndCol then
+        Just sp
       else Just enc
 
 -- | 内部：trait 方法的锚点用方法签名 span（方法名到类型结束）。

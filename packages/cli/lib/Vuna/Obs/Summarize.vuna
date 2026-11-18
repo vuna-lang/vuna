@@ -279,8 +279,9 @@ aggregateStages samples = foldl addStage [] samples
 addStage : List StageStat -> SpanSample -> List StageStat
 addStage [] s = [StageStat s.spanSampleName 1 s.spanSampleTotalUs s.spanSampleSelfUs]
 addStage (st :: rest) s =
-  if st.stageName == s.spanSampleName then StageStat st.stageName (st.stageCount + 1) (st.stageTotalUs + s.spanSampleTotalUs) (st.stageSelfUs + s.spanSampleSelfUs)
-    :: rest
+  if st.stageName == s.spanSampleName then
+    StageStat st.stageName (st.stageCount + 1) (st.stageTotalUs + s.spanSampleTotalUs) (st.stageSelfUs + s.spanSampleSelfUs)
+      :: rest
   else st :: addStage rest s
 
 -- | 内部：阶段表排序——总用时降序、名字升序（热点在前，同值确定序）。
@@ -315,7 +316,8 @@ addCounter counters ev = insertCounter counters (eventName ev) (fromMaybe 0 (eve
 insertCounter : List CounterStat -> String -> Int -> List CounterStat
 insertCounter [] name value = [CounterStat name value value 1]
 insertCounter (c :: rest) name value =
-  if c.counterName == name then CounterStat name (c.counterSum + value) value (c.counterCount + 1) :: rest
+  if c.counterName == name then
+    CounterStat name (c.counterSum + value) value (c.counterCount + 1) :: rest
   else c :: insertCounter rest name value
 
 -- | 内部：计数表按名字升序（稳定、可 diff）。

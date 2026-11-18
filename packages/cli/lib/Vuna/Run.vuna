@@ -280,8 +280,10 @@ runTarget parsed passthrough dir target =
     Just f => runError "${f} is only supported with --target native"
     Nothing => do
       executable <- isExecutable target
-      if not executable then runError "package ${packageLabel target} has no executable entry (app/Main.vuna)"
-      else if flagSet parsed "no-build" then execTarget prefix (targetNameOf parsed) passthrough target (flagValue parsed "out")
+      if not executable then
+        runError "package ${packageLabel target} has no executable entry (app/Main.vuna)"
+      else if flagSet parsed "no-build" then
+        execTarget prefix (targetNameOf parsed) passthrough target (flagValue parsed "out")
       else do
         buildCode <-
           runCompilerCliFor "vuna"
@@ -328,7 +330,8 @@ execArtifact prefix targetName passthrough pkgDir name relOut absOut = if target
 else do
   exists <- pathExistsFile "${absOut}/bin/${name}"
   if exists then processRunIn pkgDir (append prefix (append ["${relOut}/bin/${name}"] passthrough))
-  else runError "binary not found: ${absOut}/bin/${name} (build the package first, or drop --no-build)"
+  else
+    runError "binary not found: ${absOut}/bin/${name} (build the package first, or drop --no-build)"
 
 -- | 内部：打印 `error: <msg>` 并返回退出码 2（用法 / 输入错误）。
 runError : Member nConsole ConsoleOp r => String -> Eff r Int

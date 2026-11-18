@@ -396,9 +396,10 @@ transformDef : Int -> IrDef -> Result IrDef
 transformDef fuel d = if fuel <= 0 then Ok d
 else case d of
   IrExternDef _ _ _ _ => Ok d
-  IrDef name arity deps body recOk initGuard span => if name == runPureName || name == runEffName || name == runMainName then case trampolineBody name body of
-    Err msg => Err msg
-    Ok body1 => Ok (IrDef name arity deps body1 recOk initGuard span)
+  IrDef name arity deps body recOk initGuard span => if name == runPureName || name == runEffName || name == runMainName then
+    case trampolineBody name body of
+      Err msg => Err msg
+      Ok body1 => Ok (IrDef name arity deps body1 recOk initGuard span)
   else if name == handleScopedName then case selfBody (fuel - 1) body name of
     Err msg => Err msg
     Ok body1 => Ok (IrDef name arity deps body1 recOk initGuard span)
@@ -504,7 +505,8 @@ selTrampolineBody name (IrCast inner) = case selTrampolineBody name inner of
   Err msg => Err msg
   Ok b => Ok (IrCast b)
 selTrampolineBody name (IrApp (IrApp (IrApp (IrGlobal g) e) u) _idc) =
-  if g == runThunkName then Ok (IrApp (IrRt irSelRunName) (applyAll (IrGlobal g) [e, u, stepDoneCont]))
+  if g == runThunkName then
+    Ok (IrApp (IrRt irSelRunName) (applyAll (IrGlobal g) [e, u, stepDoneCont]))
   else Err ("selective CPS: unexpected trampoline shape: " ++ name)
 selTrampolineBody name _ = Err ("selective CPS: unexpected trampoline shape: " ++ name)
 
@@ -543,9 +545,10 @@ else case d of
   IrDef name arity deps body recOk initGuard span =>
     let
       b = selSyms (fuel - 1) body
-    in if name == runPureName || name == runEffName || name == runMainName then case selTrampolineBody name b of
-      Err msg => Err msg
-      Ok b1 => Ok (IrDef name arity deps b1 recOk initGuard span)
+    in if name == runPureName || name == runEffName || name == runMainName then
+      case selTrampolineBody name b of
+        Err msg => Err msg
+        Ok b1 => Ok (IrDef name arity deps b1 recOk initGuard span)
     else if name == handleScopedName then case selSelfBody (fuel - 1) b of
       Err msg => Err msg
       Ok b1 => Ok (IrDef name arity deps b1 recOk initGuard span)
@@ -834,9 +837,10 @@ else case e of
         else if n == "Base.Eff.handleCoreAt" || n == "Base.Eff.handleCore" then case args of
           _ :: _ :: _ :: (IrGlobal h) :: _ => [h]
           _ => []
-        else if n == "Base.EffConsole.handleConsole" || n == "Base.EffFs.handleFs" || n == "Base.EffClock.handleClock" then case args of
-          _ :: _ :: (IrGlobal h) :: _ => [h]
-          _ => []
+        else if n == "Base.EffConsole.handleConsole" || n == "Base.EffFs.handleFs" || n == "Base.EffClock.handleClock" then
+          case args of
+            _ :: _ :: (IrGlobal h) :: _ => [h]
+            _ => []
         else []
         _ => []
     in append here (append (collectHandleOps (fuel - 1) head) (collectHandleOpsList (fuel - 1) args))

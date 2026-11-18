@@ -202,7 +202,8 @@ else case t of
     Just (Pair c args) => termDepsArgsFuel (fuel - 1) runtimeNames acc args
     Nothing =>
       if rigIsErased rig then termDepsIntoFuel (fuel - 1) runtimeNames acc f
-      else termDepsIntoFuel (fuel - 1) runtimeNames (termDepsIntoFuel (fuel - 1) runtimeNames acc f) a
+      else
+        termDepsIntoFuel (fuel - 1) runtimeNames (termDepsIntoFuel (fuel - 1) runtimeNames acc f) a
   TCon c args => termDepsArgsFuel (fuel - 1) runtimeNames acc args
   TMk c args => termDepsArgsFuel (fuel - 1) runtimeNames acc args
   -- 类型应用不产生运行时依赖。
@@ -228,7 +229,8 @@ termDepsArgsFuel fuel runtimeNames acc [] = if fuel <= 0 then acc else acc
 termDepsArgsFuel fuel runtimeNames acc ((Pair arg rig) :: rest) =
   if fuel <= 0 then acc
   else if rigIsErased rig then termDepsArgsFuel (fuel - 1) runtimeNames acc rest
-  else termDepsArgsFuel (fuel - 1) runtimeNames (termDepsIntoFuel (fuel - 1) runtimeNames acc arg) rest
+  else
+    termDepsArgsFuel (fuel - 1) runtimeNames (termDepsIntoFuel (fuel - 1) runtimeNames acc arg) rest
 
 termDepsAltsFuel : Int -> HashMap String Bool -> List String -> List CaseAlt -> List String
 termDepsAltsFuel fuel runtimeNames acc [] = if fuel <= 0 then acc else acc
@@ -278,7 +280,8 @@ useBudgetFor size = 512 + 4 * size
 
 addRuntimeDep : HashMap String Bool -> Bool -> String -> TermUse -> TermUse
 addRuntimeDep names live n u =
-  if live && HashMap.member n names then TermUse (addName n u.termUseDeps) u.termUseFlags u.termUseFloatLit
+  if live && HashMap.member n names then
+    TermUse (addName n u.termUseDeps) u.termUseFlags u.termUseFloatLit
   else u
 
 withFlags : UseFlags -> TermUse -> TermUse
@@ -342,7 +345,8 @@ runtimeNamesOf (d :: rest) = dtDefName d :: runtimeNamesOf rest
 -- 越界/负 index 都在 check 期报内部错误，而不是在 codegen/OCaml 阶段才炸。
 checkTermScopes : Int -> Term -> Check Int
 checkTermScopes depth (TVar name i _) =
-  if i >= 0 then if i < depth then OkC 0 else icInternal "out-of-scope de Bruijn index ${i} (depth ${depth})"
+  if i >= 0 then
+    if i < depth then OkC 0 else icInternal "out-of-scope de Bruijn index ${i} (depth ${depth})"
   else icInternal "negative de Bruijn index ${i}"
 checkTermScopes depth (TGlobal name) = OkC 0
 checkTermScopes depth (TInt n) = OkC 0

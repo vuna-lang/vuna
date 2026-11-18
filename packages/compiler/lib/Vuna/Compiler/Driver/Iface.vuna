@@ -639,7 +639,8 @@ else if HashMap.member name inherited then ""
 else case ownerOfAny oi name of
   Just o =>
     if o == entryOwner then ""
-    else if HashMap.member o ourNames then if HashMap.member name merged then "" else "missing-from-iface ${name} -> ${o}"
+    else if HashMap.member o ourNames then
+      if HashMap.member name merged then "" else "missing-from-iface ${name} -> ${o}"
     else ""
   Nothing => "unowned ${name}"
 

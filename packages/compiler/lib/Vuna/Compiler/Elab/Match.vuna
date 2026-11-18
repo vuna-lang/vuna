@@ -115,7 +115,8 @@ litBranchClauses lit pos clauses = filterLitBranch lit pos clauses []
 filterLitBranch : Pat -> String -> List (Pair (List Pat) Expr) -> List (Pair (List Pat) Expr) -> List (Pair (List Pat) Expr)
 filterLitBranch lit pos [] acc = reverse acc
 filterLitBranch lit pos ((Pair (p :: ps) body) :: rest) acc =
-  if litPatMatches lit p then filterLitBranch lit pos rest (Pair ps (literalBranchBody pos p body) :: acc)
+  if litPatMatches lit p then
+    filterLitBranch lit pos rest (Pair ps (literalBranchBody pos p body) :: acc)
   else filterLitBranch lit pos rest acc
 filterLitBranch lit pos ((Pair [] body) :: rest) acc = filterLitBranch lit pos rest acc
 
@@ -161,7 +162,8 @@ else case params of
   [] => tcErr0 fb ClauseTooManyPatterns
   pos :: restParams =>
     if hasAsHead clauses then asColumn table clauses pos restParams fb fuel
-    else if allVarHeads clauses then buildColumnExpr table (prepVarColumn pos clauses) restParams fb (fuel - 1)
+    else if allVarHeads clauses then
+      buildColumnExpr table (prepVarColumn pos clauses) restParams fb (fuel - 1)
     else if allCtorHeads clauses then ctorColumn table clauses pos restParams fb fuel
     else if hasCtorHead clauses then ctorColumn table clauses pos restParams fb fuel
     else litAltExpr table clauses pos restParams fb (fuel - 1)
@@ -207,12 +209,13 @@ firstPatSpan _ = Span "" 0 0 0 0 0 0
 -- 会报 `missing Cons`）。族信息由 Elab 传入（`ctorTable`）。
 ctorColumn : List (Pair String (Pair Bool (List (Pair String Int)))) -> List (Pair (List Pat) Expr) -> String -> List String -> Span -> Int -> Check Expr
 ctorColumn table clauses pos restParams fbSp fuel = if fuel <= 0 then icFuel "pattern matrix"
-else Vuna.Compiler.Base.Common.bind (ctorAltList table clauses pos restParams fbSp (fuel - 1)) (\alts => let
-  caseSp = firstPatSpan clauses
-in if familyCovered table (ctorHeads clauses) then OkC (ECase (EVar pos caseSp) alts caseSp)
-else Vuna.Compiler.Base.Common.bind (fallbackAltList table pos clauses restParams fbSp (fuel - 1))
-  (\fbAlts => OkC (ECase (EVar pos caseSp) (append alts fbAlts) caseSp))
-)
+else
+  Vuna.Compiler.Base.Common.bind (ctorAltList table clauses pos restParams fbSp (fuel - 1)) (\alts => let
+    caseSp = firstPatSpan clauses
+  in if familyCovered table (ctorHeads clauses) then OkC (ECase (EVar pos caseSp) alts caseSp)
+  else Vuna.Compiler.Base.Common.bind (fallbackAltList table pos clauses restParams fbSp (fuel - 1))
+    (\fbAlts => OkC (ECase (EVar pos caseSp) (append alts fbAlts) caseSp))
+  )
 
 -- 构造子名 → 所属族的构造子表；找不到族时按「未覆盖」处理（保守）。
 familyOfCtor : List (Pair String (Pair Bool (List (Pair String Int)))) -> String -> Maybe (Pair Bool (List (Pair String Int)))

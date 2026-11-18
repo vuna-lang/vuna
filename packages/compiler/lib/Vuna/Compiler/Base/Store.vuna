@@ -136,7 +136,8 @@ storeDecode tag codec raw = case frameSplit raw of
   Just p =>
     let
       payload = secondOf p
-    in if headerOk tag codec (firstOf p) payload && headerDigestOf (firstOf p) == Just (Vuna.Compiler.Base.Hash.contentAddress payload) then Just payload
+    in if headerOk tag codec (firstOf p) payload && headerDigestOf (firstOf p) == Just (Vuna.Compiler.Base.Hash.contentAddress payload) then
+      Just payload
     else Nothing
 
 -- | 解码 + 校验「头里的内容地址 == 调用方期望值」（不重算内容地址）。
@@ -150,7 +151,8 @@ storeDecodeAs tag codec digest raw = case frameSplit raw of
   Just p =>
     let
       payload = secondOf p
-    in if headerOk tag codec (firstOf p) payload && headerDigestOf (firstOf p) == Just digest then Just payload
+    in if headerOk tag codec (firstOf p) payload && headerDigestOf (firstOf p) == Just digest then
+      Just payload
     else Nothing
 
 -- | 存储根（唯一根：对象库 + 视图 + roots）。候选按优先级排列，首个命中者胜出：

@@ -301,7 +301,8 @@ nodeById id (n :: rest) = if n.cdpId == id then Just n else nodeById id rest
 attachChild : Int -> Int -> List CdpNode -> List CdpNode
 attachChild id child [] = []
 attachChild id child (n :: rest) =
-  if n.cdpId == id then CdpNode n.cdpId n.cdpName n.cdpUrl n.cdpLine n.cdpParent (child :: n.cdpChildrenRev) :: rest
+  if n.cdpId == id then
+    CdpNode n.cdpId n.cdpName n.cdpUrl n.cdpLine n.cdpParent (child :: n.cdpChildrenRev) :: rest
   else n :: attachChild id child rest
 
 -- | 内部：采样序列 -> CDP Profile JSON（`nodes` / `startTime` / `endTime` / `samples` /

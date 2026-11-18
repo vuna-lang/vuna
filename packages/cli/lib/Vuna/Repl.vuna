@@ -884,7 +884,9 @@ appendDecls st text = case parseSource replTempFile text of
     OkC stRemoved =>
       let
         targets = missingTargets newDecls (bufferSigNames stRemoved)
-      in if lenInt targets == 0 then pure (ReplContinue (withDefs stRemoved (appendLast stRemoved.stateDefs (mkBlock text False))))
+      in if lenInt targets == 0 then
+        pure
+          (ReplContinue (withDefs stRemoved (appendLast stRemoved.stateDefs (mkBlock text False))))
       else inferAndAppend st stRemoved text targets
   _ => evalText st text
 
@@ -1250,8 +1252,10 @@ else case chars of
       if next == 62 then c st "34" "=>" :: colorTypeTokens (fuel - 1) st rest2 else [c st "2" "="]
     [] => [c st "2" "="]
   else if char == 32 then " " :: colorTypeTokens (fuel - 1) st rest
-  else if char == 40 || char == 41 || char == 91 || char == 93 then c st "2" (strPack [char]) :: colorTypeTokens (fuel - 1) st rest
-  else if char == 123 || char == 125 || char == 44 || char == 58 then c st "2" (strPack [char]) :: colorTypeTokens (fuel - 1) st rest
+  else if char == 40 || char == 41 || char == 91 || char == 93 then
+    c st "2" (strPack [char]) :: colorTypeTokens (fuel - 1) st rest
+  else if char == 123 || char == 125 || char == 44 || char == 58 then
+    c st "2" (strPack [char]) :: colorTypeTokens (fuel - 1) st rest
   else strPack [char] :: colorTypeTokens (fuel - 1) st rest
 
 -- | 把一段类型文本按 token 着色后拼回单个串。
@@ -1266,7 +1270,8 @@ splitTopArrows text = splitTopArrowsGo (strUnpack text) 0 [] []
 splitTopArrowsGo : List Int -> Int -> List Int -> List String -> List String
 splitTopArrowsGo [] depth seg acc = reverse (trim (strPack (reverse seg)) :: acc)
 splitTopArrowsGo (char :: rest) depth seg acc = if char == 40 || char == 91 || char == 123 then splitTopArrowsGo rest (depth + 1) (char :: seg) acc
-else if char == 41 || char == 93 || char == 125 then splitTopArrowsGo rest (imax 0 (depth - 1)) (char :: seg) acc
+else if char == 41 || char == 93 || char == 125 then
+  splitTopArrowsGo rest (imax 0 (depth - 1)) (char :: seg) acc
 else if depth == 0 && char == 45 then case rest of
   next :: rest2 =>
     if next == 62 then splitTopArrowsGo rest2 0 [] (trim (strPack (reverse seg)) :: acc)
@@ -1337,7 +1342,8 @@ typeOpHint : String -> String
 typeOpHint text = case opTokenOf text of
   Nothing => ""
   Just op =>
-    if op == ">>" then "`>>` 是 do 派生语法（`a >> b` 展开为 `bind a (\\_ => b)`），不是独立值；可查 `:type (>>=)` 或 `:type bind`"
+    if op == ">>" then
+      "`>>` 是 do 派生语法（`a >> b` 展开为 `bind a (\\_ => b)`），不是独立值；可查 `:type (>>=)` 或 `:type bind`"
     else if memName op syntaxOps then "`${op}` 是语法符号，不能作为表达式"
     else "运算符不能直接作前缀表达式；加括号当值用：`:type (${op})`"
 
@@ -2080,7 +2086,8 @@ setEditingOpt st modeText = case parseMode modeText of
     pure (ReplContinue st)
   Just mode => do
     _ <-
-      if mode == 1 && not st.stateSettings.settingTty then printHint st "当前不是交互终端，行编辑不会生效"
+      if mode == 1 && not st.stateSettings.settingTty then
+        printHint st "当前不是交互终端，行编辑不会生效"
       else pure 0
     _ <- printOk st "editing = ${modeName mode}"
     pure (ReplContinue (withSettings st (settingsSetEditing st.stateSettings mode)))
@@ -2292,7 +2299,8 @@ else if c == 45 then case rest of
     if c2 == 45 then scanText rest2 3 depth brackets else scanText rest 0 depth brackets
   [] => ScanState 0 depth brackets
 else if c == 40 || c == 91 then scanText rest 0 depth (brackets + 1)
-else if c == 41 || c == 93 || c == 125 then scanText rest 0 depth (if brackets > 0 then brackets - 1 else 0)
+else if c == 41 || c == 93 || c == 125 then
+  scanText rest 0 depth (if brackets > 0 then brackets - 1 else 0)
 else scanText rest 0 depth brackets
 
 -- | 内部：字符串态——`\` 跳过下一个字符，`"` 回到正常态。
@@ -2310,7 +2318,8 @@ scanInBlock c rest depth brackets = if c == 123 then case rest of
   [] => ScanState 2 depth brackets
 else if c == 45 then case rest of
   c2 :: rest2 =>
-    if c2 == 125 then if depth <= 1 then scanText rest2 0 0 brackets else scanText rest2 2 (depth - 1) brackets
+    if c2 == 125 then
+      if depth <= 1 then scanText rest2 0 0 brackets else scanText rest2 2 (depth - 1) brackets
     else scanText rest 2 depth brackets
   [] => ScanState 2 depth brackets
 else scanText rest 2 depth brackets

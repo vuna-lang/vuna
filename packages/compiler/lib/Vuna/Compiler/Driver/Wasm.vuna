@@ -37,7 +37,8 @@ entryCapabilityWarnings target program = case program.irProgUnit.irUnitEntry of
 capWarnings : String -> List String -> List Diagnostic
 capWarnings target [] = []
 capWarnings target (tag :: rest) =
-  if isUnavailable (capabilityOf target tag) then targetEffectWarn target tag :: capWarnings target rest
+  if isUnavailable (capabilityOf target tag) then
+    targetEffectWarn target tag :: capWarnings target rest
   else capWarnings target rest
 
 isUnavailable : Capability -> Bool

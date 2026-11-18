@@ -171,7 +171,8 @@ else case pat of
     Nothing => tcErr1 sp (UnknownRecord name) name
     Just r =>
       if hasDuplicateFieldNames fields then ErrC (duplicateFieldMsg sp)
-      else if hasUnknownFields (recordFieldNames r.recordMetaFields) fields then ErrC (firstUnknownFieldMsg sp (recordFieldNames r.recordMetaFields) fields)
+      else if hasUnknownFields (recordFieldNames r.recordMetaFields) fields then
+        ErrC (firstUnknownFieldMsg sp (recordFieldNames r.recordMetaFields) fields)
       else Vuna.Compiler.Base.Common.bind
         (desugarRecordPatternFieldsFuel (fuel - 1) records r.recordMetaFields fields sp)
         (\ps => OkC (PCon r.recordMetaCtor ps sp))
@@ -225,7 +226,8 @@ else case e of
     Nothing => tcErr1 sp (UnknownRecord name) name
     Just r =>
       if hasDuplicateFieldNames fields then ErrC (duplicateFieldMsg sp)
-      else if hasUnknownFields (recordFieldNames r.recordMetaFields) fields then ErrC (firstUnknownFieldMsg sp (recordFieldNames r.recordMetaFields) fields)
+      else if hasUnknownFields (recordFieldNames r.recordMetaFields) fields then
+        ErrC (firstUnknownFieldMsg sp (recordFieldNames r.recordMetaFields) fields)
       else Vuna.Compiler.Base.Common.bind
         (desugarRecordValuesFuel (fuel - 1) records r.recordMetaFields fields sp)
         (\vs => OkC (EApp (EVar r.recordMetaCtor sp) vs sp))
@@ -268,7 +270,9 @@ else case lookupProvided f.recordFieldName provided of
 desugarFieldValueFuel : Int -> List RecordMeta -> Pair String Expr -> Check (Pair String Expr)
 desugarFieldValueFuel fuel records (Pair fname v) =
   if fuel <= 0 then icFuel "record desugar"
-  else Vuna.Compiler.Base.Common.bind (desugarExprFuel (fuel - 1) records v) (\v2 => OkC (Pair fname v2))
+  else
+    Vuna.Compiler.Base.Common.bind (desugarExprFuel (fuel - 1) records v)
+      (\v2 => OkC (Pair fname v2))
 
 desugarBindFuel : Int -> List RecordMeta -> Pair Pat Expr -> Check (Pair Pat Expr)
 desugarBindFuel fuel records (Pair pat value) =

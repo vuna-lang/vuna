@@ -71,13 +71,14 @@ searchInstFuel globals ctx fuel ec0 dom sp =
     in case localDictLookup ctx 0 dom ec of
       Just pair => OkC pair
       Nothing => if rigidSearchFast ec dom && not (viaCandidateExists ec dom) then missingInstance ec dom sp
-      else case matchInstances globals ctx fuel ec dom sp (specificInstances (searchCandidates ec dom)) [] of
-        Pair [] ec1 => case tryViaDict globals ctx (fuel - 1) ec1 dom sp of
-          OkC (Just pair) => OkC pair
-          OkC Nothing => case matchInstances globals ctx fuel ec1 dom sp (blanketInstances (searchCandidates ec dom)) [] of
-            Pair matches ec2 => finishInstanceSearch dom sp matches ec2
-          ErrC e => ErrC e
-        Pair matches ec1 => finishInstanceSearch dom sp matches ec1
+      else
+        case matchInstances globals ctx fuel ec dom sp (specificInstances (searchCandidates ec dom)) [] of
+          Pair [] ec1 => case tryViaDict globals ctx (fuel - 1) ec1 dom sp of
+            OkC (Just pair) => OkC pair
+            OkC Nothing => case matchInstances globals ctx fuel ec1 dom sp (blanketInstances (searchCandidates ec dom)) [] of
+              Pair matches ec2 => finishInstanceSearch dom sp matches ec2
+            ErrC e => ErrC e
+          Pair matches ec1 => finishInstanceSearch dom sp matches ec1
 
 -- ---------------------------------------------------------------
 -- `deriving via field` 的字典委托（通用 GND：class 集合由底层实例决定）
@@ -587,7 +588,8 @@ resolveRowGoalsCtxGo globals ctx sp ((c@(Constraint cid kind m dom cspan cdepth)
   False => case dictClassArgs ec dom of
     [] => resolveRowGoalsCtxGo globals ctx sp rest ec (c :: kept)
     args => if anyUnsolvedMetaArg ec args then resolveRowGoalsCtxGo globals ctx sp rest ec (c :: kept)
-    else if isRigidDictArg ec dom && allInstancesMono (ecInsts ec) then resolveRowGoalsCtxGo globals ctx sp rest ec (c :: kept)
+    else if isRigidDictArg ec dom && allInstancesMono (ecInsts ec) then
+      resolveRowGoalsCtxGo globals ctx sp rest ec (c :: kept)
     else case searchInstanceIn globals ctx ec (forceVal ec dom) sp of
       OkC (Pair instTerm ec1) => case solveMeta (ecDefTbl ec1) (ecSolsP ec1) 0 m [] (eval (ctxEnv ctx) instTerm) of
         OkC sols2 => resolveRowGoalsCtxGo globals ctx sp rest (ecPutSols ec1 (solsList sols2)) kept
@@ -755,7 +757,8 @@ piRigsOfInst ec g = piRigsOfInstGo g (ecInsts ec)
 piRigsOfInstGo : String -> List DtInst -> Maybe (List Rig)
 piRigsOfInstGo g [] = Nothing
 piRigsOfInstGo g (i :: rest) =
-  if dtInstName i == g then Just (append (map (\p => Rig0) i.dtInstTele) (map (\t => RigOmega) i.dtInstCtx))
+  if dtInstName i == g then
+    Just (append (map (\p => Rig0) i.dtInstTele) (map (\t => RigOmega) i.dtInstCtx))
   else piRigsOfInstGo g rest
 
 piRigsOfGlobal : Ec -> String -> List Rig
@@ -796,8 +799,9 @@ ctorParamKindsFuel : Int -> Ec -> Value -> Int -> List Value -> List Value
 ctorParamKindsFuel fuel ec v lvl acc = if fuel <= 0 then reverse acc
 else case v of
   VPi name implicit rig dom clo =>
-    if implicit then ctorParamKindsFuel (fuel - 1) ec (forceVal ec (applyClosure clo (VNeutral (NVar name lvl []))))
-      (lvl + 1) (dom :: acc)
+    if implicit then
+      ctorParamKindsFuel (fuel - 1) ec
+        (forceVal ec (applyClosure clo (VNeutral (NVar name lvl [])))) (lvl + 1) (dom :: acc)
     else reverse acc
   _ => reverse acc
 
@@ -936,7 +940,8 @@ isCmpMethod ec name =
 -- | 把 `Base.Num` 的方法投影映射回规范运算符名（`+` / `-` / `*` / `/`）；不是 Num 方法时返回 `Nothing`。
 export numMethodOpName : Ec -> String -> Maybe String
 numMethodOpName ec name =
-  if baseNameOf name == "+" || baseNameOf name == "add" || classHasProjection "Num" "add" name ec || classHasProjection "Num" "+" name ec then Just "+"
+  if baseNameOf name == "+" || baseNameOf name == "add" || classHasProjection "Num" "add" name ec || classHasProjection "Num" "+" name ec then
+    Just "+"
   else if classHasProjection "Num" "sub" name ec || classHasProjection "Num" "-" name ec then Just "-"
   else if classHasProjection "Num" "mul" name ec || classHasProjection "Num" "*" name ec then Just "*"
   else if classHasProjection "Num" "div" name ec || classHasProjection "Num" "/" name ec then Just "/"
@@ -1016,7 +1021,8 @@ specializeEqTy globals ctx name aTerm bTerm sp aTy ec = case builtinEqTyName (fo
     Just cls =>
       let
         mname =
-          if name == "==" || name == "/=" || name == "eq" || name == "neq" then projectionFor cls (eqMethodShortOf name)
+          if name == "==" || name == "/=" || name == "eq" || name == "neq" then
+            projectionFor cls (eqMethodShortOf name)
           else name
         -- 类型项必须按**当前上下文深度** quote：`quote 0` 会把刚性变量拍成 level 0，
         -- 字典的类参数就会指向错误的 binder（两个以上类型参数时提到别的参数上）。
@@ -1065,9 +1071,10 @@ cmpRuntimeName sp method "Float" =
   else if isLeShort method then OkC "bi_le_float"
   else if isGtShort method then OkC "bi_gt_float" else OkC "bi_ge_float"
 cmpRuntimeName sp method tyName =
-  if isBoolCanonical tyName then if isLtShort method then OkC "bi_lt_bool"
-  else if isLeShort method then OkC "bi_le_bool"
-  else if isGtShort method then OkC "bi_gt_bool" else OkC "bi_ge_bool"
+  if isBoolCanonical tyName then
+    if isLtShort method then OkC "bi_lt_bool"
+    else if isLeShort method then OkC "bi_le_bool"
+    else if isGtShort method then OkC "bi_gt_bool" else OkC "bi_ge_bool"
   else tcErr2 sp (OpNotDefinedFor method tyName) method tyName
 
 isLtShort : String -> Bool
@@ -1111,7 +1118,8 @@ specializeCmpTy globals ctx name aTerm bTerm sp aTy ec = case cmpBuiltinTyName (
     Just cls =>
       let
         mname =
-          if name == "<" || name == "<=" || name == ">" || name == ">=" || name == "lt" || name == "le" || name == "gt" || name == "ge" then projectionFor cls (cmpMethodShortOf name)
+          if name == "<" || name == "<=" || name == ">" || name == ">=" || name == "lt" || name == "le" || name == "gt" || name == "ge" then
+            projectionFor cls (cmpMethodShortOf name)
           else name
         tyTerm = quote (ctxDepth ctx) aTy
         dictTy = VNeutral (NGlobal (dictTypeName (dtClassName cls)) [aTy])

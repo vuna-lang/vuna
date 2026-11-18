@@ -173,32 +173,39 @@ itemsOfDecls table decls = dedupeItems (concatMap (itemsOfDecl table decls) decl
 itemsOfDecl : DocTable -> List Decl -> Decl -> List DocItem
 itemsOfDecl table decls (DSig name ctx ty sp) =
   if isPrivate name then []
-  else [ DocItem name "fun" "${name} : ${renderTypeInCtx ctx ty}" (docForDecl table name) (spanStartLine sp) []
-  ]
+  else
+    [ DocItem name "fun" "${name} : ${renderTypeInCtx ctx ty}" (docForDecl table name) (spanStartLine sp) []
+    ]
 itemsOfDecl table decls (DFun name pats body sp) =
   if isPrivate name || hasSig name decls then []
-  else [ DocItem name "fun" "${name} : ${renderType (EVar name sp)}" (docForDecl table name) (spanStartLine sp) []
-  ]
+  else
+    [ DocItem name "fun" "${name} : ${renderType (EVar name sp)}" (docForDecl table name) (spanStartLine sp) []
+    ]
 itemsOfDecl table decls (DData name params kind ctors derivings viaField repr lin sp) =
   if isPrivate name then []
-  else [ DocItem name "data" (dataSignature name params kind ctors derivings) (docForDecl table name) (spanStartLine sp) (ctorItems table name ctors)
-  ]
+  else
+    [ DocItem name "data" (dataSignature name params kind ctors derivings) (docForDecl table name) (spanStartLine sp) (ctorItems table name ctors)
+    ]
 itemsOfDecl table decls (DRecord name params fields derivings viaField repr lin sp) =
   if isPrivate name then []
-  else [ DocItem name "record" (recordSignature name params fields derivings) (docForDecl table name) (spanStartLine sp) (fieldItems table name fields)
-  ]
+  else
+    [ DocItem name "record" (recordSignature name params fields derivings) (docForDecl table name) (spanStartLine sp) (fieldItems table name fields)
+    ]
 itemsOfDecl table decls (DTrait name params supers methods sp) =
   if isPrivate name then []
-  else [ DocItem name "trait" (traitSignature name params supers methods) (docForDecl table name) (spanStartLine sp) (methodItems table name methods)
-  ]
+  else
+    [ DocItem name "trait" (traitSignature name params supers methods) (docForDecl table name) (spanStartLine sp) (methodItems table name methods)
+    ]
 itemsOfDecl table decls (DAxiom name ty sp) =
   if isPrivate name then []
-  else [ DocItem name "axiom" "axiom ${name} : ${renderType ty}" (docForDecl table name) (spanStartLine sp) []
-  ]
+  else
+    [ DocItem name "axiom" "axiom ${name} : ${renderType ty}" (docForDecl table name) (spanStartLine sp) []
+    ]
 itemsOfDecl table decls (DExtern name cName ty sp) =
   if isPrivate name then []
-  else [ DocItem name "extern" "extern ${name} : ${renderType ty}" (docForDecl table name) (spanStartLine sp) []
-  ]
+  else
+    [ DocItem name "extern" "extern ${name} : ${renderType ty}" (docForDecl table name) (spanStartLine sp) []
+    ]
 itemsOfDecl table decls (DInstance ctxE head methods sp) = []
 
 -- | 内部：声明表里是否有该名字的顶层签名。

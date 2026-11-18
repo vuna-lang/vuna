@@ -73,8 +73,9 @@ paragraphsGo : List String -> List String -> List (List String) -> List (List St
 paragraphsGo [] current acc =
   if length current == 0 then reverse acc else reverse (reverse current :: acc)
 paragraphsGo (l :: rest) current acc =
-  if trim l == "" then if length current == 0 then paragraphsGo rest [] acc
-  else paragraphsGo rest [] (reverse current :: acc)
+  if trim l == "" then
+    if length current == 0 then paragraphsGo rest [] acc
+    else paragraphsGo rest [] (reverse current :: acc)
   else paragraphsGo rest (l :: current) acc
 
 -- | 内部：过滤空串。

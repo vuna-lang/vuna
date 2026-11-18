@@ -36,7 +36,8 @@ export record FoldedRow(..) where
 -- `args.stack` 缺失/非法、空栈的采样直接跳过。
 export cpuSamplesOf : List (Pair Int ObsEvent) -> Check (List CpuSample)
 cpuSamplesOf rows =
-  if hasCpuSampleMissingTs rows then err "cpu sample event is missing integer field `ts` (run `vuna dev obs validate` on the trace)"
+  if hasCpuSampleMissingTs rows then
+    err "cpu sample event is missing integer field `ts` (run `vuna dev obs validate` on the trace)"
   else OkC (mapMaybe cpuSampleOf rows)
 
 -- | 内部：是否存在缺 `ts` 的 CPU 采样（严格模式据此整份报错）。
