@@ -27,7 +27,7 @@ fi
 # 多行形态：`err` 单独一行、字符串在下一行（grep -A1 的输出形如 file-line-content）。
 bad3=$(grep -rn -A1 -E '^[[:space:]]*err$' --include='*.vuna' packages/compiler/lib 2>/dev/null \
   | grep -E '^[^:]+-[0-9]+-[[:space:]]*"' \
-  | grep -Ev "/(${allowed})\\.vuna-" || true)
+  | grep -Ev "/(${allowed})-" || true)
 if [ -n "$bad3" ]; then
   echo "diag-raw: compiler diagnostics must be coded (multi-line err):" >&2
   printf '%s\n' "$bad3" >&2
