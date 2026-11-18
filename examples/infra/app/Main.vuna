@@ -5,7 +5,6 @@ import Base.Data.Pair as Pair
 import Base.Data.String as String
 import Vuna.Compiler.Loader.Addr
 import Vuna.Compiler.Frontend.Canonical.Ast
-import Vuna.Compiler.Frontend.Canonical.Lex
 import Vuna.Compiler.Frontend.Canonical.Pkg
 import Vuna.Compiler.Core.Canonical
 import Vuna.Compiler.Elab.Canonical
