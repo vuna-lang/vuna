@@ -17,6 +17,9 @@ import Vuna.Compiler.Wasm.Instr
 import Vuna.Compiler.Wasm.Model
 
 -- | Step 协议类型；由 wasm 模块在 full-CPS 模式发射。
+cat : List (List Instr) -> List Instr
+cat xs = concatMap (\x => x) xs
+
 export stepTypes : List WatType
 stepTypes =
   [ WatStructType "$step"
@@ -29,7 +32,10 @@ stepTypes =
         WatField False WvAnyRef,
         WatField False WvAnyRef
       ],
-    WatStructType "$runres" [WatField False WvI32, WatField False WvAnyRef, WatField False WvAnyRef]
+    WatStructType "$runres" [WatField False WvI32, WatField False WvAnyRef, WatField False WvAnyRef],
+    WatStructType "$hframe" [WatField False WvAnyRef, WatField False WvAnyRef, WatField False WvAnyRef, WatField False WvAnyRef, WatField False WvAnyRef, WatField False WvAnyRef],
+    WatStructType "$kctx" [WatField False WvAnyRef, WatField False WvAnyRef],
+    WatStructType "$kctx2" [WatField False WvAnyRef, WatField False WvAnyRef, WatField False WvAnyRef]
   ]
 
 -- | `@ir@step@done v`
@@ -72,8 +78,187 @@ rtStepAbort =
   rtFunc "$rt_stepAbort" [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef] [WvAnyRef] []
     [IConstI32 4, ILocalGet "$p0", ILocalGet "$p1", IRefNull, IRefNull, IRefNull, IRefNull, IRefNull, IStructNew "$step"]
 
+
+-- ---------------------------------------------------------------
+-- driver
+-- ---------------------------------------------------------------
+rtStepIdentity : WatFunc
+rtStepIdentity =
+  rtFunc "$rt_stepIdentity" [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef] [WvAnyRef] []
+    [ILocalGet "$p1", ICall "$rt_stepDone", IReturn]
+
+rtStepKDone : WatFunc
+rtStepKDone =
+  rtFunc "$rt_stepKDone" [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef] [WvAnyRef] []
+    [ILocalGet "$p0", ILocalGet "$p1", ICall "$rt_stepAbort", IReturn]
+
+rtStepKClo : WatFunc
+rtStepKClo =
+  rtFunc "$rt_stepKClo" [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef] [WvAnyRef] []
+    [ IRefFunc "$rt_stepKClo2", ILocalGet "$p0", IRefCast "$kctx", IStructGet "$kctx" 0,
+      ILocalGet "$p1", ILocalGet "$p0", IRefCast "$kctx", IStructGet "$kctx" 1,
+      IStructNew "$kctx2", IStructNew "$clo"
+    ]
+
+rtStepKClo2 : WatFunc
+rtStepKClo2 =
+  let
+    params = [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef]
+    locals = [Pair "$s" WvAnyRef, Pair "$r" WvAnyRef, Pair "$step" WvAnyRef, Pair "$res" WvAnyRef]
+    body =
+      [ ILocalGet "$p0", IRefCast "$kctx2", IStructGet "$kctx2" 0,
+        ILocalGet "$p0", IRefCast "$kctx2", IStructGet "$kctx2" 1,
+        ICall "$rt_apply", ILocalSet "$step",
+        ILocalGet "$step", ILocalGet "$p0", IRefCast "$kctx2", IStructGet "$kctx2" 2,
+        ICall "$rt_stepDrive", ILocalSet "$res",
+        ILocalGet "$res", IRefCast "$runres", IStructGet "$runres" 0,
+        IConstI32 0, IBinop "i32.eq",
+        IIf ""
+          [ ILocalGet "$p1", ILocalGet "$res", IRefCast "$runres", IStructGet "$runres" 1, ICall "$rt_apply", IReturn ]
+          [ ILocalGet "$res", IRefCast "$runres", IStructGet "$runres" 1,
+            ILocalGet "$res", IRefCast "$runres", IStructGet "$runres" 2, ICall "$rt_stepAbort", IReturn ]
+      ]
+  in rtFunc "$rt_stepKClo2" params [WvAnyRef] locals body
+
+rtStepHandleDone : WatFunc
+rtStepHandleDone =
+  let
+    params = [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef]
+    locals = [Pair "$f" WvAnyRef]
+    body =
+      [ ILocalGet "$p0", IRefCast "$hframe", ILocalSet "$f",
+        ILocalGet "$f", IStructGet "$hframe" 5, IGlobalSet "$g_stepHandlers",
+        ILocalGet "$f", IStructGet "$hframe" 2, ILocalGet "$p1", ICall "$rt_apply",
+        ILocalGet "$f", IStructGet "$hframe" 4, ICall "$rt_apply", IReturn
+      ]
+  in rtFunc "$rt_stepHandleDone" params [WvAnyRef] locals body
+
+rtStepWithin : WatFunc
+rtStepWithin =
+  let
+    params = [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef]
+    locals = [Pair "$cur" WvAnyRef]
+    body =
+      [ ILocalGet "$p1", ILocalSet "$cur",
+        IBlock "$done" ""
+          [ ILoop "$l" ""
+              [ ILocalGet "$cur", IPlain "ref.is_null",
+                IIf "" [IConstI32 0, IReturn] [INop],
+                ILocalGet "$cur", ILocalGet "$p0", IPlain "ref.eq",
+                IIf "" [IConstI32 1, IReturn] [INop],
+                ILocalGet "$cur", IRefCast "$hframe", IStructGet "$hframe" 5, ILocalSet "$cur",
+                IBr "$l"
+              ]
+          ],
+        IConstI32 0
+      ]
+  in rtFunc "$rt_stepWithin" params [WvI32] locals body
+
+rtStepDrive : WatFunc
+rtStepDrive =
+  let
+    params = [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef]
+    locals =
+      [ Pair "$s" WvAnyRef, Pair "$tag" WvI32, Pair "$cur" WvAnyRef, Pair "$f" WvAnyRef,
+        Pair "$kctx" WvAnyRef, Pair "$kclo" WvAnyRef, Pair "$kdone" WvAnyRef,
+        Pair "$step2" WvAnyRef, Pair "$res" WvAnyRef, Pair "$target" WvAnyRef,
+        Pair "$val" WvAnyRef
+      ]
+    popTo =
+      [ ILocalGet "$target", IRefCast "$hframe", IStructGet "$hframe" 5, IGlobalSet "$g_stepHandlers" ]
+    body =
+      [ ILocalGet "$p0", ILocalSet "$s", ILocalGet "$p1", ILocalSet "$cur",
+        ILoop "$l" ""
+          [ ILocalGet "$s", IRefCast "$step", IStructGet "$step" 0, ILocalSet "$tag",
+            ILocalGet "$tag", IConstI32 0, IBinop "i32.eq",
+            IIf ""
+              [ IConstI32 0, ILocalGet "$s", IRefCast "$step", IStructGet "$step" 1, IRefNull,
+                IStructNew "$runres", IReturn
+              ]
+              [INop],
+            ILocalGet "$tag", IConstI32 4, IBinop "i32.eq",
+            IIf ""
+              [ ILocalGet "$s", IRefCast "$step", IStructGet "$step" 1, ILocalSet "$target",
+                ILocalGet "$s", IRefCast "$step", IStructGet "$step" 2, ILocalSet "$val",
+                ILocalGet "$target", ILocalGet "$cur", ICall "$rt_stepWithin",
+                IIf ""
+                  (cat [ popTo,
+                    [ ILocalGet "$target", IRefCast "$hframe", IStructGet "$hframe" 4,
+                      ILocalGet "$val", ICall "$rt_apply", ILocalSet "$s",
+                      ILocalGet "$target", IRefCast "$hframe", IStructGet "$hframe" 5, ILocalSet "$cur"
+                    ] ])
+                  [ IConstI32 1, ILocalGet "$target", ILocalGet "$val", IStructNew "$runres", IReturn ],
+                IBr "$l"
+              ]
+              [INop],
+            ILocalGet "$tag", IConstI32 2, IBinop "i32.eq",
+            IIf ""
+              [ ILocalGet "$s", IRefCast "$step", IStructGet "$step" 1,
+                ILocalGet "$s", IRefCast "$step", IStructGet "$step" 2,
+                ILocalGet "$s", IRefCast "$step", IStructGet "$step" 3,
+                ILocalGet "$s", IRefCast "$step", IStructGet "$step" 4,
+                ILocalGet "$s", IRefCast "$step", IStructGet "$step" 7,
+                IGlobalGet "$g_stepHandlers",
+                IStructNew "$hframe", ILocalSet "$f",
+                ILocalGet "$f", IGlobalSet "$g_stepHandlers",
+                IRefFunc "$rt_stepHandleDone", ILocalGet "$f", IStructNew "$clo", ILocalSet "$kclo",
+                ILocalGet "$s", IRefCast "$step", IStructGet "$step" 5,
+                ILocalGet "$s", IRefCast "$step", IStructGet "$step" 6,
+                ICall "$rt_apply", ILocalGet "$kclo", ICall "$rt_apply", ILocalSet "$step2",
+                ILocalGet "$step2", ILocalGet "$f", ICall "$rt_stepDrive", ILocalSet "$res",
+                ILocalGet "$res", IRefCast "$runres", IStructGet "$runres" 0, IConstI32 0, IBinop "i32.eq",
+                IIf "" [ILocalGet "$res", IReturn] [ILocalGet "$res", IReturn]
+              ]
+              [INop],
+            ILocalGet "$tag", IConstI32 1, IBinop "i32.eq",
+            IIf ""
+              [ IGlobalGet "$g_stepHandlers", ILocalSet "$cur",
+                IBlock "$found" ""
+                  [ ILoop "$j" ""
+                      [ ILocalGet "$cur", IPlain "ref.is_null",
+                        IIf "" [IUnreachable] [INop],
+                        ILocalGet "$cur", IRefCast "$hframe", IStructGet "$hframe" 0,
+                        ILocalGet "$s", IRefCast "$step", IStructGet "$step" 1,
+                        ICall "$rt_eqStr", IRefCast "i31", II31GetU,
+                        ILocalGet "$cur", IRefCast "$hframe", IStructGet "$hframe" 1,
+                        ILocalGet "$s", IRefCast "$step", IStructGet "$step" 2,
+                        ICall "$rt_eqStr", IRefCast "i31", II31GetU,
+                        IBinop "i32.and",
+                        IIf "" [IBr "$found"] [INop],
+                        ILocalGet "$cur", IRefCast "$hframe", IStructGet "$hframe" 5, ILocalSet "$cur",
+                        IBr "$j"
+                      ]
+                  ],
+                ILocalGet "$cur", ILocalSet "$f",
+                ILocalGet "$s", IRefCast "$step", IStructGet "$step" 3, ILocalSet "$kctx",
+                IRefFunc "$rt_stepKClo", ILocalGet "$kctx", IStructNew "$clo", ILocalSet "$kclo",
+                IRefFunc "$rt_stepKDone", ILocalGet "$f", IStructNew "$clo", ILocalSet "$kdone",
+                ILocalGet "$f", IStructGet "$hframe" 3,
+                ILocalGet "$s", IRefCast "$step", IStructGet "$step" 3,
+                ICall "$rt_apply", ILocalGet "$kclo", ICall "$rt_apply", ILocalGet "$kdone", ICall "$rt_apply",
+                ILocalSet "$s",
+                IBr "$l"
+              ]
+              [INop],
+            IUnreachable
+          ]
+      ]
+  in rtFunc "$rt_stepDrive" params [WvAnyRef] locals body
+
+rtStepRun : WatFunc
+rtStepRun =
+  let
+    params = [Pair "$p0" WvAnyRef]
+    locals = [Pair "$res" WvAnyRef]
+    body =
+      [ ILocalGet "$p0", IRefNull, ICall "$rt_stepDrive", ILocalSet "$res",
+        ILocalGet "$res", IRefCast "$runres", IStructGet "$runres" 0, IConstI32 0, IBinop "i32.eq",
+        IIf "" [ILocalGet "$res", IRefCast "$runres", IStructGet "$runres" 1, IReturn] [IUnreachable]
+      ]
+  in rtFunc "$rt_stepRun" params [WvAnyRef] locals body
+
 export stepFunctions : List WatFunc
-stepFunctions = [rtStepDone, rtStepPerform, rtStepHandle, rtStepSelf, rtStepAbort]
+stepFunctions = [rtStepDone, rtStepPerform, rtStepHandle, rtStepSelf, rtStepAbort, rtStepIdentity, rtStepKDone, rtStepKClo, rtStepKClo2, rtStepHandleDone, rtStepWithin, rtStepDrive, rtStepRun]
 
 rtFunc : String -> List (Pair String WatValTy) -> List WatValTy -> List (Pair String WatValTy) -> List Instr -> WatFunc
 rtFunc name params results locals body = WatFunc name "" params results locals body
