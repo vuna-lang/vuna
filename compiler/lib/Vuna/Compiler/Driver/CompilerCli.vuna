@@ -529,8 +529,11 @@ else if o.optDiagFormat == "github" then do
   pure (Pair (diagExitFor d) o)
 else do
   -- short：首行保持 `error: [pkg] file:line:col: [CODE] 消息`；片段从 label 结构化渲染。
+  -- 终止性的 call 边另起若干行，否则「证不出终止性」这句话没有可操作信息。
   snippet <- renderShortSnippetEff d
-  _ <- printErrText (severityLabelOf d ++ ": " ++ extra ++ renderShort d ++ snippet ++ "\n")
+  _ <-
+    printErrText
+      (severityLabelOf d ++ ": " ++ extra ++ renderShort d ++ snippet ++ callFieldSuffix d.diagFields ++ "\n")
   pure (Pair (diagExitFor d) o)
 
 -- sarif/json 诊断收集（写回 CliOpts，显式 state 传递）。

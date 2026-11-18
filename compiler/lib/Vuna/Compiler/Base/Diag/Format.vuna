@@ -529,6 +529,23 @@ fieldLine (FieldModule s) = "  = module: ${s}"
 fieldLine (FieldSpan s sp) = "  = span: ${s} at ${showSpanLoc sp}"
 fieldLine (FieldNote s) = "  = note: ${s}"
 
+-- | 只渲染终止性的 call 边：`short` 格式下一条错误至少要说明是哪个调用、缺什么，
+-- 否则单文件 `vuna check` 只剩「证不出终止性」这句话。
+export callFieldBlock : List DiagField -> String
+callFieldBlock ds = join "\n" (map fieldLine (callFieldsOf ds))
+
+-- | `short` 格式的后缀：有 call 边时另起一行块，没有时为空串。
+export callFieldSuffix : List DiagField -> String
+callFieldSuffix ds = case callFieldsOf ds of
+  [] => ""
+  _ => "\n" ++ callFieldBlock ds
+
+callFieldsOf : List DiagField -> List DiagField
+callFieldsOf [] = []
+callFieldsOf (d :: rest) = case d of
+  FieldCall c => d :: callFieldsOf rest
+  _ => callFieldsOf rest
+
 traceLines : Int -> List TraceFrame -> List String
 traceLines depth [] = []
 traceLines depth (t :: rest) =
