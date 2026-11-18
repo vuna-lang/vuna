@@ -52,11 +52,16 @@ main = do
   _ <- prim_eff_print (("canon-int-42 " ++ encConcat (encInt 42 [])) ++ "\n")
   _ <- prim_eff_print (("canon-str-abc " ++ encConcat (encStr "abc" [])) ++ "\n")
   _ <- prim_eff_print (("cst-sample " ++ verdict (roundtripOk sample)) ++ "\n")
+  _ <- prim_eff_print (("cst-tree " ++ verdict (treeRoundtripOk sample)) ++ "\n")
+  _ <- prim_eff_print (("cst-tree-shape " ++ verdict treeShapeSample) ++ "\n")
   src <- prim_eff_getenv "INFRA_SRC"
   pathOk <- prim_eff_fileExists src
   raw <- if pathOk then prim_eff_readFile src else pure ""
   _ <-
     prim_eff_print (("cst-file " ++ (if pathOk then verdict (roundtripOk raw) else "skip")) ++ "\n")
+  _ <-
+    prim_eff_print
+      (("cst-tree-file " ++ (if pathOk then verdict (treeRoundtripOk raw) else "skip")) ++ "\n")
   _ <- prim_eff_print (("canon-term-rt " ++ verdict termFixturesRT) ++ "\n")
   _ <- prim_eff_print (("canon-decl-rt " ++ verdict (declsRT declFixtures)) ++ "\n")
   _ <- prim_eff_print (("canon-defs-rt " ++ verdict defsRT) ++ "\n")
@@ -114,6 +119,15 @@ joinInts xs = join "," (map strFromInt xs)
 verdict : Bool -> String
 verdict True = "ok"
 verdict False = "fail"
+
+-- | 节点树结构：样例的顶层节点是文件根，children 是 7 个顶层声明。
+treeShapeSample : Bool
+treeShapeSample = case lexCst sample of
+  Nothing => False
+  Just toks =>
+    let
+      tree = buildCst toks
+    in nodeKindTag tree == "file" && listLen (nodeChildren tree) == 7
 
 -- ---------------------------------------------------------------
 -- TOML 断言辅助

@@ -21,7 +21,10 @@ out-contains: canon-int-42 i42;
 out-contains: canon-str-abc s3:abc
 # 无损 CST：字符串夹具 + 真实源码文件（Hash.vuna）都必须逐字节 roundtrip。
 out-contains: cst-sample ok
+out-contains: cst-tree ok
+out-contains: cst-tree-shape ok
 out-contains: cst-file ok
+out-contains: cst-tree-file ok
 
 
 

@@ -1,13 +1,20 @@
--- | 无损 CST 词法层：把源码切成携带前置 trivia 的 token 流，`renderCst` 可逐字节还原。
+-- | 无损 CST：携带前置 trivia 的 token 流，外加一层由缩进与括号决定的节点树。
 module Vuna.Compiler.Frontend.Cst where
 
--- Vuna.Compiler.Frontend.Cst：**无损**词法层（token 流 + trivia），不做语法分析。
+-- Vuna.Compiler.Frontend.Cst：**无损**具体语法层（token + trivia + 节点树）。
 --
 -- 为什么需要它（宏/工具的 span 来源）：parser 只把 span 写进 AST，注释与原始空白
 -- 在 parser 里被丢弃；格式化器、LSP、重构与**宏展开**都需要「源码原文 + 每个 token 的
 -- 精确 span + 注释归属」。把这些信息在词法层一次性物化成 CST（token 携带其前置
 -- trivia），工具侧就不必再从字节偏移反推文本，宏也能直接拿原始片段做 span 映射。
--- 本模块只做词法：token 流 + trivia 已足够还原源码，不建树。
+--
+-- 两层表示：
+--   * token 流（`lexCst`）：无损还原的最小信息，LSP 等只要 token 的消费者用这一层；
+--   * 节点树（`buildCst`）：在 token 流之上按**布局**（行首缩进）与括号配对建节点，
+--     每个节点只有 kind / span / children，叶节点就是 token。offside 布局规则
+--     （`canContinue` / 块起始列）在本模块实现一次，parser 与格式化器共用。
+-- 节点树不复制 token 文本：叶节点直接持有 `CstToken`，所以 `renderCstTree` 与
+-- `renderCst` 对同一份源码逐字节一致。
 --
 -- **核心不变量**：对任意 `lexSource` 成功的源码 s，`renderCst (lexCst s) == s`，
 -- 即「所有 trivia 文本按顺序拼接 + 所有 token 原文拼接 == s」。为守住它：
@@ -303,3 +310,227 @@ export roundtripOk : String -> Bool
 roundtripOk s = case lexCst s of
   Nothing => False
   Just toks => renderCst toks == s
+
+-- ---------------------------------------------------------------
+-- 节点树
+-- ---------------------------------------------------------------
+-- | 节点种类：文件根、顶层声明、缩进块、括号组。叶节点是 token，没有 kind。
+export data CstKind(..) : Type where
+  -- | 文件根（children 是顶层声明）。
+  CstFileKind : CstKind
+  -- | 行首缩进开启的布局块。
+  CstBlockKind : CstKind
+  -- | 顶层声明（根的直接子节点）。
+  CstDeclKind : CstKind
+  -- | `(` / `[` / `{` 括号组。
+  CstGroupKind : CstKind
+
+-- | 节点：叶是 token，分支是 kind + span + 有序 children。
+export data CstNode(..) : Type where
+  -- | 叶：一个 token（含其前置 trivia）。
+  CstLeaf : CstToken -> CstNode
+  -- | 分支：kind / span / 按源码顺序排列的 children。
+  CstBranch : CstKind -> Span -> List CstNode -> CstNode
+
+-- | 节点的 span（叶取 token span）。
+export nodeSpan : CstNode -> Span
+nodeSpan (CstLeaf t) = t.cstSpan
+nodeSpan (CstBranch _ sp _) = sp
+
+-- | 节点的 kind；叶节点给 `Nothing`。
+export nodeKind : CstNode -> Maybe CstKind
+nodeKind (CstLeaf _) = Nothing
+nodeKind (CstBranch k _ _) = Just k
+
+-- | 节点的 children；叶节点为空列表。
+export nodeChildren : CstNode -> List CstNode
+nodeChildren (CstLeaf _) = []
+nodeChildren (CstBranch _ _ kids) = kids
+
+-- | 叶 token；分支给 `Nothing`。
+export nodeToken : CstNode -> Maybe CstToken
+nodeToken (CstLeaf t) = Just t
+nodeToken (CstBranch _ _ _) = Nothing
+
+-- | 节点种类的短名（`"file"` / `"decl"` / `"block"` / `"group"`，叶为 `"leaf"`）；
+-- 工具侧做结构断言与 dump 时不需要对 `CstKind` 自建相等。
+export nodeKindTag : CstNode -> String
+nodeKindTag (CstLeaf _) = "leaf"
+nodeKindTag (CstBranch k _ _) = cstKindTag k
+
+cstKindTag : CstKind -> String
+cstKindTag CstFileKind = "file"
+cstKindTag CstDeclKind = "decl"
+cstKindTag CstBlockKind = "block"
+cstKindTag CstGroupKind = "group"
+
+-- ---------------------------------------------------------------
+-- 布局 + 括号分组
+-- ---------------------------------------------------------------
+-- | 建树时打开的节点：尚未定 span 的分支。
+record Frame where
+  frameKind : CstKind
+  frameCol : Int
+  frameStart : Pos
+  frameEnd : Pos
+  frameKids : List CstNode
+  frameStarted : Bool
+  frameClose : String
+
+-- | 叶节点并进 frame（children 逆序累积；span 取首 token 起点到末 token 终点）。
+attachLeaf : CstToken -> Frame -> Frame
+attachLeaf t f =
+  let
+    sp = t.cstSpan
+    start = Pos (spanStartLine sp) (spanStartCol sp) (spanStartOffset sp) (spanStartOffset sp)
+    end = Pos (spanEndLine sp) (spanEndCol sp) (spanEndOffset sp) (spanEndOffset sp)
+  in Frame f.frameKind f.frameCol (if f.frameStarted then f.frameStart else start) end
+    (CstLeaf t :: f.frameKids) True f.frameClose
+
+-- | 叶节点并进栈顶 frame（栈为空时原样返回）。
+attachLeafTop : CstToken -> List Frame -> List Frame
+attachLeafTop t (f :: rest) = attachLeaf t f :: rest
+attachLeafTop t [] = []
+
+-- | 关闭一个 frame：children 反转成源码顺序，span 由累积的首尾位置给出。
+closeFrame : Frame -> CstNode
+closeFrame f =
+  CstBranch f.frameKind
+    (Span "" (posLine f.frameStart) (posCol f.frameStart) (posLine f.frameEnd) (posCol f.frameEnd) (posOffset f.frameStart) (posOffset f.frameEnd))
+    (reverse f.frameKids)
+
+-- | 子节点并进父 frame（子节点已按源码顺序）。
+attachNode : CstNode -> Frame -> Frame
+attachNode node f =
+  let
+    sp = nodeSpan node
+    start = Pos (spanStartLine sp) (spanStartCol sp) (spanStartOffset sp) (spanStartOffset sp)
+    end = Pos (spanEndLine sp) (spanEndCol sp) (spanEndOffset sp) (spanEndOffset sp)
+  in Frame f.frameKind f.frameCol (if f.frameStarted then f.frameStart else start) end
+    (node :: f.frameKids) True f.frameClose
+
+-- | 关闭栈顶 frame，把结果并入父 frame。
+closeTop : List Frame -> List Frame
+closeTop (f :: parent :: rest) = attachNode (closeFrame f) parent :: rest
+closeTop frames = frames
+
+-- | 关掉所有缩进块（当前 token 列小于块的起始列）。
+closeBlocks : Int -> Int -> List Frame -> List Frame
+closeBlocks fuel col frames = if fuel <= 0 then frames
+else case frames of
+  f :: parent :: rest =>
+    if kindIsBlock f.frameKind && col < f.frameCol then
+      closeBlocks (fuel - 1) col (attachNode (closeFrame f) parent :: rest)
+    else frames
+  _ => frames
+
+-- | 关掉顶层声明（当前 token 列不大于声明的起始列）。
+closeDecls : Int -> Int -> List Frame -> List Frame
+closeDecls fuel col frames = if fuel <= 0 then frames
+else case frames of
+  f :: parent :: rest =>
+    if kindIsDecl f.frameKind && col <= f.frameCol then
+      closeDecls (fuel - 1) col (attachNode (closeFrame f) parent :: rest)
+    else frames
+  _ => frames
+
+kindIsBlock : CstKind -> Bool
+kindIsBlock CstBlockKind = True
+kindIsBlock _ = False
+
+kindIsDecl : CstKind -> Bool
+kindIsDecl CstDeclKind = True
+kindIsDecl _ = False
+
+kindIsGroup : CstKind -> Bool
+kindIsGroup CstGroupKind = True
+kindIsGroup _ = False
+
+kindIsFile : CstKind -> Bool
+kindIsFile CstFileKind = True
+kindIsFile _ = False
+
+-- | 行首 token 的布局处理：先按列关闭块/声明，再按相对列打开新块或新声明。
+layoutStep : Int -> List Frame -> List Frame
+layoutStep col frames =
+  let
+    f1 = closeBlocks 4096 col frames
+    f2 = closeDecls 4096 col f1
+  in case f2 of
+    f :: rest =>
+      if kindIsGroup f.frameKind then f2
+      else if kindIsFile f.frameKind then Frame CstDeclKind col (Pos 1 1 0 0) (Pos 1 1 0 0) [] False "" :: f2
+      else if col > f.frameCol then Frame CstBlockKind col (Pos 1 1 0 0) (Pos 1 1 0 0) [] False "" :: f2
+      else f2
+    [] => f2
+
+-- | 开括号 → 对应的闭括号。
+groupCloseOf : String -> Maybe String
+groupCloseOf "(" = Just ")"
+groupCloseOf "[" = Just "]"
+groupCloseOf "{" = Just "}"
+groupCloseOf _ = Nothing
+
+-- | token 原文是否等于给定符号（`cstText` 对符号就是原文）。
+isSymText : String -> CstToken -> Bool
+isSymText s t = t.cstText == s
+
+-- | 当前 token 是否在源码里另起一行（首 token 恒为「新行」）。
+isLineStart : Int -> CstToken -> Bool
+isLineStart prevLine t = spanStartLine t.cstSpan > prevLine
+
+-- | 逐 token 建树：括号组优先闭合，其次处理行首布局，最后并入叶节点。
+buildFrames : Int -> List Frame -> Int -> List CstToken -> List Frame
+buildFrames fuel frames prevLine toks = if fuel <= 0 then frames
+else case toks of
+  [] => frames
+  t :: rest => case frames of
+    [] => buildFrames (fuel - 1) frames prevLine rest
+    f :: topRest => if kindIsGroup f.frameKind && isSymText f.frameClose t then
+      buildFrames (fuel - 1) (closeTop (attachLeafTop t frames)) (spanStartLine t.cstSpan) rest
+    else
+      let
+        line = spanStartLine t.cstSpan
+        frames1 =
+          if isLineStart prevLine t && not (t.cstTag == "eof") then layoutStep (spanStartCol t.cstSpan) frames
+          else frames
+      in case groupCloseOf t.cstText of
+        Just close =>
+          buildFrames (fuel - 1)
+            (attachLeafTop t (Frame CstGroupKind 0 (Pos 1 1 0 0) (Pos 1 1 0 0) [] False close :: frames1))
+            line rest
+        Nothing => buildFrames (fuel - 1) (attachLeafTop t frames1) line rest
+
+-- | 关闭剩余 frame，留下文件根。
+closeAll : Int -> List Frame -> List Frame
+closeAll fuel frames = if fuel <= 0 then frames
+else case frames of
+  [f] => [f]
+  _ => closeAll (fuel - 1) (closeTop frames)
+
+-- | token 流 → 节点树（根是 `CstFileKind`）。空流得到空根。
+export buildCst : List CstToken -> CstNode
+buildCst toks =
+  let
+    root = Frame CstFileKind 1 (Pos 1 1 0 0) (Pos 1 1 0 0) [] False ""
+    fuel = cstTokCount toks * 4 + 64
+    frames = closeAll fuel (buildFrames fuel [root] 0 toks)
+  in case frames of
+    f :: rest => closeFrame f
+    [] => CstBranch CstFileKind (Span "" 1 1 1 1 0 0) []
+
+-- | token 数量（`List.length` 给 `Nat`，建树 fuel 要 `Int`）。
+cstTokCount : List CstToken -> Int
+cstTokCount [] = 0
+cstTokCount (t :: rest) = 1 + cstTokCount rest
+
+-- | 节点树逐字节还原源码（叶按源码顺序输出前置 trivia + token 原文）。
+export renderCstTree : CstNode -> String
+renderCstTree (CstLeaf t) = strConcatMany (renderParts t)
+renderCstTree (CstBranch _ _ kids) = strConcatMany (map renderCstTree kids)
+
+-- | `renderCstTree (buildCst (lexCst s)) == s`；词法失败时为 `False`。
+export treeRoundtripOk : String -> Bool
+treeRoundtripOk s = case lexCst s of
+  Nothing => False
+  Just toks => renderCstTree (buildCst toks) == s
