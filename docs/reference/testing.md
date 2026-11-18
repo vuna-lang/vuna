@@ -459,7 +459,17 @@ golden/runtime case 的 codegen 产物按「生成模块集」分桶（`set-<key
 `vuna-obs-schema`、`vuna-static`、`vuna-tests-e2e`、`vuna-tests-gate`、
 `vuna-tests-native`、`vuna-tests-wasm`、`vuna-tests-wasm-js`、`vuna-wasm-browser`、
 `vuna-typecheck`；主体是 `nix/checks/<name>.sh`，共享实现与并入门禁的实现放在
-`nix/checks/lib/`）。语义项：
+`nix/checks/lib/`）。
+
+CI 把它拆成三个 job（`.github/workflows/ci.yml`）：`flake-check` 跑除 suite 长尾之外的
+全部 check（外加 `nix flake check --no-build` 求值），`tests-gate` 与 `tests-e2e` 各占
+一个 runner、`CI_JOBS=1` 把自己的 4 核全给 suite。单 job 只有 4 核（`--max-jobs 2
+--cores 2`），而 gate / e2e 各自就能吃满 4 核，拆开后长尾不再共享核、其余 check 也不再
+排在它们后面。只有 `flake-check` 写 Nix store cache，另外两个 job 只读（`save: false`），
+避免同一 sha 上多份同样的 store 挤占配额。分组用 `nix/ci.sh` 的 `CI_CHECKS` /
+`CI_EXCLUDE`（按 flake 求值枚举，新增 check 不用手工同步列表）。
+
+语义项：
 
 - `seed-selfhost`：seed→stage0→stage1→stage2 逐字节一致、TCB 黑名单、seed 完整 allowlist、闭包数量、增量构建、
   行为抽查与 seed 滞后报告（不阻塞）；
@@ -565,6 +575,8 @@ nix build                  # 默认 = vuna；.#vuna-compiler / .#vuna-seed 同�
 nix flake check            # 全部 checks
 sh nix/ci.sh               # CI 统一入口；CI_TOKENS（默认 nproc）/ CI_JOBS（默认 2）决定
                            # 每个 derivation 的 cores（默认 2×8）；gate/e2e 共享该预算
+CI_CHECKS="vuna-tests-gate" sh nix/ci.sh    # 只构建列出的 check
+CI_EXCLUDE="vuna-tests-gate vuna-tests-e2e" sh nix/ci.sh  # 构建其余全部 check
 nix develop                # 全量开发环境（工具链 + vuna-seed）；.#ocaml 只有 OCaml 工具链
 nix build .#vuna --out-link result-vuna      # 产品 CLI（stage 1）
 nix build .#vuna-compiler --out-link result-compiler  # 编译器 CLI（stage 1）

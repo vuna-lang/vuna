@@ -8,7 +8,7 @@
 | `checks/` | CI 门禁：`default.nix` 声明 check 与源集合，`*.sh` 是入口脚本，`lib/` 是共享实现，`data/` 是基线 / 白名单 / 预算 |
 | `seed/` | seed rotation 与 TCB 断言：`rotate.sh`、`tcb-check.sh`、`tcb-allowlist.sh`、`forbidden.txt`、`files.txt`、`rotation.txt` |
 | `tools/` | 非门禁的开发工具：`metrics.sh`、`context-budget.sh`、`obs.sh`、`backend-check.sh`（跨编译器 conformance，`nix run .#backend-check`） |
-| `ci.sh` | CI 单一入口：`nix flake check`，`--bench` 额外跑软性能检查 |
+| `ci.sh` | CI 单一入口：`nix flake check`，`--bench` 额外跑软性能检查；`CI_CHECKS` / `CI_EXCLUDE` 供 CI 把 check 拆到多个 runner |
 
 ## 约定
 

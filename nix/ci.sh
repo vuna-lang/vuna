@@ -7,6 +7,9 @@
 #   sh nix/ci.sh --bench      # flake check 通过后再跑
 #                             #   nix run .#vuna-bench -- --check
 #                             # 性能检查是软告警（WARN/非零退出都不阻断 CI）
+#   CI_CHECKS="a b" sh nix/ci.sh      # 只构建列出的 check（空格分隔）
+#   CI_EXCLUDE="a b" sh nix/ci.sh     # 构建除这些之外的全部 check
+#                                     # 两者用于 CI 把 check 拆到多个 runner 并行
 #
 # 固定三件事，避免本地/CI 口径漂移：
 #   - 关闭 eval cache：并行/多 worktree 下 eval-cache 可能返回旧求值结果；
@@ -40,6 +43,40 @@ case "$JOBS" in ""|*[!0-9]*) JOBS=2 ;; esac
 CORES=$((TOKENS / JOBS))
 [ "$CORES" -ge 1 ] || CORES=1
 export CI_TOKENS="$TOKENS" CI_JOBS="$JOBS" CI_CORES="$CORES"
+
+# 拆 job / 拆机器：CI_CHECKS（空格分隔的属性名）只构建这些 check；CI_EXCLUDE
+# 构建除这些之外的全部 check。两者都空 = 全量 `nix flake check`（本地默认）。
+# 用途是把互不依赖的 check 分配到不同 runner 并行（各自 4 核），单机 4 核时
+# 瓶颈是 suite 的两条长尾（见 docs/reference/testing.md「Nix checks 清单」）。
+# 枚举走 flake 求值，新增 check 不需要同步维护列表。
+SYSTEM=${CI_SYSTEM:-x86_64-linux}
+check_attr() { printf '.#checks.%s.%s' "$SYSTEM" "$1"; }
+select_checks() {
+  if [ -n "${CI_CHECKS:-}" ]; then
+    # shellcheck disable=SC2086  # 按空格切成属性名
+    printf '%s\n' $CI_CHECKS
+  else
+    env NIX_CONFIG="$NIX_CONF" nix eval --raw ".#checks.$SYSTEM" \
+      --apply 'cs: builtins.concatStringsSep " " (builtins.attrNames cs)' |
+      tr ' ' '\n' | while IFS= read -r name; do
+        case " ${CI_EXCLUDE:-} " in
+          *" $name "*) continue ;;
+        esac
+        printf '%s\n' "$name"
+      done
+  fi
+}
+if [ -n "${CI_CHECKS:-}" ] || [ -n "${CI_EXCLUDE:-}" ]; then
+  [ "$#" -eq 0 ] || { printf 'ci: CI_CHECKS/CI_EXCLUDE 不接受位置参数\n' >&2; exit 2; }
+  set --
+  # shellcheck disable=SC2046  # 按空格切成属性名
+  for name in $(select_checks); do
+    set -- "$@" "$(check_attr "$name")"
+  done
+  [ "$#" -gt 0 ] || { printf 'ci: 选中的 check 为空\n' >&2; exit 2; }
+  printf 'ci: building %s check(s)\n' "$#"
+  exec env NIX_CONFIG="$NIX_CONF" nix build --keep-going --max-jobs "$JOBS" --cores "$CORES" --no-link "$@"
+fi
 
 bench=0
 # 重建参数表：吃掉 --bench，其余原样透传（保留带空格的参数）。
