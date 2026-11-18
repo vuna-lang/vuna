@@ -1,16 +1,34 @@
--- | 应用常用数据门面：按命名空间路径访问核心数据类型与 helper。
+-- | 数据门面：核心数据类型与 helper。既扁平重导出（`import Base.Data` 直接用名字），
+-- 也提供命名空间路径（`import Base.Data.List as List`，按模块名区分同名操作）。
 module Base.Data where
 
+export module Base.Pair
 export module Base.Pair as Pair
+export module Base.Bool
 export module Base.Bool as Bool
+export module Base.List
 export module Base.List as List
+export module Base.Maybe
 export module Base.Maybe as Maybe
+export module Base.Result
 export module Base.Result as Result
+export module Base.String
 export module Base.String as String
+export module Base.Unit
 export module Base.Unit as Unit
+export module Base.Vec
 export module Base.Vec as Vec
+export module Base.Nat
 export module Base.Nat as Nat
+export module Base.Int
 export module Base.Int as Int
+export module Base.Float
 export module Base.Float as Float
+export module Base.Bits
 export module Base.Bits as Bits
+export module Base.Sort
 export module Base.Sort as Sort
+export module Base.Obs
+export module Base.Obs as Obs
+export module Base.Obs.Span
+export module Base.Obs.Span as ObsSpan

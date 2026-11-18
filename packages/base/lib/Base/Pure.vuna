@@ -1,7 +1,0 @@
--- | 纯 monad 门面：State / Reader / Error / IORef。
-module Base.Pure where
-
-export module Base.State as State
-export module Base.Reader as Reader
-export module Base.Error as Error
-export module Base.IORef as IORef

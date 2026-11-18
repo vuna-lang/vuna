@@ -1,4 +1,8 @@
--- | 容器门面：Map / 哈希容器 / Array 用命名空间路径区分同名操作。
+-- | 容器门面：Map / 哈希容器 / Array / Sort 用命名空间路径区分同名操作。
+--
+-- 只提供路径（不扁平重导出）：这些模块在 `insert` / `fromList` / `toList` / `size` 上同名，
+-- 扁平重导出会让使用点产生歧义。`import Base.Container.HashMap as HashMap` 后同时可用
+-- 非限定名与 `HashMap.` 限定名。
 module Base.Container where
 
 export module Base.Map as Map

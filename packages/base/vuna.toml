@@ -62,7 +62,7 @@ modules = [
   "Base.Data",
   "Base.Trait",
   "Base.Container",
-  "Base.Pure",
-  "Base.Host",
+  "Base.Effect",
+  "Base.Effect.Pure",
   "Prelude"
 ]

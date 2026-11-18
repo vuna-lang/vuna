@@ -1,0 +1,24 @@
+-- | 效应门面：`Eff` 运行时效应核心、行/类型面、handler 原语与宿主效应模块。
+-- 只提供路径（`import Base.Effect.EffFs as EffFs`），不扁平重导出：`Eff` 与 `EffTypes`
+-- 覆盖面重叠，多个模块还有同名 handler 入口。
+--
+-- `Pure` 子树是纯表示（无运行时 handler），见 [Base.Effect.Pure]。
+module Base.Effect where
+
+export module Base.Eff as Eff
+export module Base.Eff.Types as EffTypes
+export module Base.EffState as EffState
+export module Base.Eff.Reader as EffReader
+export module Base.EffError as EffError
+export module Base.EffExn as EffExn
+export module Base.EffRef as EffRef
+export module Base.EffFs as EffFs
+export module Base.EffConsole as EffConsole
+export module Base.EffClock as EffClock
+export module Base.EffEnv as EffEnv
+export module Base.EffArgs as EffArgs
+export module Base.EffStdin as EffStdin
+export module Base.EffExit as EffExit
+export module Base.EffNet as EffNet
+export module Base.EffProcess as EffProcess
+export module Base.Effect.Pure as Pure
