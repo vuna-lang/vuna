@@ -27,7 +27,7 @@ stepTypes =
     WatStructType "$selK" [WatField False WvAnyRef, WatField True WvI32],
     WatStructType "$mres1" [WatField False WvAnyRef, WatField False WvAnyRef],
     WatStructType "$mres2" [WatField False WvAnyRef, WatField False WvAnyRef, WatField False WvAnyRef],
-    WatStructType "$mctx" [WatField False WvAnyRef, WatField False WvAnyRef, WatField False WvAnyRef],
+    WatStructType "$mctx" [WatField False WvAnyRef, WatField False WvAnyRef, WatField False WvAnyRef, WatField False WvAnyRef],
     WatStructType "$hframe" [WatField False WvAnyRef, WatField False WvAnyRef, WatField False WvAnyRef, WatField False WvAnyRef, WatField False WvAnyRef, WatField False WvAnyRef],
     WatStructType "$kctx" [WatField False WvAnyRef, WatField False WvAnyRef],
     WatStructType "$kctx2" [WatField False WvAnyRef, WatField False WvAnyRef, WatField False WvAnyRef]
@@ -221,6 +221,22 @@ rtMRunEff =
   rtFunc "$rt_mRunEff" [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef] [WvAnyRef] []
     [ILocalGet "$p0", IRefNull, ICall "$rt_apply", ILocalGet "$p1", ICall "$rt_apply"]
 
+-- | frame 是否已经在 handler 链上（resume 时判断需不需要重新装回）。
+rtMInChain : WatFunc
+rtMInChain =
+  let
+    params = [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef]
+    locals = [Pair "$cur" WvAnyRef]
+    body =
+      [ ILocalGet "$p1",
+        ILocalSet "$cur",
+        IBlock "$done" "" [ILoop "$l" "" [ILocalGet "$cur", IPlain "ref.is_null", IBrIf "$done", ILocalGet "$cur", IRefCast "$hframe", ILocalGet "$p0", IRefCast "$hframe", IPlain "ref.eq", IBrIf "$done", ILocalGet "$cur", IRefCast "$hframe", IStructGet "$hframe" 5, ILocalSet "$cur", IBr "$l"]],
+        ILocalGet "$cur",
+        IPlain "ref.is_null",
+        IPlain "i32.eqz"
+      ]
+  in rtFunc "$rt_mInChain" params [WvI32] locals body
+
 rtMKDone : WatFunc
 rtMKDone =
   let
@@ -278,21 +294,40 @@ rtMRes1 =
 
 rtMRes2 : WatFunc
 -- 转移而不是调用：resume 之后的计算由循环派发，resume 链不占 wasm 帧
+-- 只有 frame 已被 pop（answer 已交出去）时才重新装回被恢复的段
 rtMRes2 =
   let
     params = [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef]
-    locals = [Pair "$e" WvAnyRef, Pair "$k" (WvRef "$selK"), Pair "$step" WvAnyRef]
+    locals =
+      [ Pair "$e" WvAnyRef,
+        Pair "$k" (WvRef "$selK"),
+        Pair "$hs" WvAnyRef,
+        Pair "$here" WvI32,
+        Pair "$step" WvAnyRef
+      ]
     body =
       [ ILocalGet "$p0",
         IRefCast "$mres2",
         ILocalSet "$e",
+        IGlobalGet "$g_stepHandlers",
+        ILocalSet "$hs",
+        ILocalGet "$e",
+        IRefCast "$mres2",
+        IStructGet "$mres2" 0,
+        IGlobalGet "$g_stepHandlers",
+        ICall "$rt_mInChain",
+        ILocalSet "$here",
         ILocalGet "$e",
         IRefCast "$mres2",
         IStructGet "$mres2" 0,
         ILocalGet "$p1",
         IGlobalGet "$g_mctx",
+        ILocalGet "$here",
+        IIf "anyref" [IRefNull] [ILocalGet "$hs"],
         IStructNew "$mctx",
         IGlobalSet "$g_mctx",
+        ILocalGet "$here",
+        IIf "" [INop] [ILocalGet "$e", IRefCast "$mres2", IStructGet "$mres2" 0, IRefCast "$hframe", IStructGet "$hframe" 0, ILocalGet "$e", IRefCast "$mres2", IStructGet "$mres2" 0, IRefCast "$hframe", IStructGet "$hframe" 1, ILocalGet "$e", IRefCast "$mres2", IStructGet "$mres2" 0, IRefCast "$hframe", IStructGet "$hframe" 2, ILocalGet "$e", IRefCast "$mres2", IStructGet "$mres2" 0, IRefCast "$hframe", IStructGet "$hframe" 3, ILocalGet "$e", IRefCast "$mres2", IStructGet "$mres2" 0, IRefCast "$hframe", IStructGet "$hframe" 4, IGlobalGet "$g_stepHandlers", IStructNew "$hframe", IGlobalSet "$g_stepHandlers"],
         ILocalGet "$e",
         IRefCast "$mres2",
         IStructGet "$mres2" 1,
@@ -326,6 +361,7 @@ rtMRun =
         Pair "$kclo" WvAnyRef,
         Pair "$ctx" WvAnyRef,
         Pair "$v" WvAnyRef,
+        Pair "$hh" WvAnyRef,
         Pair "$kdone" WvAnyRef
       ]
     body =
@@ -333,7 +369,7 @@ rtMRun =
         IGlobalSet "$g_mctx",
         ILocalGet "$p0",
         ILocalSet "$s",
-        ILoop "$l" "" [ILocalGet "$s", IRefCast "$step", IStructGet "$step" 0, ILocalSet "$tag", ILocalGet "$tag", IConstI32 0, IBinop "i32.eq", IIf "" [ILocalGet "$s", IRefCast "$step", IStructGet "$step" 1, IReturn, IUnreachable] [INop], ILocalGet "$tag", IConstI32 3, IBinop "i32.eq", IIf "" [ILocalGet "$s", IRefCast "$step", IStructGet "$step" 1, ILocalSet "$f", ILocalGet "$s", IRefCast "$step", IStructGet "$step" 2, ILocalSet "$v", IGlobalGet "$g_mctx", ILocalSet "$ctx", ILocalGet "$ctx", IPlain "ref.is_null", IIf "" [ILocalGet "$f", IRefCast "$hframe", IStructGet "$hframe" 5, IGlobalSet "$g_stepHandlers", ILocalGet "$f", IRefCast "$hframe", IStructGet "$hframe" 4, ILocalGet "$f", IRefCast "$hframe", IStructGet "$hframe" 2, ILocalGet "$v", ICall "$rt_apply", ICall "$rt_apply", ILocalSet "$s"] [ILocalGet "$ctx", IRefCast "$mctx", IStructGet "$mctx" 0, IRefCast "$hframe", ILocalGet "$f", IRefCast "$hframe", IPlain "ref.eq", IIf "" [ILocalGet "$ctx", IRefCast "$mctx", IStructGet "$mctx" 2, IGlobalSet "$g_mctx", ILocalGet "$ctx", IRefCast "$mctx", IStructGet "$mctx" 1, ILocalGet "$f", IRefCast "$hframe", IStructGet "$hframe" 2, ILocalGet "$v", ICall "$rt_apply", ICall "$rt_apply", ILocalSet "$s"] [ILocalGet "$f", IRefCast "$hframe", IStructGet "$hframe" 5, IGlobalSet "$g_stepHandlers", ILocalGet "$f", IRefCast "$hframe", IStructGet "$hframe" 4, ILocalGet "$f", IRefCast "$hframe", IStructGet "$hframe" 2, ILocalGet "$v", ICall "$rt_apply", ICall "$rt_apply", ILocalSet "$s"]], IBr "$l"] [INop], ILocalGet "$tag", IConstI32 4, IBinop "i32.eq", IIf "" [ILocalGet "$s", IRefCast "$step", IStructGet "$step" 1, ILocalGet "$s", IRefCast "$step", IStructGet "$step" 2, ICall "$rt_apply", ILocalSet "$s", IBr "$l"] [INop], ILocalGet "$tag", IConstI32 2, IBinop "i32.eq", IIf "" [ILocalGet "$s", IRefCast "$step", IStructGet "$step" 1, ILocalGet "$s", IRefCast "$step", IStructGet "$step" 2, ILocalGet "$s", IRefCast "$step", IStructGet "$step" 3, ILocalGet "$s", IRefCast "$step", IStructGet "$step" 4, ILocalGet "$s", IRefCast "$step", IStructGet "$step" 7, IGlobalGet "$g_stepHandlers", IStructNew "$hframe", ILocalSet "$f", ILocalGet "$f", IGlobalSet "$g_stepHandlers", IRefFunc "$rt_mKComp", ILocalGet "$f", IStructNew "$clo", ILocalSet "$kclo", ILocalGet "$s", IRefCast "$step", IStructGet "$step" 5, ILocalGet "$s", IRefCast "$step", IStructGet "$step" 6, ICall "$rt_apply", ILocalGet "$kclo", ICall "$rt_apply", ILocalSet "$s", IBr "$l"] [INop], ILocalGet "$tag", IConstI32 1, IBinop "i32.eq", IIf "" [IGlobalGet "$g_stepHandlers", ILocalSet "$cur", IBlock "$found" "" [ILoop "$j" "" [ILocalGet "$cur", IPlain "ref.is_null", IIf "" [ILocalGet "$s", IRefCast "$step", IStructGet "$step" 1, ILocalGet "$s", IRefCast "$step", IStructGet "$step" 2, ICall "$rt_cpsUnhandled2", IUnreachable] [INop], ILocalGet "$cur", IRefCast "$hframe", IStructGet "$hframe" 0, ILocalGet "$s", IRefCast "$step", IStructGet "$step" 1, ICall "$rt_eqStr", IRefCast "i31", II31GetU, ILocalGet "$cur", IRefCast "$hframe", IStructGet "$hframe" 1, ILocalGet "$s", IRefCast "$step", IStructGet "$step" 2, ICall "$rt_eqStr", IRefCast "i31", II31GetU, IBinop "i32.and", IIf "" [IBr "$found"] [INop], ILocalGet "$cur", IRefCast "$hframe", IStructGet "$hframe" 5, ILocalSet "$cur", IBr "$j"]], ILocalGet "$cur", ILocalSet "$f", IRefFunc "$rt_mRes1", ILocalGet "$f", ILocalGet "$s", IRefCast "$step", IStructGet "$step" 4, IStructNew "$mres1", IStructNew "$clo", ILocalSet "$kclo", IRefFunc "$rt_mKDone", ILocalGet "$f", IStructNew "$clo", ILocalSet "$kdone", ILocalGet "$f", IRefCast "$hframe", IStructGet "$hframe" 3, ILocalGet "$s", IRefCast "$step", IStructGet "$step" 3, ICall "$rt_apply", ILocalGet "$kclo", ICall "$rt_apply", ILocalGet "$kdone", ICall "$rt_apply", ILocalSet "$s", IBr "$l"] [INop], IUnreachable],
+        ILoop "$l" "" [ILocalGet "$s", IRefCast "$step", IStructGet "$step" 0, ILocalSet "$tag", ILocalGet "$tag", IConstI32 0, IBinop "i32.eq", IIf "" [ILocalGet "$s", IRefCast "$step", IStructGet "$step" 1, IReturn, IUnreachable] [INop], ILocalGet "$tag", IConstI32 3, IBinop "i32.eq", IIf "" [ILocalGet "$s", IRefCast "$step", IStructGet "$step" 1, ILocalSet "$f", ILocalGet "$s", IRefCast "$step", IStructGet "$step" 2, ILocalSet "$v", IGlobalGet "$g_mctx", ILocalSet "$ctx", ILocalGet "$ctx", IPlain "ref.is_null", IIf "" [ILocalGet "$f", IRefCast "$hframe", IStructGet "$hframe" 5, IGlobalSet "$g_stepHandlers", ILocalGet "$f", IRefCast "$hframe", IStructGet "$hframe" 4, ILocalGet "$f", IRefCast "$hframe", IStructGet "$hframe" 2, ILocalGet "$v", ICall "$rt_apply", ICall "$rt_apply", ILocalSet "$s"] [ILocalGet "$ctx", IRefCast "$mctx", IStructGet "$mctx" 0, IRefCast "$hframe", ILocalGet "$f", IRefCast "$hframe", IPlain "ref.eq", IIf "" [ILocalGet "$ctx", IRefCast "$mctx", IStructGet "$mctx" 2, IGlobalSet "$g_mctx", ILocalGet "$ctx", IRefCast "$mctx", IStructGet "$mctx" 3, ILocalSet "$hh", ILocalGet "$hh", IPlain "ref.is_null", IIf "" [INop] [ILocalGet "$hh", IRefCast "$hframe", IGlobalSet "$g_stepHandlers"], ILocalGet "$ctx", IRefCast "$mctx", IStructGet "$mctx" 1, ILocalGet "$f", IRefCast "$hframe", IStructGet "$hframe" 2, ILocalGet "$v", ICall "$rt_apply", ICall "$rt_apply", ILocalSet "$s"] [ILocalGet "$f", IRefCast "$hframe", IStructGet "$hframe" 5, IGlobalSet "$g_stepHandlers", ILocalGet "$f", IRefCast "$hframe", IStructGet "$hframe" 4, ILocalGet "$f", IRefCast "$hframe", IStructGet "$hframe" 2, ILocalGet "$v", ICall "$rt_apply", ICall "$rt_apply", ILocalSet "$s"]], IBr "$l"] [INop], ILocalGet "$tag", IConstI32 4, IBinop "i32.eq", IIf "" [ILocalGet "$s", IRefCast "$step", IStructGet "$step" 1, ILocalGet "$s", IRefCast "$step", IStructGet "$step" 2, ICall "$rt_apply", ILocalSet "$s", IBr "$l"] [INop], ILocalGet "$tag", IConstI32 2, IBinop "i32.eq", IIf "" [ILocalGet "$s", IRefCast "$step", IStructGet "$step" 1, ILocalGet "$s", IRefCast "$step", IStructGet "$step" 2, ILocalGet "$s", IRefCast "$step", IStructGet "$step" 3, ILocalGet "$s", IRefCast "$step", IStructGet "$step" 4, ILocalGet "$s", IRefCast "$step", IStructGet "$step" 7, IGlobalGet "$g_stepHandlers", IStructNew "$hframe", ILocalSet "$f", ILocalGet "$f", IGlobalSet "$g_stepHandlers", IRefFunc "$rt_mKComp", ILocalGet "$f", IStructNew "$clo", ILocalSet "$kclo", ILocalGet "$s", IRefCast "$step", IStructGet "$step" 5, ILocalGet "$s", IRefCast "$step", IStructGet "$step" 6, ICall "$rt_apply", ILocalGet "$kclo", ICall "$rt_apply", ILocalSet "$s", IBr "$l"] [INop], ILocalGet "$tag", IConstI32 1, IBinop "i32.eq", IIf "" [IGlobalGet "$g_stepHandlers", ILocalSet "$cur", IBlock "$found" "" [ILoop "$j" "" [ILocalGet "$cur", IPlain "ref.is_null", IIf "" [ILocalGet "$s", IRefCast "$step", IStructGet "$step" 1, ILocalGet "$s", IRefCast "$step", IStructGet "$step" 2, ICall "$rt_cpsUnhandled2", IUnreachable] [INop], ILocalGet "$cur", IRefCast "$hframe", IStructGet "$hframe" 0, ILocalGet "$s", IRefCast "$step", IStructGet "$step" 1, ICall "$rt_eqStr", IRefCast "i31", II31GetU, ILocalGet "$cur", IRefCast "$hframe", IStructGet "$hframe" 1, ILocalGet "$s", IRefCast "$step", IStructGet "$step" 2, ICall "$rt_eqStr", IRefCast "i31", II31GetU, IBinop "i32.and", IIf "" [IBr "$found"] [INop], ILocalGet "$cur", IRefCast "$hframe", IStructGet "$hframe" 5, ILocalSet "$cur", IBr "$j"]], ILocalGet "$cur", ILocalSet "$f", IRefFunc "$rt_mRes1", ILocalGet "$f", ILocalGet "$s", IRefCast "$step", IStructGet "$step" 4, IStructNew "$mres1", IStructNew "$clo", ILocalSet "$kclo", IRefFunc "$rt_mKDone", ILocalGet "$f", IStructNew "$clo", ILocalSet "$kdone", ILocalGet "$f", IRefCast "$hframe", IStructGet "$hframe" 3, ILocalGet "$s", IRefCast "$step", IStructGet "$step" 3, ICall "$rt_apply", ILocalGet "$kclo", ICall "$rt_apply", ILocalGet "$kdone", ICall "$rt_apply", ILocalSet "$s", IBr "$l"] [INop], IUnreachable],
         IUnreachable
       ]
   in rtFunc "$rt_mRun" params [WvAnyRef] locals body
@@ -345,6 +381,7 @@ mFunctions =
     rtMHandle,
     rtMKComp,
     rtMApply,
+    rtMInChain,
     rtMRunEff,
     rtMKDone,
     rtMRes1,

@@ -645,6 +645,11 @@ isEffContLambda bs = case reverse bs of
   b :: _ => isEffContBinder b
   [] => False
 
+-- | λ 体已经是 `MkEff (\u K -> …)`（mCps 已包过），避免后处理重复包一层。
+isEffThunkBody : Ir -> Bool
+isEffThunkBody (IrCtor family ctor ([IrLam _ _])) = family == irEffTypeName && ctor == irEffMkCtor
+isEffThunkBody _ = False
+
 -- | 用续延 K 跑一个 Eff 值：`case eff of MkEff th => runEff th K`。
 mRunEffTerm : Ir -> Ir -> Ir
 mRunEffTerm eff k =
@@ -1063,7 +1068,8 @@ mMarked : Int -> Ir -> Ir
 mMarked fuel e = if fuel <= 0 then e
 else case e of
   IrLam bs body =>
-    if isEffContLambda bs then mEffContLambda (fuel - 1) mNoResumption bs body
+    if isEffContLambda bs && not (isEffThunkBody body) then
+      mEffContLambda (fuel - 1) mNoResumption bs body
     else IrLam bs (mMarked (fuel - 1) body)
   IrRtApp sym args => IrRtApp sym (mMarkedList (fuel - 1) args)
   IrCtor fam ctor args => IrCtor fam ctor (mMarkedList (fuel - 1) args)

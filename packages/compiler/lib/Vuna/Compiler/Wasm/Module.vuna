@@ -1912,7 +1912,7 @@ build program printResult =
           Ok cpsOrdered => buildAnf cpsOrdered 3 (Just e) listFamM
         else buildAnf ordered (effModeOf (Just e) ordered) (Just e) listFamM
       in if directable then buildAnf (append rewritten [pureKDef]) 0 (Just entryClean) listFamM
-      else if (listNull (irEntryRowTagsOf e) || consoleOnly (irEntryRowTagsOf e)) && noStepUnsupported then
+      else if noStepUnsupported then
         case cpsDefsMachine ordered of
           Ok cpsOrdered => buildAnf cpsOrdered 6 (Just e) listFamM
           Err _ => fallbackEff
