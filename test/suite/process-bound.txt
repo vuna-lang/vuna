@@ -90,3 +90,5 @@
 80_code_identity.steps	build	build-link;cli-text
 82_layers.steps	check,fmt	cli-text
 81_pkg_errors.steps	add,check,fetch	pkg-store;cli-text
+114_wasm_engine_probe.steps	(indirect)	artifact-exec;build-link
+115_wasm_js_host.steps	(indirect)	artifact-exec;build-link
