@@ -295,7 +295,7 @@
   `""` 表示对端关闭；
 - `prim_eff_netSend : Int -> String -> Eff [] Int`：写完整串（内部循环处理部分写），返回字节数；
 - `prim_eff_netClose : Int -> Eff [] Int`：关闭句柄（幂等）；
-- `prim_eff_netConnect : String -> Eff [] Int`：客户端连接（`vuna repl --client` 与测试夹具用）。
+- `prim_eff_netConnect : String -> Eff [] Int`：客户端连接（`vuna repl client --addr` 与测试夹具用）。
 
 句柄是小整数，运行时映射到 `Unix.file_descr` 表，**不引入新的语言类型**；
 无 DNS / TLS / 异步 / 超时（`accept`/`recv` 阻塞，见 §8）。
@@ -449,6 +449,6 @@ extern c_add "vuna_add" : Int -> Int -> Int
 - 原语的失败（宿主错误、`strPack` 越界、`/0`、`exit`）都是**宿主异常 / 进程退出**，
   由生成的运行时报告器统一报告（见 [debugging.md](debugging.md)），不是语言的可捕获错误。
 - `net` 只有 TCP（数字 IPv4）与 Unix domain socket：无 DNS、TLS、异步/超时、并发；
-  `accept`/`recv` 是阻塞语义。原语本身不限制绑定地址，`vuna repl --listen` 在 CLI 层只接受
+  `accept`/`recv` 是阻塞语义。原语本身不限制绑定地址，`vuna repl serve --listen` 在 CLI 层只接受
   loopback 与 Unix socket（见 [tooling.md](tooling.md)）。
 - 以上是原语与 runtime 侧的现状边界；开放债务见 [debt.md](debt.md)。

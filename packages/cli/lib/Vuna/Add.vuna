@@ -1,14 +1,15 @@
--- | `vuna add <name>[@<version>] [DIR]`：查静态索引 → 写回 `[dependencies]` → 取包。
+-- | `vuna deps add <name>[@<version>] [DIR]`：查静态索引 → 写回 `[dependencies]` → 取包。
 --
 -- 流程：读包 manifest 的 `[registry].index`（目录 / `file://` / `http(s)://`）；解析索引
 -- 条目并按版本取发布（无版本 = 索引里的最后一个发布）；把 `(源, hash)` 写成内联表依赖
 -- 行，写回 `[dependencies]`（段级替换 / 追加，保留其余字节；子表形式不猜、报错让用户手改）；
--- 默认调用 `vuna fetch` 取包，`--no-fetch` 只改 manifest，`--dry-run` 只打印。
+-- 默认调用 `vuna deps fetch` 取包，`--no-fetch` 只改 manifest，`--dry-run` 只打印。
 --
 -- 索引不可信：写回的永远是摘要，后续 fetch / check 只认摘要。
 module Vuna.Add where
 
 import Vuna.Cli.Args
+import Vuna.Cli.Spec
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Base.Diagnostics.Pkg
 import Vuna.Compiler.Frontend.Manifest
@@ -23,17 +24,17 @@ import Base.Eff.Types
 import Base.EffEnv
 import Base.EffProcess
 
--- | `vuna add` 的入口：解析 `--dry-run` / `--no-fetch` 与位置参数（`<name>[@<version>]`，
+-- | `vuna deps add` 的入口：解析 `--dry-run` / `--no-fetch` 与位置参数（`<name>[@<version>]`，
 -- 可选 `DIR`，默认 `.`）；参数个数或用法错误打印 `error: ...` 并返回 2。
 export runAdd : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => List String -> Eff r Int
-runAdd args = case parseToolArgs "vuna add" [BoolFlag "dry-run", BoolFlag "no-fetch"] args of
+runAdd args = case parseCmdArgs ["deps", "add"] args of
   ErrC e => addFailText (diagText e)
   OkC parsed =>
     let
       dry = flagSet parsed "dry-run"
       noFetch = flagSet parsed "no-fetch"
     in case parsed.positionals of
-      [] => addFailText "usage: vuna add <name>[@<version>] [DIR]"
+      [] => addFailText "usage: vuna deps add <name>[@<version>] [DIR]"
       [spec] => addAt "." spec dry noFetch
       [spec, dir] => addAt dir spec dry noFetch
       _ => addFailText "too many arguments; expected <name>[@<version>] [DIR]"

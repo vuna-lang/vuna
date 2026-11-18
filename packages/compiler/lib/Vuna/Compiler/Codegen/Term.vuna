@@ -1505,7 +1505,7 @@ let dtp_obs_emit_samples (name : string) (n : int) (get : int -> Printexc.raw_ba
 let dtp_obs_sample_start (mode : string) (interval_us : int) : int =
   if not (dtp_obs_on ()) then 0
   else begin
-    (* `mode` 为空串时按 `VUNA_OBS_SAMPLE`（env）取缺省（`cpu`）；这样 `vuna obs run
+    (* `mode` 为空串时按 `VUNA_OBS_SAMPLE`（env）取缺省（`cpu`）；这样 `vuna dev obs run
        --sample both` 的 env 注入能生效，而库层调用总是显式给 mode。 *)
     let mode2 =
       if mode <> \"\" then mode

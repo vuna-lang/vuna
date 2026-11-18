@@ -31,7 +31,7 @@ readChunk n = stdinReadBytes (natFromInt n)
 export renderFrame : Json -> String
 renderFrame payload = renderFrameBody (renderJson payload)
 
--- | 同 `renderFrame`，但 body 已经是编码好的 JSON 文本（`vuna repl --client` 直接透传 stdin 的 body）。
+-- | 同 `renderFrame`，但 body 已经是编码好的 JSON 文本（`vuna repl client --addr` 直接透传 stdin 的 body）。
 export renderFrameBody : String -> String
 renderFrameBody body = "Content-Length: ${strLength body}\r\n\r\n${body}"
 

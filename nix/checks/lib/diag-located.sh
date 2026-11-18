@@ -3,7 +3,7 @@
 # 没有主 span 的必须带显式 `absent` 理由，且该码登记在 nix/checks/data/diag-located.allow
 # （逐码审计，只减不增）。
 #
-# 数据源是 `vuna test --suite ... --bless-diag` 生成的结构化夹具，所以门禁与
+# 数据源是 `vuna dev suite ... --bless-diag` 生成的结构化夹具，所以门禁与
 # 用户实际看到的 JSON 同源，不维护第二份期望。
 set -eu
 

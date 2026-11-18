@@ -210,7 +210,7 @@ mismatchMessage (Just expected) actual =
   "pkg: dependency ${expected} expects package name ${expected} but found ${actual}"
 
 -- 不可变源依赖：定位 store 物化视图（`<store>/pkgs/<digest>`）并校验 `.complete`。
--- 物化视图由 `vuna fetch` 写入；check/build 只读，缺失即 `PKG_NotMaterialized`。
+-- 物化视图由 `vuna deps fetch` 写入；check/build 只读，缺失即 `PKG_NotMaterialized`。
 loadStoreDependency : Member nFs FsOp r, Member nEnv EnvOp r => Int -> List (Pair String String) -> Dependency -> Eff r (Check Package)
 loadStoreDependency fuel stack dep = case depHashOf dep of
   Nothing => pure (pkgNoLoc1 (NotMaterialized (depAliasOf dep)) (depAliasOf dep))

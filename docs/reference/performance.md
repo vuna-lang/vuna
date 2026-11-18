@@ -185,9 +185,9 @@ Vuna.Compiler.Driver.ToolPayload`），于是每轮都补一遍 lib check（`col
 ```console
 VUNA_OBS=2 VUNA_OBS_DIR=$PWD/trace vuna check packages/compiler      # 阶段跨度 + 逐定义
 VUNA_OBS=3 vuna build --no-compile --out OUT compiler       # + CPU/内存采样
-vuna obs summarize trace/vuna-*.jsonl                       # 阶段自用/总用时表
-vuna obs run --level 2 -- vuna check packages/compiler                # 一步到位
-vuna obs convert --to folded --out f.folded trace/*.jsonl   # 火焰图
+vuna dev obs summarize trace/vuna-*.jsonl                       # 阶段自用/总用时表
+vuna dev obs run --level 2 -- vuna check packages/compiler                # 一步到位
+vuna dev obs convert --to folded --out f.folded trace/*.jsonl   # 火焰图
 ```
 
 `dbg!` 仍是**阶段边界的低成本日志**（展开规则见 [language.md](language.md) 的「内置宏」；

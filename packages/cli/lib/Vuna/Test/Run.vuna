@@ -2099,7 +2099,7 @@ else
       append (if opts.suiteFailFast then ["--fail-fast"] else [])
         (append (if opts.suiteJSON then ["--quiet"] else []) (append (if opts.suiteNoCache then ["--no-cache"] else []) (append (if opts.suiteLastFailed then ["--last-failed"] else []) (append (if opts.suiteBless then ["--bless"] else []) (append (if opts.suiteBlessDiag then ["--bless-diag"] else []) (append cacheArgs changedArgs))))))
     args =
-      append ["test", "--suite", opts.suitePath, "--worker", workerArg, "--results-dir", resultsDir]
+      append ["dev", "suite", opts.suitePath, "--worker", workerArg, "--results-dir", resultsDir]
         (append filters flagArgs)
   in do
     pid <- processSpawn args

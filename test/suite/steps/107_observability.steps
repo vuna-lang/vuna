@@ -1,5 +1,5 @@
 # 107) 可观测性（`docs/reference/observability.md`）：语言层 obs 原语 + 生成运行时 +
-#      `vuna obs` 工具链 + `#line` 注入。依赖 PATH 里的 readelf（devShell/e2e 已提供）。
+#      `vuna dev obs` 工具链 + `#line` 注入。依赖 PATH 里的 readelf（devShell/e2e 已提供）。
 #
 # 覆盖：关闭口径不产 trace；`dbg!` stderr 协议不变而 `obs!`/`mark!` 走结构化事件；
 # `VUNA_OBS=2` trace 的结构与 `obs validate`；`#line` 是包相对 `.vuna` 路径、产物可跑；
@@ -60,7 +60,7 @@ run: sh -c 'grep -l "checkpoint" "$TMPDIR"/mac-trace/*.jsonl'
 exit: 0
 
 # ---------------------------------------------------------------- 3) 结构 + validate
-run: sh -c '"$VUNA" obs validate "$TMPDIR"/mac-trace/*.jsonl'
+run: sh -c '"$VUNA" dev obs validate "$TMPDIR"/mac-trace/*.jsonl'
 exit: 0
 out-contains: verified
 
@@ -70,7 +70,7 @@ out-contains: "ph":"M"
 out-contains: "schema":"vuna-obs 1"
 
 # 人为破坏：倒挂时间戳拒绝（exit 1，消息可读）。
-run: sh -c 'printf "%s\n" "{\"ph\":\"M\",\"name\":\"vuna.obs.schema\",\"pid\":1,\"tid\":0,\"args\":{\"schema\":\"vuna-obs 1\"}}" "{\"ph\":\"i\",\"ts\":200,\"pid\":1,\"tid\":0,\"name\":\"vuna.log\",\"args\":{\"text\":\"a\"}}" "{\"ph\":\"i\",\"ts\":100,\"pid\":1,\"tid\":0,\"name\":\"vuna.log\",\"args\":{\"text\":\"b\"}}" > "$TMPDIR/bad-order.jsonl"; "$VUNA" obs validate "$TMPDIR/bad-order.jsonl"'
+run: sh -c 'printf "%s\n" "{\"ph\":\"M\",\"name\":\"vuna.obs.schema\",\"pid\":1,\"tid\":0,\"args\":{\"schema\":\"vuna-obs 1\"}}" "{\"ph\":\"i\",\"ts\":200,\"pid\":1,\"tid\":0,\"name\":\"vuna.log\",\"args\":{\"text\":\"a\"}}" "{\"ph\":\"i\",\"ts\":100,\"pid\":1,\"tid\":0,\"name\":\"vuna.log\",\"args\":{\"text\":\"b\"}}" > "$TMPDIR/bad-order.jsonl"; "$VUNA" dev obs validate "$TMPDIR/bad-order.jsonl"'
 exit: 1
 out-contains: goes backwards
 
@@ -111,33 +111,33 @@ run: sh -c 'grep -c "vuna[.]sample[.]cpu" "$TMPDIR"/sam-trace/*.jsonl'
 exit: 0
 run: sh -c 'grep -c "vuna[.]sample[.]mem" "$TMPDIR"/sam-trace/*.jsonl'
 exit: 0
-run: sh -c '"$VUNA" obs validate "$TMPDIR"/sam-trace/*.jsonl'
+run: sh -c '"$VUNA" dev obs validate "$TMPDIR"/sam-trace/*.jsonl'
 exit: 0
 out-contains: verified
-run: sh -c '"$VUNA" obs summarize "$TMPDIR"/sam-trace/*.jsonl'
+run: sh -c '"$VUNA" dev obs summarize "$TMPDIR"/sam-trace/*.jsonl'
 exit: 0
 out-contains: samples:cpu
 
 # 工具链自采样：`vuna` 自己也是被观测程序（`VUNA_OBS_SAMPLE` 驱动 Main 的
 # sampleStart/Stop）。冷 `check base` 作输入，至少要有 CPU 采样点。
-run: sh -c 'VUNA_STORE="$TMPDIR/tool-store" "$VUNA" obs run --level 1 --sample cpu --interval 1000 --out "$TMPDIR/tool-trace.jsonl" -- "$VUNA" check "$VUNA_BASE" >/dev/null'
+run: sh -c 'VUNA_STORE="$TMPDIR/tool-store" "$VUNA" dev obs run --level 1 --sample cpu --interval 1000 --out "$TMPDIR/tool-trace.jsonl" -- "$VUNA" check "$VUNA_BASE" >/dev/null'
 exit: 0
 run: sh -c 'grep -c "vuna[.]sample[.]cpu" "$TMPDIR/tool-trace.jsonl"'
 exit: 0
 
 # ---------------------------------------------------------------- 8) convert / render
-run: sh -c '"$VUNA" obs convert --to cpuprofile --out "$TMPDIR/a.cpuprofile" "$TMPDIR"/sam-trace/*.jsonl'
+run: sh -c '"$VUNA" dev obs convert --to cpuprofile --out "$TMPDIR/a.cpuprofile" "$TMPDIR"/sam-trace/*.jsonl'
 exit: 0
-run: sh -c '"$VUNA" obs convert --to cpuprofile --out "$TMPDIR/b.cpuprofile" "$TMPDIR"/sam-trace/*.jsonl'
-run: sh -c 't=$(find "$TMPDIR/mac-trace" -name "*.jsonl" | head -1); "$VUNA" obs summarize "$t"'
+run: sh -c '"$VUNA" dev obs convert --to cpuprofile --out "$TMPDIR/b.cpuprofile" "$TMPDIR"/sam-trace/*.jsonl'
+run: sh -c 't=$(find "$TMPDIR/mac-trace" -name "*.jsonl" | head -1); "$VUNA" dev obs summarize "$t"'
 exit: 0
 exit: 0
 file-contains: $TMPDIR/a.cpuprofile "nodes"
 file-contains: $TMPDIR/a.cpuprofile "timeDeltas"
 
-run: sh -c '"$VUNA" obs convert --to folded --out "$TMPDIR/a.folded" "$TMPDIR"/sam-trace/*.jsonl'
+run: sh -c '"$VUNA" dev obs convert --to folded --out "$TMPDIR/a.folded" "$TMPDIR"/sam-trace/*.jsonl'
 exit: 0
-run: sh -c '"$VUNA" obs convert --to folded --out "$TMPDIR/b.folded" "$TMPDIR"/sam-trace/*.jsonl'
+run: sh -c '"$VUNA" dev obs convert --to folded --out "$TMPDIR/b.folded" "$TMPDIR"/sam-trace/*.jsonl'
 exit: 0
 run: sh -c 'cmp "$TMPDIR/a.folded" "$TMPDIR/b.folded"'
 exit: 0
@@ -145,13 +145,13 @@ run: sh -c 'awk -F"\t" "NF == 2" "$TMPDIR/a.folded" | head -1'
 exit: 0
 out-contains: ;
 
-run: sh -c '"$VUNA" obs convert --to speedscope --out "$TMPDIR/a.speedscope.json" "$TMPDIR"/sam-trace/*.jsonl'
+run: sh -c '"$VUNA" dev obs convert --to speedscope --out "$TMPDIR/a.speedscope.json" "$TMPDIR"/sam-trace/*.jsonl'
 exit: 0
 file-contains: $TMPDIR/a.speedscope.json speedscope.app
 
-run: sh -c '"$VUNA" obs render --out "$TMPDIR/a.html" "$TMPDIR"/sam-trace/*.jsonl'
+run: sh -c '"$VUNA" dev obs render --out "$TMPDIR/a.html" "$TMPDIR"/sam-trace/*.jsonl'
 exit: 0
-run: sh -c '"$VUNA" obs render --out "$TMPDIR/b.html" "$TMPDIR"/sam-trace/*.jsonl'
+run: sh -c '"$VUNA" dev obs render --out "$TMPDIR/b.html" "$TMPDIR"/sam-trace/*.jsonl'
 exit: 0
 run: sh -c 'cmp "$TMPDIR/a.html" "$TMPDIR/b.html"'
 exit: 0
@@ -161,15 +161,15 @@ exit: 0
 out-equals: 0
 
 # ---------------------------------------------------------------- 9) summarize --json / baseline
-run: sh -c '"$VUNA" obs summarize --json "$TMPDIR"/mac-trace/*.jsonl | wc -l | tr -d " "'
+run: sh -c '"$VUNA" dev obs summarize --json "$TMPDIR"/mac-trace/*.jsonl | wc -l | tr -d " "'
 exit: 0
 out-equals: 1
-run: sh -c '"$VUNA" obs summarize --json "$TMPDIR"/mac-trace/*.jsonl'
+run: sh -c '"$VUNA" dev obs summarize --json "$TMPDIR"/mac-trace/*.jsonl'
 exit: 0
 out-contains: "spans"
 
 # 自比对：差值 0 通过。
-run: sh -c 't=$(find "$TMPDIR/mac-trace" -name "*.jsonl" | head -1); "$VUNA" obs summarize --baseline "$t" "$t"'
+run: sh -c 't=$(find "$TMPDIR/mac-trace" -name "*.jsonl" | head -1); "$VUNA" dev obs summarize --baseline "$t" "$t"'
 exit: 0
 
 # ---------------------------------------------------------------- 10) 非 OCaml 后端

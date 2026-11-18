@@ -1,6 +1,6 @@
 -- | 语言层可观测性 API：**所有 vuna 应用**都用这一层，不只是编译器。本模块是隐藏运行时原语（`@vuna@obs@*`）的薄包装，只含**叶子**原语，因此任何后端都能构建。
 --
--- 默认关闭（`VUNA_OBS=1..3` / `--obs` / `--obs-level N`）：关闭时每次调用只付一次 `Lazy.force` + 一个布尔分支，不分配、不读时钟、不碰文件。打开后事件写 Chrome Trace Event JSONL（`ph:"X"` 跨度 / `ph:"C"` 计数 / `ph:"i"` 日志与采样），可直接拖进 `chrome://tracing` / Perfetto，或经 `vuna obs convert` 换算成 `.cpuprofile` / speedscope / folded。
+-- 默认关闭（`VUNA_OBS=1..3` / `--obs` / `--obs-level N`）：关闭时每次调用只付一次 `Lazy.force` + 一个布尔分支，不分配、不读时钟、不碰文件。打开后事件写 Chrome Trace Event JSONL（`ph:"X"` 跨度 / `ph:"C"` 计数 / `ph:"i"` 日志与采样），可直接拖进 `chrome://tracing` / Perfetto，或经 `vuna dev obs convert` 换算成 `.cpuprofile` / speedscope / folded。
 --
 -- 全部是**纯函数**（返回 `Int` 或 `Bool`，无 `Eff`）：深部纯函数照样能埋探针，不需要把签名 effect 化；开关是 ambient 运行时配置，与 `dbg!` 同形态。
 --
@@ -8,7 +8,7 @@
 --
 -- 与 `dbg!` 的关系：`dbg!` 保留其 stderr 文本协议（`DEBUG <epoch-us> <text>`，由 `--debug-perf` 门控）；本层是结构化事件。需要两者都拿到时用 `obsLog`——它在 observability 打开时写事件、并同格式写 stderr。
 --
--- 名字词汇表：编译链事件用 `vuna.*`；用户程序事件用自己的域前缀（如 `app.render`），`vuna obs validate` 只校验 `vuna.*` 前缀。
+-- 名字词汇表：编译链事件用 `vuna.*`；用户程序事件用自己的域前缀（如 `app.render`），`vuna dev obs validate` 只校验 `vuna.*` 前缀。
 --
 -- 事件模型、命名规范与成本纪律见 `docs/reference/observability.md`。
 module Base.Obs where

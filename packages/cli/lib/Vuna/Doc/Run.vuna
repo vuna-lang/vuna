@@ -6,6 +6,7 @@
 module Vuna.Doc.Run where
 
 import Vuna.Cli.Args
+import Vuna.Cli.Spec
 import Vuna.Compiler.Loader.Addr
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Loader.Fingerprint
@@ -23,7 +24,7 @@ import Base.EffProcess
 
 -- | 入口：解析参数并执行；用法错误退出 2。
 export runDoc : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => List String -> Eff r Int
-runDoc args = case parseToolArgs "vuna doc" [BoolFlag "check", ValueFlag "package"] args of
+runDoc args = case parseCmdArgs ["doc"] args of
   ErrC e => docError (diagText e)
   OkC parsed => case parsed.positionals of
     [] => docRun "." (docDefaultOut ".") (flagSet parsed "check") (flagValue parsed "package")

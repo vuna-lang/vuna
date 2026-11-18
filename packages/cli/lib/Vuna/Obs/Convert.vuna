@@ -1,4 +1,4 @@
--- | trace 换算：`vuna obs convert --to cpuprofile|speedscope|folded|jsonl [--out PATH] TRACE`。
+-- | trace 换算：`vuna dev obs convert --to cpuprofile|speedscope|folded|jsonl [--out PATH] TRACE`。
 --
 -- 输入只有一份 trace（Chrome Trace Event JSONL，schema `vuna-obs 1`）；输出按固定键序生成，
 -- 无时间戳、无随机数、无绝对路径（元数据里的 `exec` 不进产物），同一输入两次转换逐字节一致。
@@ -20,6 +20,7 @@ import Base.List
 import Base.Maybe
 import Base.String
 import Vuna.Cli.Args
+import Vuna.Cli.Spec
 import Vuna.Compiler.Base.Common
 import Vuna.Json
 import Vuna.Obs.Flame
@@ -69,10 +70,10 @@ outOf parsed = case flagValue parsed "out" of
 -- ---------------------------------------------------------------
 -- 入口
 -- ---------------------------------------------------------------
--- | `vuna obs convert` 的入口：解析 `--to` / `--out` 与单个 TRACE。
+-- | `vuna dev obs convert` 的入口：解析 `--to` / `--out` 与单个 TRACE。
 -- 用法/读盘错误退出码 2，无 cpu 采样退出码 1。
 export runObsConvert : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nProcess ProcessOp r => List String -> Eff r Int
-runObsConvert args = case parseToolArgs "vuna obs convert" [ValueFlag "to", ValueFlag "out"] args of
+runObsConvert args = case parseCmdArgs ["dev", "obs", "convert"] args of
   ErrC e => convertFail 2 (diagText e)
   OkC parsed => case convertOptsOf parsed of
     ErrC e => convertFail 2 (diagText e)
@@ -83,7 +84,8 @@ runObsConvert args = case parseToolArgs "vuna obs convert" [ValueFlag "to", Valu
 
 -- | `convert` 的用法文本。
 convertUsage : String
-convertUsage = "usage: vuna obs convert --to cpuprofile|speedscope|folded|jsonl [--out PATH] TRACE"
+convertUsage =
+  "usage: vuna dev obs convert --to cpuprofile|speedscope|folded|jsonl [--out PATH] TRACE"
 
 -- | 内部：读一个 trace、按格式换算并写出；读盘失败 ⇒ 2，内容失败（无 CPU 采样等）⇒ 1。
 convertTrace : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nProcess ProcessOp r => ConvertOpts -> String -> Eff r Int
@@ -141,7 +143,7 @@ sampledFormatContent _ samples = foldedTextOf (foldedRowsOf samples)
 -- | 内部：缺 CPU 采样时的错误文案（带采集命令提示）。
 noCpuSamplesText : String -> String
 noCpuSamplesText fmt =
-  "no cpu samples (`vuna.sample.cpu`) in trace: `${fmt}` needs level-3 CPU sampling (collect with `vuna obs run --level 3 --sample cpu -- ...`)"
+  "no cpu samples (`vuna.sample.cpu`) in trace: `${fmt}` needs level-3 CPU sampling (collect with `vuna dev obs run --level 3 --sample cpu -- ...`)"
 
 -- | `--to jsonl`：按文件顺序重写全部事件（复用 `Types.renderEventLine`，键序稳定）。
 jsonlText : ObsTrace -> String

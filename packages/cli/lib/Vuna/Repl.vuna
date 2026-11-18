@@ -130,7 +130,7 @@ record ReplSettings where
   -- | 当前是否实际着色（由 `color` 模式、tty、`NO_COLOR` 与 `TERM` 共同决定）。
   settingColorOn : Bool
 
--- | 输出汇：交互式 REPL 写 stdout；`vuna repl --listen` / `--server` 把同一份 step 函数的
+-- | 输出汇：交互式 REPL 写 stdout；`vuna repl serve --listen` / `--server` 把同一份 step 函数的
 -- 输出收集进 IORef，再作为一帧 JSON-RPC 响应回给客户端。`Vuna.Repl` 内除 `replEmit` /
 -- `replEmitErr` 外不得直接 `consolePrint`。
 export data ReplSink(..) : Type where

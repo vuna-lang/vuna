@@ -74,18 +74,18 @@
   - `vuna doc [--check] [--package NAME] [DIR [OUT]]`：扫描 `lib/` 生成**单文件交互 HTML**
     API 文档（默认 `DIR/docs/api.html`，gitignored；workspace 根含所有成员包）；`--check`
     报告缺失 docstring 的顶层导出项；docstring / 搜索框 / 类型检索见 [api-docs.md](api-docs.md)；
-  - `vuna fetch [--locked] [DIR]`：把不可变源依赖（`git` + `rev`、`url`）取到持久 store；
+  - `vuna deps fetch [--locked] [DIR]`：把不可变源依赖（`git` + `rev`、`url`）取到持久 store；
     `path` 依赖只校验摘要。`--locked` 不联网、只校验已物化。`check`/`build` 永不取包，
     缺对象报 `PKG_NotMaterialized`。布局与失败模式见 [package-store.md](package-store.md)；
-  - `vuna add <name>[@<version>] [DIR]`：查 `[registry].index`（目录 / `file://` / `http(s)://`），
+  - `vuna deps add <name>[@<version>] [DIR]`：查 `[registry].index`（目录 / `file://` / `http(s)://`），
     按版本解析出 `(源, hash)`，写回 `[dependencies]` 的内联表行并自动 fetch；
     `--dry-run` 只打印，`--no-fetch` 只改 manifest。索引是便利层，不是身份真源；
-  - `vuna clean [--store] [--packages] [--gc] [--all] [--dry-run] [DIR]`：一个 store 根、
+  - `vuna store clean [--store] [--packages] [--gc] [--all] [--dry-run] [DIR]`：一个 store 根、
     两类生命周期——`--store` 清缓存族（`objects/<kind>`、`blobs`、`units`、`views/bin`、
     `.tmp`），`--packages` 清包对象族（`objects/pkg` + `pkgs` + `tmp`），`--gc` 只删未被
     工作区/项目 roots 引用的包对象，`--all` 两者都清；不带 flag 时只清缓存族。没有树内
     `*.iface`，也没有 `--iface`。见 [cache.md](cache.md) / [package-store.md](package-store.md)；
-  - `vuna map [--modules]` / `vuna map --find <Module.name>` / `vuna map --impact
+  - `vuna map` / `vuna map find <Module.name>` / `vuna map impact
     <Module.name>` / `vuna api <Module.name>`：`Vuna.Index` 的源码符号索引，用于定位定义、
     引用者与建议测试标签；索引会话对象在 `$VUNA_STORE/objects/tool/`，按输入摘要判定
     新鲜度，refs 带行 / 列位置，没有刷新命令；
@@ -133,13 +133,13 @@ path = "../greet"
 | 源 | 必填 | 语义 |
 | --- | --- | --- |
 | `path = "相对路径"` | 无 `hash`（可写，写了就校验） | 工作树共变的**可变输入**；不复制、不写 store |
-| `git = url` + `rev = commit` | `hash = "sha256:<64hex>"` | 不可变源；`vuna fetch` 取到持久 store |
+| `git = url` + `rev = commit` | `hash = "sha256:<64hex>"` | 不可变源；`vuna deps fetch` 取到持久 store |
 | `url = "..."` | `hash = ...` | URL 直指 `pkg-source 1` 对象文件（不是 tarball） |
 | 任意源 | 可选 `identity = "sha256:<64hex>"` | 语义身份（`identityHash`）；fetch/check 校验，不替代内容完整性 |
 
 - 摘要只固定**不可变源**：改 `path` 依赖的源码**不需要**改任何 manifest（新鲜度由 iface
   接口哈希链负责；回归见 `90/steps_native/67_pkg_deps`）。
-- `vuna pin` 为 git 依赖同时写 `hash` 与 `identity`；`vuna add` 把 registry 条目的
+- `vuna deps pin` 为 git 依赖同时写 `hash` 与 `identity`；`vuna deps add` 把 registry 条目的
   `identity` 一并写回。`identity` 只 pin 语义面，不是完整性摘要。
 - 一个依赖图内包名唯一：无版本号共存；需要多版本只能改名/分叉。
 - 未知 key、源字段互斥、`git` 缺 `rev`、不可变源缺 hash、identity 格式错误或与取到的包
@@ -264,12 +264,12 @@ modules = [
 | `vuna repl [FILE\|DIR\|MODULE]` | 交互式 REPL（自动签名、行编辑/Ctrl-R、颜色；动作表达式经 compile+运行） |
 | `vuna doc [--check] [--package NAME] [DIR [OUT]]` | 单文件交互 HTML API 文档（docstring；尊重 `[export]`） |
 | `vuna search [--type|--name|--doc] ... <query...>` | 名称 / docstring / 类型检索（Hoogle 式打分；`--json`） |
-| `vuna map [--modules]` / `--find` / `--impact` | 源码符号索引（内容哈希缓存；定义、引用位置、建议测试） |
+| `vuna map` / `vuna map find` / `vuna map impact` | 源码符号索引（内容哈希缓存；定义、引用位置、建议测试） |
 | `vuna api <Module.name>` | 某模块的签名面（含 docstring 与行号） |
-| `vuna fetch [--locked] [DIR]` | 取不可变源依赖到持久 store；`--locked` 只校验不联网 |
-| `vuna add <name>[@<version>] [DIR]` | 查 `[registry].index` → 写回 `[dependencies]` 并取包（`--dry-run` / `--no-fetch`） |
-| `vuna clean [--store] [--packages] [--gc] [--all] [--dry-run] [DIR]` | 清缓存族 / 包对象族（`--gc` 只删未引用包对象） |
-| `vuna gen-errors [ROOT]` | 生成错误码文档（默认 `docs/.generated/errors.md`） |
+| `vuna deps fetch [--locked] [DIR]` | 取不可变源依赖到持久 store；`--locked` 只校验不联网 |
+| `vuna deps add <name>[@<version>] [DIR]` | 查 `[registry].index` → 写回 `[dependencies]` 并取包（`--dry-run` / `--no-fetch`） |
+| `vuna store clean [--store] [--packages] [--gc] [--all] [--dry-run] [DIR]` | 清缓存族 / 包对象族（`--gc` 只删未引用包对象） |
+| `vuna dev errors gen [ROOT]` | 生成错误码文档（默认 `docs/.generated/errors.md`） |
 | `vuna version`, `vuna --version` | 版本 |
 | `vuna help`, `vuna -h` | 用法 |
 

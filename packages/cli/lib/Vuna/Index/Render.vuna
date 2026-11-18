@@ -26,7 +26,7 @@ overviewSection ms pkg =
     title = if pkg == "" then "(no package)" else pkg
   in "\n## ${title}\n\n${join "\n" (map (\m => "  ${modName m}  ${modBytes m}B  ${modDecls m} decls") mine)}"
 
--- | 模块清单：每行「模块名、源文件路径」（`vuna map --modules`）。
+-- | 模块清单：每行「模块名、源文件路径」（`vuna map`）。
 export renderModules : Index -> String
 renderModules index =
   "${join "\n" (map (\m => "${modName m}  ${modPath m}") (indexModules index))}\n"

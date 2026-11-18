@@ -1,4 +1,4 @@
--- | `vuna gen-errors`：从**枚举真源**生成错误码文档（`docs/.generated/errors.md` 与
+-- | `vuna dev errors gen`：从**枚举真源**生成错误码文档（`docs/.generated/errors.md` 与
 -- `errors.json`）。
 --
 -- code、模板、说明、规则名、修复动作全部来自枚举表（`tcAll` / `cgAll` / `lexAll` /
@@ -138,7 +138,7 @@ renderDoc entries = do
   fxs <- pure (renderLintTable (fixEntries entries))
   pure ("""# vuna 错误码
 
-由 `vuna gen-errors` 从枚举真源（`Vuna.Compiler.Base.Diagnostics` 的 `tcAll`/`cgAll`、
+由 `vuna dev errors gen` 从枚举真源（`Vuna.Compiler.Base.Diagnostics` 的 `tcAll`/`cgAll`、
 `Vuna.Compiler.Base.Diagnostics.Frontend` 的 `lexAll`/`psAll`、`Vuna.Compiler.Base.Diagnostics.Loader` 的 `ldAll`、
 `Vuna.Lint.Diagnostics` 的 `lintAll`）生成；**勿手改**（生成物，不纳入 git）。
 

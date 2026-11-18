@@ -793,8 +793,8 @@ originFields d = case d.diagOrigin of
   OriginDirect => []
   OriginCascade _ => [JObj [Pair "kind" (JStr "origin"), Pair "value" (JStr "cascade")]]
 
--- | 内部：有 code 时附一条 `catalog` 指引（`vuna explain <code>`），供客户端跳文档。
+-- | 内部：有 code 时附一条 `catalog` 指引（`vuna errors explain <code>`），供客户端跳文档。
 catalogFields : Diagnostic -> List Json
 catalogFields d =
   if d.diagCode == "" then []
-  else [JObj [Pair "kind" (JStr "catalog"), Pair "value" (JStr "vuna explain ${d.diagCode}")]]
+  else [JObj [Pair "kind" (JStr "catalog"), Pair "value" (JStr "vuna errors explain ${d.diagCode}")]]

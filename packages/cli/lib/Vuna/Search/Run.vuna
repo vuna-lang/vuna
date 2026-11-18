@@ -6,6 +6,7 @@
 module Vuna.Search.Run where
 
 import Vuna.Cli.Args
+import Vuna.Cli.Spec
 import Vuna.Compiler.Base.Common
 import Vuna.Index
 import Vuna.Json
@@ -28,7 +29,7 @@ data SearchMode : Type where
 -- | `vuna search` 的入口：解析参数与模式，加载（或构建）当前 workspace 索引，输出命中。
 -- 用法错误、索引构建失败、查询解析失败都打印 `error: ...` 并返回 2。
 export runSearch : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => List String -> Eff r Int
-runSearch args = case parseToolArgs "vuna search" [BoolFlag "type", BoolFlag "name", BoolFlag "doc", ValueFlag "module", ValueFlag "limit", BoolFlag "json"] args of
+runSearch args = case parseCmdArgs ["search"] args of
   ErrC e => toolError (diagText e)
   OkC parsed =>
     let

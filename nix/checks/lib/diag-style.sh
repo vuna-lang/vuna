@@ -13,7 +13,7 @@ set -eu
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 mkdir -p "$tmp/docs"
-"$VUNA" gen-errors "$tmp" >/dev/null 2>&1
+"$VUNA" dev errors gen "$tmp" >/dev/null 2>&1
 md="$tmp/docs/.generated/errors.md"
 [ -f "$md" ] || { echo "diag-style: gen-errors did not produce errors.md" >&2; exit 1; }
 

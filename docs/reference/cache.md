@@ -43,7 +43,7 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
 
 缓存族 = `objects/{iface,header,lex,order,check,tool,doc,test,pkgiface,splitptr}` + `blobs` + `units` +
 `views` + `.tmp`；包对象族 = `objects/pkg` + `pkgs` + `tmp`。两族生命周期不同：
-`vuna clean --store` / `vuna store gc` 只碰缓存族，`vuna clean --packages` 只碰包对象族
+`vuna store clean --store` / `vuna store gc` 只碰缓存族，`vuna store clean --packages` 只碰包对象族
 （见 [package-store.md](package-store.md)）。
 
 所有地址 = `addrOf [kind, ...输入摘要]`（`Vuna.Compiler.Loader.Addr`，SHA-256）。
@@ -105,7 +105,7 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
 - 视图、对象、roots 全部按输入摘要寻址 → 另一目录 / 另一 worktree 的同一份输入直接命中；
   实测同一编译器身份下换目录 `check .` ~82 ms、`build .` ~0.6 s（冷态分别 ~49 s / ~28 s）；
 - 并发安全由既有机制承担：views 用 `mkdir` 锁串行、roots 只追加、units 只在桶内清理；
-- 代价：`vuna clean --store` / `vuna store gc` 是**全局操作**，任一 worktree 执行都会影响
+- 代价：`vuna store clean --store` / `vuna store gc` 是**全局操作**，任一 worktree 执行都会影响
   所有使用者（只影响命中率，不影响正确性）。不要在别人构建时跑 `clean --store`。
 
 必须隔离的四类（理由都不是权限，而是判据/口径）：
@@ -125,7 +125,7 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
 | `ifaceHash` / `miIfaceHash` / `hashOfIface` | 下游可见语义面（span/path、`opaque`/`abstract` 体排除） | 逻辑指纹：依赖失效 |
 | `implHash` / `miImplHash` | 产物面（含 `opaque`/`abstract` 体，不含 span） | 产物身份 |
 | `pkgIfaceHash` / `pkgImplHash` | 模块摘要按名排序聚合 | 包接口身份 / 包产物身份 |
-| `identityHash` | 包名 + `[export]` + 依赖摘要 + 文件内容摘要 | 分发/pin 身份（manifest `identity` / registry / `vuna pin`；不参与缓存失效） |
+| `identityHash` | 包名 + `[export]` + 依赖摘要 + 文件内容摘要 | 分发/pin 身份（manifest `identity` / registry / `vuna deps pin`；不参与缓存失效） |
 
 ## 正确性
 
@@ -155,7 +155,7 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
   摘要）+ 一个 `.project`（项目绝对目录，只写一次）。项目**只追加**；没有读-改-写，并发
   check/build 不会丢 root。GC 扫所有项目目录里 digest 文件名的并集——A 不需要知道 B
   的存在。读取侧也接受单文件布局（`roots/<项目>` 是文件时先读 digest 列表）。
-- 登记的时机：check 判定 marker 提交后、build 的 split blob 提交后、`vuna fetch` 取到包后、
+- 登记的时机：check 判定 marker 提交后、build 的 split blob 提交后、`vuna deps fetch` 取到包后、
   test verdict 提交后。
 - `vuna store gc [--dry-run] [--older-than SEC] [--max-size BYTES]`：
   - **先裁剪项目根**：`.project` 记录的目录已不存在（临时包、删掉的 worktree）或 legacy
@@ -177,7 +177,7 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
 - **roots**：逐 digest 文件（见上），不需要锁；GC 的宽限窗口覆盖「对象已写、root 还没写」。
 - **units**：只做**当前 entry 桶内**的过期 key 清理；不跨 entry 删目录。并发构建不同入口
   不会互相驱逐。桶的容量由 `vuna store gc`（按 mtime / `--max-size`）或
-  `vuna clean --store` 管理；删除 unit 只是重算，不影响正确性。split 生成顺序按实际
+  `vuna store clean --store` 管理；删除 unit 只是重算，不影响正确性。split 生成顺序按实际
   依赖图规范化（`canonicalTopo`：层 = 1 + max(依赖层)，同层按名字内容键），并校验该图
   无环 —— 命中集合不同不会让产物或 build.sh 分层漂移。
 

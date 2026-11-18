@@ -44,7 +44,7 @@ nix run .#vuna -- check examples/multi         # 包级类型检查
 nix run .#vuna -- test examples/multi          # 纯 String/Int/Bool 走核心求值；main : Eff [] ... 走 compile+运行
 
 # 测试 / 格式化 / 文档
-nix run .#vuna-run-tests                            # 原生 suite（vuna test --suite test/suite.toml）
+nix run .#vuna-run-tests                            # 原生 suite（vuna dev suite test/suite.toml）
 nix run .#vuna-run-tests -- --list                  # 列出章节/case（--only <章节>/--filter PAT）
 nix run .#backend-check -- --compiler native --scope parity  # 自举编译器跑 parity（CI 同款；见 testing.md）
 nix run .#vuna -- fmt --check examples/multi   # 格式化检查（也可逐个给文件/目录）
@@ -82,8 +82,8 @@ vuna test [DIR] [--list|--filter PAT|--verbose|--fail-fast]  # 运行 test/*.vun
 vuna run [DIR] [--package NAME] [--no-build] [--release] [-- ARGS...]    # 增量 build + 执行 .output/bin/<包名>
 vuna fmt [--check] [PATH]...
 vuna repl [FILE|DIR|MODULE]               # 自动签名 / 行编辑（方向键/Ctrl-R）/ 颜色 / :load 文件|目录|模块
-vuna repl --listen ADDR [FILE|DIR|MODULE] # 常驻 REPL server（tcp:127.0.0.1:PORT | unix:PATH；stdout 就绪行）
-vuna repl --client ADDR                   # 每次调用一发一收（stdin 的 JSON-RPC body → 响应 body）
+vuna repl serve --listen ADDR [FILE|DIR|MODULE] # 常驻 REPL server（tcp:127.0.0.1:PORT | unix:PATH；stdout 就绪行）
+vuna repl client --addr ADDR                   # 每次调用一发一收（stdin 的 JSON-RPC body → 响应 body）
 vuna doc [--check] [--package NAME] [DIR [OUT]]  # 默认 DIR/docs/api.html
 vuna search [--type|--name|--doc] [--module PFX] [--limit N] [--json] <query...>
 vuna map [...] | vuna api <Module.name>  # 模块总览 / 定位符号 / 改动影响面 / 签名面
@@ -160,12 +160,13 @@ dune/OCaml 项目，只用 `ocamlopt` 编译生成的种子和程序。
 | [docs/reference/operators.md](docs/reference/operators.md) | 运算符=方法别名、`Eq`/`Ord` 真源、实例落点规则 |
 | [docs/reference/floats.md](docs/reference/floats.md) | `Float` 原语、字面量转换 trait（FromString/FromInt/FromFloat）、`deriving`、Prelude/产物影响与核心求值限制 |
 | [docs/reference/primitives.md](docs/reference/primitives.md) | 内建/原语唯一声明面、Int/String 语义、宿主层原语与推荐的 `Base.Eff.*` handler 用法 |
+| [docs/reference/cli.md](docs/reference/cli.md) | CLI 命令树、flag 词汇、帮助与建议、退出码、产品面与 `vuna dev` 的边界 |
 | [docs/reference/packages.md](docs/reference/packages.md) | `vuna.toml` 包格式（含依赖声明）、workspace / 依赖 DAG、工具链命令一览 |
-| [docs/reference/package-store.md](docs/reference/package-store.md) | 持久包 store、`vuna fetch` / `clean --packages`、内容摘要与语义身份 |
+| [docs/reference/package-store.md](docs/reference/package-store.md) | 持久包 store、`vuna deps fetch` / `store clean --packages`、内容摘要与语义身份 |
 | [docs/reference/core.md](docs/reference/core.md) | Core TT / NbE / 合一 / 精化器 / 擦除 / codegen 护栏的实现参考 |
 | [docs/reference/api-docs.md](docs/reference/api-docs.md) | API 文档：docstring、单文件 HTML、`vuna search` / 类型检索 |
-| [docs/reference/observability.md](docs/reference/observability.md) | 可观测性（语言层，任何 vuna 应用可用）：事件模型（Chrome Trace Event JSONL `vuna-obs 1`）、`VUNA_OBS=0..3` 分级与关闭快速路径、`Base.Obs` / `Base.Obs.Span` 与 `obs!`/`mark!` 宏、生成运行时（span/计数/日志/CPU 采样/分配栈）、`#line` → DWARF、`vuna obs run/summarize/validate/convert/render/merge/symbols`、成本纪律与门禁 |
-| [docs/reference/tooling.md](docs/reference/tooling.md) | 工具链：`vuna goal`、LSP（含 codeAction quick fix）、`vuna doc`（单文件 HTML）、`vuna run` / REPL 调试命令、**REPL server / client（`--listen`/`--client`，JSON-RPC over socket）**、错误码体系与代表性错误索引 |
+| [docs/reference/observability.md](docs/reference/observability.md) | 可观测性（语言层，任何 vuna 应用可用）：事件模型（Chrome Trace Event JSONL `vuna-obs 1`）、`VUNA_OBS=0..3` 分级与关闭快速路径、`Base.Obs` / `Base.Obs.Span` 与 `obs!`/`mark!` 宏、生成运行时（span/计数/日志/CPU 采样/分配栈）、`#line` → DWARF、`vuna dev obs run/summarize/validate/convert/render/merge/symbols`、成本纪律与门禁 |
+| [docs/reference/tooling.md](docs/reference/tooling.md) | 工具链：`vuna goal`、LSP（含 codeAction quick fix）、`vuna doc`（单文件 HTML）、`vuna run` / REPL 调试命令、**REPL server / client（`repl serve --listen` / `repl client --addr`，JSON-RPC over socket）**、错误码体系与代表性错误索引 |
 | [docs/reference/debugging.md](docs/reference/debugging.md) | 调试：诊断源码片段、运行时错误报告（`vuna: runtime error` + 定义级帧 + exit 2）、语言级调试构造（`dbg!`/`dbgShow`/`assert`/`todo`）、`vuna run` / `test --verbose` / REPL `:type` |
 | [docs/reference/diagnostics.md](docs/reference/diagnostics.md) | 诊断系统：结构化 `Diagnostic`/`Check` 通道、错误码域、short/human/JSON 渲染、LSP 映射 |
 | [docs/reference/compiler.md](docs/reference/compiler.md) | 编译器模块职责、codegen 表示与输出模型、接口摘要（TTC 式模块化精化）、夹具指标 |

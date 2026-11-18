@@ -1,5 +1,5 @@
 # store-isolated: 断言缓存/对象库行为，使用 case 私有 store。
-# 68) 包获取：`vuna fetch` 把 git 依赖取到持久 store，check/build 只读。
+# 68) 包获取：`vuna deps fetch` 把 git 依赖取到持久 store，check/build 只读。
 #     git 用本地仓库（file://），无需网络；`--locked` 不联网只校验；`clean --packages`
 #     清持久 store 后 check 回到 PKG_NotMaterialized。
 
@@ -8,12 +8,12 @@ run: sh -c 'rm -rf "$TMPDIR/f68"; mkdir -p "$TMPDIR/f68/dep/lib" "$TMPDIR/f68/ap
 exit: 0
 
 # 68b) 摘要不符 ⇒ PKG_HashMismatch（不写 store、不物化），输出里带实际摘要。
-run: sh -c 'VUNA_STORE="$TMPDIR/f68/store" "$VUNA" fetch "$TMPDIR/f68/app" 2>&1'
+run: sh -c 'VUNA_STORE="$TMPDIR/f68/store" "$VUNA" deps fetch "$TMPDIR/f68/app" 2>&1'
 exit: 1
 out-contains: PKG_HashMismatch
 
 # 68c) 用输出里的实际摘要替换 manifest 的 hash，再 fetch ⇒ ok。
-run: sh -c 'actual=$(VUNA_STORE="$TMPDIR/f68/store" "$VUNA" fetch "$TMPDIR/f68/app" 2>&1 | sed -n "s/.*actual \([0-9a-f][0-9a-f]*\).*/\1/p" | head -1); [ -n "$actual" ] || exit 1; sed -i "s|hash = \"sha256:0000000000000000000000000000000000000000000000000000000000000000\"|hash = \"sha256:$actual\"|" "$TMPDIR/f68/app/vuna.toml"; VUNA_STORE="$TMPDIR/f68/store" "$VUNA" fetch "$TMPDIR/f68/app" 2>&1'
+run: sh -c 'actual=$(VUNA_STORE="$TMPDIR/f68/store" "$VUNA" deps fetch "$TMPDIR/f68/app" 2>&1 | sed -n "s/.*actual \([0-9a-f][0-9a-f]*\).*/\1/p" | head -1); [ -n "$actual" ] || exit 1; sed -i "s|hash = \"sha256:0000000000000000000000000000000000000000000000000000000000000000\"|hash = \"sha256:$actual\"|" "$TMPDIR/f68/app/vuna.toml"; VUNA_STORE="$TMPDIR/f68/store" "$VUNA" deps fetch "$TMPDIR/f68/app" 2>&1'
 out-contains: fetch: dep ok
 
 # 68d) 取到之后 check 只读 store（离线可用）。
@@ -26,28 +26,28 @@ exit: 1
 out-contains: PKG_NotMaterialized
 
 # 68f) --locked 在已物化的 store 上是纯校验（不联网）且成功。
-run: sh -c 'VUNA_STORE="$TMPDIR/f68/store" "$VUNA" fetch --locked "$TMPDIR/f68/app" 2>&1'
+run: sh -c 'VUNA_STORE="$TMPDIR/f68/store" "$VUNA" deps fetch --locked "$TMPDIR/f68/app" 2>&1'
 exit: 0
 out-contains: fetch: dep cached
 
 # 68g) --locked 在空 store 上失败（不给"顺手取一下"的隐式行为）。
-run: sh -c 'VUNA_STORE="$TMPDIR/f68/empty-store" "$VUNA" fetch --locked "$TMPDIR/f68/app" 2>&1'
+run: sh -c 'VUNA_STORE="$TMPDIR/f68/empty-store" "$VUNA" deps fetch --locked "$TMPDIR/f68/app" 2>&1'
 exit: 1
 out-contains: PKG_NotMaterialized
 
 # 68h) clean --packages --dry-run 只报数量；实际清理后 check 回到 NotMaterialized。
-run: sh -c 'VUNA_STORE="$TMPDIR/f68/store" "$VUNA" clean --packages --dry-run 2>&1'
+run: sh -c 'VUNA_STORE="$TMPDIR/f68/store" "$VUNA" store clean --packages --dry-run 2>&1'
 out-contains: clean-packages: would remove
-run: sh -c 'VUNA_STORE="$TMPDIR/f68/store" "$VUNA" clean --packages 2>&1'
+run: sh -c 'VUNA_STORE="$TMPDIR/f68/store" "$VUNA" store clean --packages 2>&1'
 out-contains: clean-packages: removed
 run: sh -c 'VUNA_STORE="$TMPDIR/f68/store" "$VUNA" check "$TMPDIR/f68/app" 2>&1'
 exit: 1
 out-contains: PKG_NotMaterialized
-# 68i) pin：依赖源码前进一个 rev 后，`vuna pin` 把实际内容摘要写回 manifest 的 hash 行，
+# 68i) pin：依赖源码前进一个 rev 后，`vuna deps pin` 把实际内容摘要写回 manifest 的 hash 行，
 #      随后 fetch 命中、check 成功（pin = 取包 + 重算摘要 + 段内替换 hash）。
-run: sh -c 'printf "module D where\n\nexport v : Int\nv = 42\n" > "$TMPDIR/f68/dep/lib/D.vuna"; ( cd "$TMPDIR/f68/dep" && git add -A && git -c user.email=t@t -c user.name=t commit -qm bump ); rev=$( cd "$TMPDIR/f68/dep" && git rev-parse HEAD ); sed -i "s|^rev = .*|rev = \"$rev\"|" "$TMPDIR/f68/app/vuna.toml"; VUNA_STORE="$TMPDIR/f68/store" "$VUNA" pin "$TMPDIR/f68/app" 2>&1'
+run: sh -c 'printf "module D where\n\nexport v : Int\nv = 42\n" > "$TMPDIR/f68/dep/lib/D.vuna"; ( cd "$TMPDIR/f68/dep" && git add -A && git -c user.email=t@t -c user.name=t commit -qm bump ); rev=$( cd "$TMPDIR/f68/dep" && git rev-parse HEAD ); sed -i "s|^rev = .*|rev = \"$rev\"|" "$TMPDIR/f68/app/vuna.toml"; VUNA_STORE="$TMPDIR/f68/store" "$VUNA" deps pin "$TMPDIR/f68/app" 2>&1'
 out-contains: pin: updated 1 dependency hash(es)
-run: sh -c 'VUNA_STORE="$TMPDIR/f68/store" "$VUNA" fetch "$TMPDIR/f68/app" 2>&1'
+run: sh -c 'VUNA_STORE="$TMPDIR/f68/store" "$VUNA" deps fetch "$TMPDIR/f68/app" 2>&1'
 out-contains: cached
 run: sh -c 'VUNA_STORE="$TMPDIR/f68/store" "$VUNA" check "$TMPDIR/f68/app"'
 exit: 0
@@ -56,6 +56,6 @@ exit: 0
 #      PKG_IdentityMismatch（缓存命中不能绕过身份校验）。
 run: sh -c 'grep -q "^identity = \"sha256:" "$TMPDIR/f68/app/vuna.toml"'
 exit: 0
-run: sh -c 'sed -i "s|^identity = .*|identity = \"sha256:0000000000000000000000000000000000000000000000000000000000000000\"|" "$TMPDIR/f68/app/vuna.toml"; VUNA_STORE="$TMPDIR/f68/store" "$VUNA" fetch "$TMPDIR/f68/app" 2>&1'
+run: sh -c 'sed -i "s|^identity = .*|identity = \"sha256:0000000000000000000000000000000000000000000000000000000000000000\"|" "$TMPDIR/f68/app/vuna.toml"; VUNA_STORE="$TMPDIR/f68/store" "$VUNA" deps fetch "$TMPDIR/f68/app" 2>&1'
 exit: 1
 out-contains: PKG_IdentityMismatch

@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-// test/corpus/obs-cdp/cdp-client.mjs —— `vuna obs serve --cdp` 的最小 Content-Length JSON-RPC 客户端。
+// test/corpus/obs-cdp/cdp-client.mjs —— `vuna dev obs serve --cdp` 的最小 Content-Length JSON-RPC 客户端。
 //
 // 用法：node test/corpus/obs-cdp/cdp-client.mjs <ADDR> <requests.json> [CAPTURE_DIR]
-//   ADDR = tcp:127.0.0.1:PORT | unix:PATH（与 `vuna obs serve --cdp` 的地址语法一致）
+//   ADDR = tcp:127.0.0.1:PORT | unix:PATH（与 `vuna dev obs serve --cdp` 的地址语法一致）
 //   requests.json = `[{"method":"...","params":{...}}, ...]`，按顺序在同一连接上发；
 //   CAPTURE_DIR 给定时，把每个响应的 `result.profile`（若有）落成 `frame-<N>.json`，
 //   供调用方 `cmp`（确定性断言）。
@@ -10,7 +10,7 @@
 // 输出每个响应一行摘要：`#<N> result=...` / `#<N> error code=<c> message=<...>`；
 // 退出码：0 = 全部请求都收到响应，2 = 连接/协议失败，3 = 参数错误。
 //
-// 为什么是 Node：`vuna repl --client` 一次调用只发一帧，而 `Profiler.stop` 必须在
+// 为什么是 Node：`vuna repl client --addr` 一次调用只发一帧，而 `Profiler.stop` 必须在
 // `Profiler.start` 之后（同一连接），所以这里需要「同一连接多帧」的客户端。
 // 只在 suite 的 e2e tier 用（`pkgs.nodejs` 在 nix 的 e2e check 里注入）。
 import net from 'node:net';

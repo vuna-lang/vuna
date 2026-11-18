@@ -1,7 +1,8 @@
 # 工具链：goal、LSP、doc、fmt 与错误码
 
 本文覆盖 DT 路径的**工具链**：洞目标显示、LSP server、`vuna doc`、`vuna fmt`，以及
-`vuna run` / REPL 的命令语义、诊断错误码与 CLI 退出码。
+`vuna run` / REPL 的命令语义、诊断错误码与 CLI 退出码。命令面（命令树、flag 词汇、
+帮助与建议、退出码总表、`vuna dev` 边界）见 [cli.md](cli.md)。
 语言语义见 [language.md](language.md) / [type-system.md](type-system.md)，实现边界见
 [core.md](core.md)，模块与 TCB 边界见 [architecture.md](../architecture.md)。
 
@@ -96,7 +97,7 @@ $ vuna search --type "a -> a"
 `tcAll` / `cgAll` 是文档遍历源。报错点统一用 `tcErr0/1/2`、`cgErr0/1`、`lexErr0`、
 `psErr0/1` 抛出。
 
-**完整清单**由 `vuna gen-errors [ROOT]` 遍历上述枚举表生成到
+**完整清单**由 `vuna dev errors gen [ROOT]` 遍历上述枚举表生成到
 `ROOT/docs/.generated/errors.md` 与同源目录 JSON `ROOT/docs/.generated/errors.json`
 （code/severity/phase/category/message/desc；默认 ROOT=`.`）。生成物 gitignored、
 **勿手改**；重跑幂等。
@@ -262,11 +263,11 @@ Ctrl-D 空行退出。超宽行按水平窗口只显示尾部，宽度来自 `st
 未知 `:命令` 给 `未知命令 ...（输入 :help 查看可用命令）` + 最近命令建议，不落到 parse
 error。调试与运行时错误的整体工作流见 [debugging.md](debugging.md)。
 
-### REPL server 与客户端（`--listen` / `--client`）
+### REPL server 与客户端（`repl serve --listen` / `repl client --addr`）
 
 **为什么不是 stdio**：agent / 脚本的每次 bash 调用都是新 shell，进程结束时子进程会被清理，
-所以「常驻 REPL」必须挂在 **OS 级端点**上。`vuna repl --listen ADDR` 起常驻 server
-（会话状态跨连接保留），`vuna repl --client ADDR` 是每次调用的一发一收客户端。
+所以「常驻 REPL」必须挂在 **OS 级端点**上。`vuna repl serve --listen ADDR` 起常驻 server
+（会话状态跨连接保留），`vuna repl client --addr ADDR` 是每次调用的一发一收客户端。
 
 **端点**（只允许本机，能连上 = 能在你的进程里执行任意 vuna 代码）：
 
@@ -304,19 +305,19 @@ error。调试与运行时错误的整体工作流见 [debugging.md](debugging.m
 ```console
 # 1) 启动（DSH：bash 工具的 run_in_background；其它环境用 setsid/nohup/systemd/tmux）。
 #    不要用普通 `&`：调用结束会被清理；/tmp 也可能每次调用隔离，socket 路径请放持久目录。
-vuna repl --listen tcp:127.0.0.1:7878      # 就绪行：listening tcp:127.0.0.1:7878
+vuna repl serve --listen tcp:127.0.0.1:7878      # 就绪行：listening tcp:127.0.0.1:7878
 
 # 2) 每次独立 bash 调用（客户端补 Content-Length，只输出响应 body）
 printf '%s' '{"jsonrpc":"2.0","id":1,"method":"eval","params":{"code":"1 + 1"}}' \
-  | vuna repl --client tcp:127.0.0.1:7878
+  | vuna repl client --addr tcp:127.0.0.1:7878
 
 # 3) 收尾
-printf '%s' '{"jsonrpc":"2.0","id":2,"method":"shutdown"}' | vuna repl --client tcp:127.0.0.1:7878
+printf '%s' '{"jsonrpc":"2.0","id":2,"method":"shutdown"}' | vuna repl client --addr tcp:127.0.0.1:7878
 ```
 
 零依赖备选：bash 内建 `exec 3<>/dev/tcp/127.0.0.1/7878` 直接收发帧（HTTP 式 `nc -U` 亦可
 连 Unix socket）。会话是**单客户端串行**的：一个连接处理完（或对端关闭）才 accept 下一个；
-`--client` 一发一收后立即断开，因此多次调用天然串行。阻塞的 `accept`/`recv` **无超时**，
+`vuna repl client` 一发一收后立即断开，因此多次调用天然串行。阻塞的 `accept`/`recv` **无超时**，
 客户端崩溃会随连接关闭自动恢复，但**不要**在同一会话上并发发请求。
 
 **server 的限制**：server 模式下 `:!` 与效果表达式（`main : Eff [] a` 临时编译运行）**拒绝执行**
@@ -352,20 +353,20 @@ printf '%s' '{"jsonrpc":"2.0","id":2,"method":"shutdown"}' | vuna repl --client 
 dedent，开引号后的首个换行由 lexer 丢弃、渲染时按需补回），文本里的 `$` 紧跟 `{` 写成
 `\$`，`${...}` 内的注释丢弃（词法不进 AST）。
 
-## 6. `vuna obs`（可观测性工具链）
+## 6. `vuna dev obs`（可观测性工具链）
 
 规范见 [observability.md](observability.md)（本页只说命令面）：
 
 | 命令 | 语义 |
 | --- | --- |
-| `vuna obs run [--level N] [--sample cpu|mem|both] [--interval US] [--out FILE] [--] <cmd...>` | 用 `env` 前置命令把 `VUNA_OBS*` 注入子进程后跑命令；退出码原样返回；打印 trace 路径 |
-| `vuna obs validate TRACE` | 结构校验（首行元数据、`ts` 必需、同 pid/tid 时序（嵌套 span 放行）、`dur`/`value`/`stack`/`text` 字段、`vuna.*` 词汇表、末行截断降级为 warning）；退出码 0/1/2 |
-| `vuna obs summarize [--json] [--baseline FILE] [--threshold PCT] TRACE...` | span 树折叠（自用/总用时、计数、采样热点）；`--json` 单行稳定；`--baseline` 超阈值退 1 |
-| `vuna obs convert --to cpuprofile|speedscope|folded|jsonl [--out PATH] TRACE` | 换到外部生态格式（确定性输出） |
-| `vuna obs render [--out FILE] TRACE` | 单文件 HTML（无外链、无时间戳、两次渲染逐字节一致） |
-| `vuna obs merge [--out FILE] TRACE...` | 多进程 trace 合并成一份 JSONL |
-| `vuna obs symbols [--out FILE] [OUTDIR]` | 从 split 产物的 `#line` 指令抽 `vuna-symbols.json`（OCaml 符号 → `.vuna` 位置） |
-| `vuna obs serve --cdp ADDR [--allow-slow] [TRACE...]` | CDP Profiler 子集（Content-Length JSON-RPC over socket，单连接；**离线**：`Profiler.stop` 由 TRACE 的 cpu 采样换算，非 live 采样；退出码 0/1/2）。Chrome DevTools 经 `test/corpus/obs-cdp/bridge.mjs` 的 WS 桥（vuna 侧不做 WebSocket，见 debt D83） |
+| `vuna dev obs run [--level N] [--sample cpu|mem|both] [--interval US] [--out FILE] [--] <cmd...>` | 用 `env` 前置命令把 `VUNA_OBS*` 注入子进程后跑命令；退出码原样返回；打印 trace 路径 |
+| `vuna dev obs validate TRACE` | 结构校验（首行元数据、`ts` 必需、同 pid/tid 时序（嵌套 span 放行）、`dur`/`value`/`stack`/`text` 字段、`vuna.*` 词汇表、末行截断降级为 warning）；退出码 0/1/2 |
+| `vuna dev obs summarize [--json] [--baseline FILE] [--threshold PCT] TRACE...` | span 树折叠（自用/总用时、计数、采样热点）；`--json` 单行稳定；`--baseline` 超阈值退 1 |
+| `vuna dev obs convert --to cpuprofile|speedscope|folded|jsonl [--out PATH] TRACE` | 换到外部生态格式（确定性输出） |
+| `vuna dev obs render [--out FILE] TRACE` | 单文件 HTML（无外链、无时间戳、两次渲染逐字节一致） |
+| `vuna dev obs merge [--out FILE] TRACE...` | 多进程 trace 合并成一份 JSONL |
+| `vuna dev obs symbols [--out FILE] [OUTDIR]` | 从 split 产物的 `#line` 指令抽 `vuna-symbols.json`（OCaml 符号 → `.vuna` 位置） |
+| `vuna dev obs serve --cdp ADDR [--allow-slow] [TRACE...]` | CDP Profiler 子集（Content-Length JSON-RPC over socket，单连接；**离线**：`Profiler.stop` 由 TRACE 的 cpu 采样换算，非 live 采样；退出码 0/1/2）。Chrome DevTools 经 `test/corpus/obs-cdp/bridge.mjs` 的 WS 桥（vuna 侧不做 WebSocket，见 debt D83） |
 
 ## 7. 尚未实现（工具链自身缺口）
 

@@ -124,6 +124,8 @@ Vuna_dCompiler_dFrontend_dParser.ml
 Vuna_dCompiler_dFrontend_dParser_dSupport.ml
 Vuna_dCompiler_dFrontend_dToml.ml
 Vuna_dCompiler_dIr_dAnalysis.ml
+Vuna_dCompiler_dIr_dAnf.ml
+Vuna_dCompiler_dIr_dCps.ml
 Vuna_dCompiler_dIr_dModel.ml
 Vuna_dCompiler_dIr_dRuntime.ml
 Vuna_dCompiler_dIr_dValidate.ml
@@ -152,6 +154,7 @@ Vuna_dCompiler_dWasm_dModel.ml
 Vuna_dCompiler_dWasm_dModule.ml
 Vuna_dCompiler_dWasm_dRender.ml
 Vuna_dCompiler_dWasm_dRuntime.ml
+Vuna_dCompiler_dWasm_dStep.ml
 Vuna_dCompiler_dWasm_dTypes.ml
 Vuna_runtime.ml
 build-id

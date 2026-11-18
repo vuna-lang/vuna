@@ -24,6 +24,7 @@ import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Packages.Pkg
 import Vuna.Compiler.Driver.CompilerCli
 import Vuna.Cli.Args
+import Vuna.Cli.Spec
 import Vuna.Files
 import Base.EffConsole
 import Base.EffEnv
@@ -49,7 +50,7 @@ runRun args =
     parts = splitPassthrough args
     own = firstOf parts
     passthrough = secondOf parts
-  in case parseToolArgs "vuna run" [BoolFlag "no-build", BoolFlag "release", ValueFlag "target", ValueFlag "package", ValueFlag "out", ValueFlag "cpus", ValueFlag "mem-limit", ValueFlag "timeout"] own of
+  in case parseCmdArgs ["run"] own of
     ErrC e => runError (diagText e)
     OkC parsed => case validateLimits parsed of
       ErrC e => runError (diagText e)

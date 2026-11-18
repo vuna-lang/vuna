@@ -1,4 +1,4 @@
--- | `vuna obs` 的规范事件模型（schema `vuna-obs 1`），外加纯解析与渲染原语。
+-- | `vuna dev obs` 的规范事件模型（schema `vuna-obs 1`），外加纯解析与渲染原语。
 -- 规范的唯一来源是 `docs/reference/observability.md` §3（事件模型）与 §3.3（事件名词汇表）。
 --
 -- 本模块只有纯函数：不做 I/O、不读文件（读盘在 [Vuna.Obs.Read]），无 `Eff`。缺字段分两层：
@@ -15,7 +15,7 @@ import Vuna.Json
 export obsSchemaVersion : String
 obsSchemaVersion = "vuna-obs 1"
 
--- | `vuna obs summarize --json` 的载荷 schema。
+-- | `vuna dev obs summarize --json` 的载荷 schema。
 export obsSummarySchema : String
 obsSummarySchema = "vuna-obs-summary 1"
 

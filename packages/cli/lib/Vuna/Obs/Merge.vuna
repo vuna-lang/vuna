@@ -1,4 +1,4 @@
--- | 多份 trace 合并成一份合法 JSONL：`vuna obs merge [--out FILE] TRACE...`。
+-- | 多份 trace 合并成一份合法 JSONL：`vuna dev obs merge [--out FILE] TRACE...`。
 --
 -- 输入是 N 份 trace（典型来源：workspace 多成员 / 每进程一份的 `vuna-<pid>.jsonl`）。
 -- 合并顺序按每份 trace 的 `t0`（元数据 `args.t0`；缺失则取该文件里第一个带 `ts` 的事件；
@@ -29,6 +29,7 @@ import Base.Pair
 import Base.Sort
 import Base.String
 import Vuna.Cli.Args
+import Vuna.Cli.Spec
 import Vuna.Compiler.Base.Common
 import Vuna.Json
 import Vuna.Obs.Read
@@ -43,11 +44,11 @@ import Base.EffProcess
 -- ---------------------------------------------------------------
 -- | `merge` 的用法文本。
 mergeUsage : String
-mergeUsage = "usage: vuna obs merge [--out FILE] TRACE..."
+mergeUsage = "usage: vuna dev obs merge [--out FILE] TRACE..."
 
--- | `vuna obs merge` 的入口；参数错误 / 读盘失败 / 空 trace 文件都是退出码 2。
+-- | `vuna dev obs merge` 的入口；参数错误 / 读盘失败 / 空 trace 文件都是退出码 2。
 export runObsMerge : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nProcess ProcessOp r => List String -> Eff r Int
-runObsMerge args = case parseToolArgs "vuna obs merge" [ValueFlag "out"] args of
+runObsMerge args = case parseCmdArgs ["dev", "obs", "merge"] args of
   ErrC e => mergeFail 2 (diagText e)
   OkC parsed => case outOf parsed of
     ErrC e => mergeFail 2 (diagText e)

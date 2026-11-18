@@ -1,6 +1,6 @@
 # vuna 原生测试 runner：`nix run .#vuna-run-tests`。
 #
-# 没有 shell 编排层：直接调用仓库里刚构建出的 `vuna test --suite test/suite.toml`。
+# 没有 shell 编排层：直接调用仓库里刚构建出的 `vuna dev suite test/suite.toml`。
 # 编译器固定为同一个 Nix 构建产物（stage 1），种子通过 VUNA_SEED 注入；case 的
 # 并行度由 runner 的 `--jobs auto` 探测全部可用核。
 {
@@ -31,10 +31,10 @@ pkgs.writeShellScriptBin "vuna-run-tests" ''
   # `--only <章节>` 反复跑仍有命中；`VUNA_STORE` 已设置时尊重调用方。
   export VUNA_STORE="''${VUNA_STORE:-$HOME/.vuna/test-store}"
   mkdir -p "$VUNA_STORE"
-  exec "${vuna}/bin/vuna" test --suite "$repo/test/suite.toml" "$@"
+  exec "${vuna}/bin/vuna" dev suite "$repo/test/suite.toml" "$@"
 ''
 // {
   meta = {
-    description = "vuna 原生测试（vuna test --suite，原生 case 级并行）";
+    description = "vuna 原生测试（vuna dev suite，原生 case 级并行）";
   };
 }

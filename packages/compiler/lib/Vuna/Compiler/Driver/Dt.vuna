@@ -1180,7 +1180,7 @@ dtIncrementalSetup ctx resolved depIfaces cleanIfaces cache =
     cleanNames = moduleNamesOf cleanIfaces
     dirtyOurs = filter (\m => memName (moduleNameOf m) cleanNames == False) ours
     decls = append (concatMap sealModule dirtyOurs) (firstOf parts)
-    -- 归因（`vuna obs summarize` 的 counter 表）：增量装配实际预置了几个干净模块、
+    -- 归因（`vuna dev obs summarize` 的 counter 表）：增量装配实际预置了几个干净模块、
     -- 本次要精化几个模块 / 多少条 decl。clean=0 而 dirty=整包 ⇒ 干净模块判定失效。
     _ = obsCounter "vuna.elab.incr.clean" (length cleanIfaces)
     _ = obsCounter "vuna.elab.incr.dirty" (length dirtyOurs)

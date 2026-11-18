@@ -9,12 +9,12 @@ exit: 1
 out-contains: PKG_HashMismatch
 
 # url 依赖取不到对象 ⇒ PKG_FetchFailed（curl 失败路径）。
-run: sh -c 'S="$TMPDIR/pe"; VUNA_STORE="$S/store" "$VUNA" fetch "$S/f" 2>&1'
+run: sh -c 'S="$TMPDIR/pe"; VUNA_STORE="$S/store" "$VUNA" deps fetch "$S/f" 2>&1'
 exit: 1
 out-contains: PKG_FetchFailed
 
 # 静态索引缺条目 ⇒ PKG_IndexMalformed。
-run: sh -c 'S="$TMPDIR/pe"; VUNA_STORE="$S/store" "$VUNA" add ghost "$S/r" --dry-run 2>&1'
+run: sh -c 'S="$TMPDIR/pe"; VUNA_STORE="$S/store" "$VUNA" deps add ghost "$S/r" --dry-run 2>&1'
 exit: 1
 out-contains: PKG_IndexMalformed
 # path 依赖声明了错误 identity ⇒ PKG_IdentityMismatch（与内容摘要分开校验）。

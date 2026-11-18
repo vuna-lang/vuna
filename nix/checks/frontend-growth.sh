@@ -64,7 +64,7 @@ best_us() { # file -> "lex syntax"（两次独立冷跑取最小）
       echo "frontend-growth: no trace produced for $f" >&2
       exit 1
     }
-    "$VUNA" obs summarize --json "$trace" >"$cache/summary.json" 2>"$cache/summary.err" || {
+    "$VUNA" dev obs summarize --json "$trace" >"$cache/summary.json" 2>"$cache/summary.err" || {
       echo "frontend-growth: obs summarize --json failed for $f" >&2
       cat "$cache/summary.err" >&2
       exit 1

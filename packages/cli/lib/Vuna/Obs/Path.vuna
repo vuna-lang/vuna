@@ -1,4 +1,4 @@
--- | `vuna obs` 工具侧的路径小工具：只做「取路径最后一段」与「去掉 `.ml` 后缀」。
+-- | `vuna dev obs` 工具侧的路径小工具：只做「取路径最后一段」与「去掉 `.ml` 后缀」。
 --
 -- 单独成模块是为了共用：`merge` 的 `args.member`（exec 的 basename）与 `symbols` 的
 -- `unit`（split 产物 `.ml` 文件名去扩展名）都要「路径最后一段」，而编译器侧的

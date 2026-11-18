@@ -1,0 +1,169 @@
+-- | 帮助渲染：全部从 [Vuna.Cli.Spec] 的命令表派生。
+--
+-- 三种形态：总览（按分组列出顶层命令）、分支帮助（列出直接子命令）、单命令帮助
+-- （用法 + options + 补充说明）。编译器命令的 flag 由编译器实现解析，因此它们的帮助正文
+-- 直接转发编译器用法文本，不在本模块重复一份。
+module Vuna.Cli.Help where
+
+import Vuna.Cli.Args
+import Vuna.Cli.Spec
+import Vuna.Compiler.Driver.CompilerCli
+import Vuna.Compiler.Base.Common
+import Base.List
+import Base.String
+import Base.Bool
+
+-- | 总览帮助（`vuna help` / `vuna --help` / 无参数）。
+export overviewText : String
+overviewText =
+  "vuna — Vuna 编译器与工具链\n\nusage:\n  vuna <command> [options]\n  vuna dev <command> [options]\n"
+    ++ renderSections "" (overviewCommands commands)
+    ++ "\n运行 `vuna help <command>` 或 `vuna <command> --help` 查看某条命令的完整用法。\n"
+
+-- | 总览里的顶层命令名（未知命令的候选建议用）。
+export topLevelNames : List String
+topLevelNames = nubNames (map headName (overviewCommands commands))
+
+-- | 内部：路径的第一段。
+headName : Cmd -> String
+headName c = case c.cmdPath of
+  [] => ""
+  name :: _ => name
+
+-- | 内部：按分组渲染总览行；`curTitle` 记录已输出的节标题（空串 = 还没输出）。
+renderSections : String -> List Cmd -> String
+renderSections curTitle [] = ""
+renderSections curTitle (c :: rest) =
+  let
+    title = groupTitle c.cmdGroup
+  in if title == curTitle then "${rowText c}${renderSections title rest}"
+  else "\n${title}\n${rowText c}${renderSections title rest}"
+
+-- | 内部：总览里的一行——命令名左对齐到固定宽度，后接摘要。
+rowText : Cmd -> String
+rowText c = "  ${padRight 20 (join " " c.cmdPath)} ${c.cmdSummary}\n"
+
+-- | 某个命令路径的帮助正文；路径不在表里给 `Nothing`。
+export helpForPath : List String -> Maybe String
+helpForPath path = case findCmd path of
+  Nothing => Nothing
+  Just c => Just (if c.cmdDelegated then delegatedHelp c else commandHelp c)
+
+-- | 某个命令路径的用法行（`Nothing` = 未登记）。
+export synopsisOf : List String -> Maybe String
+synopsisOf path = case findCmd path of
+  Nothing => Nothing
+  Just c => Just c.cmdSynopsis
+
+-- | 内部：编译器命令的帮助——转发编译器用法文本（flag 真源在编译器包里）。
+delegatedHelp : Cmd -> String
+delegatedHelp c =
+  "${c.cmdSynopsis}\n\n${c.cmdSummary}。flag 由编译器实现解析：\n\nusage:\n${compilerUsageLines "vuna"}"
+
+-- | 内部：单条命令（或分支）的帮助正文。
+commandHelp : Cmd -> String
+commandHelp c =
+  "${join " " c.cmdPath} — ${c.cmdSummary}\n\nusage:\n  ${c.cmdSynopsis}\n"
+    ++ renderChildren (childrenOf c.cmdPath)
+    ++ renderFlags c.cmdFlags
+    ++ renderNotes c.cmdNotes
+
+-- | 内部：`commands` 里的直接子命令。
+childrenOf : List String -> List Cmd
+childrenOf path = childrenIn path commands
+
+-- | 内部：`childrenOf` 的线性扫描。
+childrenIn : List String -> List Cmd -> List Cmd
+childrenIn path [] = []
+childrenIn path (c :: rest) =
+  if isDirectChild path c.cmdPath then c :: childrenIn path rest else childrenIn path rest
+
+-- | 内部：总览里的命令（保持表顺序）。
+overviewCommands : List Cmd -> List Cmd
+overviewCommands [] = []
+overviewCommands (c :: rest) =
+  if c.cmdInOverview then c :: overviewCommands rest else overviewCommands rest
+
+-- | 内部：`child` 是否是 `parent` 的直接子命令（多出恰好一层）。
+isDirectChild : List String -> List String -> Bool
+isDirectChild parent child = prefixOf parent child && extraOne parent child
+
+-- | 内部：`child` 去掉 `parent` 前缀后是否只剩一项。
+extraOne : List String -> List String -> Bool
+extraOne [] child = case child of
+  [] => False
+  [_] => True
+  _ => False
+extraOne (_ :: ps) child = case child of
+  [] => False
+  _ :: cs => extraOne ps cs
+
+-- | 内部：是否空表。
+isEmpty : List String -> Bool
+isEmpty [] = True
+isEmpty _ = False
+
+-- | 内部：`prefix` 是否逐项等于 `xs` 的前缀。
+prefixOf : List String -> List String -> Bool
+prefixOf [] _ = True
+prefixOf (_ :: _) [] = False
+prefixOf (p :: ps) (x :: xs) = if p == x then prefixOf ps xs else False
+
+-- | 内部：子命令小节。
+renderChildren : List Cmd -> String
+renderChildren [] = ""
+renderChildren kids = "\ncommands:\n" ++ renderChildRows kids
+
+-- | 内部：逐行渲染子命令。
+renderChildRows : List Cmd -> String
+renderChildRows [] = ""
+renderChildRows (c :: rest) =
+  "  ${padRight 20 (childLabel c)} ${c.cmdSummary}\n${renderChildRows rest}"
+
+-- | 内部：子命令显示名——路径最后一段 + 用法里剩下的占位。
+childLabel : Cmd -> String
+childLabel c = case lastOf c.cmdPath of
+  "" => join " " c.cmdPath
+  name => name
+
+-- | 内部：路径最后一段。
+lastOf : List String -> String
+lastOf [] = ""
+lastOf (x :: rest) = if isEmpty rest then x else lastOf rest
+
+-- | 内部：options 小节。
+renderFlags : List FlagDoc -> String
+renderFlags [] = ""
+renderFlags flags = "\noptions:\n" ++ renderFlagRows flags
+
+-- | 内部：逐行渲染 flag。
+renderFlagRows : List FlagDoc -> String
+renderFlagRows [] = ""
+renderFlagRows (f :: rest) = "  ${padRight 26 (flagUsage f)} ${f.flagHelp}\n${renderFlagRows rest}"
+
+-- | 内部：flag 的用法片段——开关只有名字，取值 flag 带占位（可重复的加 `...`）。
+flagUsage : FlagDoc -> String
+flagUsage f = case f.flagSpec of
+  BoolFlag name => "--${name}"
+  ValueFlag name => if f.flagMeta == "" then "--${name} VALUE" else "--${name} ${f.flagMeta}"
+  MultiValueFlag name =>
+    if f.flagMeta == "" then "--${name} VALUE..." else "--${name} ${f.flagMeta}..."
+
+-- | 内部：notes 小节。
+renderNotes : List String -> String
+renderNotes [] = ""
+renderNotes notes = "\nnotes:\n" ++ renderNoteRows notes
+
+-- | 内部：逐行渲染补充说明。
+renderNoteRows : List String -> String
+renderNoteRows [] = ""
+renderNoteRows (note :: rest) = "  ${note}\n${renderNoteRows rest}"
+
+-- | 内部：右侧补空格到 `width`（按 UTF-8 字节计；中文摘要不参与对齐）。
+padRight : Int -> String -> String
+padRight width text =
+  if strLength text >= width then text else "${text}${spaces (width - strLength text)}"
+
+-- | 内部：`n` 个空格。
+spaces : Int -> String
+spaces n = if n <= 0 then "" else " " ++ spaces (n - 1)

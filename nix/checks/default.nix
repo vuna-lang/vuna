@@ -382,7 +382,7 @@ in
   };
 
   # 可观测性结构门禁（`docs/reference/observability.md` §9）：关闭不产 trace；`VUNA_OBS=2`
-  # 的 check 产出可被 `vuna obs validate` 接受的 trace；`summarize --json` 单行且结构化；
+  # 的 check 产出可被 `vuna dev obs validate` 接受的 trace；`summarize --json` 单行且结构化；
   # 编译器自观测必须仍产出 `vuna.elab` / `vuna.codegen.check` 两个阶段跨度。
   vuna-obs-schema = vunaCheck {
     name = "vuna-obs-schema";

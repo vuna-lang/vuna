@@ -34,7 +34,9 @@ packages/compiler/lib/Vuna/Compiler/   （目录即层：层名 = 模块前缀�
 ├─ Wasm/        Instr Model Module Render Runtime Types   wasm 后端（WAT）
 └─ Driver/      Dt Compile Cache Iface Owner PerfCache ToolPayload CompilerCli
                 Split SplitGen Native Wasm                  输出模型 / facade / 后端驱动 / CLI
-产品 CLI 包 vuna（模块根 packages/cli/lib/，入口 packages/cli/app/Main.vuna）：Cli/Interp/Fmt/Lint/Index（门面+子模块）、
+产品 CLI 包 vuna（模块根 packages/cli/lib/，入口 packages/cli/app/Main.vuna）：Cli（+子模块 Spec/Help/Args/
+  Err/Suggest/Test/Fmt/Index/Repl/Suite/Dev，命令表与分发，见 [reference/cli.md](reference/cli.md)）、
+  Interp/Fmt/Lint/Index（门面+子模块）、
   Obs（+子模块 Types/Read/Validate/Summarize/Run；可观测性工具链，见
   [reference/observability.md](reference/observability.md)）、
   Repl/Run/Doc（+子模块）/Search（+子模块）/Sig/Lsp/Json/TestRunner/Files；suite 执行器在 Test/{Suite,Run}
@@ -175,7 +177,7 @@ vuna.toml → Frontend.{Toml.parseToml, Manifest.parseManifest/validateManifest}
 依赖包 `[export]`，隐藏模块报错；依赖图 DAG、包名唯一；`[package]` 只接受 `name`
 （本仓库没有 `[capabilities]` / `[trust]` / `[privileged]` 段）。
 **依赖定位**：`path` 依赖 = 工作树目录（可变输入）；`git`/`url` 依赖 = 持久 store 的物化视图
-`$VUNA_STORE/pkgs/<内容摘要>`（`vuna fetch` 写入，check/build 只读）。摘要规则与 store
+`$VUNA_STORE/pkgs/<内容摘要>`（`vuna deps fetch` 写入，check/build 只读）。摘要规则与 store
 布局见 [package-store.md](reference/package-store.md)，决策见 D12–D15。
 测试：第 28–29、33、39 段 + steps §67/§68。
 
@@ -185,7 +187,7 @@ vuna.toml → Frontend.{Toml.parseToml, Manifest.parseManifest/validateManifest}
 
 - `Vuna.Cli.runCli` 分发；`Vuna.Interp.interpretFile/evalExprInfoWithAux`（`PackageContext` 入参，
   实际 `Driver.Dt.dtEvalFile`）、`Vuna.Repl.runRepl`（`:type/:load/:reload/:browse`）、
-  `Vuna.Repl.Server.runReplServer` / `Vuna.Repl.Client.runReplClient`（`--listen` / `--client`；
+  `Vuna.Repl.Server.runReplServer` / `Vuna.Repl.Client.runReplClient`（`vuna repl serve --listen` / `vuna repl client --addr`；
   协议与 agent 配方见 [tooling.md](reference/tooling.md) §5）、
   `Vuna.Run.runRun`（`vuna run`）、`Vuna.TestRunner.runTests`（`TestOpts`：filter/list/verbose/
   fail-fast）、`Vuna.Doc.runDoc`（docstring -> 单文件 HTML；`Vuna.Doc.{Comments,Model,Prose,Html,Run}`）、
@@ -264,7 +266,7 @@ stage1 == stage2；seed 只含 compiler 包入口闭包。
 | `packages/base/` 的效应 monad / 调试构造（`dbg!`/`dbgShow`/`assert`） | 第 27 段 + `dt` / `dt_base` / `dt_err` 夹具 + `vuna check .`（见 [effects.md](reference/effects.md)、[debugging.md](reference/debugging.md)） |
 | `packages/compiler/`（语法 / 类型 / 精化 / 擦除） | 全量测试 + `flake check`（至少 seed-selfhost） |
 | codegen 运行时 / main 钩子 / 位置表 | 第 6、13、38 段 + 第 45–46 段 + seed rotation（[debugging.md](reference/debugging.md)） |
-| 观测（`Codegen/Term.dtObsRuntime` / `#line` 注入 / `Base.Obs` / `vuna obs`） | 第 107 段 + `checks.vuna-obs-schema` / `vuna-obs-dwarf` / `vuna-obs-overhead` + `vuna check .`（[observability.md](reference/observability.md)） |
+| 观测（`Codegen/Term.dtObsRuntime` / `#line` 注入 / `Base.Obs` / `vuna dev obs`） | 第 107 段 + `checks.vuna-obs-schema` / `vuna-obs-dwarf` / `vuna-obs-overhead` + `vuna check .`（[observability.md](reference/observability.md)） |
 | CLI 工具（`run` / `test` 选项 / REPL / LSP） | 第 40、42、47–49 段 + `corpus/lsp/smoke.sh` + `vuna check .` |
 | split 输出 / `vuna.toml` | 第 28–29、33–34、38–39 段 |
 | Nix | `nix flake check` + `nix build .#vuna` |

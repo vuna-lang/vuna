@@ -1,11 +1,11 @@
 # 测试体系（testing）
 
-本文覆盖原生 suite（`vuna test --suite`）、corpus 分类、包上下文夹具、Nix checks、性能基准
+本文覆盖原生 suite（`vuna dev suite`）、corpus 分类、包上下文夹具、Nix checks、性能基准
 与本地开发。种子不变量与 rotation 见 [bootstrap.md](bootstrap.md)。
 
-## 原生测试：`vuna test --suite`
+## 原生测试：`vuna dev suite`
 
-repo 自测由 `vuna test --suite test/suite.toml` 驱动（原生 Vuna 实现，不是 shell
+repo 自测由 `vuna dev suite test/suite.toml` 驱动（原生 Vuna 实现，不是 shell
 编排）。核心分层：
 
 - `test/suite.toml`：suite 配置。`[suite]` 放全局默认（`jobs`/`timeout`/`name`）；
@@ -14,17 +14,17 @@ repo 自测由 `vuna test --suite test/suite.toml` 驱动（原生 Vuna 实现�
 - 执行器在 `packages/cli/lib/Vuna/Test/{Suite,Run}.vuna`，由 `Vuna.Cli.testArgs` 分派。
 
 ```console
-vuna test --suite test/suite.toml                 # 全量；--jobs 默认 auto
-vuna test --suite test/suite.toml --list          # 列出章节/case
-vuna test --suite test/suite.toml --only 34       # 纯数字按 section 精确匹配
-vuna test --suite test/suite.toml --filter dt/03  # 按 case id/tag 子串
-vuna test --suite test/suite.toml --tier fast      # 只跑 fast 层（golden/error/lint/fix）
-vuna test --suite test/suite.toml --tier e2e       # 只跑 e2e 层（steps）
-vuna test --suite test/suite.toml --backend wasm   # 只跑 matrix 允许 wasm 的 case
-vuna test --suite test/suite.toml --matrix pure-cross        # 只跑三端差分精选集
-vuna test --suite test/suite.toml --filter layer:effect      # 按层次 tag 筛选
-vuna test --suite test/suite.toml --jobs 16       # 显式并行度（覆盖 auto）
-vuna test --suite test/suite.toml --json          # 机器可读汇总
+vuna dev suite test/suite.toml                 # 全量；--jobs 默认 auto
+vuna dev suite test/suite.toml --list          # 列出章节/case
+vuna dev suite test/suite.toml --only 34       # 纯数字按 section 精确匹配
+vuna dev suite test/suite.toml --filter dt/03  # 按 case id/tag 子串
+vuna dev suite test/suite.toml --tier fast      # 只跑 fast 层（golden/error/lint/fix）
+vuna dev suite test/suite.toml --tier e2e       # 只跑 e2e 层（steps）
+vuna dev suite test/suite.toml --backend wasm   # 只跑 matrix 允许 wasm 的 case
+vuna dev suite test/suite.toml --matrix pure-cross        # 只跑三端差分精选集
+vuna dev suite test/suite.toml --filter layer:effect      # 按层次 tag 筛选
+vuna dev suite test/suite.toml --jobs 16       # 显式并行度（覆盖 auto）
+vuna dev suite test/suite.toml --json          # 机器可读汇总
 ```
 
 `--jobs auto`（默认）= 探测到的全部可用核（`VUNA_TEST_JOBS` 可覆盖，`--jobs N` 显式）。
@@ -187,7 +187,7 @@ end:
   records/traits/monad/stdlib/lint/fix/term 等）。`dt_compiler` 是编译器包 API 的函数级夹具
   （mock handler + `runPure`，不碰真实文件系统），只跑 run。
 - 工具链/包/REPL/LSP/net/缓存/iface 段是 `test/suite/steps/*.steps` 声明式用例。
-- suite 入口只有 `vuna test --suite test/suite.toml`。
+- suite 入口只有 `vuna dev suite test/suite.toml`。
 
 ### iface 判据回归（§44m–§44q）
 
@@ -217,15 +217,15 @@ end:
 ### 产品化过滤与更新
 
 ```console
-vuna test --suite test/suite.toml --changed HEAD   # 仅跑 git diff 影响到的 case
-vuna test --suite test/suite.toml --last-failed    # 重跑上次失败
-vuna test --suite test/suite.toml --bless          # 更新 golden .out（只写 golden）
-vuna test --suite test/suite.toml --bless-diag     # 生成/更新 .diag.json 结构化诊断期望
-vuna test --suite test/suite.toml --watch          # 改文件后自动重跑
-vuna test --suite test/suite.toml --audit          # 孤儿 fixture 审计
-vuna test --suite test/suite.toml --timings        # 最慢 10 个 case
-vuna test --suite test/suite.toml --strict-skips   # fail-fast 产生的 skip 也算失败
-vuna test --suite test/suite.toml --cache-dir DIR   # 覆盖本地结果缓存目录
+vuna dev suite test/suite.toml --changed HEAD   # 仅跑 git diff 影响到的 case
+vuna dev suite test/suite.toml --last-failed    # 重跑上次失败
+vuna dev suite test/suite.toml --bless          # 更新 golden .out（只写 golden）
+vuna dev suite test/suite.toml --bless-diag     # 生成/更新 .diag.json 结构化诊断期望
+vuna dev suite test/suite.toml --watch          # 改文件后自动重跑
+vuna dev suite test/suite.toml --audit          # 孤儿 fixture 审计
+vuna dev suite test/suite.toml --timings        # 最慢 10 个 case
+vuna dev suite test/suite.toml --strict-skips   # fail-fast 产生的 skip 也算失败
+vuna dev suite test/suite.toml --cache-dir DIR   # 覆盖本地结果缓存目录
 ```
 
 - `--changed REV`：`git diff --name-only REV`；compiler/base/lib/app/suite 配置变更跑全量，
@@ -409,7 +409,7 @@ golden/runtime case 的 codegen 产物按「生成模块集」分桶（`set-<key
   语料 05–14、15–18、19 与 fix 07–19、20 覆盖 dispatch 提升、列表字面量归一与「不报」形态。
   输出带错误码：
   `路径:行:列: [LN_XXX] <rule>: <message>`，错误码体系见 [tooling.md](tooling.md) 第 4 节，
-  完整清单由 `vuna gen-errors` 生成。规则与边界见 [lint.md](lint.md)；
+  完整清单由 `vuna dev errors gen` 生成。规则与边界见 [lint.md](lint.md)；
   `checks.vuna-lint` 对全部包源码要求零 finding；
 - `corpus/lsp/smoke.sh`：`vuna lsp` 的 JSON-RPC 冒烟。走包上下文（含 import 的文件真正
   类型检查），覆盖两模块临时包、formatting、documentSymbol、definition、references、
@@ -440,7 +440,7 @@ golden/runtime case 的 codegen 产物按「生成模块集」分桶（`set-<key
   专项夹具；
 - `corpus/term/` / `corpus/term_err/`：终止性正反例（HOF / where / 互递归 / SCT / fuel /
   `let` 别名），第 37 段；SCT 第三级的正例是 `09_ack`（第 0/1 位各自覆盖部分环）与
-  `10_lex_mutual`（互递归字典序），`let` 别名是 `11_let_bind`；错误码段（第 36 段）用 `vuna gen-errors`（真源是诊断域枚举）检查 TC/CG/LN/FX
+  `10_lex_mutual`（互递归字典序），`let` 别名是 `11_let_bind`；错误码段（第 36 段）用 `vuna dev errors gen`（真源是诊断域枚举）检查 TC/CG/LN/FX
   分区与幂等。
 - **第 39 段：包上下文回归**。覆盖语义边界：无 manifest 的文件只可见 base
   （`VUNA_BASE` 生效、找不到 base 明确报错）；目录入口只认该目录自己的 manifest、不向上
@@ -560,7 +560,7 @@ nix build .#vuna --out-link result-vuna      # 产品 CLI（stage 1）
 nix build .#vuna-compiler --out-link result-compiler  # 编译器 CLI（stage 1）
 nix build .#vuna-seed --out-link result-seed          # stage 0 种子编译器
 VUNA=$PWD/result-vuna/bin/vuna VUNA_SEED=$PWD/result-seed/bin/vuna-seed \
-  vuna test --suite test/suite.toml --jobs auto
+  vuna dev suite test/suite.toml --jobs auto
 ```
 
 **`result*` 可能过期**：out-link 只是手工指到某次构建，源码 / seed 变了不会自动更新。需要

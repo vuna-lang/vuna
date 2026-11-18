@@ -1,4 +1,4 @@
--- | `vuna obs run [--level N] [--sample cpu|mem|both] [--interval US] [--out FILE] [--] <cmd...>`：
+-- | `vuna dev obs run [--level N] [--sample cpu|mem|both] [--interval US] [--out FILE] [--] <cmd...>`：
 -- 在开启观测的前提下透明执行用户命令，结束后打印 trace 路径，并原样返回子命令退出码。
 --
 -- 本进程不 `setenv`（仓库没有该宿主原语），改用「env 前置命令」范式：把
@@ -21,6 +21,7 @@ import Base.List
 import Base.Pair
 import Base.String
 import Vuna.Cli.Args
+import Vuna.Cli.Spec
 import Vuna.Compiler.Base.Common
 import Vuna.Files
 import Base.Nat
@@ -31,7 +32,7 @@ import Base.EffFs
 import Base.EffProcess
 import Base.Eff.Types
 
--- | `vuna obs run` 的选项（解析后的形态）。
+-- | `vuna dev obs run` 的选项（解析后的形态）。
 export record RunOpts(..) where
   -- | 观测级别（0..3，缺省 2）。
   runOptsLevel : Int
@@ -42,16 +43,16 @@ export record RunOpts(..) where
   -- | 精确的输出文件路径（已绝对化）；缺省 = `Nothing`（改用临时目录）。
   runOptsOut : Maybe String
 
--- | 执行 `vuna obs run`：打印 trace 路径，返回子命令退出码；用法错误返回 2。
+-- | 执行 `vuna dev obs run`：打印 trace 路径，返回子命令退出码；用法错误返回 2。
 export runObsRun : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => List String -> Eff r Int
-runObsRun args = case parseToolArgs "vuna obs run" [ValueFlag "level", ValueFlag "sample", ValueFlag "interval", ValueFlag "out"] args of
+runObsRun args = case parseCmdArgs ["dev", "obs", "run"] args of
   ErrC e => obsRunError (diagText e)
   OkC parsed => case runOptsOf parsed of
     ErrC e => obsRunError (diagText e)
     OkC opts => case parsed.positionals of
       [] =>
         obsRunError
-          "usage: vuna obs run [--level N] [--sample cpu|mem|both] [--interval US] [--out FILE] [--] <cmd...>"
+          "usage: vuna dev obs run [--level N] [--sample cpu|mem|both] [--interval US] [--out FILE] [--] <cmd...>"
       cmd :: rest => runChild opts (cmd :: rest)
 
 -- ---------------------------------------------------------------

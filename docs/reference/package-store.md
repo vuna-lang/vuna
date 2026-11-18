@@ -12,7 +12,7 @@
 | 名称 | 输入 | 用途 | 何时变 |
 | --- | --- | --- | --- |
 | **内容摘要** `contentHash` | `vuna.toml` + `lib/**/*.vuna` + `app/**/*.vuna` + `test/**/*.vuna` 的 `(相对路径, 字节)`，按路径升序 | 不可变源的完整性校验（manifest 的 `hash`）、包对象地址 | 任何文件字节变化（含注释、测试） |
-| **语义身份** `identityHash` | 包名 + `[export]` + 各依赖的 `(别名, 摘要)` + 每个文件的 `(路径, 内容摘要)` | 分发/pin 身份：manifest `identity`、registry 条目、`vuna pin` 写回、fetch/check 校验；**不参与缓存失效**（D5 身份模型） | 声明面或任何源码语义变化 |
+| **语义身份** `identityHash` | 包名 + `[export]` + 各依赖的 `(别名, 摘要)` + 每个文件的 `(路径, 内容摘要)` | 分发/pin 身份：manifest `identity`、registry 条目、`vuna deps pin` 写回、fetch/check 校验；**不参与缓存失效**（D5 身份模型） | 声明面或任何源码语义变化 |
 | `pkgIfaceHash` | 包内模块 `miIfaceHash` 聚合 | 依赖身份（`checkIn`/`splitIn` 的 deps 分量） | 下游可见接口/透明体变化 |
 | `pkgImplHash` | 包内模块 `miImplHash` 聚合 | 产物身份（`splitIdentity`） | `opaque`/`abstract` 体变化也变 |
 
@@ -45,13 +45,13 @@ $VUNA_STORE                     # 默认 $XDG_DATA_HOME/vuna/store，回退 ~/.v
   `views/`、`.tmp/`、`roots/`）由 `vuna store gc` / `clean --store` 管理；包对象族
   （`objects/pkg/`、`pkgs/`、`tmp/`）由 `clean --packages` 管理。包对象放在 `objects/pkg/`
   这个 kind 目录下，是为了让两族的清理/GC 作用域不互相误删。
-- **fetch 登记 roots**：`vuna fetch` 把取到的包摘要写进发起项目的 roots，`clean --packages
+- **fetch 登记 roots**：`vuna deps fetch` 把取到的包摘要写进发起项目的 roots，`clean --packages
   --gc` 取所有项目 roots 的并集 ⇒ 共享 store 上不会误删别的项目取过的对象。
 
-## 3. 获取（`vuna fetch`）
+## 3. 获取（`vuna deps fetch`）
 
 ```console
-vuna fetch [--locked] [DIR]
+vuna deps fetch [--locked] [DIR]
 ```
 
 | 源 | 行为 |
@@ -61,12 +61,12 @@ vuna fetch [--locked] [DIR]
 | `url` + `hash` | URL 直指 **`pkg-source 1` 对象文件**（不是 tar/压缩包；vuna 没有解压原语），下载后按 framing + 内容地址校验；声明 `identity` 时物化后复验 |
 
 - **只有 fetch 联网**：`check` / `build` / `test` 只读 store，缺对象报
-  `PKG_NotMaterialized`（消息里带 `vuna fetch` 提示），绝不隐式取包。
+  `PKG_NotMaterialized`（消息里带 `vuna deps fetch` 提示），绝不隐式取包。
 - `--locked`：不联网，只检查 store 是否已物化；缺失即失败。
 - 传输外置给宿主：`git`（clone/checkout）与 `curl`（URL 下载）。语言内只有裸 TCP 原语，
   **不实现 TLS**；HTTPS 由宿主工具的证书栈承担。
 - 摘要不符时**不写 store、不物化**：说明源被改写或声明过期，需人工确认后用正确摘要重写。
-- `vuna pin` 对 git 依赖同时写 `hash`（完整性）与 `identity`（语义身份）；缓存命中路径
+- `vuna deps pin` 对 git 依赖同时写 `hash`（完整性）与 `identity`（语义身份）；缓存命中路径
   也复验 `identity`，所以改错身份不会因 local store 已物化而被放过。
 
 ## 4. 解析与失败模式
@@ -87,10 +87,10 @@ DepGit/DepUrl    → $VUNA_STORE/pkgs/<normalizeHash hash>   （校验 .complete
 ## 5. 清理
 
 ```console
-vuna clean --store                  # 清缓存族（objects/<kind>、blobs、units、views/bin、.tmp）
-vuna clean --packages [--dry-run]   # 清包对象族（objects/pkg + pkgs + tmp）
-vuna clean --packages --gc [DIR]    # 只删未被工作区/项目 roots 引用的包对象
-vuna clean --all                    # 两族都清
+vuna store clean --store                  # 清缓存族（objects/<kind>、blobs、units、views/bin、.tmp）
+vuna store clean --packages [--dry-run]   # 清包对象族（objects/pkg + pkgs + tmp）
+vuna store clean --packages --gc [DIR]    # 只删未被工作区/项目 roots 引用的包对象
+vuna store clean --all                    # 两族都清
 vuna store gc [--dry-run] [--older-than SEC] [--max-size BYTES]   # 缓存族按 roots + grace 淘汰
 ```
 
@@ -99,7 +99,7 @@ vuna store gc [--dry-run] [--older-than SEC] [--max-size BYTES]   # 缓存族按
 按引用计数的 GC；`--packages` 是整族清理，`--gc` 的引用集是「声明 + 所有项目 roots」，
 roots 只追加（删除依赖后旧对象仍受保护，直到显式整族清理）。
 
-## 6. 静态索引与 `vuna add`
+## 6. 静态索引与 `vuna deps add`
 
 索引是**可选**的便利层（D14）：`name [@version] → (源, hash, identity?)`。`identity` 可选，
 写回 manifest 后由 fetch/check 校验语义身份（内容完整性仍只由 `hash` 负责）。
@@ -124,13 +124,13 @@ index = "../registry"      # 目录 / file:// / http(s)://（后者由宿主 cur
 ```
 
 ```console
-vuna add greet@1.2.0 [DIR] [--dry-run] [--no-fetch]
+vuna deps add greet@1.2.0 [DIR] [--dry-run] [--no-fetch]
 ```
 
 - 无版本时取索引里的**最后一个**发布；版本精确匹配；版本不存在报可读错误（退出码 2）。
 - 写回 `[dependencies]` 段的内联表行：同名行替换，否则段末追加；子表形式不猜、报错让
  用户手改。
-- 默认随后 `vuna fetch`（命中 `cached` 不重复取）；`--no-fetch` 只改 manifest，
+- 默认随后 `vuna deps fetch`（命中 `cached` 不重复取）；`--no-fetch` 只改 manifest，
   `--dry-run` 只打印。
 - **索引不可信**：写回的永远是摘要（+ 可选身份），之后 fetch/check 只认摘要；索引里的
   `identity` 与取到的包不符时 fetch 失败（`PKG_IdentityMismatch`），不会静默写回。
@@ -138,14 +138,14 @@ vuna add greet@1.2.0 [DIR] [--dry-run] [--no-fetch]
 ## 7. GC
 
 ```console
-vuna clean --packages --gc [--dry-run] [DIR]
+vuna store clean --packages --gc [--dry-run] [DIR]
 ```
 
 引用集 = `DIR` 的 manifest 与 `[workspace].members`（**递归嵌套**）里 `git` / `url` 依赖的
 摘要（`path` 依赖不参与，D12）**∪ 所有项目 roots**。只删 `objects/pkg/<digest>` 与
 `pkgs/<digest>/...` 中不被引用的文件；空目录会残留（与 `clean --store` 一致，只删文件）。
 不带 `--gc` 的 `--packages` 仍是整族清理。`--gc` 必须与 `--packages` 连用。
-`vuna fetch` 把取到的摘要登记进发起项目的 roots，因此共享 store 上 A 项目取过的包不会被
+`vuna deps fetch` 把取到的摘要登记进发起项目的 roots，因此共享 store 上 A 项目取过的包不会被
 B 项目的 `--gc` 误删；roots 只追加，删除依赖后旧对象仍受保护，直到整族清理。
 
 ## 8. 已知边界

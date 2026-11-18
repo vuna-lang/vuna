@@ -29,28 +29,28 @@ read packages/compiler/lib/Vuna/Compiler/Elab/Driver.vuna
 
 - 改动点通常是**数据流**而非孤立符号。例如 `Elab/Types.vuna` 的 `Ec` 状态如何穿过
   `elabBodies` → `convEc` → `unsolvedMeta`——这类信息不在任何签名里。
-- 改实现必须知道**全部**构造/解构点；`map --impact` 看不到模块**内部**耦合
+- 改实现必须知道**全部**构造/解构点；`map impact` 看不到模块**内部**耦合
   （内部类型根本不出现在跨模块签名里）。
-- 反复查询的成本会超过一次读取：650 行文件用 20 次 `map --find` 拼出的信息还不如通读。
+- 反复查询的成本会超过一次读取：650 行文件用 20 次 `map find` 拼出的信息还不如通读。
 
-**唯一例外**：超长文件（`Elab/Trait.vuna`、`Elab/Term/Impl.vuna` 等）可先 `map --find` 拿行号，再
+**唯一例外**：超长文件（`Elab/Trait.vuna`、`Elab/Term/Impl.vuna` 等）可先 `map find` 拿行号，再
 `read --offset/--limit` 读那一段。但**改动涉及的函数体必须完整读到**。
 
 ## 维度 B：不改、只引用 → `vuna map` / `vuna api`
 
 ### 四个子场景
 
-**（a）知道名字，不知道在哪** → `vuna map --find`
+**（a）知道名字，不知道在哪** → `vuna map find`
 
 ```console
-vuna map --find Vuna.Compiler.Elab.Driver.elabProgramFull   # 完全限定名，推荐
-vuna map --find lookupEnv                        # 短名也行，但见下方警告
+vuna map find Vuna.Compiler.Elab.Driver.elabProgramFull   # 完全限定名，推荐
+vuna map find lookupEnv                        # 短名也行，但见下方警告
 ```
 
 能查**非导出符号**（`extendSizes`、`ecEmpty` 这类模块内部函数都能定位），
 不必先确认它在不在 `module` 导出列表里。
 
-> **警告：短名只取第一个匹配，不报歧义。** 实测 `--find lookup` 直接返回
+> **警告：短名只取第一个匹配，不报歧义。** 实测 `vuna map find lookup` 直接返回
 > `Base.Map.lookup`，退出码 0。拿不准时用**完全限定名** `Module.name`。
 
 **（b）要一个模块的接口面** → `vuna api <Module>`
@@ -61,12 +61,12 @@ vuna api Vuna.Compiler.Elab.Driver
 
 给 data 定义 + 注释 + 行号。**已知缺陷**：只回显源码里**显式写出**的签名；vuna 大量
 访问器省略签名（如 `dtDefName (DtDef name ty body) = name`），这些条目显示为空
-（实测 `Elab.Driver` 的条目里 37 个签名是空的）。看到空签名就转 `map --find` 或读该行。
+（实测 `Elab.Driver` 的条目里 37 个签名是空的）。看到空签名就转 `map find` 或读该行。
 
-**（c）改跨模块符号，想知道波及面** → `vuna map --impact`
+**（c）改跨模块符号，想知道波及面** → `vuna map impact`
 
 ```console
-$ vuna map --impact Vuna.Compiler.Elab.Driver.elabProgramFull
+$ vuna map impact Vuna.Compiler.Elab.Driver.elabProgramFull
 symbol: Vuna.Compiler.Elab.Driver.elabProgramFull
 readers: Vuna.Compiler.Dt
 tests: run, stdlib
@@ -74,7 +74,7 @@ tests: run, stdlib
 
 `readers` 是引用者模块，`tests` 是建议测试标签。这是 grep 给不了的。
 
-**（d）某个主题会落在哪些模块** → `vuna map` / `vuna map --modules`
+**（d）某个主题会落在哪些模块** → `vuna map` / `vuna map`
 
 按包分组给模块清单与规模，据此判断再下钻。
 
@@ -82,7 +82,7 @@ tests: run, stdlib
 
 实测（`packages/compiler/lib` 下）：
 
-| 问题 | grep | `map --find` |
+| 问题 | grep | `map find` |
 | --- | --- | --- |
 | **拿多**：查 `lookup` | 命中 `lookupEntry` `lookupEntryLine` `lookupEnv` `lookupDtDef` `lookupProvided` `lookupKV` `lookup` `lookupPair` 一整族；`lookup`/`apply` 前缀单在 `packages/compiler/lib` 就 57 行 | 唯一定位 + 模块前缀 + 签名 + 行号 |
 | **拿少**：多 clause 函数 | `lookupEnv` 有签名 + 2 个 clause，`grep '^lookupEnv '` 抓 3 行但看不出是一个函数 | 明确给出唯一签名与定义点 |
@@ -96,13 +96,13 @@ tests: run, stdlib
 | 边界 | 兜底 |
 | --- | --- |
 | `--impact` 看不到模块内部耦合 | 整篇 `read` 要改的模块 |
-| `api` 空签名 | `map --find` 或读该行 |
+| `api` 空签名 | `map find` 或读该行 |
 | 索引只到 parse 级，签名是源码里写的、非推断 | 同上 |
 | 短名静默取第一个 | 用完全限定名 |
-| 索引缓存 `$VUNA_STORE/objects/tool/`（会话对象，按输入摘要自动判新鲜度） | 怀疑过期就 `vuna clean --store`（对象库根 = `$VUNA_STORE`；会自动重建） |
+| 索引缓存 `$VUNA_STORE/objects/tool/`（会话对象，按输入摘要自动判新鲜度） | 怀疑过期就 `vuna store clean --store`（对象库根 = `$VUNA_STORE`；会自动重建） |
 
 **没有「读一段实现」的命令**——这是当前工具链最明显的缺口。只能
-`map --find` 拿行号 + `read --offset/--limit`。
+`map find` 拿行号 + `read --offset/--limit`。
 
 ## `vuna doc` 用来看还是用来生成
 
@@ -125,9 +125,9 @@ read packages/compiler/lib/Vuna/Compiler/Elab/Driver.vuna
 
 # 维度 B：不改，只查
 vuna map                                        # 主题落在哪些模块
-vuna map --modules                              # 扁平模块清单
-vuna map --find <Module.name>                   # 符号：定义位置 + 签名
-vuna map --impact <Module.name>                 # 改它波及谁 + 建议测试
+vuna map                              # 扁平模块清单
+vuna map find <Module.name>                   # 符号：定义位置 + 签名
+vuna map impact <Module.name>                 # 改它波及谁 + 建议测试
 vuna api <Module.name>                          # 模块接口面 + 注释 + 行号
 
 # 有行号之后读一段

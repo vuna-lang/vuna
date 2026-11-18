@@ -154,16 +154,16 @@ check_contains "doc default OUT default content" "$(cat "$tmp/docpkg2/docs/api.h
 # ---------------------------------------------------------------
 # 4) gen-errors：ROOT 校验 + docs/.generated 递归创建
 # ---------------------------------------------------------------
-run "gen-errors missing root" "$tmp" gen-errors "$tmp/no-such-root"
+run "dev errors gen missing root" "$tmp" dev errors gen "$tmp/no-such-root"
 check_eq "gen-errors missing root exit" "2" "$code"
 check_contains "gen-errors missing root error" "$out" "no such directory"
 
-run "gen-errors file root" "$tmp" gen-errors "$tmp/afile/plain.txt"
+run "dev errors gen file root" "$tmp" dev errors gen "$tmp/afile/plain.txt"
 check_eq "gen-errors file root exit" "2" "$code"
 check_contains "gen-errors file root error" "$out" "not a directory"
 
 mkdir -p "$tmp/errroot"
-run "gen-errors fresh root" "$tmp" gen-errors "$tmp/errroot"
+run "dev errors gen fresh root" "$tmp" dev errors gen "$tmp/errroot"
 check_eq "gen-errors fresh root exit" "0" "$code"
 if [ -f "$tmp/errroot/docs/.generated/errors.md" ]; then ok; else bad "gen-errors did not create docs/.generated/errors.md"; fi
 check_contains "gen-errors content" "$(cat "$tmp/errroot/docs/.generated/errors.md" 2>/dev/null)" "TC_"
@@ -198,7 +198,7 @@ run "unknown flag lint" "$tmp" lint --bogus "$tmp/fmtws/lib/A.vuna"
 check_eq "unknown flag lint exit" "2" "$code"
 check_contains "unknown flag lint error" "$out" "unknown flag"
 
-run "value flag missing value" "$tmp" map --find
+run "value flag missing value" "$tmp" lint --format
 check_eq "value flag missing value exit" "2" "$code"
 check_contains "value flag missing value error" "$out" "requires a value"
 

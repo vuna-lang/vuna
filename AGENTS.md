@@ -23,7 +23,7 @@
 4. 需要时再下钻：`docs/reference/`（语言 / 类型 / Core / 编译器 / 包 / 工具 / 测试参考页）、
    [debt](docs/reference/debt.md)。
 
-**定位符号**用 `vuna map --find` / `--impact` / `vuna api`（规程见技能 `repo-navigation`）；
+**定位符号**用 `vuna map find` / `vuna map impact` / `vuna api`（规程见技能 `repo-navigation`）；
 **不要做的事**：通读全仓、读 `seed/` 或 `docs/api.html`（生成物）。
 
 ## 编译器选取规则
@@ -35,7 +35,7 @@
    需要固定二进制（性能读数、反复调用、传给别的脚本）时**先显式重建**；
 3. 远端稳定版（`nix registry list` 的别名）：`nix run vuna -- <subcommand>`；
 4. 测试：`nix run .#vuna-run-tests`（`nix/run-tests.nix`；`--list` / `--only <章节>` 过滤，
-   无参数等价 `vuna test --suite test/suite.toml`；`--jobs auto` 用全部可用核）。
+   无参数等价 `vuna dev suite test/suite.toml`；`--jobs auto` 用全部可用核）。
 
 `vuna-seed`（stage 0）来自 `nix build .#vuna-seed`，stage 1 是 `nix build .#vuna-compiler`；
 测试需要 PATH 里有 `ocamlopt`（`nix develop` 提供）。
@@ -113,7 +113,7 @@ sh nix/seed/rotate.sh ./result/bin/vuna   # 仅当需要轮换 seed；上面那�
 nix run .#vuna -- store gc --dry-run      # 缓存族 GC：先裁剪已消失的项目根，再按 roots+宽限淘汰
                                           # 对象库是单一根（默认 ~/.vuna/store，VUNA_STORE 覆盖）
 nix flake check                           # 3 packages + 24 checks（清单见 testing.md）
-nix run .#vuna -- map --find <Module.name> # 定位符号；另有 --impact / api
+nix run .#vuna -- map find <Module.name> # 定位符号；另有 map impact / api
 ```
 
 全部命令与 flag 以 `nix run .#vuna -- help` 为准；完整清单见
@@ -143,7 +143,7 @@ seed 工具（`seed/`）+ 开发工具（`tools/`）；`docs/` = 分层文档。
 - 编译器实现：compiler、core、ir、diagnostics、wasm、native、cache（同在 `docs/reference/`）
 - 工具链 / 测试 / 自举：tooling、testing、test-architecture、bootstrap（同在 `docs/reference/`）
 - 性能与观测：[performance.md](docs/reference/performance.md)（量什么/读数）、
-  [observability.md](docs/reference/observability.md)（`VUNA_OBS` 分级 / `Base.Obs` / `vuna obs` / `#line` → DWARF）
+  [observability.md](docs/reference/observability.md)（`VUNA_OBS` 分级 / `Base.Obs` / `vuna dev obs` / `#line` → DWARF）
 - AI 规则与技能：[`.agents/README.md`](.agents/README.md)（规则 `rules/`、技能 `skills/`）
 - 债务 / 已知缺口：[debt.md](docs/reference/debt.md)（只含开放项，带证据）
 

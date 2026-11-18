@@ -16,6 +16,7 @@
 -- 目录创建显式在 `Eff r` 里（错误仍用 `Check` 携带）；纯 flag 解析 API 保持纯函数。
 module Vuna.Cli.Args where
 
+import Vuna.Cli.Suggest
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Driver.CompilerCli
 import Base.EffFs
@@ -35,7 +36,7 @@ export data ArgSpec(..) : Type where
   MultiValueFlag : String -> ArgSpec
 
 -- | flag 名（构造 `ArgSpec` 时存入的无前缀名字）。
-specName : ArgSpec -> String
+export specName : ArgSpec -> String
 specName (BoolFlag name) = name
 specName (ValueFlag name) = name
 specName (MultiValueFlag name) = name
@@ -112,6 +113,21 @@ parseToolArgs cmd specs args = case parseGo False specs args [] [] [] of
   POk parsed => OkC parsed
   PErr e => err (argErrText cmd e)
 
+-- | 与 [parseToolArgs] 相同，但对未知 flag 追加「最近候选」建议（候选即允许表本身）。
+export parseCmdArgsOf : String -> List ArgSpec -> List String -> Check Parsed
+parseCmdArgsOf cmd specs args = case parseGo False specs args [] [] [] of
+  POk parsed => OkC parsed
+  PErr e => err (argErrTextHinted cmd specs e)
+
+-- | 内部：错误文案；未知 flag 先查已删提示，再给候选建议。
+argErrTextHinted : String -> List ArgSpec -> ArgErr -> String
+argErrTextHinted cmd specs (UnknownFlag raw) = case removedHintFor raw of
+  Just hint => "${raw} has been removed; ${hint}"
+  Nothing => case suggestOne (map specName specs) (flagNameOf raw) of
+    Just guess => "unknown flag for `${cmd}`: ${raw}; did you mean `--${guess}`?"
+    Nothing => "unknown flag for `${cmd}`: ${raw}"
+argErrTextHinted cmd specs e = argErrText cmd e
+
 -- | 内部：参数扫描主体。`literal` 为真时后续一切都当位置参数（`--` 之后）；累积器都是倒序，
 -- 结束时统一 reverse。
 parseGo : Bool -> List ArgSpec -> List String -> List String -> List (Pair String String) -> List String -> ParseOut
@@ -164,11 +180,17 @@ parseFlag specs raw rest flags values items =
 dashFlag : String -> String
 dashFlag name = "--${name}"
 
--- | 内部：工具命令侧已删的 flag → 迁移提示。编译器 flag 的真源仍是
--- `CompilerCli.removedFlagHint`；这里只放「只属于工具命令」的已删 flag。
+-- | 内部：工具命令侧已删 / 已迁移的 flag → 迁移提示。编译器 flag 的真源仍是
+-- `CompilerCli.removedFlagHint`；这里只放「只属于工具命令」的条目。
 toolRemovedFlagHint : String -> Maybe String
 toolRemovedFlagHint flag =
   if flag == dashFlag "with-comments" then Just "doc renders doc comments by default; drop the flag"
+  else if flag == dashFlag "suite" then Just "run `vuna dev suite [FILE]` instead"
+  else if flag == dashFlag "listen" then Just "run `vuna repl serve --listen ADDR` instead"
+  else if flag == dashFlag "client" then Just "run `vuna repl client --addr ADDR` instead"
+  else if flag == dashFlag "find" then Just "run `vuna map find <Module.name>` instead"
+  else if flag == dashFlag "impact" then Just "run `vuna map impact <Module.name>` instead"
+  else if flag == dashFlag "modules" then Just "run `vuna map` (module overview is the default)"
   else Nothing
 
 -- | 内部：先查工具侧 hint 表，再回落编译器包的真源。

@@ -4,8 +4,8 @@
 # 断言（任一失败即失败）：
 #   1. 关闭口径不产 trace：`VUNA_OBS=0` 的 check 不写任何 trace 文件；
 #   2. 打开后 `VUNA_OBS=2` 的 `check packages/compiler` / `check packages/base` 各产出合法 trace：
-#      `vuna obs validate` 退出码 0、事件数 > 0、元数据 schema 正确；
-#   3. `vuna obs summarize --json` 输出单行 JSON 且含 `spans` / `wallUs`；
+#      `vuna dev obs validate` 退出码 0、事件数 > 0、元数据 schema 正确；
+#   3. `vuna dev obs summarize --json` 输出单行 JSON 且含 `spans` / `wallUs`；
 #   4. 编译器自观测至少产出 `vuna.elab` + `vuna.codegen.check` 两个阶段跨度
 #      （证明插桩没有被搬掉；名字是规范 §3.3 词汇表条目），以及前端的两段
 #      `vuna.parse.lex` / `vuna.parse.syntax`（证明 lex 与语法分析可分别归因）。
@@ -63,9 +63,9 @@ for case in compiler base; do
   dir=$(run_with_obs 2 "packages/$case" "$suffix" "$suffix")
   trace=$(find "$dir" -name '*.jsonl' -type f | head -1)
   [ -n "$trace" ] || fail "no trace file produced for check $case at level 2"
-  "$VUNA" obs validate "$trace" >"$OUT/validate-$suffix.out" 2>&1 || {
+  "$VUNA" dev obs validate "$trace" >"$OUT/validate-$suffix.out" 2>&1 || {
     cat "$OUT/validate-$suffix.out" >&2
-    fail "vuna obs validate rejected the trace from check $case"
+    fail "vuna dev obs validate rejected the trace from check $case"
   }
   lines=$(wc -l <"$trace" | tr -d ' ')
   [ "$lines" -ge 2 ] || fail "trace from check $case has only $lines line(s)"
@@ -74,9 +74,9 @@ for case in compiler base; do
   head -1 "$trace" | grep -q '"schema":"vuna-obs 1"' || fail "metadata schema is not vuna-obs 1"
 
   # -------------------------------------------------------------- 3) summarize --json
-  "$VUNA" obs summarize --json "$trace" >"$OUT/summary-$suffix.json" 2>"$OUT/summary-$suffix.err" || {
+  "$VUNA" dev obs summarize --json "$trace" >"$OUT/summary-$suffix.json" 2>"$OUT/summary-$suffix.err" || {
     cat "$OUT/summary-$suffix.err" >&2
-    fail "vuna obs summarize --json failed for check $case"
+    fail "vuna dev obs summarize --json failed for check $case"
   }
   json_lines=$(wc -l <"$OUT/summary-$suffix.json" | tr -d ' ')
   [ "$json_lines" -eq 1 ] || fail "summarize --json is not a single line ($json_lines lines)"

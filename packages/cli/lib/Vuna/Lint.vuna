@@ -23,6 +23,7 @@ import Vuna.Compiler.Base.Hash
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Packages.Pkg
 import Vuna.Cli.Args
+import Vuna.Cli.Spec
 import Vuna.Files
 import Vuna.FixityEnv
 import Vuna.Json
@@ -575,7 +576,7 @@ intOf (Just s) d = parseIntArg s
 
 -- | `vuna lint` 的入口。
 export runLint : Member nConsole ConsoleOp r, Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nStdin StdinOp r => List String -> Eff r Int
-runLint args = case parseToolArgs "vuna lint" [BoolFlag "fix", BoolFlag "dry-run", BoolFlag "quiet", BoolFlag "list", BoolFlag "no-config", BoolFlag "no-cache", BoolFlag "diff", ValueFlag "format", ValueFlag "max-warnings", ValueFlag "max-passes", ValueFlag "explain", ValueFlag "config", MultiValueFlag "select", MultiValueFlag "ignore"] args of
+runLint args = case parseCmdArgs ["lint"] args of
   ErrC e => do
     _ <- consoleEprint "error: ${diagText e}\n"
     pure 2

@@ -33,6 +33,8 @@
 -- 多根 workspace 未支持（workspace/symbol 用首个打开文档推断工作区根）。
 module Vuna.Lsp where
 
+import Vuna.Cli.Args
+import Vuna.Cli.Spec
 import Vuna.Compiler.Base.Common
 import Vuna.Index
 import Vuna.Json
@@ -871,6 +873,16 @@ runLsp _ = do
     ExitClosed => abnormalExit state
     ExitFatal msg => abnormalExit (logTo msg state)
 
--- | CLI 入口：与其它工具命令一致，返回退出码（由 Vuna.Cli 插入分发）。
+-- | CLI 入口：参数面为空（`vuna lsp` 不接受位置参数或 flag），由 Vuna.Cli 插入分发。
 export runLspTool : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nStdin StdinOp r, Member nArgs ArgsOp r => List String -> Eff r Int
-runLspTool args = runLsp 0
+runLspTool args = case parseCmdArgs ["lsp"] args of
+  ErrC e => lspToolError (diagText e)
+  OkC parsed => case parsed.positionals of
+    [] => runLsp 0
+    _ => lspToolError "usage: vuna lsp"
+
+-- | 内部：`vuna lsp` 的用法错误出口（exit 2）。
+lspToolError : Member nConsole ConsoleOp r => String -> Eff r Int
+lspToolError msg = do
+  _ <- consolePrint "error: ${msg}\n"
+  pure 2

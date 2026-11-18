@@ -1,0 +1,43 @@
+-- | `vuna dev`：本仓库专用的开发/维护命令（suite、观测、错误码文档生成）。
+--
+-- 这些命令的输入是 vuna 自己的仓库布局与内部词汇（`test/suite.toml`、`VUNA_OBS` span、
+-- 错误码枚举），普通用户的项目里不成立，因此在帮助里单独成节，并且是唯一被
+-- `Vuna.Cli.Product` 隔离的命名空间（`nix/checks/lib/product-boundary.sh` 保证产品侧
+-- 模块不 import 本模块）。
+module Vuna.Cli.Dev where
+
+import Vuna.Cli.Args
+import Vuna.Cli.Err
+import Vuna.Cli.Spec
+import Vuna.Cli.Suite
+import Vuna.Compiler.Base.Common
+import Vuna.GenErrors
+import Vuna.Obs
+import Base.EffArgs
+import Base.EffClock
+import Base.EffConsole
+import Base.EffEnv
+import Base.EffExit
+import Base.EffFs
+import Base.EffNet
+import Base.EffProcess
+import Base.Eff.Types
+
+-- | `vuna dev <sub>` 的入口。
+export devArgs : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r, Member nNet NetOp r => List String -> Eff r Int
+devArgs ("suite" :: more) = suiteArgs more
+devArgs ("obs" :: more) = runObs more
+devArgs ("errors" :: "gen" :: genArgs) = genErrorsArgs genArgs
+devArgs (["errors"]) = usageErrorFor ["dev", "errors"]
+devArgs ("errors" :: bad :: _) = unknownSubcommand ["dev", "errors"] bad ["gen"]
+devArgs [] = usageErrorFor ["dev"]
+devArgs (bad :: _) = unknownSubcommand ["dev"] bad ["suite", "obs", "errors"]
+
+-- | 内部：`vuna dev errors gen [ROOT]`——ROOT 默认 `.`。
+genErrorsArgs : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => List String -> Eff r Int
+genErrorsArgs rest = case parseCmdArgs ["dev", "errors", "gen"] rest of
+  ErrC e => toolError (diagText e)
+  OkC parsed => case parsed.positionals of
+    [] => runGenErrors "."
+    [root] => runGenErrors root
+    _ => usageErrorFor ["dev", "errors", "gen"]

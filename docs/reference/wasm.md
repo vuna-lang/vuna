@@ -435,7 +435,7 @@ GC / 尾调用，包体与性能双输），也**不引 preview2-shim / jco**（
 代价（按引擎管理，不按后端分叉）：
 
 - 无 `-W max-wasm-stack`：栈上限、递归深度、GC 阈值都是引擎参数；
-- 观测面为零：`VUNA_OBS` 在 wasm 上是 no-op 桩，浏览器侧也没有 `vuna obs` 通道；
+- 观测面为零：`VUNA_OBS` 在 wasm 上是 no-op 桩，浏览器侧也没有 `vuna dev obs` 通道；
 - 能力矩阵按宿主取值：浏览器允许 `fetch`、不允许 raw socket；Wasmtime 相反。
 
 ## 9. 相关阅读

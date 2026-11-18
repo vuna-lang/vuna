@@ -16,7 +16,7 @@ import Base.EffEnv
 import Base.EffFs
 import Base.Eff.Types
 
--- | `vuna test --suite` 的选项；jobs = 0 表示 auto（由 runner 探测全部可用核）。
+-- | `vuna dev suite` 的选项；jobs = 0 表示 auto（由 runner 探测全部可用核）。
 export record SuiteOpts(..) where
   -- | suite 文件路径（`--suite`）。
   suitePath : String

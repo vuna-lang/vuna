@@ -1,0 +1,143 @@
+-- | `vuna fmt`：默认扫描 workspace，显式 PATH（文件或目录）优先。
+--
+-- 格式化本体在 `Vuna.Fmt`；本模块只做目标展开、逐文件错误累计与退出码。
+module Vuna.Cli.Fmt where
+
+import Vuna.Cli.Args
+import Vuna.Cli.Err
+import Vuna.Cli.Spec
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Frontend.Packages.Pkg
+import Vuna.Files
+import Vuna.FixityEnv
+import Vuna.Fmt
+import Base.EffConsole
+import Base.EffEnv
+import Base.EffFs
+import Base.EffProcess
+import Base.Eff.Types
+
+-- | `vuna fmt [--check] [PATH]...` 的入口。
+export fmtArgs : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => List String -> Eff r Int
+fmtArgs rest = case parseCmdArgs ["fmt"] rest of
+  ErrC e => toolError (diagText e)
+  OkC parsed => fmtRun (flagSet parsed "check") parsed.positionals
+
+-- | 内部：无参时格式化 workspace 内各包的 `lib` / `app` / `test`；有参时先整体判存在，再逐个
+-- 展开目录（文件原样进入列表）。
+fmtRun : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Bool -> List String -> Eff r Int
+fmtRun check [] = do
+  targets <- fmtDefaultTargets 0
+  case targets of
+    ErrC e => toolError (diagText e)
+    OkC paths => do
+      expanded <- expandPaths paths
+      fmtFiles check emptyFixityEnv (filter fmtScanKeep expanded) 0 False
+fmtRun check paths = do
+  missing <- firstMissingPath paths
+  case missing of
+    Just path => missingPathError path
+    Nothing => do
+      expanded <- expandPaths paths
+      fmtFiles check emptyFixityEnv expanded 0 False
+
+-- | 内部：批量存在性检查，一次给出第一个缺失的路径（不静默跳过）。
+firstMissingPath : Member nFs FsOp r => List String -> Eff r (Maybe String)
+firstMissingPath [] = pure Nothing
+firstMissingPath (path :: rest) = do
+  exists <- fsFileExists path
+  if exists then firstMissingPath rest else pure (Just path)
+
+-- | 内部：默认扫描（无参）跳过 `test/suite/fixtures/`——那里的 `.vuna` 是 steps 拼进临时包的
+-- **片段**（例如只 import 一个同目录模块、没有自己的 manifest），用仓库根上下文解析必然
+-- 报 `LD_ModuleNotFound`，于是整条扫描在第一个片段处中止、后面的文件根本没检查。
+-- 显式传路径时不禁用（`vuna fmt test/suite/fixtures/...` 仍按上下文尽力格式化）。
+fmtScanKeep : String -> Bool
+fmtScanKeep path = not (contains "/test/suite/fixtures/" path)
+
+-- | 内部：省略 PATH 时的默认目标——workspace 内所有包的 lib/app/test。
+--
+-- 不是 workspace 或没有任何源码目录都是**输入错误**（exit 2），不回退到相对
+-- 路径 `lib/app/test`（那会在非包目录把 `lib` 当文件读而抛宿主异常）。
+fmtDefaultTargets : Member nFs FsOp r, Member nEnv EnvOp r => Int -> Eff r (Check (List String))
+fmtDefaultTargets _ = do
+  found <- findManifestDirMaybe "."
+  case found of
+    Nothing => do
+      cwd <- envGetCwd
+      pure
+        (err "not inside a vuna workspace (no vuna.toml found from ${cwd}); pass PATH explicitly")
+    Just dir => do
+      pkgsR <- workspacePackages dir
+      case pkgsR of
+        ErrC e => pure (ErrC e)
+        OkC pkgs => do
+          targets <- existingTargets (concatMap packageTargets pkgs) []
+          pure
+            (if length targets == 0 then err "no vuna sources found in workspace at ${dir} (looked for lib/, app/, test/ under each package); pass PATH explicitly" else OkC targets)
+
+-- | 内部：一个包的三个源码目录候选（不判存在）。
+packageTargets : Package -> List String
+packageTargets pkg = ["${packageDir pkg}/lib", "${packageDir pkg}/app", "${packageDir pkg}/test"]
+
+-- | 内部：过滤出真实存在的目录（文件与缺失项都丢掉）。
+existingTargets : Member nFs FsOp r => List String -> List String -> Eff r (List String)
+existingTargets [] acc = pure (reverse acc)
+existingTargets (path :: rest) acc = do
+  exists <- pathExistsDir path
+  if exists then existingTargets rest (path :: acc) else existingTargets rest acc
+
+-- | 内部：逐个展开位置参数（目录展开成其中的 `.vuna` 文件）。
+expandPaths : Member nFs FsOp r => List String -> Eff r (List String)
+expandPaths [] = pure []
+expandPaths (path :: rest) = do
+  here <- expandPath path
+  there <- expandPaths rest
+  pure (append here there)
+
+-- | 内部：目录 → 其中全部 `.vuna` 文件；文件或不存在路径原样保留。
+expandPath : Member nFs FsOp r => String -> Eff r (List String)
+expandPath path = do
+  exists <- pathExistsDir path
+  if exists then collectVunaFiles path else pure [path]
+
+-- | 内部：逐个文件格式化（`check` 为真时只报告不改盘），返回 0 / 1。
+--
+-- fmt 的 fixity 是**程序级**的（本文件 `infix*` 声明 + 该文件 import 闭包）：
+-- `Vuna.FixityEnv` 按文件目录缓存「按包上下文加载的模块图」（昂贵部分），声明表逐文件重算。
+--
+-- 单个文件出错（读盘 / fixity 上下文 / 格式化）时**报告并继续**：否则第一个坏文件之后的一切
+-- 都被跳过。结束时只要出现过错误就返回非 0。
+fmtFiles : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Bool -> FixityEnv -> List String -> Int -> Bool -> Eff r Int
+fmtFiles check env [] changed failed = do
+  _ <- if check && changed > 0 then consolePrint "${changed} file(s) need formatting\n" else pure 0
+  pure (if failed || check && changed > 0 then 1 else 0)
+
+-- | 内部：单个文件出错时的统一出口——打印后继续扫剩下的文件，并把失败状态带下去。
+fmtFailMsg : Member nConsole ConsoleOp r, Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Bool -> FixityEnv -> List String -> Int -> String -> Eff r Int
+fmtFailMsg check env rest changed msg = do
+  _ <- consolePrint "error: ${msg}\n"
+  fmtFiles check env rest changed True
+
+fmtFiles check env (path :: rest) changed failed = do
+  textR <- readText path
+  case textR of
+    ErrC e => fmtFailMsg check env rest changed (diagText e)
+    OkC original => do
+      looked <- fixitiesForFile env path original
+      let
+        env2 = firstOf looked
+      in case secondOf looked of
+        ErrC e =>
+          fmtFailMsg check env rest changed
+            "${path}: cannot determine fixity context: ${diagText e}"
+        OkC fixities => case formatSourceWith fixities original of
+          ErrC e => fmtFailMsg check env rest changed "${path}: ${diagText e}"
+          OkC formatted => if formatted == original then fmtFiles check env2 rest changed failed
+          else if check then do
+            _ <- consolePrint "would reformat: ${path}\n"
+            fmtFiles check env2 rest (changed + 1) failed
+          else do
+            _ <- fsWriteFile path formatted
+            _ <- consolePrint "formatted ${path}\n"
+            fmtFiles check env2 rest (changed + 1) failed

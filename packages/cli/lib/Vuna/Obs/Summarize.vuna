@@ -1,4 +1,4 @@
--- | 把 trace 的事件折叠成阶段表 / 计数表 / 采样热点，供 `vuna obs summarize` 的文本与 JSON
+-- | 把 trace 的事件折叠成阶段表 / 计数表 / 采样热点，供 `vuna dev obs summarize` 的文本与 JSON
 -- 输出、baseline 比较与 `render` 的页面数据共用。
 --
 -- 折叠规则（规范没规定树算法，以下是本模块的约定）：只处理 `ph:"X"` 跨度（`C` / `i` 不进

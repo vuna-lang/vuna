@@ -28,11 +28,11 @@ exit: 1
 out-contains: error[TC_TypeMismatch]:
 out-contains: -->
 # explain：码目录查询（未知码 exit 2）。
-run: "$VUNA" explain TC_TypeMismatch
+run: "$VUNA" errors explain TC_TypeMismatch
 exit: 0
 out-contains: TC_TypeMismatch
 out-contains: type mismatch
-run: sh -c '"$VUNA" explain NOPE 2>&1'
+run: sh -c '"$VUNA" errors explain NOPE 2>&1'
 exit: 2
 out-contains: unknown diagnostic code
 # 清单诊断：vuna.toml 未知 key 是有码、带行号的诊断。
@@ -120,11 +120,11 @@ out-contains: 2
 run: sh -c '"$VUNA" check "$TMPDIR/m39-multi.vuna" --max-errors 2 --json 2>&1 | grep -o "\"code\"" | wc -l'
 out-contains: 2
 # explain 元数据：severity/phase/category 与诊断目录同源。
-run: "$VUNA" explain TC_TypeMismatch
+run: "$VUNA" errors explain TC_TypeMismatch
 out-contains: severity: error
 out-contains: phase: elab
 out-contains: category: types
-run: "$VUNA" explain UN_UnusedBinder
+run: "$VUNA" errors explain UN_UnusedBinder
 out-contains: severity: warning
 out-contains: phase: usage
 # i18n：--lang zh 默认切到 human 并追加中文目录说明；默认 en 不变。
@@ -143,7 +143,7 @@ exit: 1
 out-contains: [TC_TypeMismatch]: 类型不匹配
 out-contains: = message: type mismatch
 # explain example：从 corpus 结构化夹具反查示例文件。
-run: "$VUNA" explain TC_TypeMismatch
+run: "$VUNA" errors explain TC_TypeMismatch
 out-contains: example: corpus/
 # open import 追踪：使用未限定名不再误报；完全未使用才告警。
 run: sh -c 'd="$TMPDIR/m42-open-use"; rm -rf "$d"; mkdir -p "$d/lib"; printf "[package]\nname = \"m42\"\n[export]\nmodules = [\"Main\", \"M\"]\n" > "$d/vuna.toml"; printf "module M where\n\nexport helper : Int\nhelper = 1\n" > "$d/lib/M.vuna"; printf "module Main where\n\nimport M\n\nmain : Int\nmain = helper\n" > "$d/lib/Main.vuna"; cd "$d" && "$VUNA" check -W . --json 2>&1'
@@ -163,14 +163,14 @@ run: "$VUNA" check corpus/dt_err/28_multi_clause_coverage.vuna --error-format hu
 exit: 1
 out-contains: missing (Nat.Succ _)
 # explain --json：目录条目机器可读（含 example 夹具路径）。
-run: "$VUNA" explain --json TC_TypeMismatch
+run: "$VUNA" errors explain --json TC_TypeMismatch
 out-contains: "code":"TC_TypeMismatch"
 out-contains: "meaning":"类型不匹配"
 out-contains: "phase":"elab"
 out-contains: "example":
-run: "$VUNA" explain --list --json
+run: "$VUNA" errors list --json
 out-contains: "codes":[
-run: "$VUNA" explain --json NOPE_Code
+run: "$VUNA" errors explain --json NOPE_Code
 exit: 2
 out-contains: unknown diagnostic code
 # [diagnostics].deny-warnings：manifest 配置把 warning 提升为失败（显式 CLI 优先）。

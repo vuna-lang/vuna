@@ -165,7 +165,7 @@ pkgTemplate (MissingHash _) =
   "dependency \"<0>\" must have a hash (only path dependencies may omit it)"
 pkgTemplate (SourceConflict _) =
   "dependency \"<0>\" specifies more than one source (path / git / url)"
-pkgTemplate (NotMaterialized _) = "package \"<0>\" is not in the local store (run: vuna fetch)"
+pkgTemplate (NotMaterialized _) = "package \"<0>\" is not in the local store (run: vuna deps fetch)"
 pkgTemplate (FetchFailed _) = "cannot fetch package: <0>"
 pkgTemplate (IndexMalformed _) = "invalid package index: <0>"
 pkgTemplate (HashMismatch _ _) = "package \"<0>\" content hash mismatch: <1>"

@@ -10,7 +10,7 @@ module Vuna.Compiler.Frontend.Canonical.Pkg where
 --     改注释/测试都会改变它——这是"取到的字节是否就是我声明的字节"。
 --   * **语义身份**（`identityHashOf`）= `encPackageIdentity` 的 SHA-256：包名 +
 --     `[export]` + 各依赖的 `(别名, 摘要)` + 每个文件的 `(路径, 内容摘要)`。它用于分发 /
---     pin：manifest 的 `identity`（`vuna pin` 写回）、registry 条目与 `vuna fetch`/`check`
+--     pin：manifest 的 `identity`（`vuna deps pin` 写回）、registry 条目与 `vuna deps fetch`/`check`
 --     的校验；**不参与缓存失效**。依赖有声明身份时优先用身份，否则退回内容摘要；
 --     `path` 依赖两者都没有时记 `"path"`（可变输入，工作树共变）。
 --

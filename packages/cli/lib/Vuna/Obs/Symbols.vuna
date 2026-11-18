@@ -1,4 +1,4 @@
--- | `vuna obs symbols [--out FILE] [OUTDIR]`：从 split 产物抽符号表，把 OCaml 绑定名映射回
+-- | `vuna dev obs symbols [--out FILE] [OUTDIR]`：从 split 产物抽符号表，把 OCaml 绑定名映射回
 -- `.vuna` 文件与行号。
 --
 -- 输入是 `vuna build --no-compile --out OUTDIR` / `vuna compile <pkg> OUTDIR` 的 split 产物
@@ -18,6 +18,7 @@ import Base.List
 import Base.Sort
 import Base.String
 import Vuna.Cli.Args
+import Vuna.Cli.Spec
 import Vuna.Compiler.Base.Common
 import Vuna.Files
 import Vuna.Json
@@ -42,16 +43,16 @@ export record SymbolDef(..) where
 export symbolsSchemaVersion : String
 symbolsSchemaVersion = "vuna-symbols 1"
 
--- | `vuna obs symbols` 的入口：解析 `--out` 与可选 OUTDIR，写出或打印符号表。
+-- | `vuna dev obs symbols` 的入口：解析 `--out` 与可选 OUTDIR，写出或打印符号表。
 export runObsSymbols : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nProcess ProcessOp r => List String -> Eff r Int
-runObsSymbols args = case parseToolArgs "vuna obs symbols" [ValueFlag "out"] args of
+runObsSymbols args = case parseCmdArgs ["dev", "obs", "symbols"] args of
   ErrC e => symbolsFail 2 (diagText e)
   OkC parsed => case outOf parsed of
     ErrC e => symbolsFail 2 (diagText e)
     OkC out => case parsed.positionals of
       [] => symbolsDir out ".output"
       [dir] => symbolsDir out dir
-      _ => symbolsFail 2 "usage: vuna obs symbols [--out FILE] [OUTDIR]"
+      _ => symbolsFail 2 "usage: vuna dev obs symbols [--out FILE] [OUTDIR]"
 
 -- | 内部：`--out`（非空文件路径）。
 outOf : Parsed -> Check (Maybe String)

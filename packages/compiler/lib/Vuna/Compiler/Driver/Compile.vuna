@@ -1623,7 +1623,7 @@ checkModsOf pkg kind manifest sources deps ver flags =
 
 -- 项目身份：**规范化绝对包目录**的摘要。roots 按项目分目录（`store/roots/<id>/`），
 -- 项目只追加自己关心的摘要；GC 扫所有项目的并集，所以 A 不需要知道 B 的存在。
--- 公式在 `Addr.projectIdAddrOf`：`vuna fetch` 也要写同一个项目的 roots。
+-- 公式在 `Addr.projectIdAddrOf`：`vuna deps fetch` 也要写同一个项目的 roots。
 export projectIdOf : Member nEnv EnvOp r => PackageContext -> Eff r String
 projectIdOf ctx = do
   abs <- absolutePath (contextDir ctx)

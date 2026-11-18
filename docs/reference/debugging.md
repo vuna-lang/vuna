@@ -152,7 +152,7 @@ vuna: runtime error: assertion failed: broken invariant
 | `vuna repl` 的 `:info NAME` / `:search QUERY` | 查符号类型/文档/位置；按名称或类型检索 |
 | `vuna repl` 的 `:load FILE\|DIR\|MODULE` / `:reload` | 加载入口式源码 / 切换包上下文 / 导入模块；`:browse [MODULE]` 看模块接口 |
 | `vuna repl` 的 `:defs` / `:history` / `:set +s` | 看已定义名字与类型 / 输入历史与重放 / 每条输入的耗时 |
-| `vuna repl --listen ADDR` + `--client ADDR` | 常驻 REPL server（Unix socket / loopback TCP）+ 每次调用一发一收；agent/脚本跨进程驱动，JSON-RPC 帧协议（见 [tooling.md](tooling.md) §5） |
+| `vuna repl serve --listen ADDR` + `--client ADDR` | 常驻 REPL server（Unix socket / loopback TCP）+ 每次调用一发一收；agent/脚本跨进程驱动，JSON-RPC 帧协议（见 [tooling.md](tooling.md) §5） |
 | LSP `textDocument/codeAction` | lint finding 的 quick fix（含 fix all） |
 
 REPL 与 LSP 的命令面见 [tooling.md](tooling.md)，测试选项见 [testing.md](testing.md)。

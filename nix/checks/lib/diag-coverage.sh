@@ -3,8 +3,8 @@
 # fixture 里出现的码必须在目录中；覆盖数不得低于基线。
 #
 # 数据源：
-#   - 目录：`vuna explain --list`（与 `gen-errors` 同源）
-#   - 夹具：test/corpus/**/*.diag.json（`vuna test --suite ... --bless-diag` 生成）
+#   - 目录：`vuna errors list`（与 `gen-errors` 同源）
+#   - 夹具：test/corpus/**/*.diag.json（`vuna dev suite ... --bless-diag` 生成）
 #   - lint 规则夹具：test/corpus/lint/*.out（LN_ 码在 lint 输出里逐条断言；
 #     本门禁只要求「每个码至少有一个夹具」，不限定载体）
 set -eu
@@ -18,7 +18,7 @@ cd "$root"
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
-"$VUNA" explain --list > "$tmp/codes.txt"
+"$VUNA" errors list > "$tmp/codes.txt"
 grep -E '^[A-Z][A-Za-z0-9]*_[A-Za-z0-9]+' "$tmp/codes.txt" | awk '{print $1}' | sort -u > "$tmp/catalog.txt"
 
 grep -rho '"code":"[A-Z][A-Za-z0-9]*_[A-Za-z0-9]*"' test/corpus --include='*.diag.json' \

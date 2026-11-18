@@ -1,4 +1,4 @@
--- | `vuna fetch`：显式取包到持久 store（git / url），path 依赖只校验摘要。
+-- | `vuna deps fetch`：显式取包到持久 store（git / url），path 依赖只校验摘要。
 --
 -- - **只有 fetch 联网**：check / build / test 只读 store，缺对象报 `PKG_NotMaterialized`。
 -- - `path` 依赖是可变输入：不复制进 store，只按声明摘要校验（无摘要则跳过）。
@@ -11,6 +11,7 @@
 module Vuna.Fetch where
 
 import Vuna.Cli.Args
+import Vuna.Cli.Spec
 import Vuna.Compiler.Loader.Addr
 import Vuna.Compiler.Frontend.Canonical.Pkg
 import Vuna.Compiler.Base.Common
@@ -29,10 +30,10 @@ import Base.EffProcess
 import Base.Eff.Types
 import Base.EffEnv
 
--- | `vuna fetch` 的入口：解析 `--locked` 与可选目录（默认 `.`）；参数过多打印
+-- | `vuna deps fetch` 的入口：解析 `--locked` 与可选目录（默认 `.`）；参数过多打印
 -- `error: ...` 并返回 2。
 export runFetch : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => List String -> Eff r Int
-runFetch args = case parseToolArgs "vuna fetch" [BoolFlag "locked"] args of
+runFetch args = case parseCmdArgs ["deps", "fetch"] args of
   ErrC e => fetchFailText (diagText e)
   OkC parsed =>
     let
@@ -376,11 +377,11 @@ printDiagEff d = do
   pure 1
 
 -- ---------------------------------------------------------------
--- vuna pin：把 git 依赖的实际内容摘要写回 manifest（只改已有 `hash = ...` 行）
+-- vuna deps pin：把 git 依赖的实际内容摘要写回 manifest（只改已有 `hash = ...` 行）
 -- ---------------------------------------------------------------
--- | `vuna pin` 的入口：解析可选目录（默认 `.`）；参数过多打印 `error: ...` 并返回 2。
+-- | `vuna deps pin` 的入口：解析可选目录（默认 `.`）；参数过多打印 `error: ...` 并返回 2。
 export runPin : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => List String -> Eff r Int
-runPin args = case parseToolArgs "vuna pin" [] args of
+runPin args = case parseCmdArgs ["deps", "pin"] args of
   ErrC e => fetchFailText (diagText e)
   OkC parsed => case parsed.positionals of
     [] => pinAt "."

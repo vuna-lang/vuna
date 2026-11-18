@@ -1,4 +1,4 @@
--- | `vuna clean [--store] [--packages] [--gc] [--all] [--dry-run] [DIR]`：清理 store 里的
+-- | `vuna store clean [--store] [--packages] [--gc] [--all] [--dry-run] [DIR]`：清理 store 里的
 -- 缓存族与取包对象族。
 --
 -- 一个 store 根、两类生命周期：
@@ -19,6 +19,7 @@
 module Vuna.Clean where
 
 import Vuna.Cli.Args
+import Vuna.Cli.Spec
 import Base.Maybe
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Manifest
@@ -35,11 +36,11 @@ import Base.EffProcess
 import Base.Eff.Types
 import Base.EffEnv
 
--- | `vuna clean` 的入口：解析 flag 与位置参数，决定清哪一族。
+-- | `vuna store clean` 的入口：解析 flag 与位置参数，决定清哪一族。
 -- `--gc` 必须与 `--packages` 连用；`--store` / `--packages` 不带 `--gc` 时不收目录。
 -- 用法错误打印 `error: ...` 并返回 2。
 export runClean : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => List String -> Eff r Int
-runClean args = case parseToolArgs "vuna clean" [BoolFlag "dry-run", BoolFlag "store", BoolFlag "packages", BoolFlag "gc", BoolFlag "all"] args of
+runClean args = case parseCmdArgs ["store", "clean"] args of
   ErrC e => cleanError (diagText e)
   OkC parsed =>
     let
@@ -52,11 +53,11 @@ runClean args = case parseToolArgs "vuna clean" [BoolFlag "dry-run", BoolFlag "s
           || flagSet parsed "all"
       wantStore = flagSet parsed "store" || flagSet parsed "all" || not anyFlag
       wantPackages = flagSet parsed "packages" || flagSet parsed "all"
-    in if wantGc && not wantPackages then cleanError "vuna clean --gc requires --packages"
+    in if wantGc && not wantPackages then cleanError "vuna store clean --gc requires --packages"
     else case parsed.positionals of
       [] => cleanTargets wantStore wantPackages wantGc dry "."
       [dir] =>
-        if (wantStore || wantPackages) && not wantGc then cleanError "vuna clean --store/--packages takes no directory"
+        if (wantStore || wantPackages) && not wantGc then cleanError "vuna store clean --store/--packages takes no directory"
         else cleanTargets wantStore wantPackages wantGc dry dir
       _ => cleanError "too many arguments; expected at most one directory"
 
@@ -291,7 +292,7 @@ else case name of
 -- 参数：`--dry-run` 只统计不删；`--older-than <秒>` 覆盖宽限窗口（默认 3600）；
 -- `--max-size <字节>` 容量上限（0 = 不限）。
 export runStoreGc : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => List String -> Eff r Int
-runStoreGc args = case parseToolArgs "vuna store gc" [BoolFlag "dry-run", ValueFlag "older-than", ValueFlag "max-size"] args of
+runStoreGc args = case parseCmdArgs ["store", "gc"] args of
   ErrC e => cleanError (diagText e)
   OkC parsed => do
     root <- storeRootReadyEff

@@ -3,7 +3,7 @@
 //
 // 规范：docs/reference/observability.md §1 O11、§7 `serve --cdp`、§8 生态表、§10。
 //
-// 为什么要这个文件：`vuna obs serve --cdp` 只做 **Content-Length JSON-RPC over socket**
+// 为什么要这个文件：`vuna dev obs serve --cdp` 只做 **Content-Length JSON-RPC over socket**
 // （与 REPL server / LSP 同一套帧层）。CDP 客户端（Chrome DevTools frontend）要的是
 // HTTP `/json/version`、`/json/list` + WebSocket：握手需要 `Sec-WebSocket-Accept` =
 // base64(SHA-1(key + GUID))。vuna 语言层没有 SHA-1/base64，也不该为一个桥在 TCB 里造
@@ -13,9 +13,9 @@
 // 架构（每个 WS 连接一个 vuna 进程；因为 serve 是单连接串行语义）：
 //
 //   Chrome DevTools ──HTTP /json/*──▶ 本脚本 ──WS 帧──▶ 本脚本 ──Content-Length──▶
-//                                       vuna obs serve --cdp tcp:127.0.0.1:0 [TRACE...]
+//                                       vuna dev obs serve --cdp tcp:127.0.0.1:0 [TRACE...]
 //
-//   1. WS 连接建立时，脚本按 `--vuna` 起一个 `vuna obs serve`，等它 stdout 打出就绪行
+//   1. WS 连接建立时，脚本按 `--vuna` 起一个 `vuna dev obs serve`，等它 stdout 打出就绪行
 //      `listening tcp:127.0.0.1:<PORT>`（PORT=0 ⇒ 由 serve 挑空闲端口并回填，脚本不自己
 //      猜端口，避免 TOCTOU）；
 //   2. 之后 WS 文本帧里每条 JSON-RPC 请求（带 `id` 或通知）按 FIFO 顺序写进那条 TCP 连接
@@ -134,7 +134,7 @@ function findVuna(explicit) {
 }
 
 // ---------------------------------------------------------------- Content-Length 客户端
-// 一条到 `vuna obs serve` 的 TCP 连接：写帧 + 按 Content-Length 切读响应帧。
+// 一条到 `vuna dev obs serve` 的 TCP 连接：写帧 + 按 Content-Length 切读响应帧。
 class VunaClient {
   constructor(addr, onFrame, onGone) {
     this.onFrame = onFrame;
@@ -219,7 +219,7 @@ function spawnServe(opts, onReady, onFail) {
   child.stderr.on('data', (chunk) => { if (process.env.BRIDGE_VERBOSE === '1') process.stderr.write(chunk); });
   child.on('error', (e) => { if (!ready) onFail(`failed to start vuna: ${e.message}`); });
   child.on('exit', (code, sig) => {
-    if (!ready) onFail(`vuna obs serve exited before printing a readiness line (code ${code}${sig ? `, signal ${sig}` : ''})`);
+    if (!ready) onFail(`vuna dev obs serve exited before printing a readiness line (code ${code}${sig ? `, signal ${sig}` : ''})`);
   });
   return {
     stop() { try { child.kill(); } catch { /* already gone */ } },
@@ -385,9 +385,9 @@ function targetJson(opts, port) {
   return {
     id: TARGET_ID,
     type: 'page',
-    title: 'vuna obs (offline trace)',
+    title: 'vuna dev obs (offline trace)',
     url: 'vuna-obs://trace',
-    description: 'vuna obs serve --cdp (offline: the profile comes from an existing trace, not live sampling)',
+    description: 'vuna dev obs serve --cdp (offline: the profile comes from an existing trace, not live sampling)',
     webSocketDebuggerUrl: `ws://${opts.host}:${port}${WS_PATH}`,
     devtoolsFrontendUrl: `devtools://devtools/bundled/inspector.html?ws=${opts.host}:${port}${WS_PATH}`,
   };
@@ -395,7 +395,7 @@ function targetJson(opts, port) {
 
 function versionJson(opts, port) {
   return {
-    Browser: `${VERSION} (vuna obs serve --cdp)`,
+    Browser: `${VERSION} (vuna dev obs serve --cdp)`,
     'Protocol-Version': '1.3',
     'User-Agent': VERSION,
     'V8-Version': '0.1.0',
@@ -446,7 +446,7 @@ server.on('error', (e) => fail(`cannot listen on ${opts.host}:${opts.port}: ${e.
 server.listen(opts.port, opts.host, () => {
   const port = server.address().port;
   const base = `http://${opts.host}:${port}`;
-  // 就绪行：脚本 / e2e 用它判断可连（与 `vuna obs serve` 的 `listening <ADDR>` 同精神）。
+  // 就绪行：脚本 / e2e 用它判断可连（与 `vuna dev obs serve` 的 `listening <ADDR>` 同精神）。
   process.stdout.write(`bridge listening ${base} (json: ${base}/json/version)\n`);
   const traces = opts.traces.length === 0 ? '(no trace: Profiler.stop -> -32000)' : opts.traces.join(', ');
   const source = opts.serveAddr ? `reuse ${opts.serveAddr}` : (findVuna(opts.vuna) || '<vuna not found>');

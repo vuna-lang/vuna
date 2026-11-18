@@ -1,0 +1,106 @@
+-- | `vuna repl`：交互式 REPL 与两种协议端点（`serve` / `client`）。
+--
+-- 交互与 server 实现在 `Vuna.Repl` / `Vuna.Repl.Server`；`client` 只做一次 stdin →
+-- JSON-RPC → server 的传输（`Vuna.Repl.Client`）。启动目标可以是文件、目录或模块名。
+module Vuna.Cli.Repl where
+
+import Vuna.Cli.Args
+import Vuna.Cli.Err
+import Vuna.Cli.Spec
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Frontend.Packages.Pkg
+import Vuna.Repl
+import Vuna.Repl.Client
+import Vuna.Repl.Server
+import Base.EffArgs
+import Base.EffClock
+import Base.EffConsole
+import Base.EffEnv
+import Base.EffExit
+import Base.EffFs
+import Base.EffNet
+import Base.EffProcess
+import Base.Eff.Types
+import Base.EffStdin
+
+-- | `vuna repl [FILE|DIR|MODULE]` 的入口；`serve` / `client` 走各自的子命令。
+export replArgs : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nStdin StdinOp r, Member nArgs ArgsOp r, Member nNet NetOp r => List String -> Eff r Int
+replArgs ("serve" :: more) = serveArgs more
+replArgs ("client" :: more) = clientArgs more
+replArgs rest = case parseCmdArgs ["repl"] rest of
+  ErrC e => toolError (diagText e)
+  OkC parsed => case parsed.positionals of
+    [] => do
+      ctxR <- contextForDir "."
+      replWith Nothing StartNone ctxR
+    [target] => replTargetWith Nothing target
+    _ => usageErrorFor ["repl"]
+
+-- | 内部：`vuna repl serve --listen ADDR [FILE|DIR|MODULE]`。
+serveArgs : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nStdin StdinOp r, Member nArgs ArgsOp r, Member nNet NetOp r => List String -> Eff r Int
+serveArgs more = case parseCmdArgs ["repl", "serve"] more of
+  ErrC e => toolError (diagText e)
+  OkC parsed => case flagValue parsed "listen" of
+    Nothing => usageErrorFor ["repl", "serve"]
+    Just addr => case parsed.positionals of
+      [] => do
+        ctxR <- contextForDir "."
+        replServerWith addr StartNone ctxR
+      [target] => replServerWithTarget addr target
+      _ => usageErrorFor ["repl", "serve"]
+
+-- | 内部：`vuna repl client --addr ADDR`——只做传输，不加载包上下文。
+clientArgs : Member nConsole ConsoleOp r, Member nStdin StdinOp r, Member nNet NetOp r => List String -> Eff r Int
+clientArgs more = case parseCmdArgs ["repl", "client"] more of
+  ErrC e => toolError (diagText e)
+  OkC parsed => case flagValue parsed "addr" of
+    Nothing => usageErrorFor ["repl", "client"]
+    Just addr => case parsed.positionals of
+      [] => replClientWith addr
+      _ =>
+        toolError
+          "`vuna repl client` 不接受启动目标（它只做传输，不加载包上下文）"
+
+-- | 内部：`--addr` 的纯传输路径——只校地址，然后把 stdin 的一个 JSON-RPC 请求发给 server。
+replClientWith : Member nConsole ConsoleOp r, Member nStdin StdinOp r, Member nNet NetOp r => String -> Eff r Int
+replClientWith addr = case checkReplAddr addr of
+  ErrC e => toolError (diagText e)
+  OkC _ => runReplClient addr
+
+-- | 内部：`--listen` 的常驻 server 启动（无启动目标）；地址先校验，再交给 `replWith`。
+replServerWith : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nStdin StdinOp r, Member nArgs ArgsOp r, Member nNet NetOp r => String -> ReplStart -> Check PackageContext -> Eff r Int
+replServerWith addr start ctxRes = case checkReplAddr addr of
+  ErrC e => toolError (diagText e)
+  OkC _ => replWith (Just addr) start ctxRes
+
+-- | 内部：带启动目标的 server 启动——目标解析与交互式同一套。
+replServerWithTarget : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nStdin StdinOp r, Member nArgs ArgsOp r, Member nNet NetOp r => String -> String -> Eff r Int
+replServerWithTarget addr target = case checkReplAddr addr of
+  ErrC e => toolError (diagText e)
+  OkC _ => replTargetWith (Just addr) target
+
+-- | 内部：按 `listen` 分派交互式 REPL 与常驻 server；包上下文解析失败 exit 1。
+replWith : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nStdin StdinOp r, Member nArgs ArgsOp r, Member nNet NetOp r => Maybe String -> ReplStart -> Check PackageContext -> Eff r Int
+replWith listen start (ErrC e) = toolFailure (diagText e)
+replWith listen start (OkC ctx) = case listen of
+  Nothing => runRepl ctx start
+  Just addr => runReplServer ctx start addr
+
+-- | 内部：解析启动目标——存在目录 → 该包上下文；存在文件 → 文件所在包上下文 + 启动加载；
+-- 不存在且像模块名 → cwd 上下文 + 启动导入；其它报可操作错误。
+replTargetWith : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nStdin StdinOp r, Member nArgs ArgsOp r, Member nNet NetOp r => Maybe String -> String -> Eff r Int
+replTargetWith listen target = do
+  exists <- fsFileExists target
+  if exists then do
+    isDir <- fsIsDirectory target
+    if isDir then do
+      ctxR <- contextForDir target
+      replWith listen (StartDir target) ctxR
+    else do
+      ctxR <- contextForFile target
+      replWith listen (StartFile target) ctxR
+  else if isModuleNameStr target then do
+    ctxR <- contextForDir "."
+    replWith listen (StartModule target) ctxR
+  else toolFailure
+    ("找不到文件或目录: " ++ target ++ "（vuna repl 接受 <FILE> | <DIR> | <Module.Name>）")

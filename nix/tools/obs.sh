@@ -16,9 +16,9 @@
 # 设计约束（规范 §8）：
 #   * 本脚本**不进** `nix flake check`：`perf record` 需要 `perf_event_paranoid` 权限，
 #     Nix 沙箱与 CI 常拒（`perf_event_open` denied）；
-#   * 不重写任何 vuna 逻辑：trace 生成靠运行时（`VUNA_OBS*`），换算靠 `vuna obs convert`，
+#   * 不重写任何 vuna 逻辑：trace 生成靠运行时（`VUNA_OBS*`），换算靠 `vuna dev obs convert`，
 #     DWARF 靠 `ocamlopt -g` + `#line` 注入；
-#   * 输出路径一律显式打印，便于与 `vuna obs summarize` 串起来。
+#   * 输出路径一律显式打印，便于与 `vuna dev obs summarize` 串起来。
 set -eu
 
 VUNA=${VUNA:-}

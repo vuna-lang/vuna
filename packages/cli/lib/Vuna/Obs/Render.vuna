@@ -1,4 +1,4 @@
--- | `vuna obs render [--out FILE] TRACE`：把一份 trace 渲染成单文件、可复现的 HTML 报告。
+-- | `vuna dev obs render [--out FILE] TRACE`：把一份 trace 渲染成单文件、可复现的 HTML 报告。
 --
 -- 页面约定：单文件——内联 CSS + 内联 JS，无外链、无字体 / 图标 / CDN，产物里不出现任何 URL；
 -- 数据只内嵌一次（`<script type="application/json" id="vuna-obs-data">`），内容是
@@ -20,6 +20,7 @@ import Base.Pair
 import Base.Sort
 import Base.String
 import Vuna.Cli.Args
+import Vuna.Cli.Spec
 import Vuna.Compiler.Base.Common
 import Vuna.Doc.Prose
 import Vuna.Json
@@ -37,11 +38,11 @@ import Base.EffProcess
 -- ---------------------------------------------------------------
 -- | 内部：用法行。
 renderUsage : String
-renderUsage = "usage: vuna obs render [--out FILE] TRACE"
+renderUsage = "usage: vuna dev obs render [--out FILE] TRACE"
 
--- | `vuna obs render` 的入口；`--out` 缺失 / 未知 flag / TRACE 不存在都是退出码 2。
+-- | `vuna dev obs render` 的入口；`--out` 缺失 / 未知 flag / TRACE 不存在都是退出码 2。
 export runObsRender : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nProcess ProcessOp r => List String -> Eff r Int
-runObsRender args = case parseToolArgs "vuna obs render" [ValueFlag "out"] args of
+runObsRender args = case parseCmdArgs ["dev", "obs", "render"] args of
   ErrC e => renderFail 2 (diagText e)
   OkC parsed => case parsed.positionals of
     [path] => case flagValue parsed "out" of
@@ -251,7 +252,7 @@ renderPage trace =
     stats =
       "${strFromInt spanCount} spans · ${strFromInt (length summary.summaryCounters)} counters · ${strFromInt (length (cpuSamplesLenient trace.traceEvents))} cpu samples · wall ${wallText} us"
   in strConcatMany
-    ["<!doctype html>\n<html lang='zh-CN'>\n<head>\n<meta charset='utf-8'>\n", "<meta name='viewport' content='width=device-width, initial-scale=1'>\n", "<title>vuna obs</title>\n<style>\n", css, "</style>\n</head>\n<body>\n<header class='top'>\n<h1>vuna obs</h1>\n", "<p class='meta'>", htmlEscape stats, "</p>\n", "<p class='hint'>vuna-obs 1 trace · 瀑布 / 火焰图 / 计数器与采样 · 数据内嵌于 #vuna-obs-data</p>\n", "</header>\n<nav class='tabs'>\n", tabButton "waterfall" "瀑布 Waterfall" True, tabButton "flame" "火焰图 Flame graph" False, tabButton "tables" "计数器与采样 Counters &amp; samples" False, "</nav>\n<main>\n", "<section class='view' id='view-waterfall'>\n<h2>瀑布（span 按 ts/dur，缩进 = 嵌套深度）</h2>\n<div id='waterfall'></div>\n</section>\n", "<section class='view hidden' id='view-flame'>\n<h2>火焰图（CPU 采样折叠栈，宽度 = 命中次数）</h2>\n<div id='flame'></div>\n</section>\n", "<section class='view hidden' id='view-tables'>\n<h2>计数器</h2>\n<div id='counters'></div>\n", "<h2>采样热点</h2>\n<div id='samples'></div>\n</section>\n", "</main>\n", "<script type='application/json' id='vuna-obs-data'>", scriptSafe (renderJson dataJson), "</script>\n<script>\n", js, "\n</script>\n</body>\n</html>\n"]
+    ["<!doctype html>\n<html lang='zh-CN'>\n<head>\n<meta charset='utf-8'>\n", "<meta name='viewport' content='width=device-width, initial-scale=1'>\n", "<title>vuna dev obs</title>\n<style>\n", css, "</style>\n</head>\n<body>\n<header class='top'>\n<h1>vuna dev obs</h1>\n", "<p class='meta'>", htmlEscape stats, "</p>\n", "<p class='hint'>vuna-obs 1 trace · 瀑布 / 火焰图 / 计数器与采样 · 数据内嵌于 #vuna-obs-data</p>\n", "</header>\n<nav class='tabs'>\n", tabButton "waterfall" "瀑布 Waterfall" True, tabButton "flame" "火焰图 Flame graph" False, tabButton "tables" "计数器与采样 Counters &amp; samples" False, "</nav>\n<main>\n", "<section class='view' id='view-waterfall'>\n<h2>瀑布（span 按 ts/dur，缩进 = 嵌套深度）</h2>\n<div id='waterfall'></div>\n</section>\n", "<section class='view hidden' id='view-flame'>\n<h2>火焰图（CPU 采样折叠栈，宽度 = 命中次数）</h2>\n<div id='flame'></div>\n</section>\n", "<section class='view hidden' id='view-tables'>\n<h2>计数器</h2>\n<div id='counters'></div>\n", "<h2>采样热点</h2>\n<div id='samples'></div>\n</section>\n", "</main>\n", "<script type='application/json' id='vuna-obs-data'>", scriptSafe (renderJson dataJson), "</script>\n<script>\n", js, "\n</script>\n</body>\n</html>\n"]
 
 -- | 内部：一个标签页按钮（`data-view` 指向视图元素，`active` 决定高亮）。
 tabButton : String -> String -> Bool -> String

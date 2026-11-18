@@ -1,4 +1,4 @@
--- | 静态包索引：`index/<name>.toml` 的解析与版本解析（`vuna add` 的查询层）。
+-- | 静态包索引：`index/<name>.toml` 的解析与版本解析（`vuna deps add` 的查询层）。
 --
 -- 索引是**可选**的静态便利层，只做 `name [@version] → (源, hash)` 的映射，不是身份真源：
 --

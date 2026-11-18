@@ -4,7 +4,7 @@
 -- `main : Eff [] a` 的效应行必须具体（入口不做行泛化），因此下面列出 CLI 实际用到的
 -- 全部效应标签；`argsGetArgs` / `exitWith` 是命名实例上的 labeled sender。
 --
--- 工具链自采样只在显式设置 `VUNA_OBS_SAMPLE` 时启用（`vuna obs run --sample ...` 会设置它），
+-- 工具链自采样只在显式设置 `VUNA_OBS_SAMPLE` 时启用（`vuna dev obs run --sample ...` 会设置它），
 -- 免得普通 `VUNA_OBS=1` 的 span 运行也背上定时器；`obsSampleStart` 在 obs 关闭时是空操作。
 import Vuna.Cli
 import Base.Monad

@@ -1,5 +1,5 @@
 #!/bin/sh
-# `vuna obs serve --cdp` + `test/corpus/obs-cdp/bridge.mjs` 的冒烟（suite e2e tier 用）。
+# `vuna dev obs serve --cdp` + `test/corpus/obs-cdp/bridge.mjs` 的冒烟（suite e2e tier 用）。
 #
 # 用法：sh test/corpus/obs-cdp/smoke.sh <path-to-vuna>
 #   可选环境：VUNA_BASE（vuna-base 目录，默认 <repo>/base）；SKIP_BRIDGE=1 只测 serve。
@@ -71,7 +71,7 @@ start_serve() { # trace log -> sets srv_pid, prints addr-less; returns 0/1
   sv_trace=$1
   log=$2
   : >"$log"
-  "$VUNA" obs serve --cdp "unix:$sock" "$sv_trace" >"$log" 2>"$log.err" &
+  "$VUNA" dev obs serve --cdp "unix:$sock" "$sv_trace" >"$log" 2>"$log.err" &
   srv_pid=$!
   wait_ready "$log" 400 && return 0
   printf 'serve did not print a readiness line\n' >&2
@@ -154,7 +154,7 @@ else
 fi
 
 # 与 `convert --to cpuprofile` 同一构造点 ⇒ 逐字节一致。
-if "$VUNA" obs convert --to cpuprofile --out "$tmp/convert.json" "$trace" >/dev/null 2>&1 && [ -f "$tmp/cap-a/frame-4.json" ]; then
+if "$VUNA" dev obs convert --to cpuprofile --out "$tmp/convert.json" "$trace" >/dev/null 2>&1 && [ -f "$tmp/cap-a/frame-4.json" ]; then
   cmp -s "$tmp/convert.json" "$tmp/cap-a/frame-4.json" && ok "serve: profile == convert --to cpuprofile" \
     || no "serve: profile == convert --to cpuprofile"
 else
@@ -192,11 +192,11 @@ else
 fi
 
 # 4c 参数/前提错误 → 退出码 2。
-"$VUNA" obs serve >"$tmp/arg1.log" 2>&1
+"$VUNA" dev obs serve >"$tmp/arg1.log" 2>&1
 [ "$?" = "2" ] && ok "serve: missing --cdp exits 2" || no "serve: missing --cdp exits 2"
-"$VUNA" obs serve --cdp tcp:0.0.0.0:9229 "$trace" >"$tmp/arg2.log" 2>&1
+"$VUNA" dev obs serve --cdp tcp:0.0.0.0:9229 "$trace" >"$tmp/arg2.log" 2>&1
 [ "$?" = "2" ] && ok "serve: non-loopback ADDR exits 2" || no "serve: non-loopback ADDR exits 2"
-"$VUNA" obs serve --cdp "unix:$sock" "$tmp/nope.jsonl" >"$tmp/arg3.log" 2>&1
+"$VUNA" dev obs serve --cdp "unix:$sock" "$tmp/nope.jsonl" >"$tmp/arg3.log" 2>&1
 [ "$?" = "2" ] && ok "serve: missing TRACE exits 2" || no "serve: missing TRACE exits 2"
 
 # ---------------------------------------------------------------- 5) WS 桥（可选）

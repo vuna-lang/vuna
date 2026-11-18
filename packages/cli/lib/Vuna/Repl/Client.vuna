@@ -1,4 +1,4 @@
--- | `vuna repl --client ADDR`：一次调用发一个请求、收一个响应。
+-- | `vuna repl client --addr ADDR`：一次调用发一个请求、收一个响应。
 --
 -- 用途：agent / 脚本在独立进程里驱动常驻 REPL server（每次 bash 调用都是新 shell，不能指望
 -- 同一个进程的 stdin 会话）。stdin 内容是一个 JSON-RPC 请求 body（不带帧头），客户端补

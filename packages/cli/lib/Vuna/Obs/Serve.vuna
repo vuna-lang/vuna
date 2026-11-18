@@ -1,4 +1,4 @@
--- | `vuna obs serve --cdp ADDR [--allow-slow] [TRACE...]`：一个 CDP Profiler 子集 server，
+-- | `vuna dev obs serve --cdp ADDR [--allow-slow] [TRACE...]`：一个 CDP Profiler 子集 server，
 -- 把离线 trace 里的 CPU 采样换算成 CDP Profile 交给客户端。
 --
 -- 传输是 Content-Length JSON-RPC over socket（`Vuna.Json.Server.serveConnection`，与 REPL
@@ -31,6 +31,7 @@ import Base.List
 import Base.Pair
 import Base.String
 import Vuna.Cli.Args
+import Vuna.Cli.Spec
 import Vuna.Compiler.Base.Common
 import Vuna.Json
 import Vuna.Json.Rpc
@@ -50,7 +51,7 @@ errServer = 0 - 32000
 
 -- | 内部：用法行。
 serveUsage : String
-serveUsage = "usage: vuna obs serve --cdp ADDR [--allow-slow] [TRACE...]"
+serveUsage = "usage: vuna dev obs serve --cdp ADDR [--allow-slow] [TRACE...]"
 
 -- | 内部：用法行 + ADDR / TRACE 的说明（`--cdp` 缺失时打印）。
 serveAdvice : String
@@ -79,9 +80,9 @@ export record ServeState(..) where
 -- ---------------------------------------------------------------
 -- 入口
 -- ---------------------------------------------------------------
--- | `vuna obs serve` 的入口；参数/输入前提错误退出码 2。
+-- | `vuna dev obs serve` 的入口；参数/输入前提错误退出码 2。
 export runObsServe : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nNet NetOp r => List String -> Eff r Int
-runObsServe args = case parseToolArgs "vuna obs serve" [ValueFlag "cdp", BoolFlag "allow-slow"] args of
+runObsServe args = case parseCmdArgs ["dev", "obs", "serve"] args of
   ErrC e => serveFail 2 (diagText e)
   OkC parsed => case flagValue parsed "cdp" of
     Nothing => serveFail 2 serveAdvice
@@ -130,7 +131,7 @@ readServeTracesGo (path :: rest) acc = do
       else readServeTracesGo rest (trace :: acc)
 
 -- | 内部：多份 trace 的事件按命令行顺序拼接（不重排、不重编号）。跨机器的 `ts` 基准不可比，
--- 因此拼出来的 profile 时间轴不可比（要合并先 `vuna obs merge`）。
+-- 因此拼出来的 profile 时间轴不可比（要合并先 `vuna dev obs merge`）。
 concatRows : List ObsTrace -> List (Pair Int ObsEvent)
 concatRows traces = concatMap traceRowsOf traces
 

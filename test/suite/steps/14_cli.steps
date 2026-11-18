@@ -48,3 +48,48 @@ exit: 2
 out-contains: removed
 run: "$VUNA" lint >/dev/null 2>&1
 exit: 2
+# 命令面：帮助从命令表派生，每条命令都要有 --help（含分组总览与选项小节）。
+run: sh -c '"$VUNA" help | grep -q "核心循环"'
+run: sh -c '"$VUNA" help | grep -q "开发与维护"'
+run: sh -c '"$VUNA" help lint | grep -q -- "--fix"'
+run: sh -c '"$VUNA" lint --help | grep -q -- "--max-warnings"'
+run: sh -c '"$VUNA" map find --help | grep -q "vuna map find"'
+run: sh -c '"$VUNA" help dev | grep -q "vuna dev suite"'
+run: sh -c '"$VUNA" help errors | grep -q "errors explain"'
+# 未知命令 / flag 给最近候选。
+run: "$VUNA" chek 2>&1
+exit: 2
+out-contains: unknown command
+out-contains: did you mean `check`?
+run: "$VUNA" lint --fi 2>&1
+exit: 2
+out-contains: unknown flag
+out-contains: did you mean `--fix`?
+# 已改名的命令与模式 flag 给迁移提示。
+run: "$VUNA" explain TC_TypeMismatch 2>&1
+exit: 2
+out-contains: has been removed
+out-contains: vuna errors explain
+run: "$VUNA" test --suite test/suite.toml 2>&1
+exit: 2
+out-contains: vuna dev suite
+run: "$VUNA" map --find Vuna.Cli 2>&1
+exit: 2
+out-contains: vuna map find
+run: "$VUNA" repl --listen tcp:127.0.0.1:7878 2>&1
+exit: 2
+out-contains: vuna repl serve --listen
+# 分组命令缺子命令时给用法行。
+run: "$VUNA" deps 2>&1
+exit: 2
+out-contains: usage:
+out-contains: vuna deps add
+run: "$VUNA" store 2>&1
+exit: 2
+out-contains: vuna store gc
+run: "$VUNA" dev 2>&1
+exit: 2
+out-contains: vuna dev suite
+run: "$VUNA" errors nope 2>&1
+exit: 2
+out-contains: unknown `vuna errors` subcommand

@@ -1,0 +1,86 @@
+-- | `vuna dev suite`：仓库原生 suite（`test/suite.toml`）的参数面与校验。
+--
+-- suite 的 family / tier / matrix 词汇是 vuna 自己的 conformance 语义，所以命令挂在
+-- `vuna dev` 下；执行器在 `Vuna.Test.Run`，本模块只做参数校验与选项摊平。
+module Vuna.Cli.Suite where
+
+import Vuna.Cli.Args
+import Vuna.Cli.Err
+import Vuna.Cli.Parse
+import Vuna.Cli.Spec
+import Vuna.Compiler.Base.Common
+import Vuna.Test.Suite
+import Vuna.Test.Run
+import Base.EffClock
+import Base.EffConsole
+import Base.EffArgs
+import Base.EffEnv
+import Base.EffExit
+import Base.EffFs
+import Base.EffProcess
+import Base.Eff.Types
+import Base.String
+
+-- | `vuna dev suite [FILE]` 的入口；省略 FILE 时用 `test/suite.toml`。
+export suiteArgs : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => List String -> Eff r Int
+suiteArgs rest = case parseCmdArgs ["dev", "suite"] rest of
+  ErrC e => toolError (diagText e)
+  OkC parsed => case parsed.positionals of
+    [] => suiteRun parsed "test/suite.toml"
+    [path] => suiteRun parsed path
+    _ => usageErrorFor ["dev", "suite"]
+
+-- | 内部：校验 `--jobs` / `--timeout` / `--worker`，再解析 suite 文件并运行。
+suiteRun : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Parsed -> String -> Eff r Int
+suiteRun parsed suitePath = case suiteJobsOf parsed of
+  ErrC e => toolError (diagText e)
+  OkC jobs => case suiteTimeoutOf parsed of
+    ErrC e => toolError (diagText e)
+    OkC timeout => case suiteWorkerOf parsed of
+      ErrC e => toolError (diagText e)
+      OkC worker => do
+        loaded <- parseSuiteFile suitePath
+        case loaded of
+          ErrC e => toolError (diagText e)
+          OkC suite => runSuite (suiteOptsOf parsed jobs timeout worker suitePath) suite
+
+-- | 内部：把解析结果摊平成 suite 运行选项。
+suiteOptsOf : Parsed -> Int -> Int -> Maybe (Pair Int Int) -> String -> SuiteOpts
+suiteOptsOf parsed jobs timeout worker suitePath =
+  SuiteOpts suitePath jobs (flagSet parsed "list") (flagSet parsed "verbose")
+    (flagSet parsed "fail-fast") (flagSet parsed "json") (flagValues parsed "only")
+    (flagValues parsed "filter") timeout worker (flagValue parsed "results-dir")
+    (flagSet parsed "quiet") (flagSet parsed "no-cache") (flagSet parsed "last-failed")
+    (flagSet parsed "bless") (flagSet parsed "bless-diag") (flagValue parsed "changed")
+    (flagValue parsed "cache-dir") (flagSet parsed "watch") (flagSet parsed "timings")
+    (flagSet parsed "strict-skips") (flagSet parsed "audit") (flagValues parsed "tier")
+    (flagValues parsed "matrix") (flagValues parsed "backend")
+
+-- | 内部：suite 的 `--jobs`——缺省 0（auto）；`auto` 也映射到 0。
+suiteJobsOf : Parsed -> Check Int
+suiteJobsOf parsed = case flagValue parsed "jobs" of
+  Nothing => OkC 0
+  Just "auto" => OkC 0
+  Just text => case parsePositiveInt text of
+    Nothing => err "--jobs requires a positive integer (>= 1) or `auto`, got `${text}`"
+    Just n => OkC n
+
+-- | 内部：suite 的 `--timeout`——缺省 0（不超时）；否则必须是 >= 1 的整数（秒）。
+suiteTimeoutOf : Parsed -> Check Int
+suiteTimeoutOf parsed = case flagValue parsed "timeout" of
+  Nothing => OkC 0
+  Just text => case parsePositiveInt text of
+    Nothing => err "--timeout requires a positive integer (seconds), got `${text}`"
+    Just n => OkC n
+
+-- | 内部：`--worker i/N`（`i` 从 0 开始且必须小于 `N`）。
+suiteWorkerOf : Parsed -> Check (Maybe (Pair Int Int))
+suiteWorkerOf parsed = case flagValue parsed "worker" of
+  Nothing => OkC Nothing
+  Just text => case split "/" text of
+    [iText, nText] => case parseNonNegInt iText of
+      Nothing => err "--worker requires i/N with non-negative integers, got `${text}`"
+      Just i => case parsePositiveInt nText of
+        Nothing => err "--worker requires i/N with non-negative integers, got `${text}`"
+        Just n => if i < n then OkC (Just (Pair i n)) else err "--worker index must be < N"
+    _ => err "--worker requires i/N, got `${text}`"

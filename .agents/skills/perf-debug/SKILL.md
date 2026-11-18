@@ -113,7 +113,7 @@ VUNA_STORE=$(mktemp -d)/store ./result/bin/vuna check _scratch/probe/<slug>
 
 ```console
 VUNA_OBS=1 VUNA_OBS_DIR=$PWD/_scratch/trace VUNA_STORE=$(mktemp -d)/store ./result/bin/vuna check packages/compiler
-./result/bin/vuna obs summarize _scratch/trace/vuna-*.jsonl          # 阶段 span
+./result/bin/vuna dev obs summarize _scratch/trace/vuna-*.jsonl          # 阶段 span
 grep '"name":"vuna.def.elab"' _scratch/trace/*.jsonl \                # level 2 才有逐定义
   | sed -E 's/.*"dur":([0-9]+).*"def":"([^"]+)".*/\1 \2/' | sort -nr | head -20
 ```
@@ -201,7 +201,7 @@ grep '"name":"vuna.def.elab"' _scratch/trace/*.jsonl \                # level 2 
   `build --no-compile` 的 `diff -r`（本轮的四处改动两者都通过）。
 - `nix run .#vuna-run-tests` 默认用**测试专用根** `~/.vuna/test-store`（suite 会故意截断
   store 里的对象，不能与开发缓存共用）。要量冷读数就直接
-  `VUNA_STORE=$(mktemp -d) ./result/bin/vuna test --suite test/suite.toml`。
+  `VUNA_STORE=$(mktemp -d) ./result/bin/vuna dev suite test/suite.toml`。
 
 ## 反模式
 

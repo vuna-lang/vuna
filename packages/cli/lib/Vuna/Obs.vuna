@@ -1,4 +1,4 @@
--- | `vuna obs` 的子命令门面：只做分发与退出码，参数解析与业务实现都在各子模块。
+-- | `vuna dev obs` 的子命令门面：只做分发与退出码，参数解析与业务实现都在各子模块。
 --
 -- 分层：`Types`（事件模型 + 纯解析/渲染原语）、`Read`（JSONL 读取与截断容错）、
 -- `Validate`（字段/时序/词汇表校验）、`Summarize`（span 树折叠、`--json` 与基线差值）、
@@ -14,6 +14,7 @@
 module Vuna.Obs where
 
 import Vuna.Cli.Args
+import Vuna.Cli.Spec
 import Vuna.Compiler.Base.Common
 import Vuna.Json
 import Vuna.Obs.Convert
@@ -33,7 +34,7 @@ import Base.EffFs
 import Base.EffNet
 import Base.EffProcess
 
--- | `vuna obs <sub>` 的入口（`args` 是去掉 `obs` 之后的参数）；无子命令或未知子命令
+-- | `vuna dev obs <sub>` 的入口（`args` 是去掉 `obs` 之后的参数）；无子命令或未知子命令
 -- 打印用法并返回退出码 2。
 export runObs : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nNet NetOp r => List String -> Eff r Int
 runObs [] = obsUsage
@@ -47,20 +48,20 @@ runObs (obs :: rest) = case obs of
   "symbols" => Vuna.Obs.Symbols.runObsSymbols rest
   "serve" => Vuna.Obs.Serve.runObsServe rest
   _ => do
-    _ <- consolePrint "error: unknown `vuna obs` subcommand `${obs}`\n${obsUsageText}"
+    _ <- consolePrint "error: unknown `vuna dev obs` subcommand `${obs}`\n${obsUsageText}"
     pure 2
 
 -- | 全部子命令的用法文本（无参数与未知子命令时打印）。
 obsUsageText : String
 obsUsageText = """usage:
-  vuna obs run [--level N] [--sample cpu|mem|both] [--interval US] [--out FILE] [--] <cmd...>
-  vuna obs summarize [--json] [--baseline FILE] [--threshold PCT] [TRACE...]
-  vuna obs validate TRACE
-  vuna obs convert --to cpuprofile|speedscope|folded|jsonl [--out PATH] TRACE
-  vuna obs render --out FILE TRACE
-  vuna obs merge [--out FILE] TRACE...
-  vuna obs symbols [--out FILE] [OUTDIR]
-  vuna obs serve --cdp ADDR [--allow-slow] [TRACE...]
+  vuna dev obs run [--level N] [--sample cpu|mem|both] [--interval US] [--out FILE] [--] <cmd...>
+  vuna dev obs summarize [--json] [--baseline FILE] [--threshold PCT] [TRACE...]
+  vuna dev obs validate TRACE
+  vuna dev obs convert --to cpuprofile|speedscope|folded|jsonl [--out PATH] TRACE
+  vuna dev obs render --out FILE TRACE
+  vuna dev obs merge [--out FILE] TRACE...
+  vuna dev obs symbols [--out FILE] [OUTDIR]
+  vuna dev obs serve --cdp ADDR [--allow-slow] [TRACE...]
 """
 
 -- | 内部：打印用法文本并返回退出码 2（没有子命令）。
@@ -74,12 +75,12 @@ obsUsage = do
 -- ---------------------------------------------------------------
 -- | 内部：解析 `validate` 的参数：必须恰好一个 TRACE，否则用法错误（退出码 2）。
 obsValidateArgs : Member nFs FsOp r, Member nConsole ConsoleOp r => List String -> Eff r Int
-obsValidateArgs args = case parseToolArgs "vuna obs validate" [] args of
+obsValidateArgs args = case parseCmdArgs ["dev", "obs", "validate"] args of
   ErrC e => obsError (diagText e)
   OkC parsed => case parsed.positionals of
     [path] => obsValidateFile path
-    [] => obsError "usage: vuna obs validate TRACE"
-    _ => obsError "usage: vuna obs validate TRACE (exactly one trace)"
+    [] => obsError "usage: vuna dev obs validate TRACE"
+    _ => obsError "usage: vuna dev obs validate TRACE (exactly one trace)"
 
 -- | 内部：校验一个 trace 文件并打印每条问题；有 error ⇒ 退出码 1，否则打印通过摘要与
 -- warning 条数 ⇒ 0。
@@ -115,13 +116,14 @@ printIssues (i :: rest) = do
 -- | 内部：解析 `summarize` 的参数（`--json` / `--baseline` / `--threshold` + TRACE 列表）；
 -- 没有 TRACE 是用法错误。
 obsSummarizeArgs : Member nFs FsOp r, Member nConsole ConsoleOp r => List String -> Eff r Int
-obsSummarizeArgs args = case parseToolArgs "vuna obs summarize" [BoolFlag "json", ValueFlag "baseline", ValueFlag "threshold"] args of
+obsSummarizeArgs args = case parseCmdArgs ["dev", "obs", "summarize"] args of
   ErrC e => obsError (diagText e)
   OkC parsed => case thresholdOf parsed of
     ErrC e => obsError (diagText e)
     OkC threshold => case parsed.positionals of
       [] =>
-        obsError "usage: vuna obs summarize [--json] [--baseline FILE] [--threshold PCT] [TRACE...]"
+        obsError
+          "usage: vuna dev obs summarize [--json] [--baseline FILE] [--threshold PCT] [TRACE...]"
       traces => do
         baseR <- baselineOf parsed
         case baseR of

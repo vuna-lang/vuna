@@ -75,7 +75,7 @@ probe x = if x == 1 then 1 else if x == 2 then 2 else 3
 
 `vuna lint` 把成功 lint 的完整 finding（含 Edit）写入对象库 `objects/lint`，键覆盖
 `lint-cache schema + 编译器指纹 + 源内容 + 程序级 fixity 闭包 + 有效规则配置`。解析/抑制
-错误不缓存；`--fix` 不读缓存；`--no-cache` 完全关闭；`vuna clean --store` 会清理该 kind。
+错误不缓存；`--fix` 不读缓存；`--no-cache` 完全关闭；`vuna store clean --store` 会清理该 kind。
 
 ## 2. 实现模型
 

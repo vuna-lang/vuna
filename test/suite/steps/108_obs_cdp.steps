@@ -1,4 +1,4 @@
-# 108) 可观测性：`vuna obs serve --cdp`（CDP Profiler 子集）+ Node WebSocket 桥。
+# 108) 可观测性：`vuna dev obs serve --cdp`（CDP Profiler 子集）+ Node WebSocket 桥。
 #     离线语义：数据源是已有 trace，`Profiler.stop` 把 cpu 采样换算成 profile。
 #     覆盖就绪行 / 六条 CDP 请求 / getIsolateId=pid / profile samples==cpu 采样数 /
 #     未知方法 -32601 / 跨进程确定性 / 与 `convert --to cpuprofile` 逐字节等价 /

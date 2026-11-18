@@ -1,7 +1,7 @@
 # 诊断系统（Diagnostic）
 
 本文是诊断系统的**唯一参考页**：数据模型、结果通道、位置契约、错误码域、渲染视图、
-LSP 映射、错误码目录、测试与门禁。工具链命令语义（退出码、`vuna explain` 等）在
+LSP 映射、错误码目录、测试与门禁。工具链命令语义（退出码、`vuna errors explain` 等）在
 [tooling.md](tooling.md)；实现模块在 [compiler.md](compiler.md)。
 
 ## 1. 设计目标
@@ -84,8 +84,8 @@ Diagnostic = { id, severity, phase, category, code, message, labels, fields, tra
 | `LN_`/`FX_` | lint 规则/修复 | `packages/cli/lib/Vuna/Lint/Diagnostics.vuna` |
 
 约定：符号语义稳定；一个码一种语义。**没有「诊断码只增不删」的约定**：vuna 未发布、
-无兼容义务，删改码允许（同步目录、`explain` 与夹具）。`vuna explain CODE` 与
-`vuna gen-errors` 都从这些
+无兼容义务，删改码允许（同步目录、`explain` 与夹具）。`vuna errors explain CODE` 与
+`vuna dev errors gen` 都从这些
 枚举条目读取（不维护第二份列表）。
 
 告警语义：`UN_ShadowedBinder` 只比较**运行时** binder（`Rig ≠ 0`）。`Rig0` 的隐式类型 /

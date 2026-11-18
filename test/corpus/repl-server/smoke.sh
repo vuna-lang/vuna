@@ -100,7 +100,7 @@ wait_log() { # file needle
 }
 
 req() { # body -> stdout 的响应 body
-  printf '%s' "$1" | "$VUNA" repl --client "unix:$sock"
+  printf '%s' "$1" | "$VUNA" repl client --addr "unix:$sock"
 }
 
 # 夹具：`:load` 用的入口式源码（无 module 头）。
@@ -110,7 +110,7 @@ answer = 42
 VEOF
 
 # ---- 0) 启动 server（Unix socket），就绪行不混协议 ----
-"$VUNA" repl --listen "unix:$sock" >"$tmp/srv.log" 2>"$tmp/srv.err" &
+"$VUNA" repl serve --listen "unix:$sock" >"$tmp/srv.log" 2>"$tmp/srv.err" &
 srv=$!
 if wait_log "$tmp/srv.log" '^listening unix:'; then ok; else bad "--listen 就绪行"; fi
 check_contains "就绪行给出 unix 地址" "$(cat "$tmp/srv.log")" "listening unix:$sock"
@@ -173,28 +173,28 @@ check_contains "效果表达式提示指向 vuna run" "$io_out" 'vuna run'
 # ---- 5) JSON-RPC 错误码：未知方法 / 坏 JSON 都不能杀死会话 ----
 unk_out=$(req '{"jsonrpc":"2.0","id":18,"method":"nope","params":{}}')
 check_contains "未知方法 -32601" "$unk_out" '"code":-32601'
-bad_json_out=$(printf 'not json' | "$VUNA" repl --client "unix:$sock" 2>/dev/null)
+bad_json_out=$(printf 'not json' | "$VUNA" repl client --addr "unix:$sock" 2>/dev/null)
 check_contains "坏 JSON -32700" "$bad_json_out" '"code":-32700'
 alive_out=$(req '{"jsonrpc":"2.0","id":19,"method":"ping","params":{}}')
 check_contains "坏帧后服务仍存活" "$alive_out" '"status":"ok"'
 
 # ---- 6) 非法地址 / 连不上的客户端 ----
-"$VUNA" repl --listen "tcp:0.0.0.0:1" >"$tmp/badaddr.out" 2>"$tmp/badaddr.err"
+"$VUNA" repl serve --listen "tcp:0.0.0.0:1" >"$tmp/badaddr.out" 2>"$tmp/badaddr.err"
 check_eq "非法 --listen 地址退出码 2" "2" "$?"
 check_contains "非法 --listen 地址给出原因" "$(cat "$tmp/badaddr.out" "$tmp/badaddr.err" 2>/dev/null)" "只允许本机"
 printf '%s' '{"jsonrpc":"2.0","id":1,"method":"ping"}' |
-  "$VUNA" repl --client "unix:$tmp/nonexistent.sock" >/dev/null 2>"$tmp/noserver.err"
+  "$VUNA" repl client --addr "unix:$tmp/nonexistent.sock" >/dev/null 2>"$tmp/noserver.err"
 check_eq "连不上的 --client 退出码 1" "1" "$?"
 check_contains "连不上的 --client 有 stderr 诊断" "$(cat "$tmp/noserver.err")" "net: connect unix:"
 
 # ---- 7) TCP 临时端口（沙箱不可用则 SKIP）----
-"$VUNA" repl --listen "tcp:127.0.0.1:0" >"$tmp/tcp.log" 2>"$tmp/tcp.err" &
+"$VUNA" repl serve --listen "tcp:127.0.0.1:0" >"$tmp/tcp.log" 2>"$tmp/tcp.err" &
 tcp_srv=$!
 if wait_log "$tmp/tcp.log" '^listening tcp:127.0.0.1:'; then
   tcp_addr=$(sed -n 's/^listening //p' "$tmp/tcp.log" | head -1)
-  tcp_ping=$(printf '%s' '{"jsonrpc":"2.0","id":1,"method":"ping"}' | "$VUNA" repl --client "$tcp_addr" 2>&1)
+  tcp_ping=$(printf '%s' '{"jsonrpc":"2.0","id":1,"method":"ping"}' | "$VUNA" repl client --addr "$tcp_addr" 2>&1)
   check_contains "TCP 客户端 ping" "$tcp_ping" '"status":"ok"'
-  printf '%s' '{"jsonrpc":"2.0","id":2,"method":"shutdown"}' | "$VUNA" repl --client "$tcp_addr" >/dev/null 2>&1
+  printf '%s' '{"jsonrpc":"2.0","id":2,"method":"shutdown"}' | "$VUNA" repl client --addr "$tcp_addr" >/dev/null 2>&1
   wait "$tcp_srv" 2>/dev/null
   check_eq "TCP server shutdown 退出码 0" "0" "$?"
 else
