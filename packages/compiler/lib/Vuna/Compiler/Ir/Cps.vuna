@@ -1415,10 +1415,10 @@ mSteps fuel e =
                 if sym == irMRunName then
                   case args of
                     [a] => IrApp (IrGlobal "Base.Effect.Core.machineRun") (mSteps (fuel - 1) a)
-                    _ => IrApp (mSteps (fuel - 1) head) (mSteps (fuel - 1) (foldAppArgs args))
+                    _ => foldAppMap (fuel - 1) (mSteps (fuel - 1) head) args
                 else
-                  IrApp (mSteps (fuel - 1) head) (mSteps (fuel - 1) (foldAppArgs args))
-          _ => IrApp (mSteps (fuel - 1) head) (mSteps (fuel - 1) (foldAppArgs args))
+                  foldAppMap (fuel - 1) (mSteps (fuel - 1) head) args
+          _ => foldAppMap (fuel - 1) (mSteps (fuel - 1) head) args
       IrCtor fam ctor args => IrCtor fam ctor (mStepsList (fuel - 1) args)
       IrRecord fam fs => IrRecord fam (mStepsFields (fuel - 1) fs)
       IrProj b fam x => IrProj (mSteps (fuel - 1) b) fam x
@@ -1469,17 +1469,15 @@ mStepsAltM fuel m =
       Nothing => Nothing
       Just a => Just (IrAlt a.irAltCtor a.irAltBinders (mSteps (fuel - 1) a.irAltBody))
 
-foldAppArgs : List Ir -> Ir
-foldAppArgs xs =
-  case xs of
-    [] => IrGlobal "?"
-    x :: rest => foldAppArgsGo x rest
-
-foldAppArgsGo : Ir -> List Ir -> Ir
-foldAppArgsGo acc xs =
-  case xs of
-    [] => acc
-    x :: rest => foldAppArgsGo (IrApp acc x) rest
+-- | 把已求值的头逐个应用到实参（保持左结合脊）。
+foldAppMap : Int -> Ir -> List Ir -> Ir
+foldAppMap fuel acc xs =
+  if fuel <= 0 then
+    acc
+  else
+    case xs of
+      [] => acc
+      x :: rest => foldAppMap (fuel - 1) (IrApp acc (mSteps (fuel - 1) x)) rest
 
 mStepsDef : IrDef -> IrDef
 mStepsDef (IrDef n ar deps body r g sp) = IrDef n ar deps (mSteps startFuel body) r g sp
