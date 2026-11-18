@@ -474,13 +474,45 @@ fuelEdgesGo comp defTbl (s :: rest) ok acc = case siteFuelStrict (firstParamOf s
     fuelEdgesGo comp defTbl rest ok
       (Pair (Pair (Pair s.siteCaller s.siteCallee) (if strict then 1 else 0)) (Span "" 0 0 0 0 0 0) :: acc)
 
-fuelMembersGuarded : List String -> HashMap String (List (Pair (List Pat) Expr)) -> Bool
-fuelMembersGuarded [] defTbl = True
-fuelMembersGuarded (f :: rest) defTbl = case clausesOfDefTbl f defTbl of
+-- | 单个成员是否有 `fuel <= 0` 守卫（取首个 clause 的守卫变量）。
+memberGuarded : String -> HashMap String (List (Pair (List Pat) Expr)) -> Bool
+memberGuarded f defTbl = case clausesOfDefTbl f defTbl of
   [] => False
   cl :: cls => case firstParamName (firstOf cl) of
     Nothing => False
-    Just p0 => hasFuelGuard p0 (secondOf cl) && fuelMembersGuarded rest defTbl
+    Just p0 => hasFuelGuard p0 (secondOf cl)
+
+unguardedOf : List String -> HashMap String (List (Pair (List Pat) Expr)) -> List String
+unguardedOf [] defTbl = []
+unguardedOf (f :: rest) defTbl =
+  if memberGuarded f defTbl then unguardedOf rest defTbl else f :: unguardedOf rest defTbl
+
+-- 只问「有没有环」：严格边也参与，否则同一对之间的严格边会让弱邻接丢失。
+allWeakEdges : List (Pair (Pair (Pair String String) Int) Span) -> List (Pair (Pair (Pair String String) Int) Span)
+allWeakEdges [] = []
+allWeakEdges (e :: rest) = case e of
+  Pair (Pair (Pair c g) m) sp => Pair (Pair (Pair c g) 0) sp :: allWeakEdges rest
+
+onlyUnguarded : List String -> List (Pair (Pair (Pair String String) Int) Span) -> List (Pair (Pair (Pair String String) Int) Span)
+onlyUnguarded unguarded [] = []
+onlyUnguarded unguarded (e :: rest) = case e of
+  Pair (Pair (Pair c g) m) sp =>
+    if memName c unguarded then if memName g unguarded then Pair (Pair (Pair c g) m) sp :: onlyUnguarded unguarded rest
+    else onlyUnguarded unguarded rest
+    else onlyUnguarded unguarded rest
+
+-- 不含守卫的子图是否有环：有环 ⇒ 存在一条永不触底的路径，判据不成立。
+unguardedCycle : List String -> List (Pair (Pair (Pair String String) Int) Span) -> Bool
+unguardedCycle unguarded edges =
+  hasWeakCycle unguarded (allWeakEdges (onlyUnguarded unguarded edges))
+
+-- | 守卫条件：全组都守卫，或任何环都穿过守卫节点（不含守卫的子图无环）。
+-- 后者覆盖「守卫只写在少数几个入口函数上」的写法，仍然 sound：无限下降必然反复
+-- 经过守卫节点，而守卫节点在 `fuel <= 0` 时直接返回。
+fuelAcceptable : List String -> HashMap String (List (Pair (List Pat) Expr)) -> List (Pair (Pair (Pair String String) Int) Span) -> Bool
+fuelAcceptable comp defTbl edges = case unguardedOf comp defTbl of
+  [] => True
+  unguarded => if unguardedCycle unguarded edges then False else True
 
 export tryFuelThread : List String -> HashMap String (List (Pair (List Pat) Expr)) -> List String -> List (Pair String (List Int)) -> HashMap String (List Int) -> Diagnostic -> Check Int
 tryFuelThread comp defTbl ctors projs facts msg =
@@ -488,7 +520,7 @@ tryFuelThread comp defTbl ctors projs facts msg =
     sites = siteCollect comp ctors projs defTbl facts
     edges = fuelEdgesOf comp defTbl sites
     strictCount = length (filterModes (map edgeModeOf edges))
-  in if strictCount > 0 then if fuelMembersGuarded comp defTbl then if hasWeakCycle comp edges then ErrC msg else OkC 0
+  in if strictCount > 0 then if fuelAcceptable comp defTbl edges then if hasWeakCycle comp edges then ErrC msg else OkC 0
   else ErrC msg
   else ErrC msg
 
