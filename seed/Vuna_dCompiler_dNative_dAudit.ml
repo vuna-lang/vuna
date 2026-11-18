@@ -22,30 +22,30 @@ let rec v_Vuna_dCompiler_dNative_dAudit_dauditKeys = (fun (mc0 : Vuna_dCompiler_
   | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrRt (dtb__9) -> (if (v_Vuna_dCompiler_dNative_dAudit_dauditSymSupported dtb__9) then Base_dData_dList.C_Base_dData_dList_dList_Nil else (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (("symbol " ^ dtb__9), Base_dData_dList.C_Base_dData_dList_dList_Nil)))
   | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrRtApp (dtb__10, dtb__11) -> ((Base_dData_dList.v_Base_dData_dList_dappend ((v_Vuna_dCompiler_dNative_dAudit_dauditRtAppKeys dtb__10) dtb__11)) ((Base_dData_dList.v_Base_dData_dList_dconcatMap (v_Vuna_dCompiler_dNative_dAudit_dauditKeys mc0)) dtb__11))
   | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrApp (dtb__12, dtb__13) -> ((Base_dData_dList.v_Base_dData_dList_dappend ((v_Vuna_dCompiler_dNative_dAudit_dauditKeys mc0) dtb__12)) ((v_Vuna_dCompiler_dNative_dAudit_dauditKeys mc0) dtb__13))
-  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrLam (dtb__14, dtb__15) -> ((v_Vuna_dCompiler_dNative_dAudit_dauditKeys mc0) dtb__15)
-  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrConcatMany (dtb__16) -> ((Base_dData_dList.v_Base_dData_dList_dconcatMap (v_Vuna_dCompiler_dNative_dAudit_dauditKeys mc0)) dtb__16)
-  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrNatCase (dtb__17, dtb__18, dtb__19, dtb__20, dtb__21) -> ((Base_dData_dList.v_Base_dData_dList_dappend ((v_Vuna_dCompiler_dNative_dAudit_dauditKeys mc0) dtb__17)) ((Base_dData_dList.v_Base_dData_dList_dappend ((v_Vuna_dCompiler_dNative_dAudit_dauditAltMaybeKeys mc0) dtb__19)) ((Base_dData_dList.v_Base_dData_dList_dappend ((v_Vuna_dCompiler_dNative_dAudit_dauditAltMaybeKeys mc0) dtb__20)) ((v_Vuna_dCompiler_dNative_dAudit_dauditAltMaybeKeys mc0) dtb__21))))
-  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrCase (dtb__22, dtb__23) -> ((Base_dData_dList.v_Base_dData_dList_dappend ((v_Vuna_dCompiler_dNative_dAudit_dauditKeys mc0) dtb__22)) ((Base_dData_dList.v_Base_dData_dList_dconcatMap (v_Vuna_dCompiler_dNative_dAudit_dauditAltKeys mc0)) dtb__23))
-  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrRecUpd (dtb__24, dtb__25, dtb__26) -> ((Base_dData_dList.v_Base_dData_dList_dappend ((v_Vuna_dCompiler_dNative_dAudit_dauditKeys mc0) dtb__24)) ((Base_dData_dList.v_Base_dData_dList_dconcatMap (fun (p : (string, Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIr) Base_dData_dPair.t_Base_dData_dPair_dPair) -> ((v_Vuna_dCompiler_dNative_dAudit_dauditKeys mc0) (Base_dData_dPair.v_Base_dData_dPair_dsecondOf p)))) dtb__26))
-  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrProj (dtb__27, dtb__28, dtb__29) -> ((v_Vuna_dCompiler_dNative_dAudit_dauditKeys mc0) dtb__27)
-  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrRecord (dtb__30, dtb__31) -> ((Base_dData_dList.v_Base_dData_dList_dconcatMap (fun (p : (string, Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIr) Base_dData_dPair.t_Base_dData_dPair_dPair) -> ((v_Vuna_dCompiler_dNative_dAudit_dauditKeys mc0) (Base_dData_dPair.v_Base_dData_dPair_dsecondOf p)))) dtb__31)
-  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrCtor (dtb__32, dtb__33, dtb__34) -> ((Base_dData_dList.v_Base_dData_dList_dconcatMap (v_Vuna_dCompiler_dNative_dAudit_dauditKeys mc0)) dtb__34)
-  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrIf (dtb__35, dtb__36, dtb__37) -> ((Base_dData_dList.v_Base_dData_dList_dappend ((v_Vuna_dCompiler_dNative_dAudit_dauditKeys mc0) dtb__35)) ((Base_dData_dList.v_Base_dData_dList_dappend ((v_Vuna_dCompiler_dNative_dAudit_dauditKeys mc0) dtb__36)) ((v_Vuna_dCompiler_dNative_dAudit_dauditKeys mc0) dtb__37)))
-  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrLet (dtb__38, dtb__39, dtb__40) -> ((Base_dData_dList.v_Base_dData_dList_dappend ((Base_dData_dList.v_Base_dData_dList_dappend (if ((v_Vuna_dCompiler_dNative_dAudit_dauditRuntimeBinders dtb__38) > 1) then (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("multi-binder-let", Base_dData_dList.C_Base_dData_dList_dList_Nil)) else Base_dData_dList.C_Base_dData_dList_dList_Nil)) ((v_Vuna_dCompiler_dNative_dAudit_dauditKeys mc0) dtb__39))) ((v_Vuna_dCompiler_dNative_dAudit_dauditKeys mc0) dtb__40))
-  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrCast (dtb__41) -> ((v_Vuna_dCompiler_dNative_dAudit_dauditKeys mc0) dtb__41)
-  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrFloatLit (dtb__42) -> Base_dData_dList.C_Base_dData_dList_dList_Nil
-  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrBool (dtb__43) -> Base_dData_dList.C_Base_dData_dList_dList_Nil
-  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrStr (dtb__44) -> Base_dData_dList.C_Base_dData_dList_dList_Nil
-  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrInt (dtb__45) -> Base_dData_dList.C_Base_dData_dList_dList_Nil
-  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrGlobal (dtb__46) -> Base_dData_dList.C_Base_dData_dList_dList_Nil
-  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrVar (dtb__47) -> Base_dData_dList.C_Base_dData_dList_dList_Nil
+  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrLam (dtb__14, dtb__15, dtb__16) -> ((v_Vuna_dCompiler_dNative_dAudit_dauditKeys mc0) dtb__16)
+  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrConcatMany (dtb__17) -> ((Base_dData_dList.v_Base_dData_dList_dconcatMap (v_Vuna_dCompiler_dNative_dAudit_dauditKeys mc0)) dtb__17)
+  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrNatCase (dtb__18, dtb__19, dtb__20, dtb__21, dtb__22) -> ((Base_dData_dList.v_Base_dData_dList_dappend ((v_Vuna_dCompiler_dNative_dAudit_dauditKeys mc0) dtb__18)) ((Base_dData_dList.v_Base_dData_dList_dappend ((v_Vuna_dCompiler_dNative_dAudit_dauditAltMaybeKeys mc0) dtb__20)) ((Base_dData_dList.v_Base_dData_dList_dappend ((v_Vuna_dCompiler_dNative_dAudit_dauditAltMaybeKeys mc0) dtb__21)) ((v_Vuna_dCompiler_dNative_dAudit_dauditAltMaybeKeys mc0) dtb__22))))
+  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrCase (dtb__23, dtb__24) -> ((Base_dData_dList.v_Base_dData_dList_dappend ((v_Vuna_dCompiler_dNative_dAudit_dauditKeys mc0) dtb__23)) ((Base_dData_dList.v_Base_dData_dList_dconcatMap (v_Vuna_dCompiler_dNative_dAudit_dauditAltKeys mc0)) dtb__24))
+  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrRecUpd (dtb__25, dtb__26, dtb__27) -> ((Base_dData_dList.v_Base_dData_dList_dappend ((v_Vuna_dCompiler_dNative_dAudit_dauditKeys mc0) dtb__25)) ((Base_dData_dList.v_Base_dData_dList_dconcatMap (fun (p : (string, Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIr) Base_dData_dPair.t_Base_dData_dPair_dPair) -> ((v_Vuna_dCompiler_dNative_dAudit_dauditKeys mc0) (Base_dData_dPair.v_Base_dData_dPair_dsecondOf p)))) dtb__27))
+  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrProj (dtb__28, dtb__29, dtb__30) -> ((v_Vuna_dCompiler_dNative_dAudit_dauditKeys mc0) dtb__28)
+  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrRecord (dtb__31, dtb__32) -> ((Base_dData_dList.v_Base_dData_dList_dconcatMap (fun (p : (string, Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIr) Base_dData_dPair.t_Base_dData_dPair_dPair) -> ((v_Vuna_dCompiler_dNative_dAudit_dauditKeys mc0) (Base_dData_dPair.v_Base_dData_dPair_dsecondOf p)))) dtb__32)
+  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrCtor (dtb__33, dtb__34, dtb__35) -> ((Base_dData_dList.v_Base_dData_dList_dconcatMap (v_Vuna_dCompiler_dNative_dAudit_dauditKeys mc0)) dtb__35)
+  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrIf (dtb__36, dtb__37, dtb__38) -> ((Base_dData_dList.v_Base_dData_dList_dappend ((v_Vuna_dCompiler_dNative_dAudit_dauditKeys mc0) dtb__36)) ((Base_dData_dList.v_Base_dData_dList_dappend ((v_Vuna_dCompiler_dNative_dAudit_dauditKeys mc0) dtb__37)) ((v_Vuna_dCompiler_dNative_dAudit_dauditKeys mc0) dtb__38)))
+  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrLet (dtb__39, dtb__40, dtb__41) -> ((Base_dData_dList.v_Base_dData_dList_dappend ((Base_dData_dList.v_Base_dData_dList_dappend (if ((v_Vuna_dCompiler_dNative_dAudit_dauditRuntimeBinders dtb__39) > 1) then (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("multi-binder-let", Base_dData_dList.C_Base_dData_dList_dList_Nil)) else Base_dData_dList.C_Base_dData_dList_dList_Nil)) ((v_Vuna_dCompiler_dNative_dAudit_dauditKeys mc0) dtb__40))) ((v_Vuna_dCompiler_dNative_dAudit_dauditKeys mc0) dtb__41))
+  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrCast (dtb__42, dtb__43, dtb__44) -> ((v_Vuna_dCompiler_dNative_dAudit_dauditKeys mc0) dtb__44)
+  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrFloatLit (dtb__45) -> Base_dData_dList.C_Base_dData_dList_dList_Nil
+  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrBool (dtb__46) -> Base_dData_dList.C_Base_dData_dList_dList_Nil
+  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrStr (dtb__47) -> Base_dData_dList.C_Base_dData_dList_dList_Nil
+  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrInt (dtb__48) -> Base_dData_dList.C_Base_dData_dList_dList_Nil
+  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrGlobal (dtb__49) -> Base_dData_dList.C_Base_dData_dList_dList_Nil
+  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrVar (dtb__50) -> Base_dData_dList.C_Base_dData_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 # 88 "Vuna/Compiler/Native/Audit.vuna"
 and v_Vuna_dCompiler_dNative_dAudit_dauditAltKeys = (fun defs alt -> ((v_Vuna_dCompiler_dNative_dAudit_dauditKeys defs) (Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirAltBodyOf alt)))
 # 91 "Vuna/Compiler/Native/Audit.vuna"
 and v_Vuna_dCompiler_dNative_dAudit_dauditAltMaybeKeys = (fun (mc0 : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrDef Base_dData_dList.t_Base_dData_dList_dList) (mc1 : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrAlt Base_dData_dMaybe.t_Base_dData_dMaybe_dMaybe) -> (match mc1 with
-  | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__48) -> ((v_Vuna_dCompiler_dNative_dAudit_dauditAltKeys mc0) dtb__48)
+  | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__51) -> ((v_Vuna_dCompiler_dNative_dAudit_dauditAltKeys mc0) dtb__51)
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> Base_dData_dList.C_Base_dData_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
 ))
@@ -53,34 +53,34 @@ and v_Vuna_dCompiler_dNative_dAudit_dauditAltMaybeKeys = (fun (mc0 : Vuna_dCompi
 # 95 "Vuna/Compiler/Native/Audit.vuna"
 let v_Vuna_dCompiler_dNative_dAudit_dauditDefKeys = (fun defs d -> (match (Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirDefBody d) with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (("extern " ^ (Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirDefName d)), Base_dData_dList.C_Base_dData_dList_dList_Nil))
-  | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__49) -> ((v_Vuna_dCompiler_dNative_dAudit_dauditKeys defs) dtb__49)
+  | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__52) -> ((v_Vuna_dCompiler_dNative_dAudit_dauditKeys defs) dtb__52)
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 108 "Vuna/Compiler/Native/Audit.vuna"
 let rec v_Vuna_dCompiler_dNative_dAudit_dmemKey = (fun (mc0 : string) (mc1 : string Base_dData_dList.t_Base_dData_dList_dList) -> (match mc1 with
-  | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__50, dtb__51) -> (if (mc0 = dtb__50) then true else ((v_Vuna_dCompiler_dNative_dAudit_dmemKey mc0) dtb__51))
+  | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__53, dtb__54) -> (if (mc0 = dtb__53) then true else ((v_Vuna_dCompiler_dNative_dAudit_dmemKey mc0) dtb__54))
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> false
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 104 "Vuna/Compiler/Native/Audit.vuna"
 let rec v_Vuna_dCompiler_dNative_dAudit_dauditUniq = (fun (mc0 : string Base_dData_dList.t_Base_dData_dList_dList) -> (match mc0 with
-  | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__52, dtb__53) -> (if ((v_Vuna_dCompiler_dNative_dAudit_dmemKey dtb__52) dtb__53) then (v_Vuna_dCompiler_dNative_dAudit_dauditUniq dtb__53) else (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__52, (v_Vuna_dCompiler_dNative_dAudit_dauditUniq dtb__53))))
+  | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__55, dtb__56) -> (if ((v_Vuna_dCompiler_dNative_dAudit_dmemKey dtb__55) dtb__56) then (v_Vuna_dCompiler_dNative_dAudit_dauditUniq dtb__56) else (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__55, (v_Vuna_dCompiler_dNative_dAudit_dauditUniq dtb__56))))
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> Base_dData_dList.C_Base_dData_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 113 "Vuna/Compiler/Native/Audit.vuna"
 let v_Vuna_dCompiler_dNative_dAudit_dauditPrefixOf = (fun key -> (match ((Base_dData_dString.v_Base_dData_dString_dsplit " ") key) with
-  | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__54, dtb__55) -> dtb__54
+  | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__57, dtb__58) -> dtb__57
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> key
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 120 "Vuna/Compiler/Native/Audit.vuna"
 let v_Vuna_dCompiler_dNative_dAudit_dauditRestOf = (fun key -> (match ((Base_dData_dString.v_Base_dData_dString_dsplit " ") key) with
-  | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__56, dtb__57) -> (((Base_dData_dList.v_Base_dData_dList_dfoldl (fun (acc : string) (part : string) -> (if ((bi_strLength acc) = 0) then part else (String.concat "" [acc; " "; part])))) "") dtb__57)
+  | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__59, dtb__60) -> (((Base_dData_dList.v_Base_dData_dList_dfoldl (fun (acc : string) (part : string) -> (if ((bi_strLength acc) = 0) then part else (String.concat "" [acc; " "; part])))) "") dtb__60)
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> ""
   | _ -> failwith "DT: impossible branch"
 ))
@@ -97,7 +97,7 @@ let v_Vuna_dCompiler_dNative_dAudit_dauditCategoryExamples = (fun cat keys -> ((
 # 138 "Vuna/Compiler/Native/Audit.vuna"
 let v_Vuna_dCompiler_dNative_dAudit_dauditExamplesText = (fun cat keys -> (match ((v_Vuna_dCompiler_dNative_dAudit_dauditCategoryExamples cat) keys) with
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> ""
-  | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__58, dtb__59) -> (String.concat "" [" ("; (((Base_dData_dList.v_Base_dData_dList_dfoldl (fun (acc : string) (e : string) -> (String.concat "" [acc; ", "; e]))) dtb__58) dtb__59); ")"])
+  | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__61, dtb__62) -> (String.concat "" [" ("; (((Base_dData_dList.v_Base_dData_dList_dfoldl (fun (acc : string) (e : string) -> (String.concat "" [acc; ", "; e]))) dtb__61) dtb__62); ")"])
   | _ -> failwith "DT: impossible branch"
 ))
 
@@ -109,7 +109,7 @@ let v_Vuna_dCompiler_dNative_dAudit_dnativeAuditLines = (fun defs -> ((fun keys 
 
 # 169 "Vuna/Compiler/Native/Audit.vuna"
 let v_Vuna_dCompiler_dNative_dAudit_dnativeAuditEnrich = (fun (mc0 : Vuna_dCompiler_dNative_dModel.t_Vuna_dCompiler_dNative_dModel_dNativeErr) (mc1 : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrDef Base_dData_dList.t_Base_dData_dList_dList) -> (match mc0 with
-  | Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dNativeErr_NativeInternal (dtb__60) -> mc0
-  | Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dNativeErr_NativeUnsupported (dtb__61) -> ((fun lines -> (if ((Base_dData_dList.v_Base_dData_dList_dlength lines) = 0) then mc0 else (Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dNativeErr_NativeUnsupported ((String.concat "" [dtb__61; "\n"; (((Base_dData_dList.v_Base_dData_dList_dfoldl (fun (acc : string) (l : string) -> (String.concat "" [acc; "\n"; l]))) "") lines)]))))) (v_Vuna_dCompiler_dNative_dAudit_dnativeAuditLines mc1))
+  | Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dNativeErr_NativeInternal (dtb__63) -> mc0
+  | Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dNativeErr_NativeUnsupported (dtb__64) -> ((fun lines -> (if ((Base_dData_dList.v_Base_dData_dList_dlength lines) = 0) then mc0 else (Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dNativeErr_NativeUnsupported ((String.concat "" [dtb__64; "\n"; (((Base_dData_dList.v_Base_dData_dList_dfoldl (fun (acc : string) (l : string) -> (String.concat "" [acc; "\n"; l]))) "") lines)]))))) (v_Vuna_dCompiler_dNative_dAudit_dnativeAuditLines mc1))
   | _ -> failwith "DT: impossible branch"
 ))
