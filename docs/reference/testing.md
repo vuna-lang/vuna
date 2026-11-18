@@ -316,6 +316,34 @@ golden/runtime case 的 codegen 产物按「生成模块集」分桶（`set-<key
 `vuna check packages/base` 7.25s → 13ms。对象库的 split-unit 缓存在 `$VUNA_STORE/units`；
 `--cache-dir` 只放构建桶与测试临时根（split-unit 与视图见 store，
 [test-architecture.md](test-architecture.md)）。
+### 包内测试（`packages/<pkg>/test/`）
+
+`vuna test <包目录>` 逐个跑 `test/*.vuna`，每个文件的 `main` 决定是否通过：
+
+| `main` 形态 | 执行路径 | 通过条件 |
+| --- | --- | --- |
+| `String` / `Int` / `Bool` | DT 核心求值 | `""` / `0` / `True` |
+| `Eff [] a` | compile + 运行产物 | 退出码 0 |
+
+纯形态走核心求值，因此**只能用核心求值器实现的原语**：`strUnpack` / `strPack` /
+`strConcatMany` / `strSubstring` 这类 List 桥接原语不在其中，用了会得到
+`CG_MainNotValue: main does not reduce to a value`（语言夹具同理，`corpus/stdlib/07_string`
+因此用 `.run.out`）。需要这些原语时把测试写成 `Eff` 入口，失败自己收口：
+
+```vuna
+main : Eff [] String
+main = case failuresOf n written of
+  [] => pure ""
+  bad => do
+    _ <- prim_eff_print ("codec failed: " ++ join "; " bad ++ "\n")
+    _ <- prim_eff_exit 1
+    pure ""
+```
+
+`prim_eff_print` / `prim_eff_exit` 是 `Eff []` 的宿主原语（D62：无 manifest 门控，任何包可直调）。
+`packages/http/test/` 是这套写法的实例（编解码、连接循环、WebSocket、客户端回环），
+失败原因只打到 stderr，判定看退出码。
+
 ## corpus 的包上下文与 `VUNA_BASE`
 
 `test/corpus/vuna.toml` 给整个 corpus 一个**独立包上下文**（`name = "vuna-corpus"`，

@@ -59,7 +59,9 @@
     只生成源码目录、不调 `ocamlopt`（非 `--no-compile` 时生成的 `build.sh` 需要 PATH 里有
     `ocamlopt`）；
   - `vuna test [DIR]`：纯测试（`main : String` 空串 / `Int` 0 / `Bool` True 通过）走
-    DT 核心求值；`main : Eff [] ...` 走 compile + 运行，退出码 0 通过（可测效果）。DIR 是
+    DT 核心求值；`main : Eff [] ...` 走 compile + 运行，退出码 0 通过（可测效果）。纯形态受
+    核心求值器的原语支持面限制（List 桥接的 `strUnpack` / `strConcatMany` 等不在其中），
+    这类测试改用 `Eff` 入口，见 [testing.md](testing.md) 的「包内测试」。DIR 是
     workspace 根时对每个包的 `test/` 聚合；
   - `vuna fmt [--check] [PATH]...`：`Vuna.Fmt` 格式化（2 空格缩进、幂等、可重新 parse；
     保留行注释 / 块注释，超过 100 列时在 RHS、列表字面量、函数应用参数与中缀链处折行；

@@ -214,6 +214,29 @@ getCreated p = p.created
 - `{ p | f = ... }` 更新仍要求具体 record 类型（未知行的更新没有 `SetField` 支持）。
 
 
+### 写库时的三条形状限制
+
+- **类型参数不能带 kind 注解**：`record Foo (r : Row)(..) where …` 在解析期报
+  `PS_ExpectedToken: expected where`——record 的参数 kind 由字段类型推断，缺省是 `Type`。
+  要表达以 `Row` 为索引的抽象（以效应行参数化的传输 / 句柄 / 回调），用**索引数据类型**：
+
+  ```vuna
+  export data Duplex(..) : Row -> Type where
+    Dup : {r : Row} -> (Int -> Eff r String) -> (String -> Eff r Int) -> Eff r Int -> Duplex r
+
+  readSomeOf : Duplex r -> Int -> Eff r String
+  readSomeOf (Dup rd _ _) = rd
+  ```
+
+  与 `Eff : Row -> Type -> Type` / `Vec : Nat -> Type -> Type` 同一形状：类型头写显式 kind，
+  构造子写 `{r : Row}`，投影用函数头模式匹配。
+- **记录不能用 `case` 解构**：`case p of Pair a b => …` 报 `TC_NotInductiveFamily`
+  （`case` 的 scrutinee 必须是索引归纳族）。记录只有两种解构方式：构造子在**函数头**的模式
+  （`firstOf (Pair a b) = a`）与字段投影（`p.first`）。
+- **投影要求静态已知的类型**：没有动态派发，lambda 参数没标注时 `\h => h.first` 报
+  「cannot resolve field first; add a HasField … constraint」。把投影抽成带签名的函数
+  （`isNamed : String -> Pair String String -> Bool`），再把它传给 `map` / `filter`。
+
 ## trait 与实例
 
 ```vuna
@@ -369,6 +392,9 @@ main = case (MkEmail "x@y") of MkEmail s => s
 - 语法：`do` 块，语句是 `pat <- expr`（pat 只支持变量或 `_`）或裸表达式，最后一条
   必须是裸表达式；`a >>= f` 等价 `bind a f`，`a >> b` 等价
   `bind a (\_ -> b)`（顺序执行）。
+- **`do` 块不接受 `let` 绑定**：`do` 里写 `let x = 1` 报
+  `PS_ExpectedToken: expected in`（`let` 仍是表达式，必须带 `in`）。需要中间绑定时把
+  `let … in <后续表达式>` 写在表达式位置，或抽成带签名的顶层辅助函数。
 - `do` 在 Loader 里 desugar 成 `bind` / lambda（Parser 保留 `EDo`，formatter 因此能
   还原 do 语法）：
 
