@@ -1,0 +1,109 @@
+-- | 解析后语法层（RAst）的名字身份：名字只有局部 / 全局 / 内建 / 宏 / 洞五种，
+-- 不再靠字符串前缀区分来源。
+--
+-- 本模块先固定名字层（`RName` + 分类 / 还原），表达式与声明的 RAst 形状在后续阶段接入；
+-- 名字的字符串还原必须与解析器 / Loader 现有编码逐字节一致，保证诊断与 iface 不变。
+module Vuna.Compiler.Frontend.Rast where
+
+import Base.Data.List as List
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Base.Intrinsics
+import Vuna.Compiler.Frontend.Ast
+
+-- | 解析后的名字：
+--   * `RLocal`：局部 binder（源码里的短名）；
+--   * `RGlobal`：模块导出的名字（模块名 + 基名，还原为 `Module.name`）；
+--   * `RIntrinsic`：内建原语与编译器合成名（`@vuna@...`）；
+--   * `RMacro`：宏调用标记（`@vuna@macro@name` 的 `name`）；
+--   * `RHole`：`_` 与 `?name`。
+export data RName(..) : Type where
+  RLocal : String -> RName
+  RGlobal : String -> String -> RName
+  RIntrinsic : String -> RName
+  RMacro : String -> RName
+  RHole : String -> RName
+
+-- | 还原成解析器 / Loader 使用的字符串编码（逐字节兼容）。
+export rnameKey : RName -> String
+rnameKey (RLocal name) = name
+rnameKey (RGlobal moduleName base) = "${moduleName}.${base}"
+rnameKey (RIntrinsic name) = name
+rnameKey (RMacro name) = macroSyntaxName name
+rnameKey (RHole name) = name
+
+-- | 名字是否是全局引用（模块名 + 基名）。
+export rnameIsGlobal : RName -> Bool
+rnameIsGlobal (RGlobal moduleName base) = True
+rnameIsGlobal _ = False
+
+-- | 名字是否是内建 / 编译器合成名。
+export rnameIsIntrinsic : RName -> Bool
+rnameIsIntrinsic (RIntrinsic name) = True
+rnameIsIntrinsic _ = False
+
+-- | 名字是否是宏调用标记。
+export rnameIsMacro : RName -> Bool
+rnameIsMacro (RMacro name) = True
+rnameIsMacro _ = False
+
+-- | 名字是否是洞（`_` / `?name`）。
+export rnameIsHole : RName -> Bool
+rnameIsHole (RHole name) = True
+rnameIsHole _ = False
+
+-- | 全局名字的模块部分（非全局给空串）。
+export rnameModule : RName -> String
+rnameModule (RGlobal moduleName _) = moduleName
+rnameModule _ = ""
+
+-- | 全局名字的基名（非全局给空串）。
+export rnameBase : RName -> String
+rnameBase (RGlobal _ base) = base
+rnameBase _ = ""
+
+-- | 当前模块的包前缀是否属于编译器 / 标准库（这些包可以使用 `@vuna@...` 内部名）。
+-- 源码层写不出这些名字；放行判定按**模块前缀**，不是按名字前缀。
+export isCompilerModulePrefix : String -> Bool
+isCompilerModulePrefix prefix =
+  startsWith "Base." prefix
+    || startsWith "Vuna." prefix || startsWith "Base_d" prefix || startsWith "Vuna_d" prefix
+
+-- | 已解析名字的字符串 → 身份。顺序即优先级：洞 / 宏 / 编译器内部名 / 内建 / 全局 / 局部。
+export classifyName : String -> RName
+classifyName name =
+  if isHoleName name then
+    RHole name
+  else if isMacroSyntaxName name then
+    case macroNameOf name of
+      Just macro => RMacro macro
+      Nothing => RIntrinsic name
+  else if isInternalSyntaxName name then
+    RIntrinsic name
+  else if hasIntrinsic name then
+    RIntrinsic name
+  else
+    case splitGlobalKey name of
+      Just parts => RGlobal (firstOf parts) (secondOf parts)
+      Nothing => RLocal name
+
+-- | 名字是否是内建声明（含内部可见的 `bi_*`）。
+hasIntrinsic : String -> Bool
+hasIntrinsic name =
+  case findIntrinsic name of
+    Just _ => True
+    Nothing => False
+
+-- | 全局编码 `Module.name` → `(Module, name)`：按**最后一个**点切分（模块名本身含点）。
+export splitGlobalKey : String -> Maybe (Pair String String)
+splitGlobalKey name =
+  let
+    cs = strUnpack name
+    at = lastDotAt 0 cs (0 - 1)
+  in if at < 0 then Nothing else Just (Pair (strPack (take at cs)) (strPack (drop (at + 1) cs)))
+
+-- | 最后一个点的下标（没有则 -1）。
+lastDotAt : Int -> List Int -> Int -> Int
+lastDotAt index cs found =
+  case cs of
+    [] => found
+    c :: rest => lastDotAt (index + 1) rest (if c == 46 then index else found)

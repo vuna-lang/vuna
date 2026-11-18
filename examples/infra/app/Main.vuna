@@ -14,6 +14,7 @@ import Vuna.Compiler.Core.Term
 import Vuna.Compiler.Elab.Types
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Cst
+import Vuna.Compiler.Frontend.Rast
 import Vuna.Compiler.Frontend.Toml
 import Vuna.Compiler.Driver.Compile
 import Vuna.Compiler.Driver.ToolPayload
@@ -64,6 +65,7 @@ main =
     _ <-
       prim_eff_print
         (("cst-tree-file " ++ (if pathOk then verdict (treeRoundtripOk raw) else "skip")) ++ "\n")
+    _ <- prim_eff_print (("name-identity " ++ verdict nameIdentityOk) ++ "\n")
     _ <- prim_eff_print (("canon-term-rt " ++ verdict termFixturesRT) ++ "\n")
     _ <- prim_eff_print (("canon-decl-rt " ++ verdict (declsRT declFixtures)) ++ "\n")
     _ <- prim_eff_print (("canon-defs-rt " ++ verdict defsRT) ++ "\n")
@@ -404,3 +406,26 @@ toolContextRoundtrip =
   in case decToolContextComplete bytes of
     Nothing => False
     Just ctx => encToolContext ctx == bytes
+
+-- | 名字身份：局部 / 全局 / 内建 / 宏 / 洞的字符串编码必须逐字节可还原。
+nameIdentityOk : Bool
+nameIdentityOk =
+  let
+    localOk =
+      case classifyName "x" of
+        RLocal n => n == "x" && rnameKey (RLocal n) == "x"
+        _ => False
+    global = classifyName "Base.Data.Int.I42"
+    globalOk =
+      rnameIsGlobal global
+        && rnameModule global
+        == "Base.Data.Int" && rnameBase global == "I42" && rnameKey global == "Base.Data.Int.I42"
+    intrinsicOk =
+      rnameIsIntrinsic (classifyName "bi_eq_int")
+        && rnameIsIntrinsic (classifyName "@vuna@host@isTty")
+    macroOk =
+      case classifyName "@vuna@macro@dbg" of
+        RMacro n => n == "dbg" && rnameKey (RMacro n) == "@vuna@macro@dbg"
+        _ => False
+    holeOk = rnameIsHole (classifyName "?h") && rnameIsHole (classifyName "_")
+  in localOk && globalOk && intrinsicOk && macroOk && holeOk

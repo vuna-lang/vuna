@@ -25,6 +25,7 @@ out-contains: cst-tree ok
 out-contains: cst-tree-shape ok
 out-contains: cst-file ok
 out-contains: cst-tree-file ok
+out-contains: name-identity ok
 
 
 
