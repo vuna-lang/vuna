@@ -5,4 +5,4 @@ name = "dep"
 modules = ["Dep"]
 
 [dependencies]
-vuna-base = "../../../../../base"
+vuna-base = "../../../../../packages/base"

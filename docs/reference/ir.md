@@ -36,7 +36,7 @@ Loader → Elab → Core ──Lowering──> IR ──Codegen.{Decl,Term,Assem
 
 | 边界 | 规则 | 守护 |
 | --- | --- | --- |
-| 依赖方向 | `Ir.*` 只允许依赖 `Base.*`：方向由 `compiler/vuna.toml` 的 `[layers]` 声明、loader 在 import 时强制（`"Vuna.Compiler.Ir" = ["Vuna.Compiler.Base"]`，见 [packages.md](packages.md)「层约束」）。`Codegen/` 整目录只吃 IR；上游的唯一消费者是 `Lowering.Program`（Core → IR）与 `Lowering.Checks`（Core 侧检查）。声明归属切分与分文件装配在 `Driver.SplitGen`（Driver 层，允许 import `Elab` 的声明表，但必须路由到 `Lowering.Program`、不得自己消费 `Core` / `Intrinsics`） | `[layers]`（方向）+ `checks.ir-boundary`（正向断言与 IR 形状） |
+| 依赖方向 | `Ir.*` 只允许依赖 `Base.*`：方向由 `packages/compiler/vuna.toml` 的 `[layers]` 声明、loader 在 import 时强制（`"Vuna.Compiler.Ir" = ["Vuna.Compiler.Base"]`，见 [packages.md](packages.md)「层约束」）。`Codegen/` 整目录只吃 IR；上游的唯一消费者是 `Lowering.Program`（Core → IR）与 `Lowering.Checks`（Core 侧检查）。声明归属切分与分文件装配在 `Driver.SplitGen`（Driver 层，允许 import `Elab` 的声明表，但必须路由到 `Lowering.Program`、不得自己消费 `Core` / `Intrinsics`） | `[layers]`（方向）+ `checks.ir-boundary`（正向断言与 IR 形状） |
 | 名字 | IR 节点里只有**源码名**与**契约里的运行时符号**（`IrRt` / `IrRtApp`；节点里没有目标文本）；`v_` / `t_` / `C_` / `f_` 前缀、转义、`Unit.` 限定、运行时表达式都属于后端 | 同上 + review |
 | 数据 | IR 只有确定性纯数据（`String` / `Int` / `Bool` / `List` / `Pair` / `Maybe` / `Span`）：不含闭包、`HashMap`、`Value`、`Term` | `Ir.Model` 的 import 面 + `[layers]` |
 

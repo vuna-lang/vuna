@@ -23,10 +23,14 @@
   `compile <虚拟根>` 报 `PKG_NotPackage`。REPL / LSP / 单文件检查在虚拟根上使用
   **workspace 上下文**：模块根 = 各成员包的 `lib`（每根按该成员自己的 `[export]` 限制），
   没有单一包身份（`contextPackageName` 为空串）；成员目录内的文件仍用最近的包上下文。
+- **成员路径可以嵌套**：`members` 是相对 workspace 根的相对路径（如
+  `packages/compiler`），不要求是根目录的直接子目录。本仓库的成员统一放在 `packages/`
+  下（`packages/{compiler,base,cli}`）；新增包 = 在 `packages/` 下建目录并在
+  `[workspace].members` 加一行。
 - 每包固定三目录：`lib/`（模块根）、`app/`（入口，恒为 `app/Main.vuna`）、`test/`
   （测试模块）。依赖只向下流：`app`/`test` 可用本包 `lib` + 依赖包 `lib`；依赖包之间是
   DAG（循环依赖报错）。
-- **包名 ≠ 模块命名空间**：模块名仍由路径决定（`base/lib/Base/List.vuna` ⇔ `Base.List`）；
+- **包名 ≠ 模块命名空间**：模块名仍由路径决定（`packages/base/lib/Base/List.vuna` ⇔ `Base.List`）；
   每个源文件按**包上下文**解析 import——向上找最近的 `vuna.toml`，可用模块根 = 本包 `lib/`
   + 依赖闭包的 `lib/`（DFS 后序、按包名去重），跨包只认依赖包 `[export]` 列表，隐藏模块报
   `is not exported by package ...`。无 manifest 的文件只有 base 上下文（`VUNA_BASE` 覆盖，
@@ -35,9 +39,9 @@
   自己的 manifest，不向上找。
 - **依赖图内包名唯一**：包名参与「同包永远可见」判定，因此同名不同目录是配置错误。同名同
   目录的 diamond 依赖合法；同名不同目录在加载期报 `duplicate package name ...`。
-- 编译器 CLI（`compiler/lib/Vuna/Compiler/Driver/CompilerCli.vuna`）：`vuna-compiler` 提供
-  `compile/check/build`，入口 `compiler/app/Main.vuna`；**seed 只由这个入口的闭包生成**。
-  产品 CLI（`cli/lib/Vuna/Cli.vuna`）通过 in-process 调库实现同样的命令（单一二进制，不 fork
+- 编译器 CLI（`packages/compiler/lib/Vuna/Compiler/Driver/CompilerCli.vuna`）：`vuna-compiler` 提供
+  `compile/check/build`，入口 `packages/compiler/app/Main.vuna`；**seed 只由这个入口的闭包生成**。
+  产品 CLI（`packages/cli/lib/Vuna/Cli.vuna`）通过 in-process 调库实现同样的命令（单一二进制，不 fork
   `vuna-compiler`），并追加工具命令：
 
   - `vuna compile [--no-print] (<entry.vuna> | <package-dir>) OUTDIR`：DT 精化 → 擦除型
@@ -88,7 +92,7 @@
     引用者与建议测试标签；索引会话对象在 `$VUNA_STORE/objects/tool/`，按输入摘要判定
     新鲜度，refs 带行 / 列位置，没有刷新命令；
   - `vuna version` / `vuna --version`：打印 `vuna <版本>`；版本唯一真源是
-    `compiler/lib/Vuna/Compiler/Base/Version.vuna`。
+    `packages/compiler/lib/Vuna/Compiler/Base/Version.vuna`。
 - 示例：`examples/multi/` 是多包 workspace（根包 + 成员包 `greet` + `base` 路径依赖），
   本地用 `vuna build examples/multi` / `vuna test examples/multi` 验证包管理路径；
   CI 侧该冒烟目前没有独立 check（见 [debt.md](debt.md) D84）。
@@ -162,7 +166,7 @@ vuna-base = "base"
 ```
 
 ```toml
-# 成员包（库包）：用 [export] 限定跨包可见的模块（下为节选，完整列表见 base/vuna.toml）
+# 成员包（库包）：用 [export] 限定跨包可见的模块（下为节选，完整列表见 packages/base/vuna.toml）
 [package]
 name = "vuna-base"
 

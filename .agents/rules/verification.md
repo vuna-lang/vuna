@@ -30,31 +30,31 @@ nix run .#vuna-run-tests -- --only <章节>        # 按章节跑原生 suite（
 
 | 你改了什么 | 至少跑 |
 | --- | --- |
-| `cli/`（工具链）/ `docs`/`nix` | 相关章节 suite + `vuna check .` |
-| `base/`（含效应 monad、`dbg!`/`assert`） | `--only dt` / `dt_base` / `dt_err` + `vuna check .` |
-| `compiler/`（语法 / 类型 / 精化 / 擦除） | 相关章节 + `vuna check .`；合并前 `checks.seed-selfhost` |
+| `packages/cli/`（工具链）/ `docs`/`nix` | 相关章节 suite + `vuna check .` |
+| `packages/base/`（含效应 monad、`dbg!`/`assert`） | `--only dt` / `dt_base` / `dt_err` + `vuna check .` |
+| `packages/compiler/`（语法 / 类型 / 精化 / 擦除） | 相关章节 + `vuna check .`；合并前 `checks.seed-selfhost` |
 | codegen / 运行时 / `#line` / 观测 | 相关章节 + `checks.vuna-obs-*` + `vuna check .` |
 | CLI（`run`/`test`/REPL/LSP） | 第 40、42、47–49 段 + `corpus/lsp/smoke.sh` |
 
 ## 硬门禁（改到相关面时必须确认）
 
-- **seed 自举**：改 `compiler/` 后先确认「旧种子能编译新源码」——本地
+- **seed 自举**：改 `packages/compiler/` 后先确认「旧种子能编译新源码」——本地
   `nix build .#vuna-seed`，或等 CI 的 `checks.seed-selfhost`；要用的新语法先以旧语法落地
   → rotate → 再用新语法。
 - **隐藏效果守卫**：`sh nix/checks/lib/eff-boundary.sh`（基线 `nix/checks/data/eff-boundary.allowlist` 为空，
   只允许减少、不允许新增）；编译器/工具链不得用 `runPure` 在纯签名里隐藏 Eff 执行。
 - **格式化**：`vuna fmt --check <PATH>`；省略 PATH 时扫 workspace 各包 `lib/app/test`
   （`test/corpus/` 夹具跳过）。
-- **层方向**：`compiler/vuna.toml` 的 `[layers]` 由 loader 在 `vuna check .` 时强制（越层报
+- **层方向**：`packages/compiler/vuna.toml` 的 `[layers]` 由 loader 在 `vuna check .` 时强制（越层报
   `LD_LayerViolation`）；`checks.ir-boundary` 只留正向断言与 IR 形状断言。
-- **TCB 边界**：`seed/` 只含 compiler 包入口闭包；工具链（整个 `cli/`）不进 seed，
+- **TCB 边界**：`seed/` 只含 compiler 包入口闭包；工具链（整个 `packages/cli/`）不进 seed，
   黑名单见 `nix/seed/forbidden.txt`。
 
 ## 跨后端变更（原语 / 运行时）
 
 - **顺序**：OCaml 驱动 → 需要时 `sh nix/seed/rotate.sh ./result/bin/vuna`（先用 `nix build
   .#vuna --out-link result` 固定二进制；独立
-  `chore(seed)`）→ WASM → Native。OCaml 落地后才能用新原语改 `base/`（seed 闭包）。
+  `chore(seed)`）→ WASM → Native。OCaml 落地后才能用新原语改 `packages/base/`（seed 闭包）。
 - **验收**：三个后端各自的 effect/run 章节 + 对应 native/wasm 对拍；只落一个后端不算完成。
 - 原语登记点：`Base/Intrinsics.vuna`、`Ir/Runtime.vuna`、`Wasm/Runtime.vuna`
   （`rtImplOf`）、`Native/Runtime.vuna`（`nativeRtTargetBase` / `nativeRtValueArityBase`）。

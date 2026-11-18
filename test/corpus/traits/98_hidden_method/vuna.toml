@@ -5,4 +5,4 @@
 name = "fix-98-hidden-method"
 
 [dependencies]
-vuna-base = "../../../../base"
+vuna-base = "../../../../packages/base"

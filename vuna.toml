@@ -1,8 +1,8 @@
 # vuna 仓库自身是 workspace 根：只有 [workspace] 与工具配置，没有 [package]。
-# 成员包：cli/（产品 CLI，vuna）、compiler/（编译器，vuna-compiler）、
+# 成员包都在 packages/：cli/（产品 CLI，vuna）、compiler/（编译器，vuna-compiler）、
 # base/（标准库，vuna-base）。
 [workspace]
-members = ["compiler", "base", "cli"]
+members = ["packages/compiler", "packages/base", "packages/cli"]
 
 # lint 配置由 `vuna lint` 消费；编译器只做 TOML 结构解析，不校验规则语义。
 [lint]

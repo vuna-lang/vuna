@@ -3,4 +3,4 @@
 name = "fix-31-type-as-term"
 
 [dependencies]
-vuna-base = "../../../../base"
+vuna-base = "../../../../packages/base"

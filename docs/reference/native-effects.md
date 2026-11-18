@@ -220,9 +220,9 @@ Core `TPi`（增加效应域或引入新形式）、行合一半路（row variab
 
 | 区域 | 位置 |
 | --- | --- |
-| 命名效应模块 | 12 个（`base/lib/Base/Eff*.vuna` + `Eff/Reader.vuna`）：标签是 op 族应用 |
-| `Eff [` 闭行 | `base/lib` 与 `test` 的行字面量写成 `Named n <Op> :: …` / `[<Op>@name]` |
-| `rowRem`/`Member (` | `base/lib` 约 50 处按行条目（`Named n <Op>` 或裸标签）写 |
+| 命名效应模块 | 12 个（`packages/base/lib/Base/Eff*.vuna` + `Eff/Reader.vuna`）：标签是 op 族应用 |
+| `Eff [` 闭行 | `packages/base/lib` 与 `test` 的行字面量写成 `Named n <Op> :: …` / `[<Op>@name]` |
+| `rowRem`/`Member (` | `packages/base/lib` 约 50 处按行条目（`Named n <Op>` 或裸标签）写 |
 | 测试夹具 | `dt_base/11–45,74–82`、`corpus/effect/*`、`corpus/pure_cross/07_eff_main`、`dt_err/70–109`、`packages/01–04`、`stdlib/03,09,10`、`run/16–17`、`traits/pending/31`；`run_err/04` 的 key 文案 |
 | 文档 | `effects.md`、`effects-layers.md`、`stdlib.md`、`language.md`、`type-system.md`、`debt.md`、本文 |
 

@@ -89,7 +89,7 @@ repo=$PWD
 [ -x "$VUNA" ] || { echo "smoke: 找不到可执行的 vuna: $VUNA" >&2; exit 2; }
 
 # 无 manifest 的临时夹具需要 base 定位；显式给仓库 base（不依赖 exe 相对布局）。
-: "${VUNA_BASE:=$repo/base}"
+: "${VUNA_BASE:=$repo/packages/base}"
 export VUNA_BASE
 
 # 临时包必须落在**任何 vuna.toml 之外**：否则向上找 manifest 会命中仓库根包，
@@ -174,7 +174,7 @@ cat >"$pkg/vuna.toml" <<TOML
 name = "lsp-fixture"
 
 [dependencies]
-vuna-base = "$repo/base"
+vuna-base = "$repo/packages/base"
 TOML
 
 cat >"$pkg/lib/Dep.vuna" <<'VUNA'
@@ -628,7 +628,7 @@ check_eq "半帧 EOF 退出码 1" "1" "$?"
 # ---- 26) 模块名 hover：import / 导出项 `module B` / 模块头 + 模块 docstring ----
 # 模块 docstring 写在 `module` 头之前（`-- | ...`），docstring 任一行都应出现在 hover 里。
 mkdir -p "$tmp/modws/lib"
-printf '[package]\nname = "modws"\n\n[dependencies]\nvuna-base = "%s/base"\n' "$repo" >"$tmp/modws/vuna.toml"
+printf '[package]\nname = "modws"\n\n[dependencies]\nvuna-base = "%s/packages/base"\n' "$repo" >"$tmp/modws/vuna.toml"
 cat >"$tmp/modws/lib/ModDoc.vuna" <<'VEOF'
 -- | ModDoc module docs.
 -- | second line.
@@ -673,7 +673,7 @@ check_contains "模块 definition 指向 module 头名字" "$mod_out" \
 
 # ---- 27) 局部绑定：hover（语法级类型/值）与 definition（binder 位置）----
 mkdir -p "$tmp/localws/lib"
-printf '[package]\nname = "localws"\n\n[dependencies]\nvuna-base = "%s/base"\n' "$repo" >"$tmp/localws/vuna.toml"
+printf '[package]\nname = "localws"\n\n[dependencies]\nvuna-base = "%s/packages/base"\n' "$repo" >"$tmp/localws/vuna.toml"
 cat >"$tmp/localws/lib/Local.vuna" <<'VEOF'
 module Local where
 
@@ -735,7 +735,7 @@ check_contains "遮蔽：值 n 指向函数参数" "$local_out" \
 # 的完整签名 `declSigType` 喂给 `walkExpr`——不能用 `arrowDomains`，后者丢 binder 名），`EPi`
 # 分支按 `piNamePos` 命中 binder 名、类型取 domain。这里 hover 签名 binder 本体 + 带 `where` 的签名。
 mkdir -p "$tmp/piws/lib"
-printf '[package]\nname = "piws"\n\n[dependencies]\nvuna-base = "%s/base"\n' "$repo" >"$tmp/piws/vuna.toml"
+printf '[package]\nname = "piws"\n\n[dependencies]\nvuna-base = "%s/packages/base"\n' "$repo" >"$tmp/piws/vuna.toml"
 cat >"$tmp/piws/lib/PiTest.vuna" <<'VEOF'
 module PiTest where
 
@@ -768,7 +768,7 @@ check_contains "带 where 的签名 Pi binder hover（fn）" "$pi_out" 'fn : Int
 
 # ---- 28) 洞：未解 `_` 的目标+上下文；命名洞 `?name` 的名字/目标/上下文 ----
 mkdir -p "$tmp/holews/lib"
-printf '[package]\nname = "holews"\n\n[dependencies]\nvuna-base = "%s/base"\n' "$repo" >"$tmp/holews/vuna.toml"
+printf '[package]\nname = "holews"\n\n[dependencies]\nvuna-base = "%s/packages/base"\n' "$repo" >"$tmp/holews/vuna.toml"
 cat >"$tmp/holews/lib/Holes.vuna" <<'VEOF'
 module Holes where
 
@@ -817,7 +817,7 @@ check_contains "命名洞 range 覆盖整个 ?goal" "$hole_out" \
 #   - Point.px：字段声明 + `p.px` 字段访问 + 记录字面量标签。
 # 另验证 prepareRename（顶层 / 局部）、关键字与 base 标准库（Int）改名回 null。
 mkdir -p "$tmp/renamews/lib"
-printf '[package]\nname = "renamews"\n\n[dependencies]\nvuna-base = "%s/base"\n' "$repo" >"$tmp/renamews/vuna.toml"
+printf '[package]\nname = "renamews"\n\n[dependencies]\nvuna-base = "%s/packages/base"\n' "$repo" >"$tmp/renamews/vuna.toml"
 cat >"$tmp/renamews/lib/Rename.vuna" <<'VEOF'
 module Rename where
 
@@ -908,7 +908,7 @@ check_contains "rename base 标准库（Int）→ result null" "$rename_out" '"i
 # char 2、apply line 24 char 10、hval line 27 char 9、still line 30 char 11；
 # rgb line 45 char 8、either line 48 char 11、pairof line 51 char 11。
 mkdir -p "$tmp/splitws/lib"
-printf '[package]\nname = "splitws"\n\n[dependencies]\nvuna-base = "%s/base"\n' "$repo" >"$tmp/splitws/vuna.toml"
+printf '[package]\nname = "splitws"\n\n[dependencies]\nvuna-base = "%s/packages/base"\n' "$repo" >"$tmp/splitws/vuna.toml"
 cat >"$tmp/splitws/lib/Split.vuna" <<'VEOF'
 module Split where
 
@@ -1066,7 +1066,7 @@ check_contains "未知 command 带命令名" "$fixcmd_out" 'unknown command: vun
 # 拿不到的（枚举全部构造子会写出精化器拒绝的不可达分支）→ 跳过该 binder（同一个洞的其它
 # 可分裂 binder，如 `n : Nat`，仍正常给动作）。
 mkdir -p "$tmp/splitqws/lib"
-printf '[package]\nname = "splitqws"\n\n[dependencies]\nvuna-base = "%s/base"\n' "$repo" >"$tmp/splitqws/vuna.toml"
+printf '[package]\nname = "splitqws"\n\n[dependencies]\nvuna-base = "%s/packages/base"\n' "$repo" >"$tmp/splitqws/vuna.toml"
 cat >"$tmp/splitqws/lib/Dep.vuna" <<'VEOF'
 module Dep where
 
@@ -1148,7 +1148,7 @@ check_not_contains "索引族 binder（xs : Vec ...）不给 case split（不可
 # 于是同一个模块的 docstring 在它自己的文件与引用它的文件里显示成不同版本。符号 hover 也一样
 # （Index 是磁盘快照）。现在服务器把「打开中的文档」传给 Bindings/Query，两处都读缓冲。
 mkdir -p "$tmp/bufws/lib"
-printf '[package]\nname = "bufws"\n\n[dependencies]\nvuna-base = "%s/base"\n' "$repo" >"$tmp/bufws/vuna.toml"
+printf '[package]\nname = "bufws"\n\n[dependencies]\nvuna-base = "%s/packages/base"\n' "$repo" >"$tmp/bufws/vuna.toml"
 cat >"$tmp/bufws/lib/BufDoc.vuna" <<'VEOF'
 -- | 磁盘版模块文档。
 module BufDoc where
@@ -1198,7 +1198,7 @@ check_not_contains "打开着的模块里符号 hover 不回落到 Index 的磁�
 # Maybe 时被当成普通 token → hover/definition 都 null（而 `Base.List.map` 里的 List 正常）。
 # 修复后候选里加了整个 token，Base.Maybe 这种「token 就是模块名」的写法也能解析。
 mkdir -p "$tmp/modtokws/lib"
-printf '[package]\nname = "modtokws"\n\n[dependencies]\nvuna-base = "%s/base"\n' "$repo" >"$tmp/modtokws/vuna.toml"
+printf '[package]\nname = "modtokws"\n\n[dependencies]\nvuna-base = "%s/packages/base"\n' "$repo" >"$tmp/modtokws/vuna.toml"
 cat >"$tmp/modtokws/lib/Tok.vuna" <<'VEOF'
 module Tok where
 
@@ -1247,7 +1247,7 @@ check_contains "模块名后的分隔点不报模块（hover 回 null）" "$sep2
 # 现在 detail = `vuna api` 行的同一套文本（`Scan.declSigText`），成员节点（ctor/field）
 # 也带自己的类型。
 mkdir -p "$tmp/detailws/lib"
-printf '[package]\nname = "detailws"\n\n[dependencies]\nvuna-base = "%s/base"\n' "$repo" >"$tmp/detailws/vuna.toml"
+printf '[package]\nname = "detailws"\n\n[dependencies]\nvuna-base = "%s/packages/base"\n' "$repo" >"$tmp/detailws/vuna.toml"
 cat >"$tmp/detailws/lib/Dv.vuna" <<'VEOF'
 -- | Dv module docs.
 module Dv where

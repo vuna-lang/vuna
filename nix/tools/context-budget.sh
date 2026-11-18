@@ -59,10 +59,10 @@ for f in docs/reference/*.md; do
   if [ "$n" -gt "$max_ref_lines" ]; then max_ref_lines=$n; fi
 done
 
-# ---- max_module_lines：源码模块最大行数（只统计 cli/lib/、compiler/lib/、base/lib/） ----
+# ---- max_module_lines：源码模块最大行数（只统计 packages/cli/lib/、packages/compiler/lib/、packages/base/lib/） ----
 max_module_lines=0
 max_module_path=""
-for f in $(find cli/lib/Vuna compiler/lib/Vuna base/lib -name "*.vuna" | sort); do
+for f in $(find packages/cli/lib/Vuna packages/compiler/lib/Vuna packages/base/lib -name "*.vuna" | sort); do
   [ -f "$f" ] || continue
   n=$(lines_of "$f")
   if [ "$n" -gt "$max_module_lines" ]; then

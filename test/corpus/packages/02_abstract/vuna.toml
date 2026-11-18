@@ -2,4 +2,4 @@
 name = "absapp"
 
 [dependencies]
-vuna-base = "../../../../base"
+vuna-base = "../../../../packages/base"

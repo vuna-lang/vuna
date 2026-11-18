@@ -41,7 +41,7 @@ let
     build = ''
       mkdir -p "$out/bin"
       cp -r ${../../seed} seed
-      cp -r ${../../base} "$out/base"
+      cp -r ${../../packages/base} "$out/base"
       chmod -R u+w seed
       cd seed
       sh build.sh "$out/bin/vuna-seed"
@@ -56,13 +56,13 @@ let
     description = "vuna compiler (stage 1, split-compiled from compiler/)";
     mainProgram = "vuna-compiler";
     build = ''
-      mkdir -p "$out/bin"
-      cp -r ${../../compiler} compiler
-      cp -r ${../../base} base
+      mkdir -p "$out/bin" packages
+      cp -r ${../../packages/compiler} packages/compiler
+      cp -r ${../../packages/base} packages/base
       chmod -R u+w .
-      ${vuna-seed}/bin/vuna-seed build --no-compile --out stage1 compiler
+      ${vuna-seed}/bin/vuna-seed build --no-compile --out stage1 packages/compiler
       sh stage1/build.sh "$out/bin/vuna-compiler"
-      cp -r base "$out/base"
+      cp -r packages/base "$out/base"
       if [ -f stage1/build-id ]; then cp stage1/build-id "$out/build-id"; fi
     '';
   };
@@ -74,16 +74,14 @@ let
     mainProgram = "vuna";
     build = ''
       mkdir -p "$out/bin"
-      cp -r ${../../cli} cli
-      cp -r ${../../compiler} compiler
-      cp -r ${../../base} base
+      cp -r ${../../packages} packages
       cp ${../../vuna.toml} vuna.toml
       chmod -R u+w .
       export VUNA_STORE="$TMPDIR/vuna-store"
       ${vuna-compiler}/bin/vuna-compiler build --package vuna .
-      cp cli/.output/bin/vuna "$out/bin/vuna"
-      cp -r base "$out/base"
-      if [ -f cli/.output/build-id ]; then cp cli/.output/build-id "$out/build-id"; fi
+      cp packages/cli/.output/bin/vuna "$out/bin/vuna"
+      cp -r packages/base "$out/base"
+      if [ -f packages/cli/.output/build-id ]; then cp packages/cli/.output/build-id "$out/build-id"; fi
     '';
   };
 
@@ -138,15 +136,16 @@ let
         };
       }
       ''
-        cp -r ${../../compiler} compiler
-        cp -r ${../../base} base
+        mkdir -p packages
+        cp -r ${../../packages/compiler} packages/compiler
+        cp -r ${../../packages/base} packages/base
         cp ${../../vuna.toml} vuna.toml
         chmod -R u+w .
         export VUNA_STORE="$TMPDIR/store"
-        ${vuna-compiler}/bin/vuna-compiler build compiler --target native --out "$out/out"
+        ${vuna-compiler}/bin/vuna-compiler build packages/compiler --target native --out "$out/out"
         mkdir -p "$out/bin"
         cp "$out/out/bin/vuna-compiler" "$out/bin/vuna-native"
-        cp -r base "$out/base"
+        cp -r packages/base "$out/base"
         printf '%s' "vuna-native-$(sha256sum "$out/bin/vuna-native" | cut -d' ' -f1)" > "$out/build-id"
       '';
 
@@ -158,7 +157,7 @@ let
       {
         nativeBuildInputs = [ vuna ] ++ e2eTools ++ [ pkgs.playwright-driver.browsers-chromium ];
         VUNA = "${vuna}/bin/vuna";
-        VUNA_BASE = "${../../base}";
+        VUNA_BASE = "${../../packages/base}";
         VUNA_PLAYWRIGHT = "${pkgs.playwright}";
         PLAYWRIGHT_BROWSERS_PATH = "${pkgs.playwright-driver.browsers-chromium}";
         allowSubstitutes = false;

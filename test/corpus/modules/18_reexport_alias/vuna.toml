@@ -5,4 +5,4 @@
 name = "fix-18-reexport-alias"
 
 [dependencies]
-vuna-base = "../../../../base"
+vuna-base = "../../../../packages/base"

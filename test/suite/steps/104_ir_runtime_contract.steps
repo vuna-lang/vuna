@@ -5,7 +5,7 @@
 # `Lower.checkRuntimeContract` 在每次 check/build 上断言；结构边界（IR 层不 import
 # 上游、没有目标文本）由 `checks.ir-boundary` 守。本用例钉住「符号 → OCaml 文本」的
 # 代表性映射：入口展示（五种内建类型）、裸符号、内联、`++` 展平、List 桥接、动作 thunk。
-run: "$VUNA" check "$VUNA_SUITE_ROOT/compiler" 2>&1
+run: "$VUNA" check "$VUNA_SUITE_ROOT/packages/compiler" 2>&1
 exit: 0
 out-not-contains: IC_InvariantViolated
 

@@ -5,4 +5,4 @@
 name = "fix-86-entry-header"
 
 [dependencies]
-vuna-base = "../../../../base"
+vuna-base = "../../../../packages/base"

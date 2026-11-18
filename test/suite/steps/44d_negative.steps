@@ -6,8 +6,8 @@ run: sh -c 'TMPDIR="$TMPDIR/summary-cache" "$VUNA" check "$VUNA_BASE" >/dev/null
 run: sh -c 'TMPDIR="$TMPDIR/summary-cache" "$VUNA" check corpus/packages/m34_summary/dep >/dev/null 2>&1 || true'
 run: sh -c 'TMPDIR="$TMPDIR/summary-cache" "$VUNA" check corpus/packages/m34_summary/root >/dev/null 2>&1 || true'
 run: sh -c 'cp corpus/packages/m34_summary/root/app/Main.vuna "$TMPDIR/summary-bad/app/Main.vuna"; printf "\nbroken : Int\nbroken = \"x\"\n" >> "$TMPDIR/summary-bad/app/Main.vuna"'
-# 副本 manifest：../dep 与 ../../../../../base 改成本仓库绝对路径。
-run: sh -c 'dep_abs=$(cd corpus/packages/m34_summary/dep && pwd); sed "s|\.\./dep|$dep_abs|; s|\.\./\.\./\.\./\.\./\.\./base|$VUNA_BASE|" corpus/packages/m34_summary/root/vuna.toml > "$TMPDIR/summary-bad/vuna.toml"'
+# 副本 manifest：../dep 与 ../../../../../packages/base 改成本仓库绝对路径。
+run: sh -c 'dep_abs=$(cd corpus/packages/m34_summary/dep && pwd); sed "s|\.\./dep|$dep_abs|; s|\.\./\.\./\.\./\.\./\.\./packages/base|$VUNA_BASE|" corpus/packages/m34_summary/root/vuna.toml > "$TMPDIR/summary-bad/vuna.toml"'
 run: sh -c 'TMPDIR="$TMPDIR/summary-cache" "$VUNA" check "$TMPDIR/summary-bad" > "$TMPDIR/summary-bad.out" 2>&1'
 exit: nonzero
 read: $TMPDIR/summary-bad.out

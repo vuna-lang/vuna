@@ -58,10 +58,8 @@ examples/**/Main.ml
 examples/**/main
 /Main.ml
 
-# vuna 包级 compile 输出
-# `.output` 与 `compiler/.output` 都是 vuna 建的软链（指向 store view），不入库。
+# vuna 包级 compile 输出（`.output` 是 vuna 建的软链，指向 store view），不入库。
 .output
-compiler/.output
 .output/
 /seed/program
 .local-tmp/

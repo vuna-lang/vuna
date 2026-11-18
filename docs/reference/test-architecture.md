@@ -10,7 +10,7 @@
 测试 runner 因此不维护第二套缓存：**一次 run 只有一个 store root**，父进程预热一次，
 worker 与 case 共享；只有断言缓存布局 / GC / 冷命中的用例显式隔离。
 
-冷启动重复劳动的代价是为什么共享的根据：每个 worker 各跑一次 `vuna check base`
+冷启动重复劳动的代价是为什么共享的根据：每个 worker 各跑一次 `vuna check packages/base`
 （冷 store 约 7 s）会在 16 个 worker 上乘 16；同一夹具空 store 编译 2.9–5.5 s，
 暖 store 7 ms（本机 16 核实测）。所以先让测试成为对象库的普通客户端，再谈调度。
 
@@ -36,7 +36,7 @@ worker 与 case 共享；只有断言缓存布局 / GC / 冷命中的用例显�
 1. **一次 run 一个 store root**：默认 `~/.vuna/test-store`（测试专用，不与开发缓存共用；`nix run .#vuna-run-tests` 导出，
    `nix run .#vuna-run-tests`、CI check 各自导出；`VUNA_STORE` 可覆盖）。父进程解析一次，
    所有 worker/case 继承同一路径。
-2. **父进程只预热一次**：`vuna check base`（需要时 `check .`）；worker 不各自 warmup。
+2. **父进程只预热一次**：`vuna check packages/base`（需要时 `check .`）；worker 不各自 warmup。
 3. **默认共享，隔离显式**：steps 文件头写 `# store-isolated` 的 case 用 `${caseTmp}/store`；
    其余共享。断言缓存布局、GC、冷命中、只读语义的用例必须隔离。
 4. **`--no-cache` 只忽略结果判定**（golden/error 的本地结果缓存），不关闭对象库；
@@ -107,7 +107,7 @@ LSP/REPL/包管理器/seed 是 ocaml 宿主的工具链面，不跨目标。
 
 **冷隔离长 case 不能只靠排序**：把 e2e 长 case 同时压到多个 worker 会让全量变慢，
 必须先有 tier 与 cold-heavy 并发上限；当前就是静态分片。e2e 采用**专用串行预热**（先
-`check base` / `check compiler` / `check .`，再跑 suite），长 case 的根因是冷编译而不是
+`check packages/base` / `check packages/compiler` / `check .`，再跑 suite），长 case 的根因是冷编译而不是
 断言数量，所以拆 case 必须共享已预热 store。
 
 ## 4. 结果判定：verdict 对象
@@ -133,7 +133,7 @@ LSP/REPL/包管理器/seed 是 ocaml 宿主的工具链面，不跨目标。
 
 ## 7. 验收与测量
 
-- 同一 store 连续 `check compiler`：第二次 `cache-path=hit`、`iface-write=0/N`、< 100 ms。
+- 同一 store 连续 `check packages/compiler`：第二次 `cache-path=hit`、`iface-write=0/N`、< 100 ms。
 - 单 dt golden case：< 2 s；section 90：< 60 s；全量：< 2 min。
 - 测量必须在静默树上重录，记录 HEAD、CPU、`VUNA_STORE` 是否为空、`--cache-dir`。
 

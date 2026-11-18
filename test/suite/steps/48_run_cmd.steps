@@ -19,7 +19,7 @@ run: sh -c 'mkdir -p "$TMPDIR/m38-run-nobin/app"; printf "[package]\nname = \"m3
 run: "$VUNA" run "$TMPDIR/m38-run-nobin" --no-build 2>&1
 exit: 2
 out-contains: binary not found
-run: "$VUNA" run ../base 2>&1
+run: "$VUNA" run ../packages/base 2>&1
 exit: 2
 out-contains: no executable entry
 

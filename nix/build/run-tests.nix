@@ -23,7 +23,7 @@ pkgs.writeShellScriptBin "vuna-run-tests" ''
     fi
     repo=$(dirname "$repo")
   done
-  export VUNA_BASE="$repo/base"
+  export VUNA_BASE="$repo/packages/base"
   export VUNA_SEED="${vuna-seed}/bin/vuna-seed"
   export VUNA_OCAML_ID="''${VUNA_OCAML_ID:-$(ocamlopt -version 2>/dev/null || echo none)}"
   # suite 用**独立**对象库：`52_cache_framing` 会故意截断 store 里的 blob/lex 对象，

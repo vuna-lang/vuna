@@ -11,6 +11,6 @@ name = "test-m30"
 members = ["member"]
 
 [dependencies]
-vuna-base = "../../../base"
+vuna-base = "../../../packages/base"
 
 # IoPass.vuna 直接调用 prim_print（无 manifest 门控）；其余测试走宿主层或纯值。

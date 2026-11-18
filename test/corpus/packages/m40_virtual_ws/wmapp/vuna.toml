@@ -2,5 +2,5 @@
 name = "wmapp"
 
 [dependencies]
-vuna-base = "../../../../../base"
+vuna-base = "../../../../../packages/base"
 wmlib = "../wmlib"

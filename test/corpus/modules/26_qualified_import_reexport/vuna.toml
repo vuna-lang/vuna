@@ -5,4 +5,4 @@
 name = "fix-26-qualified-import-reexport"
 
 [dependencies]
-vuna-base = "../../../../base"
+vuna-base = "../../../../packages/base"

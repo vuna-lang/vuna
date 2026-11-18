@@ -5,4 +5,4 @@
 name = "fix-07-export-abstract"
 
 [dependencies]
-vuna-base = "../../../../base"
+vuna-base = "../../../../packages/base"

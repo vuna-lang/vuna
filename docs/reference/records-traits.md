@@ -384,7 +384,7 @@ main = case (MkEmail "x@y") of MkEmail s => s
     pure (x + y)
   ```
 
-- `Functor`（`fmap`）在 `base/lib/Base/Functor.vuna`；`pure` / `liftA2` / `ap` 在
+- `Functor`（`fmap`）在 `packages/base/lib/Base/Functor.vuna`；`pure` / `liftA2` / `ap` 在
   `Base.Applicative`；`Monad`（`bind`）在 `Base.Monad`（重导出 `Base.Applicative` /
   `Base.Functor`）。`Maybe` / `List` / `Result` / `State` / `Reader` / `Error` 各有
   `Functor` / `Applicative` / `Monad` 三个实例（`Eff r` 也有，见 [effects.md](effects.md) §8）。
@@ -394,7 +394,7 @@ main = case (MkEmail "x@y") of MkEmail s => s
   每个实例仍要写全三个（实例声明检查父类实例存在）。泛型代码只写 `Monad m =>` 时，
   body 对 `pure` / `fmap` 的刚性字典需求由既有提升机制变成额外隐式字典参数，
   调用点按实例搜索填充；不需要手写三段约束。
-- **`Eff`** 是 `base/lib/Base/Eff.vuna` 的抽象动作类型（构造子 `MkEff` 不导出）；组合统一用
+- **`Eff`** 是 `packages/base/lib/Base/Eff.vuna` 的抽象动作类型（构造子 `MkEff` 不导出）；组合统一用
   `Functor` / `Applicative` / `Monad` trait 的 `fmap` / `bind` / `pure` / `liftA2`、`>>=` 与 `do`。动作只在 `main`
   由运行时经 `runPure` 执行。
   参数化效应 monad（`Base.State` / `Base.Reader` / `Base.Error`）见

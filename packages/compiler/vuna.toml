@@ -1,6 +1,6 @@
 # vuna-compiler：编译器包（seed 的来源）。
 # 只包含“把源码变成 OCaml / 生成 seed”所需的模块 + 编译器自己的 CLI 入口；
-# 工具链（fmt/lint/repl/doc/test）在根包 vuna，不进入 seed 闭包。
+# 工具链（fmt/lint/repl/doc/test）在产品 CLI 包 vuna，不进入 seed 闭包。
 #
 # 目录即层：Base（位置/诊断/哈希/对象库）→ Frontend（词法/语法/TOML/manifest/包图）
 # → Loader（模块图/名字解析/flatten）→ Core（TT/NbE）→ Elab（双向精化）→ Ir

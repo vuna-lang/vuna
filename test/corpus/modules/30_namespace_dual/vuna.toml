@@ -4,4 +4,4 @@
 name = "fix-30-namespace-dual"
 
 [dependencies]
-vuna-base = "../../../../base"
+vuna-base = "../../../../packages/base"

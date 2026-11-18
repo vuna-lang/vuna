@@ -1,17 +1,17 @@
 # 编译器参考：模块职责、codegen 表示与输出模型
 
-本文覆盖 `compiler/` 包（`vuna-compiler`，模块 `Vuna.Compiler.*`）的模块职责与 codegen
+本文覆盖 `packages/compiler/` 包（`vuna-compiler`，模块 `Vuna.Compiler.*`）的模块职责与 codegen
 实现要点。子系统的数据流与「改哪里」速查见 [architecture.md](../architecture.md)，Core /
 精化器内部规则见 [core.md](core.md)，种子与自举链见 [bootstrap.md](bootstrap.md)。
 
 ## 模块地图
 
-`compiler/` 是编译器包（seed 的唯一来源）。入口 `compiler/app/Main.vuna` 的 import 闭包
+`packages/compiler/` 是编译器包（seed 的唯一来源）。入口 `packages/compiler/app/Main.vuna` 的 import 闭包
 就是 `seed/` 的内容（规模以 `seed/` 与 `nix/seed/files.txt` 为准）；工具链
-（fmt/lint/repl/doc/test/lsp）在 `cli/lib/`，不在闭包里。
+（fmt/lint/repl/doc/test/lsp）在 `packages/cli/lib/`，不在闭包里。
 代码按**目录即层**组织：`Base → Frontend → Loader → Core → Elab → Ir`，`Codegen` /
 `Lowering` / `Native` / `Wasm` 各自独立成层，`Driver` 在最上；依赖方向由
-`compiler/vuna.toml` 的 `[layers]` 声明、由 loader 强制（语义见
+`packages/compiler/vuna.toml` 的 `[layers]` 声明、由 loader 强制（语义见
 [packages.md](packages.md)「层约束」）。全包 **104 个模块，全部在 `[export]` 里**——
 没有内部模块，纯门面模块（原 `Core.vuna` / `Elab.vuna` / `Loader.vuna` / `Codegen.vuna`；
 `Ir` 的校验入口拆到 `Ir.Validate`）已删除，
@@ -144,10 +144,10 @@
 | `Driver.CompilerCli` | 编译器自己的 CLI（`vuna-compiler`）；含受限进程执行入口 `runIn`；workspace check/build 单元、`build --package`、`version` | `runCompilerCli`、`compilerUsageLines`、`runIn` |
 | `Driver.Native` / `Driver.Wasm` | 后端驱动：检查 + lowering + 写 `main.s` / `main.wat`；不 import Core/Elab/Intrinsics | `compileNative`、`compileWasm` |
 
-`compiler/vuna.toml` 的 `[export]` 列出全部 104 个模块（模块即公开面，没有内部模块）；
+`packages/compiler/vuna.toml` 的 `[export]` 列出全部 104 个模块（模块即公开面，没有内部模块）；
 编译器直接使用 `prim_*`（无 manifest 能力/特权声明）。工具链模块不在此包。
 
-## 产品 CLI 工具链模块（`cli/lib/`，不进 seed）
+## 产品 CLI 工具链模块（`packages/cli/lib/`，不进 seed）
 
 | 模块 | 职责 |
 | --- | --- |

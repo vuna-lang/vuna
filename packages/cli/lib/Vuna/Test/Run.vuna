@@ -206,7 +206,7 @@ filterEff pred (x :: rest) = do
 -- 临时目录与 helper
 -- ---------------------------------------------------------------
 -- 临时根必须位于**任何 vuna.toml 之外**：「无 manifest → base-only」一类用例若把临时根
--- 落在包内（Nix 沙箱里 TMPDIR 可能就是工作树根），向上找 manifest 会命中仓库根包，
+-- 落在包内（Nix 沙箱里 TMPDIR 可能就是工作树根），向上找 manifest 会命中仓库 workspace 根，
 -- 上下文语义被悄悄改写。
 -- | 内部：从 `dir` 起向上最多 `fuel` 层找 `vuna.toml`，找到即 True。
 hasManifestAncestorFuel : Member nFs FsOp r => Int -> String -> Eff r Bool
@@ -2641,7 +2641,7 @@ runSuiteOnce opts suite =
   in do
     tmp <- makeTempRoot tag
     helper <- writeHelper tmp
-    baseDir <- envOr "VUNA_BASE" "${root}/base"
+    baseDir <- envOr "VUNA_BASE" "${root}/packages/base"
     baseHash <- hashTree baseDir
     cacheExists <- pathExistsDir cacheDir
     _ <- if cacheExists then pure 0 else ensureDirPath cacheDir

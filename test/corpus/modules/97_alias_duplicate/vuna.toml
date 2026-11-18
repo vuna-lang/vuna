@@ -5,4 +5,4 @@
 name = "fix-97-alias-duplicate"
 
 [dependencies]
-vuna-base = "../../../../base"
+vuna-base = "../../../../packages/base"

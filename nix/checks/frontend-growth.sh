@@ -17,7 +17,7 @@ out=${1:?usage: frontend-growth.sh OUT}
 : "${VUNA:?VUNA 未设置}"
 
 MAX_RATIO_MILLI=${VUNA_FRONTEND_MAX_RATIO_MILLI:-2500}
-BASE=$PWD/base
+BASE=$PWD/packages/base
 work=$(mktemp -d "${TMPDIR:-/tmp}/vuna-frontend-growth.XXXXXX")
 trap 'rm -rf "$work"' EXIT INT TERM
 mkdir -p "$out"

@@ -4,5 +4,5 @@
 name = "fix-compiler"
 
 [dependencies]
-vuna-base = "../../../base"
-vuna-compiler = "../../../compiler"
+vuna-base = "../../../packages/base"
+vuna-compiler = "../../../packages/compiler"

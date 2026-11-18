@@ -11,7 +11,7 @@ repo 自测由 `vuna test --suite test/suite.toml` 驱动（原生 Vuna 实现�
 - `test/suite.toml`：suite 配置。`[suite]` 放全局默认（`jobs`/`timeout`/`name`）；
   `[family.<name>]` 按目录约定把夹具展开成 golden/error case；
 - `test/suite/steps/*.steps`：声明式步进用例（一套行式 DSL，见下）；
-- 执行器在 `cli/lib/Vuna/Test/{Suite,Run}.vuna`，由 `Vuna.Cli.testArgs` 分派。
+- 执行器在 `packages/cli/lib/Vuna/Test/{Suite,Run}.vuna`，由 `Vuna.Cli.testArgs` 分派。
 
 ```console
 vuna test --suite test/suite.toml                 # 全量；--jobs 默认 auto
@@ -170,7 +170,7 @@ end:
 
 - 默认根：**测试专用** `~/.vuna/test-store`（`nix run .#vuna-run-tests` 导出；
   `VUNA_STORE` 可覆盖）。子进程的 `TMPDIR` 仍按 worker/case 隔离，但对象库共用。
-- 父进程只预热一次 `vuna check base`（需要时 `check .`），worker 不各自 warmIfaces。
+- 父进程只预热一次 `vuna check packages/base`（需要时 `check .`），worker 不各自 warmIfaces。
 - 单文件对象（`objects/iface|header|lex|order|check|split|tool`）是输入寻址 + 原子写：
   同一输入同一路径、同一份字节，日常 `check`/`build` 与测试共用不会互相覆盖。
 - 目录视图 `views/bin` 与 `roots/` 的并发边界见 [cache.md](cache.md)；断言缓存布局/GC/
@@ -275,16 +275,16 @@ runner 直接调用编译器 / 工具链的导出函数，断言它们的**返�
 | lint | `Lint.Rules.lintSourceWith`（fixities 经 `FixityEnv.fixitiesForFile`） | `renderFinding` 文本 == `.out` |
 | fix | `Lint.Fix.fixLoop` | 新源码 == `.expected`；再跑一遍验收敛（幂等） |
 
-**断言口径**（`cli/lib/Vuna/Test/Expect.vuna`）：负例只比 `(severity, code, file, line, col)`
+**断言口径**（`packages/cli/lib/Vuna/Test/Expect.vuna`）：负例只比 `(severity, code, file, line, col)`
 的**多重集** + 条数，不比 `message` / `fields` / `labels.text`——文案由
 `nix/checks/lib/diag-style.sh` / `diag-raw.sh` 两个门禁守。顺序不锁：`--json` 的
 `flushSarif` 输出序与 `ErrC` 的 `diagChildren` 装配序不同，两列排序后逐项比。
 
 路径归一：期望文件里有 `<ROOT>/test/...`、`corpus/...`、`./vuna.toml`、`<BASE>/lib/...`
-四种写法；`Expect.projFile` 把两侧都压到「相对 `test/`」或 `base/`，夹具不需要改写。
+四种写法；`Expect.projFile` 把两侧都压到「相对 `test/`」或 `packages/base/`，夹具不需要改写。
 无源位置的诊断投影成 `||0|0!<absent 理由>`，与 `nix/checks/lib/diag-located.sh` 同源。
 
-**没有子进程回退**：进程内只有两条路径——增量会话（`cli/lib/Vuna/Test/Session.vuna`，依赖
+**没有子进程回退**：进程内只有两条路径——增量会话（`packages/cli/lib/Vuna/Test/Session.vuna`，依赖
 接口 + `AuxCache`）优先，不可用时**在同一进程内**退回全量精化；两条都不可用即用例失败
 （`ErrC`）。没有子进程、也没有绕过缓存的开关：`VUNA_ELAB_FULL=1` 是 CLI 语义，只出现在
 steps 里，用于「摘要路径 vs 全量路径逐字节一致」的对拍。
@@ -316,7 +316,7 @@ golden/runtime case 的 codegen 产物按「生成模块集」分桶（`set-<key
   重编，极端情况下互相踩写）；并发跑时给其中一个传 `--cache-dir` 隔离。
 
 实测（本机 16 核）：空 store 下同一夹具 compile 2.9–5.5s，暖 store 7ms；
-`vuna check base` 7.25s → 13ms。对象库的 split-unit 缓存在 `$VUNA_STORE/units`；
+`vuna check packages/base` 7.25s → 13ms。对象库的 split-unit 缓存在 `$VUNA_STORE/units`；
 `--cache-dir` 只放结果缓存（build 桶走 store 视图，见
 [test-architecture.md](test-architecture.md)）。
 ## corpus 的包上下文与 `VUNA_BASE`
@@ -521,7 +521,7 @@ wasm 不自举（浏览器/边缘受限后端的契约见 [wasm.md](wasm.md)）�
 
 | 包 | 产物 | 说明 |
 | --- | --- | --- |
-| `vuna-native` | `bin/vuna-native` + `base/` | 原生可执行文件；编译器身份写 `$out/build-id` |
+| `vuna-native` | `bin/vuna-native` + `packages/base/` | 原生可执行文件；编译器身份写 `$out/build-id` |
 
 runner 是 `nix run .#backend-check -- --compiler native`，三个 scope：
 
@@ -541,7 +541,7 @@ nix run .#backend-check -- --compiler native --scope selfhost
 ```
 
 读数（16 核）：parity 53×3 在 native 编译器上按 `--jobs` 并行；corpus 686 条断言
-8 路并行。CI 里 native 任务 `continue-on-error`（D89：`check base` / `check examples/infra`
+8 路并行。CI 里 native 任务 `continue-on-error`（D89：`check packages/base` / `check examples/infra`
 以 `continuation stack overflow` 收口，见 [native.md](native.md) §8）。
 
 **口径约束**：编译器必须与被测源码同一棵树构建——Nix 派生天然满足；手工跑时先

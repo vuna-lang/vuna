@@ -5,4 +5,4 @@
 name = "fix-27-multiline-header"
 
 [dependencies]
-vuna-base = "../../../../base"
+vuna-base = "../../../../packages/base"

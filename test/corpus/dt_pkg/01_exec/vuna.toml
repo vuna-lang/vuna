@@ -1,7 +1,7 @@
 # 可执行包夹具：app/Main.vuna 入口 + lib/ 模块。
 # check / compile 走包目录：loadProject + resolveProject。
 # 本包**不加 vuna-base 依赖**——整包会被拷贝到 $tmp 构建，相对路径依赖
-# （../../../../base）在拷贝后失效。夹具模块因此只用跨模块引用：
+# （../../../../packages/base）在拷贝后失效。夹具模块因此只用跨模块引用：
 # `Util` 把 `Answer` 的值原样返回，不涉及运算符 fixity。
 [package]
 name = "dtpkg-exec"

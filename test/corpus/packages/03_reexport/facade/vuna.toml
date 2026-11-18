@@ -5,4 +5,4 @@ name = "facade"
 modules = ["Facade"]
 
 [dependencies]
-vuna-base = "../../../../../base"
+vuna-base = "../../../../../packages/base"

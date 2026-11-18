@@ -10,14 +10,14 @@ cd "$root"
 
 allowed='CompilerCli\.vuna|Compile\.vuna|Dt\.vuna'
 
-bad=$(grep -rn 'err "' --include='*.vuna' compiler/lib 2>/dev/null | grep -Ev "/(${allowed}):" || true)
+bad=$(grep -rn 'err "' --include='*.vuna' packages/compiler/lib 2>/dev/null | grep -Ev "/(${allowed}):" || true)
 if [ -n "$bad" ]; then
   echo "diag-raw: compiler diagnostics must be coded (use a domain code):" >&2
   printf '%s\n' "$bad" >&2
   exit 1
 fi
 
-bad2=$(grep -rnE 'err \(' --include='*.vuna' compiler/lib 2>/dev/null | grep -Ev "/(${allowed}):" || true)
+bad2=$(grep -rnE 'err \(' --include='*.vuna' packages/compiler/lib 2>/dev/null | grep -Ev "/(${allowed}):" || true)
 if [ -n "$bad2" ]; then
   echo "diag-raw: compiler diagnostics must be coded (use a domain code):" >&2
   printf '%s\n' "$bad2" >&2
@@ -25,7 +25,7 @@ if [ -n "$bad2" ]; then
 fi
 
 # 多行形态：`err` 单独一行、字符串在下一行（grep -A1 的输出形如 file-line-content）。
-bad3=$(grep -rn -A1 -E '^[[:space:]]*err$' --include='*.vuna' compiler/lib 2>/dev/null \
+bad3=$(grep -rn -A1 -E '^[[:space:]]*err$' --include='*.vuna' packages/compiler/lib 2>/dev/null \
   | grep -E '^[^:]+-[0-9]+-[[:space:]]*"' \
   | grep -Ev "/(${allowed})\\.vuna-" || true)
 if [ -n "$bad3" ]; then
@@ -35,7 +35,7 @@ if [ -n "$bad3" ]; then
 fi
 
 # 位置渲染只允许出现在 Source / Diag / Format 与目标消息组装处。
-badloc=$(grep -rn 'showSpanLoc' --include='*.vuna' compiler/lib 2>/dev/null \
+badloc=$(grep -rn 'showSpanLoc' --include='*.vuna' packages/compiler/lib 2>/dev/null \
   | grep -Ev '/(Source|Diag)\.vuna:|/Diag/Format\.vuna:|/Elab/Driver\.vuna:' || true)
 if [ -n "$badloc" ]; then
   echo "diag-raw: showSpanLoc must not appear outside renderers/targets:" >&2

@@ -203,8 +203,8 @@ codegen 的字典投影没有类型标注，派生体在 OCaml 侧会把 `f a` �
 | 程序级 fixity（fmt / LSP） | `Loader.Flatten.fixitiesForSource` + `Vuna.Fmt.formatSourceWith` |
 | 方法投影判定 / 特化 | `Elab.Dict.isEqMethod` / `isCmpMethod` / `specializeEqTy` / `specializeCmpTy` |
 | 内建 runtime 名 | `Vuna.Compiler.Base.Intrinsics.allIntrinsics`（`bi_*` 仅内部可见） |
-| trait 声明 / 库声明表 | `base/lib/Base/{Eq,Ord,Bool,Int,String,List,Monad,Applicative,Monoid,Foldable,Traversable,Hashable}.vuna` |
-| `>>` 的展开 | `Loader.Fixity.infixTerm`（`bind a (\_ -> b)`）；fixity 声明在 `base/lib/Base/Monad.vuna` |
+| trait 声明 / 库声明表 | `packages/base/lib/Base/{Eq,Ord,Bool,Int,String,List,Monad,Applicative,Monoid,Foldable,Traversable,Hashable}.vuna` |
+| `>>` 的展开 | `Loader.Fixity.infixTerm`（`bind a (\_ -> b)`）；fixity 声明在 `packages/base/lib/Base/Monad.vuna` |
 | 终止性守卫识别 | `Elab.Termination.Measure.guardPosVar`（按方法短名 `le`/`ge`/`lt`） |
 
 ## 测试

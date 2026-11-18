@@ -5,4 +5,4 @@
 name = "fix-91-cycle"
 
 [dependencies]
-vuna-base = "../../../../base"
+vuna-base = "../../../../packages/base"

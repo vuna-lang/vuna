@@ -5,4 +5,4 @@
 name = "fix-76-reexport-conflict"
 
 [dependencies]
-vuna-base = "../../../../base"
+vuna-base = "../../../../packages/base"

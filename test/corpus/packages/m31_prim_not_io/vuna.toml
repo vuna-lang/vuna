@@ -2,4 +2,4 @@
 name = "m31-prim-not-io"
 
 [dependencies]
-vuna-base = "../../../../base"
+vuna-base = "../../../../packages/base"

@@ -7,4 +7,4 @@
 name = "dt-deep"
 
 [dependencies]
-vuna-base = "../../../base"
+vuna-base = "../../../packages/base"

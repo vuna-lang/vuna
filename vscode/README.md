@@ -35,7 +35,7 @@ Vuna 语言的 VS Code 支持：TextMate 语法高亮、语言配置、代码片
 | 设置 | 默认值 | 说明 |
 | --- | --- | --- |
 | `vuna.server.path` | `""` | `vuna` 可执行文件路径；空 = 按上面的顺序自动探测 |
-| `vuna.basePath` | `""` | 传给子进程的 `VUNA_BASE`；空 = workspace 下有 `base/` 时用它，否则交给服务器自己探测 |
+| `vuna.basePath` | `""` | 传给子进程的 `VUNA_BASE`；空 = workspace 下有 `packages/base/` 时用它，否则交给服务器自己探测 |
 | `vuna.trace.server` | `"off"` | LSP 通信跟踪（`off` / `messages` / `verbose`），输出到 **Vuna Language Server Trace** 通道 |
 | `vuna.diagnostics.onSave` | `true` | 保存时运行 `vuna lint` 并发布诊断（与服务器的 parse/type 诊断相互独立；lint 太慢可关掉） |
 
@@ -82,7 +82,7 @@ npm run package        # vsce package --no-dependencies -> vuna-0.1.0.vsix（可
 3. 按 `F5`（Run Extension）：扩展开发宿主窗口打开仓库根目录（`${workspaceFolder}/..`），
    这样自动探测能命中 `<repo>/result/bin/vuna`（没构建过时先在仓库根跑
    `nix build .#vuna --out-link result`）；
-4. 打开的宿主窗口里打开任意 `.vuna` 文件（例如 `cli/lib/Vuna/Lsp.vuna`）验证高亮/诊断；
+4. 打开的宿主窗口里打开任意 `.vuna` 文件（例如 `packages/cli/lib/Vuna/Lsp.vuna`）验证高亮/诊断；
 5. 输出面板选 **Vuna** 看服务器日志，选 **Vuna Language Server Trace** 看 LSP 帧
    （需把 `vuna.trace.server` 设为 `messages`）。
 
@@ -104,7 +104,7 @@ sh vscode/check.sh
 ```
 
 语法关键字与 lexer 的**同源校验**在 suite 里（`test/suite/steps/83_vscode_grammar.steps`）：
-它从 `compiler/lib/Vuna/Compiler/Frontend/Lexer.vuna` 的 `isKeyword` 抽出硬关键字表喂给
+它从 `packages/compiler/lib/Vuna/Compiler/Frontend/Lexer.vuna` 的 `isKeyword` 抽出硬关键字表喂给
 `scripts/check-grammar.mjs --keywords`，并确认软关键字（`export` / `alias` / `via` …）仍有
 `keyword` / `support` 作用域——词法表或语法任何一侧漂移都会失败。
 

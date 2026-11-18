@@ -13,7 +13,7 @@ set -eu
 OUT=${1:?usage: seed-selfhost.sh OUT}
 : "${VUNA_SEED:?VUNA_SEED 未设置}"
 # 包上下文取代 `--root`；由种子构建的 stage1 在仓库根，base 由 VUNA_BASE 显式给出。
-export VUNA_BASE="$PWD/base"
+export VUNA_BASE="$PWD/packages/base"
 
 # 提交入库的 seed 只能含 compiler 闭包（工具链与 dynamic codegen 都不在 TCB 里）。
 sh nix/seed/tcb-check.sh nix/seed/forbidden.txt seed
@@ -31,7 +31,7 @@ fi
 
 # 种子对 compiler 包分离编译 → stage1 源码集。
 # 与 nix/seed/rotate.sh 用同一入口（只 codegen、不链接），保证 seed/ 与 s1 可比。
-"$VUNA_SEED" build --no-compile --out s1 compiler
+"$VUNA_SEED" build --no-compile --out s1 packages/compiler
 sh nix/seed/tcb-check.sh nix/seed/forbidden.txt s1
 
 # rotation 按需：seed 与当前源码的生成结果可以不同（信任锚点允许滞后）。
@@ -61,7 +61,7 @@ cp -r s1 b1
 ( cd b1 && sh build.sh ../vuna-stage1 )
 
 # stage1 再生成 → stage2 源码集；两者逐字节一致。
-./vuna-stage1 build --no-compile --out s2 compiler
+./vuna-stage1 build --no-compile --out s2 packages/compiler
 diff -r s1 s2
 sh nix/seed/tcb-check.sh nix/seed/forbidden.txt s2
 

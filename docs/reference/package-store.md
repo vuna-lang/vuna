@@ -160,7 +160,7 @@ B 项目的 `--gc` 误删；roots 只追加，删除依赖后旧对象仍受保�
 - **静态索引单根（D14 便利层）**：只有 `[registry].index` 一个入口；多源/优先级/镜像/
   撤销列表不做，需要时单独立项。
 - **git/curl 由宿主提供**：缺失时是宿主错误（与 `vuna build` 依赖 `ocamlopt` 同级）。
-- **导出面**：新模块 `Frontend.Canonical.Pkg` / `Frontend.Packages.Source` 在 `compiler/vuna.toml` 的
+- **导出面**：新模块 `Frontend.Canonical.Pkg` / `Frontend.Packages.Source` 在 `packages/compiler/vuna.toml` 的
   `[export]` 列表里，跨包（如 `examples/infra`）可直接 import。
 
 ## 9. 测试标签

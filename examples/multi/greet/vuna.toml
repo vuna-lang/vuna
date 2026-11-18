@@ -5,4 +5,4 @@ name = "greet"
 modules = ["Greet", "Greet.Internal"]
 
 [dependencies]
-vuna-base = "../../../base"
+vuna-base = "../../../packages/base"

@@ -4,4 +4,4 @@
 name = "m38-test-jobs-fail"
 
 [dependencies]
-vuna-base = "../../../../../base"
+vuna-base = "../../../../../packages/base"

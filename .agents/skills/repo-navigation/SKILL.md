@@ -22,7 +22,7 @@ description: 在 vuna 仓库中探索代码时的工具选择规则——哪些�
 ## 维度 A：要改的模块 → 整篇 `read`
 
 ```console
-read compiler/lib/Vuna/Compiler/Elab/Driver.vuna
+read packages/compiler/lib/Vuna/Compiler/Elab/Driver.vuna
 ```
 
 **不要**试图用查询工具省这一步。理由：
@@ -80,11 +80,11 @@ tests: run, stdlib
 
 ### 为什么不用 grep
 
-实测（`compiler/lib` 下）：
+实测（`packages/compiler/lib` 下）：
 
 | 问题 | grep | `map --find` |
 | --- | --- | --- |
-| **拿多**：查 `lookup` | 命中 `lookupEntry` `lookupEntryLine` `lookupEnv` `lookupDtDef` `lookupProvided` `lookupKV` `lookup` `lookupPair` 一整族；`lookup`/`apply` 前缀单在 `compiler/lib` 就 57 行 | 唯一定位 + 模块前缀 + 签名 + 行号 |
+| **拿多**：查 `lookup` | 命中 `lookupEntry` `lookupEntryLine` `lookupEnv` `lookupDtDef` `lookupProvided` `lookupKV` `lookup` `lookupPair` 一整族；`lookup`/`apply` 前缀单在 `packages/compiler/lib` 就 57 行 | 唯一定位 + 模块前缀 + 签名 + 行号 |
 | **拿少**：多 clause 函数 | `lookupEnv` 有签名 + 2 个 clause，`grep '^lookupEnv '` 抓 3 行但看不出是一个函数 | 明确给出唯一签名与定义点 |
 | **拿不到签名** | 只给名字 | 直接给类型 |
 
@@ -121,7 +121,7 @@ tests: run, stdlib
 
 ```console
 # 维度 A：要改的模块 —— 整篇读
-read compiler/lib/Vuna/Compiler/Elab/Driver.vuna
+read packages/compiler/lib/Vuna/Compiler/Elab/Driver.vuna
 
 # 维度 B：不改，只查
 vuna map                                        # 主题落在哪些模块

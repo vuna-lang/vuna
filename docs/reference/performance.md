@@ -17,8 +17,8 @@
 
 | 命令 | 当前（热 store） |
 | --- | --- |
-| `check base` | ~19 ms |
-| `check compiler` | ~36 ms |
+| `check packages/base` | ~19 ms |
+| `check packages/compiler` | ~36 ms |
 | `check .` | ~58 ms（workspace 检查所有成员） |
 | `build --no-compile`（workspace） | ~5.2 s |
 | `build .`（含链接；单元缓存默认开） | ~7 s（其中 ocamlopt/链接 ~28 s CPU，16 路并行） |
@@ -51,22 +51,22 @@
 
 | 命令 | 冷（空 store，修前） | 冷（空 store，修后） | 热（同 store 第二遍） |
 | --- | --- | --- | --- |
-| `check base` | ~0.40 s | ~0.40 s | ~19 ms |
-| `check compiler` | **21.6–23.6 s** | **11.4–13.4 s** | ~51 ms |
+| `check packages/base` | ~0.40 s | ~0.40 s | ~19 ms |
+| `check packages/compiler` | **21.6–23.6 s** | **11.4–13.4 s** | ~51 ms |
 | `check .` | 18.3 s → 6.1 s → 6.1 s（三段收敛） | 同左 | 58 ms |
 | `map` | 2.2–2.5 s | 2.2–2.5 s | 0.16–0.17 s |
 | `build --no-compile compiler` | ~12–28 s（见下） | ~13 s | ~150 ms |
 
 空 store 复核（导出面判据 + 去两处死扫描 + 阶段探针）：同机空 store 冷
-`check compiler` 13.0–14.2 s、热 47 ms；`collectSigs-done` = 1、`iface-write=107/107`、
+`check packages/compiler` 13.0–14.2 s、热 47 ms；`collectSigs-done` = 1、`iface-write=107/107`、
 `check-lib-skip covered=88`。绝对读数只作同机同窗口参考。
 
 `check .` 不是「冷/热」两档：第一遍冷精化、第二遍重写接口/单元、第三遍才全命中
-（实测 18269 → 6141 → 6092 → 57 ms），只报其中一个数会误导。冷 `check compiler` 修前
+（实测 18269 → 6141 → 6092 → 57 ms），只报其中一个数会误导。冷 `check packages/compiler` 修前
 ~22 s 里约**一半是重复精化**：入口闭包没覆盖 `[export]` 的全部模块
 （`iface-skip partial ... missing=Vuna.Compiler.Frontend.Canonical.Ast,
 Vuna.Compiler.Driver.ToolPayload`），于是每轮都补一遍 lib check（`collectSigs-done` 出现
-两次，两遍各 ~11–12 s）。**已修**（见下），冷 `check compiler` 降到 ~12 s。
+两次，两遍各 ~11–12 s）。**已修**（见下），冷 `check packages/compiler` 降到 ~12 s。
 
 冷 `build --no-compile compiler` 的墙钟读数**极不稳定**（同机同源码实测 12.5 / 15.9 /
 28.0 / 38.1 s）：它按直接依赖分层并行，与宿主负载强相关，且 `TMPDIR` 里的临时候选产物
@@ -79,12 +79,12 @@ Vuna.Compiler.Driver.ToolPayload`），于是每轮都补一遍 lib check（`col
 
 | 命令 | 修前 | 修后 | 变化 |
 | --- | --- | --- | --- |
-| 冷 `check compiler`（真实包） | 21.6–23.6 s | 11.4–13.4 s | **-45%** |
-| 冷 `check compiler` 的 `collectSigs-done` 次数 | 2（逐 def 两次，共 10933 行） | 1（5470 行） | 精化遍数减半 |
+| 冷 `check packages/compiler`（真实包） | 21.6–23.6 s | 11.4–13.4 s | **-45%** |
+| 冷 `check packages/compiler` 的 `collectSigs-done` 次数 | 2（逐 def 两次，共 10933 行） | 1（5470 行） | 精化遍数减半 |
 | 合成单文件 N=8000（`vuna-compiler-growth`） | 2321 ms | 397 ms | -83% |
 | 未使用告警探针 N=16000（入口 check） | 7693 ms | 744 ms | -90% |
 | 脏模块增量探针 N=8000（`-growth-incremental`） | 4233 ms | 3116 ms | -26% |
-| 冷 `check compiler` 的 iface 写 | `iface-skip partial` | `iface-write=107/107` + `check-lib-skip covered=88` | 单遍收尾 |
+| 冷 `check packages/compiler` 的 iface 写 | `iface-skip partial` | `iface-write=107/107` + `check-lib-skip covered=88` | 单遍收尾 |
 
 ### Core→IR 段的二次项（已修）
 
@@ -98,7 +98,7 @@ Vuna.Compiler.Driver.ToolPayload`），于是每轮都补一遍 lib check（`col
   粗粒度护栏（阈值 3.5）：该形状里 elab / 前端占主导，codegen 单次 <1 ms，精确读数仍以
   `bench/compiler.sh` 与本页的 A/B 为准。
 
-1. **入口闭包漏两个导出模块 ⇒ 每轮重复精化**（`compiler/app/Main.vuna`）：`compiler`
+1. **入口闭包漏两个导出模块 ⇒ 每轮重复精化**（`packages/compiler/app/Main.vuna`）：`compiler`
    的 `[export].modules` 含 `Vuna.Compiler.Frontend.Canonical.Ast` 与 `Vuna.Compiler.Driver.ToolPayload`，
    但入口没有 import 它们 ⇒ `writeIfaceShadow` 判 `iface-skip partial`（不写包接口）⇒
    `Compile.checkPackage` 的 `check-lib-skip` 永不成立，每轮都补一遍 lib check。补两个
@@ -133,9 +133,9 @@ Vuna.Compiler.Driver.ToolPayload`），于是每轮都补一遍 lib check（`col
 
 | 命令 | 修前 | 修后 | 变化 |
 | --- | --- | --- | --- |
-| `check compiler` | 2242 ms | 785 ms | -65% |
+| `check packages/compiler` | 2242 ms | 785 ms | -65% |
 | `check .` | 3711 ms | 1430 ms | -61% |
-| `build compiler --no-compile` | 3261 ms | 1769 ms | -46% |
+| `build packages/compiler --no-compile` | 3261 ms | 1769 ms | -46% |
 | `build . --no-compile`（workspace，bench build-all） | 8793 ms | 5186 ms | -41% |
 | 增量 `build --package vuna .`（接口热） | 5.62 s | 3.53 s | -37% |
 | 冷 `build --package vuna .`（全新副本，codegen） | 8.53 s | 8.21 s | -4% |
@@ -146,14 +146,14 @@ Vuna.Compiler.Driver.ToolPayload`），于是每轮都补一遍 lib check（`col
 1. **`Dt.dedupGlobals` 及同族去重**：`memName (key x) (map key rest)` 对每个元素重建剩余
    表；增量收尾的 globals 表达上万项（16k 项实测 17.6 s）。改为从右往左一次走 +
    `HashMap String Bool` 记已见名（保持 last-wins 与「最后一次出现」的相对顺序）⇒ O(n)：
-   `check compiler` 的收尾段（`termination-done → cg-partition-done`）872 → 2.4 ms。
+   `check packages/compiler` 的收尾段（`termination-done → cg-partition-done`）872 → 2.4 ms。
 2. **`Elab.Termination.anyOwn`**：每个 SCC 用 `memName` 线性扫 `own`（n 个单点 SCC
    ⇒ n²/2 次比较；16k 项 1313 ms）。改为入口建一次 `HashMap.ofNames own`、逐 SCC
    `member` ⇒ 冷构建 termination 566 → 299 ms，合成 16k 档约 1313 → 25 ms。
 3. **写接口把包接口读两遍**：`Driver.Compile` 的 check 前段已为干净模块判定读过整包接口，
    `writeIfaceShadow` 又读一遍，`writePackageIface` 再读一遍解码全部模块文件。合并为一次
    `ownCleanInfo` 读取（同时给出 clean 与「旧接口可读」标志），把标志传给
-   `writePackageIface` ⇒ `check compiler` 的 iface-write 244 → 16 ms。
+   `writePackageIface` ⇒ `check packages/compiler` 的 iface-write 244 → 16 ms。
 
 冷构建（全量精化 + codegen + ocamlopt）不走增量收尾，收益主要来自 (2) 与 (3)，见上表。
 
@@ -163,7 +163,7 @@ Vuna.Compiler.Driver.ToolPayload`），于是每轮都补一遍 lib check（`col
 
 | 命令 | 改造前 | 改造后 | 变化 |
 | --- | --- | --- | --- |
-| `check compiler` | ~4.87 s | ~4.18 s | -14% |
+| `check packages/compiler` | ~4.87 s | ~4.18 s | -14% |
 | `check .` | ~13.4 s | ~11.3 s | -15% |
 
 除 `map` 冷启动全量重建外，所有命令都在 10 s 以内；增长率见 §5。构建口径必须
@@ -183,10 +183,10 @@ Vuna.Compiler.Driver.ToolPayload`），于是每轮都补一遍 lib check（`col
 [observability.md](observability.md)；本页只讲「用它来量编译器」：
 
 ```console
-VUNA_OBS=2 VUNA_OBS_DIR=$PWD/trace vuna check compiler      # 阶段跨度 + 逐定义
+VUNA_OBS=2 VUNA_OBS_DIR=$PWD/trace vuna check packages/compiler      # 阶段跨度 + 逐定义
 VUNA_OBS=3 vuna build --no-compile --out OUT compiler       # + CPU/内存采样
 vuna obs summarize trace/vuna-*.jsonl                       # 阶段自用/总用时表
-vuna obs run --level 2 -- vuna check compiler                # 一步到位
+vuna obs run --level 2 -- vuna check packages/compiler                # 一步到位
 vuna obs convert --to folded --out f.folded trace/*.jsonl   # 火焰图
 ```
 
@@ -212,7 +212,7 @@ vuna obs convert --to folded --out f.folded trace/*.jsonl   # 火焰图
 
 ## 3. 查找表：泛型 `Base.HashMap k v`
 
-容器在标准库（`base/lib/Base/HashMap.vuna`）：键与值都泛型的 1024 桶（两层 32 叉）持久哈希表、桶内前插、同键新值优先。键需 `Eq` + `Hashable`：String 走 `strHash`，Int 走恒等哈希 + 归一化，元变量编号这类稠密小整数几乎不冲突。String/Int 共用这一个 `HashMap k v`，编译器没有私有 `HashTbl`、也没有 `IntMap`。
+容器在标准库（`packages/base/lib/Base/HashMap.vuna`）：键与值都泛型的 1024 桶（两层 32 叉）持久哈希表、桶内前插、同键新值优先。键需 `Eq` + `Hashable`：String 走 `strHash`，Int 走恒等哈希 + 归一化，元变量编号这类稠密小整数几乎不冲突。String/Int 共用这一个 `HashMap k v`，编译器没有私有 `HashTbl`、也没有 `IntMap`。
 
 ```text
 HashMap.fromList / insert / insertAll / lookup / member / toList / size / ofNames
@@ -239,7 +239,7 @@ HashMap.fromList / insert / insertAll / lookup / member / toList / size / ofName
 
 ## 4. 仍然存在的热点
 
-冷 `check compiler` ~13 s（修后）的阶段构成（`--debug-perf` 时间戳相减，单次采样）：
+冷 `check packages/compiler` ~13 s（修后）的阶段构成（`--debug-perf` 时间戳相减，单次采样）：
 load/parse 前缀 + iface 摘要 **~4.0 s** → 逐定义精化（`collectSigs-done` → `bodies-done`）
 **~5.9 s** → 实例体/终止性 **~0.5 s** → codegen 检查（lowering + 分组 + 文本）**~1.4 s** →
 iface 影子写 **~1.2 s**（compute 0.78 s + write 0.35 s，单遍 `iface-write=107/107`）。
@@ -248,9 +248,9 @@ iface 影子写 **~1.2 s**（compute 0.78 s + write 0.35 s，单遍 `iface-write
    （逐模块 `cachedOfProgram` zonk 与 7 张表的规范化哈希）。写回侧已合并为单次读取
    （旧 §1 第 3 条）。接口哈希的「排序规范化」仍是插入排序 O(d²)，单模块数千项时会退化
    （见 §9「已量化否决」）。这也是**增量探针剩下的 2.5–2.8×/翻倍**的来源（§5.2）。
-2. **load/parse 前缀 ~4.0 s（冷 store，含 iface 摘要读取）**：`check compiler` 的闭包要
+2. **load/parse 前缀 ~4.0 s（冷 store，含 iface 摘要读取）**：`check packages/compiler` 的闭包要
    解析 107 个模块；冷 TMPDIR 还含 lex 载荷写。前端本身（lex + 语法分析）在 `VUNA_OBS=1`
-   下可单独归因：冷 `check compiler` = `vuna.parse.lex` 165 次 / **135 ms** +
+   下可单独归因：冷 `check packages/compiler` = `vuna.parse.lex` 165 次 / **135 ms** +
    `vuna.parse.syntax` 461 次 / **158 ms**（≈0.3 s，见 §6.1）。剩下的前缀耗时在 iface
    摘要、地址计算与 flatten，不在词法/语法。
 3. **冷 build 的 elab bodies**：`build --package vuna .` 的 6159 def 约 3.1 s
@@ -265,7 +265,7 @@ iface 影子写 **~1.2 s**（compute 0.78 s + write 0.35 s，单遍 `iface-write
 6. **`genGroups`**：OCaml 文本生成，没有一眼可去的 O(n²)；codegen 并行的**逐单元可并
    部分只有 ~7–8%**，fork+序列化 DtProgram 的净收益 ~6–7%（不划算，不做；
    `build.sh` 的层内并行已覆盖链接侧）。
-7. **分配**：冷 `check compiler` minor_words ≈1.1e9、cli 包子进程 ≈1.55e9；elab 占分配
+7. **分配**：冷 `check packages/compiler` minor_words ≈1.1e9、cli 包子进程 ≈1.55e9；elab 占分配
    ~92%，活数据仅 ~2.5MB，瓶颈是 `quote`/`zonk`/`applySpine` 的瞬时 churn，不是表示重复。
    hash-consing 需要全局 intern 表、改变 Marshal 布局、与纯精化/元变量/摘要三处不变量
    冲突；预计收益 2–4%，不做。
@@ -289,7 +289,7 @@ iface 影子写 **~1.2 s**（compute 0.78 s + write 0.35 s，单遍 `iface-write
 
 读数（16 核、空 store、与「处置前源码」构建的编译器同窗口交替、各 8 次最小）：
 
-| | 冷 `check compiler` 墙钟 | user | 热 `check compiler` |
+| | 冷 `check packages/compiler` 墙钟 | user | 热 `check packages/compiler` |
 | --- | --- | --- | --- |
 | 处置前 | 14.31 s | 14.03 s | 49 ms |
 | 处置后 | 14.24 s | 13.96 s | 49 ms |
@@ -316,7 +316,7 @@ iface 影子写 **~1.2 s**（compute 0.78 s + write 0.35 s，单遍 `iface-write
 
 ### 4.1 逐定义精化与 codegen 检查的分段（span 口径）
 
-`VUNA_OBS=1`、空 `VUNA_STORE`、单进程冷跑 `check compiler`（绝对数随机器负载浮动，
+`VUNA_OBS=1`、空 `VUNA_STORE`、单进程冷跑 `check packages/compiler`（绝对数随机器负载浮动，
 看份额即可）：
 
 | span | 耗时 | 说明 |
@@ -331,7 +331,7 @@ iface 影子写 **~1.2 s**（compute 0.78 s + write 0.35 s，单遍 `iface-write
 不是可以整段跳过的阶段；再往下需要给工具链自身接 CPU 采样
 （`@vuna@obs@sampleStart` 目前只接在用户程序运行时），用函数级栈定位 `conv` / `force`。
 
-用工具链自采样（`observability.md` §6.1）看函数级热点，冷 `check compiler` 的顶部是
+用工具链自采样（`observability.md` §6.1）看函数级热点，冷 `check packages/compiler` 的顶部是
 **解析期的名字解析**（`Loader.Modules.isDataOrRecordCtorTarget` 与 `mangle` 的字符串拼接、
 `lookupExport` 的线性扫描）、`Elab.Types.ecTriedAt` 的约束尝试记录、以及
 `Elab.Meta.dtCtorLookup`；`Core.Eval.quote` 与 `List` 的 `unpack` 次之。
@@ -344,15 +344,15 @@ iface 影子写 **~1.2 s**（compute 0.78 s + write 0.35 s，单遍 `iface-write
 - `isDataOrRecordCtorTarget` 先按 canonical 的「数据前缀」筛族、再比构造子短名（不再为每个
   构造子拼一次 `${mname}.${dname}.${cname}`）；`ConstraintStore.csTried` 从关联表改成
   `HashMap Int Int`（否则尝试记录变长后每次 `ecTriedAt` 线性扫描）。
-  冷 `check compiler` 与上一版同一窗口交替对比快 17–20%（负载波动大，只作同机参考）。
+  冷 `check packages/compiler` 与上一版同一窗口交替对比快 17–20%（负载波动大，只作同机参考）。
 - `Module` 增加 `moduleExportIndexOf`（公开名 → 导出条目，构造时建一次）：解析期按名字查
   导出不再线性扫整张导出表；`modulesExporting{Value,Ctor,Type}` 走索引。
-  同窗口交替对比冷 `check compiler` 再快 5–10%。
+  同窗口交替对比冷 `check packages/compiler` 再快 5–10%。
 
 - 字典求解：`ConstraintStore` 记录解表条目数（`csSolsCount`，`ecPutSols` 增量维护）与上一轮
   结束时的 `(id, 解表数)`；没有新约束、解表也没增长的轮次整体跳过。epoch 比较改用 O(1)
   计数（原来每步 `length (ecSols ec)`，解表 2.8 万条时是 O(解表) × 约束步数）。冷
-  `check compiler` 的 `elab.dict.round` 55863 → 22359，同机 CPU 时间 −33%
+  `check packages/compiler` 的 `elab.dict.round` 55863 → 22359，同机 CPU 时间 −33%
   （`ru_utime+ru_stime`，负载波动大时只看这一项）。
 
 - `dtp_unpack` / `dtp_pack` 改成直接循环（原来 `List.init` + `fold_right` 两趟、`dtp_pack`
@@ -360,12 +360,12 @@ iface 影子写 **~1.2 s**（compute 0.78 s + write 0.35 s，单遍 `iface-write
   `List.init` 与 unpack 闭包从 ~17% 降到 ~6%。
 - 构造子查表命中失败时不再盲目线性扫族表：`ConstraintStore.csCtorIndexComplete` 记录索引
   是否覆盖全部 data（`ecPutCtorTbl` 后为真），覆盖后「查不到 = 不是构造子」直接返回。
-  冷 `check compiler` 实测 96k 次回落全部是「不是构造子」，现在不再各扫 285 个族；
+  冷 `check packages/compiler` 实测 96k 次回落全部是「不是构造子」，现在不再各扫 285 个族；
   `ctorRefTerm` / `ctorAppTerm` 也改用 Ec 版本（查 `ecCtorTbl`）。
 
 - lexer 的字符游标从 `List Int` 改成「原串 + 偏移」（`Chars { source, offset, pos }`），
   扫描器按 `charsPeek` / `charsStep` 推进，不再整串 `strUnpack`。实测 `vuna.parse.lex`
-  冷 `check compiler` 194 ms → 174 ms（~10%），占整条冷检查不到 0.3%——**采样里剩下的
+  冷 `check packages/compiler` 194 ms → 174 ms（~10%），占整条冷检查不到 0.3%——**采样里剩下的
   `dtp_unpack` 主要来自 Canonical/Store/Hash 的字节编码，不是 lexer**。
 
 此时自采样的剩余热点：`dtp_unpack`（Canonical/Store 的字节处理）、`String.concat`
@@ -394,7 +394,7 @@ O(n²) 已去掉（§1）。门槛脚本的上限已提到 N=8000，因此这一
 ### 5.2 包路径增量 `check`（增量收尾路径）
 
 合成「可执行包」（`lib/Mod.vuna` N 个同形 def + `app/Main.vuna`），每档：独立空 store →
-预热依赖接口（`check base`）→ 冷跑一次探针包 → **改一个定义**（让本模块缓存失效）→
+预热依赖接口（`check packages/base`）→ 冷跑一次探针包 → **改一个定义**（让本模块缓存失效）→
 计时这次 check，三次取小：
 
 | n | 修前（同探针） | 修后 | 修后 / 翻倍 |
@@ -412,7 +412,7 @@ O(n²) 已去掉（§1）。门槛脚本的上限已提到 N=8000，因此这一
 
 门槛阈值仍按每翻倍 ≤3.3×（比单文件 2.5× 宽：增量路径有与 N 无关的固定成本，小 N 噪声更大）。
 
-## 6. `check base` 的阶段构成
+## 6. `check packages/base` 的阶段构成
 
 一次采样的量级（具体 ms 随版本 / 机器变化，用于定位优先序）：
 
@@ -440,8 +440,8 @@ defs / globals / sols 三张索引表。要继续压，先看 bodies（逐定义
 
 | 目标 | `vuna.parse.lex` | `vuna.parse.syntax` | 参考：elab |
 | --- | --- | --- | --- |
-| `check base` | 57 次 / ~11 ms | 114 次 / ~4.6 ms | ~127 ms |
-| `check compiler` | 165 次 / ~135 ms | 461 次 / ~158 ms | ~19.7 s（全量口径） |
+| `check packages/base` | 57 次 / ~11 ms | 114 次 / ~4.6 ms | ~127 ms |
+| `check packages/compiler` | 165 次 / ~135 ms | 461 次 / ~158 ms | ~19.7 s（全量口径） |
 
 三条结论：
 
@@ -474,7 +474,7 @@ token 一次 `Pair`）的初版实测让 `vuna.parse.lex` 慢 ~20%，已放弃�
   看起来像「固定 45s 的神秘成本」。
 - **冷 / 热由 `VUNA_STORE` 决定，不由 `TMPDIR` 决定**。devShell 会
   不再按 worktree 分 store（统一到默认根 `~/.vuna/store`，已预热）；换新 `TMPDIR` 对命中率没有影响
-  （实测同一热 store 换 TMPDIR，`check compiler` 仍 73–75 ms）。要冷就显式给空目录：
+  （实测同一热 store 换 TMPDIR，`check packages/compiler` 仍 73–75 ms）。要冷就显式给空目录：
   `d=$(mktemp -d); VUNA_STORE=$d/store TMPDIR=$d ./result/bin/vuna ...`。这里固定用
   `./result/bin/vuna`，先 `nix build .#vuna --out-link result`；`result` 是共享 out-link，
   可能指向旧二进制或别的产物，测量前确认它对应本次构建。
@@ -495,7 +495,7 @@ token 一次 `Pair`）的初版实测让 `vuna.parse.lex` 慢 ~20%，已放弃�
 - `--debug-perf` 在**冷 build** 上会逐条打印 conv 诊断（约 15.8 万行；`dbg!` 的实参在
   开关打开时才求值），实测让冷 build 墙钟膨胀 ~60%：定位用阶段**比例**，绝对读数
   一律用无 debug 口径；单次 <50 µs 的条目仍需「同形规模合成探针」对比总时间。
-  注意冷 `check compiler` 的 debug 膨胀**不是常数**（同窗口交替实测 22.2 s → 45.3 s，
+  注意冷 `check packages/compiler` 的 debug 膨胀**不是常数**（同窗口交替实测 22.2 s → 45.3 s，
   下一轮却 42.5 s → 23.0 s，loadavg 15–17），负载与开关同样重要。
 - **结构化观测的覆盖与盲区**：`VUNA_OBS=1` 现在有 `vuna.elab`（含子段
   `vuna.elab.bodies`）与 `vuna.codegen.check` 两个真实跨度，外加 `vuna.load` /
@@ -506,7 +506,7 @@ token 一次 `Pair`）的初版实测让 `vuna.parse.lex` 慢 ~20%，已放弃�
   `vuna.counter.steps`，要改 `Core.Eval` 热路径，先量代价）与 `VUNA_OBS=3` 的 CPU 采样
   调用点（`dtp_obs_sample_start` 在生成运行时里完整，但仓库内无人启动）。`Eff` 阶段的
   **耗时**仍只能靠 `--debug-perf` 文本行（`iface-mods-phases` / `iface-write=…` 等），
-  trace 里只有顺序；冷 `check compiler` 的 debug 口径约 18.8 万行。
+  trace 里只有顺序；冷 `check packages/compiler` 的 debug 口径约 18.8 万行。
 - 用 `OCAMLRUNPARAM=s=...` 快速判断 GC 敏感性（注意：产物里 `Gc.set` 会覆盖环境变量，要
   比较不同 minor heap 大小得改代码重建）。
 - 阶段定位优先用阶段边界的 `dbg!`；逐定义观察直接看 `dbg!` 行；不要用「等大 case 跑完」
@@ -553,7 +553,7 @@ golden 一致，再 warmup + 多次取中位数；`--target ocaml|native|both` �
 sorting,float_math,text_scan,nat_bits,tco_mutual,tco_wide,gc_low_live,gc_array_churn}.vuna`。
 
 关键设计决策与改动（`Codegen/Term.vuna`、`Base.Intrinsics` / `Elab.Prelude` / `Codegen.Decl` 与
-`base/`）：
+`packages/base/`）：
 
 1. **codegen / 运行时改进**：
    1. **内建饱和应用内联**：`+ - * /`、比较 / 相等特化、`&& ||`、`++` 直接生成 OCaml
@@ -770,7 +770,7 @@ A/B 读数一致）。`map-cold`（2111）必须清 query store 才算冷：基�
   （摘要用 SHA-256、载荷用 `Base.Bytes` 显式编码，「排序 + 整表编码」的结构不变，
   结论照此条记录。）
   合成单模块 16k 项档 iface-compute 3.77 s → ~1.0 s，但真实包是「多模块、每模块几十项」：
-  逐项哈希的分配放大让 `check compiler` 的 iface-compute 119 → 318 ms（逐项强哈希）
+  逐项哈希的分配放大让 `check packages/compiler` 的 iface-compute 119 → 318 ms（逐项强哈希）
   或冷 build 的 iface 段 90 → 518 ms（逐项单 lane），冷 build 反而 +4%。故保留插入排序
   口径，把「单模块数千项」记为已知边界（§4.1），由
   `vuna-compiler-growth-incremental` 兜住增量收尾的回归。

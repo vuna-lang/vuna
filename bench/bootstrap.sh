@@ -155,9 +155,9 @@ esac
 
 REPO=$PWD
 [ -f "$REPO/seed/build.sh" ] || die "run from the repo root (seed/build.sh not found)"
-[ -f "$REPO/cli/app/Main.vuna" ] || die "run from the repo root (cli/app/Main.vuna not found)"
-[ -d "$REPO/compiler/lib/Vuna/Compiler" ] || die "run from the repo root (compiler/lib/Vuna/Compiler not found)"
-[ -d "$REPO/cli/lib/Vuna" ] || die "run from the repo root (cli/lib/Vuna not found)"
+[ -f "$REPO/packages/cli/app/Main.vuna" ] || die "run from the repo root (cli/app/Main.vuna not found)"
+[ -d "$REPO/packages/compiler/lib/Vuna/Compiler" ] || die "run from the repo root (compiler/lib/Vuna/Compiler not found)"
+[ -d "$REPO/packages/cli/lib/Vuna" ] || die "run from the repo root (cli/lib/Vuna not found)"
 command -v ocamlopt >/dev/null 2>&1 || die "ocamlopt not found (use: nix run .#vuna-bench)"
 
 abspath() {
@@ -209,8 +209,8 @@ OCAMLOPT_VERSION=$(ocamlopt -version 2>/dev/null || printf 'unknown')
 FLAMBDA=$(ocamlopt -config 2>/dev/null | awk -F': *' '$1 == "flambda" { print $2 }' || true)
 [ -n "$FLAMBDA" ] || FLAMBDA=unknown
 SEED_SHA=$(find seed -type f | LC_ALL=C sort | xargs sha256sum | sha256sum | awk '{ print $1 }')
-SRC_LINES=$(cat compiler/lib/Vuna/Compiler/*.vuna cli/lib/Vuna/*.vuna cli/app/*.vuna | wc -l | tr -d ' ')
-SRC_BYTES=$(cat compiler/lib/Vuna/Compiler/*.vuna cli/lib/Vuna/*.vuna cli/app/*.vuna | wc -c | tr -d ' ')
+SRC_LINES=$(cat packages/compiler/lib/Vuna/Compiler/*.vuna packages/cli/lib/Vuna/*.vuna packages/cli/app/*.vuna | wc -l | tr -d ' ')
+SRC_BYTES=$(cat packages/compiler/lib/Vuna/Compiler/*.vuna packages/cli/lib/Vuna/*.vuna packages/cli/app/*.vuna | wc -c | tr -d ' ')
 
 GIT_HEAD=unknown
 GIT_DIRTY=unknown

@@ -5,7 +5,7 @@
 # 用法: sh nix/seed/rotate.sh [VUNA]
 #   VUNA  当前 stage 1 产品 CLI（vuna），默认 ./result/bin/vuna
 #
-# seed 只覆盖 compiler 包（compiler/app/Main.vuna 的 import 闭包），
+# seed 只覆盖 compiler 包（packages/compiler/app/Main.vuna 的 import 闭包），
 # 工具链（fmt/lint/repl/doc/test）不在种子里。
 #
 # 生成与校验全部在临时目录完成：只有 TCB 断言与 fixed point 都通过后才替换 seed/，
@@ -37,11 +37,11 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-# 从仓库根以包目录 "compiler" 生成，保证嵌入的文件路径与提交后的 seed/ 一致。
+# 从仓库根以包目录 "packages/compiler" 生成，保证嵌入的文件路径与提交后的 seed/ 一致。
 # 包级输出只有 split 一种模型；`--out` 只 codegen、不链接。
 # 两遍各自全新的对象库：即使 devShell 默认了共享 VUNA_STORE，rotation 也不受影响。
 export VUNA_STORE="$tmp/store-a"
-"$VUNA" build --no-compile --out "$tmp/seed" compiler
+"$VUNA" build --no-compile --out "$tmp/seed" packages/compiler
 
 # 种子必须只含 compiler 闭包：工具模块与旧 dynamic codegen 一旦出现都算错误。
 sh nix/seed/tcb-check.sh nix/seed/forbidden.txt "$tmp/seed"
@@ -51,7 +51,7 @@ sh nix/seed/tcb-check.sh nix/seed/forbidden.txt "$tmp/seed"
 cp -r "$tmp/seed" "$tmp/build-seed"
 sh "$tmp/build-seed/build.sh" "$tmp/vuna-seed"
 export VUNA_STORE="$tmp/store-b"
-"$tmp/vuna-seed" build --no-compile --out "$tmp/regen" compiler
+"$tmp/vuna-seed" build --no-compile --out "$tmp/regen" packages/compiler
 if ! diff -r "$tmp/seed" "$tmp/regen" >/dev/null 2>&1; then
   echo "seed-rotate: 错误：种子重生成的文件集与生成结果不一致" >&2
   diff -r "$tmp/seed" "$tmp/regen" | head -20 >&2
@@ -61,9 +61,9 @@ fi
 # 计算 rotation 元数据（审计用；CI 不因 seed 落后于源码而失败）。
 # 在替换 seed/ 之前完成：任何计算失败都不会动信任锚点。
 # 源码指纹 = compiler/ + base/ 下全部 .vuna 按路径排序后的内容哈希链。
-source_files=$(find compiler base -type f -name '*.vuna' | wc -l | tr -d ' ')
+source_files=$(find packages/compiler packages/base -type f -name '*.vuna' | wc -l | tr -d ' ')
 source_digest=$(
-  find compiler base -type f -name '*.vuna' -print |
+  find packages/compiler packages/base -type f -name '*.vuna' -print |
     LC_ALL=C sort |
     while IFS= read -r f; do sha256sum "$f"; done |
     sha256sum | cut -d' ' -f1

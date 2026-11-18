@@ -14,7 +14,7 @@
 #
 # 夹具包按真实依赖布局构造（compiler / base 作为依赖包），只用 $VUNA / $VUNA_BASE / $TMPDIR。
 run: sh -c 'rm -rf "$TMPDIR/meta-shift" "$TMPDIR/meta-shift-cache"; mkdir -p "$TMPDIR/meta-shift/app" "$TMPDIR/meta-shift-cache"'
-run: sh -c 'cp "$(dirname "$VUNA_BASE")/test/suite/fixtures/meta_shift/Main.vuna" "$TMPDIR/meta-shift/app/Main.vuna"'
+run: sh -c 'cp "$VUNA_SUITE_ROOT/test/suite/fixtures/meta_shift/Main.vuna" "$TMPDIR/meta-shift/app/Main.vuna"'
 run: sh -c 'printf "%s\n" "[package]" "name = \"metashift\"" "" "[dependencies]" "vuna-compiler = \"$VUNA_BASE/../compiler\"" > "$TMPDIR/meta-shift/vuna.toml"'
 run: sh -c 'TMPDIR="$TMPDIR/meta-shift-cache" "$VUNA" run "$TMPDIR/meta-shift" 2>&1'
 exit: 0
@@ -25,9 +25,9 @@ out-not-contains: SHIFT_ERR
 out-not-contains: FUEL_SILENT_BAD
 # --- A②：dep 模块序翻转后 app 的 codegen 产物逐字节稳定 ---
 run: sh -c 'rm -rf "$TMPDIR/ms-order"; mkdir -p "$TMPDIR/ms-order/dep/lib/Dep" "$TMPDIR/ms-order/app/app"'
-run: sh -c 'cp "$(dirname "$VUNA_BASE")/test/suite/fixtures/meta_shift/order/dep_A.vuna" "$TMPDIR/ms-order/dep/lib/Dep/A.vuna"'
-run: sh -c 'cp "$(dirname "$VUNA_BASE")/test/suite/fixtures/meta_shift/order/dep_B.vuna" "$TMPDIR/ms-order/dep/lib/Dep/B.vuna"'
-run: sh -c 'cp "$(dirname "$VUNA_BASE")/test/suite/fixtures/meta_shift/order/app_Main.vuna" "$TMPDIR/ms-order/app/app/Main.vuna"'
+run: sh -c 'cp "$VUNA_SUITE_ROOT/test/suite/fixtures/meta_shift/order/dep_A.vuna" "$TMPDIR/ms-order/dep/lib/Dep/A.vuna"'
+run: sh -c 'cp "$VUNA_SUITE_ROOT/test/suite/fixtures/meta_shift/order/dep_B.vuna" "$TMPDIR/ms-order/dep/lib/Dep/B.vuna"'
+run: sh -c 'cp "$VUNA_SUITE_ROOT/test/suite/fixtures/meta_shift/order/app_Main.vuna" "$TMPDIR/ms-order/app/app/Main.vuna"'
 run: sh -c 'printf "%s\n" "[package]" "name = \"msdep\"" "" "[export]" "modules = [\"Dep.A\", \"Dep.B\"]" "" "[dependencies]" "vuna-base = \"$VUNA_BASE\"" > "$TMPDIR/ms-order/dep/vuna.toml"'
 run: sh -c 'printf "%s\n" "[package]" "name = \"msapp\"" "" "[dependencies]" "vuna-base = \"$VUNA_BASE\"" "msdep = \"../dep\"" > "$TMPDIR/ms-order/app/vuna.toml"'
 run: sh -c 'TMPDIR="$TMPDIR/ms-order-cache" "$VUNA" check "$TMPDIR/ms-order/dep" >/dev/null 2>&1 && TMPDIR="$TMPDIR/ms-order-cache" "$VUNA" build --no-compile --out "$TMPDIR/ms-order/out1" "$TMPDIR/ms-order/app" >/dev/null 2>&1'

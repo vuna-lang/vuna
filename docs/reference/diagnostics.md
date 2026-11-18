@@ -14,8 +14,8 @@ LSP 映射、错误码目录、测试与门禁。工具链命令语义（退出�
 
 ## 2. 数据模型
 
-实现：`compiler/lib/Vuna/Compiler/Base/Diag.vuna`（模型 + 结果通道）、
-`compiler/lib/Vuna/Compiler/Base/Source.vuna`（`Pos`/`Span`/路径工具）。
+实现：`packages/compiler/lib/Vuna/Compiler/Base/Diag.vuna`（模型 + 结果通道）、
+`packages/compiler/lib/Vuna/Compiler/Base/Source.vuna`（`Pos`/`Span`/路径工具）。
 
 ```text
 Severity = SevError | SevWarning | SevNote | SevHelp
@@ -49,9 +49,9 @@ Diagnostic = { id, severity, phase, category, code, message, labels, fields, tra
 ## 3. 结果通道
 
 - `Vuna.Compiler.Base.Common` 重导出 `Source` + `Diag`；`Err` 载荷是 `Diagnostic`。
-- `Common.bind/step/traverse` 固定作用于 `Check`（`compiler/lib/Vuna/Compiler/Base/Common.vuna`）；
+- `Common.bind/step/traverse` 固定作用于 `Check`（`packages/compiler/lib/Vuna/Compiler/Base/Common.vuna`）；
   `OkC/ErrC` 构造子避免与 `Prelude` 的 `Base.Result` 冲突。
-- `Base.Result`（字符串错误）只留给 `base/` 标准库内部；compiler 与根工具链统一 `Check`。
+- `Base.Result`（字符串错误）只留给 `packages/base/` 标准库内部；compiler 与根工具链统一 `Check`。
 - 构造函数：
   - `err : String -> Check a`：工具错误（phase = Tool，无码）；根工具链 CLI 错误用它。
   - `rawAt` / `rawNoLoc`：未分类的源码裸消息（新代码不要使用）。
@@ -81,7 +81,7 @@ Diagnostic = { id, severity, phase, category, code, message, labels, fields, tra
 | `CG_` | codegen/驱动 | `Base/Diagnostics/Cg.vuna` |
 | `IC_` | 编译器内部错误 | `Base/Diagnostics/Ic.vuna` |
 | `UN_` | 告警（未使用/冗余/遮蔽），severity = warning | `Base/Diagnostics/Warning.vuna` |
-| `LN_`/`FX_` | lint 规则/修复 | `cli/lib/Vuna/Lint/Diagnostics.vuna` |
+| `LN_`/`FX_` | lint 规则/修复 | `packages/cli/lib/Vuna/Lint/Diagnostics.vuna` |
 
 约定：符号语义稳定；一个码一种语义。**没有「诊断码只增不删」的约定**：vuna 未发布、
 无兼容义务，删改码允许（同步目录、`explain` 与夹具）。`vuna explain CODE` 与
@@ -120,7 +120,7 @@ warning 的**通道**没有进程内全局收集器：Elab 期 `warnAt*`
 
 ## 5. 渲染视图
 
-实现：`compiler/lib/Vuna/Compiler/Base/Diag/Format.vuna`。
+实现：`packages/compiler/lib/Vuna/Compiler/Base/Diag/Format.vuna`。
 
 | 视图 | 入口 | 形态 |
 | --- | --- | --- |
@@ -165,7 +165,7 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
 
 ## 6. LSP 映射
 
-实现：`cli/lib/Vuna/Lsp/Diagnostics.vuna`。
+实现：`packages/cli/lib/Vuna/Lsp/Diagnostics.vuna`。
 
 - 直接消费 `Diagnostic`：不从文本扫位置；依赖文件诊断按 span 文件过滤。
 - range 用完整 span（起止），UTF-16 换算；无位置诊断落到 0:0。
@@ -238,5 +238,5 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
 
 - 列单位是 UTF-8 字节（不是码点）；渲染宽字符按字节/显示字符混合处理，LSP 边界换算
   UTF-16。
-- `base/` 标准库仍用 `Base.Result`（字符串错误）；不要把 `Check` 扩散进 base。
+- `packages/base/` 标准库仍用 `Base.Result`（字符串错误）；不要把 `Check` 扩散进 base。
 - 消息模板为英文（机器格式稳定）；`--lang zh` / `[diagnostics].lang` 的 human 视图用目录中文说明替代消息，并附 `= message: <英文原文>`。

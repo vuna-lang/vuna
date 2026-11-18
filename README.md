@@ -6,9 +6,9 @@ vuna 是一个函数式编程语言，本仓库是它的编译器与工具链。
 > **任何设计、接口、命令、实现、哲学都允许被推翻**。终态是**单一依赖类型路径**（唯一
 > 检查器与 codegen）。
 
-编译器完全用 vuna 自己写：成员包 `compiler/`（`vuna-compiler`，模块 `Vuna.Compiler.*`）
-+ 成员包 `cli/`（产品 CLI 与工具链 fmt/lint/repl/doc/test/lsp，包名 `vuna`）+ 成员包
-`base/`（`vuna-base`）。`seed/` 只由 compiler 包的入口闭包生成——**可固化成种子的部分与
+编译器完全用 vuna 自己写：成员包 `packages/compiler/`（`vuna-compiler`，模块 `Vuna.Compiler.*`）
++ 成员包 `packages/cli/`（产品 CLI 与工具链 fmt/lint/repl/doc/test/lsp，包名 `vuna`）+ 成员包
+`packages/base/`（`vuna-base`）。`seed/` 只由 compiler 包的入口闭包生成——**可固化成种子的部分与
 产品工具链明确分开**；仓库通过提交入库的 OCaml 种子自举，不依赖外部编译器。
 
 > **AI agent 请先读 [AGENTS.md](AGENTS.md)**；架构与改动定位见
@@ -42,7 +42,7 @@ nix run .#vuna-run-tests                            # 原生 suite（vuna test -
 nix run .#vuna-run-tests -- --list                  # 列出章节/case（--only <章节>/--filter PAT）
 nix run .#backend-check -- --compiler native --scope parity  # 自举编译器跑 parity（CI 同款；见 testing.md）
 nix run .#vuna -- fmt --check examples/multi   # 格式化检查（也可逐个给文件/目录）
-nix run .#vuna -- lint compiler/lib/Vuna/Compiler/Elab/Term.vuna   # 风格检查（文件或目录）
+nix run .#vuna -- lint packages/compiler/lib/Vuna/Compiler/Elab/Term.vuna   # 风格检查（文件或目录）
 nix run .#vuna -- doc                          # 生成 docs/api.html（gitignored）
 ```
 
@@ -58,7 +58,7 @@ nix run .#vuna -- doc                          # 生成 docs/api.html（gitignor
 | 工具 | 作用 |
 | --- | --- |
 | `vuna-seed` | stage 0：从多文件种子 `seed/`（`seed/build.sh` + ocamlopt）构建的种子编译器 |
-| `vuna-compiler` | stage 1 编译器（从 `compiler/` 做 DT 逐模块 codegen + ocamlopt）：`compile/check/build` |
+| `vuna-compiler` | stage 1 编译器（从 `packages/compiler/` 做 DT 逐模块 codegen + ocamlopt）：`compile/check/build` |
 | `vuna` | 产品 CLI：工具链 + 编译器命令（in-process 调用 compiler 库） |
 
 自举链：`seed/` →（`seed/build.sh` + ocamlopt）→ `vuna-seed` →（`build --no-compile --out s1 compiler`）
@@ -103,9 +103,10 @@ manifest，不向上找。命令语义与包格式
 
 ```text
 .
-├── compiler/  # 编译器包 vuna-compiler（seed 唯一来源）：app/Main.vuna + cli/lib/Vuna/Compiler/
-├── base/      # 成员包 vuna-base：lib/Base.*、Prelude.vuna
-├── cli/       # 产品 CLI 包 vuna：cli/lib/Vuna.*（工具链）+ app/Main.vuna（入口）
+├── packages/  # workspace 成员包
+│   ├── compiler/  # 编译器包 vuna-compiler（seed 唯一来源）：app/Main.vuna + lib/Vuna/Compiler/
+│   ├── base/      # 标准库包 vuna-base：lib/Base.*、Prelude.vuna
+│   └── cli/       # 产品 CLI 包 vuna：lib/Vuna.*（工具链）+ app/Main.vuna（入口）
 ├── seed/      # compiler 闭包的多文件自举信任锚点（生成物，禁止手改）
 ├── test/      # suite.toml + suite/（原生 runner）+ corpus/ 夹具
 ├── bench/     # 生成程序与编译器基准（nix run .#vuna-bench / .#vuna-perf）
@@ -114,14 +115,14 @@ manifest，不向上找。命令语义与包格式
 ├── vscode/    # VSCode 扩展（语法高亮 + LSP 客户端 + lint/fmt/check/build；提交 dist/）
 ├── nix/       # 构建图（build/）+ CI 门禁（checks/）+ seed 工具 + 开发工具
 ├── docs/      # 分层文档（见 AGENTS.md 导航）
-├── vuna.toml  # workspace 根（只有 [workspace] + [lint]）；members: compiler/base/cli
+├── vuna.toml  # workspace 根（只有 [workspace] + [lint]）；members: packages/{compiler,base,cli}
 └── flake.nix  # 输入与 outputs 委托（构建图在 nix/）
 ```
 
 逐模块职责见 [docs/architecture.md](docs/architecture.md)。仓库本身是一个 workspace
-（虚拟根：根目录只有 `[workspace]`，不是包）：成员包 `vuna`（模块根 `cli/lib/`）、
-`vuna-compiler`（模块根 `compiler/lib/`）与 `vuna-base`（模块根 `base/lib/`）。三者都是
-vuna 模块根，不是 OCaml 库目录；`cli/app/`、`compiler/app/` 是纯入口目录。仓库里没有任何
+（虚拟根：根目录只有 `[workspace]`，不是包）：成员包 `vuna`（模块根 `packages/cli/lib/`）、
+`vuna-compiler`（模块根 `packages/compiler/lib/`）与 `vuna-base`（模块根 `packages/base/lib/`）。三者都是
+vuna 模块根，不是 OCaml 库目录；`packages/cli/app/`、`packages/compiler/app/` 是纯入口目录。仓库里没有任何
 dune/OCaml 项目，只用 `ocamlopt` 编译生成的种子和程序。
 
 ## 硬约束（改坏了 CI 会失败）

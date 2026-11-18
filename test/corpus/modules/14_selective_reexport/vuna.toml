@@ -5,4 +5,4 @@
 name = "fix-14-selective-reexport"
 
 [dependencies]
-vuna-base = "../../../../base"
+vuna-base = "../../../../packages/base"

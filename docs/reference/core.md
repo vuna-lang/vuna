@@ -159,7 +159,7 @@ Track A 第一步（Core → IR → OCaml）之后这些不变量分两层：**�
   不重复；每个运行时 `DtDef` / `DtData` 必须有归属。
 - **依赖分组**：Kosaraju SCC（`Ir.Analysis.assembleGroupNames`）在 Lowering 期算出，结果带
   `irGroupIsRec`；自 / 互递归才用 `let rec ... and ...`；零参顶层定义生成 `let v_x = body`。
-- **边界护栏**：依赖方向由 `compiler/vuna.toml` 的 `[layers]` 声明、loader 强制（`Ir` 只依赖
+- **边界护栏**：依赖方向由 `packages/compiler/vuna.toml` 的 `[layers]` 声明、loader 强制（`Ir` 只依赖
   `Base`，见 [packages.md](packages.md)「层约束」）；`checks.ir-boundary`
   （`nix/checks/lib/ir-boundary.sh`）只留正向断言（必须 import 某模块）与 IR 形状断言。
 

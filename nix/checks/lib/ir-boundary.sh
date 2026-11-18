@@ -5,7 +5,7 @@
 #           `Driver.SplitGen` 只做「归属表 + 按归属过滤 + 分文件」，每个单元都经
 #           `Lowering` 出 `IrUnit` 再交给 `Codegen.Assembly` 装配。
 #
-# 依赖**方向**由 `compiler/vuna.toml` 的 `[layers]` 声明、由 loader 在 import 时
+# 依赖**方向**由 `packages/compiler/vuna.toml` 的 `[layers]` 声明、由 loader 在 import 时
 # 强制（例如 `Ir` 只能依赖 `Base`、`Codegen` 不能依赖 `Core`/`Elab`）。本脚本只留
 # **正向断言与形状断言**——声明式层表表达不了「必须 import 某个模块」和「IR 里不许
 # 出现目标文本」这两类规则。
@@ -48,7 +48,7 @@ check_forbidden() {
 }
 
 # 规则 3：Lowering 存在且是唯一的 Core 消费者。
-LOWER=compiler/lib/Vuna/Compiler/Lowering/Program.vuna
+LOWER=packages/compiler/lib/Vuna/Compiler/Lowering/Program.vuna
 if [ ! -f "$LOWER" ]; then
   echo "ir-boundary: missing $LOWER (Core -> IR lowering must exist)"
   fail=$((fail + 1))
@@ -60,7 +60,7 @@ else
 fi
 
 # 规则 3b：`Codegen/` 目录只放 IR→文本；Core→IR、Core 侧检查与归属切分不得再搬回来。
-for gone in compiler/lib/Vuna/Compiler/Codegen/Lower.vuna compiler/lib/Vuna/Compiler/Codegen/Erase.vuna compiler/lib/Vuna/Compiler/Codegen/Split.vuna; do
+for gone in packages/compiler/lib/Vuna/Compiler/Codegen/Lower.vuna packages/compiler/lib/Vuna/Compiler/Codegen/Erase.vuna packages/compiler/lib/Vuna/Compiler/Codegen/Split.vuna; do
   if [ -f "$gone" ]; then
     echo "ir-boundary: $gone must live outside Codegen/ (Codegen is IR -> text only)"
     fail=$((fail + 1))
@@ -69,7 +69,7 @@ done
 
 # 规则 4：SplitGen（声明归属 + 分文件装配，属 Driver 层）必须路由到 Lowering，
 # 且不得自己消费 Core / Intrinsics。
-SPLIT=compiler/lib/Vuna/Compiler/Driver/SplitGen.vuna
+SPLIT=packages/compiler/lib/Vuna/Compiler/Driver/SplitGen.vuna
 if [ -f "$SPLIT" ]; then
   if ! imports_of "$SPLIT" | grep -qE '^Vuna\.Compiler\.Lowering\.Program$'; then
     echo "ir-boundary: $SPLIT does not import Vuna.Compiler.Lowering.Program (must lower per unit)"
@@ -80,9 +80,9 @@ fi
 
 # 规则 5（正向断言）：文本生成层都消费 IR（不允许残留只吃 `DtDef`、绕过 IR 的路径）。
 for f in \
-  compiler/lib/Vuna/Compiler/Codegen/Decl.vuna \
-  compiler/lib/Vuna/Compiler/Codegen/Term.vuna \
-  compiler/lib/Vuna/Compiler/Codegen/Assembly.vuna
+  packages/compiler/lib/Vuna/Compiler/Codegen/Decl.vuna \
+  packages/compiler/lib/Vuna/Compiler/Codegen/Term.vuna \
+  packages/compiler/lib/Vuna/Compiler/Codegen/Assembly.vuna
 do
   [ -f "$f" ] || continue
   if ! imports_of "$f" | grep -qE '^Vuna\.Compiler\.Ir(\.|$)'; then
@@ -93,10 +93,10 @@ done
 
 # 规则 6（IR 只认符号契约）：`IrRuntime` / `IrBridge` 这类目标文本节点不得出现。
 if grep -nE '\bIrRuntime\b|\bIrBridge\b' \
-  compiler/lib/Vuna/Compiler/Ir/Model.vuna \
-  compiler/lib/Vuna/Compiler/Ir/Runtime.vuna \
-  compiler/lib/Vuna/Compiler/Lowering/Program.vuna \
-  compiler/lib/Vuna/Compiler/Codegen/Term.vuna
+  packages/compiler/lib/Vuna/Compiler/Ir/Model.vuna \
+  packages/compiler/lib/Vuna/Compiler/Ir/Runtime.vuna \
+  packages/compiler/lib/Vuna/Compiler/Lowering/Program.vuna \
+  packages/compiler/lib/Vuna/Compiler/Codegen/Term.vuna
 then
   echo "ir-boundary: removed IR runtime-text nodes reappeared (IrRuntime / IrBridge)"
   fail=$((fail + 1))
@@ -105,21 +105,21 @@ fi
 # 规则 7：IR 数据模块里的字面量只能是符号名（不含空格 / 括号 / 花括号），
 # 防止把目标表达式重新塞回 IR。
 if grep -nE '"[^"]*[ (){}][^"]*"' \
-  compiler/lib/Vuna/Compiler/Ir/Model.vuna \
-  compiler/lib/Vuna/Compiler/Ir/Runtime.vuna
+  packages/compiler/lib/Vuna/Compiler/Ir/Model.vuna \
+  packages/compiler/lib/Vuna/Compiler/Ir/Runtime.vuna
 then
   echo "ir-boundary: IR data module contains a text literal with spaces/brackets (target text?)"
   fail=$((fail + 1))
 fi
 
 # 规则 8（正向断言）：契约与 OCaml 符号表存在，且 Lowering 用后端表做一致性检查。
-for f in compiler/lib/Vuna/Compiler/Ir/Runtime.vuna compiler/lib/Vuna/Compiler/Codegen/Runtime.vuna; do
+for f in packages/compiler/lib/Vuna/Compiler/Ir/Runtime.vuna packages/compiler/lib/Vuna/Compiler/Codegen/Runtime.vuna; do
   if [ ! -f "$f" ]; then
     echo "ir-boundary: missing $f (IR runtime contract)"
     fail=$((fail + 1))
   fi
 done
-TABLE=compiler/lib/Vuna/Compiler/Codegen/Runtime.vuna
+TABLE=packages/compiler/lib/Vuna/Compiler/Codegen/Runtime.vuna
 if [ -f "$TABLE" ] && ! imports_of "$TABLE" | grep -qE '^Vuna\.Compiler\.Ir(\.|$)'; then
   echo "ir-boundary: $TABLE does not import Vuna.Compiler.Ir (table must be keyed by the contract)"
   fail=$((fail + 1))
@@ -130,7 +130,7 @@ if [ -f "$LOWER" ] && ! imports_of "$LOWER" | grep -qE '^Vuna\.Compiler\.Codegen
 fi
 
 # 规则 9（native 后端）：`Native.Module` 必须消费 IR。
-NATIVE_MODULE=compiler/lib/Vuna/Compiler/Native/Module.vuna
+NATIVE_MODULE=packages/compiler/lib/Vuna/Compiler/Native/Module.vuna
 if [ -f "$NATIVE_MODULE" ]; then
   if ! imports_of "$NATIVE_MODULE" | grep -qE '^Vuna\.Compiler\.Ir(\.|$)'; then
     echo "ir-boundary: $NATIVE_MODULE does not import Vuna.Compiler.Ir (native backend must consume IR)"
@@ -139,7 +139,7 @@ if [ -f "$NATIVE_MODULE" ]; then
 fi
 
 # 规则 10（wasm 后端）：`Wasm.Module` 必须消费 IR。
-WASM_MODULE=compiler/lib/Vuna/Compiler/Wasm/Module.vuna
+WASM_MODULE=packages/compiler/lib/Vuna/Compiler/Wasm/Module.vuna
 if [ -f "$WASM_MODULE" ]; then
   if ! imports_of "$WASM_MODULE" | grep -qE '^Vuna\.Compiler\.Ir(\.|$)'; then
     echo "ir-boundary: $WASM_MODULE does not import Vuna.Compiler.Ir (wasm backend must consume IR)"

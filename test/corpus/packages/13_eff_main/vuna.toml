@@ -2,4 +2,4 @@
 name = "eff-main"
 
 [dependencies]
-vuna-base = "../../../../base"
+vuna-base = "../../../../packages/base"

@@ -171,7 +171,7 @@ stdout/stderr 大输出不受线性内存大小限制）；读按 `filestat` 的
 
 ## 6. 实现约束
 
-- `Wasm` 子模块只 import `Base.*`、`Ir.*`、`Wasm.*`（方向由 `compiler/vuna.toml` 的
+- `Wasm` 子模块只 import `Base.*`、`Ir.*`、`Wasm.*`（方向由 `packages/compiler/vuna.toml` 的
   `[layers]` 强制：`"Vuna.Compiler.Wasm" = ["Vuna.Compiler.Ir"]`）；驱动只经
   `Driver.Dt.dtCheckWithProgramParts` + `Lowering.Program.lowerProgramOf`，不 import
   Core/Elab/Intrinsics（`checks.ir-boundary` 只留形状与正向断言）。

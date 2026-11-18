@@ -27,8 +27,8 @@ module Vuna.Compiler.Base.Diagnostics where
 -- 分层：本门面只做**整模块重导出**，实现按域拆到
 -- `Diagnostics.Common`（共享拼装 helper）、`Diagnostics.Tc`（TC_）、`Diagnostics.Cg`（CG_）；
 -- 对外名字集合是下面三个模块的并集，调用点只认本门面。
--- 本模块是**编译器侧**真源，进 seed（被 `vuna check .` 自检）。根包 Lint/Diagnostics 与
--- Frontend/Diagnostics 单向 import 本模块；compiler 永不 import 根包。
+-- 本模块是**编译器侧**真源，进 seed（被 `vuna check .` 自检）。产品 CLI 包 `Lint/Diagnostics` 与
+-- Frontend/Diagnostics 单向 import 本模块；compiler 永不 import `vuna` 包。
 import Base.String
 import Vuna.Compiler.Base.Diagnostics.Rn
 import Vuna.Compiler.Base.Diagnostics.Pkg

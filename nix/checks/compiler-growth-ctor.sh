@@ -18,7 +18,7 @@ mkdir -p "$out"
 : "${VUNA:?VUNA 未设置}"
 
 MAX_RATIO_MILLI=${VUNA_GROWTH_MAX_RATIO_MILLI:-3500}
-BASE=$PWD/base
+BASE=$PWD/packages/base
 work=$(mktemp -d "${TMPDIR:-/tmp}/vuna-growth-ctor.XXXXXX")
 trap 'rm -rf "$work"' EXIT INT TERM
 

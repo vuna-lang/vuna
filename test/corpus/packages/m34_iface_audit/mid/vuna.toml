@@ -6,4 +6,4 @@ modules = ["Mid"]
 
 [dependencies]
 dep = "../dep"
-vuna-base = "../../../../../base"
+vuna-base = "../../../../../packages/base"

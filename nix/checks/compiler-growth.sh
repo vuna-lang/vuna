@@ -22,7 +22,7 @@ out=${1:?usage: compiler-growth.sh OUT}
 : "${VUNA:?VUNA 未设置}"
 
 MAX_RATIO_MILLI=${VUNA_GROWTH_MAX_RATIO_MILLI:-2500}
-BASE=$PWD/base
+BASE=$PWD/packages/base
 work=$(mktemp -d "${TMPDIR:-/tmp}/vuna-growth.XXXXXX")
 trap 'rm -rf "$work"' EXIT INT TERM
 

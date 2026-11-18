@@ -5,4 +5,4 @@
 name = "fix-80-hidden-ctor-pattern"
 
 [dependencies]
-vuna-base = "../../../../base"
+vuna-base = "../../../../packages/base"

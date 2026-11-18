@@ -5,4 +5,4 @@
 name = "fix-73-private-type-use"
 
 [dependencies]
-vuna-base = "../../../../base"
+vuna-base = "../../../../packages/base"

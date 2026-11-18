@@ -4,4 +4,4 @@
 name = "ctor-same-name"
 
 [dependencies]
-vuna-base = "../../../../base"
+vuna-base = "../../../../packages/base"

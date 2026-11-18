@@ -44,9 +44,9 @@
 
 1. **当前 seed 必须能编译当前源码**（rotation 按需，触发条件见 bootstrap.md）——`seed/` 是提交入库的信任锚点；
 2. **seed rotation 后 stage1 == stage2**（文件集逐字节一致，fixed point）；
-3. **`seed/` 只含 compiler 包入口闭包**（`compiler/app/Main.vuna` 的 import 闭包）；
-4. **工具链不进 TCB**：整个 `cli/` 永不进入 seed 闭包（fmt/lint/repl/doc/test/Index/LSP/
-   obs/package manager 等都在 `cli/lib/`）；黑名单与断言见 `nix/seed/forbidden.txt`；
+3. **`seed/` 只含 compiler 包入口闭包**（`packages/compiler/app/Main.vuna` 的 import 闭包）；
+4. **工具链不进 TCB**：整个 `packages/cli/` 永不进入 seed 闭包（fmt/lint/repl/doc/test/Index/LSP/
+   obs/package manager 等都在 `packages/cli/lib/`）；黑名单与断言见 `nix/seed/forbidden.txt`；
 5. **动作入口与宿主层**：唯一动作类型是 `Eff r a`；用户面入口是 `main : Eff [] a`（行必须
    Nil，入口处未处理效应是类型错误；也允许内建宿主效应行，见 debt D65），
    执行入口是 `Base.Eff.runPure : Eff [] a -> a`。
@@ -62,7 +62,7 @@
 6. **唯一路径**：语言夹具、`vuna interp`、包构建与 seed 全部走 DT（精化 + 擦除
    codegen，`vuna check .` 也是 DT 自检）；没有可切换的检查器，也没有第二套 codegen；
 7. 编译器自检通过：`vuna check .` 必须能检查自身源码（`checks.vuna-typecheck`）。
-8. **包内层方向**：`compiler/` 的层依赖由 `compiler/vuna.toml` 的 `[layers]` 声明、由 loader
+8. **包内层方向**：`packages/compiler/` 的层依赖由 `packages/compiler/vuna.toml` 的 `[layers]` 声明、由 loader
    在 import 时强制（越层报 `LD_LayerViolation`，语义见
    [packages.md](docs/reference/packages.md)「层约束」）；`checks.ir-boundary` 只保留
    「必须 import 某模块」的正向断言与 IR 形状断言。
@@ -82,7 +82,7 @@
   `chore(seed): ...` 提交（[workflow.md](.agents/rules/workflow.md)）。
 - **改完代码跑 `nix run .#vuna -- fmt <改动的文件/目录>`**；验证按改动面选，别为自测跑全量
   `nix build` / `nix flake check`（[verification.md](.agents/rules/verification.md)）。
-- **改 `compiler/` 后先验证「旧种子能编译新源码」**（`nix build .#vuna-seed` 或 CI 的
+- **改 `packages/compiler/` 后先验证「旧种子能编译新源码」**（`nix build .#vuna-seed` 或 CI 的
   `checks.seed-selfhost`）；要用的新语法先以旧语法落地 → rotate → 再用新语法
   （[verification.md](.agents/rules/verification.md)）。
 - **探索按场景选工具**：要改的模块整篇 `read`；只引用的用 `vuna map` / `vuna api`，
@@ -122,10 +122,10 @@ nix run .#vuna -- map --find <Module.name> # 定位符号；另有 --impact / ap
 
 ## 目录速览
 
-`compiler/` = 编译器包（`Vuna.Compiler.*`，入口 `app/Main.vuna`，**进 seed**）；`base/` =
-标准库 `vuna-base`（`Base.*` + `Prelude`，**进 seed**）；`cli/` = 产品 CLI 包
-`vuna`（工具链 Cli/Interp/Files/Fmt/Lint/Repl/Run/Doc/Index/Lsp/TestRunner/Obs 在 `cli/lib/`，
-入口 `cli/app/Main.vuna`；**不进 seed**）；
+`packages/compiler/` = 编译器包（`Vuna.Compiler.*`，入口 `app/Main.vuna`，**进 seed**）；`packages/base/` =
+标准库 `vuna-base`（`Base.*` + `Prelude`，**进 seed**）；`packages/cli/` = 产品 CLI 包
+`vuna`（工具链 Cli/Interp/Files/Fmt/Lint/Repl/Run/Doc/Index/Lsp/TestRunner/Obs 在 `packages/cli/lib/`，
+入口 `packages/cli/app/Main.vuna`；**不进 seed**）；
 `seed/` = 提交入库的 OCaml 信任锚点（生成物，禁止手改、别读）；`test/` = `suite.toml` +
 `suite/`（原生 runner + steps 用例）+ `corpus/` 夹具；`bench/`（仓库根）= 生成程序与编译器基准；
 `examples/` = 多包示例；`.agents/` = AI 规则与技能；`vscode/` = VSCode 扩展（高亮 + LSP +

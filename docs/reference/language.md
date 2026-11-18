@@ -314,7 +314,7 @@ vuna/base/compiler 三包源码统一按当前语言能力书写，新增/修改
 ## 模块系统
 
 - **文件 = 模块**，加载语义由**包上下文**唯一决定：文件向上找最近的 `vuna.toml`，可用
-  模块根 = 该包 `lib/` + 依赖闭包各包的 `lib/`，`compiler/lib/Vuna/Compiler/Frontend/Parser.vuna`
+  模块根 = 该包 `lib/` + 依赖闭包各包的 `lib/`，`packages/compiler/lib/Vuna/Compiler/Frontend/Parser.vuna`
   ⇔ 模块 `Vuna.Compiler.Frontend.Parser`；
 - **无 manifest 的文件只有 base 上下文**：base 由 `VUNA_BASE` 覆盖，否则按可执行文件
   相对布局探测 `<exeDir>/base`、`<exeDir>/../base`、`<exeDir>/../../base`、
@@ -385,8 +385,8 @@ vuna/base/compiler 三包源码统一按当前语言能力书写，新增/修改
 - **抽象类型**：导出项 `T` 只导出类型、不导出构造器，跨模块既不能构造也不能模式匹配；
   要公开构造器必须写 `T(..)`；
 - **模块路径不变式**：模块路径的最后一段是文件名、中间段是目录，目录本身不是模块。
-  因此 `cli/lib/Vuna.vuna`（模块 `Vuna`）与 `cli/lib/Vuna/Compiler/Frontend/Parser.vuna`（模块
-  `Vuna.Compiler.Frontend.Parser`）能在同一个根下共存、没有歧义，包门面可以直接命名为
+  因此 `packages/base/lib/Base.vuna`（模块 `Base`）与 `packages/base/lib/Base/List.vuna`（模块
+  `Base.List`）能在同一个根下共存、没有歧义，包门面可以直接命名为
   `Base` 或 `Vuna`；
 - 非限定名的查找顺序（值位置）：局部绑定 → 本模块值定义（定义 / 签名 / 实例名）→ 本模块
   构造子 → 内建（intrinsic）/ 精化器 prelude → 已自动 open 的 import 导出（先值项、再

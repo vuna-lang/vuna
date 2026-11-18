@@ -23,9 +23,9 @@ let
   # 可复用的源集合；check 处只组合，不重复写路径。
   src = {
     seed = ../../seed;
-    compiler = ../../compiler;
-    base = ../../base;
-    cli = ../../cli;
+    compiler = ../../packages/compiler;
+    base = ../../packages/base;
+    cli = ../../packages/cli;
     test = ../../test;
     examples = ../../examples;
     docs = ../../docs;
@@ -403,7 +403,7 @@ in
     name = "vuna-obs-dwarf";
     srcs = [ src.codegenCorpus ];
     env = {
-      VUNA_BASE = "${repo}/base";
+      VUNA_BASE = "${repo}/packages/base";
     };
     nativeBuildInputs = ocamlTools ++ [
       pkgs.binutils
@@ -422,7 +422,7 @@ in
       src.base
     ];
     env = {
-      VUNA_BASE = "${repo}/base";
+      VUNA_BASE = "${repo}/packages/base";
     };
     nativeBuildInputs = ocamlTools ++ [
       pkgs.findutils

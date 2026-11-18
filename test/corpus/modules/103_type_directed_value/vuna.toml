@@ -2,4 +2,4 @@
 name = "fix-103-type-directed-value"
 
 [dependencies]
-vuna-base = "../../../../base"
+vuna-base = "../../../../packages/base"

@@ -5,4 +5,4 @@
 name = "fix-19-empty-exports"
 
 [dependencies]
-vuna-base = "../../../../base"
+vuna-base = "../../../../packages/base"

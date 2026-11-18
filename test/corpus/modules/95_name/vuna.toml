@@ -5,4 +5,4 @@
 name = "fix-95-name"
 
 [dependencies]
-vuna-base = "../../../../base"
+vuna-base = "../../../../packages/base"

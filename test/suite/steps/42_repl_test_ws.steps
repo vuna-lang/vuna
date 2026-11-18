@@ -27,5 +27,5 @@ exit: 1
 run: "$VUNA" test "$TMPDIR/test-m30/ws-fail" >/dev/null 2>&1
 exit: 1
 # 单包行为不变：没有 test/ 仍是输入错误（exit 2）。
-run: "$VUNA" test ../base >/dev/null 2>&1
+run: "$VUNA" test ../packages/base >/dev/null 2>&1
 exit: 2

@@ -11,10 +11,10 @@
 # 的增长率门槛。
 #
 # **范围（不可直接互比）**：
-#   check-all            workspace 全部包（`cli/lib/Vuna/*` + compiler/base 闭包）+ 成员子进程并行
+#   check-all            workspace 全部包（`packages/cli/lib/Vuna/*` + packages/compiler、packages/base 闭包）+ 成员子进程并行
 #   check-compiler       仅 compiler 包（base 只是依赖）
 #   check-warm           同 check-all，但缓存已预热
-#   build-all            workspace 全部包（cli + compiler + base，串行；= check 全部 + codegen）
+#   build-all            workspace 全部包（packages/cli + packages/compiler + packages/base，串行；= check 全部 + codegen）
 #   build-compiler       仅 compiler 包（= check-compiler + codegen）
 #   build-warm           同 build-compiler，但 split 缓存已预热
 #   map-cold / map-hot   `vuna map` 索引冷（清 query store）/ 热
@@ -124,7 +124,7 @@ run_once() {
       t0=$(date +%s%3N); (cd "$ROOT" && "$VUNA_BIN" check . >/dev/null 2>&1); rc=$?; t1=$(date +%s%3N) ;;
     check-compiler)
       clear_store_cache
-      t0=$(date +%s%3N); (cd "$ROOT" && "$VUNA_BIN" check compiler >/dev/null 2>&1); rc=$?; t1=$(date +%s%3N) ;;
+      t0=$(date +%s%3N); (cd "$ROOT" && "$VUNA_BIN" check packages/compiler >/dev/null 2>&1); rc=$?; t1=$(date +%s%3N) ;;
     check-warm)
       (cd "$ROOT" && "$VUNA_BIN" check . >/dev/null 2>&1)
       t0=$(date +%s%3N); (cd "$ROOT" && "$VUNA_BIN" check . >/dev/null 2>&1); rc=$?; t1=$(date +%s%3N) ;;
@@ -133,10 +133,10 @@ run_once() {
       t0=$(date +%s%3N); (cd "$ROOT" && "$VUNA_BIN" build --no-compile --out "$WORK/ball" >/dev/null 2>&1); rc=$?; t1=$(date +%s%3N) ;;
     build-compiler)
       clear_store_cache
-      t0=$(date +%s%3N); (cd "$ROOT" && "$VUNA_BIN" build --no-compile --out "$WORK/build" compiler >/dev/null 2>&1); rc=$?; t1=$(date +%s%3N) ;;
+      t0=$(date +%s%3N); (cd "$ROOT" && "$VUNA_BIN" build --no-compile --out "$WORK/build" packages/compiler >/dev/null 2>&1); rc=$?; t1=$(date +%s%3N) ;;
     build-warm)
-      (cd "$ROOT" && "$VUNA_BIN" build --no-compile --out "$WORK/bwarm" compiler >/dev/null 2>&1)
-      t0=$(date +%s%3N); (cd "$ROOT" && "$VUNA_BIN" build --no-compile --out "$WORK/bwarm" compiler >/dev/null 2>&1); rc=$?; t1=$(date +%s%3N) ;;
+      (cd "$ROOT" && "$VUNA_BIN" build --no-compile --out "$WORK/bwarm" packages/compiler >/dev/null 2>&1)
+      t0=$(date +%s%3N); (cd "$ROOT" && "$VUNA_BIN" build --no-compile --out "$WORK/bwarm" packages/compiler >/dev/null 2>&1); rc=$?; t1=$(date +%s%3N) ;;
     map-cold)
       clear_store_cache
       t0=$(date +%s%3N); (cd "$ROOT" && "$VUNA_BIN" map >/dev/null 2>&1); rc=$?; t1=$(date +%s%3N) ;;

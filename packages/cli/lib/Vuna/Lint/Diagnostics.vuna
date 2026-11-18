@@ -3,8 +3,8 @@
 -- 每条规则只声明一个构造子：`lintCode` 给出稳定符号（文档与索引的键），`lintRule` 给出
 -- CLI 与 finding 输出用的 kebab 短名，两者都由构造子派生，规则名不在别处手写，避免漂移。
 --
--- 本模块属于根包（`vuna`）的工具链，不在 compiler 包内：编译期诊断（`TC_` / `CG_`）在
--- `Vuna.Compiler.Base.Diagnostics`，lint 诊断（`LN_`）在这里，依赖方向只有根包 →
+-- 本模块属于产品 CLI 包（`vuna`）的工具链，不在 compiler 包内：编译期诊断（`TC_` / `CG_`）在
+-- `Vuna.Compiler.Base.Diagnostics`，lint 诊断（`LN_`）在这里，依赖方向只有 `vuna` →
 -- compiler。
 module Vuna.Lint.Diagnostics where
 

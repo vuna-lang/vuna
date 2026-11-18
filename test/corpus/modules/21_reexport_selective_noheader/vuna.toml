@@ -5,4 +5,4 @@
 name = "fix-21-reexport-selective-noheader"
 
 [dependencies]
-vuna-base = "../../../../base"
+vuna-base = "../../../../packages/base"

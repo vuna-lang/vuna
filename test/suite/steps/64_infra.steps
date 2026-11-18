@@ -1,9 +1,9 @@
 # 64) 基础设施验收：内容寻址摘要（Hash=SHA-256）/ 无损 CST 词法层（Frontend.Cst）/
 #     位运算原语（63-bit 语义）/ canonical 编码 / TOML / 包身份。
-#     夹具是 examples/infra（依赖 ../../compiler）；先预热 compiler 包接口。
-run: "$VUNA" check "$VUNA_SUITE_ROOT/compiler"
+#     夹具是 examples/infra（依赖 ../../packages/compiler）；先预热 compiler 包接口。
+run: "$VUNA" check "$VUNA_SUITE_ROOT/packages/compiler"
 exit: 0
-run: INFRA_SRC="$VUNA_SUITE_ROOT/compiler/lib/Vuna/Compiler/Hash.vuna" "$VUNA" run "$VUNA_SUITE_ROOT/examples/infra"
+run: INFRA_SRC="$VUNA_SUITE_ROOT/packages/compiler/lib/Vuna/Compiler/Hash.vuna" "$VUNA" run "$VUNA_SUITE_ROOT/examples/infra"
 exit: 0
 # 边界夹具：文件尾注释（无尾随换行）、嵌套块注释、字符串转义、模板里的 `--`。
 run: INFRA_SRC="$VUNA_SUITE_ROOT/test/corpus/cst/01_trivia.vuna" "$VUNA" run "$VUNA_SUITE_ROOT/examples/infra"

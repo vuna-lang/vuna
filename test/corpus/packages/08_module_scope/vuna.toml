@@ -2,4 +2,4 @@
 name = "module-scope"
 
 [dependencies]
-vuna-base = "../../../../base"
+vuna-base = "../../../../packages/base"

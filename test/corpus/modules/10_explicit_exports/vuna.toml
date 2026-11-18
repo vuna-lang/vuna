@@ -5,4 +5,4 @@
 name = "fix-10-explicit-exports"
 
 [dependencies]
-vuna-base = "../../../../base"
+vuna-base = "../../../../packages/base"

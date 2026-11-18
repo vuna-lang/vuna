@@ -4,4 +4,4 @@
 name = "fix-dt-ad-hoc"
 
 [dependencies]
-vuna-base = "../../../base"
+vuna-base = "../../../packages/base"

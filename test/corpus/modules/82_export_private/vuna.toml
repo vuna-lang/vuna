@@ -5,4 +5,4 @@
 name = "fix-82-export-private"
 
 [dependencies]
-vuna-base = "../../../../base"
+vuna-base = "../../../../packages/base"

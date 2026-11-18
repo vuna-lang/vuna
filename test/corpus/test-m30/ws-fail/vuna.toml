@@ -8,4 +8,4 @@ name = "test-m30-ws-fail"
 members = ["bad"]
 
 [dependencies]
-vuna-base = "../../../../base"
+vuna-base = "../../../../packages/base"

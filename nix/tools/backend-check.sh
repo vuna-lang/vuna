@@ -68,7 +68,7 @@ while [ ! -f "$repo/test/suite.toml" ]; do
   fi
   repo=$(dirname "$repo")
 done
-base=$repo/base
+base=$repo/packages/base
 suite=$repo/test/suite
 
 if [ -z "$compiler_bin" ]; then

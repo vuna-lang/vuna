@@ -5,4 +5,4 @@
 name = "fix-99-transitive"
 
 [dependencies]
-vuna-base = "../../../../base"
+vuna-base = "../../../../packages/base"

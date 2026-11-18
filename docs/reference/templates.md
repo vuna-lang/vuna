@@ -12,7 +12,7 @@
 2. 洞 → `Base.Interp.interp e`；
 3. 整体用 `++` 左结合链起（空文本块跳过；只有洞时直接返回该洞）。
 
-转换语义**完全由 base 的 `Interp` 实例决定**（`base/lib/Base/Interp.vuna`）：
+转换语义**完全由 base 的 `Interp` 实例决定**（`packages/base/lib/Base/Interp.vuna`）：
 
 ```vuna
 trait Interp a where
@@ -88,7 +88,7 @@ line1 ${interp n}
   约束 `Show` 实例，`${xs}` / `${Just 1}` 经第二层 `Show` 实例搜索得到字典；参数化实例的
   tele 实参按擦除 rig 落地，不进入运行时产物。
 
-全仓审计：`compiler/`、`base/`、`cli/` 下不应再有「字面量相邻的 `++`」（`base/lib/Base/String.vuna`
+全仓审计：`packages/compiler/`、`packages/base/`、`packages/cli/` 下不应再有「字面量相邻的 `++`」（`packages/base/lib/Base/String.vuna`
 的 fixity 声明、注释与 `strConcatMany` 算法除外）。
 
 ## 已知边界

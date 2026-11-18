@@ -196,13 +196,13 @@ obsSampleStop  : Int -> Int
 - **关闭路径的实测口径**是 `nix/checks/vuna-obs-overhead.sh`：`VUNA_OBS=0` 与不设观测的产物
   逐字节一致 + 关闭时不写 trace + 生成运行时的入口都以关闭快速路径开头。**不设墙钟阈值**
   （绝对性能不可跨机器比）。
-- level 2 的真实成本：`check compiler` 10933 条 `vuna.def.elab`、trace 约 2.1 MB
+- level 2 的真实成本：`check packages/compiler` 10933 条 `vuna.def.elab`、trace 约 2.1 MB
   （`docs/reference/performance.md` §2 的读数纪律：绝对读数用两者都关的口径）。
 - **绝对读数只用 `VUNA_OBS=0`**；obs 只用于归因与相对比较（同 [performance.md](performance.md) §2 纪律）。
 
 ## 6.1 工具链自采样
 
-`vuna` 自己就是被观测程序：结构化 span 走 `VUNA_OBS`，CPU 采样由 `cli/app/Main.vuna` 在
+`vuna` 自己就是被观测程序：结构化 span 走 `VUNA_OBS`，CPU 采样由 `packages/cli/app/Main.vuna` 在
 `VUNA_OBS_SAMPLE` 非空时调用 `obsSampleStart` / `obsSampleStop`（普通 `VUNA_OBS=1`
 不启动定时器）。所以可以直接 profile 工具链。下面的命令固定用 `./result/bin/vuna`（同一个
 二进制反复采样，避免 `nix run` 的每次求值开销影响读数）；先 `nix build .#vuna --out-link result`
@@ -210,7 +210,7 @@ obsSampleStop  : Int -> Int
 
 ```console
 d=$(mktemp -d); VUNA_STORE="$d/store" ./result/bin/vuna obs run --level 1 --sample cpu \
-  --interval 500 --out "$d/tool.jsonl" -- ./result/bin/vuna check compiler
+  --interval 500 --out "$d/tool.jsonl" -- ./result/bin/vuna check packages/compiler
 ./result/bin/vuna obs convert --to cpuprofile --out "$d/tool.cpuprofile" "$d/tool.jsonl"
 ```
 
@@ -426,7 +426,7 @@ vuna obs serve --cdp ADDR [--allow-slow] [TRACE...]
 
 | 位置 | 断言 |
 | --- | --- |
-| `nix/checks/vuna-obs-schema.sh` | `VUNA_OBS=0` 不产任何 trace；`VUNA_OBS=2` 的 `check compiler` 与 `check base` 各产出一份 trace：`vuna obs validate` 通过、首行是 `ph:"M"` + `schema:"vuna-obs 1"`、`summarize --json` 单行且含 `spans`/`wallUs`；编译器 trace 必须含 `vuna.elab` / `vuna.codegen.check` 两个阶段跨度（插桩被搬掉会失败） |
+| `nix/checks/vuna-obs-schema.sh` | `VUNA_OBS=0` 不产任何 trace；`VUNA_OBS=2` 的 `check packages/compiler` 与 `check packages/base` 各产出一份 trace：`vuna obs validate` 通过、首行是 `ph:"M"` + `schema:"vuna-obs 1"`、`summarize --json` 单行且含 `spans`/`wallUs`；编译器 trace 必须含 `vuna.elab` / `vuna.codegen.check` 两个阶段跨度（插桩被搬掉会失败） |
 | `nix/checks/vuna-obs-dwarf.sh` | split 产物每个绑定前有 `# <行> "<包相对>.vuna"` 指令（不含绝对/`../` 路径）；`build` 出的可执行文件在 `readelf --debug-dump=decodedline` 里有 `.vuna` 文件且行号 > 0。**不依赖** gdb/perf（CI 里不保证有） |
 | `nix/checks/vuna-obs-overhead.sh` | `VUNA_OBS=0` 与不设观测的产物**逐字节一致**（关闭路径不得改变任何输出）；关闭时不写 trace 文件；打开时必须产出（反证）；生成运行时的 `dtp_obs_log/counter/mark/span` 都以关闭快速路径开头（不在关闭路径读时钟/分配）。**不设墙钟门槛**——绝对性能不可跨机器比，那属于 benchmark |
 | `checks.eff-boundary` | 新增探针全部走隐藏原语（`runPure` 基线仍为空） |

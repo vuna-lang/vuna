@@ -40,7 +40,7 @@
 
   | 声明 | canonical 符号 | 来源 | 常量 |
   | --- | --- | --- | --- |
-  | `Bool` | `Base.Bool.Bool` | `base/lib/Base/Bool.vuna` | `Base.Intrinsics.boolTypeName` |
+  | `Bool` | `Base.Bool.Bool` | `packages/base/lib/Base/Bool.vuna` | `Base.Intrinsics.boolTypeName` |
   | `True` / `False` | `Base.Bool.True` / `Base.Bool.False` | 同上 | `boolTrueCtor` / `boolFalseCtor` |
   | `List` | `Base.List.List`（`(::)` / `Nil`） | `Base.List` | `listFamilyName` / `listConsCtor` / `listNilCtor` |
   | `Nat` | `Base.Nat.Nat`（`Zero` / `Succ` 同理） | `Base.Nat` | `natTypeName` / `natZeroCtor` / `natSuccCtor` |
@@ -158,7 +158,7 @@
   同一份定义后打印。找不到实例在**精化期**报
   `[TC_NoInstanceFound] no instance found for <T>`；`@vuna@main_show` 在 split 归属里固定
   归入口单元 `Main`。
-- **`vuna test` 的 main 判据不变**：`cli/lib/Vuna/TestRunner.dtMainKind` 只认
+- **`vuna test` 的 main 判据不变**：`packages/cli/lib/Vuna/TestRunner.dtMainKind` 只认
   `Int` / `Nat` / `String` / `Bool`（按返回 0/空串/True 判通过）与动作入口（退出码 0）；
   其它类型报 `unsupported test main type`。展示规则不改变测试通过判据——
   需要按 `Show` 类型写「纯测试」只能显式转成 `String` 判定。

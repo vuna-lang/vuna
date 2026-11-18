@@ -38,7 +38,7 @@ stage 0 / stage 1 / 产品 CLI；`checks.seed-selfhost` 守整条链。
 种子（`seed/`）**提交入库**，是构建输入而不是构建产物。种子是**多文件文件集**：每个 vuna
 模块对应一个 OCaml 模块（`.ml`），外加共享 runtime 模块、`build.sh` 与 `build-id`（编译器身份，
 见 [cache.md](cache.md)「编译器身份」）。种子**只覆盖 compiler 包**
-（`compiler/app/Main.vuna` 的 import 闭包）：工具链（fmt/lint/repl/doc/test/lsp）由
+（`packages/compiler/app/Main.vuna` 的 import 闭包）：工具链（fmt/lint/repl/doc/test/lsp）由
 编译器编译出来，不在信任锚点里。当前闭包规模以 `seed/` 实际内容与 `nix/seed/files.txt` 为准。
 
 唯一的硬性不变量：
@@ -60,10 +60,10 @@ rotation 是**按需**事件；`seed-selfhost` 在 seed 落后时只输出滞后
 - **修改现有语义**：旧 seed 会按旧语义翻译新编译器，可能产生语义偏差；先以旧语义可正确
   编译的形式落地 → rotation → 再让源码依赖新语义；
 - **发布前**：发布流程必须 rotation 并跑完整 `nix flake check`；
-- 日常新增 / 修改功能、只改 `cli/`、`test/` 等工具链 / 夹具时，都不需要 rotation。
+- 日常新增 / 修改功能、只改 `packages/cli/`、`test/` 等工具链 / 夹具时，都不需要 rotation。
 
-取舍：信任锚点因此可能落后于源码。这是明确接受的代价，换来的是不再为每次 `compiler/`
-或 `base/` 改动产生 3–4k 行生成物 diff、避免 feature 分支与 rebase 的 seed 冲突。fixed point
+取舍：信任锚点因此可能落后于源码。这是明确接受的代价，换来的是不再为每次 `packages/compiler/`
+或 `packages/base/` 改动产生 3–4k 行生成物 diff、避免 feature 分支与 rebase 的 seed 冲突。fixed point
 仍保证当前编译器自洽；发布前由 rotation 收敛。滞后程度由 CI 报告与
 `nix/seed/rotation.txt` 元数据可见。
 
@@ -86,7 +86,7 @@ rotation 是**按需**事件；`seed-selfhost` 在 seed 落后时只输出滞后
 
 - `checks.seed-selfhost` 用 `LC_ALL=C diff -rq seed s1` 统计差异文件数，写入
   `$OUT/seed-lag.txt` 与 CI 日志，**不失败**；
-- `nix/seed/rotation.txt` 记录上次 rotation 的时间、`compiler/` + `base/` 源码指纹、
+- `nix/seed/rotation.txt` 记录上次 rotation 的时间、`packages/compiler/` + `packages/base/` 源码指纹、
   文件数、seed 闭包数量与 git commit（`nix/seed/rotate.sh` 写入）；它只用于审计，不参与
   失败判定；
 - rotation 必须独立成 `chore(seed): ...` 提交，不与特性提交混合。

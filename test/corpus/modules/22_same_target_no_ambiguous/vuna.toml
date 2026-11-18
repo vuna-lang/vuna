@@ -5,4 +5,4 @@
 name = "fix-22-same-target-no-ambiguous"
 
 [dependencies]
-vuna-base = "../../../../base"
+vuna-base = "../../../../packages/base"

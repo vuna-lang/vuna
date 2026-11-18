@@ -2,4 +2,4 @@
 name = "run-args"
 
 [dependencies]
-vuna-base = "../../../../base"
+vuna-base = "../../../../packages/base"

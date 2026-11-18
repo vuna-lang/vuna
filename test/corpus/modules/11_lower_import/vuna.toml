@@ -3,4 +3,4 @@
 name = "fix-11-lower-import"
 
 [dependencies]
-vuna-base = "../../../../base"
+vuna-base = "../../../../packages/base"

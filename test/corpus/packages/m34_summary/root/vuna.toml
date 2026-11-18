@@ -3,4 +3,4 @@ name = "summary-root"
 
 [dependencies]
 dep = "../dep"
-vuna-base = "../../../../../base"
+vuna-base = "../../../../../packages/base"

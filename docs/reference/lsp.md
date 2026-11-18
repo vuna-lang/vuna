@@ -5,7 +5,7 @@
 
 
 `vuna lsp` 是一个 **JSON-RPC 2.0 over stdio** 的语言服务：从 stdin 读帧、向 stdout 写帧，
-日志一律走 stderr。它是产品 CLI 工具链模块（`cli/lib/Vuna/Lsp.vuna` + `Lsp.Protocol` /
+日志一律走 stderr。它是产品 CLI 工具链模块（`packages/cli/lib/Vuna/Lsp.vuna` + `Lsp.Protocol` /
 `Lsp.Diagnostics` / `Lsp.Query` / `Lsp.Bindings`），**永不进入 seed 闭包**。
 
 ### 帧格式

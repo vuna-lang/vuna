@@ -5,4 +5,4 @@
 name = "fix-07-qualified-alias"
 
 [dependencies]
-vuna-base = "../../../../base"
+vuna-base = "../../../../packages/base"

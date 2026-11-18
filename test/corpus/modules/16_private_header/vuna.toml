@@ -5,4 +5,4 @@
 name = "fix-16-private-header"
 
 [dependencies]
-vuna-base = "../../../../base"
+vuna-base = "../../../../packages/base"

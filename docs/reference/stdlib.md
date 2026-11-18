@@ -5,8 +5,8 @@
   `HashMap arrayEmpty`（`[||]` 字面量，non-expansive）可正常泛化。`HashSet.empty` 仍在
   （`HashSet` 本身是泛型，但 `empty` 有签名约束、调用点总带具体类型）；# 标准库（vuna-base）
 
-标准库是独立成员包 `vuna-base`（模块 `Base.*`，模块根 `base/lib/`）。编译器是它的第一个
-用户：`compiler/lib/Vuna/Compiler/Base/Common.vuna` 只是门面（整模块重导出 `Base.Pair` /
+标准库是独立成员包 `vuna-base`（模块 `Base.*`，模块根 `packages/base/lib/`）。编译器是它的第一个
+用户：`packages/compiler/lib/Vuna/Compiler/Base/Common.vuna` 只是门面（整模块重导出 `Base.Pair` /
 `Base.Bool` / `Base.List` / `Base.Maybe` / `Base.Result` / `Base.String` + 保留编译器的
 `Pos` / `Span`、模块路径与诊断工具），编译器不再私自重复定义 `Maybe` / `List` 等类型。
 包名 `vuna-base` 与模块命名空间 `Base.*` 是两回事（包名 ≠ 模块名）。
@@ -65,7 +65,7 @@
 | `Base.Pure` | 纯 monad 门面：`Base.Pure.State` / `Reader` / `Error` / `IORef` |
 | `Base.Host` | 宿主效应门面：`Base.Host.Fs` / `Console` / `Process` / `Net` 等 |
 | `Base` | 包门面：整模块重导出核心模块（含 `Base.Nat` / `Base.Num` / `Base.Unit` / `Base.Applicative`(经 Monad) / `Base.Monoid` / `Base.Foldable` / `Base.Traversable` / `Base.Hashable`；不含 `Vec` 与哈希容器；`import Base` 即可用） |
-| `Prelude` | 顶层模块（`base/lib/Prelude.vuna`）：重导出 `Base.Pair` / `Bool` / `Eq` / `Ord` / `Num` / `Show` / `Interp` / `List` / `Maybe` / `Result` / `String` / `Monad`(含 `Applicative`) / `Unit` / `Monoid` / `Foldable` / `Traversable` / `Hashable`，按包上下文自动导入（规则见下节「Prelude 自动导入」）；显式 `import` 时不再重复注入；刻意不重导出 `Base.Eff`（效果 API 需显式 import；Prelude 仅 import 加载）与 `Base.Nat` |
+| `Prelude` | 顶层模块（`packages/base/lib/Prelude.vuna`）：重导出 `Base.Pair` / `Bool` / `Eq` / `Ord` / `Num` / `Show` / `Interp` / `List` / `Maybe` / `Result` / `String` / `Monad`(含 `Applicative`) / `Unit` / `Monoid` / `Foldable` / `Traversable` / `Hashable`，按包上下文自动导入（规则见下节「Prelude 自动导入」）；显式 `import` 时不再重复注入；刻意不重导出 `Base.Eff`（效果 API 需显式 import；Prelude 仅 import 加载）与 `Base.Nat` |
 
 推荐入口层：应用默认 `import Base`（或依赖自动 `Prelude`）；需要 effect / 容器 / host
 时用 `Base.Container.Map.insert` 这类门面路径，或 `import Base.Container as C` 后写
@@ -73,9 +73,9 @@
 
 抽象类型（`Map`、`HashMap`、`HashSet`）的构造器保持私有。`Map` / `Sort` / `HashMap` / `HashSet` 都不在 `Prelude` 里；`Base` 门面重导出 `Base.Map` / `Base.Sort`，但**不**含 HashMap / HashSet——它们与 `Map` 在 `insert` / `fromList` / `toList` / `size` 上同名（`HashMap` 还有 `lookup` / `member`，`HashSet` 有 `member` 与 `empty`），同时重导出会让 `insert` 等名字在使用点产生歧义（同名条目允许共存，按候选集解析）。
 用哈希容器时显式 `import Base.HashMap` / `Base.HashSet`；同文件使用多个容器时写完整限定名（`HashMap.insert` / `HashSet.member`）。
-跨包使用时只可见 `base/vuna.toml` `[export]` 列出的模块。
+跨包使用时只可见 `packages/base/vuna.toml` `[export]` 列出的模块。
 
-模块导出清单（`base/lib/*.vuna`、`base/lib/Base/*.vuna` 的模块头）：
+模块导出清单（`packages/base/lib/*.vuna`、`packages/base/lib/Base/*.vuna` 的模块头）：
 
 ```vuna
 module Base (module Base.Pair, module Base.Bool, module Base.List, module Base.Maybe,
@@ -121,7 +121,7 @@ module Base.Error (Error, catchError, ok, runError, throwError) where
 
 导出清单里没有宿主层别名模块，宿主操作直接调用 `prim_eff_*`；
 `Eff` / `runPure` / `joinEff` / `raise` / `runEff` 统一从 `Base.Eff` 显式 import。
-`Prelude` 的导出列表见 `base/lib/Prelude.vuna`。
+`Prelude` 的导出列表见 `packages/base/lib/Prelude.vuna`。
 
 ## 度量与 Nat
 
@@ -159,11 +159,11 @@ module Base.Error (Error, catchError, ok, runError, throwError) where
 
 ## 标准库与自举的关系
 
-- `base/lib/` 是 vuna 模块根，不是 OCaml 库目录；
+- `packages/base/lib/` 是 vuna 模块根，不是 OCaml 库目录；
 - 自动注入只看包上下文（有 base 依赖才注入 `Prelude`），矩阵见上节；没有第二套加载模式；
 - `Base.Eff` 刻意不重导出：动作类型与 handler 需要显式 `import Base.Eff`（`Prelude` 只
   `import Base.Eff` 以加载类型/原语闭包，不进自动导出面），效果面不随自动注入进入每个源文件；
-- `base/` 在 seed 闭包内：修改 seed 闭包内的源码需要 seed rotation，见
+- `packages/base/` 在 seed 闭包内：修改 seed 闭包内的源码需要 seed rotation，见
   [bootstrap.md](bootstrap.md)。
 
 ## 内建与库的边界

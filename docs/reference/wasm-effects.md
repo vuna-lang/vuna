@@ -99,5 +99,5 @@ stack-switching 回落。
 - [wasm.md](wasm.md)：wasm 后端现状、浏览器能力范围、宿主符号与栈口径。
 - [native-effects.md](native-effects.md)：native 的栈拷贝续延实现。
 - [effects.md](effects.md)：效应语义与 one-shot 约束。
-- `Ir.Cps`：`compiler/lib/Vuna/Compiler/Ir/Cps.vuna`；wasm 运行时：
-  `compiler/lib/Vuna/Compiler/Wasm/Runtime.vuna`。
+- `Ir.Cps`：`packages/compiler/lib/Vuna/Compiler/Ir/Cps.vuna`；wasm 运行时：
+  `packages/compiler/lib/Vuna/Compiler/Wasm/Runtime.vuna`。

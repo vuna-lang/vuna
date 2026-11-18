@@ -3,4 +3,4 @@
 name = "test-m30-member"
 
 [dependencies]
-vuna-base = "../../../../base"
+vuna-base = "../../../../packages/base"

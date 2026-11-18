@@ -5,4 +5,4 @@
 name = "fix-71-empty-exports-hidden"
 
 [dependencies]
-vuna-base = "../../../../base"
+vuna-base = "../../../../packages/base"

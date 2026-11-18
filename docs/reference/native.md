@@ -371,7 +371,7 @@ env，**不进 codegen**（同一 IR 的 `main.s` 逐字节确定）。解析失
 `rt_<name>`、`rt_lit_<n>`、`.L<n>`），不按位置编号；`.L<n>` 的编号**跨定义连续**，
 因为每个函数都重新从 0 起会让两个函数撞名（汇编器报 `symbol .L0 is already defined`）。
 
-依赖方向由 `compiler/vuna.toml` 的 `[layers]` 强制（`"Vuna.Compiler.Native" =
+依赖方向由 `packages/compiler/vuna.toml` 的 `[layers]` 强制（`"Vuna.Compiler.Native" =
 ["Vuna.Compiler.Ir"]`，见 [packages.md](packages.md)「层约束」）：`Native.*` 不得 import
 `Core` / `Elab` / `Intrinsics` / `Codegen` / `Wasm`；`Driver/Native` 不得 import
 `Core` / `Elab` / `Intrinsics`。`checks.ir-boundary` 保留形状与正向断言
@@ -408,7 +408,7 @@ env，**不进 codegen**（同一 IR 的 `main.s` 逐字节确定）。解析失
   越界 trap）；捕获块与栈段都按 2 的幂分档复用，但嵌套 resume 会同时保留多层栈段，
   因此 N 层顺序 effect 仍是 O(N²) 时间与内存（见 §3.4 的读数）。
 - FFI / extern；stdin 的 `readLine` / `readBytes` 与 net。
-- **自举运行**：`vuna build compiler --target native` 产出可链接的 `bin/vuna-compiler`
+- **自举运行**：`vuna build packages/compiler --target native` 产出可链接的 `bin/vuna-compiler`
   （`version` / 帮助可用）；`check <小包>` 能跑完并给出正常诊断。冷 store 上
   `check test/corpus/packages/m34_summary/root` **整包通过**（exit 0）。
   整仓 selfhost 的现状按 [debt.md](debt.md) D89 跟踪：尾调用（§3）只覆盖**直接饱和直调**，

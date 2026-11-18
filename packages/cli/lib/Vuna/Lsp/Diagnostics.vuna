@@ -278,7 +278,7 @@ ownNeededOf tool needed =
   in filter (\n => memName n ownNames) needed
 
 -- 会话建立时算过一次 `tcNeeded`（闭包），之后每个请求只做这次纯名字展开，不再跑
--- `ifaceModsEff`（接口身份计算在根包上是秒级固定开销）。
+-- `ifaceModsEff`（接口身份计算在包级是一次秒级固定开销）。
 -- | 内部：从起始名字沿接口的 `miDepHashes` 传递展开出的模块名闭包。
 closureNamesOf : List ModuleIface -> List String -> List String
 closureNamesOf ifaces starts = closureGo 8192 ifaces starts []

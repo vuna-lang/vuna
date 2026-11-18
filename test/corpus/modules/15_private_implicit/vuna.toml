@@ -5,4 +5,4 @@
 name = "fix-15-private-implicit"
 
 [dependencies]
-vuna-base = "../../../../base"
+vuna-base = "../../../../packages/base"

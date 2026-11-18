@@ -4,4 +4,4 @@
 name = "test-m30-bad-pure"
 
 [dependencies]
-vuna-base = "../../../../base"
+vuna-base = "../../../../packages/base"

@@ -94,7 +94,7 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
 为什么不用二进制内容哈希：OCaml 后端的 DWARF 写构建目录（`DW_AT_comp_dir`），同源两次构建的
 字节必然不同，内容哈希无法表达「同源同身份」。
 
-后果：改 `cli/`（工具链）不换编译器身份，不脏编译器缓存；改 `compiler/` 才换代；同一份编译器
+后果：改 `packages/cli/`（工具链）不换编译器身份，不脏编译器缓存；改 `packages/compiler/` 才换代；同一份编译器
 源码在任意 worktree / 目录构建得到同一身份；重建同源也不再换代。
 
 ## 单一 store 根
