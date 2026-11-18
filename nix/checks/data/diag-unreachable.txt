@@ -55,3 +55,8 @@ TC_UnsolvedMetavarInfer	精化/Core 内部不变量防御（Conv/Meta/Index/Patt
 PS_ExpectedExportItem	旧模块头/旧导出面专用诊断；夹具迁移后暂无合法新语法触发路径
 RN_AmbiguousConstructorExport	旧模块头/旧导出面专用诊断；夹具迁移后暂无合法新语法触发路径
 RN_CannotExportUnknownName	旧模块头/旧导出面专用诊断；夹具迁移后暂无合法新语法触发路径
+RN_DuplicateExport	只在「模块头导出列表 + 逐定义 export」混用时报；解析器尚不接受模块头导出列表，无合法语法触发
+RN_DuplicateImport	只在 Catalog 里定义，当前无构造点（重复 import 先由 RN_AmbiguousModule 收口）
+RN_DuplicateModuleAlias	只在 Catalog 里定义，当前无构造点（别名重复先由 RN_AmbiguousModule 收口）
+RN_ModuleAliasConflict	只在 Catalog 里定义，当前无构造点（别名冲突先由 RN_AmbiguousModule 收口）
+TC_EffResFamilyMissing	op 族的形状检查已先由 TC_HandleFamilyUnsupported 收口，无合法语法触发

@@ -52,3 +52,15 @@ TC_UnsolvedMetavarInfer
 PS_ExpectedExportItem
 RN_AmbiguousConstructorExport
 RN_CannotExportUnknownName
+
+# 解析顺序/效应族重排后失去触发的具体码：对应夹具现在先报更粗的码
+# （modules/76、97、98 报 RN_AmbiguousModule；dt_err/101 报
+# TC_HandleFamilyUnsupported），这些码本身已无构造点（RN_DuplicateImport /
+# RN_DuplicateModuleAlias / RN_ModuleAliasConflict 只在 Catalog 里定义；
+# RN_DuplicateExport 只在模块头导出列表与逐定义 export 混用时报，而解析器
+# 还不接受模块头导出列表）。重新接上触发点后从本文件删除。
+RN_DuplicateExport
+RN_DuplicateImport
+RN_DuplicateModuleAlias
+RN_ModuleAliasConflict
+TC_EffResFamilyMissing
