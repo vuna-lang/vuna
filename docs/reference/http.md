@@ -62,15 +62,25 @@ TLS 将来若自持，只是第三个 duplex 实现，`Http.*` 不需要改。
 
 ## 6. 现状与测试
 
-已落地：消息模型、双向编解码、严格解析规则、单连接服务循环
-（`Http.Connection`：duplex 抽象、请求预算、keep-alive / HTTP/1.0 关闭策略、非法输入回
-400 后关闭）与包内测试（`packages/http/test/{Codec,Connection}.vuna`，
-`vuna test packages/http`）。
-WebSocket 握手与帧、客户端循环按后续提交落地。
+已落地：
+
+- `Http.{Header,Request,Response,Parse,Render}`：消息模型、双向编解码、严格解析规则；
+- `Http.Connection`：单连接服务循环（duplex 抽象、请求预算、keep-alive / HTTP/1.0 关闭策略、
+  非法输入回 400 后关闭）；
+- `Http.WebSocket`：握手校验与 101 应答、帧编解码（文本/二进制/ping/pong/close），
+  拒绝未掩码客户端帧、保留位、分片与 64-bit 长度；
+- `Http.Client`：请求 → 写 → 读完整响应，与 Connection 共用 duplex 与预算；
+- 包内测试 `packages/http/test/{Codec,Connection,WebSocket,Client}.vuna`，
+  `vuna test packages/http` 四条全绿。`Client` 的测试是回环 e2e：客户端渲染请求 →
+  内存 duplex → 服务循环 → 客户端读响应。
 
 服务循环的预算是显式的：`messageBudget` = 头部上限 + 体上限 + 余量（单条消息），
 `readIterations` = 读循环轮数兜底，`defaultMaxRequests` = 每连接 100 条请求。
 三者都是常量，循环靠它们满足终止性检查——没有「无限循环」这种形状。
+
+工具链侧的消费者（`vuna dev obs serve --cdp` 换成 WS 服务端并删除 Node 桥）尚未接线：
+CLI 包要新增 `vuna-http` 依赖，同时 `nix/build/packages.nix` 的构建树要带上
+`packages/http`，属于独立一轮。
 
 基础算法在 `vuna-base`：`Base.Data.Sha1`（RFC 3174，十六进制与原始字节两种输出）与
 `Base.Data.Base64`（RFC 4648，严格解码）。它们放在 base 是因为属于通用算法，
