@@ -8,6 +8,7 @@ module Vuna.Compiler.Loader.Modules where
 import Vuna.Compiler.Base.Diagnostics.Loader
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Base.Diagnostics.Rn
+import Vuna.Compiler.Base.NameAlias as NameAlias
 import Base.Container.HashMap as HashMap
 import Base.Data.List as List
 import Vuna.Compiler.Frontend.Ast
@@ -134,7 +135,7 @@ validModuleName name = case splitOnDot name of
   segs => allSegmentsValid segs
 
 export mangle : String -> String -> String
-mangle prefix name = if prefix == "" then name else "${prefix}.${name}"
+mangle prefix name = if prefix == "" then name else "${NameAlias.canonicalModule prefix}.${name}"
 
 -- | 构造子 canonical 名 = `Module.Data.Ctor`（entry 文件 `Data.Ctor`）。
 -- 不同数据类型的同名构造子因此天然不冲突；裸名按期望类型在候选里选（见 Resolve/Elab）。
