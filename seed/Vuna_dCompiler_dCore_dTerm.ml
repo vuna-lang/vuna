@@ -810,7 +810,7 @@ and v_Vuna_dCompiler_dCore_dTerm_dlevelEscapesClo = (fun mc0 mc1 -> (match mc1 w
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 926 "Vuna/Compiler/Core/Term.vuna"
+# 931 "Vuna/Compiler/Core/Term.vuna"
 let rec v_Vuna_dCompiler_dCore_dTerm_dshowBinders = (fun mc0 -> (match mc0 with
   | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__673, dtb__674) -> (match dtb__673 with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__675; Base_dPair.f_Base_dPair_dPair_second = dtb__676 } -> (String.concat "" [" "; dtb__675; (v_Vuna_dCompiler_dCore_dTerm_dshowBinders dtb__674)])
@@ -820,14 +820,14 @@ let rec v_Vuna_dCompiler_dCore_dTerm_dshowBinders = (fun mc0 -> (match mc0 with
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 933 "Vuna/Compiler/Core/Term.vuna"
+# 938 "Vuna/Compiler/Core/Term.vuna"
 let rec v_Vuna_dCompiler_dCore_dTerm_dshowCoreChars = (fun mc0 -> (match mc0 with
   | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__677, dtb__678) -> (if (dtb__677 = 34) then ("\\\"" ^ (v_Vuna_dCompiler_dCore_dTerm_dshowCoreChars dtb__678)) else (if (dtb__677 = 92) then ("\\\\" ^ (v_Vuna_dCompiler_dCore_dTerm_dshowCoreChars dtb__678)) else (if (dtb__677 = 10) then ("\\n" ^ (v_Vuna_dCompiler_dCore_dTerm_dshowCoreChars dtb__678)) else (if (dtb__677 = 9) then ("\\t" ^ (v_Vuna_dCompiler_dCore_dTerm_dshowCoreChars dtb__678)) else (if (dtb__677 = 13) then ("\\r" ^ (v_Vuna_dCompiler_dCore_dTerm_dshowCoreChars dtb__678)) else ((Base_dList.dtp_pack (Base_dList.C_Base_dList_dList__x58__x58_ (dtb__677, Base_dList.C_Base_dList_dList_Nil))) ^ (v_Vuna_dCompiler_dCore_dTerm_dshowCoreChars dtb__678)))))))
   | Base_dList.C_Base_dList_dList_Nil -> ""
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 930 "Vuna/Compiler/Core/Term.vuna"
+# 935 "Vuna/Compiler/Core/Term.vuna"
 let v_Vuna_dCompiler_dCore_dTerm_dshowCoreString = (fun s -> (String.concat "" ["\""; (v_Vuna_dCompiler_dCore_dTerm_dshowCoreChars (Base_dList.dtp_unpack s)); "\""]))
 
 # 860 "Vuna/Compiler/Core/Term.vuna"
@@ -852,7 +852,7 @@ let rec v_Vuna_dCompiler_dCore_dTerm_dshowTerm = (fun mc0 -> (match mc0 with
   | C_Vuna_dCompiler_dCore_dTerm_dTerm_TVar (dtb__719, dtb__720, dtb__721) -> dtb__719
   | _ -> failwith "DT: impossible branch"
 ))
-# 906 "Vuna/Compiler/Core/Term.vuna"
+# 911 "Vuna/Compiler/Core/Term.vuna"
 and v_Vuna_dCompiler_dCore_dTerm_dshowArgTerms = (fun mc0 -> (match mc0 with
   | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__722, dtb__723) -> (match dtb__722 with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__724; Base_dPair.f_Base_dPair_dPair_second = dtb__725 } -> (String.concat "" [" "; (v_Vuna_dCompiler_dCore_dTerm_dshowTerm dtb__724); (v_Vuna_dCompiler_dCore_dTerm_dshowArgTerms dtb__723)])
@@ -861,7 +861,7 @@ and v_Vuna_dCompiler_dCore_dTerm_dshowArgTerms = (fun mc0 -> (match mc0 with
   | Base_dList.C_Base_dList_dList_Nil -> ""
   | _ -> failwith "DT: impossible branch"
 ))
-# 911 "Vuna/Compiler/Core/Term.vuna"
+# 916 "Vuna/Compiler/Core/Term.vuna"
 and v_Vuna_dCompiler_dCore_dTerm_drecordAppShow = (fun mc0 mc1 -> (match mc1 with
   | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__726, dtb__727) -> (match dtb__726 with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__728; Base_dPair.f_Base_dPair_dPair_second = dtb__729 } -> ((v_Vuna_dCompiler_dCore_dTerm_drecordAppShow (String.concat "" ["("; mc0; " "; (v_Vuna_dCompiler_dCore_dTerm_dshowTerm dtb__728); ")"])) dtb__727)
@@ -870,30 +870,32 @@ and v_Vuna_dCompiler_dCore_dTerm_drecordAppShow = (fun mc0 mc1 -> (match mc1 wit
   | Base_dList.C_Base_dList_dList_Nil -> mc0
   | _ -> failwith "DT: impossible branch"
 ))
-# 921 "Vuna/Compiler/Core/Term.vuna"
+# 926 "Vuna/Compiler/Core/Term.vuna"
 and v_Vuna_dCompiler_dCore_dTerm_dshowCoreAlts = (fun mc0 -> (match mc0 with
   | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__730, dtb__731) -> (String.concat "" [(v_Vuna_dCompiler_dCore_dTerm_dcaseAltName dtb__730); (v_Vuna_dCompiler_dCore_dTerm_dshowBinders (v_Vuna_dCompiler_dCore_dTerm_dbinderPairs (v_Vuna_dCompiler_dCore_dTerm_dcaseAltBinders dtb__730))); " => "; (v_Vuna_dCompiler_dCore_dTerm_dshowTerm (v_Vuna_dCompiler_dCore_dTerm_dcaseAltBody dtb__730)); " | "; (v_Vuna_dCompiler_dCore_dTerm_dshowCoreAlts dtb__731)])
   | Base_dList.C_Base_dList_dList_Nil -> ""
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 887 "Vuna/Compiler/Core/Term.vuna"
-let rec v_Vuna_dCompiler_dCore_dTerm_dshowTypeSig = (fun mc0 -> (match mc0 with
+# 889 "Vuna/Compiler/Core/Term.vuna"
+let rec v_Vuna_dCompiler_dCore_dTerm_dshowPiSig = (fun name implicit dom cod -> (if (name = "_") then (String.concat "" [(v_Vuna_dCompiler_dCore_dTerm_dshowSigParenIfPi dom); " -> "; (v_Vuna_dCompiler_dCore_dTerm_dshowTypeSig cod)]) else (if implicit then (String.concat "" ["{"; name; " : "; (v_Vuna_dCompiler_dCore_dTerm_dshowTypeSig dom); "} -> "; (v_Vuna_dCompiler_dCore_dTerm_dshowTypeSig cod)]) else (String.concat "" ["("; name; " : "; (v_Vuna_dCompiler_dCore_dTerm_dshowTypeSig dom); ") -> "; (v_Vuna_dCompiler_dCore_dTerm_dshowTypeSig cod)]))))
+# 895 "Vuna/Compiler/Core/Term.vuna"
+and v_Vuna_dCompiler_dCore_dTerm_dshowTypeSig = (fun mc0 -> (match mc0 with
   | C_Vuna_dCompiler_dCore_dTerm_dTerm_TRecord (dtb__732, dtb__733) -> ((v_Vuna_dCompiler_dCore_dTerm_dshowSigAppText dtb__732) dtb__733)
   | C_Vuna_dCompiler_dCore_dTerm_dTerm_TCon (dtb__734, dtb__735) -> (match dtb__735 with
   | Base_dList.C_Base_dList_dList_Nil -> dtb__734
   | _ -> (String.concat "" ["("; dtb__734; (v_Vuna_dCompiler_dCore_dTerm_dshowSigArgs dtb__735); ")"])
 )
   | C_Vuna_dCompiler_dCore_dTerm_dTerm_TApp (dtb__736, dtb__737, dtb__738) -> (String.concat "" ["("; (v_Vuna_dCompiler_dCore_dTerm_dshowSigParenIfPi dtb__736); " "; (v_Vuna_dCompiler_dCore_dTerm_dshowSigParenIfPi dtb__737); ")"])
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_TPi (dtb__739, dtb__740, dtb__741, dtb__742, dtb__743) -> (if (dtb__739 = "_") then (String.concat "" [(v_Vuna_dCompiler_dCore_dTerm_dshowSigParenIfPi dtb__742); " -> "; (v_Vuna_dCompiler_dCore_dTerm_dshowTypeSig dtb__743)]) else (if dtb__740 then (String.concat "" ["{"; dtb__739; " : "; (v_Vuna_dCompiler_dCore_dTerm_dshowTypeSig dtb__742); "} -> "; (v_Vuna_dCompiler_dCore_dTerm_dshowTypeSig dtb__743)]) else (String.concat "" ["("; dtb__739; " : "; (v_Vuna_dCompiler_dCore_dTerm_dshowTypeSig dtb__742); ") -> "; (v_Vuna_dCompiler_dCore_dTerm_dshowTypeSig dtb__743)])))
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_TPi (dtb__739, dtb__740, dtb__741, dtb__742, dtb__743) -> ((((v_Vuna_dCompiler_dCore_dTerm_dshowPiSig dtb__739) dtb__740) dtb__742) dtb__743)
   | _ -> (v_Vuna_dCompiler_dCore_dTerm_dshowTerm mc0)
 ))
-# 898 "Vuna/Compiler/Core/Term.vuna"
+# 903 "Vuna/Compiler/Core/Term.vuna"
 and v_Vuna_dCompiler_dCore_dTerm_dshowSigParenIfPi = (fun mc0 -> (match mc0 with
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_TPi (dtb__744, dtb__745, dtb__746, dtb__747, dtb__748) -> (String.concat "" ["("; (v_Vuna_dCompiler_dCore_dTerm_dshowTypeSig (C_Vuna_dCompiler_dCore_dTerm_dTerm_TPi (dtb__744, dtb__745, dtb__746, dtb__747, dtb__748))); ")"])
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_TPi (dtb__744, dtb__745, dtb__746, dtb__747, dtb__748) -> (String.concat "" ["("; ((((v_Vuna_dCompiler_dCore_dTerm_dshowPiSig dtb__744) dtb__745) dtb__747) dtb__748); ")"])
   | _ -> (v_Vuna_dCompiler_dCore_dTerm_dshowTypeSig mc0)
 ))
-# 902 "Vuna/Compiler/Core/Term.vuna"
+# 907 "Vuna/Compiler/Core/Term.vuna"
 and v_Vuna_dCompiler_dCore_dTerm_dshowSigArgs = (fun mc0 -> (match mc0 with
   | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__749, dtb__750) -> (match dtb__749 with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__751; Base_dPair.f_Base_dPair_dPair_second = dtb__752 } -> (String.concat "" [" "; (v_Vuna_dCompiler_dCore_dTerm_dshowSigParenIfPi dtb__751); (v_Vuna_dCompiler_dCore_dTerm_dshowSigArgs dtb__750)])
@@ -902,7 +904,7 @@ and v_Vuna_dCompiler_dCore_dTerm_dshowSigArgs = (fun mc0 -> (match mc0 with
   | Base_dList.C_Base_dList_dList_Nil -> ""
   | _ -> failwith "DT: impossible branch"
 ))
-# 916 "Vuna/Compiler/Core/Term.vuna"
+# 921 "Vuna/Compiler/Core/Term.vuna"
 and v_Vuna_dCompiler_dCore_dTerm_dshowSigAppText = (fun mc0 mc1 -> (match mc1 with
   | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__753, dtb__754) -> (match dtb__753 with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__755; Base_dPair.f_Base_dPair_dPair_second = dtb__756 } -> ((v_Vuna_dCompiler_dCore_dTerm_dshowSigAppText (String.concat "" ["("; mc0; " "; (v_Vuna_dCompiler_dCore_dTerm_dshowSigParenIfPi dtb__755); ")"])) dtb__754)

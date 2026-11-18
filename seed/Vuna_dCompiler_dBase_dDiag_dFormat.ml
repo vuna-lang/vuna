@@ -391,55 +391,74 @@ let v_Vuna_dCompiler_dBase_dDiag_dFormat_drenderSarif = (fun ds -> (String.conca
 # 513 "Vuna/Compiler/Base/Diag/Format.vuna"
 let v_Vuna_dCompiler_dBase_dDiag_dFormat_ddiagDescLine = (fun d -> "")
 
-# 533 "Vuna/Compiler/Base/Diag/Format.vuna"
-let rec v_Vuna_dCompiler_dBase_dDiag_dFormat_dtraceLines = (fun mc0 mc1 -> (match mc1 with
-  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__56, dtb__57) -> ((Base_dList.v_Base_dList_dappend (Base_dList.C_Base_dList_dList__x58__x58_ ((String.concat "" ["  = trace["; (v_Vuna_dCompiler_dBase_dDiag_dFormat_dphaseName (dtb__56).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dTraceFrame_tracePhase); "]: "; (dtb__56).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dTraceFrame_traceText]), Base_dList.C_Base_dList_dList_Nil))) ((v_Vuna_dCompiler_dBase_dDiag_dFormat_dtraceLines mc0) dtb__57))
+# 544 "Vuna/Compiler/Base/Diag/Format.vuna"
+let rec v_Vuna_dCompiler_dBase_dDiag_dFormat_dcallFieldsOf = (fun mc0 -> (match mc0 with
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__56, dtb__57) -> (match dtb__56 with
+  | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dDiagField_FieldCall (dtb__58) -> (Base_dList.C_Base_dList_dList__x58__x58_ (dtb__56, (v_Vuna_dCompiler_dBase_dDiag_dFormat_dcallFieldsOf dtb__57)))
+  | _ -> (v_Vuna_dCompiler_dBase_dDiag_dFormat_dcallFieldsOf dtb__57)
+)
   | Base_dList.C_Base_dList_dList_Nil -> Base_dList.C_Base_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 538 "Vuna/Compiler/Base/Diag/Format.vuna"
+# 550 "Vuna/Compiler/Base/Diag/Format.vuna"
+let rec v_Vuna_dCompiler_dBase_dDiag_dFormat_dtraceLines = (fun mc0 mc1 -> (match mc1 with
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__59, dtb__60) -> ((Base_dList.v_Base_dList_dappend (Base_dList.C_Base_dList_dList__x58__x58_ ((String.concat "" ["  = trace["; (v_Vuna_dCompiler_dBase_dDiag_dFormat_dphaseName (dtb__59).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dTraceFrame_tracePhase); "]: "; (dtb__59).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dTraceFrame_traceText]), Base_dList.C_Base_dList_dList_Nil))) ((v_Vuna_dCompiler_dBase_dDiag_dFormat_dtraceLines mc0) dtb__60))
+  | Base_dList.C_Base_dList_dList_Nil -> Base_dList.C_Base_dList_dList_Nil
+  | _ -> failwith "DT: impossible branch"
+))
+
+# 555 "Vuna/Compiler/Base/Diag/Format.vuna"
 let rec v_Vuna_dCompiler_dBase_dDiag_dFormat_dindent = (fun n -> (if (n <= 0) then "" else ("  " ^ (v_Vuna_dCompiler_dBase_dDiag_dFormat_dindent (n - 1)))))
 
-# 541 "Vuna/Compiler/Base/Diag/Format.vuna"
+# 558 "Vuna/Compiler/Base/Diag/Format.vuna"
 let v_Vuna_dCompiler_dBase_dDiag_dFormat_dsuggestionLine = (fun s -> (String.concat "" ["  = help: "; (s).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dSuggestion_suggestionTitle; " ("; (v_Vuna_dCompiler_dBase_dDiag_dFormat_dapplicabilityName (s).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dSuggestion_suggestionApplicability); ")"]))
 
-# 544 "Vuna/Compiler/Base/Diag/Format.vuna"
+# 561 "Vuna/Compiler/Base/Diag/Format.vuna"
 let v_Vuna_dCompiler_dBase_dDiag_dFormat_dshowInt = (fun n -> (bi_strFromInt n))
 
-# 547 "Vuna/Compiler/Base/Diag/Format.vuna"
+# 564 "Vuna/Compiler/Base/Diag/Format.vuna"
 let v_Vuna_dCompiler_dBase_dDiag_dFormat_dcandidateTextOf = (fun c -> (c).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dCandidate_candidateText)
 
-# 551 "Vuna/Compiler/Base/Diag/Format.vuna"
+# 568 "Vuna/Compiler/Base/Diag/Format.vuna"
 let v_Vuna_dCompiler_dBase_dDiag_dFormat_dcallSpanSuffix = (fun mc0 -> (match mc0 with
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__58) -> (String.concat "" [" at "; (dtb__58).Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanFile; ":"; (bi_strFromInt (dtb__58).Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanStartLine)])
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__61) -> (String.concat "" [" at "; (dtb__61).Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanFile; ":"; (bi_strFromInt (dtb__61).Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanStartLine)])
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> ""
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 519 "Vuna/Compiler/Base/Diag/Format.vuna"
 let v_Vuna_dCompiler_dBase_dDiag_dFormat_dfieldLine = (fun mc0 -> (match mc0 with
-  | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dDiagField_FieldNote (dtb__59) -> ("  = note: " ^ dtb__59)
-  | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dDiagField_FieldSpan (dtb__60, dtb__61) -> (String.concat "" ["  = span: "; dtb__60; " at "; (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dshowSpanLoc dtb__61)])
-  | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dDiagField_FieldModule (dtb__62) -> ("  = module: " ^ dtb__62)
-  | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dDiagField_FieldEffect (dtb__63) -> ("  = effect: " ^ dtb__63)
-  | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dDiagField_FieldQuantity (dtb__64, dtb__65, dtb__66) -> (String.concat "" ["  = quantity: "; dtb__64; " (declared "; (v_Vuna_dCompiler_dBase_dDiag_dFormat_dshowInt dtb__65); ", observed "; (v_Vuna_dCompiler_dBase_dDiag_dFormat_dshowInt dtb__66); ")"])
-  | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dDiagField_FieldCall (dtb__67) -> (String.concat "" ["  = call: "; (dtb__67).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dCallInfo_callCallee; " <- "; (dtb__67).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dCallInfo_callArg; " ("; (dtb__67).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dCallInfo_callRelation; ")"; (v_Vuna_dCompiler_dBase_dDiag_dFormat_dcallSpanSuffix (dtb__67).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dCallInfo_callSpan)])
-  | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dDiagField_FieldCandidates (dtb__68) -> ("  = candidates: " ^ ((Base_dString.v_Base_dString_djoin ", ") ((Base_dList.v_Base_dList_dmap v_Vuna_dCompiler_dBase_dDiag_dFormat_dcandidateTextOf) ((Base_dList.v_Base_dList_dtake 8) dtb__68))))
-  | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dDiagField_FieldName (dtb__69) -> ("  = name: " ^ dtb__69)
-  | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dDiagField_FieldFound (dtb__70) -> ("  = found: " ^ dtb__70)
-  | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dDiagField_FieldExpected (dtb__71) -> ("  = expected: " ^ dtb__71)
+  | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dDiagField_FieldNote (dtb__62) -> ("  = note: " ^ dtb__62)
+  | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dDiagField_FieldSpan (dtb__63, dtb__64) -> (String.concat "" ["  = span: "; dtb__63; " at "; (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dshowSpanLoc dtb__64)])
+  | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dDiagField_FieldModule (dtb__65) -> ("  = module: " ^ dtb__65)
+  | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dDiagField_FieldEffect (dtb__66) -> ("  = effect: " ^ dtb__66)
+  | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dDiagField_FieldQuantity (dtb__67, dtb__68, dtb__69) -> (String.concat "" ["  = quantity: "; dtb__67; " (declared "; (v_Vuna_dCompiler_dBase_dDiag_dFormat_dshowInt dtb__68); ", observed "; (v_Vuna_dCompiler_dBase_dDiag_dFormat_dshowInt dtb__69); ")"])
+  | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dDiagField_FieldCall (dtb__70) -> (String.concat "" ["  = call: "; (dtb__70).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dCallInfo_callCallee; " <- "; (dtb__70).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dCallInfo_callArg; " ("; (dtb__70).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dCallInfo_callRelation; ")"; (v_Vuna_dCompiler_dBase_dDiag_dFormat_dcallSpanSuffix (dtb__70).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dCallInfo_callSpan)])
+  | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dDiagField_FieldCandidates (dtb__71) -> ("  = candidates: " ^ ((Base_dString.v_Base_dString_djoin ", ") ((Base_dList.v_Base_dList_dmap v_Vuna_dCompiler_dBase_dDiag_dFormat_dcandidateTextOf) ((Base_dList.v_Base_dList_dtake 8) dtb__71))))
+  | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dDiagField_FieldName (dtb__72) -> ("  = name: " ^ dtb__72)
+  | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dDiagField_FieldFound (dtb__73) -> ("  = found: " ^ dtb__73)
+  | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dDiagField_FieldExpected (dtb__74) -> ("  = expected: " ^ dtb__74)
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 260 "Vuna/Compiler/Base/Diag/Format.vuna"
 let v_Vuna_dCompiler_dBase_dDiag_dFormat_drenderHuman = (fun nFs lang d -> ((fun primary -> ((fun ptext -> (((Base_dMonad.v_Base_dMonad_d_x62__x62__x61_ Base_dEff.v_Monad_uBase_uEff_uEff_ur) (match primary with
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__72) -> ((v_Vuna_dCompiler_dBase_dDiag_dFormat_drenderSnippet nFs) dtb__72)
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__75) -> ((v_Vuna_dCompiler_dBase_dDiag_dFormat_drenderSnippet nFs) dtb__75)
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) "")
   | _ -> failwith "DT: impossible branch"
 )) (fun snippet -> (((Base_dMonad.v_Base_dMonad_d_x62__x62__x61_ Base_dEff.v_Monad_uBase_uEff_uEff_ur) (((v_Vuna_dCompiler_dBase_dDiag_dFormat_drenderRelated nFs) primary) (d).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagLabels)) (fun related -> ((fun labelNote -> ((fun notes -> ((fun descLine -> ((fun origLine -> ((fun fieldBlock -> ((fun traceBlock -> ((fun helpBlock -> ((fun block -> ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) (Base_dString.v_Base_dString_dtrim block))) ((Base_dString.v_Base_dString_djoin "\n") (Base_dList.C_Base_dList_dList__x58__x58_ (((v_Vuna_dCompiler_dBase_dDiag_dFormat_dheaderOf lang) d), (Base_dList.C_Base_dList_dList__x58__x58_ (snippet, (Base_dList.C_Base_dList_dList__x58__x58_ (related, (Base_dList.C_Base_dList_dList__x58__x58_ (labelNote, (Base_dList.C_Base_dList_dList__x58__x58_ (origLine, (Base_dList.C_Base_dList_dList__x58__x58_ (notes, (Base_dList.C_Base_dList_dList__x58__x58_ (fieldBlock, (Base_dList.C_Base_dList_dList__x58__x58_ (traceBlock, (Base_dList.C_Base_dList_dList__x58__x58_ (helpBlock, (Base_dList.C_Base_dList_dList__x58__x58_ (descLine, Base_dList.C_Base_dList_dList_Nil))))))))))))))))))))))) ((Base_dString.v_Base_dString_djoin "\n") ((Base_dList.v_Base_dList_dmap v_Vuna_dCompiler_dBase_dDiag_dFormat_dsuggestionLine) (d).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagSuggestions)))) ((Base_dString.v_Base_dString_djoin "\n") ((v_Vuna_dCompiler_dBase_dDiag_dFormat_dtraceLines 0) (d).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagTrace)))) ((Base_dString.v_Base_dString_djoin "\n") ((Base_dList.v_Base_dList_dmap v_Vuna_dCompiler_dBase_dDiag_dFormat_dfieldLine) (d).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagFields)))) (if (((v_Vuna_dCompiler_dBase_dDiag_dFormat_dlocalizedMessage lang) d) = (d).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagMessage) then "" else ("  = message: " ^ (d).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagMessage)))) (v_Vuna_dCompiler_dBase_dDiag_dFormat_ddiagDescLine d))) ((Base_dString.v_Base_dString_djoin "\n") ((Base_dList.v_Base_dList_dmap (fun n -> ("  = note: " ^ ((Base_dInterp.v_Base_dInterp_dinterp Base_dInterp.v_Interp_uString) n)))) (d).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagNotes)))) (if (ptext = "") then "" else ("  = note: " ^ ptext)))))))) (v_Vuna_dCompiler_dBase_dDiag_dFormat_dprimaryText (d).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagLabels))) (v_Vuna_dCompiler_dBase_dDiag_dFormat_dprimarySpan (d).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagLabels)))
 
-# 555 "Vuna/Compiler/Base/Diag/Format.vuna"
+# 535 "Vuna/Compiler/Base/Diag/Format.vuna"
+let v_Vuna_dCompiler_dBase_dDiag_dFormat_dcallFieldBlock = (fun ds -> ((Base_dString.v_Base_dString_djoin "\n") ((Base_dList.v_Base_dList_dmap v_Vuna_dCompiler_dBase_dDiag_dFormat_dfieldLine) (v_Vuna_dCompiler_dBase_dDiag_dFormat_dcallFieldsOf ds))))
+
+# 539 "Vuna/Compiler/Base/Diag/Format.vuna"
+let v_Vuna_dCompiler_dBase_dDiag_dFormat_dcallFieldSuffix = (fun ds -> (match (v_Vuna_dCompiler_dBase_dDiag_dFormat_dcallFieldsOf ds) with
+  | Base_dList.C_Base_dList_dList_Nil -> ""
+  | _ -> ("\n" ^ (v_Vuna_dCompiler_dBase_dDiag_dFormat_dcallFieldBlock ds))
+))
+
+# 572 "Vuna/Compiler/Base/Diag/Format.vuna"
 let v_Vuna_dCompiler_dBase_dDiag_dFormat_dlocalizedJsonField = (fun lang d -> ((fun lm -> (if (lm = (d).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagMessage) then "" else (",\"localizedMessage\":" ^ (v_Vuna_dCompiler_dBase_dDiag_dFormat_djsonStr lm)))) ((v_Vuna_dCompiler_dBase_dDiag_dFormat_dlocalizedMessage lang) d)))
 
 # 399 "Vuna/Compiler/Base/Diag/Format.vuna"

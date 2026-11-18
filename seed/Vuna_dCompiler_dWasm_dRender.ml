@@ -51,7 +51,7 @@ let v_Vuna_dCompiler_dWasm_dRender_dwatString = (fun s -> (Base_dList.dtp_pack (
 
 # 81 "Vuna/Compiler/Wasm/Render.vuna"
 let rec v_Vuna_dCompiler_dWasm_dRender_dchunkBytesGo = (fun mc0 mc1 mc2 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__4, dtb__5) -> (if (mc1 = 0) then (Base_dList.C_Base_dList_dList__x58__x58_ ((Base_dList.v_Base_dList_dreverse mc2), (((v_Vuna_dCompiler_dWasm_dRender_dchunkBytesGo (Base_dList.C_Base_dList_dList__x58__x58_ (dtb__4, dtb__5))) 24) Base_dList.C_Base_dList_dList_Nil))) else (((v_Vuna_dCompiler_dWasm_dRender_dchunkBytesGo dtb__5) (mc1 - 1)) (Base_dList.C_Base_dList_dList__x58__x58_ (dtb__4, mc2))))
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__4, dtb__5) -> (if (mc1 = 0) then (Base_dList.C_Base_dList_dList__x58__x58_ ((Base_dList.v_Base_dList_dreverse mc2), (((v_Vuna_dCompiler_dWasm_dRender_dchunkBytesGo dtb__5) 23) (Base_dList.C_Base_dList_dList__x58__x58_ (dtb__4, Base_dList.C_Base_dList_dList_Nil))))) else (((v_Vuna_dCompiler_dWasm_dRender_dchunkBytesGo dtb__5) (mc1 - 1)) (Base_dList.C_Base_dList_dList__x58__x58_ (dtb__4, mc2))))
   | Base_dList.C_Base_dList_dList_Nil -> (if (((Base_dEq.v_Base_dEq_d_x61__x61_ (Base_dList.v_Eq_uBase_uList_uList_ua Base_dInt.v_Eq_uInt)) mc2) Base_dList.C_Base_dList_dList_Nil) then Base_dList.C_Base_dList_dList_Nil else (Base_dList.C_Base_dList_dList__x58__x58_ ((Base_dList.v_Base_dList_dreverse mc2), Base_dList.C_Base_dList_dList_Nil)))
   | _ -> failwith "DT: impossible branch"
 ))
@@ -59,10 +59,10 @@ let rec v_Vuna_dCompiler_dWasm_dRender_dchunkBytesGo = (fun mc0 mc1 mc2 -> (matc
 # 78 "Vuna/Compiler/Wasm/Render.vuna"
 let v_Vuna_dCompiler_dWasm_dRender_dchunkBytes = (fun bytes -> (((v_Vuna_dCompiler_dWasm_dRender_dchunkBytesGo bytes) 24) Base_dList.C_Base_dList_dList_Nil))
 
-# 89 "Vuna/Compiler/Wasm/Render.vuna"
+# 90 "Vuna/Compiler/Wasm/Render.vuna"
 let v_Vuna_dCompiler_dWasm_dRender_dresultSuffix = (fun mc0 -> (if (mc0 = "") then "" else (String.concat "" [" (result "; mc0; ")"])))
 
-# 93 "Vuna/Compiler/Wasm/Render.vuna"
+# 94 "Vuna/Compiler/Wasm/Render.vuna"
 let v_Vuna_dCompiler_dWasm_dRender_drenderInstrFlat = (fun mc0 -> (match mc0 with
   | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_IComment (dtb__6) -> ""
   | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_IStore64 -> "i64.store"
@@ -78,41 +78,43 @@ let v_Vuna_dCompiler_dWasm_dRender_drenderInstrFlat = (fun mc0 -> (match mc0 wit
   | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_ILoop (dtb__9, dtb__10, dtb__11) -> ""
   | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_IBlock (dtb__12, dtb__13, dtb__14) -> ""
   | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_IIf (dtb__15, dtb__16, dtb__17) -> ""
+  | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_ITryTable (dtb__18, dtb__19, dtb__20, dtb__21) -> ""
+  | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_IThrow (dtb__22) -> ("throw " ^ dtb__22)
   | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_II31GetS -> "i31.get_s"
   | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_II31GetU -> "i31.get_u"
   | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_II31New -> "ref.i31"
-  | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_IArrayCopy (dtb__18, dtb__19) -> (String.concat "" ["array.copy "; dtb__18; " "; dtb__19])
+  | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_IArrayCopy (dtb__23, dtb__24) -> (String.concat "" ["array.copy "; dtb__23; " "; dtb__24])
   | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_IArrayLen -> "array.len"
-  | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_IArraySet (dtb__20) -> ("array.set " ^ dtb__20)
-  | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_IArrayGetS (dtb__21) -> ("array.get_s " ^ dtb__21)
-  | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_IArrayGetU (dtb__22) -> ("array.get_u " ^ dtb__22)
-  | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_IArrayGet (dtb__23) -> ("array.get " ^ dtb__23)
-  | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_IArrayNewData (dtb__24, dtb__25) -> (String.concat "" ["array.new_data "; dtb__24; " "; dtb__25])
-  | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_IArrayNewFixed (dtb__26, dtb__27) -> (String.concat "" ["array.new_fixed "; dtb__26; " "; (bi_strFromInt dtb__27)])
-  | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_IArrayNewDefault (dtb__28) -> ("array.new_default " ^ dtb__28)
-  | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_IArrayNew (dtb__29) -> ("array.new " ^ dtb__29)
-  | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_IStructSet (dtb__30, dtb__31) -> (String.concat "" ["struct.set "; dtb__30; " "; (bi_strFromInt dtb__31)])
-  | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_IStructGet (dtb__32, dtb__33) -> (String.concat "" ["struct.get "; dtb__32; " "; (bi_strFromInt dtb__33)])
-  | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_IStructNew (dtb__34) -> ("struct.new " ^ dtb__34)
+  | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_IArraySet (dtb__25) -> ("array.set " ^ dtb__25)
+  | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_IArrayGetS (dtb__26) -> ("array.get_s " ^ dtb__26)
+  | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_IArrayGetU (dtb__27) -> ("array.get_u " ^ dtb__27)
+  | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_IArrayGet (dtb__28) -> ("array.get " ^ dtb__28)
+  | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_IArrayNewData (dtb__29, dtb__30) -> (String.concat "" ["array.new_data "; dtb__29; " "; dtb__30])
+  | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_IArrayNewFixed (dtb__31, dtb__32) -> (String.concat "" ["array.new_fixed "; dtb__31; " "; (bi_strFromInt dtb__32)])
+  | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_IArrayNewDefault (dtb__33) -> ("array.new_default " ^ dtb__33)
+  | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_IArrayNew (dtb__34) -> ("array.new " ^ dtb__34)
+  | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_IStructSet (dtb__35, dtb__36) -> (String.concat "" ["struct.set "; dtb__35; " "; (bi_strFromInt dtb__36)])
+  | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_IStructGet (dtb__37, dtb__38) -> (String.concat "" ["struct.get "; dtb__37; " "; (bi_strFromInt dtb__38)])
+  | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_IStructNew (dtb__39) -> ("struct.new " ^ dtb__39)
   | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_IRefAsNonNull -> "ref.as_non_null"
-  | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_IRefTest (dtb__35) -> (String.concat "" ["ref.test (ref "; dtb__35; ")"])
-  | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_IRefCast (dtb__36) -> (String.concat "" ["ref.cast (ref "; dtb__36; ")"])
+  | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_IRefTest (dtb__40) -> (String.concat "" ["ref.test (ref "; dtb__40; ")"])
+  | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_IRefCast (dtb__41) -> (String.concat "" ["ref.cast (ref "; dtb__41; ")"])
   | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_IRefNull -> "ref.null any"
-  | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_IRefFunc (dtb__37) -> ("ref.func " ^ dtb__37)
-  | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_IReturnCallRef (dtb__38) -> ("return_call_ref " ^ dtb__38)
-  | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_IReturnCall (dtb__39) -> ("return_call " ^ dtb__39)
-  | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_ICallRef (dtb__40) -> ("call_ref " ^ dtb__40)
-  | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_ICall (dtb__41) -> ("call " ^ dtb__41)
-  | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_IBinop (dtb__42) -> dtb__42
-  | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_IUnop (dtb__43) -> dtb__43
-  | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_IPlain (dtb__44) -> dtb__44
-  | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_IConstI64 (dtb__45) -> ("i64.const " ^ (bi_strFromInt dtb__45))
-  | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_IConstI32 (dtb__46) -> ("i32.const " ^ (bi_strFromInt dtb__46))
-  | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_IGlobalSet (dtb__47) -> ("global.set " ^ dtb__47)
-  | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_IGlobalGet (dtb__48) -> ("global.get " ^ dtb__48)
-  | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_ILocalTee (dtb__49) -> ("local.tee " ^ dtb__49)
-  | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_ILocalSet (dtb__50) -> ("local.set " ^ dtb__50)
-  | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_ILocalGet (dtb__51) -> ("local.get " ^ dtb__51)
+  | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_IRefFunc (dtb__42) -> ("ref.func " ^ dtb__42)
+  | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_IReturnCallRef (dtb__43) -> ("return_call_ref " ^ dtb__43)
+  | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_IReturnCall (dtb__44) -> ("return_call " ^ dtb__44)
+  | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_ICallRef (dtb__45) -> ("call_ref " ^ dtb__45)
+  | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_ICall (dtb__46) -> ("call " ^ dtb__46)
+  | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_IBinop (dtb__47) -> dtb__47
+  | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_IUnop (dtb__48) -> dtb__48
+  | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_IPlain (dtb__49) -> dtb__49
+  | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_IConstI64 (dtb__50) -> ("i64.const " ^ (bi_strFromInt dtb__50))
+  | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_IConstI32 (dtb__51) -> ("i32.const " ^ (bi_strFromInt dtb__51))
+  | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_IGlobalSet (dtb__52) -> ("global.set " ^ dtb__52)
+  | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_IGlobalGet (dtb__53) -> ("global.get " ^ dtb__53)
+  | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_ILocalTee (dtb__54) -> ("local.tee " ^ dtb__54)
+  | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_ILocalSet (dtb__55) -> ("local.set " ^ dtb__55)
+  | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_ILocalGet (dtb__56) -> ("local.get " ^ dtb__56)
   | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_IDrop -> "drop"
   | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_IReturn -> "return"
   | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_IUnreachable -> "unreachable"
@@ -120,107 +122,110 @@ let v_Vuna_dCompiler_dWasm_dRender_drenderInstrFlat = (fun mc0 -> (match mc0 wit
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 148 "Vuna/Compiler/Wasm/Render.vuna"
-let rec v_Vuna_dCompiler_dWasm_dRender_drenderInstrs = (fun indent instrs -> ((Base_dList.v_Base_dList_dconcatMap (v_Vuna_dCompiler_dWasm_dRender_drenderInstr indent)) instrs))
 # 151 "Vuna/Compiler/Wasm/Render.vuna"
+let rec v_Vuna_dCompiler_dWasm_dRender_drenderInstrs = (fun indent instrs -> ((Base_dList.v_Base_dList_dconcatMap (v_Vuna_dCompiler_dWasm_dRender_drenderInstr indent)) instrs))
+# 154 "Vuna/Compiler/Wasm/Render.vuna"
 and v_Vuna_dCompiler_dWasm_dRender_drenderInstr = (fun mc0 mc1 -> (match mc1 with
-  | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_IComment (dtb__52) -> ((Base_dList.v_Base_dList_dmap (v_Vuna_dCompiler_dWasm_dRender_dlineOf mc0)) ((v_Vuna_dCompiler_dWasm_dRender_dwrapComment 0) (";; " ^ dtb__52)))
-  | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_ILoop (dtb__53, dtb__54, dtb__55) -> ((((v_Vuna_dCompiler_dWasm_dRender_drenderLoop mc0) dtb__53) dtb__54) dtb__55)
-  | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_IBlock (dtb__56, dtb__57, dtb__58) -> ((((v_Vuna_dCompiler_dWasm_dRender_drenderBlock mc0) dtb__56) dtb__57) dtb__58)
-  | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_IIf (dtb__59, dtb__60, dtb__61) -> ((((v_Vuna_dCompiler_dWasm_dRender_drenderIf mc0) dtb__59) dtb__60) dtb__61)
+  | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_IComment (dtb__57) -> ((Base_dList.v_Base_dList_dmap (v_Vuna_dCompiler_dWasm_dRender_dlineOf mc0)) ((v_Vuna_dCompiler_dWasm_dRender_dwrapComment 0) (";; " ^ dtb__57)))
+  | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_ILoop (dtb__58, dtb__59, dtb__60) -> ((((v_Vuna_dCompiler_dWasm_dRender_drenderLoop mc0) dtb__58) dtb__59) dtb__60)
+  | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_IBlock (dtb__61, dtb__62, dtb__63) -> ((((v_Vuna_dCompiler_dWasm_dRender_drenderBlock mc0) dtb__61) dtb__62) dtb__63)
+  | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_ITryTable (dtb__64, dtb__65, dtb__66, dtb__67) -> (((((v_Vuna_dCompiler_dWasm_dRender_drenderTryTable mc0) dtb__64) dtb__65) dtb__66) dtb__67)
+  | Vuna_dCompiler_dWasm_dInstr.C_Vuna_dCompiler_dWasm_dInstr_dInstr_IIf (dtb__68, dtb__69, dtb__70) -> ((((v_Vuna_dCompiler_dWasm_dRender_drenderIf mc0) dtb__68) dtb__69) dtb__70)
   | _ -> (Base_dList.C_Base_dList_dList__x58__x58_ (((v_Vuna_dCompiler_dWasm_dRender_dlineOf mc0) (v_Vuna_dCompiler_dWasm_dRender_drenderInstrFlat mc1)), Base_dList.C_Base_dList_dList_Nil))
 ))
-# 158 "Vuna/Compiler/Wasm/Render.vuna"
+# 162 "Vuna/Compiler/Wasm/Render.vuna"
 and v_Vuna_dCompiler_dWasm_dRender_drenderIf = (fun indent resultTy th el -> ((fun openLine -> ((fun thenBody -> ((fun elseLine -> ((fun elseBody -> ((fun endLine -> ((Base_dList.v_Base_dList_dappend openLine) ((Base_dList.v_Base_dList_dappend thenBody) ((Base_dList.v_Base_dList_dappend elseLine) ((Base_dList.v_Base_dList_dappend elseBody) endLine))))) (Base_dList.C_Base_dList_dList__x58__x58_ (((v_Vuna_dCompiler_dWasm_dRender_dlineOf indent) "end"), Base_dList.C_Base_dList_dList_Nil)))) ((v_Vuna_dCompiler_dWasm_dRender_drenderInstrs (indent + 2)) el))) (Base_dList.C_Base_dList_dList__x58__x58_ (((v_Vuna_dCompiler_dWasm_dRender_dlineOf indent) "else"), Base_dList.C_Base_dList_dList_Nil)))) ((v_Vuna_dCompiler_dWasm_dRender_drenderInstrs (indent + 2)) th))) (Base_dList.C_Base_dList_dList__x58__x58_ (((v_Vuna_dCompiler_dWasm_dRender_dlineOf indent) ("if" ^ (v_Vuna_dCompiler_dWasm_dRender_dresultSuffix resultTy))), Base_dList.C_Base_dList_dList_Nil))))
-# 168 "Vuna/Compiler/Wasm/Render.vuna"
+# 172 "Vuna/Compiler/Wasm/Render.vuna"
 and v_Vuna_dCompiler_dWasm_dRender_drenderBlock = (fun indent label resultTy body -> ((fun openLine -> ((Base_dList.v_Base_dList_dappend openLine) ((Base_dList.v_Base_dList_dappend ((v_Vuna_dCompiler_dWasm_dRender_drenderInstrs (indent + 2)) body)) (Base_dList.C_Base_dList_dList__x58__x58_ (((v_Vuna_dCompiler_dWasm_dRender_dlineOf indent) "end"), Base_dList.C_Base_dList_dList_Nil))))) (Base_dList.C_Base_dList_dList__x58__x58_ (((v_Vuna_dCompiler_dWasm_dRender_dlineOf indent) (String.concat "" ["block "; label; (v_Vuna_dCompiler_dWasm_dRender_dresultSuffix resultTy)])), Base_dList.C_Base_dList_dList_Nil))))
-# 174 "Vuna/Compiler/Wasm/Render.vuna"
+# 178 "Vuna/Compiler/Wasm/Render.vuna"
 and v_Vuna_dCompiler_dWasm_dRender_drenderLoop = (fun indent label resultTy body -> ((fun openLine -> ((Base_dList.v_Base_dList_dappend openLine) ((Base_dList.v_Base_dList_dappend ((v_Vuna_dCompiler_dWasm_dRender_drenderInstrs (indent + 2)) body)) (Base_dList.C_Base_dList_dList__x58__x58_ (((v_Vuna_dCompiler_dWasm_dRender_dlineOf indent) "end"), Base_dList.C_Base_dList_dList_Nil))))) (Base_dList.C_Base_dList_dList__x58__x58_ (((v_Vuna_dCompiler_dWasm_dRender_dlineOf indent) (String.concat "" ["loop "; label; (v_Vuna_dCompiler_dWasm_dRender_dresultSuffix resultTy)])), Base_dList.C_Base_dList_dList_Nil))))
+# 186 "Vuna/Compiler/Wasm/Render.vuna"
+and v_Vuna_dCompiler_dWasm_dRender_drenderTryTable = (fun indent label tag body normal -> ((fun openLine -> ((fun tryOpen -> ((fun bodyLines -> ((fun tryClose -> ((fun normalLines -> ((fun closeLine -> ((Base_dList.v_Base_dList_dappend openLine) ((Base_dList.v_Base_dList_dappend tryOpen) ((Base_dList.v_Base_dList_dappend bodyLines) ((Base_dList.v_Base_dList_dappend tryClose) ((Base_dList.v_Base_dList_dappend normalLines) closeLine)))))) (Base_dList.C_Base_dList_dList__x58__x58_ (((v_Vuna_dCompiler_dWasm_dRender_dlineOf indent) "end"), Base_dList.C_Base_dList_dList_Nil)))) ((v_Vuna_dCompiler_dWasm_dRender_drenderInstrs (indent + 2)) normal))) (Base_dList.C_Base_dList_dList__x58__x58_ (((v_Vuna_dCompiler_dWasm_dRender_dlineOf (indent + 2)) "end"), Base_dList.C_Base_dList_dList_Nil)))) ((v_Vuna_dCompiler_dWasm_dRender_drenderInstrs (indent + 4)) body))) (Base_dList.C_Base_dList_dList__x58__x58_ (((v_Vuna_dCompiler_dWasm_dRender_dlineOf (indent + 2)) (String.concat "" ["try_table (result anyref) (catch "; tag; " "; label; ")"])), Base_dList.C_Base_dList_dList_Nil)))) (Base_dList.C_Base_dList_dList__x58__x58_ (((v_Vuna_dCompiler_dWasm_dRender_dlineOf indent) (String.concat "" ["block "; label; " (result anyref)"])), Base_dList.C_Base_dList_dList_Nil))))
 
-# 183 "Vuna/Compiler/Wasm/Render.vuna"
+# 201 "Vuna/Compiler/Wasm/Render.vuna"
 let v_Vuna_dCompiler_dWasm_dRender_drenderParam = (fun p -> (String.concat "" ["(param "; (Base_dPair.v_Base_dPair_dfirstOf p); " "; (Vuna_dCompiler_dWasm_dModel.v_Vuna_dCompiler_dWasm_dModel_dwatValTyText (Base_dPair.v_Base_dPair_dsecondOf p)); ")"]))
 
-# 186 "Vuna/Compiler/Wasm/Render.vuna"
+# 204 "Vuna/Compiler/Wasm/Render.vuna"
 let v_Vuna_dCompiler_dWasm_dRender_drenderResult = (fun ty -> (String.concat "" ["(result "; (Vuna_dCompiler_dWasm_dModel.v_Vuna_dCompiler_dWasm_dModel_dwatValTyText ty); ")"]))
 
-# 189 "Vuna/Compiler/Wasm/Render.vuna"
+# 207 "Vuna/Compiler/Wasm/Render.vuna"
 let v_Vuna_dCompiler_dWasm_dRender_drenderField = (fun f -> ((fun tyText -> (String.concat "" ["(field "; tyText; ")"])) (if (f).Vuna_dCompiler_dWasm_dModel.f_Vuna_dCompiler_dWasm_dModel_dWatField_watFieldMut then (String.concat "" ["(mut "; (Vuna_dCompiler_dWasm_dModel.v_Vuna_dCompiler_dWasm_dModel_dwatValTyText (f).Vuna_dCompiler_dWasm_dModel.f_Vuna_dCompiler_dWasm_dModel_dWatField_watFieldTy); ")"]) else (Vuna_dCompiler_dWasm_dModel.v_Vuna_dCompiler_dWasm_dModel_dwatValTyText (f).Vuna_dCompiler_dWasm_dModel.f_Vuna_dCompiler_dWasm_dModel_dWatField_watFieldTy))))
 
-# 197 "Vuna/Compiler/Wasm/Render.vuna"
+# 215 "Vuna/Compiler/Wasm/Render.vuna"
 let v_Vuna_dCompiler_dWasm_dRender_dfuncTypeOne = (fun name params results -> ((fun paramsText -> ((fun resultsText -> ((v_Vuna_dCompiler_dWasm_dRender_dlineOf 2) (String.concat "" ["(type "; name; " (func"; paramsText; resultsText; "))"]))) ((v_Vuna_dCompiler_dWasm_dRender_djoinWith "") ((Base_dList.v_Base_dList_dmap (fun r -> (" " ^ (v_Vuna_dCompiler_dWasm_dRender_drenderResult r)))) results)))) ((v_Vuna_dCompiler_dWasm_dRender_djoinWith "") ((Base_dList.v_Base_dList_dmap (fun p -> (String.concat "" [" (param "; (Vuna_dCompiler_dWasm_dModel.v_Vuna_dCompiler_dWasm_dModel_dwatValTyText p); ")"]))) params))))
 
-# 204 "Vuna/Compiler/Wasm/Render.vuna"
+# 222 "Vuna/Compiler/Wasm/Render.vuna"
 let v_Vuna_dCompiler_dWasm_dRender_dfuncTypeMulti = (fun name params results -> ((fun openLine -> ((fun funcLine -> ((fun paramLines -> ((fun resultLines -> ((fun closeFunc -> ((fun closeType -> ((Base_dList.v_Base_dList_dappend openLine) ((Base_dList.v_Base_dList_dappend funcLine) ((Base_dList.v_Base_dList_dappend paramLines) ((Base_dList.v_Base_dList_dappend resultLines) ((Base_dList.v_Base_dList_dappend closeFunc) closeType)))))) (Base_dList.C_Base_dList_dList__x58__x58_ (((v_Vuna_dCompiler_dWasm_dRender_dlineOf 2) ")"), Base_dList.C_Base_dList_dList_Nil)))) (Base_dList.C_Base_dList_dList__x58__x58_ (((v_Vuna_dCompiler_dWasm_dRender_dlineOf 4) ")"), Base_dList.C_Base_dList_dList_Nil)))) ((Base_dList.v_Base_dList_dmap (v_Vuna_dCompiler_dWasm_dRender_dlineOf 6)) ((Base_dList.v_Base_dList_dmap v_Vuna_dCompiler_dWasm_dRender_drenderResult) results)))) ((Base_dList.v_Base_dList_dmap (v_Vuna_dCompiler_dWasm_dRender_dlineOf 6)) ((Base_dList.v_Base_dList_dmap (fun p -> (String.concat "" ["(param "; (Vuna_dCompiler_dWasm_dModel.v_Vuna_dCompiler_dWasm_dModel_dwatValTyText p); ")"]))) params)))) (Base_dList.C_Base_dList_dList__x58__x58_ (((v_Vuna_dCompiler_dWasm_dRender_dlineOf 4) "(func"), Base_dList.C_Base_dList_dList_Nil)))) (Base_dList.C_Base_dList_dList__x58__x58_ (((v_Vuna_dCompiler_dWasm_dRender_dlineOf 2) ("(type " ^ name)), Base_dList.C_Base_dList_dList_Nil))))
 
-# 216 "Vuna/Compiler/Wasm/Render.vuna"
+# 234 "Vuna/Compiler/Wasm/Render.vuna"
 let v_Vuna_dCompiler_dWasm_dRender_dstructTypeOne = (fun name fields -> ((fun fieldsText -> ((v_Vuna_dCompiler_dWasm_dRender_dlineOf 2) (String.concat "" ["(type "; name; " (struct"; fieldsText; "))"]))) ((v_Vuna_dCompiler_dWasm_dRender_djoinWith "") ((Base_dList.v_Base_dList_dmap (fun f -> (" " ^ (v_Vuna_dCompiler_dWasm_dRender_drenderField f)))) fields))))
 
-# 222 "Vuna/Compiler/Wasm/Render.vuna"
+# 240 "Vuna/Compiler/Wasm/Render.vuna"
 let v_Vuna_dCompiler_dWasm_dRender_dstructTypeMulti = (fun name fields -> ((fun openLine -> ((fun structLine -> ((fun fieldLines -> ((fun closeStruct -> ((fun closeType -> ((Base_dList.v_Base_dList_dappend openLine) ((Base_dList.v_Base_dList_dappend structLine) ((Base_dList.v_Base_dList_dappend fieldLines) ((Base_dList.v_Base_dList_dappend closeStruct) closeType))))) (Base_dList.C_Base_dList_dList__x58__x58_ (((v_Vuna_dCompiler_dWasm_dRender_dlineOf 2) ")"), Base_dList.C_Base_dList_dList_Nil)))) (Base_dList.C_Base_dList_dList__x58__x58_ (((v_Vuna_dCompiler_dWasm_dRender_dlineOf 4) ")"), Base_dList.C_Base_dList_dList_Nil)))) ((Base_dList.v_Base_dList_dmap (v_Vuna_dCompiler_dWasm_dRender_dlineOf 6)) ((Base_dList.v_Base_dList_dmap v_Vuna_dCompiler_dWasm_dRender_drenderField) fields)))) (Base_dList.C_Base_dList_dList__x58__x58_ (((v_Vuna_dCompiler_dWasm_dRender_dlineOf 4) "(struct"), Base_dList.C_Base_dList_dList_Nil)))) (Base_dList.C_Base_dList_dList__x58__x58_ (((v_Vuna_dCompiler_dWasm_dRender_dlineOf 2) ("(type " ^ name)), Base_dList.C_Base_dList_dList_Nil))))
 
-# 238 "Vuna/Compiler/Wasm/Render.vuna"
+# 256 "Vuna/Compiler/Wasm/Render.vuna"
 let v_Vuna_dCompiler_dWasm_dRender_drenderFuncType = (fun name params results -> (if (v_Vuna_dCompiler_dWasm_dRender_dfitsLine (((v_Vuna_dCompiler_dWasm_dRender_dfuncTypeOne name) params) results)) then (Base_dList.C_Base_dList_dList__x58__x58_ ((((v_Vuna_dCompiler_dWasm_dRender_dfuncTypeOne name) params) results), Base_dList.C_Base_dList_dList_Nil)) else (((v_Vuna_dCompiler_dWasm_dRender_dfuncTypeMulti name) params) results)))
 
-# 243 "Vuna/Compiler/Wasm/Render.vuna"
+# 261 "Vuna/Compiler/Wasm/Render.vuna"
 let v_Vuna_dCompiler_dWasm_dRender_drenderStructType = (fun name fields -> (if (v_Vuna_dCompiler_dWasm_dRender_dfitsLine ((v_Vuna_dCompiler_dWasm_dRender_dstructTypeOne name) fields)) then (Base_dList.C_Base_dList_dList__x58__x58_ (((v_Vuna_dCompiler_dWasm_dRender_dstructTypeOne name) fields), Base_dList.C_Base_dList_dList_Nil)) else ((v_Vuna_dCompiler_dWasm_dRender_dstructTypeMulti name) fields)))
 
-# 248 "Vuna/Compiler/Wasm/Render.vuna"
+# 266 "Vuna/Compiler/Wasm/Render.vuna"
 let v_Vuna_dCompiler_dWasm_dRender_drenderArrayType = (fun name mut elemTy -> ((fun elemText -> (Base_dList.C_Base_dList_dList__x58__x58_ (((v_Vuna_dCompiler_dWasm_dRender_dlineOf 2) (String.concat "" ["(type "; name; " (array "; elemText; "))"])), Base_dList.C_Base_dList_dList_Nil))) (if mut then (String.concat "" ["(mut "; (Vuna_dCompiler_dWasm_dModel.v_Vuna_dCompiler_dWasm_dModel_dwatValTyText elemTy); ")"]) else (Vuna_dCompiler_dWasm_dModel.v_Vuna_dCompiler_dWasm_dModel_dwatValTyText elemTy))))
 
-# 232 "Vuna/Compiler/Wasm/Render.vuna"
+# 250 "Vuna/Compiler/Wasm/Render.vuna"
 let v_Vuna_dCompiler_dWasm_dRender_drenderType = (fun mc0 -> (match mc0 with
-  | Vuna_dCompiler_dWasm_dModel.C_Vuna_dCompiler_dWasm_dModel_dWatType_WatContType (dtb__62, dtb__63) -> (Base_dList.C_Base_dList_dList__x58__x58_ (((v_Vuna_dCompiler_dWasm_dRender_dlineOf 2) (String.concat "" ["(type "; dtb__62; " (cont "; dtb__63; "))"])), Base_dList.C_Base_dList_dList_Nil))
-  | Vuna_dCompiler_dWasm_dModel.C_Vuna_dCompiler_dWasm_dModel_dWatType_WatArrayType (dtb__64, dtb__65, dtb__66) -> (((v_Vuna_dCompiler_dWasm_dRender_drenderArrayType dtb__64) dtb__65) dtb__66)
-  | Vuna_dCompiler_dWasm_dModel.C_Vuna_dCompiler_dWasm_dModel_dWatType_WatStructType (dtb__67, dtb__68) -> ((v_Vuna_dCompiler_dWasm_dRender_drenderStructType dtb__67) dtb__68)
-  | Vuna_dCompiler_dWasm_dModel.C_Vuna_dCompiler_dWasm_dModel_dWatType_WatFuncType (dtb__69, dtb__70, dtb__71) -> (((v_Vuna_dCompiler_dWasm_dRender_drenderFuncType dtb__69) dtb__70) dtb__71)
+  | Vuna_dCompiler_dWasm_dModel.C_Vuna_dCompiler_dWasm_dModel_dWatType_WatContType (dtb__71, dtb__72) -> (Base_dList.C_Base_dList_dList__x58__x58_ (((v_Vuna_dCompiler_dWasm_dRender_dlineOf 2) (String.concat "" ["(type "; dtb__71; " (cont "; dtb__72; "))"])), Base_dList.C_Base_dList_dList_Nil))
+  | Vuna_dCompiler_dWasm_dModel.C_Vuna_dCompiler_dWasm_dModel_dWatType_WatArrayType (dtb__73, dtb__74, dtb__75) -> (((v_Vuna_dCompiler_dWasm_dRender_drenderArrayType dtb__73) dtb__74) dtb__75)
+  | Vuna_dCompiler_dWasm_dModel.C_Vuna_dCompiler_dWasm_dModel_dWatType_WatStructType (dtb__76, dtb__77) -> ((v_Vuna_dCompiler_dWasm_dRender_drenderStructType dtb__76) dtb__77)
+  | Vuna_dCompiler_dWasm_dModel.C_Vuna_dCompiler_dWasm_dModel_dWatType_WatFuncType (dtb__78, dtb__79, dtb__80) -> (((v_Vuna_dCompiler_dWasm_dRender_drenderFuncType dtb__78) dtb__79) dtb__80)
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 257 "Vuna/Compiler/Wasm/Render.vuna"
+# 275 "Vuna/Compiler/Wasm/Render.vuna"
 let v_Vuna_dCompiler_dWasm_dRender_dimportOne = (fun imp -> ((fun paramsText -> ((fun resultsText -> ((v_Vuna_dCompiler_dWasm_dRender_dlineOf 2) (String.concat "" ["(import \""; (imp).Vuna_dCompiler_dWasm_dModel.f_Vuna_dCompiler_dWasm_dModel_dWatImport_watImportModule; "\" \""; (imp).Vuna_dCompiler_dWasm_dModel.f_Vuna_dCompiler_dWasm_dModel_dWatImport_watImportName; "\" (func "; (imp).Vuna_dCompiler_dWasm_dModel.f_Vuna_dCompiler_dWasm_dModel_dWatImport_watImportFunc; paramsText; resultsText; "))"]))) ((v_Vuna_dCompiler_dWasm_dRender_djoinWith "") ((Base_dList.v_Base_dList_dmap (fun r -> (" " ^ (v_Vuna_dCompiler_dWasm_dRender_drenderResult r)))) (imp).Vuna_dCompiler_dWasm_dModel.f_Vuna_dCompiler_dWasm_dModel_dWatImport_watImportResults)))) ((v_Vuna_dCompiler_dWasm_dRender_djoinWith "") ((Base_dList.v_Base_dList_dmap (fun p -> (String.concat "" [" (param "; (Vuna_dCompiler_dWasm_dModel.v_Vuna_dCompiler_dWasm_dModel_dwatValTyText p); ")"]))) (imp).Vuna_dCompiler_dWasm_dModel.f_Vuna_dCompiler_dWasm_dModel_dWatImport_watImportParams))))
 
-# 265 "Vuna/Compiler/Wasm/Render.vuna"
+# 283 "Vuna/Compiler/Wasm/Render.vuna"
 let v_Vuna_dCompiler_dWasm_dRender_dimportMulti = (fun imp -> ((fun openLine -> ((fun funcLine -> ((fun paramLines -> ((fun resultLines -> ((fun closeFunc -> ((fun closeImport -> ((Base_dList.v_Base_dList_dappend openLine) ((Base_dList.v_Base_dList_dappend funcLine) ((Base_dList.v_Base_dList_dappend paramLines) ((Base_dList.v_Base_dList_dappend resultLines) ((Base_dList.v_Base_dList_dappend closeFunc) closeImport)))))) (Base_dList.C_Base_dList_dList__x58__x58_ (((v_Vuna_dCompiler_dWasm_dRender_dlineOf 2) ")"), Base_dList.C_Base_dList_dList_Nil)))) (Base_dList.C_Base_dList_dList__x58__x58_ (((v_Vuna_dCompiler_dWasm_dRender_dlineOf 4) ")"), Base_dList.C_Base_dList_dList_Nil)))) ((Base_dList.v_Base_dList_dmap (v_Vuna_dCompiler_dWasm_dRender_dlineOf 6)) ((Base_dList.v_Base_dList_dmap v_Vuna_dCompiler_dWasm_dRender_drenderResult) (imp).Vuna_dCompiler_dWasm_dModel.f_Vuna_dCompiler_dWasm_dModel_dWatImport_watImportResults)))) ((Base_dList.v_Base_dList_dmap (v_Vuna_dCompiler_dWasm_dRender_dlineOf 6)) ((Base_dList.v_Base_dList_dmap (fun p -> (String.concat "" ["(param "; (Vuna_dCompiler_dWasm_dModel.v_Vuna_dCompiler_dWasm_dModel_dwatValTyText p); ")"]))) (imp).Vuna_dCompiler_dWasm_dModel.f_Vuna_dCompiler_dWasm_dModel_dWatImport_watImportParams)))) (Base_dList.C_Base_dList_dList__x58__x58_ (((v_Vuna_dCompiler_dWasm_dRender_dlineOf 4) ("(func " ^ (imp).Vuna_dCompiler_dWasm_dModel.f_Vuna_dCompiler_dWasm_dModel_dWatImport_watImportFunc)), Base_dList.C_Base_dList_dList_Nil)))) (Base_dList.C_Base_dList_dList__x58__x58_ (((v_Vuna_dCompiler_dWasm_dRender_dlineOf 2) (String.concat "" ["(import \""; (imp).Vuna_dCompiler_dWasm_dModel.f_Vuna_dCompiler_dWasm_dModel_dWatImport_watImportModule; "\" \""; (imp).Vuna_dCompiler_dWasm_dModel.f_Vuna_dCompiler_dWasm_dModel_dWatImport_watImportName; "\""])), Base_dList.C_Base_dList_dList_Nil))))
 
-# 277 "Vuna/Compiler/Wasm/Render.vuna"
+# 295 "Vuna/Compiler/Wasm/Render.vuna"
 let v_Vuna_dCompiler_dWasm_dRender_drenderTag = (fun t -> ((fun paramsText -> ((fun resultsText -> (Base_dList.C_Base_dList_dList__x58__x58_ (((v_Vuna_dCompiler_dWasm_dRender_dlineOf 2) (String.concat "" ["(tag "; (t).Vuna_dCompiler_dWasm_dModel.f_Vuna_dCompiler_dWasm_dModel_dWatTag_watTagName; paramsText; resultsText; ")"])), Base_dList.C_Base_dList_dList_Nil))) ((v_Vuna_dCompiler_dWasm_dRender_djoinWith "") ((Base_dList.v_Base_dList_dmap (fun ty -> (String.concat "" [" (result "; (Vuna_dCompiler_dWasm_dModel.v_Vuna_dCompiler_dWasm_dModel_dwatValTyText ty); ")"]))) (t).Vuna_dCompiler_dWasm_dModel.f_Vuna_dCompiler_dWasm_dModel_dWatTag_watTagResults)))) ((v_Vuna_dCompiler_dWasm_dRender_djoinWith "") ((Base_dList.v_Base_dList_dmap (fun ty -> (String.concat "" [" (param "; (Vuna_dCompiler_dWasm_dModel.v_Vuna_dCompiler_dWasm_dModel_dwatValTyText ty); ")"]))) (t).Vuna_dCompiler_dWasm_dModel.f_Vuna_dCompiler_dWasm_dModel_dWatTag_watTagParams))))
 
-# 284 "Vuna/Compiler/Wasm/Render.vuna"
+# 302 "Vuna/Compiler/Wasm/Render.vuna"
 let v_Vuna_dCompiler_dWasm_dRender_drenderImport = (fun imp -> (if (v_Vuna_dCompiler_dWasm_dRender_dfitsLine (v_Vuna_dCompiler_dWasm_dRender_dimportOne imp)) then (Base_dList.C_Base_dList_dList__x58__x58_ ((v_Vuna_dCompiler_dWasm_dRender_dimportOne imp), Base_dList.C_Base_dList_dList_Nil)) else (v_Vuna_dCompiler_dWasm_dRender_dimportMulti imp)))
 
-# 287 "Vuna/Compiler/Wasm/Render.vuna"
+# 305 "Vuna/Compiler/Wasm/Render.vuna"
 let v_Vuna_dCompiler_dWasm_dRender_drenderGlobal = (fun g -> ((fun initText -> (Base_dList.C_Base_dList_dList__x58__x58_ (((v_Vuna_dCompiler_dWasm_dRender_dlineOf 2) (String.concat "" ["(global "; (g).Vuna_dCompiler_dWasm_dModel.f_Vuna_dCompiler_dWasm_dModel_dWatGlobal_watGlobalName; " (mut "; (Vuna_dCompiler_dWasm_dModel.v_Vuna_dCompiler_dWasm_dModel_dwatValTyText (g).Vuna_dCompiler_dWasm_dModel.f_Vuna_dCompiler_dWasm_dModel_dWatGlobal_watGlobalTy); ") "; initText; ")"])), Base_dList.C_Base_dList_dList_Nil))) ((v_Vuna_dCompiler_dWasm_dRender_djoinWith " ") ((Base_dList.v_Base_dList_dmap v_Vuna_dCompiler_dWasm_dRender_drenderInstrFlat) (g).Vuna_dCompiler_dWasm_dModel.f_Vuna_dCompiler_dWasm_dModel_dWatGlobal_watGlobalInit))))
 
-# 293 "Vuna/Compiler/Wasm/Render.vuna"
+# 311 "Vuna/Compiler/Wasm/Render.vuna"
 let v_Vuna_dCompiler_dWasm_dRender_dfuncOpeningOne = (fun f -> ((fun typePart -> ((fun paramsText -> ((fun resultsText -> ((v_Vuna_dCompiler_dWasm_dRender_dlineOf 2) (String.concat "" ["(func "; (f).Vuna_dCompiler_dWasm_dModel.f_Vuna_dCompiler_dWasm_dModel_dWatFunc_watFuncName; typePart; paramsText; resultsText]))) ((v_Vuna_dCompiler_dWasm_dRender_djoinWith "") ((Base_dList.v_Base_dList_dmap (fun r -> (" " ^ (v_Vuna_dCompiler_dWasm_dRender_drenderResult r)))) (f).Vuna_dCompiler_dWasm_dModel.f_Vuna_dCompiler_dWasm_dModel_dWatFunc_watFuncResults)))) ((v_Vuna_dCompiler_dWasm_dRender_djoinWith "") ((Base_dList.v_Base_dList_dmap (fun p -> (" " ^ (v_Vuna_dCompiler_dWasm_dRender_drenderParam p)))) (f).Vuna_dCompiler_dWasm_dModel.f_Vuna_dCompiler_dWasm_dModel_dWatFunc_watFuncParams)))) (if ((f).Vuna_dCompiler_dWasm_dModel.f_Vuna_dCompiler_dWasm_dModel_dWatFunc_watFuncType = "") then "" else (String.concat "" [" (type "; (f).Vuna_dCompiler_dWasm_dModel.f_Vuna_dCompiler_dWasm_dModel_dWatFunc_watFuncType; ")"]))))
 
-# 301 "Vuna/Compiler/Wasm/Render.vuna"
+# 319 "Vuna/Compiler/Wasm/Render.vuna"
 let v_Vuna_dCompiler_dWasm_dRender_dfuncOpeningMulti = (fun f -> ((fun typePart -> ((fun openLine -> ((fun paramLines -> ((fun resultLines -> ((Base_dList.v_Base_dList_dappend openLine) ((Base_dList.v_Base_dList_dappend paramLines) resultLines))) ((Base_dList.v_Base_dList_dmap (v_Vuna_dCompiler_dWasm_dRender_dlineOf 4)) ((Base_dList.v_Base_dList_dmap v_Vuna_dCompiler_dWasm_dRender_drenderResult) (f).Vuna_dCompiler_dWasm_dModel.f_Vuna_dCompiler_dWasm_dModel_dWatFunc_watFuncResults)))) ((Base_dList.v_Base_dList_dmap (v_Vuna_dCompiler_dWasm_dRender_dlineOf 4)) ((Base_dList.v_Base_dList_dmap v_Vuna_dCompiler_dWasm_dRender_drenderParam) (f).Vuna_dCompiler_dWasm_dModel.f_Vuna_dCompiler_dWasm_dModel_dWatFunc_watFuncParams)))) (Base_dList.C_Base_dList_dList__x58__x58_ (((v_Vuna_dCompiler_dWasm_dRender_dlineOf 2) (String.concat "" ["(func "; (f).Vuna_dCompiler_dWasm_dModel.f_Vuna_dCompiler_dWasm_dModel_dWatFunc_watFuncName; typePart])), Base_dList.C_Base_dList_dList_Nil)))) (if ((f).Vuna_dCompiler_dWasm_dModel.f_Vuna_dCompiler_dWasm_dModel_dWatFunc_watFuncType = "") then "" else (String.concat "" [" (type "; (f).Vuna_dCompiler_dWasm_dModel.f_Vuna_dCompiler_dWasm_dModel_dWatFunc_watFuncType; ")"]))))
 
-# 310 "Vuna/Compiler/Wasm/Render.vuna"
+# 328 "Vuna/Compiler/Wasm/Render.vuna"
 let v_Vuna_dCompiler_dWasm_dRender_drenderFunc = (fun f -> ((fun opening -> ((fun locals -> ((fun body -> ((fun closeLine -> ((Base_dList.v_Base_dList_dappend opening) ((Base_dList.v_Base_dList_dappend locals) ((Base_dList.v_Base_dList_dappend body) closeLine)))) (Base_dList.C_Base_dList_dList__x58__x58_ (((v_Vuna_dCompiler_dWasm_dRender_dlineOf 2) ")"), Base_dList.C_Base_dList_dList_Nil)))) ((v_Vuna_dCompiler_dWasm_dRender_drenderInstrs 4) (f).Vuna_dCompiler_dWasm_dModel.f_Vuna_dCompiler_dWasm_dModel_dWatFunc_watFuncBody))) ((Base_dList.v_Base_dList_dmap (v_Vuna_dCompiler_dWasm_dRender_dlineOf 4)) ((Base_dList.v_Base_dList_dmap (fun p -> (String.concat "" ["(local "; ((Base_dInterp.v_Base_dInterp_dinterp Base_dInterp.v_Interp_uString) (Base_dPair.v_Base_dPair_dfirstOf p)); " "; (Vuna_dCompiler_dWasm_dModel.v_Vuna_dCompiler_dWasm_dModel_dwatValTyText (Base_dPair.v_Base_dPair_dsecondOf p)); ")"]))) (f).Vuna_dCompiler_dWasm_dModel.f_Vuna_dCompiler_dWasm_dModel_dWatFunc_watFuncLocals)))) (if (v_Vuna_dCompiler_dWasm_dRender_dfitsLine (v_Vuna_dCompiler_dWasm_dRender_dfuncOpeningOne f)) then (Base_dList.C_Base_dList_dList__x58__x58_ ((v_Vuna_dCompiler_dWasm_dRender_dfuncOpeningOne f), Base_dList.C_Base_dList_dList_Nil)) else (v_Vuna_dCompiler_dWasm_dRender_dfuncOpeningMulti f))))
 
-# 321 "Vuna/Compiler/Wasm/Render.vuna"
+# 339 "Vuna/Compiler/Wasm/Render.vuna"
 let v_Vuna_dCompiler_dWasm_dRender_drenderExport = (fun e -> (if ((e).Vuna_dCompiler_dWasm_dModel.f_Vuna_dCompiler_dWasm_dModel_dWatExport_watExportKind = "memory") then (Base_dList.C_Base_dList_dList__x58__x58_ (((v_Vuna_dCompiler_dWasm_dRender_dlineOf 2) (String.concat "" ["(memory (export \""; (e).Vuna_dCompiler_dWasm_dModel.f_Vuna_dCompiler_dWasm_dModel_dWatExport_watExportName; "\") "; (e).Vuna_dCompiler_dWasm_dModel.f_Vuna_dCompiler_dWasm_dModel_dWatExport_watExportRef; ")"])), Base_dList.C_Base_dList_dList_Nil)) else (Base_dList.C_Base_dList_dList__x58__x58_ (((v_Vuna_dCompiler_dWasm_dRender_dlineOf 2) (String.concat "" ["(export \""; (e).Vuna_dCompiler_dWasm_dModel.f_Vuna_dCompiler_dWasm_dModel_dWatExport_watExportName; "\" ("; (e).Vuna_dCompiler_dWasm_dModel.f_Vuna_dCompiler_dWasm_dModel_dWatExport_watExportKind; " "; (e).Vuna_dCompiler_dWasm_dModel.f_Vuna_dCompiler_dWasm_dModel_dWatExport_watExportRef; "))"])), Base_dList.C_Base_dList_dList_Nil))))
 
-# 326 "Vuna/Compiler/Wasm/Render.vuna"
+# 344 "Vuna/Compiler/Wasm/Render.vuna"
 let v_Vuna_dCompiler_dWasm_dRender_drenderElem = (fun mc0 -> (match mc0 with
   | Base_dList.C_Base_dList_dList_Nil -> Base_dList.C_Base_dList_dList_Nil
   | _ -> ((fun one -> (if (v_Vuna_dCompiler_dWasm_dRender_dfitsLine one) then (Base_dList.C_Base_dList_dList__x58__x58_ (one, Base_dList.C_Base_dList_dList_Nil)) else ((Base_dList.v_Base_dList_dappend (Base_dList.C_Base_dList_dList__x58__x58_ (((v_Vuna_dCompiler_dWasm_dRender_dlineOf 2) "(elem declare func"), Base_dList.C_Base_dList_dList_Nil))) ((Base_dList.v_Base_dList_dappend ((Base_dList.v_Base_dList_dmap (v_Vuna_dCompiler_dWasm_dRender_dlineOf 4)) mc0)) (Base_dList.C_Base_dList_dList__x58__x58_ (((v_Vuna_dCompiler_dWasm_dRender_dlineOf 2) ")"), Base_dList.C_Base_dList_dList_Nil)))))) ((v_Vuna_dCompiler_dWasm_dRender_dlineOf 2) (String.concat "" ["(elem declare func "; ((v_Vuna_dCompiler_dWasm_dRender_djoinWith " ") mc0); ")"])))
 ))
 
-# 334 "Vuna/Compiler/Wasm/Render.vuna"
+# 352 "Vuna/Compiler/Wasm/Render.vuna"
 let v_Vuna_dCompiler_dWasm_dRender_drenderData = (fun d -> ((fun chunks -> ((fun quoted -> ((fun one -> (if (v_Vuna_dCompiler_dWasm_dRender_dfitsLine one) then (Base_dList.C_Base_dList_dList__x58__x58_ (one, Base_dList.C_Base_dList_dList_Nil)) else ((Base_dList.v_Base_dList_dappend (Base_dList.C_Base_dList_dList__x58__x58_ (((v_Vuna_dCompiler_dWasm_dRender_dlineOf 2) ("(data " ^ (d).Vuna_dCompiler_dWasm_dModel.f_Vuna_dCompiler_dWasm_dModel_dWatData_watDataName)), Base_dList.C_Base_dList_dList_Nil))) ((Base_dList.v_Base_dList_dappend ((Base_dList.v_Base_dList_dmap (v_Vuna_dCompiler_dWasm_dRender_dlineOf 4)) quoted)) (Base_dList.C_Base_dList_dList__x58__x58_ (((v_Vuna_dCompiler_dWasm_dRender_dlineOf 2) ")"), Base_dList.C_Base_dList_dList_Nil)))))) ((v_Vuna_dCompiler_dWasm_dRender_dlineOf 2) (String.concat "" ["(data "; (d).Vuna_dCompiler_dWasm_dModel.f_Vuna_dCompiler_dWasm_dModel_dWatData_watDataName; " "; ((v_Vuna_dCompiler_dWasm_dRender_djoinWith " ") quoted); ")"])))) ((Base_dList.v_Base_dList_dmap (fun c -> (String.concat "" ["\""; (v_Vuna_dCompiler_dWasm_dRender_dwatString (Base_dList.dtp_pack c)); "\""]))) chunks))) (v_Vuna_dCompiler_dWasm_dRender_dchunkBytes (Base_dList.dtp_unpack (d).Vuna_dCompiler_dWasm_dModel.f_Vuna_dCompiler_dWasm_dModel_dWatData_watDataBytes))))
 
-# 346 "Vuna/Compiler/Wasm/Render.vuna"
+# 364 "Vuna/Compiler/Wasm/Render.vuna"
 let v_Vuna_dCompiler_dWasm_dRender_dsectionComment = (fun title -> (Base_dList.C_Base_dList_dList__x58__x58_ ("", (Base_dList.C_Base_dList_dList__x58__x58_ (((v_Vuna_dCompiler_dWasm_dRender_dlineOf 0) (";; " ^ title)), Base_dList.C_Base_dList_dList_Nil)))))
 
-# 349 "Vuna/Compiler/Wasm/Render.vuna"
+# 367 "Vuna/Compiler/Wasm/Render.vuna"
 let v_Vuna_dCompiler_dWasm_dRender_dmoduleLines = (fun m -> ((fun typeLines -> ((fun tagLines -> ((fun importLines -> ((fun globalLines -> ((fun funcLines -> ((fun elemLines -> ((fun dataLines -> ((fun exportLines -> ((fun memoryLines -> ((Base_dList.v_Base_dList_dappend (Base_dList.C_Base_dList_dList__x58__x58_ ("(module", Base_dList.C_Base_dList_dList_Nil))) ((Base_dList.v_Base_dList_dappend (v_Vuna_dCompiler_dWasm_dRender_dsectionComment "types")) ((Base_dList.v_Base_dList_dappend typeLines) ((Base_dList.v_Base_dList_dappend (v_Vuna_dCompiler_dWasm_dRender_dsectionComment "tags")) ((Base_dList.v_Base_dList_dappend tagLines) ((Base_dList.v_Base_dList_dappend (v_Vuna_dCompiler_dWasm_dRender_dsectionComment "imports")) ((Base_dList.v_Base_dList_dappend importLines) ((Base_dList.v_Base_dList_dappend (v_Vuna_dCompiler_dWasm_dRender_dsectionComment "memory")) ((Base_dList.v_Base_dList_dappend memoryLines) ((Base_dList.v_Base_dList_dappend (v_Vuna_dCompiler_dWasm_dRender_dsectionComment "globals")) ((Base_dList.v_Base_dList_dappend globalLines) ((Base_dList.v_Base_dList_dappend (v_Vuna_dCompiler_dWasm_dRender_dsectionComment "functions")) ((Base_dList.v_Base_dList_dappend funcLines) ((Base_dList.v_Base_dList_dappend (v_Vuna_dCompiler_dWasm_dRender_dsectionComment "elements")) ((Base_dList.v_Base_dList_dappend elemLines) ((Base_dList.v_Base_dList_dappend (v_Vuna_dCompiler_dWasm_dRender_dsectionComment "data")) ((Base_dList.v_Base_dList_dappend dataLines) ((Base_dList.v_Base_dList_dappend (v_Vuna_dCompiler_dWasm_dRender_dsectionComment "exports")) ((Base_dList.v_Base_dList_dappend exportLines) (Base_dList.C_Base_dList_dList__x58__x58_ (")", (Base_dList.C_Base_dList_dList__x58__x58_ ("", Base_dList.C_Base_dList_dList_Nil)))))))))))))))))))))))) (Base_dList.C_Base_dList_dList__x58__x58_ (((v_Vuna_dCompiler_dWasm_dRender_dlineOf 2) (String.concat "" ["(memory (export \"memory\") "; (bi_strFromInt (m).Vuna_dCompiler_dWasm_dModel.f_Vuna_dCompiler_dWasm_dModel_dWasmModule_wmMemPages); ")"])), Base_dList.C_Base_dList_dList_Nil)))) ((Base_dList.v_Base_dList_dconcatMap v_Vuna_dCompiler_dWasm_dRender_drenderExport) (m).Vuna_dCompiler_dWasm_dModel.f_Vuna_dCompiler_dWasm_dModel_dWasmModule_wmExports))) (match (m).Vuna_dCompiler_dWasm_dModel.f_Vuna_dCompiler_dWasm_dModel_dWasmModule_wmData with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> Base_dList.C_Base_dList_dList_Nil
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__72) -> (v_Vuna_dCompiler_dWasm_dRender_drenderData dtb__72)
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__81) -> (v_Vuna_dCompiler_dWasm_dRender_drenderData dtb__81)
   | _ -> failwith "DT: impossible branch"
 ))) (v_Vuna_dCompiler_dWasm_dRender_drenderElem (m).Vuna_dCompiler_dWasm_dModel.f_Vuna_dCompiler_dWasm_dModel_dWasmModule_wmElems))) ((Base_dList.v_Base_dList_dconcatMap v_Vuna_dCompiler_dWasm_dRender_drenderFunc) (m).Vuna_dCompiler_dWasm_dModel.f_Vuna_dCompiler_dWasm_dModel_dWasmModule_wmFuncs))) ((Base_dList.v_Base_dList_dconcatMap v_Vuna_dCompiler_dWasm_dRender_drenderGlobal) (m).Vuna_dCompiler_dWasm_dModel.f_Vuna_dCompiler_dWasm_dModel_dWasmModule_wmGlobals))) ((Base_dList.v_Base_dList_dconcatMap v_Vuna_dCompiler_dWasm_dRender_drenderImport) (m).Vuna_dCompiler_dWasm_dModel.f_Vuna_dCompiler_dWasm_dModel_dWasmModule_wmImports))) ((Base_dList.v_Base_dList_dconcatMap v_Vuna_dCompiler_dWasm_dRender_drenderTag) (m).Vuna_dCompiler_dWasm_dModel.f_Vuna_dCompiler_dWasm_dModel_dWasmModule_wmTags))) ((Base_dList.v_Base_dList_dconcatMap v_Vuna_dCompiler_dWasm_dRender_drenderType) (m).Vuna_dCompiler_dWasm_dModel.f_Vuna_dCompiler_dWasm_dModel_dWasmModule_wmTypes)))
 
-# 366 "Vuna/Compiler/Wasm/Render.vuna"
+# 384 "Vuna/Compiler/Wasm/Render.vuna"
 let v_Vuna_dCompiler_dWasm_dRender_drenderModule = (fun m -> ((v_Vuna_dCompiler_dWasm_dRender_djoinWith "\n") (v_Vuna_dCompiler_dWasm_dRender_dmoduleLines m)))
