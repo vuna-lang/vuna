@@ -186,12 +186,19 @@ Control       = Done value
   全部删除——**wasm 不再有 stack switching**；
 - `106` 的 2000 次顺序 perform 用**引擎默认栈**（此前依次是 4 MiB → 1 MiB → 256 KiB）。
 
-仍然成立的两条限制：
+- **`bracket`/`finally`** 的 `prim_cleanupPush/Pop` 已在机器帧上实现：帧安装时记下
+  cleanup 深度（`hframe` 第 7 个字段），弹帧前（`kDone` 与 `Return` 两条路径）跑该深度
+  之上的 cleanup；正常路径仍由 `bracket` 带内 pop，所以不会重复执行（夹具
+  `pure_cross/52`、`53` 锁 abort 与「恰好一次」）。
+
+仍然成立的限制：
 
 1. **栈仍随 perform 次数线性增长**（约 96 B/次）：组合子的 CPS 管道里还有普通
    `IrApp` 在同一条链上层层返回；默认栈足够跑 `106`，但还不是常量栈。
-2. **`bracket`/`finally`**（`prim_cleanupPush/Pop`）的清理钩子还没有机器实现：
-   wasm 侧**显式拒绝**并给出诊断，不再回落 stack switching（debt D42）。
+2. **cleanup 自身的效应/异常**走当前 handler 链（不吞）；native / OCaml 的旧实现是
+   「release 只能访问外层 handler、自身异常被吞」，两边口径不同（debt D42）。
+3. `hframe` 的 cleanup 深度按「安装时的 `$g_cleanDepth`」记录：跨 resume 重装帧时沿用
+   原值，因此 resume 段里新登记的 cleanup 仍归该帧。
 
 native / OCaml 仍走各自的 handler 实现（native 是栈拷贝，O(N²) 见 D89）；
 三端统一到同一 `Control` 协议是后续工作。

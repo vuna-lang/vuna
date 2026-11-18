@@ -1781,12 +1781,7 @@ build program printResult =
         entryClean =
           IrEntry (irEntryShowOf e) (irEntryMainOf e) (irEntryIsActionOf e) (irEntryRunMainOf e) []
             (irEntryRowTagsOf e)
-        -- 清理钩子（bracket/finally）还没有机器实现：宿主帧的 release 槽未接，
-        -- 显式拒绝而不是回落 stack switching（见 debt D42/D105）。
-        cleanupUnsupported = defsUseSyms ["prim_cleanupPush", "prim_cleanupPop"] ordered
       in if directable then buildAnf (append rewritten [pureKDef]) 0 (Just entryClean) listFamM
-      else if cleanupUnsupported then WasmRejected
-        (WasmUnsupported "bracket/finally cleanup is not implemented on the effect machine")
       else case cpsDefsMachine ordered of
         Ok cpsOrdered => buildAnf cpsOrdered 6 (Just e) listFamM
         Err msg => WasmRejected (WasmUnsupported msg)

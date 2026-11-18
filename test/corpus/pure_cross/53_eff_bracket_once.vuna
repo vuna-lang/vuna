@@ -1,0 +1,20 @@
+-- `bracket` 的 release 恰好执行一次：正常返回一次、abort 一次（不同 bracket），
+-- 且 abort 路径的退出钩子不会与带内 pop 重复执行。
+import Base.Effect.Core as Eff
+import Base.Effect.Exn as EffExn
+import Base.Effect.Pure.IORef as IORef
+import Base.Data.Result as Result
+
+bump : {r : Row} -> IORef Int -> Eff r Int
+bump ref = do
+  v <- raise (readRef ref)
+  _ <- raise (writeRef ref (v + 1))
+  pure (v + 1)
+
+main : Int
+main = runPure (do
+  ref <- newRef 0
+  _ <- runExn "boom" (bracket (pure 0) (\_ => bump ref) (\_ => pure 5))
+  _ <- runExn "boom" (bracket (pure 0) (\_ => bump ref) (\_ => throwExn "boom" "x"))
+  readRef ref
+)

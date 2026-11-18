@@ -1,0 +1,17 @@
+-- `bracket` 的 abort 路径：use 里抛异常时 release 仍执行（cleanup 由机器帧的退出钩子跑）。
+import Base.Effect.Core as Eff
+import Base.Effect.Exn as EffExn
+import Base.Effect.Pure.IORef as IORef
+import Base.Data.Result as Result
+
+prog : Eff [] Int
+prog = do
+  ref <- newRef 0
+  r <- runExn "boom" (bracket (pure 0) (\_ => writeRef ref 7) (\_ => throwExn "boom" "x"))
+  v <- readRef ref
+  case r of
+    Err _ => pure (v * 10 + 1)
+    Ok _ => pure v
+
+main : Int
+main = runPure prog
