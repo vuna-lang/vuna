@@ -11,28 +11,14 @@
 -- 退出码：0 成功 / 1 被检查代码或查询的语义失败 / 2 用法、参数、输入路径或不满足命令前提。
 module Vuna.Cli where
 
-import Vuna.Cli.Args
-import Vuna.Cli.Dev
 import Vuna.Cli.Err
-import Vuna.Cli.Fmt
 import Vuna.Cli.Help
-import Vuna.Cli.Index
-import Vuna.Cli.Repl
+import Vuna.Cli.Registry
 import Vuna.Cli.Spec
 import Vuna.Cli.Suggest
-import Vuna.Cli.Test
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Driver.CompilerCli
 import Vuna.Compiler.Base.Version
-import Vuna.Add
-import Vuna.Clean
-import Vuna.Doc
-import Vuna.Explain
-import Vuna.Fetch
-import Vuna.Lint
-import Vuna.Lsp
-import Vuna.Run
-import Vuna.Search
 import Base.Data.Pair as Pair
 import Base.Effect.Args as EffArgs
 import Base.Effect.Clock as EffClock
@@ -46,7 +32,7 @@ import Base.Effect.Stdin as EffStdin
 import Base.Effect.Types as EffTypes
 
 -- | CLI 总入口：去掉隐藏的性能旗标，`-h` / `--help` 优先，其余交给命令分发。
-export runCli : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nStdin StdinOp r, Member nArgs ArgsOp r, Member nNet NetOp r => List String -> Eff r Int
+export runCli : List String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
 runCli args =
   case helpPath args of
     Just path => printHelp path
@@ -114,8 +100,8 @@ consoleLine msg = consolePrint msg >>= (\_ => pure 0)
 printVersion : Member nConsole ConsoleOp r => Int -> Eff r Int
 printVersion _ = consoleLine "vuna ${vunaVersion}\n"
 
--- | 内部：命令分发表——每条命令一行；编译器命令原样转交 `CompilerCli`。
-dispatch : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nStdin StdinOp r, Member nArgs ArgsOp r, Member nNet NetOp r => List String -> Eff r Int
+-- | 内部：分发——元命令（`help` / `version`）就地处理，其余查 [Vuna.Cli.Registry]。
+dispatch : List String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
 dispatch args =
   case args of
     [] =>
@@ -125,28 +111,13 @@ dispatch args =
     "help" :: rest => helpCommand rest
     "version" :: _ => printVersion 0
     "--version" :: _ => printVersion 0
-    "compile" :: rest => runCompilerCliFor "vuna" ("compile" :: rest)
-    "check" :: rest => runCompilerCliFor "vuna" ("check" :: rest)
-    "build" :: rest => runCompilerCliFor "vuna" ("build" :: rest)
-    "run" :: rest => Vuna.Run.runRun rest
-    "test" :: rest => testArgs rest
-    "fmt" :: rest => fmtArgs rest
-    "lint" :: rest => Vuna.Lint.runLint rest
-    "doc" :: rest => Vuna.Doc.runDoc rest
-    "search" :: rest => Vuna.Search.runSearch rest
-    "map" :: rest => mapArgs rest
-    "api" :: rest => apiArgs rest
-    "goal" :: rest => goalArgs rest
-    "errors" :: rest => errorsArgs rest
-    "deps" :: rest => depsArgs rest
-    "store" :: rest => storeArgs rest
-    "repl" :: rest => replArgs rest
-    "lsp" :: rest => Vuna.Lsp.runLspTool rest
-    "dev" :: rest => devArgs rest
     arg :: _ =>
-      case removedHint arg of
-        Just hint => removedCommand arg hint
-        Nothing => if startsWith "-" arg then runCompilerCliFor "vuna" args else unknownCommand arg
+      case Vuna.Cli.Registry.matchHandler args of
+        Just (Pair h rest) => h.handlerRun rest
+        Nothing =>
+          case removedHint arg of
+            Just hint => removedCommand arg hint
+            Nothing => if startsWith "-" arg then runCompilerCliFor "vuna" args else unknownCommand arg
 
 -- | 内部：`vuna help <command>...`——解析成已登记路径后打印。
 helpCommand : Member nConsole ConsoleOp r => List String -> Eff r Int
@@ -155,28 +126,6 @@ helpCommand rest =
   case matchCommand rest of
     Just (Pair c _) => printHelp c.cmdPath
     Nothing => unknownCommand (joinWords rest)
-
--- | 内部：`vuna errors` 子命令。
-errorsArgs : Member nFs FsOp r, Member nConsole ConsoleOp r => List String -> Eff r Int
-errorsArgs ("list" :: more) = Vuna.Explain.runExplainList more
-errorsArgs ("explain" :: more) = Vuna.Explain.runExplainCode more
-errorsArgs [] = usageErrorFor ["errors"]
-errorsArgs (bad :: _) = unknownSubcommand ["errors"] bad ["list", "explain"]
-
--- | 内部：`vuna deps` 子命令。
-depsArgs : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => List String -> Eff r Int
-depsArgs ("add" :: more) = Vuna.Add.runAdd more
-depsArgs ("fetch" :: more) = Vuna.Fetch.runFetch more
-depsArgs ("pin" :: more) = Vuna.Fetch.runPin more
-depsArgs [] = usageErrorFor ["deps"]
-depsArgs (bad :: _) = unknownSubcommand ["deps"] bad ["add", "fetch", "pin"]
-
--- | 内部：`vuna store` 子命令。
-storeArgs : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => List String -> Eff r Int
-storeArgs ("gc" :: more) = Vuna.Clean.runStoreGc more
-storeArgs ("clean" :: more) = Vuna.Clean.runClean more
-storeArgs [] = usageErrorFor ["store"]
-storeArgs (bad :: _) = unknownSubcommand ["store"] bad ["gc", "clean"]
 
 -- | 内部：已改名命令的迁移提示（旧名字不再分发）。
 removedHint : String -> Maybe String

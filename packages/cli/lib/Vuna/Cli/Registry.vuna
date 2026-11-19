@@ -1,0 +1,109 @@
+-- | 产品命令的接线表：路径 → 实现。
+--
+-- 分发只查这张表，不再按首段字符串写 `case` 链；命令的元数据仍在 [Vuna.Cli.Spec]。
+-- 表里每一条都显式写出路径，`test/suite` 的 `cli` 章节逐条跑 `vuna help <path>` 与
+-- 分组命令，漏接线会红。
+module Vuna.Cli.Registry where
+
+import Vuna.Cli.Dev
+import Vuna.Cli.Err
+import Vuna.Cli.Fmt
+import Vuna.Cli.Index
+import Vuna.Cli.Repl
+import Vuna.Cli.Test
+import Vuna.Add
+import Vuna.Clean
+import Vuna.Doc
+import Vuna.Explain
+import Vuna.Fetch
+import Vuna.Lint
+import Vuna.Lsp
+import Vuna.Run
+import Vuna.Search
+import Vuna.Compiler.Driver.CompilerCli
+import Base.Effect.Types as EffTypes
+import Base.Effect.Args as EffArgs
+import Base.Effect.Clock as EffClock
+import Base.Effect.Console as EffConsole
+import Base.Effect.Env as EffEnv
+import Base.Effect.Exit as EffExit
+import Base.Effect.Fs as EffFs
+import Base.Effect.Net as EffNet
+import Base.Effect.Process as EffProcess
+import Base.Effect.Stdin as EffStdin
+
+-- | 一条命令的接线：路径 + 实现（实现收到路径之后的剩余参数）。
+export record Handler(..) where
+  -- | 命令路径（不含程序名）。
+  handlerPath : List String
+  -- | 实现；效应行是 CLI 入口实际用到的全部标签。
+  handlerRun : List String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
+
+-- | 产品命令表。编译器命令把 argv 原样转交 `CompilerCli`（flag 真源在编译器包里）。
+export handlers : List Handler
+handlers =
+  [
+    Handler ["compile"] (\rest => runCompilerCliFor "vuna" ("compile" :: rest)),
+    Handler ["check"] (\rest => runCompilerCliFor "vuna" ("check" :: rest)),
+    Handler ["build"] (\rest => runCompilerCliFor "vuna" ("build" :: rest)),
+    Handler ["run"] (\rest => Vuna.Run.runRun rest),
+    Handler ["test"] (\rest => testArgs rest),
+    Handler ["fmt"] (\rest => fmtArgs rest),
+    Handler ["lint"] (\rest => Vuna.Lint.runLint rest),
+    Handler ["doc"] (\rest => Vuna.Doc.runDoc rest),
+    Handler ["search"] (\rest => Vuna.Search.runSearch rest),
+    Handler ["map"] (\rest => mapArgs rest),
+    Handler ["api"] (\rest => apiArgs rest),
+    Handler ["goal"] (\rest => goalArgs rest),
+    Handler ["errors"] (\rest => errorsArgs rest),
+    Handler ["deps"] (\rest => depsArgs rest),
+    Handler ["store"] (\rest => storeArgs rest),
+    Handler ["repl"] (\rest => replArgs rest),
+    Handler ["lsp"] (\rest => Vuna.Lsp.runLspTool rest),
+    Handler ["dev"] (\rest => devArgs rest)
+  ]
+
+-- | 按最长前缀匹配一条命令（最多 3 段），返回实现与剩余参数。
+export matchHandler : List String -> Maybe (Pair Handler (List String))
+matchHandler args = matchDepth 3 args
+
+-- | 内部：按深度从 3 到 1 尝试精确路径匹配（最长优先）。
+matchDepth : Int -> List String -> Maybe (Pair Handler (List String))
+matchDepth n args =
+  if n <= 0 then
+    Nothing
+  else
+    case findHandler (take n args) of
+      Just h => Just (Pair h (drop n args))
+      Nothing => matchDepth (n - 1) args
+
+-- | 内部：按路径精确查找实现。
+findHandler : List String -> Maybe Handler
+findHandler path = findHandlerIn path handlers
+
+-- | 内部：`findHandler` 的线性扫描。
+findHandlerIn : List String -> List Handler -> Maybe Handler
+findHandlerIn path [] = Nothing
+findHandlerIn path (h :: rest) = if h.handlerPath == path then Just h else findHandlerIn path rest
+
+-- | 内部：`vuna errors` 子命令。
+errorsArgs : Member nFs FsOp r, Member nConsole ConsoleOp r => List String -> Eff r Int
+errorsArgs ("list" :: more) = Vuna.Explain.runExplainList more
+errorsArgs ("explain" :: more) = Vuna.Explain.runExplainCode more
+errorsArgs [] = usageErrorFor ["errors"]
+errorsArgs (bad :: _) = unknownSubcommand ["errors"] bad ["list", "explain"]
+
+-- | 内部：`vuna deps` 子命令。
+depsArgs : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => List String -> Eff r Int
+depsArgs ("add" :: more) = Vuna.Add.runAdd more
+depsArgs ("fetch" :: more) = Vuna.Fetch.runFetch more
+depsArgs ("pin" :: more) = Vuna.Fetch.runPin more
+depsArgs [] = usageErrorFor ["deps"]
+depsArgs (bad :: _) = unknownSubcommand ["deps"] bad ["add", "fetch", "pin"]
+
+-- | 内部：`vuna store` 子命令。
+storeArgs : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => List String -> Eff r Int
+storeArgs ("gc" :: more) = Vuna.Clean.runStoreGc more
+storeArgs ("clean" :: more) = Vuna.Clean.runClean more
+storeArgs [] = usageErrorFor ["store"]
+storeArgs (bad :: _) = unknownSubcommand ["store"] bad ["gc", "clean"]

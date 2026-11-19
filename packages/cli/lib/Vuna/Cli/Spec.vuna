@@ -1,9 +1,8 @@
 -- | CLI 命令面的单一真源：分组、摘要、用法、flag 表与帮助元数据。
 --
 -- 帮助文本、未知 flag 的校验都从这里读：命令实现只调用 [Vuna.Cli.Spec.parseCmdArgs]，
--- 不再各自维护一份 flag 列表。分发（`Vuna.Cli`）按命令路径显式接线，和本表共享同一组
--- 路径字符串；新增命令时两处都要改，`test/suite` 的 `cli` 章节会逐条跑 `vuna help <path>`
--- 与 `vuna <path>` 把漏接线暴露出来。
+-- 不再各自维护一份 flag 列表。实现在 [Vuna.Cli.Registry] 里按路径注册；新增命令时两处
+-- 都要改，`test/suite` 的 `cli` 章节会逐条跑 `vuna help <path>` 与分组命令，漏接线会红。
 --
 -- 编译器命令（`check` / `build` / `compile`）的 flag 由编译器包解析，本表只记摘要与
 -- 用法；它们的详细帮助由 [Vuna.Cli.Help] 转发编译器用法文本（零重复）。
@@ -11,12 +10,12 @@ module Vuna.Cli.Spec where
 
 import Vuna.Cli.Args
 import Vuna.Compiler.Base.Common
-export import Vuna.Plugin.Command (Group(..), groupTitle, FlagDoc(..), ArgSpec(..), Cmd(..), boolFlag, valueFlag, multiFlag, mkCmd, subCmd, topCmd, Group(..), groupTitle, FlagDoc(..), ArgSpec(..), Cmd(..), boolFlag, valueFlag, multiFlag, mkCmd, subCmd, topCmd, Group(..), groupTitle, FlagDoc(..), ArgSpec(..), Cmd(..), boolFlag, valueFlag, multiFlag, mkCmd, subCmd, topCmd, Group(..), groupTitle, FlagDoc(..), ArgSpec(..), Cmd(..), boolFlag, valueFlag, multiFlag, mkCmd, subCmd, topCmd)
+export import Vuna.Plugin.Command (Group(..), groupTitle, FlagDoc(..), ArgSpec(..), Cmd(..), boolFlag, valueFlag, multiFlag, mkCmd, subCmd, topCmd, Group(..), groupTitle, FlagDoc(..), ArgSpec(..), Cmd(..), boolFlag, valueFlag, multiFlag, mkCmd, subCmd, topCmd, Group(..), groupTitle, FlagDoc(..), ArgSpec(..), Cmd(..), boolFlag, valueFlag, multiFlag, mkCmd, subCmd, topCmd, Group(..), groupTitle, FlagDoc(..), ArgSpec(..), Cmd(..), boolFlag, valueFlag, multiFlag, mkCmd, subCmd, topCmd, Group(..), groupTitle, FlagDoc(..), ArgSpec(..), Cmd(..), boolFlag, valueFlag, multiFlag, mkCmd, subCmd, topCmd, Group(..), groupTitle, FlagDoc(..), ArgSpec(..), Cmd(..), boolFlag, valueFlag, multiFlag, mkCmd, subCmd, topCmd, Group(..), groupTitle, FlagDoc(..), ArgSpec(..), Cmd(..), boolFlag, valueFlag, multiFlag, mkCmd, subCmd, topCmd, Group(..), groupTitle, FlagDoc(..), ArgSpec(..), Cmd(..), boolFlag, valueFlag, multiFlag, mkCmd, subCmd, topCmd)
 import Base.Data.List as List
 import Base.Data.String as String
 import Base.Data.Bool as Bool
 -- | 命令面的数据类型与构造器由 [Vuna.Plugin.Command] 提供；本模块只持有产品命令表。
-export import Vuna.Plugin.Command (Group(..), groupTitle, FlagDoc(..), ArgSpec(..), Cmd(..), boolFlag, valueFlag, multiFlag, mkCmd, subCmd, topCmd, Group(..), groupTitle, FlagDoc(..), ArgSpec(..), Cmd(..), boolFlag, valueFlag, multiFlag, mkCmd, subCmd, topCmd, Group(..), groupTitle, FlagDoc(..), ArgSpec(..), Cmd(..), boolFlag, valueFlag, multiFlag, mkCmd, subCmd, topCmd, Group(..), groupTitle, FlagDoc(..), ArgSpec(..), Cmd(..), boolFlag, valueFlag, multiFlag, mkCmd, subCmd, topCmd)
+export import Vuna.Plugin.Command (Group(..), groupTitle, FlagDoc(..), ArgSpec(..), Cmd(..), boolFlag, valueFlag, multiFlag, mkCmd, subCmd, topCmd, Group(..), groupTitle, FlagDoc(..), ArgSpec(..), Cmd(..), boolFlag, valueFlag, multiFlag, mkCmd, subCmd, topCmd, Group(..), groupTitle, FlagDoc(..), ArgSpec(..), Cmd(..), boolFlag, valueFlag, multiFlag, mkCmd, subCmd, topCmd, Group(..), groupTitle, FlagDoc(..), ArgSpec(..), Cmd(..), boolFlag, valueFlag, multiFlag, mkCmd, subCmd, topCmd, Group(..), groupTitle, FlagDoc(..), ArgSpec(..), Cmd(..), boolFlag, valueFlag, multiFlag, mkCmd, subCmd, topCmd, Group(..), groupTitle, FlagDoc(..), ArgSpec(..), Cmd(..), boolFlag, valueFlag, multiFlag, mkCmd, subCmd, topCmd, Group(..), groupTitle, FlagDoc(..), ArgSpec(..), Cmd(..), boolFlag, valueFlag, multiFlag, mkCmd, subCmd, topCmd, Group(..), groupTitle, FlagDoc(..), ArgSpec(..), Cmd(..), boolFlag, valueFlag, multiFlag, mkCmd, subCmd, topCmd)
 
 -- | 内部：构造一条归其它实现解析 flag 的命令（路径只有一段）。
 delegatedCmd : String -> String -> String -> Cmd
@@ -192,6 +191,14 @@ commands =
       "vuna dev errors gen [ROOT]"
       []
       ["输出 `ROOT/docs/.generated/errors.md` 与同源 JSON；生成物不入 git。"],
+    subCmd ["dev", "ir"] GDev "IR 调试" "vuna dev ir dump [--after NAME] [--out FILE] DIR" [] [],
+    subCmd
+      ["dev", "ir", "dump"]
+      GDev
+      "检查 + lowering 后打印确定性 IR"
+      "vuna dev ir dump [--after raw|cps|machine|anf|anf2|ocaml] [--out FILE] DIR"
+      [valueFlag "after" "raw|cps|machine|anf|anf2|ocaml" "在 lowering 的哪一步之后打印（缺省 raw）", valueFlag "out" "FILE" "写入文件（缺省 stdout）"]
+      [],
     subCmd
       ["dev", "obs"]
       GDev
