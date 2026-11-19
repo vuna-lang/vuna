@@ -128,7 +128,7 @@ OCaml 种子是**当前唯一**锚点。方向是让 native 自举成熟后，�
 **前提（未满足就不能切换）：**
 
 1. native 自举通过：native 产物能编译编译器自身并通过行为验收（`backend-check --compiler
-   native --scope selfhost`，现状见 [debt.md](debt.md) D89）；
+   native --scope selfhost`，现状见 [testing.md](testing.md)「后端自举 conformance」）；
 2. `stage1 == stage2` 的判据改写：两个 stage 都由同一 codegen 产生，固定点从此只证明
    **自洽回归**，不再有「两条独立实现互证」的成分；
 3. 自举链的平台锁定被显式接受：`.s` 是 x86-64 Linux SysV 汇编，其它平台要么用发布的

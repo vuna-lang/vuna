@@ -377,26 +377,8 @@ native 与 wasm 都跑 `Base.Effect.Core` 的库机器（`Control` 循环 + hand
 `prim_effectHandleId` 只在 lowering 的派发 pass 之后作为机器步骤的构造入口，
 不再由后端各自实现续延。
 
-下面是**旧栈拷贝实现**（`Native.Runtime` 的 `rt_eff_*`，仍在源码里但不再发射），
-保留作布局参考（[native.md](native.md) §3.4）：
-
-- handler 链是 `.bss` 的 `rt_handlers`；节点按 `(key, name)` 线性扫描。
-- `perform` 把 comp 栈帧（`[perform_rbp, handler 栈顶)`）拷到堆，构造一次性续延闭包，
-  并在**当前栈**上调用 `opH`；不调用 `k` 的 opH 返回值直接作为 answer。
-- `k v` 把捕获帧搬到堆上的新栈段、修正 rbp 链、把 comp 顶部返回地址改到
-  `rt_eff_kdone`；`kdone` 应用 `ret` 后把 answer 交回 `k` 的调用点。因此 `opH` 在
-  `k` 返回后继续计算、宿主 handler 的「先做宿主操作再 `k`」都与 OCaml 语义一致。
-- 一次性：续延记录带 `used`；resume 两次 trap `vuna: runtime error: continuation
-  already resumed`（exit 2）。
-- host 叶子（`@vuna@host@print`、`@vuna@host@exitOp`、Ref 等）在 `Native.Runtime`
-  的 intrinsic 表里映射到既有 `prim_eff_*` 实现；入口按 `irEntryHandlersOf` 预装
-  `runXHost`。
-
-- 捕获/迁移的是 `[perform_rbp, rt_stack_top)` 整段栈（含外层 handler 的挂起帧）；
-  内层恢复后再触发外层 `perform` 也走同一段，节点栈地址随段平移、`kdone` 时撤销。
-- 恢复栈段保留 128 KiB slack（约 1k 个常见帧），从 free list 复用；函数 prologue 检查
-  `rt_stack_limit`，越界 trap。嵌套 effect 的总开销仍随深度增长
-  （[debt.md](debt.md) D89）。
+旧栈拷贝实现（`Native.Runtime` 的 `rt_eff_*`、`rt_handlers`、捕获缓冲与迁移栈段）已删除；
+延迟 answer 的 handler 边界见 [debt.md](debt.md) D101。
 
 wasm 后端与 native 一样用 base 的显式效应机器实现 handler（见 [effect-machine.md](effect-machine.md)）；
 效应语义的三端对拍在 suite `pure-cross` 分类（`packages/compiler/test/corpus/pure_cross/`，`35_eff_*`–`50_eff_*`），native 的

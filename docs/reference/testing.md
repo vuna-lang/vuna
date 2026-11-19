@@ -593,7 +593,7 @@ CI 把它拆成三个 job（`.github/workflows/ci.yml`）：`flake-check` 跑除
 wasm 不自举（浏览器/边缘受限后端的契约见 [wasm.md](wasm.md)），因此没有 wasm 侧的
 自举产物与 runner。该 package **不进 `nix flake check`**：整轮成本远高于日常门禁。
 它在 `.github/workflows/ci.yml` 的 `backend-native` job 里只跑**定时（每晚）、手动
-dispatch 与带 `backend` 标签的 PR**——D89 未关时 native 后端在部分夹具上会挂住，
+dispatch 与带 `backend` 标签的 PR**——整轮成本高、且 native 后端仍有未关闭的边界（[native.md](native.md) §8），
 放在每次 push 上只会占满 runner 又被下一次 push 取消（`cancel-in-progress`），
 既拿不到读数也拖慢反馈。push 路径上的 native 覆盖由 flake check 的
 `vuna-tests-native`（fast+integration 矩阵）承担。
@@ -615,7 +615,7 @@ runner 是 `nix run .#backend-check -- --compiler native`，三个 scope：
 
 每条外部命令（编译器、`cc`、`node`、生成的程序）默认 240 s 上限
 （`VUNA_BACKEND_TIMEOUT=<秒>`，`0` = 不限）。超时的夹具按失败计入清单，其余夹具继续跑：
-D89 未关时挂住的是单条命令，没有超时整轮会被拖到 job 级 timeout 而丢掉失败面。
+单条命令挂住时按超时计入失败，没有超时整轮会被拖到 job 级 timeout 而丢掉失败面。
 失败达到 `VUNA_BACKEND_MAX_FAILS`（默认 `0` = 不限；CI 设 20）后停止派发剩余夹具，
 其余记为 skip——编译器整体坏掉时清单已经很说明问题。
 
@@ -626,8 +626,7 @@ nix run .#backend-check -- --compiler native --scope selfhost
 ```
 
 读数（16 核）：parity 53×3 在 native 编译器上按 `--jobs` 并行；corpus 686 条断言
-8 路并行。CI 里 native 任务 `continue-on-error`（D89：`check packages/base` / `check examples/infra`
-以 `continuation stack overflow` 收口，见 [native.md](native.md) §8）。
+8 路并行。CI 里 native 任务仍是 `continue-on-error`（边界见 [native.md](native.md) §8）。
 
 **口径约束**：编译器必须与被测源码同一棵树构建——Nix 派生天然满足；手工跑时先
 `nix build .#vuna-native`，不要拿旧二进制去跑新源码（诊断会指向编译器的能力差异，而不是

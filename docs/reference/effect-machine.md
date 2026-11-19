@@ -113,7 +113,7 @@ ContFrame    = { k, prompt }   -- prompt = 所属 handler frame（delimited）
        `@ir@m@run` 驱动到值（每次 resume 一层 wasm 帧 → 栈耗尽）。因此
        「resume 返回值」与「常量栈」是同一件事：**先把续延做成显式控制栈（trampoline），
        再让 resume 直接返回 answer 值**，然后再转 Fs 及其余宿主家族。
-2. **native**：实现同一组原语（显式帧 + 续延栈，替代栈拷贝路径的 handler 部分）；
+2. **native**：实现同一组原语（显式帧 + 条件 trampoline，替代栈拷贝路径的 handler 部分）；
    用 `effect-common` 三端矩阵验收。
 3. **OCaml**：用同一协议映射到 `Effect.Deep` 或显式 trampoline；验收同矩阵。
 4. **删除旧运行时**：wasm 的 `$rt_cps*` / stack switching、native/OCaml 的旧 handler
@@ -217,7 +217,7 @@ native / wasm 已切库机器；OCaml 仍走 `Effect.Deep`，三端统一到同�
 
 > 现状：`Ir.Cps` 只被 `Wasm/Module.vuna` 引用——**只有 wasm 走 CPS + 显式机器**；
 > OCaml 直接用 `Effect.Deep.match_with/continue`，native 用栈拷贝
-> （`effAllocCapture`/`effResume`，O(N²) 见 debt D89）。handler 语义因此有**三份实现**。
+> （`effAllocCapture`/`effResume`，O(N²)）。当时 handler 语义有**三份实现**；native 后来切到库机器，这套栈拷贝路径已删除。
 
 目标：机器只实现一次（用 vuna 写在 base 里），三端只提供「闭包应用 + 分配」。
 
@@ -457,15 +457,17 @@ ume 后按需重装）。下一步：把 `inChain` 改成帧引用/身份比较�
   续延 λ 打名字标记，未知变量的应用一律当普通调用（`onExit c k`）→ 过应用。现在
   λ 携带结果类型，mCps 按 `Eff` 结果判定续延，`onExit c` 走 thunk 运行路径。
 
-### 9.2.5 native 已切到库机器（D89 栈拷贝删除）
+### 9.2.5 native 已切到库机器（栈拷贝路径删除）
 
 `Native/Module.build` 现在对 `ordered` 调 `cpsDefsMachine`，seeds 加
 `Base.Effect.Core.machineRun`：native 与 wasm 跑同一份机器代码。随后把
 `nativeRtFuncs` 里的栈拷贝家族（`eff_perform/eff_handle/eff_self/eff_alloc_capture/
 eff_alloc_segment/eff_free_segment/eff_translate_nodes/eff_unrelocate/eff_resume/
 eff_kdone/eff_pure_k/free_capture/trap_unhandled_effect/trap_resume_twice/trap_bad_stack`）
-与 `prim_effectPerformId/HandleId/Self` 的符号映射一并移除——用户代码已不引用它们
-（生成的模块 `.s` 里 0 处 `rt_eff_*`）。
+从发射列表与符号映射里移除；本轮进一步删除它们的**定义**、`.bss` 槽（`rt_handlers` /
+`rt_self` / `rt_next_host` / `rt_stack_arena` / `rt_seg_free` / `rt_cap_free`）、
+trap/message、GC 的旧根（`rt_handlers` / `rt_self` / `rt_active_recs`）以及 wasm 的
+死映射（`prim_effectSelf → $rt_effSelf`）。生成的模块 `.s` 里 0 处 `rt_eff_*`。
 
 读数：
 
@@ -520,11 +522,24 @@ ctx 深度是真正的嵌套 resume 深度。
 
 | 步 | 内容 | 验收 |
 |---|---|---|
-| 1 | `Obj` + 两个 coercion 三端打通 | 往返夹具三端一致 |
-| 2 | `Eff.Machine` 写出来（vuna），先用 `Done/Apply` 跑一个手搭的 Control | native 上跑通 |
-| 3 | **native** 接机器：`prim_effectPerformId/HandleId/Self` 改成构造 `Control`，入口跑一次 `run`；删栈拷贝路径 | `pure-cross` + `effect-common` 全绿；D89 的 O(N²) 读数消失 |
-| 4 | **OCaml** 接机器（先保留 `Effect.Deep` 作为差分 oracle 跑同一组夹具，再切库机器） | 同上 |
-| 5 | **wasm** 接同一台机器（`@ir@m@*` 变成对库函数的 `IrGlobal` 调用；手写 wat 机器已删除） | `106` 默认栈；`114/115` 冒烟 |
+| 1 | `Obj` + 两个 coercion 三端打通 | 往返夹具三端一致（已达成） |
+| 2 | `Eff.Machine` 写出来（vuna），先用 `Done/Apply` 跑一个手搭的 Control | native 上跑通（已达成，见 `pure_cross/56`） |
+| 3 | **native** 接机器：`prim_effectPerformId/HandleId/Self` 改成构造 `Control`，入口跑一次 `run`；删栈拷贝路径 | `pure-cross` + `effect-common` 全绿；O(N²) 读数消失（已达成） |
+| 4 | **OCaml** 接机器（先保留 `Effect.Deep` 作为差分 oracle 跑同一组夹具，再切库机器） | 同一组夹具两端逐字一致（**未做**：OCaml 仍走 `Effect.Deep`） |
+| 5 | **wasm** 接同一台机器（`@ir@m@*` 变成对库函数的 `IrGlobal` 调用；手写 wat 机器已删除） | `106` 默认栈；`114/115` 冒烟（已达成） |
+
+### 9.5 宿主路径与派发收敛（待做）
+
+下面几项来自宿主效应/机器收敛的盘点；按门禁执行，不先做优化后找口径。
+
+| 项 | 内容 | 门禁 / 状态 |
+|---|---|---|
+| W1 | 入口命名实例 fail closed：`main : Eff [ConsoleOp@mock] …` 当前能编译、运行期才 `unhandled effect`（[debt.md](debt.md) D116）；加诊断 + 正/负夹具 | 立即（下一轮）；诊断先于任何入口 handler 改动 |
+| W2 | 宿主表收敛成 `HostClass = Handled impl \| Direct`，删死字段，行为由覆盖单测锁住（含 `sendCore` / `sendCoreId` 两种名字） | 立即；W5 的前置 |
+| W4 | `collectHandleOpsDefs` 改吃 **CPS 前** 的 defs，让 handler 分类与 CPS 输出解耦 | 立即（小重构）；只校准 audit 文案，不声称关闭 IR-08/IR-09 |
+| W3.0 | 补「入口宿主叶子」bench：entry 预装 handler + 每次 `consolePrint` 的 `runPure (@vuna@host@print …)` 嵌套机器 | W5 / W3.1 的前置；读数写进 [benchmarks.md](benchmarks.md) §1.4 |
+| W5 | 宿主叶子改裸值原语，去掉每次 print 的嵌套 `machineRun` | 先过 W3.0；预计是本批最大收益 |
+| W3.1 | `handleHostAt → MkHandleHost`，宿主帧免槽位/epoch，Ref 归入 Direct | **不独立开工**：W5 落地后复评，若宿主帧仍显著再做，否则删 |
 
 ### 9.4 风险与边界
 

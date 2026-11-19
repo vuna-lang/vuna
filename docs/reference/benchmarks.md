@@ -198,7 +198,7 @@ native 赢在「调用少、字符串/栈传参多」的形状（[performance.md
 
 - `eff_tick`：尾递归里 20000 次顺序 `perform` + `resume`（浅续延吞吐）；
 - `eff_deep`：非尾递归到深度 2000 才 `perform` 一次（单次捕获深度）；
-- `eff_deepseq`：非尾递归每层都 `perform`（深度 2000→1，D89 的原始形状）；
+- `eff_deepseq`：非尾递归每层都 `perform`（深度 2000→1；旧栈拷贝路径下的原始形状，机器下是线性）；
 - `eff_bracket`：10000 轮 `bracket` + `perform`（cleanup 的 push/pop）；
 - `eff_nested`：2000 层 handler 嵌套，内层完成后再在外层 perform（帧链 / 回退）；
 - `eff_host`：Console handler 的 answer 是 `Eff`（answer row），每轮额外发一个 Tick；
@@ -242,6 +242,11 @@ HashMap 升级」后同一档约 193 ms（wasm ≈149 ms，N=5000，`--runs 1`�
 原生 `str_eq` 只占单次 perform 的 ~1%（2 次比较 ≈7 ns / ~700 ns），这次改动是协议
 收敛（派发只比整数），不是性能项。
 
+**还缺的口径（W3.0）**：现有 `eff_*` 覆盖用户 handler 与 answer row，但没有量
+**入口宿主叶子**——entry 预装 `runXHost` 后，每次 `consolePrint` 都会在 opH 里再跑一次
+`runPure (@vuna@host@print …)`（嵌套机器）。在补出这条 bench 之前，不评估
+「宿主叶子改裸值原语」与 `MkHandleHost` 的收益。
+
 **CPS 前后**（wasm：`445315d` 的 wat 机器 → HEAD 的库机器；native：`e663921` 的栈拷贝 →
 HEAD 的库机器；`--runs 3 --warmup 1`，源码与 harness 都是 HEAD）：
 
@@ -269,7 +274,7 @@ HEAD 的库机器；`--runs 3 --warmup 1`，源码与 harness 都是 HEAD）：
 | 80000 | 5.33 s | 761 ms |
 
 native 在 40k 之后出现台阶：`VUNA_NATIVE_GC_MIN=2G` 下同一 80k 档只要 0.42 s，说明台阶来自
-保守 GC 反复扫描随 perform 增长的活数据（一次性续延集合只增不减，见 debt D109）；wasm 不回收，
+保守 GC 反复扫描随 perform 增长的活数据（旧栈拷贝路径的捕获集合只增不减；该路径已删除）；wasm 不回收，
 时间随 N 近线性、内存同样线性增长（20k ≈ 159 MB）。**这组台阶是续延槽复用落地前的读数**，
 修复后 200k 仍线性（见下）。
 

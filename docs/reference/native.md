@@ -9,8 +9,8 @@
 > `strConcatMany` / `strSubstTemplate`）+ 闭包与高阶应用 + Float（算术/比较/转换/展示）。
 > 堆是段链表 + 尺寸类复用 + **保守标记-清扫 GC**（非移动）；对象布局见 §2，回收契约见 §5.2。
 > `main : Eff r a`（含带行的宿主效应，
-> 入口自动预装 `runXHost`）与 `IORef` 可用；`perform` / `handle` 用**栈拷贝 + 续延栈迁移**
-> 实现一次性续延（§3.4）。FFI / extern 仍被明确拒绝（`NativeUnsupported`）。
+> 入口自动预装 `runXHost`）与 `IORef` 可用；`perform` / `handle` 走**库机器**
+> （`Control` 循环 + trampoline）实现一次性续延（§3.4）。FFI / extern 仍被明确拒绝（`NativeUnsupported`）。
 > 实现入口：`Vuna.Compiler.Native.{Model,Abi,Gc,Runtime,Module,Render}`，
 > 驱动 `Vuna.Compiler.Driver.Native`。边界见 §8。
 
@@ -90,8 +90,7 @@
   顶层函数 / 运行时符号**当值**时生成静态 wrapper（闭包 ABI → 标准 ABI）作为 code，
   arity 取定义参数个数 / `nativeRtValueArity` / `irInlineArity`。
 - 生成代码只使用 caller-saved 寄存器（`rax, rdi, rsi, rdx, rcx, r8-r11`）与帧指针
-  `rbp`，不碰 `rbx/r12-r15`，因此无需保存 callee-saved。运行时只有续延恢复用 `r15`
-  暂存续延记录（§3.4），生成代码不碰它。
+  `rbp`，不碰 `rbx/r12-r15`，因此无需保存 callee-saved（生成代码与运行时都不使用它们）。
 - **单出口**：带栈帧的运行时函数体内出现的 `IRet` 由 `Native.Runtime.rtFunc` 统一改写
   成跳到函数尾标签（`mov rsp, rbp; pop rbp; ret`）；只有无栈帧的入口/陷阱（`rtRawFunc`）
   直接写 `ret`。手写分支因此不会「提前 ret 把 rsp 留在 frame 里」，不会崩在返回地址上。
@@ -108,72 +107,23 @@
 
 ### 3.4 效应 handler 与一次性续延
 
-运行时表示（`Native.Runtime`）：
+native 与 wasm 跑同一份**库机器**（`Base.Effect.Core.Control` 循环，设计与能力矩阵见
+[effect-machine.md](effect-machine.md)）：lowering 的机器 pass 把 `perform` / `handle`
+改写成 `MkPerform` / `MkHandle` 等 `Control` 步骤，`machineRun` 的 trampoline 驱动。
 
-- **handler 链**：`.bss` 的 `rt_handlers` 指向最内层节点。节点 96 B：
-  `[0]=key [8]=name [16]=ret [24]=opH [32]=当前 comp 栈顶（base_rsp）`
-  `[40]=prev [48]=base_rbp [56]=当前 resume 记录（0 = 无；`perform` 调 `opH` 期间暂存在帧内）`
-  `[64]=宿主直连标志（入口预装的宿主 handler 为 1）`。
-- **续延记录** 176 B：`[0]=捕获字节 [8]=字节数 [16]=perform 的 rbp [24]=used`
-  `[32]=节点 [40]=perform 时的链顶 [48..72]=resume 调用者的 rbp/rsp/ret/r15`
-  `[80]=恢复值 v [88]=prev stack_top [96..112]=段迁移的 lo/hi/delta`
-  `[128]=栈段基址 [136]=段大小 [144]=prev stack_limit [152]=捕获字节数`
-  `[160]=活动续延链 next`（GC 根集按此链扫记录与挂起的旧栈）。
-- **续延闭包** 24 B：`[0]=rt_eff_resume [8]=arity(1) [16]=记录`；调用约定与普通闭包一致。
+- 生成的代码只构造 `Control` 值；handler 帧（`MkFrame`）与机器状态是普通堆对象，
+  不使用 `.bss` 的 handler 链、不拷贝/迁移宿主栈。
+- `MkPerform` 按 `(keyId, nameId)` 在 `msFrames` 链上找最内层帧；`MkResume` 把续延
+  交回；`unwind` / `finish` 负责弹帧与按深度跑 cleanup。
+- **常量栈**：每次转移都是一次循环迭代（`step` 返回 `Pair MSt Control`，`runGo` 立即
+  消费），续延链不占宿主栈；顺序 perform 的深度不随次数增长。
+- **one-shot**：续延槽 → epoch 表（`MSt.msUsed`）拒绝重放；尾 resume 复用 `tailSlot`。
+- 宿主 handler 与用户 handler 走同一套 `MkHandle`，没有「宿主直连」旁路。
+- 旧栈拷贝实现（`rt_eff_*`、`rt_handlers`、捕获缓冲与迁移栈段、`rt_next_host` 标记）
+  已删除；GC 的保守根集只有当前栈区间（`rt_stack_top`）与 `rt_cleanups`。
 
-`perform`：按 `(key, name)` 扫链；找到后把节点弹出（`rt_handlers = node.prev`），把
-`[perform_rbp, rt_stack_top)` 的**整段栈**（含所有外层 handler 的挂起帧）拷到堆，
-分配记录与续延闭包，然后**在当前栈上**调用 `opH(op, k)`（不切到 handler 帧，避免 opH
-帧落进捕获区）。调用 `opH` 前先把 `node[56]` 摘到本帧槽位并清零：同一个节点可以在它自己
-的续延里再次 `perform`（续延副本里 handler 帧仍在），内层 `resume` 会覆盖该槽；不摘走的话，
-外层 `perform` 在 `opH` 返回时会拿到内层的记录，把 answer 交给一个已经放弃的栈段。
-**宿主效应直连**：入口预装 handler 的 `run*Host` 调用前把 `rt_next_host` 置 1，`eff_handle`
-在节点创建时把它写进 `node[64]` 并清零。`perform` 命中 `node[64] != 0` 时不捕获、不迁移、
-不弹节点，直接用 `rt_eff_pure_k`（`\r => r` 的续延闭包）调用 `opH(op, k)` 并把结果作为本次
-send 的结果返回——宿主 `opH` 都只在尾位置调用一次 `k`，所以等价于纯动作。
-
-`opH` 返回时按 `node[56]` 三路分派：
-- `0`：本次 `opH` 没有 resume，返回值直接作为 handler answer（走
-  `rt_eff_handle_end`，`ret` 不应用）；
-- `1`：`kdone` 已完成一次 resume（`ret` 已在 `kdone` 应用过）；沿 `rt_active_recs`
-  找 `record[32] == node` 的最近记录，取它的 `kdone_bubble` 入口撤销迁移、归还段并把答案
-  交回外层 `k` 的调用点；链上没有同节点记录时把答案交回 `handle` 的调用点；
-- 其它（真实记录）：把返回值交回该 resume 的调用点。
-
-`resume`（`k v`）：检查 one-shot；保存调用者的 rbp/rsp/ret/r15 到记录；把捕获的整段栈
-拷到**新栈段**（预留 `nativeSegSlackBytes = 32 MiB` 向下空间，向下增长留在段内），把 rbp 链和所有活动
-handler 节点的 `base_rsp` / 同源 `base_rbp` 平移 `delta`，把匹配 handler 的顶部返回地址
-改成 `rt_eff_kdone`；`rt_stack_top` 指向新栈顶，从 perform 的返回点继续执行。
-
-**abort 跨段恢复**：`opH` 不 resume、或答案需要交回外层调用点时，`perform` 的 abort
-路径会先在 `rt_active_recs` 里找包含目标帧（`node[48]`）的段，按 `limit = base+16`、
-`top = record[104]` 恢复，再返回 `handle` 的调用点；否则会拿着新段的 `limit` 回到旧段，
-在下一次函数 prologue 误报栈溢出。
-
-`rt_eff_kdone`：comp 正常结束后按需弹掉节点、应用一次 `ret`，再**撤销**节点地址平移、
-恢复 `rt_stack_top`，把答案交回 `k` 的调用点。后续嵌套 resume 的答案经
-`kdone_bubble` 入口冒泡（不重复应用 `ret`）。abort（opH 不调用 `k`）不经过 `kdone`，
-直接把 opH 返回值当作 answer，`ret` 不应用。
-
-因为捕获/迁移的是**整段栈**，内层续延恢复后触发外层 handler 也能正确穿过已挂起的内层
-handler 帧（节点地址随段平移，返回时再撤销）。
-
-捕获缓冲与迁移栈段各有一条 free list（`rt_cap_free` / `rt_seg_free`），块大小向上取整到
-2 的幂：`perform` 的捕获块在 `resume` 拷走后立即归还，`kdone` / abort 归还栈段，因此
-顺序 effect 只复用固定的几档块，不会每次新 `mmap`。每个 resume 预留 32 MiB 向下空间
-（页惰性提交：没有真正用到的页不计 RSS；段大小 `pow2_ceil(len + 32 MiB + 16)`）；函数
-prologue 比较 `rt_stack_limit`，越过段基址 trap `continuation stack overflow` 而不是踩堆。
-栈段从**专用高地址区间**（`0x2000_0000_0000` 起、`MAP_FIXED_NOREPLACE`）分配：resume 的
-重定位是保守扫描，落在 `(perform_rbp, stack_top)` 里的字一律当栈指针平移，堆/arena 指针
-如果也在这个区间里就会被误平移——固定区间让两者不相交。
-
-嵌套 effect 的总开销仍随深度增长：每次 resume 复制当前整段栈并保留自己的栈段（外层
-handler 帧还在上面），所以 N 层顺序 perform 是 O(N²) 拷贝 / 内存（500 次约 22 ms、
-2000 次约 260 ms / 500 MiB、5000 次约 1.4 s / 3 GiB）。
-
-约束：续延一次性（`used` 标记，resume 两次 trap）；每次 resume 复制整段栈；只支持
-one-shot，不做 multi-shot；`ret`/`opH` 允许在 `k` 返回后继续计算。宿主 handler 的
-「先做宿主操作再 `k`」写法（`consoleOpHIOHost` 等）与用户 `handle` 走同一条路径。
+延迟 answer（`opH` 返回函数、`resume` 发生在 `MkHandle` 返回之后）仍不支持，见
+[debt.md](debt.md) D101。
 
 ## 4. IR 支持面
 
@@ -282,9 +232,8 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
   + 恢复 cwd；实参按 shell 单引号转义）、`spawn`（`fork` + `execve("/proc/self/exe", argv)`，
   argv[0] 是本进程路径）、`wait`（`wait4` 取退出码，被信号杀死按 1）、`exit_process_host`。
 - 未实现的宿主面：stdin 的 `readLine` / `readBytes`（编译器闭包不可达）与 net。
-- 续延：`rt_eff_perform` / `rt_eff_handle` / `rt_eff_self` / `rt_eff_resume` / `rt_eff_kdone`
-  是旧的栈拷贝实现，当前机器路径**不再发射**它们（native 与 wasm 跑同一份
-  `Base.Effect.Core` 的 `Control` 循环，见 §3.4）。其余 `prim_eff_*` 宿主原语仍未实现。
+- 续延：`perform` / `handle` 由库机器（`Base.Effect.Core` 的 `Control` 循环）执行，见 §3.4；
+  旧的 `rt_eff_*` 栈拷贝实现已删除。其余 `prim_eff_*` 宿主原语仍未实现。
 - 浮点：`float_from_int` / `int_from_float`（截断）/ `float_abs` / `float_sqrt`、
   `float_add/sub/mul/div`、`float_eq/neq/lt/le/gt/ge`；展示不是运行时符号，
   走 `Base.Data.Float.floatRender`（Vuna 实现，三端共用）。
@@ -311,9 +260,6 @@ env，**不进 codegen**（同一 IR 的产物逐字节确定）。解析失败�
 
 - 预算检查在 `alloc` 里分配之前（`live + 已分配 + 本次 > limit` → 先 GC；GC 后仍超才 trap）；
   `live` 由清扫阶段累计（见 §5.2）。
-- **续延栈段不计入预算**：`resume` 的段按 `pow2_ceil(len + 32 MiB + 16)` 预留（页惰性提交），
-  按预留算会让 500 层嵌套一上来就爆；段耗尽仍由 `continuation stack overflow` / `mmap`
-  失败（`out of memory`）单独收口。
 - 亲和性是进程级：`fork` / `execve` 后子进程继承；`spawn` / `runIn` 的 env 默认**剔除**
   `VUNA_NATIVE_*`（`VUNA_NATIVE_INHERIT=1` 时原样传），避免子进程继承父进程的预算。
 - 口径边界：核数限制**不是 CPU 配额**（不限制单核跑多久，要限速用超时）；cgroup 只读 v2
@@ -332,15 +278,13 @@ env，**不进 codegen**（同一 IR 的产物逐字节确定）。解析失败�
   分配先弹表再 bump。大于 64 MiB 的块单独占一个段，死块进 `rt_huge_free` 首次适配链。
 - **根集**（没有栈图，全部保守扫描）：
   1. 机器栈 `[rsp, rt_stack_top)`；GC 入口先把通用寄存器（含 `r15`）溢进自己的帧；
-  2. `.bss` 白名单：`rt_handlers`、`rt_self`、`rt_cleanups`，以及 `alloc` 的调用方寄存器
-     快照（`rt_alloc_save_rdi/rsi/r8/r9`：`alloc` 不建栈帧，这四个寄存器靠 `.bss` 保活）；
-  3. 活动续延记录链（`rt_active_recs`，`record[160]` 是 next）：记录本身，以及它挂起的那段
-     旧栈 `[record+56, record+88)`。活动记录在 `resume` 入链、`eff_free_segment` 出链，
-     所以嵌套 resume 的每一层旧栈都会被扫到。
+  2. `.bss` 白名单：`rt_cleanups`，以及 `alloc` 的调用方寄存器
+     快照（`rt_alloc_save_rdi/rsi/r8/r9`：`alloc` 不建栈帧，这四个寄存器靠 `.bss` 保活）。
+  3. 没有续延记录链：栈拷贝路径已删除，机器状态都是栈上的普通值，随第 1 项被扫到。
 - **候选判据**：字必须指向某个已注册堆段内、16 对齐、块头合法且非空闲的 payload 起点。
   `Int` / 字节型偶然形似指针只会多留对象（非移动，不会失效）；`.rodata` 字面量不进堆，天然忽略。
-- **不扫的块**：`leaf`（String / Float，payload 是字节或位型）与 `pin`（续延捕获缓冲，
-  由 `rt_cap_free` 自己复用；活跃捕获缓冲经 `record[0]` 被记录标记，再按普通 payload 保守扫描）。
+- **不扫的块**：`leaf`（String / Float，payload 是字节或位型）与 `pin`（当前没有调用方；
+  留给需要长期驻留的宿主缓冲）。
 - **清扫**：清 mark、把未标记块按尺寸类回收、累计 `live`；之后
   `threshold = max(GC_MIN, 2 × live, 本次扫到的栈字节数)`（深递归按扫栈成本摊还）。
   非移动、不压缩，也没有分代/增量/并发。
@@ -413,16 +357,16 @@ env，**不进 codegen**（同一 IR 的产物逐字节确定）。解析失败�
 ## 8. 已知边界
 
 - 变体分支的**嵌套深匹配**：case 只按 tag 做一次线性分派，不做多模式矩阵。
-- 续延是**一次性**（one-shot）：resume 两次 trap；multi-shot 不做。每次 resume 把
-  `[perform_rbp, rt_stack_top)` 整段栈拷到新栈段（32 MiB 预留，页惰性提交；
-  越界 trap）；捕获块与栈段都按 2 的幂分档复用，但嵌套 resume 会同时保留多层栈段，
-  因此 N 层顺序 effect 仍是 O(N²) 时间与内存（见 §3.4 的读数）。
+- 续延是**一次性**（one-shot）：resume 两次被 epoch 表拒绝；multi-shot 不做。顺序 effect
+  的栈深是常量（trampoline），不随 perform 次数增长；延迟 answer 的 handler 仍不支持
+  （[debt.md](debt.md) D101）。
 - FFI / extern；stdin 的 `readLine` / `readBytes` 与 net。
 - **自举运行**：`vuna build packages/compiler --target native` 产出可链接的 `bin/vuna-compiler`
   （`version` / 帮助可用）；`check <小包>` 能跑完并给出正常诊断。冷 store 上
   `check packages/cli/test/corpus/packages/m34_summary/root` **整包通过**（exit 0）。
-  整仓 selfhost 的现状按 [debt.md](debt.md) D89 跟踪：尾调用（§3）只覆盖**直接饱和直调**，
-  非尾递归、被闭包包住的递归仍按帧吃宿主栈，续延里的深递归还受固定的 32 MiB 迁移窗口限制。
+  整仓 selfhost 的现状见 [testing.md](testing.md)「后端自举 conformance」：尾调用（§3）只覆盖
+  **直接饱和直调**，非尾递归、被闭包包住的递归仍按帧吃宿主栈；效应侧另有延迟 answer 的
+  handler 缺口（[debt.md](debt.md) D101）。
   CI 的 `nix run .#backend-check -- --compiler native` 因此仍是非阻塞任务（口径见
   [testing.md](testing.md)「后端自举 conformance」）。
 - **GC 的边界**：保守、非移动、不分代、不压缩。因此
@@ -433,8 +377,6 @@ env，**不进 codegen**（同一 IR 的产物逐字节确定）。解析失败�
   2. 形似指针的 `Int` 会多留对象；非移动所以不会让指针失效；
   3. 空闲块按 2 的幂尺寸类复用、不合并相邻空块，内部碎片最多约 2×；
   4. 超过 64 MiB 的块单独占段、死块进 `rt_huge_free` 首次适配链（可复用，不 `munmap`）；
-  5. 续延捕获缓冲是钉住块（`rt_cap_free` 自己复用），GC 不回收；
-  6. 栈段（`resume` 迁移用的 32 MiB 预留窗口）不计入预算，见 §5.1。
 - **宿主缓冲与算术边界**（失败一律显式，不静默截断/越界写）：
   - `fsReadFile` 的读缓冲 8 MiB：超过上界报 io 错误（`vuna: fs: readFile …: host I/O error`，
     exit 1）；OCaml / wasm 没有这个上界；
