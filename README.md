@@ -188,6 +188,7 @@ dune/OCaml 项目，只用 `ocamlopt` 编译生成的种子和程序。
 | [docs/reference/test-architecture.md](docs/reference/test-architecture.md) | 测试体系设计：共享对象库、store-isolated、verdict 对象、tier 与预算 |
 | [docs/reference/lint.md](docs/reference/lint.md) | lint 规则、`vuna.toml [lint]` 配置、源码抑制与门禁 |
 | [docs/reference/debt.md](docs/reference/debt.md) | 仍未关闭的债务、缺陷与未实现能力（按语言 / 工具分组，带证据） |
+| [docs/reference/compiler-audit.md](docs/reference/compiler-audit.md) | 编译器分层实现债：每层的补丁 / 降级 / 近似 / 结构妥协清单（按 ID 引用） |
 
 文档分层规则：README 只保留定位/上手/目录/硬约束/导航；细节在 `docs/reference/`；
 历史与里程碑在 git 历史；已知边界并入各主题参考页

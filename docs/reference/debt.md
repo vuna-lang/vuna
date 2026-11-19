@@ -103,6 +103,21 @@
 | D96 | 能力矩阵是手写表，与三张运行时实现表的一致性靠人工同步；改 `rtImplOf` / `dtp_*` / `nativeRtTargetHost` 时必须同步改矩阵，没有自动校验 | `packages/compiler/lib/Vuna/Compiler/Base/Capabilities.vuna`；[wasm.md](wasm.md) §8 | 后续（硬拒绝落地时补一致性测试） |
 | D97 | 入口行的不可用效应只能构建期告警 + 运行期 trap，不能构建期拒绝：`Base/Store.vuna` 的 `dirReady` 用 `processRunIn mkdir -p` bootstrap 存储根，所以 `packages/compiler/app/Main.vuna` 的行必须带 `ProcessOp`，按符号生成期拒绝会把编译器自己拒掉 | `packages/compiler/lib/Vuna/Compiler/Base/Store.vuna`（`dirReady`）、`packages/compiler/app/Main.vuna`；[wasm.md](wasm.md) §8 | 后续（前置：该调用改成 FsOp 逐级建目录，并清理签名链上的 `Member nProcess ProcessOp r`） |
 
+## 编译器实现债（⚠️ 静默错误项）
+
+完整分层清单见 [compiler-audit.md](compiler-audit.md)（按 ID 引用）。本文件只登记其中
+后果是**静默错误**、需要单独跟踪的条目：
+
+| ID | 仍未成立的事实 | 证据 | 归属 |
+| --- | --- | --- | --- |
+| A01 | `Termination/Scc.fuelEdgesGo` 的 `ok` 累加器只写不读：穿线失败的递归站点被从图里删掉，剩余严格边即可判通过 → 接受非终止程序 | [compiler-audit.md](compiler-audit.md) EL-01；`Elab/Termination/Scc.vuna` 的 `fuelEdgesGo` / `tryFuelThread` | 后续 |
+| A02 | 元变量作用域检查靠负索引放行：`Conv.termScopedTo` 的 `i < extra` 与 `Eval.varIndex` 的越界 `-1` 哨兵叠加，越界解一律通过；显式收紧会打断 base 自身（`String.lines` 报 `TC_NoInstanceFound`），需与表示一起改 | [compiler-audit.md](compiler-audit.md) EC-01/EC-02；`Core/Conv.vuna`、`Core/Eval.vuna` | 后续（需设计） |
+| A03 | `Core.Eval.quote*` 固定 fuel 64、耗尽返回 `TType 0`，而 `substSolvedMetas` 用它把已解元变量写回程序；`hasUnsolvedMeta*` 同上限且耗尽返回 `False` | [compiler-audit.md](compiler-audit.md) IR-01/IR-02；`Core/Eval.vuna` | 后续 |
+| A04 | 包文件收集在 fuel 耗尽时返回部分列表（`collectDirFiles`/`collectNames`/`walkName`），摘要据此判「内容一致」 | [compiler-audit.md](compiler-audit.md) FE-01/FE-02；`Frontend/Packages/Source.vuna` | 后续 |
+| A05 | `Loader.Flatten.loadModule` 命中模块表即跳过可见性检查：依赖包未导出的模块、两个 root 的同名模块都按「先装入者」解析 | [compiler-audit.md](compiler-audit.md) LD-01；`Loader/Flatten.vuna` | 后续 |
+| A06 | split 的 cache key 编入 `mode=s/f`：摘要路径与全量路径产出不同字节，产物是「输入 + store 热度」的函数 | [compiler-audit.md](compiler-audit.md) DR-01；`Driver/Compile.vuna`（D112 疑源） | 后续（需设计） |
+| A07 | native `div` 无 `min_int / -1` 守卫（SIGFPE）；非 try 的 `prim_eff_*` FS 原语映射到 `try_*` 后失败变默认真值；`fsReadFile` >8 MiB 静默截断 | [compiler-audit.md](compiler-audit.md) CG-01/CG-02/CG-03；`Native/Runtime.vuna` | 后续 |
+
 ## 相关阅读
 
 - 规则与语义：各主题参考页（见 `AGENTS.md` 的「文档导航」）
