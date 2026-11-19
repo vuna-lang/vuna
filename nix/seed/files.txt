@@ -177,7 +177,6 @@ Vuna_dCompiler_dWasm_dModel.ml
 Vuna_dCompiler_dWasm_dModule.ml
 Vuna_dCompiler_dWasm_dRender.ml
 Vuna_dCompiler_dWasm_dRuntime.ml
-Vuna_dCompiler_dWasm_dStep.ml
 Vuna_dCompiler_dWasm_dTypes.ml
 Vuna_runtime.ml
 build-id

@@ -324,3 +324,51 @@ let v_Vuna_dCompiler_dIr_dModel_dirProgUnitOf = (fun (mc0 : t_Vuna_dCompiler_dIr
   | { f_Vuna_dCompiler_dIr_dModel_dIrProgram_irProgShared = dtb__239; f_Vuna_dCompiler_dIr_dModel_dIrProgram_irProgUnit = dtb__240 } -> dtb__240
   | _ -> failwith "DT: impossible branch"
 ))
+
+# 561 "Vuna/Compiler/Ir/Model.vuna"
+let rec v_Vuna_dCompiler_dIr_dModel_dirSize = (fun (ir : t_Vuna_dCompiler_dIr_dModel_dIr) -> (1 + (v_Vuna_dCompiler_dIr_dModel_dirSizeChildren ir)))
+# 564 "Vuna/Compiler/Ir/Model.vuna"
+and v_Vuna_dCompiler_dIr_dModel_dirSizeChildren = (fun (ir : t_Vuna_dCompiler_dIr_dModel_dIr) -> (match ir with
+  | C_Vuna_dCompiler_dIr_dModel_dIr_IrCtor (dtb__241, dtb__242, dtb__243, dtb__244) -> (v_Vuna_dCompiler_dIr_dModel_dirSizeList dtb__244)
+  | C_Vuna_dCompiler_dIr_dModel_dIr_IrRecord (dtb__245, dtb__246, dtb__247) -> (v_Vuna_dCompiler_dIr_dModel_dirSizeFields dtb__247)
+  | C_Vuna_dCompiler_dIr_dModel_dIr_IrProj (dtb__248, dtb__249, dtb__250, dtb__251) -> (v_Vuna_dCompiler_dIr_dModel_dirSize dtb__248)
+  | C_Vuna_dCompiler_dIr_dModel_dIr_IrRecUpd (dtb__252, dtb__253, dtb__254, dtb__255) -> ((v_Vuna_dCompiler_dIr_dModel_dirSize dtb__252) + (v_Vuna_dCompiler_dIr_dModel_dirSizeFields dtb__254))
+  | C_Vuna_dCompiler_dIr_dModel_dIr_IrRtApp (dtb__256, dtb__257) -> (v_Vuna_dCompiler_dIr_dModel_dirSizeList dtb__257)
+  | C_Vuna_dCompiler_dIr_dModel_dIr_IrCast (dtb__258, dtb__259, dtb__260) -> (v_Vuna_dCompiler_dIr_dModel_dirSize dtb__260)
+  | C_Vuna_dCompiler_dIr_dModel_dIr_IrLet (dtb__261, dtb__262, dtb__263) -> ((v_Vuna_dCompiler_dIr_dModel_dirSize dtb__262) + (v_Vuna_dCompiler_dIr_dModel_dirSize dtb__263))
+  | C_Vuna_dCompiler_dIr_dModel_dIr_IrLam (dtb__264, dtb__265, dtb__266) -> (v_Vuna_dCompiler_dIr_dModel_dirSize dtb__266)
+  | C_Vuna_dCompiler_dIr_dModel_dIr_IrApp (dtb__267, dtb__268, dtb__269) -> ((v_Vuna_dCompiler_dIr_dModel_dirSize dtb__268) + (v_Vuna_dCompiler_dIr_dModel_dirSize dtb__269))
+  | C_Vuna_dCompiler_dIr_dModel_dIr_IrIf (dtb__270, dtb__271, dtb__272) -> (((v_Vuna_dCompiler_dIr_dModel_dirSize dtb__270) + (v_Vuna_dCompiler_dIr_dModel_dirSize dtb__271)) + (v_Vuna_dCompiler_dIr_dModel_dirSize dtb__272))
+  | C_Vuna_dCompiler_dIr_dModel_dIr_IrCase (dtb__273, dtb__274, dtb__275, dtb__276) -> ((v_Vuna_dCompiler_dIr_dModel_dirSize dtb__275) + (v_Vuna_dCompiler_dIr_dModel_dirSizeAlts dtb__276))
+  | C_Vuna_dCompiler_dIr_dModel_dIr_IrNatCase (dtb__277, dtb__278, dtb__279, dtb__280, dtb__281) -> ((((v_Vuna_dCompiler_dIr_dModel_dirSize dtb__277) + (v_Vuna_dCompiler_dIr_dModel_dirSizeAlt dtb__279)) + (v_Vuna_dCompiler_dIr_dModel_dirSizeAlt dtb__280)) + (v_Vuna_dCompiler_dIr_dModel_dirSizeAlt dtb__281))
+  | C_Vuna_dCompiler_dIr_dModel_dIr_IrConcatMany (dtb__282) -> (v_Vuna_dCompiler_dIr_dModel_dirSizeList dtb__282)
+  | C_Vuna_dCompiler_dIr_dModel_dIr_IrEffThunk (dtb__283, dtb__284, dtb__285, dtb__286, dtb__287) -> (v_Vuna_dCompiler_dIr_dModel_dirSize dtb__287)
+  | _ -> 0
+))
+# 584 "Vuna/Compiler/Ir/Model.vuna"
+and v_Vuna_dCompiler_dIr_dModel_dirSizeList = (fun (mc0 : t_Vuna_dCompiler_dIr_dModel_dIr Base_dData_dList.t_Base_dData_dList_dList) -> (match mc0 with
+  | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__288, dtb__289) -> ((v_Vuna_dCompiler_dIr_dModel_dirSize dtb__288) + (v_Vuna_dCompiler_dIr_dModel_dirSizeList dtb__289))
+  | Base_dData_dList.C_Base_dData_dList_dList_Nil -> 0
+  | _ -> failwith "DT: impossible branch"
+))
+# 588 "Vuna/Compiler/Ir/Model.vuna"
+and v_Vuna_dCompiler_dIr_dModel_dirSizeFields = (fun (mc0 : (string, t_Vuna_dCompiler_dIr_dModel_dIr) Base_dData_dPair.t_Base_dData_dPair_dPair Base_dData_dList.t_Base_dData_dList_dList) -> (match mc0 with
+  | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__290, dtb__291) -> (match dtb__290 with
+  | { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__292; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__293 } -> ((v_Vuna_dCompiler_dIr_dModel_dirSize dtb__293) + (v_Vuna_dCompiler_dIr_dModel_dirSizeFields dtb__291))
+  | _ -> failwith "DT: impossible branch"
+)
+  | Base_dData_dList.C_Base_dData_dList_dList_Nil -> 0
+  | _ -> failwith "DT: impossible branch"
+))
+# 592 "Vuna/Compiler/Ir/Model.vuna"
+and v_Vuna_dCompiler_dIr_dModel_dirSizeAlts = (fun (mc0 : t_Vuna_dCompiler_dIr_dModel_dIrAlt Base_dData_dList.t_Base_dData_dList_dList) -> (match mc0 with
+  | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__294, dtb__295) -> ((v_Vuna_dCompiler_dIr_dModel_dirSize (v_Vuna_dCompiler_dIr_dModel_dirAltBodyOf dtb__294)) + (v_Vuna_dCompiler_dIr_dModel_dirSizeAlts dtb__295))
+  | Base_dData_dList.C_Base_dData_dList_dList_Nil -> 0
+  | _ -> failwith "DT: impossible branch"
+))
+# 596 "Vuna/Compiler/Ir/Model.vuna"
+and v_Vuna_dCompiler_dIr_dModel_dirSizeAlt = (fun (mc0 : t_Vuna_dCompiler_dIr_dModel_dIrAlt Base_dData_dMaybe.t_Base_dData_dMaybe_dMaybe) -> (match mc0 with
+  | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__296) -> (v_Vuna_dCompiler_dIr_dModel_dirSize (v_Vuna_dCompiler_dIr_dModel_dirAltBodyOf dtb__296))
+  | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> 0
+  | _ -> failwith "DT: impossible branch"
+))
