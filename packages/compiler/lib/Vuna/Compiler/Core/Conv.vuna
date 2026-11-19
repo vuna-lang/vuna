@@ -669,7 +669,9 @@ patternEnv created depth =
     in (::) (VNeutral (NVar "_" lvl [])) (patternEnv created (depth - 1))
 
 patternSolution : List (Pair String Int) -> Int -> Int -> Term -> Value
-patternSolution [] created depth body = VType levelZero
+-- 空 spine 由 `solveMetaEmpty` 处理，调用点已排除（`patternSpineOf` 的非空分支）；
+-- 这里取 n=0 的自然延拓：不包 λ，直接在 `patternEnv` 下求值，不伪造排序值。
+patternSolution [] created depth body = eval (patternEnv created depth) body
 patternSolution ((Pair name lvl) :: rest) created depth body =
   VLam name RigOmega (Closure (patternEnv created depth) (wrapPatternLams rest body))
 

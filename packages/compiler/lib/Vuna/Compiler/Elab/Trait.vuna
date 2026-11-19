@@ -375,7 +375,7 @@ elabInstanceWithClass globals allDecls cls info ec0 headExpr methods msp =
                         solvedCtx = solveCtxGoals bodyCtx nCtx nTele ec1 []
                         ctxSubs = firstOf solvedCtx
                         ec2 = secondOf solvedCtx
-                        fields1 = map (applyCtxSubstsTo nCtx ctxSubs) fieldTerms
+                        fields1 = map (applyCtxSubstsTo nTele ctxSubs) fieldTerms
                       in Vuna.Compiler.Base.Common.bind (resolveRigidGoals globals bodyCtx msp (ecPending ec2) [] ec2) (
                           \r =>
                             let
@@ -1012,12 +1012,13 @@ ctxDictDomEqual ec a b =
     OkC _ => True
     ErrC e => False
 
--- 把 meta 出现替换成 ctx 字典变量：binder k 位于 `nTele + k`，出现点的 index = depth - (nTele+k) - 1，
--- 即 substMetaVar 的 q = nTele + k + 1。
+-- 把 meta 出现替换成 ctx 字典变量：`_ctx{k}` 的 level = `nTele + k`（bodyCtx 里 tele 在外、
+-- ctx 字典 binder 依次在内），出现点（根下 depth 层 binder）的 index = depth - level - 1；
+-- `substMetaVar` 产出 `TVar name (depth - q)` ⇒ q = level + 1 = nTele + k + 1。
 applyCtxSubstsTo : Int -> List (Pair Int Int) -> Term -> Term
-applyCtxSubstsTo nCtx [] t = t
-applyCtxSubstsTo nCtx ((Pair m k) :: rest) t =
-  applyCtxSubstsTo nCtx rest (substMetaVar m (ctxDictName k) (k - nCtx + 1) t)
+applyCtxSubstsTo nTele [] t = t
+applyCtxSubstsTo nTele ((Pair m k) :: rest) t =
+  applyCtxSubstsTo nTele rest (substMetaVar m (ctxDictName k) (nTele + k + 1) t)
 
 -- 剩下的 goal：仍刚性 ⇒ 用带局部 ctx 的实例搜索解（`Dict_Eq (Box a)` 靠自实例 + ctx 递归）；
 -- 搜不到 ⇒ `TC_InstanceContextMissing`。非刚性（具体类型）的 goal 留给程序级搜索。
@@ -1034,7 +1035,10 @@ resolveRigidGoalsGo globals ctx sp ((g@(Constraint cid kind m dom cspan cdepth))
       OkC (Pair rep ec1) =>
         case solveMeta (ecDefTbl ec1) (ecSolsP ec1) (ctxDepth ctx) m [] (eval (ctxEnv ctx) rep) of
           OkC sols2 => resolveRigidGoalsGo globals ctx sp rest kept (Pair m rep :: acc) (ecPutSols ec1 (solsList sols2))
-          ErrC e => resolveRigidGoalsGo globals ctx sp rest kept (Pair m rep :: acc) ec1
+          -- 解不进去就不许替换：acc 不变、goal 退回 kept（与 `solveCtxGoalsGo` /
+          -- `Driver.solveDeclaredDictGoalsGo` 的失败分支同形）。残留的未解 ?m 会在收尾
+          -- 报 `TC_UnsolvedMetavar`，比静默写入一个没过 occurs / 作用域检查的字典好。
+          ErrC e => resolveRigidGoalsGo globals ctx sp rest (g :: kept) acc ec1
   else
     resolveRigidGoalsGo globals ctx sp rest (g :: kept) acc ec
 
