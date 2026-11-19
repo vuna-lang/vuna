@@ -752,18 +752,8 @@ baseIntrinsics =
     Intrinsic "arrayFromList" (IPi "a" (IFun (IList (IVar "a")) (IArray (IVar "a")))) OpNone True,
     Intrinsic "arrayToList" (IPi "a" (IFun (IArray (IVar "a")) (IList (IVar "a")))) OpNone True,
     Intrinsic
-      "prim_effectPerform"
-      (IPi "a" (IPi "b" (IFun IStr (IFun IStr (IFun (IVar "a") (IVar "b"))))))
-      OpNone
-      True,
-    Intrinsic
       "prim_effectPerformId"
       (IPi "a" (IPi "b" (IFun IStr (IFun IStr (IFun IInt (IFun IInt (IFun (IVar "a") (IVar "b"))))))))
-      OpNone
-      True,
-    Intrinsic
-      "prim_effectHandle"
-      (IPi "u" (IPi "a" (IPi "b" (IPi "ret" (IPi "h" (IFun IStr (IFun IStr (IFun (IVar "ret") (IFun (IVar "h") (IFun (IFun (IVar "u") (IVar "a")) (IFun (IVar "u") (IVar "b"))))))))))))
       OpNone
       True,
     Intrinsic

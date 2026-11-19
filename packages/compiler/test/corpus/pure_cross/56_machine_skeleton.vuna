@@ -11,10 +11,10 @@ opH : Eff.Obj -> (Eff.Obj -> Eff.Rest Eff.Obj -> Eff.Control Eff.Obj) -> (Eff.Ob
 opH _ k kdone _ = k (Eff.toObj 2) (Eff.MkRestCont kdone)
 
 comp : Eff.Obj -> (Eff.Obj -> Eff.Control Eff.Obj) -> Eff.Control Eff.Obj
-comp _ k = Eff.MkPerform "po" "po" (Eff.toObj 1) (\v => Eff.MkApply k v)
+comp _ k = Eff.MkPerform 7 7 (Eff.toObj 1) (\v => Eff.MkApply k v)
 
 kOuter : Eff.Obj -> Eff.Control Eff.Obj
 kOuter v = Eff.MkDone v
 
 main : Int
-main = Eff.fromObj (Eff.machineRun (Eff.MkHandle "po" "po" ret opH comp kOuter))
+main = Eff.fromObj (Eff.machineRun (Eff.MkHandle 7 7 ret opH comp kOuter))

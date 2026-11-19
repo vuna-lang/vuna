@@ -204,9 +204,13 @@ raiseTo r e =
           MkEff f => f u
     )
 
--- | 核心发送：`e` 是标签类型（宇宙域、恒擦除），key/name 是运行时 handler 实例标识，op 是操作值；运行时按 (key, name) 找到 handler。
+-- | 核心发送：`e` 是标签类型（宇宙域、恒擦除），key/name 是运行时 handler 实例标识，op 是操作值；运行时按 (keyId, nameId) 找到 handler。这里按名字现算 id（源码层入口）；`sendCoreId` 是 lowering 之后的零哈希形式。
 export sendCore : (e : Type) -> {r : Row} -> {op : Type} -> {x : Type} -> (key : String) -> (name : String) -> (o : op) -> Eff r x
-sendCore e key name o = MkEff (\_ => prim_effectPerform key name o)
+sendCore e key name o = sendCoreId e key name (effectId key) (effectId name) o
+
+-- | 派发 id 版核心发送：keyId/nameId 由 lowering 的派发 pass 填好（字面量在编译期折叠）。
+export sendCoreId : (e : Type) -> {r : Row} -> {op : Type} -> {x : Type} -> (key : String) -> (name : String) -> (keyId : Int) -> (nameId : Int) -> (o : op) -> Eff r x
+sendCoreId e key name keyId nameId o = MkEff (\_ => prim_effectPerformId key name keyId nameId o)
 
 -- 名字、key、标签与效应签名都由编译器按 op 族推导：key = op 族规范名；标签 = `Named n sigOf sig`（`sig` 是 `op 族应用`）；结果类型 = op 的索引。
 -- | 效应签名包装：把家族 `Type -> Type` 包成可作擦除量传递的值。类型级函数不能作显式实参，降级点只能经 `sigFn` 构造、在类型位置经 `sigOf` 取回。
@@ -230,24 +234,38 @@ sigOf (MkEffSig f) = f
 
 -- | `perform <op>` 的降级目标：`o : sigOf sig i` 是操作值，结果类型就是它的索引 `i`；行条目必须是 `Named n (sigOf sig)`，`n` 是运行时路由值。
 export performCore : (n : String) -> (key : String) -> (0 sig : EffSig) -> {r : Row} -> {w : Member (Named n (sigOf sig)) r} -> {i : Type} -> (o : sigOf sig i) -> Eff r i
-performCore n key sig o = sendCore (Named n (sigOf sig)) key n o
+performCore n key sig o = performCoreId n key (effectId n) (effectId key) sig o
+
+-- | 派发 id 版：`nId`/`keyId` 由派发 pass 填。
+export performCoreId : (n : String) -> (key : String) -> (nId : Int) -> (keyId : Int) -> (0 sig : EffSig) -> {r : Row} -> {w : Member (Named n (sigOf sig)) r} -> {i : Type} -> (o : sigOf sig i) -> Eff r i
+performCoreId n key nId keyId sig o = sendCoreId (Named n (sigOf sig)) key n keyId nId o
 
 -- | 核心 handler：`ret` 处理正常返回，`opH` 处理每个操作，结果行删除标签 `e`（`rowRem e r`）；(key, name) 必须与 `sendCore` 匹配。
 export handleCore : (e : Type) -> {r : Row} -> {op : Type} -> {a : Type} -> {b : Type} -> {h : Type} -> (key : String) -> (name : String) -> (a -> b) -> h -> Eff r a -> Eff (rowRem e r) b
 handleCore e key name ret opH comp =
+  handleCoreId e key name (effectId key) (effectId name) ret opH comp
+
+-- | 派发 id 版核心 handler。
+export handleCoreId : (e : Type) -> {r : Row} -> {op : Type} -> {a : Type} -> {b : Type} -> {h : Type} -> (key : String) -> (name : String) -> (keyId : Int) -> (nameId : Int) -> (a -> b) -> h -> Eff r a -> Eff (rowRem e r) b
+handleCoreId e key name keyId nameId ret opH comp =
   MkEff (
       \u =>
         case comp of
-          MkEff f => prim_effectHandle key name ret opH f u
+          MkEff f => prim_effectHandleId key name keyId nameId ret opH f u
     )
 
 -- | 行首条目版核心 handler：`comp` 的行首就是被处理的标签，结果行直接是 `er`，不需要 `rowRem` 归约。用于 comp 的行尚未具体化的降级路径。
 export handleCoreAt : (e : Type) -> {er : Row} -> {op : Type} -> {a : Type} -> {b : Type} -> {h : Type} -> (key : String) -> (name : String) -> (a -> b) -> h -> Eff (e :: er) a -> Eff er b
 handleCoreAt e key name ret opH comp =
+  handleCoreAtId e key name (effectId key) (effectId name) ret opH comp
+
+-- | 派发 id 版行首 handler。
+export handleCoreAtId : (e : Type) -> {er : Row} -> {op : Type} -> {a : Type} -> {b : Type} -> {h : Type} -> (key : String) -> (name : String) -> (keyId : Int) -> (nameId : Int) -> (a -> b) -> h -> Eff (e :: er) a -> Eff er b
+handleCoreAtId e key name keyId nameId ret opH comp =
   MkEff (
       \u =>
         case comp of
-          MkEff f => prim_effectHandle key name ret opH f u
+          MkEff f => prim_effectHandleId key name keyId nameId ret opH f u
     )
 
 -- ---------------------------------------------------------------
@@ -285,7 +303,13 @@ contAdapter opH i o k = opH i o (MkCont k)
 
 -- | 线性版核心 handler：`opH` 接收线性 `Cont i b`（一次性续延），其余同 `handleCore`；供需要线性续延的效应使用。
 export handleCoreLin : (e : Type) -> {r : Row} -> {f : Type -> Type} -> {a : Type} -> {b : Type} -> (key : String) -> (name : String) -> (a -> b) -> ((i : Type) -> (o : f i) -> (1 k : Cont i b) -> b) -> Eff r a -> Eff (rowRem e r) b
-handleCoreLin e key name ret opH comp = handleCore e key name ret (contAdapter opH) comp
+handleCoreLin e key name ret opH comp =
+  handleCoreLinId e key name (effectId key) (effectId name) ret opH comp
+
+-- | 派发 id 版线性 handler。
+export handleCoreLinId : (e : Type) -> {r : Row} -> {f : Type -> Type} -> {a : Type} -> {b : Type} -> (key : String) -> (name : String) -> (keyId : Int) -> (nameId : Int) -> (a -> b) -> ((i : Type) -> (o : f i) -> (1 k : Cont i b) -> b) -> Eff r a -> Eff (rowRem e r) b
+handleCoreLinId e key name keyId nameId ret opH comp =
+  handleCoreId e key name keyId nameId ret (contAdapter opH) comp
 
 -- ---------------------------------------------------------------
 -- `handle` 语法（native-effects）的 base 协议
@@ -294,12 +318,23 @@ handleCoreLin e key name ret opH comp = handleCore e key name ret (contAdapter o
 -- 参数顺序是求解顺序的一部分：`comp` 在 `ret` 之前，先由 comp 解出 `a`，ret 体才不会被 Numeric 默认成 `Int`；`{w}` 放最后，`r` 已由 comp 解出，`rowRem` 的归约需要 name/label 当场解掉（`Core.Eval.rowRemReduce`）。
 -- | 核心 handler 的类型化包装：handler 类型为 `(i : Type) -> (o : sigOf sig i) -> (resIdx i o -> b) -> b`（`handleCore` 的 `h` 是裸类型变量，合成代码里的 `case o of ...` 拿不到 op 族与续延域）；`sig` 是擦除量。
 export handleWith : (n : String) -> (key : String) -> (0 sig : EffSig) -> {r : Row} -> {a : Type} -> {b : Type} -> Eff r a -> {w : Member (Named n (sigOf sig)) r} -> (a -> b) -> ((i : Type) -> (o : sigOf sig i) -> (resIdx i o -> b) -> b) -> Eff (rowRem (Named n (sigOf sig)) r) b
-handleWith n key sig comp ret opH = handleCore (Named n (sigOf sig)) key n ret opH comp
+handleWith n key sig comp ret opH = handleWithId n key (effectId n) (effectId key) sig comp ret opH
+
+-- | 派发 id 版 `handleWith`。
+export handleWithId : (n : String) -> (key : String) -> (nId : Int) -> (keyId : Int) -> (0 sig : EffSig) -> {r : Row} -> {a : Type} -> {b : Type} -> Eff r a -> {w : Member (Named n (sigOf sig)) r} -> (a -> b) -> ((i : Type) -> (o : sigOf sig i) -> (resIdx i o -> b) -> b) -> Eff (rowRem (Named n (sigOf sig)) r) b
+handleWithId n key nId keyId sig comp ret opH =
+  handleCoreId (Named n (sigOf sig)) key n keyId nId ret opH comp
 
 -- 用于 comp 行仍是未解 meta 的场合（`handle (pure e) { ... }`、内联 do 块）：此时 `handleWith` 的结果行 `rowRem (Named n (sigOf sig)) r` 在调用点 conv 卡住；这里把被处理条目放行首、名字取默认实例名。
 -- | 行首条目版核心 handler：`comp : Eff (Named n (sigOf sig) :: er) a`，结果行即 `er`，不需要 `rowRem` 归约；支持条目在行首时用这个，条目在行中任意位置用 `handleWith`。
 export handleWithAt : (n : String) -> (key : String) -> (0 sig : EffSig) -> {er : Row} -> {a : Type} -> {b : Type} -> Eff (Named n (sigOf sig) :: er) a -> (a -> b) -> ((i : Type) -> (o : sigOf sig i) -> (resIdx i o -> b) -> b) -> Eff er b
-handleWithAt n key sig comp ret opH = handleCoreAt (Named n (sigOf sig)) key n ret opH comp
+handleWithAt n key sig comp ret opH =
+  handleWithAtId n key (effectId n) (effectId key) sig comp ret opH
+
+-- | 派发 id 版 `handleWithAt`。
+export handleWithAtId : (n : String) -> (key : String) -> (nId : Int) -> (keyId : Int) -> (0 sig : EffSig) -> {er : Row} -> {a : Type} -> {b : Type} -> Eff (Named n (sigOf sig) :: er) a -> (a -> b) -> ((i : Type) -> (o : sigOf sig i) -> (resIdx i o -> b) -> b) -> Eff er b
+handleWithAtId n key nId keyId sig comp ret opH =
+  handleCoreAtId (Named n (sigOf sig)) key n keyId nId ret opH comp
 
 -- ---------------------------------------------------------------
 -- 线性函数（一次性闭包）与通用 bracket
@@ -348,8 +383,8 @@ export data Rest v(..) : Type where
 export data Control v(..) : Type where
   MkDone : v -> Control v
   MkApply : (v -> Control v) -> v -> Control v
-  MkPerform : String -> String -> v -> (v -> Control v) -> Control v
-  MkHandle : String -> String -> (v -> v) -> (v -> (v -> Rest v -> Control v) -> (v -> Control v) -> (Scoped ((v -> Control v) -> Control v) -> v) -> Control v) -> (v -> (v -> Control v) -> Control v) -> (v -> Control v) -> Control v
+  MkPerform : Int -> Int -> v -> (v -> Control v) -> Control v
+  MkHandle : Int -> Int -> (v -> v) -> (v -> (v -> Rest v -> Control v) -> (v -> Control v) -> (Scoped ((v -> Control v) -> Control v) -> v) -> Control v) -> (v -> (v -> Control v) -> Control v) -> (v -> Control v) -> Control v
   MkSelf : (v -> (v -> Control v) -> Control v) -> (v -> Control v) -> Control v
   MkPushCleanup : Cleanup -> (v -> Control v) -> Control v
   MkPopCleanup : (v -> Control v) -> Control v
@@ -357,9 +392,9 @@ export data Control v(..) : Type where
   MkKDone : Frame v -> v -> Control v
   MkResume : Frame v -> (v -> Control v) -> Int -> Int -> v -> Rest v -> Control v
 
--- | handler frame：key、name、ret、opH、comp、kOuter、prev、cleanup 深度、id。
+-- | handler frame：key id、name id、ret、opH、comp、kOuter、prev、cleanup 深度、id。
 export data Frame v(..) : Type where
-  MkFrame : String -> String -> (v -> v) -> (v -> (v -> Rest v -> Control v) -> (v -> Control v) -> (Scoped ((v -> Control v) -> Control v) -> v) -> Control v) -> (v -> (v -> Control v) -> Control v) -> (v -> Control v) -> Maybe (Frame v) -> Int -> Int -> Frame v
+  MkFrame : Int -> Int -> (v -> v) -> (v -> (v -> Rest v -> Control v) -> (v -> Control v) -> (Scoped ((v -> Control v) -> Control v) -> v) -> Control v) -> (v -> (v -> Control v) -> Control v) -> (v -> Control v) -> Maybe (Frame v) -> Int -> Int -> Frame v
 
 -- | 续延上下文：本次 resume 的 prompt、交付续延、外层上下文、占用的续延槽。
 export data Ctx v(..) : Type where
@@ -391,12 +426,12 @@ export record MSt v where
 export emptySt : MSt v
 emptySt = MSt Nothing Nothing (MkUsedSmall []) 0 [] 0 [] 0
 
-frameKey : Frame v -> String
+frameKey : Frame v -> Int
 frameKey f =
   case f of
     MkFrame key _ _ _ _ _ _ _ _ => key
 
-frameName : Frame v -> String
+frameName : Frame v -> Int
 frameName f =
   case f of
     MkFrame _ name _ _ _ _ _ _ _ => name
@@ -548,7 +583,7 @@ reinstall f chain =
 reinstallIfMissing : Int -> Frame v -> Maybe (Frame v) -> Maybe (Frame v)
 reinstallIfMissing fuel f chain = if inChain fuel f chain then chain else Just (reinstall f chain)
 
-findFrame : Int -> String -> String -> Maybe (Frame v) -> Maybe (Frame v)
+findFrame : Int -> Int -> Int -> Maybe (Frame v) -> Maybe (Frame v)
 findFrame fuel key name chain =
   if fuel <= 0 then
     Nothing

@@ -236,6 +236,12 @@ native 14.0x、wasm net 15.75x，安装成本是派发侧的下一个热点。
 `eff_host` 在 `a5d4c93` 后一度回归到 N=5000 native ≈186 s；`msUsed` 改回「小表 +
 HashMap 升级」后同一档约 193 ms（wasm ≈149 ms，N=5000，`--runs 1`），与上表同阶。
 
+**派发 id（P1c）**：机器与 OCaml 运行时的 handler 匹配从 `(key, name)` 字符串改成
+整数 id（`effectId`，字面量在 lowering 折叠）；三端 ratio 与改前同窗口一致
+（`eff_tick` native 4.7x、`eff_install` 15.4x、`eff_host` 31.9x），没有可测收益——
+原生 `str_eq` 只占单次 perform 的 ~1%（2 次比较 ≈7 ns / ~700 ns），这次改动是协议
+收敛（派发只比整数），不是性能项。
+
 **CPS 前后**（wasm：`445315d` 的 wat 机器 → HEAD 的库机器；native：`e663921` 的栈拷贝 →
 HEAD 的库机器；`--runs 3 --warmup 1`，源码与 harness 都是 HEAD）：
 

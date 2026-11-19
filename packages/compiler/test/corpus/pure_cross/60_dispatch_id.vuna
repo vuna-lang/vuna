@@ -1,0 +1,17 @@
+-- 派发 id：编译期折叠（字面量）与运行时 `effectId`（拼接出来的串）必须一致；
+-- 三端 runtime 与编译器 fold 用同一公式（FNV-1a 32 位取低 30 位）。
+import Base.Effect.Core as Eff
+
+runtimeKey : String
+runtimeKey = "con" ++ "sole"
+
+longKey : String
+longKey = "Base.Effect.Console.Con" ++ "soleOp"
+
+main : Int
+main =
+  let
+    a = if effectId "console" == effectId runtimeKey then 1 else 0
+    b = if effectId "Base.Effect.Console.ConsoleOp" == effectId longKey then 10 else 0
+    c = if effectId "" == effectId ("" ++ "") then 100 else 0
+  in a + b + c

@@ -1677,7 +1677,7 @@ concatMapType (f :: rest) =
 
 -- | 需要续延的运行时符号。
 effSymbols : List String
-effSymbols = ["prim_effectPerform", "prim_effectHandle", "prim_effectSelf"]
+effSymbols = ["prim_effectPerformId", "prim_effectHandleId", "prim_effectSelf"]
 
 -- | 扫描预算：超过即按「需要」处理（保守）。
 effScanFuel : Int
@@ -1734,7 +1734,7 @@ irUsesSyms fuel syms ir =
 
 -- | 需要 handler 的任何一项（perform / handle / self）。
 performSyms : List String
-performSyms = ["prim_effectPerform", "prim_effectHandle", "prim_effectSelf"]
+performSyms = ["prim_effectPerformId", "prim_effectHandleId", "prim_effectSelf"]
 
 defUsesSyms : List String -> IrDef -> Bool
 defUsesSyms syms d =
@@ -1799,6 +1799,13 @@ buildModule fuel st ordered entry printResult listFamM =
 -- stack switching；入口也不再预装这些家族。
 hcSendCore : String
 hcSendCore = "Base.Effect.Core.sendCore"
+
+-- | 派发 pass 之后的 `sendCore` 名字（源码层入口仍可能以旧名出现）。
+hcSendCoreId : String
+hcSendCoreId = "Base.Effect.Core.sendCoreId"
+
+isSendCoreName : String -> Bool
+isSendCoreName n = n == hcSendCore || n == hcSendCoreId
 
 hcPureK : String
 hcPureK = "@vuna@host@pureK"
@@ -1870,11 +1877,11 @@ rw h ab n (IrConcatMany xs) = rwSpine h ab n (IrConcatMany (map (rw h ab n) xs))
 rw h ab n (IrEffThunk f c t a p) = rwSpine h ab n (IrEffThunk f c t a (rw h ab n p))
 rw h ab n ir = rwSpine h ab n ir
 
--- | `sendCore` 的尾部三参：key（字面量）、name、op。擦除实参可能在前，按后缀取。
+-- | `sendCore` 的尾部五参：key（字面量）、name、keyId、nameId、op。擦除实参可能在前，按后缀取。
 sendTailOf : List Ir -> Maybe (Pair String Ir)
 sendTailOf args =
   case reverse args of
-    op :: name :: k :: _ =>
+    op :: _ :: _ :: name :: k :: _ =>
       case stripIrCasts k of
         IrStr key => Just (Pair key op)
         _ => Nothing
@@ -1891,7 +1898,7 @@ rwSpine h ab n ir0 =
     ir = stripIrCasts ir0
   in case spineOf ir of
     Pair (IrGlobal g) args =>
-      if g == hcSendCore then
+      if isSendCoreName g then
         case sendTailOf args of
           Just p =>
             case opHOf (firstOf p) h of

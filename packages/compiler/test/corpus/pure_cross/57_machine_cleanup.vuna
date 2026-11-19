@@ -18,7 +18,7 @@ go ref =
   let
     v =
       Eff.fromObj
-        (Eff.machineRun (Eff.MkHandle "k" "n" ret opH (\_ => \k => Eff.MkPushCleanup (Eff.MkCleanup (\_ => Eff.runPure (IORef.writeRef ref 7))) k) kOuter))
+        (Eff.machineRun (Eff.MkHandle 1 2 ret opH (\_ => \k => Eff.MkPushCleanup (Eff.MkCleanup (\_ => Eff.runPure (IORef.writeRef ref 7))) k) kOuter))
   in v + Eff.runPure (IORef.readRef ref)
 
 main : Int

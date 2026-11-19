@@ -241,8 +241,10 @@
 
 **Eff 代数不是原语**：`pure` / `>>=` / `do` / `fmap` 来自 `Functor`/`Applicative`/`Monad (Eff r)`
 实例（`Base.Effect.Core` 内建）；`runPure` / `joinEff` / `raise` / `weaken` 是 `Base.Effect.Core` 的库函数。
-`prim_effectPerform` / `prim_effectHandle` / `prim_cleanupPush` / `prim_cleanupPop` 是隐藏的
-运行时效应核心，常规只由 `Base.Effect.Core` 包装使用（没有 `unsafe` 门控）。
+`prim_effectPerformId` / `prim_effectHandleId` / `prim_cleanupPush` / `prim_cleanupPop` 是隐藏的
+运行时效应核心，常规只由 `Base.Effect.Core` 包装使用（没有 `unsafe` 门控）。`*Id` 变体
+按 `(keyId, nameId)` 路由（`effectId` 把路由串折成 30 位整数）；展示名仍随原语传入，
+只用于「未处理效应」的诊断。
 
 **效果原语类型**（`prim_eff_*`，全部返回 `Eff []`）：`prim_eff_print : String -> Eff [] Int`
 （`Base.Effect.Console.Print` 在 handler 边界转 `Nat`）、`prim_eff_readFile : String -> Eff [] String`、
@@ -322,7 +324,7 @@
 | `env` | `prim_eff_getenv`、`prim_eff_getcwd`、`prim_eff_execPath` |
 | `clock` | `effTimeUs`、`prim_eff_sleep` |
 | `net` | `prim_eff_netListen`、`prim_eff_netPort`、`prim_eff_netAccept`、`prim_eff_netRecv`、`prim_eff_netSend`、`prim_eff_netClose`、`prim_eff_netConnect`；宿主 handler 用 `@vuna@host@tryNet*` + `@vuna@prim_eff_hostStatus`（0 = 成功、1 = 对端关闭、2 = refused、3 = timeout、4 = closed、5 = addr-in-use、6 = bad-addr、7 = timeout(带超时变体)、8 = bad-handle、其它 = io）；带超时的变体是 `@vuna@host@tryNetAcceptWithin` / `tryNetRecvWithin` / `tryNetSendWithin` |
-| 运行时核心（隐藏） | `prim_effectPerform` / `prim_effectHandle` / `prim_effectSelf` / `prim_cleanupPush` / `prim_cleanupPop`（运行时续延、scoped handler 重装与 bracket cleanup，常规仅 `Base.Effect.Core` 包装使用） |
+| 运行时核心（隐藏） | `prim_effectPerformId` / `prim_effectHandleId` / `prim_effectSelf` / `prim_cleanupPush` / `prim_cleanupPop`（运行时续延、scoped handler 重装与 bracket cleanup，常规仅 `Base.Effect.Core` 包装使用）；`effectId : String -> Int` 是派发 id（FNV-1a 32 位取低 30 位，三端 runtime 与编译器折叠同一公式） |
 
 - **原语是普通内建**：任何包（用户包、ad-hoc 文件）都可以直接调用 `prim_*` /
   `prim_eff_*`。没有 manifest `[capabilities]` /

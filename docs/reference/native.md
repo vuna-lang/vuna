@@ -282,9 +282,9 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
   + 恢复 cwd；实参按 shell 单引号转义）、`spawn`（`fork` + `execve("/proc/self/exe", argv)`，
   argv[0] 是本进程路径）、`wait`（`wait4` 取退出码，被信号杀死按 1）、`exit_process_host`。
 - 未实现的宿主面：stdin 的 `readLine` / `readBytes`（编译器闭包不可达）与 net。
-- 续延：`prim_effectPerform`（`rt_eff_perform`）、`prim_effectHandle`（`rt_eff_handle`）、
-  `prim_effectSelf`（`rt_eff_self`：用 `rt_self` 记录的当前节点重装 handler）、
-  `rt_eff_resume` / `rt_eff_kdone`；设计与限制见 §3.4。其余 `prim_eff_*` 宿主原语仍未实现。
+- 续延：`rt_eff_perform` / `rt_eff_handle` / `rt_eff_self` / `rt_eff_resume` / `rt_eff_kdone`
+  是旧的栈拷贝实现，当前机器路径**不再发射**它们（native 与 wasm 跑同一份
+  `Base.Effect.Core` 的 `Control` 循环，见 §3.4）。其余 `prim_eff_*` 宿主原语仍未实现。
 - 浮点：`float_from_int` / `int_from_float`（截断）/ `float_abs` / `float_sqrt`、
   `float_add/sub/mul/div`、`float_eq/neq/lt/le/gt/ge`；展示不是运行时符号，
   走 `Base.Data.Float.floatRender`（Vuna 实现，三端共用）。

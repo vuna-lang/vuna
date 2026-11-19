@@ -27,14 +27,19 @@
 Machine = (Control, HandlerStack, ContStack)
 
 Control  = Done value
-         | Perform key name op
-         | Handle key name ret opH comp unit
+         | Perform keyId nameId op
+         | Handle keyId nameId ret opH comp unit
          | Resume cont value
 
-HandlerFrame = { key, name, ret, opH, kOuter, prev, answerMode }
+HandlerFrame = { keyId, nameId, ret, opH, kOuter, prev, answerMode }
 
 ContFrame    = { k, prompt }   -- prompt = 所属 handler frame（delimited）
 ```
+
+- **派发 id**：`keyId` / `nameId` 是路由串 `(key, name)` 的整数 id（`effectId`：FNV-1a
+  32 位取低 30 位）。Lowering 的 `Ir.Dispatch` 在 `sendCore` / `performCore` /
+  `handleCore*` / `handleWith*` 的调用点把字面量折成常量、变量留给运行时；机器与 OCaml
+  运行时的 handler 匹配因此只比整数。展示名仍随 `*Id` 原语传入，只用于未处理效应的诊断。
 
 - **HandlerStack**：动态 handler 帧，`prev` 链。
 - **ContStack**：显式续延栈；`prompt` 标记续延属于哪个 handler。
@@ -459,7 +464,7 @@ ume 后按需重装）。下一步：把 `inChain` 改成帧引用/身份比较�
 `nativeRtFuncs` 里的栈拷贝家族（`eff_perform/eff_handle/eff_self/eff_alloc_capture/
 eff_alloc_segment/eff_free_segment/eff_translate_nodes/eff_unrelocate/eff_resume/
 eff_kdone/eff_pure_k/free_capture/trap_unhandled_effect/trap_resume_twice/trap_bad_stack`）
-与 `prim_effectPerform/Handle/Self` 的符号映射一并移除——用户代码已不引用它们
+与 `prim_effectPerformId/HandleId/Self` 的符号映射一并移除——用户代码已不引用它们
 （生成的模块 `.s` 里 0 处 `rt_eff_*`）。
 
 读数：
@@ -517,7 +522,7 @@ ctx 深度是真正的嵌套 resume 深度。
 |---|---|---|
 | 1 | `Obj` + 两个 coercion 三端打通 | 往返夹具三端一致 |
 | 2 | `Eff.Machine` 写出来（vuna），先用 `Done/Apply` 跑一个手搭的 Control | native 上跑通 |
-| 3 | **native** 接机器：`prim_effectPerform/Handle/Self` 改成构造 `Control`，入口跑一次 `run`；删栈拷贝路径 | `pure-cross` + `effect-common` 全绿；D89 的 O(N²) 读数消失 |
+| 3 | **native** 接机器：`prim_effectPerformId/HandleId/Self` 改成构造 `Control`，入口跑一次 `run`；删栈拷贝路径 | `pure-cross` + `effect-common` 全绿；D89 的 O(N²) 读数消失 |
 | 4 | **OCaml** 接机器（先保留 `Effect.Deep` 作为差分 oracle 跑同一组夹具，再切库机器） | 同上 |
 | 5 | **wasm** 接同一台机器（`@ir@m@*` 变成对库函数的 `IrGlobal` 调用；手写 wat 机器已删除） | `106` 默认栈；`114/115` 冒烟 |
 

@@ -56,7 +56,7 @@ main : Eff [] Nat
 | 要素 | 当前表示 |
 | --- | --- |
 | 效应描述 | `Row`（`Nil` / `(::)`）、`Named` / `Member` 是 Type-1 数据；名字求解是编译器规则（§3.2） |
-| 效应执行 | `perform`/`handle` 降级到 `performCore` / `handleWith`（`handleWithAt`），落到同一对 intrinsic `prim_effectPerform` / `prim_effectHandle` |
+| 效应执行 | `perform`/`handle` 降级到 `performCore` / `handleWith`（`handleWithAt`）；Lowering 的派发 pass 换成 `*Id` 变体并填入 `effectId`，落到 `prim_effectPerformId` / `prim_effectHandleId` |
 | key | op 族规范名（编译器推导，send / handle 两侧由构造保证一致） |
 | 实例名 | 名字与签名进标签 `Named : String -> (Type -> Type) -> Type`（行条目 `Named "audit" ConsoleOp`），默认 `"default"`，显式 `@` 名；运行时仍是 `(key, name)` 路由，name 作隐式 String 传给 send/handle |
 | 行标签 | 标签 = 命名后的效应签名（`Named "audit" ConsoleOp`、`Named "counter" (StateOp Nat)`）；op 族以结果类型为最后索引（`ConsoleOp : Type -> Type`、`StateOp : (s : Type) -> Type -> Type`） |
@@ -178,7 +178,7 @@ handle comp {
 | `Base/Diagnostics/{Tc,Frontend}.vuna` | `TC_AmbiguousInstance`、`TC_EffResFamilyMissing`、`TC_HandleClauseFamilyMismatch`、`TC_HandleFamilyUnsupported`（族形状）；PS 侧 `PS_Handle{NeedsOpClause,ClauseNotIndented,ClauseNeedsCtor,ContinuationNameMismatch,ReturnMisplaced}` |
 | `Base.Effect.Core`（在 seed 闭包里） | `defaultInstance = "default"`、`Named`、`Row.Nil`/`Row.(::)`、`Member` 2 参、`EffSig`/`sigFn`/`sigOf`/`resIdx`、`performCore`/`handleWith`/`handleWithAt`（`sig` 擦除量、`{w : Member (Named n (sigOf sig)) r}` 移到 comp 之后先解名字；行首条目版把条目放在 comp 的行首、结果行即剩余行）；12 个效应模块用「结果类型索引」的 op 族 |
 
-不改：`Eff` 本体、`runPure`/`joinEff`、`prim_effectPerform`/`prim_effectHandle` 语义、
+不改：`Eff` 本体、`runPure`/`joinEff`、`prim_effectPerformId`/`prim_effectHandleId` 语义、
 `Codegen/Term.dtPrimRuntime` 的运行时块、`Eff` 的私有 `MkEff` 表示。
 
 ### 3.4 bootstrap 要求
@@ -372,9 +372,13 @@ consolePrint@audit "hi"    -- 行 [ConsoleOp@audit] ⇒ 显式选 audit
 
 ## 11. native 后端的续延实现
 
-OCaml 后端用 `Effect.Deep`；native 后端没有运行时调度器，`prim_effectPerform` /
-`prim_effectHandle` 由 `Native.Runtime` 的栈拷贝实现（细节与布局见
-[native.md](native.md) §3.4）：
+native 与 wasm 都跑 `Base.Effect.Core` 的库机器（`Control` 循环 + handler 帧链，
+见 [effect-machine.md](effect-machine.md)）；`prim_effectPerformId` /
+`prim_effectHandleId` 只在 lowering 的派发 pass 之后作为机器步骤的构造入口，
+不再由后端各自实现续延。
+
+下面是**旧栈拷贝实现**（`Native.Runtime` 的 `rt_eff_*`，仍在源码里但不再发射），
+保留作布局参考（[native.md](native.md) §3.4）：
 
 - handler 链是 `.bss` 的 `rt_handlers`；节点按 `(key, name)` 线性扫描。
 - `perform` 把 comp 栈帧（`[perform_rbp, handler 栈顶)`）拷到堆，构造一次性续延闭包，

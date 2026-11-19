@@ -27,6 +27,10 @@ Loader → Elab → Core ──Lowering──> IR ──Codegen.{Decl,Term,Assem
 - **ANF（wasm 前置）**：`Ir.Anf` 把每条非简单表达式绑定到 `let`，binder 用单调
   `next` 编号（不是路径深度）；它保持求值顺序与作用域，给效应 thunk 的 CPS/Step 变换提供
   一阶输入。wasm 在 codegen 前跑一次 ANF。
+- **派发 id（Lowering 内）**：`Ir.Dispatch` 在 lowering 之后把 `sendCore` / `performCore` /
+  `handleCore*` / `handleWith*` 的调用换成 `*Id` 变体，并把路由串 `(key, name)` 的
+  `effectId` 实参插进去（字面量在编译期折成整数，其余留给运行时）。机器与 OCaml
+  运行时的 handler 匹配因此只比整数；源码层入口仍是 String。
 - **CPS lowering（wasm）**：`Ir.Cps` 是 `Ir -> Ir` 的后端内变换（不改变 Lowering 产物）：
   只把 `MkEff` / `MkScoped` / `IrEffThunk` 的 thunk 改成显式 `k`，并把
   `prim_effect*` 换成 `@ir@cps@*`。纯代码与调用约定不变；详见

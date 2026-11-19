@@ -27,6 +27,7 @@ import Vuna.Compiler.Elab.Types
 import Vuna.Compiler.Elab.Representation
 import Vuna.Compiler.Base.Intrinsics
 import Vuna.Compiler.Ir.Model
+import Vuna.Compiler.Ir.Dispatch
 import Vuna.Compiler.Ir.Represent
 import Vuna.Compiler.Ir.Analysis
 import Vuna.Compiler.Ir.Runtime
@@ -1427,7 +1428,7 @@ lowerUnitAfterChecks env defNames dataNames =
               let
                 groups2 = map groupOfPair groups
                 hasList = hasDataNamed listFamilyName unitDatas
-              in OkC (representUnit (lwEnvShared env) (IrUnit decls groups2 hasList (tyDeclRefs decls) Nothing))
+              in OkC (dispatchIdsUnit (representUnit (lwEnvShared env) (IrUnit decls groups2 hasList (tyDeclRefs decls) Nothing)))
           )
     )
 

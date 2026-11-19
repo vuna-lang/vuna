@@ -219,10 +219,11 @@ vuna.toml → Frontend.{Toml.parseToml, Manifest.parseManifest/validateManifest}
   句柄是 Int、运行时映射 `Unix.file_descr`）见 [primitives.md](reference/primitives.md) §7。
   当前已落地 loopback TCP 与 Unix domain socket（异步/取消/TLS/HTTP 为非目标，见
   [tooling.md](reference/tooling.md) §5）。
-- **运行时效应（Layer 1–3）**：`prim_effectPerform` / `prim_effectHandle`
+- **运行时效应（Layer 1–3）**：`prim_effectPerformId` / `prim_effectHandleId`
   把 OCaml 5 一次性续延接入 `Base.Effect.Core`（开放行 + 命名实例 + 一阶效应）；
-  `Vuna_runtime` 声明通用 `Perform (key, name, payload)`（key/name 都是 String），handler 按 key/name 过滤并
-  `continue` 一次；handler 壳是 `dtp_effect_handle`，它在 handler 退出时执行
+  `Vuna_runtime` 声明通用 `Perform (keyId, nameId, key, name, payload)`（路由用整数 id，
+  key/name 只作展示），handler 按 id 过滤并 `continue` 一次；handler 壳是
+  `dtp_effect_handle_id`，它在 handler 退出时执行
   每纤程 cleanup 栈（`prim_cleanupPush`/`prim_cleanupPop` → `dtp_cleanup_*`），
   `Base.Effect.Core.bracket`/`finally` 的 release 因此在非 `Exn` abort（续延被丢弃）时也会跑；
   运行时还包含单线程 fiber 调度器 `dtSchedRuntime`（隐藏

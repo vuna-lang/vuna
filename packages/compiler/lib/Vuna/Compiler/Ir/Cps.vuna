@@ -5,7 +5,7 @@ module Vuna.Compiler.Ir.Cps where
 -- 只改写**效应 thunk**，纯代码保持直接风格：
 --   * `MkEff` / `MkScoped` 的 lambda 增加 continuation 参数 `k`；
 --   * thunk 的运行点（`case e of MkEff f => f u`、`runThunk e u`）追加 `k`；
---   * `prim_effectPerform` / `prim_effectHandle` / `prim_effectSelf` 换成 CPS
+--   * `prim_effectPerformId` / `prim_effectHandleId` / `prim_effectSelf` 换成 CPS
 --     运行时符号（`@ir@cps@*`），由后端实现；
 --   * `runPure` / `runEff` / `runMain` / `handleScoped` 是 trampoline 边界，传 identity。
 --
@@ -303,8 +303,8 @@ cpsApp fuel env e k =
       IrGlobal name => if name == runThunkName then cpsThunkCall (fuel - 1) head args k else cpsExpr (fuel - 1) env head (IrLam [v] Nothing (cpsArgs (fuel - 1) env args (IrVar v) [] k))
       IrRt sym =>
         case sym of
-          "prim_effectPerform" => cpsThunkCall (fuel - 1) (IrRt irCpsPerformName) args k
-          "prim_effectHandle" => cpsThunkCall (fuel - 1) (IrRt irCpsHandleName) args k
+          "prim_effectPerformId" => cpsThunkCall (fuel - 1) (IrRt irCpsPerformName) args k
+          "prim_effectHandleId" => cpsThunkCall (fuel - 1) (IrRt irCpsHandleName) args k
           "prim_effectSelf" => cpsThunkCall (fuel - 1) (IrRt irCpsSelfName) args k
           _ => cpsExpr (fuel - 1) env head (IrLam [v] Nothing (cpsArgs (fuel - 1) env args (IrVar v) [] k))
       _ => cpsExpr (fuel - 1) env head (IrLam [v] Nothing (cpsArgs (fuel - 1) env args (IrVar v) [] k))
@@ -967,7 +967,17 @@ isCoreHandleCombinator n =
     == "Base.Effect.Core.handleCoreAt"
     || n
     == "Base.Effect.Core.handleCoreLin"
-    || n == "Base.Effect.Core.handleWith" || n == "Base.Effect.Core.handleWithAt"
+    || n
+    == "Base.Effect.Core.handleWith"
+    || n
+    == "Base.Effect.Core.handleWithAt"
+    || n
+    == "Base.Effect.Core.handleCoreId"
+    || n
+    == "Base.Effect.Core.handleCoreAtId"
+    || n
+    == "Base.Effect.Core.handleCoreLinId"
+    || n == "Base.Effect.Core.handleWithId" || n == "Base.Effect.Core.handleWithAtId"
 
 isHandleCombinator : HandlerTables -> String -> Bool
 isHandleCombinator t n =
@@ -1431,13 +1441,20 @@ machineCtorOf sym =
     Just "MkHandle"
   else if sym == irMSelfName then Just "MkSelf" else Nothing
 
--- | `@ir@m@handle` 的实参是 key,name,ret,opH,comp,unit,kOuter；机器里 comp 自带
--- unit（循环里传），所以丢掉第 6 个。
+-- | 机器步骤的实参裁剪：
+--   * `@ir@m@handle` 的原语实参是 key,name,keyId,nameId,ret,opH,comp,unit[,kOuter]；
+--     机器要 keyId,nameId,ret,opH,comp[,kOuter]（丢掉展示名与 unit）。
+--   * `@ir@m@perform` 的原语实参是 key,name,keyId,nameId,op[,k]；机器要
+--     keyId,nameId,op[,k]（丢掉展示名）。
 machineArgsOf : String -> List Ir -> List Ir
 machineArgsOf sym args =
   if sym == irMHandleName then
     case args of
-      a :: b :: c :: d :: e :: _ :: rest => append [a, b, c, d, e] rest
+      _ :: _ :: c :: d :: e :: f :: g :: _ :: rest => append [c, d, e, f, g] rest
+      _ => args
+  else if sym == irMPerformName then
+    case args of
+      _ :: _ :: c :: d :: e :: rest => append [c, d, e] rest
       _ => args
   else
     args

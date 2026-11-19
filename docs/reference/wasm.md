@@ -421,10 +421,10 @@ WASI preview1，宿主侧逐函数实现。下表的「允许」指浏览器平�
 
 - 入口的每个 handler 都要在 `Ir.Runtime.irHostDirectOf` 表里（表给出 `run*Host` 定义名 →
   send key + 该族 `opH` 定义名）；缺一个就整体走显式效应机器。
-- 改写按 `sendCore` 的应用脊椎匹配：实参末尾三元组是 (key 字面量, name, op)，key 命中即改写。
+- 改写按 `sendCore` 的应用脊椎匹配：实参末尾五元组是 (key 字面量, name, keyId, nameId, op)，key 命中即改写。
 - 改写后按**体引用**重算可达集（静态依赖表会漏掉字典实例等隐式引用，因此保留集用「全依赖
   闭包 ∩ 不含续延原语」）；`genStartBody` 的初始化列表用同一份集合。
-- 若改写后仍有可达到的 `prim_effectPerform` / `prim_effectHandle` / `prim_effectSelf`，说明
+- 若改写后仍有可达到的 `prim_effectPerformId` / `prim_effectHandleId` / `prim_effectSelf`，说明
   存在用户 handler 或未覆盖的族，整体走显式效应机器（不静默改语义）。
 
 当前落地：宿主与 loaders 在 `wasm-host/`（`host.mjs` + `fs-node.mjs` + `run.mjs`，

@@ -146,7 +146,7 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
    handler 栈」。
 3. **可变数据边界**：`IORef` 的公开操作与实现都是 `Eff []`；没有局部可变的 region 形式
    （重建约束见 [debt.md](debt.md) D63）。
-4. **宿主层是底层原语面，不是类型豁免**：`prim_effectPerform` / `prim_effectHandle` /
+4. **宿主层是底层原语面，不是类型豁免**：`prim_effectPerformId` / `prim_effectHandleId` /
    cleanup/sched 是宿主层原语，常规用户面经 `Base.Effect.Core.*` 标签 + handler 使用效果；没有
    `unsafe` 能力位或 `[trust]` 定义级清单（[debt.md](debt.md) D62）。
 5. **效应组合显式**：transformer 的 handler 必须显式调用；没有自动 lift 到任意深度。
@@ -199,12 +199,12 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
 
 ### 8.2 运行时
 
-- `Vuna_runtime` 声明 `type _ Effect.t += Perform : string * string * Obj.t -> Obj.t Effect.t`。
-- 隐藏 intrinsic `prim_effectPerform` / `prim_effectHandle` / `prim_effectSelf`（宿主层原语，常规只由
+- `Vuna_runtime` 声明 `type _ Effect.t += Perform : int * int * string * string * Obj.t -> Obj.t Effect.t`（前两个字段是派发 id，后两个是展示名）。
+- 隐藏 intrinsic `prim_effectPerformId` / `prim_effectHandleId` / `prim_effectSelf`（宿主层原语，常规只由
   `Base.Effect.Core` 包装使用；没有 `unsafe` 门控）：
   - `perform` → `Effect.perform`；
   - `handle` → `Vuna_runtime.dtp_effect_handle`：`Effect.Deep.match_with`，按
-    `(key, name)` 过滤；不匹配返回 `None` 交给外层 handler；`retc` 应用 handler 的
+    `(keyId, nameId)` 过滤（`effectId` 折叠/哈希出整数）；不匹配返回 `None` 交给外层 handler；`retc` 应用 handler 的
     `ret`；`continue` 一次。handler 退出（正常 / 异常 / abort 丢弃续延）时执行该
     extent 内未弹出的 bracket cleanup。
   - `self` → `Vuna_runtime.dtp_effect_self`：在 opH 执行期间把当前

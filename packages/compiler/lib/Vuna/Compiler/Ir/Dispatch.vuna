@@ -1,0 +1,209 @@
+module Vuna.Compiler.Ir.Dispatch where
+
+-- Vuna.Compiler.Ir.Dispatch：效应派发的字符串路由 → 整数 id。
+--
+-- Elab 产出 `performCore n key sig op` / `handleWith n key …`；基库包装调用
+-- `sendCore … "console" n …`。这些应用的**前两个运行时实参**是路由对 (key, name)：
+-- 本 pass 把它换成同族的 `*Id` 入口，并在这一对后面插入 `effectId` 实参。字面量在
+-- 这里折成整数常量，变量留给运行时 `effectId`。机器与 OCaml 运行时的 handler 匹配
+-- 因此只比整数。
+--
+-- 只改写**旧 arity** 的调用点（3 = `sendCore` / `performCore`，5 = `handleCore*` /
+-- `handleWith*`）：基库里显式传 id 的内部调用已经是新 arity，原样跳过。
+--
+-- 边界：本模块只 import `Ir.Model` 与 Base 的纯数据结构；不 import 后端。
+import Base.Data.List as List
+import Base.Data.Pair as Pair
+import Vuna.Compiler.Base.Intrinsics
+import Vuna.Compiler.Ir.Model
+
+-- | 派发入口的旧 arity → 整数 id 版的入口名。命中时在路由对后面插入两个 id 实参：
+-- `f a b rest…` → `fId a b (idOf a) (idOf b) rest…`。
+dispatchIdNameOf : String -> Int -> Maybe String
+dispatchIdNameOf name arity =
+  if name == "Base.Effect.Core.sendCore" then
+    if arity == 3 then Just "Base.Effect.Core.sendCoreId" else Nothing
+  else if name == "Base.Effect.Core.performCore" then
+    if arity == 3 then Just "Base.Effect.Core.performCoreId" else Nothing
+  else if name == "Base.Effect.Core.handleCore" then
+    if arity == 5 then Just "Base.Effect.Core.handleCoreId" else Nothing
+  else if name == "Base.Effect.Core.handleCoreAt" then
+    if arity == 5 then Just "Base.Effect.Core.handleCoreAtId" else Nothing
+  else if name == "Base.Effect.Core.handleCoreLin" then
+    if arity == 5 then Just "Base.Effect.Core.handleCoreLinId" else Nothing
+  else if name == "Base.Effect.Core.handleWith" then
+    if arity == 5 then Just "Base.Effect.Core.handleWithId" else Nothing
+  else if name == "Base.Effect.Core.handleWithAt" then
+    if arity == 5 then Just "Base.Effect.Core.handleWithAtId" else Nothing
+  else
+    Nothing
+
+-- | 应用脊的一个实参：保留原节点的类型槽（插入的新实参没有槽）。
+record SpineArg where
+  saTy : Maybe (Pair IrTy IrTy)
+  saValue : Ir
+
+flattenSpine : Ir -> Pair Ir (List SpineArg)
+flattenSpine (IrApp ty f a) =
+  let
+    p = flattenSpine f
+  in Pair (firstOf p) (append (secondOf p) [SpineArg ty a])
+flattenSpine x = Pair x []
+
+buildSpine : Ir -> List SpineArg -> Ir
+buildSpine head [] = head
+buildSpine head (a :: rest) = buildSpine (IrApp a.saTy head a.saValue) rest
+
+argCount : List SpineArg -> Int
+argCount [] = 0
+argCount (_ :: rest) = 1 + argCount rest
+
+-- | 路由值 → id 实参：字面量折成常量，其余留运行时 `effectId`。
+dispatchIdArg : Ir -> Ir
+dispatchIdArg (IrStr s) = IrInt (dispatchIdOf s)
+dispatchIdArg e = IrRtApp dispatchIdIntrinsicName [e]
+
+-- | 一个应用脊的派发改写：旧 arity 命中时在路由对后面插入两个 id 实参。
+-- 只在**最外层**调用：子前缀（`f a` / `f a b`）不是调用点，不能按旧 arity 改写。
+dispatchSpine : Ir -> List SpineArg -> Ir
+dispatchSpine head args =
+  case head of
+    IrGlobal name =>
+      case dispatchIdNameOf name (argCount args) of
+        Just idName =>
+          case args of
+            a :: b :: rest =>
+              buildSpine
+                (IrGlobal idName)
+                (a :: b :: SpineArg Nothing (dispatchIdArg a.saValue) :: SpineArg Nothing (dispatchIdArg b.saValue) :: rest)
+            _ => buildSpine head args
+        Nothing => buildSpine head args
+    _ => buildSpine head args
+
+dispatchSpineArgs : Int -> List SpineArg -> List SpineArg
+dispatchSpineArgs fuel args =
+  if fuel <= 0 then
+    args
+  else
+    case args of
+      [] => []
+      a :: rest => SpineArg a.saTy (dispatch (fuel - 1) a.saValue) :: dispatchSpineArgs (fuel - 1) rest
+
+-- | 结构化遍历：先递归子项，再把应用脊改写成派发形式。
+dispatch : Int -> Ir -> Ir
+dispatch fuel e =
+  if fuel <= 0 then
+    e
+  else
+    case e of
+      IrVar _ => e
+      IrGlobal _ => e
+      IrRt _ => e
+      IrInt _ => e
+      IrStr _ => e
+      IrBool _ => e
+      IrFloatLit _ => e
+      IrEffBind _ _ _ => e
+      IrCtor f c ty args => IrCtor f c ty (dispatchList (fuel - 1) args)
+      IrRecord f ty fields => IrRecord f ty (dispatchFields (fuel - 1) fields)
+      IrProj base f field ty => IrProj (dispatch (fuel - 1) base) f field ty
+      IrRecUpd base f fields ty => IrRecUpd (dispatch (fuel - 1) base) f (dispatchFields (fuel - 1) fields) ty
+      IrApp ty f a =>
+        let
+          p = flattenSpine (IrApp ty f a)
+        in dispatchSpine (dispatch (fuel - 1) (firstOf p)) (dispatchSpineArgs (fuel - 1) (secondOf p))
+      IrIf c t el => IrIf (dispatch (fuel - 1) c) (dispatch (fuel - 1) t) (dispatch (fuel - 1) el)
+      IrCase ty rty scrut alts => IrCase ty rty (dispatch (fuel - 1) scrut) (dispatchAlts (fuel - 1) alts)
+      IrNatCase scrut fresh z s c => IrNatCase (dispatch (fuel - 1) scrut) fresh (dispatchAltM (fuel - 1) z) (dispatchAltM (fuel - 1) s) (dispatchAltM (fuel - 1) c)
+      IrConcatMany xs => IrConcatMany (dispatchList (fuel - 1) xs)
+      IrEffThunk fam ctor unitTy arity prim => IrEffThunk fam ctor unitTy arity (dispatch (fuel - 1) prim)
+      IrCast cFrom cTo inner => IrCast cFrom cTo (dispatch (fuel - 1) inner)
+      IrLet bs scrut body => IrLet bs (dispatch (fuel - 1) scrut) (dispatch (fuel - 1) body)
+      IrLam bs rt body => IrLam bs rt (dispatch (fuel - 1) body)
+      IrRtApp sym args =>
+        let
+          args1 = dispatchList (fuel - 1) args
+        in if sym == dispatchIdIntrinsicName then
+          case args1 of
+            [IrStr s] => IrInt (dispatchIdOf s)
+            _ => IrRtApp sym args1
+        else
+          IrRtApp sym args1
+
+dispatchList : Int -> List Ir -> List Ir
+dispatchList fuel xs =
+  if fuel <= 0 then
+    xs
+  else
+    case xs of
+      [] => []
+      x :: rest => dispatch (fuel - 1) x :: dispatchList (fuel - 1) rest
+
+dispatchFields : Int -> List (Pair String Ir) -> List (Pair String Ir)
+dispatchFields fuel fs =
+  if fuel <= 0 then
+    fs
+  else
+    case fs of
+      [] => []
+      p :: rest => Pair (firstOf p) (dispatch (fuel - 1) (secondOf p)) :: dispatchFields (fuel - 1) rest
+
+dispatchAlt : Int -> IrAlt -> IrAlt
+dispatchAlt fuel a =
+  if fuel <= 0 then a else IrAlt a.irAltCtor a.irAltBinders (dispatch (fuel - 1) a.irAltBody)
+
+dispatchAltM : Int -> Maybe IrAlt -> Maybe IrAlt
+dispatchAltM fuel m =
+  if fuel <= 0 then
+    m
+  else
+    case m of
+      Nothing => Nothing
+      Just a => Just (dispatchAlt (fuel - 1) a)
+
+dispatchAlts : Int -> List IrAlt -> List IrAlt
+dispatchAlts fuel alts =
+  if fuel <= 0 then
+    alts
+  else
+    case alts of
+      [] => []
+      a :: rest => dispatchAlt (fuel - 1) a :: dispatchAlts (fuel - 1) rest
+
+dispatchDef : IrDef -> IrDef
+dispatchDef (IrDef n ar deps sigTy body recOk initGuard sp) =
+  IrDef n ar deps sigTy (dispatch (dispatchFuelOfBody body) body) recOk initGuard sp
+dispatchDef d = d
+
+dispatchGroup : IrGroup -> IrGroup
+dispatchGroup (IrGroup isRec defs) = IrGroup isRec (map dispatchDef defs)
+
+dispatchEntry : IrEntry -> IrEntry
+dispatchEntry e =
+  IrEntry
+    (dispatch (dispatchFuelOfBody e.irEntryShow) e.irEntryShow)
+    e.irEntryMain
+    e.irEntryIsAction
+    e.irEntryRunMain
+    e.irEntryHandlers
+    e.irEntryRowTags
+
+dispatchEntryM : Maybe IrEntry -> Maybe IrEntry
+dispatchEntryM Nothing = Nothing
+dispatchEntryM (Just e) = Just (dispatchEntry e)
+
+-- | 单元入口：改写所有定义体与入口展示节点。
+export dispatchIdsUnit : IrUnit -> IrUnit
+dispatchIdsUnit u =
+  IrUnit
+    u.irUnitTyDecls
+    (map dispatchGroup u.irUnitGroups)
+    u.irUnitHasListFamily
+    u.irUnitTypeRefs
+    (dispatchEntryM u.irUnitEntry)
+
+dispatchFuelBase : Int
+dispatchFuelBase = 64
+
+dispatchFuelOfBody : Ir -> Int
+dispatchFuelOfBody body = dispatchFuelBase + 2 * irSize body

@@ -116,7 +116,7 @@ let dtp_effectId (s : string) : int =
   !h land 0x3FFFFFFF
 
 (* bracket 的 abort cleanup 登记表（每纤程一份，LIFO）。
-   `prim_effectHandle` 在安装 handler 时记下当前深度 mark；handler 正常返回 /
+   `prim_effectHandleId` 在安装 handler 时记下当前深度 mark；handler 正常返回 /
    抛异常 / 丢弃续延（abort）时，把 mark 之上仍未弹出的 cleanup 逐个执行——这些
    正是被丢弃的续延里打开的 bracket。纤程用 `dtp_cleanup_fiber` 区分（调度器在
    运行某个任务时设置它）；非调度器上下文（-1）有一份独立栈。
@@ -195,8 +195,6 @@ let dtp_effect_run key name kid nid ret h th =
     with
     | r -> run_cleanups (); r
     | exception e -> run_cleanups (); raise e)
-let dtp_effect_handle key name ret h th =
-  fun u -> dtp_effect_run key name (dtp_effectId key) (dtp_effectId name) ret h (fun () -> (Obj.magic th) u)
 let dtp_effect_handle_id key name kid nid ret h th =
   fun u -> dtp_effect_run key name kid nid ret h (fun () -> (Obj.magic th) u)
 let dtp_effect_self th =
