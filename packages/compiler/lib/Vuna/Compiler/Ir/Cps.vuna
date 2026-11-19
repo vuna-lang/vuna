@@ -1577,7 +1577,10 @@ cpsDefsMachine defs =
     Err msg => Err msg
     Ok ds =>
       let
-        handlerNames = collectHandleOpsDefs 100000 ds
+        -- handler clause 的分类读 **CPS 前** 的定义：`handleCore … opH` 的调用形状与
+        -- 签名只有直接风格里才有，机器 pass 会改写这些体；读 CPS 输出等于让分类依赖
+        -- 改写的偶然结果。
+        handlerNames = collectHandleOpsDefs 100000 defs
       in case annotateDefs (map mStepsDef (map mApplysDef (map mMarkedDef (mDefs handlerNames (cpsFuelOfDefs ds) ds)))) of
         Err msg => Err msg
         Ok annotated => Ok annotated

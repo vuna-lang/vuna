@@ -132,8 +132,8 @@ ID 是稳定引用（`层前缀-序号`），改动时保留编号，删掉实�
 | IR-05 | `Ir/Cps.vuna` | ⚠️C | 20+ 处 `if fuel <= 0 then e` 返回半 CPS 形态 | 已清（各 pass 预算按项规模派生） |
 | IR-06 | `Ir/Cps.vuna` 的 `mCpsApply` | A | 耗尽返回 `IrGlobal "?"` 占位 | 已清（耗尽退化成直接应用，不再占位） |
 | IR-07 | `Ir/Cps.vuna` 的 `mStepsDef` | A | 注入的 `machineRun` 全局不在 `irDefDeps` → SCC/可达性看不见 | 已清（`mStepsDef` 把注入的 `machineRun` 记进 deps） |
-| IR-08 | `Ir/Cps.vuna` 的 `transformDef` | D | 直接风格 pass（`transformDirect` / `transformDef` / `selfBody`）与 def 签名已保留；机器 pass（`mHandlers` / `mSyms` / `mApplys` / `mMarked` / `mSteps`）仍属类型改变型，节点类型槽继续置空 | 开放（部分） |
-| IR-09 | `Ir/Cps.vuna` 的 `isHandleCombinator` | C | handler 组合子按类型判据（结果 `Eff` + clause 参数）；opH 为裸类型变量的核心组合子（`handleCore` / `handleCoreAt` / `handleCoreLin` / `handleWith` / `handleWithAt`）用显式 allowlist，不再用字符串启发式 | 已清 |
+| IR-08 | `Ir/Cps.vuna` 的 `transformDef` | D | 直接风格 pass（`transformDirect` / `transformDef` / `selfBody`）与 def 签名已保留；机器 pass（`mHandlers` / `mSyms` / `mApplys` / `mMarked` / `mSteps`）仍属类型改变型，节点类型槽继续置空。handler clause 的收集已改读 CPS 前的 defs，但这不改变机器 pass 本身的类型改变面 | 开放（部分） |
+| IR-09 | `Ir/Cps.vuna` 的 `isHandleCombinator` | C | handler 组合子按类型判据（结果 `Eff` + clause 参数）；opH 为裸类型变量的核心组合子（`handleCore` / `handleCoreAt` / `handleCoreLin` / `handleWith` / `handleWithAt`，以及派发后的 `*Id` 形）用显式 allowlist，不再用字符串启发式；`collectHandleOpsDefs` 读 CPS 前的 defs，分类不依赖机器 pass 的输出 | 已清 |
 | IR-10 | `Ir/Cps.vuna` 的 `isEffResultTy` 注释 | C | 曾与 `Lowering.effResultTyOf` 的实参口径不符 | 已清（对齐注释） |
 | IR-11 | `Ir/Validate.vuna` 的 `ctorFieldCountOf` | C | 查不到构造子当 0 字段（跨单元表不全） | 已清（构造子 arity 走程序级 `IrShared` 形状表） |
 | IR-12 | `Ir/Validate.vuna` 的 `IrTyVar` | C | 只查 `i >= 0`，不查族 arity | 已清（声明体槽按本声明 arity 校验） |
