@@ -33,6 +33,7 @@
 | `vuna-<domain> --vuna-describe` | 打印命令表（stdout） |
 | `vuna-<domain> --vuna-describe FILE` | 把命令表写到 FILE（入口用这个形态收集，子进程 stdout/stderr 被丢弃） |
 | 路由 | `vuna <path> ...` 原样把 argv 交给拥有该路径的插件；stdio 继承、退出码透传 |
+| `vuna-<domain> --vuna-describe` 的 `req\t<domain>` 行 | 声明的依赖域；未满足（没有提供该域的插件）时整个插件被丢弃 |
 | 缺失 | 插件不在 → 它的命令从帮助里消失，调用报 exit 2；入口其余功能不受影响 |
 
 插件集合（默认安装）：
@@ -44,6 +45,7 @@
 | `vuna-dev` | `dev` | 仓库专用的 `vuna dev …`（suite / obs / errors gen / ir dump）——当前与工具链同包，未独立安装 |
 | `vuna-target-native` | `target-native` | `--target native` 的后端：读 IR 编码、写 x86-64 汇编文件集 |
 | `vuna-target-wasm` | `target-wasm` | `--target wasm` 的后端：读 IR 编码、写 `main.wat` + 能力告警 |
+| `vuna-web` | `web` | `vuna web build / check / version`（服务端目标 ocaml/native，不依赖后端插件） |
 
 `vuna-compiler` 与自举 stage-1 是**同一个产物**：包的入口就是产品插件入口，nix 把它装成两个名字。
 

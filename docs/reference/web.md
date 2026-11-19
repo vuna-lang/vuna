@@ -122,3 +122,17 @@ myapp/.vuna-web/bin/myapp tcp:127.0.0.1:8080
   native-effects 那条线补上网络后再说。
 - **已知限制**：串行 accept（慢客户端挡住其它连接，见 §4）；`PATH` 里必须有 `ocamlopt`
   （`--target ocaml` 的构建脚本需要它）。
+### 7.1 插件形态（`vuna web …`）
+
+`vuna-web` 插件（`packages/plugin-web`，二进制 `vuna-web`）把同一个 `Vuna.Web.Cli`
+挂到产品入口下：
+
+```console
+vuna web build myapp [--out DIR] [--target ocaml|native] [--release]
+vuna web check myapp
+vuna web version
+```
+
+它**不声明后端插件依赖**：服务端目标只有 `ocaml` / `native`，构建链在编译器库内完成，
+不需要 `vuna-target-*` 进程。describe 的 `req` 行留给真正需要别的插件的场景（协议见
+[cli.md](cli.md)「插件发现」）。

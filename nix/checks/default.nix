@@ -29,6 +29,7 @@ let
     targetOcaml = ../../packages/target-ocaml;
     targetNative = ../../packages/target-native;
     targetWasm = ../../packages/target-wasm;
+    pluginWeb = ../../packages/plugin-web;
     base = ../../packages/base;
     pluginKit = ../../packages/plugin-kit;
     toolchain = ../../packages/toolchain;
@@ -63,6 +64,7 @@ let
     src.targetOcaml
     src.targetNative
     src.targetWasm
+    src.pluginWeb
     src.pluginKit
     src.toolchain
     src.cli
@@ -170,6 +172,7 @@ let
       src.targetOcaml
       src.targetNative
       src.targetWasm
+      src.pluginWeb
       src.base
       src.cli
       src.pluginKit
@@ -343,6 +346,7 @@ in
       src.targetOcaml
       src.targetNative
       src.targetWasm
+      src.pluginWeb
       src.base
       src.manifest
     ];
@@ -418,6 +422,7 @@ in
       src.targetOcaml
       src.targetNative
       src.targetWasm
+      src.pluginWeb
       src.cli
       src.base
       src.pluginKit
@@ -452,6 +457,7 @@ in
       src.targetOcaml
       src.targetNative
       src.targetWasm
+      src.pluginWeb
       src.base
     ];
     nativeBuildInputs = [

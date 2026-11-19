@@ -1,0 +1,85 @@
+-- | `vuna-web` 插件入口：把 `vuna web …` 转给 `Vuna.Web.Cli`。
+--
+-- web 构建复用编译器库（同一条 compile/split/cache 链），因此不声明后端插件依赖：
+-- 服务端目标只有 `ocaml` / `native`，都由编译器本身完成。
+module Vuna.Web.Plugin.Registry where
+
+import Vuna.Web.Cli
+import Vuna.Web.Plugin.Spec
+import Vuna.Plugin.Command
+import Vuna.Plugin.Describe
+import Vuna.Plugin.Help
+import Vuna.Plugin.Suggest
+import Vuna.Compiler.Base.Version as Version
+import Base.Data.List as List
+import Base.Data.String as String
+import Base.Effect.Args as EffArgs
+import Base.Effect.Clock as EffClock
+import Base.Effect.Console as EffConsole
+import Base.Effect.Env as EffEnv
+import Base.Effect.Exit as EffExit
+import Base.Effect.Fs as EffFs
+import Base.Effect.Net as EffNet
+import Base.Effect.Process as EffProcess
+import Base.Effect.Stdin as EffStdin
+import Base.Effect.Types as EffTypes
+
+-- | 插件入口：读 argv，处理 describe / help，其余交给 `web` 分派。
+export runPlugin : Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
+runPlugin =
+  do
+    args <- argsGetArgs
+    runArgs args
+
+-- | 按 argv 执行；`--vuna-describe [FILE]` 与 `--help` 优先。
+export runArgs : List String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
+runArgs raw = runArgsClean (withoutPerfFlag raw)
+
+runArgsClean : List String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
+runArgsClean args =
+  case args of
+    ["--vuna-describe"] => printText (Describe.render "web" commands)
+    "--vuna-describe" :: file :: more => writeDescribe file
+    _ =>
+      case helpPathIn 3 commands args of
+        Just path => printHelp path
+        Nothing => dispatch args
+
+writeDescribe : String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
+writeDescribe file =
+  do
+    _ <- fsWriteFileAtomic file (Describe.render "web" commands)
+    pure 0
+
+printHelp : List String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
+printHelp path =
+  case helpForPathIn commands noDelegated path of
+    Just text => printText text
+    Nothing => printText (unknownCommandText (join " " path))
+
+dispatch : List String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
+dispatch args =
+  case args of
+    "web" :: "version" :: _ => printText "vuna web ${Version.vunaVersion}\n"
+    "web" :: rest => runWebCli rest
+    _ => printText (unknownCommandText (join " " args))
+
+printText : String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
+printText text =
+  do
+    _ <- consolePrint text
+    pure 0
+
+unknownCommandText : String -> String
+unknownCommandText arg =
+  case suggestOne (topLevelNamesOf commands) arg of
+    Just guess => "error: unknown command `${arg}`; did you mean `${guess}`?\nrun `vuna help`\n"
+    Nothing => "error: unknown command `${arg}`\nrun `vuna help`\n"
+
+noDelegated : Cmd -> String
+noDelegated _ = ""
+
+withoutPerfFlag : List String -> List String
+withoutPerfFlag [] = []
+withoutPerfFlag (a :: rest) =
+  if a == "--debug-perf" then withoutPerfFlag rest else a :: withoutPerfFlag rest

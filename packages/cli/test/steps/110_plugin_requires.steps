@@ -1,0 +1,15 @@
+# 110) 插件依赖声明（describe `req`）：未满足的插件整块丢弃。
+#
+# 负例：一个只声明 `req target:wasm` 的假插件（没有 target-wasm 插件时）命令不出现在
+# 帮助里，调用按未知命令退出 2；正例：同样形状但不带 `req` 的插件正常出现。
+
+run: sh -c 'd="$TMPDIR/fake-plugins"; mkdir -p "$d"; printf "#!/bin/sh\nif [ \"\$1\" = \"--vuna-describe\" ]; then\n  printf \"vuna-plugin\\t1\\tcli\\tfake\\nreq\\ttarget:wasm\\ncmd\\tfake hello\\tservice\\tyes\\tno\\t需要 wasm 的假命令\\tvuna fake hello\\n\" > \"\$2\"\n  exit 0\nfi\nexit 2\n" > "$d/vuna-fake"; chmod +x "$d/vuna-fake"; printf "#!/bin/sh\nif [ \"\$1\" = \"--vuna-describe\" ]; then\n  printf \"vuna-plugin\\t1\\tcli\\tok\\ncmd\\tok hello\\tservice\\tyes\\tno\\t无依赖的假命令\\tvuna ok hello\\n\" > \"\$2\"\n  exit 0\nfi\nexit 2\n" > "$d/vuna-ok"; chmod +x "$d/vuna-ok"'
+exit: 0
+
+# 110a) 依赖未满足：fake 的命令不出现；无依赖的 ok 正常出现。
+run: sh -c 'out=$(VUNA_EXEC_PATH="$TMPDIR/fake-plugins" "$VUNA" help 2>&1); printf "%s\n" "$out" | grep -q "ok hello" || exit 1; printf "%s\n" "$out" | grep -q "fake hello" && exit 2; exit 0'
+exit: 0
+
+# 110b) 调用被丢弃插件的命令：按未知命令退出 2。
+run: sh -c 'VUNA_EXEC_PATH="$TMPDIR/fake-plugins" "$VUNA" fake hello >/dev/null 2>&1'
+exit: 2

@@ -1,0 +1,37 @@
+-- describe 协议：`req` 行解析与依赖满足判定（负例是核心）。
+import Base
+import Base.Effect.Core
+import Vuna.Plugin.Describe
+
+main : Eff [] String
+main =
+  case filter (\p => not (secondOf p)) results of
+    [] => pure ""
+    bad =>
+      do
+        _ <- prim_eff_print ("plugin describe failed: " ++ join "; " (map firstOf bad) ++ "\n")
+        _ <- prim_eff_exit 1
+        pure ""
+
+results : List (Pair String Bool)
+results =
+  [
+    Pair "requirement-domain" (requirementDomain "target:wasm" == "target-wasm"),
+    Pair "no-requirements" (requirementsMet [] ["web"]),
+    Pair "met" (requirementsMet ["target:wasm"] ["web", "target-wasm"]),
+    Pair "unmet-missing-plugin" (not (requirementsMet ["target:wasm"] ["web"])),
+    Pair "unmet-wrong-domain" (not (requirementsMet ["target:wasm"] ["target-native"])),
+    Pair "render-parse-roundtrip" roundtrip
+  ]
+
+sampleText : String
+sampleText = renderSpec "web" ["target:wasm"] []
+
+roundtrip : Bool
+roundtrip =
+  case parseSpec sampleText of
+    Nothing => False
+    Just spec =>
+      spec.specDomain
+        == "web"
+        && spec.specRequires == ["target:wasm"] && requirementsMet spec.specRequires ["target-wasm"]

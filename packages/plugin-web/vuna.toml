@@ -1,0 +1,17 @@
+# vuna-plugin-web：web 应用构建/检查的插件（二进制 `vuna-web`）。
+#
+# 实现复用 `vuna-web-cli` 的 `Vuna.Web.Cli`：命令面独立成插件，构建链仍是编译器库。
+[package]
+name = "vuna-plugin-web"
+
+[dependencies]
+vuna-compiler-base = "../compiler-base"
+vuna-base = "../base"
+vuna-plugin-kit = "../plugin-kit"
+vuna-web-cli = "../web-cli"
+
+[export]
+modules = [
+  "Vuna.Web.Plugin.Registry",
+  "Vuna.Web.Plugin.Spec",
+]

@@ -54,6 +54,7 @@ packages/compiler/lib/Vuna/Compiler/   （目录即层：层名 = 模块前缀�
   路由匹配 + 应用值 + 服务端根；依赖 vuna-base / vuna-http，不进 seed（见 [reference/web.md](reference/web.md)）。
 编排工具 vuna-web-cli（模块根 packages/web-cli/lib/，二进制 vuna-web-cli）：读应用包上下文、
   生成适配包、复用 Driver.CompilerCli 构出服务端二进制；依赖编译器包，不进 seed，不属于产品 CLI。
+  产品入口经 `vuna-web` 插件（`packages/plugin-web`）暴露同一实现：`vuna web build|check|version`。
 ```
 
 **目录即层，方向由 manifest 声明**：层 = 模块前缀（目录），`packages/compiler/vuna.toml` 的

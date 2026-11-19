@@ -1,0 +1,20 @@
+-- | `vuna web` 的命令表（插件 `vuna-web` 的 describe 面）。
+module Vuna.Web.Plugin.Spec where
+
+import Vuna.Plugin.Command
+
+-- | web 分节的命令与子命令。
+export commands : List Cmd
+commands =
+  [
+    topCmd ["web"] GService "构建与检查 web 应用" "vuna web build|check|version" [] [],
+    subCmd
+      ["web", "build"]
+      GService
+      "构建 web 应用（生成本地服务端二进制）"
+      "vuna web build <app-dir> [--out DIR] [--target ocaml|native] [--release]"
+      []
+      [],
+    subCmd ["web", "check"] GService "检查 web 应用" "vuna web check <app-dir>" [] [],
+    subCmd ["web", "version"] GService "打印 web 工具链版本" "vuna web version" [] []
+  ]

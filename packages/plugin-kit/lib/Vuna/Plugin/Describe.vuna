@@ -19,11 +19,27 @@ import Base.Data.String as String
 export protocolVersion : String
 protocolVersion = "1"
 
--- | 渲染一个插件的命令表。
+-- | 一个插件的 describe 面：域、依赖、命令表。
+export record Spec(..) where
+  specDomain : String
+  -- | 需要的其它域（例：`target:wasm` 只由域 `target-wasm` 满足）。
+  specRequires : List String
+  specCommands : List Cmd
+
+-- | 渲染一个插件的命令表（无依赖）。
 export render : String -> List Cmd -> String
-render domain cmds =
+render domain cmds = renderSpec domain [] cmds
+
+-- | 渲染一个插件的命令表（含依赖）。
+export renderSpec : String -> List String -> List Cmd -> String
+renderSpec domain requires cmds =
   "vuna-plugin\t${protocolVersion}\tcli\t${domain}\n"
+    ++ join "" (map reqLine requires)
     ++ join "" (map cmdLine cmds) ++ join "" (map flagLines cmds) ++ join "" (map noteLines cmds)
+
+-- | 内部：一行依赖声明。
+reqLine : String -> String
+reqLine name = "req\t${name}\n"
 
 -- | 内部：一条命令的头部行。
 cmdLine : Cmd -> String
@@ -48,9 +64,9 @@ yesNo : Bool -> String
 yesNo True = "yes"
 yesNo False = "no"
 
--- | 解析 describe 文本：首行给 `<domain>`，其余行合并成命令表。
-export parse : String -> Maybe (Pair String (List Cmd))
-parse text =
+-- | 解析 describe 文本：首行给域，`req` 行给依赖，其余行合并成命令表。
+export parseSpec : String -> Maybe Spec
+parseSpec text =
   case lines text of
     [] => Nothing
     header :: rest =>
@@ -58,10 +74,38 @@ parse text =
         f0 :: f1 :: f2 :: f3 :: more =>
           if f0 == "vuna-plugin" && f1 == protocolVersion && f2 == "cli" then
             Just
-              (Pair f3 (foldl (\cmds => \line => applyLine line cmds) (mapMaybe cmdOfLine rest) rest))
+              (Spec f3 (reqsOfLines rest) (foldl (\cmds => \line => applyLine line cmds) (mapMaybe cmdOfLine rest) rest))
           else
             Nothing
         _ => Nothing
+
+-- | 解析 describe 文本（只要域与命令表）。
+export parse : String -> Maybe (Pair String (List Cmd))
+parse text =
+  case parseSpec text of
+    Nothing => Nothing
+    Just spec => Just (Pair spec.specDomain spec.specCommands)
+
+-- | 内部：全部 `req` 行。
+reqsOfLines : List String -> List String
+reqsOfLines ls = mapMaybe reqOfLine ls
+
+-- | 内部：单条 `req` 行。
+reqOfLine : String -> Maybe String
+reqOfLine line =
+  case split "\t" line of
+    "req" :: name :: more => Just name
+    _ => Nothing
+
+-- | 依赖名 → 提供它的插件域（`target:wasm` → `target-wasm`）。
+export requirementDomain : String -> String
+requirementDomain name = join "-" (split ":" name)
+
+-- | 依赖是否被已发现的域满足。
+export requirementsMet : List String -> List String -> Bool
+requirementsMet [] domains = True
+requirementsMet (r :: rest) domains =
+  if memName (requirementDomain r) domains then requirementsMet rest domains else False
 
 -- | 内部：`cmd` 行 → 命令（flag / note 留空，由后续行填充）。
 cmdOfLine : String -> Maybe Cmd

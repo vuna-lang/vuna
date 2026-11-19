@@ -2,7 +2,7 @@
 # 成员包都在 packages/：cli/（产品 CLI，vuna）、compiler/（编译器，vuna-compiler）、
 # base/（标准库，vuna-base）。
 [workspace]
-members = ["packages/compiler", "packages/compiler-base", "packages/ir", "packages/target-ocaml", "packages/target-native", "packages/target-wasm", "packages/base", "packages/plugin-kit", "packages/toolchain", "packages/cli", "packages/http", "packages/web", "packages/web-cli"]
+members = ["packages/compiler", "packages/compiler-base", "packages/ir", "packages/target-ocaml", "packages/target-native", "packages/target-wasm", "packages/plugin-web", "packages/base", "packages/plugin-kit", "packages/toolchain", "packages/cli", "packages/http", "packages/web", "packages/web-cli"]
 
 # lint 配置由 `vuna lint` 消费；编译器只做 TOML 结构解析，不校验规则语义。
 [lint]

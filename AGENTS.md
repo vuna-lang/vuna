@@ -130,7 +130,8 @@ nix run .#vuna -- map find <Module.name> # 定位符号；另有 map impact / ap
 （`Vuna.Target.Ocaml.*`：IR→OCaml 文本，**进 seed**——编译器用它把自身编译成 OCaml）；
 `packages/target-native/` / `packages/target-wasm/` = native / wasm 后端插件
 （`Vuna.Target.{Native,Wasm}.*`，**不进 seed**：编译器按 `--target` 把 IR 编码后起子进程，
-见 [cli.md](docs/reference/cli.md)「后端插件协议」）；`packages/base/` =
+见 [cli.md](docs/reference/cli.md)「后端插件协议」）；`packages/plugin-web/` = web 应用插件
+（二进制 `vuna-web`，复用 `vuna-web-cli` 的实现，提供 `vuna web …`）；`packages/base/` =
 标准库 `vuna-base`（`Base.*` + `Prelude`，**进 seed**；跨包公开面只有门面
 `Base` / `Base.Data` / `Base.Trait` / `Base.Container` / `Base.Effect(.Core/.Pure)` / `Prelude`）；`packages/cli/` = 产品 CLI 包
 `vuna`（工具链 Cli/Interp/Files/Fmt/Lint/Repl/Run/Doc/Index/Lsp/TestRunner/Obs 在 `packages/cli/lib/`，

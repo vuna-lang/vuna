@@ -21,6 +21,8 @@ import Base.Effect.Types as EffTypes
 export record Plugin(..) where
   -- | 域（二进制名 `vuna-<domain>` 的后半段）。
   pluginDomain : String
+  -- | 声明的依赖域（`req` 行，例：`target:wasm`）。
+  pluginRequires : List String
   -- | 可执行文件路径（绝对路径；同目录发现时也带目录）。
   pluginBinary : String
   -- | 插件声明的命令。
@@ -32,7 +34,21 @@ discoverPlugins =
   do
     exe <- envExecPath
     execEnv <- envGetEnv "VUNA_EXEC_PATH"
-    discoverIn (searchDirs exe execEnv)
+    raw <- discoverIn (searchDirs exe execEnv)
+    pure (satisfiedPlugins raw)
+
+-- | 内部：依赖未满足的插件整块丢弃（命令从帮助消失、调用报未知命令）。
+satisfiedPlugins : List Plugin -> List Plugin
+satisfiedPlugins ps = filter (isSatisfied ps) ps
+
+-- | 内部：单插件是否满足依赖（`ps` 是已发现的全部插件）。
+isSatisfied : List Plugin -> Plugin -> Bool
+isSatisfied ps p = requirementsMet p.pluginRequires (domainListOf ps)
+
+-- | 内部：已发现的域列表。
+domainListOf : List Plugin -> List String
+domainListOf [] = []
+domainListOf (p :: rest) = p.pluginDomain :: domainListOf rest
 
 -- | 内部：在给定目录序列里发现插件。
 discoverIn : List String -> Eff [EnvOp, FsOp, ProcessOp, ClockOp] (List Plugin)
@@ -193,8 +209,8 @@ readDescribe domain bin file =
 -- | 内部：解析 describe 文本；域以插件自己的声明为准（不一致时也接受二进制名）。
 parsedPlugin : String -> String -> String -> Maybe Plugin
 parsedPlugin domain bin text =
-  case parse text of
-    Just (Pair d cmds) => Just (Plugin d bin cmds)
+  case parseSpec text of
+    Just spec => Just (Plugin spec.specDomain spec.specRequires bin spec.specCommands)
     Nothing => Nothing
 
 -- | 内部：文件大小的文本（取不到给 0）。

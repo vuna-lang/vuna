@@ -92,6 +92,8 @@ let
       cp packages/target-native/.output/bin/vuna-target-native "$out/bin/vuna-target-native"
       ${vuna-compiler}/bin/vuna-compiler build --package vuna-target-wasm .
       cp packages/target-wasm/.output/bin/vuna-target-wasm "$out/bin/vuna-target-wasm"
+      ${vuna-compiler}/bin/vuna-compiler build --package vuna-plugin-web .
+      cp packages/plugin-web/.output/bin/vuna-plugin-web "$out/bin/vuna-web"
       # 编译器命令走独立插件（同一个 stage-1 产物，安装名即插件名）。
       cp ${vuna-compiler}/bin/vuna-compiler "$out/bin/vuna-compiler"
       cp -r packages/base "$out/base"
