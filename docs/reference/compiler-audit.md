@@ -70,7 +70,7 @@ ID 是稳定引用（`层前缀-序号`），改动时保留编号，删掉实�
 | EL-08 | `Case.vuna` 的 `occursLevel` | ⚠️C | 耗尽返回 `False`=无 occurs | 开放 |
 | EL-09 | `Case.vuna` 的 `bindCtorTele` | C | 失败/残参时直接当可达分支 | 开放 |
 | EL-10 | `Case.vuna` 的 `hasCatchAll` | A | 任何非 `PCon` 头（含 `PInt`/`PStr`/`PRecord`）都算兜底 → 跳过穷尽检查 | 已清（只认 `PVar`/`PWild`） |
-| EL-11 | `Records.vuna` 的 `desugarPatternFuel` | ⚠️A | 耗尽 `OkC pat` 静默返回半降级模式（对照组 `desugarExprFuel` 是 `icFuel`） | 开放 |
+| EL-11 | `Records.vuna` 的 `desugarPatternFuel` | ⚠️A | 耗尽 `OkC pat` 静默返回半降级模式（对照组 `desugarExprFuel` 是 `icFuel`） | 已清（耗尽报 `icFuel`） |
 | EL-12 | `Match.vuna` 的 `familyCovered` | C | 缺族信息时补 `_` 兜底 → 注释自认会报假 `missing` | 开放 |
 | EL-13 | `Coverage.vuna` 的见证搜索 | C | fuel 耗尽 `Nothing`（少报见证） | 开放 |
 | EL-14 | `Data.vuna` 的 `eraseIndexMask` | B | 索引擦除只有分析，无消费者（死 API） | 开放 |
@@ -91,7 +91,7 @@ ID 是稳定引用（`层前缀-序号`），改动时保留编号，删掉实�
 | EC-05 | `Core/Conv.vuna` 的 `patternSolution []` | C | 不可达分支伪造 `VType` | 开放 |
 | EC-06 | `Core/Conv.vuna` 的 Nat 折算 | C | 饱和成相等；`convNatFuel` 用幻数推预算 | 开放 |
 | EC-07 | `Elab/Dict.vuna` 的 `tryResolveDictGoal` | ⚠️A | 程序级求解用空 ctx + `Span ""` + depth 0，与收尾路径不等价 | 开放 |
-| EC-08 | `Dict`/`Trait`/`Driver` 的 `solveMeta … 0` | C | 一批延迟求解点传 depth 0，等于跳过作用域检查 | 开放 |
+| EC-08 | `Dict`/`Trait`/`Driver` 的 `solveMeta … 0` | C | 一批延迟求解点传 depth 0，等于跳过作用域检查 | 已清（传 `ctxDepth` 与约束的 `cdepth`） |
 | EC-09 | `Dict.vuna` 的 `matchInstances` | C | 上一候选的解表污染下一候选（无候选快照） | 开放 |
 | EC-10 | `Dict.vuna` 的 `ctxMemberProofTermGo` | C | 用 `showTerm` 文本比较找同型证明 binder | 开放 |
 | EC-11 | `Dict.vuna` 的刚性快路径 | C | `rigidSearchFast` 按族 vs `allInstancesMono` 按全表，两份判据 | 开放 |
@@ -138,7 +138,7 @@ ID 是稳定引用（`层前缀-序号`），改动时保留编号，删掉实�
 | IR-12 | `Ir/Validate.vuna` 的 `IrTyVar` | C | 只查 `i >= 0`，不查族 arity | 开放 |
 | IR-13 | `Lowering/Ty.vuna` 的 `renderFieldTy` | C | 解析不到字段类型时凭空分配 `IrTyVar slot`，抬高声明 arity | 开放 |
 | IR-14 | `Lowering/Env.vuna` 的 `usedTableFix` | C | 64 轮未收敛静默取近似 | 开放 |
-| IR-15 | `Lowering/Env.vuna` 的 `defTblOf`/`findDtDef` | C | 同键「后插优先」vs「首匹配」，重名时口径不同 | 开放 |
+| IR-15 | `Lowering/Env.vuna` 的 `defTblOf`/`findDtDef` | C | 同键「后插优先」vs「首匹配」，重名时口径不同 | 已清（语义一致：重复名取靠前的一条；注释纠正） |
 | IR-16 | `Lowering/Program.vuna` 的 `zipFieldNames` | C | 字段表与实参表长度不一静默截断 | 开放 |
 | IR-17 | `Lowering/Program.vuna` 的 `lookupRtPositionsIn` | C | 找不到运行时位置就静默丢字段更新 | 开放 |
 | IR-18 | `Lowering/Entry.vuna` 的 `mainShowIr` | A | 用空 def 表 `force`，别名一律退到 `@vuna@main_show` | 开放 |
