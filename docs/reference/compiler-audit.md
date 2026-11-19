@@ -18,7 +18,7 @@ ID 是稳定引用（`层前缀-序号`），改动时保留编号，删掉实�
 | FE-03 | `Frontend/Parser.vuna` 的 `parseModDecl` | ⚠️B | 显式导出列表从不解析，`modDeclHasExportList` 恒 False，但 Ast/Canonical/Fmt/LSP 都在读 | 已清（`parseModDecl` 解析括号列表；与逐定义 `export` 互斥） |
 | FE-04 | `Parser.vuna` 的 `exportMarkerFollows` | A | 两个分支同值，`export x = 1` 被当成导出标记 | 已清 |
 | FE-05 | `Parser/Support.vuna` 的 `binderHead` | C | binder 组上限 64 名，超出静默退化成普通括号表达式 | 已清（名字串沿 token 列表结构扫描，无 64 上限） |
-| FE-06 | `Manifest.vuna` 的 `layerHasCycle` | ⚠️C | fuel 只按「层数+1」，队列更宽时环路漏检 | 开放 |
+| FE-06 | `Manifest.vuna` 的 `layerHasCycle` | ⚠️C | fuel 只按「层数+1」，队列更宽时环路漏检 | 已清（预算 = 层数 + uses 条目数 + 1） |
 | FE-07 | `Manifest.vuna` 的 schema 编码 | D | 注释 / `checkOneEntry` / `buildManifest` 三处手工同步 | 开放 |
 | FE-08 | `Toml.vuna` 的 `parseIntegerDigits` | C | 整数累加无溢出检查（词法器对源码字面量有 `IntLiteralOutOfRange`） | 已清（按 `Lexer.maxIntLiteral` 判界，报 `PKG_TomlSyntax`） |
 | FE-09 | `Toml.vuna` 的 `flatten*` / `nodeValue` | D | `fuel` 是 SCT 的测度、从不检查；越界不可达靠调用方论证 | 开放 |
@@ -41,7 +41,7 @@ ID 是稳定引用（`层前缀-序号`），改动时保留编号，删掉实�
 | LD-01 | `Flatten.vuna` 的 `loadModule` | ⚠️A | `findModule` 命中即跳过 `rootAllows` → `[export]` 边界与同名歧义只在首次加载生效 | 开放 |
 | LD-02 | `Flatten.visibleFixitiesOf` + `Fixity.dedupeFixities` | ⚠️D | fixity 是程序全局表；iface 路径 span 全空 ⇒ 跨模块同名声明被静默去重 | 开放 |
 | LD-03 | `Layers.vuna` 的 `checkImports` | ⚠️A | import 目标不在模块表就跳过该边（`preloaded` 装配时越层不检查） | 开放 |
-| LD-04 | `Layers.vuna` 的 `closureGo` | C | fuel 耗尽静默返回已累积集合 | 开放 |
+| LD-04 | `Layers.vuna` 的 `closureGo` | C | fuel 耗尽静默返回已累积集合 | 已清（预算 = 层数 + uses 条目数 + 2） |
 | LD-05 | `Expand.internalRef` + `Resolve` 的 `!` 前缀 | A | 隐藏原语走「非法标识符」通道 | 已清（剥前缀后校验 `findIntrinsic`） |
 | LD-06 | `Flatten.vuna` 的模块加载 | A | 生产路径残留 `dbg!` 探针 | 已清 |
 | LD-07 | `Flatten.vuna` 的 unused-import 判定 | C | 判据只认导出 target，漏「只为 fixity 而 import」；删除 span 假设独占一行 | 开放 |
@@ -50,7 +50,7 @@ ID 是稳定引用（`层前缀-序号`），改动时保留编号，删掉实�
 | LD-10 | `Resolve.vuna` 的解析特判 | C | `Nil/Cons/::` 特判、`>>=`→`bind` 双名回落、`Type` 头不解析实参、隐式 binder 只认 String 域 | 开放 |
 | LD-11 | `Resolve.vuna` 的内部名旁路 | B | `@vuna@…` 与「属于编译器包」直接放行 | 开放 |
 | LD-12 | `Fixity.vuna` 的 `reorderDecl` | C | 实例体里非 `DSig`/`DFun` 声明原样放行 → 延后成 internal error | 开放 |
-| LD-14 | `Addr.vuna` 的 `topoVisit` | ⚠️C | fuel 耗尽静默返回部分序 → 依赖地址退化 `ext:`，iface 永不命中 | 开放 |
+| LD-14 | `Addr.vuna` 的 `topoVisit` | ⚠️C | fuel 耗尽静默返回部分序 → 依赖地址退化 `ext:`，iface 永不命中 | 已清（导出面删除：地址改用 `depSrcOf` 源摘要表，不依赖拓扑序） |
 | LD-15 | `Addr.vuna` 的模块摘要 | C | 无条件并入 Prelude 摘要（过近似） | 开放 |
 | LD-16 | `Fingerprint.vuna` | C | 无 build-id 时身份退化为「路径+大小+mtime」 | 开放 |
 | LD-17 | `Expand.vuna` 的宏入口 | B | 只在表达式位置、只认裸 `EVar` 应用头 | 开放 |
@@ -88,7 +88,7 @@ ID 是稳定引用（`层前缀-序号`），改动时保留编号，删掉实�
 | EC-02 | `Core/Eval.vuna` 的 `varIndex` | ⚠️A | 越界返回 `-1` 哨兵，下游按 `i <= 0` 取最内层变量 → 静默错指 | 开放 |
 | EC-03 | `Core/Conv.vuna` 的 `metaCreatedDepth` | C | 未登记时回退当前深度 | 开放 |
 | EC-04 | `Core/Conv.vuna` 的 `VPi`/`VLam` | C | 定义性相等不比 `rig`（`rig` 是运行时擦除格子，不比是有意取舍） | 开放（有意） |
-| EC-05 | `Core/Conv.vuna` 的 `patternSolution []` | C | 不可达分支伪造 `VType` | 开放 |
+| EC-05 | `Core/Conv.vuna` 的 `patternSolution []` | C | 不可达分支伪造 `VType` | 已清（空 spine 取 n=0 的自然延拓：不伪造 `VType`） |
 | EC-06 | `Core/Conv.vuna` 的 Nat 折算 | C | 饱和成相等；`convNatFuel` 用幻数推预算 | 开放（预算已按 `convFuelBase + 4*depth` 派生并以 `convFuelMax` 封顶；饱和相等是有意取舍） |
 | EC-07 | `Elab/Dict.vuna` 的 `tryResolveDictGoal` | ⚠️A | 程序级求解用空 ctx + `Span ""` + depth 0，与收尾路径不等价 | 开放 |
 | EC-08 | `Dict`/`Trait`/`Driver` 的 `solveMeta … 0` | C | 一批延迟求解点传 depth 0，等于跳过作用域检查 | 已清（传 `ctxDepth` 与约束的 `cdepth`） |
@@ -105,10 +105,10 @@ ID 是稳定引用（`层前缀-序号`），改动时保留编号，删掉实�
 | EC-19 | `Meta.vuna` 的 `zonkTermFuel` | C | 固定 64、耗尽原样返回（错误推迟到 codegen） | 已清（`zonkTerm` 按 `termSize` 派生燃料、上限 1e6，嵌套深度不再截断） |
 | EC-20 | `Meta.vuna` 的 `ctorRefTerm*` | D | Ec 版与全局版两份实现 | 开放 |
 | EC-21 | `Trait.vuna` 的 `instArgAt` | A | 实参取尽时伪造 `TGlobal "Int"` | 开放 |
-| EC-22 | `Trait.vuna` 的 `resolveRigidGoalsGo` | A | `solveMeta` 失败仍把替换记进 acc | 开放 |
+| EC-22 | `Trait.vuna` 的 `resolveRigidGoalsGo` | A | `solveMeta` 失败仍把替换记进 acc | 已清（求解失败不替换，goal 退回待解） |
 | EC-23 | `Trait.vuna` 的 `methodClausesNamed` | C | 实例方法按短名收集（跨类同名方法会被并进来） | 开放 |
 | EC-24 | `Trait.vuna` 的 `checkBodyAtEndFuel` | A | 剩余 Pi 静默 η 展开，`TC_DefFewerParams` 永不触发 | 开放 |
-| EC-25 | `Trait.vuna` 的 `applyCtxSubstsTo` | A | 注释的索引算术与实现不符 | 开放 |
+| EC-25 | `Trait.vuna` 的 `applyCtxSubstsTo` | A | 注释的索引算术与实现不符 | 已清（q = nTele + k + 1，与注释一致） |
 | EC-26 | `InstName.vuna` 的 `exprNameFor`/`argNameOf` | A | 未知形状伪造 `"X"`/`"Int"` 名 | 开放 |
 | EC-27 | `Prelude.vuna` 的 `ityToTermEnv` | A | `IVar` 查不到回退 `TGlobal`（拼错变全局引用） | 开放 |
 | EC-28 | `Elab/Driver.vuna` 的 `resolveDictGoalsFix` | C | 字典收敛固定 8 轮 | 开放 |
@@ -188,7 +188,7 @@ ID 是稳定引用（`层前缀-序号`），改动时保留编号，删掉实�
 | --- | --- | --- | --- | --- |
 | DR-01 | `Compile.vuna` 的 `splitModsOf` / `summarySplitParts` | ⚠️D | `mode=s/f` 进 split key：产物是「输入 + store 热度」的函数（D112 疑源） | 开放 |
 | DR-02 | `Dt.dtProjectDecls` vs codegen 的 `topoModules` | D | 两套模块排序；起点键还是模块名哈希 | 开放 |
-| DR-03 | `Dt.topoVisit` / `Compile.closureGo` / `importClosureGo` | ⚠️C | fuel 耗尽静默返回部分结果（同层 `shiftTerm` 是 `icFuel`） | 开放 |
+| DR-03 | `Dt.topoVisit` / `Compile.closureGo` / `importClosureGo` | ⚠️C | fuel 耗尽静默返回部分结果（同层 `shiftTerm` 是 `icFuel`） | 已清（预算按起点 + 节点 + 边派生） |
 | DR-04 | `CompilerCli.vuna` 的 `stdoutIsTty` | A | 走隐藏原语，绕过 `ConsoleOp` 行 | 开放 |
 | DR-05 | `CompilerCli.vuna` + `Capabilities.vuna` | B | native 目标没有 entry 能力检查 | 开放 |
 | DR-06 | `Store.vuna` 的 roots 布局 | D | 保留单文件 legacy 布局与一次性迁移 | 已清 |
