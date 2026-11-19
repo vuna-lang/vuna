@@ -2031,8 +2031,9 @@ nonErasedBinderText : IrBinder -> String
 nonErasedBinderText (IrBinder nm True _) = ""
 nonErasedBinderText (IrBinder nm False _) = irBinderText (IrBinder nm False Nothing)
 
--- | λ 参数表：擦除占位不渲染；有运行时类型的 binder 渲染成 `(x : ty)`。
+-- | λ 参数表：擦除占位不渲染；有可命名运行时类型的 binder 渲染成 `(x : ty)`。
 -- 注解里的跨单元类型引用记成依赖（与构造子 / record 引用同一条通道）。
+-- `IrTyOpaque` / 类型变量槽不写注解：那会固定 OCaml 的多态性。
 genLamParams : GenSt -> List IrBinder -> Check (Pair (List (Pair String (Maybe String))) GenSt)
 genLamParams st [] = OkC (Pair [] st)
 genLamParams st (b :: rest) =
@@ -2040,21 +2041,27 @@ genLamParams st (b :: rest) =
     genLamParams st rest
   else
     case b.irBinderTy of
-      Nothing =>
-        Vuna.Compiler.Base.Common.bind (genLamParams st rest) (
-            \p =>
-              case p of
-                Pair params st1 => OkC (Pair (Pair (irBinderText b) Nothing :: params) st1)
-          )
       Just ty =>
-        let
-          st1 = gsWithTyDeps st ty
-          annotation = Just (irTyText st.gsQual ty)
-        in Vuna.Compiler.Base.Common.bind (genLamParams st1 rest) (
-            \p =>
-              case p of
-                Pair params st2 => OkC (Pair (Pair (irBinderText b) annotation :: params) st2)
-          )
+        if irTyAnnotatable ty then
+          let
+            st1 = gsWithTyDeps st ty
+            annotation = Just (irTyText st.gsQual ty)
+          in Vuna.Compiler.Base.Common.bind (genLamParams st1 rest) (
+              \p =>
+                case p of
+                  Pair params st2 => OkC (Pair (Pair (irBinderText b) annotation :: params) st2)
+            )
+        else
+          genLamParamsUnannotated st b rest
+      Nothing => genLamParamsUnannotated st b rest
+
+genLamParamsUnannotated : GenSt -> IrBinder -> List IrBinder -> Check (Pair (List (Pair String (Maybe String))) GenSt)
+genLamParamsUnannotated st b rest =
+  Vuna.Compiler.Base.Common.bind (genLamParams st rest) (
+      \p =>
+        case p of
+          Pair params st1 => OkC (Pair (Pair (irBinderText b) Nothing :: params) st1)
+    )
 
 -- | 注解类型引用到的运行时族归属单元（去重后记录）。
 gsWithTyDeps : GenSt -> IrTy -> GenSt

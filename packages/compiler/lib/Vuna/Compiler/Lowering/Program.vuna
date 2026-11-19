@@ -241,7 +241,13 @@ lowerLamChainFuel fuel env st binders hints params inner resultTy =
     in Vuna.Compiler.Base.Common.bind (lowerTermFuel (fuel - 1) env st envB inner) (
         \p =>
           case p of
-            Pair b st2 => OkC (Pair (IrLam bs resultIr b) st2)
+            Pair b st2 =>
+              let
+                resultIr2 =
+                  case resultIr of
+                    Just _ => resultIr
+                    Nothing => irResultTyOf b
+              in OkC (Pair (IrLam bs resultIr2 b) st2)
       )
 
 -- 顶层定义体：签名箭头与 λ 链的运行时 binder 逐位对应时用签名回填 binder 类型
@@ -315,14 +321,11 @@ binderOfParam env outer p =
   else
     case p.lamParamTy of
       Nothing => mkIrBinder p.lamParamName
-      Just ty =>
-        case annotTyOf env outer ty of
-          Nothing => mkIrBinder p.lamParamName
-          Just irTy => mkIrBinderTyped p.lamParamName irTy
+      Just ty => mkIrBinderTyped p.lamParamName (annotTyOfTotal env outer ty)
 
 -- 带外层签名提示的 binder 表：非擦除参数按顺序消费一个提示类型。
--- 提示类型必须完全可命名（不含 `IrTyOpaque` / 类型变量槽），否则不写注解——
--- OCaml 侧的 lambda 参数注解会固定多态性，不透明类型会破坏 `List (a -> b)` 这类用法。
+-- 提示类型可以含 `IrTyOpaque`：OCaml 侧的 lambda 注解由 `irTyAnnotatable` 过滤，
+-- 不透明类型不会写进 OCaml，因此不会固定多态性。
 bindersOfParamsHint : LwEnv -> List IrBinder -> List IrTy -> List LamParam -> List IrBinder
 bindersOfParamsHint env outer _ [] = []
 bindersOfParamsHint env outer hints (p :: rest) =
@@ -333,7 +336,7 @@ bindersOfParamsHint env outer hints (p :: rest) =
         Nothing
       else
         case hints of
-          h :: _ => if irTyClosedForAnnot h then Just h else Nothing
+          h :: _ => Just h
           [] => Nothing
     restHints =
       if erased then
@@ -347,23 +350,6 @@ bindersOfParamsHint env outer hints (p :: rest) =
         Just ty => mkIrBinderTyped p.lamParamName ty
         Nothing => binderOfParam env outer p
   in b :: bindersOfParamsHint env (b :: outer) restHints rest
-
--- 注解安全的运行时类型：整条类型都可命名（无 `IrTyOpaque` / 类型变量槽）。
-irTyClosedForAnnot : IrTy -> Bool
-irTyClosedForAnnot (IrTyVar _) = False
-irTyClosedForAnnot IrTyInt = True
-irTyClosedForAnnot IrTyStr = True
-irTyClosedForAnnot IrTyBool = True
-irTyClosedForAnnot IrTyFloat = True
-irTyClosedForAnnot IrTyOpaque = False
-irTyClosedForAnnot (IrTyArray a) = irTyClosedForAnnot a
-irTyClosedForAnnot (IrTyRef a) = irTyClosedForAnnot a
-irTyClosedForAnnot (IrTyData _ args) = allClosedIrTys args
-irTyClosedForAnnot (IrTyFun a b) = if irTyClosedForAnnot a then irTyClosedForAnnot b else False
-
-allClosedIrTys : List IrTy -> Bool
-allClosedIrTys [] = True
-allClosedIrTys (t :: rest) = if irTyClosedForAnnot t then allClosedIrTys rest else False
 
 -- 应用：先按构造子折叠（多维变体构造子是 tupled 的），再试内建内联 / `++` 展平 / 普通应用。
 lowerAppFuel : Int -> LwEnv -> LwSt -> List IrBinder -> Term -> Term -> Rig -> Check (Pair Ir LwSt)
@@ -414,6 +400,19 @@ appTyOf env binders f =
     Just (fn@(IrTyFun _ cod)) => Just (Pair fn cod)
     _ => Nothing
 
+-- 已降低 callee 的节点类型兜底：内联 lambda / 已带函数类型的变量在这里命中。
+appTyOfIr : Ir -> Maybe (Pair IrTy IrTy)
+appTyOfIr ir =
+  case irResultTyOf ir of
+    Just (fn@(IrTyFun _ cod)) => Just (Pair fn cod)
+    _ => Nothing
+
+appTyFrom : LwEnv -> List IrBinder -> Term -> Ir -> Maybe (Pair IrTy IrTy)
+appTyFrom env binders f irF =
+  case appTyOf env binders f of
+    Just p => Just p
+    Nothing => appTyOfIr irF
+
 lowerAppFallbackFuel : Int -> LwEnv -> LwSt -> List IrBinder -> Term -> Term -> Rig -> Check (Pair Ir LwSt)
 lowerAppFallbackFuel fuel env st binders f a rig =
   if fuel <= 0 then
@@ -426,7 +425,7 @@ lowerAppFallbackFuel fuel env st binders f a rig =
               Vuna.Compiler.Base.Common.bind (lowerTermFuel (fuel - 1) env st1 binders a) (
                   \pa =>
                     case pa of
-                      Pair irA st2 => OkC (Pair (IrApp (appTyOf env binders f) irF irA) st2)
+                      Pair irA st2 => OkC (Pair (IrApp (appTyFrom env binders f irF) irF irA) st2)
                 )
       )
 

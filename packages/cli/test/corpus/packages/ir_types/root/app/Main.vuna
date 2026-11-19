@@ -27,3 +27,9 @@ instance Level Int where
 
 levelOf : Int -> Int
 levelOf x = level x
+
+inlineLet : Int -> Int
+inlineLet n =
+  let
+    x = n + 1
+  in add x 1

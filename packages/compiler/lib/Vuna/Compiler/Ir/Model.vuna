@@ -80,6 +80,25 @@ export irTyAt : List IrTy -> Int -> Maybe IrTy
 irTyAt [] _ = Nothing
 irTyAt (x :: xs) i = if i <= 0 then Just x else irTyAt xs (i - 1)
 
+-- | 这条运行时类型能否安全写进 OCaml 的 binder 注解：整条类型都可命名
+-- （不含 `IrTyOpaque` / 类型变量槽）。含不透明部分的注解会固定 OCaml 的多态性
+-- （例如把 `List (a -> b)` 的元素注解成 `Obj.t`），所以只在可命名时写。
+export irTyAnnotatable : IrTy -> Bool
+irTyAnnotatable (IrTyVar _) = False
+irTyAnnotatable IrTyInt = True
+irTyAnnotatable IrTyStr = True
+irTyAnnotatable IrTyBool = True
+irTyAnnotatable IrTyFloat = True
+irTyAnnotatable IrTyOpaque = False
+irTyAnnotatable (IrTyArray a) = irTyAnnotatable a
+irTyAnnotatable (IrTyRef a) = irTyAnnotatable a
+irTyAnnotatable (IrTyData _ args) = allAnnotatableIrTys args
+irTyAnnotatable (IrTyFun a b) = if irTyAnnotatable a then irTyAnnotatable b else False
+
+allAnnotatableIrTys : List IrTy -> Bool
+allAnnotatableIrTys [] = True
+allAnnotatableIrTys (t :: rest) = if irTyAnnotatable t then allAnnotatableIrTys rest else False
+
 -- ---------------------------------------------------------------
 -- binder
 -- ---------------------------------------------------------------
@@ -233,7 +252,8 @@ irResultTyFuel fuel ir =
       IrConcatMany _ => Just IrTyStr
       _ => Nothing
 
--- lambda 链的运行时函数类型：只含非擦除 binder，binder 类型必须全部已知。
+-- lambda 链的运行时函数类型：只含非擦除 binder；binder 类型未记录时域落
+-- `IrTyOpaque`（体类型才是调用点的结果，域不可命名不影响 `IrApp` 的结果类型）。
 irLamTyFuel : Int -> Maybe IrTy -> List IrBinder -> Maybe IrTy
 irLamTyFuel fuel bodyTy bs =
   if fuel <= 0 then
@@ -250,7 +270,7 @@ irLamTyFuel fuel bodyTy bs =
             else
               case b.irBinderTy of
                 Just ty => Just (IrTyFun ty inner)
-                Nothing => Nothing
+                Nothing => Just (IrTyFun IrTyOpaque inner)
 
 -- | `Eff` 的运行时类型名与构造子名：宿主效应直连时后端构造纯动作（`MkEff (\\u => r)`）用。
 export irEffTypeName : String

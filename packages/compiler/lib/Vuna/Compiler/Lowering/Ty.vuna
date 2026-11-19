@@ -193,64 +193,79 @@ maxIntListIn [] = 0
 maxIntListIn (x :: rest) = if x >= maxIntListIn rest then x else maxIntListIn rest
 
 -- ---------------------------------------------------------------
--- λ binder 的运行时类型（选择性标注）
+-- λ binder 的运行时类型（两种口径）
 -- ---------------------------------------------------------------
 --
--- binder 类型槽是 Core 侧的派生项。只有整条类型都能落到**可命名**的 `IrTy` 时
--- 才返回 `Just`：变量取外层 binder 已解析的运行时类型，primitive / 数据族要求
--- 类型实参全部可解析；其余（类型参数、别名、卡住的类型族应用、隐式 Pi）一律
--- `Nothing`，后端因此不会渲染可能错配的注解。
+-- binder 类型槽是 Core 侧的派生项：变量取外层 binder 已解析的运行时类型，
+-- primitive / 数据族要求类型实参可解析。两种口径共用同一套遍历：
+--
+--   * `annotTyOf`：不可命名的部分返回 `Nothing`（选择性注解）；
+--   * `annotTyOfTotal`：不可命名的部分落 `IrTyOpaque`，因此总能给出结构
+--     （`a -> b` 是 `Opaque -> Opaque` 而不是整体未知）。它只服务 binder 类型槽；
+--     OCaml lambda 注解另由 `irTyAnnotatable` 过滤，不透明类型不会写进 OCaml，
+--     从而不固定多态性。
 export annotTyOf : LwEnv -> List IrBinder -> Term -> Maybe IrTy
-annotTyOf env binders t = annotTyOfFuel 256 env binders t
+annotTyOf env binders t = annotTyOfFuel 256 Nothing env binders t
 
-annotTyOfFuel : Int -> LwEnv -> List IrBinder -> Term -> Maybe IrTy
-annotTyOfFuel fuel env binders t =
+export annotTyOfTotal : LwEnv -> List IrBinder -> Term -> IrTy
+annotTyOfTotal env binders t =
+  case annotTyOfFuel 256 (Just IrTyOpaque) env binders t of
+    Just ty => ty
+    Nothing => IrTyOpaque
+
+-- 第一个 `Maybe IrTy` 是「不可命名时落什么」：`Nothing` = 整体未知，`Just IrTyOpaque`
+-- = 保留结构、把洞填成不透明值。
+annotTyOfFuel : Int -> Maybe IrTy -> LwEnv -> List IrBinder -> Term -> Maybe IrTy
+annotTyOfFuel fuel dflt env binders t =
   if fuel <= 0 then
-    Nothing
+    dflt
   else
     case t of
-      TVar _ i _ => binderTyAtIn i binders
-      TGlobal g => annotHeadTy (fuel - 1) env binders g []
+      TVar _ i _ =>
+        case binderTyAtIn i binders of
+          Just ty => Just ty
+          Nothing => dflt
+      TGlobal g => annotHeadTy (fuel - 1) dflt env binders g []
       TApp _ _ _ =>
         case flattenAnnotApp t of
           Pair head args =>
             case head of
-              TGlobal g => annotHeadTy (fuel - 1) env binders g args
-              _ => Nothing
-      TRecord g args => annotHeadTy (fuel - 1) env binders g (map firstOf args)
-      TCon c args => annotConTy (fuel - 1) env c args
-      TMk c args => annotConTy (fuel - 1) env c args
+              TGlobal g => annotHeadTy (fuel - 1) dflt env binders g args
+              _ => dflt
+      TRecord g args => annotHeadTy (fuel - 1) dflt env binders g (map firstOf args)
+      TCon c args => annotConTy (fuel - 1) dflt env c args
+      TMk c args => annotConTy (fuel - 1) dflt env c args
       TInt _ => Just IrTyInt
       TStr _ => Just IrTyStr
       TBool _ => Just IrTyBool
       TFloat _ => Just IrTyFloat
-      TIf _ t _ => annotTyOfFuel (fuel - 1) env binders t
+      TIf _ t _ => annotTyOfFuel (fuel - 1) dflt env binders t
       TPi name implicit rig dom cod =>
         if rigIsErased rig then
-          Nothing
+          dflt
         else
-          case annotTyOfFuel (fuel - 1) env binders dom of
+          case annotTyOfFuel (fuel - 1) dflt env binders dom of
             Nothing => Nothing
             Just domTy =>
-              case annotTyOfFuel (fuel - 1) env (mkIrBinderTyped name domTy :: binders) cod of
+              case annotTyOfFuel (fuel - 1) dflt env (mkIrBinderTyped name domTy :: binders) cod of
                 Nothing => Nothing
                 Just codTy => Just (IrTyFun domTy codTy)
-      _ => Nothing
+      _ => dflt
 
-annotConTy : Int -> LwEnv -> String -> List (Pair Term Rig) -> Maybe IrTy
-annotConTy fuel env c args =
+annotConTy : Int -> Maybe IrTy -> LwEnv -> String -> List (Pair Term Rig) -> Maybe IrTy
+annotConTy fuel dflt env c args =
   if fuel <= 0 then
-    Nothing
+    dflt
   else
     case HashMap.lookup c env.lwCtors of
-      Nothing => Nothing
+      Nothing => dflt
       Just (Pair family _) =>
         case reprTyIr family of
           Just t => Just t
           Nothing =>
             case ctorTypeArgsOf env c args of
               Just tys => Just (IrTyData family tys)
-              Nothing => Nothing
+              Nothing => dflt
 
 -- 外层 binder 的运行时类型（de Bruijn 下标；最近绑定在前）。
 -- 擦除占位只占槽位、运行时类型不可命名，因此恒返回 `Nothing`。
@@ -268,35 +283,35 @@ flattenAnnotAppGo (TApp f a _) acc = flattenAnnotAppGo f (a :: acc)
 flattenAnnotAppGo (TRecord name args) acc = Pair (TGlobal name) (append (map firstOf args) acc)
 flattenAnnotAppGo t acc = Pair t acc
 
-annotHeadTy : Int -> LwEnv -> List IrBinder -> String -> List Term -> Maybe IrTy
-annotHeadTy fuel env binders g args =
+annotHeadTy : Int -> Maybe IrTy -> LwEnv -> List IrBinder -> String -> List Term -> Maybe IrTy
+annotHeadTy fuel dflt env binders g args =
   if fuel <= 0 then
-    Nothing
+    dflt
   else if g == "Array" then
     case args of
       [a] =>
-        case annotTyOfFuel (fuel - 1) env binders a of
+        case annotTyOfFuel (fuel - 1) dflt env binders a of
           Nothing => Nothing
           Just t => Just (IrTyArray t)
-      _ => Nothing
+      _ => dflt
   else if g == "IORef" then
     case args of
       [a] =>
-        case annotTyOfFuel (fuel - 1) env binders a of
+        case annotTyOfFuel (fuel - 1) dflt env binders a of
           Nothing => Nothing
           Just t => Just (IrTyRef t)
-      _ => Nothing
+      _ => dflt
   else
     case reprTyIr g of
       Just t =>
         case args of
           [] => Just t
-          _ => Nothing
+          _ => dflt
       Nothing =>
         case findDtData g env.lwDatas of
-          Nothing => Nothing
+          Nothing => dflt
           Just dd =>
-            case annotFamilyArgs (fuel - 1) env binders (lookupTyParamsIn env.lwTyParams g) args of
+            case annotFamilyArgs (fuel - 1) dflt env binders (lookupTyParamsIn env.lwTyParams g) args of
               Nothing => Nothing
               Just tys => Just (IrTyData g tys)
 
@@ -319,7 +334,8 @@ annotCalleeTy env binders t =
               case globalTyTermOf env g of
                 Just ty => peelPiArgsTy 256 env (eval [] ty) args
                 Nothing => peelIrFuns (countRuntimeArgs args) (annotTyOf env binders (TGlobal g))
-        Pair head args => peelIrFuns (countRuntimeArgs args) (annotTyOf env binders head)
+        Pair head args =>
+          peelIrFuns (countRuntimeArgs args) (Just (annotTyOfTotal env binders head))
     _ => annotTyOf env binders t
 
 -- | 全局名的**类型项**：运行时定义走 `lwDefTbl`，其余（trait 方法选择子等）走
@@ -385,8 +401,8 @@ peelPiArgsTy fuel env v args =
 
 -- 数据族的运行时类型实参：按族的**运行时参数槽**（`usedPats` 是族 telescope 的 level）
 -- 选实参，因此注解的实参个数与声明的类型参数个数逐位一致。
-annotFamilyArgs : Int -> LwEnv -> List IrBinder -> List Int -> List Term -> Maybe (List IrTy)
-annotFamilyArgs fuel env binders usedPats args =
+annotFamilyArgs : Int -> Maybe IrTy -> LwEnv -> List IrBinder -> List Int -> List Term -> Maybe (List IrTy)
+annotFamilyArgs fuel dflt env binders usedPats args =
   if fuel <= 0 then
     Nothing
   else
@@ -396,10 +412,10 @@ annotFamilyArgs fuel env binders usedPats args =
         case nthTermIn args i of
           Nothing => Nothing
           Just a =>
-            case annotTyOfFuel (fuel - 1) env binders a of
+            case annotTyOfFuel (fuel - 1) dflt env binders a of
               Nothing => Nothing
               Just t =>
-                case annotFamilyArgs (fuel - 1) env binders rest args of
+                case annotFamilyArgs (fuel - 1) dflt env binders rest args of
                   Nothing => Nothing
                   Just ts => Just (t :: ts)
 
@@ -415,7 +431,13 @@ ctorTypeArgsOf env ctor args =
       case findDtData family env.lwDatas of
         Nothing => Nothing
         Just _ =>
-          annotFamilyArgs 256 env [] (lookupTyParamsIn env.lwTyParams family) (map firstOf args)
+          annotFamilyArgs
+            256
+            Nothing
+            env
+            []
+            (lookupTyParamsIn env.lwTyParams family)
+            (map firstOf args)
     Nothing => Nothing
 
 findCtorInLocal : String -> List DtCtor -> Maybe DtCtor
