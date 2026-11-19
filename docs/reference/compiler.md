@@ -65,7 +65,7 @@
 | `Loader.Expand` | 内置宏展开 pass：parser 把 `name!` 编码成保留名 `@vuna@macro@name`，这里在 fixity 重排后、名字解析前做 AST→AST 展开（当前唯一内置宏 `dbg!`，展开到隐藏 runtime 原语；插入节点 span = 调用点） | `expandDecls` |
 | `Loader.Fixity` | 按每模块可见表重排中缀 / 换别名 / 展开 section（`->` 恒可见；未知符号运算符报错） | `reorderProgram` |
 | `Loader.Addr` | **输入摘要（地址）唯一构造器**：`addrOf`（域分隔 + 规范编码 + SHA-256）、header 地址、项目身份 `projectIdAddrOf`；所有对象路径都由这里的纯函数决定 | `addrOf`、`headerAddrOf`、`projectIdAddrOf` |
-| `Loader.Fingerprint` | 编译器身份的唯一来源：**身份属于编译器闭包**——本包模块含 `Vuna.Compiler.Loader.Fingerprint` 时按源闭包 + 依赖身份定址（`compilerIdOf`，`build-id` 由构建写入产物目录），其余包继承构建它的编译器身份；运行时读 `VUNA_COMPILER_TAG` → 可执行文件旁 `build-id` → 路径+大小+mtime 兜底。iface 分桶、lex/check/split/unit 的 key 与 framing tag 共用（同源同身份，换编译器源码才换代） | `compilerIdOf`、`compilerTagEff`、`compilerFingerprintEff`、`buildIdFileName`、`textHashOf` |
+| `Loader.Fingerprint` | 编译器身份的唯一来源：**身份属于编译器闭包**——本包模块含 `Vuna.Compiler.Loader.Fingerprint` 时按源闭包 + 依赖身份定址（`compilerIdOf`，`build-id` 由构建写入产物目录），其余包继承构建它的编译器身份；运行时读 `VUNA_COMPILER_TAG` → 可执行文件旁 `build-id` → 路径+大小+mtime 兜底。iface 分桶、lex/check/split/unit 的 key 与 framing tag 共用；缓存键另用 `cacheTagEff`（`$out/cache-tag` = 二进制 sha256，回退 `build-id`），同源不同 seed 的二进制不共享缓存 | `compilerIdOf`、`compilerTagEff`、`compilerFingerprintEff`、`buildIdFileName`、`textHashOf` |
 | `Loader.Layers` | `[layers]` 的执行者：模块属于所有匹配的层前缀，import 合法 ⇔ 对每个匹配层目标落在自身子树或 `closure(uses)` 的层子树；只看直接 import 边，依赖包恒放行 | `checkProjectLayers`、`labelOf` |
 
 ### Core（类型论、求值、相等、Core 编码）

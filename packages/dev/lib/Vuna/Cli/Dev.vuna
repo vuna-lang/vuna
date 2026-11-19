@@ -1,9 +1,9 @@
 -- | `vuna dev`：本仓库专用的开发/维护命令（suite、观测、错误码文档生成）。
 --
 -- 这些命令的输入是 vuna 自己的仓库布局与内部词汇（`test/suite.toml`、`VUNA_OBS` span、
--- 错误码枚举），普通用户的项目里不成立，因此在帮助里单独成节，并且是唯一被
--- `Vuna.Cli.Product` 隔离的命名空间（`nix/checks/lib/product-boundary.sh` 保证产品侧
--- 模块不 import 本模块）。
+-- 错误码枚举），普通用户的项目里不成立，因此在帮助里单独成节；实现与命令表在独立包
+-- `packages/dev`（插件 `vuna-dev`），`nix/checks/lib/product-boundary.sh` 保证产品侧
+-- 不 import 这些模块。
 module Vuna.Cli.Dev where
 
 import Vuna.Cli.Args
