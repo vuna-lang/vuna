@@ -14,8 +14,6 @@ module Vuna.Compiler.Loader.Addr where
 -- 分段用 `Canonical.Bytes` 的 `[n:…]`/`s<len>:` 自定界编码再取 SHA-256：不用「拼字符串
 -- 再加分隔符」，因为那会 reintroduce `("a","bc")` 与 `("ab","c")` 同键的歧义。
 import Base.Data.List as List
-import Base.Data.Maybe as Maybe
-import Base.Data.Pair as Pair
 import Vuna.Compiler.Base.Bytes
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Ast
@@ -57,38 +55,6 @@ export record ModHeader(..) where
   mhName : String
   mhImports : List String
   mhFixities : List FixRow
-
--- ---------------------------------------------------------------
--- 模块依赖图的拓扑序
---
--- 输入是一张「模块名 → 直接 import 名」的表（含包内与跨包模块）。返回依赖在前的顺序。
--- 不在表里的名字（外部包）忽略：它们的输入摘要由调用方另行并入。环显式报空表（上层
--- loader 已经拒绝环；这里用 fuel 兜底，不静默产错序）。
--- ---------------------------------------------------------------
-lookupImports : String -> List (Pair String (List String)) -> List String
-lookupImports name [] = []
-lookupImports name ((Pair n deps) :: rest) = if n == name then deps else lookupImports name rest
-
-topoVisitGo : Int -> List (Pair String (List String)) -> List String -> List String -> List String -> Pair (List String) (List String)
-topoVisitGo fuel graph [] visited order = Pair visited order
-topoVisitGo fuel graph (name :: rest) visited order =
-  if fuel <= 0 then
-    Pair visited order
-  else if memName name visited then
-    topoVisitGo fuel graph rest visited order
-  else
-    let
-      deps = lookupImports name graph
-      after = topoVisitGo (fuel - 1) graph deps visited order
-    in topoVisitGo (fuel - 1) graph rest (name :: firstOf after) (name :: secondOf after)
-
--- | 依赖在前的模块顺序（未出现在表里的名字被跳过）。
---
--- 累加器是「反向拓扑序」（名字在依赖之前 prepend），所以只在**最外层** reverse 一次：
--- 在递归 base case 里 reverse 会让嵌套调用把已排好的前缀翻乱——依赖模块
--- 排在使用者之后，算地址时依赖还没分配、退化成 `ext:` 哨兵（跨包接口因此永不命中）。
-export topoModules : List (Pair String (List String)) -> List String
-topoModules graph = reverse (secondOf (topoVisitGo 8192 graph (map firstOf graph) [] []))
 
 -- ---------------------------------------------------------------
 -- 从 parse 产物抽出 header
