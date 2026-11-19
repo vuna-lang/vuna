@@ -504,7 +504,14 @@ tyDeclOf table allDatas unboxed d =
     Nothing =>
       if hasRecordRepr d then
         case dtDataCtors d of
-          [c] => Vuna.Compiler.Base.Common.bind (ctorFieldTys levels table allDatas (ctorKeepFlags c) (ctorOpaqueFlagsOf allDatas c) (dtCtorTelescope c) 0 (eval [] (dtCtorType c)) arity) (\p => OkC (IrRecordDecl (dtDataName d) (secondOf p) (recordRtFields d) (firstOf p)))
+          [c] =>
+            Vuna.Compiler.Base.Common.bind (ctorFieldTys levels table allDatas (ctorKeepFlags c) (ctorOpaqueFlagsOf allDatas c) (dtCtorTelescope c) 0 (eval [] (dtCtorType c)) arity) (
+                \p =>
+                  let
+                    fields = recordRtFields d
+                    tys = firstOf p
+                  in if listLength fields == listLength tys then OkC (IrRecordDecl (dtDataName d) (secondOf p) fields tys) else icInternal "record `${dtDataName d}` has ${strFromInt (listLength fields)} runtime fields but ${strFromInt (listLength tys)} field types"
+              )
           _ => icInternal "record family must have exactly one constructor: ${dtDataName d}"
       else
         Vuna.Compiler.Base.Common.bind (dataArityNeed levels table allDatas (dtDataCtors d)) (\fullArity => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (\c => Vuna.Compiler.Base.Common.bind (ctorFieldTys levels table allDatas (ctorKeepFlags c) (ctorOpaqueFlagsOf allDatas c) (dtCtorTelescope c) 0 (eval [] (dtCtorType c)) (listLength levels)) (\p => OkC (Pair (dtCtorName c) (firstOf p)))) (dtDataCtors d)) (\ctors => OkC (IrVariantDecl (dtDataName d) fullArity ctors)))

@@ -19,14 +19,14 @@ import Vuna.Compiler.Base.Common
 
 -- | 单元级校验：定义名唯一、分组自洽（每个依赖要么在更早的组、要么在同组）、
 -- 运行时符号已声明且 arity 一致。分组自洽用一次线性扫描，不重跑 SCC。
-export validateUnit : IrUnit -> Check Int
-validateUnit u =
+export validateUnit : IrShared -> IrUnit -> Check Int
+validateUnit shared u =
   let
     defs = concatMap irGroupDefs u.irUnitGroups
     nameTbl = HashMap.ofNames (map irDefName defs)
   in Vuna.Compiler.Base.Common.bind
     (checkUniqueDefNames defs)
-    (\_ => Vuna.Compiler.Base.Common.bind (checkGroupOrder u.irUnitGroups nameTbl) (\_ => Vuna.Compiler.Base.Common.bind (checkSymbolRefs (irSymbolsOfUnit u)) (\_ => Vuna.Compiler.Base.Common.bind (checkScopedUnit u) (\_ => Vuna.Compiler.Base.Common.bind (validateTyDecls u.irUnitTyDecls) (\_ => checkBinderTys u.irUnitTyDecls defs)))))
+    (\_ => Vuna.Compiler.Base.Common.bind (checkGroupOrder u.irUnitGroups nameTbl) (\_ => Vuna.Compiler.Base.Common.bind (checkSymbolRefs (irSymbolsOfUnit u)) (\_ => Vuna.Compiler.Base.Common.bind (checkScopedUnit u) (\_ => Vuna.Compiler.Base.Common.bind (validateTyDecls u.irUnitTyDecls) (\_ => checkBinderTys shared u.irUnitTyDecls defs)))))
 
 -- 依赖可见性：组内成员可以互引；跨组引用只能指向已经产出的组。
 checkGroupOrder : List IrGroup -> HashMap String Bool -> Check Int
@@ -87,12 +87,13 @@ export validateProgram : IrProgram -> Check Int
 validateProgram p =
   let
     u = p.irProgUnit
+    shared = p.irProgShared
     defs = concatMap irGroupDefs u.irUnitGroups
   in case u.irUnitEntry of
-    Nothing => validateUnit u
+    Nothing => validateUnit shared u
     Just e =>
       if memName e.irEntryMain (map irDefName defs) then
-        validateUnit u
+        validateUnit shared u
       else
         icInternal "IR entry references an undefined main: `${e.irEntryMain}`"
 
@@ -101,16 +102,16 @@ validateProgram p =
 -- ---------------------------------------------------------------
 -- 注解只能挂在运行时 binder 上（擦除占位必须 `Nothing`）；`IrTyData` 的实参个数
 -- 要与本单元声明的运行时类型参数个数一致。跨单元类型只递归检查实参，不检查 arity。
-checkBinderTys : List IrTyDecl -> List IrDef -> Check Int
-checkBinderTys decls [] = OkC 0
-checkBinderTys decls (d :: rest) =
+checkBinderTys : IrShared -> List IrTyDecl -> List IrDef -> Check Int
+checkBinderTys shared decls [] = OkC 0
+checkBinderTys shared decls (d :: rest) =
   Vuna.Compiler.Base.Common.bind (checkDefTy decls (irDefName d) (irDefTy d)) (
       \_ =>
         Vuna.Compiler.Base.Common.bind (checkDefArityVsSig d) (
             \_ =>
               case irDefBody d of
-                Nothing => checkBinderTys decls rest
-                Just body => Vuna.Compiler.Base.Common.bind (checkBinderTysWork (8 * irSize body + 64) decls [body]) (\_ => checkBinderTys decls rest)
+                Nothing => checkBinderTys shared decls rest
+                Just body => Vuna.Compiler.Base.Common.bind (checkBinderTysWork shared (8 * irSize body + 64) decls [body]) (\_ => checkBinderTys shared decls rest)
           )
     )
 
@@ -146,17 +147,17 @@ checkDefTy decls name (Just ty) =
     ErrC _ => icInternal "definition `${name}` has an invalid runtime signature"
     OkC n => OkC n
 
-checkBinderTysWork : Int -> List IrTyDecl -> List Ir -> Check Int
-checkBinderTysWork fuel decls work =
+checkBinderTysWork : IrShared -> Int -> List IrTyDecl -> List Ir -> Check Int
+checkBinderTysWork shared fuel decls work =
   if fuel <= 0 then
     icFuel "ir-binder-ty"
   else
     case work of
       [] => OkC 0
-      ir :: rest => Vuna.Compiler.Base.Common.bind (checkNodeBinderTys decls ir) (\_ => checkBinderTysWork (fuel - 1) decls (append (map secondOf (scopedChildren [] ir)) rest))
+      ir :: rest => Vuna.Compiler.Base.Common.bind (checkNodeBinderTys shared decls ir) (\_ => checkBinderTysWork shared (fuel - 1) decls (append (map secondOf (scopedChildren [] ir)) rest))
 
-checkNodeBinderTys : List IrTyDecl -> Ir -> Check Int
-checkNodeBinderTys decls ir =
+checkNodeBinderTys : IrShared -> List IrTyDecl -> Ir -> Check Int
+checkNodeBinderTys shared decls ir =
   case ir of
     IrLam bs resultTy _ =>
       Vuna.Compiler.Base.Common.bind (checkBinderTysOf decls bs) (\_ => checkIrTyM decls resultTy)
@@ -166,7 +167,7 @@ checkNodeBinderTys decls ir =
         (checkIrTyM decls caseTy)
         (\_ => Vuna.Compiler.Base.Common.bind (checkIrTyM decls resultTy) (\_ => checkAltBinderTys decls alts))
     IrApp appTy _ _ => checkAppTyM decls appTy
-    IrCtor family ctor tys args => checkCtorTys decls family ctor tys (listLength args)
+    IrCtor family ctor tys args => checkCtorTys shared decls family ctor tys (listLength args)
     IrRecord _ resTy _ => checkIrTyM decls resTy
     IrProj _ _ _ resTy => checkIrTyM decls resTy
     IrRecUpd _ _ _ resTy => checkIrTyM decls resTy
@@ -185,8 +186,8 @@ checkAppTyM decls (Just p) =
     (checkIrTyM decls (Just (firstOf p)))
     (\_ => checkIrTyM decls (Just (secondOf p)))
 
-checkCtorTys : List IrTyDecl -> String -> String -> Maybe (List IrTy) -> Int -> Check Int
-checkCtorTys decls family ctor tys nargs =
+checkCtorTys : IrShared -> List IrTyDecl -> String -> String -> Maybe (List IrTy) -> Int -> Check Int
+checkCtorTys shared decls family ctor tys nargs =
   Vuna.Compiler.Base.Common.bind (checkTyArityListM decls tys) (
       \_ =>
         let
@@ -197,38 +198,30 @@ checkCtorTys decls family ctor tys nargs =
                   Just ts => listLength ts == n
                   Nothing => True
               Nothing => True
-        in if typeArityOk then checkCtorArity decls family ctor nargs else icInternal "constructor application has the wrong runtime type argument count for `${family}`"
+        in if typeArityOk then checkCtorArity shared family ctor nargs else icInternal "constructor application has the wrong runtime type argument count for `${family}`"
     )
 
 checkTyArityListM : List IrTyDecl -> Maybe (List IrTy) -> Check Int
 checkTyArityListM decls Nothing = OkC 0
 checkTyArityListM decls (Just tys) = checkTyArityList decls tys
 
-checkCtorArity : List IrTyDecl -> String -> String -> Int -> Check Int
-checkCtorArity decls family ctor nargs =
-  case ctorFieldCountOf decls family ctor of
-    Just n =>
-      if nargs == n then
-        OkC 0
+-- | 构造子的运行时字段数从**程序级** shared 表取（split 后单元声明表只含本单元，
+--   跨单元构造子在 `decls` 里查不到）。查不到 = IR 引用了未声明的构造子。
+checkCtorArity : IrShared -> String -> String -> Int -> Check Int
+checkCtorArity shared family ctor nargs =
+  case irSharedCtorShapeOf ctor shared.irSharedCtorShapes of
+    Nothing => icInternal "IR references an undeclared constructor: `${ctor}`"
+    Just (Pair fam flags) =>
+      if fam == family then
+        let
+          n = countKeptFlags flags
+        in if nargs == n then OkC 0 else icInternal "constructor `${ctor}` has ${strFromInt nargs} runtime arguments, expected ${strFromInt n}"
       else
-        icInternal
-          "constructor `${ctor}` has ${strFromInt nargs} runtime arguments, expected ${strFromInt n}"
-    Nothing => OkC 0
+        icInternal "constructor `${ctor}` belongs to family `${fam}`, not `${family}`"
 
-ctorFieldCountOf : List IrTyDecl -> String -> String -> Maybe Int
-ctorFieldCountOf [] _ _ = Nothing
-ctorFieldCountOf (d :: rest) family ctor =
-  case d of
-    IrVariantDecl name _ ctors =>
-      if name == family then ctorFieldsIn ctor ctors else ctorFieldCountOf rest family ctor
-    IrRecordDecl name _ _ tys =>
-      if name == family then Just (listLength tys) else ctorFieldCountOf rest family ctor
-    IrUnboxedDecl name _ _ => if name == family then Just 1 else ctorFieldCountOf rest family ctor
-
-ctorFieldsIn : String -> List (Pair String (List IrTy)) -> Maybe Int
-ctorFieldsIn _ [] = Nothing
-ctorFieldsIn ctor (p :: rest) =
-  if firstOf p == ctor then Just (listLength (secondOf p)) else ctorFieldsIn ctor rest
+countKeptFlags : List Bool -> Int
+countKeptFlags [] = 0
+countKeptFlags (k :: rest) = if k then 1 + countKeptFlags rest else countKeptFlags rest
 
 checkIrTyM : List IrTyDecl -> Maybe IrTy -> Check Int
 checkIrTyM decls Nothing = OkC 0

@@ -634,14 +634,23 @@ lowerConAppFinish env st family c args irs =
           case ctorTypeArgsOf env c args of
             Just tys => Just (IrTyData family tys)
             Nothing => Nothing
-      in OkC (Pair (IrRecord family recTy (zipFieldNames fields irs)) st)
+      in Vuna.Compiler.Base.Common.bind
+        (zipFieldNames fields irs)
+        (\pairs => OkC (Pair (IrRecord family recTy pairs) st))
     Nothing => OkC (Pair (IrCtor family c (ctorTypeArgsOf env c args) irs) st)
 
 -- record 构造：运行时节数（与降级后的实参逐位对齐）→ 字段表给出字段源码名。
-zipFieldNames : List (Pair Int String) -> List Ir -> List (Pair String Ir)
-zipFieldNames [] irs = []
-zipFieldNames fields [] = []
-zipFieldNames (f :: fs) (ir :: irs) = Pair (secondOf f) ir :: zipFieldNames fs irs
+-- 两张表都由 `ctorKeepFlags` 驱动，长度不等是内部对齐 bug，不能静默截断。
+zipFieldNames : List (Pair Int String) -> List Ir -> Check (List (Pair String Ir))
+zipFieldNames [] [] = OkC []
+zipFieldNames [] (_ :: _) =
+  icInternal "record construction has more runtime arguments than its runtime field table"
+zipFieldNames (_ :: _) [] =
+  icInternal "record construction has fewer runtime arguments than its runtime field table"
+zipFieldNames (f :: fs) (ir :: irs) =
+  Vuna.Compiler.Base.Common.bind
+    (zipFieldNames fs irs)
+    (\rest => OkC (Pair (secondOf f) ir :: rest))
 
 -- ---------------------------------------------------------------
 -- case / 分支 binder
@@ -1035,12 +1044,16 @@ lookupRtPosIn fi [] n = Nothing
 lookupRtPosIn fi ((Pair i label) :: rest) n =
   if i == fi then Just n else lookupRtPosIn fi rest (n + 1)
 
-lookupRtPositionsIn : List (Pair Int String) -> List Int -> List (Pair Int Int)
-lookupRtPositionsIn fields [] = []
+lookupRtPositionsIn : List (Pair Int String) -> List Int -> Check (List (Pair Int Int))
+lookupRtPositionsIn fields [] = OkC []
 lookupRtPositionsIn fields (i :: rest) =
   case lookupRtPosIn i fields 0 of
-    Just pos => Pair i pos :: lookupRtPositionsIn fields rest
-    Nothing => lookupRtPositionsIn fields rest
+    Just pos =>
+      Vuna.Compiler.Base.Common.bind
+        (lookupRtPositionsIn fields rest)
+        (\ps => OkC (Pair i pos :: ps))
+    Nothing =>
+      icInternal "record update targets field index ${strFromInt i}, which has no runtime field"
 
 nthOpqArgIn : Int -> List Bool -> List (Pair Term Rig) -> Maybe Term
 nthOpqArgIn n [] args = Nothing
@@ -1086,12 +1099,13 @@ lowerRecordUpdateArgsFuel fuel env st binders baseIr baseTy c fields idxs args =
           Just opqs =>
             Vuna.Compiler.Base.Common.bind (alignCtorArgs c keepFlags args) (
                 \runtimeArgs =>
-                  let
-                    positions = lookupRtPositionsIn fields idxs
-                  in Vuna.Compiler.Base.Common.bind (lowerUpdFieldsFuel (fuel - 1) env st binders fields (ctorOpaqueKeptFlags keepFlags opqs) positions runtimeArgs) (
-                      \q =>
-                        case q of
-                          Pair updates st2 => OkC (Pair (IrRecUpd baseIr c updates baseTy) st2)
+                  Vuna.Compiler.Base.Common.bind (lookupRtPositionsIn fields idxs) (
+                      \positions =>
+                        Vuna.Compiler.Base.Common.bind (lowerUpdFieldsFuel (fuel - 1) env st binders fields (ctorOpaqueKeptFlags keepFlags opqs) positions runtimeArgs) (
+                            \q =>
+                              case q of
+                                Pair updates st2 => OkC (Pair (IrRecUpd baseIr c updates baseTy) st2)
+                          )
                     )
               )
 
@@ -1390,7 +1404,7 @@ export lowerUnitChecked : LwEnv -> List String -> List String -> Check IrUnit
 lowerUnitChecked env defNames dataNames =
   Vuna.Compiler.Base.Common.bind
     (lowerUnitAfterChecks env defNames dataNames)
-    (\u => Vuna.Compiler.Base.Common.bind (validateUnit u) (\_ => OkC u))
+    (\u => Vuna.Compiler.Base.Common.bind (validateUnit (lwEnvShared env) u) (\_ => OkC u))
 
 -- | 只做 lowering（程序级检查已由 `checkProgramOf` 跑过；split 路径每个单元用它）。
 --

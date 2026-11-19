@@ -1,0 +1,431 @@
+-- 70 层链式 record：类型参数槽沿字段类型逐层传播，第 k 层要在第 k+1 轮才拿到槽。
+-- 固定 64 轮的旧实现会在链尾静默塌成 0 参数；预算按槽总数派生后必须收敛。
+record L0 a where
+  f : a
+
+record L1 a where
+  f : L0 a
+
+record L2 a where
+  f : L1 a
+
+record L3 a where
+  f : L2 a
+
+record L4 a where
+  f : L3 a
+
+record L5 a where
+  f : L4 a
+
+record L6 a where
+  f : L5 a
+
+record L7 a where
+  f : L6 a
+
+record L8 a where
+  f : L7 a
+
+record L9 a where
+  f : L8 a
+
+record L10 a where
+  f : L9 a
+
+record L11 a where
+  f : L10 a
+
+record L12 a where
+  f : L11 a
+
+record L13 a where
+  f : L12 a
+
+record L14 a where
+  f : L13 a
+
+record L15 a where
+  f : L14 a
+
+record L16 a where
+  f : L15 a
+
+record L17 a where
+  f : L16 a
+
+record L18 a where
+  f : L17 a
+
+record L19 a where
+  f : L18 a
+
+record L20 a where
+  f : L19 a
+
+record L21 a where
+  f : L20 a
+
+record L22 a where
+  f : L21 a
+
+record L23 a where
+  f : L22 a
+
+record L24 a where
+  f : L23 a
+
+record L25 a where
+  f : L24 a
+
+record L26 a where
+  f : L25 a
+
+record L27 a where
+  f : L26 a
+
+record L28 a where
+  f : L27 a
+
+record L29 a where
+  f : L28 a
+
+record L30 a where
+  f : L29 a
+
+record L31 a where
+  f : L30 a
+
+record L32 a where
+  f : L31 a
+
+record L33 a where
+  f : L32 a
+
+record L34 a where
+  f : L33 a
+
+record L35 a where
+  f : L34 a
+
+record L36 a where
+  f : L35 a
+
+record L37 a where
+  f : L36 a
+
+record L38 a where
+  f : L37 a
+
+record L39 a where
+  f : L38 a
+
+record L40 a where
+  f : L39 a
+
+record L41 a where
+  f : L40 a
+
+record L42 a where
+  f : L41 a
+
+record L43 a where
+  f : L42 a
+
+record L44 a where
+  f : L43 a
+
+record L45 a where
+  f : L44 a
+
+record L46 a where
+  f : L45 a
+
+record L47 a where
+  f : L46 a
+
+record L48 a where
+  f : L47 a
+
+record L49 a where
+  f : L48 a
+
+record L50 a where
+  f : L49 a
+
+record L51 a where
+  f : L50 a
+
+record L52 a where
+  f : L51 a
+
+record L53 a where
+  f : L52 a
+
+record L54 a where
+  f : L53 a
+
+record L55 a where
+  f : L54 a
+
+record L56 a where
+  f : L55 a
+
+record L57 a where
+  f : L56 a
+
+record L58 a where
+  f : L57 a
+
+record L59 a where
+  f : L58 a
+
+record L60 a where
+  f : L59 a
+
+record L61 a where
+  f : L60 a
+
+record L62 a where
+  f : L61 a
+
+record L63 a where
+  f : L62 a
+
+record L64 a where
+  f : L63 a
+
+record L65 a where
+  f : L64 a
+
+record L66 a where
+  f : L65 a
+
+record L67 a where
+  f : L66 a
+
+record L68 a where
+  f : L67 a
+
+record L69 a where
+  f : L68 a
+
+record L70 a where
+  f : L69 a
+
+v0 : L0 Int
+v0 = L0 { f = 7 }
+
+v1 : L1 Int
+v1 = L1 { f = v0 }
+
+v2 : L2 Int
+v2 = L2 { f = v1 }
+
+v3 : L3 Int
+v3 = L3 { f = v2 }
+
+v4 : L4 Int
+v4 = L4 { f = v3 }
+
+v5 : L5 Int
+v5 = L5 { f = v4 }
+
+v6 : L6 Int
+v6 = L6 { f = v5 }
+
+v7 : L7 Int
+v7 = L7 { f = v6 }
+
+v8 : L8 Int
+v8 = L8 { f = v7 }
+
+v9 : L9 Int
+v9 = L9 { f = v8 }
+
+v10 : L10 Int
+v10 = L10 { f = v9 }
+
+v11 : L11 Int
+v11 = L11 { f = v10 }
+
+v12 : L12 Int
+v12 = L12 { f = v11 }
+
+v13 : L13 Int
+v13 = L13 { f = v12 }
+
+v14 : L14 Int
+v14 = L14 { f = v13 }
+
+v15 : L15 Int
+v15 = L15 { f = v14 }
+
+v16 : L16 Int
+v16 = L16 { f = v15 }
+
+v17 : L17 Int
+v17 = L17 { f = v16 }
+
+v18 : L18 Int
+v18 = L18 { f = v17 }
+
+v19 : L19 Int
+v19 = L19 { f = v18 }
+
+v20 : L20 Int
+v20 = L20 { f = v19 }
+
+v21 : L21 Int
+v21 = L21 { f = v20 }
+
+v22 : L22 Int
+v22 = L22 { f = v21 }
+
+v23 : L23 Int
+v23 = L23 { f = v22 }
+
+v24 : L24 Int
+v24 = L24 { f = v23 }
+
+v25 : L25 Int
+v25 = L25 { f = v24 }
+
+v26 : L26 Int
+v26 = L26 { f = v25 }
+
+v27 : L27 Int
+v27 = L27 { f = v26 }
+
+v28 : L28 Int
+v28 = L28 { f = v27 }
+
+v29 : L29 Int
+v29 = L29 { f = v28 }
+
+v30 : L30 Int
+v30 = L30 { f = v29 }
+
+v31 : L31 Int
+v31 = L31 { f = v30 }
+
+v32 : L32 Int
+v32 = L32 { f = v31 }
+
+v33 : L33 Int
+v33 = L33 { f = v32 }
+
+v34 : L34 Int
+v34 = L34 { f = v33 }
+
+v35 : L35 Int
+v35 = L35 { f = v34 }
+
+v36 : L36 Int
+v36 = L36 { f = v35 }
+
+v37 : L37 Int
+v37 = L37 { f = v36 }
+
+v38 : L38 Int
+v38 = L38 { f = v37 }
+
+v39 : L39 Int
+v39 = L39 { f = v38 }
+
+v40 : L40 Int
+v40 = L40 { f = v39 }
+
+v41 : L41 Int
+v41 = L41 { f = v40 }
+
+v42 : L42 Int
+v42 = L42 { f = v41 }
+
+v43 : L43 Int
+v43 = L43 { f = v42 }
+
+v44 : L44 Int
+v44 = L44 { f = v43 }
+
+v45 : L45 Int
+v45 = L45 { f = v44 }
+
+v46 : L46 Int
+v46 = L46 { f = v45 }
+
+v47 : L47 Int
+v47 = L47 { f = v46 }
+
+v48 : L48 Int
+v48 = L48 { f = v47 }
+
+v49 : L49 Int
+v49 = L49 { f = v48 }
+
+v50 : L50 Int
+v50 = L50 { f = v49 }
+
+v51 : L51 Int
+v51 = L51 { f = v50 }
+
+v52 : L52 Int
+v52 = L52 { f = v51 }
+
+v53 : L53 Int
+v53 = L53 { f = v52 }
+
+v54 : L54 Int
+v54 = L54 { f = v53 }
+
+v55 : L55 Int
+v55 = L55 { f = v54 }
+
+v56 : L56 Int
+v56 = L56 { f = v55 }
+
+v57 : L57 Int
+v57 = L57 { f = v56 }
+
+v58 : L58 Int
+v58 = L58 { f = v57 }
+
+v59 : L59 Int
+v59 = L59 { f = v58 }
+
+v60 : L60 Int
+v60 = L60 { f = v59 }
+
+v61 : L61 Int
+v61 = L61 { f = v60 }
+
+v62 : L62 Int
+v62 = L62 { f = v61 }
+
+v63 : L63 Int
+v63 = L63 { f = v62 }
+
+v64 : L64 Int
+v64 = L64 { f = v63 }
+
+v65 : L65 Int
+v65 = L65 { f = v64 }
+
+v66 : L66 Int
+v66 = L66 { f = v65 }
+
+v67 : L67 Int
+v67 = L67 { f = v66 }
+
+v68 : L68 Int
+v68 = L68 { f = v67 }
+
+v69 : L69 Int
+v69 = L69 { f = v68 }
+
+v70 : L70 Int
+v70 = L70 { f = v69 }
+
+main : Int
+main =
+  v70.f.f.f.f.f.f.f.f.f.f.f.f.f.f.f.f.f.f.f.f.f.f.f.f.f.f.f.f.f.f.f.f.f.f.f.f.f.f.f.f.f.f.f.f.f.f.f.f.f.f.f.f.f.f.f.f.f.f.f.f.f.f.f.f.f.f.f.f.f.f.f
