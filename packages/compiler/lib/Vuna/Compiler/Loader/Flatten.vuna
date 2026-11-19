@@ -669,7 +669,6 @@ loadModule fuel roots importerPkg modules stack imp =
                 let
                   path = firstOf found
                   root = secondOf found
-                  _ = dbg! "parse-module=${name}"
                 in do
                   text <- fsReadFile path
                   parsed <- parseFileWithPath path text

@@ -1091,7 +1091,7 @@ hostStatusFn : NativeFunc
 hostStatusFn = rtFunc "host_status_get" 0 [IMov (OpReg Rax) (OpRip hostStatusLabel)]
 
 -- | `prim_cleanupPush f`：把 thunk 压进 LIFO（节点 `[closure][next]`），返回 0。
---   只有正常路径会 pop；abort 路径不运行登记表（与 wasm / [debt.md] D42 的边界一致）。
+--   正常路径由 `bracket` 自己 pop；异常/中断路径由效应机器在弹帧前跑（`Base.Effect.Core.dropCleanups`）。
 cleanupPushFn : NativeFunc
 cleanupPushFn =
   rtFunc
