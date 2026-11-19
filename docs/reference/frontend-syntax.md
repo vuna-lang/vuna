@@ -199,8 +199,9 @@
 
 另外两条硬约束：
 
-- `packages/compiler` 的前端**在 seed 闭包里**：改 Parser/Ast 就要 rotate seed，并满足
-  stage1 == stage2；「只是语法」不等于「不进 TCB」。
+- `packages/compiler` 的前端**在 seed 闭包里**：改 Parser/Ast 会让 seed 落后于源码
+  （rotation 时机见 [bootstrap.md](bootstrap.md)），且新 seed 必须满足 stage1 == stage2；
+  「只是语法」不等于「不进 TCB」。
 - `packages/cli` 的 Fmt / Index / Lint / Lsp / Sig 不进 seed，但必须同轮更新，否则工具与编译器漂移。
 
 ## 11. 未支持与已决边界
