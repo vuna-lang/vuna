@@ -19,12 +19,12 @@ import Base.Data.Result as Result
 import Base.Data.String as String
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Base.Intrinsics
-import Vuna.Compiler.Ir.Model
-import Vuna.Compiler.Ir.Analysis
-import Vuna.Compiler.Ir.Cps
-import Vuna.Compiler.Ir.Anf
-import Vuna.Compiler.Ir.Runtime
-import Vuna.Compiler.Ir.Tail
+import Vuna.Ir.Model
+import Vuna.Ir.Analysis
+import Vuna.Ir.Cps
+import Vuna.Ir.Anf
+import Vuna.Ir.Runtime
+import Vuna.Ir.Tail
 import Vuna.Compiler.Wasm.Instr
 import Vuna.Compiler.Wasm.Model
 import Vuna.Compiler.Wasm.Runtime

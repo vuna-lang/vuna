@@ -1,6 +1,6 @@
 # IR 参考：擦除后的中间表示与运行时契约
 
-本文描述三层：`Vuna.Compiler.Ir.*`（IR 数据定义、纯分析与校验）、`Vuna.Compiler.Ir.Runtime`
+本文描述三层：`Vuna.Ir.*`（IR 数据定义、纯分析与校验）、`Vuna.Ir.Runtime`
 （IR ↔ 运行时**契约**）与 `Vuna.Compiler.Lowering.Program`（Core → IR 的唯一入口）、
 `Vuna.Compiler.Codegen.Runtime`（契约的 OCaml 实现）。
 
@@ -45,11 +45,12 @@ Loader → Elab → Core ──Lowering──> IR ──Codegen.{Decl,Term,Assem
 
 | 边界 | 规则 | 守护 |
 | --- | --- | --- |
-| 依赖方向 | `Ir.*` 只允许依赖 `Base.*`：方向由 `packages/compiler/vuna.toml` 的 `[layers]` 声明、loader 在 import 时强制（`"Vuna.Compiler.Ir" = ["Vuna.Compiler.Base"]`，见 [packages.md](packages.md)「层约束」）。`Codegen/` 整目录只吃 IR；上游的唯一消费者是 `Lowering.Program`（Core → IR）与 `Lowering.Checks`（Core 侧检查）。声明归属切分与分文件装配在 `Driver.SplitGen`（Driver 层，允许 import `Elab` 的声明表，但必须路由到 `Lowering.Program`、不得自己消费 `Core` / `Intrinsics`） | `[layers]`（方向）+ `checks.ir-boundary`（正向断言与 IR 形状） |
+| 依赖方向 | `Vuna.Ir.*` 是独立包 `vuna-ir`，只依赖 `vuna-base` 与 `vuna-compiler-base`（位置 / 诊断 / 内建符号表）；跨包可见性由 `[export]` 管，包内没有 web 式层表。`Codegen/` 整目录只吃 IR；上游的唯一消费者是 `Lowering.Program`（Core → IR）与 `Lowering.Checks`（Core 侧检查）。声明归属切分与分文件装配在 `Driver.SplitGen`（Driver 层，允许 import `Elab` 的声明表，但必须路由到 `Lowering.Program`、不得自己消费 `Core` / `Intrinsics`） | `checks.ir-boundary`（正向断言与 IR 形状） + `packages/ir/vuna.toml` 的 `[dependencies]` |
 | 名字 | IR 节点里只有**源码名**与**契约里的运行时符号**（`IrRt` / `IrRtApp`；节点里没有目标文本）；`v_` / `t_` / `C_` / `f_` 前缀、转义、`Unit.` 限定、运行时表达式都属于后端 | 同上 + review |
-| 数据 | IR 只有确定性纯数据（`String` / `Int` / `Bool` / `List` / `Pair` / `Maybe` / `Span`）：不含闭包、`HashMap`、`Value`、`Term` | `Ir.Model` 的 import 面 + `[layers]` |
+| 数据 | IR 只有确定性纯数据（`String` / `Int` / `Bool` / `List` / `Pair` / `Maybe` / `Span`）：不含闭包、`HashMap`、`Value`、`Term` | `Vuna.Ir.Model` 的 import 面 |
+| 编码 | 跨进程边界只用 `Vuna.Ir.Codec`（`Vuna.Compiler.Base.Bytes` 的规范字节文法）；`encode`/`decode` 必须往返（`packages/ir/test/Codec.vuna`） | `vuna test packages/ir` |
 
-## 数据模型（`Vuna.Compiler.Ir.Model`）
+## 数据模型（`Vuna.Ir.Model`）
 
 ### 节点 `Ir`
 
@@ -119,7 +120,7 @@ binder 的**身份**在 Lowering 分配，前缀与编号渲染属后端：
   `usesObs`、定义位置行。它只承载**后端渲染要消费**的表示决策结果；构造子形状、去装箱
   集合、类型参数槽是 Lowering 内部的查表输入，不进 IR。
 
-## 运行时契约（`Vuna.Compiler.Ir.Runtime`）
+## 运行时契约（`Vuna.Ir.Runtime`）
 
 **IR 里没有目标文本**：`IrRt sym` / `IrRtApp sym args` 只引用符号名，符号必须在本契约里
 声明；OCaml 表达式在 `Vuna.Compiler.Codegen.Runtime`（后端表）。这是「一份 IR 驱动所有
@@ -161,7 +162,7 @@ binder 的**身份**在 Lowering 分配，前缀与编号渲染属后端：
 `Codegen.Runtime`（OCaml 文本）。漏任一处会在下一次 `vuna check` 直接报内部错，不会静默
 生成坏代码。
 
-## 表示选择（`Vuna.Compiler.Ir.Represent`）
+## 表示选择（`Vuna.Ir.Represent`）
 
 去装箱族的**项形态**由单独的 pass 决定：`Lowering` 对它们只生成装箱形态（`IrCtor`、
 `IrCase`），`representUnit` 再按 `IrShared.irSharedUnboxed`（族 → 构造子 + 字段号）与
@@ -170,7 +171,7 @@ binder 的**身份**在 Lowering 分配，前缀与编号渲染属后端：
 因此这一步只动项、不碰声明；产物与 pass 之前逐字节一致。
 
 
-## 尾位置标记（`Vuna.Compiler.Ir.Tail`）
+## 尾位置标记（`Vuna.Ir.Tail`）
 
 `Ir.Tail` 是 CPS 之后的共享 pass，输出仍是同一个 `Ir`，只多一层注解：
 
@@ -187,7 +188,7 @@ binder 的**身份**在 Lowering 分配，前缀与编号渲染属后端：
   `IrLam`，避免在效应机器里把普通返回误发成 `return_call`）。
 - `IrTail` 不是 `MkRestTail`：后者是续延 resume 的语义标记，`Ir.Tail` 不改写它。
 
-## 分析与分组（`Vuna.Compiler.Ir.Analysis`）
+## 分析与分组（`Vuna.Ir.Analysis`）
 
 从 `Lowering.Checks` 的同一套算法原样沿用（Kosaraju：完成序 → 反向图收集 → 依赖就绪
 排序），语义与顺序不变（分组顺序决定 `let` / `let rec ... and ...` 的落盘顺序）：

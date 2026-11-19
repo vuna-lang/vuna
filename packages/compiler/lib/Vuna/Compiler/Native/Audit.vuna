@@ -14,8 +14,8 @@ import Base.Data.Int as Int
 import Base.Data.List as List
 import Base.Data.Pair as Pair
 import Base.Data.String as String
-import Vuna.Compiler.Ir.Model
-import Vuna.Compiler.Ir.Runtime
+import Vuna.Ir.Model
+import Vuna.Ir.Runtime
 import Vuna.Compiler.Native.Model
 import Vuna.Compiler.Native.Runtime
 

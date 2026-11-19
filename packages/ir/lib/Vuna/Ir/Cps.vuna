@@ -1,6 +1,6 @@
-module Vuna.Compiler.Ir.Cps where
+module Vuna.Ir.Cps where
 
--- Vuna.Compiler.Ir.Cps：把 `Eff` / `Scoped` 的 thunk 降到显式 CPS。
+-- Vuna.Ir.Cps：把 `Eff` / `Scoped` 的 thunk 降到显式 CPS。
 --
 -- 只改写**效应 thunk**，纯代码保持直接风格：
 --   * `MkEff` / `MkScoped` 的 lambda 增加 continuation 参数 `k`；
@@ -21,9 +21,9 @@ import Base.Data.Maybe as Maybe
 import Base.Data.Pair as Pair
 import Base.Data.Result as Result
 import Base.Data.String as String
-import Vuna.Compiler.Ir.Model
-import Vuna.Compiler.Ir.Tail
-import Vuna.Compiler.Ir.Analysis
+import Vuna.Ir.Model
+import Vuna.Ir.Tail
+import Vuna.Ir.Analysis
 
 -- ---------------------------------------------------------------
 -- 协议名字

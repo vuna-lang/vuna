@@ -11,9 +11,9 @@ import Vuna.Compiler.Core.Canonical
 import Vuna.Compiler.Elab.Types
 import Vuna.Compiler.Elab.Representation
 import Vuna.Compiler.Base.Intrinsics
-import Vuna.Compiler.Ir.Model
-import Vuna.Compiler.Ir.Analysis
-import Vuna.Compiler.Ir.Runtime
+import Vuna.Ir.Model
+import Vuna.Ir.Analysis
+import Vuna.Ir.Runtime
 import Vuna.Compiler.Lowering.Env
 
 -- ---------------------------------------------------------------

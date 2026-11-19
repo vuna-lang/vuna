@@ -4,6 +4,7 @@
 name = "vuna-web-cli"
 
 [dependencies]
+vuna-compiler-base = "../compiler-base"
 vuna-base = "../base"
 vuna-compiler = "../compiler"
 vuna-web = "../web"

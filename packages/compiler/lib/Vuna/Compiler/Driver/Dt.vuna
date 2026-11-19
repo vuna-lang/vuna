@@ -38,9 +38,9 @@ import Vuna.Compiler.Base.Intrinsics
 import Vuna.Compiler.Codegen.Assembly
 import Vuna.Compiler.Lowering.Program
 import Vuna.Compiler.Codegen.Decl
-import Vuna.Compiler.Ir.Model
-import Vuna.Compiler.Ir.Analysis
-import Vuna.Compiler.Ir.Runtime
+import Vuna.Ir.Model
+import Vuna.Ir.Analysis
+import Vuna.Ir.Runtime
 import Vuna.Compiler.Driver.Cache
 import Vuna.Compiler.Driver.Iface
 import Vuna.Compiler.Driver.PerfCache

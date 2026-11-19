@@ -14,9 +14,9 @@ import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Base.Source as Source
 import Base.Container.HashMap as HashMap
 import Vuna.Compiler.Frontend.Ast
-import Vuna.Compiler.Ir.Model
-import Vuna.Compiler.Ir.Analysis
-import Vuna.Compiler.Ir.Runtime
+import Vuna.Ir.Model
+import Vuna.Ir.Analysis
+import Vuna.Ir.Runtime
 import Vuna.Compiler.Codegen.Ocaml.Model
 import Vuna.Compiler.Codegen.Ocaml.Render as Render
 

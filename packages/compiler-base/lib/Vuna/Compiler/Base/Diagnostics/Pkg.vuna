@@ -146,7 +146,7 @@ pkgTemplate (TomlSyntax _) = "<0>"
 pkgTemplate (UnexpectedTopLevelKey _) = "unexpected top-level key \"<0>\""
 pkgTemplate (UnknownSection _) = "unknown section [<0>]"
 pkgTemplate (LayerInvalidName _) =
-  "invalid layer name \"<0>\" (expected a module prefix such as Vuna.Compiler.Ir)"
+  "invalid layer name \"<0>\" (expected a module prefix such as Vuna.Ir)"
 pkgTemplate (LayerInvalidTarget _) =
   "invalid layer target \"<0>\" (expected a module prefix such as Vuna.Compiler.Base)"
 pkgTemplate (LayerKeyMustBeQuoted _) =

@@ -1,5 +1,5 @@
 #!/bin/sh
-# 隐藏效果守卫：packages/compiler/lib 与 packages/cli/lib 不得用 `runPure` 在纯签名里隐藏 Eff 执行。
+# 隐藏效果守卫：编译器 / IR / 工具链 / 入口的 lib 不得用 `runPure` 在纯签名里隐藏 Eff 执行。
 #
 # 用户面已统一到 Eff（main : Eff [] a，由运行时执行）。本脚本统计两个目录下每个 .vuna
 # 文件中 `runPure` 后接 `(` 的调用点数，与基线 nix/checks/data/eff-boundary.allowlist 比较：
@@ -22,7 +22,7 @@ trap 'rm -f "$tmp" "$excTmp"' EXIT
 : >"$excTmp"
 # 显式例外：设计上保留的 tracing/调试通道（nix/eff-boundary.exceptions，每行一个路径；当前不存在）。
 is_exempt() { [ -f "$exc" ] && grep -qxF -- "$1" "$exc"; }
-for f in $(cd "$root" && find packages/compiler/lib packages/cli/lib packages/toolchain/lib packages/plugin-kit/lib -name '*.vuna' 2>/dev/null | sort); do
+for f in $(cd "$root" && find packages/compiler/lib packages/compiler-base/lib packages/ir/lib packages/cli/lib packages/toolchain/lib packages/plugin-kit/lib -name '*.vuna' 2>/dev/null | sort); do
   # 跨行也算：`runPure` 与 `(` 被 fmt 拆成两行时，逐行 grep 会漏计。
   n=$(tr '\n' ' ' <"$root/$f" | grep -oE '\brunPure[[:space:]]*\(' | wc -l | tr -d ' ')
   if is_exempt "$f"; then
@@ -64,7 +64,7 @@ fi
 # `Ir/Runtime.vuna` 与各后端的 `Runtime.vuna` 是运行时符号表，字符串里的 `prim_eff_*`
 # 是契约数据/目标符号，不是源码调用，均豁免）。用户源码写不出这些名字（词法只认
 # `@vuna@` 前缀的完整内部名，且隐藏 intrinsic 不进用户可见名单）。
-oldNames=$(cd "$root" && grep -rn "\bprim_eff_" packages/compiler/lib packages/cli/lib packages/toolchain/lib packages/plugin-kit/lib --include='*.vuna' 2>/dev/null | grep -v '@vuna@' | grep -v 'Vuna/Compiler/Base/Intrinsics.vuna' | grep -v 'Vuna/Compiler/Ir/Runtime.vuna' | grep -v 'Vuna/Compiler/Codegen/Runtime.vuna' | grep -v 'Vuna/Compiler/Native/Runtime.vuna' | grep -v 'Vuna/Compiler/Wasm/Runtime.vuna' || true)
+oldNames=$(cd "$root" && grep -rn "\bprim_eff_" packages/compiler/lib packages/compiler-base/lib packages/ir/lib packages/cli/lib packages/toolchain/lib packages/plugin-kit/lib --include='*.vuna' 2>/dev/null | grep -v '@vuna@' | grep -v 'Vuna/Compiler/Base/Intrinsics.vuna' | grep -v 'Vuna/Ir/Runtime.vuna' | grep -v 'Vuna/Compiler/Codegen/Runtime.vuna' | grep -v 'Vuna/Compiler/Native/Runtime.vuna' | grep -v 'Vuna/Compiler/Wasm/Runtime.vuna' || true)
 if [ -n "$oldNames" ]; then
   echo "eff-boundary: 发现可见宿主原语名（应改成 @vuna@ 内部名）：" >&2
   printf '%s\n' "$oldNames" | head -10 | sed 's/^/  /' >&2

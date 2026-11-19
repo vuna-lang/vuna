@@ -85,16 +85,16 @@ for f in \
   packages/compiler/lib/Vuna/Compiler/Codegen/Assembly.vuna
 do
   [ -f "$f" ] || continue
-  if ! imports_of "$f" | grep -qE '^Vuna\.Compiler\.Ir(\.|$)'; then
-    echo "ir-boundary: $f does not import Vuna.Compiler.Ir (backend must consume IR)"
+  if ! imports_of "$f" | grep -qE '^Vuna\.Ir(\.|$)'; then
+    echo "ir-boundary: $f does not import Vuna.Ir (backend must consume IR)"
     fail=$((fail + 1))
   fi
 done
 
 # 规则 6（IR 只认符号契约）：`IrRuntime` / `IrBridge` 这类目标文本节点不得出现。
 if grep -nE '\bIrRuntime\b|\bIrBridge\b' \
-  packages/compiler/lib/Vuna/Compiler/Ir/Model.vuna \
-  packages/compiler/lib/Vuna/Compiler/Ir/Runtime.vuna \
+  packages/ir/lib/Vuna/Ir/Model.vuna \
+  packages/ir/lib/Vuna/Ir/Runtime.vuna \
   packages/compiler/lib/Vuna/Compiler/Lowering/Program.vuna \
   packages/compiler/lib/Vuna/Compiler/Codegen/Term.vuna
 then
@@ -109,8 +109,8 @@ fi
 # 「两个相邻字面量之间的空格」当成字面量内容（`Pair "fs" "Base.X"` 的
 # `" "` 就命中），对任何成对出现的字符串表都误报。
 if grep -noE '"[^"]*"' \
-  packages/compiler/lib/Vuna/Compiler/Ir/Model.vuna \
-  packages/compiler/lib/Vuna/Compiler/Ir/Runtime.vuna |
+  packages/ir/lib/Vuna/Ir/Model.vuna \
+  packages/ir/lib/Vuna/Ir/Runtime.vuna |
   grep -E '[ (){}]'
 then
   echo "ir-boundary: IR data module contains a text literal with spaces/brackets (target text?)"
@@ -118,15 +118,15 @@ then
 fi
 
 # 规则 8（正向断言）：契约与 OCaml 符号表存在，且 Lowering 用后端表做一致性检查。
-for f in packages/compiler/lib/Vuna/Compiler/Ir/Runtime.vuna packages/compiler/lib/Vuna/Compiler/Codegen/Runtime.vuna; do
+for f in packages/ir/lib/Vuna/Ir/Runtime.vuna packages/compiler/lib/Vuna/Compiler/Codegen/Runtime.vuna; do
   if [ ! -f "$f" ]; then
     echo "ir-boundary: missing $f (IR runtime contract)"
     fail=$((fail + 1))
   fi
 done
 TABLE=packages/compiler/lib/Vuna/Compiler/Codegen/Runtime.vuna
-if [ -f "$TABLE" ] && ! imports_of "$TABLE" | grep -qE '^Vuna\.Compiler\.Ir(\.|$)'; then
-  echo "ir-boundary: $TABLE does not import Vuna.Compiler.Ir (table must be keyed by the contract)"
+if [ -f "$TABLE" ] && ! imports_of "$TABLE" | grep -qE '^Vuna\.Ir(\.|$)'; then
+  echo "ir-boundary: $TABLE does not import Vuna.Ir (table must be keyed by the contract)"
   fail=$((fail + 1))
 fi
 if [ -f "$LOWER" ] && ! imports_of "$LOWER" | grep -qE '^Vuna\.Compiler\.Codegen\.Runtime$'; then
@@ -137,15 +137,15 @@ fi
 # 规则 9（native 后端）：`Native.Module` 必须消费 IR。
 NATIVE_MODULE=packages/compiler/lib/Vuna/Compiler/Native/Module.vuna
 if [ -f "$NATIVE_MODULE" ]; then
-  if ! imports_of "$NATIVE_MODULE" | grep -qE '^Vuna\.Compiler\.Ir(\.|$)'; then
-    echo "ir-boundary: $NATIVE_MODULE does not import Vuna.Compiler.Ir (native backend must consume IR)"
+  if ! imports_of "$NATIVE_MODULE" | grep -qE '^Vuna\.Ir(\.|$)'; then
+    echo "ir-boundary: $NATIVE_MODULE does not import Vuna.Ir (native backend must consume IR)"
     fail=$((fail + 1))
   fi
 fi
 
 # 规则 11（后端模型层）：`Codegen/Ocaml/Model.vuna` 与 `Ir/Model.vuna` 的代码行（去注释）
 # 不得出现目标文本前缀（`v_` / `t_` / `C_` / `f_` / `Unit.`）：模型只装形状。
-for model in packages/compiler/lib/Vuna/Compiler/Codegen/Ocaml/Model.vuna packages/compiler/lib/Vuna/Compiler/Ir/Model.vuna; do
+for model in packages/compiler/lib/Vuna/Compiler/Codegen/Ocaml/Model.vuna packages/ir/lib/Vuna/Ir/Model.vuna; do
   [ -f "$model" ] || continue
   if sed -e "s/--.*//" "$model" | grep -qE "\"(v_|t_|C_|f_|Unit\.)"; then
     echo "ir-boundary: $model contains target text (model layer must stay shape-only)"
@@ -156,8 +156,8 @@ done
 # 规则 10（wasm 后端）：`Wasm.Module` 必须消费 IR。
 WASM_MODULE=packages/compiler/lib/Vuna/Compiler/Wasm/Module.vuna
 if [ -f "$WASM_MODULE" ]; then
-  if ! imports_of "$WASM_MODULE" | grep -qE '^Vuna\.Compiler\.Ir(\.|$)'; then
-    echo "ir-boundary: $WASM_MODULE does not import Vuna.Compiler.Ir (wasm backend must consume IR)"
+  if ! imports_of "$WASM_MODULE" | grep -qE '^Vuna\.Ir(\.|$)'; then
+    echo "ir-boundary: $WASM_MODULE does not import Vuna.Ir (wasm backend must consume IR)"
     fail=$((fail + 1))
   fi
 fi

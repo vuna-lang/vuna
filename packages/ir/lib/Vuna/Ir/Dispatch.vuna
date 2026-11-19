@@ -1,6 +1,6 @@
-module Vuna.Compiler.Ir.Dispatch where
+module Vuna.Ir.Dispatch where
 
--- Vuna.Compiler.Ir.Dispatch：效应派发的字符串路由 → 整数 id。
+-- Vuna.Ir.Dispatch：效应派发的字符串路由 → 整数 id。
 --
 -- Elab 产出 `performCore n key sig op` / `handleWith n key …`；基库包装调用
 -- `sendCore … "console" n …`。这些应用的**前两个运行时实参**是路由对 (key, name)：
@@ -15,7 +15,7 @@ module Vuna.Compiler.Ir.Dispatch where
 import Base.Data.List as List
 import Base.Data.Pair as Pair
 import Vuna.Compiler.Base.Intrinsics
-import Vuna.Compiler.Ir.Model
+import Vuna.Ir.Model
 
 -- | 派发入口的旧 arity → 整数 id 版的入口名。命中时在路由对后面插入两个 id 实参：
 -- `f a b rest…` → `fId a b (idOf a) (idOf b) rest…`。

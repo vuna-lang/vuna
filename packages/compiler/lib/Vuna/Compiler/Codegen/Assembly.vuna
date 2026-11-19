@@ -12,9 +12,9 @@ module Vuna.Compiler.Codegen.Assembly where
 -- `Codegen.Term` 生成 `Unit.name` 全限定名；`UnitParts` 同时带出该单元**直接引用**
 -- 到的依赖单元（`unitPartsDeps`），供 `Driver.SplitGen` 写进 `SplitFile` 与 build.sh。
 import Vuna.Compiler.Base.Common
-import Vuna.Compiler.Ir.Model
-import Vuna.Compiler.Ir.Analysis
-import Vuna.Compiler.Ir.Runtime
+import Vuna.Ir.Model
+import Vuna.Ir.Analysis
+import Vuna.Ir.Runtime
 import Vuna.Compiler.Codegen.Decl
 import Vuna.Compiler.Codegen.Term
 import Vuna.Compiler.Codegen.Ocaml.Render

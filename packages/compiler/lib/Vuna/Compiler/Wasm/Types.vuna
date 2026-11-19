@@ -16,9 +16,9 @@ import Base.Data.List as List
 import Base.Data.Maybe as Maybe
 import Base.Data.Pair as Pair
 import Base.Data.String as String
-import Vuna.Compiler.Ir.Model
-import Vuna.Compiler.Ir.Analysis
-import Vuna.Compiler.Ir.Runtime
+import Vuna.Ir.Model
+import Vuna.Ir.Analysis
+import Vuna.Ir.Runtime
 import Vuna.Compiler.Wasm.Model
 
 -- | 族的运行时形状。

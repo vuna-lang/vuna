@@ -18,18 +18,18 @@ module Vuna.Compiler.Native.Module where
 --   * 内部 label（`.L<n>`）是文件局部符号，编号在模块内跨定义累加；
 --   * 生成器带 fuel，越界报 `NativeInternal`，不 panic。
 --
--- 边界：只 import Base、`Vuna.Compiler.Ir` 与 `Native.*`。
+-- 边界：只 import Base、`Vuna.Ir` 与 `Native.*`。
 import Base.Data.Bool as Bool
 import Base.Data.Int as Int
 import Base.Data.List as List
 import Base.Data.Maybe as Maybe
 import Base.Data.Pair as Pair
 import Base.Data.String as String
-import Vuna.Compiler.Ir.Model
-import Vuna.Compiler.Ir.Cps
-import Vuna.Compiler.Ir.Analysis
-import Vuna.Compiler.Ir.Runtime
-import Vuna.Compiler.Ir.Tail
+import Vuna.Ir.Model
+import Vuna.Ir.Cps
+import Vuna.Ir.Analysis
+import Vuna.Ir.Runtime
+import Vuna.Ir.Tail
 import Vuna.Compiler.Native.Abi
 import Vuna.Compiler.Native.Audit
 import Vuna.Compiler.Native.Model

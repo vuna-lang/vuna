@@ -175,8 +175,8 @@ stdout/stderr 大输出不受线性内存大小限制）；读按 `filestat` 的
 
 ## 6. 实现约束
 
-- `Wasm` 子模块只 import `Base.*`、`Ir.*`、`Wasm.*`（方向由 `packages/compiler/vuna.toml` 的
-  `[layers]` 强制：`"Vuna.Compiler.Wasm" = ["Vuna.Compiler.Ir"]`）；驱动只经
+- `Wasm` 子模块只 import `Base.*`、`Vuna.Ir.*`、`Wasm.*`（IR 是独立包 `vuna-ir`；
+  `packages/compiler/vuna.toml` 的 `[layers]` 不再约束 Wasm）；驱动只经
   `Driver.Dt.dtCheckWithProgramParts` + `Lowering.Program.lowerProgramOf`，不 import
   Core/Elab/Intrinsics（`checks.ir-boundary` 只留形状与正向断言）。
 - `Module.build` 是纯函数；`Driver.Wasm.compileWasm` 负责写文件，签名只要求

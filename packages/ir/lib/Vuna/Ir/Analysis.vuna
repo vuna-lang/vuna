@@ -1,6 +1,6 @@
-module Vuna.Compiler.Ir.Analysis where
+module Vuna.Ir.Analysis where
 
--- Vuna.Compiler.Ir.Analysis：IR 依赖分析（SCC 分组）与合法性护栏。
+-- Vuna.Ir.Analysis：IR 依赖分析（SCC 分组）与合法性护栏。
 --
 -- 只依赖 `Ir.Model`（不碰 Core/Elab），因此同一套分组既能服务 Lowering（用 Core 侧算出的
 -- 名字 + 依赖做分组，再按组序降低体），也能服务已降低的 IR（校验 / 检查路径）。
@@ -13,7 +13,7 @@ import Base.Data.List as List
 import Base.Data.Pair as Pair
 import Base.Container.HashMap as HashMap
 import Vuna.Compiler.Base.Diagnostics
-import Vuna.Compiler.Ir.Model
+import Vuna.Ir.Model
 
 -- ---------------------------------------------------------------
 -- 邻接表

@@ -10,9 +10,9 @@ import Vuna.Compiler.Codegen.Ocaml.Render
 import Vuna.Compiler.Codegen.Term
 import Vuna.Compiler.Driver.Dt
 import Vuna.Compiler.Frontend.Packages.Pkg
-import Vuna.Compiler.Ir.Anf
-import Vuna.Compiler.Ir.Cps
-import Vuna.Compiler.Ir.Model
+import Vuna.Ir.Anf
+import Vuna.Ir.Cps
+import Vuna.Ir.Model
 import Vuna.Cli.IrRender
 import Vuna.Compiler.Lowering.Program
 import Base.Effect.Fs as EffFs

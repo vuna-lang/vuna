@@ -18,9 +18,9 @@ import Base.Data.Bool as Bool
 import Base.Data.List as List
 import Base.Data.Maybe as Maybe
 import Base.Data.Pair as Pair
-import Vuna.Compiler.Ir.Model
-import Vuna.Compiler.Ir.Analysis
-import Vuna.Compiler.Ir.Runtime
+import Vuna.Ir.Model
+import Vuna.Ir.Analysis
+import Vuna.Ir.Runtime
 
 ocamlRtTextTable : List (Pair String String)
 ocamlRtTextTable =

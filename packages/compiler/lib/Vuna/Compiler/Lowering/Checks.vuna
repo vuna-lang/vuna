@@ -9,7 +9,7 @@ module Vuna.Compiler.Lowering.Checks where
 --   - de Bruijn 作用域护栏；
 --   - 运行时依赖遍历（`termDepsInto`，供 axiom 检查）与定义体使用事实
 --     （`termUseInto`：运行时依赖 + float / tracing / obs 旗标，一次遍历）。
--- SCC 分组已迁到 `Vuna.Compiler.Ir.Analysis`（IR 层，不依赖 Core 的具体含义之外的东西）；
+-- SCC 分组已迁到 `Vuna.Ir.Analysis`（IR 层，不依赖 Core 的具体含义之外的东西）；
 -- 本模块只提供输入它的「名字级」分析。不产生 OCaml 文本。
 import Base.Data.List as List
 import Vuna.Compiler.Base.Common

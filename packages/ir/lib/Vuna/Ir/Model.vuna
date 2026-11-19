@@ -1,6 +1,6 @@
-module Vuna.Compiler.Ir.Model where
+module Vuna.Ir.Model where
 
--- Vuna.Compiler.Ir.Model：擦除后中间表示（IR）的数据定义（唯一真源）。
+-- Vuna.Ir.Model：擦除后中间表示（IR）的数据定义（唯一真源）。
 --
 -- 定位（Track A 第一步）：`Core --Lower--> IR --OCaml 后端--> 文本`。
 -- IR 是 Core 与**唯一**后端之间的显式契约：

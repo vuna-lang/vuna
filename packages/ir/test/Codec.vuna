@@ -1,0 +1,128 @@
+-- IR codec 的包内测试：规范编码往返、单元编码往返、截断载荷拒绝。
+import Base
+import Base.Effect.Core
+import Vuna.Ir.Model
+import Vuna.Compiler.Base.Source
+import Vuna.Ir.Codec
+import Base.Data.List as List
+import Base.Data.String as String
+
+main : Eff [] String
+main =
+  case filter (\p => not (secondOf p)) results of
+    [] => pure ""
+    bad =>
+      do
+        _ <- prim_eff_print ("ir codec failed: " ++ join "; " (map firstOf bad) ++ "\n")
+        _ <- prim_eff_exit 1
+        pure ""
+
+results : List (Pair String Bool)
+results =
+  [
+    Pair "program-roundtrip" programRoundtrip,
+    Pair "unit-roundtrip" unitRoundtrip,
+    Pair "truncated-rejected" truncatedRejected,
+    Pair "empty-rejected" emptyRejected
+  ]
+
+-- ---------------------------------------------------------------
+-- 夹具：每个构造子至少出现一次
+-- ---------------------------------------------------------------
+sampleTy : IrTy
+sampleTy =
+  IrTyFun
+    IrTyInt
+    (IrTyData "Base.Data.List.List" [IrTyVar 0, IrTyArray (IrTyRef IrTyBool), IrTyStr, IrTyFloat, IrTyOpaque])
+
+sampleIr : Ir
+sampleIr =
+  IrLet
+    [mkIrBinder "x", mkIrBinderErased]
+    (IrCtor "Fam" "Ctor" (Just [IrTyInt]) [IrInt 3, IrStr "hi"])
+    (IrCase (Just IrTyInt) (Just IrTyStr) (IrVar (mkIrBinderTyped "x" IrTyInt)) [IrAlt (Just (Pair "Fam" "Some")) [mkIrBinderArm 1] (IrGlobal "y"), IrAlt Nothing [] (IrRtApp "+" [IrInt 1, IrInt 2])])
+
+sampleBody : Ir
+sampleBody =
+  IrTail
+    (IrIf (IrBool True) (IrApp (Just (Pair IrTyInt IrTyStr)) (IrGlobal "f") (IrInt 7)) (IrNatCase (IrInt 2) 9 (Just (IrAlt Nothing [mkIrBinderNat 9] (IrStr "zero"))) (Just (IrAlt Nothing [mkIrBinderNat 10] (IrStr "succ"))) Nothing))
+
+richIr : Ir
+richIr =
+  IrRecord
+    "Rec"
+    (Just (IrTyData "Rec" [IrTyInt]))
+    [Pair "a" sampleIr, Pair "b" sampleBody, Pair "c" (IrProj (IrGlobal "r") "Rec" "a" (Just IrTyInt)), Pair "d" (IrRecUpd (IrGlobal "r") "Rec" [Pair "a" (IrInt 1)] (Just (IrTyData "Rec" []))), Pair "e" (IrCast (Just IrTyInt) (Just IrTyOpaque) (IrInt 4)), Pair "f" (IrRt "Base.Effect.Core.runPure"), Pair "g" (IrFloatLit "1.5"), Pair "h" (IrConcatMany [IrStr "a", IrStr "b"]), Pair "i" (IrEffThunk "Eff" "MkEff" IrTyInt 1 (IrRtApp "bi_add_int" [IrInt 1, IrInt 2])), Pair "j" (IrEffBind "Eff" "BindEff" IrTyInt)]
+
+sampleTyDecls : List IrTyDecl
+sampleTyDecls =
+  [
+    IrVariantDecl "Opt" 1 [Pair "None" [], Pair "Some" [IrTyVar 0]],
+    IrRecordDecl "Rec" 1 [Pair 0 "a", Pair 1 "b"] [IrTyInt, IrTyStr],
+    IrUnboxedDecl "Wrap" 0 IrTyInt
+  ]
+
+sampleDefs : List IrDef
+sampleDefs =
+  [
+    IrDef "f" 1 ["g"] (Just sampleTy) richIr True False (Just (Span "M.vuna" 1 2 3 4 5 6)),
+    IrExternDef "c_ffi" IrTyInt "c_ffi_impl" Nothing
+  ]
+
+sampleUnit : IrUnit
+sampleUnit =
+  IrUnit
+    sampleTyDecls
+    [IrGroup True sampleDefs, IrGroup False [IrDef "main" 0 [] Nothing (IrInt 0) False True Nothing]]
+    True
+    ["Opt", "Rec"]
+    (Just (IrEntry (IrGlobal "showInt") "main" True (Just "runMain") ["Print"] ["ConsoleOp"]))
+
+sampleShared : IrShared
+sampleShared =
+  IrShared
+    [Pair "Rec" [Pair 0 "a", Pair 1 "b"]]
+    (Just (IrListFam "Base.Data.List.List" "Base.Data.List.Nil" "Base.Data.List.Cons"))
+    True
+    False
+    True
+    [Pair "main" (Pair "M.vuna" 3)]
+    [Pair "Wrap" (Pair "WrapCtor" 0)]
+    [Pair "Some" (Pair "Opt" [True, False])]
+
+sampleProgram : IrProgram
+sampleProgram = IrProgram sampleShared sampleUnit
+
+-- ---------------------------------------------------------------
+-- 检查
+-- ---------------------------------------------------------------
+programRoundtrip : Bool
+programRoundtrip =
+  let
+    bytes = encodeProgram sampleProgram
+  in case decodeProgram 100000 bytes of
+    Nothing => False
+    Just p => encodeProgram p == bytes
+
+unitRoundtrip : Bool
+unitRoundtrip =
+  let
+    bytes = encodeUnit sampleUnit
+  in case decodeUnit 100000 bytes of
+    Nothing => False
+    Just u => encodeUnit u == bytes
+
+truncatedRejected : Bool
+truncatedRejected =
+  let
+    bytes = encodeProgram sampleProgram
+    cut = strSubstring 0 (strLength bytes - 1) bytes
+  in case decodeProgram 100000 cut of
+    Nothing => True
+    Just _ => False
+
+emptyRejected : Bool
+emptyRejected =
+  case decodeProgram 100000 "" of
+    Nothing => True
+    Just _ => False

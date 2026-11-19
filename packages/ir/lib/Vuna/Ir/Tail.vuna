@@ -1,4 +1,4 @@
-module Vuna.Compiler.Ir.Tail where
+module Vuna.Ir.Tail where
 
 -- 尾位置标记 pass。
 --
@@ -15,7 +15,7 @@ import Base.Data.List as List
 import Base.Data.Maybe as Maybe
 import Base.Data.Pair as Pair
 import Base.Data.Result as Result
-import Vuna.Compiler.Ir.Model
+import Vuna.Ir.Model
 
 -- | 定义名 -> 运行时 arity。extern 不参与（没有 IR 调用点）。
 arityTableOf : List IrDef -> HashMap String Int

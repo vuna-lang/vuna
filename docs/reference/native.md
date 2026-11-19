@@ -331,8 +331,7 @@ env，**不进 codegen**（同一 IR 的产物逐字节确定）。解析失败�
 可以重号，改动一个模块不会让其它模块的标签重编号。跨文件引用的函数/数据标签一律
 `.globl`。
 
-依赖方向由 `packages/compiler/vuna.toml` 的 `[layers]` 强制（`"Vuna.Compiler.Native" =
-["Vuna.Compiler.Ir"]`，见 [packages.md](packages.md)「层约束」）：`Native.*` 不得 import
+依赖方向：IR 是独立包 `vuna-ir`（`Native.*` 跨包 import 它），`packages/compiler/vuna.toml` 的 `[layers]` 不再约束 Native：`Native.*` 不得 import
 `Core` / `Elab` / `Intrinsics` / `Codegen` / `Wasm`；`Driver/Native` 不得 import
 `Core` / `Elab` / `Intrinsics`。`checks.ir-boundary` 保留形状与正向断言
 （`Native.Module` 必须 import `Ir`）。

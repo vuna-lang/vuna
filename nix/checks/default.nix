@@ -24,6 +24,8 @@ let
   src = {
     seed = ../../seed;
     compiler = ../../packages/compiler;
+    compilerBase = ../../packages/compiler-base;
+    ir = ../../packages/ir;
     base = ../../packages/base;
     pluginKit = ../../packages/plugin-kit;
     toolchain = ../../packages/toolchain;
@@ -53,6 +55,8 @@ let
   workspace = [
     src.base
     src.compiler
+    src.compilerBase
+    src.ir
     src.pluginKit
     src.toolchain
     src.cli
@@ -155,6 +159,8 @@ let
     srcs = [
       src.seed
       src.compiler
+      src.compilerBase
+      src.ir
       src.base
       src.cli
       src.pluginKit
@@ -323,6 +329,8 @@ in
     name = "vuna-single-pass";
     srcs = [
       src.compiler
+      src.compilerBase
+      src.ir
       src.base
       src.manifest
     ];
@@ -393,6 +401,8 @@ in
     name = "vuna-static";
     srcs = [
       src.compiler
+      src.compilerBase
+      src.ir
       src.cli
       src.base
       src.pluginKit
@@ -422,6 +432,8 @@ in
     name = "vuna-obs-schema";
     srcs = [
       src.compiler
+      src.compilerBase
+      src.ir
       src.base
     ];
     nativeBuildInputs = [

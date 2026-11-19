@@ -1,4 +1,4 @@
-module Vuna.Compiler.Ir.Validate where
+module Vuna.Ir.Validate where
 
 -- 擦除后中间表示（IR）的单元/程序级校验。
 --
@@ -12,9 +12,9 @@ module Vuna.Compiler.Ir.Validate where
 import Base.Data.Maybe as Maybe
 import Base.Data.Pair as Pair
 import Base.Container.HashMap as HashMap
-import Vuna.Compiler.Ir.Model
-import Vuna.Compiler.Ir.Analysis
-import Vuna.Compiler.Ir.Runtime
+import Vuna.Ir.Model
+import Vuna.Ir.Analysis
+import Vuna.Ir.Runtime
 import Vuna.Compiler.Base.Common
 
 -- | 单元级校验：定义名唯一、分组自洽（每个依赖要么在更早的组、要么在同组）、

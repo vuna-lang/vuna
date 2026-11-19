@@ -1,0 +1,36 @@
+# vuna-compiler-base：编译器与 IR 共用的底层（源码位置 / 诊断模型 / 字节与哈希 / 对象库 / 内建符号表）。
+#
+# 单独成包是因为 IR 库与各后端插件都要用它：`Vuna.Compiler.Base.*` 是这条链路的最低层，
+# 不依赖编译器前端 / 精化 / 代码生成。
+[package]
+name = "vuna-compiler-base"
+
+[dependencies]
+vuna-base = "../base"
+
+[export]
+modules = [
+  "Vuna.Compiler.Base.Bytes",
+  "Vuna.Compiler.Base.Capabilities",
+  "Vuna.Compiler.Base.Common",
+  "Vuna.Compiler.Base.Diag",
+  "Vuna.Compiler.Base.Diag.Codec",
+  "Vuna.Compiler.Base.Diag.Format",
+  "Vuna.Compiler.Base.Diagnostics",
+  "Vuna.Compiler.Base.Diagnostics.Cg",
+  "Vuna.Compiler.Base.Diagnostics.Common",
+  "Vuna.Compiler.Base.Diagnostics.Frontend",
+  "Vuna.Compiler.Base.Diagnostics.Ic",
+  "Vuna.Compiler.Base.Diagnostics.Loader",
+  "Vuna.Compiler.Base.Diagnostics.Pkg",
+  "Vuna.Compiler.Base.Diagnostics.Rn",
+  "Vuna.Compiler.Base.Diagnostics.Sink",
+  "Vuna.Compiler.Base.Diagnostics.Tc",
+  "Vuna.Compiler.Base.Diagnostics.Warning",
+  "Vuna.Compiler.Base.Hash",
+  "Vuna.Compiler.Base.Intrinsics",
+  "Vuna.Compiler.Base.Obs",
+  "Vuna.Compiler.Base.Source",
+  "Vuna.Compiler.Base.Store",
+  "Vuna.Compiler.Base.Version",
+]

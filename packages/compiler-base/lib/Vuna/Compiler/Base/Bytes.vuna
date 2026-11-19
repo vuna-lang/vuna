@@ -215,3 +215,15 @@ decPair fa fb fuel c =
   thenPair
     (fa (fuel - 1) c)
     (\x, b1 => thenPair (fb (fuel - 1) b1) (\y, b2 => Just (Pair (Pair x y) b2)))
+
+-- | 解析列表头 `[<n>:`：返回元素个数与游标（元素由调用方逐个解码）。
+--
+-- 供需要**自定界列表但元素解码器不在本模块**的载荷使用（例如 IR codec）。
+export decListHead : Int -> Cur -> Maybe (Pair Int Cur)
+decListHead fuel c =
+  if fuel <= 0 then
+    Nothing
+  else
+    case curChar c of
+      Just 91 => thenPair (decNumStop (fuel - 1) 58 0 (curSkip c)) (\n, b => Just (Pair n b))
+      _ => Nothing

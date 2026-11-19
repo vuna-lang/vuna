@@ -1,0 +1,25 @@
+# vuna-ir：擦除后的中间表示库。编译器前端（Lowering）与各后端插件都依赖它，
+# 它自己只依赖 base 与 compiler-base（位置 / 诊断 / 内建符号表）。
+[package]
+name = "vuna-ir"
+
+[dependencies]
+vuna-base = "../base"
+vuna-compiler-base = "../compiler-base"
+
+# 形状（Model）与各 pass 都是公开面：Lowering 只产出，后端只消费。
+# `Codec` 是跨进程边界的规范编码；`Render`（调试文本）不在这里——它只服务工具链，
+# 见 `packages/toolchain`。
+[export]
+modules = [
+  "Vuna.Ir.Analysis",
+  "Vuna.Ir.Anf",
+  "Vuna.Ir.Codec",
+  "Vuna.Ir.Cps",
+  "Vuna.Ir.Dispatch",
+  "Vuna.Ir.Model",
+  "Vuna.Ir.Represent",
+  "Vuna.Ir.Runtime",
+  "Vuna.Ir.Tail",
+  "Vuna.Ir.Validate",
+]

@@ -6,10 +6,10 @@
 -- 这里只动项。
 --
 -- 纯函数、确定性：同一输入逐字节同一输出；不做燃料预算（每个节点一次结构递归）。
-module Vuna.Compiler.Ir.Represent where
+module Vuna.Ir.Represent where
 
 import Vuna.Compiler.Base.Common
-import Vuna.Compiler.Ir.Model
+import Vuna.Ir.Model
 
 export representUnit : IrShared -> IrUnit -> IrUnit
 representUnit shared u =

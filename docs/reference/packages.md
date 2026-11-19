@@ -201,11 +201,8 @@ modules = [
 
 ```toml
 [layers]
-"Vuna.Compiler.Ir" = ["Vuna.Compiler.Base"]
-"Vuna.Compiler.Codegen" = ["Vuna.Compiler.Base", "Vuna.Compiler.Frontend", "Vuna.Compiler.Ir"]
-"Vuna.Compiler.Lowering" = ["Vuna.Compiler.Base", "Vuna.Compiler.Core", "Vuna.Compiler.Elab", "Vuna.Compiler.Ir", "Vuna.Compiler.Codegen"]
-"Vuna.Compiler.Native" = ["Vuna.Compiler.Ir"]
-"Vuna.Compiler.Wasm" = ["Vuna.Compiler.Ir"]
+"Vuna.Compiler.Codegen" = ["Vuna.Compiler.Frontend"]
+"Vuna.Compiler.Lowering" = ["Vuna.Compiler.Core", "Vuna.Compiler.Elab", "Vuna.Compiler.Codegen"]
 ```
 
 语义（实现 `Vuna.Compiler.Loader.Layers`，由 `Loader.Flatten` 在加载完成后跑一次）：

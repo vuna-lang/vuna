@@ -1,6 +1,6 @@
-module Vuna.Compiler.Ir.Runtime where
+module Vuna.Ir.Runtime where
 
--- Vuna.Compiler.Ir.Runtime：IR ↔ 运行时的**契约**（Track A 第二步）。
+-- Vuna.Ir.Runtime：IR ↔ 运行时的**契约**（Track A 第二步）。
 --
 -- 定位：`Core --Lower--> IR --后端--> 目标文本`。IR 节点里只有**符号**，没有目标文本：
 -- `IrRt sym` / `IrRtApp sym args` 的 `sym` 必须在本模块的契约里声明，后端（当前是
@@ -28,7 +28,7 @@ import Base.Data.Bool as Bool
 import Base.Data.List as List
 import Base.Data.Maybe as Maybe
 import Base.Data.Pair as Pair
-import Vuna.Compiler.Ir.Model
+import Vuna.Ir.Model
 
 -- | 契约里的一条运行时符号：名字 + 是否需要 canonical List 族桥接。
 export record IrRtSym(..) where

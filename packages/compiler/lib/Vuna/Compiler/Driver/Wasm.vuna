@@ -15,7 +15,7 @@ import Vuna.Compiler.Base.Diagnostics.Warning
 import Vuna.Compiler.Driver.Compile
 import Vuna.Compiler.Driver.Dt
 import Vuna.Compiler.Frontend.Packages.Pkg
-import Vuna.Compiler.Ir.Model
+import Vuna.Ir.Model
 import Vuna.Compiler.Lowering.Program
 import Vuna.Compiler.Wasm.Model
 import Vuna.Compiler.Wasm.Module

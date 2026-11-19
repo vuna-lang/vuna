@@ -1,0 +1,1020 @@
+-- | IR 的规范二进制编码 / 解码（跨进程边界用）。
+--
+-- 为什么需要这一层：后端插件与编译器是独立进程，IR 必须能落成字节再读回。
+-- 编码复用 `Vuna.Compiler.Base.Bytes` 的原子文法（自定界、规范顺序），因此：
+--   * 同一 IR 值永远编码成同一串字节（字段顺序固定，不含位置无关的抖动）；
+--   * 每个原子都有对应的 `dec*`，`encodeX` + `decodeX` 构成 roundtrip；
+--   * 载荷是文本字节（不是目标文本），后端只按 `Vuna.Ir.Model` 的形状解释。
+--
+-- 解码按「每步一个具名函数」拆开写：`thenPair` 的深层 lambda 嵌套会让精化器的
+-- 推理预算成倍增长（`IC_FuelExhausted`），拆开后每个声明的形状都很浅。
+--
+-- 边界：只编码 `Vuna.Ir.Model` 的形状 + `Span`（定义位置，供诊断）。不含任何
+-- 目标文本、名字转义或后端决策。
+module Vuna.Ir.Codec where
+
+import Vuna.Ir.Model
+import Vuna.Compiler.Base.Bytes as B
+import Vuna.Compiler.Base.Source
+import Base.Data.List as List
+import Base.Data.Maybe as Maybe
+import Base.Data.Pair as Pair
+import Base.Data.Bool as Bool
+import Base.Data.Int as Int
+import Base.Data.String as String
+
+-- ---------------------------------------------------------------
+-- 原子封装
+-- ---------------------------------------------------------------
+-- | 编码 `List String`（名字表 / 依赖表 / 标签表）。
+encStrs : List String -> List String -> List String
+encStrs xs acc = B.encList B.encStr xs acc
+
+-- | 编码 `List Bool`（构造子 keep flags）。
+encBools : List Bool -> List String -> List String
+encBools xs acc = B.encList B.encBool xs acc
+
+-- | 解码 `List String`。
+decStrs : Int -> B.Cur -> Maybe (Pair (List String) B.Cur)
+decStrs fuel c = B.decList B.decStr fuel c
+
+-- | 解码 `List Bool`。
+decBools : Int -> B.Cur -> Maybe (Pair (List Bool) B.Cur)
+decBools fuel c = B.decList B.decBool fuel c
+
+-- ---------------------------------------------------------------
+-- Span
+-- ---------------------------------------------------------------
+encSpan : Span -> List String -> List String
+encSpan sp acc =
+  B.encStr
+    (spanFile sp)
+    (B.encInt (spanStartLine sp) (B.encInt (spanStartCol sp) (B.encInt (spanEndLine sp) (B.encInt (spanEndCol sp) (B.encInt (spanStartOffset sp) (B.encInt (spanEndOffset sp) acc))))))
+
+encSpanM : Maybe Span -> List String -> List String
+encSpanM sp acc = B.encMaybe encSpan sp acc
+
+decSpan : Int -> B.Cur -> Maybe (Pair Span B.Cur)
+decSpan fuel c = B.thenPair (B.decStr fuel c) (\f, c1 => decSpan1 fuel c1 f)
+
+decSpan1 : Int -> B.Cur -> String -> Maybe (Pair Span B.Cur)
+decSpan1 fuel c f = B.thenPair (B.decInt fuel c) (\sl, c1 => decSpan2 fuel c1 f sl)
+
+decSpan2 : Int -> B.Cur -> String -> Int -> Maybe (Pair Span B.Cur)
+decSpan2 fuel c f sl = B.thenPair (B.decInt fuel c) (\sc, c1 => decSpan3 fuel c1 f sl sc)
+
+decSpan3 : Int -> B.Cur -> String -> Int -> Int -> Maybe (Pair Span B.Cur)
+decSpan3 fuel c f sl sc = B.thenPair (B.decInt fuel c) (\el, c1 => decSpan4 fuel c1 f sl sc el)
+
+decSpan4 : Int -> B.Cur -> String -> Int -> Int -> Int -> Maybe (Pair Span B.Cur)
+decSpan4 fuel c f sl sc el =
+  B.thenPair (B.decInt fuel c) (\ec, c1 => decSpan5 fuel c1 f sl sc el ec)
+
+decSpan5 : Int -> B.Cur -> String -> Int -> Int -> Int -> Int -> Maybe (Pair Span B.Cur)
+decSpan5 fuel c f sl sc el ec =
+  B.thenPair (B.decInt fuel c) (\so, c1 => decSpan6 fuel c1 f sl sc el ec so)
+
+decSpan6 : Int -> B.Cur -> String -> Int -> Int -> Int -> Int -> Int -> Maybe (Pair Span B.Cur)
+decSpan6 fuel c f sl sc el ec so =
+  B.thenPair (B.decInt fuel c) (\eo, c1 => Just (Pair (Span f sl sc el ec so eo) c1))
+
+decSpanM : Int -> B.Cur -> Maybe (Pair (Maybe Span) B.Cur)
+decSpanM fuel c = B.decMaybe decSpan fuel c
+
+-- ---------------------------------------------------------------
+-- IrTy
+-- ---------------------------------------------------------------
+encIrTy : Int -> IrTy -> List String -> List String
+encIrTy fuel ty acc =
+  if fuel <= 0 then
+    acc
+  else
+    case ty of
+      IrTyVar i => B.encTag 0 (B.encInt i acc)
+      IrTyInt => B.encTag 1 acc
+      IrTyStr => B.encTag 2 acc
+      IrTyBool => B.encTag 3 acc
+      IrTyFloat => B.encTag 4 acc
+      IrTyOpaque => B.encTag 5 acc
+      IrTyArray a => B.encTag 6 (encIrTy (fuel - 1) a acc)
+      IrTyRef a => B.encTag 7 (encIrTy (fuel - 1) a acc)
+      IrTyData f xs => B.encTag 8 (B.encStr f (encIrTys (fuel - 1) xs acc))
+      IrTyFun d c => B.encTag 9 (encIrTy (fuel - 1) d (encIrTy (fuel - 1) c acc))
+
+encIrTys : Int -> List IrTy -> List String -> List String
+encIrTys fuel xs acc = "[" :: strFromInt (B.lenOf xs) :: ":" :: encIrTysGo fuel xs acc
+
+encIrTysGo : Int -> List IrTy -> List String -> List String
+encIrTysGo fuel xs acc =
+  if fuel <= 0 then
+    acc
+  else
+    case xs of
+      [] => acc
+      x :: rest => encIrTy (fuel - 1) x (encIrTysGo (fuel - 1) rest acc)
+
+encIrTyM : Int -> Maybe IrTy -> List String -> List String
+encIrTyM fuel ty acc =
+  if fuel <= 0 then
+    acc
+  else
+    case ty of
+      Nothing => "0" :: acc
+      Just x => "1" :: encIrTy (fuel - 1) x acc
+
+decIrTys : Int -> B.Cur -> Maybe (Pair (List IrTy) B.Cur)
+decIrTys fuel c =
+  if fuel <= 0 then
+    Nothing
+  else
+    case B.curChar c of
+      Just 91 => B.thenPair (B.decListHead (fuel - 1) c) (\n, c1 => decIrTysGo n (fuel - 1) c1 [])
+      _ => Nothing
+
+decIrTysGo : Int -> Int -> B.Cur -> List IrTy -> Maybe (Pair (List IrTy) B.Cur)
+decIrTysGo n fuel c acc =
+  if n <= 0 then
+    Just (Pair (reverse acc) c)
+  else if fuel <= 0 then
+    Nothing
+  else
+    B.thenPair (decIrTy fuel c) (\x, c1 => decIrTysGo (n - 1) (fuel - 1) c1 (x :: acc))
+
+decIrTy : Int -> B.Cur -> Maybe (Pair IrTy B.Cur)
+decIrTy fuel c =
+  if fuel <= 0 then
+    Nothing
+  else
+    B.thenPair (B.decTag fuel c) (\tag, c1 => decIrTyTag tag (fuel - 1) c1)
+
+decIrTyTag : Int -> Int -> B.Cur -> Maybe (Pair IrTy B.Cur)
+decIrTyTag tag fuel c =
+  case tag of
+    0 => B.thenPair (B.decInt fuel c) (\i, c1 => Just (Pair (IrTyVar i) c1))
+    1 => Just (Pair IrTyInt c)
+    2 => Just (Pair IrTyStr c)
+    3 => Just (Pair IrTyBool c)
+    4 => Just (Pair IrTyFloat c)
+    5 => Just (Pair IrTyOpaque c)
+    6 => decIrTyWrap IrTyArray fuel c
+    7 => decIrTyWrap IrTyRef fuel c
+    8 => decIrTyData fuel c
+    9 => decIrTyFun fuel c
+    _ => Nothing
+
+decIrTyWrap : (IrTy -> IrTy) -> Int -> B.Cur -> Maybe (Pair IrTy B.Cur)
+decIrTyWrap wrap fuel c = B.thenPair (decIrTy fuel c) (\a, c1 => Just (Pair (wrap a) c1))
+
+decIrTyData : Int -> B.Cur -> Maybe (Pair IrTy B.Cur)
+decIrTyData fuel c = B.thenPair (B.decStr fuel c) (\f, c1 => decIrTyData1 fuel c1 f)
+
+decIrTyData1 : Int -> B.Cur -> String -> Maybe (Pair IrTy B.Cur)
+decIrTyData1 fuel c f = B.thenPair (decIrTys fuel c) (\xs, c1 => Just (Pair (IrTyData f xs) c1))
+
+decIrTyFun : Int -> B.Cur -> Maybe (Pair IrTy B.Cur)
+decIrTyFun fuel c = B.thenPair (decIrTy fuel c) (\d, c1 => decIrTyFun1 fuel c1 d)
+
+decIrTyFun1 : Int -> B.Cur -> IrTy -> Maybe (Pair IrTy B.Cur)
+decIrTyFun1 fuel c d = B.thenPair (decIrTy fuel c) (\r, c1 => Just (Pair (IrTyFun d r) c1))
+
+decIrTyM : Int -> B.Cur -> Maybe (Pair (Maybe IrTy) B.Cur)
+decIrTyM fuel c = B.decMaybe decIrTy fuel c
+
+-- ---------------------------------------------------------------
+-- IrBName / IrBinder
+-- ---------------------------------------------------------------
+encBName : IrBName -> List String -> List String
+encBName b acc =
+  case b of
+    IrBUser s => B.encTag 0 (B.encStr s acc)
+    IrBArm n => B.encTag 1 (B.encInt n acc)
+    IrBNat n => B.encTag 2 (B.encInt n acc)
+    IrBWild => B.encTag 3 acc
+
+decBName : Int -> B.Cur -> Maybe (Pair IrBName B.Cur)
+decBName fuel c =
+  if fuel <= 0 then
+    Nothing
+  else
+    B.thenPair (B.decTag fuel c) (\tag, c1 => decBNameTag tag (fuel - 1) c1)
+
+decBNameTag : Int -> Int -> B.Cur -> Maybe (Pair IrBName B.Cur)
+decBNameTag tag fuel c =
+  case tag of
+    0 => B.thenPair (B.decStr fuel c) (\s, c1 => Just (Pair (IrBUser s) c1))
+    1 => B.thenPair (B.decInt fuel c) (\n, c1 => Just (Pair (IrBArm n) c1))
+    2 => B.thenPair (B.decInt fuel c) (\n, c1 => Just (Pair (IrBNat n) c1))
+    3 => Just (Pair IrBWild c)
+    _ => Nothing
+
+encBinder : Int -> IrBinder -> List String -> List String
+encBinder fuel b acc =
+  encBName b.irBinderName (B.encBool b.irBinderErased (encIrTyM (fuel - 1) b.irBinderTy acc))
+
+decBinder : Int -> B.Cur -> Maybe (Pair IrBinder B.Cur)
+decBinder fuel c = B.thenPair (decBName fuel c) (\name, c1 => decBinder1 fuel c1 name)
+
+decBinder1 : Int -> B.Cur -> IrBName -> Maybe (Pair IrBinder B.Cur)
+decBinder1 fuel c name =
+  B.thenPair (B.decBool fuel c) (\erased, c1 => decBinder2 fuel c1 name erased)
+
+decBinder2 : Int -> B.Cur -> IrBName -> Bool -> Maybe (Pair IrBinder B.Cur)
+decBinder2 fuel c name erased =
+  B.thenPair (decIrTyM fuel c) (\ty, c1 => Just (Pair (IrBinder name erased ty) c1))
+
+encBinders : Int -> List IrBinder -> List String -> List String
+encBinders fuel xs acc = "[" :: strFromInt (B.lenOf xs) :: ":" :: encBindersGo fuel xs acc
+
+encBindersGo : Int -> List IrBinder -> List String -> List String
+encBindersGo fuel xs acc =
+  if fuel <= 0 then
+    acc
+  else
+    case xs of
+      [] => acc
+      x :: rest => encBinder (fuel - 1) x (encBindersGo (fuel - 1) rest acc)
+
+decBinders : Int -> B.Cur -> Maybe (Pair (List IrBinder) B.Cur)
+decBinders fuel c = B.decList decBinder fuel c
+
+-- ---------------------------------------------------------------
+-- IrAlt
+-- ---------------------------------------------------------------
+encAlt : Int -> IrAlt -> List String -> List String
+encAlt fuel (IrAlt ctor bs body) acc =
+  B.encMaybe
+    (B.encPair B.encStr B.encStr)
+    ctor
+    (encBinders (fuel - 1) bs (encIr (fuel - 1) body acc))
+
+decAlt : Int -> B.Cur -> Maybe (Pair IrAlt B.Cur)
+decAlt fuel c =
+  B.thenPair (B.decMaybe (B.decPair B.decStr B.decStr) fuel c) (\ctor, c1 => decAlt1 fuel c1 ctor)
+
+decAlt1 : Int -> B.Cur -> Maybe (Pair String String) -> Maybe (Pair IrAlt B.Cur)
+decAlt1 fuel c ctor = B.thenPair (decBinders fuel c) (\bs, c1 => decAlt2 fuel c1 ctor bs)
+
+decAlt2 : Int -> B.Cur -> Maybe (Pair String String) -> List IrBinder -> Maybe (Pair IrAlt B.Cur)
+decAlt2 fuel c ctor bs =
+  B.thenPair (decIr fuel c) (\body, c1 => Just (Pair (IrAlt ctor bs body) c1))
+
+encAlts : Int -> List IrAlt -> List String -> List String
+encAlts fuel xs acc = "[" :: strFromInt (B.lenOf xs) :: ":" :: encAltsGo fuel xs acc
+
+encAltsGo : Int -> List IrAlt -> List String -> List String
+encAltsGo fuel xs acc =
+  if fuel <= 0 then
+    acc
+  else
+    case xs of
+      [] => acc
+      x :: rest => encAlt (fuel - 1) x (encAltsGo (fuel - 1) rest acc)
+
+decAlts : Int -> B.Cur -> Maybe (Pair (List IrAlt) B.Cur)
+decAlts fuel c =
+  if fuel <= 0 then
+    Nothing
+  else
+    case B.curChar c of
+      Just 91 => B.thenPair (B.decListHead (fuel - 1) c) (\n, c1 => decAltsGo n (fuel - 1) c1 [])
+      _ => Nothing
+
+decAltsGo : Int -> Int -> B.Cur -> List IrAlt -> Maybe (Pair (List IrAlt) B.Cur)
+decAltsGo n fuel c acc =
+  if n <= 0 then
+    Just (Pair (reverse acc) c)
+  else if fuel <= 0 then
+    Nothing
+  else
+    B.thenPair (decAlt fuel c) (\x, c1 => decAltsGo (n - 1) (fuel - 1) c1 (x :: acc))
+
+encAltM : Int -> Maybe IrAlt -> List String -> List String
+encAltM fuel a acc =
+  if fuel <= 0 then
+    acc
+  else
+    case a of
+      Nothing => "0" :: acc
+      Just x => "1" :: encAlt (fuel - 1) x acc
+
+decAltM : Int -> B.Cur -> Maybe (Pair (Maybe IrAlt) B.Cur)
+decAltM fuel c =
+  if fuel <= 0 then
+    Nothing
+  else
+    case B.curChar c of
+      Just 48 => Just (Pair Nothing (B.curSkip c))
+      Just 49 => B.thenPair (decAlt (fuel - 1) (B.curSkip c)) (\a, c1 => Just (Pair (Just a) c1))
+      _ => Nothing
+
+-- ---------------------------------------------------------------
+-- Ir：编码
+-- ---------------------------------------------------------------
+encFields : Int -> List (Pair String Ir) -> List String -> List String
+encFields fuel xs acc = "[" :: strFromInt (B.lenOf xs) :: ":" :: encFieldsGo fuel xs acc
+
+encFieldsGo : Int -> List (Pair String Ir) -> List String -> List String
+encFieldsGo fuel xs acc =
+  if fuel <= 0 then
+    acc
+  else
+    case xs of
+      [] => acc
+      (Pair k v) :: rest => B.encStr k (encIr (fuel - 1) v (encFieldsGo (fuel - 1) rest acc))
+
+decFields : Int -> B.Cur -> Maybe (Pair (List (Pair String Ir)) B.Cur)
+decFields fuel c =
+  if fuel <= 0 then
+    Nothing
+  else
+    case B.curChar c of
+      Just 91 => B.thenPair (B.decListHead (fuel - 1) c) (\n, c1 => decFieldsGo n (fuel - 1) c1 [])
+      _ => Nothing
+
+decFieldsGo : Int -> Int -> B.Cur -> List (Pair String Ir) -> Maybe (Pair (List (Pair String Ir)) B.Cur)
+decFieldsGo n fuel c acc =
+  if n <= 0 then
+    Just (Pair (reverse acc) c)
+  else if fuel <= 0 then
+    Nothing
+  else
+    B.thenPair (decField fuel c) (\x, c1 => decFieldsGo (n - 1) (fuel - 1) c1 (x :: acc))
+
+decField : Int -> B.Cur -> Maybe (Pair (Pair String Ir) B.Cur)
+decField fuel c =
+  B.thenPair
+    (B.decStr fuel c)
+    (\k, c1 => B.thenPair (decIr fuel c1) (\v, c2 => Just (Pair (Pair k v) c2)))
+
+encIr : Int -> Ir -> List String -> List String
+encIr fuel ir acc = if fuel <= 0 then acc else encIrCases fuel ir acc
+
+encIrCases : Int -> Ir -> List String -> List String
+encIrCases fuel ir acc =
+  case ir of
+    IrVar b => B.encTag 0 (encBinder (fuel - 1) b acc)
+    IrGlobal name => B.encTag 1 (B.encStr name acc)
+    IrCtor fam ctor tys args =>
+      B.encTag
+        2
+        (B.encStr fam (B.encStr ctor (B.encMaybe (encIrTys (fuel - 1)) tys (encIrs (fuel - 1) args acc))))
+    IrRecord fam resTy fields =>
+      B.encTag 3 (B.encStr fam (encIrTyM (fuel - 1) resTy (encFields (fuel - 1) fields acc)))
+    IrProj base fam field resTy =>
+      B.encTag
+        4
+        (encIr (fuel - 1) base (B.encStr fam (B.encStr field (encIrTyM (fuel - 1) resTy acc))))
+    IrRecUpd base fam fields resTy =>
+      B.encTag
+        5
+        (encIr (fuel - 1) base (B.encStr fam (encFields (fuel - 1) fields (encIrTyM (fuel - 1) resTy acc))))
+    IrRt sym => B.encTag 6 (B.encStr sym acc)
+    IrRtApp sym args => B.encTag 7 (B.encStr sym (encIrs (fuel - 1) args acc))
+    IrCast from to inner =>
+      B.encTag 8 (encIrTyM (fuel - 1) from (encIrTyM (fuel - 1) to (encIr (fuel - 1) inner acc)))
+    IrInt n => B.encTag 9 (B.encInt n acc)
+    IrStr s => B.encTag 10 (B.encStr s acc)
+    IrBool b => B.encTag 11 (B.encBool b acc)
+    IrFloatLit s => B.encTag 12 (B.encStr s acc)
+    IrLet bs scrut body =>
+      B.encTag 13 (encBinders (fuel - 1) bs (encIr (fuel - 1) scrut (encIr (fuel - 1) body acc)))
+    IrLam bs bodyTy body =>
+      B.encTag
+        14
+        (encBinders (fuel - 1) bs (encIrTyM (fuel - 1) bodyTy (encIr (fuel - 1) body acc)))
+    IrApp appTy f a =>
+      B.encTag 15 (encAppTy (fuel - 1) appTy (encIr (fuel - 1) f (encIr (fuel - 1) a acc)))
+    IrTail inner => B.encTag 16 (encIr (fuel - 1) inner acc)
+    IrIf cond th el =>
+      B.encTag 17 (encIr (fuel - 1) cond (encIr (fuel - 1) th (encIr (fuel - 1) el acc)))
+    IrCase scrutTy resTy scrut alts =>
+      B.encTag
+        18
+        (encIrTyM (fuel - 1) scrutTy (encIrTyM (fuel - 1) resTy (encIr (fuel - 1) scrut (encAlts (fuel - 1) alts acc))))
+    IrNatCase scrut fresh zero succ catch =>
+      B.encTag
+        19
+        (encIr (fuel - 1) scrut (B.encInt fresh (encAltM (fuel - 1) zero (encAltM (fuel - 1) succ (encAltM (fuel - 1) catch acc)))))
+    IrConcatMany parts => B.encTag 20 (encIrs (fuel - 1) parts acc)
+    IrEffThunk fam ctor unitTy arity prim =>
+      B.encTag
+        21
+        (B.encStr fam (B.encStr ctor (encIrTy (fuel - 1) unitTy (B.encInt arity (encIr (fuel - 1) prim acc)))))
+    IrEffBind fam ctor unitTy =>
+      B.encTag 22 (B.encStr fam (B.encStr ctor (encIrTy (fuel - 1) unitTy acc)))
+
+encIrs : Int -> List Ir -> List String -> List String
+encIrs fuel xs acc = "[" :: strFromInt (B.lenOf xs) :: ":" :: encIrsGo fuel xs acc
+
+encIrsGo : Int -> List Ir -> List String -> List String
+encIrsGo fuel xs acc =
+  if fuel <= 0 then
+    acc
+  else
+    case xs of
+      [] => acc
+      x :: rest => encIr (fuel - 1) x (encIrsGo (fuel - 1) rest acc)
+
+encAppTy : Int -> Maybe (Pair IrTy IrTy) -> List String -> List String
+encAppTy fuel ty acc =
+  if fuel <= 0 then acc else B.encMaybe (B.encPair (encIrTy (fuel - 1)) (encIrTy (fuel - 1))) ty acc
+
+-- ---------------------------------------------------------------
+-- Ir：解码（每个构造子一个具名函数，保持浅形状）
+-- ---------------------------------------------------------------
+decIr : Int -> B.Cur -> Maybe (Pair Ir B.Cur)
+decIr fuel c =
+  if fuel <= 0 then
+    Nothing
+  else
+    B.thenPair (B.decTag fuel c) (\tag, c1 => decIrTag tag (fuel - 1) c1)
+
+decIrTag : Int -> Int -> B.Cur -> Maybe (Pair Ir B.Cur)
+decIrTag tag fuel c =
+  case tag of
+    0 => decIrVar fuel c
+    1 => decIrGlobal fuel c
+    2 => decIrCtor fuel c
+    3 => decIrRecord fuel c
+    4 => decIrProj fuel c
+    5 => decIrRecUpd fuel c
+    6 => decIrRt fuel c
+    7 => decIrRtApp fuel c
+    8 => decIrCast fuel c
+    9 => decIrInt fuel c
+    10 => decIrStr fuel c
+    11 => decIrBool fuel c
+    12 => decIrFloat fuel c
+    13 => decIrLet fuel c
+    14 => decIrLam fuel c
+    15 => decIrApp fuel c
+    16 => decIrTail fuel c
+    17 => decIrIf fuel c
+    18 => decIrCase fuel c
+    19 => decIrNatCase fuel c
+    20 => decIrConcat fuel c
+    21 => decIrEffThunk fuel c
+    22 => decIrEffBind fuel c
+    _ => Nothing
+
+decIrVar : Int -> B.Cur -> Maybe (Pair Ir B.Cur)
+decIrVar fuel c = B.thenPair (decBinder fuel c) (\b, c1 => Just (Pair (IrVar b) c1))
+
+decIrGlobal : Int -> B.Cur -> Maybe (Pair Ir B.Cur)
+decIrGlobal fuel c = B.thenPair (B.decStr fuel c) (\s, c1 => Just (Pair (IrGlobal s) c1))
+
+decIrCtor : Int -> B.Cur -> Maybe (Pair Ir B.Cur)
+decIrCtor fuel c = B.thenPair (B.decStr fuel c) (\fam, c1 => decIrCtor1 fuel c1 fam)
+
+decIrCtor1 : Int -> B.Cur -> String -> Maybe (Pair Ir B.Cur)
+decIrCtor1 fuel c fam = B.thenPair (B.decStr fuel c) (\ctor, c1 => decIrCtor2 fuel c1 fam ctor)
+
+decIrCtor2 : Int -> B.Cur -> String -> String -> Maybe (Pair Ir B.Cur)
+decIrCtor2 fuel c fam ctor =
+  B.thenPair (B.decMaybe decIrTys fuel c) (\tys, c1 => decIrCtor3 fuel c1 fam ctor tys)
+
+decIrCtor3 : Int -> B.Cur -> String -> String -> Maybe (List IrTy) -> Maybe (Pair Ir B.Cur)
+decIrCtor3 fuel c fam ctor tys =
+  B.thenPair (decIrs fuel c) (\args, c1 => Just (Pair (IrCtor fam ctor tys args) c1))
+
+decIrRecord : Int -> B.Cur -> Maybe (Pair Ir B.Cur)
+decIrRecord fuel c = B.thenPair (B.decStr fuel c) (\fam, c1 => decIrRecord1 fuel c1 fam)
+
+decIrRecord1 : Int -> B.Cur -> String -> Maybe (Pair Ir B.Cur)
+decIrRecord1 fuel c fam =
+  B.thenPair (decIrTyM fuel c) (\resTy, c1 => decIrRecord2 fuel c1 fam resTy)
+
+decIrRecord2 : Int -> B.Cur -> String -> Maybe IrTy -> Maybe (Pair Ir B.Cur)
+decIrRecord2 fuel c fam resTy =
+  B.thenPair (decFields fuel c) (\fields, c1 => Just (Pair (IrRecord fam resTy fields) c1))
+
+decIrProj : Int -> B.Cur -> Maybe (Pair Ir B.Cur)
+decIrProj fuel c = B.thenPair (decIr fuel c) (\base, c1 => decIrProj1 fuel c1 base)
+
+decIrProj1 : Int -> B.Cur -> Ir -> Maybe (Pair Ir B.Cur)
+decIrProj1 fuel c base = B.thenPair (B.decStr fuel c) (\fam, c1 => decIrProj2 fuel c1 base fam)
+
+decIrProj2 : Int -> B.Cur -> Ir -> String -> Maybe (Pair Ir B.Cur)
+decIrProj2 fuel c base fam =
+  B.thenPair (B.decStr fuel c) (\field, c1 => decIrProj3 fuel c1 base fam field)
+
+decIrProj3 : Int -> B.Cur -> Ir -> String -> String -> Maybe (Pair Ir B.Cur)
+decIrProj3 fuel c base fam field =
+  B.thenPair (decIrTyM fuel c) (\resTy, c1 => Just (Pair (IrProj base fam field resTy) c1))
+
+decIrRecUpd : Int -> B.Cur -> Maybe (Pair Ir B.Cur)
+decIrRecUpd fuel c = B.thenPair (decIr fuel c) (\base, c1 => decIrRecUpd1 fuel c1 base)
+
+decIrRecUpd1 : Int -> B.Cur -> Ir -> Maybe (Pair Ir B.Cur)
+decIrRecUpd1 fuel c base = B.thenPair (B.decStr fuel c) (\fam, c1 => decIrRecUpd2 fuel c1 base fam)
+
+decIrRecUpd2 : Int -> B.Cur -> Ir -> String -> Maybe (Pair Ir B.Cur)
+decIrRecUpd2 fuel c base fam =
+  B.thenPair (decFields fuel c) (\fields, c1 => decIrRecUpd3 fuel c1 base fam fields)
+
+decIrRecUpd3 : Int -> B.Cur -> Ir -> String -> List (Pair String Ir) -> Maybe (Pair Ir B.Cur)
+decIrRecUpd3 fuel c base fam fields =
+  B.thenPair (decIrTyM fuel c) (\resTy, c1 => Just (Pair (IrRecUpd base fam fields resTy) c1))
+
+decIrRt : Int -> B.Cur -> Maybe (Pair Ir B.Cur)
+decIrRt fuel c = B.thenPair (B.decStr fuel c) (\sym, c1 => Just (Pair (IrRt sym) c1))
+
+decIrRtApp : Int -> B.Cur -> Maybe (Pair Ir B.Cur)
+decIrRtApp fuel c = B.thenPair (B.decStr fuel c) (\sym, c1 => decIrRtApp1 fuel c1 sym)
+
+decIrRtApp1 : Int -> B.Cur -> String -> Maybe (Pair Ir B.Cur)
+decIrRtApp1 fuel c sym = B.thenPair (decIrs fuel c) (\args, c1 => Just (Pair (IrRtApp sym args) c1))
+
+decIrCast : Int -> B.Cur -> Maybe (Pair Ir B.Cur)
+decIrCast fuel c = B.thenPair (decIrTyM fuel c) (\from, c1 => decIrCast1 fuel c1 from)
+
+decIrCast1 : Int -> B.Cur -> Maybe IrTy -> Maybe (Pair Ir B.Cur)
+decIrCast1 fuel c from = B.thenPair (decIrTyM fuel c) (\to, c1 => decIrCast2 fuel c1 from to)
+
+decIrCast2 : Int -> B.Cur -> Maybe IrTy -> Maybe IrTy -> Maybe (Pair Ir B.Cur)
+decIrCast2 fuel c from to =
+  B.thenPair (decIr fuel c) (\inner, c1 => Just (Pair (IrCast from to inner) c1))
+
+decIrInt : Int -> B.Cur -> Maybe (Pair Ir B.Cur)
+decIrInt fuel c = B.thenPair (B.decInt fuel c) (\n, c1 => Just (Pair (IrInt n) c1))
+
+decIrStr : Int -> B.Cur -> Maybe (Pair Ir B.Cur)
+decIrStr fuel c = B.thenPair (B.decStr fuel c) (\s, c1 => Just (Pair (IrStr s) c1))
+
+decIrBool : Int -> B.Cur -> Maybe (Pair Ir B.Cur)
+decIrBool fuel c = B.thenPair (B.decBool fuel c) (\b, c1 => Just (Pair (IrBool b) c1))
+
+decIrFloat : Int -> B.Cur -> Maybe (Pair Ir B.Cur)
+decIrFloat fuel c = B.thenPair (B.decStr fuel c) (\s, c1 => Just (Pair (IrFloatLit s) c1))
+
+decIrLet : Int -> B.Cur -> Maybe (Pair Ir B.Cur)
+decIrLet fuel c = B.thenPair (decBinders fuel c) (\bs, c1 => decIrLet1 fuel c1 bs)
+
+decIrLet1 : Int -> B.Cur -> List IrBinder -> Maybe (Pair Ir B.Cur)
+decIrLet1 fuel c bs = B.thenPair (decIr fuel c) (\scrut, c1 => decIrLet2 fuel c1 bs scrut)
+
+decIrLet2 : Int -> B.Cur -> List IrBinder -> Ir -> Maybe (Pair Ir B.Cur)
+decIrLet2 fuel c bs scrut =
+  B.thenPair (decIr fuel c) (\body, c1 => Just (Pair (IrLet bs scrut body) c1))
+
+decIrLam : Int -> B.Cur -> Maybe (Pair Ir B.Cur)
+decIrLam fuel c = B.thenPair (decBinders fuel c) (\bs, c1 => decIrLam1 fuel c1 bs)
+
+decIrLam1 : Int -> B.Cur -> List IrBinder -> Maybe (Pair Ir B.Cur)
+decIrLam1 fuel c bs = B.thenPair (decIrTyM fuel c) (\bodyTy, c1 => decIrLam2 fuel c1 bs bodyTy)
+
+decIrLam2 : Int -> B.Cur -> List IrBinder -> Maybe IrTy -> Maybe (Pair Ir B.Cur)
+decIrLam2 fuel c bs bodyTy =
+  B.thenPair (decIr fuel c) (\body, c1 => Just (Pair (IrLam bs bodyTy body) c1))
+
+decIrApp : Int -> B.Cur -> Maybe (Pair Ir B.Cur)
+decIrApp fuel c =
+  B.thenPair (B.decMaybe (B.decPair decIrTy decIrTy) fuel c) (\appTy, c1 => decIrApp1 fuel c1 appTy)
+
+decIrApp1 : Int -> B.Cur -> Maybe (Pair IrTy IrTy) -> Maybe (Pair Ir B.Cur)
+decIrApp1 fuel c appTy = B.thenPair (decIr fuel c) (\f, c1 => decIrApp2 fuel c1 appTy f)
+
+decIrApp2 : Int -> B.Cur -> Maybe (Pair IrTy IrTy) -> Ir -> Maybe (Pair Ir B.Cur)
+decIrApp2 fuel c appTy f = B.thenPair (decIr fuel c) (\a, c1 => Just (Pair (IrApp appTy f a) c1))
+
+decIrTail : Int -> B.Cur -> Maybe (Pair Ir B.Cur)
+decIrTail fuel c = B.thenPair (decIr fuel c) (\inner, c1 => Just (Pair (IrTail inner) c1))
+
+decIrIf : Int -> B.Cur -> Maybe (Pair Ir B.Cur)
+decIrIf fuel c = B.thenPair (decIr fuel c) (\cond, c1 => decIrIf1 fuel c1 cond)
+
+decIrIf1 : Int -> B.Cur -> Ir -> Maybe (Pair Ir B.Cur)
+decIrIf1 fuel c cond = B.thenPair (decIr fuel c) (\th, c1 => decIrIf2 fuel c1 cond th)
+
+decIrIf2 : Int -> B.Cur -> Ir -> Ir -> Maybe (Pair Ir B.Cur)
+decIrIf2 fuel c cond th = B.thenPair (decIr fuel c) (\el, c1 => Just (Pair (IrIf cond th el) c1))
+
+decIrCase : Int -> B.Cur -> Maybe (Pair Ir B.Cur)
+decIrCase fuel c = B.thenPair (decIrTyM fuel c) (\scrutTy, c1 => decIrCase1 fuel c1 scrutTy)
+
+decIrCase1 : Int -> B.Cur -> Maybe IrTy -> Maybe (Pair Ir B.Cur)
+decIrCase1 fuel c scrutTy =
+  B.thenPair (decIrTyM fuel c) (\resTy, c1 => decIrCase2 fuel c1 scrutTy resTy)
+
+decIrCase2 : Int -> B.Cur -> Maybe IrTy -> Maybe IrTy -> Maybe (Pair Ir B.Cur)
+decIrCase2 fuel c scrutTy resTy =
+  B.thenPair (decIr fuel c) (\scrut, c1 => decIrCase3 fuel c1 scrutTy resTy scrut)
+
+decIrCase3 : Int -> B.Cur -> Maybe IrTy -> Maybe IrTy -> Ir -> Maybe (Pair Ir B.Cur)
+decIrCase3 fuel c scrutTy resTy scrut =
+  B.thenPair (decAlts fuel c) (\alts, c1 => Just (Pair (IrCase scrutTy resTy scrut alts) c1))
+
+decIrNatCase : Int -> B.Cur -> Maybe (Pair Ir B.Cur)
+decIrNatCase fuel c = B.thenPair (decIr fuel c) (\scrut, c1 => decIrNatCase1 fuel c1 scrut)
+
+decIrNatCase1 : Int -> B.Cur -> Ir -> Maybe (Pair Ir B.Cur)
+decIrNatCase1 fuel c scrut =
+  B.thenPair (B.decInt fuel c) (\fresh, c1 => decIrNatCase2 fuel c1 scrut fresh)
+
+decIrNatCase2 : Int -> B.Cur -> Ir -> Int -> Maybe (Pair Ir B.Cur)
+decIrNatCase2 fuel c scrut fresh =
+  B.thenPair (decAltM fuel c) (\zero, c1 => decIrNatCase3 fuel c1 scrut fresh zero)
+
+decIrNatCase3 : Int -> B.Cur -> Ir -> Int -> Maybe IrAlt -> Maybe (Pair Ir B.Cur)
+decIrNatCase3 fuel c scrut fresh zero =
+  B.thenPair (decAltM fuel c) (\succ, c1 => decIrNatCase4 fuel c1 scrut fresh zero succ)
+
+decIrNatCase4 : Int -> B.Cur -> Ir -> Int -> Maybe IrAlt -> Maybe IrAlt -> Maybe (Pair Ir B.Cur)
+decIrNatCase4 fuel c scrut fresh zero succ =
+  B.thenPair (decAltM fuel c) (\catch, c1 => Just (Pair (IrNatCase scrut fresh zero succ catch) c1))
+
+decIrConcat : Int -> B.Cur -> Maybe (Pair Ir B.Cur)
+decIrConcat fuel c = B.thenPair (decIrs fuel c) (\parts, c1 => Just (Pair (IrConcatMany parts) c1))
+
+decIrEffThunk : Int -> B.Cur -> Maybe (Pair Ir B.Cur)
+decIrEffThunk fuel c = B.thenPair (B.decStr fuel c) (\fam, c1 => decIrEffThunk1 fuel c1 fam)
+
+decIrEffThunk1 : Int -> B.Cur -> String -> Maybe (Pair Ir B.Cur)
+decIrEffThunk1 fuel c fam =
+  B.thenPair (B.decStr fuel c) (\ctor, c1 => decIrEffThunk2 fuel c1 fam ctor)
+
+decIrEffThunk2 : Int -> B.Cur -> String -> String -> Maybe (Pair Ir B.Cur)
+decIrEffThunk2 fuel c fam ctor =
+  B.thenPair (decIrTy fuel c) (\unitTy, c1 => decIrEffThunk3 fuel c1 fam ctor unitTy)
+
+decIrEffThunk3 : Int -> B.Cur -> String -> String -> IrTy -> Maybe (Pair Ir B.Cur)
+decIrEffThunk3 fuel c fam ctor unitTy =
+  B.thenPair (B.decInt fuel c) (\arity, c1 => decIrEffThunk4 fuel c1 fam ctor unitTy arity)
+
+decIrEffThunk4 : Int -> B.Cur -> String -> String -> IrTy -> Int -> Maybe (Pair Ir B.Cur)
+decIrEffThunk4 fuel c fam ctor unitTy arity =
+  B.thenPair (decIr fuel c) (\prim, c1 => Just (Pair (IrEffThunk fam ctor unitTy arity prim) c1))
+
+decIrEffBind : Int -> B.Cur -> Maybe (Pair Ir B.Cur)
+decIrEffBind fuel c = B.thenPair (B.decStr fuel c) (\fam, c1 => decIrEffBind1 fuel c1 fam)
+
+decIrEffBind1 : Int -> B.Cur -> String -> Maybe (Pair Ir B.Cur)
+decIrEffBind1 fuel c fam =
+  B.thenPair (B.decStr fuel c) (\ctor, c1 => decIrEffBind2 fuel c1 fam ctor)
+
+decIrEffBind2 : Int -> B.Cur -> String -> String -> Maybe (Pair Ir B.Cur)
+decIrEffBind2 fuel c fam ctor =
+  B.thenPair (decIrTy fuel c) (\unitTy, c1 => Just (Pair (IrEffBind fam ctor unitTy) c1))
+
+decIrs : Int -> B.Cur -> Maybe (Pair (List Ir) B.Cur)
+decIrs fuel c =
+  if fuel <= 0 then
+    Nothing
+  else
+    case B.curChar c of
+      Just 91 => B.thenPair (B.decListHead (fuel - 1) c) (\n, c1 => decIrsGo n (fuel - 1) c1 [])
+      _ => Nothing
+
+decIrsGo : Int -> Int -> B.Cur -> List Ir -> Maybe (Pair (List Ir) B.Cur)
+decIrsGo n fuel c acc =
+  if n <= 0 then
+    Just (Pair (reverse acc) c)
+  else if fuel <= 0 then
+    Nothing
+  else
+    B.thenPair (decIr fuel c) (\x, c1 => decIrsGo (n - 1) (fuel - 1) c1 (x :: acc))
+
+-- ---------------------------------------------------------------
+-- IrTyDecl
+-- ---------------------------------------------------------------
+encTyDecl : Int -> IrTyDecl -> List String -> List String
+encTyDecl fuel decl acc =
+  if fuel <= 0 then
+    acc
+  else
+    case decl of
+      IrVariantDecl fam arity ctors => B.encTag 0 (B.encStr fam (B.encInt arity (B.encList (B.encPair B.encStr (encIrTys (fuel - 1))) ctors acc)))
+      IrRecordDecl fam arity order tys => B.encTag 1 (B.encStr fam (B.encInt arity (B.encList (B.encPair B.encInt B.encStr) order (encIrTys (fuel - 1) tys acc))))
+      IrUnboxedDecl fam arity ty => B.encTag 2 (B.encStr fam (B.encInt arity (encIrTy (fuel - 1) ty acc)))
+
+decTyDecl : Int -> B.Cur -> Maybe (Pair IrTyDecl B.Cur)
+decTyDecl fuel c =
+  if fuel <= 0 then
+    Nothing
+  else
+    B.thenPair (B.decTag fuel c) (\tag, c1 => decTyDeclTag tag (fuel - 1) c1)
+
+decTyDeclTag : Int -> Int -> B.Cur -> Maybe (Pair IrTyDecl B.Cur)
+decTyDeclTag tag fuel c =
+  case tag of
+    0 => decTyDeclVariant fuel c
+    1 => decTyDeclRecord fuel c
+    2 => decTyDeclUnboxed fuel c
+    _ => Nothing
+
+decTyDeclVariant : Int -> B.Cur -> Maybe (Pair IrTyDecl B.Cur)
+decTyDeclVariant fuel c = B.thenPair (B.decStr fuel c) (\fam, c1 => decTyDeclVariant1 fuel c1 fam)
+
+decTyDeclVariant1 : Int -> B.Cur -> String -> Maybe (Pair IrTyDecl B.Cur)
+decTyDeclVariant1 fuel c fam =
+  B.thenPair (B.decInt fuel c) (\arity, c1 => decTyDeclVariant2 fuel c1 fam arity)
+
+decTyDeclVariant2 : Int -> B.Cur -> String -> Int -> Maybe (Pair IrTyDecl B.Cur)
+decTyDeclVariant2 fuel c fam arity =
+  B.thenPair
+    (B.decList (B.decPair B.decStr decIrTys) fuel c)
+    (\ctors, c1 => Just (Pair (IrVariantDecl fam arity ctors) c1))
+
+decTyDeclRecord : Int -> B.Cur -> Maybe (Pair IrTyDecl B.Cur)
+decTyDeclRecord fuel c = B.thenPair (B.decStr fuel c) (\fam, c1 => decTyDeclRecord1 fuel c1 fam)
+
+decTyDeclRecord1 : Int -> B.Cur -> String -> Maybe (Pair IrTyDecl B.Cur)
+decTyDeclRecord1 fuel c fam =
+  B.thenPair (B.decInt fuel c) (\arity, c1 => decTyDeclRecord2 fuel c1 fam arity)
+
+decTyDeclRecord2 : Int -> B.Cur -> String -> Int -> Maybe (Pair IrTyDecl B.Cur)
+decTyDeclRecord2 fuel c fam arity =
+  B.thenPair
+    (B.decList (B.decPair B.decInt B.decStr) fuel c)
+    (\order, c1 => decTyDeclRecord3 fuel c1 fam arity order)
+
+decTyDeclRecord3 : Int -> B.Cur -> String -> Int -> List (Pair Int String) -> Maybe (Pair IrTyDecl B.Cur)
+decTyDeclRecord3 fuel c fam arity order =
+  B.thenPair (decIrTys fuel c) (\tys, c1 => Just (Pair (IrRecordDecl fam arity order tys) c1))
+
+decTyDeclUnboxed : Int -> B.Cur -> Maybe (Pair IrTyDecl B.Cur)
+decTyDeclUnboxed fuel c = B.thenPair (B.decStr fuel c) (\fam, c1 => decTyDeclUnboxed1 fuel c1 fam)
+
+decTyDeclUnboxed1 : Int -> B.Cur -> String -> Maybe (Pair IrTyDecl B.Cur)
+decTyDeclUnboxed1 fuel c fam =
+  B.thenPair (B.decInt fuel c) (\arity, c1 => decTyDeclUnboxed2 fuel c1 fam arity)
+
+decTyDeclUnboxed2 : Int -> B.Cur -> String -> Int -> Maybe (Pair IrTyDecl B.Cur)
+decTyDeclUnboxed2 fuel c fam arity =
+  B.thenPair (decIrTy fuel c) (\ty, c1 => Just (Pair (IrUnboxedDecl fam arity ty) c1))
+
+-- ---------------------------------------------------------------
+-- IrDef / IrGroup
+-- ---------------------------------------------------------------
+encDef : Int -> IrDef -> List String -> List String
+encDef fuel decl acc =
+  if fuel <= 0 then
+    acc
+  else
+    case decl of
+      IrDef name arity deps ty body recOk initGuard span => B.encTag 0 (B.encStr name (B.encInt arity (encStrs deps (encIrTyM (fuel - 1) ty (encIr (fuel - 1) body (B.encBool recOk (B.encBool initGuard (encSpanM span acc))))))))
+      IrExternDef name ty cName span => B.encTag 1 (B.encStr name (encIrTy (fuel - 1) ty (B.encStr cName (encSpanM span acc))))
+
+decDef : Int -> B.Cur -> Maybe (Pair IrDef B.Cur)
+decDef fuel c =
+  if fuel <= 0 then
+    Nothing
+  else
+    B.thenPair (B.decTag fuel c) (\tag, c1 => decDefTag tag (fuel - 1) c1)
+
+decDefTag : Int -> Int -> B.Cur -> Maybe (Pair IrDef B.Cur)
+decDefTag tag fuel c =
+  case tag of
+    0 => decDefRec fuel c
+    1 => decDefExtern fuel c
+    _ => Nothing
+
+decDefRec : Int -> B.Cur -> Maybe (Pair IrDef B.Cur)
+decDefRec fuel c = B.thenPair (B.decStr fuel c) (\name, c1 => decDefRec1 fuel c1 name)
+
+decDefRec1 : Int -> B.Cur -> String -> Maybe (Pair IrDef B.Cur)
+decDefRec1 fuel c name = B.thenPair (B.decInt fuel c) (\arity, c1 => decDefRec2 fuel c1 name arity)
+
+decDefRec2 : Int -> B.Cur -> String -> Int -> Maybe (Pair IrDef B.Cur)
+decDefRec2 fuel c name arity =
+  B.thenPair (decStrs fuel c) (\deps, c1 => decDefRec3 fuel c1 name arity deps)
+
+decDefRec3 : Int -> B.Cur -> String -> Int -> List String -> Maybe (Pair IrDef B.Cur)
+decDefRec3 fuel c name arity deps =
+  B.thenPair (decIrTyM fuel c) (\ty, c1 => decDefRec4 fuel c1 name arity deps ty)
+
+decDefRec4 : Int -> B.Cur -> String -> Int -> List String -> Maybe IrTy -> Maybe (Pair IrDef B.Cur)
+decDefRec4 fuel c name arity deps ty =
+  B.thenPair (decIr fuel c) (\body, c1 => decDefRec5 fuel c1 name arity deps ty body)
+
+decDefRec5 : Int -> B.Cur -> String -> Int -> List String -> Maybe IrTy -> Ir -> Maybe (Pair IrDef B.Cur)
+decDefRec5 fuel c name arity deps ty body =
+  B.thenPair (B.decBool fuel c) (\recOk, c1 => decDefRec6 fuel c1 name arity deps ty body recOk)
+
+decDefRec6 : Int -> B.Cur -> String -> Int -> List String -> Maybe IrTy -> Ir -> Bool -> Maybe (Pair IrDef B.Cur)
+decDefRec6 fuel c name arity deps ty body recOk =
+  B.thenPair
+    (B.decBool fuel c)
+    (\initGuard, c1 => decDefRec7 fuel c1 name arity deps ty body recOk initGuard)
+
+decDefRec7 : Int -> B.Cur -> String -> Int -> List String -> Maybe IrTy -> Ir -> Bool -> Bool -> Maybe (Pair IrDef B.Cur)
+decDefRec7 fuel c name arity deps ty body recOk initGuard =
+  B.thenPair
+    (decSpanM fuel c)
+    (\span, c1 => Just (Pair (IrDef name arity deps ty body recOk initGuard span) c1))
+
+decDefExtern : Int -> B.Cur -> Maybe (Pair IrDef B.Cur)
+decDefExtern fuel c = B.thenPair (B.decStr fuel c) (\name, c1 => decDefExtern1 fuel c1 name)
+
+decDefExtern1 : Int -> B.Cur -> String -> Maybe (Pair IrDef B.Cur)
+decDefExtern1 fuel c name = B.thenPair (decIrTy fuel c) (\ty, c1 => decDefExtern2 fuel c1 name ty)
+
+decDefExtern2 : Int -> B.Cur -> String -> IrTy -> Maybe (Pair IrDef B.Cur)
+decDefExtern2 fuel c name ty =
+  B.thenPair (B.decStr fuel c) (\cName, c1 => decDefExtern3 fuel c1 name ty cName)
+
+decDefExtern3 : Int -> B.Cur -> String -> IrTy -> String -> Maybe (Pair IrDef B.Cur)
+decDefExtern3 fuel c name ty cName =
+  B.thenPair (decSpanM fuel c) (\span, c1 => Just (Pair (IrExternDef name ty cName span) c1))
+
+encGroup : Int -> IrGroup -> List String -> List String
+encGroup fuel (IrGroup isRec defs) acc = B.encBool isRec (B.encList (encDef (fuel - 1)) defs acc)
+
+decGroup : Int -> B.Cur -> Maybe (Pair IrGroup B.Cur)
+decGroup fuel c = B.thenPair (B.decBool fuel c) (\isRec, c1 => decGroup1 fuel c1 isRec)
+
+decGroup1 : Int -> B.Cur -> Bool -> Maybe (Pair IrGroup B.Cur)
+decGroup1 fuel c isRec =
+  B.thenPair (B.decList decDef fuel c) (\defs, c1 => Just (Pair (IrGroup isRec defs) c1))
+
+-- ---------------------------------------------------------------
+-- IrEntry
+-- ---------------------------------------------------------------
+encEntry : Int -> IrEntry -> List String -> List String
+encEntry fuel e acc =
+  encIr
+    (fuel - 1)
+    e.irEntryShow
+    (B.encStr e.irEntryMain (B.encBool e.irEntryIsAction (B.encMaybe B.encStr e.irEntryRunMain (encStrs e.irEntryHandlers (encStrs e.irEntryRowTags acc)))))
+
+decEntry : Int -> B.Cur -> Maybe (Pair IrEntry B.Cur)
+decEntry fuel c = B.thenPair (decIr fuel c) (\show, c1 => decEntry1 fuel c1 show)
+
+decEntry1 : Int -> B.Cur -> Ir -> Maybe (Pair IrEntry B.Cur)
+decEntry1 fuel c show = B.thenPair (B.decStr fuel c) (\main, c1 => decEntry2 fuel c1 show main)
+
+decEntry2 : Int -> B.Cur -> Ir -> String -> Maybe (Pair IrEntry B.Cur)
+decEntry2 fuel c show main =
+  B.thenPair (B.decBool fuel c) (\isAction, c1 => decEntry3 fuel c1 show main isAction)
+
+decEntry3 : Int -> B.Cur -> Ir -> String -> Bool -> Maybe (Pair IrEntry B.Cur)
+decEntry3 fuel c show main isAction =
+  B.thenPair
+    (B.decMaybe B.decStr fuel c)
+    (\runMain, c1 => decEntry4 fuel c1 show main isAction runMain)
+
+decEntry4 : Int -> B.Cur -> Ir -> String -> Bool -> Maybe String -> Maybe (Pair IrEntry B.Cur)
+decEntry4 fuel c show main isAction runMain =
+  B.thenPair
+    (decStrs fuel c)
+    (\handlers, c1 => decEntry5 fuel c1 show main isAction runMain handlers)
+
+decEntry5 : Int -> B.Cur -> Ir -> String -> Bool -> Maybe String -> List String -> Maybe (Pair IrEntry B.Cur)
+decEntry5 fuel c show main isAction runMain handlers =
+  B.thenPair
+    (decStrs fuel c)
+    (\rowTags, c1 => Just (Pair (IrEntry show main isAction runMain handlers rowTags) c1))
+
+-- ---------------------------------------------------------------
+-- IrListFam / IrShared
+-- ---------------------------------------------------------------
+encListFam : IrListFam -> List String -> List String
+encListFam (IrListFam fam nil cons) acc = B.encStr fam (B.encStr nil (B.encStr cons acc))
+
+decListFam : Int -> B.Cur -> Maybe (Pair IrListFam B.Cur)
+decListFam fuel c = B.thenPair (B.decStr fuel c) (\fam, c1 => decListFam1 fuel c1 fam)
+
+decListFam1 : Int -> B.Cur -> String -> Maybe (Pair IrListFam B.Cur)
+decListFam1 fuel c fam = B.thenPair (B.decStr fuel c) (\nil, c1 => decListFam2 fuel c1 fam nil)
+
+decListFam2 : Int -> B.Cur -> String -> String -> Maybe (Pair IrListFam B.Cur)
+decListFam2 fuel c fam nil =
+  B.thenPair (B.decStr fuel c) (\cons, c1 => Just (Pair (IrListFam fam nil cons) c1))
+
+-- | 内部：共享元数据的 `(字段序号, 字段源码名)` 表。
+decFieldOrder : Int -> B.Cur -> Maybe (Pair (List (Pair Int String)) B.Cur)
+decFieldOrder fuel c = B.decList (B.decPair B.decInt B.decStr) fuel c
+
+-- | 内部：`(名字, 小整数)` 表（去装箱 / 定义位置）。
+decNamedInt : Int -> B.Cur -> Maybe (Pair (List (Pair String (Pair String Int))) B.Cur)
+decNamedInt fuel c = B.decList (B.decPair B.decStr (B.decPair B.decStr B.decInt)) fuel c
+
+-- | 内部：构造子形状表 `(构造子名, (族名, keep flags))`。
+decCtorShapes : Int -> B.Cur -> Maybe (Pair (List (Pair String (Pair String (List Bool)))) B.Cur)
+decCtorShapes fuel c = B.decList (B.decPair B.decStr (B.decPair B.decStr decBools)) fuel c
+
+encShared : IrShared -> List String -> List String
+encShared s acc =
+  B.encList
+    (B.encPair B.encStr (B.encList (B.encPair B.encInt B.encStr)))
+    s.irSharedRecordFields
+    (B.encMaybe encListFam s.irSharedListFam (B.encBool s.irSharedUsesFloat (B.encBool s.irSharedUsesTrace (B.encBool s.irSharedUsesObs (B.encList (B.encPair B.encStr (B.encPair B.encStr B.encInt)) s.irSharedDefLocs (B.encList (B.encPair B.encStr (B.encPair B.encStr B.encInt)) s.irSharedUnboxed (B.encList (B.encPair B.encStr (B.encPair B.encStr encBools)) s.irSharedCtorShapes acc)))))))
+
+decShared : Int -> B.Cur -> Maybe (Pair IrShared B.Cur)
+decShared fuel c =
+  B.thenPair
+    (B.decList (B.decPair B.decStr (B.decList (B.decPair B.decInt B.decStr))) fuel c)
+    (\recFields, c1 => decShared1 fuel c1 recFields)
+
+decShared1 : Int -> B.Cur -> List (Pair String (List (Pair Int String))) -> Maybe (Pair IrShared B.Cur)
+decShared1 fuel c recFields =
+  B.thenPair (B.decMaybe decListFam fuel c) (\listFam, c1 => decShared2 fuel c1 recFields listFam)
+
+decShared2 : Int -> B.Cur -> List (Pair String (List (Pair Int String))) -> Maybe IrListFam -> Maybe (Pair IrShared B.Cur)
+decShared2 fuel c recFields listFam =
+  B.thenPair (B.decBool fuel c) (\usesFloat, c1 => decShared3 fuel c1 recFields listFam usesFloat)
+
+decShared3 : Int -> B.Cur -> List (Pair String (List (Pair Int String))) -> Maybe IrListFam -> Bool -> Maybe (Pair IrShared B.Cur)
+decShared3 fuel c recFields listFam usesFloat =
+  B.thenPair
+    (B.decBool fuel c)
+    (\usesTrace, c1 => decShared4 fuel c1 recFields listFam usesFloat usesTrace)
+
+decShared4 : Int -> B.Cur -> List (Pair String (List (Pair Int String))) -> Maybe IrListFam -> Bool -> Bool -> Maybe (Pair IrShared B.Cur)
+decShared4 fuel c recFields listFam usesFloat usesTrace =
+  B.thenPair
+    (B.decBool fuel c)
+    (\usesObs, c1 => decShared5 fuel c1 recFields listFam usesFloat usesTrace usesObs)
+
+decShared5 : Int -> B.Cur -> List (Pair String (List (Pair Int String))) -> Maybe IrListFam -> Bool -> Bool -> Bool -> Maybe (Pair IrShared B.Cur)
+decShared5 fuel c recFields listFam usesFloat usesTrace usesObs =
+  B.thenPair
+    (decNamedInt fuel c)
+    (\defLocs, c1 => decShared6 fuel c1 recFields listFam usesFloat usesTrace usesObs defLocs)
+
+decShared6 : Int -> B.Cur -> List (Pair String (List (Pair Int String))) -> Maybe IrListFam -> Bool -> Bool -> Bool -> List (Pair String (Pair String Int)) -> Maybe (Pair IrShared B.Cur)
+decShared6 fuel c recFields listFam usesFloat usesTrace usesObs defLocs =
+  B.thenPair
+    (decNamedInt fuel c)
+    (\unboxed, c1 => decShared7 fuel c1 recFields listFam usesFloat usesTrace usesObs defLocs unboxed)
+
+decShared7 : Int -> B.Cur -> List (Pair String (List (Pair Int String))) -> Maybe IrListFam -> Bool -> Bool -> Bool -> List (Pair String (Pair String Int)) -> List (Pair String (Pair String Int)) -> Maybe (Pair IrShared B.Cur)
+decShared7 fuel c recFields listFam usesFloat usesTrace usesObs defLocs unboxed =
+  B.thenPair
+    (decCtorShapes fuel c)
+    (\ctorShapes, c1 => Just (Pair (IrShared recFields listFam usesFloat usesTrace usesObs defLocs unboxed ctorShapes) c1))
+
+-- ---------------------------------------------------------------
+-- IrUnit / IrProgram
+-- ---------------------------------------------------------------
+encUnit : Int -> IrUnit -> List String -> List String
+encUnit fuel u acc =
+  if fuel <= 0 then
+    acc
+  else
+    B.encList
+      (encTyDecl (fuel - 1))
+      u.irUnitTyDecls
+      (B.encList (encGroup (fuel - 1)) u.irUnitGroups (B.encBool u.irUnitHasListFamily (encStrs u.irUnitTypeRefs (B.encMaybe (encEntry (fuel - 1)) u.irUnitEntry acc))))
+
+decUnit : Int -> B.Cur -> Maybe (Pair IrUnit B.Cur)
+decUnit fuel c = B.thenPair (B.decList decTyDecl fuel c) (\tyDecls, c1 => decUnit1 fuel c1 tyDecls)
+
+decUnit1 : Int -> B.Cur -> List IrTyDecl -> Maybe (Pair IrUnit B.Cur)
+decUnit1 fuel c tyDecls =
+  B.thenPair (B.decList decGroup fuel c) (\groups, c1 => decUnit2 fuel c1 tyDecls groups)
+
+decUnit2 : Int -> B.Cur -> List IrTyDecl -> List IrGroup -> Maybe (Pair IrUnit B.Cur)
+decUnit2 fuel c tyDecls groups =
+  B.thenPair
+    (B.decBool fuel c)
+    (\hasListFamily, c1 => decUnit3 fuel c1 tyDecls groups hasListFamily)
+
+decUnit3 : Int -> B.Cur -> List IrTyDecl -> List IrGroup -> Bool -> Maybe (Pair IrUnit B.Cur)
+decUnit3 fuel c tyDecls groups hasListFamily =
+  B.thenPair
+    (decStrs fuel c)
+    (\typeRefs, c1 => decUnit4 fuel c1 tyDecls groups hasListFamily typeRefs)
+
+decUnit4 : Int -> B.Cur -> List IrTyDecl -> List IrGroup -> Bool -> List String -> Maybe (Pair IrUnit B.Cur)
+decUnit4 fuel c tyDecls groups hasListFamily typeRefs =
+  B.thenPair
+    (B.decMaybe decEntry fuel c)
+    (\entry, c1 => Just (Pair (IrUnit tyDecls groups hasListFamily typeRefs entry) c1))
+
+-- | 编码预算：IR 节点上限（编码是纯遍历，超出说明结构异常）。
+irEncoderFuel : Int
+irEncoderFuel = 16777216
+
+-- | 编码整个程序 IR（进程边界的写侧）。
+export encodeProgram : IrProgram -> String
+encodeProgram p =
+  B.encTop (\x, acc => encShared (irProgSharedOf x) (encUnit irEncoderFuel (irProgUnitOf x) acc)) p
+
+-- | 解码整个程序 IR（进程边界的读侧）；`fuel` 是节点预算，尾随字节拒绝。
+export decodeProgram : Int -> String -> Maybe IrProgram
+decodeProgram fuel bytes =
+  if fuel <= 0 then
+    Nothing
+  else if strLength bytes <= 0 then
+    Nothing
+  else
+    case B.thenPair (decShared fuel (B.curOf bytes)) (\shared, c1 => B.thenPair (decUnit fuel c1) (\unit, c2 => if B.curAtEnd c2 then Just (Pair (IrProgram shared unit) c2) else Nothing)) of
+      Just (Pair prog _) => Just prog
+      Nothing => Nothing
+
+-- | 编码一个单元（分解诊断 / 缓存单单元时用）。
+export encodeUnit : IrUnit -> String
+encodeUnit u = B.encTop (encUnit irEncoderFuel) u
+
+-- | 解码一个单元；`fuel` 是节点预算，尾随字节拒绝。
+export decodeUnit : Int -> String -> Maybe IrUnit
+decodeUnit fuel bytes =
+  if fuel <= 0 then
+    Nothing
+  else if strLength bytes <= 0 then
+    Nothing
+  else
+    case B.thenPair (decUnit fuel (B.curOf bytes)) (\unit, c2 => if B.curAtEnd c2 then Just (Pair unit c2) else Nothing) of
+      Just (Pair unit _) => Just unit
+      Nothing => Nothing

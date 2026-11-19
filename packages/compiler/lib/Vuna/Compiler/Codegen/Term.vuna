@@ -2,7 +2,7 @@ module Vuna.Compiler.Codegen.Term where
 
 -- IR → OCaml 文本 + DT 运行时前缀。
 --
--- 本模块**只消费 IR**（`Vuna.Compiler.Ir`）：擦除判定、表示决策、
+-- 本模块**只消费 IR**（`Vuna.Ir`）：擦除判定、表示决策、
 -- Nat 折回、内联形态、入口分类都在 `Lowering` 完成。这里只剩：
 --   * 运行时文本常量（`dtRuntime` / 报告器 / 浮点与 tracing helper / List 桥接）；
 --   * `Ir` 节点 → OCaml 文本（含跨单元限定与依赖累积）；
@@ -16,9 +16,9 @@ import Base.Data.List as List
 import Vuna.Compiler.Base.Common
 import Base.Container.HashMap as HashMap
 import Vuna.Compiler.Base.Diagnostics
-import Vuna.Compiler.Ir.Model
-import Vuna.Compiler.Ir.Analysis
-import Vuna.Compiler.Ir.Runtime
+import Vuna.Ir.Model
+import Vuna.Ir.Analysis
+import Vuna.Ir.Runtime
 import Vuna.Compiler.Codegen.Decl
 import Vuna.Compiler.Codegen.Ocaml.Model
 import Vuna.Compiler.Codegen.Ocaml.Render

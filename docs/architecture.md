@@ -13,11 +13,15 @@ roots 与 GC / 工具产物来源；排障用 `VUNA_IFACE_AUDIT=1` 双路径对�
 ## 仓库分层
 
 ```text
-packages/compiler/lib/Vuna/Compiler/   （目录即层：层名 = 模块前缀；依赖方向由 packages/compiler/vuna.toml
-                                的 [layers] 执行，见 reference/packages.md「层约束」）
-├─ Base/        Source Common Diag{,.Format,.Codec} Bytes Hash Version Store Obs Intrinsics
+packages/compiler-base/lib/Vuna/Compiler/Base/   （独立包 vuna-compiler-base：IR 与编译器共用的最低层）
+├─ Source Common Diag{,.Format,.Codec} Bytes Hash Version Store Obs Intrinsics
 │               Diagnostics.vuna Diagnostics/{Common,Ic,Cg,Pkg,Rn,Sink,Warning,Tc,Frontend,Loader}
 │                             位置/诊断模型、编码原语、摘要与身份、落盘层、内建真源
+packages/ir/lib/Vuna/Ir/              （独立包 vuna-ir：擦除后的中间表示，后端插件的唯一输入面）
+├─ Model Analysis Runtime Validate Represent Anf Cps Dispatch Tail Codec
+│                             形状 / SCC / 运行时契约 / 校验 / 表示选择 / 变换 / 跨进程编码
+packages/compiler/lib/Vuna/Compiler/   （目录即层：层名 = 模块前缀；依赖方向由 packages/compiler/vuna.toml
+                                的 [layers] 执行，见 reference/packages.md「层约束」）
 ├─ Frontend/    Ast Lexer Cst Parser Parser/Support Toml Manifest
 │               Canonical/{Ast,Lex,Pkg} Packages/{Pkg,Source}
 │                             词法（含无损 CST）/ 语法 / vuna.toml / 规范编码 / 包图
@@ -26,8 +30,6 @@ packages/compiler/lib/Vuna/Compiler/   （目录即层：层名 = 模块前缀�
 ├─ Core/        Term Eval Conv Canonical      Core TT / NbE / 定义性相等 / 规范编码
 ├─ Elab/        Sig Types Meta Case Dict Term Data Trait InstName Driver Termination
 │               Prelude Match Records Derive Canonical        双向精化
-├─ Ir/          Model Analysis Runtime Validate
-│                             擦除后 IR（纯数据 + SCC + 运行时契约 + 校验）
 ├─ Codegen/     Decl Term Assembly Runtime    IR→OCaml 文本（不 import Core / Elab / Intrinsics）
 ├─ Lowering/    Program Env Ty Entry Checks    Core→IR 唯一入口（程序级表/类型表面/入口形态）+ Core 侧检查
 ├─ Native/      Abi Gc Model Module Render Runtime   native 后端（x86-64 汇编文本 + 保守标记-清扫 GC）
@@ -40,7 +42,7 @@ packages/compiler/lib/Vuna/Compiler/   （目录即层：层名 = 模块前缀�
   Obs（+子模块 Types/Read/Validate/Summarize/Run；可观测性工具链，见
   [reference/observability.md](reference/observability.md)）、
   Repl/Run/Doc（+子模块）/Search（+子模块）/Sig/Lsp/Json/TestRunner/Files；suite 执行器在 Test/{Suite,Run}
-依赖图：vuna → vuna-compiler → vuna-base（vuna 也直接依赖 base）
+依赖图：vuna → vuna-compiler → {vuna-ir, vuna-compiler-base} → vuna-base（vuna 也直接依赖 base）
 中立库 vuna-http（模块根 packages/http/lib/）：Http.{Header,Request,Response,Parse,Render}，
   HTTP/1.1 消息编解码、严格解析规则与传输无关连接层；依赖 vuna-base，不进 seed
   （见 [reference/http.md](reference/http.md)）；依赖图 vuna-http → vuna-base。
@@ -58,7 +60,7 @@ packages/compiler/lib/Vuna/Compiler/   （目录即层：层名 = 模块前缀�
 （如 `Core.Term` / `Core.Eval` / `Core.Conv`、`Loader.Flatten` / `Loader.Modules`、
 `Codegen.Assembly`、`Elab.*`）；`Ir` 的校验入口在 `Ir.Validate`。数据定义只在叶子
 （`Core.Term`、`Elab.Types` 等）。目标每模块 ≤~800 行（当前最大 `Elab/Trait.vuna`，约 1.2k）。
-`packages/compiler/` 是 seed 唯一来源（`packages/compiler/app/Main.vuna` 的 import 闭包，数量以 `seed/` 与
+`packages/compiler/` 的入口闭包是 seed 唯一来源（`packages/compiler/app/Main.vuna` 的 import 闭包，跨 `vuna-ir` / `vuna-compiler-base`；数量以 `seed/` 与
 `nix/seed/files.txt` 与 `nix/seed/rotation.txt` 为准）；`packages/cli/` 工具链在 TCB 之外；`packages/base/` 模块名即 API。
 
 ## 1. 编译链：Frontend → Loader → Elab → Codegen

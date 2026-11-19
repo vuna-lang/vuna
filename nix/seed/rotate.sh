@@ -5,7 +5,8 @@
 # 用法: sh nix/seed/rotate.sh [VUNA]
 #   VUNA  当前 stage 1 产品 CLI（vuna），默认 ./result/bin/vuna
 #
-# seed 只覆盖 compiler 包（packages/compiler/app/Main.vuna 的 import 闭包），
+# seed 只覆盖编译器入口闭包（packages/compiler/app/Main.vuna 的 import 闭包，
+# 含它依赖的 packages/ir 与 packages/compiler-base 模块），
 # 工具链（fmt/lint/repl/doc/test）不在种子里。
 #
 # 生成与校验全部在临时目录完成：只有 TCB 断言与 fixed point 都通过后才替换 seed/，
@@ -60,10 +61,10 @@ fi
 
 # 计算 rotation 元数据（审计用；CI 不因 seed 落后于源码而失败）。
 # 在替换 seed/ 之前完成：任何计算失败都不会动信任锚点。
-# 源码指纹 = compiler/ + base/ 下全部 .vuna 按路径排序后的内容哈希链。
-source_files=$(find packages/compiler packages/base -type f -name '*.vuna' | wc -l | tr -d ' ')
+# 源码指纹 = compiler/ + ir/ + compiler-base/ + base/ 下全部 .vuna 按路径排序后的内容哈希链。
+source_files=$(find packages/compiler packages/ir packages/compiler-base packages/base -type f -name '*.vuna' | wc -l | tr -d ' ')
 source_digest=$(
-  find packages/compiler packages/base -type f -name '*.vuna' -print |
+  find packages/compiler packages/ir packages/compiler-base packages/base -type f -name '*.vuna' -print |
     LC_ALL=C sort |
     while IFS= read -r f; do sha256sum "$f"; done |
     sha256sum | cut -d' ' -f1

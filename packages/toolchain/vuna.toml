@@ -6,6 +6,8 @@
 name = "vuna-toolchain"
 
 [dependencies]
+vuna-ir = "../ir"
+vuna-compiler-base = "../compiler-base"
 vuna-base = "../base"
 vuna-compiler = "../compiler"
 vuna-http = "../http"
