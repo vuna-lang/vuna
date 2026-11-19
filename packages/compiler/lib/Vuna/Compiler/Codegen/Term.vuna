@@ -1807,13 +1807,13 @@ genIrNode st (IrCtor family ctor _ args) =
               r = genCtorRef st1 family ctor
             in OkC (Pair (OCtorApp (firstOf r) terms) (secondOf r))
     )
-genIrNode st (IrRecord family fields) =
+genIrNode st (IrRecord family _ fields) =
   Vuna.Compiler.Base.Common.bind (genAssignedFields st family fields) (
       \p =>
         case p of
           Pair fields st1 => OkC (Pair (ORecordCon fields) (gsDepOfFamily st1 family))
     )
-genIrNode st (IrProj base family field) =
+genIrNode st (IrProj base family field _) =
   Vuna.Compiler.Base.Common.bind (genIr st base) (
       \p =>
         case p of
@@ -1823,7 +1823,7 @@ genIrNode st (IrProj base family field) =
               label = recordFieldLabel family field
             in OkC (Pair (OProj baseTerm (recordLabelOf st2 family label)) st2)
     )
-genIrNode st (IrRecUpd base family fields) =
+genIrNode st (IrRecUpd base family fields _) =
   Vuna.Compiler.Base.Common.bind (genIr st base) (
       \p =>
         case p of
@@ -1909,7 +1909,7 @@ genIrNode st (IrIf c th el) =
                         )
               )
     )
-genIrNode st (IrCase _ scrut alts) =
+genIrNode st (IrCase _ _ scrut alts) =
   Vuna.Compiler.Base.Common.bind (genIr st scrut) (
       \p =>
         case p of

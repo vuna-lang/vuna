@@ -418,9 +418,10 @@ export irSymbolsOf : Ir -> List (Pair String (Maybe Int))
 irSymbolsOf (IrVar _) = []
 irSymbolsOf (IrGlobal _) = []
 irSymbolsOf (IrCtor _ _ _ args) = concatMap irSymbolsOf args
-irSymbolsOf (IrRecord _ fields) = concatMap irSymbolsOfField fields
-irSymbolsOf (IrProj base _ _) = irSymbolsOf base
-irSymbolsOf (IrRecUpd base _ fields) = append (irSymbolsOf base) (concatMap irSymbolsOfField fields)
+irSymbolsOf (IrRecord _ _ fields) = concatMap irSymbolsOfField fields
+irSymbolsOf (IrProj base _ _ _) = irSymbolsOf base
+irSymbolsOf (IrRecUpd base _ fields _) =
+  append (irSymbolsOf base) (concatMap irSymbolsOfField fields)
 irSymbolsOf (IrRt sym) = [Pair sym Nothing]
 irSymbolsOf (IrRtApp sym args) =
   append [Pair sym (Just (irListLength args))] (concatMap irSymbolsOf args)
@@ -433,7 +434,7 @@ irSymbolsOf (IrLet _ scrut body) = append (irSymbolsOf scrut) (irSymbolsOf body)
 irSymbolsOf (IrLam _ _ body) = irSymbolsOf body
 irSymbolsOf (IrApp _ f a) = append (irSymbolsOf f) (irSymbolsOf a)
 irSymbolsOf (IrIf c t e) = append (irSymbolsOf c) (append (irSymbolsOf t) (irSymbolsOf e))
-irSymbolsOf (IrCase _ scrut alts) = append (irSymbolsOf scrut) (concatMap irSymbolsOfAlt alts)
+irSymbolsOf (IrCase _ _ scrut alts) = append (irSymbolsOf scrut) (concatMap irSymbolsOfAlt alts)
 irSymbolsOf (IrNatCase scrut _ z s c) =
   append
     (irSymbolsOf scrut)

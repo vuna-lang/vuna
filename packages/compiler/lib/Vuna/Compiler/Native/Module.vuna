@@ -792,10 +792,10 @@ genExprAt fuel st isTail ir =
                 )
           )
       IrCtor family ctor _ args => genCtor (fuel - 1) st family ctor args
-      IrRecord family fields => genRecord (fuel - 1) st family fields
-      IrProj base family field => genProj (fuel - 1) st base family field
-      IrRecUpd base family fields => genRecUpd (fuel - 1) st base family fields
-      IrCase caseTy scrut alts => genCase (fuel - 1) st isTail caseTy scrut alts
+      IrRecord family _ fields => genRecord (fuel - 1) st family fields
+      IrProj base family field _ => genProj (fuel - 1) st base family field
+      IrRecUpd base family fields _ => genRecUpd (fuel - 1) st base family fields
+      IrCase caseTy _ scrut alts => genCase (fuel - 1) st isTail caseTy scrut alts
       IrApp _ _ _ => genApp (fuel - 1) st isTail ir
       IrRtApp sym args => genRtApp (fuel - 1) st sym args
       IrConcatMany parts => genConcatMany (fuel - 1) st parts

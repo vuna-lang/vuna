@@ -65,11 +65,11 @@ auditKeys defs (IrLet bs scrut body) =
 auditKeys defs (IrIf c t e) =
   append (auditKeys defs c) (append (auditKeys defs t) (auditKeys defs e))
 auditKeys defs (IrCtor _ _ _ args) = concatMap (auditKeys defs) args
-auditKeys defs (IrRecord _ fields) = concatMap (\p => auditKeys defs (secondOf p)) fields
-auditKeys defs (IrProj base _ _) = auditKeys defs base
-auditKeys defs (IrRecUpd base _ fields) =
+auditKeys defs (IrRecord _ _ fields) = concatMap (\p => auditKeys defs (secondOf p)) fields
+auditKeys defs (IrProj base _ _ _) = auditKeys defs base
+auditKeys defs (IrRecUpd base _ fields _) =
   append (auditKeys defs base) (concatMap (\p => auditKeys defs (secondOf p)) fields)
-auditKeys defs (IrCase _ scrut alts) =
+auditKeys defs (IrCase _ _ scrut alts) =
   append (auditKeys defs scrut) (concatMap (auditAltKeys defs) alts)
 auditKeys defs (IrNatCase scrut _ z s c) =
   append

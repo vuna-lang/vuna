@@ -40,7 +40,7 @@
 
 | ID | 仍未成立的事实 | 证据 | 归属 |
 | --- | --- | --- | --- |
-| D109 | **擦除后 IR 的类型信息仍是选择性的**：`Ir.Lam` 带结果类型、`IrDef` 带运行时签名、`IrCast` 带源/目标、`IrCtor` 带类型实参、`IrApp` 带函数/结果类型、`IrCase` 带 scrutinee 类型；但 `IrCase` 的结果类型、分支 binder 类型、record / projection 的结果类型仍没有，签名与节点类型里不可命名的部分退化成 `IrTyOpaque`，也没有 IR 级类型检查器。`IrCast` 位点与不透明字段仍靠 Lowering 写对 | `Ir/Model.vuna`（`IrLam` / `IrDef` / `IrCast` / `IrCtor` / `IrApp` / `IrCase`）、`Ir/Validate.vuna`（签名、注解与节点类型 arity）、`Lowering/Ty.vuna`（`renderPiTy` / `annotTyOf` / `annotCalleeTy`）；[ir.md](ir.md)「已知边界」 | 后续（case 结果/分支 binder、record 结果类型与结构校验） |
+| D109 | **擦除后 IR 的类型信息是选择性填充的**：λ binder、`IrLam` 结果、`IrDef` 签名、`IrCast` 两端、`IrCtor` 类型实参、`IrApp` 函数/结果、`IrCase` scrutinee/结果、分支 binder、record / projection / update 结果都有类型槽；但 Lowering 只填可解析的部分，不可命名/未解析处保持 `Nothing` 或落 `IrTyOpaque`，也没有 IR 级类型检查器（非目标是不做第二套精化器） | `Ir/Model.vuna`（节点类型槽）、`Ir/Validate.vuna`（签名、注解、节点类型 arity、构造子值实参个数）、`Lowering/Ty.vuna`（`renderPiTy` / `annotTyOf` / `annotCalleeTy` / `ctorKeptFieldTys`）；[ir.md](ir.md)「已知边界」 | 后续（提高填充覆盖率；结构校验按需补充） |
 | D111 | **ANF 不是幂等规范化**：二次 ANF 会给已经 `let` 绑定的非简单右值再插一层 `let`（`__anf<n>` 编号递增），结构因此变化；wasm 的 CPS 路径恰好依赖「二次 ANF 从更高编号开始」来避免撞名，所以幂等门禁不成立 | `Ir/Anf.vuna`（`anfProgramDefs` / `next` 计数）；复现：`vuna dev ir dump --after anf` 与 `--after anf2` 的首个定义不同 | 后续（若要幂等：已 ANF 的右值不再 hoist，或把二次 ANF 换成显式命名空间） |
 
 ## 工具、构建与验证

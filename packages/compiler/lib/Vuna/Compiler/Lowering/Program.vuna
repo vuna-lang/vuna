@@ -123,7 +123,17 @@ lowerTermFuel fuel env st binders t =
                   Vuna.Compiler.Base.Common.bind (lowerTermFuel (fuel - 1) env st binders base) (
                       \p =>
                         case p of
-                          Pair baseIr st2 => OkC (Pair (IrProj baseIr c label) st2)
+                          Pair baseIr st2 =>
+                            Vuna.Compiler.Base.Common.bind (ctorKeptFieldTys env c) (
+                                \fieldTys =>
+                                  let
+                                    args = irTyDataArgsOf (annotTyOf env binders base)
+                                    resTy =
+                                      case lookupRtPosIn fi fields 0 of
+                                        Just pos => irTyAt (map (irTySubstVars args) fieldTys) pos
+                                        Nothing => Nothing
+                                  in OkC (Pair (IrProj baseIr c label resTy) st2)
+                              )
                     )
               )
           Nothing => lowerProjAsCaseFuel (fuel - 1) env st binders base c tele i fi
@@ -505,7 +515,13 @@ lowerConAppNonChainFuel fuel env st binders c args =
 lowerConAppFinish : LwEnv -> LwSt -> String -> String -> List (Pair Term Rig) -> List Ir -> Check (Pair Ir LwSt)
 lowerConAppFinish env st family c args irs =
   case HashMap.lookup family env.lwRecordFields of
-    Just fields => OkC (Pair (IrRecord family (zipFieldNames fields irs)) st)
+    Just fields =>
+      let
+        recTy =
+          case ctorTypeArgsOf env c args of
+            Just tys => Just (IrTyData family tys)
+            Nothing => Nothing
+      in OkC (Pair (IrRecord family recTy (zipFieldNames fields irs)) st)
     Nothing => OkC (Pair (IrCtor family c (ctorTypeArgsOf env c args) irs) st)
 
 -- record 构造：运行时节数（与降级后的实参逐位对齐）→ 字段表给出字段源码名。
@@ -594,6 +610,18 @@ altEnvKeptIn st label outer ((Pair name rig) :: rest) pats =
       b = mkIrBinderArm fresh
     in altEnvKeptIn (LwSt (fresh + 1)) label (b :: outer) rest (b :: pats)
 
+-- 分支 binder 的运行时类型：按构造子字段类型实例化族参数槽；catch-all 用 scrutinee 类型。
+binderWithTy : Maybe IrTy -> IrBinder -> IrBinder
+binderWithTy ty b = IrBinder b.irBinderName b.irBinderErased ty
+
+typedPats : List IrTy -> List IrBinder -> List IrBinder
+typedPats [] bs = bs
+typedPats _ [] = []
+typedPats (t :: ts) (b :: rest) = binderWithTy (Just t) b :: typedPats ts rest
+
+typedPatsAll : Maybe IrTy -> List IrBinder -> List IrBinder
+typedPatsAll ty bs = map (\b => binderWithTy ty b) bs
+
 -- 分支体：把分支 binder 栈接在外层上面后 lower。
 lowerArmBodyFuel : Int -> LwEnv -> AltEnvIn -> Term -> Check (Pair Ir LwSt)
 lowerArmBodyFuel fuel env bound body = lowerTermFuel fuel env (aeStOf bound) (aeEnvOf bound) body
@@ -638,17 +666,22 @@ lowerUnboxedCaseFuel fuel env st outer scrut alt =
                     Pair scrutIr st1 =>
                       Vuna.Compiler.Base.Common.bind (altEnvCheckedIn st1 name outer (binderPairs (caseAltBinders alt)) keepFlags) (
                           \bound =>
-                            Vuna.Compiler.Base.Common.bind (lowerArmBodyFuel (fuel - 1) env bound (caseAltBody alt)) (
-                                \q =>
-                                  case q of
-                                    Pair bodyIr st2 => OkC (Pair (IrLet (aePatsOf bound) scrutIr bodyIr) st2)
+                            Vuna.Compiler.Base.Common.bind (ctorKeptFieldTys env name) (
+                                \fieldTys =>
+                                  let
+                                    argTys = map (irTySubstVars (irTyDataArgsOf (annotTyOf env outer scrut))) fieldTys
+                                  in Vuna.Compiler.Base.Common.bind (lowerArmBodyFuel (fuel - 1) env bound (caseAltBody alt)) (
+                                      \q =>
+                                        case q of
+                                          Pair bodyIr st2 => OkC (Pair (IrLet (typedPats argTys (aePatsOf bound)) scrutIr bodyIr) st2)
+                                    )
                               )
                         )
               )
 
 -- 每个分支：catch-all → pattern 只有非擦除 binder；构造子 → 按形状绑定。
-lowerArmFuel : Int -> LwEnv -> LwSt -> List IrBinder -> CaseAlt -> Check (Pair IrAlt LwSt)
-lowerArmFuel fuel env st outer alt =
+lowerArmFuel : Int -> LwEnv -> Maybe IrTy -> LwSt -> List IrBinder -> CaseAlt -> Check (Pair IrAlt (Pair (Maybe IrTy) LwSt))
+lowerArmFuel fuel env scrutTy st outer alt =
   if fuel <= 0 then
     icFuel "ir-lower"
   else if caseAltName alt == "" then
@@ -657,7 +690,7 @@ lowerArmFuel fuel env st outer alt =
     in Vuna.Compiler.Base.Common.bind (lowerArmBodyFuel (fuel - 1) env bound (caseAltBody alt)) (
         \p =>
           case p of
-            Pair bodyIr st2 => OkC (Pair (IrAlt Nothing (aePatsOf bound) bodyIr) st2)
+            Pair bodyIr st2 => OkC (Pair (IrAlt Nothing (typedPatsAll scrutTy (aePatsOf bound)) bodyIr) (Pair (annotTyOf env (aeEnvOf bound) (caseAltBody alt)) st2))
       )
   else
     case HashMap.lookup (caseAltName alt) env.lwCtors of
@@ -665,27 +698,39 @@ lowerArmFuel fuel env st outer alt =
       Just (Pair family keepFlags) =>
         Vuna.Compiler.Base.Common.bind (altEnvCheckedIn st (caseAltName alt) outer (binderPairs (caseAltBinders alt)) keepFlags) (
             \bound =>
-              Vuna.Compiler.Base.Common.bind (lowerArmBodyFuel (fuel - 1) env bound (caseAltBody alt)) (
-                  \p =>
-                    case p of
-                      Pair bodyIr st2 => OkC (Pair (IrAlt (Just (Pair family (caseAltName alt))) (aePatsOf bound) bodyIr) st2)
+              Vuna.Compiler.Base.Common.bind (ctorKeptFieldTys env (caseAltName alt)) (
+                  \fieldTys =>
+                    let
+                      argTys = map (irTySubstVars (irTyDataArgsOf scrutTy)) fieldTys
+                    in Vuna.Compiler.Base.Common.bind (lowerArmBodyFuel (fuel - 1) env bound (caseAltBody alt)) (
+                        \p =>
+                          case p of
+                            Pair bodyIr st2 => OkC (Pair (IrAlt (Just (Pair family (caseAltName alt))) (typedPats argTys (aePatsOf bound)) bodyIr) (Pair (annotTyOf env (aeEnvOf bound) (caseAltBody alt)) st2))
+                      )
                 )
           )
 
-lowerArmsFuel : Int -> LwEnv -> LwSt -> List IrBinder -> List CaseAlt -> Check (Pair (List IrAlt) LwSt)
-lowerArmsFuel fuel env st outer [] = if fuel <= 0 then icFuel "ir-lower" else OkC (Pair [] st)
-lowerArmsFuel fuel env st outer (alt :: rest) =
+lowerArmsFuel : Int -> LwEnv -> Maybe IrTy -> LwSt -> List IrBinder -> List CaseAlt -> Check (Pair (List IrAlt) (Pair (Maybe IrTy) LwSt))
+lowerArmsFuel fuel env scrutTy st outer [] =
+  if fuel <= 0 then icFuel "ir-lower" else OkC (Pair [] (Pair Nothing st))
+lowerArmsFuel fuel env scrutTy st outer (alt :: rest) =
   if fuel <= 0 then
     icFuel "ir-lower"
   else
-    Vuna.Compiler.Base.Common.bind (lowerArmFuel (fuel - 1) env st outer alt) (
+    Vuna.Compiler.Base.Common.bind (lowerArmFuel (fuel - 1) env scrutTy st outer alt) (
         \p =>
           case p of
-            Pair arm st2 =>
-              Vuna.Compiler.Base.Common.bind (lowerArmsFuel (fuel - 1) env st2 outer rest) (
+            Pair arm (Pair bodyTy st2) =>
+              Vuna.Compiler.Base.Common.bind (lowerArmsFuel (fuel - 1) env scrutTy st2 outer rest) (
                   \q =>
                     case q of
-                      Pair arms st3 => OkC (Pair ((::) arm arms) st3)
+                      Pair arms (Pair restTy st3) =>
+                        let
+                          resultTy =
+                            case bodyTy of
+                              Just _ => bodyTy
+                              Nothing => restTy
+                        in OkC (Pair ((::) arm arms) (Pair resultTy st3))
                 )
       )
 
@@ -733,7 +778,7 @@ lowerNatAltFuel fuel env st outer (Just alt) =
     in Vuna.Compiler.Base.Common.bind (lowerArmBodyFuel (fuel - 1) env bound (caseAltBody alt)) (
         \p =>
           case p of
-            Pair bodyIr st2 => OkC (Pair (Just (IrAlt Nothing (aePatsOf bound) bodyIr)) st2)
+            Pair bodyIr st2 => OkC (Pair (Just (IrAlt Nothing (typedPatsAll (Just IrTyInt) (aePatsOf bound)) bodyIr)) st2)
       )
 
 lowerNatCaseFuel : Int -> LwEnv -> LwSt -> List IrBinder -> Term -> List CaseAlt -> Check (Pair Ir LwSt)
@@ -782,10 +827,12 @@ lowerCaseFuel fuel env st outer scrut alts =
         \p =>
           case p of
             Pair scrutIr st1 =>
-              Vuna.Compiler.Base.Common.bind (lowerArmsFuel (fuel - 1) env st1 outer alts) (
+              let
+                scrutTy = annotTyOf env outer scrut
+              in Vuna.Compiler.Base.Common.bind (lowerArmsFuel (fuel - 1) env scrutTy st1 outer alts) (
                   \q =>
                     case q of
-                      Pair arms st2 => OkC (Pair (IrCase (annotTyOf env outer scrut) scrutIr arms) st2)
+                      Pair arms (Pair resultTy st2) => OkC (Pair (IrCase scrutTy resultTy scrutIr arms) st2)
                 )
       )
 
@@ -849,14 +896,16 @@ lowerRecordUpdateFuel fuel env st outer base c tele fields idxs body =
         \p =>
           case p of
             Pair baseIr st1 =>
-              case body of
-                TMk c2 args => lowerRecordUpdateArgsFuel (fuel - 1) env st1 (recordAltBindersIn tele outer) baseIr c fields idxs args
-                TCon c2 args => lowerRecordUpdateArgsFuel (fuel - 1) env st1 (recordAltBindersIn tele outer) baseIr c fields idxs args
+              let
+                baseTy = annotTyOf env outer base
+              in case body of
+                TMk c2 args => lowerRecordUpdateArgsFuel (fuel - 1) env st1 (recordAltBindersIn tele outer) baseIr baseTy c fields idxs args
+                TCon c2 args => lowerRecordUpdateArgsFuel (fuel - 1) env st1 (recordAltBindersIn tele outer) baseIr baseTy c fields idxs args
                 _ => icInternal "record update body is not a constructor application"
       )
 
-lowerRecordUpdateArgsFuel : Int -> LwEnv -> LwSt -> List IrBinder -> Ir -> String -> List (Pair Int String) -> List Int -> List (Pair Term Rig) -> Check (Pair Ir LwSt)
-lowerRecordUpdateArgsFuel fuel env st binders baseIr c fields idxs args =
+lowerRecordUpdateArgsFuel : Int -> LwEnv -> LwSt -> List IrBinder -> Ir -> Maybe IrTy -> String -> List (Pair Int String) -> List Int -> List (Pair Term Rig) -> Check (Pair Ir LwSt)
+lowerRecordUpdateArgsFuel fuel env st binders baseIr baseTy c fields idxs args =
   if fuel <= 0 then
     icFuel "ir-lower"
   else
@@ -873,7 +922,7 @@ lowerRecordUpdateArgsFuel fuel env st binders baseIr c fields idxs args =
                   in Vuna.Compiler.Base.Common.bind (lowerUpdFieldsFuel (fuel - 1) env st binders fields (ctorOpaqueKeptFlags keepFlags opqs) positions runtimeArgs) (
                       \q =>
                         case q of
-                          Pair updates st2 => OkC (Pair (IrRecUpd baseIr c updates) st2)
+                          Pair updates st2 => OkC (Pair (IrRecUpd baseIr c updates baseTy) st2)
                     )
               )
 

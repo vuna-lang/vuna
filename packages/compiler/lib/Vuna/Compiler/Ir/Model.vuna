@@ -51,6 +51,35 @@ export data IrTy(..) : Type where
   -- | 显式函数类型（隐式 Pi 已剥掉）。
   IrTyFun : IrTy -> IrTy -> IrTy
 
+-- | 用类型实参替换 `IrTyVar` 槽；越界/缺失的槽落 `IrTyOpaque`。
+export irTySubstVars : List IrTy -> IrTy -> IrTy
+irTySubstVars args ty =
+  case ty of
+    IrTyVar i => irTyVarAt args i
+    IrTyInt => IrTyInt
+    IrTyStr => IrTyStr
+    IrTyBool => IrTyBool
+    IrTyFloat => IrTyFloat
+    IrTyOpaque => IrTyOpaque
+    IrTyArray a => IrTyArray (irTySubstVars args a)
+    IrTyRef a => IrTyRef (irTySubstVars args a)
+    IrTyData f xs => IrTyData f (map (\x => irTySubstVars args x) xs)
+    IrTyFun d c => IrTyFun (irTySubstVars args d) (irTySubstVars args c)
+
+irTyVarAt : List IrTy -> Int -> IrTy
+irTyVarAt [] _ = IrTyOpaque
+irTyVarAt (x :: xs) i = if i <= 0 then x else irTyVarAt xs (i - 1)
+
+-- | 数据族类型应用的实参；非 `IrTyData` 返回空列表。
+export irTyDataArgsOf : Maybe IrTy -> List IrTy
+irTyDataArgsOf (Just (IrTyData _ args)) = args
+irTyDataArgsOf _ = []
+
+-- | 列表按下标取 `IrTy`（越界返回 `Nothing`）。
+export irTyAt : List IrTy -> Int -> Maybe IrTy
+irTyAt [] _ = Nothing
+irTyAt (x :: xs) i = if i <= 0 then Just x else irTyAt xs (i - 1)
+
 -- ---------------------------------------------------------------
 -- binder
 -- ---------------------------------------------------------------
@@ -123,12 +152,12 @@ export data Ir(..) : Type where
   -- | 构造子应用：族名、构造子名、运行时类型实参（可选）、运行时实参
   -- （已按 keep 形状对齐、不可命名字段已 cast）。
   IrCtor : String -> String -> Maybe (List IrTy) -> List Ir -> Ir
-  -- | record 构造：族名 + (字段源码名, 值)（按运行时字段顺序）。
-  IrRecord : String -> List (Pair String Ir) -> Ir
-  -- | record 投影：base、族名、字段源码名。
-  IrProj : Ir -> String -> String -> Ir
-  -- | record 更新：base、族名、(字段源码名, 新值)。
-  IrRecUpd : Ir -> String -> List (Pair String Ir) -> Ir
+  -- | record 构造：族名 + 结果运行时类型（可选）+ (字段源码名, 值)（按运行时字段顺序）。
+  IrRecord : String -> Maybe IrTy -> List (Pair String Ir) -> Ir
+  -- | record 投影：base、族名、字段源码名、结果运行时类型（可选）。
+  IrProj : Ir -> String -> String -> Maybe IrTy -> Ir
+  -- | record 更新：base、族名、(字段源码名, 新值)、结果运行时类型（可选）。
+  IrRecUpd : Ir -> String -> List (Pair String Ir) -> Maybe IrTy -> Ir
   -- | 运行时符号引用（目标中立；名字必须在 `Ir.Runtime` 的契约里声明）。
   -- 目标文本由后端按契约映射，IR 里不出现 `bi_*` / `dtp_*` / OCaml 表达式。
   IrRt : String -> Ir
@@ -156,9 +185,9 @@ export data Ir(..) : Type where
   IrApp : Maybe (Pair IrTy IrTy) -> Ir -> Ir -> Ir
   -- | `if`。
   IrIf : Ir -> Ir -> Ir -> Ir
-  -- | 通用 `match`：scrutinee 的运行时类型（可选）+ scrutinee + 分支。
+  -- | 通用 `match`：scrutinee 的运行时类型、结果类型（均可缺）+ scrutinee + 分支。
   -- 无 catch-all 时后端补不可达兜底臂，保持 match 完整。
-  IrCase : Maybe IrTy -> Ir -> List IrAlt -> Ir
+  IrCase : Maybe IrTy -> Maybe IrTy -> Ir -> List IrAlt -> Ir
   -- | Nat case 降级（运行时是 int）：scrutinee、scrutinee 的 fresh 序号（`dtnat__<n>`）、
   -- 零支 / 后继支 / 兜底支。三支的 binder 表同样是完整 telescope。
   IrNatCase : Ir -> Int -> Maybe IrAlt -> Maybe IrAlt -> Maybe IrAlt -> Ir

@@ -112,10 +112,10 @@ anf fuel next e =
         let
           a = anf (fuel - 1) next inner
         in mkAnf a.anfLets (IrCast cFrom cTo a.anfExpr) a.anfNext
-      IrProj base family field =>
+      IrProj base family field resTy =>
         let
           a = anf (fuel - 1) next base
-        in mkAnf a.anfLets (IrProj a.anfExpr family field) a.anfNext
+        in mkAnf a.anfLets (IrProj a.anfExpr family field resTy) a.anfNext
       IrConcatMany parts =>
         let
           p = anfList (fuel - 1) next parts
@@ -124,15 +124,15 @@ anf fuel next e =
         let
           p = anfList (fuel - 1) next args
         in mkAnf p.anfLets (IrCtor family ctor tys p.anfExprs) p.anfNext
-      IrRecord family fields =>
+      IrRecord family resTy fields =>
         let
           p = anfFields (fuel - 1) next fields
-        in mkAnf p.anfLets (IrRecord family p.anfValues) p.anfNext
-      IrRecUpd base family fields =>
+        in mkAnf p.anfLets (IrRecord family resTy p.anfValues) p.anfNext
+      IrRecUpd base family fields resTy =>
         let
           b = anf (fuel - 1) next base
           p = anfFields (fuel - 1) b.anfNext fields
-        in mkAnf (append b.anfLets p.anfLets) (IrRecUpd b.anfExpr family p.anfValues) p.anfNext
+        in mkAnf (append b.anfLets p.anfLets) (IrRecUpd b.anfExpr family p.anfValues resTy) p.anfNext
       IrRtApp "prim_erase" args =>
         case args of
           -- 擦除包装是恒等（首实参即被擦的值，其余照常应用）：直接透传，避免把尾位置的
@@ -163,11 +163,11 @@ anf fuel next e =
           ta = anf (fuel - 1) ca.anfNext t
           ea = anf (fuel - 1) ta.anfNext el
         in mkAnf ca.anfLets (IrIf ca.anfExpr (letsIn ta.anfLets ta.anfExpr) (letsIn ea.anfLets ea.anfExpr)) ea.anfNext
-      IrCase caseTy scrut alts =>
+      IrCase caseTy resultTy scrut alts =>
         let
           s = anf (fuel - 1) next scrut
           alts1 = anfAlts (fuel - 1) s.anfNext alts
-        in mkAnf s.anfLets (IrCase caseTy s.anfExpr alts1.anfAlts) alts1.anfNext
+        in mkAnf s.anfLets (IrCase caseTy resultTy s.anfExpr alts1.anfAlts) alts1.anfNext
       IrNatCase scrut fresh zero succ catch =>
         let
           s = anf (fuel - 1) next scrut
@@ -249,16 +249,16 @@ countAnfBinders fuel e =
       IrBool _ => 0
       IrFloatLit _ => 0
       IrCtor _ _ _ args => countAnfList (fuel - 1) args
-      IrRecord _ fs => countAnfFields (fuel - 1) fs
-      IrProj b _ _ => countAnfBinders (fuel - 1) b
-      IrRecUpd b _ fs => countAnfBinders (fuel - 1) b + countAnfFields (fuel - 1) fs
+      IrRecord _ _ fs => countAnfFields (fuel - 1) fs
+      IrProj b _ _ _ => countAnfBinders (fuel - 1) b
+      IrRecUpd b _ fs _ => countAnfBinders (fuel - 1) b + countAnfFields (fuel - 1) fs
       IrRtApp _ args => countAnfList (fuel - 1) args
       IrCast cFrom cTo x => countAnfBinders (fuel - 1) x
       IrLet bs rhs body => countBs bs + countAnfBinders (fuel - 1) rhs + countAnfBinders (fuel - 1) body
       IrLam bs _ body => countBs bs + countAnfBinders (fuel - 1) body
       IrApp _ f a => countAnfBinders (fuel - 1) f + countAnfBinders (fuel - 1) a
       IrIf c t el => countAnfBinders (fuel - 1) c + countAnfBinders (fuel - 1) t + countAnfBinders (fuel - 1) el
-      IrCase _ s alts => countAnfBinders (fuel - 1) s + countAnfAlts (fuel - 1) alts
+      IrCase _ _ s alts => countAnfBinders (fuel - 1) s + countAnfAlts (fuel - 1) alts
       IrNatCase s _ z su ca => countAnfBinders (fuel - 1) s + countAltM (fuel - 1) z + countAltM (fuel - 1) su + countAltM (fuel - 1) ca
       IrConcatMany xs => countAnfList (fuel - 1) xs
       IrEffThunk _ _ _ _ p => countAnfBinders (fuel - 1) p

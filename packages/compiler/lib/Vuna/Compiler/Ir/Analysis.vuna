@@ -390,16 +390,17 @@ reachableNames fuel pending defTbl seen =
 export irStringsOf : Ir -> List String
 irStringsOf (IrStr s) = [s]
 irStringsOf (IrCtor _ _ _ args) = concatMap irStringsOf args
-irStringsOf (IrRecord _ fields) = concatMap irStringsOfField fields
-irStringsOf (IrProj base _ _) = irStringsOf base
-irStringsOf (IrRecUpd base _ fields) = append (irStringsOf base) (concatMap irStringsOfField fields)
+irStringsOf (IrRecord _ _ fields) = concatMap irStringsOfField fields
+irStringsOf (IrProj base _ _ _) = irStringsOf base
+irStringsOf (IrRecUpd base _ fields _) =
+  append (irStringsOf base) (concatMap irStringsOfField fields)
 irStringsOf (IrRtApp _ args) = concatMap irStringsOf args
 irStringsOf (IrCast cFrom cTo inner) = irStringsOf inner
 irStringsOf (IrLet _ scrut body) = append (irStringsOf scrut) (irStringsOf body)
 irStringsOf (IrLam _ _ body) = irStringsOf body
 irStringsOf (IrApp _ f a) = append (irStringsOf f) (irStringsOf a)
 irStringsOf (IrIf c t e) = append (irStringsOf c) (append (irStringsOf t) (irStringsOf e))
-irStringsOf (IrCase _ scrut alts) = append (irStringsOf scrut) (concatMap irStringsOfAlt alts)
+irStringsOf (IrCase _ _ scrut alts) = append (irStringsOf scrut) (concatMap irStringsOfAlt alts)
 irStringsOf (IrNatCase scrut _ z s c) =
   append
     (irStringsOf scrut)

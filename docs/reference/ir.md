@@ -53,9 +53,9 @@ Loader → Elab → Core ──Lowering──> IR ──Codegen.{Decl,Term,Assem
 | `IrVar binder` | 运行时 binder 引用 | 携带 binder **身份**（Lowering 已解析 de Bruijn 下标）；擦除 binder 不进 IR |
 | `IrGlobal name` | 顶层运行时定义引用 | 跨单元限定时由后端加前缀并记依赖 |
 | `IrCtor family ctor typeArgs args` | 构造子应用 | `typeArgs` 是族的运行时类型实参（未知时 `Nothing`）；实参已按 keep 形状对齐；不可命名字段已包 `IrCast` |
-| `IrRecord family fields` | record 构造 | `(源码字段名, 值)`，按运行时字段顺序 |
-| `IrProj base family field` | record 投影 | 非 record 族的投影由 Lowering 降成 `IrCase` |
-| `IrRecUpd base family fields` | record 更新 | 只含被改字段 |
+| `IrRecord family resultTy fields` | record 构造 | `resultTy` 是 record 族的运行时类型（未知时 `Nothing`）；`(源码字段名, 值)`，按运行时字段顺序 |
+| `IrProj base family field resultTy` | record 投影 | `resultTy` 是字段的运行时类型（未知时 `Nothing`）；非 record 族的投影由 Lowering 降成 `IrCase` |
+| `IrRecUpd base family fields resultTy` | record 更新 | `resultTy` 是更新结果的运行时类型（未知时 `Nothing`）；只含被改字段 |
 | `IrRt sym` | 运行时符号引用 | 符号必须在 `Ir.Runtime` 契约里；目标文本由后端映射（不记依赖） |
 | `IrRtApp sym args` | 运行时符号的饱和应用 | 内建名 + 实参；OCaml 运算符模板在后端；arity 由 `irInlineArity` 定 |
 | `IrCast from to ir` | 表现层转换 | 表示改变、运行时不产生操作；`from` / `to` 是可选运行时类型（未知时 `Nothing`），后端渲染成自己的转换形式 |
@@ -64,7 +64,7 @@ Loader → Elab → Core ──Lowering──> IR ──Codegen.{Decl,Term,Assem
 | `IrLam binders resultTy body` | lambda 链 | 擦除 binder 占位不渲染；无运行时 binder 时退化成体；`resultTy` 是体的运行时类型（未知时 `Nothing`） |
 | `IrApp ty f a` | 应用 | `ty` 是函数类型与结果类型（`Pair`；未知时 `Nothing`）；擦除实参已丢弃 |
 | `IrIf c t e` | `if` | |
-| `IrCase scrutTy scrut alts` | 通用 `match` | `scrutTy` 是 scrutinee 的运行时类型（未知时 `Nothing`）；无 catch-all 时后端补不可达兜底臂 |
+| `IrCase scrutTy resultTy scrut alts` | 通用 `match` | `scrutTy` / `resultTy` 是 scrutinee 与结果的运行时类型（未知时 `Nothing`）；分支 binder 带按构造子字段实例化的类型；无 catch-all 时后端补不可达兜底臂 |
 | `IrNatCase scrut fresh zero succ catch` | Nat case 降级 | Nat 运行时是 `int`，不能生成变体 match；`fresh` 是 `dtnat__<n>` 的编号 |
 | `IrConcatMany parts` | `++` 链展平 | `String.concat "" [a; b; c]` |
 | `IrEffThunk family ctor unitTy arity prim` | 装箱动作构造 | 原语运行时仍是 eager 函数，结果包成 `MkEff` |
@@ -202,9 +202,10 @@ binder 的**身份**在 Lowering 分配，前缀与编号渲染属后端：
   （见上节）。check 路径在 `lowerProgramOf` 末尾跑，split 路径经
   `Lowering.Program.lowerUnitChecked` 逐单元跑一次。
 - **类型形状**：`checkDefTy` 校验 `IrDef` 的运行时签名；`checkNodeBinderTys` 校验 λ binder
-  注解、`IrLam` 结果类型、`IrCast` 源/目标、`IrApp` 函数/结果类型、`IrCase` scrutinee 类型
-  与 `IrCtor` 类型实参（`IrTyData` / 构造子族的实参个数按本单元声明核对）。
-  跨单元类型只做递归形状检查；这不是第二套精化器，只守 IR 的结构不变量。
+  注解、`IrLam` 结果、`IrCast` 源/目标、`IrApp` 函数/结果、`IrCase` scrutinee/结果、
+  `IrCtor` 类型实参与值实参个数、record/projection/update 结果类型
+  （`IrTyData` / 构造子族的实参个数按本单元声明核对）。跨单元类型只做递归形状检查；
+  这不是第二套精化器，只守 IR 的结构不变量。
 - **作用域**：`checkScopedUnit` 逐节点检查每个 `IrVar` 指向语法作用域内的 binder，
   且擦除占位 binder 不得出现在变量位置（Lowering 的擦除判据漏一处就报内部错）；
   它把「well-scoped」从约定变成门禁。
@@ -224,16 +225,16 @@ binder 的**身份**在 Lowering 分配，前缀与编号渲染属后端：
 
 ## 已知边界 / 刻意未做
 
-- IR 的类型信息仍是**选择性**的：λ binder 可带 `irBinderTy`，`IrLam` 带结果类型，
-  `IrDef` 带运行时签名（`renderPiTy`，不可命名部分为 `IrTyOpaque`），`IrCast` 带源/目标，
-  `IrCtor` 带运行时类型实参，`IrApp` 带函数/结果类型，`IrCase` 带 scrutinee 类型；
-  但 `IrCase` 的结果类型、分支 binder 类型、record/projection 的结果类型仍没有，签名与
-  节点类型里不可命名的部分退化成 `IrTyOpaque`，也没有 IR 级类型检查器。`IrCast` 位点仍
-  靠 Lowering 写对；结构化校验只查签名/注解/节点类型的形状与 arity，不复刻精化器
+- IR 的类型信息仍是**选择性**的：λ binder、`IrLam` 结果、`IrDef` 签名、`IrCast` 两端、
+  `IrCtor` 类型实参、`IrApp` 函数/结果、`IrCase` scrutinee/结果、分支 binder、record /
+  projection / update 结果都已带类型槽；但 Lowering 只填可解析的部分，不可命名/未解析处
+  保持 `Nothing` 或落 `IrTyOpaque`，也没有 IR 级类型检查器。`IrCast` 位点仍靠 Lowering
+  写对；结构化校验只查签名/注解/节点类型的形状、arity 与构造子实参数，不复刻精化器
   （见 [architecture-target.md](../architecture-target.md) 非目标）。
 - `IrApp` 的类型只在可解析出函数类型时填写（局部 binder、全局定义、部分应用）；
-  内建（`IrRtApp`）与嵌套部分应用可能保持 `Nothing`。wasm / native 的 case 族优先用
-  `IrCase` 的 scrutinee 类型，缺失时回退到分支构造子名。
+  内建（`IrRtApp`）与嵌套部分应用可能保持 `Nothing`。`IrCase` 的结果与分支 binder 类型
+  同样受字段/类型实参可解析性限制。wasm / native 的 case 族优先用 `IrCase` 的 scrutinee
+  类型，缺失时回退到分支构造子名。
 - CPS 的续延判定按 `IrLam` 结果类型（`Eff`）；handler clause 收集按 `IrDef` 签名
   （结果是 `Eff` 且参数是 `op -> k -> b` 形状），签名不可用时回退到 arity。
 - IR 没有 fuel：需要「结构上限」的地方改成按项规模派生（与 `Core.termSize` 同思路）。

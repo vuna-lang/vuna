@@ -218,6 +218,13 @@ annotTyOfFuel fuel env binders t =
               TGlobal g => annotHeadTy (fuel - 1) env binders g args
               _ => Nothing
       TRecord g args => annotHeadTy (fuel - 1) env binders g (map firstOf args)
+      TCon c args => annotConTy (fuel - 1) env c args
+      TMk c args => annotConTy (fuel - 1) env c args
+      TInt _ => Just IrTyInt
+      TStr _ => Just IrTyStr
+      TBool _ => Just IrTyBool
+      TFloat _ => Just IrTyFloat
+      TIf _ t _ => annotTyOfFuel (fuel - 1) env binders t
       TPi name implicit rig dom cod =>
         if rigIsErased rig then
           Nothing
@@ -229,6 +236,21 @@ annotTyOfFuel fuel env binders t =
                 Nothing => Nothing
                 Just codTy => Just (IrTyFun domTy codTy)
       _ => Nothing
+
+annotConTy : Int -> LwEnv -> String -> List (Pair Term Rig) -> Maybe IrTy
+annotConTy fuel env c args =
+  if fuel <= 0 then
+    Nothing
+  else
+    case HashMap.lookup c env.lwCtors of
+      Nothing => Nothing
+      Just (Pair family _) =>
+        case reprTyIr family of
+          Just t => Just t
+          Nothing =>
+            case ctorTypeArgsOf env c args of
+              Just tys => Just (IrTyData family tys)
+              Nothing => Nothing
 
 -- 外层 binder 的运行时类型（de Bruijn 下标；最近绑定在前）。
 -- 擦除占位只占槽位、运行时类型不可命名，因此恒返回 `Nothing`。
@@ -326,6 +348,29 @@ ctorTypeArgsOf env ctor args =
         Just _ =>
           annotFamilyArgs 256 env [] (lookupTyParamsIn env.lwTyParams family) (map firstOf args)
     Nothing => Nothing
+
+findCtorInLocal : String -> List DtCtor -> Maybe DtCtor
+findCtorInLocal name [] = Nothing
+findCtorInLocal name (c :: rest) =
+  if dtCtorName c == name then Just c else findCtorInLocal name rest
+
+-- | 构造子的**运行时**字段类型表（只含 kept 字段，未实例化族参数槽）。
+export ctorKeptFieldTys : LwEnv -> String -> Check (List IrTy)
+ctorKeptFieldTys env ctor =
+  case HashMap.lookup ctor env.lwCtors of
+    Nothing => OkC []
+    Just (Pair family keepFlags) =>
+      case findDtData family env.lwDatas of
+        Nothing => OkC []
+        Just dd =>
+          case findCtorInLocal ctor (dtDataCtors dd) of
+            Nothing => OkC []
+            Just c =>
+              let
+                levels = lookupTyParamsIn env.lwTyParams family
+              in Vuna.Compiler.Base.Common.bind
+                (ctorFieldTys levels env.lwTyParams env.lwDatas keepFlags (ctorOpaqueFlagsOf env.lwDatas c) (dtCtorTelescope c) 0 (eval [] (dtCtorType c)) (listLength levels))
+                (\p => OkC (firstOf p))
 
 -- ---------------------------------------------------------------
 -- 类型声明（IR）

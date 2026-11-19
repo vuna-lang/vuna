@@ -42,21 +42,22 @@ representIr shared ir =
             [only] => only
             _ => IrCtor family ctor tys args2
         Nothing => IrCtor family ctor tys args2
-    IrRecord family fields =>
-      IrRecord family (map (\p => Pair (firstOf p) (representIr shared (secondOf p))) fields)
-    IrRecUpd base family fields =>
+    IrRecord family resTy fields =>
+      IrRecord family resTy (map (\p => Pair (firstOf p) (representIr shared (secondOf p))) fields)
+    IrRecUpd base family fields resTy =>
       IrRecUpd
         (representIr shared base)
         family
         (map (\p => Pair (firstOf p) (representIr shared (secondOf p))) fields)
-    IrProj base family field => IrProj (representIr shared base) family field
+        resTy
+    IrProj base family field resTy => IrProj (representIr shared base) family field resTy
     IrRtApp sym args => IrRtApp sym (map (representIr shared) args)
     IrCast cFrom cTo inner => IrCast cFrom cTo (representIr shared inner)
     IrLet bs scrut body => IrLet bs (representIr shared scrut) (representIr shared body)
     IrLam bs rt body => IrLam bs rt (representIr shared body)
     IrApp appTy f a => IrApp appTy (representIr shared f) (representIr shared a)
     IrIf c th el => IrIf (representIr shared c) (representIr shared th) (representIr shared el)
-    IrCase caseTy scrut alts => representCase shared caseTy scrut alts
+    IrCase caseTy resultTy scrut alts => representCase shared caseTy resultTy scrut alts
     IrNatCase scrut fresh zero succ catch =>
       IrNatCase
         (representIr shared scrut)
@@ -70,8 +71,8 @@ representIr shared ir =
     _ => ir
 
 -- 单构造子去装箱族的 case → `let`：分支 binder 表就是完整 telescope，体的下标不变。
-representCase : IrShared -> Maybe IrTy -> Ir -> List IrAlt -> Ir
-representCase shared caseTy scrut alts =
+representCase : IrShared -> Maybe IrTy -> Maybe IrTy -> Ir -> List IrAlt -> Ir
+representCase shared caseTy resultTy scrut alts =
   let
     scrut2 = representIr shared scrut
   in case alts of
@@ -83,10 +84,10 @@ representCase shared caseTy scrut alts =
               if allCatchAll rest then
                 IrLet (irAltBindersOf alt) scrut2 (representIr shared (irAltBodyOf alt))
               else
-                IrCase caseTy scrut2 (map (representAltIr shared) alts)
-            Nothing => IrCase caseTy scrut2 (map (representAltIr shared) alts)
-        Nothing => IrCase caseTy scrut2 (map (representAltIr shared) alts)
-    [] => IrCase caseTy scrut2 []
+                IrCase caseTy resultTy scrut2 (map (representAltIr shared) alts)
+            Nothing => IrCase caseTy resultTy scrut2 (map (representAltIr shared) alts)
+        Nothing => IrCase caseTy resultTy scrut2 (map (representAltIr shared) alts)
+    [] => IrCase caseTy resultTy scrut2 []
 
 allCatchAll : List IrAlt -> Bool
 allCatchAll [] = True
