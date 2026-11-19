@@ -2,13 +2,13 @@ open Vuna_runtime
 type 'a0 t_Base_dEffect_dExn_dExnOp = C_Base_dEffect_dExn_dExnOp_ThrowExn of (string) | C_Base_dEffect_dExn_dExnOp_Try of ('a0 Base_dEffect_dCore.t_Base_dEffect_dCore_dScoped)
 
 # 20 "Base/Effect/Exn.vuna"
-let v_Base_dEffect_dExn_dthrowExn = (fun (n : string) (msg : string) -> (((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCore "exn") n) (C_Base_dEffect_dExn_dExnOp_ThrowExn (msg))))
+let v_Base_dEffect_dExn_dthrowExn = (fun (n : string) (msg : string) -> (((((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCoreId "exn") n) 547777234) (dtp_effectId n)) (C_Base_dEffect_dExn_dExnOp_ThrowExn (msg))))
 
 # 24 "Base/Effect/Exn.vuna"
-let v_Base_dEffect_dExn_dtryWith = (fun (n : string) comp -> (((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCore "exn") n) (C_Base_dEffect_dExn_dExnOp_Try ((Base_dEffect_dCore.v_Base_dEffect_dCore_dscope comp)))))
+let v_Base_dEffect_dExn_dtryWith = (fun (n : string) comp -> (((((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCoreId "exn") n) 547777234) (dtp_effectId n)) (C_Base_dEffect_dExn_dExnOp_Try ((Base_dEffect_dCore.v_Base_dEffect_dCore_dscope comp)))))
 
 # 28 "Base/Effect/Exn.vuna"
-let v_Base_dEffect_dExn_dhandleExn = (fun (n : string) ret opH comp -> (((((Base_dEffect_dCore.v_Base_dEffect_dCore_dhandleCoreAt "exn") n) ret) (Obj.magic opH)) comp))
+let v_Base_dEffect_dExn_dhandleExn = (fun (n : string) ret opH comp -> (((((((Base_dEffect_dCore.v_Base_dEffect_dCore_dhandleCoreAtId "exn") n) 547777234) (dtp_effectId n)) ret) (Obj.magic opH)) comp))
 
 # 32 "Base/Effect/Exn.vuna"
 let v_Base_dEffect_dExn_dexnOpH = (fun op k -> (match op with

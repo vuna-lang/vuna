@@ -2,10 +2,10 @@ open Vuna_runtime
 type t_Base_dEffect_dExit_dExitOp = C_Base_dEffect_dExit_dExitOp_ExitWith of (int)
 
 # 14 "Base/Effect/Exit.vuna"
-let v_Base_dEffect_dExit_dexitWith = (fun (n : string) (code : int) -> (((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCore "exit") n) (C_Base_dEffect_dExit_dExitOp_ExitWith (code))))
+let v_Base_dEffect_dExit_dexitWith = (fun (n : string) (code : int) -> (((((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCoreId "exit") n) 233642629) (dtp_effectId n)) (C_Base_dEffect_dExit_dExitOp_ExitWith (code))))
 
 # 18 "Base/Effect/Exit.vuna"
-let v_Base_dEffect_dExit_dhandleExit = (fun (n : string) ret opH comp -> (((((Base_dEffect_dCore.v_Base_dEffect_dCore_dhandleCore "exit") n) ret) (Obj.magic opH)) comp))
+let v_Base_dEffect_dExit_dhandleExit = (fun (n : string) ret opH comp -> (((((((Base_dEffect_dCore.v_Base_dEffect_dCore_dhandleCoreId "exit") n) 233642629) (dtp_effectId n)) ret) (Obj.magic opH)) comp))
 
 # 22 "Base/Effect/Exit.vuna"
 let v_Base_dEffect_dExit_dexitOpHIO = (fun (op : t_Base_dEffect_dExit_dExitOp) k -> (match op with
@@ -20,7 +20,7 @@ let v_Base_dEffect_dExit_dexitOpHIOHost = (fun (op : t_Base_dEffect_dExit_dExitO
 ))
 
 # 43 "Base/Effect/Exit.vuna"
-let v_Base_dEffect_dExit_dhandleExitHostHost = (fun (n : string) comp -> (((((Base_dEffect_dCore.v_Base_dEffect_dCore_dhandleCoreAt "exit") n) (fun a -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) a))) v_Base_dEffect_dExit_dexitOpHIOHost) comp))
+let v_Base_dEffect_dExit_dhandleExitHostHost = (fun (n : string) comp -> (((((((Base_dEffect_dCore.v_Base_dEffect_dCore_dhandleCoreAtId "exit") n) 233642629) (dtp_effectId n)) (fun a -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) a))) v_Base_dEffect_dExit_dexitOpHIOHost) comp))
 
 # 47 "Base/Effect/Exit.vuna"
 let v_Base_dEffect_dExit_drunExitHost = (fun comp -> (Base_dEffect_dCore.v_Base_dEffect_dCore_djoinEff ((v_Base_dEffect_dExit_dhandleExitHostHost "default") comp)))

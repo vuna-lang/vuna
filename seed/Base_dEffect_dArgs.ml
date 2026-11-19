@@ -2,10 +2,10 @@ open Vuna_runtime
 type t_Base_dEffect_dArgs_dArgsOp = C_Base_dEffect_dArgs_dArgsOp_GetArgs
 
 # 15 "Base/Effect/Args.vuna"
-let v_Base_dEffect_dArgs_dargsGetArgs = (fun (n : string) -> (((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCore "args") n) C_Base_dEffect_dArgs_dArgsOp_GetArgs))
+let v_Base_dEffect_dArgs_dargsGetArgs = (fun (n : string) -> (((((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCoreId "args") n) 487237436) (dtp_effectId n)) C_Base_dEffect_dArgs_dArgsOp_GetArgs))
 
 # 19 "Base/Effect/Args.vuna"
-let v_Base_dEffect_dArgs_dhandleArgs = (fun (n : string) ret opH comp -> (((((Base_dEffect_dCore.v_Base_dEffect_dCore_dhandleCore "args") n) ret) (Obj.magic opH)) comp))
+let v_Base_dEffect_dArgs_dhandleArgs = (fun (n : string) ret opH comp -> (((((((Base_dEffect_dCore.v_Base_dEffect_dCore_dhandleCoreId "args") n) 487237436) (dtp_effectId n)) ret) (Obj.magic opH)) comp))
 
 # 23 "Base/Effect/Args.vuna"
 let v_Base_dEffect_dArgs_dargsOpHIO = (fun (op : t_Base_dEffect_dArgs_dArgsOp) k -> (match op with
@@ -20,7 +20,7 @@ let v_Base_dEffect_dArgs_dargsOpHIOHost = (fun (op : t_Base_dEffect_dArgs_dArgsO
 ))
 
 # 44 "Base/Effect/Args.vuna"
-let v_Base_dEffect_dArgs_dhandleArgsHostHost = (fun (n : string) comp -> (((((Base_dEffect_dCore.v_Base_dEffect_dCore_dhandleCoreAt "args") n) (fun a -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) a))) v_Base_dEffect_dArgs_dargsOpHIOHost) comp))
+let v_Base_dEffect_dArgs_dhandleArgsHostHost = (fun (n : string) comp -> (((((((Base_dEffect_dCore.v_Base_dEffect_dCore_dhandleCoreAtId "args") n) 487237436) (dtp_effectId n)) (fun a -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) a))) v_Base_dEffect_dArgs_dargsOpHIOHost) comp))
 
 # 48 "Base/Effect/Args.vuna"
 let v_Base_dEffect_dArgs_drunArgsHost = (fun comp -> (Base_dEffect_dCore.v_Base_dEffect_dCore_djoinEff ((v_Base_dEffect_dArgs_dhandleArgsHostHost "default") comp)))

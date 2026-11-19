@@ -5,37 +5,37 @@ and t_Base_dEffect_dNet_dNetError = C_Base_dEffect_dNet_dNetError_NetRefused of 
 and t_Base_dEffect_dNet_dNetErrorOp = C_Base_dEffect_dNet_dNetErrorOp_NetFail of (t_Base_dEffect_dNet_dNetError)
 
 # 54 "Base/Effect/Net.vuna"
-let v_Base_dEffect_dNet_dnetListen = (fun (n : string) (addr : string) -> (((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCore "net") n) (C_Base_dEffect_dNet_dNetOp_Listen (addr))))
+let v_Base_dEffect_dNet_dnetListen = (fun (n : string) (addr : string) -> (((((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCoreId "net") n) 630821208) (dtp_effectId n)) (C_Base_dEffect_dNet_dNetOp_Listen (addr))))
 
 # 60 "Base/Effect/Net.vuna"
-let v_Base_dEffect_dNet_dnetPort = (fun (n : string) (h : int) -> (((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCore "net") n) (C_Base_dEffect_dNet_dNetOp_Port (h))))
+let v_Base_dEffect_dNet_dnetPort = (fun (n : string) (h : int) -> (((((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCoreId "net") n) 630821208) (dtp_effectId n)) (C_Base_dEffect_dNet_dNetOp_Port (h))))
 
 # 66 "Base/Effect/Net.vuna"
-let v_Base_dEffect_dNet_dnetAccept = (fun (n : string) (h : int) -> (((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCore "net") n) (C_Base_dEffect_dNet_dNetOp_Accept (h))))
+let v_Base_dEffect_dNet_dnetAccept = (fun (n : string) (h : int) -> (((((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCoreId "net") n) 630821208) (dtp_effectId n)) (C_Base_dEffect_dNet_dNetOp_Accept (h))))
 
 # 72 "Base/Effect/Net.vuna"
-let v_Base_dEffect_dNet_dnetRecv = (fun (n : string) (h : int) (bytes : int) -> (((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCore "net") n) (C_Base_dEffect_dNet_dNetOp_Recv (h, bytes))))
+let v_Base_dEffect_dNet_dnetRecv = (fun (n : string) (h : int) (bytes : int) -> (((((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCoreId "net") n) 630821208) (dtp_effectId n)) (C_Base_dEffect_dNet_dNetOp_Recv (h, bytes))))
 
 # 78 "Base/Effect/Net.vuna"
-let v_Base_dEffect_dNet_dnetSend = (fun (n : string) (h : int) (s : string) -> (((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCore "net") n) (C_Base_dEffect_dNet_dNetOp_Send (h, s))))
+let v_Base_dEffect_dNet_dnetSend = (fun (n : string) (h : int) (s : string) -> (((((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCoreId "net") n) 630821208) (dtp_effectId n)) (C_Base_dEffect_dNet_dNetOp_Send (h, s))))
 
 # 84 "Base/Effect/Net.vuna"
-let v_Base_dEffect_dNet_dnetClose = (fun (n : string) (h : int) -> (((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCore "net") n) (C_Base_dEffect_dNet_dNetOp_Close (h))))
+let v_Base_dEffect_dNet_dnetClose = (fun (n : string) (h : int) -> (((((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCoreId "net") n) 630821208) (dtp_effectId n)) (C_Base_dEffect_dNet_dNetOp_Close (h))))
 
 # 90 "Base/Effect/Net.vuna"
-let v_Base_dEffect_dNet_dnetConnect = (fun (n : string) (addr : string) -> (((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCore "net") n) (C_Base_dEffect_dNet_dNetOp_Connect (addr))))
+let v_Base_dEffect_dNet_dnetConnect = (fun (n : string) (addr : string) -> (((((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCoreId "net") n) 630821208) (dtp_effectId n)) (C_Base_dEffect_dNet_dNetOp_Connect (addr))))
 
 # 96 "Base/Effect/Net.vuna"
-let v_Base_dEffect_dNet_dnetAcceptWithin = (fun (n : string) (h : int) (micros : int) -> (((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCore "net") n) (C_Base_dEffect_dNet_dNetOp_AcceptWithin (h, micros))))
+let v_Base_dEffect_dNet_dnetAcceptWithin = (fun (n : string) (h : int) (micros : int) -> (((((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCoreId "net") n) 630821208) (dtp_effectId n)) (C_Base_dEffect_dNet_dNetOp_AcceptWithin (h, micros))))
 
 # 102 "Base/Effect/Net.vuna"
-let v_Base_dEffect_dNet_dnetRecvWithin = (fun (n : string) (h : int) (bytes : int) (micros : int) -> (((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCore "net") n) (C_Base_dEffect_dNet_dNetOp_RecvWithin (h, bytes, micros))))
+let v_Base_dEffect_dNet_dnetRecvWithin = (fun (n : string) (h : int) (bytes : int) (micros : int) -> (((((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCoreId "net") n) 630821208) (dtp_effectId n)) (C_Base_dEffect_dNet_dNetOp_RecvWithin (h, bytes, micros))))
 
 # 108 "Base/Effect/Net.vuna"
-let v_Base_dEffect_dNet_dnetSendWithin = (fun (n : string) (h : int) (s : string) (micros : int) -> (((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCore "net") n) (C_Base_dEffect_dNet_dNetOp_SendWithin (h, s, micros))))
+let v_Base_dEffect_dNet_dnetSendWithin = (fun (n : string) (h : int) (s : string) (micros : int) -> (((((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCoreId "net") n) 630821208) (dtp_effectId n)) (C_Base_dEffect_dNet_dNetOp_SendWithin (h, s, micros))))
 
 # 136 "Base/Effect/Net.vuna"
-let v_Base_dEffect_dNet_dnetFail = (fun (n : string) (e : t_Base_dEffect_dNet_dNetError) -> (((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCore "net-error") n) (C_Base_dEffect_dNet_dNetErrorOp_NetFail (e))))
+let v_Base_dEffect_dNet_dnetFail = (fun (n : string) (e : t_Base_dEffect_dNet_dNetError) -> (((((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCoreId "net-error") n) 1000332959) (dtp_effectId n)) (C_Base_dEffect_dNet_dNetErrorOp_NetFail (e))))
 
 # 140 "Base/Effect/Net.vuna"
 let v_Base_dEffect_dNet_dnetErrorOfCode = (fun (mc0 : string) (mc1 : int) -> (if (mc1 = 2) then (C_Base_dEffect_dNet_dNetError_NetRefused (mc0)) else (if (mc1 = 3) then (C_Base_dEffect_dNet_dNetError_NetTimeout (mc0)) else (if (mc1 = 4) then (C_Base_dEffect_dNet_dNetError_NetClosed (mc0)) else (if (mc1 = 5) then (C_Base_dEffect_dNet_dNetError_NetAddrInUse (mc0)) else (if (mc1 = 6) then (C_Base_dEffect_dNet_dNetError_NetBadAddr (mc0)) else (if (mc1 = 7) then (C_Base_dEffect_dNet_dNetError_NetTimeout (mc0)) else (if (mc1 = 8) then (C_Base_dEffect_dNet_dNetError_NetBadHandle (mc0)) else (C_Base_dEffect_dNet_dNetError_NetIo (mc0))))))))))
@@ -53,7 +53,7 @@ let v_Base_dEffect_dNet_dnetErrorText = (fun (mc0 : t_Base_dEffect_dNet_dNetErro
 ))
 
 # 161 "Base/Effect/Net.vuna"
-let v_Base_dEffect_dNet_dhandleNet = (fun (n : string) ret opH comp -> (((((Base_dEffect_dCore.v_Base_dEffect_dCore_dhandleCore "net") n) ret) (Obj.magic opH)) comp))
+let v_Base_dEffect_dNet_dhandleNet = (fun (n : string) ret opH comp -> (((((((Base_dEffect_dCore.v_Base_dEffect_dCore_dhandleCoreId "net") n) 630821208) (dtp_effectId n)) ret) (Obj.magic opH)) comp))
 
 # 165 "Base/Effect/Net.vuna"
 let v_Base_dEffect_dNet_dnetHostStatus = (Base_dEffect_dCore.v_Base_dEffect_dCore_draise (Base_dEffect_dCore.C_Base_dEffect_dCore_dEff_MkEff (fun (_ : Base_dEffect_dCore.t_Base_dEffect_dCore_dEffUnit) -> (dtp_hostStatus ()))))
@@ -77,7 +77,7 @@ let v_Base_dEffect_dNet_dnetOpHIOHost = (fun (op : t_Base_dEffect_dNet_dNetOp) k
 ))
 
 # 247 "Base/Effect/Net.vuna"
-let v_Base_dEffect_dNet_dhandleNetHostHost = (fun (n : string) comp -> (((((Base_dEffect_dCore.v_Base_dEffect_dCore_dhandleCoreAt "net") n) (fun a -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) a))) v_Base_dEffect_dNet_dnetOpHIOHost) comp))
+let v_Base_dEffect_dNet_dhandleNetHostHost = (fun (n : string) comp -> (((((((Base_dEffect_dCore.v_Base_dEffect_dCore_dhandleCoreAtId "net") n) 630821208) (dtp_effectId n)) (fun a -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) a))) v_Base_dEffect_dNet_dnetOpHIOHost) comp))
 
 # 251 "Base/Effect/Net.vuna"
 let v_Base_dEffect_dNet_drunNetHost = (fun comp -> (Base_dEffect_dCore.v_Base_dEffect_dCore_djoinEff ((v_Base_dEffect_dNet_dhandleNetHostHost "default") comp)))
@@ -92,7 +92,7 @@ let v_Base_dEffect_dNet_dnetErrorOpHR = (fun (op : t_Base_dEffect_dNet_dNetError
 ))
 
 # 265 "Base/Effect/Net.vuna"
-let v_Base_dEffect_dNet_drunNetError = (fun (n : string) comp -> (((((Base_dEffect_dCore.v_Base_dEffect_dCore_dhandleCoreAt "net-error") n) v_Base_dEffect_dNet_dnetErrorRet) v_Base_dEffect_dNet_dnetErrorOpHR) comp))
+let v_Base_dEffect_dNet_drunNetError = (fun (n : string) comp -> (((((((Base_dEffect_dCore.v_Base_dEffect_dCore_dhandleCoreAtId "net-error") n) 1000332959) (dtp_effectId n)) v_Base_dEffect_dNet_dnetErrorRet) v_Base_dEffect_dNet_dnetErrorOpHR) comp))
 
 # 269 "Base/Effect/Net.vuna"
 let v_Base_dEffect_dNet_drunNetErrorHost = (fun comp -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((v_Base_dEffect_dNet_drunNetError "net-error") comp)) (fun res -> (match res with

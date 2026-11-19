@@ -2,13 +2,13 @@ open Vuna_runtime
 type t_Base_dEffect_dStdin_dStdinOp = C_Base_dEffect_dStdin_dStdinOp_ReadLine | C_Base_dEffect_dStdin_dStdinOp_ReadBytes of (int)
 
 # 22 "Base/Effect/Stdin.vuna"
-let v_Base_dEffect_dStdin_dstdinReadLine = (fun (n : string) -> (((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCore "stdin") n) C_Base_dEffect_dStdin_dStdinOp_ReadLine))
+let v_Base_dEffect_dStdin_dstdinReadLine = (fun (n : string) -> (((((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCoreId "stdin") n) 618336925) (dtp_effectId n)) C_Base_dEffect_dStdin_dStdinOp_ReadLine))
 
 # 26 "Base/Effect/Stdin.vuna"
-let v_Base_dEffect_dStdin_dstdinReadBytes = (fun (n : string) (k : int) -> (((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCore "stdin") n) (C_Base_dEffect_dStdin_dStdinOp_ReadBytes (k))))
+let v_Base_dEffect_dStdin_dstdinReadBytes = (fun (n : string) (k : int) -> (((((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCoreId "stdin") n) 618336925) (dtp_effectId n)) (C_Base_dEffect_dStdin_dStdinOp_ReadBytes (k))))
 
 # 30 "Base/Effect/Stdin.vuna"
-let v_Base_dEffect_dStdin_dhandleStdin = (fun (n : string) ret opH comp -> (((((Base_dEffect_dCore.v_Base_dEffect_dCore_dhandleCore "stdin") n) ret) (Obj.magic opH)) comp))
+let v_Base_dEffect_dStdin_dhandleStdin = (fun (n : string) ret opH comp -> (((((((Base_dEffect_dCore.v_Base_dEffect_dCore_dhandleCoreId "stdin") n) 618336925) (dtp_effectId n)) ret) (Obj.magic opH)) comp))
 
 # 34 "Base/Effect/Stdin.vuna"
 let v_Base_dEffect_dStdin_dstdinOpHIO = (fun (op : t_Base_dEffect_dStdin_dStdinOp) k -> (match op with
@@ -25,7 +25,7 @@ let v_Base_dEffect_dStdin_dstdinOpHIOHost = (fun (op : t_Base_dEffect_dStdin_dSt
 ))
 
 # 67 "Base/Effect/Stdin.vuna"
-let v_Base_dEffect_dStdin_dhandleStdinHostHost = (fun (n : string) comp -> (((((Base_dEffect_dCore.v_Base_dEffect_dCore_dhandleCoreAt "stdin") n) (fun a -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) a))) v_Base_dEffect_dStdin_dstdinOpHIOHost) comp))
+let v_Base_dEffect_dStdin_dhandleStdinHostHost = (fun (n : string) comp -> (((((((Base_dEffect_dCore.v_Base_dEffect_dCore_dhandleCoreAtId "stdin") n) 618336925) (dtp_effectId n)) (fun a -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) a))) v_Base_dEffect_dStdin_dstdinOpHIOHost) comp))
 
 # 72 "Base/Effect/Stdin.vuna"
 let v_Base_dEffect_dStdin_drunStdinHost = (fun comp -> (Base_dEffect_dCore.v_Base_dEffect_dCore_djoinEff ((v_Base_dEffect_dStdin_dhandleStdinHostHost "default") comp)))

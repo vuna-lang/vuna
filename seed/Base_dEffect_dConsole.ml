@@ -2,13 +2,13 @@ open Vuna_runtime
 type t_Base_dEffect_dConsole_dConsoleOp = C_Base_dEffect_dConsole_dConsoleOp_Print of (string) | C_Base_dEffect_dConsole_dConsoleOp_EPrint of (string)
 
 # 21 "Base/Effect/Console.vuna"
-let v_Base_dEffect_dConsole_dconsolePrint = (fun (n : string) (s : string) -> (((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCore "console") n) (C_Base_dEffect_dConsole_dConsoleOp_Print (s))))
+let v_Base_dEffect_dConsole_dconsolePrint = (fun (n : string) (s : string) -> (((((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCoreId "console") n) 775068458) (dtp_effectId n)) (C_Base_dEffect_dConsole_dConsoleOp_Print (s))))
 
 # 25 "Base/Effect/Console.vuna"
-let v_Base_dEffect_dConsole_dconsoleEprint = (fun (n : string) (s : string) -> (((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCore "console") n) (C_Base_dEffect_dConsole_dConsoleOp_EPrint (s))))
+let v_Base_dEffect_dConsole_dconsoleEprint = (fun (n : string) (s : string) -> (((((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCoreId "console") n) 775068458) (dtp_effectId n)) (C_Base_dEffect_dConsole_dConsoleOp_EPrint (s))))
 
 # 29 "Base/Effect/Console.vuna"
-let v_Base_dEffect_dConsole_dhandleConsole = (fun (n : string) ret opH comp -> (((((Base_dEffect_dCore.v_Base_dEffect_dCore_dhandleCore "console") n) ret) (Obj.magic opH)) comp))
+let v_Base_dEffect_dConsole_dhandleConsole = (fun (n : string) ret opH comp -> (((((((Base_dEffect_dCore.v_Base_dEffect_dCore_dhandleCoreId "console") n) 775068458) (dtp_effectId n)) ret) (Obj.magic opH)) comp))
 
 # 33 "Base/Effect/Console.vuna"
 let v_Base_dEffect_dConsole_dconsoleOpHIO = (fun (op : t_Base_dEffect_dConsole_dConsoleOp) k -> (match op with
@@ -25,7 +25,7 @@ let v_Base_dEffect_dConsole_dconsoleOpHIOHost = (fun (op : t_Base_dEffect_dConso
 ))
 
 # 56 "Base/Effect/Console.vuna"
-let v_Base_dEffect_dConsole_dhandleConsoleHostHost = (fun (n : string) comp -> (((((Base_dEffect_dCore.v_Base_dEffect_dCore_dhandleCoreAt "console") n) (fun a -> a)) v_Base_dEffect_dConsole_dconsoleOpHIOHost) comp))
+let v_Base_dEffect_dConsole_dhandleConsoleHostHost = (fun (n : string) comp -> (((((((Base_dEffect_dCore.v_Base_dEffect_dCore_dhandleCoreAtId "console") n) 775068458) (dtp_effectId n)) (fun a -> a)) v_Base_dEffect_dConsole_dconsoleOpHIOHost) comp))
 
 # 61 "Base/Effect/Console.vuna"
 let v_Base_dEffect_dConsole_drunConsoleHost = (fun comp -> ((v_Base_dEffect_dConsole_dhandleConsoleHostHost "default") comp))

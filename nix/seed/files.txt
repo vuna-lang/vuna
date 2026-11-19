@@ -145,6 +145,7 @@ Vuna_dCompiler_dFrontend_dToml.ml
 Vuna_dCompiler_dIr_dAnalysis.ml
 Vuna_dCompiler_dIr_dAnf.ml
 Vuna_dCompiler_dIr_dCps.ml
+Vuna_dCompiler_dIr_dDispatch.ml
 Vuna_dCompiler_dIr_dModel.ml
 Vuna_dCompiler_dIr_dRepresent.ml
 Vuna_dCompiler_dIr_dRuntime.ml

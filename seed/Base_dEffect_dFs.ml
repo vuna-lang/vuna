@@ -4,7 +4,7 @@ and t_Base_dEffect_dFs_dFsError = C_Base_dEffect_dFs_dFsError_FsMissing of (stri
 and t_Base_dEffect_dFs_dFsErrorOp = C_Base_dEffect_dFs_dFsErrorOp_FsFail of (t_Base_dEffect_dFs_dFsError)
 
 # 80 "Base/Effect/Fs.vuna"
-let v_Base_dEffect_dFs_dfsFail = (fun (n : string) (e : t_Base_dEffect_dFs_dFsError) -> (((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCore "fs-error") n) (C_Base_dEffect_dFs_dFsErrorOp_FsFail (e))))
+let v_Base_dEffect_dFs_dfsFail = (fun (n : string) (e : t_Base_dEffect_dFs_dFsError) -> (((((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCoreId "fs-error") n) 1044473165) (dtp_effectId n)) (C_Base_dEffect_dFs_dFsErrorOp_FsFail (e))))
 
 # 84 "Base/Effect/Fs.vuna"
 let v_Base_dEffect_dFs_dfsErrorOfCode = (fun (mc0 : string) (mc1 : int) -> (if (mc1 = 1) then (C_Base_dEffect_dFs_dFsError_FsMissing (mc0)) else (if (mc1 = 2) then (C_Base_dEffect_dFs_dFsError_FsDenied (mc0)) else (if (mc1 = 3) then (C_Base_dEffect_dFs_dFsError_FsNoSpace (mc0)) else (if (mc1 = 4) then (C_Base_dEffect_dFs_dFsError_FsNotDir (mc0)) else (if (mc1 = 5) then (C_Base_dEffect_dFs_dFsError_FsIsDir (mc0)) else (if (mc1 = 6) then (C_Base_dEffect_dFs_dFsError_FsExists (mc0)) else (C_Base_dEffect_dFs_dFsError_FsIo (mc0)))))))))
@@ -28,55 +28,55 @@ let v_Base_dEffect_dFs_disDotEntry = (fun (name : string) -> (if (name = ".") th
 let v_Base_dEffect_dFs_dsortEntries = (fun (xs : string Base_dData_dList.t_Base_dData_dList_dList) -> ((Base_dData_dSort.v_Base_dData_dSort_dsortBy (fun (a : string) (b : string) -> (((Base_dTrait_dOrd.v_Base_dTrait_dOrd_d_x60__x61_ Base_dData_dString.v_Ord_uString) a) b))) ((Base_dData_dList.v_Base_dData_dList_dfilter (fun (name : string) -> (Base_dData_dBool.v_Base_dData_dBool_dnot (v_Base_dEffect_dFs_disDotEntry name)))) xs)))
 
 # 114 "Base/Effect/Fs.vuna"
-let v_Base_dEffect_dFs_dfsReadFile = (fun (n : string) (p : string) -> (((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCore "fs") n) (C_Base_dEffect_dFs_dFsOp_ReadFile (p))))
+let v_Base_dEffect_dFs_dfsReadFile = (fun (n : string) (p : string) -> (((((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCoreId "fs") n) 371381598) (dtp_effectId n)) (C_Base_dEffect_dFs_dFsOp_ReadFile (p))))
 
 # 120 "Base/Effect/Fs.vuna"
-let v_Base_dEffect_dFs_dfsWriteFile = (fun (n : string) (p : string) (s : string) -> (((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCore "fs") n) (C_Base_dEffect_dFs_dFsOp_WriteFile (p, s))))
+let v_Base_dEffect_dFs_dfsWriteFile = (fun (n : string) (p : string) (s : string) -> (((((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCoreId "fs") n) 371381598) (dtp_effectId n)) (C_Base_dEffect_dFs_dFsOp_WriteFile (p, s))))
 
 # 126 "Base/Effect/Fs.vuna"
-let v_Base_dEffect_dFs_dfsWriteFileAtomic = (fun (n : string) (p : string) (s : string) -> (((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCore "fs") n) (C_Base_dEffect_dFs_dFsOp_WriteFileAtomic (p, s))))
+let v_Base_dEffect_dFs_dfsWriteFileAtomic = (fun (n : string) (p : string) (s : string) -> (((((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCoreId "fs") n) 371381598) (dtp_effectId n)) (C_Base_dEffect_dFs_dFsOp_WriteFileAtomic (p, s))))
 
 # 132 "Base/Effect/Fs.vuna"
-let v_Base_dEffect_dFs_dfsReadDir = (fun (n : string) (p : string) -> (((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCore "fs") n) (C_Base_dEffect_dFs_dFsOp_ReadDir (p))))
+let v_Base_dEffect_dFs_dfsReadDir = (fun (n : string) (p : string) -> (((((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCoreId "fs") n) 371381598) (dtp_effectId n)) (C_Base_dEffect_dFs_dFsOp_ReadDir (p))))
 
 # 138 "Base/Effect/Fs.vuna"
-let v_Base_dEffect_dFs_dfsIsDirectory = (fun (n : string) (p : string) -> (((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCore "fs") n) (C_Base_dEffect_dFs_dFsOp_IsDirectory (p))))
+let v_Base_dEffect_dFs_dfsIsDirectory = (fun (n : string) (p : string) -> (((((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCoreId "fs") n) 371381598) (dtp_effectId n)) (C_Base_dEffect_dFs_dFsOp_IsDirectory (p))))
 
 # 144 "Base/Effect/Fs.vuna"
-let v_Base_dEffect_dFs_dfsMakeDir = (fun (n : string) (p : string) -> (((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCore "fs") n) (C_Base_dEffect_dFs_dFsOp_MakeDir (p))))
+let v_Base_dEffect_dFs_dfsMakeDir = (fun (n : string) (p : string) -> (((((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCoreId "fs") n) 371381598) (dtp_effectId n)) (C_Base_dEffect_dFs_dFsOp_MakeDir (p))))
 
 # 150 "Base/Effect/Fs.vuna"
-let v_Base_dEffect_dFs_dfsRemoveFile = (fun (n : string) (p : string) -> (((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCore "fs") n) (C_Base_dEffect_dFs_dFsOp_RemoveFile (p))))
+let v_Base_dEffect_dFs_dfsRemoveFile = (fun (n : string) (p : string) -> (((((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCoreId "fs") n) 371381598) (dtp_effectId n)) (C_Base_dEffect_dFs_dFsOp_RemoveFile (p))))
 
 # 156 "Base/Effect/Fs.vuna"
-let v_Base_dEffect_dFs_dfsFileExists = (fun (n : string) (p : string) -> (((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCore "fs") n) (C_Base_dEffect_dFs_dFsOp_FileExists (p))))
+let v_Base_dEffect_dFs_dfsFileExists = (fun (n : string) (p : string) -> (((((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCoreId "fs") n) 371381598) (dtp_effectId n)) (C_Base_dEffect_dFs_dFsOp_FileExists (p))))
 
 # 160 "Base/Effect/Fs.vuna"
-let v_Base_dEffect_dFs_dfsFileMtime = (fun (n : string) (p : string) -> (((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCore "fs") n) (C_Base_dEffect_dFs_dFsOp_FileMtime (p))))
+let v_Base_dEffect_dFs_dfsFileMtime = (fun (n : string) (p : string) -> (((((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCoreId "fs") n) 371381598) (dtp_effectId n)) (C_Base_dEffect_dFs_dFsOp_FileMtime (p))))
 
 # 164 "Base/Effect/Fs.vuna"
-let v_Base_dEffect_dFs_dfsFileSize = (fun (n : string) (p : string) -> (((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCore "fs") n) (C_Base_dEffect_dFs_dFsOp_FileSize (p))))
+let v_Base_dEffect_dFs_dfsFileSize = (fun (n : string) (p : string) -> (((((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCoreId "fs") n) 371381598) (dtp_effectId n)) (C_Base_dEffect_dFs_dFsOp_FileSize (p))))
 
 # 168 "Base/Effect/Fs.vuna"
-let v_Base_dEffect_dFs_dfsRemoveTree = (fun (n : string) (p : string) -> (((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCore "fs") n) (C_Base_dEffect_dFs_dFsOp_RemoveTree (p))))
+let v_Base_dEffect_dFs_dfsRemoveTree = (fun (n : string) (p : string) -> (((((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCoreId "fs") n) 371381598) (dtp_effectId n)) (C_Base_dEffect_dFs_dFsOp_RemoveTree (p))))
 
 # 172 "Base/Effect/Fs.vuna"
-let v_Base_dEffect_dFs_dfsRename = (fun (n : string) (src : string) (dst : string) -> (((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCore "fs") n) (C_Base_dEffect_dFs_dFsOp_Rename (src, dst))))
+let v_Base_dEffect_dFs_dfsRename = (fun (n : string) (src : string) (dst : string) -> (((((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCoreId "fs") n) 371381598) (dtp_effectId n)) (C_Base_dEffect_dFs_dFsOp_Rename (src, dst))))
 
 # 176 "Base/Effect/Fs.vuna"
-let v_Base_dEffect_dFs_dfsSymlink = (fun (n : string) (target : string) (link : string) -> (((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCore "fs") n) (C_Base_dEffect_dFs_dFsOp_Symlink (target, link))))
+let v_Base_dEffect_dFs_dfsSymlink = (fun (n : string) (target : string) (link : string) -> (((((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCoreId "fs") n) 371381598) (dtp_effectId n)) (C_Base_dEffect_dFs_dFsOp_Symlink (target, link))))
 
 # 180 "Base/Effect/Fs.vuna"
-let v_Base_dEffect_dFs_dfsMakeDirExclusive = (fun (n : string) (p : string) -> (((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCore "fs") n) (C_Base_dEffect_dFs_dFsOp_MakeDirExclusive (p))))
+let v_Base_dEffect_dFs_dfsMakeDirExclusive = (fun (n : string) (p : string) -> (((((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCoreId "fs") n) 371381598) (dtp_effectId n)) (C_Base_dEffect_dFs_dFsOp_MakeDirExclusive (p))))
 
 # 184 "Base/Effect/Fs.vuna"
-let v_Base_dEffect_dFs_dhandleFs = (fun (n : string) ret opH comp -> (((((Base_dEffect_dCore.v_Base_dEffect_dCore_dhandleCore "fs") n) ret) (Obj.magic opH)) comp))
+let v_Base_dEffect_dFs_dhandleFs = (fun (n : string) ret opH comp -> (((((((Base_dEffect_dCore.v_Base_dEffect_dCore_dhandleCoreId "fs") n) 371381598) (dtp_effectId n)) ret) (Obj.magic opH)) comp))
 
 # 191 "Base/Effect/Fs.vuna"
 let v_Base_dEffect_dFs_dfsHostStatus = (Base_dEffect_dCore.v_Base_dEffect_dCore_draise (Base_dEffect_dCore.C_Base_dEffect_dCore_dEff_MkEff (fun (_ : Base_dEffect_dCore.t_Base_dEffect_dCore_dEffUnit) -> (dtp_hostStatus ()))))
 
 # 195 "Base/Effect/Fs.vuna"
-let v_Base_dEffect_dFs_dfsFailAt = (fun (e : t_Base_dEffect_dFs_dFsError) -> (((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCore "fs-error") "fs-error") (C_Base_dEffect_dFs_dFsErrorOp_FsFail (e))))
+let v_Base_dEffect_dFs_dfsFailAt = (fun (e : t_Base_dEffect_dFs_dFsError) -> (((((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCoreId "fs-error") "fs-error") 1044473165) 1044473165) (C_Base_dEffect_dFs_dFsErrorOp_FsFail (e))))
 
 # 199 "Base/Effect/Fs.vuna"
 let v_Base_dEffect_dFs_dfsOpHIOHost = (fun (op : t_Base_dEffect_dFs_dFsOp) k -> (match op with
@@ -98,7 +98,7 @@ let v_Base_dEffect_dFs_dfsOpHIOHost = (fun (op : t_Base_dEffect_dFs_dFsOp) k -> 
 ))
 
 # 278 "Base/Effect/Fs.vuna"
-let v_Base_dEffect_dFs_dhandleFsHostHost = (fun (n : string) comp -> (((((Base_dEffect_dCore.v_Base_dEffect_dCore_dhandleCoreAt "fs") n) (fun a -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) a))) v_Base_dEffect_dFs_dfsOpHIOHost) comp))
+let v_Base_dEffect_dFs_dhandleFsHostHost = (fun (n : string) comp -> (((((((Base_dEffect_dCore.v_Base_dEffect_dCore_dhandleCoreAtId "fs") n) 371381598) (dtp_effectId n)) (fun a -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) a))) v_Base_dEffect_dFs_dfsOpHIOHost) comp))
 
 # 282 "Base/Effect/Fs.vuna"
 let v_Base_dEffect_dFs_drunFsHost = (fun comp -> (Base_dEffect_dCore.v_Base_dEffect_dCore_djoinEff ((v_Base_dEffect_dFs_dhandleFsHostHost "default") comp)))
@@ -113,7 +113,7 @@ let v_Base_dEffect_dFs_dfsErrorOpHR = (fun (op : t_Base_dEffect_dFs_dFsErrorOp) 
 ))
 
 # 296 "Base/Effect/Fs.vuna"
-let v_Base_dEffect_dFs_drunFsError = (fun (n : string) comp -> (((((Base_dEffect_dCore.v_Base_dEffect_dCore_dhandleCoreAt "fs-error") n) v_Base_dEffect_dFs_dfsErrorRet) v_Base_dEffect_dFs_dfsErrorOpHR) comp))
+let v_Base_dEffect_dFs_drunFsError = (fun (n : string) comp -> (((((((Base_dEffect_dCore.v_Base_dEffect_dCore_dhandleCoreAtId "fs-error") n) 1044473165) (dtp_effectId n)) v_Base_dEffect_dFs_dfsErrorRet) v_Base_dEffect_dFs_dfsErrorOpHR) comp))
 
 # 300 "Base/Effect/Fs.vuna"
 let v_Base_dEffect_dFs_drunFsErrorHost = (fun comp -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((v_Base_dEffect_dFs_drunFsError "fs-error") comp)) (fun res -> (match res with

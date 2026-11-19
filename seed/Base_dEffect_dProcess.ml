@@ -4,22 +4,22 @@ and t_Base_dEffect_dProcess_dProcessError = C_Base_dEffect_dProcess_dProcessErro
 and t_Base_dEffect_dProcess_dProcessErrorOp = C_Base_dEffect_dProcess_dProcessErrorOp_ProcessFail of (t_Base_dEffect_dProcess_dProcessError)
 
 # 28 "Base/Effect/Process.vuna"
-let v_Base_dEffect_dProcess_dprocessArgs = (fun (n : string) -> (((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCore "process") n) C_Base_dEffect_dProcess_dProcessOp_Args))
+let v_Base_dEffect_dProcess_dprocessArgs = (fun (n : string) -> (((((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCoreId "process") n) 485051770) (dtp_effectId n)) C_Base_dEffect_dProcess_dProcessOp_Args))
 
 # 32 "Base/Effect/Process.vuna"
-let v_Base_dEffect_dProcess_dprocessExit = (fun (n : string) (c : int) -> (((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCore "process") n) (C_Base_dEffect_dProcess_dProcessOp_Exit (c))))
+let v_Base_dEffect_dProcess_dprocessExit = (fun (n : string) (c : int) -> (((((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCoreId "process") n) 485051770) (dtp_effectId n)) (C_Base_dEffect_dProcess_dProcessOp_Exit (c))))
 
 # 36 "Base/Effect/Process.vuna"
-let v_Base_dEffect_dProcess_dprocessRunIn = (fun (n : string) (dir : string) (args : string Base_dData_dList.t_Base_dData_dList_dList) -> (((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCore "process") n) (C_Base_dEffect_dProcess_dProcessOp_RunIn (dir, args))))
+let v_Base_dEffect_dProcess_dprocessRunIn = (fun (n : string) (dir : string) (args : string Base_dData_dList.t_Base_dData_dList_dList) -> (((((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCoreId "process") n) 485051770) (dtp_effectId n)) (C_Base_dEffect_dProcess_dProcessOp_RunIn (dir, args))))
 
 # 42 "Base/Effect/Process.vuna"
-let v_Base_dEffect_dProcess_dprocessSpawn = (fun (n : string) (args : string Base_dData_dList.t_Base_dData_dList_dList) -> (((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCore "process") n) (C_Base_dEffect_dProcess_dProcessOp_Spawn (args))))
+let v_Base_dEffect_dProcess_dprocessSpawn = (fun (n : string) (args : string Base_dData_dList.t_Base_dData_dList_dList) -> (((((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCoreId "process") n) 485051770) (dtp_effectId n)) (C_Base_dEffect_dProcess_dProcessOp_Spawn (args))))
 
 # 48 "Base/Effect/Process.vuna"
-let v_Base_dEffect_dProcess_dprocessWait = (fun (n : string) (h : int) -> (((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCore "process") n) (C_Base_dEffect_dProcess_dProcessOp_Wait (h))))
+let v_Base_dEffect_dProcess_dprocessWait = (fun (n : string) (h : int) -> (((((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCoreId "process") n) 485051770) (dtp_effectId n)) (C_Base_dEffect_dProcess_dProcessOp_Wait (h))))
 
 # 66 "Base/Effect/Process.vuna"
-let v_Base_dEffect_dProcess_dprocessFail = (fun (n : string) (e : t_Base_dEffect_dProcess_dProcessError) -> (((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCore "process-error") n) (C_Base_dEffect_dProcess_dProcessErrorOp_ProcessFail (e))))
+let v_Base_dEffect_dProcess_dprocessFail = (fun (n : string) (e : t_Base_dEffect_dProcess_dProcessError) -> (((((Base_dEffect_dCore.v_Base_dEffect_dCore_dsendCoreId "process-error") n) 44116993) (dtp_effectId n)) (C_Base_dEffect_dProcess_dProcessErrorOp_ProcessFail (e))))
 
 # 70 "Base/Effect/Process.vuna"
 let v_Base_dEffect_dProcess_dprocessErrorOfCode = (fun (mc0 : string) (mc1 : int) -> (if (mc1 = 1) then (C_Base_dEffect_dProcess_dProcessError_ProcessNoDir (mc0)) else (if (mc1 = 2) then (C_Base_dEffect_dProcess_dProcessError_ProcessLaunchDenied (mc0)) else (C_Base_dEffect_dProcess_dProcessError_ProcessHostIo (mc0)))))
@@ -33,7 +33,7 @@ let v_Base_dEffect_dProcess_dprocessErrorText = (fun (mc0 : t_Base_dEffect_dProc
 ))
 
 # 82 "Base/Effect/Process.vuna"
-let v_Base_dEffect_dProcess_dhandleProcess = (fun (n : string) ret opH comp -> (((((Base_dEffect_dCore.v_Base_dEffect_dCore_dhandleCore "process") n) ret) (Obj.magic opH)) comp))
+let v_Base_dEffect_dProcess_dhandleProcess = (fun (n : string) ret opH comp -> (((((((Base_dEffect_dCore.v_Base_dEffect_dCore_dhandleCoreId "process") n) 485051770) (dtp_effectId n)) ret) (Obj.magic opH)) comp))
 
 # 86 "Base/Effect/Process.vuna"
 let v_Base_dEffect_dProcess_dprocessOpHIOWith = (fun (op : t_Base_dEffect_dProcess_dProcessOp) k -> (match op with
@@ -46,7 +46,7 @@ let v_Base_dEffect_dProcess_dprocessOpHIOWith = (fun (op : t_Base_dEffect_dProce
 ))
 
 # 109 "Base/Effect/Process.vuna"
-let v_Base_dEffect_dProcess_dhandleProcessHostWith = (fun (n : string) comp -> (((((Base_dEffect_dCore.v_Base_dEffect_dCore_dhandleCoreAt "process") n) (fun a -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) a))) v_Base_dEffect_dProcess_dprocessOpHIOWith) comp))
+let v_Base_dEffect_dProcess_dhandleProcessHostWith = (fun (n : string) comp -> (((((((Base_dEffect_dCore.v_Base_dEffect_dCore_dhandleCoreAtId "process") n) 485051770) (dtp_effectId n)) (fun a -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) a))) v_Base_dEffect_dProcess_dprocessOpHIOWith) comp))
 
 # 117 "Base/Effect/Process.vuna"
 let v_Base_dEffect_dProcess_dprocessHostStatus = (Base_dEffect_dCore.v_Base_dEffect_dCore_draise (Base_dEffect_dCore.C_Base_dEffect_dCore_dEff_MkEff (fun (_ : Base_dEffect_dCore.t_Base_dEffect_dCore_dEffUnit) -> (dtp_hostStatus ()))))
@@ -62,7 +62,7 @@ let v_Base_dEffect_dProcess_dprocessOpHIOWithHost = (fun (op : t_Base_dEffect_dP
 ))
 
 # 145 "Base/Effect/Process.vuna"
-let v_Base_dEffect_dProcess_dhandleProcessHostWithHost = (fun (n : string) comp -> (((((Base_dEffect_dCore.v_Base_dEffect_dCore_dhandleCoreAt "process") n) (fun a -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) a))) v_Base_dEffect_dProcess_dprocessOpHIOWithHost) comp))
+let v_Base_dEffect_dProcess_dhandleProcessHostWithHost = (fun (n : string) comp -> (((((((Base_dEffect_dCore.v_Base_dEffect_dCore_dhandleCoreAtId "process") n) 485051770) (dtp_effectId n)) (fun a -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) a))) v_Base_dEffect_dProcess_dprocessOpHIOWithHost) comp))
 
 # 150 "Base/Effect/Process.vuna"
 let v_Base_dEffect_dProcess_drunProcessHost = (fun comp -> (Base_dEffect_dCore.v_Base_dEffect_dCore_djoinEff ((v_Base_dEffect_dProcess_dhandleProcessHostWithHost "default") comp)))
@@ -77,7 +77,7 @@ let v_Base_dEffect_dProcess_dprocessErrorOpHR = (fun (op : t_Base_dEffect_dProce
 ))
 
 # 166 "Base/Effect/Process.vuna"
-let v_Base_dEffect_dProcess_drunProcessError = (fun (n : string) comp -> (((((Base_dEffect_dCore.v_Base_dEffect_dCore_dhandleCoreAt "process-error") n) v_Base_dEffect_dProcess_dprocessErrorRet) v_Base_dEffect_dProcess_dprocessErrorOpHR) comp))
+let v_Base_dEffect_dProcess_drunProcessError = (fun (n : string) comp -> (((((((Base_dEffect_dCore.v_Base_dEffect_dCore_dhandleCoreAtId "process-error") n) 44116993) (dtp_effectId n)) v_Base_dEffect_dProcess_dprocessErrorRet) v_Base_dEffect_dProcess_dprocessErrorOpHR) comp))
 
 # 171 "Base/Effect/Process.vuna"
 let v_Base_dEffect_dProcess_drunProcessErrorHost = (fun comp -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((v_Base_dEffect_dProcess_drunProcessError "process-error") comp)) (fun res -> (match res with
