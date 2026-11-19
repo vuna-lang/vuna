@@ -17,13 +17,13 @@ ID 是稳定引用（`层前缀-序号`），改动时保留编号，删掉实�
 | FE-02 | `Packages/Source.vuna` 的 `collectNames` / `walkName` | ⚠️C | 同上（同族另一口径 `Pkg.loadPackageWalk` 是 `icFuel`） | 已清（同 FE-01） |
 | FE-03 | `Frontend/Parser.vuna` 的 `parseModDecl` | ⚠️B | 显式导出列表从不解析，`modDeclHasExportList` 恒 False，但 Ast/Canonical/Fmt/LSP 都在读 | 开放 |
 | FE-04 | `Parser.vuna` 的 `exportMarkerFollows` | A | 两个分支同值，`export x = 1` 被当成导出标记 | 已清 |
-| FE-05 | `Parser/Support.vuna` 的 `binderHead` | C | binder 组上限 64 名，超出静默退化成普通括号表达式 | 开放 |
+| FE-05 | `Parser/Support.vuna` 的 `binderHead` | C | binder 组上限 64 名，超出静默退化成普通括号表达式 | 已清（名字串沿 token 列表结构扫描，无 64 上限） |
 | FE-06 | `Manifest.vuna` 的 `layerHasCycle` | ⚠️C | fuel 只按「层数+1」，队列更宽时环路漏检 | 开放 |
 | FE-07 | `Manifest.vuna` 的 schema 编码 | D | 注释 / `checkOneEntry` / `buildManifest` 三处手工同步 | 开放 |
-| FE-08 | `Toml.vuna` 的 `parseIntegerDigits` | C | 整数累加无溢出检查（词法器对源码字面量有 `IntLiteralOutOfRange`） | 开放 |
+| FE-08 | `Toml.vuna` 的 `parseIntegerDigits` | C | 整数累加无溢出检查（词法器对源码字面量有 `IntLiteralOutOfRange`） | 已清（按 `Lexer.maxIntLiteral` 判界，报 `PKG_TomlSyntax`） |
 | FE-09 | `Toml.vuna` 的 `flatten*` / `nodeValue` | D | `fuel` 是 SCT 的测度、从不检查；越界不可达靠调用方论证 | 开放 |
 | FE-10 | `Toml.vuna` 的 `nodeFields` | C | 表数组元素不是表时静默给空表 | 开放 |
-| FE-11 | `Cst.vuna` 的 `closeBlocks` / `buildCst` | ⚠️C | 4096 / `tokCount*4+64` 估算上界，耗尽静默留下未闭合节点 | 开放 |
+| FE-11 | `Cst.vuna` 的 `closeBlocks` / `buildCst` | ⚠️C | 4096 / `tokCount*4+64` 估算上界，耗尽静默留下未闭合节点 | 已清（`closeBlocks`/`closeDecls` fuel = 栈长，`buildCst` fuel = token 数） |
 | FE-12 | `Cst.vuna` 的 `scanStringEnd` / `scanDigitsEnd` | D | 为还原原文二次扫描，规则与 lexer 手工一致 | 开放 |
 | FE-13 | `Lexer.isOpChar` + `Parser.parseAtomBase` 的限定符号分支 | C | `.` 并入运算符 token，`A.+` 形状不可达（分支已删；限定运算符引用不存在） | 已清 |
 | FE-14 | `Parser.vuna` 的 `parseDoStmt` | A | 任何模式错误都被吞掉、改按表达式重试 | 开放 |
@@ -72,12 +72,12 @@ ID 是稳定引用（`层前缀-序号`），改动时保留编号，删掉实�
 | EL-10 | `Case.vuna` 的 `hasCatchAll` | A | 任何非 `PCon` 头（含 `PInt`/`PStr`/`PRecord`）都算兜底 → 跳过穷尽检查 | 已清（只认 `PVar`/`PWild`） |
 | EL-11 | `Records.vuna` 的 `desugarPatternFuel` | ⚠️A | 耗尽 `OkC pat` 静默返回半降级模式（对照组 `desugarExprFuel` 是 `icFuel`） | 已清（耗尽报 `icFuel`） |
 | EL-12 | `Match.vuna` 的 `familyCovered` | C | 缺族信息时补 `_` 兜底 → 注释自认会报假 `missing` | 开放 |
-| EL-13 | `Coverage.vuna` 的见证搜索 | C | fuel 耗尽 `Nothing`（少报见证） | 开放 |
+| EL-13 | `Coverage.vuna` 的见证搜索 | C | fuel 耗尽 `Nothing`（少报见证） | 已清（燃料按矩阵节点数派生） |
 | EL-14 | `Data.vuna` 的 `eraseIndexMask` | B | 索引擦除只有分析，无消费者（死 API） | 开放 |
 | EL-15 | `Records.vuna` 的 `HasField` 注入 | C | 生成实例硬编码 base 具体名字（`Field`/`HasField`/`getField`） | 开放 |
 | EL-16 | `Derive.vuna` 的 `boolTrue`/`boolFalse` | A | 用 `1 == 1` / `0 == 1` 造 Bool（派生实例不依赖源码 Bool 构造子） | 开放（有意） |
-| EL-17 | `Usage.vuna` 的捕获检查 | C | 上限后 `icInternal`（应保守拒绝） | 开放 |
-| EL-18 | `Representation.vuna` 的 `termIsFunction` | C | 只看顶层 `TPi`，别名展开的函数类型逃过判据 | 开放 |
+| EL-17 | `Usage.vuna` 的捕获检查 | C | 上限后 `icInternal`（应保守拒绝） | 已清（报 `TC_CaptureFuel`，保守拒绝） |
+| EL-18 | `Representation.vuna` 的 `termIsFunction` | C | 只看顶层 `TPi`，别名展开的函数类型逃过判据 | 已清（沿单字段 record/alias 头展开到 `TPi`） |
 | EL-19 | `Data.vuna` 的 record 字段类型 | C | `shift 0 (0-i)` 硬假设字段类型不引用前序字段 | 开放 |
 
 ## Elab：Term / Meta / Conv / Dict / Trait
@@ -130,7 +130,7 @@ ID 是稳定引用（`层前缀-序号`），改动时保留编号，删掉实�
 | IR-04 | `Ir/Anf.vuna` | ⚠️C | 燃料耗尽静默返回未变换子项，`anfProgramDefs` 恒 `Ok` | 已清（预算按程序规模派生） |
 | IR-05 | `Ir/Cps.vuna` | ⚠️C | 20+ 处 `if fuel <= 0 then e` 返回半 CPS 形态 | 已清（各 pass 预算按项规模派生） |
 | IR-06 | `Ir/Cps.vuna` 的 `mCpsApply` | A | 耗尽返回 `IrGlobal "?"` 占位 | 已清（耗尽退化成直接应用，不再占位） |
-| IR-07 | `Ir/Cps.vuna` 的 `mStepsDef` | A | 注入的 `machineRun` 全局不在 `irDefDeps` → SCC/可达性看不见 | 开放 |
+| IR-07 | `Ir/Cps.vuna` 的 `mStepsDef` | A | 注入的 `machineRun` 全局不在 `irDefDeps` → SCC/可达性看不见 | 已清（`mStepsDef` 把注入的 `machineRun` 记进 deps） |
 | IR-08 | `Ir/Cps.vuna` 的 `transformDef` | D | 直接风格 pass（`transformDirect` / `transformDef` / `selfBody`）与 def 签名已保留；机器 pass（`mHandlers` / `mSyms` / `mApplys` / `mMarked` / `mSteps`）仍属类型改变型，节点类型槽继续置空 | 开放（部分） |
 | IR-09 | `Ir/Cps.vuna` 的 `isHandleCombinator` | C | handler 组合子按类型判据（结果 `Eff` + clause 参数）；opH 为裸类型变量的核心组合子（`handleCore` / `handleCoreAt` / `handleCoreLin` / `handleWith` / `handleWithAt`）用显式 allowlist，不再用字符串启发式 | 已清 |
 | IR-10 | `Ir/Cps.vuna` 的 `isEffResultTy` 注释 | C | 曾与 `Lowering.effResultTyOf` 的实参口径不符 | 已清（对齐注释） |
@@ -141,8 +141,8 @@ ID 是稳定引用（`层前缀-序号`），改动时保留编号，删掉实�
 | IR-15 | `Lowering/Env.vuna` 的 `defTblOf`/`findDtDef` | C | 同键「后插优先」vs「首匹配」，重名时口径不同 | 已清（语义一致：重复名取靠前的一条；注释纠正） |
 | IR-16 | `Lowering/Program.vuna` 的 `zipFieldNames` | C | 字段表与实参表长度不一静默截断 | 已清（长度不等报 ICE） |
 | IR-17 | `Lowering/Program.vuna` 的 `lookupRtPositionsIn` | C | 找不到运行时位置就静默丢字段更新 | 已清（找不到运行时位置报 ICE） |
-| IR-18 | `Lowering/Entry.vuna` 的 `mainShowIr` | A | 用空 def 表 `force`，别名一律退到 `@vuna@main_show` | 开放 |
-| IR-19 | `Lowering/Checks.vuna` 的 `checkErasure` | A | 命中 Nat 链就 `OkC 0`，整条链跳过擦除/作用域检查 | 开放 |
+| IR-18 | `Lowering/Entry.vuna` 的 `mainShowIr` | A | 用空 def 表 `force`，别名一律退到 `@vuna@main_show` | 已清（force 表与 Elab 收尾同源） |
+| IR-19 | `Lowering/Checks.vuna` 的 `checkErasure` | A | 命中 Nat 链就 `OkC 0`，整条链跳过擦除/作用域检查 | 已清（每个节点折回 Nat 链，长字面量嵌在大项里也不吃 fuel） |
 | IR-20 | `Ir/Anf.vuna` 的 `__anf` 编号 | D | 二次 ANF 靠 `startsWith "__anf"` 计数避撞名（D111） | 开放 |
 | IR-21 | `Core/Canonical.vuna` | C | 规范化编码含 binder 名 ⇒ 重命名即换 iface 哈希 | 开放 |
 
