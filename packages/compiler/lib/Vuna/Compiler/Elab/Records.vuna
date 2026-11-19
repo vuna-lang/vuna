@@ -161,7 +161,7 @@ desugarPattern records pat = desugarPatternFuel 64 records pat
 desugarPatternFuel : Int -> List RecordMeta -> Pat -> Check Pat
 desugarPatternFuel fuel records pat =
   if fuel <= 0 then
-    OkC pat
+    icFuel "record pattern desugar"
   else
     case pat of
       PWild sp => OkC (PWild sp)
@@ -178,7 +178,7 @@ desugarPatternFuel fuel records pat =
 desugarRecordPatternFieldsFuel : Int -> List RecordMeta -> List RecordFieldMeta -> List (Pair String Pat) -> Span -> Check (List Pat)
 desugarRecordPatternFieldsFuel fuel records fdefs provided sp =
   if fuel <= 0 then
-    OkC []
+    icFuel "record pattern desugar"
   else
     case fdefs of
       [] => OkC []

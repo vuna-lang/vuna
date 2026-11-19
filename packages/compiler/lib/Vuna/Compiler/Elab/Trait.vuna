@@ -989,7 +989,7 @@ solveCtxGoalsGo ctx nCtx ec ((g@(Constraint cid kind m dom cspan cdepth)) :: res
         Just i =>
           let
             k = nCtx - 1 - i
-          in case solveMeta (ecDefTbl ec) (ecSolsP ec) 0 m [] (VNeutral (NVar (ctxDictName k) (ctxDepth ctx - nCtx + k) [])) of
+          in case solveMeta (ecDefTbl ec) (ecSolsP ec) (ctxDepth ctx) m [] (VNeutral (NVar (ctxDictName k) (ctxDepth ctx - nCtx + k) [])) of
             OkC sols2 =>
               solveCtxGoalsGo ctx nCtx (ecPutSols ec (solsList sols2)) rest kept (Pair m k :: acc)
             ErrC e => solveCtxGoalsGo ctx nCtx ec rest kept acc
@@ -1032,7 +1032,7 @@ resolveRigidGoalsGo globals ctx sp ((g@(Constraint cid kind m dom cspan cdepth))
     case searchInstanceIn globals ctx ec dom sp of
       ErrC e => tcErr1 sp (InstanceContextMissing (showValue dom)) (showValue dom)
       OkC (Pair rep ec1) =>
-        case solveMeta (ecDefTbl ec1) (ecSolsP ec1) 0 m [] (eval (ctxEnv ctx) rep) of
+        case solveMeta (ecDefTbl ec1) (ecSolsP ec1) (ctxDepth ctx) m [] (eval (ctxEnv ctx) rep) of
           OkC sols2 => resolveRigidGoalsGo globals ctx sp rest kept (Pair m rep :: acc) (ecPutSols ec1 (solsList sols2))
           ErrC e => resolveRigidGoalsGo globals ctx sp rest kept (Pair m rep :: acc) ec1
   else
@@ -1148,7 +1148,7 @@ leadingImplicitCount _ = 0
 -- 解的作用域在 Core.Conv 求解点就地检查，这里不再事后复核。
 export solveLiftedMeta : Ec -> String -> Int -> Int -> Ec
 solveLiftedMeta ec name level m =
-  case solveMeta (ecDefTbl ec) (ecSolsP ec) 0 m [] (VNeutral (NVar name level [])) of
+  case solveMeta (ecDefTbl ec) (ecSolsP ec) (level + 1) m [] (VNeutral (NVar name level [])) of
     OkC sols2 => ecPutSols ec (solsList sols2)
     ErrC e => ec
 

@@ -632,9 +632,9 @@ ctxMemberProofUnifyGo ctx ((Pair name ty) :: rest) idx ec dom =
     OkC ec2 => Just (Pair (TVar name idx (Span "" 0 0 0 0 0 0)) ec2)
     ErrC _ => ctxMemberProofUnifyGo ctx rest (idx + 1) ec dom
 
-solveRowMeta : Ec -> Int -> Value -> Check Ec
-solveRowMeta ec m v =
-  case solveMeta (ecDefTbl ec) (ecSolsP ec) 0 m [] v of
+solveRowMeta : Ec -> Int -> Int -> Value -> Check Ec
+solveRowMeta ec depth m v =
+  case solveMeta (ecDefTbl ec) (ecSolsP ec) depth m [] v of
     OkC sols2 => OkC (ecPutSols ec (solsList sols2))
     ErrC e => ErrC e
 
@@ -648,7 +648,7 @@ resolveRowGoalsCtxGo globals ctx sp ((c@(Constraint cid kind m dom cspan cdepth)
     True =>
       case memberLookup 64 (ctxDepth ctx) ec dom of
         MemberFound proof ec2 =>
-          case solveRowMeta ec2 m proof of
+          case solveRowMeta ec2 (ctxDepth ctx) m proof of
             OkC ec3 => resolveRowGoalsCtxGo globals ctx sp rest ec3 kept
             ErrC e => ErrC e
         MemberAbsent => tcErr1 sp (NoInstanceFound "row membership") "row membership"
@@ -662,13 +662,13 @@ resolveRowGoalsCtxGo globals ctx sp ((c@(Constraint cid kind m dom cspan cdepth)
         MemberStuck =>
           case ctxMemberProofTerm ctx ec dom of
             Just proofTerm =>
-              case solveRowMeta ec m (eval (ctxEnv ctx) proofTerm) of
+              case solveRowMeta ec (ctxDepth ctx) m (eval (ctxEnv ctx) proofTerm) of
                 OkC ec2 => resolveRowGoalsCtxGo globals ctx sp rest ec2 kept
                 ErrC e => ErrC e
             Nothing =>
               case ctxMemberProofUnify ctx ec dom of
                 Just (Pair proofTerm ec2) =>
-                  case solveRowMeta ec2 m (eval (ctxEnv ctx) proofTerm) of
+                  case solveRowMeta ec2 (ctxDepth ctx) m (eval (ctxEnv ctx) proofTerm) of
                     OkC ec3 => resolveRowGoalsCtxGo globals ctx sp rest ec3 kept
                     ErrC e => ErrC e
                 Nothing => tcErr1 sp (NoInstanceFound "row membership") "row membership"
@@ -753,7 +753,7 @@ tryResolveDictGoal globals ec (Constraint cid kind m dom cspan cdepth) forced =
   if isMemberDomain ec dom then
     case memberLookup 64 0 ec dom of
       MemberFound proof ec2 =>
-        case solveRowMeta ec2 m proof of
+        case solveRowMeta ec2 cdepth m proof of
           OkC ec3 => Just ec3
           ErrC e => Nothing
       MemberAbsent => Nothing
@@ -770,7 +770,7 @@ tryResolveDictGoal globals ec (Constraint cid kind m dom cspan cdepth) forced =
         else
           case searchInstance ec forced (Span "" 0 0 0 0 0 0) of
             OkC (Pair instTerm ec2) =>
-              case solveMeta (ecDefTbl ec2) (ecSolsP ec2) 0 m [] (eval [] instTerm) of
+              case solveMeta (ecDefTbl ec2) (ecSolsP ec2) cdepth m [] (eval [] instTerm) of
                 OkC sols2 => Just (ecPutSols ec2 (solsList sols2))
                 ErrC e => Nothing
             ErrC e => Nothing

@@ -292,7 +292,7 @@ solveDeclaredDictGoalsGo ec binders goals kept acc =
                 -- q = level + 1：出现点（term 根下的 lambda 深度 depth）的 index = depth - q，正好等于
                 -- 该 binder 在「全部隐式 binder 之外再加 depth 层 λ」处的 de Bruijn index。
                 q = b.declDictLevel + 1
-              in case solveMeta (ecDefTbl ec) (ecSolsP ec) 0 m [] (VNeutral (NVar b.declDictName b.declDictLevel [])) of
+              in case solveMeta (ecDefTbl ec) (ecSolsP ec) (b.declDictLevel + 1) m [] (VNeutral (NVar b.declDictName b.declDictLevel [])) of
                 OkC sols2 =>
                   solveDeclaredDictGoalsGo
                     (ecPutSols ec (solsList sols2))
