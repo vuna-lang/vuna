@@ -943,6 +943,7 @@ isParserSyntaxName name =
 
 -- 宏展开产生的隐藏原语引用（`!name`）：剥前缀后必须是内建表里的名字（`visible`
 -- 与否都行）；否则是展开器自己拼错，报 internal error 而不是静默透传。
+-- 单个 `!` 不是隐藏引用，而是用户声明的普通运算符名。
 hiddenRef : String -> Span -> Check Expr
 hiddenRef name sp =
   let
@@ -959,7 +960,7 @@ resolveExpr fuel modules label prefix ns imports scope expr =
     case expr of
       -- `_` / `?name` 是洞，不是可解析的名字（`_` 也走 `dtPreludeNames`，命名洞必须
       -- 在这里直接放行，否则会报 unbound variable）。
-      EVar name sp => if isHoleName name then OkC (EVar name sp) else if startsWith "!" name then hiddenRef name sp else if isMacroSyntaxName name then icInternal "unexpanded macro invocation ${name}" else if isInternalSyntaxName name then if isParserSyntaxName name || isCompilerModulePrefix prefix then OkC (EVar name sp) else onErrDiag (withFallbackSpan sp) (rnNoLoc1 (UnknownVariable name) name) else if containsDot name then resolveDottedExpr modules label prefix ns imports scope name sp else Vuna.Compiler.Base.Common.bind (onErrDiag (withFallbackSpan sp) (resolveGlobal modules label prefix ns imports scope name)) (\n => checkDebugConstruct ns.nsRelease sp name n scope)
+      EVar name sp => if isHoleName name then OkC (EVar name sp) else if startsWith "!" name && strLength name > 1 then hiddenRef name sp else if isMacroSyntaxName name then icInternal "unexpanded macro invocation ${name}" else if isInternalSyntaxName name then if isParserSyntaxName name || isCompilerModulePrefix prefix then OkC (EVar name sp) else onErrDiag (withFallbackSpan sp) (rnNoLoc1 (UnknownVariable name) name) else if containsDot name then resolveDottedExpr modules label prefix ns imports scope name sp else Vuna.Compiler.Base.Common.bind (onErrDiag (withFallbackSpan sp) (resolveGlobal modules label prefix ns imports scope name)) (\n => checkDebugConstruct ns.nsRelease sp name n scope)
       -- 内置宏标记必须在 `Loader.Expand` 里展开；走到这里说明展开漏了（internal error，
       -- 不静默透传成普通内部名）。
       -- `EInfix` / `EParen` 是 parser 的中间产物，正常路径在 Loader 重排里已消除；
