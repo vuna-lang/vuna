@@ -182,7 +182,8 @@ binder 的**身份**在 Lowering 分配，前缀与编号渲染属后端：
   wasm 发 `return_call` / `return_call $rt_apply`。native 的来参区不够、闭包慢路径、
   wasm 的非法目标仍回退普通调用。
 - wasm 的零参定义在 `_start` 里内联求值，因此 `genDefInit` 用 `stripTail` 去掉该上下文
-  的标记；`IrLam` 的 body 由 codegen 合成时用 `annotateExpr` / `annotateBody` 重新标记。
+  的标记；codegen 合成的效应 thunk / eta wrapper body 不标记（标记只来自 IR 里的
+  `IrLam`，避免在效应机器里把普通返回误发成 `return_call`）。
 - `IrTail` 不是 `MkRestTail`：后者是续延 resume 的语义标记，`Ir.Tail` 不改写它。
 
 ## 分析与分组（`Vuna.Compiler.Ir.Analysis`）
