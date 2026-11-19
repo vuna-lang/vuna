@@ -49,11 +49,11 @@
       "ratios": {"vuna_ocaml": { "vs_handwritten": 2.00, "rss_vs_handwritten": 2.95 }, "native": { "vs_handwritten": 4.00, "rss_vs_handwritten": 1.01, "vs_ocaml_backend": 2.00, "rss_vs_ocaml_backend": 0.34 }, "wasm": { "vs_handwritten": 13.00, "rss_vs_handwritten": 18.55, "net_vs_handwritten": 5.67, "vs_ocaml_backend": 6.50, "rss_vs_ocaml_backend": 6.28 } }
     },
     "eff_bracket": {
-      "ocaml_ref": { "run_ok": true, "median_ms": 3, "rss_kb": 2456 },
-      "vuna_ocaml": { "run_ok": true, "median_ms": 11, "rss_kb": 20384, "artifact": { "bytes": 219245, "lines": 3003 }, "gc": { "minor_words": 915, "major_words": 0, "minor_collections": 1, "major_collections": 0, "top_heap_words": 53248 } },
-      "native": { "run_ok": true, "median_ms": 272, "rss_kb": 50816, "artifact": { "bytes": 363933, "lines": 16914 }, "gc": { "collections": 11, "live_bytes": 26276224, "alloc_bytes": 34251584 }, "default_stack_ok": true },
-      "wasm": { "run_ok": true, "median_ms": 172, "rss_kb": 155436, "net_median_ms": 150, "artifact": { "wat_bytes": 447620, "wat_lines": 18681, "wasm_bytes": 57709 }, "memory_bytes": 262144 },
-      "ratios": {"vuna_ocaml": { "vs_handwritten": 3.67, "rss_vs_handwritten": 8.30 }, "native": { "vs_handwritten": 90.67, "rss_vs_handwritten": 20.69, "vs_ocaml_backend": 24.73, "rss_vs_ocaml_backend": 2.49 }, "wasm": { "vs_handwritten": 57.33, "rss_vs_handwritten": 63.29, "net_vs_handwritten": 50.00, "vs_ocaml_backend": 15.64, "rss_vs_ocaml_backend": 7.63 } }
+      "ocaml_ref": { "run_ok": true, "median_ms": 3, "rss_kb": 2624 },
+      "vuna_ocaml": { "run_ok": true, "median_ms": 12, "rss_kb": 18712, "artifact": { "bytes": 218118, "lines": 2967 }, "gc": { "minor_words": 915, "major_words": 0, "minor_collections": 1, "major_collections": 0, "top_heap_words": 53248 } },
+      "native": { "run_ok": true, "median_ms": 35, "rss_kb": 4252, "artifact": { "bytes": 355003, "lines": 16512 }, "gc": { "collections": 72, "live_bytes": 614640, "alloc_bytes": 1125856 }, "default_stack_ok": true },
+      "wasm": { "run_ok": true, "median_ms": 64, "rss_kb": 63156, "net_median_ms": 40, "artifact": { "wat_bytes": 464137, "wat_lines": 19093, "wasm_bytes": 58245 }, "memory_bytes": 262144 },
+      "ratios": {"vuna_ocaml": { "vs_handwritten": 4.00, "rss_vs_handwritten": 7.13 }, "native": { "vs_handwritten": 11.67, "rss_vs_handwritten": 1.62, "vs_ocaml_backend": 2.92, "rss_vs_ocaml_backend": 0.23 }, "wasm": { "vs_handwritten": 21.33, "rss_vs_handwritten": 24.07, "net_vs_handwritten": 13.33, "vs_ocaml_backend": 5.33, "rss_vs_ocaml_backend": 3.38 } }
     },
     "eff_deep": {
       "ocaml_ref": { "run_ok": true, "median_ms": 3, "rss_kb": 3232 },

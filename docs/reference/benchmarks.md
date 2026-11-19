@@ -217,7 +217,7 @@ ratio 相对手写 OCaml；wasm 括号里是减掉 `meta.node_startup_ms` = 22 m
 | eff_tick（20000 次 perform） | 4 | 10（2.5x） | 199（49.8x） | 182（45.5x；net 160 / 40.0x） |
 | eff_deep（深度 2000 捕获一次） | 3 | 4（1.3x） | 5（1.7x） | 35（11.7x；net 13 / 4.3x） |
 | eff_deepseq（深度 2000 每层 perform） | 3 | 4（1.3x） | 12（4.0x） | 51（17.0x；net 29 / 9.7x） |
-| eff_bracket（10000 轮 bracket） | 3 | 11（3.7x） | 272（90.7x） | 172（57.3x；net 150 / 50.0x） |
+| eff_bracket（10000 轮 bracket） | 3 | 12（4.0x） | 35（11.7x） | 64（21.3x；net 40 / 13.3x） |
 | eff_nested（2000 层 handler） | 4 | 5（1.3x） | 11（2.8x） | 46（11.5x；net 24 / 6.0x） |
 | eff_host（answer 是 Eff 的 Console） | 3 | 6（2.0x） | 85（28.3x） | 133（44.3x；net 111 / 37.0x） |
 | eff_abort（abort 路径 cleanup） | 3 | 6（2.0x） | 12（4.0x） | 39（13.0x；net 17 / 5.7x） |
@@ -226,6 +226,8 @@ ratio 相对手写 OCaml；wasm 括号里是减掉 `meta.node_startup_ms` = 22 m
 | traits（约束多态字典派发） | 5 | 6（1.2x） | 18（3.6x） | 40（8.0x；net 18 / 3.6x） |
 
 同一份数据在 `bench/baselines/programs.json`；`--only eff_*` 是效应面的快检子集。
+`eff_bracket` 的 vuna 与 `.ml` 都是尾递归（`loop n acc`）；修正前 vuna 版本是非尾递归，
+历史表里它的旧读数（90x / 57x）不可与修正后对照。
 
 **CPS 前后**（wasm：`445315d` 的 wat 机器 → HEAD 的库机器；native：`e663921` 的栈拷贝 →
 HEAD 的库机器；`--runs 3 --warmup 1`，源码与 harness 都是 HEAD）：
@@ -233,7 +235,7 @@ HEAD 的库机器；`--runs 3 --warmup 1`，源码与 harness 都是 HEAD）：
 | benchmark | native 前 | native 后 | wasm 前 | wasm 后 |
 | --- | --- | --- | --- | --- |
 | eff_tick（20000） | 25587 ms / 21.4 GB | 214 ms / 57 MB | 栈溢出（`Maximum call stack size exceeded`） | 184 ms |
-| eff_bracket（10000） | 8955 ms / 12.6 GB | 268 ms / 51 MB | 栈溢出 | 174 ms |
+| eff_bracket（10000，修正前非尾版本） | 8955 ms / 12.6 GB | 268 ms / 51 MB | 栈溢出 | 174 ms |
 | eff_deep（2000） | 5 ms | 6 ms | 36 ms | 34 ms |
 
 - native 的栈拷贝按「每次 perform 留一段栈」计费，20k 次顺序 perform 就要 21.4 GB；
@@ -269,13 +271,14 @@ native 在 40k 之后出现台阶：`VUNA_NATIVE_GC_MIN=2G` 下同一 80k 档只
 | benchmark | native 前 | native 后 | wasm 前 | wasm 后 |
 | --- | --- | --- | --- | --- |
 | eff_tick（20000） | 207 ms / 57 MB | 17 ms / 4.2 MB | 178 ms / 158 MB | 56 ms / 63 MB |
-| eff_bracket（10000） | 263 ms / 51 MB | 151 ms / 27 MB | 175 ms / 156 MB | 100 ms / 94 MB |
+| eff_bracket（10000，修正前非尾版本） | 263 ms / 51 MB | 151 ms / 27 MB | 175 ms / 156 MB | 100 ms / 94 MB |
 | eff_deep（2000） | 6 ms | 6 ms | 35 ms | 37 ms |
 
 - `eff_tick` 放大到 200k：native 0.18–0.34 s / 2.4–17 MB，`VUNA_NATIVE_GC_LOG` 的末次
   `live` ≤ 0.3 MB（不随 N 涨）；wasm 0.86 s（含 `nix run`/Node 启动，默认栈）。
 - `eff_bracket` 的剩余成本在 CPS 管道步数（do / bind / cleanup），不在续延；下一档是
-  `>>=` / `pure` 的 CPS 展开。
+  `>>=` / `pure` 的 CPS 展开。修正为尾递归后当前读数是 native 35 ms / 4.2 MB、
+  wasm 64 ms / 63 MB（见上方三端表）。
 
 **产物**（`compile`，空 store；native 列是全部 `.s` 的合计）：
 
