@@ -1477,6 +1477,7 @@ depIfacesForToolSourceDetailed ctx label source =
           depMods = toolDepModsOf ctx mods needed
           depHashes = map modHashPair depMods
           ownNames = map modNameOf (selfModsOf ctx mods)
+          _ = dbg! "tool-closure modules=${length depMods}"
         in do
           ifaces <- readIfaceListEff depMods
           case ifaces of
