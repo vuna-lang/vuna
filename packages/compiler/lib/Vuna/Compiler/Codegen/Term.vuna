@@ -1848,7 +1848,12 @@ genIrNode st (IrCast cFrom cTo inner) =
   Vuna.Compiler.Base.Common.bind (genIr st inner) (
       \p =>
         case p of
-          Pair term st1 => OkC (Pair (OCast term) st1)
+          Pair term st1 =>
+            case cTo of
+              -- 带目标类型的 cast 渲染成 `(Obj.magic e : T)`：机器化把构造子实参
+              -- cast 到 `Control ObjTy` 时，靠这层标注把多态钉成单态（value restriction）。
+              Nothing => OkC (Pair (OCast term) st1)
+              Just ty => OkC (Pair (OAnnot (OCast term) (irTyText st1.gsQual ty)) st1)
     )
 genIrNode st (IrInt n) = OkC (Pair (OName (strFromInt n)) st)
 genIrNode st (IrStr s) = OkC (Pair (OName (ocamlString s)) st)
