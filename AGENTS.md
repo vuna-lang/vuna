@@ -126,8 +126,9 @@ nix run .#vuna -- map find <Module.name> # 定位符号；另有 map impact / ap
 标准库 `vuna-base`（`Base.*` + `Prelude`，**进 seed**；跨包公开面只有门面
 `Base` / `Base.Data` / `Base.Trait` / `Base.Container` / `Base.Effect(.Core/.Pure)` / `Prelude`）；`packages/cli/` = 产品 CLI 包
 `vuna`（工具链 Cli/Interp/Files/Fmt/Lint/Repl/Run/Doc/Index/Lsp/TestRunner/Obs 在 `packages/cli/lib/`，
-入口 `packages/cli/app/Main.vuna`；**不进 seed**）；`packages/plugin-kit/` = 命令面数据模型、
-纯参数解析与 describe 协议（编译器与产品入口共用，只依赖 base）；
+入口 `packages/cli/app/Main.vuna`；**不进 seed**，二进制 `vuna` 只做发现与路由）；
+`packages/toolchain/` = 产品工具链实现与命令接线表（二进制 `vuna-toolchain`）；
+`packages/plugin-kit/` = 命令面数据模型、纯参数解析与 describe 协议（编译器与产品入口共用，只依赖 base）；
 `seed/` = 提交入库的 OCaml 信任锚点（生成物，禁止手改、别读）；`wasm-host/` = wasm 产物的
 WASI preview1 宿主（Node / 浏览器共用）与 Node loader（`vuna run --target wasm`、suite、bench 共用）；
 `test/` = driver 清单

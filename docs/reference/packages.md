@@ -41,8 +41,9 @@
   目录的 diamond 依赖合法；同名不同目录在加载期报 `duplicate package name ...`。
 - 编译器 CLI（`packages/compiler/lib/Vuna/Compiler/Driver/CompilerCli.vuna`）：`vuna-compiler` 提供
   `compile/check/build`，入口 `packages/compiler/app/Main.vuna`；**seed 只由这个入口的闭包生成**。
-  产品 CLI（`packages/cli/lib/Vuna/Cli.vuna`）通过 in-process 调库实现同样的命令（单一二进制，不 fork
-  `vuna-compiler`），并追加工具命令：
+  产品 CLI 有两层：入口 `vuna`（`packages/cli/lib/Vuna/Cli.vuna`）只做发现与路由，把命令转给
+  `vuna-toolchain` 插件（`packages/toolchain/`）——插件的 `check/build/compile` 在进程内调库
+  实现同样的命令（不 fork `vuna-compiler`），并追加工具命令：
 
   - `vuna compile [--no-print] (<entry.vuna> | <package-dir>) OUTDIR`：DT 精化 → 擦除型
     OCaml，**逐模块**写到 OUTDIR（`Vuna_runtime.ml` + 各模块 + `Main.ml` + `build.sh`），

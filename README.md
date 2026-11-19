@@ -15,7 +15,8 @@ vuna 是一个函数式编程语言，本仓库是它的编译器与工具链。
 
 编译器完全用 vuna 自己写：成员包 `packages/compiler/`（`vuna-compiler`，模块 `Vuna.Compiler.*`）
 + 成员包 `packages/cli/`（产品 CLI 与工具链 fmt/lint/repl/doc/test/lsp，包名 `vuna`）
-+ 成员包 `packages/plugin-kit/`（命令面协议与纯参数解析，包名 `vuna-plugin-kit`）+ 成员包
++ 成员包 `packages/plugin-kit/`（命令面协议与纯参数解析，包名 `vuna-plugin-kit`）
++ 成员包 `packages/toolchain/`（产品工具链实现与命令接线表，二进制 `vuna-toolchain`）+ 成员包
 `packages/base/`（`vuna-base`）。`seed/` 只由 compiler 包的入口闭包生成——**可固化成种子的部分与
 产品工具链明确分开**；仓库通过提交入库的 OCaml 种子自举，不依赖外部编译器。
 
@@ -130,9 +131,9 @@ manifest，不向上找。命令语义与包格式
 逐模块职责见 [docs/architecture.md](docs/architecture.md)。仓库本身是一个 workspace
 （虚拟根：根目录只有 `[workspace]`，不是包）：成员包 `vuna`（模块根 `packages/cli/lib/`）、
 `vuna-compiler`（模块根 `packages/compiler/lib/`）、`vuna-base`（模块根 `packages/base/lib/`）、
-`vuna-plugin-kit`（模块根 `packages/plugin-kit/lib/`）、`vuna-http`（模块根 `packages/http/lib/`，中立 HTTP/1.1 库）、`vuna-web`（模块根
+`vuna-plugin-kit`（模块根 `packages/plugin-kit/lib/`）、`vuna-toolchain`（模块根 `packages/toolchain/lib/`，二进制 `vuna-toolchain`）、`vuna-http`（模块根 `packages/http/lib/`，中立 HTTP/1.1 库）、`vuna-web`（模块根
 `packages/web/lib/`，生态层：视图 + 路由 + 服务驱动）与 `vuna-web-cli`（模块根
-`packages/web-cli/lib/`，编排工具：生成适配包并复用编译器构建）。七者都是
+`packages/web-cli/lib/`，编排工具：生成适配包并复用编译器构建）。八者都是
 vuna 模块根，不是 OCaml 库目录；`packages/cli/app/`、`packages/compiler/app/` 是纯入口目录。仓库里没有任何
 dune/OCaml 项目，只用 `ocamlopt` 编译生成的种子和程序。
 

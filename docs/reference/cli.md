@@ -1,27 +1,45 @@
 # CLI：命令面、全局约定与退出码
 
-本文是 `vuna` 命令面的参考页：命令树、flag 词汇、帮助与建议、退出码、机器输出，以及
-产品面与 `vuna dev` 的边界。实现入口是 `packages/cli/lib/Vuna/Cli/`：
+本文是 `vuna` 命令面的参考页：命令树、flag 词汇、帮助与建议、退出码、机器输出、
+插件发现，以及产品面与 `vuna dev` 的边界。命令面按「入口 / 协议 / 工具链」三层分布：
 
-| 模块 | 职责 |
-| --- | --- |
-| `Vuna.Plugin.Command`（`packages/plugin-kit/lib/`） | 命令面数据模型（`Cmd` / `Group` / `FlagDoc` / `ArgSpec`）与表查询 |
-| `Vuna.Plugin.Args` / `Parse` / `Suggest` | 纯参数解析与近邻建议（不认识「已删 flag」，提示由调用方注入） |
-| `Vuna.Plugin.Err` | 统一错误出口（用法错误 / 未知子命令 / 已改名命令） |
-| `Vuna.Plugin.Describe` | describe 协议 v1 的渲染与解析 |
-| `Vuna.Cli.Spec` | 产品命令表（路径、分组、摘要、用法、flag 表）——**单一真源** |
-| `Vuna.Cli.Registry` | 路径 → 实现接线表（分发只查表，不写 `case` 链） |
-| `Vuna.Cli.Help` | 总览 / 分支 / 单命令帮助渲染，全部从命令表派生 |
-| `Vuna.Cli.Args` | 门面：解析失败转 `Check` 文案、工具侧已删 flag 提示、读盘守卫 |
-| `Vuna.Cli.Err` | 工具命令错误出口（exit 2 用法错误 / exit 1 语义失败） |
-| `Vuna.Cli.Suggest` | 未知命令 / flag 的「是不是想输入」建议 |
-| `Vuna.Cli.{Test,Fmt,Index,Repl,Suite}` | 各命令族的参数校验与目录展开 |
-| `Vuna.Cli.Dev` | `vuna dev` 子命令（suite / 观测 / 错误码文档生成 / IR dump） |
-| `Vuna.Cli` | `help` / `version` / 分发 / 未知命令 |
+| 模块 | 所属 | 职责 |
+| --- | --- | --- |
+| `Vuna.Plugin.Command` | `plugin-kit` | 命令面数据模型（`Cmd` / `Group` / `FlagDoc` / `ArgSpec`）与表查询 |
+| `Vuna.Plugin.Args` / `Parse` / `Suggest` | `plugin-kit` | 纯参数解析与近邻建议（不认识「已删 flag」，提示由调用方注入） |
+| `Vuna.Plugin.Err` / `Help` | `plugin-kit` | 错误出口与帮助渲染（表由调用方传入） |
+| `Vuna.Plugin.Describe` | `plugin-kit` | describe 协议 v1 的渲染与解析 |
+| `Vuna.Cli` / `Vuna.Cli.Discover` | `cli`（入口） | 命令发现、帮助总览、路由；只带 `help` / `version` |
+| `Vuna.Cli.Spec` | `toolchain` | 产品命令表（路径、分组、摘要、用法、flag 表）——**单一真源** |
+| `Vuna.Cli.Registry` | `toolchain` | 路径 → 实现接线表；插件入口（describe / help / dispatch） |
+| `Vuna.Cli.Help` | `toolchain` | 工具链侧帮助（`Spec` + 编译器命令转发） |
+| `Vuna.Cli.Args` | `toolchain` | 门面：解析失败转 `Check` 文案、工具侧已删 flag 提示、读盘守卫 |
+| `Vuna.Cli.Err` / `Suggest` | `toolchain` | 工具命令错误出口与建议 |
+| `Vuna.Cli.{Test,Fmt,Index,Repl,Suite,Dev}` | `toolchain` | 各命令族的参数校验与目录展开 |
+| `Vuna.Fmt` / `Vuna.Lint` / `Vuna.Doc` / … | `toolchain` | 工具实现 |
 
 命令实现只调用 `Vuna.Cli.Spec.parseCmdArgs`：flag 表来自命令表，未知 flag 的校验与
 帮助文本不会各写一份。新增命令 = 命令表一条 + Registry 一条；`packages/cli/test/steps/14_cli.steps`
 逐条跑 `vuna help <path>` 与分组命令，漏接线会红。
+
+## 0. 插件发现
+
+`vuna` 二进制只做发现与路由，工具实现都在 `vuna-toolchain` 进程里：
+
+| 契约 | 说明 |
+| --- | --- |
+| 搜索目录 | `<exeDir>` → `$VUNA_EXEC_PATH`（冒号分隔）。**不扫 `PATH`**：那里可能有别的 `vuna-*` 工具（`vuna-seed` / `vuna-compiler`），不是插件 |
+| 候选 | 文件名 `vuna-<domain>`（无点、非 `vuna` 自身） |
+| `vuna-<domain> --vuna-describe` | 打印命令表（stdout） |
+| `vuna-<domain> --vuna-describe FILE` | 把命令表写到 FILE（入口用这个形态收集，子进程 stdout/stderr 被丢弃） |
+| 路由 | `vuna <path> ...` 原样把 argv 交给拥有该路径的插件；stdio 继承、退出码透传 |
+| 缺失 | 插件不在 → 它的命令从帮助里消失，调用报 exit 2；入口其余功能不受影响 |
+
+describe v1 是行式 TAB 分隔文本（见 `Vuna.Plugin.Describe`）：首行 `vuna-plugin 1 cli <domain>`，
+其余行是 `cmd` / `flag` / `note`。`summary` 与 `synopsis` 放在最后，正文里的空格与 `|` 无需转义。
+
+`nix` 侧把入口与工具链装进同一个 `$out/bin`，因此 `nix profile install` / `systemPackages`
+合并 bin 目录后 `vuna <cmd>` 直接可用；`VUNA_EXEC_PATH` 用于 Bin 目录不共享的安装方式。
 
 ## 1. 命令树
 

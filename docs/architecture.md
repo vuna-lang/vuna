@@ -193,12 +193,15 @@ vuna.toml → Frontend.{Toml.parseToml, Manifest.parseManifest/validateManifest}
 布局见 [package-store.md](reference/package-store.md)，决策见 D12–D15。
 测试：第 28–29、33、39 段 + steps §67/§68。
 
-## 3. 产品 CLI 工具链（`packages/cli/`）与 TCB 边界
+## 3. 产品 CLI 工具链（`packages/{cli,toolchain,plugin-kit}/`）与 TCB 边界
 
-**何时该看这里**：改 `vuna` 子命令、fmt/lint/repl/doc/test/map、解释器 facade。
+**何时该看这里**：改 `vuna` 子命令、fmt/lint/repl/doc/test/map、解释器 facade、插件发现。
 
-- `Vuna.Cli.runCli` 分发（命令接线在 `Vuna.Cli.Registry`，命令面数据模型与纯解析在
-  `packages/plugin-kit/`）；`Vuna.Interp.interpretFile/evalExprInfoWithAux`（`PackageContext` 入参，
+- 入口二进制 `vuna`（`packages/cli/`）只做发现与路由：扫 `<exeDir>` / `$VUNA_EXEC_PATH` 上的
+  `vuna-*` 插件，用 `--vuna-describe` 取回命令表，再把 argv 原样转交拥有该命令的插件进程。
+  工具实现与 `Vuna.Cli.{Spec,Registry,Help}` 在 `packages/toolchain/`（二进制 `vuna-toolchain`），
+  命令面数据模型与纯解析在 `packages/plugin-kit/`（协议见 [cli.md](reference/cli.md) §0）。
+- `Vuna.Interp.interpretFile/evalExprInfoWithAux`（`PackageContext` 入参，
   实际 `Driver.Dt.dtEvalFile`）、`Vuna.Repl.runRepl`（`:type/:load/:reload/:browse`）、
   `Vuna.Repl.Server.runReplServer` / `Vuna.Repl.Client.runReplClient`（`vuna repl serve --listen` / `vuna repl client --addr`；
   协议与 agent 配方见 [tooling.md](reference/tooling.md) §5）、
@@ -206,9 +209,9 @@ vuna.toml → Frontend.{Toml.parseToml, Manifest.parseManifest/validateManifest}
   fail-fast）、`Vuna.Doc.runDoc`（docstring -> 单文件 HTML；`Vuna.Doc.{Comments,Model,Prose,Html,Run}`）、
   `Vuna.Search.runSearch`、`Vuna.Files.collectVunaFiles`；fmt/lint 见 `Fmt.formatSourceWith` /
   `Lint.runLint`；诊断渲染（short/human/JSON）见 `Base.Diag.Format`（模型见
-  [diagnostics.md](reference/diagnostics.md)）；效果显式化：`packages/cli/lib` 与 compiler 壳层都是显式
-  `Eff`——`runCompilerCliFor : … -> Eff [] Int`，`packages/cli/lib/Vuna/Cli.vuna` / `Run.vuna` 与两个
-  `app/Main.vuna` 直接 bind；`Driver/CompilerCli` 的打印/诊断/子进程/recovery 全部显式，
+  [diagnostics.md](reference/diagnostics.md)）；效果显式化：`packages/{cli,toolchain}/lib` 与 compiler 壳层
+  都是显式 `Eff`——`runCompilerCliFor : … -> Eff [] Int`，`packages/cli/lib/Vuna/Cli.vuna`、
+  `packages/toolchain/lib/Vuna/{Run,Repl,Lsp}.vuna` 与三个 `app/Main.vuna` 直接 bind；`Driver/CompilerCli` 的打印/诊断/子进程/recovery 全部显式，
   `CliOpts` 是显式参数；`Base.Diag.Format` 语言也是显式 `lang` 参数。
   API 文档与检索见
   [api-docs.md](reference/api-docs.md)，调试工作流见 [debugging.md](reference/debugging.md)。

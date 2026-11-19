@@ -12,7 +12,7 @@ repo 自测由 `vuna dev suite <suite.toml>` 驱动（原生 Vuna 实现，不�
   `[family.<name>]` 按目录约定把夹具展开成 golden/error case，`dir` 相对 suite 文件所在目录；
   case id 是 `<owner>/<family>/<相对路径>`；
 - `<test 根>/steps/*.steps`（当前 `packages/*/test/steps`）：声明式步进用例（一套行式 DSL，见下）；
-- 执行器在 `packages/cli/lib/Vuna/Test/{Suite,Run}.vuna`，由 `Vuna.Cli.testArgs` 分派。
+- 执行器在 `packages/toolchain/lib/Vuna/Test/{Suite,Run}.vuna`，由 `Vuna.Cli.testArgs` 分派。
 
 ```console
 vuna dev suite --all                      # 全部独立 suite（读 test/suite.toml 的清单）
@@ -289,7 +289,7 @@ runner 直接调用编译器 / 工具链的导出函数，断言它们的**返�
 | lint | `Lint.Rules.lintSourceWith`（fixities 经 `FixityEnv.fixitiesForFile`） | `renderFinding` 文本 == `.out` |
 | fix | `Lint.Fix.fixLoop` | 新源码 == `.expected`；再跑一遍验收敛（幂等） |
 
-**断言口径**（`packages/cli/lib/Vuna/Test/Expect.vuna`）：负例只比 `(severity, code, file, line, col)`
+**断言口径**（`packages/toolchain/lib/Vuna/Test/Expect.vuna`）：负例只比 `(severity, code, file, line, col)`
 的**多重集** + 条数，不比 `message` / `fields` / `labels.text`——文案由
 `nix/checks/lib/diag-style.sh` / `diag-raw.sh` 两个门禁守。顺序不锁：`--json` 的
 `flushSarif` 输出序与 `ErrC` 的 `diagChildren` 装配序不同，两列排序后逐项比。
@@ -298,7 +298,7 @@ runner 直接调用编译器 / 工具链的导出函数，断言它们的**返�
 四种写法；`Expect.projFile` 把两侧都压到「相对 `test/`」或 `packages/base/`，夹具不需要改写。
 无源位置的诊断投影成 `||0|0!<absent 理由>`，与 `nix/checks/lib/diag-located.sh` 同源。
 
-**没有子进程回退**：进程内只有两条路径——增量会话（`packages/cli/lib/Vuna/Test/Session.vuna`，依赖
+**没有子进程回退**：进程内只有两条路径——增量会话（`packages/toolchain/lib/Vuna/Test/Session.vuna`，依赖
 接口 + `AuxCache`）优先，不可用时**在同一进程内**退回全量精化；两条都不可用即用例失败
 （`ErrC`）。没有子进程、也没有绕过缓存的开关：`VUNA_ELAB_FULL=1` 是 CLI 语义，只出现在
 steps 里，用于「摘要路径 vs 全量路径逐字节一致」的对拍。

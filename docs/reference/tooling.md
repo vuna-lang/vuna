@@ -80,8 +80,8 @@ $ vuna search --type "a -> a"
 | `LD_` | Loader / 包 / 加载诊断 | `Base/Diagnostics/Loader.vuna` |
 | `IC_` | 编译器内部错误（不变量/燃料耗尽；internal compiler error，exit 2） | `Base/Diagnostics/Ic.vuna` |
 | `UN_` | 告警（未使用/冗余/遮蔽；severity = warning） | `Base/Diagnostics/Warning.vuna` |
-| `LN_` | lint 规则 | `packages/cli/lib/Vuna/Lint/Diagnostics.vuna` |
-| `FX_` | 错误修复规则（从可修复 `LN_` 推导，`FX_` + 规则名去 `-`） | `packages/cli/lib/Vuna/Lint/Diagnostics.vuna` |
+| `LN_` | lint 规则 | `packages/toolchain/lib/Vuna/Lint/Diagnostics.vuna` |
+| `FX_` | 错误修复规则（从可修复 `LN_` 推导，`FX_` + 规则名去 `-`） | `packages/toolchain/lib/Vuna/Lint/Diagnostics.vuna` |
 
 约定：符号**语义稳定**；同语义消息**共享**一个符号；**一个码只承载一种语义**。没有
 「诊断码只增不删」约定：vuna 未发布、无兼容义务，允许删除/重命名码（同步目录

@@ -1,10 +1,10 @@
 # lint：AST 驱动的 dispatch 提升、列表字面量归一与自动修复
 
 本文记录 `vuna lint` 的规则、可修复判据与语料。实现入口是
-`packages/cli/lib/Vuna/Lint/Rules.vuna`（dispatch 判定、提升渲染、列表链检测、源码切片）、
-`packages/cli/lib/Vuna/Lint/Fix.vuna`（应用 Edit 的多轮循环）、`packages/cli/lib/Vuna/Lint.vuna`（CLI 与输出）、
-`packages/cli/lib/Vuna/Lint/Config.vuna`（`vuna.toml [lint]`）、`packages/cli/lib/Vuna/Lint/Suppress.vuna`（源码抑制）、
-`packages/cli/lib/Vuna/Lint/Diagnostics.vuna`（规则枚举：
+`packages/toolchain/lib/Vuna/Lint/Rules.vuna`（dispatch 判定、提升渲染、列表链检测、源码切片）、
+`packages/toolchain/lib/Vuna/Lint/Fix.vuna`（应用 Edit 的多轮循环）、`packages/toolchain/lib/Vuna/Lint.vuna`（CLI 与输出）、
+`packages/toolchain/lib/Vuna/Lint/Config.vuna`（`vuna.toml [lint]`）、`packages/toolchain/lib/Vuna/Lint/Suppress.vuna`（源码抑制）、
+`packages/toolchain/lib/Vuna/Lint/Diagnostics.vuna`（规则枚举：
 code / rule / 消息的唯一真源）。
 
 ## 1. 用法与输出
@@ -23,7 +23,7 @@ vuna lint --list | --explain <RULE>
 
 - 文本格式：`路径:行:列: [LN_xxx] rule-name: 消息`（列 1-based）；`--fix` 模式下不可修复的
   finding 追加 ` (not auto-fixable)`。LSP 用同一批 finding（含结束位置与 severity），见
-  `packages/cli/lib/Vuna/Lsp/Diagnostics.vuna`。
+  `packages/toolchain/lib/Vuna/Lsp/Diagnostics.vuna`。
 - 退出码：0 = 无 error 且 warning 未超 `max-warnings`；1 = 有 error / warning 超限；2 = 用法、
   配置、读盘、解析或 fixity 上下文错误。error/warning 由规则配置决定。
 - 目录会递归收集 `.vuna`（跳过生成物 / corpus）；重复路径去重，顺序保持用户/目录顺序。

@@ -150,7 +150,7 @@ main 结束时统一取消清理（最外层兜底）；跨域 handler / Domain 
   `prim_eff_*`（纪律而非门控）。**编译器级强制不可行**：
   没有 manifest 能力/信任门控，类型系统也没有类型级能力行，`prim_*`/`prim_eff_*` 在任何包内
   都可用；编译器自身在 seed 闭包里必须做宿主操作（`prim_eff_*`、`Codegen`）。纪律面可在
-  `vuna lint` 增加模块级规则（如禁止 `packages/cli/lib/Vuna/**` 新增直接 `prim_*`/`prim_eff_*` 使用，
+  `vuna lint` 增加模块级规则（如禁止 `packages/toolchain/lib/Vuna/**` 新增直接 `prim_*`/`prim_eff_*` 使用，
   白名单 `Vuna.Cli.consoleLine` 一类的点），而不是改类型检查器。
 - **对拍夹具**（关闭 interp 阶段，只 check + compile + run）：
   - `dt_base/26_eff_console`：同一 `prog n` 在 `ConsoleOp@mock`（mock，纯 answer 收集日志）
