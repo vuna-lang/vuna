@@ -1,0 +1,6 @@
+-- `&&` 的假分支只保证「至少一侧为假」，不能同时得到 n > 0 与 m > 0。
+bad : Int -> Int -> Int
+bad n m = if n <= 0 && m <= 0 then 0 else bad (n - 1) (m - 1)
+
+main : Int
+main = bad 0 0

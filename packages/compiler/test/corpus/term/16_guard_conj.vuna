@@ -1,0 +1,13 @@
+-- 守卫合取/析取给正性事实：`&&` 的真分支取并、`||` 的假分支取并；
+-- 阈值不限于 0/1（`n > 1` 也给出 n > 0）。
+andThen : Int -> Int
+andThen n = if n > 0 && n > 5 then andThen (n - 1) else 0
+
+orElse : Int -> Int -> Int
+orElse n m = if n <= 0 || m <= 0 then 0 else orElse (n - 1) (m - 1)
+
+gtOne : Int -> Int
+gtOne n = if n > 1 then gtOne (n - 2) else 0
+
+main : Int
+main = andThen 10

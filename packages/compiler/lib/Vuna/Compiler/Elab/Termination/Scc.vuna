@@ -126,20 +126,10 @@ siteWalkC fuel comp ctors projs caller facts sizes region e acc =
       EApp fn args sp => siteWalkEApp (fuel - 1) comp ctors projs caller facts sizes region fn args acc
       ECase scrut alts sp => siteCollectAlts (fuel - 1) comp ctors projs caller facts sizes region scrut alts (siteWalkC (fuel - 1) comp ctors projs caller facts sizes region scrut acc)
       EIf c t el sp =>
-        case guardPosVar c of
-          Just v =>
-            let
-              acc1 = siteWalkC (fuel - 1) comp ctors projs caller facts sizes region c acc
-              acc2 = siteWalkC (fuel - 1) comp ctors projs caller facts sizes region t acc1
-            in siteWalkC (fuel - 1) comp ctors projs caller facts sizes (v :: region) el acc2
-          Nothing =>
-            case guardThenPosVar c of
-              Just v =>
-                let
-                  acc1 = siteWalkC (fuel - 1) comp ctors projs caller facts sizes region c acc
-                  acc2 = siteWalkC (fuel - 1) comp ctors projs caller facts sizes (v :: region) t acc1
-                in siteWalkC (fuel - 1) comp ctors projs caller facts sizes region el acc2
-              Nothing => siteWalkC (fuel - 1) comp ctors projs caller facts sizes region el (siteWalkC (fuel - 1) comp ctors projs caller facts sizes region t (siteWalkC (fuel - 1) comp ctors projs caller facts sizes region c acc))
+        let
+          acc1 = siteWalkC (fuel - 1) comp ctors projs caller facts sizes region c acc
+          acc2 = siteWalkC (fuel - 1) comp ctors projs caller facts sizes (append (guardThenPosVars c) region) t acc1
+        in siteWalkC (fuel - 1) comp ctors projs caller facts sizes (append (guardElsePosVars c) region) el acc2
       ELam ns b sp => siteWalkC (fuel - 1) comp ctors projs caller facts sizes region b acc
       ELet binds body rec_ sp => siteWalkC (fuel - 1) comp ctors projs caller facts (extendByBinds binds sizes) region body (siteCollectBinds (fuel - 1) comp ctors projs caller facts sizes region binds acc)
       EPi n implicit _ dom cod sp => siteWalkC (fuel - 1) comp ctors projs caller facts sizes region cod (siteWalkC (fuel - 1) comp ctors projs caller facts sizes region dom acc)

@@ -279,52 +279,109 @@ localClauseBinds [] = []
 localClauseBinds ((Pair pats body) :: rest) =
   Pair (PWild (exprSpan body)) body :: localClauseBinds rest
 
--- | 条件为真时成立的「正性」守卫：`n > 0` / `n >= 1` / `0 < n` / `1 <= n`。
---   与 `guardPosVar`（条件为假时的基例守卫）互补：`if <正性> then <递归> else <基例>`
---   的 then 分支才有 `n >= 1` 这条事实，`n - 1` 的非负性才成立。
-export guardThenPosVar : Expr -> Maybe String
-guardThenPosVar e =
+-- | 正性事实的集合运算：`&&` 的真分支取并、`||` 的真分支取交；
+-- 假分支由德摩根定律对调。
+export guardUnion : List String -> List String -> List String
+guardUnion a b = dedup (append a b)
+
+guardInter : List String -> List String -> List String
+guardInter [] b = []
+guardInter (x :: rest) b = if memName x b then x :: guardInter rest b else guardInter rest b
+
+-- | 单个比较为真时成立的「正性」：`x > k`（k ≥ 0）/ `x ≥ k`（k ≥ 1）及其字面量在左的写法。
+guardThenPosAtom : String -> List Expr -> Maybe String
+guardThenPosAtom op args =
+  case args of
+    [lhs, rhs] =>
+      case rhs of
+        EInt k ksp =>
+          if op == "gt" || op == ">" then
+            if k >= 0 then varOfExpr lhs else Nothing
+          else if op == "ge" || op == ">=" then
+            if k >= 1 then varOfExpr lhs else Nothing
+          else
+            Nothing
+        _ =>
+          case lhs of
+            EInt k ksp =>
+              if op == "lt" || op == "<" then
+                if k >= 0 then varOfExpr rhs else Nothing
+              else if op == "le" || op == "<=" then
+                if k >= 1 then varOfExpr rhs else Nothing
+              else
+                Nothing
+            _ => Nothing
+    _ => Nothing
+
+-- | 单个比较为假时成立的「正性」：`x <= k`（k ≥ 0）为假 ⇒ `x > 0`；
+-- `x < k`（k ≥ 1）为假 ⇒ `x ≥ 1 > 0`。字面量在左的写法按同一口径镜像。
+guardElsePosAtom : String -> List Expr -> Maybe String
+guardElsePosAtom op args =
+  case args of
+    [lhs, rhs] =>
+      case rhs of
+        EInt k ksp =>
+          if op == "le" || op == "<=" then
+            if k >= 0 then varOfExpr lhs else Nothing
+          else if op == "lt" || op == "<" then
+            if k >= 1 then varOfExpr lhs else Nothing
+          else
+            Nothing
+        _ =>
+          case lhs of
+            EInt k ksp =>
+              if op == "ge" || op == ">=" then
+                if k >= 0 then varOfExpr rhs else Nothing
+              else if op == "gt" || op == ">" then
+                if k >= 1 then varOfExpr rhs else Nothing
+              else
+                Nothing
+            _ => Nothing
+    _ => Nothing
+
+-- | 条件为真时成立的全部正性事实。`a && b` 取并；`a || b` 只有两侧都为真才成立的
+--   事实才可用（取交），否则会把「至少一侧为正」误当成两侧都为正。
+export guardThenPosVars : Expr -> List String
+guardThenPosVars e =
   case e of
     EApp (EVar op osp) args sp =>
-      case opBaseName (rnameKey op) of
-        "gt" => guardGTZero args
-        "ge" => guardGEOne args
-        "lt" => guardZeroLT args
-        "le" => guardOneLE args
-        ">" => guardGTZero args
-        ">=" => guardGEOne args
-        "<" => guardZeroLT args
-        "<=" => guardOneLE args
-        _ => Nothing
-    _ => Nothing
+      let
+        opn = opBaseName (rnameKey op)
+      in if opn == "&&" then
+        case args of
+          [a, b] => guardUnion (guardThenPosVars a) (guardThenPosVars b)
+          _ => []
+      else if opn == "||" then
+        case args of
+          [a, b] => guardInter (guardThenPosVars a) (guardThenPosVars b)
+          _ => []
+      else
+        case guardThenPosAtom opn args of
+          Just v => [v]
+          Nothing => []
+    _ => []
 
-guardGTZero : List Expr -> Maybe String
-guardGTZero ([lhs, rhs]) =
-  case rhs of
-    EInt k ksp => if k == 0 then varOfExpr lhs else Nothing
-    _ => Nothing
-guardGTZero _ = Nothing
-
-guardGEOne : List Expr -> Maybe String
-guardGEOne ([lhs, rhs]) =
-  case rhs of
-    EInt k ksp => if k == 1 then varOfExpr lhs else Nothing
-    _ => Nothing
-guardGEOne _ = Nothing
-
-guardZeroLT : List Expr -> Maybe String
-guardZeroLT ([lhs, rhs]) =
-  case lhs of
-    EInt k ksp => if k == 0 then varOfExpr rhs else Nothing
-    _ => Nothing
-guardZeroLT _ = Nothing
-
-guardOneLE : List Expr -> Maybe String
-guardOneLE ([lhs, rhs]) =
-  case lhs of
-    EInt k ksp => if k == 1 then varOfExpr rhs else Nothing
-    _ => Nothing
-guardOneLE _ = Nothing
+-- | 条件为假时成立的全部正性事实：`a || b` 为假 ⇒ 两侧都假（取并）；
+--   `a && b` 为假只说明至少一侧为假（取交）。
+export guardElsePosVars : Expr -> List String
+guardElsePosVars e =
+  case e of
+    EApp (EVar op osp) args sp =>
+      let
+        opn = opBaseName (rnameKey op)
+      in if opn == "&&" then
+        case args of
+          [a, b] => guardInter (guardElsePosVars a) (guardElsePosVars b)
+          _ => []
+      else if opn == "||" then
+        case args of
+          [a, b] => guardUnion (guardElsePosVars a) (guardElsePosVars b)
+          _ => []
+      else
+        case guardElsePosAtom opn args of
+          Just v => [v]
+          Nothing => []
+    _ => []
 
 -- 一个实参是否「已知为正」：字面量 >0，或变量处于守卫区 / 调用方同位置形参已有正事实。
 export argPositive : List Expr -> Int -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> HashMap String (List Int) -> List String -> Bool
@@ -485,24 +542,10 @@ posWalk namesTbl caller sizes facts region (EApp fn args sp) st =
         args
         (posWalk namesTbl caller sizes facts region fn st)
 posWalk namesTbl caller sizes facts region (EIf c t el sp) st =
-  case guardPosVar c of
-    Just v =>
-      let
-        st1 = posWalk namesTbl caller sizes facts region c st
-        st2 = posWalk namesTbl caller sizes facts region t st1
-      in posWalk namesTbl caller sizes facts (v :: region) el st2
-    Nothing =>
-      case guardThenPosVar c of
-        Just v =>
-          let
-            st1 = posWalk namesTbl caller sizes facts region c st
-            st2 = posWalk namesTbl caller sizes facts (v :: region) t st1
-          in posWalk namesTbl caller sizes facts region el st2
-        Nothing =>
-          let
-            st1 = posWalk namesTbl caller sizes facts region c st
-            st2 = posWalk namesTbl caller sizes facts region t st1
-          in posWalk namesTbl caller sizes facts region el st2
+  let
+    st1 = posWalk namesTbl caller sizes facts region c st
+    st2 = posWalk namesTbl caller sizes facts (append (guardThenPosVars c) region) t st1
+  in posWalk namesTbl caller sizes facts (append (guardElsePosVars c) region) el st2
 posWalk namesTbl caller sizes facts region (ECase scrut alts sp) st =
   posWalkAlts
     namesTbl

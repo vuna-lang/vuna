@@ -204,20 +204,10 @@ strWalk fuel comp ctors projs p sizes caller facts region e acc =
       EApp fn args sp => strWalkEApp (fuel - 1) comp ctors projs p sizes caller facts region fn args sp acc
       ECase scrut alts sp => strWalkAlts (fuel - 1) comp ctors projs p sizes caller facts region scrut alts (strWalk (fuel - 1) comp ctors projs p sizes caller facts region scrut acc)
       EIf c t el sp =>
-        case guardPosVar c of
-          Just v =>
-            let
-              acc1 = strWalk (fuel - 1) comp ctors projs p sizes caller facts region c acc
-              acc2 = strWalk (fuel - 1) comp ctors projs p sizes caller facts region t acc1
-            in strWalk (fuel - 1) comp ctors projs p sizes caller facts (v :: region) el acc2
-          Nothing =>
-            case guardThenPosVar c of
-              Just v =>
-                let
-                  acc1 = strWalk (fuel - 1) comp ctors projs p sizes caller facts region c acc
-                  acc2 = strWalk (fuel - 1) comp ctors projs p sizes caller facts (v :: region) t acc1
-                in strWalk (fuel - 1) comp ctors projs p sizes caller facts region el acc2
-              Nothing => strWalk (fuel - 1) comp ctors projs p sizes caller facts region el (strWalk (fuel - 1) comp ctors projs p sizes caller facts region t (strWalk (fuel - 1) comp ctors projs p sizes caller facts region c acc))
+        let
+          acc1 = strWalk (fuel - 1) comp ctors projs p sizes caller facts region c acc
+          acc2 = strWalk (fuel - 1) comp ctors projs p sizes caller facts (append (guardThenPosVars c) region) t acc1
+        in strWalk (fuel - 1) comp ctors projs p sizes caller facts (append (guardElsePosVars c) region) el acc2
       ELam ns b sp => strWalk (fuel - 1) comp ctors projs p sizes caller facts region b acc
       ELet binds body rec_ sp =>
         let

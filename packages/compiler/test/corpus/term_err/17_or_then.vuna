@@ -1,0 +1,6 @@
+-- `||` 的真分支只保证「至少一侧为正」，不能推出 n > 0：`n - 1` 仍缺守卫。
+bad : Int -> Int
+bad n = if n > 0 || n < 0 then bad (n - 1) else 0
+
+main : Int
+main = bad 0

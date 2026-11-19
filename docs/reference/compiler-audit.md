@@ -63,7 +63,7 @@ ID 是稳定引用（`层前缀-序号`），改动时保留编号，删掉实�
 | EL-02 | `Termination.vuna` 的 SCC/DFS | ⚠️C | fuel 耗尽静默返回部分结果 → 整函数跳过终止性检查 | 已清（DFS/SCC 显式 `ok`，耗尽报 `IC_FuelExhausted`） |
 | EL-03 | `Termination.vuna` 的 STR | ⚠️C | 硬编码 100000、耗尽静默；三套遍历已漂移（`posWalk` 缺 `ELocalFun`） | 已清（预算按表达式规模派生；STR 耗尽保守拒绝；`posWalk` 补 `ELocalFun`） |
 | EL-04 | `Measure.vuna` 的 `weakReach` | ⚠️C | 耗尽返回 `False`=无环（方向是放过） | 已清（耗尽按有环处理） |
-| EL-05 | `Measure.vuna` 的正性守卫 | C | 只认 `x <= 0` / `0 >= x` / `x < 1` | 已清（补 `n > 0` / `n >= 1` / `0 < n` / `1 <= n` 的 then 区事实；`n /= 0` 在 Int 上不 sound，仍拒绝） |
+| EL-05 | `Measure.vuna` 的正性守卫 | C | 只认 `x <= 0` / `0 >= x` / `x < 1` | 已清（四个方向 + `&&` 真分支 / `||` 假分支合并事实、阈值推广到任意 `k ≥ 0` / `k ≥ 1`；`n /= 0` 在 Int 上不 sound，仍拒绝） |
 | EL-06 | `Measure.vuna` 的 `isMapLike` | C | 按点后短名硬编码 `map/traverse/…` | 开放 |
 | EL-07 | `Case.vuna` 的 `unifyIdxList` | C | 耗尽走 `TC_ImpossibleBranchIndex`（误导性错误码） | 已清（耗尽报 `TC_IndexFuel`） |
 | EL-08 | `Case.vuna` 的 `occursLevel` | ⚠️C | 耗尽返回 `False`=无 occurs | 已清（耗尽按保守方向 `True`） |
