@@ -1551,30 +1551,10 @@ startFunc printResult kind mainName runMainM handlers =
       case runMainM of
         Just rm => [IMov (OpReg Rdi) (OpReg Rax), ICall (nativeFuncLabel rm)]
         Nothing => []
-    hostHandlerFlags : List String
-    hostHandlerFlags =
-      [
-        "Base.Effect.Console.runConsoleHost",
-        "Base.Effect.Fs.runFsHost",
-        "Base.Effect.Clock.runClockHost",
-        "Base.Effect.Env.runEnvHost",
-        "Base.Effect.Args.runArgsHost",
-        "Base.Effect.Exit.runExitHost",
-        "Base.Effect.Stdin.runStdinHost"
-      ]
+    -- 入口 handler 是普通定义：机器路径不需要「宿主直连」标记（旧的 `rt_next_host`
+    -- 只服务已删除的栈拷贝运行时）。
     markHost : String -> List Instr
-    markHost h =
-      if memName h hostHandlerFlags then
-        [
-          IMov (OpReg Rcx) (OpImm 1),
-          IMov (OpRip nextHostLabel) (OpReg Rcx),
-          IMov (OpReg Rdi) (OpReg Rax),
-          ICall (nativeFuncLabel h),
-          IMov (OpReg Rcx) (OpImm 0),
-          IMov (OpRip nextHostLabel) (OpReg Rcx)
-        ]
-      else
-        [IMov (OpReg Rdi) (OpReg Rax), ICall (nativeFuncLabel h)]
+    markHost h = [IMov (OpReg Rdi) (OpReg Rax), ICall (nativeFuncLabel h)]
     handlerPart = concatMap markHost handlers
     callMain =
       append

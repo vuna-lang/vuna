@@ -92,7 +92,7 @@ nativeFreeFlag = 2
 export nativeLeafFlag : Int
 nativeLeafFlag = 4
 
--- | 永不回收的块（续延捕获缓冲由 `rt_cap_free` 自己复用）。
+-- | 永不回收的块（pinned 分配；当前没有调用方，留给需要长期驻留的宿主缓冲）。
 export nativePinFlag : Int
 nativePinFlag = 8
 
@@ -163,17 +163,9 @@ nativeGcMinDefaultBytes = 1048576
 -- ---------------------------------------------------------------
 -- GC 根槽（保守标记的 `.bss` 白名单）
 -- ---------------------------------------------------------------
--- | 最内层 handler 节点（`rt_handlers`，堆对象）。
-export nativeHandlersLabel : String
-nativeHandlersLabel = "rt_handlers"
-
 -- | 当前 active 栈的栈顶（GC 扫描 `[rsp, rt_stack_top)`）。
 export nativeStackTopLabel : String
 nativeStackTopLabel = "rt_stack_top"
-
--- | 当前 opH 所属的 handler 节点（`prim_effectSelf` 用）。
-export nativeSelfLabel : String
-nativeSelfLabel = "rt_self"
 
 -- | `bracket` / `finally` 的 cleanup 登记表头（堆对象）。
 export nativeCleanupHeadLabel : String

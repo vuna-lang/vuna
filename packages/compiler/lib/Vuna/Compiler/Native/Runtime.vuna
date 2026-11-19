@@ -137,7 +137,7 @@ rmtreeDeepMessage = "vuna: runtime error: directory tree too deep\n"
 export nativeRodata : List NativeRodata
 nativeRodata =
   append
-    [NativeRodata (nativeDataLabel "true") "True", NativeRodata (nativeDataLabel "false") "False", NativeRodata (nativeDataLabel "nl") "\n", NativeRodata (nativeDataLabel "divzero") divZeroMessage, NativeRodata (nativeDataLabel "oom") oomMessage, NativeRodata (nativeDataLabel "mem_limit") memLimitMessage, NativeRodata (nativeDataLabel "timeout") timeoutMessage, NativeRodata (nativeDataLabel "err_prefix") errPrefix, NativeRodata (nativeDataLabel "assert_prefix") assertPrefix, NativeRodata (nativeDataLabel "todo_prefix") todoPrefix, NativeRodata (nativeDataLabel "impossible") impossibleMessage, NativeRodata (nativeDataLabel "array_oob") arrayOobMessage, NativeRodata (nativeDataLabel "path_long") pathTooLongMessage, NativeRodata (nativeDataLabel "rmtree_deep") rmtreeDeepMessage, NativeRodata (nativeDataLabel "unhandled_effect") unhandledEffectMessage, NativeRodata (nativeDataLabel "resume_twice") resumeTwiceMessage, NativeRodata (nativeDataLabel "bad_stack") badStackMessage, NativeRodata (nativeDataLabel "stack_overflow") stackOverflowMessage, NativeRodata (nativeDataLabel "proc_self_exe") ("/proc/self/exe" ++ strPack [0]), NativeRodata (nativeDataLabel "tmp_suffix") (".tmp" ++ strPack [0]), NativeRodata (nativeDataLabel "sh_path") ("/bin/sh" ++ strPack [0]), NativeRodata (nativeDataLabel "sh_dash_c") ("-c" ++ strPack [0]), NativeRodata (nativeDataLabel "env_mem_limit") memLimitKey, NativeRodata (nativeDataLabel "env_timeout") timeoutKey, NativeRodata (nativeDataLabel "env_cpus") cpusKey, NativeRodata (nativeDataLabel "env_inherit") inheritKey, NativeRodata (nativeDataLabel "env_prefix") nativeEnvPrefix, NativeRodata (nativeDataLabel "cg_cpu_max") cgroupCpuMaxPath]
+    [NativeRodata (nativeDataLabel "true") "True", NativeRodata (nativeDataLabel "false") "False", NativeRodata (nativeDataLabel "nl") "\n", NativeRodata (nativeDataLabel "divzero") divZeroMessage, NativeRodata (nativeDataLabel "oom") oomMessage, NativeRodata (nativeDataLabel "mem_limit") memLimitMessage, NativeRodata (nativeDataLabel "timeout") timeoutMessage, NativeRodata (nativeDataLabel "err_prefix") errPrefix, NativeRodata (nativeDataLabel "assert_prefix") assertPrefix, NativeRodata (nativeDataLabel "todo_prefix") todoPrefix, NativeRodata (nativeDataLabel "impossible") impossibleMessage, NativeRodata (nativeDataLabel "array_oob") arrayOobMessage, NativeRodata (nativeDataLabel "path_long") pathTooLongMessage, NativeRodata (nativeDataLabel "rmtree_deep") rmtreeDeepMessage, NativeRodata (nativeDataLabel "stack_overflow") stackOverflowMessage, NativeRodata (nativeDataLabel "proc_self_exe") ("/proc/self/exe" ++ strPack [0]), NativeRodata (nativeDataLabel "tmp_suffix") (".tmp" ++ strPack [0]), NativeRodata (nativeDataLabel "sh_path") ("/bin/sh" ++ strPack [0]), NativeRodata (nativeDataLabel "sh_dash_c") ("-c" ++ strPack [0]), NativeRodata (nativeDataLabel "env_mem_limit") memLimitKey, NativeRodata (nativeDataLabel "env_timeout") timeoutKey, NativeRodata (nativeDataLabel "env_cpus") cpusKey, NativeRodata (nativeDataLabel "env_inherit") inheritKey, NativeRodata (nativeDataLabel "env_prefix") nativeEnvPrefix, NativeRodata (nativeDataLabel "cg_cpu_max") cgroupCpuMaxPath]
     nativeGcRodata
 
 -- | `_start` 从初始栈拷下来的进程入参（`argc` / `argv` / `envp`）。
@@ -169,21 +169,6 @@ termiosLabel = "rt_termios"
 -- | `bracket` / `finally` 的 cleanup 登记表（LIFO 链表头；`prim_cleanupPush/Pop` 维护）。
 export cleanupHeadLabel : String
 cleanupHeadLabel = nativeCleanupHeadLabel
-
--- | `resume` 迁移栈段的向下可用空间（字节）。段按 `pow2_ceil(len + slack + 16)` 预留，
---   页惰性提交：嵌套 handler 各占一段时，只有真正用到的页计入 RSS。
-export nativeSegSlackBytes : Int
-nativeSegSlackBytes = 33554432
-
--- | 迁移栈段的专用地址区间起点。栈段必须**远离 arena / 堆**（`mmap(NULL)` 的 0x7f... 一带）：
---   `effResume` 的重定位是保守扫描——落在 `(perform_rbp, stack_top)` 里的字一律当栈指针
---   平移，堆指针如果也在这个区间里就会被误平移。固定高地址区间让两者不相交。
-export nativeStackArenaBase : Int
-nativeStackArenaBase = 35184372088832
-
--- | 栈段区间的 bump 指针（0 = 尚未使用）。
-export stackArenaLabel : String
-stackArenaLabel = "rt_stack_arena"
 
 -- | 第二个路径缓冲（`rename` / `symlink` / 原子写的 tmp 路径要同时持有两个 C 路径）。
 export pathBuf2Label : String
@@ -226,7 +211,7 @@ readBufLabel = "rt_read_buf"
 export nativeBss : List NativeBss
 nativeBss =
   append
-    [NativeBss nativeHeapSegLabel 32 8, NativeBss nativeHeapLabel nativeHeapBytes 16, NativeBss nativeHeapEndLabel 0 0, NativeBss nativeHeapPtrLabel 8 8, NativeBss nativeArenaEndLabel 8 8, NativeBss nativeSegsLabel 8 8, NativeBss nativeCurSegLabel 8 8, NativeBss nativeFreeTableLabel nativeFreeTableBytes 8, NativeBss nativeHugeFreeLabel 8 8, NativeBss handlersLabel 8 8, NativeBss stackTopLabel 8 8, NativeBss selfLabel 8 8, NativeBss stackLimitLabel 8 8, NativeBss segFreeLabel 8 8, NativeBss capFreeLabel 8 8, NativeBss argcLabel 8 8, NativeBss argvLabel 8 8, NativeBss envpLabel 8 8, NativeBss hostStatusLabel 8 8, NativeBss pathBufLabel 4096 8, NativeBss tsLabel 16 8, NativeBss termiosLabel 64 8, NativeBss cleanupHeadLabel 8 8, NativeBss stackArenaLabel 8 8, NativeBss pathBuf2Label 4096 8, NativeBss statBufLabel 256 8, NativeBss dirBufLabel 32768 8, NativeBss dirNamesLabel 32256 8, NativeBss readBufLabel 8388608 8, NativeBss cmdBufLabel 65536 8, NativeBss cwdBufLabel 4096 8, NativeBss spawnArgvLabel 2048 8, NativeBss spawnBufLabel 65536 8, NativeBss shArgvLabel 32 8, NativeBss memLimitLabel 8 8, NativeBss cpuCountLabel 8 8, NativeBss sigActLabel 32 8, NativeBss itimerLabel 32 8, NativeBss cpuCurLabel 128 16, NativeBss cpuNewLabel 128 16, NativeBss cgBufLabel 64 8, NativeBss envChildLabel 8192 8, NativeBss nextHostLabel 8 8]
+    [NativeBss nativeHeapSegLabel 32 8, NativeBss nativeHeapLabel nativeHeapBytes 16, NativeBss nativeHeapEndLabel 0 0, NativeBss nativeHeapPtrLabel 8 8, NativeBss nativeArenaEndLabel 8 8, NativeBss nativeSegsLabel 8 8, NativeBss nativeCurSegLabel 8 8, NativeBss nativeFreeTableLabel nativeFreeTableBytes 8, NativeBss nativeHugeFreeLabel 8 8, NativeBss stackTopLabel 8 8, NativeBss stackLimitLabel 8 8, NativeBss argcLabel 8 8, NativeBss argvLabel 8 8, NativeBss envpLabel 8 8, NativeBss hostStatusLabel 8 8, NativeBss pathBufLabel 4096 8, NativeBss tsLabel 16 8, NativeBss termiosLabel 64 8, NativeBss cleanupHeadLabel 8 8, NativeBss pathBuf2Label 4096 8, NativeBss statBufLabel 256 8, NativeBss dirBufLabel 32768 8, NativeBss dirNamesLabel 32256 8, NativeBss readBufLabel 8388608 8, NativeBss cmdBufLabel 65536 8, NativeBss cwdBufLabel 4096 8, NativeBss spawnArgvLabel 2048 8, NativeBss spawnBufLabel 65536 8, NativeBss shArgvLabel 32 8, NativeBss memLimitLabel 8 8, NativeBss cpuCountLabel 8 8, NativeBss sigActLabel 32 8, NativeBss itimerLabel 32 8, NativeBss cpuCurLabel 128 16, NativeBss cpuNewLabel 128 16, NativeBss cgBufLabel 64 8, NativeBss envChildLabel 8192 8]
     nativeGcBss
 
 -- ---------------------------------------------------------------
@@ -531,79 +516,15 @@ floatAbsFn =
 floatSqrtFn : NativeFunc
 floatSqrtFn = rtFunc "float_sqrt" 0 (append [IXmmLoad 0 (OpMem Rdi 0), IXmmUnop "sqrt" 0] floatBox)
 
--- ---------------------------------------------------------------
--- 效应 handler / 一次性续延（栈拷贝）
--- ---------------------------------------------------------------
--- 运行时表示：
---   * handler 链：`.bss` 里的 `rt_handlers` 指向最内层节点；节点 64 B：
---     `[0]=key [8]=name [16]=ret [24]=opH [32]=当前 comp 栈顶 [40]=prev`
---     `[48]=base_rbp [56]=活动 resume 记录（0 = 无）`。
---   * 续延记录 160 B：`[0]=捕获字节 [8]=字节数 [16]=perform 的 rbp`（`cur_rbp`）、
---     `[24]=used [32]=handler 节点 [40]=perform 时的链顶`、
---     `[48]=resume 调用者 rbp [56]=rsp [64]=返回地址 [72]=r15`、`[80]=恢复值 v`、
---     `[88]=prev_top [96]=new_cur [104]=new_top [112]=delta [120]=捕获时的栈顶`、
---     `[128]=栈段基址 [136]=栈段大小 [144]=prev_stack_limit`。
---   * 续延闭包 24 B：`[0]=code [8]=arity(1) [16]=续延记录`；调用约定与普通闭包一致（rdi=闭包）。
---
--- `perform` 把 `[cur_rbp, rt_stack_top)` 的**整段栈**（含所有外层 handler 的挂起帧）
--- 拷到堆上，在当前栈上执行 `opH(op, k)`（opH 帧落在捕获区外）。`k v` 把整段栈搬到
--- 堆上的新栈段（保留向下增长的 slack）、平移 rbp 链与 handler 节点的栈地址，把匹配
--- handler 的顶部返回地址改到 `eff_kdone`；`kdone` 应用 `ret` 后撤销平移、恢复栈顶，把
--- 答案交回 `k` 的调用点。opH 不调用 `k` 时，其返回值直接作为 handler answer。
--- 续延是一次性的（`used` 标记）。
-handlersLabel : String
-handlersLabel = nativeHandlersLabel
-
 -- | 当前 active 栈的栈顶（GC 用它确定保守扫描范围）。
 stackTopLabel : String
 stackTopLabel = nativeStackTopLabel
 
--- | 当前 opH 所属的 handler 节点（`prim_effectSelf` 用）。
-selfLabel : String
-selfLabel = nativeSelfLabel
-
 stackLimitLabel : String
 stackLimitLabel = "rt_stack_limit"
 
--- | 下一个安装的 handler 是否是「入口预装的宿主 handler」（1 = 是，装完清零）。
-export nextHostLabel : String
-nextHostLabel = "rt_next_host"
-
-segFreeLabel : String
-segFreeLabel = "rt_seg_free"
-
-capFreeLabel : String
-capFreeLabel = "rt_cap_free"
-
-unhandledEffectMessage : String
-unhandledEffectMessage = "vuna: runtime error: unhandled effect\n"
-
-resumeTwiceMessage : String
-resumeTwiceMessage = "vuna: runtime error: continuation already resumed\n"
-
-badStackMessage : String
-badStackMessage = "vuna: runtime error: invalid continuation stack\n"
-
 stackOverflowMessage : String
 stackOverflowMessage = "vuna: runtime error: continuation stack overflow\n"
-
-trapUnhandledFn : NativeFunc
-trapUnhandledFn =
-  rtRawFunc
-    "trap_unhandled_effect"
-    [IMov (OpReg Rax) (OpImm 1), IMov (OpReg Rdi) (OpImm 2), ILea Rsi (nativeDataLabel "unhandled_effect"), IMov (OpReg Rdx) (OpImm (strLength unhandledEffectMessage)), ISyscall, IMov (OpReg Rax) (OpImm 60), IMov (OpReg Rdi) (OpImm 2), ISyscall]
-
-trapResumeTwiceFn : NativeFunc
-trapResumeTwiceFn =
-  rtRawFunc
-    "trap_resume_twice"
-    [IMov (OpReg Rax) (OpImm 1), IMov (OpReg Rdi) (OpImm 2), ILea Rsi (nativeDataLabel "resume_twice"), IMov (OpReg Rdx) (OpImm (strLength resumeTwiceMessage)), ISyscall, IMov (OpReg Rax) (OpImm 60), IMov (OpReg Rdi) (OpImm 2), ISyscall]
-
-trapBadStackFn : NativeFunc
-trapBadStackFn =
-  rtRawFunc
-    "trap_bad_stack"
-    [IMov (OpReg Rax) (OpImm 1), IMov (OpReg Rdi) (OpImm 2), ILea Rsi (nativeDataLabel "bad_stack"), IMov (OpReg Rdx) (OpImm (strLength badStackMessage)), ISyscall, IMov (OpReg Rax) (OpImm 60), IMov (OpReg Rdi) (OpImm 2), ISyscall]
 
 trapStackOverflowFn : NativeFunc
 trapStackOverflowFn =
@@ -617,124 +538,19 @@ trapRmtreeDeepFn =
     "trap_rmtree_deep"
     [IMov (OpReg Rax) (OpImm 1), IMov (OpReg Rdi) (OpImm 2), ILea Rsi (nativeDataLabel "rmtree_deep"), IMov (OpReg Rdx) (OpImm (strLength rmtreeDeepMessage)), ISyscall, IMov (OpReg Rax) (OpImm 60), IMov (OpReg Rdi) (OpImm 2), ISyscall]
 
--- | `prim_effectPerform key name op`：rdi/rsi/rdx。找到最内层匹配 handler 后拷贝栈，
---   回到 handler 帧调用 `opH(op, k)`，再把它的结果作为 `handle` 的结果返回。
-effPerformFn : NativeFunc
-effPerformFn =
-  rtFunc
-    "eff_perform"
-    112
-    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IMov (OpMem Rbp (nativeSlotOff 1)) (OpReg Rsi), IMov (OpMem Rbp (nativeSlotOff 2)) (OpReg Rdx), IMov (OpReg Rax) (OpRip handlersLabel), IMov (OpMem Rbp (nativeSlotOff 3)) (OpReg Rax), ILabel ".Lrt_eff_perform_scan", IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 3)), ITest Rax Rax, IJcc "jz" ".Lrt_eff_perform_unhandled", IMov (OpReg Rdi) (OpMem Rax 0), IMov (OpReg Rsi) (OpMem Rbp (nativeSlotOff 0)), ICall (nativeRtLabel "str_eq"), ITest Rax Rax, IJcc "jz" ".Lrt_eff_perform_next", IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 3)), IMov (OpReg Rdi) (OpMem Rax 8), IMov (OpReg Rsi) (OpMem Rbp (nativeSlotOff 1)), ICall (nativeRtLabel "str_eq"), ITest Rax Rax, IJcc "jnz" ".Lrt_eff_perform_found", ILabel ".Lrt_eff_perform_next", IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 3)), IMov (OpReg Rax) (OpMem Rax 40), IMov (OpMem Rbp (nativeSlotOff 3)) (OpReg Rax), IJmp ".Lrt_eff_perform_scan", ILabel ".Lrt_eff_perform_unhandled", ICall (nativeRtLabel "trap_unhandled_effect"), ILabel ".Lrt_eff_perform_found", IMov (OpReg Rdx) (OpMem Rbp (nativeSlotOff 3)), IMov (OpReg Rax) (OpMem Rdx 64), ITest Rax Rax, IJcc "jnz" ".Lrt_eff_perform_host_direct", IMov (OpReg Rax) (OpRip handlersLabel), IMov (OpMem Rbp (nativeSlotOff 4)) (OpReg Rax), IMov (OpReg Rdx) (OpMem Rbp (nativeSlotOff 3)), IMov (OpReg Rcx) (OpMem Rdx 56), IMov (OpMem Rbp (nativeSlotOff 10)) (OpReg Rcx), IMov (OpMem Rdx 56) (OpImm 0), IMov (OpReg Rcx) (OpMem Rdx 40), IMov (OpRip handlersLabel) (OpReg Rcx), IMov (OpReg Rax) (OpRip stackTopLabel), IMov (OpMem Rbp (nativeSlotOff 9)) (OpReg Rax), IBinReg "sub" Rax (OpReg Rbp), IMov (OpMem Rbp (nativeSlotOff 5)) (OpReg Rax), ICmp (OpReg Rax) (OpImm 0), IJcc "jle" (nativeRtLabel "trap_bad_stack"), IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "pow2_ceil"), IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "eff_alloc_capture"), IMov (OpMem Rbp (nativeSlotOff 6)) (OpReg Rax), IMov (OpMem Rbp (nativeSlotOff 11)) (OpReg Rsi), IMov (OpReg Rdi) (OpReg Rax), IMov (OpReg Rsi) (OpReg Rbp), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 5)), IRepMovsb, IMov (OpReg Rdi) (OpImm 176), ICall (nativeRtLabel "alloc"), IMov (OpMem Rbp (nativeSlotOff 7)) (OpReg Rax), IMov (OpReg Rdx) (OpReg Rax), IMov (OpReg Rcx) (OpImm 0), IMov (OpMem Rdx 160) (OpReg Rcx), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 6)), IMov (OpMem Rdx 0) (OpReg Rcx), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 5)), IMov (OpMem Rdx 8) (OpReg Rcx), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 11)), IMov (OpMem Rdx 152) (OpReg Rcx), IMov (OpReg Rcx) (OpReg Rbp), IMov (OpMem Rdx 16) (OpReg Rcx), IMov (OpMem Rdx 24) (OpImm 0), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 3)), IMov (OpMem Rdx 32) (OpReg Rcx), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 4)), IMov (OpMem Rdx 40) (OpReg Rcx), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 9)), IMov (OpMem Rdx 120) (OpReg Rcx), IMov (OpReg Rdi) (OpImm 24), ICall (nativeRtLabel "alloc"), IMov (OpMem Rbp (nativeSlotOff 8)) (OpReg Rax), ILea Rcx (nativeRtLabel "eff_resume"), IMov (OpMem Rax 0) (OpReg Rcx), IMov (OpMem Rax 8) (OpImm 1), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 7)), IMov (OpMem Rax 16) (OpReg Rcx), IMov (OpReg R11) (OpMem Rbp (nativeSlotOff 2)), IMov (OpReg R10) (OpMem Rbp (nativeSlotOff 8)), IMov (OpReg R9) (OpMem Rbp (nativeSlotOff 3)), IMov (OpReg R8) (OpMem R9 24), IBinReg "sub" Rsp (OpImm 16), IMov (OpMem Rsp 0) (OpReg R11), IMov (OpMem Rsp 8) (OpReg R10), IMov (OpReg Rdi) (OpReg R8), IMov (OpReg Rsi) (OpImm 2), IMov (OpReg Rdx) (OpReg Rsp), IMov (OpReg R11) (OpRip selfLabel), IMov (OpMem Rbp (nativeSlotOff 12)) (OpReg R11), IMov (OpReg R11) (OpMem Rbp (nativeSlotOff 3)), IMov (OpRip selfLabel) (OpReg R11), ICall (nativeRtLabel "apply"), IBinReg "add" Rsp (OpImm 16), IMov (OpReg R11) (OpMem Rbp (nativeSlotOff 12)), IMov (OpRip selfLabel) (OpReg R11), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 3)), IMov (OpReg R8) (OpMem Rcx 56), ITest R8 R8, IJcc "jz" ".Lrt_eff_perform_abort_handle", ICmp (OpReg R8) (OpImm 1), IJcc "jne" ".Lrt_eff_perform_record", IMov (OpReg R9) (OpRip activeRecsLabel), ILabel ".Lrt_eff_perform_bubble_scan", ITest R9 R9, IJcc "jz" ".Lrt_eff_perform_answer_out", IMov (OpReg R10) (OpMem R9 32), ICmp (OpReg R10) (OpReg Rcx), IJcc "je" ".Lrt_eff_perform_bubble_found", IMov (OpReg R9) (OpMem R9 160), IJmp ".Lrt_eff_perform_bubble_scan", ILabel ".Lrt_eff_perform_bubble_found", IMov (OpMem Rcx 56) (OpImm 1), IMov (OpReg R15) (OpReg R9), IJmp ".Lrt_eff_kdone_bubble", ILabel ".Lrt_eff_perform_answer_out", IMov (OpMem Rcx 56) (OpImm 0), IJmp ".Lrt_eff_perform_abort_handle", ILabel ".Lrt_eff_perform_record", IMov (OpMem Rcx 56) (OpImm 0), IMov (OpReg R15) (OpReg R8), IMov (OpReg Rdi) (OpReg R8), ICall (nativeRtLabel "eff_unrelocate"), IMov (OpReg Rdi) (OpReg R15), ICall (nativeRtLabel "eff_free_segment"), IMov (OpReg Rcx) (OpMem R15 64), IMov (OpReg Rbp) (OpMem R15 48), IMov (OpReg Rsp) (OpMem R15 56), IMov (OpReg R10) (OpMem R15 72), IMov (OpReg R15) (OpReg R10), IJmpReg Rcx, ILabel ".Lrt_eff_perform_host_direct", IMov (OpReg Rdi) (OpImm 24), ICall (nativeRtLabel "alloc"), ILea Rcx (nativeRtLabel "eff_pure_k"), IMov (OpMem Rax 0) (OpReg Rcx), IMov (OpReg Rcx) (OpImm 1), IMov (OpMem Rax 8) (OpReg Rcx), IMov (OpReg Rcx) (OpImm 0), IMov (OpMem Rax 16) (OpReg Rcx), IBinReg "sub" Rsp (OpImm 16), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 2)), IMov (OpMem Rsp 0) (OpReg Rcx), IMov (OpMem Rsp 8) (OpReg Rax), IMov (OpReg Rdx) (OpMem Rbp (nativeSlotOff 3)), IMov (OpReg Rdi) (OpMem Rdx 24), IMov (OpReg Rsi) (OpImm 2), IMov (OpReg Rdx) (OpReg Rsp), ICall (nativeRtLabel "apply"), IBinReg "add" Rsp (OpImm 16), IRet, ILabel ".Lrt_eff_perform_abort_handle", IMov (OpReg Rdx) (OpMem Rbp (nativeSlotOff 3)), IMov (OpReg R8) (OpMem Rdx 48), IMov (OpReg R9) (OpRip activeRecsLabel), ILabel ".Lrt_eff_abort_seg_scan", ITest R9 R9, IJcc "jz" ".Lrt_eff_abort_seg_done", IMov (OpReg R10) (OpMem R9 128), ICmp (OpReg R8) (OpReg R10), IJcc "jb" ".Lrt_eff_abort_seg_next", IBinReg "add" R10 (OpMem R9 136), ICmp (OpReg R8) (OpReg R10), IJcc "jae" ".Lrt_eff_abort_seg_next", IMov (OpReg R10) (OpMem R9 128), IBinReg "add" R10 (OpImm 16), IMov (OpRip stackLimitLabel) (OpReg R10), IMov (OpReg R10) (OpMem R9 104), IMov (OpRip stackTopLabel) (OpReg R10), IJmp ".Lrt_eff_abort_seg_done", ILabel ".Lrt_eff_abort_seg_next", IMov (OpReg R9) (OpMem R9 160), IJmp ".Lrt_eff_abort_seg_scan", ILabel ".Lrt_eff_abort_seg_done", IMov (OpReg R11) (OpMem Rbp (nativeSlotOff 12)), IMov (OpRip selfLabel) (OpReg R11), IMov (OpReg Rdx) (OpMem Rbp (nativeSlotOff 3)), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 10)), IMov (OpMem Rdx 56) (OpReg Rcx), IMov (OpReg Rbp) (OpMem Rdx 48), IJmp ".Lrt_eff_handle_abort"]
-
--- | `prim_effectSelf thunk`：把 thunk 重新装进当前 opH 所属的 handler（`rt_self`）。
---   当前 handler 由 `eff_perform` 调用 opH 前设置、返回/abort 后恢复。
-effSelfFn : NativeFunc
-effSelfFn =
-  rtFunc
-    "eff_self"
-    32
-    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IMov (OpReg Rax) (OpRip selfLabel), ITest Rax Rax, IJcc "jz" (nativeRtLabel "trap_unhandled_effect"), IMov (OpReg Rdi) (OpMem Rax 0), IMov (OpReg Rsi) (OpMem Rax 8), IMov (OpReg Rdx) (OpMem Rax 16), IMov (OpReg Rcx) (OpMem Rax 24), IMov (OpReg R8) (OpMem Rbp (nativeSlotOff 0)), IMov (OpReg R9) (OpImm 0), ICall (nativeRtLabel "eff_handle"), IRet]
-
--- | `prim_effectHandle key name ret opH th u`（6 参，`u` 只作延迟标记）：安装节点、
---   执行 thunk，按需弹出，最后把结果交给 `ret`。
-effHandleFn : NativeFunc
-effHandleFn =
-  rtFunc
-    "eff_handle"
-    96
-    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IMov (OpMem Rbp (nativeSlotOff 1)) (OpReg Rsi), IMov (OpMem Rbp (nativeSlotOff 2)) (OpReg Rdx), IMov (OpMem Rbp (nativeSlotOff 3)) (OpReg Rcx), IMov (OpMem Rbp (nativeSlotOff 4)) (OpReg R8), IMov (OpReg Rdi) (OpImm 96), ICall (nativeRtLabel "alloc"), IMov (OpMem Rbp (nativeSlotOff 5)) (OpReg Rax), IMov (OpReg Rdx) (OpReg Rax), IMov (OpReg Rax) (OpRip nextHostLabel), IMov (OpMem Rdx 64) (OpReg Rax), IMov (OpReg Rcx) (OpImm 0), IMov (OpRip nextHostLabel) (OpReg Rcx), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 0)), IMov (OpMem Rdx 0) (OpReg Rcx), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 1)), IMov (OpMem Rdx 8) (OpReg Rcx), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 2)), IMov (OpMem Rdx 16) (OpReg Rcx), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 3)), IMov (OpMem Rdx 24) (OpReg Rcx), ILeaMem Rcx Rbp (nativeSlotOff 11), IMov (OpMem Rdx 32) (OpReg Rcx), IMov (OpReg Rcx) (OpRip handlersLabel), IMov (OpMem Rdx 40) (OpReg Rcx), IMov (OpReg Rcx) (OpReg Rbp), IMov (OpMem Rdx 48) (OpReg Rcx), IMov (OpMem Rdx 56) (OpImm 0), IMov (OpRip handlersLabel) (OpReg Rdx), IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 4)), IMov (OpReg Rsi) (OpImm 0), IMov (OpReg R11) (OpMem Rdi 0), ICallReg R11, IMov (OpMem Rbp (nativeSlotOff 6)) (OpReg Rax), IMov (OpReg Rdx) (OpMem Rbp (nativeSlotOff 5)), IMov (OpReg Rcx) (OpRip handlersLabel), ICmp (OpReg Rcx) (OpReg Rdx), IJcc "jne" ".Lrt_eff_handle_no_pop", IMov (OpReg Rcx) (OpMem Rdx 40), IMov (OpRip handlersLabel) (OpReg Rcx), ILabel ".Lrt_eff_handle_no_pop", IBinReg "sub" Rsp (OpImm 16), IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 6)), IMov (OpMem Rsp 0) (OpReg Rax), IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 2)), IMov (OpReg Rsi) (OpImm 1), IMov (OpReg Rdx) (OpReg Rsp), ICall (nativeRtLabel "apply"), IBinReg "add" Rsp (OpImm 16), ILabel ".Lrt_eff_handle_abort"]
-
--- | 宿主直连用的纯续延闭包体：`rdi`=闭包、`rsi`=结果 -> `rax`=结果。
-effPureKFn : NativeFunc
-effPureKFn = rtRawFunc "eff_pure_k" [IMov (OpReg Rax) (OpReg Rsi), IRet]
-
--- | 向上取整到 2 的幂（最小 64 B）：`rdi` -> `rax`。块大小按 2 的幂分档，
---   单调增长的捕获/迁移请求才能复用同一批块，而不是每次都新 mmap。
+-- | 向上取整到 2 的幂（最小 64 B）：`rdi` -> `rax`。堆段按 2 的幂分档，
+--   增长时才能复用同一批段，而不是每次都新 mmap。
 pow2CeilFn : NativeFunc
 pow2CeilFn =
   rtRawFunc
     "pow2_ceil"
     [IMov (OpReg Rax) (OpImm 64), ILabel ".Lrt_pow2_loop", ICmp (OpReg Rax) (OpReg Rdi), IJcc "jae" ".Lrt_pow2_done", IBinReg "shl" Rax (OpImm 1), IJmp ".Lrt_pow2_loop", ILabel ".Lrt_pow2_done", IRet]
 
--- | 归还捕获缓冲：`rdi` = 基址、`rsi` = 大小；块头 `[0]=next [8]=size`。
-freeCaptureFn : NativeFunc
-freeCaptureFn =
-  rtRawFunc
-    "free_capture"
-    [IMov (OpReg R8) (OpReg Rdi), IMov (OpReg R9) (OpReg Rsi), IMov (OpReg R10) (OpRip capFreeLabel), IMov (OpMem R8 0) (OpReg R10), IMov (OpMem R8 8) (OpReg R9), IMov (OpRip capFreeLabel) (OpReg R8), IRet]
-
--- | 归还栈段：`rdi` = 基址、`rsi` = 大小；块头 `[0]=next [8]=size`。
-freeBlockFn : NativeFunc
-freeBlockFn =
-  rtRawFunc
-    "free_block"
-    [IMov (OpReg R8) (OpReg Rdi), IMov (OpReg R9) (OpReg Rsi), IMov (OpReg R10) (OpRip segFreeLabel), IMov (OpMem R8 0) (OpReg R10), IMov (OpMem R8 8) (OpReg R9), IMov (OpRip segFreeLabel) (OpReg R8), IRet]
-
--- | 栈段/捕获缓冲分配：优先复用 free list 中足够大的块；块头 `[0]=next [8]=size`。
---   `rdi` = 请求字节数 -> `rax` = 块基址、`rsi` = 实际块大小。
-effAllocSegmentFn : NativeFunc
-effAllocSegmentFn =
-  rtRawFunc
-    "eff_alloc_segment"
-    [IMov (OpReg R8) (OpImm 0), IMov (OpReg R9) (OpRip segFreeLabel), ILabel ".Lrt_alloc_seg_loop", ITest R9 R9, IJcc "jz" ".Lrt_alloc_seg_fresh", IMov (OpReg R10) (OpMem R9 8), ICmp (OpReg R10) (OpReg Rdi), IJcc "jae" ".Lrt_alloc_seg_found", IMov (OpReg R8) (OpReg R9), IMov (OpReg R9) (OpMem R9 0), IJmp ".Lrt_alloc_seg_loop", ILabel ".Lrt_alloc_seg_found", IMov (OpReg Rsi) (OpMem R9 8), IMov (OpReg R10) (OpMem R9 0), ITest R8 R8, IJcc "jz" ".Lrt_alloc_seg_head", IMov (OpMem R8 0) (OpReg R10), IJmp ".Lrt_alloc_seg_ret", ILabel ".Lrt_alloc_seg_head", IMov (OpRip segFreeLabel) (OpReg R10), ILabel ".Lrt_alloc_seg_ret", IMov (OpReg Rax) (OpReg R9), IRet, ILabel ".Lrt_alloc_seg_fresh", IMov (OpReg R8) (OpRip stackArenaLabel), ITest R8 R8, IJcc "jnz" ".Lrt_alloc_seg_arena_ok", IMov (OpReg R8) (OpImm nativeStackArenaBase), IMov (OpRip stackArenaLabel) (OpReg R8), ILabel ".Lrt_alloc_seg_arena_ok", IMov (OpReg R9) (OpReg R8), IBinReg "add" R9 (OpReg Rdi), IMov (OpRip stackArenaLabel) (OpReg R9), IMov (OpReg Rsi) (OpReg Rdi), IMov (OpReg Rdi) (OpReg R8), IMov (OpReg Rdx) (OpImm 3), IMov (OpReg R10) (OpImm 1048610), IMov (OpReg R8) (OpImm (0 - 1)), IBinReg "xor" R9 (OpReg R9), IMov (OpReg Rax) (OpImm 9), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jge" ".Lrt_alloc_seg_new_done", IBinReg "xor" Rdi (OpReg Rdi), IMov (OpReg Rdx) (OpImm 3), IMov (OpReg R10) (OpImm 34), IMov (OpReg R8) (OpImm (0 - 1)), IBinReg "xor" R9 (OpReg R9), IMov (OpReg Rax) (OpImm 9), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jl" (nativeRtLabel "trap_oom"), ILabel ".Lrt_alloc_seg_new_done", IRet]
-
--- | 归还迁移栈段：`rdi` = 续延记录；块基址/大小在 `[128]` / `[136]`。保留 rax。
---   同时把记录从活动续延链摘掉（LIFO，找不到就遍历摘），并清零段字段。
-effFreeSegmentFn : NativeFunc
-effFreeSegmentFn =
-  rtRawFunc
-    "eff_free_segment"
-    [IMov (OpReg R8) (OpRip activeRecsLabel), ICmp (OpReg R8) (OpReg Rdi), IJcc "jne" ".Lrt_free_seg_walk", IMov (OpReg R8) (OpMem Rdi 160), IMov (OpRip activeRecsLabel) (OpReg R8), IJmp ".Lrt_free_seg_pop_done", ILabel ".Lrt_free_seg_walk", ITest R8 R8, IJcc "jz" ".Lrt_free_seg_pop_done", IMov (OpReg R9) (OpMem R8 160), ICmp (OpReg R9) (OpReg Rdi), IJcc "jne" ".Lrt_free_seg_walk_next", IMov (OpReg R9) (OpMem Rdi 160), IMov (OpMem R8 160) (OpReg R9), IJmp ".Lrt_free_seg_pop_done", ILabel ".Lrt_free_seg_walk_next", IMov (OpReg R8) (OpReg R9), IJmp ".Lrt_free_seg_walk", ILabel ".Lrt_free_seg_pop_done", IMov (OpReg R8) (OpMem Rdi 128), IMov (OpReg R9) (OpMem Rdi 136), IMov (OpReg R10) (OpImm 0), IMov (OpMem Rdi 128) (OpReg R10), IMov (OpMem Rdi 136) (OpReg R10), ITest R8 R8, IJcc "jz" ".Lrt_free_seg_done", IMov (OpReg Rdi) (OpReg R8), IMov (OpReg Rsi) (OpReg R9), ICall (nativeRtLabel "free_block"), ILabel ".Lrt_free_seg_done", IRet]
-
--- | 捕获缓冲分配：与栈段同样的 free list 结构，但用独立的 `rt_cap_free` 链，
---   避免捕获块和栈段互相侵占（两者的请求大小差一个 slack，混用会让每层都新分配）。
---   新块从堆分配并打上 pinned 标志（`rt_cap_free` 自己复用，标记-清扫不回收）。
---   `rdi` = 请求字节数 -> `rax` = 块基址、`rsi` = 实际块大小。
-effAllocCaptureFn : NativeFunc
-effAllocCaptureFn =
-  rtRawFunc
-    "eff_alloc_capture"
-    [IMov (OpReg R8) (OpImm 0), IMov (OpReg R9) (OpRip capFreeLabel), ILabel ".Lrt_alloc_cap_loop", ITest R9 R9, IJcc "jz" ".Lrt_alloc_cap_fresh", IMov (OpReg R10) (OpMem R9 8), ICmp (OpReg R10) (OpReg Rdi), IJcc "jae" ".Lrt_alloc_cap_found", IMov (OpReg R8) (OpReg R9), IMov (OpReg R9) (OpMem R9 0), IJmp ".Lrt_alloc_cap_loop", ILabel ".Lrt_alloc_cap_found", IMov (OpReg Rsi) (OpMem R9 8), IMov (OpReg R10) (OpMem R9 0), ITest R8 R8, IJcc "jz" ".Lrt_alloc_cap_head", IMov (OpMem R8 0) (OpReg R10), IJmp ".Lrt_alloc_cap_ret", ILabel ".Lrt_alloc_cap_head", IMov (OpRip capFreeLabel) (OpReg R10), ILabel ".Lrt_alloc_cap_ret", IMov (OpReg Rax) (OpReg R9), IRet, ILabel ".Lrt_alloc_cap_fresh", IPush Rdi, ICall (nativeRtLabel "alloc_pinned"), IPop Rsi, IRet]
-
--- | 把 `[lo, hi)` 内的栈地址（handler 节点 base_rsp / base_rbp）平移 `delta`。
---   `rdi` = 续延记录（先处理 record.node），随后沿 `rt_handlers` 链处理；`rsi` = lo、
---   `rdx` = hi、`rcx` = delta。只改节点里的栈地址；保留 rax / rbp / rsp / r15 / rdi。
-effTranslateNodesFn : NativeFunc
-effTranslateNodesFn =
-  rtRawFunc
-    "eff_translate_nodes"
-    [IMov (OpReg R8) (OpMem Rdi 32), IMov (OpReg R9) (OpMem R8 32), ICmp (OpReg R9) (OpReg Rsi), IJcc "jb" ".Lrt_translate_rec_rsp", ICmp (OpReg R9) (OpReg Rdx), IJcc "jae" ".Lrt_translate_rec_rsp", IBinReg "add" R9 (OpReg Rcx), IMov (OpMem R8 32) (OpReg R9), ILabel ".Lrt_translate_rec_rsp", IMov (OpReg R9) (OpMem R8 48), ICmp (OpReg R9) (OpReg Rsi), IJcc "jb" ".Lrt_translate_rec_rbp", ICmp (OpReg R9) (OpReg Rdx), IJcc "jae" ".Lrt_translate_rec_rbp", IBinReg "add" R9 (OpReg Rcx), IMov (OpMem R8 48) (OpReg R9), ILabel ".Lrt_translate_rec_rbp", IMov (OpReg R8) (OpRip handlersLabel), ILabel ".Lrt_translate_nodes_loop", ITest R8 R8, IJcc "jz" ".Lrt_translate_nodes_done", IMov (OpReg R9) (OpMem R8 32), ICmp (OpReg R9) (OpReg Rsi), IJcc "jb" ".Lrt_translate_node_rsp", ICmp (OpReg R9) (OpReg Rdx), IJcc "jae" ".Lrt_translate_node_rsp", IBinReg "add" R9 (OpReg Rcx), IMov (OpMem R8 32) (OpReg R9), ILabel ".Lrt_translate_node_rsp", IMov (OpReg R9) (OpMem R8 48), ICmp (OpReg R9) (OpReg Rsi), IJcc "jb" ".Lrt_translate_node_rbp", ICmp (OpReg R9) (OpReg Rdx), IJcc "jae" ".Lrt_translate_node_rbp", IBinReg "add" R9 (OpReg Rcx), IMov (OpMem R8 48) (OpReg R9), ILabel ".Lrt_translate_node_rbp", IMov (OpReg R8) (OpMem R8 40), IJmp ".Lrt_translate_nodes_loop", ILabel ".Lrt_translate_nodes_done", IRet]
-
--- | 撤销一次 resume 的栈迁移：节点地址按 -delta 平移，`rt_stack_top` 恢复为 prev_top。
---   `rdi` = 续延记录；保留 rax（answer）。
-effUnrelocateFn : NativeFunc
-effUnrelocateFn =
-  rtRawFunc
-    "eff_unrelocate"
-    [IMov (OpReg Rcx) (OpMem Rdi 112), INeg Rcx, IMov (OpReg Rsi) (OpMem Rdi 96), IMov (OpReg Rdx) (OpMem Rdi 104), ICall (nativeRtLabel "eff_translate_nodes"), IMov (OpReg Rcx) (OpMem Rdi 144), IMov (OpRip stackLimitLabel) (OpReg Rcx), IMov (OpReg Rcx) (OpMem Rdi 88), IMov (OpRip stackTopLabel) (OpReg Rcx), IRet]
-
--- | 续延闭包体：`rdi` = 闭包、`rsi` = v。把 `[perform_rbp, rt_stack_top)` 整段
---   （含外层 handler 的挂起帧）拷到新栈段，平移 rbp 链与节点栈地址，把匹配 handler 的
---   顶部返回地址改到 `eff_kdone`，再从 perform 的返回点继续。
-effResumeFn : NativeFunc
-effResumeFn =
-  rtRawFunc
-    "eff_resume"
-    [IMov (OpReg R8) (OpMem Rdi 16), IMov (OpReg Rax) (OpMem R8 24), ITest Rax Rax, IJcc "jnz" ".Lrt_eff_resume_used", IMov (OpMem R8 24) (OpImm 1), IMov (OpMem R8 48) (OpReg Rbp), ILeaMem Rax Rsp 8, IMov (OpMem R8 56) (OpReg Rax), IMov (OpReg Rax) (OpMem Rsp 0), IMov (OpMem R8 64) (OpReg Rax), IMov (OpMem R8 72) (OpReg R15), IMov (OpMem R8 80) (OpReg Rsi), IMov (OpReg R15) (OpReg R8), IMov (OpReg R9) (OpMem R8 16), IMov (OpReg R10) (OpMem R8 8), IMov (OpReg R11) (OpMem R8 120), IMov (OpReg Rdi) (OpReg R10), IBinReg "add" Rdi (OpImm (nativeSegSlackBytes + 16)), ICall (nativeRtLabel "pow2_ceil"), IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "eff_alloc_segment"), IMov (OpMem R15 128) (OpReg Rax), IMov (OpMem R15 136) (OpReg Rsi), IMov (OpReg R9) (OpMem R15 16), IMov (OpReg R10) (OpMem R15 8), IMov (OpReg Rdi) (OpReg Rax), IBinReg "add" Rdi (OpImm nativeSegSlackBytes), IBinReg "add" Rdi (OpReg R10), IBinReg "add" Rdi (OpImm 15), IBinReg "and" Rdi (OpImm (0 - 16)), IMov (OpReg Rsi) (OpReg Rdi), IBinReg "sub" Rsi (OpReg R10), IMov (OpReg Rcx) (OpReg Rsi), IBinReg "sub" Rcx (OpReg R9), IMov (OpReg Rax) (OpRip stackTopLabel), IMov (OpMem R15 88) (OpReg Rax), IMov (OpMem R15 96) (OpReg Rsi), IMov (OpMem R15 104) (OpReg Rdi), IMov (OpMem R15 112) (OpReg Rcx), IMov (OpReg Rcx) (OpRip stackLimitLabel), IMov (OpMem R15 144) (OpReg Rcx), IMov (OpReg Rdi) (OpReg Rsi), IMov (OpReg Rsi) (OpMem R15 0), IMov (OpReg Rcx) (OpReg R10), IRepMovsb, IMov (OpReg Rdi) (OpMem R15 0), ITest Rdi Rdi, IJcc "jz" ".Lrt_eff_resume_cap_done", IMov (OpReg Rsi) (OpMem R15 152), ICall (nativeRtLabel "free_capture"), IMov (OpMem R15 0) (OpImm 0), IMov (OpMem R15 152) (OpImm 0), ILabel ".Lrt_eff_resume_cap_done", IMov (OpReg R9) (OpMem R15 16), IMov (OpReg Rax) (OpMem R15 40), IMov (OpRip handlersLabel) (OpReg Rax), IMov (OpReg Rcx) (OpMem R15 112), IMov (OpReg Rdx) (OpMem R15 120), IMov (OpReg R8) (OpMem R15 96), IMov (OpReg R10) (OpMem R15 104), IMov (OpReg Rsi) (OpMem R15 96), ILabel ".Lrt_eff_resume_reloc", ICmp (OpReg R8) (OpReg R10), IJcc "jae" ".Lrt_eff_resume_reloc_done", ICmp (OpReg R8) (OpReg Rsi), IJcc "jb" ".Lrt_eff_resume_reloc_done", IMov (OpReg R11) (OpMem R8 0), ICmp (OpReg R11) (OpReg R9), IJcc "jb" ".Lrt_eff_resume_reloc_next", ICmp (OpReg R11) (OpReg Rdx), IJcc "jae" ".Lrt_eff_resume_reloc_next", IBinReg "add" R11 (OpReg Rcx), IMov (OpMem R8 0) (OpReg R11), ILabel ".Lrt_eff_resume_reloc_next", IMov (OpReg R8) (OpReg R11), IJmp ".Lrt_eff_resume_reloc", ILabel ".Lrt_eff_resume_reloc_done", IMov (OpReg Rdi) (OpReg R15), IMov (OpReg Rsi) (OpMem R15 16), IMov (OpReg Rdx) (OpMem R15 120), IMov (OpReg Rcx) (OpMem R15 112), ICall (nativeRtLabel "eff_translate_nodes"), IMov (OpReg Rax) (OpMem R15 32), IMov (OpReg R8) (OpMem Rax 32), IBinReg "sub" R8 (OpImm 8), ILea Rax (nativeRtLabel "eff_kdone"), IMov (OpMem R8 0) (OpReg Rax), IMov (OpReg Rax) (OpMem R15 32), IMov (OpMem Rax 56) (OpReg R15), IMov (OpReg Rcx) (OpRip activeRecsLabel), IMov (OpMem R15 160) (OpReg Rcx), IMov (OpRip activeRecsLabel) (OpReg R15), IMov (OpReg Rcx) (OpMem R15 128), IBinReg "add" Rcx (OpImm 16), IMov (OpRip stackLimitLabel) (OpReg Rcx), IMov (OpReg Rax) (OpMem R15 104), IMov (OpRip stackTopLabel) (OpReg Rax), IMov (OpReg R8) (OpMem R15 96), IMov (OpReg Rax) (OpMem R15 80), IMov (OpReg Rcx) (OpMem R8 8), IMov (OpReg Rbp) (OpMem R8 0), IMov (OpReg Rsp) (OpReg R8), IBinReg "add" Rsp (OpImm 16), IJmpReg Rcx, ILabel ".Lrt_eff_resume_used", ICall (nativeRtLabel "trap_resume_twice")]
-
--- | comp 在续延恢复后正常结束：按需弹掉 handler，应用 `ret`，撤销栈迁移，把答案交回
---   `k` 的调用点。
-effKdoneFn : NativeFunc
-effKdoneFn =
-  rtRawFunc
-    "eff_kdone"
-    [IMov (OpReg R8) (OpMem R15 32), IMov (OpReg R9) (OpRip handlersLabel), ICmp (OpReg R9) (OpReg R8), IJcc "jne" ".Lrt_eff_kdone_no_pop", IMov (OpReg R9) (OpMem R8 40), IMov (OpRip handlersLabel) (OpReg R9), ILabel ".Lrt_eff_kdone_no_pop", IMov (OpReg R9) (OpMem R8 56), ICmp (OpReg R9) (OpReg R15), IJcc "jne" ".Lrt_eff_kdone_keep_ctx", IMov (OpMem R8 56) (OpImm 1), ILabel ".Lrt_eff_kdone_keep_ctx", IMov (OpReg Rsi) (OpReg Rax), IBinReg "sub" Rsp (OpImm 16), IMov (OpMem Rsp 0) (OpReg Rsi), IMov (OpReg Rdi) (OpMem R8 16), IMov (OpReg Rsi) (OpImm 1), IMov (OpReg Rdx) (OpReg Rsp), ICall (nativeRtLabel "apply"), IBinReg "add" Rsp (OpImm 16), ILabel ".Lrt_eff_kdone_bubble", IMov (OpReg R8) (OpMem R15 32), IMov (OpReg R9) (OpMem R8 56), ICmp (OpReg R9) (OpReg R15), IJcc "jne" ".Lrt_eff_kdone_bubble_skip", IMov (OpMem R8 56) (OpImm 1), ILabel ".Lrt_eff_kdone_bubble_skip", IMov (OpReg Rdi) (OpReg R15), ICall (nativeRtLabel "eff_unrelocate"), IMov (OpReg Rdi) (OpReg R15), ICall (nativeRtLabel "eff_free_segment"), IMov (OpReg Rcx) (OpMem R15 64), IMov (OpReg Rbp) (OpMem R15 48), IMov (OpReg Rsp) (OpMem R15 56), IMov (OpReg R10) (OpMem R15 72), IMov (OpReg R15) (OpReg R10), IJmpReg Rcx]
-
 -- ---------------------------------------------------------------
 -- 效应原语（宿主层叶子 + IORef）
 -- ---------------------------------------------------------------
 -- `Eff` 的运行时壳是 base 的 `MkEff` data；这些原语只负责「做一次宿主操作」。
--- 续延（`prim_effectPerform` / `prim_effectHandle`）需要栈捕获，仍不支持。
+-- `perform` / `handle` 由库机器（`Base.Effect.Core.Control`）执行，不经 native 运行时。
 -- | `IORef` 单元：一个 8 字节槽（`[value]`）。
 effNewRefFn : NativeFunc
 effNewRefFn =
@@ -1475,7 +1291,7 @@ envFilterFn =
 export nativeRtFuncs : List NativeFunc
 nativeRtFuncs =
   append
-    [intBinary "add" "add", intBinary "sub" "sub", intBinary "mul" "imul", divFn, intBinary "bit_and" "and", intBinary "bit_or" "or", intBinary "bit_xor" "xor", bitNotFn, bitShlFn, bitShrFn, intCompare "eq_int" "sete", intCompare "neq_int" "setne", intCompare "lt_int" "setl", intCompare "le_int" "setle", intCompare "gt_int" "setg", intCompare "ge_int" "setge", natAddFn, natSubFn, natMulFn, natDivFn, natToIntFn, natFromIntFn, natSuccFn, obsZeroFn "obs_level", obsZeroFn "obs_log", obsZero2Fn "obs_counter", obsZeroFn "obs_mark", obsZero2Fn "obs_span_begin", obsZeroFn "obs_span_end", obsZero2Fn "obs_sample_start", obsZeroFn "obs_sample_stop", obsSpanFn, obsSpanLabFn, debugOnFn, debugLineFn, strAllocFn, strLengthFn, strConcatFn, strEqFn, strNeqFn, strCompareFn, strCompareFnOf "str_lt" "setl", strCompareFnOf "str_le" "setle", strCompareFnOf "str_gt" "setg", strCompareFnOf "str_ge" "setge", strFromIntFn, strAtFn, strSubstringFn, strHashFn, effectIdFn, strShowFn, printIntFn, printBoolFn, printStrFn, assertFn, primFailFn, todoFn, trapMsgFn, trapAssertFn, trapTodoFn, allocFn, allocLeafFn, allocPinnedFn, applyFn, applyExactFn, applyShimFn, strFromBytesFn, strFromCFn, strOneCharFn, strEmptyFn, getenvFn, getcwdFn, execPathFn, nowUsFn, sleepUsFn, isTtyFn, hostStatusFn, cleanupPushFn, cleanupPopFn, fsFailFn, strToCFn, strToC2Fn, strCopyIntoFn, cStrCpyFn, u64ToDecFn, statPathFn, lstatPathFn, fileExistsFn, fileMtimeFn, fileSizeFn, tryIsDirFn, tryReadFileFn, tryWriteFileFn, tryWriteFileAtomicFn, tryMakeDirFn, tryMakeDirExclusiveFn, tryRemoveFileFn, tryRenameFn, trySymlinkFn, removeTreeFn, tryRemoveTreeFn, dirOpenFn, dirNamesFn, dirCloseFn, cmdRunShFn, spawnExecFn, waitPidFn, exitWithFn, trapImpossibleFn, trapDivZeroFn, trapArrayOobFn, trapOomFn, trapPathLongFn, trapMemLimitFn, initMemFn, initCpusFn, initTimeoutFn, envLookupFn, parseU64Fn, cgroupCpusFn, envFilterFn, sigreturnStubFn, sigalrmFn, arrayEmptyFn, arrayLengthFn, arrayGetFn, arraySetFn, arrayMakeFn, freeBlockFn, trapRmtreeDeepFn, trapStackOverflowFn, mRunEffFn, pow2CeilFn, eraseFn, effNewRefFn, effReadRefFn, effWriteRefFn, effPrintFn "prim_eff_print" 1, effPrintFn "prim_eff_eprint" 2, effExitFn, floatFromIntFn, intFromFloatFn, floatBinFn "float_add" "add", floatBinFn "float_sub" "sub", floatBinFn "float_mul" "mul", floatBinFn "float_div" "div", floatCmpFn "float_eq" (floatCmpOrdered "sete"), floatCmpFn "float_neq" floatCmpNeq, floatCmpFn "float_lt" (floatCmpOrdered "setb"), floatCmpFn "float_le" (floatCmpOrdered "setbe"), floatCmpFn "float_gt" (floatCmpOrdered "seta"), floatCmpFn "float_ge" (floatCmpOrdered "setae"), floatAbsFn, floatSqrtFn]
+    [intBinary "add" "add", intBinary "sub" "sub", intBinary "mul" "imul", divFn, intBinary "bit_and" "and", intBinary "bit_or" "or", intBinary "bit_xor" "xor", bitNotFn, bitShlFn, bitShrFn, intCompare "eq_int" "sete", intCompare "neq_int" "setne", intCompare "lt_int" "setl", intCompare "le_int" "setle", intCompare "gt_int" "setg", intCompare "ge_int" "setge", natAddFn, natSubFn, natMulFn, natDivFn, natToIntFn, natFromIntFn, natSuccFn, obsZeroFn "obs_level", obsZeroFn "obs_log", obsZero2Fn "obs_counter", obsZeroFn "obs_mark", obsZero2Fn "obs_span_begin", obsZeroFn "obs_span_end", obsZero2Fn "obs_sample_start", obsZeroFn "obs_sample_stop", obsSpanFn, obsSpanLabFn, debugOnFn, debugLineFn, strAllocFn, strLengthFn, strConcatFn, strEqFn, strNeqFn, strCompareFn, strCompareFnOf "str_lt" "setl", strCompareFnOf "str_le" "setle", strCompareFnOf "str_gt" "setg", strCompareFnOf "str_ge" "setge", strFromIntFn, strAtFn, strSubstringFn, strHashFn, effectIdFn, strShowFn, printIntFn, printBoolFn, printStrFn, assertFn, primFailFn, todoFn, trapMsgFn, trapAssertFn, trapTodoFn, allocFn, allocLeafFn, allocPinnedFn, applyFn, applyExactFn, applyShimFn, strFromBytesFn, strFromCFn, strOneCharFn, strEmptyFn, getenvFn, getcwdFn, execPathFn, nowUsFn, sleepUsFn, isTtyFn, hostStatusFn, cleanupPushFn, cleanupPopFn, fsFailFn, strToCFn, strToC2Fn, strCopyIntoFn, cStrCpyFn, u64ToDecFn, statPathFn, lstatPathFn, fileExistsFn, fileMtimeFn, fileSizeFn, tryIsDirFn, tryReadFileFn, tryWriteFileFn, tryWriteFileAtomicFn, tryMakeDirFn, tryMakeDirExclusiveFn, tryRemoveFileFn, tryRenameFn, trySymlinkFn, removeTreeFn, tryRemoveTreeFn, dirOpenFn, dirNamesFn, dirCloseFn, cmdRunShFn, spawnExecFn, waitPidFn, exitWithFn, trapImpossibleFn, trapDivZeroFn, trapArrayOobFn, trapOomFn, trapPathLongFn, trapMemLimitFn, initMemFn, initCpusFn, initTimeoutFn, envLookupFn, parseU64Fn, cgroupCpusFn, envFilterFn, sigreturnStubFn, sigalrmFn, arrayEmptyFn, arrayLengthFn, arrayGetFn, arraySetFn, arrayMakeFn, trapRmtreeDeepFn, trapStackOverflowFn, mRunEffFn, pow2CeilFn, eraseFn, effNewRefFn, effReadRefFn, effWriteRefFn, effPrintFn "prim_eff_print" 1, effPrintFn "prim_eff_eprint" 2, effExitFn, floatFromIntFn, intFromFloatFn, floatBinFn "float_add" "add", floatBinFn "float_sub" "sub", floatBinFn "float_mul" "mul", floatBinFn "float_div" "div", floatCmpFn "float_eq" (floatCmpOrdered "sete"), floatCmpFn "float_neq" floatCmpNeq, floatCmpFn "float_lt" (floatCmpOrdered "setb"), floatCmpFn "float_le" (floatCmpOrdered "setbe"), floatCmpFn "float_gt" (floatCmpOrdered "seta"), floatCmpFn "float_ge" (floatCmpOrdered "setae"), floatAbsFn, floatSqrtFn]
     nativeGcFuncs
 
 -- | IR 符号 -> 运行时函数标签。白名单之外返回 Nothing（Module 报 NativeUnsupported）。
