@@ -1780,7 +1780,8 @@ buildModule fuel st ordered entry printResult listFamM =
               [
                 WatGlobal "$g_cleanups" WvAnyRef [IRefNull],
                 WatGlobal "$g_hostStatus" WvI32 [IConstI32 0],
-                WatGlobal "$g_cleanDepth" WvI32 [IConstI32 0]
+                WatGlobal "$g_cleanDepth" WvI32 [IConstI32 0],
+                WatGlobal "$g_tmpSeq" WvI32 [IConstI32 0]
               ]
             globals = append baseGlobals (globalsOf ordered)
             dataText = poolBytes st.gsPool
