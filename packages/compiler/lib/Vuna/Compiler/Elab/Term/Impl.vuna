@@ -1002,7 +1002,7 @@ recordUpdatePlan ec baseTy fields sp =
 
 -- | `Base.Trait.Record.HasField` 字典族的 canonical 名，供上下文查找字段约束使用。
 hasFieldDictName : String
-hasFieldDictName = dictTypeName "Base.Trait.Record.HasField"
+hasFieldDictName = dictTypeName hasFieldTraitName
 
 -- 在局部上下文里找签名约束提供的 HasField 字典（`{d : Dict_HasField (MkField "f") a t}`）。
 -- 类参数顺序固定为 f / a / t；标签按 Field 构造子里的 String 比较。
@@ -1022,7 +1022,7 @@ ctxHasFieldDictGo ((Pair name ty) :: rest) idx ctx ec fname baseTy =
           case args of
             fVal :: aVal :: tVal :: _ =>
               case forceVal ec fVal of
-                VNeutral (NGlobal "Base.Trait.Field.Field" (label :: _)) =>
+                VNeutral (NGlobal hasFieldLabelName (label :: _)) =>
                   case label of
                     VStr nm =>
                       case nm == fname of
@@ -1053,10 +1053,10 @@ hasFieldAccessFuel fuel globals ctx ec baseTerm baseTy fname sp =
         Just (Pair dictTerm (Pair fieldTy ec2)) =>
           let
             d = ctxDepth ctx
-            labelTerm = TApp (TGlobal "Base.Trait.Field.Field") (TStr fname) Rig0
+            labelTerm = TApp (TGlobal hasFieldLabelName) (TStr fname) Rig0
             proj =
               TApp
-                (TApp (TApp (TApp (TApp (TGlobal "Base.Trait.Record.getField") labelTerm Rig0) (quote d baseTy) Rig0) (quote d fieldTy) Rig0) dictTerm RigOmega)
+                (TApp (TApp (TApp (TApp (TGlobal hasFieldGetFieldName) labelTerm Rig0) (quote d baseTy) Rig0) (quote d fieldTy) Rig0) dictTerm RigOmega)
                 baseTerm
                 RigOmega
           in OkC (Pair proj (Pair fieldTy ec2))

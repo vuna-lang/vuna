@@ -88,13 +88,13 @@ hasFieldOwnerOf owner dname params f =
   let
     fname = fieldName f
     fty = fieldType f
-    label = EApp (EVar "Base.Trait.Field.Field" splitNoSpan) [EStr fname splitNoSpan] splitNoSpan
+    label = EApp (EVar hasFieldLabelName splitNoSpan) [EStr fname splitNoSpan] splitNoSpan
     head =
       EApp
-        (EVar "Base.Trait.Record.HasField" splitNoSpan)
+        (EVar hasFieldTraitName splitNoSpan)
         [label, hasFieldRecordTypeExpr dname params, fty]
         splitNoSpan
-  in Pair (instanceName "Base.Trait.Record.HasField" (toRastExpr head)) owner
+  in Pair (instanceName hasFieldTraitName (toRastExpr head)) owner
 
 splitHasFieldOwners : String -> String -> List String -> List Field -> List (Pair String String)
 splitHasFieldOwners owner dname params [] = []

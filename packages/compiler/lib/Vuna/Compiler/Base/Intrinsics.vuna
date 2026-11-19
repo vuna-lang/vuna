@@ -543,6 +543,22 @@ listNilCtor = "Base.Data.List.List.Nil"
 export listConsCtor : String
 listConsCtor = "Base.Data.List.List.::"
 
+-- | 记录字段标签族（`Base.Trait.Field.Field : String -> Type`）的完整符号。
+export hasFieldLabelName : String
+hasFieldLabelName = "Base.Trait.Field.Field"
+
+-- | `HasField` trait 的完整符号：自动生成的记录字段实例挂在这个 trait 下。
+export hasFieldTraitName : String
+hasFieldTraitName = "Base.Trait.Record.HasField"
+
+-- | `HasField` 方法 / 投影的完整符号。
+export hasFieldGetFieldName : String
+hasFieldGetFieldName = "Base.Trait.Record.getField"
+
+-- | `HasField` 方法的短名（实例声明的 `DFun` 用）。
+export hasFieldMethodName : String
+hasFieldMethodName = "getField"
+
 -- ---------------------------------------------------------------
 -- canonical 族表
 -- ---------------------------------------------------------------

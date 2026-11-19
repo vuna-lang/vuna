@@ -1,0 +1,14 @@
+-- 用户自定义的同名 `HasField` trait 不触发 base 记录实例的自动生成：
+-- 生成只认 canonical `Base.Trait.Record.HasField`，否则实例会挂到不存在的族上。
+trait HasField (l : Type) (a : Type) (t : Type) where
+  getField : a -> t
+
+record Point where
+  x : Int
+  y : Int
+
+p : Point
+p = Point { x = 2, y = 3 }
+
+main : Int
+main = p.x * 10 + p.y

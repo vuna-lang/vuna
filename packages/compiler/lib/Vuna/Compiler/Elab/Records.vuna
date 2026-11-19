@@ -14,6 +14,7 @@ import Vuna.Compiler.Base.Diagnostics.Tc
 import Vuna.Compiler.Base.Diagnostics.Common
 import Vuna.Compiler.Frontend.Rast
 import Vuna.Compiler.Frontend.Rast.Name
+import Vuna.Compiler.Base.Intrinsics
 
 -- | 一条 record 字段的结构化元数据。`recordFieldIndex` 是声明序号（也是降级后
 -- 构造子里的位置参数序号）；`recordFieldType` 仍带源码 span，供 `HasField` 实例生成。
@@ -325,15 +326,15 @@ hasFieldInstanceDecl rname params ctor n fi fname fty =
       case params of
         [] => EVar (classifyName rname) fsp
         _ => EApp (EVar (classifyName rname) fsp) (map (\p => EVar (classifyName p) fsp) params) fsp
-    label = EApp (EVar (classifyName "Base.Trait.Field.Field") fsp) [EStr fname fsp] fsp
-    head = EApp (EVar (classifyName "Base.Trait.Record.HasField") fsp) [label, recType, fty] fsp
+    label = EApp (EVar (classifyName hasFieldLabelName) fsp) [EStr fname fsp] fsp
+    head = EApp (EVar (classifyName hasFieldTraitName) fsp) [label, recType, fty] fsp
     pats = recordInstancePats n fsp
     body =
       ECase
         (EVar (classifyName "p") fsp)
         [Pair (PCon (classifyName ctor) pats fsp) (EVar (classifyName (recordInstanceVar fi)) fsp)]
         fsp
-    meth = DFun "getField" [PVar "p" fsp] body fsp
+    meth = DFun hasFieldMethodName [PVar "p" fsp] body fsp
   in DInstance [] head [meth] fsp
 
 -- DT 的一步式入口：收集 record 元数据并完成 record 表达式/模式的语法降级。

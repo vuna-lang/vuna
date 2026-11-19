@@ -860,16 +860,13 @@ dtEvalExprInInfoCore prog expr =
         )
 
 -- 导入 Base.Trait.Record 的模块：为当前模块的 record 字段追加 HasField 实例。
--- | 判断声明列表里是否出现 `HasField` trait 声明（全名或短名）。
+-- | 判断声明列表里是否出现 `HasField` trait 声明（只认 canonical 名，避免把用户
+-- 自定义的同名 trait 当成 base 的 `HasField` 而生成挂错族的实例）。
 hasHasFieldDecls : List Decl -> Bool
 hasHasFieldDecls [] = False
 hasHasFieldDecls (d :: rest) =
   case d of
-    DTrait n ps supers ms sp =>
-      if n == "Base.Trait.Record.HasField" || baseNameOf n == "HasField" then
-        True
-      else
-        hasHasFieldDecls rest
+    DTrait n ps supers ms sp => if n == hasFieldTraitName then True else hasHasFieldDecls rest
     _ => hasHasFieldDecls rest
 
 -- | 只保留短名（非限定名）的记录声明，避免为依赖包的记录重复生成实例。
@@ -893,9 +890,9 @@ hasExplicitHasFieldInstance (d :: rest) =
     DInstance ctx head methods sp =>
       case head of
         EApp (EVar n _) _ _ =>
-          if baseNameOf (rnameKey n) == "HasField" then True else hasExplicitHasFieldInstance rest
+          if rnameKey n == hasFieldTraitName then True else hasExplicitHasFieldInstance rest
         EVar n _ =>
-          if baseNameOf (rnameKey n) == "HasField" then True else hasExplicitHasFieldInstance rest
+          if rnameKey n == hasFieldTraitName then True else hasExplicitHasFieldInstance rest
         _ => hasExplicitHasFieldInstance rest
     _ => hasExplicitHasFieldInstance rest
 
@@ -905,7 +902,7 @@ maybeAddHasFieldInstances globals decls =
   if hasExplicitHasFieldInstance decls then
     decls
   else
-    case globalLookup "Base.Trait.Record.getField" globals of
+    case globalLookup hasFieldGetFieldName globals of
       Just _ => append decls (hasFieldInstancesOfDecls decls)
       Nothing => if hasHasFieldDecls decls then append decls (hasFieldInstancesOfDecls decls) else decls
 
