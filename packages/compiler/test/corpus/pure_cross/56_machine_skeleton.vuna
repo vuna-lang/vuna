@@ -7,12 +7,8 @@ ret : Eff.Obj -> Eff.Obj
 ret x = x
 
 -- opH 的第 4 个参数是机器给的 runScoped（当前帧上的嵌套运行）；这个骨架用不到。
-opH : Eff.Obj ->
-      (Eff.Obj -> (Eff.Obj -> Eff.Control Eff.Obj) -> Eff.Control Eff.Obj) ->
-      (Eff.Obj -> Eff.Control Eff.Obj) ->
-      (Eff.Scoped ((Eff.Obj -> Eff.Control Eff.Obj) -> Eff.Control Eff.Obj) -> Eff.Obj) ->
-      Eff.Control Eff.Obj
-opH _ k kdone _ = k (Eff.toObj 2) kdone
+opH : Eff.Obj -> (Eff.Obj -> Eff.Rest Eff.Obj -> Eff.Control Eff.Obj) -> (Eff.Obj -> Eff.Control Eff.Obj) -> (Eff.Scoped ((Eff.Obj -> Eff.Control Eff.Obj) -> Eff.Control Eff.Obj) -> Eff.Obj) -> Eff.Control Eff.Obj
+opH _ k kdone _ = k (Eff.toObj 2) (Eff.MkRestCont kdone)
 
 comp : Eff.Obj -> (Eff.Obj -> Eff.Control Eff.Obj) -> Eff.Control Eff.Obj
 comp _ k = Eff.MkPerform "po" "po" (Eff.toObj 1) (\v => Eff.MkApply k v)

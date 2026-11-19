@@ -10,7 +10,7 @@ ret x = x
 kOuter : Eff.Obj -> Eff.Control Eff.Obj
 kOuter v = Eff.MkDone v
 
-opH : Eff.Obj -> (Eff.Obj -> (Eff.Obj -> Eff.Control Eff.Obj) -> Eff.Control Eff.Obj) -> (Eff.Obj -> Eff.Control Eff.Obj) -> (Eff.Scoped ((Eff.Obj -> Eff.Control Eff.Obj) -> Eff.Control Eff.Obj) -> Eff.Obj) -> Eff.Control Eff.Obj
+opH : Eff.Obj -> (Eff.Obj -> Eff.Rest Eff.Obj -> Eff.Control Eff.Obj) -> (Eff.Obj -> Eff.Control Eff.Obj) -> (Eff.Scoped ((Eff.Obj -> Eff.Control Eff.Obj) -> Eff.Control Eff.Obj) -> Eff.Obj) -> Eff.Control Eff.Obj
 opH _ _ kd _ = kd (Eff.toObj 0)
 
 go : IORef Int -> Int

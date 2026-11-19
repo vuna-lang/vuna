@@ -198,15 +198,15 @@ Control       = Done value
 
 仍然成立的限制：
 
-1. **栈仍随 perform 次数线性增长**（约 96 B/次）：组合子的 CPS 管道里还有普通
-   `IrApp` 在同一条链上层层返回；默认栈足够跑 `106`，但还不是常量栈。
+1. **尾 resume 不再压栈**；非尾 resume 的 `msCtx` 深度是真正的嵌套 resume 深度。CPS 管道里
+   仍有普通 `IrApp` 决定每 perform 的步数，但它不再按 perform 次数堆 `msCtx/msUsed`
+   （200k 尾递归 perform 在默认 wasm 栈上通过）。
 2. **cleanup 自身的效应/异常**走当前 handler 链（不吞）；native / OCaml 的旧实现是
    「release 只能访问外层 handler、自身异常被吞」，两边口径不同（debt D42）。
 3. `hframe` 的 cleanup 深度按「安装时的 `$g_cleanDepth`」记录：跨 resume 重装帧时沿用
    原值，因此 resume 段里新登记的 cleanup 仍归该帧。
 
-native / OCaml 仍走各自的 handler 实现（native 是栈拷贝，O(N²) 见 D89）；
-三端统一到同一 `Control` 协议是后续工作。
+native / wasm 已切库机器；OCaml 仍走 `Effect.Deep`，三端统一到同一 `Control` 协议是后续工作。
 
 ## 9. 方案 B：把机器下沉为库代码（三端统一）
 
@@ -488,6 +488,28 @@ wasm 生成代码与 native 一样只驱动 base 机器（`@ir@m@*` → `Control
 产物实测（48_eff_many 的 main.wat）只有 `$rt_mRunEff` 的普通 helper 调用形态。
 
 读数：wasm 337 / native 445 / 全量 7207 全绿。
+
+### 9.2.7 续延槽复用与尾 resume
+
+`MkResume` 的续延参数从裸函数改成 `Rest`：
+
+- `MkRestTail`：handler clause 的 resume 在尾位置（lowering 用 `__mchTK` 标记 kDone），
+  段结束就是 handler 的答案，**不压 `msCtx`**；one-shot 用共享尾槽（`tailSlot = -1`）+
+  单调 epoch。
+- `MkRestCont krest`：非尾 resume，压 `MkCtx`（带 slot 字段），段边界交回 `krest`。
+
+`msUsed` 从 `HashMap Int Bool` 换成 `List (Pair Int Int)`（槽 → epoch）；槽在 `unwind`
+弹 ctx 时回收到 `msFree`，下一次 perform 复用；`usedEpoch` 拒绝 `epoch <= 已记录`，所以
+旧续延重放仍报 `continuation already resumed`。尾 resume 不分配/压 ctx，非尾 resume 的
+ctx 深度是真正的嵌套 resume 深度。
+
+同机读数（`vuna-perf --target all --runs 3 --warmup 1`）：
+
+- `eff_tick` 20k：native 207→17 ms / 57→4.2 MB；wasm 178→56 ms / 158→63 MB。
+- `eff_tick` 200k：native 0.18–0.34 s / 2.4–17 MB（`VUNA_NATIVE_GC_LOG` 末次 live ≤ 0.3 MB）；
+  wasm 0.86 s（默认栈）。
+- `eff_bracket` 10k：native 263→151 ms / 51→27 MB；wasm 175→100 ms / 156→94 MB。
+  剩余成本在 CPS 管道步数（do / bind / cleanup），不在续延。
 
 ### 9.3 后端义务与迁移顺序
 

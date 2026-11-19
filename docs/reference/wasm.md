@@ -22,8 +22,9 @@
   不回落到 OCaml。
 - 执行宿主是仓库自带的 Node/V8 宿主（`wasm-host/run.mjs`，宿主层 `wasm-host/host.mjs`，
   浏览器复用同一份 `host.mjs`）：产物不含 wasm stack-switching 类型与指令，默认配置的
-  引擎即可直接运行。handler 运行时由显式效应机器的一个循环派发续延；栈增长与 perform
-  次数仍线性（约 96 B/次），默认栈足够跑 2000 次（见 [effect-machine.md](effect-machine.md) §7.1）。
+  引擎即可直接运行。handler 运行时由显式效应机器的一个循环派发续延；尾位置 resume 不压
+  `msCtx`，200k 次顺序 perform 在默认栈上运行（见 [effect-machine.md](effect-machine.md) §9.2.7），
+  非尾 resume 的嵌套深度仍按语义保留。
 - **栈上限由引擎决定**：V8 的 wasm 栈约 1 MB 且没有开关（`node --stack-size` 不改变
   wasm 栈）。长列表上的**非尾递归**辅助函数（`map` / `append` / `Bytes.lenOf` 这类
   `1 + f rest` 形状）让栈深与输入规模成正比，超出后以 `Maximum call stack size exceeded`

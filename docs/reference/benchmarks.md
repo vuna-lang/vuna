@@ -255,7 +255,27 @@ HEAD 的库机器；`--runs 3 --warmup 1`，源码与 harness 都是 HEAD）：
 
 native 在 40k 之后出现台阶：`VUNA_NATIVE_GC_MIN=2G` 下同一 80k 档只要 0.42 s，说明台阶来自
 保守 GC 反复扫描随 perform 增长的活数据（一次性续延集合只增不减，见 debt D109）；wasm 不回收，
-时间随 N 近线性、内存同样线性增长（20k ≈ 159 MB）。
+时间随 N 近线性、内存同样线性增长（20k ≈ 159 MB）。**这组台阶是续延槽复用落地前的读数**，
+修复后 200k 仍线性（见下）。
+
+**续延槽复用 / 尾 resume**
+
+`Base.Effect.Core` 的 `MkResume` 现在区分 `MkRestTail`（handler clause 尾位置的 resume）与
+`MkRestCont`：尾 resume 不压 `msCtx`，用共享槽 + epoch 做 one-shot；只有非尾 resume 才压 ctx。
+`msUsed` 从 COW `HashMap` 换成按槽回收的 epoch 表，`msCtx` / `msUsed` 不再随 perform 次数增长。
+
+同窗口（`--target all --runs 3 --warmup 1`，本机）：
+
+| benchmark | native 前 | native 后 | wasm 前 | wasm 后 |
+| --- | --- | --- | --- | --- |
+| eff_tick（20000） | 207 ms / 57 MB | 17 ms / 4.2 MB | 178 ms / 158 MB | 56 ms / 63 MB |
+| eff_bracket（10000） | 263 ms / 51 MB | 151 ms / 27 MB | 175 ms / 156 MB | 100 ms / 94 MB |
+| eff_deep（2000） | 6 ms | 6 ms | 35 ms | 37 ms |
+
+- `eff_tick` 放大到 200k：native 0.18–0.34 s / 2.4–17 MB，`VUNA_NATIVE_GC_LOG` 的末次
+  `live` ≤ 0.3 MB（不随 N 涨）；wasm 0.86 s（含 `nix run`/Node 启动，默认栈）。
+- `eff_bracket` 的剩余成本在 CPS 管道步数（do / bind / cleanup），不在续延；下一档是
+  `>>=` / `pure` 的 CPS 展开。
 
 **产物**（`compile`，空 store；native 列是全部 `.s` 的合计）：
 

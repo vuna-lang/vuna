@@ -550,6 +550,10 @@ mFreshV n = mkBinder ("__mchV" ++ strFromInt n)
 mFreshK : Int -> IrBinder
 mFreshK n = mkBinder ("__mchK" ++ strFromInt n)
 
+-- | handler clause 的 kDone：尾位置 resume 用它作为段边界标记（`MkRestTail`）。
+mFreshTailK : Int -> IrBinder
+mFreshTailK n = mkBinder ("__mchTK" ++ strFromInt n)
+
 mFreshR : Int -> IrBinder
 mFreshR n = mkBinder ("__mchR" ++ strFromInt n)
 
@@ -658,12 +662,19 @@ mCpsApplyArgs fuel r k args acc headV =
           v = mFreshV fuel
         in mCps (fuel - 1) r (IrLam [v] Nothing (mCpsApplyArgs (fuel - 1) r k rest (IrVar v :: acc) headV)) a
 
+-- | handler clause 顶层的 kDone（`mFreshTailK`）：resume 在尾位置时用它标记段边界。
+isTailCont : Ir -> Bool
+isTailCont e =
+  case e of
+    IrVar b => String.startsWith "__mchTK" (mBNameText b.irBinderName)
+    _ => False
+
 mCps : Int -> IrBinder -> Ir -> Ir -> Ir
 mCps fuel r k e =
   if fuel <= 0 then
     IrApp Nothing k e
   else if mIsResumeApp r e then
-    IrApp Nothing e k
+    if isTailCont k then IrApp Nothing e (IrCtor "Base.Effect.Core.Rest" "Base.Effect.Core.Rest.MkRestTail" Nothing []) else IrApp Nothing e (IrCtor "Base.Effect.Core.Rest" "Base.Effect.Core.Rest.MkRestCont" Nothing [k])
   else
     case e of
       IrLet bs rhs body =>
@@ -701,7 +712,7 @@ mHandlerLam fuel bs body =
     Nothing => IrLam bs Nothing (mHandlers (fuel - 1) body)
     Just r =>
       let
-        kd = mFreshK fuel
+        kd = mFreshTailK fuel
         rs = mFreshR fuel
       in IrLam
         (append bs [kd, rs])
@@ -1224,7 +1235,7 @@ isContBinder : IrBinder -> Bool
 isContBinder b =
   let
     n = mBNameText b.irBinderName
-  in String.startsWith "__cpsK" n || String.startsWith "__mchK" n
+  in String.startsWith "__cpsK" n || String.startsWith "__mchTK" n || String.startsWith "__mchK" n
 
 mApplys : Int -> Ir -> Ir
 mApplys fuel e =
