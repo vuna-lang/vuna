@@ -93,24 +93,18 @@ let v_Vuna_dCompiler_dNative_dAbi_dnativeHugeFreeLabel = "rt_huge_free"
 let v_Vuna_dCompiler_dNative_dAbi_dnativeGcMinDefaultBytes = 1048576
 
 # 168 "Vuna/Compiler/Native/Abi.vuna"
-let v_Vuna_dCompiler_dNative_dAbi_dnativeHandlersLabel = "rt_handlers"
-
-# 172 "Vuna/Compiler/Native/Abi.vuna"
 let v_Vuna_dCompiler_dNative_dAbi_dnativeStackTopLabel = "rt_stack_top"
 
-# 176 "Vuna/Compiler/Native/Abi.vuna"
-let v_Vuna_dCompiler_dNative_dAbi_dnativeSelfLabel = "rt_self"
-
-# 180 "Vuna/Compiler/Native/Abi.vuna"
+# 172 "Vuna/Compiler/Native/Abi.vuna"
 let v_Vuna_dCompiler_dNative_dAbi_dnativeCleanupHeadLabel = "rt_cleanups"
 
-# 187 "Vuna/Compiler/Native/Abi.vuna"
+# 179 "Vuna/Compiler/Native/Abi.vuna"
 let v_Vuna_dCompiler_dNative_dAbi_dnativePrologue = (fun (frame : int) -> ((Base_dData_dList.v_Base_dData_dList_dappend (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dInstr_IPush (Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dReg_Rbp)), (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dInstr_IMov ((Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dOperand_OpReg (Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dReg_Rbp)), (Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dOperand_OpReg (Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dReg_Rsp)))), Base_dData_dList.C_Base_dData_dList_dList_Nil))))) (if (frame = 0) then Base_dData_dList.C_Base_dData_dList_dList_Nil else (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dInstr_IBinReg ("sub", Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dReg_Rsp, (Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dOperand_OpImm (frame)))), Base_dData_dList.C_Base_dData_dList_dList_Nil)))))
 
-# 194 "Vuna/Compiler/Native/Abi.vuna"
+# 186 "Vuna/Compiler/Native/Abi.vuna"
 let v_Vuna_dCompiler_dNative_dAbi_dnativeEpilogue = (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dInstr_IMov ((Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dOperand_OpReg (Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dReg_Rsp)), (Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dOperand_OpReg (Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dReg_Rbp)))), (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dInstr_IPop (Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dReg_Rbp)), (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dInstr_IRet, Base_dData_dList.C_Base_dData_dList_dList_Nil))))))
 
-# 203 "Vuna/Compiler/Native/Abi.vuna"
+# 195 "Vuna/Compiler/Native/Abi.vuna"
 let rec v_Vuna_dCompiler_dNative_dAbi_dmapRetTo = (fun (mc0 : string) (mc1 : Vuna_dCompiler_dNative_dModel.t_Vuna_dCompiler_dNative_dModel_dInstr Base_dData_dList.t_Base_dData_dList_dList) -> (match mc1 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__0, dtb__1) -> (match dtb__0 with
   | Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dInstr_IRet -> (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dInstr_IJmp (mc0)), ((v_Vuna_dCompiler_dNative_dAbi_dmapRetTo mc0) dtb__1)))
@@ -120,44 +114,44 @@ let rec v_Vuna_dCompiler_dNative_dAbi_dmapRetTo = (fun (mc0 : string) (mc1 : Vun
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 228 "Vuna/Compiler/Native/Abi.vuna"
+# 220 "Vuna/Compiler/Native/Abi.vuna"
 let v_Vuna_dCompiler_dNative_dAbi_disNativeNameChar = (fun (c : int) -> (if (if (if (if (c >= 48) then (c <= 57) else false) then true else (if (c >= 65) then (c <= 90) else false)) then true else (if (c >= 97) then (c <= 122) else false)) then true else (c = 95)))
 
-# 231 "Vuna/Compiler/Native/Abi.vuna"
+# 223 "Vuna/Compiler/Native/Abi.vuna"
 let v_Vuna_dCompiler_dNative_dAbi_dnativeNameChar = (fun (c : int) -> (if (v_Vuna_dCompiler_dNative_dAbi_disNativeNameChar c) then (Base_dData_dList.dtp_pack (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (c, Base_dData_dList.C_Base_dData_dList_dList_Nil))) else (String.concat "" ["_x"; (bi_strFromInt c); "_"])))
 
-# 235 "Vuna/Compiler/Native/Abi.vuna"
+# 227 "Vuna/Compiler/Native/Abi.vuna"
 let v_Vuna_dCompiler_dNative_dAbi_dnativeName = (fun (name : string) -> (Base_dData_dList.dtp_pack ((Base_dData_dList.v_Base_dData_dList_dconcatMap (fun (c : int) -> (Base_dData_dList.dtp_unpack (v_Vuna_dCompiler_dNative_dAbi_dnativeNameChar c)))) (Base_dData_dList.dtp_unpack name))))
 
-# 239 "Vuna/Compiler/Native/Abi.vuna"
+# 231 "Vuna/Compiler/Native/Abi.vuna"
 let v_Vuna_dCompiler_dNative_dAbi_dnativeFuncLabel = (fun (name : string) -> ("vuna_" ^ (v_Vuna_dCompiler_dNative_dAbi_dnativeName name)))
 
-# 243 "Vuna/Compiler/Native/Abi.vuna"
+# 235 "Vuna/Compiler/Native/Abi.vuna"
 let v_Vuna_dCompiler_dNative_dAbi_dnativeRtLabel = (fun (name : string) -> ("rt_" ^ (v_Vuna_dCompiler_dNative_dAbi_dnativeName name)))
 
-# 198 "Vuna/Compiler/Native/Abi.vuna"
+# 190 "Vuna/Compiler/Native/Abi.vuna"
 let v_Vuna_dCompiler_dNative_dAbi_dstackGuardInstrs = (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dInstr_ICmp ((Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dOperand_OpReg (Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dReg_Rsp)), (Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dOperand_OpRip ("rt_stack_limit")))), (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dInstr_IJcc ("jb", (v_Vuna_dCompiler_dNative_dAbi_dnativeRtLabel "trap_stack_overflow"))), Base_dData_dList.C_Base_dData_dList_dList_Nil))))
 
-# 211 "Vuna/Compiler/Native/Abi.vuna"
+# 203 "Vuna/Compiler/Native/Abi.vuna"
 let v_Vuna_dCompiler_dNative_dAbi_drtFunc = (fun (name : string) (frame : int) (body : Vuna_dCompiler_dNative_dModel.t_Vuna_dCompiler_dNative_dModel_dInstr Base_dData_dList.t_Base_dData_dList_dList) -> ((fun endLabel -> { Vuna_dCompiler_dNative_dModel.f_Vuna_dCompiler_dNative_dModel_dNativeFunc_nfLabel = (v_Vuna_dCompiler_dNative_dAbi_dnativeRtLabel name); Vuna_dCompiler_dNative_dModel.f_Vuna_dCompiler_dNative_dModel_dNativeFunc_nfFrame = frame; Vuna_dCompiler_dNative_dModel.f_Vuna_dCompiler_dNative_dModel_dNativeFunc_nfBody = ((Base_dData_dList.v_Base_dData_dList_dappend (v_Vuna_dCompiler_dNative_dAbi_dnativePrologue frame)) ((Base_dData_dList.v_Base_dData_dList_dappend v_Vuna_dCompiler_dNative_dAbi_dstackGuardInstrs) ((Base_dData_dList.v_Base_dData_dList_dappend ((v_Vuna_dCompiler_dNative_dAbi_dmapRetTo endLabel) body)) ((Base_dData_dList.v_Base_dData_dList_dappend (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dInstr_ILabel (endLabel)), Base_dData_dList.C_Base_dData_dList_dList_Nil))) v_Vuna_dCompiler_dNative_dAbi_dnativeEpilogue)))); Vuna_dCompiler_dNative_dModel.f_Vuna_dCompiler_dNative_dModel_dNativeFunc_nfModule = v_Vuna_dCompiler_dNative_dAbi_dnativeRuntimeModule }) ((v_Vuna_dCompiler_dNative_dAbi_dnativeRtLabel name) ^ "_end")))
 
-# 222 "Vuna/Compiler/Native/Abi.vuna"
+# 214 "Vuna/Compiler/Native/Abi.vuna"
 let v_Vuna_dCompiler_dNative_dAbi_drtRawFunc = (fun (name : string) (body : Vuna_dCompiler_dNative_dModel.t_Vuna_dCompiler_dNative_dModel_dInstr Base_dData_dList.t_Base_dData_dList_dList) -> { Vuna_dCompiler_dNative_dModel.f_Vuna_dCompiler_dNative_dModel_dNativeFunc_nfLabel = (v_Vuna_dCompiler_dNative_dAbi_dnativeRtLabel name); Vuna_dCompiler_dNative_dModel.f_Vuna_dCompiler_dNative_dModel_dNativeFunc_nfFrame = 0; Vuna_dCompiler_dNative_dModel.f_Vuna_dCompiler_dNative_dModel_dNativeFunc_nfBody = body; Vuna_dCompiler_dNative_dModel.f_Vuna_dCompiler_dNative_dModel_dNativeFunc_nfModule = v_Vuna_dCompiler_dNative_dAbi_dnativeRuntimeModule })
 
-# 247 "Vuna/Compiler/Native/Abi.vuna"
+# 239 "Vuna/Compiler/Native/Abi.vuna"
 let v_Vuna_dCompiler_dNative_dAbi_dnativeGlobalValueLabel = (fun (name : string) -> ("vuna_gv_" ^ (v_Vuna_dCompiler_dNative_dAbi_dnativeName name)))
 
-# 251 "Vuna/Compiler/Native/Abi.vuna"
+# 243 "Vuna/Compiler/Native/Abi.vuna"
 let v_Vuna_dCompiler_dNative_dAbi_dnativeRtValueLabel = (fun (sym : string) -> ("rt_gv_" ^ (v_Vuna_dCompiler_dNative_dAbi_dnativeName sym)))
 
-# 255 "Vuna/Compiler/Native/Abi.vuna"
+# 247 "Vuna/Compiler/Native/Abi.vuna"
 let v_Vuna_dCompiler_dNative_dAbi_dnativeEntryLabel = "_start"
 
-# 260 "Vuna/Compiler/Native/Abi.vuna"
+# 252 "Vuna/Compiler/Native/Abi.vuna"
 let v_Vuna_dCompiler_dNative_dAbi_dnativeJumpLabel = (fun (n : int) -> (".L" ^ (bi_strFromInt n)))
 
-# 264 "Vuna/Compiler/Native/Abi.vuna"
+# 256 "Vuna/Compiler/Native/Abi.vuna"
 let v_Vuna_dCompiler_dNative_dAbi_dnativeDataLabel = (fun (name : string) -> ("rt_data_" ^ (v_Vuna_dCompiler_dNative_dAbi_dnativeName name)))
 
-# 268 "Vuna/Compiler/Native/Abi.vuna"
+# 260 "Vuna/Compiler/Native/Abi.vuna"
 let v_Vuna_dCompiler_dNative_dAbi_dnativeStrLitLabel = (fun (n : int) -> (".Llit_" ^ (bi_strFromInt n)))

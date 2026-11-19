@@ -146,7 +146,7 @@ and v_Vuna_dCompiler_dElab_dRecords_ddesugarRecordPatternFieldsFuel = (fun (fuel
 )))
 
 # 159 "Vuna/Compiler/Elab/Records.vuna"
-let v_Vuna_dCompiler_dElab_dRecords_ddesugarPattern = (fun (records : t_Vuna_dCompiler_dElab_dRecords_dRecordMeta Base_dData_dList.t_Base_dData_dList_dList) (pat : Vuna_dCompiler_dFrontend_dRast.t_Vuna_dCompiler_dFrontend_dRast_dPat) -> (((v_Vuna_dCompiler_dElab_dRecords_ddesugarPatternFuel 64) records) pat))
+let v_Vuna_dCompiler_dElab_dRecords_ddesugarPattern = (fun (records : t_Vuna_dCompiler_dElab_dRecords_dRecordMeta Base_dData_dList.t_Base_dData_dList_dList) (pat : Vuna_dCompiler_dFrontend_dRast.t_Vuna_dCompiler_dFrontend_dRast_dPat) -> (((v_Vuna_dCompiler_dElab_dRecords_ddesugarPatternFuel ((Vuna_dCompiler_dFrontend_dRast.v_Vuna_dCompiler_dFrontend_dRast_dpatBudget 64) pat)) records) pat))
 
 # 305 "Vuna/Compiler/Elab/Records.vuna"
 let v_Vuna_dCompiler_dElab_dRecords_drecordInstanceVar = (fun (i : int) -> ("@vuna@record@hf" ^ (bi_strFromInt i)))
@@ -267,7 +267,7 @@ and v_Vuna_dCompiler_dElab_dRecords_ddesugarAltFuel = (fun (mc0 : int) (mc1 : t_
 ))
 
 # 362 "Vuna/Compiler/Elab/Records.vuna"
-let v_Vuna_dCompiler_dElab_dRecords_ddesugarExpr = (fun (a1 : t_Vuna_dCompiler_dElab_dRecords_dRecordMeta Base_dData_dList.t_Base_dData_dList_dList) (a2 : Vuna_dCompiler_dFrontend_dRast.t_Vuna_dCompiler_dFrontend_dRast_dExpr) -> (((v_Vuna_dCompiler_dElab_dRecords_ddesugarExprFuel 512) a1) a2))
+let v_Vuna_dCompiler_dElab_dRecords_ddesugarExpr = (fun (a1 : t_Vuna_dCompiler_dElab_dRecords_dRecordMeta Base_dData_dList.t_Base_dData_dList_dList) (a2 : Vuna_dCompiler_dFrontend_dRast.t_Vuna_dCompiler_dFrontend_dRast_dExpr) -> (((v_Vuna_dCompiler_dElab_dRecords_ddesugarExprFuel ((Vuna_dCompiler_dFrontend_dRast.v_Vuna_dCompiler_dFrontend_dRast_dexprBudget 512) a2)) a1) a2))
 
 # 139 "Vuna/Compiler/Elab/Records.vuna"
 let rec v_Vuna_dCompiler_dElab_dRecords_ddesugarRecordDecl = (fun (records : t_Vuna_dCompiler_dElab_dRecords_dRecordMeta Base_dData_dList.t_Base_dData_dList_dList) (d : Vuna_dCompiler_dFrontend_dRast.t_Vuna_dCompiler_dFrontend_dRast_dDecl) -> (match d with
