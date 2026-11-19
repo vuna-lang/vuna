@@ -7,7 +7,7 @@
 100_export.steps	check	cli-text
 101_opaque.steps	check	cli-text
 102_abstract.steps	check	cli-text
-103_ir_lowering.steps	check,compile	artifact-exec;cli-text
+103_ir_lowering.steps	check,compile,dump	artifact-exec;cli-text
 104_ir_runtime_contract.steps	check,compile	artifact-exec;cli-text
 105_native_backend.steps	build,compile,run	artifact-exec;build-link;cli-text
 106_wasm_backend.steps	build,compile,run	artifact-exec;build-link;cli-text

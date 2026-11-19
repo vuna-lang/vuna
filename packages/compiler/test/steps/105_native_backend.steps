@@ -380,7 +380,11 @@ exit: 0
 out-equals: 0
 run: sh -c 'grep -q "jmp r11" "$TMPDIR/tcoclosure-out/Main.s"'
 exit: 0
-run: sh -c 'VUNA_NATIVE_GC_STRESS=1 "$TMPDIR/tcoclosure-out/bin/tcoclosure" 2>&1'
+
+# 9aj2) 闭包尾调用的 GC 压力：小规模深递归，确认保守 GC 不破坏迭代值。
+run: sh -c 'd="$TMPDIR/tcoclosuregc"; mkdir -p "$d/app"; printf "[package]\nname = \"tcoclosuregc\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Data.List as List\nimport Base.Data.Nat as Nat\n\napply : (Int -> Int) -> Int -> Int\napply f k = f k\n\nbuild : Nat -> List Int -> List Int\nbuild n acc = case n of\n  Zero => acc\n  Succ k => build k (0 :: acc)\n\ngo : List Int -> Int\ngo xs = case xs of\n  [] => 0\n  y :: ys => apply (\\\\u => go ys) 0\n\nmain : Int\nmain = go (build (natFromInt 30000) [])\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/tcoclosuregc-out" "$d"'
+exit: 0
+run: sh -c 'VUNA_NATIVE_GC_STRESS=1 "$TMPDIR/tcoclosuregc-out/bin/tcoclosuregc" 2>&1'
 exit: 0
 out-equals: 0
 

@@ -21,3 +21,16 @@ exit: 0
 run: "$TMPDIR/dt-deep/prog" 2>&1
 exit: 0
 out-equals: 45299
+# 尾位置标记：`vuna dev ir dump --after machine` 是 `Ir.Tail` 之后的共享视图。
+# native / wasm 的 TCO 都消费同一份标记；这里钉住标记的形状与负例。
+run: sh -c 'd="$TMPDIR/irtail"; mkdir -p "$d/app"; printf "[package]\nname = \"irtail\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Data.Nat as Nat\nimport Base.Data.String as String\n\nloop : Nat -> Int\nloop n = case n of\n  Zero => 0\n  Succ k => loop k\n\nnontail : Nat -> Int\nnontail n = case n of\n  Zero => 0\n  Succ k => 1 + nontail k\n\napply : (Nat -> Int) -> Nat -> Int\napply f x = f x\n\nrtTail : Nat -> Int\nrtTail n = case n of\n  Zero => 0\n  Succ k => strLength (strFromInt k)\n\nmain : Int\nmain = loop (natFromInt 10) + nontail (natFromInt 10) + apply loop (natFromInt 10) + rtTail (natFromInt 10)\n" > "$d/app/Main.vuna"; "$VUNA" dev ir dump --after machine "$d" > "$TMPDIR/irtail.ir"'
+exit: 0
+run: sh -c 'grep "def loop/1" "$TMPDIR/irtail.ir" | grep -q "(tail (app"'
+exit: 0
+run: sh -c '! grep "def nontail/1" "$TMPDIR/irtail.ir" | grep -q "(tail (app ? g:nontail"'
+exit: 0
+run: sh -c 'grep "def apply/2" "$TMPDIR/irtail.ir" | grep -q "(tail (app"'
+exit: 0
+run: sh -c 'grep "def rtTail/1" "$TMPDIR/irtail.ir" | grep -q "(tail (app ? rt:strLength"'
+exit: 0
+run: sh -c '"$VUNA" dev ir dump --after machine "$TMPDIR/irtail" > "$TMPDIR/irtail2.ir"; cmp "$TMPDIR/irtail.ir" "$TMPDIR/irtail2.ir"'
