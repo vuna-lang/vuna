@@ -13,8 +13,8 @@ ID 是稳定引用（`层前缀-序号`），改动时保留编号，删掉实�
 
 | ID | 位置 | 类 | 现象 → 后果 | 状态 |
 | --- | --- | --- | --- | --- |
-| FE-01 | `Packages/Source.vuna` 的 `collectDirFiles` | ⚠️C | fuel 耗尽 `pure []`：文件集合被静默截断，摘要据此判「内容一致」 | 开放 |
-| FE-02 | `Packages/Source.vuna` 的 `collectNames` / `walkName` | ⚠️C | 同上（同族另一口径 `Pkg.loadPackageWalk` 是 `icFuel`） | 开放 |
+| FE-01 | `Packages/Source.vuna` 的 `collectDirFiles` | ⚠️C | fuel 耗尽 `pure []`：文件集合被静默截断，摘要据此判「内容一致」 | 已清（耗尽报 `IC_FuelExhausted`；预算按深度计） |
+| FE-02 | `Packages/Source.vuna` 的 `collectNames` / `walkName` | ⚠️C | 同上（同族另一口径 `Pkg.loadPackageWalk` 是 `icFuel`） | 已清（同 FE-01） |
 | FE-03 | `Frontend/Parser.vuna` 的 `parseModDecl` | ⚠️B | 显式导出列表从不解析，`modDeclHasExportList` 恒 False，但 Ast/Canonical/Fmt/LSP 都在读 | 开放 |
 | FE-04 | `Parser.vuna` 的 `exportMarkerFollows` | A | 两个分支同值，`export x = 1` 被当成导出标记 | 已清 |
 | FE-05 | `Parser/Support.vuna` 的 `binderHead` | C | binder 组上限 64 名，超出静默退化成普通括号表达式 | 开放 |
@@ -155,8 +155,8 @@ ID 是稳定引用（`层前缀-序号`），改动时保留编号，删掉实�
 | CG-03 | `Native/Runtime.vuna` 的 `try_read_file` | ⚠️A | 8 MiB 固定缓冲，读满即成功 → 静默截断大文件 | 已清（超上界报 io 错误） |
 | CG-04 | `Native/Runtime.vuna` 的 `dir_names` | C | 目录项上限 4032，超出 skip | 已清（超上限报 io 错误） |
 | CG-05 | `Native/Runtime.vuna` 的 `str_to_c` | ⚠️A | 无界 `rep movsb` 写 4096 `.bss` | 已清（超长 trap） |
-| CG-06 | `Native/Runtime.vuna` 的 `try_strFromInt` | ⚠️C | `min_int` 渲染错文本 | 开放 |
-| CG-07 | `Native/Runtime.vuna` 的 `remove_tree` | ⚠️C | 每层 40 KiB、无栈守卫、`c_strcpy` 无界 | 开放 |
+| CG-06 | `Native/Runtime.vuna` 的 `strFromInt` | ⚠️C | 符号位存在易失寄存器 `r9`，跨 `str_alloc` 丢失（负数 / `min_int` 可能丢符号） | 已清（符号位存栈槽） |
+| CG-07 | `Native/Runtime.vuna` 的 `remove_tree` | ⚠️C | 每层 40 KiB、无栈守卫、`c_strcpy` 无界 | 已清（8 KiB 帧 + 栈下界守卫 + 路径容量检查） |
 | CG-08 | `Wasm/Runtime.vuna` 的 `rt_pathCopyRel` | ⚠️A | 无长度上限，覆盖 iov/scratch | 已清（按目标区容量 trap） |
 | CG-09 | `Wasm/Runtime.vuna` 的原子写 | C | 临时名 `<path>.tmp` 无 pid（另两端有） | 已清（时间+序号） |
 | CG-10 | `Wasm/Render.vuna` 的 `renderInstrFlat` | C | 复合指令返回 `""` → 静默抹掉 | 已清（复合指令复用结构化渲染压平） |
