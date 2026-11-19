@@ -325,20 +325,23 @@ fixities / imports、`miSource`、`miIfaceHash`、`miDepHashes`。
    定义位置表（mangled 值名 → `定义名 (相对路径:行)`，路径来自 `IrShared.irSharedDefLocs`
    + 增量路径的 `extraDefLocs`，已按模块根/包目录归一，落盘前排序保证确定性）
    + `dt_report_exn` 未捕获异常报告器（见 [debugging.md](debugging.md)）；
-2. 每个源码模块一个 `<Module>.ml`（OCaml 编译单元名 = 模块名点转 `_d`，如
-   `Vuna_dCompiler_dFrontend_dParser.ml`；拓扑序）。文件头**只** `open Vuna_runtime`，
+2. 每个源码模块一个 `<Unit>.ml`（OCaml 编译单元名 = 模块路径去掉包前缀后点转 `_d`，如
+   `Vuna.Compiler.Frontend.Parser` → `Frontend_dParser.ml`、`Base.Data.List` → `B_dData_dList.ml`；
+   拓扑序）。文件头**只** `open Vuna_runtime`，
    没有 open 链；跨单元引用（值 `v_*` / 构造子 `C_*` / 类型 `t_*`）一律渲染成 OCaml
    限定名 `Unit.name`（`Unit` = 定义该名字的编译单元，如
-   `Base_dData_dList.C_Base_dData_dList_dList_Cons`），同单元内仍是裸名；`List` 桥接放在声明 `List`
+   `B_dData_dList.C_List_Cons`），同单元内仍是裸名。名字只编码**本地段**：单元内的声明
+   共享同一个模块前缀，所以 `A.B.foo` 写成 `v_foo` 而不是把整条路径背进标识符；`List` 桥接放在声明 `List`
    族的模块文件里；
 3. `Main.ml`：entry decls 的 datas + defs + `main` 钩子（入口文件里的 `data` 也必须发进来）；
    首行是 `Printexc.record_backtrace` 序言，钩子在 `try` 内执行入口动作；
 4. `build.sh`：不在生成器内，由 `Driver.Compile.compileToDir` 用 `Driver.Split.buildScript`
    写盘；`vuna build` 随后执行它。
 
-`build.sh` 两条路径都按 `SplitFile` 的直接依赖工作：干净构建（无 `.cmx`）一次 `ocamlopt`
-编译全部源码；增量构建按依赖分层（`depth(u) = 1 + max(depth(dep))`，同层单元互不依赖），
-单单元层前台、多单元层 `&` + `wait` 并行，每单元 stamp 只含自身 `.ml/.mli` 与**直接依赖**
+`build.sh` 的内部只有一份单元表（`@` 分隔并行层，其余行 `单元 直接依赖...`，拓扑序），
+编译调用、stamp 与链接顺序都从它派生。干净构建（无 `.cmx`）在 `JOBS<=1` 时一次 `ocamlopt`
+编译全部源码，其余情况按依赖分层（`depth(u) = 1 + max(depth(dep))`，同层单元互不依赖），
+层内 `&` + 层末 `wait` 并行；每单元 stamp 只含自身 `.ml/.mli` 与**直接依赖**
 的 `.stamp` 内容哈希——改一个单元只重编它的（直接/传递）依赖者。链接顺序 = 拓扑序
 （依赖在前）。依赖图是精确 DAG（没有「全序 open 链 / 文件顺序即依赖顺序」模型）。
 
@@ -370,7 +373,7 @@ fixities / imports、`miSource`、`miIfaceHash`、`miDepHashes`。
 codegen 健康由**固定夹具**度量：`packages/compiler/test/corpus/codegen/` 是冻结的包（data/多构造子、case、
 record、trait/instance/deriving、as-pattern、where/let 多 clause、List 结构递归、Int 相等、
 零参定义、动作/do、`prim_*` 的 `Eff` 包装、跨模块 split）。`checks.vuna-metrics` 用
-`vuna build --no-compile` 生成它，剔除 `Base_*.ml` / `Prelude.ml` / `Vuna_runtime.ml` 后，
+`vuna build --no-compile` 生成它，剔除 `B_d*.ml` / `Prelude.ml` / `Vuna_runtime.ml` 后，
 用 `nix/tools/metrics.sh` 与 `nix/checks/data/codegen.baseline` 做**精确基线**比较
 （`<metric> =<expected>`，不等即失败）。
 

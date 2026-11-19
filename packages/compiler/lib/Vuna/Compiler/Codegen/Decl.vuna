@@ -11,6 +11,7 @@ module Vuna.Compiler.Codegen.Decl where
 -- record 字段表、去装箱族）全部由 `Lowering` 在 IR 里定好。边界由
 -- `checks.ir-boundary` 守护。
 import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Base.Source as Source
 import Base.Container.HashMap as HashMap
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Ir.Model
@@ -54,8 +55,18 @@ ocamlEscapeChar c = if c >= 32 && c <= 126 then [c] else strUnpack "\\${ocamlPad
 export ocamlString : String -> String
 ocamlString s = "\"${strPack (concatMap ocamlEscapeChar (strUnpack s))}\""
 
+-- | 名字的**本地段**：`A.B.foo` → `foo`；无点时原样返回。
+--
+-- 值 / 类型 / 构造子 / 字段的 OCaml 名只编码这一段。切分单元时每个单元只装属于自己
+-- 模块的声明（`SplitGen` 的归属表），因此单元内所有名字共享同一个模块前缀，剥掉它
+-- 不会造成单元内重名；跨单元引用由 `qualPrefix` 写成 `Unit.name`，模块路径也只写一次。
+-- 单元内重名由 `Lowering.ensureUniqueOcamlNamesIn` 在生成前报错，不会退化成 OCaml 的
+-- 静默 shadowing。
+export localName : String -> String
+localName name = secondOf (Source.splitLastDot (Source.splitOnDot name))
+
 export valueName : String -> String
-valueName name = "v_${sanitizeName name}"
+valueName name = "v_${sanitizeName (localName name)}"
 
 -- 单独提出来：OCaml `if` 直接作构造子实参时 早期 codegen 的括号处理不可靠，
 -- 这里把它包成一个命名函数，保证自举编译本文件时生成的 OCaml 合法。
@@ -63,17 +74,18 @@ export boolText : Bool -> String
 boolText True = "true"
 boolText False = "false"
 
--- 族 → OCaml 变体类型名；构造子 → 带族前缀的变体构造子名（避免跨族重名）。
+-- 族 → OCaml 变体类型名；构造子 → 带族前缀的变体构造子名（避免同单元内跨族重名）。
 export typeName : String -> String
-typeName name = "t_${sanitizeName name}"
+typeName name = "t_${sanitizeName (localName name)}"
 
 -- | 构造子的 OCaml 名（族名 + 构造子短名）。
 export ctorOcamlName : String -> String -> String
-ctorOcamlName family ctor = "C_${sanitizeName family}_${sanitizeName (ctorShortName ctor)}"
+ctorOcamlName family ctor =
+  "C_${sanitizeName (localName family)}_${sanitizeName (ctorShortName ctor)}"
 
--- | record 字段的 OCaml record label（按 record 名前缀，避免不同 record 间标签撞车）。
+-- | record 字段的 OCaml record label（按 record 名前缀，避免同单元内不同 record 撞标签）。
 export recordFieldLabel : String -> String -> String
-recordFieldLabel family field = "f_${sanitizeName family}_${sanitizeName field}"
+recordFieldLabel family field = "f_${sanitizeName (localName family)}_${sanitizeName field}"
 
 -- ---------------------------------------------------------------
 -- 跨单元引用限定
@@ -82,7 +94,8 @@ recordFieldLabel family field = "f_${sanitizeName family}_${sanitizeName field}"
 -- split 产物里每个单元只 `open Vuna_runtime`（运行时 helper 是唯一共享前缀），
 -- 其余跨单元引用（值 `v_*` / 构造子 `C_*` / 类型 `t_*`）一律渲染成 OCaml 限定名
 -- `Unit.name`；同单元引用仍是裸名（`let rec` 组与类型声明内部不写自限定）。
--- `Unit` = `sanitizeName` 后的编译单元名，必须已编译 —— 每单元只依赖**实际引用**
+-- `Unit` = `Driver.SplitGen` 给出的单元名（模块路径的包内部分，同时是文件名），
+-- 必须已编译 —— 每单元只依赖**实际引用**
 -- 到的单元（见 `typeDepsOf` 与 `Codegen.Term` 的 dep 累积），依赖图因此是精确
 -- DAG 而不是「所有前序单元」的全序。
 --

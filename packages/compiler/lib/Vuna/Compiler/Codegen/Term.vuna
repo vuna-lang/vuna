@@ -1043,20 +1043,25 @@ let dtp_sched_scope_count (id : int) : int =
   (dtp_sched_scope id).sched_completed
 """
 
--- 运行时错误报告器。位置表的键是 OCaml 值名（如 `v_main`）；回栈帧名形如
--- `Main.v_main`（跨单元调用）或 `Main.v_main.(fun)`（lambda 内联后）。报告器取帧名
--- 最后一个**非 `(fun)`** 的 '.' 分量查表，渲染成 `main (app/Main.vuna:12)`。
+-- 运行时错误报告器。位置表的键是 `单元.值名`（如 `Main.v_main`）；回栈帧名形如
+-- `Main.v_main`（跨单元调用）或 `Main.v_main.(fun)`（lambda 内联后）。报告器跳过 `(fun)`
+-- 分量后取**最后两段**（单元 + 值）查表，渲染成 `main (app/Main.vuna:12)`。
 -- 命中帧最多打印 12 条，未命中帧（如 `Stdlib.failwith`）跳过。
 dtReporterRuntime : String
-dtReporterRuntime = """let rec dt_frame_key parts =
+dtReporterRuntime = """let rec dt_frame_parts parts =
   match parts with
-  | [] -> None
-  | part :: rest -> if part = \"(fun)\" then dt_frame_key rest else Some part
+  | [] -> []
+  | \"(fun)\" :: rest -> dt_frame_parts rest
+  | p :: rest -> p :: dt_frame_parts rest
+let dt_frame_key nm =
+  match dt_frame_parts (List.rev (String.split_on_char '.' nm)) with
+  | value :: unit :: _ -> Some (unit ^ \".\" ^ value)
+  | _ -> None
 let dt_frame_label slot =
   match Printexc.Slot.name slot with
   | None -> None
   | Some nm ->
-    match dt_frame_key (List.rev (String.split_on_char '.' nm)) with
+    match dt_frame_key nm with
     | None -> None
     | Some key ->
       (match List.assoc_opt key dt_def_locs with
@@ -1683,24 +1688,25 @@ let dtp_substTemplate tmpl xs =
   in go 0; Buffer.contents buf
 """
 
--- 定义位置表：OCaml 值名 → (vuna 定义名, 文件:行)。
--- `norm` 负责把 span 里的文件路径归一到模块根 / 包目录下（见 `Driver.SplitGen`）。
+-- 定义位置表：`单元.值名` → (vuna 定义名, 文件:行)。
+-- `norm` 负责把 span 里的文件路径归一到模块根 / 包目录下（见 `Driver.SplitGen`）；
+-- `unitOf` 把定义名映射到所属单元（回栈帧名是 `Unit.value`，键必须与之一致）。
 -- 确定性：增量路径的干净模块从接口复用，位置行来自接口里持久化的
 -- `miDefLocs`；两条路径的拼接顺序不同，所以这里把行**按文本排序**再拼接——
 -- 全量/增量产物因此逐字节一致，运行时 `assoc_opt` 查找不依赖顺序。
-export dtDefLocTable : (String -> String) -> List (Pair String (Pair String Int)) -> String
-dtDefLocTable norm rows = strConcatMany (sortLocRows (map (locRowOf norm) rows))
+export dtDefLocTable : (String -> String) -> (String -> String) -> List (Pair String (Pair String Int)) -> String
+dtDefLocTable norm unitOf rows = strConcatMany (sortLocRows (map (locRowOf norm unitOf) rows))
 
 sortLocRows : List String -> List String
 sortLocRows rows = sortBy (\a, b => a <= b) rows
 
-locRowOf : (String -> String) -> Pair String (Pair String Int) -> String
-locRowOf norm row =
+locRowOf : (String -> String) -> (String -> String) -> Pair String (Pair String Int) -> String
+locRowOf norm unitOf row =
   let
     name = firstOf row
     file = firstOf (secondOf row)
     line = secondOf (secondOf row)
-  in "  (${ocamlString (valueName name)}, (${ocamlString name}, ${ocamlString "${norm file}:${strFromInt line}"}));\n"
+  in "  (${ocamlString "${unitOf name}.${valueName name}"}, (${ocamlString name}, ${ocamlString "${norm file}:${strFromInt line}"}));\n"
 
 -- ---------------------------------------------------------------
 -- 生成状态

@@ -135,18 +135,17 @@ maxInt a b = if a > b then a else b
 --   * 干净构建（没有 .cmx，例如 Nix 构建 seed / stage1）**且 JOBS ≤ 1**：一次 ocamlopt
 --     调用，避免几十次进程启动（单核下分层并行的进程/I/O 开销反而更慢）；
 --   * 其余情况（干净 + 多核，或已有 .cmx 的增量）：按**内容哈希**（.ml/.mli + 直接依赖
---     .stamp）逐单元编译，单单元层前台、多单元层 `&` 并行 + 逐个 `wait` 收尾。
+--     .stamp）逐单元编译，同层 `&` 并行 + 层间 `wait` 收尾。
+-- 单元表只写一份（`UNIT_TABLE`）：编译、stamp 与链接顺序都从它派生。
 export buildScript : List (Pair String (List String)) -> List String -> String
 buildScript graph cFiles = """#!/bin/sh
-# 由 vuna 生成：分离编译构建脚本（按直接依赖分层并行 + 内容哈希增量）。用法: ./build.sh [OUT]
-# 干净构建且 JOBS<=1：一次 ocamlopt 编译全部 .mli/.ml 并链接；
-# 增量构建：每单元 .ml/.mli 与直接依赖 .stamp 的内容哈希写 $base.stamp，命中即跳过；
-# 同层单元互不依赖：多单元层用后台任务并行编译，层间用 wait 串行。
+# 由 vuna 生成：分离编译构建脚本（直接依赖表 + 内容哈希增量 + 分层并行）。用法: ./build.sh [OUT]
+# 单元表在本文件末尾的 `VUNA_UNIT_TABLE` 里：`@` 分隔并行层，其余每行 `单元 直接依赖...`
+# （拓扑序）。干净构建且 JOBS<=1：一次 ocamlopt 编译全部 .mli/.ml；其余按内容哈希逐单元编译。
 set -eu
 cd \"$(dirname \"$0\")\"
 OUT=\${1:-program}
 FLAGS=\"-g -w -a+39 -warn-error +39\"
-MODULES=\"${spaceJoin (graphUnits graph)}\"
 JOBS=\${VUNA_BUILD_JOBS:-}
 if [ -z \"$JOBS\" ]; then
   JOBS=$(nproc 2>/dev/null || echo 1)
@@ -173,20 +172,6 @@ stamp_want() {
   for d in \"$@\"; do deps=\"$deps $d.stamp\"; done
   hash_of \"$base.ml\" \"$base.mli\" $deps
 }
-clean=1
-for m in $MODULES; do
-  if [ -f \"$m.cmx\" ]; then clean=0; fi
-done
-if [ \"$clean\" -eq 1 ] && [ \"$JOBS\" -le 1 ]; then
-  SOURCES=\"\"
-  for m in $MODULES; do
-    if [ -f \"$m.mli\" ]; then SOURCES=\"$SOURCES $m.mli\"; fi
-    SOURCES=\"$SOURCES $m.ml\"
-  done
-  ocamlopt $FLAGS -I +unix -o \"$OUT\" unix.cmxa $SOURCES $C_OBJS
-${stampWrites graph}  echo \"built $OUT\"
-  exit 0
-fi
 compile_mod() {
   base=$1
   shift
@@ -197,40 +182,73 @@ compile_mod() {
   ocamlopt $FLAGS -I +unix -c \"$base.ml\"
   printf '%s' \"$want\" > \"$base.stamp\"
 }
-${layerScripts (splitLayers graph)}ocamlopt $FLAGS -I +unix -o \"$OUT\" unix.cmxa ${joinCmxs (graphUnits graph)} $C_OBJS
+pids=\"\"
+flush_layer() {
+  for p in $pids; do wait \"$p\" || exit 1; done
+  pids=\"\"
+}
+# 按单元表驱动，四种用途共用同一份依赖表：
+#   clean    探测是否已有 .cmx（决定走单次调用还是逐单元路径）
+#   source   收集单次 ocamlopt 的全部输入（SOURCES）与链接序（CMXS）
+#   parallel 逐层并行编译：层内 `&`，层末 flush_layer 逐个 wait
+#   stamps   干净构建后补写每单元 .stamp（增量构建的输入）
+each_unit() {
+  mode=$1
+  while IFS= read -r line; do
+    case \"$line\" in
+      ''|'#'*) continue ;;
+      '@') flush_layer; continue ;;
+    esac
+    set -- $line
+    base=$1
+    shift
+    case \"$mode\" in
+      clean) if [ -f \"$base.cmx\" ]; then clean=0; fi ;;
+      source)
+        CMXS=\"$CMXS $base.cmx\"
+        if [ -f \"$base.mli\" ]; then SOURCES=\"$SOURCES $base.mli\"; fi
+        SOURCES=\"$SOURCES $base.ml\"
+        ;;
+      parallel)
+        CMXS=\"$CMXS $base.cmx\"
+        compile_mod \"$base\" \"$@\" &
+        pids=\"$pids $!\"
+        ;;
+      stamps) printf '%s' \"$(stamp_want \"$base\" \"$@\")\" > \"$base.stamp\" ;;
+    esac
+  done <<'VUNA_UNIT_TABLE'
+${unitTableText (splitLayers graph)}VUNA_UNIT_TABLE
+  flush_layer
+}
+clean=1
+each_unit clean
+if [ \"$clean\" -eq 1 ] && [ \"$JOBS\" -le 1 ]; then
+  SOURCES=\"\"
+  CMXS=\"\"
+  each_unit source
+  ocamlopt $FLAGS -I +unix -o \"$OUT\" unix.cmxa $SOURCES $C_OBJS
+  each_unit stamps
+  echo \"built $OUT\"
+  exit 0
+fi
+CMXS=\"\"
+each_unit parallel
+ocamlopt $FLAGS -I +unix -o \"$OUT\" unix.cmxa $CMXS $C_OBJS
 echo \"built $OUT\"
 """
 
--- 干净构建成功后按 graph 顺序写每单元 stamp（只含直接依赖的 .stamp，与增量公式一致；
--- 依赖在前，因此依赖的 stamp 先写好）。用 `printf '%s' "$(...)"` 而不是直接重定向，
--- 让 stamp 的**字节**与增量路径（`printf '%s' "$want"`）完全相同——否则干净构建后
--- 第一次增量重编会因多一个换行而重算依赖链。
-stampWrites : List (Pair String (List String)) -> String
-stampWrites [] = ""
-stampWrites (m :: rest) =
-  "  printf '%s' \"$(stamp_want ${firstOf m}${depsSuffix (secondOf m)})\" > \"${firstOf m}.stamp\"\n${stampWrites rest}"
+-- 单元表：一层若干行 `单元 直接依赖...`，层间用 `@` 分隔（同层互不依赖，可并行）。
+unitTableText : List (List (Pair String (List String))) -> String
+unitTableText [] = ""
+unitTableText (layer :: rest) = tableRows layer ++ tableRest rest
 
-graphUnits : List (Pair String (List String)) -> List String
-graphUnits [] = []
-graphUnits (m :: rest) = firstOf m :: graphUnits rest
+tableRows : List (Pair String (List String)) -> String
+tableRows [] = ""
+tableRows ((Pair unit deps) :: rest) = "${unit}${depsSuffix deps}\n${tableRows rest}"
 
--- 逐层生成调用：单单元层前台执行；多单元层并行执行并收集 $!，最后逐个 wait。
-layerScripts : List (List (Pair String (List String))) -> String
-layerScripts [] = ""
-layerScripts (layer :: rest) = layerCalls layer ++ layerScripts rest
-
-layerCalls : List (Pair String (List String)) -> String
-layerCalls [] = ""
-layerCalls ([m]) = "compile_mod ${firstOf m}${depsSuffix (secondOf m)}\n"
-layerCalls layer = """pids=\"\"
-${bgCalls layer}for p in $pids; do wait \"$p\" || exit 1; done
-"""
-
-bgCalls : List (Pair String (List String)) -> String
-bgCalls [] = ""
-bgCalls (m :: rest) = """compile_mod ${firstOf m}${depsSuffix (secondOf m)} &
-pids=\"$pids $!\"
-${bgCalls rest}"""
+tableRest : List (List (Pair String (List String))) -> String
+tableRest [] = ""
+tableRest (layer :: rest) = "@\n${tableRows layer}${tableRest rest}"
 
 spaceJoin : List String -> String
 spaceJoin [] = ""
@@ -239,11 +257,6 @@ spaceJoin (name :: rest) = "${name} ${spaceJoin rest}"
 depsSuffix : List String -> String
 depsSuffix [] = ""
 depsSuffix (dep :: rest) = " ${dep}${depsSuffix rest}"
-
-joinCmxs : List String -> String
-joinCmxs [] = ""
-joinCmxs ([name]) = "${name}.cmx"
-joinCmxs (name :: rest) = "${name}.cmx ${joinCmxs rest}"
 
 -- | 实际依赖图是否有环：深度松弛在 DAG 上最多 n 轮收敛（最长路径 ≤ n-1）；环上每轮
 -- 仍在增长，燃料用尽即未收敛。`canonicalTopo` 的前置条件。

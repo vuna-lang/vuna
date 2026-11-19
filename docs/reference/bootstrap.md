@@ -196,10 +196,12 @@ Main
 ```
 
 - `Vuna_runtime`：`Codegen.Term.dtRuntime`（`bi_*` / `dtp_*` 等运行时）。
-- 每个源码模块一个 `<Module>.ml`（依赖序；OCaml 编译单元名 = 模块名点转 `_d`），文件头
+- 每个源码模块一个 `<Unit>.ml`（依赖序；OCaml 编译单元名 = 模块路径去掉包前缀后点转 `_d`，
+  如 `Vuna.Compiler.Base.Intrinsics` → `Base_dIntrinsics.ml`、`Base.Data.List` →
+  `B_dData_dList.ml`），文件头
   **只** `open Vuna_runtime`（没有 open 链），跨单元引用写成 OCaml 限定名 `Unit.name`
-  （值 / 构造子 / 类型一致）；`List` 桥接（`dtp_unpack/pack`）放在声明 `List` 族的模块
-  文件里；`Vuna_dCompiler_dBase_dData_dIntrinsics.ml` 是内建声明的唯一真源。
+  （值 / 构造子 / 类型一致，名字只编码本地段）；`List` 桥接（`dtp_unpack/pack`）放在声明 `List` 族的模块
+  文件里；`Base_dIntrinsics.ml` 是内建声明的唯一真源。
 - `Main.ml`：entry decls 的 datas + defs 与 `main` 钩子（入口文件里声明的 `data` 也必须发进
   `Main.ml`）。**不生成 `.mli`**。
 - 没有只为形状稳定而保留的空编译单元。

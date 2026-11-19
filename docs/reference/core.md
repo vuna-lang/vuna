@@ -159,7 +159,7 @@ Track A 第一步（Core → IR → OCaml）之后这些不变量分两层：**�
   校验，越界报内部错误。`IrVar` 携带 binder 身份（不是裸下标），所以「渲染出未绑定名字」
   在 IR 层不可表达。
 - **名字护栏**：`Lowering.Program.ensureUniqueOcamlNamesIn` 对实际生成的 `v_*` / `t_*` / `C_*`
-  做族内去重。
+  按「模块前缀 + 编码名」做族内去重——名字只编码本地段，所以唯一性只需保证在同一单元内。
 - **入口护栏**：`checkResolvedModules` 要求模块声明带模块前缀；入口声明必须不带点、非空、
   不重复；每个运行时 `DtDef` / `DtData` 必须有归属。
 - **依赖分组**：Kosaraju SCC（`Ir.Analysis.assembleGroupNames`）在 Lowering 期算出，结果带

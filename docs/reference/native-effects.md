@@ -23,7 +23,7 @@
    `(key, name)` 路由 + 约定（没有包级特权与能力声明，见 [effects.md](effects.md) §8.6）。
 
 **seed 约束**：`Base.Effect.Core` 在 seed 闭包里（`Vuna.Compiler.Base.Common` import 它；
-`nix/seed/files.txt` 含 `Base_dEffect_dCore.ml`），base 的其余效应模块不在 seed。改标签形状而不
+`nix/seed/files.txt` 含 `B_dEffect_dCore.ml`），base 的其余效应模块不在 seed。改标签形状而不
 引入新语法时，旧 seed 仍能编译新源码；rotation 按需触发（规则见
 [bootstrap.md](bootstrap.md)）。
 

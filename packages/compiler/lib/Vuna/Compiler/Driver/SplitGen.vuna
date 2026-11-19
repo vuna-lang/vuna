@@ -28,8 +28,36 @@ import Vuna.Compiler.Elab.Driver
 import Vuna.Compiler.Elab.Term
 import Vuna.Compiler.Elab.Types
 
+-- 单元名同时是 seed 文件名与跨单元引用前缀，所以只取模块路径的**包内部分**：
+--   Vuna.Compiler.Native.Abi → Native_dAbi
+--   Base.Data.List           → B_dData_dList
+-- 剥前缀只是命名策略，归属推导仍用完整模块名（`SplitMeta` 的表）；重名由
+-- `checkUniqueUnits` 在生成前报错。
 splitUnitOfModule : String -> String
-splitUnitOfModule modName = sanitizeName modName
+splitUnitOfModule modName = sanitizeName (unitPathOf modName)
+
+compilerPkgPrefix : String
+compilerPkgPrefix = "Vuna.Compiler."
+
+basePkgPrefix : String
+basePkgPrefix = "Base."
+
+unitPathOf : String -> String
+unitPathOf m =
+  if startsWith compilerPkgPrefix m then
+    strSubstring (strLength compilerPkgPrefix) (strLength m - strLength compilerPkgPrefix) m
+  else if startsWith basePkgPrefix m then
+    "B.${strSubstring (strLength basePkgPrefix) (strLength m - strLength basePkgPrefix) m}"
+  else
+    m
+
+-- 定义名 → 所属单元（位置表的键是「单元.值名」，与运行时回栈帧名一致：
+-- 定义名带模块前缀，入口声明是裸名、归 `Main`）。
+unitOfLocName : String -> String
+unitOfLocName name =
+  let
+    p = modulePrefixOfName name
+  in if p == "" then splitUnitOfModule entryOwner else splitUnitOfModule p
 
 -- 入口单元在定义求值**之前**就开启回栈记录（零参 `main` 在模块初始化期求值，
 -- 早于 main 钩子的 try；初始化异常靠当时已开启的回栈打印 vuna 位置帧）。
@@ -106,6 +134,19 @@ depsKnown known (d :: rest) = if knownUnit known d then depsKnown known rest els
 keepCached : List String -> String -> Maybe SplitFile -> Maybe SplitFile
 keepCached known unit (Just sf) = if cachedUnitOk known unit sf then Just sf else Nothing
 keepCached known unit Nothing = Nothing
+
+-- 单元名即文件名：两个模块撞名会写到同一个 `.ml` 并互相覆盖，必须在返回文件集前报错。
+uniqueSplitNames : List SplitFile -> List String -> Bool
+uniqueSplitNames [] seen = True
+uniqueSplitNames ((SplitFile name _ _) :: rest) seen =
+  if memName name seen then False else uniqueSplitNames rest (name :: seen)
+
+checkSplitNames : List SplitFile -> Check Int
+checkSplitNames files =
+  if uniqueSplitNames files [] then
+    OkC 0
+  else
+    icInternal "split unit name collides with another module (codegen unit naming)"
 
 -- 实际依赖图必须无环：`canonicalTopo` 用迭代松弛算层，环会让层号永远增长、停在燃料
 -- 上界并给出错误的“拓扑序”（build.sh 的分层与链接顺序随之失效）。判定直接复用深度
@@ -294,7 +335,7 @@ generateDtSplitProgramWith lookup store modules entryDecls prog printResult root
     -- 位置表：Lowering 已算好本程序的运行时定义行；增量路径复用模块的额外行在这里合并
     -- （`extraDefLocs` 来自接口的 `miDefLocs`，落盘前统一排序，全量/增量一致）。
     locRows = append shared.irSharedDefLocs extraDefLocs
-    locTbl = dtDefLocTable (splitLocPath roots contextDir) locRows
+    locTbl = dtDefLocTable (splitLocPath roots contextDir) unitOfLocName locRows
     _ = dbg! "cg-deflocs-done"
     runtimeText =
       dtRuntimeWith locTbl shared.irSharedUsesFloat shared.irSharedUsesTrace shared.irSharedUsesObs
@@ -387,9 +428,12 @@ splitWithOwnersWith lookup store env modules printResult allDatas allDefs defPai
                 OkC mainFile =>
                   let
                     files = SplitFile "Vuna_runtime.ml" runtimeText [] :: append moduleFiles [mainFile]
-                  in case checkSplitAcyclic files of
+                  in case checkSplitNames files of
                     ErrC e => ErrC e
-                    OkC _ => OkC files
+                    OkC _ =>
+                      case checkSplitAcyclic files of
+                        ErrC e => ErrC e
+                        OkC _ => OkC files
             )
 
 -- 单模块：按归属过滤名字 → Lowering 出 `IrUnit` → 装配成文件。

@@ -2,16 +2,16 @@
 #
 # 夹具：packages/compiler/test/corpus/codegen（冻结包；改夹具、base 接口或 codegen 后重跑
 #       checks.vuna-metrics 取新值并复核 diff）。
-# 口径：`vuna build --no-compile --out` 后剔除 Base_*.ml / Prelude.ml /
+# 口径：`vuna build --no-compile --out` 后剔除 B_d*.ml / Prelude.ml /
 #       Vuna_runtime.ml，只量夹具自有模块——base/runtime 随功能增长，纳入会重新
 #       引入「移动靶」。指标定义见 nix/tools/metrics.sh 头注释。
 # 规则：本文件是精确基线（`=<expected>`），不是上限；不等即失败（双向捕获膨胀与
 #       优化丢失）。种子尺寸不在这里设阈值（见 docs/reference/compiler.md）。
 files =4
-bytes =4532
+bytes =4220
 lines =98
-maxline =841
-longlines =5
+maxline =725
+longlines =6
 letrec =1
 strcat =1
 eqint =0

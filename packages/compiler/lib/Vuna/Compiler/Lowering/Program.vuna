@@ -16,6 +16,7 @@ module Vuna.Compiler.Lowering.Program where
 -- 门禁：产物逐字节确定（[architecture-target.md] 的 IR 门禁）。因此本模块的遍历顺序、
 -- fresh 编号分配顺序、分支与实参顺序都不能随实现方式变化。
 import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Base.Source as Source
 import Vuna.Compiler.Base.Obs
 import Vuna.Compiler.Base.Diagnostics
 import Base.Container.HashMap as HashMap
@@ -1231,32 +1232,38 @@ lowerDefs env st (d :: rest) =
 -- ---------------------------------------------------------------
 -- 单元 lowering
 -- ---------------------------------------------------------------
--- OCaml 名字单射性护栏（三族前缀 v_/t_/C_ 互不相同，只需族内校验）。
-checkNoDupOcamlNames : String -> List String -> Check Int
-checkNoDupOcamlNames kind names = checkNoDupOcamlNamesGo kind names (HashMap.fromList [])
+-- OCaml 名字单射性护栏：名字只编码本地段，所以**同一模块前缀**（= 同一单元）内必须
+-- 唯一；跨单元由 `Unit.` 限定区分，不在此约束。三族前缀 v_/t_/C_ 互不相同，只需族内校验。
+nameKey : String -> String -> Pair String String
+nameKey raw encoded = Pair (Source.prefixOfName raw) encoded
 
-checkNoDupOcamlNamesGo : String -> List String -> HashMap String Bool -> Check Int
+checkNoDupOcamlNames : String -> List (Pair String String) -> Check Int
+checkNoDupOcamlNames kind keys = checkNoDupOcamlNamesGo kind keys (HashMap.fromList [])
+
+checkNoDupOcamlNamesGo : String -> List (Pair String String) -> HashMap String Bool -> Check Int
 checkNoDupOcamlNamesGo kind [] seen = OkC 0
-checkNoDupOcamlNamesGo kind (n :: rest) seen =
-  if HashMap.member n seen then
-    icInternal "OCaml name collision among ${kind}s: `${n}`"
+checkNoDupOcamlNamesGo kind ((Pair owner encoded) :: rest) seen =
+  let
+    key = "${owner}\t${encoded}"
+  in if HashMap.member key seen then
+    icInternal "OCaml name collision among ${kind}s in module `${owner}`: `${encoded}`"
   else
-    checkNoDupOcamlNamesGo kind rest (HashMap.insert n True seen)
+    checkNoDupOcamlNamesGo kind rest (HashMap.insert key True seen)
 
 ensureUniqueOcamlNamesIn : List DtData -> List DtDef -> Check Int
 ensureUniqueOcamlNamesIn datas defs =
   let
     runtime = rtDatasOf datas
     unboxed = unboxedFamilySet runtime
-    valueNames = map (\d => valueName (dtDefName d)) defs
-    typeNames = map (\d => typeName (dtDataName d)) runtime
-    ctorNames =
+    valueKeys = map (\d => nameKey (dtDefName d) (valueName (dtDefName d))) defs
+    typeKeys = map (\d => nameKey (dtDataName d) (typeName (dtDataName d))) runtime
+    ctorKeys =
       concatMap
-        (\d => if memName (dtDataName d) unboxed then [] else map (\c => ctorOcamlName (dtCtorFamily c) (dtCtorName c)) (dtDataCtors d))
+        (\d => if memName (dtDataName d) unboxed then [] else map (\c => nameKey (dtCtorFamily c) (ctorOcamlName (dtCtorFamily c) (dtCtorName c))) (dtDataCtors d))
         runtime
   in Vuna.Compiler.Base.Common.bind
-    (checkNoDupOcamlNames "value" valueNames)
-    (\_ => Vuna.Compiler.Base.Common.bind (checkNoDupOcamlNames "type" typeNames) (\_ => checkNoDupOcamlNames "constructor" ctorNames))
+    (checkNoDupOcamlNames "value" valueKeys)
+    (\_ => Vuna.Compiler.Base.Common.bind (checkNoDupOcamlNames "type" typeKeys) (\_ => checkNoDupOcamlNames "constructor" ctorKeys))
 
 -- | 分区 + 护栏 + 擦除检查（顺序与诊断集合固定）。
 -- 返回运行时定义（源码顺序）与「类型级 + 族名」名字集（擦除检查的输入）。
