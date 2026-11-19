@@ -1,0 +1,22 @@
+-- 深缩进的 CST 建树：closeBlocks 的预算 = 当前 frame 栈长，不再有 4096 硬上限。
+import Prelude
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Frontend.Cst
+
+tokenAtLine : Int -> CstToken
+tokenAtLine i = CstToken "ident" "x" (Span "" i i i i i i) []
+
+-- 结构递归：每行一个 token，列号递增（每行开一层 block）。
+deepTokens : Int -> Int -> List CstToken
+deepTokens i n = if n <= 0 then [] else tokenAtLine i :: deepTokens (i + 1) (n - 1)
+
+-- 第 4101 行回到第 1 列：关闭全部 block 与声明。
+dedented : List CstToken
+dedented = append (deepTokens 1 4100) [CstToken "ident" "x" (Span "" 4101 1 4101 1 4101 4101) []]
+
+childCount : List CstNode -> Int
+childCount [] = 0
+childCount (_ :: rest) = 1 + childCount rest
+
+main : Int
+main = if childCount (nodeChildren (buildCst dedented)) == 2 then 1 else 0

@@ -483,12 +483,18 @@ kindIsFile : CstKind -> Bool
 kindIsFile CstFileKind = True
 kindIsFile _ = False
 
+-- | frame 栈长（`List.length` 给 `Nat`，fuel 要 `Int`；同 `cstTokCount`）。
+frameCount : List Frame -> Int
+frameCount [] = 0
+frameCount (_ :: rest) = 1 + frameCount rest
+
 -- | 行首 token 的布局处理：先按列关闭块/声明，再按相对列打开新块或新声明。
+-- 每次关闭调用最多关「栈长 − 1」个 frame，因此 fuel = 栈长是精确界。
 layoutStep : Int -> List Frame -> List Frame
 layoutStep col frames =
   let
-    f1 = closeBlocks 4096 col frames
-    f2 = closeDecls 4096 col f1
+    f1 = closeBlocks (frameCount frames) col frames
+    f2 = closeDecls (frameCount f1) col f1
   in case f2 of
     f :: rest =>
       if kindIsGroup f.frameKind then
@@ -553,8 +559,9 @@ export buildCst : List CstToken -> CstNode
 buildCst toks =
   let
     root = Frame CstFileKind 1 (Pos 1 1 0 0) (Pos 1 1 0 0) [] False ""
-    fuel = cstTokCount toks * 4 + 64
-    frames = closeAll fuel (buildFrames fuel [root] 0 toks)
+    -- `buildFrames` 每 token 恰消耗 1 步（+1 留边界）；`closeAll` 最多关「栈长 − 1」次。
+    frames0 = buildFrames (cstTokCount toks + 1) [root] 0 toks
+    frames = closeAll (frameCount frames0) frames0
   in case frames of
     f :: rest => closeFrame f
     [] => CstBranch CstFileKind (Span "" 1 1 1 1 0 0) []

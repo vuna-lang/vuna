@@ -1,0 +1,25 @@
+-- TOML 整数按 `maxIntLiteral` 判界：越界报 `PKG_TomlSyntax`，不再静默回绕。
+import Prelude
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Frontend.Toml
+
+maxOk : Bool
+maxOk =
+  case parseTomlAt "t" "x = 4611686018427387903\n" of
+    OkC _ => True
+    ErrC _ => False
+
+overflow : Bool
+overflow =
+  case parseTomlAt "t" "x = 4611686018427387904\n" of
+    ErrC _ => True
+    OkC _ => False
+
+wrap : Bool
+wrap =
+  case parseTomlAt "t" "x = 10000000000000000000\n" of
+    ErrC _ => True
+    OkC _ => False
+
+main : Int
+main = (if maxOk then 1 else 0) + (if overflow then 2 else 0) + (if wrap then 4 else 0)

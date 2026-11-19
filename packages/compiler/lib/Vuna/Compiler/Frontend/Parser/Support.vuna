@@ -158,30 +158,34 @@ export binderHead : PState -> Maybe (Pair (Maybe Qty) (List String))
 binderHead st =
   case peekTok st of
     PTok (TIdent name) _ =>
-      case binderNameTail 64 st 1 [] of
+      case binderNameTail (tokTail st.toksOf) [] of
         Just names => Just (Pair Nothing (name :: names))
         Nothing => Nothing
     PTok (TInt 0) _ => quantifiedHead st Q0
     PTok (TInt 1) _ => quantifiedHead st Q1
     _ => Nothing
 
--- 从第 n 个 token 起收集连续的标识符，直到 `:`（lookahead 不走状态）。
--- fuel 只是终止性证据：每次向前看一个 token，最多走 token 数步。
-binderNameTail : Int -> PState -> Int -> List String -> Maybe (List String)
-binderNameTail fuel st n acc =
-  if fuel <= 0 then
-    Nothing
-  else
-    case peekTokAt st n of
-      Just (PTok (TIdent name) _) => binderNameTail (fuel - 1) st (n + 1) (name :: acc)
-      Just (PTok (TSym ":") _) => Just (reverse acc)
-      _ => Nothing
+-- 丢掉表头一个 token（第一个 token 已由 `binderHead` / `quantifiedHead` 认出）。
+tokTail : List PTok -> List PTok
+tokTail [] = []
+tokTail (_ :: rest) = rest
+
+-- 从给定 token 列表起收集连续的标识符，直到 `:`；递归沿列表结构下降（无长度上限）。
+binderNameTail : List PTok -> List String -> Maybe (List String)
+binderNameTail toks acc =
+  case toks of
+    [] => Nothing
+    t :: rest =>
+      case t of
+        PTok (TIdent name) _ => binderNameTail rest (name :: acc)
+        PTok (TSym ":") _ => Just (reverse acc)
+        _ => Nothing
 
 quantifiedHead : PState -> Qty -> Maybe (Pair (Maybe Qty) (List String))
 quantifiedHead st q =
   case peekTokAt st 1 of
     Just (PTok (TIdent name) _) =>
-      case binderNameTail 64 st 2 [] of
+      case binderNameTail (tokTail (tokTail st.toksOf)) [] of
         Just names => Just (Pair (Just q) (name :: names))
         Nothing => Nothing
     _ => Nothing

@@ -31,6 +31,7 @@ module Vuna.Compiler.Frontend.Toml where
 -- 这类 corner case 不支持，边界见文档。
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Base.Diagnostics.Pkg
+import Vuna.Compiler.Frontend.Lexer as Lexer
 import Base.Data.Bits as Bits
 
 export data TomlValue(..) : Type where
@@ -791,7 +792,13 @@ parseIntegerDigits fuel path startCs cs count acc negative =
   else
     case cs.cursorChars of
       [] => finishInteger path startCs cs count acc negative
-      c :: rest => if isDigitChar c then parseIntegerDigits (fuel - 1) path startCs (advanceCursor cs) (count + 1) (acc * 10 + (c - 48)) negative else finishInteger path startCs cs count acc negative
+      c :: rest =>
+        if isDigitChar c then
+          let
+            d = c - 48
+          in if acc > (Lexer.maxIntLiteral - d) / 10 then failAt path startCs.cursorLine "integer literal is out of range (max is 4611686018427387903)" else parseIntegerDigits (fuel - 1) path startCs (advanceCursor cs) (count + 1) (acc * 10 + d) negative
+        else
+          finishInteger path startCs cs count acc negative
 
 finishInteger : String -> TomlCursor -> TomlCursor -> Int -> Int -> Bool -> Check (Pair Int TomlCursor)
 finishInteger path startCs cs count acc negative =
