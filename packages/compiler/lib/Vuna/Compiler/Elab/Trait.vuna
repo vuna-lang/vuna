@@ -201,7 +201,7 @@ methodProjZip tname params pKinds idx ((Pair mname mexpr) :: rest) (t :: rest2) 
 methodProjType : String -> List String -> List Term -> Term -> Term
 methodProjType tname params pKinds methodTy =
   let
-    dictPi = TPi "_" True Rig0 (dictAppTermOf (dictTypeName tname) params) (shift 0 1 methodTy)
+    dictPi = TPi "_" True RigOmega (dictAppTermOf (dictTypeName tname) params) (shift 0 1 methodTy)
   in foldParamPis (zip params pKinds) dictPi
 
 -- 投影的定义体：`\p1 .. \pn => \d => \x0 .. \x(ar-1) => case d of MkDict_C f0..fn => f_k x0..`

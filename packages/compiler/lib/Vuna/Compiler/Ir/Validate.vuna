@@ -106,10 +106,38 @@ checkBinderTys decls [] = OkC 0
 checkBinderTys decls (d :: rest) =
   Vuna.Compiler.Base.Common.bind (checkDefTy decls (irDefName d) (irDefTy d)) (
       \_ =>
-        case irDefBody d of
-          Nothing => checkBinderTys decls rest
-          Just body => Vuna.Compiler.Base.Common.bind (checkBinderTysWork (8 * irSize body + 64) decls [body]) (\_ => checkBinderTys decls rest)
+        Vuna.Compiler.Base.Common.bind (checkDefArityVsSig d) (
+            \_ =>
+              case irDefBody d of
+                Nothing => checkBinderTys decls rest
+                Just body => Vuna.Compiler.Base.Common.bind (checkBinderTysWork (8 * irSize body + 64) decls [body]) (\_ => checkBinderTys decls rest)
+          )
     )
+
+-- 运行时 arity 不能超过签名的箭头数：签名是体的类型，体最多 η-展开成同样多的运行时
+-- 参数（η-收缩的定义 arity 更小）。签名不可命名（0 箭头，例如类型别名）时无法核对，跳过。
+-- 投影定义的运行时字典参数必须出现在签名里，这条守它。
+checkDefArityVsSig : IrDef -> Check Int
+checkDefArityVsSig d =
+  case irDefExtern d of
+    Just _ => OkC 0
+    Nothing =>
+      case irDefTy d of
+        Nothing => OkC 0
+        Just ty =>
+          let
+            arrows = irTyArrowArity ty
+          in if irDefArity d == 0 || arrows == 0 then
+            OkC 0
+          else if irDefArity d <= arrows then
+            OkC 0
+          else
+            icInternal
+              "definition `${irDefName d}` has ${strFromInt (irDefArity d)} runtime parameters but its signature has ${strFromInt arrows}"
+
+irTyArrowArity : IrTy -> Int
+irTyArrowArity (IrTyFun _ cod) = 1 + irTyArrowArity cod
+irTyArrowArity _ = 0
 
 checkDefTy : List IrTyDecl -> String -> Maybe IrTy -> Check Int
 checkDefTy decls _ Nothing = OkC 0
