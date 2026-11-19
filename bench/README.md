@@ -108,6 +108,11 @@ native 侧 GC 已落地（保守 mark-sweep）但无统计输出，只记峰值 
 `gc_low_live` 的 RSS 降到 5 MiB（0.02x 手写），`gc_array_churn` 仍是 GC 相关的最差项
 （COW 数组复制）；TCO 未做。判定与读数见 [performance.md §8.2](../docs/reference/performance.md)。
 
+三个效应机器基准（`eff_tick` / `eff_deep` / `eff_bracket`）已进 `BENCHES`，但**不入基线
+JSON**：它们的绝对量随宿主、GC 阈值与 `perform` 次数变化大，跨版本只比同窗口的前后对照。
+三端读数、CPS 前后（历史二进制）与产物尺寸见
+[benchmarks.md §1.4](../docs/reference/benchmarks.md)。
+
 ## 编译器基准
 
 `bench/compiler.sh` 测编译器 / 工具链自身墙钟：`check .`、`check compiler`、`build --no-compile`

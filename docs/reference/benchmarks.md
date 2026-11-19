@@ -153,7 +153,8 @@ native 的 TCO / GC 验证项。**GC 与 TCO 均已落地**；下表「前」列
 ### 1.3 wasm 后端（浏览器路径：JS 宿主 / V8）
 
 wasm 产物由仓库自带的宿主执行（`wasm-host/run.mjs`，Node/V8；与浏览器同一套
-`WebAssembly` API 和 host 层）。`--target wasm`（或 `--target all`）跑同一批 16 个程序。
+`WebAssembly` API 和 host 层）。`--target wasm`（或 `--target all`）跑同一批 16 个程序
+（另有 3 个效应机器基准见 §1.4）。
 
 本机一档（`--target all --runs 5 --warmup 2`，同窗口；绝对 ms / RSS 只作同机对比）：
 
@@ -189,4 +190,62 @@ wasm 产物由仓库自带的宿主执行（`wasm-host/run.mjs`，Node/V8；与�
 `arith`（70 vs 48）、`string_ops`、`hashmap`、`tco_wide`、`gc_low_live`。差异来源与 native 的
 既有缺口一致：native 无寄存器分配、每个算术/比较都是一次运行时调用，而 V8 有优化编译器；
 native 赢在「调用少、字符串/栈传参多」的形状（[performance.md](performance.md) §3）。
+
+### 1.4 效应机器（CPS）
+
+`eff_tick` / `eff_deep` / `eff_bracket` 测 handler 派发与续延：`eff_tick` 在尾递归里做
+20000 次顺序 `perform` + `resume`（浅续延吞吐），`eff_deep` 非尾递归到深度 2000 才
+`perform` 一次（捕获深度），`eff_bracket` 每轮 `bracket` 包一次 `perform`（10000 轮，
+cleanup 的 push/pop 步骤）。手写 OCaml 对照在同名 `.ml`（`Effect.Deep` 或直接内联）。
+
+三端同窗口（HEAD `c6586e7`，`--target all --runs 5 --warmup 2`，loadavg ≈3.3；
+ratio 相对手写 OCaml，wasm 含 `meta.node_startup_ms` = 25 ms）：
+
+| benchmark | 手写 ms | OCaml 后端 | native | wasm |
+| --- | --- | --- | --- | --- |
+| eff_tick（20000 次 perform） | 4 | 10（2.5x） | 212（53.0x） | 189（47.3x） |
+| eff_deep（深度 2000 捕获一次） | 3 | 3（1.0x） | 5（1.7x） | 37（12.3x） |
+| eff_bracket（10000 轮 bracket） | 3 | 14（4.7x） | 320（106.7x） | 194（64.7x） |
+
+**CPS 前后**（wasm：`445315d` 的 wat 机器 → HEAD 的库机器；native：`e663921` 的栈拷贝 →
+HEAD 的库机器；`--runs 3 --warmup 1`，源码与 harness 都是 HEAD）：
+
+| benchmark | native 前 | native 后 | wasm 前 | wasm 后 |
+| --- | --- | --- | --- | --- |
+| eff_tick（20000） | 25587 ms / 21.4 GB | 214 ms / 57 MB | 栈溢出（`Maximum call stack size exceeded`） | 184 ms |
+| eff_bracket（10000） | 8955 ms / 12.6 GB | 268 ms / 51 MB | 栈溢出 | 174 ms |
+| eff_deep（2000） | 5 ms | 6 ms | 36 ms | 34 ms |
+
+- native 的栈拷贝按「每次 perform 留一段栈」计费，20k 次顺序 perform 就要 21.4 GB；
+  库机器把同一档压到 57 MB。`eff_deep` 只捕一次浅栈，两者相当。
+- wasm 的 wat 机器栈深约 96 B/次，20000 次超过 V8 的 1 MB；库机器在同一档跑通。
+  小档（4000 次，减 27 ms 地板）两者净耗时 6 ms vs 36 ms：库机器每次派发更贵，
+  但栈是常量。
+- OCaml 后端仍是 `Effect.Deep`，没有 after 列；同一批基准在 `445315d` / `e663921` /
+  HEAD 三个二进制上都在 9–12 ms，切换不影响它。
+
+`eff_tick` 的增长率（HEAD，单进程；wasm 含宿主地板，地板不随 N 增长）：
+
+| N | native `user` | wasm wall |
+| --- | --- | --- |
+| 10000 | 0.06 s | 112 ms |
+| 20000 | 0.17 s | 185 ms |
+| 40000 | 0.52 s | 329 ms |
+| 80000 | 5.33 s | 761 ms |
+
+native 在 40k 之后出现台阶：`VUNA_NATIVE_GC_MIN=2G` 下同一 80k 档只要 0.42 s，说明台阶来自
+保守 GC 反复扫描随 perform 增长的活数据（一次性续延集合只增不减，见 debt D109）；wasm 不回收，
+时间随 N 近线性、内存同样线性增长（20k ≈ 159 MB）。
+
+**产物**（`compile`，空 store；native 列是全部 `.s` 的合计）：
+
+| 程序 | wasm 前 | wasm 后 | native 前 | native 后 |
+| --- | --- | --- | --- | --- |
+| eff_tick | 458 KB / 19199 行 | 429 KB / 17838 行 | 149 KB / 7643 行 | 338 KB / 15821 行 |
+| eff_bracket | 728 KB / 32591 行 | 448 KB / 18681 行 | 167 KB / 8411 行 | 364 KB / 16914 行 |
+| arith（纯程序） | 391 KB / 16016 行 | 377 KB / 15394 行 | 119 KB / 6286 行 | 274 KB / 12930 行 |
+
+wasm 删掉 wat 机器后连纯程序也小了 ~4%；native 相反：`machineRun` 是无条件可达根，
+纯程序也从 2 个 `.s` 变成 7 个（多出 `Base/Effect/Core.s`，见 debt D110）。编译时间三档都在
+0.16–0.25 s，无可测差异。
 
