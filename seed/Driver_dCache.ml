@@ -271,7 +271,7 @@ let v_cachedProgramIssue = (fun (mc0 : t_CachedProgram) -> (match mc0 with
 # 347 "Vuna/Compiler/Driver/Cache.vuna"
 let v_summaryMetaSegment = 1073741824
 
-# 360 "Vuna/Compiler/Driver/Cache.vuna"
+# 361 "Vuna/Compiler/Driver/Cache.vuna"
 let rec v_shiftTermFuel = (fun (fuel : int) (off : int) (t : Core_dTerm.t_Term) -> (if (fuel <= 0) then (Base_dDiag.v_icFuel "meta-shift") else (match t with
   | Core_dTerm.C_Term_TVar (dtb__139, dtb__140, dtb__141) -> (Base_dDiag.C_Check_OkC ((Core_dTerm.C_Term_TVar (dtb__139, dtb__140, dtb__141))))
   | Core_dTerm.C_Term_TMeta (dtb__142) -> (Base_dDiag.C_Check_OkC ((Core_dTerm.C_Term_TMeta ((dtb__142 + off)))))
@@ -293,19 +293,19 @@ let rec v_shiftTermFuel = (fun (fuel : int) (off : int) (t : Core_dTerm.t_Term) 
   | Core_dTerm.C_Term_TFloat (dtb__182) -> (Base_dDiag.C_Check_OkC ((Core_dTerm.C_Term_TFloat (dtb__182))))
   | _ -> failwith "DT: impossible branch"
 )))
-# 386 "Vuna/Compiler/Driver/Cache.vuna"
+# 387 "Vuna/Compiler/Driver/Cache.vuna"
 and v_shiftLamTyFuel = (fun (mc0 : int) (mc1 : int) (mc2 : (Core_dTerm.t_Term B_dData_dMaybe.t_Maybe, Core_dTerm.t_Term B_dData_dMaybe.t_Maybe) B_dData_dPair.t_Pair B_dData_dMaybe.t_Maybe) -> (match mc2 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__183) -> ((Base_dCommon.v_bind (((v_shiftTermMaybeFuel mc0) mc1) (B_dData_dPair.v_firstOf dtb__183))) (fun (b : Core_dTerm.t_Term B_dData_dMaybe.t_Maybe) -> ((Base_dCommon.v_bind (((v_shiftTermMaybeFuel mc0) mc1) (B_dData_dPair.v_secondOf dtb__183))) (fun (r : Core_dTerm.t_Term B_dData_dMaybe.t_Maybe) -> (Base_dDiag.C_Check_OkC (((Core_dTerm.v_lamTyOf b) r)))))))
   | B_dData_dMaybe.C_Maybe_Nothing -> (Base_dDiag.C_Check_OkC (B_dData_dMaybe.C_Maybe_Nothing))
   | _ -> failwith "DT: impossible branch"
 ))
-# 394 "Vuna/Compiler/Driver/Cache.vuna"
+# 395 "Vuna/Compiler/Driver/Cache.vuna"
 and v_shiftTermMaybeFuel = (fun (mc0 : int) (mc1 : int) (mc2 : Core_dTerm.t_Term B_dData_dMaybe.t_Maybe) -> (match mc2 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__184) -> ((Base_dCommon.v_bind (((v_shiftTermFuel mc0) mc1) dtb__184)) (fun (t2 : Core_dTerm.t_Term) -> (Base_dDiag.C_Check_OkC ((B_dData_dMaybe.C_Maybe_Just (t2))))))
   | B_dData_dMaybe.C_Maybe_Nothing -> (Base_dDiag.C_Check_OkC (B_dData_dMaybe.C_Maybe_Nothing))
   | _ -> failwith "DT: impossible branch"
 ))
-# 400 "Vuna/Compiler/Driver/Cache.vuna"
+# 401 "Vuna/Compiler/Driver/Cache.vuna"
 and v_shiftArgs = (fun (mc0 : int) (mc1 : int) (mc2 : (Core_dTerm.t_Term, Core_dTerm.t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc2 with
   | B_dData_dList.C_List__x58__x58_ (dtb__185, dtb__186) -> (match dtb__185 with
   | { B_dData_dPair.f_Pair_first = dtb__187; B_dData_dPair.f_Pair_second = dtb__188 } -> ((Base_dCommon.v_bind (((v_shiftTermFuel mc0) mc1) dtb__187)) (fun (a2 : Core_dTerm.t_Term) -> ((Base_dCommon.v_bind (((v_shiftArgs mc0) mc1) dtb__186)) (fun (rest2 : (Core_dTerm.t_Term, Core_dTerm.t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC ((B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = a2; B_dData_dPair.f_Pair_second = dtb__188 }, rest2))))))))
@@ -314,7 +314,7 @@ and v_shiftArgs = (fun (mc0 : int) (mc1 : int) (mc2 : (Core_dTerm.t_Term, Core_d
   | B_dData_dList.C_List_Nil -> (Base_dDiag.C_Check_OkC (B_dData_dList.C_List_Nil))
   | _ -> failwith "DT: impossible branch"
 ))
-# 407 "Vuna/Compiler/Driver/Cache.vuna"
+# 408 "Vuna/Compiler/Driver/Cache.vuna"
 and v_shiftAlts = (fun (mc0 : int) (mc1 : int) (mc2 : Core_dTerm.t_CaseAlt B_dData_dList.t_List) -> (match mc2 with
   | B_dData_dList.C_List__x58__x58_ (dtb__189, dtb__190) -> (match dtb__189 with
   | { Core_dTerm.f_CaseAlt_caseAltName = dtb__191; Core_dTerm.f_CaseAlt_caseAltBinders = dtb__192; Core_dTerm.f_CaseAlt_caseAltBody = dtb__193 } -> ((Base_dCommon.v_bind (((v_shiftTermFuel mc0) mc1) dtb__193)) (fun (b2 : Core_dTerm.t_Term) -> ((Base_dCommon.v_bind (((v_shiftAlts mc0) mc1) dtb__190)) (fun (rest2 : Core_dTerm.t_CaseAlt B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC ((B_dData_dList.C_List__x58__x58_ ({ Core_dTerm.f_CaseAlt_caseAltName = dtb__191; Core_dTerm.f_CaseAlt_caseAltBinders = dtb__192; Core_dTerm.f_CaseAlt_caseAltBody = b2 }, rest2))))))))
@@ -324,10 +324,10 @@ and v_shiftAlts = (fun (mc0 : int) (mc1 : int) (mc2 : Core_dTerm.t_CaseAlt B_dDa
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 357 "Vuna/Compiler/Driver/Cache.vuna"
-let v_shiftTerm = (fun (off : int) (t : Core_dTerm.t_Term) -> (((v_shiftTermFuel Core_dTerm.v_defaultFuel) off) t))
+# 358 "Vuna/Compiler/Driver/Cache.vuna"
+let v_shiftTerm = (fun (off : int) (t : Core_dTerm.t_Term) -> (((v_shiftTermFuel ((Core_dTerm.v_termSize t) + 16)) off) t))
 
-# 414 "Vuna/Compiler/Driver/Cache.vuna"
+# 415 "Vuna/Compiler/Driver/Cache.vuna"
 let v_shiftDef = (fun (mc0 : int) (mc1 : Elab_dTypes.t_DtDef) -> (match mc1 with
   | Elab_dTypes.C_DtDef_DtExtern (dtb__194, dtb__195, dtb__196, dtb__197) -> ((Base_dCommon.v_bind ((v_shiftTerm mc0) dtb__195)) (fun (ty2 : Core_dTerm.t_Term) -> (Base_dDiag.C_Check_OkC ((Elab_dTypes.C_DtDef_DtExtern (dtb__194, ty2, dtb__196, dtb__197))))))
   | Elab_dTypes.C_DtDef_DtAxiom (dtb__198, dtb__199, dtb__200) -> ((Base_dCommon.v_bind ((v_shiftTerm mc0) dtb__199)) (fun (ty2 : Core_dTerm.t_Term) -> (Base_dDiag.C_Check_OkC ((Elab_dTypes.C_DtDef_DtAxiom (dtb__198, ty2, dtb__200))))))
@@ -335,25 +335,25 @@ let v_shiftDef = (fun (mc0 : int) (mc1 : Elab_dTypes.t_DtDef) -> (match mc1 with
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 424 "Vuna/Compiler/Driver/Cache.vuna"
+# 425 "Vuna/Compiler/Driver/Cache.vuna"
 let v_shiftCtor = (fun (mc0 : int) (mc1 : Elab_dTypes.t_DtCtor) -> (match mc1 with
   | { Elab_dTypes.f_DtCtor_dtCtorName = dtb__205; Elab_dTypes.f_DtCtor_dtCtorFamily = dtb__206; Elab_dTypes.f_DtCtor_dtCtorTelescope = dtb__207; Elab_dTypes.f_DtCtor_dtCtorType = dtb__208; Elab_dTypes.f_DtCtor_dtCtorSpan = dtb__209 } -> ((Base_dCommon.v_bind ((v_shiftTerm mc0) dtb__208)) (fun (ty2 : Core_dTerm.t_Term) -> (Base_dDiag.C_Check_OkC ({ Elab_dTypes.f_DtCtor_dtCtorName = dtb__205; Elab_dTypes.f_DtCtor_dtCtorFamily = dtb__206; Elab_dTypes.f_DtCtor_dtCtorTelescope = dtb__207; Elab_dTypes.f_DtCtor_dtCtorType = ty2; Elab_dTypes.f_DtCtor_dtCtorSpan = dtb__209 }))))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 428 "Vuna/Compiler/Driver/Cache.vuna"
+# 429 "Vuna/Compiler/Driver/Cache.vuna"
 let v_shiftFieldMeta = (fun (mc0 : int) (mc1 : Elab_dTypes.t_DtFieldMeta) -> (match mc1 with
   | { Elab_dTypes.f_DtFieldMeta_dtFieldName = dtb__210; Elab_dTypes.f_DtFieldMeta_dtFieldIndex = dtb__211; Elab_dTypes.f_DtFieldMeta_dtFieldType = dtb__212 } -> ((Base_dCommon.v_bind ((v_shiftTerm mc0) dtb__212)) (fun (fty2 : Core_dTerm.t_Term) -> (Base_dDiag.C_Check_OkC ({ Elab_dTypes.f_DtFieldMeta_dtFieldName = dtb__210; Elab_dTypes.f_DtFieldMeta_dtFieldIndex = dtb__211; Elab_dTypes.f_DtFieldMeta_dtFieldType = fty2 }))))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 432 "Vuna/Compiler/Driver/Cache.vuna"
+# 433 "Vuna/Compiler/Driver/Cache.vuna"
 let v_shiftData = (fun (mc0 : int) (mc1 : Elab_dTypes.t_DtData) -> (match mc1 with
   | { Elab_dTypes.f_DtData_dtDataName = dtb__213; Elab_dTypes.f_DtData_dtDataParams = dtb__214; Elab_dTypes.f_DtData_dtDataCtors = dtb__215; Elab_dTypes.f_DtData_dtDataKind = dtb__216; Elab_dTypes.f_DtData_dtDataViaClasses = dtb__217; Elab_dTypes.f_DtData_dtDataLinear = dtb__218; Elab_dTypes.f_DtData_dtDataRepr = dtb__219; Elab_dTypes.f_DtData_dtDataFields = dtb__220; Elab_dTypes.f_DtData_dtDataIsRecord = dtb__221 } -> ((Base_dCommon.v_bind ((Base_dCommon.v_traverse (v_shiftCtor mc0)) dtb__215)) (fun (ctors2 : Elab_dTypes.t_DtCtor B_dData_dList.t_List) -> ((Base_dCommon.v_bind ((v_shiftTerm mc0) dtb__216)) (fun (kind2 : Core_dTerm.t_Term) -> ((Base_dCommon.v_bind ((Base_dCommon.v_traverse (v_shiftFieldMeta mc0)) dtb__220)) (fun (fields2 : Elab_dTypes.t_DtFieldMeta B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC ({ Elab_dTypes.f_DtData_dtDataName = dtb__213; Elab_dTypes.f_DtData_dtDataParams = dtb__214; Elab_dTypes.f_DtData_dtDataCtors = ctors2; Elab_dTypes.f_DtData_dtDataKind = kind2; Elab_dTypes.f_DtData_dtDataViaClasses = dtb__217; Elab_dTypes.f_DtData_dtDataLinear = dtb__218; Elab_dTypes.f_DtData_dtDataRepr = dtb__219; Elab_dTypes.f_DtData_dtDataFields = fields2; Elab_dTypes.f_DtData_dtDataIsRecord = dtb__221 }))))))))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 438 "Vuna/Compiler/Driver/Cache.vuna"
+# 439 "Vuna/Compiler/Driver/Cache.vuna"
 let rec v_shiftTele = (fun (mc0 : int) (mc1 : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__222, dtb__223) -> (match dtb__222 with
   | { B_dData_dPair.f_Pair_first = dtb__224; B_dData_dPair.f_Pair_second = dtb__225 } -> ((Base_dCommon.v_bind ((v_shiftTerm mc0) dtb__225)) (fun (t2 : Core_dTerm.t_Term) -> ((Base_dCommon.v_bind ((v_shiftTele mc0) dtb__223)) (fun (rest2 : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC ((B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = dtb__224; B_dData_dPair.f_Pair_second = t2 }, rest2))))))))
@@ -363,46 +363,46 @@ let rec v_shiftTele = (fun (mc0 : int) (mc1 : (string, Core_dTerm.t_Term) B_dDat
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 445 "Vuna/Compiler/Driver/Cache.vuna"
+# 446 "Vuna/Compiler/Driver/Cache.vuna"
 let v_shiftClass = (fun (mc0 : int) (mc1 : Elab_dTypes.t_DtClass) -> (match mc1 with
   | { Elab_dTypes.f_DtClass_dtClassName = dtb__226; Elab_dTypes.f_DtClass_dtClassParams = dtb__227; Elab_dTypes.f_DtClass_dtClassSupers = dtb__228; Elab_dTypes.f_DtClass_dtClassMethods = dtb__229; Elab_dTypes.f_DtClass_dtClassFieldTys = dtb__230; Elab_dTypes.f_DtClass_dtClassMethodSpans = dtb__231 } -> ((Base_dCommon.v_bind ((Base_dCommon.v_traverse (v_shiftTerm mc0)) dtb__228)) (fun (supers2 : Core_dTerm.t_Term B_dData_dList.t_List) -> ((Base_dCommon.v_bind ((v_shiftTele mc0) dtb__229)) (fun (projs2 : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List) -> ((Base_dCommon.v_bind ((Base_dCommon.v_traverse (v_shiftTerm mc0)) dtb__230)) (fun (tys2 : Core_dTerm.t_Term B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC ({ Elab_dTypes.f_DtClass_dtClassName = dtb__226; Elab_dTypes.f_DtClass_dtClassParams = dtb__227; Elab_dTypes.f_DtClass_dtClassSupers = supers2; Elab_dTypes.f_DtClass_dtClassMethods = projs2; Elab_dTypes.f_DtClass_dtClassFieldTys = tys2; Elab_dTypes.f_DtClass_dtClassMethodSpans = dtb__231 }))))))))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 451 "Vuna/Compiler/Driver/Cache.vuna"
+# 452 "Vuna/Compiler/Driver/Cache.vuna"
 let v_shiftInst = (fun (mc0 : int) (mc1 : Elab_dTypes.t_DtInst) -> (match mc1 with
   | { Elab_dTypes.f_DtInst_dtInstName = dtb__232; Elab_dTypes.f_DtInst_dtInstTele = dtb__233; Elab_dTypes.f_DtInst_dtInstCtx = dtb__234; Elab_dTypes.f_DtInst_dtInstHead = dtb__235; Elab_dTypes.f_DtInst_dtInstSpan = dtb__236 } -> ((Base_dCommon.v_bind ((v_shiftTele mc0) dtb__233)) (fun (tele2 : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List) -> ((Base_dCommon.v_bind ((Base_dCommon.v_traverse (v_shiftTerm mc0)) dtb__234)) (fun (ctx2 : Core_dTerm.t_Term B_dData_dList.t_List) -> ((Base_dCommon.v_bind ((v_shiftTerm mc0) dtb__235)) (fun (head2 : Core_dTerm.t_Term) -> (Base_dDiag.C_Check_OkC ({ Elab_dTypes.f_DtInst_dtInstName = dtb__232; Elab_dTypes.f_DtInst_dtInstTele = tele2; Elab_dTypes.f_DtInst_dtInstCtx = ctx2; Elab_dTypes.f_DtInst_dtInstHead = head2; Elab_dTypes.f_DtInst_dtInstSpan = dtb__236 }))))))))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 457 "Vuna/Compiler/Driver/Cache.vuna"
+# 458 "Vuna/Compiler/Driver/Cache.vuna"
 let v_shiftGlobal = (fun (mc0 : int) (mc1 : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair) -> (match mc1 with
   | { B_dData_dPair.f_Pair_first = dtb__237; B_dData_dPair.f_Pair_second = dtb__238 } -> ((Base_dCommon.v_bind ((v_shiftTerm mc0) dtb__238)) (fun (t2 : Core_dTerm.t_Term) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = dtb__237; B_dData_dPair.f_Pair_second = t2 }))))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 461 "Vuna/Compiler/Driver/Cache.vuna"
+# 462 "Vuna/Compiler/Driver/Cache.vuna"
 let v_shiftCachedProgram = (fun (mc0 : int) (mc1 : t_CachedProgram) -> (match mc1 with
   | { f_CachedProgram_cachedDatas = dtb__239; f_CachedProgram_cachedDefs = dtb__240; f_CachedProgram_cachedGlobals = dtb__241; f_CachedProgram_cachedInsts = dtb__242; f_CachedProgram_cachedClasses = dtb__243; f_CachedProgram_cachedOpaque = dtb__244 } -> ((Base_dCommon.v_bind ((Base_dCommon.v_traverse (v_shiftData mc0)) dtb__239)) (fun (datas2 : Elab_dTypes.t_DtData B_dData_dList.t_List) -> ((Base_dCommon.v_bind ((Base_dCommon.v_traverse (v_shiftDef mc0)) dtb__240)) (fun (defs2 : Elab_dTypes.t_DtDef B_dData_dList.t_List) -> ((Base_dCommon.v_bind ((Base_dCommon.v_traverse (v_shiftGlobal mc0)) dtb__241)) (fun (globals2 : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List) -> ((Base_dCommon.v_bind ((Base_dCommon.v_traverse (v_shiftInst mc0)) dtb__242)) (fun (insts2 : Elab_dTypes.t_DtInst B_dData_dList.t_List) -> ((Base_dCommon.v_bind ((Base_dCommon.v_traverse (v_shiftClass mc0)) dtb__243)) (fun (classes2 : Elab_dTypes.t_DtClass B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC ({ f_CachedProgram_cachedDatas = datas2; f_CachedProgram_cachedDefs = defs2; f_CachedProgram_cachedGlobals = globals2; f_CachedProgram_cachedInsts = insts2; f_CachedProgram_cachedClasses = classes2; f_CachedProgram_cachedOpaque = B_dData_dList.C_List_Nil }))))))))))))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 484 "Vuna/Compiler/Driver/Cache.vuna"
+# 485 "Vuna/Compiler/Driver/Cache.vuna"
 let v_encGlobalPair = (fun (mc0 : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair) (mc1 : string B_dData_dList.t_List) -> (match mc0 with
   | { B_dData_dPair.f_Pair_first = dtb__245; B_dData_dPair.f_Pair_second = dtb__246 } -> ((Base_dBytes.v_encStr dtb__245) ((Core_dCanonical.v_encTerm dtb__246) mc1))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 477 "Vuna/Compiler/Driver/Cache.vuna"
+# 478 "Vuna/Compiler/Driver/Cache.vuna"
 let v_encCachedProgram = (fun (cp : t_CachedProgram) (acc : string B_dData_dList.t_List) -> (((Base_dBytes.v_encList Elab_dCanonical.v_encDtData) (cp).f_CachedProgram_cachedDatas) (((Base_dBytes.v_encList Elab_dCanonical.v_encDtDef) (cp).f_CachedProgram_cachedDefs) (((Base_dBytes.v_encList v_encGlobalPair) (cp).f_CachedProgram_cachedGlobals) (((Base_dBytes.v_encList Elab_dCanonical.v_encDtInst) (cp).f_CachedProgram_cachedInsts) (((Base_dBytes.v_encList Elab_dCanonical.v_encDtClass) (cp).f_CachedProgram_cachedClasses) (((Base_dBytes.v_encList Base_dBytes.v_encStr) (cp).f_CachedProgram_cachedOpaque) acc)))))))
 
-# 500 "Vuna/Compiler/Driver/Cache.vuna"
+# 501 "Vuna/Compiler/Driver/Cache.vuna"
 let v_decGlobalPair = (fun (fuel : int) (c : Base_dBytes.t_Cur) -> ((Base_dBytes.v_thenPair ((Base_dBytes.v_decStr (fuel - 1)) c)) (fun (n : string) (b1 : Base_dBytes.t_Cur) -> ((Base_dBytes.v_thenPair ((Core_dCanonical.v_decTerm (fuel - 1)) b1)) (fun (t : Core_dTerm.t_Term) (b2 : Base_dBytes.t_Cur) -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = { B_dData_dPair.f_Pair_first = n; B_dData_dPair.f_Pair_second = t }; B_dData_dPair.f_Pair_second = b2 })))))))
 
-# 494 "Vuna/Compiler/Driver/Cache.vuna"
+# 495 "Vuna/Compiler/Driver/Cache.vuna"
 let v_decCachedProgram = (fun (fuel : int) (c : Base_dBytes.t_Cur) -> ((Base_dBytes.v_thenPair (((Base_dBytes.v_decList Elab_dCanonical.v_decDtData) (fuel - 1)) c)) (fun (datas : Elab_dTypes.t_DtData B_dData_dList.t_List) (b1 : Base_dBytes.t_Cur) -> ((Base_dBytes.v_thenPair (((Base_dBytes.v_decList Elab_dCanonical.v_decDtDef) (fuel - 1)) b1)) (fun (defs : Elab_dTypes.t_DtDef B_dData_dList.t_List) (b2 : Base_dBytes.t_Cur) -> ((Base_dBytes.v_thenPair (((Base_dBytes.v_decList v_decGlobalPair) (fuel - 1)) b2)) (fun (globals : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List) (b3 : Base_dBytes.t_Cur) -> ((Base_dBytes.v_thenPair (((Base_dBytes.v_decList Elab_dCanonical.v_decDtInst) (fuel - 1)) b3)) (fun (insts : Elab_dTypes.t_DtInst B_dData_dList.t_List) (b4 : Base_dBytes.t_Cur) -> ((Base_dBytes.v_thenPair (((Base_dBytes.v_decList Elab_dCanonical.v_decDtClass) (fuel - 1)) b4)) (fun (classes : Elab_dTypes.t_DtClass B_dData_dList.t_List) (b5 : Base_dBytes.t_Cur) -> ((Base_dBytes.v_thenPair (((Base_dBytes.v_decList Base_dBytes.v_decStr) (fuel - 1)) b5)) (fun (names : string B_dData_dList.t_List) (b6 : Base_dBytes.t_Cur) -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = { f_CachedProgram_cachedDatas = datas; f_CachedProgram_cachedDefs = defs; f_CachedProgram_cachedGlobals = globals; f_CachedProgram_cachedInsts = insts; f_CachedProgram_cachedClasses = classes; f_CachedProgram_cachedOpaque = names }; B_dData_dPair.f_Pair_second = b6 })))))))))))))))
 
-# 488 "Vuna/Compiler/Driver/Cache.vuna"
+# 489 "Vuna/Compiler/Driver/Cache.vuna"
 let v_decCachedProgramComplete = (fun (s : string) -> ((fun nd_uscrut1 -> (match nd_uscrut1 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__247) -> (match dtb__247 with
   | { B_dData_dPair.f_Pair_first = dtb__248; B_dData_dPair.f_Pair_second = dtb__249 } -> (if (Base_dBytes.v_curAtEnd dtb__249) then (B_dData_dMaybe.C_Maybe_Just (dtb__248)) else B_dData_dMaybe.C_Maybe_Nothing)
