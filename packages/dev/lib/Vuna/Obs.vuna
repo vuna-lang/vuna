@@ -17,6 +17,7 @@ import Vuna.Cli.Args
 import Vuna.Plugin.Command
 import Vuna.Plugin.Args
 import Vuna.Cli.Spec
+import Vuna.Dev.Spec as DevSpec
 import Vuna.Compiler.Base.Common
 import Vuna.Json
 import Vuna.Obs.Convert
@@ -81,7 +82,7 @@ obsUsage =
 -- | 内部：解析 `validate` 的参数：必须恰好一个 TRACE，否则用法错误（退出码 2）。
 obsValidateArgs : Member nFs FsOp r, Member nConsole ConsoleOp r => List String -> Eff r Int
 obsValidateArgs args =
-  case parseCmdArgs ["dev", "obs", "validate"] args of
+  case parseCmdArgsIn DevSpec.commands ["dev", "obs", "validate"] args of
     ErrC e => obsError (diagText e)
     OkC parsed =>
       case parsed.positionals of
@@ -125,7 +126,7 @@ printIssues (i :: rest) =
 -- 没有 TRACE 是用法错误。
 obsSummarizeArgs : Member nFs FsOp r, Member nConsole ConsoleOp r => List String -> Eff r Int
 obsSummarizeArgs args =
-  case parseCmdArgs ["dev", "obs", "summarize"] args of
+  case parseCmdArgsIn DevSpec.commands ["dev", "obs", "summarize"] args of
     ErrC e => obsError (diagText e)
     OkC parsed =>
       case thresholdOf parsed of

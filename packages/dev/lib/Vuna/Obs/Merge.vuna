@@ -32,6 +32,7 @@ import Vuna.Cli.Args
 import Vuna.Plugin.Command
 import Vuna.Plugin.Args
 import Vuna.Cli.Spec
+import Vuna.Dev.Spec as DevSpec
 import Vuna.Compiler.Base.Common
 import Vuna.Json
 import Vuna.Obs.Read
@@ -51,7 +52,7 @@ mergeUsage = "usage: vuna dev obs merge [--out FILE] TRACE..."
 -- | `vuna dev obs merge` 的入口；参数错误 / 读盘失败 / 空 trace 文件都是退出码 2。
 export runObsMerge : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nProcess ProcessOp r => List String -> Eff r Int
 runObsMerge args =
-  case parseCmdArgs ["dev", "obs", "merge"] args of
+  case parseCmdArgsIn DevSpec.commands ["dev", "obs", "merge"] args of
     ErrC e => mergeFail 2 (diagText e)
     OkC parsed =>
       case outOf parsed of

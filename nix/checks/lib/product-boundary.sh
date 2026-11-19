@@ -1,9 +1,9 @@
 #!/bin/sh
 # checks.vuna-static 的一部分：产品 / 开发命令边界的结构守卫。
 #
-# 约束：`vuna dev …` 是仓库专用命名空间，实现集中在 `Vuna.Cli.Dev`（产品工具链包里）。
-# 入口二进制（`packages/cli`）不得 import 任何工具实现或 dev 命名空间——它只做发现与路由；
-# 开发命令的唯一合法引用点是接线表 `Vuna.Cli.Registry`。
+# `vuna dev …` 是仓库专用命名空间，实现与命令表在独立包 `packages/dev`（二进制
+# `vuna-dev`）。产品侧（`packages/cli` / `packages/toolchain`）只做发现与路由，不得
+# import 开发命名空间的任何模块——边界已经是包边界。
 set -eu
 export LC_ALL=C
 
@@ -16,35 +16,31 @@ report() {
   fail=1
 }
 
-# 开发命名空间必须存在，且被接线表接上。
-[ -f packages/toolchain/lib/Vuna/Cli/Dev.vuna ] || report "missing packages/toolchain/lib/Vuna/Cli/Dev.vuna"
-grep -q '^import Vuna\.Cli\.Dev$' packages/toolchain/lib/Vuna/Cli/Registry.vuna ||
-  report "Vuna.Cli.Registry does not import Vuna.Cli.Dev"
+# 开发插件必须自成包，且有入口与命令表。
+[ -f packages/dev/app/Main.vuna ] || report "missing packages/dev/app/Main.vuna"
+[ -f packages/dev/lib/Vuna/Cli/Dev.vuna ] || report "missing packages/dev/lib/Vuna/Cli/Dev.vuna"
+[ -f packages/dev/lib/Vuna/Dev/Spec.vuna ] || report "missing packages/dev/lib/Vuna/Dev/Spec.vuna"
+[ -f packages/dev/lib/Vuna/Dev/Registry.vuna ] || report "missing packages/dev/lib/Vuna/Dev/Registry.vuna"
 
-# 接线表与 Dev 自身之外，产品工具链模块不得 import 开发命名空间。
-for f in $(find packages/toolchain/lib -name '*.vuna'); do
-  case "$f" in
-    packages/toolchain/lib/Vuna/Cli/Registry.vuna) continue ;;
-    packages/toolchain/lib/Vuna/Cli/Dev.vuna) continue ;;
-  esac
-  if grep -q '^import Vuna\.Cli\.Dev$' "$f"; then
-    report "$f imports Vuna.Cli.Dev (only the wiring table may depend on the dev namespace)"
+# 产品侧（入口 + 工具链）不得 import 开发命名空间。
+for f in $(find packages/cli/lib packages/cli/app packages/toolchain/lib -name '*.vuna'); do
+  if grep -Eq '^import (Vuna\.Cli\.Dev|Vuna\.GenErrors|Vuna\.Obs|Vuna\.Test\.(Run|Suite)|Vuna\.Cli\.(Suite|IrDump|IrRender))$' "$f"; then
+    report "$f imports a dev-only module (dev commands live in packages/dev)"
   fi
-done
-
-# 入口二进制只做发现与路由：不得 import 工具实现。
-for f in $(find packages/cli/lib packages/cli/app -name '*.vuna'); do
-  if grep -qE '^import Vuna\.(Fmt|Lint|Doc|Search|Lsp|Repl|Interp|TestRunner|Run|Obs|Index|Clean|Add|Fetch|Cli\.Registry|Cli\.Spec)' "$f"; then
-    report "$f imports a toolchain module (the entry binary must only discover and route)"
+  if grep -q '^import Vuna\.Dev\.' "$f"; then
+    report "$f imports a Vuna.Dev.* module (dev commands live in packages/dev)"
   fi
 done
 
 # 开发命令必须挂在 `dev` 前缀下（不能散落在产品面）。
-if grep -q 'subCmd \["suite"\]' packages/toolchain/lib/Vuna/Cli/Spec.vuna; then
-  report "dev suite is declared outside the dev namespace in Vuna.Cli.Spec"
+if grep -q 'topCmd \["dev"\]\|subCmd \["dev"' packages/toolchain/lib/Vuna/Cli/Spec.vuna; then
+  report "dev commands are declared in Vuna.Cli.Spec (product table) instead of Vuna.Dev.Spec"
 fi
-if grep -q 'subCmd \["obs"' packages/toolchain/lib/Vuna/Cli/Spec.vuna; then
-  report "dev obs is declared outside the dev namespace in Vuna.Cli.Spec"
+if grep -q 'subCmd \["suite"\]' packages/dev/lib/Vuna/Dev/Spec.vuna; then
+  report "dev suite is declared outside the dev namespace in Vuna.Dev.Spec"
+fi
+if grep -q 'subCmd \["obs"' packages/dev/lib/Vuna/Dev/Spec.vuna; then
+  report "dev obs is declared outside the dev namespace in Vuna.Dev.Spec"
 fi
 
 [ "$fail" -eq 0 ] || exit 1

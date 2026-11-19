@@ -20,3 +20,7 @@ Clean
 # 后端插件（由编译器按 --target 起进程，不进信任锚点）。
 Target_dNative
 Target_dWasm
+# 开发/维护插件模块（独立包 vuna-dev，不进信任锚点）。
+Obs
+GenErrors
+Test

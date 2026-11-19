@@ -42,7 +42,7 @@
 | --- | --- | --- |
 | `vuna-toolchain` | `toolchain` | run / test / fmt / lint / doc / search / map / api / goal / errors / deps / store / repl / lsp |
 | `vuna-compiler` | `compiler` | check / build / compile；裸 flag（`vuna --typed`）也转给它（已删 flag 提示的真源） |
-| `vuna-dev` | `dev` | 仓库专用的 `vuna dev …`（suite / obs / errors gen / ir dump）——当前与工具链同包，未独立安装 |
+| `vuna-dev` | `dev` | 仓库专用的 `vuna dev …`（suite / obs / errors gen / ir dump）；独立包 `packages/dev`，默认随产品安装 |
 | `vuna-target-native` | `target-native` | `--target native` 的后端：读 IR 编码、写 x86-64 汇编文件集 |
 | `vuna-target-wasm` | `target-wasm` | `--target wasm` 的后端：读 IR 编码、写 `main.wat` + 能力告警 |
 | `vuna-web` | `web` | `vuna web build / check / version`（服务端目标 ocaml/native，不依赖后端插件） |

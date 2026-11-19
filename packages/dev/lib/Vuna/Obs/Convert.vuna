@@ -23,6 +23,7 @@ import Vuna.Cli.Args
 import Vuna.Plugin.Command
 import Vuna.Plugin.Args
 import Vuna.Cli.Spec
+import Vuna.Dev.Spec as DevSpec
 import Vuna.Compiler.Base.Common
 import Vuna.Json
 import Vuna.Obs.Flame
@@ -82,7 +83,7 @@ outOf parsed =
 -- 用法/读盘错误退出码 2，无 cpu 采样退出码 1。
 export runObsConvert : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nProcess ProcessOp r => List String -> Eff r Int
 runObsConvert args =
-  case parseCmdArgs ["dev", "obs", "convert"] args of
+  case parseCmdArgsIn DevSpec.commands ["dev", "obs", "convert"] args of
     ErrC e => convertFail 2 (diagText e)
     OkC parsed =>
       case convertOptsOf parsed of

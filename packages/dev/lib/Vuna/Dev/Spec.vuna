@@ -1,0 +1,103 @@
+-- | `vuna dev` 的命令表（插件 `vuna-dev` 的 describe 面）。
+module Vuna.Dev.Spec where
+
+import Vuna.Plugin.Command
+
+-- | dev 分节的命令与子命令。
+export commands : List Cmd
+commands =
+  [
+    topCmd
+      ["dev"]
+      GDev
+      "开发/维护命令（本仓库专用）"
+      "vuna dev suite|obs|errors ..."
+      []
+      [],
+    subCmd
+      ["dev", "suite"]
+      GDev
+      "跑原生 suite（test/suite.toml）"
+      "vuna dev suite [FILE] [--only PAT]... [--jobs auto|N]"
+      [boolFlag "all" "跑 driver 清单（test/suite.toml）里的全部独立 suite", boolFlag "list" "只列 case", boolFlag "verbose" "结果行尾追加耗时", boolFlag "fail-fast" "首个失败即停止", boolFlag "json" "汇总输出单行 JSON", boolFlag "audit" "跑全部 case 并报告跳过项", boolFlag "strict-skips" "跳过项视为失败", boolFlag "timings" "输出计时表", boolFlag "last-failed" "只跑上次失败", boolFlag "bless" "重写 golden", boolFlag "bless-diag" "重写诊断夹具", boolFlag "watch" "变更后重跑", boolFlag "quiet" "只输出失败", multiFlag "only" "PAT" "按 owner / family / case id 过滤（可重复）", multiFlag "filter" "PAT" "按 id / tag 子串过滤（可重复）", multiFlag "tier" "NAME" "按层级过滤（可重复）", multiFlag "matrix" "NAME" "只跑指定矩阵（可重复）", multiFlag "backend" "ocaml|wasm|native" "后端矩阵（可重复）", valueFlag "jobs" "auto|N" "并行度（缺省 auto）", valueFlag "timeout" "SECS" "单个 case 超时", valueFlag "worker" "i/N" "内部分片（测试运行器自己用）", valueFlag "results-dir" "DIR" "结果目录", valueFlag "cache-dir" "DIR" "测试对象库与构建桶根", valueFlag "changed" "REV" "只跑相对 REV 改动覆盖的 case"]
+      [],
+    subCmd ["dev", "errors"] GDev "错误码文档生成" "vuna dev errors gen [ROOT]" [] [],
+    subCmd
+      ["dev", "errors", "gen"]
+      GDev
+      "从枚举真源生成错误码文档"
+      "vuna dev errors gen [ROOT]"
+      []
+      ["输出 `ROOT/docs/.generated/errors.md` 与同源 JSON；生成物不入 git。"],
+    subCmd ["dev", "ir"] GDev "IR 调试" "vuna dev ir dump [--after NAME] [--out FILE] DIR" [] [],
+    subCmd
+      ["dev", "ir", "dump"]
+      GDev
+      "检查 + lowering 后打印确定性 IR"
+      "vuna dev ir dump [--after raw|cps|machine|anf|anf2|ocaml] [--out FILE] DIR"
+      [valueFlag "after" "raw|cps|machine|anf|anf2|ocaml" "在 lowering 的哪一步之后打印（缺省 raw）", valueFlag "out" "FILE" "写入文件（缺省 stdout）"]
+      [],
+    subCmd
+      ["dev", "obs"]
+      GDev
+      "观测工具链"
+      "vuna dev obs run|summarize|validate|convert|render|merge|symbols|serve ..."
+      []
+      [],
+    subCmd
+      ["dev", "obs", "run"]
+      GDev
+      "在开启观测的前提下跑子命令"
+      "vuna dev obs run [--level N] [--sample cpu|mem|both] [--out FILE] -- <cmd...>"
+      [valueFlag "level" "N" "观测级别 0..3（缺省 2）", valueFlag "sample" "cpu|mem|both" "采样种类", valueFlag "interval" "US" "采样间隔（微秒）", valueFlag "out" "FILE" "trace 输出文件"]
+      ["`--` 之后的命令与参数原样透传。"],
+    subCmd
+      ["dev", "obs", "summarize"]
+      GDev
+      "span 折叠与阶段摘要"
+      "vuna dev obs summarize [--json] [--baseline FILE] [--threshold PCT] [TRACE...]"
+      [boolFlag "json" "输出单行 JSON", valueFlag "baseline" "FILE" "基线 trace（输出差值）", valueFlag "threshold" "PCT" "差值超过 PCT 即退出 1"]
+      [],
+    subCmd
+      ["dev", "obs", "validate"]
+      GDev
+      "校验 trace 的字段与时序"
+      "vuna dev obs validate TRACE"
+      []
+      [],
+    subCmd
+      ["dev", "obs", "convert"]
+      GDev
+      "采样栈换算为其它 profile 格式"
+      "vuna dev obs convert --to cpuprofile|speedscope|folded|jsonl [--out PATH] TRACE"
+      [valueFlag "to" "cpuprofile|speedscope|folded|jsonl" "目标格式", valueFlag "out" "PATH" "输出路径"]
+      [],
+    subCmd
+      ["dev", "obs", "render"]
+      GDev
+      "渲染单文件 HTML（瀑布 + 火焰图）"
+      "vuna dev obs render --out FILE TRACE"
+      [valueFlag "out" "FILE" "输出 HTML"]
+      [],
+    subCmd
+      ["dev", "obs", "merge"]
+      GDev
+      "按 t0 合并多份 trace"
+      "vuna dev obs merge [--out FILE] TRACE..."
+      [valueFlag "out" "FILE" "输出文件"]
+      [],
+    subCmd
+      ["dev", "obs", "symbols"]
+      GDev
+      "从 split 产物抽符号表"
+      "vuna dev obs symbols [--out FILE] [OUTDIR]"
+      [valueFlag "out" "FILE" "输出文件"]
+      [],
+    subCmd
+      ["dev", "obs", "serve"]
+      GDev
+      "CDP Profiler 子集 server（离线，数据来自 trace）"
+      "vuna dev obs serve --cdp ADDR [--allow-slow] [TRACE...]"
+      [valueFlag "cdp" "ADDR" "监听地址", boolFlag "allow-slow" "接受较慢的 trace"]
+      []
+  ]

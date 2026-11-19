@@ -6,6 +6,8 @@ module Vuna.Cli.Err where
 
 import Vuna.Cli.Help
 import Vuna.Cli.Suggest
+import Vuna.Plugin.Command
+import Vuna.Plugin.Help
 import Base.Effect.Console as EffConsole
 import Base.Effect.Types as EffTypes
 
@@ -40,6 +42,20 @@ usageText path =
   case synopsisOf path of
     Just line => "usage:\n  ${line}\nrun `vuna help ${joinWords path}` for details\n"
     Nothing => overviewText
+
+-- | 用法错误（给定命令表）：插件自己的命令表用。
+export usageErrorForIn : Member nConsole ConsoleOp r => List Cmd -> List String -> Eff r Int
+usageErrorForIn cmds path =
+  do
+    _ <- consolePrint (usageTextIn cmds path)
+    pure 2
+
+-- | 内部：`usage:` 段（给定命令表）。
+usageTextIn : List Cmd -> List String -> String
+usageTextIn cmds path =
+  case synopsisIn cmds path of
+    Just line => "usage:\n  ${line}\nrun `vuna help ${joinWords path}` for details\n"
+    Nothing => renderOverview cmds
 
 -- | 内部：命令路径用空格拼接。
 joinWords : List String -> String

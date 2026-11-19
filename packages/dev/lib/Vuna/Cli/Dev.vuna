@@ -7,10 +7,11 @@
 module Vuna.Cli.Dev where
 
 import Vuna.Cli.Args
+import Vuna.Cli.Spec
+import Vuna.Dev.Spec as DevSpec
 import Vuna.Plugin.Command
 import Vuna.Plugin.Args
 import Vuna.Cli.Err
-import Vuna.Cli.Spec
 import Vuna.Cli.Suite
 import Vuna.Compiler.Base.Common
 import Vuna.Cli.IrDump
@@ -33,9 +34,9 @@ devArgs ("suite" :: more) = suiteArgs more
 devArgs ("obs" :: more) = runObs more
 devArgs ("ir" :: "dump" :: more) = irDumpArgs more
 devArgs ("errors" :: "gen" :: genArgs) = genErrorsArgs genArgs
-devArgs (["errors"]) = usageErrorFor ["dev", "errors"]
+devArgs (["errors"]) = usageErrorForIn DevSpec.commands ["dev", "errors"]
 devArgs ("errors" :: bad :: _) = unknownSubcommand ["dev", "errors"] bad ["gen"]
-devArgs [] = usageErrorFor ["dev"]
+devArgs [] = usageErrorForIn DevSpec.commands ["dev"]
 devArgs (bad :: _) = unknownSubcommand ["dev"] bad ["suite", "obs", "errors", "ir"]
 
 -- | `vuna dev ir dump [--out FILE] DIR`：检查 + lowering 后打印确定性 IR。
@@ -51,7 +52,7 @@ dumpGo out after dirs rest =
     [] =>
       case reverse dirs of
         [dir] => runDump out after dir
-        _ => usageErrorFor ["dev", "ir", "dump"]
+        _ => usageErrorForIn DevSpec.commands ["dev", "ir", "dump"]
 
 runDump : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Maybe String -> String -> String -> Eff r Int
 runDump out after dir =
@@ -79,10 +80,10 @@ runDump out after dir =
 -- | 内部：`vuna dev errors gen [ROOT]`——ROOT 默认 `.`。
 genErrorsArgs : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => List String -> Eff r Int
 genErrorsArgs rest =
-  case parseCmdArgs ["dev", "errors", "gen"] rest of
+  case parseCmdArgsIn DevSpec.commands ["dev", "errors", "gen"] rest of
     ErrC e => toolError (diagText e)
     OkC parsed =>
       case parsed.positionals of
         [] => runGenErrors "."
         [root] => runGenErrors root
-        _ => usageErrorFor ["dev", "errors", "gen"]
+        _ => usageErrorForIn DevSpec.commands ["dev", "errors", "gen"]

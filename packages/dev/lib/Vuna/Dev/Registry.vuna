@@ -1,0 +1,91 @@
+-- | `vuna-dev` 插件入口：仓库专用的开发/维护命令（suite / 观测 / 错误码文档 / IR dump）。
+--
+-- 命令面见 [Vuna.Dev.Spec]；`--vuna-describe [FILE]` 输出 describe v1 命令表，入口据此
+-- 把它合并进帮助与路由。产品工具链不 import 这里的任何模块。
+module Vuna.Dev.Registry where
+
+import Vuna.Cli.Dev
+import Vuna.Dev.Spec
+import Vuna.Plugin.Command
+import Vuna.Plugin.Describe
+import Vuna.Plugin.Help
+import Vuna.Plugin.Suggest
+import Base.Data.List as List
+import Base.Data.String as String
+import Base.Effect.Args as EffArgs
+import Base.Effect.Clock as EffClock
+import Base.Effect.Console as EffConsole
+import Base.Effect.Env as EffEnv
+import Base.Effect.Exit as EffExit
+import Base.Effect.Fs as EffFs
+import Base.Effect.Net as EffNet
+import Base.Effect.Process as EffProcess
+import Base.Effect.Stdin as EffStdin
+import Base.Effect.Types as EffTypes
+
+-- | 插件入口：读 argv，处理 describe / help，其余交给 `dev` 分派。
+export runPlugin : Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
+runPlugin =
+  do
+    args <- argsGetArgs
+    runArgs args
+
+-- | 按 argv 执行；`--vuna-describe [FILE]` 与 `--help` 优先。
+export runArgs : List String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
+runArgs raw = runArgsClean (withoutPerfFlag raw)
+
+-- | 内部：`runArgs` 的主体（已去掉隐藏旗标）。
+runArgsClean : List String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
+runArgsClean args =
+  case args of
+    ["--vuna-describe"] => printText (Describe.render "dev" commands)
+    "--vuna-describe" :: file :: more => writeDescribe file
+    _ =>
+      case helpPathIn 3 commands args of
+        Just path => printHelp path
+        Nothing => dispatch args
+
+-- | 内部：把命令表写到 `file`（入口据此收集命令面）。
+writeDescribe : String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
+writeDescribe file =
+  do
+    _ <- fsWriteFileAtomic file (Describe.render "dev" commands)
+    pure 0
+
+-- | 内部：打印某路径的帮助。
+printHelp : List String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
+printHelp path =
+  case helpForPathIn commands noDelegated path of
+    Just text => printText text
+    Nothing => printText (unknownCommandText (join " " path))
+
+-- | 内部：分派——`vuna dev` 之后的一切交给 `devArgs`。
+dispatch : List String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
+dispatch args =
+  case args of
+    "dev" :: rest => Vuna.Cli.Dev.devArgs rest
+    _ => printText (unknownCommandText (join " " args))
+
+-- | 内部：打印文本并返回 0。
+printText : String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
+printText text =
+  do
+    _ <- consolePrint text
+    pure 0
+
+-- | 内部：未知命令文案（附最近候选）。
+unknownCommandText : String -> String
+unknownCommandText arg =
+  case suggestOne (topLevelNamesOf commands) arg of
+    Just guess => "error: unknown command `${arg}`; did you mean `${guess}`?\nrun `vuna help`\n"
+    Nothing => "error: unknown command `${arg}`\nrun `vuna help`\n"
+
+-- | 内部：dev 命令都不是 delegated。
+noDelegated : Cmd -> String
+noDelegated _ = ""
+
+-- | 内部：去掉隐藏的性能旗标（runtime 从原始 argv 读取，命令解析要忽略）。
+withoutPerfFlag : List String -> List String
+withoutPerfFlag [] = []
+withoutPerfFlag (a :: rest) =
+  if a == "--debug-perf" then withoutPerfFlag rest else a :: withoutPerfFlag rest

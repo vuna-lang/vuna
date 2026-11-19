@@ -30,6 +30,7 @@ let
     targetNative = ../../packages/target-native;
     targetWasm = ../../packages/target-wasm;
     pluginWeb = ../../packages/plugin-web;
+    dev = ../../packages/dev;
     base = ../../packages/base;
     pluginKit = ../../packages/plugin-kit;
     toolchain = ../../packages/toolchain;
@@ -65,6 +66,7 @@ let
     src.targetNative
     src.targetWasm
     src.pluginWeb
+    src.dev
     src.pluginKit
     src.toolchain
     src.cli
@@ -173,6 +175,7 @@ let
       src.targetNative
       src.targetWasm
       src.pluginWeb
+      src.dev
       src.base
       src.cli
       src.pluginKit
@@ -347,6 +350,7 @@ in
       src.targetNative
       src.targetWasm
       src.pluginWeb
+      src.dev
       src.base
       src.manifest
     ];
@@ -423,6 +427,7 @@ in
       src.targetNative
       src.targetWasm
       src.pluginWeb
+      src.dev
       src.cli
       src.base
       src.pluginKit
@@ -458,6 +463,7 @@ in
       src.targetNative
       src.targetWasm
       src.pluginWeb
+      src.dev
       src.base
     ];
     nativeBuildInputs = [

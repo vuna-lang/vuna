@@ -21,6 +21,7 @@ import Vuna.Cli.Args
 import Vuna.Plugin.Command
 import Vuna.Plugin.Args
 import Vuna.Cli.Spec
+import Vuna.Dev.Spec as DevSpec
 import Vuna.Compiler.Base.Common
 import Vuna.Files
 import Vuna.Json
@@ -48,7 +49,7 @@ symbolsSchemaVersion = "vuna-symbols 1"
 -- | `vuna dev obs symbols` 的入口：解析 `--out` 与可选 OUTDIR，写出或打印符号表。
 export runObsSymbols : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nProcess ProcessOp r => List String -> Eff r Int
 runObsSymbols args =
-  case parseCmdArgs ["dev", "obs", "symbols"] args of
+  case parseCmdArgsIn DevSpec.commands ["dev", "obs", "symbols"] args of
     ErrC e => symbolsFail 2 (diagText e)
     OkC parsed =>
       case outOf parsed of

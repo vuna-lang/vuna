@@ -44,7 +44,8 @@ packages/compiler/lib/Vuna/Compiler/   （目录即层：层名 = 模块前缀�
   Interp/Fmt/Lint/Index（门面+子模块）、
   Obs（+子模块 Types/Read/Validate/Summarize/Run；可观测性工具链，见
   [reference/observability.md](reference/observability.md)）、
-  Repl/Run/Doc（+子模块）/Search（+子模块）/Sig/Lsp/Json/TestRunner/Files；suite 执行器在 Test/{Suite,Run}
+  Repl/Run/Doc（+子模块）/Search（+子模块）/Sig/Lsp/Json/TestRunner/Files；开发/维护命令（suite / obs /
+  错误码文档 / IR dump）在独立插件 `packages/dev`（二进制 `vuna-dev`，`vuna dev …`）。
 依赖图：vuna → vuna-compiler → {vuna-ir, vuna-compiler-base, vuna-target-ocaml} → vuna-base（vuna 也直接依赖 base）；
   vuna-target-native / vuna-target-wasm 只依赖 base + compiler-base + ir，由编译器按 `--target` 起进程。
 中立库 vuna-http（模块根 packages/http/lib/）：Http.{Header,Request,Response,Parse,Render}，

@@ -23,6 +23,7 @@ import Vuna.Cli.Args
 import Vuna.Plugin.Command
 import Vuna.Plugin.Args
 import Vuna.Cli.Spec
+import Vuna.Dev.Spec as DevSpec
 import Vuna.Compiler.Base.Common
 import Vuna.Doc.Prose
 import Vuna.Json
@@ -45,7 +46,7 @@ renderUsage = "usage: vuna dev obs render [--out FILE] TRACE"
 -- | `vuna dev obs render` 的入口；`--out` 缺失 / 未知 flag / TRACE 不存在都是退出码 2。
 export runObsRender : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nProcess ProcessOp r => List String -> Eff r Int
 runObsRender args =
-  case parseCmdArgs ["dev", "obs", "render"] args of
+  case parseCmdArgsIn DevSpec.commands ["dev", "obs", "render"] args of
     ErrC e => renderFail 2 (diagText e)
     OkC parsed =>
       case parsed.positionals of

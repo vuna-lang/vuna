@@ -10,7 +10,6 @@ import Vuna.Cli.Err
 import Vuna.Cli.Fmt
 import Vuna.Cli.Index
 import Vuna.Cli.Repl
-import Vuna.Cli.Dev
 import Vuna.Cli.Spec
 import Vuna.Cli.Test
 import Vuna.Plugin.Command
@@ -61,8 +60,7 @@ handlers =
     Handler ["deps"] (\rest => depsArgs rest),
     Handler ["store"] (\rest => storeArgs rest),
     Handler ["repl"] (\rest => replArgs rest),
-    Handler ["lsp"] (\rest => Vuna.Lsp.runLspTool rest),
-    Handler ["dev"] (\rest => devArgs rest)
+    Handler ["lsp"] (\rest => Vuna.Lsp.runLspTool rest)
   ]
 
 -- | 插件入口：读 argv，处理 describe / help，其余交给接线表。

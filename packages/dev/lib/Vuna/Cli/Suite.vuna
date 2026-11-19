@@ -5,11 +5,12 @@
 module Vuna.Cli.Suite where
 
 import Vuna.Cli.Args
+import Vuna.Cli.Spec
+import Vuna.Dev.Spec as DevSpec
 import Vuna.Plugin.Command
 import Vuna.Plugin.Args
 import Vuna.Cli.Err
 import Vuna.Cli.Parse
-import Vuna.Cli.Spec
 import Vuna.Compiler.Base.Common
 import Vuna.Test.Suite
 import Vuna.Test.Run
@@ -27,7 +28,7 @@ import Base.Data.String as String
 -- `test/suite.toml` 的 driver 清单依次跑各包 suite。
 export suiteArgs : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => List String -> Eff r Int
 suiteArgs rest =
-  case parseCmdArgs ["dev", "suite"] rest of
+  case parseCmdArgsIn DevSpec.commands ["dev", "suite"] rest of
     ErrC e => toolError (diagText e)
     OkC parsed =>
       case parsed.positionals of
@@ -37,7 +38,7 @@ suiteArgs rest =
             toolError "--all 不接受 FILE 参数"
           else
             suiteRun parsed path
-        _ => usageErrorFor ["dev", "suite"]
+        _ => usageErrorForIn DevSpec.commands ["dev", "suite"]
 
 -- | 内部：`--all`：读 driver 清单，逐个独立 suite 调用（共享 store 与预热由调用方负责）。
 suiteAll : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Parsed -> Eff r Int

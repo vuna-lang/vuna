@@ -12,7 +12,8 @@ repo 自测由 `vuna dev suite <suite.toml>` 驱动（原生 Vuna 实现，不�
   `[family.<name>]` 按目录约定把夹具展开成 golden/error case，`dir` 相对 suite 文件所在目录；
   case id 是 `<owner>/<family>/<相对路径>`；
 - `<test 根>/steps/*.steps`（当前 `packages/*/test/steps`）：声明式步进用例（一套行式 DSL，见下）；
-- 执行器在 `packages/toolchain/lib/Vuna/Test/{Suite,Run}.vuna`，由 `Vuna.Cli.testArgs` 分派。
+- 执行器在 `packages/dev/lib/Vuna/Test/{Suite,Run}.vuna`（插件 `vuna-dev`）；`vuna test` 的单元测试
+  入口仍由工具链的 `Vuna.Cli.testArgs` 分派。
 
 ```console
 vuna dev suite --all                      # 全部独立 suite（读 test/suite.toml 的清单）

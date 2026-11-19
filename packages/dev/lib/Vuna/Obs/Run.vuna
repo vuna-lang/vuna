@@ -24,6 +24,7 @@ import Vuna.Cli.Args
 import Vuna.Plugin.Command
 import Vuna.Plugin.Args
 import Vuna.Cli.Spec
+import Vuna.Dev.Spec as DevSpec
 import Vuna.Compiler.Base.Common
 import Vuna.Files
 import Base.Data.Nat as Nat
@@ -48,7 +49,7 @@ export record RunOpts(..) where
 -- | 执行 `vuna dev obs run`：打印 trace 路径，返回子命令退出码；用法错误返回 2。
 export runObsRun : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => List String -> Eff r Int
 runObsRun args =
-  case parseCmdArgs ["dev", "obs", "run"] args of
+  case parseCmdArgsIn DevSpec.commands ["dev", "obs", "run"] args of
     ErrC e => obsRunError (diagText e)
     OkC parsed =>
       case runOptsOf parsed of

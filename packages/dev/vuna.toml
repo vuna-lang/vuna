@@ -1,0 +1,39 @@
+# vuna-dev：仓库专用的开发/维护插件（`vuna dev …`），默认不随产品安装。
+[package]
+name = "vuna-dev"
+
+[dependencies]
+vuna-base = "../base"
+vuna-compiler = "../compiler"
+vuna-compiler-base = "../compiler-base"
+vuna-http = "../http"
+vuna-ir = "../ir"
+vuna-target-ocaml = "../target-ocaml"
+vuna-plugin-kit = "../plugin-kit"
+vuna-toolchain = "../toolchain"
+
+[export]
+modules = [
+  "Vuna.Cli.Dev",
+  "Vuna.Cli.IrDump",
+  "Vuna.Cli.IrRender",
+  "Vuna.Cli.Suite",
+  "Vuna.Dev.Registry",
+  "Vuna.Dev.Spec",
+  "Vuna.GenErrors",
+  "Vuna.Obs",
+  "Vuna.Obs.Convert",
+  "Vuna.Obs.Flame",
+  "Vuna.Obs.Merge",
+  "Vuna.Obs.Path",
+  "Vuna.Obs.Read",
+  "Vuna.Obs.Render",
+  "Vuna.Obs.Run",
+  "Vuna.Obs.Serve",
+  "Vuna.Obs.Summarize",
+  "Vuna.Obs.Symbols",
+  "Vuna.Obs.Types",
+  "Vuna.Obs.Validate",
+  "Vuna.Test.Run",
+  "Vuna.Test.Suite",
+]
