@@ -312,7 +312,7 @@ capCheckFuelMax = 1000000
 capCheckFuel : Int -> Ec -> Span -> Term -> Bool -> Check Int
 capCheckFuel fuel ec sp t allowed =
   if fuel <= 0 then
-    icInternal "capture check fuel exhausted"
+    tcErr0 sp CaptureFuel
   else
     case t of
       TVar name i _ => OkC 0

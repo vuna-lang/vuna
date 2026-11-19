@@ -100,10 +100,55 @@ ctorFieldDomainTermGo fuel i t =
       _ => Nothing
 
 -- 函数 / Pi 字段保持装箱：OCaml 值限制会让零参顶层定义的别名函数类型出现弱类型变量。
--- | 项是否为函数/Pi 类型（这类字段保持装箱，避免 OCaml 弱类型变量）。
-export termIsFunction : Term -> Bool
-termIsFunction (TPi _ _ _ _ _) = True
-termIsFunction _ = False
+-- | 项是否为函数/Pi 类型：沿「单构造子 + 单保留字段」的 record/alias 头展开，用实参替换
+-- 族参数后继续判；取不到/不唯一/超预算一律保守 `True`（装箱）。
+export termIsFunction : List DtData -> Term -> Bool
+termIsFunction datas t = termIsFunctionFuel 64 datas [] t
+
+termIsFunctionFuel : Int -> List DtData -> List String -> Term -> Bool
+termIsFunctionFuel fuel datas seen t =
+  if fuel <= 0 then
+    True
+  else
+    case t of
+      TPi _ _ _ _ _ => True
+      _ =>
+        let
+          p = flattenTermApp t
+        in case firstOf p of
+          TGlobal g => termIsFunctionHead fuel datas seen g (map firstOf (secondOf p))
+          _ => False
+
+termIsFunctionHead : Int -> List DtData -> List String -> String -> List Term -> Bool
+termIsFunctionHead fuel datas seen g args =
+  if memName g seen then
+    False
+  else
+    case findDtData g datas of
+      Nothing => False
+      Just d =>
+        case dtDataCtors d of
+          [c] =>
+            case keptIndices (ctorKeepFlags c) of
+              [i] =>
+                if i < length d.dtDataParams then
+                  False
+                else if length args /= length d.dtDataParams then
+                  True
+                else
+                  case ctorFieldDomainTerm c i of
+                    Nothing => True
+                    Just dom => termIsFunctionFuel (fuel - 1) datas (g :: seen) (substFamArgs i args dom)
+              _ => False
+          _ => False
+
+-- `dom` 位于「前 i 个 telescope binder」的上下文；族参数 j 的索引是 i-1-j。
+substFamArgs : Int -> List Term -> Term -> Term
+substFamArgs i args dom = substFamArgsGo i 0 args dom
+
+substFamArgsGo : Int -> Int -> List Term -> Term -> Term
+substFamArgsGo i j [] dom = dom
+substFamArgsGo i j (a :: rest) dom = substFamArgsGo i (j + 1) rest (substVarAt (i - 1 - j) a dom)
 
 -- 判据（唯一真源）：
 --   1. 恰好 1 个构造子；
@@ -140,7 +185,7 @@ unboxedCandidateOfData datas d =
                   [] =>
                     if i >= length d.dtDataParams then
                       case ctorFieldDomainTerm c i of
-                        Just dom => if termIsFunction dom then [] else if termRepresentable datas dom then [UnboxedCand (dtDataName d) c i] else []
+                        Just dom => if termIsFunction datas dom then [] else if termRepresentable datas dom then [UnboxedCand (dtDataName d) c i] else []
                         Nothing => []
                     else
                       []

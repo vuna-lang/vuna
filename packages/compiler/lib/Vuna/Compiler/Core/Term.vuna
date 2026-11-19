@@ -292,7 +292,7 @@ natChainNext : Int -> Int
 natChainNext n = if n >= natChainMax then natChainMax else n + 1
 
 -- 应用脊展平：`TApp (TApp f a) b` → `(f, [a, b])`（累积参数，保持线性）。
-flattenTermApp : Term -> Pair Term (List (Pair Term Rig))
+export flattenTermApp : Term -> Pair Term (List (Pair Term Rig))
 flattenTermApp t = flattenTermAppGo t []
 
 flattenTermAppGo : Term -> List (Pair Term Rig) -> Pair Term (List (Pair Term Rig))

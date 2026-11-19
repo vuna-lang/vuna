@@ -177,9 +177,43 @@ coverageWitness table fuel pending rows qs =
 export matrixWitness : List (Pair String (Pair Bool (List (Pair String Int)))) -> List (List Pat) -> Maybe (List Pat)
 matrixWitness table clauses =
   if uniformArity clauses then
-    coverageWitness table (natFromInt 256) Nothing clauses (wilds (matrixArity clauses))
+    coverageWitness
+      table
+      (natFromInt (coverageFuelFor clauses))
+      Nothing
+      clauses
+      (wilds (matrixArity clauses))
   else
     Nothing
+
+-- 模式节点数（每个 `Pat` 节点计 1；构造子子模式 / record 字段递归）。
+patNodes : Pat -> Int
+patNodes (PCon _ ps _) = 1 + patNodesList ps
+patNodes (PAs _ inner _) = 1 + patNodes inner
+patNodes (PRecord _ fs _) = 1 + patNodesFields fs
+patNodes _ = 1
+
+patNodesList : List Pat -> Int
+patNodesList [] = 0
+patNodesList (p :: rest) = patNodes p + patNodesList rest
+
+patNodesFields : List (Pair String Pat) -> Int
+patNodesFields [] = 0
+patNodesFields ((Pair _ p) :: rest) = patNodes p + patNodesFields rest
+
+matrixNodes : List (List Pat) -> Int
+matrixNodes [] = 0
+matrixNodes (row :: rest) = patNodesList row + matrixNodes rest
+
+-- 见证搜索每下降一步至少消耗 1；每个待试构造子还会重复下降剩余列 → 每节点给 4 步余量。
+coverageFuelFor : List (List Pat) -> Int
+coverageFuelFor clauses =
+  let
+    scaled = 256 + 4 * matrixNodes clauses
+  in if scaled > coverageFuelMax then coverageFuelMax else scaled
+
+coverageFuelMax : Int
+coverageFuelMax = 1000000
 
 -- 各行的列数必须一致（`where`/`let` 里允许不同 arity 的方程，矩阵算法不适用）。
 uniformArity : List (List Pat) -> Bool

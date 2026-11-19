@@ -21,6 +21,7 @@ export data TcErr(..) : Nat -> Type where
   -- arity 0
   BoolCaseRestriction : TcErr Zero
   CaseBranchTooFewArgs : TcErr Zero
+  CaptureFuel : TcErr Zero
   CatchAllNotLast : TcErr Zero
   ClauseTooManyPatterns : TcErr Zero
   DataKindArrows : TcErr Zero
@@ -146,6 +147,7 @@ export data TcErr(..) : Nat -> Type where
 export tcCode : {n : Nat} -> TcErr n -> String
 tcCode BoolCaseRestriction = "TC_BoolCaseRestriction"
 tcCode CaseBranchTooFewArgs = "TC_CaseBranchTooFewArgs"
+tcCode CaptureFuel = "TC_CaptureFuel"
 tcCode CatchAllNotLast = "TC_CatchAllNotLast"
 tcCode ClauseTooManyPatterns = "TC_ClauseTooManyPatterns"
 tcCode DataKindArrows = "TC_DataKindArrows"
@@ -256,6 +258,8 @@ tcCode (DeriveUnsupportedKind _) = "TC_DeriveUnsupportedKind"
 export tcTemplate : {n : Nat} -> TcErr n -> String
 tcTemplate BoolCaseRestriction = "case on Bool accepts only True, False, or variable patterns"
 tcTemplate CaseBranchTooFewArgs = "case branch has too few arguments for its constructor"
+tcTemplate CaptureFuel =
+  "linear capture check ran out of reduction fuel (program rejected conservatively)"
 tcTemplate CatchAllNotLast = "catch-all branch must come last"
 tcTemplate ClauseTooManyPatterns = "clause has more patterns than the function arity"
 tcTemplate DataKindArrows = "data declaration kind must be a chain of arrows ending in Type"
@@ -410,6 +414,10 @@ tcChunk0 =
       (tcCode CaseBranchTooFewArgs)
       (tcTemplate CaseBranchTooFewArgs)
       "case 分支的实参少于构造子字段",
+    TcEntry
+      (tcCode CaptureFuel)
+      (tcTemplate CaptureFuel)
+      "线性捕获检查耗尽归约燃料（保守拒绝）",
     TcEntry (tcCode CatchAllNotLast) (tcTemplate CatchAllNotLast) "兜底分支必须在最后",
     TcEntry
       (tcCode ClauseTooManyPatterns)

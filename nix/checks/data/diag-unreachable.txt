@@ -38,6 +38,7 @@ TC_InvalidArrowType	精化/Core 内部不变量防御（Conv/Meta/Index/Pattern 
 TC_NatLiteralOutOfRange	精化/Core 内部不变量防御（Conv/Meta/Index/Pattern fuel 等）；合法源码不可构造
 TC_NestedPatterns	精化/Core 内部不变量防御（Conv/Meta/Index/Pattern fuel 等）；合法源码不可构造
 TC_NotInductiveFamily	精化/Core 内部不变量防御（Conv/Meta/Index/Pattern fuel 等）；合法源码不可构造
+TC_CaptureFuel	精化/Core 内部不变量防御（线性捕获检查 fuel）；合法源码不可构造
 TC_NotTraitMethod	精化/Core 内部不变量防御（Conv/Meta/Index/Pattern fuel 等）；合法源码不可构造
 TC_OpNotDefinedFor	精化/Core 内部不变量防御（Conv/Meta/Index/Pattern fuel 等）；合法源码不可构造
 TC_OpOnlyIntString	精化/Core 内部不变量防御（Conv/Meta/Index/Pattern fuel 等）；合法源码不可构造

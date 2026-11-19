@@ -35,6 +35,7 @@ TC_InvalidArrowType
 TC_NatLiteralOutOfRange
 TC_NestedPatterns
 TC_NotInductiveFamily
+TC_CaptureFuel
 TC_NotTraitMethod
 TC_OpNotDefinedFor
 TC_OpOnlyIntString
