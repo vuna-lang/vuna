@@ -34,6 +34,10 @@ import Vuna.Compiler.Native.Model
 nativeMaxInt : Int
 nativeMaxInt = 4611686018427387903
 
+-- | 同上界对应的下界（`min_int = -2^62`；字面量上界是 `2^62-1`，因此写成 `-max - 1`）。
+nativeMinInt : Int
+nativeMinInt = -4611686018427387903 - 1
+
 divZeroMessage : String
 divZeroMessage = "vuna: runtime error: division by zero\n"
 
@@ -122,10 +126,14 @@ impossibleMessage = "vuna: runtime error: impossible branch\n"
 arrayOobMessage : String
 arrayOobMessage = "vuna: runtime error: Invalid_argument(\"index out of bounds\")\n"
 
+-- | 路径超过宿主缓冲（`rt_path_buf` / `rt_path_buf2` = 4096 字节）。
+pathTooLongMessage : String
+pathTooLongMessage = "vuna: runtime error: path too long\n"
+
 export nativeRodata : List NativeRodata
 nativeRodata =
   append
-    [NativeRodata (nativeDataLabel "true") "True", NativeRodata (nativeDataLabel "false") "False", NativeRodata (nativeDataLabel "nl") "\n", NativeRodata (nativeDataLabel "divzero") divZeroMessage, NativeRodata (nativeDataLabel "oom") oomMessage, NativeRodata (nativeDataLabel "mem_limit") memLimitMessage, NativeRodata (nativeDataLabel "timeout") timeoutMessage, NativeRodata (nativeDataLabel "err_prefix") errPrefix, NativeRodata (nativeDataLabel "assert_prefix") assertPrefix, NativeRodata (nativeDataLabel "todo_prefix") todoPrefix, NativeRodata (nativeDataLabel "impossible") impossibleMessage, NativeRodata (nativeDataLabel "array_oob") arrayOobMessage, NativeRodata (nativeDataLabel "unhandled_effect") unhandledEffectMessage, NativeRodata (nativeDataLabel "resume_twice") resumeTwiceMessage, NativeRodata (nativeDataLabel "bad_stack") badStackMessage, NativeRodata (nativeDataLabel "stack_overflow") stackOverflowMessage, NativeRodata (nativeDataLabel "proc_self_exe") ("/proc/self/exe" ++ strPack [0]), NativeRodata (nativeDataLabel "tmp_suffix") (".tmp" ++ strPack [0]), NativeRodata (nativeDataLabel "sh_path") ("/bin/sh" ++ strPack [0]), NativeRodata (nativeDataLabel "sh_dash_c") ("-c" ++ strPack [0]), NativeRodata (nativeDataLabel "env_mem_limit") memLimitKey, NativeRodata (nativeDataLabel "env_timeout") timeoutKey, NativeRodata (nativeDataLabel "env_cpus") cpusKey, NativeRodata (nativeDataLabel "env_inherit") inheritKey, NativeRodata (nativeDataLabel "env_prefix") nativeEnvPrefix, NativeRodata (nativeDataLabel "cg_cpu_max") cgroupCpuMaxPath]
+    [NativeRodata (nativeDataLabel "true") "True", NativeRodata (nativeDataLabel "false") "False", NativeRodata (nativeDataLabel "nl") "\n", NativeRodata (nativeDataLabel "divzero") divZeroMessage, NativeRodata (nativeDataLabel "oom") oomMessage, NativeRodata (nativeDataLabel "mem_limit") memLimitMessage, NativeRodata (nativeDataLabel "timeout") timeoutMessage, NativeRodata (nativeDataLabel "err_prefix") errPrefix, NativeRodata (nativeDataLabel "assert_prefix") assertPrefix, NativeRodata (nativeDataLabel "todo_prefix") todoPrefix, NativeRodata (nativeDataLabel "impossible") impossibleMessage, NativeRodata (nativeDataLabel "array_oob") arrayOobMessage, NativeRodata (nativeDataLabel "path_long") pathTooLongMessage, NativeRodata (nativeDataLabel "unhandled_effect") unhandledEffectMessage, NativeRodata (nativeDataLabel "resume_twice") resumeTwiceMessage, NativeRodata (nativeDataLabel "bad_stack") badStackMessage, NativeRodata (nativeDataLabel "stack_overflow") stackOverflowMessage, NativeRodata (nativeDataLabel "proc_self_exe") ("/proc/self/exe" ++ strPack [0]), NativeRodata (nativeDataLabel "tmp_suffix") (".tmp" ++ strPack [0]), NativeRodata (nativeDataLabel "sh_path") ("/bin/sh" ++ strPack [0]), NativeRodata (nativeDataLabel "sh_dash_c") ("-c" ++ strPack [0]), NativeRodata (nativeDataLabel "env_mem_limit") memLimitKey, NativeRodata (nativeDataLabel "env_timeout") timeoutKey, NativeRodata (nativeDataLabel "env_cpus") cpusKey, NativeRodata (nativeDataLabel "env_inherit") inheritKey, NativeRodata (nativeDataLabel "env_prefix") nativeEnvPrefix, NativeRodata (nativeDataLabel "cg_cpu_max") cgroupCpuMaxPath]
     nativeGcRodata
 
 -- | `_start` 从初始栈拷下来的进程入参（`argc` / `argv` / `envp`）。
@@ -303,11 +311,12 @@ debugLineFn = rtFunc "debug_line" 0 [IMov (OpReg Rax) (OpImm 0)]
 -- Int 运算
 -- ---------------------------------------------------------------
 divFn : NativeFunc
+-- `min_int / -1` 在 x86 上触发 #DE；OCaml 与 wasm 都返回 `min_int`。
 divFn =
   rtFunc
     "div"
     0
-    [ITest Rsi Rsi, IJcc "jne" ".Lrt_div_ok", ICall (nativeRtLabel "trap_divzero"), ILabel ".Lrt_div_ok", IMov (OpReg Rax) (OpReg Rdi), ICqo, IDiv Rsi, IBin "shl" (OpImm 1), IBin "sar" (OpImm 1)]
+    [ITest Rsi Rsi, IJcc "jne" ".Lrt_div_ok", ICall (nativeRtLabel "trap_divzero"), ILabel ".Lrt_div_ok", ICmp (OpReg Rsi) (OpImm (-1)), IJcc "jne" ".Lrt_div_go", IMov (OpReg R11) (OpImm nativeMinInt), ICmp (OpReg Rdi) (OpReg R11), IJcc "jne" ".Lrt_div_go", IMov (OpReg Rax) (OpReg Rdi), IRet, ILabel ".Lrt_div_go", IMov (OpReg Rax) (OpReg Rdi), ICqo, IDiv Rsi, IBin "shl" (OpImm 1), IBin "sar" (OpImm 1)]
 
 -- ---------------------------------------------------------------
 -- Nat 运算（饱和/夹取，照抄 OCaml 模板）
@@ -881,6 +890,12 @@ trapOomFn =
     "trap_oom"
     [IMov (OpReg Rax) (OpImm 1), IMov (OpReg Rdi) (OpImm 2), ILea Rsi (nativeDataLabel "oom"), IMov (OpReg Rdx) (OpImm (strLength oomMessage)), ISyscall, IMov (OpReg Rax) (OpImm 60), IMov (OpReg Rdi) (OpImm 2), ISyscall]
 
+trapPathLongFn : NativeFunc
+trapPathLongFn =
+  rtRawFunc
+    "trap_path_long"
+    [IMov (OpReg Rax) (OpImm 1), IMov (OpReg Rdi) (OpImm 2), ILea Rsi (nativeDataLabel "path_long"), IMov (OpReg Rdx) (OpImm (strLength pathTooLongMessage)), ISyscall, IMov (OpReg Rax) (OpImm 60), IMov (OpReg Rdi) (OpImm 2), ISyscall]
+
 -- ---------------------------------------------------------------
 -- 断言 / 未实现占位 / 显式失败
 -- ---------------------------------------------------------------
@@ -1128,7 +1143,7 @@ strToCFn =
   rtFunc
     "str_to_c"
     0
-    [IMov (OpReg Rcx) (OpMem Rdi 0), ILeaMem Rsi Rdi 8, ILea Rdi pathBufLabel, IRepMovsb, IMovByteOp (OpMem Rdi 0) 0, ILea Rax pathBufLabel]
+    [IMov (OpReg Rcx) (OpMem Rdi 0), ICmp (OpReg Rcx) (OpImm 4095), IJcc "jl" ".Lrt_stc_ok", ICall (nativeRtLabel "trap_path_long"), ILabel ".Lrt_stc_ok", ILeaMem Rsi Rdi 8, ILea Rdi pathBufLabel, IRepMovsb, IMovByteOp (OpMem Rdi 0) 0, ILea Rax pathBufLabel]
 
 -- | 同 `str_to_c`，写到 `rt_path_buf2`。
 strToC2Fn : NativeFunc
@@ -1136,7 +1151,7 @@ strToC2Fn =
   rtFunc
     "str_to_c2"
     0
-    [IMov (OpReg Rcx) (OpMem Rdi 0), ILeaMem Rsi Rdi 8, ILea Rdi pathBuf2Label, IRepMovsb, IMovByteOp (OpMem Rdi 0) 0, ILea Rax pathBuf2Label]
+    [IMov (OpReg Rcx) (OpMem Rdi 0), ICmp (OpReg Rcx) (OpImm 4095), IJcc "jl" ".Lrt_stc2_ok", ICall (nativeRtLabel "trap_path_long"), ILabel ".Lrt_stc2_ok", ILeaMem Rsi Rdi 8, ILea Rdi pathBuf2Label, IRepMovsb, IMovByteOp (OpMem Rdi 0) 0, ILea Rax pathBuf2Label]
 
 -- | `rdi` = Vuna String、`rsi` = 目的缓冲 → rax = 目的端（指向新 NUL）。
 strCopyIntoFn : NativeFunc
@@ -1211,12 +1226,14 @@ tryIsDirFn =
     [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IBinReg "xor" Rax (OpReg Rax), IMov (OpRip hostStatusLabel) (OpReg Rax), ICall (nativeRtLabel "str_to_c"), IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "stat_path"), ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_isdir_fail", ILea Rcx statBufLabel, IMov (OpReg Rax) (OpMem Rcx 24), IBinReg "and" Rax (OpImm 61440), ICmp (OpReg Rax) (OpImm 16384), ISetcc "sete" Rax, IMovzxAl, IRet, ILabel ".Lrt_isdir_fail", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm 0)]
 
 -- | `rdi` = Vuna String path → rax = 文件内容；失败写状态槽并返回空串。
+--   运行时读缓冲是 8 MiB；超过上界报 io 错误（不静默截断）。
 tryReadFileFn : NativeFunc
+-- 缓冲满：再读 1 字节区分「正好 8 MiB」与「超过上界」。
 tryReadFileFn =
   rtFunc
     "try_read_file"
     16
-    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IBinReg "xor" Rax (OpReg Rax), IMov (OpRip hostStatusLabel) (OpReg Rax), ICall (nativeRtLabel "str_to_c"), IMov (OpReg Rsi) (OpReg Rax), IMov (OpReg Rdi) (OpImm (0 - 100)), IBinReg "xor" Rdx (OpReg Rdx), IBinReg "xor" R10 (OpReg R10), IMov (OpReg Rax) (OpImm 257), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_rf_fail", IMov (OpMem Rbp (nativeSlotOff 1)) (OpReg Rax), IMov (OpMem Rbp (nativeSlotOff 2)) (OpImm 0), ILabel ".Lrt_rf_loop", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 1)), ILea Rsi readBufLabel, IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 2)), IBinReg "add" Rsi (OpReg Rcx), IMov (OpReg Rdx) (OpImm 8388608), IBinReg "sub" Rdx (OpReg Rcx), IMov (OpReg Rax) (OpImm 0), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_rf_read_fail", IJcc "je" ".Lrt_rf_done", IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 2)), IBinReg "add" Rcx (OpReg Rax), IMov (OpMem Rbp (nativeSlotOff 2)) (OpReg Rcx), ICmp (OpReg Rcx) (OpImm 8388608), IJcc "jl" ".Lrt_rf_loop", ILabel ".Lrt_rf_done", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 1)), IMov (OpReg Rax) (OpImm 3), ISyscall, ILea Rdi readBufLabel, IMov (OpReg Rsi) (OpMem Rbp (nativeSlotOff 2)), ICall (nativeRtLabel "str_from_bytes"), IRet, ILabel ".Lrt_rf_read_fail", IMov (OpMem Rbp (nativeSlotOff 3)) (OpReg Rax), IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 1)), IMov (OpReg Rax) (OpImm 3), ISyscall, IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 3)), ICall (nativeRtLabel "fs_fail"), ICall (nativeRtLabel "str_empty"), IRet, ILabel ".Lrt_rf_fail", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "fs_fail"), ICall (nativeRtLabel "str_empty"), IRet]
+    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IBinReg "xor" Rax (OpReg Rax), IMov (OpRip hostStatusLabel) (OpReg Rax), ICall (nativeRtLabel "str_to_c"), IMov (OpReg Rsi) (OpReg Rax), IMov (OpReg Rdi) (OpImm (0 - 100)), IBinReg "xor" Rdx (OpReg Rdx), IBinReg "xor" R10 (OpReg R10), IMov (OpReg Rax) (OpImm 257), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_rf_fail", IMov (OpMem Rbp (nativeSlotOff 1)) (OpReg Rax), IMov (OpMem Rbp (nativeSlotOff 2)) (OpImm 0), ILabel ".Lrt_rf_loop", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 1)), ILea Rsi readBufLabel, IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 2)), IBinReg "add" Rsi (OpReg Rcx), IMov (OpReg Rdx) (OpImm 8388608), IBinReg "sub" Rdx (OpReg Rcx), IMov (OpReg Rax) (OpImm 0), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_rf_read_fail", IJcc "je" ".Lrt_rf_done", IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 2)), IBinReg "add" Rcx (OpReg Rax), IMov (OpMem Rbp (nativeSlotOff 2)) (OpReg Rcx), ICmp (OpReg Rcx) (OpImm 8388608), IJcc "jl" ".Lrt_rf_loop", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 1)), ILea Rsi readBufLabel, IMov (OpReg Rdx) (OpImm 1), IMov (OpReg Rax) (OpImm 0), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "je" ".Lrt_rf_done", IJcc "jl" ".Lrt_rf_read_fail", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 1)), IMov (OpReg Rax) (OpImm 3), ISyscall, IMov (OpReg Rdi) (OpImm (0 - 5)), ICall (nativeRtLabel "fs_fail"), ICall (nativeRtLabel "str_empty"), IRet, ILabel ".Lrt_rf_done", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 1)), IMov (OpReg Rax) (OpImm 3), ISyscall, ILea Rdi readBufLabel, IMov (OpReg Rsi) (OpMem Rbp (nativeSlotOff 2)), ICall (nativeRtLabel "str_from_bytes"), IRet, ILabel ".Lrt_rf_read_fail", IMov (OpMem Rbp (nativeSlotOff 3)) (OpReg Rax), IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 1)), IMov (OpReg Rax) (OpImm 3), ISyscall, IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 3)), ICall (nativeRtLabel "fs_fail"), ICall (nativeRtLabel "str_empty"), IRet, ILabel ".Lrt_rf_fail", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "fs_fail"), ICall (nativeRtLabel "str_empty"), IRet]
 
 -- | `rdi` = path、`rsi` = contents → rax = 写入字节数（Nat）；失败写状态槽并返回 0。
 tryWriteFileFn : NativeFunc
@@ -1300,12 +1317,13 @@ dirOpenFn =
     [IMov (OpReg Rsi) (OpReg Rdi), IMov (OpReg Rdi) (OpImm (0 - 100)), IMov (OpReg Rdx) (OpImm 65536), IBinReg "xor" R10 (OpReg R10), IMov (OpReg Rax) (OpImm 257), ISyscall]
 
 -- | `rdi` = fd → rax = 名字个数（写 `rt_dir_names`），失败返回负 errno。
+--   名字数组上限 4032；超出报 io 错误（不静默丢弃条目）。
 dirNamesFn : NativeFunc
 dirNamesFn =
   rtFunc
     "dir_names"
     48
-    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IMov (OpMem Rbp (nativeSlotOff 1)) (OpImm 0), ILabel ".Lrt_dn_outer", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 0)), ILea Rsi dirBufLabel, IMov (OpReg Rdx) (OpImm 32768), IMov (OpReg Rax) (OpImm 217), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_dn_ret", IJcc "je" ".Lrt_dn_done", IMov (OpMem Rbp (nativeSlotOff 3)) (OpReg Rax), IMov (OpMem Rbp (nativeSlotOff 2)) (OpImm 0), ILabel ".Lrt_dn_entry", IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 2)), ICmp (OpReg Rcx) (OpMem Rbp (nativeSlotOff 3)), IJcc "jge" ".Lrt_dn_outer", ILea R8 dirBufLabel, IBinReg "add" R8 (OpReg Rcx), IMov (OpReg Rax) (OpMem R8 16), IBinReg "and" Rax (OpImm 65535), IMov (OpMem Rbp (nativeSlotOff 4)) (OpReg Rax), ILeaMem R9 R8 19, IMov (OpMem Rbp (nativeSlotOff 5)) (OpReg R9), IMovzx Rax (OpMem R9 0), ICmp (OpReg Rax) (OpImm 46), IJcc "jne" ".Lrt_dn_take", IMovzx Rax (OpMem R9 1), ICmp (OpReg Rax) (OpImm 0), IJcc "je" ".Lrt_dn_skip", ICmp (OpReg Rax) (OpImm 46), IJcc "jne" ".Lrt_dn_take", IMovzx Rax (OpMem R9 2), ICmp (OpReg Rax) (OpImm 0), IJcc "je" ".Lrt_dn_skip", ILabel ".Lrt_dn_take", IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 1)), ICmp (OpReg Rcx) (OpImm 4032), IJcc "jge" ".Lrt_dn_skip", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 5)), ICall (nativeRtLabel "str_from_c"), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 1)), ILea Rdx dirNamesLabel, IBinReg "shl" Rcx (OpImm 3), IBinReg "add" Rdx (OpReg Rcx), IMov (OpMem Rdx 0) (OpReg Rax), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 1)), IBinReg "add" Rcx (OpImm 1), IMov (OpMem Rbp (nativeSlotOff 1)) (OpReg Rcx), ILabel ".Lrt_dn_skip", IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 2)), IBinReg "add" Rcx (OpMem Rbp (nativeSlotOff 4)), IMov (OpMem Rbp (nativeSlotOff 2)) (OpReg Rcx), IJmp ".Lrt_dn_entry", ILabel ".Lrt_dn_done", IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 1)), IRet, ILabel ".Lrt_dn_ret", IRet]
+    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IMov (OpMem Rbp (nativeSlotOff 1)) (OpImm 0), ILabel ".Lrt_dn_outer", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 0)), ILea Rsi dirBufLabel, IMov (OpReg Rdx) (OpImm 32768), IMov (OpReg Rax) (OpImm 217), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_dn_ret", IJcc "je" ".Lrt_dn_done", IMov (OpMem Rbp (nativeSlotOff 3)) (OpReg Rax), IMov (OpMem Rbp (nativeSlotOff 2)) (OpImm 0), ILabel ".Lrt_dn_entry", IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 2)), ICmp (OpReg Rcx) (OpMem Rbp (nativeSlotOff 3)), IJcc "jge" ".Lrt_dn_outer", ILea R8 dirBufLabel, IBinReg "add" R8 (OpReg Rcx), IMov (OpReg Rax) (OpMem R8 16), IBinReg "and" Rax (OpImm 65535), IMov (OpMem Rbp (nativeSlotOff 4)) (OpReg Rax), ILeaMem R9 R8 19, IMov (OpMem Rbp (nativeSlotOff 5)) (OpReg R9), IMovzx Rax (OpMem R9 0), ICmp (OpReg Rax) (OpImm 46), IJcc "jne" ".Lrt_dn_take", IMovzx Rax (OpMem R9 1), ICmp (OpReg Rax) (OpImm 0), IJcc "je" ".Lrt_dn_skip", ICmp (OpReg Rax) (OpImm 46), IJcc "jne" ".Lrt_dn_take", IMovzx Rax (OpMem R9 2), ICmp (OpReg Rax) (OpImm 0), IJcc "je" ".Lrt_dn_skip", ILabel ".Lrt_dn_take", IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 1)), ICmp (OpReg Rcx) (OpImm 4032), IJcc "jl" ".Lrt_dn_store", IMov (OpReg Rax) (OpImm (0 - 5)), IRet, ILabel ".Lrt_dn_store", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 5)), ICall (nativeRtLabel "str_from_c"), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 1)), ILea Rdx dirNamesLabel, IBinReg "shl" Rcx (OpImm 3), IBinReg "add" Rdx (OpReg Rcx), IMov (OpMem Rdx 0) (OpReg Rax), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 1)), IBinReg "add" Rcx (OpImm 1), IMov (OpMem Rbp (nativeSlotOff 1)) (OpReg Rcx), ILabel ".Lrt_dn_skip", IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 2)), IBinReg "add" Rcx (OpMem Rbp (nativeSlotOff 4)), IMov (OpMem Rbp (nativeSlotOff 2)) (OpReg Rcx), IJmp ".Lrt_dn_entry", ILabel ".Lrt_dn_done", IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 1)), IRet, ILabel ".Lrt_dn_ret", IRet]
 
 -- | `rdi` = fd → rax = 0（忽略关闭失败）。
 dirCloseFn : NativeFunc
@@ -1437,7 +1455,7 @@ envFilterFn =
 export nativeRtFuncs : List NativeFunc
 nativeRtFuncs =
   append
-    [intBinary "add" "add", intBinary "sub" "sub", intBinary "mul" "imul", divFn, intBinary "bit_and" "and", intBinary "bit_or" "or", intBinary "bit_xor" "xor", bitNotFn, bitShlFn, bitShrFn, intCompare "eq_int" "sete", intCompare "neq_int" "setne", intCompare "lt_int" "setl", intCompare "le_int" "setle", intCompare "gt_int" "setg", intCompare "ge_int" "setge", natAddFn, natSubFn, natMulFn, natDivFn, natToIntFn, natFromIntFn, natSuccFn, obsZeroFn "obs_level", obsZeroFn "obs_log", obsZero2Fn "obs_counter", obsZeroFn "obs_mark", obsZero2Fn "obs_span_begin", obsZeroFn "obs_span_end", obsZero2Fn "obs_sample_start", obsZeroFn "obs_sample_stop", obsSpanFn, obsSpanLabFn, debugOnFn, debugLineFn, strAllocFn, strLengthFn, strConcatFn, strEqFn, strNeqFn, strCompareFn, strCompareFnOf "str_lt" "setl", strCompareFnOf "str_le" "setle", strCompareFnOf "str_gt" "setg", strCompareFnOf "str_ge" "setge", strFromIntFn, strAtFn, strSubstringFn, strHashFn, strShowFn, printIntFn, printBoolFn, printStrFn, assertFn, primFailFn, todoFn, trapMsgFn, trapAssertFn, trapTodoFn, allocFn, allocLeafFn, allocPinnedFn, applyFn, applyExactFn, applyShimFn, strFromBytesFn, strFromCFn, strOneCharFn, strEmptyFn, getenvFn, getcwdFn, execPathFn, nowUsFn, sleepUsFn, isTtyFn, hostStatusFn, cleanupPushFn, cleanupPopFn, fsFailFn, strToCFn, strToC2Fn, strCopyIntoFn, cStrCpyFn, u64ToDecFn, statPathFn, lstatPathFn, fileExistsFn, fileMtimeFn, fileSizeFn, tryIsDirFn, tryReadFileFn, tryWriteFileFn, tryWriteFileAtomicFn, tryMakeDirFn, tryMakeDirExclusiveFn, tryRemoveFileFn, tryRenameFn, trySymlinkFn, removeTreeFn, tryRemoveTreeFn, dirOpenFn, dirNamesFn, dirCloseFn, cmdRunShFn, spawnExecFn, waitPidFn, exitWithFn, trapImpossibleFn, trapDivZeroFn, trapArrayOobFn, trapOomFn, trapMemLimitFn, initMemFn, initCpusFn, initTimeoutFn, envLookupFn, parseU64Fn, cgroupCpusFn, envFilterFn, sigreturnStubFn, sigalrmFn, arrayEmptyFn, arrayLengthFn, arrayGetFn, arraySetFn, arrayMakeFn, freeBlockFn, trapStackOverflowFn, mRunEffFn, pow2CeilFn, eraseFn, effNewRefFn, effReadRefFn, effWriteRefFn, effPrintFn "prim_eff_print" 1, effPrintFn "prim_eff_eprint" 2, effExitFn, floatFromIntFn, intFromFloatFn, floatBinFn "float_add" "add", floatBinFn "float_sub" "sub", floatBinFn "float_mul" "mul", floatBinFn "float_div" "div", floatCmpFn "float_eq" (floatCmpOrdered "sete"), floatCmpFn "float_neq" floatCmpNeq, floatCmpFn "float_lt" (floatCmpOrdered "setb"), floatCmpFn "float_le" (floatCmpOrdered "setbe"), floatCmpFn "float_gt" (floatCmpOrdered "seta"), floatCmpFn "float_ge" (floatCmpOrdered "setae"), floatAbsFn, floatSqrtFn]
+    [intBinary "add" "add", intBinary "sub" "sub", intBinary "mul" "imul", divFn, intBinary "bit_and" "and", intBinary "bit_or" "or", intBinary "bit_xor" "xor", bitNotFn, bitShlFn, bitShrFn, intCompare "eq_int" "sete", intCompare "neq_int" "setne", intCompare "lt_int" "setl", intCompare "le_int" "setle", intCompare "gt_int" "setg", intCompare "ge_int" "setge", natAddFn, natSubFn, natMulFn, natDivFn, natToIntFn, natFromIntFn, natSuccFn, obsZeroFn "obs_level", obsZeroFn "obs_log", obsZero2Fn "obs_counter", obsZeroFn "obs_mark", obsZero2Fn "obs_span_begin", obsZeroFn "obs_span_end", obsZero2Fn "obs_sample_start", obsZeroFn "obs_sample_stop", obsSpanFn, obsSpanLabFn, debugOnFn, debugLineFn, strAllocFn, strLengthFn, strConcatFn, strEqFn, strNeqFn, strCompareFn, strCompareFnOf "str_lt" "setl", strCompareFnOf "str_le" "setle", strCompareFnOf "str_gt" "setg", strCompareFnOf "str_ge" "setge", strFromIntFn, strAtFn, strSubstringFn, strHashFn, strShowFn, printIntFn, printBoolFn, printStrFn, assertFn, primFailFn, todoFn, trapMsgFn, trapAssertFn, trapTodoFn, allocFn, allocLeafFn, allocPinnedFn, applyFn, applyExactFn, applyShimFn, strFromBytesFn, strFromCFn, strOneCharFn, strEmptyFn, getenvFn, getcwdFn, execPathFn, nowUsFn, sleepUsFn, isTtyFn, hostStatusFn, cleanupPushFn, cleanupPopFn, fsFailFn, strToCFn, strToC2Fn, strCopyIntoFn, cStrCpyFn, u64ToDecFn, statPathFn, lstatPathFn, fileExistsFn, fileMtimeFn, fileSizeFn, tryIsDirFn, tryReadFileFn, tryWriteFileFn, tryWriteFileAtomicFn, tryMakeDirFn, tryMakeDirExclusiveFn, tryRemoveFileFn, tryRenameFn, trySymlinkFn, removeTreeFn, tryRemoveTreeFn, dirOpenFn, dirNamesFn, dirCloseFn, cmdRunShFn, spawnExecFn, waitPidFn, exitWithFn, trapImpossibleFn, trapDivZeroFn, trapArrayOobFn, trapOomFn, trapPathLongFn, trapMemLimitFn, initMemFn, initCpusFn, initTimeoutFn, envLookupFn, parseU64Fn, cgroupCpusFn, envFilterFn, sigreturnStubFn, sigalrmFn, arrayEmptyFn, arrayLengthFn, arrayGetFn, arraySetFn, arrayMakeFn, freeBlockFn, trapStackOverflowFn, mRunEffFn, pow2CeilFn, eraseFn, effNewRefFn, effReadRefFn, effWriteRefFn, effPrintFn "prim_eff_print" 1, effPrintFn "prim_eff_eprint" 2, effExitFn, floatFromIntFn, intFromFloatFn, floatBinFn "float_add" "add", floatBinFn "float_sub" "sub", floatBinFn "float_mul" "mul", floatBinFn "float_div" "div", floatCmpFn "float_eq" (floatCmpOrdered "sete"), floatCmpFn "float_neq" floatCmpNeq, floatCmpFn "float_lt" (floatCmpOrdered "setb"), floatCmpFn "float_le" (floatCmpOrdered "setbe"), floatCmpFn "float_gt" (floatCmpOrdered "seta"), floatCmpFn "float_ge" (floatCmpOrdered "setae"), floatAbsFn, floatSqrtFn]
     nativeGcFuncs
 
 -- | IR 符号 -> 运行时函数标签。白名单之外返回 Nothing（Module 报 NativeUnsupported）。

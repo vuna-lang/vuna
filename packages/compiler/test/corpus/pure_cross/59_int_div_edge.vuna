@@ -1,0 +1,8 @@
+-- `min_int / -1` 在 x86 上会触发 #DE；三端都必须返回 `min_int`（与 OCaml 一致）。
+-- 字面量上界是 `2^62-1`，所以 `min_int` 写成 `-max - 1`。
+main : Int
+main =
+  let
+    m = -4611686018427387903 - 1
+    q = m / -1
+  in if q == m then q else 1
