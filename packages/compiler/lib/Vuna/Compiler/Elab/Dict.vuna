@@ -1036,20 +1036,13 @@ opShortOf : String -> String
 opShortOf name = lastSeg name
 
 export isEqMethod : Ec -> String -> Bool
--- 后两个是**内部生成名**：`Elab.Derive`（deriving 展开）与 `Elab.Match`（字面量模式）
--- 直接构造 `EVar "=="` / `EVar "/="`，不经过 Loader 别名；用户源码的 `==` 一律在
--- Loader 被换成 `eq`，所以内部名不会泄漏到用户语义。
+-- `Elab.Derive`（deriving 展开）与 `Elab.Match`（字面量模式）直接构造 `EVar "=="` /
+-- `EVar "/="`；用户源码写的 `==` 解析后也是同名方法投影。
 isEqMethod ec name =
   opShortOf name
     == "=="
     || opShortOf name
-    == "/="
-    || opShortOf name
-    == "eq"
-    || opShortOf name
-    == "neq"
-    || classHasProjection "Eq" "eq" name ec
-    || classHasProjection "Eq" "neq" name ec || name == "==" || name == "/="
+    == "/=" || classHasProjection "Eq" "==" name ec || classHasProjection "Eq" "/=" name ec
 
 export isCmpMethod : Ec -> String -> Bool
 isCmpMethod ec name =
@@ -1061,105 +1054,46 @@ isCmpMethod ec name =
     == ">"
     || baseNameOf name
     == ">="
-    || baseNameOf name
-    == "lt"
-    || baseNameOf name
-    == "le"
-    || baseNameOf name
-    == "gt"
-    || baseNameOf name
-    == "ge"
-    || classHasProjection "Ord" "lt" name ec
-    || classHasProjection "Ord" "le" name ec
-    || classHasProjection "Ord" "gt" name ec
-    || classHasProjection "Ord" "ge" name ec
     || classHasProjection "Ord" "<" name ec
     || classHasProjection "Ord" "<=" name ec
-    || classHasProjection "Ord" ">" name ec
-    || classHasProjection "Ord" ">=" name ec
-    || name
-    == "<"
-    || name
-    == "<="
-    || name == ">" || name == ">=" || name == "lt" || name == "le" || name == "gt" || name == "ge"
+    || classHasProjection "Ord" ">" name ec || classHasProjection "Ord" ">=" name ec
 
--- `Base.Trait.Num.add/sub/mul/div` 的方法投影（四则运算符的方法形态）。
+-- `Base.Trait.Num` 四则方法（`(+)` / `(-)` / `(*)` / `(/)`）的投影判定。
 -- 与 `isEqMethod` / `isCmpMethod` 同一套「从类表取投影名」判定，不硬编码模块前缀。
--- 返回规范运算符名（`+` / `-` / `*` / `/`）：`+` 在 Loader 被别名到 `add` 之后，精化器的
--- 算术特化靠它把方法投影映射回内建原语名；泛型 `Num a =>` 代码在具体类型未知时由
--- 调用方回落到普通 trait 应用。
+-- 返回规范运算符名：精化器的算术特化靠它把方法投影映射回内建原语名；泛型 `Num a =>`
+-- 代码在具体类型未知时由调用方回落到普通 trait 应用。
 -- | 把 `Base.Trait.Num` 的方法投影映射回规范运算符名（`+` / `-` / `*` / `/`）；不是 Num 方法时返回 `Nothing`。
 export numMethodOpName : Ec -> String -> Maybe String
 numMethodOpName ec name =
-  if baseNameOf name == "+" || baseNameOf name == "add" || classHasProjection "Num" "add" name ec || classHasProjection "Num" "+" name ec then
+  if baseNameOf name == "+" || classHasProjection "Num" "+" name ec then
     Just "+"
-  else if classHasProjection "Num" "sub" name ec || classHasProjection "Num" "-" name ec then
+  else if classHasProjection "Num" "-" name ec then
     Just "-"
-  else if classHasProjection "Num" "mul" name ec || classHasProjection "Num" "*" name ec then
+  else if classHasProjection "Num" "*" name ec then
     Just "*"
-  else if classHasProjection "Num" "div" name ec || classHasProjection "Num" "/" name ec then
-    Just "/"
-  else
-    Nothing
+  else if classHasProjection "Num" "/" name ec then Just "/" else Nothing
 
--- 方法投影的**短名**（`Base.Trait.Eq.eq` → `eq`）：特化只按短名选 runtime 函数。
+-- 方法投影的**短名**（`Base.Trait.Eq.==` → `==`）：特化只按短名选 runtime 函数。
 methodShortOf : String -> String
 methodShortOf name = secondOf (splitLastDot (splitOnDot name))
 
--- 方法短名直接取名字最后一段；运算符名与旧的标识符方法名都原样保留。
+-- 方法短名直接取名字最后一段。
 eqMethodShortOf : String -> String
 eqMethodShortOf name = methodShortOf name
 
 cmpMethodShortOf : String -> String
 cmpMethodShortOf name = methodShortOf name
 
--- 同一方法的两种写法（旧库 `eq` / 新库 `==` 等）。库方法可以是标识符或运算符，
--- 实例/派生体的内部名与库里的声明名不一定一致，统一走这张表找投影。
-methodNameAliases : String -> List String
-methodNameAliases "==" = ["eq"]
-methodNameAliases "eq" = ["=="]
-methodNameAliases "/=" = ["neq"]
-methodNameAliases "neq" = ["/="]
-methodNameAliases "<" = ["lt"]
-methodNameAliases "lt" = ["<"]
-methodNameAliases "<=" = ["le"]
-methodNameAliases "le" = ["<="]
-methodNameAliases ">" = ["gt"]
-methodNameAliases "gt" = [">"]
-methodNameAliases ">=" = ["ge"]
-methodNameAliases "ge" = [">="]
-methodNameAliases "+" = ["add"]
-methodNameAliases "add" = ["+"]
-methodNameAliases "-" = ["sub"]
-methodNameAliases "sub" = ["-"]
-methodNameAliases "*" = ["mul"]
-methodNameAliases "mul" = ["*"]
-methodNameAliases "/" = ["div"]
-methodNameAliases "div" = ["/"]
-methodNameAliases ">>=" = ["bind"]
-methodNameAliases "bind" = [">>="]
-methodNameAliases _ = []
-
--- 类里是否有该短名的方法（`classMethodProjection` 找不到时会回落传入的短名）。
-hasMethodShort : List (Pair String Term) -> String -> Bool
-hasMethodShort methods short = classMethodProjection methods short /= short
-
--- 类方法投影名：先按同名找，找不到再按等价写法找；都没有时回落短名。
+-- 类方法投影名：按同名找；找不到时回落短名（类里没有该方法）。
 projectionFor : DtClass -> String -> String
-projectionFor cls short =
-  if hasMethodShort cls.dtClassMethods short then
-    classMethodProjection cls.dtClassMethods short
-  else
-    case methodNameAliases short of
-      alt :: rest => if hasMethodShort cls.dtClassMethods alt then classMethodProjection cls.dtClassMethods alt else short
-      [] => short
+projectionFor cls short = classMethodProjection cls.dtClassMethods short
 
--- `eq` / `neq` 的饱和应用（运算符是方法别名）：`Int` / `String`
+-- `==` / `/=` 的饱和应用：`Int` / `String`
 -- 特化成具体运行时函数；其它类型解析成 `Eq` 字典的方法投影（手写实例、`deriving (Eq)`、
 -- 约束实例都算证据）。
 -- 方法投影名与字典名从库里短名 `Eq` 的类表项取（`Base.Trait.Eq.Eq`），不用硬编码 `Dict_Eq`。
--- `name` 已是被解析成方法投影的完整名（`Base.Trait.Eq.eq` / `.neq`），因此字典分支
--- 直接用它，没有 `==` → `eq` 的映射。
+-- `name` 已是被解析成方法投影的完整名（`Base.Trait.Eq.==` / `Base.Trait.Eq./=`），因此字典分支
+-- 直接用它。
 --
 -- **没有泛型结构比较兜底**——程序里没有 `Eq` 类、或具体类型搜不到实例时
 -- 在 check 期报错（`TC_EqRequiresEvidence` / `TC_NoInstanceFound`），不退回
@@ -1180,7 +1114,7 @@ specializeEqTy globals ctx name aTerm bTerm sp aTy ec =
         Just cls =>
           let
             mname =
-              if name == "==" || name == "/=" || name == "eq" || name == "neq" then
+              if name == "==" || name == "/=" then
                 projectionFor cls (eqMethodShortOf name)
               else
                 name
@@ -1207,14 +1141,14 @@ deferEqDict globals ctx mname tyTerm aTerm bTerm sp dictTy ec =
         (Just (Pair (TApp (TApp (TApp (TApp (TGlobal mname) tyTerm Rig0) metaTerm RigOmega) aTerm Rig1) bTerm Rig1) (Pair boolTyValue (ecAddConstraint ec1 CkDict m dictTy (Just sp) 0))))
 
 -- ---------------------------------------------------------------
--- `lt` / `le` / `gt` / `ge` 的饱和应用按实参类型特化
+-- `<` / `<=` / `>` / `>=` 的饱和应用按实参类型特化
 -- ---------------------------------------------------------------
--- 与 `eq` / `neq` 同构：`Int` / `String` / `Bool` / `Float` 走具体运行时函数；其它类型
+-- 与 `==` / `/=` 同构：`Int` / `String` / `Bool` / `Float` 走具体运行时函数；其它类型
 -- 解析成 `Ord` 字典的方法投影（`deriving (Ord)` 生效），刚性类参数延迟提升成
 -- `{d : Dict_Ord a}`。
 -- 每个类型一个符号族：`String` 是指针、`Bool` 是 0/1 裸字，共享一个「泛型比较」符号时
 -- 后端在运行时无法区分（native 的值没有类型标签）。
--- `name` 是方法投影完整名（`Base.Trait.Ord.lt` 等），特化只按短名选 runtime 名。
+-- `name` 是方法投影完整名（`Base.Trait.Ord.<` 等），特化只按短名选 runtime 名。
 cmpRuntimeName : Span -> String -> String -> Check String
 cmpRuntimeName sp method "Int" =
   if isLtShort method then
@@ -1245,13 +1179,13 @@ cmpRuntimeName sp method tyName =
     tcErr2 sp (OpNotDefinedFor method tyName) method tyName
 
 isLtShort : String -> Bool
-isLtShort m = m == "<" || m == "lt"
+isLtShort m = m == "<"
 
 isLeShort : String -> Bool
-isLeShort m = m == "<=" || m == "le"
+isLeShort m = m == "<="
 
 isGtShort : String -> Bool
-isGtShort m = m == ">" || m == "gt"
+isGtShort m = m == ">"
 
 -- 字典的类参数还有未解元变量时**不做实例搜索**：否则会像 `srt (\x,y => x <= y) xs`
 -- 那样被第一个内建实例（Ord Int）提前定死，随后与 `List a` 统一时报 occurs check。
@@ -1288,7 +1222,7 @@ specializeCmpTy globals ctx name aTerm bTerm sp aTy ec =
         Just cls =>
           let
             mname =
-              if name == "<" || name == "<=" || name == ">" || name == ">=" || name == "lt" || name == "le" || name == "gt" || name == "ge" then
+              if name == "<" || name == "<=" || name == ">" || name == ">=" then
                 projectionFor cls (cmpMethodShortOf name)
               else
                 name
