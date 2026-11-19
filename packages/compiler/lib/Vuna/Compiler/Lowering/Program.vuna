@@ -224,12 +224,30 @@ lowerLamFuel fuel env st binders name rig slot sp body =
           resultIr =
             case resultTy of
               Nothing => Nothing
-              Just t => annotTyOf env envB t
+              Just t =>
+                case annotTyOf env envB t of
+                  Just ty => Just ty
+                  -- 族实参不可命名（类型变量、擦除占位）时仍要留下「结果是 Eff」这一位：
+                  -- 机器化 CPS 只按它判定 `a -> Eff r b`（见 Ir.Cps.isEffResultTy）。
+                  Nothing => effResultTyOf t
         in Vuna.Compiler.Base.Common.bind (lowerTermFuel (fuel - 1) env st envB inner) (
             \p =>
               case p of
                 Pair b st2 => OkC (Pair (IrLam bs resultIr b) st2)
           )
+
+-- | 结果类型不可命名时的族身份：只认 `Eff`（实体是数据族，运行时类型实参无用途）。
+effResultTyOf : Term -> Maybe IrTy
+effResultTyOf t =
+  case headGlobalOf t of
+    Just g => if g == irEffTypeName then Just (IrTyData irEffTypeName [IrTyOpaque]) else Nothing
+    Nothing => Nothing
+
+headGlobalOf : Term -> Maybe String
+headGlobalOf (TGlobal g) = Just g
+headGlobalOf (TApp f _ _) = headGlobalOf f
+headGlobalOf (TRecord g _) = Just g
+headGlobalOf _ = Nothing
 
 -- lambda 链的 binder 表（外→内）：每个 binder 的注解按它自己的外层上下文解析。
 bindersOfParams : LwEnv -> List IrBinder -> List LamParam -> List IrBinder
