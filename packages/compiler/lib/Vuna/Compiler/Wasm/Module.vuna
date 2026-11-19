@@ -21,7 +21,6 @@ import Vuna.Compiler.Ir.Model
 import Vuna.Compiler.Ir.Analysis
 import Vuna.Compiler.Ir.Cps
 import Vuna.Compiler.Ir.Anf
-import Vuna.Compiler.Wasm.Step
 import Vuna.Compiler.Ir.Runtime
 import Vuna.Compiler.Wasm.Instr
 import Vuna.Compiler.Wasm.Model
@@ -1747,16 +1746,12 @@ defsUseSyms : List String -> List IrDef -> Bool
 defsUseSyms syms [] = False
 defsUseSyms syms (d :: rest) = if defUsesSyms syms d then True else defsUseSyms syms rest
 
-consoleOnly : List String -> Bool
-consoleOnly [] = True
-consoleOnly (t :: rest) = t == "Base.Effect.Console.ConsoleOp" && consoleOnly rest
-
 listNull : List a -> Bool
 listNull [] = True
 listNull (_ :: _) = False
 
-buildModule : Int -> GenState -> List IrDef -> Maybe IrEntry -> Bool -> Int -> Maybe WasmListFam -> Result WasmModule
-buildModule fuel st ordered entry printResult effMode listFamM =
+buildModule : Int -> GenState -> List IrDef -> Maybe IrEntry -> Bool -> Maybe WasmListFam -> Result WasmModule
+buildModule fuel st ordered entry printResult listFamM =
   case genDefFuncs fuel st ordered of
     Err msg => Err msg
     Ok pf =>
@@ -1770,45 +1765,28 @@ buildModule fuel st ordered entry printResult effMode listFamM =
             startState = secondOf p
             startFunc = WatFunc "$_start" "" [] [] startState.gsLocals (firstOf p)
             lamFuncs = reverse startState.gsFuncs
-            elems = reverse startState.gsElems
-            elemNames = if effMode == 6 then append elems ["$rt_mRunEff"] else elems
-            rtSelected =
-              if effMode == 6 then
-                append (rtFunctions st.gsConsts) mFunctions
-              else
-                rtFunctions st.gsConsts
+            elems0 = reverse startState.gsElems
+            -- 机器路径的 `runEff` helper 走直接调用，但仍要进 elem 声明（间接引用）。
+            elems = if memName "$rt_mRunEff" elems0 then elems0 else append elems0 ["$rt_mRunEff"]
+            rtSelected = rtFunctions st.gsConsts
             funcs =
               append
                 rtSelected
                 (append (wasmCompareFuncs st.gsConsts st.gsFams) (append (wasmBridgeFuncs listFamM) (append userFuncs (append lamFuncs [startFunc]))))
             famTypes = concatMapType st.gsFams
-            allTypes =
-              if effMode == 6 then
-                append baseTypes (append stepTypes famTypes)
-              else
-                append baseTypes famTypes
+            allTypes = append baseTypes famTypes
             tags = []
             baseGlobals =
-              if effMode == 6 then
-                [
-                  WatGlobal "$g_cleanups" WvAnyRef [IRefNull],
-                  WatGlobal "$g_hostStatus" WvI32 [IConstI32 0],
-                  WatGlobal "$g_cleanDepth" WvI32 [IConstI32 0],
-                  WatGlobal "$g_stepHandlers" WvAnyRef [IRefNull],
-                  WatGlobal "$g_mctx" WvAnyRef [IRefNull]
-                ]
-              else
-                [
-                  WatGlobal "$g_cleanups" WvAnyRef [IRefNull],
-                  WatGlobal "$g_hostStatus" WvI32 [IConstI32 0],
-                  WatGlobal "$g_cleanDepth" WvI32 [IConstI32 0],
-                  WatGlobal "$g_self" WvAnyRef [IRefNull]
-                ]
+              [
+                WatGlobal "$g_cleanups" WvAnyRef [IRefNull],
+                WatGlobal "$g_hostStatus" WvI32 [IConstI32 0],
+                WatGlobal "$g_cleanDepth" WvI32 [IConstI32 0]
+              ]
             globals = append baseGlobals (globalsOf ordered)
             dataText = poolBytes st.gsPool
             dataM = if strLength dataText == 0 then Nothing else Just (WatData "$d0" dataText)
           in Ok
-            (WasmModule allTypes tags baseImports globals funcs elemNames dataM [WatExport "func" "_start" "$_start"] 4)
+            (WasmModule allTypes tags baseImports globals funcs elems dataM [WatExport "func" "_start" "$_start"] 4)
 
 -- ---------------------------------------------------------------
 -- 宿主效应直连（静态改写）
@@ -2096,12 +2074,12 @@ build program printResult =
         dt = HashMap.fromList (map (\d => Pair (irDefName d) d) ds)
       in GenState fams famTbl ds dt offsets poolTbl [] [] 0 [] consts [] False 0
     st0 = mkSt defsAll
-    buildAnf : List IrDef -> Int -> Maybe IrEntry -> Maybe WasmListFam -> WasmOutcome
-    buildAnf ds mode entry0 lf =
+    buildAnf : List IrDef -> Maybe IrEntry -> Maybe WasmListFam -> WasmOutcome
+    buildAnf ds entry0 lf =
       case anfProgramDefs ds of
         Err msg => WasmRejected (WasmInternal ("ANF: " ++ msg))
         Ok ds1 =>
-          case buildModule 100000 (mkSt ds1) ds1 entry0 printResult mode lf of
+          case buildModule 100000 (mkSt ds1) ds1 entry0 printResult lf of
             Ok m => WasmOk m
             Err msg => WasmRejected (classifyWasmErr msg)
   in case entry of
@@ -2162,10 +2140,10 @@ build program printResult =
             []
             (irEntryRowTagsOf e)
       in if directable then
-        buildAnf (append rewritten [pureKDef]) 0 (Just entryClean) listFamM
+        buildAnf (append rewritten [pureKDef]) (Just entryClean) listFamM
       else
         case cpsDefsMachine ordered of
-          Ok cpsOrdered => buildAnf cpsOrdered 6 (Just e) listFamM
+          Ok cpsOrdered => buildAnf cpsOrdered (Just e) listFamM
           Err msg => WasmRejected (WasmUnsupported msg)
 
 -- | `Show Float` 的实现（`Base.Data.Float.floatRender`）；入口展示与用户 `show` 共用。

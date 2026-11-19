@@ -97,6 +97,17 @@ rtApply =
       ]
   in rtFunc "$rt_apply" params [WvAnyRef] locals body
 
+-- | 用续延 K 跑一个 `Eff` 的 thunk（dummy 单元取 null：thunk 体不看它）。
+--   机器路径（`@ir@m@*` → `Base.Effect.Core.Control`）里的 `runEff` 落到这里。
+rtMRunEff : WatFunc
+rtMRunEff =
+  rtFunc
+    "$rt_mRunEff"
+    [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef]
+    [WvAnyRef]
+    []
+    [ILocalGet "$p0", IRefNull, ICall "$rt_apply", ILocalGet "$p1", ICall "$rt_apply"]
+
 -- ---------------------------------------------------------------
 -- 数值/布尔 helper
 -- ---------------------------------------------------------------
@@ -981,8 +992,8 @@ rtArrayOob c =
 -- 效应原语（宿主层叶子 + IORef）
 -- ---------------------------------------------------------------
 -- `Eff` 的运行时壳是 base 的 `MkEff` data；这些原语只负责「做一次宿主操作」。
--- 续延（`prim_effectPerform` / `prim_effectHandle`）走 stack switching；cleanup 登记表
--- 只维护 LIFO（abort 路径不运行，见 `rtCleanupPush`）。
+-- 续延与 handler 由 base 的效应机器（`Base.Effect.Core.Control` + `machineRun`）驱动；
+-- cleanup 登记表只维护 LIFO，正常路径由 `bracket` pop，异常路径由机器弹帧前跑。
 rtEffNewRef : WatFunc
 rtEffNewRef =
   rtFunc
@@ -1695,8 +1706,8 @@ rtHostTrap c n =
     (failWithConst c.rtcHostOff c.rtcHostLen)
 
 -- | `bracket` 的 cleanup 登记表：全局 LIFO（无调度器时只有一个 fiber）。
---   正常路径由 `bracket` 自己 pop + 执行 release；abort 路径不运行登记表（与 native 的
---   硬中止限制一致），因此这里只维护栈本身。
+--   正常路径由 `bracket` 自己 pop + 执行 release；异常/中断路径由效应机器在弹帧前跑
+--   （`Base.Effect.Core.dropCleanups`），因此这里只维护栈本身。
 rtCleanupPush : WatFunc
 rtCleanupPush =
   let
@@ -1822,6 +1833,7 @@ export rtFunctions : RtConsts -> List WatFunc
 rtFunctions c =
   [
     rtApply,
+    rtMRunEff,
     rtCpsUnhandled c,
     rtCpsUnhandled2 c,
     rtResumeTwice c,

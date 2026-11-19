@@ -37,22 +37,6 @@ irCpsHandleName = "@ir@cps@handle"
 export irCpsSelfName : String
 irCpsSelfName = "@ir@cps@self"
 
--- | 选择性 CPS + Step trampoline 的协议名。
-export irSelPerformName : String
-irSelPerformName = "@ir@sel@perform"
-
-export irSelHandleName : String
-irSelHandleName = "@ir@sel@handle"
-
-export irSelSelfName : String
-irSelSelfName = "@ir@sel@self"
-
-export irSelRunName : String
-irSelRunName = "@ir@sel@run"
-
-export irSelDoneName : String
-irSelDoneName = "@ir@sel@done"
-
 export irMPerformName : String
 irMPerformName = "@ir@m@perform"
 
@@ -502,177 +486,6 @@ transformGroups fuel xs =
               Ok rest1 => Ok (g1 :: rest1)
 
 -- ---------------------------------------------------------------
--- 选择性 CPS + Step：handler clause 显式 CPS
--- ---------------------------------------------------------------
--- 协议：`opH: \o k -> body` → `\o k kDone -> body'`。
---   * `k v` 是 resumption，直接返回 Step（不追加 kDone）；
---   * 其它结果/控制流交给 `kDone`（driver 弹 frame 后交 kOuter）；
---   * `ret` 保持原样（normal return 时 driver 先 ret 再 kOuter）。
-selSym : String -> String
-selSym s =
-  if s == irCpsPerformName then
-    irSelPerformName
-  else if s == irCpsHandleName then
-    irSelHandleName
-  else if s == irCpsSelfName then irSelSelfName else s
-
-selSyms : Int -> Ir -> Ir
-selSyms fuel e =
-  if fuel <= 0 then
-    e
-  else
-    case e of
-      IrRt s => IrRt (selSym s)
-      IrRtApp s args => IrRtApp (selSym s) (selSList (fuel - 1) args)
-      IrCtor fam ctor _ args => IrCtor fam ctor Nothing (selSList (fuel - 1) args)
-      IrRecord fam _ fs => IrRecord fam Nothing (selSFields (fuel - 1) fs)
-      IrProj b fam f _ => IrProj (selSyms (fuel - 1) b) fam f Nothing
-      IrRecUpd b fam fs _ => IrRecUpd (selSyms (fuel - 1) b) fam (selSFields (fuel - 1) fs) Nothing
-      IrCast cFrom cTo x => IrCast cFrom cTo (selSyms (fuel - 1) x)
-      IrLet bs rhs body => IrLet bs (selSyms (fuel - 1) rhs) (selSyms (fuel - 1) body)
-      IrLam bs rt body => IrLam bs rt (selSyms (fuel - 1) body)
-      IrApp _ f a => IrApp Nothing (selSyms (fuel - 1) f) (selSyms (fuel - 1) a)
-      IrIf c t el => IrIf (selSyms (fuel - 1) c) (selSyms (fuel - 1) t) (selSyms (fuel - 1) el)
-      IrCase caseTy _ s alts => IrCase caseTy Nothing (selSyms (fuel - 1) s) (selSymsAlt (fuel - 1) alts)
-      IrNatCase s fr z su ca => IrNatCase (selSyms (fuel - 1) s) fr (selSymsAltM (fuel - 1) z) (selSymsAltM (fuel - 1) su) (selSymsAltM (fuel - 1) ca)
-      IrConcatMany xs => IrConcatMany (selSList (fuel - 1) xs)
-      IrEffThunk fam ctor u arity prim => IrEffThunk fam ctor u arity (selSyms (fuel - 1) prim)
-      _ => e
-
-selSList : Int -> List Ir -> List Ir
-selSList fuel xs =
-  if fuel <= 0 then
-    xs
-  else
-    case xs of
-      [] => []
-      x :: rest => selSyms (fuel - 1) x :: selSList (fuel - 1) rest
-
-selSFields : Int -> List (Pair String Ir) -> List (Pair String Ir)
-selSFields fuel fs =
-  if fuel <= 0 then
-    fs
-  else
-    case fs of
-      [] => []
-      p :: rest => Pair (firstOf p) (selSyms (fuel - 1) (secondOf p)) :: selSFields (fuel - 1) rest
-
-selSymsAlt : Int -> List IrAlt -> List IrAlt
-selSymsAlt fuel alts =
-  if fuel <= 0 then
-    alts
-  else
-    case alts of
-      [] => []
-      a :: rest => IrAlt a.irAltCtor a.irAltBinders (selSyms (fuel - 1) a.irAltBody) :: selSymsAlt (fuel - 1) rest
-
-selSymsAltM : Int -> Maybe IrAlt -> Maybe IrAlt
-selSymsAltM fuel m =
-  if fuel <= 0 then
-    m
-  else
-    case m of
-      Nothing => Nothing
-      Just a => Just (IrAlt a.irAltCtor a.irAltBinders (selSyms (fuel - 1) a.irAltBody))
-
--- | trampoline 边界：`stepRun (runThunk e unit stepDone)`。
-stepDoneCont : Ir
-stepDoneCont =
-  let
-    v = mkBinder "__selId"
-  in IrLam [v] Nothing (IrApp Nothing (IrRt irSelDoneName) (IrVar v))
-
-selTrampolineBody : String -> Ir -> Result Ir
-selTrampolineBody name (IrLam bs rt inner) =
-  case selTrampolineBody name inner of
-    Err msg => Err msg
-    Ok b => Ok (IrLam bs rt b)
-selTrampolineBody name (IrCast cFrom cTo inner) =
-  case selTrampolineBody name inner of
-    Err msg => Err msg
-    Ok b => Ok (IrCast cFrom cTo b)
-selTrampolineBody name (IrApp _ (IrApp _ (IrApp _ (IrGlobal g) e) u) _idc) =
-  if g == runThunkName then
-    Ok (IrApp Nothing (IrRt irSelRunName) (applyAll (IrGlobal g) [e, u, stepDoneCont]))
-  else
-    Err ("selective CPS: unexpected trampoline shape: " ++ name)
-selTrampolineBody name _ = Err ("selective CPS: unexpected trampoline shape: " ++ name)
-
--- | `handleScoped`：`@ir@sel@self th stepDone`。
-selSelfBody : Int -> Ir -> Result Ir
-selSelfBody fuel body =
-  if fuel <= 0 then
-    Ok body
-  else
-    case body of
-      IrLam bs rt inner =>
-        case selSelfBody (fuel - 1) inner of
-          Err msg => Err msg
-          Ok b => Ok (IrLam bs rt b)
-      IrCast cFrom cTo inner =>
-        case selSelfBody (fuel - 1) inner of
-          Err msg => Err msg
-          Ok b => Ok (IrCast cFrom cTo b)
-      IrCase caseTy _ s alts =>
-        case selSelfAlts (fuel - 1) alts of
-          Err msg => Err msg
-          Ok a => Ok (IrCase caseTy Nothing s a)
-      IrApp _ (IrApp _ (IrRt s) th) idc => if s == irSelSelfName then Ok (IrApp Nothing (IrApp Nothing (IrRt s) th) stepDoneCont) else Err "selective CPS: unexpected handleScoped shape"
-      _ => Err "selective CPS: unexpected handleScoped shape"
-
-selSelfAlts : Int -> List IrAlt -> Result (List IrAlt)
-selSelfAlts fuel alts =
-  if fuel <= 0 then
-    Ok alts
-  else
-    case alts of
-      [] => Ok []
-      a :: rest =>
-        case selSelfBody (fuel - 1) a.irAltBody of
-          Err msg => Err msg
-          Ok b =>
-            case selSelfAlts (fuel - 1) rest of
-              Err msg => Err msg
-              Ok r => Ok (IrAlt a.irAltCtor a.irAltBinders b :: r)
-
-selDef : Int -> IrDef -> Result IrDef
-selDef fuel d =
-  if fuel <= 0 then
-    Ok d
-  else
-    case d of
-      IrExternDef _ _ _ _ => Ok d
-      IrDef name arity deps _ body recOk initGuard span =>
-        let
-          b = selSyms (fuel - 1) body
-        in if name == runPureName || name == runEffName || name == runMainName then
-          case selTrampolineBody name b of
-            Err msg => Err msg
-            Ok b1 => Ok (IrDef name arity deps Nothing b1 recOk initGuard span)
-        else if name == handleScopedName then
-          case selSelfBody (fuel - 1) b of
-            Err msg => Err msg
-            Ok b1 => Ok (IrDef name arity deps Nothing b1 recOk initGuard span)
-        else
-          Ok (IrDef name arity deps Nothing b recOk initGuard span)
-
-selDefs : Int -> List IrDef -> Result (List IrDef)
-selDefs fuel defs =
-  if fuel <= 0 then
-    Ok defs
-  else
-    case defs of
-      [] => Ok []
-      d :: rest =>
-        case selDef (fuel - 1) d of
-          Err msg => Err msg
-          Ok d1 =>
-            case selDefs (fuel - 1) rest of
-              Err msg => Err msg
-              Ok rest1 => Ok (d1 :: rest1)
-
--- | 选择性 CPS + Step 入口：先做现有 thunk lowering，再改 handler clause / 符号 / trampoline。
--- ---------------------------------------------------------------
 -- 机器化 handler CPS（方案 2 第一层）：resumption 改成 (v, kRest)
 -- ---------------------------------------------------------------
 mBNameText : IrBName -> String
@@ -741,7 +554,7 @@ mFreshR : Int -> IrBinder
 mFreshR n = mkBinder ("__mchR" ++ strFromInt n)
 
 -- | λ 的结果类型是不是 `Eff r a`：机器化 CPS 据此区分 `a -> Eff r b` 与普通函数。
--- `Eff` 的运行时类型参数槽为空，所以任何行/结果实参都落到 `IrTyData effTypeName []`。
+-- `Eff` 的运行时实参记成 `[IrTyOpaque]`（结果类型不可命名时）；这里只比族名。
 isEffResultTy : Maybe IrTy -> Bool
 isEffResultTy (Just (IrTyData fam _)) = fam == irEffTypeName
 isEffResultTy _ = False
@@ -1685,12 +1498,6 @@ cpsDefsMachine defs =
     Ok ds =>
       Ok
         (map mStepsDef (map mApplysDef (map mMarkedDef (mDefs (collectHandleOpsDefs 100000 ds) startFuel ds))))
-
-export cpsDefsStep : List IrDef -> Result (List IrDef)
-cpsDefsStep defs =
-  case cpsDefs defs of
-    Err msg => Err msg
-    Ok ds => selDefs startFuel ds
 
 -- | 单元级入口：改写所有组；入口展示节点是纯值，不需要 CPS。
 export cpsUnit : IrUnit -> Result IrUnit

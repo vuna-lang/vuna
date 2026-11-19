@@ -92,7 +92,7 @@ binder 全量拷进 `$env` 数组（与 native 同策略），闭包应用经 `$
 | `IrCtor` / `IrRecord` / `IrProj` / `IrRecUpd` / `IrCase` | 支持 | WasmGC struct：变体 `(field i32 tag) (field anyref...)`；record 纯字段 |
 | Float | 支持 | `$float` struct + f64 指令；比较按 IEEE 语义；展示走 `Base.Data.Float.floatRender` |
 | Eff thunk / IORef | 支持 | `MkEff` 包装原语；`IORef` 是长度 1 的 `$arr` |
-| Effect handlers | 支持 | 泛型 tag + `resume`/`suspend`；key/name 不匹配时转发外层；见 [wasm-effects.md](wasm-effects.md) |
+| Effect handlers | 支持 | 泛型 tag + `resume`/`suspend`；key/name 不匹配时转发外层；见 [effect-machine.md](effect-machine.md) |
 | `IrEffBind` | 拒绝 | effect 的 bind 降级；与 native 同一限制 |
 | extern / FFI | 拒绝 | `IrExternDef` 在生成期报 `WasmUnsupported` |
 
@@ -300,7 +300,7 @@ WASI preview1，宿主侧逐函数实现。下表的「允许」指浏览器平�
 | 能力 | 状态 | 构建期 / 运行期 |
 | --- | --- | --- |
 | 纯计算、WasmGC 值、结构化比较 | 支持 | — |
-| `Eff` 的 handler | 全部走显式效应机器（`@ir@m@*`），宿主家族与用户/作用域 handler 同一套帧 | 产物默认引擎可跑；`bracket`/`finally` 的清理钩子尚未实现（显式拒绝） |
+| `Eff` 的 handler | 全部走显式效应机器（`@ir@m@*`），宿主家族与用户/作用域 handler 同一套帧 | 产物默认引擎可跑；`bracket`/`finally` 的 cleanup 由机器弹帧前按深度执行 |
 | `FsOp` 核心（经 `@vuna@host@try*` + fd 3 preopen） | 支持 | 需 preopen + mutate 权限；失败经 errno 走 `FsOp` 错误通道 |
 | `ConsoleOp` / `ExitOp` / `ArgsOp` / `EnvOp` / `RefOp` | 支持 | `getcwd` 恒 `/`、`execPath` 空串、`isTty` 恒 `False` |
 | `ClockOp.Now` | 支持 | monotonic clock |
@@ -359,11 +359,11 @@ WASI preview1，宿主侧逐函数实现。下表的「允许」指浏览器平�
 - **宿主效应直连**（`Wasm.Module` 的 `sendCore` 改写）：入口行里的内建宿主效应在
   「可达代码没有用户 handler」时被降成 `MkEff (\_ => runMain (opH op pureK))`——`opH`
   是该族的宿主解释器，`pureK` 是模块生成的纯动作续延。入口也不再预装这些家族。
-- **显式效应机器**（`Ir.Cps` + `Wasm.Step`）：其余程序整片走 `@ir@m@*`——续延只返回
+- **显式效应机器**（`Ir.Cps` + `Base.Effect.Core.Control`）：其余程序整片走 `@ir@m@*`——续延只返回
   `Control`（`Done`/`Apply`/`Perform`/`Handle`），机器循环单层派发；handler 帧在链上，
   answer 是 `Eff` 时 resume 会把帧装回去。宿主家族、用户 handler、作用域 handler 同一套帧。
-- **清理钩子**：`bracket`/`finally` 依赖的 `prim_cleanupPush/Pop` 还没在机器上实现，
-  wasm 侧显式拒绝并给出诊断（debt D42）。
+- **清理钩子**：`bracket`/`finally` 经 `prim_cleanupPush/Pop` 维护 LIFO，机器在弹帧前
+  按帧深度跑（`Base.Effect.Core.dropCleanups`）。
 
 实测读数（`test/suite/fixtures/wasm_engine_probe/probe.sh`，node 24.22 / Chromium 145）：
 

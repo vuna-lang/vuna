@@ -130,7 +130,6 @@ modules = [
   "Vuna.Compiler.Wasm.Module",
   "Vuna.Compiler.Wasm.Render",
   "Vuna.Compiler.Wasm.Runtime",
-  "Vuna.Compiler.Wasm.Step",
   "Vuna.Compiler.Wasm.Types",
 ]
 

@@ -341,9 +341,9 @@ lowering 侧同时修了 `mSteps` 的**应用脊重建**：`runThunk e u k` 之�
   `$rt_mRun` 是循环，resume 链不占 wasm 帧）。需要在机器里把「续延转移」做成
   tail 路径（显式 work item / 队列），否则只能靠 `return_call_ref` 级别的改造。
 
-在 3 个缺口关闭前，wasm 仍走 `Wasm/Step.vuna` 的 wat 机器（`$rt_m*`），
-`cpsDefsMachine` 里的 `map mStepsDef` 保持关闭；上面 4 条协议修复与 lowering 的应用脊
-修复都已在库里，接入时直接生效。
+在 3 个缺口关闭前，wasm 曾走 `Wasm/Step.vuna` 的 wat 机器（`$rt_m*`）；
+这些都已由 base 机器与 `cpsDefsMachine`（`@ir@m@*`）覆盖，wat 机器与对应的
+step 类型/全局已从产物中删除。
 - **cleanup（52、53）**：已进 base——`MSt` 带 cleanup 栈 + 深度，`Frame` 记安装时
   深度；`Control.MkPushCleanup`/`MkPopCleanup` 直接改状态，`finish` 弹帧前用
   `dropCleanups` 按深度跑（thunk 宿主直调、结果丢弃）；`bracket` 改走
@@ -398,10 +398,7 @@ wasm: vuna tests passed (337 checks)   # 含 08/09/52/53/56/57/106
 拿不到 `return_call`。现在 `runGo` 的自调用在 wat 里是 `return_call $f_runGo`，
 effdepth 的 2000 次顺序 perform 在引擎默认栈下输出 2000。
 
-剩余：`Wasm/Step.vuna` 的 `$rt_m*` 仍是静态发射的运行时表（程序已不再调用其中大部分，
-只 `$rt_mRunEff` 还在用）——下一步删掉死表并把 `@ir@m@runEff` 收敛成一个普通 helper；
-之后按 native（`prim_effectPerform/Handle/Self` → `Control` + `machineRun`，D89 消失）
-→ OCaml（保留 `Effect.Deep` 作差分 oracle）推进。
+剩余：OCaml 仍用 `Effect.Deep`（差分 oracle）。
 
 ### 9.2.4 native 切换的进展与卡点
 
@@ -476,24 +473,19 @@ wasm：337 checks 全绿
 `105_native_backend` 按库机器改写：删掉「续延栈段越界」用例（段已不存在），增量编译
 计数从 3 改为 8。`30_eff_process` 随 process handler 简化一起通过。
 
-剩余：OCaml 仍用 `Effect.Deep`；`Wasm/Step.vuna` 的 `$rt_m*` 死表仍静态发射。
+剩余：OCaml 仍用 `Effect.Deep`（差分 oracle）。
 
-### 9.2.6 wasm 的 wat 机器已停止发射
+### 9.2.6 wasm 的 step 协议已删除
 
-库机器接管后，wasm 生成代码只用到 `@ir@m@runEff`（普通应用 helper）。因此：
+wasm 生成代码与 native 一样只驱动 base 机器（`@ir@m@*` → `Control` → `machineRun`）：
 
-- `Wasm/Step.vuna` 的 `mFunctions` 只剩 `rtMRunEff`（`$rt_mDone/$rt_mPerform/
-  $rt_mHandle/$rt_mApply/$rt_mSelf/$rt_mRun/$rt_mKDone/$rt_mRes1/$rt_mRes2/
-  $rt_mKComp/$rt_mInChain/$rt_mRunCleanups/$rt_mPureThunk*/$rt_mKAns` 都不再发射）；
-- `Wasm/Runtime.vuna` 移除 `@ir@m@done/perform/handle/apply/self/run` 的符号映射
-  （残留用法会变成 hard error）；
-- `Wasm/Module.vuna` 的 elem-declare 名单只保留 `$rt_mRunEff`。
+- `Ir.Cps` 只提供 `cpsDefsMachine`；选择性 CPS / Step 协议的符号族（`@ir@sel@*`）与
+  对应 pass 已删除；
+- `Wasm/Module.vuna` 不再发射 step 类型（`$step` / `$hframe` / `$mctx` / …）与
+  `$g_stepHandlers` / `$g_mctx` 全局，elem 名单里没有 `$rt_mRunEff`；
+- `Wasm/Runtime.vuna` 的 cleanup 表只维护 LIFO，异常路径由机器在弹帧前跑。
 
-产物实测（48_eff_many 的 main.wat）只剩：
-
-```text
-$rt_mRunEff  ×4   （定义 + elem + 调用）
-```
+产物实测（48_eff_many 的 main.wat）只有 `$rt_mRunEff` 的普通 helper 调用形态。
 
 读数：wasm 337 / native 445 / 全量 7207 全绿。
 
@@ -505,7 +497,7 @@ $rt_mRunEff  ×4   （定义 + elem + 调用）
 | 2 | `Eff.Machine` 写出来（vuna），先用 `Done/Apply` 跑一个手搭的 Control | native 上跑通 |
 | 3 | **native** 接机器：`prim_effectPerform/Handle/Self` 改成构造 `Control`，入口跑一次 `run`；删栈拷贝路径 | `pure-cross` + `effect-common` 全绿；D89 的 O(N²) 读数消失 |
 | 4 | **OCaml** 接机器（先保留 `Effect.Deep` 作为差分 oracle 跑同一组夹具，再切库机器） | 同上 |
-| 5 | **wasm** 用机器替换 `Wasm/Step.vuna` 里的手写 wat 机器（`@ir@m@*` 变成对库函数的 `IrGlobal` 调用） | `106` 默认栈；`114/115` 冒烟 |
+| 5 | **wasm** 接同一台机器（`@ir@m@*` 变成对库函数的 `IrGlobal` 调用；手写 wat 机器已删除） | `106` 默认栈；`114/115` 冒烟 |
 
 ### 9.4 风险与边界
 

@@ -30,7 +30,7 @@ Loader → Elab → Core ──Lowering──> IR ──Codegen.{Decl,Term,Assem
 - **CPS lowering（wasm）**：`Ir.Cps` 是 `Ir -> Ir` 的后端内变换（不改变 Lowering 产物）：
   只把 `MkEff` / `MkScoped` / `IrEffThunk` 的 thunk 改成显式 `k`，并把
   `prim_effect*` 换成 `@ir@cps@*`。纯代码与调用约定不变；详见
-  [wasm-effects.md](wasm-effects.md)。
+  [effect-machine.md](effect-machine.md)。
 - 门禁：IR 路径的产物逐字节确定，且与
   [architecture-target.md](../architecture-target.md) 门禁表里的差分口径一致。
 

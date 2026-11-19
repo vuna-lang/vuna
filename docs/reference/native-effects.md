@@ -394,6 +394,6 @@ OCaml 后端用 `Effect.Deep`；native 后端没有运行时调度器，`prim_ef
   `rt_stack_limit`，越界 trap。嵌套 effect 的总开销仍随深度增长
   （[debt.md](debt.md) D89）。
 
-wasm 后端用 stack switching 实现了 handler（见 [wasm-effects.md](wasm-effects.md)）；
+wasm 后端与 native 一样用 base 的显式效应机器实现 handler（见 [effect-machine.md](effect-machine.md)）；
 效应语义的三端对拍在 suite `pure-cross` 分类（`packages/compiler/test/corpus/pure_cross/`，`35_eff_*`–`50_eff_*`），native 的
 机制用例在 `105_native_backend.steps`。
