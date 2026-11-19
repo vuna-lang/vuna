@@ -48,30 +48,30 @@ let v_Vuna_dCompiler_dFrontend_dRast_dName_drnameBase = (fun (mc0 : t_Vuna_dComp
 ))
 
 # 63 "Vuna/Compiler/Frontend/Rast/Name.vuna"
-let v_Vuna_dCompiler_dFrontend_dRast_dName_disCompilerModulePrefix = (fun prefix -> (if (if (if ((Base_dData_dString.v_Base_dData_dString_dstartsWith "Base.") prefix) then true else ((Base_dData_dString.v_Base_dData_dString_dstartsWith "Vuna.") prefix)) then true else ((Base_dData_dString.v_Base_dData_dString_dstartsWith "Base_d") prefix)) then true else ((Base_dData_dString.v_Base_dData_dString_dstartsWith "Vuna_d") prefix)))
+let v_Vuna_dCompiler_dFrontend_dRast_dName_disCompilerModulePrefix = (fun (prefix : string) -> (if (if (if ((Base_dData_dString.v_Base_dData_dString_dstartsWith "Base.") prefix) then true else ((Base_dData_dString.v_Base_dData_dString_dstartsWith "Vuna.") prefix)) then true else ((Base_dData_dString.v_Base_dData_dString_dstartsWith "Base_d") prefix)) then true else ((Base_dData_dString.v_Base_dData_dString_dstartsWith "Vuna_d") prefix)))
 
 # 87 "Vuna/Compiler/Frontend/Rast/Name.vuna"
-let v_Vuna_dCompiler_dFrontend_dRast_dName_dhasIntrinsic = (fun name -> (match (Vuna_dCompiler_dBase_dIntrinsics.v_Vuna_dCompiler_dBase_dIntrinsics_dfindIntrinsic name) with
+let v_Vuna_dCompiler_dFrontend_dRast_dName_dhasIntrinsic = (fun (name : string) -> (match (Vuna_dCompiler_dBase_dIntrinsics.v_Vuna_dCompiler_dBase_dIntrinsics_dfindIntrinsic name) with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__15) -> true
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> false
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 102 "Vuna/Compiler/Frontend/Rast/Name.vuna"
-let rec v_Vuna_dCompiler_dFrontend_dRast_dName_dlastDotAt = (fun index cs found -> (match cs with
+let rec v_Vuna_dCompiler_dFrontend_dRast_dName_dlastDotAt = (fun (index : int) (cs : int Base_dData_dList.t_Base_dData_dList_dList) (found : int) -> (match cs with
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> found
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__16, dtb__17) -> (((v_Vuna_dCompiler_dFrontend_dRast_dName_dlastDotAt (index + 1)) dtb__17) (if (dtb__16 = 46) then index else found))
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 94 "Vuna/Compiler/Frontend/Rast/Name.vuna"
-let v_Vuna_dCompiler_dFrontend_dRast_dName_dsplitGlobalKey = (fun name -> ((fun cs -> ((fun at -> (if (at < 0) then Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing else (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just ({ Base_dData_dPair.f_Base_dData_dPair_dPair_first = (Base_dData_dList.dtp_pack ((Base_dData_dList.v_Base_dData_dList_dtake at) cs)); Base_dData_dPair.f_Base_dData_dPair_dPair_second = (Base_dData_dList.dtp_pack ((Base_dData_dList.v_Base_dData_dList_ddrop (at + 1)) cs)) })))) (((v_Vuna_dCompiler_dFrontend_dRast_dName_dlastDotAt 0) cs) (0 - 1)))) (Base_dData_dList.dtp_unpack name)))
+let v_Vuna_dCompiler_dFrontend_dRast_dName_dsplitGlobalKey = (fun (name : string) -> ((fun cs -> ((fun at -> (if (at < 0) then Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing else (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just ({ Base_dData_dPair.f_Base_dData_dPair_dPair_first = (Base_dData_dList.dtp_pack ((Base_dData_dList.v_Base_dData_dList_dtake at) cs)); Base_dData_dPair.f_Base_dData_dPair_dPair_second = (Base_dData_dList.dtp_pack ((Base_dData_dList.v_Base_dData_dList_ddrop (at + 1)) cs)) })))) (((v_Vuna_dCompiler_dFrontend_dRast_dName_dlastDotAt 0) cs) (0 - 1)))) (Base_dData_dList.dtp_unpack name)))
 
 # 109 "Vuna/Compiler/Frontend/Rast/Name.vuna"
-let v_Vuna_dCompiler_dFrontend_dRast_dName_disPreludeName = (fun name -> ((Base_dData_dList.v_Base_dData_dList_dmemName name) ((Base_dData_dList.v_Base_dData_dList_dappend (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("Type", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("->", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("_", Base_dData_dList.C_Base_dData_dList_dList_Nil))))))) ((Base_dData_dList.v_Base_dData_dList_dappend Vuna_dCompiler_dBase_dIntrinsics.v_Vuna_dCompiler_dBase_dIntrinsics_dpreludeTypeNames) Vuna_dCompiler_dBase_dIntrinsics.v_Vuna_dCompiler_dBase_dIntrinsics_dpreludeValueNames))))
+let v_Vuna_dCompiler_dFrontend_dRast_dName_disPreludeName = (fun (name : string) -> ((Base_dData_dList.v_Base_dData_dList_dmemName name) ((Base_dData_dList.v_Base_dData_dList_dappend (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("Type", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("->", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("_", Base_dData_dList.C_Base_dData_dList_dList_Nil))))))) ((Base_dData_dList.v_Base_dData_dList_dappend Vuna_dCompiler_dBase_dIntrinsics.v_Vuna_dCompiler_dBase_dIntrinsics_dpreludeTypeNames) Vuna_dCompiler_dBase_dIntrinsics.v_Vuna_dCompiler_dBase_dIntrinsics_dpreludeValueNames))))
 
 # 69 "Vuna/Compiler/Frontend/Rast/Name.vuna"
-let v_Vuna_dCompiler_dFrontend_dRast_dName_dclassifyName = (fun name -> (if (Vuna_dCompiler_dFrontend_dAst.v_Vuna_dCompiler_dFrontend_dAst_disHoleName name) then (C_Vuna_dCompiler_dFrontend_dRast_dName_dRName_RHole (name)) else (if (Vuna_dCompiler_dFrontend_dAst.v_Vuna_dCompiler_dFrontend_dAst_disMacroSyntaxName name) then (match (Vuna_dCompiler_dFrontend_dAst.v_Vuna_dCompiler_dFrontend_dAst_dmacroNameOf name) with
+let v_Vuna_dCompiler_dFrontend_dRast_dName_dclassifyName = (fun (name : string) -> (if (Vuna_dCompiler_dFrontend_dAst.v_Vuna_dCompiler_dFrontend_dAst_disHoleName name) then (C_Vuna_dCompiler_dFrontend_dRast_dName_dRName_RHole (name)) else (if (Vuna_dCompiler_dFrontend_dAst.v_Vuna_dCompiler_dFrontend_dAst_disMacroSyntaxName name) then (match (Vuna_dCompiler_dFrontend_dAst.v_Vuna_dCompiler_dFrontend_dAst_dmacroNameOf name) with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__18) -> (C_Vuna_dCompiler_dFrontend_dRast_dName_dRName_RMacro (dtb__18))
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> (C_Vuna_dCompiler_dFrontend_dRast_dName_dRName_RIntrinsic (name))
   | _ -> failwith "DT: impossible branch"

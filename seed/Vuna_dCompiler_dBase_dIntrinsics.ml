@@ -38,7 +38,7 @@ let rec v_Vuna_dCompiler_dBase_dIntrinsics_dtypeIntrinsicArityOfRest = (fun (mc0
 ))
 
 # 88 "Vuna/Compiler/Base/Intrinsics.vuna"
-let v_Vuna_dCompiler_dBase_dIntrinsics_dtypeIntrinsicArityOf = (fun name -> ((v_Vuna_dCompiler_dBase_dIntrinsics_dtypeIntrinsicArityOfRest name) v_Vuna_dCompiler_dBase_dIntrinsics_dtypeIntrinsicArities))
+let v_Vuna_dCompiler_dBase_dIntrinsics_dtypeIntrinsicArityOf = (fun (name : string) -> ((v_Vuna_dCompiler_dBase_dIntrinsics_dtypeIntrinsicArityOfRest name) v_Vuna_dCompiler_dBase_dIntrinsics_dtypeIntrinsicArities))
 
 # 101 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_Vuna_dCompiler_dBase_dIntrinsics_dtypeIntrinsicCtorNames = ((Base_dData_dList.v_Base_dData_dList_dmap v_Vuna_dCompiler_dBase_dIntrinsics_dtypeIntrinsicCtorName) v_Vuna_dCompiler_dBase_dIntrinsics_dtypeIntrinsicArities)
@@ -57,7 +57,7 @@ let rec v_Vuna_dCompiler_dBase_dIntrinsics_dbuiltinEffectRunHostOfRest = (fun (m
 ))
 
 # 172 "Vuna/Compiler/Base/Intrinsics.vuna"
-let v_Vuna_dCompiler_dBase_dIntrinsics_dbuiltinEffectRunHostOf = (fun tag -> ((v_Vuna_dCompiler_dBase_dIntrinsics_dbuiltinEffectRunHostOfRest tag) v_Vuna_dCompiler_dBase_dIntrinsics_dbuiltinEffects))
+let v_Vuna_dCompiler_dBase_dIntrinsics_dbuiltinEffectRunHostOf = (fun (tag : string) -> ((v_Vuna_dCompiler_dBase_dIntrinsics_dbuiltinEffectRunHostOfRest tag) v_Vuna_dCompiler_dBase_dIntrinsics_dbuiltinEffects))
 
 # 184 "Vuna/Compiler/Base/Intrinsics.vuna"
 let rec v_Vuna_dCompiler_dBase_dIntrinsics_dbuiltinEffectImplOfRest = (fun (mc0 : string) (mc1 : t_Vuna_dCompiler_dBase_dIntrinsics_dBuiltinEffect Base_dData_dList.t_Base_dData_dList_dList) -> (match mc1 with
@@ -67,7 +67,7 @@ let rec v_Vuna_dCompiler_dBase_dIntrinsics_dbuiltinEffectImplOfRest = (fun (mc0 
 ))
 
 # 181 "Vuna/Compiler/Base/Intrinsics.vuna"
-let v_Vuna_dCompiler_dBase_dIntrinsics_dbuiltinEffectImplOf = (fun tag -> ((v_Vuna_dCompiler_dBase_dIntrinsics_dbuiltinEffectImplOfRest tag) v_Vuna_dCompiler_dBase_dIntrinsics_dbuiltinEffects))
+let v_Vuna_dCompiler_dBase_dIntrinsics_dbuiltinEffectImplOf = (fun (tag : string) -> ((v_Vuna_dCompiler_dBase_dIntrinsics_dbuiltinEffectImplOfRest tag) v_Vuna_dCompiler_dBase_dIntrinsics_dbuiltinEffects))
 
 # 193 "Vuna/Compiler/Base/Intrinsics.vuna"
 let rec v_Vuna_dCompiler_dBase_dIntrinsics_dbuiltinEffectExistsRest = (fun (mc0 : string) (mc1 : t_Vuna_dCompiler_dBase_dIntrinsics_dBuiltinEffect Base_dData_dList.t_Base_dData_dList_dList) -> (match mc1 with
@@ -77,7 +77,7 @@ let rec v_Vuna_dCompiler_dBase_dIntrinsics_dbuiltinEffectExistsRest = (fun (mc0 
 ))
 
 # 190 "Vuna/Compiler/Base/Intrinsics.vuna"
-let v_Vuna_dCompiler_dBase_dIntrinsics_disBuiltinEffectTag = (fun tag -> ((v_Vuna_dCompiler_dBase_dIntrinsics_dbuiltinEffectExistsRest tag) v_Vuna_dCompiler_dBase_dIntrinsics_dbuiltinEffects))
+let v_Vuna_dCompiler_dBase_dIntrinsics_disBuiltinEffectTag = (fun (tag : string) -> ((v_Vuna_dCompiler_dBase_dIntrinsics_dbuiltinEffectExistsRest tag) v_Vuna_dCompiler_dBase_dIntrinsics_dbuiltinEffects))
 
 # 200 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_Vuna_dCompiler_dBase_dIntrinsics_dprimEffBind1Name = "prim_eff_bind1"
@@ -137,7 +137,7 @@ let v_Vuna_dCompiler_dBase_dIntrinsics_dassertIntrinsicName = "assert"
 let v_Vuna_dCompiler_dBase_dIntrinsics_dtodoIntrinsicName = "todo"
 
 # 311 "Vuna/Compiler/Base/Intrinsics.vuna"
-let v_Vuna_dCompiler_dBase_dIntrinsics_disDebugOnlyName = (fun name -> (if (name = v_Vuna_dCompiler_dBase_dIntrinsics_dassertIntrinsicName) then true else (name = v_Vuna_dCompiler_dBase_dIntrinsics_dtodoIntrinsicName)))
+let v_Vuna_dCompiler_dBase_dIntrinsics_disDebugOnlyName = (fun (name : string) -> (if (name = v_Vuna_dCompiler_dBase_dIntrinsics_dassertIntrinsicName) then true else (name = v_Vuna_dCompiler_dBase_dIntrinsics_dtodoIntrinsicName)))
 
 # 324 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_Vuna_dCompiler_dBase_dIntrinsics_deffRowFamilyName = "Base.Effect.Core.Row"
@@ -197,7 +197,7 @@ let v_Vuna_dCompiler_dBase_dIntrinsics_dintrinsicVisible = (fun (mc0 : t_Vuna_dC
 ))
 
 # 492 "Vuna/Compiler/Base/Intrinsics.vuna"
-let v_Vuna_dCompiler_dBase_dIntrinsics_dintrinsicArity = (fun i -> (v_Vuna_dCompiler_dBase_dIntrinsics_darityOfType (v_Vuna_dCompiler_dBase_dIntrinsics_dintrinsicSignature i)))
+let v_Vuna_dCompiler_dBase_dIntrinsics_dintrinsicArity = (fun (i : t_Vuna_dCompiler_dBase_dIntrinsics_dIntrinsic) -> (v_Vuna_dCompiler_dBase_dIntrinsics_darityOfType (v_Vuna_dCompiler_dBase_dIntrinsics_dintrinsicSignature i)))
 
 # 502 "Vuna/Compiler/Base/Intrinsics.vuna"
 let rec v_Vuna_dCompiler_dBase_dIntrinsics_dtypeReturnsEff = (fun (mc0 : t_Vuna_dCompiler_dBase_dIntrinsics_dIType) -> (match mc0 with
@@ -209,7 +209,7 @@ let rec v_Vuna_dCompiler_dBase_dIntrinsics_dtypeReturnsEff = (fun (mc0 : t_Vuna_
 ))
 
 # 498 "Vuna/Compiler/Base/Intrinsics.vuna"
-let v_Vuna_dCompiler_dBase_dIntrinsics_dintrinsicReturnsEff = (fun i -> (v_Vuna_dCompiler_dBase_dIntrinsics_dtypeReturnsEff (v_Vuna_dCompiler_dBase_dIntrinsics_dintrinsicSignature i)))
+let v_Vuna_dCompiler_dBase_dIntrinsics_dintrinsicReturnsEff = (fun (i : t_Vuna_dCompiler_dBase_dIntrinsics_dIntrinsic) -> (v_Vuna_dCompiler_dBase_dIntrinsics_dtypeReturnsEff (v_Vuna_dCompiler_dBase_dIntrinsics_dintrinsicSignature i)))
 
 # 514 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_Vuna_dCompiler_dBase_dIntrinsics_dintTypeName = "Int"
@@ -221,7 +221,7 @@ let v_Vuna_dCompiler_dBase_dIntrinsics_dstrTypeName = "String"
 let v_Vuna_dCompiler_dBase_dIntrinsics_dfloatTypeName = "Float"
 
 # 106 "Vuna/Compiler/Base/Intrinsics.vuna"
-let v_Vuna_dCompiler_dBase_dIntrinsics_disTypeConstructorName = (fun name -> (if (if (if (name = v_Vuna_dCompiler_dBase_dIntrinsics_dintTypeName) then true else (name = v_Vuna_dCompiler_dBase_dIntrinsics_dstrTypeName)) then true else (name = v_Vuna_dCompiler_dBase_dIntrinsics_dfloatTypeName)) then true else ((v_Vuna_dCompiler_dBase_dIntrinsics_dtypeIntrinsicArityOf name) >= 0)))
+let v_Vuna_dCompiler_dBase_dIntrinsics_disTypeConstructorName = (fun (name : string) -> (if (if (if (name = v_Vuna_dCompiler_dBase_dIntrinsics_dintTypeName) then true else (name = v_Vuna_dCompiler_dBase_dIntrinsics_dstrTypeName)) then true else (name = v_Vuna_dCompiler_dBase_dIntrinsics_dfloatTypeName)) then true else ((v_Vuna_dCompiler_dBase_dIntrinsics_dtypeIntrinsicArityOf name) >= 0)))
 
 # 510 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_Vuna_dCompiler_dBase_dIntrinsics_dtypeIntrinsicNames = (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (v_Vuna_dCompiler_dBase_dIntrinsics_dintTypeName, (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (v_Vuna_dCompiler_dBase_dIntrinsics_dstrTypeName, (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (v_Vuna_dCompiler_dBase_dIntrinsics_dfloatTypeName, Base_dData_dList.C_Base_dData_dList_dList_Nil))))))
@@ -248,7 +248,7 @@ let v_Vuna_dCompiler_dBase_dIntrinsics_dnatZeroCtor = "Base.Data.Nat.Nat.Zero"
 let v_Vuna_dCompiler_dBase_dIntrinsics_dnatSuccCtor = "Base.Data.Nat.Nat.Succ"
 
 # 551 "Vuna/Compiler/Base/Intrinsics.vuna"
-let v_Vuna_dCompiler_dBase_dIntrinsics_disIntrinsicTypeName = (fun name -> ((Base_dData_dList.v_Base_dData_dList_dmemName name) v_Vuna_dCompiler_dBase_dIntrinsics_dpreludeTypeNames))
+let v_Vuna_dCompiler_dBase_dIntrinsics_disIntrinsicTypeName = (fun (name : string) -> ((Base_dData_dList.v_Base_dData_dList_dmemName name) v_Vuna_dCompiler_dBase_dIntrinsics_dpreludeTypeNames))
 
 # 555 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_Vuna_dCompiler_dBase_dIntrinsics_dlistFamilyName = "Base.Data.List.List"
@@ -281,13 +281,13 @@ let v_Vuna_dCompiler_dBase_dIntrinsics_dcfRepr = (fun (mc0 : t_Vuna_dCompiler_dB
 let v_Vuna_dCompiler_dBase_dIntrinsics_dcanonicalFamilies = (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ({ f_Vuna_dCompiler_dBase_dIntrinsics_dCanonicalFamily_cfName = v_Vuna_dCompiler_dBase_dIntrinsics_dboolTypeName; f_Vuna_dCompiler_dBase_dIntrinsics_dCanonicalFamily_cfCtors = (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (v_Vuna_dCompiler_dBase_dIntrinsics_dboolTrueCtor, (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (v_Vuna_dCompiler_dBase_dIntrinsics_dboolFalseCtor, Base_dData_dList.C_Base_dData_dList_dList_Nil)))); f_Vuna_dCompiler_dBase_dIntrinsics_dCanonicalFamily_cfRepr = C_Vuna_dCompiler_dBase_dIntrinsics_dFamilyRepr_FamReprBool }, (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ({ f_Vuna_dCompiler_dBase_dIntrinsics_dCanonicalFamily_cfName = v_Vuna_dCompiler_dBase_dIntrinsics_dnatTypeName; f_Vuna_dCompiler_dBase_dIntrinsics_dCanonicalFamily_cfCtors = (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (v_Vuna_dCompiler_dBase_dIntrinsics_dnatZeroCtor, (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (v_Vuna_dCompiler_dBase_dIntrinsics_dnatSuccCtor, Base_dData_dList.C_Base_dData_dList_dList_Nil)))); f_Vuna_dCompiler_dBase_dIntrinsics_dCanonicalFamily_cfRepr = C_Vuna_dCompiler_dBase_dIntrinsics_dFamilyRepr_FamReprNat }, (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ({ f_Vuna_dCompiler_dBase_dIntrinsics_dCanonicalFamily_cfName = v_Vuna_dCompiler_dBase_dIntrinsics_dlistFamilyName; f_Vuna_dCompiler_dBase_dIntrinsics_dCanonicalFamily_cfCtors = (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (v_Vuna_dCompiler_dBase_dIntrinsics_dlistNilCtor, (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (v_Vuna_dCompiler_dBase_dIntrinsics_dlistConsCtor, Base_dData_dList.C_Base_dData_dList_dList_Nil)))); f_Vuna_dCompiler_dBase_dIntrinsics_dCanonicalFamily_cfRepr = C_Vuna_dCompiler_dBase_dIntrinsics_dFamilyRepr_FamReprBoxed }, Base_dData_dList.C_Base_dData_dList_dList_Nil))))))
 
 # 616 "Vuna/Compiler/Base/Intrinsics.vuna"
-let v_Vuna_dCompiler_dBase_dIntrinsics_ddropLastSegment = (fun name -> (match (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dsplitLastDot (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dsplitOnDot name)) with
+let v_Vuna_dCompiler_dBase_dIntrinsics_ddropLastSegment = (fun (name : string) -> (match (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dsplitLastDot (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dsplitOnDot name)) with
   | { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__46; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__47 } -> (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_djoinDots dtb__46)
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 608 "Vuna/Compiler/Base/Intrinsics.vuna"
-let v_Vuna_dCompiler_dBase_dIntrinsics_dctorSpellingKey = (fun name -> (if (if (if (if (if ((Base_dData_dString.v_Base_dData_dString_dendsWith ".Cons") name) then true else ((Base_dData_dString.v_Base_dData_dString_dendsWith ".RCons") name)) then true else ((Base_dData_dString.v_Base_dData_dString_dendsWith ".VCons") name)) then true else ((Base_dData_dString.v_Base_dData_dString_dendsWith ".::") name)) then true else ((Base_dData_dString.v_Base_dData_dString_dendsWith ".(::)") name)) then ((v_Vuna_dCompiler_dBase_dIntrinsics_ddropLastSegment name) ^ ".CONS") else name))
+let v_Vuna_dCompiler_dBase_dIntrinsics_dctorSpellingKey = (fun (name : string) -> (if (if (if (if (if ((Base_dData_dString.v_Base_dData_dString_dendsWith ".Cons") name) then true else ((Base_dData_dString.v_Base_dData_dString_dendsWith ".RCons") name)) then true else ((Base_dData_dString.v_Base_dData_dString_dendsWith ".VCons") name)) then true else ((Base_dData_dString.v_Base_dData_dString_dendsWith ".::") name)) then true else ((Base_dData_dString.v_Base_dData_dString_dendsWith ".(::)") name)) then ((v_Vuna_dCompiler_dBase_dIntrinsics_ddropLastSegment name) ^ ".CONS") else name))
 
 # 625 "Vuna/Compiler/Base/Intrinsics.vuna"
 let rec v_Vuna_dCompiler_dBase_dIntrinsics_dfindCanonicalFamilyGo = (fun (mc0 : string) (mc1 : t_Vuna_dCompiler_dBase_dIntrinsics_dCanonicalFamily Base_dData_dList.t_Base_dData_dList_dList) -> (match mc1 with
@@ -297,24 +297,24 @@ let rec v_Vuna_dCompiler_dBase_dIntrinsics_dfindCanonicalFamilyGo = (fun (mc0 : 
 ))
 
 # 622 "Vuna/Compiler/Base/Intrinsics.vuna"
-let v_Vuna_dCompiler_dBase_dIntrinsics_dfindCanonicalFamily = (fun name -> ((v_Vuna_dCompiler_dBase_dIntrinsics_dfindCanonicalFamilyGo name) v_Vuna_dCompiler_dBase_dIntrinsics_dcanonicalFamilies))
+let v_Vuna_dCompiler_dBase_dIntrinsics_dfindCanonicalFamily = (fun (name : string) -> ((v_Vuna_dCompiler_dBase_dIntrinsics_dfindCanonicalFamilyGo name) v_Vuna_dCompiler_dBase_dIntrinsics_dcanonicalFamilies))
 
 # 485 "Vuna/Compiler/Base/Intrinsics.vuna"
-let v_Vuna_dCompiler_dBase_dIntrinsics_dcanonicalCtorsFor = (fun name -> (match (v_Vuna_dCompiler_dBase_dIntrinsics_dfindCanonicalFamily name) with
+let v_Vuna_dCompiler_dBase_dIntrinsics_dcanonicalCtorsFor = (fun (name : string) -> (match (v_Vuna_dCompiler_dBase_dIntrinsics_dfindCanonicalFamily name) with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__50) -> (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just ((v_Vuna_dCompiler_dBase_dIntrinsics_dcfCtors dtb__50)))
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 631 "Vuna/Compiler/Base/Intrinsics.vuna"
-let v_Vuna_dCompiler_dBase_dIntrinsics_dcanonicalReprOf = (fun name -> (match (v_Vuna_dCompiler_dBase_dIntrinsics_dfindCanonicalFamily name) with
+let v_Vuna_dCompiler_dBase_dIntrinsics_dcanonicalReprOf = (fun (name : string) -> (match (v_Vuna_dCompiler_dBase_dIntrinsics_dfindCanonicalFamily name) with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__51) -> (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just ((v_Vuna_dCompiler_dBase_dIntrinsics_dcfRepr dtb__51)))
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 638 "Vuna/Compiler/Base/Intrinsics.vuna"
-let v_Vuna_dCompiler_dBase_dIntrinsics_disUnboxedCanonical = (fun name -> ((fun nd_uscrut1 -> (match nd_uscrut1 with
+let v_Vuna_dCompiler_dBase_dIntrinsics_disUnboxedCanonical = (fun (name : string) -> ((fun nd_uscrut1 -> (match nd_uscrut1 with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> false
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__52) -> (match dtb__52 with
   | C_Vuna_dCompiler_dBase_dIntrinsics_dFamilyRepr_FamReprBoxed -> false
@@ -324,7 +324,7 @@ let v_Vuna_dCompiler_dBase_dIntrinsics_disUnboxedCanonical = (fun name -> ((fun 
 )) (v_Vuna_dCompiler_dBase_dIntrinsics_dcanonicalReprOf name)))
 
 # 646 "Vuna/Compiler/Base/Intrinsics.vuna"
-let v_Vuna_dCompiler_dBase_dIntrinsics_disBoolCanonical = (fun name -> ((fun nd_uscrut1 -> (match nd_uscrut1 with
+let v_Vuna_dCompiler_dBase_dIntrinsics_disBoolCanonical = (fun (name : string) -> ((fun nd_uscrut1 -> (match nd_uscrut1 with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__53) -> (match dtb__53 with
   | C_Vuna_dCompiler_dBase_dIntrinsics_dFamilyRepr_FamReprBool -> true
   | _ -> false
@@ -339,7 +339,7 @@ let v_Vuna_dCompiler_dBase_dIntrinsics_dcmpSpecializedTyNames = (Base_dData_dLis
 let v_Vuna_dCompiler_dBase_dIntrinsics_dffiScalarNames = (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (v_Vuna_dCompiler_dBase_dIntrinsics_dintTypeName, (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (v_Vuna_dCompiler_dBase_dIntrinsics_dstrTypeName, (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (v_Vuna_dCompiler_dBase_dIntrinsics_dboolTypeName, Base_dData_dList.C_Base_dData_dList_dList_Nil))))))
 
 # 661 "Vuna/Compiler/Base/Intrinsics.vuna"
-let v_Vuna_dCompiler_dBase_dIntrinsics_disFfiScalarName = (fun name -> ((Base_dData_dList.v_Base_dData_dList_dmemName name) v_Vuna_dCompiler_dBase_dIntrinsics_dffiScalarNames))
+let v_Vuna_dCompiler_dBase_dIntrinsics_disFfiScalarName = (fun (name : string) -> ((Base_dData_dList.v_Base_dData_dList_dmemName name) v_Vuna_dCompiler_dBase_dIntrinsics_dffiScalarNames))
 
 # 666 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_Vuna_dCompiler_dBase_dIntrinsics_dinterpTypeName = "Base.Trait.Interp.Interp"
@@ -396,10 +396,10 @@ let v_Vuna_dCompiler_dBase_dIntrinsics_dfloatIntrinsicNames = (Base_dData_dList.
 let v_Vuna_dCompiler_dBase_dIntrinsics_dintrinsicTbl = (((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dinsertAll Base_dData_dString.v_Hashable_uString) ((Base_dData_dList.v_Base_dData_dList_dmap (fun (i : t_Vuna_dCompiler_dBase_dIntrinsics_dIntrinsic) -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = (v_Vuna_dCompiler_dBase_dIntrinsics_dintrinsicName i); Base_dData_dPair.f_Base_dData_dPair_dPair_second = i })) v_Vuna_dCompiler_dBase_dIntrinsics_dallIntrinsics)) ((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dfromList Base_dData_dString.v_Hashable_uString) Base_dData_dList.C_Base_dData_dList_dList_Nil))
 
 # 1185 "Vuna/Compiler/Base/Intrinsics.vuna"
-let v_Vuna_dCompiler_dBase_dIntrinsics_dfindIntrinsic = (fun name -> ((((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dlookup Base_dData_dString.v_Hashable_uString) Base_dData_dString.v_Eq_uString) name) v_Vuna_dCompiler_dBase_dIntrinsics_dintrinsicTbl))
+let v_Vuna_dCompiler_dBase_dIntrinsics_dfindIntrinsic = (fun (name : string) -> ((((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dlookup Base_dData_dString.v_Hashable_uString) Base_dData_dString.v_Eq_uString) name) v_Vuna_dCompiler_dBase_dIntrinsics_dintrinsicTbl))
 
 # 1189 "Vuna/Compiler/Base/Intrinsics.vuna"
-let v_Vuna_dCompiler_dBase_dIntrinsics_disIntrinsicName = (fun name -> (match (v_Vuna_dCompiler_dBase_dIntrinsics_dfindIntrinsic name) with
+let v_Vuna_dCompiler_dBase_dIntrinsics_disIntrinsicName = (fun (name : string) -> (match (v_Vuna_dCompiler_dBase_dIntrinsics_dfindIntrinsic name) with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__54) -> (v_Vuna_dCompiler_dBase_dIntrinsics_dintrinsicVisible dtb__54)
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> false
   | _ -> failwith "DT: impossible branch"

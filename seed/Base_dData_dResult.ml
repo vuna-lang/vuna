@@ -2,21 +2,21 @@ open Vuna_runtime
 type 'a0 t_Base_dData_dResult_dResult = C_Base_dData_dResult_dResult_Ok of ('a0) | C_Base_dData_dResult_dResult_Err of (string)
 
 # 25 "Base/Data/Result.vuna"
-let v_Functor_uBase_uData_uResult_uResult = (Base_dTrait_dFunctor.C_Dict_uBase_dTrait_dFunctor_dFunctor_Functor ((Obj.magic (fun mc0 mc1 -> (match mc1 with
+let v_Functor_uBase_uData_uResult_uResult = (Base_dTrait_dFunctor.C_Dict_uBase_dTrait_dFunctor_dFunctor_Functor (((Obj.magic (fun mc0 mc1 -> (match mc1 with
   | C_Base_dData_dResult_dResult_Err (dtb__0) -> (C_Base_dData_dResult_dResult_Err (dtb__0))
   | C_Base_dData_dResult_dResult_Ok (dtb__1) -> (C_Base_dData_dResult_dResult_Ok ((mc0 dtb__1)))
   | _ -> failwith "DT: impossible branch"
-)))))
+))) : Obj.t)))
 
 # 29 "Base/Data/Result.vuna"
-let v_Monad_uBase_uData_uResult_uResult = (Base_dTrait_dMonad.C_Dict_uBase_dTrait_dMonad_dMonad_Monad ((Obj.magic (fun mc0 mc1 -> (match mc0 with
+let v_Monad_uBase_uData_uResult_uResult = (Base_dTrait_dMonad.C_Dict_uBase_dTrait_dMonad_dMonad_Monad (((Obj.magic (fun mc0 mc1 -> (match mc0 with
   | C_Base_dData_dResult_dResult_Err (dtb__2) -> (C_Base_dData_dResult_dResult_Err (dtb__2))
   | C_Base_dData_dResult_dResult_Ok (dtb__3) -> (mc1 dtb__3)
   | _ -> failwith "DT: impossible branch"
-)))))
+))) : Obj.t)))
 
 # 33 "Base/Data/Result.vuna"
-let v_Applicative_uBase_uData_uResult_uResult = (Base_dTrait_dApplicative.C_Dict_uBase_dTrait_dApplicative_dApplicative_Applicative ((Obj.magic (fun _uarity1 -> (C_Base_dData_dResult_dResult_Ok (_uarity1)))), (Obj.magic (fun mf mx -> (match mf with
+let v_Applicative_uBase_uData_uResult_uResult = (Base_dTrait_dApplicative.C_Dict_uBase_dTrait_dApplicative_dApplicative_Applicative (((Obj.magic (fun _uarity1 -> (C_Base_dData_dResult_dResult_Ok (_uarity1)))) : Obj.t), ((Obj.magic (fun mf mx -> (match mf with
   | C_Base_dData_dResult_dResult_Ok (dtb__4) -> (match mx with
   | C_Base_dData_dResult_dResult_Ok (dtb__5) -> (C_Base_dData_dResult_dResult_Ok ((dtb__4 dtb__5)))
   | C_Base_dData_dResult_dResult_Err (dtb__6) -> (C_Base_dData_dResult_dResult_Err (dtb__6))
@@ -24,7 +24,7 @@ let v_Applicative_uBase_uData_uResult_uResult = (Base_dTrait_dApplicative.C_Dict
 )
   | C_Base_dData_dResult_dResult_Err (dtb__7) -> (C_Base_dData_dResult_dResult_Err (dtb__7))
   | _ -> failwith "DT: impossible branch"
-))), (Obj.magic (fun mc0 mc1 mc2 -> (match mc1 with
+))) : Obj.t), ((Obj.magic (fun mc0 mc1 mc2 -> (match mc1 with
   | C_Base_dData_dResult_dResult_Err (dtb__8) -> (C_Base_dData_dResult_dResult_Err (dtb__8))
   | C_Base_dData_dResult_dResult_Ok (dtb__9) -> (match mc2 with
   | C_Base_dData_dResult_dResult_Err (dtb__10) -> (C_Base_dData_dResult_dResult_Err (dtb__10))
@@ -32,7 +32,7 @@ let v_Applicative_uBase_uData_uResult_uResult = (Base_dTrait_dApplicative.C_Dict
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
-)))))
+))) : Obj.t)))
 
 # 75 "Base/Data/Result.vuna"
 let v_Show_uBase_uData_uResult_uResult_ua = (fun _uctx0 -> (Base_dTrait_dShow.C_Dict_uBase_dTrait_dShow_dShow_Show ((fun r -> (match r with
@@ -62,18 +62,18 @@ let v_Hashable_uBase_uData_uResult_uResult_ua = (fun _uctx0 -> (Base_dTrait_dHas
 )))))
 
 # 94 "Base/Data/Result.vuna"
-let v_Foldable_uBase_uData_uResult_uResult = (Base_dTrait_dFoldable.C_Dict_uBase_dTrait_dFoldable_dFoldable_Foldable ((Obj.magic (fun f z r -> (match r with
+let v_Foldable_uBase_uData_uResult_uResult = (Base_dTrait_dFoldable.C_Dict_uBase_dTrait_dFoldable_dFoldable_Foldable (((Obj.magic (fun f z r -> (match r with
   | C_Base_dData_dResult_dResult_Ok (dtb__20) -> ((f dtb__20) z)
   | C_Base_dData_dResult_dResult_Err (dtb__21) -> z
   | _ -> failwith "DT: impossible branch"
-)))))
+))) : Obj.t)))
 
 # 100 "Base/Data/Result.vuna"
-let v_Traversable_uBase_uData_uResult_uResult_uf = (fun _uctx0 -> (Base_dTrait_dTraversable.C_Dict_uBase_dTrait_dTraversable_dTraversable_Traversable ((Obj.magic (fun fun_ r -> (match r with
+let v_Traversable_uBase_uData_uResult_uResult_uf = (fun _uctx0 -> (Base_dTrait_dTraversable.C_Dict_uBase_dTrait_dTraversable_dTraversable_Traversable (((Obj.magic (fun fun_ r -> (match r with
   | C_Base_dData_dResult_dResult_Ok (dtb__22) -> ((((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dliftA2 _uctx0) (fun y _u -> (C_Base_dData_dResult_dResult_Ok (y)))) (fun_ dtb__22)) ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure _uctx0) dtb__22))
   | C_Base_dData_dResult_dResult_Err (dtb__23) -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure _uctx0) (C_Base_dData_dResult_dResult_Err (dtb__23)))
   | _ -> failwith "DT: impossible branch"
-))))))
+))) : Obj.t))))
 
 # 48 "Base/Data/Result.vuna"
 let rec v_Base_dData_dResult_dtraverse = (fun mc0 mc1 -> (match mc1 with

@@ -1,22 +1,22 @@
 open Vuna_runtime
 # 31 "Vuna/Compiler/Elab/Usage.vuna"
-let rec v_Vuna_dCompiler_dElab_dUsage_disTypeFormingFuel = (fun fuel v -> (if (fuel <= 0) then false else (match v with
+let rec v_Vuna_dCompiler_dElab_dUsage_disTypeFormingFuel = (fun (fuel : int) (v : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dValue) -> (if (fuel <= 0) then false else (match v with
   | Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dValue_VType (dtb__0) -> true
   | Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dValue_VPi (dtb__1, dtb__2, dtb__3, dtb__4, dtb__5) -> ((v_Vuna_dCompiler_dElab_dUsage_disTypeFormingFuel (fuel - 1)) ((Vuna_dCompiler_dCore_dEval.v_Vuna_dCompiler_dCore_dEval_dapplyClosure dtb__5) (Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dValue_VNeutral ((Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dNeutral_NVar (dtb__1, 0, Base_dData_dList.C_Base_dData_dList_dList_Nil))))))
   | _ -> false
 )))
 
 # 28 "Vuna/Compiler/Elab/Usage.vuna"
-let v_Vuna_dCompiler_dElab_dUsage_disTypeForming = (fun v -> ((v_Vuna_dCompiler_dElab_dUsage_disTypeFormingFuel 128) v))
+let v_Vuna_dCompiler_dElab_dUsage_disTypeForming = (fun (v : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dValue) -> ((v_Vuna_dCompiler_dElab_dUsage_disTypeFormingFuel 128) v))
 
 # 45 "Vuna/Compiler/Elab/Usage.vuna"
-let rec v_Vuna_dCompiler_dElab_dUsage_duZeroOf = (fun n -> (if (n <= 0) then Base_dData_dList.C_Base_dData_dList_dList_Nil else (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dRig_Rig0, (v_Vuna_dCompiler_dElab_dUsage_duZeroOf (n - 1))))))
+let rec v_Vuna_dCompiler_dElab_dUsage_duZeroOf = (fun (n : int) -> (if (n <= 0) then Base_dData_dList.C_Base_dData_dList_dList_Nil else (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dRig_Rig0, (v_Vuna_dCompiler_dElab_dUsage_duZeroOf (n - 1))))))
 
 # 51 "Vuna/Compiler/Elab/Usage.vuna"
-let rec v_Vuna_dCompiler_dElab_dUsage_duVarAtGo = (fun n i -> (if (n <= 0) then Base_dData_dList.C_Base_dData_dList_dList_Nil else (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((if (i = 0) then Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dRig_Rig1 else Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dRig_Rig0), ((v_Vuna_dCompiler_dElab_dUsage_duVarAtGo (n - 1)) (i - 1))))))
+let rec v_Vuna_dCompiler_dElab_dUsage_duVarAtGo = (fun (n : int) (i : int) -> (if (n <= 0) then Base_dData_dList.C_Base_dData_dList_dList_Nil else (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((if (i = 0) then Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dRig_Rig1 else Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dRig_Rig0), ((v_Vuna_dCompiler_dElab_dUsage_duVarAtGo (n - 1)) (i - 1))))))
 
 # 48 "Vuna/Compiler/Elab/Usage.vuna"
-let v_Vuna_dCompiler_dElab_dUsage_duVarAt = (fun depth i -> (if (if (i < 0) then true else (i >= depth)) then (v_Vuna_dCompiler_dElab_dUsage_duZeroOf depth) else ((v_Vuna_dCompiler_dElab_dUsage_duVarAtGo depth) i)))
+let v_Vuna_dCompiler_dElab_dUsage_duVarAt = (fun (depth : int) (i : int) -> (if (if (i < 0) then true else (i >= depth)) then (v_Vuna_dCompiler_dElab_dUsage_duZeroOf depth) else ((v_Vuna_dCompiler_dElab_dUsage_duVarAtGo depth) i)))
 
 # 55 "Vuna/Compiler/Elab/Usage.vuna"
 let rec v_Vuna_dCompiler_dElab_dUsage_duAdd = (fun (mc0 : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dRig Base_dData_dList.t_Base_dData_dList_dList) (mc1 : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dRig Base_dData_dList.t_Base_dData_dList_dList) -> (match mc0 with
@@ -30,7 +30,7 @@ let rec v_Vuna_dCompiler_dElab_dUsage_duAdd = (fun (mc0 : Vuna_dCompiler_dCore_d
 ))
 
 # 60 "Vuna/Compiler/Elab/Usage.vuna"
-let v_Vuna_dCompiler_dElab_dUsage_duScale = (fun rig us -> ((Base_dData_dList.v_Base_dData_dList_dmap (fun (u : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dRig) -> ((Vuna_dCompiler_dCore_dTerm.v_Vuna_dCompiler_dCore_dTerm_drigScale rig) u))) us))
+let v_Vuna_dCompiler_dElab_dUsage_duScale = (fun (rig : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dRig) (us : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dRig Base_dData_dList.t_Base_dData_dList_dList) -> ((Base_dData_dList.v_Base_dData_dList_dmap (fun (u : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dRig) -> ((Vuna_dCompiler_dCore_dTerm.v_Vuna_dCompiler_dCore_dTerm_drigScale rig) u))) us))
 
 # 63 "Vuna/Compiler/Elab/Usage.vuna"
 let rec v_Vuna_dCompiler_dElab_dUsage_duJoin = (fun (mc0 : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dRig Base_dData_dList.t_Base_dData_dList_dList) (mc1 : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dRig Base_dData_dList.t_Base_dData_dList_dList) -> (match mc0 with
@@ -44,17 +44,17 @@ let rec v_Vuna_dCompiler_dElab_dUsage_duJoin = (fun (mc0 : Vuna_dCompiler_dCore_
 ))
 
 # 68 "Vuna/Compiler/Elab/Usage.vuna"
-let rec v_Vuna_dCompiler_dElab_dUsage_duDrop = (fun n us -> (if (n <= 0) then us else (match us with
+let rec v_Vuna_dCompiler_dElab_dUsage_duDrop = (fun (n : int) (us : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dRig Base_dData_dList.t_Base_dData_dList_dList) -> (if (n <= 0) then us else (match us with
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> Base_dData_dList.C_Base_dData_dList_dList_Nil
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__14, dtb__15) -> ((v_Vuna_dCompiler_dElab_dUsage_duDrop (n - 1)) dtb__15)
   | _ -> failwith "DT: impossible branch"
 )))
 
 # 101 "Vuna/Compiler/Elab/Usage.vuna"
-let v_Vuna_dCompiler_dElab_dUsage_dresolvedBinderSpan = (fun binderSp fallback -> (if (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_disSpanEmpty binderSp) then fallback else binderSp))
+let v_Vuna_dCompiler_dElab_dUsage_dresolvedBinderSpan = (fun (binderSp : Vuna_dCompiler_dBase_dSource.t_Vuna_dCompiler_dBase_dSource_dSpan) (fallback : Vuna_dCompiler_dBase_dSource.t_Vuna_dCompiler_dBase_dSource_dSpan) -> (if (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_disSpanEmpty binderSp) then fallback else binderSp))
 
 # 106 "Vuna/Compiler/Elab/Usage.vuna"
-let v_Vuna_dCompiler_dElab_dUsage_dbinderEditSpan = (fun name binderSp -> ((fun width -> (if (if (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_disSpanEmpty binderSp) then true else (width <> (bi_strLength name))) then Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing else (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (binderSp)))) ((Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dspanEndOffset binderSp) - (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dspanStartOffset binderSp))))
+let v_Vuna_dCompiler_dElab_dUsage_dbinderEditSpan = (fun (name : string) (binderSp : Vuna_dCompiler_dBase_dSource.t_Vuna_dCompiler_dBase_dSource_dSpan) -> ((fun width -> (if (if (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_disSpanEmpty binderSp) then true else (width <> (bi_strLength name))) then Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing else (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (binderSp)))) ((Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dspanEndOffset binderSp) - (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dspanStartOffset binderSp))))
 
 # 269 "Vuna/Compiler/Elab/Usage.vuna"
 let v_Vuna_dCompiler_dElab_dUsage_disRigZero = (fun (mc0 : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dRig) -> (match mc0 with
@@ -76,10 +76,10 @@ let rec v_Vuna_dCompiler_dElab_dUsage_dshadowedByRuntime = (fun (mc0 : string) (
 let v_Vuna_dCompiler_dElab_dUsage_dcapCheckFuelMax = 1000000
 
 # 304 "Vuna/Compiler/Elab/Usage.vuna"
-let v_Vuna_dCompiler_dElab_dUsage_dcapCheckFuelFor = (fun t -> ((fun scaled -> (if (scaled > v_Vuna_dCompiler_dElab_dUsage_dcapCheckFuelMax) then v_Vuna_dCompiler_dElab_dUsage_dcapCheckFuelMax else scaled)) (1024 + (4 * (Vuna_dCompiler_dCore_dTerm.v_Vuna_dCompiler_dCore_dTerm_dtermSize t)))))
+let v_Vuna_dCompiler_dElab_dUsage_dcapCheckFuelFor = (fun (t : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dTerm) -> ((fun scaled -> (if (scaled > v_Vuna_dCompiler_dElab_dUsage_dcapCheckFuelMax) then v_Vuna_dCompiler_dElab_dUsage_dcapCheckFuelMax else scaled)) (1024 + (4 * (Vuna_dCompiler_dCore_dTerm.v_Vuna_dCompiler_dCore_dTerm_dtermSize t)))))
 
 # 359 "Vuna/Compiler/Elab/Usage.vuna"
-let v_Vuna_dCompiler_dElab_dUsage_dctorFamilyLinear = (fun ec c -> (match ((Vuna_dCompiler_dElab_dMeta.v_Vuna_dCompiler_dElab_dMeta_ddtCtorLookupEc ec) c) with
+let v_Vuna_dCompiler_dElab_dUsage_dctorFamilyLinear = (fun (ec : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dEc) (c : string) -> (match ((Vuna_dCompiler_dElab_dMeta.v_Vuna_dCompiler_dElab_dMeta_ddtCtorLookupEc ec) c) with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__20) -> (match ((Vuna_dCompiler_dElab_dMeta.v_Vuna_dCompiler_dElab_dMeta_ddtDataLookup (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtCtorFamily dtb__20)) (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_decDatas ec)) with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__21) -> (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDataLinear dtb__21)
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> false
@@ -90,7 +90,7 @@ let v_Vuna_dCompiler_dElab_dUsage_dctorFamilyLinear = (fun ec c -> (match ((Vuna
 ))
 
 # 313 "Vuna/Compiler/Elab/Usage.vuna"
-let rec v_Vuna_dCompiler_dElab_dUsage_dcapCheckFuel = (fun fuel ec sp t allowed -> (if (fuel <= 0) then (Vuna_dCompiler_dBase_dDiag.v_Vuna_dCompiler_dBase_dDiag_dicInternal "capture check fuel exhausted") else (match t with
+let rec v_Vuna_dCompiler_dElab_dUsage_dcapCheckFuel = (fun (fuel : int) (ec : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dEc) (sp : Vuna_dCompiler_dBase_dSource.t_Vuna_dCompiler_dBase_dSource_dSpan) (t : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dTerm) (allowed : bool) -> (if (fuel <= 0) then (Vuna_dCompiler_dBase_dDiag.v_Vuna_dCompiler_dBase_dDiag_dicInternal "capture check fuel exhausted") else (match t with
   | Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dTerm_TVar (dtb__22, dtb__23, dtb__24) -> (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC (0))
   | Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dTerm_TGlobal (dtb__25) -> (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC (0))
   | Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dTerm_TInt (dtb__26) -> (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC (0))
@@ -112,7 +112,7 @@ let rec v_Vuna_dCompiler_dElab_dUsage_dcapCheckFuel = (fun fuel ec sp t allowed 
   | _ -> failwith "DT: impossible branch"
 )))
 # 339 "Vuna/Compiler/Elab/Usage.vuna"
-and v_Vuna_dCompiler_dElab_dUsage_dcapArgsFuel = (fun fuel ec sp c args -> (((((v_Vuna_dCompiler_dElab_dUsage_dcapArgsGo fuel) ec) sp) ((v_Vuna_dCompiler_dElab_dUsage_dctorFamilyLinear ec) c)) args))
+and v_Vuna_dCompiler_dElab_dUsage_dcapArgsFuel = (fun (fuel : int) (ec : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dEc) (sp : Vuna_dCompiler_dBase_dSource.t_Vuna_dCompiler_dBase_dSource_dSpan) (c : string) (args : (Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dTerm, Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dRig) Base_dData_dPair.t_Base_dData_dPair_dPair Base_dData_dList.t_Base_dData_dList_dList) -> (((((v_Vuna_dCompiler_dElab_dUsage_dcapArgsGo fuel) ec) sp) ((v_Vuna_dCompiler_dElab_dUsage_dctorFamilyLinear ec) c)) args))
 # 342 "Vuna/Compiler/Elab/Usage.vuna"
 and v_Vuna_dCompiler_dElab_dUsage_dcapArgsGo = (fun (mc0 : int) (mc1 : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dEc) (mc2 : Vuna_dCompiler_dBase_dSource.t_Vuna_dCompiler_dBase_dSource_dSpan) (mc3 : bool) (mc4 : (Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dTerm, Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dRig) Base_dData_dPair.t_Base_dData_dPair_dPair Base_dData_dList.t_Base_dData_dList_dList) -> (match mc4 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__66, dtb__67) -> (match dtb__66 with
@@ -133,20 +133,20 @@ and v_Vuna_dCompiler_dElab_dUsage_dcapAltsFuel = (fun (mc0 : int) (mc1 : Vuna_dC
 ))
 
 # 298 "Vuna/Compiler/Elab/Usage.vuna"
-let v_Vuna_dCompiler_dElab_dUsage_dcapCheck = (fun ec sp t allowed -> (((((v_Vuna_dCompiler_dElab_dUsage_dcapCheckFuel (v_Vuna_dCompiler_dElab_dUsage_dcapCheckFuelFor t)) ec) sp) t) allowed))
+let v_Vuna_dCompiler_dElab_dUsage_dcapCheck = (fun (ec : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dEc) (sp : Vuna_dCompiler_dBase_dSource.t_Vuna_dCompiler_dBase_dSource_dSpan) (t : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dTerm) (allowed : bool) -> (((((v_Vuna_dCompiler_dElab_dUsage_dcapCheckFuel (v_Vuna_dCompiler_dElab_dUsage_dcapCheckFuelFor t)) ec) sp) t) allowed))
 
 # 372 "Vuna/Compiler/Elab/Usage.vuna"
-let v_Vuna_dCompiler_dElab_dUsage_disTypeLevelDef = (fun ec d -> (v_Vuna_dCompiler_dElab_dUsage_disTypeForming ((((Vuna_dCompiler_dCore_dEval.v_Vuna_dCompiler_dCore_dEval_dforce (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_decDefTbl ec)) (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_decSolsP ec)) Vuna_dCompiler_dCore_dTerm.v_Vuna_dCompiler_dCore_dTerm_ddefaultFuel) ((Vuna_dCompiler_dCore_dEval.v_Vuna_dCompiler_dCore_dEval_deval Base_dData_dList.C_Base_dData_dList_dList_Nil) (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDefType d)))))
+let v_Vuna_dCompiler_dElab_dUsage_disTypeLevelDef = (fun (ec : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dEc) (d : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dDtDef) -> (v_Vuna_dCompiler_dElab_dUsage_disTypeForming ((((Vuna_dCompiler_dCore_dEval.v_Vuna_dCompiler_dCore_dEval_dforce (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_decDefTbl ec)) (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_decSolsP ec)) Vuna_dCompiler_dCore_dTerm.v_Vuna_dCompiler_dCore_dTerm_ddefaultFuel) ((Vuna_dCompiler_dCore_dEval.v_Vuna_dCompiler_dCore_dEval_deval Base_dData_dList.C_Base_dData_dList_dList_Nil) (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDefType d)))))
 
 # 393 "Vuna/Compiler/Elab/Usage.vuna"
-let v_Vuna_dCompiler_dElab_dUsage_ddefSpanOf = (fun d -> (match (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDefSpan d) with
+let v_Vuna_dCompiler_dElab_dUsage_ddefSpanOf = (fun (d : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dDtDef) -> (match (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDefSpan d) with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__75) -> dtb__75
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> { Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanFile = ""; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanStartLine = 0; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanStartCol = 0; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanEndLine = 0; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanEndCol = 0; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanStartOffset = 0; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanEndOffset = 0 }
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 369 "Vuna/Compiler/Elab/Usage.vuna"
-let v_Vuna_dCompiler_dElab_dUsage_dcheckDefCapture = (fun ec d body -> ((((v_Vuna_dCompiler_dElab_dUsage_dcapCheck ec) (v_Vuna_dCompiler_dElab_dUsage_ddefSpanOf d)) body) false))
+let v_Vuna_dCompiler_dElab_dUsage_dcheckDefCapture = (fun (ec : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dEc) (d : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dDtDef) (body : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dTerm) -> ((((v_Vuna_dCompiler_dElab_dUsage_dcapCheck ec) (v_Vuna_dCompiler_dElab_dUsage_ddefSpanOf d)) body) false))
 
 # 405 "Vuna/Compiler/Elab/Usage.vuna"
 let v_Vuna_dCompiler_dElab_dUsage_drenameSuggestion = (fun (mc0 : string) (mc1 : Vuna_dCompiler_dBase_dSource.t_Vuna_dCompiler_dBase_dSource_dSpan Base_dData_dMaybe.t_Base_dData_dMaybe_dMaybe) (mc2 : Vuna_dCompiler_dBase_dDiag.t_Vuna_dCompiler_dBase_dDiag_dDiagnostic) -> (match mc1 with
@@ -156,13 +156,13 @@ let v_Vuna_dCompiler_dElab_dUsage_drenameSuggestion = (fun (mc0 : string) (mc1 :
 ))
 
 # 417 "Vuna/Compiler/Elab/Usage.vuna"
-let v_Vuna_dCompiler_dElab_dUsage_dresetUseSpans = (fun ec -> ((Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_decPutUseSpans ec) Base_dData_dList.C_Base_dData_dList_dList_Nil))
+let v_Vuna_dCompiler_dElab_dUsage_dresetUseSpans = (fun (ec : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dEc) -> ((Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_decPutUseSpans ec) Base_dData_dList.C_Base_dData_dList_dList_Nil))
 
 # 421 "Vuna/Compiler/Elab/Usage.vuna"
-let v_Vuna_dCompiler_dElab_dUsage_drecordUseSpan = (fun ec name sp -> ((Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_decPutUseSpans ec) (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ({ Base_dData_dPair.f_Base_dData_dPair_dPair_first = name; Base_dData_dPair.f_Base_dData_dPair_dPair_second = sp }, (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_decUseSpans ec)))))
+let v_Vuna_dCompiler_dElab_dUsage_drecordUseSpan = (fun (ec : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dEc) (name : string) (sp : Vuna_dCompiler_dBase_dSource.t_Vuna_dCompiler_dBase_dSource_dSpan) -> ((Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_decPutUseSpans ec) (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ({ Base_dData_dPair.f_Base_dData_dPair_dPair_first = name; Base_dData_dPair.f_Base_dData_dPair_dPair_second = sp }, (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_decUseSpans ec)))))
 
 # 425 "Vuna/Compiler/Elab/Usage.vuna"
-let v_Vuna_dCompiler_dElab_dUsage_dusesOf = (fun ec name -> (Base_dData_dList.v_Base_dData_dList_dreverse ((Base_dData_dList.v_Base_dData_dList_dmap Base_dData_dPair.v_Base_dData_dPair_dsecondOf) ((Base_dData_dList.v_Base_dData_dList_dfilter (fun (p : (string, Vuna_dCompiler_dBase_dSource.t_Vuna_dCompiler_dBase_dSource_dSpan) Base_dData_dPair.t_Base_dData_dPair_dPair) -> ((Base_dData_dPair.v_Base_dData_dPair_dfirstOf p) = name))) (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_decUseSpans ec)))))
+let v_Vuna_dCompiler_dElab_dUsage_dusesOf = (fun (ec : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dEc) (name : string) -> (Base_dData_dList.v_Base_dData_dList_dreverse ((Base_dData_dList.v_Base_dData_dList_dmap Base_dData_dPair.v_Base_dData_dPair_dsecondOf) ((Base_dData_dList.v_Base_dData_dList_dfilter (fun (p : (string, Vuna_dCompiler_dBase_dSource.t_Vuna_dCompiler_dBase_dSource_dSpan) Base_dData_dPair.t_Base_dData_dPair_dPair) -> ((Base_dData_dPair.v_Base_dData_dPair_dfirstOf p) = name))) (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_decUseSpans ec)))))
 
 # 433 "Vuna/Compiler/Elab/Usage.vuna"
 let rec v_Vuna_dCompiler_dElab_dUsage_dwithUseSpans = (fun (mc0 : Vuna_dCompiler_dBase_dSource.t_Vuna_dCompiler_dBase_dSource_dSpan Base_dData_dList.t_Base_dData_dList_dList) (mc1 : Vuna_dCompiler_dBase_dDiag.t_Vuna_dCompiler_dBase_dDiag_dDiagnostic) -> (match mc0 with
@@ -172,7 +172,7 @@ let rec v_Vuna_dCompiler_dElab_dUsage_dwithUseSpans = (fun (mc0 : Vuna_dCompiler
 ))
 
 # 429 "Vuna/Compiler/Elab/Usage.vuna"
-let v_Vuna_dCompiler_dElab_dUsage_dwithUseFields = (fun ec name d -> ((v_Vuna_dCompiler_dElab_dUsage_dwithUseSpans ((v_Vuna_dCompiler_dElab_dUsage_dusesOf ec) name)) d))
+let v_Vuna_dCompiler_dElab_dUsage_dwithUseFields = (fun (ec : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dEc) (name : string) (d : Vuna_dCompiler_dBase_dDiag.t_Vuna_dCompiler_dBase_dDiag_dDiagnostic) -> ((v_Vuna_dCompiler_dElab_dUsage_dwithUseSpans ((v_Vuna_dCompiler_dElab_dUsage_dusesOf ec) name)) d))
 
 # 79 "Vuna/Compiler/Elab/Usage.vuna"
 let v_Vuna_dCompiler_dElab_dUsage_dcheckBinderRig = (fun (mc0 : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dEc) (mc1 : Vuna_dCompiler_dBase_dSource.t_Vuna_dCompiler_dBase_dSource_dSpan) (mc2 : string) (mc3 : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dRig) (mc4 : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dRig) -> (match mc3 with
@@ -188,19 +188,19 @@ let v_Vuna_dCompiler_dElab_dUsage_dcheckBinderRig = (fun (mc0 : Vuna_dCompiler_d
 ))
 
 # 443 "Vuna/Compiler/Elab/Usage.vuna"
-let v_Vuna_dCompiler_dElab_dUsage_dwarnAt = (fun ec sp e args -> ((Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_decAddWarning ec) (((Vuna_dCompiler_dBase_dDiagnostics_dWarning.v_Vuna_dCompiler_dBase_dDiagnostics_dWarning_dwarnDiagAt sp) e) args)))
+let v_Vuna_dCompiler_dElab_dUsage_dwarnAt = (fun (ec : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dEc) (sp : Vuna_dCompiler_dBase_dSource.t_Vuna_dCompiler_dBase_dSource_dSpan) (e : Vuna_dCompiler_dBase_dDiagnostics_dWarning.t_Vuna_dCompiler_dBase_dDiagnostics_dWarning_dWarnErr) (args : string Base_dData_dVec.t_Base_dData_dVec_dVec) -> ((Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_decAddWarning ec) (((Vuna_dCompiler_dBase_dDiagnostics_dWarning.v_Vuna_dCompiler_dBase_dDiagnostics_dWarning_dwarnDiagAt sp) e) args)))
 
 # 447 "Vuna/Compiler/Elab/Usage.vuna"
-let v_Vuna_dCompiler_dElab_dUsage_dwarnAt0 = (fun ec sp e -> ((((v_Vuna_dCompiler_dElab_dUsage_dwarnAt ec) sp) e) Base_dData_dVec.C_Base_dData_dVec_dVec_Nil))
+let v_Vuna_dCompiler_dElab_dUsage_dwarnAt0 = (fun (ec : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dEc) (sp : Vuna_dCompiler_dBase_dSource.t_Vuna_dCompiler_dBase_dSource_dSpan) (e : Vuna_dCompiler_dBase_dDiagnostics_dWarning.t_Vuna_dCompiler_dBase_dDiagnostics_dWarning_dWarnErr) -> ((((v_Vuna_dCompiler_dElab_dUsage_dwarnAt ec) sp) e) Base_dData_dVec.C_Base_dData_dVec_dVec_Nil))
 
 # 451 "Vuna/Compiler/Elab/Usage.vuna"
-let v_Vuna_dCompiler_dElab_dUsage_dwarnAt1 = (fun ec sp e a0 -> ((((v_Vuna_dCompiler_dElab_dUsage_dwarnAt ec) sp) e) (Base_dData_dVec.C_Base_dData_dVec_dVec_VCons (a0, Base_dData_dVec.C_Base_dData_dVec_dVec_Nil))))
+let v_Vuna_dCompiler_dElab_dUsage_dwarnAt1 = (fun (ec : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dEc) (sp : Vuna_dCompiler_dBase_dSource.t_Vuna_dCompiler_dBase_dSource_dSpan) (e : Vuna_dCompiler_dBase_dDiagnostics_dWarning.t_Vuna_dCompiler_dBase_dDiagnostics_dWarning_dWarnErr) (a0 : string) -> ((((v_Vuna_dCompiler_dElab_dUsage_dwarnAt ec) sp) e) (Base_dData_dVec.C_Base_dData_dVec_dVec_VCons (a0, Base_dData_dVec.C_Base_dData_dVec_dVec_Nil))))
 
 # 455 "Vuna/Compiler/Elab/Usage.vuna"
-let v_Vuna_dCompiler_dElab_dUsage_dwarnAt1Mod = (fun ec f sp e a0 -> ((Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_decAddWarning ec) ((((Vuna_dCompiler_dBase_dDiagnostics_dWarning.v_Vuna_dCompiler_dBase_dDiagnostics_dWarning_dwarnDiagAtMod f) sp) e) (Base_dData_dVec.C_Base_dData_dVec_dVec_VCons (a0, Base_dData_dVec.C_Base_dData_dVec_dVec_Nil)))))
+let v_Vuna_dCompiler_dElab_dUsage_dwarnAt1Mod = (fun (ec : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dEc) (f : (Vuna_dCompiler_dBase_dDiag.t_Vuna_dCompiler_dBase_dDiag_dDiagnostic) -> Vuna_dCompiler_dBase_dDiag.t_Vuna_dCompiler_dBase_dDiag_dDiagnostic) (sp : Vuna_dCompiler_dBase_dSource.t_Vuna_dCompiler_dBase_dSource_dSpan) (e : Vuna_dCompiler_dBase_dDiagnostics_dWarning.t_Vuna_dCompiler_dBase_dDiagnostics_dWarning_dWarnErr) (a0 : string) -> ((Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_decAddWarning ec) ((((Vuna_dCompiler_dBase_dDiagnostics_dWarning.v_Vuna_dCompiler_dBase_dDiagnostics_dWarning_dwarnDiagAtMod f) sp) e) (Base_dData_dVec.C_Base_dData_dVec_dVec_VCons (a0, Base_dData_dVec.C_Base_dData_dVec_dVec_Nil)))))
 
 # 401 "Vuna/Compiler/Elab/Usage.vuna"
-let v_Vuna_dCompiler_dElab_dUsage_dwarnUnusedBinder = (fun ec sp mEdit name -> (((((v_Vuna_dCompiler_dElab_dUsage_dwarnAt1Mod ec) ((v_Vuna_dCompiler_dElab_dUsage_drenameSuggestion name) mEdit)) sp) (Vuna_dCompiler_dBase_dDiagnostics_dWarning.C_Vuna_dCompiler_dBase_dDiagnostics_dWarning_dWarnErr_UnusedBinder (name))) name))
+let v_Vuna_dCompiler_dElab_dUsage_dwarnUnusedBinder = (fun (ec : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dEc) (sp : Vuna_dCompiler_dBase_dSource.t_Vuna_dCompiler_dBase_dSource_dSpan) (mEdit : Vuna_dCompiler_dBase_dSource.t_Vuna_dCompiler_dBase_dSource_dSpan Base_dData_dMaybe.t_Base_dData_dMaybe_dMaybe) (name : string) -> (((((v_Vuna_dCompiler_dElab_dUsage_dwarnAt1Mod ec) ((v_Vuna_dCompiler_dElab_dUsage_drenameSuggestion name) mEdit)) sp) (Vuna_dCompiler_dBase_dDiagnostics_dWarning.C_Vuna_dCompiler_dBase_dDiagnostics_dWarning_dWarnErr_UnusedBinder (name))) name))
 
 # 114 "Vuna/Compiler/Elab/Usage.vuna"
 let v_Vuna_dCompiler_dElab_dUsage_dcheckLamBinder = (fun (mc0 : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dEc) (mc1 : Vuna_dCompiler_dBase_dSource.t_Vuna_dCompiler_dBase_dSource_dSpan) (mc2 : Vuna_dCompiler_dBase_dSource.t_Vuna_dCompiler_dBase_dSource_dSpan Base_dData_dMaybe.t_Base_dData_dMaybe_dMaybe) (mc3 : string) (mc4 : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dRig) (mc5 : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dRig Base_dData_dList.t_Base_dData_dList_dList) -> (match mc5 with
@@ -227,10 +227,10 @@ let rec v_Vuna_dCompiler_dElab_dUsage_dcheckAltBindersGo = (fun (mc0 : Vuna_dCom
 ))
 
 # 142 "Vuna/Compiler/Elab/Usage.vuna"
-let v_Vuna_dCompiler_dElab_dUsage_dcheckAltBinders = (fun ec sp binders us -> ((((v_Vuna_dCompiler_dElab_dUsage_dcheckAltBindersGo ec) sp) (Base_dData_dList.v_Base_dData_dList_dreverse binders)) us))
+let v_Vuna_dCompiler_dElab_dUsage_dcheckAltBinders = (fun (ec : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dEc) (sp : Vuna_dCompiler_dBase_dSource.t_Vuna_dCompiler_dBase_dSource_dSpan) (binders : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dBinder Base_dData_dList.t_Base_dData_dList_dList) (us : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dRig Base_dData_dList.t_Base_dData_dList_dList) -> ((((v_Vuna_dCompiler_dElab_dUsage_dcheckAltBindersGo ec) sp) (Base_dData_dList.v_Base_dData_dList_dreverse binders)) us))
 
 # 177 "Vuna/Compiler/Elab/Usage.vuna"
-let rec v_Vuna_dCompiler_dElab_dUsage_dcheckTerm = (fun ec sp env t -> (match t with
+let rec v_Vuna_dCompiler_dElab_dUsage_dcheckTerm = (fun (ec : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dEc) (sp : Vuna_dCompiler_dBase_dSource.t_Vuna_dCompiler_dBase_dSource_dSpan) (env : (string, Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dRig) Base_dData_dPair.t_Base_dData_dPair_dPair Base_dData_dList.t_Base_dData_dList_dList) (t : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dTerm) -> (match t with
   | Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dTerm_TVar (dtb__85, dtb__86, dtb__87) -> ((fun ec2 -> (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC ({ Base_dData_dPair.f_Base_dData_dPair_dPair_first = ((v_Vuna_dCompiler_dElab_dUsage_duVarAt (Base_dData_dList.v_Base_dData_dList_dlength env)) dtb__86); Base_dData_dPair.f_Base_dData_dPair_dPair_second = ec2 }))) (if ((dtb__87).Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanStartLine = 0) then ec else (((v_Vuna_dCompiler_dElab_dUsage_drecordUseSpan ec) dtb__85) dtb__87)))
   | Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dTerm_TMeta (dtb__88) -> (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC ({ Base_dData_dPair.f_Base_dData_dPair_dPair_first = (v_Vuna_dCompiler_dElab_dUsage_duZeroOf (Base_dData_dList.v_Base_dData_dList_dlength env)); Base_dData_dPair.f_Base_dData_dPair_dPair_second = ec }))
   | Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dTerm_TGlobal (dtb__89) -> (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC ({ Base_dData_dPair.f_Base_dData_dPair_dPair_first = (v_Vuna_dCompiler_dElab_dUsage_duZeroOf (Base_dData_dList.v_Base_dData_dList_dlength env)); Base_dData_dPair.f_Base_dData_dPair_dPair_second = ec }))
@@ -252,7 +252,7 @@ let rec v_Vuna_dCompiler_dElab_dUsage_dcheckTerm = (fun ec sp env t -> (match t 
   | _ -> failwith "DT: impossible branch"
 ))
 # 227 "Vuna/Compiler/Elab/Usage.vuna"
-and v_Vuna_dCompiler_dElab_dUsage_dcheckArgs = (fun ec sp env args -> (((((v_Vuna_dCompiler_dElab_dUsage_dcheckArgsGo ec) sp) env) args) (v_Vuna_dCompiler_dElab_dUsage_duZeroOf (Base_dData_dList.v_Base_dData_dList_dlength env))))
+and v_Vuna_dCompiler_dElab_dUsage_dcheckArgs = (fun (ec : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dEc) (sp : Vuna_dCompiler_dBase_dSource.t_Vuna_dCompiler_dBase_dSource_dSpan) (env : (string, Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dRig) Base_dData_dPair.t_Base_dData_dPair_dPair Base_dData_dList.t_Base_dData_dList_dList) (args : (Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dTerm, Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dRig) Base_dData_dPair.t_Base_dData_dPair_dPair Base_dData_dList.t_Base_dData_dList_dList) -> (((((v_Vuna_dCompiler_dElab_dUsage_dcheckArgsGo ec) sp) env) args) (v_Vuna_dCompiler_dElab_dUsage_duZeroOf (Base_dData_dList.v_Base_dData_dList_dlength env))))
 # 230 "Vuna/Compiler/Elab/Usage.vuna"
 and v_Vuna_dCompiler_dElab_dUsage_dcheckArgsGo = (fun (mc0 : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dEc) (mc1 : Vuna_dCompiler_dBase_dSource.t_Vuna_dCompiler_dBase_dSource_dSpan) (mc2 : (string, Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dRig) Base_dData_dPair.t_Base_dData_dPair_dPair Base_dData_dList.t_Base_dData_dList_dList) (mc3 : (Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dTerm, Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dRig) Base_dData_dPair.t_Base_dData_dPair_dPair Base_dData_dList.t_Base_dData_dList_dList) (mc4 : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dRig Base_dData_dList.t_Base_dData_dList_dList) -> (match mc3 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__129, dtb__130) -> (match dtb__129 with
@@ -263,7 +263,7 @@ and v_Vuna_dCompiler_dElab_dUsage_dcheckArgsGo = (fun (mc0 : Vuna_dCompiler_dEla
   | _ -> failwith "DT: impossible branch"
 ))
 # 240 "Vuna/Compiler/Elab/Usage.vuna"
-and v_Vuna_dCompiler_dElab_dUsage_dcheckAlts = (fun ec sp env alts -> (((((v_Vuna_dCompiler_dElab_dUsage_dcheckAltsGo ec) sp) env) alts) Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing))
+and v_Vuna_dCompiler_dElab_dUsage_dcheckAlts = (fun (ec : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dEc) (sp : Vuna_dCompiler_dBase_dSource.t_Vuna_dCompiler_dBase_dSource_dSpan) (env : (string, Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dRig) Base_dData_dPair.t_Base_dData_dPair_dPair Base_dData_dList.t_Base_dData_dList_dList) (alts : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dCaseAlt Base_dData_dList.t_Base_dData_dList_dList) -> (((((v_Vuna_dCompiler_dElab_dUsage_dcheckAltsGo ec) sp) env) alts) Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing))
 # 243 "Vuna/Compiler/Elab/Usage.vuna"
 and v_Vuna_dCompiler_dElab_dUsage_dcheckAltsGo = (fun (mc0 : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dEc) (mc1 : Vuna_dCompiler_dBase_dSource.t_Vuna_dCompiler_dBase_dSource_dSpan) (mc2 : (string, Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dRig) Base_dData_dPair.t_Base_dData_dPair_dPair Base_dData_dList.t_Base_dData_dList_dList) (mc3 : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dCaseAlt Base_dData_dList.t_Base_dData_dList_dList) (mc4 : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dRig Base_dData_dList.t_Base_dData_dList_dList Base_dData_dMaybe.t_Base_dData_dMaybe_dMaybe) -> (match mc3 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__133, dtb__134) -> (match dtb__133 with
@@ -283,7 +283,7 @@ and v_Vuna_dCompiler_dElab_dUsage_dcheckAltsGo = (fun (mc0 : Vuna_dCompiler_dEla
 ))
 
 # 275 "Vuna/Compiler/Elab/Usage.vuna"
-let v_Vuna_dCompiler_dElab_dUsage_dcheckDefUsage = (fun ec msp name body -> ((fun sp -> ((fun ec0 -> ((Vuna_dCompiler_dBase_dCommon.v_Vuna_dCompiler_dBase_dCommon_dstep ((((v_Vuna_dCompiler_dElab_dUsage_dcheckTerm ec0) sp) Base_dData_dList.C_Base_dData_dList_dList_Nil) body)) (fun (_urest : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dRig Base_dData_dList.t_Base_dData_dList_dList) (ec1 : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dEc) -> (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC (ec1))))) (v_Vuna_dCompiler_dElab_dUsage_dresetUseSpans ec))) (match msp with
+let v_Vuna_dCompiler_dElab_dUsage_dcheckDefUsage = (fun (ec : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dEc) (msp : Vuna_dCompiler_dBase_dSource.t_Vuna_dCompiler_dBase_dSource_dSpan Base_dData_dMaybe.t_Base_dData_dMaybe_dMaybe) (name : string) (body : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dTerm) -> ((fun sp -> ((fun ec0 -> ((Vuna_dCompiler_dBase_dCommon.v_Vuna_dCompiler_dBase_dCommon_dstep ((((v_Vuna_dCompiler_dElab_dUsage_dcheckTerm ec0) sp) Base_dData_dList.C_Base_dData_dList_dList_Nil) body)) (fun (_urest : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dRig Base_dData_dList.t_Base_dData_dList_dList) (ec1 : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dEc) -> (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC (ec1))))) (v_Vuna_dCompiler_dElab_dUsage_dresetUseSpans ec))) (match msp with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__140) -> dtb__140
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> { Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanFile = ""; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanStartLine = 0; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanStartCol = 0; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanEndLine = 0; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanEndCol = 0; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanStartOffset = 0; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanEndOffset = 0 }
   | _ -> failwith "DT: impossible branch"
@@ -301,7 +301,7 @@ let rec v_Vuna_dCompiler_dElab_dUsage_dcheckProgramUsageGo = (fun (mc0 : Vuna_dC
 ))
 
 # 378 "Vuna/Compiler/Elab/Usage.vuna"
-let v_Vuna_dCompiler_dElab_dUsage_dcheckProgramUsage = (fun ec defs -> ((v_Vuna_dCompiler_dElab_dUsage_dcheckProgramUsageGo ec) defs))
+let v_Vuna_dCompiler_dElab_dUsage_dcheckProgramUsage = (fun (ec : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dEc) (defs : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dDtDef Base_dData_dList.t_Base_dData_dList_dList) -> ((v_Vuna_dCompiler_dElab_dUsage_dcheckProgramUsageGo ec) defs))
 
 # 459 "Vuna/Compiler/Elab/Usage.vuna"
-let v_Vuna_dCompiler_dElab_dUsage_dwarnAt0Mod = (fun ec f sp e -> ((Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_decAddWarning ec) ((((Vuna_dCompiler_dBase_dDiagnostics_dWarning.v_Vuna_dCompiler_dBase_dDiagnostics_dWarning_dwarnDiagAtMod f) sp) e) Base_dData_dVec.C_Base_dData_dVec_dVec_Nil)))
+let v_Vuna_dCompiler_dElab_dUsage_dwarnAt0Mod = (fun (ec : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dEc) (f : (Vuna_dCompiler_dBase_dDiag.t_Vuna_dCompiler_dBase_dDiag_dDiagnostic) -> Vuna_dCompiler_dBase_dDiag.t_Vuna_dCompiler_dBase_dDiag_dDiagnostic) (sp : Vuna_dCompiler_dBase_dSource.t_Vuna_dCompiler_dBase_dSource_dSpan) (e : Vuna_dCompiler_dBase_dDiagnostics_dWarning.t_Vuna_dCompiler_dBase_dDiagnostics_dWarning_dWarnErr) -> ((Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_decAddWarning ec) ((((Vuna_dCompiler_dBase_dDiagnostics_dWarning.v_Vuna_dCompiler_dBase_dDiagnostics_dWarning_dwarnDiagAtMod f) sp) e) Base_dData_dVec.C_Base_dData_dVec_dVec_Nil)))

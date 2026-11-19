@@ -17,10 +17,10 @@ let v_Vuna_dCompiler_dCore_dCanonical_dencBinder = (fun (mc0 : (string, Vuna_dCo
 ))
 
 # 56 "Vuna/Compiler/Core/Canonical.vuna"
-let v_Vuna_dCompiler_dCore_dCanonical_dencBinders = (fun bs acc -> (((Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dencList v_Vuna_dCompiler_dCore_dCanonical_dencBinder) bs) acc))
+let v_Vuna_dCompiler_dCore_dCanonical_dencBinders = (fun (bs : (string, Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dRig) Base_dData_dPair.t_Base_dData_dPair_dPair Base_dData_dList.t_Base_dData_dList_dList) (acc : string Base_dData_dList.t_Base_dData_dList_dList) -> (((Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dencList v_Vuna_dCompiler_dCore_dCanonical_dencBinder) bs) acc))
 
 # 73 "Vuna/Compiler/Core/Canonical.vuna"
-let v_Vuna_dCompiler_dCore_dCanonical_dencInts = (fun xs acc -> (((Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dencList Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dencInt) xs) acc))
+let v_Vuna_dCompiler_dCore_dCanonical_dencInts = (fun (xs : int Base_dData_dList.t_Base_dData_dList_dList) (acc : string Base_dData_dList.t_Base_dData_dList_dList) -> (((Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dencList Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dencInt) xs) acc))
 
 # 39 "Vuna/Compiler/Core/Canonical.vuna"
 let rec v_Vuna_dCompiler_dCore_dCanonical_dencArg = (fun (mc0 : (Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dTerm, Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dRig) Base_dData_dPair.t_Base_dData_dPair_dPair) (mc1 : string Base_dData_dList.t_Base_dData_dList_dList) -> (match mc0 with
@@ -28,7 +28,7 @@ let rec v_Vuna_dCompiler_dCore_dCanonical_dencArg = (fun (mc0 : (Vuna_dCompiler_
   | _ -> failwith "DT: impossible branch"
 ))
 # 43 "Vuna/Compiler/Core/Canonical.vuna"
-and v_Vuna_dCompiler_dCore_dCanonical_dencArgs = (fun xs acc -> (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((String.concat "" ["["; (bi_strFromInt (Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dlenOf xs)); ":"]), ((v_Vuna_dCompiler_dCore_dCanonical_dencArgsGo xs) acc))))
+and v_Vuna_dCompiler_dCore_dCanonical_dencArgs = (fun (xs : (Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dTerm, Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dRig) Base_dData_dPair.t_Base_dData_dPair_dPair Base_dData_dList.t_Base_dData_dList_dList) (acc : string Base_dData_dList.t_Base_dData_dList_dList) -> (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((String.concat "" ["["; (bi_strFromInt (Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dlenOf xs)); ":"]), ((v_Vuna_dCompiler_dCore_dCanonical_dencArgsGo xs) acc))))
 # 47 "Vuna/Compiler/Core/Canonical.vuna"
 and v_Vuna_dCompiler_dCore_dCanonical_dencArgsGo = (fun (mc0 : (Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dTerm, Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dRig) Base_dData_dPair.t_Base_dData_dPair_dPair Base_dData_dList.t_Base_dData_dList_dList) (mc1 : string Base_dData_dList.t_Base_dData_dList_dList) -> (match mc0 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__4, dtb__5) -> ((v_Vuna_dCompiler_dCore_dCanonical_dencArg dtb__4) ((v_Vuna_dCompiler_dCore_dCanonical_dencArgsGo dtb__5) mc1))
@@ -41,7 +41,7 @@ and v_Vuna_dCompiler_dCore_dCanonical_dencAlt = (fun (mc0 : Vuna_dCompiler_dCore
   | _ -> failwith "DT: impossible branch"
 ))
 # 64 "Vuna/Compiler/Core/Canonical.vuna"
-and v_Vuna_dCompiler_dCore_dCanonical_dencAlts = (fun xs acc -> (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((String.concat "" ["["; (bi_strFromInt (Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dlenOf xs)); ":"]), ((v_Vuna_dCompiler_dCore_dCanonical_dencAltsGo xs) acc))))
+and v_Vuna_dCompiler_dCore_dCanonical_dencAlts = (fun (xs : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dCaseAlt Base_dData_dList.t_Base_dData_dList_dList) (acc : string Base_dData_dList.t_Base_dData_dList_dList) -> (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((String.concat "" ["["; (bi_strFromInt (Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dlenOf xs)); ":"]), ((v_Vuna_dCompiler_dCore_dCanonical_dencAltsGo xs) acc))))
 # 68 "Vuna/Compiler/Core/Canonical.vuna"
 and v_Vuna_dCompiler_dCore_dCanonical_dencAltsGo = (fun (mc0 : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dCaseAlt Base_dData_dList.t_Base_dData_dList_dList) (mc1 : string Base_dData_dList.t_Base_dData_dList_dList) -> (match mc0 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__9, dtb__10) -> ((v_Vuna_dCompiler_dCore_dCanonical_dencAlt dtb__9) ((v_Vuna_dCompiler_dCore_dCanonical_dencAltsGo dtb__10) mc1))
@@ -72,10 +72,10 @@ and v_Vuna_dCompiler_dCore_dCanonical_dencTerm = (fun (mc0 : Vuna_dCompiler_dCor
 ))
 
 # 100 "Vuna/Compiler/Core/Canonical.vuna"
-let v_Vuna_dCompiler_dCore_dCanonical_dencTermBytes = (fun t -> ((Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dencTop v_Vuna_dCompiler_dCore_dCanonical_dencTerm) t))
+let v_Vuna_dCompiler_dCore_dCanonical_dencTermBytes = (fun (t : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dTerm) -> ((Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dencTop v_Vuna_dCompiler_dCore_dCanonical_dencTerm) t))
 
 # 108 "Vuna/Compiler/Core/Canonical.vuna"
-let v_Vuna_dCompiler_dCore_dCanonical_ddecRig = (fun fuel bytes -> (if (fuel <= 0) then Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing else ((fun nd_uscrut2 -> (match nd_uscrut2 with
+let v_Vuna_dCompiler_dCore_dCanonical_ddecRig = (fun (fuel : int) (bytes : Vuna_dCompiler_dBase_dBytes.t_Vuna_dCompiler_dBase_dBytes_dCur) -> (if (fuel <= 0) then Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing else ((fun nd_uscrut2 -> (match nd_uscrut2 with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__55) -> (match dtb__55 with
   | { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__56; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__57 } -> (if (dtb__56 = 0) then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just ({ Base_dData_dPair.f_Base_dData_dPair_dPair_first = Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dRig_Rig0; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__57 })) else (if (dtb__56 = 1) then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just ({ Base_dData_dPair.f_Base_dData_dPair_dPair_first = Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dRig_Rig1; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__57 })) else (if (dtb__56 = 2) then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just ({ Base_dData_dPair.f_Base_dData_dPair_dPair_first = Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dRig_RigOmega; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__57 })) else Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing)))
   | _ -> failwith "DT: impossible branch"
@@ -85,7 +85,7 @@ let v_Vuna_dCompiler_dCore_dCanonical_ddecRig = (fun fuel bytes -> (if (fuel <= 
 )) ((Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_ddecTag fuel) bytes))))
 
 # 136 "Vuna/Compiler/Core/Canonical.vuna"
-let v_Vuna_dCompiler_dCore_dCanonical_ddecBinder = (fun fuel bytes -> (if (fuel <= 0) then Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing else ((fun nd_uscrut2 -> (match nd_uscrut2 with
+let v_Vuna_dCompiler_dCore_dCanonical_ddecBinder = (fun (fuel : int) (bytes : Vuna_dCompiler_dBase_dBytes.t_Vuna_dCompiler_dBase_dBytes_dCur) -> (if (fuel <= 0) then Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing else ((fun nd_uscrut2 -> (match nd_uscrut2 with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__58) -> (match dtb__58 with
   | { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__59; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__60 } -> ((fun nd_uscrut9 -> (match nd_uscrut9 with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__61) -> (match dtb__61 with
@@ -102,7 +102,7 @@ let v_Vuna_dCompiler_dCore_dCanonical_ddecBinder = (fun fuel bytes -> (if (fuel 
 )) ((Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_ddecStr (fuel - 1)) bytes))))
 
 # 123 "Vuna/Compiler/Core/Canonical.vuna"
-let rec v_Vuna_dCompiler_dCore_dCanonical_ddecArg = (fun fuel bytes -> (if (fuel <= 0) then Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing else ((fun nd_uscrut2 -> (match nd_uscrut2 with
+let rec v_Vuna_dCompiler_dCore_dCanonical_ddecArg = (fun (fuel : int) (bytes : Vuna_dCompiler_dBase_dBytes.t_Vuna_dCompiler_dBase_dBytes_dCur) -> (if (fuel <= 0) then Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing else ((fun nd_uscrut2 -> (match nd_uscrut2 with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__64) -> (match dtb__64 with
   | { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__65; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__66 } -> ((fun nd_uscrut9 -> (match nd_uscrut9 with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__67) -> (match dtb__67 with
@@ -118,7 +118,7 @@ let rec v_Vuna_dCompiler_dCore_dCanonical_ddecArg = (fun fuel bytes -> (if (fuel
   | _ -> failwith "DT: impossible branch"
 )) ((v_Vuna_dCompiler_dCore_dCanonical_ddecTerm (fuel - 1)) bytes))))
 # 149 "Vuna/Compiler/Core/Canonical.vuna"
-and v_Vuna_dCompiler_dCore_dCanonical_ddecAlt = (fun fuel bytes -> (if (fuel <= 0) then Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing else ((fun nd_uscrut2 -> (match nd_uscrut2 with
+and v_Vuna_dCompiler_dCore_dCanonical_ddecAlt = (fun (fuel : int) (bytes : Vuna_dCompiler_dBase_dBytes.t_Vuna_dCompiler_dBase_dBytes_dCur) -> (if (fuel <= 0) then Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing else ((fun nd_uscrut2 -> (match nd_uscrut2 with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__70) -> (match dtb__70 with
   | { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__71; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__72 } -> ((fun nd_uscrut9 -> (match nd_uscrut9 with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__73) -> (match dtb__73 with
@@ -141,7 +141,7 @@ and v_Vuna_dCompiler_dCore_dCanonical_ddecAlt = (fun fuel bytes -> (if (fuel <= 
   | _ -> failwith "DT: impossible branch"
 )) ((Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_ddecStr (fuel - 1)) bytes))))
 # 165 "Vuna/Compiler/Core/Canonical.vuna"
-and v_Vuna_dCompiler_dCore_dCanonical_ddecTerm = (fun fuel bytes -> (if (fuel <= 0) then Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing else ((fun nd_uscrut2 -> (match nd_uscrut2 with
+and v_Vuna_dCompiler_dCore_dCanonical_ddecTerm = (fun (fuel : int) (bytes : Vuna_dCompiler_dBase_dBytes.t_Vuna_dCompiler_dBase_dBytes_dCur) -> (if (fuel <= 0) then Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing else ((fun nd_uscrut2 -> (match nd_uscrut2 with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__79) -> (match dtb__79 with
   | { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__80; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__81 } -> (if (dtb__80 = 0) then ((fun nd_uscrut9 -> (match nd_uscrut9 with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__82) -> (match dtb__82 with
@@ -438,7 +438,7 @@ and v_Vuna_dCompiler_dCore_dCanonical_ddecTerm = (fun fuel bytes -> (if (fuel <=
 )) ((Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_ddecTag fuel) bytes))))
 
 # 318 "Vuna/Compiler/Core/Canonical.vuna"
-let v_Vuna_dCompiler_dCore_dCanonical_ddecTermComplete = (fun s -> ((fun nd_uscrut1 -> (match nd_uscrut1 with
+let v_Vuna_dCompiler_dCore_dCanonical_ddecTermComplete = (fun (s : string) -> ((fun nd_uscrut1 -> (match nd_uscrut1 with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__205) -> (match dtb__205 with
   | { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__206; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__207 } -> (if (Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dcurAtEnd dtb__207) then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__206)) else Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing)
   | _ -> failwith "DT: impossible branch"

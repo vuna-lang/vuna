@@ -2,13 +2,13 @@ open Vuna_runtime
 type 'a0 t_Vuna_dCompiler_dBase_dCommon_dEffCheck = 'a0 Base_dEffect_dCore.t_Base_dEffect_dCore_dEff
 
 # 38 "Vuna/Compiler/Base/Common.vuna"
-let v_Functor_uVuna_uCompiler_uBase_uCommon_uEffCheck = (Base_dTrait_dFunctor.C_Dict_uBase_dTrait_dFunctor_dFunctor_Functor ((Obj.magic (fun f m -> (((Base_dTrait_dFunctor.v_Base_dTrait_dFunctor_dfmap Base_dEffect_dCore.v_Functor_uBase_uEffect_uCore_uEff_ur) f) (let dtb__0 = m in dtb__0))))))
+let v_Functor_uVuna_uCompiler_uBase_uCommon_uEffCheck = (Base_dTrait_dFunctor.C_Dict_uBase_dTrait_dFunctor_dFunctor_Functor (((Obj.magic (fun f m -> (((Base_dTrait_dFunctor.v_Base_dTrait_dFunctor_dfmap Base_dEffect_dCore.v_Functor_uBase_uEffect_uCore_uEff_ur) f) (let dtb__0 = m in dtb__0)))) : Obj.t)))
 
 # 41 "Vuna/Compiler/Base/Common.vuna"
-let v_Applicative_uVuna_uCompiler_uBase_uCommon_uEffCheck = (Base_dTrait_dApplicative.C_Dict_uBase_dTrait_dApplicative_dApplicative_Applicative ((Obj.magic (fun x -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) x))), (Obj.magic (fun mf mx -> (((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dap Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) (let dtb__1 = mf in dtb__1)) (let dtb__2 = mx in dtb__2)))), (Obj.magic (fun f ma mb -> ((((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dliftA2 Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) f) (let dtb__3 = ma in dtb__3)) (let dtb__4 = mb in dtb__4))))))
+let v_Applicative_uVuna_uCompiler_uBase_uCommon_uEffCheck = (Base_dTrait_dApplicative.C_Dict_uBase_dTrait_dApplicative_dApplicative_Applicative (((Obj.magic (fun x -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) x))) : Obj.t), ((Obj.magic (fun mf mx -> (((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dap Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) (let dtb__1 = mf in dtb__1)) (let dtb__2 = mx in dtb__2)))) : Obj.t), ((Obj.magic (fun f ma mb -> ((((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dliftA2 Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) f) (let dtb__3 = ma in dtb__3)) (let dtb__4 = mb in dtb__4)))) : Obj.t)))
 
 # 46 "Vuna/Compiler/Base/Common.vuna"
-let v_Monad_uVuna_uCompiler_uBase_uCommon_uEffCheck = (Base_dTrait_dMonad.C_Dict_uBase_dTrait_dMonad_dMonad_Monad ((Obj.magic (fun m k -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (let dtb__5 = m in dtb__5)) (fun x -> (let dtb__6 = (k x) in dtb__6)))))))
+let v_Monad_uVuna_uCompiler_uBase_uCommon_uEffCheck = (Base_dTrait_dMonad.C_Dict_uBase_dTrait_dMonad_dMonad_Monad (((Obj.magic (fun m k -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (let dtb__5 = m in dtb__5)) (fun x -> (let dtb__6 = (k x) in dtb__6))))) : Obj.t)))
 
 # 26 "Vuna/Compiler/Base/Common.vuna"
 let v_Vuna_dCompiler_dBase_dCommon_dbind = (fun mc0 mc1 -> (match mc0 with

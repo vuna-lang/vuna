@@ -9,10 +9,10 @@ let rec v_Vuna_dCompiler_dLowering_dChecks_dflattenAppSpineGo = (fun (mc0 : Vuna
 ))
 
 # 44 "Vuna/Compiler/Lowering/Checks.vuna"
-let v_Vuna_dCompiler_dLowering_dChecks_dflattenAppSpine = (fun t -> ((v_Vuna_dCompiler_dLowering_dChecks_dflattenAppSpineGo t) Base_dData_dList.C_Base_dData_dList_dList_Nil))
+let v_Vuna_dCompiler_dLowering_dChecks_dflattenAppSpine = (fun (t : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dTerm) -> ((v_Vuna_dCompiler_dLowering_dChecks_dflattenAppSpineGo t) Base_dData_dList.C_Base_dData_dList_dList_Nil))
 
 # 34 "Vuna/Compiler/Lowering/Checks.vuna"
-let v_Vuna_dCompiler_dLowering_dChecks_dflattenConApp = (fun t -> (match (v_Vuna_dCompiler_dLowering_dChecks_dflattenAppSpine t) with
+let v_Vuna_dCompiler_dLowering_dChecks_dflattenConApp = (fun (t : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dTerm) -> (match (v_Vuna_dCompiler_dLowering_dChecks_dflattenAppSpine t) with
   | { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__3; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__4 } -> (match dtb__3 with
   | Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dTerm_TCon (dtb__5, dtb__6) -> (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just ({ Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__5; Base_dData_dPair.f_Base_dData_dPair_dPair_second = ((Base_dData_dList.v_Base_dData_dList_dappend dtb__6) dtb__4) }))
   | Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dTerm_TMk (dtb__7, dtb__8) -> (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just ({ Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__7; Base_dData_dPair.f_Base_dData_dPair_dPair_second = ((Base_dData_dList.v_Base_dData_dList_dappend dtb__8) dtb__4) }))
@@ -40,7 +40,7 @@ let rec v_Vuna_dCompiler_dLowering_dChecks_dfindDtDef = (fun (mc0 : string) (mc1
 ))
 
 # 67 "Vuna/Compiler/Lowering/Checks.vuna"
-let v_Vuna_dCompiler_dLowering_dChecks_disAxiomDef = (fun d -> (Base_dData_dBool.v_Base_dData_dBool_dnot (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDefHasBody d)))
+let v_Vuna_dCompiler_dLowering_dChecks_disAxiomDef = (fun (d : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dDtDef) -> (Base_dData_dBool.v_Base_dData_dBool_dnot (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDefHasBody d)))
 
 # 70 "Vuna/Compiler/Lowering/Checks.vuna"
 let rec v_Vuna_dCompiler_dLowering_dChecks_daxiomNamesOf = (fun (mc0 : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dDtDef Base_dData_dList.t_Base_dData_dList_dList) -> (match mc0 with
@@ -50,7 +50,7 @@ let rec v_Vuna_dCompiler_dLowering_dChecks_daxiomNamesOf = (fun (mc0 : Vuna_dCom
 ))
 
 # 75 "Vuna/Compiler/Lowering/Checks.vuna"
-let v_Vuna_dCompiler_dLowering_dChecks_disTypeLevelDef = (fun tbl d -> (Vuna_dCompiler_dElab_dUsage.v_Vuna_dCompiler_dElab_dUsage_disTypeForming ((((Vuna_dCompiler_dCore_dEval.v_Vuna_dCompiler_dCore_dEval_dforce tbl) Vuna_dCompiler_dCore_dTerm.v_Vuna_dCompiler_dCore_dTerm_dsolsEmpty) Vuna_dCompiler_dCore_dTerm.v_Vuna_dCompiler_dCore_dTerm_ddefaultFuel) ((Vuna_dCompiler_dCore_dEval.v_Vuna_dCompiler_dCore_dEval_deval Base_dData_dList.C_Base_dData_dList_dList_Nil) (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDefType d)))))
+let v_Vuna_dCompiler_dLowering_dChecks_disTypeLevelDef = (fun (tbl : (string, Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dTerm) Base_dContainer_dHashMap.t_Base_dContainer_dHashMap_dHashMap) (d : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dDtDef) -> (Vuna_dCompiler_dElab_dUsage.v_Vuna_dCompiler_dElab_dUsage_disTypeForming ((((Vuna_dCompiler_dCore_dEval.v_Vuna_dCompiler_dCore_dEval_dforce tbl) Vuna_dCompiler_dCore_dTerm.v_Vuna_dCompiler_dCore_dTerm_dsolsEmpty) Vuna_dCompiler_dCore_dTerm.v_Vuna_dCompiler_dCore_dTerm_ddefaultFuel) ((Vuna_dCompiler_dCore_dEval.v_Vuna_dCompiler_dCore_dEval_deval Base_dData_dList.C_Base_dData_dList_dList_Nil) (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDefType d)))))
 
 # 84 "Vuna/Compiler/Lowering/Checks.vuna"
 let rec v_Vuna_dCompiler_dLowering_dChecks_dpartitionDefsGo = (fun (mc0 : (string, Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dTerm) Base_dContainer_dHashMap.t_Base_dContainer_dHashMap_dHashMap) (mc1 : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dDtDef Base_dData_dList.t_Base_dData_dList_dList) (mc2 : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dDtDef Base_dData_dList.t_Base_dData_dList_dList) (mc3 : string Base_dData_dList.t_Base_dData_dList_dList) -> (match mc1 with
@@ -60,13 +60,13 @@ let rec v_Vuna_dCompiler_dLowering_dChecks_dpartitionDefsGo = (fun (mc0 : (strin
 ))
 
 # 81 "Vuna/Compiler/Lowering/Checks.vuna"
-let v_Vuna_dCompiler_dLowering_dChecks_dpartitionDefs = (fun table defs -> ((((v_Vuna_dCompiler_dLowering_dChecks_dpartitionDefsGo ((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dfromList Base_dData_dString.v_Hashable_uString) table)) defs) Base_dData_dList.C_Base_dData_dList_dList_Nil) Base_dData_dList.C_Base_dData_dList_dList_Nil))
+let v_Vuna_dCompiler_dLowering_dChecks_dpartitionDefs = (fun (table : (string, Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dTerm) Base_dData_dPair.t_Base_dData_dPair_dPair Base_dData_dList.t_Base_dData_dList_dList) (defs : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dDtDef Base_dData_dList.t_Base_dData_dList_dList) -> ((((v_Vuna_dCompiler_dLowering_dChecks_dpartitionDefsGo ((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dfromList Base_dData_dString.v_Hashable_uString) table)) defs) Base_dData_dList.C_Base_dData_dList_dList_Nil) Base_dData_dList.C_Base_dData_dList_dList_Nil))
 
 # 97 "Vuna/Compiler/Lowering/Checks.vuna"
-let v_Vuna_dCompiler_dLowering_dChecks_ddefLocDiag = (fun d e -> (((Vuna_dCompiler_dBase_dDiag.v_Vuna_dCompiler_dBase_dDiag_dwithContext (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDefSpan d)) (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDefName d)) e))
+let v_Vuna_dCompiler_dLowering_dChecks_ddefLocDiag = (fun (d : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dDtDef) (e : Vuna_dCompiler_dBase_dDiag.t_Vuna_dCompiler_dBase_dDiag_dDiagnostic) -> (((Vuna_dCompiler_dBase_dDiag.v_Vuna_dCompiler_dBase_dDiag_dwithContext (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDefSpan d)) (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDefName d)) e))
 
 # 139 "Vuna/Compiler/Lowering/Checks.vuna"
-let v_Vuna_dCompiler_dLowering_dChecks_dshowMetaHint = (fun m -> (" ?" ^ (bi_strFromInt m)))
+let v_Vuna_dCompiler_dLowering_dChecks_dshowMetaHint = (fun (m : int) -> (" ?" ^ (bi_strFromInt m)))
 
 # 200 "Vuna/Compiler/Lowering/Checks.vuna"
 let rec v_Vuna_dCompiler_dLowering_dChecks_dbinderAt = (fun (mc0 : int) (mc1 : (string, Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dRig) Base_dData_dPair.t_Base_dData_dPair_dPair Base_dData_dList.t_Base_dData_dList_dList) -> (match mc1 with
@@ -76,7 +76,7 @@ let rec v_Vuna_dCompiler_dLowering_dChecks_dbinderAt = (fun (mc0 : int) (mc1 : (
 ))
 
 # 142 "Vuna/Compiler/Lowering/Checks.vuna"
-let rec v_Vuna_dCompiler_dLowering_dChecks_dcheckErasureFuel = (fun fuel typeNames binders t -> (if (fuel <= 0) then (Vuna_dCompiler_dBase_dDiag.v_Vuna_dCompiler_dBase_dDiag_dicFuel "erasure") else (match t with
+let rec v_Vuna_dCompiler_dLowering_dChecks_dcheckErasureFuel = (fun (fuel : int) (typeNames : string Base_dData_dList.t_Base_dData_dList_dList) (binders : (string, Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dRig) Base_dData_dPair.t_Base_dData_dPair_dPair Base_dData_dList.t_Base_dData_dList_dList) (t : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dTerm) -> (if (fuel <= 0) then (Vuna_dCompiler_dBase_dDiag.v_Vuna_dCompiler_dBase_dDiag_dicFuel "erasure") else (match t with
   | Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dTerm_TVar (dtb__20, dtb__21, dtb__22) -> ((fun nd_uscrut7 -> (match nd_uscrut7 with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> (Vuna_dCompiler_dBase_dDiag.v_Vuna_dCompiler_dBase_dDiag_dicInternal (String.concat "" ["unbound runtime variable "; dtb__20; " (index "; (bi_strFromInt dtb__21); ", binders "; (bi_strFromInt (Base_dData_dList.v_Base_dData_dList_dlength binders)); ")"]))
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__23) -> (match dtb__23 with
@@ -135,7 +135,7 @@ let rec v_Vuna_dCompiler_dLowering_dChecks_daddName = (fun (mc0 : string) (mc1 :
 ))
 
 # 205 "Vuna/Compiler/Lowering/Checks.vuna"
-let rec v_Vuna_dCompiler_dLowering_dChecks_dtermDepsIntoFuel = (fun fuel runtimeNames acc t -> (if (fuel <= 0) then acc else (match t with
+let rec v_Vuna_dCompiler_dLowering_dChecks_dtermDepsIntoFuel = (fun (fuel : int) (runtimeNames : (string, bool) Base_dContainer_dHashMap.t_Base_dContainer_dHashMap_dHashMap) (acc : string Base_dData_dList.t_Base_dData_dList_dList) (t : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dTerm) -> (if (fuel <= 0) then acc else (match t with
   | Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dTerm_TGlobal (dtb__78) -> (if ((((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dmember Base_dData_dString.v_Hashable_uString) Base_dData_dString.v_Eq_uString) dtb__78) runtimeNames) then ((v_Vuna_dCompiler_dLowering_dChecks_daddName dtb__78) acc) else acc)
   | Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dTerm_TVar (dtb__79, dtb__80, dtb__81) -> acc
   | Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dTerm_TMeta (dtb__82) -> acc
@@ -183,19 +183,19 @@ and v_Vuna_dCompiler_dLowering_dChecks_dtermDepsAltsFuel = (fun (mc0 : int) (mc1
 let v_Vuna_dCompiler_dLowering_dChecks_dnoUseFlags = { f_Vuna_dCompiler_dLowering_dChecks_dUseFlags_useFlagsFloat = false; f_Vuna_dCompiler_dLowering_dChecks_dUseFlags_useFlagsTrace = false; f_Vuna_dCompiler_dLowering_dChecks_dUseFlags_useFlagsObs = false }
 
 # 276 "Vuna/Compiler/Lowering/Checks.vuna"
-let v_Vuna_dCompiler_dLowering_dChecks_dorUseFlags = (fun a b -> { f_Vuna_dCompiler_dLowering_dChecks_dUseFlags_useFlagsFloat = (if (a).f_Vuna_dCompiler_dLowering_dChecks_dUseFlags_useFlagsFloat then true else (b).f_Vuna_dCompiler_dLowering_dChecks_dUseFlags_useFlagsFloat); f_Vuna_dCompiler_dLowering_dChecks_dUseFlags_useFlagsTrace = (if (a).f_Vuna_dCompiler_dLowering_dChecks_dUseFlags_useFlagsTrace then true else (b).f_Vuna_dCompiler_dLowering_dChecks_dUseFlags_useFlagsTrace); f_Vuna_dCompiler_dLowering_dChecks_dUseFlags_useFlagsObs = (if (a).f_Vuna_dCompiler_dLowering_dChecks_dUseFlags_useFlagsObs then true else (b).f_Vuna_dCompiler_dLowering_dChecks_dUseFlags_useFlagsObs) })
+let v_Vuna_dCompiler_dLowering_dChecks_dorUseFlags = (fun (a : t_Vuna_dCompiler_dLowering_dChecks_dUseFlags) (b : t_Vuna_dCompiler_dLowering_dChecks_dUseFlags) -> { f_Vuna_dCompiler_dLowering_dChecks_dUseFlags_useFlagsFloat = (if (a).f_Vuna_dCompiler_dLowering_dChecks_dUseFlags_useFlagsFloat then true else (b).f_Vuna_dCompiler_dLowering_dChecks_dUseFlags_useFlagsFloat); f_Vuna_dCompiler_dLowering_dChecks_dUseFlags_useFlagsTrace = (if (a).f_Vuna_dCompiler_dLowering_dChecks_dUseFlags_useFlagsTrace then true else (b).f_Vuna_dCompiler_dLowering_dChecks_dUseFlags_useFlagsTrace); f_Vuna_dCompiler_dLowering_dChecks_dUseFlags_useFlagsObs = (if (a).f_Vuna_dCompiler_dLowering_dChecks_dUseFlags_useFlagsObs then true else (b).f_Vuna_dCompiler_dLowering_dChecks_dUseFlags_useFlagsObs) })
 
 # 294 "Vuna/Compiler/Lowering/Checks.vuna"
-let v_Vuna_dCompiler_dLowering_dChecks_duseBudgetFor = (fun size -> (512 + (4 * size)))
+let v_Vuna_dCompiler_dLowering_dChecks_duseBudgetFor = (fun (size : int) -> (512 + (4 * size)))
 
 # 297 "Vuna/Compiler/Lowering/Checks.vuna"
-let v_Vuna_dCompiler_dLowering_dChecks_daddRuntimeDep = (fun names live n u -> (if (if live then ((((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dmember Base_dData_dString.v_Hashable_uString) Base_dData_dString.v_Eq_uString) n) names) else false) then { f_Vuna_dCompiler_dLowering_dChecks_dTermUse_termUseDeps = ((v_Vuna_dCompiler_dLowering_dChecks_daddName n) (u).f_Vuna_dCompiler_dLowering_dChecks_dTermUse_termUseDeps); f_Vuna_dCompiler_dLowering_dChecks_dTermUse_termUseFlags = (u).f_Vuna_dCompiler_dLowering_dChecks_dTermUse_termUseFlags; f_Vuna_dCompiler_dLowering_dChecks_dTermUse_termUseFloatLit = (u).f_Vuna_dCompiler_dLowering_dChecks_dTermUse_termUseFloatLit } else u))
+let v_Vuna_dCompiler_dLowering_dChecks_daddRuntimeDep = (fun (names : (string, bool) Base_dContainer_dHashMap.t_Base_dContainer_dHashMap_dHashMap) (live : bool) (n : string) (u : t_Vuna_dCompiler_dLowering_dChecks_dTermUse) -> (if (if live then ((((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dmember Base_dData_dString.v_Hashable_uString) Base_dData_dString.v_Eq_uString) n) names) else false) then { f_Vuna_dCompiler_dLowering_dChecks_dTermUse_termUseDeps = ((v_Vuna_dCompiler_dLowering_dChecks_daddName n) (u).f_Vuna_dCompiler_dLowering_dChecks_dTermUse_termUseDeps); f_Vuna_dCompiler_dLowering_dChecks_dTermUse_termUseFlags = (u).f_Vuna_dCompiler_dLowering_dChecks_dTermUse_termUseFlags; f_Vuna_dCompiler_dLowering_dChecks_dTermUse_termUseFloatLit = (u).f_Vuna_dCompiler_dLowering_dChecks_dTermUse_termUseFloatLit } else u))
 
 # 304 "Vuna/Compiler/Lowering/Checks.vuna"
-let v_Vuna_dCompiler_dLowering_dChecks_dwithFlags = (fun f u -> { f_Vuna_dCompiler_dLowering_dChecks_dTermUse_termUseDeps = (u).f_Vuna_dCompiler_dLowering_dChecks_dTermUse_termUseDeps; f_Vuna_dCompiler_dLowering_dChecks_dTermUse_termUseFlags = ((v_Vuna_dCompiler_dLowering_dChecks_dorUseFlags (u).f_Vuna_dCompiler_dLowering_dChecks_dTermUse_termUseFlags) f); f_Vuna_dCompiler_dLowering_dChecks_dTermUse_termUseFloatLit = (u).f_Vuna_dCompiler_dLowering_dChecks_dTermUse_termUseFloatLit })
+let v_Vuna_dCompiler_dLowering_dChecks_dwithFlags = (fun (f : t_Vuna_dCompiler_dLowering_dChecks_dUseFlags) (u : t_Vuna_dCompiler_dLowering_dChecks_dTermUse) -> { f_Vuna_dCompiler_dLowering_dChecks_dTermUse_termUseDeps = (u).f_Vuna_dCompiler_dLowering_dChecks_dTermUse_termUseDeps; f_Vuna_dCompiler_dLowering_dChecks_dTermUse_termUseFlags = ((v_Vuna_dCompiler_dLowering_dChecks_dorUseFlags (u).f_Vuna_dCompiler_dLowering_dChecks_dTermUse_termUseFlags) f); f_Vuna_dCompiler_dLowering_dChecks_dTermUse_termUseFloatLit = (u).f_Vuna_dCompiler_dLowering_dChecks_dTermUse_termUseFloatLit })
 
 # 307 "Vuna/Compiler/Lowering/Checks.vuna"
-let rec v_Vuna_dCompiler_dLowering_dChecks_dtermUseFuel = (fun fuel names flagOf live acc t -> (if (fuel <= 0) then acc else (match t with
+let rec v_Vuna_dCompiler_dLowering_dChecks_dtermUseFuel = (fun (fuel : int) (names : (string, bool) Base_dContainer_dHashMap.t_Base_dContainer_dHashMap_dHashMap) (flagOf : (string) -> t_Vuna_dCompiler_dLowering_dChecks_dUseFlags) (live : bool) (acc : t_Vuna_dCompiler_dLowering_dChecks_dTermUse) (t : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dTerm) -> (if (fuel <= 0) then acc else (match t with
   | Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dTerm_TGlobal (dtb__131) -> ((v_Vuna_dCompiler_dLowering_dChecks_dwithFlags (flagOf dtb__131)) ((((v_Vuna_dCompiler_dLowering_dChecks_daddRuntimeDep names) live) dtb__131) acc))
   | Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dTerm_TFloat (dtb__132) -> { f_Vuna_dCompiler_dLowering_dChecks_dTermUse_termUseDeps = (acc).f_Vuna_dCompiler_dLowering_dChecks_dTermUse_termUseDeps; f_Vuna_dCompiler_dLowering_dChecks_dTermUse_termUseFlags = (acc).f_Vuna_dCompiler_dLowering_dChecks_dTermUse_termUseFlags; f_Vuna_dCompiler_dLowering_dChecks_dTermUse_termUseFloatLit = true }
   | Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dTerm_TVar (dtb__133, dtb__134, dtb__135) -> acc
@@ -233,7 +233,7 @@ and v_Vuna_dCompiler_dLowering_dChecks_dtermUseAltsFuel = (fun (mc0 : int) (mc1 
 ))
 
 # 289 "Vuna/Compiler/Lowering/Checks.vuna"
-let v_Vuna_dCompiler_dLowering_dChecks_dtermUseInto = (fun runtimeNames flagOf t -> ((((((v_Vuna_dCompiler_dLowering_dChecks_dtermUseFuel (v_Vuna_dCompiler_dLowering_dChecks_duseBudgetFor (Vuna_dCompiler_dCore_dTerm.v_Vuna_dCompiler_dCore_dTerm_dtermSize t))) runtimeNames) flagOf) true) { f_Vuna_dCompiler_dLowering_dChecks_dTermUse_termUseDeps = Base_dData_dList.C_Base_dData_dList_dList_Nil; f_Vuna_dCompiler_dLowering_dChecks_dTermUse_termUseFlags = v_Vuna_dCompiler_dLowering_dChecks_dnoUseFlags; f_Vuna_dCompiler_dLowering_dChecks_dTermUse_termUseFloatLit = false }) t))
+let v_Vuna_dCompiler_dLowering_dChecks_dtermUseInto = (fun (runtimeNames : (string, bool) Base_dContainer_dHashMap.t_Base_dContainer_dHashMap_dHashMap) (flagOf : (string) -> t_Vuna_dCompiler_dLowering_dChecks_dUseFlags) (t : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dTerm) -> ((((((v_Vuna_dCompiler_dLowering_dChecks_dtermUseFuel (v_Vuna_dCompiler_dLowering_dChecks_duseBudgetFor (Vuna_dCompiler_dCore_dTerm.v_Vuna_dCompiler_dCore_dTerm_dtermSize t))) runtimeNames) flagOf) true) { f_Vuna_dCompiler_dLowering_dChecks_dTermUse_termUseDeps = Base_dData_dList.C_Base_dData_dList_dList_Nil; f_Vuna_dCompiler_dLowering_dChecks_dTermUse_termUseFlags = v_Vuna_dCompiler_dLowering_dChecks_dnoUseFlags; f_Vuna_dCompiler_dLowering_dChecks_dTermUse_termUseFloatLit = false }) t))
 
 # 360 "Vuna/Compiler/Lowering/Checks.vuna"
 let rec v_Vuna_dCompiler_dLowering_dChecks_druntimeNamesOf = (fun (mc0 : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dDtDef Base_dData_dList.t_Base_dData_dList_dList) -> (match mc0 with
@@ -308,7 +308,7 @@ let rec v_Vuna_dCompiler_dLowering_dChecks_dcheckAllDefScopes = (fun (mc0 : Vuna
 ))
 
 # 442 "Vuna/Compiler/Lowering/Checks.vuna"
-let v_Vuna_dCompiler_dLowering_dChecks_dtermDepsInto = (fun a1 a2 a3 -> ((((v_Vuna_dCompiler_dLowering_dChecks_dtermDepsIntoFuel (v_Vuna_dCompiler_dLowering_dChecks_duseBudgetFor (Vuna_dCompiler_dCore_dTerm.v_Vuna_dCompiler_dCore_dTerm_dtermSize a3))) a1) a2) a3))
+let v_Vuna_dCompiler_dLowering_dChecks_dtermDepsInto = (fun (a1 : (string, bool) Base_dContainer_dHashMap.t_Base_dContainer_dHashMap_dHashMap) (a2 : string Base_dData_dList.t_Base_dData_dList_dList) (a3 : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dTerm) -> ((((v_Vuna_dCompiler_dLowering_dChecks_dtermDepsIntoFuel (v_Vuna_dCompiler_dLowering_dChecks_duseBudgetFor (Vuna_dCompiler_dCore_dTerm.v_Vuna_dCompiler_dCore_dTerm_dtermSize a3))) a1) a2) a3))
 
 # 105 "Vuna/Compiler/Lowering/Checks.vuna"
 let rec v_Vuna_dCompiler_dLowering_dChecks_dcheckNoAxiomRuntimeGo = (fun (mc0 : (string, bool) Base_dContainer_dHashMap.t_Base_dContainer_dHashMap_dHashMap) (mc1 : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dDtDef Base_dData_dList.t_Base_dData_dList_dList) -> (match mc1 with
@@ -326,29 +326,29 @@ let rec v_Vuna_dCompiler_dLowering_dChecks_dcheckNoAxiomRuntimeGo = (fun (mc0 : 
 ))
 
 # 102 "Vuna/Compiler/Lowering/Checks.vuna"
-let v_Vuna_dCompiler_dLowering_dChecks_dcheckNoAxiomRuntime = (fun axiomNames defs -> ((v_Vuna_dCompiler_dLowering_dChecks_dcheckNoAxiomRuntimeGo (Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dofNames axiomNames)) defs))
+let v_Vuna_dCompiler_dLowering_dChecks_dcheckNoAxiomRuntime = (fun (axiomNames : string Base_dData_dList.t_Base_dData_dList_dList) (defs : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dDtDef Base_dData_dList.t_Base_dData_dList_dList) -> ((v_Vuna_dCompiler_dLowering_dChecks_dcheckNoAxiomRuntimeGo (Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dofNames axiomNames)) defs))
 
 # 445 "Vuna/Compiler/Lowering/Checks.vuna"
-let v_Vuna_dCompiler_dLowering_dChecks_dtermDepsArgs = (fun a1 a2 a3 -> ((((v_Vuna_dCompiler_dLowering_dChecks_dtermDepsArgsFuel 100000) a1) a2) a3))
+let v_Vuna_dCompiler_dLowering_dChecks_dtermDepsArgs = (fun (a1 : (string, bool) Base_dContainer_dHashMap.t_Base_dContainer_dHashMap_dHashMap) (a2 : string Base_dData_dList.t_Base_dData_dList_dList) (a3 : (Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dTerm, Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dRig) Base_dData_dPair.t_Base_dData_dPair_dPair Base_dData_dList.t_Base_dData_dList_dList) -> ((((v_Vuna_dCompiler_dLowering_dChecks_dtermDepsArgsFuel 100000) a1) a2) a3))
 
 # 448 "Vuna/Compiler/Lowering/Checks.vuna"
-let v_Vuna_dCompiler_dLowering_dChecks_dtermDepsAlts = (fun a1 a2 a3 -> ((((v_Vuna_dCompiler_dLowering_dChecks_dtermDepsAltsFuel 100000) a1) a2) a3))
+let v_Vuna_dCompiler_dLowering_dChecks_dtermDepsAlts = (fun (a1 : (string, bool) Base_dContainer_dHashMap.t_Base_dContainer_dHashMap_dHashMap) (a2 : string Base_dData_dList.t_Base_dData_dList_dList) (a3 : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dCaseAlt Base_dData_dList.t_Base_dData_dList_dList) -> ((((v_Vuna_dCompiler_dLowering_dChecks_dtermDepsAltsFuel 100000) a1) a2) a3))
 
 # 467 "Vuna/Compiler/Lowering/Checks.vuna"
 let v_Vuna_dCompiler_dLowering_dChecks_derasureFuelMax = 1000000
 
 # 461 "Vuna/Compiler/Lowering/Checks.vuna"
-let v_Vuna_dCompiler_dLowering_dChecks_derasureFuelFor = (fun size -> ((fun scaled -> (if (scaled > v_Vuna_dCompiler_dLowering_dChecks_derasureFuelMax) then v_Vuna_dCompiler_dLowering_dChecks_derasureFuelMax else scaled)) (512 + (4 * size))))
+let v_Vuna_dCompiler_dLowering_dChecks_derasureFuelFor = (fun (size : int) -> ((fun scaled -> (if (scaled > v_Vuna_dCompiler_dLowering_dChecks_derasureFuelMax) then v_Vuna_dCompiler_dLowering_dChecks_derasureFuelMax else scaled)) (512 + (4 * size))))
 
 # 451 "Vuna/Compiler/Lowering/Checks.vuna"
-let v_Vuna_dCompiler_dLowering_dChecks_dcheckErasure = (fun typeNames binders t -> (match (Vuna_dCompiler_dCore_dTerm.v_Vuna_dCompiler_dCore_dTerm_dnatChainValue t) with
+let v_Vuna_dCompiler_dLowering_dChecks_dcheckErasure = (fun (typeNames : string Base_dData_dList.t_Base_dData_dList_dList) (binders : (string, Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dRig) Base_dData_dPair.t_Base_dData_dPair_dPair Base_dData_dList.t_Base_dData_dList_dList) (t : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dTerm) -> (match (Vuna_dCompiler_dCore_dTerm.v_Vuna_dCompiler_dCore_dTerm_dnatChainValue t) with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__245) -> (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC (0))
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> ((((v_Vuna_dCompiler_dLowering_dChecks_dcheckErasureFuel (v_Vuna_dCompiler_dLowering_dChecks_derasureFuelFor (Vuna_dCompiler_dCore_dTerm.v_Vuna_dCompiler_dCore_dTerm_dtermSize t))) typeNames) binders) t)
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 125 "Vuna/Compiler/Lowering/Checks.vuna"
-let v_Vuna_dCompiler_dLowering_dChecks_dcheckOneErasure = (fun typeNames d -> (match (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDefExtern d) with
+let v_Vuna_dCompiler_dLowering_dChecks_dcheckOneErasure = (fun (typeNames : string Base_dData_dList.t_Base_dData_dList_dList) (d : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dDtDef) -> (match (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDefExtern d) with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__246) -> (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC (0))
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> (match (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDefBody d) with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> (Vuna_dCompiler_dBase_dDiag.v_Vuna_dCompiler_dBase_dDiag_dicInternal "axiom reached the runtime erasure check (partition must erase it)")
@@ -380,7 +380,7 @@ let rec v_Vuna_dCompiler_dLowering_dChecks_derasureFuelForArgs = (fun (mc0 : (Vu
 ))
 
 # 474 "Vuna/Compiler/Lowering/Checks.vuna"
-let v_Vuna_dCompiler_dLowering_dChecks_dcheckConArgsErasure = (fun a1 a2 a3 -> ((((v_Vuna_dCompiler_dLowering_dChecks_dcheckConArgsErasureFuel (v_Vuna_dCompiler_dLowering_dChecks_derasureFuelFor (v_Vuna_dCompiler_dLowering_dChecks_derasureFuelForArgs a3))) a1) a2) a3))
+let v_Vuna_dCompiler_dLowering_dChecks_dcheckConArgsErasure = (fun (a1 : string Base_dData_dList.t_Base_dData_dList_dList) (a2 : (string, Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dRig) Base_dData_dPair.t_Base_dData_dPair_dPair Base_dData_dList.t_Base_dData_dList_dList) (a3 : (Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dTerm, Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dRig) Base_dData_dPair.t_Base_dData_dPair_dPair Base_dData_dList.t_Base_dData_dList_dList) -> ((((v_Vuna_dCompiler_dLowering_dChecks_dcheckConArgsErasureFuel (v_Vuna_dCompiler_dLowering_dChecks_derasureFuelFor (v_Vuna_dCompiler_dLowering_dChecks_derasureFuelForArgs a3))) a1) a2) a3))
 
 # 481 "Vuna/Compiler/Lowering/Checks.vuna"
 let rec v_Vuna_dCompiler_dLowering_dChecks_derasureFuelForAlts = (fun (mc0 : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dCaseAlt Base_dData_dList.t_Base_dData_dList_dList) -> (match mc0 with
@@ -390,4 +390,4 @@ let rec v_Vuna_dCompiler_dLowering_dChecks_derasureFuelForAlts = (fun (mc0 : Vun
 ))
 
 # 478 "Vuna/Compiler/Lowering/Checks.vuna"
-let v_Vuna_dCompiler_dLowering_dChecks_dcheckAltErasure = (fun a1 a2 a3 -> ((((v_Vuna_dCompiler_dLowering_dChecks_dcheckAltErasureFuel (v_Vuna_dCompiler_dLowering_dChecks_derasureFuelFor (v_Vuna_dCompiler_dLowering_dChecks_derasureFuelForAlts a3))) a1) a2) a3))
+let v_Vuna_dCompiler_dLowering_dChecks_dcheckAltErasure = (fun (a1 : string Base_dData_dList.t_Base_dData_dList_dList) (a2 : (string, Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dRig) Base_dData_dPair.t_Base_dData_dPair_dPair Base_dData_dList.t_Base_dData_dList_dList) (a3 : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dCaseAlt Base_dData_dList.t_Base_dData_dList_dList) -> ((((v_Vuna_dCompiler_dLowering_dChecks_dcheckAltErasureFuel (v_Vuna_dCompiler_dLowering_dChecks_derasureFuelFor (v_Vuna_dCompiler_dLowering_dChecks_derasureFuelForAlts a3))) a1) a2) a3))

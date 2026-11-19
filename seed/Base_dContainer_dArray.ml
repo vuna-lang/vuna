@@ -15,10 +15,10 @@ let v_Show_uArray_ua = (fun _uctx0 -> (Base_dTrait_dShow.C_Dict_uBase_dTrait_dSh
 let v_Base_dContainer_dArray_dlength = (fun a -> (bi_natFromInt (Array.length a)))
 
 # 24 "Base/Container/Array.vuna"
-let v_Base_dContainer_dArray_dget = (fun a i -> ((Array.get a) i))
+let v_Base_dContainer_dArray_dget = (fun a (i : int) -> ((Array.get a) i))
 
 # 28 "Base/Container/Array.vuna"
-let v_Base_dContainer_dArray_dset = (fun a i v -> (((dtp_arraySet a) i) v))
+let v_Base_dContainer_dArray_dset = (fun a (i : int) v -> (((dtp_arraySet a) i) v))
 
 # 32 "Base/Container/Array.vuna"
-let v_Base_dContainer_dArray_dmake = (fun n v -> ((Array.make n) v))
+let v_Base_dContainer_dArray_dmake = (fun (n : int) v -> ((Array.make n) v))

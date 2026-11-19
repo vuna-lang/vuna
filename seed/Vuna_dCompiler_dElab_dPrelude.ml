@@ -15,10 +15,10 @@ let v_Vuna_dCompiler_dElab_dPrelude_dboolTy = (Vuna_dCompiler_dCore_dTerm.C_Vuna
 let v_Vuna_dCompiler_dElab_dPrelude_dboolTyValue = (Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dValue_VNeutral ((Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dNeutral_NGlobal (Vuna_dCompiler_dBase_dIntrinsics.v_Vuna_dCompiler_dBase_dIntrinsics_dboolTypeName, Base_dData_dList.C_Base_dData_dList_dList_Nil))))
 
 # 41 "Vuna/Compiler/Elab/Prelude.vuna"
-let v_Vuna_dCompiler_dElab_dPrelude_dfun2 = (fun a b c -> (Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dTerm_TPi ("_", false, Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dRig_RigOmega, a, (Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dTerm_TPi ("_", false, Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dRig_RigOmega, (((Vuna_dCompiler_dCore_dTerm.v_Vuna_dCompiler_dCore_dTerm_dshift 0) 1) b), (((Vuna_dCompiler_dCore_dTerm.v_Vuna_dCompiler_dCore_dTerm_dshift 0) 2) c))))))
+let v_Vuna_dCompiler_dElab_dPrelude_dfun2 = (fun (a : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dTerm) (b : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dTerm) (c : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dTerm) -> (Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dTerm_TPi ("_", false, Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dRig_RigOmega, a, (Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dTerm_TPi ("_", false, Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dRig_RigOmega, (((Vuna_dCompiler_dCore_dTerm.v_Vuna_dCompiler_dCore_dTerm_dshift 0) 1) b), (((Vuna_dCompiler_dCore_dTerm.v_Vuna_dCompiler_dCore_dTerm_dshift 0) 2) c))))))
 
 # 50 "Vuna/Compiler/Elab/Prelude.vuna"
-let v_Vuna_dCompiler_dElab_dPrelude_dbuiltinTyName = (fun v -> (match v with
+let v_Vuna_dCompiler_dElab_dPrelude_dbuiltinTyName = (fun (v : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dValue) -> (match v with
   | Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dValue_VNeutral (dtb__0) -> (match dtb__0 with
   | Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dNeutral_NGlobal (dtb__1, dtb__2) -> (if ((Base_dData_dList.v_Base_dData_dList_dlength dtb__2) = 0) then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__1)) else Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing)
   | _ -> Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing
@@ -27,7 +27,7 @@ let v_Vuna_dCompiler_dElab_dPrelude_dbuiltinTyName = (fun v -> (match v with
 ))
 
 # 60 "Vuna/Compiler/Elab/Prelude.vuna"
-let v_Vuna_dCompiler_dElab_dPrelude_disEqShort = (fun m -> (if (m = "==") then true else (m = "eq")))
+let v_Vuna_dCompiler_dElab_dPrelude_disEqShort = (fun (m : string) -> (if (m = "==") then true else (m = "eq")))
 
 # 65 "Vuna/Compiler/Elab/Prelude.vuna"
 let v_Vuna_dCompiler_dElab_dPrelude_deqRuntimeName = (fun (mc0 : string) (mc1 : string) -> (if (mc1 = "Int") then (if (v_Vuna_dCompiler_dElab_dPrelude_disEqShort mc0) then (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC ("bi_eq_int")) else (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC ("bi_neq_int"))) else (if (mc1 = "String") then (if (v_Vuna_dCompiler_dElab_dPrelude_disEqShort mc0) then (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC ("bi_eq_str")) else (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC ("bi_neq_str"))) else (if (mc1 = "Float") then (if (v_Vuna_dCompiler_dElab_dPrelude_disEqShort mc0) then (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC ("bi_eq_float")) else (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC ("bi_neq_float"))) else (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_ErrC (((Vuna_dCompiler_dBase_dDiagnostics_dTc.v_Vuna_dCompiler_dBase_dDiagnostics_dTc_dtcMsg (Vuna_dCompiler_dBase_dDiagnostics_dTc.C_Vuna_dCompiler_dBase_dDiagnostics_dTc_dTcErr_OpOnlyIntString (mc0, mc1))) (Base_dData_dVec.C_Base_dData_dVec_dVec_VCons (mc0, (Base_dData_dVec.C_Base_dData_dVec_dVec_VCons (mc1, Base_dData_dVec.C_Base_dData_dVec_dVec_Nil)))))))))))
@@ -40,7 +40,7 @@ let rec v_Vuna_dCompiler_dElab_dPrelude_dindexOfNameGo = (fun (mc0 : string) (mc
 ))
 
 # 80 "Vuna/Compiler/Elab/Prelude.vuna"
-let v_Vuna_dCompiler_dElab_dPrelude_dindexOfName = (fun name env -> (((v_Vuna_dCompiler_dElab_dPrelude_dindexOfNameGo name) env) 0))
+let v_Vuna_dCompiler_dElab_dPrelude_dindexOfName = (fun (name : string) (env : string Base_dData_dList.t_Base_dData_dList_dList) -> (((v_Vuna_dCompiler_dElab_dPrelude_dindexOfNameGo name) env) 0))
 
 # 86 "Vuna/Compiler/Elab/Prelude.vuna"
 let rec v_Vuna_dCompiler_dElab_dPrelude_dityToTermEnv = (fun (mc0 : string Base_dData_dList.t_Base_dData_dList_dList) (mc1 : Vuna_dCompiler_dBase_dIntrinsics.t_Vuna_dCompiler_dBase_dIntrinsics_dIType) -> (match mc1 with
@@ -67,10 +67,10 @@ let rec v_Vuna_dCompiler_dElab_dPrelude_dityToTermEnv = (fun (mc0 : string Base_
 ))
 
 # 83 "Vuna/Compiler/Elab/Prelude.vuna"
-let v_Vuna_dCompiler_dElab_dPrelude_dityToTerm = (fun ty -> ((v_Vuna_dCompiler_dElab_dPrelude_dityToTermEnv Base_dData_dList.C_Base_dData_dList_dList_Nil) ty))
+let v_Vuna_dCompiler_dElab_dPrelude_dityToTerm = (fun (ty : Vuna_dCompiler_dBase_dIntrinsics.t_Vuna_dCompiler_dBase_dIntrinsics_dIType) -> ((v_Vuna_dCompiler_dElab_dPrelude_dityToTermEnv Base_dData_dList.C_Base_dData_dList_dList_Nil) ty))
 
 # 115 "Vuna/Compiler/Elab/Prelude.vuna"
-let rec v_Vuna_dCompiler_dElab_dPrelude_dtypeCtorKindTerm = (fun arity -> (if (arity <= 0) then (Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dTerm_TType (Vuna_dCompiler_dCore_dTerm.v_Vuna_dCompiler_dCore_dTerm_dlevelZero)) else (Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dTerm_TPi ("_", false, Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dRig_Rig0, (Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dTerm_TType (Vuna_dCompiler_dCore_dTerm.v_Vuna_dCompiler_dCore_dTerm_dlevelZero)), (v_Vuna_dCompiler_dElab_dPrelude_dtypeCtorKindTerm (arity - 1))))))
+let rec v_Vuna_dCompiler_dElab_dPrelude_dtypeCtorKindTerm = (fun (arity : int) -> (if (arity <= 0) then (Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dTerm_TType (Vuna_dCompiler_dCore_dTerm.v_Vuna_dCompiler_dCore_dTerm_dlevelZero)) else (Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dTerm_TPi ("_", false, Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dRig_Rig0, (Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dTerm_TType (Vuna_dCompiler_dCore_dTerm.v_Vuna_dCompiler_dCore_dTerm_dlevelZero)), (v_Vuna_dCompiler_dElab_dPrelude_dtypeCtorKindTerm (arity - 1))))))
 
 # 123 "Vuna/Compiler/Elab/Prelude.vuna"
 let v_Vuna_dCompiler_dElab_dPrelude_dpreludeTypeGlobals = ((Base_dData_dList.v_Base_dData_dList_dappend ((Base_dData_dList.v_Base_dData_dList_dmap (fun (n : string) -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = n; Base_dData_dPair.f_Base_dData_dPair_dPair_second = (Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dTerm_TType (Vuna_dCompiler_dCore_dTerm.v_Vuna_dCompiler_dCore_dTerm_dlevelZero)) })) Vuna_dCompiler_dBase_dIntrinsics.v_Vuna_dCompiler_dBase_dIntrinsics_dtypeIntrinsicNames)) ((Base_dData_dList.v_Base_dData_dList_dmap (fun (t : Vuna_dCompiler_dBase_dIntrinsics.t_Vuna_dCompiler_dBase_dIntrinsics_dTypeIntrinsic) -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = (Vuna_dCompiler_dBase_dIntrinsics.v_Vuna_dCompiler_dBase_dIntrinsics_dtypeIntrinsicCtorName t); Base_dData_dPair.f_Base_dData_dPair_dPair_second = (v_Vuna_dCompiler_dElab_dPrelude_dtypeCtorKindTerm (Vuna_dCompiler_dBase_dIntrinsics.v_Vuna_dCompiler_dBase_dIntrinsics_dtypeIntrinsicCtorArity t)) })) Vuna_dCompiler_dBase_dIntrinsics.v_Vuna_dCompiler_dBase_dIntrinsics_dtypeIntrinsicArities))
@@ -88,14 +88,14 @@ let v_Vuna_dCompiler_dElab_dPrelude_dpreludeGlobals = ((Base_dData_dList.v_Base_
 let v_Vuna_dCompiler_dElab_dPrelude_dpreludeNames = ((Base_dData_dList.v_Base_dData_dList_dappend Vuna_dCompiler_dBase_dIntrinsics.v_Vuna_dCompiler_dBase_dIntrinsics_dpreludeTypeNames) Vuna_dCompiler_dBase_dIntrinsics.v_Vuna_dCompiler_dBase_dIntrinsics_dpreludeValueNames)
 
 # 148 "Vuna/Compiler/Elab/Prelude.vuna"
-let v_Vuna_dCompiler_dElab_dPrelude_dbuiltinEqTyName = (fun v -> (match (v_Vuna_dCompiler_dElab_dPrelude_dbuiltinTyName v) with
+let v_Vuna_dCompiler_dElab_dPrelude_dbuiltinEqTyName = (fun (v : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dValue) -> (match (v_Vuna_dCompiler_dElab_dPrelude_dbuiltinTyName v) with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__18) -> (if (dtb__18 = Vuna_dCompiler_dBase_dIntrinsics.v_Vuna_dCompiler_dBase_dIntrinsics_dintTypeName) then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (Vuna_dCompiler_dBase_dIntrinsics.v_Vuna_dCompiler_dBase_dIntrinsics_dintTypeName)) else (if (dtb__18 = Vuna_dCompiler_dBase_dIntrinsics.v_Vuna_dCompiler_dBase_dIntrinsics_dstrTypeName) then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (Vuna_dCompiler_dBase_dIntrinsics.v_Vuna_dCompiler_dBase_dIntrinsics_dstrTypeName)) else (if (dtb__18 = Vuna_dCompiler_dBase_dIntrinsics.v_Vuna_dCompiler_dBase_dIntrinsics_dfloatTypeName) then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (Vuna_dCompiler_dBase_dIntrinsics.v_Vuna_dCompiler_dBase_dIntrinsics_dfloatTypeName)) else Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing)))
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 161 "Vuna/Compiler/Elab/Prelude.vuna"
-let v_Vuna_dCompiler_dElab_dPrelude_dcmpBuiltinTyName = (fun v -> (match (v_Vuna_dCompiler_dElab_dPrelude_dbuiltinTyName v) with
+let v_Vuna_dCompiler_dElab_dPrelude_dcmpBuiltinTyName = (fun (v : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dValue) -> (match (v_Vuna_dCompiler_dElab_dPrelude_dbuiltinTyName v) with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__19) -> (if ((Base_dData_dList.v_Base_dData_dList_dmemName dtb__19) Vuna_dCompiler_dBase_dIntrinsics.v_Vuna_dCompiler_dBase_dIntrinsics_dcmpSpecializedTyNames) then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__19)) else Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing)
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing
   | _ -> failwith "DT: impossible branch"
@@ -109,7 +109,7 @@ let rec v_Vuna_dCompiler_dElab_dPrelude_dprependParams = (fun (mc0 : string Base
 ))
 
 # 177 "Vuna/Compiler/Elab/Prelude.vuna"
-let v_Vuna_dCompiler_dElab_dPrelude_dbaseNameOf = (fun name -> (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dlastSeg name))
+let v_Vuna_dCompiler_dElab_dPrelude_dbaseNameOf = (fun (name : string) -> (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dlastSeg name))
 
 # 184 "Vuna/Compiler/Elab/Prelude.vuna"
 let rec v_Vuna_dCompiler_dElab_dPrelude_dclassMethodProjectionGo = (fun (mc0 : string) (mc1 : (string, Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dTerm) Base_dData_dPair.t_Base_dData_dPair_dPair Base_dData_dList.t_Base_dData_dList_dList) (mc2 : string) -> (match mc1 with
@@ -119,4 +119,4 @@ let rec v_Vuna_dCompiler_dElab_dPrelude_dclassMethodProjectionGo = (fun (mc0 : s
 ))
 
 # 181 "Vuna/Compiler/Elab/Prelude.vuna"
-let v_Vuna_dCompiler_dElab_dPrelude_dclassMethodProjection = (fun methods short -> (((v_Vuna_dCompiler_dElab_dPrelude_dclassMethodProjectionGo short) methods) short))
+let v_Vuna_dCompiler_dElab_dPrelude_dclassMethodProjection = (fun (methods : (string, Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dTerm) Base_dData_dPair.t_Base_dData_dPair_dPair Base_dData_dList.t_Base_dData_dList_dList) (short : string) -> (((v_Vuna_dCompiler_dElab_dPrelude_dclassMethodProjectionGo short) methods) short))

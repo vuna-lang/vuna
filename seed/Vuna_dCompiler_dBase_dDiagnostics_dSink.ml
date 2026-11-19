@@ -9,7 +9,7 @@ let v_Vuna_dCompiler_dBase_dDiagnostics_dSink_dseverityTag = (fun (mc0 : Vuna_dC
 ))
 
 # 27 "Vuna/Compiler/Base/Diagnostics/Sink.vuna"
-let v_Vuna_dCompiler_dBase_dDiagnostics_dSink_dtagPart = (fun s -> (String.concat "" [(bi_strFromInt (bi_strLength s)); ":"; s]))
+let v_Vuna_dCompiler_dBase_dDiagnostics_dSink_dtagPart = (fun (s : string) -> (String.concat "" [(bi_strFromInt (bi_strLength s)); ":"; s]))
 
 # 42 "Vuna/Compiler/Base/Diagnostics/Sink.vuna"
 let v_Vuna_dCompiler_dBase_dDiagnostics_dSink_dspanPart = (fun (mc0 : Vuna_dCompiler_dBase_dSource.t_Vuna_dCompiler_dBase_dSource_dSpan Base_dData_dMaybe.t_Base_dData_dMaybe_dMaybe) -> (match mc0 with
@@ -26,7 +26,7 @@ let rec v_Vuna_dCompiler_dBase_dDiagnostics_dSink_dspansKey = (fun (mc0 : Vuna_d
 ))
 
 # 31 "Vuna/Compiler/Base/Diagnostics/Sink.vuna"
-let v_Vuna_dCompiler_dBase_dDiagnostics_dSink_ddiagKey = (fun d -> (String.concat "" [(v_Vuna_dCompiler_dBase_dDiagnostics_dSink_dseverityTag (d).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagSeverity); "|"; (v_Vuna_dCompiler_dBase_dDiagnostics_dSink_dtagPart (d).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagCode); "|"; (v_Vuna_dCompiler_dBase_dDiagnostics_dSink_dtagPart (d).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagMessage); "|"; (v_Vuna_dCompiler_dBase_dDiagnostics_dSink_dspansKey (d).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagLabels)]))
+let v_Vuna_dCompiler_dBase_dDiagnostics_dSink_ddiagKey = (fun (d : Vuna_dCompiler_dBase_dDiag.t_Vuna_dCompiler_dBase_dDiag_dDiagnostic) -> (String.concat "" [(v_Vuna_dCompiler_dBase_dDiagnostics_dSink_dseverityTag (d).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagSeverity); "|"; (v_Vuna_dCompiler_dBase_dDiagnostics_dSink_dtagPart (d).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagCode); "|"; (v_Vuna_dCompiler_dBase_dDiagnostics_dSink_dtagPart (d).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagMessage); "|"; (v_Vuna_dCompiler_dBase_dDiagnostics_dSink_dspansKey (d).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagLabels)]))
 
 # 52 "Vuna/Compiler/Base/Diagnostics/Sink.vuna"
 let rec v_Vuna_dCompiler_dBase_dDiagnostics_dSink_ddedupeGo = (fun (mc0 : Vuna_dCompiler_dBase_dDiag.t_Vuna_dCompiler_dBase_dDiag_dDiagnostic Base_dData_dList.t_Base_dData_dList_dList) (mc1 : (string, bool) Base_dContainer_dHashMap.t_Base_dContainer_dHashMap_dHashMap) (mc2 : Vuna_dCompiler_dBase_dDiag.t_Vuna_dCompiler_dBase_dDiag_dDiagnostic Base_dData_dList.t_Base_dData_dList_dList) -> (match mc0 with
@@ -40,4 +40,4 @@ let rec v_Vuna_dCompiler_dBase_dDiagnostics_dSink_ddedupeGo = (fun (mc0 : Vuna_d
 ))
 
 # 62 "Vuna/Compiler/Base/Diagnostics/Sink.vuna"
-let v_Vuna_dCompiler_dBase_dDiagnostics_dSink_ddedupeWarnings = (fun ds -> (((v_Vuna_dCompiler_dBase_dDiagnostics_dSink_ddedupeGo ds) ((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dfromList Base_dData_dString.v_Hashable_uString) Base_dData_dList.C_Base_dData_dList_dList_Nil)) Base_dData_dList.C_Base_dData_dList_dList_Nil))
+let v_Vuna_dCompiler_dBase_dDiagnostics_dSink_ddedupeWarnings = (fun (ds : Vuna_dCompiler_dBase_dDiag.t_Vuna_dCompiler_dBase_dDiag_dDiagnostic Base_dData_dList.t_Base_dData_dList_dList) -> (((v_Vuna_dCompiler_dBase_dDiagnostics_dSink_ddedupeGo ds) ((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dfromList Base_dData_dString.v_Hashable_uString) Base_dData_dList.C_Base_dData_dList_dList_Nil)) Base_dData_dList.C_Base_dData_dList_dList_Nil))

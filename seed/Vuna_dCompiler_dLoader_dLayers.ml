@@ -1,6 +1,6 @@
 open Vuna_runtime
 # 25 "Vuna/Compiler/Loader/Layers.vuna"
-let v_Vuna_dCompiler_dLoader_dLayers_disLayerPrefix = (fun prefix name -> (if (name = prefix) then true else ((Base_dData_dString.v_Base_dData_dString_dstartsWith (prefix ^ ".")) name)))
+let v_Vuna_dCompiler_dLoader_dLayers_disLayerPrefix = (fun (prefix : string) (name : string) -> (if (name = prefix) then true else ((Base_dData_dString.v_Base_dData_dString_dstartsWith (prefix ^ ".")) name)))
 
 # 28 "Vuna/Compiler/Loader/Layers.vuna"
 let rec v_Vuna_dCompiler_dLoader_dLayers_dusesOfLayer = (fun (mc0 : Vuna_dCompiler_dFrontend_dManifest.t_Vuna_dCompiler_dFrontend_dManifest_dLayer Base_dData_dList.t_Base_dData_dList_dList) (mc1 : string) -> (match mc0 with
@@ -10,14 +10,14 @@ let rec v_Vuna_dCompiler_dLoader_dLayers_dusesOfLayer = (fun (mc0 : Vuna_dCompil
 ))
 
 # 32 "Vuna/Compiler/Loader/Layers.vuna"
-let rec v_Vuna_dCompiler_dLoader_dLayers_dclosureGo = (fun fuel layers todo acc -> (if (fuel <= 0) then acc else (match todo with
+let rec v_Vuna_dCompiler_dLoader_dLayers_dclosureGo = (fun (fuel : int) (layers : Vuna_dCompiler_dFrontend_dManifest.t_Vuna_dCompiler_dFrontend_dManifest_dLayer Base_dData_dList.t_Base_dData_dList_dList) (todo : string Base_dData_dList.t_Base_dData_dList_dList) (acc : string Base_dData_dList.t_Base_dData_dList_dList) -> (if (fuel <= 0) then acc else (match todo with
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> acc
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__2, dtb__3) -> (if ((Base_dData_dList.v_Base_dData_dList_dmemName dtb__2) acc) then ((((v_Vuna_dCompiler_dLoader_dLayers_dclosureGo (fuel - 1)) layers) dtb__3) acc) else ((((v_Vuna_dCompiler_dLoader_dLayers_dclosureGo (fuel - 1)) layers) ((Base_dData_dList.v_Base_dData_dList_dappend dtb__3) ((v_Vuna_dCompiler_dLoader_dLayers_dusesOfLayer layers) dtb__2))) (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__2, acc))))
   | _ -> failwith "DT: impossible branch"
 )))
 
 # 42 "Vuna/Compiler/Loader/Layers.vuna"
-let v_Vuna_dCompiler_dLoader_dLayers_dallowedByRow = (fun layers l -> ((((v_Vuna_dCompiler_dLoader_dLayers_dclosureGo ((Base_dData_dList.v_Base_dData_dList_dlength layers) + 2)) layers) (l).Vuna_dCompiler_dFrontend_dManifest.f_Vuna_dCompiler_dFrontend_dManifest_dLayer_layerUses) (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((l).Vuna_dCompiler_dFrontend_dManifest.f_Vuna_dCompiler_dFrontend_dManifest_dLayer_layerName, Base_dData_dList.C_Base_dData_dList_dList_Nil))))
+let v_Vuna_dCompiler_dLoader_dLayers_dallowedByRow = (fun (layers : Vuna_dCompiler_dFrontend_dManifest.t_Vuna_dCompiler_dFrontend_dManifest_dLayer Base_dData_dList.t_Base_dData_dList_dList) (l : Vuna_dCompiler_dFrontend_dManifest.t_Vuna_dCompiler_dFrontend_dManifest_dLayer) -> ((((v_Vuna_dCompiler_dLoader_dLayers_dclosureGo ((Base_dData_dList.v_Base_dData_dList_dlength layers) + 2)) layers) (l).Vuna_dCompiler_dFrontend_dManifest.f_Vuna_dCompiler_dFrontend_dManifest_dLayer_layerUses) (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((l).Vuna_dCompiler_dFrontend_dManifest.f_Vuna_dCompiler_dFrontend_dManifest_dLayer_layerName, Base_dData_dList.C_Base_dData_dList_dList_Nil))))
 
 # 45 "Vuna/Compiler/Loader/Layers.vuna"
 let rec v_Vuna_dCompiler_dLoader_dLayers_dcovered = (fun (mc0 : string Base_dData_dList.t_Base_dData_dList_dList) (mc1 : string) -> (match mc0 with
@@ -34,10 +34,10 @@ let rec v_Vuna_dCompiler_dLoader_dLayers_dimportAllowed = (fun (mc0 : Vuna_dComp
 ))
 
 # 55 "Vuna/Compiler/Loader/Layers.vuna"
-let v_Vuna_dCompiler_dLoader_dLayers_dlayerMatches = (fun name l -> ((v_Vuna_dCompiler_dLoader_dLayers_disLayerPrefix (l).Vuna_dCompiler_dFrontend_dManifest.f_Vuna_dCompiler_dFrontend_dManifest_dLayer_layerName) name))
+let v_Vuna_dCompiler_dLoader_dLayers_dlayerMatches = (fun (name : string) (l : Vuna_dCompiler_dFrontend_dManifest.t_Vuna_dCompiler_dFrontend_dManifest_dLayer) -> ((v_Vuna_dCompiler_dLoader_dLayers_disLayerPrefix (l).Vuna_dCompiler_dFrontend_dManifest.f_Vuna_dCompiler_dFrontend_dManifest_dLayer_layerName) name))
 
 # 58 "Vuna/Compiler/Loader/Layers.vuna"
-let v_Vuna_dCompiler_dLoader_dLayers_dmatchingLayers = (fun rules name -> ((Base_dData_dList.v_Base_dData_dList_dfilter (v_Vuna_dCompiler_dLoader_dLayers_dlayerMatches name)) rules))
+let v_Vuna_dCompiler_dLoader_dLayers_dmatchingLayers = (fun (rules : Vuna_dCompiler_dFrontend_dManifest.t_Vuna_dCompiler_dFrontend_dManifest_dLayer Base_dData_dList.t_Base_dData_dList_dList) (name : string) -> ((Base_dData_dList.v_Base_dData_dList_dfilter (v_Vuna_dCompiler_dLoader_dLayers_dlayerMatches name)) rules))
 
 # 68 "Vuna/Compiler/Loader/Layers.vuna"
 let rec v_Vuna_dCompiler_dLoader_dLayers_dlabelBest = (fun (mc0 : Vuna_dCompiler_dFrontend_dManifest.t_Vuna_dCompiler_dFrontend_dManifest_dLayer) (mc1 : Vuna_dCompiler_dFrontend_dManifest.t_Vuna_dCompiler_dFrontend_dManifest_dLayer Base_dData_dList.t_Base_dData_dList_dList) -> (match mc1 with
@@ -47,7 +47,7 @@ let rec v_Vuna_dCompiler_dLoader_dLayers_dlabelBest = (fun (mc0 : Vuna_dCompiler
 ))
 
 # 62 "Vuna/Compiler/Loader/Layers.vuna"
-let v_Vuna_dCompiler_dLoader_dLayers_dlabelOf = (fun rules name -> (match ((v_Vuna_dCompiler_dLoader_dLayers_dmatchingLayers rules) name) with
+let v_Vuna_dCompiler_dLoader_dLayers_dlabelOf = (fun (rules : Vuna_dCompiler_dFrontend_dManifest.t_Vuna_dCompiler_dFrontend_dManifest_dLayer Base_dData_dList.t_Base_dData_dList_dList) (name : string) -> (match ((v_Vuna_dCompiler_dLoader_dLayers_dmatchingLayers rules) name) with
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dprefixOfName name)
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__10, dtb__11) -> ((v_Vuna_dCompiler_dLoader_dLayers_dlabelBest dtb__10) dtb__11)
   | _ -> failwith "DT: impossible branch"
@@ -61,7 +61,7 @@ let rec v_Vuna_dCompiler_dLoader_dLayers_dlayersOfRoot = (fun (mc0 : Vuna_dCompi
 ))
 
 # 77 "Vuna/Compiler/Loader/Layers.vuna"
-let v_Vuna_dCompiler_dLoader_dLayers_dwithImportSpan = (fun imp e -> (if ((Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dspanFile (imp).Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dImport_importSpan) = "") then e else ((Vuna_dCompiler_dBase_dDiag.v_Vuna_dCompiler_dBase_dDiag_dwithFallbackSpan (imp).Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dImport_importSpan) e)))
+let v_Vuna_dCompiler_dLoader_dLayers_dwithImportSpan = (fun (imp : Vuna_dCompiler_dFrontend_dAst.t_Vuna_dCompiler_dFrontend_dAst_dImport) (e : Vuna_dCompiler_dBase_dDiag.t_Vuna_dCompiler_dBase_dDiag_dDiagnostic) -> (if ((Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dspanFile (imp).Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dImport_importSpan) = "") then e else ((Vuna_dCompiler_dBase_dDiag.v_Vuna_dCompiler_dBase_dDiag_dwithFallbackSpan (imp).Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dImport_importSpan) e)))
 
 # 81 "Vuna/Compiler/Loader/Layers.vuna"
 let rec v_Vuna_dCompiler_dLoader_dLayers_dcheckImports = (fun (mc0 : Vuna_dCompiler_dFrontend_dManifest.t_Vuna_dCompiler_dFrontend_dManifest_dLayer Base_dData_dList.t_Base_dData_dList_dList) (mc1 : Vuna_dCompiler_dFrontend_dManifest.t_Vuna_dCompiler_dFrontend_dManifest_dLayer Base_dData_dList.t_Base_dData_dList_dList) (mc2 : string) (mc3 : string) (mc4 : Vuna_dCompiler_dLoader_dModules.t_Vuna_dCompiler_dLoader_dModules_dModule Base_dData_dList.t_Base_dData_dList_dList) (mc5 : Vuna_dCompiler_dFrontend_dAst.t_Vuna_dCompiler_dFrontend_dAst_dImport Base_dData_dList.t_Base_dData_dList_dList) -> (match mc5 with
@@ -86,4 +86,4 @@ let rec v_Vuna_dCompiler_dLoader_dLayers_dcheckModules = (fun (mc0 : Vuna_dCompi
 ))
 
 # 110 "Vuna/Compiler/Loader/Layers.vuna"
-let v_Vuna_dCompiler_dLoader_dLayers_dcheckProjectLayers = (fun roots project -> (((v_Vuna_dCompiler_dLoader_dLayers_dcheckModules roots) (project).Vuna_dCompiler_dLoader_dModules.f_Vuna_dCompiler_dLoader_dModules_dProject_projectModules) (project).Vuna_dCompiler_dLoader_dModules.f_Vuna_dCompiler_dLoader_dModules_dProject_projectModules))
+let v_Vuna_dCompiler_dLoader_dLayers_dcheckProjectLayers = (fun (roots : Vuna_dCompiler_dFrontend_dPackages_dPkg.t_Vuna_dCompiler_dFrontend_dPackages_dPkg_dRoot Base_dData_dList.t_Base_dData_dList_dList) (project : Vuna_dCompiler_dLoader_dModules.t_Vuna_dCompiler_dLoader_dModules_dProject) -> (((v_Vuna_dCompiler_dLoader_dLayers_dcheckModules roots) (project).Vuna_dCompiler_dLoader_dModules.f_Vuna_dCompiler_dLoader_dModules_dProject_projectModules) (project).Vuna_dCompiler_dLoader_dModules.f_Vuna_dCompiler_dLoader_dModules_dProject_projectModules))

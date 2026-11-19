@@ -10,10 +10,10 @@ let rec v_Vuna_dCompiler_dCodegen_dOcaml_dRender_dinterpose = (fun (mc0 : string
 ))
 
 # 13 "Vuna/Compiler/Codegen/Ocaml/Render.vuna"
-let v_Vuna_dCompiler_dCodegen_dOcaml_dRender_djoinWith = (fun sep xs -> (Base_dData_dList.dtp_concatMany ((v_Vuna_dCompiler_dCodegen_dOcaml_dRender_dinterpose sep) xs)))
+let v_Vuna_dCompiler_dCodegen_dOcaml_dRender_djoinWith = (fun (sep : string) (xs : string Base_dData_dList.t_Base_dData_dList_dList) -> (Base_dData_dList.dtp_concatMany ((v_Vuna_dCompiler_dCodegen_dOcaml_dRender_dinterpose sep) xs)))
 
 # 21 "Vuna/Compiler/Codegen/Ocaml/Render.vuna"
-let v_Vuna_dCompiler_dCodegen_dOcaml_dRender_dtypeParamName = (fun i -> ("'a" ^ (bi_strFromInt i)))
+let v_Vuna_dCompiler_dCodegen_dOcaml_dRender_dtypeParamName = (fun (i : int) -> ("'a" ^ (bi_strFromInt i)))
 
 # 24 "Vuna/Compiler/Codegen/Ocaml/Render.vuna"
 let v_Vuna_dCompiler_dCodegen_dOcaml_dRender_dtypeParamDecl = (fun (mc0 : int) -> (if (mc0 = 0) then "" else ((fun nd_uscrut1 -> (match nd_uscrut1 with
@@ -50,7 +50,7 @@ let rec v_Vuna_dCompiler_dCodegen_dOcaml_dRender_drenderTy = (fun (mc0 : (string
 ))
 
 # 49 "Vuna/Compiler/Codegen/Ocaml/Render.vuna"
-let v_Vuna_dCompiler_dCodegen_dOcaml_dRender_dctorDecl = (fun qual c -> ((fun nd_uscrut2 -> (match nd_uscrut2 with
+let v_Vuna_dCompiler_dCodegen_dOcaml_dRender_dctorDecl = (fun (qual : (string) -> string) (c : Vuna_dCompiler_dCodegen_dOcaml_dModel.t_Vuna_dCompiler_dCodegen_dOcaml_dModel_dOCtor) -> ((fun nd_uscrut2 -> (match nd_uscrut2 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__13, dtb__14) -> (match dtb__14 with
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> (String.concat "" [(c).Vuna_dCompiler_dCodegen_dOcaml_dModel.f_Vuna_dCompiler_dCodegen_dOcaml_dModel_dOCtor_ocName; " of ("; ((v_Vuna_dCompiler_dCodegen_dOcaml_dRender_drenderTy qual) dtb__13); ")"])
   | _ -> (String.concat "" [(c).Vuna_dCompiler_dCodegen_dOcaml_dModel.f_Vuna_dCompiler_dCodegen_dOcaml_dModel_dOCtor_ocName; " of "; ((v_Vuna_dCompiler_dCodegen_dOcaml_dRender_djoinWith " * ") ((Base_dData_dList.v_Base_dData_dList_dmap (fun (t : Vuna_dCompiler_dCodegen_dOcaml_dModel.t_Vuna_dCompiler_dCodegen_dOcaml_dModel_dOTy) -> (String.concat "" ["("; ((v_Vuna_dCompiler_dCodegen_dOcaml_dRender_drenderTy qual) t); ")"]))) nd_uscrut2))])
@@ -148,4 +148,4 @@ and v_Vuna_dCompiler_dCodegen_dOcaml_dRender_drecordField = (fun (mc0 : (string,
   | _ -> failwith "DT: impossible branch"
 ))
 # 123 "Vuna/Compiler/Codegen/Ocaml/Render.vuna"
-and v_Vuna_dCompiler_dCodegen_dOcaml_dRender_drecordFields = (fun fields -> ((Base_dData_dList.v_Base_dData_dList_dmap v_Vuna_dCompiler_dCodegen_dOcaml_dRender_drecordField) fields))
+and v_Vuna_dCompiler_dCodegen_dOcaml_dRender_drecordFields = (fun (fields : (string, Vuna_dCompiler_dCodegen_dOcaml_dModel.t_Vuna_dCompiler_dCodegen_dOcaml_dModel_dOTerm) Base_dData_dPair.t_Base_dData_dPair_dPair Base_dData_dList.t_Base_dData_dList_dList) -> ((Base_dData_dList.v_Base_dData_dList_dmap v_Vuna_dCompiler_dCodegen_dOcaml_dRender_drecordField) fields))

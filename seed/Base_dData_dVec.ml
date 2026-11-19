@@ -28,4 +28,4 @@ let rec v_Base_dData_dVec_dvecToList = (fun (mc0 : string t_Base_dData_dVec_dVec
 ))
 
 # 44 "Base/Data/Vec.vuna"
-let v_Base_dData_dVec_dsubstTemplate = (fun template args -> ((Base_dData_dList.dtp_substTemplate template) (v_Base_dData_dVec_dvecToList args)))
+let v_Base_dData_dVec_dsubstTemplate = (fun (template : string) (args : string t_Base_dData_dVec_dVec) -> ((Base_dData_dList.dtp_substTemplate template) (v_Base_dData_dVec_dvecToList args)))

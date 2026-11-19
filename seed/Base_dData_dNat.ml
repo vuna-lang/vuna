@@ -6,19 +6,19 @@ let v_Num_uBase_uData_uNat_uNat = (Base_dTrait_dNum.C_Dict_uBase_dTrait_dNum_dNu
 let v_Monoid_uBase_uData_uNat_uNat = (Base_dTrait_dMonoid.C_Dict_uBase_dTrait_dMonoid_dMonoid_Monoid (0))
 
 # 24 "Base/Data/Nat.vuna"
-let v_Base_dData_dNat_dplus = (fun _uarity0 _uarity1 -> (bi_natAdd _uarity0 _uarity1))
+let v_Base_dData_dNat_dplus = (fun (_uarity0 : int) (_uarity1 : int) -> (bi_natAdd _uarity0 _uarity1))
 
 # 77 "Base/Data/Nat.vuna"
 let v_Semigroup_uBase_uData_uNat_uNat = (Base_dTrait_dMonoid.C_Dict_uBase_dTrait_dMonoid_dSemigroup_Semigroup ((fun _uarity0 _uarity1 -> ((v_Base_dData_dNat_dplus _uarity0) _uarity1))))
 
 # 28 "Base/Data/Nat.vuna"
-let v_Base_dData_dNat_dminus = (fun _uarity0 _uarity1 -> (bi_natSub _uarity0 _uarity1))
+let v_Base_dData_dNat_dminus = (fun (_uarity0 : int) (_uarity1 : int) -> (bi_natSub _uarity0 _uarity1))
 
 # 32 "Base/Data/Nat.vuna"
-let v_Base_dData_dNat_dmult = (fun _uarity0 _uarity1 -> (bi_natMul _uarity0 _uarity1))
+let v_Base_dData_dNat_dmult = (fun (_uarity0 : int) (_uarity1 : int) -> (bi_natMul _uarity0 _uarity1))
 
 # 36 "Base/Data/Nat.vuna"
-let v_Base_dData_dNat_dtoInt = (fun _uarity0 -> _uarity0)
+let v_Base_dData_dNat_dtoInt = (fun (_uarity0 : int) -> _uarity0)
 
 # 54 "Base/Data/Nat.vuna"
 let v_Eq_uBase_uData_uNat_uNat = (Base_dTrait_dEq.C_Dict_uBase_dTrait_dEq_dEq_Eq ((fun x y -> ((v_Base_dData_dNat_dtoInt x) = (v_Base_dData_dNat_dtoInt y))), (fun x y -> ((v_Base_dData_dNat_dtoInt x) <> (v_Base_dData_dNat_dtoInt y)))))
@@ -33,13 +33,13 @@ let v_Show_uBase_uData_uNat_uNat = (Base_dTrait_dShow.C_Dict_uBase_dTrait_dShow_
 let v_Hashable_uBase_uData_uNat_uNat = (Base_dTrait_dHashable.C_Dict_uBase_dTrait_dHashable_dHashable_Hashable ((fun n -> (v_Base_dData_dNat_dtoInt n))))
 
 # 40 "Base/Data/Nat.vuna"
-let v_Base_dData_dNat_dfromInt = (fun _uarity0 -> (bi_natFromInt _uarity0))
+let v_Base_dData_dNat_dfromInt = (fun (_uarity0 : int) -> (bi_natFromInt _uarity0))
 
 # 44 "Base/Data/Nat.vuna"
-let v_Base_dData_dNat_dfromIntMaybe = (fun n -> (if (n < 0) then Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing else (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just ((v_Base_dData_dNat_dfromInt n)))))
+let v_Base_dData_dNat_dfromIntMaybe = (fun (n : int) -> (if (n < 0) then Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing else (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just ((v_Base_dData_dNat_dfromInt n)))))
 
 # 48 "Base/Data/Nat.vuna"
-let v_Base_dData_dNat_dpred = (fun n -> ((v_Base_dData_dNat_dminus n) 1))
+let v_Base_dData_dNat_dpred = (fun (n : int) -> ((v_Base_dData_dNat_dminus n) 1))
 
 # 52 "Base/Data/Nat.vuna"
-let v_Base_dData_dNat_disZero = (fun n -> ((v_Base_dData_dNat_dtoInt n) = 0))
+let v_Base_dData_dNat_disZero = (fun (n : int) -> ((v_Base_dData_dNat_dtoInt n) = 0))

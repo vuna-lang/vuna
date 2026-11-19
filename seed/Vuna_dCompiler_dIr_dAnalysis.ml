@@ -1,13 +1,13 @@
 open Vuna_runtime
 # 21 "Vuna/Compiler/Ir/Analysis.vuna"
-let v_Vuna_dCompiler_dIr_dAnalysis_dneighborsOf = (fun adjT name -> (match ((((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dlookup Base_dData_dString.v_Hashable_uString) Base_dData_dString.v_Eq_uString) name) adjT) with
+let v_Vuna_dCompiler_dIr_dAnalysis_dneighborsOf = (fun (adjT : (string, string Base_dData_dList.t_Base_dData_dList_dList) Base_dContainer_dHashMap.t_Base_dContainer_dHashMap_dHashMap) (name : string) -> (match ((((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dlookup Base_dData_dString.v_Hashable_uString) Base_dData_dString.v_Eq_uString) name) adjT) with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__0) -> dtb__0
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> Base_dData_dList.C_Base_dData_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 27 "Vuna/Compiler/Ir/Analysis.vuna"
-let v_Vuna_dCompiler_dIr_dAnalysis_dadjTblOf = (fun adj -> (((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dinsertAll Base_dData_dString.v_Hashable_uString) adj) ((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dfromList Base_dData_dString.v_Hashable_uString) Base_dData_dList.C_Base_dData_dList_dList_Nil)))
+let v_Vuna_dCompiler_dIr_dAnalysis_dadjTblOf = (fun (adj : (string, string Base_dData_dList.t_Base_dData_dList_dList) Base_dData_dPair.t_Base_dData_dPair_dPair Base_dData_dList.t_Base_dData_dList_dList) -> (((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dinsertAll Base_dData_dString.v_Hashable_uString) adj) ((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dfromList Base_dData_dString.v_Hashable_uString) Base_dData_dList.C_Base_dData_dList_dList_Nil)))
 
 # 30 "Vuna/Compiler/Ir/Analysis.vuna"
 let rec v_Vuna_dCompiler_dIr_dAnalysis_daddDependents = (fun (mc0 : string) (mc1 : string Base_dData_dList.t_Base_dData_dList_dList) (mc2 : (string, string Base_dData_dList.t_Base_dData_dList_dList) Base_dContainer_dHashMap.t_Base_dContainer_dHashMap_dHashMap) -> (match mc1 with
@@ -31,7 +31,7 @@ let rec v_Vuna_dCompiler_dIr_dAnalysis_dreverseAdjTbl = (fun (mc0 : (string, str
 ))
 
 # 50 "Vuna/Compiler/Ir/Analysis.vuna"
-let rec v_Vuna_dCompiler_dIr_dAnalysis_dfoldNeighborsPostFuel = (fun fuel adjT ms visited order -> (if (fuel <= 0) then { Base_dData_dPair.f_Base_dData_dPair_dPair_first = visited; Base_dData_dPair.f_Base_dData_dPair_dPair_second = order } else (match ms with
+let rec v_Vuna_dCompiler_dIr_dAnalysis_dfoldNeighborsPostFuel = (fun (fuel : int) (adjT : (string, string Base_dData_dList.t_Base_dData_dList_dList) Base_dContainer_dHashMap.t_Base_dContainer_dHashMap_dHashMap) (ms : string Base_dData_dList.t_Base_dData_dList_dList) (visited : (string, bool) Base_dContainer_dHashMap.t_Base_dContainer_dHashMap_dHashMap) (order : string Base_dData_dList.t_Base_dData_dList_dList) -> (if (fuel <= 0) then { Base_dData_dPair.f_Base_dData_dPair_dPair_first = visited; Base_dData_dPair.f_Base_dData_dPair_dPair_second = order } else (match ms with
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = visited; Base_dData_dPair.f_Base_dData_dPair_dPair_second = order }
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__8, dtb__9) -> (if ((((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dmember Base_dData_dString.v_Hashable_uString) Base_dData_dString.v_Eq_uString) dtb__8) visited) then (((((v_Vuna_dCompiler_dIr_dAnalysis_dfoldNeighborsPostFuel (fuel - 1)) adjT) dtb__9) visited) order) else (match (((((v_Vuna_dCompiler_dIr_dAnalysis_ddfsPostFuel (fuel - 1)) adjT) dtb__8) ((((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dinsert Base_dData_dString.v_Hashable_uString) dtb__8) true) visited)) order) with
   | { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__10; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__11 } -> (((((v_Vuna_dCompiler_dIr_dAnalysis_dfoldNeighborsPostFuel (fuel - 1)) adjT) dtb__9) dtb__10) dtb__11)
@@ -40,16 +40,16 @@ let rec v_Vuna_dCompiler_dIr_dAnalysis_dfoldNeighborsPostFuel = (fun fuel adjT m
   | _ -> failwith "DT: impossible branch"
 )))
 # 67 "Vuna/Compiler/Ir/Analysis.vuna"
-and v_Vuna_dCompiler_dIr_dAnalysis_ddfsPostFuel = (fun fuel adjT n visited order -> (if (fuel <= 0) then { Base_dData_dPair.f_Base_dData_dPair_dPair_first = visited; Base_dData_dPair.f_Base_dData_dPair_dPair_second = order } else (match (((((v_Vuna_dCompiler_dIr_dAnalysis_dfoldNeighborsPostFuel (fuel - 1)) adjT) ((v_Vuna_dCompiler_dIr_dAnalysis_dneighborsOf adjT) n)) visited) order) with
+and v_Vuna_dCompiler_dIr_dAnalysis_ddfsPostFuel = (fun (fuel : int) (adjT : (string, string Base_dData_dList.t_Base_dData_dList_dList) Base_dContainer_dHashMap.t_Base_dContainer_dHashMap_dHashMap) (n : string) (visited : (string, bool) Base_dContainer_dHashMap.t_Base_dContainer_dHashMap_dHashMap) (order : string Base_dData_dList.t_Base_dData_dList_dList) -> (if (fuel <= 0) then { Base_dData_dPair.f_Base_dData_dPair_dPair_first = visited; Base_dData_dPair.f_Base_dData_dPair_dPair_second = order } else (match (((((v_Vuna_dCompiler_dIr_dAnalysis_dfoldNeighborsPostFuel (fuel - 1)) adjT) ((v_Vuna_dCompiler_dIr_dAnalysis_dneighborsOf adjT) n)) visited) order) with
   | { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__12; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__13 } -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__12; Base_dData_dPair.f_Base_dData_dPair_dPair_second = (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (n, dtb__13)) }
   | _ -> failwith "DT: impossible branch"
 )))
 
 # 47 "Vuna/Compiler/Ir/Analysis.vuna"
-let v_Vuna_dCompiler_dIr_dAnalysis_dfoldNeighborsPost = (fun adjT ms visited order -> (((((v_Vuna_dCompiler_dIr_dAnalysis_dfoldNeighborsPostFuel 100000) adjT) ms) visited) order))
+let v_Vuna_dCompiler_dIr_dAnalysis_dfoldNeighborsPost = (fun (adjT : (string, string Base_dData_dList.t_Base_dData_dList_dList) Base_dContainer_dHashMap.t_Base_dContainer_dHashMap_dHashMap) (ms : string Base_dData_dList.t_Base_dData_dList_dList) (visited : (string, bool) Base_dContainer_dHashMap.t_Base_dContainer_dHashMap_dHashMap) (order : string Base_dData_dList.t_Base_dData_dList_dList) -> (((((v_Vuna_dCompiler_dIr_dAnalysis_dfoldNeighborsPostFuel 100000) adjT) ms) visited) order))
 
 # 64 "Vuna/Compiler/Ir/Analysis.vuna"
-let v_Vuna_dCompiler_dIr_dAnalysis_ddfsPost = (fun adjT n visited order -> (((((v_Vuna_dCompiler_dIr_dAnalysis_ddfsPostFuel 100000) adjT) n) visited) order))
+let v_Vuna_dCompiler_dIr_dAnalysis_ddfsPost = (fun (adjT : (string, string Base_dData_dList.t_Base_dData_dList_dList) Base_dContainer_dHashMap.t_Base_dContainer_dHashMap_dHashMap) (n : string) (visited : (string, bool) Base_dContainer_dHashMap.t_Base_dContainer_dHashMap_dHashMap) (order : string Base_dData_dList.t_Base_dData_dList_dList) -> (((((v_Vuna_dCompiler_dIr_dAnalysis_ddfsPostFuel 100000) adjT) n) visited) order))
 
 # 75 "Vuna/Compiler/Ir/Analysis.vuna"
 let rec v_Vuna_dCompiler_dIr_dAnalysis_dpostOrder = (fun (mc0 : (string, string Base_dData_dList.t_Base_dData_dList_dList) Base_dContainer_dHashMap.t_Base_dContainer_dHashMap_dHashMap) (mc1 : string Base_dData_dList.t_Base_dData_dList_dList) (mc2 : (string, bool) Base_dContainer_dHashMap.t_Base_dContainer_dHashMap_dHashMap) (mc3 : string Base_dData_dList.t_Base_dData_dList_dList) -> (match mc1 with
@@ -62,7 +62,7 @@ let rec v_Vuna_dCompiler_dIr_dAnalysis_dpostOrder = (fun (mc0 : (string, string 
 ))
 
 # 90 "Vuna/Compiler/Ir/Analysis.vuna"
-let rec v_Vuna_dCompiler_dIr_dAnalysis_dfoldNeighborsCollectFuel = (fun fuel adjT ms visited comp -> (if (fuel <= 0) then { Base_dData_dPair.f_Base_dData_dPair_dPair_first = visited; Base_dData_dPair.f_Base_dData_dPair_dPair_second = comp } else (match ms with
+let rec v_Vuna_dCompiler_dIr_dAnalysis_dfoldNeighborsCollectFuel = (fun (fuel : int) (adjT : (string, string Base_dData_dList.t_Base_dData_dList_dList) Base_dContainer_dHashMap.t_Base_dContainer_dHashMap_dHashMap) (ms : string Base_dData_dList.t_Base_dData_dList_dList) (visited : (string, bool) Base_dContainer_dHashMap.t_Base_dContainer_dHashMap_dHashMap) (comp : string Base_dData_dList.t_Base_dData_dList_dList) -> (if (fuel <= 0) then { Base_dData_dPair.f_Base_dData_dPair_dPair_first = visited; Base_dData_dPair.f_Base_dData_dPair_dPair_second = comp } else (match ms with
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = visited; Base_dData_dPair.f_Base_dData_dPair_dPair_second = comp }
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__18, dtb__19) -> (if ((((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dmember Base_dData_dString.v_Hashable_uString) Base_dData_dString.v_Eq_uString) dtb__18) visited) then (((((v_Vuna_dCompiler_dIr_dAnalysis_dfoldNeighborsCollectFuel (fuel - 1)) adjT) dtb__19) visited) comp) else (match (((((v_Vuna_dCompiler_dIr_dAnalysis_ddfsCollectFuel (fuel - 1)) adjT) dtb__18) ((((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dinsert Base_dData_dString.v_Hashable_uString) dtb__18) true) visited)) comp) with
   | { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__20; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__21 } -> (((((v_Vuna_dCompiler_dIr_dAnalysis_dfoldNeighborsCollectFuel (fuel - 1)) adjT) dtb__19) dtb__20) dtb__21)
@@ -71,16 +71,16 @@ let rec v_Vuna_dCompiler_dIr_dAnalysis_dfoldNeighborsCollectFuel = (fun fuel adj
   | _ -> failwith "DT: impossible branch"
 )))
 # 107 "Vuna/Compiler/Ir/Analysis.vuna"
-and v_Vuna_dCompiler_dIr_dAnalysis_ddfsCollectFuel = (fun fuel adjT n visited comp -> (if (fuel <= 0) then { Base_dData_dPair.f_Base_dData_dPair_dPair_first = visited; Base_dData_dPair.f_Base_dData_dPair_dPair_second = comp } else (match (((((v_Vuna_dCompiler_dIr_dAnalysis_dfoldNeighborsCollectFuel (fuel - 1)) adjT) ((v_Vuna_dCompiler_dIr_dAnalysis_dneighborsOf adjT) n)) visited) comp) with
+and v_Vuna_dCompiler_dIr_dAnalysis_ddfsCollectFuel = (fun (fuel : int) (adjT : (string, string Base_dData_dList.t_Base_dData_dList_dList) Base_dContainer_dHashMap.t_Base_dContainer_dHashMap_dHashMap) (n : string) (visited : (string, bool) Base_dContainer_dHashMap.t_Base_dContainer_dHashMap_dHashMap) (comp : string Base_dData_dList.t_Base_dData_dList_dList) -> (if (fuel <= 0) then { Base_dData_dPair.f_Base_dData_dPair_dPair_first = visited; Base_dData_dPair.f_Base_dData_dPair_dPair_second = comp } else (match (((((v_Vuna_dCompiler_dIr_dAnalysis_dfoldNeighborsCollectFuel (fuel - 1)) adjT) ((v_Vuna_dCompiler_dIr_dAnalysis_dneighborsOf adjT) n)) visited) comp) with
   | { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__22; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__23 } -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__22; Base_dData_dPair.f_Base_dData_dPair_dPair_second = (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (n, dtb__23)) }
   | _ -> failwith "DT: impossible branch"
 )))
 
 # 87 "Vuna/Compiler/Ir/Analysis.vuna"
-let v_Vuna_dCompiler_dIr_dAnalysis_dfoldNeighborsCollect = (fun adjT ms visited comp -> (((((v_Vuna_dCompiler_dIr_dAnalysis_dfoldNeighborsCollectFuel 100000) adjT) ms) visited) comp))
+let v_Vuna_dCompiler_dIr_dAnalysis_dfoldNeighborsCollect = (fun (adjT : (string, string Base_dData_dList.t_Base_dData_dList_dList) Base_dContainer_dHashMap.t_Base_dContainer_dHashMap_dHashMap) (ms : string Base_dData_dList.t_Base_dData_dList_dList) (visited : (string, bool) Base_dContainer_dHashMap.t_Base_dContainer_dHashMap_dHashMap) (comp : string Base_dData_dList.t_Base_dData_dList_dList) -> (((((v_Vuna_dCompiler_dIr_dAnalysis_dfoldNeighborsCollectFuel 100000) adjT) ms) visited) comp))
 
 # 104 "Vuna/Compiler/Ir/Analysis.vuna"
-let v_Vuna_dCompiler_dIr_dAnalysis_ddfsCollect = (fun adjT n visited comp -> (((((v_Vuna_dCompiler_dIr_dAnalysis_ddfsCollectFuel 100000) adjT) n) visited) comp))
+let v_Vuna_dCompiler_dIr_dAnalysis_ddfsCollect = (fun (adjT : (string, string Base_dData_dList.t_Base_dData_dList_dList) Base_dContainer_dHashMap.t_Base_dContainer_dHashMap_dHashMap) (n : string) (visited : (string, bool) Base_dContainer_dHashMap.t_Base_dContainer_dHashMap_dHashMap) (comp : string Base_dData_dList.t_Base_dData_dList_dList) -> (((((v_Vuna_dCompiler_dIr_dAnalysis_ddfsCollectFuel 100000) adjT) n) visited) comp))
 
 # 115 "Vuna/Compiler/Ir/Analysis.vuna"
 let rec v_Vuna_dCompiler_dIr_dAnalysis_dcollectComps = (fun (mc0 : (string, string Base_dData_dList.t_Base_dData_dList_dList) Base_dContainer_dHashMap.t_Base_dContainer_dHashMap_dHashMap) (mc1 : string Base_dData_dList.t_Base_dData_dList_dList) (mc2 : (string, bool) Base_dContainer_dHashMap.t_Base_dContainer_dHashMap_dHashMap) (mc3 : string Base_dData_dList.t_Base_dData_dList_dList Base_dData_dList.t_Base_dData_dList_dList) -> (match mc1 with
@@ -93,7 +93,7 @@ let rec v_Vuna_dCompiler_dIr_dAnalysis_dcollectComps = (fun (mc0 : (string, stri
 ))
 
 # 125 "Vuna/Compiler/Ir/Analysis.vuna"
-let v_Vuna_dCompiler_dIr_dAnalysis_dcomponentTblOf = (fun comps -> (((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dinsertAll Base_dData_dString.v_Hashable_uString) ((Base_dData_dList.v_Base_dData_dList_dconcatMap (fun (g : string Base_dData_dList.t_Base_dData_dList_dList) -> ((Base_dData_dList.v_Base_dData_dList_dmap (fun (n : string) -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = n; Base_dData_dPair.f_Base_dData_dPair_dPair_second = g })) g))) comps)) ((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dfromList Base_dData_dString.v_Hashable_uString) Base_dData_dList.C_Base_dData_dList_dList_Nil)))
+let v_Vuna_dCompiler_dIr_dAnalysis_dcomponentTblOf = (fun (comps : string Base_dData_dList.t_Base_dData_dList_dList Base_dData_dList.t_Base_dData_dList_dList) -> (((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dinsertAll Base_dData_dString.v_Hashable_uString) ((Base_dData_dList.v_Base_dData_dList_dconcatMap (fun (g : string Base_dData_dList.t_Base_dData_dList_dList) -> ((Base_dData_dList.v_Base_dData_dList_dmap (fun (n : string) -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = n; Base_dData_dPair.f_Base_dData_dPair_dPair_second = g })) g))) comps)) ((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dfromList Base_dData_dString.v_Hashable_uString) Base_dData_dList.C_Base_dData_dList_dList_Nil)))
 
 # 129 "Vuna/Compiler/Ir/Analysis.vuna"
 let rec v_Vuna_dCompiler_dIr_dAnalysis_daddAllNames = (fun (mc0 : string Base_dData_dList.t_Base_dData_dList_dList) (mc1 : (string, bool) Base_dContainer_dHashMap.t_Base_dContainer_dHashMap_dHashMap) -> (match mc0 with
@@ -130,10 +130,10 @@ let rec v_Vuna_dCompiler_dIr_dAnalysis_dgroupsFromCompsGo = (fun (mc0 : (string,
 ))
 
 # 134 "Vuna/Compiler/Ir/Analysis.vuna"
-let v_Vuna_dCompiler_dIr_dAnalysis_dgroupsFromComps = (fun comps names -> ((((v_Vuna_dCompiler_dIr_dAnalysis_dgroupsFromCompsGo (v_Vuna_dCompiler_dIr_dAnalysis_dcomponentTblOf comps)) names) names) ((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dfromList Base_dData_dString.v_Hashable_uString) Base_dData_dList.C_Base_dData_dList_dList_Nil)))
+let v_Vuna_dCompiler_dIr_dAnalysis_dgroupsFromComps = (fun (comps : string Base_dData_dList.t_Base_dData_dList_dList Base_dData_dList.t_Base_dData_dList_dList) (names : string Base_dData_dList.t_Base_dData_dList_dList) -> ((((v_Vuna_dCompiler_dIr_dAnalysis_dgroupsFromCompsGo (v_Vuna_dCompiler_dIr_dAnalysis_dcomponentTblOf comps)) names) names) ((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dfromList Base_dData_dString.v_Hashable_uString) Base_dData_dList.C_Base_dData_dList_dList_Nil)))
 
 # 161 "Vuna/Compiler/Ir/Analysis.vuna"
-let v_Vuna_dCompiler_dIr_dAnalysis_dnotIn = (fun name names -> (Base_dData_dBool.v_Base_dData_dBool_dnot ((Base_dData_dList.v_Base_dData_dList_dmemName name) names)))
+let v_Vuna_dCompiler_dIr_dAnalysis_dnotIn = (fun (name : string) (names : string Base_dData_dList.t_Base_dData_dList_dList) -> (Base_dData_dBool.v_Base_dData_dBool_dnot ((Base_dData_dList.v_Base_dData_dList_dmemName name) names)))
 
 # 188 "Vuna/Compiler/Ir/Analysis.vuna"
 let rec v_Vuna_dCompiler_dIr_dAnalysis_dindexGroups = (fun (mc0 : int) (mc1 : string Base_dData_dList.t_Base_dData_dList_dList Base_dData_dList.t_Base_dData_dList_dList) (mc2 : (int, string Base_dData_dList.t_Base_dData_dList_dList) Base_dData_dPair.t_Base_dData_dPair_dPair Base_dData_dList.t_Base_dData_dList_dList) -> (match mc1 with
@@ -143,7 +143,7 @@ let rec v_Vuna_dCompiler_dIr_dAnalysis_dindexGroups = (fun (mc0 : int) (mc1 : st
 ))
 
 # 192 "Vuna/Compiler/Ir/Analysis.vuna"
-let v_Vuna_dCompiler_dIr_dAnalysis_dgroupIndexTbl = (fun indexed -> (((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dinsertAll Base_dData_dString.v_Hashable_uString) ((Base_dData_dList.v_Base_dData_dList_dconcatMap (fun (p : (int, string Base_dData_dList.t_Base_dData_dList_dList) Base_dData_dPair.t_Base_dData_dPair_dPair) -> ((Base_dData_dList.v_Base_dData_dList_dmap (fun (n : string) -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = n; Base_dData_dPair.f_Base_dData_dPair_dPair_second = (Base_dData_dPair.v_Base_dData_dPair_dfirstOf p) })) (Base_dData_dPair.v_Base_dData_dPair_dsecondOf p)))) indexed)) ((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dfromList Base_dData_dString.v_Hashable_uString) Base_dData_dList.C_Base_dData_dList_dList_Nil)))
+let v_Vuna_dCompiler_dIr_dAnalysis_dgroupIndexTbl = (fun (indexed : (int, string Base_dData_dList.t_Base_dData_dList_dList) Base_dData_dPair.t_Base_dData_dPair_dPair Base_dData_dList.t_Base_dData_dList_dList) -> (((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dinsertAll Base_dData_dString.v_Hashable_uString) ((Base_dData_dList.v_Base_dData_dList_dconcatMap (fun (p : (int, string Base_dData_dList.t_Base_dData_dList_dList) Base_dData_dPair.t_Base_dData_dPair_dPair) -> ((Base_dData_dList.v_Base_dData_dList_dmap (fun (n : string) -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = n; Base_dData_dPair.f_Base_dData_dPair_dPair_second = (Base_dData_dPair.v_Base_dData_dPair_dfirstOf p) })) (Base_dData_dPair.v_Base_dData_dPair_dsecondOf p)))) indexed)) ((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dfromList Base_dData_dString.v_Hashable_uString) Base_dData_dList.C_Base_dData_dList_dList_Nil)))
 
 # 204 "Vuna/Compiler/Ir/Analysis.vuna"
 let rec v_Vuna_dCompiler_dIr_dAnalysis_dgroupDepIdxGo = (fun (mc0 : int) (mc1 : (string, int) Base_dContainer_dHashMap.t_Base_dContainer_dHashMap_dHashMap) (mc2 : string Base_dData_dList.t_Base_dData_dList_dList) (mc3 : (int, bool) Base_dContainer_dHashMap.t_Base_dContainer_dHashMap_dHashMap) (mc4 : int Base_dData_dList.t_Base_dData_dList_dList) -> (match mc2 with
@@ -163,21 +163,21 @@ let v_Vuna_dCompiler_dIr_dAnalysis_dgroupDepIdx = (fun (mc0 : (string, string Ba
 ))
 
 # 223 "Vuna/Compiler/Ir/Analysis.vuna"
-let v_Vuna_dCompiler_dIr_dAnalysis_dlookupInt = (fun tbl k -> (match ((((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dlookup Base_dData_dInt.v_Hashable_uInt) Base_dData_dInt.v_Eq_uInt) k) tbl) with
+let v_Vuna_dCompiler_dIr_dAnalysis_dlookupInt = (fun (tbl : (int, int) Base_dContainer_dHashMap.t_Base_dContainer_dHashMap_dHashMap) (k : int) -> (match ((((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dlookup Base_dData_dInt.v_Hashable_uInt) Base_dData_dInt.v_Eq_uInt) k) tbl) with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__44) -> dtb__44
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> 0
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 229 "Vuna/Compiler/Ir/Analysis.vuna"
-let v_Vuna_dCompiler_dIr_dAnalysis_dlookupNames = (fun tbl k -> (match ((((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dlookup Base_dData_dInt.v_Hashable_uInt) Base_dData_dInt.v_Eq_uInt) k) tbl) with
+let v_Vuna_dCompiler_dIr_dAnalysis_dlookupNames = (fun (tbl : (int, string Base_dData_dList.t_Base_dData_dList_dList) Base_dContainer_dHashMap.t_Base_dContainer_dHashMap_dHashMap) (k : int) -> (match ((((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dlookup Base_dData_dInt.v_Hashable_uInt) Base_dData_dInt.v_Eq_uInt) k) tbl) with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__45) -> dtb__45
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> Base_dData_dList.C_Base_dData_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 235 "Vuna/Compiler/Ir/Analysis.vuna"
-let v_Vuna_dCompiler_dIr_dAnalysis_dlookupDeps = (fun tbl k -> (match ((((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dlookup Base_dData_dInt.v_Hashable_uInt) Base_dData_dInt.v_Eq_uInt) k) tbl) with
+let v_Vuna_dCompiler_dIr_dAnalysis_dlookupDeps = (fun (tbl : (int, int Base_dData_dList.t_Base_dData_dList_dList) Base_dContainer_dHashMap.t_Base_dContainer_dHashMap_dHashMap) (k : int) -> (match ((((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dlookup Base_dData_dInt.v_Hashable_uInt) Base_dData_dInt.v_Eq_uInt) k) tbl) with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__46) -> dtb__46
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> Base_dData_dList.C_Base_dData_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
@@ -190,7 +190,7 @@ let v_Vuna_dCompiler_dIr_dAnalysis_daddReverseEdges = (fun (mc0 : (int, int Base
 ))
 
 # 215 "Vuna/Compiler/Ir/Analysis.vuna"
-let v_Vuna_dCompiler_dIr_dAnalysis_dreverseDepTbl = (fun pairs -> (((Base_dData_dList.v_Base_dData_dList_dfoldl v_Vuna_dCompiler_dIr_dAnalysis_daddReverseEdges) ((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dfromList Base_dData_dInt.v_Hashable_uInt) Base_dData_dList.C_Base_dData_dList_dList_Nil)) pairs))
+let v_Vuna_dCompiler_dIr_dAnalysis_dreverseDepTbl = (fun (pairs : (int, int Base_dData_dList.t_Base_dData_dList_dList) Base_dData_dPair.t_Base_dData_dPair_dPair Base_dData_dList.t_Base_dData_dList_dList) -> (((Base_dData_dList.v_Base_dData_dList_dfoldl v_Vuna_dCompiler_dIr_dAnalysis_daddReverseEdges) ((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dfromList Base_dData_dInt.v_Hashable_uInt) Base_dData_dList.C_Base_dData_dList_dList_Nil)) pairs))
 
 # 242 "Vuna/Compiler/Ir/Analysis.vuna"
 let rec v_Vuna_dCompiler_dIr_dAnalysis_dinsertReady = (fun (mc0 : int) (mc1 : int Base_dData_dList.t_Base_dData_dList_dList) -> (match mc1 with
@@ -200,7 +200,7 @@ let rec v_Vuna_dCompiler_dIr_dAnalysis_dinsertReady = (fun (mc0 : int) (mc1 : in
 ))
 
 # 246 "Vuna/Compiler/Ir/Analysis.vuna"
-let rec v_Vuna_dCompiler_dIr_dAnalysis_dorderGroupsGo = (fun fuel grpTbl revTbl indeg ready remaining acc -> (if (fuel <= 0) then (Vuna_dCompiler_dBase_dDiagnostics_dCg.v_Vuna_dCompiler_dBase_dDiagnostics_dCg_dcgErr0 Vuna_dCompiler_dBase_dDiagnostics_dCg.C_Vuna_dCompiler_dBase_dDiagnostics_dCg_dCgErr_DependencyCycle) else (if (remaining = 0) then (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC ((Base_dData_dList.v_Base_dData_dList_dreverse acc))) else (match ready with
+let rec v_Vuna_dCompiler_dIr_dAnalysis_dorderGroupsGo = (fun (fuel : int) (grpTbl : (int, string Base_dData_dList.t_Base_dData_dList_dList) Base_dContainer_dHashMap.t_Base_dContainer_dHashMap_dHashMap) (revTbl : (int, int Base_dData_dList.t_Base_dData_dList_dList) Base_dContainer_dHashMap.t_Base_dContainer_dHashMap_dHashMap) (indeg : (int, int) Base_dContainer_dHashMap.t_Base_dContainer_dHashMap_dHashMap) (ready : int Base_dData_dList.t_Base_dData_dList_dList) (remaining : int) (acc : string Base_dData_dList.t_Base_dData_dList_dList Base_dData_dList.t_Base_dData_dList_dList) -> (if (fuel <= 0) then (Vuna_dCompiler_dBase_dDiagnostics_dCg.v_Vuna_dCompiler_dBase_dDiagnostics_dCg_dcgErr0 Vuna_dCompiler_dBase_dDiagnostics_dCg.C_Vuna_dCompiler_dBase_dDiagnostics_dCg_dCgErr_DependencyCycle) else (if (remaining = 0) then (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC ((Base_dData_dList.v_Base_dData_dList_dreverse acc))) else (match ready with
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> (Vuna_dCompiler_dBase_dDiagnostics_dCg.v_Vuna_dCompiler_dBase_dDiagnostics_dCg_dcgErr0 Vuna_dCompiler_dBase_dDiagnostics_dCg.C_Vuna_dCompiler_dBase_dDiagnostics_dCg_dCgErr_DependencyCycle)
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__51, dtb__52) -> ((fun deps -> ((fun indeg2 -> ((fun ready2 -> (((((((v_Vuna_dCompiler_dIr_dAnalysis_dorderGroupsGo (fuel - 1)) grpTbl) revTbl) indeg2) ready2) (remaining - 1)) (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (((v_Vuna_dCompiler_dIr_dAnalysis_dlookupNames grpTbl) dtb__51), acc)))) (((Base_dData_dList.v_Base_dData_dList_dfoldl (fun (r : int Base_dData_dList.t_Base_dData_dList_dList) (d : int) -> (if (((v_Vuna_dCompiler_dIr_dAnalysis_dlookupInt indeg2) d) = 0) then ((v_Vuna_dCompiler_dIr_dAnalysis_dinsertReady d) r) else r))) dtb__52) deps))) (((Base_dData_dList.v_Base_dData_dList_dfoldl (fun (acc2 : (int, int) Base_dContainer_dHashMap.t_Base_dContainer_dHashMap_dHashMap) (d : int) -> ((((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dinsert Base_dData_dInt.v_Hashable_uInt) d) (((v_Vuna_dCompiler_dIr_dAnalysis_dlookupInt indeg) d) - 1)) acc2))) indeg) deps))) ((v_Vuna_dCompiler_dIr_dAnalysis_dlookupDeps revTbl) dtb__51))
   | _ -> failwith "DT: impossible branch"
@@ -214,7 +214,7 @@ let rec v_Vuna_dCompiler_dIr_dAnalysis_dallCovered = (fun (mc0 : (string, bool) 
 ))
 
 # 286 "Vuna/Compiler/Ir/Analysis.vuna"
-let v_Vuna_dCompiler_dIr_dAnalysis_dcheckGroupsCover = (fun groups names -> ((fun covered -> (if ((v_Vuna_dCompiler_dIr_dAnalysis_dallCovered covered) names) then (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC (groups)) else (Vuna_dCompiler_dBase_dDiag.v_Vuna_dCompiler_dBase_dDiag_dicInternal "SCC grouping dropped definitions (DFS budget exhausted?)"))) (Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dofNames ((Base_dData_dList.v_Base_dData_dList_dconcatMap (fun (g : string Base_dData_dList.t_Base_dData_dList_dList) -> g)) groups))))
+let v_Vuna_dCompiler_dIr_dAnalysis_dcheckGroupsCover = (fun (groups : string Base_dData_dList.t_Base_dData_dList_dList Base_dData_dList.t_Base_dData_dList_dList) (names : string Base_dData_dList.t_Base_dData_dList_dList) -> ((fun covered -> (if ((v_Vuna_dCompiler_dIr_dAnalysis_dallCovered covered) names) then (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC (groups)) else (Vuna_dCompiler_dBase_dDiag.v_Vuna_dCompiler_dBase_dDiag_dicInternal "SCC grouping dropped definitions (DFS budget exhausted?)"))) (Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dofNames ((Base_dData_dList.v_Base_dData_dList_dconcatMap (fun (g : string Base_dData_dList.t_Base_dData_dList_dList) -> g)) groups))))
 
 # 300 "Vuna/Compiler/Ir/Analysis.vuna"
 let v_Vuna_dCompiler_dIr_dAnalysis_dgroupNeedsRec = (fun (mc0 : (string, string Base_dData_dList.t_Base_dData_dList_dList) Base_dContainer_dHashMap.t_Base_dContainer_dHashMap_dHashMap) (mc1 : string Base_dData_dList.t_Base_dData_dList_dList) -> (match mc1 with
@@ -274,19 +274,19 @@ let rec v_Vuna_dCompiler_dIr_dAnalysis_dcountList = (fun mc0 -> (match mc0 with
 ))
 
 # 171 "Vuna/Compiler/Ir/Analysis.vuna"
-let v_Vuna_dCompiler_dIr_dAnalysis_dorderGroups = (fun adjT groups -> ((fun indexed -> ((fun groupIdxT -> ((fun grpTbl -> ((fun depPairs -> ((fun revTbl -> ((fun indeg -> ((fun ready -> (((((((v_Vuna_dCompiler_dIr_dAnalysis_dorderGroupsGo ((v_Vuna_dCompiler_dIr_dAnalysis_dcountList groups) + 1)) grpTbl) revTbl) indeg) ready) (v_Vuna_dCompiler_dIr_dAnalysis_dcountList groups)) Base_dData_dList.C_Base_dData_dList_dList_Nil)) ((Base_dData_dList.v_Base_dData_dList_dfilter (fun (n : int) -> (((v_Vuna_dCompiler_dIr_dAnalysis_dlookupInt indeg) n) = 0))) ((Base_dData_dList.v_Base_dData_dList_dmap Base_dData_dPair.v_Base_dData_dPair_dfirstOf) indexed)))) (((Base_dData_dList.v_Base_dData_dList_dfoldl (fun (acc : (int, int) Base_dContainer_dHashMap.t_Base_dContainer_dHashMap_dHashMap) (p : (int, int Base_dData_dList.t_Base_dData_dList_dList) Base_dData_dPair.t_Base_dData_dPair_dPair) -> ((((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dinsert Base_dData_dInt.v_Hashable_uInt) (Base_dData_dPair.v_Base_dData_dPair_dfirstOf p)) (v_Vuna_dCompiler_dIr_dAnalysis_dcountList (Base_dData_dPair.v_Base_dData_dPair_dsecondOf p))) acc))) ((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dfromList Base_dData_dInt.v_Hashable_uInt) Base_dData_dList.C_Base_dData_dList_dList_Nil)) depPairs))) (v_Vuna_dCompiler_dIr_dAnalysis_dreverseDepTbl depPairs))) ((Base_dData_dList.v_Base_dData_dList_dmap (fun (p : (int, string Base_dData_dList.t_Base_dData_dList_dList) Base_dData_dPair.t_Base_dData_dPair_dPair) -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = (Base_dData_dPair.v_Base_dData_dPair_dfirstOf p); Base_dData_dPair.f_Base_dData_dPair_dPair_second = (((v_Vuna_dCompiler_dIr_dAnalysis_dgroupDepIdx adjT) groupIdxT) p) })) indexed))) (((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dinsertAll Base_dData_dInt.v_Hashable_uInt) ((Base_dData_dList.v_Base_dData_dList_dmap (fun (p : (int, string Base_dData_dList.t_Base_dData_dList_dList) Base_dData_dPair.t_Base_dData_dPair_dPair) -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = (Base_dData_dPair.v_Base_dData_dPair_dfirstOf p); Base_dData_dPair.f_Base_dData_dPair_dPair_second = (Base_dData_dPair.v_Base_dData_dPair_dsecondOf p) })) indexed)) ((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dfromList Base_dData_dInt.v_Hashable_uInt) Base_dData_dList.C_Base_dData_dList_dList_Nil)))) (v_Vuna_dCompiler_dIr_dAnalysis_dgroupIndexTbl indexed))) (((v_Vuna_dCompiler_dIr_dAnalysis_dindexGroups 0) groups) Base_dData_dList.C_Base_dData_dList_dList_Nil)))
+let v_Vuna_dCompiler_dIr_dAnalysis_dorderGroups = (fun (adjT : (string, string Base_dData_dList.t_Base_dData_dList_dList) Base_dContainer_dHashMap.t_Base_dContainer_dHashMap_dHashMap) (groups : string Base_dData_dList.t_Base_dData_dList_dList Base_dData_dList.t_Base_dData_dList_dList) -> ((fun indexed -> ((fun groupIdxT -> ((fun grpTbl -> ((fun depPairs -> ((fun revTbl -> ((fun indeg -> ((fun ready -> (((((((v_Vuna_dCompiler_dIr_dAnalysis_dorderGroupsGo ((v_Vuna_dCompiler_dIr_dAnalysis_dcountList groups) + 1)) grpTbl) revTbl) indeg) ready) (v_Vuna_dCompiler_dIr_dAnalysis_dcountList groups)) Base_dData_dList.C_Base_dData_dList_dList_Nil)) ((Base_dData_dList.v_Base_dData_dList_dfilter (fun (n : int) -> (((v_Vuna_dCompiler_dIr_dAnalysis_dlookupInt indeg) n) = 0))) ((Base_dData_dList.v_Base_dData_dList_dmap Base_dData_dPair.v_Base_dData_dPair_dfirstOf) indexed)))) (((Base_dData_dList.v_Base_dData_dList_dfoldl (fun (acc : (int, int) Base_dContainer_dHashMap.t_Base_dContainer_dHashMap_dHashMap) (p : (int, int Base_dData_dList.t_Base_dData_dList_dList) Base_dData_dPair.t_Base_dData_dPair_dPair) -> ((((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dinsert Base_dData_dInt.v_Hashable_uInt) (Base_dData_dPair.v_Base_dData_dPair_dfirstOf p)) (v_Vuna_dCompiler_dIr_dAnalysis_dcountList (Base_dData_dPair.v_Base_dData_dPair_dsecondOf p))) acc))) ((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dfromList Base_dData_dInt.v_Hashable_uInt) Base_dData_dList.C_Base_dData_dList_dList_Nil)) depPairs))) (v_Vuna_dCompiler_dIr_dAnalysis_dreverseDepTbl depPairs))) ((Base_dData_dList.v_Base_dData_dList_dmap (fun (p : (int, string Base_dData_dList.t_Base_dData_dList_dList) Base_dData_dPair.t_Base_dData_dPair_dPair) -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = (Base_dData_dPair.v_Base_dData_dPair_dfirstOf p); Base_dData_dPair.f_Base_dData_dPair_dPair_second = (((v_Vuna_dCompiler_dIr_dAnalysis_dgroupDepIdx adjT) groupIdxT) p) })) indexed))) (((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dinsertAll Base_dData_dInt.v_Hashable_uInt) ((Base_dData_dList.v_Base_dData_dList_dmap (fun (p : (int, string Base_dData_dList.t_Base_dData_dList_dList) Base_dData_dPair.t_Base_dData_dPair_dPair) -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = (Base_dData_dPair.v_Base_dData_dPair_dfirstOf p); Base_dData_dPair.f_Base_dData_dPair_dPair_second = (Base_dData_dPair.v_Base_dData_dPair_dsecondOf p) })) indexed)) ((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dfromList Base_dData_dInt.v_Hashable_uInt) Base_dData_dList.C_Base_dData_dList_dList_Nil)))) (v_Vuna_dCompiler_dIr_dAnalysis_dgroupIndexTbl indexed))) (((v_Vuna_dCompiler_dIr_dAnalysis_dindexGroups 0) groups) Base_dData_dList.C_Base_dData_dList_dList_Nil)))
 
 # 268 "Vuna/Compiler/Ir/Analysis.vuna"
-let v_Vuna_dCompiler_dIr_dAnalysis_dgroupNames = (fun adj names -> ((fun nameTbl -> ((fun adj2 -> ((fun adjT -> ((fun revT -> (match ((((v_Vuna_dCompiler_dIr_dAnalysis_dpostOrder adjT) names) ((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dfromList Base_dData_dString.v_Hashable_uString) Base_dData_dList.C_Base_dData_dList_dList_Nil)) Base_dData_dList.C_Base_dData_dList_dList_Nil) with
+let v_Vuna_dCompiler_dIr_dAnalysis_dgroupNames = (fun (adj : (string, string Base_dData_dList.t_Base_dData_dList_dList) Base_dData_dPair.t_Base_dData_dPair_dPair Base_dData_dList.t_Base_dData_dList_dList) (names : string Base_dData_dList.t_Base_dData_dList_dList) -> ((fun nameTbl -> ((fun adj2 -> ((fun adjT -> ((fun revT -> (match ((((v_Vuna_dCompiler_dIr_dAnalysis_dpostOrder adjT) names) ((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dfromList Base_dData_dString.v_Hashable_uString) Base_dData_dList.C_Base_dData_dList_dList_Nil)) Base_dData_dList.C_Base_dData_dList_dList_Nil) with
   | { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__70; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__71 } -> ((fun comps -> ((fun groups -> ((Vuna_dCompiler_dBase_dCommon.v_Vuna_dCompiler_dBase_dCommon_dbind ((v_Vuna_dCompiler_dIr_dAnalysis_dorderGroups adjT) groups)) (fun (ordered : string Base_dData_dList.t_Base_dData_dList_dList Base_dData_dList.t_Base_dData_dList_dList) -> ((v_Vuna_dCompiler_dIr_dAnalysis_dcheckGroupsCover ordered) names)))) ((v_Vuna_dCompiler_dIr_dAnalysis_dgroupsFromComps comps) names))) ((((v_Vuna_dCompiler_dIr_dAnalysis_dcollectComps revT) dtb__71) ((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dfromList Base_dData_dString.v_Hashable_uString) Base_dData_dList.C_Base_dData_dList_dList_Nil)) Base_dData_dList.C_Base_dData_dList_dList_Nil))
   | _ -> failwith "DT: impossible branch"
 )) (v_Vuna_dCompiler_dIr_dAnalysis_dreverseAdjTbl adj2))) (v_Vuna_dCompiler_dIr_dAnalysis_dadjTblOf adj2))) ((Base_dData_dList.v_Base_dData_dList_dmap (fun (p : (string, string Base_dData_dList.t_Base_dData_dList_dList) Base_dData_dPair.t_Base_dData_dPair_dPair) -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = (Base_dData_dPair.v_Base_dData_dPair_dfirstOf p); Base_dData_dPair.f_Base_dData_dPair_dPair_second = ((Base_dData_dList.v_Base_dData_dList_dfilter (fun (n : string) -> ((((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dmember Base_dData_dString.v_Hashable_uString) Base_dData_dString.v_Eq_uString) n) nameTbl))) (Base_dData_dPair.v_Base_dData_dPair_dsecondOf p)) })) adj))) (Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dofNames names)))
 
 # 362 "Vuna/Compiler/Ir/Analysis.vuna"
-let v_Vuna_dCompiler_dIr_dAnalysis_ddepEdgeCount = (fun defs -> (((Base_dData_dList.v_Base_dData_dList_dfoldl (fun (acc : int) (d : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrDef) -> (((Base_dTrait_dNum.v_Base_dTrait_dNum_d_x43_ Base_dData_dInt.v_Num_uInt) acc) (v_Vuna_dCompiler_dIr_dAnalysis_dcountList (Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirDefDeps d))))) 0) defs))
+let v_Vuna_dCompiler_dIr_dAnalysis_ddepEdgeCount = (fun (defs : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrDef Base_dData_dList.t_Base_dData_dList_dList) -> (((Base_dData_dList.v_Base_dData_dList_dfoldl (fun (acc : int) (d : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrDef) -> (((Base_dTrait_dNum.v_Base_dTrait_dNum_d_x43_ Base_dData_dInt.v_Num_uInt) acc) (v_Vuna_dCompiler_dIr_dAnalysis_dcountList (Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirDefDeps d))))) 0) defs))
 
 # 369 "Vuna/Compiler/Ir/Analysis.vuna"
-let rec v_Vuna_dCompiler_dIr_dAnalysis_dreachableNames = (fun fuel pending defTbl seen -> (if (fuel <= 0) then seen else (match pending with
+let rec v_Vuna_dCompiler_dIr_dAnalysis_dreachableNames = (fun (fuel : int) (pending : string Base_dData_dList.t_Base_dData_dList_dList) (defTbl : (string, Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrDef) Base_dContainer_dHashMap.t_Base_dContainer_dHashMap_dHashMap) (seen : (string, bool) Base_dContainer_dHashMap.t_Base_dContainer_dHashMap_dHashMap) -> (if (fuel <= 0) then seen else (match pending with
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> seen
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__72, dtb__73) -> (if ((((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dmember Base_dData_dString.v_Hashable_uString) Base_dData_dString.v_Eq_uString) dtb__72) seen) then ((((v_Vuna_dCompiler_dIr_dAnalysis_dreachableNames (fuel - 1)) dtb__73) defTbl) seen) else ((fun seen2 -> (match ((((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dlookup Base_dData_dString.v_Hashable_uString) Base_dData_dString.v_Eq_uString) dtb__72) defTbl) with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> ((((v_Vuna_dCompiler_dIr_dAnalysis_dreachableNames (fuel - 1)) dtb__73) defTbl) seen2)
@@ -297,7 +297,7 @@ let rec v_Vuna_dCompiler_dIr_dAnalysis_dreachableNames = (fun fuel pending defTb
 )))
 
 # 354 "Vuna/Compiler/Ir/Analysis.vuna"
-let v_Vuna_dCompiler_dIr_dAnalysis_dreachableDefs = (fun seeds defs -> ((fun defTbl -> ((fun budget -> ((fun seen -> ((Base_dData_dList.v_Base_dData_dList_dfilter (fun (d : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrDef) -> ((((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dmember Base_dData_dString.v_Hashable_uString) Base_dData_dString.v_Eq_uString) (Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirDefName d)) seen))) defs)) ((((v_Vuna_dCompiler_dIr_dAnalysis_dreachableNames budget) seeds) defTbl) ((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dfromList Base_dData_dString.v_Hashable_uString) Base_dData_dList.C_Base_dData_dList_dList_Nil)))) ((8 + (v_Vuna_dCompiler_dIr_dAnalysis_dcountList seeds)) + (v_Vuna_dCompiler_dIr_dAnalysis_ddepEdgeCount defs)))) (((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dinsertAll Base_dData_dString.v_Hashable_uString) ((Base_dData_dList.v_Base_dData_dList_dmap (fun (d : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrDef) -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = (Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirDefName d); Base_dData_dPair.f_Base_dData_dPair_dPair_second = d })) defs)) ((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dfromList Base_dData_dString.v_Hashable_uString) Base_dData_dList.C_Base_dData_dList_dList_Nil))))
+let v_Vuna_dCompiler_dIr_dAnalysis_dreachableDefs = (fun (seeds : string Base_dData_dList.t_Base_dData_dList_dList) (defs : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrDef Base_dData_dList.t_Base_dData_dList_dList) -> ((fun defTbl -> ((fun budget -> ((fun seen -> ((Base_dData_dList.v_Base_dData_dList_dfilter (fun (d : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrDef) -> ((((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dmember Base_dData_dString.v_Hashable_uString) Base_dData_dString.v_Eq_uString) (Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirDefName d)) seen))) defs)) ((((v_Vuna_dCompiler_dIr_dAnalysis_dreachableNames budget) seeds) defTbl) ((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dfromList Base_dData_dString.v_Hashable_uString) Base_dData_dList.C_Base_dData_dList_dList_Nil)))) ((8 + (v_Vuna_dCompiler_dIr_dAnalysis_dcountList seeds)) + (v_Vuna_dCompiler_dIr_dAnalysis_ddepEdgeCount defs)))) (((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dinsertAll Base_dData_dString.v_Hashable_uString) ((Base_dData_dList.v_Base_dData_dList_dmap (fun (d : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrDef) -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = (Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirDefName d); Base_dData_dPair.f_Base_dData_dPair_dPair_second = d })) defs)) ((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dfromList Base_dData_dString.v_Hashable_uString) Base_dData_dList.C_Base_dData_dList_dList_Nil))))
 
 # 391 "Vuna/Compiler/Ir/Analysis.vuna"
 let rec v_Vuna_dCompiler_dIr_dAnalysis_dirStringsOf = (fun (mc0 : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIr) -> (match mc0 with
@@ -319,9 +319,9 @@ let rec v_Vuna_dCompiler_dIr_dAnalysis_dirStringsOf = (fun (mc0 : Vuna_dCompiler
   | _ -> Base_dData_dList.C_Base_dData_dList_dList_Nil
 ))
 # 413 "Vuna/Compiler/Ir/Analysis.vuna"
-and v_Vuna_dCompiler_dIr_dAnalysis_dirStringsOfField = (fun p -> (v_Vuna_dCompiler_dIr_dAnalysis_dirStringsOf (Base_dData_dPair.v_Base_dData_dPair_dsecondOf p)))
+and v_Vuna_dCompiler_dIr_dAnalysis_dirStringsOfField = (fun (p : (string, Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIr) Base_dData_dPair.t_Base_dData_dPair_dPair) -> (v_Vuna_dCompiler_dIr_dAnalysis_dirStringsOf (Base_dData_dPair.v_Base_dData_dPair_dsecondOf p)))
 # 416 "Vuna/Compiler/Ir/Analysis.vuna"
-and v_Vuna_dCompiler_dIr_dAnalysis_dirStringsOfAlt = (fun alt -> (v_Vuna_dCompiler_dIr_dAnalysis_dirStringsOf (Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirAltBodyOf alt)))
+and v_Vuna_dCompiler_dIr_dAnalysis_dirStringsOfAlt = (fun (alt : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrAlt) -> (v_Vuna_dCompiler_dIr_dAnalysis_dirStringsOf (Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirAltBodyOf alt)))
 # 419 "Vuna/Compiler/Ir/Analysis.vuna"
 and v_Vuna_dCompiler_dIr_dAnalysis_dirStringsOfAltMaybe = (fun (mc0 : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrAlt Base_dData_dMaybe.t_Base_dData_dMaybe_dMaybe) -> (match mc0 with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__123) -> (v_Vuna_dCompiler_dIr_dAnalysis_dirStringsOfAlt dtb__123)
@@ -330,7 +330,7 @@ and v_Vuna_dCompiler_dIr_dAnalysis_dirStringsOfAltMaybe = (fun (mc0 : Vuna_dComp
 ))
 
 # 424 "Vuna/Compiler/Ir/Analysis.vuna"
-let v_Vuna_dCompiler_dIr_dAnalysis_dirStringsOfDef = (fun d -> (match (Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirDefBody d) with
+let v_Vuna_dCompiler_dIr_dAnalysis_dirStringsOfDef = (fun (d : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrDef) -> (match (Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirDefBody d) with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> Base_dData_dList.C_Base_dData_dList_dList_Nil
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__124) -> (v_Vuna_dCompiler_dIr_dAnalysis_dirStringsOf dtb__124)
   | _ -> failwith "DT: impossible branch"
@@ -344,7 +344,7 @@ let rec v_Vuna_dCompiler_dIr_dAnalysis_dcheckUniqueDefNamesGo = (fun (mc0 : stri
 ))
 
 # 432 "Vuna/Compiler/Ir/Analysis.vuna"
-let v_Vuna_dCompiler_dIr_dAnalysis_dcheckUniqueDefNames = (fun defs -> ((v_Vuna_dCompiler_dIr_dAnalysis_dcheckUniqueDefNamesGo ((Base_dData_dList.v_Base_dData_dList_dmap Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirDefName) defs)) ((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dfromList Base_dData_dString.v_Hashable_uString) Base_dData_dList.C_Base_dData_dList_dList_Nil)))
+let v_Vuna_dCompiler_dIr_dAnalysis_dcheckUniqueDefNames = (fun (defs : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrDef Base_dData_dList.t_Base_dData_dList_dList) -> ((v_Vuna_dCompiler_dIr_dAnalysis_dcheckUniqueDefNamesGo ((Base_dData_dList.v_Base_dData_dList_dmap Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirDefName) defs)) ((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dfromList Base_dData_dString.v_Hashable_uString) Base_dData_dList.C_Base_dData_dList_dList_Nil)))
 
 # 472 "Vuna/Compiler/Ir/Analysis.vuna"
 let rec v_Vuna_dCompiler_dIr_dAnalysis_dfirstBadRecName = (fun (mc0 : string Base_dData_dList.t_Base_dData_dList_dList) (mc1 : (string) -> bool) -> (match mc0 with
@@ -372,4 +372,4 @@ let v_Vuna_dCompiler_dIr_dAnalysis_dgroupNamesGo = (fun (mc0 : (string, string B
 ))
 
 # 448 "Vuna/Compiler/Ir/Analysis.vuna"
-let v_Vuna_dCompiler_dIr_dAnalysis_dassembleGroupNames = (fun adj names recOk spanOf -> (((((v_Vuna_dCompiler_dIr_dAnalysis_dgroupNamesGo (v_Vuna_dCompiler_dIr_dAnalysis_dadjTblOf adj)) names) ((v_Vuna_dCompiler_dIr_dAnalysis_dgroupNames adj) names)) recOk) spanOf))
+let v_Vuna_dCompiler_dIr_dAnalysis_dassembleGroupNames = (fun (adj : (string, string Base_dData_dList.t_Base_dData_dList_dList) Base_dData_dPair.t_Base_dData_dPair_dPair Base_dData_dList.t_Base_dData_dList_dList) (names : string Base_dData_dList.t_Base_dData_dList_dList) (recOk : (string) -> bool) (spanOf : (string) -> Vuna_dCompiler_dBase_dSource.t_Vuna_dCompiler_dBase_dSource_dSpan Base_dData_dMaybe.t_Base_dData_dMaybe_dMaybe) -> (((((v_Vuna_dCompiler_dIr_dAnalysis_dgroupNamesGo (v_Vuna_dCompiler_dIr_dAnalysis_dadjTblOf adj)) names) ((v_Vuna_dCompiler_dIr_dAnalysis_dgroupNames adj) names)) recOk) spanOf))

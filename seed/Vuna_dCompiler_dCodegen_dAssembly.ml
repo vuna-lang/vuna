@@ -33,16 +33,16 @@ let rec v_Vuna_dCompiler_dCodegen_dAssembly_dcheckGroupsForBuild = (fun (mc0 : V
 ))
 
 # 67 "Vuna/Compiler/Codegen/Assembly.vuna"
-let v_Vuna_dCompiler_dCodegen_dAssembly_dcheckUnitParts = (fun shared unitIr -> (v_Vuna_dCompiler_dCodegen_dAssembly_dcheckGroupsForBuild (unitIr).Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrUnit_irUnitGroups))
+let v_Vuna_dCompiler_dCodegen_dAssembly_dcheckUnitParts = (fun (shared : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrShared) (unitIr : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrUnit) -> (v_Vuna_dCompiler_dCodegen_dAssembly_dcheckGroupsForBuild (unitIr).Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrUnit_irUnitGroups))
 
 # 89 "Vuna/Compiler/Codegen/Assembly.vuna"
-let v_Vuna_dCompiler_dCodegen_dAssembly_dgenTypePart = (fun qc unitIr -> (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC (((Vuna_dCompiler_dCodegen_dDecl.v_Vuna_dCompiler_dCodegen_dDecl_dirTypeDeclsText qc) (unitIr).Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrUnit_irUnitTyDecls))))
+let v_Vuna_dCompiler_dCodegen_dAssembly_dgenTypePart = (fun (qc : Vuna_dCompiler_dCodegen_dDecl.t_Vuna_dCompiler_dCodegen_dDecl_dQualCtx) (unitIr : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrUnit) -> (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC (((Vuna_dCompiler_dCodegen_dDecl.v_Vuna_dCompiler_dCodegen_dDecl_dirTypeDeclsText qc) (unitIr).Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrUnit_irUnitTyDecls))))
 
 # 93 "Vuna/Compiler/Codegen/Assembly.vuna"
-let v_Vuna_dCompiler_dCodegen_dAssembly_daddDep = (fun acc dep -> (if (if (dep = "") then true else ((Base_dData_dList.v_Base_dData_dList_dmemName dep) acc)) then acc else ((Base_dData_dList.v_Base_dData_dList_dappend acc) (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dep, Base_dData_dList.C_Base_dData_dList_dList_Nil)))))
+let v_Vuna_dCompiler_dCodegen_dAssembly_daddDep = (fun (acc : string Base_dData_dList.t_Base_dData_dList_dList) (dep : string) -> (if (if (dep = "") then true else ((Base_dData_dList.v_Base_dData_dList_dmemName dep) acc)) then acc else ((Base_dData_dList.v_Base_dData_dList_dappend acc) (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dep, Base_dData_dList.C_Base_dData_dList_dList_Nil)))))
 
 # 96 "Vuna/Compiler/Codegen/Assembly.vuna"
-let v_Vuna_dCompiler_dCodegen_dAssembly_duniqueDeps = (fun deps -> (((Base_dData_dList.v_Base_dData_dList_dfoldl v_Vuna_dCompiler_dCodegen_dAssembly_daddDep) Base_dData_dList.C_Base_dData_dList_dList_Nil) deps))
+let v_Vuna_dCompiler_dCodegen_dAssembly_duniqueDeps = (fun (deps : string Base_dData_dList.t_Base_dData_dList_dList) -> (((Base_dData_dList.v_Base_dData_dList_dfoldl v_Vuna_dCompiler_dCodegen_dAssembly_daddDep) Base_dData_dList.C_Base_dData_dList_dList_Nil) deps))
 
 # 101 "Vuna/Compiler/Codegen/Assembly.vuna"
 let v_Vuna_dCompiler_dCodegen_dAssembly_dgenUnitText = (fun (mc0 : t_Vuna_dCompiler_dCodegen_dAssembly_dUnitParts) -> (match mc0 with
@@ -51,10 +51,10 @@ let v_Vuna_dCompiler_dCodegen_dAssembly_dgenUnitText = (fun (mc0 : t_Vuna_dCompi
 ))
 
 # 108 "Vuna/Compiler/Codegen/Assembly.vuna"
-let v_Vuna_dCompiler_dCodegen_dAssembly_dopenHeader = (fun qc -> (if ((qc).Vuna_dCompiler_dCodegen_dDecl.f_Vuna_dCompiler_dCodegen_dDecl_dQualCtx_qcUnit = "") then "" else (String.concat "" ["open "; v_Vuna_dCompiler_dCodegen_dAssembly_druntimeUnit; "\n"])))
+let v_Vuna_dCompiler_dCodegen_dAssembly_dopenHeader = (fun (qc : Vuna_dCompiler_dCodegen_dDecl.t_Vuna_dCompiler_dCodegen_dDecl_dQualCtx) -> (if ((qc).Vuna_dCompiler_dCodegen_dDecl.f_Vuna_dCompiler_dCodegen_dDecl_dQualCtx_qcUnit = "") then "" else (String.concat "" ["open "; v_Vuna_dCompiler_dCodegen_dAssembly_druntimeUnit; "\n"])))
 
 # 112 "Vuna/Compiler/Codegen/Assembly.vuna"
-let v_Vuna_dCompiler_dCodegen_dAssembly_dlistBridgeFor = (fun shared unitIr -> (if (unitIr).Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrUnit_irUnitHasListFamily then (Vuna_dCompiler_dCodegen_dTerm.v_Vuna_dCompiler_dCodegen_dTerm_ddtListBridge (shared).Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedListFam) else ""))
+let v_Vuna_dCompiler_dCodegen_dAssembly_dlistBridgeFor = (fun (shared : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrShared) (unitIr : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrUnit) -> (if (unitIr).Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrUnit_irUnitHasListFamily then (Vuna_dCompiler_dCodegen_dTerm.v_Vuna_dCompiler_dCodegen_dTerm_ddtListBridge (shared).Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedListFam) else ""))
 
 # 118 "Vuna/Compiler/Codegen/Assembly.vuna"
 let rec v_Vuna_dCompiler_dCodegen_dAssembly_dtypeRefDeps = (fun (mc0 : Vuna_dCompiler_dCodegen_dDecl.t_Vuna_dCompiler_dCodegen_dDecl_dQualCtx) (mc1 : string Base_dData_dList.t_Base_dData_dList_dList) -> (match mc1 with
@@ -64,7 +64,7 @@ let rec v_Vuna_dCompiler_dCodegen_dAssembly_dtypeRefDeps = (fun (mc0 : Vuna_dCom
 ))
 
 # 49 "Vuna/Compiler/Codegen/Assembly.vuna"
-let v_Vuna_dCompiler_dCodegen_dAssembly_dgenUnitPartsWith = (fun norm qc shared unitIr -> ((Vuna_dCompiler_dBase_dCommon.v_Vuna_dCompiler_dBase_dCommon_dbind ((v_Vuna_dCompiler_dCodegen_dAssembly_dgenTypePart qc) unitIr)) (fun (typeText : string) -> ((fun _u -> ((fun nd_uscrut5 -> (match nd_uscrut5 with
+let v_Vuna_dCompiler_dCodegen_dAssembly_dgenUnitPartsWith = (fun (norm : (string) -> string) (qc : Vuna_dCompiler_dCodegen_dDecl.t_Vuna_dCompiler_dCodegen_dDecl_dQualCtx) (shared : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrShared) (unitIr : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrUnit) -> ((Vuna_dCompiler_dBase_dCommon.v_Vuna_dCompiler_dBase_dCommon_dbind ((v_Vuna_dCompiler_dCodegen_dAssembly_dgenTypePart qc) unitIr)) (fun (typeText : string) -> ((fun _u -> ((fun nd_uscrut5 -> (match nd_uscrut5 with
   | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC (dtb__16) -> (match dtb__16 with
   | { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__17; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__18 } -> ((fun _u -> ((fun deps -> (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC ({ f_Vuna_dCompiler_dCodegen_dAssembly_dUnitParts_unitPartsFragments = (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((v_Vuna_dCompiler_dCodegen_dAssembly_dopenHeader qc), (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (typeText, (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (((v_Vuna_dCompiler_dCodegen_dAssembly_dlistBridgeFor shared) unitIr), Base_dData_dList.C_Base_dData_dList_dList_Nil)))))); f_Vuna_dCompiler_dCodegen_dAssembly_dUnitParts_unitPartsBodies = dtb__17; f_Vuna_dCompiler_dCodegen_dAssembly_dUnitParts_unitPartsState = dtb__18; f_Vuna_dCompiler_dCodegen_dAssembly_dUnitParts_unitPartsDeps = deps }))) (v_Vuna_dCompiler_dCodegen_dAssembly_duniqueDeps ((Base_dData_dList.v_Base_dData_dList_dappend ((Base_dData_dList.v_Base_dData_dList_dappend (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (v_Vuna_dCompiler_dCodegen_dAssembly_druntimeUnit, Base_dData_dList.C_Base_dData_dList_dList_Nil))) ((v_Vuna_dCompiler_dCodegen_dAssembly_dtypeRefDeps qc) (unitIr).Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrUnit_irUnitTypeRefs))) (dtb__18).Vuna_dCompiler_dCodegen_dTerm.f_Vuna_dCompiler_dCodegen_dTerm_dGenSt_gsDeps)))) (if (dtp_debug_on 0) then (dtp_debug_line "cg-genGroups-done") else 0))
   | _ -> failwith "DT: impossible branch"
@@ -74,4 +74,4 @@ let v_Vuna_dCompiler_dCodegen_dAssembly_dgenUnitPartsWith = (fun norm qc shared 
 )) ((Vuna_dCompiler_dCodegen_dTerm.v_Vuna_dCompiler_dCodegen_dTerm_dgenGroups (((Vuna_dCompiler_dCodegen_dTerm.v_Vuna_dCompiler_dCodegen_dTerm_dmkGenStWith norm) qc) shared)) (unitIr).Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrUnit_irUnitGroups))) (if (dtp_debug_on 0) then (dtp_debug_line "cg-typedecls-done") else 0)))))
 
 # 46 "Vuna/Compiler/Codegen/Assembly.vuna"
-let v_Vuna_dCompiler_dCodegen_dAssembly_dgenUnitParts = (fun qc shared unitIr -> ((((v_Vuna_dCompiler_dCodegen_dAssembly_dgenUnitPartsWith (fun (p : string) -> p)) qc) shared) unitIr))
+let v_Vuna_dCompiler_dCodegen_dAssembly_dgenUnitParts = (fun (qc : Vuna_dCompiler_dCodegen_dDecl.t_Vuna_dCompiler_dCodegen_dDecl_dQualCtx) (shared : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrShared) (unitIr : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrUnit) -> ((((v_Vuna_dCompiler_dCodegen_dAssembly_dgenUnitPartsWith (fun (p : string) -> p)) qc) shared) unitIr))

@@ -1,6 +1,6 @@
 open Vuna_runtime
 # 68 "Vuna/Compiler/Frontend/Rast/Bridge.vuna"
-let rec v_Vuna_dCompiler_dFrontend_dRast_dBridge_dtoAstPat = (fun p -> (match p with
+let rec v_Vuna_dCompiler_dFrontend_dRast_dBridge_dtoAstPat = (fun (p : Vuna_dCompiler_dFrontend_dRast.t_Vuna_dCompiler_dFrontend_dRast_dPat) -> (match p with
   | Vuna_dCompiler_dFrontend_dRast.C_Vuna_dCompiler_dFrontend_dRast_dPat_PVar (dtb__0, dtb__1) -> (Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dPat_PVar (dtb__0, dtb__1))
   | Vuna_dCompiler_dFrontend_dRast.C_Vuna_dCompiler_dFrontend_dRast_dPat_PAs (dtb__2, dtb__3, dtb__4) -> (Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dPat_PAs (dtb__2, (v_Vuna_dCompiler_dFrontend_dRast_dBridge_dtoAstPat dtb__3), dtb__4))
   | Vuna_dCompiler_dFrontend_dRast.C_Vuna_dCompiler_dFrontend_dRast_dPat_PWild (dtb__5) -> (Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dPat_PWild (dtb__5))
@@ -17,7 +17,7 @@ and v_Vuna_dCompiler_dFrontend_dRast_dBridge_dtoAstPatField = (fun (mc0 : (strin
 ))
 
 # 14 "Vuna/Compiler/Frontend/Rast/Bridge.vuna"
-let rec v_Vuna_dCompiler_dFrontend_dRast_dBridge_dtoAstExpr = (fun e -> (match e with
+let rec v_Vuna_dCompiler_dFrontend_dRast_dBridge_dtoAstExpr = (fun (e : Vuna_dCompiler_dFrontend_dRast.t_Vuna_dCompiler_dFrontend_dRast_dExpr) -> (match e with
   | Vuna_dCompiler_dFrontend_dRast.C_Vuna_dCompiler_dFrontend_dRast_dExpr_EVar (dtb__18, dtb__19) -> (Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EVar ((Vuna_dCompiler_dFrontend_dRast_dName.v_Vuna_dCompiler_dFrontend_dRast_dName_drnameKey dtb__18), dtb__19))
   | Vuna_dCompiler_dFrontend_dRast.C_Vuna_dCompiler_dFrontend_dRast_dExpr_EInt (dtb__20, dtb__21) -> (Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EInt (dtb__20, dtb__21))
   | Vuna_dCompiler_dFrontend_dRast.C_Vuna_dCompiler_dFrontend_dRast_dExpr_EStr (dtb__22, dtb__23) -> (Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EStr (dtb__22, dtb__23))
@@ -44,7 +44,7 @@ let rec v_Vuna_dCompiler_dFrontend_dRast_dBridge_dtoAstExpr = (fun e -> (match e
   | _ -> failwith "DT: impossible branch"
 ))
 # 44 "Vuna/Compiler/Frontend/Rast/Bridge.vuna"
-and v_Vuna_dCompiler_dFrontend_dRast_dBridge_dtoAstInterpPart = (fun part -> (match part with
+and v_Vuna_dCompiler_dFrontend_dRast_dBridge_dtoAstInterpPart = (fun (part : Vuna_dCompiler_dFrontend_dRast.t_Vuna_dCompiler_dFrontend_dRast_dInterpPart) -> (match part with
   | Vuna_dCompiler_dFrontend_dRast.C_Vuna_dCompiler_dFrontend_dRast_dInterpPart_IPText (dtb__86) -> (Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dInterpPart_IPText (dtb__86))
   | Vuna_dCompiler_dFrontend_dRast.C_Vuna_dCompiler_dFrontend_dRast_dInterpPart_IPHole (dtb__87) -> (Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dInterpPart_IPHole ((v_Vuna_dCompiler_dFrontend_dRast_dBridge_dtoAstExpr dtb__87)))
   | _ -> failwith "DT: impossible branch"
@@ -70,20 +70,20 @@ and v_Vuna_dCompiler_dFrontend_dRast_dBridge_dtoAstFieldValue = (fun (mc0 : (str
   | _ -> failwith "DT: impossible branch"
 ))
 # 62 "Vuna/Compiler/Frontend/Rast/Bridge.vuna"
-and v_Vuna_dCompiler_dFrontend_dRast_dBridge_dtoAstStmt = (fun stmt -> (match stmt with
+and v_Vuna_dCompiler_dFrontend_dRast_dBridge_dtoAstStmt = (fun (stmt : Vuna_dCompiler_dFrontend_dRast.t_Vuna_dCompiler_dFrontend_dRast_dDoStmt) -> (match stmt with
   | Vuna_dCompiler_dFrontend_dRast.C_Vuna_dCompiler_dFrontend_dRast_dDoStmt_DBind (dtb__96, dtb__97, dtb__98) -> (Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dDoStmt_DBind ((v_Vuna_dCompiler_dFrontend_dRast_dBridge_dtoAstPat dtb__96), (v_Vuna_dCompiler_dFrontend_dRast_dBridge_dtoAstExpr dtb__97), dtb__98))
   | Vuna_dCompiler_dFrontend_dRast.C_Vuna_dCompiler_dFrontend_dRast_dDoStmt_DExpr (dtb__99, dtb__100) -> (Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dDoStmt_DExpr ((v_Vuna_dCompiler_dFrontend_dRast_dBridge_dtoAstExpr dtb__99), dtb__100))
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 84 "Vuna/Compiler/Frontend/Rast/Bridge.vuna"
-let v_Vuna_dCompiler_dFrontend_dRast_dBridge_dtoRastExpr = (fun e -> ((Vuna_dCompiler_dFrontend_dRast.v_Vuna_dCompiler_dFrontend_dRast_dofExpr Base_dData_dList.C_Base_dData_dList_dList_Nil) e))
+let v_Vuna_dCompiler_dFrontend_dRast_dBridge_dtoRastExpr = (fun (e : Vuna_dCompiler_dFrontend_dAst.t_Vuna_dCompiler_dFrontend_dAst_dExpr) -> ((Vuna_dCompiler_dFrontend_dRast.v_Vuna_dCompiler_dFrontend_dRast_dofExpr Base_dData_dList.C_Base_dData_dList_dList_Nil) e))
 
 # 88 "Vuna/Compiler/Frontend/Rast/Bridge.vuna"
-let v_Vuna_dCompiler_dFrontend_dRast_dBridge_dtoRastDecls = (fun decls -> (Vuna_dCompiler_dFrontend_dRast.v_Vuna_dCompiler_dFrontend_dRast_dofDecls decls))
+let v_Vuna_dCompiler_dFrontend_dRast_dBridge_dtoRastDecls = (fun (decls : Vuna_dCompiler_dFrontend_dAst.t_Vuna_dCompiler_dFrontend_dAst_dDecl Base_dData_dList.t_Base_dData_dList_dList) -> (Vuna_dCompiler_dFrontend_dRast.v_Vuna_dCompiler_dFrontend_dRast_dofDecls decls))
 
 # 92 "Vuna/Compiler/Frontend/Rast/Bridge.vuna"
-let v_Vuna_dCompiler_dFrontend_dRast_dBridge_dtoRastDecl = (fun d -> ((Vuna_dCompiler_dFrontend_dRast.v_Vuna_dCompiler_dFrontend_dRast_dofDecl Base_dData_dList.C_Base_dData_dList_dList_Nil) d))
+let v_Vuna_dCompiler_dFrontend_dRast_dBridge_dtoRastDecl = (fun (d : Vuna_dCompiler_dFrontend_dAst.t_Vuna_dCompiler_dFrontend_dAst_dDecl) -> ((Vuna_dCompiler_dFrontend_dRast.v_Vuna_dCompiler_dFrontend_dRast_dofDecl Base_dData_dList.C_Base_dData_dList_dList_Nil) d))
 
 # 120 "Vuna/Compiler/Frontend/Rast/Bridge.vuna"
 let v_Vuna_dCompiler_dFrontend_dRast_dBridge_dtoAstCtor = (fun (mc0 : Vuna_dCompiler_dFrontend_dRast.t_Vuna_dCompiler_dFrontend_dRast_dCtor) -> (match mc0 with
@@ -117,7 +117,7 @@ let v_Vuna_dCompiler_dFrontend_dRast_dBridge_dtoAstTraitParam = (fun (mc0 : Vuna
 ))
 
 # 99 "Vuna/Compiler/Frontend/Rast/Bridge.vuna"
-let rec v_Vuna_dCompiler_dFrontend_dRast_dBridge_dtoAstDecl = (fun d -> (match d with
+let rec v_Vuna_dCompiler_dFrontend_dRast_dBridge_dtoAstDecl = (fun (d : Vuna_dCompiler_dFrontend_dRast.t_Vuna_dCompiler_dFrontend_dRast_dDecl) -> (match d with
   | Vuna_dCompiler_dFrontend_dRast.C_Vuna_dCompiler_dFrontend_dRast_dDecl_DData (dtb__114, dtb__115, dtb__116, dtb__117, dtb__118, dtb__119, dtb__120, dtb__121, dtb__122) -> (Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dDecl_DData (dtb__114, dtb__115, (v_Vuna_dCompiler_dFrontend_dRast_dBridge_dtoAstExpr dtb__116), ((Base_dData_dList.v_Base_dData_dList_dmap v_Vuna_dCompiler_dFrontend_dRast_dBridge_dtoAstCtor) dtb__117), dtb__118, dtb__119, dtb__120, dtb__121, dtb__122))
   | Vuna_dCompiler_dFrontend_dRast.C_Vuna_dCompiler_dFrontend_dRast_dDecl_DAxiom (dtb__123, dtb__124, dtb__125) -> (Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dDecl_DAxiom (dtb__123, (v_Vuna_dCompiler_dFrontend_dRast_dBridge_dtoAstExpr dtb__124), dtb__125))
   | Vuna_dCompiler_dFrontend_dRast.C_Vuna_dCompiler_dFrontend_dRast_dDecl_DExtern (dtb__126, dtb__127, dtb__128, dtb__129) -> (Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dDecl_DExtern (dtb__126, dtb__127, (v_Vuna_dCompiler_dFrontend_dRast_dBridge_dtoAstExpr dtb__128), dtb__129))
@@ -130,10 +130,10 @@ let rec v_Vuna_dCompiler_dFrontend_dRast_dBridge_dtoAstDecl = (fun d -> (match d
 ))
 
 # 96 "Vuna/Compiler/Frontend/Rast/Bridge.vuna"
-let v_Vuna_dCompiler_dFrontend_dRast_dBridge_dtoAstDecls = (fun decls -> ((Base_dData_dList.v_Base_dData_dList_dmap v_Vuna_dCompiler_dFrontend_dRast_dBridge_dtoAstDecl) decls))
+let v_Vuna_dCompiler_dFrontend_dRast_dBridge_dtoAstDecls = (fun (decls : Vuna_dCompiler_dFrontend_dRast.t_Vuna_dCompiler_dFrontend_dRast_dDecl Base_dData_dList.t_Base_dData_dList_dList) -> ((Base_dData_dList.v_Base_dData_dList_dmap v_Vuna_dCompiler_dFrontend_dRast_dBridge_dtoAstDecl) decls))
 
 # 137 "Vuna/Compiler/Frontend/Rast/Bridge.vuna"
-let rec v_Vuna_dCompiler_dFrontend_dRast_dBridge_dtoRastPat = (fun p -> (match p with
+let rec v_Vuna_dCompiler_dFrontend_dRast_dBridge_dtoRastPat = (fun (p : Vuna_dCompiler_dFrontend_dAst.t_Vuna_dCompiler_dFrontend_dAst_dPat) -> (match p with
   | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dPat_PVar (dtb__155, dtb__156) -> (Vuna_dCompiler_dFrontend_dRast.C_Vuna_dCompiler_dFrontend_dRast_dPat_PVar (dtb__155, dtb__156))
   | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dPat_PAs (dtb__157, dtb__158, dtb__159) -> (Vuna_dCompiler_dFrontend_dRast.C_Vuna_dCompiler_dFrontend_dRast_dPat_PAs (dtb__157, (v_Vuna_dCompiler_dFrontend_dRast_dBridge_dtoRastPat dtb__158), dtb__159))
   | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dPat_PWild (dtb__160) -> (Vuna_dCompiler_dFrontend_dRast.C_Vuna_dCompiler_dFrontend_dRast_dPat_PWild (dtb__160))

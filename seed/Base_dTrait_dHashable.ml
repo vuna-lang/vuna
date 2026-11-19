@@ -8,7 +8,7 @@ let v_Base_dTrait_dHashable_dhash = (fun _ud x0 -> (match _ud with
 ))
 
 # 20 "Base/Trait/Hashable.vuna"
-let v_Base_dTrait_dHashable_dhashStr = (fun s -> (dtp_strHash s))
+let v_Base_dTrait_dHashable_dhashStr = (fun (s : string) -> (dtp_strHash s))
 
 # 24 "Base/Trait/Hashable.vuna"
-let v_Base_dTrait_dHashable_dhashCombine = (fun a b -> ((a * 31) + b))
+let v_Base_dTrait_dHashable_dhashCombine = (fun (a : int) (b : int) -> ((a * 31) + b))

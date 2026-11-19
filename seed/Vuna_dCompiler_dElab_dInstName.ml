@@ -10,7 +10,7 @@ let v_Vuna_dCompiler_dElab_dInstName_dinstanceHeadName = (fun (mc0 : Vuna_dCompi
 ))
 
 # 38 "Vuna/Compiler/Elab/InstName.vuna"
-let v_Vuna_dCompiler_dElab_dInstName_dsanitizeInstName = (fun s -> ((Base_dData_dString.v_Base_dData_dString_djoin "_") ((Base_dData_dString.v_Base_dData_dString_dsplit ".") s)))
+let v_Vuna_dCompiler_dElab_dInstName_dsanitizeInstName = (fun (s : string) -> ((Base_dData_dString.v_Base_dData_dString_djoin "_") ((Base_dData_dString.v_Base_dData_dString_dsplit ".") s)))
 
 # 53 "Vuna/Compiler/Elab/InstName.vuna"
 let rec v_Vuna_dCompiler_dElab_dInstName_dargSuffix = (fun (mc0 : Vuna_dCompiler_dFrontend_dRast.t_Vuna_dCompiler_dFrontend_dRast_dExpr Base_dData_dList.t_Base_dData_dList_dList) -> (match mc0 with
@@ -19,7 +19,7 @@ let rec v_Vuna_dCompiler_dElab_dInstName_dargSuffix = (fun (mc0 : Vuna_dCompiler
   | _ -> failwith "DT: impossible branch"
 ))
 # 59 "Vuna/Compiler/Elab/InstName.vuna"
-and v_Vuna_dCompiler_dElab_dInstName_dexprNameFor = (fun e -> (match e with
+and v_Vuna_dCompiler_dElab_dInstName_dexprNameFor = (fun (e : Vuna_dCompiler_dFrontend_dRast.t_Vuna_dCompiler_dFrontend_dRast_dExpr) -> (match e with
   | Vuna_dCompiler_dFrontend_dRast.C_Vuna_dCompiler_dFrontend_dRast_dExpr_EVar (dtb__9, dtb__10) -> (Vuna_dCompiler_dFrontend_dRast_dName.v_Vuna_dCompiler_dFrontend_dRast_dName_drnameKey dtb__9)
   | Vuna_dCompiler_dFrontend_dRast.C_Vuna_dCompiler_dFrontend_dRast_dExpr_EInt (dtb__11, dtb__12) -> (bi_strFromInt dtb__11)
   | Vuna_dCompiler_dFrontend_dRast.C_Vuna_dCompiler_dFrontend_dRast_dExpr_EStr (dtb__13, dtb__14) -> dtb__13
@@ -41,7 +41,7 @@ let v_Vuna_dCompiler_dElab_dInstName_dderivedInstName = (fun (mc0 : Vuna_dCompil
 ))
 
 # 32 "Vuna/Compiler/Elab/InstName.vuna"
-let v_Vuna_dCompiler_dElab_dInstName_dinstanceName = (fun cname headExpr -> (v_Vuna_dCompiler_dElab_dInstName_dsanitizeInstName (String.concat "" [(Vuna_dCompiler_dElab_dMeta.v_Vuna_dCompiler_dElab_dMeta_dbaseNameOf cname); "_"; (v_Vuna_dCompiler_dElab_dInstName_dderivedInstName headExpr)])))
+let v_Vuna_dCompiler_dElab_dInstName_dinstanceName = (fun (cname : string) (headExpr : Vuna_dCompiler_dFrontend_dRast.t_Vuna_dCompiler_dFrontend_dRast_dExpr) -> (v_Vuna_dCompiler_dElab_dInstName_dsanitizeInstName (String.concat "" [(Vuna_dCompiler_dElab_dMeta.v_Vuna_dCompiler_dElab_dMeta_dbaseNameOf cname); "_"; (v_Vuna_dCompiler_dElab_dInstName_dderivedInstName headExpr)])))
 
 # 70 "Vuna/Compiler/Elab/InstName.vuna"
 let v_Vuna_dCompiler_dElab_dInstName_dargNameOf = (fun (mc0 : Vuna_dCompiler_dFrontend_dRast.t_Vuna_dCompiler_dFrontend_dRast_dExpr) -> (match mc0 with

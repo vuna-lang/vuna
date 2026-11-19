@@ -134,10 +134,10 @@ let rec v_Vuna_dCompiler_dFrontend_dRast_dcollectClauses = (fun (mc0 : t_Vuna_dC
 ))
 
 # 226 "Vuna/Compiler/Frontend/Rast.vuna"
-let v_Vuna_dCompiler_dFrontend_dRast_dclausesFor = (fun decls name -> ((v_Vuna_dCompiler_dFrontend_dRast_dcollectClauses decls) name))
+let v_Vuna_dCompiler_dFrontend_dRast_dclausesFor = (fun (decls : t_Vuna_dCompiler_dFrontend_dRast_dDecl Base_dData_dList.t_Base_dData_dList_dList) (name : string) -> ((v_Vuna_dCompiler_dFrontend_dRast_dcollectClauses decls) name))
 
 # 229 "Vuna/Compiler/Frontend/Rast.vuna"
-let v_Vuna_dCompiler_dFrontend_dRast_dfunArity = (fun name decls -> ((fun nd_uscrut2 -> (match nd_uscrut2 with
+let v_Vuna_dCompiler_dFrontend_dRast_dfunArity = (fun (name : string) (decls : t_Vuna_dCompiler_dFrontend_dRast_dDecl Base_dData_dList.t_Base_dData_dList_dList) -> ((fun nd_uscrut2 -> (match nd_uscrut2 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__172, dtb__173) -> (match dtb__172 with
   | { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__174; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__175 } -> (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just ((Base_dData_dList.v_Base_dData_dList_dlength dtb__174)))
   | _ -> failwith "DT: impossible branch"
@@ -153,10 +153,10 @@ let v_Vuna_dCompiler_dFrontend_dRast_dctorName = (fun (mc0 : t_Vuna_dCompiler_dF
 ))
 
 # 241 "Vuna/Compiler/Frontend/Rast.vuna"
-let v_Vuna_dCompiler_dFrontend_dRast_dctorShortName = (fun name -> (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dlastSeg name))
+let v_Vuna_dCompiler_dFrontend_dRast_dctorShortName = (fun (name : string) -> (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dlastSeg name))
 
 # 247 "Vuna/Compiler/Frontend/Rast.vuna"
-let v_Vuna_dCompiler_dFrontend_dRast_dctorDisplayName = (fun name -> ((fun nd_uscrut1 -> (match nd_uscrut1 with
+let v_Vuna_dCompiler_dFrontend_dRast_dctorDisplayName = (fun (name : string) -> ((fun nd_uscrut1 -> (match nd_uscrut1 with
   | { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__180; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__181 } -> (match dtb__180 with
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> dtb__181
   | _ -> (match (Base_dData_dList.v_Base_dData_dList_dreverse dtb__180) with
@@ -231,7 +231,7 @@ let v_Vuna_dCompiler_dFrontend_dRast_ddeclNames = (fun (mc0 : t_Vuna_dCompiler_d
 ))
 
 # 293 "Vuna/Compiler/Frontend/Rast.vuna"
-let v_Vuna_dCompiler_dFrontend_dRast_dtopNames = (fun decls -> ((Base_dData_dList.v_Base_dData_dList_dconcatMap v_Vuna_dCompiler_dFrontend_dRast_ddeclNames) decls))
+let v_Vuna_dCompiler_dFrontend_dRast_dtopNames = (fun (decls : t_Vuna_dCompiler_dFrontend_dRast_dDecl Base_dData_dList.t_Base_dData_dList_dList) -> ((Base_dData_dList.v_Base_dData_dList_dconcatMap v_Vuna_dCompiler_dFrontend_dRast_ddeclNames) decls))
 
 # 296 "Vuna/Compiler/Frontend/Rast.vuna"
 let v_Vuna_dCompiler_dFrontend_dRast_ddeclAllNames = (fun (mc0 : t_Vuna_dCompiler_dFrontend_dRast_dDecl) -> (match mc0 with
@@ -250,7 +250,7 @@ let v_Vuna_dCompiler_dFrontend_dRast_d_udeclCtors = (fun (mc0 : t_Vuna_dCompiler
 ))
 
 # 309 "Vuna/Compiler/Frontend/Rast.vuna"
-let v_Vuna_dCompiler_dFrontend_dRast_dctorsOf = (fun decls -> ((Base_dData_dList.v_Base_dData_dList_dconcatMap v_Vuna_dCompiler_dFrontend_dRast_d_udeclCtors) decls))
+let v_Vuna_dCompiler_dFrontend_dRast_dctorsOf = (fun (decls : t_Vuna_dCompiler_dFrontend_dRast_dDecl Base_dData_dList.t_Base_dData_dList_dList) -> ((Base_dData_dList.v_Base_dData_dList_dconcatMap v_Vuna_dCompiler_dFrontend_dRast_d_udeclCtors) decls))
 
 # 312 "Vuna/Compiler/Frontend/Rast.vuna"
 let v_Vuna_dCompiler_dFrontend_dRast_ddeclTypeNames = (fun (mc0 : t_Vuna_dCompiler_dFrontend_dRast_dDecl) -> (match mc0 with
@@ -261,7 +261,7 @@ let v_Vuna_dCompiler_dFrontend_dRast_ddeclTypeNames = (fun (mc0 : t_Vuna_dCompil
 ))
 
 # 318 "Vuna/Compiler/Frontend/Rast.vuna"
-let v_Vuna_dCompiler_dFrontend_dRast_dtypeNamesOf = (fun decls -> ((Base_dData_dList.v_Base_dData_dList_dconcatMap v_Vuna_dCompiler_dFrontend_dRast_ddeclTypeNames) decls))
+let v_Vuna_dCompiler_dFrontend_dRast_dtypeNamesOf = (fun (decls : t_Vuna_dCompiler_dFrontend_dRast_dDecl Base_dData_dList.t_Base_dData_dList_dList) -> ((Base_dData_dList.v_Base_dData_dList_dconcatMap v_Vuna_dCompiler_dFrontend_dRast_ddeclTypeNames) decls))
 
 # 321 "Vuna/Compiler/Frontend/Rast.vuna"
 let v_Vuna_dCompiler_dFrontend_dRast_ddeclDerivings = (fun (mc0 : t_Vuna_dCompiler_dFrontend_dRast_dDecl) -> (match mc0 with
@@ -271,7 +271,7 @@ let v_Vuna_dCompiler_dFrontend_dRast_ddeclDerivings = (fun (mc0 : t_Vuna_dCompil
 ))
 
 # 335 "Vuna/Compiler/Frontend/Rast.vuna"
-let v_Vuna_dCompiler_dFrontend_dRast_dholeNamed = (fun name -> ((fun nd_uscrut1 -> (match nd_uscrut1 with
+let v_Vuna_dCompiler_dFrontend_dRast_dholeNamed = (fun (name : string) -> ((fun nd_uscrut1 -> (match nd_uscrut1 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__344, dtb__345) -> (if (dtb__344 = 63) then (match dtb__345 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__346, dtb__347) -> true
   | _ -> false
@@ -280,10 +280,10 @@ let v_Vuna_dCompiler_dFrontend_dRast_dholeNamed = (fun name -> ((fun nd_uscrut1 
 )) (Base_dData_dList.dtp_unpack name)))
 
 # 332 "Vuna/Compiler/Frontend/Rast.vuna"
-let v_Vuna_dCompiler_dFrontend_dRast_disHoleName = (fun name -> (if (name = "_") then true else (v_Vuna_dCompiler_dFrontend_dRast_dholeNamed name)))
+let v_Vuna_dCompiler_dFrontend_dRast_disHoleName = (fun (name : string) -> (if (name = "_") then true else (v_Vuna_dCompiler_dFrontend_dRast_dholeNamed name)))
 
 # 342 "Vuna/Compiler/Frontend/Rast.vuna"
-let v_Vuna_dCompiler_dFrontend_dRast_dholeNameOf = (fun name -> (if (v_Vuna_dCompiler_dFrontend_dRast_dholeNamed name) then name else ""))
+let v_Vuna_dCompiler_dFrontend_dRast_dholeNameOf = (fun (name : string) -> (if (v_Vuna_dCompiler_dFrontend_dRast_dholeNamed name) then name else ""))
 
 # 352 "Vuna/Compiler/Frontend/Rast.vuna"
 let v_Vuna_dCompiler_dFrontend_dRast_dinternalNamePrefix = "@vuna@"
@@ -292,17 +292,17 @@ let v_Vuna_dCompiler_dFrontend_dRast_dinternalNamePrefix = "@vuna@"
 let v_Vuna_dCompiler_dFrontend_dRast_doverCtorPrefix = "@vuna@ctor@"
 
 # 360 "Vuna/Compiler/Frontend/Rast.vuna"
-let v_Vuna_dCompiler_dFrontend_dRast_disInternalSyntaxName = (fun name -> ((Base_dData_dString.v_Base_dData_dString_dstartsWith v_Vuna_dCompiler_dFrontend_dRast_dinternalNamePrefix) name))
+let v_Vuna_dCompiler_dFrontend_dRast_disInternalSyntaxName = (fun (name : string) -> ((Base_dData_dString.v_Base_dData_dString_dstartsWith v_Vuna_dCompiler_dFrontend_dRast_dinternalNamePrefix) name))
 
 # 364 "Vuna/Compiler/Frontend/Rast.vuna"
-let rec v_Vuna_dCompiler_dFrontend_dRast_ddropNChars = (fun n xs -> (if (n <= 0) then xs else (match xs with
+let rec v_Vuna_dCompiler_dFrontend_dRast_ddropNChars = (fun (n : int) (xs : int Base_dData_dList.t_Base_dData_dList_dList) -> (if (n <= 0) then xs else (match xs with
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> Base_dData_dList.C_Base_dData_dList_dList_Nil
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__348, dtb__349) -> ((v_Vuna_dCompiler_dFrontend_dRast_ddropNChars (n - 1)) dtb__349)
   | _ -> failwith "DT: impossible branch"
 )))
 
 # 374 "Vuna/Compiler/Frontend/Rast.vuna"
-let v_Vuna_dCompiler_dFrontend_dRast_ddropNamePrefix = (fun p name -> (if ((Base_dData_dString.v_Base_dData_dString_dstartsWith p) name) then (Base_dData_dList.dtp_pack ((v_Vuna_dCompiler_dFrontend_dRast_ddropNChars (bi_strLength p)) (Base_dData_dList.dtp_unpack name))) else name))
+let v_Vuna_dCompiler_dFrontend_dRast_ddropNamePrefix = (fun (p : string) (name : string) -> (if ((Base_dData_dString.v_Base_dData_dString_dstartsWith p) name) then (Base_dData_dList.dtp_pack ((v_Vuna_dCompiler_dFrontend_dRast_ddropNChars (bi_strLength p)) (Base_dData_dList.dtp_unpack name))) else name))
 
 # 379 "Vuna/Compiler/Frontend/Rast.vuna"
 let rec v_Vuna_dCompiler_dFrontend_dRast_djoinWithAt = (fun (mc0 : string Base_dData_dList.t_Base_dData_dList_dList) -> (match mc0 with
@@ -315,47 +315,47 @@ let rec v_Vuna_dCompiler_dFrontend_dRast_djoinWithAt = (fun (mc0 : string Base_d
 ))
 
 # 385 "Vuna/Compiler/Frontend/Rast.vuna"
-let v_Vuna_dCompiler_dFrontend_dRast_doverCtorName = (fun short targets -> (String.concat "" [v_Vuna_dCompiler_dFrontend_dRast_doverCtorPrefix; short; "@"; (v_Vuna_dCompiler_dFrontend_dRast_djoinWithAt targets)]))
+let v_Vuna_dCompiler_dFrontend_dRast_doverCtorName = (fun (short : string) (targets : string Base_dData_dList.t_Base_dData_dList_dList) -> (String.concat "" [v_Vuna_dCompiler_dFrontend_dRast_doverCtorPrefix; short; "@"; (v_Vuna_dCompiler_dFrontend_dRast_djoinWithAt targets)]))
 
 # 389 "Vuna/Compiler/Frontend/Rast.vuna"
-let v_Vuna_dCompiler_dFrontend_dRast_doverCtorShort = (fun name -> (match ((Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dsplitOnChar 64) ((v_Vuna_dCompiler_dFrontend_dRast_ddropNamePrefix v_Vuna_dCompiler_dFrontend_dRast_doverCtorPrefix) name)) with
+let v_Vuna_dCompiler_dFrontend_dRast_doverCtorShort = (fun (name : string) -> (match ((Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dsplitOnChar 64) ((v_Vuna_dCompiler_dFrontend_dRast_ddropNamePrefix v_Vuna_dCompiler_dFrontend_dRast_doverCtorPrefix) name)) with
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> ""
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__352, dtb__353) -> dtb__352
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 396 "Vuna/Compiler/Frontend/Rast.vuna"
-let v_Vuna_dCompiler_dFrontend_dRast_doverCtorTargets = (fun name -> (match ((Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dsplitOnChar 64) ((v_Vuna_dCompiler_dFrontend_dRast_ddropNamePrefix v_Vuna_dCompiler_dFrontend_dRast_doverCtorPrefix) name)) with
+let v_Vuna_dCompiler_dFrontend_dRast_doverCtorTargets = (fun (name : string) -> (match ((Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dsplitOnChar 64) ((v_Vuna_dCompiler_dFrontend_dRast_ddropNamePrefix v_Vuna_dCompiler_dFrontend_dRast_doverCtorPrefix) name)) with
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> Base_dData_dList.C_Base_dData_dList_dList_Nil
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__354, dtb__355) -> dtb__355
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 403 "Vuna/Compiler/Frontend/Rast.vuna"
-let v_Vuna_dCompiler_dFrontend_dRast_disOverCtorName = (fun name -> ((Base_dData_dString.v_Base_dData_dString_dstartsWith v_Vuna_dCompiler_dFrontend_dRast_doverCtorPrefix) name))
+let v_Vuna_dCompiler_dFrontend_dRast_disOverCtorName = (fun (name : string) -> ((Base_dData_dString.v_Base_dData_dString_dstartsWith v_Vuna_dCompiler_dFrontend_dRast_doverCtorPrefix) name))
 
 # 407 "Vuna/Compiler/Frontend/Rast.vuna"
 let v_Vuna_dCompiler_dFrontend_dRast_doverValuePrefix = "@vuna@value@"
 
 # 410 "Vuna/Compiler/Frontend/Rast.vuna"
-let v_Vuna_dCompiler_dFrontend_dRast_doverValueName = (fun short targets -> (String.concat "" [v_Vuna_dCompiler_dFrontend_dRast_doverValuePrefix; short; "@"; (v_Vuna_dCompiler_dFrontend_dRast_djoinWithAt targets)]))
+let v_Vuna_dCompiler_dFrontend_dRast_doverValueName = (fun (short : string) (targets : string Base_dData_dList.t_Base_dData_dList_dList) -> (String.concat "" [v_Vuna_dCompiler_dFrontend_dRast_doverValuePrefix; short; "@"; (v_Vuna_dCompiler_dFrontend_dRast_djoinWithAt targets)]))
 
 # 413 "Vuna/Compiler/Frontend/Rast.vuna"
-let v_Vuna_dCompiler_dFrontend_dRast_doverValueShort = (fun name -> (match ((Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dsplitOnChar 64) ((v_Vuna_dCompiler_dFrontend_dRast_ddropNamePrefix v_Vuna_dCompiler_dFrontend_dRast_doverValuePrefix) name)) with
+let v_Vuna_dCompiler_dFrontend_dRast_doverValueShort = (fun (name : string) -> (match ((Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dsplitOnChar 64) ((v_Vuna_dCompiler_dFrontend_dRast_ddropNamePrefix v_Vuna_dCompiler_dFrontend_dRast_doverValuePrefix) name)) with
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> ""
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__356, dtb__357) -> dtb__356
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 419 "Vuna/Compiler/Frontend/Rast.vuna"
-let v_Vuna_dCompiler_dFrontend_dRast_doverValueTargets = (fun name -> (match ((Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dsplitOnChar 64) ((v_Vuna_dCompiler_dFrontend_dRast_ddropNamePrefix v_Vuna_dCompiler_dFrontend_dRast_doverValuePrefix) name)) with
+let v_Vuna_dCompiler_dFrontend_dRast_doverValueTargets = (fun (name : string) -> (match ((Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dsplitOnChar 64) ((v_Vuna_dCompiler_dFrontend_dRast_ddropNamePrefix v_Vuna_dCompiler_dFrontend_dRast_doverValuePrefix) name)) with
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> Base_dData_dList.C_Base_dData_dList_dList_Nil
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__358, dtb__359) -> dtb__359
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 425 "Vuna/Compiler/Frontend/Rast.vuna"
-let v_Vuna_dCompiler_dFrontend_dRast_disOverValueName = (fun name -> ((Base_dData_dString.v_Base_dData_dString_dstartsWith v_Vuna_dCompiler_dFrontend_dRast_doverValuePrefix) name))
+let v_Vuna_dCompiler_dFrontend_dRast_disOverValueName = (fun (name : string) -> ((Base_dData_dString.v_Base_dData_dString_dstartsWith v_Vuna_dCompiler_dFrontend_dRast_doverValuePrefix) name))
 
 # 431 "Vuna/Compiler/Frontend/Rast.vuna"
 let v_Vuna_dCompiler_dFrontend_dRast_dlistNilSyntax = "@vuna@list@nil"
@@ -364,58 +364,58 @@ let v_Vuna_dCompiler_dFrontend_dRast_dlistNilSyntax = "@vuna@list@nil"
 let v_Vuna_dCompiler_dFrontend_dRast_dlistConsSyntax = "@vuna@list@cons"
 
 # 439 "Vuna/Compiler/Frontend/Rast.vuna"
-let v_Vuna_dCompiler_dFrontend_dRast_disListNilSyntax = (fun name -> (name = v_Vuna_dCompiler_dFrontend_dRast_dlistNilSyntax))
+let v_Vuna_dCompiler_dFrontend_dRast_disListNilSyntax = (fun (name : string) -> (name = v_Vuna_dCompiler_dFrontend_dRast_dlistNilSyntax))
 
 # 443 "Vuna/Compiler/Frontend/Rast.vuna"
-let v_Vuna_dCompiler_dFrontend_dRast_disListConsSyntax = (fun name -> (name = v_Vuna_dCompiler_dFrontend_dRast_dlistConsSyntax))
+let v_Vuna_dCompiler_dFrontend_dRast_disListConsSyntax = (fun (name : string) -> (name = v_Vuna_dCompiler_dFrontend_dRast_dlistConsSyntax))
 
 # 465 "Vuna/Compiler/Frontend/Rast.vuna"
 let v_Vuna_dCompiler_dFrontend_dRast_dperformSyntax = "@vuna@perform"
 
 # 469 "Vuna/Compiler/Frontend/Rast.vuna"
-let v_Vuna_dCompiler_dFrontend_dRast_disPerformSyntax = (fun name -> (name = v_Vuna_dCompiler_dFrontend_dRast_dperformSyntax))
+let v_Vuna_dCompiler_dFrontend_dRast_disPerformSyntax = (fun (name : string) -> (name = v_Vuna_dCompiler_dFrontend_dRast_dperformSyntax))
 
 # 481 "Vuna/Compiler/Frontend/Rast.vuna"
 let v_Vuna_dCompiler_dFrontend_dRast_dhandleSyntax = "@vuna@handle"
 
 # 485 "Vuna/Compiler/Frontend/Rast.vuna"
-let v_Vuna_dCompiler_dFrontend_dRast_disHandleSyntax = (fun name -> (name = v_Vuna_dCompiler_dFrontend_dRast_dhandleSyntax))
+let v_Vuna_dCompiler_dFrontend_dRast_disHandleSyntax = (fun (name : string) -> (name = v_Vuna_dCompiler_dFrontend_dRast_dhandleSyntax))
 
 # 489 "Vuna/Compiler/Frontend/Rast.vuna"
 let v_Vuna_dCompiler_dFrontend_dRast_dhandleNoRetSyntax = "@vuna@handle@noret"
 
 # 493 "Vuna/Compiler/Frontend/Rast.vuna"
-let v_Vuna_dCompiler_dFrontend_dRast_disHandleNoRetSyntax = (fun name -> (name = v_Vuna_dCompiler_dFrontend_dRast_dhandleNoRetSyntax))
+let v_Vuna_dCompiler_dFrontend_dRast_disHandleNoRetSyntax = (fun (name : string) -> (name = v_Vuna_dCompiler_dFrontend_dRast_dhandleNoRetSyntax))
 
 # 499 "Vuna/Compiler/Frontend/Rast.vuna"
 let v_Vuna_dCompiler_dFrontend_dRast_drowAtSyntax = "@vuna@row@at"
 
 # 503 "Vuna/Compiler/Frontend/Rast.vuna"
-let v_Vuna_dCompiler_dFrontend_dRast_disRowAtSyntax = (fun name -> (name = v_Vuna_dCompiler_dFrontend_dRast_drowAtSyntax))
+let v_Vuna_dCompiler_dFrontend_dRast_disRowAtSyntax = (fun (name : string) -> (name = v_Vuna_dCompiler_dFrontend_dRast_drowAtSyntax))
 
 # 510 "Vuna/Compiler/Frontend/Rast.vuna"
 let v_Vuna_dCompiler_dFrontend_dRast_dappAtSyntax = "@vuna@app@at"
 
 # 514 "Vuna/Compiler/Frontend/Rast.vuna"
-let v_Vuna_dCompiler_dFrontend_dRast_disAppAtSyntax = (fun name -> (name = v_Vuna_dCompiler_dFrontend_dRast_dappAtSyntax))
+let v_Vuna_dCompiler_dFrontend_dRast_disAppAtSyntax = (fun (name : string) -> (name = v_Vuna_dCompiler_dFrontend_dRast_dappAtSyntax))
 
 # 519 "Vuna/Compiler/Frontend/Rast.vuna"
 let v_Vuna_dCompiler_dFrontend_dRast_dinstArgSyntax = "@vuna@inst@arg"
 
 # 523 "Vuna/Compiler/Frontend/Rast.vuna"
-let v_Vuna_dCompiler_dFrontend_dRast_disInstArgSyntax = (fun name -> (name = v_Vuna_dCompiler_dFrontend_dRast_dinstArgSyntax))
+let v_Vuna_dCompiler_dFrontend_dRast_disInstArgSyntax = (fun (name : string) -> (name = v_Vuna_dCompiler_dFrontend_dRast_dinstArgSyntax))
 
 # 535 "Vuna/Compiler/Frontend/Rast.vuna"
 let v_Vuna_dCompiler_dFrontend_dRast_dmacroSyntaxPrefix = "@vuna@macro@"
 
 # 539 "Vuna/Compiler/Frontend/Rast.vuna"
-let v_Vuna_dCompiler_dFrontend_dRast_dmacroSyntaxName = (fun name -> (v_Vuna_dCompiler_dFrontend_dRast_dmacroSyntaxPrefix ^ name))
+let v_Vuna_dCompiler_dFrontend_dRast_dmacroSyntaxName = (fun (name : string) -> (v_Vuna_dCompiler_dFrontend_dRast_dmacroSyntaxPrefix ^ name))
 
 # 543 "Vuna/Compiler/Frontend/Rast.vuna"
-let v_Vuna_dCompiler_dFrontend_dRast_disMacroSyntaxName = (fun name -> ((Base_dData_dString.v_Base_dData_dString_dstartsWith v_Vuna_dCompiler_dFrontend_dRast_dmacroSyntaxPrefix) name))
+let v_Vuna_dCompiler_dFrontend_dRast_disMacroSyntaxName = (fun (name : string) -> ((Base_dData_dString.v_Base_dData_dString_dstartsWith v_Vuna_dCompiler_dFrontend_dRast_dmacroSyntaxPrefix) name))
 
 # 547 "Vuna/Compiler/Frontend/Rast.vuna"
-let v_Vuna_dCompiler_dFrontend_dRast_dmacroNameOf = (fun name -> (if (v_Vuna_dCompiler_dFrontend_dRast_disMacroSyntaxName name) then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (((v_Vuna_dCompiler_dFrontend_dRast_ddropNamePrefix v_Vuna_dCompiler_dFrontend_dRast_dmacroSyntaxPrefix) name))) else Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing))
+let v_Vuna_dCompiler_dFrontend_dRast_dmacroNameOf = (fun (name : string) -> (if (v_Vuna_dCompiler_dFrontend_dRast_disMacroSyntaxName name) then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (((v_Vuna_dCompiler_dFrontend_dRast_ddropNamePrefix v_Vuna_dCompiler_dFrontend_dRast_dmacroSyntaxPrefix) name))) else Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing))
 
 # 552 "Vuna/Compiler/Frontend/Rast.vuna"
 let v_Vuna_dCompiler_dFrontend_dRast_ddoBindSyntaxPrefix = "@vuna@do@bind@"
@@ -424,25 +424,25 @@ let v_Vuna_dCompiler_dFrontend_dRast_ddoBindSyntaxPrefix = "@vuna@do@bind@"
 let v_Vuna_dCompiler_dFrontend_dRast_ddoIgnoreSyntaxPrefix = "@vuna@do@ignore@"
 
 # 560 "Vuna/Compiler/Frontend/Rast.vuna"
-let v_Vuna_dCompiler_dFrontend_dRast_ddoBindSyntaxName = (fun canonical -> (v_Vuna_dCompiler_dFrontend_dRast_ddoBindSyntaxPrefix ^ canonical))
+let v_Vuna_dCompiler_dFrontend_dRast_ddoBindSyntaxName = (fun (canonical : string) -> (v_Vuna_dCompiler_dFrontend_dRast_ddoBindSyntaxPrefix ^ canonical))
 
 # 564 "Vuna/Compiler/Frontend/Rast.vuna"
-let v_Vuna_dCompiler_dFrontend_dRast_ddoIgnoreSyntaxName = (fun canonical -> (v_Vuna_dCompiler_dFrontend_dRast_ddoIgnoreSyntaxPrefix ^ canonical))
+let v_Vuna_dCompiler_dFrontend_dRast_ddoIgnoreSyntaxName = (fun (canonical : string) -> (v_Vuna_dCompiler_dFrontend_dRast_ddoIgnoreSyntaxPrefix ^ canonical))
 
 # 568 "Vuna/Compiler/Frontend/Rast.vuna"
-let v_Vuna_dCompiler_dFrontend_dRast_disDoBindSyntaxName = (fun name -> ((Base_dData_dString.v_Base_dData_dString_dstartsWith v_Vuna_dCompiler_dFrontend_dRast_ddoBindSyntaxPrefix) name))
+let v_Vuna_dCompiler_dFrontend_dRast_disDoBindSyntaxName = (fun (name : string) -> ((Base_dData_dString.v_Base_dData_dString_dstartsWith v_Vuna_dCompiler_dFrontend_dRast_ddoBindSyntaxPrefix) name))
 
 # 572 "Vuna/Compiler/Frontend/Rast.vuna"
-let v_Vuna_dCompiler_dFrontend_dRast_disDoIgnoreSyntaxName = (fun name -> ((Base_dData_dString.v_Base_dData_dString_dstartsWith v_Vuna_dCompiler_dFrontend_dRast_ddoIgnoreSyntaxPrefix) name))
+let v_Vuna_dCompiler_dFrontend_dRast_disDoIgnoreSyntaxName = (fun (name : string) -> ((Base_dData_dString.v_Base_dData_dString_dstartsWith v_Vuna_dCompiler_dFrontend_dRast_ddoIgnoreSyntaxPrefix) name))
 
 # 577 "Vuna/Compiler/Frontend/Rast.vuna"
-let v_Vuna_dCompiler_dFrontend_dRast_ddoSyntaxCanonical = (fun name -> (if (v_Vuna_dCompiler_dFrontend_dRast_disDoBindSyntaxName name) then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (((v_Vuna_dCompiler_dFrontend_dRast_ddropNamePrefix v_Vuna_dCompiler_dFrontend_dRast_ddoBindSyntaxPrefix) name))) else (if (v_Vuna_dCompiler_dFrontend_dRast_disDoIgnoreSyntaxName name) then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (((v_Vuna_dCompiler_dFrontend_dRast_ddropNamePrefix v_Vuna_dCompiler_dFrontend_dRast_ddoIgnoreSyntaxPrefix) name))) else Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing)))
+let v_Vuna_dCompiler_dFrontend_dRast_ddoSyntaxCanonical = (fun (name : string) -> (if (v_Vuna_dCompiler_dFrontend_dRast_disDoBindSyntaxName name) then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (((v_Vuna_dCompiler_dFrontend_dRast_ddropNamePrefix v_Vuna_dCompiler_dFrontend_dRast_ddoBindSyntaxPrefix) name))) else (if (v_Vuna_dCompiler_dFrontend_dRast_disDoIgnoreSyntaxName name) then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (((v_Vuna_dCompiler_dFrontend_dRast_ddropNamePrefix v_Vuna_dCompiler_dFrontend_dRast_ddoIgnoreSyntaxPrefix) name))) else Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing)))
 
 # 593 "Vuna/Compiler/Frontend/Rast.vuna"
-let v_Vuna_dCompiler_dFrontend_dRast_dnameOf = (fun scope name -> (if ((Base_dData_dList.v_Base_dData_dList_dmemName name) scope) then (Vuna_dCompiler_dFrontend_dRast_dName.C_Vuna_dCompiler_dFrontend_dRast_dName_dRName_RLocal (name)) else (Vuna_dCompiler_dFrontend_dRast_dName.v_Vuna_dCompiler_dFrontend_dRast_dName_dclassifyName name)))
+let v_Vuna_dCompiler_dFrontend_dRast_dnameOf = (fun (scope : string Base_dData_dList.t_Base_dData_dList_dList) (name : string) -> (if ((Base_dData_dList.v_Base_dData_dList_dmemName name) scope) then (Vuna_dCompiler_dFrontend_dRast_dName.C_Vuna_dCompiler_dFrontend_dRast_dName_dRName_RLocal (name)) else (Vuna_dCompiler_dFrontend_dRast_dName.v_Vuna_dCompiler_dFrontend_dRast_dName_dclassifyName name)))
 
 # 646 "Vuna/Compiler/Frontend/Rast.vuna"
-let rec v_Vuna_dCompiler_dFrontend_dRast_dofPat = (fun scope p -> (match p with
+let rec v_Vuna_dCompiler_dFrontend_dRast_dofPat = (fun (scope : string Base_dData_dList.t_Base_dData_dList_dList) (p : Vuna_dCompiler_dFrontend_dAst.t_Vuna_dCompiler_dFrontend_dAst_dPat) -> (match p with
   | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dPat_PVar (dtb__360, dtb__361) -> (C_Vuna_dCompiler_dFrontend_dRast_dPat_PVar (dtb__360, dtb__361))
   | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dPat_PAs (dtb__362, dtb__363, dtb__364) -> (C_Vuna_dCompiler_dFrontend_dRast_dPat_PAs (dtb__362, ((v_Vuna_dCompiler_dFrontend_dRast_dofPat scope) dtb__363), dtb__364))
   | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dPat_PWild (dtb__365) -> (C_Vuna_dCompiler_dFrontend_dRast_dPat_PWild (dtb__365))
@@ -459,7 +459,7 @@ and v_Vuna_dCompiler_dFrontend_dRast_dofPatField = (fun (mc0 : string Base_dData
 ))
 
 # 661 "Vuna/Compiler/Frontend/Rast.vuna"
-let rec v_Vuna_dCompiler_dFrontend_dRast_dpatBinders = (fun p -> (match p with
+let rec v_Vuna_dCompiler_dFrontend_dRast_dpatBinders = (fun (p : Vuna_dCompiler_dFrontend_dAst.t_Vuna_dCompiler_dFrontend_dAst_dPat) -> (match p with
   | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dPat_PVar (dtb__378, dtb__379) -> (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__378, Base_dData_dList.C_Base_dData_dList_dList_Nil))
   | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dPat_PAs (dtb__380, dtb__381, dtb__382) -> (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__380, (v_Vuna_dCompiler_dFrontend_dRast_dpatBinders dtb__381)))
   | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dPat_PWild (dtb__383) -> Base_dData_dList.C_Base_dData_dList_dList_Nil
@@ -476,7 +476,7 @@ and v_Vuna_dCompiler_dFrontend_dRast_dpatFieldBinders = (fun (mc0 : (string, Vun
 ))
 
 # 672 "Vuna/Compiler/Frontend/Rast.vuna"
-let v_Vuna_dCompiler_dFrontend_dRast_dbindersOfPats = (fun pats -> ((Base_dData_dList.v_Base_dData_dList_dconcatMap v_Vuna_dCompiler_dFrontend_dRast_dpatBinders) pats))
+let v_Vuna_dCompiler_dFrontend_dRast_dbindersOfPats = (fun (pats : Vuna_dCompiler_dFrontend_dAst.t_Vuna_dCompiler_dFrontend_dAst_dPat Base_dData_dList.t_Base_dData_dList_dList) -> ((Base_dData_dList.v_Base_dData_dList_dconcatMap v_Vuna_dCompiler_dFrontend_dRast_dpatBinders) pats))
 
 # 746 "Vuna/Compiler/Frontend/Rast.vuna"
 let v_Vuna_dCompiler_dFrontend_dRast_dbindingBinders = (fun (mc0 : (Vuna_dCompiler_dFrontend_dAst.t_Vuna_dCompiler_dFrontend_dAst_dPat, Vuna_dCompiler_dFrontend_dAst.t_Vuna_dCompiler_dFrontend_dAst_dExpr) Base_dData_dPair.t_Base_dData_dPair_dPair) -> (match mc0 with
@@ -485,7 +485,7 @@ let v_Vuna_dCompiler_dFrontend_dRast_dbindingBinders = (fun (mc0 : (Vuna_dCompil
 ))
 
 # 676 "Vuna/Compiler/Frontend/Rast.vuna"
-let rec v_Vuna_dCompiler_dFrontend_dRast_dofExpr = (fun scope e -> (match e with
+let rec v_Vuna_dCompiler_dFrontend_dRast_dofExpr = (fun (scope : string Base_dData_dList.t_Base_dData_dList_dList) (e : Vuna_dCompiler_dFrontend_dAst.t_Vuna_dCompiler_dFrontend_dAst_dExpr) -> (match e with
   | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EVar (dtb__398, dtb__399) -> (C_Vuna_dCompiler_dFrontend_dRast_dExpr_EVar (((v_Vuna_dCompiler_dFrontend_dRast_dnameOf scope) dtb__398), dtb__399))
   | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EInt (dtb__400, dtb__401) -> (C_Vuna_dCompiler_dFrontend_dRast_dExpr_EInt (dtb__400, dtb__401))
   | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EStr (dtb__402, dtb__403) -> (C_Vuna_dCompiler_dFrontend_dRast_dExpr_EStr (dtb__402, dtb__403))
@@ -532,13 +532,13 @@ and v_Vuna_dCompiler_dFrontend_dRast_dofFieldValue = (fun (mc0 : string Base_dDa
   | _ -> failwith "DT: impossible branch"
 ))
 # 726 "Vuna/Compiler/Frontend/Rast.vuna"
-and v_Vuna_dCompiler_dFrontend_dRast_dofInterpPart = (fun scope part -> (match part with
+and v_Vuna_dCompiler_dFrontend_dRast_dofInterpPart = (fun (scope : string Base_dData_dList.t_Base_dData_dList_dList) (part : Vuna_dCompiler_dFrontend_dAst.t_Vuna_dCompiler_dFrontend_dAst_dInterpPart) -> (match part with
   | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dInterpPart_IPText (dtb__474) -> (C_Vuna_dCompiler_dFrontend_dRast_dInterpPart_IPText (dtb__474))
   | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dInterpPart_IPHole (dtb__475) -> (C_Vuna_dCompiler_dFrontend_dRast_dInterpPart_IPHole (((v_Vuna_dCompiler_dFrontend_dRast_dofExpr scope) dtb__475)))
   | _ -> failwith "DT: impossible branch"
 ))
 # 732 "Vuna/Compiler/Frontend/Rast.vuna"
-and v_Vuna_dCompiler_dFrontend_dRast_dofStmts = (fun scope stmts -> (match stmts with
+and v_Vuna_dCompiler_dFrontend_dRast_dofStmts = (fun (scope : string Base_dData_dList.t_Base_dData_dList_dList) (stmts : Vuna_dCompiler_dFrontend_dAst.t_Vuna_dCompiler_dFrontend_dAst_dDoStmt Base_dData_dList.t_Base_dData_dList_dList) -> (match stmts with
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> Base_dData_dList.C_Base_dData_dList_dList_Nil
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__476, dtb__477) -> (match dtb__476 with
   | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dDoStmt_DBind (dtb__478, dtb__479, dtb__480) -> (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((C_Vuna_dCompiler_dFrontend_dRast_dDoStmt_DBind (((v_Vuna_dCompiler_dFrontend_dRast_dofPat scope) dtb__478), ((v_Vuna_dCompiler_dFrontend_dRast_dofExpr scope) dtb__479), dtb__480)), ((v_Vuna_dCompiler_dFrontend_dRast_dofStmts ((Base_dData_dList.v_Base_dData_dList_dappend (v_Vuna_dCompiler_dFrontend_dRast_dpatBinders dtb__478)) scope)) dtb__477)))
@@ -567,7 +567,7 @@ let v_Vuna_dCompiler_dFrontend_dRast_dofTraitMethod = (fun (mc0 : string Base_dD
 ))
 
 # 749 "Vuna/Compiler/Frontend/Rast.vuna"
-let v_Vuna_dCompiler_dFrontend_dRast_dastTraitParamName = (fun p -> (p).Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dTraitParam_traitParamName)
+let v_Vuna_dCompiler_dFrontend_dRast_dastTraitParamName = (fun (p : Vuna_dCompiler_dFrontend_dAst.t_Vuna_dCompiler_dFrontend_dAst_dTraitParam) -> (p).Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dTraitParam_traitParamName)
 
 # 755 "Vuna/Compiler/Frontend/Rast.vuna"
 let v_Vuna_dCompiler_dFrontend_dRast_dofMaybeExpr = (fun (mc0 : string Base_dData_dList.t_Base_dData_dList_dList) (mc1 : Vuna_dCompiler_dFrontend_dAst.t_Vuna_dCompiler_dFrontend_dAst_dExpr Base_dData_dMaybe.t_Base_dData_dMaybe_dMaybe) -> (match mc1 with
@@ -583,7 +583,7 @@ let v_Vuna_dCompiler_dFrontend_dRast_dofTraitParam = (fun (mc0 : string Base_dDa
 ))
 
 # 601 "Vuna/Compiler/Frontend/Rast.vuna"
-let rec v_Vuna_dCompiler_dFrontend_dRast_dofDecl = (fun scope d -> (match d with
+let rec v_Vuna_dCompiler_dFrontend_dRast_dofDecl = (fun (scope : string Base_dData_dList.t_Base_dData_dList_dList) (d : Vuna_dCompiler_dFrontend_dAst.t_Vuna_dCompiler_dFrontend_dAst_dDecl) -> (match d with
   | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dDecl_DData (dtb__496, dtb__497, dtb__498, dtb__499, dtb__500, dtb__501, dtb__502, dtb__503, dtb__504) -> (C_Vuna_dCompiler_dFrontend_dRast_dDecl_DData (dtb__496, dtb__497, ((v_Vuna_dCompiler_dFrontend_dRast_dofExpr ((Base_dData_dList.v_Base_dData_dList_dappend dtb__497) scope)) dtb__498), ((Base_dData_dList.v_Base_dData_dList_dmap (v_Vuna_dCompiler_dFrontend_dRast_dofCtor ((Base_dData_dList.v_Base_dData_dList_dappend dtb__497) scope))) dtb__499), dtb__500, dtb__501, dtb__502, dtb__503, dtb__504))
   | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dDecl_DAxiom (dtb__505, dtb__506, dtb__507) -> (C_Vuna_dCompiler_dFrontend_dRast_dDecl_DAxiom (dtb__505, ((v_Vuna_dCompiler_dFrontend_dRast_dofExpr scope) dtb__506), dtb__507))
   | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dDecl_DExtern (dtb__508, dtb__509, dtb__510, dtb__511) -> (C_Vuna_dCompiler_dFrontend_dRast_dDecl_DExtern (dtb__508, dtb__509, ((v_Vuna_dCompiler_dFrontend_dRast_dofExpr scope) dtb__510), dtb__511))
@@ -596,4 +596,4 @@ let rec v_Vuna_dCompiler_dFrontend_dRast_dofDecl = (fun scope d -> (match d with
 ))
 
 # 597 "Vuna/Compiler/Frontend/Rast.vuna"
-let v_Vuna_dCompiler_dFrontend_dRast_dofDecls = (fun decls -> ((Base_dData_dList.v_Base_dData_dList_dmap (v_Vuna_dCompiler_dFrontend_dRast_dofDecl Base_dData_dList.C_Base_dData_dList_dList_Nil)) decls))
+let v_Vuna_dCompiler_dFrontend_dRast_dofDecls = (fun (decls : Vuna_dCompiler_dFrontend_dAst.t_Vuna_dCompiler_dFrontend_dAst_dDecl Base_dData_dList.t_Base_dData_dList_dList) -> ((Base_dData_dList.v_Base_dData_dList_dmap (v_Vuna_dCompiler_dFrontend_dRast_dofDecl Base_dData_dList.C_Base_dData_dList_dList_Nil)) decls))

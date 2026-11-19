@@ -78,11 +78,11 @@ let rec v_Hashable_uBase_uData_uList_uList_ua = (fun _uctx0 -> (Base_dTrait_dHas
 let v_Monoid_uBase_uData_uList_uList_ua = (Base_dTrait_dMonoid.C_Dict_uBase_dTrait_dMonoid_dMonoid_Monoid (C_Base_dData_dList_dList_Nil))
 
 # 234 "Base/Data/List.vuna"
-let rec v_Traversable_uBase_uData_uList_uList_uf = (fun _uctx0 -> (Base_dTrait_dTraversable.C_Dict_uBase_dTrait_dTraversable_dTraversable_Traversable ((Obj.magic (fun fun_ xs -> (match xs with
+let rec v_Traversable_uBase_uData_uList_uList_uf = (fun _uctx0 -> (Base_dTrait_dTraversable.C_Dict_uBase_dTrait_dTraversable_dTraversable_Traversable (((Obj.magic (fun fun_ xs -> (match xs with
   | C_Base_dData_dList_dList_Nil -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure _uctx0) C_Base_dData_dList_dList_Nil)
   | C_Base_dData_dList_dList__x58__x58_ (dtb__12, dtb__13) -> ((((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dliftA2 _uctx0) (fun y ys -> (C_Base_dData_dList_dList__x58__x58_ (y, ys)))) (fun_ dtb__12)) (((Base_dTrait_dTraversable.v_Base_dTrait_dTraversable_dmapM (v_Traversable_uBase_uData_uList_uList_uf _uctx0)) fun_) dtb__13))
   | _ -> failwith "DT: impossible branch"
-))))))
+))) : Obj.t))))
 
 # 32 "Base/Data/List.vuna"
 let rec v_Base_dData_dList_dappend = (fun mc0 mc1 -> (match mc0 with
@@ -122,7 +122,7 @@ let rec v_Base_dData_dList_dmap = (fun mc0 mc1 -> (match mc1 with
 ))
 
 # 173 "Base/Data/List.vuna"
-let v_Functor_uBase_uData_uList_uList = (Base_dTrait_dFunctor.C_Dict_uBase_dTrait_dFunctor_dFunctor_Functor ((Obj.magic (fun f xs -> ((v_Base_dData_dList_dmap f) xs)))))
+let v_Functor_uBase_uData_uList_uList = (Base_dTrait_dFunctor.C_Dict_uBase_dTrait_dFunctor_dFunctor_Functor (((Obj.magic (fun f xs -> ((v_Base_dData_dList_dmap f) xs))) : Obj.t)))
 
 # 61 "Base/Data/List.vuna"
 let rec v_Base_dData_dList_dfilter = (fun mc0 mc1 -> (match mc1 with
@@ -146,7 +146,7 @@ let rec v_Base_dData_dList_dfoldr = (fun mc0 mc1 mc2 -> (match mc2 with
 ))
 
 # 231 "Base/Data/List.vuna"
-let v_Foldable_uBase_uData_uList_uList = (Base_dTrait_dFoldable.C_Dict_uBase_dTrait_dFoldable_dFoldable_Foldable ((Obj.magic (fun f z xs -> (((v_Base_dData_dList_dfoldr f) z) xs)))))
+let v_Foldable_uBase_uData_uList_uList = (Base_dTrait_dFoldable.C_Dict_uBase_dTrait_dFoldable_dFoldable_Foldable (((Obj.magic (fun f z xs -> (((v_Base_dData_dList_dfoldr f) z) xs))) : Obj.t)))
 
 # 81 "Base/Data/List.vuna"
 let rec v_Base_dData_dList_dconcatMapGo = (fun mc0 mc1 mc2 -> (match mc1 with
@@ -159,10 +159,10 @@ let rec v_Base_dData_dList_dconcatMapGo = (fun mc0 mc1 mc2 -> (match mc1 with
 let v_Base_dData_dList_dconcatMap = (fun f xs -> (((v_Base_dData_dList_dconcatMapGo f) xs) C_Base_dData_dList_dList_Nil))
 
 # 176 "Base/Data/List.vuna"
-let v_Monad_uBase_uData_uList_uList = (Base_dTrait_dMonad.C_Dict_uBase_dTrait_dMonad_dMonad_Monad ((Obj.magic (fun xs f -> ((v_Base_dData_dList_dconcatMap f) xs)))))
+let v_Monad_uBase_uData_uList_uList = (Base_dTrait_dMonad.C_Dict_uBase_dTrait_dMonad_dMonad_Monad (((Obj.magic (fun xs f -> ((v_Base_dData_dList_dconcatMap f) xs))) : Obj.t)))
 
 # 179 "Base/Data/List.vuna"
-let v_Applicative_uBase_uData_uList_uList = (Base_dTrait_dApplicative.C_Dict_uBase_dTrait_dApplicative_dApplicative_Applicative ((Obj.magic (fun x -> (C_Base_dData_dList_dList__x58__x58_ (x, C_Base_dData_dList_dList_Nil)))), (Obj.magic (fun mf mx -> ((v_Base_dData_dList_dconcatMap (fun g -> ((v_Base_dData_dList_dmap g) mx))) mf))), (Obj.magic (fun f xs ys -> ((v_Base_dData_dList_dconcatMap (fun a -> ((v_Base_dData_dList_dmap (fun b -> ((f a) b))) ys))) xs)))))
+let v_Applicative_uBase_uData_uList_uList = (Base_dTrait_dApplicative.C_Dict_uBase_dTrait_dApplicative_dApplicative_Applicative (((Obj.magic (fun x -> (C_Base_dData_dList_dList__x58__x58_ (x, C_Base_dData_dList_dList_Nil)))) : Obj.t), ((Obj.magic (fun mf mx -> ((v_Base_dData_dList_dconcatMap (fun g -> ((v_Base_dData_dList_dmap g) mx))) mf))) : Obj.t), ((Obj.magic (fun f xs ys -> ((v_Base_dData_dList_dconcatMap (fun a -> ((v_Base_dData_dList_dmap (fun b -> ((f a) b))) ys))) xs))) : Obj.t)))
 
 # 86 "Base/Data/List.vuna"
 let rec v_Base_dData_dList_dmem = (fun _uctx0 mc0 mc1 -> (match mc1 with
@@ -237,10 +237,10 @@ let rec v_Base_dData_dList_ddrop = (fun (mc0 : int) mc1 -> (match mc1 with
 ))
 
 # 143 "Base/Data/List.vuna"
-let rec v_Base_dData_dList_drangeFrom = (fun i k -> (if (k <= 0) then C_Base_dData_dList_dList_Nil else (C_Base_dData_dList_dList__x58__x58_ (i, ((v_Base_dData_dList_drangeFrom (i + 1)) (k - 1))))))
+let rec v_Base_dData_dList_drangeFrom = (fun (i : int) (k : int) -> (if (k <= 0) then C_Base_dData_dList_dList_Nil else (C_Base_dData_dList_dList__x58__x58_ (i, ((v_Base_dData_dList_drangeFrom (i + 1)) (k - 1))))))
 
 # 139 "Base/Data/List.vuna"
-let v_Base_dData_dList_drange = (fun i n -> ((v_Base_dData_dList_drangeFrom i) (n - i)))
+let v_Base_dData_dList_drange = (fun (i : int) (n : int) -> ((v_Base_dData_dList_drangeFrom i) (n - i)))
 
 # 147 "Base/Data/List.vuna"
 let rec v_Base_dData_dList_dmapMaybe = (fun mc0 mc1 -> (match mc1 with

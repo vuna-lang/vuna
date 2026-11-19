@@ -2,7 +2,7 @@ open Vuna_runtime
 type ('a0, 'a1) t_Base_dContainer_dHashMap_dHashMap = ((('a0, 'a1) Base_dData_dPair.t_Base_dData_dPair_dPair Base_dData_dList.t_Base_dData_dList_dList array) array)
 
 # 26 "Base/Container/HashMap.vuna"
-let v_Base_dContainer_dHashMap_d_ubucketOf = (fun n -> ((fun m -> (if (m < 0) then (m + 1024) else m)) (n - ((if 1024 = 0 then failwith "division by zero" else n / 1024) * 1024))))
+let v_Base_dContainer_dHashMap_d_ubucketOf = (fun (n : int) -> ((fun m -> (if (m < 0) then (m + 1024) else m)) (n - ((if 1024 = 0 then failwith "division by zero" else n / 1024) * 1024))))
 
 # 33 "Base/Container/HashMap.vuna"
 let rec v_Base_dContainer_dHashMap_d_ulookupAssoc = (fun _uctx0 mc0 mc1 -> (match mc1 with
@@ -71,7 +71,7 @@ let rec v_Base_dContainer_dHashMap_dfromList = (fun _uctx0 mc0 -> (match mc0 wit
 ))
 
 # 102 "Base/Container/HashMap.vuna"
-let v_Base_dContainer_dHashMap_dofNames = (fun xs -> (((v_Base_dContainer_dHashMap_dinsertAll Base_dData_dString.v_Hashable_uString) ((Base_dData_dList.v_Base_dData_dList_dmap (fun (n : string) -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = n; Base_dData_dPair.f_Base_dData_dPair_dPair_second = true })) xs)) ((v_Base_dContainer_dHashMap_dfromList Base_dData_dString.v_Hashable_uString) Base_dData_dList.C_Base_dData_dList_dList_Nil)))
+let v_Base_dContainer_dHashMap_dofNames = (fun (xs : string Base_dData_dList.t_Base_dData_dList_dList) -> (((v_Base_dContainer_dHashMap_dinsertAll Base_dData_dString.v_Hashable_uString) ((Base_dData_dList.v_Base_dData_dList_dmap (fun (n : string) -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = n; Base_dData_dPair.f_Base_dData_dPair_dPair_second = true })) xs)) ((v_Base_dContainer_dHashMap_dfromList Base_dData_dString.v_Hashable_uString) Base_dData_dList.C_Base_dData_dList_dList_Nil)))
 
 # 106 "Base/Container/HashMap.vuna"
 let v_Base_dContainer_dHashMap_dtoList = (fun _uctx0 mc0 -> (let dtb__23 = mc0 in ((Base_dData_dList.v_Base_dData_dList_dconcatMap (fun outer -> ((Base_dData_dList.v_Base_dData_dList_dconcatMap (fun inner -> ((v_Base_dContainer_dHashMap_d_udedupBucket _uctx0) inner))) (Base_dContainer_dArray.v_Base_dContainer_dArray_dtoList outer)))) (Base_dContainer_dArray.v_Base_dContainer_dArray_dtoList dtb__23))))

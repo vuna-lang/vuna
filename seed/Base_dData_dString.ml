@@ -15,7 +15,7 @@ let v_Semigroup_uString = (Base_dTrait_dMonoid.C_Dict_uBase_dTrait_dMonoid_dSemi
 let v_Monoid_uString = (Base_dTrait_dMonoid.C_Dict_uBase_dTrait_dMonoid_dMonoid_Monoid (""))
 
 # 21 "Base/Data/String.vuna"
-let v_Base_dData_dString_dbyteLength = (fun s -> (bi_natFromInt (bi_strLength s)))
+let v_Base_dData_dString_dbyteLength = (fun (s : string) -> (bi_natFromInt (bi_strLength s)))
 
 # 59 "Base/Data/String.vuna"
 let rec v_Base_dData_dString_d_uinterleave = (fun (mc0 : string) (mc1 : string Base_dData_dList.t_Base_dData_dList_dList) -> (match mc1 with
@@ -28,7 +28,7 @@ let rec v_Base_dData_dString_d_uinterleave = (fun (mc0 : string) (mc1 : string B
 ))
 
 # 55 "Base/Data/String.vuna"
-let v_Base_dData_dString_djoin = (fun sep xs -> (Base_dData_dList.dtp_concatMany ((v_Base_dData_dString_d_uinterleave sep) xs)))
+let v_Base_dData_dString_djoin = (fun (sep : string) (xs : string Base_dData_dList.t_Base_dData_dList_dList) -> (Base_dData_dList.dtp_concatMany ((v_Base_dData_dString_d_uinterleave sep) xs)))
 
 # 69 "Base/Data/String.vuna"
 let v_Base_dData_dString_dunlines = (fun (mc0 : string Base_dData_dList.t_Base_dData_dList_dList) -> (match mc0 with
@@ -37,13 +37,13 @@ let v_Base_dData_dString_dunlines = (fun (mc0 : string Base_dData_dList.t_Base_d
 ))
 
 # 106 "Base/Data/String.vuna"
-let v_Base_dData_dString_drepeat = (fun n s -> (Base_dData_dList.dtp_concatMany ((Base_dData_dList.v_Base_dData_dList_dmap (fun (_u : int) -> s)) ((Base_dData_dList.v_Base_dData_dList_drange 0) n))))
+let v_Base_dData_dString_drepeat = (fun (n : int) (s : string) -> (Base_dData_dList.dtp_concatMany ((Base_dData_dList.v_Base_dData_dList_dmap (fun (_u : int) -> s)) ((Base_dData_dList.v_Base_dData_dList_drange 0) n))))
 
 # 110 "Base/Data/String.vuna"
-let v_Base_dData_dString_dsubstring = (fun start len s -> (((dtp_substring start) len) s))
+let v_Base_dData_dString_dsubstring = (fun (start : int) (len : int) (s : string) -> (((dtp_substring start) len) s))
 
 # 114 "Base/Data/String.vuna"
-let v_Base_dData_dString_d_uisSpace = (fun c -> (if (if (if (c = 32) then true else (c = 9)) then true else (c = 10)) then true else (c = 13)))
+let v_Base_dData_dString_d_uisSpace = (fun (c : int) -> (if (if (if (c = 32) then true else (c = 9)) then true else (c = 10)) then true else (c = 13)))
 
 # 118 "Base/Data/String.vuna"
 let rec v_Base_dData_dString_d_udropSpace = (fun (mc0 : int Base_dData_dList.t_Base_dData_dList_dList) -> (match mc0 with
@@ -53,13 +53,13 @@ let rec v_Base_dData_dString_d_udropSpace = (fun (mc0 : int Base_dData_dList.t_B
 ))
 
 # 74 "Base/Data/String.vuna"
-let v_Base_dData_dString_dtrimLeft = (fun s -> (Base_dData_dList.dtp_pack (v_Base_dData_dString_d_udropSpace (Base_dData_dList.dtp_unpack s))))
+let v_Base_dData_dString_dtrimLeft = (fun (s : string) -> (Base_dData_dList.dtp_pack (v_Base_dData_dString_d_udropSpace (Base_dData_dList.dtp_unpack s))))
 
 # 78 "Base/Data/String.vuna"
-let v_Base_dData_dString_dtrimRight = (fun s -> (Base_dData_dList.dtp_pack (Base_dData_dList.v_Base_dData_dList_dreverse (v_Base_dData_dString_d_udropSpace (Base_dData_dList.v_Base_dData_dList_dreverse (Base_dData_dList.dtp_unpack s))))))
+let v_Base_dData_dString_dtrimRight = (fun (s : string) -> (Base_dData_dList.dtp_pack (Base_dData_dList.v_Base_dData_dList_dreverse (v_Base_dData_dString_d_udropSpace (Base_dData_dList.v_Base_dData_dList_dreverse (Base_dData_dList.dtp_unpack s))))))
 
 # 82 "Base/Data/String.vuna"
-let v_Base_dData_dString_dtrim = (fun s -> (v_Base_dData_dString_dtrimLeft (v_Base_dData_dString_dtrimRight s)))
+let v_Base_dData_dString_dtrim = (fun (s : string) -> (v_Base_dData_dString_dtrimLeft (v_Base_dData_dString_dtrimRight s)))
 
 # 123 "Base/Data/String.vuna"
 let rec v_Base_dData_dString_d_ustartsWithChars = (fun (mc0 : int Base_dData_dList.t_Base_dData_dList_dList) (mc1 : int Base_dData_dList.t_Base_dData_dList_dList) -> (match mc0 with
@@ -86,23 +86,23 @@ and v_Base_dData_dString_dskipSep = (fun (mc0 : int Base_dData_dList.t_Base_dDat
 ))
 
 # 25 "Base/Data/String.vuna"
-let v_Base_dData_dString_dsplit = (fun sep text -> (if ((bi_strLength sep) = 0) then ((Base_dData_dList.v_Base_dData_dList_dmap (fun (c : int) -> (Base_dData_dList.dtp_pack (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (c, Base_dData_dList.C_Base_dData_dList_dList_Nil))))) (Base_dData_dList.dtp_unpack text)) else (((((v_Base_dData_dString_dsplitAcc (Base_dData_dList.dtp_unpack sep)) (Base_dData_dList.dtp_unpack text)) (((2 * (bi_strLength text)) + (bi_strLength sep)) + 2)) Base_dData_dList.C_Base_dData_dList_dList_Nil) Base_dData_dList.C_Base_dData_dList_dList_Nil)))
+let v_Base_dData_dString_dsplit = (fun (sep : string) (text : string) -> (if ((bi_strLength sep) = 0) then ((Base_dData_dList.v_Base_dData_dList_dmap (fun (c : int) -> (Base_dData_dList.dtp_pack (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (c, Base_dData_dList.C_Base_dData_dList_dList_Nil))))) (Base_dData_dList.dtp_unpack text)) else (((((v_Base_dData_dString_dsplitAcc (Base_dData_dList.dtp_unpack sep)) (Base_dData_dList.dtp_unpack text)) (((2 * (bi_strLength text)) + (bi_strLength sep)) + 2)) Base_dData_dList.C_Base_dData_dList_dList_Nil) Base_dData_dList.C_Base_dData_dList_dList_Nil)))
 
 # 65 "Base/Data/String.vuna"
-let v_Base_dData_dString_dlines = (fun s -> ((v_Base_dData_dString_dsplit "\n") s))
+let v_Base_dData_dString_dlines = (fun (s : string) -> ((v_Base_dData_dString_dsplit "\n") s))
 
 # 90 "Base/Data/String.vuna"
-let v_Base_dData_dString_dstartsWith = (fun prefix text -> ((v_Base_dData_dString_d_ustartsWithChars (Base_dData_dList.dtp_unpack prefix)) (Base_dData_dList.dtp_unpack text)))
+let v_Base_dData_dString_dstartsWith = (fun (prefix : string) (text : string) -> ((v_Base_dData_dString_d_ustartsWithChars (Base_dData_dList.dtp_unpack prefix)) (Base_dData_dList.dtp_unpack text)))
 
 # 94 "Base/Data/String.vuna"
-let v_Base_dData_dString_dendsWith = (fun suffix text -> ((fun ls -> ((fun ltLen -> (if (ls > ltLen) then false else ((v_Base_dData_dString_d_ustartsWithChars (Base_dData_dList.dtp_unpack suffix)) ((Base_dData_dList.v_Base_dData_dList_ddrop (ltLen - ls)) (Base_dData_dList.dtp_unpack text))))) (bi_strLength text))) (bi_strLength suffix)))
+let v_Base_dData_dString_dendsWith = (fun (suffix : string) (text : string) -> ((fun ls -> ((fun ltLen -> (if (ls > ltLen) then false else ((v_Base_dData_dString_d_ustartsWithChars (Base_dData_dList.dtp_unpack suffix)) ((Base_dData_dList.v_Base_dData_dList_ddrop (ltLen - ls)) (Base_dData_dList.dtp_unpack text))))) (bi_strLength text))) (bi_strLength suffix)))
 
 # 131 "Base/Data/String.vuna"
-let rec v_Base_dData_dString_d_ucontainsChars = (fun needle text -> (if ((v_Base_dData_dString_d_ustartsWithChars needle) text) then true else (match text with
+let rec v_Base_dData_dString_d_ucontainsChars = (fun (needle : int Base_dData_dList.t_Base_dData_dList_dList) (text : int Base_dData_dList.t_Base_dData_dList_dList) -> (if ((v_Base_dData_dString_d_ustartsWithChars needle) text) then true else (match text with
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> false
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__12, dtb__13) -> ((v_Base_dData_dString_d_ucontainsChars needle) dtb__13)
   | _ -> failwith "DT: impossible branch"
 )))
 
 # 86 "Base/Data/String.vuna"
-let v_Base_dData_dString_dcontains = (fun needle text -> ((v_Base_dData_dString_d_ucontainsChars (Base_dData_dList.dtp_unpack needle)) (Base_dData_dList.dtp_unpack text)))
+let v_Base_dData_dString_dcontains = (fun (needle : string) (text : string) -> ((v_Base_dData_dString_d_ucontainsChars (Base_dData_dList.dtp_unpack needle)) (Base_dData_dList.dtp_unpack text)))

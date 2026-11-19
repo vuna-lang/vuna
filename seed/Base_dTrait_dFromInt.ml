@@ -5,7 +5,7 @@ type 'a0 t_Dict_uBase_dTrait_dFromInt_dFromInt = C_Dict_uBase_dTrait_dFromInt_dF
 let v_FromInt_uInt = (C_Dict_uBase_dTrait_dFromInt_dFromInt_FromInt ((fun n -> n)))
 
 # 11 "Base/Trait/FromInt.vuna"
-let v_Base_dTrait_dFromInt_dfromInt = (fun _ud x0 -> (match _ud with
+let v_Base_dTrait_dFromInt_dfromInt = (fun _ud (x0 : int) -> (match _ud with
   | C_Dict_uBase_dTrait_dFromInt_dFromInt_FromInt (dtb__0) -> (dtb__0 x0)
   | _ -> failwith "DT: impossible branch"
 ))

@@ -159,7 +159,7 @@ let rec v_Vuna_dCompiler_dElab_dTypes_dflattenTaggedApp = (fun (mc0 : Vuna_dComp
 ))
 
 # 200 "Vuna/Compiler/Elab/Types.vuna"
-let v_Vuna_dCompiler_dElab_dTypes_dinstFamilyOf = (fun i -> ((fun nd_uscrut1 -> (match nd_uscrut1 with
+let v_Vuna_dCompiler_dElab_dTypes_dinstFamilyOf = (fun (i : t_Vuna_dCompiler_dElab_dTypes_dDtInst) -> ((fun nd_uscrut1 -> (match nd_uscrut1 with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> ""
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__169) -> (match dtb__169 with
   | { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__170; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__171 } -> dtb__170
@@ -172,7 +172,7 @@ let v_Vuna_dCompiler_dElab_dTypes_dinstFamilyOf = (fun i -> ((fun nd_uscrut1 -> 
 let v_Vuna_dCompiler_dElab_dTypes_dinstStoreEmpty = { f_Vuna_dCompiler_dElab_dTypes_dInstStore_instsList = Base_dData_dList.C_Base_dData_dList_dList_Nil; f_Vuna_dCompiler_dElab_dTypes_dInstStore_instsByFamily = ((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dfromList Base_dData_dString.v_Hashable_uString) Base_dData_dList.C_Base_dData_dList_dList_Nil) }
 
 # 217 "Vuna/Compiler/Elab/Types.vuna"
-let v_Vuna_dCompiler_dElab_dTypes_dinstStorePush = (fun store i -> ((fun fam -> ((fun bucket -> { f_Vuna_dCompiler_dElab_dTypes_dInstStore_instsList = ((Base_dData_dList.v_Base_dData_dList_dappend (store).f_Vuna_dCompiler_dElab_dTypes_dInstStore_instsList) (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (i, Base_dData_dList.C_Base_dData_dList_dList_Nil))); f_Vuna_dCompiler_dElab_dTypes_dInstStore_instsByFamily = ((((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dinsert Base_dData_dString.v_Hashable_uString) fam) ((Base_dData_dList.v_Base_dData_dList_dappend bucket) (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (i, Base_dData_dList.C_Base_dData_dList_dList_Nil)))) (store).f_Vuna_dCompiler_dElab_dTypes_dInstStore_instsByFamily) }) (match ((((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dlookup Base_dData_dString.v_Hashable_uString) Base_dData_dString.v_Eq_uString) fam) (store).f_Vuna_dCompiler_dElab_dTypes_dInstStore_instsByFamily) with
+let v_Vuna_dCompiler_dElab_dTypes_dinstStorePush = (fun (store : t_Vuna_dCompiler_dElab_dTypes_dInstStore) (i : t_Vuna_dCompiler_dElab_dTypes_dDtInst) -> ((fun fam -> ((fun bucket -> { f_Vuna_dCompiler_dElab_dTypes_dInstStore_instsList = ((Base_dData_dList.v_Base_dData_dList_dappend (store).f_Vuna_dCompiler_dElab_dTypes_dInstStore_instsList) (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (i, Base_dData_dList.C_Base_dData_dList_dList_Nil))); f_Vuna_dCompiler_dElab_dTypes_dInstStore_instsByFamily = ((((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dinsert Base_dData_dString.v_Hashable_uString) fam) ((Base_dData_dList.v_Base_dData_dList_dappend bucket) (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (i, Base_dData_dList.C_Base_dData_dList_dList_Nil)))) (store).f_Vuna_dCompiler_dElab_dTypes_dInstStore_instsByFamily) }) (match ((((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dlookup Base_dData_dString.v_Hashable_uString) Base_dData_dString.v_Eq_uString) fam) (store).f_Vuna_dCompiler_dElab_dTypes_dInstStore_instsByFamily) with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__172) -> dtb__172
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> Base_dData_dList.C_Base_dData_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
@@ -186,7 +186,7 @@ let rec v_Vuna_dCompiler_dElab_dTypes_dinstStoreOf = (fun (mc0 : t_Vuna_dCompile
 ))
 
 # 231 "Vuna/Compiler/Elab/Types.vuna"
-let v_Vuna_dCompiler_dElab_dTypes_dinstStoreFamily = (fun store fam -> (match ((((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dlookup Base_dData_dString.v_Hashable_uString) Base_dData_dString.v_Eq_uString) fam) (store).f_Vuna_dCompiler_dElab_dTypes_dInstStore_instsByFamily) with
+let v_Vuna_dCompiler_dElab_dTypes_dinstStoreFamily = (fun (store : t_Vuna_dCompiler_dElab_dTypes_dInstStore) (fam : string) -> (match ((((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dlookup Base_dData_dString.v_Hashable_uString) Base_dData_dString.v_Eq_uString) fam) (store).f_Vuna_dCompiler_dElab_dTypes_dInstStore_instsByFamily) with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__175) -> dtb__175
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> Base_dData_dList.C_Base_dData_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
@@ -343,7 +343,7 @@ let v_Vuna_dCompiler_dElab_dTypes_decAddInstRaw = (fun (mc0 : t_Vuna_dCompiler_d
 ))
 
 # 530 "Vuna/Compiler/Elab/Types.vuna"
-let v_Vuna_dCompiler_dElab_dTypes_decAddInst = (fun ec i -> (if ((v_Vuna_dCompiler_dElab_dTypes_dhasInstName (v_Vuna_dCompiler_dElab_dTypes_ddtInstName i)) (v_Vuna_dCompiler_dElab_dTypes_decInsts ec)) then ec else ((v_Vuna_dCompiler_dElab_dTypes_decAddInstRaw ec) i)))
+let v_Vuna_dCompiler_dElab_dTypes_decAddInst = (fun (ec : t_Vuna_dCompiler_dElab_dTypes_dEc) (i : t_Vuna_dCompiler_dElab_dTypes_dDtInst) -> (if ((v_Vuna_dCompiler_dElab_dTypes_dhasInstName (v_Vuna_dCompiler_dElab_dTypes_ddtInstName i)) (v_Vuna_dCompiler_dElab_dTypes_decInsts ec)) then ec else ((v_Vuna_dCompiler_dElab_dTypes_decAddInstRaw ec) i)))
 
 # 563 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_decAddClass = (fun (mc0 : t_Vuna_dCompiler_dElab_dTypes_dEc) (mc1 : t_Vuna_dCompiler_dElab_dTypes_dDtClass) -> (match mc0 with
@@ -364,31 +364,31 @@ let v_Vuna_dCompiler_dElab_dTypes_decPutConstraints = (fun (mc0 : t_Vuna_dCompil
 ))
 
 # 623 "Vuna/Compiler/Elab/Types.vuna"
-let v_Vuna_dCompiler_dElab_dTypes_decPending = (fun ec -> (match (v_Vuna_dCompiler_dElab_dTypes_decConstraints ec) with
+let v_Vuna_dCompiler_dElab_dTypes_decPending = (fun (ec : t_Vuna_dCompiler_dElab_dTypes_dEc) -> (match (v_Vuna_dCompiler_dElab_dTypes_decConstraints ec) with
   | { f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csPending = dtb__652; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csNextId = dtb__653; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csTried = dtb__654; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csSolsCount = dtb__655; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csPassNext = dtb__656; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csPassSols = dtb__657; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csCtorIndexComplete = dtb__658 } -> dtb__652
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 629 "Vuna/Compiler/Elab/Types.vuna"
-let v_Vuna_dCompiler_dElab_dTypes_decPutPending = (fun ec pending2 -> (match (v_Vuna_dCompiler_dElab_dTypes_decConstraints ec) with
+let v_Vuna_dCompiler_dElab_dTypes_decPutPending = (fun (ec : t_Vuna_dCompiler_dElab_dTypes_dEc) (pending2 : t_Vuna_dCompiler_dElab_dTypes_dConstraint Base_dData_dList.t_Base_dData_dList_dList) -> (match (v_Vuna_dCompiler_dElab_dTypes_decConstraints ec) with
   | { f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csPending = dtb__659; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csNextId = dtb__660; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csTried = dtb__661; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csSolsCount = dtb__662; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csPassNext = dtb__663; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csPassSols = dtb__664; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csCtorIndexComplete = dtb__665 } -> ((v_Vuna_dCompiler_dElab_dTypes_decPutConstraints ec) { f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csPending = pending2; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csNextId = dtb__660; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csTried = dtb__661; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csSolsCount = dtb__662; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csPassNext = dtb__663; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csPassSols = dtb__664; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csCtorIndexComplete = dtb__665 })
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 636 "Vuna/Compiler/Elab/Types.vuna"
-let v_Vuna_dCompiler_dElab_dTypes_decAddConstraint = (fun ec kind meta dom span depth -> (match (v_Vuna_dCompiler_dElab_dTypes_decConstraints ec) with
+let v_Vuna_dCompiler_dElab_dTypes_decAddConstraint = (fun (ec : t_Vuna_dCompiler_dElab_dTypes_dEc) (kind : t_Vuna_dCompiler_dElab_dTypes_dConstraintKind) (meta : int) (dom : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dValue) (span : Vuna_dCompiler_dBase_dSource.t_Vuna_dCompiler_dBase_dSource_dSpan Base_dData_dMaybe.t_Base_dData_dMaybe_dMaybe) (depth : int) -> (match (v_Vuna_dCompiler_dElab_dTypes_decConstraints ec) with
   | { f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csPending = dtb__666; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csNextId = dtb__667; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csTried = dtb__668; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csSolsCount = dtb__669; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csPassNext = dtb__670; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csPassSols = dtb__671; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csCtorIndexComplete = dtb__672 } -> ((v_Vuna_dCompiler_dElab_dTypes_decPutConstraints ec) { f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csPending = ((Base_dData_dList.v_Base_dData_dList_dappend dtb__666) (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ({ f_Vuna_dCompiler_dElab_dTypes_dConstraint_conId = dtb__667; f_Vuna_dCompiler_dElab_dTypes_dConstraint_conKind = kind; f_Vuna_dCompiler_dElab_dTypes_dConstraint_conMeta = meta; f_Vuna_dCompiler_dElab_dTypes_dConstraint_conDom = dom; f_Vuna_dCompiler_dElab_dTypes_dConstraint_conSpan = span; f_Vuna_dCompiler_dElab_dTypes_dConstraint_conDepth = depth }, Base_dData_dList.C_Base_dData_dList_dList_Nil))); f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csNextId = (dtb__667 + 1); f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csTried = dtb__668; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csSolsCount = dtb__669; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csPassNext = dtb__670; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csPassSols = dtb__671; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csCtorIndexComplete = dtb__672 })
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 646 "Vuna/Compiler/Elab/Types.vuna"
-let v_Vuna_dCompiler_dElab_dTypes_decTriedAt = (fun ec cid -> (match (v_Vuna_dCompiler_dElab_dTypes_decConstraints ec) with
+let v_Vuna_dCompiler_dElab_dTypes_decTriedAt = (fun (ec : t_Vuna_dCompiler_dElab_dTypes_dEc) (cid : int) -> (match (v_Vuna_dCompiler_dElab_dTypes_decConstraints ec) with
   | { f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csPending = dtb__673; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csNextId = dtb__674; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csTried = dtb__675; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csSolsCount = dtb__676; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csPassNext = dtb__677; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csPassSols = dtb__678; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csCtorIndexComplete = dtb__679 } -> ((((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dlookup Base_dData_dInt.v_Hashable_uInt) Base_dData_dInt.v_Eq_uInt) cid) dtb__675)
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 652 "Vuna/Compiler/Elab/Types.vuna"
-let v_Vuna_dCompiler_dElab_dTypes_decRecordTried = (fun ec cid epoch -> (match (v_Vuna_dCompiler_dElab_dTypes_decConstraints ec) with
+let v_Vuna_dCompiler_dElab_dTypes_decRecordTried = (fun (ec : t_Vuna_dCompiler_dElab_dTypes_dEc) (cid : int) (epoch : int) -> (match (v_Vuna_dCompiler_dElab_dTypes_decConstraints ec) with
   | { f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csPending = dtb__680; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csNextId = dtb__681; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csTried = dtb__682; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csSolsCount = dtb__683; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csPassNext = dtb__684; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csPassSols = dtb__685; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csCtorIndexComplete = dtb__686 } -> ((v_Vuna_dCompiler_dElab_dTypes_decPutConstraints ec) { f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csPending = dtb__680; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csNextId = dtb__681; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csTried = ((((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dinsert Base_dData_dInt.v_Hashable_uInt) cid) epoch) dtb__682); f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csSolsCount = dtb__683; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csPassNext = dtb__684; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csPassSols = dtb__685; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csCtorIndexComplete = dtb__686 })
   | _ -> failwith "DT: impossible branch"
 ))
@@ -403,16 +403,16 @@ let v_Vuna_dCompiler_dElab_dTypes_decSolTbl = (fun (mc0 : t_Vuna_dCompiler_dElab
 ))
 
 # 696 "Vuna/Compiler/Elab/Types.vuna"
-let v_Vuna_dCompiler_dElab_dTypes_decSolsP = (fun ec -> (((Vuna_dCompiler_dCore_dTerm.v_Vuna_dCompiler_dCore_dTerm_dsolsOf (v_Vuna_dCompiler_dElab_dTypes_decSolTbl ec)) (v_Vuna_dCompiler_dElab_dTypes_decSols ec)) (v_Vuna_dCompiler_dElab_dTypes_decDepthTbl ec)))
+let v_Vuna_dCompiler_dElab_dTypes_decSolsP = (fun (ec : t_Vuna_dCompiler_dElab_dTypes_dEc) -> (((Vuna_dCompiler_dCore_dTerm.v_Vuna_dCompiler_dCore_dTerm_dsolsOf (v_Vuna_dCompiler_dElab_dTypes_decSolTbl ec)) (v_Vuna_dCompiler_dElab_dTypes_decSols ec)) (v_Vuna_dCompiler_dElab_dTypes_decDepthTbl ec)))
 
 # 707 "Vuna/Compiler/Elab/Types.vuna"
-let v_Vuna_dCompiler_dElab_dTypes_decSolsCountOf = (fun ec -> (match (v_Vuna_dCompiler_dElab_dTypes_decConstraints ec) with
+let v_Vuna_dCompiler_dElab_dTypes_decSolsCountOf = (fun (ec : t_Vuna_dCompiler_dElab_dTypes_dEc) -> (match (v_Vuna_dCompiler_dElab_dTypes_decConstraints ec) with
   | { f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csPending = dtb__709; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csNextId = dtb__710; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csTried = dtb__711; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csSolsCount = dtb__712; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csPassNext = dtb__713; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csPassSols = dtb__714; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csCtorIndexComplete = dtb__715 } -> dtb__712
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 712 "Vuna/Compiler/Elab/Types.vuna"
-let v_Vuna_dCompiler_dElab_dTypes_decPutSolsCount = (fun ec cnt -> (match (v_Vuna_dCompiler_dElab_dTypes_decConstraints ec) with
+let v_Vuna_dCompiler_dElab_dTypes_decPutSolsCount = (fun (ec : t_Vuna_dCompiler_dElab_dTypes_dEc) (cnt : int) -> (match (v_Vuna_dCompiler_dElab_dTypes_decConstraints ec) with
   | { f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csPending = dtb__716; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csNextId = dtb__717; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csTried = dtb__718; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csSolsCount = dtb__719; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csPassNext = dtb__720; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csPassSols = dtb__721; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csCtorIndexComplete = dtb__722 } -> ((v_Vuna_dCompiler_dElab_dTypes_decPutConstraints ec) { f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csPending = dtb__716; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csNextId = dtb__717; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csTried = dtb__718; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csSolsCount = cnt; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csPassNext = dtb__720; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csPassSols = dtb__721; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csCtorIndexComplete = dtb__722 })
   | _ -> failwith "DT: impossible branch"
 ))
@@ -424,25 +424,25 @@ let v_Vuna_dCompiler_dElab_dTypes_decPutSolsRaw = (fun (mc0 : t_Vuna_dCompiler_d
 ))
 
 # 745 "Vuna/Compiler/Elab/Types.vuna"
-let v_Vuna_dCompiler_dElab_dTypes_decPutPassMarker = (fun ec -> (match (v_Vuna_dCompiler_dElab_dTypes_decConstraints ec) with
+let v_Vuna_dCompiler_dElab_dTypes_decPutPassMarker = (fun (ec : t_Vuna_dCompiler_dElab_dTypes_dEc) -> (match (v_Vuna_dCompiler_dElab_dTypes_decConstraints ec) with
   | { f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csPending = dtb__745; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csNextId = dtb__746; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csTried = dtb__747; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csSolsCount = dtb__748; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csPassNext = dtb__749; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csPassSols = dtb__750; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csCtorIndexComplete = dtb__751 } -> ((v_Vuna_dCompiler_dElab_dTypes_decPutConstraints ec) { f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csPending = dtb__745; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csNextId = dtb__746; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csTried = dtb__747; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csSolsCount = dtb__748; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csPassNext = dtb__746; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csPassSols = dtb__748; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csCtorIndexComplete = dtb__751 })
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 752 "Vuna/Compiler/Elab/Types.vuna"
-let v_Vuna_dCompiler_dElab_dTypes_decCtorIndexComplete = (fun ec -> (match (v_Vuna_dCompiler_dElab_dTypes_decConstraints ec) with
+let v_Vuna_dCompiler_dElab_dTypes_decCtorIndexComplete = (fun (ec : t_Vuna_dCompiler_dElab_dTypes_dEc) -> (match (v_Vuna_dCompiler_dElab_dTypes_decConstraints ec) with
   | { f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csPending = dtb__752; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csNextId = dtb__753; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csTried = dtb__754; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csSolsCount = dtb__755; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csPassNext = dtb__756; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csPassSols = dtb__757; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csCtorIndexComplete = dtb__758 } -> dtb__758
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 757 "Vuna/Compiler/Elab/Types.vuna"
-let v_Vuna_dCompiler_dElab_dTypes_decPutCtorIndexComplete = (fun ec ok -> (match (v_Vuna_dCompiler_dElab_dTypes_decConstraints ec) with
+let v_Vuna_dCompiler_dElab_dTypes_decPutCtorIndexComplete = (fun (ec : t_Vuna_dCompiler_dElab_dTypes_dEc) (ok : bool) -> (match (v_Vuna_dCompiler_dElab_dTypes_decConstraints ec) with
   | { f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csPending = dtb__759; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csNextId = dtb__760; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csTried = dtb__761; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csSolsCount = dtb__762; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csPassNext = dtb__763; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csPassSols = dtb__764; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csCtorIndexComplete = dtb__765 } -> ((v_Vuna_dCompiler_dElab_dTypes_decPutConstraints ec) { f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csPending = dtb__759; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csNextId = dtb__760; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csTried = dtb__761; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csSolsCount = dtb__762; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csPassNext = dtb__763; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csPassSols = dtb__764; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csCtorIndexComplete = ok })
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 764 "Vuna/Compiler/Elab/Types.vuna"
-let v_Vuna_dCompiler_dElab_dTypes_decDictPassIdle = (fun ec -> (match (v_Vuna_dCompiler_dElab_dTypes_decConstraints ec) with
+let v_Vuna_dCompiler_dElab_dTypes_decDictPassIdle = (fun (ec : t_Vuna_dCompiler_dElab_dTypes_dEc) -> (match (v_Vuna_dCompiler_dElab_dTypes_decConstraints ec) with
   | { f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csPending = dtb__766; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csNextId = dtb__767; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csTried = dtb__768; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csSolsCount = dtb__769; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csPassNext = dtb__770; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csPassSols = dtb__771; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csCtorIndexComplete = dtb__772 } -> (if (dtb__770 = dtb__767) then (dtb__771 = dtb__769) else false)
   | _ -> failwith "DT: impossible branch"
 ))
@@ -468,7 +468,7 @@ let v_Vuna_dCompiler_dElab_dTypes_dsolsDelta = (fun (mc0 : (int, Vuna_dCompiler_
 ))
 
 # 698 "Vuna/Compiler/Elab/Types.vuna"
-let v_Vuna_dCompiler_dElab_dTypes_decPutSols = (fun ec sols2 -> ((fun delta -> ((fun soltbl2 -> ((fun ec2 -> ((v_Vuna_dCompiler_dElab_dTypes_decPutSolsCount ec2) ((v_Vuna_dCompiler_dElab_dTypes_decSolsCountOf ec2) + (Base_dData_dList.v_Base_dData_dList_dlength delta)))) (((v_Vuna_dCompiler_dElab_dTypes_decPutSolsRaw ec) sols2) soltbl2))) (((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dinsertAll Base_dData_dInt.v_Hashable_uInt) delta) (v_Vuna_dCompiler_dElab_dTypes_decSolTbl ec)))) ((v_Vuna_dCompiler_dElab_dTypes_dsolsDelta (v_Vuna_dCompiler_dElab_dTypes_decSols ec)) sols2)))
+let v_Vuna_dCompiler_dElab_dTypes_decPutSols = (fun (ec : t_Vuna_dCompiler_dElab_dTypes_dEc) (sols2 : (int, Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dValue) Base_dData_dPair.t_Base_dData_dPair_dPair Base_dData_dList.t_Base_dData_dList_dList) -> ((fun delta -> ((fun soltbl2 -> ((fun ec2 -> ((v_Vuna_dCompiler_dElab_dTypes_decPutSolsCount ec2) ((v_Vuna_dCompiler_dElab_dTypes_decSolsCountOf ec2) + (Base_dData_dList.v_Base_dData_dList_dlength delta)))) (((v_Vuna_dCompiler_dElab_dTypes_decPutSolsRaw ec) sols2) soltbl2))) (((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dinsertAll Base_dData_dInt.v_Hashable_uInt) delta) (v_Vuna_dCompiler_dElab_dTypes_decSolTbl ec)))) ((v_Vuna_dCompiler_dElab_dTypes_dsolsDelta (v_Vuna_dCompiler_dElab_dTypes_decSols ec)) sols2)))
 
 # 781 "Vuna/Compiler/Elab/Types.vuna"
 let rec v_Vuna_dCompiler_dElab_dTypes_dmemDataNameIn = (fun (mc0 : string) (mc1 : t_Vuna_dCompiler_dElab_dTypes_dDtData Base_dData_dList.t_Base_dData_dList_dList) -> (match mc1 with
@@ -490,7 +490,7 @@ let v_Vuna_dCompiler_dElab_dTypes_decRemoveDefTbl = (fun (mc0 : string) (mc1 : t
 ))
 
 # 876 "Vuna/Compiler/Elab/Types.vuna"
-let v_Vuna_dCompiler_dElab_dTypes_ddataCtorPairs = (fun d -> ((Base_dData_dList.v_Base_dData_dList_dmap (fun (c : t_Vuna_dCompiler_dElab_dTypes_dDtCtor) -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = (v_Vuna_dCompiler_dElab_dTypes_ddtCtorName c); Base_dData_dPair.f_Base_dData_dPair_dPair_second = c })) (v_Vuna_dCompiler_dElab_dTypes_ddtDataCtors d)))
+let v_Vuna_dCompiler_dElab_dTypes_ddataCtorPairs = (fun (d : t_Vuna_dCompiler_dElab_dTypes_dDtData) -> ((Base_dData_dList.v_Base_dData_dList_dmap (fun (c : t_Vuna_dCompiler_dElab_dTypes_dDtCtor) -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = (v_Vuna_dCompiler_dElab_dTypes_ddtCtorName c); Base_dData_dPair.f_Base_dData_dPair_dPair_second = c })) (v_Vuna_dCompiler_dElab_dTypes_ddtDataCtors d)))
 
 # 846 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_decAddData = (fun (mc0 : t_Vuna_dCompiler_dElab_dTypes_dEc) (mc1 : t_Vuna_dCompiler_dElab_dTypes_dDtData) -> (match mc0 with
@@ -499,7 +499,7 @@ let v_Vuna_dCompiler_dElab_dTypes_decAddData = (fun (mc0 : t_Vuna_dCompiler_dEla
 ))
 
 # 873 "Vuna/Compiler/Elab/Types.vuna"
-let v_Vuna_dCompiler_dElab_dTypes_dctorTblOfDatas = (fun datas -> (((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dinsertAll Base_dData_dString.v_Hashable_uString) ((Base_dData_dList.v_Base_dData_dList_dconcatMap v_Vuna_dCompiler_dElab_dTypes_ddataCtorPairs) datas)) ((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dfromList Base_dData_dString.v_Hashable_uString) Base_dData_dList.C_Base_dData_dList_dList_Nil)))
+let v_Vuna_dCompiler_dElab_dTypes_dctorTblOfDatas = (fun (datas : t_Vuna_dCompiler_dElab_dTypes_dDtData Base_dData_dList.t_Base_dData_dList_dList) -> (((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dinsertAll Base_dData_dString.v_Hashable_uString) ((Base_dData_dList.v_Base_dData_dList_dconcatMap v_Vuna_dCompiler_dElab_dTypes_ddataCtorPairs) datas)) ((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dfromList Base_dData_dString.v_Hashable_uString) Base_dData_dList.C_Base_dData_dList_dList_Nil)))
 
 # 879 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_decPutCtorTbl = (fun (mc0 : t_Vuna_dCompiler_dElab_dTypes_dEc) (mc1 : (string, t_Vuna_dCompiler_dElab_dTypes_dDtCtor) Base_dContainer_dHashMap.t_Base_dContainer_dHashMap_dHashMap) -> (match mc0 with
@@ -550,10 +550,10 @@ let v_Vuna_dCompiler_dElab_dTypes_decPutWarnings = (fun (mc0 : t_Vuna_dCompiler_
 ))
 
 # 990 "Vuna/Compiler/Elab/Types.vuna"
-let v_Vuna_dCompiler_dElab_dTypes_decAddWarning = (fun ec d -> ((v_Vuna_dCompiler_dElab_dTypes_decPutWarnings ec) ((Base_dData_dList.v_Base_dData_dList_dappend (v_Vuna_dCompiler_dElab_dTypes_decWarnings ec)) (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (d, Base_dData_dList.C_Base_dData_dList_dList_Nil)))))
+let v_Vuna_dCompiler_dElab_dTypes_decAddWarning = (fun (ec : t_Vuna_dCompiler_dElab_dTypes_dEc) (d : Vuna_dCompiler_dBase_dDiag.t_Vuna_dCompiler_dBase_dDiag_dDiagnostic) -> ((v_Vuna_dCompiler_dElab_dTypes_decPutWarnings ec) ((Base_dData_dList.v_Base_dData_dList_dappend (v_Vuna_dCompiler_dElab_dTypes_decWarnings ec)) (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (d, Base_dData_dList.C_Base_dData_dList_dList_Nil)))))
 
 # 994 "Vuna/Compiler/Elab/Types.vuna"
-let v_Vuna_dCompiler_dElab_dTypes_decCounters = (fun e -> (e).f_Vuna_dCompiler_dElab_dTypes_dEc_ecCounters)
+let v_Vuna_dCompiler_dElab_dTypes_decCounters = (fun (e : t_Vuna_dCompiler_dElab_dTypes_dEc) -> (e).f_Vuna_dCompiler_dElab_dTypes_dEc_ecCounters)
 
 # 997 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_decBump = (fun (mc0 : t_Vuna_dCompiler_dElab_dTypes_dEc) (mc1 : string) -> (match mc0 with
@@ -581,7 +581,7 @@ let rec v_Vuna_dCompiler_dElab_dTypes_ddatasHaveLinear = (fun (mc0 : t_Vuna_dCom
 ))
 
 # 1075 "Vuna/Compiler/Elab/Types.vuna"
-let v_Vuna_dCompiler_dElab_dTypes_dctxDepth = (fun ctx -> (ctx).f_Vuna_dCompiler_dElab_dTypes_dCtx_ctxDepthF)
+let v_Vuna_dCompiler_dElab_dTypes_dctxDepth = (fun (ctx : t_Vuna_dCompiler_dElab_dTypes_dCtx) -> (ctx).f_Vuna_dCompiler_dElab_dTypes_dCtx_ctxDepthF)
 
 # 1078 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_dctxBind = (fun (mc0 : string) (mc1 : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dTerm) (mc2 : t_Vuna_dCompiler_dElab_dTypes_dCtx) -> (match mc2 with
@@ -612,7 +612,7 @@ let rec v_Vuna_dCompiler_dElab_dTypes_dctxLookupAt = (fun (mc0 : string) (mc1 : 
 ))
 
 # 1096 "Vuna/Compiler/Elab/Types.vuna"
-let v_Vuna_dCompiler_dElab_dTypes_dctxLookup = (fun name ctx -> (((v_Vuna_dCompiler_dElab_dTypes_dctxLookupAt name) (ctx).f_Vuna_dCompiler_dElab_dTypes_dCtx_ctxItems) 0))
+let v_Vuna_dCompiler_dElab_dTypes_dctxLookup = (fun (name : string) (ctx : t_Vuna_dCompiler_dElab_dTypes_dCtx) -> (((v_Vuna_dCompiler_dElab_dTypes_dctxLookupAt name) (ctx).f_Vuna_dCompiler_dElab_dTypes_dCtx_ctxItems) 0))
 
 # 1105 "Vuna/Compiler/Elab/Types.vuna"
 let rec v_Vuna_dCompiler_dElab_dTypes_dctxEnvAt = (fun (mc0 : (string, Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dTerm) Base_dData_dPair.t_Base_dData_dPair_dPair Base_dData_dList.t_Base_dData_dList_dList) (mc1 : int) (mc2 : int) -> (match mc0 with
@@ -641,7 +641,7 @@ let rec v_Vuna_dCompiler_dElab_dTypes_drefineLookup = (fun (mc0 : int) (mc1 : (i
 ))
 
 # 1121 "Vuna/Compiler/Elab/Types.vuna"
-let rec v_Vuna_dCompiler_dElab_dTypes_drefineValue = (fun refs fuel v -> (if (fuel <= 0) then v else (match v with
+let rec v_Vuna_dCompiler_dElab_dTypes_drefineValue = (fun (refs : (int, Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dValue) Base_dData_dPair.t_Base_dData_dPair_dPair Base_dData_dList.t_Base_dData_dList_dList) (fuel : int) (v : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dValue) -> (if (fuel <= 0) then v else (match v with
   | Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dValue_VNeutral (dtb__1121) -> (match dtb__1121 with
   | Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dNeutral_NVar (dtb__1122, dtb__1123, dtb__1124) -> ((fun sp2 -> (match ((v_Vuna_dCompiler_dElab_dTypes_drefineLookup dtb__1123) refs) with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__1125) -> ((Vuna_dCompiler_dCore_dEval.v_Vuna_dCompiler_dCore_dEval_dapplySpine (((v_Vuna_dCompiler_dElab_dTypes_drefineValue refs) (fuel - 1)) dtb__1125)) sp2)
@@ -666,19 +666,19 @@ let v_Vuna_dCompiler_dElab_dTypes_drefinedEnv = (fun (mc0 : (int, Vuna_dCompiler
 ))
 
 # 1116 "Vuna/Compiler/Elab/Types.vuna"
-let v_Vuna_dCompiler_dElab_dTypes_dctxEnvRefined = (fun ctx -> ((v_Vuna_dCompiler_dElab_dTypes_drefinedEnv (ctx).f_Vuna_dCompiler_dElab_dTypes_dCtx_ctxRefVals) (v_Vuna_dCompiler_dElab_dTypes_dctxEnv ctx)))
+let v_Vuna_dCompiler_dElab_dTypes_dctxEnvRefined = (fun (ctx : t_Vuna_dCompiler_dElab_dTypes_dCtx) -> ((v_Vuna_dCompiler_dElab_dTypes_drefinedEnv (ctx).f_Vuna_dCompiler_dElab_dTypes_dCtx_ctxRefVals) (v_Vuna_dCompiler_dElab_dTypes_dctxEnv ctx)))
 
 # 1148 "Vuna/Compiler/Elab/Types.vuna"
-let v_Vuna_dCompiler_dElab_dTypes_devalCtx = (fun ctx ty -> ((Vuna_dCompiler_dCore_dEval.v_Vuna_dCompiler_dCore_dEval_deval (v_Vuna_dCompiler_dElab_dTypes_dctxEnvRefined ctx)) ty))
+let v_Vuna_dCompiler_dElab_dTypes_devalCtx = (fun (ctx : t_Vuna_dCompiler_dElab_dTypes_dCtx) (ty : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dTerm) -> ((Vuna_dCompiler_dCore_dEval.v_Vuna_dCompiler_dCore_dEval_deval (v_Vuna_dCompiler_dElab_dTypes_dctxEnvRefined ctx)) ty))
 
 # 1153 "Vuna/Compiler/Elab/Types.vuna"
-let v_Vuna_dCompiler_dElab_dTypes_dvarTypeValue = (fun ctx idx ty -> ((Vuna_dCompiler_dCore_dEval.v_Vuna_dCompiler_dCore_dEval_deval (v_Vuna_dCompiler_dElab_dTypes_dctxEnvRefined ctx)) (((Vuna_dCompiler_dCore_dTerm.v_Vuna_dCompiler_dCore_dTerm_dshift 0) (idx + 1)) ty)))
+let v_Vuna_dCompiler_dElab_dTypes_dvarTypeValue = (fun (ctx : t_Vuna_dCompiler_dElab_dTypes_dCtx) (idx : int) (ty : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dTerm) -> ((Vuna_dCompiler_dCore_dEval.v_Vuna_dCompiler_dCore_dEval_deval (v_Vuna_dCompiler_dElab_dTypes_dctxEnvRefined ctx)) (((Vuna_dCompiler_dCore_dTerm.v_Vuna_dCompiler_dCore_dTerm_dshift 0) (idx + 1)) ty)))
 
 # 1156 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_demptyCtx = { f_Vuna_dCompiler_dElab_dTypes_dCtx_ctxItems = Base_dData_dList.C_Base_dData_dList_dList_Nil; f_Vuna_dCompiler_dElab_dTypes_dCtx_ctxEnvF = Base_dData_dList.C_Base_dData_dList_dList_Nil; f_Vuna_dCompiler_dElab_dTypes_dCtx_ctxRefVals = Base_dData_dList.C_Base_dData_dList_dList_Nil; f_Vuna_dCompiler_dElab_dTypes_dCtx_ctxDepthF = 0 }
 
 # 1162 "Vuna/Compiler/Elab/Types.vuna"
-let v_Vuna_dCompiler_dElab_dTypes_derrAt = (fun sp msg -> ((Vuna_dCompiler_dBase_dDiag.v_Vuna_dCompiler_dBase_dDiag_drawAt sp) msg))
+let v_Vuna_dCompiler_dElab_dTypes_derrAt = (fun (sp : Vuna_dCompiler_dBase_dSource.t_Vuna_dCompiler_dBase_dSource_dSpan) (msg : string) -> ((Vuna_dCompiler_dBase_dDiag.v_Vuna_dCompiler_dBase_dDiag_drawAt sp) msg))
 
 # 1166 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_dnewMeta = (fun (mc0 : t_Vuna_dCompiler_dElab_dTypes_dCtx) (mc1 : t_Vuna_dCompiler_dElab_dTypes_dEc) -> (match mc1 with
@@ -687,7 +687,7 @@ let v_Vuna_dCompiler_dElab_dTypes_dnewMeta = (fun (mc0 : t_Vuna_dCompiler_dElab_
 ))
 
 # 1172 "Vuna/Compiler/Elab/Types.vuna"
-let v_Vuna_dCompiler_dElab_dTypes_dforceVal = (fun ec v -> ((((Vuna_dCompiler_dCore_dEval.v_Vuna_dCompiler_dCore_dEval_dforce (v_Vuna_dCompiler_dElab_dTypes_decDefTbl ec)) (v_Vuna_dCompiler_dElab_dTypes_decSolsP ec)) Vuna_dCompiler_dCore_dTerm.v_Vuna_dCompiler_dCore_dTerm_ddefaultFuel) v))
+let v_Vuna_dCompiler_dElab_dTypes_dforceVal = (fun (ec : t_Vuna_dCompiler_dElab_dTypes_dEc) (v : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dValue) -> ((((Vuna_dCompiler_dCore_dEval.v_Vuna_dCompiler_dCore_dEval_dforce (v_Vuna_dCompiler_dElab_dTypes_decDefTbl ec)) (v_Vuna_dCompiler_dElab_dTypes_decSolsP ec)) Vuna_dCompiler_dCore_dTerm.v_Vuna_dCompiler_dCore_dTerm_ddefaultFuel) v))
 
 # 1192 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_ddtProgDatas = (fun (mc0 : t_Vuna_dCompiler_dElab_dTypes_dDtProgram) -> (match mc0 with
@@ -738,7 +738,7 @@ let v_Vuna_dCompiler_dElab_dTypes_ddtProgWarnings = (fun (mc0 : t_Vuna_dCompiler
 ))
 
 # 1219 "Vuna/Compiler/Elab/Types.vuna"
-let v_Vuna_dCompiler_dElab_dTypes_dsolsToTbl = (fun sols -> (((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dinsertAll Base_dData_dInt.v_Hashable_uInt) sols) ((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dfromList Base_dData_dInt.v_Hashable_uInt) Base_dData_dList.C_Base_dData_dList_dList_Nil)))
+let v_Vuna_dCompiler_dElab_dTypes_dsolsToTbl = (fun (sols : (int, Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dValue) Base_dData_dPair.t_Base_dData_dPair_dPair Base_dData_dList.t_Base_dData_dList_dList) -> (((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dinsertAll Base_dData_dInt.v_Hashable_uInt) sols) ((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dfromList Base_dData_dInt.v_Hashable_uInt) Base_dData_dList.C_Base_dData_dList_dList_Nil)))
 
 # 1222 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_decPutDefTbl = (fun (mc0 : t_Vuna_dCompiler_dElab_dTypes_dEc) (mc1 : (string, Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dTerm) Base_dContainer_dHashMap.t_Base_dContainer_dHashMap_dHashMap) -> (match mc0 with

@@ -20,7 +20,7 @@ let v_Vuna_dCompiler_dElab_dRepresentation_dunboxedCandIndex = (fun (mc0 : t_Vun
 ))
 
 # 38 "Vuna/Compiler/Elab/Representation.vuna"
-let v_Vuna_dCompiler_dElab_dRepresentation_dctorKeepFlags = (fun c -> ((Base_dData_dList.v_Base_dData_dList_dmap (fun (b : (string, Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dRig) Base_dData_dPair.t_Base_dData_dPair_dPair) -> (Base_dData_dBool.v_Base_dData_dBool_dnot (Vuna_dCompiler_dCore_dTerm.v_Vuna_dCompiler_dCore_dTerm_drigIsErased (Base_dData_dPair.v_Base_dData_dPair_dsecondOf b))))) (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtCtorTelescope c)))
+let v_Vuna_dCompiler_dElab_dRepresentation_dctorKeepFlags = (fun (c : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dDtCtor) -> ((Base_dData_dList.v_Base_dData_dList_dmap (fun (b : (string, Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dRig) Base_dData_dPair.t_Base_dData_dPair_dPair) -> (Base_dData_dBool.v_Base_dData_dBool_dnot (Vuna_dCompiler_dCore_dTerm.v_Vuna_dCompiler_dCore_dTerm_drigIsErased (Base_dData_dPair.v_Base_dData_dPair_dsecondOf b))))) (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtCtorTelescope c)))
 
 # 46 "Vuna/Compiler/Elab/Representation.vuna"
 let rec v_Vuna_dCompiler_dElab_dRepresentation_dkeptIndicesGo = (fun (mc0 : bool Base_dData_dList.t_Base_dData_dList_dList) (mc1 : int) -> (match mc0 with
@@ -30,10 +30,10 @@ let rec v_Vuna_dCompiler_dElab_dRepresentation_dkeptIndicesGo = (fun (mc0 : bool
 ))
 
 # 42 "Vuna/Compiler/Elab/Representation.vuna"
-let v_Vuna_dCompiler_dElab_dRepresentation_dkeptIndices = (fun flags -> ((v_Vuna_dCompiler_dElab_dRepresentation_dkeptIndicesGo flags) 0))
+let v_Vuna_dCompiler_dElab_dRepresentation_dkeptIndices = (fun (flags : bool Base_dData_dList.t_Base_dData_dList_dList) -> ((v_Vuna_dCompiler_dElab_dRepresentation_dkeptIndicesGo flags) 0))
 
 # 52 "Vuna/Compiler/Elab/Representation.vuna"
-let v_Vuna_dCompiler_dElab_dRepresentation_disSpecialUnboxFamily = (fun name -> (if (Vuna_dCompiler_dBase_dIntrinsics.v_Vuna_dCompiler_dBase_dIntrinsics_disUnboxedCanonical name) then true else (Vuna_dCompiler_dBase_dIntrinsics.v_Vuna_dCompiler_dBase_dIntrinsics_disTypeConstructorName name)))
+let v_Vuna_dCompiler_dElab_dRepresentation_disSpecialUnboxFamily = (fun (name : string) -> (if (Vuna_dCompiler_dBase_dIntrinsics.v_Vuna_dCompiler_dBase_dIntrinsics_disUnboxedCanonical name) then true else (Vuna_dCompiler_dBase_dIntrinsics.v_Vuna_dCompiler_dBase_dIntrinsics_disTypeConstructorName name)))
 
 # 57 "Vuna/Compiler/Elab/Representation.vuna"
 let rec v_Vuna_dCompiler_dElab_dRepresentation_dfindDtData = (fun (mc0 : string) (mc1 : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dDtData Base_dData_dList.t_Base_dData_dList_dList) -> (match mc1 with
@@ -43,7 +43,7 @@ let rec v_Vuna_dCompiler_dElab_dRepresentation_dfindDtData = (fun (mc0 : string)
 ))
 
 # 62 "Vuna/Compiler/Elab/Representation.vuna"
-let v_Vuna_dCompiler_dElab_dRepresentation_dknownTypeHead = (fun datas g -> (if (if (if (if (g = Vuna_dCompiler_dBase_dIntrinsics.v_Vuna_dCompiler_dBase_dIntrinsics_dintTypeName) then true else (g = Vuna_dCompiler_dBase_dIntrinsics.v_Vuna_dCompiler_dBase_dIntrinsics_dstrTypeName)) then true else (Vuna_dCompiler_dBase_dIntrinsics.v_Vuna_dCompiler_dBase_dIntrinsics_disUnboxedCanonical g)) then true else (Vuna_dCompiler_dBase_dIntrinsics.v_Vuna_dCompiler_dBase_dIntrinsics_disTypeConstructorName g)) then true else (match ((v_Vuna_dCompiler_dElab_dRepresentation_dfindDtData g) datas) with
+let v_Vuna_dCompiler_dElab_dRepresentation_dknownTypeHead = (fun (datas : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dDtData Base_dData_dList.t_Base_dData_dList_dList) (g : string) -> (if (if (if (if (g = Vuna_dCompiler_dBase_dIntrinsics.v_Vuna_dCompiler_dBase_dIntrinsics_dintTypeName) then true else (g = Vuna_dCompiler_dBase_dIntrinsics.v_Vuna_dCompiler_dBase_dIntrinsics_dstrTypeName)) then true else (Vuna_dCompiler_dBase_dIntrinsics.v_Vuna_dCompiler_dBase_dIntrinsics_disUnboxedCanonical g)) then true else (Vuna_dCompiler_dBase_dIntrinsics.v_Vuna_dCompiler_dBase_dIntrinsics_disTypeConstructorName g)) then true else (match ((v_Vuna_dCompiler_dElab_dRepresentation_dfindDtData g) datas) with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__13) -> true
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> false
   | _ -> failwith "DT: impossible branch"
@@ -67,13 +67,13 @@ let rec v_Vuna_dCompiler_dElab_dRepresentation_dtermRepresentable = (fun (mc0 : 
 ))
 
 # 94 "Vuna/Compiler/Elab/Representation.vuna"
-let rec v_Vuna_dCompiler_dElab_dRepresentation_dctorFieldDomainTermGo = (fun fuel i t -> (if (fuel <= 0) then Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing else (match t with
+let rec v_Vuna_dCompiler_dElab_dRepresentation_dctorFieldDomainTermGo = (fun (fuel : int) (i : int) (t : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dTerm) -> (if (fuel <= 0) then Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing else (match t with
   | Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dTerm_TPi (dtb__32, dtb__33, dtb__34, dtb__35, dtb__36) -> (if (i <= 0) then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__35)) else (((v_Vuna_dCompiler_dElab_dRepresentation_dctorFieldDomainTermGo (fuel - 1)) (i - 1)) dtb__36))
   | _ -> Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing
 )))
 
 # 90 "Vuna/Compiler/Elab/Representation.vuna"
-let v_Vuna_dCompiler_dElab_dRepresentation_dctorFieldDomainTerm = (fun c i -> (((v_Vuna_dCompiler_dElab_dRepresentation_dctorFieldDomainTermGo 512) i) (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtCtorType c)))
+let v_Vuna_dCompiler_dElab_dRepresentation_dctorFieldDomainTerm = (fun (c : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dDtCtor) (i : int) -> (((v_Vuna_dCompiler_dElab_dRepresentation_dctorFieldDomainTermGo 512) i) (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtCtorType c)))
 
 # 105 "Vuna/Compiler/Elab/Representation.vuna"
 let v_Vuna_dCompiler_dElab_dRepresentation_dtermIsFunction = (fun (mc0 : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dTerm) -> (match mc0 with
@@ -88,7 +88,7 @@ let v_Vuna_dCompiler_dElab_dRepresentation_dreprIsBoxed = (fun (mc0 : Vuna_dComp
 ))
 
 # 123 "Vuna/Compiler/Elab/Representation.vuna"
-let v_Vuna_dCompiler_dElab_dRepresentation_dunboxedCandidateOfData = (fun datas d -> (if (Base_dData_dBool.v_Base_dData_dBool_dnot (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDataIsRecord d)) then Base_dData_dList.C_Base_dData_dList_dList_Nil else (if (v_Vuna_dCompiler_dElab_dRepresentation_disSpecialUnboxFamily (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDataName d)) then Base_dData_dList.C_Base_dData_dList_dList_Nil else (if (v_Vuna_dCompiler_dElab_dRepresentation_dreprIsBoxed (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDataRepr d)) then Base_dData_dList.C_Base_dData_dList_dList_Nil else (match (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDataCtors d) with
+let v_Vuna_dCompiler_dElab_dRepresentation_dunboxedCandidateOfData = (fun (datas : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dDtData Base_dData_dList.t_Base_dData_dList_dList) (d : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dDtData) -> (if (Base_dData_dBool.v_Base_dData_dBool_dnot (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDataIsRecord d)) then Base_dData_dList.C_Base_dData_dList_dList_Nil else (if (v_Vuna_dCompiler_dElab_dRepresentation_disSpecialUnboxFamily (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDataName d)) then Base_dData_dList.C_Base_dData_dList_dList_Nil else (if (v_Vuna_dCompiler_dElab_dRepresentation_dreprIsBoxed (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDataRepr d)) then Base_dData_dList.C_Base_dData_dList_dList_Nil else (match (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDataCtors d) with
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> Base_dData_dList.C_Base_dData_dList_dList_Nil
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__42, dtb__43) -> (match dtb__43 with
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> (match (v_Vuna_dCompiler_dElab_dRepresentation_dkeptIndices (v_Vuna_dCompiler_dElab_dRepresentation_dctorKeepFlags dtb__42)) with
@@ -109,20 +109,20 @@ let v_Vuna_dCompiler_dElab_dRepresentation_dunboxedCandidateOfData = (fun datas 
 )))))
 
 # 152 "Vuna/Compiler/Elab/Representation.vuna"
-let v_Vuna_dCompiler_dElab_dRepresentation_dunboxedCandidates = (fun datas -> ((Base_dData_dList.v_Base_dData_dList_dconcatMap (v_Vuna_dCompiler_dElab_dRepresentation_dunboxedCandidateOfData datas)) datas))
+let v_Vuna_dCompiler_dElab_dRepresentation_dunboxedCandidates = (fun (datas : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dDtData Base_dData_dList.t_Base_dData_dList_dList) -> ((Base_dData_dList.v_Base_dData_dList_dconcatMap (v_Vuna_dCompiler_dElab_dRepresentation_dunboxedCandidateOfData datas)) datas))
 
 # 156 "Vuna/Compiler/Elab/Representation.vuna"
-let v_Vuna_dCompiler_dElab_dRepresentation_dcandidateNames = (fun cands -> ((Base_dData_dList.v_Base_dData_dList_dmap v_Vuna_dCompiler_dElab_dRepresentation_dunboxedCandName) cands))
+let v_Vuna_dCompiler_dElab_dRepresentation_dcandidateNames = (fun (cands : t_Vuna_dCompiler_dElab_dRepresentation_dUnboxedCand Base_dData_dList.t_Base_dData_dList_dList) -> ((Base_dData_dList.v_Base_dData_dList_dmap v_Vuna_dCompiler_dElab_dRepresentation_dunboxedCandName) cands))
 
 # 165 "Vuna/Compiler/Elab/Representation.vuna"
-let v_Vuna_dCompiler_dElab_dRepresentation_dcandidateRefs = (fun datas names cand -> (match ((v_Vuna_dCompiler_dElab_dRepresentation_dctorFieldDomainTerm (v_Vuna_dCompiler_dElab_dRepresentation_dunboxedCandCtor cand)) (v_Vuna_dCompiler_dElab_dRepresentation_dunboxedCandIndex cand)) with
+let v_Vuna_dCompiler_dElab_dRepresentation_dcandidateRefs = (fun (datas : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dDtData Base_dData_dList.t_Base_dData_dList_dList) (names : string Base_dData_dList.t_Base_dData_dList_dList) (cand : t_Vuna_dCompiler_dElab_dRepresentation_dUnboxedCand) -> (match ((v_Vuna_dCompiler_dElab_dRepresentation_dctorFieldDomainTerm (v_Vuna_dCompiler_dElab_dRepresentation_dunboxedCandCtor cand)) (v_Vuna_dCompiler_dElab_dRepresentation_dunboxedCandIndex cand)) with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__47) -> ((Base_dData_dList.v_Base_dData_dList_dfilter (fun (n : string) -> ((Base_dData_dList.v_Base_dData_dList_dmemName n) names))) (Vuna_dCompiler_dCore_dTerm.v_Vuna_dCompiler_dCore_dTerm_dtermGlobalNames dtb__47))
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> Base_dData_dList.C_Base_dData_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 160 "Vuna/Compiler/Elab/Representation.vuna"
-let v_Vuna_dCompiler_dElab_dRepresentation_dcandidateEdges = (fun datas names cands -> ((Base_dData_dList.v_Base_dData_dList_dmap (fun (cand : t_Vuna_dCompiler_dElab_dRepresentation_dUnboxedCand) -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = (v_Vuna_dCompiler_dElab_dRepresentation_dunboxedCandName cand); Base_dData_dPair.f_Base_dData_dPair_dPair_second = (((v_Vuna_dCompiler_dElab_dRepresentation_dcandidateRefs datas) names) cand) })) cands))
+let v_Vuna_dCompiler_dElab_dRepresentation_dcandidateEdges = (fun (datas : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dDtData Base_dData_dList.t_Base_dData_dList_dList) (names : string Base_dData_dList.t_Base_dData_dList_dList) (cands : t_Vuna_dCompiler_dElab_dRepresentation_dUnboxedCand Base_dData_dList.t_Base_dData_dList_dList) -> ((Base_dData_dList.v_Base_dData_dList_dmap (fun (cand : t_Vuna_dCompiler_dElab_dRepresentation_dUnboxedCand) -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = (v_Vuna_dCompiler_dElab_dRepresentation_dunboxedCandName cand); Base_dData_dPair.f_Base_dData_dPair_dPair_second = (((v_Vuna_dCompiler_dElab_dRepresentation_dcandidateRefs datas) names) cand) })) cands))
 
 # 172 "Vuna/Compiler/Elab/Representation.vuna"
 let rec v_Vuna_dCompiler_dElab_dRepresentation_dlookupNeighbors = (fun (mc0 : string) (mc1 : (string, string Base_dData_dList.t_Base_dData_dList_dList) Base_dData_dPair.t_Base_dData_dPair_dPair Base_dData_dList.t_Base_dData_dList_dList) -> (match mc1 with
@@ -132,7 +132,7 @@ let rec v_Vuna_dCompiler_dElab_dRepresentation_dlookupNeighbors = (fun (mc0 : st
 ))
 
 # 178 "Vuna/Compiler/Elab/Representation.vuna"
-let rec v_Vuna_dCompiler_dElab_dRepresentation_dreachesBackTo = (fun fuel edges visited target node -> (if (fuel <= 0) then true else (((((v_Vuna_dCompiler_dElab_dRepresentation_danyReachBack (fuel - 1)) edges) visited) target) ((v_Vuna_dCompiler_dElab_dRepresentation_dlookupNeighbors node) edges))))
+let rec v_Vuna_dCompiler_dElab_dRepresentation_dreachesBackTo = (fun (fuel : int) (edges : (string, string Base_dData_dList.t_Base_dData_dList_dList) Base_dData_dPair.t_Base_dData_dPair_dPair Base_dData_dList.t_Base_dData_dList_dList) (visited : string Base_dData_dList.t_Base_dData_dList_dList) (target : string) (node : string) -> (if (fuel <= 0) then true else (((((v_Vuna_dCompiler_dElab_dRepresentation_danyReachBack (fuel - 1)) edges) visited) target) ((v_Vuna_dCompiler_dElab_dRepresentation_dlookupNeighbors node) edges))))
 # 186 "Vuna/Compiler/Elab/Representation.vuna"
 and v_Vuna_dCompiler_dElab_dRepresentation_danyReachBack = (fun (mc0 : int) (mc1 : (string, string Base_dData_dList.t_Base_dData_dList_dList) Base_dData_dPair.t_Base_dData_dPair_dPair Base_dData_dList.t_Base_dData_dList_dList) (mc2 : string Base_dData_dList.t_Base_dData_dList_dList) (mc3 : string) (mc4 : string Base_dData_dList.t_Base_dData_dList_dList) -> (match mc4 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__50, dtb__51) -> (if (dtb__50 = mc3) then true else (if ((Base_dData_dList.v_Base_dData_dList_dmemName dtb__50) mc2) then (((((v_Vuna_dCompiler_dElab_dRepresentation_danyReachBack mc0) mc1) mc2) mc3) dtb__51) else (if (mc0 <= 0) then true else (if (((((v_Vuna_dCompiler_dElab_dRepresentation_dreachesBackTo (mc0 - 1)) mc1) (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__50, mc2))) mc3) dtb__50) then true else (((((v_Vuna_dCompiler_dElab_dRepresentation_danyReachBack (mc0 - 1)) mc1) mc2) mc3) dtb__51)))))
@@ -141,10 +141,10 @@ and v_Vuna_dCompiler_dElab_dRepresentation_danyReachBack = (fun (mc0 : int) (mc1
 ))
 
 # 201 "Vuna/Compiler/Elab/Representation.vuna"
-let v_Vuna_dCompiler_dElab_dRepresentation_dunboxedInfoOf = (fun datas -> ((fun cands -> ((fun names -> ((fun edges -> ((fun fuel -> ((Base_dData_dList.v_Base_dData_dList_dmap (fun (cand : t_Vuna_dCompiler_dElab_dRepresentation_dUnboxedCand) -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = (v_Vuna_dCompiler_dElab_dRepresentation_dunboxedCandName cand); Base_dData_dPair.f_Base_dData_dPair_dPair_second = { Base_dData_dPair.f_Base_dData_dPair_dPair_first = (v_Vuna_dCompiler_dElab_dRepresentation_dunboxedCandCtor cand); Base_dData_dPair.f_Base_dData_dPair_dPair_second = (v_Vuna_dCompiler_dElab_dRepresentation_dunboxedCandIndex cand) } })) ((Base_dData_dList.v_Base_dData_dList_dfilter (fun (cand : t_Vuna_dCompiler_dElab_dRepresentation_dUnboxedCand) -> (Base_dData_dBool.v_Base_dData_dBool_dnot (((((v_Vuna_dCompiler_dElab_dRepresentation_dreachesBackTo fuel) edges) (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((v_Vuna_dCompiler_dElab_dRepresentation_dunboxedCandName cand), Base_dData_dList.C_Base_dData_dList_dList_Nil))) (v_Vuna_dCompiler_dElab_dRepresentation_dunboxedCandName cand)) (v_Vuna_dCompiler_dElab_dRepresentation_dunboxedCandName cand))))) cands))) (bi_natAdd (Base_dData_dList.v_Base_dData_dList_dlength names) 2))) (((v_Vuna_dCompiler_dElab_dRepresentation_dcandidateEdges datas) names) cands))) (v_Vuna_dCompiler_dElab_dRepresentation_dcandidateNames cands))) (v_Vuna_dCompiler_dElab_dRepresentation_dunboxedCandidates datas)))
+let v_Vuna_dCompiler_dElab_dRepresentation_dunboxedInfoOf = (fun (datas : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dDtData Base_dData_dList.t_Base_dData_dList_dList) -> ((fun cands -> ((fun names -> ((fun edges -> ((fun fuel -> ((Base_dData_dList.v_Base_dData_dList_dmap (fun (cand : t_Vuna_dCompiler_dElab_dRepresentation_dUnboxedCand) -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = (v_Vuna_dCompiler_dElab_dRepresentation_dunboxedCandName cand); Base_dData_dPair.f_Base_dData_dPair_dPair_second = { Base_dData_dPair.f_Base_dData_dPair_dPair_first = (v_Vuna_dCompiler_dElab_dRepresentation_dunboxedCandCtor cand); Base_dData_dPair.f_Base_dData_dPair_dPair_second = (v_Vuna_dCompiler_dElab_dRepresentation_dunboxedCandIndex cand) } })) ((Base_dData_dList.v_Base_dData_dList_dfilter (fun (cand : t_Vuna_dCompiler_dElab_dRepresentation_dUnboxedCand) -> (Base_dData_dBool.v_Base_dData_dBool_dnot (((((v_Vuna_dCompiler_dElab_dRepresentation_dreachesBackTo fuel) edges) (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((v_Vuna_dCompiler_dElab_dRepresentation_dunboxedCandName cand), Base_dData_dList.C_Base_dData_dList_dList_Nil))) (v_Vuna_dCompiler_dElab_dRepresentation_dunboxedCandName cand)) (v_Vuna_dCompiler_dElab_dRepresentation_dunboxedCandName cand))))) cands))) (bi_natAdd (Base_dData_dList.v_Base_dData_dList_dlength names) 2))) (((v_Vuna_dCompiler_dElab_dRepresentation_dcandidateEdges datas) names) cands))) (v_Vuna_dCompiler_dElab_dRepresentation_dcandidateNames cands))) (v_Vuna_dCompiler_dElab_dRepresentation_dunboxedCandidates datas)))
 
 # 213 "Vuna/Compiler/Elab/Representation.vuna"
-let v_Vuna_dCompiler_dElab_dRepresentation_dunboxedFamilySet = (fun datas -> ((Base_dData_dList.v_Base_dData_dList_dmap Base_dData_dPair.v_Base_dData_dPair_dfirstOf) (v_Vuna_dCompiler_dElab_dRepresentation_dunboxedInfoOf datas)))
+let v_Vuna_dCompiler_dElab_dRepresentation_dunboxedFamilySet = (fun (datas : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dDtData Base_dData_dList.t_Base_dData_dList_dList) -> ((Base_dData_dList.v_Base_dData_dList_dmap Base_dData_dPair.v_Base_dData_dPair_dfirstOf) (v_Vuna_dCompiler_dElab_dRepresentation_dunboxedInfoOf datas)))
 
 # 217 "Vuna/Compiler/Elab/Representation.vuna"
 let rec v_Vuna_dCompiler_dElab_dRepresentation_dlookupUnboxedInfo = (fun (mc0 : string) (mc1 : (string, (Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dDtCtor, int) Base_dData_dPair.t_Base_dData_dPair_dPair) Base_dData_dPair.t_Base_dData_dPair_dPair Base_dData_dList.t_Base_dData_dList_dList) -> (match mc1 with

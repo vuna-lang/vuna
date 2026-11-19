@@ -6,13 +6,13 @@ and t_Vuna_dCompiler_dLoader_dAddr_dModHeader = { f_Vuna_dCompiler_dLoader_dAddr
 let v_Vuna_dCompiler_dLoader_dAddr_daddrSchema = "vuna-addr 1"
 
 # 30 "Vuna/Compiler/Loader/Addr.vuna"
-let v_Vuna_dCompiler_dLoader_dAddr_dhashHex = (fun s -> (Vuna_dCompiler_dBase_dHash.v_Vuna_dCompiler_dBase_dHash_ddigestHex (Vuna_dCompiler_dBase_dHash.v_Vuna_dCompiler_dBase_dHash_ddigestOfString s)))
+let v_Vuna_dCompiler_dLoader_dAddr_dhashHex = (fun (s : string) -> (Vuna_dCompiler_dBase_dHash.v_Vuna_dCompiler_dBase_dHash_ddigestHex (Vuna_dCompiler_dBase_dHash.v_Vuna_dCompiler_dBase_dHash_ddigestOfString s)))
 
 # 34 "Vuna/Compiler/Loader/Addr.vuna"
-let v_Vuna_dCompiler_dLoader_dAddr_daddrOf = (fun parts -> (v_Vuna_dCompiler_dLoader_dAddr_dhashHex ((Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dencTop (Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dencList Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dencStr)) (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (v_Vuna_dCompiler_dLoader_dAddr_daddrSchema, parts)))))
+let v_Vuna_dCompiler_dLoader_dAddr_daddrOf = (fun (parts : string Base_dData_dList.t_Base_dData_dList_dList) -> (v_Vuna_dCompiler_dLoader_dAddr_dhashHex ((Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dencTop (Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dencList Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dencStr)) (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (v_Vuna_dCompiler_dLoader_dAddr_daddrSchema, parts)))))
 
 # 39 "Vuna/Compiler/Loader/Addr.vuna"
-let v_Vuna_dCompiler_dLoader_dAddr_dprojectIdAddrOf = (fun dir -> (v_Vuna_dCompiler_dLoader_dAddr_daddrOf (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("project", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dir, Base_dData_dList.C_Base_dData_dList_dList_Nil))))))
+let v_Vuna_dCompiler_dLoader_dAddr_dprojectIdAddrOf = (fun (dir : string) -> (v_Vuna_dCompiler_dLoader_dAddr_daddrOf (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("project", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dir, Base_dData_dList.C_Base_dData_dList_dList_Nil))))))
 
 # 70 "Vuna/Compiler/Loader/Addr.vuna"
 let rec v_Vuna_dCompiler_dLoader_dAddr_dlookupImports = (fun (mc0 : string) (mc1 : (string, string Base_dData_dList.t_Base_dData_dList_dList) Base_dData_dPair.t_Base_dData_dPair_dPair Base_dData_dList.t_Base_dData_dList_dList) -> (match mc1 with
@@ -32,10 +32,10 @@ let rec v_Vuna_dCompiler_dLoader_dAddr_dtopoVisitGo = (fun (mc0 : int) (mc1 : (s
 ))
 
 # 92 "Vuna/Compiler/Loader/Addr.vuna"
-let v_Vuna_dCompiler_dLoader_dAddr_dtopoModules = (fun graph -> (Base_dData_dList.v_Base_dData_dList_dreverse (Base_dData_dPair.v_Base_dData_dPair_dsecondOf (((((v_Vuna_dCompiler_dLoader_dAddr_dtopoVisitGo 8192) graph) ((Base_dData_dList.v_Base_dData_dList_dmap Base_dData_dPair.v_Base_dData_dPair_dfirstOf) graph)) Base_dData_dList.C_Base_dData_dList_dList_Nil) Base_dData_dList.C_Base_dData_dList_dList_Nil))))
+let v_Vuna_dCompiler_dLoader_dAddr_dtopoModules = (fun (graph : (string, string Base_dData_dList.t_Base_dData_dList_dList) Base_dData_dPair.t_Base_dData_dPair_dPair Base_dData_dList.t_Base_dData_dList_dList) -> (Base_dData_dList.v_Base_dData_dList_dreverse (Base_dData_dPair.v_Base_dData_dPair_dsecondOf (((((v_Vuna_dCompiler_dLoader_dAddr_dtopoVisitGo 8192) graph) ((Base_dData_dList.v_Base_dData_dList_dmap Base_dData_dPair.v_Base_dData_dPair_dfirstOf) graph)) Base_dData_dList.C_Base_dData_dList_dList_Nil) Base_dData_dList.C_Base_dData_dList_dList_Nil))))
 
 # 98 "Vuna/Compiler/Loader/Addr.vuna"
-let v_Vuna_dCompiler_dLoader_dAddr_dfixRowOf = (fun f -> { f_Vuna_dCompiler_dLoader_dAddr_dFixRow_frOp = (f).Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dFixityDecl_fixityOp; f_Vuna_dCompiler_dLoader_dAddr_dFixRow_frLevel = (f).Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dFixityDecl_fixityLevel; f_Vuna_dCompiler_dLoader_dAddr_dFixRow_frAssoc = (f).Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dFixityDecl_fixityAssoc; f_Vuna_dCompiler_dLoader_dAddr_dFixRow_frTarget = (f).Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dFixityDecl_fixityTarget })
+let v_Vuna_dCompiler_dLoader_dAddr_dfixRowOf = (fun (f : Vuna_dCompiler_dFrontend_dAst.t_Vuna_dCompiler_dFrontend_dAst_dFixityDecl) -> { f_Vuna_dCompiler_dLoader_dAddr_dFixRow_frOp = (f).Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dFixityDecl_fixityOp; f_Vuna_dCompiler_dLoader_dAddr_dFixRow_frLevel = (f).Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dFixityDecl_fixityLevel; f_Vuna_dCompiler_dLoader_dAddr_dFixRow_frAssoc = (f).Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dFixityDecl_fixityAssoc; f_Vuna_dCompiler_dLoader_dAddr_dFixRow_frTarget = (f).Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dFixityDecl_fixityTarget })
 
 # 101 "Vuna/Compiler/Loader/Addr.vuna"
 let v_Vuna_dCompiler_dLoader_dAddr_dimportNameOf = (fun (mc0 : Vuna_dCompiler_dFrontend_dAst.t_Vuna_dCompiler_dFrontend_dAst_dImport) -> (match mc0 with

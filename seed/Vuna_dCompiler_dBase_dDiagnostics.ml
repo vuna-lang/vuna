@@ -1,6 +1,6 @@
 open Vuna_runtime
 # 49 "Vuna/Compiler/Base/Diagnostics.vuna"
-let v_Vuna_dCompiler_dBase_dDiagnostics_dcodeDomain = (fun code -> (match ((Base_dData_dString.v_Base_dData_dString_dsplit "_") code) with
+let v_Vuna_dCompiler_dBase_dDiagnostics_dcodeDomain = (fun (code : string) -> (match ((Base_dData_dString.v_Base_dData_dString_dsplit "_") code) with
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> code
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__0, dtb__1) -> dtb__0
   | _ -> failwith "DT: impossible branch"
@@ -92,4 +92,4 @@ let rec v_Vuna_dCompiler_dBase_dDiagnostics_dlookupDesc = (fun (mc0 : string) (m
 ))
 
 # 93 "Vuna/Compiler/Base/Diagnostics.vuna"
-let v_Vuna_dCompiler_dBase_dDiagnostics_ddiagDescOf = (fun code -> ((v_Vuna_dCompiler_dBase_dDiagnostics_dlookupDesc code) v_Vuna_dCompiler_dBase_dDiagnostics_dallDescPairs))
+let v_Vuna_dCompiler_dBase_dDiagnostics_ddiagDescOf = (fun (code : string) -> ((v_Vuna_dCompiler_dBase_dDiagnostics_dlookupDesc code) v_Vuna_dCompiler_dBase_dDiagnostics_dallDescPairs))

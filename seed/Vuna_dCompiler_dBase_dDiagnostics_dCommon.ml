@@ -1,15 +1,15 @@
 open Vuna_runtime
 # 18 "Vuna/Compiler/Base/Diagnostics/Common.vuna"
-let v_Vuna_dCompiler_dBase_dDiagnostics_dCommon_ddiagBody = (fun template args -> ((Base_dData_dVec.v_Base_dData_dVec_dsubstTemplate template) args))
+let v_Vuna_dCompiler_dBase_dDiagnostics_dCommon_ddiagBody = (fun (template : string) (args : string Base_dData_dVec.t_Base_dData_dVec_dVec) -> ((Base_dData_dVec.v_Base_dData_dVec_dsubstTemplate template) args))
 
 # 22 "Vuna/Compiler/Base/Diagnostics/Common.vuna"
-let v_Vuna_dCompiler_dBase_dDiagnostics_dCommon_dmkDiag = (fun sev phase cat code msg -> (((((Vuna_dCompiler_dBase_dDiag.v_Vuna_dCompiler_dBase_dDiag_ddiagNoLoc sev) phase) cat) code) msg))
+let v_Vuna_dCompiler_dBase_dDiagnostics_dCommon_dmkDiag = (fun (sev : Vuna_dCompiler_dBase_dDiag.t_Vuna_dCompiler_dBase_dDiag_dSeverity) (phase : Vuna_dCompiler_dBase_dDiag.t_Vuna_dCompiler_dBase_dDiag_dPhase) (cat : Vuna_dCompiler_dBase_dDiag.t_Vuna_dCompiler_dBase_dDiag_dCategory) (code : string) (msg : string) -> (((((Vuna_dCompiler_dBase_dDiag.v_Vuna_dCompiler_dBase_dDiag_ddiagNoLoc sev) phase) cat) code) msg))
 
 # 26 "Vuna/Compiler/Base/Diagnostics/Common.vuna"
-let v_Vuna_dCompiler_dBase_dDiagnostics_dCommon_dwithDiagSpan = (fun sp d -> ((Vuna_dCompiler_dBase_dDiag.v_Vuna_dCompiler_dBase_dDiag_dwithLabel { Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dLabel_labelSpan = (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (sp)); Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dLabel_labelText = ""; Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dLabel_labelStyle = Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dLabelStyle_LabelPrimary; Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dLabel_labelProvenance = Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing }) d))
+let v_Vuna_dCompiler_dBase_dDiagnostics_dCommon_dwithDiagSpan = (fun (sp : Vuna_dCompiler_dBase_dSource.t_Vuna_dCompiler_dBase_dSource_dSpan) (d : Vuna_dCompiler_dBase_dDiag.t_Vuna_dCompiler_dBase_dDiag_dDiagnostic) -> ((Vuna_dCompiler_dBase_dDiag.v_Vuna_dCompiler_dBase_dDiag_dwithLabel { Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dLabel_labelSpan = (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (sp)); Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dLabel_labelText = ""; Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dLabel_labelStyle = Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dLabelStyle_LabelPrimary; Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dLabel_labelProvenance = Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing }) d))
 
 # 30 "Vuna/Compiler/Base/Diagnostics/Common.vuna"
-let v_Vuna_dCompiler_dBase_dDiagnostics_dCommon_dwithDiagDef = (fun msp name d -> (((Vuna_dCompiler_dBase_dDiag.v_Vuna_dCompiler_dBase_dDiag_dwithContext msp) name) d))
+let v_Vuna_dCompiler_dBase_dDiagnostics_dCommon_dwithDiagDef = (fun (msp : Vuna_dCompiler_dBase_dSource.t_Vuna_dCompiler_dBase_dSource_dSpan Base_dData_dMaybe.t_Base_dData_dMaybe_dMaybe) (name : string) (d : Vuna_dCompiler_dBase_dDiag.t_Vuna_dCompiler_dBase_dDiag_dDiagnostic) -> (((Vuna_dCompiler_dBase_dDiag.v_Vuna_dCompiler_dBase_dDiag_dwithContext msp) name) d))
 
 # 35 "Vuna/Compiler/Base/Diagnostics/Common.vuna"
 let rec v_Vuna_dCompiler_dBase_dDiagnostics_dCommon_dconcatLists = (fun mc0 -> (match mc0 with

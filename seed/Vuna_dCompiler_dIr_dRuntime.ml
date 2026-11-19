@@ -54,17 +54,17 @@ let rec v_Vuna_dCompiler_dIr_dRuntime_dirRtLookupGo = (fun (mc0 : string) (mc1 :
 ))
 
 # 389 "Vuna/Compiler/Ir/Runtime.vuna"
-let v_Vuna_dCompiler_dIr_dRuntime_dirRtLookup = (fun name -> ((v_Vuna_dCompiler_dIr_dRuntime_dirRtLookupGo name) v_Vuna_dCompiler_dIr_dRuntime_dirRtContract))
+let v_Vuna_dCompiler_dIr_dRuntime_dirRtLookup = (fun (name : string) -> ((v_Vuna_dCompiler_dIr_dRuntime_dirRtLookupGo name) v_Vuna_dCompiler_dIr_dRuntime_dirRtContract))
 
 # 393 "Vuna/Compiler/Ir/Runtime.vuna"
-let v_Vuna_dCompiler_dIr_dRuntime_dirRtIsKnown = (fun name -> (match (v_Vuna_dCompiler_dIr_dRuntime_dirRtLookup name) with
+let v_Vuna_dCompiler_dIr_dRuntime_dirRtIsKnown = (fun (name : string) -> (match (v_Vuna_dCompiler_dIr_dRuntime_dirRtLookup name) with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__6) -> true
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> false
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 400 "Vuna/Compiler/Ir/Runtime.vuna"
-let v_Vuna_dCompiler_dIr_dRuntime_dirRtBridgesList = (fun name -> (match (v_Vuna_dCompiler_dIr_dRuntime_dirRtLookup name) with
+let v_Vuna_dCompiler_dIr_dRuntime_dirRtBridgesList = (fun (name : string) -> (match (v_Vuna_dCompiler_dIr_dRuntime_dirRtLookup name) with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__7) -> (v_Vuna_dCompiler_dIr_dRuntime_dirRtSymBridgesOf dtb__7)
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> false
   | _ -> failwith "DT: impossible branch"
@@ -104,9 +104,9 @@ let rec v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOf = (fun (mc0 : Vuna_dCompiler_
   | _ -> failwith "DT: impossible branch"
 ))
 # 447 "Vuna/Compiler/Ir/Runtime.vuna"
-and v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOfField = (fun p -> (v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOf (Base_dData_dPair.v_Base_dData_dPair_dsecondOf p)))
+and v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOfField = (fun (p : (string, Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIr) Base_dData_dPair.t_Base_dData_dPair_dPair) -> (v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOf (Base_dData_dPair.v_Base_dData_dPair_dsecondOf p)))
 # 450 "Vuna/Compiler/Ir/Runtime.vuna"
-and v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOfAlt = (fun alt -> (v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOf (Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirAltBodyOf alt)))
+and v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOfAlt = (fun (alt : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrAlt) -> (v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOf (Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirAltBodyOf alt)))
 # 453 "Vuna/Compiler/Ir/Runtime.vuna"
 and v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOfAltMaybe = (fun (mc0 : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrAlt Base_dData_dMaybe.t_Base_dData_dMaybe_dMaybe) -> (match mc0 with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__67) -> (v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOfAlt dtb__67)
@@ -115,7 +115,7 @@ and v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOfAltMaybe = (fun (mc0 : Vuna_dCompi
 ))
 
 # 457 "Vuna/Compiler/Ir/Runtime.vuna"
-let v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOfDef = (fun d -> (match (Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirDefBody d) with
+let v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOfDef = (fun (d : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrDef) -> (match (Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirDefBody d) with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> Base_dData_dList.C_Base_dData_dList_dList_Nil
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__68) -> (v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOf dtb__68)
   | _ -> failwith "DT: impossible branch"
@@ -129,10 +129,10 @@ let v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOfEntry = (fun (mc0 : Vuna_dCompiler
 ))
 
 # 464 "Vuna/Compiler/Ir/Runtime.vuna"
-let v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOfUnit = (fun u -> ((Base_dData_dList.v_Base_dData_dList_dappend ((Base_dData_dList.v_Base_dData_dList_dconcatMap v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOfDef) ((Base_dData_dList.v_Base_dData_dList_dconcatMap Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirGroupDefs) (u).Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrUnit_irUnitGroups))) (v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOfEntry (u).Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrUnit_irUnitEntry)))
+let v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOfUnit = (fun (u : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrUnit) -> ((Base_dData_dList.v_Base_dData_dList_dappend ((Base_dData_dList.v_Base_dData_dList_dconcatMap v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOfDef) ((Base_dData_dList.v_Base_dData_dList_dconcatMap Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirGroupDefs) (u).Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrUnit_irUnitGroups))) (v_Vuna_dCompiler_dIr_dRuntime_dirSymbolsOfEntry (u).Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrUnit_irUnitEntry)))
 
 # 481 "Vuna/Compiler/Ir/Runtime.vuna"
 let v_Vuna_dCompiler_dIr_dRuntime_dirHostDirectOf = (fun (mc0 : string) -> (if (mc0 = "Base.Effect.Console.runConsoleHost") then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just ({ Base_dData_dPair.f_Base_dData_dPair_dPair_first = "console"; Base_dData_dPair.f_Base_dData_dPair_dPair_second = "Base.Effect.Console.consoleOpHIOHost" })) else (if (mc0 = "Base.Effect.Fs.runFsHost") then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just ({ Base_dData_dPair.f_Base_dData_dPair_dPair_first = "fs"; Base_dData_dPair.f_Base_dData_dPair_dPair_second = "Base.Effect.Fs.fsOpHIOHost" })) else (if (mc0 = "Base.Effect.Clock.runClockHost") then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just ({ Base_dData_dPair.f_Base_dData_dPair_dPair_first = "clock"; Base_dData_dPair.f_Base_dData_dPair_dPair_second = "Base.Effect.Clock.clockOpHIOHost" })) else (if (mc0 = "Base.Effect.Env.runEnvHost") then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just ({ Base_dData_dPair.f_Base_dData_dPair_dPair_first = "env"; Base_dData_dPair.f_Base_dData_dPair_dPair_second = "Base.Effect.Env.envOpHIOHost" })) else (if (mc0 = "Base.Effect.Args.runArgsHost") then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just ({ Base_dData_dPair.f_Base_dData_dPair_dPair_first = "args"; Base_dData_dPair.f_Base_dData_dPair_dPair_second = "Base.Effect.Args.argsOpHIOHost" })) else (if (mc0 = "Base.Effect.Exit.runExitHost") then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just ({ Base_dData_dPair.f_Base_dData_dPair_dPair_first = "exit"; Base_dData_dPair.f_Base_dData_dPair_dPair_second = "Base.Effect.Exit.exitOpHIOHost" })) else (if (mc0 = "Base.Effect.Stdin.runStdinHost") then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just ({ Base_dData_dPair.f_Base_dData_dPair_dPair_first = "stdin"; Base_dData_dPair.f_Base_dData_dPair_dPair_second = "Base.Effect.Stdin.stdinOpHIOHost" })) else Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing))))))))
 
 # 496 "Vuna/Compiler/Ir/Runtime.vuna"
-let v_Vuna_dCompiler_dIr_dRuntime_dirHostAbortOf = (fun name -> (if (name = "Base.Effect.Fs.runFsErrorHost") then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just ({ Base_dData_dPair.f_Base_dData_dPair_dPair_first = "fs-error"; Base_dData_dPair.f_Base_dData_dPair_dPair_second = "Base.Effect.Fs.fsErrorText" })) else Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing))
+let v_Vuna_dCompiler_dIr_dRuntime_dirHostAbortOf = (fun (name : string) -> (if (name = "Base.Effect.Fs.runFsErrorHost") then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just ({ Base_dData_dPair.f_Base_dData_dPair_dPair_first = "fs-error"; Base_dData_dPair.f_Base_dData_dPair_dPair_second = "Base.Effect.Fs.fsErrorText" })) else Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing))
