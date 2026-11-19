@@ -348,23 +348,9 @@ isSymbolName name =
     [] => False
     cs => allOpChars cs
 
--- | 内部：运算符的可见声明：直接查名字，未命中再按反向别名（`eq` → `==`）查一次。
+-- | 内部：运算符的可见声明：只查名字本身（没有反向别名）。
 opDeclOf : List FixityDecl -> String -> Maybe FixityDecl
-opDeclOf env op =
-  case lookupFixityDecl (tableOfKeepOps env) op of
-    Just d => Just d
-    Nothing =>
-      case symbolOfTargetIn env op of
-        Just sym => lookupFixityDecl (tableOfKeepOps env) sym
-        Nothing => Nothing
-
--- | 内部：名字是否是声明表里的 canonical 别名目标（`Cons` → `::`、`bind` → `>>=`）。
--- 只有声明表里真的有这个反向别名才成立，所以不会误伤同名的普通函数。
-hasOpAlias : List FixityDecl -> String -> Bool
-hasOpAlias env name =
-  case symbolOfTargetIn env name of
-    Just sym => True
-    Nothing => False
+opDeclOf env op = lookupFixityDecl (tableOfKeepOps env) op
 
 -- | 内部：中缀打印用的 (优先级, 结合性)：1 = 右，0 = 左/未知。
 infixPrecOf : List FixityDecl -> String -> Maybe (Pair Int Int)
@@ -379,13 +365,6 @@ infixPrec env op =
   case infixPrecOf env op of
     Just fx => fx
     Nothing => Pair 9 0
-
--- | 内部：反引号中缀的 fixity：普通名字无声明时按 9 左（与 Haskell 一致），符号名查声明表。
-opText : List FixityDecl -> String -> String
-opText env op =
-  case symbolOfTargetIn env op of
-    Just sym => sym
-    Nothing => op
 
 -- | 内部：反引号中缀的运算符标签 `` `name` ``。
 backtickLabel : String -> String
@@ -672,15 +651,15 @@ inlineAppGo fuel env minPrec fn args =
     Nothing
   else
     case fn of
-      -- 符号名/canonical 别名（`Cons`->`::`、`bind`->`>>=`）当作中缀运算符：两参应用还原成
-      -- `a op b`（哪怕无声明也按 9 左打印）。普通标识符保持应用形式。
+      -- 符号名当作中缀运算符：两参应用还原成 `a op b`（哪怕无声明也按 9 左打印）。
+      -- 普通标识符保持应用形式。
       EVar op sp =>
-        if isSymbolName op || hasOpAlias env op then
+        if isSymbolName op then
           case args of
             [a, b] =>
               let
                 fx = infixPrec env op
-              in inlineInfixGo (fuel - 1) env minPrec (firstOf fx) (secondOf fx) (opText env op) a b
+              in inlineInfixGo (fuel - 1) env minPrec (firstOf fx) (secondOf fx) op a b
             _ => inlineApplyGo (fuel - 1) env minPrec fn args
         else
           inlineApplyGo (fuel - 1) env minPrec fn args
@@ -962,12 +941,12 @@ infixOrApply fuel env at fn args =
   else
     case fn of
       EVar op sp =>
-        if isSymbolName op || hasOpAlias env op then
+        if isSymbolName op then
           case args of
             [a, b] =>
               let
                 fx = infixPrec env op
-              in infixDoc (fuel - 1) env at (firstOf fx) (secondOf fx) (opText env op) a b
+              in infixDoc (fuel - 1) env at (firstOf fx) (secondOf fx) op a b
             _ => applyDoc (fuel - 1) env at fn args
         else
           applyDoc (fuel - 1) env at fn args

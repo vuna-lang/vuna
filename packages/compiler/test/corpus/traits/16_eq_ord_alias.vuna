@@ -1,6 +1,6 @@
--- `==` / `/=` / `<` 等是 `eq` / `neq` / `lt` 等方法的**解析期别名**；
+-- `==` / `/=` / `<` 等就是 `Eq` / `Ord` 的方法名本身；
 -- Int / String 走内建特化，Bool 走 Base.Trait.Eq / Base.Trait.Ord 的模式匹配实例，用户 data 走
--- deriving 生成的实例（`==` 与 `eq` 必须得到同一结果）。
+-- deriving 生成的实例（中缀与 `(==)` 前缀写法必须得到同一结果）。
 import Prelude
 
 data Color : Type where

@@ -106,18 +106,17 @@ export data Expr(..) : Type where
   -- `Float` 字面量：原始十进制文本（放末尾以保持既有构造子 tag 顺序）。
   EFloat : String -> Span -> Expr
 
--- fixity / 别名声明（`infixl 6 +`、`infixr 5 :: = Cons`、`infix 4 == = eq`）。
+-- fixity 声明（`infixl 6 +`）。
 -- 只进入 `SourceFile.fixities`，由 Loader 在中缀重排时消费；**不进入 `Decl`**，避免所有
 -- Decl 匹配点扩散。
 export record FixityDecl(..) where
   fixityOp : String
   fixityLevel : Int
   fixityAssoc : Int
-  fixityTarget : Maybe String
   fixitySpan : Span
 
 export fixitySpan : FixityDecl -> Span
-fixitySpan (FixityDecl op level assoc target sp) = sp
+fixitySpan (FixityDecl op level assoc sp) = sp
 
 -- do 语句：`pat <- expr` 或裸表达式；最后一条必须是裸表达式。
 export data DoStmt(..) : Type where

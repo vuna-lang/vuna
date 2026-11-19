@@ -52,7 +52,6 @@ export record FixRow(..) where
   frOp : String
   frLevel : Int
   frAssoc : Int
-  frTarget : Maybe String
 
 export record ModHeader(..) where
   mhName : String
@@ -95,7 +94,7 @@ topoModules graph = reverse (secondOf (topoVisitGo 8192 graph (map firstOf graph
 -- 从 parse 产物抽出 header
 -- ---------------------------------------------------------------
 export fixRowOf : FixityDecl -> FixRow
-fixRowOf f = FixRow f.fixityOp f.fixityLevel f.fixityAssoc f.fixityTarget
+fixRowOf f = FixRow f.fixityOp f.fixityLevel f.fixityAssoc
 
 importNameOf : Import -> String
 importNameOf (Import n _ _ _) = n

@@ -1,0 +1,13 @@
+-- 运算符作为普通名字定义：`(<+>) = add` + `infixl 6 <+>`，fixity 声明只给优先级。
+import Prelude
+
+add : Int -> Int -> Int
+add x y = x + y
+
+(<+>) : Int -> Int -> Int
+(<+>) = add
+
+infixl 6 <+>
+
+main : String
+main = show (1 <+> 2)

@@ -373,16 +373,9 @@ assocKeyword 1 = "infixl"
 assocKeyword 2 = "infixr"
 assocKeyword n = "infix"
 
--- | 内部：`infix*` 声明行，规范写法 `infixl 6 +` / `infixr 5 :: = Cons` /
--- `infix 4 == = eq`。
+-- | 内部：`infix*` 声明行，规范写法 `infixl 6 +` / `infixr 5 ::`。
 renderFixityDecl : FixityDecl -> String
-renderFixityDecl (FixityDecl op level assoc target sp) =
-  "${assocKeyword assoc} ${level} ${op}${targetSuffix target}"
-
--- | 内部：别名目标后缀 ` = target`（无目标时为空串）。
-targetSuffix : Maybe String -> String
-targetSuffix Nothing = ""
-targetSuffix (Just t) = " = ${t}"
+renderFixityDecl (FixityDecl op level assoc sp) = "${assocKeyword assoc} ${level} ${op}"
 
 -- | 内部：单条 `infix*` 声明行（贴上该声明的注释）。
 renderFixityLine : TriviaCtx -> FixityDecl -> Doc

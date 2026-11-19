@@ -41,7 +41,6 @@ out-contains: canon-defs-rt ok
 out-contains: canon-span ok
 out-contains: canon-binder-span ok
 out-contains: canon-export-parent ok
-out-contains: canon-fixity-target ok
 # TOML 解析器：子表 / 引号段名 / 点键 / 内联表 / 数组 / 表数组 / 多行字符串 /
 # unicode 转义 / literal 字符串；以及必须拒绝的输入（重复键、浮点、重复表、点键定义的
 # 表再被 `[a]` 定义）。

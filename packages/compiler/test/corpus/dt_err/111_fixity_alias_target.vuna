@@ -1,0 +1,7 @@
+-- fixity 声明不接受别名目标：运算符是普通名字，绑定函数用 `(<+>) = add`。
+import Prelude
+
+infixl 4 == = eq
+
+main : Int
+main = 1

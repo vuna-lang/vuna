@@ -74,7 +74,6 @@ main =
     _ <- prim_eff_print (("canon-span " ++ verdict spanInsensitive) ++ "\n")
     _ <- prim_eff_print (("canon-binder-span " ++ verdict binderSpanInsensitive) ++ "\n")
     _ <- prim_eff_print (("canon-export-parent " ++ verdict parentCovered) ++ "\n")
-    _ <- prim_eff_print (("canon-fixity-target " ++ verdict fixityCovered) ++ "\n")
     -- 包内容/语义身份的规范编码 roundtrip 与两者输入面的区分（D12）。
     _ <- prim_eff_print (("pkg-canon-rt " ++ verdict pkgContentRT) ++ "\n")
     _ <- prim_eff_print (("pkg-identity-rt " ++ verdict pkgIdentityRT) ++ "\n")
@@ -388,12 +387,6 @@ parentCovered : Bool
 parentCovered =
   not
     (encTop encExportEntry (ExportEntry "ctor" "C" "M.C" "") == encTop encExportEntry (ExportEntry "ctor" "C" "M.C" "M.T"))
-
--- | fixity 的别名目标必须进哈希。
-fixityCovered : Bool
-fixityCovered =
-  not
-    (encTop encFixity (FixityDecl "::" 5 1 Nothing sp0) == encTop encFixity (FixityDecl "::" 5 1 (Just "Cons") sp0))
 
 -- | 工具会话载荷（`ToolContext`）的编码 roundtrip：空上下文也要逐字节稳定。
 -- 真实上下文含 iface 列表（`encModuleIfaceAt`），这里只验证字段顺序 / Maybe / 列表 / 尾部

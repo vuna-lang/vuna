@@ -11,7 +11,7 @@ module Vuna.Compiler.Elab.Canonical where
 --   * **span / 路径不参与编码**：`DtCtor`/`DtInst` 的 span、`Import`/`FixityDecl` 的 span
 --     都丢弃；换行、移动代码不改变依赖方的接口哈希。
 --   * **覆盖读方真正消费的字段**：`ExportEntry.parent`（ctor 重导出保持源模块抽象性）
---     与 `FixityDecl.fixityTarget`（`infixr 5 :: = Cons` 的别名目标）都进哈希。
+--     都进哈希。
 --   * `RecordMeta` 的字段**类型表达式**纳入编码：字段类型变化会让依赖方判脏。
 --
 -- 解码器只服务 roundtrip 自检/测试（`decXComplete` 入口）；生产写侧只编码。
@@ -128,12 +128,9 @@ encExportEntry e acc = encStr e.kind (encStr e.public (encStr e.target (encStr e
 export encExportEntries : List ExportEntry -> List String -> List String
 encExportEntries es acc = encList encExportEntry es acc
 
--- | `FixityDecl`：运算符 / 级别 / 结合性 / **别名目标**（span 丢弃）。
+-- | `FixityDecl`：运算符 / 级别 / 结合性（span 丢弃）。
 export encFixity : FixityDecl -> List String -> List String
-encFixity f acc =
-  encStr
-    f.fixityOp
-    (encInt f.fixityLevel (encInt f.fixityAssoc (encMaybe encStr f.fixityTarget acc)))
+encFixity f acc = encStr f.fixityOp (encInt f.fixityLevel (encInt f.fixityAssoc acc))
 
 -- | fixity 表。
 export encFixities : List FixityDecl -> List String -> List String
@@ -269,7 +266,7 @@ export decFixity : Int -> Cur -> Maybe (Pair FixityDecl Cur)
 decFixity fuel bytes =
   thenPair
     (decStr (fuel - 1) bytes)
-    (\op, b1 => thenPair (decInt (fuel - 1) b1) (\level, b2 => thenPair (decInt (fuel - 1) b2) (\assoc, b3 => thenPair (decMaybe decStr (fuel - 1) b3) (\target, b4 => Just (Pair (FixityDecl op level assoc target (Span "" 0 0 0 0 0 0)) b4)))))
+    (\op, b1 => thenPair (decInt (fuel - 1) b1) (\level, b2 => thenPair (decInt (fuel - 1) b2) (\assoc, b3 => Just (Pair (FixityDecl op level assoc (Span "" 0 0 0 0 0 0)) b3))))
 
 -- | 解析 fixity 表。
 export decFixities : Int -> Cur -> Maybe (Pair (List FixityDecl) Cur)

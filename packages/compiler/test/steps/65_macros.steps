@@ -16,7 +16,7 @@ exit: 0
 # 65b) 带空格的 `!` 仍是普通中缀运算符（宏只吃紧邻的 `!`）。
 run: mkdir -p "$TMPDIR/mac-infix/app"
 run: printf '[package]\nname = "mac-infix"\n\n[dependencies]\nvuna-base = "%s"\n' "$VUNA_BASE" > "$TMPDIR/mac-infix/vuna.toml"
-run: sh -c 'printf "%s\n" "infixl 6 ! = plusInt" "" "plusInt : Int -> Int -> Int" "plusInt a b = a + b" "" "main : Int" "main = 1 ! 2" > "$TMPDIR/mac-infix/app/Main.vuna"'
+run: sh -c 'printf "%s\n" "infixl 6 !" "" "(!) : Int -> Int -> Int" "(!) a b = a + b" "" "main : Int" "main = 1 ! 2" > "$TMPDIR/mac-infix/app/Main.vuna"'
 run: "$VUNA" build "$TMPDIR/mac-infix" 2>&1
 out-contains: built
 run: "$TMPDIR/mac-infix/.output/bin/mac-infix" 2>&1

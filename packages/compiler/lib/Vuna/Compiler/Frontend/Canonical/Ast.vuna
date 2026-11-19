@@ -1065,10 +1065,7 @@ encImportLike i acc =
   encStr i.importName (encBool i.importIsQualified (encMaybe encStr i.importAlias acc))
 
 encFixityLike : FixityDecl -> List String -> List String
-encFixityLike f acc =
-  encStr
-    f.fixityOp
-    (encInt f.fixityLevel (encInt f.fixityAssoc (encMaybe encStr f.fixityTarget acc)))
+encFixityLike f acc = encStr f.fixityOp (encInt f.fixityLevel (encInt f.fixityAssoc acc))
 
 -- | 解析 `ExportItem`（tag 0/1/2/3/4）。
 export decExportItem : Int -> Cur -> Maybe (Pair ExportItem Cur)
@@ -1151,7 +1148,7 @@ decFixityLike : Int -> Cur -> Maybe (Pair FixityDecl Cur)
 decFixityLike fuel c =
   thenPair
     (decStr (fuel - 1) c)
-    (\op, b1 => thenPair (decInt (fuel - 1) b1) (\level, b2 => thenPair (decInt (fuel - 1) b2) (\assoc, b3 => thenPair (decMaybe decStr (fuel - 1) b3) (\target, b4 => Just (Pair (FixityDecl op level assoc target noSpan) b4)))))
+    (\op, b1 => thenPair (decInt (fuel - 1) b1) (\level, b2 => thenPair (decInt (fuel - 1) b2) (\assoc, b3 => Just (Pair (FixityDecl op level assoc noSpan) b3))))
 
 -- | 整串解析 `SourceFile`（AST 缓存载荷入口）：要求恰好消费完。
 export decSourceFileComplete : String -> Maybe SourceFile

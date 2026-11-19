@@ -731,12 +731,12 @@ parenIsMemberList st =
 parseOptionalMembers : PState -> Check (Pair ExportMembers PState)
 parseOptionalMembers st = if atSym st "(" then parseExportMembers st else OkC (Pair EMNone st)
 
--- `infixl 6 +` / `infixr 5 :: = Cons` / `infix 4 == = eq`。
+-- `infixl 6 +` / `infixr 5 ::` / `infix 4 ==`。
 parseFixityDecl : PState -> Int -> Int -> Pos -> Check (Pair FixityDecl PState)
 parseFixityDecl st blockCol assoc kwPos =
   Vuna.Compiler.Base.Common.step
     (expectFixityLevel (advance st))
-    (\level, st1 => Vuna.Compiler.Base.Common.step (expectOpName st1) (\op, st2 => if atSym st2 "=" then Vuna.Compiler.Base.Common.bind (expectSym st2 "=") (\st3 => Vuna.Compiler.Base.Common.step (expectOpName st3) (\target, st4 => OkC (Pair (FixityDecl op level assoc (Just target) (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st4)) (posCol (lastPos st4)) (posOffset kwPos) (posOffset (lastPos st4)))) st4))) else OkC (Pair (FixityDecl op level assoc Nothing (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st2)) (posCol (lastPos st2)) (posOffset kwPos) (posOffset (lastPos st2)))) st2)))
+    (\level, st1 => Vuna.Compiler.Base.Common.step (expectOpName st1) (\op, st2 => OkC (Pair (FixityDecl op level assoc (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st2)) (posCol (lastPos st2)) (posOffset kwPos) (posOffset (lastPos st2)))) st2)))
 
 -- 声明位的名字：标识符 / `(sym)` / 裸符号。trait 方法、instance 方法、data 构造子
 -- 与导出成员列表共用，允许运算符与标识符同等使用。保留符号不是可定义名。
@@ -2176,8 +2176,7 @@ parsePatternSingle fuel st blockCol =
   if fuel <= 0 then icFuel "parser" else parsePatternCons (fuel - 1) st blockCol
 
 parsePatternCons : Int -> PState -> Int -> Check (Pair Pat PState)
--- pattern 里的 `::` 保留符号原形，由 Loader 按 fixity/别名声明换成
--- canonical `Cons`（base 声明 `infixr 5 :: = Cons`）。
+-- pattern 里的 `::` 直接使用同名构造子（`Base.Data.List` 声明的就是 `(::)`）。
 parsePatternCons fuel st blockCol =
   if fuel <= 0 then
     icFuel "parser"
