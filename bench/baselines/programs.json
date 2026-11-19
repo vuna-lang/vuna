@@ -1,906 +1,206 @@
 {
-  "schema": 2,
+  "schema": 3,
   "meta": {
-    "timestamp": "2026-11-19T02:28:21Z",
-    "git_head": "c6586e7f8279a678fa07175bd3c8fe29ba3ec2bc",
-    "git_dirty": true,
+    "timestamp": "2026-11-19T03:28:40Z",
+    "git_head": "7fc2e8b2f8c56c808449c46090f4c51fdbfc668c",
+    "git_dirty": false,
     "compiler": "vuna 0.1.0",
     "ocamlopt": "5.5.1",
     "arch": "x86_64",
     "nproc": 16,
-    "loadavg": "3.34",
+    "loadavg": "2.53",
     "runs": 5,
     "warmup": 2,
     "target": "all",
-    "stack_policy": "unlimited; js-host (V8 wasm stack, no knob)",
-    "wasm_host": "js",
-    "wasm_host_runner": "/home/grass/.local/share/opencode/worktree/c1976f/perf-cps-compare/test/suite/fixtures/wasm_js_host/run.mjs",
+    "stack_policy": "unlimited; node (V8 wasm stack, no knob)",
+    "wasm_host_runner": "/home/grass/.local/share/opencode/worktree/c1976f/bench-refactor/wasm-host/run.mjs",
     "node": "v24.21.0",
-    "node_startup_ms": 25,
-    "rss_passes": 3,
-    "rss_method": "gnu-time max_rss (max of rss_passes)",
-    "baseline_set": "programs"
+    "node_startup_ms": 22,
+    "rss_samples": 1,
+    "rss_method": "gnu-time max_rss on sampled timed runs"
   },
   "benchmarks": {
     "arith": {
-      "ocaml_ref": {
-        "run_ok": true,
-        "median_ms": 5,
-        "rss_kb": 2528
-      },
-      "vuna_ocaml": {
-        "run_ok": true,
-        "median_ms": 6,
-        "rss_kb": 4388,
-        "gc": {
-          "minor_words": 912,
-          "major_words": 0,
-          "minor_collections": 1,
-          "major_collections": 0,
-          "top_heap_words": 53248
-        }
-      },
-      "native": {
-        "run_ok": true,
-        "median_ms": 44,
-        "rss_kb": 3400,
-        "default_stack_ok": true
-      },
-      "wasm": {
-        "run_ok": true,
-        "median_ms": 103,
-        "rss_kb": 61000
-      },
-      "ratios": {
-        "vuna_ocaml": {
-          "vs_handwritten": 1.20,
-          "rss_vs_handwritten": 1.74
-        },
-        "native": {
-          "vs_handwritten": 8.80,
-          "rss_vs_handwritten": 1.34,
-          "vs_ocaml_backend": 7.33,
-          "rss_vs_ocaml_backend": 0.77
-        },
-        "wasm": {
-          "vs_handwritten": 20.60,
-          "rss_vs_handwritten": 24.13,
-          "vs_ocaml_backend": 17.17,
-          "rss_vs_ocaml_backend": 13.90
-        }
-      }
-    },
-    "string_ops": {
-      "ocaml_ref": {
-        "run_ok": true,
-        "median_ms": 3,
-        "rss_kb": 3132
-      },
-      "vuna_ocaml": {
-        "run_ok": true,
-        "median_ms": 4,
-        "rss_kb": 5028,
-        "gc": {
-          "minor_words": 915,
-          "major_words": 0,
-          "minor_collections": 1,
-          "major_collections": 0,
-          "top_heap_words": 53248
-        }
-      },
-      "native": {
-        "run_ok": true,
-        "median_ms": 4,
-        "rss_kb": 3400,
-        "default_stack_ok": true
-      },
-      "wasm": {
-        "run_ok": true,
-        "median_ms": 33,
-        "rss_kb": 57600
-      },
-      "ratios": {
-        "vuna_ocaml": {
-          "vs_handwritten": 1.33,
-          "rss_vs_handwritten": 1.61
-        },
-        "native": {
-          "vs_handwritten": 1.33,
-          "rss_vs_handwritten": 1.09,
-          "vs_ocaml_backend": 1.00,
-          "rss_vs_ocaml_backend": 0.68
-        },
-        "wasm": {
-          "vs_handwritten": 11.00,
-          "rss_vs_handwritten": 18.39,
-          "vs_ocaml_backend": 8.25,
-          "rss_vs_ocaml_backend": 11.46
-        }
-      }
-    },
-    "hashmap": {
-      "ocaml_ref": {
-        "run_ok": true,
-        "median_ms": 4,
-        "rss_kb": 3968
-      },
-      "vuna_ocaml": {
-        "run_ok": true,
-        "median_ms": 8,
-        "rss_kb": 9444,
-        "gc": {
-          "minor_words": 912,
-          "major_words": 0,
-          "minor_collections": 1,
-          "major_collections": 0,
-          "top_heap_words": 53248
-        }
-      },
-      "native": {
-        "run_ok": true,
-        "median_ms": 13,
-        "rss_kb": 3840,
-        "default_stack_ok": true
-      },
-      "wasm": {
-        "run_ok": true,
-        "median_ms": 50,
-        "rss_kb": 65420
-      },
-      "ratios": {
-        "vuna_ocaml": {
-          "vs_handwritten": 2.00,
-          "rss_vs_handwritten": 2.38
-        },
-        "native": {
-          "vs_handwritten": 3.25,
-          "rss_vs_handwritten": 0.97,
-          "vs_ocaml_backend": 1.62,
-          "rss_vs_ocaml_backend": 0.41
-        },
-        "wasm": {
-          "vs_handwritten": 12.50,
-          "rss_vs_handwritten": 16.49,
-          "vs_ocaml_backend": 6.25,
-          "rss_vs_ocaml_backend": 6.93
-        }
-      }
-    },
-    "list_recursion": {
-      "ocaml_ref": {
-        "run_ok": true,
-        "median_ms": 15,
-        "rss_kb": 11472
-      },
-      "vuna_ocaml": {
-        "run_ok": true,
-        "median_ms": 12,
-        "rss_kb": 14056,
-        "gc": {
-          "minor_words": 915,
-          "major_words": 0,
-          "minor_collections": 1,
-          "major_collections": 0,
-          "top_heap_words": 53248
-        }
-      },
-      "native": {
-        "run_ok": true,
-        "median_ms": 76,
-        "rss_kb": 40576,
-        "default_stack_ok": false
-      },
-      "wasm": {
-        "run_ok": false,
-        "skip_reason": "run"
-      },
-      "ratios": {
-        "vuna_ocaml": {
-          "vs_handwritten": 0.80,
-          "rss_vs_handwritten": 1.23
-        },
-        "native": {
-          "vs_handwritten": 5.07,
-          "rss_vs_handwritten": 3.54,
-          "vs_ocaml_backend": 6.33,
-          "rss_vs_ocaml_backend": 2.89
-        },
-        "wasm": {
-          "run_ok": false
-        }
-      }
-    },
-    "gc_pressure": {
-      "ocaml_ref": {
-        "run_ok": true,
-        "median_ms": 33,
-        "rss_kb": 11396
-      },
-      "vuna_ocaml": {
-        "run_ok": true,
-        "median_ms": 41,
-        "rss_kb": 35172,
-        "gc": {
-          "minor_words": 915,
-          "major_words": 0,
-          "minor_collections": 1,
-          "major_collections": 0,
-          "top_heap_words": 53248
-        }
-      },
-      "native": {
-        "run_ok": true,
-        "median_ms": 159,
-        "rss_kb": 51072,
-        "default_stack_ok": false
-      },
-      "wasm": {
-        "run_ok": false,
-        "skip_reason": "run"
-      },
-      "ratios": {
-        "vuna_ocaml": {
-          "vs_handwritten": 1.24,
-          "rss_vs_handwritten": 3.09
-        },
-        "native": {
-          "vs_handwritten": 4.82,
-          "rss_vs_handwritten": 4.48,
-          "vs_ocaml_backend": 3.88,
-          "rss_vs_ocaml_backend": 1.45
-        },
-        "wasm": {
-          "run_ok": false
-        }
-      }
+      "ocaml_ref": { "run_ok": true, "median_ms": 5, "rss_kb": 2452 },
+      "vuna_ocaml": { "run_ok": true, "median_ms": 6, "rss_kb": 4464, "artifact": { "bytes": 217848, "lines": 2998 }, "gc": { "minor_words": 912, "major_words": 0, "minor_collections": 1, "major_collections": 0, "top_heap_words": 53248 } },
+      "native": { "run_ok": true, "median_ms": 44, "rss_kb": 3448, "artifact": { "bytes": 273623, "lines": 12930 }, "default_stack_ok": true },
+      "wasm": { "run_ok": true, "median_ms": 82, "rss_kb": 61212, "net_median_ms": 60, "artifact": { "wat_bytes": 376768, "wat_lines": 15394, "wasm_bytes": 47258 }, "memory_bytes": 262144 },
+      "ratios": {"vuna_ocaml": { "vs_handwritten": 1.20, "rss_vs_handwritten": 1.82 }, "native": { "vs_handwritten": 8.80, "rss_vs_handwritten": 1.41, "vs_ocaml_backend": 7.33, "rss_vs_ocaml_backend": 0.77 }, "wasm": { "vs_handwritten": 16.40, "rss_vs_handwritten": 24.96, "net_vs_handwritten": 12.00, "vs_ocaml_backend": 13.67, "rss_vs_ocaml_backend": 13.71 } }
     },
     "array": {
-      "ocaml_ref": {
-        "run_ok": true,
-        "median_ms": 24,
-        "rss_kb": 15784
-      },
-      "vuna_ocaml": {
-        "run_ok": true,
-        "median_ms": 20,
-        "rss_kb": 20076,
-        "gc": {
-          "minor_words": 912,
-          "major_words": 0,
-          "minor_collections": 1,
-          "major_collections": 0,
-          "top_heap_words": 53248
-        }
-      },
-      "native": {
-        "run_ok": true,
-        "median_ms": 41,
-        "rss_kb": 34304,
-        "default_stack_ok": false
-      },
-      "wasm": {
-        "run_ok": false,
-        "skip_reason": "run"
-      },
-      "ratios": {
-        "vuna_ocaml": {
-          "vs_handwritten": 0.83,
-          "rss_vs_handwritten": 1.27
-        },
-        "native": {
-          "vs_handwritten": 1.71,
-          "rss_vs_handwritten": 2.17,
-          "vs_ocaml_backend": 2.05,
-          "rss_vs_ocaml_backend": 1.71
-        },
-        "wasm": {
-          "run_ok": false
-        }
-      }
-    },
-    "records": {
-      "ocaml_ref": {
-        "run_ok": true,
-        "median_ms": 7,
-        "rss_kb": 4712
-      },
-      "vuna_ocaml": {
-        "run_ok": true,
-        "median_ms": 15,
-        "rss_kb": 22932,
-        "gc": {
-          "minor_words": 912,
-          "major_words": 0,
-          "minor_collections": 1,
-          "major_collections": 0,
-          "top_heap_words": 53248
-        }
-      },
-      "native": {
-        "run_ok": true,
-        "median_ms": 50,
-        "rss_kb": 3400,
-        "default_stack_ok": true
-      },
-      "wasm": {
-        "run_ok": true,
-        "median_ms": 77,
-        "rss_kb": 61256
-      },
-      "ratios": {
-        "vuna_ocaml": {
-          "vs_handwritten": 2.14,
-          "rss_vs_handwritten": 4.87
-        },
-        "native": {
-          "vs_handwritten": 7.14,
-          "rss_vs_handwritten": 0.72,
-          "vs_ocaml_backend": 3.33,
-          "rss_vs_ocaml_backend": 0.15
-        },
-        "wasm": {
-          "vs_handwritten": 11.00,
-          "rss_vs_handwritten": 13.00,
-          "vs_ocaml_backend": 5.13,
-          "rss_vs_ocaml_backend": 2.67
-        }
-      }
+      "ocaml_ref": { "run_ok": true, "median_ms": 17, "rss_kb": 15772 },
+      "vuna_ocaml": { "run_ok": true, "median_ms": 16, "rss_kb": 20208, "artifact": { "bytes": 218492, "lines": 3002 }, "gc": { "minor_words": 912, "major_words": 0, "minor_collections": 1, "major_collections": 0, "top_heap_words": 53248 } },
+      "native": { "run_ok": true, "median_ms": 34, "rss_kb": 34304, "artifact": { "bytes": 280807, "lines": 13257 }, "gc": { "collections": 1, "live_bytes": 1048608, "alloc_bytes": 1048608 }, "default_stack_ok": false },
+      "wasm": { "run_ok": false, "skip_reason": "run" },
+      "ratios": {"vuna_ocaml": { "vs_handwritten": 0.94, "rss_vs_handwritten": 1.28 }, "native": { "vs_handwritten": 2.00, "rss_vs_handwritten": 2.17, "vs_ocaml_backend": 2.12, "rss_vs_ocaml_backend": 1.70 }, "wasm": { "run_ok": false } }
     },
     "closures": {
-      "ocaml_ref": {
-        "run_ok": true,
-        "median_ms": 10,
-        "rss_kb": 8796
-      },
-      "vuna_ocaml": {
-        "run_ok": true,
-        "median_ms": 12,
-        "rss_kb": 13296,
-        "gc": {
-          "minor_words": 912,
-          "major_words": 0,
-          "minor_collections": 1,
-          "major_collections": 0,
-          "top_heap_words": 53248
-        }
-      },
-      "native": {
-        "run_ok": true,
-        "median_ms": 93,
-        "rss_kb": 46848,
-        "default_stack_ok": false
-      },
-      "wasm": {
-        "run_ok": false,
-        "skip_reason": "run"
-      },
-      "ratios": {
-        "vuna_ocaml": {
-          "vs_handwritten": 1.20,
-          "rss_vs_handwritten": 1.51
-        },
-        "native": {
-          "vs_handwritten": 9.30,
-          "rss_vs_handwritten": 5.33,
-          "vs_ocaml_backend": 7.75,
-          "rss_vs_ocaml_backend": 3.52
-        },
-        "wasm": {
-          "run_ok": false
-        }
-      }
+      "ocaml_ref": { "run_ok": true, "median_ms": 9, "rss_kb": 8672 },
+      "vuna_ocaml": { "run_ok": true, "median_ms": 12, "rss_kb": 13140, "artifact": { "bytes": 218238, "lines": 3006 }, "gc": { "minor_words": 912, "major_words": 0, "minor_collections": 1, "major_collections": 0, "top_heap_words": 53248 } },
+      "native": { "run_ok": true, "median_ms": 88, "rss_kb": 46720, "artifact": { "bytes": 286877, "lines": 13552 }, "gc": { "collections": 13, "live_bytes": 46656, "alloc_bytes": 1048608 }, "default_stack_ok": false },
+      "wasm": { "run_ok": false, "skip_reason": "run" },
+      "ratios": {"vuna_ocaml": { "vs_handwritten": 1.33, "rss_vs_handwritten": 1.52 }, "native": { "vs_handwritten": 9.78, "rss_vs_handwritten": 5.39, "vs_ocaml_backend": 7.33, "rss_vs_ocaml_backend": 3.56 }, "wasm": { "run_ok": false } }
     },
-    "sorting": {
-      "ocaml_ref": {
-        "run_ok": true,
-        "median_ms": 20,
-        "rss_kb": 9632
-      },
-      "vuna_ocaml": {
-        "run_ok": true,
-        "median_ms": 24,
-        "rss_kb": 35756,
-        "gc": {
-          "minor_words": 912,
-          "major_words": 0,
-          "minor_collections": 1,
-          "major_collections": 0,
-          "top_heap_words": 53248
-        }
-      },
-      "native": {
-        "run_ok": true,
-        "median_ms": 50,
-        "rss_kb": 19584,
-        "default_stack_ok": true
-      },
-      "wasm": {
-        "run_ok": false,
-        "skip_reason": "run"
-      },
-      "ratios": {
-        "vuna_ocaml": {
-          "vs_handwritten": 1.20,
-          "rss_vs_handwritten": 3.71
-        },
-        "native": {
-          "vs_handwritten": 2.50,
-          "rss_vs_handwritten": 2.03,
-          "vs_ocaml_backend": 2.08,
-          "rss_vs_ocaml_backend": 0.55
-        },
-        "wasm": {
-          "run_ok": false
-        }
-      }
-    },
-    "float_math": {
-      "ocaml_ref": {
-        "run_ok": true,
-        "median_ms": 7,
-        "rss_kb": 4708
-      },
-      "vuna_ocaml": {
-        "run_ok": true,
-        "median_ms": 14,
-        "rss_kb": 20012,
-        "gc": {
-          "minor_words": 915,
-          "major_words": 0,
-          "minor_collections": 1,
-          "major_collections": 0,
-          "top_heap_words": 53248
-        }
-      },
-      "native": {
-        "run_ok": true,
-        "median_ms": 80,
-        "rss_kb": 3400,
-        "default_stack_ok": true
-      },
-      "wasm": {
-        "run_ok": true,
-        "median_ms": 58,
-        "rss_kb": 60980
-      },
-      "ratios": {
-        "vuna_ocaml": {
-          "vs_handwritten": 2.00,
-          "rss_vs_handwritten": 4.25
-        },
-        "native": {
-          "vs_handwritten": 11.43,
-          "rss_vs_handwritten": 0.72,
-          "vs_ocaml_backend": 5.71,
-          "rss_vs_ocaml_backend": 0.17
-        },
-        "wasm": {
-          "vs_handwritten": 8.29,
-          "rss_vs_handwritten": 12.95,
-          "vs_ocaml_backend": 4.14,
-          "rss_vs_ocaml_backend": 3.05
-        }
-      }
-    },
-    "text_scan": {
-      "ocaml_ref": {
-        "run_ok": true,
-        "median_ms": 4,
-        "rss_kb": 3516
-      },
-      "vuna_ocaml": {
-        "run_ok": true,
-        "median_ms": 6,
-        "rss_kb": 6568,
-        "gc": {
-          "minor_words": 915,
-          "major_words": 0,
-          "minor_collections": 1,
-          "major_collections": 0,
-          "top_heap_words": 53248
-        }
-      },
-      "native": {
-        "run_ok": true,
-        "median_ms": 40,
-        "rss_kb": 30848,
-        "default_stack_ok": false
-      },
-      "wasm": {
-        "run_ok": false,
-        "skip_reason": "run"
-      },
-      "ratios": {
-        "vuna_ocaml": {
-          "vs_handwritten": 1.50,
-          "rss_vs_handwritten": 1.87
-        },
-        "native": {
-          "vs_handwritten": 10.00,
-          "rss_vs_handwritten": 8.77,
-          "vs_ocaml_backend": 6.67,
-          "rss_vs_ocaml_backend": 4.70
-        },
-        "wasm": {
-          "run_ok": false
-        }
-      }
-    },
-    "nat_bits": {
-      "ocaml_ref": {
-        "run_ok": true,
-        "median_ms": 3,
-        "rss_kb": 2536
-      },
-      "vuna_ocaml": {
-        "run_ok": true,
-        "median_ms": 5,
-        "rss_kb": 4400,
-        "gc": {
-          "minor_words": 912,
-          "major_words": 0,
-          "minor_collections": 1,
-          "major_collections": 0,
-          "top_heap_words": 53248
-        }
-      },
-      "native": {
-        "run_ok": true,
-        "median_ms": 17,
-        "rss_kb": 3404,
-        "default_stack_ok": true
-      },
-      "wasm": {
-        "run_ok": true,
-        "median_ms": 43,
-        "rss_kb": 61096
-      },
-      "ratios": {
-        "vuna_ocaml": {
-          "vs_handwritten": 1.67,
-          "rss_vs_handwritten": 1.74
-        },
-        "native": {
-          "vs_handwritten": 5.67,
-          "rss_vs_handwritten": 1.34,
-          "vs_ocaml_backend": 3.40,
-          "rss_vs_ocaml_backend": 0.77
-        },
-        "wasm": {
-          "vs_handwritten": 14.33,
-          "rss_vs_handwritten": 24.09,
-          "vs_ocaml_backend": 8.60,
-          "rss_vs_ocaml_backend": 13.89
-        }
-      }
-    },
-    "tco_mutual": {
-      "ocaml_ref": {
-        "run_ok": true,
-        "median_ms": 5,
-        "rss_kb": 2532
-      },
-      "vuna_ocaml": {
-        "run_ok": true,
-        "median_ms": 6,
-        "rss_kb": 4388,
-        "gc": {
-          "minor_words": 915,
-          "major_words": 0,
-          "minor_collections": 1,
-          "major_collections": 0,
-          "top_heap_words": 53248
-        }
-      },
-      "native": {
-        "run_ok": true,
-        "median_ms": 25,
-        "rss_kb": 3400,
-        "default_stack_ok": true
-      },
-      "wasm": {
-        "run_ok": true,
-        "median_ms": 39,
-        "rss_kb": 60896
-      },
-      "ratios": {
-        "vuna_ocaml": {
-          "vs_handwritten": 1.20,
-          "rss_vs_handwritten": 1.73
-        },
-        "native": {
-          "vs_handwritten": 5.00,
-          "rss_vs_handwritten": 1.34,
-          "vs_ocaml_backend": 4.17,
-          "rss_vs_ocaml_backend": 0.77
-        },
-        "wasm": {
-          "vs_handwritten": 7.80,
-          "rss_vs_handwritten": 24.05,
-          "vs_ocaml_backend": 6.50,
-          "rss_vs_ocaml_backend": 13.88
-        }
-      }
-    },
-    "tco_wide": {
-      "ocaml_ref": {
-        "run_ok": true,
-        "median_ms": 4,
-        "rss_kb": 2536
-      },
-      "vuna_ocaml": {
-        "run_ok": true,
-        "median_ms": 5,
-        "rss_kb": 4388,
-        "gc": {
-          "minor_words": 912,
-          "major_words": 0,
-          "minor_collections": 1,
-          "major_collections": 0,
-          "top_heap_words": 53248
-        }
-      },
-      "native": {
-        "run_ok": true,
-        "median_ms": 27,
-        "rss_kb": 3400,
-        "default_stack_ok": true
-      },
-      "wasm": {
-        "run_ok": true,
-        "median_ms": 56,
-        "rss_kb": 61100
-      },
-      "ratios": {
-        "vuna_ocaml": {
-          "vs_handwritten": 1.25,
-          "rss_vs_handwritten": 1.73
-        },
-        "native": {
-          "vs_handwritten": 6.75,
-          "rss_vs_handwritten": 1.34,
-          "vs_ocaml_backend": 5.40,
-          "rss_vs_ocaml_backend": 0.77
-        },
-        "wasm": {
-          "vs_handwritten": 14.00,
-          "rss_vs_handwritten": 24.09,
-          "vs_ocaml_backend": 11.20,
-          "rss_vs_ocaml_backend": 13.92
-        }
-      }
-    },
-    "gc_low_live": {
-      "ocaml_ref": {
-        "run_ok": true,
-        "median_ms": 380,
-        "rss_kb": 250164
-      },
-      "vuna_ocaml": {
-        "run_ok": true,
-        "median_ms": 330,
-        "rss_kb": 340260,
-        "gc": {
-          "minor_words": 33555222,
-          "major_words": 13016142,
-          "minor_collections": 3,
-          "major_collections": 0,
-          "top_heap_words": 26152960
-        }
-      },
-      "native": {
-        "run_ok": true,
-        "median_ms": 307,
-        "rss_kb": 5504,
-        "default_stack_ok": true
-      },
-      "wasm": {
-        "run_ok": false,
-        "skip_reason": "run"
-      },
-      "ratios": {
-        "vuna_ocaml": {
-          "vs_handwritten": 0.87,
-          "rss_vs_handwritten": 1.36
-        },
-        "native": {
-          "vs_handwritten": 0.81,
-          "rss_vs_handwritten": 0.02,
-          "vs_ocaml_backend": 0.93,
-          "rss_vs_ocaml_backend": 0.02
-        },
-        "wasm": {
-          "run_ok": false
-        }
-      }
-    },
-    "gc_array_churn": {
-      "ocaml_ref": {
-        "run_ok": true,
-        "median_ms": 356,
-        "rss_kb": 84108
-      },
-      "vuna_ocaml": {
-        "run_ok": true,
-        "median_ms": 443,
-        "rss_kb": 215460,
-        "gc": {
-          "minor_words": 36908030,
-          "major_words": 15116352,
-          "minor_collections": 5,
-          "major_collections": 2,
-          "top_heap_words": 9596126
-        }
-      },
-      "native": {
-        "run_ok": true,
-        "median_ms": 2899,
-        "rss_kb": 227968,
-        "default_stack_ok": true
-      },
-      "wasm": {
-        "run_ok": false,
-        "skip_reason": "run"
-      },
-      "ratios": {
-        "vuna_ocaml": {
-          "vs_handwritten": 1.24,
-          "rss_vs_handwritten": 2.56
-        },
-        "native": {
-          "vs_handwritten": 8.14,
-          "rss_vs_handwritten": 2.71,
-          "vs_ocaml_backend": 6.54,
-          "rss_vs_ocaml_backend": 1.06
-        },
-        "wasm": {
-          "run_ok": false
-        }
-      }
-    },
-    "eff_tick": {
-      "ocaml_ref": {
-        "run_ok": true,
-        "median_ms": 4,
-        "rss_kb": 5228
-      },
-      "vuna_ocaml": {
-        "run_ok": true,
-        "median_ms": 10,
-        "rss_kb": 16672,
-        "gc": {
-          "minor_words": 912,
-          "major_words": 0,
-          "minor_collections": 1,
-          "major_collections": 0,
-          "top_heap_words": 53248
-        }
-      },
-      "native": {
-        "run_ok": true,
-        "median_ms": 212,
-        "rss_kb": 57344,
-        "default_stack_ok": true
-      },
-      "wasm": {
-        "run_ok": true,
-        "median_ms": 189,
-        "rss_kb": 159176
-      },
-      "ratios": {
-        "vuna_ocaml": {
-          "vs_handwritten": 2.50,
-          "rss_vs_handwritten": 3.19
-        },
-        "native": {
-          "vs_handwritten": 53.00,
-          "rss_vs_handwritten": 10.97,
-          "vs_ocaml_backend": 21.20,
-          "rss_vs_ocaml_backend": 3.44
-        },
-        "wasm": {
-          "vs_handwritten": 47.25,
-          "rss_vs_handwritten": 30.45,
-          "vs_ocaml_backend": 18.90,
-          "rss_vs_ocaml_backend": 9.55
-        }
-      }
-    },
-    "eff_deep": {
-      "ocaml_ref": {
-        "run_ok": true,
-        "median_ms": 3,
-        "rss_kb": 3312
-      },
-      "vuna_ocaml": {
-        "run_ok": true,
-        "median_ms": 3,
-        "rss_kb": 4772,
-        "gc": {
-          "minor_words": 912,
-          "major_words": 0,
-          "minor_collections": 1,
-          "major_collections": 0,
-          "top_heap_words": 53248
-        }
-      },
-      "native": {
-        "run_ok": true,
-        "median_ms": 5,
-        "rss_kb": 3400,
-        "default_stack_ok": true
-      },
-      "wasm": {
-        "run_ok": true,
-        "median_ms": 37,
-        "rss_kb": 62372
-      },
-      "ratios": {
-        "vuna_ocaml": {
-          "vs_handwritten": 1.00,
-          "rss_vs_handwritten": 1.44
-        },
-        "native": {
-          "vs_handwritten": 1.67,
-          "rss_vs_handwritten": 1.03,
-          "vs_ocaml_backend": 1.67,
-          "rss_vs_ocaml_backend": 0.71
-        },
-        "wasm": {
-          "vs_handwritten": 12.33,
-          "rss_vs_handwritten": 18.83,
-          "vs_ocaml_backend": 12.33,
-          "rss_vs_ocaml_backend": 13.07
-        }
-      }
+    "eff_abort": {
+      "ocaml_ref": { "run_ok": true, "median_ms": 3, "rss_kb": 3400 },
+      "vuna_ocaml": { "run_ok": true, "median_ms": 6, "rss_kb": 10044, "artifact": { "bytes": 224153, "lines": 3044 }, "gc": { "minor_words": 915, "major_words": 0, "minor_collections": 1, "major_collections": 0, "top_heap_words": 53248 } },
+      "native": { "run_ok": true, "median_ms": 12, "rss_kb": 3448, "artifact": { "bytes": 386494, "lines": 17857 }, "gc": { "collections": 17, "live_bytes": 1154224, "alloc_bytes": 1492496 }, "default_stack_ok": true },
+      "wasm": { "run_ok": true, "median_ms": 39, "rss_kb": 63072, "net_median_ms": 17, "artifact": { "wat_bytes": 493105, "wat_lines": 20141, "wasm_bytes": 63552 }, "memory_bytes": 262144 },
+      "ratios": {"vuna_ocaml": { "vs_handwritten": 2.00, "rss_vs_handwritten": 2.95 }, "native": { "vs_handwritten": 4.00, "rss_vs_handwritten": 1.01, "vs_ocaml_backend": 2.00, "rss_vs_ocaml_backend": 0.34 }, "wasm": { "vs_handwritten": 13.00, "rss_vs_handwritten": 18.55, "net_vs_handwritten": 5.67, "vs_ocaml_backend": 6.50, "rss_vs_ocaml_backend": 6.28 } }
     },
     "eff_bracket": {
-      "ocaml_ref": {
-        "run_ok": true,
-        "median_ms": 3,
-        "rss_kb": 2532
-      },
-      "vuna_ocaml": {
-        "run_ok": true,
-        "median_ms": 14,
-        "rss_kb": 20252,
-        "gc": {
-          "minor_words": 915,
-          "major_words": 0,
-          "minor_collections": 1,
-          "major_collections": 0,
-          "top_heap_words": 53248
-        }
-      },
-      "native": {
-        "run_ok": true,
-        "median_ms": 320,
-        "rss_kb": 50688,
-        "default_stack_ok": true
-      },
-      "wasm": {
-        "run_ok": true,
-        "median_ms": 194,
-        "rss_kb": 155392
-      },
-      "ratios": {
-        "vuna_ocaml": {
-          "vs_handwritten": 4.67,
-          "rss_vs_handwritten": 8.00
-        },
-        "native": {
-          "vs_handwritten": 106.67,
-          "rss_vs_handwritten": 20.02,
-          "vs_ocaml_backend": 22.86,
-          "rss_vs_ocaml_backend": 2.50
-        },
-        "wasm": {
-          "vs_handwritten": 64.67,
-          "rss_vs_handwritten": 61.37,
-          "vs_ocaml_backend": 13.86,
-          "rss_vs_ocaml_backend": 7.67
-        }
-      }
+      "ocaml_ref": { "run_ok": true, "median_ms": 3, "rss_kb": 2456 },
+      "vuna_ocaml": { "run_ok": true, "median_ms": 11, "rss_kb": 20384, "artifact": { "bytes": 219245, "lines": 3003 }, "gc": { "minor_words": 915, "major_words": 0, "minor_collections": 1, "major_collections": 0, "top_heap_words": 53248 } },
+      "native": { "run_ok": true, "median_ms": 272, "rss_kb": 50816, "artifact": { "bytes": 363933, "lines": 16914 }, "gc": { "collections": 11, "live_bytes": 26276224, "alloc_bytes": 34251584 }, "default_stack_ok": true },
+      "wasm": { "run_ok": true, "median_ms": 172, "rss_kb": 155436, "net_median_ms": 150, "artifact": { "wat_bytes": 447620, "wat_lines": 18681, "wasm_bytes": 57709 }, "memory_bytes": 262144 },
+      "ratios": {"vuna_ocaml": { "vs_handwritten": 3.67, "rss_vs_handwritten": 8.30 }, "native": { "vs_handwritten": 90.67, "rss_vs_handwritten": 20.69, "vs_ocaml_backend": 24.73, "rss_vs_ocaml_backend": 2.49 }, "wasm": { "vs_handwritten": 57.33, "rss_vs_handwritten": 63.29, "net_vs_handwritten": 50.00, "vs_ocaml_backend": 15.64, "rss_vs_ocaml_backend": 7.63 } }
+    },
+    "eff_deep": {
+      "ocaml_ref": { "run_ok": true, "median_ms": 3, "rss_kb": 3232 },
+      "vuna_ocaml": { "run_ok": true, "median_ms": 4, "rss_kb": 4904, "artifact": { "bytes": 218628, "lines": 3003 }, "gc": { "minor_words": 912, "major_words": 0, "minor_collections": 1, "major_collections": 0, "top_heap_words": 53248 } },
+      "native": { "run_ok": true, "median_ms": 5, "rss_kb": 3448, "artifact": { "bytes": 337935, "lines": 15801 }, "gc": { "collections": 1, "live_bytes": 560736, "alloc_bytes": 1048640 }, "default_stack_ok": true },
+      "wasm": { "run_ok": true, "median_ms": 35, "rss_kb": 62136, "net_median_ms": 13, "artifact": { "wat_bytes": 428813, "wat_lines": 17822, "wasm_bytes": 54870 }, "memory_bytes": 262144 },
+      "ratios": {"vuna_ocaml": { "vs_handwritten": 1.33, "rss_vs_handwritten": 1.52 }, "native": { "vs_handwritten": 1.67, "rss_vs_handwritten": 1.07, "vs_ocaml_backend": 1.25, "rss_vs_ocaml_backend": 0.70 }, "wasm": { "vs_handwritten": 11.67, "rss_vs_handwritten": 19.23, "net_vs_handwritten": 4.33, "vs_ocaml_backend": 8.75, "rss_vs_ocaml_backend": 12.67 } }
+    },
+    "eff_deepseq": {
+      "ocaml_ref": { "run_ok": true, "median_ms": 3, "rss_kb": 3612 },
+      "vuna_ocaml": { "run_ok": true, "median_ms": 4, "rss_kb": 6176, "artifact": { "bytes": 218867, "lines": 3003 }, "gc": { "minor_words": 915, "major_words": 0, "minor_collections": 1, "major_collections": 0, "top_heap_words": 53248 } },
+      "native": { "run_ok": true, "median_ms": 12, "rss_kb": 7424, "artifact": { "bytes": 339380, "lines": 15860 }, "gc": { "collections": 4, "live_bytes": 2692352, "alloc_bytes": 2997632 }, "default_stack_ok": true },
+      "wasm": { "run_ok": true, "median_ms": 51, "rss_kb": 73880, "net_median_ms": 29, "artifact": { "wat_bytes": 430275, "wat_lines": 17890, "wasm_bytes": 55063 }, "memory_bytes": 262144 },
+      "ratios": {"vuna_ocaml": { "vs_handwritten": 1.33, "rss_vs_handwritten": 1.71 }, "native": { "vs_handwritten": 4.00, "rss_vs_handwritten": 2.06, "vs_ocaml_backend": 3.00, "rss_vs_ocaml_backend": 1.20 }, "wasm": { "vs_handwritten": 17.00, "rss_vs_handwritten": 20.45, "net_vs_handwritten": 9.67, "vs_ocaml_backend": 12.75, "rss_vs_ocaml_backend": 11.96 } }
+    },
+    "eff_host": {
+      "ocaml_ref": { "run_ok": true, "median_ms": 3, "rss_kb": 4252 },
+      "vuna_ocaml": { "run_ok": true, "median_ms": 6, "rss_kb": 10804, "artifact": { "bytes": 223071, "lines": 3039 }, "gc": { "minor_words": 912, "major_words": 0, "minor_collections": 1, "major_collections": 0, "top_heap_words": 53248 } },
+      "native": { "run_ok": true, "median_ms": 85, "rss_kb": 34432, "artifact": { "bytes": 420205, "lines": 19428 }, "gc": { "collections": 8, "live_bytes": 12293456, "alloc_bytes": 15093600 }, "default_stack_ok": true },
+      "wasm": { "run_ok": true, "median_ms": 133, "rss_kb": 115284, "net_median_ms": 111, "artifact": { "wat_bytes": 552036, "wat_lines": 23167, "wasm_bytes": 71468 }, "memory_bytes": 262144 },
+      "ratios": {"vuna_ocaml": { "vs_handwritten": 2.00, "rss_vs_handwritten": 2.54 }, "native": { "vs_handwritten": 28.33, "rss_vs_handwritten": 8.10, "vs_ocaml_backend": 14.17, "rss_vs_ocaml_backend": 3.19 }, "wasm": { "vs_handwritten": 44.33, "rss_vs_handwritten": 27.11, "net_vs_handwritten": 37.00, "vs_ocaml_backend": 22.17, "rss_vs_ocaml_backend": 10.67 } }
+    },
+    "eff_install": {
+      "ocaml_ref": { "run_ok": true, "median_ms": 4, "rss_kb": 5276 },
+      "vuna_ocaml": { "run_ok": true, "median_ms": 9, "rss_kb": 14276, "artifact": { "bytes": 219057, "lines": 3011 }, "gc": { "minor_words": 915, "major_words": 0, "minor_collections": 1, "major_collections": 0, "top_heap_words": 53248 } },
+      "native": { "run_ok": true, "median_ms": 92, "rss_kb": 26496, "artifact": { "bytes": 339472, "lines": 15875 }, "gc": { "collections": 11, "live_bytes": 11995440, "alloc_bytes": 16779712 }, "default_stack_ok": true },
+      "wasm": { "run_ok": true, "median_ms": 77, "rss_kb": 81700, "net_median_ms": 55, "artifact": { "wat_bytes": 427299, "wat_lines": 17736, "wasm_bytes": 54680 }, "memory_bytes": 262144 },
+      "ratios": {"vuna_ocaml": { "vs_handwritten": 2.25, "rss_vs_handwritten": 2.71 }, "native": { "vs_handwritten": 23.00, "rss_vs_handwritten": 5.02, "vs_ocaml_backend": 10.22, "rss_vs_ocaml_backend": 1.86 }, "wasm": { "vs_handwritten": 19.25, "rss_vs_handwritten": 15.49, "net_vs_handwritten": 13.75, "vs_ocaml_backend": 8.56, "rss_vs_ocaml_backend": 5.72 } }
+    },
+    "eff_nested": {
+      "ocaml_ref": { "run_ok": true, "median_ms": 4, "rss_kb": 4892 },
+      "vuna_ocaml": { "run_ok": true, "median_ms": 5, "rss_kb": 7840, "artifact": { "bytes": 219118, "lines": 3006 }, "gc": { "minor_words": 915, "major_words": 0, "minor_collections": 1, "major_collections": 0, "top_heap_words": 53248 } },
+      "native": { "run_ok": true, "median_ms": 11, "rss_kb": 6144, "artifact": { "bytes": 352582, "lines": 16464 }, "gc": { "collections": 4, "live_bytes": 1464592, "alloc_bytes": 3676000 }, "default_stack_ok": true },
+      "wasm": { "run_ok": true, "median_ms": 46, "rss_kb": 71044, "net_median_ms": 24, "artifact": { "wat_bytes": 447343, "wat_lines": 18730, "wasm_bytes": 57529 }, "memory_bytes": 262144 },
+      "ratios": {"vuna_ocaml": { "vs_handwritten": 1.25, "rss_vs_handwritten": 1.60 }, "native": { "vs_handwritten": 2.75, "rss_vs_handwritten": 1.26, "vs_ocaml_backend": 2.20, "rss_vs_ocaml_backend": 0.78 }, "wasm": { "vs_handwritten": 11.50, "rss_vs_handwritten": 14.52, "net_vs_handwritten": 6.00, "vs_ocaml_backend": 9.20, "rss_vs_ocaml_backend": 9.06 } }
+    },
+    "eff_tick": {
+      "ocaml_ref": { "run_ok": true, "median_ms": 4, "rss_kb": 5148 },
+      "vuna_ocaml": { "run_ok": true, "median_ms": 10, "rss_kb": 16804, "artifact": { "bytes": 218658, "lines": 3003 }, "gc": { "minor_words": 912, "major_words": 0, "minor_collections": 1, "major_collections": 0, "top_heap_words": 53248 } },
+      "native": { "run_ok": true, "median_ms": 199, "rss_kb": 57216, "artifact": { "bytes": 338455, "lines": 15821 }, "gc": { "collections": 8, "live_bytes": 24240192, "alloc_bytes": 27463584 }, "default_stack_ok": true },
+      "wasm": { "run_ok": true, "median_ms": 182, "rss_kb": 158672, "net_median_ms": 160, "artifact": { "wat_bytes": 429150, "wat_lines": 17838, "wasm_bytes": 54916 }, "memory_bytes": 262144 },
+      "ratios": {"vuna_ocaml": { "vs_handwritten": 2.50, "rss_vs_handwritten": 3.26 }, "native": { "vs_handwritten": 49.75, "rss_vs_handwritten": 11.11, "vs_ocaml_backend": 19.90, "rss_vs_ocaml_backend": 3.40 }, "wasm": { "vs_handwritten": 45.50, "rss_vs_handwritten": 30.82, "net_vs_handwritten": 40.00, "vs_ocaml_backend": 18.20, "rss_vs_ocaml_backend": 9.44 } }
+    },
+    "float_math": {
+      "ocaml_ref": { "run_ok": true, "median_ms": 7, "rss_kb": 4632 },
+      "vuna_ocaml": { "run_ok": true, "median_ms": 14, "rss_kb": 20144, "artifact": { "bytes": 218022, "lines": 2998 }, "gc": { "minor_words": 915, "major_words": 0, "minor_collections": 1, "major_collections": 0, "top_heap_words": 53248 } },
+      "native": { "run_ok": true, "median_ms": 79, "rss_kb": 3320, "artifact": { "bytes": 276252, "lines": 13038 }, "gc": { "collections": 183, "live_bytes": 16, "alloc_bytes": 1048592 }, "default_stack_ok": true },
+      "wasm": { "run_ok": true, "median_ms": 51, "rss_kb": 61240, "net_median_ms": 29, "artifact": { "wat_bytes": 378206, "wat_lines": 15445, "wasm_bytes": 47566 }, "memory_bytes": 262144 },
+      "ratios": {"vuna_ocaml": { "vs_handwritten": 2.00, "rss_vs_handwritten": 4.35 }, "native": { "vs_handwritten": 11.29, "rss_vs_handwritten": 0.72, "vs_ocaml_backend": 5.64, "rss_vs_ocaml_backend": 0.16 }, "wasm": { "vs_handwritten": 7.29, "rss_vs_handwritten": 13.22, "net_vs_handwritten": 4.14, "vs_ocaml_backend": 3.64, "rss_vs_ocaml_backend": 3.04 } }
+    },
+    "gc_array_churn": {
+      "ocaml_ref": { "run_ok": true, "median_ms": 121, "rss_kb": 84080 },
+      "vuna_ocaml": { "run_ok": true, "median_ms": 200, "rss_kb": 215464, "artifact": { "bytes": 218260, "lines": 2998 }, "gc": { "minor_words": 36908030, "major_words": 15116352, "minor_collections": 5, "major_collections": 2, "top_heap_words": 9596126 } },
+      "native": { "run_ok": true, "median_ms": 1451, "rss_kb": 227968, "artifact": { "bytes": 280725, "lines": 13241 }, "gc": { "collections": 12, "live_bytes": 125820192, "alloc_bytes": 150193152 }, "default_stack_ok": true },
+      "wasm": { "run_ok": false, "skip_reason": "run" },
+      "ratios": {"vuna_ocaml": { "vs_handwritten": 1.65, "rss_vs_handwritten": 2.56 }, "native": { "vs_handwritten": 11.99, "rss_vs_handwritten": 2.71, "vs_ocaml_backend": 7.25, "rss_vs_ocaml_backend": 1.06 }, "wasm": { "run_ok": false } }
+    },
+    "gc_low_live": {
+      "ocaml_ref": { "run_ok": true, "median_ms": 363, "rss_kb": 250044 },
+      "vuna_ocaml": { "run_ok": true, "median_ms": 312, "rss_kb": 340392, "artifact": { "bytes": 218336, "lines": 3006 }, "gc": { "minor_words": 33555222, "major_words": 13016142, "minor_collections": 3, "major_collections": 0, "top_heap_words": 26152960 } },
+      "native": { "run_ok": true, "median_ms": 300, "rss_kb": 5376, "artifact": { "bytes": 283942, "lines": 13405 }, "gc": { "collections": 280, "live_bytes": 32, "alloc_bytes": 2763104 }, "default_stack_ok": true },
+      "wasm": { "run_ok": false, "skip_reason": "run" },
+      "ratios": {"vuna_ocaml": { "vs_handwritten": 0.86, "rss_vs_handwritten": 1.36 }, "native": { "vs_handwritten": 0.83, "rss_vs_handwritten": 0.02, "vs_ocaml_backend": 0.96, "rss_vs_ocaml_backend": 0.02 }, "wasm": { "run_ok": false } }
+    },
+    "gc_pressure": {
+      "ocaml_ref": { "run_ok": true, "median_ms": 27, "rss_kb": 11160 },
+      "vuna_ocaml": { "run_ok": true, "median_ms": 32, "rss_kb": 35176, "artifact": { "bytes": 217910, "lines": 2998 }, "gc": { "minor_words": 915, "major_words": 0, "minor_collections": 1, "major_collections": 0, "top_heap_words": 53248 } },
+      "native": { "run_ok": true, "median_ms": 86, "rss_kb": 50944, "artifact": { "bytes": 280485, "lines": 13231 }, "gc": { "collections": 9, "live_bytes": 5964000, "alloc_bytes": 17176384 }, "default_stack_ok": false },
+      "wasm": { "run_ok": false, "skip_reason": "run" },
+      "ratios": {"vuna_ocaml": { "vs_handwritten": 1.19, "rss_vs_handwritten": 3.15 }, "native": { "vs_handwritten": 3.19, "rss_vs_handwritten": 4.56, "vs_ocaml_backend": 2.69, "rss_vs_ocaml_backend": 1.45 }, "wasm": { "run_ok": false } }
+    },
+    "hashmap": {
+      "ocaml_ref": { "run_ok": true, "median_ms": 4, "rss_kb": 3940 },
+      "vuna_ocaml": { "run_ok": true, "median_ms": 7, "rss_kb": 9508, "artifact": { "bytes": 219529, "lines": 3018 }, "gc": { "minor_words": 912, "major_words": 0, "minor_collections": 1, "major_collections": 0, "top_heap_words": 53248 } },
+      "native": { "run_ok": true, "median_ms": 13, "rss_kb": 3840, "artifact": { "bytes": 306492, "lines": 14400 }, "gc": { "collections": 12, "live_bytes": 807104, "alloc_bytes": 1048608 }, "default_stack_ok": true },
+      "wasm": { "run_ok": true, "median_ms": 46, "rss_kb": 65872, "net_median_ms": 24, "artifact": { "wat_bytes": 399205, "wat_lines": 16246, "wasm_bytes": 50379 }, "memory_bytes": 262144 },
+      "ratios": {"vuna_ocaml": { "vs_handwritten": 1.75, "rss_vs_handwritten": 2.41 }, "native": { "vs_handwritten": 3.25, "rss_vs_handwritten": 0.97, "vs_ocaml_backend": 1.86, "rss_vs_ocaml_backend": 0.40 }, "wasm": { "vs_handwritten": 11.50, "rss_vs_handwritten": 16.72, "net_vs_handwritten": 6.00, "vs_ocaml_backend": 6.57, "rss_vs_ocaml_backend": 6.93 } }
+    },
+    "list_recursion": {
+      "ocaml_ref": { "run_ok": true, "median_ms": 12, "rss_kb": 11364 },
+      "vuna_ocaml": { "run_ok": true, "median_ms": 10, "rss_kb": 14172, "artifact": { "bytes": 218389, "lines": 3002 }, "gc": { "minor_words": 915, "major_words": 0, "minor_collections": 1, "major_collections": 0, "top_heap_words": 53248 } },
+      "native": { "run_ok": true, "median_ms": 69, "rss_kb": 40320, "artifact": { "bytes": 291900, "lines": 13769 }, "gc": { "collections": 4, "live_bytes": 4262624, "alloc_bytes": 12787968 }, "default_stack_ok": false },
+      "wasm": { "run_ok": false, "skip_reason": "run" },
+      "ratios": {"vuna_ocaml": { "vs_handwritten": 0.83, "rss_vs_handwritten": 1.25 }, "native": { "vs_handwritten": 5.75, "rss_vs_handwritten": 3.55, "vs_ocaml_backend": 6.90, "rss_vs_ocaml_backend": 2.85 }, "wasm": { "run_ok": false } }
+    },
+    "nat_bits": {
+      "ocaml_ref": { "run_ok": true, "median_ms": 4, "rss_kb": 2460 },
+      "vuna_ocaml": { "run_ok": true, "median_ms": 5, "rss_kb": 4532, "artifact": { "bytes": 220183, "lines": 3028 }, "gc": { "minor_words": 912, "major_words": 0, "minor_collections": 1, "major_collections": 0, "top_heap_words": 53248 } },
+      "native": { "run_ok": true, "median_ms": 17, "rss_kb": 3448, "artifact": { "bytes": 282271, "lines": 13314 }, "default_stack_ok": true },
+      "wasm": { "run_ok": true, "median_ms": 40, "rss_kb": 61292, "net_median_ms": 18, "artifact": { "wat_bytes": 383147, "wat_lines": 15636, "wasm_bytes": 48323 }, "memory_bytes": 262144 },
+      "ratios": {"vuna_ocaml": { "vs_handwritten": 1.25, "rss_vs_handwritten": 1.84 }, "native": { "vs_handwritten": 4.25, "rss_vs_handwritten": 1.40, "vs_ocaml_backend": 3.40, "rss_vs_ocaml_backend": 0.76 }, "wasm": { "vs_handwritten": 10.00, "rss_vs_handwritten": 24.92, "net_vs_handwritten": 4.50, "vs_ocaml_backend": 8.00, "rss_vs_ocaml_backend": 13.52 } }
+    },
+    "records": {
+      "ocaml_ref": { "run_ok": true, "median_ms": 7, "rss_kb": 4684 },
+      "vuna_ocaml": { "run_ok": true, "median_ms": 15, "rss_kb": 23344, "artifact": { "bytes": 218729, "lines": 3017 }, "gc": { "minor_words": 912, "major_words": 0, "minor_collections": 1, "major_collections": 0, "top_heap_words": 53248 } },
+      "native": { "run_ok": true, "median_ms": 48, "rss_kb": 3448, "artifact": { "bytes": 279708, "lines": 13214 }, "gc": { "collections": 36, "live_bytes": 64, "alloc_bytes": 1048608 }, "default_stack_ok": true },
+      "wasm": { "run_ok": true, "median_ms": 71, "rss_kb": 61440, "net_median_ms": 49, "artifact": { "wat_bytes": 381739, "wat_lines": 15619, "wasm_bytes": 47904 }, "memory_bytes": 262144 },
+      "ratios": {"vuna_ocaml": { "vs_handwritten": 2.14, "rss_vs_handwritten": 4.98 }, "native": { "vs_handwritten": 6.86, "rss_vs_handwritten": 0.74, "vs_ocaml_backend": 3.20, "rss_vs_ocaml_backend": 0.15 }, "wasm": { "vs_handwritten": 10.14, "rss_vs_handwritten": 13.12, "net_vs_handwritten": 7.00, "vs_ocaml_backend": 4.73, "rss_vs_ocaml_backend": 2.63 } }
+    },
+    "sorting": {
+      "ocaml_ref": { "run_ok": true, "median_ms": 19, "rss_kb": 9720 },
+      "vuna_ocaml": { "run_ok": true, "median_ms": 22, "rss_kb": 35704, "artifact": { "bytes": 221182, "lines": 3045 }, "gc": { "minor_words": 912, "major_words": 0, "minor_collections": 1, "major_collections": 0, "top_heap_words": 53248 } },
+      "native": { "run_ok": true, "median_ms": 45, "rss_kb": 19456, "artifact": { "bytes": 286902, "lines": 13562 }, "gc": { "collections": 7, "live_bytes": 4056608, "alloc_bytes": 8515040 }, "default_stack_ok": true },
+      "wasm": { "run_ok": false, "skip_reason": "run" },
+      "ratios": {"vuna_ocaml": { "vs_handwritten": 1.16, "rss_vs_handwritten": 3.67 }, "native": { "vs_handwritten": 2.37, "rss_vs_handwritten": 2.00, "vs_ocaml_backend": 2.05, "rss_vs_ocaml_backend": 0.54 }, "wasm": { "run_ok": false } }
+    },
+    "startup": {
+      "ocaml_ref": { "run_ok": true, "median_ms": 2, "rss_kb": 2324 },
+      "vuna_ocaml": { "run_ok": true, "median_ms": 2, "rss_kb": 4520, "artifact": { "bytes": 217606, "lines": 2994 }, "gc": { "minor_words": 912, "major_words": 0, "minor_collections": 1, "major_collections": 0, "top_heap_words": 53248 } },
+      "native": { "run_ok": true, "median_ms": 2, "rss_kb": 3448, "artifact": { "bytes": 271753, "lines": 12841 }, "default_stack_ok": true },
+      "wasm": { "run_ok": true, "median_ms": 26, "rss_kb": 54680, "net_median_ms": 4, "artifact": { "wat_bytes": 375830, "wat_lines": 15348, "wasm_bytes": 47125 }, "memory_bytes": 262144 },
+      "ratios": {"vuna_ocaml": { "vs_handwritten": 1.00, "rss_vs_handwritten": 1.94 }, "native": { "vs_handwritten": 1.00, "rss_vs_handwritten": 1.48, "vs_ocaml_backend": 1.00, "rss_vs_ocaml_backend": 0.76 }, "wasm": { "vs_handwritten": 13.00, "rss_vs_handwritten": 23.53, "net_vs_handwritten": 2.00, "vs_ocaml_backend": 13.00, "rss_vs_ocaml_backend": 12.10 } }
+    },
+    "string_ops": {
+      "ocaml_ref": { "run_ok": true, "median_ms": 3, "rss_kb": 3232 },
+      "vuna_ocaml": { "run_ok": true, "median_ms": 4, "rss_kb": 5160, "artifact": { "bytes": 217974, "lines": 2994 }, "gc": { "minor_words": 915, "major_words": 0, "minor_collections": 1, "major_collections": 0, "top_heap_words": 53248 } },
+      "native": { "run_ok": true, "median_ms": 4, "rss_kb": 3448, "artifact": { "bytes": 282827, "lines": 13331 }, "default_stack_ok": true },
+      "wasm": { "run_ok": true, "median_ms": 32, "rss_kb": 57516, "net_median_ms": 10, "artifact": { "wat_bytes": 383883, "wat_lines": 15669, "wasm_bytes": 48285 }, "memory_bytes": 262144 },
+      "ratios": {"vuna_ocaml": { "vs_handwritten": 1.33, "rss_vs_handwritten": 1.60 }, "native": { "vs_handwritten": 1.33, "rss_vs_handwritten": 1.07, "vs_ocaml_backend": 1.00, "rss_vs_ocaml_backend": 0.67 }, "wasm": { "vs_handwritten": 10.67, "rss_vs_handwritten": 17.80, "net_vs_handwritten": 3.33, "vs_ocaml_backend": 8.00, "rss_vs_ocaml_backend": 11.15 } }
+    },
+    "tco_mutual": {
+      "ocaml_ref": { "run_ok": true, "median_ms": 5, "rss_kb": 2456 },
+      "vuna_ocaml": { "run_ok": true, "median_ms": 5, "rss_kb": 4344, "artifact": { "bytes": 217939, "lines": 3001 }, "gc": { "minor_words": 915, "major_words": 0, "minor_collections": 1, "major_collections": 0, "top_heap_words": 53248 } },
+      "native": { "run_ok": true, "median_ms": 25, "rss_kb": 3448, "artifact": { "bytes": 273520, "lines": 12937 }, "default_stack_ok": true },
+      "wasm": { "run_ok": true, "median_ms": 37, "rss_kb": 61216, "net_median_ms": 15, "artifact": { "wat_bytes": 376817, "wat_lines": 15400, "wasm_bytes": 47277 }, "memory_bytes": 262144 },
+      "ratios": {"vuna_ocaml": { "vs_handwritten": 1.00, "rss_vs_handwritten": 1.77 }, "native": { "vs_handwritten": 5.00, "rss_vs_handwritten": 1.40, "vs_ocaml_backend": 5.00, "rss_vs_ocaml_backend": 0.79 }, "wasm": { "vs_handwritten": 7.40, "rss_vs_handwritten": 24.93, "net_vs_handwritten": 3.00, "vs_ocaml_backend": 7.40, "rss_vs_ocaml_backend": 14.09 } }
+    },
+    "tco_wide": {
+      "ocaml_ref": { "run_ok": true, "median_ms": 4, "rss_kb": 2460 },
+      "vuna_ocaml": { "run_ok": true, "median_ms": 4, "rss_kb": 4520, "artifact": { "bytes": 217999, "lines": 2998 }, "gc": { "minor_words": 912, "major_words": 0, "minor_collections": 1, "major_collections": 0, "top_heap_words": 53248 } },
+      "native": { "run_ok": true, "median_ms": 25, "rss_kb": 3448, "artifact": { "bytes": 277607, "lines": 13096 }, "default_stack_ok": true },
+      "wasm": { "run_ok": true, "median_ms": 52, "rss_kb": 61596, "net_median_ms": 30, "artifact": { "wat_bytes": 378514, "wat_lines": 15482, "wasm_bytes": 47492 }, "memory_bytes": 262144 },
+      "ratios": {"vuna_ocaml": { "vs_handwritten": 1.00, "rss_vs_handwritten": 1.84 }, "native": { "vs_handwritten": 6.25, "rss_vs_handwritten": 1.40, "vs_ocaml_backend": 6.25, "rss_vs_ocaml_backend": 0.76 }, "wasm": { "vs_handwritten": 13.00, "rss_vs_handwritten": 25.04, "net_vs_handwritten": 7.50, "vs_ocaml_backend": 13.00, "rss_vs_ocaml_backend": 13.63 } }
+    },
+    "text_scan": {
+      "ocaml_ref": { "run_ok": true, "median_ms": 4, "rss_kb": 3480 },
+      "vuna_ocaml": { "run_ok": true, "median_ms": 6, "rss_kb": 6700, "artifact": { "bytes": 218139, "lines": 2998 }, "gc": { "minor_words": 915, "major_words": 0, "minor_collections": 1, "major_collections": 0, "top_heap_words": 53248 } },
+      "native": { "run_ok": true, "median_ms": 38, "rss_kb": 30720, "artifact": { "bytes": 285079, "lines": 13446 }, "gc": { "collections": 3, "live_bytes": 262144, "alloc_bytes": 3871552 }, "default_stack_ok": false },
+      "wasm": { "run_ok": false, "skip_reason": "run" },
+      "ratios": {"vuna_ocaml": { "vs_handwritten": 1.50, "rss_vs_handwritten": 1.93 }, "native": { "vs_handwritten": 9.50, "rss_vs_handwritten": 8.83, "vs_ocaml_backend": 6.33, "rss_vs_ocaml_backend": 4.59 }, "wasm": { "run_ok": false } }
+    },
+    "traits": {
+      "ocaml_ref": { "run_ok": true, "median_ms": 5, "rss_kb": 2460 },
+      "vuna_ocaml": { "run_ok": true, "median_ms": 6, "rss_kb": 4344, "artifact": { "bytes": 218860, "lines": 3023 }, "gc": { "minor_words": 912, "major_words": 0, "minor_collections": 1, "major_collections": 0, "top_heap_words": 53248 } },
+      "native": { "run_ok": true, "median_ms": 18, "rss_kb": 3448, "artifact": { "bytes": 280202, "lines": 13245 }, "default_stack_ok": true },
+      "wasm": { "run_ok": true, "median_ms": 40, "rss_kb": 61380, "net_median_ms": 18, "artifact": { "wat_bytes": 381806, "wat_lines": 15600, "wasm_bytes": 47951 }, "memory_bytes": 262144 },
+      "ratios": {"vuna_ocaml": { "vs_handwritten": 1.20, "rss_vs_handwritten": 1.77 }, "native": { "vs_handwritten": 3.60, "rss_vs_handwritten": 1.40, "vs_ocaml_backend": 3.00, "rss_vs_ocaml_backend": 0.79 }, "wasm": { "vs_handwritten": 8.00, "rss_vs_handwritten": 24.95, "net_vs_handwritten": 3.60, "vs_ocaml_backend": 6.67, "rss_vs_ocaml_backend": 14.13 } }
     }
   }
 }

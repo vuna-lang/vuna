@@ -209,14 +209,23 @@ native 赢在「调用少、字符串/栈传参多」的形状（[performance.md
 手写 OCaml 对照在同名 `.ml`（`Effect.Deep` 或直接内联）。`handleState` 这种 answer 是
 函数的库 handler 仍不可用（D111），没有进基准。
 
-三端同窗口（HEAD `c6586e7`，`--target all --runs 5 --warmup 2`，loadavg ≈3.3；
-ratio 相对手写 OCaml，wasm 含 `meta.node_startup_ms` = 25 ms）：
+三端同窗口（HEAD，`--target all --runs 5 --warmup 2`，loadavg ≈2.5；
+ratio 相对手写 OCaml；wasm 括号里是减掉 `meta.node_startup_ms` = 22 ms 的 net）：
 
 | benchmark | 手写 ms | OCaml 后端 | native | wasm |
 | --- | --- | --- | --- | --- |
-| eff_tick（20000 次 perform） | 4 | 10（2.5x） | 212（53.0x） | 189（47.3x） |
-| eff_deep（深度 2000 捕获一次） | 3 | 3（1.0x） | 5（1.7x） | 37（12.3x） |
-| eff_bracket（10000 轮 bracket） | 3 | 14（4.7x） | 320（106.7x） | 194（64.7x） |
+| eff_tick（20000 次 perform） | 4 | 10（2.5x） | 199（49.8x） | 182（45.5x；net 160 / 40.0x） |
+| eff_deep（深度 2000 捕获一次） | 3 | 4（1.3x） | 5（1.7x） | 35（11.7x；net 13 / 4.3x） |
+| eff_deepseq（深度 2000 每层 perform） | 3 | 4（1.3x） | 12（4.0x） | 51（17.0x；net 29 / 9.7x） |
+| eff_bracket（10000 轮 bracket） | 3 | 11（3.7x） | 272（90.7x） | 172（57.3x；net 150 / 50.0x） |
+| eff_nested（2000 层 handler） | 4 | 5（1.3x） | 11（2.8x） | 46（11.5x；net 24 / 6.0x） |
+| eff_host（answer 是 Eff 的 Console） | 3 | 6（2.0x） | 85（28.3x） | 133（44.3x；net 111 / 37.0x） |
+| eff_abort（abort 路径 cleanup） | 3 | 6（2.0x） | 12（4.0x） | 39（13.0x；net 17 / 5.7x） |
+| eff_install（每轮安装 handler） | 4 | 9（2.3x） | 92（23.0x） | 77（19.3x；net 55 / 13.8x） |
+| startup（repeat=20 的启动地板） | 2 | 2（1.0x） | 2（1.0x） | 26（13.0x；net 4 / 2.0x） |
+| traits（约束多态字典派发） | 5 | 6（1.2x） | 18（3.6x） | 40（8.0x；net 18 / 3.6x） |
+
+同一份数据在 `bench/baselines/programs.json`；`--only eff_*` 是效应面的快检子集。
 
 **CPS 前后**（wasm：`445315d` 的 wat 机器 → HEAD 的库机器；native：`e663921` 的栈拷贝 →
 HEAD 的库机器；`--runs 3 --warmup 1`，源码与 harness 都是 HEAD）：
