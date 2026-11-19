@@ -91,8 +91,9 @@ nix run .#vuna-artifacts -- --only hello --check
 nix run .#vuna-artifacts -- --json bench/baselines/artifacts.json   # 重标
 ```
 
-用例：`hello`（最小 hello world）、`defs-10/100/1000`（单文件顶层定义数）、
-`mods-10/100`（包内模块数）、`self`（`packages/compiler`；wasm 不支持该目标）。
+用例：`hello`（最小 hello world）、`defs-10/100/1000`（单文件顶层定义数；入口体是直连的
+左嵌套加法链，同时钉住精化入口按表达式规模派生的预算）、`mods-10/100`（包内模块数）、
+`self`（`packages/compiler`；wasm 不支持该目标）。
 
 口径：
 

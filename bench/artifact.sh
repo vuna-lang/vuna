@@ -222,23 +222,15 @@ target_requested() {
   esac
 }
 
-# 平衡加法树：`a + b + c ...` 的深左嵌套会让精化在同一条表达式上耗尽 fuel；
-# 平衡树深度是 log N，且不改变定义数量（行数/字节仍随 N 线性）。
-balanced_sum() {
-  local -a cur=("$@") next
-  local i
-  while [ "${#cur[@]}" -gt 1 ]; do
-    next=()
-    for ((i = 0; i < ${#cur[@]}; i += 2)); do
-      if [ $((i + 1)) -lt "${#cur[@]}" ]; then
-        next+=("(${cur[i]} + ${cur[i + 1]})")
-      else
-        next+=("${cur[i]}")
-      fi
-    done
-    cur=("${next[@]}")
+# 直连左嵌套加法链：`f0 + f1 + f2 ...` 是源码里最自然的写法，`defs-N` 同时钉住
+# 精化入口按表达式规模派生的预算（长算子链不报 `IC_FuelExhausted`）。
+# deep 夹具：`packages/compiler/test/corpus/dt_deep`；steps：`103_ir_lowering.steps`。
+sum_chain() {
+  local out="" t
+  for t in "$@"; do
+    if [ -z "$out" ]; then out="$t"; else out="$out + $t"; fi
   done
-  printf '%s' "${cur[0]}"
+  printf '%s' "$out"
 }
 
 gen_defs() { # n out
@@ -250,7 +242,7 @@ gen_defs() { # n out
       printf 'f%s : Int\nf%s = %s\n' "$i" "$i" "$i"
       terms+=("f$i")
     done
-    printf 'main : Int\nmain = %s\n' "$(balanced_sum "${terms[@]}")"
+    printf 'main : Int\nmain = %s\n' "$(sum_chain "${terms[@]}")"
   } >"$out"
 }
 
@@ -269,7 +261,7 @@ gen_mods() { # n dir
   {
     printf '%s\n' '-- 由 bench/artifact.sh 生成：N 个库模块 + 入口（文件树斜率）。'
     for ((i = 0; i < n; i++)); do printf 'import Art.Mod%s as M%s\n' "$i" "$i"; done
-    printf '\nmain : Int\nmain = %s\n' "$(balanced_sum "${terms[@]}")"
+    printf '\nmain : Int\nmain = %s\n' "$(sum_chain "${terms[@]}")"
   } >"$dir/app/Main.vuna"
 }
 
