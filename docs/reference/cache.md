@@ -116,6 +116,20 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
 后果：改 `packages/cli/`（工具链）不换编译器身份，不脏编译器缓存；改 `packages/compiler/` 才换代；同一份编译器
 源码在任意 worktree / 目录构建得到同一身份；重建同源也不再换代。
 
+### 缓存命名空间（`cache-tag`）
+
+`build-id` 只由**源码闭包**决定：同一份源码由不同 seed 构建出的二进制仍共享 `build-id`
+（旋转窗口内两者并不保证行为一致）。接口摘要、模块顺序、split blob 等缓存对象如果只按
+`build-id` 寻址，就可能把旧二进制写的结果当成本二进制的。
+
+因此缓存键另有一层**二进制身份** `cache-tag`：`nix/build/packages.nix` 在构建
+`vuna-seed` / `vuna-compiler` 后写入 `$out/cache-tag`（= 产物二进制的 sha256），产品安装时
+复制同一个文件。运行时读取顺序：`VUNA_CACHE_TAG`（排障/测试）→ `$out/cache-tag` →
+回退 `build-id`（开发构建与旧安装）。
+
+它只参与缓存 key，不写进产物、不参与 rotation 的 fixed point（`seed/build-id` 仍是源码身份）。
+代价是同一源码的两次字节不同构建会各自冷一次缓存；这是正确性优先的取舍。
+
 ## 单一 store 根
 
 对象库是**用户级单一根**（默认 `~/.vuna/store`，`VUNA_STORE` 可覆盖），不按 worktree 分。

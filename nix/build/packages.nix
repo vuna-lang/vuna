@@ -46,6 +46,7 @@ let
       chmod -R u+w seed
       cd seed
       sh build.sh "$out/bin/vuna-seed"
+      sha256sum "$out/bin/vuna-seed" | cut -d' ' -f1 > "$out/cache-tag"
       # 编译器身份随产物安装（`Fingerprint` 读 `$out/build-id`）。
       if [ -f build-id ]; then cp build-id "$out/build-id"; fi
     '';
@@ -68,6 +69,7 @@ let
       chmod -R u+w .
       ${vuna-seed}/bin/vuna-seed build --no-compile --out stage1 packages/compiler
       sh stage1/build.sh "$out/bin/vuna-compiler"
+      sha256sum "$out/bin/vuna-compiler" | cut -d' ' -f1 > "$out/cache-tag"
       cp -r packages/base "$out/base"
       if [ -f stage1/build-id ]; then cp stage1/build-id "$out/build-id"; fi
     '';
@@ -96,6 +98,7 @@ let
       cp packages/plugin-web/.output/bin/vuna-plugin-web "$out/bin/vuna-web"
       # 编译器命令走独立插件（同一个 stage-1 产物，安装名即插件名）。
       cp ${vuna-compiler}/bin/vuna-compiler "$out/bin/vuna-compiler"
+      cp ${vuna-compiler}/cache-tag "$out/cache-tag"
       cp -r packages/base "$out/base"
       # `vuna run --target wasm` 的执行宿主（Node/V8，`Vuna.Run.wasmRunner` 按此布局查找）。
       mkdir -p "$out/share/vuna"

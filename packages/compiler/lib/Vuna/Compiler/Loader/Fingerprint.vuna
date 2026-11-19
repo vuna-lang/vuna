@@ -80,14 +80,41 @@ compilerTagEff =
                 Nothing => pure vunaVersion
                 Just size => pure "stat:${strFromInt (fingerprintOfStat exe (natToInt size) mtime)}"
 
+-- | 缓存命名空间 tag：编译器**二进制**身份（安装时由 nix 写入 `cache-tag`）。
+--
+-- 与 `build-id`（源码闭包身份）分开：同一份源码闭包可能由不同 seed 构建出行为不同的
+-- 二进制（旋转窗口内），缓存键必须区分它们；否则会把旧二进制写的接口摘要当成本二进制的
+-- 结果。缺失时回退 `compilerTagEff`（开发构建 / 旧安装）。
+export cacheTagEff : Member nFs FsOp r, Member nEnv EnvOp r => Eff r String
+cacheTagEff =
+  do
+    override <- envGetEnv "VUNA_CACHE_TAG"
+    if override /= "" then
+      pure override
+    else
+      do
+        exe <- envExecPath
+        found <- readNamedNear exe cacheTagFileName
+        case found of
+          Just t => pure t
+          Nothing => compilerTagEff
+
+-- | 缓存 tag 文件名。
+cacheTagFileName : String
+cacheTagFileName = "cache-tag"
+
 -- 可执行文件旁的 `build-id`：安装布局 `$out/bin/<prog>` + `$out/build-id`，
 -- 构建布局 `--out DIR` 下 `DIR/build-id`（`DIR/bin/<prog>` 或 `DIR/<pkg>/bin/<prog>`）。
 readBuildIdNear : Member nFs FsOp r => String -> Eff r (Maybe String)
-readBuildIdNear exe =
+readBuildIdNear exe = readNamedNear exe buildIdFileName
+
+-- | 可执行文件旁的任意身份文件（同上两种布局）。
+readNamedNear : Member nFs FsOp r => String -> String -> Eff r (Maybe String)
+readNamedNear exe name =
   let
     binDir = parentOfPath exe
     outDir = parentOfPath binDir
-  in readFirstBuildId ["${outDir}/${buildIdFileName}", "${binDir}/${buildIdFileName}"]
+  in readFirstBuildId ["${outDir}/${name}", "${binDir}/${name}"]
 
 readFirstBuildId : Member nFs FsOp r => List String -> Eff r (Maybe String)
 readFirstBuildId [] = pure Nothing

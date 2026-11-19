@@ -249,7 +249,7 @@ rebuildSplit ctx entry printResult outDir fast =
               ErrC e => pure (ErrC e)
               OkC modules =>
                 do
-                  tag <- compilerTagEff
+                  tag <- cacheTagEff
                   let
                     -- 入口-only 包没有可写的模块面（`modules=[]`），语义 key 无从谈起：
                     -- 退回源输入 key（正确优先，放弃这类包的注释复用）。
@@ -315,7 +315,7 @@ auditCompile ctx entry printResult outDir =
                     ErrC e => pure (ErrC e)
                     OkC modules =>
                       do
-                        tag <- compilerTagEff
+                        tag <- cacheTagEff
                         let
                           sem =
                             case modules of
@@ -607,7 +607,7 @@ depRootIdentityEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess Pro
 depRootIdentityEff root =
   do
     h <- rootHash root
-    tag <- compilerTagEff
+    tag <- cacheTagEff
     let
       key = pkgIfaceSummaryKeyOf (rootName root) (strFromInt h) tag
     in do
@@ -649,7 +649,7 @@ writePkgIfaceSummaryEff ctx modules =
     r :: _ =>
       do
         h <- rootHash r
-        tag <- compilerTagEff
+        tag <- cacheTagEff
         let
           key = pkgIfaceSummaryKeyOf (contextPackageName ctx) (strFromInt h) tag
           payload = pkgIfaceHashOfModules (contextPackageName ctx) modules
@@ -1169,7 +1169,7 @@ orderKeyOfEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessO
 orderKeyOfEff root =
   do
     h <- rootHash root
-    tag <- compilerTagEff
+    tag <- cacheTagEff
     pure (addrOf ["module-order", rootName root, strFromInt h, tag])
 
 -- | 写某包的模块顺序（完整模块面写全后调用）。
@@ -2123,7 +2123,7 @@ cleanHashOf (m :: rest) name =
 -- 接口加载与失效判定读它）；写失败/归属缺口只打 note（不影响 check 结果），缺口存在时
 -- **不写**（避免依赖方拿到不完整接口）。
 ifaceCompilerTag : Member nFs FsOp r, Member nEnv EnvOp r => Eff r String
-ifaceCompilerTag = compilerTagEff
+ifaceCompilerTag = cacheTagEff
 
 -- | iface 目录：默认与源码同布局（`<包目录>/lib/.../X.vuna` → 同目录 `X.iface`）；
 -- `VUNA_IFACE_DIR` 非空时整体镜像到该根（`<根>/<包绝对目录>/lib/.../X.iface`），便于
@@ -2420,7 +2420,7 @@ splitCacheCodec = "split-files 2"
 splitBlobTag : Member nFs FsOp r, Member nEnv EnvOp r => Eff r String
 splitBlobTag =
   do
-    tag <- compilerTagEff
+    tag <- cacheTagEff
     pure "${splitNodeSchema}/${tag}"
 
 -- | split 节点的输入摘要：源闭包 / 依赖身份 / 版本+指纹+printResult。
