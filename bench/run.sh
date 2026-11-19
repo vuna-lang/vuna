@@ -786,7 +786,12 @@ compare_baseline() {
         news=$((news + 1))
       else
         read -r delta verdict <<<"$(judge_delta "$cur" "$basev" "$THRESHOLD" "$FAIL_THRESHOLD")"
-        case $verdict in WARN) warns=$((warns + 1)) ;; FAIL) fails=$((fails + 1)) ;; new) news=$((news + 1)) ;; *) ok=$((ok + 1)) ;; esac
+        # 同机器有绝对值基线时，ratio 只作参考：手写 OCaml 分母常常在 1 ms 分辨率上，
+        # ratio 的抖动会被误判成回归；回归判定交给下面的 abs 行。
+        if [ "$same_machine" = 1 ] && [ -n "$(baseline_abs "$name" "$t")" ]; then
+          verdict=info
+        fi
+        case $verdict in WARN) warns=$((warns + 1)) ;; FAIL) fails=$((fails + 1)) ;; new) news=$((news + 1)) ;; ok) ok=$((ok + 1)) ;; esac
         printf '  %-16s %-11s %-8s %10s %10s %10s  %s\n' "$name" "$t" "$metric" "${cur}x" "${basev}x" "${delta}%" "$verdict"
       fi
       # 同机器时再比绝对值（ratio 会归一化掉整体变慢）。
