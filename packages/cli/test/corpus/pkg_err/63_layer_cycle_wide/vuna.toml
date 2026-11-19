@@ -1,0 +1,11 @@
+[package]
+name = "p"
+
+[layers]
+A = ["B", "C", "D", "E", "F"]
+B = ["G"]
+C = ["G"]
+D = ["G"]
+E = ["G"]
+F = ["G"]
+G = ["A"]
