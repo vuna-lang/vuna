@@ -177,6 +177,7 @@ checkNodeBinderTys shared decls ir =
         (\_ => Vuna.Compiler.Base.Common.bind (checkAltBinderTysM decls succ) (\_ => checkAltBinderTysM decls catch))
     IrCast from to _ =>
       Vuna.Compiler.Base.Common.bind (checkIrTyM decls from) (\_ => checkIrTyM decls to)
+    IrTail inner => checkNodeBinderTys shared decls inner
     _ => OkC 0
 
 checkAppTyM : List IrTyDecl -> Maybe (Pair IrTy IrTy) -> Check Int
@@ -385,6 +386,7 @@ scopedChildren scope ir =
         (append (altWork scope (maybeAlts zero)) (append (altWork scope (maybeAlts succ)) (altWork scope (maybeAlts catch))))
     IrConcatMany parts => map (\a => Pair scope a) parts
     IrEffThunk family ctor unitTy arity prim => [Pair scope prim]
+    IrTail inner => [Pair scope inner]
     _ => []
 
 maybeAlts : Maybe IrAlt -> List IrAlt

@@ -56,6 +56,7 @@ representIr shared ir =
     IrLet bs scrut body => IrLet bs (representIr shared scrut) (representIr shared body)
     IrLam bs rt body => IrLam bs rt (representIr shared body)
     IrApp appTy f a => IrApp appTy (representIr shared f) (representIr shared a)
+    IrTail inner => IrTail (representIr shared inner)
     IrIf c th el => IrIf (representIr shared c) (representIr shared th) (representIr shared el)
     IrCase caseTy resultTy scrut alts => representCase shared caseTy resultTy scrut alts
     IrNatCase scrut fresh zero succ catch =>

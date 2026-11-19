@@ -146,9 +146,9 @@ native 的 TCO / GC 验证项。**GC 与 TCO 均已落地**；下表「前」列
   与**保守扫活栈**，所以阈值取 `max(GC_MIN, 2×live, 本次扫到的栈字节数)`（见
   [native.md](native.md) §5.1）；死槽清零（调用点实参槽 + 文本最后读取后清零）让活帧
   不再留住已消费的临时对象，是 `gc_low_live` RSS 能降到 5 MiB 的原因。
-- 重标基线时 `default_stack_ok` 是布尔快照：直接饱和尾调用的项应为 true；非尾深递归项
-  （如 `list_recursion` 的拆半递归）仍为 false，那不是 TCO 漏覆盖——闭包调用、
-  `rt_apply`、`rt_*` 与源级 `let`（降级成 lambda 应用）都不在覆盖面内。
+- 重标基线时 `default_stack_ok` 是布尔快照：直调、自递归、饱和闭包、wrapper 与 runtime
+  符号的尾位置都应为 true；非尾深递归项（如 `list_recursion` 的拆半递归）仍为 false，
+  那不是 TCO 漏覆盖——窄调宽与 `rt_apply` 慢路径仍回退普通调用。
 
 ### 1.3 wasm 后端（浏览器路径：JS 宿主 / V8）
 

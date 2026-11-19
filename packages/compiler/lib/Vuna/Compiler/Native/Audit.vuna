@@ -78,6 +78,7 @@ auditKeys defs (IrNatCase scrut _ z s c) =
 auditKeys defs (IrConcatMany parts) = concatMap (auditKeys defs) parts
 auditKeys defs (IrLam _ _ body) = auditKeys defs body
 auditKeys defs (IrApp _ f a) = append (auditKeys defs f) (auditKeys defs a)
+auditKeys defs (IrTail inner) = auditKeys defs inner
 auditKeys defs (IrRtApp sym args) =
   append (auditRtAppKeys sym args) (concatMap (auditKeys defs) args)
 auditKeys defs (IrRt sym) = if auditSymSupported sym then [] else ["symbol " ++ sym]

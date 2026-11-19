@@ -22,6 +22,7 @@ import Base.Data.Pair as Pair
 import Base.Data.Result as Result
 import Base.Data.String as String
 import Vuna.Compiler.Ir.Model
+import Vuna.Compiler.Ir.Tail
 import Vuna.Compiler.Ir.Analysis
 
 -- ---------------------------------------------------------------
@@ -346,6 +347,7 @@ transformDirect fuel e =
       IrLet bs scrut body => IrLet bs (transformDirect (fuel - 1) scrut) (transformDirect (fuel - 1) body)
       IrLam bs rt body => IrLam bs rt (transformDirect (fuel - 1) body)
       IrApp appTy g a => IrApp appTy (transformDirect (fuel - 1) g) (transformDirect (fuel - 1) a)
+      IrTail inner => IrTail (transformDirect (fuel - 1) inner)
       IrIf c t el => IrIf (transformDirect (fuel - 1) c) (transformDirect (fuel - 1) t) (transformDirect (fuel - 1) el)
       IrCase caseTy resTy scrut alts => IrCase caseTy resTy (transformDirect (fuel - 1) scrut) (mapAltDirect (fuel - 1) alts)
       IrNatCase scrut fresh zero succ catch => IrNatCase (transformDirect (fuel - 1) scrut) fresh (transformAltMaybe (fuel - 1) zero) (transformAltMaybe (fuel - 1) succ) (transformAltMaybe (fuel - 1) catch)
@@ -1576,8 +1578,9 @@ cpsDefsMachine defs =
     Ok ds =>
       let
         handlerNames = collectHandleOpsDefs 100000 ds
-      in Ok
-        (map mStepsDef (map mApplysDef (map mMarkedDef (mDefs handlerNames (cpsFuelOfDefs ds) ds))))
+      in case annotateDefs (map mStepsDef (map mApplysDef (map mMarkedDef (mDefs handlerNames (cpsFuelOfDefs ds) ds)))) of
+        Err msg => Err msg
+        Ok annotated => Ok annotated
 
 -- | 单元级入口：改写所有组；入口展示节点是纯值，不需要 CPS。
 export cpsUnit : IrUnit -> Result IrUnit

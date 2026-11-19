@@ -202,6 +202,9 @@ export data Ir(..) : Type where
   -- | 应用（擦除实参已在 Lowering 丢弃）。第一个字段是函数类型与结果类型
   -- （`IrTyFun` 的域/余域；未知时 `Nothing`）。
   IrApp : Maybe (Pair IrTy IrTy) -> Ir -> Ir -> Ir
+  -- | 尾位置标记：求值与内层相同。只表示内层处在函数结果位置，后端按自身能力
+  -- 决定是否发射尾调用；允许包裹 `IrApp` / `IrRtApp` / `IrRt` / 零参 `IrGlobal`。
+  IrTail : Ir -> Ir
   -- | `if`。
   IrIf : Ir -> Ir -> Ir -> Ir
   -- | 通用 `match`：scrutinee 的运行时类型、结果类型（均可缺）+ scrutinee + 分支。
@@ -244,6 +247,7 @@ irResultTyFuel fuel ir =
         case appTy of
           Just p => Just (secondOf p)
           Nothing => Nothing
+      IrTail inner => irResultTyFuel (fuel - 1) inner
       IrIf _ th el =>
         case irResultTyFuel (fuel - 1) th of
           Just ty => Just ty
@@ -559,6 +563,7 @@ irProgUnitOf (IrProgram shared unit) = unit
 -- ---------------------------------------------------------------
 -- | 节点数（含 binder / 分支体）；只做结构遍历，不展开定义。
 export irSize : Ir -> Int
+irSize (IrTail inner) = irSize inner
 irSize ir = 1 + irSizeChildren ir
 
 irSizeChildren : Ir -> Int
@@ -573,6 +578,7 @@ irSizeChildren ir =
     IrLet bs scrut body => irSize scrut + irSize body
     IrLam bs _ body => irSize body
     IrApp _ f a => irSize f + irSize a
+    IrTail inner => irSize inner
     IrIf c th el => irSize c + irSize th + irSize el
     IrCase _ _ scrut alts => irSize scrut + irSizeAlts alts
     IrNatCase scrut fresh zero succ catch =>

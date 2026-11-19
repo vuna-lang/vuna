@@ -159,6 +159,15 @@ renderBss b =
     dataLine = if b.nbSize > 0 then [indent ".zero ${strFromInt b.nbSize}"] else []
   in append [".globl ${b.nbLabel}"] (append alignLine (append ["${b.nbLabel}:"] dataLine))
 
+renderClosure : NativeClosure -> List String
+renderClosure c =
+  [
+    ".globl ${c.ncLabel}",
+    "${c.ncLabel}:",
+    indent ".quad ${c.ncCode}",
+    indent ".quad ${strFromInt c.ncArity}"
+  ]
+
 -- | 函数标签跨文件可见（模块之间的调用、`_start` 调 `main`），所以全部 `.globl`。
 renderFunc : NativeFunc -> List String
 renderFunc f =
@@ -204,7 +213,8 @@ renderProgramFile p key =
     funcs = funcsOfKey key p.npFuncs
     rodataLits = concatMap renderStrLit (litsOfKey key p.npModuleLits)
     rodataConsts = if isRuntime then concatMap renderRodata p.npRodata else []
-    rodataPart = append rodataConsts rodataLits
+    rodataClosures = if isRuntime then concatMap renderClosure p.npClosures else []
+    rodataPart = append rodataConsts (append rodataClosures rodataLits)
     rodataSection = if isEmpty rodataPart then [] else ".section .rodata" :: rodataPart
     bssPart = if isRuntime then concatMap renderBss p.npBss else []
     bssSection = if isEmpty bssPart then [] else ".section .bss" :: bssPart

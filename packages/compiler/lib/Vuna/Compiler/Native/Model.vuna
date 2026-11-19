@@ -196,6 +196,12 @@ export record NativeBss(..) where
   nbSize : Int
   nbAlign : Int
 
+-- | 静态闭包对象：`[code][arity]`，只读，不占堆，不进 GC 段。
+export record NativeClosure(..) where
+  ncLabel : String
+  ncCode : String
+  ncArity : Int
+
 -- | 一个 native 程序（渲染前的结构）。
 --   `npFuncs` 的顺序固定：runtime 函数 → 用户函数（按生成顺序）→ `_start`；
 --   `npModuleLits` 是每个模块自己的字符串字面量池（`.Llit_<n>` 是文件局部标签，
@@ -203,6 +209,7 @@ export record NativeBss(..) where
 export record NativeProgram(..) where
   npRodata : List NativeRodata
   npBss : List NativeBss
+  npClosures : List NativeClosure
   npFuncs : List NativeFunc
   npModuleLits : List (Pair (List String) (List NativeStrLit))
 

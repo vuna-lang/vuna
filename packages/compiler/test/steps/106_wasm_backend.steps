@@ -33,6 +33,11 @@ file-contains: $TMPDIR/shape-out/main.wat (func $f_apply
 file-contains: $TMPDIR/shape-out/main.wat (elem declare func
 file-contains: $TMPDIR/shape-out/main.wat ref.func
 
+# 2b) TCO：尾位置直调是 `return_call`（不是普通 `call`）。
+run: sh -c 'd="$TMPDIR/tcotail"; mkdir -p "$d/app"; printf "[package]\nname = \"tcotail\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Data.Nat as Nat\n\ntco : Nat -> Int\ntco n = case n of\n  Zero => 0\n  Succ k => tco k\n\nmain : Int\nmain = tco (natFromInt 100)\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/tcotail-out" "$d"'
+exit: 0
+file-contains: $TMPDIR/tcotail-out/main.wat return_call $f_tco
+
 # 3) let 遮蔽：作用域必须在分支结束时恢复（否则读到最后一次 binder 的 local）。
 run: sh -c 'd="$TMPDIR/shadow"; mkdir -p "$d/app"; printf "[package]\nname = \"shadow\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Int\nmain = let x = 10 in (let x = 1 in x) + x\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/shadow-out" "$d"'
 exit: 0

@@ -29,6 +29,7 @@ import Vuna.Compiler.Ir.Model
 import Vuna.Compiler.Ir.Cps
 import Vuna.Compiler.Ir.Analysis
 import Vuna.Compiler.Ir.Runtime
+import Vuna.Compiler.Ir.Tail
 import Vuna.Compiler.Native.Abi
 import Vuna.Compiler.Native.Audit
 import Vuna.Compiler.Native.Model
@@ -87,6 +88,14 @@ record FGen where
   fgModule : List String
   -- | 当前定义的全限定名（闭包标签由它派生，跨定义稳定）。
   fgOwner : String
+  -- | 当前函数的标签；自递归尾调用只在它非空时启用。
+  fgSelfLabel : String
+  -- | 自递归尾调用的回边标签；空串表示当前函数没有循环头。
+  fgSelfLoop : String
+  -- | 自递归尾调用要写回的形参槽（按参数顺序）。
+  fgSelfParams : List Int
+  -- | 本次生成收集到的静态闭包对象（无捕获的函数值）。
+  fgStatics : List NativeClosure
 
 freshSlot : FGen -> Pair Int FGen
 freshSlot st =
@@ -445,12 +454,12 @@ tailCallFits st kOut = 8 * kOut <= st.fgTailRoom
 
 -- | 第 `i`（从 0 起）个实参的栈槽 → 调用者来参区的第 `i-6` 个槽位。
 --   源全在 `rbp` 以下、目标在 `rbp+16` 以上，两者不重叠，拷贝顺序无关。
-tailStackArgMoves : Int -> List Int -> List Instr
-tailStackArgMoves _ [] = []
-tailStackArgMoves i (slot :: rest) =
+tailStackArgMoves : Int -> Int -> List Int -> List Instr
+tailStackArgMoves _ _ [] = []
+tailStackArgMoves regs i (slot :: rest) =
   append
-    [IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff slot)), IMov (OpMem Rbp (16 + 8 * (i - nativeMaxArgs))) (OpReg Rax)]
-    (tailStackArgMoves (i + 1) rest)
+    [IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff slot)), IMov (OpMem Rbp (16 + 8 * (i - regs))) (OpReg Rax)]
+    (tailStackArgMoves regs (i + 1) rest)
 
 -- | 尾调用：栈实参搬进来参区 → 装参数寄存器 → 拆本帧 → `jmp`。
 --   `pop rbp` 之后 `rsp` 正好落在返回地址槽，与 `call` 刚进入时同构（`rsp ≡ 8 mod 16`），
@@ -461,7 +470,7 @@ tailCallSlotsInstrs label slots =
     regSlots = take nativeMaxArgs slots
     stackSlots = drop nativeMaxArgs slots
   in append
-    (tailStackArgMoves nativeMaxArgs stackSlots)
+    (tailStackArgMoves nativeMaxArgs nativeMaxArgs stackSlots)
     (append (loadArgRegs nativeArgRegs regSlots) [IMov (OpReg Rsp) (OpReg Rbp), IPop Rbp, IJmp label])
 
 -- ---------------------------------------------------------------
@@ -495,29 +504,35 @@ valueWrapperFunc modPath label arity target =
   in NativeFunc
     label
     frame
-    (append (nativePrologue frame) (append stackGuardInstrs (append loads (append (callSlotsInstrs target slots) nativeEpilogue))))
+    (append (nativePrologue frame) (append stackGuardInstrs (append loads (tailCallSlotsInstrs target slots))))
     modPath
 
+nativeStaticClosureLabel : String -> Int -> String
+nativeStaticClosureLabel label arity = "vuna_static_${nativeName label}_${strFromInt arity}"
+
+hasNativeClosure : String -> List NativeClosure -> Bool
+hasNativeClosure _ [] = False
+hasNativeClosure label (c :: rest) =
+  if c.ncLabel == label then True else hasNativeClosure label rest
+
 -- | 把「顶层函数 / 运行时符号」求值成闭包对象：`[code][arity]`（无捕获）。
+--   无捕获闭包是只读静态对象，引用点只 `lea`，不分配堆。
 genValueClosure : FGen -> List String -> String -> Int -> String -> NRes (Pair (List Instr) FGen)
 genValueClosure st modPath label arity target =
   let
+    staticLabel = nativeStaticClosureLabel label arity
     st1 =
       if hasFuncLabel label st.fgLams then
         st
       else
         { st | fgLams = append st.fgLams [valueWrapperFunc modPath label arity target] }
-    body =
-      [
-        IMov (OpReg Rdi) (OpImm 16),
-        ICall (nativeRtLabel "alloc"),
-        IMov (OpReg Rdx) (OpReg Rax),
-        ILea Rcx label,
-        IMov (OpMem Rdx 0) (OpReg Rcx),
-        IMov (OpMem Rdx 8) (OpImm arity),
-        IMov (OpReg Rax) (OpReg Rdx)
-      ]
-  in NOk (Pair body st1)
+    st2 =
+      if hasNativeClosure staticLabel st1.fgStatics then
+        st1
+      else
+        { st1 | fgStatics = append st1.fgStatics [NativeClosure staticLabel label arity] }
+    body = [ILea Rax staticLabel]
+  in NOk (Pair body st2)
 
 -- | 运行时符号作为值时的 arity：`nativeRtValueArity` 优先，其次内建饱和应用 arity。
 rtValueArityOf : String -> Int
@@ -537,10 +552,20 @@ closureCallSlotsInstrs clo slots =
     (pushStackArgs stackSlots)
     (append (loadArgRegs closureArgRegs regSlots) (append [IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff clo)), IMov (OpReg R11) (OpMem Rdi 0)] (append (clearSlotsInstrs (clo :: slots)) (append [ICallReg R11] (if popped == 0 then [] else [IBinReg "add" Rsp (OpImm popped)])))))
 
+-- | 饱和闭包尾调用：栈实参写回来参区 → 装闭包 ABI 寄存器 → 拆帧 → `jmp [clo]`。
+closureTailCallSlotsInstrs : Int -> List Int -> List Instr
+closureTailCallSlotsInstrs clo slots =
+  let
+    regSlots = take (length closureArgRegs) slots
+    stackSlots = drop (length closureArgRegs) slots
+  in append
+    (tailStackArgMoves (length closureArgRegs) (length closureArgRegs) stackSlots)
+    (append (loadArgRegs closureArgRegs regSlots) [IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff clo)), IMov (OpReg R11) (OpMem Rdi 0), IMov (OpReg Rsp) (OpReg Rbp), IPop Rbp, IJmpReg R11])
+
 -- | 统一应用：运行时先按闭包 arity 走**饱和直调**快路径（栈开销与闭包 ABI 引入前一致），
 --   arity 不匹配才把实参按逆序压栈成升序数组交给 `rt_apply`（部分 / 过度应用）。
-genApplyCall : FGen -> Int -> List Int -> NRes (Pair (List Instr) FGen)
-genApplyCall st clo args =
+genApplyCall : FGen -> Bool -> Int -> List Int -> NRes (Pair (List Instr) FGen)
+genApplyCall st isTail clo args =
   let
     k = length args
     idx = st.fgNextLabel
@@ -554,16 +579,17 @@ genApplyCall st clo args =
       append
         head
         (append pushes (append [IMov (OpReg Rdx) (OpReg Rsp), IMov (OpReg Rsi) (OpImm k), IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff clo))] (append (clearSlotsInstrs (clo :: args)) [ICall (nativeRtLabel "apply"), IBinReg "add" Rsp (OpImm (8 * k + pad))])))
+    tailFits = isTail && tailCallFits st (nativeStackArgCount k (length closureArgRegs))
     fastPart =
       append
         [IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff clo)), IMov (OpReg Rax) (OpMem Rax 8), ICmp (OpReg Rax) (OpImm k), IJcc "jne" lSlow]
-        (closureCallSlotsInstrs clo args)
+        (if tailFits then closureTailCallSlotsInstrs clo args else append (closureCallSlotsInstrs clo args) [IJmp lEnd])
   in NOk
-    (Pair (append fastPart (append [IJmp lEnd, ILabel lSlow] (append slowPart (append [ILabel lEnd] (clearSlotsInstrs (clo :: args)))))) st1)
+    (Pair (append fastPart (append [ILabel lSlow] (append slowPart (append [ILabel lEnd] (clearSlotsInstrs (clo :: args)))))) st1)
 
 -- | 求值 head + 实参后统一应用（部分 / 过度 / 运行时闭包都走这里）。
-genApplyHead : Int -> FGen -> Ir -> List Ir -> NRes (Pair (List Instr) FGen)
-genApplyHead fuel st head args =
+genApplyHead : Int -> FGen -> Bool -> Ir -> List Ir -> NRes (Pair (List Instr) FGen)
+genApplyHead fuel st isTail head args =
   if fuel <= 0 then
     internal "native codegen fuel exhausted"
   else
@@ -573,7 +599,28 @@ genApplyHead fuel st head args =
             cloP = freshSlot (secondOf p)
             clo = firstOf cloP
             st1 = secondOf cloP
-          in nbind (genArgs (fuel - 1) st1 args) (\q => nbind (genApplyCall (secondOf (secondOf q)) clo (firstOf (secondOf q))) (\r => NOk (Pair (cat [firstOf p, storeSlot clo, firstOf q, firstOf r]) (secondOf r))))
+          in nbind (genArgs (fuel - 1) st1 args) (\q => nbind (genApplyCall (secondOf (secondOf q)) isTail clo (firstOf (secondOf q))) (\r => NOk (Pair (cat [firstOf p, storeSlot clo, firstOf q, firstOf r]) (secondOf r))))
+      )
+
+-- | 自递归尾调用：实参已求值到 fresh slots，逐项写回形参槽后回到循环头。
+selfSlotMoves : List Int -> List Int -> List Instr
+selfSlotMoves [] _ = []
+selfSlotMoves _ [] = []
+selfSlotMoves (src :: ss) (dst :: ds) =
+  append
+    [IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff src)), IMov (OpMem Rbp (nativeSlotOff dst)) (OpReg Rax)]
+    (selfSlotMoves ss ds)
+
+genSelfTailCall : Int -> FGen -> List Ir -> NRes (Pair (List Instr) FGen)
+genSelfTailCall fuel st args =
+  if fuel <= 0 then
+    internal "native codegen fuel exhausted"
+  else
+    nbind (genArgs (fuel - 1) st args) (
+        \p =>
+          let
+            argSlots = firstOf (secondOf p)
+          in if length argSlots == length st.fgSelfParams then NOk (Pair (append (firstOf p) (append (selfSlotMoves argSlots st.fgSelfParams) [IJmp st.fgSelfLoop])) (secondOf (secondOf p))) else internal "self tail call arity mismatch"
       )
 
 genGlobalCall : Int -> FGen -> Bool -> String -> List Ir -> NRes (Pair (List Instr) FGen)
@@ -586,19 +633,21 @@ genGlobalCall fuel st isTail name args =
       Just d =>
         let
           arity = irDefArity d
-        in if arity == length args then if isTail && tailCallFits st (nativeStackArgCount arity nativeMaxArgs) then genTailCall (fuel - 1) st (nativeFuncLabel name) args else genSaturatedCall (fuel - 1) st (nativeFuncLabel name) args else if arity == 0 then internal "zero-argument global used as a function" else genApplyHead (fuel - 1) st (IrGlobal name) args
+        in if isTail && st.fgSelfLoop /= "" && st.fgSelfLabel == nativeFuncLabel name && arity == length args then genSelfTailCall (fuel - 1) st args else if arity == length args then if isTail && tailCallFits st (nativeStackArgCount arity nativeMaxArgs) then genTailCall (fuel - 1) st (nativeFuncLabel name) args else genSaturatedCall (fuel - 1) st (nativeFuncLabel name) args else if arity == 0 then internal "zero-argument global used as a function" else genApplyHead (fuel - 1) st isTail (IrGlobal name) args
 
-genNatSuccCall : Int -> FGen -> Ir -> NRes (Pair (List Instr) FGen)
-genNatSuccCall fuel st arg =
+genNatSuccCall : Int -> FGen -> Bool -> Ir -> NRes (Pair (List Instr) FGen)
+genNatSuccCall fuel st isTail arg =
   if fuel <= 0 then
     internal "native codegen fuel exhausted"
+  else if isTail then
+    genTailCall (fuel - 1) st (nativeRtLabel "nat_succ") [arg]
   else
     nbind
       (genExpr (fuel - 1) st arg)
       (\p => NOk (Pair (append (firstOf p) [IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "nat_succ")]) (secondOf p)))
 
-genRtApp : Int -> FGen -> String -> List Ir -> NRes (Pair (List Instr) FGen)
-genRtApp fuel st sym args =
+genRtApp : Int -> FGen -> Bool -> String -> List Ir -> NRes (Pair (List Instr) FGen)
+genRtApp fuel st isTail sym args =
   if fuel <= 0 then
     internal "native codegen fuel exhausted"
   else
@@ -608,12 +657,12 @@ genRtApp fuel st sym args =
       _ =>
         case nativeRtTarget sym of
           Nothing => unsupported "native target: runtime symbol `${sym}` is not supported yet"
-          Just label => if length args /= irInlineArity sym then internal "runtime symbol arity mismatch: ${sym}" else genSaturatedCall (fuel - 1) st label args
+          Just label => if length args /= irInlineArity sym then internal "runtime symbol arity mismatch: ${sym}" else if isTail then genTailCall (fuel - 1) st label args else genSaturatedCall (fuel - 1) st label args
 
 -- | `IrApp (IrRt sym) args`：运行时常量函数值的应用（`irInlineArity = 0` 的那些）。
 --   饱和走直调；部分/过度应用先求值成闭包再交给 `rt_apply`。
-genRtValueCall : Int -> FGen -> String -> List Ir -> NRes (Pair (List Instr) FGen)
-genRtValueCall fuel st sym args =
+genRtValueCall : Int -> FGen -> Bool -> String -> List Ir -> NRes (Pair (List Instr) FGen)
+genRtValueCall fuel st isTail sym args =
   if fuel <= 0 then
     internal "native codegen fuel exhausted"
   else
@@ -624,9 +673,9 @@ genRtValueCall fuel st sym args =
     else if length args == arity then
       case nativeRtTarget sym of
         Nothing => unsupported "native target: runtime symbol `${sym}` is not supported yet"
-        Just label => genSaturatedCall (fuel - 1) st label args
+        Just label => if isTail then genTailCall (fuel - 1) st label args else genSaturatedCall (fuel - 1) st label args
     else
-      genApplyHead (fuel - 1) st (IrRt sym) args
+      genApplyHead (fuel - 1) st isTail (IrRt sym) args
 
 -- | `IrConcatMany`：左→右两两拼接（与 OCaml 的 `String.concat ""` 语义一致）。
 --   `parts` 至少 3 项（Lowering 的门槛），空/单元素的兜底只防空指针。
@@ -802,18 +851,19 @@ genExprAt fuel st isTail ir =
       IrRecUpd base family fields _ => genRecUpd (fuel - 1) st base family fields
       IrCase caseTy _ scrut alts => genCase (fuel - 1) st isTail caseTy scrut alts
       IrApp _ _ _ => genApp (fuel - 1) st isTail ir
-      IrRtApp sym args => genRtApp (fuel - 1) st sym args
+      IrRtApp sym args => genRtApp (fuel - 1) st isTail sym args
       IrConcatMany parts => genConcatMany (fuel - 1) st parts
       IrNatCase scrut _fresh zero succ catch => genNatCase (fuel - 1) st isTail scrut zero succ catch
-      IrLam bs _ body => genLamValue (fuel - 1) st isTail bs body
+      IrLam bs _ body => genLamValue (fuel - 1) st bs body
       IrRt sym =>
         let
           arity = rtValueArityOf sym
         in case nativeRtTarget sym of
           Nothing => unsupported "native target: runtime symbol `${sym}` is not supported yet"
-          Just label => if arity <= 0 then NOk (Pair [ICall label] st) else genValueClosure st nativeRuntimeModule (nativeRtValueLabel sym) arity label
+          Just label => if arity <= 0 then if isTail then NOk (Pair (tailCallSlotsInstrs label []) st) else NOk (Pair [ICall label] st) else genValueClosure st nativeRuntimeModule (nativeRtValueLabel sym) arity label
       IrFloatLit raw => genFloatLit st raw
       IrEffThunk family ctor _unitTy arity prim => genEffThunk (fuel - 1) st family ctor arity prim
+      IrTail inner => genExprAt (fuel - 1) st True inner
       IrEffBind _ _ _ => unsupported "native target: effect bindings are not supported yet"
 
 -- `&&` / `||`：短路；a 为 0/1，b 为 Bool。
@@ -836,13 +886,6 @@ genBoolChain fuel st args isAnd =
       _ => internal "`&&`/`||` must have exactly two arguments"
 
 -- 应用：flatten 左脊，支持饱和顶层调用、`@ir@natSucc`、运行时值函数。
-flattenApp : Ir -> Pair Ir (List Ir)
-flattenApp (IrApp _ f a) =
-  let
-    p = flattenApp f
-  in Pair (firstOf p) (append (secondOf p) [a])
-flattenApp x = Pair x []
-
 genLamApp : Int -> FGen -> IrBinder -> Ir -> Ir -> NRes (Pair (List Instr) FGen)
 genLamApp fuel st b arg body =
   if fuel <= 0 then
@@ -866,19 +909,26 @@ genApp fuel st isTail ir =
       Pair head args =>
         case head of
           IrGlobal name => genGlobalCall (fuel - 1) st isTail name args
+          IrLam bs _ body =>
+            case runtimeBinders bs of
+              [b] =>
+                case args of
+                  [a] => genLamApp (fuel - 1) st b a body
+                  _ => genApplyHead (fuel - 1) st isTail head args
+              _ => genApplyHead (fuel - 1) st isTail head args
           IrRt s =>
             if s == irRtNatSucc then
               case args of
-                [a] => genNatSuccCall (fuel - 1) st a
+                [a] => genNatSuccCall (fuel - 1) st isTail a
                 _ => internal "Nat Succ must have exactly one argument"
             else if s == "prim_erase" || s == "@vuna@prim@toObj" || s == "@vuna@prim@fromObj" then
               case args of
                 [] => internal "prim_erase needs an argument"
                 x :: rest => genExprAt (fuel - 1) st isTail (applyAllIr x rest)
             else
-              genRtValueCall (fuel - 1) st s args
+              genRtValueCall (fuel - 1) st isTail s args
           -- 动态 head：求值成闭包后交给 `rt_apply`（饱和 / 部分 / 过度统一处理）。
-          _ => genApplyHead (fuel - 1) st head args
+          _ => genApplyHead (fuel - 1) st isTail head args
 
 -- ---------------------------------------------------------------
 -- 闭包
@@ -915,13 +965,13 @@ storeCapsAt obj i [] = []
 storeCapsAt obj i (p :: rest) =
   append (setObjFromSlot obj (16 + 8 * i) (secondOf p)) (storeCapsAt obj (i + 1) rest)
 
--- | `IrLam` 作为值：生成闭包函数体并构造闭包对象。
-genLamValue : Int -> FGen -> Bool -> List IrBinder -> Ir -> NRes (Pair (List Instr) FGen)
-genLamValue fuel st isTail bs body =
+-- | `IrLam` 作为值：生成闭包函数体并构造闭包对象。body 的尾位置由 `IrTail` 标记。
+genLamValue : Int -> FGen -> List IrBinder -> Ir -> NRes (Pair (List Instr) FGen)
+genLamValue fuel st bs body =
   if fuel <= 0 then
     internal "native codegen fuel exhausted"
   else if length (runtimeBinders bs) == 0 then
-    genExprAt (fuel - 1) st isTail body
+    genExpr (fuel - 1) st body
   else
     let
       rbs = runtimeBinders bs
@@ -933,12 +983,12 @@ genLamValue fuel st isTail bs body =
       st1 = { st | fgNextLabel = idx + 1 }
       -- 闭包体自己的来参区由闭包 ABI 决定（`rdi` 是闭包自身，实参从 `rsi` 起）。
       lamRoom = nativeTailRoomBytes (nativeStackArgCount (length rbs) (length closureArgRegs))
-      stBody = FGen st1.fgDefs st1.fgPool [] st1.fgFams 0 st1.fgNextLabel [] lamRoom st1.fgModule st1.fgOwner
+      stBody = FGen st1.fgDefs st1.fgPool [] st1.fgFams 0 st1.fgNextLabel [] lamRoom st1.fgModule st1.fgOwner "" "" [] []
     in nbind (bindCaptures stBody caps 0) (
         \cp =>
           nbind (bindArgsGo rbs 1 (secondOf cp)) (
               \bp =>
-                nbind (genExprAt (fuel - 1) (secondOf bp) True body) (
+                nbind (genExpr (fuel - 1) (secondOf bp) body) (
                     \q =>
                       let
                         stF = secondOf q
@@ -949,7 +999,7 @@ genLamValue fuel st isTail bs body =
                         st2 = secondOf (secondOf allocP)
                         bodyIns = append (firstOf allocP) (append (storeCloCode obj lamName) (append (storeCloArity obj (length rbs)) (append (storeCapsAt obj 0 caps) (getLocal obj))))
                         lams = append st1.fgLams (append stF.fgLams [lamFunc])
-                        st3 = { st2 | fgLams = lams }
+                        st3 = { st2 | fgLams = lams, fgStatics = append st2.fgStatics stF.fgStatics }
                         -- 闭包函数体里用掉的内部 label 必须回写：否则父函数继续编号会撞名。
                         st4 = { st3 | fgNextLabel = stF.fgNextLabel }
                       in NOk (Pair bodyIns st4)
@@ -1404,6 +1454,13 @@ genNatCase fuel st isTail scrut zero succ catch =
 bindArgs : List IrBinder -> FGen -> NRes (Pair (List Instr) FGen)
 bindArgs bs st = bindArgsGo bs 0 st
 
+slotsOfBinders : List IrBinder -> List (Pair IrBinder Int) -> List Int
+slotsOfBinders [] _ = []
+slotsOfBinders (b :: rest) slots =
+  case lookupBinder b slots of
+    Just slot => slot :: slotsOfBinders rest slots
+    Nothing => slotsOfBinders rest slots
+
 -- | 绑定形参：前 6 个来自参数寄存器，其余来自调用方压栈（`[rbp+16]` 起）。
 bindArgsGo : List IrBinder -> Int -> FGen -> NRes (Pair (List Instr) FGen)
 bindArgsGo [] _ st = NOk (Pair [] st)
@@ -1423,7 +1480,7 @@ bindArgsGo (b :: rest) i st =
 
 -- | 生成一个定义；返回函数与该定义之后**模块内** label/slot 计数（`.L` 是文件局部
 --   符号，计数按模块保存；重编号不会跨模块扩散）。
-genDefFunc : List IrDef -> List (Pair String (List (Pair String String))) -> List IrTyDecl -> Int -> IrDef -> NRes (Pair (List NativeFunc) Int)
+genDefFunc : List IrDef -> List (Pair String (List (Pair String String))) -> List IrTyDecl -> Int -> IrDef -> NRes (Pair (List NativeFunc) (Pair Int (List NativeClosure)))
 genDefFunc _defs _pools _fams _nextLabel (IrExternDef name _ _ _) =
   unsupported "native target: extern definition `${name}` is not supported yet"
 genDefFunc defs pools fams nextLabel (IrDef name arity _ _ body _ _ _) =
@@ -1432,16 +1489,16 @@ genDefFunc defs pools fams nextLabel (IrDef name arity _ _ body _ _ _) =
     room = nativeTailRoomBytes (nativeStackArgCount arity nativeMaxArgs)
     modPath = modulePathOf name
     pool = modulePoolOf (moduleKeyOf name) pools
-    st0 = FGen defs pool [] fams 0 nextLabel [] room modPath name
+    st0 = FGen defs pool [] fams 0 nextLabel [] room modPath name "" "" [] []
   in if arity == 0 then
-    nbind (genExprAt (nativeFuelOfBody body) st0 True body) (
+    nbind (genExpr (nativeFuelOfBody body) st0 body) (
         \p =>
           let
             st1 = secondOf p
             frame = nativeFrameBytes st1.fgNextSlot
             instrs = append (clearDeadSlots (firstOf p)) nativeEpilogue
             mainF = NativeFunc (nativeFuncLabel name) frame (append (nativePrologue frame) (append stackGuardInstrs instrs)) modPath
-          in NOk (Pair (append st1.fgLams [mainF]) st1.fgNextLabel)
+          in NOk (Pair (append st1.fgLams [mainF]) (Pair st1.fgNextLabel st1.fgStatics))
       )
   else
     case body of
@@ -1453,14 +1510,19 @@ genDefFunc defs pools fams nextLabel (IrDef name arity _ _ body _ _ _) =
         else
           nbind (bindArgs rbs st0) (
               \bp =>
-                nbind (genExprAt (nativeFuelOfBody inner) (secondOf bp) True inner) (
+                let
+                  stB = secondOf bp
+                  loopP = freshLabel stB
+                  loopLabel = firstOf loopP
+                  stLoop = { (secondOf loopP) | fgSelfLabel = nativeFuncLabel name, fgSelfLoop = loopLabel, fgSelfParams = slotsOfBinders rbs stB.fgSlots }
+                in nbind (genExpr (nativeFuelOfBody inner) stLoop inner) (
                     \q =>
                       let
                         st1 = secondOf q
                         frame = nativeFrameBytes st1.fgNextSlot
-                        instrs = append (firstOf bp) (append (clearDeadSlots (firstOf q)) nativeEpilogue)
+                        instrs = append (firstOf bp) (append [ILabel loopLabel] (append (clearDeadSlots (firstOf q)) nativeEpilogue))
                         mainF = NativeFunc (nativeFuncLabel name) frame (append (nativePrologue frame) (append stackGuardInstrs instrs)) modPath
-                      in NOk (Pair (append st1.fgLams [mainF]) st1.fgNextLabel)
+                      in NOk (Pair (append st1.fgLams [mainF]) (Pair st1.fgNextLabel st1.fgStatics))
                   )
             )
       _ => internal "function body is not a lambda: ${name}"
@@ -1476,21 +1538,31 @@ putLabelCount key n [] = [Pair key n]
 putLabelCount key n (p :: rest) =
   if firstOf p == key then Pair key n :: rest else p :: putLabelCount key n rest
 
-genDefs : List IrDef -> List (Pair String (List (Pair String String))) -> List IrTyDecl -> List (Pair String Int) -> List IrDef -> List (List NativeFunc) -> NRes (Pair (List NativeFunc) Int)
-genDefs _all _pools _fams _labels [] acc = NOk (Pair (concatMap (\x => x) (reverse acc)) 0)
-genDefs all pools fams labels (d :: rest) acc =
+genDefs : List IrDef -> List (Pair String (List (Pair String String))) -> List IrTyDecl -> List (Pair String Int) -> List IrDef -> List (List NativeFunc) -> List NativeClosure -> NRes (Pair (List NativeFunc) (Pair Int (List NativeClosure)))
+genDefs _all _pools _fams _labels [] acc statAcc =
+  NOk (Pair (concatMap (\x => x) (reverse acc)) (Pair 0 statAcc))
+genDefs all pools fams labels (d :: rest) acc statAcc =
   let
     key = moduleKeyOf (irDefName d)
     start = labelCountOf key labels
-  in nbind
-    (genDefFunc all pools fams start d)
-    (\p => genDefs all pools fams (putLabelCount key (secondOf p) labels) rest (firstOf p :: acc))
+  in nbind (genDefFunc all pools fams start d) (
+      \p =>
+        let
+          next = firstOf (secondOf p)
+          statics = secondOf (secondOf p)
+        in genDefs all pools fams (putLabelCount key next labels) rest (firstOf p :: acc) (append statics statAcc)
+    )
 
 -- | 按标签去重（函数值 wrapper 可能被多个定义分别登记；同标签体相同）。
 dedupeFuncs : List NativeFunc -> List NativeFunc
 dedupeFuncs [] = []
 dedupeFuncs (f :: rest) =
   if hasFuncLabel (nativeFuncLabelOf f) rest then dedupeFuncs rest else f :: dedupeFuncs rest
+
+dedupeClosures : List NativeClosure -> List NativeClosure
+dedupeClosures [] = []
+dedupeClosures (c :: rest) =
+  if hasNativeClosure c.ncLabel rest then dedupeClosures rest else c :: dedupeClosures rest
 
 -- ---------------------------------------------------------------
 -- 入口
@@ -1863,10 +1935,11 @@ build program printResult =
                   Ok cpsOrdered =>
                     let
                       pools = modulePools cpsOrdered
-                    in case genDefs cpsOrdered pools unit.irUnitTyDecls [] cpsOrdered [] of
+                    in case genDefs cpsOrdered pools unit.irUnitTyDecls [] cpsOrdered [] [] of
                       NFail err => NativeRejected (nativeAuditEnrich err cpsOrdered)
                       NOk pair =>
                         let
                           start = startFunc printResult kind mainName runMainM (irEntryHandlersOf e)
                           moduleLits = map (\p => Pair (split "." (firstOf p)) (poolItems (secondOf p))) pools
-                        in NativeOk (NativeProgram nativeRodata nativeBss (dedupeFuncs (append (nativeBridgeFuncs (irProgSharedOf program).irSharedListFam unit.irUnitTyDecls) (append nativeRtFuncs (append (firstOf pair) [start])))) moduleLits)
+                          statics = dedupeClosures (secondOf (secondOf pair))
+                        in NativeOk (NativeProgram nativeRodata nativeBss statics (dedupeFuncs (append (nativeBridgeFuncs (irProgSharedOf program).irSharedListFam unit.irUnitTyDecls) (append nativeRtFuncs (append (firstOf pair) [start])))) moduleLits)

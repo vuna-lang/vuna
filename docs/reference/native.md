@@ -96,14 +96,20 @@
   直接写 `ret`。手写分支因此不会「提前 ret 把 rsp 留在 frame 里」，不会崩在返回地址上。
 - 入口 `_start`：初始化堆指针 → `and rsp, -16` → `call vuna_main` → 按入口 show
   打印 → `exit(0)`；不解析 argv，无栈溢出检查。
-- **尾调用**：结果位置的饱和直调（`IrApp` 的 head 是 `IrGlobal` 且实参个数等于定义 arity，
-  以及零参 `IrGlobal`；`IrLet` 的 body 也算结果位置）把实参写回**调用者的来参区**
-  `[rbp+16...]`，装参数寄存器后 `mov rsp, rbp; pop rbp; jmp 目标`。`pop rbp` 之后 `rsp`
-  正好落在返回地址槽，与 `call` 刚进入时同构（`rsp ≡ 8 mod 16`），所以尾调用自己不需要
-  补对齐洞。空间判据在生成期静态判定：`8 × 栈实参个数 <= 来参区字节数`（`Native.Abi` 的
-  `nativeTailRoomBytes`）；不满足就回退普通 `call`，语义不变（`>6` 参函数的「窄调宽」
-  尾调用因此可能不复用帧）。闭包调用、`rt_apply` 与 `rt_*` 运行时目标都不做尾调用；
-  源级 `let` 降级成 lambda 应用，带 `let` 的递归循环仍走闭包调用。
+- **尾调用**：结果位置由 `Ir.Tail` 标记（`cpsDefsMachine` 之后）。native 的覆盖面：
+  1. **自递归**：饱和自调用写回形参槽后 `jmp` 到函数内的 loop header，不拆帧/不重建帧，
+     也不受来参区限制；
+  2. **直调**：饱和 `IrGlobal` 把实参写回**调用者的来参区** `[rbp+16...]`，装参数寄存器后
+     `mov rsp, rbp; pop rbp; jmp 目标`。空间判据 `8 × 栈实参个数 <= nativeTailRoomBytes`；
+     不满足回退普通 `call`（窄调宽）；
+  3. **饱和闭包**：快路径 `jmp [clo]`（闭包 ABI：`rdi` + `rsi..r9`，第 6 个起写回来参区）；
+     慢路径（部分 / 过度应用）仍走 `call rt_apply`；
+  4. **函数值 wrapper**：wrapper 把闭包实参搬进本帧槽后直接 `jmp` 目标；函数值递归不会
+     每轮累积 wrapper 帧；
+  5. **runtime 符号**：饱和 `IrRtApp` / `IrRt` / `genRtValueCall` / `nat_succ` 发 `jmp rt_*`。
+  源级 `let` 的立即 lambda 在 native codegen 内联成 `IrLet` 形态，不再分配闭包；`let`
+  循环走普通直调尾跳（或上面的自递归 loop）。仍不回退为尾调用的情况：窄调宽、`rt_apply`
+  慢路径、非尾递归。
 
 ### 3.4 效应 handler 与一次性续延
 
@@ -387,9 +393,10 @@ env，**不进 codegen**（同一 IR 的产物逐字节确定）。解析失败�
   在 16 个生成程序基准上测 native 产物；基线 `bench/baselines/programs.json`，读数与口径见
 [benchmarks.md](benchmarks.md) §1.1。非尾深递归在默认 8 MiB 栈下仍会崩溃（exit 139），
   基准因此在 `ulimit -s unlimited` 下运行，JSON 的 `meta.stack_policy` 记录该口径、每项另有
-  `default_stack_ok` 探针；峰值 RSS = 栈页 + live 堆，需与墙钟一起读。TCO 已落地：只覆盖
-  直接饱和直调，`tco_mutual` / `tco_wide` / `arith` / `records` 的判定与实测读数见
-  [benchmarks.md](benchmarks.md) §1.2；§1.1 的 native 列是 TCO 前快照。
+  `default_stack_ok` 探针；峰值 RSS = 栈页 + live 堆，需与墙钟一起读。TCO 由 `IrTail`
+  标记驱动，覆盖直调、饱和闭包、函数值 wrapper、runtime 符号与自递归 loop；窄调宽、
+  `rt_apply` 慢路径与非尾递归仍吃帧。`tco_mutual` / `tco_wide` / `arith` / `records`
+  的判定与实测读数见 [benchmarks.md](benchmarks.md) §1.2；§1.1 的 native 列是 TCO 前快照。
 - 核数限制是**亲和性**，不是 CPU 配额：单核跑多久不管，长时间占用用
   `VUNA_NATIVE_TIMEOUT_MS`；cgroup 只读 v2 挂载根的 `cpu.max`。
 - `Int`/`Nat`/`Bool` 的 heap 布局、对象头/复用（Perceus RC 依赖这一层）。

@@ -434,6 +434,7 @@ irSymbolsOf (IrFloatLit _) = []
 irSymbolsOf (IrLet _ scrut body) = append (irSymbolsOf scrut) (irSymbolsOf body)
 irSymbolsOf (IrLam _ _ body) = irSymbolsOf body
 irSymbolsOf (IrApp _ f a) = append (irSymbolsOf f) (irSymbolsOf a)
+irSymbolsOf (IrTail inner) = irSymbolsOf inner
 irSymbolsOf (IrIf c t e) = append (irSymbolsOf c) (append (irSymbolsOf t) (irSymbolsOf e))
 irSymbolsOf (IrCase _ _ scrut alts) = append (irSymbolsOf scrut) (concatMap irSymbolsOfAlt alts)
 irSymbolsOf (IrNatCase scrut _ z s c) =

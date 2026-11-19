@@ -1899,6 +1899,7 @@ genIrNode st (IrLam bs _ body) =
                     Pair bodyTerm st2 => OkC (Pair (OLam params bodyTerm) st2)
               )
     )
+genIrNode st (IrTail inner) = genIrNode st inner
 genIrNode st (IrApp _ f a) =
   Vuna.Compiler.Base.Common.bind (genIr st f) (
       \p =>

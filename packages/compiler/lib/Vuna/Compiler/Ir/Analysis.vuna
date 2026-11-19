@@ -10,6 +10,7 @@ module Vuna.Compiler.Ir.Analysis where
 -- **逐项一致**才能做到产物逐字节相同。
 import Vuna.Compiler.Base.Common
 import Base.Data.List as List
+import Base.Data.Pair as Pair
 import Base.Container.HashMap as HashMap
 import Vuna.Compiler.Base.Diagnostics
 import Vuna.Compiler.Ir.Model
@@ -399,6 +400,7 @@ irStringsOf (IrCast cFrom cTo inner) = irStringsOf inner
 irStringsOf (IrLet _ scrut body) = append (irStringsOf scrut) (irStringsOf body)
 irStringsOf (IrLam _ _ body) = irStringsOf body
 irStringsOf (IrApp _ f a) = append (irStringsOf f) (irStringsOf a)
+irStringsOf (IrTail inner) = irStringsOf inner
 irStringsOf (IrIf c t e) = append (irStringsOf c) (append (irStringsOf t) (irStringsOf e))
 irStringsOf (IrCase _ _ scrut alts) = append (irStringsOf scrut) (concatMap irStringsOfAlt alts)
 irStringsOf (IrNatCase scrut _ z s c) =
@@ -418,6 +420,14 @@ irStringsOfAlt alt = irStringsOf (irAltBodyOf alt)
 irStringsOfAltMaybe : Maybe IrAlt -> List String
 irStringsOfAltMaybe Nothing = []
 irStringsOfAltMaybe (Just alt) = irStringsOfAlt alt
+
+-- | 应用的左脊：拆出 head 与按序实参。`IrTail` 不属于脊，调用方先处理标记。
+export flattenApp : Ir -> Pair Ir (List Ir)
+flattenApp (IrApp _ f a) =
+  let
+    p = flattenApp f
+  in Pair (firstOf p) (append (secondOf p) [a])
+flattenApp x = Pair x []
 
 -- | 一个运行时定义体的字符串字面量（extern / 无体定义为空）。
 export irStringsOfDef : IrDef -> List String

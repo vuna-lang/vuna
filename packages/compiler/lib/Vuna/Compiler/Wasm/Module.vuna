@@ -22,6 +22,7 @@ import Vuna.Compiler.Ir.Analysis
 import Vuna.Compiler.Ir.Cps
 import Vuna.Compiler.Ir.Anf
 import Vuna.Compiler.Ir.Runtime
+import Vuna.Compiler.Ir.Tail
 import Vuna.Compiler.Wasm.Instr
 import Vuna.Compiler.Wasm.Model
 import Vuna.Compiler.Wasm.Runtime
@@ -280,6 +281,10 @@ genExpr fuel st ir =
       IrEffThunk family ctor _unitTy arity prim => genEffThunk (fuel - 1) st family ctor arity prim
       IrEffBind _ _ _ => Err "wasm target: effect bindings are not supported yet"
       IrFloatLit raw => genFloatLit st raw
+      IrTail inner =>
+        case genExpr (fuel - 1) (withTail True st) inner of
+          Err e => Err e
+          Ok p => Ok (Pair (firstOf p) (withTail st.gsTail (secondOf p)))
       IrRt sym => genRtValue (fuel - 1) st sym
 
 genVar : GenState -> IrBinder -> Result (Pair (List Instr) GenState)
@@ -301,7 +306,8 @@ genGlobalRef fuel st name =
         else
           let
             bs = etaBinders (irDefArity d)
-          in genLamValue (fuel - 1) st bs Nothing (applyAllIr (IrGlobal name) (map (\b => IrVar b) bs))
+            bodyIr = applyAllIr (IrGlobal name) (map (\b => IrVar b) bs)
+          in genLamValue (fuel - 1) st bs Nothing bodyIr
       Nothing => Err "unknown top-level definition in wasm codegen: `${name}`"
 
 -- | 运行时符号作为值：`RtValue` 直接内联；`RtFunc` eta 展开成闭包。
@@ -316,7 +322,8 @@ genRtValue fuel st sym =
       RtFunc n _ =>
         let
           bs = etaBinders n
-        in genLamValue (fuel - 1) st bs Nothing (IrRtApp sym (map (\b => IrVar b) bs))
+          bodyIr = IrRtApp sym (map (\b => IrVar b) bs)
+        in genLamValue (fuel - 1) st bs Nothing bodyIr
 
 etaBinders : Int -> List IrBinder
 etaBinders n = map (\i => IrBinder (IrBUser ("__eta" ++ strFromInt i)) False Nothing) (range 0 n)
@@ -409,13 +416,6 @@ listLengthB (_ :: rest) = 1 + listLengthB rest
 -- ---------------------------------------------------------------
 -- 应用
 -- ---------------------------------------------------------------
-flattenApp : Ir -> Pair Ir (List Ir)
-flattenApp (IrApp _ f a) =
-  let
-    p = flattenApp f
-  in Pair (firstOf p) (append (secondOf p) [a])
-flattenApp x = Pair x []
-
 genApp : Int -> GenState -> Ir -> Result (Pair (List Instr) GenState)
 genApp fuel st ir =
   if fuel <= 0 then
@@ -534,7 +534,7 @@ genLamValue fuel st bs rt body =
             Ok cp =>
               case freshLocal (secondOf cp) WvAnyRef of
                 Pair pl stp =>
-                  case genExpr (fuel - 1) (pushBinder b pl (withTail True stp)) body of
+                  case genExpr (fuel - 1) (pushBinder b pl (noTail stp)) body of
                     Err e => Err e
                     Ok q =>
                       let
@@ -1478,7 +1478,7 @@ genDefFuncBody fuel st name arity body =
 genDefFuncGo : Int -> GenState -> String -> Int -> Ir -> List (Pair IrBinder String) -> List (Pair String WatValTy) -> Int -> List (Pair IrBinder String) -> Result (Pair (List WatFunc) GenState)
 genDefFuncGo fuel st name arity inner paramScope savedLocals savedNext savedScope =
   let
-    st1 = { st | gsScope = paramScope, gsTail = True }
+    st1 = { st | gsScope = paramScope, gsTail = False }
   in case genExpr (fuel - 1) st1 inner of
     Err e => Err e
     Ok p =>
@@ -1519,7 +1519,7 @@ genDefInit fuel st (IrDef name arity _deps _ty body _recOk _initGuard _span) =
   else
     let
       st1 = restoreScope [] st
-    in case genExpr (fuel - 1) st1 body of
+    in case genExpr (fuel - 1) st1 (stripTail body) of
       Err e => Err e
       Ok p => Ok (Pair (append (firstOf p) [IGlobalSet (watGlobalNameOf name)]) (secondOf p))
 
@@ -1730,6 +1730,7 @@ irUsesSyms fuel syms ir =
       IrNatCase s _ z su c => if irUsesSyms (fuel - 1) syms s then True else if altMaybeSym fuel syms z then True else if altMaybeSym fuel syms su then True else altMaybeSym fuel syms c
       IrConcatMany xs => anyIrSym fuel syms xs
       IrEffThunk _ _ _ _ e => False
+      IrTail inner => irUsesSyms (fuel - 1) syms inner
       IrEffBind _ _ _ => False
 
 -- | 需要 handler 的任何一项（perform / handle / self）。
@@ -1815,6 +1816,7 @@ spineOf : Ir -> Pair Ir (List Ir)
 spineOf (IrApp _ f a) =
   case spineOf f of
     Pair h args => Pair h (append args [a])
+spineOf (IrTail inner) = spineOf inner
 spineOf ir = Pair ir []
 
 -- | key → opH 定义名。
@@ -1875,6 +1877,7 @@ rw h ab n (IrNatCase sc i z su c) =
     (IrNatCase (rw h ab n sc) i (rwAltMaybe h ab n z) (rwAltMaybe h ab n su) (rwAltMaybe h ab n c))
 rw h ab n (IrConcatMany xs) = rwSpine h ab n (IrConcatMany (map (rw h ab n) xs))
 rw h ab n (IrEffThunk f c t a p) = rwSpine h ab n (IrEffThunk f c t a (rw h ab n p))
+rw h ab n (IrTail inner) = IrTail (rw h ab n inner)
 rw h ab n ir = rwSpine h ab n ir
 
 -- | `sendCore` 的尾部五参：key（字面量）、name、keyId、nameId、op。擦除实参可能在前，按后缀取。
@@ -1973,6 +1976,7 @@ irGlobalsOf (IrNatCase sc _ z su c) =
     (append (globalsOfAltMaybe z) (append (globalsOfAltMaybe su) (globalsOfAltMaybe c)))
 irGlobalsOf (IrConcatMany xs) = concatMap irGlobalsOf xs
 irGlobalsOf (IrEffThunk _ _ _ _ p) = irGlobalsOf p
+irGlobalsOf (IrTail inner) = irGlobalsOf inner
 irGlobalsOf _ = []
 
 globalsOfField : Pair String Ir -> List String
@@ -2087,9 +2091,13 @@ build program printResult =
       case anfProgramDefs ds of
         Err msg => WasmRejected (WasmInternal ("ANF: " ++ msg))
         Ok ds1 =>
-          case buildModule 100000 (mkSt ds1) ds1 entry0 printResult lf of
-            Ok m => WasmOk m
-            Err msg => WasmRejected (classifyWasmErr msg)
+          case annotateDefs ds1 of
+            -- 第二次 ANF（CPS 输出再规范化）会丢掉输入里的尾标记；ANF 之后重新标记。
+            Err msg => WasmRejected (WasmInternal ("tail: " ++ msg))
+            Ok ds2 =>
+              case buildModule 100000 (mkSt ds2) ds2 entry0 printResult lf of
+                Ok m => WasmOk m
+                Err msg => WasmRejected (classifyWasmErr msg)
   in case entry of
     Nothing => WasmRejected (WasmUnsupported "wasm target: no main definition")
     Just e =>

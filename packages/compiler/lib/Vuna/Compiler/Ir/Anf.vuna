@@ -176,6 +176,8 @@ anf fuel next e =
         let
           p = anf (fuel - 1) next prim
         in mkAnf p.anfLets (IrEffThunk family ctor unitTy arity p.anfExpr) p.anfNext
+      -- 尾标记在 ANF 之后生成；这里只是防御性透明处理。
+      IrTail inner => anf (fuel - 1) next inner
 
 anfList : Int -> Int -> List Ir -> AnfList
 anfList fuel next xs =
@@ -259,6 +261,7 @@ countAnfBinders fuel e =
       IrNatCase s _ z su ca => countAnfBinders (fuel - 1) s + countAltM (fuel - 1) z + countAltM (fuel - 1) su + countAltM (fuel - 1) ca
       IrConcatMany xs => countAnfList (fuel - 1) xs
       IrEffThunk _ _ _ _ p => countAnfBinders (fuel - 1) p
+      IrTail inner => countAnfBinders (fuel - 1) inner
       IrEffBind _ _ _ => 0
 
 countBs : List IrBinder -> Int

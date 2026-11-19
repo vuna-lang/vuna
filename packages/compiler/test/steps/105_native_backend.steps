@@ -306,13 +306,15 @@ exit: 0
 out-equals: 1
 file-contains: $TMPDIR/tcomutual-out/Main.s jmp vuna_odd
 
-# 9ac) 尾调用的栈传参：9 参自递归（3 个栈参数）每层重写来参区，常量栈跑完 100 万层。
+# 9ac) 自递归尾调用：9 参自递归（3 个栈参数）走本地循环，常量栈跑完 100 万层；
+#      循环回边是函数内 label，不再 `jmp vuna_step`。
 run: sh -c 'd="$TMPDIR/tcowide"; mkdir -p "$d/app"; printf "[package]\nname = \"tcowide\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "step : Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int\nstep a b c d e f g h n =\n  if n <= 0 then a + b + c + d + e + f + g + h\n  else step (a + 1) b c d e f g h (n - 1)\n\nmain : Int\nmain = step 0 0 0 0 0 0 0 1 1000000\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/tcowide-out" "$d"'
 exit: 0
 run: "$TMPDIR/tcowide-out/bin/tcowide" 2>&1
 exit: 0
 out-equals: 1000001
-file-contains: $TMPDIR/tcowide-out/Main.s jmp vuna_step
+file-contains: $TMPDIR/tcowide-out/Main.s jmp .L
+run: sh -c '! grep -q "jmp vuna_step" "$TMPDIR/tcowide-out/Main.s"'
 
 # 9ad) 尾位置穿透 `if` / `case` / `natCase`：三种形状的深递归都在常量栈上跑完。
 run: sh -c 'd="$TMPDIR/tcopos"; mkdir -p "$d/app"; printf "[package]\nname = \"tcopos\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Data.Nat as Nat\n\ndata Chain : Type where\n  Nil2 : Chain\n  Cons2 : Chain -> Chain\n\nbuild : Int -> Chain -> Chain\nbuild n acc = if n <= 0 then acc else build (n - 1) (Cons2 acc)\n\nifTail : Int -> Int\nifTail n = if n <= 0 then 0 else ifTail (n - 1)\n\nchainTail : Chain -> Int\nchainTail c = case c of\n  Nil2 => 0\n  Cons2 k => chainTail k\n\nnatTail : Nat -> Int\nnatTail n = case n of\n  Zero => 0\n  Succ k => natTail k\n\nmain : Int\nmain = ifTail 300000 + chainTail (build 300000 Nil2) + natTail (natFromInt 300000)\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/tcopos-out" "$d"'
@@ -350,14 +352,60 @@ run: sh -c '"$VUNA" compile "$TMPDIR/tcowide/app/Main.vuna" "$TMPDIR/dettco-a" -
 exit: 0
 
 # 9ah) 闭包体的来参区按闭包 ABI 算（`rdi` 占掉一个寄存器）：8 参 lambda 尾调 10 参函数
-#      正好用满 32 字节来参区，仍然发 `jmp`（两处：lambda 体内 + 宽函数自递归）。
+#      正好用满 32 字节来参区，仍然发 `jmp`；wide10 自己的递归走本地循环。
 run: sh -c 'd="$TMPDIR/tcolam"; mkdir -p "$d/app"; printf "[package]\nname = \"tcolam\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "wide10 : Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int\nwide10 a b c d e f g h i n =\n  if n <= 0 then a + b + c + d + e + f + g + h + i\n  else wide10 a b c d e f g h i (n - 1)\n\napply8 : (Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int) -> Int\napply8 f = f 1 2 3 4 5 6 7 8\n\nmain : Int\nmain = apply8 (\\\\a, b, c, d, e, f, g, h => wide10 a b c d e f g h 0 100000)\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/tcolam-out" "$d"'
 exit: 0
 run: "$TMPDIR/tcolam-out/bin/tcolam" 2>&1
 exit: 0
 out-equals: 36
 run: sh -c 'grep -c "jmp vuna_wide10" "$TMPDIR/tcolam-out/Main.s"'
-out-equals: 2
+out-equals: 1
+
+# 9ai) 源级 let 的立即 lambda 内联：循环体不再分配闭包、不再走 `call r11`。
+run: sh -c 'd="$TMPDIR/tcolet"; mkdir -p "$d/app"; printf "[package]\nname = \"tcolet\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Data.Nat as Nat\n\nloop : Nat -> Int\nloop n = case n of\n  Zero => 0\n  Succ k => let x = 1 in loop k\n\nmain : Int\nmain = loop (natFromInt 1000)\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/tcolet-out" "$d"'
+exit: 0
+run: "$TMPDIR/tcolet-out/bin/tcolet" 2>&1
+exit: 0
+out-equals: 0
+run: sh -c '! grep -q "vuna_loop_lam" "$TMPDIR/tcolet-out/Main.s"'
+exit: 0
+run: sh -c '! grep -q "call r11" "$TMPDIR/tcolet-out/Main.s"'
+exit: 0
+
+# 9aj) 闭包尾调用 + wrapper 尾跳：函数值递归在默认 8 MiB 栈上跑 20 万层，GC_STRESS 一致。
+run: sh -c 'd="$TMPDIR/tcoclosure"; mkdir -p "$d/app"; printf "[package]\nname = \"tcoclosure\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Data.List as List\nimport Base.Data.Nat as Nat\n\napply : (Int -> Int) -> Int -> Int\napply f k = f k\n\nbuild : Nat -> List Int -> List Int\nbuild n acc = case n of\n  Zero => acc\n  Succ k => build k (0 :: acc)\n\ngo : List Int -> Int\ngo xs = case xs of\n  [] => 0\n  y :: ys => apply (\\\\u => go ys) 0\n\nmain : Int\nmain = go (build (natFromInt 200000) [])\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/tcoclosure-out" "$d"'
+exit: 0
+run: "$TMPDIR/tcoclosure-out/bin/tcoclosure" 2>&1
+exit: 0
+out-equals: 0
+run: sh -c 'grep -q "jmp r11" "$TMPDIR/tcoclosure-out/Main.s"'
+exit: 0
+run: sh -c 'VUNA_NATIVE_GC_STRESS=1 "$TMPDIR/tcoclosure-out/bin/tcoclosure" 2>&1'
+exit: 0
+out-equals: 0
+
+# 9ak) 运行时符号尾调用：饱和 runtime 调用在结果位置发 `jmp rt_*`。
+run: sh -c 'd="$TMPDIR/tcort"; mkdir -p "$d/app"; printf "[package]\nname = \"tcort\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Data.Nat as Nat\nimport Base.Data.String as String\n\nrtTail : Nat -> Int\nrtTail n = case n of\n  Zero => 0\n  Succ k => strLength (strFromInt k)\n\nmain : Int\nmain = rtTail (natFromInt 10)\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/tcort-out" "$d"'
+exit: 0
+run: "$TMPDIR/tcort-out/bin/tcort" 2>&1
+exit: 0
+out-equals: 1
+run: sh -c 'grep -q "jmp rt_str_length" "$TMPDIR/tcort-out/Main.s"'
+exit: 0
+
+# 9al) 顶层函数值闭包静态化：引用点是 `lea`，不是每轮 `rt_alloc`。
+run: sh -c 'd="$TMPDIR/tcostatic"; mkdir -p "$d/app"; printf "[package]\nname = \"tcostatic\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Data.Nat as Nat\n\ndirect : Nat -> Int\ndirect n = case n of\n  Zero => 0\n  Succ k => direct k\n\napply : (Nat -> Int) -> Nat -> Int\napply f n = f n\n\nmain : Int\nmain = apply direct (natFromInt 1000)\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/tcostatic-out" "$d"'
+exit: 0
+run: "$TMPDIR/tcostatic-out/bin/tcostatic" 2>&1
+exit: 0
+out-equals: 0
+run: sh -c 'grep -q "vuna_static" "$TMPDIR/tcostatic-out/runtime.s"'
+exit: 0
+run: sh -c 'grep -q "lea rax, \\[rip + vuna_static" "$TMPDIR/tcostatic-out/Main.s"'
+exit: 0
+run: sh -c 'VUNA_NATIVE_GC_STRESS=1 "$TMPDIR/tcostatic-out/bin/tcostatic" 2>&1'
+exit: 0
+out-equals: 0
 
 # 11) 文件集按模块切分：改一个模块只重写该模块的 `.s`，其它模块与 runtime 逐字节不变。
 run: sh -c 'd="$TMPDIR/loc"; mkdir -p "$d/app" "$d/lib"; printf "[package]\nname = \"loc\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "module Util where\n\nexport answer : Int\nanswer = 41\n" > "$d/lib/Util.vuna"; printf "import Util\n\nmain : Int\nmain = answer + 1\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --no-compile --out "$TMPDIR/loc-a" "$d"'

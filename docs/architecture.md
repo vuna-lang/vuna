@@ -83,6 +83,10 @@ packages/compiler/lib/Vuna/Compiler/   （目录即层：层名 = 模块前缀�
 上下文（最近 manifest，无则 base-only），flatten / 精化 / codegen 与包内模块相同——无第二套
 加载语义。
 
+**native / wasm 的 IR 后段**：`Lowering.Program` 之后走 `Ir.Represent`（去装箱）→
+`Ir.Cps.cpsDefsMachine`（效应机器）→ `Ir.Tail`（尾位置标记）→ `Native.Module` / `Wasm.Module`。
+`Ir.Tail` 是两端共享的判定；发射仍是各自后端（native `jmp`，wasm `return_call`）。
+
 **运行时错误报告**：`Vuna_runtime.ml` 由 `Codegen.Term.dtRuntimeWith` 生成 =
 运行时常量 + `dt_def_locs`（定义位置表：mangled 值名 → `定义名 (相对路径:行)`，路径按
 `PackageContext` 的模块根/包目录归一）+ `dt_report_exn`（未捕获异常报告器）。

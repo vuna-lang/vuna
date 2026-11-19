@@ -130,6 +130,7 @@ renderIr fuel e =
         let
           p = renderApp (fuel - 1) e
         in "(app " ++ appTyText appTy ++ " " ++ firstOf p ++ " " ++ secondOf p ++ ")"
+      IrTail inner => "(tail " ++ renderIr (fuel - 1) inner ++ ")"
       IrIf c t el => "(if " ++ renderIr (fuel - 1) c ++ " " ++ renderIr (fuel - 2) t ++ " " ++ renderIr (fuel - 3) el ++ ")"
       IrCase caseTy resultTy s alts => "(case " ++ tyTextMaybe caseTy ++ "->" ++ tyTextMaybe resultTy ++ " " ++ renderIr (fuel - 1) s ++ " " ++ String.join " " (map (renderAlt (fuel - 2)) alts) ++ ")"
       IrNatCase s _ z su ca => "(natcase " ++ renderIr (fuel - 1) s ++ " " ++ renderAltM (fuel - 2) z ++ " " ++ renderAltM (fuel - 2) su ++ " " ++ renderAltM (fuel - 2) ca ++ ")"

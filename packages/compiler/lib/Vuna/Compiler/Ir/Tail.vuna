@@ -1,0 +1,154 @@
+module Vuna.Compiler.Ir.Tail where
+
+-- 尾位置标记 pass。
+--
+-- `IrTail` 只是注解：求值与原节点相同，表示该节点处在函数结果位置。尾位置规则
+-- 集中在这里，native / wasm 只消费标记并发射各自的尾调用指令。
+--
+-- 运行位置：`Ir.Cps.cpsDefsMachine` 末尾。CPS 会新建/重排 `IrApp` 与 `IrLam`，
+-- 因此标记必须在 CPS 之后。`IrEffThunk` 的 prim 是模板，不在这里标记；后端把它
+-- 塞进合成的 lambda 时不标记（效应 thunk / eta wrapper 的 body 仍按普通调用生成）。
+--
+-- 边界：只 import `Ir.Model` 与 Base 的纯数据结构。
+import Base.Container.HashMap as HashMap
+import Base.Data.List as List
+import Base.Data.Maybe as Maybe
+import Base.Data.Pair as Pair
+import Base.Data.Result as Result
+import Vuna.Compiler.Ir.Model
+
+-- | 定义名 -> 运行时 arity。extern 不参与（没有 IR 调用点）。
+arityTableOf : List IrDef -> HashMap String Int
+arityTableOf defs = foldl addDef (HashMap.fromList []) defs
+
+addDef : HashMap String Int -> IrDef -> HashMap String Int
+addDef tbl d =
+  case d of
+    IrDef name arity _ _ _ _ _ _ => HashMap.insert name arity tbl
+    IrExternDef _ _ _ _ => tbl
+
+arityOfTable : HashMap String Int -> String -> Maybe Int
+arityOfTable tbl name = HashMap.lookup name tbl
+
+tailFuelOf : Ir -> Int
+tailFuelOf ir = 64 + 16 * irSize ir
+
+annotateDefsWith : (String -> Maybe Int) -> List IrDef -> List IrDef
+annotateDefsWith arityOf defs = map (annotateDef arityOf) defs
+
+annotateDef : (String -> Maybe Int) -> IrDef -> IrDef
+annotateDef arityOf d =
+  case d of
+    IrDef name arity deps ty body recOk initGuard span =>
+      IrDef name arity deps ty (annotateAt (tailFuelOf body) arityOf True body) recOk initGuard span
+    IrExternDef _ _ _ _ => d
+
+-- | 对整个定义表做标记。同一个 pass 幂等：已有 `IrTail` 不再包一层。
+export annotateDefs : List IrDef -> Result (List IrDef)
+annotateDefs defs =
+  let
+    tbl = arityTableOf defs
+  in Ok (annotateDefsWith (arityOfTable tbl) defs)
+
+-- | 去掉当前求值上下文里的尾标记，但保留 `IrLam` body 内的标记（那是函数体）。
+--   wasm 的零参定义在 `_start` 里内联求值，不能按函数返回位置发 `return_call`。
+export stripTail : Ir -> Ir
+stripTail ir = stripTailAt (tailFuelOf ir) ir
+
+stripTailAt : Int -> Ir -> Ir
+stripTailAt fuel ir =
+  if fuel <= 0 then
+    ir
+  else
+    case ir of
+      IrTail inner => stripTailAt (fuel - 1) inner
+      IrVar _ => ir
+      IrGlobal _ => ir
+      IrCtor family ctor tys args => IrCtor family ctor tys (map (stripTailAt (fuel - 1)) args)
+      IrRecord family resTy fields => IrRecord family resTy (map (stripField (fuel - 1)) fields)
+      IrProj base family field resTy => IrProj (stripTailAt (fuel - 1) base) family field resTy
+      IrRecUpd base family fields resTy => IrRecUpd (stripTailAt (fuel - 1) base) family (map (stripField (fuel - 1)) fields) resTy
+      IrRt _ => ir
+      IrRtApp sym args => IrRtApp sym (map (stripTailAt (fuel - 1)) args)
+      IrCast cFrom cTo inner => IrCast cFrom cTo (stripTailAt (fuel - 1) inner)
+      IrInt _ => ir
+      IrStr _ => ir
+      IrBool _ => ir
+      IrFloatLit _ => ir
+      IrLet bs scrut body => IrLet bs (stripTailAt (fuel - 1) scrut) (stripTailAt (fuel - 1) body)
+      IrLam bs rt body => IrLam bs rt (stripTailAt (fuel - 1) body)
+      IrApp appTy f a => IrApp appTy (stripTailAt (fuel - 1) f) (stripTailAt (fuel - 1) a)
+      IrIf c t el => IrIf (stripTailAt (fuel - 1) c) (stripTailAt (fuel - 1) t) (stripTailAt (fuel - 1) el)
+      IrCase caseTy resultTy scrut alts => IrCase caseTy resultTy (stripTailAt (fuel - 1) scrut) (map (stripAlt (fuel - 1)) alts)
+      IrNatCase scrut fresh zero succ catch => IrNatCase (stripTailAt (fuel - 1) scrut) fresh (stripAltM (fuel - 1) zero) (stripAltM (fuel - 1) succ) (stripAltM (fuel - 1) catch)
+      IrConcatMany parts => IrConcatMany (map (stripTailAt (fuel - 1)) parts)
+      IrEffThunk family ctor unitTy arity prim => IrEffThunk family ctor unitTy arity (stripTailAt (fuel - 1) prim)
+      IrEffBind _ _ _ => ir
+
+stripField : Int -> Pair String Ir -> Pair String Ir
+stripField fuel p = Pair (firstOf p) (stripTailAt fuel (secondOf p))
+
+stripAlt : Int -> IrAlt -> IrAlt
+stripAlt fuel alt = IrAlt alt.irAltCtor alt.irAltBinders (stripTailAt fuel alt.irAltBody)
+
+stripAltM : Int -> Maybe IrAlt -> Maybe IrAlt
+stripAltM fuel m =
+  case m of
+    Nothing => Nothing
+    Just alt => Just (stripAlt fuel alt)
+
+annotateAt : Int -> (String -> Maybe Int) -> Bool -> Ir -> Ir
+annotateAt fuel arityOf tail ir =
+  if fuel <= 0 then
+    ir
+  else
+    case ir of
+      IrVar _ => ir
+      IrGlobal name =>
+        if tail then
+          case arityOf name of
+            Just 0 => IrTail (IrGlobal name)
+            _ => IrGlobal name
+        else
+          IrGlobal name
+      IrCtor family ctor tys args => IrCtor family ctor tys (map (annotateAt (fuel - 1) arityOf False) args)
+      IrRecord family resTy fields => IrRecord family resTy (map (annotateField (fuel - 1) arityOf) fields)
+      IrProj base family field resTy => IrProj (annotateAt (fuel - 1) arityOf False base) family field resTy
+      IrRecUpd base family fields resTy => IrRecUpd (annotateAt (fuel - 1) arityOf False base) family (map (annotateField (fuel - 1) arityOf) fields) resTy
+      IrRt sym => if tail then IrTail (IrRt sym) else IrRt sym
+      IrRtApp sym args =>
+        let
+          args2 = map (annotateAt (fuel - 1) arityOf False) args
+        in if tail then IrTail (IrRtApp sym args2) else IrRtApp sym args2
+      IrCast cFrom cTo inner => IrCast cFrom cTo (annotateAt (fuel - 1) arityOf tail inner)
+      IrInt _ => ir
+      IrStr _ => ir
+      IrBool _ => ir
+      IrFloatLit _ => ir
+      IrLet bs scrut body => IrLet bs (annotateAt (fuel - 1) arityOf False scrut) (annotateAt (fuel - 1) arityOf tail body)
+      IrLam bs rt body => IrLam bs rt (annotateAt (fuel - 1) arityOf True body)
+      IrApp appTy f a =>
+        let
+          f2 = annotateAt (fuel - 1) arityOf False f
+          a2 = annotateAt (fuel - 1) arityOf False a
+        in if tail then IrTail (IrApp appTy f2 a2) else IrApp appTy f2 a2
+      IrTail inner => IrTail (annotateAt (fuel - 1) arityOf False inner)
+      IrIf c t el => IrIf (annotateAt (fuel - 1) arityOf False c) (annotateAt (fuel - 1) arityOf tail t) (annotateAt (fuel - 1) arityOf tail el)
+      IrCase caseTy resultTy scrut alts => IrCase caseTy resultTy (annotateAt (fuel - 1) arityOf False scrut) (map (annotateAlt (fuel - 1) arityOf tail) alts)
+      IrNatCase scrut fresh zero succ catch => IrNatCase (annotateAt (fuel - 1) arityOf False scrut) fresh (annotateAltMaybe (fuel - 1) arityOf tail zero) (annotateAltMaybe (fuel - 1) arityOf tail succ) (annotateAltMaybe (fuel - 1) arityOf tail catch)
+      IrConcatMany parts => IrConcatMany (map (annotateAt (fuel - 1) arityOf False) parts)
+      IrEffThunk family ctor unitTy arity prim => IrEffThunk family ctor unitTy arity (annotateAt (fuel - 1) arityOf False prim)
+      IrEffBind _ _ _ => ir
+
+annotateField : Int -> (String -> Maybe Int) -> Pair String Ir -> Pair String Ir
+annotateField fuel arityOf p = Pair (firstOf p) (annotateAt fuel arityOf False (secondOf p))
+
+annotateAlt : Int -> (String -> Maybe Int) -> Bool -> IrAlt -> IrAlt
+annotateAlt fuel arityOf tail alt =
+  IrAlt alt.irAltCtor alt.irAltBinders (annotateAt fuel arityOf tail alt.irAltBody)
+
+annotateAltMaybe : Int -> (String -> Maybe Int) -> Bool -> Maybe IrAlt -> Maybe IrAlt
+annotateAltMaybe fuel arityOf tail m =
+  case m of
+    Nothing => Nothing
+    Just alt => Just (annotateAlt fuel arityOf tail alt)

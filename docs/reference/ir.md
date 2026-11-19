@@ -31,10 +31,13 @@ Loader → Elab → Core ──Lowering──> IR ──Codegen.{Decl,Term,Assem
   `handleCore*` / `handleWith*` 的调用换成 `*Id` 变体，并把路由串 `(key, name)` 的
   `effectId` 实参插进去（字面量在编译期折成整数，其余留给运行时）。机器与 OCaml
   运行时的 handler 匹配因此只比整数；源码层入口仍是 String。
-- **CPS lowering（wasm）**：`Ir.Cps` 是 `Ir -> Ir` 的后端内变换（不改变 Lowering 产物）：
+- **CPS lowering（native / wasm）**：`Ir.Cps` 是 `Ir -> Ir` 的后端内变换（不改变 Lowering 产物）：
   只把 `MkEff` / `MkScoped` / `IrEffThunk` 的 thunk 改成显式 `k`，并把
   `prim_effect*` 换成 `@ir@cps@*`。纯代码与调用约定不变；详见
   [effect-machine.md](effect-machine.md)。
+- **尾位置标记（`Ir.Tail`）**：`Ir.Cps.cpsDefsMachine` 末尾跑一次纯 pass，把结果位置的调用
+  包成 `IrTail`。native / wasm 只消费标记并发射各自的尾调用指令；标记是语义提示，后端
+  能力不足时回退普通调用。详见下文「尾位置标记」。
 - 门禁：IR 路径的产物逐字节确定，且与
   [architecture-target.md](../architecture-target.md) 门禁表里的差分口径一致。
 
@@ -67,6 +70,7 @@ Loader → Elab → Core ──Lowering──> IR ──Codegen.{Decl,Term,Assem
 | `IrLet binders e body` | `let` | unboxed case 降级用；binder 表是完整 telescope（含擦除占位） |
 | `IrLam binders resultTy body` | lambda 链 | 擦除 binder 占位不渲染；无运行时 binder 时退化成体；`resultTy` 是体的运行时类型（未知时 `Nothing`） |
 | `IrApp ty f a` | 应用 | `ty` 是函数类型与结果类型（`Pair`；未知时 `Nothing`）；擦除实参已丢弃 |
+| `IrTail inner` | 尾位置标记 | 求值与 inner 相同；只用于结果位置的调用（`IrApp` / `IrRtApp` / `IrRt` / 零参 `IrGlobal`）；后端可回退 |
 | `IrIf c t e` | `if` | |
 | `IrCase scrutTy resultTy scrut alts` | 通用 `match` | `scrutTy` / `resultTy` 是 scrutinee 与结果的运行时类型（未知时 `Nothing`）；分支 binder 带按构造子字段实例化的类型；无 catch-all 时后端补不可达兜底臂 |
 | `IrNatCase scrut fresh zero succ catch` | Nat case 降级 | Nat 运行时是 `int`，不能生成变体 match；`fresh` 是 `dtnat__<n>` 的编号 |
@@ -166,6 +170,21 @@ binder 的**身份**在 Lowering 分配，前缀与编号渲染属后端：
 因此这一步只动项、不碰声明；产物与 pass 之前逐字节一致。
 
 
+## 尾位置标记（`Vuna.Compiler.Ir.Tail`）
+
+`Ir.Tail` 是 CPS 之后的共享 pass，输出仍是同一个 `Ir`，只多一层注解：
+
+- 规则：`IrDef` body、每个 `IrLam` body 是尾位置；`IrLet` body、`IrIf` 两支、
+  `IrCase` / `IrNatCase` 各臂、`IrCast` 内层继承外层；实参、构造字段、record 字段、
+  scrutinee、`IrConcatMany` parts 都不是。
+- 标记只包调用形状：`IrApp` / `IrRtApp` / `IrRt` / 零参 `IrGlobal`。
+- native / wasm 在 `cpsDefsMachine` 之后消费标记：native 发 `jmp` / `jmp r11`，
+  wasm 发 `return_call` / `return_call $rt_apply`。native 的来参区不够、闭包慢路径、
+  wasm 的非法目标仍回退普通调用。
+- wasm 的零参定义在 `_start` 里内联求值，因此 `genDefInit` 用 `stripTail` 去掉该上下文
+  的标记；`IrLam` 的 body 由 codegen 合成时用 `annotateExpr` / `annotateBody` 重新标记。
+- `IrTail` 不是 `MkRestTail`：后者是续延 resume 的语义标记，`Ir.Tail` 不改写它。
+
 ## 分析与分组（`Vuna.Compiler.Ir.Analysis`）
 
 从 `Lowering.Checks` 的同一套算法原样沿用（Kosaraju：完成序 → 反向图收集 → 依赖就绪
@@ -196,6 +215,8 @@ binder 的**身份**在 Lowering 分配，前缀与编号渲染属后端：
 | 内建饱和内联、`++` 链展平 | Lowering 判定（`IrRtApp` / `IrConcatMany`），模板文本在后端 |
 | 入口分类（动作 vs 值）、展示函数、handler 列表 | Lowering（`IrEntry`） |
 | SCC 分组 | `Ir.Analysis`（Lowering 调用） |
+| 尾位置判定（CPS 之后） | `Ir.Tail`（native / wasm 共享） |
+| 尾调用发射 / 回退 | 后端（native `jmp`，wasm `return_call`） |
 | 名字编码 / 保留字 / 跨单元限定 / fresh 编号前缀 | 后端 |
 | 布局 / 括号 / `let rec` 文本 / 运行时模板 | 后端 |
 

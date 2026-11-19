@@ -120,6 +120,7 @@ dispatch fuel e =
       IrCast cFrom cTo inner => IrCast cFrom cTo (dispatch (fuel - 1) inner)
       IrLet bs scrut body => IrLet bs (dispatch (fuel - 1) scrut) (dispatch (fuel - 1) body)
       IrLam bs rt body => IrLam bs rt (dispatch (fuel - 1) body)
+      IrTail inner => IrTail (dispatch (fuel - 1) inner)
       IrRtApp sym args =>
         let
           args1 = dispatchList (fuel - 1) args
