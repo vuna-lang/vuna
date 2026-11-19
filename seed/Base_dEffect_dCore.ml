@@ -121,7 +121,7 @@ let v_Base_dEffect_dCore_draiseTo = (fun (r : t_Base_dEffect_dCore_dRow) e -> (C
 )))))
 
 # 209 "Base/Effect/Core.vuna"
-let v_Base_dEffect_dCore_dsendCore = (fun (key : string) (name : string) o -> (C_Base_dEffect_dCore_dEff_MkEff ((fun (_u : t_Base_dEffect_dCore_dEffUnit) -> ((((fun key name v -> Obj.obj (Effect.perform (Perform (key, name, Obj.repr v)))) key) name) o)))))
+let v_Base_dEffect_dCore_dsendCore = (fun (key : string) (name : string) o -> (C_Base_dEffect_dCore_dEff_MkEff ((fun (_u : t_Base_dEffect_dCore_dEffUnit) -> ((((fun key name v -> Obj.obj (Effect.perform (Perform (dtp_effectId key, dtp_effectId name, key, name, Obj.repr v)))) key) name) o)))))
 
 # 219 "Base/Effect/Core.vuna"
 let v_Base_dEffect_dCore_dsigFn = C_Base_dEffect_dCore_dEffSig_MkEffSig
