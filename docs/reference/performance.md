@@ -685,6 +685,14 @@ A/B 读数一致）。`map-cold`（2111）必须清 query store 才算冷：基�
 
 **已量化否决的候选**（数据见 git 与 `_scratch` 探针，不要重复开题）：
 
+- **增量摘要 / 分片哈希（`sha256OfParts`）与编码分片合并**：采样里 iface 阶段仍剩
+  `String.concat` ~6%，看起来像"整包载荷 concat 太贵"，但微基准（200 MB、`time` 外壳）证伪：
+  `strConcatMany` 200 MB 只要 **0.02 s user**（原生 memcpy），`prehashOfString` 200 MB =
+  0.58 s user（≈345 MB/s），`contentAddress` 200 MB = 1.09 s user（≈180 MB/s）。也就是说钱花在
+  **逐字节的预哈希/SHA** 与「百万级小分片」本身，不在拼接那一遍；把 `encTag`/`encInt`/`encStr`/
+  `encList` 的分片**合并回单个原子串**反而从 7.02 s 变成 7.08 s（3 轮，user）。因此增量摘要
+  不会省下可测的时间，不做；这条线要动就动"两次哈希"（`hashParts` 与 `implHashOfParts`
+  对几乎相同的载荷各编码+各哈希一遍），那是缓存身份设计，不是局部优化。
 - **提高 OCaml 优化级别 / 内联阈值**（`build.sh` 的 `FLAGS`）：本机 `ocamlopt` 的
   `-config` 是 `flambda: false`，`-O3` 因此是**空操作**——同一源码 `-O3` 与默认产物
   **逐字节相同**（25,458,312 B，编译 CPU 12.66 s vs 12.63 s）。`-inline 10` 让编译
