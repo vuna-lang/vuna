@@ -40,6 +40,17 @@ gen_probe() { # n file
   done
 }
 
+gen_deep_probe() { # depth file —— `x : Maybe (Maybe … Int)`，层数 = depth
+  depth=$1 file=$2
+  ty=Int
+  i=0
+  while [ "$i" -lt "$depth" ]; do
+    ty="Maybe ($ty)"
+    i=$((i + 1))
+  done
+  printf 'x : %s\nx = Nothing\n' "$ty" >"$file"
+}
+
 time_check() { # file -> ms (min of 2 independent cold runs)
   f=$1
   best=999999
@@ -47,10 +58,13 @@ time_check() { # file -> ms (min of 2 independent cold runs)
   while [ "$k" -lt 2 ]; do
     cache=$(mktemp -d "$work/cache.XXXXXX")
     t0=$(date +%s%3N)
-    VUNA_STORE="$cache/store" TMPDIR="$cache" "$VUNA" check "$f" >/dev/null 2>&1 || {
-      echo "compiler-growth: check failed for $f" >&2
+    rc=0
+    VUNA_STORE="$cache/store" TMPDIR="$cache" timeout "${VUNA_GROWTH_TIMEOUT:-120}" "$VUNA" check "$f" >"$cache/check.log" 2>&1 || rc=$?
+    if [ "$rc" -ne 0 ]; then
+      echo "compiler-growth: check failed for $f (rc=$rc, 超时上限 ${VUNA_GROWTH_TIMEOUT:-120}s)" >&2
+      sed -n '1,20p' "$cache/check.log" >&2
       exit 1
-    }
+    fi
     t1=$(date +%s%3N)
     rm -rf "$cache"
     ms=$((t1 - t0))
@@ -80,6 +94,26 @@ while [ "$n" -le 8000 ]; do
   fi
   prev=$ms
   n=$((n * 2))
+done
+
+# 嵌套类型构造子：运行时类型渲染必须随层数线性。渲染器若先把族实参渲染成表交给
+# intrinsic 探测、非 intrinsic 族再丢弃这份结果重渲染，每层乘 2（depth 32 就会越过超时）。
+deep_prev=""
+for depth in 32 64; do
+  f="$probe/deep$depth.vuna"
+  gen_deep_probe "$depth" "$f"
+  ms=$(time_check "$f")
+  if [ -n "$deep_prev" ]; then
+    ratio_milli=$((ms * 1000 / deep_prev))
+    printf '  depth=%-3s %6s ms  (x%s.%03s)\n' "$depth" "$ms" "$((ratio_milli / 1000))" "$((ratio_milli % 1000))"
+    if [ "$ratio_milli" -gt "$MAX_RATIO_MILLI" ]; then
+      echo "FAIL: 嵌套类型构造子 growth ratio $((ratio_milli / 1000)).$((ratio_milli % 1000)) > $((MAX_RATIO_MILLI / 1000)).$((MAX_RATIO_MILLI % 1000)) at depth=$depth (prev=${deep_prev}ms, cur=${ms}ms)" >&2
+      exit 1
+    fi
+  else
+    printf '  depth=%-3s %6s ms  (base)\n' "$depth" "$ms"
+  fi
+  deep_prev=$ms
 done
 
 touch "$out/ok"

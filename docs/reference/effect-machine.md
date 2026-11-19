@@ -238,7 +238,7 @@ axiom Obj : Type
 
 1. `Base/Intrinsics.vuna`：`IType` 增 `IObj`（追加在末尾，保持既有 tag 顺序），
    两个 intrinsic 条目；
-2. `Lowering/Ty.vuna` 的 `renderTyIntrinsic`：`IObj -> IrTyOpaque`；
+2. `Lowering/Ty.vuna` 的 `renderTyIntrinsicWith`：`IObj -> IrTyOpaque`；
 3. wasm：`RtFunc 1 "$rt_erase"`（identity）；OCaml：`Obj.repr` / `Obj.obj`；
    native：identity（现有 `eraseFn`）；
 4. 夹具：一个把 `Int`/`闭包`/数据值经 `Obj` 往返的程序，三端输出一致

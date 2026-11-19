@@ -508,6 +508,31 @@ O(n²) 已去掉（§1）。门槛脚本的上限已提到 N=8000，因此这一
 
 门槛阈值仍按每翻倍 ≤3.3×（比单文件 2.5× 宽：增量路径有与 N 无关的固定成本，小 N 噪声更大）。
 
+### 5.3 嵌套类型构造子（运行时类型渲染）
+
+`x : Maybe (Maybe … Int)`（`x = Nothing`）与 `data W where MkW : <同深类型> -> W` 的
+`check` 成本必须随嵌套层数线性。`Lowering.Ty` 的渲染器过去先把族实参渲染成 `List IrTy`
+交给 intrinsic 探测（`Array` / `IORef`），非 intrinsic 族再把这份结果丢掉、由
+`renderFamilyArgs` 重新渲染同一批实参 ⇒ 每层乘 2。改成按需渲染的探测
+（`renderTyIntrinsicWith`）后，同一批次读数（`VUNA_OBS=2` 的 `vuna.codegen.unit`）：
+
+| depth | 修前 | 修后 |
+| --- | --- | --- |
+| 16 | 14 ms | 7 ms |
+| 18 | 38 ms | 7 ms |
+| 20 | 143 ms | 5 ms |
+| 22 | 430 ms | 5 ms |
+
+冷 `check` 的总墙钟同口径：depth 30/40/80/100 = 270/262/196/194 ms（固定成本占主导）。
+
+判据（防止再误判成精化期问题）：把同样的嵌套换成 intrinsic 族
+`Array (Array … Int)`，成本本来就平（depth 22 ≈ 5 ms）——两者在精化期走同一条
+`EApp` 类型名应用路径，差异只可能来自 lowering 的 intrinsic 探测。`axiom x : <深类型>`
+不触发（axiom 不进 lowering），不能当对照。
+
+门槛：`nix/checks/compiler-growth.sh` 的 `depth=32/64` 探针（每档独立空 store，
+`VUNA_GROWTH_TIMEOUT` 兜超时）。回归时 depth 32 的 2^32 成本会直接超时失败。
+
 ## 6. `check packages/base` 的阶段构成
 
 一次采样的量级（具体 ms 随版本 / 机器变化，用于定位优先序）：
