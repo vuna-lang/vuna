@@ -43,24 +43,56 @@
 [`bench/baselines/compiler.txt`](../../bench/baselines/compiler.txt) 的
 同机口径比较；跨机器只比 §5 的增长率。**该基线是旧口径，尚未按本轮修复重标。**
 
-### 产物规模（native `.s` 文件集）
+### 产物规模（三端，`bench/artifact.sh`）
 
-`vuna build packages/compiler --target native --out <dir> --no-compile`，编译器自身：
+`nix run .#vuna-artifacts -- --json bench/baselines/artifacts.json` 用固定输入测三端产物，
+基线在 [`bench/baselines/artifacts.json`](../../bench/baselines/artifacts.json)。用例按规模分档：
+`hello`（最小 hello world）、`defs-{10,100,1000}`（单文件顶层定义数）、`mods-{10,100}`
+（包内模块数）、`self`（`packages/compiler`；wasm 后端不支持编译器目标，基线里记 `skip_reason`）。
 
-| 指标 | 读数 |
-| --- | --- |
-| 文件数 | 143（`runtime.s` + 每模块一个） |
-| 总体积 | 45 MB |
-| 总行数 | 约 189 万行 |
-| 其中 lambda 体 | 约 89 万行（5,976 个，占 ~47%） |
-| 其中 `mov qword ptr [rbp-N], 0` 槽清零 | 约 24.8 万行（~13%）；裁剪前 ~39.6 万行（~19.7%） |
-| 最大单文件 | `Vuna/Compiler/Native/Runtime.s` 约 5.1 MB |
-| 构建（`build.sh`，143 个 `cc -c` + 链接） | ~6.9 s（冷）/ ~0.75 s（内容哈希命中，`compiled 0 of 143`，只链接） |
+口径：
 
-对照：OCaml 种子 158 个文件 / 9.5 MB / 5.4 万行。tree-shaking 已由
-`Ir.Analysis.reachableDefs` 做完（编译器自身只有 13 个函数 / 240 行未被引用）；剩余体积空间
-在指令选择与槽清零策略，见 [debt.md](debt.md) D108。产物作为自举锚点的取舍见
-[bootstrap.md](bootstrap.md)「锚点演进」。
+- 中间文本：`.ml`（ocaml）/ `.s`（native）/ `main.wat`（wasm）的**文件树**、文件数、字节、行数；
+- 最终二进制：`prog`（ocaml / native）与 `main.wasm` 的字节；
+- 构建：`codegen` = `vuna compile`，`toolchain` = `ocamlopt` / `cc` / `wasm-tools`，括号里是
+  user+sys CPU 毫秒（墙钟另记在 JSON，宿主负载波动时只看 CPU）。
+
+生成物不含绝对路径/时间戳，工具链由 flake 固定，所以**尺寸与二进制大小跨机器可比**
+（5% WARN / 20% FAIL，FAIL 退出 1）；**时间只同机可比**（20% / 50%，软判定：只报告，
+基线 <100ms 的行不判定）。下表是同机一次读数（16 核，`--runs 1`，基线 meta 的 loadavg = 23；全量矩阵见 JSON）：
+
+| 用例 | 后端 | 文件数 | 文本字节 | 行数 | 二进制字节 | CPU ms（codegen/toolchain） |
+| --- | --- | --- | --- | --- | --- | --- |
+| hello | ocaml | 54 | 310,181 | 4,052 | 3,280,168 | 43 / 2,703 |
+| hello | native | 10 | 399,706 | 18,424 | 113,120 | 342 / 91 |
+| hello | wasm | 1 | 499,628 | 19,966 | 61,874 | 342 / 11 |
+| defs-1000 | ocaml | 32 | 384,346 | 7,115 | 3,810,376 | 13 / 1,751 |
+| defs-1000 | native | 7 | 686,602 | 33,115 | 217,408 | 333 / 97 |
+| defs-1000 | wasm | 1 | 653,816 | 27,048 | 94,794 | 346 / 21 |
+| mods-100 | ocaml | 132 | 245,308 | 3,474 | 3,298,784 | 152 / 4,961 |
+| mods-100 | native | 107 | 373,054 | 17,215 | 110,984 | 240 / 268 |
+| mods-100 | wasm | 1 | 469,910 | 18,948 | 60,018 | 234 / 12 |
+| self | ocaml | 166 | 11,955,213 | 59,319 | 25,200,920 | 436 / 20,061 |
+| self | native | 146 | 48,263,150 | 1,983,880 | 12,313,216 | 16,366 / 3,490 |
+
+读法：
+
+- `hello` 是**绝对地板**：仅 runtime + 最小 base 闭包就有 54 个 `.ml` / 310 KB，
+  native 10 个 `.s` / 400 KB，wasm 单个 500 KB `main.wat`（汇编后 62 KB `main.wasm`）。
+  程序本身只有 8 行——产物大小由闭包决定，不是源码行数。
+- `defs-*` 在**单文件**里加定义：文件数不变（32 / 7 / 1），文本随定义数线性（ocaml
+  203→219→384 KB，native 328→359→687 KB）。
+- `mods-*` 在**包内**加模块：文件树随模块数线性（ocaml 32→42→132 个 `.ml`，
+  native 7→17→107 个 `.s`），wasm 始终是单文件 `main.wat`。
+- `self` 是真实最大负载：ocaml 166 个 `.ml` / 11.9 MB / 5.9 万行 → 25 MB 可执行
+  （`-g`，含调试信息）；native 146 个 `.s` / 48 MB / 198 万行 → 12 MB 静态 ELF。
+  tree-shaking 已由 `Ir.Analysis.reachableDefs` 做完（编译器自身只有 13 个函数 / 240 行未被引用）；
+  剩余体积空间在指令选择与槽清零策略，见 [debt.md](debt.md) D108。产物作为自举锚点的取舍见
+  [bootstrap.md](bootstrap.md)「锚点演进」。
+
+OCaml 二进制里的调试信息记录的是**相对**源码名（`build.sh` 先 `cd` 到产物目录、用相对模块名
+编译、输出名固定），因此二进制字节不随构建目录漂移；native ELF 依赖链接工具版本，但
+`cc`/`ld` 由 flake 固定，同 arch 内可比。
 
 ### 冷 / 热必须分开报
 
@@ -526,6 +558,9 @@ token 一次 `Pair`）的初版实测让 `vuna.parse.lex` 慢 ~20%，已放弃�
   调用点（`dtp_obs_sample_start` 在生成运行时里完整，但仓库内无人启动）。`Eff` 阶段的
   **耗时**仍只能靠 `--debug-perf` 文本行（`iface-mods-phases` / `iface-write=…` 等），
   trace 里只有顺序；冷 `check packages/compiler` 的 debug 口径约 18.8 万行。
+- **产物尺寸与构建耗时分开报**：`bench/artifact.sh` 的尺寸（文本文件树/字节/行数、二进制）
+  由 flake 固定的工具链生成、产物不含绝对路径与时间戳，因此**尺寸不需要冷/热口径、可跨机器比**；
+  构建耗时仍只同机可比，宿主有负载时看 `*_cpu_ms`（user+sys）而不是墙钟。
 - 用 `OCAMLRUNPARAM=s=...` 快速判断 GC 敏感性（注意：产物里 `Gc.set` 会覆盖环境变量，要
   比较不同 minor heap 大小得改代码重建）。
 - 阶段定位优先用阶段边界的 `dbg!`；逐定义观察直接看 `dbg!` 行；不要用「等大 case 跑完」
@@ -543,6 +578,9 @@ wasm 浏览器路径）已拆到 [benchmarks.md](benchmarks.md)。
 `sh bench/compiler.sh`（仓库根；`--runs N` / `--check` / `--save-baseline` / `--alloc`）测
 编译器 / 工具链自身墙钟。基线 `bench/baselines/compiler.txt`（机器相关，只做同机回归对比）；
 `--check` 超过 `--threshold`%（默认 20）打 WARN、超过 `--fail-threshold`%（默认 50）exit 1。
+**产物尺寸与产出它的构建时间**走 `sh bench/artifact.sh`（`nix run .#vuna-artifacts`）：
+基线 `bench/baselines/artifacts.json`，尺寸跨机器可比（§1「产物规模」），
+`--check` 的尺寸阈值默认 5% / 20%，耗时默认 20% / 50%（同机）。
 跨机器/跨输入规模的可比口径是 `nix/checks/compiler-growth.sh`（单文件全量路径）与
 `nix/checks/compiler-growth-pkg.sh`（包路径增量收尾）的增长率门槛（§5）。
 

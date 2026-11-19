@@ -1,11 +1,12 @@
 # bench：生成程序与运行时基准
 
-本目录是「生成程序 vs 手写 OCaml」的测量设施。它与 `bench/bootstrap.sh` 分工：
+本目录是生成程序、工具链与产物的测量设施。各脚本分工：
 
 | 设施 | 测什么 | 入口 |
 | --- | --- | --- |
-| `bench/bootstrap.sh` | 编译器**构建/编译**墙钟、产物尺寸、codegen 计数 | `nix run .#vuna-bench` |
-| `bench/run.sh` | **生成程序运行时**（vuna 产物 vs 手写 OCaml）；target = ocaml / native / wasm / both / all | `nix run .#vuna-perf` |
+| `bench/bootstrap.sh` | 编译器**构建/编译**墙钟、OCaml 文本尺寸、codegen 计数 | `nix run .#vuna-bench` |
+| `bench/run.sh` | **生成程序运行时**（vuna 产物 vs 手写 OCaml）；target = ocaml / native / wasm / both / all；另记每个后端的产物文件数/二进制大小/构建耗时 | `nix run .#vuna-perf` |
+| `bench/artifact.sh` | **三端产物基线**：`.ml` / `.s` / `.wat` 的文件树、字节、行数，最终二进制大小，分段构建时间；按 `hello` / `defs-N` / `mods-N` / `self` 分档 | `nix run .#vuna-artifacts` |
 | `bench/compiler.sh` | **工具链命令**墙钟（check/build/map/fmt，冷/热） | `sh bench/compiler.sh` |
 | `bench/native.sh` | 编译器编到 **native** 后的端到端（`check packages/base` / `--full` 加 compiler） | `sh bench/native.sh`（需 `result-native`） |
 
@@ -68,16 +69,43 @@ VUNA=$PWD/result/bin/vuna ./bench/run.sh --runs 3
 ## 基线维护
 
 - 基线统一在 `bench/baselines/`：`programs.json`（全部生成程序 × 三端）、`bootstrap.json`、
-  `compiler.txt`、`native.json`。每个 family 只有一份，不再按 target 拆文件。
+  `compiler.txt`、`artifacts.json`、`native.json`。每个 family 只有一份，不再按 target 拆文件。
 - `programs.json` 用 `--target all --runs 5 --warmup 2` 生成；`--check` 只比本次实际跑的
   target / benchmark（`--only eff_*` 就是效应子集）。wasm 另有 `net_median_ms`
   （减 `meta.node_startup_ms`）。
 - 统一重标：`nix build .#vuna --out-link result && sh bench/update-baselines.sh`
-  （`--only programs|bootstrap|compiler|native` 可单跑）。
+  （`--only programs|bootstrap|compiler|artifacts|native` 可单跑）。
 - 基线是**软门槛**：默认 WARN；`--strict` 把 WARN 变 exit 1，`--fail-threshold`（默认 50%）
   直接失败。不为跨机器/环境差异改阈值，只有确认是生成程序质量的真实变化才重标。
 - 每个 benchmark 可用同名 `.bench` sidecar 覆盖默认口径：`repeat=N`（一次采样内重复）、
   `targets=a,b`（限定后端）、`c=path`（参与链接的 C 源）、`skip=1`。
+
+## 产物基线
+
+`bench/artifact.sh` 用固定输入测三端产物（中间文本 + 最终二进制 + 分段构建时间），
+结构写进 `bench/baselines/artifacts.json`：
+
+```console
+nix run .#vuna-artifacts -- --list
+nix run .#vuna-artifacts -- --only hello --check
+nix run .#vuna-artifacts -- --json bench/baselines/artifacts.json   # 重标
+```
+
+用例：`hello`（最小 hello world）、`defs-10/100/1000`（单文件顶层定义数）、
+`mods-10/100`（包内模块数）、`self`（`packages/compiler`；wasm 不支持该目标）。
+
+口径：
+
+- 中间文本：`.ml`（ocaml）/ `.s`（native）/ `main.wat`（wasm）的文件树、文件数、字节、行数；
+- 最终二进制：`prog`（ocaml / native）与 `main.wasm`；
+- 构建：`codegen_ms`（`vuna compile`）与 `toolchain_ms`（ocamlopt / cc / wasm-tools），
+  各带 `*_cpu_ms`（user+sys），另有 `toolchain_warm_ms`（ocaml 走 build.sh 内容哈希、
+  native 为重链、wasm 为重新汇编）；
+- 生成物不含绝对路径/时间戳，工具链由 flake 固定，所以**尺寸与二进制大小跨机器可比**
+  （默认 5% WARN / 20% FAIL，FAIL 退出 1）；**时间只同机可比**，负载波动时看 CPU 口径
+  （20% / 50%，软判定：只报告，不影响退出码；基线 <100ms 的行不判定）。
+
+读数与解读见 [performance.md §产物规模](../docs/reference/performance.md)。
 
 ## 当前基线
 

@@ -1,0 +1,10 @@
+-- 最小 hello world：一次 Console 打印 + 纯 Int 返回（入口自动预装宿主 handler）。
+-- 产物基线的绝对地板：runtime + base 的最小闭包。
+import Base.Effect.Core as Eff
+import Base.Effect.Console as EffConsole
+
+main : Eff [ConsoleOp] Int
+main =
+  do
+    _ <- consolePrint "hello, world\n"
+    pure 0

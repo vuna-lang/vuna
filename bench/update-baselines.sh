@@ -2,7 +2,7 @@
 # 统一重标 bench/baselines/ 下的基线。
 #
 # 用法（仓库根目录）：
-#   sh bench/update-baselines.sh                 # programs + bootstrap + compiler
+#   sh bench/update-baselines.sh                 # programs + bootstrap + compiler + artifacts
 #   sh bench/update-baselines.sh --only programs
 #   sh bench/update-baselines.sh --quick         # programs 用 runs=1/warmup=0
 #
@@ -22,7 +22,7 @@ usage: update-baselines [options]
 
 options:
   --vuna PATH      被测 vuna（默认 $VUNA 或 ./result/bin/vuna）
-  --only NAME      只重标一项：programs / bootstrap / compiler（可重复）
+  --only NAME      只重标一项：programs / bootstrap / compiler / artifacts（可重复）
   --quick          programs 用 --runs 1 --warmup 0（只做冒烟）
   -h, --help       显示帮助
 EOF
@@ -73,6 +73,12 @@ if selected compiler; then
   echo "== compiler =="
   bash bench/compiler.sh --compiler "$VUNA_BIN" --save-baseline \
     --baseline bench/baselines/compiler.txt
+fi
+
+if selected artifacts; then
+  echo "== artifacts =="
+  bash bench/artifact.sh --compiler "$VUNA_BIN" \
+    --json bench/baselines/artifacts.json
 fi
 
 if selected native; then

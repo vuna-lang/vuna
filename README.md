@@ -116,7 +116,7 @@ manifest，不向上找。命令语义与包格式
 ├── seed/      # compiler 闭包的多文件自举信任锚点（生成物，禁止手改）
 ├── wasm-host/ # wasm 产物的 WASI preview1 宿主（Node / 浏览器共用）+ Node loader
 ├── test/      # suite driver 清单 + runner 夹具/全局名单（各包 test/ 有自己的 suite）
-├── bench/     # 生成程序与编译器基准（nix run .#vuna-bench / .#vuna-perf）
+├── bench/     # 生成程序与编译器基准（nix run .#vuna-bench / .#vuna-perf / .#vuna-artifacts）
 ├── examples/  # 多包示例
 ├── .agents/   # AI 规则（rules/）与场景技能（skills/）
 ├── vscode/    # VSCode 扩展（语法高亮 + LSP 客户端 + lint/fmt/check/build；提交 dist/）

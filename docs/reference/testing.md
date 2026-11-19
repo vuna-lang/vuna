@@ -676,6 +676,13 @@ bytes/lines/最长行/行尾空白、codegen 健康度计数（`let rec`、`Stri
 所有构建口径都是逐模块 split（`compile`/`build`/seed 同一种产物），没有「单文件
 `main.ml` vs 多模块」两种读数需要区分。
 
+产物本身另有一份基线：`nix run .#vuna-artifacts`（`bench/artifact.sh`）测三端的
+`.ml` / `.s` / `.wat` 文件树与字节/行数、最终 `prog` / `main.wasm` 大小、以及
+`vuna compile` 与外部工具链的分段构建时间（含 user+sys CPU），按 `hello` /
+`defs-N` / `mods-N` / `self` 分档。基线 `bench/baselines/artifacts.json`；
+`--check` 的尺寸阈值默认 5% / 20%（跨机器可比），耗时 20% / 50%（同机、软判定）。
+读数见 [performance.md §产物规模](performance.md)。
+
 ## 相关阅读
 
 - 种子不变量与 rotation：[bootstrap.md](bootstrap.md)；编译器模块职责：[compiler.md](compiler.md)

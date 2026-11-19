@@ -18,6 +18,10 @@
 #   * native 进程统一在 `ulimit -s unlimited` 下运行；`stack_policy` 记进 JSON；
 #   * 跨机器比较只看 `ratio = <backend>_median / ocaml_median` 与
 #     `rss_ratio`；wasm 另给 `net_*`（减掉 node 启动地板）；
+#   * 每个后端另记产物指标：中间文本 `files/bytes/lines/max_file`、最终二进制
+#     `binary_bytes`（wasm 是 `wasm_bytes`）、构建耗时 `build{codegen_ms,toolchain_ms}`
+#     与对应的 `*_cpu_ms`（user+sys；文本与二进制由 flake 固定工具链生成，大小跨机器
+#     可比；耗时只同机可比，负载波动时看 CPU）；
 #   * 基线只有一份 `bench/baselines/programs.json`（全部 target）；`--check` 只比本次
 #     实际跑的 target / benchmark，并报告 `new` / `missing`。
 set -euo pipefail
@@ -135,6 +139,9 @@ esac
 REPO=$PWD
 [ -d "$REPO/bench/programs" ] || die "run from the repo root (bench/programs not found)"
 [ -d "$REPO/packages/base" ] || die "run from the repo root (packages/base not found)"
+
+# 后端构建与产物度量（与 bench/artifact.sh 共用）。
+. "$REPO/bench/lib/targets.sh"
 
 # ---------------------------------------------------------------- 发现与 sidecar
 bench_meta() { # name key default
@@ -273,26 +280,14 @@ TIME_BIN=$(type -P time || true)
 if [ -n "$TIME_BIN" ] && ! "$TIME_BIN" -f '%M' true >/dev/null 2>&1; then TIME_BIN=""; fi
 
 # native 产物在 unlimited 栈下运行；wasm 产物由 JS 宿主执行。
-run_target() { # target program
-  case $1 in
-    native) bash -c 'ulimit -s unlimited; exec "$1"' _ "$2" ;;
-    wasm) "$NODE_BIN" "$WASM_RUNNER" "$2" ;;
-    *) "$2" ;;
-  esac
-}
+run_target() { vuna_run_target "$1" "$2"; }
 
 # native 默认栈探针：固定 8 MiB soft limit，记录程序能否正常退出（信息性）。
 default_stack_run() { # program
   bash -c 'ulimit -s 8192 2>/dev/null; exec "$1"' _ "$1"
 }
 
-capture_target() { # target program
-  case $1 in
-    native) bash -c 'ulimit -s unlimited; exec "$1"' _ "$2" 2>&1 ;;
-    wasm) "$NODE_BIN" "$WASM_RUNNER" "$2" 2>&1 ;;
-    *) "$2" 2>&1 ;;
-  esac
-}
+capture_target() { vuna_capture_target "$1" "$2"; }
 
 selected() {
   case " $ONLY " in
@@ -304,7 +299,9 @@ selected() {
 declare -A MED NET RSS RATIO NET_RATIO RSS_RATIO DEFAULT_STACK SKIP \
   GC_MINOR_WORDS GC_MAJOR_WORDS GC_MINOR_COLLECTIONS GC_MAJOR_COLLECTIONS GC_TOP_HEAP \
   NATIVE_GC_NATIVE_LIVE NATIVE_GC_NATIVE_ALLOC NATIVE_GC_NATIVE_COLLECTIONS \
-  WASM_MEMORY_BYTES ART_BYTES ART_LINES WASM_BYTES SAMPLE_LOG
+  WASM_MEMORY_BYTES ART_BYTES ART_LINES WASM_BYTES SAMPLE_LOG \
+  ART_FILES ART_MAX_PATH ART_MAX_BYTES ART_MAX_LINES BIN_BYTES BUILD_CG_MS BUILD_TC_MS \
+  BUILD_CG_CPU_MS BUILD_TC_CPU_MS
 ORDER=()
 
 sum_bytes() { awk '{ s += $1 } END { print s + 0 }'; }
@@ -326,6 +323,16 @@ artifact_measure() { # name target dir
       WASM_BYTES["$name:$target"]=$(wc -c <"$dir/main.wasm" | tr -d ' ')
       ;;
   esac
+  local key val
+  while IFS=$'\t' read -r key val; do
+    case $key in
+      files) ART_FILES["$name:$target"]=$val ;;
+      max_path) ART_MAX_PATH["$name:$target"]=$val ;;
+      max_bytes) ART_MAX_BYTES["$name:$target"]=$val ;;
+      max_lines) ART_MAX_LINES["$name:$target"]=$val ;;
+      binary) BIN_BYTES["$name:$target"]=$val ;;
+    esac
+  done < <(vuna_artifact_stats "$target" "$dir")
 }
 
 # 编译一个被测后端到 <dir>/prog；<name>.bench 的 `c=` 参与链接。
@@ -335,27 +342,11 @@ build_target() { # name target dir
   csrc=$(bench_meta "$name" c "")
   local -a csrcs=()
   [ -n "$csrc" ] && csrcs=("$REPO/bench/programs/$csrc")
-  case $target in
-    vuna_ocaml)
-      "$VUNA_BIN" compile "$REPO/bench/programs/$name.vuna" "$dir" --target ocaml \
-        >"$WORK/$name.$target.compile.log" 2>&1 || return 1
-      ( cd "$dir" && sh build.sh prog "${csrcs[@]}" ) >"$WORK/$name.$target.build.log" 2>&1 || return 1
-      ;;
-    native)
-      "$VUNA_BIN" compile "$REPO/bench/programs/$name.vuna" "$dir" --target native \
-        >"$WORK/$name.$target.compile.log" 2>&1 || return 1
-      ( cd "$dir" && "$CC_BIN" -static -nostdlib -no-pie -Wl,--build-id=none -o prog \
-          $(find . -name '*.s' | sort) "${csrcs[@]}" ) \
-        >"$WORK/$name.$target.build.log" 2>&1 || return 1
-      ;;
-    wasm)
-      "$VUNA_BIN" compile "$REPO/bench/programs/$name.vuna" "$dir" --target wasm \
-        >"$WORK/$name.$target.compile.log" 2>&1 || return 1
-      ( cd "$dir" && wasm-tools parse main.wat -o main.wasm ) \
-        >"$WORK/$name.$target.build.log" 2>&1 || return 1
-      ;;
-    *) die "unknown target: $target" ;;
-  esac
+  vuna_build_target "$REPO/bench/programs/$name.vuna" "$target" "$dir" "${csrcs[@]}" || return 1
+  BUILD_CG_MS["$name:$target"]=$LAST_CODEGEN_MS
+  BUILD_TC_MS["$name:$target"]=$LAST_TOOLCHAIN_MS
+  BUILD_CG_CPU_MS["$name:$target"]=$LAST_CODEGEN_CPU_MS
+  BUILD_TC_CPU_MS["$name:$target"]=$LAST_TOOLCHAIN_CPU_MS
 }
 
 # 校验产物输出与 golden 一致；返回 1 = 不一致或运行失败（调用方决定 die 还是记 skip）。
@@ -609,13 +600,26 @@ emit_backend() {
     printf ', "net_median_ms": %s' "${NET["$name:$target"]}"
   fi
   if [ -n "${ART_BYTES["$name:$target"]:-}" ]; then
+    local files max_path max_bytes max_lines
+    files=${ART_FILES["$name:$target"]:-0}
+    max_path=${ART_MAX_PATH["$name:$target"]:-}
+    max_bytes=${ART_MAX_BYTES["$name:$target"]:-0}
+    max_lines=${ART_MAX_LINES["$name:$target"]:-0}
     if [ "$target" = wasm ]; then
-      printf ', "artifact": { "wat_bytes": %s, "wat_lines": %s, "wasm_bytes": %s }' \
-        "${ART_BYTES["$name:$target"]}" "${ART_LINES["$name:$target"]}" "${WASM_BYTES["$name:$target"]:-0}"
+      printf ', "artifact": { "wat_bytes": %s, "wat_lines": %s, "wasm_bytes": %s, "files": %s, "max_file": { "path": "%s", "bytes": %s, "lines": %s } }' \
+        "${ART_BYTES["$name:$target"]}" "${ART_LINES["$name:$target"]}" "${WASM_BYTES["$name:$target"]:-0}" \
+        "$files" "$(json_escape "$max_path")" "$max_bytes" "$max_lines"
     else
-      printf ', "artifact": { "bytes": %s, "lines": %s }' \
-        "${ART_BYTES["$name:$target"]}" "${ART_LINES["$name:$target"]}"
+      printf ', "artifact": { "bytes": %s, "lines": %s, "files": %s, "max_file": { "path": "%s", "bytes": %s, "lines": %s }, "binary_bytes": %s }' \
+        "${ART_BYTES["$name:$target"]}" "${ART_LINES["$name:$target"]}" \
+        "$files" "$(json_escape "$max_path")" "$max_bytes" "$max_lines" \
+        "${BIN_BYTES["$name:$target"]:-0}"
     fi
+  fi
+  if [ -n "${BUILD_CG_MS["$name:$target"]:-}" ]; then
+    printf ', "build": { "codegen_ms": %s, "codegen_cpu_ms": %s, "toolchain_ms": %s, "toolchain_cpu_ms": %s }' \
+      "${BUILD_CG_MS["$name:$target"]}" "${BUILD_CG_CPU_MS["$name:$target"]:-null}" \
+      "${BUILD_TC_MS["$name:$target"]:-0}" "${BUILD_TC_CPU_MS["$name:$target"]:-null}"
   fi
   if [ "$target" = vuna_ocaml ] && [ -n "${GC_MINOR_WORDS[$name]:-}" ]; then
     printf ', "gc": { "minor_words": %s, "major_words": %s, "minor_collections": %s, "major_collections": %s, "top_heap_words": %s }' \
@@ -712,6 +716,24 @@ print_table() {
       fi
       printf '  %-16s %-11s %10s %8s %12s %10s\n' "$name" "$t" \
         "${MED["$name:$t"]}" "${RATIO["$name:$t"]}x" "${RSS["$name:$t"]:-0}" "${RSS_RATIO["$name:$t"]}x"
+    done
+  done
+}
+
+# 产物表：中间文本文件数与最大文件、最终二进制大小、codegen/工具链耗时。
+print_artifact_table() {
+  note ""
+  printf '  %-16s %-11s %7s %11s %11s %11s %10s %11s %10s %10s\n' \
+    benchmark backend files text_bytes max_file bin_bytes codegen_ms toolchain_ms cg_cpu tc_cpu
+  local name t
+  for name in "${ORDER[@]}"; do
+    for t in $TARGETS; do
+      [ -n "${SKIP["$name:$t"]:-}" ] && continue
+      printf '  %-16s %-11s %7s %11s %11s %11s %10s %11s %10s %10s\n' "$name" "$t" \
+        "${ART_FILES["$name:$t"]:-0}" "${ART_BYTES["$name:$t"]:-0}" \
+        "${ART_MAX_BYTES["$name:$t"]:-0}" "${BIN_BYTES["$name:$t"]:-0}" \
+        "${BUILD_CG_MS["$name:$t"]:-0}" "${BUILD_TC_MS["$name:$t"]:-0}" \
+        "${BUILD_CG_CPU_MS["$name:$t"]:-n/a}" "${BUILD_TC_CPU_MS["$name:$t"]:-n/a}"
     done
   done
 }
@@ -878,6 +900,7 @@ if [ "$JSON_OUT" = "-" ]; then
   exit $rc
 else
   print_table
+  print_artifact_table
   if [ -n "$JSON_OUT" ]; then
     if [ "$GIT_DIRTY" = true ]; then
       note "warning: 工作树有未提交改动，基线会记 git_dirty=true（$JSON_OUT）" >&2

@@ -299,3 +299,8 @@ wasm 删掉 wat 机器后连纯程序也小了 ~4%；native 相反：`machineRun
 纯程序也从 2 个 `.s` 变成 7 个（多出 `Base/Effect/Core.s`，见 debt D110）。编译时间三档都在
 0.16–0.25 s，无可测差异。
 
+这里的「产物」是相对历史二进制的 A/B；**系统性的三端产物基线**（文件树、字节、行数、
+最终二进制、分段构建时间，按 hello / defs-N / mods-N / self 分档）由
+`nix run .#vuna-artifacts` 测量，读数与口径见 [performance.md §产物规模](performance.md)，
+基线 `bench/baselines/artifacts.json`。
+

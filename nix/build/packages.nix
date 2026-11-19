@@ -1,6 +1,7 @@
 # 自举链的三级构建产物与两个开发 runner：
 #   seed/ → vuna-seed（stage 0）→ vuna-compiler（stage 1）→ vuna（产品 CLI）
-#   vuna-run-tests / vuna-bench 是开发用包装（nix run .#vuna-run-tests / .#vuna-bench）。
+#   vuna-run-tests / vuna-bench / vuna-perf / vuna-artifacts 是开发用包装
+#   （nix run .#vuna-run-tests / .#vuna-bench / .#vuna-perf / .#vuna-artifacts）。
 {
   pkgs,
   ocamlTools,
@@ -96,6 +97,16 @@ let
     '')
     // {
       meta.description = "手动 vuna 性能基准（构建/编译/产物尺寸）";
+    };
+
+  # 产物基线（bench/artifact.sh）：中间文本文件树 / 最终二进制 / 分段构建时间。
+  vuna-artifacts =
+    (pkgs.writeShellScriptBin "vuna-artifacts" ''
+      export PATH="${lib.makeBinPath ([ vuna ] ++ e2eTools ++ shellTools ++ [ pkgs.stdenv.cc ])}:$PATH"
+      exec ${pkgs.bash}/bin/bash ${../../bench/artifact.sh} "$@"
+    '')
+    // {
+      meta.description = "三端产物基线（文本文件树 / 二进制大小 / 构建时间）";
     };
 
   # 生成程序运行时基准（bench/run.sh；vuna 用 nix 构建的产物）。
@@ -237,6 +248,7 @@ in
     vuna-seed
     vuna-compiler
     vuna-bench
+    vuna-artifacts
     vuna-perf
     vuna-run-tests
     vuna-web-cli
