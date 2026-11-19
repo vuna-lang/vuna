@@ -1,0 +1,14 @@
+-- 列表列已全覆盖时不再补 `_` 兜底：dead clause 的残矩阵不能被当成可达分支
+-- 单独判覆盖（否则会在不可达兜底里报假 `missing Maybe.Nothing`）。
+data W : Type where
+  W : List Int -> Maybe Int -> W
+
+f : W -> Int
+f (W [] (Just n)) = n
+f (W [] Nothing) = 0
+f (W (_ :: _) (Just n)) = n
+f (W (_ :: _) Nothing) = 0
+f (W xs (Just n)) = 99
+
+main : Int
+main = f (W [1] (Just 5))

@@ -105,6 +105,38 @@ familyCtors table cname =
     [one] => if firstOf (secondOf one) then Just (secondOf (secondOf one)) else Nothing
     _ => Nothing
 
+-- | 按构造子**短名**定位族：列表字面量哨兵（`@vuna@list@nil` / `@vuna@list@cons`）
+-- 在模式矩阵里还没有 canonical 名字，只能按短名找。候选短名是**或**关系（不同列表族
+-- 可能叫 `::` 或 `Cons`）；**必须唯一命中族**，否则按未知处理。
+export familyOfShortCtors : List (Pair String (Pair Bool (List (Pair String Int)))) -> List String -> Maybe (List (Pair String Int))
+familyOfShortCtors table shorts =
+  case filter (\e => anyShortCtor shorts (secondOf (secondOf e))) table of
+    [one] => if firstOf (secondOf one) then Just (secondOf (secondOf one)) else Nothing
+    _ => Nothing
+
+anyShortCtor : List String -> List (Pair String Int) -> Bool
+anyShortCtor [] ctors = False
+anyShortCtor (s :: rest) ctors = hasShortCtor s ctors || anyShortCtor rest ctors
+
+hasShortCtor : String -> List (Pair String Int) -> Bool
+hasShortCtor s [] = False
+hasShortCtor s ((Pair c n) :: rest) = ctorShortName c == s || hasShortCtor s rest
+
+-- | 列表字面量哨兵 → 该族里对应的 canonical 构造子名；非哨兵原样返回。
+export sentinelCtorIn : List (Pair String Int) -> String -> Maybe String
+sentinelCtorIn ctors h =
+  if isListNilSyntax h then
+    findShortCtor ctors ["Nil"]
+  else if isListConsSyntax h then
+    findShortCtor ctors ["::", "Cons"]
+  else
+    Just h
+
+findShortCtor : List (Pair String Int) -> List String -> Maybe String
+findShortCtor [] shorts = Nothing
+findShortCtor (p :: rest) shorts =
+  if memName (ctorShortName (firstOf p)) shorts then Just (firstOf p) else findShortCtor rest shorts
+
 -- 构造子尝试顺序：本列没出现的在前（见证更具体），已出现的在后。
 orderedCtors : List (Pair String Int) -> List String -> List (Pair String Int)
 orderedCtors ctors heads =

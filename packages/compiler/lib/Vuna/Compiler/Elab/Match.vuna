@@ -237,7 +237,7 @@ ctorColumn table clauses pos restParams fbSp fuel =
           in if familyCovered table (ctorHeads clauses) then OkC (ECase (EVar (classifyName pos) caseSp) alts caseSp) else Vuna.Compiler.Base.Common.bind (fallbackAltList table pos clauses restParams fbSp (fuel - 1)) (\fbAlts => OkC (ECase (EVar (classifyName pos) caseSp) (append alts fbAlts) caseSp))
       )
 
--- 构造子名 → 所属族的构造子表；找不到族时按「未覆盖」处理（保守）。
+-- 构造子名 → 所属族的构造子表；列表字面量哨兵按短名找族，其余找不到族时按未知处理。
 familyOfCtor : List (Pair String (Pair Bool (List (Pair String Int)))) -> String -> Maybe (Pair Bool (List (Pair String Int)))
 familyOfCtor [] ctor = Nothing
 familyOfCtor (p :: rest) ctor =
@@ -246,12 +246,40 @@ familyOfCtor (p :: rest) ctor =
   else
     familyOfCtor rest ctor
 
+familyOfHead : List (Pair String (Pair Bool (List (Pair String Int)))) -> String -> Maybe (List (Pair String Int))
+familyOfHead table h =
+  case familyOfCtor table h of
+    Just fam => Just (secondOf fam)
+    Nothing =>
+      if isListNilSyntax h then
+        familyOfShortCtors table ["Nil"]
+      else if isListConsSyntax h then familyOfShortCtors table ["::", "Cons"] else Nothing
+
+-- 该列 head 里的列表哨兵折回族里的 canonical 构造子名；非哨兵原样保留。
+canonHeads : List (Pair String Int) -> List String -> Maybe (List String)
+canonHeads ctors [] = Just []
+canonHeads ctors (h :: rest) =
+  case sentinelCtorIn ctors h of
+    Nothing => Nothing
+    Just c =>
+      case canonHeads ctors rest of
+        Nothing => Nothing
+        Just tail => Just (c :: tail)
+
+-- 该族是否已被本列构造子 head 全覆盖。族未知（表与模式不一致）时不推断：
+-- 补 `_` 兜底会用不完整的残矩阵独立判覆盖，反而在不可达兜底里报假 missing；
+-- 交给外层穷尽检查（它按真实构造子判）更准确。
 familyCovered : List (Pair String (Pair Bool (List (Pair String Int)))) -> List String -> Bool
 familyCovered table [] = False
 familyCovered table (heads@(h :: rest)) =
-  case familyOfCtor table h of
+  case familyOfHead table h of
     Nothing => False
-    Just fam => allMem (map firstOf (secondOf fam)) heads
+    Just fam =>
+      let
+        names = map firstOf fam
+      in case canonHeads fam heads of
+        Nothing => False
+        Just canon => allMem names canon
 
 -- 该列至少有一个构造子模式（与变量/通配混合时也要走构造子分支 + 兜底，
 -- 不能落到 `litAltExpr`——它不会展开构造子子模式，丢失子模式绑定）。
