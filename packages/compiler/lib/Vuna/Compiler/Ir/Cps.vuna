@@ -83,9 +83,23 @@ runMainName = "Base.Effect.Core.runMain"
 handleScopedName : String
 handleScopedName = "Base.Effect.Core.handleScoped"
 
--- | 燃料：固定预算 + `fuel <= 0` 守卫是终止性证书。
-startFuel : Int
-startFuel = 200000
+-- | 预算按项规模派生（每节点最多几步）：固定 200000 对超大单元会让某个 pass 静默半途而废
+-- （函数体原样返回），产物因此既不是纯 IR 也不是 CPS。派生后耗尽不可由输入规模触发。
+cpsFuelBase : Int
+cpsFuelBase = 64
+
+cpsFuelOfBody : Ir -> Int
+cpsFuelOfBody body = cpsFuelBase + 8 * irSize body
+
+cpsDefsSize : List IrDef -> Int
+cpsDefsSize [] = 0
+cpsDefsSize (d :: rest) =
+  case irDefBody d of
+    Nothing => 1 + cpsDefsSize rest
+    Just b => 1 + irSize b + cpsDefsSize rest
+
+cpsFuelOfDefs : List IrDef -> Int
+cpsFuelOfDefs defs = cpsFuelBase + 8 * cpsDefsSize defs
 
 -- ---------------------------------------------------------------
 -- 小工具
@@ -1365,12 +1379,14 @@ mMarkedAltM fuel m =
       Just a => Just (IrAlt a.irAltCtor a.irAltBinders (mMarked (fuel - 1) a.irAltBody))
 
 mMarkedDef : IrDef -> IrDef
-mMarkedDef (IrDef n ar deps _ body r g sp) = IrDef n ar deps Nothing (mMarked startFuel body) r g sp
+mMarkedDef (IrDef n ar deps _ body r g sp) =
+  IrDef n ar deps Nothing (mMarked (cpsFuelOfBody body) body) r g sp
 mMarkedDef d = d
 
 -- ---------------------------------------------------------------
 mApplysDef : IrDef -> IrDef
-mApplysDef (IrDef n ar deps _ body r g sp) = IrDef n ar deps Nothing (mApplys startFuel body) r g sp
+mApplysDef (IrDef n ar deps _ body r g sp) =
+  IrDef n ar deps Nothing (mApplys (cpsFuelOfBody body) body) r g sp
 mApplysDef d = d
 
 -- | 方案 2 第一层：选择性 CPS 后把 handler clause 改成 (o, k, kDone)，resumption 为 (v, kRest)。
@@ -1499,7 +1515,8 @@ foldAppMap fuel acc xs =
       x :: rest => foldAppMap (fuel - 1) (IrApp Nothing acc (mSteps (fuel - 1) x)) rest
 
 mStepsDef : IrDef -> IrDef
-mStepsDef (IrDef n ar deps _ body r g sp) = IrDef n ar deps Nothing (mSteps startFuel body) r g sp
+mStepsDef (IrDef n ar deps _ body r g sp) =
+  IrDef n ar deps Nothing (mSteps (cpsFuelOfBody body) body) r g sp
 mStepsDef d = d
 
 export cpsDefsMachine : List IrDef -> Result (List IrDef)
@@ -1508,16 +1525,16 @@ cpsDefsMachine defs =
     Err msg => Err msg
     Ok ds =>
       Ok
-        (map mStepsDef (map mApplysDef (map mMarkedDef (mDefs (collectHandleOpsDefs 100000 ds) startFuel ds))))
+        (map mStepsDef (map mApplysDef (map mMarkedDef (mDefs (collectHandleOpsDefs 100000 ds) (cpsFuelOfDefs ds) ds))))
 
 -- | 单元级入口：改写所有组；入口展示节点是纯值，不需要 CPS。
 export cpsUnit : IrUnit -> Result IrUnit
 cpsUnit u =
-  case transformGroups startFuel u.irUnitGroups of
+  case transformGroups (cpsFuelOfDefs (concatMap irGroupDefs u.irUnitGroups)) u.irUnitGroups of
     Err msg => Err msg
     Ok groups1 =>
       Ok (IrUnit u.irUnitTyDecls groups1 u.irUnitHasListFamily u.irUnitTypeRefs u.irUnitEntry)
 
 -- | 定义列表入口（后端只持有可达 defs 时用）。
 export cpsDefs : List IrDef -> Result (List IrDef)
-cpsDefs defs = transformDefs startFuel defs
+cpsDefs defs = transformDefs (cpsFuelOfDefs defs) defs

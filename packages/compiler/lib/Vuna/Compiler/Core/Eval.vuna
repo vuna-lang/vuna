@@ -893,8 +893,14 @@ normalizeIfFuel fuel defs sols evalFuel c th el =
 -- ---------------------------------------------------------------
 -- quote：值 → 项（level 转 de Bruijn index）
 -- ---------------------------------------------------------------
+-- quote 的预算：按「值深度远大于 64」的现实取值，单次给足（见 compiler-audit IR-01：
+-- 旧的 64 层会把深值静默折成 `TType 0` 并写回程序）。耗尽仍返回 `TType 0`，但这需要
+-- 单条路径超过 262144 层，正常精化产物达不到。
+quoteFuelBound : Int
+quoteFuelBound = 262144
+
 export quote : Int -> Value -> Term
-quote depth v = quoteFuel 64 depth v
+quote depth v = quoteFuel quoteFuelBound depth v
 
 quoteFuel : Int -> Int -> Value -> Term
 quoteFuel fuel depth v =
@@ -919,7 +925,7 @@ quoteFuel fuel depth v =
 
 -- 分支绑定子的 level 约定：第一个实参 level 最低（quote 后 index 最大）。
 export quoteCaseAlt : Int -> VCaseAlt -> CaseAlt
-quoteCaseAlt depth alt = quoteCaseAltFuel 64 depth alt
+quoteCaseAlt depth alt = quoteCaseAltFuel quoteFuelBound depth alt
 
 quoteCaseAltFuel : Int -> Int -> VCaseAlt -> CaseAlt
 quoteCaseAltFuel fuel depth alt0 =
@@ -935,7 +941,7 @@ quoteCaseAltFuel fuel depth alt0 =
         in CaseAlt name (bindersOfPairs binders) body
 
 export quoteArgValues : Int -> List Value -> List (Pair Term Rig)
-quoteArgValues depth vs = quoteArgValuesFuel 64 depth vs
+quoteArgValues depth vs = quoteArgValuesFuel quoteFuelBound depth vs
 
 quoteArgValuesFuel : Int -> Int -> List Value -> List (Pair Term Rig)
 quoteArgValuesFuel fuel depth vs =
@@ -961,7 +967,7 @@ export freshVar : String -> Int -> Value
 freshVar name level = VNeutral (NVar name level [])
 
 export quoteNeutral : Int -> Neutral -> Term
-quoteNeutral depth n = quoteNeutralFuel 64 depth n
+quoteNeutral depth n = quoteNeutralFuel quoteFuelBound depth n
 
 quoteNeutralFuel : Int -> Int -> Neutral -> Term
 quoteNeutralFuel fuel depth n =

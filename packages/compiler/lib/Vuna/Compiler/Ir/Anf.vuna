@@ -16,9 +16,6 @@ import Base.Data.Result as Result
 import Base.Data.String as String
 import Vuna.Compiler.Ir.Model
 
-startFuel : Int
-startFuel = 200000
-
 record Anf where
   anfLets : List (Pair IrBinder Ir)
   anfExpr : Ir
@@ -327,7 +324,7 @@ anfDefs fuel defs =
       d :: rest => anfDef (fuel - 1) d :: anfDefs (fuel - 1) rest
 
 anfGroup : IrGroup -> IrGroup
-anfGroup g = IrGroup g.irGroupIsRec (anfDefs startFuel g.irGroupDefs)
+anfGroup g = IrGroup g.irGroupIsRec (anfDefs (anfFuelFor g.irGroupDefs) g.irGroupDefs)
 
 anfGroupsList : List IrGroup -> List IrGroup
 anfGroupsList [] = []
@@ -336,5 +333,17 @@ anfGroupsList (g :: rest) = anfGroup g :: anfGroupsList rest
 export anfGroups : List IrGroup -> List IrGroup
 anfGroups groups = anfGroupsList groups
 
+-- 预算按程序规模派生（每节点最多几步）：固定 200000 对超大单元会静默半变换，
+-- 而 `anfProgramDefs` 恒返回 `Ok`。派生后耗尽不可由输入规模触发。
+anfFuelFor : List IrDef -> Int
+anfFuelFor defs = 64 + 8 * defsSize defs
+
+defsSize : List IrDef -> Int
+defsSize [] = 0
+defsSize (d :: rest) =
+  case irDefBody d of
+    Nothing => 1 + defsSize rest
+    Just b => 1 + irSize b + defsSize rest
+
 export anfProgramDefs : List IrDef -> Result (List IrDef)
-anfProgramDefs defs = Ok (anfDefs startFuel defs)
+anfProgramDefs defs = Ok (anfDefs (anfFuelFor defs) defs)

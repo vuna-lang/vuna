@@ -935,13 +935,17 @@ anyNegativeVarAlts [] = False
 anyNegativeVarAlts ((CaseAlt n bs b) :: rest) = hasNegativeVar b || anyNegativeVarAlts rest
 
 -- 值里是否还有未解元变量（`VMeta m` 未解，或解里仍有未解）。
+-- 预算耗尽时按**保守方向**回答 `True`（当成「可能还有未解」），避免把不干净的值当可复用。
+metaScanBound : Int
+metaScanBound = 262144
+
 export hasUnsolvedMetaValue : Sols -> Value -> Bool
-hasUnsolvedMetaValue sols v = hasUnsolvedMetaValueFuel 64 sols v
+hasUnsolvedMetaValue sols v = hasUnsolvedMetaValueFuel metaScanBound sols v
 
 hasUnsolvedMetaValueFuel : Int -> Sols -> Value -> Bool
 hasUnsolvedMetaValueFuel fuel sols v =
   if fuel <= 0 then
-    False
+    True
   else
     case v of
       VMeta m sp =>
@@ -962,24 +966,24 @@ hasUnsolvedMetaValueFuel fuel sols v =
       _ => False
 
 export hasUnsolvedMetaList : Sols -> List Value -> Bool
-hasUnsolvedMetaList sols vs = hasUnsolvedMetaListFuel 64 sols vs
+hasUnsolvedMetaList sols vs = hasUnsolvedMetaListFuel metaScanBound sols vs
 
 hasUnsolvedMetaListFuel : Int -> Sols -> List Value -> Bool
 hasUnsolvedMetaListFuel fuel sols vs =
   if fuel <= 0 then
-    False
+    True
   else
     case vs of
       [] => False
       v :: rest => hasUnsolvedMetaValueFuel (fuel - 1) sols v || hasUnsolvedMetaListFuel (fuel - 1) sols rest
 
 export hasUnsolvedMetaClo : Sols -> Closure -> Bool
-hasUnsolvedMetaClo sols clo = hasUnsolvedMetaCloFuel 64 sols clo
+hasUnsolvedMetaClo sols clo = hasUnsolvedMetaCloFuel metaScanBound sols clo
 
 hasUnsolvedMetaCloFuel : Int -> Sols -> Closure -> Bool
 hasUnsolvedMetaCloFuel fuel sols clo =
   if fuel <= 0 then
-    False
+    True
   else
     case clo of
       Closure env body => hasUnsolvedMetaListFuel (fuel - 1) sols env
