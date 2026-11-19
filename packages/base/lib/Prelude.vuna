@@ -9,6 +9,7 @@ import Base.Data.Int
 -- 只 import 不重导出：保证每个程序加载 Base.Effect.Core（宿主原语签名与 codegen 的 MkEff 需要）；短名 `Eff` / `Row` 仍需显式 import。
 import Base.Effect.Core
 export module Base.Data.Pair
+export module Base.Data.Function
 export module Base.Data.Bool
 export module Base.Trait.Show
 export module Base.Trait.Eq

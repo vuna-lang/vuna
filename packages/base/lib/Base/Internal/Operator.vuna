@@ -4,6 +4,8 @@
 -- 源码里再声明会报 `RN_BuiltinFixity`，因此不在这里。
 module Base.Internal.Operator where
 
+infixr 0 $
+infixl 1 |>
 infixl 4 ==
 infixl 4 /=
 infixl 4 <

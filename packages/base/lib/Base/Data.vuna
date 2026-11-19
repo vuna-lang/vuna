@@ -4,6 +4,8 @@ module Base.Data where
 
 export module Base.Data.Pair
 export module Base.Data.Pair as Pair
+export module Base.Data.Function
+export module Base.Data.Function as Function
 export module Base.Data.Bool
 export module Base.Data.Bool as Bool
 export module Base.Data.List
