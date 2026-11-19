@@ -188,12 +188,15 @@ natPrefixGo fuel v =
       _ => 0
 
 -- ---------------------------------------------------------------
--- D24：conv fuel 派生（按值里的 Nat 链规模）
+-- conv fuel 派生
 -- ---------------------------------------------------------------
--- 固定 64 对「字面量展开成的深 Nat 链」不够：链每层要走 convFuel → convBoth →
--- convValueLists 几步，类型索引 ≥20 就会假报 `conv fuel exhausted`。这里只对
--- **Nat 根值**按链深放大（非 Nat 值仍是 64，热路径成本不变）；上限 `convFuelMax`
--- 防失控输入。
+-- 每层结构比较要走 convFuel → convBoth → convNeutral/convSpines 几步，预算必须覆盖
+-- **嵌套深度**：基值覆盖 ~1000 层，深类型（`Maybe (Maybe …)` 十几层起）不再假报
+-- `conv fuel exhausted`。Nat 链再按链深额外放大；上限 `convFuelMax` 防失控输入。
+-- 预算只在真正走深时消耗，浅值（热路径上的绝大多数比较）不受影响。
+convFuelBase : Int
+convFuelBase = 4096
+
 -- 浅探：Nat 链深度取「根值」或「直接参数 / 脊实参」里的最大前缀深度。
 -- 失败形态 `Vec (Succ^k Zero) Int` 的根不是 Nat，但索引链就在直接参数里；入口燃料
 -- 必须覆盖索引链的逐层比较（每层约 3–4 fuel，系数 4 足够）。
@@ -230,7 +233,10 @@ convFuelMax : Int
 convFuelMax = 100000
 
 convNatFuel : Int -> Int
-convNatFuel depth = if depth > 24984 then convFuelMax else 64 + 4 * depth
+convNatFuel depth =
+  let
+    need = convFuelBase + 4 * depth
+  in if need > convFuelMax then convFuelMax else need
 
 -- Nat 构造子应对：两边都能折成整数时按整数判等 / 不等（O(链深)，不再逐层消耗 fuel）；
 -- 折不动（meta / 中性尾巴）才回落到逐层比较，并在回落点补足 fuel。
@@ -778,25 +784,25 @@ export convBoth : HashMap String Term -> Sols -> Int -> Value -> Value -> Check 
 convBoth a1 a2 a3 a4 a5 = convBothFuel (convFuelFor a4 a5) a1 a2 a3 a4 a5
 
 export convCaseAlts : HashMap String Term -> Sols -> Int -> List VCaseAlt -> List VCaseAlt -> Check Sols
-convCaseAlts a1 a2 a3 a4 a5 = convCaseAltsFuel 64 a1 a2 a3 a4 a5
+convCaseAlts a1 a2 a3 a4 a5 = convCaseAltsFuel convFuelBase a1 a2 a3 a4 a5
 
 export convOneAlt : HashMap String Term -> Sols -> Int -> VCaseAlt -> VCaseAlt -> Check Sols
-convOneAlt a1 a2 a3 a4 a5 = convOneAltFuel 64 a1 a2 a3 a4 a5
+convOneAlt a1 a2 a3 a4 a5 = convOneAltFuel convFuelBase a1 a2 a3 a4 a5
 
 export convValueLists : HashMap String Term -> Sols -> Int -> List Value -> List Value -> Check Sols
-convValueLists a1 a2 a3 a4 a5 = convValueListsFuel 64 a1 a2 a3 a4 a5
+convValueLists a1 a2 a3 a4 a5 = convValueListsFuel convFuelBase a1 a2 a3 a4 a5
 
 export convNeutral : HashMap String Term -> Sols -> Int -> Neutral -> Neutral -> Value -> Value -> Check Sols
-convNeutral a1 a2 a3 a4 a5 a6 a7 = convNeutralFuel 64 a1 a2 a3 a4 a5 a6 a7
+convNeutral a1 a2 a3 a4 a5 a6 a7 = convNeutralFuel convFuelBase a1 a2 a3 a4 a5 a6 a7
 
 export convSpines : HashMap String Term -> Sols -> Int -> List Value -> List Value -> Value -> Value -> Check Sols
-convSpines a1 a2 a3 a4 a5 a6 a7 = convSpinesFuel 64 a1 a2 a3 a4 a5 a6 a7
+convSpines a1 a2 a3 a4 a5 a6 a7 = convSpinesFuel convFuelBase a1 a2 a3 a4 a5 a6 a7
 
 export etaLeft : HashMap String Term -> Sols -> Int -> Value -> String -> Closure -> Check Sols
-etaLeft a1 a2 a3 a4 a5 a6 = etaLeftFuel 64 a1 a2 a3 a4 a5 a6
+etaLeft a1 a2 a3 a4 a5 a6 = etaLeftFuel convFuelBase a1 a2 a3 a4 a5 a6
 
 export etaRight : HashMap String Term -> Sols -> Int -> String -> Closure -> Value -> Check Sols
-etaRight a1 a2 a3 a4 a5 a6 = etaRightFuel 64 a1 a2 a3 a4 a5 a6
+etaRight a1 a2 a3 a4 a5 a6 = etaRightFuel convFuelBase a1 a2 a3 a4 a5 a6
 
 export solveMeta : HashMap String Term -> Sols -> Int -> Int -> List Value -> Value -> Check Sols
-solveMeta a1 a2 a3 a4 a5 a6 = solveMetaFuel 64 a1 a2 a3 a4 a5 a6
+solveMeta a1 a2 a3 a4 a5 a6 = solveMetaFuel convFuelBase a1 a2 a3 a4 a5 a6

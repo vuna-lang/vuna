@@ -574,7 +574,18 @@ resultSpine ty = spineOfType ty
 -- 这是**唯一**的「已解元变量 → 项」入口（解在求解点已保证作用域，所以正常输入不会
 -- 出现越界）。
 export zonkTerm : Ec -> Int -> Term -> Term
-zonkTerm ec depth t = zonkTermFuel 64 ec depth t
+zonkTerm ec depth t = zonkTermFuel (zonkFuelFor t) ec depth t
+
+-- | 燃料按项规模派生（`termSize` 必 ≥ 嵌套深度；每节点 4 步，与 `Eval.evalFuelFor` 同口径）。
+-- 固定上限会在更深的项上中途停在原项，残留元变量推迟到 codegen 才报。
+zonkFuelFor : Term -> Int
+zonkFuelFor t =
+  let
+    need = 128 + 4 * termSize t
+  in if need > zonkFuelMax then zonkFuelMax else need
+
+zonkFuelMax : Int
+zonkFuelMax = 1000000
 
 zonkTermFuel : Int -> Ec -> Int -> Term -> Term
 zonkTermFuel fuel ec depth t =

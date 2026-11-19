@@ -89,7 +89,7 @@ ID 是稳定引用（`层前缀-序号`），改动时保留编号，删掉实�
 | EC-03 | `Core/Conv.vuna` 的 `metaCreatedDepth` | C | 未登记时回退当前深度 | 开放 |
 | EC-04 | `Core/Conv.vuna` 的 `VPi`/`VLam` | C | 定义性相等不比 `rig`（`rig` 是运行时擦除格子，不比是有意取舍） | 开放（有意） |
 | EC-05 | `Core/Conv.vuna` 的 `patternSolution []` | C | 不可达分支伪造 `VType` | 开放 |
-| EC-06 | `Core/Conv.vuna` 的 Nat 折算 | C | 饱和成相等；`convNatFuel` 用幻数推预算 | 开放 |
+| EC-06 | `Core/Conv.vuna` 的 Nat 折算 | C | 饱和成相等；`convNatFuel` 用幻数推预算 | 开放（预算已按 `convFuelBase + 4*depth` 派生并以 `convFuelMax` 封顶；饱和相等是有意取舍） |
 | EC-07 | `Elab/Dict.vuna` 的 `tryResolveDictGoal` | ⚠️A | 程序级求解用空 ctx + `Span ""` + depth 0，与收尾路径不等价 | 开放 |
 | EC-08 | `Dict`/`Trait`/`Driver` 的 `solveMeta … 0` | C | 一批延迟求解点传 depth 0，等于跳过作用域检查 | 已清（传 `ctxDepth` 与约束的 `cdepth`） |
 | EC-09 | `Dict.vuna` 的 `matchInstances` | C | 上一候选的解表污染下一候选（无候选快照） | 开放 |
@@ -102,7 +102,7 @@ ID 是稳定引用（`层前缀-序号`），改动时保留编号，删掉实�
 | EC-16 | `Impl.vuna` 的效果协议名字 | D | 字面串绕过 `Intrinsics` 的单一真源 | 开放 |
 | EC-17 | `Impl.vuna` 的 `sameLabelValue` | C | 行标签包含关系用 `showTerm (quote 0 …)` 文本判等 | 开放 |
 | EC-18 | `Meta.vuna` 的 `outerScan` | ⚠️A | 漏 `TProj`/`TRecord`/`TRecUpd` → 线性捕获检查漏报 | 已清 |
-| EC-19 | `Meta.vuna` 的 `zonkTermFuel` | C | 固定 64、耗尽原样返回（错误推迟到 codegen） | 开放 |
+| EC-19 | `Meta.vuna` 的 `zonkTermFuel` | C | 固定 64、耗尽原样返回（错误推迟到 codegen） | 已清（`zonkTerm` 按 `termSize` 派生燃料、上限 1e6，嵌套深度不再截断） |
 | EC-20 | `Meta.vuna` 的 `ctorRefTerm*` | D | Ec 版与全局版两份实现 | 开放 |
 | EC-21 | `Trait.vuna` 的 `instArgAt` | A | 实参取尽时伪造 `TGlobal "Int"` | 开放 |
 | EC-22 | `Trait.vuna` 的 `resolveRigidGoalsGo` | A | `solveMeta` 失败仍把替换记进 acc | 开放 |
@@ -114,6 +114,7 @@ ID 是稳定引用（`层前缀-序号`），改动时保留编号，删掉实�
 | EC-28 | `Elab/Driver.vuna` 的 `resolveDictGoalsFix` | C | 字典收敛固定 8 轮 | 开放 |
 | EC-29 | `Elab/Driver.vuna` 的实例索引自检 | D | 只在 `--debug-perf` 下跑 | 开放 |
 | EC-30 | `Impl.vuna` 的 check 位 `if` | A | 分支检查失败后整体重推断（位置/期望类型信息丢失） | 开放 |
+| EC-31 | `Conv.vuna` 的 `convFuelBase` | C | 非 Nat 值的 conv 燃料固定 64：定义性相等嵌套 ≥ ~15 层就假报 `IC_FuelExhausted` | 已清（基值 4096 ≈ 1000 层；Nat 链仍按链深追加） |
 
 `EC-01` 的事实（收紧即断链）：把 `i < 0` 显式判 False 后，`packages/base` 自身在
 `Base/Data/String.vuna` 的 `lines` 上报 `TC_NoInstanceFound`——说明正常编译链**依赖**

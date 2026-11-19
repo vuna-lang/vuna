@@ -1,0 +1,13 @@
+-- 深嵌套类型的定义性相等：conv 预算按嵌套深度派生（≥16 层不假报 fuel 耗尽）。
+-- 同时覆盖无字段构造子（`Nothing`）的族参数直接取自期望类型。
+
+import Base.Data
+
+x : Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Int))))))))))))))))))))))))))))))))))))))))
+x = Nothing
+
+y : Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Maybe (Int))))))))))))))))))))))))))))))))))))))))
+y = x
+
+main : String
+main = "ok"
