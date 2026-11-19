@@ -319,6 +319,10 @@ WASI preview1，宿主侧逐函数实现。下表的「允许」指浏览器平�
 伪造结果。能力表在 `Vuna.Compiler.Base.Capabilities`，粒度是效应家族；逐操作缺口以
 §8.1–§8.3 为准。
 
+宿主 scratch 的边界：路径复制按目标区容量（`wasiPath1` 4096 字节 / `wasiPath2` 至
+`wasiAux`）检查，超长路径 trap（不覆盖相邻 iov / io 缓冲）；原子写的临时名是
+`<path>.tmp<µs><seq>`（时间 + 进程内序号），同进程并发写不会互相覆盖。
+
 - 闭包是**单参**形状（`$ft = (anyref anyref) -> anyref`）：多参 lambda 创建时柯里化，
   应用侧每多一个实参就多一次 `call $rt_apply`。零参 lambda 内联，不产生闭包。
 - 变体分支只按 tag 一次线性分派（不做多模式矩阵）；结构化比较的用户族也按声明序线性

@@ -115,7 +115,7 @@
 | A04 | 包文件收集在 fuel 耗尽时返回部分列表（`collectDirFiles`/`collectNames`/`walkName`），摘要据此判「内容一致」 | [compiler-audit.md](compiler-audit.md) FE-01/FE-02；`Frontend/Packages/Source.vuna` | 后续 |
 | A05 | `Loader.Flatten.loadModule` 命中模块表即跳过可见性检查：依赖包未导出的模块、两个 root 的同名模块都按「先装入者」解析 | [compiler-audit.md](compiler-audit.md) LD-01；`Loader/Flatten.vuna` | 后续 |
 | A06 | split 的 cache key 编入 `mode=s/f`：摘要路径与全量路径产出不同字节，产物是「输入 + store 热度」的函数 | [compiler-audit.md](compiler-audit.md) DR-01；`Driver/Compile.vuna`（D112 疑源） | 后续（需设计） |
-| A07 | native `div` 无 `min_int / -1` 守卫（SIGFPE）；非 try 的 `prim_eff_*` FS 原语映射到 `try_*` 后失败变默认真值；`fsReadFile` >8 MiB 静默截断 | [compiler-audit.md](compiler-audit.md) CG-01/CG-02/CG-03；`Native/Runtime.vuna` | 后续 |
+| A07 | 非 try 的 `prim_eff_*` FS 原语在 native 上映射到 `try_*`：失败变成 `""`/`0`/`False` + status，而 OCaml 抛错、wasm trap | [compiler-audit.md](compiler-audit.md) CG-02；`Native/Runtime.vuna` | 后续（与 typed error 通道一起定） |
 
 ## 相关阅读
 

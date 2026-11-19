@@ -150,15 +150,15 @@ ID 是稳定引用（`层前缀-序号`），改动时保留编号，删掉实�
 
 | ID | 位置 | 类 | 现象 → 后果 | 状态 |
 | --- | --- | --- | --- | --- |
-| CG-01 | `Native/Runtime.vuna` 的 `divFn` | ⚠️A | 无 `min_int / -1` 守卫 → `#DE`/SIGFPE，三端唯一进程崩溃 | 开放 |
+| CG-01 | `Native/Runtime.vuna` 的 `divFn` | ⚠️A | 无 `min_int / -1` 守卫 → `#DE`/SIGFPE，三端唯一进程崩溃 | 已清（守卫返回 min_int） |
 | CG-02 | `Native/Runtime.vuna` 的 `prim_eff_*` | ⚠️B | 非 try 的 FS 原语全映射到 `try_*`：失败变默认真值 + status | 开放 |
-| CG-03 | `Native/Runtime.vuna` 的 `try_read_file` | ⚠️A | 8 MiB 固定缓冲，读满即成功 → 静默截断大文件 | 开放 |
-| CG-04 | `Native/Runtime.vuna` 的 `dir_names` | C | 目录项上限 4032，超出 skip | 开放 |
-| CG-05 | `Native/Runtime.vuna` 的 `str_to_c` | ⚠️A | 无界 `rep movsb` 写 4096 `.bss` | 开放 |
+| CG-03 | `Native/Runtime.vuna` 的 `try_read_file` | ⚠️A | 8 MiB 固定缓冲，读满即成功 → 静默截断大文件 | 已清（超上界报 io 错误） |
+| CG-04 | `Native/Runtime.vuna` 的 `dir_names` | C | 目录项上限 4032，超出 skip | 已清（超上限报 io 错误） |
+| CG-05 | `Native/Runtime.vuna` 的 `str_to_c` | ⚠️A | 无界 `rep movsb` 写 4096 `.bss` | 已清（超长 trap） |
 | CG-06 | `Native/Runtime.vuna` 的 `try_strFromInt` | ⚠️C | `min_int` 渲染错文本 | 开放 |
 | CG-07 | `Native/Runtime.vuna` 的 `remove_tree` | ⚠️C | 每层 40 KiB、无栈守卫、`c_strcpy` 无界 | 开放 |
-| CG-08 | `Wasm/Runtime.vuna` 的 `rt_pathCopyRel` | ⚠️A | 无长度上限，覆盖 iov/scratch | 开放 |
-| CG-09 | `Wasm/Runtime.vuna` 的原子写 | C | 临时名 `<path>.tmp` 无 pid（另两端有） | 开放 |
+| CG-08 | `Wasm/Runtime.vuna` 的 `rt_pathCopyRel` | ⚠️A | 无长度上限，覆盖 iov/scratch | 已清（按目标区容量 trap） |
+| CG-09 | `Wasm/Runtime.vuna` 的原子写 | C | 临时名 `<path>.tmp` 无 pid（另两端有） | 已清（时间+序号） |
 | CG-10 | `Wasm/Render.vuna` 的 `renderInstrFlat` | C | 复合指令返回 `""` → 静默抹掉 | 开放 |
 | CG-11 | `Wasm/Step.vuna` + `Module` 的 step 发射 | D | 整段死机器 + 9 类型/4 全局仍发射 + 注释与实现相反 | 已清（文件与发射已删） |
 | CG-12 | `Codegen/Term.vuna` 的 cleanup 兜底 | C | 硬上限 256（另两端无） | 开放 |
@@ -172,14 +172,14 @@ ID 是稳定引用（`层前缀-序号`），改动时保留编号，删掉实�
 
 | 语义 | OCaml | Native | WASM |
 | --- | --- | --- | --- |
-| `min_int / -1` | `min_int` | SIGFPE | `min_int` |
+| `min_int / -1` | `min_int` | `min_int` | `min_int` |
 | `strFromInt min_int` | 正确 | 错误文本 | 正确 |
-| `fsReadFile` > 8 MiB | 全量 | 静默截断 | 全量 |
+| `fsReadFile` > 8 MiB | 全量 | io 错误（8 MiB 上界） | 全量 |
 | 非 try FS 失败 | exit 2 | 静默默认值 | trap |
 | `strPack` 越界 | 抛异常 | 截断低 8 位 | 截断低 8 位 |
 | `isTty` | stdout | stdin | 恒 False |
 | 零参顶层定义 | 初始化时求值 | 每次引用重新调用 | `_start` 一次 |
-| 原子写临时名 | `<path>.<pid>.tmp` | `<path>.<pid>.tmp` | `<path>.tmp` |
+| 原子写临时名 | `<path>.<pid>.tmp` | `<path>.<pid>.tmp` | `<path>.tmp<µs><seq>` |
 
 ## Driver / 编译器 Base
 
