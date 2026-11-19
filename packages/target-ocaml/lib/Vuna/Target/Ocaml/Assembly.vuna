@@ -1,4 +1,4 @@
-module Vuna.Compiler.Codegen.Assembly where
+module Vuna.Target.Ocaml.Assembly where
 
 -- split 产物的**唯一装配实现**。
 --
@@ -15,9 +15,9 @@ import Vuna.Compiler.Base.Common
 import Vuna.Ir.Model
 import Vuna.Ir.Analysis
 import Vuna.Ir.Runtime
-import Vuna.Compiler.Codegen.Decl
-import Vuna.Compiler.Codegen.Term
-import Vuna.Compiler.Codegen.Ocaml.Render
+import Vuna.Target.Ocaml.Decl
+import Vuna.Target.Ocaml.Term
+import Vuna.Target.Ocaml.Render
 
 -- 运行时前缀单元：`Vuna_runtime.ml` 只有 `dtRuntime`，是唯一被其余单元 open 的单元。
 export runtimeUnit : String

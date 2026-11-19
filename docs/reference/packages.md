@@ -25,7 +25,7 @@
   没有单一包身份（`contextPackageName` 为空串）；成员目录内的文件仍用最近的包上下文。
 - **成员路径可以嵌套**：`members` 是相对 workspace 根的相对路径（如
   `packages/compiler`），不要求是根目录的直接子目录。本仓库的成员统一放在 `packages/`
-  下（`packages/{compiler,base,cli,http,web,web-cli}`）；新增包 = 在 `packages/` 下建目录并在
+  下（`packages/{compiler,compiler-base,ir,target-ocaml,base,cli,http,web,web-cli}`）；新增包 = 在 `packages/` 下建目录并在
   `[workspace].members` 加一行。
 - 每包固定三目录：`lib/`（模块根）、`app/`（入口，恒为 `app/Main.vuna`）、`test/`
   （测试模块）。依赖只向下流：`app`/`test` 可用本包 `lib` + 依赖包 `lib`；依赖包之间是
@@ -201,8 +201,8 @@ modules = [
 
 ```toml
 [layers]
-"Vuna.Compiler.Codegen" = ["Vuna.Compiler.Frontend"]
-"Vuna.Compiler.Lowering" = ["Vuna.Compiler.Core", "Vuna.Compiler.Elab", "Vuna.Compiler.Codegen"]
+"Vuna.Target.Ocaml" = ["Vuna.Compiler.Frontend"]
+"Vuna.Compiler.Lowering" = ["Vuna.Compiler.Core", "Vuna.Compiler.Elab", "Vuna.Target.Ocaml"]
 ```
 
 语义（实现 `Vuna.Compiler.Loader.Layers`，由 `Loader.Flatten` 在加载完成后跑一次）：

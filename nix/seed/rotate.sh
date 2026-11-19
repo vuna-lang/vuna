@@ -61,10 +61,10 @@ fi
 
 # 计算 rotation 元数据（审计用；CI 不因 seed 落后于源码而失败）。
 # 在替换 seed/ 之前完成：任何计算失败都不会动信任锚点。
-# 源码指纹 = compiler/ + ir/ + compiler-base/ + base/ 下全部 .vuna 按路径排序后的内容哈希链。
-source_files=$(find packages/compiler packages/ir packages/compiler-base packages/base -type f -name '*.vuna' | wc -l | tr -d ' ')
+# 源码指纹 = compiler/ + ir/ + compiler-base/ + target-ocaml/ + base/ 下全部 .vuna 按路径排序后的内容哈希链。
+source_files=$(find packages/compiler packages/ir packages/compiler-base packages/target-ocaml packages/base -type f -name '*.vuna' | wc -l | tr -d ' ')
 source_digest=$(
-  find packages/compiler packages/ir packages/compiler-base packages/base -type f -name '*.vuna' -print |
+  find packages/compiler packages/ir packages/compiler-base packages/target-ocaml packages/base -type f -name '*.vuna' -print |
     LC_ALL=C sort |
     while IFS= read -r f; do sha256sum "$f"; done |
     sha256sum | cut -d' ' -f1

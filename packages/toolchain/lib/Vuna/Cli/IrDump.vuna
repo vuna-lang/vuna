@@ -5,9 +5,9 @@ module Vuna.Cli.IrDump where
 import Base.Effect.Types as EffTypes
 import Base.Data.Pair as Pair
 import Vuna.Compiler.Base.Common
-import Vuna.Compiler.Codegen.Decl
-import Vuna.Compiler.Codegen.Ocaml.Render
-import Vuna.Compiler.Codegen.Term
+import Vuna.Target.Ocaml.Decl
+import Vuna.Target.Ocaml.Render
+import Vuna.Target.Ocaml.Term
 import Vuna.Compiler.Driver.Dt
 import Vuna.Compiler.Frontend.Packages.Pkg
 import Vuna.Ir.Anf

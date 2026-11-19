@@ -1,4 +1,4 @@
-module Vuna.Compiler.Codegen.Decl where
+module Vuna.Target.Ocaml.Decl where
 
 -- OCaml 名字编码 + 跨单元限定 + IR 类型/声明渲染。
 --
@@ -13,12 +13,15 @@ module Vuna.Compiler.Codegen.Decl where
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Base.Source as Source
 import Base.Container.HashMap as HashMap
-import Vuna.Compiler.Frontend.Ast
 import Vuna.Ir.Model
 import Vuna.Ir.Analysis
 import Vuna.Ir.Runtime
-import Vuna.Compiler.Codegen.Ocaml.Model
-import Vuna.Compiler.Codegen.Ocaml.Render as Render
+import Vuna.Target.Ocaml.Model
+import Vuna.Target.Ocaml.Render as Render
+
+-- | 构造子全名的最后一段（`Module.Data.Ctor` → `Ctor`）。
+ctorShortName : String -> String
+ctorShortName name = Source.lastSeg name
 
 -- ---------------------------------------------------------------
 -- 名字编码

@@ -61,6 +61,7 @@ let
       cp -r ${../../packages/compiler} packages/compiler
       cp -r ${../../packages/compiler-base} packages/compiler-base
       cp -r ${../../packages/ir} packages/ir
+      cp -r ${../../packages/target-ocaml} packages/target-ocaml
       cp -r ${../../packages/base} packages/base
       chmod -R u+w .
       ${vuna-seed}/bin/vuna-seed build --no-compile --out stage1 packages/compiler

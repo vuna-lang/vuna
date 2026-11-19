@@ -2,8 +2,8 @@
 -- main : Eff [] Int——由运行时执行；getArgs/exit 走宿主原语 @vuna@prim_eff_getArgs / @vuna@prim_eff_exit。
 import Vuna.Compiler.Driver.CompilerCli
 import Base.Data.Obs as Obs
-import Vuna.Compiler.Codegen.Ocaml.Model
-import Vuna.Compiler.Codegen.Ocaml.Render
+import Vuna.Target.Ocaml.Model
+import Vuna.Target.Ocaml.Render
 import Vuna.Ir.Represent
 -- 包接口面：下面这些模块不在编译器的运行路径上，但属于 compiler 包的导出面
 -- （工具链与 examples/infra 消费）。显式 import 让它们进入入口闭包：seed 与包 iface

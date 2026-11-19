@@ -8,7 +8,7 @@ module Vuna.Compiler.Base.Capabilities where
 --
 -- 值来源（改运行时实现表时必须同步本表）：
 --   wasm   → `Vuna.Compiler.Wasm.Runtime` 的 `rtImplOf`
---   ocaml  → `Vuna.Compiler.Codegen.Runtime` 的 `dtp_*`
+--   ocaml  → `Vuna.Target.Ocaml.Runtime` 的 `dtp_*`
 --   native → `Vuna.Compiler.Native.Runtime` 的 `nativeRtTargetHost`
 import Vuna.Compiler.Base.Common
 import Base.Data.String as String

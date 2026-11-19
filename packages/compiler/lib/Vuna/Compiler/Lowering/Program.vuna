@@ -34,8 +34,8 @@ import Vuna.Ir.Analysis
 import Vuna.Ir.Runtime
 import Vuna.Ir.Validate
 import Vuna.Compiler.Lowering.Checks
-import Vuna.Compiler.Codegen.Decl
-import Vuna.Compiler.Codegen.Runtime
+import Vuna.Target.Ocaml.Decl
+import Vuna.Target.Ocaml.Runtime
 import Base.Effect.Types as EffTypes
 export module Vuna.Compiler.Lowering.Env
 export module Vuna.Compiler.Lowering.Ty

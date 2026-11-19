@@ -2,7 +2,7 @@
 
 本文描述三层：`Vuna.Ir.*`（IR 数据定义、纯分析与校验）、`Vuna.Ir.Runtime`
 （IR ↔ 运行时**契约**）与 `Vuna.Compiler.Lowering.Program`（Core → IR 的唯一入口）、
-`Vuna.Compiler.Codegen.Runtime`（契约的 OCaml 实现）。
+`Vuna.Target.Ocaml.Runtime`（契约的 OCaml 实现）。
 
 子系统位置见 [architecture.md](../architecture.md)，
 终态方向与「为什么先做 IR」见 [architecture-target.md](../architecture-target.md)
@@ -123,7 +123,7 @@ binder 的**身份**在 Lowering 分配，前缀与编号渲染属后端：
 ## 运行时契约（`Vuna.Ir.Runtime`）
 
 **IR 里没有目标文本**：`IrRt sym` / `IrRtApp sym args` 只引用符号名，符号必须在本契约里
-声明；OCaml 表达式在 `Vuna.Compiler.Codegen.Runtime`（后端表）。这是「一份 IR 驱动所有
+声明；OCaml 表达式在 `Vuna.Target.Ocaml.Runtime`（后端表）。这是「一份 IR 驱动所有
 后端，后端之间只差运行时契约」（[architecture-target.md](../architecture-target.md) 不变量 6）
 的可检查形式，也是 wasm / native 后端开工前的唯一前置。
 

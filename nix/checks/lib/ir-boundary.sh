@@ -60,7 +60,7 @@ else
 fi
 
 # 规则 3b：`Codegen/` 目录只放 IR→文本；Core→IR、Core 侧检查与归属切分不得再搬回来。
-for gone in packages/compiler/lib/Vuna/Compiler/Codegen/Lower.vuna packages/compiler/lib/Vuna/Compiler/Codegen/Erase.vuna packages/compiler/lib/Vuna/Compiler/Codegen/Split.vuna; do
+for gone in packages/target-ocaml/lib/Vuna/Target/Ocaml/Lower.vuna packages/target-ocaml/lib/Vuna/Target/Ocaml/Erase.vuna packages/target-ocaml/lib/Vuna/Target/Ocaml/Split.vuna; do
   if [ -f "$gone" ]; then
     echo "ir-boundary: $gone must live outside Codegen/ (Codegen is IR -> text only)"
     fail=$((fail + 1))
@@ -80,9 +80,9 @@ fi
 
 # 规则 5（正向断言）：文本生成层都消费 IR（不允许残留只吃 `DtDef`、绕过 IR 的路径）。
 for f in \
-  packages/compiler/lib/Vuna/Compiler/Codegen/Decl.vuna \
-  packages/compiler/lib/Vuna/Compiler/Codegen/Term.vuna \
-  packages/compiler/lib/Vuna/Compiler/Codegen/Assembly.vuna
+  packages/target-ocaml/lib/Vuna/Target/Ocaml/Decl.vuna \
+  packages/target-ocaml/lib/Vuna/Target/Ocaml/Term.vuna \
+  packages/target-ocaml/lib/Vuna/Target/Ocaml/Assembly.vuna
 do
   [ -f "$f" ] || continue
   if ! imports_of "$f" | grep -qE '^Vuna\.Ir(\.|$)'; then
@@ -96,7 +96,7 @@ if grep -nE '\bIrRuntime\b|\bIrBridge\b' \
   packages/ir/lib/Vuna/Ir/Model.vuna \
   packages/ir/lib/Vuna/Ir/Runtime.vuna \
   packages/compiler/lib/Vuna/Compiler/Lowering/Program.vuna \
-  packages/compiler/lib/Vuna/Compiler/Codegen/Term.vuna
+  packages/target-ocaml/lib/Vuna/Target/Ocaml/Term.vuna
 then
   echo "ir-boundary: removed IR runtime-text nodes reappeared (IrRuntime / IrBridge)"
   fail=$((fail + 1))
@@ -118,18 +118,18 @@ then
 fi
 
 # 规则 8（正向断言）：契约与 OCaml 符号表存在，且 Lowering 用后端表做一致性检查。
-for f in packages/ir/lib/Vuna/Ir/Runtime.vuna packages/compiler/lib/Vuna/Compiler/Codegen/Runtime.vuna; do
+for f in packages/ir/lib/Vuna/Ir/Runtime.vuna packages/target-ocaml/lib/Vuna/Target/Ocaml/Runtime.vuna; do
   if [ ! -f "$f" ]; then
     echo "ir-boundary: missing $f (IR runtime contract)"
     fail=$((fail + 1))
   fi
 done
-TABLE=packages/compiler/lib/Vuna/Compiler/Codegen/Runtime.vuna
+TABLE=packages/target-ocaml/lib/Vuna/Target/Ocaml/Runtime.vuna
 if [ -f "$TABLE" ] && ! imports_of "$TABLE" | grep -qE '^Vuna\.Ir(\.|$)'; then
   echo "ir-boundary: $TABLE does not import Vuna.Ir (table must be keyed by the contract)"
   fail=$((fail + 1))
 fi
-if [ -f "$LOWER" ] && ! imports_of "$LOWER" | grep -qE '^Vuna\.Compiler\.Codegen\.Runtime$'; then
+if [ -f "$LOWER" ] && ! imports_of "$LOWER" | grep -qE '^Vuna\.Target\.Ocaml\.Runtime$'; then
   echo "ir-boundary: $LOWER does not import Codegen.Runtime (contract conformance check must run)"
   fail=$((fail + 1))
 fi
@@ -145,7 +145,7 @@ fi
 
 # 规则 11（后端模型层）：`Codegen/Ocaml/Model.vuna` 与 `Ir/Model.vuna` 的代码行（去注释）
 # 不得出现目标文本前缀（`v_` / `t_` / `C_` / `f_` / `Unit.`）：模型只装形状。
-for model in packages/compiler/lib/Vuna/Compiler/Codegen/Ocaml/Model.vuna packages/ir/lib/Vuna/Ir/Model.vuna; do
+for model in packages/target-ocaml/lib/Vuna/Target/Ocaml/Model.vuna packages/ir/lib/Vuna/Ir/Model.vuna; do
   [ -f "$model" ] || continue
   if sed -e "s/--.*//" "$model" | grep -qE "\"(v_|t_|C_|f_|Unit\.)"; then
     echo "ir-boundary: $model contains target text (model layer must stay shape-only)"

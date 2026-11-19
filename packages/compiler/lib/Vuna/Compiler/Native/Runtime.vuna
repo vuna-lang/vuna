@@ -5,7 +5,7 @@ module Vuna.Compiler.Native.Runtime where
 -- 运行时按 `Ir.Runtime` 契约的符号名实现；白名单之外的符号由 `Native.Module` 拒绝
 -- （编译期 `NativeUnsupported`），不做「trap 兜底」。
 --
--- 语义参考实现是 `Vuna.Compiler.Codegen.Term` 的 `bi_*` / `dt_show_*` / `dtp_*` 模板：
+-- 语义参考实现是 `Vuna.Target.Ocaml.Term` 的 `bi_*` / `dt_show_*` / `dtp_*` 模板：
 --   * Int/Nat 是 63-bit 有符号；`+ - *` wrap，`/` 向零截断、除零 exit 2；
 --   * Bool 是 0/1；`&&`/`||` 的短路由 `Native.Module` 生成控制流，不在运行时；
 --   * Nat 的加法/乘法饱和到 max_int，减法下溢到 0；

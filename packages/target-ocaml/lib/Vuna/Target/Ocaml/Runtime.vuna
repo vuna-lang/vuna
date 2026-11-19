@@ -1,4 +1,4 @@
-module Vuna.Compiler.Codegen.Runtime where
+module Vuna.Target.Ocaml.Runtime where
 
 -- OCaml 后端的**运行时符号表**（契约的 OCaml 实现）。
 --

@@ -26,6 +26,7 @@ let
     compiler = ../../packages/compiler;
     compilerBase = ../../packages/compiler-base;
     ir = ../../packages/ir;
+    targetOcaml = ../../packages/target-ocaml;
     base = ../../packages/base;
     pluginKit = ../../packages/plugin-kit;
     toolchain = ../../packages/toolchain;
@@ -57,6 +58,7 @@ let
     src.compiler
     src.compilerBase
     src.ir
+    src.targetOcaml
     src.pluginKit
     src.toolchain
     src.cli
@@ -161,6 +163,7 @@ let
       src.compiler
       src.compilerBase
       src.ir
+      src.targetOcaml
       src.base
       src.cli
       src.pluginKit
@@ -331,6 +334,7 @@ in
       src.compiler
       src.compilerBase
       src.ir
+      src.targetOcaml
       src.base
       src.manifest
     ];
@@ -403,6 +407,7 @@ in
       src.compiler
       src.compilerBase
       src.ir
+      src.targetOcaml
       src.cli
       src.base
       src.pluginKit
@@ -434,6 +439,7 @@ in
       src.compiler
       src.compilerBase
       src.ir
+      src.targetOcaml
       src.base
     ];
     nativeBuildInputs = [

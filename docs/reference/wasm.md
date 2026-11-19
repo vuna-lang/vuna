@@ -112,7 +112,7 @@ binder 全量拷进 `$env` 数组（与 native 同策略），闭包应用经 `$
 ## 5. 运行时符号
 
 `Wasm.Runtime` 按 `Ir.Runtime` 契约的**符号名**实现子集；语义参考实现是
-`Vuna.Compiler.Codegen.Term` 的 `bi_*` / `dtp_*` 模板，不重新定义语义：
+`Vuna.Target.Ocaml.Term` 的 `bi_*` / `dtp_*` 模板，不重新定义语义：
 
 | 组 | 已实现 |
 | --- | --- |

@@ -1,12 +1,12 @@
--- | OCaml 后端的文本渲染：把 [Vuna.Compiler.Codegen.Ocaml.Model] 的类型面渲染成
+-- | OCaml 后端的文本渲染：把 [Vuna.Target.Ocaml.Model] 的类型面渲染成
 -- OCaml 文本。这里只做括号、分隔符与布局，不做任何表示决策。
 --
 -- `qualFamily` 由调用方给：族名 → 该族在本单元里的类型名（同单元裸名，跨单元
 -- `Unit.t_*`）。渲染器不持有归属表。
-module Vuna.Compiler.Codegen.Ocaml.Render where
+module Vuna.Target.Ocaml.Render where
 
 import Vuna.Compiler.Base.Common
-import Vuna.Compiler.Codegen.Ocaml.Model
+import Vuna.Target.Ocaml.Model
 
 -- | 一次性线性拼接：先插分隔符成列表，再用运行时 `String.concat` 单遍拼出。
 export joinWith : String -> List String -> String

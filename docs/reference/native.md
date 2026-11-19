@@ -194,7 +194,7 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
 ## 5. 运行时符号
 
 `Native.Runtime` 按 `Ir.Runtime` 契约的**符号名**实现子集；语义参考实现是
-`Vuna.Compiler.Codegen.Term` 的 `bi_*` / `dt_show_*` / `dtp_*` 模板，不重新定义语义：
+`Vuna.Target.Ocaml.Term` 的 `bi_*` / `dt_show_*` / `dtp_*` 模板，不重新定义语义：
 
 - `Int`：`add/sub/mul/div`（63-bit wrap；除零 trap）；`bit_and/bit_or/bit_xor/bit_not/
   bit_shl/bit_shr`（63-bit 语义；移位计数 `n < 0 || n >= 63` → 0，`bit_shr` 保留 bit 62）；比较返回 0/1。

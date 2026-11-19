@@ -20,6 +20,8 @@ packages/compiler-base/lib/Vuna/Compiler/Base/   （独立包 vuna-compiler-base
 packages/ir/lib/Vuna/Ir/              （独立包 vuna-ir：擦除后的中间表示，后端插件的唯一输入面）
 ├─ Model Analysis Runtime Validate Represent Anf Cps Dispatch Tail Codec
 │                             形状 / SCC / 运行时契约 / 校验 / 表示选择 / 变换 / 跨进程编码
+packages/target-ocaml/lib/Vuna/Target/Ocaml/  （独立包 vuna-target-ocaml：OCaml 后端，仍在种子闭包内）
+├─ Decl Term Assembly Model Render Runtime   IR→OCaml 文本（不 import Core / Elab / Intrinsics）
 packages/compiler/lib/Vuna/Compiler/   （目录即层：层名 = 模块前缀；依赖方向由 packages/compiler/vuna.toml
                                 的 [layers] 执行，见 reference/packages.md「层约束」）
 ├─ Frontend/    Ast Lexer Cst Parser Parser/Support Toml Manifest
@@ -30,7 +32,6 @@ packages/compiler/lib/Vuna/Compiler/   （目录即层：层名 = 模块前缀�
 ├─ Core/        Term Eval Conv Canonical      Core TT / NbE / 定义性相等 / 规范编码
 ├─ Elab/        Sig Types Meta Case Dict Term Data Trait InstName Driver Termination
 │               Prelude Match Records Derive Canonical        双向精化
-├─ Codegen/     Decl Term Assembly Runtime    IR→OCaml 文本（不 import Core / Elab / Intrinsics）
 ├─ Lowering/    Program Env Ty Entry Checks    Core→IR 唯一入口（程序级表/类型表面/入口形态）+ Core 侧检查
 ├─ Native/      Abi Gc Model Module Render Runtime   native 后端（x86-64 汇编文本 + 保守标记-清扫 GC）
 ├─ Wasm/        Instr Model Module Render Runtime Types   wasm 后端（WAT）
@@ -42,7 +43,7 @@ packages/compiler/lib/Vuna/Compiler/   （目录即层：层名 = 模块前缀�
   Obs（+子模块 Types/Read/Validate/Summarize/Run；可观测性工具链，见
   [reference/observability.md](reference/observability.md)）、
   Repl/Run/Doc（+子模块）/Search（+子模块）/Sig/Lsp/Json/TestRunner/Files；suite 执行器在 Test/{Suite,Run}
-依赖图：vuna → vuna-compiler → {vuna-ir, vuna-compiler-base} → vuna-base（vuna 也直接依赖 base）
+依赖图：vuna → vuna-compiler → {vuna-ir, vuna-compiler-base, vuna-target-ocaml} → vuna-base（vuna 也直接依赖 base）
 中立库 vuna-http（模块根 packages/http/lib/）：Http.{Header,Request,Response,Parse,Render}，
   HTTP/1.1 消息编解码、严格解析规则与传输无关连接层；依赖 vuna-base，不进 seed
   （见 [reference/http.md](reference/http.md)）；依赖图 vuna-http → vuna-base。

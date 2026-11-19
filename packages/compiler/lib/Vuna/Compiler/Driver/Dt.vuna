@@ -35,9 +35,9 @@ import Vuna.Compiler.Elab.Termination.Measure
 import Vuna.Compiler.Elab.Types
 import Vuna.Compiler.Elab.Prelude
 import Vuna.Compiler.Base.Intrinsics
-import Vuna.Compiler.Codegen.Assembly
+import Vuna.Target.Ocaml.Assembly
 import Vuna.Compiler.Lowering.Program
-import Vuna.Compiler.Codegen.Decl
+import Vuna.Target.Ocaml.Decl
 import Vuna.Ir.Model
 import Vuna.Ir.Analysis
 import Vuna.Ir.Runtime

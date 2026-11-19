@@ -1,0 +1,21 @@
+# vuna-target-ocaml：OCaml 后端（IR → 文本）。独立成包，因为它既是产品代码生成目标，
+# 也是自举链的产物形态；编译器核心只经由 IR 与它相接。
+#
+# 仍在种子闭包内：编译器用同一份后端把自身编译成 OCaml。
+[package]
+name = "vuna-target-ocaml"
+
+[dependencies]
+vuna-base = "../base"
+vuna-compiler-base = "../compiler-base"
+vuna-ir = "../ir"
+
+[export]
+modules = [
+  "Vuna.Target.Ocaml.Assembly",
+  "Vuna.Target.Ocaml.Decl",
+  "Vuna.Target.Ocaml.Model",
+  "Vuna.Target.Ocaml.Render",
+  "Vuna.Target.Ocaml.Runtime",
+  "Vuna.Target.Ocaml.Term",
+]

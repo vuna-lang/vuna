@@ -124,7 +124,7 @@ manifest，不向上找。命令语义与包格式
 ├── vscode/    # VSCode 扩展（语法高亮 + LSP 客户端 + lint/fmt/check/build；提交 dist/）
 ├── nix/       # 构建图（build/）+ CI 门禁（checks/）+ seed 工具 + 开发工具
 ├── docs/      # 分层文档（见 AGENTS.md 导航）
-├── vuna.toml  # workspace 根（只有 [workspace] + [lint]）；members: packages/{compiler,base,cli,http,web,web-cli}
+├── vuna.toml  # workspace 根（只有 [workspace] + [lint]）；members: packages/{compiler,compiler-base,ir,target-ocaml,base,cli,http,web,web-cli}
 └── flake.nix  # 输入与 outputs 委托（构建图在 nix/）
 ```
 

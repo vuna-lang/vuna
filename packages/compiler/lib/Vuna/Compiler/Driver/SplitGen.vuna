@@ -20,10 +20,10 @@ import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Driver.Owner
 import Vuna.Compiler.Driver.Split
 import Vuna.Compiler.Base.Diagnostics
-import Vuna.Compiler.Codegen.Assembly
-import Vuna.Compiler.Codegen.Decl
+import Vuna.Target.Ocaml.Assembly
+import Vuna.Target.Ocaml.Decl
 import Vuna.Compiler.Lowering.Program
-import Vuna.Compiler.Codegen.Term
+import Vuna.Target.Ocaml.Term
 import Vuna.Compiler.Elab.Driver
 import Vuna.Compiler.Elab.Term
 import Vuna.Compiler.Elab.Types

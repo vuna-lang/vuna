@@ -126,7 +126,8 @@ nix run .#vuna -- map find <Module.name> # 定位符号；另有 map impact / ap
 `packages/compiler/` = 编译器包（`Vuna.Compiler.*`，入口 `app/Main.vuna`，**进 seed**）；`packages/compiler-base/` =
 编译器与 IR 共用的最低层（`Vuna.Compiler.Base.*`：位置 / 诊断 / 编码原语 / 摘要 / 落盘 / 内建符号表，**进 seed**）；
 `packages/ir/` = 擦除后 IR 库 `vuna-ir`（`Vuna.Ir.*`：形状 / SCC / 运行时契约 / 校验 / 表示 / 变换 / **跨进程 codec**，
-**进 seed**；编译器与后端插件都依赖它）；`packages/base/` =
+**进 seed**；编译器与后端插件都依赖它）；`packages/target-ocaml/` = OCaml 后端 `vuna-target-ocaml`
+（`Vuna.Target.Ocaml.*`：IR→OCaml 文本，**进 seed**——编译器用它把自身编译成 OCaml）；`packages/base/` =
 标准库 `vuna-base`（`Base.*` + `Prelude`，**进 seed**；跨包公开面只有门面
 `Base` / `Base.Data` / `Base.Trait` / `Base.Container` / `Base.Effect(.Core/.Pure)` / `Prelude`）；`packages/cli/` = 产品 CLI 包
 `vuna`（工具链 Cli/Interp/Files/Fmt/Lint/Repl/Run/Doc/Index/Lsp/TestRunner/Obs 在 `packages/cli/lib/`，

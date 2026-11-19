@@ -1,9 +1,9 @@
 -- | OCaml 后端的声明面：类型表达式与类型声明。
 --
 -- 模型里**没有目标文本**：名字编码（`v_` / `t_` / `C_` / `f_`）、跨单元限定与括号
--- 都在 [Vuna.Compiler.Codegen.Ocaml.Render] 里完成。表示决策（族参数槽、去装箱、
+-- 都在 [Vuna.Target.Ocaml.Render] 里完成。表示决策（族参数槽、去装箱、
 -- 不透明字段）在 Lowering 已经定好，这里只搬形状。
-module Vuna.Compiler.Codegen.Ocaml.Model where
+module Vuna.Target.Ocaml.Model where
 
 import Vuna.Compiler.Base.Common
 
