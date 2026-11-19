@@ -1,0 +1,9 @@
+-- 实参不是形参的子项：拿不到尺寸关系，但仍要按弱边留在图上，不能整条边消失。
+g : Int -> Int
+g n = n + 1
+
+f : Int -> Int
+f x = f (g x)
+
+main : Int
+main = f 0

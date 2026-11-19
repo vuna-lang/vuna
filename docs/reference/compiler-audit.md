@@ -60,6 +60,7 @@ ID 是稳定引用（`层前缀-序号`），改动时保留编号，删掉实�
 | ID | 位置 | 类 | 现象 → 后果 | 状态 |
 | --- | --- | --- | --- | --- |
 | EL-01 | `Termination/Scc.vuna` 的 `fuelEdgesGo` | ⚠️A | 穿线失败（`ok=False`）的站点被从图里删掉，剩余严格自环即可判通过 → 接受非终止程序 | 已清（未识别站点按弱边计入；fuel 按守卫形参定位） |
+| EL-09 | `Termination/Scc.vuna` 的 `siteCollect*` | ⚠️A | 遍历预算耗尽时静默丢站点 → 图变小或变空，可能接受非终止程序 | 已清（耗尽按 caller 全形参 × callee arity 落全弱边，与 EL-01 同方向） |
 | EL-02 | `Termination.vuna` 的 SCC/DFS | ⚠️C | fuel 耗尽静默返回部分结果 → 整函数跳过终止性检查 | 已清（DFS/SCC 显式 `ok`，耗尽报 `IC_FuelExhausted`） |
 | EL-03 | `Termination.vuna` 的 STR | ⚠️C | 硬编码 100000、耗尽静默；三套遍历已漂移（`posWalk` 缺 `ELocalFun`） | 已清（预算按表达式规模派生；STR 耗尽保守拒绝；`posWalk` 补 `ELocalFun`） |
 | EL-04 | `Measure.vuna` 的 `weakReach` | ⚠️C | 耗尽返回 `False`=无环（方向是放过） | 已清（耗尽按有环处理） |

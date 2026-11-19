@@ -35,6 +35,7 @@
 | D65 | 只有内置宏：没有用户自定义宏 / 模式宏 / 宏生成宏；宏名是全局内置名（不参与模块作用域，不能遮蔽），实参只做 AST 替换（无 hygiene 重命名、无 typed macro / reflection） | `packages/compiler/lib/Vuna/Compiler/Loader/Expand.vuna`（`expandMacro`）、`Frontend/Ast.vuna`（`macroSyntaxName`）；[language.md](language.md)「内置宏」 | 终局见 architecture-target D4（typed macro 之前的 AST→AST 阶段） |
 | D66 | 宏展开只有调用点 span：展开出的节点共享 `name!` 的 span，没有 per-展开节点的 source map；LSP 不能 goto 宏定义 / 展开视图，fmt / lint / index 只按调用形式处理 | `Loader/Expand.vuna` 的 span 约定；`packages/cli/lib/Vuna/Fmt/Expr.vuna`（标记回渲染）、`packages/cli/lib/Vuna/Index/Scan.vuna`（标记过滤） | 后续（与 D4 / LSP 语义化一起做） |
 | D104 | 有界计数器（升序 `i + 1` 配 `i >= n` 上界）没有判定规则：只有递减构成长度证据，升序一律报 `TC_CannotProveTermination`（诊断写明「ascending counters are not supported」）；同形态只能改写成显式递减 fuel 或显式上界 | `packages/compiler/lib/Vuna/Compiler/Elab/Termination/Measure.vuna`（`arithMinusBase` / `isAddOpName`）；`packages/compiler/test/corpus/term_err/08_up_counter.vuna`；[type-system.md](type-system.md)「定义与终止性」 | 后续（需要上界推理，不是局部规则） |
+| D113 | 以值传递的调用点看不到实参位置：`let g = f in g x` 只落全弱边并报「SCT 未识别调用」，没有别名解析；同形态只能改写成直接调用 | `packages/compiler/lib/Vuna/Compiler/Elab/Termination/Scc.vuna`（`siteBlind` / `blindEdges`）；`packages/compiler/test/corpus/term_err/14_blind_value.vuna` | 后续（需要 `let` / `ELam` 的终值解析，且不能引入新站点形状） |
 
 ## 中间表示
 

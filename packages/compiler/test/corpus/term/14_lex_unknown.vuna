@@ -1,0 +1,18 @@
+-- 字典序互递归 + 未知关系的实参：第 0 位（down→step）与第 1 位（step→step）
+-- 各自覆盖部分环，只有 SCT 能证；`h Zero` 不依赖形参，不应落弱边制造伪环。
+data Nat : Type where
+  Zero : Nat
+  Succ : Nat -> Nat
+
+h : Nat -> Nat
+h n = Succ n
+
+down : Nat -> Nat -> Nat
+
+step : Nat -> Nat -> Nat
+
+down Zero n = n
+down (Succ m) n = step m n
+
+step m Zero = down m (h Zero)
+step m (Succ n) = step m n

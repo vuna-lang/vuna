@@ -216,7 +216,7 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
 | 建议引擎 + Fix | `Candidate`/`Suggestion` 模型；所有可安全自动修复的 warning 附 machine-applicable 编辑（unused binder/definition/import、冗余构造子/字面量分支、catch-all 后分支）；LSP codeAction 应用诊断 suggestions，`packages/cli/test/corpus/lsp/quickfix.sh` 集成测试 |
 | 类型不匹配 expected/found | fields expected/found + PhUnify trace 帧；期望类型无源 span，以 fields 而非双端 label 表达 |
 | 实例搜索 trace | `TC_NoInstanceFound` 附失败目标族桶的候选实例 `fields.candidates`，每个候选带 instance 声明 span 与拒绝原因「实例头 vs 目标」 |
-| 终止性 call matrix | `TC_CannotProveTermination` 附 `fields.call` 边：callee、被测形参位置（`arg`）、关系（`relation`：严格子项 / 守卫减法 / 缺非负证明 / 升序计数器 / 无尺寸来源 / 关系落在别的形参 / 无关系）、调用点 span；human 行尾显示文件:行号。SCT 失败在 message 后缀给出幂等图，闭包放弃时后缀改为「闭包未收敛 + 上限」 |
+| 终止性 call matrix | `TC_CannotProveTermination` 附 `fields.call` 边：callee、被测形参位置（`arg`）、关系（`relation`：严格子项 / 守卫减法 / 缺非负证明 / 升序计数器 / 无尺寸来源 / 关系落在别的形参 / 无关系）、调用点 span；human 行尾显示文件:行号。SCT 失败在 message 后缀给出幂等图，闭包放弃时后缀改为「闭包未收敛 + 上限」；存在盲调用（callee 以值传递 / 遍历预算耗尽）时再追加「未识别调用」名单 |
 | 覆盖性缺失构造子标签 | 缺失构造子进 `fields.candidates`，每个候选带构造子声明 `span`；JSON/SARIF/LSP（含 diag fields 的 candidates.span）可跳转 |
 | QTT 使用点 | Core `TVar` 携带源 span；线性/擦除错误附 `fields.quantity`：name/declared/observed，并逐使用点附 `fields.span name=use`；内部合成变量无源位置时不附 |
 | 文案规范/门禁 | `nix/checks/lib/diag-style.sh`：句号/大小写/空白/占位符；专有名词例外逐码 allowlist |
