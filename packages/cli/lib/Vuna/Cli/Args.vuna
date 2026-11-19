@@ -1,14 +1,8 @@
--- | 工具命令的统一参数解析与输入/输出路径守卫。
+-- | 工具命令的参数解析门面与输入/输出路径守卫。
 --
--- 为什么不放在 [Vuna.Cli]：[Vuna.Cli] 要 import `Vuna.Lint` / `Vuna.Doc` 等工具模块（分发），
--- 这些模块无法反向 import [Vuna.Cli]（循环）。统一入口必须落在依赖图的叶子上，因此本模块只
--- 依赖编译器包（已删 flag 的真源）与 Base。
---
--- 参数模型：每个工具命令显式声明允许的 flag 表（`BoolFlag` 开关 / `ValueFlag` 取值 /
--- `MultiValueFlag` 可重复取值）；位置参数保持用户给的顺序，`--` 之后一律当位置参数；
--- 未知 flag / 重复 flag / 缺值都是可读错误，由调用方统一打印并 exit 2。
--- `--with-comments` 这类只属于工具命令的已删 flag 在工具侧 hint 表里，其余已删 flag 回落
--- 编译器包 `removedFlagHint`（唯一真源，不复制文案）。
+-- 纯解析在 [Vuna.Plugin.Args]（不依赖编译器）；本模块只做三件事：把解析失败转成
+-- `Check` 文案、提供工具侧「已删 flag」提示表（其余回落编译器包的真源）、以及读盘守卫
+-- 与路径工具。
 --
 -- 读盘守卫：内建 `fsIsDirectory` 对不存在的路径会抛宿主异常，所以所有来自用户的路径都必须
 -- 先 `fsFileExists` 再 `fsIsDirectory`；[Vuna.Cli.Args.readText] /
@@ -16,185 +10,30 @@
 -- 目录创建显式在 `Eff r` 里（错误仍用 `Check` 携带）；纯 flag 解析 API 保持纯函数。
 module Vuna.Cli.Args where
 
-import Vuna.Cli.Suggest
+-- | 参数说明表与解析结果由插件协议包提供。
+export import Vuna.Plugin.Args (Parsed(..), flagSet, flagValue, flagValues, argErrText)
+export import Vuna.Plugin.Command (ArgSpec(..), specName)
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Driver.CompilerCli
 import Base.Effect.Fs as EffFs
 import Base.Effect.Types as EffTypes
 import Base.Effect.Process as EffProcess
 
--- ---------------------------------------------------------------
--- 参数说明表
--- ---------------------------------------------------------------
--- | 一个 flag 的形态：开关、取单值、取可重复值。
-export data ArgSpec(..) : Type where
-  -- | 开关（如 `--check`）。
-  BoolFlag : String -> ArgSpec
-  -- | 需要紧跟一个值（如 `--find <Module.name>`）。
-  ValueFlag : String -> ArgSpec
-  -- | 可重复取值（如 `--filter a --filter b`），用于筛选类参数。
-  MultiValueFlag : String -> ArgSpec
-
--- | flag 名（构造 `ArgSpec` 时存入的无前缀名字）。
-export specName : ArgSpec -> String
-specName (BoolFlag name) = name
-specName (ValueFlag name) = name
-specName (MultiValueFlag name) = name
-
--- | 内部：在允许表里按名查找 flag 形态；不在表里即未允许。
-specOf : String -> List ArgSpec -> Maybe ArgSpec
-specOf name [] = Nothing
-specOf name (spec :: rest) = if specName spec == name then Just spec else specOf name rest
-
--- | 参数错误；统一由 [Vuna.Cli.Args.argErrText] 渲染成单行可读文案。
-export data ArgErr(..) : Type where
-  -- | 未在允许 flag 表里的 flag（原文含前缀）。
-  UnknownFlag : String -> ArgErr
-  -- | 同一非重复 flag 出现了两次。
-  DuplicateFlag : String -> ArgErr
-  -- | 取值 flag 后面没有值（参数到头，或紧跟另一个 flag）。
-  MissingValue : String -> ArgErr
-
--- | 解析结果：开关名集合、取值 flag 的 `(name, value)`、按用户顺序的位置参数。
-export record Parsed(..) where
-  -- | 出现过的开关名（不含 `--`）。
-  flagNames : List String
-  -- | 取值 flag 的 `(name, value)`，按出现顺序。
-  valuesOf : List (Pair String String)
-  -- | 位置参数，保持用户给的出现顺序。
-  positionals : List String
-
--- | 内部：结构化解析结果（`Base.Data.Result` 的错误固定是 `String`，不能携带结构化
--- [Vuna.Cli.Args.ArgErr]）。
-data ParseOut : Type where
-  -- | 解析成功。
-  POk : Parsed -> ParseOut
-  -- | 解析失败，携带结构化错误。
-  PErr : ArgErr -> ParseOut
-
--- | 某开关是否出现（名字不带 `--`）。
-export flagSet : Parsed -> String -> Bool
-flagSet parsed name = memName name parsed.flagNames
-
--- | 某取值 flag 的值（名字不带 `--`）；未出现给 `Nothing`。
-export flagValue : Parsed -> String -> Maybe String
-flagValue parsed name = lookupValue name parsed.valuesOf
-
--- | 某可重复取值 flag 的全部值（按用户给出的顺序；未出现 = 空列表）。`MultiValueFlag` 的重复
--- 出现是合法的，因此这里收集的是列表而不是单值。
-export flagValues : Parsed -> String -> List String
-flagValues parsed name = lookupValues name parsed.valuesOf
-
--- | 内部：收集某个取值 flag 的全部值（保持出现顺序）。
-lookupValues : String -> List (Pair String String) -> List String
-lookupValues name [] = []
-lookupValues name ((Pair key value) :: rest) =
-  if key == name then value :: lookupValues name rest else lookupValues name rest
-
--- | 内部：取某个取值 flag 的第一个值。
-lookupValue : String -> List (Pair String String) -> Maybe String
-lookupValue name [] = Nothing
-lookupValue name ((Pair key value) :: rest) =
-  if key == name then Just value else lookupValue name rest
-
--- | 内部：该键是否已取值（判重复用）。
-hasValue : String -> List (Pair String String) -> Bool
-hasValue name values =
-  case lookupValue name values of
-    Just _ => True
-    Nothing => False
-
--- ---------------------------------------------------------------
--- 解析
--- ---------------------------------------------------------------
 -- | 工具命令共用入口：`cmd` 只用于错误文案，`specs` 是允许的 flag 表，`args` 是去掉子命令后
 -- 的参数。
 export parseToolArgs : String -> List ArgSpec -> List String -> Check Parsed
 parseToolArgs cmd specs args =
-  case parseGo False specs args [] [] [] of
+  case Vuna.Plugin.Args.parseToolArgs cmd specs args of
     POk parsed => OkC parsed
-    PErr e => err (argErrText cmd e)
+    PErr e => err (Vuna.Plugin.Args.argErrText cmd e)
 
--- | 与 [parseToolArgs] 相同，但对未知 flag 追加「最近候选」建议（候选即允许表本身）。
+-- | 与 [parseToolArgs] 相同，但对未知 flag 追加「最近候选」建议与已删提示。
 export parseCmdArgsOf : String -> List ArgSpec -> List String -> Check Parsed
 parseCmdArgsOf cmd specs args =
-  case parseGo False specs args [] [] [] of
+  case Vuna.Plugin.Args.parseCmdArgsOf cmd specs args of
     POk parsed => OkC parsed
-    PErr e => err (argErrTextHinted cmd specs e)
+    PErr e => err (Vuna.Plugin.Args.argErrTextHinted removedHintFor cmd specs e)
 
--- | 内部：错误文案；未知 flag 先查已删提示，再给候选建议。
-argErrTextHinted : String -> List ArgSpec -> ArgErr -> String
-argErrTextHinted cmd specs (UnknownFlag raw) =
-  case removedHintFor raw of
-    Just hint => "${raw} has been removed; ${hint}"
-    Nothing =>
-      case suggestOne (map specName specs) (flagNameOf raw) of
-        Just guess => "unknown flag for `${cmd}`: ${raw}; did you mean `--${guess}`?"
-        Nothing => "unknown flag for `${cmd}`: ${raw}"
-argErrTextHinted cmd specs e = argErrText cmd e
-
--- | 内部：参数扫描主体。`literal` 为真时后续一切都当位置参数（`--` 之后）；累积器都是倒序，
--- 结束时统一 reverse。
-parseGo : Bool -> List ArgSpec -> List String -> List String -> List (Pair String String) -> List String -> ParseOut
-parseGo literal specs args flags values items =
-  case args of
-    [] => POk (Parsed (reverse flags) (reverse values) (reverse items))
-    arg :: rest =>
-      if literal then
-        parseGo True specs rest flags values (arg :: items)
-      else if arg == "--" then
-        parseGo True specs rest flags values items
-      else if isFlagLike arg then
-        parseFlag specs arg rest flags values items
-      else
-        parseGo False specs rest flags values (arg :: items)
-
--- | 内部：`-` 单独出现按位置参数（stdin 约定）；其余以 `-` 开头的都当 flag。
-isFlagLike : String -> Bool
-isFlagLike arg = startsWith "-" arg && arg /= "-"
-
--- | 内部：去掉 `--` / `-` 前缀得到 flag 名。
-flagNameOf : String -> String
-flagNameOf arg =
-  if startsWith "--" arg then
-    substring 2 (byteLength arg - 2) arg
-  else
-    substring 1 (byteLength arg - 1) arg
-
--- | 内部：按 flag 形态消费参数——`BoolFlag` 只记名字（重复即错），`ValueFlag` 取一个值（重复
--- 或紧跟另一个 flag 即错），`MultiValueFlag` 可重复但同样要求有值。
-parseFlag : List ArgSpec -> String -> List String -> List String -> List (Pair String String) -> List String -> ParseOut
-parseFlag specs raw rest flags values items =
-  let
-    name = flagNameOf raw
-  in case specOf name specs of
-    Nothing => PErr (UnknownFlag raw)
-    Just spec =>
-      case spec of
-        BoolFlag _ =>
-          if memName name flags then
-            PErr (DuplicateFlag raw)
-          else
-            parseGo False specs rest (name :: flags) values items
-        ValueFlag _ =>
-          if hasValue name values then
-            PErr (DuplicateFlag raw)
-          else
-            case rest of
-              [] => PErr (MissingValue raw)
-              value :: more => if isFlagLike value then PErr (MissingValue raw) else parseGo False specs more flags (Pair name value :: values) items
-        MultiValueFlag _ =>
-          case rest of
-            [] => PErr (MissingValue raw)
-            value :: more =>
-              if isFlagLike value then
-                PErr (MissingValue raw)
-              else
-                parseGo False specs more flags (Pair name value :: values) items
-
--- ---------------------------------------------------------------
--- 错误文案
--- ---------------------------------------------------------------
 -- | 内部：拼出带 `--` 前缀的 flag 原文。
 dashFlag : String -> String
 dashFlag name = "--${name}"
@@ -226,15 +65,6 @@ removedHintFor flag =
   case toolRemovedFlagHint flag of
     Just hint => Just hint
     Nothing => removedFlagHint flag
-
--- | 渲染参数错误；`cmd` 是完整命令名（如 `"vuna fmt"`），只用在不涉及已删 flag 的文案里。
-export argErrText : String -> ArgErr -> String
-argErrText cmd (UnknownFlag flag) =
-  case removedHintFor flag of
-    Just hint => "${flag} has been removed; ${hint}"
-    Nothing => "unknown flag for `${cmd}`: ${flag}"
-argErrText cmd (DuplicateFlag flag) = "duplicate flag: ${flag}"
-argErrText cmd (MissingValue flag) = "flag requires a value: ${flag}"
 
 -- ---------------------------------------------------------------
 -- 读盘守卫（禁止在不存在路径上调 fsIsDirectory）

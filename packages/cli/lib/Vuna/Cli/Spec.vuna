@@ -11,90 +11,14 @@ module Vuna.Cli.Spec where
 
 import Vuna.Cli.Args
 import Vuna.Compiler.Base.Common
+export import Vuna.Plugin.Command (Group(..), groupTitle, FlagDoc(..), ArgSpec(..), Cmd(..), boolFlag, valueFlag, multiFlag, mkCmd, subCmd, topCmd, Group(..), groupTitle, FlagDoc(..), ArgSpec(..), Cmd(..), boolFlag, valueFlag, multiFlag, mkCmd, subCmd, topCmd, Group(..), groupTitle, FlagDoc(..), ArgSpec(..), Cmd(..), boolFlag, valueFlag, multiFlag, mkCmd, subCmd, topCmd, Group(..), groupTitle, FlagDoc(..), ArgSpec(..), Cmd(..), boolFlag, valueFlag, multiFlag, mkCmd, subCmd, topCmd)
 import Base.Data.List as List
 import Base.Data.String as String
 import Base.Data.Bool as Bool
+-- | 命令面的数据类型与构造器由 [Vuna.Plugin.Command] 提供；本模块只持有产品命令表。
+export import Vuna.Plugin.Command (Group(..), groupTitle, FlagDoc(..), ArgSpec(..), Cmd(..), boolFlag, valueFlag, multiFlag, mkCmd, subCmd, topCmd, Group(..), groupTitle, FlagDoc(..), ArgSpec(..), Cmd(..), boolFlag, valueFlag, multiFlag, mkCmd, subCmd, topCmd, Group(..), groupTitle, FlagDoc(..), ArgSpec(..), Cmd(..), boolFlag, valueFlag, multiFlag, mkCmd, subCmd, topCmd, Group(..), groupTitle, FlagDoc(..), ArgSpec(..), Cmd(..), boolFlag, valueFlag, multiFlag, mkCmd, subCmd, topCmd)
 
--- | 帮助里的一节。
-export data Group(..) : Type where
-  -- | 日常循环。
-  GCore : Group
-  -- | 文档与导航。
-  GInspect : Group
-  -- | 依赖与缓存。
-  GDeps : Group
-  -- | 交互与服务。
-  GService : Group
-  -- | 帮助与版本。
-  GMeta : Group
-  -- | 开发/维护（默认只列出入口一行）。
-  GDev : Group
-
--- | 一节的标题（顺序由 [Vuna.Cli.Help] 固定）。
-export groupTitle : Group -> String
-groupTitle GCore = "核心循环"
-groupTitle GInspect = "文档与导航"
-groupTitle GDeps = "依赖与缓存"
-groupTitle GService = "交互与服务"
-groupTitle GMeta = "帮助与版本"
-groupTitle GDev = "开发与维护"
-
--- | 一个 flag 的帮助条目：解析形态 + 取值占位（开关为空串）+ 一行说明。
-export record FlagDoc(..) where
-  -- | 解析形态（名字不带 `--`）。
-  flagSpec : ArgSpec
-  -- | 取值占位（`<Module.name>` / `<N>` / `cpu|mem`）；开关为空串。
-  flagMeta : String
-  -- | 一行说明。
-  flagHelp : String
-
--- | 一条命令（或命令分支）的帮助元数据。
-export record Cmd(..) where
-  -- | 命令路径（不含程序名），如 `["map", "find"]`。
-  cmdPath : List String
-  -- | 所属帮助分组。
-  cmdGroup : Group
-  -- | 一行摘要。
-  cmdSummary : String
-  -- | 用法行（含程序名）。
-  cmdSynopsis : String
-  -- | 允许的 flag。
-  cmdFlags : List FlagDoc
-  -- | 补充说明（逐行）。
-  cmdNotes : List String
-  -- | 是否出现在总览里（子命令只在 `vuna help <父>` 里列）。
-  cmdInOverview : Bool
-  -- | flag 与帮助由编译器实现提供（`check` / `build` / `compile`）。
-  cmdDelegated : Bool
-
--- | 内部：开关类 flag。
-boolFlag : String -> String -> FlagDoc
-boolFlag name help = FlagDoc (BoolFlag name) "" help
-
--- | 内部：取单值 flag。
-valueFlag : String -> String -> String -> FlagDoc
-valueFlag name meta help = FlagDoc (ValueFlag name) meta help
-
--- | 内部：可重复取值 flag。
-multiFlag : String -> String -> String -> FlagDoc
-multiFlag name meta help = FlagDoc (MultiValueFlag name) meta help
-
--- | 内部：构造一条命令。
-mkCmd : List String -> Group -> String -> String -> List FlagDoc -> List String -> Bool -> Bool -> Cmd
-mkCmd path group summary synopsis flags notes overview delegated =
-  Cmd path group summary synopsis flags notes overview delegated
-
--- | 内部：构造一条不接线的子命令（帮助里有、总览里不列）。
-subCmd : List String -> Group -> String -> String -> List FlagDoc -> List String -> Cmd
-subCmd path group summary synopsis flags notes =
-  mkCmd path group summary synopsis flags notes False False
-
--- | 内部：构造一条总览里的命令。
-topCmd : List String -> Group -> String -> String -> List FlagDoc -> List String -> Cmd
-topCmd path group summary synopsis flags notes =
-  mkCmd path group summary synopsis flags notes True False
-
--- | 内部：构造一条归编译器解析的命令。
+-- | 内部：构造一条归其它实现解析 flag 的命令（路径只有一段）。
 delegatedCmd : String -> String -> String -> Cmd
 delegatedCmd name summary synopsis = mkCmd [name] GCore summary synopsis [] [] True True
 

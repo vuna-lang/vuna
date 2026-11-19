@@ -1,0 +1,24 @@
+-- | CLI 参数里的十进制整数解析（`vuna test --jobs` / `vuna dev suite --jobs` 等共用）。
+module Vuna.Plugin.Parse where
+
+import Base.Data.String as String
+
+-- | 解析正整数（0 视为非法）。
+export parsePositiveInt : String -> Maybe Int
+parsePositiveInt s = if s == "" then Nothing else positiveDigits (strUnpack s) 0
+
+-- | 内部：`parsePositiveInt` 的逐位累加；空串累加结果为 0，因此末尾要再判一次 `> 0`。
+positiveDigits : List Int -> Int -> Maybe Int
+positiveDigits [] acc = if acc > 0 then Just acc else Nothing
+positiveDigits (c :: rest) acc =
+  if c >= 48 && c <= 57 then positiveDigits rest (acc * 10 + (c - 48)) else Nothing
+
+-- | 解析非负十进制整数（不接受空串、符号与非数字）。
+export parseNonNegInt : String -> Maybe Int
+parseNonNegInt s = if s == "" then Nothing else nonNegDigits (strUnpack s) 0
+
+-- | 内部：`parseNonNegInt` 的逐位累加。
+nonNegDigits : List Int -> Int -> Maybe Int
+nonNegDigits [] acc = Just acc
+nonNegDigits (c :: rest) acc =
+  if c >= 48 && c <= 57 then nonNegDigits rest (acc * 10 + (c - 48)) else Nothing

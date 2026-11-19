@@ -1,0 +1,19 @@
+# vuna-plugin-kit：命令面协议与数据模型（编译器、入口与插件共用）。
+#
+# 只放纯数据与纯函数：命令元数据类型、flag 解析、describe 协议的渲染与解析。
+# 不依赖编译器内部，因此编译器与产品入口都能依赖它而不产生环。
+[package]
+name = "vuna-plugin-kit"
+
+[dependencies]
+vuna-base = "../base"
+
+[export]
+modules = [
+  "Vuna.Plugin.Command",
+  "Vuna.Plugin.Parse",
+  "Vuna.Plugin.Suggest",
+  "Vuna.Plugin.Args",
+  "Vuna.Plugin.Err",
+  "Vuna.Plugin.Describe"
+]

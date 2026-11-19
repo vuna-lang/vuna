@@ -25,6 +25,7 @@ let
     seed = ../../seed;
     compiler = ../../packages/compiler;
     base = ../../packages/base;
+    pluginKit = ../../packages/plugin-kit;
     cli = ../../packages/cli;
     http = ../../packages/http;
     web = ../../packages/web;
@@ -51,6 +52,7 @@ let
   workspace = [
     src.base
     src.compiler
+    src.pluginKit
     src.cli
     src.http
     src.web

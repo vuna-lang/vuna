@@ -1,0 +1,157 @@
+-- | 命令参数解析（纯函数）：允许的 flag 表 → `Parsed`。
+--
+-- 只做语法：哪些 flag 被允许、每个 flag 吃几个值、`--` 之后一律当位置参数。
+-- flag 的含义（某个开关打开什么行为）留在各命令实现里；失败给结构化 `ArgErr`，
+-- 由调用方决定文案、退出码与「已删除 flag」的提示来源。
+module Vuna.Plugin.Args where
+
+import Vuna.Plugin.Command
+import Vuna.Plugin.Suggest
+import Base.Data.List as List
+import Base.Data.String as String
+import Base.Data.Bool as Bool
+
+-- | 解析结果：开关名集合、取值 flag 的 `(name, value)`、按用户顺序的位置参数。
+export record Parsed(..) where
+  -- | 出现过的开关名（不含 `--`）。
+  flagNames : List String
+  -- | 取值 flag 的 `(name, value)`，按出现顺序。
+  valuesOf : List (Pair String String)
+  -- | 位置参数，保持用户给的出现顺序。
+  positionals : List String
+
+-- | 参数错误；统一由 [argErrText] / [argErrTextHinted] 渲染成单行可读文案。
+export data ArgErr(..) : Type where
+  -- | 未在允许 flag 表里的 flag（原文含前缀）。
+  UnknownFlag : String -> ArgErr
+  -- | 同一非重复 flag 出现了两次。
+  DuplicateFlag : String -> ArgErr
+  -- | 取值 flag 后面没有值（参数到头，或紧跟另一个 flag）。
+  MissingValue : String -> ArgErr
+
+-- | 解析输出：成功给 `Parsed`，失败给结构化错误（不携带文案，避免把提示来源写死）。
+export data ParseOut(..) : Type where
+  -- | 解析成功。
+  POk : Parsed -> ParseOut
+  -- | 解析失败。
+  PErr : ArgErr -> ParseOut
+
+-- | 某开关是否出现（名字不带 `--`）。
+export flagSet : Parsed -> String -> Bool
+flagSet parsed name = memName name parsed.flagNames
+
+-- | 某取值 flag 的值（名字不带 `--`）；未出现给 `Nothing`。
+export flagValue : Parsed -> String -> Maybe String
+flagValue parsed name = lookupValue name parsed.valuesOf
+
+-- | 某可重复取值 flag 的全部值（按用户给出的顺序；未出现 = 空列表）。
+export flagValues : Parsed -> String -> List String
+flagValues parsed name = lookupValues name parsed.valuesOf
+
+-- | 内部：收集某个取值 flag 的全部值（保持出现顺序）。
+lookupValues : String -> List (Pair String String) -> List String
+lookupValues name [] = []
+lookupValues name ((Pair key value) :: rest) =
+  if key == name then value :: lookupValues name rest else lookupValues name rest
+
+-- | 内部：取某个取值 flag 的第一个值。
+lookupValue : String -> List (Pair String String) -> Maybe String
+lookupValue name [] = Nothing
+lookupValue name ((Pair key value) :: rest) =
+  if key == name then Just value else lookupValue name rest
+
+-- | 内部：该键是否已取值（判重复用）。
+hasValue : String -> List (Pair String String) -> Bool
+hasValue name values =
+  case lookupValue name values of
+    Just _ => True
+    Nothing => False
+
+-- | 纯解析入口：不给已删 flag 提示。
+export parseToolArgs : String -> List ArgSpec -> List String -> ParseOut
+parseToolArgs cmd specs args = parseGo False specs args [] [] []
+
+-- | 纯解析入口：允许表本身就是未知 flag 的候选建议来源。
+export parseCmdArgsOf : String -> List ArgSpec -> List String -> ParseOut
+parseCmdArgsOf cmd specs args = parseGo False specs args [] [] []
+
+-- | 内部：在允许表里按名查找 flag 形态；不在表里即未允许。
+specOf : String -> List ArgSpec -> Maybe ArgSpec
+specOf name [] = Nothing
+specOf name (spec :: rest) = if specName spec == name then Just spec else specOf name rest
+
+-- | 内部：参数扫描主体。`literal` 为真时后续一切都当位置参数（`--` 之后）；累积器都是倒序，
+-- 结束时统一 reverse。
+parseGo : Bool -> List ArgSpec -> List String -> List String -> List (Pair String String) -> List String -> ParseOut
+parseGo literal specs args flags values items =
+  case args of
+    [] => POk (Parsed (reverse flags) (reverse values) (reverse items))
+    arg :: rest =>
+      if literal then
+        parseGo True specs rest flags values (arg :: items)
+      else if arg == "--" then
+        parseGo True specs rest flags values items
+      else if isFlagLike arg then
+        parseFlag specs arg rest flags values items
+      else
+        parseGo False specs rest flags values (arg :: items)
+
+-- | 内部：`-` 单独出现按位置参数（stdin 约定）；其余以 `-` 开头的都当 flag。
+isFlagLike : String -> Bool
+isFlagLike arg = startsWith "-" arg && arg /= "-"
+
+-- | 去掉 `--` / `-` 前缀得到 flag 名。
+export flagNameOf : String -> String
+flagNameOf arg =
+  if startsWith "--" arg then
+    substring 2 (byteLength arg - 2) arg
+  else
+    substring 1 (byteLength arg - 1) arg
+
+-- | 内部：按 flag 形态消费参数——`BoolFlag` 只记名字（重复即错），`ValueFlag` 取一个值（重复
+-- 或紧跟另一个 flag 即错），`MultiValueFlag` 可重复但同样要求有值。
+parseFlag : List ArgSpec -> String -> List String -> List String -> List (Pair String String) -> List String -> ParseOut
+parseFlag specs raw rest flags values items =
+  let
+    name = flagNameOf raw
+  in case specOf name specs of
+    Nothing => PErr (UnknownFlag raw)
+    Just spec =>
+      case spec of
+        BoolFlag _ =>
+          if memName name flags then
+            PErr (DuplicateFlag raw)
+          else
+            parseGo False specs rest (name :: flags) values items
+        ValueFlag _ =>
+          if hasValue name values then
+            PErr (DuplicateFlag raw)
+          else
+            case rest of
+              [] => PErr (MissingValue raw)
+              value :: more => if isFlagLike value then PErr (MissingValue raw) else parseGo False specs more flags (Pair name value :: values) items
+        MultiValueFlag _ =>
+          case rest of
+            [] => PErr (MissingValue raw)
+            value :: more =>
+              if isFlagLike value then
+                PErr (MissingValue raw)
+              else
+                parseGo False specs more flags (Pair name value :: values) items
+
+-- | 渲染参数错误（不带已删提示）。
+export argErrText : String -> ArgErr -> String
+argErrText cmd (UnknownFlag flag) = "unknown flag for `${cmd}`: ${flag}"
+argErrText cmd (DuplicateFlag flag) = "duplicate flag: ${flag}"
+argErrText cmd (MissingValue flag) = "flag requires a value: ${flag}"
+
+-- | 渲染参数错误：未知 flag 先查已删提示表，再给候选建议。
+export argErrTextHinted : (String -> Maybe String) -> String -> List ArgSpec -> ArgErr -> String
+argErrTextHinted hint cmd specs (UnknownFlag raw) =
+  case hint raw of
+    Just text => "${raw} has been removed; ${text}"
+    Nothing =>
+      case suggestOne (map specName specs) (flagNameOf raw) of
+        Just guess => "unknown flag for `${cmd}`: ${raw}; did you mean `--${guess}`?"
+        Nothing => "unknown flag for `${cmd}`: ${raw}"
+argErrTextHinted hint cmd specs e = argErrText cmd e

@@ -1,0 +1,174 @@
+-- | 命令面数据模型：分组、flag 形态、命令元数据与表查询。
+--
+-- 纯数据 + 纯函数，不依赖工具实现、编译器内部或任何效应。编译器、产品入口与插件共用
+-- 同一套类型：帮助渲染、flag 校验、describe 协议都从它派生，命令元数据因此只有一种表示。
+module Vuna.Plugin.Command where
+
+import Base.Data.List as List
+import Base.Data.String as String
+
+-- | 帮助里的一节。
+export data Group(..) : Type where
+  -- | 日常循环。
+  GCore : Group
+  -- | 文档与导航。
+  GInspect : Group
+  -- | 依赖与缓存。
+  GDeps : Group
+  -- | 交互与服务。
+  GService : Group
+  -- | 帮助与版本。
+  GMeta : Group
+  -- | 开发/维护（默认只列出入口一行）。
+  GDev : Group
+
+-- | 一节的标题（顺序由帮助渲染固定）。
+export groupTitle : Group -> String
+groupTitle GCore = "核心循环"
+groupTitle GInspect = "文档与导航"
+groupTitle GDeps = "依赖与缓存"
+groupTitle GService = "交互与服务"
+groupTitle GMeta = "帮助与版本"
+groupTitle GDev = "开发与维护"
+
+-- | 分组的协议名（describe 用；与本地化标题分开，避免把展示文本当标识）。
+export groupName : Group -> String
+groupName GCore = "core"
+groupName GInspect = "inspect"
+groupName GDeps = "deps"
+groupName GService = "service"
+groupName GMeta = "meta"
+groupName GDev = "dev"
+
+export groupOf : String -> Maybe Group
+groupOf "core" = Just GCore
+groupOf "inspect" = Just GInspect
+groupOf "deps" = Just GDeps
+groupOf "service" = Just GService
+groupOf "meta" = Just GMeta
+groupOf "dev" = Just GDev
+groupOf _ = Nothing
+
+-- | 一个 flag 的形态：开关、取单值、取可重复值。
+export data ArgSpec(..) : Type where
+  -- | 开关（如 `--check`）。
+  BoolFlag : String -> ArgSpec
+  -- | 需要紧跟一个值（如 `--find <Module.name>`）。
+  ValueFlag : String -> ArgSpec
+  -- | 可重复取值（如 `--filter a --filter b`），用于筛选类参数。
+  MultiValueFlag : String -> ArgSpec
+
+-- | flag 名（构造 `ArgSpec` 时存入的无前缀名字）。
+export specName : ArgSpec -> String
+specName (BoolFlag name) = name
+specName (ValueFlag name) = name
+specName (MultiValueFlag name) = name
+
+-- | flag 形态的协议名（describe 用）。
+export specKind : ArgSpec -> String
+specKind (BoolFlag _) = "bool"
+specKind (ValueFlag _) = "value"
+specKind (MultiValueFlag _) = "multi"
+
+-- | 协议名 + flag 名 → 形态；不认识的给 `Nothing`。
+export specOfKind : String -> String -> Maybe ArgSpec
+specOfKind "bool" name = Just (BoolFlag name)
+specOfKind "value" name = Just (ValueFlag name)
+specOfKind "multi" name = Just (MultiValueFlag name)
+specOfKind _ name = Nothing
+
+-- | 一个 flag 的帮助条目：解析形态 + 取值占位（开关为空串）+ 一行说明。
+export record FlagDoc(..) where
+  -- | 解析形态（名字不带 `--`）。
+  flagSpec : ArgSpec
+  -- | 取值占位（`<Module.name>` / `<N>` / `cpu|mem`）；开关为空串。
+  flagMeta : String
+  -- | 一行说明。
+  flagHelp : String
+
+-- | 一条命令（或命令分组）的帮助元数据。
+export record Cmd(..) where
+  -- | 命令路径（不含程序名），如 `["map", "find"]`。
+  cmdPath : List String
+  -- | 所属帮助分组。
+  cmdGroup : Group
+  -- | 一行摘要。
+  cmdSummary : String
+  -- | 用法行（含程序名）。
+  cmdSynopsis : String
+  -- | 允许的 flag。
+  cmdFlags : List FlagDoc
+  -- | 补充说明（逐行）。
+  cmdNotes : List String
+  -- | 是否出现在总览里（子命令只在 `vuna help <父>` 里列）。
+  cmdInOverview : Bool
+  -- | flag 与帮助由另一实现提供（帮助渲染另行处理）。
+  cmdDelegated : Bool
+
+-- | 内部：开关类 flag。
+export boolFlag : String -> String -> FlagDoc
+boolFlag name help = FlagDoc (BoolFlag name) "" help
+
+-- | 内部：取单值 flag。
+export valueFlag : String -> String -> String -> FlagDoc
+valueFlag name meta help = FlagDoc (ValueFlag name) meta help
+
+-- | 内部：可重复取值 flag。
+export multiFlag : String -> String -> String -> FlagDoc
+multiFlag name meta help = FlagDoc (MultiValueFlag name) meta help
+
+-- | 内部：构造一条命令。
+export mkCmd : List String -> Group -> String -> String -> List FlagDoc -> List String -> Bool -> Bool -> Cmd
+mkCmd path group summary synopsis flags notes overview delegated =
+  Cmd path group summary synopsis flags notes overview delegated
+
+-- | 内部：构造一条不接线的子命令（帮助里有、总览里不列）。
+export subCmd : List String -> Group -> String -> String -> List FlagDoc -> List String -> Cmd
+subCmd path group summary synopsis flags notes =
+  mkCmd path group summary synopsis flags notes False False
+
+-- | 内部：构造一条总览里的命令。
+export topCmd : List String -> Group -> String -> String -> List FlagDoc -> List String -> Cmd
+topCmd path group summary synopsis flags notes =
+  mkCmd path group summary synopsis flags notes True False
+
+-- | 内部：构造一条由其它实现解析 flag 的命令。
+export delegatedCmd : List String -> Group -> String -> String -> Cmd
+delegatedCmd path group summary synopsis = mkCmd path group summary synopsis [] [] True True
+
+-- | 表查询：按路径精确查找。
+export findCmdIn : List String -> List Cmd -> Maybe Cmd
+findCmdIn path [] = Nothing
+findCmdIn path (c :: rest) = if c.cmdPath == path then Just c else findCmdIn path rest
+
+-- | 表查询：最长前缀匹配（最多 `depth` 段），返回命令与剩余参数。
+export matchCommandIn : Int -> List String -> List Cmd -> Maybe (Pair Cmd (List String))
+matchCommandIn depth args cmds =
+  if depth <= 0 then
+    Nothing
+  else
+    case findCmdIn (take depth args) cmds of
+      Just c => Just (Pair c (drop depth args))
+      Nothing => matchCommandIn (depth - 1) args cmds
+
+-- | 一条命令允许的 flag 形态（保持声明顺序）。
+export flagSpecsOf : Cmd -> List ArgSpec
+flagSpecsOf c = flagSpecsIn c.cmdFlags
+
+-- | 内部：把帮助条目摊成解析形态（保持声明顺序）。
+export flagSpecsIn : List FlagDoc -> List ArgSpec
+flagSpecsIn [] = []
+flagSpecsIn (f :: rest) = f.flagSpec :: flagSpecsIn rest
+
+-- | 一条命令允许的 flag 名（不带 `--`）。
+export flagNamesOf : Cmd -> List String
+flagNamesOf c = map specName (flagSpecsOf c)
+
+-- | 表里的全部命令路径（帮助与测试共用）。
+export commandPathsOf : List Cmd -> List (List String)
+commandPathsOf [] = []
+commandPathsOf (c :: rest) = c.cmdPath :: commandPathsOf rest
+
+-- | 命令路径的显示文本。
+export commandLabel : List String -> String
+commandLabel path = join " " path

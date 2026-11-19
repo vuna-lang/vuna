@@ -1,0 +1,108 @@
+-- | describe 协议（v1）：插件向入口声明自己注册了哪些命令。
+--
+-- 行式、TAB 分隔、字段内不含 TAB。首行是版本与种类：
+--
+--   `vuna-plugin<TAB>1<TAB>cli<TAB><domain>`
+--   `cmd<TAB><path><TAB><group><TAB><overview><TAB><delegated><TAB><summary><TAB><synopsis>`
+--   `flag<TAB><path><TAB><bool|value|multi><TAB><name><TAB><meta><TAB><help>`
+--   `note<TAB><path><TAB><text>`
+--
+-- `overview` / `delegated` 取 `yes` / `no`；`path` 用空格分段。summary 与 synopsis 放在
+-- 最后，因此正文里的空格与 `|` 都不需要转义。
+module Vuna.Plugin.Describe where
+
+import Vuna.Plugin.Command
+import Base.Data.List as List
+import Base.Data.String as String
+
+-- | 协议版本（出现在首行）。
+export protocolVersion : String
+protocolVersion = "1"
+
+-- | 渲染一个插件的命令表。
+export render : String -> List Cmd -> String
+render domain cmds =
+  "vuna-plugin\t${protocolVersion}\tcli\t${domain}\n"
+    ++ join "" (map cmdLine cmds) ++ join "" (map flagLines cmds) ++ join "" (map noteLines cmds)
+
+-- | 内部：一条命令的头部行。
+cmdLine : Cmd -> String
+cmdLine c =
+  "cmd\t${commandLabel c.cmdPath}\t${groupName c.cmdGroup}\t${yesNo c.cmdInOverview}\t${yesNo c.cmdDelegated}\t${c.cmdSummary}\t${c.cmdSynopsis}\n"
+
+-- | 内部：一条命令的全部 flag 行。
+flagLines : Cmd -> String
+flagLines c = join "" (map (flagLine (commandLabel c.cmdPath)) c.cmdFlags)
+
+-- | 内部：单条 flag 行。
+flagLine : String -> FlagDoc -> String
+flagLine path f =
+  "flag\t${path}\t${specKind f.flagSpec}\t${specName f.flagSpec}\t${f.flagMeta}\t${f.flagHelp}\n"
+
+-- | 内部：一条命令的全部 note 行。
+noteLines : Cmd -> String
+noteLines c = join "" (map (\note => "note\t${commandLabel c.cmdPath}\t${note}\n") c.cmdNotes)
+
+-- | 内部：Bool → `yes` / `no`。
+yesNo : Bool -> String
+yesNo True = "yes"
+yesNo False = "no"
+
+-- | 解析 describe 文本：首行给 `<domain>`，其余行合并成命令表。
+export parse : String -> Maybe (Pair String (List Cmd))
+parse text =
+  case lines text of
+    [] => Nothing
+    header :: rest =>
+      case split "\t" header of
+        f0 :: f1 :: f2 :: f3 :: more =>
+          if f0 == "vuna-plugin" && f1 == protocolVersion && f2 == "cli" then
+            Just
+              (Pair f3 (foldl (\cmds => \line => applyLine line cmds) (mapMaybe cmdOfLine rest) rest))
+          else
+            Nothing
+        _ => Nothing
+
+-- | 内部：`cmd` 行 → 命令（flag / note 留空，由后续行填充）。
+cmdOfLine : String -> Maybe Cmd
+cmdOfLine line =
+  case split "\t" line of
+    "cmd" :: path :: grp :: overview :: delegated :: summary :: synopsis :: more =>
+      case groupOf grp of
+        Just group =>
+          Just
+            (Cmd (pathWords path) group summary synopsis [] [] (isYes overview) (isYes delegated))
+        Nothing => Nothing
+    _ => Nothing
+
+-- | 内部：把 `flag` / `note` 行并入已解析的命令。
+applyLine : String -> List Cmd -> List Cmd
+applyLine line cmds =
+  case split "\t" line of
+    "flag" :: path :: kind :: name :: meta :: help :: more =>
+      case specOfKind kind name of
+        Just spec =>
+          updateCmd
+            (pathWords path)
+            (\c => Cmd c.cmdPath c.cmdGroup c.cmdSummary c.cmdSynopsis (append c.cmdFlags [FlagDoc spec meta help]) c.cmdNotes c.cmdInOverview c.cmdDelegated)
+            cmds
+        Nothing => cmds
+    "note" :: path :: note :: more =>
+      updateCmd
+        (pathWords path)
+        (\c => Cmd c.cmdPath c.cmdGroup c.cmdSummary c.cmdSynopsis c.cmdFlags (append c.cmdNotes [note]) c.cmdInOverview c.cmdDelegated)
+        cmds
+    _ => cmds
+
+-- | 内部：按路径替换一条命令。
+updateCmd : List String -> (Cmd -> Cmd) -> List Cmd -> List Cmd
+updateCmd path f [] = []
+updateCmd path f (c :: rest) = if c.cmdPath == path then f c :: rest else c :: updateCmd path f rest
+
+-- | 内部：路径文本 → 段列表（丢弃空段）。
+pathWords : String -> List String
+pathWords text = filter (\part => part /= "") (split " " text)
+
+-- | 内部：`yes` / `no` → Bool。
+isYes : String -> Bool
+isYes text = text == "yes"

@@ -1,0 +1,69 @@
+-- | 命令的统一错误出口：0（成功）/ 1（语义失败）/ 2（用法或前提不满足）。
+--
+-- 文案前缀与退出码语义只有一处；命令表由调用方传入，因此本模块不绑定某张具体的表。
+module Vuna.Plugin.Err where
+
+import Vuna.Plugin.Command
+import Vuna.Plugin.Suggest
+import Base.Effect.Console as EffConsole
+import Base.Effect.Types as EffTypes
+
+-- | 用法 / 前提错误：打印并返回 2。
+export toolError : Member nConsole ConsoleOp r => String -> Eff r Int
+toolError e =
+  do
+    _ <- consolePrint "error: ${e}\n"
+    pure 2
+
+-- | 被检查代码或查询的语义失败：打印并返回 1。
+export toolFailure : Member nConsole ConsoleOp r => String -> Eff r Int
+toolFailure e =
+  do
+    _ <- consolePrint "error: ${e}\n"
+    pure 1
+
+-- | 输入路径存在性守卫：打印第一个缺失路径并返回 2。
+export missingPathError : Member nConsole ConsoleOp r => String -> Eff r Int
+missingPathError path = toolError "no such file: ${path}"
+
+-- | 用法错误：打印该命令的用法行与帮助入口，返回 2。`fallback` 用于路径未登记的情况。
+export usageErrorIn : Member nConsole ConsoleOp r => List Cmd -> String -> List String -> Eff r Int
+usageErrorIn cmds fallback path =
+  do
+    _ <- consolePrint (usageTextIn cmds fallback path)
+    pure 2
+
+-- | 内部：`usage:` 段——已登记的命令给 synopsis + 帮助提示，未登记的给 `fallback`。
+usageTextIn : List Cmd -> String -> List String -> String
+usageTextIn cmds fallback path =
+  case findCmdIn path cmds of
+    Just c => "usage:\n  ${c.cmdSynopsis}\nrun `vuna help ${joinWords path}` for details\n"
+    Nothing => fallback
+
+-- | 内部：命令路径用空格拼接。
+joinWords : List String -> String
+joinWords [] = ""
+joinWords ([one]) = one
+joinWords (one :: rest) = "${one} ${joinWords rest}"
+
+-- | 未知子命令：打印候选建议与帮助入口，返回 2。
+export unknownSubcommand : Member nConsole ConsoleOp r => List String -> String -> List String -> Eff r Int
+unknownSubcommand parent bad candidates =
+  do
+    _ <- consolePrint (unknownSubcommandText (joinWords parent) bad candidates)
+    pure 2
+
+-- | 内部：未知子命令文案（有近邻就补一句建议）。
+unknownSubcommandText : String -> String -> List String -> String
+unknownSubcommandText parent bad candidates =
+  case suggestOne candidates bad of
+    Just guess =>
+      "error: unknown `vuna ${parent}` subcommand `${bad}`; did you mean `${guess}`?\nrun `vuna help ${parent}`\n"
+    Nothing => "error: unknown `vuna ${parent}` subcommand `${bad}`\nrun `vuna help ${parent}`\n"
+
+-- | 已移除 / 已改名的命令：打印迁移提示并返回 2。
+export removedCommand : Member nConsole ConsoleOp r => String -> String -> Eff r Int
+removedCommand name hint =
+  do
+    _ <- consolePrint "error: `${name}` has been removed; ${hint}\n"
+    pure 2
