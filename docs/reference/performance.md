@@ -104,7 +104,7 @@ OCaml 二进制里的调试信息记录的是**相对**源码名（`build.sh` �
 | --- | --- | --- | --- |
 | `check packages/base` | ~0.40 s | ~0.40 s | ~19 ms |
 | `check packages/compiler` | **21.6–23.6 s** | **11.4–13.4 s** | ~51 ms |
-| `check .` | 18.3 s → 6.1 s → 6.1 s（三段收敛） | 同左 | 58 ms |
+| `check .` | 冷 21.8 s → 0.23 s（两段收敛） | 同左 | 58 ms |
 | `map` | 2.2–2.5 s | 2.2–2.5 s | 0.16–0.17 s |
 | `build --no-compile compiler` | ~12–28 s（见下） | ~13 s | ~150 ms |
 
@@ -112,9 +112,9 @@ OCaml 二进制里的调试信息记录的是**相对**源码名（`build.sh` �
 `check packages/compiler` 13.0–14.2 s、热 47 ms；`collectSigs-done` = 1、`iface-write=107/107`、
 `check-lib-skip covered=88`。绝对读数只作同机同窗口参考。
 
-`check .` 不是「冷/热」两档：第一遍冷精化、第二遍重写接口/单元、第三遍才全命中
-（实测 18269 → 6141 → 6092 → 57 ms），只报其中一个数会误导。冷 `check packages/compiler` 修前
-~22 s 里约**一半是重复精化**：入口闭包没覆盖 `[export]` 的全部模块
+`check .` 的成员按依赖分层跑（见 §4 第 10 条），因此冷跑之后**第二遍就全命中**
+（实测 21.8 s → 0.23 s，只两段）。冷 `check packages/compiler` 修前 ~22 s 里约**一半是重复精化**：
+入口闭包没覆盖 `[export]` 的全部模块
 （`iface-skip partial ... missing=Vuna.Compiler.Frontend.Canonical.Ast,
 Vuna.Compiler.Driver.ToolPayload`），于是每轮都补一遍 lib check（`collectSigs-done` 出现
 两次，两遍各 ~11–12 s）。**已修**（见下），冷 `check packages/compiler` 降到 ~12 s；后又修了
@@ -337,6 +337,15 @@ load/parse 前缀 + iface 摘要 **~2.6 s** → 逐定义精化（`collectSigs-d
    CPU **55.3 s → 39.3 s**（wall 22.8 s → 16.5 s）。处置：两个模块搬进 cli 包
    （`Vuna.Cli.IrDump` / `Vuna.Cli.IrRender`，seed 不变），门禁 `checks.vuna-single-pass`。
    注：`build` 不走这条 lib 补做路径，读数不变（`build . --no-compile` 仍 ~41 s）。
+10. **workspace 成员一次全起 ⇒ 依赖包被重复精化（已修）**：`check .` 的成员子进程过去同时
+    spawn，`cli` 成员的 `depIfacesOf` 缺兄弟包（`vuna-http` 等）接口 ⇒ `cache-path=full`，
+   把 compiler 闭包又精化一遍（`bodies-done defs=10744` = compiler 7157 + cli 3587）。
+   改为**按依赖分层**（同层并行、跨层等接口）：同一份源码 `check .` 冷跑 A/B
+   （同窗口交替、空 store）**CPU 40.1–42.4 s → 20.1–20.7 s（-51%）**，冷 wall **16.6–17.6 s →
+   19.8–20.9 s（+22%）**；4 核（`taskset -c 0-3`）冷 wall **16.8 s → 20.2 s（+20%）**。
+   代价是 wall 走依赖关键路径（base → compiler → cli），换来的是不重复精化；同一 store
+   的第二遍也因此从 6.1 s 降到 0.23 s（**两段收敛**，见 §1）。成员依赖来自
+   `Package.packageDependencies`（`checkMembersByLevel`）。
 
 ### 4.1 elab 内部的结构性开销（当前处置与读数）
 

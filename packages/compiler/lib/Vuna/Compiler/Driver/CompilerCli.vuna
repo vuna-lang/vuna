@@ -941,7 +941,12 @@ checkPackages pkgs code o =
   else
     checkPackagesSpawn pkgs code o
 
--- 文本格式的工作区检查：成员包各起一个子进程并行检查（输出可交错），根包当前进程串行。
+-- 文本格式的工作区检查：成员包按**依赖层级**并行检查（同层各起一个子进程，输出可交错），
+-- 根包当前进程串行。
+--
+-- 为什么分层而不是一次全起：成员的 check 只有在「全部依赖包接口已落盘」时才走摘要路径
+-- （`summaryCheckExeParts` 的 `depIfacesOf`）；缺一个兄弟包接口就退回整闭包全量
+-- （`cache-path=full`），同一份编译器源码被精化多次。分层后同层仍并行，跨层等接口。
 checkPackagesSpawn : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => List Package -> Int -> CliOpts -> Eff r (Pair Int CliOpts)
 checkPackagesSpawn [] code o = pure (Pair code o)
 checkPackagesSpawn pkgs code o =
@@ -949,17 +954,57 @@ checkPackagesSpawn pkgs code o =
     let
       members = filter (\p => not (isWorkspaceRoot p)) pkgs
       roots = filter isWorkspaceRoot pkgs
+      memberNames = map packageName members
     in do
-      started <-
-        mapEff (
-            \pkg =>
-              do
-                pid <- processSpawn (checkSpawnArgs o (packageDir pkg))
-                pure (Pair pkg pid)
-          ) members
       r1 <- checkRootsSeq roots code o
-      codes <- mapEff (\pr => processWait (secondOf pr)) started
-      pure (Pair (countFailures (firstOf r1) codes) (secondOf r1))
+      checkMembersByLevel (length members) members memberNames [] (firstOf r1) (secondOf r1)
+
+-- 每轮挑出「依赖的成员包都已检查完」的那批一起跑，跑完进入下一轮。
+-- 轮数上界 = 成员数（每轮至少摘掉一个），因此用成员数作 fuel；fuel 用尽说明依赖成环
+-- （loader 已拒环），剩余一次全起，不静默跳过。
+checkMembersByLevel : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Int -> List Package -> List String -> List String -> Int -> CliOpts -> Eff r (Pair Int CliOpts)
+checkMembersByLevel fuel pending memberNames done code o =
+  if length pending == 0 then
+    pure (Pair code o)
+  else if fuel <= 0 then
+    checkMembersParallel pending code o
+  else
+    let
+      ready = filter (\p => depsReady memberNames done p) pending
+      rest = filter (\p => not (depsReady memberNames done p)) pending
+    in if length ready == 0 then
+      checkMembersParallel pending code o
+    else
+      do
+        r <- checkMembersParallel ready code o
+        checkMembersByLevel (fuel - 1) rest memberNames (append done (map packageName ready)) (firstOf r) (secondOf r)
+
+-- 依赖的成员包是否都已检查完；不在成员列表里的依赖（外部路径）视为已满足。
+depsReady : List String -> List String -> Package -> Bool
+depsReady memberNames done pkg = depsReadyList memberNames done pkg.packageDependencies
+
+depsReadyList : List String -> List String -> List Package -> Bool
+depsReadyList memberNames done [] = True
+depsReadyList memberNames done (d :: rest) =
+  let
+    isMember = memName (packageName d) memberNames
+    isDone = memName (packageName d) done
+  in (not isMember || isDone) && depsReadyList memberNames done rest
+
+-- 一批成员包并行检查：全部 spawn 后逐个 wait，退出码汇总进 code。
+checkMembersParallel : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => List Package -> Int -> CliOpts -> Eff r (Pair Int CliOpts)
+checkMembersParallel [] code o = pure (Pair code o)
+checkMembersParallel members code o =
+  do
+    started <-
+      mapEff (
+          \pkg =>
+            do
+              pid <- processSpawn (checkSpawnArgs o (packageDir pkg))
+              pure (Pair pkg pid)
+        ) members
+    codes <- mapEff (\pr => processWait (secondOf pr)) started
+    pure (Pair (countFailures code codes) o)
 
 -- 机器格式的工作区检查：父进程内顺序检查每个包，共享同一份 CliOpts/SARIF 收集器。
 checkPkgsInProcess : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => List Package -> Int -> CliOpts -> Eff r (Pair Int CliOpts)
