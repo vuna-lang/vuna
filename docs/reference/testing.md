@@ -661,7 +661,7 @@ VUNA=$PWD/result-vuna/bin/vuna VUNA_SEED=$PWD/result-seed/bin/vuna-seed \
 `nix run .#vuna-bench` 是**手动**基准（不是 CI check，结果依赖机器）：默认测 `vuna`，
 `--compiler seed` 改测 `vuna-seed`；`--quick` 快速冒烟，`--runs N --save F` 存档，
 `--baseline F` 与历史对比（JSON 用 `jq` 解析），`--with-tests` 额外跑全部 checks，`--json`
-输出机器可读报告。入库基线 `bench/bootstrap-baseline.json`、`--check`（默认读基线，超
+输出机器可读报告。入库基线 `bench/baselines/bootstrap.json`、`--check`（默认读基线，超
 `--threshold N`（默认 20%）只打印 `WARN`、退出 0）、`--strict`（同机 + 同 compiler 的
 WARN 变失败）；`nix/ci.sh --bench` 在 flake check 之后跑软告警（默认不跑，避免 CI 抖动）。
 跨机器 / 不同口径只做软告警。
@@ -671,7 +671,7 @@ compiler 闭包、corpus 批量、tiny 程序、DT 精化 + 擦除 codegen）、
 bytes/lines/最长行/行尾空白、codegen 健康度计数（`let rec`、`String.concat ""`、
 `bi_eq_int/_str/_bool`、零参定义）以及 fixed point / seed 一致性与可选 tests 状态。中间
 产物写入临时目录（`TMPDIR` 可覆盖），不写入仓库。基线在空闲机器上重跑：
-`nix run .#vuna-bench -- --quick --json bench/bootstrap-baseline.json`（或默认 runs=3 更稳）。
+`nix run .#vuna-bench -- --quick --json bench/baselines/bootstrap.json`（或默认 runs=3 更稳）。
 
 所有构建口径都是逐模块 split（`compile`/`build`/seed 同一种产物），没有「单文件
 `main.ml` vs 多模块」两种读数需要区分。

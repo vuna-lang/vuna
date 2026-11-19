@@ -12,9 +12,9 @@ golden 一致，再 warmup + 多次取中位数；`--target ocaml|native|both` �
 用 GNU time 的 max RSS。跨机器只比 `ratio = <backend>/ocaml` 与 `rss_ratio`
 （绝对 ms / KB 不可比）。
 
-口径与基线维护见 `bench/README.md`；基线 `bench/baseline.json`（OCaml 后端）与
-`bench/native-baseline.json`（native，§1.1）入库，`--check` 对超阈值项软告警。与
-`bench/bootstrap.sh` 的分工：后者测构建 / 编译墙钟与产物尺寸，本设施测运行期。
+口径与基线维护见 `bench/README.md`；基线统一在 `bench/baselines/`：`programs.json` 一份
+（全部生成程序 × ocaml/native/wasm），`--check` 只比本次实际跑的 target / benchmark。
+与 `bench/bootstrap.sh` 的分工：后者测构建 / 编译墙钟与产物尺寸，本设施测运行期。
 
 当前读数（`--runs 3 --warmup 1`，x86_64 / 16 核 / ocamlopt 5.5.1 非 flambda；绝对 ms 随
 机器变化，只比较 ratio）：
@@ -67,12 +67,12 @@ sorting,float_math,text_scan,nat_bits,tco_mutual,tco_wide,gc_low_live,gc_array_c
    3. **HashMap 桶改造与泛型化**：`Array (Array (List ...))`；`HashMap k v` 统一 String/Int
       两套容器（无 `IntMap`），统一 `fromList []`。
 
-优化后重跑 `--json bench/baseline.json` 更新基线并在这里记录。
+优化后跑 `sh bench/update-baselines.sh --only programs` 重标并在这里记录。
 
 ### 1.1 native 后端（生成程序）
 
 `nix run .#vuna-perf -- --target native`（或 `--target both`）把同一批基准编到 native
-并测量；基线 `bench/native-baseline.json`。口径：
+并测量；基线 `bench/baselines/programs.json`（同一份含三端）。口径：
 
 - 同一份源码、同一 N；native、OCaml 后端与手写 OCaml 在同一窗口交替测量；
 - native 不做尾调用：16 个基准里 11 个在默认 8 MiB 栈上 exit 139（只有 `string_ops` /
@@ -123,7 +123,7 @@ sorting,float_math,text_scan,nat_bits,tco_mutual,tco_wide,gc_low_live,gc_array_c
   + COW 复制产生大量复制块，回收时机由阈值决定，墙钟比手写高 12.6x。
 - 峰值 RSS 的语义：OCaml 侧是 GC 后高水位，native 侧是栈页 + live 堆；两者只作量级参考。
 - 这组数不是 CI 门槛：跨机器、跨负载不可比；回归判断用 `--target native --check` 对
-  `bench/native-baseline.json` 的 ratio、rss_ratio 与 `default_stack_ok` 变化做提示。
+  `bench/baselines/programs.json` 的 ratio、rss_ratio、artifact 与 `default_stack_ok` 变化做提示。
 
 ### 1.2 TCO / GC 验证项
 
@@ -153,8 +153,8 @@ native 的 TCO / GC 验证项。**GC 与 TCO 均已落地**；下表「前」列
 ### 1.3 wasm 后端（浏览器路径：JS 宿主 / V8）
 
 wasm 产物由仓库自带的宿主执行（`wasm-host/run.mjs`，Node/V8；与浏览器同一套
-`WebAssembly` API 和 host 层）。`--target wasm`（或 `--target all`）跑同一批 16 个程序
-（另有 3 个效应机器基准见 §1.4）。
+`WebAssembly` API 和 host 层）。`--target wasm`（或 `--target all`）跑同一批程序
+（另有 8 个效应基准与 `startup` / `traits` 见 §1.4）。
 
 本机一档（`--target all --runs 5 --warmup 2`，同窗口；绝对 ms / RSS 只作同机对比）：
 
@@ -193,10 +193,21 @@ native 赢在「调用少、字符串/栈传参多」的形状（[performance.md
 
 ### 1.4 效应机器（CPS）
 
-`eff_tick` / `eff_deep` / `eff_bracket` 测 handler 派发与续延：`eff_tick` 在尾递归里做
-20000 次顺序 `perform` + `resume`（浅续延吞吐），`eff_deep` 非尾递归到深度 2000 才
-`perform` 一次（捕获深度），`eff_bracket` 每轮 `bracket` 包一次 `perform`（10000 轮，
-cleanup 的 push/pop 步骤）。手写 OCaml 对照在同名 `.ml`（`Effect.Deep` 或直接内联）。
+`eff_tick` / `eff_deep` / `eff_deepseq` / `eff_bracket` / `eff_nested` / `eff_host` /
+`eff_abort` / `eff_install` 覆盖 handler 派发与续延：
+
+- `eff_tick`：尾递归里 20000 次顺序 `perform` + `resume`（浅续延吞吐）；
+- `eff_deep`：非尾递归到深度 2000 才 `perform` 一次（单次捕获深度）；
+- `eff_deepseq`：非尾递归每层都 `perform`（深度 2000→1，D89 的原始形状）；
+- `eff_bracket`：10000 轮 `bracket` + `perform`（cleanup 的 push/pop）；
+- `eff_nested`：2000 层 handler 嵌套，内层完成后再在外层 perform（帧链 / 回退）；
+- `eff_host`：Console handler 的 answer 是 `Eff`（answer row），每轮额外发一个 Tick；
+- `eff_abort`：2000 轮 `bracket` 的 use 都 abort（cleanup 恰好一次）；
+- `eff_install`：10000 轮独立安装 handler + perform + 拆掉（`MkHandle`/`finish` 固定成本）。
+
+另有 `startup`（`repeat=20` 的进程/运行时初始化地板）与 `traits`（约束多态的字典派发）。
+手写 OCaml 对照在同名 `.ml`（`Effect.Deep` 或直接内联）。`handleState` 这种 answer 是
+函数的库 handler 仍不可用（D111），没有进基准。
 
 三端同窗口（HEAD `c6586e7`，`--target all --runs 5 --warmup 2`，loadavg ≈3.3；
 ratio 相对手写 OCaml，wasm 含 `meta.node_startup_ms` = 25 ms）：

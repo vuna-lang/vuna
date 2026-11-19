@@ -433,7 +433,7 @@ env，**不进 codegen**（同一 IR 的产物逐字节确定）。解析失败�
   5. 续延捕获缓冲是钉住块（`rt_cap_free` 自己复用），GC 不回收；
   6. 栈段（`resume` 迁移用的 32 MiB 预留窗口）不计入预算，见 §5.1。
 - **运行期性能与内存**：`nix run .#vuna-perf -- --target native`（或 `--target both`）
-  在 16 个生成程序基准上测 native 产物；基线 `bench/native-baseline.json`，读数与口径见
+  在 16 个生成程序基准上测 native 产物；基线 `bench/baselines/programs.json`，读数与口径见
 [benchmarks.md](benchmarks.md) §1.1。非尾深递归在默认 8 MiB 栈下仍会崩溃（exit 139），
   基准因此在 `ulimit -s unlimited` 下运行，JSON 的 `meta.stack_policy` 记录该口径、每项另有
   `default_stack_ok` 探针；峰值 RSS = 栈页 + live 堆，需与墙钟一起读。TCO 已落地：只覆盖

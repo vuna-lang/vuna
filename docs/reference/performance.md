@@ -40,7 +40,7 @@
 漂移）；CI 的 `nix/checks/vuna-fmt.sh` 只查各包 + `examples`。
 
 更早的读数在 git 历史；当前读数须与
-[`bench/compiler-baseline.txt`](../../bench/compiler-baseline.txt) 的
+[`bench/baselines/compiler.txt`](../../bench/baselines/compiler.txt) 的
 同机口径比较；跨机器只比 §5 的增长率。**该基线是旧口径，尚未按本轮修复重标。**
 
 ### 产物规模（native `.s` 文件集）
@@ -541,7 +541,7 @@ wasm 浏览器路径）已拆到 [benchmarks.md](benchmarks.md)。
 ## 9. 编译器基准
 
 `sh bench/compiler.sh`（仓库根；`--runs N` / `--check` / `--save-baseline` / `--alloc`）测
-编译器 / 工具链自身墙钟。基线 `bench/compiler-baseline.txt`（机器相关，只做同机回归对比）；
+编译器 / 工具链自身墙钟。基线 `bench/baselines/compiler.txt`（机器相关，只做同机回归对比）；
 `--check` 超过 `--threshold`%（默认 20）打 WARN、超过 `--fail-threshold`%（默认 50）exit 1。
 跨机器/跨输入规模的可比口径是 `nix/checks/compiler-growth.sh`（单文件全量路径）与
 `nix/checks/compiler-growth-pkg.sh`（包路径增量收尾）的增长率门槛（§5）。

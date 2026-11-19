@@ -5,7 +5,9 @@
 | 设施 | 测什么 | 入口 |
 | --- | --- | --- |
 | `bench/bootstrap.sh` | 编译器**构建/编译**墙钟、产物尺寸、codegen 计数 | `nix run .#vuna-bench` |
-| `bench/run.sh` | **生成程序运行时**（vuna 产物 vs 手写 OCaml）、`check`/`compile` 运行期负载；可选 ocaml / native 后端 | `nix run .#vuna-perf` |
+| `bench/run.sh` | **生成程序运行时**（vuna 产物 vs 手写 OCaml）；target = ocaml / native / wasm / both / all | `nix run .#vuna-perf` |
+| `bench/compiler.sh` | **工具链命令**墙钟（check/build/map/fmt，冷/热） | `sh bench/compiler.sh` |
+| `bench/native.sh` | 编译器编到 **native** 后的端到端（`check packages/base` / `--full` 加 compiler） | `sh bench/native.sh`（需 `result-native`） |
 
 ## 口径
 
@@ -45,16 +47,15 @@
 ```console
 # 仓库根；nix runner 会带上 vuna / ocamlopt / cc / jq / GNU time
 nix run .#vuna-perf
+nix run .#vuna-perf -- --list                          # 自动发现的基准 + sidecar（repeat/targets/c）
 nix run .#vuna-perf -- --runs 5 --only string_ops
 nix run .#vuna-perf -- --target native                 # 只测 native 后端
 nix run .#vuna-perf -- --target wasm                   # 只测 wasm（JS 宿主 / Node）
-nix run .#vuna-perf -- --target both --check           # 两个后端同窗口对比
-nix run .#vuna-perf -- --check                         # 软对比基线
-nix run .#vuna-perf -- --json bench/baseline.json      # 重新生成 OCaml 基线（提交入库）
-nix run .#vuna-perf -- --target both --runs 5 --warmup 2 \
-  --json bench/native-baseline.json                    # 重新生成 native 基线（提交入库）
+nix run .#vuna-perf -- --target all --check            # 与 baselines/programs.json 比
+nix run .#vuna-perf -- --only eff_tick --only eff_deep --only eff_bracket --check  # 效应子集
+nix run .#vuna-perf -- --check --strict                # WARN 也 exit 1
 nix run .#vuna-perf -- --target all --runs 5 --warmup 2 \
-  --json bench/wasm-baseline.json                      # 重新生成 wasm 基线（提交入库）
+  --json bench/baselines/programs.json                 # 重新生成唯一一份程序基线
 ```
 
 本地已有固定二进制时可直接复用（先 `nix build .#vuna --out-link result`；`result` 是共享
@@ -66,14 +67,17 @@ VUNA=$PWD/result/bin/vuna ./bench/run.sh --runs 3
 
 ## 基线维护
 
-- `baseline.json`（OCaml 后端）、`native-baseline.json`（native + OCaml 后端同窗口）与
-  `wasm-baseline.json`（wasm/native/OCaml 三端同窗口）分别入库；
-  更新基线的唯一方式是用**同一机器、同一口径**（target/runs/warmup/rss-passes）重跑对应命令，
-  并在提交信息里写明原因。
-- `native-baseline.json` 用 `--target both --runs 5 --warmup 2`、`wasm-baseline.json` 用
-  `--target all --runs 5 --warmup 2` 生成；生成后检查 `meta` 的 `target` / `stack_policy` /
-  `node` / `rss_passes` 是否符合预期。
-- 基线是**软门槛**：不为跨机器/环境差异改写基线；只有确认是生成程序质量的真实变化才更新。
+- 基线统一在 `bench/baselines/`：`programs.json`（全部生成程序 × 三端）、`bootstrap.json`、
+  `compiler.txt`、`native.json`。每个 family 只有一份，不再按 target 拆文件。
+- `programs.json` 用 `--target all --runs 5 --warmup 2` 生成；`--check` 只比本次实际跑的
+  target / benchmark（`--only eff_*` 就是效应子集）。wasm 另有 `net_median_ms`
+  （减 `meta.node_startup_ms`）。
+- 统一重标：`nix build .#vuna --out-link result && sh bench/update-baselines.sh`
+  （`--only programs|bootstrap|compiler|native` 可单跑）。
+- 基线是**软门槛**：默认 WARN；`--strict` 把 WARN 变 exit 1，`--fail-threshold`（默认 50%）
+  直接失败。不为跨机器/环境差异改阈值，只有确认是生成程序质量的真实变化才重标。
+- 每个 benchmark 可用同名 `.bench` sidecar 覆盖默认口径：`repeat=N`（一次采样内重复）、
+  `targets=a,b`（限定后端）、`c=path`（参与链接的 C 源）、`skip=1`。
 
 ## 当前基线
 
@@ -108,9 +112,10 @@ native 侧 GC 已落地（保守 mark-sweep）但无统计输出，只记峰值 
 `gc_low_live` 的 RSS 降到 5 MiB（0.02x 手写），`gc_array_churn` 仍是 GC 相关的最差项
 （COW 数组复制）；TCO 未做。判定与读数见 [performance.md §8.2](../docs/reference/performance.md)。
 
-三个效应机器基准（`eff_tick` / `eff_deep` / `eff_bracket`）已进 `BENCHES`，但**不入基线
-JSON**：它们的绝对量随宿主、GC 阈值与 `perform` 次数变化大，跨版本只比同窗口的前后对照。
-三端读数、CPS 前后（历史二进制）与产物尺寸见
+效应基准（`eff_tick` / `eff_deep` / `eff_deepseq` / `eff_bracket` / `eff_nested` /
+`eff_host` / `eff_abort` / `eff_install`）与 `startup`（sidecar `repeat=20`）、`traits`
+都在默认集合与 `programs.json` 里；`vuna-perf --only eff_tick --only eff_deep --only eff_bracket --check`
+是效应面的快检子集。三端读数、CPS 前后（历史二进制）与产物尺寸见
 [benchmarks.md §1.4](../docs/reference/benchmarks.md)。
 
 ## 编译器基准
@@ -119,7 +124,7 @@ JSON**：它们的绝对量随宿主、GC 阈值与 `perform` 次数变化大，
 （workspace 全部 / 仅 compiler 包）、`vuna map` 冷 / 热、`fmt --check`，并内置冷 / 热两种
 口径（清缓存后测 vs 预热后测）。**范围不同不可直接互比**：`check-all` 是 workspace 根包 +
 成员并行，`build-all` 是 workspace 全部串行（≈ check 全部 + codegen），`*-compiler` 只覆盖
-compiler 包。基线 `bench/compiler-baseline.txt`（机器相关，仅同机回归对比）；`--check` 超
+compiler 包。基线 `bench/baselines/compiler.txt`（机器相关，仅同机回归对比）；`--check` 超
 `--threshold`%（默认 20）打 WARN、超 `--fail-threshold`%（默认 50）exit 1（硬门槛），
 `--save-baseline` 重写基线，`--alloc` 额外打印冷 `check .` 的 GC 分配统计（`VN_PERF_STATS=1`）。
 跨机器/跨输入规模的可比口径是 `nix/checks/compiler-growth.sh`（合成 500/1000/2000/4000 同形
