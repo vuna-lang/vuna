@@ -1,13 +1,11 @@
 #!/bin/sh
-# 由 vuna 生成：分离编译构建脚本（按直接依赖分层并行 + 内容哈希增量）。用法: ./build.sh [OUT]
-# 干净构建且 JOBS<=1：一次 ocamlopt 编译全部 .mli/.ml 并链接；
-# 增量构建：每单元 .ml/.mli 与直接依赖 .stamp 的内容哈希写 $base.stamp，命中即跳过；
-# 同层单元互不依赖：多单元层用后台任务并行编译，层间用 wait 串行。
+# 由 vuna 生成：分离编译构建脚本（直接依赖表 + 内容哈希增量 + 分层并行）。用法: ./build.sh [OUT]
+# 单元表在本文件末尾的 `VUNA_UNIT_TABLE` 里：`@` 分隔并行层，其余每行 `单元 直接依赖...`
+# （拓扑序）。干净构建且 JOBS<=1：一次 ocamlopt 编译全部 .mli/.ml；其余按内容哈希逐单元编译。
 set -eu
 cd "$(dirname "$0")"
 OUT=${1:-program}
 FLAGS="-g -w -a+39 -warn-error +39"
-MODULES="Vuna_runtime Base_dTrait_dNum Base_dTrait_dMonoid Base_dTrait_dFromInt Base_dTrait_dTraversable Base_dTrait_dMonad Base_dTrait_dHashable Base_dEffect_dTypes Base_dData Base_dInternal_dOperator Base_dData_dFunction Base_dData_dBits Base_dTrait_dApplicative Base_dTrait_dEq Base_dTrait_dNeg Vuna_dCompiler_dBase_dVersion Base_dTrait_dFromString Base_dTrait_dShow Vuna_dCompiler_dBase_dCapabilities Prelude Base_dEffect_dPure Base_dEffect Base_dData_dObs Base_dTrait_dFunctor Base_dTrait_dFoldable Base_dEffect_dPure_dReader Base_dData_dBool Base_dTrait_dInterp Base_dEffect_dPure_dError Base_dTrait_dOrd Base_dData_dUnit Base_dData_dMaybe Base_dData_dPair Base_dData_dInt Base_dData_dNat Base_dEffect_dPure_dState Base_dData_dList Vuna_dCompiler_dWasm_dInstr Base_dData_dString Base_dData_dSha1 Base_dData_dVec Base_dContainer_dArray Vuna_dCompiler_dNative_dModel Base_dData_dBase64 Vuna_dCompiler_dCodegen_dOcaml_dModel Vuna_dCompiler_dBase_dBytes Vuna_dCompiler_dBase_dDiagnostics_dIc Base_dData_dResult Base_dData_dFloat Vuna_dCompiler_dBase_dHash Base_dData_dSort Vuna_dCompiler_dFrontend_dCanonical_dPkg Vuna_dCompiler_dCodegen_dOcaml_dRender Vuna_dCompiler_dWasm_dModel Vuna_dCompiler_dNative_dAbi Base_dContainer_dHashMap Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dNative_dRender Vuna_dCompiler_dNative_dGc Vuna_dCompiler_dWasm_dRender Vuna_dCompiler_dBase_dIntrinsics Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dFrontend_dAst Vuna_dCompiler_dIr_dModel Vuna_dCompiler_dWasm_dRuntime Base_dEffect_dCore Vuna_dCompiler_dIr_dTail Vuna_dCompiler_dFrontend_dCanonical_dAst Vuna_dCompiler_dIr_dRuntime Base_dEffect_dError Base_dEffect_dClock Vuna_dCompiler_dBase_dDiagnostics_dCommon Base_dEffect_dReader Base_dEffect_dConsole Base_dEffect_dRef Base_dEffect_dExit Base_dEffect_dExn Base_dEffect_dProcess Base_dEffect_dArgs Base_dEffect_dNet Vuna_dCompiler_dWasm_dTypes Base_dEffect_dStdin Vuna_dCompiler_dCodegen_dDecl Vuna_dCompiler_dCore_dTerm Vuna_dCompiler_dBase_dObs Vuna_dCompiler_dIr_dAnf Vuna_dCompiler_dIr_dDispatch Vuna_dCompiler_dBase_dDiagnostics_dSink Base_dEffect_dPure_dIORef Vuna_dCompiler_dFrontend_dRast_dName Vuna_dCompiler_dLoader_dAddr Base_dEffect_dEnv Vuna_dCompiler_dNative_dRuntime Base_dEffect_dState Base_dEffect_dFs Vuna_dCompiler_dBase_dDiag_dCodec Vuna_dCompiler_dIr_dRepresent Base_dData_dObs_dSpan Vuna_dCompiler_dBase_dCommon Vuna_dCompiler_dBase_dDiagnostics_dRn Vuna_dCompiler_dBase_dDiagnostics_dTc Vuna_dCompiler_dCore_dCanonical Vuna_dCompiler_dNative_dAudit Vuna_dCompiler_dBase_dDiagnostics_dLoader Vuna_dCompiler_dBase_dStore Vuna_dCompiler_dCodegen_dRuntime Vuna_dCompiler_dBase_dDiagnostics_dPkg Vuna_dCompiler_dBase_dDiagnostics_dCg Vuna_dCompiler_dBase_dDiagnostics_dFrontend Vuna_dCompiler_dLoader_dFingerprint Vuna_dCompiler_dBase_dDiagnostics_dWarning Vuna_dCompiler_dFrontend_dRast Vuna_dCompiler_dDriver_dSplit Vuna_dCompiler_dCore_dEval Vuna_dCompiler_dBase_dDiagnostics Vuna_dCompiler_dFrontend_dRast_dBridge Vuna_dCompiler_dElab_dRecords Vuna_dCompiler_dLoader_dFixity Vuna_dCompiler_dElab_dPrelude Vuna_dCompiler_dElab_dSig Vuna_dCompiler_dFrontend_dLexer Vuna_dCompiler_dLoader_dExpand Vuna_dCompiler_dElab_dCoverage Vuna_dCompiler_dCore_dConv Vuna_dCompiler_dElab_dTypes Vuna_dCompiler_dCodegen_dTerm Vuna_dCompiler_dIr_dAnalysis Vuna_dCompiler_dDriver_dPerfCache Vuna_dCompiler_dElab_dTermination_dMeasure Vuna_dCompiler_dElab_dMatch Vuna_dCompiler_dElab_dDerive Vuna_dCompiler_dElab_dRepresentation Vuna_dCompiler_dBase_dDiag_dFormat Vuna_dCompiler_dFrontend_dToml Vuna_dCompiler_dIr_dCps Vuna_dCompiler_dCodegen_dAssembly Vuna_dCompiler_dElab_dTermination_dScc Vuna_dCompiler_dFrontend_dCst Vuna_dCompiler_dElab_dMetaSpans Vuna_dCompiler_dIr_dValidate Vuna_dCompiler_dFrontend_dParser_dSupport Vuna_dCompiler_dFrontend_dManifest Vuna_dCompiler_dElab_dMeta Vuna_dCompiler_dFrontend_dParser Vuna_dCompiler_dNative_dModule Vuna_dCompiler_dElab_dTermination Vuna_dCompiler_dWasm_dModule Vuna_dCompiler_dElab_dUsage Vuna_dCompiler_dFrontend_dPackages_dSource Vuna_dCompiler_dElab_dTerm_dSupport Vuna_dCompiler_dElab_dDict Vuna_dCompiler_dElab_dInstName Vuna_dCompiler_dElab_dCase Vuna_dCompiler_dElab_dInstCoherence Vuna_dCompiler_dFrontend_dPackages_dPkg Vuna_dCompiler_dLowering_dChecks Vuna_dCompiler_dDriver_dOwner Vuna_dCompiler_dLowering_dEnv Vuna_dCompiler_dLoader_dModules Vuna_dCompiler_dLowering_dEntry Vuna_dCompiler_dElab_dTerm_dImpl Vuna_dCompiler_dLoader_dLayers Vuna_dCompiler_dLoader_dResolve Vuna_dCompiler_dElab_dCanonical Vuna_dCompiler_dElab_dTerm Vuna_dCompiler_dLowering_dTy Vuna_dCompiler_dLowering_dProgram Vuna_dCompiler_dElab_dData Vuna_dCompiler_dLoader_dFlatten Vuna_dCompiler_dDriver_dCache Vuna_dCompiler_dElab_dTrait Vuna_dCompiler_dDriver_dSplitGen Vuna_dCompiler_dDriver_dIface Vuna_dCompiler_dElab_dDriver Vuna_dCompiler_dDriver_dDt Vuna_dCompiler_dDriver_dCompile Vuna_dCompiler_dDriver_dWasm Vuna_dCompiler_dDriver_dNative Vuna_dCompiler_dDriver_dToolPayload Vuna_dCompiler_dDriver_dCompilerCli Main "
 JOBS=${VUNA_BUILD_JOBS:-}
 if [ -z "$JOBS" ]; then
   JOBS=$(nproc 2>/dev/null || echo 1)
@@ -34,201 +32,6 @@ stamp_want() {
   for d in "$@"; do deps="$deps $d.stamp"; done
   hash_of "$base.ml" "$base.mli" $deps
 }
-clean=1
-for m in $MODULES; do
-  if [ -f "$m.cmx" ]; then clean=0; fi
-done
-if [ "$clean" -eq 1 ] && [ "$JOBS" -le 1 ]; then
-  SOURCES=""
-  for m in $MODULES; do
-    if [ -f "$m.mli" ]; then SOURCES="$SOURCES $m.mli"; fi
-    SOURCES="$SOURCES $m.ml"
-  done
-  ocamlopt $FLAGS -I +unix -o "$OUT" unix.cmxa $SOURCES $C_OBJS
-  printf '%s' "$(stamp_want Vuna_runtime)" > "Vuna_runtime.stamp"
-  printf '%s' "$(stamp_want Base_dTrait_dNum Vuna_runtime)" > "Base_dTrait_dNum.stamp"
-  printf '%s' "$(stamp_want Base_dTrait_dMonoid Vuna_runtime)" > "Base_dTrait_dMonoid.stamp"
-  printf '%s' "$(stamp_want Base_dTrait_dFromInt Vuna_runtime)" > "Base_dTrait_dFromInt.stamp"
-  printf '%s' "$(stamp_want Base_dTrait_dTraversable Vuna_runtime)" > "Base_dTrait_dTraversable.stamp"
-  printf '%s' "$(stamp_want Base_dTrait_dMonad Vuna_runtime)" > "Base_dTrait_dMonad.stamp"
-  printf '%s' "$(stamp_want Base_dTrait_dHashable Vuna_runtime)" > "Base_dTrait_dHashable.stamp"
-  printf '%s' "$(stamp_want Base_dEffect_dTypes Vuna_runtime)" > "Base_dEffect_dTypes.stamp"
-  printf '%s' "$(stamp_want Base_dData Vuna_runtime)" > "Base_dData.stamp"
-  printf '%s' "$(stamp_want Base_dInternal_dOperator Vuna_runtime)" > "Base_dInternal_dOperator.stamp"
-  printf '%s' "$(stamp_want Base_dData_dFunction Vuna_runtime)" > "Base_dData_dFunction.stamp"
-  printf '%s' "$(stamp_want Base_dData_dBits Vuna_runtime)" > "Base_dData_dBits.stamp"
-  printf '%s' "$(stamp_want Base_dTrait_dApplicative Vuna_runtime)" > "Base_dTrait_dApplicative.stamp"
-  printf '%s' "$(stamp_want Base_dTrait_dEq Vuna_runtime)" > "Base_dTrait_dEq.stamp"
-  printf '%s' "$(stamp_want Base_dTrait_dNeg Vuna_runtime)" > "Base_dTrait_dNeg.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dBase_dVersion Vuna_runtime)" > "Vuna_dCompiler_dBase_dVersion.stamp"
-  printf '%s' "$(stamp_want Base_dTrait_dFromString Vuna_runtime)" > "Base_dTrait_dFromString.stamp"
-  printf '%s' "$(stamp_want Base_dTrait_dShow Vuna_runtime)" > "Base_dTrait_dShow.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dBase_dCapabilities Vuna_runtime)" > "Vuna_dCompiler_dBase_dCapabilities.stamp"
-  printf '%s' "$(stamp_want Prelude Vuna_runtime)" > "Prelude.stamp"
-  printf '%s' "$(stamp_want Base_dEffect_dPure Vuna_runtime)" > "Base_dEffect_dPure.stamp"
-  printf '%s' "$(stamp_want Base_dEffect Vuna_runtime)" > "Base_dEffect.stamp"
-  printf '%s' "$(stamp_want Base_dData_dObs Vuna_runtime)" > "Base_dData_dObs.stamp"
-  printf '%s' "$(stamp_want Base_dTrait_dFunctor Vuna_runtime)" > "Base_dTrait_dFunctor.stamp"
-  printf '%s' "$(stamp_want Base_dTrait_dFoldable Base_dTrait_dMonoid Vuna_runtime)" > "Base_dTrait_dFoldable.stamp"
-  printf '%s' "$(stamp_want Base_dEffect_dPure_dReader Vuna_runtime Base_dTrait_dMonad Base_dTrait_dApplicative Base_dTrait_dFunctor)" > "Base_dEffect_dPure_dReader.stamp"
-  printf '%s' "$(stamp_want Base_dData_dBool Vuna_runtime Base_dTrait_dHashable Base_dTrait_dShow)" > "Base_dData_dBool.stamp"
-  printf '%s' "$(stamp_want Base_dTrait_dInterp Vuna_runtime Base_dTrait_dShow)" > "Base_dTrait_dInterp.stamp"
-  printf '%s' "$(stamp_want Base_dEffect_dPure_dError Vuna_runtime Base_dTrait_dMonad Base_dTrait_dApplicative Base_dTrait_dFunctor)" > "Base_dEffect_dPure_dError.stamp"
-  printf '%s' "$(stamp_want Base_dTrait_dOrd Vuna_runtime Base_dTrait_dHashable Base_dData_dBool Base_dTrait_dEq Base_dTrait_dShow)" > "Base_dTrait_dOrd.stamp"
-  printf '%s' "$(stamp_want Base_dData_dUnit Base_dTrait_dMonoid Vuna_runtime Base_dTrait_dHashable Base_dTrait_dEq Base_dTrait_dShow Base_dTrait_dOrd)" > "Base_dData_dUnit.stamp"
-  printf '%s' "$(stamp_want Base_dData_dMaybe Base_dTrait_dFoldable Base_dTrait_dMonoid Vuna_runtime Base_dTrait_dTraversable Base_dTrait_dMonad Base_dTrait_dHashable Base_dData_dBool Base_dTrait_dApplicative Base_dTrait_dEq Base_dTrait_dShow Base_dTrait_dOrd Base_dTrait_dFunctor)" > "Base_dData_dMaybe.stamp"
-  printf '%s' "$(stamp_want Base_dData_dPair Vuna_runtime Base_dTrait_dHashable Base_dData_dBool Base_dTrait_dEq Base_dTrait_dShow Base_dTrait_dOrd)" > "Base_dData_dPair.stamp"
-  printf '%s' "$(stamp_want Base_dData_dInt Base_dTrait_dNum Vuna_runtime Base_dTrait_dHashable Base_dTrait_dEq Base_dTrait_dNeg Base_dTrait_dShow Base_dTrait_dOrd)" > "Base_dData_dInt.stamp"
-  printf '%s' "$(stamp_want Base_dData_dNat Base_dTrait_dNum Base_dTrait_dMonoid Vuna_runtime Base_dTrait_dHashable Base_dData_dMaybe Base_dTrait_dEq Base_dTrait_dShow Base_dTrait_dOrd)" > "Base_dData_dNat.stamp"
-  printf '%s' "$(stamp_want Base_dEffect_dPure_dState Vuna_runtime Base_dTrait_dMonad Base_dTrait_dApplicative Base_dData_dPair Base_dTrait_dFunctor)" > "Base_dEffect_dPure_dState.stamp"
-  printf '%s' "$(stamp_want Base_dData_dList Base_dTrait_dFoldable Base_dTrait_dMonoid Vuna_runtime Base_dTrait_dTraversable Base_dTrait_dMonad Base_dTrait_dHashable Base_dData_dBool Base_dTrait_dApplicative Base_dData_dMaybe Base_dTrait_dEq Base_dTrait_dShow Base_dTrait_dOrd Base_dData_dPair Base_dTrait_dFunctor)" > "Base_dData_dList.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dWasm_dInstr Vuna_runtime Base_dData_dList)" > "Vuna_dCompiler_dWasm_dInstr.stamp"
-  printf '%s' "$(stamp_want Base_dData_dString Base_dTrait_dMonoid Vuna_runtime Base_dTrait_dHashable Base_dTrait_dInterp Base_dTrait_dEq Base_dTrait_dOrd Base_dData_dList)" > "Base_dData_dString.stamp"
-  printf '%s' "$(stamp_want Base_dData_dSha1 Vuna_runtime Base_dData_dBits Base_dData_dPair Base_dData_dList)" > "Base_dData_dSha1.stamp"
-  printf '%s' "$(stamp_want Base_dData_dVec Vuna_runtime Base_dData_dList)" > "Base_dData_dVec.stamp"
-  printf '%s' "$(stamp_want Base_dContainer_dArray Vuna_runtime Base_dTrait_dEq Base_dTrait_dShow Base_dData_dList)" > "Base_dContainer_dArray.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dNative_dModel Vuna_runtime Base_dData_dPair Base_dData_dList)" > "Vuna_dCompiler_dNative_dModel.stamp"
-  printf '%s' "$(stamp_want Base_dData_dBase64 Vuna_runtime Base_dData_dBits Base_dData_dMaybe Base_dData_dList)" > "Base_dData_dBase64.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dCodegen_dOcaml_dModel Vuna_runtime Base_dData_dMaybe Base_dData_dPair Base_dData_dList)" > "Vuna_dCompiler_dCodegen_dOcaml_dModel.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dBase_dBytes Vuna_runtime Base_dData_dMaybe Base_dData_dPair Base_dData_dList)" > "Vuna_dCompiler_dBase_dBytes.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dBase_dDiagnostics_dIc Vuna_runtime Base_dData_dList)" > "Vuna_dCompiler_dBase_dDiagnostics_dIc.stamp"
-  printf '%s' "$(stamp_want Base_dData_dResult Base_dTrait_dFoldable Vuna_runtime Base_dTrait_dTraversable Base_dTrait_dMonad Base_dTrait_dHashable Base_dTrait_dApplicative Base_dTrait_dEq Base_dTrait_dShow Base_dData_dPair Base_dData_dList Base_dTrait_dFunctor)" > "Base_dData_dResult.stamp"
-  printf '%s' "$(stamp_want Base_dData_dFloat Base_dTrait_dNum Vuna_runtime Base_dData_dMaybe Base_dTrait_dEq Base_dTrait_dNeg Base_dTrait_dShow Base_dTrait_dOrd Base_dData_dPair Base_dData_dList)" > "Base_dData_dFloat.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dBase_dHash Base_dTrait_dNum Vuna_runtime Base_dData_dBits Base_dData_dPair Base_dData_dList Base_dData_dInt)" > "Vuna_dCompiler_dBase_dHash.stamp"
-  printf '%s' "$(stamp_want Base_dData_dSort Vuna_runtime Base_dTrait_dOrd Base_dData_dList)" > "Base_dData_dSort.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dFrontend_dCanonical_dPkg Vuna_runtime Vuna_dCompiler_dBase_dBytes Base_dData_dMaybe Base_dData_dPair Base_dData_dList Vuna_dCompiler_dBase_dHash)" > "Vuna_dCompiler_dFrontend_dCanonical_dPkg.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dCodegen_dOcaml_dRender Vuna_runtime Vuna_dCompiler_dCodegen_dOcaml_dModel Base_dData_dMaybe Base_dData_dPair Base_dData_dList)" > "Vuna_dCompiler_dCodegen_dOcaml_dRender.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dWasm_dModel Vuna_dCompiler_dWasm_dInstr Vuna_runtime Base_dData_dMaybe Base_dData_dPair Base_dData_dList)" > "Vuna_dCompiler_dWasm_dModel.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dNative_dAbi Vuna_runtime Vuna_dCompiler_dNative_dModel Base_dData_dList)" > "Vuna_dCompiler_dNative_dAbi.stamp"
-  printf '%s' "$(stamp_want Base_dContainer_dHashMap Base_dData_dString Base_dContainer_dArray Vuna_runtime Base_dTrait_dHashable Base_dData_dMaybe Base_dTrait_dEq Base_dTrait_dShow Base_dData_dPair Base_dData_dList)" > "Base_dContainer_dHashMap.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dBase_dSource Base_dData_dString Vuna_runtime Base_dData_dBool Base_dData_dPair Base_dData_dList)" > "Vuna_dCompiler_dBase_dSource.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dNative_dRender Base_dData_dString Vuna_runtime Vuna_dCompiler_dNative_dModel Base_dData_dPair Base_dData_dList)" > "Vuna_dCompiler_dNative_dRender.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dNative_dGc Vuna_runtime Vuna_dCompiler_dNative_dAbi Vuna_dCompiler_dNative_dModel Base_dData_dList)" > "Vuna_dCompiler_dNative_dGc.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dWasm_dRender Vuna_dCompiler_dWasm_dInstr Base_dData_dString Vuna_dCompiler_dWasm_dModel Vuna_runtime Base_dTrait_dInterp Base_dData_dMaybe Base_dTrait_dEq Base_dData_dPair Base_dData_dList Base_dData_dInt)" > "Vuna_dCompiler_dWasm_dRender.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dBase_dIntrinsics Base_dData_dString Vuna_runtime Base_dContainer_dHashMap Base_dData_dBool Vuna_dCompiler_dBase_dSource Base_dData_dMaybe Base_dData_dPair Base_dData_dList)" > "Vuna_dCompiler_dBase_dIntrinsics.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dBase_dDiag Base_dData_dString Vuna_runtime Base_dTrait_dMonad Vuna_dCompiler_dBase_dSource Base_dTrait_dApplicative Base_dData_dMaybe Base_dTrait_dEq Base_dData_dPair Base_dData_dList Base_dTrait_dFunctor Base_dData_dInt)" > "Vuna_dCompiler_dBase_dDiag.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dFrontend_dAst Base_dData_dString Vuna_runtime Vuna_dCompiler_dBase_dSource Base_dData_dMaybe Base_dData_dPair Base_dData_dList)" > "Vuna_dCompiler_dFrontend_dAst.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dIr_dModel Vuna_runtime Vuna_dCompiler_dBase_dSource Base_dData_dMaybe Base_dData_dPair Base_dData_dList)" > "Vuna_dCompiler_dIr_dModel.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dWasm_dRuntime Vuna_dCompiler_dWasm_dInstr Vuna_dCompiler_dWasm_dModel Vuna_runtime Base_dData_dPair Base_dData_dList)" > "Vuna_dCompiler_dWasm_dRuntime.stamp"
-  printf '%s' "$(stamp_want Base_dEffect_dCore Vuna_runtime Base_dTrait_dMonad Base_dContainer_dHashMap Base_dTrait_dApplicative Base_dData_dMaybe Base_dData_dPair Base_dData_dList Base_dTrait_dFunctor Base_dData_dInt)" > "Base_dEffect_dCore.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dIr_dTail Base_dData_dString Vuna_runtime Base_dContainer_dHashMap Base_dData_dMaybe Base_dData_dResult Vuna_dCompiler_dIr_dModel Base_dData_dPair Base_dData_dList)" > "Vuna_dCompiler_dIr_dTail.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dFrontend_dCanonical_dAst Vuna_runtime Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dBase_dBytes Vuna_dCompiler_dFrontend_dAst Base_dData_dMaybe Base_dData_dPair Base_dData_dList)" > "Vuna_dCompiler_dFrontend_dCanonical_dAst.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dIr_dRuntime Vuna_runtime Base_dData_dMaybe Vuna_dCompiler_dIr_dModel Base_dData_dPair Base_dData_dList)" > "Vuna_dCompiler_dIr_dRuntime.stamp"
-  printf '%s' "$(stamp_want Base_dEffect_dError Vuna_runtime Base_dTrait_dMonad Base_dTrait_dApplicative Base_dData_dResult Base_dEffect_dCore)" > "Base_dEffect_dError.stamp"
-  printf '%s' "$(stamp_want Base_dEffect_dClock Vuna_runtime Base_dTrait_dMonad Base_dTrait_dApplicative Base_dEffect_dCore)" > "Base_dEffect_dClock.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dBase_dDiagnostics_dCommon Base_dData_dVec Vuna_runtime Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dBase_dSource Base_dData_dMaybe Base_dData_dList)" > "Vuna_dCompiler_dBase_dDiagnostics_dCommon.stamp"
-  printf '%s' "$(stamp_want Base_dEffect_dReader Vuna_runtime Base_dTrait_dMonad Base_dEffect_dCore)" > "Base_dEffect_dReader.stamp"
-  printf '%s' "$(stamp_want Base_dEffect_dConsole Vuna_runtime Base_dTrait_dMonad Base_dTrait_dFunctor Base_dEffect_dCore)" > "Base_dEffect_dConsole.stamp"
-  printf '%s' "$(stamp_want Base_dEffect_dRef Vuna_runtime Base_dEffect_dCore)" > "Base_dEffect_dRef.stamp"
-  printf '%s' "$(stamp_want Base_dEffect_dExit Vuna_runtime Base_dTrait_dMonad Base_dTrait_dApplicative Base_dEffect_dCore)" > "Base_dEffect_dExit.stamp"
-  printf '%s' "$(stamp_want Base_dEffect_dExn Vuna_runtime Base_dTrait_dMonad Base_dTrait_dApplicative Base_dData_dResult Base_dEffect_dCore)" > "Base_dEffect_dExn.stamp"
-  printf '%s' "$(stamp_want Base_dEffect_dProcess Vuna_runtime Base_dTrait_dMonad Base_dTrait_dApplicative Base_dData_dResult Base_dData_dList Base_dEffect_dCore)" > "Base_dEffect_dProcess.stamp"
-  printf '%s' "$(stamp_want Base_dEffect_dArgs Vuna_runtime Base_dTrait_dMonad Base_dTrait_dApplicative Base_dData_dList Base_dEffect_dCore)" > "Base_dEffect_dArgs.stamp"
-  printf '%s' "$(stamp_want Base_dEffect_dNet Vuna_runtime Base_dTrait_dMonad Base_dTrait_dApplicative Base_dData_dMaybe Base_dData_dResult Base_dEffect_dCore)" > "Base_dEffect_dNet.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dWasm_dTypes Vuna_dCompiler_dWasm_dModel Vuna_runtime Base_dData_dMaybe Vuna_dCompiler_dIr_dModel Base_dData_dPair Base_dData_dList)" > "Vuna_dCompiler_dWasm_dTypes.stamp"
-  printf '%s' "$(stamp_want Base_dEffect_dStdin Vuna_runtime Base_dTrait_dMonad Base_dTrait_dApplicative Base_dData_dMaybe Base_dEffect_dCore)" > "Base_dEffect_dStdin.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dCodegen_dDecl Base_dData_dString Vuna_dCompiler_dCodegen_dOcaml_dRender Vuna_runtime Base_dContainer_dHashMap Vuna_dCompiler_dCodegen_dOcaml_dModel Vuna_dCompiler_dFrontend_dAst Base_dData_dMaybe Vuna_dCompiler_dIr_dModel Base_dData_dPair Base_dData_dList)" > "Vuna_dCompiler_dCodegen_dDecl.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dCore_dTerm Base_dData_dString Vuna_runtime Vuna_dCompiler_dBase_dIntrinsics Base_dContainer_dHashMap Vuna_dCompiler_dBase_dSource Base_dData_dMaybe Base_dData_dPair Base_dData_dList Base_dData_dInt)" > "Vuna_dCompiler_dCore_dTerm.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dBase_dObs Vuna_runtime Base_dData_dObs Base_dEffect_dCore)" > "Vuna_dCompiler_dBase_dObs.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dIr_dAnf Base_dData_dString Vuna_runtime Base_dData_dMaybe Base_dData_dResult Vuna_dCompiler_dIr_dModel Base_dData_dPair Base_dData_dList)" > "Vuna_dCompiler_dIr_dAnf.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dIr_dDispatch Vuna_runtime Vuna_dCompiler_dBase_dIntrinsics Base_dData_dMaybe Vuna_dCompiler_dIr_dModel Base_dData_dPair Base_dData_dList)" > "Vuna_dCompiler_dIr_dDispatch.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dBase_dDiagnostics_dSink Base_dData_dString Vuna_runtime Vuna_dCompiler_dBase_dDiag Base_dContainer_dHashMap Vuna_dCompiler_dBase_dSource Base_dData_dMaybe Base_dData_dList)" > "Vuna_dCompiler_dBase_dDiagnostics_dSink.stamp"
-  printf '%s' "$(stamp_want Base_dEffect_dPure_dIORef Vuna_runtime Base_dTrait_dMonad Base_dEffect_dCore)" > "Base_dEffect_dPure_dIORef.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dFrontend_dRast_dName Base_dData_dString Vuna_runtime Vuna_dCompiler_dBase_dIntrinsics Vuna_dCompiler_dFrontend_dAst Base_dData_dMaybe Base_dData_dPair Base_dData_dList)" > "Vuna_dCompiler_dFrontend_dRast_dName.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dLoader_dAddr Vuna_runtime Vuna_dCompiler_dBase_dBytes Vuna_dCompiler_dFrontend_dAst Base_dData_dList Vuna_dCompiler_dBase_dHash)" > "Vuna_dCompiler_dLoader_dAddr.stamp"
-  printf '%s' "$(stamp_want Base_dEffect_dEnv Vuna_runtime Base_dTrait_dMonad Base_dTrait_dApplicative Base_dData_dMaybe Base_dEffect_dCore)" > "Base_dEffect_dEnv.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dNative_dRuntime Vuna_dCompiler_dNative_dGc Vuna_runtime Vuna_dCompiler_dNative_dAbi Vuna_dCompiler_dNative_dModel Base_dData_dMaybe Base_dData_dList)" > "Vuna_dCompiler_dNative_dRuntime.stamp"
-  printf '%s' "$(stamp_want Base_dEffect_dState Vuna_runtime Base_dEffect_dCore)" > "Base_dEffect_dState.stamp"
-  printf '%s' "$(stamp_want Base_dEffect_dFs Base_dData_dString Vuna_runtime Base_dTrait_dMonad Base_dData_dBool Base_dTrait_dApplicative Base_dData_dMaybe Base_dData_dResult Base_dTrait_dOrd Base_dData_dList Base_dTrait_dFunctor Base_dEffect_dCore Base_dData_dSort)" > "Base_dEffect_dFs.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dBase_dDiag_dCodec Vuna_runtime Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dBase_dBytes Base_dData_dMaybe Base_dData_dPair Base_dData_dList)" > "Vuna_dCompiler_dBase_dDiag_dCodec.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dIr_dRepresent Vuna_runtime Base_dData_dMaybe Vuna_dCompiler_dIr_dModel Base_dData_dPair Base_dData_dList)" > "Vuna_dCompiler_dIr_dRepresent.stamp"
-  printf '%s' "$(stamp_want Base_dData_dObs_dSpan Vuna_runtime Base_dTrait_dMonad Base_dTrait_dApplicative Base_dData_dObs Base_dEffect_dCore)" > "Base_dData_dObs_dSpan.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dBase_dCommon Vuna_runtime Base_dTrait_dMonad Vuna_dCompiler_dBase_dDiag Base_dTrait_dApplicative Base_dData_dPair Base_dData_dList Base_dTrait_dFunctor Base_dEffect_dCore)" > "Vuna_dCompiler_dBase_dCommon.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dBase_dDiagnostics_dRn Base_dData_dVec Vuna_dCompiler_dBase_dDiagnostics_dCommon Vuna_runtime Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dBase_dSource Base_dData_dMaybe Base_dData_dList)" > "Vuna_dCompiler_dBase_dDiagnostics_dRn.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dBase_dDiagnostics_dTc Base_dData_dString Base_dData_dVec Vuna_dCompiler_dBase_dDiagnostics_dCommon Vuna_runtime Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dBase_dSource Base_dData_dMaybe Base_dData_dPair Base_dData_dList)" > "Vuna_dCompiler_dBase_dDiagnostics_dTc.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dCore_dCanonical Vuna_runtime Vuna_dCompiler_dCore_dTerm Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dBase_dBytes Base_dData_dMaybe Base_dData_dPair Base_dData_dList)" > "Vuna_dCompiler_dCore_dCanonical.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dNative_dAudit Base_dData_dString Vuna_dCompiler_dIr_dRuntime Vuna_runtime Vuna_dCompiler_dNative_dModel Base_dData_dBool Base_dData_dMaybe Vuna_dCompiler_dIr_dModel Vuna_dCompiler_dNative_dRuntime Base_dData_dPair Base_dData_dList)" > "Vuna_dCompiler_dNative_dAudit.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dBase_dDiagnostics_dLoader Base_dData_dVec Vuna_dCompiler_dBase_dDiagnostics_dCommon Vuna_runtime Vuna_dCompiler_dBase_dDiag Base_dData_dList)" > "Vuna_dCompiler_dBase_dDiagnostics_dLoader.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dBase_dStore Base_dData_dString Base_dEffect_dClock Vuna_runtime Base_dTrait_dMonad Base_dEffect_dProcess Base_dData_dBool Base_dTrait_dApplicative Base_dData_dMaybe Base_dTrait_dEq Base_dEffect_dEnv Base_dEffect_dFs Base_dData_dObs_dSpan Base_dData_dPair Base_dData_dList Vuna_dCompiler_dBase_dHash Base_dTrait_dFunctor Base_dEffect_dCore)" > "Vuna_dCompiler_dBase_dStore.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dCodegen_dRuntime Vuna_dCompiler_dIr_dRuntime Vuna_runtime Base_dData_dMaybe Base_dData_dPair Base_dData_dList)" > "Vuna_dCompiler_dCodegen_dRuntime.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dBase_dDiagnostics_dPkg Base_dData_dVec Vuna_dCompiler_dBase_dDiagnostics_dCommon Vuna_runtime Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dBase_dSource Base_dData_dMaybe Base_dData_dList)" > "Vuna_dCompiler_dBase_dDiagnostics_dPkg.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dBase_dDiagnostics_dCg Base_dData_dVec Vuna_dCompiler_dBase_dDiagnostics_dCommon Vuna_runtime Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dBase_dSource Base_dData_dMaybe Base_dData_dList)" > "Vuna_dCompiler_dBase_dDiagnostics_dCg.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dBase_dDiagnostics_dFrontend Base_dData_dVec Vuna_dCompiler_dBase_dDiagnostics_dCommon Vuna_runtime Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dBase_dSource Base_dData_dMaybe Base_dData_dList)" > "Vuna_dCompiler_dBase_dDiagnostics_dFrontend.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dLoader_dFingerprint Base_dData_dString Vuna_runtime Base_dTrait_dMonad Vuna_dCompiler_dBase_dSource Base_dTrait_dApplicative Base_dData_dMaybe Vuna_dCompiler_dLoader_dAddr Base_dEffect_dEnv Base_dEffect_dFs Vuna_dCompiler_dBase_dVersion Base_dTrait_dOrd Base_dData_dPair Base_dData_dList Vuna_dCompiler_dBase_dHash Base_dTrait_dFunctor Base_dEffect_dCore Base_dData_dSort)" > "Vuna_dCompiler_dLoader_dFingerprint.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dBase_dDiagnostics_dWarning Base_dData_dVec Vuna_dCompiler_dBase_dDiagnostics_dCommon Vuna_runtime Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dBase_dSource Base_dData_dMaybe Base_dData_dList)" > "Vuna_dCompiler_dBase_dDiagnostics_dWarning.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dFrontend_dRast Base_dData_dString Vuna_runtime Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dFrontend_dAst Vuna_dCompiler_dFrontend_dRast_dName Base_dData_dMaybe Base_dData_dPair Base_dData_dList)" > "Vuna_dCompiler_dFrontend_dRast.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dDriver_dSplit Base_dData_dString Vuna_runtime Base_dTrait_dMonad Vuna_dCompiler_dBase_dDiag Base_dContainer_dHashMap Vuna_dCompiler_dBase_dBytes Base_dTrait_dApplicative Base_dData_dMaybe Base_dEffect_dFs Base_dTrait_dOrd Base_dData_dPair Base_dData_dList Vuna_dCompiler_dBase_dHash Base_dEffect_dCore Base_dData_dSort Base_dData_dInt)" > "Vuna_dCompiler_dDriver_dSplit.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dCore_dEval Vuna_runtime Vuna_dCompiler_dBase_dIntrinsics Base_dContainer_dHashMap Vuna_dCompiler_dCore_dTerm Base_dData_dBool Vuna_dCompiler_dBase_dSource Base_dData_dMaybe Base_dTrait_dEq Base_dData_dFloat Base_dData_dPair Base_dData_dList Base_dData_dInt)" > "Vuna_dCompiler_dCore_dEval.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dBase_dDiagnostics Vuna_dCompiler_dBase_dDiagnostics_dRn Base_dData_dString Vuna_dCompiler_dBase_dDiagnostics_dTc Vuna_dCompiler_dBase_dDiagnostics_dLoader Vuna_dCompiler_dBase_dDiagnostics_dPkg Vuna_dCompiler_dBase_dDiagnostics_dCg Vuna_runtime Vuna_dCompiler_dBase_dDiagnostics_dFrontend Vuna_dCompiler_dBase_dDiagnostics_dIc Vuna_dCompiler_dBase_dDiagnostics_dWarning Base_dData_dMaybe Base_dData_dPair Base_dData_dList)" > "Vuna_dCompiler_dBase_dDiagnostics.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dFrontend_dRast_dBridge Vuna_runtime Vuna_dCompiler_dFrontend_dAst Vuna_dCompiler_dFrontend_dRast_dName Base_dData_dMaybe Vuna_dCompiler_dFrontend_dRast Base_dData_dPair Base_dData_dList)" > "Vuna_dCompiler_dFrontend_dRast_dBridge.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dElab_dRecords Vuna_dCompiler_dBase_dDiagnostics_dTc Base_dData_dVec Vuna_dCompiler_dBase_dDiagnostics_dCommon Vuna_runtime Vuna_dCompiler_dBase_dIntrinsics Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dFrontend_dAst Vuna_dCompiler_dFrontend_dRast_dName Base_dData_dMaybe Vuna_dCompiler_dFrontend_dRast Base_dData_dPair Vuna_dCompiler_dBase_dCommon Base_dData_dList)" > "Vuna_dCompiler_dElab_dRecords.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dLoader_dFixity Vuna_dCompiler_dBase_dDiagnostics_dRn Base_dData_dString Base_dData_dVec Vuna_runtime Vuna_dCompiler_dBase_dDiag Base_dContainer_dHashMap Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dFrontend_dAst Base_dData_dMaybe Base_dData_dPair Vuna_dCompiler_dBase_dCommon Base_dData_dList)" > "Vuna_dCompiler_dLoader_dFixity.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dElab_dPrelude Vuna_dCompiler_dBase_dDiagnostics_dTc Base_dData_dVec Vuna_runtime Vuna_dCompiler_dBase_dIntrinsics Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dCore_dTerm Vuna_dCompiler_dBase_dSource Base_dData_dMaybe Base_dData_dPair Base_dData_dList)" > "Vuna_dCompiler_dElab_dPrelude.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dElab_dSig Base_dData_dString Vuna_runtime Vuna_dCompiler_dBase_dIntrinsics Base_dContainer_dHashMap Vuna_dCompiler_dCore_dTerm Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dFrontend_dRast_dName Base_dData_dMaybe Vuna_dCompiler_dFrontend_dRast Base_dData_dPair Base_dData_dList Vuna_dCompiler_dCore_dEval)" > "Vuna_dCompiler_dElab_dSig.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dFrontend_dLexer Vuna_runtime Vuna_dCompiler_dBase_dDiag Base_dData_dBool Vuna_dCompiler_dBase_dDiagnostics_dFrontend Vuna_dCompiler_dBase_dSource Base_dData_dMaybe Base_dData_dPair Base_dData_dList)" > "Vuna_dCompiler_dFrontend_dLexer.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dLoader_dExpand Vuna_dCompiler_dBase_dDiagnostics_dRn Vuna_runtime Vuna_dCompiler_dBase_dIntrinsics Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dFrontend_dAst Base_dData_dMaybe Base_dData_dPair Vuna_dCompiler_dBase_dCommon Base_dData_dList)" > "Vuna_dCompiler_dLoader_dExpand.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dElab_dCoverage Base_dData_dString Vuna_dCompiler_dBase_dDiagnostics_dTc Base_dData_dVec Vuna_runtime Vuna_dCompiler_dBase_dDiag Base_dData_dBool Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dFrontend_dRast_dName Base_dData_dMaybe Base_dTrait_dEq Vuna_dCompiler_dFrontend_dRast Base_dData_dPair Base_dData_dList Base_dData_dInt)" > "Vuna_dCompiler_dElab_dCoverage.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dCore_dConv Vuna_dCompiler_dBase_dDiagnostics_dTc Vuna_runtime Vuna_dCompiler_dBase_dIntrinsics Vuna_dCompiler_dBase_dDiag Base_dContainer_dHashMap Vuna_dCompiler_dCore_dTerm Base_dData_dBool Vuna_dCompiler_dBase_dSource Base_dData_dMaybe Base_dTrait_dEq Base_dData_dPair Vuna_dCompiler_dBase_dCommon Base_dData_dList Vuna_dCompiler_dCore_dEval)" > "Vuna_dCompiler_dCore_dConv.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dElab_dTypes Base_dData_dString Vuna_runtime Vuna_dCompiler_dBase_dDiag Base_dContainer_dHashMap Vuna_dCompiler_dCore_dTerm Base_dData_dBool Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dFrontend_dAst Base_dData_dMaybe Vuna_dCompiler_dFrontend_dRast Base_dData_dPair Base_dData_dList Vuna_dCompiler_dCore_dEval Base_dData_dInt)" > "Vuna_dCompiler_dElab_dTypes.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dCodegen_dTerm Base_dData_dString Vuna_dCompiler_dCodegen_dOcaml_dRender Vuna_dCompiler_dIr_dRuntime Vuna_dCompiler_dCodegen_dRuntime Vuna_runtime Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dCodegen_dDecl Vuna_dCompiler_dCodegen_dOcaml_dModel Vuna_dCompiler_dBase_dSource Base_dData_dMaybe Vuna_dCompiler_dIr_dModel Base_dTrait_dOrd Base_dData_dPair Vuna_dCompiler_dBase_dCommon Base_dData_dList Base_dData_dSort)" > "Vuna_dCompiler_dCodegen_dTerm.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dIr_dAnalysis Base_dTrait_dNum Base_dData_dString Base_dData_dVec Vuna_dCompiler_dBase_dDiagnostics_dCg Vuna_runtime Vuna_dCompiler_dBase_dDiag Base_dContainer_dHashMap Base_dData_dBool Vuna_dCompiler_dBase_dSource Base_dData_dMaybe Vuna_dCompiler_dIr_dModel Base_dData_dPair Vuna_dCompiler_dBase_dCommon Base_dData_dList Base_dData_dInt)" > "Vuna_dCompiler_dIr_dAnalysis.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dDriver_dPerfCache Vuna_dCompiler_dBase_dStore Vuna_runtime Base_dTrait_dMonad Vuna_dCompiler_dBase_dBytes Vuna_dCompiler_dLoader_dFingerprint Base_dTrait_dApplicative Base_dData_dMaybe Base_dEffect_dFs Vuna_dCompiler_dDriver_dSplit Base_dData_dPair Base_dData_dList Base_dEffect_dCore)" > "Vuna_dCompiler_dDriver_dPerfCache.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dElab_dTermination_dMeasure Base_dData_dString Vuna_runtime Base_dContainer_dHashMap Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dFrontend_dRast_dName Base_dData_dMaybe Vuna_dCompiler_dFrontend_dRast Base_dData_dPair Base_dData_dList)" > "Vuna_dCompiler_dElab_dTermination_dMeasure.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dElab_dMatch Vuna_dCompiler_dBase_dDiagnostics_dTc Base_dData_dVec Vuna_runtime Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dElab_dCoverage Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dFrontend_dRast_dName Base_dData_dMaybe Vuna_dCompiler_dFrontend_dRast Base_dData_dPair Vuna_dCompiler_dBase_dCommon Base_dData_dList)" > "Vuna_dCompiler_dElab_dMatch.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dElab_dDerive Vuna_dCompiler_dBase_dDiagnostics_dTc Vuna_dCompiler_dElab_dRecords Vuna_runtime Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dFrontend_dRast_dName Vuna_dCompiler_dFrontend_dRast Base_dData_dPair Vuna_dCompiler_dBase_dCommon Base_dData_dList)" > "Vuna_dCompiler_dElab_dDerive.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dElab_dRepresentation Vuna_runtime Vuna_dCompiler_dBase_dIntrinsics Vuna_dCompiler_dCore_dTerm Base_dData_dBool Vuna_dCompiler_dFrontend_dAst Vuna_dCompiler_dElab_dTypes Base_dData_dMaybe Base_dData_dPair Base_dData_dList)" > "Vuna_dCompiler_dElab_dRepresentation.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dBase_dDiag_dFormat Base_dData_dString Vuna_dCompiler_dBase_dDiagnostics Vuna_runtime Base_dTrait_dMonad Vuna_dCompiler_dBase_dDiag Base_dData_dBool Vuna_dCompiler_dBase_dSource Base_dTrait_dInterp Base_dTrait_dApplicative Base_dData_dMaybe Base_dEffect_dFs Vuna_dCompiler_dBase_dVersion Base_dData_dList Base_dEffect_dCore)" > "Vuna_dCompiler_dBase_dDiag_dFormat.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dFrontend_dToml Base_dData_dString Vuna_dCompiler_dBase_dDiagnostics_dPkg Vuna_dCompiler_dFrontend_dLexer Vuna_runtime Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dBase_dSource Base_dData_dBits Base_dData_dMaybe Base_dTrait_dEq Base_dData_dPair Base_dData_dList)" > "Vuna_dCompiler_dFrontend_dToml.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dIr_dCps Vuna_dCompiler_dIr_dTail Base_dData_dString Vuna_runtime Base_dData_dBool Vuna_dCompiler_dIr_dAnalysis Base_dData_dMaybe Base_dTrait_dEq Base_dData_dResult Vuna_dCompiler_dIr_dModel Base_dData_dPair Base_dData_dList)" > "Vuna_dCompiler_dIr_dCps.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dCodegen_dAssembly Vuna_dCompiler_dCodegen_dOcaml_dRender Vuna_runtime Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dCodegen_dDecl Vuna_dCompiler_dCodegen_dTerm Base_dData_dMaybe Vuna_dCompiler_dIr_dModel Base_dData_dPair Vuna_dCompiler_dBase_dCommon Base_dData_dList)" > "Vuna_dCompiler_dCodegen_dAssembly.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dElab_dTermination_dScc Vuna_runtime Vuna_dCompiler_dBase_dDiag Base_dContainer_dHashMap Base_dData_dBool Vuna_dCompiler_dBase_dObs Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dFrontend_dRast_dName Base_dData_dMaybe Base_dTrait_dEq Vuna_dCompiler_dFrontend_dRast Vuna_dCompiler_dElab_dTermination_dMeasure Base_dData_dPair Base_dData_dList Base_dData_dObs)" > "Vuna_dCompiler_dElab_dTermination_dScc.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dFrontend_dCst Vuna_dCompiler_dFrontend_dLexer Vuna_runtime Vuna_dCompiler_dBase_dDiag Base_dData_dBool Vuna_dCompiler_dBase_dSource Base_dData_dMaybe Base_dData_dObs_dSpan Base_dData_dPair Base_dData_dList)" > "Vuna_dCompiler_dFrontend_dCst.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dElab_dMetaSpans Vuna_runtime Vuna_dCompiler_dCore_dTerm Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dElab_dTypes Base_dData_dMaybe Base_dData_dPair Base_dData_dList)" > "Vuna_dCompiler_dElab_dMetaSpans.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dIr_dValidate Base_dData_dString Vuna_dCompiler_dIr_dRuntime Vuna_runtime Vuna_dCompiler_dBase_dDiag Base_dContainer_dHashMap Vuna_dCompiler_dIr_dAnalysis Base_dData_dMaybe Base_dTrait_dEq Vuna_dCompiler_dIr_dModel Base_dData_dPair Vuna_dCompiler_dBase_dCommon Base_dData_dList)" > "Vuna_dCompiler_dIr_dValidate.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dFrontend_dParser_dSupport Vuna_dCompiler_dFrontend_dLexer Vuna_runtime Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dBase_dDiagnostics_dFrontend Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dFrontend_dAst Base_dData_dMaybe Base_dData_dPair Base_dData_dList)" > "Vuna_dCompiler_dFrontend_dParser_dSupport.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dFrontend_dManifest Base_dData_dString Vuna_dCompiler_dBase_dDiagnostics_dPkg Vuna_runtime Base_dTrait_dMonad Vuna_dCompiler_dFrontend_dToml Vuna_dCompiler_dBase_dDiag Base_dData_dBool Vuna_dCompiler_dBase_dSource Base_dTrait_dApplicative Base_dData_dMaybe Base_dTrait_dEq Base_dData_dPair Vuna_dCompiler_dBase_dCommon Base_dData_dList)" > "Vuna_dCompiler_dFrontend_dManifest.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dElab_dMeta Base_dData_dString Vuna_dCompiler_dElab_dRepresentation Vuna_dCompiler_dBase_dDiagnostics_dTc Vuna_dCompiler_dElab_dPrelude Vuna_dCompiler_dElab_dSig Vuna_runtime Vuna_dCompiler_dBase_dIntrinsics Vuna_dCompiler_dBase_dDiag Base_dContainer_dHashMap Vuna_dCompiler_dCore_dTerm Base_dData_dBool Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dFrontend_dAst Vuna_dCompiler_dCore_dConv Vuna_dCompiler_dElab_dTypes Vuna_dCompiler_dFrontend_dRast_dName Base_dData_dMaybe Base_dTrait_dEq Vuna_dCompiler_dFrontend_dRast Base_dData_dPair Vuna_dCompiler_dBase_dCommon Base_dData_dList Vuna_dCompiler_dCore_dEval)" > "Vuna_dCompiler_dElab_dMeta.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dFrontend_dParser Base_dData_dVec Vuna_dCompiler_dFrontend_dLexer Vuna_runtime Vuna_dCompiler_dBase_dDiag Base_dData_dBool Vuna_dCompiler_dBase_dDiagnostics_dFrontend Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dFrontend_dAst Base_dData_dMaybe Base_dData_dPair Vuna_dCompiler_dFrontend_dParser_dSupport Vuna_dCompiler_dBase_dCommon Base_dData_dList)" > "Vuna_dCompiler_dFrontend_dParser.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dNative_dModule Vuna_dCompiler_dIr_dTail Base_dData_dString Vuna_dCompiler_dIr_dRuntime Vuna_dCompiler_dNative_dAudit Vuna_runtime Vuna_dCompiler_dNative_dAbi Vuna_dCompiler_dNative_dModel Vuna_dCompiler_dIr_dCps Base_dData_dBool Vuna_dCompiler_dIr_dAnalysis Base_dData_dMaybe Base_dTrait_dEq Base_dData_dResult Vuna_dCompiler_dIr_dModel Vuna_dCompiler_dNative_dRuntime Base_dData_dPair Base_dData_dList)" > "Vuna_dCompiler_dNative_dModule.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dElab_dTermination Base_dData_dString Vuna_dCompiler_dBase_dDiagnostics_dTc Base_dData_dVec Vuna_runtime Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dElab_dTermination_dScc Base_dContainer_dHashMap Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dFrontend_dRast_dName Base_dData_dMaybe Vuna_dCompiler_dFrontend_dRast Vuna_dCompiler_dElab_dTermination_dMeasure Base_dData_dPair Vuna_dCompiler_dBase_dCommon Base_dData_dList)" > "Vuna_dCompiler_dElab_dTermination.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dWasm_dModule Vuna_dCompiler_dWasm_dInstr Vuna_dCompiler_dIr_dTail Base_dData_dString Vuna_dCompiler_dWasm_dModel Vuna_runtime Vuna_dCompiler_dBase_dIntrinsics Vuna_dCompiler_dWasm_dTypes Vuna_dCompiler_dIr_dCps Base_dContainer_dHashMap Base_dData_dBool Vuna_dCompiler_dIr_dAnf Vuna_dCompiler_dIr_dAnalysis Base_dData_dMaybe Base_dTrait_dEq Base_dData_dResult Vuna_dCompiler_dIr_dModel Vuna_dCompiler_dWasm_dRuntime Base_dData_dPair Base_dData_dList)" > "Vuna_dCompiler_dWasm_dModule.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dElab_dUsage Base_dData_dString Vuna_dCompiler_dBase_dDiagnostics_dTc Base_dData_dVec Vuna_dCompiler_dElab_dMeta Vuna_runtime Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dCore_dTerm Base_dData_dBool Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dElab_dTypes Vuna_dCompiler_dBase_dDiagnostics_dWarning Base_dData_dMaybe Base_dData_dPair Vuna_dCompiler_dBase_dCommon Base_dData_dList Vuna_dCompiler_dCore_dEval)" > "Vuna_dCompiler_dElab_dUsage.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dFrontend_dPackages_dSource Vuna_dCompiler_dFrontend_dCanonical_dPkg Vuna_dCompiler_dFrontend_dManifest Base_dData_dString Vuna_runtime Base_dTrait_dMonad Vuna_dCompiler_dBase_dDiag Base_dTrait_dApplicative Base_dData_dMaybe Base_dEffect_dFs Base_dData_dPair Base_dData_dList Vuna_dCompiler_dBase_dHash Base_dEffect_dCore Base_dData_dSort)" > "Vuna_dCompiler_dFrontend_dPackages_dSource.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dElab_dTerm_dSupport Vuna_dCompiler_dBase_dDiagnostics_dTc Vuna_dCompiler_dElab_dMeta Vuna_runtime Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dCore_dTerm Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dElab_dTypes Base_dData_dMaybe Vuna_dCompiler_dFrontend_dRast Base_dData_dPair Base_dData_dList Vuna_dCompiler_dCore_dEval)" > "Vuna_dCompiler_dElab_dTerm_dSupport.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dElab_dDict Base_dData_dString Vuna_dCompiler_dElab_dRepresentation Vuna_dCompiler_dBase_dDiagnostics_dTc Vuna_dCompiler_dElab_dMeta Vuna_dCompiler_dElab_dPrelude Vuna_runtime Vuna_dCompiler_dBase_dIntrinsics Vuna_dCompiler_dBase_dDiag Base_dContainer_dHashMap Vuna_dCompiler_dCore_dTerm Base_dData_dBool Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dCore_dConv Vuna_dCompiler_dElab_dTypes Base_dData_dMaybe Vuna_dCompiler_dElab_dMetaSpans Base_dData_dPair Vuna_dCompiler_dBase_dCommon Base_dData_dList Vuna_dCompiler_dCore_dEval)" > "Vuna_dCompiler_dElab_dDict.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dElab_dInstName Base_dData_dString Vuna_dCompiler_dElab_dMeta Vuna_runtime Vuna_dCompiler_dFrontend_dRast_dName Base_dData_dMaybe Vuna_dCompiler_dFrontend_dRast Base_dData_dList)" > "Vuna_dCompiler_dElab_dInstName.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dElab_dCase Vuna_dCompiler_dElab_dUsage Vuna_dCompiler_dBase_dDiagnostics_dTc Base_dData_dVec Vuna_dCompiler_dElab_dMeta Vuna_runtime Vuna_dCompiler_dBase_dIntrinsics Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dCore_dTerm Base_dData_dBool Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dCore_dConv Vuna_dCompiler_dElab_dTypes Vuna_dCompiler_dFrontend_dRast_dName Vuna_dCompiler_dBase_dDiagnostics_dWarning Base_dData_dMaybe Base_dTrait_dEq Vuna_dCompiler_dFrontend_dRast Base_dData_dPair Vuna_dCompiler_dBase_dCommon Base_dData_dList Vuna_dCompiler_dCore_dEval)" > "Vuna_dCompiler_dElab_dCase.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dElab_dInstCoherence Vuna_dCompiler_dElab_dMeta Vuna_runtime Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dCore_dTerm Vuna_dCompiler_dCore_dConv Vuna_dCompiler_dElab_dTypes Base_dData_dMaybe Vuna_dCompiler_dElab_dDict Base_dData_dPair Base_dData_dList Vuna_dCompiler_dCore_dEval)" > "Vuna_dCompiler_dElab_dInstCoherence.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dFrontend_dPackages_dPkg Vuna_dCompiler_dFrontend_dCanonical_dPkg Vuna_dCompiler_dFrontend_dManifest Base_dData_dString Base_dData_dVec Vuna_dCompiler_dFrontend_dPackages_dSource Vuna_dCompiler_dBase_dStore Vuna_dCompiler_dBase_dDiagnostics_dPkg Base_dData_dUnit Vuna_runtime Base_dTrait_dMonad Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dBase_dSource Base_dTrait_dApplicative Base_dData_dMaybe Base_dTrait_dEq Base_dEffect_dEnv Base_dEffect_dFs Base_dData_dPair Base_dData_dList Base_dEffect_dCore)" > "Vuna_dCompiler_dFrontend_dPackages_dPkg.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dLowering_dChecks Vuna_dCompiler_dElab_dUsage Base_dData_dString Base_dData_dVec Vuna_dCompiler_dBase_dDiagnostics_dCg Vuna_runtime Vuna_dCompiler_dBase_dDiag Base_dContainer_dHashMap Vuna_dCompiler_dCore_dTerm Base_dData_dBool Vuna_dCompiler_dElab_dTypes Base_dData_dMaybe Base_dData_dPair Vuna_dCompiler_dBase_dCommon Base_dData_dList Vuna_dCompiler_dCore_dEval)" > "Vuna_dCompiler_dLowering_dChecks.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dDriver_dOwner Vuna_dCompiler_dElab_dDerive Base_dData_dString Vuna_dCompiler_dFrontend_dRast_dBridge Vuna_runtime Vuna_dCompiler_dBase_dIntrinsics Vuna_dCompiler_dBase_dDiag Base_dContainer_dHashMap Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dFrontend_dAst Vuna_dCompiler_dElab_dTypes Base_dData_dMaybe Vuna_dCompiler_dElab_dInstName Base_dData_dPair Vuna_dCompiler_dBase_dCommon Base_dData_dList)" > "Vuna_dCompiler_dDriver_dOwner.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dLowering_dEnv Base_dData_dString Vuna_dCompiler_dElab_dRepresentation Vuna_dCompiler_dElab_dMeta Vuna_runtime Vuna_dCompiler_dBase_dIntrinsics Vuna_dCompiler_dLowering_dChecks Base_dContainer_dHashMap Vuna_dCompiler_dCore_dTerm Base_dData_dBool Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dElab_dTypes Base_dData_dMaybe Vuna_dCompiler_dIr_dModel Base_dData_dPair Base_dData_dList Vuna_dCompiler_dCore_dEval)" > "Vuna_dCompiler_dLowering_dEnv.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dLoader_dModules Vuna_dCompiler_dBase_dDiagnostics_dRn Base_dData_dString Vuna_dCompiler_dBase_dDiagnostics_dLoader Vuna_dCompiler_dFrontend_dPackages_dPkg Vuna_dCompiler_dFrontend_dLexer Vuna_runtime Base_dTrait_dMonad Vuna_dCompiler_dBase_dDiag Base_dContainer_dHashMap Base_dData_dBool Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dFrontend_dAst Base_dTrait_dApplicative Base_dData_dMaybe Base_dTrait_dEq Base_dEffect_dFs Base_dData_dPair Vuna_dCompiler_dBase_dCommon Base_dData_dList Base_dEffect_dCore)" > "Vuna_dCompiler_dLoader_dModules.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dLowering_dEntry Base_dData_dString Vuna_dCompiler_dIr_dRuntime Vuna_runtime Vuna_dCompiler_dBase_dIntrinsics Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dLowering_dChecks Base_dContainer_dHashMap Vuna_dCompiler_dCore_dTerm Vuna_dCompiler_dElab_dTypes Base_dData_dMaybe Vuna_dCompiler_dIr_dModel Base_dData_dPair Base_dData_dList Vuna_dCompiler_dCore_dEval)" > "Vuna_dCompiler_dLowering_dEntry.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dElab_dTerm_dImpl Vuna_dCompiler_dElab_dMatch Base_dData_dString Vuna_dCompiler_dBase_dDiagnostics_dTc Vuna_dCompiler_dElab_dCase Vuna_dCompiler_dElab_dMeta Vuna_dCompiler_dElab_dRecords Vuna_dCompiler_dElab_dPrelude Vuna_runtime Vuna_dCompiler_dBase_dIntrinsics Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dElab_dCoverage Base_dData_dNat Vuna_dCompiler_dElab_dTerm_dSupport Vuna_dCompiler_dCore_dTerm Base_dData_dBool Vuna_dCompiler_dBase_dObs Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dFrontend_dAst Vuna_dCompiler_dCore_dConv Vuna_dCompiler_dElab_dTypes Vuna_dCompiler_dFrontend_dRast_dName Base_dData_dMaybe Base_dTrait_dEq Vuna_dCompiler_dFrontend_dRast Vuna_dCompiler_dElab_dMetaSpans Vuna_dCompiler_dElab_dDict Base_dData_dPair Vuna_dCompiler_dBase_dCommon Base_dData_dList Vuna_dCompiler_dCore_dEval)" > "Vuna_dCompiler_dElab_dTerm_dImpl.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dLoader_dLayers Vuna_dCompiler_dFrontend_dManifest Base_dData_dString Vuna_dCompiler_dBase_dDiagnostics_dLoader Vuna_dCompiler_dFrontend_dPackages_dPkg Vuna_runtime Vuna_dCompiler_dLoader_dModules Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dFrontend_dAst Base_dData_dMaybe Base_dData_dList)" > "Vuna_dCompiler_dLoader_dLayers.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dLoader_dResolve Vuna_dCompiler_dBase_dDiagnostics_dRn Base_dData_dString Vuna_dCompiler_dBase_dDiagnostics_dTc Vuna_dCompiler_dFrontend_dLexer Vuna_runtime Vuna_dCompiler_dLoader_dModules Vuna_dCompiler_dBase_dIntrinsics Vuna_dCompiler_dBase_dDiag Base_dContainer_dHashMap Vuna_dCompiler_dBase_dDiagnostics_dFrontend Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dFrontend_dAst Vuna_dCompiler_dFrontend_dRast_dName Base_dData_dMaybe Base_dData_dPair Vuna_dCompiler_dBase_dCommon Base_dData_dList)" > "Vuna_dCompiler_dLoader_dResolve.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dElab_dCanonical Vuna_dCompiler_dFrontend_dCanonical_dAst Vuna_dCompiler_dCore_dCanonical Vuna_dCompiler_dFrontend_dRast_dBridge Vuna_dCompiler_dElab_dRecords Vuna_runtime Vuna_dCompiler_dLoader_dModules Vuna_dCompiler_dCore_dTerm Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dBase_dBytes Vuna_dCompiler_dFrontend_dAst Vuna_dCompiler_dElab_dTypes Base_dData_dMaybe Base_dData_dPair Base_dData_dList)" > "Vuna_dCompiler_dElab_dCanonical.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dElab_dTerm Vuna_runtime Vuna_dCompiler_dCore_dTerm Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dFrontend_dAst Vuna_dCompiler_dElab_dTypes Base_dData_dMaybe Vuna_dCompiler_dFrontend_dRast Vuna_dCompiler_dElab_dTerm_dImpl Base_dData_dPair Base_dData_dList)" > "Vuna_dCompiler_dElab_dTerm.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dLowering_dTy Vuna_dCompiler_dLowering_dEnv Base_dData_dString Vuna_dCompiler_dElab_dRepresentation Vuna_runtime Vuna_dCompiler_dBase_dIntrinsics Vuna_dCompiler_dBase_dDiag Base_dContainer_dHashMap Vuna_dCompiler_dCore_dTerm Base_dData_dBool Vuna_dCompiler_dElab_dTypes Base_dData_dMaybe Vuna_dCompiler_dIr_dModel Base_dData_dPair Vuna_dCompiler_dBase_dCommon Base_dData_dList Vuna_dCompiler_dCore_dEval)" > "Vuna_dCompiler_dLowering_dTy.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dLowering_dProgram Vuna_dCompiler_dLowering_dEnv Base_dData_dString Vuna_dCompiler_dIr_dRuntime Vuna_dCompiler_dElab_dRepresentation Vuna_dCompiler_dCodegen_dRuntime Vuna_dCompiler_dBase_dDiagnostics_dCg Vuna_runtime Vuna_dCompiler_dBase_dIntrinsics Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dLowering_dEntry Vuna_dCompiler_dCodegen_dDecl Vuna_dCompiler_dLowering_dChecks Base_dContainer_dHashMap Vuna_dCompiler_dCore_dTerm Base_dData_dBool Vuna_dCompiler_dBase_dObs Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dIr_dDispatch Vuna_dCompiler_dElab_dTypes Vuna_dCompiler_dIr_dAnalysis Base_dData_dMaybe Vuna_dCompiler_dIr_dModel Vuna_dCompiler_dIr_dRepresent Vuna_dCompiler_dLowering_dTy Vuna_dCompiler_dIr_dValidate Base_dData_dPair Vuna_dCompiler_dBase_dCommon Base_dData_dList Vuna_dCompiler_dCore_dEval)" > "Vuna_dCompiler_dLowering_dProgram.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dElab_dData Base_dData_dString Vuna_dCompiler_dElab_dRepresentation Vuna_dCompiler_dBase_dDiagnostics_dTc Vuna_dCompiler_dElab_dMeta Vuna_dCompiler_dElab_dRecords Vuna_dCompiler_dElab_dPrelude Vuna_runtime Vuna_dCompiler_dBase_dIntrinsics Vuna_dCompiler_dBase_dDiag Base_dContainer_dHashMap Vuna_dCompiler_dCore_dTerm Base_dData_dBool Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dFrontend_dAst Vuna_dCompiler_dElab_dTypes Vuna_dCompiler_dFrontend_dRast_dName Base_dData_dMaybe Vuna_dCompiler_dFrontend_dRast Vuna_dCompiler_dElab_dTerm Base_dData_dPair Vuna_dCompiler_dBase_dCommon Base_dData_dList)" > "Vuna_dCompiler_dElab_dData.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dLoader_dFlatten Vuna_dCompiler_dBase_dDiagnostics_dRn Base_dData_dString Vuna_dCompiler_dBase_dDiagnostics_dLoader Base_dData_dVec Vuna_dCompiler_dLoader_dFixity Vuna_dCompiler_dFrontend_dPackages_dPkg Vuna_dCompiler_dFrontend_dParser Vuna_dCompiler_dFrontend_dLexer Vuna_runtime Vuna_dCompiler_dLoader_dLayers Base_dTrait_dMonad Vuna_dCompiler_dLoader_dResolve Vuna_dCompiler_dLoader_dModules Vuna_dCompiler_dBase_dIntrinsics Vuna_dCompiler_dLoader_dExpand Vuna_dCompiler_dBase_dDiag Base_dContainer_dHashMap Base_dData_dBool Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dFrontend_dAst Base_dTrait_dApplicative Vuna_dCompiler_dBase_dDiagnostics_dWarning Base_dData_dMaybe Base_dEffect_dFs Base_dData_dObs_dSpan Base_dData_dPair Vuna_dCompiler_dFrontend_dParser_dSupport Vuna_dCompiler_dBase_dCommon Base_dData_dList Base_dEffect_dCore)" > "Vuna_dCompiler_dLoader_dFlatten.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dDriver_dCache Vuna_dCompiler_dCore_dCanonical Vuna_dCompiler_dElab_dMeta Vuna_runtime Vuna_dCompiler_dBase_dDiag Base_dContainer_dHashMap Vuna_dCompiler_dCore_dTerm Base_dData_dBool Vuna_dCompiler_dBase_dBytes Vuna_dCompiler_dElab_dTypes Vuna_dCompiler_dElab_dCanonical Base_dData_dMaybe Base_dData_dPair Vuna_dCompiler_dBase_dCommon Base_dData_dList Vuna_dCompiler_dCore_dEval Base_dData_dInt)" > "Vuna_dCompiler_dDriver_dCache.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dElab_dTrait Vuna_dCompiler_dElab_dMatch Base_dData_dString Vuna_dCompiler_dBase_dDiagnostics_dTc Vuna_dCompiler_dElab_dMeta Vuna_dCompiler_dElab_dInstCoherence Vuna_dCompiler_dElab_dSig Vuna_runtime Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dElab_dCoverage Base_dContainer_dHashMap Vuna_dCompiler_dCore_dTerm Vuna_dCompiler_dBase_dObs Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dFrontend_dAst Vuna_dCompiler_dCore_dConv Vuna_dCompiler_dElab_dTypes Base_dTrait_dInterp Vuna_dCompiler_dFrontend_dRast_dName Base_dData_dMaybe Vuna_dCompiler_dFrontend_dRast Vuna_dCompiler_dElab_dTerm Vuna_dCompiler_dElab_dDict Vuna_dCompiler_dElab_dInstName Vuna_dCompiler_dElab_dTerm_dImpl Base_dData_dPair Vuna_dCompiler_dBase_dCommon Base_dData_dList Vuna_dCompiler_dCore_dEval Base_dData_dInt)" > "Vuna_dCompiler_dElab_dTrait.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dDriver_dSplitGen Vuna_dCompiler_dLowering_dEnv Base_dData_dString Vuna_dCompiler_dLowering_dProgram Vuna_dCompiler_dBase_dDiagnostics_dCg Vuna_runtime Base_dTrait_dMonad Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dLowering_dEntry Vuna_dCompiler_dCodegen_dAssembly Vuna_dCompiler_dCodegen_dDecl Base_dContainer_dHashMap Base_dData_dBool Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dFrontend_dAst Vuna_dCompiler_dElab_dTypes Vuna_dCompiler_dCodegen_dTerm Base_dTrait_dApplicative Base_dData_dMaybe Vuna_dCompiler_dIr_dModel Vuna_dCompiler_dDriver_dOwner Vuna_dCompiler_dDriver_dSplit Base_dData_dPair Vuna_dCompiler_dBase_dCommon Base_dData_dList Base_dEffect_dCore)" > "Vuna_dCompiler_dDriver_dSplitGen.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dDriver_dIface Vuna_dCompiler_dFrontend_dCanonical_dAst Vuna_dCompiler_dElab_dDerive Base_dData_dString Vuna_dCompiler_dCore_dCanonical Vuna_dCompiler_dFrontend_dRast_dBridge Vuna_dCompiler_dElab_dRecords Vuna_dCompiler_dLoader_dFlatten Vuna_dCompiler_dElab_dPrelude Vuna_runtime Base_dTrait_dMonad Vuna_dCompiler_dLoader_dModules Vuna_dCompiler_dBase_dIntrinsics Vuna_dCompiler_dDriver_dCache Vuna_dCompiler_dBase_dDiag Base_dContainer_dHashMap Vuna_dCompiler_dCore_dTerm Base_dData_dBool Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dBase_dBytes Vuna_dCompiler_dFrontend_dAst Vuna_dCompiler_dElab_dTypes Vuna_dCompiler_dElab_dCanonical Base_dTrait_dApplicative Base_dData_dMaybe Base_dTrait_dOrd Vuna_dCompiler_dDriver_dOwner Base_dData_dPair Base_dData_dList Vuna_dCompiler_dBase_dHash Base_dData_dSort Base_dData_dInt)" > "Vuna_dCompiler_dDriver_dIface.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dElab_dDriver Vuna_dCompiler_dElab_dUsage Vuna_dCompiler_dElab_dDerive Base_dData_dString Vuna_dCompiler_dBase_dDiagnostics_dTc Vuna_dCompiler_dElab_dData Base_dData_dVec Vuna_dCompiler_dElab_dMeta Vuna_dCompiler_dElab_dRecords Vuna_dCompiler_dElab_dPrelude Vuna_runtime Vuna_dCompiler_dBase_dIntrinsics Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dElab_dTermination Base_dContainer_dHashMap Vuna_dCompiler_dCore_dTerm Vuna_dCompiler_dBase_dObs Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dCore_dConv Vuna_dCompiler_dElab_dTypes Base_dTrait_dInterp Vuna_dCompiler_dFrontend_dRast_dName Base_dData_dMaybe Base_dTrait_dEq Vuna_dCompiler_dFrontend_dRast Vuna_dCompiler_dElab_dTerm Vuna_dCompiler_dElab_dMetaSpans Vuna_dCompiler_dElab_dDict Base_dTrait_dOrd Vuna_dCompiler_dElab_dTerm_dImpl Vuna_dCompiler_dElab_dTrait Base_dData_dPair Vuna_dCompiler_dBase_dCommon Base_dData_dList Base_dData_dSort Vuna_dCompiler_dCore_dEval Base_dData_dInt)" > "Vuna_dCompiler_dElab_dDriver.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dDriver_dDt Vuna_dCompiler_dLowering_dEnv Vuna_dCompiler_dFrontend_dCanonical_dAst Vuna_dCompiler_dElab_dDerive Base_dData_dString Vuna_dCompiler_dDriver_dSplitGen Vuna_dCompiler_dLowering_dProgram Vuna_dCompiler_dFrontend_dRast_dBridge Base_dData_dVec Vuna_dCompiler_dElab_dMeta Vuna_dCompiler_dElab_dRecords Vuna_dCompiler_dLoader_dFlatten Vuna_dCompiler_dElab_dPrelude Vuna_dCompiler_dFrontend_dPackages_dPkg Vuna_dCompiler_dFrontend_dParser Vuna_dCompiler_dBase_dDiagnostics_dCg Vuna_dCompiler_dDriver_dIface Vuna_runtime Base_dTrait_dMonad Vuna_dCompiler_dLoader_dModules Vuna_dCompiler_dElab_dDriver Vuna_dCompiler_dBase_dIntrinsics Vuna_dCompiler_dDriver_dCache Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dCodegen_dAssembly Base_dContainer_dHashMap Vuna_dCompiler_dCore_dTerm Base_dData_dBool Vuna_dCompiler_dBase_dObs Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dBase_dBytes Vuna_dCompiler_dFrontend_dAst Vuna_dCompiler_dElab_dTypes Base_dTrait_dApplicative Vuna_dCompiler_dBase_dDiagnostics_dWarning Base_dData_dMaybe Base_dTrait_dEq Vuna_dCompiler_dFrontend_dRast Vuna_dCompiler_dDriver_dPerfCache Vuna_dCompiler_dIr_dModel Base_dEffect_dEnv Base_dEffect_dFs Base_dTrait_dOrd Vuna_dCompiler_dElab_dTermination_dMeasure Vuna_dCompiler_dDriver_dSplit Base_dData_dPair Vuna_dCompiler_dBase_dCommon Base_dData_dList Base_dData_dObs Vuna_dCompiler_dBase_dHash Base_dEffect_dCore Base_dData_dSort Vuna_dCompiler_dCore_dEval)" > "Vuna_dCompiler_dDriver_dDt.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dDriver_dCompile Vuna_dCompiler_dFrontend_dManifest Base_dData_dString Base_dEffect_dClock Vuna_dCompiler_dFrontend_dPackages_dSource Vuna_dCompiler_dBase_dStore Vuna_dCompiler_dBase_dDiagnostics_dPkg Vuna_dCompiler_dLoader_dFlatten Vuna_dCompiler_dFrontend_dPackages_dPkg Vuna_dCompiler_dDriver_dIface Vuna_runtime Base_dTrait_dMonad Base_dEffect_dProcess Vuna_dCompiler_dLoader_dModules Vuna_dCompiler_dDriver_dCache Vuna_dCompiler_dBase_dDiag Base_dContainer_dHashMap Base_dData_dBool Vuna_dCompiler_dBase_dObs Vuna_dCompiler_dDriver_dDt Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dBase_dBytes Vuna_dCompiler_dFrontend_dAst Vuna_dCompiler_dLoader_dFingerprint Base_dTrait_dInterp Base_dTrait_dApplicative Base_dData_dMaybe Base_dTrait_dEq Vuna_dCompiler_dLoader_dAddr Base_dEffect_dEnv Base_dEffect_dFs Vuna_dCompiler_dBase_dVersion Vuna_dCompiler_dBase_dDiag_dCodec Vuna_dCompiler_dDriver_dSplit Base_dData_dPair Base_dData_dList Base_dData_dObs Vuna_dCompiler_dBase_dHash Base_dTrait_dFunctor Base_dEffect_dCore)" > "Vuna_dCompiler_dDriver_dCompile.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dDriver_dWasm Vuna_dCompiler_dLowering_dProgram Vuna_dCompiler_dFrontend_dPackages_dPkg Vuna_dCompiler_dWasm_dModel Vuna_runtime Base_dTrait_dMonad Vuna_dCompiler_dWasm_dRender Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dDriver_dDt Vuna_dCompiler_dElab_dTypes Base_dTrait_dApplicative Vuna_dCompiler_dBase_dDiagnostics_dWarning Base_dData_dMaybe Vuna_dCompiler_dIr_dModel Base_dEffect_dFs Vuna_dCompiler_dWasm_dModule Vuna_dCompiler_dDriver_dCompile Vuna_dCompiler_dBase_dCapabilities Base_dData_dPair Base_dData_dList Base_dEffect_dCore)" > "Vuna_dCompiler_dDriver_dWasm.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dDriver_dNative Base_dData_dString Vuna_dCompiler_dLowering_dProgram Vuna_dCompiler_dFrontend_dPackages_dPkg Vuna_runtime Vuna_dCompiler_dNative_dModule Base_dTrait_dMonad Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dNative_dModel Vuna_dCompiler_dDriver_dDt Vuna_dCompiler_dElab_dTypes Base_dTrait_dApplicative Vuna_dCompiler_dNative_dRender Base_dEffect_dFs Vuna_dCompiler_dDriver_dCompile Base_dData_dPair Base_dData_dList Base_dEffect_dCore)" > "Vuna_dCompiler_dDriver_dNative.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dDriver_dToolPayload Vuna_dCompiler_dDriver_dIface Vuna_runtime Vuna_dCompiler_dBase_dBytes Base_dData_dMaybe Vuna_dCompiler_dDriver_dCompile Base_dData_dPair Base_dData_dList)" > "Vuna_dCompiler_dDriver_dToolPayload.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dDriver_dCompilerCli Vuna_dCompiler_dFrontend_dManifest Base_dData_dString Vuna_dCompiler_dDriver_dWasm Vuna_dCompiler_dDriver_dNative Base_dEffect_dClock Vuna_dCompiler_dBase_dDiag_dFormat Vuna_dCompiler_dBase_dStore Vuna_dCompiler_dFrontend_dPackages_dPkg Base_dEffect_dConsole Vuna_runtime Base_dTrait_dMonad Base_dEffect_dProcess Vuna_dCompiler_dBase_dDiag Base_dData_dBool Vuna_dCompiler_dDriver_dDt Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dBase_dDiagnostics_dSink Vuna_dCompiler_dLoader_dFingerprint Base_dTrait_dApplicative Base_dData_dMaybe Base_dTrait_dEq Base_dEffect_dEnv Base_dEffect_dFs Vuna_dCompiler_dBase_dVersion Vuna_dCompiler_dDriver_dCompile Base_dData_dPair Base_dData_dList Base_dEffect_dCore)" > "Vuna_dCompiler_dDriver_dCompilerCli.stamp"
-  printf '%s' "$(stamp_want Main Vuna_dCompiler_dDriver_dCompilerCli Base_dEffect_dClock Base_dEffect_dConsole Vuna_runtime Base_dEffect_dExit Base_dTrait_dMonad Base_dEffect_dProcess Base_dEffect_dArgs Base_dEffect_dEnv Base_dEffect_dFs Base_dEffect_dCore)" > "Main.stamp"
-  echo "built $OUT"
-  exit 0
-fi
 compile_mod() {
   base=$1
   shift
@@ -239,399 +42,261 @@ compile_mod() {
   ocamlopt $FLAGS -I +unix -c "$base.ml"
   printf '%s' "$want" > "$base.stamp"
 }
-compile_mod Vuna_runtime
 pids=""
-compile_mod Base_dTrait_dNum Vuna_runtime &
-pids="$pids $!"
-compile_mod Base_dTrait_dMonoid Vuna_runtime &
-pids="$pids $!"
-compile_mod Base_dTrait_dFromInt Vuna_runtime &
-pids="$pids $!"
-compile_mod Base_dTrait_dTraversable Vuna_runtime &
-pids="$pids $!"
-compile_mod Base_dTrait_dMonad Vuna_runtime &
-pids="$pids $!"
-compile_mod Base_dTrait_dHashable Vuna_runtime &
-pids="$pids $!"
-compile_mod Base_dEffect_dTypes Vuna_runtime &
-pids="$pids $!"
-compile_mod Base_dData Vuna_runtime &
-pids="$pids $!"
-compile_mod Base_dInternal_dOperator Vuna_runtime &
-pids="$pids $!"
-compile_mod Base_dData_dFunction Vuna_runtime &
-pids="$pids $!"
-compile_mod Base_dData_dBits Vuna_runtime &
-pids="$pids $!"
-compile_mod Base_dTrait_dApplicative Vuna_runtime &
-pids="$pids $!"
-compile_mod Base_dTrait_dEq Vuna_runtime &
-pids="$pids $!"
-compile_mod Base_dTrait_dNeg Vuna_runtime &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dBase_dVersion Vuna_runtime &
-pids="$pids $!"
-compile_mod Base_dTrait_dFromString Vuna_runtime &
-pids="$pids $!"
-compile_mod Base_dTrait_dShow Vuna_runtime &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dBase_dCapabilities Vuna_runtime &
-pids="$pids $!"
-compile_mod Prelude Vuna_runtime &
-pids="$pids $!"
-compile_mod Base_dEffect_dPure Vuna_runtime &
-pids="$pids $!"
-compile_mod Base_dEffect Vuna_runtime &
-pids="$pids $!"
-compile_mod Base_dData_dObs Vuna_runtime &
-pids="$pids $!"
-compile_mod Base_dTrait_dFunctor Vuna_runtime &
-pids="$pids $!"
-for p in $pids; do wait "$p" || exit 1; done
-pids=""
-compile_mod Base_dTrait_dFoldable Base_dTrait_dMonoid Vuna_runtime &
-pids="$pids $!"
-compile_mod Base_dEffect_dPure_dReader Vuna_runtime Base_dTrait_dMonad Base_dTrait_dApplicative Base_dTrait_dFunctor &
-pids="$pids $!"
-compile_mod Base_dData_dBool Vuna_runtime Base_dTrait_dHashable Base_dTrait_dShow &
-pids="$pids $!"
-compile_mod Base_dTrait_dInterp Vuna_runtime Base_dTrait_dShow &
-pids="$pids $!"
-compile_mod Base_dEffect_dPure_dError Vuna_runtime Base_dTrait_dMonad Base_dTrait_dApplicative Base_dTrait_dFunctor &
-pids="$pids $!"
-for p in $pids; do wait "$p" || exit 1; done
-compile_mod Base_dTrait_dOrd Vuna_runtime Base_dTrait_dHashable Base_dData_dBool Base_dTrait_dEq Base_dTrait_dShow
-pids=""
-compile_mod Base_dData_dUnit Base_dTrait_dMonoid Vuna_runtime Base_dTrait_dHashable Base_dTrait_dEq Base_dTrait_dShow Base_dTrait_dOrd &
-pids="$pids $!"
-compile_mod Base_dData_dMaybe Base_dTrait_dFoldable Base_dTrait_dMonoid Vuna_runtime Base_dTrait_dTraversable Base_dTrait_dMonad Base_dTrait_dHashable Base_dData_dBool Base_dTrait_dApplicative Base_dTrait_dEq Base_dTrait_dShow Base_dTrait_dOrd Base_dTrait_dFunctor &
-pids="$pids $!"
-compile_mod Base_dData_dPair Vuna_runtime Base_dTrait_dHashable Base_dData_dBool Base_dTrait_dEq Base_dTrait_dShow Base_dTrait_dOrd &
-pids="$pids $!"
-compile_mod Base_dData_dInt Base_dTrait_dNum Vuna_runtime Base_dTrait_dHashable Base_dTrait_dEq Base_dTrait_dNeg Base_dTrait_dShow Base_dTrait_dOrd &
-pids="$pids $!"
-for p in $pids; do wait "$p" || exit 1; done
-pids=""
-compile_mod Base_dData_dNat Base_dTrait_dNum Base_dTrait_dMonoid Vuna_runtime Base_dTrait_dHashable Base_dData_dMaybe Base_dTrait_dEq Base_dTrait_dShow Base_dTrait_dOrd &
-pids="$pids $!"
-compile_mod Base_dEffect_dPure_dState Vuna_runtime Base_dTrait_dMonad Base_dTrait_dApplicative Base_dData_dPair Base_dTrait_dFunctor &
-pids="$pids $!"
-compile_mod Base_dData_dList Base_dTrait_dFoldable Base_dTrait_dMonoid Vuna_runtime Base_dTrait_dTraversable Base_dTrait_dMonad Base_dTrait_dHashable Base_dData_dBool Base_dTrait_dApplicative Base_dData_dMaybe Base_dTrait_dEq Base_dTrait_dShow Base_dTrait_dOrd Base_dData_dPair Base_dTrait_dFunctor &
-pids="$pids $!"
-for p in $pids; do wait "$p" || exit 1; done
-pids=""
-compile_mod Vuna_dCompiler_dWasm_dInstr Vuna_runtime Base_dData_dList &
-pids="$pids $!"
-compile_mod Base_dData_dString Base_dTrait_dMonoid Vuna_runtime Base_dTrait_dHashable Base_dTrait_dInterp Base_dTrait_dEq Base_dTrait_dOrd Base_dData_dList &
-pids="$pids $!"
-compile_mod Base_dData_dSha1 Vuna_runtime Base_dData_dBits Base_dData_dPair Base_dData_dList &
-pids="$pids $!"
-compile_mod Base_dData_dVec Vuna_runtime Base_dData_dList &
-pids="$pids $!"
-compile_mod Base_dContainer_dArray Vuna_runtime Base_dTrait_dEq Base_dTrait_dShow Base_dData_dList &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dNative_dModel Vuna_runtime Base_dData_dPair Base_dData_dList &
-pids="$pids $!"
-compile_mod Base_dData_dBase64 Vuna_runtime Base_dData_dBits Base_dData_dMaybe Base_dData_dList &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dCodegen_dOcaml_dModel Vuna_runtime Base_dData_dMaybe Base_dData_dPair Base_dData_dList &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dBase_dBytes Vuna_runtime Base_dData_dMaybe Base_dData_dPair Base_dData_dList &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dBase_dDiagnostics_dIc Vuna_runtime Base_dData_dList &
-pids="$pids $!"
-compile_mod Base_dData_dResult Base_dTrait_dFoldable Vuna_runtime Base_dTrait_dTraversable Base_dTrait_dMonad Base_dTrait_dHashable Base_dTrait_dApplicative Base_dTrait_dEq Base_dTrait_dShow Base_dData_dPair Base_dData_dList Base_dTrait_dFunctor &
-pids="$pids $!"
-compile_mod Base_dData_dFloat Base_dTrait_dNum Vuna_runtime Base_dData_dMaybe Base_dTrait_dEq Base_dTrait_dNeg Base_dTrait_dShow Base_dTrait_dOrd Base_dData_dPair Base_dData_dList &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dBase_dHash Base_dTrait_dNum Vuna_runtime Base_dData_dBits Base_dData_dPair Base_dData_dList Base_dData_dInt &
-pids="$pids $!"
-compile_mod Base_dData_dSort Vuna_runtime Base_dTrait_dOrd Base_dData_dList &
-pids="$pids $!"
-for p in $pids; do wait "$p" || exit 1; done
-pids=""
-compile_mod Vuna_dCompiler_dFrontend_dCanonical_dPkg Vuna_runtime Vuna_dCompiler_dBase_dBytes Base_dData_dMaybe Base_dData_dPair Base_dData_dList Vuna_dCompiler_dBase_dHash &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dCodegen_dOcaml_dRender Vuna_runtime Vuna_dCompiler_dCodegen_dOcaml_dModel Base_dData_dMaybe Base_dData_dPair Base_dData_dList &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dWasm_dModel Vuna_dCompiler_dWasm_dInstr Vuna_runtime Base_dData_dMaybe Base_dData_dPair Base_dData_dList &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dNative_dAbi Vuna_runtime Vuna_dCompiler_dNative_dModel Base_dData_dList &
-pids="$pids $!"
-compile_mod Base_dContainer_dHashMap Base_dData_dString Base_dContainer_dArray Vuna_runtime Base_dTrait_dHashable Base_dData_dMaybe Base_dTrait_dEq Base_dTrait_dShow Base_dData_dPair Base_dData_dList &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dBase_dSource Base_dData_dString Vuna_runtime Base_dData_dBool Base_dData_dPair Base_dData_dList &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dNative_dRender Base_dData_dString Vuna_runtime Vuna_dCompiler_dNative_dModel Base_dData_dPair Base_dData_dList &
-pids="$pids $!"
-for p in $pids; do wait "$p" || exit 1; done
-pids=""
-compile_mod Vuna_dCompiler_dNative_dGc Vuna_runtime Vuna_dCompiler_dNative_dAbi Vuna_dCompiler_dNative_dModel Base_dData_dList &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dWasm_dRender Vuna_dCompiler_dWasm_dInstr Base_dData_dString Vuna_dCompiler_dWasm_dModel Vuna_runtime Base_dTrait_dInterp Base_dData_dMaybe Base_dTrait_dEq Base_dData_dPair Base_dData_dList Base_dData_dInt &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dBase_dIntrinsics Base_dData_dString Vuna_runtime Base_dContainer_dHashMap Base_dData_dBool Vuna_dCompiler_dBase_dSource Base_dData_dMaybe Base_dData_dPair Base_dData_dList &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dBase_dDiag Base_dData_dString Vuna_runtime Base_dTrait_dMonad Vuna_dCompiler_dBase_dSource Base_dTrait_dApplicative Base_dData_dMaybe Base_dTrait_dEq Base_dData_dPair Base_dData_dList Base_dTrait_dFunctor Base_dData_dInt &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dFrontend_dAst Base_dData_dString Vuna_runtime Vuna_dCompiler_dBase_dSource Base_dData_dMaybe Base_dData_dPair Base_dData_dList &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dIr_dModel Vuna_runtime Vuna_dCompiler_dBase_dSource Base_dData_dMaybe Base_dData_dPair Base_dData_dList &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dWasm_dRuntime Vuna_dCompiler_dWasm_dInstr Vuna_dCompiler_dWasm_dModel Vuna_runtime Base_dData_dPair Base_dData_dList &
-pids="$pids $!"
-compile_mod Base_dEffect_dCore Vuna_runtime Base_dTrait_dMonad Base_dContainer_dHashMap Base_dTrait_dApplicative Base_dData_dMaybe Base_dData_dPair Base_dData_dList Base_dTrait_dFunctor Base_dData_dInt &
-pids="$pids $!"
-for p in $pids; do wait "$p" || exit 1; done
-pids=""
-compile_mod Vuna_dCompiler_dIr_dTail Base_dData_dString Vuna_runtime Base_dContainer_dHashMap Base_dData_dMaybe Base_dData_dResult Vuna_dCompiler_dIr_dModel Base_dData_dPair Base_dData_dList &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dFrontend_dCanonical_dAst Vuna_runtime Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dBase_dBytes Vuna_dCompiler_dFrontend_dAst Base_dData_dMaybe Base_dData_dPair Base_dData_dList &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dIr_dRuntime Vuna_runtime Base_dData_dMaybe Vuna_dCompiler_dIr_dModel Base_dData_dPair Base_dData_dList &
-pids="$pids $!"
-compile_mod Base_dEffect_dError Vuna_runtime Base_dTrait_dMonad Base_dTrait_dApplicative Base_dData_dResult Base_dEffect_dCore &
-pids="$pids $!"
-compile_mod Base_dEffect_dClock Vuna_runtime Base_dTrait_dMonad Base_dTrait_dApplicative Base_dEffect_dCore &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dBase_dDiagnostics_dCommon Base_dData_dVec Vuna_runtime Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dBase_dSource Base_dData_dMaybe Base_dData_dList &
-pids="$pids $!"
-compile_mod Base_dEffect_dReader Vuna_runtime Base_dTrait_dMonad Base_dEffect_dCore &
-pids="$pids $!"
-compile_mod Base_dEffect_dConsole Vuna_runtime Base_dTrait_dMonad Base_dTrait_dFunctor Base_dEffect_dCore &
-pids="$pids $!"
-compile_mod Base_dEffect_dRef Vuna_runtime Base_dEffect_dCore &
-pids="$pids $!"
-compile_mod Base_dEffect_dExit Vuna_runtime Base_dTrait_dMonad Base_dTrait_dApplicative Base_dEffect_dCore &
-pids="$pids $!"
-compile_mod Base_dEffect_dExn Vuna_runtime Base_dTrait_dMonad Base_dTrait_dApplicative Base_dData_dResult Base_dEffect_dCore &
-pids="$pids $!"
-compile_mod Base_dEffect_dProcess Vuna_runtime Base_dTrait_dMonad Base_dTrait_dApplicative Base_dData_dResult Base_dData_dList Base_dEffect_dCore &
-pids="$pids $!"
-compile_mod Base_dEffect_dArgs Vuna_runtime Base_dTrait_dMonad Base_dTrait_dApplicative Base_dData_dList Base_dEffect_dCore &
-pids="$pids $!"
-compile_mod Base_dEffect_dNet Vuna_runtime Base_dTrait_dMonad Base_dTrait_dApplicative Base_dData_dMaybe Base_dData_dResult Base_dEffect_dCore &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dWasm_dTypes Vuna_dCompiler_dWasm_dModel Vuna_runtime Base_dData_dMaybe Vuna_dCompiler_dIr_dModel Base_dData_dPair Base_dData_dList &
-pids="$pids $!"
-compile_mod Base_dEffect_dStdin Vuna_runtime Base_dTrait_dMonad Base_dTrait_dApplicative Base_dData_dMaybe Base_dEffect_dCore &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dCodegen_dDecl Base_dData_dString Vuna_dCompiler_dCodegen_dOcaml_dRender Vuna_runtime Base_dContainer_dHashMap Vuna_dCompiler_dCodegen_dOcaml_dModel Vuna_dCompiler_dFrontend_dAst Base_dData_dMaybe Vuna_dCompiler_dIr_dModel Base_dData_dPair Base_dData_dList &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dCore_dTerm Base_dData_dString Vuna_runtime Vuna_dCompiler_dBase_dIntrinsics Base_dContainer_dHashMap Vuna_dCompiler_dBase_dSource Base_dData_dMaybe Base_dData_dPair Base_dData_dList Base_dData_dInt &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dBase_dObs Vuna_runtime Base_dData_dObs Base_dEffect_dCore &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dIr_dAnf Base_dData_dString Vuna_runtime Base_dData_dMaybe Base_dData_dResult Vuna_dCompiler_dIr_dModel Base_dData_dPair Base_dData_dList &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dIr_dDispatch Vuna_runtime Vuna_dCompiler_dBase_dIntrinsics Base_dData_dMaybe Vuna_dCompiler_dIr_dModel Base_dData_dPair Base_dData_dList &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dBase_dDiagnostics_dSink Base_dData_dString Vuna_runtime Vuna_dCompiler_dBase_dDiag Base_dContainer_dHashMap Vuna_dCompiler_dBase_dSource Base_dData_dMaybe Base_dData_dList &
-pids="$pids $!"
-compile_mod Base_dEffect_dPure_dIORef Vuna_runtime Base_dTrait_dMonad Base_dEffect_dCore &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dFrontend_dRast_dName Base_dData_dString Vuna_runtime Vuna_dCompiler_dBase_dIntrinsics Vuna_dCompiler_dFrontend_dAst Base_dData_dMaybe Base_dData_dPair Base_dData_dList &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dLoader_dAddr Vuna_runtime Vuna_dCompiler_dBase_dBytes Vuna_dCompiler_dFrontend_dAst Base_dData_dList Vuna_dCompiler_dBase_dHash &
-pids="$pids $!"
-compile_mod Base_dEffect_dEnv Vuna_runtime Base_dTrait_dMonad Base_dTrait_dApplicative Base_dData_dMaybe Base_dEffect_dCore &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dNative_dRuntime Vuna_dCompiler_dNative_dGc Vuna_runtime Vuna_dCompiler_dNative_dAbi Vuna_dCompiler_dNative_dModel Base_dData_dMaybe Base_dData_dList &
-pids="$pids $!"
-compile_mod Base_dEffect_dState Vuna_runtime Base_dEffect_dCore &
-pids="$pids $!"
-compile_mod Base_dEffect_dFs Base_dData_dString Vuna_runtime Base_dTrait_dMonad Base_dData_dBool Base_dTrait_dApplicative Base_dData_dMaybe Base_dData_dResult Base_dTrait_dOrd Base_dData_dList Base_dTrait_dFunctor Base_dEffect_dCore Base_dData_dSort &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dBase_dDiag_dCodec Vuna_runtime Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dBase_dBytes Base_dData_dMaybe Base_dData_dPair Base_dData_dList &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dIr_dRepresent Vuna_runtime Base_dData_dMaybe Vuna_dCompiler_dIr_dModel Base_dData_dPair Base_dData_dList &
-pids="$pids $!"
-compile_mod Base_dData_dObs_dSpan Vuna_runtime Base_dTrait_dMonad Base_dTrait_dApplicative Base_dData_dObs Base_dEffect_dCore &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dBase_dCommon Vuna_runtime Base_dTrait_dMonad Vuna_dCompiler_dBase_dDiag Base_dTrait_dApplicative Base_dData_dPair Base_dData_dList Base_dTrait_dFunctor Base_dEffect_dCore &
-pids="$pids $!"
-for p in $pids; do wait "$p" || exit 1; done
-pids=""
-compile_mod Vuna_dCompiler_dBase_dDiagnostics_dRn Base_dData_dVec Vuna_dCompiler_dBase_dDiagnostics_dCommon Vuna_runtime Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dBase_dSource Base_dData_dMaybe Base_dData_dList &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dBase_dDiagnostics_dTc Base_dData_dString Base_dData_dVec Vuna_dCompiler_dBase_dDiagnostics_dCommon Vuna_runtime Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dBase_dSource Base_dData_dMaybe Base_dData_dPair Base_dData_dList &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dCore_dCanonical Vuna_runtime Vuna_dCompiler_dCore_dTerm Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dBase_dBytes Base_dData_dMaybe Base_dData_dPair Base_dData_dList &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dNative_dAudit Base_dData_dString Vuna_dCompiler_dIr_dRuntime Vuna_runtime Vuna_dCompiler_dNative_dModel Base_dData_dBool Base_dData_dMaybe Vuna_dCompiler_dIr_dModel Vuna_dCompiler_dNative_dRuntime Base_dData_dPair Base_dData_dList &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dBase_dDiagnostics_dLoader Base_dData_dVec Vuna_dCompiler_dBase_dDiagnostics_dCommon Vuna_runtime Vuna_dCompiler_dBase_dDiag Base_dData_dList &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dBase_dStore Base_dData_dString Base_dEffect_dClock Vuna_runtime Base_dTrait_dMonad Base_dEffect_dProcess Base_dData_dBool Base_dTrait_dApplicative Base_dData_dMaybe Base_dTrait_dEq Base_dEffect_dEnv Base_dEffect_dFs Base_dData_dObs_dSpan Base_dData_dPair Base_dData_dList Vuna_dCompiler_dBase_dHash Base_dTrait_dFunctor Base_dEffect_dCore &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dCodegen_dRuntime Vuna_dCompiler_dIr_dRuntime Vuna_runtime Base_dData_dMaybe Base_dData_dPair Base_dData_dList &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dBase_dDiagnostics_dPkg Base_dData_dVec Vuna_dCompiler_dBase_dDiagnostics_dCommon Vuna_runtime Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dBase_dSource Base_dData_dMaybe Base_dData_dList &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dBase_dDiagnostics_dCg Base_dData_dVec Vuna_dCompiler_dBase_dDiagnostics_dCommon Vuna_runtime Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dBase_dSource Base_dData_dMaybe Base_dData_dList &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dBase_dDiagnostics_dFrontend Base_dData_dVec Vuna_dCompiler_dBase_dDiagnostics_dCommon Vuna_runtime Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dBase_dSource Base_dData_dMaybe Base_dData_dList &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dLoader_dFingerprint Base_dData_dString Vuna_runtime Base_dTrait_dMonad Vuna_dCompiler_dBase_dSource Base_dTrait_dApplicative Base_dData_dMaybe Vuna_dCompiler_dLoader_dAddr Base_dEffect_dEnv Base_dEffect_dFs Vuna_dCompiler_dBase_dVersion Base_dTrait_dOrd Base_dData_dPair Base_dData_dList Vuna_dCompiler_dBase_dHash Base_dTrait_dFunctor Base_dEffect_dCore Base_dData_dSort &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dBase_dDiagnostics_dWarning Base_dData_dVec Vuna_dCompiler_dBase_dDiagnostics_dCommon Vuna_runtime Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dBase_dSource Base_dData_dMaybe Base_dData_dList &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dFrontend_dRast Base_dData_dString Vuna_runtime Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dFrontend_dAst Vuna_dCompiler_dFrontend_dRast_dName Base_dData_dMaybe Base_dData_dPair Base_dData_dList &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dDriver_dSplit Base_dData_dString Vuna_runtime Base_dTrait_dMonad Vuna_dCompiler_dBase_dDiag Base_dContainer_dHashMap Vuna_dCompiler_dBase_dBytes Base_dTrait_dApplicative Base_dData_dMaybe Base_dEffect_dFs Base_dTrait_dOrd Base_dData_dPair Base_dData_dList Vuna_dCompiler_dBase_dHash Base_dEffect_dCore Base_dData_dSort Base_dData_dInt &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dCore_dEval Vuna_runtime Vuna_dCompiler_dBase_dIntrinsics Base_dContainer_dHashMap Vuna_dCompiler_dCore_dTerm Base_dData_dBool Vuna_dCompiler_dBase_dSource Base_dData_dMaybe Base_dTrait_dEq Base_dData_dFloat Base_dData_dPair Base_dData_dList Base_dData_dInt &
-pids="$pids $!"
-for p in $pids; do wait "$p" || exit 1; done
-pids=""
-compile_mod Vuna_dCompiler_dBase_dDiagnostics Vuna_dCompiler_dBase_dDiagnostics_dRn Base_dData_dString Vuna_dCompiler_dBase_dDiagnostics_dTc Vuna_dCompiler_dBase_dDiagnostics_dLoader Vuna_dCompiler_dBase_dDiagnostics_dPkg Vuna_dCompiler_dBase_dDiagnostics_dCg Vuna_runtime Vuna_dCompiler_dBase_dDiagnostics_dFrontend Vuna_dCompiler_dBase_dDiagnostics_dIc Vuna_dCompiler_dBase_dDiagnostics_dWarning Base_dData_dMaybe Base_dData_dPair Base_dData_dList &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dFrontend_dRast_dBridge Vuna_runtime Vuna_dCompiler_dFrontend_dAst Vuna_dCompiler_dFrontend_dRast_dName Base_dData_dMaybe Vuna_dCompiler_dFrontend_dRast Base_dData_dPair Base_dData_dList &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dElab_dRecords Vuna_dCompiler_dBase_dDiagnostics_dTc Base_dData_dVec Vuna_dCompiler_dBase_dDiagnostics_dCommon Vuna_runtime Vuna_dCompiler_dBase_dIntrinsics Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dFrontend_dAst Vuna_dCompiler_dFrontend_dRast_dName Base_dData_dMaybe Vuna_dCompiler_dFrontend_dRast Base_dData_dPair Vuna_dCompiler_dBase_dCommon Base_dData_dList &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dLoader_dFixity Vuna_dCompiler_dBase_dDiagnostics_dRn Base_dData_dString Base_dData_dVec Vuna_runtime Vuna_dCompiler_dBase_dDiag Base_dContainer_dHashMap Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dFrontend_dAst Base_dData_dMaybe Base_dData_dPair Vuna_dCompiler_dBase_dCommon Base_dData_dList &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dElab_dPrelude Vuna_dCompiler_dBase_dDiagnostics_dTc Base_dData_dVec Vuna_runtime Vuna_dCompiler_dBase_dIntrinsics Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dCore_dTerm Vuna_dCompiler_dBase_dSource Base_dData_dMaybe Base_dData_dPair Base_dData_dList &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dElab_dSig Base_dData_dString Vuna_runtime Vuna_dCompiler_dBase_dIntrinsics Base_dContainer_dHashMap Vuna_dCompiler_dCore_dTerm Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dFrontend_dRast_dName Base_dData_dMaybe Vuna_dCompiler_dFrontend_dRast Base_dData_dPair Base_dData_dList Vuna_dCompiler_dCore_dEval &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dFrontend_dLexer Vuna_runtime Vuna_dCompiler_dBase_dDiag Base_dData_dBool Vuna_dCompiler_dBase_dDiagnostics_dFrontend Vuna_dCompiler_dBase_dSource Base_dData_dMaybe Base_dData_dPair Base_dData_dList &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dLoader_dExpand Vuna_dCompiler_dBase_dDiagnostics_dRn Vuna_runtime Vuna_dCompiler_dBase_dIntrinsics Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dFrontend_dAst Base_dData_dMaybe Base_dData_dPair Vuna_dCompiler_dBase_dCommon Base_dData_dList &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dElab_dCoverage Base_dData_dString Vuna_dCompiler_dBase_dDiagnostics_dTc Base_dData_dVec Vuna_runtime Vuna_dCompiler_dBase_dDiag Base_dData_dBool Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dFrontend_dRast_dName Base_dData_dMaybe Base_dTrait_dEq Vuna_dCompiler_dFrontend_dRast Base_dData_dPair Base_dData_dList Base_dData_dInt &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dCore_dConv Vuna_dCompiler_dBase_dDiagnostics_dTc Vuna_runtime Vuna_dCompiler_dBase_dIntrinsics Vuna_dCompiler_dBase_dDiag Base_dContainer_dHashMap Vuna_dCompiler_dCore_dTerm Base_dData_dBool Vuna_dCompiler_dBase_dSource Base_dData_dMaybe Base_dTrait_dEq Base_dData_dPair Vuna_dCompiler_dBase_dCommon Base_dData_dList Vuna_dCompiler_dCore_dEval &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dElab_dTypes Base_dData_dString Vuna_runtime Vuna_dCompiler_dBase_dDiag Base_dContainer_dHashMap Vuna_dCompiler_dCore_dTerm Base_dData_dBool Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dFrontend_dAst Base_dData_dMaybe Vuna_dCompiler_dFrontend_dRast Base_dData_dPair Base_dData_dList Vuna_dCompiler_dCore_dEval Base_dData_dInt &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dCodegen_dTerm Base_dData_dString Vuna_dCompiler_dCodegen_dOcaml_dRender Vuna_dCompiler_dIr_dRuntime Vuna_dCompiler_dCodegen_dRuntime Vuna_runtime Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dCodegen_dDecl Vuna_dCompiler_dCodegen_dOcaml_dModel Vuna_dCompiler_dBase_dSource Base_dData_dMaybe Vuna_dCompiler_dIr_dModel Base_dTrait_dOrd Base_dData_dPair Vuna_dCompiler_dBase_dCommon Base_dData_dList Base_dData_dSort &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dIr_dAnalysis Base_dTrait_dNum Base_dData_dString Base_dData_dVec Vuna_dCompiler_dBase_dDiagnostics_dCg Vuna_runtime Vuna_dCompiler_dBase_dDiag Base_dContainer_dHashMap Base_dData_dBool Vuna_dCompiler_dBase_dSource Base_dData_dMaybe Vuna_dCompiler_dIr_dModel Base_dData_dPair Vuna_dCompiler_dBase_dCommon Base_dData_dList Base_dData_dInt &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dDriver_dPerfCache Vuna_dCompiler_dBase_dStore Vuna_runtime Base_dTrait_dMonad Vuna_dCompiler_dBase_dBytes Vuna_dCompiler_dLoader_dFingerprint Base_dTrait_dApplicative Base_dData_dMaybe Base_dEffect_dFs Vuna_dCompiler_dDriver_dSplit Base_dData_dPair Base_dData_dList Base_dEffect_dCore &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dElab_dTermination_dMeasure Base_dData_dString Vuna_runtime Base_dContainer_dHashMap Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dFrontend_dRast_dName Base_dData_dMaybe Vuna_dCompiler_dFrontend_dRast Base_dData_dPair Base_dData_dList &
-pids="$pids $!"
-for p in $pids; do wait "$p" || exit 1; done
-pids=""
-compile_mod Vuna_dCompiler_dElab_dMatch Vuna_dCompiler_dBase_dDiagnostics_dTc Base_dData_dVec Vuna_runtime Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dElab_dCoverage Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dFrontend_dRast_dName Base_dData_dMaybe Vuna_dCompiler_dFrontend_dRast Base_dData_dPair Vuna_dCompiler_dBase_dCommon Base_dData_dList &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dElab_dDerive Vuna_dCompiler_dBase_dDiagnostics_dTc Vuna_dCompiler_dElab_dRecords Vuna_runtime Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dFrontend_dRast_dName Vuna_dCompiler_dFrontend_dRast Base_dData_dPair Vuna_dCompiler_dBase_dCommon Base_dData_dList &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dElab_dRepresentation Vuna_runtime Vuna_dCompiler_dBase_dIntrinsics Vuna_dCompiler_dCore_dTerm Base_dData_dBool Vuna_dCompiler_dFrontend_dAst Vuna_dCompiler_dElab_dTypes Base_dData_dMaybe Base_dData_dPair Base_dData_dList &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dBase_dDiag_dFormat Base_dData_dString Vuna_dCompiler_dBase_dDiagnostics Vuna_runtime Base_dTrait_dMonad Vuna_dCompiler_dBase_dDiag Base_dData_dBool Vuna_dCompiler_dBase_dSource Base_dTrait_dInterp Base_dTrait_dApplicative Base_dData_dMaybe Base_dEffect_dFs Vuna_dCompiler_dBase_dVersion Base_dData_dList Base_dEffect_dCore &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dFrontend_dToml Base_dData_dString Vuna_dCompiler_dBase_dDiagnostics_dPkg Vuna_dCompiler_dFrontend_dLexer Vuna_runtime Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dBase_dSource Base_dData_dBits Base_dData_dMaybe Base_dTrait_dEq Base_dData_dPair Base_dData_dList &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dIr_dCps Vuna_dCompiler_dIr_dTail Base_dData_dString Vuna_runtime Base_dData_dBool Vuna_dCompiler_dIr_dAnalysis Base_dData_dMaybe Base_dTrait_dEq Base_dData_dResult Vuna_dCompiler_dIr_dModel Base_dData_dPair Base_dData_dList &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dCodegen_dAssembly Vuna_dCompiler_dCodegen_dOcaml_dRender Vuna_runtime Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dCodegen_dDecl Vuna_dCompiler_dCodegen_dTerm Base_dData_dMaybe Vuna_dCompiler_dIr_dModel Base_dData_dPair Vuna_dCompiler_dBase_dCommon Base_dData_dList &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dElab_dTermination_dScc Vuna_runtime Vuna_dCompiler_dBase_dDiag Base_dContainer_dHashMap Base_dData_dBool Vuna_dCompiler_dBase_dObs Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dFrontend_dRast_dName Base_dData_dMaybe Base_dTrait_dEq Vuna_dCompiler_dFrontend_dRast Vuna_dCompiler_dElab_dTermination_dMeasure Base_dData_dPair Base_dData_dList Base_dData_dObs &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dFrontend_dCst Vuna_dCompiler_dFrontend_dLexer Vuna_runtime Vuna_dCompiler_dBase_dDiag Base_dData_dBool Vuna_dCompiler_dBase_dSource Base_dData_dMaybe Base_dData_dObs_dSpan Base_dData_dPair Base_dData_dList &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dElab_dMetaSpans Vuna_runtime Vuna_dCompiler_dCore_dTerm Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dElab_dTypes Base_dData_dMaybe Base_dData_dPair Base_dData_dList &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dIr_dValidate Base_dData_dString Vuna_dCompiler_dIr_dRuntime Vuna_runtime Vuna_dCompiler_dBase_dDiag Base_dContainer_dHashMap Vuna_dCompiler_dIr_dAnalysis Base_dData_dMaybe Base_dTrait_dEq Vuna_dCompiler_dIr_dModel Base_dData_dPair Vuna_dCompiler_dBase_dCommon Base_dData_dList &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dFrontend_dParser_dSupport Vuna_dCompiler_dFrontend_dLexer Vuna_runtime Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dBase_dDiagnostics_dFrontend Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dFrontend_dAst Base_dData_dMaybe Base_dData_dPair Base_dData_dList &
-pids="$pids $!"
-for p in $pids; do wait "$p" || exit 1; done
-pids=""
-compile_mod Vuna_dCompiler_dFrontend_dManifest Base_dData_dString Vuna_dCompiler_dBase_dDiagnostics_dPkg Vuna_runtime Base_dTrait_dMonad Vuna_dCompiler_dFrontend_dToml Vuna_dCompiler_dBase_dDiag Base_dData_dBool Vuna_dCompiler_dBase_dSource Base_dTrait_dApplicative Base_dData_dMaybe Base_dTrait_dEq Base_dData_dPair Vuna_dCompiler_dBase_dCommon Base_dData_dList &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dElab_dMeta Base_dData_dString Vuna_dCompiler_dElab_dRepresentation Vuna_dCompiler_dBase_dDiagnostics_dTc Vuna_dCompiler_dElab_dPrelude Vuna_dCompiler_dElab_dSig Vuna_runtime Vuna_dCompiler_dBase_dIntrinsics Vuna_dCompiler_dBase_dDiag Base_dContainer_dHashMap Vuna_dCompiler_dCore_dTerm Base_dData_dBool Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dFrontend_dAst Vuna_dCompiler_dCore_dConv Vuna_dCompiler_dElab_dTypes Vuna_dCompiler_dFrontend_dRast_dName Base_dData_dMaybe Base_dTrait_dEq Vuna_dCompiler_dFrontend_dRast Base_dData_dPair Vuna_dCompiler_dBase_dCommon Base_dData_dList Vuna_dCompiler_dCore_dEval &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dFrontend_dParser Base_dData_dVec Vuna_dCompiler_dFrontend_dLexer Vuna_runtime Vuna_dCompiler_dBase_dDiag Base_dData_dBool Vuna_dCompiler_dBase_dDiagnostics_dFrontend Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dFrontend_dAst Base_dData_dMaybe Base_dData_dPair Vuna_dCompiler_dFrontend_dParser_dSupport Vuna_dCompiler_dBase_dCommon Base_dData_dList &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dNative_dModule Vuna_dCompiler_dIr_dTail Base_dData_dString Vuna_dCompiler_dIr_dRuntime Vuna_dCompiler_dNative_dAudit Vuna_runtime Vuna_dCompiler_dNative_dAbi Vuna_dCompiler_dNative_dModel Vuna_dCompiler_dIr_dCps Base_dData_dBool Vuna_dCompiler_dIr_dAnalysis Base_dData_dMaybe Base_dTrait_dEq Base_dData_dResult Vuna_dCompiler_dIr_dModel Vuna_dCompiler_dNative_dRuntime Base_dData_dPair Base_dData_dList &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dElab_dTermination Base_dData_dString Vuna_dCompiler_dBase_dDiagnostics_dTc Base_dData_dVec Vuna_runtime Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dElab_dTermination_dScc Base_dContainer_dHashMap Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dFrontend_dRast_dName Base_dData_dMaybe Vuna_dCompiler_dFrontend_dRast Vuna_dCompiler_dElab_dTermination_dMeasure Base_dData_dPair Vuna_dCompiler_dBase_dCommon Base_dData_dList &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dWasm_dModule Vuna_dCompiler_dWasm_dInstr Vuna_dCompiler_dIr_dTail Base_dData_dString Vuna_dCompiler_dWasm_dModel Vuna_runtime Vuna_dCompiler_dBase_dIntrinsics Vuna_dCompiler_dWasm_dTypes Vuna_dCompiler_dIr_dCps Base_dContainer_dHashMap Base_dData_dBool Vuna_dCompiler_dIr_dAnf Vuna_dCompiler_dIr_dAnalysis Base_dData_dMaybe Base_dTrait_dEq Base_dData_dResult Vuna_dCompiler_dIr_dModel Vuna_dCompiler_dWasm_dRuntime Base_dData_dPair Base_dData_dList &
-pids="$pids $!"
-for p in $pids; do wait "$p" || exit 1; done
-pids=""
-compile_mod Vuna_dCompiler_dElab_dUsage Base_dData_dString Vuna_dCompiler_dBase_dDiagnostics_dTc Base_dData_dVec Vuna_dCompiler_dElab_dMeta Vuna_runtime Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dCore_dTerm Base_dData_dBool Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dElab_dTypes Vuna_dCompiler_dBase_dDiagnostics_dWarning Base_dData_dMaybe Base_dData_dPair Vuna_dCompiler_dBase_dCommon Base_dData_dList Vuna_dCompiler_dCore_dEval &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dFrontend_dPackages_dSource Vuna_dCompiler_dFrontend_dCanonical_dPkg Vuna_dCompiler_dFrontend_dManifest Base_dData_dString Vuna_runtime Base_dTrait_dMonad Vuna_dCompiler_dBase_dDiag Base_dTrait_dApplicative Base_dData_dMaybe Base_dEffect_dFs Base_dData_dPair Base_dData_dList Vuna_dCompiler_dBase_dHash Base_dEffect_dCore Base_dData_dSort &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dElab_dTerm_dSupport Vuna_dCompiler_dBase_dDiagnostics_dTc Vuna_dCompiler_dElab_dMeta Vuna_runtime Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dCore_dTerm Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dElab_dTypes Base_dData_dMaybe Vuna_dCompiler_dFrontend_dRast Base_dData_dPair Base_dData_dList Vuna_dCompiler_dCore_dEval &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dElab_dDict Base_dData_dString Vuna_dCompiler_dElab_dRepresentation Vuna_dCompiler_dBase_dDiagnostics_dTc Vuna_dCompiler_dElab_dMeta Vuna_dCompiler_dElab_dPrelude Vuna_runtime Vuna_dCompiler_dBase_dIntrinsics Vuna_dCompiler_dBase_dDiag Base_dContainer_dHashMap Vuna_dCompiler_dCore_dTerm Base_dData_dBool Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dCore_dConv Vuna_dCompiler_dElab_dTypes Base_dData_dMaybe Vuna_dCompiler_dElab_dMetaSpans Base_dData_dPair Vuna_dCompiler_dBase_dCommon Base_dData_dList Vuna_dCompiler_dCore_dEval &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dElab_dInstName Base_dData_dString Vuna_dCompiler_dElab_dMeta Vuna_runtime Vuna_dCompiler_dFrontend_dRast_dName Base_dData_dMaybe Vuna_dCompiler_dFrontend_dRast Base_dData_dList &
-pids="$pids $!"
-for p in $pids; do wait "$p" || exit 1; done
-pids=""
-compile_mod Vuna_dCompiler_dElab_dCase Vuna_dCompiler_dElab_dUsage Vuna_dCompiler_dBase_dDiagnostics_dTc Base_dData_dVec Vuna_dCompiler_dElab_dMeta Vuna_runtime Vuna_dCompiler_dBase_dIntrinsics Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dCore_dTerm Base_dData_dBool Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dCore_dConv Vuna_dCompiler_dElab_dTypes Vuna_dCompiler_dFrontend_dRast_dName Vuna_dCompiler_dBase_dDiagnostics_dWarning Base_dData_dMaybe Base_dTrait_dEq Vuna_dCompiler_dFrontend_dRast Base_dData_dPair Vuna_dCompiler_dBase_dCommon Base_dData_dList Vuna_dCompiler_dCore_dEval &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dElab_dInstCoherence Vuna_dCompiler_dElab_dMeta Vuna_runtime Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dCore_dTerm Vuna_dCompiler_dCore_dConv Vuna_dCompiler_dElab_dTypes Base_dData_dMaybe Vuna_dCompiler_dElab_dDict Base_dData_dPair Base_dData_dList Vuna_dCompiler_dCore_dEval &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dFrontend_dPackages_dPkg Vuna_dCompiler_dFrontend_dCanonical_dPkg Vuna_dCompiler_dFrontend_dManifest Base_dData_dString Base_dData_dVec Vuna_dCompiler_dFrontend_dPackages_dSource Vuna_dCompiler_dBase_dStore Vuna_dCompiler_dBase_dDiagnostics_dPkg Base_dData_dUnit Vuna_runtime Base_dTrait_dMonad Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dBase_dSource Base_dTrait_dApplicative Base_dData_dMaybe Base_dTrait_dEq Base_dEffect_dEnv Base_dEffect_dFs Base_dData_dPair Base_dData_dList Base_dEffect_dCore &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dLowering_dChecks Vuna_dCompiler_dElab_dUsage Base_dData_dString Base_dData_dVec Vuna_dCompiler_dBase_dDiagnostics_dCg Vuna_runtime Vuna_dCompiler_dBase_dDiag Base_dContainer_dHashMap Vuna_dCompiler_dCore_dTerm Base_dData_dBool Vuna_dCompiler_dElab_dTypes Base_dData_dMaybe Base_dData_dPair Vuna_dCompiler_dBase_dCommon Base_dData_dList Vuna_dCompiler_dCore_dEval &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dDriver_dOwner Vuna_dCompiler_dElab_dDerive Base_dData_dString Vuna_dCompiler_dFrontend_dRast_dBridge Vuna_runtime Vuna_dCompiler_dBase_dIntrinsics Vuna_dCompiler_dBase_dDiag Base_dContainer_dHashMap Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dFrontend_dAst Vuna_dCompiler_dElab_dTypes Base_dData_dMaybe Vuna_dCompiler_dElab_dInstName Base_dData_dPair Vuna_dCompiler_dBase_dCommon Base_dData_dList &
-pids="$pids $!"
-for p in $pids; do wait "$p" || exit 1; done
-pids=""
-compile_mod Vuna_dCompiler_dLowering_dEnv Base_dData_dString Vuna_dCompiler_dElab_dRepresentation Vuna_dCompiler_dElab_dMeta Vuna_runtime Vuna_dCompiler_dBase_dIntrinsics Vuna_dCompiler_dLowering_dChecks Base_dContainer_dHashMap Vuna_dCompiler_dCore_dTerm Base_dData_dBool Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dElab_dTypes Base_dData_dMaybe Vuna_dCompiler_dIr_dModel Base_dData_dPair Base_dData_dList Vuna_dCompiler_dCore_dEval &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dLoader_dModules Vuna_dCompiler_dBase_dDiagnostics_dRn Base_dData_dString Vuna_dCompiler_dBase_dDiagnostics_dLoader Vuna_dCompiler_dFrontend_dPackages_dPkg Vuna_dCompiler_dFrontend_dLexer Vuna_runtime Base_dTrait_dMonad Vuna_dCompiler_dBase_dDiag Base_dContainer_dHashMap Base_dData_dBool Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dFrontend_dAst Base_dTrait_dApplicative Base_dData_dMaybe Base_dTrait_dEq Base_dEffect_dFs Base_dData_dPair Vuna_dCompiler_dBase_dCommon Base_dData_dList Base_dEffect_dCore &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dLowering_dEntry Base_dData_dString Vuna_dCompiler_dIr_dRuntime Vuna_runtime Vuna_dCompiler_dBase_dIntrinsics Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dLowering_dChecks Base_dContainer_dHashMap Vuna_dCompiler_dCore_dTerm Vuna_dCompiler_dElab_dTypes Base_dData_dMaybe Vuna_dCompiler_dIr_dModel Base_dData_dPair Base_dData_dList Vuna_dCompiler_dCore_dEval &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dElab_dTerm_dImpl Vuna_dCompiler_dElab_dMatch Base_dData_dString Vuna_dCompiler_dBase_dDiagnostics_dTc Vuna_dCompiler_dElab_dCase Vuna_dCompiler_dElab_dMeta Vuna_dCompiler_dElab_dRecords Vuna_dCompiler_dElab_dPrelude Vuna_runtime Vuna_dCompiler_dBase_dIntrinsics Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dElab_dCoverage Base_dData_dNat Vuna_dCompiler_dElab_dTerm_dSupport Vuna_dCompiler_dCore_dTerm Base_dData_dBool Vuna_dCompiler_dBase_dObs Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dFrontend_dAst Vuna_dCompiler_dCore_dConv Vuna_dCompiler_dElab_dTypes Vuna_dCompiler_dFrontend_dRast_dName Base_dData_dMaybe Base_dTrait_dEq Vuna_dCompiler_dFrontend_dRast Vuna_dCompiler_dElab_dMetaSpans Vuna_dCompiler_dElab_dDict Base_dData_dPair Vuna_dCompiler_dBase_dCommon Base_dData_dList Vuna_dCompiler_dCore_dEval &
-pids="$pids $!"
-for p in $pids; do wait "$p" || exit 1; done
-pids=""
-compile_mod Vuna_dCompiler_dLoader_dLayers Vuna_dCompiler_dFrontend_dManifest Base_dData_dString Vuna_dCompiler_dBase_dDiagnostics_dLoader Vuna_dCompiler_dFrontend_dPackages_dPkg Vuna_runtime Vuna_dCompiler_dLoader_dModules Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dFrontend_dAst Base_dData_dMaybe Base_dData_dList &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dLoader_dResolve Vuna_dCompiler_dBase_dDiagnostics_dRn Base_dData_dString Vuna_dCompiler_dBase_dDiagnostics_dTc Vuna_dCompiler_dFrontend_dLexer Vuna_runtime Vuna_dCompiler_dLoader_dModules Vuna_dCompiler_dBase_dIntrinsics Vuna_dCompiler_dBase_dDiag Base_dContainer_dHashMap Vuna_dCompiler_dBase_dDiagnostics_dFrontend Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dFrontend_dAst Vuna_dCompiler_dFrontend_dRast_dName Base_dData_dMaybe Base_dData_dPair Vuna_dCompiler_dBase_dCommon Base_dData_dList &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dElab_dCanonical Vuna_dCompiler_dFrontend_dCanonical_dAst Vuna_dCompiler_dCore_dCanonical Vuna_dCompiler_dFrontend_dRast_dBridge Vuna_dCompiler_dElab_dRecords Vuna_runtime Vuna_dCompiler_dLoader_dModules Vuna_dCompiler_dCore_dTerm Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dBase_dBytes Vuna_dCompiler_dFrontend_dAst Vuna_dCompiler_dElab_dTypes Base_dData_dMaybe Base_dData_dPair Base_dData_dList &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dElab_dTerm Vuna_runtime Vuna_dCompiler_dCore_dTerm Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dFrontend_dAst Vuna_dCompiler_dElab_dTypes Base_dData_dMaybe Vuna_dCompiler_dFrontend_dRast Vuna_dCompiler_dElab_dTerm_dImpl Base_dData_dPair Base_dData_dList &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dLowering_dTy Vuna_dCompiler_dLowering_dEnv Base_dData_dString Vuna_dCompiler_dElab_dRepresentation Vuna_runtime Vuna_dCompiler_dBase_dIntrinsics Vuna_dCompiler_dBase_dDiag Base_dContainer_dHashMap Vuna_dCompiler_dCore_dTerm Base_dData_dBool Vuna_dCompiler_dElab_dTypes Base_dData_dMaybe Vuna_dCompiler_dIr_dModel Base_dData_dPair Vuna_dCompiler_dBase_dCommon Base_dData_dList Vuna_dCompiler_dCore_dEval &
-pids="$pids $!"
-for p in $pids; do wait "$p" || exit 1; done
-pids=""
-compile_mod Vuna_dCompiler_dLowering_dProgram Vuna_dCompiler_dLowering_dEnv Base_dData_dString Vuna_dCompiler_dIr_dRuntime Vuna_dCompiler_dElab_dRepresentation Vuna_dCompiler_dCodegen_dRuntime Vuna_dCompiler_dBase_dDiagnostics_dCg Vuna_runtime Vuna_dCompiler_dBase_dIntrinsics Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dLowering_dEntry Vuna_dCompiler_dCodegen_dDecl Vuna_dCompiler_dLowering_dChecks Base_dContainer_dHashMap Vuna_dCompiler_dCore_dTerm Base_dData_dBool Vuna_dCompiler_dBase_dObs Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dIr_dDispatch Vuna_dCompiler_dElab_dTypes Vuna_dCompiler_dIr_dAnalysis Base_dData_dMaybe Vuna_dCompiler_dIr_dModel Vuna_dCompiler_dIr_dRepresent Vuna_dCompiler_dLowering_dTy Vuna_dCompiler_dIr_dValidate Base_dData_dPair Vuna_dCompiler_dBase_dCommon Base_dData_dList Vuna_dCompiler_dCore_dEval &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dElab_dData Base_dData_dString Vuna_dCompiler_dElab_dRepresentation Vuna_dCompiler_dBase_dDiagnostics_dTc Vuna_dCompiler_dElab_dMeta Vuna_dCompiler_dElab_dRecords Vuna_dCompiler_dElab_dPrelude Vuna_runtime Vuna_dCompiler_dBase_dIntrinsics Vuna_dCompiler_dBase_dDiag Base_dContainer_dHashMap Vuna_dCompiler_dCore_dTerm Base_dData_dBool Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dFrontend_dAst Vuna_dCompiler_dElab_dTypes Vuna_dCompiler_dFrontend_dRast_dName Base_dData_dMaybe Vuna_dCompiler_dFrontend_dRast Vuna_dCompiler_dElab_dTerm Base_dData_dPair Vuna_dCompiler_dBase_dCommon Base_dData_dList &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dLoader_dFlatten Vuna_dCompiler_dBase_dDiagnostics_dRn Base_dData_dString Vuna_dCompiler_dBase_dDiagnostics_dLoader Base_dData_dVec Vuna_dCompiler_dLoader_dFixity Vuna_dCompiler_dFrontend_dPackages_dPkg Vuna_dCompiler_dFrontend_dParser Vuna_dCompiler_dFrontend_dLexer Vuna_runtime Vuna_dCompiler_dLoader_dLayers Base_dTrait_dMonad Vuna_dCompiler_dLoader_dResolve Vuna_dCompiler_dLoader_dModules Vuna_dCompiler_dBase_dIntrinsics Vuna_dCompiler_dLoader_dExpand Vuna_dCompiler_dBase_dDiag Base_dContainer_dHashMap Base_dData_dBool Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dFrontend_dAst Base_dTrait_dApplicative Vuna_dCompiler_dBase_dDiagnostics_dWarning Base_dData_dMaybe Base_dEffect_dFs Base_dData_dObs_dSpan Base_dData_dPair Vuna_dCompiler_dFrontend_dParser_dSupport Vuna_dCompiler_dBase_dCommon Base_dData_dList Base_dEffect_dCore &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dDriver_dCache Vuna_dCompiler_dCore_dCanonical Vuna_dCompiler_dElab_dMeta Vuna_runtime Vuna_dCompiler_dBase_dDiag Base_dContainer_dHashMap Vuna_dCompiler_dCore_dTerm Base_dData_dBool Vuna_dCompiler_dBase_dBytes Vuna_dCompiler_dElab_dTypes Vuna_dCompiler_dElab_dCanonical Base_dData_dMaybe Base_dData_dPair Vuna_dCompiler_dBase_dCommon Base_dData_dList Vuna_dCompiler_dCore_dEval Base_dData_dInt &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dElab_dTrait Vuna_dCompiler_dElab_dMatch Base_dData_dString Vuna_dCompiler_dBase_dDiagnostics_dTc Vuna_dCompiler_dElab_dMeta Vuna_dCompiler_dElab_dInstCoherence Vuna_dCompiler_dElab_dSig Vuna_runtime Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dElab_dCoverage Base_dContainer_dHashMap Vuna_dCompiler_dCore_dTerm Vuna_dCompiler_dBase_dObs Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dFrontend_dAst Vuna_dCompiler_dCore_dConv Vuna_dCompiler_dElab_dTypes Base_dTrait_dInterp Vuna_dCompiler_dFrontend_dRast_dName Base_dData_dMaybe Vuna_dCompiler_dFrontend_dRast Vuna_dCompiler_dElab_dTerm Vuna_dCompiler_dElab_dDict Vuna_dCompiler_dElab_dInstName Vuna_dCompiler_dElab_dTerm_dImpl Base_dData_dPair Vuna_dCompiler_dBase_dCommon Base_dData_dList Vuna_dCompiler_dCore_dEval Base_dData_dInt &
-pids="$pids $!"
-for p in $pids; do wait "$p" || exit 1; done
-pids=""
-compile_mod Vuna_dCompiler_dDriver_dSplitGen Vuna_dCompiler_dLowering_dEnv Base_dData_dString Vuna_dCompiler_dLowering_dProgram Vuna_dCompiler_dBase_dDiagnostics_dCg Vuna_runtime Base_dTrait_dMonad Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dLowering_dEntry Vuna_dCompiler_dCodegen_dAssembly Vuna_dCompiler_dCodegen_dDecl Base_dContainer_dHashMap Base_dData_dBool Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dFrontend_dAst Vuna_dCompiler_dElab_dTypes Vuna_dCompiler_dCodegen_dTerm Base_dTrait_dApplicative Base_dData_dMaybe Vuna_dCompiler_dIr_dModel Vuna_dCompiler_dDriver_dOwner Vuna_dCompiler_dDriver_dSplit Base_dData_dPair Vuna_dCompiler_dBase_dCommon Base_dData_dList Base_dEffect_dCore &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dDriver_dIface Vuna_dCompiler_dFrontend_dCanonical_dAst Vuna_dCompiler_dElab_dDerive Base_dData_dString Vuna_dCompiler_dCore_dCanonical Vuna_dCompiler_dFrontend_dRast_dBridge Vuna_dCompiler_dElab_dRecords Vuna_dCompiler_dLoader_dFlatten Vuna_dCompiler_dElab_dPrelude Vuna_runtime Base_dTrait_dMonad Vuna_dCompiler_dLoader_dModules Vuna_dCompiler_dBase_dIntrinsics Vuna_dCompiler_dDriver_dCache Vuna_dCompiler_dBase_dDiag Base_dContainer_dHashMap Vuna_dCompiler_dCore_dTerm Base_dData_dBool Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dBase_dBytes Vuna_dCompiler_dFrontend_dAst Vuna_dCompiler_dElab_dTypes Vuna_dCompiler_dElab_dCanonical Base_dTrait_dApplicative Base_dData_dMaybe Base_dTrait_dOrd Vuna_dCompiler_dDriver_dOwner Base_dData_dPair Base_dData_dList Vuna_dCompiler_dBase_dHash Base_dData_dSort Base_dData_dInt &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dElab_dDriver Vuna_dCompiler_dElab_dUsage Vuna_dCompiler_dElab_dDerive Base_dData_dString Vuna_dCompiler_dBase_dDiagnostics_dTc Vuna_dCompiler_dElab_dData Base_dData_dVec Vuna_dCompiler_dElab_dMeta Vuna_dCompiler_dElab_dRecords Vuna_dCompiler_dElab_dPrelude Vuna_runtime Vuna_dCompiler_dBase_dIntrinsics Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dElab_dTermination Base_dContainer_dHashMap Vuna_dCompiler_dCore_dTerm Vuna_dCompiler_dBase_dObs Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dCore_dConv Vuna_dCompiler_dElab_dTypes Base_dTrait_dInterp Vuna_dCompiler_dFrontend_dRast_dName Base_dData_dMaybe Base_dTrait_dEq Vuna_dCompiler_dFrontend_dRast Vuna_dCompiler_dElab_dTerm Vuna_dCompiler_dElab_dMetaSpans Vuna_dCompiler_dElab_dDict Base_dTrait_dOrd Vuna_dCompiler_dElab_dTerm_dImpl Vuna_dCompiler_dElab_dTrait Base_dData_dPair Vuna_dCompiler_dBase_dCommon Base_dData_dList Base_dData_dSort Vuna_dCompiler_dCore_dEval Base_dData_dInt &
-pids="$pids $!"
-for p in $pids; do wait "$p" || exit 1; done
-compile_mod Vuna_dCompiler_dDriver_dDt Vuna_dCompiler_dLowering_dEnv Vuna_dCompiler_dFrontend_dCanonical_dAst Vuna_dCompiler_dElab_dDerive Base_dData_dString Vuna_dCompiler_dDriver_dSplitGen Vuna_dCompiler_dLowering_dProgram Vuna_dCompiler_dFrontend_dRast_dBridge Base_dData_dVec Vuna_dCompiler_dElab_dMeta Vuna_dCompiler_dElab_dRecords Vuna_dCompiler_dLoader_dFlatten Vuna_dCompiler_dElab_dPrelude Vuna_dCompiler_dFrontend_dPackages_dPkg Vuna_dCompiler_dFrontend_dParser Vuna_dCompiler_dBase_dDiagnostics_dCg Vuna_dCompiler_dDriver_dIface Vuna_runtime Base_dTrait_dMonad Vuna_dCompiler_dLoader_dModules Vuna_dCompiler_dElab_dDriver Vuna_dCompiler_dBase_dIntrinsics Vuna_dCompiler_dDriver_dCache Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dCodegen_dAssembly Base_dContainer_dHashMap Vuna_dCompiler_dCore_dTerm Base_dData_dBool Vuna_dCompiler_dBase_dObs Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dBase_dBytes Vuna_dCompiler_dFrontend_dAst Vuna_dCompiler_dElab_dTypes Base_dTrait_dApplicative Vuna_dCompiler_dBase_dDiagnostics_dWarning Base_dData_dMaybe Base_dTrait_dEq Vuna_dCompiler_dFrontend_dRast Vuna_dCompiler_dDriver_dPerfCache Vuna_dCompiler_dIr_dModel Base_dEffect_dEnv Base_dEffect_dFs Base_dTrait_dOrd Vuna_dCompiler_dElab_dTermination_dMeasure Vuna_dCompiler_dDriver_dSplit Base_dData_dPair Vuna_dCompiler_dBase_dCommon Base_dData_dList Base_dData_dObs Vuna_dCompiler_dBase_dHash Base_dEffect_dCore Base_dData_dSort Vuna_dCompiler_dCore_dEval
-compile_mod Vuna_dCompiler_dDriver_dCompile Vuna_dCompiler_dFrontend_dManifest Base_dData_dString Base_dEffect_dClock Vuna_dCompiler_dFrontend_dPackages_dSource Vuna_dCompiler_dBase_dStore Vuna_dCompiler_dBase_dDiagnostics_dPkg Vuna_dCompiler_dLoader_dFlatten Vuna_dCompiler_dFrontend_dPackages_dPkg Vuna_dCompiler_dDriver_dIface Vuna_runtime Base_dTrait_dMonad Base_dEffect_dProcess Vuna_dCompiler_dLoader_dModules Vuna_dCompiler_dDriver_dCache Vuna_dCompiler_dBase_dDiag Base_dContainer_dHashMap Base_dData_dBool Vuna_dCompiler_dBase_dObs Vuna_dCompiler_dDriver_dDt Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dBase_dBytes Vuna_dCompiler_dFrontend_dAst Vuna_dCompiler_dLoader_dFingerprint Base_dTrait_dInterp Base_dTrait_dApplicative Base_dData_dMaybe Base_dTrait_dEq Vuna_dCompiler_dLoader_dAddr Base_dEffect_dEnv Base_dEffect_dFs Vuna_dCompiler_dBase_dVersion Vuna_dCompiler_dBase_dDiag_dCodec Vuna_dCompiler_dDriver_dSplit Base_dData_dPair Base_dData_dList Base_dData_dObs Vuna_dCompiler_dBase_dHash Base_dTrait_dFunctor Base_dEffect_dCore
-pids=""
-compile_mod Vuna_dCompiler_dDriver_dWasm Vuna_dCompiler_dLowering_dProgram Vuna_dCompiler_dFrontend_dPackages_dPkg Vuna_dCompiler_dWasm_dModel Vuna_runtime Base_dTrait_dMonad Vuna_dCompiler_dWasm_dRender Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dDriver_dDt Vuna_dCompiler_dElab_dTypes Base_dTrait_dApplicative Vuna_dCompiler_dBase_dDiagnostics_dWarning Base_dData_dMaybe Vuna_dCompiler_dIr_dModel Base_dEffect_dFs Vuna_dCompiler_dWasm_dModule Vuna_dCompiler_dDriver_dCompile Vuna_dCompiler_dBase_dCapabilities Base_dData_dPair Base_dData_dList Base_dEffect_dCore &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dDriver_dNative Base_dData_dString Vuna_dCompiler_dLowering_dProgram Vuna_dCompiler_dFrontend_dPackages_dPkg Vuna_runtime Vuna_dCompiler_dNative_dModule Base_dTrait_dMonad Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dNative_dModel Vuna_dCompiler_dDriver_dDt Vuna_dCompiler_dElab_dTypes Base_dTrait_dApplicative Vuna_dCompiler_dNative_dRender Base_dEffect_dFs Vuna_dCompiler_dDriver_dCompile Base_dData_dPair Base_dData_dList Base_dEffect_dCore &
-pids="$pids $!"
-compile_mod Vuna_dCompiler_dDriver_dToolPayload Vuna_dCompiler_dDriver_dIface Vuna_runtime Vuna_dCompiler_dBase_dBytes Base_dData_dMaybe Vuna_dCompiler_dDriver_dCompile Base_dData_dPair Base_dData_dList &
-pids="$pids $!"
-for p in $pids; do wait "$p" || exit 1; done
-compile_mod Vuna_dCompiler_dDriver_dCompilerCli Vuna_dCompiler_dFrontend_dManifest Base_dData_dString Vuna_dCompiler_dDriver_dWasm Vuna_dCompiler_dDriver_dNative Base_dEffect_dClock Vuna_dCompiler_dBase_dDiag_dFormat Vuna_dCompiler_dBase_dStore Vuna_dCompiler_dFrontend_dPackages_dPkg Base_dEffect_dConsole Vuna_runtime Base_dTrait_dMonad Base_dEffect_dProcess Vuna_dCompiler_dBase_dDiag Base_dData_dBool Vuna_dCompiler_dDriver_dDt Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dBase_dDiagnostics_dSink Vuna_dCompiler_dLoader_dFingerprint Base_dTrait_dApplicative Base_dData_dMaybe Base_dTrait_dEq Base_dEffect_dEnv Base_dEffect_dFs Vuna_dCompiler_dBase_dVersion Vuna_dCompiler_dDriver_dCompile Base_dData_dPair Base_dData_dList Base_dEffect_dCore
-compile_mod Main Vuna_dCompiler_dDriver_dCompilerCli Base_dEffect_dClock Base_dEffect_dConsole Vuna_runtime Base_dEffect_dExit Base_dTrait_dMonad Base_dEffect_dProcess Base_dEffect_dArgs Base_dEffect_dEnv Base_dEffect_dFs Base_dEffect_dCore
-ocamlopt $FLAGS -I +unix -o "$OUT" unix.cmxa Vuna_runtime.cmx Base_dTrait_dNum.cmx Base_dTrait_dMonoid.cmx Base_dTrait_dFromInt.cmx Base_dTrait_dTraversable.cmx Base_dTrait_dMonad.cmx Base_dTrait_dHashable.cmx Base_dEffect_dTypes.cmx Base_dData.cmx Base_dInternal_dOperator.cmx Base_dData_dFunction.cmx Base_dData_dBits.cmx Base_dTrait_dApplicative.cmx Base_dTrait_dEq.cmx Base_dTrait_dNeg.cmx Vuna_dCompiler_dBase_dVersion.cmx Base_dTrait_dFromString.cmx Base_dTrait_dShow.cmx Vuna_dCompiler_dBase_dCapabilities.cmx Prelude.cmx Base_dEffect_dPure.cmx Base_dEffect.cmx Base_dData_dObs.cmx Base_dTrait_dFunctor.cmx Base_dTrait_dFoldable.cmx Base_dEffect_dPure_dReader.cmx Base_dData_dBool.cmx Base_dTrait_dInterp.cmx Base_dEffect_dPure_dError.cmx Base_dTrait_dOrd.cmx Base_dData_dUnit.cmx Base_dData_dMaybe.cmx Base_dData_dPair.cmx Base_dData_dInt.cmx Base_dData_dNat.cmx Base_dEffect_dPure_dState.cmx Base_dData_dList.cmx Vuna_dCompiler_dWasm_dInstr.cmx Base_dData_dString.cmx Base_dData_dSha1.cmx Base_dData_dVec.cmx Base_dContainer_dArray.cmx Vuna_dCompiler_dNative_dModel.cmx Base_dData_dBase64.cmx Vuna_dCompiler_dCodegen_dOcaml_dModel.cmx Vuna_dCompiler_dBase_dBytes.cmx Vuna_dCompiler_dBase_dDiagnostics_dIc.cmx Base_dData_dResult.cmx Base_dData_dFloat.cmx Vuna_dCompiler_dBase_dHash.cmx Base_dData_dSort.cmx Vuna_dCompiler_dFrontend_dCanonical_dPkg.cmx Vuna_dCompiler_dCodegen_dOcaml_dRender.cmx Vuna_dCompiler_dWasm_dModel.cmx Vuna_dCompiler_dNative_dAbi.cmx Base_dContainer_dHashMap.cmx Vuna_dCompiler_dBase_dSource.cmx Vuna_dCompiler_dNative_dRender.cmx Vuna_dCompiler_dNative_dGc.cmx Vuna_dCompiler_dWasm_dRender.cmx Vuna_dCompiler_dBase_dIntrinsics.cmx Vuna_dCompiler_dBase_dDiag.cmx Vuna_dCompiler_dFrontend_dAst.cmx Vuna_dCompiler_dIr_dModel.cmx Vuna_dCompiler_dWasm_dRuntime.cmx Base_dEffect_dCore.cmx Vuna_dCompiler_dIr_dTail.cmx Vuna_dCompiler_dFrontend_dCanonical_dAst.cmx Vuna_dCompiler_dIr_dRuntime.cmx Base_dEffect_dError.cmx Base_dEffect_dClock.cmx Vuna_dCompiler_dBase_dDiagnostics_dCommon.cmx Base_dEffect_dReader.cmx Base_dEffect_dConsole.cmx Base_dEffect_dRef.cmx Base_dEffect_dExit.cmx Base_dEffect_dExn.cmx Base_dEffect_dProcess.cmx Base_dEffect_dArgs.cmx Base_dEffect_dNet.cmx Vuna_dCompiler_dWasm_dTypes.cmx Base_dEffect_dStdin.cmx Vuna_dCompiler_dCodegen_dDecl.cmx Vuna_dCompiler_dCore_dTerm.cmx Vuna_dCompiler_dBase_dObs.cmx Vuna_dCompiler_dIr_dAnf.cmx Vuna_dCompiler_dIr_dDispatch.cmx Vuna_dCompiler_dBase_dDiagnostics_dSink.cmx Base_dEffect_dPure_dIORef.cmx Vuna_dCompiler_dFrontend_dRast_dName.cmx Vuna_dCompiler_dLoader_dAddr.cmx Base_dEffect_dEnv.cmx Vuna_dCompiler_dNative_dRuntime.cmx Base_dEffect_dState.cmx Base_dEffect_dFs.cmx Vuna_dCompiler_dBase_dDiag_dCodec.cmx Vuna_dCompiler_dIr_dRepresent.cmx Base_dData_dObs_dSpan.cmx Vuna_dCompiler_dBase_dCommon.cmx Vuna_dCompiler_dBase_dDiagnostics_dRn.cmx Vuna_dCompiler_dBase_dDiagnostics_dTc.cmx Vuna_dCompiler_dCore_dCanonical.cmx Vuna_dCompiler_dNative_dAudit.cmx Vuna_dCompiler_dBase_dDiagnostics_dLoader.cmx Vuna_dCompiler_dBase_dStore.cmx Vuna_dCompiler_dCodegen_dRuntime.cmx Vuna_dCompiler_dBase_dDiagnostics_dPkg.cmx Vuna_dCompiler_dBase_dDiagnostics_dCg.cmx Vuna_dCompiler_dBase_dDiagnostics_dFrontend.cmx Vuna_dCompiler_dLoader_dFingerprint.cmx Vuna_dCompiler_dBase_dDiagnostics_dWarning.cmx Vuna_dCompiler_dFrontend_dRast.cmx Vuna_dCompiler_dDriver_dSplit.cmx Vuna_dCompiler_dCore_dEval.cmx Vuna_dCompiler_dBase_dDiagnostics.cmx Vuna_dCompiler_dFrontend_dRast_dBridge.cmx Vuna_dCompiler_dElab_dRecords.cmx Vuna_dCompiler_dLoader_dFixity.cmx Vuna_dCompiler_dElab_dPrelude.cmx Vuna_dCompiler_dElab_dSig.cmx Vuna_dCompiler_dFrontend_dLexer.cmx Vuna_dCompiler_dLoader_dExpand.cmx Vuna_dCompiler_dElab_dCoverage.cmx Vuna_dCompiler_dCore_dConv.cmx Vuna_dCompiler_dElab_dTypes.cmx Vuna_dCompiler_dCodegen_dTerm.cmx Vuna_dCompiler_dIr_dAnalysis.cmx Vuna_dCompiler_dDriver_dPerfCache.cmx Vuna_dCompiler_dElab_dTermination_dMeasure.cmx Vuna_dCompiler_dElab_dMatch.cmx Vuna_dCompiler_dElab_dDerive.cmx Vuna_dCompiler_dElab_dRepresentation.cmx Vuna_dCompiler_dBase_dDiag_dFormat.cmx Vuna_dCompiler_dFrontend_dToml.cmx Vuna_dCompiler_dIr_dCps.cmx Vuna_dCompiler_dCodegen_dAssembly.cmx Vuna_dCompiler_dElab_dTermination_dScc.cmx Vuna_dCompiler_dFrontend_dCst.cmx Vuna_dCompiler_dElab_dMetaSpans.cmx Vuna_dCompiler_dIr_dValidate.cmx Vuna_dCompiler_dFrontend_dParser_dSupport.cmx Vuna_dCompiler_dFrontend_dManifest.cmx Vuna_dCompiler_dElab_dMeta.cmx Vuna_dCompiler_dFrontend_dParser.cmx Vuna_dCompiler_dNative_dModule.cmx Vuna_dCompiler_dElab_dTermination.cmx Vuna_dCompiler_dWasm_dModule.cmx Vuna_dCompiler_dElab_dUsage.cmx Vuna_dCompiler_dFrontend_dPackages_dSource.cmx Vuna_dCompiler_dElab_dTerm_dSupport.cmx Vuna_dCompiler_dElab_dDict.cmx Vuna_dCompiler_dElab_dInstName.cmx Vuna_dCompiler_dElab_dCase.cmx Vuna_dCompiler_dElab_dInstCoherence.cmx Vuna_dCompiler_dFrontend_dPackages_dPkg.cmx Vuna_dCompiler_dLowering_dChecks.cmx Vuna_dCompiler_dDriver_dOwner.cmx Vuna_dCompiler_dLowering_dEnv.cmx Vuna_dCompiler_dLoader_dModules.cmx Vuna_dCompiler_dLowering_dEntry.cmx Vuna_dCompiler_dElab_dTerm_dImpl.cmx Vuna_dCompiler_dLoader_dLayers.cmx Vuna_dCompiler_dLoader_dResolve.cmx Vuna_dCompiler_dElab_dCanonical.cmx Vuna_dCompiler_dElab_dTerm.cmx Vuna_dCompiler_dLowering_dTy.cmx Vuna_dCompiler_dLowering_dProgram.cmx Vuna_dCompiler_dElab_dData.cmx Vuna_dCompiler_dLoader_dFlatten.cmx Vuna_dCompiler_dDriver_dCache.cmx Vuna_dCompiler_dElab_dTrait.cmx Vuna_dCompiler_dDriver_dSplitGen.cmx Vuna_dCompiler_dDriver_dIface.cmx Vuna_dCompiler_dElab_dDriver.cmx Vuna_dCompiler_dDriver_dDt.cmx Vuna_dCompiler_dDriver_dCompile.cmx Vuna_dCompiler_dDriver_dWasm.cmx Vuna_dCompiler_dDriver_dNative.cmx Vuna_dCompiler_dDriver_dToolPayload.cmx Vuna_dCompiler_dDriver_dCompilerCli.cmx Main.cmx $C_OBJS
+flush_layer() {
+  for p in $pids; do wait "$p" || exit 1; done
+  pids=""
+}
+# 按单元表驱动，四种用途共用同一份依赖表：
+#   clean    探测是否已有 .cmx（决定走单次调用还是逐单元路径）
+#   source   收集单次 ocamlopt 的全部输入（SOURCES）与链接序（CMXS）
+#   parallel 逐层并行编译：层内 `&`，层末 flush_layer 逐个 wait
+#   stamps   干净构建后补写每单元 .stamp（增量构建的输入）
+each_unit() {
+  mode=$1
+  while IFS= read -r line; do
+    case "$line" in
+      ''|'#'*) continue ;;
+      '@') flush_layer; continue ;;
+    esac
+    set -- $line
+    base=$1
+    shift
+    case "$mode" in
+      clean) if [ -f "$base.cmx" ]; then clean=0; fi ;;
+      source)
+        CMXS="$CMXS $base.cmx"
+        if [ -f "$base.mli" ]; then SOURCES="$SOURCES $base.mli"; fi
+        SOURCES="$SOURCES $base.ml"
+        ;;
+      parallel)
+        CMXS="$CMXS $base.cmx"
+        compile_mod "$base" "$@" &
+        pids="$pids $!"
+        ;;
+      stamps) printf '%s' "$(stamp_want "$base" "$@")" > "$base.stamp" ;;
+    esac
+  done <<'VUNA_UNIT_TABLE'
+Vuna_runtime
+@
+B_dTrait_dMonoid Vuna_runtime
+B_dTrait_dFromString Vuna_runtime
+B_dTrait_dFunctor Vuna_runtime
+B_dTrait_dNum Vuna_runtime
+B_dEffect_dTypes Vuna_runtime
+B_dData_dFunction Vuna_runtime
+B_dTrait_dTraversable Vuna_runtime
+B_dTrait_dShow Vuna_runtime
+B_dEffect_dPure Vuna_runtime
+B_dTrait_dFromInt Vuna_runtime
+B_dInternal_dOperator Vuna_runtime
+B_dEffect Vuna_runtime
+B_dData Vuna_runtime
+B_dData_dObs Vuna_runtime
+B_dTrait_dApplicative Vuna_runtime
+Prelude Vuna_runtime
+Base_dVersion Vuna_runtime
+B_dTrait_dEq Vuna_runtime
+B_dData_dBits Vuna_runtime
+B_dTrait_dHashable Vuna_runtime
+B_dTrait_dMonad Vuna_runtime
+Base_dCapabilities Vuna_runtime
+B_dTrait_dNeg Vuna_runtime
+@
+B_dEffect_dPure_dError B_dTrait_dFunctor Vuna_runtime B_dTrait_dApplicative B_dTrait_dMonad
+B_dTrait_dInterp B_dTrait_dShow Vuna_runtime
+B_dData_dBool B_dTrait_dShow Vuna_runtime B_dTrait_dHashable
+B_dEffect_dPure_dReader B_dTrait_dFunctor Vuna_runtime B_dTrait_dApplicative B_dTrait_dMonad
+B_dTrait_dFoldable B_dTrait_dMonoid Vuna_runtime
+@
+B_dTrait_dOrd B_dTrait_dShow Vuna_runtime B_dData_dBool B_dTrait_dEq B_dTrait_dHashable
+@
+B_dData_dInt B_dTrait_dNum B_dTrait_dShow Vuna_runtime B_dTrait_dOrd B_dTrait_dEq B_dTrait_dHashable B_dTrait_dNeg
+B_dData_dUnit B_dTrait_dMonoid B_dTrait_dShow Vuna_runtime B_dTrait_dOrd B_dTrait_dEq B_dTrait_dHashable
+B_dData_dPair B_dTrait_dShow Vuna_runtime B_dData_dBool B_dTrait_dOrd B_dTrait_dEq B_dTrait_dHashable
+B_dData_dMaybe B_dTrait_dMonoid B_dTrait_dFunctor B_dTrait_dTraversable B_dTrait_dShow Vuna_runtime B_dData_dBool B_dTrait_dOrd B_dTrait_dFoldable B_dTrait_dApplicative B_dTrait_dEq B_dTrait_dHashable B_dTrait_dMonad
+@
+B_dData_dNat B_dTrait_dMonoid B_dTrait_dNum B_dTrait_dShow Vuna_runtime B_dTrait_dOrd B_dTrait_dEq B_dTrait_dHashable B_dData_dMaybe
+B_dData_dList B_dTrait_dMonoid B_dTrait_dFunctor B_dTrait_dTraversable B_dTrait_dShow Vuna_runtime B_dData_dBool B_dTrait_dOrd B_dTrait_dFoldable B_dTrait_dApplicative B_dData_dPair B_dTrait_dEq B_dTrait_dHashable B_dTrait_dMonad B_dData_dMaybe
+B_dEffect_dPure_dState B_dTrait_dFunctor Vuna_runtime B_dTrait_dApplicative B_dData_dPair B_dTrait_dMonad
+@
+Base_dBytes Vuna_runtime B_dData_dList B_dData_dPair B_dData_dMaybe
+B_dContainer_dArray B_dTrait_dShow Vuna_runtime B_dData_dList B_dTrait_dEq
+Codegen_dOcaml_dModel Vuna_runtime B_dData_dList B_dData_dPair B_dData_dMaybe
+B_dData_dSha1 Vuna_runtime B_dData_dList B_dData_dPair B_dData_dBits
+B_dData_dFloat B_dTrait_dNum B_dTrait_dShow Vuna_runtime B_dTrait_dOrd B_dData_dList B_dData_dPair B_dTrait_dEq B_dData_dMaybe B_dTrait_dNeg
+B_dData_dString B_dTrait_dMonoid B_dTrait_dInterp Vuna_runtime B_dTrait_dOrd B_dData_dList B_dTrait_dEq B_dTrait_dHashable
+B_dData_dResult B_dTrait_dFunctor B_dTrait_dTraversable B_dTrait_dShow Vuna_runtime B_dTrait_dFoldable B_dData_dList B_dTrait_dApplicative B_dData_dPair B_dTrait_dEq B_dTrait_dHashable B_dTrait_dMonad
+B_dData_dBase64 Vuna_runtime B_dData_dList B_dData_dBits B_dData_dMaybe
+Native_dModel Vuna_runtime B_dData_dList B_dData_dPair
+Wasm_dInstr Vuna_runtime B_dData_dList
+B_dData_dVec Vuna_runtime B_dData_dList
+Base_dHash B_dData_dInt B_dTrait_dNum Vuna_runtime B_dData_dList B_dData_dPair B_dData_dBits
+Base_dDiagnostics_dIc Vuna_runtime B_dData_dList
+B_dData_dSort Vuna_runtime B_dTrait_dOrd B_dData_dList
+@
+Frontend_dCanonical_dPkg Base_dBytes Vuna_runtime B_dData_dList Base_dHash B_dData_dPair B_dData_dMaybe
+Native_dAbi Vuna_runtime B_dData_dList Native_dModel
+B_dContainer_dHashMap B_dContainer_dArray B_dTrait_dShow Vuna_runtime B_dData_dString B_dData_dList B_dData_dPair B_dTrait_dEq B_dTrait_dHashable B_dData_dMaybe
+Native_dRender Vuna_runtime B_dData_dString B_dData_dList Native_dModel B_dData_dPair
+Codegen_dOcaml_dRender Codegen_dOcaml_dModel Vuna_runtime B_dData_dList B_dData_dPair B_dData_dMaybe
+Wasm_dModel Vuna_runtime B_dData_dList Wasm_dInstr B_dData_dPair B_dData_dMaybe
+Base_dSource Vuna_runtime B_dData_dBool B_dData_dString B_dData_dList B_dData_dPair
+@
+Native_dGc Vuna_runtime Native_dAbi B_dData_dList Native_dModel
+Frontend_dAst Vuna_runtime B_dData_dString B_dData_dList B_dData_dPair Base_dSource B_dData_dMaybe
+Wasm_dRuntime Vuna_runtime Wasm_dModel B_dData_dList Wasm_dInstr B_dData_dPair
+Base_dDiag B_dData_dInt B_dTrait_dFunctor Vuna_runtime B_dData_dString B_dData_dList B_dTrait_dApplicative B_dData_dPair B_dTrait_dEq Base_dSource B_dTrait_dMonad B_dData_dMaybe
+Base_dIntrinsics Vuna_runtime B_dContainer_dHashMap B_dData_dBool B_dData_dString B_dData_dList B_dData_dPair Base_dSource B_dData_dMaybe
+Wasm_dRender B_dData_dInt B_dTrait_dInterp Vuna_runtime B_dData_dString Wasm_dModel B_dData_dList Wasm_dInstr B_dData_dPair B_dTrait_dEq B_dData_dMaybe
+Ir_dModel Vuna_runtime B_dData_dList B_dData_dPair Base_dSource B_dData_dMaybe
+B_dEffect_dCore B_dData_dInt B_dTrait_dFunctor Vuna_runtime B_dContainer_dHashMap B_dData_dList B_dTrait_dApplicative B_dData_dPair B_dTrait_dMonad B_dData_dMaybe
+@
+B_dEffect_dRef Vuna_runtime B_dEffect_dCore
+Loader_dAddr Base_dBytes Frontend_dAst Vuna_runtime B_dData_dList Base_dHash
+Base_dDiagnostics_dSink Vuna_runtime Base_dDiag B_dContainer_dHashMap B_dData_dString B_dData_dList Base_dSource B_dData_dMaybe
+Codegen_dDecl Codegen_dOcaml_dModel Frontend_dAst Vuna_runtime B_dContainer_dHashMap Codegen_dOcaml_dRender B_dData_dString B_dData_dList B_dData_dPair Ir_dModel Base_dSource B_dData_dMaybe
+B_dData_dObs_dSpan Vuna_runtime B_dData_dObs B_dTrait_dApplicative B_dEffect_dCore B_dTrait_dMonad
+B_dEffect_dStdin Vuna_runtime B_dTrait_dApplicative B_dEffect_dCore B_dTrait_dMonad B_dData_dMaybe
+Base_dDiag_dCodec Base_dBytes Vuna_runtime Base_dDiag B_dData_dList B_dData_dPair Base_dSource B_dData_dMaybe
+Ir_dDispatch Vuna_runtime Base_dIntrinsics B_dData_dList B_dData_dPair Ir_dModel B_dData_dMaybe
+B_dEffect_dReader Vuna_runtime B_dEffect_dCore B_dTrait_dMonad
+B_dEffect_dClock Vuna_runtime B_dTrait_dApplicative B_dEffect_dCore B_dTrait_dMonad
+Ir_dAnf Vuna_runtime B_dData_dString B_dData_dResult B_dData_dList B_dData_dPair Ir_dModel B_dData_dMaybe
+Native_dRuntime Native_dGc Vuna_runtime Native_dAbi B_dData_dList Native_dModel B_dData_dMaybe
+B_dEffect_dConsole B_dTrait_dFunctor Vuna_runtime B_dEffect_dCore B_dTrait_dMonad
+Frontend_dCanonical_dAst Base_dBytes Frontend_dAst Vuna_runtime B_dData_dList B_dData_dPair Base_dSource B_dData_dMaybe
+Base_dObs Vuna_runtime B_dData_dObs B_dEffect_dCore
+B_dEffect_dProcess Vuna_runtime B_dData_dResult B_dData_dList B_dTrait_dApplicative B_dEffect_dCore B_dTrait_dMonad
+Core_dTerm B_dData_dInt Vuna_runtime B_dContainer_dHashMap Base_dIntrinsics B_dData_dString B_dData_dList B_dData_dPair Base_dSource B_dData_dMaybe
+Wasm_dTypes Vuna_runtime Wasm_dModel B_dData_dList B_dData_dPair Ir_dModel B_dData_dMaybe
+B_dEffect_dEnv Vuna_runtime B_dTrait_dApplicative B_dEffect_dCore B_dTrait_dMonad B_dData_dMaybe
+B_dEffect_dNet Vuna_runtime B_dData_dResult B_dTrait_dApplicative B_dEffect_dCore B_dTrait_dMonad B_dData_dMaybe
+Base_dCommon B_dTrait_dFunctor Vuna_runtime Base_dDiag B_dData_dList B_dTrait_dApplicative B_dData_dPair B_dEffect_dCore B_dTrait_dMonad
+B_dEffect_dState Vuna_runtime B_dEffect_dCore
+B_dEffect_dExn Vuna_runtime B_dData_dResult B_dTrait_dApplicative B_dEffect_dCore B_dTrait_dMonad
+B_dEffect_dPure_dIORef Vuna_runtime B_dEffect_dCore B_dTrait_dMonad
+Ir_dTail Vuna_runtime B_dContainer_dHashMap B_dData_dString B_dData_dResult B_dData_dList B_dData_dPair Ir_dModel B_dData_dMaybe
+Ir_dRuntime Vuna_runtime B_dData_dList B_dData_dPair Ir_dModel B_dData_dMaybe
+Ir_dRepresent Vuna_runtime B_dData_dList B_dData_dPair Ir_dModel B_dData_dMaybe
+B_dEffect_dError Vuna_runtime B_dData_dResult B_dTrait_dApplicative B_dEffect_dCore B_dTrait_dMonad
+B_dEffect_dExit Vuna_runtime B_dTrait_dApplicative B_dEffect_dCore B_dTrait_dMonad
+B_dEffect_dFs B_dTrait_dFunctor Vuna_runtime B_dData_dBool B_dTrait_dOrd B_dData_dString B_dData_dResult B_dData_dList B_dTrait_dApplicative B_dEffect_dCore B_dData_dSort B_dTrait_dMonad B_dData_dMaybe
+Base_dDiagnostics_dCommon Vuna_runtime Base_dDiag B_dData_dList B_dData_dVec Base_dSource B_dData_dMaybe
+B_dEffect_dArgs Vuna_runtime B_dData_dList B_dTrait_dApplicative B_dEffect_dCore B_dTrait_dMonad
+Frontend_dRast_dName Frontend_dAst Vuna_runtime Base_dIntrinsics B_dData_dString B_dData_dList B_dData_dPair B_dData_dMaybe
+@
+Base_dStore B_dTrait_dFunctor B_dData_dObs_dSpan Vuna_runtime B_dEffect_dClock B_dData_dBool B_dEffect_dProcess B_dData_dString B_dEffect_dEnv B_dData_dList Base_dHash B_dTrait_dApplicative B_dData_dPair B_dEffect_dFs B_dTrait_dEq B_dEffect_dCore B_dTrait_dMonad B_dData_dMaybe
+Core_dCanonical Base_dBytes Vuna_runtime Core_dTerm B_dData_dList B_dData_dPair Base_dSource B_dData_dMaybe
+Driver_dSplit B_dData_dInt Base_dBytes Vuna_runtime Base_dDiag B_dContainer_dHashMap B_dTrait_dOrd B_dData_dString B_dData_dList Base_dHash B_dTrait_dApplicative B_dData_dPair B_dEffect_dFs B_dEffect_dCore B_dData_dSort B_dTrait_dMonad B_dData_dMaybe
+Base_dDiagnostics_dTc Vuna_runtime Base_dDiag B_dData_dString B_dData_dList B_dData_dVec B_dData_dPair Base_dSource Base_dDiagnostics_dCommon B_dData_dMaybe
+Loader_dFingerprint B_dTrait_dFunctor Loader_dAddr Vuna_runtime B_dTrait_dOrd B_dData_dString B_dEffect_dEnv B_dData_dList Base_dHash B_dTrait_dApplicative Base_dVersion B_dData_dPair B_dEffect_dFs Base_dSource B_dEffect_dCore B_dData_dSort B_dTrait_dMonad B_dData_dMaybe
+Base_dDiagnostics_dPkg Vuna_runtime Base_dDiag B_dData_dList B_dData_dVec Base_dSource Base_dDiagnostics_dCommon B_dData_dMaybe
+Codegen_dRuntime Vuna_runtime B_dData_dList Ir_dRuntime B_dData_dPair B_dData_dMaybe
+Core_dEval B_dData_dInt Vuna_runtime B_dContainer_dHashMap B_dData_dBool Base_dIntrinsics Core_dTerm B_dData_dFloat B_dData_dList B_dData_dPair B_dTrait_dEq Base_dSource B_dData_dMaybe
+Base_dDiagnostics_dLoader Vuna_runtime Base_dDiag B_dData_dList B_dData_dVec Base_dDiagnostics_dCommon
+Base_dDiagnostics_dWarning Vuna_runtime Base_dDiag B_dData_dList B_dData_dVec Base_dSource Base_dDiagnostics_dCommon B_dData_dMaybe
+Base_dDiagnostics_dCg Vuna_runtime Base_dDiag B_dData_dList B_dData_dVec Base_dSource Base_dDiagnostics_dCommon B_dData_dMaybe
+Native_dAudit Vuna_runtime Native_dRuntime B_dData_dBool B_dData_dString B_dData_dList Native_dModel Ir_dRuntime B_dData_dPair Ir_dModel B_dData_dMaybe
+Frontend_dRast Frontend_dAst Vuna_runtime B_dData_dString B_dData_dList B_dData_dPair Base_dSource B_dData_dMaybe Frontend_dRast_dName
+Base_dDiagnostics_dFrontend Vuna_runtime Base_dDiag B_dData_dList B_dData_dVec Base_dSource Base_dDiagnostics_dCommon B_dData_dMaybe
+Base_dDiagnostics_dRn Vuna_runtime Base_dDiag B_dData_dList B_dData_dVec Base_dSource Base_dDiagnostics_dCommon B_dData_dMaybe
+@
+Elab_dCoverage B_dData_dInt Base_dDiagnostics_dTc Vuna_runtime Base_dDiag B_dData_dBool B_dData_dString B_dData_dList B_dData_dVec Frontend_dRast B_dData_dPair B_dTrait_dEq Base_dSource B_dData_dMaybe Frontend_dRast_dName
+Ir_dAnalysis B_dData_dInt B_dTrait_dNum Vuna_runtime Base_dDiag B_dContainer_dHashMap B_dData_dBool Base_dDiagnostics_dCg B_dData_dString Base_dCommon B_dData_dList B_dData_dVec B_dData_dPair Ir_dModel Base_dSource B_dData_dMaybe
+Elab_dPrelude Base_dDiagnostics_dTc Vuna_runtime Base_dDiag Base_dIntrinsics Core_dTerm B_dData_dList B_dData_dVec B_dData_dPair Base_dSource B_dData_dMaybe
+Frontend_dLexer Vuna_runtime Base_dDiag B_dData_dBool B_dData_dList Base_dDiagnostics_dFrontend B_dData_dPair Base_dSource B_dData_dMaybe
+Elab_dRecords Frontend_dAst Base_dDiagnostics_dTc Vuna_runtime Base_dDiag Base_dIntrinsics Base_dCommon B_dData_dList B_dData_dVec Frontend_dRast B_dData_dPair Base_dSource Base_dDiagnostics_dCommon B_dData_dMaybe Frontend_dRast_dName
+Loader_dFixity Frontend_dAst Vuna_runtime Base_dDiag B_dContainer_dHashMap B_dData_dString Base_dCommon B_dData_dList B_dData_dVec B_dData_dPair Base_dDiagnostics_dRn Base_dSource B_dData_dMaybe
+Driver_dPerfCache Base_dBytes Base_dStore Driver_dSplit Vuna_runtime Loader_dFingerprint B_dData_dList B_dTrait_dApplicative B_dData_dPair B_dEffect_dFs B_dEffect_dCore B_dTrait_dMonad B_dData_dMaybe
+Elab_dTypes B_dData_dInt Frontend_dAst Vuna_runtime Base_dDiag Core_dEval B_dContainer_dHashMap B_dData_dBool Core_dTerm B_dData_dString B_dData_dList Frontend_dRast B_dData_dPair Base_dSource B_dData_dMaybe
+Base_dDiagnostics Base_dDiagnostics_dTc Vuna_runtime Base_dDiagnostics_dPkg Base_dDiagnostics_dLoader Base_dDiagnostics_dWarning Base_dDiagnostics_dCg B_dData_dString B_dData_dList Base_dDiagnostics_dFrontend Base_dDiagnostics_dIc B_dData_dPair Base_dDiagnostics_dRn B_dData_dMaybe
+Codegen_dTerm Codegen_dDecl Codegen_dOcaml_dModel Vuna_runtime Base_dDiag Codegen_dRuntime Codegen_dOcaml_dRender B_dTrait_dOrd B_dData_dString Base_dCommon B_dData_dList Ir_dRuntime B_dData_dPair Ir_dModel Base_dSource B_dData_dSort B_dData_dMaybe
+Elab_dSig Vuna_runtime Core_dEval B_dContainer_dHashMap Base_dIntrinsics Core_dTerm B_dData_dString B_dData_dList Frontend_dRast B_dData_dPair Base_dSource B_dData_dMaybe Frontend_dRast_dName
+Loader_dExpand Frontend_dAst Vuna_runtime Base_dDiag Base_dIntrinsics Base_dCommon B_dData_dList B_dData_dPair Base_dDiagnostics_dRn Base_dSource B_dData_dMaybe
+Core_dConv Base_dDiagnostics_dTc Vuna_runtime Base_dDiag Core_dEval B_dContainer_dHashMap B_dData_dBool Base_dIntrinsics Core_dTerm Base_dCommon B_dData_dList B_dData_dPair B_dTrait_dEq Base_dSource B_dData_dMaybe
+Frontend_dRast_dBridge Frontend_dAst Vuna_runtime B_dData_dList Frontend_dRast B_dData_dPair B_dData_dMaybe Frontend_dRast_dName
+Elab_dTermination_dMeasure Vuna_runtime B_dContainer_dHashMap B_dData_dString B_dData_dList Frontend_dRast B_dData_dPair Base_dSource B_dData_dMaybe Frontend_dRast_dName
+@
+Frontend_dToml Vuna_runtime Frontend_dLexer Base_dDiag Base_dDiagnostics_dPkg B_dData_dString B_dData_dList B_dData_dPair B_dTrait_dEq Base_dSource B_dData_dBits B_dData_dMaybe
+Ir_dValidate Ir_dAnalysis Vuna_runtime Base_dDiag B_dContainer_dHashMap B_dData_dString Base_dCommon B_dData_dList Ir_dRuntime B_dData_dPair Ir_dModel B_dTrait_dEq B_dData_dMaybe
+Frontend_dCst B_dData_dObs_dSpan Vuna_runtime Frontend_dLexer Base_dDiag B_dData_dBool B_dData_dList B_dData_dPair Base_dSource B_dData_dMaybe
+Elab_dMatch Elab_dCoverage Base_dDiagnostics_dTc Vuna_runtime Base_dDiag Base_dCommon B_dData_dList B_dData_dVec Frontend_dRast B_dData_dPair Base_dSource B_dData_dMaybe Frontend_dRast_dName
+Base_dDiag_dFormat B_dTrait_dInterp Vuna_runtime Base_dDiag B_dData_dBool Base_dDiagnostics B_dData_dString B_dData_dList B_dTrait_dApplicative Base_dVersion B_dEffect_dFs Base_dSource B_dEffect_dCore B_dTrait_dMonad B_dData_dMaybe
+Elab_dDerive Base_dDiagnostics_dTc Vuna_runtime Base_dDiag Elab_dRecords Base_dCommon B_dData_dList Frontend_dRast B_dData_dPair Base_dSource Frontend_dRast_dName
+Elab_dMetaSpans Vuna_runtime Elab_dTypes Core_dTerm B_dData_dList B_dData_dPair Base_dSource B_dData_dMaybe
+Elab_dTermination_dScc Vuna_runtime Base_dDiag B_dContainer_dHashMap B_dData_dBool Base_dObs B_dData_dList B_dData_dObs Frontend_dRast B_dData_dPair B_dTrait_dEq Base_dSource B_dData_dMaybe Elab_dTermination_dMeasure Frontend_dRast_dName
+Frontend_dParser_dSupport Frontend_dAst Vuna_runtime Frontend_dLexer Base_dDiag B_dData_dList Base_dDiagnostics_dFrontend B_dData_dPair Base_dSource B_dData_dMaybe
+Codegen_dAssembly Codegen_dDecl Vuna_runtime Base_dDiag Codegen_dOcaml_dRender Codegen_dTerm Base_dCommon B_dData_dList B_dData_dPair Ir_dModel B_dData_dMaybe
+Elab_dRepresentation Frontend_dAst Vuna_runtime B_dData_dBool Base_dIntrinsics Elab_dTypes Core_dTerm B_dData_dList B_dData_dPair B_dData_dMaybe
+Ir_dCps Ir_dAnalysis Vuna_runtime B_dData_dBool B_dData_dString B_dData_dResult B_dData_dList Ir_dTail B_dData_dPair Ir_dModel B_dTrait_dEq B_dData_dMaybe
+@
+Frontend_dParser Frontend_dAst Vuna_runtime Frontend_dLexer Base_dDiag B_dData_dBool Base_dCommon B_dData_dList B_dData_dVec Base_dDiagnostics_dFrontend Frontend_dParser_dSupport B_dData_dPair Base_dSource B_dData_dMaybe
+Elab_dTermination Base_dDiagnostics_dTc Vuna_runtime Base_dDiag B_dContainer_dHashMap B_dData_dString Base_dCommon B_dData_dList B_dData_dVec Frontend_dRast Elab_dTermination_dScc B_dData_dPair Base_dSource B_dData_dMaybe Elab_dTermination_dMeasure Frontend_dRast_dName
+Wasm_dModule Ir_dAnalysis Wasm_dRuntime Vuna_runtime Ir_dAnf B_dContainer_dHashMap B_dData_dBool Base_dIntrinsics Wasm_dTypes B_dData_dString B_dData_dResult Wasm_dModel B_dData_dList Wasm_dInstr Ir_dTail B_dData_dPair Ir_dModel B_dTrait_dEq B_dData_dMaybe Ir_dCps
+Elab_dMeta Frontend_dAst Elab_dPrelude Base_dDiagnostics_dTc Vuna_runtime Base_dDiag Core_dEval B_dContainer_dHashMap B_dData_dBool Base_dIntrinsics Elab_dTypes Core_dTerm B_dData_dString Elab_dSig Base_dCommon B_dData_dList Core_dConv Frontend_dRast B_dData_dPair B_dTrait_dEq Base_dSource Elab_dRepresentation B_dData_dMaybe Frontend_dRast_dName
+Frontend_dManifest Frontend_dToml Vuna_runtime Base_dDiag Base_dDiagnostics_dPkg B_dData_dBool B_dData_dString Base_dCommon B_dData_dList B_dTrait_dApplicative B_dData_dPair B_dTrait_dEq Base_dSource B_dTrait_dMonad B_dData_dMaybe
+Native_dModule Ir_dAnalysis Vuna_runtime Native_dAbi Native_dRuntime B_dData_dBool B_dData_dString Native_dAudit B_dData_dResult B_dData_dList Native_dModel Ir_dTail Ir_dRuntime B_dData_dPair Ir_dModel B_dTrait_dEq B_dData_dMaybe Ir_dCps
+@
+Elab_dInstName Vuna_runtime B_dData_dString Elab_dMeta B_dData_dList Frontend_dRast B_dData_dMaybe Frontend_dRast_dName
+Elab_dUsage Base_dDiagnostics_dTc Vuna_runtime Base_dDiag Core_dEval B_dData_dBool Base_dDiagnostics_dWarning Elab_dTypes Core_dTerm B_dData_dString Base_dCommon Elab_dMeta B_dData_dList B_dData_dVec B_dData_dPair Base_dSource B_dData_dMaybe
+Frontend_dPackages_dSource Frontend_dCanonical_dPkg Vuna_runtime Base_dDiag B_dData_dString B_dData_dList Frontend_dManifest Base_dHash B_dTrait_dApplicative B_dData_dPair B_dEffect_dFs B_dEffect_dCore B_dData_dSort B_dTrait_dMonad B_dData_dMaybe
+Elab_dTerm_dSupport Base_dDiagnostics_dTc Vuna_runtime Base_dDiag Core_dEval Elab_dTypes Core_dTerm Elab_dMeta B_dData_dList Frontend_dRast B_dData_dPair Base_dSource B_dData_dMaybe
+Elab_dDict Elab_dPrelude Base_dDiagnostics_dTc Vuna_runtime Base_dDiag Core_dEval B_dContainer_dHashMap B_dData_dBool Base_dIntrinsics Elab_dTypes Core_dTerm B_dData_dString Base_dCommon Elab_dMeta B_dData_dList Elab_dMetaSpans Core_dConv B_dData_dPair Base_dSource Elab_dRepresentation B_dData_dMaybe
+@
+Lowering_dChecks Elab_dUsage Vuna_runtime Base_dDiag Core_dEval B_dContainer_dHashMap B_dData_dBool Elab_dTypes Core_dTerm Base_dDiagnostics_dCg B_dData_dString Base_dCommon B_dData_dList B_dData_dVec B_dData_dPair B_dData_dMaybe
+Elab_dInstCoherence Vuna_runtime Base_dDiag Core_dEval Elab_dTypes Core_dTerm Elab_dDict Elab_dMeta B_dData_dList Core_dConv B_dData_dPair B_dData_dMaybe
+Elab_dCase Elab_dUsage Base_dDiagnostics_dTc Vuna_runtime Base_dDiag Core_dEval B_dData_dBool Base_dIntrinsics Base_dDiagnostics_dWarning Elab_dTypes Core_dTerm Base_dCommon Elab_dMeta B_dData_dList B_dData_dVec Core_dConv Frontend_dRast B_dData_dPair B_dTrait_dEq Base_dSource B_dData_dMaybe Frontend_dRast_dName
+Driver_dOwner Frontend_dAst Elab_dInstName Vuna_runtime Base_dDiag B_dContainer_dHashMap Base_dIntrinsics Elab_dDerive Elab_dTypes B_dData_dString Base_dCommon B_dData_dList Frontend_dRast_dBridge B_dData_dPair Base_dSource B_dData_dMaybe
+Frontend_dPackages_dPkg Frontend_dCanonical_dPkg Base_dStore Vuna_runtime B_dData_dUnit Base_dDiag Base_dDiagnostics_dPkg Frontend_dPackages_dSource B_dData_dString B_dEffect_dEnv B_dData_dList Frontend_dManifest B_dData_dVec B_dTrait_dApplicative B_dData_dPair B_dEffect_dFs B_dTrait_dEq Base_dSource B_dEffect_dCore B_dTrait_dMonad B_dData_dMaybe
+@
+Loader_dModules Frontend_dAst Vuna_runtime Frontend_dLexer Base_dDiag B_dContainer_dHashMap Base_dDiagnostics_dLoader B_dData_dBool B_dData_dString Base_dCommon B_dData_dList Frontend_dPackages_dPkg B_dTrait_dApplicative B_dData_dPair B_dEffect_dFs Base_dDiagnostics_dRn B_dTrait_dEq Base_dSource B_dEffect_dCore B_dTrait_dMonad B_dData_dMaybe
+Elab_dTerm_dImpl Elab_dCoverage Frontend_dAst Elab_dPrelude Base_dDiagnostics_dTc Vuna_runtime Base_dDiag Elab_dRecords Elab_dMatch Elab_dTerm_dSupport Core_dEval B_dData_dBool Base_dIntrinsics Base_dObs Elab_dTypes Core_dTerm B_dData_dString Elab_dDict Elab_dCase B_dData_dNat Base_dCommon Elab_dMeta B_dData_dList Elab_dMetaSpans Core_dConv Frontend_dRast B_dData_dPair B_dTrait_dEq Base_dSource B_dData_dMaybe Frontend_dRast_dName
+Lowering_dEnv Lowering_dChecks Vuna_runtime Core_dEval B_dContainer_dHashMap B_dData_dBool Base_dIntrinsics Elab_dTypes Core_dTerm B_dData_dString Elab_dMeta B_dData_dList B_dData_dPair Ir_dModel Base_dSource Elab_dRepresentation B_dData_dMaybe
+Lowering_dEntry Lowering_dChecks Vuna_runtime Base_dDiag Core_dEval B_dContainer_dHashMap Base_dIntrinsics Elab_dTypes Core_dTerm B_dData_dString B_dData_dList Ir_dRuntime B_dData_dPair Ir_dModel B_dData_dMaybe
+@
+Elab_dCanonical Base_dBytes Frontend_dAst Core_dCanonical Loader_dModules Vuna_runtime Elab_dRecords Frontend_dCanonical_dAst Elab_dTypes Core_dTerm B_dData_dList Frontend_dRast_dBridge B_dData_dPair Base_dSource B_dData_dMaybe
+Lowering_dTy Vuna_runtime Base_dDiag Core_dEval B_dContainer_dHashMap B_dData_dBool Base_dIntrinsics Lowering_dEnv Elab_dTypes Core_dTerm B_dData_dString Base_dCommon B_dData_dList B_dData_dPair Ir_dModel Elab_dRepresentation B_dData_dMaybe
+Loader_dResolve Frontend_dAst Loader_dModules Base_dDiagnostics_dTc Vuna_runtime Frontend_dLexer Base_dDiag B_dContainer_dHashMap Base_dIntrinsics B_dData_dString Base_dCommon B_dData_dList Base_dDiagnostics_dFrontend B_dData_dPair Base_dDiagnostics_dRn Base_dSource B_dData_dMaybe Frontend_dRast_dName
+Loader_dLayers Frontend_dAst Loader_dModules Vuna_runtime Base_dDiag Base_dDiagnostics_dLoader B_dData_dString B_dData_dList Frontend_dPackages_dPkg Frontend_dManifest Base_dSource B_dData_dMaybe
+Elab_dTerm Frontend_dAst Vuna_runtime Elab_dTerm_dImpl Elab_dTypes Core_dTerm B_dData_dList Frontend_dRast B_dData_dPair Base_dSource B_dData_dMaybe
+@
+Driver_dCache B_dData_dInt Base_dBytes Elab_dCanonical Core_dCanonical Vuna_runtime Base_dDiag Core_dEval B_dContainer_dHashMap B_dData_dBool Elab_dTypes Core_dTerm Base_dCommon Elab_dMeta B_dData_dList B_dData_dPair B_dData_dMaybe
+Elab_dData Frontend_dAst Elab_dPrelude Base_dDiagnostics_dTc Vuna_runtime Base_dDiag Elab_dRecords B_dContainer_dHashMap B_dData_dBool Base_dIntrinsics Elab_dTypes Core_dTerm B_dData_dString Base_dCommon Elab_dMeta B_dData_dList Frontend_dRast Elab_dTerm B_dData_dPair Base_dSource Elab_dRepresentation B_dData_dMaybe Frontend_dRast_dName
+Lowering_dProgram Ir_dAnalysis Lowering_dChecks Codegen_dDecl Lowering_dTy Ir_dDispatch Vuna_runtime Ir_dValidate Base_dDiag Codegen_dRuntime Core_dEval B_dContainer_dHashMap B_dData_dBool Base_dIntrinsics Lowering_dEnv Base_dObs Elab_dTypes Core_dTerm Base_dDiagnostics_dCg B_dData_dString Lowering_dEntry Base_dCommon B_dData_dList Ir_dRuntime Ir_dRepresent B_dData_dPair Ir_dModel Base_dSource Elab_dRepresentation B_dData_dMaybe
+Elab_dTrait Elab_dCoverage B_dData_dInt B_dTrait_dInterp Frontend_dAst Elab_dInstCoherence Elab_dInstName Base_dDiagnostics_dTc Vuna_runtime Base_dDiag Elab_dMatch Core_dEval B_dContainer_dHashMap Elab_dTerm_dImpl Base_dObs Elab_dTypes Core_dTerm B_dData_dString Elab_dDict Elab_dSig Base_dCommon Elab_dMeta B_dData_dList Core_dConv Frontend_dRast Elab_dTerm B_dData_dPair Base_dSource B_dData_dMaybe Frontend_dRast_dName
+Loader_dFlatten B_dData_dObs_dSpan Frontend_dParser Frontend_dAst Loader_dModules Vuna_runtime Frontend_dLexer Base_dDiag Loader_dFixity Loader_dResolve B_dContainer_dHashMap Base_dDiagnostics_dLoader Loader_dLayers B_dData_dBool Base_dIntrinsics Base_dDiagnostics_dWarning B_dData_dString Base_dCommon B_dData_dList Loader_dExpand Frontend_dPackages_dPkg B_dData_dVec B_dTrait_dApplicative Frontend_dParser_dSupport B_dData_dPair B_dEffect_dFs Base_dDiagnostics_dRn Base_dSource B_dEffect_dCore B_dTrait_dMonad B_dData_dMaybe
+@
+Driver_dSplitGen Codegen_dDecl Frontend_dAst Driver_dSplit Vuna_runtime Base_dDiag B_dContainer_dHashMap B_dData_dBool Lowering_dProgram Lowering_dEnv Elab_dTypes Base_dDiagnostics_dCg B_dData_dString Lowering_dEntry Codegen_dTerm Base_dCommon B_dData_dList Driver_dOwner B_dTrait_dApplicative B_dData_dPair Ir_dModel Base_dSource B_dEffect_dCore B_dTrait_dMonad Codegen_dAssembly B_dData_dMaybe
+Driver_dIface B_dData_dInt Base_dBytes Driver_dCache Frontend_dAst Elab_dCanonical Core_dCanonical Elab_dPrelude Loader_dModules Vuna_runtime Base_dDiag Elab_dRecords B_dContainer_dHashMap Frontend_dCanonical_dAst B_dData_dBool Base_dIntrinsics Elab_dDerive Elab_dTypes Core_dTerm B_dTrait_dOrd B_dData_dString B_dData_dList Driver_dOwner Frontend_dRast_dBridge Base_dHash B_dTrait_dApplicative B_dData_dPair Base_dSource Loader_dFlatten B_dData_dSort B_dTrait_dMonad B_dData_dMaybe
+Elab_dDriver B_dData_dInt B_dTrait_dInterp Elab_dPrelude Elab_dUsage Base_dDiagnostics_dTc Vuna_runtime Base_dDiag Elab_dRecords Core_dEval B_dContainer_dHashMap Elab_dTermination Elab_dData Base_dIntrinsics Elab_dTerm_dImpl Elab_dDerive Elab_dTrait Base_dObs Elab_dTypes Core_dTerm B_dTrait_dOrd B_dData_dString Elab_dDict Base_dCommon Elab_dMeta B_dData_dList Elab_dMetaSpans B_dData_dVec Core_dConv Frontend_dRast Elab_dTerm B_dData_dPair B_dTrait_dEq Base_dSource B_dData_dSort B_dData_dMaybe Frontend_dRast_dName
+@
+Driver_dDt Base_dBytes Frontend_dParser Driver_dCache Frontend_dAst Elab_dPrelude Driver_dSplit Loader_dModules Vuna_runtime Base_dDiag Elab_dRecords Driver_dSplitGen Core_dEval B_dContainer_dHashMap Driver_dPerfCache Frontend_dCanonical_dAst B_dData_dBool Lowering_dProgram Base_dIntrinsics Base_dDiagnostics_dWarning Elab_dDerive Lowering_dEnv Base_dObs Elab_dTypes Core_dTerm Base_dDiagnostics_dCg B_dTrait_dOrd B_dData_dString B_dEffect_dEnv Base_dCommon Elab_dMeta B_dData_dList Frontend_dPackages_dPkg B_dData_dObs B_dData_dVec Frontend_dRast_dBridge Base_dHash B_dTrait_dApplicative Driver_dIface Frontend_dRast B_dData_dPair Ir_dModel B_dEffect_dFs Elab_dDriver B_dTrait_dEq Base_dSource B_dEffect_dCore Loader_dFlatten B_dData_dSort B_dTrait_dMonad Codegen_dAssembly B_dData_dMaybe Elab_dTermination_dMeasure
+@
+Driver_dCompile Base_dBytes B_dTrait_dFunctor Loader_dAddr Base_dDiag_dCodec B_dTrait_dInterp Driver_dCache Frontend_dAst Base_dStore Driver_dSplit Loader_dModules Vuna_runtime Loader_dFingerprint B_dEffect_dClock Base_dDiag Base_dDiagnostics_dPkg Frontend_dPackages_dSource B_dContainer_dHashMap B_dData_dBool Base_dObs B_dEffect_dProcess B_dData_dString B_dEffect_dEnv B_dData_dList Frontend_dPackages_dPkg Frontend_dManifest B_dData_dObs Base_dHash B_dTrait_dApplicative Driver_dIface Driver_dDt Base_dVersion B_dData_dPair B_dEffect_dFs B_dTrait_dEq Base_dSource B_dEffect_dCore Loader_dFlatten B_dTrait_dMonad B_dData_dMaybe
+@
+Driver_dWasm Vuna_runtime Base_dDiag Driver_dCompile Lowering_dProgram Base_dDiagnostics_dWarning Wasm_dModule Elab_dTypes Wasm_dRender Wasm_dModel B_dData_dList Frontend_dPackages_dPkg B_dTrait_dApplicative Driver_dDt B_dData_dPair Ir_dModel B_dEffect_dFs B_dEffect_dCore B_dTrait_dMonad Base_dCapabilities B_dData_dMaybe
+Driver_dToolPayload Base_dBytes Vuna_runtime Driver_dCompile B_dData_dList Driver_dIface B_dData_dPair B_dData_dMaybe
+Driver_dNative Vuna_runtime Base_dDiag Driver_dCompile Native_dRender Lowering_dProgram Elab_dTypes B_dData_dString B_dData_dList Native_dModel Frontend_dPackages_dPkg B_dTrait_dApplicative Native_dModule Driver_dDt B_dData_dPair B_dEffect_dFs B_dEffect_dCore B_dTrait_dMonad
+@
+Driver_dCompilerCli Base_dDiagnostics_dSink Base_dStore Vuna_runtime Loader_dFingerprint B_dEffect_dClock Base_dDiag Driver_dCompile B_dEffect_dConsole Base_dDiag_dFormat B_dData_dBool B_dEffect_dProcess B_dData_dString Driver_dWasm B_dEffect_dEnv B_dData_dList Driver_dNative Frontend_dPackages_dPkg Frontend_dManifest B_dTrait_dApplicative Driver_dDt Base_dVersion B_dData_dPair B_dEffect_dFs B_dTrait_dEq Base_dSource B_dEffect_dCore B_dTrait_dMonad B_dData_dMaybe
+@
+Main Vuna_runtime B_dEffect_dClock B_dEffect_dConsole Driver_dCompilerCli B_dEffect_dProcess B_dEffect_dEnv B_dEffect_dExit B_dEffect_dFs B_dEffect_dCore B_dTrait_dMonad B_dEffect_dArgs
+VUNA_UNIT_TABLE
+  flush_layer
+}
+clean=1
+each_unit clean
+if [ "$clean" -eq 1 ] && [ "$JOBS" -le 1 ]; then
+  SOURCES=""
+  CMXS=""
+  each_unit source
+  ocamlopt $FLAGS -I +unix -o "$OUT" unix.cmxa $SOURCES $C_OBJS
+  each_unit stamps
+  echo "built $OUT"
+  exit 0
+fi
+CMXS=""
+each_unit parallel
+ocamlopt $FLAGS -I +unix -o "$OUT" unix.cmxa $CMXS $C_OBJS
 echo "built $OUT"

@@ -1,0 +1,26 @@
+open Vuna_runtime
+type t_ExitOp = C_ExitOp_ExitWith of (int)
+
+# 14 "Base/Effect/Exit.vuna"
+let v_exitWith = (fun (n : string) (code : int) -> (((((B_dEffect_dCore.v_sendCoreId "exit") n) 233642629) (dtp_effectId n)) (C_ExitOp_ExitWith (code))))
+
+# 18 "Base/Effect/Exit.vuna"
+let v_handleExit = (fun (n : string) ret opH comp -> (((((((B_dEffect_dCore.v_handleCoreId "exit") n) 233642629) (dtp_effectId n)) ret) (Obj.magic opH)) comp))
+
+# 22 "Base/Effect/Exit.vuna"
+let v_exitOpHIO = (fun (op : t_ExitOp) k -> (match op with
+  | C_ExitOp_ExitWith (dtb__0) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((fun dtio_0 -> B_dEffect_dCore.C_Eff_MkEff (fun (_ : B_dEffect_dCore.t_EffUnit) -> dtp_exit dtio_0)) dtb__0)) (fun _u -> ((Obj.magic k) 0)))
+  | _ -> failwith "DT: impossible branch"
+))
+
+# 34 "Base/Effect/Exit.vuna"
+let v_exitOpHIOHost = (fun (op : t_ExitOp) k -> (match op with
+  | C_ExitOp_ExitWith (dtb__1) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (B_dEffect_dCore.v_raise ((fun dtio_0 -> B_dEffect_dCore.C_Eff_MkEff (fun (_ : B_dEffect_dCore.t_EffUnit) -> dtp_exit dtio_0)) dtb__1))) (fun _u -> ((Obj.magic k) 0)))
+  | _ -> failwith "DT: impossible branch"
+))
+
+# 43 "Base/Effect/Exit.vuna"
+let v_handleExitHostHost = (fun (n : string) comp -> (((((((B_dEffect_dCore.v_handleCoreAtId "exit") n) 233642629) (dtp_effectId n)) (fun a -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) a))) v_exitOpHIOHost) comp))
+
+# 47 "Base/Effect/Exit.vuna"
+let v_runExitHost = (fun comp -> (B_dEffect_dCore.v_joinEff ((v_handleExitHostHost "default") comp)))
