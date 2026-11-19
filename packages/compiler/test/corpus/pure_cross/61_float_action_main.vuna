@@ -1,0 +1,6 @@
+-- 动作 main 返回 Float：CPS 注入的 machineRun 必须在 wasm 可达集里
+-- （旧实现只在非 float 展示分支种这个种子）。
+import Base.Effect.Core as Eff
+
+main : Eff [] Float
+main = pure 1.5

@@ -12,8 +12,8 @@ module Vuna.Compiler.Ir.Cps where
 -- `cpsExpr` 的 continuation 是**运行时值**（`Ir` 表达式），不是编译器函数：这样递归
 -- 只发生在子项上，终止性检查能看到结构下降。纯代码只重建，不改调用约定。
 --
--- 边界：本模块只 import `Ir.Model` 与 Base 的纯数据结构；不 import Core / Elab /
--- Intrinsics / 任何后端。输出仍是 `Ir`；CPS 符号只由本模块产生，后端按需实现。
+-- 边界：本模块只 import `Ir.Model` / `Ir.Analysis` 与 Base 的纯数据结构；不 import
+-- Core / Elab / Intrinsics / 任何后端。输出仍是 `Ir`；CPS 符号只由本模块产生，后端按需实现。
 import Base.Data.Bool as Bool
 import Base.Data.Int as Int
 import Base.Data.List as List
@@ -22,6 +22,7 @@ import Base.Data.Pair as Pair
 import Base.Data.Result as Result
 import Base.Data.String as String
 import Vuna.Compiler.Ir.Model
+import Vuna.Compiler.Ir.Analysis
 
 -- ---------------------------------------------------------------
 -- 协议名字
@@ -1552,9 +1553,20 @@ foldAppMap fuel acc xs =
       [] => acc
       x :: rest => foldAppMap (fuel - 1) (IrApp Nothing acc (mSteps (fuel - 1) x)) rest
 
+-- | 机器 pass 注入的运行时全局；`mSteps` 只在本模块产生这条引用，deps 必须跟着体走。
+machineRunGlobal : String
+machineRunGlobal = "Base.Effect.Core.machineRun"
+
+addDepOnce : String -> List String -> List String
+addDepOnce d ds = if memName d ds then ds else append ds [d]
+
 mStepsDef : IrDef -> IrDef
 mStepsDef (IrDef n ar deps sigTy body r g sp) =
-  IrDef n ar deps sigTy (mSteps (cpsFuelOfBody body) body) r g sp
+  let
+    body2 = mSteps (cpsFuelOfBody body) body
+    deps2 =
+      if irMentionsGlobal machineRunGlobal body2 then addDepOnce machineRunGlobal deps else deps
+  in IrDef n ar deps2 sigTy body2 r g sp
 mStepsDef d = d
 
 export cpsDefsMachine : List IrDef -> Result (List IrDef)

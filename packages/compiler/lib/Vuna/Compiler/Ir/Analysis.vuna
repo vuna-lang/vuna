@@ -471,3 +471,47 @@ assembleGo adjT (g :: rest) recOk spanOf =
 firstBadRecName : List String -> (String -> Bool) -> Maybe String
 firstBadRecName [] recOk = Nothing
 firstBadRecName (n :: rest) recOk = if recOk n then firstBadRecName rest recOk else Just n
+
+-- | 项里是否直接引用某个顶层定义名（只看 `IrGlobal`，不展开被引用定义）。
+-- CPS 这类会合成全局引用的 pass 用它维护 `irDefDeps`。
+export irMentionsGlobal : String -> Ir -> Bool
+irMentionsGlobal name (IrGlobal n) = n == name
+irMentionsGlobal name (IrCtor _ _ _ args) = anyMentions name args
+irMentionsGlobal name (IrRecord _ _ fields) = anyMentionsFields name fields
+irMentionsGlobal name (IrProj base _ _ _) = irMentionsGlobal name base
+irMentionsGlobal name (IrRecUpd base _ fields _) =
+  irMentionsGlobal name base || anyMentionsFields name fields
+irMentionsGlobal name (IrRtApp _ args) = anyMentions name args
+irMentionsGlobal name (IrCast _ _ inner) = irMentionsGlobal name inner
+irMentionsGlobal name (IrLet _ scrut body) =
+  irMentionsGlobal name scrut || irMentionsGlobal name body
+irMentionsGlobal name (IrLam _ _ body) = irMentionsGlobal name body
+irMentionsGlobal name (IrApp _ f a) = irMentionsGlobal name f || irMentionsGlobal name a
+irMentionsGlobal name (IrIf c t e) =
+  irMentionsGlobal name c || (irMentionsGlobal name t || irMentionsGlobal name e)
+irMentionsGlobal name (IrCase _ _ scrut alts) =
+  irMentionsGlobal name scrut || anyMentionsAlts name alts
+irMentionsGlobal name (IrNatCase scrut _ z s c) =
+  irMentionsGlobal name scrut
+    || (anyMentionsAltM name z || (anyMentionsAltM name s || anyMentionsAltM name c))
+irMentionsGlobal name (IrConcatMany parts) = anyMentions name parts
+irMentionsGlobal name (IrEffThunk _ _ _ _ prim) = irMentionsGlobal name prim
+irMentionsGlobal name _ = False
+
+anyMentions : String -> List Ir -> Bool
+anyMentions name [] = False
+anyMentions name (x :: rest) = irMentionsGlobal name x || anyMentions name rest
+
+anyMentionsFields : String -> List (Pair String Ir) -> Bool
+anyMentionsFields name [] = False
+anyMentionsFields name ((Pair fn fe) :: rest) =
+  irMentionsGlobal name fe || anyMentionsFields name rest
+
+anyMentionsAlts : String -> List IrAlt -> Bool
+anyMentionsAlts name [] = False
+anyMentionsAlts name (alt :: rest) =
+  irMentionsGlobal name (irAltBodyOf alt) || anyMentionsAlts name rest
+
+anyMentionsAltM : String -> Maybe IrAlt -> Bool
+anyMentionsAltM name Nothing = False
+anyMentionsAltM name (Just alt) = irMentionsGlobal name (irAltBodyOf alt)

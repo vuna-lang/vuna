@@ -2103,7 +2103,7 @@ build program printResult =
           case irEntryShowOf e of
             IrRt "@ir@showFloat" =>
               reachableDefs
-                (append [irEntryMainOf e, floatRenderName] (append runSeeds handlerSeeds))
+                (append ["Base.Effect.Core.machineRun"] (append [irEntryMainOf e, floatRenderName] (append runSeeds handlerSeeds)))
                 defs
             _ =>
               reachableDefs
