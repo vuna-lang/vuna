@@ -1,0 +1,90 @@
+-- 宿主表唯一真源：entry 预装（impl / error impl）与静态直连（send key → opH / 错误文本）
+-- 都在 `builtinEffects` 上；`sendCore` 的两种名字（派发前 / 派发后）都算直连入口。
+import Prelude
+import Vuna.Compiler.Base.Intrinsics as I
+
+resolved : String -> Bool
+resolved name =
+  case I.hostClassOf name of
+    Just _ => True
+    Nothing => False
+
+directKeyIs : String -> String -> Bool
+directKeyIs implName key =
+  case I.hostClassOf implName of
+    Just (I.HostDirect k _) => k == key
+    _ => False
+
+directTargetIs : String -> String -> Bool
+directTargetIs implName target =
+  case I.hostClassOf implName of
+    Just (I.HostDirect _ t) => t == target
+    _ => False
+
+handledOnly : String -> Bool
+handledOnly implName =
+  case I.hostClassOf implName of
+    Just I.HostHandled => True
+    _ => False
+
+sendKeyIs : String -> String -> Bool
+sendKeyIs key target =
+  case I.hostClassOfSendKey key of
+    Just (I.HostDirect _ t) => t == target
+    Just (I.HostAbort _ t) => t == target
+    _ => False
+
+sendKeyMissing : String -> Bool
+sendKeyMissing key =
+  case I.hostClassOfSendKey key of
+    Nothing => True
+    _ => False
+
+-- | 入口预装项（正常 handler + 失败收口）必须都能在表里查到接入方式。
+preinstallResolves : String -> Bool
+preinstallResolves tag =
+  let
+    impl = I.builtinEffectImplOf tag
+    err = I.builtinEffectErrorRunHostOf tag
+    okImpl = if impl == "" then True else resolved impl
+    okErr = if err == "" then True else resolved err
+  in okImpl && okErr
+
+bit : Bool -> Int
+bit b = if b then 1 else 0
+
+main : Int
+main =
+  bit (directKeyIs "Base.Effect.Console.runConsoleHost" "console")
+    + bit
+      (directTargetIs "Base.Effect.Console.runConsoleHost" "Base.Effect.Console.consoleOpHIOHost")
+    + bit (sendKeyIs "console" "Base.Effect.Console.consoleOpHIOHost")
+    + bit (directKeyIs "Base.Effect.Fs.runFsHost" "fs")
+    + bit (sendKeyIs "fs" "Base.Effect.Fs.fsOpHIOHost")
+    + bit (sendKeyIs "fs-error" "Base.Effect.Fs.fsErrorText")
+    + bit (directKeyIs "Base.Effect.Clock.runClockHost" "clock")
+    + bit (directKeyIs "Base.Effect.Env.runEnvHost" "env")
+    + bit (directKeyIs "Base.Effect.Args.runArgsHost" "args")
+    + bit (directKeyIs "Base.Effect.Exit.runExitHost" "exit")
+    + bit (directKeyIs "Base.Effect.Stdin.runStdinHost" "stdin")
+    + bit (handledOnly "Base.Effect.Process.runProcessHost")
+    + bit (handledOnly "Base.Effect.Process.runProcessErrorHost")
+    + bit (handledOnly "Base.Effect.Net.runNetHost")
+    + bit (sendKeyMissing "process")
+    + bit (sendKeyMissing "net")
+    + bit (not (resolved "Base.Effect.Core.sendCore"))
+    + bit (preinstallResolves "Base.Effect.Console.ConsoleOp")
+    + bit (preinstallResolves "Base.Effect.Fs.FsOp")
+    + bit (preinstallResolves "Base.Effect.Process.ProcessOp")
+    + bit (preinstallResolves "Base.Effect.Net.NetOp")
+    + bit (preinstallResolves "Base.Effect.Ref.RefOp")
+    + bit
+      (I.builtinEffectImplOf "Base.Effect.Console.ConsoleOp" == "Base.Effect.Console.runConsoleHost")
+    + bit (I.builtinEffectErrorRunHostOf "Base.Effect.Fs.FsOp" == "Base.Effect.Fs.runFsErrorHost")
+    + bit (I.builtinEffectErrorRunHostOf "Base.Effect.Console.ConsoleOp" == "")
+    + bit (I.builtinEffectImplOf "Base.Effect.Ref.RefOp" == "")
+    + bit (I.isSendCoreName I.effSendCoreName)
+    + bit (I.isSendCoreName I.effSendCoreIdName)
+    + bit (not (I.isSendCoreName "Base.Effect.Core.send"))
+    + bit (I.isBuiltinEffectTag "Base.Effect.Console.ConsoleOp")
+    + bit (not (I.isBuiltinEffectTag "Base.Data.List.List"))

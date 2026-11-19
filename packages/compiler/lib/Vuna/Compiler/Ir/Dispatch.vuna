@@ -21,8 +21,8 @@ import Vuna.Compiler.Ir.Model
 -- `f a b rest…` → `fId a b (idOf a) (idOf b) rest…`。
 dispatchIdNameOf : String -> Int -> Maybe String
 dispatchIdNameOf name arity =
-  if name == "Base.Effect.Core.sendCore" then
-    if arity == 3 then Just "Base.Effect.Core.sendCoreId" else Nothing
+  if name == effSendCoreName then
+    if arity == 3 then Just effSendCoreIdName else Nothing
   else if name == "Base.Effect.Core.performCore" then
     if arity == 3 then Just "Base.Effect.Core.performCoreId" else Nothing
   else if name == "Base.Effect.Core.handleCore" then

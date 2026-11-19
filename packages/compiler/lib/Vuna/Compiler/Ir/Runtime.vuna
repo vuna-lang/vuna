@@ -471,32 +471,3 @@ irSymbolsOfUnit u =
 irSymbolsOfEntry : Maybe IrEntry -> List (Pair String (Maybe Int))
 irSymbolsOfEntry Nothing = []
 irSymbolsOfEntry (Just e) = irSymbolsOf (irEntryShowOf e)
-
--- ---------------------------------------------------------------
--- 宿主效应直连（wasm）
--- ---------------------------------------------------------------
--- 转发式宿主 handler：`run*Host` 定义名 → (send key, 该族 op 解释器定义名)。
--- 这些 handler 的 opH 只做「宿主调用 + 尾位置回写 k」，因此可以在「可达代码里没有用户
--- 自定义 handler」时把 send 直接降成宿主调用（不需要续延）。答案行仍是同一族
--- （`[ConsoleOp]` 等）的家族才在表内；Fs / Process / Net 的 opH 会转投别的族，暂不列入。
-export irHostDirectOf : String -> Maybe (Pair String String)
-irHostDirectOf "Base.Effect.Console.runConsoleHost" =
-  Just (Pair "console" "Base.Effect.Console.consoleOpHIOHost")
-irHostDirectOf "Base.Effect.Fs.runFsHost" = Just (Pair "fs" "Base.Effect.Fs.fsOpHIOHost")
-irHostDirectOf "Base.Effect.Clock.runClockHost" =
-  Just (Pair "clock" "Base.Effect.Clock.clockOpHIOHost")
-irHostDirectOf "Base.Effect.Env.runEnvHost" = Just (Pair "env" "Base.Effect.Env.envOpHIOHost")
-irHostDirectOf "Base.Effect.Args.runArgsHost" = Just (Pair "args" "Base.Effect.Args.argsOpHIOHost")
-irHostDirectOf "Base.Effect.Exit.runExitHost" = Just (Pair "exit" "Base.Effect.Exit.exitOpHIOHost")
-irHostDirectOf "Base.Effect.Stdin.runStdinHost" =
-  Just (Pair "stdin" "Base.Effect.Stdin.stdinOpHIOHost")
-irHostDirectOf _ = Nothing
-
--- | 只做「诊断 + 退出」的错误族：send key → 渲染错误文本的定义名。入口的这类 handler
--- 不恢复续延（打印诊断后退出），所以直连时把 send 降成同样的收口序列。
-export irHostAbortOf : String -> Maybe (Pair String String)
-irHostAbortOf name =
-  if name == "Base.Effect.Fs.runFsErrorHost" then
-    Just (Pair "fs-error" "Base.Effect.Fs.fsErrorText")
-  else
-    Nothing

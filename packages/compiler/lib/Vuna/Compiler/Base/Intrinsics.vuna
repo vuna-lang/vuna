@@ -107,56 +107,91 @@ isTypeConstructorName name =
   name
     == intTypeName || name == strTypeName || name == floatTypeName || typeIntrinsicArityOf name >= 0
 
--- | 内建宿主效应：标签全名 → 未导出的 `runXHost`（entry 自动预装用）。
+-- | 内建宿主 handler 的接入方式（entry 预装与后端静态直连的唯一分类）。
+export data HostClass(..) : Type where
+  -- | 只能由 entry 预装 `runXHost`、走库机器（默认路径）。
+  HostHandled : HostClass
+  -- | 另有直连路径：`sendCore key … op` 改写成 `runMain (opH op pureK)`（同步宿主叶子）。
+  HostDirect : String -> String -> HostClass
+  -- | 另有直连收口：`sendCore key … op` 改写成「打印 `text op` 后 exit 1」，不恢复续延。
+  HostAbort : String -> String -> HostClass
+
+-- | 内建宿主效应：标签全名 → entry 预装的 handler + 直连分类。
 record BuiltinEffect where
   -- | 行标签的全名（base 的 op 族类型）。
   beTag : String
-  -- | entry 自动预装项的编译器内建名（`@vuna@runXHost`；源码写不出）。
-  beRunHost : String
-  -- | 内建名对应的 base 实现名（`Codegen` 生成引用时用；实现仍是 vuna 代码）。
+  -- | entry 预装的正常 handler 实现名（空串 = 只允许行、没有 handler）。
   beImpl : String
+  -- | 正常 handler 的接入方式。
+  beHost : HostClass
+  -- | entry 预装的失败收口 handler 实现名（空串 = 该家族没有失败通道）。
+  beErrorImpl : String
+  -- | 失败收口 handler 的接入方式。
+  beErrorHost : HostClass
 
--- | 内建宿主效应的失败收口 handler（entry 追加在最外层；空串 = 该家族没有失败通道）。
-export builtinEffectErrorRunHostOf : String -> String
-builtinEffectErrorRunHostOf "Base.Effect.Fs.FsOp" = "Base.Effect.Fs.runFsErrorHost"
-builtinEffectErrorRunHostOf "Base.Effect.Process.ProcessOp" =
-  "Base.Effect.Process.runProcessErrorHost"
-builtinEffectErrorRunHostOf "Base.Effect.Net.NetOp" = "Base.Effect.Net.runNetErrorHost"
-builtinEffectErrorRunHostOf _ = ""
-
--- | 全部内建宿主效应（标签 + runXHost）。未实现的条目先占位，entry 只对已实现的
--- 表项自动预装；用户自定义效应仍须自己 handle 成 Nil。
+-- | 全部内建宿主效应（标签 + runXHost + 直连分类）。未实现的条目先占位，entry 只对
+-- 已实现的表项自动预装；用户自定义效应仍须自己 handle 成 Nil。
 export builtinEffects : List BuiltinEffect
 builtinEffects =
   [
     BuiltinEffect
       "Base.Effect.Console.ConsoleOp"
-      "@vuna@runConsoleHost"
-      "Base.Effect.Console.runConsoleHost",
-    BuiltinEffect "Base.Effect.Fs.FsOp" "@vuna@runFsHost" "Base.Effect.Fs.runFsHost",
-    BuiltinEffect "Base.Effect.Clock.ClockOp" "@vuna@runClockHost" "Base.Effect.Clock.runClockHost",
-    BuiltinEffect "Base.Effect.Env.EnvOp" "@vuna@runEnvHost" "Base.Effect.Env.runEnvHost",
+      "Base.Effect.Console.runConsoleHost"
+      (HostDirect "console" "Base.Effect.Console.consoleOpHIOHost")
+      ""
+      HostHandled,
+    BuiltinEffect
+      "Base.Effect.Fs.FsOp"
+      "Base.Effect.Fs.runFsHost"
+      (HostDirect "fs" "Base.Effect.Fs.fsOpHIOHost")
+      "Base.Effect.Fs.runFsErrorHost"
+      (HostAbort "fs-error" "Base.Effect.Fs.fsErrorText"),
+    BuiltinEffect
+      "Base.Effect.Clock.ClockOp"
+      "Base.Effect.Clock.runClockHost"
+      (HostDirect "clock" "Base.Effect.Clock.clockOpHIOHost")
+      ""
+      HostHandled,
+    BuiltinEffect
+      "Base.Effect.Env.EnvOp"
+      "Base.Effect.Env.runEnvHost"
+      (HostDirect "env" "Base.Effect.Env.envOpHIOHost")
+      ""
+      HostHandled,
     BuiltinEffect
       "Base.Effect.Process.ProcessOp"
-      "@vuna@runProcessHost"
-      "Base.Effect.Process.runProcessHost",
-    BuiltinEffect "Base.Effect.Exit.ExitOp" "@vuna@runExitHost" "Base.Effect.Exit.runExitHost",
-    BuiltinEffect "Base.Effect.Stdin.StdinOp" "@vuna@runStdinHost" "Base.Effect.Stdin.runStdinHost",
-    BuiltinEffect "Base.Effect.Args.ArgsOp" "@vuna@runArgsHost" "Base.Effect.Args.runArgsHost",
-    BuiltinEffect "Base.Effect.Net.NetOp" "@vuna@runNetHost" "Base.Effect.Net.runNetHost",
-    BuiltinEffect "Base.Effect.Ref.RefOp" "" ""
+      "Base.Effect.Process.runProcessHost"
+      HostHandled
+      "Base.Effect.Process.runProcessErrorHost"
+      HostHandled,
+    BuiltinEffect
+      "Base.Effect.Exit.ExitOp"
+      "Base.Effect.Exit.runExitHost"
+      (HostDirect "exit" "Base.Effect.Exit.exitOpHIOHost")
+      ""
+      HostHandled,
+    BuiltinEffect
+      "Base.Effect.Stdin.StdinOp"
+      "Base.Effect.Stdin.runStdinHost"
+      (HostDirect "stdin" "Base.Effect.Stdin.stdinOpHIOHost")
+      ""
+      HostHandled,
+    BuiltinEffect
+      "Base.Effect.Args.ArgsOp"
+      "Base.Effect.Args.runArgsHost"
+      (HostDirect "args" "Base.Effect.Args.argsOpHIOHost")
+      ""
+      HostHandled,
+    BuiltinEffect
+      "Base.Effect.Net.NetOp"
+      "Base.Effect.Net.runNetHost"
+      HostHandled
+      "Base.Effect.Net.runNetErrorHost"
+      HostHandled,
+    BuiltinEffect "Base.Effect.Ref.RefOp" "" HostHandled "" HostHandled
   ]
 
--- | 标签对应的 `runXHost` 全名；不是内建宿主效应时返回空串。
-export builtinEffectRunHostOf : String -> String
-builtinEffectRunHostOf tag = builtinEffectRunHostOfRest tag builtinEffects
-
-builtinEffectRunHostOfRest : String -> List BuiltinEffect -> String
-builtinEffectRunHostOfRest tag [] = ""
-builtinEffectRunHostOfRest tag (e :: rest) =
-  if e.beTag == tag then e.beRunHost else builtinEffectRunHostOfRest tag rest
-
--- | 内建名对应的 base 实现名（`Codegen` 生成 entry 预装引用时用）。
+-- | 标签对应的 `runXHost` 实现名；不是内建宿主效应时返回空串。
 export builtinEffectImplOf : String -> String
 builtinEffectImplOf tag = builtinEffectImplOfRest tag builtinEffects
 
@@ -165,7 +200,52 @@ builtinEffectImplOfRest tag [] = ""
 builtinEffectImplOfRest tag (e :: rest) =
   if e.beTag == tag then e.beImpl else builtinEffectImplOfRest tag rest
 
--- | 该标签是否是内建宿主效应（`beRunHost` 为空表示只允许行、无需预装 handler）。
+-- | 标签对应的失败收口 handler；该家族没有失败通道时返回空串。
+export builtinEffectErrorRunHostOf : String -> String
+builtinEffectErrorRunHostOf tag = builtinEffectErrorRunHostOfRest tag builtinEffects
+
+builtinEffectErrorRunHostOfRest : String -> List BuiltinEffect -> String
+builtinEffectErrorRunHostOfRest tag [] = ""
+builtinEffectErrorRunHostOfRest tag (e :: rest) =
+  if e.beTag == tag then e.beErrorImpl else builtinEffectErrorRunHostOfRest tag rest
+
+-- | entry 预装项（`runXHost` / `runXErrorHost`）的接入方式；不认识的实现名返回 Nothing。
+export hostClassOf : String -> Maybe HostClass
+hostClassOf name = hostClassOfRest name builtinEffects
+
+hostClassOfRest : String -> List BuiltinEffect -> Maybe HostClass
+hostClassOfRest name [] = Nothing
+hostClassOfRest name (e :: rest) =
+  if name == e.beImpl && e.beImpl /= "" then
+    Just e.beHost
+  else if name == e.beErrorImpl && e.beErrorImpl /= "" then
+    Just e.beErrorHost
+  else
+    hostClassOfRest name rest
+
+-- | `sendCore` 的 key → 直连方式（`HostDirect` / `HostAbort` 都带 key；正常与失败收口
+--   两列都查）。
+export hostClassOfSendKey : String -> Maybe HostClass
+hostClassOfSendKey key = hostClassOfSendKeyRest key builtinEffects
+
+hostClassOfSendKeyRest : String -> List BuiltinEffect -> Maybe HostClass
+hostClassOfSendKeyRest key [] = Nothing
+hostClassOfSendKeyRest key (e :: rest) =
+  case directClassForKey key e.beHost of
+    Just c => Just c
+    Nothing =>
+      case directClassForKey key e.beErrorHost of
+        Just c => Just c
+        Nothing => hostClassOfSendKeyRest key rest
+
+directClassForKey : String -> HostClass -> Maybe HostClass
+directClassForKey key c =
+  case c of
+    HostDirect k _ => if k == key then Just c else Nothing
+    HostAbort k _ => if k == key then Just c else Nothing
+    HostHandled => Nothing
+
+-- | 该标签是否是内建宿主效应（`beImpl` 为空表示只允许行、无需预装 handler）。
 export isBuiltinEffectTag : String -> Bool
 isBuiltinEffectTag tag = builtinEffectExistsRest tag builtinEffects
 
@@ -173,6 +253,18 @@ builtinEffectExistsRest : String -> List BuiltinEffect -> Bool
 builtinEffectExistsRest tag [] = False
 builtinEffectExistsRest tag (e :: rest) =
   if e.beTag == tag then True else builtinEffectExistsRest tag rest
+
+-- | `sendCore` 的两种名字：派发前的源码形与派发 pass 之后的 `*Id` 形；后端的静态
+-- 直连改写必须同时认（`isSendCoreName`）。
+export effSendCoreName : String
+effSendCoreName = "Base.Effect.Core.sendCore"
+
+export effSendCoreIdName : String
+effSendCoreIdName = "Base.Effect.Core.sendCoreId"
+
+-- | 是否是 `sendCore` 入口（两种名字）。
+export isSendCoreName : String -> Bool
+isSendCoreName name = name == effSendCoreName || name == effSendCoreIdName
 
 -- | Eff 版线性绑定（当前无库调用方）：`Eff [] a` 的线性 continuation。
 -- runtime 由 codegen 专门生成（装箱 `MkEff` 的 match），不能复用 eager 包装。

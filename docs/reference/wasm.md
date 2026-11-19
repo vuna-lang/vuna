@@ -423,9 +423,12 @@ WASI preview1，宿主侧逐函数实现。下表的「允许」指浏览器平�
 
 宿主效应直连的判据与边界（`Wasm.Module`）：
 
-- 入口的每个 handler 都要在 `Ir.Runtime.irHostDirectOf` 表里（表给出 `run*Host` 定义名 →
-  send key + 该族 `opH` 定义名）；缺一个就整体走显式效应机器。
-- 改写按 `sendCore` 的应用脊椎匹配：实参末尾五元组是 (key 字面量, name, keyId, nameId, op)，key 命中即改写。
+- 分类与 key/opH 全在 `Base.Intrinsics.builtinEffects` 的 `HostClass`：`HostDirect key opH`
+  可直连，`HostAbort key text` 是可直连的失败收口，`HostHandled` 只能走库机器。
+  entry 预装的每个 handler（含 `runXErrorHost`）都要在表里且不是 `HostHandled`，
+  缺一个就整体走显式效应机器。
+- 改写按 `sendCore` 的应用脊椎匹配（`isSendCoreName` 同时认派发前的 `sendCore` 与派发后的
+  `sendCoreId`）：实参末尾五元组是 (key 字面量, name, keyId, nameId, op)，key 命中即改写。
 - 改写后按**体引用**重算可达集（静态依赖表会漏掉字典实例等隐式引用，因此保留集用「全依赖
   闭包 ∩ 不含续延原语」）；`genStartBody` 的初始化列表用同一份集合。
 - 若改写后仍有可达到的 `prim_effectPerformId` / `prim_effectHandleId` / `prim_effectSelf`，说明

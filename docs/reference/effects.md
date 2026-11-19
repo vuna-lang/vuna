@@ -44,8 +44,10 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
   `Base.Effect.Core.*` 标签 + handler 使用效果（纪律/文档约定，见 §8.6）。
 - **动作入口**：`IEffRow`/`IRowCons`/`IGlobal` 行 IType、隐藏
   `Base.Effect.Core.runMain`、`rowAppend` 行拼接与 `joinEff` 泛化、`builtinEffects` 表、entry
-  按 main 行自动嵌套 `runXHost`；Console/Fs/Clock/Env/Process/Exit/Stdin/Args 有带行
-  handler，Ref/Net 直调带行原语（`beRunHost=""`）；夹具 90–94。`runPure` 只收 Nil
+  按 main 行自动嵌套 `runXHost`；Console/Fs/Clock/Env/Process/Exit/Stdin/Args/Net 有带行
+  handler（Net 另带 `net-error` 收口），Ref 只允许行、不需要 handler（`beImpl=""`）。
+  表项同时带直连分类（`HostClass`：`HostHandled` / `HostDirect` / `HostAbort`），
+  entry 预装与 wasm 的静态直连改读同一张表；夹具 90–94。`runPure` 只收 Nil
   （纯性负例：`runPure (consolePrint ...)` → `TC_UnhandledEffects`）。
 - **编译器与工具链的 IO 走 labeled 效应**：叶子统一用 `Base.Effect.Core.*` labeled sender
   （`consolePrint` / `fsReadFile` / `processSpawn` / `clockNow` / `envGetEnv` …），签名按

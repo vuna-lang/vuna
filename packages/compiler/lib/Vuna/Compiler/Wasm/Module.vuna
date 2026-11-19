@@ -17,6 +17,8 @@ import Base.Data.Maybe as Maybe
 import Base.Data.Pair as Pair
 import Base.Data.Result as Result
 import Base.Data.String as String
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Base.Intrinsics
 import Vuna.Compiler.Ir.Model
 import Vuna.Compiler.Ir.Analysis
 import Vuna.Compiler.Ir.Cps
@@ -1747,6 +1749,14 @@ defsUseSyms : List String -> List IrDef -> Bool
 defsUseSyms syms [] = False
 defsUseSyms syms (d :: rest) = if defUsesSyms syms d then True else defsUseSyms syms rest
 
+-- | 入口 handler 里只要有一个只能走库机器（`HostHandled`），静态直连就不成立。
+anyHostHandled : List HostClass -> Bool
+anyHostHandled [] = False
+anyHostHandled (c :: rest) =
+  case c of
+    HostHandled => True
+    _ => anyHostHandled rest
+
 listNull : List a -> Bool
 listNull [] = True
 listNull (_ :: _) = False
@@ -1794,20 +1804,11 @@ buildModule fuel st ordered entry printResult listFamM =
 -- 宿主效应直连（静态改写）
 -- ---------------------------------------------------------------
 -- 入口预装的 `run*Host` 是转发式 handler：`opH op k = k (hostOp op)`。可达代码里没有用户
--- handler 时，把每个 `sendCore key name op`（key 是字面量、落在表内）直接改写成
---   `MkEff (\\_ => runMain (opH op pureK))`
--- 其中 `pureK = \\r => MkEff (\\_ => r)`。续延参数因此是模块自己的纯动作，不再需要
--- stack switching；入口也不再预装这些家族。
-hcSendCore : String
-hcSendCore = "Base.Effect.Core.sendCore"
-
--- | 派发 pass 之后的 `sendCore` 名字（源码层入口仍可能以旧名出现）。
-hcSendCoreId : String
-hcSendCoreId = "Base.Effect.Core.sendCoreId"
-
-isSendCoreName : String -> Bool
-isSendCoreName n = n == hcSendCore || n == hcSendCoreId
-
+-- handler 时，把每个 `sendCore key name op`（key 是字面量、表里标成直连）直接改写成
+--   `MkEff (\_ => runMain (opH op pureK))`
+-- 其中 `pureK = \r => MkEff (\_ => r)`。续延参数因此是模块自己的纯动作，不再需要
+-- stack switching；入口也不再预装这些家族。分类与 key/opH 全在 `builtinEffects`
+-- （`HostClass`）里，这里不另立表。
 hcPureK : String
 hcPureK = "@vuna@host@pureK"
 
@@ -1818,11 +1819,6 @@ spineOf (IrApp _ f a) =
     Pair h args => Pair h (append args [a])
 spineOf (IrTail inner) = spineOf inner
 spineOf ir = Pair ir []
-
--- | key → opH 定义名。
-opHOf : String -> List (Pair String String) -> Maybe String
-opHOf key [] = Nothing
-opHOf key ((Pair k v) :: rest) = if key == k then Just v else opHOf key rest
 
 -- | 单构造子 op 的字段：`FsFail e` 的 `e`。
 opFieldOf : Ir -> Ir
@@ -1855,30 +1851,24 @@ abortSend textName op =
     [IrLam [u] Nothing (IrApp Nothing (IrLam [dead] Nothing exited) eprinted)]
 
 -- | 一个节点：先改写子项，再把脊椎是 `sendCore` 的节点换成直连调用。
-rw : List (Pair String String) -> List (Pair String String) -> String -> Ir -> Ir
-rw h ab n (IrCtor f c _ args) = rwSpine h ab n (IrCtor f c Nothing (map (rw h ab n) args))
-rw h ab n (IrRecord f _ fields) = rwSpine h ab n (IrRecord f Nothing (map (rwField h ab n) fields))
-rw h ab n (IrProj b f fd _) = rwSpine h ab n (IrProj (rw h ab n b) f fd Nothing)
-rw h ab n (IrRecUpd b f fields _) =
-  rwSpine h ab n (IrRecUpd (rw h ab n b) f (map (rwField h ab n) fields) Nothing)
-rw h ab n (IrRtApp sym args) = rwSpine h ab n (IrRtApp sym (map (rw h ab n) args))
-rw h ab n (IrCast cFrom cTo e) = rwSpine h ab n (IrCast cFrom cTo (rw h ab n e))
-rw h ab n (IrLet bs v body) = rwSpine h ab n (IrLet bs (rw h ab n v) (rw h ab n body))
-rw h ab n (IrLam bs rt body) = rwSpine h ab n (IrLam bs rt (rw h ab n body))
-rw h ab n (IrApp _ f a) = rwSpine h ab n (IrApp Nothing (rw h ab n f) (rw h ab n a))
-rw h ab n (IrIf c t e) = rwSpine h ab n (IrIf (rw h ab n c) (rw h ab n t) (rw h ab n e))
-rw h ab n (IrCase caseTy _ sc alts) =
-  rwSpine h ab n (IrCase caseTy Nothing (rw h ab n sc) (map (rwAlt h ab n) alts))
-rw h ab n (IrNatCase sc i z su c) =
-  rwSpine
-    h
-    ab
-    n
-    (IrNatCase (rw h ab n sc) i (rwAltMaybe h ab n z) (rwAltMaybe h ab n su) (rwAltMaybe h ab n c))
-rw h ab n (IrConcatMany xs) = rwSpine h ab n (IrConcatMany (map (rw h ab n) xs))
-rw h ab n (IrEffThunk f c t a p) = rwSpine h ab n (IrEffThunk f c t a (rw h ab n p))
-rw h ab n (IrTail inner) = IrTail (rw h ab n inner)
-rw h ab n ir = rwSpine h ab n ir
+rw : String -> Ir -> Ir
+rw n (IrCtor f c _ args) = rwSpine n (IrCtor f c Nothing (map (rw n) args))
+rw n (IrRecord f _ fields) = rwSpine n (IrRecord f Nothing (map (rwField n) fields))
+rw n (IrProj b f fd _) = rwSpine n (IrProj (rw n b) f fd Nothing)
+rw n (IrRecUpd b f fields _) = rwSpine n (IrRecUpd (rw n b) f (map (rwField n) fields) Nothing)
+rw n (IrRtApp sym args) = rwSpine n (IrRtApp sym (map (rw n) args))
+rw n (IrCast cFrom cTo e) = rwSpine n (IrCast cFrom cTo (rw n e))
+rw n (IrLet bs v body) = rwSpine n (IrLet bs (rw n v) (rw n body))
+rw n (IrLam bs rt body) = rwSpine n (IrLam bs rt (rw n body))
+rw n (IrApp _ f a) = rwSpine n (IrApp Nothing (rw n f) (rw n a))
+rw n (IrIf c t e) = rwSpine n (IrIf (rw n c) (rw n t) (rw n e))
+rw n (IrCase caseTy _ sc alts) = rwSpine n (IrCase caseTy Nothing (rw n sc) (map (rwAlt n) alts))
+rw n (IrNatCase sc i z su c) =
+  rwSpine n (IrNatCase (rw n sc) i (rwAltMaybe n z) (rwAltMaybe n su) (rwAltMaybe n c))
+rw n (IrConcatMany xs) = rwSpine n (IrConcatMany (map (rw n) xs))
+rw n (IrEffThunk f c t a p) = rwSpine n (IrEffThunk f c t a (rw n p))
+rw n (IrTail inner) = IrTail (rw n inner)
+rw n ir = rwSpine n ir
 
 -- | `sendCore` 的尾部五参：key（字面量）、name、keyId、nameId、op。擦除实参可能在前，按后缀取。
 sendTailOf : List Ir -> Maybe (Pair String Ir)
@@ -1895,8 +1885,9 @@ stripIrCasts : Ir -> Ir
 stripIrCasts (IrCast _ _ inner) = stripIrCasts inner
 stripIrCasts ir = ir
 
-rwSpine : List (Pair String String) -> List (Pair String String) -> String -> Ir -> Ir
-rwSpine h ab n ir0 =
+-- | 脊椎是 `sendCore` 且 key 落在直连表时换成直连调用；`HostHandled` 的家族原样保留。
+rwSpine : String -> Ir -> Ir
+rwSpine n ir0 =
   let
     ir = stripIrCasts ir0
   in case spineOf ir of
@@ -1904,29 +1895,27 @@ rwSpine h ab n ir0 =
       if isSendCoreName g then
         case sendTailOf args of
           Just p =>
-            case opHOf (firstOf p) h of
-              Just opHName => directSend n opHName (secondOf p)
-              Nothing =>
-                case opHOf (firstOf p) ab of
-                  Just textName => abortSend textName (secondOf p)
-                  Nothing => ir
+            case hostClassOfSendKey (firstOf p) of
+              Just (HostDirect _ opHName) => directSend n opHName (secondOf p)
+              Just (HostAbort _ textName) => abortSend textName (secondOf p)
+              _ => ir
           Nothing => ir
       else
         ir
     _ => ir
 
-rwField : List (Pair String String) -> List (Pair String String) -> String -> Pair String Ir -> Pair String Ir
-rwField h ab n (Pair k v) = Pair k (rw h ab n v)
+rwField : String -> Pair String Ir -> Pair String Ir
+rwField n (Pair k v) = Pair k (rw n v)
 
-rwAlt : List (Pair String String) -> List (Pair String String) -> String -> IrAlt -> IrAlt
-rwAlt h ab n (IrAlt c bs b) = IrAlt c bs (rw h ab n b)
+rwAlt : String -> IrAlt -> IrAlt
+rwAlt n (IrAlt c bs b) = IrAlt c bs (rw n b)
 
-rwAltMaybe : List (Pair String String) -> List (Pair String String) -> String -> Maybe IrAlt -> Maybe IrAlt
-rwAltMaybe h ab n Nothing = Nothing
-rwAltMaybe h ab n (Just a) = Just (rwAlt h ab n a)
+rwAltMaybe : String -> Maybe IrAlt -> Maybe IrAlt
+rwAltMaybe n Nothing = Nothing
+rwAltMaybe n (Just a) = Just (rwAlt n a)
 
-rwDef : List (Pair String String) -> List (Pair String String) -> String -> IrDef -> IrDef
-rwDef h ab n d =
+rwDef : String -> IrDef -> IrDef
+rwDef n d =
   case irDefBody d of
     Nothing => d
     Just b =>
@@ -1935,7 +1924,7 @@ rwDef h ab n d =
         (irDefArity d)
         (irDefDeps d)
         (irDefTy d)
-        (rw h ab n b)
+        (rw n b)
         (irDefRecValueOk d)
         (irDefInitGuard d)
         (irDefSpan d)
@@ -2118,21 +2107,20 @@ build program printResult =
                 (append ["Base.Effect.Core.machineRun"] (append [irEntryMainOf e] (append runSeeds handlerSeeds)))
                 defs
         listFamM = wasmListFamFromFams (irProgSharedOf program).irSharedListFam fams
-        hosts = mapMaybe irHostDirectOf handlerSeeds
-        aborts = mapMaybe irHostAbortOf handlerSeeds
+        handlerClasses = mapMaybe hostClassOf handlerSeeds
         runName =
           case irEntryRunMainOf e of
             Just rm => rm
             Nothing => ""
         roots = append ["Base.Effect.Core.machineRun", irEntryMainOf e] runSeeds
-        rewrittenAll = map (rwDef hosts aborts runName) defs
+        rewrittenAll = map (rwDef runName) defs
         rewritten = reachableByRefs 100000 roots rewrittenAll
         live = rewritten
         tblAll = HashMap.fromList (map (\d => Pair (irDefName d) d) rewrittenAll)
         namesAll = closeRefsAll 100000 tblAll roots []
         dropNames =
           [
-            "Base.Effect.Core.sendCore",
+            effSendCoreName,
             "Base.Effect.Core.handleCore",
             "Base.Effect.Core.handleCoreAt",
             "Base.Effect.Core.handleCoreLin",
@@ -2144,7 +2132,9 @@ build program printResult =
         directable =
           if listNull handlerSeeds then
             False
-          else if listLengthB hosts + listLengthB aborts /= listLengthB handlerSeeds then
+          else if listLengthB handlerClasses /= listLengthB handlerSeeds then
+            False
+          else if anyHostHandled handlerClasses then
             False
           else if runName == "" then False else not (defsUseSyms performSyms live)
         entryClean =
