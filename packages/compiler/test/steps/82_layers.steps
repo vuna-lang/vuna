@@ -47,3 +47,11 @@ out-contains: PKG_LayerCycle
 run: sh -c 'S="$TMPDIR/lay"; VUNA_STORE="$S/store" "$VUNA" check "$S/lay8" 2>&1'
 exit: 1
 out-contains: PKG_LayerInvalidTarget
+
+# 宽层图的传递闭包：重复入队不能截断许可集（A → D 合法）。
+run: sh -c 'S="$TMPDIR/lay"; d="$S/lay9"; mkdir -p "$d/lib/L/A" "$d/lib/L/D" "$d/app"; printf "%b" "[package]\nname = \"lay9\"\n\n[dependencies]\nvuna-base = \"$VUNA_BASE\"\n\n[layers]\n\"L.A\" = [\"L.B1\", \"L.B2\", \"L.B3\", \"L.B4\", \"L.B5\"]\n\"L.B1\" = [\"L.C\"]\n\"L.B2\" = [\"L.C\"]\n\"L.B3\" = [\"L.C\"]\n\"L.B4\" = [\"L.C\"]\n\"L.B5\" = [\"L.C\"]\n\"L.C\" = [\"L.D\"]\n\"L.D\" = []\n" > "$d/vuna.toml"; printf "module L.A.One where\n\nimport L.D.Two\n\nexport one : Int\none = two\n" > "$d/lib/L/A/One.vuna"; printf "module L.D.Two where\n\nexport two : Int\ntwo = 2\n" > "$d/lib/L/D/Two.vuna"; printf "import L.A.One\n\nmain : Int\nmain = one\n" > "$d/app/Main.vuna"'
+exit: 0
+
+# 宽层图上的 legal import 放行（预算耗尽时旧实现会假报越层）。
+run: sh -c 'S="$TMPDIR/lay"; VUNA_STORE="$S/store" "$VUNA" check "$S/lay9" 2>&1'
+exit: 0

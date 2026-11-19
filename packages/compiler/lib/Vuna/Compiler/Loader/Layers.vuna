@@ -37,9 +37,18 @@ closureGo fuel layers todo acc =
       [] => acc
       n :: rest => if memName n acc then closureGo (fuel - 1) layers rest acc else closureGo (fuel - 1) layers (append rest (usesOfLayer layers n)) (n :: acc)
 
--- | 一行的许可集：自身层 + uses 的传递闭包（层数有限，fuel 足够）。
+-- 队列里每个层名最多被弹出一次；重复边会让同一名字重复入队，因此上界是
+-- 「层数 + uses 总数 + 2」（只按层数给界时，宽图会提前截断闭包）。
+closureBound : List Layer -> Int
+closureBound layers = usesTotal layers + length layers + 2
+
+usesTotal : List Layer -> Int
+usesTotal [] = 0
+usesTotal (l :: rest) = length l.layerUses + usesTotal rest
+
+-- | 一行的许可集：自身层 + uses 的传递闭包。
 allowedByRow : List Layer -> Layer -> List String
-allowedByRow layers l = closureGo (length layers + 2) layers l.layerUses [l.layerName]
+allowedByRow layers l = closureGo (closureBound layers) layers l.layerUses [l.layerName]
 
 covered : List String -> String -> Bool
 covered [] name = False
