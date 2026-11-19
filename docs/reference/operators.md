@@ -99,6 +99,8 @@ import 之后、第一个声明之前（fmt 的规范位置），每条一行。
 | `::` | 5 右 | `Base.Data.List` / `Base.Effect.Core.Row` | 两个族各自的 cons 构造子（同名，按期望族定向解析） |
 | `>>=` | 1 右 | `Base.Trait.Monad` | `Monad` 方法（`(>>=)`） |
 | `>>` | 1 左 | `Base.Trait.Monad` | `a >> b` 展开为 `(>>=) a (\_ => b)`（Loader 的 do 派生，用调用点可见的 `>>=`） |
+| `$` | 0 右 | `Base.Data.Function` | 低优先级应用：`f $ x` ≡ `f x` |
+| `\|>` | 1 左 | `Base.Data.Function` | 正向管道：`x \|> f` ≡ `f x` |
 
 `>>` 留在 Loader 的 do 派生里：它需要「丢弃第一个结果」的适配，且必须用**调用点可见**
 的 `>>=`（模块内自定义 Monad trait 时也要绑对）；`Base.Trait.Monad` 提供它的 fixity 声明
@@ -212,6 +214,8 @@ import 之后、第一个声明之前（fmt 的规范位置），每条一行。
 - `packages/compiler/test/corpus/dt/96_fixity_operator_def`：`(<+>) = add` + `infixl 6 <+>`（运算符是普通名字）。
 - `packages/compiler/test/corpus/dt_err/53_unknown_fixity`：未知符号运算符报 `unknown fixity`。
 - `packages/compiler/test/corpus/dt_err/111_fixity_alias_target`：fixity 声明不写 `= target`（语法错误）。
+- `packages/base/test/corpus/stdlib/12_function`：`$`（`infixr 0`）/ `|>`（`infixl 1`）的优先级与
+  `id` / `const` / `flip` / `compose`。
 - `packages/cli/test/corpus/fmt/23_fixity_decls` / `24_backtick_sections` / `25_custom_ops`：声明打印与
   fmt 新语法往返。
 - `nix run .#vuna-run-tests` 全量；`sh nix/seed/rotate.sh <vuna>` 验证自举 fixed point。

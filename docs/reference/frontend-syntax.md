@@ -21,8 +21,9 @@
 - **表面语法只活到 `Frontend.Ast`**：`EInfix` / `EBacktick` / `ESect*` / `EParen` 是 parser
   中间产物，`Loader.Fixity.reorderProgram` 之后必须消失；`Loader.Resolve` 对残留报 internal error。
 - 部分糖**不新增 AST 构造子**，而用保留名编码（`@vuna@list@*` / `@vuna@handle` /
-  `@vuna@macro@*` / `?hole`）：列表字面量、`perform` / `handle`、`f@name`、行条目
-  `[Op@name]`、洞、内置宏都走这条路。新增形式优先考虑这条路径（§10）。
+  `@vuna@macro@*` / `@vuna@tuple@*` / `@vuna@ascribe` / `?hole`）：列表字面量、`perform` /
+  `handle`、`f@name`、行条目、元组 / unit、类型标注、洞、内置宏都走这条路。新增形式优先
+  考虑这条路径（§10）。
 - **工具面看的是 `Frontend.Ast` 原形**：`Fmt` 按源码顺序打印、`Index`/`Lsp` 扫 binder 与引用、
   `Lint` 做归一化建议。任何表面形式都必须在这三处有明确处理，否则工具会漂移。
 
@@ -81,7 +82,11 @@
 | 模板字符串 | `"hi ${name}"` | `Base.Trait.Interp.interp e` + `++` 链 | `Loader.Resolve`、[templates.md](templates.md) |
 | 洞 | `_` / `?name` | goal（check 位必须有期望类型） | `Elab.Term.Support`、[language.md](language.md) |
 | 内置宏 | `dbg! x` / `obs! x` / `mark! name` | `Loader.Expand` 展开成隐藏 runtime 原语 | `Loader.Expand`、[observability.md](observability.md) |
-| **不支持** | tuple `(a, b)`、unit `()`、`(e : T)` 标注、`$` / `\|>`、guard、`\case`、range、comprehension | 见 §11 | — |
+| 元组 | `(a, b, c)` | 右嵌套成 `Pair a (Pair b c)`；类型 / 值 / 模式同一套语法（要求 `Pair` 可见） | `Frontend.Parser`、`Loader.Resolve` |
+| unit | `()` | 类型位置是 `Unit`，值 / 模式位置是 `MkUnit`（要求可见） | `Frontend.Parser`、`Loader.Resolve` |
+| 类型标注 | `(e : T)` | parser 编码成 `@vuna@ascribe`，Loader 降级成 `EAnn`（按 `T` 检查 `e`） | `Frontend.Parser`、`Loader.Resolve`、`Elab.Term.Impl` |
+| 低优先级应用 / 管道 | `f $ x` / `x \|> f` | 普通运算符：定义在 `Base.Data.Function`，fixity 在 `Base.Internal.Operator` | `Base.Data.Function`、[operators.md](operators.md) |
+| **不支持** | guard、`\case`、range、comprehension | 见 §11 | — |
 
 ## 3. 模式
 
@@ -94,9 +99,10 @@
 | as-pattern | `x@pat` / `_@x` | 整个值绑定到 `x`；case 分支里降成 `let` | `Elab.Match`、`Elab.Records` |
 | 记录模式 | `R { x = p, y }` | 可省略字段（= 通配）；`{ y }` 是 pun | `Elab.Records` |
 | 列表模式 | `[]` / `[a, b]` / `x :: xs` | 按 scrutinee 族展开 | `Elab.Term.Impl` |
+| 元组模式 | `(a, b)` / `(a, (b, c))` | 右嵌套到 `Pair`；`()` 是 `MkUnit` | `Elab.Match` |
 | 重复 binder | `f x x = ...` | 拒绝（`PS_RepeatedPatternBinder`）；不实现相等约束 | `Frontend.Parser` |
 | `let` / `where` 绑定左端 | `MkPoint x y = e` | 必须不可失败（穷尽）；绑定出的名字在后续绑定与 body 可见 | `Elab.Term.Impl` |
-| **不支持** | tuple 模式、guard、view pattern、pattern synonym、浮点字面量模式 | 见 §11 | — |
+| **不支持** | guard、view pattern、pattern synonym、浮点字面量模式 | 见 §11 | — |
 
 ## 4. 类型表达式
 
@@ -110,6 +116,8 @@
 | `Member` 签名糖 | `Member n ConsoleOp r => ...` | 展开成 `Member (Named n e) r` + 隐式 `Rig0` 证明 binder | `Elab.Driver`、[native-effects.md](native-effects.md) |
 | 类型层字面量 | `Vec 3 a`、`Box "books"` | 只放行 `Int` / `String`；其它（含浮点）报 invalid type expression | [type-system.md](type-system.md) |
 | 索引族应用 | `Vec (Succ n) a` | 索引构造子按名字解析 | [type-system.md](type-system.md) |
+| 元组类型 | `(Int, String)` / `(Int, Int, Int)` | `Pair Int String`；右嵌套（fmt 展平成 `(Int, Int, Int)`） | `Frontend.Parser`、`Loader.Resolve` |
+| unit 类型 | `()` | `Unit` | `Frontend.Parser`、`Loader.Resolve` |
 | **不支持** | 类型层 lambda `\n => ...`、类型位置 `_` 洞、`f {e}` 隐式实参、`@T` 类型应用、`(n ** p)` | §11；`Sigma (\n => ...)` 因类型 lambda 缺失写不出来 | — |
 
 ## 5. 声明
@@ -165,7 +173,8 @@
 ## 9. 工具面对表面语法的约定
 
 - **Fmt**：`parse → 规范打印`，按源码顺序与源码括号输出，不按 fixity 重排；因此不需要程序级
-  fixity 闭包。新增表面形式必须能原样打印回可重新 parse 的源码（幂等）。
+  fixity 闭包。新增表面形式必须能原样打印回可重新 parse 的源码（幂等）。元组是唯一例外：
+  右嵌套的元组类型 / 值统一展平成 `(a, b, c)`（两者同型，展平是规范形）。
 - **Lint**：`vuna lint --fix` 的 `list-literal` 规则把表达式 / 类型位置的闭合 `::` 链与裸 `Nil`
   归一成 `[..]`；模式里的 `::` 保持原样。
 - **Index / Lsp**：洞名与宏标记不算引用；`@` 实例名是静态名字；任何引入新 binder 的形式
@@ -200,17 +209,17 @@
 
 | 形式 | H | I2 | PS | vuna 现状 | 决定 |
 | --- | --- | --- | --- | --- | --- |
-| `$` 低优先级应用 | ✓ | ✓ | ✓ | 无；`$` 可 lex | 库层可做（零编译器改动） |
-| 管道 `\|>` / `&` | `&` | — | `#` | 无（`#` 不在 `isOpChar`，需 lexer） | 库层可做，优先 `\|>` |
-| 组合子 `id` / `const` / `flip` / `compose` | ✓ | ✓ | ✓ | base 无定义 | 库层可做 |
+| `$` 低优先级应用 | ✓ | ✓ | ✓ | `Base.Data.Function.($)`，`infixr 0` | 已支持（库层） |
+| 管道 `\|>` / `&` | `&` | — | `#` | `Base.Data.Function.(\|>)`，`infixl 1`（`&` / `#` 不做） | 已支持（库层） |
+| 组合子 `id` / `const` / `flip` / `compose` | ✓ | ✓ | ✓ | `Base.Data.Function`，随 `Prelude` 可见 | 已支持 |
 | `do` 内 `let` | ✓ | ✓ | ✓ | 只能写 `let ... in ...` 包住剩余块 | 待评估（parser + do 链） |
 | `do` 模式绑定 | ✓ | ✓ | ✓ | 语法接受，语义只允许变量 / `_` | 不做（需要失败语义 / `MonadFail`） |
 | guards（函数 / case / let） | ✓ | ✓ | ✓ | 无 | 不做（穷尽性 + 模式矩阵成本高） |
 | lambda 参数模式 | ✓ | ✓ | ✓ | 参数只能是名字 | 不做（无签名 lambda 无期望类型） |
 | `\case` | ✓ | — | ✓ | 无 | 不做 |
-| tuple / unit 语法 | ✓ | ✓ | ✓ | 无（`Pair` / `Unit` 是普通类型） | 待评估（右嵌套到 `Pair`） |
-| 表达式类型标注 `(e : T)` | ✓ | ✓ | ✓ | 无；`EAnn` 只由 `where` 签名产生 | 待评估（低成本、缓解推断边界） |
-| `case` 多 scrutinee | — | — | — | 无（单一 scrutinee） | 不做（tuple 落地后 `case (a,b)` 等价） |
+| tuple / unit 语法 | ✓ | ✓ | ✓ | `(a, b, c)` 右嵌套到 `Pair`；`()` 按位置展开成 `Unit` / `MkUnit` | 已支持（要求 `Pair` / `Unit` / `MkUnit` 可见） |
+| 表达式类型标注 `(e : T)` | ✓ | ✓ | ✓ | 降级成 `EAnn`（与 where 签名同一路径） | 已支持 |
+| `case` 多 scrutinee | — | — | — | 无专用语法 | 不做（写 `case (a, b)`） |
 | 多 binder 重复（非线性模式） | — | ✓ | — | 拒绝 | 不做（需要相等约束） |
 | Sigma `(n ** p)` / 依赖对 | — | ✓ | — | 无 `Sigma`；`**` 只是未知运算符 | 阻塞于**类型层 lambda**（见下） |
 | 类型层 lambda / 类型层 section | — | ✓ | — | 报 invalid type expression | 类型系统特性，优先级低 |

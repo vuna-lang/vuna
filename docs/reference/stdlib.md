@@ -13,6 +13,7 @@
 
 | 模块 | 内容 |
 | --- | --- |
+| `Base.Data.Function` | 函数组合子与低优先级应用：`id` / `const` / `flip` / `compose` / `($)` / `(|>)`；`$`（`infixr 0`）与 `|>`（`infixl 1`）的 fixity 声明在 `Base.Internal.Operator`，随 `Prelude` 可见 |
 | `Base.Data.Pair` / `Base.Data.Bool` / `Base.Data.List` / `Base.Data.Maybe` / `Base.Data.Result` | 核心代数数据类型与常用 helper（append/reverse/map/filter/foldl/foldr/traverse/step/...）；`List` 另有候选选择组合子 `firstJust`（首个 `Just`）与 `firstSuccess`（顺序尝试动作，命中即停）；`Result` / `Maybe` / `List` 带 `Functor`/`Applicative`/`Monad` 实例（`do` 可用）；容器带约束 `Show`，代数容器另带 `Eq`（List/Maybe/Pair 还有 `Ord`），容器 `Show` 的插值经 blanket `Interp` 复用 |
 | `Base.Trait.Field` / `Base.Trait.Record` | `Field` 类型级字段标签（`Field "id"`）+ `HasField` trait：nominal record 的泛型读访问；`Base.Trait.Record` 重导出 `Base.Trait.Field`；实例由编译器按 record 字段自动生成（仅导入 Base.Trait.Record 的模块）。见 [records-traits.md](records-traits.md)「HasField」 |
 | `Base.Data.String` | split/join/lines/unlines/trim/contains/startsWith/endsWith/repeat/substring；`byteLength : String -> Nat` |
@@ -67,7 +68,7 @@
 | `Base.Effect` | 效应门面（只提供路径）：`Core`（运行时核心）/ `Types`（类型面）/ `State` / `Reader` / `Error` / `Exn` / `Ref` / `Fs` / `Console` / `Clock` / `Env` / `Args` / `Stdin` / `Exit` / `Net` / `Process`，以及 `Pure` 子树 |
 | `Base.Effect.Pure` | 纯效应表示门面（只提供路径，无运行时 handler）：`Base.Effect.Pure.State` / `Reader` / `Error` / `IORef` |
 | `Base` | 包门面：整模块重导出核心模块（含 `Base.Data.Nat` / `Base.Trait.Num` / `Base.Data.Unit` / `Base.Trait.Applicative`(经 Monad) / `Base.Trait.Monoid` / `Base.Trait.Foldable` / `Base.Trait.Traversable` / `Base.Trait.Hashable`；不含 `Vec` 与哈希容器；`import Base` 即可用） |
-| `Prelude` | 顶层模块（`packages/base/lib/Prelude.vuna`）：重导出 `Base.Data.Pair` / `Base.Data.Bool` / `Base.Trait.Eq` / `Base.Trait.Ord` / `Base.Trait.Num` / `Base.Trait.Show` / `Base.Trait.Interp` / `Base.Data.List` / `Base.Data.Maybe` / `Base.Data.Result` / `Base.Data.String` / `Base.Trait.Monad`（含 `Applicative`）/ `Base.Data.Unit` / `Base.Trait.Monoid` / `Base.Trait.Foldable` / `Base.Trait.Traversable` / `Base.Trait.Hashable`，按包上下文自动导入（规则见下节「Prelude 自动导入」）；显式 `import` 时不再重复注入；刻意不重导出 `Base.Effect.Core`（效果 API 需显式 import；Prelude 仅 import 加载）与 `Base.Data.Nat` |
+| `Prelude` | 顶层模块（`packages/base/lib/Prelude.vuna`）：重导出 `Base.Data.Pair` / `Base.Data.Function` / `Base.Data.Bool` / `Base.Trait.Eq` / `Base.Trait.Ord` / `Base.Trait.Num` / `Base.Trait.Show` / `Base.Trait.Interp` / `Base.Data.List` / `Base.Data.Maybe` / `Base.Data.Result` / `Base.Data.String` / `Base.Trait.Monad`（含 `Applicative`）/ `Base.Data.Unit` / `Base.Trait.Monoid` / `Base.Trait.Foldable` / `Base.Trait.Traversable` / `Base.Trait.Hashable`，按包上下文自动导入（规则见下节「Prelude 自动导入」）；显式 `import` 时不再重复注入；刻意不重导出 `Base.Effect.Core`（效果 API 需显式 import；Prelude 仅 import 加载）与 `Base.Data.Nat` |
 
 推荐入口层：应用默认依赖自动 `Prelude`（或显式 `import Base`）；数据用 `Base.Data.X`、
 trait 用 `Base.Trait.X`、容器用 `Base.Container.X`、效应用 `Base.Effect.X`，统一写
