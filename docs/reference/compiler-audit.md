@@ -61,10 +61,10 @@ ID 是稳定引用（`层前缀-序号`），改动时保留编号，删掉实�
 | ID | 位置 | 类 | 现象 → 后果 | 状态 |
 | --- | --- | --- | --- | --- |
 | EL-01 | `Termination/Scc.vuna` 的 `fuelEdgesGo` | ⚠️A | 穿线失败（`ok=False`）的站点被从图里删掉，剩余严格自环即可判通过 → 接受非终止程序 | 已清（未识别站点按弱边计入；fuel 按守卫形参定位） |
-| EL-02 | `Termination.vuna` 的 SCC/DFS | ⚠️C | fuel 耗尽静默返回部分结果 → 整函数跳过终止性检查 | 开放 |
-| EL-03 | `Termination.vuna` 的 STR | ⚠️C | 硬编码 100000、耗尽静默；三套遍历已漂移（`posWalk` 缺 `ELocalFun`） | 开放 |
-| EL-04 | `Measure.vuna` 的 `weakReach` | ⚠️C | 耗尽返回 `False`=无环（方向是放过） | 开放 |
-| EL-05 | `Measure.vuna` 的正性守卫 | C | 只认 `x <= 0` / `0 >= x` / `x < 1`；`n > 0` / `n >= 1` / `n /= 0` 不认 | 开放 |
+| EL-02 | `Termination.vuna` 的 SCC/DFS | ⚠️C | fuel 耗尽静默返回部分结果 → 整函数跳过终止性检查 | 已清（DFS/SCC 显式 `ok`，耗尽报 `IC_FuelExhausted`） |
+| EL-03 | `Termination.vuna` 的 STR | ⚠️C | 硬编码 100000、耗尽静默；三套遍历已漂移（`posWalk` 缺 `ELocalFun`） | 已清（预算按表达式规模派生；STR 耗尽保守拒绝；`posWalk` 补 `ELocalFun`） |
+| EL-04 | `Measure.vuna` 的 `weakReach` | ⚠️C | 耗尽返回 `False`=无环（方向是放过） | 已清（耗尽按有环处理） |
+| EL-05 | `Measure.vuna` 的正性守卫 | C | 只认 `x <= 0` / `0 >= x` / `x < 1` | 已清（补 `n > 0` / `n >= 1` / `0 < n` / `1 <= n` 的 then 区事实；`n /= 0` 在 Int 上不 sound，仍拒绝） |
 | EL-06 | `Measure.vuna` 的 `isMapLike` | C | 按点后短名硬编码 `map/traverse/…` | 开放 |
 | EL-07 | `Case.vuna` 的 `unifyIdxList` | C | 耗尽走 `TC_ImpossibleBranchIndex`（误导性错误码） | 已清（耗尽报 `TC_IndexFuel`） |
 | EL-08 | `Case.vuna` 的 `occursLevel` | ⚠️C | 耗尽返回 `False`=无 occurs | 已清（耗尽按保守方向 `True`） |
@@ -134,13 +134,13 @@ ID 是稳定引用（`层前缀-序号`），改动时保留编号，删掉实�
 | IR-08 | `Ir/Cps.vuna` 的 `transformDef` | D | 直接风格 pass（`transformDirect` / `transformDef` / `selfBody`）与 def 签名已保留；机器 pass（`mHandlers` / `mSyms` / `mApplys` / `mMarked` / `mSteps`）仍属类型改变型，节点类型槽继续置空 | 开放（部分） |
 | IR-09 | `Ir/Cps.vuna` 的 `isHandleCombinator` | C | handler 组合子按类型判据（结果 `Eff` + clause 参数）；opH 为裸类型变量的核心组合子（`handleCore` / `handleCoreAt` / `handleCoreLin` / `handleWith` / `handleWithAt`）用显式 allowlist，不再用字符串启发式 | 已清 |
 | IR-10 | `Ir/Cps.vuna` 的 `isEffResultTy` 注释 | C | 曾与 `Lowering.effResultTyOf` 的实参口径不符 | 已清（对齐注释） |
-| IR-11 | `Ir/Validate.vuna` 的 `ctorFieldCountOf` | C | 查不到构造子当 0 字段（跨单元表不全） | 开放 |
+| IR-11 | `Ir/Validate.vuna` 的 `ctorFieldCountOf` | C | 查不到构造子当 0 字段（跨单元表不全） | 已清（构造子 arity 走程序级 `IrShared` 形状表） |
 | IR-12 | `Ir/Validate.vuna` 的 `IrTyVar` | C | 只查 `i >= 0`，不查族 arity | 已清（声明体槽按本声明 arity 校验） |
 | IR-13 | `Lowering/Ty.vuna` 的 `renderFieldTy` | C | 解析不到字段类型时凭空分配 `IrTyVar slot`，抬高声明 arity | 已清（解析不到报 ICE；arity 计入额外槽） |
-| IR-14 | `Lowering/Env.vuna` 的 `usedTableFix` | C | 64 轮未收敛静默取近似 | 开放 |
+| IR-14 | `Lowering/Env.vuna` 的 `usedTableFix` | C | 64 轮未收敛静默取近似 | 已清（轮数 = 1 + 各族槽总数） |
 | IR-15 | `Lowering/Env.vuna` 的 `defTblOf`/`findDtDef` | C | 同键「后插优先」vs「首匹配」，重名时口径不同 | 已清（语义一致：重复名取靠前的一条；注释纠正） |
-| IR-16 | `Lowering/Program.vuna` 的 `zipFieldNames` | C | 字段表与实参表长度不一静默截断 | 开放 |
-| IR-17 | `Lowering/Program.vuna` 的 `lookupRtPositionsIn` | C | 找不到运行时位置就静默丢字段更新 | 开放 |
+| IR-16 | `Lowering/Program.vuna` 的 `zipFieldNames` | C | 字段表与实参表长度不一静默截断 | 已清（长度不等报 ICE） |
+| IR-17 | `Lowering/Program.vuna` 的 `lookupRtPositionsIn` | C | 找不到运行时位置就静默丢字段更新 | 已清（找不到运行时位置报 ICE） |
 | IR-18 | `Lowering/Entry.vuna` 的 `mainShowIr` | A | 用空 def 表 `force`，别名一律退到 `@vuna@main_show` | 开放 |
 | IR-19 | `Lowering/Checks.vuna` 的 `checkErasure` | A | 命中 Nat 链就 `OkC 0`，整条链跳过擦除/作用域检查 | 开放 |
 | IR-20 | `Ir/Anf.vuna` 的 `__anf` 编号 | D | 二次 ANF 靠 `startsWith "__anf"` 计数避撞名（D111） | 开放 |
@@ -163,8 +163,8 @@ ID 是稳定引用（`层前缀-序号`），改动时保留编号，删掉实�
 | CG-11 | `Wasm/Step.vuna` + `Module` 的 step 发射 | D | 整段死机器 + 9 类型/4 全局仍发射 + 注释与实现相反 | 已清（文件与发射已删） |
 | CG-12 | `Codegen/Term.vuna` 的 cleanup 兜底 | C | 硬上限 256（另两端无） | 已清（预算 = 进入时待跑条数） |
 | CG-13 | `Codegen/Term.vuna` 的 `isTty` | C | 看 stdout；native 看 stdin；wasm 恒 False | 已清（三端按 stdout；wasm 无 isatty，保守 False） |
-| CG-14 | `Codegen/Decl.vuna` 的 `recordFieldsOf` | C | 字段名表与类型表长度不一静默截断 | 开放 |
-| CG-15 | `Native/Module.vuna` 的 `genExprAt` | C | 定义体固定 100000 | 开放 |
+| CG-14 | `Codegen/Decl.vuna` 的 `recordFieldsOf` | C | 字段名表与类型表长度不一静默截断 | 已清（字段名表与类型表长度不等报 ICE） |
+| CG-15 | `Native/Module.vuna` 的 `genExprAt` | C | 定义体固定 100000 | 已清（预算按定义体 `irSize` 派生） |
 | CG-16 | `Wasm/Runtime.vuna` 的 `fsRemoveTree` | B | 只 unlink / 删空目录 | 开放 |
 | CG-17 | 运行时符号表 | D | `Ir/Runtime` / `Native/Module` / `Native/Runtime` / `Wasm/Runtime` / `Codegen/Runtime` 手写同步 | 开放 |
 
