@@ -4,4 +4,4 @@
 name = "vuna-bench"
 
 [dependencies]
-vuna-base = "../../base"
+vuna-base = "../../packages/base"

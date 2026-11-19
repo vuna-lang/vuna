@@ -56,7 +56,7 @@ options:
   -h, --help             显示帮助
 
 环境：
-  VUNA / OCAMLOPT / CC  工具路径；VUNA_BASE 覆盖 base 包位置（默认 <repo>/base）
+  VUNA / OCAMLOPT / CC  工具路径；VUNA_BASE 覆盖 base 包位置（默认 <repo>/packages/base）
   TMPDIR                 临时目录根
 EOF
 }
@@ -111,7 +111,7 @@ esac
 
 REPO=$PWD
 [ -d "$REPO/bench/programs" ] || die "run from the repo root (bench/programs not found)"
-[ -d "$REPO/base" ] || die "run from the repo root (base/ not found)"
+[ -d "$REPO/packages/base" ] || die "run from the repo root (packages/base not found)"
 command -v "$VUNA_BIN" >/dev/null 2>&1 || die "vuna not found: $VUNA_BIN"
 command -v "$OCAMLOPT_BIN" >/dev/null 2>&1 || die "ocamlopt not found: $OCAMLOPT_BIN"
 # wasm 的执行宿主是仓库自带的 Node/V8 宿主：与浏览器同一套 WebAssembly API 和 host 层。
@@ -148,7 +148,7 @@ case " $TARGETS " in
     ;;
 esac
 
-VUNA_BASE=${VUNA_BASE_OVERRIDE:-$REPO/base}
+VUNA_BASE=${VUNA_BASE_OVERRIDE:-$REPO/packages/base}
 export VUNA_BASE
 
 if [ "$CHECK" = 1 ] && [ -z "$BASELINE" ]; then
@@ -281,7 +281,7 @@ build_target() { # name target dir
     native)
       "$VUNA_BIN" compile "$REPO/bench/programs/$name.vuna" "$dir" --target native \
         >"$WORK/$name.$target.compile.log" 2>&1 || return 1
-      ( cd "$dir" && "$CC_BIN" -static -nostdlib -no-pie -Wl,--build-id=none -o prog main.s ) \
+      ( cd "$dir" && "$CC_BIN" -static -nostdlib -no-pie -Wl,--build-id=none -o prog $(find . -name '*.s' | sort) ) \
         >"$WORK/$name.$target.build.log" 2>&1 || return 1
       ;;
     wasm)
