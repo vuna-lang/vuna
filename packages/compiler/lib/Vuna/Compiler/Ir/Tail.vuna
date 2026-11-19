@@ -43,6 +43,10 @@ annotateDef arityOf d =
       IrDef name arity deps ty (annotateAt (tailFuelOf body) arityOf True body) recOk initGuard span
     IrExternDef _ _ _ _ => d
 
+-- | 对一段函数体做标记（顶层就是结果位置）。codegen 合成效应 thunk 时用。
+export annotateBody : (String -> Maybe Int) -> Ir -> Ir
+annotateBody arityOf ir = annotateAt (tailFuelOf ir) arityOf True ir
+
 -- | 对整个定义表做标记。同一个 pass 幂等：已有 `IrTail` 不再包一层。
 export annotateDefs : List IrDef -> Result (List IrDef)
 annotateDefs defs =

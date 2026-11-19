@@ -534,7 +534,7 @@ genLamValue fuel st bs rt body =
             Ok cp =>
               case freshLocal (secondOf cp) WvAnyRef of
                 Pair pl stp =>
-                  case genExpr (fuel - 1) (pushBinder b pl (noTail stp)) body of
+                  case genExpr (fuel - 1) (pushBinder b pl (withTail True stp)) body of
                     Err e => Err e
                     Ok q =>
                       let
@@ -1478,7 +1478,7 @@ genDefFuncBody fuel st name arity body =
 genDefFuncGo : Int -> GenState -> String -> Int -> Ir -> List (Pair IrBinder String) -> List (Pair String WatValTy) -> Int -> List (Pair IrBinder String) -> Result (Pair (List WatFunc) GenState)
 genDefFuncGo fuel st name arity inner paramScope savedLocals savedNext savedScope =
   let
-    st1 = { st | gsScope = paramScope, gsTail = False }
+    st1 = { st | gsScope = paramScope, gsTail = True }
   in case genExpr (fuel - 1) st1 inner of
     Err e => Err e
     Ok p =>

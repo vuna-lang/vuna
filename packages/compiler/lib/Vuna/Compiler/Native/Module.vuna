@@ -764,6 +764,12 @@ effArgBinders : Int -> List IrBinder
 effArgBinders n =
   map (\i => IrBinder (IrBUser ("effArg" ++ strFromInt i)) False Nothing) (range 0 n)
 
+nativeArityOf : FGen -> String -> Maybe Int
+nativeArityOf st name =
+  case findDef name st.fgDefs of
+    Just d => Just (irDefArity d)
+    Nothing => Nothing
+
 genEffThunk : Int -> FGen -> String -> String -> Int -> Ir -> NRes (Pair (List Instr) FGen)
 genEffThunk fuel st family ctor arity prim =
   if fuel <= 0 then
@@ -774,7 +780,7 @@ genEffThunk fuel st family ctor arity prim =
       applied = applyAllIr prim (map (\b => IrVar b) bs)
       mkEff = IrCtor family ctor Nothing [IrLam [effUnitBinder] Nothing applied]
       outer = if arity <= 0 then mkEff else IrLam bs Nothing mkEff
-    in genExpr (fuel - 1) st outer
+    in genExpr (fuel - 1) st (annotateBody (nativeArityOf st) outer)
 
 -- | 生成预算按定义体规模派生（每节点最多几步递归，与 `Ir.Cps` 的 `cpsFuelOfBody` 同口径）。
 --   固定 100000 会让大定义体在没有任何不变式被破坏时报 fuel exhausted。
