@@ -114,6 +114,7 @@ manifest，不向上找。命令语义与包格式
 │   ├── web/       # 生态层 vuna-web：HTML 视图 + 路由 + 串行服务驱动
 │   └── web-cli/   # vuna-web-cli：全栈应用的服务端产物编排（依赖编译器，不进 seed）
 ├── seed/      # compiler 闭包的多文件自举信任锚点（生成物，禁止手改）
+├── wasm-host/ # wasm 产物的 WASI preview1 宿主（Node / 浏览器共用）+ Node loader
 ├── test/      # suite driver 清单 + runner 夹具/全局名单（各包 test/ 有自己的 suite）
 ├── bench/     # 生成程序与编译器基准（nix run .#vuna-bench / .#vuna-perf）
 ├── examples/  # 多包示例

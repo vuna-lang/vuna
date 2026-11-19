@@ -1,11 +1,11 @@
 #!/bin/sh
-# JS 宿主（Node / V8）的冒烟：同一份 .wasm 在 `test/suite/fixtures/wasm_js_host/run.mjs` 上跑。
+# JS 宿主（Node / V8）的冒烟：同一份 .wasm 在 `wasm-host/run.mjs` 上跑。
 #
 # 用法：sh smoke.sh <path-to-vuna>
 #   环境：VUNA_BASE（vuna-base 目录，默认 <repo>/base）
 #
 # 覆盖：
-#   1) 纯程序（无 `cont`）：宿主 stdout 与 wasmtime 同口径；
+#   1) 纯程序（无 `cont`）：宿主 stdout / exit 口径；
 #   2) 入口行只有内建宿主效应（无用户 handler）：send 直接降成宿主调用，同样无 `cont`；
 #   3) 用户自定义 handler：CPS lowering 后默认引擎可直接运行；
 #   4) 运行时失败经 `$rt_failStr` 走 guest 自己的文本 + exit 2（宿主不重写）。
@@ -27,7 +27,7 @@ VUNA=$1
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 REPO=$(CDPATH= cd -- "$HERE/../../../.." && pwd)
 VUNA_BASE=${VUNA_BASE:-$REPO/base}
-RUNNER=$HERE/run.mjs
+RUNNER=$REPO/wasm-host/run.mjs
 
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/wjs.XXXXXX") || exit 1
 trap 'rm -rf "$tmp"' EXIT INT HUP TERM
@@ -100,7 +100,7 @@ else
   ok "host/no-cont"
 fi
 
-# 3) 用户自定义 handler：仍需要 stack switching，默认引擎拒绝编译。
+# 3) 用户自定义 handler：CPS lowering 后产物不含续延类型，默认引擎可跑。
 build_pkg "$tmp/user" "user" 'import Base.Effect.Core as Eff
 
 data POp : Type -> Type where

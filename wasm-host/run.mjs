@@ -1,12 +1,13 @@
-// 测试用 wasm loader：在 Node（V8）上跑 `main.wasm`，宿主层见 host.mjs。
+// wasm 产物的 Node（V8）loader：`vuna run --target wasm`、suite 的 wasm 矩阵与 bench 共用，
+// 宿主层见 host.mjs。
 //
 // 用法：node run.mjs <main.wasm> [--dir ROOT] [--env K=V]... [--arg S]...
 //   --dir    fd 3 的 preopen 根（默认 cwd）
 //   --env    传给 guest 的环境变量（默认空）
 //   --arg    传给 guest 的 argv（默认空）
 //
-// 退出码：guest `proc_exit(n)` → n；引擎 trap → 2（文本写 stderr，不参与跨宿主比对）。
-// stdout/stderr 按到达顺序直接写进程流，与 Wasmtime 下合并流的读法一致。
+// 退出码：guest `proc_exit(n)` → n；引擎 trap → 2（文本写 stderr，不参与断言）。
+// stdout/stderr 按到达顺序直接写进程流（单一 sink）。
 
 import fs from "node:fs";
 import { createHost, ExitError } from "./host.mjs";

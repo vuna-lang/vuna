@@ -1,4 +1,4 @@
-// 测试用 WASI preview1 宿主（Node / 浏览器通用，单文件、无 import 依赖）。
+// WASI preview1 宿主（Node / 浏览器通用，单文件、无 import 依赖）。
 //
 // 契约见 docs/reference/wasm.md §5 与 §8.6：只实现产物 import 的那组函数，errno 用
 // WASI preview1 的数值（guest 侧 `$rt_errno` 再映射成 1..6 / 9）；fd 3 是唯一的 preopen

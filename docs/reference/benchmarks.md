@@ -152,9 +152,8 @@ native 的 TCO / GC 验证项。**GC 与 TCO 均已落地**；下表「前」列
 
 ### 1.3 wasm 后端（浏览器路径：JS 宿主 / V8）
 
-wasm 产物由仓库自带的 JS 宿主执行（`test/suite/fixtures/wasm_js_host/run.mjs`，Node/V8；
-与浏览器同一套 `WebAssembly` API 和 host 层），不走 wasmtime——后者的删除条件见
-[debt.md](debt.md) D102。`--target wasm`（或 `--target all`）跑同一批 16 个程序。
+wasm 产物由仓库自带的宿主执行（`wasm-host/run.mjs`，Node/V8；与浏览器同一套
+`WebAssembly` API 和 host 层）。`--target wasm`（或 `--target all`）跑同一批 16 个程序。
 
 本机一档（`--target all --runs 5 --warmup 2`，同窗口；绝对 ms / RSS 只作同机对比）：
 
@@ -182,8 +181,8 @@ wasm 产物由仓库自带的 JS 宿主执行（`test/suite/fixtures/wasm_js_hos
   不是测量设施的限制。
 - **RSS 不可比**：wasm 列是 node 进程量级（~55 MB 起），`gc_low_live` 的 ~800 MB 是 wasm 侧
   只增不减的线性内存；与 native「栈页 + live 堆」、OCaml「GC 高水位」不是一个口径。
-- **引擎/宿主版本是一阶变量**：同一份 `main.wasm` 的 `arith` 在 wasmtime 41.0.3 上是 2.1 s、
-  50.0.0 上是 0.11 s。基线只与 `meta.node` + `meta.wasm_host_runner` 同版本可比。
+- **引擎/宿主版本是一阶变量**：基线只与 `meta.node` + `meta.wasm_host_runner` 同版本
+  可比；换 Node 版本要重标基线。
 
 读法（减掉 ~18 ms 地板）：**V8 在 `float_math`（37 vs native 85）、`gc_array_churn`
 （449 vs 1399）与 `tco_mutual`（16 vs 27）上快过 native，`records` 基本持平**；native 领先

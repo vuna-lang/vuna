@@ -8,8 +8,8 @@
 #   * 每个 benchmark 一份 `bench/programs/<name>.vuna`（vuna）与 `<name>.ml`（手写
 #     OCaml 等价实现，同算法；个别库基准用标准库上限，见各文件注释）；
 #   * `--target` 选择被测后端：ocaml（默认）/ native / wasm / both（ocaml+native）/
-#     all（三个都测）。wasm 用仓库里的 JS 宿主（`test/suite/fixtures/wasm_js_host/run.mjs`，
-#     Node/V8，与浏览器同一套 WebAssembly API 与 host 层）执行，不走 wasmtime；
+#     all（三个都测）。wasm 用仓库里的宿主（`wasm-host/run.mjs`，Node/V8，与浏览器
+#     同一套 WebAssembly API 与 host 层）执行；
 #   * `.out` 是 golden：每个被测产物与手写实现都必须输出它；
 #   * 每项先 warmup 再跑 --runs 次取**中位数**；峰值内存用 GNU time 的 max RSS，
 #     计时结束后单独跑 --rss-passes 次取**最大值**（不参与计时）；
@@ -114,9 +114,8 @@ REPO=$PWD
 [ -d "$REPO/base" ] || die "run from the repo root (base/ not found)"
 command -v "$VUNA_BIN" >/dev/null 2>&1 || die "vuna not found: $VUNA_BIN"
 command -v "$OCAMLOPT_BIN" >/dev/null 2>&1 || die "ocamlopt not found: $OCAMLOPT_BIN"
-# wasm 的执行宿主是仓库自带的 JS 宿主（Node/V8）：与浏览器同一套 WebAssembly API
-# 和 host 层，不依赖 wasmtime（后者的删除条件见 debt D102）。
-WASM_RUNNER=${WASM_RUNNER:-$REPO/test/suite/fixtures/wasm_js_host/run.mjs}
+# wasm 的执行宿主是仓库自带的 Node/V8 宿主：与浏览器同一套 WebAssembly API 和 host 层。
+WASM_RUNNER=${WASM_RUNNER:-$REPO/wasm-host/run.mjs}
 NODE_BIN=${NODE:-node}
 NODE_VERSION=n/a
 NODE_STARTUP_MS=n/a
@@ -142,9 +141,9 @@ case " $TARGETS " in
     _t1=$(date +%s%N)
     NODE_STARTUP_MS=$(( (_t1 - _t0 + 2500000) / 5000000 ))
     if [ "$STACK_POLICY" = n/a ]; then
-      STACK_POLICY="js-host (V8 wasm stack, no knob)"
+      STACK_POLICY="node (V8 wasm stack, no knob)"
     else
-      STACK_POLICY="$STACK_POLICY; js-host (V8 wasm stack, no knob)"
+      STACK_POLICY="$STACK_POLICY; node (V8 wasm stack, no knob)"
     fi
     ;;
 esac
@@ -487,7 +486,6 @@ emit_json() {
   printf '    "warmup": %s,\n' "$WARMUP"
   printf '    "target": "%s",\n' "$TARGET"
   printf '    "stack_policy": "%s",\n' "$STACK_POLICY"
-  printf '    "wasm_host": "js",\n'
   printf '    "wasm_host_runner": "%s",\n' "$(json_escape "$WASM_RUNNER")"
   printf '    "node": "%s",\n' "$(json_escape "$NODE_VERSION")"
   printf '    "node_startup_ms": %s,\n' "$(case $NODE_STARTUP_MS in ''|*[!0-9]*) printf 'null' ;; *) printf '%s' "$NODE_STARTUP_MS" ;; esac)"

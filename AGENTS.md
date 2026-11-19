@@ -112,7 +112,7 @@ nix build .#vuna --out-link result        # 需要固定二进制时才构建（
 sh nix/seed/rotate.sh ./result/bin/vuna   # 仅当需要轮换 seed；上面那条先跑过
 nix run .#vuna -- store gc --dry-run      # 缓存族 GC：先裁剪已消失的项目根，再按 roots+宽限淘汰
                                           # 对象库是单一根（默认 ~/.vuna/store，VUNA_STORE 覆盖）
-nix flake check                           # 3 packages + 24 checks（清单见 testing.md）
+nix flake check                           # 3 packages + 23 checks（清单见 testing.md）
 nix run .#vuna -- map find <Module.name> # 定位符号；另有 map impact / api
 ```
 
@@ -127,7 +127,9 @@ nix run .#vuna -- map find <Module.name> # 定位符号；另有 map impact / ap
 `Base` / `Base.Data` / `Base.Trait` / `Base.Container` / `Base.Effect(.Core/.Pure)` / `Prelude`）；`packages/cli/` = 产品 CLI 包
 `vuna`（工具链 Cli/Interp/Files/Fmt/Lint/Repl/Run/Doc/Index/Lsp/TestRunner/Obs 在 `packages/cli/lib/`，
 入口 `packages/cli/app/Main.vuna`；**不进 seed**）；
-`seed/` = 提交入库的 OCaml 信任锚点（生成物，禁止手改、别读）；`test/` = driver 清单
+`seed/` = 提交入库的 OCaml 信任锚点（生成物，禁止手改、别读）；`wasm-host/` = wasm 产物的
+WASI preview1 宿主（Node / 浏览器共用）与 Node loader（`vuna run --target wasm`、suite、bench 共用）；
+`test/` = driver 清单
 （`suite.toml`）+ runner 夹具/全局名单（`suite/`）；各包 `test/` = 独立 suite（`suite.toml` +
 `corpus/` + `steps/`）与 `vuna test` 单元测试；`bench/`（仓库根）= 生成程序与编译器基准；
 `examples/` = 多包示例；`.agents/` = AI 规则与技能；`vscode/` = VSCode 扩展（高亮 + LSP +

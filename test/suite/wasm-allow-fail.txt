@@ -1,4 +1,4 @@
-# JS 宿主（浏览器可跑面）门禁的「允许失败」清单（`VUNA_TEST_ALLOW_FAIL`）。
+# wasm 后端矩阵（Node/V8 = 浏览器可跑面）的「允许失败」清单（`VUNA_TEST_ALLOW_FAIL`）。
 # 一行一条、按 case id 子串匹配；命中且失败的结果按状态 `allow` 计（不算 skip，
 # `--strict-skips` 不抓）。
 #

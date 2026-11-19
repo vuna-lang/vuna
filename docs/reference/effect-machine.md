@@ -298,7 +298,7 @@ run : Control -> Obj
 
 - **下一步缺口（编译已通，运行时 trap）**：修掉「0 元定义被应用」的 codegen 缺陷后
   （提交 8cc1bb4：先 `global.get` 再逐个 `rt_apply`），`mSteps` 接线的产物**能组装**；
-  `wasmtime` 跑起来在 `_start → rt_apply` 处 cast failure，说明入口/续延交接处还有一处
+  跑起来在 `_start → rt_apply` 处 cast failure，说明入口/续延交接处还有一处
   形状不匹配（`runMain` 被改写成 `machineRun` 之后，入口仍按旧约定把某值当闭包应用）。
 
 ### 9.2.2 进度（机器已驱动 wasm 的 329/334 检查，仍有 3 个缺口）

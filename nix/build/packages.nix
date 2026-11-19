@@ -81,6 +81,9 @@ let
       ${vuna-compiler}/bin/vuna-compiler build --package vuna .
       cp packages/cli/.output/bin/vuna "$out/bin/vuna"
       cp -r packages/base "$out/base"
+      # `vuna run --target wasm` 的执行宿主（Node/V8，`Vuna.Run.wasmRunner` 按此布局查找）。
+      mkdir -p "$out/share/vuna"
+      cp -r ${../../wasm-host} "$out/share/vuna/wasm-host"
       if [ -f packages/cli/.output/build-id ]; then cp packages/cli/.output/build-id "$out/build-id"; fi
     '';
   };
@@ -121,7 +124,7 @@ let
       vuna-seed
       vuna-web-cli
       ;
-    # 与 checks 的 e2e 同一份 PATH：wasm-tools/wasmtime/cc/node 都在。
+    # 与 checks 的 e2e 同一份 PATH：wasm-tools/cc/node 都在。
     tools = e2eTools;
   };
 

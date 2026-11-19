@@ -15,9 +15,9 @@
 --
 -- 构建走 in-process `runCompilerCliFor "vuna" (["build", DIR] ++ 包选择)`（`--no-build`
 -- 跳过）；执行走 `processRunIn <包目录> <.output/bin/<包名> :: 透传参数>`，子进程退出码
--- 原样返回。`--target wasm` 执行 `<OUT>/main.wasm`（wasmtime + stack-switching / gc /
--- function-references），`--target native` 与 ocaml 一样执行 `<OUT>/bin/<包名>`。目标没有
--- 可执行入口、构建被跳过导致产物缺失都是输入错误（exit 2）。
+-- 原样返回。`--target wasm` 用仓库自带的 JS 宿主跑 `<OUT>/main.wasm`
+-- （`wasm-host/run.mjs`，Node/V8；preopen 根 = 包目录），`--target native` 与 ocaml 一样
+-- 执行 `<OUT>/bin/<包名>`。目标没有可执行入口、构建被跳过导致产物缺失都是输入错误（exit 2）。
 module Vuna.Run where
 
 import Vuna.Compiler.Base.Common
@@ -382,15 +382,55 @@ execTarget prefix targetName passthrough target outM =
 resolveOut : String -> String -> String
 resolveOut cwd out = if startsWith "/" out then out else "${cwd}/${out}"
 
--- | 内部：执行产物 —— wasm 目标跑 `wasmtime run <OUT>/main.wasm`（启用 stack-switching /
--- gc / function-references）；ocaml / native 跑 `<OUT>/bin/<包名>`。产物缺失时打印
+-- | 内部：wasm 产物的执行宿主（`wasm-host/run.mjs`，Node/V8）。解析顺序：
+-- `VUNA_WASM_RUNNER`（相对 cwd 解析）→ 安装布局 `<exe>/../share/vuna/wasm-host/run.mjs`
+-- → 仓库布局 `<exe>/../../wasm-host/run.mjs` → `<cwd>/wasm-host/run.mjs`。
+wasmRunner : Member nFs FsOp r, Member nEnv EnvOp r => Eff r (Maybe String)
+wasmRunner =
+  do
+    cwd <- envGetCwd
+    override <- envGetEnvNonEmpty "VUNA_WASM_RUNNER"
+    case override of
+      Just p =>
+        do
+          exists <- pathExistsFile (resolveOut cwd p)
+          pure (if exists then Just (resolveOut cwd p) else Nothing)
+      Nothing =>
+        do
+          exe <- envExecPath
+          firstExisting (wasmRunnerCandidates (parentOfPath (resolveOut cwd exe)) cwd)
+
+-- | 内部：wasm 宿主候选路径（`binDir` 是可执行文件所在目录）。
+wasmRunnerCandidates : String -> String -> List String
+wasmRunnerCandidates binDir cwd =
+  append
+    (map (\rel => "${binDir}/${rel}") ["../share/vuna/wasm-host/run.mjs", "../../wasm-host/run.mjs"])
+    ["${cwd}/wasm-host/run.mjs"]
+
+-- | 内部：按顺序返回第一个存在的文件路径。
+firstExisting : Member nFs FsOp r => List String -> Eff r (Maybe String)
+firstExisting [] = pure Nothing
+firstExisting (path :: rest) =
+  do
+    exists <- pathExistsFile path
+    if exists then pure (Just path) else firstExisting rest
+
+-- | 内部：执行产物 —— wasm 目标跑 `node wasm-host/run.mjs <OUT>/main.wasm`（preopen 根是
+-- 进程 cwd，即包目录）；ocaml / native 跑 `<OUT>/bin/<包名>`。产物或宿主缺失时打印
 -- 提示（先构建或去掉 `--no-build`）并返回 2。
 execArtifact : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => List String -> String -> List String -> String -> String -> String -> String -> Eff r Int
 execArtifact prefix targetName passthrough pkgDir name relOut absOut =
   if targetName == "wasm" then
     do
       exists <- pathExistsFile "${absOut}/main.wasm"
-      if exists then processRunIn pkgDir (append prefix (append ["wasmtime", "run", "-W", "stack-switching=y", "-W", "gc=y", "-W", "function-references=y", "${relOut}/main.wasm"] passthrough)) else runError "wasm artifact not found: ${absOut}/main.wasm (build the package first, or drop --no-build)"
+      if exists then
+        do
+          runner <- wasmRunner
+          case runner of
+            Just r => processRunIn pkgDir (append prefix (append ["node", r, "${relOut}/main.wasm"] passthrough))
+            Nothing => runError "wasm runner not found: set VUNA_WASM_RUNNER to wasm-host/run.mjs (Node is required for --target wasm)"
+      else
+        runError "wasm artifact not found: ${absOut}/main.wasm (build the package first, or drop --no-build)"
   else
     do
       exists <- pathExistsFile "${absOut}/bin/${name}"

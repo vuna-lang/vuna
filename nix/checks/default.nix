@@ -61,6 +61,8 @@ let
   testTree = workspace ++ [
     src.test
     src.examples
+    # wasm 后端的执行宿主（跨后端 matrix 与 steps 通过 `$VUNA_SUITE_ROOT/wasm-host` 调用）。
+    ../../wasm-host
     # 83_vscode_grammar 的 keyword/soft-keyword 同源对拍需要这两份源文件
     # （steps 的 cwd 是 test/，路径走 $VUNA_SUITE_ROOT）。
     ../../vscode/scripts
@@ -208,6 +210,8 @@ in
   # 后端矩阵：同一份 suite 在两个非默认目标上跑它声明允许的用例
   # （`matrix = pure-cross / effect-common / effect-wasm`，见 testing.md）。
   # ocaml 由 gate 覆盖；这里只跑 fast+integration，e2e/steps 仍由 ocaml 承担。
+  # wasm 的执行宿主是 Node/V8（`wasm-host/run.mjs`），即「浏览器可跑面」的行为门禁；
+  # allowlist 里的条目命中且失败按 `allow` 计（不算 skip，`--strict-skips` 不抓）。
   vuna-tests-wasm = vunaCheck {
     name = "vuna-tests-wasm";
     srcs = testTree;
@@ -215,22 +219,7 @@ in
       VUNA_SEED = "${vuna-seed}/bin/vuna-seed";
       VUNA_TEST_TIERS = "fast integration";
       VUNA_TEST_BACKENDS = "wasm";
-    };
-    nativeBuildInputs = e2eTools;
-    script = ./vuna-tests.sh;
-  };
-
-  # JS 宿主（V8）跑 wasm 后端矩阵：浏览器可跑面的行为门禁。
-  # 参考通道独有用例（用户自定义 handler）在 allowlist 里按 skip 计。
-  vuna-tests-wasm-js = vunaCheck {
-    name = "vuna-tests-wasm-js";
-    srcs = testTree;
-    env = {
-      VUNA_SEED = "${vuna-seed}/bin/vuna-seed";
-      VUNA_TEST_TIERS = "fast integration";
-      VUNA_TEST_BACKENDS = "wasm";
-      VUNA_WASM_HOST = "js";
-      VUNA_TEST_ALLOW_FAIL = "test/suite/wasm-js-allow-fail.txt";
+      VUNA_TEST_ALLOW_FAIL = "test/suite/wasm-allow-fail.txt";
     };
     nativeBuildInputs = e2eTools;
     script = ./vuna-tests.sh;

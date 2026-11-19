@@ -11,7 +11,7 @@
 #                 [--target ocaml,wasm,native] [--filter PAT] [--compiler-bin PATH]
 #                 [--keep] [--list]
 #
-# 依赖 PATH：wasm-tools / wasmtime / cc / ocamlopt / jq / timeout（由 `nix run .#backend-check` 注入）。
+# 依赖 PATH：wasm-tools / node / cc / ocamlopt / jq / timeout（由 `nix run .#backend-check` 注入）。
 # 单条命令默认 240 s 上限（VUNA_BACKEND_TIMEOUT，0 = 不限）；超时按失败计。
 # 失败达到 VUNA_BACKEND_MAX_FAILS（默认 0 = 不限）后停止派发剩余夹具：
 # 编译器整体坏掉时（D89）跑完几百条夹具没有额外信息，只会把 job 拖到超时。
@@ -198,7 +198,7 @@ parity_one() {
         run_limited wasm-tools parse "$outdir/w/main.wat" -o "$outdir/w/main.wasm" >>"$outdir/build.log" 2>&1 || status=$?
       fi
       if [ "$status" = 0 ]; then
-        got=$(run_limited wasmtime run -W stack-switching=y -W gc=y -W function-references=y "$outdir/w/main.wasm" 2>&1) || status=$?
+        got=$( ( cd "$outdir/w" && run_limited node "$repo/wasm-host/run.mjs" main.wasm ) 2>&1 ) || status=$?
       fi
       ;;
     native)

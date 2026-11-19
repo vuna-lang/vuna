@@ -179,7 +179,7 @@ file-exists: $TMPDIR/wobs-out/main.wat
 
 run: sh -c 'd="$TMPDIR/wspan"; mkdir -p "$d/app"; printf "[package]\nname = \"wspan\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Data.ObsSpan as ObsSpan\n\nmain : Int\nmain = obsSpan \"x\" \"vuna.user\" (\\_ => 1)\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/wspan-out" "$d"'
 exit: 0
-run: sh -c 'cd "$TMPDIR/wspan-out" && wasmtime run -W stack-switching=y -W gc=y -W function-references=y main.wasm'
+run: sh -c 'cd "$TMPDIR/wspan-out" && node "$VUNA_SUITE_ROOT/wasm-host/run.mjs" main.wasm'
 exit: 0
 out-equals: 1
 

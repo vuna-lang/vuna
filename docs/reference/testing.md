@@ -95,8 +95,8 @@ fixture 与 steps 的相对路径以**所属包的 `test/`** 为根（见 `[fami
 - `--matrix <分类>` 精确筛选，`--filter layer:pure|effect` 按层次筛选；每个 case 自动带
   `layer:<层次>` 与 `matrix:<分类>` 两个 tag。
 - 跨后端 golden：夹具写进 case 私有包目录（`app/Main.vuna` + 指向 base 的 `vuna.toml`），
-  对每个目标 `build --target` 后执行；wasm 走 `wasmtime ... --dir <case-dir>`（WASI
-  preopen），native 直接跑静态产物，三者都以 case 私有目录为 cwd，FS 用例不污染源码树。
+  对每个目标 `build --target` 后执行；wasm 走 `node wasm-host/run.mjs ... --dir <case-dir>`
+  （WASI preopen），native 直接跑静态产物，三者都以 case 私有目录为 cwd，FS 用例不污染源码树。
 - 期望文件按目标覆盖：`<base>.<backend>.out` 优先，否则共享 `<base>.out`——共享期望即三端
   差分。没有 `--backend` 时只跑 ocaml；`effect-*` 分类即使只跑 ocaml 也走私有包目录。
 - 机制断言（trap 文本、WAT / ELF 形状、import 缺失、ABI）留在 steps 的单后端用例，不进差分。
@@ -499,13 +499,13 @@ pkg_err/packages/test-m30 → `packages/cli`；web → `packages/web-cli`；其�
 
 ## Nix checks 清单
 
-`nix flake check` 实测 **27 项**：3 个 package 构建（`vuna` / `vuna-compiler` /
-`vuna-seed`，同时暴露为 checks）+ 24 个 check 语义项（`context-budget`、
+`nix flake check` 实测 **26 项**：3 个 package 构建（`vuna` / `vuna-compiler` /
+`vuna-seed`，同时暴露为 checks）+ 23 个 check 语义项（`context-budget`、
 `seed-selfhost`、`vscode-ext`、`vuna-checks-inventory`、`vuna-compiler-growth`、
 `vuna-compiler-growth-ctor`、`vuna-compiler-growth-incremental`、`vuna-diag`、`vuna-fmt`、`vuna-frontend-growth`、
 `vuna-lint`、`vuna-metrics`、`vuna-nix-fmt`、`vuna-obs-dwarf`、`vuna-obs-overhead`、
 `vuna-obs-schema`、`vuna-static`、`vuna-tests-e2e`、`vuna-tests-gate`、
-`vuna-tests-native`、`vuna-tests-wasm`、`vuna-tests-wasm-js`、`vuna-wasm-browser`、
+`vuna-tests-native`、`vuna-tests-wasm`、`vuna-wasm-browser`、
 `vuna-typecheck`；主体是 `nix/checks/<name>.sh`，共享实现与并入门禁的实现放在
 `nix/checks/lib/`）。
 
@@ -536,14 +536,13 @@ CI 把它拆成三个 job（`.github/workflows/ci.yml`）：`flake-check` 跑除
   行为抽查与 seed 滞后报告（不阻塞）；
 - `vuna-tests-wasm` / `vuna-tests-native`：各包 suite 在 `--backend wasm|native` 下跑
   `fast integration`，只覆盖 matrix 允许该目标的 case（`pure-cross` + 对应 `effect-*`）；
+  wasm 的执行宿主是 Node/V8（`wasm-host/run.mjs`），即「浏览器可跑面」的行为门禁。
+  `test/suite/wasm-allow-fail.txt` 是允许失败清单（当前为空），命中且失败按 `allow` 计
+  （不算 skip，`--strict-skips` 不抓），见 [wasm.md](wasm.md) §8.5。
   ocaml 的完整门禁仍由 `vuna-tests-gate` 逐份调用各包 suite 承担。
 - `vuna-static`：结构守卫（诊断码 / IR 边界 / 进程绑定岛 / 隐藏效果 / **suite 清单**）——
   `test/suite.toml` 的 driver 清单必须覆盖所有 `packages/*/test/suite.toml`，且每个 suite
   带 `owner` 与正的 `min_cases`。
-- `vuna-tests-wasm-js`：同一份 wasm matrix 在 **Node（V8）+ JS 宿主**上跑
-  （`VUNA_WASM_HOST=js`），是「浏览器可跑面」的行为门禁。用户自定义 handler 的用例
-  （参考通道独有）登记在 `test/suite/wasm-js-allow-fail.txt`，命中且失败按 `allow` 计
-  （不算 skip，`--strict-skips` 不抓），见 [wasm.md](wasm.md) §8.5。
 - `vuna-wasm-browser`：产物在**默认 wasm 特性**下必须 validate 通过——所有效应形态都走
   显式效应机器，不含 `cont` / `$eff`，不依赖任何提案特性。默认不跑浏览器（保持
   `nix flake check` 秒级）。
@@ -612,7 +611,7 @@ runner 是 `nix run .#backend-check -- --compiler native`，三个 scope：
 `--scope all` = 三个都跑，默认 `selfhost,parity`。`--jobs N` 控制并行度，`--filter PAT`
 只跑匹配的夹具，`--target` 收窄 parity 的输出目标。
 
-每条外部命令（编译器、`cc`、`wasmtime`、生成的程序）默认 240 s 上限
+每条外部命令（编译器、`cc`、`node`、生成的程序）默认 240 s 上限
 （`VUNA_BACKEND_TIMEOUT=<秒>`，`0` = 不限）。超时的夹具按失败计入清单，其余夹具继续跑：
 D89 未关时挂住的是单条命令，没有超时整轮会被拖到 job 级 timeout 而丢掉失败面。
 失败达到 `VUNA_BACKEND_MAX_FAILS`（默认 `0` = 不限；CI 设 20）后停止派发剩余夹具，

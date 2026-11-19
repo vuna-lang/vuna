@@ -74,7 +74,7 @@ jobs:
         # cache 冷构建（实测 3 min → 17 min）。门禁结论由 ci-status 汇总。
         continue-on-error: true
         env:
-          CI_EXCLUDE: "vuna-tests-gate vuna-tests-e2e vuna-tests-wasm vuna-tests-wasm-js vuna-tests-native vuna-typecheck"
+          CI_EXCLUDE: "vuna-tests-gate vuna-tests-e2e vuna-tests-wasm vuna-tests-native vuna-typecheck"
         run: sh nix/ci.sh
       # Nix 每次构建都会在 store 里留下 `<out>.lock`（root 0600）。cache 保存用
       # 非 root 的 tar 打包 /nix，读到这些锁就整体失败（Failed to save），随后
@@ -83,7 +83,7 @@ jobs:
         if: always()
         run: sudo rm -f /nix/store/*.lock
 
-  # 后端 suite + 自检：wasm / wasm-js / native 三个矩阵 check 与 `vuna-typecheck`
+  # 后端 suite + 自检：wasm / native 两个矩阵 check 与 `vuna-typecheck`
   # 放一个 job，`CI_JOBS=1` 让它们**串行**独占 4 核。串行是为了读时长：
   # 构建日志里相邻两条 `building '...'` 的时间差就是上一个 check 的墙钟，
   # 并行时无法归属。它们都不依赖彼此，串行只多花这些 check 各自的运行时间。
@@ -102,10 +102,10 @@ jobs:
           primary-key: nix-${{ runner.os }}-${{ github.sha }}-matrix
           restore-prefixes-first-match: nix-${{ runner.os }}-
           save: false
-      - name: vuna-tests-{wasm,wasm-js,native} + typecheck
+      - name: vuna-tests-{wasm,native} + typecheck
         env:
           CI_JOBS: 1
-          CI_CHECKS: "vuna-tests-wasm vuna-tests-wasm-js vuna-tests-native vuna-typecheck"
+          CI_CHECKS: "vuna-tests-wasm vuna-tests-native vuna-typecheck"
         run: sh nix/ci.sh
 
   # suite 长尾 1：ocaml 全量门禁（fast + integration）。CI_JOBS=1 让这个 job 的

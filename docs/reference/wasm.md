@@ -20,22 +20,22 @@
   不静默留半成品）；`--no-compile` 只写 WAT + `build.sh`。
 - `--target` 取值校验在 CLI 解析层（`ocaml|wasm|native`），未知目标是用法错误（exit 2），
   不回落到 OCaml。
-- 运行时（本地 nixpkgs 是 wasmtime 50 / wasm-tools 1.262）：产物不含 wasm stack-switching
-  类型与指令，默认配置的引擎即可直接运行：
-  `wasmtime run -W gc=y -W function-references=y main.wasm`（见 §8.5）。
-  handler 运行时由显式效应机器的一个循环派发续延；栈增长与 perform 次数仍线性
-  （约 96 B/次），默认栈足够跑 2000 次（见 [effect-machine.md](effect-machine.md) §7.1）。
-- **栈要按输入配**：默认 `max-wasm-stack`（512 KiB）对长列表不够，会以
-  `call stack exhausted` 失败。长列表上的**非尾递归**辅助函数（`map` / `append` /
-  `Bytes.lenOf` 这类 `1 + f rest` 形状）让栈深与输入规模成正比；按实际输入给
-  `-W max-wasm-stack=<bytes>`，不要依赖默认值。词法主循环（`Lexer.lexChars` /
+- 执行宿主是仓库自带的 Node/V8 宿主（`wasm-host/run.mjs`，宿主层 `wasm-host/host.mjs`，
+  浏览器复用同一份 `host.mjs`）：产物不含 wasm stack-switching 类型与指令，默认配置的
+  引擎即可直接运行。handler 运行时由显式效应机器的一个循环派发续延；栈增长与 perform
+  次数仍线性（约 96 B/次），默认栈足够跑 2000 次（见 [effect-machine.md](effect-machine.md) §7.1）。
+- **栈上限由引擎决定**：V8 的 wasm 栈约 1 MB 且没有开关（`node --stack-size` 不改变
+  wasm 栈）。长列表上的**非尾递归**辅助函数（`map` / `append` / `Bytes.lenOf` 这类
+  `1 + f rest` 形状）让栈深与输入规模成正比，超出后以 `Maximum call stack size exceeded`
+  收口；这是浏览器路径的实际边界，不能靠 flag 调整。词法主循环（`Lexer.lexChars` /
   `lexCharsWith`）是尾递归（逆序累积 + 一次 reverse），不按 token 数吃栈；effect 次数
   也不吃栈，剩余上限由被处理计算自身的递归深度决定。
-- 产物把预打开目录的 **fd 3** 当作唯一 preopen 根（见 §5）：Wasmtime 下用
-  `--dir <root>`，浏览器下由宿主注入 preopen/adapter。路径按 fd 3 解析而**不按 `PWD`**；
+- 产物把预打开目录的 **fd 3** 当作唯一 preopen 根（见 §5）：Node 宿主用 `--dir <root>`
+  （缺省进程 cwd），浏览器下由宿主注入 preopen/adapter。路径按 fd 3 解析而**不按 `PWD`**；
   绝对路径会去掉开头的 `/` 再按根解析。多个 preopen 时只使用 fd 3，不做多根映射。
 - 工具链是**构建期/测试期外部工具**，不进 TCB、不进 seed（与 native 侧 `cc` 同构）：
-  `nix/common.nix` 的 `wasmTools`（devShell、`vuna-run-tests`、`vuna-tests-*` 的 PATH）。
+  `nix/build/common.nix` 的 `wasmTools`（`wasm-tools`，devShell / `vuna-run-tests` /
+  `vuna-tests-*` 的 PATH）；执行用的 Node 在 `e2eTools` 里。
 
 ## 2. 数据表示（WasmGC）
 
@@ -203,14 +203,13 @@ stdout/stderr 大输出不受线性内存大小限制）；读按 `filestat` 的
   suite 的 `pure-cross` 分类对拍三端（OCaml 是语义 oracle）；
   新增共享能力先加 `packages/compiler/test/corpus/pure_cross/` 夹具，再实现两个后端。生成器的两臂顺序约束由
   `49_if_branch_closures.vuna` 锁住（见 §6）。
-- 引擎支持矩阵由 `114_wasm_engine_probe.steps` 锁住：不需要 handler 的产物必须在默认配置
-  下可编译运行，需要 handler 的产物在默认配置下被拒绝（§8.5）；开启 V8 实验特性后的读数
+- 引擎支持矩阵由 `114_wasm_engine_probe.steps` 锁住：纯程序、内建宿主效应、用户 handler
+  与作用域 handler 的产物都在默认配置下可编译运行（§8.5）；开启 V8 实验特性后的读数
   只作报告。
-- JS 宿主（`test/suite/fixtures/wasm_js_host/`）由 `115_wasm_js_host.steps` 冒烟：同一份
-  `.wasm` 在 Node（V8）上的 stdout / exit / 失败文本与 Wasmtime 同口径；suite 侧用
-  `VUNA_WASM_HOST=js` 切换执行器。
-- CI 门禁：`checks.vuna-tests-wasm-js`（同一份 wasm matrix 在 V8 上跑，参考通道独有用例
-  见 `test/suite/wasm-js-allow-fail.txt`）与 `checks.vuna-wasm-browser`（默认特性
+- 宿主（`wasm-host/`）由 `115_wasm_js_host.steps` 冒烟：同一份 `.wasm` 在 Node（V8）上的
+  stdout / exit / 失败文本按 §8.6 的契约断言。
+- CI 门禁：`checks.vuna-tests-wasm`（整份 wasm matrix 在 V8 上跑，`test/suite/wasm-allow-fail.txt`
+  是允许失败清单，当前为空）与 `checks.vuna-wasm-browser`（默认特性
   validate 是硬门；浏览器实跑走 **`.#vuna-wasm-browser-smoke`**：Playwright +
   `pkgs.playwright-driver` 的 chromium，按需构建、不进 `nix flake check`，见
   [testing.md](testing.md)「Nix checks 清单」）。
@@ -224,8 +223,8 @@ wasm 的契约上限是**浏览器能提供的能力子集**：纯计算、WasmG
 preopen 的文件读写、stdout/stderr、monotonic clock、args/env。进程派生 / stdin / raw 网络 /
 信号 / 线程 / 符号链接 / 阻塞 sleep 不在契约内。
 
-宿主面固定为 WASI preview1（§1 的 import 列表），由宿主自己实现：Wasmtime 内建一份，
-浏览器/Node 由 JS 宿主层实现同一组函数（§8.6）。不引入 preview2-shim / `jco`：它们是
+宿主面固定为 WASI preview1（§1 的 import 列表），由本仓手写实现（`wasm-host/host.mjs`，
+Node 与浏览器共用，§8.6）。不引入 preview2-shim / `jco`：它们是
 Component Model 的运行链路，而产物是核心模块，且测试宿主需要确定性（固定时钟、临时目录、
 严格 trap 文本）。
 
@@ -239,8 +238,8 @@ wasm 栈），所以非尾深递归的生成程序在浏览器路径上会以 `M
 能力口径参考 `@bytecodealliance/preview2-shim` 的 Browser support matrix（0.31.1，
 <https://github.com/bytecodealliance/jco/tree/main/packages/preview2-shim>），但**不使用该
 shim**（§8 的分层说明）：它描述的是浏览器平台能提供什么，不是我们的实现路径。产物 import
-WASI preview1，宿主侧逐函数实现。下表的「允许」指浏览器平台的能力交集，不是 Node/Wasmtime
-的全部宿主能力。
+WASI preview1，宿主侧逐函数实现。下表的「允许」指浏览器平台的能力交集，不是 Node
+宿主的全部宿主能力。
 
 | WASI 面 | preview2-shim 浏览器 | Vuna 效应 / 原语 | 当前 wasm 后端 |
 | --- | --- | --- | --- |
@@ -293,8 +292,8 @@ WASI preview1，宿主侧逐函数实现。下表的「允许」指浏览器平�
   是 raw socket 语义，不能直接映射；需要单独的 HTTP 效应。
 - 持久文件系统：由宿主注入 OPFS / IndexedDB 等存储后端；guest 侧没有额外能力。
 - 可注入 stdin / terminal：宿主可以注入；当前后端仍按不可用处理。
-- 浏览器宿主层：JS 侧的 WASI preview1 垫片与端到端用例尚未接入仓库（§8.6）；
-  当前产物只在 Wasmtime 上执行。
+- 浏览器宿主层在 `wasm-host/`（§8.6）；Chromium 实跑由 `.#vuna-wasm-browser-smoke`
+  按需提供。
 
 ### 8.4 能力表
 
@@ -334,10 +333,11 @@ WASI preview1，宿主侧逐函数实现。下表的「允许」指浏览器平�
   trap；base 的 `FsOp` handler 走 `@vuna@host@try*`，是可用路径（见 §5）。
 - wasm 的 `tryRemoveTree` 只做「unlink 文件」或「删空目录」（`path_unlink_file` +
   `path_remove_directory`），不递归；要删非空树需调用方逐层处理。
-- 栈：默认 512 KiB 对长输入不够；按 §1 的口径给 `max-wasm-stack`。栈深来自长列表上的
-  非尾辅助函数（`append` 之类 `1 + f rest`），与列表长度成正比。
+- 栈：V8 的 wasm 栈约 1 MB 且没有开关；长列表上的非尾辅助函数（`append` 之类
+  `1 + f rest`）栈深与列表长度成正比，超出后以 `Maximum call stack size exceeded` 收口
+  （§8 执行边界）。
 - 线性内存只有固定 scratch（4 页），没有 bump 堆；GC 堆由引擎管理。
-- 多单元链接、WAT 缓存、`vuna run --target`、wasm seed（不做，见
+- 多单元链接、WAT 缓存、wasm seed（不做，见
   [architecture-target](../architecture-target.md) D7）、Component Model / WASI 0.2/0.3
   （D16 的终端未决部分）。
 
@@ -377,9 +377,10 @@ WASI preview1，宿主侧逐函数实现。下表的「允许」指浏览器平�
 的 stdout/exit。
 
 - 所有效应形态的产物都不含 `cont` / `$eff`，**浏览器默认配置即可运行**；
-- 栈深由引擎决定（浏览器没有 `-W max-wasm-stack`）：2000 次顺序 perform 约需 192 KiB
-  （wasmtime 默认栈 512 KiB 足够，`106` 已按默认栈验收）；
-- Wasmtime 是参考/差分执行器，不是产品运行时。
+- 栈深由引擎决定（V8 的 wasm 栈约 1 MB、无开关）：2000 次顺序 perform 约需 192 KiB，
+  `106` 已按默认栈验收；
+- 执行器只有仓库自带的 Node/V8 宿主（Node 与 Chrome 同引擎）；非 V8 引擎（Firefox /
+  Safari）不在当前验证面内。
 
 ## 8.6 engine / host / loader 分层
 
@@ -392,8 +393,8 @@ WASI preview1，宿主侧逐函数实现。下表的「允许」指浏览器平�
 | loader | 本仓 | 取 `.wasm`、喂 args/env/preopen、接 stdout/stderr、拿退出码 |
 | 语言运行时 | 编进 `.wasm`（`$rt_*`） | GC 对象、字符串、数组、闭包、handler 运行时 |
 
-宿主实现策略：**不内嵌 wasm 运行时**（Wasmtime 编成 wasm、Wasmer、wasmi 都需要自己实现
-GC / 尾调用，包体与性能双输），也**不引 preview2-shim / jco**（组件化前置 + npm 依赖 +
+宿主实现策略：**不内嵌 wasm 运行时**（把现成运行时编成 wasm 都需要自己实现 GC /
+尾调用，包体与性能双输），也**不引 preview2-shim / jco**（组件化前置 + npm 依赖 +
 浏览器默认值不确定）。宿主层是手写的 JS 对象，同一份实现服务 Node（V8，与 Chrome 同引擎）
 与浏览器。
 
@@ -404,8 +405,7 @@ GC / 尾调用，包体与性能双输），也**不引 preview2-shim / jco**（
 - `proc_exit(n)` → 抛 `ExitError(n)`，由 loader 转成退出码；
 - 引擎级 trap 的文本因引擎而异，**不跨引擎比对**；guest 自己经 `fd_write` 写的
   `vuna: runtime error: …` 仍逐字节比对；
-- stdout/stderr 走**单一 sink、按到达顺序追加**：guest 单线程，顺序确定，等价于
-  Wasmtime 下合并流的读法；
+- stdout/stderr 走**单一 sink、按到达顺序追加**：guest 单线程，顺序确定；
 - 线性内存只有固定的 4 页 scratch（导出 `memory`），宿主只读写它，不分配；GC 堆归引擎；
 - 宿主 import 的**签名保持同步**。异步能力（如将来的 HTTP）只在宿主实现内部异步
   （浏览器用 `WebAssembly.Suspending` + `fetch`，测试宿主用阻塞实现），guest 契约不变；
@@ -422,16 +422,15 @@ GC / 尾调用，包体与性能双输），也**不引 preview2-shim / jco**（
 - 若改写后仍有可达到的 `prim_effectPerform` / `prim_effectHandle` / `prim_effectSelf`，说明
   存在用户 handler 或未覆盖的族，整体走显式效应机器（不静默改语义）。
 
-当前落地：JS 宿主在 `test/suite/fixtures/wasm_js_host/`（`host.mjs` + `fs-node.mjs` + `run.mjs`，
-测试资产、不进 seed），suite 用 `VUNA_WASM_HOST=js` 把 wasm 执行器从 Wasmtime 切到
-`node run.mjs`；不引用 handler 的产物在该宿主上的 stdout / exit / 失败文本与 Wasmtime
-同口径（`115_wasm_js_host.steps`）。
+当前落地：宿主与 loaders 在 `wasm-host/`（`host.mjs` + `fs-node.mjs` + `run.mjs`，
+`vuna run --target wasm`、suite 的 wasm matrix、bench 与浏览器冒烟共用；不进 seed）。
+`115_wasm_js_host.steps` 冒烟 Node 路径的 stdout / exit / 失败文本。
 
 代价（按引擎管理，不按后端分叉）：
 
 - 无 `-W max-wasm-stack`：栈上限、递归深度、GC 阈值都是引擎参数；
 - 观测面为零：`VUNA_OBS` 在 wasm 上是 no-op 桩，浏览器侧也没有 `vuna dev obs` 通道；
-- 能力矩阵按宿主取值：浏览器允许 `fetch`、不允许 raw socket；Wasmtime 相反。
+- 能力矩阵按宿主取值：浏览器允许 `fetch`、不允许 raw socket；Node 宿主按同一张表实现。
 
 ## 9. 相关阅读
 

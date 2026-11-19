@@ -46,7 +46,7 @@ import Base.Effect.Args as EffArgs
 
 -- | 一次 suite run 的执行环境：每个进程（父进程 / 各 worker）在 `runSuiteOnce` 里构造一次。
 record Env where
-  -- | 仓库根（含 `[workspace]` 的 `vuna.toml`）：base、`.local`、runner 夹具都在这里。
+  -- | 仓库根（含 `[workspace]` 的 `vuna.toml`）：base、`.local`、`wasm-host` 与 suite 夹具都在这里。
   envRoot : String
   -- | steps 与产物执行的 cwd（仓库根；跨包工具链用例都在这一层）。
   envCwd : String
@@ -84,8 +84,6 @@ record Env where
   envSession : IORef Session
   -- | 本次 run 选中的后端（`--backend`；空 = 只跑 ocaml）。
   envBackends : List String
-  -- | wasm 的执行宿主：`wasmtime`（默认）或 `js`（`test/suite/fixtures/wasm_js_host`）。
-  envWasmHost : String
 
 -- | 一次子进程调用：退出码、分离的 stdout/stderr、是否被判为超时。
 record CmdResult where
@@ -364,9 +362,6 @@ withEnvIfaceAt env storeOverride argv =
 -- | 内部：steps case 的进程环境：TMPDIR / REPL 历史 / XDG 缓存按 case 隔离（同一 worker
 -- 内多个 steps case 顺序执行，共享 `envTmp` 会让 `$TMPDIR/ws1` 之类互相污染）；对象库
 -- 默认与 suite 共用，`isolated` 时用 `${caseTmp}/store`。
---
--- wasmtime 的编译缓存只认 `$HOME/.cache`（`WASMTIME_CACHE_DIR` 不生效）；沙箱里 HOME 是
--- /homeless-shelter，因此每个 case 指到自己的 XDG 缓存根。
 withStepsEnv : Env -> String -> Bool -> List String -> List String
 withStepsEnv env caseTmp isolated argv =
   let
@@ -773,8 +768,9 @@ prepareCrossPackage env c source =
     _ <- fsWriteFile "${dir}/app/Main.vuna" text
     pure dir
 
--- | 内部：跑一个目标的构建 + 执行，返回断言。wasm 用 wasmtime + preopen 根，native /
--- ocaml 直接执行静态产物；三种目标都以 case 私有目录为 cwd。
+-- | 内部：跑一个目标的构建 + 执行，返回断言。wasm 用 Node/V8 宿主（`wasm-host/run.mjs`，
+-- preopen 根 = case 私有目录），native / ocaml 直接执行静态产物；三种目标都以 case
+-- 私有目录为 cwd。
 runCrossTarget : Member nFs FsOp r, Member nProcess ProcessOp r => Env -> Case -> String -> String -> String -> Eff r (List Assertion)
 runCrossTarget env c dir backend expected =
   let
@@ -782,28 +778,7 @@ runCrossTarget env c dir backend expected =
     buildTag = "${c.caseId}-build-${backend}"
     prog =
       if backend == "wasm" then
-        if env.envWasmHost == "js" then
-          [
-            "node",
-            "${env.envRoot}/test/suite/fixtures/wasm_js_host/run.mjs",
-            "${out}/main.wasm",
-            "--dir",
-            dir
-          ]
-        else
-          [
-            "wasmtime",
-            "run",
-            "-W",
-            "stack-switching=y",
-            "-W",
-            "gc=y",
-            "-W",
-            "function-references=y",
-            "--dir",
-            dir,
-            "${out}/main.wasm"
-          ]
+        ["node", "${env.envRoot}/wasm-host/run.mjs", "${out}/main.wasm", "--dir", dir]
       else
         ["${out}/bin/p"]
   in do
@@ -2947,7 +2922,6 @@ runSuiteOnce opts suite =
     vuna <- envExecPath
     vunaSeed <- envOr "VUNA_SEED" "vuna-seed"
     ocamlopt <- envOr "OCAMLOPT" "ocamlopt"
-    wasmHost <- envOr "VUNA_WASM_HOST" "wasmtime"
     -- 跨 run 的构建桶：base 的 .cmx 只编译一次，后续 run 直接命中 stamp。
     buildFp <- toolCompilerFingerprint
     buildDir <- pure "${cacheDir}/build/${scope}-${strOfInt buildFp}-${strOfInt baseHash}"
@@ -2955,7 +2929,7 @@ runSuiteOnce opts suite =
     discovered <- discoverCases suite
     orphans <- familyOrphans suite
     let
-      env = Env root root testRoot tmp vuna vunaSeed baseDir ocamlopt helper cacheDir baseHash opts.suiteBless opts.suiteBlessDiag workerMode store buildDir ref opts.suiteBackends wasmHost
+      env = Env root root testRoot tmp vuna vunaSeed baseDir ocamlopt helper cacheDir baseHash opts.suiteBless opts.suiteBlessDiag workerMode store buildDir ref opts.suiteBackends
       -- 两层默认护栏（局部 --only/--filter 时被过滤掉，符合预期）：
       --   ① 已声明 family 目录里的孤儿夹具（精确 source 认领）；
       --   ② case 总数下限——整族从 suite.toml 消失时，①会连目录一起看不到。

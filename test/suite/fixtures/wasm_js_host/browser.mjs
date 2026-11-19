@@ -31,7 +31,7 @@ if (!pwDir) {
 
 const here = new URL(".", import.meta.url).pathname;
 const wasmB64 = readFileSync(wasmPath).toString("base64");
-const hostSrc = readFileSync(join(here, "host.mjs"), "utf8").replace(/^export /gm, "");
+const hostSrc = readFileSync(join(here, "../../../../wasm-host/host.mjs"), "utf8").replace(/^export /gm, "");
 
 const pw = await import(pathToFileURL(join(pwDir, "index.mjs")).href);
 const launchOpts = {

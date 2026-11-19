@@ -14,9 +14,8 @@
   文件头注释会说明；这测的是「vuna 库/表示与手写最优实现的差距」。
 - `--target ocaml|native|wasm|both|all` 选择被测后端（默认 `ocaml`）。`both` 在同一窗口内
   同时测 OCaml 后端与 native，`all` 再加上 wasm，用来给出跨后端的比值。
-- wasm 产物由仓库自带的 JS 宿主执行（`test/suite/fixtures/wasm_js_host/run.mjs`，Node/V8，
-  与浏览器同一套 `WebAssembly` API 与 host 层），**不用 wasmtime**（删除条件见
-  [debt](../docs/reference/debt.md) D102）。`meta` 记录 `node` / `node_startup_ms` /
+- wasm 产物由仓库自带的宿主执行（`wasm-host/run.mjs`，Node/V8，与浏览器同一套
+  `WebAssembly` API 与 host 层）。`meta` 记录 `node` / `node_startup_ms` /
   `wasm_host_runner`。
 - V8 的 wasm 栈约 1 MB 且无开关：非尾深递归的程序会以 `Maximum call stack size exceeded`
   收口，JSON 记 `"run_ok": false`（浏览器路径的真实边界，不是测量设施的限制）。
