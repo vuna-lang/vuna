@@ -17,9 +17,9 @@ let rec v_capWarnings = (fun (mc0 : string) (mc1 : string B_dData_dList.t_List) 
 ))
 
 # 33 "Vuna/Compiler/Driver/Wasm.vuna"
-let v_entryCapabilityWarnings = (fun (target : string) (program : Ir_dModel.t_IrProgram) -> (match ((program).Ir_dModel.f_IrProgram_irProgUnit).Ir_dModel.f_IrUnit_irUnitEntry with
+let v_entryCapabilityWarnings = (fun (target : string) (program : Vuna_dIr_dModel.t_IrProgram) -> (match ((program).Vuna_dIr_dModel.f_IrProgram_irProgUnit).Vuna_dIr_dModel.f_IrUnit_irUnitEntry with
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dList.C_List_Nil
-  | B_dData_dMaybe.C_Maybe_Just (dtb__2) -> ((v_capWarnings target) (dtb__2).Ir_dModel.f_IrEntry_irEntryRowTags)
+  | B_dData_dMaybe.C_Maybe_Just (dtb__2) -> ((v_capWarnings target) (dtb__2).Vuna_dIr_dModel.f_IrEntry_irEntryRowTags)
   | _ -> failwith "DT: impossible branch"
 ))
 

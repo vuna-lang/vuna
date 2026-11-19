@@ -9,17 +9,17 @@ let v_ocamlRtText = (fun (sym : string) -> ((B_dData_dList.v_lookupPair sym) v_o
 let v_ocamlRtHelperNames = (B_dData_dList.C_List__x58__x58_ ("dtp_unpack", (B_dData_dList.C_List__x58__x58_ ("dtp_pack", (B_dData_dList.C_List__x58__x58_ ("dtp_listOf", (B_dData_dList.C_List__x58__x58_ ("dtp_ocamlOf", (B_dData_dList.C_List__x58__x58_ ("dtp_concatMany", (B_dData_dList.C_List__x58__x58_ ("dtp_substTemplate", B_dData_dList.C_List_Nil))))))))))))
 
 # 342 "Vuna/Compiler/Codegen/Runtime.vuna"
-let v_rtTextMissing = (fun (s : Ir_dRuntime.t_IrRtSym) -> (match (v_ocamlRtText (Ir_dRuntime.v_irRtSymNameOf s)) with
+let v_rtTextMissing = (fun (s : Vuna_dIr_dRuntime.t_IrRtSym) -> (match (v_ocamlRtText (Vuna_dIr_dRuntime.v_irRtSymNameOf s)) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__0) -> false
   | B_dData_dMaybe.C_Maybe_Nothing -> true
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 349 "Vuna/Compiler/Codegen/Runtime.vuna"
-let v_rtTextGaps = ((B_dData_dList.v_map Ir_dRuntime.v_irRtSymNameOf) ((B_dData_dList.v_filter v_rtTextMissing) Ir_dRuntime.v_irRtContract))
+let v_rtTextGaps = ((B_dData_dList.v_map Vuna_dIr_dRuntime.v_irRtSymNameOf) ((B_dData_dList.v_filter v_rtTextMissing) Vuna_dIr_dRuntime.v_irRtContract))
 
 # 352 "Vuna/Compiler/Codegen/Runtime.vuna"
-let v_rtTextExtra = (fun (p : (string, string) B_dData_dPair.t_Pair) -> (match (Ir_dRuntime.v_irRtLookup (B_dData_dPair.v_firstOf p)) with
+let v_rtTextExtra = (fun (p : (string, string) B_dData_dPair.t_Pair) -> (match (Vuna_dIr_dRuntime.v_irRtLookup (B_dData_dPair.v_firstOf p)) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__1) -> false
   | B_dData_dMaybe.C_Maybe_Nothing -> true
   | _ -> failwith "DT: impossible branch"

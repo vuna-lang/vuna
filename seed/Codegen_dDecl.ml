@@ -72,12 +72,12 @@ let v_ocamlReservedWords = (B_dData_dList.C_List__x58__x58_ ("and", (B_dData_dLi
 let v_ocamlBinderName = (fun (name : string) -> ((fun oc -> (if ((B_dData_dList.v_memName oc) v_ocamlReservedWords) then (oc ^ "_") else oc)) (v_sanitizeName name)))
 
 # 218 "Vuna/Compiler/Codegen/Decl.vuna"
-let v_irBinderText = (fun (mc0 : Ir_dModel.t_IrBinder) -> (match mc0 with
-  | { Ir_dModel.f_IrBinder_irBinderName = dtb__1; Ir_dModel.f_IrBinder_irBinderErased = dtb__2; Ir_dModel.f_IrBinder_irBinderTy = dtb__3 } -> (match dtb__1 with
-  | Ir_dModel.C_IrBName_IrBWild -> "_"
-  | Ir_dModel.C_IrBName_IrBNat (dtb__4) -> ("dtnat__" ^ (bi_strFromInt dtb__4))
-  | Ir_dModel.C_IrBName_IrBArm (dtb__5) -> ("dtb__" ^ (bi_strFromInt dtb__5))
-  | Ir_dModel.C_IrBName_IrBUser (dtb__6) -> (v_ocamlBinderName dtb__6)
+let v_irBinderText = (fun (mc0 : Vuna_dIr_dModel.t_IrBinder) -> (match mc0 with
+  | { Vuna_dIr_dModel.f_IrBinder_irBinderName = dtb__1; Vuna_dIr_dModel.f_IrBinder_irBinderErased = dtb__2; Vuna_dIr_dModel.f_IrBinder_irBinderTy = dtb__3 } -> (match dtb__1 with
+  | Vuna_dIr_dModel.C_IrBName_IrBWild -> "_"
+  | Vuna_dIr_dModel.C_IrBName_IrBNat (dtb__4) -> ("dtnat__" ^ (bi_strFromInt dtb__4))
+  | Vuna_dIr_dModel.C_IrBName_IrBArm (dtb__5) -> ("dtb__" ^ (bi_strFromInt dtb__5))
+  | Vuna_dIr_dModel.C_IrBName_IrBUser (dtb__6) -> (v_ocamlBinderName dtb__6)
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
@@ -87,31 +87,31 @@ let v_irBinderText = (fun (mc0 : Ir_dModel.t_IrBinder) -> (match mc0 with
 let v_qualFamOf = (fun (qc : t_QualCtx) (fam : string) -> (B_dData_dPair.v_firstOf ((v_qualTypeText qc) fam)))
 
 # 231 "Vuna/Compiler/Codegen/Decl.vuna"
-let rec v_toOTy = (fun (mc0 : Ir_dModel.t_IrTy) -> (match mc0 with
-  | Ir_dModel.C_IrTy_IrTyData (dtb__7, dtb__8) -> (Codegen_dOcaml_dModel.C_OTy_OTData (dtb__7, ((B_dData_dList.v_map v_toOTy) dtb__8)))
-  | Ir_dModel.C_IrTy_IrTyFun (dtb__9, dtb__10) -> (Codegen_dOcaml_dModel.C_OTy_OTFun ((v_toOTy dtb__9), (v_toOTy dtb__10)))
-  | Ir_dModel.C_IrTy_IrTyRef (dtb__11) -> (Codegen_dOcaml_dModel.C_OTy_OTRef ((v_toOTy dtb__11)))
-  | Ir_dModel.C_IrTy_IrTyArray (dtb__12) -> (Codegen_dOcaml_dModel.C_OTy_OTArray ((v_toOTy dtb__12)))
-  | Ir_dModel.C_IrTy_IrTyOpaque -> Codegen_dOcaml_dModel.C_OTy_OTOpaque
-  | Ir_dModel.C_IrTy_IrTyFloat -> Codegen_dOcaml_dModel.C_OTy_OTFloat
-  | Ir_dModel.C_IrTy_IrTyBool -> Codegen_dOcaml_dModel.C_OTy_OTBool
-  | Ir_dModel.C_IrTy_IrTyStr -> Codegen_dOcaml_dModel.C_OTy_OTStr
-  | Ir_dModel.C_IrTy_IrTyInt -> Codegen_dOcaml_dModel.C_OTy_OTInt
-  | Ir_dModel.C_IrTy_IrTyVar (dtb__13) -> (Codegen_dOcaml_dModel.C_OTy_OTVar (dtb__13))
+let rec v_toOTy = (fun (mc0 : Vuna_dIr_dModel.t_IrTy) -> (match mc0 with
+  | Vuna_dIr_dModel.C_IrTy_IrTyData (dtb__7, dtb__8) -> (Codegen_dOcaml_dModel.C_OTy_OTData (dtb__7, ((B_dData_dList.v_map v_toOTy) dtb__8)))
+  | Vuna_dIr_dModel.C_IrTy_IrTyFun (dtb__9, dtb__10) -> (Codegen_dOcaml_dModel.C_OTy_OTFun ((v_toOTy dtb__9), (v_toOTy dtb__10)))
+  | Vuna_dIr_dModel.C_IrTy_IrTyRef (dtb__11) -> (Codegen_dOcaml_dModel.C_OTy_OTRef ((v_toOTy dtb__11)))
+  | Vuna_dIr_dModel.C_IrTy_IrTyArray (dtb__12) -> (Codegen_dOcaml_dModel.C_OTy_OTArray ((v_toOTy dtb__12)))
+  | Vuna_dIr_dModel.C_IrTy_IrTyOpaque -> Codegen_dOcaml_dModel.C_OTy_OTOpaque
+  | Vuna_dIr_dModel.C_IrTy_IrTyFloat -> Codegen_dOcaml_dModel.C_OTy_OTFloat
+  | Vuna_dIr_dModel.C_IrTy_IrTyBool -> Codegen_dOcaml_dModel.C_OTy_OTBool
+  | Vuna_dIr_dModel.C_IrTy_IrTyStr -> Codegen_dOcaml_dModel.C_OTy_OTStr
+  | Vuna_dIr_dModel.C_IrTy_IrTyInt -> Codegen_dOcaml_dModel.C_OTy_OTInt
+  | Vuna_dIr_dModel.C_IrTy_IrTyVar (dtb__13) -> (Codegen_dOcaml_dModel.C_OTy_OTVar (dtb__13))
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 224 "Vuna/Compiler/Codegen/Decl.vuna"
-let v_irTyText = (fun (qc : t_QualCtx) (ty : Ir_dModel.t_IrTy) -> ((Codegen_dOcaml_dRender.v_renderTy (v_qualFamOf qc)) (v_toOTy ty)))
+let v_irTyText = (fun (qc : t_QualCtx) (ty : Vuna_dIr_dModel.t_IrTy) -> ((Codegen_dOcaml_dRender.v_renderTy (v_qualFamOf qc)) (v_toOTy ty)))
 
 # 249 "Vuna/Compiler/Codegen/Decl.vuna"
-let v_toOCtor = (fun (mc0 : string) (mc1 : (string, Ir_dModel.t_IrTy B_dData_dList.t_List) B_dData_dPair.t_Pair) -> (match mc1 with
+let v_toOCtor = (fun (mc0 : string) (mc1 : (string, Vuna_dIr_dModel.t_IrTy B_dData_dList.t_List) B_dData_dPair.t_Pair) -> (match mc1 with
   | { B_dData_dPair.f_Pair_first = dtb__14; B_dData_dPair.f_Pair_second = dtb__15 } -> { Codegen_dOcaml_dModel.f_OCtor_ocName = ((v_ctorOcamlName mc0) dtb__14); Codegen_dOcaml_dModel.f_OCtor_ocFields = ((B_dData_dList.v_map v_toOTy) dtb__15) }
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 252 "Vuna/Compiler/Codegen/Decl.vuna"
-let rec v_recordFieldsOf = (fun (mc0 : string) (mc1 : (int, string) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc2 : Ir_dModel.t_IrTy B_dData_dList.t_List) -> (match mc1 with
+let rec v_recordFieldsOf = (fun (mc0 : string) (mc1 : (int, string) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc2 : Vuna_dIr_dModel.t_IrTy B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__16, dtb__17) -> (match mc2 with
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | B_dData_dList.C_List__x58__x58_ (dtb__18, dtb__19) -> (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = ((v_recordFieldLabel mc0) (B_dData_dPair.v_secondOf dtb__16)); B_dData_dPair.f_Pair_second = (v_toOTy dtb__18) }, (((v_recordFieldsOf mc0) dtb__17) dtb__19)))
@@ -122,28 +122,28 @@ let rec v_recordFieldsOf = (fun (mc0 : string) (mc1 : (int, string) B_dData_dPai
 ))
 
 # 243 "Vuna/Compiler/Codegen/Decl.vuna"
-let v_toODecl = (fun (mc0 : Ir_dModel.t_IrTyDecl) -> (match mc0 with
-  | Ir_dModel.C_IrTyDecl_IrUnboxedDecl (dtb__20, dtb__21, dtb__22) -> (Codegen_dOcaml_dModel.C_ODecl_ODAlias (dtb__21, (v_typeName dtb__20), (v_toOTy dtb__22)))
-  | Ir_dModel.C_IrTyDecl_IrRecordDecl (dtb__23, dtb__24, dtb__25, dtb__26) -> (Codegen_dOcaml_dModel.C_ODecl_ODRecord (dtb__24, (v_typeName dtb__23), (((v_recordFieldsOf dtb__23) dtb__25) dtb__26)))
-  | Ir_dModel.C_IrTyDecl_IrVariantDecl (dtb__27, dtb__28, dtb__29) -> (Codegen_dOcaml_dModel.C_ODecl_ODVariant (dtb__28, (v_typeName dtb__27), ((B_dData_dList.v_map (v_toOCtor dtb__27)) dtb__29)))
+let v_toODecl = (fun (mc0 : Vuna_dIr_dModel.t_IrTyDecl) -> (match mc0 with
+  | Vuna_dIr_dModel.C_IrTyDecl_IrUnboxedDecl (dtb__20, dtb__21, dtb__22) -> (Codegen_dOcaml_dModel.C_ODecl_ODAlias (dtb__21, (v_typeName dtb__20), (v_toOTy dtb__22)))
+  | Vuna_dIr_dModel.C_IrTyDecl_IrRecordDecl (dtb__23, dtb__24, dtb__25, dtb__26) -> (Codegen_dOcaml_dModel.C_ODecl_ODRecord (dtb__24, (v_typeName dtb__23), (((v_recordFieldsOf dtb__23) dtb__25) dtb__26)))
+  | Vuna_dIr_dModel.C_IrTyDecl_IrVariantDecl (dtb__27, dtb__28, dtb__29) -> (Codegen_dOcaml_dModel.C_ODecl_ODVariant (dtb__28, (v_typeName dtb__27), ((B_dData_dList.v_map (v_toOCtor dtb__27)) dtb__29)))
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 260 "Vuna/Compiler/Codegen/Decl.vuna"
-let v_irTypeDeclsText = (fun (qc : t_QualCtx) (decls : Ir_dModel.t_IrTyDecl B_dData_dList.t_List) -> ((Codegen_dOcaml_dRender.v_renderDecls (v_qualFamOf qc)) ((B_dData_dList.v_map v_toODecl) decls)))
+let v_irTypeDeclsText = (fun (qc : t_QualCtx) (decls : Vuna_dIr_dModel.t_IrTyDecl B_dData_dList.t_List) -> ((Codegen_dOcaml_dRender.v_renderDecls (v_qualFamOf qc)) ((B_dData_dList.v_map v_toODecl) decls)))
 
 # 267 "Vuna/Compiler/Codegen/Decl.vuna"
-let rec v_irTyGlobalNames = (fun (mc0 : Ir_dModel.t_IrTy) -> (match mc0 with
-  | Ir_dModel.C_IrTy_IrTyData (dtb__30, dtb__31) -> (B_dData_dList.C_List__x58__x58_ (dtb__30, ((B_dData_dList.v_concatMap v_irTyGlobalNames) dtb__31)))
-  | Ir_dModel.C_IrTy_IrTyFun (dtb__32, dtb__33) -> ((B_dData_dList.v_append (v_irTyGlobalNames dtb__32)) (v_irTyGlobalNames dtb__33))
-  | Ir_dModel.C_IrTy_IrTyRef (dtb__34) -> (v_irTyGlobalNames dtb__34)
-  | Ir_dModel.C_IrTy_IrTyArray (dtb__35) -> (v_irTyGlobalNames dtb__35)
-  | Ir_dModel.C_IrTy_IrTyOpaque -> B_dData_dList.C_List_Nil
-  | Ir_dModel.C_IrTy_IrTyFloat -> B_dData_dList.C_List_Nil
-  | Ir_dModel.C_IrTy_IrTyBool -> B_dData_dList.C_List_Nil
-  | Ir_dModel.C_IrTy_IrTyStr -> B_dData_dList.C_List_Nil
-  | Ir_dModel.C_IrTy_IrTyInt -> B_dData_dList.C_List_Nil
-  | Ir_dModel.C_IrTy_IrTyVar (dtb__36) -> B_dData_dList.C_List_Nil
+let rec v_irTyGlobalNames = (fun (mc0 : Vuna_dIr_dModel.t_IrTy) -> (match mc0 with
+  | Vuna_dIr_dModel.C_IrTy_IrTyData (dtb__30, dtb__31) -> (B_dData_dList.C_List__x58__x58_ (dtb__30, ((B_dData_dList.v_concatMap v_irTyGlobalNames) dtb__31)))
+  | Vuna_dIr_dModel.C_IrTy_IrTyFun (dtb__32, dtb__33) -> ((B_dData_dList.v_append (v_irTyGlobalNames dtb__32)) (v_irTyGlobalNames dtb__33))
+  | Vuna_dIr_dModel.C_IrTy_IrTyRef (dtb__34) -> (v_irTyGlobalNames dtb__34)
+  | Vuna_dIr_dModel.C_IrTy_IrTyArray (dtb__35) -> (v_irTyGlobalNames dtb__35)
+  | Vuna_dIr_dModel.C_IrTy_IrTyOpaque -> B_dData_dList.C_List_Nil
+  | Vuna_dIr_dModel.C_IrTy_IrTyFloat -> B_dData_dList.C_List_Nil
+  | Vuna_dIr_dModel.C_IrTy_IrTyBool -> B_dData_dList.C_List_Nil
+  | Vuna_dIr_dModel.C_IrTy_IrTyStr -> B_dData_dList.C_List_Nil
+  | Vuna_dIr_dModel.C_IrTy_IrTyInt -> B_dData_dList.C_List_Nil
+  | Vuna_dIr_dModel.C_IrTy_IrTyVar (dtb__36) -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
@@ -155,4 +155,4 @@ let rec v_irTyDepsGo = (fun (mc0 : t_QualCtx) (mc1 : string B_dData_dList.t_List
 ))
 
 # 264 "Vuna/Compiler/Codegen/Decl.vuna"
-let v_irTyDeclDeps = (fun (qc : t_QualCtx) (tys : Ir_dModel.t_IrTy B_dData_dList.t_List) -> (((v_irTyDepsGo qc) ((B_dData_dList.v_concatMap v_irTyGlobalNames) tys)) B_dData_dList.C_List_Nil))
+let v_irTyDeclDeps = (fun (qc : t_QualCtx) (tys : Vuna_dIr_dModel.t_IrTy B_dData_dList.t_List) -> (((v_irTyDepsGo qc) ((B_dData_dList.v_concatMap v_irTyGlobalNames) tys)) B_dData_dList.C_List_Nil))

@@ -1,5 +1,5 @@
 open Vuna_runtime
-type t_GenSt = { f_GenSt_gsShared : Ir_dModel.t_IrShared; f_GenSt_gsQual : Codegen_dDecl.t_QualCtx; f_GenSt_gsDeps : string B_dData_dList.t_List; f_GenSt_gsNormPath : (string) -> string }
+type t_GenSt = { f_GenSt_gsShared : Vuna_dIr_dModel.t_IrShared; f_GenSt_gsQual : Codegen_dDecl.t_QualCtx; f_GenSt_gsDeps : string B_dData_dList.t_List; f_GenSt_gsNormPath : (string) -> string }
 
 # 589 "Vuna/Compiler/Codegen/Term.vuna"
 let v_dtSchedRuntime = "(* ------------------------------------------------------------------ *)\n(* Single-threaded cooperative fiber scheduler.                        *)\n(*                                                                     *)\n(* Fibers are one-shot OCaml 5 continuations captured by the root      *)\n(* Effect.Deep handler installed for every fiber. The scheduler loop   *)\n(* outside the fibers decides what runs next; suspension is requested  *)\n(* through private runtime effects (SchedYield/SchedAwait/WaitScope).  *)\n(* Tasks are `Eff Nil a` thunks: their user effects are handled       *)\n(* inside the fiber, and only the scheduler primitives cross fibers.   *)\n(* ------------------------------------------------------------------ *)\n\ntype _ Effect.t +=\n  | SchedYield : int Effect.t\n  | SchedAwait : int -> int Effect.t\n  | SchedWaitScope : int -> int Effect.t\n  | SchedWaitScopeTimeout : int * int -> int Effect.t\n\ntype dtp_sched_step =\n  | SchedStepYield of Obj.t\n  | SchedStepAwait of int * Obj.t\n  | SchedStepScope of int * Obj.t\n  | SchedStepScopeTimeout of int * int * Obj.t\n  | SchedStepDone of Obj.t\n  | SchedStepFailed of exn * Printexc.raw_backtrace\n\ntype dtp_sched_wait = SchedWaitNone | SchedWaitTask of int | SchedWaitScope of int | SchedWaitTimed\n\ntype dtp_sched_state =\n  | SchedQueued of Obj.t\n  | SchedRunning\n  | SchedSuspended\n  | SchedDone of Obj.t\n  | SchedFailed of exn * Printexc.raw_backtrace\n  | SchedCancelled\n\ntype dtp_sched_task = {\n  sched_tid : int;\n  mutable sched_state : dtp_sched_state;\n  mutable sched_start : (unit -> Obj.t) option;\n  mutable sched_cont : Obj.t option;\n  sched_scope : int;\n  mutable sched_wait : dtp_sched_wait;\n  mutable sched_waiters : int list;\n  mutable sched_cancel : bool;\n  mutable sched_grace : int;\n}\n\ntype dtp_sched_scope = {\n  sched_sid : int;\n  mutable sched_tasks : int list;\n  mutable sched_failed : string option;\n  mutable sched_waiters : int list;\n  mutable sched_timeout : bool;\n  mutable sched_completed : int;\n}\n\nlet dtp_sched_tasks : (int, dtp_sched_task) Hashtbl.t = Hashtbl.create 64\nlet dtp_sched_scopes : (int, dtp_sched_scope) Hashtbl.t = Hashtbl.create 16\nlet dtp_sched_ready : int Queue.t = Queue.create ()\nlet dtp_sched_next_task = ref 0\nlet dtp_sched_next_scope = ref 0\nlet dtp_sched_timeouts : (int * int * int) list ref = ref []\nlet dtp_sched_main_tid = ref 0\nlet dtp_sched_current = ref (-1)\nlet dtp_sched_main_result : Obj.t option ref = ref None\nlet dtp_sched_main_exn : (exn * Printexc.raw_backtrace) option ref = ref None\nlet dtp_sched_grace_steps = 64\n\nlet dtp_sched_reset () =\n  Hashtbl.reset dtp_sched_tasks;\n  Hashtbl.reset dtp_sched_scopes;\n  dtp_cleanup_reset ();\n  Queue.clear dtp_sched_ready;\n  dtp_sched_next_task := 0;\n  dtp_sched_next_scope := 0;\n  dtp_sched_timeouts := [];\n  dtp_sched_main_tid := 0;\n  dtp_sched_current := -1;\n  dtp_sched_main_result := None;\n  dtp_sched_main_exn := None\n\nlet dtp_sched_task id =\n  match Hashtbl.find_opt dtp_sched_tasks id with\n  | Some t -> t\n  | None -> failwith \"scheduler: invalid task handle\"\n\nlet dtp_sched_scope id =\n  match Hashtbl.find_opt dtp_sched_scopes id with\n  | Some s -> s\n  | None -> failwith \"scheduler: invalid scope handle\"\n\nlet dtp_sched_exn_msg e =\n  match e with\n  | Effect.Unhandled (Perform (_, _, key, name, _)) ->\n    Printf.sprintf \"unhandled effect %s (instance %s)\" key name\n  | Failure m -> m\n  | _ -> Printexc.to_string e\n\nlet dtp_sched_task_status t =\n  if t.sched_cancel then 1\n  else match t.sched_state with\n    | SchedDone _ -> 0\n    | SchedFailed _ -> 2\n    | SchedCancelled -> 1\n    | _ -> 0\n\nlet dtp_sched_enqueue t v =\n  t.sched_state <- SchedQueued v;\n  Queue.push t.sched_tid dtp_sched_ready\n\nlet dtp_sched_wake_scope s =\n  if s.sched_tasks = [] && s.sched_waiters <> [] then begin\n    let status =\n      if s.sched_timeout then 2\n      else if s.sched_failed <> None then 1\n      else 0\n    in\n    let ws = s.sched_waiters in\n    s.sched_waiters <- [];\n    dtp_sched_timeouts := List.filter (fun (w, _, _) -> not (List.mem w ws)) !dtp_sched_timeouts;\n    List.iter (fun wid ->\n      let w = dtp_sched_task wid in\n      w.sched_wait <- SchedWaitNone;\n      dtp_sched_enqueue w (Obj.repr status)) ws\n  end\n\nlet dtp_sched_finish t st =\n  t.sched_state <- st;\n  t.sched_wait <- SchedWaitNone;\n  let ws = t.sched_waiters in\n  t.sched_waiters <- [];\n  let status = dtp_sched_task_status t in\n  List.iter (fun wid ->\n    let w = dtp_sched_task wid in\n    w.sched_wait <- SchedWaitNone;\n    dtp_sched_enqueue w (Obj.repr status)) ws;\n  if t.sched_tid = !dtp_sched_main_tid then begin\n    match st with\n    | SchedDone v -> dtp_sched_main_result := Some v\n    | SchedFailed (e, bt) -> dtp_sched_main_exn := Some (e, bt)\n    | _ -> ()\n  end;\n  match Hashtbl.find_opt dtp_sched_scopes t.sched_scope with\n  | Some s ->\n    s.sched_tasks <- List.filter (fun x -> x <> t.sched_tid) s.sched_tasks;\n    s.sched_completed <- s.sched_completed + 1;\n    dtp_sched_wake_scope s\n  | None -> ()\n\nlet dtp_sched_remove_waiter t =\n  match t.sched_wait with\n  | SchedWaitTask id ->\n    let tg = dtp_sched_task id in\n    tg.sched_waiters <- List.filter (fun x -> x <> t.sched_tid) tg.sched_waiters\n  | SchedWaitScope id ->\n    let s = dtp_sched_scope id in\n    s.sched_waiters <- List.filter (fun x -> x <> t.sched_tid) s.sched_waiters\n  | SchedWaitTimed | SchedWaitNone -> ()\n\nlet dtp_sched_cancel_task t =\n  let terminal = match t.sched_state with\n    | SchedDone _ | SchedFailed _ | SchedCancelled -> true\n    | _ -> false\n  in\n  if t.sched_cancel || terminal then ()\n  else begin\n    t.sched_cancel <- true;\n    match t.sched_state with\n    | SchedQueued _ -> if t.sched_start <> None then dtp_sched_finish t SchedCancelled\n      else t.sched_state <- SchedQueued (Obj.repr 1)\n    | SchedSuspended ->\n      let code = match t.sched_wait with\n        | SchedWaitTask _ -> 1\n        | SchedWaitScope _ | SchedWaitTimed -> 3\n        | SchedWaitNone -> 1\n      in\n      dtp_sched_remove_waiter t;\n      dtp_sched_timeouts := List.filter (fun (w, _, _) -> w <> t.sched_tid) !dtp_sched_timeouts;\n      dtp_sched_enqueue t (Obj.repr code)\n    | _ -> ()\n  end\n\nlet dtp_sched_cancel_scope_tasks sid =\n  let s = dtp_sched_scope sid in\n  List.iter (fun id -> dtp_sched_cancel_task (dtp_sched_task id)) s.sched_tasks\n\nlet dtp_sched_effc (type a) (eff : a Effect.t)\n  : ((a, Obj.t) Effect.Deep.continuation -> Obj.t) option =\n  match eff with\n  | SchedYield -> Some (fun k -> Obj.repr (SchedStepYield (Obj.repr k)))\n  | SchedAwait id -> Some (fun k -> Obj.repr (SchedStepAwait (id, Obj.repr k)))\n  | SchedWaitScope id -> Some (fun k -> Obj.repr (SchedStepScope (id, Obj.repr k)))\n  | SchedWaitScopeTimeout (n, id) ->\n    Some (fun k -> Obj.repr (SchedStepScopeTimeout (n, id, Obj.repr k)))\n  | _ -> None\n\nlet dtp_sched_run_fresh t =\n  let start = match t.sched_start with\n    | Some f -> f\n    | None -> failwith \"scheduler: no start thunk\" in\n  t.sched_start <- None;\n  let r = Effect.Deep.match_with\n      (fun () -> start ())\n      ()\n      { retc = (fun x -> Obj.repr (SchedStepDone x));\n        exnc = (fun e -> Obj.repr (SchedStepFailed (e, Printexc.get_raw_backtrace ())));\n        effc = dtp_sched_effc } in\n  (Obj.obj r : dtp_sched_step)\n\nlet dtp_sched_run_resume t v =\n  let k = match t.sched_cont with\n    | Some rep -> (Obj.magic rep : (Obj.t, Obj.t) Effect.Deep.continuation)\n    | None -> failwith \"scheduler: no continuation\" in\n  let r = Effect.Deep.continue k v in\n  (Obj.obj r : dtp_sched_step)\n\nlet dtp_sched_new_task scope start =\n  let id = !dtp_sched_next_task in\n  dtp_sched_next_task := id + 1;\n  let t = {\n    sched_tid = id;\n    sched_state = SchedQueued (Obj.repr 0);\n    sched_start = Some start;\n    sched_cont = None;\n    sched_scope = scope;\n    sched_wait = SchedWaitNone;\n    sched_waiters = [];\n    sched_cancel = false;\n    sched_grace = dtp_sched_grace_steps;\n  } in\n  Hashtbl.replace dtp_sched_tasks id t;\n  (match Hashtbl.find_opt dtp_sched_scopes scope with\n   | Some s -> s.sched_tasks <- id :: s.sched_tasks\n   | None -> ());\n  Queue.push id dtp_sched_ready;\n  t\n\nlet dtp_sched_new_scope () =\n  let id = !dtp_sched_next_scope in\n  dtp_sched_next_scope := id + 1;\n  Hashtbl.replace dtp_sched_scopes id {\n    sched_sid = id;\n    sched_tasks = [];\n    sched_failed = None;\n    sched_waiters = [];\n    sched_timeout = false;\n    sched_completed = 0;\n  };\n  id\n\nlet dtp_sched_step t =\n  if t.sched_cancel then t.sched_grace <- t.sched_grace - 1;\n  if t.sched_cancel && t.sched_grace <= 0 then begin\n    (* \231\161\172\228\184\173\230\173\162\239\188\154\231\187\173\229\187\182\232\162\171\228\184\162\229\188\131\239\188\140bracket \231\154\132\229\186\147\229\177\130 finally \228\184\141\228\188\154\232\183\145\239\188\155\229\176\189\229\138\155\230\137\167\232\161\140\230\156\170\229\188\185\229\135\186\231\154\132\n       cleanup\239\188\136\229\174\131\228\187\172\229\143\170\232\131\189\229\129\154\230\151\160\230\149\136\229\186\148/\232\135\170\229\140\133\229\144\171\231\154\132\230\184\133\231\144\134\239\188\154\230\140\130\232\181\183\231\130\185\228\185\139\229\164\150\230\178\161\230\156\137 handler \230\160\136\239\188\137\227\128\130 *)\n    dtp_cleanup_run_all_for t.sched_tid;\n    dtp_cleanup_forget t.sched_tid;\n    dtp_sched_finish t SchedCancelled;\n    None\n  end\n  else Some (match t.sched_start with\n    | Some _ -> dtp_sched_run_fresh t\n    | None -> match t.sched_state with\n      | SchedQueued v -> t.sched_state <- SchedRunning; dtp_sched_run_resume t v\n      | _ -> failwith \"scheduler: bad task state\")\n\nlet dtp_sched_apply t (st : dtp_sched_step) =\n  match st with\n  | SchedStepYield krep ->\n    t.sched_cont <- Some krep;\n    t.sched_wait <- SchedWaitNone;\n    dtp_sched_enqueue t (Obj.repr (if t.sched_cancel then 1 else 0))\n  | SchedStepAwait (id, krep) ->\n    t.sched_cont <- Some krep;\n    t.sched_wait <- SchedWaitTask id;\n    t.sched_state <- SchedSuspended;\n    let tg = dtp_sched_task id in\n    tg.sched_waiters <- t.sched_tid :: tg.sched_waiters\n  | SchedStepScope (id, krep) ->\n    t.sched_cont <- Some krep;\n    t.sched_wait <- SchedWaitScope id;\n    t.sched_state <- SchedSuspended;\n    let s = dtp_sched_scope id in\n    s.sched_waiters <- t.sched_tid :: s.sched_waiters\n  | SchedStepScopeTimeout (n, id, krep) ->\n    t.sched_cont <- Some krep;\n    t.sched_wait <- SchedWaitTimed;\n    t.sched_state <- SchedSuspended;\n    let s = dtp_sched_scope id in\n    s.sched_waiters <- t.sched_tid :: s.sched_waiters;\n    (* n \230\152\175\227\128\140\229\188\128\229\167\139\231\173\137\229\190\133\228\185\139\229\144\142\227\128\141\231\154\132\232\176\131\229\186\166\230\173\165\233\162\132\231\174\151\239\188\154\230\173\166\232\163\133\232\191\153\230\172\161\231\173\137\229\190\133\231\154\132\233\130\163\228\184\128\230\173\165\228\184\141\231\174\151\227\128\130 *)\n    dtp_sched_timeouts := (t.sched_tid, id, n + 1) :: !dtp_sched_timeouts\n  | SchedStepDone v ->\n    (* \230\173\163\229\184\184\231\187\147\230\157\159\239\188\154bracket \229\183\178\232\135\170\232\161\140\229\188\185\229\135\186\239\188\155\230\174\139\231\149\153\239\188\136\229\188\130\229\184\184\232\190\185\232\167\146\239\188\137\228\185\159\228\184\128\229\185\182\230\184\133\230\142\137\227\128\130 *)\n    dtp_cleanup_run_all_for t.sched_tid;\n    dtp_cleanup_forget t.sched_tid;\n    dtp_sched_finish t (if t.sched_cancel then SchedCancelled else SchedDone v)\n  | SchedStepFailed (e, bt) ->\n    (* \229\188\130\229\184\184\231\169\191\232\191\135\231\186\164\231\168\139\230\160\185 handler\239\188\154\232\162\171\228\184\162\229\188\131\231\154\132\231\187\173\229\187\182\233\135\140\231\154\132 bracket cleanup \229\156\168\232\191\153\233\135\140\229\133\156\229\186\149\227\128\130 *)\n    dtp_cleanup_run_all_for t.sched_tid;\n    dtp_cleanup_forget t.sched_tid;\n    if t.sched_tid = !dtp_sched_main_tid then dtp_sched_finish t (SchedFailed (e, bt))\n    else begin\n      let s = dtp_sched_scope t.sched_scope in\n      if s.sched_failed = None then s.sched_failed <- Some (dtp_sched_exn_msg e);\n      dtp_sched_finish t (SchedFailed (e, bt));\n      dtp_sched_cancel_scope_tasks t.sched_scope\n    end\n\nlet dtp_sched_tick () =\n  let expired = ref [] in\n  dtp_sched_timeouts := List.map (fun (w, sc, n) -> (w, sc, n - 1)) !dtp_sched_timeouts;\n  dtp_sched_timeouts := List.filter (fun (w, sc, n) ->\n    if n > 0 then true else (expired := (w, sc) :: !expired; false)) !dtp_sched_timeouts;\n  List.iter (fun (_, sc) ->\n    let s = dtp_sched_scope sc in\n    if not s.sched_timeout then begin\n      s.sched_timeout <- true;\n      dtp_sched_cancel_scope_tasks sc\n    end) !expired\n\nlet dtp_sched_runnable t =\n  match t.sched_state with SchedQueued _ -> true | _ -> false\n\nlet dtp_sched_run_one t =\n  if dtp_sched_runnable t then begin\n    dtp_sched_current := t.sched_tid;\n    dtp_cleanup_fiber := t.sched_tid;\n    (match dtp_sched_step t with\n     | Some st -> dtp_sched_apply t st\n     | None -> ());\n    dtp_cleanup_fiber := -1;\n    dtp_sched_current := -1\n  end\n\nlet dtp_sched_deadlock () = failwith \"scheduler: deadlock (no runnable task)\"\n\nlet dtp_sched_loop () =\n  let rec loop () =\n    if !dtp_sched_main_result <> None || !dtp_sched_main_exn <> None then ()\n    else if Queue.is_empty dtp_sched_ready then dtp_sched_deadlock ()\n    else begin\n      let tid = Queue.pop dtp_sched_ready in\n      dtp_sched_run_one (dtp_sched_task tid);\n      dtp_sched_tick ();\n      loop ()\n    end\n  in loop ()\n\nlet dtp_sched_drain () =\n  let rec loop () =\n    if Queue.is_empty dtp_sched_ready then ()\n    else begin\n      let tid = Queue.pop dtp_sched_ready in\n      dtp_sched_run_one (dtp_sched_task tid);\n      loop ()\n    end\n  in loop ()\n\nlet dtp_sched_cancel_leftovers () =\n  Hashtbl.iter (fun _ t -> match t.sched_state with\n    | SchedDone _ | SchedFailed _ | SchedCancelled -> ()\n    | _ -> dtp_sched_cancel_task t) dtp_sched_tasks\n\nlet dtp_sched_main (th : unit -> 'a) : 'a =\n  dtp_sched_reset ();\n  ignore (dtp_sched_new_scope ());\n  let main = dtp_sched_new_task 0 (fun () -> Obj.repr (th ())) in\n  dtp_sched_main_tid := main.sched_tid;\n  (try dtp_sched_loop ()\n   with e -> dtp_sched_cancel_leftovers (); dtp_sched_drain (); raise e);\n  dtp_sched_cancel_leftovers ();\n  dtp_sched_drain ();\n  match !dtp_sched_main_exn with\n  | Some (e, bt) -> Printexc.raise_with_backtrace e bt\n  | None -> match !dtp_sched_main_result with\n    | Some v -> (Obj.obj v : 'a)\n    | None -> failwith \"scheduler: main did not finish\"\n\n(* scheduler primitives exposed to Base.EffSched through hidden intrinsics *)\n\nlet dtp_sched_fork (scope : int) (f : int -> 'a) : int =\n  (dtp_sched_new_task scope (fun () -> Obj.repr (f 0))).sched_tid\n\nlet dtp_sched_current_task () =\n  if !dtp_sched_current < 0 then failwith \"scheduler: no current fiber\"\n  else dtp_sched_task !dtp_sched_current\n\nlet dtp_sched_yield () : int = Effect.perform SchedYield\n\nlet dtp_sched_is_cancelled () : int =\n  match Hashtbl.find_opt dtp_sched_tasks !dtp_sched_current with\n  | Some t -> if t.sched_cancel then 1 else 0\n  | None -> 0\n\nlet dtp_sched_await (id : int) : int =\n  let self = dtp_sched_current_task () in\n  if self.sched_cancel then begin ignore (Effect.perform SchedYield); 1 end\n  else begin\n    let target = dtp_sched_task id in\n    match target.sched_state with\n    | SchedDone _ | SchedFailed _ | SchedCancelled -> dtp_sched_task_status target\n    | _ -> Effect.perform (SchedAwait id)\n  end\n\nlet dtp_sched_task_result (id : int) : 'a =\n  match (dtp_sched_task id).sched_state with\n  | SchedDone v -> Obj.obj v\n  | _ -> failwith \"scheduler: task has no result\"\n\nlet dtp_sched_task_error (id : int) : string =\n  match (dtp_sched_task id).sched_state with\n  | SchedFailed (e, _) -> dtp_sched_exn_msg e\n  | _ -> \"\"\n\nlet dtp_sched_cancel_task_prim (id : int) : int =\n  dtp_sched_cancel_task (dtp_sched_task id);\n  0\n\nlet dtp_sched_cancel_scope (id : int) : int =\n  dtp_sched_cancel_scope_tasks id;\n  0\n\nlet dtp_sched_scope_status (s : dtp_sched_scope) : int =\n  if s.sched_timeout then 2\n  else if s.sched_failed <> None then 1\n  else 0\n\nlet dtp_sched_scope_wait (id : int) : int =\n  let s = dtp_sched_scope id in\n  let self = dtp_sched_current_task () in\n  if self.sched_cancel then begin ignore (Effect.perform SchedYield); 3 end\n  else if s.sched_tasks = [] then dtp_sched_scope_status s\n  else Effect.perform (SchedWaitScope id)\n\nlet dtp_sched_scope_wait_timeout (steps : int) (id : int) : int =\n  let s = dtp_sched_scope id in\n  let self = dtp_sched_current_task () in\n  if self.sched_cancel then begin ignore (Effect.perform SchedYield); 3 end\n  else if s.sched_tasks = [] then dtp_sched_scope_status s\n  else if steps <= 0 then begin\n    s.sched_timeout <- true;\n    dtp_sched_cancel_scope_tasks id;\n    Effect.perform (SchedWaitScope id)\n  end else\n    Effect.perform (SchedWaitScopeTimeout (steps, id))\n\nlet dtp_sched_scope_error (id : int) : string =\n  let s = dtp_sched_scope id in\n  match s.sched_failed with\n  | Some msg -> msg\n  | None -> \"\"\n\nlet dtp_sched_scope_count (id : int) : int =\n  (dtp_sched_scope id).sched_completed\n"
@@ -431,8 +431,8 @@ let v_inlineText = (fun (mc0 : string) (mc1 : string B_dData_dList.t_List) -> (i
 let v_dtRuntimeWith = (fun (locs : string) (usesFloat : bool) (usesTrace : bool) (usesObs : bool) -> (String.concat "" [v_dtRuntime; (if usesFloat then v_dtFloatRuntime else ""); (if (locs = "") then "let dt_def_locs = []\n" else (String.concat "" ["let dt_def_locs = [\n"; locs; "]\n"])); v_dtReporterRuntime; (if usesTrace then v_dtTraceRuntime else ""); (if usesObs then v_dtObsRuntime else "")]))
 
 # 1645 "Vuna/Compiler/Codegen/Term.vuna"
-let v_dtListBridge = (fun (mc0 : Ir_dModel.t_IrListFam B_dData_dMaybe.t_Maybe) -> (match mc0 with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__176) -> ((fun nilMl -> ((fun consMl -> (String.concat "" ["\nlet dtp_unpack (s : string) =\n  let rec go i acc = if i < 0 then acc else go (i - 1) ("; consMl; " (Char.code (String.unsafe_get s i), acc)) in\n  go (String.length s - 1) "; nilMl; "\nlet dtp_pack xs =\n  let rec len n l = match l with "; nilMl; " -> n | "; consMl; " (_, rest) -> len (n + 1) rest in\n  let buf = Bytes.create (len 0 xs) in\n  let rec go i l = match l with\n    | "; nilMl; " -> ()\n    | "; consMl; " (x, rest) -> Bytes.unsafe_set buf i (Char.chr x); go (i + 1) rest\n  in\n  (go 0 xs; Bytes.unsafe_to_string buf)\n\nlet dtp_listOf xs = List.fold_right (fun x acc -> "; consMl; " (x, acc)) xs "; nilMl; "\nlet dtp_ocamlOf xs =\n  let rec go l = match l with "; nilMl; " -> [] | "; consMl; " (x, rest) -> x :: go rest in\n  go xs\n\nlet dtp_concatMany xs = String.concat \"\" (dtp_ocamlOf xs)\n\nlet dtp_substTemplate tmpl xs =\n  let args = Array.of_list (dtp_ocamlOf xs) in\n  let n = String.length tmpl and na = Array.length args in\n  let buf = Buffer.create (n + 32) in\n  let rec go i =\n    if i >= n then ()\n    else if tmpl.[i] = '<' then begin\n      let j = ref (i + 1) and k = ref 0 in\n      while !j < n && tmpl.[!j] >= '0' && tmpl.[!j] <= '9' do\n        k := !k * 10 + (Char.code tmpl.[!j] - 48); incr j\n      done;\n      if !j < n && tmpl.[!j] = '>' && !j > i + 1 then begin\n        (if !k < na then Buffer.add_string buf args.(!k)\n         else Buffer.add_string buf (String.sub tmpl i (!j - i + 1)));\n        go (!j + 1)\n      end else (Buffer.add_char buf '<'; go (i + 1))\n    end else (Buffer.add_char buf tmpl.[i]; go (i + 1))\n  in go 0; Buffer.contents buf\n"])) ((Codegen_dDecl.v_ctorOcamlName (Ir_dModel.v_irListFamilyOf dtb__176)) (Ir_dModel.v_irListConsOf dtb__176)))) ((Codegen_dDecl.v_ctorOcamlName (Ir_dModel.v_irListFamilyOf dtb__176)) (Ir_dModel.v_irListNilOf dtb__176)))
+let v_dtListBridge = (fun (mc0 : Vuna_dIr_dModel.t_IrListFam B_dData_dMaybe.t_Maybe) -> (match mc0 with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__176) -> ((fun nilMl -> ((fun consMl -> (String.concat "" ["\nlet dtp_unpack (s : string) =\n  let rec go i acc = if i < 0 then acc else go (i - 1) ("; consMl; " (Char.code (String.unsafe_get s i), acc)) in\n  go (String.length s - 1) "; nilMl; "\nlet dtp_pack xs =\n  let rec len n l = match l with "; nilMl; " -> n | "; consMl; " (_, rest) -> len (n + 1) rest in\n  let buf = Bytes.create (len 0 xs) in\n  let rec go i l = match l with\n    | "; nilMl; " -> ()\n    | "; consMl; " (x, rest) -> Bytes.unsafe_set buf i (Char.chr x); go (i + 1) rest\n  in\n  (go 0 xs; Bytes.unsafe_to_string buf)\n\nlet dtp_listOf xs = List.fold_right (fun x acc -> "; consMl; " (x, acc)) xs "; nilMl; "\nlet dtp_ocamlOf xs =\n  let rec go l = match l with "; nilMl; " -> [] | "; consMl; " (x, rest) -> x :: go rest in\n  go xs\n\nlet dtp_concatMany xs = String.concat \"\" (dtp_ocamlOf xs)\n\nlet dtp_substTemplate tmpl xs =\n  let args = Array.of_list (dtp_ocamlOf xs) in\n  let n = String.length tmpl and na = Array.length args in\n  let buf = Buffer.create (n + 32) in\n  let rec go i =\n    if i >= n then ()\n    else if tmpl.[i] = '<' then begin\n      let j = ref (i + 1) and k = ref 0 in\n      while !j < n && tmpl.[!j] >= '0' && tmpl.[!j] <= '9' do\n        k := !k * 10 + (Char.code tmpl.[!j] - 48); incr j\n      done;\n      if !j < n && tmpl.[!j] = '>' && !j > i + 1 then begin\n        (if !k < na then Buffer.add_string buf args.(!k)\n         else Buffer.add_string buf (String.sub tmpl i (!j - i + 1)));\n        go (!j + 1)\n      end else (Buffer.add_char buf '<'; go (i + 1))\n    end else (Buffer.add_char buf tmpl.[i]; go (i + 1))\n  in go 0; Buffer.contents buf\n"])) ((Codegen_dDecl.v_ctorOcamlName (Vuna_dIr_dModel.v_irListFamilyOf dtb__176)) (Vuna_dIr_dModel.v_irListConsOf dtb__176)))) ((Codegen_dDecl.v_ctorOcamlName (Vuna_dIr_dModel.v_irListFamilyOf dtb__176)) (Vuna_dIr_dModel.v_irListNilOf dtb__176)))
   | B_dData_dMaybe.C_Maybe_Nothing -> ""
   | _ -> failwith "DT: impossible branch"
 ))
@@ -447,10 +447,10 @@ let v_locRowOf = (fun (norm : (string) -> string) (unitOf : (string) -> string) 
 let v_dtDefLocTable = (fun (norm : (string) -> string) (unitOf : (string) -> string) (rows : (string, (string, int) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (B_dData_dList.dtp_concatMany (v_sortLocRows ((B_dData_dList.v_map ((v_locRowOf norm) unitOf)) rows))))
 
 # 1734 "Vuna/Compiler/Codegen/Term.vuna"
-let v_mkGenStWith = (fun (norm : (string) -> string) (qc : Codegen_dDecl.t_QualCtx) (shared : Ir_dModel.t_IrShared) -> { f_GenSt_gsShared = shared; f_GenSt_gsQual = qc; f_GenSt_gsDeps = B_dData_dList.C_List_Nil; f_GenSt_gsNormPath = norm })
+let v_mkGenStWith = (fun (norm : (string) -> string) (qc : Codegen_dDecl.t_QualCtx) (shared : Vuna_dIr_dModel.t_IrShared) -> { f_GenSt_gsShared = shared; f_GenSt_gsQual = qc; f_GenSt_gsDeps = B_dData_dList.C_List_Nil; f_GenSt_gsNormPath = norm })
 
 # 1731 "Vuna/Compiler/Codegen/Term.vuna"
-let v_mkGenSt = (fun (qc : Codegen_dDecl.t_QualCtx) (shared : Ir_dModel.t_IrShared) -> (((v_mkGenStWith (fun (p : string) -> p)) qc) shared))
+let v_mkGenSt = (fun (qc : Codegen_dDecl.t_QualCtx) (shared : Vuna_dIr_dModel.t_IrShared) -> (((v_mkGenStWith (fun (p : string) -> p)) qc) shared))
 
 # 1738 "Vuna/Compiler/Codegen/Term.vuna"
 let v_gsAddDep = (fun (st : t_GenSt) (unit : string) -> (if (if (unit = "") then true else ((B_dData_dList.v_memName unit) (st).f_GenSt_gsDeps)) then st else { f_GenSt_gsShared = (st).f_GenSt_gsShared; f_GenSt_gsQual = (st).f_GenSt_gsQual; f_GenSt_gsDeps = (B_dData_dList.C_List__x58__x58_ (unit, (st).f_GenSt_gsDeps)); f_GenSt_gsNormPath = (st).f_GenSt_gsNormPath }))
@@ -468,8 +468,8 @@ let v_gsDepOfFamily = (fun (st : t_GenSt) (family : string) -> ((fun unit -> (if
 let v_recordLabelOf = (fun (st : t_GenSt) (family : string) (label : string) -> ((fun unit -> (if (if (unit = "") then true else (unit = ((st).f_GenSt_gsQual).Codegen_dDecl.f_QualCtx_qcUnit)) then label else (String.concat "" [unit; "."; label]))) ((Codegen_dDecl.v_unitOfTbl ((st).f_GenSt_gsQual).Codegen_dDecl.f_QualCtx_qcDatas) family)))
 
 # 1774 "Vuna/Compiler/Codegen/Term.vuna"
-let v_bridgeUnitOf = (fun (st : t_GenSt) -> (match ((st).f_GenSt_gsShared).Ir_dModel.f_IrShared_irSharedListFam with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__177) -> ((Codegen_dDecl.v_unitOfTbl ((st).f_GenSt_gsQual).Codegen_dDecl.f_QualCtx_qcDatas) (Ir_dModel.v_irListFamilyOf dtb__177))
+let v_bridgeUnitOf = (fun (st : t_GenSt) -> (match ((st).f_GenSt_gsShared).Vuna_dIr_dModel.f_IrShared_irSharedListFam with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__177) -> ((Codegen_dDecl.v_unitOfTbl ((st).f_GenSt_gsQual).Codegen_dDecl.f_QualCtx_qcDatas) (Vuna_dIr_dModel.v_irListFamilyOf dtb__177))
   | B_dData_dMaybe.C_Maybe_Nothing -> ""
   | _ -> failwith "DT: impossible branch"
 ))
@@ -510,18 +510,18 @@ let rec v_takeNames = (fun (n : int) (names : string B_dData_dList.t_List) -> (i
 let v_effThunkText = (fun (ctor : string) (unitTy : string) (rt : string) (arity : int) -> ((fun argText -> (if (arity = 0) then (String.concat "" ["("; ctor; " (fun (_ : "; unitTy; ") -> "; rt; "))"]) else (String.concat "" ["(fun "; argText; " -> "; ctor; " (fun (_ : "; unitTy; ") -> "; rt; " "; argText; "))"]))) ((Codegen_dOcaml_dRender.v_joinWith " ") ((v_takeNames arity) v_ioParamNames))))
 
 # 2050 "Vuna/Compiler/Codegen/Term.vuna"
-let v_nonErasedBinderText = (fun (mc0 : Ir_dModel.t_IrBinder) -> (match mc0 with
-  | { Ir_dModel.f_IrBinder_irBinderName = dtb__182; Ir_dModel.f_IrBinder_irBinderErased = dtb__183; Ir_dModel.f_IrBinder_irBinderTy = dtb__184 } -> (if dtb__183 then "" else (Codegen_dDecl.v_irBinderText { Ir_dModel.f_IrBinder_irBinderName = dtb__182; Ir_dModel.f_IrBinder_irBinderErased = false; Ir_dModel.f_IrBinder_irBinderTy = B_dData_dMaybe.C_Maybe_Nothing }))
+let v_nonErasedBinderText = (fun (mc0 : Vuna_dIr_dModel.t_IrBinder) -> (match mc0 with
+  | { Vuna_dIr_dModel.f_IrBinder_irBinderName = dtb__182; Vuna_dIr_dModel.f_IrBinder_irBinderErased = dtb__183; Vuna_dIr_dModel.f_IrBinder_irBinderTy = dtb__184 } -> (if dtb__183 then "" else (Codegen_dDecl.v_irBinderText { Vuna_dIr_dModel.f_IrBinder_irBinderName = dtb__182; Vuna_dIr_dModel.f_IrBinder_irBinderErased = false; Vuna_dIr_dModel.f_IrBinder_irBinderTy = B_dData_dMaybe.C_Maybe_Nothing }))
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 2087 "Vuna/Compiler/Codegen/Term.vuna"
-let v_gsWithTyDeps = (fun (st : t_GenSt) (ty : Ir_dModel.t_IrTy) -> (((B_dData_dList.v_foldl (fun (acc : t_GenSt) (unit : string) -> ((v_gsAddDep acc) unit))) st) ((Codegen_dDecl.v_irTyDeclDeps (st).f_GenSt_gsQual) (B_dData_dList.C_List__x58__x58_ (ty, B_dData_dList.C_List_Nil)))))
+let v_gsWithTyDeps = (fun (st : t_GenSt) (ty : Vuna_dIr_dModel.t_IrTy) -> (((B_dData_dList.v_foldl (fun (acc : t_GenSt) (unit : string) -> ((v_gsAddDep acc) unit))) st) ((Codegen_dDecl.v_irTyDeclDeps (st).f_GenSt_gsQual) (B_dData_dList.C_List__x58__x58_ (ty, B_dData_dList.C_List_Nil)))))
 
 # 2057 "Vuna/Compiler/Codegen/Term.vuna"
-let rec v_genLamParams = (fun (mc0 : t_GenSt) (mc1 : Ir_dModel.t_IrBinder B_dData_dList.t_List) -> (match mc1 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__185, dtb__186) -> (if (dtb__185).Ir_dModel.f_IrBinder_irBinderErased then ((v_genLamParams mc0) dtb__186) else (match (dtb__185).Ir_dModel.f_IrBinder_irBinderTy with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__187) -> (if (Ir_dModel.v_irTyAnnotatable dtb__187) then ((fun st1 -> ((fun annotation -> ((Base_dCommon.v_bind ((v_genLamParams st1) dtb__186)) (fun (p : ((string, string B_dData_dMaybe.t_Maybe) B_dData_dPair.t_Pair B_dData_dList.t_List, t_GenSt) B_dData_dPair.t_Pair) -> (match p with
+let rec v_genLamParams = (fun (mc0 : t_GenSt) (mc1 : Vuna_dIr_dModel.t_IrBinder B_dData_dList.t_List) -> (match mc1 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__185, dtb__186) -> (if (dtb__185).Vuna_dIr_dModel.f_IrBinder_irBinderErased then ((v_genLamParams mc0) dtb__186) else (match (dtb__185).Vuna_dIr_dModel.f_IrBinder_irBinderTy with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__187) -> (if (Vuna_dIr_dModel.v_irTyAnnotatable dtb__187) then ((fun st1 -> ((fun annotation -> ((Base_dCommon.v_bind ((v_genLamParams st1) dtb__186)) (fun (p : ((string, string B_dData_dMaybe.t_Maybe) B_dData_dPair.t_Pair B_dData_dList.t_List, t_GenSt) B_dData_dPair.t_Pair) -> (match p with
   | { B_dData_dPair.f_Pair_first = dtb__188; B_dData_dPair.f_Pair_second = dtb__189 } -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = (Codegen_dDecl.v_irBinderText dtb__185); B_dData_dPair.f_Pair_second = annotation }, dtb__188)); B_dData_dPair.f_Pair_second = dtb__189 }))
   | _ -> failwith "DT: impossible branch"
 )))) (B_dData_dMaybe.C_Maybe_Just (((Codegen_dDecl.v_irTyText (mc0).f_GenSt_gsQual) dtb__187))))) ((v_gsWithTyDeps mc0) dtb__187)) else (((v_genLamParamsUnannotated mc0) dtb__185) dtb__186))
@@ -532,14 +532,14 @@ let rec v_genLamParams = (fun (mc0 : t_GenSt) (mc1 : Ir_dModel.t_IrBinder B_dDat
   | _ -> failwith "DT: impossible branch"
 ))
 # 2078 "Vuna/Compiler/Codegen/Term.vuna"
-and v_genLamParamsUnannotated = (fun (st : t_GenSt) (b : Ir_dModel.t_IrBinder) (rest : Ir_dModel.t_IrBinder B_dData_dList.t_List) -> ((Base_dCommon.v_bind ((v_genLamParams st) rest)) (fun (p : ((string, string B_dData_dMaybe.t_Maybe) B_dData_dPair.t_Pair B_dData_dList.t_List, t_GenSt) B_dData_dPair.t_Pair) -> (match p with
+and v_genLamParamsUnannotated = (fun (st : t_GenSt) (b : Vuna_dIr_dModel.t_IrBinder) (rest : Vuna_dIr_dModel.t_IrBinder B_dData_dList.t_List) -> ((Base_dCommon.v_bind ((v_genLamParams st) rest)) (fun (p : ((string, string B_dData_dMaybe.t_Maybe) B_dData_dPair.t_Pair B_dData_dList.t_List, t_GenSt) B_dData_dPair.t_Pair) -> (match p with
   | { B_dData_dPair.f_Pair_first = dtb__190; B_dData_dPair.f_Pair_second = dtb__191 } -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = (Codegen_dDecl.v_irBinderText b); B_dData_dPair.f_Pair_second = B_dData_dMaybe.C_Maybe_Nothing }, dtb__190)); B_dData_dPair.f_Pair_second = dtb__191 }))
   | _ -> failwith "DT: impossible branch"
 ))))
 
 # 2090 "Vuna/Compiler/Codegen/Term.vuna"
-let rec v_hasCatchAll = (fun (mc0 : Ir_dModel.t_IrAlt B_dData_dList.t_List) -> (match mc0 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__192, dtb__193) -> (match (Ir_dModel.v_irAltCtorOf dtb__192) with
+let rec v_hasCatchAll = (fun (mc0 : Vuna_dIr_dModel.t_IrAlt B_dData_dList.t_List) -> (match mc0 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__192, dtb__193) -> (match (Vuna_dIr_dModel.v_irAltCtorOf dtb__192) with
   | B_dData_dMaybe.C_Maybe_Nothing -> true
   | B_dData_dMaybe.C_Maybe_Just (dtb__194) -> (v_hasCatchAll dtb__193)
   | _ -> failwith "DT: impossible branch"
@@ -567,19 +567,19 @@ let v_termOrImpossible = (fun (mc0 : Codegen_dOcaml_dModel.t_OTerm B_dData_dMayb
 ))
 
 # 1811 "Vuna/Compiler/Codegen/Term.vuna"
-let rec v_genIr = (fun (st : t_GenSt) (node : Ir_dModel.t_Ir) -> ((v_genIrNode st) node))
+let rec v_genIr = (fun (st : t_GenSt) (node : Vuna_dIr_dModel.t_Ir) -> ((v_genIrNode st) node))
 # 1814 "Vuna/Compiler/Codegen/Term.vuna"
-and v_genIrNode = (fun (mc0 : t_GenSt) (mc1 : Ir_dModel.t_Ir) -> (match mc1 with
-  | Ir_dModel.C_Ir_IrEffBind (dtb__200, dtb__201, dtb__202) -> ((fun ctorP -> ((fun st1 -> ((fun unitText -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (Codegen_dOcaml_dModel.C_OTerm_ORaw ((String.concat "" ["(fun m k -> "; (B_dData_dPair.v_firstOf ctorP); " (fun (u : "; unitText; ") -> match m with "; (B_dData_dPair.v_firstOf ctorP); " f -> (match k (f u) with "; (B_dData_dPair.v_firstOf ctorP); " g -> g u)))"]))); B_dData_dPair.f_Pair_second = st1 }))) ((Codegen_dDecl.v_irTyText (st1).f_GenSt_gsQual) dtb__202))) ((v_gsDepOfFamily (B_dData_dPair.v_secondOf ctorP)) dtb__200))) (((v_genCtorRef mc0) dtb__200) dtb__201))
-  | Ir_dModel.C_Ir_IrEffThunk (dtb__203, dtb__204, dtb__205, dtb__206, dtb__207) -> ((Base_dCommon.v_bind ((v_genIr mc0) dtb__207)) (fun (p : (Codegen_dOcaml_dModel.t_OTerm, t_GenSt) B_dData_dPair.t_Pair) -> (match p with
+and v_genIrNode = (fun (mc0 : t_GenSt) (mc1 : Vuna_dIr_dModel.t_Ir) -> (match mc1 with
+  | Vuna_dIr_dModel.C_Ir_IrEffBind (dtb__200, dtb__201, dtb__202) -> ((fun ctorP -> ((fun st1 -> ((fun unitText -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (Codegen_dOcaml_dModel.C_OTerm_ORaw ((String.concat "" ["(fun m k -> "; (B_dData_dPair.v_firstOf ctorP); " (fun (u : "; unitText; ") -> match m with "; (B_dData_dPair.v_firstOf ctorP); " f -> (match k (f u) with "; (B_dData_dPair.v_firstOf ctorP); " g -> g u)))"]))); B_dData_dPair.f_Pair_second = st1 }))) ((Codegen_dDecl.v_irTyText (st1).f_GenSt_gsQual) dtb__202))) ((v_gsDepOfFamily (B_dData_dPair.v_secondOf ctorP)) dtb__200))) (((v_genCtorRef mc0) dtb__200) dtb__201))
+  | Vuna_dIr_dModel.C_Ir_IrEffThunk (dtb__203, dtb__204, dtb__205, dtb__206, dtb__207) -> ((Base_dCommon.v_bind ((v_genIr mc0) dtb__207)) (fun (p : (Codegen_dOcaml_dModel.t_OTerm, t_GenSt) B_dData_dPair.t_Pair) -> (match p with
   | { B_dData_dPair.f_Pair_first = dtb__208; B_dData_dPair.f_Pair_second = dtb__209 } -> ((fun ctorP -> ((fun st2 -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (Codegen_dOcaml_dModel.C_OTerm_ORaw (((((v_effThunkText (B_dData_dPair.v_firstOf ctorP)) ((Codegen_dDecl.v_irTyText (st2).f_GenSt_gsQual) dtb__205)) (Codegen_dOcaml_dRender.v_renderTerm dtb__208)) dtb__206))); B_dData_dPair.f_Pair_second = st2 }))) ((v_gsDepOfFamily (B_dData_dPair.v_secondOf ctorP)) dtb__203))) (((v_genCtorRef dtb__209) dtb__203) dtb__204))
   | _ -> failwith "DT: impossible branch"
 )))
-  | Ir_dModel.C_Ir_IrConcatMany (dtb__210) -> ((Base_dCommon.v_bind ((v_genIrArgs mc0) dtb__210)) (fun (p : (Codegen_dOcaml_dModel.t_OTerm B_dData_dList.t_List, t_GenSt) B_dData_dPair.t_Pair) -> (match p with
+  | Vuna_dIr_dModel.C_Ir_IrConcatMany (dtb__210) -> ((Base_dCommon.v_bind ((v_genIrArgs mc0) dtb__210)) (fun (p : (Codegen_dOcaml_dModel.t_OTerm B_dData_dList.t_List, t_GenSt) B_dData_dPair.t_Pair) -> (match p with
   | { B_dData_dPair.f_Pair_first = dtb__211; B_dData_dPair.f_Pair_second = dtb__212 } -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (Codegen_dOcaml_dModel.C_OTerm_OConcatStr (dtb__211)); B_dData_dPair.f_Pair_second = dtb__212 }))
   | _ -> failwith "DT: impossible branch"
 )))
-  | Ir_dModel.C_Ir_IrRtApp (dtb__213, dtb__214) -> ((Base_dCommon.v_bind ((v_genIrArgs mc0) dtb__214)) (fun (p : (Codegen_dOcaml_dModel.t_OTerm B_dData_dList.t_List, t_GenSt) B_dData_dPair.t_Pair) -> (match p with
+  | Vuna_dIr_dModel.C_Ir_IrRtApp (dtb__213, dtb__214) -> ((Base_dCommon.v_bind ((v_genIrArgs mc0) dtb__214)) (fun (p : (Codegen_dOcaml_dModel.t_OTerm B_dData_dList.t_List, t_GenSt) B_dData_dPair.t_Pair) -> (match p with
   | { B_dData_dPair.f_Pair_first = dtb__215; B_dData_dPair.f_Pair_second = dtb__216 } -> (match ((v_inlineText dtb__213) ((B_dData_dList.v_map Codegen_dOcaml_dRender.v_renderTerm) dtb__215)) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__217) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (Codegen_dOcaml_dModel.C_OTerm_ORaw (dtb__217)); B_dData_dPair.f_Pair_second = dtb__216 }))
   | B_dData_dMaybe.C_Maybe_Nothing -> (Base_dDiag.v_icInternal (String.concat "" ["no inline text for builtin `"; dtb__213; "`"]))
@@ -587,21 +587,21 @@ and v_genIrNode = (fun (mc0 : t_GenSt) (mc1 : Ir_dModel.t_Ir) -> (match mc1 with
 )
   | _ -> failwith "DT: impossible branch"
 )))
-  | Ir_dModel.C_Ir_IrNatCase (dtb__218, dtb__219, dtb__220, dtb__221, dtb__222) -> ((Base_dCommon.v_bind ((v_genIr mc0) dtb__218)) (fun (p : (Codegen_dOcaml_dModel.t_OTerm, t_GenSt) B_dData_dPair.t_Pair) -> (match p with
+  | Vuna_dIr_dModel.C_Ir_IrNatCase (dtb__218, dtb__219, dtb__220, dtb__221, dtb__222) -> ((Base_dCommon.v_bind ((v_genIr mc0) dtb__218)) (fun (p : (Codegen_dOcaml_dModel.t_OTerm, t_GenSt) B_dData_dPair.t_Pair) -> (match p with
   | { B_dData_dPair.f_Pair_first = dtb__223; B_dData_dPair.f_Pair_second = dtb__224 } -> ((Base_dCommon.v_bind (((((v_genNatBranches dtb__224) dtb__219) dtb__220) dtb__221) dtb__222)) (fun (q : (Codegen_dOcaml_dModel.t_OTerm, t_GenSt) B_dData_dPair.t_Pair) -> (match q with
   | { B_dData_dPair.f_Pair_first = dtb__225; B_dData_dPair.f_Pair_second = dtb__226 } -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (Codegen_dOcaml_dModel.C_OTerm_OLet ((Codegen_dOcaml_dModel.C_OPat_OPVar (("dtnat__" ^ (bi_strFromInt dtb__219)))), dtb__223, dtb__225)); B_dData_dPair.f_Pair_second = dtb__226 }))
   | _ -> failwith "DT: impossible branch"
 )))
   | _ -> failwith "DT: impossible branch"
 )))
-  | Ir_dModel.C_Ir_IrCase (dtb__227, dtb__228, dtb__229, dtb__230) -> ((Base_dCommon.v_bind ((v_genIr mc0) dtb__229)) (fun (p : (Codegen_dOcaml_dModel.t_OTerm, t_GenSt) B_dData_dPair.t_Pair) -> (match p with
+  | Vuna_dIr_dModel.C_Ir_IrCase (dtb__227, dtb__228, dtb__229, dtb__230) -> ((Base_dCommon.v_bind ((v_genIr mc0) dtb__229)) (fun (p : (Codegen_dOcaml_dModel.t_OTerm, t_GenSt) B_dData_dPair.t_Pair) -> (match p with
   | { B_dData_dPair.f_Pair_first = dtb__231; B_dData_dPair.f_Pair_second = dtb__232 } -> ((Base_dCommon.v_bind ((v_genArms dtb__232) dtb__230)) (fun (q : ((Codegen_dOcaml_dModel.t_OPat, Codegen_dOcaml_dModel.t_OTerm) B_dData_dPair.t_Pair B_dData_dList.t_List, t_GenSt) B_dData_dPair.t_Pair) -> (match q with
   | { B_dData_dPair.f_Pair_first = dtb__233; B_dData_dPair.f_Pair_second = dtb__234 } -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (Codegen_dOcaml_dModel.C_OTerm_OMatch (dtb__231, dtb__233, (v_hasCatchAll dtb__230))); B_dData_dPair.f_Pair_second = dtb__234 }))
   | _ -> failwith "DT: impossible branch"
 )))
   | _ -> failwith "DT: impossible branch"
 )))
-  | Ir_dModel.C_Ir_IrIf (dtb__235, dtb__236, dtb__237) -> ((Base_dCommon.v_bind ((v_genIr mc0) dtb__235)) (fun (p : (Codegen_dOcaml_dModel.t_OTerm, t_GenSt) B_dData_dPair.t_Pair) -> (match p with
+  | Vuna_dIr_dModel.C_Ir_IrIf (dtb__235, dtb__236, dtb__237) -> ((Base_dCommon.v_bind ((v_genIr mc0) dtb__235)) (fun (p : (Codegen_dOcaml_dModel.t_OTerm, t_GenSt) B_dData_dPair.t_Pair) -> (match p with
   | { B_dData_dPair.f_Pair_first = dtb__238; B_dData_dPair.f_Pair_second = dtb__239 } -> ((Base_dCommon.v_bind ((v_genIr dtb__239) dtb__236)) (fun (q : (Codegen_dOcaml_dModel.t_OTerm, t_GenSt) B_dData_dPair.t_Pair) -> (match q with
   | { B_dData_dPair.f_Pair_first = dtb__240; B_dData_dPair.f_Pair_second = dtb__241 } -> ((Base_dCommon.v_bind ((v_genIr dtb__241) dtb__237)) (fun (r : (Codegen_dOcaml_dModel.t_OTerm, t_GenSt) B_dData_dPair.t_Pair) -> (match r with
   | { B_dData_dPair.f_Pair_first = dtb__242; B_dData_dPair.f_Pair_second = dtb__243 } -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (Codegen_dOcaml_dModel.C_OTerm_OIf (dtb__238, dtb__240, dtb__242)); B_dData_dPair.f_Pair_second = dtb__243 }))
@@ -611,22 +611,22 @@ and v_genIrNode = (fun (mc0 : t_GenSt) (mc1 : Ir_dModel.t_Ir) -> (match mc1 with
 )))
   | _ -> failwith "DT: impossible branch"
 )))
-  | Ir_dModel.C_Ir_IrApp (dtb__244, dtb__245, dtb__246) -> ((Base_dCommon.v_bind ((v_genIr mc0) dtb__245)) (fun (p : (Codegen_dOcaml_dModel.t_OTerm, t_GenSt) B_dData_dPair.t_Pair) -> (match p with
+  | Vuna_dIr_dModel.C_Ir_IrApp (dtb__244, dtb__245, dtb__246) -> ((Base_dCommon.v_bind ((v_genIr mc0) dtb__245)) (fun (p : (Codegen_dOcaml_dModel.t_OTerm, t_GenSt) B_dData_dPair.t_Pair) -> (match p with
   | { B_dData_dPair.f_Pair_first = dtb__247; B_dData_dPair.f_Pair_second = dtb__248 } -> ((Base_dCommon.v_bind ((v_genIr dtb__248) dtb__246)) (fun (q : (Codegen_dOcaml_dModel.t_OTerm, t_GenSt) B_dData_dPair.t_Pair) -> (match q with
   | { B_dData_dPair.f_Pair_first = dtb__249; B_dData_dPair.f_Pair_second = dtb__250 } -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (Codegen_dOcaml_dModel.C_OTerm_OApp (dtb__247, dtb__249)); B_dData_dPair.f_Pair_second = dtb__250 }))
   | _ -> failwith "DT: impossible branch"
 )))
   | _ -> failwith "DT: impossible branch"
 )))
-  | Ir_dModel.C_Ir_IrTail (dtb__251) -> ((v_genIrNode mc0) dtb__251)
-  | Ir_dModel.C_Ir_IrLam (dtb__252, dtb__253, dtb__254) -> ((Base_dCommon.v_bind ((v_genLamParams mc0) dtb__252)) (fun (p : ((string, string B_dData_dMaybe.t_Maybe) B_dData_dPair.t_Pair B_dData_dList.t_List, t_GenSt) B_dData_dPair.t_Pair) -> (match p with
+  | Vuna_dIr_dModel.C_Ir_IrTail (dtb__251) -> ((v_genIrNode mc0) dtb__251)
+  | Vuna_dIr_dModel.C_Ir_IrLam (dtb__252, dtb__253, dtb__254) -> ((Base_dCommon.v_bind ((v_genLamParams mc0) dtb__252)) (fun (p : ((string, string B_dData_dMaybe.t_Maybe) B_dData_dPair.t_Pair B_dData_dList.t_List, t_GenSt) B_dData_dPair.t_Pair) -> (match p with
   | { B_dData_dPair.f_Pair_first = dtb__255; B_dData_dPair.f_Pair_second = dtb__256 } -> ((Base_dCommon.v_bind ((v_genIr dtb__256) dtb__254)) (fun (q : (Codegen_dOcaml_dModel.t_OTerm, t_GenSt) B_dData_dPair.t_Pair) -> (match q with
   | { B_dData_dPair.f_Pair_first = dtb__257; B_dData_dPair.f_Pair_second = dtb__258 } -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (Codegen_dOcaml_dModel.C_OTerm_OLam (dtb__255, dtb__257)); B_dData_dPair.f_Pair_second = dtb__258 }))
   | _ -> failwith "DT: impossible branch"
 )))
   | _ -> failwith "DT: impossible branch"
 )))
-  | Ir_dModel.C_Ir_IrLet (dtb__259, dtb__260, dtb__261) -> ((Base_dCommon.v_bind ((v_genIr mc0) dtb__260)) (fun (p : (Codegen_dOcaml_dModel.t_OTerm, t_GenSt) B_dData_dPair.t_Pair) -> (match p with
+  | Vuna_dIr_dModel.C_Ir_IrLet (dtb__259, dtb__260, dtb__261) -> ((Base_dCommon.v_bind ((v_genIr mc0) dtb__260)) (fun (p : (Codegen_dOcaml_dModel.t_OTerm, t_GenSt) B_dData_dPair.t_Pair) -> (match p with
   | { B_dData_dPair.f_Pair_first = dtb__262; B_dData_dPair.f_Pair_second = dtb__263 } -> ((Base_dCommon.v_bind ((v_genIr dtb__263) dtb__261)) (fun (q : (Codegen_dOcaml_dModel.t_OTerm, t_GenSt) B_dData_dPair.t_Pair) -> (match q with
   | { B_dData_dPair.f_Pair_first = dtb__264; B_dData_dPair.f_Pair_second = dtb__265 } -> (match ((B_dData_dList.v_filter (fun (n : string) -> (n <> ""))) ((B_dData_dList.v_map v_nonErasedBinderText) dtb__259)) with
   | B_dData_dList.C_List_Nil -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (Codegen_dOcaml_dModel.C_OTerm_OLet (Codegen_dOcaml_dModel.C_OPat_OPWild, dtb__262, dtb__264)); B_dData_dPair.f_Pair_second = dtb__265 }))
@@ -640,11 +640,11 @@ and v_genIrNode = (fun (mc0 : t_GenSt) (mc1 : Ir_dModel.t_Ir) -> (match mc1 with
 )))
   | _ -> failwith "DT: impossible branch"
 )))
-  | Ir_dModel.C_Ir_IrFloatLit (dtb__268) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (Codegen_dOcaml_dModel.C_OTerm_OName (dtb__268)); B_dData_dPair.f_Pair_second = mc0 }))
-  | Ir_dModel.C_Ir_IrBool (dtb__269) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (Codegen_dOcaml_dModel.C_OTerm_OName ((Codegen_dDecl.v_boolText dtb__269))); B_dData_dPair.f_Pair_second = mc0 }))
-  | Ir_dModel.C_Ir_IrStr (dtb__270) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (Codegen_dOcaml_dModel.C_OTerm_OName ((Codegen_dDecl.v_ocamlString dtb__270))); B_dData_dPair.f_Pair_second = mc0 }))
-  | Ir_dModel.C_Ir_IrInt (dtb__271) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (Codegen_dOcaml_dModel.C_OTerm_OName ((bi_strFromInt dtb__271))); B_dData_dPair.f_Pair_second = mc0 }))
-  | Ir_dModel.C_Ir_IrCast (dtb__272, dtb__273, dtb__274) -> ((Base_dCommon.v_bind ((v_genIr mc0) dtb__274)) (fun (p : (Codegen_dOcaml_dModel.t_OTerm, t_GenSt) B_dData_dPair.t_Pair) -> (match p with
+  | Vuna_dIr_dModel.C_Ir_IrFloatLit (dtb__268) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (Codegen_dOcaml_dModel.C_OTerm_OName (dtb__268)); B_dData_dPair.f_Pair_second = mc0 }))
+  | Vuna_dIr_dModel.C_Ir_IrBool (dtb__269) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (Codegen_dOcaml_dModel.C_OTerm_OName ((Codegen_dDecl.v_boolText dtb__269))); B_dData_dPair.f_Pair_second = mc0 }))
+  | Vuna_dIr_dModel.C_Ir_IrStr (dtb__270) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (Codegen_dOcaml_dModel.C_OTerm_OName ((Codegen_dDecl.v_ocamlString dtb__270))); B_dData_dPair.f_Pair_second = mc0 }))
+  | Vuna_dIr_dModel.C_Ir_IrInt (dtb__271) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (Codegen_dOcaml_dModel.C_OTerm_OName ((bi_strFromInt dtb__271))); B_dData_dPair.f_Pair_second = mc0 }))
+  | Vuna_dIr_dModel.C_Ir_IrCast (dtb__272, dtb__273, dtb__274) -> ((Base_dCommon.v_bind ((v_genIr mc0) dtb__274)) (fun (p : (Codegen_dOcaml_dModel.t_OTerm, t_GenSt) B_dData_dPair.t_Pair) -> (match p with
   | { B_dData_dPair.f_Pair_first = dtb__275; B_dData_dPair.f_Pair_second = dtb__276 } -> (match dtb__273 with
   | B_dData_dMaybe.C_Maybe_Nothing -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (Codegen_dOcaml_dModel.C_OTerm_OCast (dtb__275)); B_dData_dPair.f_Pair_second = dtb__276 }))
   | B_dData_dMaybe.C_Maybe_Just (dtb__277) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (Codegen_dOcaml_dModel.C_OTerm_OAnnot ((Codegen_dOcaml_dModel.C_OTerm_OCast (dtb__275)), ((Codegen_dDecl.v_irTyText (dtb__276).f_GenSt_gsQual) dtb__277))); B_dData_dPair.f_Pair_second = dtb__276 }))
@@ -652,36 +652,36 @@ and v_genIrNode = (fun (mc0 : t_GenSt) (mc1 : Ir_dModel.t_Ir) -> (match mc1 with
 )
   | _ -> failwith "DT: impossible branch"
 )))
-  | Ir_dModel.C_Ir_IrRt (dtb__278) -> (match (Codegen_dRuntime.v_ocamlRtText dtb__278) with
+  | Vuna_dIr_dModel.C_Ir_IrRt (dtb__278) -> (match (Codegen_dRuntime.v_ocamlRtText dtb__278) with
   | B_dData_dMaybe.C_Maybe_Nothing -> (Base_dDiag.v_icInternal (String.concat "" ["no OCaml runtime text for IR symbol `"; dtb__278; "`"]))
-  | B_dData_dMaybe.C_Maybe_Just (dtb__279) -> (if (Ir_dRuntime.v_irRtBridgesList dtb__278) then ((fun p -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (Codegen_dOcaml_dModel.C_OTerm_ORaw ((B_dData_dPair.v_firstOf p))); B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf p) }))) ((v_genBridgeRef mc0) dtb__279)) else (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (Codegen_dOcaml_dModel.C_OTerm_ORaw (dtb__279)); B_dData_dPair.f_Pair_second = mc0 })))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__279) -> (if (Vuna_dIr_dRuntime.v_irRtBridgesList dtb__278) then ((fun p -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (Codegen_dOcaml_dModel.C_OTerm_ORaw ((B_dData_dPair.v_firstOf p))); B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf p) }))) ((v_genBridgeRef mc0) dtb__279)) else (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (Codegen_dOcaml_dModel.C_OTerm_ORaw (dtb__279)); B_dData_dPair.f_Pair_second = mc0 })))
   | _ -> failwith "DT: impossible branch"
 )
-  | Ir_dModel.C_Ir_IrRecUpd (dtb__280, dtb__281, dtb__282, dtb__283) -> ((Base_dCommon.v_bind ((v_genIr mc0) dtb__280)) (fun (p : (Codegen_dOcaml_dModel.t_OTerm, t_GenSt) B_dData_dPair.t_Pair) -> (match p with
+  | Vuna_dIr_dModel.C_Ir_IrRecUpd (dtb__280, dtb__281, dtb__282, dtb__283) -> ((Base_dCommon.v_bind ((v_genIr mc0) dtb__280)) (fun (p : (Codegen_dOcaml_dModel.t_OTerm, t_GenSt) B_dData_dPair.t_Pair) -> (match p with
   | { B_dData_dPair.f_Pair_first = dtb__284; B_dData_dPair.f_Pair_second = dtb__285 } -> ((Base_dCommon.v_bind (((v_genAssignedFields dtb__285) dtb__281) dtb__282)) (fun (q : ((string, Codegen_dOcaml_dModel.t_OTerm) B_dData_dPair.t_Pair B_dData_dList.t_List, t_GenSt) B_dData_dPair.t_Pair) -> (match q with
   | { B_dData_dPair.f_Pair_first = dtb__286; B_dData_dPair.f_Pair_second = dtb__287 } -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (Codegen_dOcaml_dModel.C_OTerm_ORecordUpd (dtb__284, dtb__286)); B_dData_dPair.f_Pair_second = ((v_gsDepOfFamily dtb__287) dtb__281) }))
   | _ -> failwith "DT: impossible branch"
 )))
   | _ -> failwith "DT: impossible branch"
 )))
-  | Ir_dModel.C_Ir_IrProj (dtb__288, dtb__289, dtb__290, dtb__291) -> ((Base_dCommon.v_bind ((v_genIr mc0) dtb__288)) (fun (p : (Codegen_dOcaml_dModel.t_OTerm, t_GenSt) B_dData_dPair.t_Pair) -> (match p with
+  | Vuna_dIr_dModel.C_Ir_IrProj (dtb__288, dtb__289, dtb__290, dtb__291) -> ((Base_dCommon.v_bind ((v_genIr mc0) dtb__288)) (fun (p : (Codegen_dOcaml_dModel.t_OTerm, t_GenSt) B_dData_dPair.t_Pair) -> (match p with
   | { B_dData_dPair.f_Pair_first = dtb__292; B_dData_dPair.f_Pair_second = dtb__293 } -> ((fun st2 -> ((fun label -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (Codegen_dOcaml_dModel.C_OTerm_OProj (dtb__292, (((v_recordLabelOf st2) dtb__289) label))); B_dData_dPair.f_Pair_second = st2 }))) ((Codegen_dDecl.v_recordFieldLabel dtb__289) dtb__290))) ((v_gsDepOfFamily dtb__293) dtb__289))
   | _ -> failwith "DT: impossible branch"
 )))
-  | Ir_dModel.C_Ir_IrRecord (dtb__294, dtb__295, dtb__296) -> ((Base_dCommon.v_bind (((v_genAssignedFields mc0) dtb__294) dtb__296)) (fun (p : ((string, Codegen_dOcaml_dModel.t_OTerm) B_dData_dPair.t_Pair B_dData_dList.t_List, t_GenSt) B_dData_dPair.t_Pair) -> (match p with
+  | Vuna_dIr_dModel.C_Ir_IrRecord (dtb__294, dtb__295, dtb__296) -> ((Base_dCommon.v_bind (((v_genAssignedFields mc0) dtb__294) dtb__296)) (fun (p : ((string, Codegen_dOcaml_dModel.t_OTerm) B_dData_dPair.t_Pair B_dData_dList.t_List, t_GenSt) B_dData_dPair.t_Pair) -> (match p with
   | { B_dData_dPair.f_Pair_first = dtb__297; B_dData_dPair.f_Pair_second = dtb__298 } -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (Codegen_dOcaml_dModel.C_OTerm_ORecordCon (dtb__297)); B_dData_dPair.f_Pair_second = ((v_gsDepOfFamily dtb__298) dtb__294) }))
   | _ -> failwith "DT: impossible branch"
 )))
-  | Ir_dModel.C_Ir_IrCtor (dtb__299, dtb__300, dtb__301, dtb__302) -> ((Base_dCommon.v_bind ((v_genIrArgs mc0) dtb__302)) (fun (p : (Codegen_dOcaml_dModel.t_OTerm B_dData_dList.t_List, t_GenSt) B_dData_dPair.t_Pair) -> (match p with
+  | Vuna_dIr_dModel.C_Ir_IrCtor (dtb__299, dtb__300, dtb__301, dtb__302) -> ((Base_dCommon.v_bind ((v_genIrArgs mc0) dtb__302)) (fun (p : (Codegen_dOcaml_dModel.t_OTerm B_dData_dList.t_List, t_GenSt) B_dData_dPair.t_Pair) -> (match p with
   | { B_dData_dPair.f_Pair_first = dtb__303; B_dData_dPair.f_Pair_second = dtb__304 } -> ((fun r -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (Codegen_dOcaml_dModel.C_OTerm_OCtorApp ((B_dData_dPair.v_firstOf r), dtb__303)); B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf r) }))) (((v_genCtorRef dtb__304) dtb__299) dtb__300))
   | _ -> failwith "DT: impossible branch"
 )))
-  | Ir_dModel.C_Ir_IrGlobal (dtb__305) -> ((fun p -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (Codegen_dOcaml_dModel.C_OTerm_OName ((B_dData_dPair.v_firstOf p))); B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf p) }))) ((v_genValueRef mc0) dtb__305))
-  | Ir_dModel.C_Ir_IrVar (dtb__306) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (Codegen_dOcaml_dModel.C_OTerm_OName ((Codegen_dDecl.v_irBinderText dtb__306))); B_dData_dPair.f_Pair_second = mc0 }))
+  | Vuna_dIr_dModel.C_Ir_IrGlobal (dtb__305) -> ((fun p -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (Codegen_dOcaml_dModel.C_OTerm_OName ((B_dData_dPair.v_firstOf p))); B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf p) }))) ((v_genValueRef mc0) dtb__305))
+  | Vuna_dIr_dModel.C_Ir_IrVar (dtb__306) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (Codegen_dOcaml_dModel.C_OTerm_OName ((Codegen_dDecl.v_irBinderText dtb__306))); B_dData_dPair.f_Pair_second = mc0 }))
   | _ -> failwith "DT: impossible branch"
 ))
 # 2017 "Vuna/Compiler/Codegen/Term.vuna"
-and v_genIrArgs = (fun (mc0 : t_GenSt) (mc1 : Ir_dModel.t_Ir B_dData_dList.t_List) -> (match mc1 with
+and v_genIrArgs = (fun (mc0 : t_GenSt) (mc1 : Vuna_dIr_dModel.t_Ir B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__307, dtb__308) -> ((Base_dCommon.v_bind ((v_genIr mc0) dtb__307)) (fun (p : (Codegen_dOcaml_dModel.t_OTerm, t_GenSt) B_dData_dPair.t_Pair) -> (match p with
   | { B_dData_dPair.f_Pair_first = dtb__309; B_dData_dPair.f_Pair_second = dtb__310 } -> ((Base_dCommon.v_bind ((v_genIrArgs dtb__310) dtb__308)) (fun (q : (Codegen_dOcaml_dModel.t_OTerm B_dData_dList.t_List, t_GenSt) B_dData_dPair.t_Pair) -> (match q with
   | { B_dData_dPair.f_Pair_first = dtb__311; B_dData_dPair.f_Pair_second = dtb__312 } -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (B_dData_dList.C_List__x58__x58_ (dtb__309, dtb__311)); B_dData_dPair.f_Pair_second = dtb__312 }))
@@ -693,7 +693,7 @@ and v_genIrArgs = (fun (mc0 : t_GenSt) (mc1 : Ir_dModel.t_Ir B_dData_dList.t_Lis
   | _ -> failwith "DT: impossible branch"
 ))
 # 2032 "Vuna/Compiler/Codegen/Term.vuna"
-and v_genAssignedFields = (fun (mc0 : t_GenSt) (mc1 : string) (mc2 : (string, Ir_dModel.t_Ir) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc2 with
+and v_genAssignedFields = (fun (mc0 : t_GenSt) (mc1 : string) (mc2 : (string, Vuna_dIr_dModel.t_Ir) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc2 with
   | B_dData_dList.C_List__x58__x58_ (dtb__313, dtb__314) -> ((Base_dCommon.v_bind ((v_genIr mc0) (B_dData_dPair.v_secondOf dtb__313))) (fun (p : (Codegen_dOcaml_dModel.t_OTerm, t_GenSt) B_dData_dPair.t_Pair) -> (match p with
   | { B_dData_dPair.f_Pair_first = dtb__315; B_dData_dPair.f_Pair_second = dtb__316 } -> ((Base_dCommon.v_bind (((v_genAssignedFields dtb__316) mc1) dtb__314)) (fun (q : ((string, Codegen_dOcaml_dModel.t_OTerm) B_dData_dPair.t_Pair B_dData_dList.t_List, t_GenSt) B_dData_dPair.t_Pair) -> (match q with
   | { B_dData_dPair.f_Pair_first = dtb__317; B_dData_dPair.f_Pair_second = dtb__318 } -> ((fun st3 -> ((fun label -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = label; B_dData_dPair.f_Pair_second = dtb__315 }, dtb__317)); B_dData_dPair.f_Pair_second = st3 }))) (((v_recordLabelOf st3) mc1) ((Codegen_dDecl.v_recordFieldLabel mc1) (B_dData_dPair.v_firstOf dtb__313))))) ((v_gsDepOfFamily dtb__318) mc1))
@@ -705,7 +705,7 @@ and v_genAssignedFields = (fun (mc0 : t_GenSt) (mc1 : string) (mc2 : (string, Ir
   | _ -> failwith "DT: impossible branch"
 ))
 # 2097 "Vuna/Compiler/Codegen/Term.vuna"
-and v_genArms = (fun (mc0 : t_GenSt) (mc1 : Ir_dModel.t_IrAlt B_dData_dList.t_List) -> (match mc1 with
+and v_genArms = (fun (mc0 : t_GenSt) (mc1 : Vuna_dIr_dModel.t_IrAlt B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__319, dtb__320) -> ((Base_dCommon.v_bind ((v_genArm mc0) dtb__319)) (fun (p : ((Codegen_dOcaml_dModel.t_OPat, Codegen_dOcaml_dModel.t_OTerm) B_dData_dPair.t_Pair, t_GenSt) B_dData_dPair.t_Pair) -> (match p with
   | { B_dData_dPair.f_Pair_first = dtb__321; B_dData_dPair.f_Pair_second = dtb__322 } -> ((Base_dCommon.v_bind ((v_genArms dtb__322) dtb__320)) (fun (q : ((Codegen_dOcaml_dModel.t_OPat, Codegen_dOcaml_dModel.t_OTerm) B_dData_dPair.t_Pair B_dData_dList.t_List, t_GenSt) B_dData_dPair.t_Pair) -> (match q with
   | { B_dData_dPair.f_Pair_first = dtb__323; B_dData_dPair.f_Pair_second = dtb__324 } -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (B_dData_dList.C_List__x58__x58_ (dtb__321, dtb__323)); B_dData_dPair.f_Pair_second = dtb__324 }))
@@ -717,10 +717,10 @@ and v_genArms = (fun (mc0 : t_GenSt) (mc1 : Ir_dModel.t_IrAlt B_dData_dList.t_Li
   | _ -> failwith "DT: impossible branch"
 ))
 # 2111 "Vuna/Compiler/Codegen/Term.vuna"
-and v_genArm = (fun (st : t_GenSt) (alt : Ir_dModel.t_IrAlt) -> ((fun envPats -> ((Base_dCommon.v_bind ((v_genIr st) (Ir_dModel.v_irAltBodyOf alt))) (fun (p : (Codegen_dOcaml_dModel.t_OTerm, t_GenSt) B_dData_dPair.t_Pair) -> (match p with
+and v_genArm = (fun (st : t_GenSt) (alt : Vuna_dIr_dModel.t_IrAlt) -> ((fun envPats -> ((Base_dCommon.v_bind ((v_genIr st) (Vuna_dIr_dModel.v_irAltBodyOf alt))) (fun (p : (Codegen_dOcaml_dModel.t_OTerm, t_GenSt) B_dData_dPair.t_Pair) -> (match p with
   | { B_dData_dPair.f_Pair_first = dtb__325; B_dData_dPair.f_Pair_second = dtb__326 } -> ((fun nd_uscrut8 -> (match nd_uscrut8 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__327) -> (match dtb__327 with
-  | { B_dData_dPair.f_Pair_first = dtb__328; B_dData_dPair.f_Pair_second = dtb__329 } -> (match ((Ir_dModel.v_irSharedRecordFieldsOf dtb__328) ((dtb__326).f_GenSt_gsShared).Ir_dModel.f_IrShared_irSharedRecordFields) with
+  | { B_dData_dPair.f_Pair_first = dtb__328; B_dData_dPair.f_Pair_second = dtb__329 } -> (match ((Vuna_dIr_dModel.v_irSharedRecordFieldsOf dtb__328) ((dtb__326).f_GenSt_gsShared).Vuna_dIr_dModel.f_IrShared_irSharedRecordFields) with
   | B_dData_dList.C_List_Nil -> ((fun r -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = { B_dData_dPair.f_Pair_first = (Codegen_dOcaml_dModel.C_OPat_OPCtorPat ((B_dData_dPair.v_firstOf r), ((B_dData_dList.v_map (fun _heta0 -> (Codegen_dOcaml_dModel.C_OPat_OPVar (_heta0)))) envPats))); B_dData_dPair.f_Pair_second = dtb__325 }; B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf r) }))) (((v_genCtorRef dtb__326) dtb__328) dtb__329))
   | dtb__330 -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = { B_dData_dPair.f_Pair_first = (Codegen_dOcaml_dModel.C_OPat_OPRecordPat (((((v_recordPatFields dtb__326) dtb__328) dtb__330) envPats))); B_dData_dPair.f_Pair_second = dtb__325 }; B_dData_dPair.f_Pair_second = ((v_gsDepOfFamily dtb__326) dtb__328) }))
 )
@@ -732,11 +732,11 @@ and v_genArm = (fun (st : t_GenSt) (alt : Ir_dModel.t_IrAlt) -> ((fun envPats ->
   | _ -> failwith "DT: impossible branch"
 ))
   | _ -> failwith "DT: impossible branch"
-)) (Ir_dModel.v_irAltCtorOf alt))
+)) (Vuna_dIr_dModel.v_irAltCtorOf alt))
   | _ -> failwith "DT: impossible branch"
-)))) ((B_dData_dList.v_filter (fun (n : string) -> (n <> ""))) ((B_dData_dList.v_map v_nonErasedBinderText) (Ir_dModel.v_irAltBindersOf alt)))))
+)))) ((B_dData_dList.v_filter (fun (n : string) -> (n <> ""))) ((B_dData_dList.v_map v_nonErasedBinderText) (Vuna_dIr_dModel.v_irAltBindersOf alt)))))
 # 2149 "Vuna/Compiler/Codegen/Term.vuna"
-and v_genNatBranches = (fun (st : t_GenSt) (fresh : int) (zero : Ir_dModel.t_IrAlt B_dData_dMaybe.t_Maybe) (succ : Ir_dModel.t_IrAlt B_dData_dMaybe.t_Maybe) (catch : Ir_dModel.t_IrAlt B_dData_dMaybe.t_Maybe) -> ((fun sc -> ((fun predExpr -> ((fun impossible -> ((Base_dCommon.v_bind (((v_genNatAlt st) zero) B_dData_dMaybe.C_Maybe_Nothing)) (fun (pz : (Codegen_dOcaml_dModel.t_OTerm B_dData_dMaybe.t_Maybe, t_GenSt) B_dData_dPair.t_Pair) -> (match pz with
+and v_genNatBranches = (fun (st : t_GenSt) (fresh : int) (zero : Vuna_dIr_dModel.t_IrAlt B_dData_dMaybe.t_Maybe) (succ : Vuna_dIr_dModel.t_IrAlt B_dData_dMaybe.t_Maybe) (catch : Vuna_dIr_dModel.t_IrAlt B_dData_dMaybe.t_Maybe) -> ((fun sc -> ((fun predExpr -> ((fun impossible -> ((Base_dCommon.v_bind (((v_genNatAlt st) zero) B_dData_dMaybe.C_Maybe_Nothing)) (fun (pz : (Codegen_dOcaml_dModel.t_OTerm B_dData_dMaybe.t_Maybe, t_GenSt) B_dData_dPair.t_Pair) -> (match pz with
   | { B_dData_dPair.f_Pair_first = dtb__333; B_dData_dPair.f_Pair_second = dtb__334 } -> ((Base_dCommon.v_bind (((v_genNatAlt dtb__334) succ) (B_dData_dMaybe.C_Maybe_Just (predExpr)))) (fun (ps : (Codegen_dOcaml_dModel.t_OTerm B_dData_dMaybe.t_Maybe, t_GenSt) B_dData_dPair.t_Pair) -> (match ps with
   | { B_dData_dPair.f_Pair_first = dtb__335; B_dData_dPair.f_Pair_second = dtb__336 } -> ((Base_dCommon.v_bind (((v_genNatAlt dtb__336) catch) (B_dData_dMaybe.C_Maybe_Just (sc)))) (fun (pc : (Codegen_dOcaml_dModel.t_OTerm B_dData_dMaybe.t_Maybe, t_GenSt) B_dData_dPair.t_Pair) -> (match pc with
   | { B_dData_dPair.f_Pair_first = dtb__337; B_dData_dPair.f_Pair_second = dtb__338 } -> ((fun trueTerm -> ((fun falseTerm -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (Codegen_dOcaml_dModel.C_OTerm_OIf ((Codegen_dOcaml_dModel.C_OTerm_ORaw ((String.concat "" ["("; sc; " = 0)"]))), trueTerm, falseTerm)); B_dData_dPair.f_Pair_second = dtb__338 }))) (match succ with
@@ -763,9 +763,9 @@ and v_genNatBranches = (fun (st : t_GenSt) (fresh : int) (zero : Ir_dModel.t_IrA
   | _ -> failwith "DT: impossible branch"
 )))) (Codegen_dOcaml_dModel.C_OTerm_ORaw ("(failwith \"DT: impossible branch\")")))) (String.concat "" ["("; sc; " - 1)"]))) ("dtnat__" ^ (bi_strFromInt fresh))))
 # 2191 "Vuna/Compiler/Codegen/Term.vuna"
-and v_genNatAlt = (fun (mc0 : t_GenSt) (mc1 : Ir_dModel.t_IrAlt B_dData_dMaybe.t_Maybe) (mc2 : string B_dData_dMaybe.t_Maybe) -> (match mc1 with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__343) -> ((Base_dCommon.v_bind ((v_genIr mc0) (Ir_dModel.v_irAltBodyOf dtb__343))) (fun (p : (Codegen_dOcaml_dModel.t_OTerm, t_GenSt) B_dData_dPair.t_Pair) -> (match p with
-  | { B_dData_dPair.f_Pair_first = dtb__344; B_dData_dPair.f_Pair_second = dtb__345 } -> (match ((B_dData_dList.v_filter (fun (n : string) -> (n <> ""))) ((B_dData_dList.v_map v_nonErasedBinderText) (Ir_dModel.v_irAltBindersOf dtb__343))) with
+and v_genNatAlt = (fun (mc0 : t_GenSt) (mc1 : Vuna_dIr_dModel.t_IrAlt B_dData_dMaybe.t_Maybe) (mc2 : string B_dData_dMaybe.t_Maybe) -> (match mc1 with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__343) -> ((Base_dCommon.v_bind ((v_genIr mc0) (Vuna_dIr_dModel.v_irAltBodyOf dtb__343))) (fun (p : (Codegen_dOcaml_dModel.t_OTerm, t_GenSt) B_dData_dPair.t_Pair) -> (match p with
+  | { B_dData_dPair.f_Pair_first = dtb__344; B_dData_dPair.f_Pair_second = dtb__345 } -> (match ((B_dData_dList.v_filter (fun (n : string) -> (n <> ""))) ((B_dData_dList.v_map v_nonErasedBinderText) (Vuna_dIr_dModel.v_irAltBindersOf dtb__343))) with
   | B_dData_dList.C_List_Nil -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (B_dData_dMaybe.C_Maybe_Just (dtb__344)); B_dData_dPair.f_Pair_second = dtb__345 }))
   | B_dData_dList.C_List__x58__x58_ (dtb__346, dtb__347) -> (match dtb__347 with
   | B_dData_dList.C_List_Nil -> (match mc2 with
@@ -784,36 +784,36 @@ and v_genNatAlt = (fun (mc0 : t_GenSt) (mc1 : Ir_dModel.t_IrAlt B_dData_dMaybe.t
 ))
 
 # 2255 "Vuna/Compiler/Codegen/Term.vuna"
-let v_bindKeywordOf = (fun (group : Ir_dModel.t_IrGroup) -> (if (Ir_dModel.v_irGroupIsRec group) then "let rec " else "let "))
+let v_bindKeywordOf = (fun (group : Vuna_dIr_dModel.t_IrGroup) -> (if (Vuna_dIr_dModel.v_irGroupIsRec group) then "let rec " else "let "))
 
 # 2265 "Vuna/Compiler/Codegen/Term.vuna"
-let v_lineDirectiveOf = (fun (st : t_GenSt) (d : Ir_dModel.t_IrDef) -> (match (Ir_dModel.v_irDefSpan d) with
+let v_lineDirectiveOf = (fun (st : t_GenSt) (d : Vuna_dIr_dModel.t_IrDef) -> (match (Vuna_dIr_dModel.v_irDefSpan d) with
   | B_dData_dMaybe.C_Maybe_Nothing -> ""
   | B_dData_dMaybe.C_Maybe_Just (dtb__349) -> ((fun file -> (if (file = "") then "" else (String.concat "" ["# "; (bi_strFromInt (Base_dSource.v_spanStartLine dtb__349)); " "; (Codegen_dDecl.v_ocamlString file); "\n"]))) ((st).f_GenSt_gsNormPath (dtb__349).Base_dSource.f_Span_spanFile))
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 2288 "Vuna/Compiler/Codegen/Term.vuna"
-let v_genDef = (fun (st : t_GenSt) (d : Ir_dModel.t_IrDef) -> ((fun nd_uscrut2 -> (match nd_uscrut2 with
-  | B_dData_dMaybe.C_Maybe_Nothing -> (match (Ir_dModel.v_irDefBody d) with
-  | B_dData_dMaybe.C_Maybe_Nothing -> (Base_dDiag.C_Check_ErrC ((((Base_dDiag.v_withContext (Ir_dModel.v_irDefSpan d)) (Ir_dModel.v_irDefName d)) (((((Base_dDiag.v_diagNoLoc Base_dDiag.C_Severity_SevError) Base_dDiag.C_Phase_PhInternal) Base_dDiag.C_Category_CatInternal) "IC_AxiomRuntime") "axiom reached runtime code generation (partition must erase it)"))))
+let v_genDef = (fun (st : t_GenSt) (d : Vuna_dIr_dModel.t_IrDef) -> ((fun nd_uscrut2 -> (match nd_uscrut2 with
+  | B_dData_dMaybe.C_Maybe_Nothing -> (match (Vuna_dIr_dModel.v_irDefBody d) with
+  | B_dData_dMaybe.C_Maybe_Nothing -> (Base_dDiag.C_Check_ErrC ((((Base_dDiag.v_withContext (Vuna_dIr_dModel.v_irDefSpan d)) (Vuna_dIr_dModel.v_irDefName d)) (((((Base_dDiag.v_diagNoLoc Base_dDiag.C_Severity_SevError) Base_dDiag.C_Phase_PhInternal) Base_dDiag.C_Category_CatInternal) "IC_AxiomRuntime") "axiom reached runtime code generation (partition must erase it)"))))
   | B_dData_dMaybe.C_Maybe_Just (dtb__350) -> ((Base_dCommon.v_bind ((v_genIr st) dtb__350)) (fun (p : (Codegen_dOcaml_dModel.t_OTerm, t_GenSt) B_dData_dPair.t_Pair) -> (match p with
-  | { B_dData_dPair.f_Pair_first = dtb__351; B_dData_dPair.f_Pair_second = dtb__352 } -> ((fun guarded -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (Codegen_dOcaml_dModel.C_ODef_ODValue ((Codegen_dDecl.v_valueName (Ir_dModel.v_irDefName d)), guarded)); B_dData_dPair.f_Pair_second = dtb__352 }))) (if (Ir_dModel.v_irDefInitGuard d) then (Codegen_dOcaml_dModel.C_OTerm_ORaw ((String.concat "" ["(try "; (Codegen_dOcaml_dRender.v_renderTerm dtb__351); " with e -> dt_report_exn e (Printexc.get_raw_backtrace ()); exit 2)"]))) else dtb__351))
+  | { B_dData_dPair.f_Pair_first = dtb__351; B_dData_dPair.f_Pair_second = dtb__352 } -> ((fun guarded -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (Codegen_dOcaml_dModel.C_ODef_ODValue ((Codegen_dDecl.v_valueName (Vuna_dIr_dModel.v_irDefName d)), guarded)); B_dData_dPair.f_Pair_second = dtb__352 }))) (if (Vuna_dIr_dModel.v_irDefInitGuard d) then (Codegen_dOcaml_dModel.C_OTerm_ORaw ((String.concat "" ["(try "; (Codegen_dOcaml_dRender.v_renderTerm dtb__351); " with e -> dt_report_exn e (Printexc.get_raw_backtrace ()); exit 2)"]))) else dtb__351))
   | _ -> failwith "DT: impossible branch"
 )))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Just (dtb__353) -> (match dtb__353 with
-  | { B_dData_dPair.f_Pair_first = dtb__354; B_dData_dPair.f_Pair_second = dtb__355 } -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (Codegen_dOcaml_dModel.C_ODef_ODExternal ((Codegen_dDecl.v_valueName (Ir_dModel.v_irDefName d)), ((Codegen_dDecl.v_irTyText (st).f_GenSt_gsQual) dtb__354), dtb__355)); B_dData_dPair.f_Pair_second = st }))
+  | { B_dData_dPair.f_Pair_first = dtb__354; B_dData_dPair.f_Pair_second = dtb__355 } -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (Codegen_dOcaml_dModel.C_ODef_ODExternal ((Codegen_dDecl.v_valueName (Vuna_dIr_dModel.v_irDefName d)), ((Codegen_dDecl.v_irTyText (st).f_GenSt_gsQual) dtb__354), dtb__355)); B_dData_dPair.f_Pair_second = st }))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
-)) (Ir_dModel.v_irDefExtern d)))
+)) (Vuna_dIr_dModel.v_irDefExtern d)))
 
 # 2274 "Vuna/Compiler/Codegen/Term.vuna"
-let rec v_genGroupDefs = (fun (mc0 : t_GenSt) (mc1 : Ir_dModel.t_IrDef B_dData_dList.t_List) -> (match mc1 with
+let rec v_genGroupDefs = (fun (mc0 : t_GenSt) (mc1 : Vuna_dIr_dModel.t_IrDef B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__356, dtb__357) -> ((Base_dCommon.v_bind ((v_genDef mc0) dtb__356)) (fun (p : (Codegen_dOcaml_dModel.t_ODef, t_GenSt) B_dData_dPair.t_Pair) -> (match p with
-  | { B_dData_dPair.f_Pair_first = dtb__358; B_dData_dPair.f_Pair_second = dtb__359 } -> ((Base_dCommon.v_bind ((v_genGroupDefs dtb__359) dtb__357)) (fun (q : ((Ir_dModel.t_IrDef, Codegen_dOcaml_dModel.t_ODef) B_dData_dPair.t_Pair B_dData_dList.t_List, t_GenSt) B_dData_dPair.t_Pair) -> (match q with
+  | { B_dData_dPair.f_Pair_first = dtb__358; B_dData_dPair.f_Pair_second = dtb__359 } -> ((Base_dCommon.v_bind ((v_genGroupDefs dtb__359) dtb__357)) (fun (q : ((Vuna_dIr_dModel.t_IrDef, Codegen_dOcaml_dModel.t_ODef) B_dData_dPair.t_Pair B_dData_dList.t_List, t_GenSt) B_dData_dPair.t_Pair) -> (match q with
   | { B_dData_dPair.f_Pair_first = dtb__360; B_dData_dPair.f_Pair_second = dtb__361 } -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = dtb__356; B_dData_dPair.f_Pair_second = dtb__358 }, dtb__360)); B_dData_dPair.f_Pair_second = dtb__361 }))
   | _ -> failwith "DT: impossible branch"
 )))
@@ -831,42 +831,42 @@ let v_renderDefOf = (fun (mc0 : Codegen_dOcaml_dModel.t_ODef) -> (match mc0 with
 ))
 
 # 2249 "Vuna/Compiler/Codegen/Term.vuna"
-let v_bindFirstOf = (fun (mc0 : t_GenSt) (mc1 : Ir_dModel.t_IrGroup) (mc2 : (Ir_dModel.t_IrDef, Codegen_dOcaml_dModel.t_ODef) B_dData_dPair.t_Pair) -> (match mc2 with
+let v_bindFirstOf = (fun (mc0 : t_GenSt) (mc1 : Vuna_dIr_dModel.t_IrGroup) (mc2 : (Vuna_dIr_dModel.t_IrDef, Codegen_dOcaml_dModel.t_ODef) B_dData_dPair.t_Pair) -> (match mc2 with
   | { B_dData_dPair.f_Pair_first = dtb__367; B_dData_dPair.f_Pair_second = dtb__368 } -> (String.concat "" [((v_lineDirectiveOf mc0) dtb__367); (v_bindKeywordOf mc1); (v_renderDefOf dtb__368)])
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 2252 "Vuna/Compiler/Codegen/Term.vuna"
-let v_bindAndOf = (fun (mc0 : t_GenSt) (mc1 : (Ir_dModel.t_IrDef, Codegen_dOcaml_dModel.t_ODef) B_dData_dPair.t_Pair) -> (match mc1 with
+let v_bindAndOf = (fun (mc0 : t_GenSt) (mc1 : (Vuna_dIr_dModel.t_IrDef, Codegen_dOcaml_dModel.t_ODef) B_dData_dPair.t_Pair) -> (match mc1 with
   | { B_dData_dPair.f_Pair_first = dtb__369; B_dData_dPair.f_Pair_second = dtb__370 } -> (String.concat "" [((v_lineDirectiveOf mc0) dtb__369); "and "; (v_renderDefOf dtb__370)])
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 2244 "Vuna/Compiler/Codegen/Term.vuna"
-let v_bindGroupOf = (fun (mc0 : t_GenSt) (mc1 : Ir_dModel.t_IrGroup) (mc2 : (Ir_dModel.t_IrDef, Codegen_dOcaml_dModel.t_ODef) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc2 with
+let v_bindGroupOf = (fun (mc0 : t_GenSt) (mc1 : Vuna_dIr_dModel.t_IrGroup) (mc2 : (Vuna_dIr_dModel.t_IrDef, Codegen_dOcaml_dModel.t_ODef) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc2 with
   | B_dData_dList.C_List__x58__x58_ (dtb__371, dtb__372) -> ((Codegen_dOcaml_dRender.v_joinWith "\n") (B_dData_dList.C_List__x58__x58_ ((((v_bindFirstOf mc0) mc1) dtb__371), ((B_dData_dList.v_map (v_bindAndOf mc0)) dtb__372))))
   | B_dData_dList.C_List_Nil -> ""
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 2227 "Vuna/Compiler/Codegen/Term.vuna"
-let v_genGroup = (fun (st : t_GenSt) (group : Ir_dModel.t_IrGroup) -> ((Base_dCommon.v_bind ((v_genGroupDefs st) (Ir_dModel.v_irGroupDefs group))) (fun (p : ((Ir_dModel.t_IrDef, Codegen_dOcaml_dModel.t_ODef) B_dData_dPair.t_Pair B_dData_dList.t_List, t_GenSt) B_dData_dPair.t_Pair) -> (match p with
+let v_genGroup = (fun (st : t_GenSt) (group : Vuna_dIr_dModel.t_IrGroup) -> ((Base_dCommon.v_bind ((v_genGroupDefs st) (Vuna_dIr_dModel.v_irGroupDefs group))) (fun (p : ((Vuna_dIr_dModel.t_IrDef, Codegen_dOcaml_dModel.t_ODef) B_dData_dPair.t_Pair B_dData_dList.t_List, t_GenSt) B_dData_dPair.t_Pair) -> (match p with
   | { B_dData_dPair.f_Pair_first = dtb__373; B_dData_dPair.f_Pair_second = dtb__374 } -> ((fun nd_uscrut7 -> (match nd_uscrut7 with
   | B_dData_dList.C_List__x58__x58_ (dtb__375, dtb__376) -> (match dtb__376 with
-  | B_dData_dList.C_List_Nil -> (match (Ir_dModel.v_irDefExtern dtb__375) with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__377) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = ((Codegen_dOcaml_dRender.v_joinWith "\n") ((B_dData_dList.v_map (fun (p : (Ir_dModel.t_IrDef, Codegen_dOcaml_dModel.t_ODef) B_dData_dPair.t_Pair) -> (v_renderDefOf (B_dData_dPair.v_secondOf p)))) dtb__373)); B_dData_dPair.f_Pair_second = dtb__374 }))
+  | B_dData_dList.C_List_Nil -> (match (Vuna_dIr_dModel.v_irDefExtern dtb__375) with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__377) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = ((Codegen_dOcaml_dRender.v_joinWith "\n") ((B_dData_dList.v_map (fun (p : (Vuna_dIr_dModel.t_IrDef, Codegen_dOcaml_dModel.t_ODef) B_dData_dPair.t_Pair) -> (v_renderDefOf (B_dData_dPair.v_secondOf p)))) dtb__373)); B_dData_dPair.f_Pair_second = dtb__374 }))
   | B_dData_dMaybe.C_Maybe_Nothing -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (((v_bindGroupOf dtb__374) group) dtb__373); B_dData_dPair.f_Pair_second = dtb__374 }))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (((v_bindGroupOf dtb__374) group) dtb__373); B_dData_dPair.f_Pair_second = dtb__374 }))
 )
   | _ -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (((v_bindGroupOf dtb__374) group) dtb__373); B_dData_dPair.f_Pair_second = dtb__374 }))
-)) (Ir_dModel.v_irGroupDefs group))
+)) (Vuna_dIr_dModel.v_irGroupDefs group))
   | _ -> failwith "DT: impossible branch"
 ))))
 
 # 2213 "Vuna/Compiler/Codegen/Term.vuna"
-let rec v_genGroups = (fun (mc0 : t_GenSt) (mc1 : Ir_dModel.t_IrGroup B_dData_dList.t_List) -> (match mc1 with
+let rec v_genGroups = (fun (mc0 : t_GenSt) (mc1 : Vuna_dIr_dModel.t_IrGroup B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__378, dtb__379) -> ((Base_dCommon.v_bind ((v_genGroup mc0) dtb__378)) (fun (p : (string, t_GenSt) B_dData_dPair.t_Pair) -> (match p with
   | { B_dData_dPair.f_Pair_first = dtb__380; B_dData_dPair.f_Pair_second = dtb__381 } -> ((Base_dCommon.v_bind ((v_genGroups dtb__381) dtb__379)) (fun (q : (string B_dData_dList.t_List, t_GenSt) B_dData_dPair.t_Pair) -> (match q with
   | { B_dData_dPair.f_Pair_first = dtb__382; B_dData_dPair.f_Pair_second = dtb__383 } -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (B_dData_dList.C_List__x58__x58_ (dtb__380, dtb__382)); B_dData_dPair.f_Pair_second = dtb__383 }))
@@ -889,14 +889,14 @@ let rec v_foldHandlers = (fun (mc0 : t_GenSt) (mc1 : string) (mc2 : string B_dDa
 let v_hookText = (fun (showText : string) (body : string) (printResult : bool) -> ((fun action -> (String.concat "" ["\nlet () =\n  Printexc.record_backtrace true;\n  try "; action; "\n  with e -> dt_report_exn e (Printexc.get_raw_backtrace ()); exit 2\n"])) (if printResult then (String.concat "" ["print_endline ("; showText; " ("; body; "))"]) else (String.concat "" ["ignore ("; body; ")"]))))
 
 # 2321 "Vuna/Compiler/Codegen/Term.vuna"
-let v_genEntryHook = (fun (st : t_GenSt) (entry : Ir_dModel.t_IrEntry) (printResult : bool) -> ((Base_dCommon.v_bind ((v_genIr st) (Ir_dModel.v_irEntryShowOf entry))) (fun (sp : (Codegen_dOcaml_dModel.t_OTerm, t_GenSt) B_dData_dPair.t_Pair) -> (match sp with
-  | { B_dData_dPair.f_Pair_first = dtb__386; B_dData_dPair.f_Pair_second = dtb__387 } -> (if (Ir_dModel.v_irEntryIsActionOf entry) then (match (Ir_dModel.v_irEntryRunMainOf entry) with
+let v_genEntryHook = (fun (st : t_GenSt) (entry : Vuna_dIr_dModel.t_IrEntry) (printResult : bool) -> ((Base_dCommon.v_bind ((v_genIr st) (Vuna_dIr_dModel.v_irEntryShowOf entry))) (fun (sp : (Codegen_dOcaml_dModel.t_OTerm, t_GenSt) B_dData_dPair.t_Pair) -> (match sp with
+  | { B_dData_dPair.f_Pair_first = dtb__386; B_dData_dPair.f_Pair_second = dtb__387 } -> (if (Vuna_dIr_dModel.v_irEntryIsActionOf entry) then (match (Vuna_dIr_dModel.v_irEntryRunMainOf entry) with
   | B_dData_dMaybe.C_Maybe_Nothing -> (Base_dDiag.v_icInternal "action entry has no runMain")
-  | B_dData_dMaybe.C_Maybe_Just (dtb__388) -> ((fun mainP -> ((fun st2 -> ((fun runP -> ((fun st3 -> (match (((v_foldHandlers st3) (B_dData_dPair.v_firstOf mainP)) (Ir_dModel.v_irEntryHandlersOf entry)) with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__388) -> ((fun mainP -> ((fun st2 -> ((fun runP -> ((fun st3 -> (match (((v_foldHandlers st3) (B_dData_dPair.v_firstOf mainP)) (Vuna_dIr_dModel.v_irEntryHandlersOf entry)) with
   | { B_dData_dPair.f_Pair_first = dtb__389; B_dData_dPair.f_Pair_second = dtb__390 } -> ((fun body -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (((v_hookText (Codegen_dOcaml_dRender.v_renderTerm dtb__386)) body) printResult); B_dData_dPair.f_Pair_second = (dtb__390).f_GenSt_gsDeps }))) (String.concat "" ["dtp_sched_main (fun () -> "; (B_dData_dPair.v_firstOf runP); " "; dtb__389; ")"]))
   | _ -> failwith "DT: impossible branch"
-)) (B_dData_dPair.v_secondOf runP))) ((v_genValueRef st2) dtb__388))) (B_dData_dPair.v_secondOf mainP))) ((v_genValueRef dtb__387) (Ir_dModel.v_irEntryMainOf entry)))
+)) (B_dData_dPair.v_secondOf runP))) ((v_genValueRef st2) dtb__388))) (B_dData_dPair.v_secondOf mainP))) ((v_genValueRef dtb__387) (Vuna_dIr_dModel.v_irEntryMainOf entry)))
   | _ -> failwith "DT: impossible branch"
-) else ((fun mainP -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (((v_hookText (Codegen_dOcaml_dRender.v_renderTerm dtb__386)) (B_dData_dPair.v_firstOf mainP)) printResult); B_dData_dPair.f_Pair_second = ((B_dData_dPair.v_secondOf mainP)).f_GenSt_gsDeps }))) ((v_genValueRef dtb__387) (Ir_dModel.v_irEntryMainOf entry))))
+) else ((fun mainP -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (((v_hookText (Codegen_dOcaml_dRender.v_renderTerm dtb__386)) (B_dData_dPair.v_firstOf mainP)) printResult); B_dData_dPair.f_Pair_second = ((B_dData_dPair.v_secondOf mainP)).f_GenSt_gsDeps }))) ((v_genValueRef dtb__387) (Vuna_dIr_dModel.v_irEntryMainOf entry))))
   | _ -> failwith "DT: impossible branch"
 ))))

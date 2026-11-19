@@ -1,7 +1,33 @@
 let () = Printexc.record_backtrace true
 open Vuna_runtime
-# 43 "app/Main.vuna"
-let v_main = (try (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (B_dEffect_dArgs.v_argsGetArgs "default")) (fun args -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((((((((Driver_dCompilerCli.v_runCompilerCli "default") "default") "default") "default") "default") "default") "default") args)) (fun code -> ((B_dEffect_dExit.v_exitWith "default") code))))) with e -> dt_report_exn e (Printexc.get_raw_backtrace ()); exit 2)
+# 55 "app/Main.vuna"
+let rec v_withoutPerfFlag = (fun (mc0 : string B_dData_dList.t_List) -> (match mc0 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__0, dtb__1) -> (if (dtb__0 = "--debug-perf") then (v_withoutPerfFlag dtb__1) else (B_dData_dList.C_List__x58__x58_ (dtb__0, (v_withoutPerfFlag dtb__1))))
+  | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
+  | _ -> failwith "DT: impossible branch"
+))
+
+# 75 "app/Main.vuna"
+let v_sampleWanted = (fun (nEnv : string) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((B_dEffect_dEnv.v_envGetEnv nEnv) "VUNA_OBS_SAMPLE")) (fun mode -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) (if (mode = "") then false else true)))))
+
+# 83 "app/Main.vuna"
+let v_describeText = (String.concat "" ["vuna-plugin\t1\tcli\tcompiler\n"; "cmd\tcheck\tcore\tyes\tyes\t\230\163\128\230\159\165\229\140\133\230\136\150\230\150\135\228\187\182\231\154\132\231\177\187\229\158\139\tvuna check (<file.vuna> | <package-dir>)\n"; "cmd\tbuild\tcore\tyes\tyes\t\230\158\132\229\187\186\229\140\133\231\154\132\229\143\175\230\137\167\232\161\140\229\133\165\229\143\163\tvuna build [--out DIR] [--package NAME] [--target ocaml|wasm|native] [DIR]\n"; "cmd\tcompile\tcore\tyes\tyes\t\231\188\150\232\175\145\229\140\133\230\136\150\229\133\165\229\143\163\230\150\135\228\187\182\229\136\176\232\190\147\229\135\186\231\155\174\229\189\149\tvuna compile (<entry.vuna> | <package-dir>) <out-dir>\n"])
+
+# 61 "app/Main.vuna"
+let v_runMain = (fun (args : string B_dData_dList.t_List) -> ((fun nd_uscrut1 -> (match nd_uscrut1 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__2, dtb__3) -> (if (dtb__2 = "--vuna-describe") then (match dtb__3 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__4, dtb__5) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((B_dEffect_dFs.v_fsWriteFileAtomic "default") dtb__4) v_describeText)) (fun _u -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) 0)))
+  | B_dData_dList.C_List_Nil -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((B_dEffect_dConsole.v_consolePrint "default") v_describeText)) (fun _u -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) 0)))
+  | _ -> failwith "DT: impossible branch"
+) else (if (dtb__2 = "--vuna-describe") then (match dtb__3 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__6, dtb__7) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((B_dEffect_dFs.v_fsWriteFileAtomic "default") dtb__6) v_describeText)) (fun _u -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) 0)))
+  | _ -> ((((((((Driver_dCompilerCli.v_runCompilerCli "default") "default") "default") "default") "default") "default") "default") args)
+) else ((((((((Driver_dCompilerCli.v_runCompilerCli "default") "default") "default") "default") "default") "default") "default") args)))
+  | _ -> ((((((((Driver_dCompilerCli.v_runCompilerCli "default") "default") "default") "default") "default") "default") "default") args)
+)) args))
+
+# 44 "app/Main.vuna"
+let v_main = (try (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (v_sampleWanted "default")) (fun sample -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (if sample then ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) ((B_dData_dObs.v_obsSampleStart "") 0)) else ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) 0))) (fun _u -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (B_dEffect_dArgs.v_argsGetArgs "default")) (fun args -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (v_runMain (v_withoutPerfFlag args))) (fun code -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (if sample then ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) (B_dData_dObs.v_obsSampleStop 0)) else ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) 0))) (fun _u -> ((B_dEffect_dExit.v_exitWith "default") code))))))))))) with e -> dt_report_exn e (Printexc.get_raw_backtrace ()); exit 2)
 let () =
   Printexc.record_backtrace true;
   try print_endline (string_of_int (dtp_sched_main (fun () -> B_dEffect_dCore.v_runMain (B_dEffect_dProcess.v_runProcessErrorHost (B_dEffect_dFs.v_runFsErrorHost (B_dEffect_dArgs.v_runArgsHost (B_dEffect_dExit.v_runExitHost (B_dEffect_dProcess.v_runProcessHost (B_dEffect_dEnv.v_runEnvHost (B_dEffect_dClock.v_runClockHost (B_dEffect_dConsole.v_runConsoleHost (B_dEffect_dFs.v_runFsHost v_main))))))))))))

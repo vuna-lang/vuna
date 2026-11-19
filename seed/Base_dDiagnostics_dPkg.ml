@@ -72,7 +72,7 @@ let v_pkgTemplate = (fun (mc0 : t_PkgErr) -> (match mc0 with
   | C_PkgErr_LayerCycle (dtb__66) -> "layer dependency cycle: <0>"
   | C_PkgErr_LayerKeyMustBeQuoted (dtb__67) -> "layer \"<0>\" must be a quoted key in [layers] (\"<0>\" = [...])"
   | C_PkgErr_LayerInvalidTarget (dtb__68) -> "invalid layer target \"<0>\" (expected a module prefix such as Vuna.Compiler.Base)"
-  | C_PkgErr_LayerInvalidName (dtb__69) -> "invalid layer name \"<0>\" (expected a module prefix such as Vuna.Compiler.Ir)"
+  | C_PkgErr_LayerInvalidName (dtb__69) -> "invalid layer name \"<0>\" (expected a module prefix such as Vuna.Ir)"
   | C_PkgErr_UnknownSection (dtb__70) -> "unknown section [<0>]"
   | C_PkgErr_UnexpectedTopLevelKey (dtb__71) -> "unexpected top-level key \"<0>\""
   | C_PkgErr_TomlSyntax (dtb__72) -> "<0>"

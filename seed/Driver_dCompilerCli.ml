@@ -848,4 +848,4 @@ let v_runCompilerCliFor = (fun (nFs : string) (nConsole : string) (nClock : stri
 ))) (B_dData_dPair.v_secondOf strippedLang))) (v_stripContinueOnError kept))) (v_stripDenyWarnings (B_dData_dPair.v_firstOf strippedMax)))) (v_stripMaxErrors (B_dData_dPair.v_firstOf strippedLang)))) (v_stripLang (B_dData_dPair.v_firstOf stripped)))) (v_stripDiagFormat args)))))))
 
 # 66 "Vuna/Compiler/Driver/CompilerCli.vuna"
-let v_runCompilerCli = (fun (nFs : string) (nConsole : string) (nClock : string) (nEnv : string) (nProcess : string) (nExit : string) (nArgs : string) (args : string B_dData_dList.t_List) -> (((((((((v_runCompilerCliFor nFs) nConsole) nClock) nEnv) nProcess) nExit) nArgs) "vuna-compiler") args))
+let v_runCompilerCli = (fun (nFs : string) (nConsole : string) (nClock : string) (nEnv : string) (nProcess : string) (nExit : string) (nArgs : string) (args : string B_dData_dList.t_List) -> (((((((((v_runCompilerCliFor nFs) nConsole) nClock) nEnv) nProcess) nExit) nArgs) "vuna") args))

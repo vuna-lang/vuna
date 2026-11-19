@@ -131,3 +131,9 @@ let v_decMaybe = (fun fp (fuel : int) (c : t_Cur) -> (if (fuel <= 0) then B_dDat
 
 # 214 "Vuna/Compiler/Base/Bytes.vuna"
 let v_decPair = (fun fa fb (fuel : int) (c : t_Cur) -> ((v_thenPair ((fa (fuel - 1)) c)) (fun x (b1 : t_Cur) -> ((v_thenPair ((fb (fuel - 1)) b1)) (fun y (b2 : t_Cur) -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = { B_dData_dPair.f_Pair_first = x; B_dData_dPair.f_Pair_second = y }; B_dData_dPair.f_Pair_second = b2 })))))))
+
+# 223 "Vuna/Compiler/Base/Bytes.vuna"
+let v_decListHead = (fun (fuel : int) (c : t_Cur) -> (if (fuel <= 0) then B_dData_dMaybe.C_Maybe_Nothing else ((fun nd_uscrut2 -> (match nd_uscrut2 with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__19) -> (if (dtb__19 = 91) then ((v_thenPair ((((v_decNumStop (fuel - 1)) 58) 0) (v_curSkip c))) (fun (n : int) (b : t_Cur) -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = n; B_dData_dPair.f_Pair_second = b })))) else B_dData_dMaybe.C_Maybe_Nothing)
+  | _ -> B_dData_dMaybe.C_Maybe_Nothing
+)) (v_curChar c))))

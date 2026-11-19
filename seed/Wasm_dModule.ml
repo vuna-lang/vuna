@@ -1,45 +1,45 @@
 open Vuna_runtime
 type t_WasmOutcome = C_WasmOutcome_WasmOk of (Wasm_dModel.t_WasmModule) | C_WasmOutcome_WasmRejected of (Wasm_dModel.t_WasmErr)
-and t_GenState = { f_GenState_gsFams : Wasm_dTypes.t_WasmFam B_dData_dList.t_List; f_GenState_gsFamTbl : (string, Wasm_dTypes.t_WasmFam) B_dContainer_dHashMap.t_HashMap; f_GenState_gsDefs : Ir_dModel.t_IrDef B_dData_dList.t_List; f_GenState_gsDefTbl : (string, Ir_dModel.t_IrDef) B_dContainer_dHashMap.t_HashMap; f_GenState_gsPool : (string, (int, int) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List; f_GenState_gsPoolTbl : (string, (int, int) B_dData_dPair.t_Pair) B_dContainer_dHashMap.t_HashMap; f_GenState_gsFuncs : Wasm_dModel.t_WatFunc B_dData_dList.t_List; f_GenState_gsLocals : (string, Wasm_dModel.t_WatValTy) B_dData_dPair.t_Pair B_dData_dList.t_List; f_GenState_gsNextLocal : int; f_GenState_gsScope : (Ir_dModel.t_IrBinder, string) B_dData_dPair.t_Pair B_dData_dList.t_List; f_GenState_gsConsts : Wasm_dRuntime.t_RtConsts; f_GenState_gsElems : string B_dData_dList.t_List; f_GenState_gsTail : bool; f_GenState_gsNextLam : int }
+and t_GenState = { f_GenState_gsFams : Wasm_dTypes.t_WasmFam B_dData_dList.t_List; f_GenState_gsFamTbl : (string, Wasm_dTypes.t_WasmFam) B_dContainer_dHashMap.t_HashMap; f_GenState_gsDefs : Vuna_dIr_dModel.t_IrDef B_dData_dList.t_List; f_GenState_gsDefTbl : (string, Vuna_dIr_dModel.t_IrDef) B_dContainer_dHashMap.t_HashMap; f_GenState_gsPool : (string, (int, int) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List; f_GenState_gsPoolTbl : (string, (int, int) B_dData_dPair.t_Pair) B_dContainer_dHashMap.t_HashMap; f_GenState_gsFuncs : Wasm_dModel.t_WatFunc B_dData_dList.t_List; f_GenState_gsLocals : (string, Wasm_dModel.t_WatValTy) B_dData_dPair.t_Pair B_dData_dList.t_List; f_GenState_gsNextLocal : int; f_GenState_gsScope : (Vuna_dIr_dModel.t_IrBinder, string) B_dData_dPair.t_Pair B_dData_dList.t_List; f_GenState_gsConsts : Wasm_dRuntime.t_RtConsts; f_GenState_gsElems : string B_dData_dList.t_List; f_GenState_gsTail : bool; f_GenState_gsNextLam : int }
 
 # 58 "Vuna/Compiler/Wasm/Module.vuna"
-let v_binderNameOf = (fun (mc0 : Ir_dModel.t_IrBinder) -> (match mc0 with
-  | { Ir_dModel.f_IrBinder_irBinderName = dtb__0; Ir_dModel.f_IrBinder_irBinderErased = dtb__1; Ir_dModel.f_IrBinder_irBinderTy = dtb__2 } -> dtb__0
+let v_binderNameOf = (fun (mc0 : Vuna_dIr_dModel.t_IrBinder) -> (match mc0 with
+  | { Vuna_dIr_dModel.f_IrBinder_irBinderName = dtb__0; Vuna_dIr_dModel.f_IrBinder_irBinderErased = dtb__1; Vuna_dIr_dModel.f_IrBinder_irBinderTy = dtb__2 } -> dtb__0
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 61 "Vuna/Compiler/Wasm/Module.vuna"
-let v_binderErasedOf = (fun (mc0 : Ir_dModel.t_IrBinder) -> (match mc0 with
-  | { Ir_dModel.f_IrBinder_irBinderName = dtb__3; Ir_dModel.f_IrBinder_irBinderErased = dtb__4; Ir_dModel.f_IrBinder_irBinderTy = dtb__5 } -> dtb__4
+let v_binderErasedOf = (fun (mc0 : Vuna_dIr_dModel.t_IrBinder) -> (match mc0 with
+  | { Vuna_dIr_dModel.f_IrBinder_irBinderName = dtb__3; Vuna_dIr_dModel.f_IrBinder_irBinderErased = dtb__4; Vuna_dIr_dModel.f_IrBinder_irBinderTy = dtb__5 } -> dtb__4
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 64 "Vuna/Compiler/Wasm/Module.vuna"
-let v_bNameEq = (fun (mc0 : Ir_dModel.t_IrBName) (mc1 : Ir_dModel.t_IrBName) -> (match mc0 with
-  | Ir_dModel.C_IrBName_IrBWild -> (match mc1 with
-  | Ir_dModel.C_IrBName_IrBWild -> true
+let v_bNameEq = (fun (mc0 : Vuna_dIr_dModel.t_IrBName) (mc1 : Vuna_dIr_dModel.t_IrBName) -> (match mc0 with
+  | Vuna_dIr_dModel.C_IrBName_IrBWild -> (match mc1 with
+  | Vuna_dIr_dModel.C_IrBName_IrBWild -> true
   | _ -> false
 )
-  | Ir_dModel.C_IrBName_IrBNat (dtb__6) -> (match mc1 with
-  | Ir_dModel.C_IrBName_IrBNat (dtb__7) -> (dtb__6 = dtb__7)
+  | Vuna_dIr_dModel.C_IrBName_IrBNat (dtb__6) -> (match mc1 with
+  | Vuna_dIr_dModel.C_IrBName_IrBNat (dtb__7) -> (dtb__6 = dtb__7)
   | _ -> false
 )
-  | Ir_dModel.C_IrBName_IrBArm (dtb__8) -> (match mc1 with
-  | Ir_dModel.C_IrBName_IrBArm (dtb__9) -> (dtb__8 = dtb__9)
+  | Vuna_dIr_dModel.C_IrBName_IrBArm (dtb__8) -> (match mc1 with
+  | Vuna_dIr_dModel.C_IrBName_IrBArm (dtb__9) -> (dtb__8 = dtb__9)
   | _ -> false
 )
-  | Ir_dModel.C_IrBName_IrBUser (dtb__10) -> (match mc1 with
-  | Ir_dModel.C_IrBName_IrBUser (dtb__11) -> (dtb__10 = dtb__11)
+  | Vuna_dIr_dModel.C_IrBName_IrBUser (dtb__10) -> (match mc1 with
+  | Vuna_dIr_dModel.C_IrBName_IrBUser (dtb__11) -> (dtb__10 = dtb__11)
   | _ -> false
 )
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 82 "Vuna/Compiler/Wasm/Module.vuna"
-let v_binderEq = (fun (a : Ir_dModel.t_IrBinder) (b : Ir_dModel.t_IrBinder) -> (if ((v_bNameEq (v_binderNameOf a)) (v_binderNameOf b)) then (((B_dTrait_dEq.v__x61__x61_ B_dTrait_dEq.v_Eq_uBase_uData_uBool_uBool) (v_binderErasedOf a)) (v_binderErasedOf b)) else false))
+let v_binderEq = (fun (a : Vuna_dIr_dModel.t_IrBinder) (b : Vuna_dIr_dModel.t_IrBinder) -> (if ((v_bNameEq (v_binderNameOf a)) (v_binderNameOf b)) then (((B_dTrait_dEq.v__x61__x61_ B_dTrait_dEq.v_Eq_uBase_uData_uBool_uBool) (v_binderErasedOf a)) (v_binderErasedOf b)) else false))
 
 # 85 "Vuna/Compiler/Wasm/Module.vuna"
-let rec v_lookupBinder = (fun (mc0 : Ir_dModel.t_IrBinder) (mc1 : (Ir_dModel.t_IrBinder, string) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc1 with
+let rec v_lookupBinder = (fun (mc0 : Vuna_dIr_dModel.t_IrBinder) (mc1 : (Vuna_dIr_dModel.t_IrBinder, string) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__12, dtb__13) -> (if ((v_binderEq mc0) (B_dData_dPair.v_firstOf dtb__12)) then (B_dData_dMaybe.C_Maybe_Just ((B_dData_dPair.v_secondOf dtb__12))) else ((v_lookupBinder mc0) dtb__13))
   | B_dData_dList.C_List_Nil -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
@@ -49,13 +49,13 @@ let rec v_lookupBinder = (fun (mc0 : Ir_dModel.t_IrBinder) (mc1 : (Ir_dModel.t_I
 let v_freshLocal = (fun (st : t_GenState) (ty : Wasm_dModel.t_WatValTy) -> ((fun name -> ((fun st1 -> { B_dData_dPair.f_Pair_first = name; B_dData_dPair.f_Pair_second = st1 }) { st with f_GenState_gsLocals = ((B_dData_dList.v_append (st).f_GenState_gsLocals) (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = name; B_dData_dPair.f_Pair_second = ty }, B_dData_dList.C_List_Nil))); f_GenState_gsNextLocal = ((st).f_GenState_gsNextLocal + 1) })) ("$l" ^ (bi_strFromInt (st).f_GenState_gsNextLocal))))
 
 # 97 "Vuna/Compiler/Wasm/Module.vuna"
-let v_pushBinder = (fun (b : Ir_dModel.t_IrBinder) (l : string) (st : t_GenState) -> { st with f_GenState_gsScope = (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = b; B_dData_dPair.f_Pair_second = l }, (st).f_GenState_gsScope)) })
+let v_pushBinder = (fun (b : Vuna_dIr_dModel.t_IrBinder) (l : string) (st : t_GenState) -> { st with f_GenState_gsScope = (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = b; B_dData_dPair.f_Pair_second = l }, (st).f_GenState_gsScope)) })
 
 # 101 "Vuna/Compiler/Wasm/Module.vuna"
-let v_restoreScope = (fun (scope : (Ir_dModel.t_IrBinder, string) B_dData_dPair.t_Pair B_dData_dList.t_List) (st : t_GenState) -> { st with f_GenState_gsScope = scope })
+let v_restoreScope = (fun (scope : (Vuna_dIr_dModel.t_IrBinder, string) B_dData_dPair.t_Pair B_dData_dList.t_List) (st : t_GenState) -> { st with f_GenState_gsScope = scope })
 
 # 105 "Vuna/Compiler/Wasm/Module.vuna"
-let v_runtimeBinders = (fun (bs : Ir_dModel.t_IrBinder B_dData_dList.t_List) -> ((B_dData_dList.v_filter (fun (b : Ir_dModel.t_IrBinder) -> (B_dData_dBool.v_not (v_binderErasedOf b)))) bs))
+let v_runtimeBinders = (fun (bs : Vuna_dIr_dModel.t_IrBinder B_dData_dList.t_List) -> ((B_dData_dList.v_filter (fun (b : Vuna_dIr_dModel.t_IrBinder) -> (B_dData_dBool.v_not (v_binderErasedOf b)))) bs))
 
 # 109 "Vuna/Compiler/Wasm/Module.vuna"
 let v_beginFuncScope = (fun (st : t_GenState) -> ((fun st1 -> { st1 with f_GenState_gsNextLocal = 0; f_GenState_gsScope = B_dData_dList.C_List_Nil; f_GenState_gsTail = false }) { st with f_GenState_gsLocals = B_dData_dList.C_List_Nil }))
@@ -67,7 +67,7 @@ let v_noTail = (fun (st : t_GenState) -> { st with f_GenState_gsTail = false })
 let v_withTail = (fun (b : bool) (st : t_GenState) -> { st with f_GenState_gsTail = b })
 
 # 122 "Vuna/Compiler/Wasm/Module.vuna"
-let v_endFuncScope = (fun (st : t_GenState) (locals : (string, Wasm_dModel.t_WatValTy) B_dData_dPair.t_Pair B_dData_dList.t_List) (next : int) (scope : (Ir_dModel.t_IrBinder, string) B_dData_dPair.t_Pair B_dData_dList.t_List) -> ((fun st1 -> { st1 with f_GenState_gsNextLocal = next; f_GenState_gsScope = scope }) { st with f_GenState_gsLocals = locals }))
+let v_endFuncScope = (fun (st : t_GenState) (locals : (string, Wasm_dModel.t_WatValTy) B_dData_dPair.t_Pair B_dData_dList.t_List) (next : int) (scope : (Vuna_dIr_dModel.t_IrBinder, string) B_dData_dPair.t_Pair B_dData_dList.t_List) -> ((fun st1 -> { st1 with f_GenState_gsNextLocal = next; f_GenState_gsScope = scope }) { st with f_GenState_gsLocals = locals }))
 
 # 143 "Vuna/Compiler/Wasm/Module.vuna"
 let rec v_memLocalName = (fun (mc0 : string) (mc1 : (string, Wasm_dModel.t_WatValTy) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc1 with
@@ -93,7 +93,7 @@ let rec v_memFuncName = (fun (mc0 : string) (mc1 : Wasm_dModel.t_WatFunc B_dData
 let v_mergeFuncs = (fun (a : Wasm_dModel.t_WatFunc B_dData_dList.t_List) (b : Wasm_dModel.t_WatFunc B_dData_dList.t_List) -> ((B_dData_dList.v_append a) ((B_dData_dList.v_filter (fun (f : Wasm_dModel.t_WatFunc) -> (B_dData_dBool.v_not ((v_memFuncName (v_watFuncNameOfF f)) a)))) b)))
 
 # 160 "Vuna/Compiler/Wasm/Module.vuna"
-let rec v_zipIdx = (fun (mc0 : int) (mc1 : Ir_dModel.t_IrBinder B_dData_dList.t_List) -> (match mc1 with
+let rec v_zipIdx = (fun (mc0 : int) (mc1 : Vuna_dIr_dModel.t_IrBinder B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__18, dtb__19) -> (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = dtb__18; B_dData_dPair.f_Pair_second = ("$p" ^ (bi_strFromInt mc0)) }, ((v_zipIdx (mc0 + 1)) dtb__19)))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
@@ -150,27 +150,27 @@ let v_genFloatLit = (fun (st : t_GenState) (raw : string) -> ((fun nd_uscrut2 ->
 )) ((B_dData_dString.v_split ".") raw)))
 
 # 237 "Vuna/Compiler/Wasm/Module.vuna"
-let rec v_applyAllIr = (fun (mc0 : Ir_dModel.t_Ir) (mc1 : Ir_dModel.t_Ir B_dData_dList.t_List) -> (match mc1 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__30, dtb__31) -> ((v_applyAllIr (Ir_dModel.C_Ir_IrApp (B_dData_dMaybe.C_Maybe_Nothing, mc0, dtb__30))) dtb__31)
+let rec v_applyAllIr = (fun (mc0 : Vuna_dIr_dModel.t_Ir) (mc1 : Vuna_dIr_dModel.t_Ir B_dData_dList.t_List) -> (match mc1 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__30, dtb__31) -> ((v_applyAllIr (Vuna_dIr_dModel.C_Ir_IrApp (B_dData_dMaybe.C_Maybe_Nothing, mc0, dtb__30))) dtb__31)
   | B_dData_dList.C_List_Nil -> mc0
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 241 "Vuna/Compiler/Wasm/Module.vuna"
-let v_effUnitBinder = { Ir_dModel.f_IrBinder_irBinderName = (Ir_dModel.C_IrBName_IrBUser ("effUnitArg")); Ir_dModel.f_IrBinder_irBinderErased = false; Ir_dModel.f_IrBinder_irBinderTy = B_dData_dMaybe.C_Maybe_Nothing }
+let v_effUnitBinder = { Vuna_dIr_dModel.f_IrBinder_irBinderName = (Vuna_dIr_dModel.C_IrBName_IrBUser ("effUnitArg")); Vuna_dIr_dModel.f_IrBinder_irBinderErased = false; Vuna_dIr_dModel.f_IrBinder_irBinderTy = B_dData_dMaybe.C_Maybe_Nothing }
 
 # 244 "Vuna/Compiler/Wasm/Module.vuna"
-let v_effArgBinders = (fun (n : int) -> ((B_dData_dList.v_map (fun (i : int) -> { Ir_dModel.f_IrBinder_irBinderName = (Ir_dModel.C_IrBName_IrBUser (("effArg" ^ (bi_strFromInt i)))); Ir_dModel.f_IrBinder_irBinderErased = false; Ir_dModel.f_IrBinder_irBinderTy = B_dData_dMaybe.C_Maybe_Nothing })) ((B_dData_dList.v_range 0) n)))
+let v_effArgBinders = (fun (n : int) -> ((B_dData_dList.v_map (fun (i : int) -> { Vuna_dIr_dModel.f_IrBinder_irBinderName = (Vuna_dIr_dModel.C_IrBName_IrBUser (("effArg" ^ (bi_strFromInt i)))); Vuna_dIr_dModel.f_IrBinder_irBinderErased = false; Vuna_dIr_dModel.f_IrBinder_irBinderTy = B_dData_dMaybe.C_Maybe_Nothing })) ((B_dData_dList.v_range 0) n)))
 
 # 293 "Vuna/Compiler/Wasm/Module.vuna"
-let v_genVar = (fun (st : t_GenState) (b : Ir_dModel.t_IrBinder) -> (match ((v_lookupBinder b) (st).f_GenState_gsScope) with
+let v_genVar = (fun (st : t_GenState) (b : Vuna_dIr_dModel.t_IrBinder) -> (match ((v_lookupBinder b) (st).f_GenState_gsScope) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__32) -> (B_dData_dResult.C_Result_Ok ({ B_dData_dPair.f_Pair_first = (B_dData_dList.C_List__x58__x58_ ((Wasm_dInstr.C_Instr_ILocalGet (dtb__32)), B_dData_dList.C_List_Nil)); B_dData_dPair.f_Pair_second = st }))
   | B_dData_dMaybe.C_Maybe_Nothing -> (B_dData_dResult.C_Result_Err ("unbound runtime binder in wasm codegen"))
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 331 "Vuna/Compiler/Wasm/Module.vuna"
-let v_etaBinders = (fun (n : int) -> ((B_dData_dList.v_map (fun (i : int) -> { Ir_dModel.f_IrBinder_irBinderName = (Ir_dModel.C_IrBName_IrBUser (("__eta" ^ (bi_strFromInt i)))); Ir_dModel.f_IrBinder_irBinderErased = false; Ir_dModel.f_IrBinder_irBinderTy = B_dData_dMaybe.C_Maybe_Nothing })) ((B_dData_dList.v_range 0) n)))
+let v_etaBinders = (fun (n : int) -> ((B_dData_dList.v_map (fun (i : int) -> { Vuna_dIr_dModel.f_IrBinder_irBinderName = (Vuna_dIr_dModel.C_IrBName_IrBUser (("__eta" ^ (bi_strFromInt i)))); Vuna_dIr_dModel.f_IrBinder_irBinderErased = false; Vuna_dIr_dModel.f_IrBinder_irBinderTy = B_dData_dMaybe.C_Maybe_Nothing })) ((B_dData_dList.v_range 0) n)))
 
 # 334 "Vuna/Compiler/Wasm/Module.vuna"
 let rec v_splitAt = (fun (n : int) xs -> (if (n <= 0) then { B_dData_dPair.f_Pair_first = B_dData_dList.C_List_Nil; B_dData_dPair.f_Pair_second = xs } else (match xs with
@@ -200,14 +200,14 @@ let rec v_listLengthB = (fun mc0 -> (match mc0 with
 ))
 
 # 481 "Vuna/Compiler/Wasm/Module.vuna"
-let rec v_capGetInstrs = (fun (mc0 : (Ir_dModel.t_IrBinder, string) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc0 with
+let rec v_capGetInstrs = (fun (mc0 : (Vuna_dIr_dModel.t_IrBinder, string) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__40, dtb__41) -> (B_dData_dList.C_List__x58__x58_ ((Wasm_dInstr.C_Instr_ILocalGet ((B_dData_dPair.v_secondOf dtb__40))), (v_capGetInstrs dtb__41)))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 486 "Vuna/Compiler/Wasm/Module.vuna"
-let rec v_bindEnvLocals = (fun (mc0 : t_GenState) (mc1 : (Ir_dModel.t_IrBinder, string) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc2 : int) -> (match mc1 with
+let rec v_bindEnvLocals = (fun (mc0 : t_GenState) (mc1 : (Vuna_dIr_dModel.t_IrBinder, string) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc2 : int) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__42, dtb__43) -> (match dtb__42 with
   | { B_dData_dPair.f_Pair_first = dtb__44; B_dData_dPair.f_Pair_second = dtb__45 } -> (match ((v_freshLocal mc0) Wasm_dModel.C_WatValTy_WvAnyRef) with
   | { B_dData_dPair.f_Pair_first = dtb__46; B_dData_dPair.f_Pair_second = dtb__47 } -> (match (((v_bindEnvLocals (((v_pushBinder dtb__44) dtb__46) dtb__47)) dtb__43) (mc2 + 1)) with
@@ -249,7 +249,7 @@ let v_famOrFail = (fun (st : t_GenState) (family : string) -> (match ((((B_dCont
 let rec v_refNullN = (fun (n : int) -> (if (n <= 0) then B_dData_dList.C_List_Nil else (B_dData_dList.C_List__x58__x58_ (Wasm_dInstr.C_Instr_IRefNull, (v_refNullN (n - 1))))))
 
 # 873 "Vuna/Compiler/Wasm/Module.vuna"
-let rec v_lookupFieldIr = (fun (mc0 : string) (mc1 : (string, Ir_dModel.t_Ir) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc1 with
+let rec v_lookupFieldIr = (fun (mc0 : string) (mc1 : (string, Vuna_dIr_dModel.t_Ir) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__51, dtb__52) -> (if ((B_dData_dPair.v_firstOf dtb__51) = mc0) then (B_dData_dMaybe.C_Maybe_Just ((B_dData_dPair.v_secondOf dtb__51))) else ((v_lookupFieldIr mc0) dtb__52))
   | B_dData_dList.C_List_Nil -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
@@ -292,8 +292,8 @@ let v_restoreTail = (fun (mc0 : t_GenState) (mc1 : (Wasm_dInstr.t_Instr B_dData_
 ))
 
 # 930 "Vuna/Compiler/Wasm/Module.vuna"
-let rec v_caseFamilyOfAlts = (fun (mc0 : Ir_dModel.t_IrAlt B_dData_dList.t_List) -> (match mc0 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__59, dtb__60) -> (match (Ir_dModel.v_irAltCtorOf dtb__59) with
+let rec v_caseFamilyOfAlts = (fun (mc0 : Vuna_dIr_dModel.t_IrAlt B_dData_dList.t_List) -> (match mc0 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__59, dtb__60) -> (match (Vuna_dIr_dModel.v_irAltCtorOf dtb__59) with
   | B_dData_dMaybe.C_Maybe_Nothing -> (v_caseFamilyOfAlts dtb__60)
   | B_dData_dMaybe.C_Maybe_Just (dtb__61) -> (B_dData_dMaybe.C_Maybe_Just ((B_dData_dPair.v_firstOf dtb__61)))
   | _ -> failwith "DT: impossible branch"
@@ -303,16 +303,16 @@ let rec v_caseFamilyOfAlts = (fun (mc0 : Ir_dModel.t_IrAlt B_dData_dList.t_List)
 ))
 
 # 926 "Vuna/Compiler/Wasm/Module.vuna"
-let v_caseFamilyOf = (fun (mc0 : Ir_dModel.t_IrTy B_dData_dMaybe.t_Maybe) (mc1 : Ir_dModel.t_IrAlt B_dData_dList.t_List) -> (match mc0 with
+let v_caseFamilyOf = (fun (mc0 : Vuna_dIr_dModel.t_IrTy B_dData_dMaybe.t_Maybe) (mc1 : Vuna_dIr_dModel.t_IrAlt B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__62) -> (match dtb__62 with
-  | Ir_dModel.C_IrTy_IrTyData (dtb__63, dtb__64) -> (B_dData_dMaybe.C_Maybe_Just (dtb__63))
+  | Vuna_dIr_dModel.C_IrTy_IrTyData (dtb__63, dtb__64) -> (B_dData_dMaybe.C_Maybe_Just (dtb__63))
   | _ -> (v_caseFamilyOfAlts mc1)
 )
   | _ -> (v_caseFamilyOfAlts mc1)
 ))
 
 # 953 "Vuna/Compiler/Wasm/Module.vuna"
-let v_bindScrutBinder = (fun (bs : Ir_dModel.t_IrBinder B_dData_dList.t_List) (scLocal : string) (st : t_GenState) -> ((fun nd_uscrut3 -> (match nd_uscrut3 with
+let v_bindScrutBinder = (fun (bs : Vuna_dIr_dModel.t_IrBinder B_dData_dList.t_List) (scLocal : string) (st : t_GenState) -> ((fun nd_uscrut3 -> (match nd_uscrut3 with
   | B_dData_dList.C_List__x58__x58_ (dtb__65, dtb__66) -> (match dtb__66 with
   | B_dData_dList.C_List_Nil -> (match ((v_freshLocal st) Wasm_dModel.C_WatValTy_WvAnyRef) with
   | { B_dData_dPair.f_Pair_first = dtb__67; B_dData_dPair.f_Pair_second = dtb__68 } -> (B_dData_dResult.C_Result_Ok ({ B_dData_dPair.f_Pair_first = (B_dData_dList.C_List__x58__x58_ ((Wasm_dInstr.C_Instr_ILocalGet (scLocal)), (B_dData_dList.C_List__x58__x58_ ((Wasm_dInstr.C_Instr_ILocalSet (dtb__67)), B_dData_dList.C_List_Nil)))); B_dData_dPair.f_Pair_second = (((v_pushBinder dtb__65) dtb__67) dtb__68) }))
@@ -325,7 +325,7 @@ let v_bindScrutBinder = (fun (bs : Ir_dModel.t_IrBinder B_dData_dList.t_List) (s
 )) (v_runtimeBinders bs)))
 
 # 1002 "Vuna/Compiler/Wasm/Module.vuna"
-let rec v_bindFields = (fun (mc0 : int) (mc1 : t_GenState) (mc2 : string) (mc3 : string) (mc4 : Ir_dModel.t_IrBinder B_dData_dList.t_List) (mc5 : int) -> (match mc4 with
+let rec v_bindFields = (fun (mc0 : int) (mc1 : t_GenState) (mc2 : string) (mc3 : string) (mc4 : Vuna_dIr_dModel.t_IrBinder B_dData_dList.t_List) (mc5 : int) -> (match mc4 with
   | B_dData_dList.C_List__x58__x58_ (dtb__69, dtb__70) -> (if (mc0 <= 0) then (B_dData_dResult.C_Result_Err ("wasm codegen fuel exhausted")) else (match ((v_freshLocal mc1) Wasm_dModel.C_WatValTy_WvAnyRef) with
   | { B_dData_dPair.f_Pair_first = dtb__71; B_dData_dPair.f_Pair_second = dtb__72 } -> (match ((((((v_bindFields (mc0 - 1)) (((v_pushBinder dtb__69) dtb__71) dtb__72)) mc2) mc3) dtb__70) (mc5 + 1)) with
   | B_dData_dResult.C_Result_Err (dtb__73) -> (B_dData_dResult.C_Result_Err (dtb__73))
@@ -339,41 +339,41 @@ let rec v_bindFields = (fun (mc0 : int) (mc1 : t_GenState) (mc2 : string) (mc3 :
 ))
 
 # 248 "Vuna/Compiler/Wasm/Module.vuna"
-let rec v_genEffThunk = (fun (fuel : int) (st : t_GenState) (family : string) (ctor : string) (arity : int) (prim : Ir_dModel.t_Ir) -> (if (fuel <= 0) then (B_dData_dResult.C_Result_Err ("wasm codegen fuel exhausted")) else ((fun bs -> ((fun applied -> ((fun mkEff -> ((fun outer -> (((v_genExpr (fuel - 1)) st) outer)) (if (arity <= 0) then mkEff else (Ir_dModel.C_Ir_IrLam (bs, B_dData_dMaybe.C_Maybe_Nothing, mkEff))))) (Ir_dModel.C_Ir_IrCtor (family, ctor, B_dData_dMaybe.C_Maybe_Nothing, (B_dData_dList.C_List__x58__x58_ ((Ir_dModel.C_Ir_IrLam ((B_dData_dList.C_List__x58__x58_ (v_effUnitBinder, B_dData_dList.C_List_Nil)), B_dData_dMaybe.C_Maybe_Nothing, applied)), B_dData_dList.C_List_Nil)))))) ((v_applyAllIr prim) ((B_dData_dList.v_map (fun (b : Ir_dModel.t_IrBinder) -> (Ir_dModel.C_Ir_IrVar (b)))) bs)))) (v_effArgBinders arity))))
+let rec v_genEffThunk = (fun (fuel : int) (st : t_GenState) (family : string) (ctor : string) (arity : int) (prim : Vuna_dIr_dModel.t_Ir) -> (if (fuel <= 0) then (B_dData_dResult.C_Result_Err ("wasm codegen fuel exhausted")) else ((fun bs -> ((fun applied -> ((fun mkEff -> ((fun outer -> (((v_genExpr (fuel - 1)) st) outer)) (if (arity <= 0) then mkEff else (Vuna_dIr_dModel.C_Ir_IrLam (bs, B_dData_dMaybe.C_Maybe_Nothing, mkEff))))) (Vuna_dIr_dModel.C_Ir_IrCtor (family, ctor, B_dData_dMaybe.C_Maybe_Nothing, (B_dData_dList.C_List__x58__x58_ ((Vuna_dIr_dModel.C_Ir_IrLam ((B_dData_dList.C_List__x58__x58_ (v_effUnitBinder, B_dData_dList.C_List_Nil)), B_dData_dMaybe.C_Maybe_Nothing, applied)), B_dData_dList.C_List_Nil)))))) ((v_applyAllIr prim) ((B_dData_dList.v_map (fun (b : Vuna_dIr_dModel.t_IrBinder) -> (Vuna_dIr_dModel.C_Ir_IrVar (b)))) bs)))) (v_effArgBinders arity))))
 # 260 "Vuna/Compiler/Wasm/Module.vuna"
-and v_genExpr = (fun (fuel : int) (st : t_GenState) (ir : Ir_dModel.t_Ir) -> (if (fuel <= 0) then (B_dData_dResult.C_Result_Err ("wasm codegen fuel exhausted")) else (match ir with
-  | Ir_dModel.C_Ir_IrVar (dtb__75) -> ((v_genVar st) dtb__75)
-  | Ir_dModel.C_Ir_IrGlobal (dtb__76) -> (((v_genGlobalRef (fuel - 1)) st) dtb__76)
-  | Ir_dModel.C_Ir_IrInt (dtb__77) -> (B_dData_dResult.C_Result_Ok ({ B_dData_dPair.f_Pair_first = (B_dData_dList.C_List__x58__x58_ ((Wasm_dInstr.C_Instr_IConstI64 (dtb__77)), (B_dData_dList.C_List__x58__x58_ ((Wasm_dInstr.C_Instr_IStructNew ("$int")), B_dData_dList.C_List_Nil)))); B_dData_dPair.f_Pair_second = st }))
-  | Ir_dModel.C_Ir_IrBool (dtb__78) -> (B_dData_dResult.C_Result_Ok ({ B_dData_dPair.f_Pair_first = (v_boolI31 dtb__78); B_dData_dPair.f_Pair_second = st }))
-  | Ir_dModel.C_Ir_IrStr (dtb__79) -> ((v_genStr st) dtb__79)
-  | Ir_dModel.C_Ir_IrCast (dtb__80, dtb__81, dtb__82) -> (((v_genExpr (fuel - 1)) st) dtb__82)
-  | Ir_dModel.C_Ir_IrLet (dtb__83, dtb__84, dtb__85) -> (((((v_genLet (fuel - 1)) st) dtb__83) dtb__84) dtb__85)
-  | Ir_dModel.C_Ir_IrIf (dtb__86, dtb__87, dtb__88) -> (((((v_genIf (fuel - 1)) st) dtb__86) dtb__87) dtb__88)
-  | Ir_dModel.C_Ir_IrRtApp (dtb__89, dtb__90) -> ((((v_genRtApp (fuel - 1)) st) dtb__89) dtb__90)
-  | Ir_dModel.C_Ir_IrApp (dtb__91, dtb__92, dtb__93) -> (((v_genApp (fuel - 1)) st) ir)
-  | Ir_dModel.C_Ir_IrNatCase (dtb__94, dtb__95, dtb__96, dtb__97, dtb__98) -> ((((((v_genNatCase (fuel - 1)) st) dtb__94) dtb__96) dtb__97) dtb__98)
-  | Ir_dModel.C_Ir_IrConcatMany (dtb__99) -> (((v_genConcatMany (fuel - 1)) st) dtb__99)
-  | Ir_dModel.C_Ir_IrCtor (dtb__100, dtb__101, dtb__102, dtb__103) -> (((((v_genCtor (fuel - 1)) st) dtb__100) dtb__101) dtb__103)
-  | Ir_dModel.C_Ir_IrRecord (dtb__104, dtb__105, dtb__106) -> ((((v_genRecord (fuel - 1)) st) dtb__104) dtb__106)
-  | Ir_dModel.C_Ir_IrProj (dtb__107, dtb__108, dtb__109, dtb__110) -> (((((v_genProj (fuel - 1)) st) dtb__107) dtb__108) dtb__109)
-  | Ir_dModel.C_Ir_IrRecUpd (dtb__111, dtb__112, dtb__113, dtb__114) -> (((((v_genRecUpd (fuel - 1)) st) dtb__111) dtb__112) dtb__113)
-  | Ir_dModel.C_Ir_IrCase (dtb__115, dtb__116, dtb__117, dtb__118) -> (((((v_genCase (fuel - 1)) st) dtb__115) dtb__117) dtb__118)
-  | Ir_dModel.C_Ir_IrLam (dtb__119, dtb__120, dtb__121) -> (((((v_genLamValue (fuel - 1)) st) dtb__119) dtb__120) dtb__121)
-  | Ir_dModel.C_Ir_IrEffThunk (dtb__122, dtb__123, dtb__124, dtb__125, dtb__126) -> ((((((v_genEffThunk (fuel - 1)) st) dtb__122) dtb__123) dtb__125) dtb__126)
-  | Ir_dModel.C_Ir_IrEffBind (dtb__127, dtb__128, dtb__129) -> (B_dData_dResult.C_Result_Err ("wasm target: effect bindings are not supported yet"))
-  | Ir_dModel.C_Ir_IrFloatLit (dtb__130) -> ((v_genFloatLit st) dtb__130)
-  | Ir_dModel.C_Ir_IrTail (dtb__131) -> (match (((v_genExpr (fuel - 1)) ((v_withTail true) st)) dtb__131) with
+and v_genExpr = (fun (fuel : int) (st : t_GenState) (ir : Vuna_dIr_dModel.t_Ir) -> (if (fuel <= 0) then (B_dData_dResult.C_Result_Err ("wasm codegen fuel exhausted")) else (match ir with
+  | Vuna_dIr_dModel.C_Ir_IrVar (dtb__75) -> ((v_genVar st) dtb__75)
+  | Vuna_dIr_dModel.C_Ir_IrGlobal (dtb__76) -> (((v_genGlobalRef (fuel - 1)) st) dtb__76)
+  | Vuna_dIr_dModel.C_Ir_IrInt (dtb__77) -> (B_dData_dResult.C_Result_Ok ({ B_dData_dPair.f_Pair_first = (B_dData_dList.C_List__x58__x58_ ((Wasm_dInstr.C_Instr_IConstI64 (dtb__77)), (B_dData_dList.C_List__x58__x58_ ((Wasm_dInstr.C_Instr_IStructNew ("$int")), B_dData_dList.C_List_Nil)))); B_dData_dPair.f_Pair_second = st }))
+  | Vuna_dIr_dModel.C_Ir_IrBool (dtb__78) -> (B_dData_dResult.C_Result_Ok ({ B_dData_dPair.f_Pair_first = (v_boolI31 dtb__78); B_dData_dPair.f_Pair_second = st }))
+  | Vuna_dIr_dModel.C_Ir_IrStr (dtb__79) -> ((v_genStr st) dtb__79)
+  | Vuna_dIr_dModel.C_Ir_IrCast (dtb__80, dtb__81, dtb__82) -> (((v_genExpr (fuel - 1)) st) dtb__82)
+  | Vuna_dIr_dModel.C_Ir_IrLet (dtb__83, dtb__84, dtb__85) -> (((((v_genLet (fuel - 1)) st) dtb__83) dtb__84) dtb__85)
+  | Vuna_dIr_dModel.C_Ir_IrIf (dtb__86, dtb__87, dtb__88) -> (((((v_genIf (fuel - 1)) st) dtb__86) dtb__87) dtb__88)
+  | Vuna_dIr_dModel.C_Ir_IrRtApp (dtb__89, dtb__90) -> ((((v_genRtApp (fuel - 1)) st) dtb__89) dtb__90)
+  | Vuna_dIr_dModel.C_Ir_IrApp (dtb__91, dtb__92, dtb__93) -> (((v_genApp (fuel - 1)) st) ir)
+  | Vuna_dIr_dModel.C_Ir_IrNatCase (dtb__94, dtb__95, dtb__96, dtb__97, dtb__98) -> ((((((v_genNatCase (fuel - 1)) st) dtb__94) dtb__96) dtb__97) dtb__98)
+  | Vuna_dIr_dModel.C_Ir_IrConcatMany (dtb__99) -> (((v_genConcatMany (fuel - 1)) st) dtb__99)
+  | Vuna_dIr_dModel.C_Ir_IrCtor (dtb__100, dtb__101, dtb__102, dtb__103) -> (((((v_genCtor (fuel - 1)) st) dtb__100) dtb__101) dtb__103)
+  | Vuna_dIr_dModel.C_Ir_IrRecord (dtb__104, dtb__105, dtb__106) -> ((((v_genRecord (fuel - 1)) st) dtb__104) dtb__106)
+  | Vuna_dIr_dModel.C_Ir_IrProj (dtb__107, dtb__108, dtb__109, dtb__110) -> (((((v_genProj (fuel - 1)) st) dtb__107) dtb__108) dtb__109)
+  | Vuna_dIr_dModel.C_Ir_IrRecUpd (dtb__111, dtb__112, dtb__113, dtb__114) -> (((((v_genRecUpd (fuel - 1)) st) dtb__111) dtb__112) dtb__113)
+  | Vuna_dIr_dModel.C_Ir_IrCase (dtb__115, dtb__116, dtb__117, dtb__118) -> (((((v_genCase (fuel - 1)) st) dtb__115) dtb__117) dtb__118)
+  | Vuna_dIr_dModel.C_Ir_IrLam (dtb__119, dtb__120, dtb__121) -> (((((v_genLamValue (fuel - 1)) st) dtb__119) dtb__120) dtb__121)
+  | Vuna_dIr_dModel.C_Ir_IrEffThunk (dtb__122, dtb__123, dtb__124, dtb__125, dtb__126) -> ((((((v_genEffThunk (fuel - 1)) st) dtb__122) dtb__123) dtb__125) dtb__126)
+  | Vuna_dIr_dModel.C_Ir_IrEffBind (dtb__127, dtb__128, dtb__129) -> (B_dData_dResult.C_Result_Err ("wasm target: effect bindings are not supported yet"))
+  | Vuna_dIr_dModel.C_Ir_IrFloatLit (dtb__130) -> ((v_genFloatLit st) dtb__130)
+  | Vuna_dIr_dModel.C_Ir_IrTail (dtb__131) -> (match (((v_genExpr (fuel - 1)) ((v_withTail true) st)) dtb__131) with
   | B_dData_dResult.C_Result_Err (dtb__132) -> (B_dData_dResult.C_Result_Err (dtb__132))
   | B_dData_dResult.C_Result_Ok (dtb__133) -> (B_dData_dResult.C_Result_Ok ({ B_dData_dPair.f_Pair_first = (B_dData_dPair.v_firstOf dtb__133); B_dData_dPair.f_Pair_second = ((v_withTail (st).f_GenState_gsTail) (B_dData_dPair.v_secondOf dtb__133)) }))
   | _ -> failwith "DT: impossible branch"
 )
-  | Ir_dModel.C_Ir_IrRt (dtb__134) -> (((v_genRtValue (fuel - 1)) st) dtb__134)
+  | Vuna_dIr_dModel.C_Ir_IrRt (dtb__134) -> (((v_genRtValue (fuel - 1)) st) dtb__134)
   | _ -> failwith "DT: impossible branch"
 )))
 # 300 "Vuna/Compiler/Wasm/Module.vuna"
 and v_genGlobalRef = (fun (fuel : int) (st : t_GenState) (name : string) -> (if (fuel <= 0) then (B_dData_dResult.C_Result_Err ("wasm codegen fuel exhausted")) else (match ((((B_dContainer_dHashMap.v_lookup B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) name) (st).f_GenState_gsDefTbl) with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__135) -> (if ((Ir_dModel.v_irDefArity dtb__135) = 0) then (B_dData_dResult.C_Result_Ok ({ B_dData_dPair.f_Pair_first = (B_dData_dList.C_List__x58__x58_ ((Wasm_dInstr.C_Instr_IGlobalGet ((Wasm_dTypes.v_watGlobalNameOf name))), B_dData_dList.C_List_Nil)); B_dData_dPair.f_Pair_second = st })) else ((fun bs -> ((fun bodyIr -> (((((v_genLamValue (fuel - 1)) st) bs) B_dData_dMaybe.C_Maybe_Nothing) bodyIr)) ((v_applyAllIr (Ir_dModel.C_Ir_IrGlobal (name))) ((B_dData_dList.v_map (fun (b : Ir_dModel.t_IrBinder) -> (Ir_dModel.C_Ir_IrVar (b)))) bs)))) (v_etaBinders (Ir_dModel.v_irDefArity dtb__135))))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__135) -> (if ((Vuna_dIr_dModel.v_irDefArity dtb__135) = 0) then (B_dData_dResult.C_Result_Ok ({ B_dData_dPair.f_Pair_first = (B_dData_dList.C_List__x58__x58_ ((Wasm_dInstr.C_Instr_IGlobalGet ((Wasm_dTypes.v_watGlobalNameOf name))), B_dData_dList.C_List_Nil)); B_dData_dPair.f_Pair_second = st })) else ((fun bs -> ((fun bodyIr -> (((((v_genLamValue (fuel - 1)) st) bs) B_dData_dMaybe.C_Maybe_Nothing) bodyIr)) ((v_applyAllIr (Vuna_dIr_dModel.C_Ir_IrGlobal (name))) ((B_dData_dList.v_map (fun (b : Vuna_dIr_dModel.t_IrBinder) -> (Vuna_dIr_dModel.C_Ir_IrVar (b)))) bs)))) (v_etaBinders (Vuna_dIr_dModel.v_irDefArity dtb__135))))
   | B_dData_dMaybe.C_Maybe_Nothing -> (B_dData_dResult.C_Result_Err ((String.concat "" ["unknown top-level definition in wasm codegen: `"; name; "`"])))
   | _ -> failwith "DT: impossible branch"
 )))
@@ -381,11 +381,11 @@ and v_genGlobalRef = (fun (fuel : int) (st : t_GenState) (name : string) -> (if 
 and v_genRtValue = (fun (fuel : int) (st : t_GenState) (sym : string) -> (if (fuel <= 0) then (B_dData_dResult.C_Result_Err ("wasm codegen fuel exhausted")) else (match (Wasm_dRuntime.v_rtImplOf sym) with
   | Wasm_dRuntime.C_RtImpl_RtValue (dtb__136) -> (B_dData_dResult.C_Result_Ok ({ B_dData_dPair.f_Pair_first = dtb__136; B_dData_dPair.f_Pair_second = st }))
   | Wasm_dRuntime.C_RtImpl_RtUnsupported -> (B_dData_dResult.C_Result_Err ((String.concat "" ["wasm target: runtime symbol `"; sym; "` is not supported yet"])))
-  | Wasm_dRuntime.C_RtImpl_RtFunc (dtb__137, dtb__138) -> ((fun bs -> ((fun bodyIr -> (((((v_genLamValue (fuel - 1)) st) bs) B_dData_dMaybe.C_Maybe_Nothing) bodyIr)) (Ir_dModel.C_Ir_IrRtApp (sym, ((B_dData_dList.v_map (fun (b : Ir_dModel.t_IrBinder) -> (Ir_dModel.C_Ir_IrVar (b)))) bs))))) (v_etaBinders dtb__137))
+  | Wasm_dRuntime.C_RtImpl_RtFunc (dtb__137, dtb__138) -> ((fun bs -> ((fun bodyIr -> (((((v_genLamValue (fuel - 1)) st) bs) B_dData_dMaybe.C_Maybe_Nothing) bodyIr)) (Vuna_dIr_dModel.C_Ir_IrRtApp (sym, ((B_dData_dList.v_map (fun (b : Vuna_dIr_dModel.t_IrBinder) -> (Vuna_dIr_dModel.C_Ir_IrVar (b)))) bs))))) (v_etaBinders dtb__137))
   | _ -> failwith "DT: impossible branch"
 )))
 # 362 "Vuna/Compiler/Wasm/Module.vuna"
-and v_genIf = (fun (fuel : int) (st : t_GenState) (c : Ir_dModel.t_Ir) (th : Ir_dModel.t_Ir) (el : Ir_dModel.t_Ir) -> (if (fuel <= 0) then (B_dData_dResult.C_Result_Err ("wasm codegen fuel exhausted")) else (match (((v_genExpr (fuel - 1)) (v_noTail st)) c) with
+and v_genIf = (fun (fuel : int) (st : t_GenState) (c : Vuna_dIr_dModel.t_Ir) (th : Vuna_dIr_dModel.t_Ir) (el : Vuna_dIr_dModel.t_Ir) -> (if (fuel <= 0) then (B_dData_dResult.C_Result_Err ("wasm codegen fuel exhausted")) else (match (((v_genExpr (fuel - 1)) (v_noTail st)) c) with
   | B_dData_dResult.C_Result_Err (dtb__139) -> (B_dData_dResult.C_Result_Err (dtb__139))
   | B_dData_dResult.C_Result_Ok (dtb__140) -> ((fun base -> (match (((v_genExpr (fuel - 1)) base) th) with
   | B_dData_dResult.C_Result_Err (dtb__141) -> (B_dData_dResult.C_Result_Err (dtb__141))
@@ -399,13 +399,13 @@ and v_genIf = (fun (fuel : int) (st : t_GenState) (c : Ir_dModel.t_Ir) (th : Ir_
   | _ -> failwith "DT: impossible branch"
 )))
 # 383 "Vuna/Compiler/Wasm/Module.vuna"
-and v_genLet = (fun (fuel : int) (st : t_GenState) (bs : Ir_dModel.t_IrBinder B_dData_dList.t_List) (scrut : Ir_dModel.t_Ir) (body : Ir_dModel.t_Ir) -> (if (fuel <= 0) then (B_dData_dResult.C_Result_Err ("wasm codegen fuel exhausted")) else ((fun runtimeBs -> ((fun savedScope -> (match (((v_genExpr (fuel - 1)) (v_noTail st)) scrut) with
+and v_genLet = (fun (fuel : int) (st : t_GenState) (bs : Vuna_dIr_dModel.t_IrBinder B_dData_dList.t_List) (scrut : Vuna_dIr_dModel.t_Ir) (body : Vuna_dIr_dModel.t_Ir) -> (if (fuel <= 0) then (B_dData_dResult.C_Result_Err ("wasm codegen fuel exhausted")) else ((fun runtimeBs -> ((fun savedScope -> (match (((v_genExpr (fuel - 1)) (v_noTail st)) scrut) with
   | B_dData_dResult.C_Result_Err (dtb__145) -> (B_dData_dResult.C_Result_Err (dtb__145))
   | B_dData_dResult.C_Result_Ok (dtb__146) -> ((((((v_genLetBound (fuel - 1)) ((v_withTail (st).f_GenState_gsTail) (B_dData_dPair.v_secondOf dtb__146))) runtimeBs) (B_dData_dPair.v_firstOf dtb__146)) body) savedScope)
   | _ -> failwith "DT: impossible branch"
 )) (st).f_GenState_gsScope)) (v_runtimeBinders bs))))
 # 395 "Vuna/Compiler/Wasm/Module.vuna"
-and v_genLetBound = (fun (mc0 : int) (mc1 : t_GenState) (mc2 : Ir_dModel.t_IrBinder B_dData_dList.t_List) (mc3 : Wasm_dInstr.t_Instr B_dData_dList.t_List) (mc4 : Ir_dModel.t_Ir) (mc5 : (Ir_dModel.t_IrBinder, string) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc2 with
+and v_genLetBound = (fun (mc0 : int) (mc1 : t_GenState) (mc2 : Vuna_dIr_dModel.t_IrBinder B_dData_dList.t_List) (mc3 : Wasm_dInstr.t_Instr B_dData_dList.t_List) (mc4 : Vuna_dIr_dModel.t_Ir) (mc5 : (Vuna_dIr_dModel.t_IrBinder, string) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc2 with
   | B_dData_dList.C_List__x58__x58_ (dtb__147, dtb__148) -> (if (mc0 <= 0) then (B_dData_dResult.C_Result_Err ("wasm codegen fuel exhausted")) else (if ((v_listLengthB dtb__148) <> 0) then (B_dData_dResult.C_Result_Err ("unboxed let has more than one runtime binder")) else (match ((v_freshLocal mc1) Wasm_dModel.C_WatValTy_WvAnyRef) with
   | { B_dData_dPair.f_Pair_first = dtb__149; B_dData_dPair.f_Pair_second = dtb__150 } -> (match (((v_genExpr (mc0 - 1)) (((v_pushBinder dtb__147) dtb__149) dtb__150)) mc4) with
   | B_dData_dResult.C_Result_Err (dtb__151) -> (B_dData_dResult.C_Result_Err (dtb__151))
@@ -422,10 +422,10 @@ and v_genLetBound = (fun (mc0 : int) (mc1 : t_GenState) (mc2 : Ir_dModel.t_IrBin
   | _ -> failwith "DT: impossible branch"
 ))
 # 422 "Vuna/Compiler/Wasm/Module.vuna"
-and v_genApp = (fun (fuel : int) (st : t_GenState) (ir : Ir_dModel.t_Ir) -> (if (fuel <= 0) then (B_dData_dResult.C_Result_Err ("wasm codegen fuel exhausted")) else (match (Ir_dAnalysis.v_flattenApp ir) with
+and v_genApp = (fun (fuel : int) (st : t_GenState) (ir : Vuna_dIr_dModel.t_Ir) -> (if (fuel <= 0) then (B_dData_dResult.C_Result_Err ("wasm codegen fuel exhausted")) else (match (Vuna_dIr_dAnalysis.v_flattenApp ir) with
   | { B_dData_dPair.f_Pair_first = dtb__155; B_dData_dPair.f_Pair_second = dtb__156 } -> (match dtb__155 with
-  | Ir_dModel.C_Ir_IrGlobal (dtb__157) -> ((((v_genGlobalCall (fuel - 1)) st) dtb__157) dtb__156)
-  | Ir_dModel.C_Ir_IrLam (dtb__158, dtb__159, dtb__160) -> ((fun nd_uscrut10 -> (match nd_uscrut10 with
+  | Vuna_dIr_dModel.C_Ir_IrGlobal (dtb__157) -> ((((v_genGlobalCall (fuel - 1)) st) dtb__157) dtb__156)
+  | Vuna_dIr_dModel.C_Ir_IrLam (dtb__158, dtb__159, dtb__160) -> ((fun nd_uscrut10 -> (match nd_uscrut10 with
   | B_dData_dList.C_List__x58__x58_ (dtb__161, dtb__162) -> (match dtb__162 with
   | B_dData_dList.C_List_Nil -> ((fun nd_uscrut15 -> (match nd_uscrut15 with
   | B_dData_dList.C_List__x58__x58_ (dtb__163, dtb__164) -> (match dtb__164 with
@@ -438,7 +438,7 @@ and v_genApp = (fun (fuel : int) (st : t_GenState) (ir : Ir_dModel.t_Ir) -> (if 
 )
   | _ -> ((((v_genApplyValue (fuel - 1)) st) dtb__155) dtb__156)
 )) (v_runtimeBinders dtb__158))
-  | Ir_dModel.C_Ir_IrRt (dtb__165) -> (if (dtb__165 = "prim_erase") then (match dtb__156 with
+  | Vuna_dIr_dModel.C_Ir_IrRt (dtb__165) -> (if (dtb__165 = "prim_erase") then (match dtb__156 with
   | B_dData_dList.C_List_Nil -> (B_dData_dResult.C_Result_Err ("prim_erase needs an argument"))
   | B_dData_dList.C_List__x58__x58_ (dtb__166, dtb__167) -> (((v_genExpr (fuel - 1)) st) ((v_applyAllIr dtb__166) dtb__167))
   | _ -> failwith "DT: impossible branch"
@@ -448,26 +448,26 @@ and v_genApp = (fun (fuel : int) (st : t_GenState) (ir : Ir_dModel.t_Ir) -> (if 
   | _ -> failwith "DT: impossible branch"
 )))
 # 447 "Vuna/Compiler/Wasm/Module.vuna"
-and v_genGlobalCall = (fun (fuel : int) (st : t_GenState) (name : string) (args : Ir_dModel.t_Ir B_dData_dList.t_List) -> (if (fuel <= 0) then (B_dData_dResult.C_Result_Err ("wasm codegen fuel exhausted")) else (match ((((B_dContainer_dHashMap.v_lookup B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) name) (st).f_GenState_gsDefTbl) with
+and v_genGlobalCall = (fun (fuel : int) (st : t_GenState) (name : string) (args : Vuna_dIr_dModel.t_Ir B_dData_dList.t_List) -> (if (fuel <= 0) then (B_dData_dResult.C_Result_Err ("wasm codegen fuel exhausted")) else (match ((((B_dContainer_dHashMap.v_lookup B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) name) (st).f_GenState_gsDefTbl) with
   | B_dData_dMaybe.C_Maybe_Nothing -> (B_dData_dResult.C_Result_Err ((String.concat "" ["unknown top-level definition in wasm codegen: `"; name; "`"])))
   | B_dData_dMaybe.C_Maybe_Just (dtb__168) -> ((fun arity -> ((fun argc -> (if (arity = 0) then (match (((v_genGlobalRef (fuel - 1)) st) name) with
   | B_dData_dResult.C_Result_Err (dtb__169) -> (B_dData_dResult.C_Result_Err (dtb__169))
   | B_dData_dResult.C_Result_Ok (dtb__170) -> (((((v_genApplyArgs (fuel - 1)) (st).f_GenState_gsTail) (B_dData_dPair.v_secondOf dtb__170)) (B_dData_dPair.v_firstOf dtb__170)) args)
   | _ -> failwith "DT: impossible branch"
-) else (if (argc = arity) then ((((v_genArgsThen (fuel - 1)) st) args) (if (st).f_GenState_gsTail then (Wasm_dInstr.C_Instr_IReturnCall ((Wasm_dTypes.v_watFuncNameOf name))) else (Wasm_dInstr.C_Instr_ICall ((Wasm_dTypes.v_watFuncNameOf name))))) else (if (argc < arity) then ((((v_genApplyValue (fuel - 1)) st) (Ir_dModel.C_Ir_IrGlobal (name))) args) else (match ((v_splitAt arity) args) with
+) else (if (argc = arity) then ((((v_genArgsThen (fuel - 1)) st) args) (if (st).f_GenState_gsTail then (Wasm_dInstr.C_Instr_IReturnCall ((Wasm_dTypes.v_watFuncNameOf name))) else (Wasm_dInstr.C_Instr_ICall ((Wasm_dTypes.v_watFuncNameOf name))))) else (if (argc < arity) then ((((v_genApplyValue (fuel - 1)) st) (Vuna_dIr_dModel.C_Ir_IrGlobal (name))) args) else (match ((v_splitAt arity) args) with
   | { B_dData_dPair.f_Pair_first = dtb__171; B_dData_dPair.f_Pair_second = dtb__172 } -> (match ((((v_genArgsThen (fuel - 1)) st) dtb__171) (Wasm_dInstr.C_Instr_ICall ((Wasm_dTypes.v_watFuncNameOf name)))) with
   | B_dData_dResult.C_Result_Err (dtb__173) -> (B_dData_dResult.C_Result_Err (dtb__173))
   | B_dData_dResult.C_Result_Ok (dtb__174) -> (((((v_genApplyArgs (fuel - 1)) (st).f_GenState_gsTail) (B_dData_dPair.v_secondOf dtb__174)) (B_dData_dPair.v_firstOf dtb__174)) dtb__172)
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
-))))) (v_listLengthB args))) (Ir_dModel.v_irDefArity dtb__168))
+))))) (v_listLengthB args))) (Vuna_dIr_dModel.v_irDefArity dtb__168))
   | _ -> failwith "DT: impossible branch"
 )))
 # 515 "Vuna/Compiler/Wasm/Module.vuna"
-and v_genLamValue = (fun (fuel : int) (st : t_GenState) (bs : Ir_dModel.t_IrBinder B_dData_dList.t_List) (rt : Ir_dModel.t_IrTy B_dData_dMaybe.t_Maybe) (body : Ir_dModel.t_Ir) -> (if (fuel <= 0) then (B_dData_dResult.C_Result_Err ("wasm codegen fuel exhausted")) else ((fun rbs -> ((fun caps -> ((fun ncap -> ((fun n -> ((fun lamName -> ((fun st1 -> (match rbs with
+and v_genLamValue = (fun (fuel : int) (st : t_GenState) (bs : Vuna_dIr_dModel.t_IrBinder B_dData_dList.t_List) (rt : Vuna_dIr_dModel.t_IrTy B_dData_dMaybe.t_Maybe) (body : Vuna_dIr_dModel.t_Ir) -> (if (fuel <= 0) then (B_dData_dResult.C_Result_Err ("wasm codegen fuel exhausted")) else ((fun rbs -> ((fun caps -> ((fun ncap -> ((fun n -> ((fun lamName -> ((fun st1 -> (match rbs with
   | B_dData_dList.C_List_Nil -> (((v_genExpr (fuel - 1)) st) body)
-  | B_dData_dList.C_List__x58__x58_ (dtb__175, dtb__176) -> (if ((v_listLengthB dtb__176) > 0) then (((((v_genLamValue (fuel - 1)) st) (B_dData_dList.C_List__x58__x58_ (dtb__175, B_dData_dList.C_List_Nil))) rt) (Ir_dModel.C_Ir_IrLam (dtb__176, rt, body))) else (match (((v_bindEnvLocals (v_beginFuncScope st1)) caps) 0) with
+  | B_dData_dList.C_List__x58__x58_ (dtb__175, dtb__176) -> (if ((v_listLengthB dtb__176) > 0) then (((((v_genLamValue (fuel - 1)) st) (B_dData_dList.C_List__x58__x58_ (dtb__175, B_dData_dList.C_List_Nil))) rt) (Vuna_dIr_dModel.C_Ir_IrLam (dtb__176, rt, body))) else (match (((v_bindEnvLocals (v_beginFuncScope st1)) caps) 0) with
   | B_dData_dResult.C_Result_Err (dtb__177) -> (B_dData_dResult.C_Result_Err (dtb__177))
   | B_dData_dResult.C_Result_Ok (dtb__178) -> (match ((v_freshLocal (B_dData_dPair.v_secondOf dtb__178)) Wasm_dModel.C_WatValTy_WvAnyRef) with
   | { B_dData_dPair.f_Pair_first = dtb__179; B_dData_dPair.f_Pair_second = dtb__180 } -> (match (((v_genExpr (fuel - 1)) (((v_pushBinder dtb__175) dtb__179) ((v_withTail true) dtb__180))) body) with
@@ -482,13 +482,13 @@ and v_genLamValue = (fun (fuel : int) (st : t_GenState) (bs : Ir_dModel.t_IrBind
   | _ -> failwith "DT: impossible branch"
 )) { st with f_GenState_gsNextLam = (n + 1) })) ("$lam" ^ (bi_strFromInt n)))) (st).f_GenState_gsNextLam)) (v_listLengthB caps))) (B_dData_dList.v_reverse (st).f_GenState_gsScope))) (v_runtimeBinders bs))))
 # 556 "Vuna/Compiler/Wasm/Module.vuna"
-and v_genApplyValue = (fun (fuel : int) (st : t_GenState) (head : Ir_dModel.t_Ir) (args : Ir_dModel.t_Ir B_dData_dList.t_List) -> (if (fuel <= 0) then (B_dData_dResult.C_Result_Err ("wasm codegen fuel exhausted")) else (match (((v_genExpr (fuel - 1)) (v_noTail st)) head) with
+and v_genApplyValue = (fun (fuel : int) (st : t_GenState) (head : Vuna_dIr_dModel.t_Ir) (args : Vuna_dIr_dModel.t_Ir B_dData_dList.t_List) -> (if (fuel <= 0) then (B_dData_dResult.C_Result_Err ("wasm codegen fuel exhausted")) else (match (((v_genExpr (fuel - 1)) (v_noTail st)) head) with
   | B_dData_dResult.C_Result_Err (dtb__183) -> (B_dData_dResult.C_Result_Err (dtb__183))
   | B_dData_dResult.C_Result_Ok (dtb__184) -> (((((v_genApplyArgs (fuel - 1)) (st).f_GenState_gsTail) ((v_withTail (st).f_GenState_gsTail) (B_dData_dPair.v_secondOf dtb__184))) (B_dData_dPair.v_firstOf dtb__184)) args)
   | _ -> failwith "DT: impossible branch"
 )))
 # 567 "Vuna/Compiler/Wasm/Module.vuna"
-and v_genApplyArgs = (fun (mc0 : int) (mc1 : bool) (mc2 : t_GenState) (mc3 : Wasm_dInstr.t_Instr B_dData_dList.t_List) (mc4 : Ir_dModel.t_Ir B_dData_dList.t_List) -> (match mc4 with
+and v_genApplyArgs = (fun (mc0 : int) (mc1 : bool) (mc2 : t_GenState) (mc3 : Wasm_dInstr.t_Instr B_dData_dList.t_List) (mc4 : Vuna_dIr_dModel.t_Ir B_dData_dList.t_List) -> (match mc4 with
   | B_dData_dList.C_List__x58__x58_ (dtb__185, dtb__186) -> (if (mc0 <= 0) then (B_dData_dResult.C_Result_Err ("wasm codegen fuel exhausted")) else (match (((v_genExpr (mc0 - 1)) (v_noTail mc2)) dtb__185) with
   | B_dData_dResult.C_Result_Err (dtb__187) -> (B_dData_dResult.C_Result_Err (dtb__187))
   | B_dData_dResult.C_Result_Ok (dtb__188) -> ((fun callInstr -> (((((v_genApplyArgs (mc0 - 1)) mc1) ((v_withTail (mc2).f_GenState_gsTail) (B_dData_dPair.v_secondOf dtb__188))) ((B_dData_dList.v_append mc3) ((B_dData_dList.v_append (B_dData_dPair.v_firstOf dtb__188)) (B_dData_dList.C_List__x58__x58_ (callInstr, B_dData_dList.C_List_Nil))))) dtb__186)) (match dtb__186 with
@@ -501,7 +501,7 @@ and v_genApplyArgs = (fun (mc0 : int) (mc1 : bool) (mc2 : t_GenState) (mc3 : Was
   | _ -> failwith "DT: impossible branch"
 ))
 # 584 "Vuna/Compiler/Wasm/Module.vuna"
-and v_genLamApp = (fun (fuel : int) (st : t_GenState) (bs : Ir_dModel.t_IrBinder B_dData_dList.t_List) (body : Ir_dModel.t_Ir) (args : Ir_dModel.t_Ir B_dData_dList.t_List) -> (if (fuel <= 0) then (B_dData_dResult.C_Result_Err ("wasm codegen fuel exhausted")) else ((fun rbs -> ((fun savedScope -> (if ((v_listLengthB rbs) <> 1) then (B_dData_dResult.C_Result_Err ("wasm target: only single-binder lambdas are supported yet")) else (if ((v_listLengthB args) <> 1) then (B_dData_dResult.C_Result_Err ("wasm target: only saturated single-argument lambda application is supported yet")) else ((fun nd_uscrut7 -> (match nd_uscrut7 with
+and v_genLamApp = (fun (fuel : int) (st : t_GenState) (bs : Vuna_dIr_dModel.t_IrBinder B_dData_dList.t_List) (body : Vuna_dIr_dModel.t_Ir) (args : Vuna_dIr_dModel.t_Ir B_dData_dList.t_List) -> (if (fuel <= 0) then (B_dData_dResult.C_Result_Err ("wasm codegen fuel exhausted")) else ((fun rbs -> ((fun savedScope -> (if ((v_listLengthB rbs) <> 1) then (B_dData_dResult.C_Result_Err ("wasm target: only single-binder lambdas are supported yet")) else (if ((v_listLengthB args) <> 1) then (B_dData_dResult.C_Result_Err ("wasm target: only saturated single-argument lambda application is supported yet")) else ((fun nd_uscrut7 -> (match nd_uscrut7 with
   | B_dData_dList.C_List__x58__x58_ (dtb__189, dtb__190) -> (match dtb__190 with
   | B_dData_dList.C_List_Nil -> (match (((v_genExpr (fuel - 1)) (v_noTail st)) dtb__189) with
   | B_dData_dResult.C_Result_Err (dtb__191) -> (B_dData_dResult.C_Result_Err (dtb__191))
@@ -526,7 +526,7 @@ and v_genLamApp = (fun (fuel : int) (st : t_GenState) (bs : Ir_dModel.t_IrBinder
   | _ -> (B_dData_dResult.C_Result_Err ("wasm target: lambda application shape mismatch"))
 )) args)))) (st).f_GenState_gsScope)) (v_runtimeBinders bs))))
 # 613 "Vuna/Compiler/Wasm/Module.vuna"
-and v_genArgsThen = (fun (mc0 : int) (mc1 : t_GenState) (mc2 : Ir_dModel.t_Ir B_dData_dList.t_List) (mc3 : Wasm_dInstr.t_Instr) -> (match mc2 with
+and v_genArgsThen = (fun (mc0 : int) (mc1 : t_GenState) (mc2 : Vuna_dIr_dModel.t_Ir B_dData_dList.t_List) (mc3 : Wasm_dInstr.t_Instr) -> (match mc2 with
   | B_dData_dList.C_List__x58__x58_ (dtb__199, dtb__200) -> (if (mc0 <= 0) then (B_dData_dResult.C_Result_Err ("wasm codegen fuel exhausted")) else (match (((v_genExpr (mc0 - 1)) (v_noTail mc1)) dtb__199) with
   | B_dData_dResult.C_Result_Err (dtb__201) -> (B_dData_dResult.C_Result_Err (dtb__201))
   | B_dData_dResult.C_Result_Ok (dtb__202) -> (match ((((v_genArgsThen (mc0 - 1)) ((v_withTail (mc1).f_GenState_gsTail) (B_dData_dPair.v_secondOf dtb__202))) dtb__200) mc3) with
@@ -540,14 +540,14 @@ and v_genArgsThen = (fun (mc0 : int) (mc1 : t_GenState) (mc2 : Ir_dModel.t_Ir B_
   | _ -> failwith "DT: impossible branch"
 ))
 # 626 "Vuna/Compiler/Wasm/Module.vuna"
-and v_genRtApp = (fun (fuel : int) (st : t_GenState) (sym : string) (args : Ir_dModel.t_Ir B_dData_dList.t_List) -> (if (fuel <= 0) then (B_dData_dResult.C_Result_Err ("wasm codegen fuel exhausted")) else (if (sym = "prim_erase") then (match args with
+and v_genRtApp = (fun (fuel : int) (st : t_GenState) (sym : string) (args : Vuna_dIr_dModel.t_Ir B_dData_dList.t_List) -> (if (fuel <= 0) then (B_dData_dResult.C_Result_Err ("wasm codegen fuel exhausted")) else (if (sym = "prim_erase") then (match args with
   | B_dData_dList.C_List_Nil -> (B_dData_dResult.C_Result_Err ("prim_erase needs an argument"))
   | B_dData_dList.C_List__x58__x58_ (dtb__205, dtb__206) -> (((v_genExpr (fuel - 1)) st) ((v_applyAllIr dtb__205) dtb__206))
   | _ -> failwith "DT: impossible branch"
 ) else (match (Wasm_dRuntime.v_rtImplOf sym) with
   | Wasm_dRuntime.C_RtImpl_RtUnsupported -> (B_dData_dResult.C_Result_Err ((String.concat "" ["wasm target: runtime symbol `"; sym; "` is not supported yet"])))
   | Wasm_dRuntime.C_RtImpl_RtValue (dtb__207) -> (if ((v_listLengthB args) = 0) then (B_dData_dResult.C_Result_Ok ({ B_dData_dPair.f_Pair_first = dtb__207; B_dData_dPair.f_Pair_second = st })) else (B_dData_dResult.C_Result_Err ((String.concat "" ["wasm target: runtime value `"; sym; "` applied to arguments"]))))
-  | Wasm_dRuntime.C_RtImpl_RtFunc (dtb__208, dtb__209) -> ((fun argc -> (if (argc = dtb__208) then ((((v_genArgsThen (fuel - 1)) st) args) (if (st).f_GenState_gsTail then (Wasm_dInstr.C_Instr_IReturnCall (dtb__209)) else (Wasm_dInstr.C_Instr_ICall (dtb__209)))) else (if (argc < dtb__208) then ((((v_genApplyValue (fuel - 1)) st) (Ir_dModel.C_Ir_IrRt (sym))) args) else (match ((v_splitAt dtb__208) args) with
+  | Wasm_dRuntime.C_RtImpl_RtFunc (dtb__208, dtb__209) -> ((fun argc -> (if (argc = dtb__208) then ((((v_genArgsThen (fuel - 1)) st) args) (if (st).f_GenState_gsTail then (Wasm_dInstr.C_Instr_IReturnCall (dtb__209)) else (Wasm_dInstr.C_Instr_ICall (dtb__209)))) else (if (argc < dtb__208) then ((((v_genApplyValue (fuel - 1)) st) (Vuna_dIr_dModel.C_Ir_IrRt (sym))) args) else (match ((v_splitAt dtb__208) args) with
   | { B_dData_dPair.f_Pair_first = dtb__210; B_dData_dPair.f_Pair_second = dtb__211 } -> (match ((((v_genArgsThen (fuel - 1)) st) dtb__210) (Wasm_dInstr.C_Instr_ICall (dtb__209))) with
   | B_dData_dResult.C_Result_Err (dtb__212) -> (B_dData_dResult.C_Result_Err (dtb__212))
   | B_dData_dResult.C_Result_Ok (dtb__213) -> (((((v_genApplyArgs (fuel - 1)) (st).f_GenState_gsTail) (B_dData_dPair.v_secondOf dtb__213)) (B_dData_dPair.v_firstOf dtb__213)) dtb__211)
@@ -558,16 +558,16 @@ and v_genRtApp = (fun (fuel : int) (st : t_GenState) (sym : string) (args : Ir_d
   | _ -> failwith "DT: impossible branch"
 ))))
 # 665 "Vuna/Compiler/Wasm/Module.vuna"
-and v_genNatArm = (fun (fuel : int) (st : t_GenState) (alt : Ir_dModel.t_IrAlt B_dData_dMaybe.t_Maybe) (valueInstrs : Wasm_dInstr.t_Instr B_dData_dList.t_List) -> (if (fuel <= 0) then (B_dData_dResult.C_Result_Err ("wasm codegen fuel exhausted")) else (match alt with
+and v_genNatArm = (fun (fuel : int) (st : t_GenState) (alt : Vuna_dIr_dModel.t_IrAlt B_dData_dMaybe.t_Maybe) (valueInstrs : Wasm_dInstr.t_Instr B_dData_dList.t_List) -> (if (fuel <= 0) then (B_dData_dResult.C_Result_Err ("wasm codegen fuel exhausted")) else (match alt with
   | B_dData_dMaybe.C_Maybe_Nothing -> (B_dData_dResult.C_Result_Err ("wasm target: Nat case has no zero/succ/catch branch"))
   | B_dData_dMaybe.C_Maybe_Just (dtb__214) -> ((((v_genNatArmAlt fuel) st) dtb__214) valueInstrs)
   | _ -> failwith "DT: impossible branch"
 )))
 # 674 "Vuna/Compiler/Wasm/Module.vuna"
-and v_genNatArmAlt = (fun (fuel : int) (st : t_GenState) (a : Ir_dModel.t_IrAlt) (valueInstrs : Wasm_dInstr.t_Instr B_dData_dList.t_List) -> (if (fuel <= 0) then (B_dData_dResult.C_Result_Err ("wasm codegen fuel exhausted")) else ((fun bs -> ((fun savedScope -> ((fun nd_uscrut6 -> (match nd_uscrut6 with
+and v_genNatArmAlt = (fun (fuel : int) (st : t_GenState) (a : Vuna_dIr_dModel.t_IrAlt) (valueInstrs : Wasm_dInstr.t_Instr B_dData_dList.t_List) -> (if (fuel <= 0) then (B_dData_dResult.C_Result_Err ("wasm codegen fuel exhausted")) else ((fun bs -> ((fun savedScope -> ((fun nd_uscrut6 -> (match nd_uscrut6 with
   | B_dData_dList.C_List__x58__x58_ (dtb__215, dtb__216) -> (match dtb__216 with
   | B_dData_dList.C_List_Nil -> (match ((v_freshLocal st) Wasm_dModel.C_WatValTy_WvAnyRef) with
-  | { B_dData_dPair.f_Pair_first = dtb__217; B_dData_dPair.f_Pair_second = dtb__218 } -> (match (((v_genExpr (fuel - 1)) (((v_pushBinder dtb__215) dtb__217) dtb__218)) (Ir_dModel.v_irAltBodyOf a)) with
+  | { B_dData_dPair.f_Pair_first = dtb__217; B_dData_dPair.f_Pair_second = dtb__218 } -> (match (((v_genExpr (fuel - 1)) (((v_pushBinder dtb__215) dtb__217) dtb__218)) (Vuna_dIr_dModel.v_irAltBodyOf a)) with
   | B_dData_dResult.C_Result_Err (dtb__219) -> (B_dData_dResult.C_Result_Err (dtb__219))
   | B_dData_dResult.C_Result_Ok (dtb__220) -> (B_dData_dResult.C_Result_Ok ({ B_dData_dPair.f_Pair_first = ((B_dData_dList.v_append valueInstrs) ((B_dData_dList.v_append (B_dData_dList.C_List__x58__x58_ ((Wasm_dInstr.C_Instr_ILocalSet (dtb__217)), B_dData_dList.C_List_Nil))) (B_dData_dPair.v_firstOf dtb__220))); B_dData_dPair.f_Pair_second = ((v_restoreScope savedScope) (B_dData_dPair.v_secondOf dtb__220)) }))
   | _ -> failwith "DT: impossible branch"
@@ -576,11 +576,11 @@ and v_genNatArmAlt = (fun (fuel : int) (st : t_GenState) (a : Ir_dModel.t_IrAlt)
 )
   | _ -> (B_dData_dResult.C_Result_Err ("wasm target: Nat case arm has more than one runtime binder"))
 )
-  | B_dData_dList.C_List_Nil -> (((v_genExpr (fuel - 1)) st) (Ir_dModel.v_irAltBodyOf a))
+  | B_dData_dList.C_List_Nil -> (((v_genExpr (fuel - 1)) st) (Vuna_dIr_dModel.v_irAltBodyOf a))
   | _ -> failwith "DT: impossible branch"
-)) bs)) (st).f_GenState_gsScope)) (v_runtimeBinders (Ir_dModel.v_irAltBindersOf a)))))
+)) bs)) (st).f_GenState_gsScope)) (v_runtimeBinders (Vuna_dIr_dModel.v_irAltBindersOf a)))))
 # 692 "Vuna/Compiler/Wasm/Module.vuna"
-and v_genNatCase = (fun (fuel : int) (st : t_GenState) (scrut : Ir_dModel.t_Ir) (zero : Ir_dModel.t_IrAlt B_dData_dMaybe.t_Maybe) (succ : Ir_dModel.t_IrAlt B_dData_dMaybe.t_Maybe) (catch : Ir_dModel.t_IrAlt B_dData_dMaybe.t_Maybe) -> (if (fuel <= 0) then (B_dData_dResult.C_Result_Err ("wasm codegen fuel exhausted")) else (match (((v_genExpr (fuel - 1)) (v_noTail st)) scrut) with
+and v_genNatCase = (fun (fuel : int) (st : t_GenState) (scrut : Vuna_dIr_dModel.t_Ir) (zero : Vuna_dIr_dModel.t_IrAlt B_dData_dMaybe.t_Maybe) (succ : Vuna_dIr_dModel.t_IrAlt B_dData_dMaybe.t_Maybe) (catch : Vuna_dIr_dModel.t_IrAlt B_dData_dMaybe.t_Maybe) -> (if (fuel <= 0) then (B_dData_dResult.C_Result_Err ("wasm codegen fuel exhausted")) else (match (((v_genExpr (fuel - 1)) (v_noTail st)) scrut) with
   | B_dData_dResult.C_Result_Err (dtb__221) -> (B_dData_dResult.C_Result_Err (dtb__221))
   | B_dData_dResult.C_Result_Ok (dtb__222) -> (match ((v_freshLocal ((v_withTail (st).f_GenState_gsTail) (B_dData_dPair.v_secondOf dtb__222))) Wasm_dModel.C_WatValTy_WvAnyRef) with
   | { B_dData_dPair.f_Pair_first = dtb__223; B_dData_dPair.f_Pair_second = dtb__224 } -> ((fun zeroAlt -> ((fun succAlt -> ((fun zeroValue -> ((fun succValue -> ((fun succBoxed -> (match ((((v_genNatArm (fuel - 1)) dtb__224) zeroAlt) zeroValue) with
@@ -605,7 +605,7 @@ and v_genNatCase = (fun (fuel : int) (st : t_GenState) (scrut : Ir_dModel.t_Ir) 
   | _ -> failwith "DT: impossible branch"
 )))
 # 725 "Vuna/Compiler/Wasm/Module.vuna"
-and v_genConcatMany = (fun (fuel : int) (st : t_GenState) (parts : Ir_dModel.t_Ir B_dData_dList.t_List) -> (if (fuel <= 0) then (B_dData_dResult.C_Result_Err ("wasm codegen fuel exhausted")) else ((fun nd_uscrut3 -> (match nd_uscrut3 with
+and v_genConcatMany = (fun (fuel : int) (st : t_GenState) (parts : Vuna_dIr_dModel.t_Ir B_dData_dList.t_List) -> (if (fuel <= 0) then (B_dData_dResult.C_Result_Err ("wasm codegen fuel exhausted")) else ((fun nd_uscrut3 -> (match nd_uscrut3 with
   | B_dData_dList.C_List__x58__x58_ (dtb__231, dtb__232) -> (match dtb__232 with
   | B_dData_dList.C_List_Nil -> (((v_genExpr (fuel - 1)) (v_noTail st)) dtb__231)
   | _ -> (match (((v_genExpr (fuel - 1)) (v_noTail st)) dtb__231) with
@@ -622,7 +622,7 @@ and v_genConcatMany = (fun (fuel : int) (st : t_GenState) (parts : Ir_dModel.t_I
   | _ -> failwith "DT: impossible branch"
 )) parts)))
 # 741 "Vuna/Compiler/Wasm/Module.vuna"
-and v_genConcatRest = (fun (mc0 : int) (mc1 : t_GenState) (mc2 : Ir_dModel.t_Ir B_dData_dList.t_List) -> (match mc2 with
+and v_genConcatRest = (fun (mc0 : int) (mc1 : t_GenState) (mc2 : Vuna_dIr_dModel.t_Ir B_dData_dList.t_List) -> (match mc2 with
   | B_dData_dList.C_List__x58__x58_ (dtb__237, dtb__238) -> (if (mc0 <= 0) then (B_dData_dResult.C_Result_Err ("wasm codegen fuel exhausted")) else (match (((v_genExpr (mc0 - 1)) (v_noTail mc1)) dtb__237) with
   | B_dData_dResult.C_Result_Err (dtb__239) -> (B_dData_dResult.C_Result_Err (dtb__239))
   | B_dData_dResult.C_Result_Ok (dtb__240) -> (match (((v_genConcatRest (mc0 - 1)) ((v_withTail (mc1).f_GenState_gsTail) (B_dData_dPair.v_secondOf dtb__240))) dtb__238) with
@@ -636,7 +636,7 @@ and v_genConcatRest = (fun (mc0 : int) (mc1 : t_GenState) (mc2 : Ir_dModel.t_Ir 
   | _ -> failwith "DT: impossible branch"
 ))
 # 766 "Vuna/Compiler/Wasm/Module.vuna"
-and v_genExprs = (fun (mc0 : int) (mc1 : t_GenState) (mc2 : Ir_dModel.t_Ir B_dData_dList.t_List) -> (match mc2 with
+and v_genExprs = (fun (mc0 : int) (mc1 : t_GenState) (mc2 : Vuna_dIr_dModel.t_Ir B_dData_dList.t_List) -> (match mc2 with
   | B_dData_dList.C_List__x58__x58_ (dtb__243, dtb__244) -> (if (mc0 <= 0) then (B_dData_dResult.C_Result_Err ("wasm codegen fuel exhausted")) else (match (((v_genExpr (mc0 - 1)) (v_noTail mc1)) dtb__243) with
   | B_dData_dResult.C_Result_Err (dtb__245) -> (B_dData_dResult.C_Result_Err (dtb__245))
   | B_dData_dResult.C_Result_Ok (dtb__246) -> (match (((v_genExprs (mc0 - 1)) ((v_withTail (mc1).f_GenState_gsTail) (B_dData_dPair.v_secondOf dtb__246))) dtb__244) with
@@ -650,7 +650,7 @@ and v_genExprs = (fun (mc0 : int) (mc1 : t_GenState) (mc2 : Ir_dModel.t_Ir B_dDa
   | _ -> failwith "DT: impossible branch"
 ))
 # 781 "Vuna/Compiler/Wasm/Module.vuna"
-and v_genCtor = (fun (fuel : int) (st : t_GenState) (family : string) (ctor : string) (args : Ir_dModel.t_Ir B_dData_dList.t_List) -> (if (fuel <= 0) then (B_dData_dResult.C_Result_Err ("wasm codegen fuel exhausted")) else (match ((v_famOrFail st) family) with
+and v_genCtor = (fun (fuel : int) (st : t_GenState) (family : string) (ctor : string) (args : Vuna_dIr_dModel.t_Ir B_dData_dList.t_List) -> (if (fuel <= 0) then (B_dData_dResult.C_Result_Err ("wasm codegen fuel exhausted")) else (match ((v_famOrFail st) family) with
   | B_dData_dResult.C_Result_Err (dtb__249) -> (B_dData_dResult.C_Result_Err (dtb__249))
   | B_dData_dResult.C_Result_Ok (dtb__250) -> (match ((Wasm_dTypes.v_wasmCtorTagOf dtb__250) ctor) with
   | B_dData_dMaybe.C_Maybe_Nothing -> (B_dData_dResult.C_Result_Err ((String.concat "" ["unknown constructor in wasm codegen: `"; ctor; "`"])))
@@ -668,9 +668,9 @@ and v_genCtor = (fun (fuel : int) (st : t_GenState) (family : string) (ctor : st
   | _ -> failwith "DT: impossible branch"
 )))
 # 806 "Vuna/Compiler/Wasm/Module.vuna"
-and v_genRecord = (fun (fuel : int) (st : t_GenState) (family : string) (fields : (string, Ir_dModel.t_Ir) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (if (fuel <= 0) then (B_dData_dResult.C_Result_Err ("wasm codegen fuel exhausted")) else (match ((v_famOrFail st) family) with
+and v_genRecord = (fun (fuel : int) (st : t_GenState) (family : string) (fields : (string, Vuna_dIr_dModel.t_Ir) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (if (fuel <= 0) then (B_dData_dResult.C_Result_Err ("wasm codegen fuel exhausted")) else (match ((v_famOrFail st) family) with
   | B_dData_dResult.C_Result_Err (dtb__255) -> (B_dData_dResult.C_Result_Err (dtb__255))
-  | B_dData_dResult.C_Result_Ok (dtb__256) -> (if ((v_listLengthB fields) <> (v_listLengthB (dtb__256).Wasm_dTypes.f_WasmFam_wasmFamRecordFields)) then (B_dData_dResult.C_Result_Err ((String.concat "" ["record `"; family; "` constructed with the wrong number of fields"]))) else (match (((v_genExprs (fuel - 1)) st) ((B_dData_dList.v_map (fun (p : (string, Ir_dModel.t_Ir) B_dData_dPair.t_Pair) -> (B_dData_dPair.v_secondOf p))) fields)) with
+  | B_dData_dResult.C_Result_Ok (dtb__256) -> (if ((v_listLengthB fields) <> (v_listLengthB (dtb__256).Wasm_dTypes.f_WasmFam_wasmFamRecordFields)) then (B_dData_dResult.C_Result_Err ((String.concat "" ["record `"; family; "` constructed with the wrong number of fields"]))) else (match (((v_genExprs (fuel - 1)) st) ((B_dData_dList.v_map (fun (p : (string, Vuna_dIr_dModel.t_Ir) B_dData_dPair.t_Pair) -> (B_dData_dPair.v_secondOf p))) fields)) with
   | B_dData_dResult.C_Result_Err (dtb__257) -> (B_dData_dResult.C_Result_Err (dtb__257))
   | B_dData_dResult.C_Result_Ok (dtb__258) -> (B_dData_dResult.C_Result_Ok ({ B_dData_dPair.f_Pair_first = ((B_dData_dList.v_append (B_dData_dPair.v_firstOf dtb__258)) (B_dData_dList.C_List__x58__x58_ ((Wasm_dInstr.C_Instr_IStructNew ((Wasm_dTypes.v_watFamName family))), B_dData_dList.C_List_Nil))); B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf dtb__258) }))
   | _ -> failwith "DT: impossible branch"
@@ -678,7 +678,7 @@ and v_genRecord = (fun (fuel : int) (st : t_GenState) (family : string) (fields 
   | _ -> failwith "DT: impossible branch"
 )))
 # 821 "Vuna/Compiler/Wasm/Module.vuna"
-and v_genProj = (fun (fuel : int) (st : t_GenState) (base : Ir_dModel.t_Ir) (family : string) (field : string) -> (if (fuel <= 0) then (B_dData_dResult.C_Result_Err ("wasm codegen fuel exhausted")) else (match ((v_famOrFail st) family) with
+and v_genProj = (fun (fuel : int) (st : t_GenState) (base : Vuna_dIr_dModel.t_Ir) (family : string) (field : string) -> (if (fuel <= 0) then (B_dData_dResult.C_Result_Err ("wasm codegen fuel exhausted")) else (match ((v_famOrFail st) family) with
   | B_dData_dResult.C_Result_Err (dtb__259) -> (B_dData_dResult.C_Result_Err (dtb__259))
   | B_dData_dResult.C_Result_Ok (dtb__260) -> (match ((Wasm_dTypes.v_wasmRecordFieldIndex dtb__260) field) with
   | B_dData_dMaybe.C_Maybe_Nothing -> (B_dData_dResult.C_Result_Err ((String.concat "" ["unknown record field in wasm codegen: `"; family; "."; field; "`"])))
@@ -692,7 +692,7 @@ and v_genProj = (fun (fuel : int) (st : t_GenState) (base : Ir_dModel.t_Ir) (fam
   | _ -> failwith "DT: impossible branch"
 )))
 # 837 "Vuna/Compiler/Wasm/Module.vuna"
-and v_genRecUpd = (fun (fuel : int) (st : t_GenState) (base : Ir_dModel.t_Ir) (family : string) (fields : (string, Ir_dModel.t_Ir) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (if (fuel <= 0) then (B_dData_dResult.C_Result_Err ("wasm codegen fuel exhausted")) else (match ((v_famOrFail st) family) with
+and v_genRecUpd = (fun (fuel : int) (st : t_GenState) (base : Vuna_dIr_dModel.t_Ir) (family : string) (fields : (string, Vuna_dIr_dModel.t_Ir) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (if (fuel <= 0) then (B_dData_dResult.C_Result_Err ("wasm codegen fuel exhausted")) else (match ((v_famOrFail st) family) with
   | B_dData_dResult.C_Result_Err (dtb__264) -> (B_dData_dResult.C_Result_Err (dtb__264))
   | B_dData_dResult.C_Result_Ok (dtb__265) -> (match (((v_genExpr (fuel - 1)) (v_noTail st)) base) with
   | B_dData_dResult.C_Result_Err (dtb__266) -> (B_dData_dResult.C_Result_Err (dtb__266))
@@ -709,7 +709,7 @@ and v_genRecUpd = (fun (fuel : int) (st : t_GenState) (base : Ir_dModel.t_Ir) (f
   | _ -> failwith "DT: impossible branch"
 )))
 # 854 "Vuna/Compiler/Wasm/Module.vuna"
-and v_genUpdFields = (fun (mc0 : int) (mc1 : t_GenState) (mc2 : string) (mc3 : string) (mc4 : (int, string) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc5 : (string, Ir_dModel.t_Ir) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc4 with
+and v_genUpdFields = (fun (mc0 : int) (mc1 : t_GenState) (mc2 : string) (mc3 : string) (mc4 : (int, string) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc5 : (string, Vuna_dIr_dModel.t_Ir) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc4 with
   | B_dData_dList.C_List__x58__x58_ (dtb__272, dtb__273) -> (match dtb__272 with
   | { B_dData_dPair.f_Pair_first = dtb__274; B_dData_dPair.f_Pair_second = dtb__275 } -> (if (mc0 <= 0) then (B_dData_dResult.C_Result_Err ("wasm codegen fuel exhausted")) else (match ((v_lookupFieldIr dtb__275) mc5) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__276) -> (match (((v_genExpr (mc0 - 1)) (v_noTail mc1)) dtb__276) with
@@ -734,7 +734,7 @@ and v_genUpdFields = (fun (mc0 : int) (mc1 : t_GenState) (mc2 : string) (mc3 : s
   | _ -> failwith "DT: impossible branch"
 ))
 # 880 "Vuna/Compiler/Wasm/Module.vuna"
-and v_genCase = (fun (fuel : int) (st : t_GenState) (caseTy : Ir_dModel.t_IrTy B_dData_dMaybe.t_Maybe) (scrut : Ir_dModel.t_Ir) (alts : Ir_dModel.t_IrAlt B_dData_dList.t_List) -> (if (fuel <= 0) then (B_dData_dResult.C_Result_Err ("wasm codegen fuel exhausted")) else (match (((v_genExpr (fuel - 1)) (v_noTail st)) scrut) with
+and v_genCase = (fun (fuel : int) (st : t_GenState) (caseTy : Vuna_dIr_dModel.t_IrTy B_dData_dMaybe.t_Maybe) (scrut : Vuna_dIr_dModel.t_Ir) (alts : Vuna_dIr_dModel.t_IrAlt B_dData_dList.t_List) -> (if (fuel <= 0) then (B_dData_dResult.C_Result_Err ("wasm codegen fuel exhausted")) else (match (((v_genExpr (fuel - 1)) (v_noTail st)) scrut) with
   | B_dData_dResult.C_Result_Err (dtb__283) -> (B_dData_dResult.C_Result_Err (dtb__283))
   | B_dData_dResult.C_Result_Ok (dtb__284) -> ((fun st1 -> (match ((v_caseFamilyOf caseTy) alts) with
   | B_dData_dMaybe.C_Maybe_Nothing -> ((v_prepend (v_scrutInstrs dtb__284)) ((v_restoreTail st) ((((v_genCatchAllOnly (fuel - 1)) st1) v_scrutSlot) alts)))
@@ -751,11 +751,11 @@ and v_genCase = (fun (fuel : int) (st : t_GenState) (caseTy : Ir_dModel.t_IrTy B
   | _ -> failwith "DT: impossible branch"
 )))
 # 938 "Vuna/Compiler/Wasm/Module.vuna"
-and v_genCatchAllOnly = (fun (fuel : int) (st : t_GenState) (scLocal : string) (alts : Ir_dModel.t_IrAlt B_dData_dList.t_List) -> (if (fuel <= 0) then (B_dData_dResult.C_Result_Err ("wasm codegen fuel exhausted")) else (match alts with
+and v_genCatchAllOnly = (fun (fuel : int) (st : t_GenState) (scLocal : string) (alts : Vuna_dIr_dModel.t_IrAlt B_dData_dList.t_List) -> (if (fuel <= 0) then (B_dData_dResult.C_Result_Err ("wasm codegen fuel exhausted")) else (match alts with
   | B_dData_dList.C_List_Nil -> (B_dData_dResult.C_Result_Ok ({ B_dData_dPair.f_Pair_first = (B_dData_dList.C_List__x58__x58_ (Wasm_dInstr.C_Instr_IUnreachable, B_dData_dList.C_List_Nil)); B_dData_dPair.f_Pair_second = st }))
-  | B_dData_dList.C_List__x58__x58_ (dtb__288, dtb__289) -> (match (((v_bindScrutBinder (Ir_dModel.v_irAltBindersOf dtb__288)) scLocal) st) with
+  | B_dData_dList.C_List__x58__x58_ (dtb__288, dtb__289) -> (match (((v_bindScrutBinder (Vuna_dIr_dModel.v_irAltBindersOf dtb__288)) scLocal) st) with
   | B_dData_dResult.C_Result_Err (dtb__290) -> (B_dData_dResult.C_Result_Err (dtb__290))
-  | B_dData_dResult.C_Result_Ok (dtb__291) -> (match (((v_genExpr (fuel - 1)) (B_dData_dPair.v_secondOf dtb__291)) (Ir_dModel.v_irAltBodyOf dtb__288)) with
+  | B_dData_dResult.C_Result_Ok (dtb__291) -> (match (((v_genExpr (fuel - 1)) (B_dData_dPair.v_secondOf dtb__291)) (Vuna_dIr_dModel.v_irAltBodyOf dtb__288)) with
   | B_dData_dResult.C_Result_Err (dtb__292) -> (B_dData_dResult.C_Result_Err (dtb__292))
   | B_dData_dResult.C_Result_Ok (dtb__293) -> (B_dData_dResult.C_Result_Ok ({ B_dData_dPair.f_Pair_first = ((B_dData_dList.v_append (B_dData_dPair.v_firstOf dtb__291)) (B_dData_dPair.v_firstOf dtb__293)); B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf dtb__293) }))
   | _ -> failwith "DT: impossible branch"
@@ -765,7 +765,7 @@ and v_genCatchAllOnly = (fun (fuel : int) (st : t_GenState) (scLocal : string) (
   | _ -> failwith "DT: impossible branch"
 )))
 # 962 "Vuna/Compiler/Wasm/Module.vuna"
-and v_genVariantCase = (fun (fuel : int) (st : t_GenState) (scLocal : string) (family : string) (fam : Wasm_dTypes.t_WasmFam) (alts : Ir_dModel.t_IrAlt B_dData_dList.t_List) -> (if (fuel <= 0) then (B_dData_dResult.C_Result_Err ("wasm codegen fuel exhausted")) else (match alts with
+and v_genVariantCase = (fun (fuel : int) (st : t_GenState) (scLocal : string) (family : string) (fam : Wasm_dTypes.t_WasmFam) (alts : Vuna_dIr_dModel.t_IrAlt B_dData_dList.t_List) -> (if (fuel <= 0) then (B_dData_dResult.C_Result_Err ("wasm codegen fuel exhausted")) else (match alts with
   | B_dData_dList.C_List_Nil -> (B_dData_dResult.C_Result_Ok ({ B_dData_dPair.f_Pair_first = (B_dData_dList.C_List__x58__x58_ (Wasm_dInstr.C_Instr_IUnreachable, B_dData_dList.C_List_Nil)); B_dData_dPair.f_Pair_second = st }))
   | B_dData_dList.C_List__x58__x58_ (dtb__294, dtb__295) -> ((fun nd_uscrut9 -> (match nd_uscrut9 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__296) -> (match dtb__296 with
@@ -790,15 +790,15 @@ and v_genVariantCase = (fun (fuel : int) (st : t_GenState) (scLocal : string) (f
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
-)) (Ir_dModel.v_irAltCtorOf dtb__294))
+)) (Vuna_dIr_dModel.v_irAltCtorOf dtb__294))
   | _ -> failwith "DT: impossible branch"
 )))
 # 987 "Vuna/Compiler/Wasm/Module.vuna"
-and v_genAltBody = (fun (fuel : int) (st : t_GenState) (scLocal : string) (family : string) (fam : Wasm_dTypes.t_WasmFam) (alt : Ir_dModel.t_IrAlt) -> (if (fuel <= 0) then (B_dData_dResult.C_Result_Err ("wasm codegen fuel exhausted")) else (match (Ir_dModel.v_irAltCtorOf alt) with
+and v_genAltBody = (fun (fuel : int) (st : t_GenState) (scLocal : string) (family : string) (fam : Wasm_dTypes.t_WasmFam) (alt : Vuna_dIr_dModel.t_IrAlt) -> (if (fuel <= 0) then (B_dData_dResult.C_Result_Err ("wasm codegen fuel exhausted")) else (match (Vuna_dIr_dModel.v_irAltCtorOf alt) with
   | B_dData_dMaybe.C_Maybe_Nothing -> ((((v_genCatchAllOnly (fuel - 1)) st) scLocal) (B_dData_dList.C_List__x58__x58_ (alt, B_dData_dList.C_List_Nil)))
-  | B_dData_dMaybe.C_Maybe_Just (dtb__306) -> (match ((((((v_bindFields (fuel - 1)) st) scLocal) (Wasm_dTypes.v_watFamName family)) (v_runtimeBinders (Ir_dModel.v_irAltBindersOf alt))) 1) with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__306) -> (match ((((((v_bindFields (fuel - 1)) st) scLocal) (Wasm_dTypes.v_watFamName family)) (v_runtimeBinders (Vuna_dIr_dModel.v_irAltBindersOf alt))) 1) with
   | B_dData_dResult.C_Result_Err (dtb__307) -> (B_dData_dResult.C_Result_Err (dtb__307))
-  | B_dData_dResult.C_Result_Ok (dtb__308) -> (match (((v_genExpr (fuel - 1)) (B_dData_dPair.v_secondOf dtb__308)) (Ir_dModel.v_irAltBodyOf alt)) with
+  | B_dData_dResult.C_Result_Ok (dtb__308) -> (match (((v_genExpr (fuel - 1)) (B_dData_dPair.v_secondOf dtb__308)) (Vuna_dIr_dModel.v_irAltBodyOf alt)) with
   | B_dData_dResult.C_Result_Err (dtb__309) -> (B_dData_dResult.C_Result_Err (dtb__309))
   | B_dData_dResult.C_Result_Ok (dtb__310) -> (B_dData_dResult.C_Result_Ok ({ B_dData_dPair.f_Pair_first = ((B_dData_dList.v_append (B_dData_dPair.v_firstOf dtb__308)) (B_dData_dPair.v_firstOf dtb__310)); B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf dtb__310) }))
   | _ -> failwith "DT: impossible branch"
@@ -808,13 +808,13 @@ and v_genAltBody = (fun (fuel : int) (st : t_GenState) (scLocal : string) (famil
   | _ -> failwith "DT: impossible branch"
 )))
 # 1014 "Vuna/Compiler/Wasm/Module.vuna"
-and v_genRecordCase = (fun (fuel : int) (st : t_GenState) (scLocal : string) (family : string) (fam : Wasm_dTypes.t_WasmFam) (alts : Ir_dModel.t_IrAlt B_dData_dList.t_List) -> (if (fuel <= 0) then (B_dData_dResult.C_Result_Err ("wasm codegen fuel exhausted")) else (match alts with
+and v_genRecordCase = (fun (fuel : int) (st : t_GenState) (scLocal : string) (family : string) (fam : Wasm_dTypes.t_WasmFam) (alts : Vuna_dIr_dModel.t_IrAlt B_dData_dList.t_List) -> (if (fuel <= 0) then (B_dData_dResult.C_Result_Err ("wasm codegen fuel exhausted")) else (match alts with
   | B_dData_dList.C_List_Nil -> (B_dData_dResult.C_Result_Ok ({ B_dData_dPair.f_Pair_first = (B_dData_dList.C_List__x58__x58_ (Wasm_dInstr.C_Instr_IUnreachable, B_dData_dList.C_List_Nil)); B_dData_dPair.f_Pair_second = st }))
-  | B_dData_dList.C_List__x58__x58_ (dtb__311, dtb__312) -> (match (Ir_dModel.v_irAltCtorOf dtb__311) with
+  | B_dData_dList.C_List__x58__x58_ (dtb__311, dtb__312) -> (match (Vuna_dIr_dModel.v_irAltCtorOf dtb__311) with
   | B_dData_dMaybe.C_Maybe_Nothing -> ((((v_genCatchAllOnly (fuel - 1)) st) scLocal) (B_dData_dList.C_List__x58__x58_ (dtb__311, dtb__312)))
-  | B_dData_dMaybe.C_Maybe_Just (dtb__313) -> (match ((((((v_bindFields (fuel - 1)) st) scLocal) (Wasm_dTypes.v_watFamName family)) (v_runtimeBinders (Ir_dModel.v_irAltBindersOf dtb__311))) 0) with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__313) -> (match ((((((v_bindFields (fuel - 1)) st) scLocal) (Wasm_dTypes.v_watFamName family)) (v_runtimeBinders (Vuna_dIr_dModel.v_irAltBindersOf dtb__311))) 0) with
   | B_dData_dResult.C_Result_Err (dtb__314) -> (B_dData_dResult.C_Result_Err (dtb__314))
-  | B_dData_dResult.C_Result_Ok (dtb__315) -> (match (((v_genExpr (fuel - 1)) (B_dData_dPair.v_secondOf dtb__315)) (Ir_dModel.v_irAltBodyOf dtb__311)) with
+  | B_dData_dResult.C_Result_Ok (dtb__315) -> (match (((v_genExpr (fuel - 1)) (B_dData_dPair.v_secondOf dtb__315)) (Vuna_dIr_dModel.v_irAltBodyOf dtb__311)) with
   | B_dData_dResult.C_Result_Err (dtb__316) -> (B_dData_dResult.C_Result_Err (dtb__316))
   | B_dData_dResult.C_Result_Ok (dtb__317) -> (B_dData_dResult.C_Result_Ok ({ B_dData_dPair.f_Pair_first = ((B_dData_dList.v_append (B_dData_dPair.v_firstOf dtb__315)) (B_dData_dPair.v_firstOf dtb__317)); B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf dtb__317) }))
   | _ -> failwith "DT: impossible branch"
@@ -924,29 +924,29 @@ let v_wasmBridgeFuncs = (fun (mc0 : Wasm_dTypes.t_WasmListFam B_dData_dMaybe.t_M
 ))
 
 # 1481 "Vuna/Compiler/Wasm/Module.vuna"
-let v_genDefFuncGo = (fun (fuel : int) (st : t_GenState) (name : string) (arity : int) (inner : Ir_dModel.t_Ir) (paramScope : (Ir_dModel.t_IrBinder, string) B_dData_dPair.t_Pair B_dData_dList.t_List) (savedLocals : (string, Wasm_dModel.t_WatValTy) B_dData_dPair.t_Pair B_dData_dList.t_List) (savedNext : int) (savedScope : (Ir_dModel.t_IrBinder, string) B_dData_dPair.t_Pair B_dData_dList.t_List) -> ((fun st1 -> (match (((v_genExpr (fuel - 1)) st1) inner) with
+let v_genDefFuncGo = (fun (fuel : int) (st : t_GenState) (name : string) (arity : int) (inner : Vuna_dIr_dModel.t_Ir) (paramScope : (Vuna_dIr_dModel.t_IrBinder, string) B_dData_dPair.t_Pair B_dData_dList.t_List) (savedLocals : (string, Wasm_dModel.t_WatValTy) B_dData_dPair.t_Pair B_dData_dList.t_List) (savedNext : int) (savedScope : (Vuna_dIr_dModel.t_IrBinder, string) B_dData_dPair.t_Pair B_dData_dList.t_List) -> ((fun st1 -> (match (((v_genExpr (fuel - 1)) st1) inner) with
   | B_dData_dResult.C_Result_Err (dtb__321) -> (B_dData_dResult.C_Result_Err (dtb__321))
   | B_dData_dResult.C_Result_Ok (dtb__322) -> ((fun bodyState -> ((fun func -> ((fun st2 -> (B_dData_dResult.C_Result_Ok ({ B_dData_dPair.f_Pair_first = (B_dData_dList.C_List__x58__x58_ (func, B_dData_dList.C_List_Nil)); B_dData_dPair.f_Pair_second = ((v_withTail false) st2) }))) ((((v_endFuncScope bodyState) savedLocals) savedNext) savedScope))) { Wasm_dModel.f_WatFunc_watFuncName = (Wasm_dTypes.v_watFuncNameOf name); Wasm_dModel.f_WatFunc_watFuncType = ""; Wasm_dModel.f_WatFunc_watFuncParams = (v_funcParams arity); Wasm_dModel.f_WatFunc_watFuncResults = (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvAnyRef, B_dData_dList.C_List_Nil)); Wasm_dModel.f_WatFunc_watFuncLocals = (bodyState).f_GenState_gsLocals; Wasm_dModel.f_WatFunc_watFuncBody = (B_dData_dPair.v_firstOf dtb__322) })) (B_dData_dPair.v_secondOf dtb__322))
   | _ -> failwith "DT: impossible branch"
 )) { st with f_GenState_gsScope = paramScope; f_GenState_gsTail = true }))
 
 # 1464 "Vuna/Compiler/Wasm/Module.vuna"
-let v_genDefFuncBody = (fun (fuel : int) (st : t_GenState) (name : string) (arity : int) (body : Ir_dModel.t_Ir) -> ((fun savedLocals -> ((fun savedNext -> ((fun savedScope -> ((fun st1 -> (match body with
-  | Ir_dModel.C_Ir_IrLam (dtb__323, dtb__324, dtb__325) -> (match (v_runtimeBinders dtb__323) with
+let v_genDefFuncBody = (fun (fuel : int) (st : t_GenState) (name : string) (arity : int) (body : Vuna_dIr_dModel.t_Ir) -> ((fun savedLocals -> ((fun savedNext -> ((fun savedScope -> ((fun st1 -> (match body with
+  | Vuna_dIr_dModel.C_Ir_IrLam (dtb__323, dtb__324, dtb__325) -> (match (v_runtimeBinders dtb__323) with
   | dtb__326 -> (if ((v_listLengthB dtb__326) <> arity) then (B_dData_dResult.C_Result_Err ((String.concat "" ["wasm target: function body lambda arity mismatch: `"; name; "`"]))) else (((((((((v_genDefFuncGo fuel) st1) name) arity) dtb__325) ((v_zipIdx 0) dtb__326)) savedLocals) savedNext) savedScope))
 )
   | _ -> (B_dData_dResult.C_Result_Err ((String.concat "" ["wasm target: function body is not a lambda: `"; name; "`"])))
 )) (v_beginFuncScope st))) (st).f_GenState_gsScope)) (st).f_GenState_gsNextLocal)) (st).f_GenState_gsLocals))
 
 # 1458 "Vuna/Compiler/Wasm/Module.vuna"
-let v_genDefFunc = (fun (mc0 : int) (mc1 : t_GenState) (mc2 : Ir_dModel.t_IrDef) -> (match mc2 with
-  | Ir_dModel.C_IrDef_IrDef (dtb__327, dtb__328, dtb__329, dtb__330, dtb__331, dtb__332, dtb__333, dtb__334) -> (if (dtb__328 = 0) then (B_dData_dResult.C_Result_Ok ({ B_dData_dPair.f_Pair_first = B_dData_dList.C_List_Nil; B_dData_dPair.f_Pair_second = mc1 })) else (((((v_genDefFuncBody mc0) mc1) dtb__327) dtb__328) dtb__331))
-  | Ir_dModel.C_IrDef_IrExternDef (dtb__335, dtb__336, dtb__337, dtb__338) -> (B_dData_dResult.C_Result_Err ((String.concat "" ["wasm target: extern definition `"; dtb__335; "` is not supported yet"])))
+let v_genDefFunc = (fun (mc0 : int) (mc1 : t_GenState) (mc2 : Vuna_dIr_dModel.t_IrDef) -> (match mc2 with
+  | Vuna_dIr_dModel.C_IrDef_IrDef (dtb__327, dtb__328, dtb__329, dtb__330, dtb__331, dtb__332, dtb__333, dtb__334) -> (if (dtb__328 = 0) then (B_dData_dResult.C_Result_Ok ({ B_dData_dPair.f_Pair_first = B_dData_dList.C_List_Nil; B_dData_dPair.f_Pair_second = mc1 })) else (((((v_genDefFuncBody mc0) mc1) dtb__327) dtb__328) dtb__331))
+  | Vuna_dIr_dModel.C_IrDef_IrExternDef (dtb__335, dtb__336, dtb__337, dtb__338) -> (B_dData_dResult.C_Result_Err ((String.concat "" ["wasm target: extern definition `"; dtb__335; "` is not supported yet"])))
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 1501 "Vuna/Compiler/Wasm/Module.vuna"
-let rec v_genDefFuncs = (fun (mc0 : int) (mc1 : t_GenState) (mc2 : Ir_dModel.t_IrDef B_dData_dList.t_List) -> (match mc2 with
+let rec v_genDefFuncs = (fun (mc0 : int) (mc1 : t_GenState) (mc2 : Vuna_dIr_dModel.t_IrDef B_dData_dList.t_List) -> (match mc2 with
   | B_dData_dList.C_List__x58__x58_ (dtb__339, dtb__340) -> (if (mc0 <= 0) then (B_dData_dResult.C_Result_Err ("wasm codegen fuel exhausted")) else (match (((v_genDefFunc mc0) mc1) dtb__339) with
   | B_dData_dResult.C_Result_Err (dtb__341) -> (B_dData_dResult.C_Result_Err (dtb__341))
   | B_dData_dResult.C_Result_Ok (dtb__342) -> (match (((v_genDefFuncs (mc0 - 1)) (B_dData_dPair.v_secondOf dtb__342)) dtb__340) with
@@ -961,18 +961,18 @@ let rec v_genDefFuncs = (fun (mc0 : int) (mc1 : t_GenState) (mc2 : Ir_dModel.t_I
 ))
 
 # 1517 "Vuna/Compiler/Wasm/Module.vuna"
-let v_genDefInit = (fun (mc0 : int) (mc1 : t_GenState) (mc2 : Ir_dModel.t_IrDef) -> (match mc2 with
-  | Ir_dModel.C_IrDef_IrDef (dtb__345, dtb__346, dtb__347, dtb__348, dtb__349, dtb__350, dtb__351, dtb__352) -> (if (dtb__346 <> 0) then (B_dData_dResult.C_Result_Ok ({ B_dData_dPair.f_Pair_first = B_dData_dList.C_List_Nil; B_dData_dPair.f_Pair_second = mc1 })) else ((fun st1 -> (match (((v_genExpr (mc0 - 1)) st1) (Ir_dTail.v_stripTail dtb__349)) with
+let v_genDefInit = (fun (mc0 : int) (mc1 : t_GenState) (mc2 : Vuna_dIr_dModel.t_IrDef) -> (match mc2 with
+  | Vuna_dIr_dModel.C_IrDef_IrDef (dtb__345, dtb__346, dtb__347, dtb__348, dtb__349, dtb__350, dtb__351, dtb__352) -> (if (dtb__346 <> 0) then (B_dData_dResult.C_Result_Ok ({ B_dData_dPair.f_Pair_first = B_dData_dList.C_List_Nil; B_dData_dPair.f_Pair_second = mc1 })) else ((fun st1 -> (match (((v_genExpr (mc0 - 1)) st1) (Vuna_dIr_dTail.v_stripTail dtb__349)) with
   | B_dData_dResult.C_Result_Err (dtb__353) -> (B_dData_dResult.C_Result_Err (dtb__353))
   | B_dData_dResult.C_Result_Ok (dtb__354) -> (B_dData_dResult.C_Result_Ok ({ B_dData_dPair.f_Pair_first = ((B_dData_dList.v_append (B_dData_dPair.v_firstOf dtb__354)) (B_dData_dList.C_List__x58__x58_ ((Wasm_dInstr.C_Instr_IGlobalSet ((Wasm_dTypes.v_watGlobalNameOf dtb__345))), B_dData_dList.C_List_Nil))); B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf dtb__354) }))
   | _ -> failwith "DT: impossible branch"
 )) ((v_restoreScope B_dData_dList.C_List_Nil) mc1)))
-  | Ir_dModel.C_IrDef_IrExternDef (dtb__355, dtb__356, dtb__357, dtb__358) -> (B_dData_dResult.C_Result_Err ("extern definition reached wasm codegen"))
+  | Vuna_dIr_dModel.C_IrDef_IrExternDef (dtb__355, dtb__356, dtb__357, dtb__358) -> (B_dData_dResult.C_Result_Err ("extern definition reached wasm codegen"))
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 1529 "Vuna/Compiler/Wasm/Module.vuna"
-let rec v_genDefsInits = (fun (mc0 : int) (mc1 : t_GenState) (mc2 : Ir_dModel.t_IrDef B_dData_dList.t_List) -> (match mc2 with
+let rec v_genDefsInits = (fun (mc0 : int) (mc1 : t_GenState) (mc2 : Vuna_dIr_dModel.t_IrDef B_dData_dList.t_List) -> (match mc2 with
   | B_dData_dList.C_List__x58__x58_ (dtb__359, dtb__360) -> (if (mc0 <= 0) then (B_dData_dResult.C_Result_Err ("wasm codegen fuel exhausted")) else (match (((v_genDefInit (mc0 - 1)) mc1) dtb__359) with
   | B_dData_dResult.C_Result_Err (dtb__361) -> (B_dData_dResult.C_Result_Err (dtb__361))
   | B_dData_dResult.C_Result_Ok (dtb__362) -> (match (((v_genDefsInits (mc0 - 1)) (B_dData_dPair.v_secondOf dtb__362)) dtb__360) with
@@ -993,10 +993,10 @@ let v_baseTypes = (B_dData_dList.C_List__x58__x58_ ((Wasm_dModel.C_WatType_WatFu
 let v_baseImports = (B_dData_dList.C_List__x58__x58_ ({ Wasm_dModel.f_WatImport_watImportModule = "wasi_snapshot_preview1"; Wasm_dModel.f_WatImport_watImportName = "fd_write"; Wasm_dModel.f_WatImport_watImportFunc = "$fd_write"; Wasm_dModel.f_WatImport_watImportParams = (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI32, (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI32, (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI32, (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI32, B_dData_dList.C_List_Nil)))))))); Wasm_dModel.f_WatImport_watImportResults = (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI32, B_dData_dList.C_List_Nil)) }, (B_dData_dList.C_List__x58__x58_ ({ Wasm_dModel.f_WatImport_watImportModule = "wasi_snapshot_preview1"; Wasm_dModel.f_WatImport_watImportName = "fd_read"; Wasm_dModel.f_WatImport_watImportFunc = "$fd_read"; Wasm_dModel.f_WatImport_watImportParams = (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI32, (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI32, (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI32, (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI32, B_dData_dList.C_List_Nil)))))))); Wasm_dModel.f_WatImport_watImportResults = (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI32, B_dData_dList.C_List_Nil)) }, (B_dData_dList.C_List__x58__x58_ ({ Wasm_dModel.f_WatImport_watImportModule = "wasi_snapshot_preview1"; Wasm_dModel.f_WatImport_watImportName = "fd_close"; Wasm_dModel.f_WatImport_watImportFunc = "$fd_close"; Wasm_dModel.f_WatImport_watImportParams = (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI32, B_dData_dList.C_List_Nil)); Wasm_dModel.f_WatImport_watImportResults = (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI32, B_dData_dList.C_List_Nil)) }, (B_dData_dList.C_List__x58__x58_ ({ Wasm_dModel.f_WatImport_watImportModule = "wasi_snapshot_preview1"; Wasm_dModel.f_WatImport_watImportName = "path_open"; Wasm_dModel.f_WatImport_watImportFunc = "$path_open"; Wasm_dModel.f_WatImport_watImportParams = (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI32, (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI32, (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI32, (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI32, (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI32, (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI64, (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI64, (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI32, (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI32, B_dData_dList.C_List_Nil)))))))))))))))))); Wasm_dModel.f_WatImport_watImportResults = (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI32, B_dData_dList.C_List_Nil)) }, (B_dData_dList.C_List__x58__x58_ ({ Wasm_dModel.f_WatImport_watImportModule = "wasi_snapshot_preview1"; Wasm_dModel.f_WatImport_watImportName = "path_filestat_get"; Wasm_dModel.f_WatImport_watImportFunc = "$path_filestat_get"; Wasm_dModel.f_WatImport_watImportParams = (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI32, (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI32, (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI32, (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI32, (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI32, B_dData_dList.C_List_Nil)))))))))); Wasm_dModel.f_WatImport_watImportResults = (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI32, B_dData_dList.C_List_Nil)) }, (B_dData_dList.C_List__x58__x58_ ({ Wasm_dModel.f_WatImport_watImportModule = "wasi_snapshot_preview1"; Wasm_dModel.f_WatImport_watImportName = "path_create_directory"; Wasm_dModel.f_WatImport_watImportFunc = "$path_create_directory"; Wasm_dModel.f_WatImport_watImportParams = (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI32, (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI32, (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI32, B_dData_dList.C_List_Nil)))))); Wasm_dModel.f_WatImport_watImportResults = (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI32, B_dData_dList.C_List_Nil)) }, (B_dData_dList.C_List__x58__x58_ ({ Wasm_dModel.f_WatImport_watImportModule = "wasi_snapshot_preview1"; Wasm_dModel.f_WatImport_watImportName = "path_remove_directory"; Wasm_dModel.f_WatImport_watImportFunc = "$path_remove_directory"; Wasm_dModel.f_WatImport_watImportParams = (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI32, (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI32, (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI32, B_dData_dList.C_List_Nil)))))); Wasm_dModel.f_WatImport_watImportResults = (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI32, B_dData_dList.C_List_Nil)) }, (B_dData_dList.C_List__x58__x58_ ({ Wasm_dModel.f_WatImport_watImportModule = "wasi_snapshot_preview1"; Wasm_dModel.f_WatImport_watImportName = "path_unlink_file"; Wasm_dModel.f_WatImport_watImportFunc = "$path_unlink_file"; Wasm_dModel.f_WatImport_watImportParams = (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI32, (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI32, (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI32, B_dData_dList.C_List_Nil)))))); Wasm_dModel.f_WatImport_watImportResults = (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI32, B_dData_dList.C_List_Nil)) }, (B_dData_dList.C_List__x58__x58_ ({ Wasm_dModel.f_WatImport_watImportModule = "wasi_snapshot_preview1"; Wasm_dModel.f_WatImport_watImportName = "path_rename"; Wasm_dModel.f_WatImport_watImportFunc = "$path_rename"; Wasm_dModel.f_WatImport_watImportParams = (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI32, (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI32, (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI32, (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI32, (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI32, (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI32, B_dData_dList.C_List_Nil)))))))))))); Wasm_dModel.f_WatImport_watImportResults = (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI32, B_dData_dList.C_List_Nil)) }, (B_dData_dList.C_List__x58__x58_ ({ Wasm_dModel.f_WatImport_watImportModule = "wasi_snapshot_preview1"; Wasm_dModel.f_WatImport_watImportName = "fd_readdir"; Wasm_dModel.f_WatImport_watImportFunc = "$fd_readdir"; Wasm_dModel.f_WatImport_watImportParams = (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI32, (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI32, (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI32, (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI64, (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI32, B_dData_dList.C_List_Nil)))))))))); Wasm_dModel.f_WatImport_watImportResults = (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI32, B_dData_dList.C_List_Nil)) }, (B_dData_dList.C_List__x58__x58_ ({ Wasm_dModel.f_WatImport_watImportModule = "wasi_snapshot_preview1"; Wasm_dModel.f_WatImport_watImportName = "environ_sizes_get"; Wasm_dModel.f_WatImport_watImportFunc = "$environ_sizes_get"; Wasm_dModel.f_WatImport_watImportParams = (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI32, (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI32, B_dData_dList.C_List_Nil)))); Wasm_dModel.f_WatImport_watImportResults = (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI32, B_dData_dList.C_List_Nil)) }, (B_dData_dList.C_List__x58__x58_ ({ Wasm_dModel.f_WatImport_watImportModule = "wasi_snapshot_preview1"; Wasm_dModel.f_WatImport_watImportName = "environ_get"; Wasm_dModel.f_WatImport_watImportFunc = "$environ_get"; Wasm_dModel.f_WatImport_watImportParams = (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI32, (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI32, B_dData_dList.C_List_Nil)))); Wasm_dModel.f_WatImport_watImportResults = (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI32, B_dData_dList.C_List_Nil)) }, (B_dData_dList.C_List__x58__x58_ ({ Wasm_dModel.f_WatImport_watImportModule = "wasi_snapshot_preview1"; Wasm_dModel.f_WatImport_watImportName = "args_sizes_get"; Wasm_dModel.f_WatImport_watImportFunc = "$args_sizes_get"; Wasm_dModel.f_WatImport_watImportParams = (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI32, (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI32, B_dData_dList.C_List_Nil)))); Wasm_dModel.f_WatImport_watImportResults = (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI32, B_dData_dList.C_List_Nil)) }, (B_dData_dList.C_List__x58__x58_ ({ Wasm_dModel.f_WatImport_watImportModule = "wasi_snapshot_preview1"; Wasm_dModel.f_WatImport_watImportName = "args_get"; Wasm_dModel.f_WatImport_watImportFunc = "$args_get"; Wasm_dModel.f_WatImport_watImportParams = (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI32, (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI32, B_dData_dList.C_List_Nil)))); Wasm_dModel.f_WatImport_watImportResults = (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI32, B_dData_dList.C_List_Nil)) }, (B_dData_dList.C_List__x58__x58_ ({ Wasm_dModel.f_WatImport_watImportModule = "wasi_snapshot_preview1"; Wasm_dModel.f_WatImport_watImportName = "clock_time_get"; Wasm_dModel.f_WatImport_watImportFunc = "$clock_time_get"; Wasm_dModel.f_WatImport_watImportParams = (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI32, (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI64, (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI32, B_dData_dList.C_List_Nil)))))); Wasm_dModel.f_WatImport_watImportResults = (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI32, B_dData_dList.C_List_Nil)) }, (B_dData_dList.C_List__x58__x58_ ({ Wasm_dModel.f_WatImport_watImportModule = "wasi_snapshot_preview1"; Wasm_dModel.f_WatImport_watImportName = "proc_exit"; Wasm_dModel.f_WatImport_watImportFunc = "$proc_exit"; Wasm_dModel.f_WatImport_watImportParams = (B_dData_dList.C_List__x58__x58_ (Wasm_dModel.C_WatValTy_WvI32, B_dData_dList.C_List_Nil)); Wasm_dModel.f_WatImport_watImportResults = B_dData_dList.C_List_Nil }, B_dData_dList.C_List_Nil))))))))))))))))))))))))))))))))
 
 # 1670 "Vuna/Compiler/Wasm/Module.vuna"
-let v_globalOfDef = (fun (d : Ir_dModel.t_IrDef) -> (if ((Ir_dModel.v_irDefArity d) = 0) then (B_dData_dList.C_List__x58__x58_ ({ Wasm_dModel.f_WatGlobal_watGlobalName = (Wasm_dTypes.v_watGlobalNameOf (Ir_dModel.v_irDefName d)); Wasm_dModel.f_WatGlobal_watGlobalTy = Wasm_dModel.C_WatValTy_WvAnyRef; Wasm_dModel.f_WatGlobal_watGlobalInit = (B_dData_dList.C_List__x58__x58_ (Wasm_dInstr.C_Instr_IRefNull, B_dData_dList.C_List_Nil)) }, B_dData_dList.C_List_Nil)) else B_dData_dList.C_List_Nil))
+let v_globalOfDef = (fun (d : Vuna_dIr_dModel.t_IrDef) -> (if ((Vuna_dIr_dModel.v_irDefArity d) = 0) then (B_dData_dList.C_List__x58__x58_ ({ Wasm_dModel.f_WatGlobal_watGlobalName = (Wasm_dTypes.v_watGlobalNameOf (Vuna_dIr_dModel.v_irDefName d)); Wasm_dModel.f_WatGlobal_watGlobalTy = Wasm_dModel.C_WatValTy_WvAnyRef; Wasm_dModel.f_WatGlobal_watGlobalInit = (B_dData_dList.C_List__x58__x58_ (Wasm_dInstr.C_Instr_IRefNull, B_dData_dList.C_List_Nil)) }, B_dData_dList.C_List_Nil)) else B_dData_dList.C_List_Nil))
 
 # 1667 "Vuna/Compiler/Wasm/Module.vuna"
-let v_globalsOf = (fun (defs : Ir_dModel.t_IrDef B_dData_dList.t_List) -> ((B_dData_dList.v_concatMap v_globalOfDef) defs))
+let v_globalsOf = (fun (defs : Vuna_dIr_dModel.t_IrDef B_dData_dList.t_List) -> ((B_dData_dList.v_concatMap v_globalOfDef) defs))
 
 # 1674 "Vuna/Compiler/Wasm/Module.vuna"
 let rec v_concatMapType = (fun (mc0 : Wasm_dTypes.t_WasmFam B_dData_dList.t_List) -> (match mc0 with
@@ -1016,25 +1016,25 @@ let v_effSymbols = (B_dData_dList.C_List__x58__x58_ ("prim_effectPerformId", (B_
 let v_effScanFuel = 100000
 
 # 1689 "Vuna/Compiler/Wasm/Module.vuna"
-let rec v_anyIrSym = (fun (mc0 : int) (mc1 : string B_dData_dList.t_List) (mc2 : Ir_dModel.t_Ir B_dData_dList.t_List) -> (match mc2 with
+let rec v_anyIrSym = (fun (mc0 : int) (mc1 : string B_dData_dList.t_List) (mc2 : Vuna_dIr_dModel.t_Ir B_dData_dList.t_List) -> (match mc2 with
   | B_dData_dList.C_List__x58__x58_ (dtb__368, dtb__369) -> (if (((v_irUsesSyms (mc0 - 1)) mc1) dtb__368) then true else (((v_anyIrSym (mc0 - 1)) mc1) dtb__369))
   | B_dData_dList.C_List_Nil -> false
   | _ -> failwith "DT: impossible branch"
 ))
 # 1694 "Vuna/Compiler/Wasm/Module.vuna"
-and v_anyAltSym = (fun (mc0 : int) (mc1 : string B_dData_dList.t_List) (mc2 : Ir_dModel.t_IrAlt B_dData_dList.t_List) -> (match mc2 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__370, dtb__371) -> (if (((v_irUsesSyms (mc0 - 1)) mc1) (dtb__370).Ir_dModel.f_IrAlt_irAltBody) then true else (((v_anyAltSym (mc0 - 1)) mc1) dtb__371))
+and v_anyAltSym = (fun (mc0 : int) (mc1 : string B_dData_dList.t_List) (mc2 : Vuna_dIr_dModel.t_IrAlt B_dData_dList.t_List) -> (match mc2 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__370, dtb__371) -> (if (((v_irUsesSyms (mc0 - 1)) mc1) (dtb__370).Vuna_dIr_dModel.f_IrAlt_irAltBody) then true else (((v_anyAltSym (mc0 - 1)) mc1) dtb__371))
   | B_dData_dList.C_List_Nil -> false
   | _ -> failwith "DT: impossible branch"
 ))
 # 1699 "Vuna/Compiler/Wasm/Module.vuna"
-and v_altMaybeSym = (fun (mc0 : int) (mc1 : string B_dData_dList.t_List) (mc2 : Ir_dModel.t_IrAlt B_dData_dMaybe.t_Maybe) -> (match mc2 with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__372) -> (((v_irUsesSyms (mc0 - 1)) mc1) (dtb__372).Ir_dModel.f_IrAlt_irAltBody)
+and v_altMaybeSym = (fun (mc0 : int) (mc1 : string B_dData_dList.t_List) (mc2 : Vuna_dIr_dModel.t_IrAlt B_dData_dMaybe.t_Maybe) -> (match mc2 with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__372) -> (((v_irUsesSyms (mc0 - 1)) mc1) (dtb__372).Vuna_dIr_dModel.f_IrAlt_irAltBody)
   | B_dData_dMaybe.C_Maybe_Nothing -> false
   | _ -> failwith "DT: impossible branch"
 ))
 # 1703 "Vuna/Compiler/Wasm/Module.vuna"
-and v_fieldSym = (fun (mc0 : int) (mc1 : string B_dData_dList.t_List) (mc2 : (string, Ir_dModel.t_Ir) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc2 with
+and v_fieldSym = (fun (mc0 : int) (mc1 : string B_dData_dList.t_List) (mc2 : (string, Vuna_dIr_dModel.t_Ir) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc2 with
   | B_dData_dList.C_List__x58__x58_ (dtb__373, dtb__374) -> (match dtb__373 with
   | { B_dData_dPair.f_Pair_first = dtb__375; B_dData_dPair.f_Pair_second = dtb__376 } -> (if (((v_irUsesSyms (mc0 - 1)) mc1) dtb__376) then true else (((v_fieldSym (mc0 - 1)) mc1) dtb__374))
   | _ -> failwith "DT: impossible branch"
@@ -1043,30 +1043,30 @@ and v_fieldSym = (fun (mc0 : int) (mc1 : string B_dData_dList.t_List) (mc2 : (st
   | _ -> failwith "DT: impossible branch"
 ))
 # 1709 "Vuna/Compiler/Wasm/Module.vuna"
-and v_irUsesSyms = (fun (fuel : int) (syms : string B_dData_dList.t_List) (ir : Ir_dModel.t_Ir) -> (if (fuel <= 0) then true else (match ir with
-  | Ir_dModel.C_Ir_IrVar (dtb__377) -> false
-  | Ir_dModel.C_Ir_IrGlobal (dtb__378) -> false
-  | Ir_dModel.C_Ir_IrCtor (dtb__379, dtb__380, dtb__381, dtb__382) -> (((v_anyIrSym fuel) syms) dtb__382)
-  | Ir_dModel.C_Ir_IrRecord (dtb__383, dtb__384, dtb__385) -> (((v_fieldSym fuel) syms) dtb__385)
-  | Ir_dModel.C_Ir_IrProj (dtb__386, dtb__387, dtb__388, dtb__389) -> (((v_irUsesSyms (fuel - 1)) syms) dtb__386)
-  | Ir_dModel.C_Ir_IrRecUpd (dtb__390, dtb__391, dtb__392, dtb__393) -> (if (((v_irUsesSyms (fuel - 1)) syms) dtb__390) then true else (((v_fieldSym fuel) syms) dtb__392))
-  | Ir_dModel.C_Ir_IrRt (dtb__394) -> ((B_dData_dList.v_memName dtb__394) syms)
-  | Ir_dModel.C_Ir_IrRtApp (dtb__395, dtb__396) -> (if ((B_dData_dList.v_memName dtb__395) syms) then true else (((v_anyIrSym fuel) syms) dtb__396))
-  | Ir_dModel.C_Ir_IrCast (dtb__397, dtb__398, dtb__399) -> (((v_irUsesSyms (fuel - 1)) syms) dtb__399)
-  | Ir_dModel.C_Ir_IrInt (dtb__400) -> false
-  | Ir_dModel.C_Ir_IrStr (dtb__401) -> false
-  | Ir_dModel.C_Ir_IrBool (dtb__402) -> false
-  | Ir_dModel.C_Ir_IrFloatLit (dtb__403) -> false
-  | Ir_dModel.C_Ir_IrLet (dtb__404, dtb__405, dtb__406) -> (if (((v_irUsesSyms (fuel - 1)) syms) dtb__405) then true else (((v_irUsesSyms (fuel - 1)) syms) dtb__406))
-  | Ir_dModel.C_Ir_IrLam (dtb__407, dtb__408, dtb__409) -> (((v_irUsesSyms (fuel - 1)) syms) dtb__409)
-  | Ir_dModel.C_Ir_IrApp (dtb__410, dtb__411, dtb__412) -> (if (((v_irUsesSyms (fuel - 1)) syms) dtb__411) then true else (((v_irUsesSyms (fuel - 1)) syms) dtb__412))
-  | Ir_dModel.C_Ir_IrIf (dtb__413, dtb__414, dtb__415) -> (if (((v_irUsesSyms (fuel - 1)) syms) dtb__413) then true else (if (((v_irUsesSyms (fuel - 1)) syms) dtb__414) then true else (((v_irUsesSyms (fuel - 1)) syms) dtb__415)))
-  | Ir_dModel.C_Ir_IrCase (dtb__416, dtb__417, dtb__418, dtb__419) -> (if (((v_irUsesSyms (fuel - 1)) syms) dtb__418) then true else (((v_anyAltSym fuel) syms) dtb__419))
-  | Ir_dModel.C_Ir_IrNatCase (dtb__420, dtb__421, dtb__422, dtb__423, dtb__424) -> (if (((v_irUsesSyms (fuel - 1)) syms) dtb__420) then true else (if (((v_altMaybeSym fuel) syms) dtb__422) then true else (if (((v_altMaybeSym fuel) syms) dtb__423) then true else (((v_altMaybeSym fuel) syms) dtb__424))))
-  | Ir_dModel.C_Ir_IrConcatMany (dtb__425) -> (((v_anyIrSym fuel) syms) dtb__425)
-  | Ir_dModel.C_Ir_IrEffThunk (dtb__426, dtb__427, dtb__428, dtb__429, dtb__430) -> false
-  | Ir_dModel.C_Ir_IrTail (dtb__431) -> (((v_irUsesSyms (fuel - 1)) syms) dtb__431)
-  | Ir_dModel.C_Ir_IrEffBind (dtb__432, dtb__433, dtb__434) -> false
+and v_irUsesSyms = (fun (fuel : int) (syms : string B_dData_dList.t_List) (ir : Vuna_dIr_dModel.t_Ir) -> (if (fuel <= 0) then true else (match ir with
+  | Vuna_dIr_dModel.C_Ir_IrVar (dtb__377) -> false
+  | Vuna_dIr_dModel.C_Ir_IrGlobal (dtb__378) -> false
+  | Vuna_dIr_dModel.C_Ir_IrCtor (dtb__379, dtb__380, dtb__381, dtb__382) -> (((v_anyIrSym fuel) syms) dtb__382)
+  | Vuna_dIr_dModel.C_Ir_IrRecord (dtb__383, dtb__384, dtb__385) -> (((v_fieldSym fuel) syms) dtb__385)
+  | Vuna_dIr_dModel.C_Ir_IrProj (dtb__386, dtb__387, dtb__388, dtb__389) -> (((v_irUsesSyms (fuel - 1)) syms) dtb__386)
+  | Vuna_dIr_dModel.C_Ir_IrRecUpd (dtb__390, dtb__391, dtb__392, dtb__393) -> (if (((v_irUsesSyms (fuel - 1)) syms) dtb__390) then true else (((v_fieldSym fuel) syms) dtb__392))
+  | Vuna_dIr_dModel.C_Ir_IrRt (dtb__394) -> ((B_dData_dList.v_memName dtb__394) syms)
+  | Vuna_dIr_dModel.C_Ir_IrRtApp (dtb__395, dtb__396) -> (if ((B_dData_dList.v_memName dtb__395) syms) then true else (((v_anyIrSym fuel) syms) dtb__396))
+  | Vuna_dIr_dModel.C_Ir_IrCast (dtb__397, dtb__398, dtb__399) -> (((v_irUsesSyms (fuel - 1)) syms) dtb__399)
+  | Vuna_dIr_dModel.C_Ir_IrInt (dtb__400) -> false
+  | Vuna_dIr_dModel.C_Ir_IrStr (dtb__401) -> false
+  | Vuna_dIr_dModel.C_Ir_IrBool (dtb__402) -> false
+  | Vuna_dIr_dModel.C_Ir_IrFloatLit (dtb__403) -> false
+  | Vuna_dIr_dModel.C_Ir_IrLet (dtb__404, dtb__405, dtb__406) -> (if (((v_irUsesSyms (fuel - 1)) syms) dtb__405) then true else (((v_irUsesSyms (fuel - 1)) syms) dtb__406))
+  | Vuna_dIr_dModel.C_Ir_IrLam (dtb__407, dtb__408, dtb__409) -> (((v_irUsesSyms (fuel - 1)) syms) dtb__409)
+  | Vuna_dIr_dModel.C_Ir_IrApp (dtb__410, dtb__411, dtb__412) -> (if (((v_irUsesSyms (fuel - 1)) syms) dtb__411) then true else (((v_irUsesSyms (fuel - 1)) syms) dtb__412))
+  | Vuna_dIr_dModel.C_Ir_IrIf (dtb__413, dtb__414, dtb__415) -> (if (((v_irUsesSyms (fuel - 1)) syms) dtb__413) then true else (if (((v_irUsesSyms (fuel - 1)) syms) dtb__414) then true else (((v_irUsesSyms (fuel - 1)) syms) dtb__415)))
+  | Vuna_dIr_dModel.C_Ir_IrCase (dtb__416, dtb__417, dtb__418, dtb__419) -> (if (((v_irUsesSyms (fuel - 1)) syms) dtb__418) then true else (((v_anyAltSym fuel) syms) dtb__419))
+  | Vuna_dIr_dModel.C_Ir_IrNatCase (dtb__420, dtb__421, dtb__422, dtb__423, dtb__424) -> (if (((v_irUsesSyms (fuel - 1)) syms) dtb__420) then true else (if (((v_altMaybeSym fuel) syms) dtb__422) then true else (if (((v_altMaybeSym fuel) syms) dtb__423) then true else (((v_altMaybeSym fuel) syms) dtb__424))))
+  | Vuna_dIr_dModel.C_Ir_IrConcatMany (dtb__425) -> (((v_anyIrSym fuel) syms) dtb__425)
+  | Vuna_dIr_dModel.C_Ir_IrEffThunk (dtb__426, dtb__427, dtb__428, dtb__429, dtb__430) -> false
+  | Vuna_dIr_dModel.C_Ir_IrTail (dtb__431) -> (((v_irUsesSyms (fuel - 1)) syms) dtb__431)
+  | Vuna_dIr_dModel.C_Ir_IrEffBind (dtb__432, dtb__433, dtb__434) -> false
   | _ -> failwith "DT: impossible branch"
 )))
 
@@ -1074,14 +1074,14 @@ and v_irUsesSyms = (fun (fuel : int) (syms : string B_dData_dList.t_List) (ir : 
 let v_performSyms = (B_dData_dList.C_List__x58__x58_ ("prim_effectPerformId", (B_dData_dList.C_List__x58__x58_ ("prim_effectHandleId", (B_dData_dList.C_List__x58__x58_ ("prim_effectSelf", B_dData_dList.C_List_Nil))))))
 
 # 1743 "Vuna/Compiler/Wasm/Module.vuna"
-let v_defUsesSyms = (fun (syms : string B_dData_dList.t_List) (d : Ir_dModel.t_IrDef) -> (match (Ir_dModel.v_irDefBody d) with
+let v_defUsesSyms = (fun (syms : string B_dData_dList.t_List) (d : Vuna_dIr_dModel.t_IrDef) -> (match (Vuna_dIr_dModel.v_irDefBody d) with
   | B_dData_dMaybe.C_Maybe_Nothing -> false
   | B_dData_dMaybe.C_Maybe_Just (dtb__435) -> (((v_irUsesSyms v_effScanFuel) syms) dtb__435)
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 1749 "Vuna/Compiler/Wasm/Module.vuna"
-let rec v_defsUseSyms = (fun (mc0 : string B_dData_dList.t_List) (mc1 : Ir_dModel.t_IrDef B_dData_dList.t_List) -> (match mc1 with
+let rec v_defsUseSyms = (fun (mc0 : string B_dData_dList.t_List) (mc1 : Vuna_dIr_dModel.t_IrDef B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__436, dtb__437) -> (if ((v_defUsesSyms mc0) dtb__436) then true else ((v_defsUseSyms mc0) dtb__437))
   | B_dData_dList.C_List_Nil -> false
   | _ -> failwith "DT: impossible branch"
@@ -1108,9 +1108,9 @@ let v_listNull = (fun mc0 -> (match mc0 with
 let v_hcPureK = "@vuna@host@pureK"
 
 # 1817 "Vuna/Compiler/Wasm/Module.vuna"
-let rec v_spineOf = (fun (mc0 : Ir_dModel.t_Ir) -> (match mc0 with
-  | Ir_dModel.C_Ir_IrTail (dtb__442) -> (v_spineOf dtb__442)
-  | Ir_dModel.C_Ir_IrApp (dtb__443, dtb__444, dtb__445) -> (match (v_spineOf dtb__444) with
+let rec v_spineOf = (fun (mc0 : Vuna_dIr_dModel.t_Ir) -> (match mc0 with
+  | Vuna_dIr_dModel.C_Ir_IrTail (dtb__442) -> (v_spineOf dtb__442)
+  | Vuna_dIr_dModel.C_Ir_IrApp (dtb__443, dtb__444, dtb__445) -> (match (v_spineOf dtb__444) with
   | { B_dData_dPair.f_Pair_first = dtb__446; B_dData_dPair.f_Pair_second = dtb__447 } -> { B_dData_dPair.f_Pair_first = dtb__446; B_dData_dPair.f_Pair_second = ((B_dData_dList.v_append dtb__447) (B_dData_dList.C_List__x58__x58_ (dtb__445, B_dData_dList.C_List_Nil))) }
   | _ -> failwith "DT: impossible branch"
 )
@@ -1118,8 +1118,8 @@ let rec v_spineOf = (fun (mc0 : Ir_dModel.t_Ir) -> (match mc0 with
 ))
 
 # 1825 "Vuna/Compiler/Wasm/Module.vuna"
-let v_opFieldOf = (fun (mc0 : Ir_dModel.t_Ir) -> (match mc0 with
-  | Ir_dModel.C_Ir_IrCtor (dtb__448, dtb__449, dtb__450, dtb__451) -> (match dtb__451 with
+let v_opFieldOf = (fun (mc0 : Vuna_dIr_dModel.t_Ir) -> (match mc0 with
+  | Vuna_dIr_dModel.C_Ir_IrCtor (dtb__448, dtb__449, dtb__450, dtb__451) -> (match dtb__451 with
   | B_dData_dList.C_List__x58__x58_ (dtb__452, dtb__453) -> (match dtb__453 with
   | B_dData_dList.C_List_Nil -> dtb__452
   | _ -> mc0
@@ -1130,25 +1130,25 @@ let v_opFieldOf = (fun (mc0 : Ir_dModel.t_Ir) -> (match mc0 with
 ))
 
 # 1830 "Vuna/Compiler/Wasm/Module.vuna"
-let v_directSend = (fun (runName : string) (opHName : string) (op : Ir_dModel.t_Ir) -> ((fun u -> ((fun applied -> ((fun ran -> (Ir_dModel.C_Ir_IrCtor (Ir_dModel.v_irEffTypeName, Ir_dModel.v_irEffMkCtor, B_dData_dMaybe.C_Maybe_Nothing, (B_dData_dList.C_List__x58__x58_ ((Ir_dModel.C_Ir_IrLam ((B_dData_dList.C_List__x58__x58_ (u, B_dData_dList.C_List_Nil)), B_dData_dMaybe.C_Maybe_Nothing, ran)), B_dData_dList.C_List_Nil))))) (Ir_dModel.C_Ir_IrApp (B_dData_dMaybe.C_Maybe_Nothing, (Ir_dModel.C_Ir_IrGlobal (runName)), applied)))) (Ir_dModel.C_Ir_IrApp (B_dData_dMaybe.C_Maybe_Nothing, (Ir_dModel.C_Ir_IrApp (B_dData_dMaybe.C_Maybe_Nothing, (Ir_dModel.C_Ir_IrGlobal (opHName)), op)), (Ir_dModel.C_Ir_IrGlobal (v_hcPureK)))))) (Ir_dModel.v_mkIrBinder "hostUnit")))
+let v_directSend = (fun (runName : string) (opHName : string) (op : Vuna_dIr_dModel.t_Ir) -> ((fun u -> ((fun applied -> ((fun ran -> (Vuna_dIr_dModel.C_Ir_IrCtor (Vuna_dIr_dModel.v_irEffTypeName, Vuna_dIr_dModel.v_irEffMkCtor, B_dData_dMaybe.C_Maybe_Nothing, (B_dData_dList.C_List__x58__x58_ ((Vuna_dIr_dModel.C_Ir_IrLam ((B_dData_dList.C_List__x58__x58_ (u, B_dData_dList.C_List_Nil)), B_dData_dMaybe.C_Maybe_Nothing, ran)), B_dData_dList.C_List_Nil))))) (Vuna_dIr_dModel.C_Ir_IrApp (B_dData_dMaybe.C_Maybe_Nothing, (Vuna_dIr_dModel.C_Ir_IrGlobal (runName)), applied)))) (Vuna_dIr_dModel.C_Ir_IrApp (B_dData_dMaybe.C_Maybe_Nothing, (Vuna_dIr_dModel.C_Ir_IrApp (B_dData_dMaybe.C_Maybe_Nothing, (Vuna_dIr_dModel.C_Ir_IrGlobal (opHName)), op)), (Vuna_dIr_dModel.C_Ir_IrGlobal (v_hcPureK)))))) (Vuna_dIr_dModel.v_mkIrBinder "hostUnit")))
 
 # 1839 "Vuna/Compiler/Wasm/Module.vuna"
-let v_abortSend = (fun (textName : string) (op : Ir_dModel.t_Ir) -> ((fun u -> ((fun dead -> ((fun msg -> ((fun eprinted -> ((fun exited -> (Ir_dModel.C_Ir_IrCtor (Ir_dModel.v_irEffTypeName, Ir_dModel.v_irEffMkCtor, B_dData_dMaybe.C_Maybe_Nothing, (B_dData_dList.C_List__x58__x58_ ((Ir_dModel.C_Ir_IrLam ((B_dData_dList.C_List__x58__x58_ (u, B_dData_dList.C_List_Nil)), B_dData_dMaybe.C_Maybe_Nothing, (Ir_dModel.C_Ir_IrApp (B_dData_dMaybe.C_Maybe_Nothing, (Ir_dModel.C_Ir_IrLam ((B_dData_dList.C_List__x58__x58_ (dead, B_dData_dList.C_List_Nil)), B_dData_dMaybe.C_Maybe_Nothing, exited)), eprinted)))), B_dData_dList.C_List_Nil))))) (Ir_dModel.C_Ir_IrRtApp ("@vuna@prim_eff_exit", (B_dData_dList.C_List__x58__x58_ ((Ir_dModel.C_Ir_IrInt (1)), B_dData_dList.C_List_Nil)))))) (Ir_dModel.C_Ir_IrRtApp ("@vuna@prim_eff_eprint", (B_dData_dList.C_List__x58__x58_ (msg, B_dData_dList.C_List_Nil)))))) (Ir_dModel.C_Ir_IrConcatMany ((B_dData_dList.C_List__x58__x58_ ((Ir_dModel.C_Ir_IrStr ("vuna: ")), (B_dData_dList.C_List__x58__x58_ ((Ir_dModel.C_Ir_IrApp (B_dData_dMaybe.C_Maybe_Nothing, (Ir_dModel.C_Ir_IrGlobal (textName)), (v_opFieldOf op))), (B_dData_dList.C_List__x58__x58_ ((Ir_dModel.C_Ir_IrStr ("\n")), B_dData_dList.C_List_Nil)))))))))) (Ir_dModel.v_mkIrBinder "hostDead"))) (Ir_dModel.v_mkIrBinder "hostUnit")))
+let v_abortSend = (fun (textName : string) (op : Vuna_dIr_dModel.t_Ir) -> ((fun u -> ((fun dead -> ((fun msg -> ((fun eprinted -> ((fun exited -> (Vuna_dIr_dModel.C_Ir_IrCtor (Vuna_dIr_dModel.v_irEffTypeName, Vuna_dIr_dModel.v_irEffMkCtor, B_dData_dMaybe.C_Maybe_Nothing, (B_dData_dList.C_List__x58__x58_ ((Vuna_dIr_dModel.C_Ir_IrLam ((B_dData_dList.C_List__x58__x58_ (u, B_dData_dList.C_List_Nil)), B_dData_dMaybe.C_Maybe_Nothing, (Vuna_dIr_dModel.C_Ir_IrApp (B_dData_dMaybe.C_Maybe_Nothing, (Vuna_dIr_dModel.C_Ir_IrLam ((B_dData_dList.C_List__x58__x58_ (dead, B_dData_dList.C_List_Nil)), B_dData_dMaybe.C_Maybe_Nothing, exited)), eprinted)))), B_dData_dList.C_List_Nil))))) (Vuna_dIr_dModel.C_Ir_IrRtApp ("@vuna@prim_eff_exit", (B_dData_dList.C_List__x58__x58_ ((Vuna_dIr_dModel.C_Ir_IrInt (1)), B_dData_dList.C_List_Nil)))))) (Vuna_dIr_dModel.C_Ir_IrRtApp ("@vuna@prim_eff_eprint", (B_dData_dList.C_List__x58__x58_ (msg, B_dData_dList.C_List_Nil)))))) (Vuna_dIr_dModel.C_Ir_IrConcatMany ((B_dData_dList.C_List__x58__x58_ ((Vuna_dIr_dModel.C_Ir_IrStr ("vuna: ")), (B_dData_dList.C_List__x58__x58_ ((Vuna_dIr_dModel.C_Ir_IrApp (B_dData_dMaybe.C_Maybe_Nothing, (Vuna_dIr_dModel.C_Ir_IrGlobal (textName)), (v_opFieldOf op))), (B_dData_dList.C_List__x58__x58_ ((Vuna_dIr_dModel.C_Ir_IrStr ("\n")), B_dData_dList.C_List_Nil)))))))))) (Vuna_dIr_dModel.v_mkIrBinder "hostDead"))) (Vuna_dIr_dModel.v_mkIrBinder "hostUnit")))
 
 # 1885 "Vuna/Compiler/Wasm/Module.vuna"
-let rec v_stripIrCasts = (fun (mc0 : Ir_dModel.t_Ir) -> (match mc0 with
-  | Ir_dModel.C_Ir_IrCast (dtb__454, dtb__455, dtb__456) -> (v_stripIrCasts dtb__456)
+let rec v_stripIrCasts = (fun (mc0 : Vuna_dIr_dModel.t_Ir) -> (match mc0 with
+  | Vuna_dIr_dModel.C_Ir_IrCast (dtb__454, dtb__455, dtb__456) -> (v_stripIrCasts dtb__456)
   | _ -> mc0
 ))
 
 # 1875 "Vuna/Compiler/Wasm/Module.vuna"
-let v_sendTailOf = (fun (args : Ir_dModel.t_Ir B_dData_dList.t_List) -> ((fun nd_uscrut1 -> (match nd_uscrut1 with
+let v_sendTailOf = (fun (args : Vuna_dIr_dModel.t_Ir B_dData_dList.t_List) -> ((fun nd_uscrut1 -> (match nd_uscrut1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__457, dtb__458) -> (match dtb__458 with
   | B_dData_dList.C_List__x58__x58_ (dtb__459, dtb__460) -> (match dtb__460 with
   | B_dData_dList.C_List__x58__x58_ (dtb__461, dtb__462) -> (match dtb__462 with
   | B_dData_dList.C_List__x58__x58_ (dtb__463, dtb__464) -> (match dtb__464 with
   | B_dData_dList.C_List__x58__x58_ (dtb__465, dtb__466) -> (match (v_stripIrCasts dtb__465) with
-  | Ir_dModel.C_Ir_IrStr (dtb__467) -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = dtb__467; B_dData_dPair.f_Pair_second = dtb__457 }))
+  | Vuna_dIr_dModel.C_Ir_IrStr (dtb__467) -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = dtb__467; B_dData_dPair.f_Pair_second = dtb__457 }))
   | _ -> B_dData_dMaybe.C_Maybe_Nothing
 )
   | _ -> B_dData_dMaybe.C_Maybe_Nothing
@@ -1163,9 +1163,9 @@ let v_sendTailOf = (fun (args : Ir_dModel.t_Ir B_dData_dList.t_List) -> ((fun nd
 )) (B_dData_dList.v_reverse args)))
 
 # 1890 "Vuna/Compiler/Wasm/Module.vuna"
-let v_rwSpine = (fun (n : string) (ir0 : Ir_dModel.t_Ir) -> ((fun ir -> ((fun nd_uscrut3 -> (match nd_uscrut3 with
+let v_rwSpine = (fun (n : string) (ir0 : Vuna_dIr_dModel.t_Ir) -> ((fun ir -> ((fun nd_uscrut3 -> (match nd_uscrut3 with
   | { B_dData_dPair.f_Pair_first = dtb__468; B_dData_dPair.f_Pair_second = dtb__469 } -> (match dtb__468 with
-  | Ir_dModel.C_Ir_IrGlobal (dtb__470) -> (if (Base_dIntrinsics.v_isSendCoreName dtb__470) then (match (v_sendTailOf dtb__469) with
+  | Vuna_dIr_dModel.C_Ir_IrGlobal (dtb__470) -> (if (Base_dIntrinsics.v_isSendCoreName dtb__470) then (match (v_sendTailOf dtb__469) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__471) -> ((fun nd_uscrut11 -> (match nd_uscrut11 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__472) -> (match dtb__472 with
   | Base_dIntrinsics.C_HostClass_HostAbort (dtb__473, dtb__474) -> ((v_abortSend dtb__474) (B_dData_dPair.v_secondOf dtb__471))
@@ -1183,98 +1183,98 @@ let v_rwSpine = (fun (n : string) (ir0 : Ir_dModel.t_Ir) -> ((fun ir -> ((fun nd
 )) (v_spineOf ir))) (v_stripIrCasts ir0)))
 
 # 1855 "Vuna/Compiler/Wasm/Module.vuna"
-let rec v_rw = (fun (mc0 : string) (mc1 : Ir_dModel.t_Ir) -> (match mc1 with
-  | Ir_dModel.C_Ir_IrTail (dtb__477) -> (Ir_dModel.C_Ir_IrTail (((v_rw mc0) dtb__477)))
-  | Ir_dModel.C_Ir_IrEffThunk (dtb__478, dtb__479, dtb__480, dtb__481, dtb__482) -> ((v_rwSpine mc0) (Ir_dModel.C_Ir_IrEffThunk (dtb__478, dtb__479, dtb__480, dtb__481, ((v_rw mc0) dtb__482))))
-  | Ir_dModel.C_Ir_IrConcatMany (dtb__483) -> ((v_rwSpine mc0) (Ir_dModel.C_Ir_IrConcatMany (((B_dData_dList.v_map (v_rw mc0)) dtb__483))))
-  | Ir_dModel.C_Ir_IrNatCase (dtb__484, dtb__485, dtb__486, dtb__487, dtb__488) -> ((v_rwSpine mc0) (Ir_dModel.C_Ir_IrNatCase (((v_rw mc0) dtb__484), dtb__485, ((v_rwAltMaybe mc0) dtb__486), ((v_rwAltMaybe mc0) dtb__487), ((v_rwAltMaybe mc0) dtb__488))))
-  | Ir_dModel.C_Ir_IrCase (dtb__489, dtb__490, dtb__491, dtb__492) -> ((v_rwSpine mc0) (Ir_dModel.C_Ir_IrCase (dtb__489, B_dData_dMaybe.C_Maybe_Nothing, ((v_rw mc0) dtb__491), ((B_dData_dList.v_map (v_rwAlt mc0)) dtb__492))))
-  | Ir_dModel.C_Ir_IrIf (dtb__493, dtb__494, dtb__495) -> ((v_rwSpine mc0) (Ir_dModel.C_Ir_IrIf (((v_rw mc0) dtb__493), ((v_rw mc0) dtb__494), ((v_rw mc0) dtb__495))))
-  | Ir_dModel.C_Ir_IrApp (dtb__496, dtb__497, dtb__498) -> ((v_rwSpine mc0) (Ir_dModel.C_Ir_IrApp (B_dData_dMaybe.C_Maybe_Nothing, ((v_rw mc0) dtb__497), ((v_rw mc0) dtb__498))))
-  | Ir_dModel.C_Ir_IrLam (dtb__499, dtb__500, dtb__501) -> ((v_rwSpine mc0) (Ir_dModel.C_Ir_IrLam (dtb__499, dtb__500, ((v_rw mc0) dtb__501))))
-  | Ir_dModel.C_Ir_IrLet (dtb__502, dtb__503, dtb__504) -> ((v_rwSpine mc0) (Ir_dModel.C_Ir_IrLet (dtb__502, ((v_rw mc0) dtb__503), ((v_rw mc0) dtb__504))))
-  | Ir_dModel.C_Ir_IrCast (dtb__505, dtb__506, dtb__507) -> ((v_rwSpine mc0) (Ir_dModel.C_Ir_IrCast (dtb__505, dtb__506, ((v_rw mc0) dtb__507))))
-  | Ir_dModel.C_Ir_IrRtApp (dtb__508, dtb__509) -> ((v_rwSpine mc0) (Ir_dModel.C_Ir_IrRtApp (dtb__508, ((B_dData_dList.v_map (v_rw mc0)) dtb__509))))
-  | Ir_dModel.C_Ir_IrRecUpd (dtb__510, dtb__511, dtb__512, dtb__513) -> ((v_rwSpine mc0) (Ir_dModel.C_Ir_IrRecUpd (((v_rw mc0) dtb__510), dtb__511, ((B_dData_dList.v_map (v_rwField mc0)) dtb__512), B_dData_dMaybe.C_Maybe_Nothing)))
-  | Ir_dModel.C_Ir_IrProj (dtb__514, dtb__515, dtb__516, dtb__517) -> ((v_rwSpine mc0) (Ir_dModel.C_Ir_IrProj (((v_rw mc0) dtb__514), dtb__515, dtb__516, B_dData_dMaybe.C_Maybe_Nothing)))
-  | Ir_dModel.C_Ir_IrRecord (dtb__518, dtb__519, dtb__520) -> ((v_rwSpine mc0) (Ir_dModel.C_Ir_IrRecord (dtb__518, B_dData_dMaybe.C_Maybe_Nothing, ((B_dData_dList.v_map (v_rwField mc0)) dtb__520))))
-  | Ir_dModel.C_Ir_IrCtor (dtb__521, dtb__522, dtb__523, dtb__524) -> ((v_rwSpine mc0) (Ir_dModel.C_Ir_IrCtor (dtb__521, dtb__522, B_dData_dMaybe.C_Maybe_Nothing, ((B_dData_dList.v_map (v_rw mc0)) dtb__524))))
+let rec v_rw = (fun (mc0 : string) (mc1 : Vuna_dIr_dModel.t_Ir) -> (match mc1 with
+  | Vuna_dIr_dModel.C_Ir_IrTail (dtb__477) -> (Vuna_dIr_dModel.C_Ir_IrTail (((v_rw mc0) dtb__477)))
+  | Vuna_dIr_dModel.C_Ir_IrEffThunk (dtb__478, dtb__479, dtb__480, dtb__481, dtb__482) -> ((v_rwSpine mc0) (Vuna_dIr_dModel.C_Ir_IrEffThunk (dtb__478, dtb__479, dtb__480, dtb__481, ((v_rw mc0) dtb__482))))
+  | Vuna_dIr_dModel.C_Ir_IrConcatMany (dtb__483) -> ((v_rwSpine mc0) (Vuna_dIr_dModel.C_Ir_IrConcatMany (((B_dData_dList.v_map (v_rw mc0)) dtb__483))))
+  | Vuna_dIr_dModel.C_Ir_IrNatCase (dtb__484, dtb__485, dtb__486, dtb__487, dtb__488) -> ((v_rwSpine mc0) (Vuna_dIr_dModel.C_Ir_IrNatCase (((v_rw mc0) dtb__484), dtb__485, ((v_rwAltMaybe mc0) dtb__486), ((v_rwAltMaybe mc0) dtb__487), ((v_rwAltMaybe mc0) dtb__488))))
+  | Vuna_dIr_dModel.C_Ir_IrCase (dtb__489, dtb__490, dtb__491, dtb__492) -> ((v_rwSpine mc0) (Vuna_dIr_dModel.C_Ir_IrCase (dtb__489, B_dData_dMaybe.C_Maybe_Nothing, ((v_rw mc0) dtb__491), ((B_dData_dList.v_map (v_rwAlt mc0)) dtb__492))))
+  | Vuna_dIr_dModel.C_Ir_IrIf (dtb__493, dtb__494, dtb__495) -> ((v_rwSpine mc0) (Vuna_dIr_dModel.C_Ir_IrIf (((v_rw mc0) dtb__493), ((v_rw mc0) dtb__494), ((v_rw mc0) dtb__495))))
+  | Vuna_dIr_dModel.C_Ir_IrApp (dtb__496, dtb__497, dtb__498) -> ((v_rwSpine mc0) (Vuna_dIr_dModel.C_Ir_IrApp (B_dData_dMaybe.C_Maybe_Nothing, ((v_rw mc0) dtb__497), ((v_rw mc0) dtb__498))))
+  | Vuna_dIr_dModel.C_Ir_IrLam (dtb__499, dtb__500, dtb__501) -> ((v_rwSpine mc0) (Vuna_dIr_dModel.C_Ir_IrLam (dtb__499, dtb__500, ((v_rw mc0) dtb__501))))
+  | Vuna_dIr_dModel.C_Ir_IrLet (dtb__502, dtb__503, dtb__504) -> ((v_rwSpine mc0) (Vuna_dIr_dModel.C_Ir_IrLet (dtb__502, ((v_rw mc0) dtb__503), ((v_rw mc0) dtb__504))))
+  | Vuna_dIr_dModel.C_Ir_IrCast (dtb__505, dtb__506, dtb__507) -> ((v_rwSpine mc0) (Vuna_dIr_dModel.C_Ir_IrCast (dtb__505, dtb__506, ((v_rw mc0) dtb__507))))
+  | Vuna_dIr_dModel.C_Ir_IrRtApp (dtb__508, dtb__509) -> ((v_rwSpine mc0) (Vuna_dIr_dModel.C_Ir_IrRtApp (dtb__508, ((B_dData_dList.v_map (v_rw mc0)) dtb__509))))
+  | Vuna_dIr_dModel.C_Ir_IrRecUpd (dtb__510, dtb__511, dtb__512, dtb__513) -> ((v_rwSpine mc0) (Vuna_dIr_dModel.C_Ir_IrRecUpd (((v_rw mc0) dtb__510), dtb__511, ((B_dData_dList.v_map (v_rwField mc0)) dtb__512), B_dData_dMaybe.C_Maybe_Nothing)))
+  | Vuna_dIr_dModel.C_Ir_IrProj (dtb__514, dtb__515, dtb__516, dtb__517) -> ((v_rwSpine mc0) (Vuna_dIr_dModel.C_Ir_IrProj (((v_rw mc0) dtb__514), dtb__515, dtb__516, B_dData_dMaybe.C_Maybe_Nothing)))
+  | Vuna_dIr_dModel.C_Ir_IrRecord (dtb__518, dtb__519, dtb__520) -> ((v_rwSpine mc0) (Vuna_dIr_dModel.C_Ir_IrRecord (dtb__518, B_dData_dMaybe.C_Maybe_Nothing, ((B_dData_dList.v_map (v_rwField mc0)) dtb__520))))
+  | Vuna_dIr_dModel.C_Ir_IrCtor (dtb__521, dtb__522, dtb__523, dtb__524) -> ((v_rwSpine mc0) (Vuna_dIr_dModel.C_Ir_IrCtor (dtb__521, dtb__522, B_dData_dMaybe.C_Maybe_Nothing, ((B_dData_dList.v_map (v_rw mc0)) dtb__524))))
   | _ -> ((v_rwSpine mc0) mc1)
 ))
 # 1908 "Vuna/Compiler/Wasm/Module.vuna"
-and v_rwField = (fun (mc0 : string) (mc1 : (string, Ir_dModel.t_Ir) B_dData_dPair.t_Pair) -> (match mc1 with
+and v_rwField = (fun (mc0 : string) (mc1 : (string, Vuna_dIr_dModel.t_Ir) B_dData_dPair.t_Pair) -> (match mc1 with
   | { B_dData_dPair.f_Pair_first = dtb__525; B_dData_dPair.f_Pair_second = dtb__526 } -> { B_dData_dPair.f_Pair_first = dtb__525; B_dData_dPair.f_Pair_second = ((v_rw mc0) dtb__526) }
   | _ -> failwith "DT: impossible branch"
 ))
 # 1911 "Vuna/Compiler/Wasm/Module.vuna"
-and v_rwAlt = (fun (mc0 : string) (mc1 : Ir_dModel.t_IrAlt) -> (match mc1 with
-  | { Ir_dModel.f_IrAlt_irAltCtor = dtb__527; Ir_dModel.f_IrAlt_irAltBinders = dtb__528; Ir_dModel.f_IrAlt_irAltBody = dtb__529 } -> { Ir_dModel.f_IrAlt_irAltCtor = dtb__527; Ir_dModel.f_IrAlt_irAltBinders = dtb__528; Ir_dModel.f_IrAlt_irAltBody = ((v_rw mc0) dtb__529) }
+and v_rwAlt = (fun (mc0 : string) (mc1 : Vuna_dIr_dModel.t_IrAlt) -> (match mc1 with
+  | { Vuna_dIr_dModel.f_IrAlt_irAltCtor = dtb__527; Vuna_dIr_dModel.f_IrAlt_irAltBinders = dtb__528; Vuna_dIr_dModel.f_IrAlt_irAltBody = dtb__529 } -> { Vuna_dIr_dModel.f_IrAlt_irAltCtor = dtb__527; Vuna_dIr_dModel.f_IrAlt_irAltBinders = dtb__528; Vuna_dIr_dModel.f_IrAlt_irAltBody = ((v_rw mc0) dtb__529) }
   | _ -> failwith "DT: impossible branch"
 ))
 # 1914 "Vuna/Compiler/Wasm/Module.vuna"
-and v_rwAltMaybe = (fun (mc0 : string) (mc1 : Ir_dModel.t_IrAlt B_dData_dMaybe.t_Maybe) -> (match mc1 with
+and v_rwAltMaybe = (fun (mc0 : string) (mc1 : Vuna_dIr_dModel.t_IrAlt B_dData_dMaybe.t_Maybe) -> (match mc1 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__530) -> (B_dData_dMaybe.C_Maybe_Just (((v_rwAlt mc0) dtb__530)))
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 1918 "Vuna/Compiler/Wasm/Module.vuna"
-let v_rwDef = (fun (n : string) (d : Ir_dModel.t_IrDef) -> (match (Ir_dModel.v_irDefBody d) with
+let v_rwDef = (fun (n : string) (d : Vuna_dIr_dModel.t_IrDef) -> (match (Vuna_dIr_dModel.v_irDefBody d) with
   | B_dData_dMaybe.C_Maybe_Nothing -> d
-  | B_dData_dMaybe.C_Maybe_Just (dtb__531) -> (Ir_dModel.C_IrDef_IrDef ((Ir_dModel.v_irDefName d), (Ir_dModel.v_irDefArity d), (Ir_dModel.v_irDefDeps d), (Ir_dModel.v_irDefTy d), ((v_rw n) dtb__531), (Ir_dModel.v_irDefRecValueOk d), (Ir_dModel.v_irDefInitGuard d), (Ir_dModel.v_irDefSpan d)))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__531) -> (Vuna_dIr_dModel.C_IrDef_IrDef ((Vuna_dIr_dModel.v_irDefName d), (Vuna_dIr_dModel.v_irDefArity d), (Vuna_dIr_dModel.v_irDefDeps d), (Vuna_dIr_dModel.v_irDefTy d), ((v_rw n) dtb__531), (Vuna_dIr_dModel.v_irDefRecValueOk d), (Vuna_dIr_dModel.v_irDefInitGuard d), (Vuna_dIr_dModel.v_irDefSpan d)))
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 1934 "Vuna/Compiler/Wasm/Module.vuna"
-let v_pureKDef = ((fun r -> ((fun u -> (Ir_dModel.C_IrDef_IrDef (v_hcPureK, 1, B_dData_dList.C_List_Nil, B_dData_dMaybe.C_Maybe_Nothing, (Ir_dModel.C_Ir_IrLam ((B_dData_dList.C_List__x58__x58_ (r, B_dData_dList.C_List_Nil)), B_dData_dMaybe.C_Maybe_Nothing, (Ir_dModel.C_Ir_IrCtor (Ir_dModel.v_irEffTypeName, Ir_dModel.v_irEffMkCtor, B_dData_dMaybe.C_Maybe_Nothing, (B_dData_dList.C_List__x58__x58_ ((Ir_dModel.C_Ir_IrLam ((B_dData_dList.C_List__x58__x58_ (u, B_dData_dList.C_List_Nil)), B_dData_dMaybe.C_Maybe_Nothing, (Ir_dModel.C_Ir_IrVar (r)))), B_dData_dList.C_List_Nil)))))), true, false, B_dData_dMaybe.C_Maybe_Nothing))) (Ir_dModel.v_mkIrBinder "pureKU"))) (Ir_dModel.v_mkIrBinder "pureKR"))
+let v_pureKDef = ((fun r -> ((fun u -> (Vuna_dIr_dModel.C_IrDef_IrDef (v_hcPureK, 1, B_dData_dList.C_List_Nil, B_dData_dMaybe.C_Maybe_Nothing, (Vuna_dIr_dModel.C_Ir_IrLam ((B_dData_dList.C_List__x58__x58_ (r, B_dData_dList.C_List_Nil)), B_dData_dMaybe.C_Maybe_Nothing, (Vuna_dIr_dModel.C_Ir_IrCtor (Vuna_dIr_dModel.v_irEffTypeName, Vuna_dIr_dModel.v_irEffMkCtor, B_dData_dMaybe.C_Maybe_Nothing, (B_dData_dList.C_List__x58__x58_ ((Vuna_dIr_dModel.C_Ir_IrLam ((B_dData_dList.C_List__x58__x58_ (u, B_dData_dList.C_List_Nil)), B_dData_dMaybe.C_Maybe_Nothing, (Vuna_dIr_dModel.C_Ir_IrVar (r)))), B_dData_dList.C_List_Nil)))))), true, false, B_dData_dMaybe.C_Maybe_Nothing))) (Vuna_dIr_dModel.v_mkIrBinder "pureKU"))) (Vuna_dIr_dModel.v_mkIrBinder "pureKR"))
 
 # 1950 "Vuna/Compiler/Wasm/Module.vuna"
-let rec v_irGlobalsOf = (fun (mc0 : Ir_dModel.t_Ir) -> (match mc0 with
-  | Ir_dModel.C_Ir_IrTail (dtb__532) -> (v_irGlobalsOf dtb__532)
-  | Ir_dModel.C_Ir_IrEffThunk (dtb__533, dtb__534, dtb__535, dtb__536, dtb__537) -> (v_irGlobalsOf dtb__537)
-  | Ir_dModel.C_Ir_IrConcatMany (dtb__538) -> ((B_dData_dList.v_concatMap v_irGlobalsOf) dtb__538)
-  | Ir_dModel.C_Ir_IrNatCase (dtb__539, dtb__540, dtb__541, dtb__542, dtb__543) -> ((B_dData_dList.v_append (v_irGlobalsOf dtb__539)) ((B_dData_dList.v_append (v_globalsOfAltMaybe dtb__541)) ((B_dData_dList.v_append (v_globalsOfAltMaybe dtb__542)) (v_globalsOfAltMaybe dtb__543))))
-  | Ir_dModel.C_Ir_IrCase (dtb__544, dtb__545, dtb__546, dtb__547) -> ((B_dData_dList.v_append (v_irGlobalsOf dtb__546)) ((B_dData_dList.v_concatMap v_globalsOfAlt) dtb__547))
-  | Ir_dModel.C_Ir_IrIf (dtb__548, dtb__549, dtb__550) -> ((B_dData_dList.v_append (v_irGlobalsOf dtb__548)) ((B_dData_dList.v_append (v_irGlobalsOf dtb__549)) (v_irGlobalsOf dtb__550)))
-  | Ir_dModel.C_Ir_IrApp (dtb__551, dtb__552, dtb__553) -> ((B_dData_dList.v_append (v_irGlobalsOf dtb__552)) (v_irGlobalsOf dtb__553))
-  | Ir_dModel.C_Ir_IrLam (dtb__554, dtb__555, dtb__556) -> (v_irGlobalsOf dtb__556)
-  | Ir_dModel.C_Ir_IrLet (dtb__557, dtb__558, dtb__559) -> ((B_dData_dList.v_append (v_irGlobalsOf dtb__558)) (v_irGlobalsOf dtb__559))
-  | Ir_dModel.C_Ir_IrCast (dtb__560, dtb__561, dtb__562) -> (v_irGlobalsOf dtb__562)
-  | Ir_dModel.C_Ir_IrRtApp (dtb__563, dtb__564) -> ((B_dData_dList.v_concatMap v_irGlobalsOf) dtb__564)
-  | Ir_dModel.C_Ir_IrRecUpd (dtb__565, dtb__566, dtb__567, dtb__568) -> ((B_dData_dList.v_append (v_irGlobalsOf dtb__565)) ((B_dData_dList.v_concatMap v_globalsOfField) dtb__567))
-  | Ir_dModel.C_Ir_IrProj (dtb__569, dtb__570, dtb__571, dtb__572) -> (v_irGlobalsOf dtb__569)
-  | Ir_dModel.C_Ir_IrRecord (dtb__573, dtb__574, dtb__575) -> ((B_dData_dList.v_concatMap v_globalsOfField) dtb__575)
-  | Ir_dModel.C_Ir_IrCtor (dtb__576, dtb__577, dtb__578, dtb__579) -> ((B_dData_dList.v_concatMap v_irGlobalsOf) dtb__579)
-  | Ir_dModel.C_Ir_IrGlobal (dtb__580) -> (B_dData_dList.C_List__x58__x58_ (dtb__580, B_dData_dList.C_List_Nil))
+let rec v_irGlobalsOf = (fun (mc0 : Vuna_dIr_dModel.t_Ir) -> (match mc0 with
+  | Vuna_dIr_dModel.C_Ir_IrTail (dtb__532) -> (v_irGlobalsOf dtb__532)
+  | Vuna_dIr_dModel.C_Ir_IrEffThunk (dtb__533, dtb__534, dtb__535, dtb__536, dtb__537) -> (v_irGlobalsOf dtb__537)
+  | Vuna_dIr_dModel.C_Ir_IrConcatMany (dtb__538) -> ((B_dData_dList.v_concatMap v_irGlobalsOf) dtb__538)
+  | Vuna_dIr_dModel.C_Ir_IrNatCase (dtb__539, dtb__540, dtb__541, dtb__542, dtb__543) -> ((B_dData_dList.v_append (v_irGlobalsOf dtb__539)) ((B_dData_dList.v_append (v_globalsOfAltMaybe dtb__541)) ((B_dData_dList.v_append (v_globalsOfAltMaybe dtb__542)) (v_globalsOfAltMaybe dtb__543))))
+  | Vuna_dIr_dModel.C_Ir_IrCase (dtb__544, dtb__545, dtb__546, dtb__547) -> ((B_dData_dList.v_append (v_irGlobalsOf dtb__546)) ((B_dData_dList.v_concatMap v_globalsOfAlt) dtb__547))
+  | Vuna_dIr_dModel.C_Ir_IrIf (dtb__548, dtb__549, dtb__550) -> ((B_dData_dList.v_append (v_irGlobalsOf dtb__548)) ((B_dData_dList.v_append (v_irGlobalsOf dtb__549)) (v_irGlobalsOf dtb__550)))
+  | Vuna_dIr_dModel.C_Ir_IrApp (dtb__551, dtb__552, dtb__553) -> ((B_dData_dList.v_append (v_irGlobalsOf dtb__552)) (v_irGlobalsOf dtb__553))
+  | Vuna_dIr_dModel.C_Ir_IrLam (dtb__554, dtb__555, dtb__556) -> (v_irGlobalsOf dtb__556)
+  | Vuna_dIr_dModel.C_Ir_IrLet (dtb__557, dtb__558, dtb__559) -> ((B_dData_dList.v_append (v_irGlobalsOf dtb__558)) (v_irGlobalsOf dtb__559))
+  | Vuna_dIr_dModel.C_Ir_IrCast (dtb__560, dtb__561, dtb__562) -> (v_irGlobalsOf dtb__562)
+  | Vuna_dIr_dModel.C_Ir_IrRtApp (dtb__563, dtb__564) -> ((B_dData_dList.v_concatMap v_irGlobalsOf) dtb__564)
+  | Vuna_dIr_dModel.C_Ir_IrRecUpd (dtb__565, dtb__566, dtb__567, dtb__568) -> ((B_dData_dList.v_append (v_irGlobalsOf dtb__565)) ((B_dData_dList.v_concatMap v_globalsOfField) dtb__567))
+  | Vuna_dIr_dModel.C_Ir_IrProj (dtb__569, dtb__570, dtb__571, dtb__572) -> (v_irGlobalsOf dtb__569)
+  | Vuna_dIr_dModel.C_Ir_IrRecord (dtb__573, dtb__574, dtb__575) -> ((B_dData_dList.v_concatMap v_globalsOfField) dtb__575)
+  | Vuna_dIr_dModel.C_Ir_IrCtor (dtb__576, dtb__577, dtb__578, dtb__579) -> ((B_dData_dList.v_concatMap v_irGlobalsOf) dtb__579)
+  | Vuna_dIr_dModel.C_Ir_IrGlobal (dtb__580) -> (B_dData_dList.C_List__x58__x58_ (dtb__580, B_dData_dList.C_List_Nil))
   | _ -> B_dData_dList.C_List_Nil
 ))
 # 1972 "Vuna/Compiler/Wasm/Module.vuna"
-and v_globalsOfField = (fun (p : (string, Ir_dModel.t_Ir) B_dData_dPair.t_Pair) -> (v_irGlobalsOf (B_dData_dPair.v_secondOf p)))
+and v_globalsOfField = (fun (p : (string, Vuna_dIr_dModel.t_Ir) B_dData_dPair.t_Pair) -> (v_irGlobalsOf (B_dData_dPair.v_secondOf p)))
 # 1975 "Vuna/Compiler/Wasm/Module.vuna"
-and v_globalsOfAlt = (fun (a : Ir_dModel.t_IrAlt) -> (v_irGlobalsOf (Ir_dModel.v_irAltBodyOf a)))
+and v_globalsOfAlt = (fun (a : Vuna_dIr_dModel.t_IrAlt) -> (v_irGlobalsOf (Vuna_dIr_dModel.v_irAltBodyOf a)))
 # 1978 "Vuna/Compiler/Wasm/Module.vuna"
-and v_globalsOfAltMaybe = (fun (mc0 : Ir_dModel.t_IrAlt B_dData_dMaybe.t_Maybe) -> (match mc0 with
+and v_globalsOfAltMaybe = (fun (mc0 : Vuna_dIr_dModel.t_IrAlt B_dData_dMaybe.t_Maybe) -> (match mc0 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__581) -> (v_globalsOfAlt dtb__581)
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 1985 "Vuna/Compiler/Wasm/Module.vuna"
-let v_depKeeps = (fun (tbl : (string, Ir_dModel.t_IrDef) B_dContainer_dHashMap.t_HashMap) (n : string) -> (match ((((B_dContainer_dHashMap.v_lookup B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) n) tbl) with
+let v_depKeeps = (fun (tbl : (string, Vuna_dIr_dModel.t_IrDef) B_dContainer_dHashMap.t_HashMap) (n : string) -> (match ((((B_dContainer_dHashMap.v_lookup B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) n) tbl) with
   | B_dData_dMaybe.C_Maybe_Nothing -> true
   | B_dData_dMaybe.C_Maybe_Just (dtb__582) -> (B_dData_dBool.v_not ((v_defUsesSyms v_performSyms) dtb__582))
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 1991 "Vuna/Compiler/Wasm/Module.vuna"
-let v_refsOf = (fun (d : Ir_dModel.t_IrDef) (tbl : (string, Ir_dModel.t_IrDef) B_dContainer_dHashMap.t_HashMap) -> (match (Ir_dModel.v_irDefBody d) with
+let v_refsOf = (fun (d : Vuna_dIr_dModel.t_IrDef) (tbl : (string, Vuna_dIr_dModel.t_IrDef) B_dContainer_dHashMap.t_HashMap) -> (match (Vuna_dIr_dModel.v_irDefBody d) with
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dList.C_List_Nil
-  | B_dData_dMaybe.C_Maybe_Just (dtb__583) -> ((B_dData_dList.v_append (v_irGlobalsOf dtb__583)) ((B_dData_dList.v_filter (v_depKeeps tbl)) (Ir_dModel.v_irDefDeps d)))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__583) -> ((B_dData_dList.v_append (v_irGlobalsOf dtb__583)) ((B_dData_dList.v_filter (v_depKeeps tbl)) (Vuna_dIr_dModel.v_irDefDeps d)))
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 1997 "Vuna/Compiler/Wasm/Module.vuna"
-let rec v_closeRefs = (fun (fuel : int) (tbl : (string, Ir_dModel.t_IrDef) B_dContainer_dHashMap.t_HashMap) (work : string B_dData_dList.t_List) (acc : string B_dData_dList.t_List) -> (if (fuel <= 0) then acc else (match work with
+let rec v_closeRefs = (fun (fuel : int) (tbl : (string, Vuna_dIr_dModel.t_IrDef) B_dContainer_dHashMap.t_HashMap) (work : string B_dData_dList.t_List) (acc : string B_dData_dList.t_List) -> (if (fuel <= 0) then acc else (match work with
   | B_dData_dList.C_List_Nil -> acc
   | B_dData_dList.C_List__x58__x58_ (dtb__584, dtb__585) -> (if ((B_dData_dList.v_memName dtb__584) acc) then ((((v_closeRefs (fuel - 1)) tbl) dtb__585) acc) else (match ((((B_dContainer_dHashMap.v_lookup B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) dtb__584) tbl) with
   | B_dData_dMaybe.C_Maybe_Nothing -> ((((v_closeRefs (fuel - 1)) tbl) dtb__585) (B_dData_dList.C_List__x58__x58_ (dtb__584, acc)))
@@ -1285,14 +1285,14 @@ let rec v_closeRefs = (fun (fuel : int) (tbl : (string, Ir_dModel.t_IrDef) B_dCo
 )))
 
 # 2013 "Vuna/Compiler/Wasm/Module.vuna"
-let v_refsAllOf = (fun (d : Ir_dModel.t_IrDef) -> (match (Ir_dModel.v_irDefBody d) with
+let v_refsAllOf = (fun (d : Vuna_dIr_dModel.t_IrDef) -> (match (Vuna_dIr_dModel.v_irDefBody d) with
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dList.C_List_Nil
-  | B_dData_dMaybe.C_Maybe_Just (dtb__587) -> ((B_dData_dList.v_append (v_irGlobalsOf dtb__587)) (Ir_dModel.v_irDefDeps d))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__587) -> ((B_dData_dList.v_append (v_irGlobalsOf dtb__587)) (Vuna_dIr_dModel.v_irDefDeps d))
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 2019 "Vuna/Compiler/Wasm/Module.vuna"
-let rec v_closeRefsAll = (fun (fuel : int) (tbl : (string, Ir_dModel.t_IrDef) B_dContainer_dHashMap.t_HashMap) (work : string B_dData_dList.t_List) (acc : string B_dData_dList.t_List) -> (if (fuel <= 0) then acc else (match work with
+let rec v_closeRefsAll = (fun (fuel : int) (tbl : (string, Vuna_dIr_dModel.t_IrDef) B_dContainer_dHashMap.t_HashMap) (work : string B_dData_dList.t_List) (acc : string B_dData_dList.t_List) -> (if (fuel <= 0) then acc else (match work with
   | B_dData_dList.C_List_Nil -> acc
   | B_dData_dList.C_List__x58__x58_ (dtb__588, dtb__589) -> (if ((B_dData_dList.v_memName dtb__588) acc) then ((((v_closeRefsAll (fuel - 1)) tbl) dtb__589) acc) else (match ((((B_dContainer_dHashMap.v_lookup B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) dtb__588) tbl) with
   | B_dData_dMaybe.C_Maybe_Nothing -> ((((v_closeRefsAll (fuel - 1)) tbl) dtb__589) (B_dData_dList.C_List__x58__x58_ (dtb__588, acc)))
@@ -1303,34 +1303,34 @@ let rec v_closeRefsAll = (fun (fuel : int) (tbl : (string, Ir_dModel.t_IrDef) B_
 )))
 
 # 2035 "Vuna/Compiler/Wasm/Module.vuna"
-let v_reachableByRefs = (fun (fuel : int) (roots : string B_dData_dList.t_List) (defs : Ir_dModel.t_IrDef B_dData_dList.t_List) -> ((fun tbl -> ((fun names -> ((B_dData_dList.v_filter (fun (d : Ir_dModel.t_IrDef) -> ((B_dData_dList.v_memName (Ir_dModel.v_irDefName d)) names))) defs)) ((((v_closeRefs fuel) tbl) roots) B_dData_dList.C_List_Nil))) ((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) ((B_dData_dList.v_map (fun (d : Ir_dModel.t_IrDef) -> { B_dData_dPair.f_Pair_first = (Ir_dModel.v_irDefName d); B_dData_dPair.f_Pair_second = d })) defs))))
+let v_reachableByRefs = (fun (fuel : int) (roots : string B_dData_dList.t_List) (defs : Vuna_dIr_dModel.t_IrDef B_dData_dList.t_List) -> ((fun tbl -> ((fun names -> ((B_dData_dList.v_filter (fun (d : Vuna_dIr_dModel.t_IrDef) -> ((B_dData_dList.v_memName (Vuna_dIr_dModel.v_irDefName d)) names))) defs)) ((((v_closeRefs fuel) tbl) roots) B_dData_dList.C_List_Nil))) ((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) ((B_dData_dList.v_map (fun (d : Vuna_dIr_dModel.t_IrDef) -> { B_dData_dPair.f_Pair_first = (Vuna_dIr_dModel.v_irDefName d); B_dData_dPair.f_Pair_second = d })) defs))))
 
 # 2157 "Vuna/Compiler/Wasm/Module.vuna"
 let v_floatRenderName = "Base.Data.Float.floatRender"
 
 # 1542 "Vuna/Compiler/Wasm/Module.vuna"
-let v_entryShowFunc = (fun (mc0 : Ir_dModel.t_Ir) -> (match mc0 with
-  | Ir_dModel.C_Ir_IrRt (dtb__591) -> (if (dtb__591 = "@ir@showInt") then (B_dData_dMaybe.C_Maybe_Just ("$rt_strFromInt")) else (if (dtb__591 = "@ir@showNat") then (B_dData_dMaybe.C_Maybe_Just ("$rt_strFromInt")) else (if (dtb__591 = "@ir@showBool") then (B_dData_dMaybe.C_Maybe_Just ("$rt_showBool")) else (if (dtb__591 = "@ir@showStr") then (B_dData_dMaybe.C_Maybe_Just ("$rt_showStr")) else (if (dtb__591 = "@ir@showFloat") then (B_dData_dMaybe.C_Maybe_Just ((Wasm_dTypes.v_watFuncNameOf v_floatRenderName))) else B_dData_dMaybe.C_Maybe_Nothing)))))
+let v_entryShowFunc = (fun (mc0 : Vuna_dIr_dModel.t_Ir) -> (match mc0 with
+  | Vuna_dIr_dModel.C_Ir_IrRt (dtb__591) -> (if (dtb__591 = "@ir@showInt") then (B_dData_dMaybe.C_Maybe_Just ("$rt_strFromInt")) else (if (dtb__591 = "@ir@showNat") then (B_dData_dMaybe.C_Maybe_Just ("$rt_strFromInt")) else (if (dtb__591 = "@ir@showBool") then (B_dData_dMaybe.C_Maybe_Just ("$rt_showBool")) else (if (dtb__591 = "@ir@showStr") then (B_dData_dMaybe.C_Maybe_Just ("$rt_showStr")) else (if (dtb__591 = "@ir@showFloat") then (B_dData_dMaybe.C_Maybe_Just ((Wasm_dTypes.v_watFuncNameOf v_floatRenderName))) else B_dData_dMaybe.C_Maybe_Nothing)))))
   | _ -> B_dData_dMaybe.C_Maybe_Nothing
 ))
 
 # 1553 "Vuna/Compiler/Wasm/Module.vuna"
-let v_genStartBody = (fun (fuel : int) (st : t_GenState) (entry : Ir_dModel.t_IrEntry B_dData_dMaybe.t_Maybe) (ordered : Ir_dModel.t_IrDef B_dData_dList.t_List) (printResult : bool) -> (if (fuel <= 0) then (B_dData_dResult.C_Result_Err ("wasm codegen fuel exhausted")) else (match entry with
+let v_genStartBody = (fun (fuel : int) (st : t_GenState) (entry : Vuna_dIr_dModel.t_IrEntry B_dData_dMaybe.t_Maybe) (ordered : Vuna_dIr_dModel.t_IrDef B_dData_dList.t_List) (printResult : bool) -> (if (fuel <= 0) then (B_dData_dResult.C_Result_Err ("wasm codegen fuel exhausted")) else (match entry with
   | B_dData_dMaybe.C_Maybe_Nothing -> (B_dData_dResult.C_Result_Ok ({ B_dData_dPair.f_Pair_first = B_dData_dList.C_List_Nil; B_dData_dPair.f_Pair_second = st }))
   | B_dData_dMaybe.C_Maybe_Just (dtb__592) -> ((fun st1 -> ((fun runSeeds -> ((fun handlerSeeds -> ((fun runInstrs -> ((fun handlerInstrs -> ((fun mainInstrs -> (match (((v_genDefsInits (fuel - 1)) st1) ordered) with
   | B_dData_dResult.C_Result_Err (dtb__593) -> (B_dData_dResult.C_Result_Err (dtb__593))
-  | B_dData_dResult.C_Result_Ok (dtb__594) -> (if (B_dData_dBool.v_not printResult) then (if (Ir_dModel.v_irEntryIsActionOf dtb__592) then (B_dData_dResult.C_Result_Ok ({ B_dData_dPair.f_Pair_first = ((B_dData_dList.v_append (B_dData_dPair.v_firstOf dtb__594)) ((B_dData_dList.v_append mainInstrs) (B_dData_dList.C_List__x58__x58_ (Wasm_dInstr.C_Instr_IDrop, B_dData_dList.C_List_Nil)))); B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf dtb__594) })) else (B_dData_dResult.C_Result_Ok (dtb__594))) else (match (v_entryShowFunc (Ir_dModel.v_irEntryShowOf dtb__592)) with
+  | B_dData_dResult.C_Result_Ok (dtb__594) -> (if (B_dData_dBool.v_not printResult) then (if (Vuna_dIr_dModel.v_irEntryIsActionOf dtb__592) then (B_dData_dResult.C_Result_Ok ({ B_dData_dPair.f_Pair_first = ((B_dData_dList.v_append (B_dData_dPair.v_firstOf dtb__594)) ((B_dData_dList.v_append mainInstrs) (B_dData_dList.C_List__x58__x58_ (Wasm_dInstr.C_Instr_IDrop, B_dData_dList.C_List_Nil)))); B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf dtb__594) })) else (B_dData_dResult.C_Result_Ok (dtb__594))) else (match (v_entryShowFunc (Vuna_dIr_dModel.v_irEntryShowOf dtb__592)) with
   | B_dData_dMaybe.C_Maybe_Nothing -> (B_dData_dResult.C_Result_Err ("wasm target: custom Show entry is not supported yet"))
   | B_dData_dMaybe.C_Maybe_Just (dtb__595) -> (B_dData_dResult.C_Result_Ok ({ B_dData_dPair.f_Pair_first = ((B_dData_dList.v_append (B_dData_dPair.v_firstOf dtb__594)) ((B_dData_dList.v_append mainInstrs) (B_dData_dList.C_List__x58__x58_ ((Wasm_dInstr.C_Instr_ICall (dtb__595)), (B_dData_dList.C_List__x58__x58_ ((Wasm_dInstr.C_Instr_ICall ("$rt_println")), B_dData_dList.C_List_Nil)))))); B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf dtb__594) }))
   | _ -> failwith "DT: impossible branch"
 ))
   | _ -> failwith "DT: impossible branch"
-)) ((B_dData_dList.v_append (B_dData_dList.C_List__x58__x58_ ((Wasm_dInstr.C_Instr_IGlobalGet ((Wasm_dTypes.v_watGlobalNameOf (Ir_dModel.v_irEntryMainOf dtb__592)))), B_dData_dList.C_List_Nil))) ((B_dData_dList.v_append handlerInstrs) runInstrs)))) ((B_dData_dList.v_concatMap (fun (h : string) -> (B_dData_dList.C_List__x58__x58_ ((Wasm_dInstr.C_Instr_ICall ((Wasm_dTypes.v_watFuncNameOf h))), B_dData_dList.C_List_Nil)))) handlerSeeds))) (match (Ir_dModel.v_irEntryRunMainOf dtb__592) with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__596) -> (if (Ir_dModel.v_irEntryIsActionOf dtb__592) then (B_dData_dList.C_List__x58__x58_ ((Wasm_dInstr.C_Instr_ICall ((Wasm_dTypes.v_watFuncNameOf dtb__596))), B_dData_dList.C_List_Nil)) else B_dData_dList.C_List_Nil)
+)) ((B_dData_dList.v_append (B_dData_dList.C_List__x58__x58_ ((Wasm_dInstr.C_Instr_IGlobalGet ((Wasm_dTypes.v_watGlobalNameOf (Vuna_dIr_dModel.v_irEntryMainOf dtb__592)))), B_dData_dList.C_List_Nil))) ((B_dData_dList.v_append handlerInstrs) runInstrs)))) ((B_dData_dList.v_concatMap (fun (h : string) -> (B_dData_dList.C_List__x58__x58_ ((Wasm_dInstr.C_Instr_ICall ((Wasm_dTypes.v_watFuncNameOf h))), B_dData_dList.C_List_Nil)))) handlerSeeds))) (match (Vuna_dIr_dModel.v_irEntryRunMainOf dtb__592) with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__596) -> (if (Vuna_dIr_dModel.v_irEntryIsActionOf dtb__592) then (B_dData_dList.C_List__x58__x58_ ((Wasm_dInstr.C_Instr_ICall ((Wasm_dTypes.v_watFuncNameOf dtb__596))), B_dData_dList.C_List_Nil)) else B_dData_dList.C_List_Nil)
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
-))) (Ir_dModel.v_irEntryHandlersOf dtb__592))) (match (Ir_dModel.v_irEntryRunMainOf dtb__592) with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__597) -> (if (Ir_dModel.v_irEntryIsActionOf dtb__592) then (B_dData_dList.C_List__x58__x58_ (dtb__597, B_dData_dList.C_List_Nil)) else B_dData_dList.C_List_Nil)
+))) (Vuna_dIr_dModel.v_irEntryHandlersOf dtb__592))) (match (Vuna_dIr_dModel.v_irEntryRunMainOf dtb__592) with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__597) -> (if (Vuna_dIr_dModel.v_irEntryIsActionOf dtb__592) then (B_dData_dList.C_List__x58__x58_ (dtb__597, B_dData_dList.C_List_Nil)) else B_dData_dList.C_List_Nil)
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
 ))) (v_beginFuncScope st))
@@ -1371,7 +1371,7 @@ let v_joinWith = (fun (sep : string) (xs : string B_dData_dList.t_List) -> ((B_d
 let v_poolBytes = (fun (pool : (string, (int, int) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) -> ((v_joinWith "") ((B_dData_dList.v_map (fun (p : (string, (int, int) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair) -> (B_dData_dPair.v_firstOf p))) pool)))
 
 # 1765 "Vuna/Compiler/Wasm/Module.vuna"
-let v_buildModule = (fun (fuel : int) (st : t_GenState) (ordered : Ir_dModel.t_IrDef B_dData_dList.t_List) (entry : Ir_dModel.t_IrEntry B_dData_dMaybe.t_Maybe) (printResult : bool) (listFamM : Wasm_dTypes.t_WasmListFam B_dData_dMaybe.t_Maybe) -> (match (((v_genDefFuncs fuel) st) ordered) with
+let v_buildModule = (fun (fuel : int) (st : t_GenState) (ordered : Vuna_dIr_dModel.t_IrDef B_dData_dList.t_List) (entry : Vuna_dIr_dModel.t_IrEntry B_dData_dMaybe.t_Maybe) (printResult : bool) (listFamM : Wasm_dTypes.t_WasmListFam B_dData_dMaybe.t_Maybe) -> (match (((v_genDefFuncs fuel) st) ordered) with
   | B_dData_dResult.C_Result_Err (dtb__602) -> (B_dData_dResult.C_Result_Err (dtb__602))
   | B_dData_dResult.C_Result_Ok (dtb__603) -> ((fun userFuncs -> ((fun stFuncs -> (match (((((v_genStartBody (fuel - 1)) stFuncs) entry) ordered) printResult) with
   | B_dData_dResult.C_Result_Err (dtb__604) -> (B_dData_dResult.C_Result_Err (dtb__604))
@@ -1382,28 +1382,28 @@ let v_buildModule = (fun (fuel : int) (st : t_GenState) (ordered : Ir_dModel.t_I
 ))
 
 # 2045 "Vuna/Compiler/Wasm/Module.vuna"
-let v_build = (fun (program : Ir_dModel.t_IrProgram) (printResult : bool) -> ((fun unit -> ((fun defs -> ((fun entry -> ((fun fams -> ((fun statics -> ((fun users -> ((fun offsets -> ((fun defsAll -> ((fun famTbl -> ((fun poolTbl -> ((fun consts -> ((fun mkSt -> ((fun st0 -> ((fun buildAnf -> (match entry with
+let v_build = (fun (program : Vuna_dIr_dModel.t_IrProgram) (printResult : bool) -> ((fun unit -> ((fun defs -> ((fun entry -> ((fun fams -> ((fun statics -> ((fun users -> ((fun offsets -> ((fun defsAll -> ((fun famTbl -> ((fun poolTbl -> ((fun consts -> ((fun mkSt -> ((fun st0 -> ((fun buildAnf -> (match entry with
   | B_dData_dMaybe.C_Maybe_Nothing -> (C_WasmOutcome_WasmRejected ((Wasm_dModel.C_WasmErr_WasmUnsupported ("wasm target: no main definition"))))
-  | B_dData_dMaybe.C_Maybe_Just (dtb__606) -> ((fun runSeeds -> ((fun handlerSeeds -> ((fun ordered -> ((fun listFamM -> ((fun handlerClasses -> ((fun runName -> ((fun roots -> ((fun rewrittenAll -> ((fun rewritten -> ((fun live -> ((fun tblAll -> ((fun namesAll -> ((fun dropNames -> ((fun kept -> ((fun directable -> ((fun entryClean -> (if directable then (((buildAnf ((B_dData_dList.v_append rewritten) (B_dData_dList.C_List__x58__x58_ (v_pureKDef, B_dData_dList.C_List_Nil)))) (B_dData_dMaybe.C_Maybe_Just (entryClean))) listFamM) else (match (Ir_dCps.v_cpsDefsMachine ordered) with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__606) -> ((fun runSeeds -> ((fun handlerSeeds -> ((fun ordered -> ((fun listFamM -> ((fun handlerClasses -> ((fun runName -> ((fun roots -> ((fun rewrittenAll -> ((fun rewritten -> ((fun live -> ((fun tblAll -> ((fun namesAll -> ((fun dropNames -> ((fun kept -> ((fun directable -> ((fun entryClean -> (if directable then (((buildAnf ((B_dData_dList.v_append rewritten) (B_dData_dList.C_List__x58__x58_ (v_pureKDef, B_dData_dList.C_List_Nil)))) (B_dData_dMaybe.C_Maybe_Just (entryClean))) listFamM) else (match (Vuna_dIr_dCps.v_cpsDefsMachine ordered) with
   | B_dData_dResult.C_Result_Ok (dtb__607) -> (((buildAnf dtb__607) (B_dData_dMaybe.C_Maybe_Just (dtb__606))) listFamM)
   | B_dData_dResult.C_Result_Err (dtb__608) -> (C_WasmOutcome_WasmRejected ((Wasm_dModel.C_WasmErr_WasmUnsupported (dtb__608))))
   | _ -> failwith "DT: impossible branch"
-))) { Ir_dModel.f_IrEntry_irEntryShow = (Ir_dModel.v_irEntryShowOf dtb__606); Ir_dModel.f_IrEntry_irEntryMain = (Ir_dModel.v_irEntryMainOf dtb__606); Ir_dModel.f_IrEntry_irEntryIsAction = (Ir_dModel.v_irEntryIsActionOf dtb__606); Ir_dModel.f_IrEntry_irEntryRunMain = (Ir_dModel.v_irEntryRunMainOf dtb__606); Ir_dModel.f_IrEntry_irEntryHandlers = B_dData_dList.C_List_Nil; Ir_dModel.f_IrEntry_irEntryRowTags = (Ir_dModel.v_irEntryRowTagsOf dtb__606) })) (if (v_listNull handlerSeeds) then false else (if ((v_listLengthB handlerClasses) <> (v_listLengthB handlerSeeds)) then false else (if (v_anyHostHandled handlerClasses) then false else (if (runName = "") then false else (B_dData_dBool.v_not ((v_defsUseSyms v_performSyms) live)))))))) ((B_dData_dList.v_filter (fun (d : Ir_dModel.t_IrDef) -> (B_dData_dBool.v_not ((v_defUsesSyms v_performSyms) d)))) rewrittenAll))) (B_dData_dList.C_List__x58__x58_ (Base_dIntrinsics.v_effSendCoreName, (B_dData_dList.C_List__x58__x58_ ("Base.Effect.Core.handleCore", (B_dData_dList.C_List__x58__x58_ ("Base.Effect.Core.handleCoreAt", (B_dData_dList.C_List__x58__x58_ ("Base.Effect.Core.handleCoreLin", (B_dData_dList.C_List__x58__x58_ ("Base.Effect.Core.performCore", (B_dData_dList.C_List__x58__x58_ ("Base.Effect.Core.handleScoped", (B_dData_dList.C_List__x58__x58_ ("Base.Effect.Core.handleSelf", B_dData_dList.C_List_Nil)))))))))))))))) ((((v_closeRefsAll 100000) tblAll) roots) B_dData_dList.C_List_Nil))) ((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) ((B_dData_dList.v_map (fun (d : Ir_dModel.t_IrDef) -> { B_dData_dPair.f_Pair_first = (Ir_dModel.v_irDefName d); B_dData_dPair.f_Pair_second = d })) rewrittenAll)))) rewritten)) (((v_reachableByRefs 100000) roots) rewrittenAll))) ((B_dData_dList.v_map (v_rwDef runName)) defs))) ((B_dData_dList.v_append (B_dData_dList.C_List__x58__x58_ ("Base.Effect.Core.machineRun", (B_dData_dList.C_List__x58__x58_ ((Ir_dModel.v_irEntryMainOf dtb__606), B_dData_dList.C_List_Nil))))) runSeeds))) (match (Ir_dModel.v_irEntryRunMainOf dtb__606) with
+))) { Vuna_dIr_dModel.f_IrEntry_irEntryShow = (Vuna_dIr_dModel.v_irEntryShowOf dtb__606); Vuna_dIr_dModel.f_IrEntry_irEntryMain = (Vuna_dIr_dModel.v_irEntryMainOf dtb__606); Vuna_dIr_dModel.f_IrEntry_irEntryIsAction = (Vuna_dIr_dModel.v_irEntryIsActionOf dtb__606); Vuna_dIr_dModel.f_IrEntry_irEntryRunMain = (Vuna_dIr_dModel.v_irEntryRunMainOf dtb__606); Vuna_dIr_dModel.f_IrEntry_irEntryHandlers = B_dData_dList.C_List_Nil; Vuna_dIr_dModel.f_IrEntry_irEntryRowTags = (Vuna_dIr_dModel.v_irEntryRowTagsOf dtb__606) })) (if (v_listNull handlerSeeds) then false else (if ((v_listLengthB handlerClasses) <> (v_listLengthB handlerSeeds)) then false else (if (v_anyHostHandled handlerClasses) then false else (if (runName = "") then false else (B_dData_dBool.v_not ((v_defsUseSyms v_performSyms) live)))))))) ((B_dData_dList.v_filter (fun (d : Vuna_dIr_dModel.t_IrDef) -> (B_dData_dBool.v_not ((v_defUsesSyms v_performSyms) d)))) rewrittenAll))) (B_dData_dList.C_List__x58__x58_ (Base_dIntrinsics.v_effSendCoreName, (B_dData_dList.C_List__x58__x58_ ("Base.Effect.Core.handleCore", (B_dData_dList.C_List__x58__x58_ ("Base.Effect.Core.handleCoreAt", (B_dData_dList.C_List__x58__x58_ ("Base.Effect.Core.handleCoreLin", (B_dData_dList.C_List__x58__x58_ ("Base.Effect.Core.performCore", (B_dData_dList.C_List__x58__x58_ ("Base.Effect.Core.handleScoped", (B_dData_dList.C_List__x58__x58_ ("Base.Effect.Core.handleSelf", B_dData_dList.C_List_Nil)))))))))))))))) ((((v_closeRefsAll 100000) tblAll) roots) B_dData_dList.C_List_Nil))) ((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) ((B_dData_dList.v_map (fun (d : Vuna_dIr_dModel.t_IrDef) -> { B_dData_dPair.f_Pair_first = (Vuna_dIr_dModel.v_irDefName d); B_dData_dPair.f_Pair_second = d })) rewrittenAll)))) rewritten)) (((v_reachableByRefs 100000) roots) rewrittenAll))) ((B_dData_dList.v_map (v_rwDef runName)) defs))) ((B_dData_dList.v_append (B_dData_dList.C_List__x58__x58_ ("Base.Effect.Core.machineRun", (B_dData_dList.C_List__x58__x58_ ((Vuna_dIr_dModel.v_irEntryMainOf dtb__606), B_dData_dList.C_List_Nil))))) runSeeds))) (match (Vuna_dIr_dModel.v_irEntryRunMainOf dtb__606) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__609) -> dtb__609
   | B_dData_dMaybe.C_Maybe_Nothing -> ""
   | _ -> failwith "DT: impossible branch"
-))) ((B_dData_dList.v_mapMaybe Base_dIntrinsics.v_hostClassOf) handlerSeeds))) ((Wasm_dTypes.v_wasmListFamFromFams ((Ir_dModel.v_irProgSharedOf program)).Ir_dModel.f_IrShared_irSharedListFam) fams))) ((fun nd_uscrut20 -> (match nd_uscrut20 with
-  | Ir_dModel.C_Ir_IrRt (dtb__610) -> (if (dtb__610 = "@ir@showFloat") then ((Ir_dAnalysis.v_reachableDefs ((B_dData_dList.v_append (B_dData_dList.C_List__x58__x58_ ("Base.Effect.Core.machineRun", B_dData_dList.C_List_Nil))) ((B_dData_dList.v_append (B_dData_dList.C_List__x58__x58_ ((Ir_dModel.v_irEntryMainOf dtb__606), (B_dData_dList.C_List__x58__x58_ (v_floatRenderName, B_dData_dList.C_List_Nil))))) ((B_dData_dList.v_append runSeeds) handlerSeeds)))) defs) else ((Ir_dAnalysis.v_reachableDefs ((B_dData_dList.v_append (B_dData_dList.C_List__x58__x58_ ("Base.Effect.Core.machineRun", B_dData_dList.C_List_Nil))) ((B_dData_dList.v_append (B_dData_dList.C_List__x58__x58_ ((Ir_dModel.v_irEntryMainOf dtb__606), B_dData_dList.C_List_Nil))) ((B_dData_dList.v_append runSeeds) handlerSeeds)))) defs))
-  | _ -> ((Ir_dAnalysis.v_reachableDefs ((B_dData_dList.v_append (B_dData_dList.C_List__x58__x58_ ("Base.Effect.Core.machineRun", B_dData_dList.C_List_Nil))) ((B_dData_dList.v_append (B_dData_dList.C_List__x58__x58_ ((Ir_dModel.v_irEntryMainOf dtb__606), B_dData_dList.C_List_Nil))) ((B_dData_dList.v_append runSeeds) handlerSeeds)))) defs)
-)) (Ir_dModel.v_irEntryShowOf dtb__606)))) (Ir_dModel.v_irEntryHandlersOf dtb__606))) (match (Ir_dModel.v_irEntryRunMainOf dtb__606) with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__611) -> (if (Ir_dModel.v_irEntryIsActionOf dtb__606) then (B_dData_dList.C_List__x58__x58_ (dtb__611, B_dData_dList.C_List_Nil)) else B_dData_dList.C_List_Nil)
+))) ((B_dData_dList.v_mapMaybe Base_dIntrinsics.v_hostClassOf) handlerSeeds))) ((Wasm_dTypes.v_wasmListFamFromFams ((Vuna_dIr_dModel.v_irProgSharedOf program)).Vuna_dIr_dModel.f_IrShared_irSharedListFam) fams))) ((fun nd_uscrut20 -> (match nd_uscrut20 with
+  | Vuna_dIr_dModel.C_Ir_IrRt (dtb__610) -> (if (dtb__610 = "@ir@showFloat") then ((Vuna_dIr_dAnalysis.v_reachableDefs ((B_dData_dList.v_append (B_dData_dList.C_List__x58__x58_ ("Base.Effect.Core.machineRun", B_dData_dList.C_List_Nil))) ((B_dData_dList.v_append (B_dData_dList.C_List__x58__x58_ ((Vuna_dIr_dModel.v_irEntryMainOf dtb__606), (B_dData_dList.C_List__x58__x58_ (v_floatRenderName, B_dData_dList.C_List_Nil))))) ((B_dData_dList.v_append runSeeds) handlerSeeds)))) defs) else ((Vuna_dIr_dAnalysis.v_reachableDefs ((B_dData_dList.v_append (B_dData_dList.C_List__x58__x58_ ("Base.Effect.Core.machineRun", B_dData_dList.C_List_Nil))) ((B_dData_dList.v_append (B_dData_dList.C_List__x58__x58_ ((Vuna_dIr_dModel.v_irEntryMainOf dtb__606), B_dData_dList.C_List_Nil))) ((B_dData_dList.v_append runSeeds) handlerSeeds)))) defs))
+  | _ -> ((Vuna_dIr_dAnalysis.v_reachableDefs ((B_dData_dList.v_append (B_dData_dList.C_List__x58__x58_ ("Base.Effect.Core.machineRun", B_dData_dList.C_List_Nil))) ((B_dData_dList.v_append (B_dData_dList.C_List__x58__x58_ ((Vuna_dIr_dModel.v_irEntryMainOf dtb__606), B_dData_dList.C_List_Nil))) ((B_dData_dList.v_append runSeeds) handlerSeeds)))) defs)
+)) (Vuna_dIr_dModel.v_irEntryShowOf dtb__606)))) (Vuna_dIr_dModel.v_irEntryHandlersOf dtb__606))) (match (Vuna_dIr_dModel.v_irEntryRunMainOf dtb__606) with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__611) -> (if (Vuna_dIr_dModel.v_irEntryIsActionOf dtb__606) then (B_dData_dList.C_List__x58__x58_ (dtb__611, B_dData_dList.C_List_Nil)) else B_dData_dList.C_List_Nil)
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
 ))
   | _ -> failwith "DT: impossible branch"
-)) (fun (mc0 : Ir_dModel.t_IrDef B_dData_dList.t_List) (mc1 : Ir_dModel.t_IrEntry B_dData_dMaybe.t_Maybe) (mc2 : Wasm_dTypes.t_WasmListFam B_dData_dMaybe.t_Maybe) -> (match (Ir_dAnf.v_anfProgramDefs mc0) with
+)) (fun (mc0 : Vuna_dIr_dModel.t_IrDef B_dData_dList.t_List) (mc1 : Vuna_dIr_dModel.t_IrEntry B_dData_dMaybe.t_Maybe) (mc2 : Wasm_dTypes.t_WasmListFam B_dData_dMaybe.t_Maybe) -> (match (Vuna_dIr_dAnf.v_anfProgramDefs mc0) with
   | B_dData_dResult.C_Result_Err (dtb__612) -> (C_WasmOutcome_WasmRejected ((Wasm_dModel.C_WasmErr_WasmInternal (("ANF: " ^ dtb__612)))))
-  | B_dData_dResult.C_Result_Ok (dtb__613) -> (match (Ir_dTail.v_annotateDefs dtb__613) with
+  | B_dData_dResult.C_Result_Ok (dtb__613) -> (match (Vuna_dIr_dTail.v_annotateDefs dtb__613) with
   | B_dData_dResult.C_Result_Err (dtb__614) -> (C_WasmOutcome_WasmRejected ((Wasm_dModel.C_WasmErr_WasmInternal (("tail: " ^ dtb__614)))))
   | B_dData_dResult.C_Result_Ok (dtb__615) -> (match ((((((v_buildModule 100000) (mkSt dtb__615)) dtb__615) mc1) printResult) mc2) with
   | B_dData_dResult.C_Result_Ok (dtb__616) -> (C_WasmOutcome_WasmOk (dtb__616))
@@ -1413,4 +1413,4 @@ let v_build = (fun (program : Ir_dModel.t_IrProgram) (printResult : bool) -> ((f
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
-)))) (mkSt defsAll))) (fun (mc0 : Ir_dModel.t_IrDef B_dData_dList.t_List) -> ((fun dt -> { f_GenState_gsFams = fams; f_GenState_gsFamTbl = famTbl; f_GenState_gsDefs = mc0; f_GenState_gsDefTbl = dt; f_GenState_gsPool = offsets; f_GenState_gsPoolTbl = poolTbl; f_GenState_gsFuncs = B_dData_dList.C_List_Nil; f_GenState_gsLocals = B_dData_dList.C_List_Nil; f_GenState_gsNextLocal = 0; f_GenState_gsScope = B_dData_dList.C_List_Nil; f_GenState_gsConsts = consts; f_GenState_gsElems = B_dData_dList.C_List_Nil; f_GenState_gsTail = false; f_GenState_gsNextLam = 0 }) ((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) ((B_dData_dList.v_map (fun (d : Ir_dModel.t_IrDef) -> { B_dData_dPair.f_Pair_first = (Ir_dModel.v_irDefName d); B_dData_dPair.f_Pair_second = d })) mc0)))))) (v_mkConsts poolTbl))) ((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) offsets))) ((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) ((B_dData_dList.v_map (fun (f : Wasm_dTypes.t_WasmFam) -> { B_dData_dPair.f_Pair_first = (v_famNameOf f); B_dData_dPair.f_Pair_second = f })) fams)))) ((B_dData_dList.v_append defs) (B_dData_dList.C_List__x58__x58_ (v_pureKDef, B_dData_dList.C_List_Nil))))) (v_poolOf ((B_dData_dList.v_append statics) users)))) ((B_dData_dList.v_concatMap Ir_dAnalysis.v_irStringsOfDef) defs))) (B_dData_dList.C_List__x58__x58_ ("True", (B_dData_dList.C_List__x58__x58_ ("False", (B_dData_dList.C_List__x58__x58_ ("TODO: ", (B_dData_dList.C_List__x58__x58_ ("division by zero", (B_dData_dList.C_List__x58__x58_ ("vuna: runtime error: ", (B_dData_dList.C_List__x58__x58_ ("assertion failed: ", (B_dData_dList.C_List__x58__x58_ ("Invalid_argument(\"index out of bounds\")", (B_dData_dList.C_List__x58__x58_ ("continuation already resumed", (B_dData_dList.C_List__x58__x58_ ("unhandled effect", (B_dData_dList.C_List__x58__x58_ ("wasm host operation is not implemented", (B_dData_dList.C_List__x58__x58_ (".tmp", (B_dData_dList.C_List__x58__x58_ ("/", B_dData_dList.C_List_Nil)))))))))))))))))))))))))) (Wasm_dTypes.v_wasmFamsOf (unit).Ir_dModel.f_IrUnit_irUnitTyDecls))) (unit).Ir_dModel.f_IrUnit_irUnitEntry)) ((B_dData_dList.v_concatMap Ir_dModel.v_irGroupDefs) (unit).Ir_dModel.f_IrUnit_irUnitGroups))) (Ir_dModel.v_irProgUnitOf program)))
+)))) (mkSt defsAll))) (fun (mc0 : Vuna_dIr_dModel.t_IrDef B_dData_dList.t_List) -> ((fun dt -> { f_GenState_gsFams = fams; f_GenState_gsFamTbl = famTbl; f_GenState_gsDefs = mc0; f_GenState_gsDefTbl = dt; f_GenState_gsPool = offsets; f_GenState_gsPoolTbl = poolTbl; f_GenState_gsFuncs = B_dData_dList.C_List_Nil; f_GenState_gsLocals = B_dData_dList.C_List_Nil; f_GenState_gsNextLocal = 0; f_GenState_gsScope = B_dData_dList.C_List_Nil; f_GenState_gsConsts = consts; f_GenState_gsElems = B_dData_dList.C_List_Nil; f_GenState_gsTail = false; f_GenState_gsNextLam = 0 }) ((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) ((B_dData_dList.v_map (fun (d : Vuna_dIr_dModel.t_IrDef) -> { B_dData_dPair.f_Pair_first = (Vuna_dIr_dModel.v_irDefName d); B_dData_dPair.f_Pair_second = d })) mc0)))))) (v_mkConsts poolTbl))) ((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) offsets))) ((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) ((B_dData_dList.v_map (fun (f : Wasm_dTypes.t_WasmFam) -> { B_dData_dPair.f_Pair_first = (v_famNameOf f); B_dData_dPair.f_Pair_second = f })) fams)))) ((B_dData_dList.v_append defs) (B_dData_dList.C_List__x58__x58_ (v_pureKDef, B_dData_dList.C_List_Nil))))) (v_poolOf ((B_dData_dList.v_append statics) users)))) ((B_dData_dList.v_concatMap Vuna_dIr_dAnalysis.v_irStringsOfDef) defs))) (B_dData_dList.C_List__x58__x58_ ("True", (B_dData_dList.C_List__x58__x58_ ("False", (B_dData_dList.C_List__x58__x58_ ("TODO: ", (B_dData_dList.C_List__x58__x58_ ("division by zero", (B_dData_dList.C_List__x58__x58_ ("vuna: runtime error: ", (B_dData_dList.C_List__x58__x58_ ("assertion failed: ", (B_dData_dList.C_List__x58__x58_ ("Invalid_argument(\"index out of bounds\")", (B_dData_dList.C_List__x58__x58_ ("continuation already resumed", (B_dData_dList.C_List__x58__x58_ ("unhandled effect", (B_dData_dList.C_List__x58__x58_ ("wasm host operation is not implemented", (B_dData_dList.C_List__x58__x58_ (".tmp", (B_dData_dList.C_List__x58__x58_ ("/", B_dData_dList.C_List_Nil)))))))))))))))))))))))))) (Wasm_dTypes.v_wasmFamsOf (unit).Vuna_dIr_dModel.f_IrUnit_irUnitTyDecls))) (unit).Vuna_dIr_dModel.f_IrUnit_irUnitEntry)) ((B_dData_dList.v_concatMap Vuna_dIr_dModel.v_irGroupDefs) (unit).Vuna_dIr_dModel.f_IrUnit_irUnitGroups))) (Vuna_dIr_dModel.v_irProgUnitOf program)))
