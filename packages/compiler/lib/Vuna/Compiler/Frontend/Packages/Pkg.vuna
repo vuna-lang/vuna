@@ -19,6 +19,7 @@ import Vuna.Compiler.Frontend.Manifest
 import Vuna.Compiler.Frontend.Canonical.Pkg
 import Vuna.Compiler.Frontend.Packages.Source
 import Vuna.Compiler.Base.Store
+import Base.Data.Unit
 import Base.Data.List as List
 import Base.Effect.Env as EffEnv
 import Base.Effect.Fs as EffFs
@@ -652,9 +653,9 @@ firstExistingBase original (dir :: rest) =
     exists <- hasManifest dir
     if exists then pure (OkC dir) else firstExistingBase original rest
 
--- base 定位是启动期读环境/探路径的**动作**（零参顶层值会在模块初始化时求值），
--- 因此函数化：调用方传 dummy 0，真正用到 base-only 上下文时才解析。
-export locateBase : Member nFs FsOp r, Member nEnv EnvOp r => Int -> Eff r (Check String)
+-- base 定位是启动期读环境/探路径的**动作**（零参顶层值是值，会在模块初始化时求值），
+-- 因此函数化：调用方传 `MkUnit`，真正用到 base-only 上下文时才解析。
+export locateBase : Member nFs FsOp r, Member nEnv EnvOp r => Unit -> Eff r (Check String)
 locateBase _ =
   do
     env <- envGetEnv "VUNA_BASE"
@@ -718,7 +719,7 @@ contextAt start =
                       )
       Nothing =>
         do
-          baseR <- locateBase 0
+          baseR <- locateBase MkUnit
           case baseR of
             ErrC e => pure (ErrC e)
             OkC base => baseOnlyContext base

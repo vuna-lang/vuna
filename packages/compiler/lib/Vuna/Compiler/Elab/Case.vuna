@@ -575,8 +575,9 @@ export hasCatchAll : List (Pair Pat Expr) -> Bool
 hasCatchAll [] = False
 hasCatchAll ((Pair pat body) :: rest) =
   case pat of
-    PCon cname args psp => hasCatchAll rest
-    _ => True
+    PVar name psp => True
+    PWild psp => True
+    _ => hasCatchAll rest
 
 -- 重复名判定统一用 `Base.Data.List.hasDupNames`（本模块曾有一份逐字相同的私有实现）。
 -- 带**嵌套模式**的 case（`[y]` = `Cons y Nil`）走 `Elab.Match` 的模式矩阵降级：

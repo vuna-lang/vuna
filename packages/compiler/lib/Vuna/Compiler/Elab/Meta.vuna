@@ -1207,6 +1207,10 @@ outerScan ec ctx depth (TLam n r _ _ b) = outerScan ec ctx (depth + 1) b
 outerScan ec ctx depth (TApp f a r) = outerScan ec ctx depth f || outerScan ec ctx depth a
 outerScan ec ctx depth (TCon c args) = outerScanArgs ec ctx depth args
 outerScan ec ctx depth (TMk c args) = outerScanArgs ec ctx depth args
+outerScan ec ctx depth (TProj b c tele i fi) = outerScan ec ctx depth b
+outerScan ec ctx depth (TRecord c args) = outerScanArgs ec ctx depth args
+outerScan ec ctx depth (TRecUpd b c tele idxs body) =
+  outerScan ec ctx depth b || outerScan ec ctx (depth + natToInt (length tele)) body
 outerScan ec ctx depth (TCase s alts) = outerScan ec ctx depth s || outerScanAlts ec ctx depth alts
 outerScan ec ctx depth (TIf c th el) =
   outerScan ec ctx depth c || outerScan ec ctx depth th || outerScan ec ctx depth el

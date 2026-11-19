@@ -1536,14 +1536,7 @@ parseAtomBase fuel st blockCol =
       PTok (TIdent name) p =>
         let
           st1 = advance st
-        in if atSym st1 "{" then
-          Vuna.Compiler.Base.Common.bind (expectSym st1 "{") (\st1b => Vuna.Compiler.Base.Common.step (parseRecordAssignments (fuel - 1) st1b blockCol) (\fields, st2 => OkC (Pair (ERecord name fields (spanOf st st2)) st2)))
-        else if atSym st1 "." then
-          case peekTokAt st1 1 of
-            -- 限定符号引用 `A.+`：模块名 + `.` + 符号名，合成一个带点全名交给 Resolve。
-            Just (PTok (TSym sym) _) => if isReservedValueName sym then OkC (Pair (EVar name (spanOf st st1)) st1) else OkC (Pair (EVar (name ++ "." ++ sym) (spanOf st (advance (advance st1)))) (advance (advance st1)))
-            _ => OkC (Pair (EVar name (spanOf st st1)) st1)
-        else if macroBangAt st1 p name then Vuna.Compiler.Base.Common.bind (expectSym st1 "!") (\st1b => Vuna.Compiler.Base.Common.step (parseArgs (fuel - 1) st1b blockCol) (\args, st2 => OkC (Pair (macroAtom name args (spanOf st st2) (spanOf st st1b)) st2))) else OkC (Pair (EVar name (spanOf st st1)) st1)
+        in if atSym st1 "{" then Vuna.Compiler.Base.Common.bind (expectSym st1 "{") (\st1b => Vuna.Compiler.Base.Common.step (parseRecordAssignments (fuel - 1) st1b blockCol) (\fields, st2 => OkC (Pair (ERecord name fields (spanOf st st2)) st2))) else if macroBangAt st1 p name then Vuna.Compiler.Base.Common.bind (expectSym st1 "!") (\st1b => Vuna.Compiler.Base.Common.step (parseArgs (fuel - 1) st1b blockCol) (\args, st2 => OkC (Pair (macroAtom name args (spanOf st st2) (spanOf st st1b)) st2))) else OkC (Pair (EVar name (spanOf st st1)) st1)
       PTok (TInt n) p => OkC (Pair (EInt n (spanOf st (advance st))) (advance st))
       PTok (TFloat raw) p => OkC (Pair (EFloat raw (spanOf st (advance st))) (advance st))
       PTok (TStr s) p => OkC (Pair (EStr s (spanOf st (advance st))) (advance st))
