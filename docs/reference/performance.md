@@ -364,6 +364,11 @@ load/parse 前缀 + iface 摘要 **~2.6 s** → 逐定义精化（`collectSigs-d
    下一轮剩下的顶部（同一份采样）：`Iface`/`Canonical` 的 `String.concat` 6.3%、`dtp_strHash` 6.2%、
    `exportIndexOfModule`+`resolveModuleName` 7.7%（每次查导出现在都重解析模块名，没有按名字的
    解析缓存）、`Lowering.Ty.renderTyGlobal` 3.0%、`Core.Eval.quote` 2.6%。
+   后续那次把编码原子、`joinDots`、`mangle`/`ctorCanonical` 的名字比较都改成零分配形式，
+   冷 `check packages/compiler` **7.10 s → 7.02 s（噪声级）**：剩下的 `String.concat` 已经不是
+   逐节点拼接，而是**每个哈希输入那一次** `strConcatMany`（整包载荷 ~MB 级），要再降必须把
+   `contentAddress`/`sha256` 改成对分片流增量计算（`sha256OfParts`，纯 vuna、摘要不变可对拍），
+   名字解析则仍需要一张按名字的表。
 
 ### 4.1 elab 内部的结构性开销（当前处置与读数）
 

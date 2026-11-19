@@ -141,6 +141,32 @@ validModuleName name =
 export mangle : String -> String -> String
 mangle prefix name = if prefix == "" then name else "${prefix}.${name}"
 
+-- | `mangle prefix name == target` 的零分配判定：名字解析按名字查询时不再为每个声明拼一次。
+export isMangled : String -> String -> String -> Bool
+isMangled prefix name target =
+  if prefix == "" then
+    name == target
+  else
+    let
+      lp = strLength prefix
+      ln = strLength name
+    in strLength target == lp + 1 + ln && strAt target lp == 46 && sliceEq 0 prefix 0 target lp && sliceEq 0 name (lp + 1) target ln
+
+-- | `src[srcOff..)` 与 `dst[dstOff..)` 的前 `n` 字节是否相同（fuel 只用于终止性检查）。
+sliceEq : Int -> String -> Int -> String -> Int -> Bool
+sliceEq srcOff src dstOff dst n = sliceEqGo 0 srcOff src dstOff dst n n
+
+sliceEqGo : Int -> Int -> String -> Int -> String -> Int -> Int -> Bool
+sliceEqGo i srcOff src dstOff dst n fuel =
+  if fuel <= 0 then
+    True
+  else if i >= n then
+    True
+  else if strAt src (srcOff + i) == strAt dst (dstOff + i) then
+    sliceEqGo (i + 1) srcOff src dstOff dst n (fuel - 1)
+  else
+    False
+
 -- | 构造子 canonical 名 = `Module.Data.Ctor`（entry 文件 `Data.Ctor`）。
 -- 不同数据类型的同名构造子因此天然不冲突；裸名按期望类型在候选里选（见 Resolve/Elab）。
 export ctorCanonical : String -> String -> String -> String
@@ -609,11 +635,10 @@ isCtorTargetInDecls mname target dprefix cname [] = False
 isCtorTargetInDecls mname target dprefix cname (d :: rest) =
   case d of
     DData dname params kind ctors derivings viaField repr lin sp =>
-      mangle mname dname
-        == dprefix
+      isMangled mname dname dprefix
         && anyCtorNamed cname ctors || isCtorTargetInDecls mname target dprefix cname rest
     DRecord dname params fields derivings viaField repr lin sp =>
-      mangle mname dname == target || isCtorTargetInDecls mname target dprefix cname rest
+      isMangled mname dname target || isCtorTargetInDecls mname target dprefix cname rest
     _ => isCtorTargetInDecls mname target dprefix cname rest
 
 anyCtorNamed : String -> List Ctor -> Bool
@@ -624,4 +649,23 @@ anyCtorNamed cname (c :: rest) = ctorName c == cname || anyCtorNamed cname rest
 anyCtorTarget : String -> String -> String -> List Ctor -> Bool
 anyCtorTarget mname dname target [] = False
 anyCtorTarget mname dname target (c :: rest) =
-  ctorCanonical mname dname (ctorName c) == target || anyCtorTarget mname dname target rest
+  isCtorCanonical mname dname (ctorName c) target || anyCtorTarget mname dname target rest
+
+-- | `ctorCanonical mname dname cname == target` 的零分配判定（`M.D.C` 三段逐字节比较）。
+isCtorCanonical : String -> String -> String -> String -> Bool
+isCtorCanonical mname dname cname target =
+  let
+    lm = strLength mname
+    ld = strLength dname
+    lc = strLength cname
+    second = lm + 1 + ld
+  in strLength target
+    == second
+    + 1
+    + lc
+    && strAt target lm
+    == 46
+    && strAt target second
+    == 46
+    && sliceEq 0 mname 0 target lm
+    && sliceEq 0 dname (lm + 1) target ld && sliceEq 0 cname (second + 1) target lc

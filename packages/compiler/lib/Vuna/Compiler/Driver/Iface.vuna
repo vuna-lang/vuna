@@ -236,12 +236,16 @@ export payloadDigest : String -> String
 payloadDigest s = Vuna.Compiler.Base.Hash.contentAddress s
 
 -- | 可解析分片：长度前缀，保证多段拼接无歧义。
-partOf : String -> String
-partOf s = "${strLength s}:${s}"
+partOf : String -> List String
+partOf s = strFromInt (strLength s) :: ":" :: s :: []
 
 -- | 多个规范分片 → 一个内容摘要。
 digestParts : List String -> String
-digestParts ps = shaText (strConcatMany (map partOf ps))
+digestParts ps = shaText (strConcatMany (flatParts ps))
+
+flatParts : List String -> List String
+flatParts [] = []
+flatParts (p :: rest) = append (partOf p) (flatParts rest)
 
 -- | 依赖接口不可得时的哨兵（永不失配任何真实哈希）。
 export depMissingHash : String

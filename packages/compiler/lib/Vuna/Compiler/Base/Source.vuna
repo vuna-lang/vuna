@@ -165,9 +165,16 @@ splitLastDot parts =
 
 -- | 用 `.` 拼接模块路径段；空列表得空串，单段原样返回。
 export joinDots : List String -> String
-joinDots [] = ""
-joinDots ([x]) = x
-joinDots (x :: rest) = "${x}.${joinDots rest}"
+joinDots xs = strConcatMany (joinDotsParts xs)
+
+-- 分片形式（差列表）：顶层只 `strConcatMany` 一次，避免 `"${x}.${...}"` 的逐层拷贝。
+joinDotsParts : List String -> List String
+joinDotsParts [] = []
+joinDotsParts (x :: rest) = x :: dotsRest rest
+
+dotsRest : List String -> List String
+dotsRest [] = []
+dotsRest (x :: rest) = "." :: x :: dotsRest rest
 
 -- | 名字的**末段**（`Base.Trait.Monad.fmap` → `fmap`；无点时返回原名本身）。
 -- 名字末段/前缀的唯一入口：`Elab.Meta.baseNameOf`、`Elab.Prelude` 的短名比较、

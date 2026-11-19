@@ -40,7 +40,7 @@ encArg (Pair t r) acc = encTerm t (encRig r acc)
 
 -- | 实参表（直接递归：SCT 要看到 `encArg` 的调用位于子项上，不能经高阶 `encList`）。
 encArgs : List (Pair Term Rig) -> List String -> List String
-encArgs xs acc = "[${strFromInt (lenOf xs)}:" :: encArgsGo xs acc
+encArgs xs acc = "[" :: strFromInt (lenOf xs) :: ":" :: encArgsGo xs acc
 
 -- | 实参表的递归主体（计数头由 `encArgs` 写；`acc` 是累积器）。
 encArgsGo : List (Pair Term Rig) -> List String -> List String
@@ -61,7 +61,7 @@ encAlt (CaseAlt n bs b) acc = encStr n (encBinders (binderPairs bs) (encTerm b a
 
 -- | 分支表（直接递归，理由同 `encArgs`）。
 encAlts : List CaseAlt -> List String -> List String
-encAlts xs acc = "[${strFromInt (lenOf xs)}:" :: encAltsGo xs acc
+encAlts xs acc = "[" :: strFromInt (lenOf xs) :: ":" :: encAltsGo xs acc
 
 -- | 分支表的递归主体（计数头由 `encAlts` 写；`acc` 是累积器）。
 encAltsGo : List CaseAlt -> List String -> List String
