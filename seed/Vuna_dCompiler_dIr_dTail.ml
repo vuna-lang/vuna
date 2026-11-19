@@ -15,7 +15,7 @@ let v_Vuna_dCompiler_dIr_dTail_darityOfTable = (fun (tbl : (string, int) Base_dC
 # 34 "Vuna/Compiler/Ir/Tail.vuna"
 let v_Vuna_dCompiler_dIr_dTail_dtailFuelOf = (fun (ir : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIr) -> (64 + (16 * (Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirSize ir))))
 
-# 59 "Vuna/Compiler/Ir/Tail.vuna"
+# 63 "Vuna/Compiler/Ir/Tail.vuna"
 let rec v_Vuna_dCompiler_dIr_dTail_dstripTailAt = (fun (fuel : int) (ir : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIr) -> (if (fuel <= 0) then ir else (match ir with
   | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrTail (dtb__12) -> ((v_Vuna_dCompiler_dIr_dTail_dstripTailAt (fuel - 1)) dtb__12)
   | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrVar (dtb__13) -> ir
@@ -42,21 +42,21 @@ let rec v_Vuna_dCompiler_dIr_dTail_dstripTailAt = (fun (fuel : int) (ir : Vuna_d
   | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrEffBind (dtb__67, dtb__68, dtb__69) -> ir
   | _ -> failwith "DT: impossible branch"
 )))
-# 89 "Vuna/Compiler/Ir/Tail.vuna"
+# 93 "Vuna/Compiler/Ir/Tail.vuna"
 and v_Vuna_dCompiler_dIr_dTail_dstripField = (fun (fuel : int) (p : (string, Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIr) Base_dData_dPair.t_Base_dData_dPair_dPair) -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = (Base_dData_dPair.v_Base_dData_dPair_dfirstOf p); Base_dData_dPair.f_Base_dData_dPair_dPair_second = ((v_Vuna_dCompiler_dIr_dTail_dstripTailAt fuel) (Base_dData_dPair.v_Base_dData_dPair_dsecondOf p)) })
-# 92 "Vuna/Compiler/Ir/Tail.vuna"
+# 96 "Vuna/Compiler/Ir/Tail.vuna"
 and v_Vuna_dCompiler_dIr_dTail_dstripAlt = (fun (fuel : int) (alt : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrAlt) -> { Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrAlt_irAltCtor = (alt).Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrAlt_irAltCtor; Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrAlt_irAltBinders = (alt).Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrAlt_irAltBinders; Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrAlt_irAltBody = ((v_Vuna_dCompiler_dIr_dTail_dstripTailAt fuel) (alt).Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrAlt_irAltBody) })
-# 95 "Vuna/Compiler/Ir/Tail.vuna"
+# 99 "Vuna/Compiler/Ir/Tail.vuna"
 and v_Vuna_dCompiler_dIr_dTail_dstripAltM = (fun (fuel : int) (m : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrAlt Base_dData_dMaybe.t_Base_dData_dMaybe_dMaybe) -> (match m with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__70) -> (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (((v_Vuna_dCompiler_dIr_dTail_dstripAlt fuel) dtb__70)))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 56 "Vuna/Compiler/Ir/Tail.vuna"
+# 60 "Vuna/Compiler/Ir/Tail.vuna"
 let v_Vuna_dCompiler_dIr_dTail_dstripTail = (fun (ir : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIr) -> ((v_Vuna_dCompiler_dIr_dTail_dstripTailAt (v_Vuna_dCompiler_dIr_dTail_dtailFuelOf ir)) ir))
 
-# 101 "Vuna/Compiler/Ir/Tail.vuna"
+# 105 "Vuna/Compiler/Ir/Tail.vuna"
 let rec v_Vuna_dCompiler_dIr_dTail_dannotateAt = (fun (fuel : int) (arityOf : (string) -> int Base_dData_dMaybe.t_Base_dData_dMaybe_dMaybe) (tail : bool) (ir : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIr) -> (if (fuel <= 0) then ir else (match ir with
   | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrVar (dtb__71) -> ir
   | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrGlobal (dtb__72) -> (if tail then ((fun nd_uscrut5 -> (match nd_uscrut5 with
@@ -86,11 +86,11 @@ let rec v_Vuna_dCompiler_dIr_dTail_dannotateAt = (fun (fuel : int) (arityOf : (s
   | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrEffBind (dtb__127, dtb__128, dtb__129) -> ir
   | _ -> failwith "DT: impossible branch"
 )))
-# 144 "Vuna/Compiler/Ir/Tail.vuna"
+# 148 "Vuna/Compiler/Ir/Tail.vuna"
 and v_Vuna_dCompiler_dIr_dTail_dannotateField = (fun (fuel : int) (arityOf : (string) -> int Base_dData_dMaybe.t_Base_dData_dMaybe_dMaybe) (p : (string, Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIr) Base_dData_dPair.t_Base_dData_dPair_dPair) -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = (Base_dData_dPair.v_Base_dData_dPair_dfirstOf p); Base_dData_dPair.f_Base_dData_dPair_dPair_second = ((((v_Vuna_dCompiler_dIr_dTail_dannotateAt fuel) arityOf) false) (Base_dData_dPair.v_Base_dData_dPair_dsecondOf p)) })
-# 147 "Vuna/Compiler/Ir/Tail.vuna"
-and v_Vuna_dCompiler_dIr_dTail_dannotateAlt = (fun (fuel : int) (arityOf : (string) -> int Base_dData_dMaybe.t_Base_dData_dMaybe_dMaybe) (tail : bool) (alt : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrAlt) -> { Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrAlt_irAltCtor = (alt).Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrAlt_irAltCtor; Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrAlt_irAltBinders = (alt).Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrAlt_irAltBinders; Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrAlt_irAltBody = ((((v_Vuna_dCompiler_dIr_dTail_dannotateAt fuel) arityOf) tail) (alt).Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrAlt_irAltBody) })
 # 151 "Vuna/Compiler/Ir/Tail.vuna"
+and v_Vuna_dCompiler_dIr_dTail_dannotateAlt = (fun (fuel : int) (arityOf : (string) -> int Base_dData_dMaybe.t_Base_dData_dMaybe_dMaybe) (tail : bool) (alt : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrAlt) -> { Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrAlt_irAltCtor = (alt).Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrAlt_irAltCtor; Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrAlt_irAltBinders = (alt).Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrAlt_irAltBinders; Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrAlt_irAltBody = ((((v_Vuna_dCompiler_dIr_dTail_dannotateAt fuel) arityOf) tail) (alt).Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrAlt_irAltBody) })
+# 155 "Vuna/Compiler/Ir/Tail.vuna"
 and v_Vuna_dCompiler_dIr_dTail_dannotateAltMaybe = (fun (fuel : int) (arityOf : (string) -> int Base_dData_dMaybe.t_Base_dData_dMaybe_dMaybe) (tail : bool) (m : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrAlt Base_dData_dMaybe.t_Base_dData_dMaybe_dMaybe) -> (match m with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__130) -> (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (((((v_Vuna_dCompiler_dIr_dTail_dannotateAlt fuel) arityOf) tail) dtb__130)))
@@ -108,4 +108,7 @@ let v_Vuna_dCompiler_dIr_dTail_dannotateDef = (fun (arityOf : (string) -> int Ba
 let v_Vuna_dCompiler_dIr_dTail_dannotateDefsWith = (fun (arityOf : (string) -> int Base_dData_dMaybe.t_Base_dData_dMaybe_dMaybe) (defs : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrDef Base_dData_dList.t_Base_dData_dList_dList) -> ((Base_dData_dList.v_Base_dData_dList_dmap (v_Vuna_dCompiler_dIr_dTail_dannotateDef arityOf)) defs))
 
 # 48 "Vuna/Compiler/Ir/Tail.vuna"
+let v_Vuna_dCompiler_dIr_dTail_dannotateBody = (fun (arityOf : (string) -> int Base_dData_dMaybe.t_Base_dData_dMaybe_dMaybe) (ir : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIr) -> ((((v_Vuna_dCompiler_dIr_dTail_dannotateAt (v_Vuna_dCompiler_dIr_dTail_dtailFuelOf ir)) arityOf) true) ir))
+
+# 52 "Vuna/Compiler/Ir/Tail.vuna"
 let v_Vuna_dCompiler_dIr_dTail_dannotateDefs = (fun (defs : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrDef Base_dData_dList.t_Base_dData_dList_dList) -> ((fun tbl -> (Base_dData_dResult.C_Base_dData_dResult_dResult_Ok (((v_Vuna_dCompiler_dIr_dTail_dannotateDefsWith (v_Vuna_dCompiler_dIr_dTail_darityOfTable tbl)) defs)))) (v_Vuna_dCompiler_dIr_dTail_darityTableOf defs)))
