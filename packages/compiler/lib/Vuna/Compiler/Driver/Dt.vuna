@@ -1657,7 +1657,7 @@ topoModules : List Module -> List Module
 topoModules mods =
   let
     sorted = sortBy moduleOrderLess mods
-  in secondOf (topoVisitAll 8192 sorted (map moduleNameOf sorted) [] [])
+  in secondOf (topoVisitAll (length sorted + 1) sorted (map moduleNameOf sorted) [] [])
 
 -- codegen 单元级缓存。单元 key = 单元名 + 模块声明内容哈希 + 传递依赖
 -- 单元 key 的哈希链（与 build 系统同思路）：依赖接口变化沿链使依赖者失效，无关模块
@@ -1818,6 +1818,15 @@ importsOfModuleNames : Module -> List String
 importsOfModuleNames m =
   map findModuleNameField (append m.moduleImportsOf m.moduleImplicitImportsOf)
 
+-- 每个名字首次出队扣 1（visited 命中不扣）；起点里的外部名也会各扣一次，
+-- 所以上界 = 起点数 + 模块数 + 边数 + 1。
+closureFuel : List Module -> List String -> Int
+closureFuel mods starts = length starts + length mods + importsEdgeCount mods + 1
+
+importsEdgeCount : List Module -> Int
+importsEdgeCount [] = 0
+importsEdgeCount (m :: rest) = length (importsOfModuleNames m) + importsEdgeCount rest
+
 closureGo : Int -> List Module -> List String -> List String -> List String
 closureGo fuel mods visited [] = visited
 closureGo fuel mods visited (n :: rest) =
@@ -1836,7 +1845,7 @@ filterProjectToImports pkg (Project ds imports implicit mods epkg fixes) =
     entryStarts = map findModuleNameField (append imports implicit)
     ownNames = map moduleNameOf (filter (\m => modulePackageOf m == pkg) mods)
     starts = append entryStarts ownNames
-    closed = closureGo 8192 mods [] starts
+    closed = closureGo (closureFuel mods starts) mods [] starts
     kept = filter (\m => memName (moduleNameOf m) closed) mods
   in Pair (Project ds imports implicit kept epkg fixes) kept
 

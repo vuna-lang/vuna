@@ -1329,9 +1329,17 @@ importClosureGo fuel mods (n :: rest) acc =
       Just m => importClosureGo (fuel - 1) mods (append m.cmImports rest) (n :: acc)
 
 -- 从起点名单沿 header 的 import 边做传递闭包（不读模块文件；header 已在内存）。
--- fuel 守卫：header 图理论上无环（loader 拒绝环），这里只防脏数据。
+-- fuel 守卫：header 图理论上无环（loader 拒绝环），这里只防脏数据。队列里每个名字
+-- 最多处理一次；重复边与起点里的外部名也会入队，所以上界 = 起点 + 节点 + 边 + 1。
 importClosureOf : List ClosureMod -> List String -> List String
-importClosureOf mods starts = importClosureGo 8192 mods starts []
+importClosureOf mods starts = importClosureGo (closureFuel mods starts) mods starts []
+
+closureFuel : List ClosureMod -> List String -> Int
+closureFuel mods starts = length starts + length mods + closureEdges mods + 1
+
+closureEdges : List ClosureMod -> Int
+closureEdges [] = 0
+closureEdges (m :: rest) = length m.cmImports + closureEdges rest
 
 isNeededMod : List String -> ClosureMod -> Bool
 isNeededMod needed m = memName m.cmName needed
