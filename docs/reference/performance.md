@@ -84,7 +84,7 @@
   203→219→384 KB，native 328→359→687 KB）。
 - `mods-*` 在**包内**加模块：文件树随模块数线性（ocaml 32→42→132 个 `.ml`，
   native 7→17→107 个 `.s`），wasm 始终是单文件 `main.wat`。
-- `self` 是真实最大负载：ocaml 166 个 `.ml` / 11.9 MB / 5.9 万行 → 25 MB 可执行
+- `self` 是真实最大负载：ocaml 169 个 `.ml` / 7.2 MB / 6.1 万行 → 21 MB 可执行
   （`-g`，含调试信息）；native 146 个 `.s` / 48 MB / 198 万行 → 12 MB 静态 ELF。
   tree-shaking 已由 `Ir.Analysis.reachableDefs` 做完（编译器自身只有 13 个函数 / 240 行未被引用）；
   剩余体积空间在指令选择与槽清零策略，见 [debt.md](debt.md) D108。产物作为自举锚点的取舍见

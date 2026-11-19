@@ -182,16 +182,15 @@ OCaml 种子是**当前唯一**锚点。方向是让 native 自举成熟后，�
 ## 种子文件集（当前）
 
 `seed/` 由 `vuna build --no-compile --out <tmp>/seed compiler`（`nix/seed/rotate.sh` 在临时
-目录执行，校验通过后替换 `seed/`）产出，文件集按依赖序排列，`seed/build.sh` 的 `MODULES`
+目录执行，校验通过后替换 `seed/`）产出，文件集按依赖序排列，`seed/build.sh` 的单元表
 列出全部编译单元。最终清单与数量以 `seed/` 实际内容与 `nix/seed/files.txt` 为准：
 
 ```text
 Vuna_runtime
-Base_dData_dPair ... Base_dData_dString          （vuna-base 模块，依赖序）
+B_dData_dPair ... B_dData_dString                 （vuna-base 模块，依赖序）
 Prelude
-Vuna_dCompiler_dBase_dCommon ... Vuna_dCompiler_dBase_dData_dIntrinsics ...
-  ... Vuna_dCompiler_dElab_dTerm ... Vuna_dCompiler_dDriver_dCompilerCli
-                                     （编译器模块，依赖序；点转 _d）
+Base_dCommon ... Base_dIntrinsics ...              （编译器内置层）
+  ... Elab_dTerm ... Driver_dCompilerCli           （编译器模块，依赖序；点转 _d）
 Main
 ```
 
@@ -206,7 +205,8 @@ Main
   `Main.ml`）。**不生成 `.mli`**。
 - 没有只为形状稳定而保留的空编译单元。
 
-`seed/build.sh` 由 codegen 生成：干净构建一次 `ocamlopt` 编译全部 `.ml` 并链接；增量构建
+`seed/build.sh` 由 codegen 生成，内部只有一份单元表（`@` 分隔并行层，其余行
+`单元 直接依赖...`）：干净构建一次 `ocamlopt` 编译全部 `.ml` 并链接；增量构建
 按内容哈希**按直接依赖分层**重编（层内并行，每模块 stamp 只含直接依赖的 `.stamp`）。编译
 flag 统一为 `-g -w -a+39 -warn-error +39`（warning 39 = unused rec，设 warn-error），并
 链接 `unix.cmxa`——runtime 仍无条件依赖 Unix
