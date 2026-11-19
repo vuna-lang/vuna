@@ -6146,12 +6146,15 @@ let dt_def_locs = [
   ("Loader_dExpand.v_macroArityMismatch", ("Vuna.Compiler.Loader.Expand.macroArityMismatch", "Vuna/Compiler/Loader/Expand.vuna:219"));
   ("Loader_dFingerprint.v_buildIdFileName", ("Vuna.Compiler.Loader.Fingerprint.buildIdFileName", "Vuna/Compiler/Loader/Fingerprint.vuna:38"));
   ("Loader_dFingerprint.v_buildIdSchema", ("Vuna.Compiler.Loader.Fingerprint.buildIdSchema", "Vuna/Compiler/Loader/Fingerprint.vuna:42"));
-  ("Loader_dFingerprint.v_compilerFingerprintEff", ("Vuna.Compiler.Loader.Fingerprint.compilerFingerprintEff", "Vuna/Compiler/Loader/Fingerprint.vuna:106"));
+  ("Loader_dFingerprint.v_cacheTagEff", ("Vuna.Compiler.Loader.Fingerprint.cacheTagEff", "Vuna/Compiler/Loader/Fingerprint.vuna:89"));
+  ("Loader_dFingerprint.v_cacheTagFileName", ("Vuna.Compiler.Loader.Fingerprint.cacheTagFileName", "Vuna/Compiler/Loader/Fingerprint.vuna:104"));
+  ("Loader_dFingerprint.v_compilerFingerprintEff", ("Vuna.Compiler.Loader.Fingerprint.compilerFingerprintEff", "Vuna/Compiler/Loader/Fingerprint.vuna:133"));
   ("Loader_dFingerprint.v_compilerIdOf", ("Vuna.Compiler.Loader.Fingerprint.compilerIdOf", "Vuna/Compiler/Loader/Fingerprint.vuna:48"));
   ("Loader_dFingerprint.v_compilerTagEff", ("Vuna.Compiler.Loader.Fingerprint.compilerTagEff", "Vuna/Compiler/Loader/Fingerprint.vuna:64"));
   ("Loader_dFingerprint.v_fingerprintOfStat", ("Vuna.Compiler.Loader.Fingerprint.fingerprintOfStat", "Vuna/Compiler/Loader/Fingerprint.vuna:57"));
-  ("Loader_dFingerprint.v_readBuildIdNear", ("Vuna.Compiler.Loader.Fingerprint.readBuildIdNear", "Vuna/Compiler/Loader/Fingerprint.vuna:86"));
-  ("Loader_dFingerprint.v_readFirstBuildId", ("Vuna.Compiler.Loader.Fingerprint.readFirstBuildId", "Vuna/Compiler/Loader/Fingerprint.vuna:93"));
+  ("Loader_dFingerprint.v_readBuildIdNear", ("Vuna.Compiler.Loader.Fingerprint.readBuildIdNear", "Vuna/Compiler/Loader/Fingerprint.vuna:109"));
+  ("Loader_dFingerprint.v_readFirstBuildId", ("Vuna.Compiler.Loader.Fingerprint.readFirstBuildId", "Vuna/Compiler/Loader/Fingerprint.vuna:120"));
+  ("Loader_dFingerprint.v_readNamedNear", ("Vuna.Compiler.Loader.Fingerprint.readNamedNear", "Vuna/Compiler/Loader/Fingerprint.vuna:113"));
   ("Loader_dFingerprint.v_sourceFrag", ("Vuna.Compiler.Loader.Fingerprint.sourceFrag", "Vuna/Compiler/Loader/Fingerprint.vuna:53"));
   ("Loader_dFingerprint.v_textHashOf", ("Vuna.Compiler.Loader.Fingerprint.textHashOf", "Vuna/Compiler/Loader/Fingerprint.vuna:60"));
   ("Loader_dFixity.v_builtinFixityDecls", ("Vuna.Compiler.Loader.Fixity.builtinFixityDecls", "Vuna/Compiler/Loader/Fixity.vuna:40"));
