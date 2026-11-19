@@ -309,26 +309,35 @@ annotHeadTy fuel env binders g args =
 export annotCalleeTy : LwEnv -> List IrBinder -> Term -> Maybe IrTy
 annotCalleeTy env binders t =
   case t of
-    TGlobal g => annotGlobalCalleeTy env binders g
+    TGlobal g => annotGlobalTy env binders g
     TApp _ _ _ =>
       case flattenAnnotAppRig t of
         Pair (TGlobal g) args =>
           case findDtData g env.lwDatas of
             Just _ => annotTyOf env binders t
             Nothing =>
-              case HashMap.lookup g env.lwDefTbl of
-                Just d => peelPiArgsTy 256 env (eval [] (dtDefType d)) args
+              case globalTyTermOf env g of
+                Just ty => peelPiArgsTy 256 env (eval [] ty) args
                 Nothing => peelIrFuns (countRuntimeArgs args) (annotTyOf env binders (TGlobal g))
         Pair head args => peelIrFuns (countRuntimeArgs args) (annotTyOf env binders head)
     _ => annotTyOf env binders t
 
-annotGlobalCalleeTy : LwEnv -> List IrBinder -> String -> Maybe IrTy
-annotGlobalCalleeTy env binders g =
+-- | 全局名的**类型项**：运行时定义走 `lwDefTbl`，其余（trait 方法选择子等）走
+-- `lwGlobals`。只读类型，不看定义体。
+export globalTyTermOf : LwEnv -> String -> Maybe Term
+globalTyTermOf env g =
+  case HashMap.lookup g env.lwDefTbl of
+    Just d => Just (dtDefType d)
+    Nothing => HashMap.lookup g env.lwGlobals
+
+-- | 全局值的运行时类型（签名级）。`IrGlobal` 与 `IrApp` 的节点类型都走这里。
+export annotGlobalTy : LwEnv -> List IrBinder -> String -> Maybe IrTy
+annotGlobalTy env binders g =
   case findDtData g env.lwDatas of
     Just _ => annotTyOf env binders (TGlobal g)
     Nothing =>
-      case HashMap.lookup g env.lwDefTbl of
-        Just d => Just (renderPiTy [] env.lwTyParams env.lwDatas 0 (eval [] (dtDefType d)))
+      case globalTyTermOf env g of
+        Just ty => Just (renderPiTy [] env.lwTyParams env.lwDatas 0 (eval [] ty))
         Nothing => annotTyOf env binders (TGlobal g)
 
 -- 应用脊展平（保留每个实参的 rig；`TRecord` 等价于它的 `TGlobal` 应用脊）。

@@ -259,7 +259,9 @@ main = pretty Red ++ "/" ++ show Red
 
 - **trait 支持 N>=1 个参数**：字典类型是 `Dict_C p1 .. pn`，构造子字段仍是方法；
   方法字段在运行时是**不透明值**（`Obj.t`）——OCaml 记录字段承载不了 `∀a` 的方法签名，
-  访问器在方法签名上 cast 一次，因此同一字典可以按不同实例化使用。默认方法、关联类型
+  访问器在方法签名上 cast 一次，因此同一字典可以按不同实例化使用。方法投影的签名是
+  `{p1 .. pn} -> {d : Dict_C p1 .. pn} -> <方法类型>`；字典 binder 是**隐式但运行时**
+  参数（`RigOmega`：投影体要 case 它取字段），与约束字典一致。默认方法、关联类型
   未实现（见 [debt.md](debt.md)）；**父类约束可用**：`trait Functor f => Applicative f where ...`。
   每个参数的 kind 可显式写：`trait C (a : Type) (r : Row) where ...`；未写时从方法签名
   推断（参数被应用 k 次即 `Type -> ... -> Type`，否则 `Type`；显式 kind 里的中缀如 `Type -> Type` 也会被 Loader 重排）。空参数表报

@@ -4,7 +4,6 @@ import Base.Trait
 
 -- IR 节点类型填充的回归夹具：签名完全可命名的定义要能把类型带到
 -- lambda binder / case scrutinee / case 结果 / 部分应用上。
-
 add : Int -> Int -> Int
 add x y = x + y
 
@@ -12,9 +11,19 @@ incAll : List Int -> List Int
 incAll xs = map (add 1) xs
 
 sum : List Int -> Int
-sum xs = case xs of
-  [] => 0
-  y :: ys => y + sum ys
+sum xs =
+  case xs of
+    [] => 0
+    y :: ys => y + sum ys
 
 main : Int
 main = add (sum (incAll [1, 2, 3])) 0
+
+trait Level a where
+  level : a -> Int
+
+instance Level Int where
+  level n = n
+
+levelOf : Int -> Int
+levelOf x = level x

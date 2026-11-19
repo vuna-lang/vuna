@@ -204,8 +204,10 @@ binder 的**身份**在 Lowering 分配，前缀与编号渲染属后端：
 - **类型形状**：`checkDefTy` 校验 `IrDef` 的运行时签名；`checkNodeBinderTys` 校验 λ binder
   注解、`IrLam` 结果、`IrCast` 源/目标、`IrApp` 函数/结果、`IrCase` scrutinee/结果、
   `IrCtor` 类型实参与值实参个数、record/projection/update 结果类型
-  （`IrTyData` / 构造子族的实参个数按本单元声明核对）。跨单元类型只做递归形状检查；
-  这不是第二套精化器，只守 IR 的结构不变量。
+  （`IrTyData` / 构造子族的实参个数按本单元声明核对）。`checkDefArityVsSig` 要求
+  **运行时 arity ≤ 签名箭头数**（η-收缩的定义可以更少；签名不可命名时跳过）——
+  它守「体里的运行时参数都在签名里」，trait 方法投影的字典参数正是靠这条不被漏掉。
+  跨单元类型只做递归形状检查；这不是第二套精化器，只守 IR 的结构不变量。
 - **作用域**：`checkScopedUnit` 逐节点检查每个 `IrVar` 指向语法作用域内的 binder，
   且擦除占位 binder 不得出现在变量位置（Lowering 的擦除判据漏一处就报内部错）；
   它把「well-scoped」从约定变成门禁。
@@ -235,10 +237,12 @@ binder 的**身份**在 Lowering 分配，前缀与编号渲染属后端：
   逐位回填 binder 类型——**不透明类型不回填**，因为 OCaml 侧的 lambda 注解会固定多态性；
   分支体先按构造子字段类型回填分支 binder，再 lower，case 结果依次取「已降低节点的类型槽
   （`irResultTyOf`）→ Core 注解」，因此嵌套 case / `let` / `if` / 应用体的结果能连续传递。
-- `IrApp` 的类型在可解析出函数类型时填写：全局定义（含部分应用，擦除实参用来实例化定义
-  签名）、局部 binder 的 `IrTyFun` 链。内建（`IrRtApp`）保持 `Nothing`；`IrCase` 的
-  scrutinee/分支 binder 类型受字段/类型实参可解析性限制。wasm / native 的 case 族优先用
-  `IrCase` 的 scrutinee 类型，缺失时回退到分支构造子名。
+- `IrApp` 的类型在可解析出函数类型时填写：全局定义（含部分应用；擦除实参用来实例化定义
+  签名）、trait 方法选择子（投影签名带运行时字典参数，字典按隐式实参实例化）、运行时原语
+  （`lwGlobals` 的签名表）、局部 binder 的 `IrTyFun` 链。仍保持 `Nothing` 的是：内联 lambda
+  作为 callee（需要 λ 的函数类型）、签名表里没有条目的 `IrRtApp`、binder 类型不可命名的
+  局部变量。`IrCase` 的 scrutinee/分支 binder 类型受字段/类型实参可解析性限制；
+  wasm / native 的 case 族优先用 `IrCase` 的 scrutinee 类型，缺失时回退到分支构造子名。
 - CPS 的续延判定按 `IrLam` 结果类型（`Eff`）；handler clause 收集按 `IrDef` 签名
   （结果是 `Eff` 且参数是 `op -> k -> b` 形状），签名不可用时回退到 arity。
 - IR 没有 fuel：需要「结构上限」的地方改成按项规模派生（与 `Core.termSize` 同思路）。

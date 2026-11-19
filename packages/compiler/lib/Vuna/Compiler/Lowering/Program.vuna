@@ -835,7 +835,13 @@ armResultTyOf : LwEnv -> AltEnvIn -> Ir -> Term -> Maybe IrTy
 armResultTyOf env bound bodyIr coreBody =
   case irResultTyOf bodyIr of
     Just ty => Just ty
-    Nothing => annotTyOf env (aeEnvOf bound) coreBody
+    Nothing =>
+      case bodyIr of
+        IrGlobal g =>
+          case annotGlobalTy env (aeEnvOf bound) g of
+            Just ty => Just ty
+            Nothing => annotTyOf env (aeEnvOf bound) coreBody
+        _ => annotTyOf env (aeEnvOf bound) coreBody
 
 -- 每个分支：catch-all → pattern 只有非擦除 binder；构造子 → 按形状绑定。
 lowerArmFuel : Int -> LwEnv -> Maybe IrTy -> LwSt -> List IrBinder -> CaseAlt -> Check (Pair IrAlt (Pair (Maybe IrTy) LwSt))
@@ -1419,9 +1425,11 @@ groupOfPair : Pair Bool (List IrDef) -> IrGroup
 groupOfPair (Pair isRec ds) = IrGroup isRec ds
 
 -- | 整个程序当作一个单元 lowering（check 路径；文本丢弃）。
-export lowerProgramOf : List DtData -> List DtDef -> Check IrProgram
-lowerProgramOf datas defs =
-  Vuna.Compiler.Base.Common.bind (obsCheck "vuna.codegen.env" (\_ => OkC (mkLwEnv datas defs ""))) (
+export lowerProgramOf : List DtData -> List DtDef -> List (Pair String Term) -> Check IrProgram
+lowerProgramOf datas defs globals =
+  Vuna.Compiler.Base.Common.bind
+    (obsCheck "vuna.codegen.env" (\_ => OkC (mkLwEnv datas defs globals "")))
+    (
       \env =>
         Vuna.Compiler.Base.Common.bind (obsCheck "vuna.codegen.prepare" (\_ => checkProgramOf env)) (
             \_ =>

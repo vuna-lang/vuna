@@ -151,7 +151,7 @@ checkDeclsWithWarns loaderWarns decls =
               _ = dbg! "elab-done"
             in obsCheck "vuna.codegen.check" (
                 \_ =>
-                  case checkDtProgramOf (dtProgDatas program) (dtProgDefs program) of
+                  case checkDtProgramOf (dtProgDatas program) (dtProgDefs program) (dtProgGlobals program) of
                     ErrC e => ErrC e
                     OkC _ =>
                       let
@@ -193,7 +193,7 @@ dtCheckPartsWithProgram pkg loaded =
                         warns = append loaderWarns (dtProgWarnings program)
                       in obsCheck "vuna.codegen.check" (
                           \_ =>
-                            case checkDtProgramOf (dtProgDatas program) (dtProgDefs program) of
+                            case checkDtProgramOf (dtProgDatas program) (dtProgDefs program) (dtProgGlobals program) of
                               ErrC e => ErrC e
                               OkC _ =>
                                 let
@@ -1044,7 +1044,7 @@ dtCheckOursParts ctx resolved deps =
           -- codegen 的 check（擦除/名字/构造子护栏）需要依赖包的 datas（构造子与标签信息）；
           -- 只生成本包 defs（依赖包 body 不重精化、不重新生成）。
           allDatas = append (concatMap cachedDatas deps) (dtProgDatas prog)
-        in Vuna.Compiler.Base.Common.bind (checkDtProgramOf allDatas (dtProgDefs prog)) (
+        in Vuna.Compiler.Base.Common.bind (checkDtProgramOf allDatas (dtProgDefs prog) (dtProgGlobals prog)) (
             \_ =>
               let
                 warns = append loaderWarns (dtProgWarnings prog)
@@ -1423,7 +1423,7 @@ dtFinishPackage loaderWarns depCps cleanCps prog parts next =
     warns = append loaderWarns (dtProgWarnings prog)
     checked = CheckedPackage assembled (secondOf parts) (firstOf parts) (cachedNamesOf depCps) warns
   in Vuna.Compiler.Base.Common.bind
-    (checkDtProgramOf (dtProgDatas assembled) (dtProgDefs assembled))
+    (checkDtProgramOf (dtProgDatas assembled) (dtProgDefs assembled) (dtProgGlobals assembled))
     (\_ => OkC (Pair (Just checked) next))
 
 -- 增量路径的整包组装：产物照常组装（写 iface 需要 per-module 的 cp/parts），但
@@ -1455,7 +1455,7 @@ dtFinishPackageScoped loaderWarns depCps cleanCps prog parts next =
         (concatMap cachedDatas depCps)
         (append (concatMap cachedDatas cleanCps) (dtProgDatas prog))
   in Vuna.Compiler.Base.Common.bind
-    (dtCheckScoped allDatas (dtProgDatas prog) (dtProgDefs prog))
+    (dtCheckScoped allDatas (dtProgDatas prog) (dtProgDefs prog) (dtProgGlobals prog))
     (\_ => OkC (Pair (Just checked) next))
 
 -- 工具链诊断：只对本次新精化的 datas/defs 跑检查链（组装省掉），返回无 CheckedPackage。
@@ -1469,7 +1469,7 @@ dtFinishScoped depCps cleanCps prog cache =
     newDatas = dtProgDatas prog
     newDefs = dtProgDefs prog
   in Vuna.Compiler.Base.Common.bind
-    (dtCheckScoped allDatas newDatas newDefs)
+    (dtCheckScoped allDatas newDatas newDefs (dtProgGlobals prog))
     (\_ => OkC (Pair Nothing cache))
 
 -- `codegen` 检查的收窄版：`allDatas` 是渲染/构造子表的完整视图（依赖 + 干净 + 本次），
@@ -1478,10 +1478,10 @@ dtFinishScoped depCps cleanCps prog cache =
 -- 观测：这是增量路径上唯一没被 `vuna.elab` / `vuna.codegen.check` 覆盖的检查段（`dbg!`
 -- 文本行在调用方），整段包进 `vuna.codegen.check`；两个调用点（`dtFinishPackageScoped` /
 -- `dtFinishScoped`）因此各得一个 span，不重复包。
-dtCheckScoped : List DtData -> List DtData -> List DtDef -> Check Int
-dtCheckScoped allDatas unitDatas defs =
+dtCheckScoped : List DtData -> List DtData -> List DtDef -> List (Pair String Term) -> Check Int
+dtCheckScoped allDatas unitDatas defs globals =
   let
-    env = mkLwEnv allDatas defs ""
+    env = mkLwEnv allDatas defs globals ""
   in obsCheck
     "vuna.codegen.check"
     (\_ => Vuna.Compiler.Base.Common.bind (obsCheck "vuna.codegen.lower" (\_ => lowerUnitOf env (map dtDefName defs) (map dtDataName unitDatas))) (\unitIr => Vuna.Compiler.Base.Common.bind (obsCheck "vuna.codegen.gen" (\_ => checkUnitParts (lwEnvShared env) unitIr)) (\_ => OkC 0)))
@@ -2124,8 +2124,8 @@ dtCheckLibraryRecovering ctx names =
 
 -- `vuna check` 的整包 codegen 检查：Lowering（擦除 / 表示决策 / SCC）+ 装配（丢弃文本），
 -- 保证「能 check 就能 build」。main 的存在与返回类型只在生成入口要求（库模块也能 check）。
-checkDtProgramOf : List DtData -> List DtDef -> Check Int
-checkDtProgramOf datas defs =
+checkDtProgramOf : List DtData -> List DtDef -> List (Pair String Term) -> Check Int
+checkDtProgramOf datas defs globals =
   Vuna.Compiler.Base.Common.bind
-    (obsCheck "vuna.codegen.lower" (\_ => lowerProgramOf datas defs))
+    (obsCheck "vuna.codegen.lower" (\_ => lowerProgramOf datas defs globals))
     (\programIr => Vuna.Compiler.Base.Common.bind (obsCheck "vuna.codegen.gen" (\_ => checkUnitParts (irProgSharedOf programIr) (irProgUnitOf programIr))) (\_ => OkC 0))

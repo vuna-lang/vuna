@@ -110,4 +110,9 @@ run: sh -c '"$VUNA" dev ir dump $VUNA_SUITE_ROOT/packages/cli/test/corpus/packag
 exit: 0
 run: sh -c '"$VUNA" dev ir dump $VUNA_SUITE_ROOT/packages/cli/test/corpus/packages/ir_types/root 2>/dev/null | grep -qF "(app (Base.Data.List.List Int -> Base.Data.List.List Int)->Base.Data.List.List Int g:Base.Data.List.map"'
 exit: 0
+# trait 方法选择子：投影签名带运行时字典参数，部分应用的 callee 类型因此可解析。
+run: sh -c '"$VUNA" dev ir dump $VUNA_SUITE_ROOT/packages/cli/test/corpus/packages/ir_types/root 2>/dev/null | grep -qF "def level/2 : (Dict_Level Opaque"'
+exit: 0
+run: sh -c '"$VUNA" dev ir dump $VUNA_SUITE_ROOT/packages/cli/test/corpus/packages/ir_types/root 2>/dev/null | grep -qF "(app (Int -> Int)->Int g:level"'
+exit: 0
 
