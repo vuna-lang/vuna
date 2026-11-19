@@ -176,7 +176,11 @@ Control       = Done value
   重新装回，段结束时按 mctx 记下的链还原；
 - do 块续延 λ 由 **λ 结果类型**识别：`IrLam` 携带体类型，`Eff` 结果降成「返回一个
   Eff，其 thunk 以 `(u, K)` 运行」（`mEffContLambda`）；手写 `>>=` 的续延 λ 走同一
-  判据。`prim_erase` 包一层的 resumption 调用由 `mStripErase` 剥壳；
+  判据。结果类型的族实参不可命名时（`Eff r a` 里 `r`/`a` 是类型参数、`annotTyOf`
+  无法命名），lowering 只保留族身份 `IrTyData Eff [Opaque]`——判据只需要「是不是
+  `Eff`」这一位，丢掉它会让库内 handler（`bracket`、`fsOpHIOHost` 等）的续延退化成
+  普通 λ，wasm 在 `step` 里对普通值 `ref.cast $Eff` 失败。`prim_erase` 包一层的
+  resumption 调用由 `mStripErase` 剥壳；
 - `handleScoped`：`@ir@m@self` 把当前最内层 handler 帧重新装到子计算上跑
   （复用 `Handle` 步骤），值语义边界降成 `run (self th doneCont)`；
 - handler clause 收集按**签名类型**判定（`IrDef` 的运行时签名：结果行是 `Eff`，且某个
