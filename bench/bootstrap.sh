@@ -209,8 +209,9 @@ OCAMLOPT_VERSION=$(ocamlopt -version 2>/dev/null || printf 'unknown')
 FLAMBDA=$(ocamlopt -config 2>/dev/null | awk -F': *' '$1 == "flambda" { print $2 }' || true)
 [ -n "$FLAMBDA" ] || FLAMBDA=unknown
 SEED_SHA=$(find seed -type f | LC_ALL=C sort | xargs sha256sum | sha256sum | awk '{ print $1 }')
-SRC_LINES=$(cat packages/compiler/lib/Vuna/Compiler/*.vuna packages/cli/lib/Vuna/*.vuna packages/cli/app/*.vuna | wc -l | tr -d ' ')
-SRC_BYTES=$(cat packages/compiler/lib/Vuna/Compiler/*.vuna packages/cli/lib/Vuna/*.vuna packages/cli/app/*.vuna | wc -c | tr -d ' ')
+SRC_FILES=$(find packages/compiler/lib/Vuna/Compiler packages/cli/lib/Vuna packages/cli/app -type f -name '*.vuna' | sort)
+SRC_LINES=$(cat $SRC_FILES | wc -l | tr -d ' ')
+SRC_BYTES=$(cat $SRC_FILES | wc -c | tr -d ' ')
 
 GIT_HEAD=unknown
 GIT_DIRTY=unknown
@@ -236,18 +237,15 @@ fi
 
 # ---- 工作副本 ------------------------------------------------------------
 mkdir -p "$WORK/src"
-cp -r compiler lib app base seed vuna.toml "$WORK/src/"
+cp -r packages seed vuna.toml "$WORK/src/"
 if [ "$WITH_TESTS" = 1 ]; then
   cp -r test "$WORK/src/"
 else
-  mkdir -p "$WORK/src/test/corpus"
-  cp -r test/corpus/run "$WORK/src/test/corpus/"
-  cp -r test/corpus/dt "$WORK/src/test/corpus/"
-  cp test/corpus/vuna.toml "$WORK/src/test/corpus/"
+  :
 fi
 cd "$WORK/src"
 # 包上下文取代 `--root`；工作副本的 base 位置（无 manifest 的临时夹具用）。
-export VUNA_BASE="$WORK/src/base"
+export VUNA_BASE="$WORK/src/packages/base"
 
 log() {
   printf '%s\n' "$*" >>"$WORK/cmd.log"
@@ -317,10 +315,10 @@ SELF_OUT_SRC=$WORK/selfsrc
 SELF_COMPILER_SRC=$WORK/selfcompilersrc
 
 measure seed_build sh seed/build.sh "$SEED_BIN"
-measure seed_compile "$SEED_BIN" compile compiler "$STAGE1_SRC"
+measure seed_compile "$SEED_BIN" compile packages/compiler "$STAGE1_SRC"
 cp -r "$STAGE1_SRC" "$STAGE1_BUILD"
 measure stage1_build sh "$STAGE1_BUILD/build.sh" "$VUNA_COMPILER_BIN"
-measure product_compile "$VUNA_COMPILER_BIN" compile . "$PRODUCT_SRC"
+measure product_compile "$VUNA_COMPILER_BIN" compile packages/cli "$PRODUCT_SRC"
 cp -r "$PRODUCT_SRC" "$PRODUCT_BUILD"
 measure product_build sh "$PRODUCT_BUILD/build.sh" "$VUNA_BIN"
 
@@ -330,8 +328,8 @@ else
   SELF_BIN=$SEED_BIN
 fi
 
-measure compiler_self_compile "$SELF_BIN" compile . "$SELF_OUT_SRC"
-measure compiler_closure_compile "$SELF_BIN" compile compiler "$SELF_COMPILER_SRC"
+measure compiler_self_compile "$SELF_BIN" compile packages/cli "$SELF_OUT_SRC"
+measure compiler_closure_compile "$SELF_BIN" compile packages/compiler "$SELF_COMPILER_SRC"
 cat "$SELF_OUT_SRC"/*.ml >"$WORK/self_concat.ml"
 cat "$STAGE1_SRC"/*.ml >"$WORK/stage1_concat.ml"
 cat seed/*.ml >"$WORK/seed_concat.ml"
@@ -339,7 +337,7 @@ cat seed/*.ml >"$WORK/seed_concat.ml"
 printf 'main : Int\nmain = 40 + 2\n' >tiny.vuna
 measure tiny_compile "$SELF_BIN" compile --no-print tiny.vuna "$WORK/tinyout"
 # DT 精化 + 擦除 codegen 基准（单文件，Pi + 类型擦除；唯一 codegen 路径）
-measure dt_elab "$SELF_BIN" compile --no-print test/corpus/dt/03_compose.vuna "$WORK/dtelab"
+measure dt_elab "$SELF_BIN" compile --no-print packages/compiler/test/corpus/dt/03_compose.vuna "$WORK/dtelab"
 
 # ---- corpus 批量编译（单次计时，内部循环） --------------------------------
 cat >"$WORK/corpus.sh" <<'EOS'
@@ -348,7 +346,7 @@ set -u
 rm -rf "$CORPUS_OUT"
 mkdir -p "$CORPUS_OUT"
 : >"$CORPUS_FAIL"
-for f in test/corpus/run/*.vuna; do
+for f in packages/compiler/test/corpus/dt/*.vuna; do
   out="$CORPUS_OUT/$(basename "$f" .vuna)"
   if ! "$CORPUS_BIN" compile --no-print "$f" "$out" >>"$CORPUS_LOG" 2>&1; then
     printf '%s\n' "$f" >>"$CORPUS_FAIL"
@@ -365,7 +363,7 @@ export CORPUS_FAIL=$WORK/corpus.fail
 : >"$WORK/corpus.fail"
 measure corpus_compile bash "$WORK/corpus.sh"
 
-CORPUS_TOTAL=$(printf '%s\n' test/corpus/run/*.vuna | wc -l | tr -d ' ')
+CORPUS_TOTAL=$(printf '%s\n' packages/compiler/test/corpus/dt/*.vuna | wc -l | tr -d ' ')
 CORPUS_FAILS=$(wc -l <"$WORK/corpus.fail" | tr -d ' ')
 CORPUS_OK=$((CORPUS_TOTAL - CORPUS_FAILS))
 
@@ -417,7 +415,7 @@ if diff -r -x "*.cmi" -x "*.cmx" -x "*.o" -x "vuna-seed" -x "build.log" -x "buil
 TESTS=skipped
 TESTS_SUMMARY=""
 if [ "$WITH_TESTS" = 1 ]; then
-  if VUNA_BASE="$REPO/base" VUNA=$VUNA_BIN VUNA_SEED=$SEED_BIN OCAMLOPT=ocamlopt \
+  if VUNA_BASE="$REPO/packages/base" VUNA=$VUNA_BIN VUNA_SEED=$SEED_BIN OCAMLOPT=ocamlopt \
        "$VUNA_BIN" test --suite "$REPO/test/suite.toml" --jobs 1 --no-cache >"$WORK/tests.log" 2>&1; then
     TESTS=ok
   else
