@@ -1141,14 +1141,19 @@ mainEntryRowCheck ec bodies sp (TApp (TApp fn row _) _ _) =
       if g == effTypeName then
         let
           rowV = force (ecDefTbl ec) (ecSolsP ec) defaultFuel (eval [] row)
+          named = rowNonDefaultHostEntries 64 ec rowV
         in if isNilRowValue ec rowV then
           OkC 0
-        else if isBuiltinHostRowValue rowV then
-          OkC 0
         else
-          case rowEffectLabels 64 ec rowV of
-            Just labels => if labels == [] then OkC 0 else tcErr1 sp (UnhandledEffects (joinEffectLabels labels)) (joinEffectLabels labels)
-            Nothing => tcErr1 sp (UnhandledEffects (showTerm row)) (showTerm row)
+          case named of
+            _ :: _ => tcErr1 sp (EntryInstanceNotDefault (joinEffectLabels named)) (joinEffectLabels named)
+            [] =>
+              if isBuiltinHostRowValue rowV then
+                OkC 0
+              else
+                case rowEffectLabels 64 ec rowV of
+                  Just labels => if labels == [] then OkC 0 else tcErr1 sp (UnhandledEffects (joinEffectLabels labels)) (joinEffectLabels labels)
+                  Nothing => tcErr1 sp (UnhandledEffects (showTerm row)) (showTerm row)
       else
         OkC 0
     _ => OkC 0

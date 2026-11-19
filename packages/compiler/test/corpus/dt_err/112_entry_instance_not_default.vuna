@@ -1,0 +1,9 @@
+-- 入口行的内建宿主效应必须用默认实例：entry 只预装 `Named "default"` 的 handler，
+-- `@mock` 在运行期没有 handler，所以编译期报 `TC_EntryInstanceNotDefault`。
+import Base.Effect.Core as Eff
+import Base.Effect.Console as EffConsole
+
+main : Eff [ConsoleOp@mock] Int
+main = do
+  _ <- consolePrint@mock "mock\n"
+  pure 0

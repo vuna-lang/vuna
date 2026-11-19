@@ -222,7 +222,8 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
 | 文案规范/门禁 | `nix/checks/lib/diag-style.sh`：句号/大小写/空白/占位符；专有名词例外逐码 allowlist |
 | explanation/example/`explain` | `explain` 文本/`--json`/`--list --json`，含模板/中文说明/severity/phase/category/example；元变量/洞带 `name`/note 与洞目标 span；`Elab/MetaSpans` 登记创建点，洞与可延迟字典元变量附 `fields.span name=created`，纯合成 meta 无源位置时不伪造 |
 | 效果行 | `TC_UnhandledEffects` fields 含 expected/actual 行 + 每个未处理 effect 单独一条 `unhandled:` 行 |
-| 结构化夹具 + 每码覆盖门禁 | 320 个 `.diag.json`；覆盖门禁 191/242，51 个缺口 allowlist 且逐码在 `nix/checks/data/diag-unreachable.txt` 审计 |
+| 入口行实例名 | `TC_EntryInstanceNotDefault`：`main` 行里的内建宿主效应用了非 `default` 的显式实例（如 `ConsoleOp@mock`）即编译期拒绝——entry 只预装默认实例的 handler |
+| 结构化夹具 + 每码覆盖门禁 | 349 个 `.diag.json`；覆盖门禁 206/264，58 个缺口 allowlist 且逐码在 `nix/checks/data/diag-unreachable.txt` 审计 |
 | 位置门禁 | `nix/checks/lib/diag-located.sh`：无 span 必须带 `absent` 理由并逐码登记；当前 320/324 有位置，剩余 3 package-graph + 1 internal；parser/resolver/loader/elab 用户面码均有位置 |
 | 无源码位置显式化 | `NoSourceReason`（synthetic/tool-usage/package-graph/internal）/`Stability` 模型字段；JSON 仅在无位置时输出 `absent`；剩余无位置码逐码登记在 `nix/checks/data/diag-located.allow`，门禁要求「无 span 必须带理由」 |
 | SourceRef | `--json --with-sources` 顶层 `sources`：file/digest/package/module/relPath；默认 JSON 契约不变 |

@@ -1,0 +1,18 @@
+-- 命名实例在自己的 handler 里被消掉：main 的行是 Nil，入口不受影响。
+import Base.Effect.Core as Eff
+import Base.Effect.Console as EffConsole
+import Base.Data.Nat as Nat
+
+prog : Eff [ConsoleOp@mock] Nat
+prog = do
+  n <- consolePrint@mock "hi"
+  pure (n + 1)
+
+opH : (i : Type) -> (o : ConsoleOp i) -> (Base.Effect.Core.resIdx i o -> Nat) -> Nat
+opH i op k =
+  case op of
+    Print s => k 1
+    EPrint s => k 0
+
+main : Nat
+main = runPure (handleConsole "mock" (\x => x) opH prog)

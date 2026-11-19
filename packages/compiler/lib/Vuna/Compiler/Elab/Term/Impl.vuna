@@ -2526,6 +2526,34 @@ rowEffectLabels fuel ec row =
           Nothing
       _ => Nothing
 
+-- | 具体行里「内建宿主效应、但实例名不是 default」的条目文本（`ConsoleOp@mock`）。
+-- 入口只预装 `Named "default"` 的宿主 handler；显式命名实例在运行期没有 handler，
+-- 所以入口行要在编译期拒绝，而不是等到运行期报 unhandled effect。
+export rowNonDefaultHostEntries : Int -> Ec -> Value -> List String
+rowNonDefaultHostEntries fuel ec row =
+  if fuel <= 0 then
+    []
+  else
+    case forceVal ec row of
+      VCon consName cargs =>
+        if consName == effRowNilCtor then
+          []
+        else if consName == effRowConsCtor then
+          case rowEntryLabelTail (VCon consName cargs) of
+            Just (Pair label t) =>
+              let
+                rest = rowNonDefaultHostEntries (fuel - 1) ec t
+              in case namedLabelParts ec label of
+                Just (Pair n h) =>
+                  case forceVal ec h of
+                    VNeutral (NGlobal g _) => if isBuiltinEffectTag g then if rowNameText ec n == "default" then rest else (::) (rowEntryText ec n h) rest else rest
+                    _ => rest
+                Nothing => rest
+            Nothing => []
+        else
+          []
+      _ => []
+
 -- | 标签列表拼成逗号分隔（不引入 Base.Data.String 依赖）。
 export joinEffectLabels : List String -> String
 joinEffectLabels [] = ""

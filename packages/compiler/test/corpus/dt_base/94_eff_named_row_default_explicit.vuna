@@ -1,0 +1,8 @@
+-- 显式写 `@default` 与裸标签等价，入口照常预装宿主 handler。
+import Base.Effect.Core as Eff
+import Base.Effect.Console as EffConsole
+
+main : Eff [ConsoleOp@default] Int
+main = do
+  _ <- consolePrint@default "ok\n"
+  pure 0

@@ -139,6 +139,8 @@ export data TcErr(..) : Nat -> Type where
   DeriveFieldType : String -> String -> String -> TcErr (Succ (Succ (Succ Zero)))
   DeriveSingleCtor : String -> TcErr (Succ Zero)
   DeriveUnsupportedKind : String -> TcErr (Succ Zero)
+  -- 入口行的内建宿主效应用了非 `default` 的显式实例名：entry 只预装默认实例。
+  EntryInstanceNotDefault : String -> TcErr (Succ Zero)
 
 -- ---------------------------------------------------------------
 -- code 派生（唯一真源；`gen-errors` 与 throw 都用它）
@@ -201,6 +203,7 @@ tcCode (LinearCaptureEscapes _) = "TC_LinearCaptureEscapes"
 tcCode (UnhandledEffects _) = "TC_UnhandledEffects"
 tcCode (DebugConstructInRelease _) = "TC_DebugConstructInRelease"
 tcCode (MainArity _) = "TC_MainArity"
+tcCode (EntryInstanceNotDefault _) = "TC_EntryInstanceNotDefault"
 tcCode (TypeMismatchCaseVars _) = "TC_TypeMismatchCaseVars"
 tcCode (DuplicateInstance _) = "TC_DuplicateInstance"
 tcCode (InstanceContextMissing _) = "TC_InstanceContextMissing"
@@ -385,6 +388,8 @@ tcTemplate (UnhandledEffects _) =
 tcTemplate (DebugConstructInRelease _) =
   "<0> is only available in debug builds (remove it before a release build)"
 tcTemplate (MainArity _) = "main must not take parameters (got <0>)"
+tcTemplate (EntryInstanceNotDefault _) =
+  "a builtin effect in main's row may only use the default instance (got <0>)"
 
 -- ---------------------------------------------------------------
 -- 文档遍历源（同构 List；`gen-errors` 遍历渲染；不承载 arity——arity 在构造子类型里）
@@ -807,7 +812,11 @@ tcChunk12 =
     TcEntry
       (tcCode (MainArity ""))
       (tcTemplate (MainArity ""))
-      "main 带形参（入口必须零参）"
+      "main 带形参（入口必须零参）",
+    TcEntry
+      (tcCode (EntryInstanceNotDefault ""))
+      (tcTemplate (EntryInstanceNotDefault ""))
+      "入口行里的内建宿主效应用了非 default 的实例名（entry 只预装默认实例）"
   ]
 
 export tcAll : List TcEntry
