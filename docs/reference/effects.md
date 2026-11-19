@@ -39,6 +39,10 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
 - `main : Eff [] a` 的**行检查在类型期**：entry 处仍有未处理行报
   `TC_UnhandledEffects`；核心求值路径遇到动作入口报
   `[CG_InterpCannotExecuteEffects]`（纯核心求值器只跑纯 main）。
+- **入口只认默认实例**：entry 预装的 `runXHost` 只删除 `Named "default" …` 条目，所以 `main`
+  行里留命名实例（`Eff [ConsoleOp@mock] Int`）报 `TC_EntryInstanceNotDefault`，不拖到运行期
+  `unhandled effect`。命名实例必须在进 main 之前被 handler 消掉（夹具
+  `dt_err/112_entry_instance_not_default`、`dt_base/93_eff_named_row_handled`）。
 - `Eff []` 不表示「无副作用」：它表示「无未处理的行效应」；宿主层构造的叶子里可以
   有真实宿主操作。宿主副作用没有 manifest 能力/特权门控；用户面应经
   `Base.Effect.Core.*` 标签 + handler 使用效果（纪律/文档约定，见 §8.6）。

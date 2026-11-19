@@ -534,7 +534,7 @@ ctx 深度是真正的嵌套 resume 深度。
 
 | 项 | 内容 | 门禁 / 状态 |
 |---|---|---|
-| W1 | 入口命名实例 fail closed：`main : Eff [ConsoleOp@mock] …` 当前能编译、运行期才 `unhandled effect`（[debt.md](debt.md) D116）；加诊断 + 正/负夹具 | 立即（下一轮）；诊断先于任何入口 handler 改动 |
+| W1 | 入口命名实例 fail closed：`main : Eff [ConsoleOp@mock] …` 曾能编译、运行期才 `unhandled effect`；现在精化期报 `TC_EntryInstanceNotDefault` | **已达成**；夹具 `dt_err/112_entry_instance_not_default`、`dt_base/93_eff_named_row_handled`、`dt_base/94_eff_named_row_default_explicit` |
 | W2 | 宿主表收敛成 `Base.Intrinsics.builtinEffects` 的 `HostClass = HostHandled \| HostDirect key opH \| HostAbort key text`；entry 预装与 wasm 直连同源，删死字段（`@vuna@run*Host` 名、`irHost*` 表、`opHOf`） | **已达成**；`corpus/compiler/05_host_table` 锁分类与 `sendCore`/`sendCoreId` 两种名字 |
 | W4 | `collectHandleOpsDefs` 改吃 **CPS 前** 的 defs，让 handler 分类与 CPS 输出解耦 | **已达成**（机器 pass 仍是类型改变型，见 [compiler-audit.md](compiler-audit.md) IR-08；不声称关闭 IR-08/IR-09） |
 | W3.0 | 补「入口宿主叶子」bench：entry 预装 handler + 每次 `consolePrint` 的 `runPure (@vuna@host@print …)` 嵌套机器 | W5 / W3.1 的前置；读数写进 [benchmarks.md](benchmarks.md) §1.4 |

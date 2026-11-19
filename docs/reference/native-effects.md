@@ -363,6 +363,8 @@ consolePrint@audit "hi"    -- 行 [ConsoleOp@audit] ⇒ 显式选 audit
   `"default"`，也没有最终化默认兜底。`[ConsoleOp@audit]` 行里裸调用会解成 `audit`（行已
   指定）；多实例行 `[ConsoleOp@a, ConsoleOp@b]` 裸调用 `TC_AmbiguousInstance`，用
   `@a`/`@b`。
+- **入口只认默认实例**：entry 预装的 `runXHost` 只删除 `Named "default" …` 条目；`main`
+  行里留命名实例报 `TC_EntryInstanceNotDefault`（精化期），命名实例必须先被 handler 消掉。
 - **base 的写法**：senders（console/fs/clock/env/process/exit/args/stdin/throw）用
   `Member ... =>` 签名，定义体用隐式 n + 短 key `sendCore`；结构行 handler
   （`runError`/`catch`/`tryWith`/`local`/`handleExn`/`run*Host` 等）保留显式 `{n}`/`{w}`
