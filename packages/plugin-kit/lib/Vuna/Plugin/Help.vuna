@@ -11,11 +11,38 @@ import Base.Data.String as String
 import Base.Data.Bool as Bool
 
 -- | 总览帮助（`vuna help` / `vuna --help` / 无参数）。
+--
+-- 分节顺序固定（与命令表来自哪个插件无关）：命令表按插件拼接，顺序不保证分组连续，
+-- 因此这里按分组过滤，而不是「按表顺序遇到新标题就换节」。
 export renderOverview : List Cmd -> String
 renderOverview cmds =
   "vuna — Vuna 编译器与工具链\n\nusage:\n  vuna <command> [options]\n  vuna dev <command> [options]\n"
-    ++ renderSections "" (overviewCommands cmds)
+    ++ renderGroupSections groupOrder cmds
     ++ "\n运行 `vuna help <command>` 或 `vuna <command> --help` 查看某条命令的完整用法。\n"
+
+-- | 内部：总览的分节顺序。
+groupOrder : List Group
+groupOrder = [GCore, GInspect, GDeps, GService, GMeta, GDev]
+
+-- | 内部：按固定分组逐个渲染（每组只列 `cmdInOverview` 的命令）。
+renderGroupSections : List Group -> List Cmd -> String
+renderGroupSections [] cmds = ""
+renderGroupSections (g :: rest) cmds =
+  let
+    rows = filter (inGroup g) cmds
+  in if emptyCmds rows then
+    renderGroupSections rest cmds
+  else
+    "\n${groupTitle g}\n" ++ renderRows rows ++ renderGroupSections rest cmds
+
+-- | 内部：命令是否属于该分组且进总览。
+inGroup : Group -> Cmd -> Bool
+inGroup g c = c.cmdInOverview && groupName c.cmdGroup == groupName g
+
+-- | 内部：逐行渲染总览里的命令。
+renderRows : List Cmd -> String
+renderRows [] = ""
+renderRows (c :: rest) = "${rowText c}${renderRows rest}"
 
 -- | 总览里的顶层命令名（未知命令的候选建议用）。
 export topLevelNamesOf : List Cmd -> List String
@@ -68,17 +95,6 @@ headName c =
   case c.cmdPath of
     [] => ""
     name :: _ => name
-
--- | 内部：按分组渲染总览行；`curTitle` 记录已输出的节标题（空串 = 还没输出）。
-renderSections : String -> List Cmd -> String
-renderSections curTitle [] = ""
-renderSections curTitle (c :: rest) =
-  let
-    title = groupTitle c.cmdGroup
-  in if title == curTitle then
-    "${rowText c}${renderSections title rest}"
-  else
-    "\n${title}\n${rowText c}${renderSections title rest}"
 
 -- | 内部：总览里的一行——命令名左对齐到固定宽度，后接摘要。
 rowText : Cmd -> String
@@ -190,3 +206,8 @@ padRight width text =
 -- | 内部：`n` 个空格。
 spaces : Int -> String
 spaces n = if n <= 0 then "" else " " ++ spaces (n - 1)
+
+-- | 内部：命令表是否为空。
+emptyCmds : List Cmd -> Bool
+emptyCmds [] = True
+emptyCmds _ = False

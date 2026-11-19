@@ -157,6 +157,8 @@ let
       src.compiler
       src.base
       src.cli
+      src.pluginKit
+      src.toolchain
       # 行为抽查在仓库根编译：根清单是 workspace，成员清单必须齐全。
       src.http
       src.web

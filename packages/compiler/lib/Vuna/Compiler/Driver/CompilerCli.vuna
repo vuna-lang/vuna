@@ -63,7 +63,7 @@ mapEff f (x :: rest) =
 
 -- | CLI 辅助：runCompilerCli（参数/退出码约定见 tooling.md）。
 export runCompilerCli : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => List String -> Eff r Int
-runCompilerCli args = runCompilerCliFor "vuna-compiler" args
+runCompilerCli args = runCompilerCliFor "vuna" args
 
 -- CLI 选项集中状态：入口构造一次，命令链显式传递（没有 ambient 存储）。
 record CliOpts where

@@ -12,7 +12,6 @@ import Vuna.Plugin.Err
 import Vuna.Plugin.Help
 import Vuna.Plugin.Suggest
 import Vuna.Compiler.Base.Version
-import Vuna.Compiler.Driver.CompilerCli
 import Base.Data.List as List
 import Base.Data.Pair as Pair
 import Base.Data.String as String
@@ -104,7 +103,7 @@ dispatch plugins cmds args route =
           case removedHint arg of
             Just hint => removedCommand arg hint
             Nothing =>
-              if startsWith "-" arg then runCompilerCliFor "vuna" args else unknownCommand cmds arg
+              if startsWith "-" arg then compilerFallback plugins args else unknownCommand cmds arg
 
 -- | 内部：`vuna help <command>...`——解析成已登记路径后打印。
 helpCommand : List Plugin -> List Cmd -> List String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
@@ -124,7 +123,7 @@ helpOut plugins cmds path =
   else
     case findCmdIn path cmds of
       Nothing => unknownCommand cmds (join " " path)
-      Just c => if c.cmdDelegated then delegatedHelpOut plugins path else localHelp cmds path
+      Just c => if c.cmdDelegated then delegatedHelpOut plugins c else localHelp cmds path
 
 -- | 内部：本地渲染（表里已有全部元数据）。
 localHelp : List Cmd -> List String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
@@ -134,11 +133,17 @@ localHelp cmds path =
     Nothing => unknownCommand cmds (join " " path)
 
 -- | 内部：delegated 命令的帮助——转交拥有它的插件（`<path> --help`）。
-delegatedHelpOut : List Plugin -> List String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
-delegatedHelpOut plugins path =
-  case findOwner 3 path plugins of
-    Just p => processRunIn "." (append [p.pluginBinary] (append path ["--help"]))
-    Nothing => printText "error: command is not provided by any installed plugin\n"
+delegatedHelpOut : List Plugin -> Cmd -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
+delegatedHelpOut plugins c =
+  do
+    _ <- consolePrint (delegatedHeader c)
+    case findOwner 3 c.cmdPath plugins of
+      Just p => processRunIn "." (append [p.pluginBinary] (append c.cmdPath ["--help"]))
+      Nothing => pure 2
+
+-- | 内部：delegated 命令的帮助抬头（正文由插件打印）。
+delegatedHeader : Cmd -> String
+delegatedHeader c = "${c.cmdSynopsis}\n\n${c.cmdSummary}。flag 由编译器实现解析：\n\n"
 
 -- | 内部：永远不会被调用的 delegated 正文（delegated 命令走转发）。
 noDelegated : Cmd -> String
@@ -210,3 +215,21 @@ unknownCommand cmds arg =
   do
     _ <- consolePrint (unknownCommandText cmds arg)
     pure 2
+
+-- | 内部：裸 flag（`vuna --typed` 这类）转给编译器插件——已删 flag 的提示真源在它那里。
+compilerFallback : List Plugin -> List String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
+compilerFallback plugins args =
+  case findByDomain "compiler" plugins of
+    Just p => processRunIn "." (append [p.pluginBinary] args)
+    Nothing =>
+      do
+        _ <-
+          consolePrint
+            "error: no compiler plugin installed (vuna-compiler is required for compiler commands)\n"
+        pure 2
+
+-- | 内部：按域找插件（裸 flag 转交用）。
+findByDomain : String -> List Plugin -> Maybe Plugin
+findByDomain domain [] = Nothing
+findByDomain domain (p :: rest) =
+  if p.pluginDomain == domain then Just p else findByDomain domain rest

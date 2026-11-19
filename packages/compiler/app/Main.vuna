@@ -1,6 +1,7 @@
 -- vuna-compiler：编译器 CLI 入口（seed 与 stage 1 编译器共用）。
 -- main : Eff [] Int——由运行时执行；getArgs/exit 走宿主原语 @vuna@prim_eff_getArgs / @vuna@prim_eff_exit。
 import Vuna.Compiler.Driver.CompilerCli
+import Base.Data.Obs as Obs
 import Vuna.Compiler.Codegen.Ocaml.Model
 import Vuna.Compiler.Codegen.Ocaml.Render
 import Vuna.Compiler.Ir.Represent
@@ -42,6 +43,45 @@ import Base.Effect.Process as EffProcess
 main : Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, ArgsOp] Int
 main =
   do
+    sample <- sampleWanted
+    _ <- if sample then pure (obsSampleStart "" 0) else pure 0
     args <- argsGetArgs
-    code <- runCompilerCli args
+    code <- runMain (withoutPerfFlag args)
+    _ <- if sample then pure (obsSampleStop 0) else pure 0
     exitWith code
+
+-- | 内部：去掉隐藏的性能旗标（runtime 从原始 argv 读取，命令解析要忽略）。
+withoutPerfFlag : List String -> List String
+withoutPerfFlag [] = []
+withoutPerfFlag (a :: rest) =
+  if a == "--debug-perf" then withoutPerfFlag rest else a :: withoutPerfFlag rest
+
+-- | 内部：入口主体——describe 优先，其余交给编译器 CLI。
+runMain : List String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, ArgsOp] Int
+runMain args =
+  case args of
+    ["--vuna-describe"] =>
+      do
+        _ <- consolePrint describeText
+        pure 0
+    "--vuna-describe" :: file :: more =>
+      do
+        _ <- fsWriteFileAtomic file describeText
+        pure 0
+    _ => runCompilerCli args
+
+-- | 内部：环境里 `VUNA_OBS_SAMPLE` 非空才返回 True。
+sampleWanted : Member nEnv EnvOp r => Eff r Bool
+sampleWanted =
+  do
+    mode <- envGetEnv "VUNA_OBS_SAMPLE"
+    pure (if mode == "" then False else True)
+
+-- | 插件协议 v1 的自描述：只有摘要与用法；flag 明细仍由 `compilerUsageLines` 提供
+-- （`vuna help check` 会转发 `<cmd> --help`）。
+describeText : String
+describeText =
+  "vuna-plugin\t1\tcli\tcompiler\n"
+    ++ "cmd\tcheck\tcore\tyes\tyes\t检查包或文件的类型\tvuna check (<file.vuna> | <package-dir>)\n"
+    ++ "cmd\tbuild\tcore\tyes\tyes\t构建包的可执行入口\tvuna build [--out DIR] [--package NAME] [--target ocaml|wasm|native] [DIR]\n"
+    ++ "cmd\tcompile\tcore\tyes\tyes\t编译包或入口文件到输出目录\tvuna compile (<entry.vuna> | <package-dir>) <out-dir>\n"

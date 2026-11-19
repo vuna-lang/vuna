@@ -129,6 +129,7 @@ nix run .#vuna -- map find <Module.name> # 定位符号；另有 map impact / ap
 入口 `packages/cli/app/Main.vuna`；**不进 seed**，二进制 `vuna` 只做发现与路由）；
 `packages/toolchain/` = 产品工具链实现与命令接线表（二进制 `vuna-toolchain`）；
 `packages/plugin-kit/` = 命令面数据模型、纯参数解析与 describe 协议（编译器与产品入口共用，只依赖 base）；
+`packages/compiler/app/Main.vuna` 同时是 `vuna-compiler` 插件入口（与自举 stage-1 同一产物，`--vuna-describe` 供入口收集命令面）；
 `seed/` = 提交入库的 OCaml 信任锚点（生成物，禁止手改、别读）；`wasm-host/` = wasm 产物的
 WASI preview1 宿主（Node / 浏览器共用）与 Node loader（`vuna run --target wasm`、suite、bench 共用）；
 `test/` = driver 清单

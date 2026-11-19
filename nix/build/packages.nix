@@ -83,6 +83,8 @@ let
       cp packages/cli/.output/bin/vuna "$out/bin/vuna"
       ${vuna-compiler}/bin/vuna-compiler build --package vuna-toolchain .
       cp packages/toolchain/.output/bin/vuna-toolchain "$out/bin/vuna-toolchain"
+      # 编译器命令走独立插件（同一个 stage-1 产物，安装名即插件名）。
+      cp ${vuna-compiler}/bin/vuna-compiler "$out/bin/vuna-compiler"
       cp -r packages/base "$out/base"
       # `vuna run --target wasm` 的执行宿主（Node/V8，`Vuna.Run.wasmRunner` 按此布局查找）。
       mkdir -p "$out/share/vuna"

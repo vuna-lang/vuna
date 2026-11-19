@@ -5,7 +5,6 @@
 module Vuna.Cli.Help where
 
 import Vuna.Cli.Spec
-import Vuna.Compiler.Driver.CompilerCli
 import Vuna.Plugin.Command
 import Vuna.Plugin.Help
 
@@ -19,13 +18,14 @@ topLevelNames = topLevelNamesOf commands
 
 -- | 某个命令路径的帮助正文；路径不在表里给 `Nothing`。
 export helpForPath : List String -> Maybe String
-helpForPath path = helpForPathIn commands delegatedHelp path
+helpForPath path = helpForPathIn commands noDelegated path
 
 -- | 某个命令路径的用法行（`Nothing` = 未登记）。
 export synopsisOf : List String -> Maybe String
 synopsisOf path = synopsisIn commands path
 
 -- | 内部：编译器命令的帮助——转发编译器用法文本（flag 真源在编译器包里）。
-delegatedHelp : Cmd -> String
-delegatedHelp c =
-  "${c.cmdSynopsis}\n\n${c.cmdSummary}。flag 由编译器实现解析：\n\nusage:\n${compilerUsageLines "vuna"}"
+
+-- | 内部：工具链命令都不是 delegated；编译器命令由单独的插件提供。
+noDelegated : Cmd -> String
+noDelegated _ = ""

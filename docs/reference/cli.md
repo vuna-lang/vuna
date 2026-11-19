@@ -35,6 +35,16 @@
 | 路由 | `vuna <path> ...` 原样把 argv 交给拥有该路径的插件；stdio 继承、退出码透传 |
 | 缺失 | 插件不在 → 它的命令从帮助里消失，调用报 exit 2；入口其余功能不受影响 |
 
+插件集合（默认安装）：
+
+| 插件 | 域 | 提供 |
+| --- | --- | --- |
+| `vuna-toolchain` | `toolchain` | run / test / fmt / lint / doc / search / map / api / goal / errors / deps / store / repl / lsp |
+| `vuna-compiler` | `compiler` | check / build / compile；裸 flag（`vuna --typed`）也转给它（已删 flag 提示的真源） |
+| `vuna-dev` | `dev` | 仓库专用的 `vuna dev …`（suite / obs / errors gen / ir dump）——当前与工具链同包，未独立安装 |
+
+`vuna-compiler` 与自举 stage-1 是**同一个产物**：包的入口就是产品插件入口，nix 把它装成两个名字。
+
 describe v1 是行式 TAB 分隔文本（见 `Vuna.Plugin.Describe`）：首行 `vuna-plugin 1 cli <domain>`，
 其余行是 `cmd` / `flag` / `note`。`summary` 与 `synopsis` 放在最后，正文里的空格与 `|` 无需转义。
 

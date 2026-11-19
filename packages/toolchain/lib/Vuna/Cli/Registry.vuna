@@ -6,11 +6,11 @@
 module Vuna.Cli.Registry where
 
 import Vuna.Cli.Help
-import Vuna.Cli.Dev
 import Vuna.Cli.Err
 import Vuna.Cli.Fmt
 import Vuna.Cli.Index
 import Vuna.Cli.Repl
+import Vuna.Cli.Dev
 import Vuna.Cli.Spec
 import Vuna.Cli.Test
 import Vuna.Plugin.Command
@@ -26,7 +26,6 @@ import Vuna.Lint
 import Vuna.Lsp
 import Vuna.Run
 import Vuna.Search
-import Vuna.Compiler.Driver.CompilerCli
 import Base.Effect.Types as EffTypes
 import Base.Effect.Args as EffArgs
 import Base.Effect.Clock as EffClock
@@ -49,9 +48,6 @@ export record Handler(..) where
 export handlers : List Handler
 handlers =
   [
-    Handler ["compile"] (\rest => runCompilerCliFor "vuna" ("compile" :: rest)),
-    Handler ["check"] (\rest => runCompilerCliFor "vuna" ("check" :: rest)),
-    Handler ["build"] (\rest => runCompilerCliFor "vuna" ("build" :: rest)),
     Handler ["run"] (\rest => Vuna.Run.runRun rest),
     Handler ["test"] (\rest => testArgs rest),
     Handler ["fmt"] (\rest => fmtArgs rest),

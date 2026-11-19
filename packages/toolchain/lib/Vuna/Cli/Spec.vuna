@@ -16,23 +16,10 @@ import Base.Data.List as List
 import Base.Data.String as String
 import Base.Data.Bool as Bool
 
--- | 内部：构造一条归其它实现解析 flag 的命令（路径只有一段）。
-delegatedCmd : String -> String -> String -> Cmd
-delegatedCmd name summary synopsis = mkCmd [name] GCore summary synopsis [] [] True True
-
 -- | 全部命令与分支，按帮助分组顺序排列。
 export commands : List Cmd
 commands =
   [
-    delegatedCmd "check" "检查包或文件的类型" "vuna check (<file.vuna> | <package-dir>)",
-    delegatedCmd
-      "build"
-      "构建包的可执行入口"
-      "vuna build [--out DIR] [--package NAME] [--target ocaml|wasm|native] [DIR]",
-    delegatedCmd
-      "compile"
-      "编译包或入口文件到输出目录"
-      "vuna compile (<entry.vuna> | <package-dir>) <out-dir>",
     topCmd
       ["run"]
       GCore
