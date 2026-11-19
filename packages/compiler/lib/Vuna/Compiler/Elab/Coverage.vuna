@@ -127,10 +127,7 @@ export sentinelCtorIn : List (Pair String Int) -> String -> Maybe String
 sentinelCtorIn ctors h =
   if isListNilSyntax h then
     findShortCtor ctors ["Nil"]
-  else if isListConsSyntax h then
-    findShortCtor ctors ["::", "Cons"]
-  else
-    Just h
+  else if isListConsSyntax h then findShortCtor ctors ["::", "Cons"] else Just h
 
 findShortCtor : List (Pair String Int) -> List String -> Maybe String
 findShortCtor [] shorts = Nothing
