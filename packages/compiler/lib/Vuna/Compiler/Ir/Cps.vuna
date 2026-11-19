@@ -318,17 +318,17 @@ transformDirect fuel e =
     e
   else
     case e of
-      IrCtor family ctor _ args =>
+      IrCtor family ctor tyArgs args =>
         if isThunkCtor family ctor then
           case args of
             [IrLam bs _ body] =>
               let
                 k = freshK fuel
                 body1 = cpsExpr (fuel - 1) [] body (IrVar k)
-              in IrCtor family ctor Nothing [IrLam (append bs [k]) Nothing body1]
-            _ => IrCtor family ctor Nothing (mapDirect (fuel - 1) args)
+              in IrCtor family ctor tyArgs [IrLam (append bs [k]) Nothing body1]
+            _ => IrCtor family ctor tyArgs (mapDirect (fuel - 1) args)
         else
-          IrCtor family ctor Nothing (mapDirect (fuel - 1) args)
+          IrCtor family ctor tyArgs (mapDirect (fuel - 1) args)
       IrEffThunk family ctor _unitTy arity prim =>
         let
           u = freshU fuel
@@ -337,16 +337,16 @@ transformDirect fuel e =
           applied = applyAll (transformDirect (fuel - 1) prim) (map IrVar argBs)
           inner = IrCtor family ctor Nothing [IrLam [u, k] Nothing (IrApp Nothing (IrVar k) applied)]
         in if arity <= 0 then inner else IrLam argBs Nothing inner
-      IrRecord family _ fields => IrRecord family Nothing (mapFieldsDirect (fuel - 1) fields)
-      IrProj base family field _ => IrProj (transformDirect (fuel - 1) base) family field Nothing
-      IrRecUpd base family fields _ => IrRecUpd (transformDirect (fuel - 1) base) family (mapFieldsDirect (fuel - 1) fields) Nothing
+      IrRecord family resTy fields => IrRecord family resTy (mapFieldsDirect (fuel - 1) fields)
+      IrProj base family field resTy => IrProj (transformDirect (fuel - 1) base) family field resTy
+      IrRecUpd base family fields resTy => IrRecUpd (transformDirect (fuel - 1) base) family (mapFieldsDirect (fuel - 1) fields) resTy
       IrRtApp sym args => IrRtApp sym (mapDirect (fuel - 1) args)
       IrCast cFrom cTo inner => IrCast cFrom cTo (transformDirect (fuel - 1) inner)
       IrLet bs scrut body => IrLet bs (transformDirect (fuel - 1) scrut) (transformDirect (fuel - 1) body)
       IrLam bs rt body => IrLam bs rt (transformDirect (fuel - 1) body)
-      IrApp _ g a => IrApp Nothing (transformDirect (fuel - 1) g) (transformDirect (fuel - 1) a)
+      IrApp appTy g a => IrApp appTy (transformDirect (fuel - 1) g) (transformDirect (fuel - 1) a)
       IrIf c t el => IrIf (transformDirect (fuel - 1) c) (transformDirect (fuel - 1) t) (transformDirect (fuel - 1) el)
-      IrCase caseTy _ scrut alts => IrCase caseTy Nothing (transformDirect (fuel - 1) scrut) (mapAltDirect (fuel - 1) alts)
+      IrCase caseTy resTy scrut alts => IrCase caseTy resTy (transformDirect (fuel - 1) scrut) (mapAltDirect (fuel - 1) alts)
       IrNatCase scrut fresh zero succ catch => IrNatCase (transformDirect (fuel - 1) scrut) fresh (transformAltMaybe (fuel - 1) zero) (transformAltMaybe (fuel - 1) succ) (transformAltMaybe (fuel - 1) catch)
       IrConcatMany parts => IrConcatMany (mapDirect (fuel - 1) parts)
       IrVar _ => e
@@ -434,10 +434,10 @@ selfBody fuel body name =
         case selfBody (fuel - 1) inner name of
           Err msg => Err msg
           Ok inner1 => Ok (IrCast cFrom cTo inner1)
-      IrCase caseTy _ scrut alts =>
+      IrCase caseTy resTy scrut alts =>
         case selfAlts (fuel - 1) alts name of
           Err msg => Err msg
-          Ok alts1 => Ok (IrCase caseTy Nothing scrut alts1)
+          Ok alts1 => Ok (IrCase caseTy resTy scrut alts1)
       IrApp _ (IrRt sym) th => if sym == "prim_effectSelf" then Ok (applyAll (IrRt irCpsSelfName) [th, identityCont]) else Err ("CPS: unexpected handleScoped shape: " ++ name)
       _ => Err ("CPS: unexpected handleScoped shape: " ++ name)
 
@@ -448,17 +448,17 @@ transformDef fuel d =
   else
     case d of
       IrExternDef _ _ _ _ => Ok d
-      IrDef name arity deps _ body recOk initGuard span =>
+      IrDef name arity deps sigTy body recOk initGuard span =>
         if name == runPureName || name == runEffName || name == runMainName then
           case trampolineBody name body of
             Err msg => Err msg
-            Ok body1 => Ok (IrDef name arity deps Nothing body1 recOk initGuard span)
+            Ok body1 => Ok (IrDef name arity deps sigTy body1 recOk initGuard span)
         else if name == handleScopedName then
           case selfBody (fuel - 1) body name of
             Err msg => Err msg
-            Ok body1 => Ok (IrDef name arity deps Nothing body1 recOk initGuard span)
+            Ok body1 => Ok (IrDef name arity deps sigTy body1 recOk initGuard span)
         else
-          Ok (IrDef name arity deps Nothing (transformDirect (fuel - 1) body) recOk initGuard span)
+          Ok (IrDef name arity deps sigTy (transformDirect (fuel - 1) body) recOk initGuard span)
 
 transformDefs : Int -> List IrDef -> Result (List IrDef)
 transformDefs fuel xs =
@@ -1216,7 +1216,7 @@ mDef handlers fuel d =
   else
     case d of
       IrExternDef _ _ _ _ => d
-      IrDef n ar deps _ body r g sp =>
+      IrDef n ar deps sigTy body r g sp =>
         let
           marked = memName n handlers
           h =
@@ -1224,13 +1224,16 @@ mDef handlers fuel d =
               Just b1 => b1
               Nothing => if marked then mHandlerFun (fuel - 1) body else body
           ar2 = if marked then ar + 2 else ar
+          -- handler def 的运行时 arity 多出 kDone / runScoped 两个参数，原签名不再匹配；
+          -- 其余 def 的签名在 CPS 前后不变，原样保留。
+          sigTy1 = if ar2 == ar then sigTy else Nothing
           b = mSyms (fuel - 1) (mHandlers (fuel - 1) h)
         in if n == runPureName || n == runEffName || n == runMainName then
           case mTrampolineBody n b of
-            Ok b1 => IrDef n ar2 deps Nothing b1 r g sp
-            Err _ => IrDef n ar2 deps Nothing b r g sp
+            Ok b1 => IrDef n ar2 deps sigTy1 b1 r g sp
+            Err _ => IrDef n ar2 deps sigTy1 b r g sp
         else
-          IrDef n ar2 deps Nothing b r g sp
+          IrDef n ar2 deps sigTy1 b r g sp
 
 mDefs : List String -> Int -> List IrDef -> List IrDef
 mDefs handlers fuel ds =
@@ -1379,14 +1382,14 @@ mMarkedAltM fuel m =
       Just a => Just (IrAlt a.irAltCtor a.irAltBinders (mMarked (fuel - 1) a.irAltBody))
 
 mMarkedDef : IrDef -> IrDef
-mMarkedDef (IrDef n ar deps _ body r g sp) =
-  IrDef n ar deps Nothing (mMarked (cpsFuelOfBody body) body) r g sp
+mMarkedDef (IrDef n ar deps sigTy body r g sp) =
+  IrDef n ar deps sigTy (mMarked (cpsFuelOfBody body) body) r g sp
 mMarkedDef d = d
 
 -- ---------------------------------------------------------------
 mApplysDef : IrDef -> IrDef
-mApplysDef (IrDef n ar deps _ body r g sp) =
-  IrDef n ar deps Nothing (mApplys (cpsFuelOfBody body) body) r g sp
+mApplysDef (IrDef n ar deps sigTy body r g sp) =
+  IrDef n ar deps sigTy (mApplys (cpsFuelOfBody body) body) r g sp
 mApplysDef d = d
 
 -- | 方案 2 第一层：选择性 CPS 后把 handler clause 改成 (o, k, kDone)，resumption 为 (v, kRest)。
@@ -1515,17 +1518,24 @@ foldAppMap fuel acc xs =
       x :: rest => foldAppMap (fuel - 1) (IrApp Nothing acc (mSteps (fuel - 1) x)) rest
 
 mStepsDef : IrDef -> IrDef
-mStepsDef (IrDef n ar deps _ body r g sp) =
-  IrDef n ar deps Nothing (mSteps (cpsFuelOfBody body) body) r g sp
+mStepsDef (IrDef n ar deps sigTy body r g sp) =
+  IrDef n ar deps sigTy (mSteps (cpsFuelOfBody body) body) r g sp
 mStepsDef d = d
+
+-- | handler 分类只看「签名已擦除」的形态：分类口径与 CPS 是否保留签名解耦。
+eraseDefSig : IrDef -> IrDef
+eraseDefSig (IrDef n ar deps _ body r g sp) = IrDef n ar deps Nothing body r g sp
+eraseDefSig d = d
 
 export cpsDefsMachine : List IrDef -> Result (List IrDef)
 cpsDefsMachine defs =
   case cpsDefs defs of
     Err msg => Err msg
     Ok ds =>
-      Ok
-        (map mStepsDef (map mApplysDef (map mMarkedDef (mDefs (collectHandleOpsDefs 100000 ds) (cpsFuelOfDefs ds) ds))))
+      let
+        handlerNames = collectHandleOpsDefs 100000 (map eraseDefSig ds)
+      in Ok
+        (map mStepsDef (map mApplysDef (map mMarkedDef (mDefs handlerNames (cpsFuelOfDefs ds) ds))))
 
 -- | 单元级入口：改写所有组；入口展示节点是纯值，不需要 CPS。
 export cpsUnit : IrUnit -> Result IrUnit
