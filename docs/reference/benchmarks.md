@@ -229,6 +229,13 @@ ratio 相对手写 OCaml；wasm 括号里是减掉 `meta.node_startup_ms` = 22 m
 `eff_bracket` 的 vuna 与 `.ml` 都是尾递归（`loop n acc`）；修正前 vuna 版本是非尾递归，
 历史表里它的旧读数（90x / 57x）不可与修正后对照。
 
+**复测（2026-11-19，本地 main + CPS 类型槽/分类改动，`--target all --runs 3 --warmup 1`，
+loadavg ≈3）：** 尾 resume 优化落地后 `eff_tick` / `eff_nested` / `eff_deep` 已降到
+native 6.3x / 2.75x / 2.0x（wasm net 10.0x / 5.75x / 4.7x）；`eff_install` 仍是
+native 14.0x、wasm net 15.75x，安装成本是派发侧的下一个热点。
+**`eff_host` 有回归**：native N=1000 约 220 ms、N=5000 约 186 s（上表旧读数 85 ms），
+bisect 到 `a5d4c93` 的 `msUsed` 列表/槽回收，见 debt D113；同期 OCaml 后端 3–4 ms 正常。
+
 **CPS 前后**（wasm：`445315d` 的 wat 机器 → HEAD 的库机器；native：`e663921` 的栈拷贝 →
 HEAD 的库机器；`--runs 3 --warmup 1`，源码与 harness 都是 HEAD）：
 
