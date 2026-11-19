@@ -15,5 +15,6 @@ modules = [
   "Vuna.Plugin.Suggest",
   "Vuna.Plugin.Args",
   "Vuna.Plugin.Err",
+  "Vuna.Plugin.Help",
   "Vuna.Plugin.Describe"
 ]

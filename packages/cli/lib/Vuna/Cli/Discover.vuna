@@ -1,0 +1,212 @@
+-- | 插件发现：扫 `<exeDir>` → `$VUNA_EXEC_PATH` → `PATH` 上的 `vuna-*` 可执行文件，
+-- 逐个用 `--vuna-describe` 取回命令表。
+--
+-- 目录顺序即优先级；同名域只取第一个。候选二进制只按文件名筛选，不认识 describe 协议的
+-- 可执行文件会写不出元数据文件，被静默跳过（不是插件）。
+module Vuna.Cli.Discover where
+
+import Vuna.Plugin.Command
+import Vuna.Plugin.Describe
+import Base.Data.List as List
+import Base.Data.Nat as Nat
+import Base.Data.String as String
+import Base.Data.Bool as Bool
+import Base.Effect.Clock as EffClock
+import Base.Effect.Env as EffEnv
+import Base.Effect.Fs as EffFs
+import Base.Effect.Process as EffProcess
+import Base.Effect.Types as EffTypes
+
+-- | 一个已发现的插件：域、可执行文件路径、注册的命令。
+export record Plugin(..) where
+  -- | 域（二进制名 `vuna-<domain>` 的后半段）。
+  pluginDomain : String
+  -- | 可执行文件路径（绝对路径；同目录发现时也带目录）。
+  pluginBinary : String
+  -- | 插件声明的命令。
+  pluginCommands : List Cmd
+
+-- | 发现全部插件（按目录优先级去重）。
+export discoverPlugins : Eff [EnvOp, FsOp, ProcessOp, ClockOp] (List Plugin)
+discoverPlugins =
+  do
+    exe <- envExecPath
+    execEnv <- envGetEnv "VUNA_EXEC_PATH"
+    discoverIn (searchDirs exe execEnv)
+
+-- | 内部：在给定目录序列里发现插件。
+discoverIn : List String -> Eff [EnvOp, FsOp, ProcessOp, ClockOp] (List Plugin)
+discoverIn dirs =
+  do
+    cands <- collectCandidates dirs
+    describeAll (dedupByDomain cands)
+
+-- | 内部：搜索目录顺序——可执行文件所在目录优先，其次 `VUNA_EXEC_PATH`。
+--
+-- 不扫 `PATH`：那里可能挂着别的 `vuna-*` 工具（`vuna-seed` / `vuna-compiler`），
+-- 它们不是插件；nix profile 与 systemPackages 会把同包的二进制装进同一个 bin 目录，
+-- 因此“插件与 entry 相邻”这条规则已经覆盖常规安装方式。
+searchDirs : String -> String -> List String
+searchDirs exe execEnv = nubNames (filter (\d => d /= "") (append [dirOf exe] (split ":" execEnv)))
+
+-- | 内部：路径的父目录（`/a/b` → `/a`；无 `/` → `.`）。
+dirOf : String -> String
+dirOf path =
+  case split "/" path of
+    [] => "."
+    parts => joinPathSlash (dropLast parts)
+
+-- | 内部：去掉最后一段并拼回。
+dropLast : List String -> List String
+dropLast [] = []
+dropLast xs = reverse (drop 1 (reverse xs))
+
+-- | 内部：用 `/` 拼回路径（保留前导 `/`）。
+joinPathSlash : List String -> String
+joinPathSlash [] = "/"
+joinPathSlash parts = join "/" parts
+
+-- | 内部：逐个目录收集候选 `(domain, 可执行文件路径)`。
+collectCandidates : List String -> Eff [EnvOp, FsOp, ProcessOp, ClockOp] (List (Pair String String))
+collectCandidates [] = pure []
+collectCandidates (dir :: rest) =
+  do
+    here <- scanDir dir
+    more <- collectCandidates rest
+    pure (append here more)
+
+-- | 内部：一个目录里的 `vuna-*` 候选。
+scanDir : String -> Eff [EnvOp, FsOp, ProcessOp, ClockOp] (List (Pair String String))
+scanDir dir =
+  do
+    exists <- fsFileExists dir
+    if exists then
+      do
+        isDir <- fsIsDirectory dir
+        if isDir then
+          do
+            names <- fsReadDir dir
+            pure (mapMaybe (candidateOf dir) names)
+        else
+          pure []
+    else
+      pure []
+
+-- | 内部：文件名 → 候选；只认 `vuna-<domain>`（无点、不是 `vuna` 自身）。
+candidateOf : String -> String -> Maybe (Pair String String)
+candidateOf dir name =
+  if pluginName name then Just (Pair (domainOf name) (appendPath dir name)) else Nothing
+
+-- | 内部：是否是插件可执行文件名。
+pluginName : String -> Bool
+pluginName name = startsWith "vuna-" name && name /= "vuna" && not (contains "." name)
+
+-- | 内部：`vuna-<domain>` → `<domain>`。
+domainOf : String -> String
+domainOf name = substring 5 (byteLength name - 5) name
+
+-- | 内部：目录 + 文件名（`dir` 为 `.` 或 `/` 时也要拼对）。
+appendPath : String -> String -> String
+appendPath dir name =
+  if dir == "/" then "/${name}" else if dir == "." then "./${name}" else "${dir}/${name}"
+
+-- | 内部：按域去重（先出现的目录优先）。
+dedupByDomain : List (Pair String String) -> List (Pair String String)
+dedupByDomain pairs = dedupGo [] pairs
+
+-- | 内部：`dedupByDomain` 的扫描（`seen` 是已出现的域）。
+dedupGo : List String -> List (Pair String String) -> List (Pair String String)
+dedupGo seen [] = []
+dedupGo seen ((Pair d bin) :: rest) =
+  if memName d seen then dedupGo seen rest else Pair d bin :: dedupGo (d :: seen) rest
+
+-- | 内部：逐个候选取回命令表；拿不到就跳过。
+describeAll : List (Pair String String) -> Eff [EnvOp, FsOp, ProcessOp, ClockOp] (List Plugin)
+describeAll [] = pure []
+describeAll ((Pair domain bin) :: rest) =
+  do
+    found <- describeOne domain bin
+    more <- describeAll rest
+    case found of
+      Just p => pure (p :: more)
+      Nothing => pure more
+
+-- | 内部：跑 `<bin> --vuna-describe <tmpfile>` 再读回命令表。
+--
+-- 文件名只由（域, 二进制 size/mtime）决定：内容相同、写入是原子的，因此并发发现不会
+-- 互相踩（不需要随机名，也不需要读完就删）。
+describeOne : String -> String -> Eff [EnvOp, FsOp, ProcessOp, ClockOp] (Maybe Plugin)
+describeOne domain bin =
+  do
+    tmp <- usableTmp
+    stamp <- fileStamp bin
+    describeAt domain bin (describeFile tmp domain stamp)
+
+-- | 内部：可写的临时目录——`TMPDIR` 不存在（用例常把它指到尚未创建的目录）时落 `/tmp`。
+usableTmp : Eff [EnvOp, FsOp, ProcessOp, ClockOp] String
+usableTmp =
+  do
+    tmp <- envGetEnv "TMPDIR"
+    if tmp == "" then
+      pure "/tmp"
+    else
+      do
+        exists <- fsFileExists tmp
+        pure (if exists then tmp else "/tmp")
+
+-- | 内部：元数据文件路径（内容由二进制决定，见 [describeOne]）。
+describeFile : String -> String -> String -> String
+describeFile base domain stamp = "${base}/vuna-describe-${domain}-${stamp}"
+
+-- | 内部：二进制的 (size, mtime) 指纹——升级后路径自动变化，避免读到旧表。
+fileStamp : String -> Eff [EnvOp, FsOp, ProcessOp, ClockOp] String
+fileStamp bin =
+  do
+    size <- fsFileSize bin
+    mt <- fsFileMtime bin
+    pure "${sizePart size}-${mtPart mt}"
+
+-- | 内部：跑 `<bin> --vuna-describe <file>` 再读回命令表；文件已存在（同域同版本）就直接读。
+describeAt : String -> String -> String -> Eff [EnvOp, FsOp, ProcessOp, ClockOp] (Maybe Plugin)
+describeAt domain bin file =
+  do
+    cached <- fsFileExists file
+    if cached then
+      readDescribe domain bin file
+    else
+      do
+        _ <- processRunIn "." ["sh", "-c", "'${bin}' --vuna-describe '${file}' >/dev/null 2>&1"]
+        readDescribe domain bin file
+
+-- | 内部：读回 describe 文件并解析；不存在给 `Nothing`。
+readDescribe : String -> String -> String -> Eff [EnvOp, FsOp, ProcessOp, ClockOp] (Maybe Plugin)
+readDescribe domain bin file =
+  do
+    exists <- fsFileExists file
+    if exists then
+      do
+        text <- fsReadFile file
+        pure (parsedPlugin domain bin text)
+    else
+      pure Nothing
+
+-- | 内部：解析 describe 文本；域以插件自己的声明为准（不一致时也接受二进制名）。
+parsedPlugin : String -> String -> String -> Maybe Plugin
+parsedPlugin domain bin text =
+  case parse text of
+    Just (Pair d cmds) => Just (Plugin d bin cmds)
+    Nothing => Nothing
+
+-- | 内部：文件大小的文本（取不到给 0）。
+sizePart : Maybe Nat -> String
+sizePart size =
+  case size of
+    Just n => strFromInt (natToInt n)
+    Nothing => "0"
+
+-- | 内部：mtime 的文本（取不到给 0）。
+mtPart : Maybe Int -> String
+mtPart mt =
+  case mt of
+    Just t => strFromInt t
+    Nothing => "0"

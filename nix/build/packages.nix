@@ -81,6 +81,8 @@ let
       export VUNA_STORE="$TMPDIR/vuna-store"
       ${vuna-compiler}/bin/vuna-compiler build --package vuna .
       cp packages/cli/.output/bin/vuna "$out/bin/vuna"
+      ${vuna-compiler}/bin/vuna-compiler build --package vuna-toolchain .
+      cp packages/toolchain/.output/bin/vuna-toolchain "$out/bin/vuna-toolchain"
       cp -r packages/base "$out/base"
       # `vuna run --target wasm` 的执行宿主（Node/V8，`Vuna.Run.wasmRunner` 按此布局查找）。
       mkdir -p "$out/share/vuna"

@@ -2844,13 +2844,15 @@ watchSnapshot suite =
     corpusFiles <- collectSourceFiles "${suite.suiteRoot}/corpus"
     suiteFiles <- collectSourceFiles suite.suiteRoot
     cliFiles <- collectSourceFiles "${suite.suiteRepoRoot}/packages/cli/lib"
+    toolchainFiles <- collectSourceFiles "${suite.suiteRepoRoot}/packages/toolchain/lib"
+    pluginKitFiles <- collectSourceFiles "${suite.suiteRepoRoot}/packages/plugin-kit/lib"
     compilerFiles <- collectSourceFiles "${suite.suiteRepoRoot}/packages/compiler/lib"
     baseFiles <- collectSourceFiles "${suite.suiteRepoRoot}/packages/base/lib"
     extra <-
       filterEff pathExistsFile ["${suite.suiteRoot}/suite.toml", "${suite.suiteRepoRoot}/vuna.toml"]
     maxMtime
       0
-      (append corpusFiles (append suiteFiles (append cliFiles (append compilerFiles (append baseFiles extra)))))
+      (append corpusFiles (append suiteFiles (append cliFiles (append toolchainFiles (append pluginKitFiles (append compilerFiles (append baseFiles extra)))))))
 
 -- | 内部：`--watch` 的轮询体：每 500ms 取一次快照，变化就重跑整个 suite。
 watchLoop : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Int -> SuiteOpts -> Suite -> Int -> Int -> Eff r Int
@@ -2919,7 +2921,8 @@ runSuiteOnce opts suite =
     -- 默认由 devShell / nix run 包装 / CI 导出 `VUNA_STORE`；未设置时按 Store 的
     -- `$XDG_DATA_HOME` / `~/.vuna/store` / `$TMPDIR/vuna-store` 回落。
     store <- storeRootReadyEff
-    vuna <- envExecPath
+    vunaSelf <- envExecPath
+    vuna <- envOr "VUNA" "${Vuna.Cli.Args.parentOf vunaSelf}/vuna"
     vunaSeed <- envOr "VUNA_SEED" "vuna-seed"
     ocamlopt <- envOr "OCAMLOPT" "ocamlopt"
     -- 跨 run 的构建桶：base 的 .cmx 只编译一次，后续 run 直接命中 stamp。

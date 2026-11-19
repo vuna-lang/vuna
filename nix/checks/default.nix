@@ -26,6 +26,7 @@ let
     compiler = ../../packages/compiler;
     base = ../../packages/base;
     pluginKit = ../../packages/plugin-kit;
+    toolchain = ../../packages/toolchain;
     cli = ../../packages/cli;
     http = ../../packages/http;
     web = ../../packages/web;
@@ -53,6 +54,7 @@ let
     src.base
     src.compiler
     src.pluginKit
+    src.toolchain
     src.cli
     src.http
     src.web
@@ -391,6 +393,8 @@ in
       src.compiler
       src.cli
       src.base
+      src.pluginKit
+      src.toolchain
       src.webCli
       src.stepsCli
       src.stepsCompiler

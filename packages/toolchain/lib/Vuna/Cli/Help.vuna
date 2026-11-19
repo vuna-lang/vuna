@@ -1,0 +1,31 @@
+-- | 工具链命令的帮助渲染：把 [Vuna.Cli.Spec] 的命令表接到 [Vuna.Plugin.Help]。
+--
+-- 编译器命令（`check` / `build` / `compile`）的 flag 由编译器实现解析，正文转发编译器
+-- 用法文本（零重复）。
+module Vuna.Cli.Help where
+
+import Vuna.Cli.Spec
+import Vuna.Compiler.Driver.CompilerCli
+import Vuna.Plugin.Command
+import Vuna.Plugin.Help
+
+-- | 总览帮助。
+export overviewText : String
+overviewText = renderOverview commands
+
+-- | 总览里的顶层命令名。
+export topLevelNames : List String
+topLevelNames = topLevelNamesOf commands
+
+-- | 某个命令路径的帮助正文；路径不在表里给 `Nothing`。
+export helpForPath : List String -> Maybe String
+helpForPath path = helpForPathIn commands delegatedHelp path
+
+-- | 某个命令路径的用法行（`Nothing` = 未登记）。
+export synopsisOf : List String -> Maybe String
+synopsisOf path = synopsisIn commands path
+
+-- | 内部：编译器命令的帮助——转发编译器用法文本（flag 真源在编译器包里）。
+delegatedHelp : Cmd -> String
+delegatedHelp c =
+  "${c.cmdSynopsis}\n\n${c.cmdSummary}。flag 由编译器实现解析：\n\nusage:\n${compilerUsageLines "vuna"}"

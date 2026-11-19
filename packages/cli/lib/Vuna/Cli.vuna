@@ -1,27 +1,22 @@
--- | 产品 CLI（`vuna`）：命令分发与帮助入口。
+-- | 产品 CLI 入口（`vuna`）：命令发现、帮助总览与路由。
 --
--- 命令面的元数据（摘要、用法、flag 表）在 `Vuna.Cli.Spec`，帮助渲染在 `Vuna.Cli.Help`，
--- 工具命令的错误出口在 `Vuna.Cli.Err`；本模块只做两件事：解析 argv 走到对应实现，
--- 以及 `help` / `--version` / 未知命令这类元命令。
---
--- 编译器命令（`compile` / `check` / `build`）的 argv 原样转交
--- `Vuna.Compiler.Driver.CompilerCli`（flag 真源在编译器包里）；工具命令在各自的
--- `Vuna.Cli.*` / 工具模块里解析。`vuna dev` 是本仓库专用的开发命名空间（`Vuna.Cli.Dev`）。
---
--- 退出码：0 成功 / 1 被检查代码或查询的语义失败 / 2 用法、参数、输入路径或不满足命令前提。
+-- 本二进制不 import 任何工具实现：`--vuna-describe` 从同目录 / `$VUNA_EXEC_PATH` / `PATH`
+-- 上的 `vuna-*` 插件收集命令表，`vuna <cmd>` 原样转交给拥有该命令的插件进程。
+-- 自带的命令只有 `help` 与 `version`。
 module Vuna.Cli where
 
-import Vuna.Cli.Err
-import Vuna.Cli.Help
-import Vuna.Cli.Registry
-import Vuna.Cli.Spec
+import Vuna.Cli.Discover
 import Vuna.Plugin.Command
 import Vuna.Plugin.Describe
-import Vuna.Cli.Suggest
-import Vuna.Compiler.Base.Common
-import Vuna.Compiler.Driver.CompilerCli
+import Vuna.Plugin.Err
+import Vuna.Plugin.Help
+import Vuna.Plugin.Suggest
 import Vuna.Compiler.Base.Version
+import Vuna.Compiler.Driver.CompilerCli
+import Base.Data.List as List
 import Base.Data.Pair as Pair
+import Base.Data.String as String
+import Base.Data.Bool as Bool
 import Base.Effect.Args as EffArgs
 import Base.Effect.Clock as EffClock
 import Base.Effect.Console as EffConsole
@@ -33,106 +28,157 @@ import Base.Effect.Process as EffProcess
 import Base.Effect.Stdin as EffStdin
 import Base.Effect.Types as EffTypes
 
--- | CLI 总入口：去掉隐藏的性能旗标，`-h` / `--help` 优先，其余交给命令分发。
--- `--vuna-describe` 打印本二进制的命令表（插件协议 v1），供入口与工具读取。
+-- | 入口自带的命令（其余全部来自插件）。
+ownCommands : List Cmd
+ownCommands =
+  [
+    topCmd ["version"] GMeta "显示版本" "vuna version | --version" [] [],
+    topCmd ["help"] GMeta "显示帮助" "vuna help [<command>...]" [] []
+  ]
+
+-- | 合并命令表：插件命令在前，自带命令插在 `dev` 分节之前（保持帮助分节顺序）。
+tableOf : List Plugin -> List Cmd
+tableOf plugins = insertOwn (concatCommands plugins)
+
+-- | 内部：把自带命令插到第一个 `dev` 命令之前。
+insertOwn : List Cmd -> List Cmd
+insertOwn cmds = append (takeNonDev cmds) (append ownCommands (dropNonDev cmds))
+
+-- | 内部：`dev` 分节之前的命令。
+takeNonDev : List Cmd -> List Cmd
+takeNonDev [] = []
+takeNonDev (c :: rest) = if isDevCmd c then [] else c :: takeNonDev rest
+
+-- | 内部：从第一个 `dev` 命令开始（含）。
+dropNonDev : List Cmd -> List Cmd
+dropNonDev [] = []
+dropNonDev (c :: rest) = if isDevCmd c then c :: rest else dropNonDev rest
+
+-- | 内部：是否属于 `dev` 分节。
+isDevCmd : Cmd -> Bool
+isDevCmd c = groupName c.cmdGroup == "dev"
+
+-- | 内部：拼接各插件的命令。
+concatCommands : List Plugin -> List Cmd
+concatCommands [] = []
+concatCommands (p :: rest) = append p.pluginCommands (concatCommands rest)
+
+-- | CLI 总入口：版本与帮助优先，其余路由到插件。
 export runCli : List String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
 runCli args =
   case args of
-    ["--vuna-describe"] => printText (Vuna.Plugin.Describe.render "cli" commands)
+    ["version"] => printVersion
+    ["--version"] => printVersion
     _ =>
-      case helpPath args of
-        Just path => printHelp path
-        Nothing => dispatch (stripPerfFlags args)
+      do
+        plugins <- discoverPlugins
+        let
+          cmds = tableOf plugins
+        in let
+          route = withoutPerfFlag args
+        in case helpPathIn 3 cmds route of
+          Just path => helpOut plugins cmds path
+          Nothing => dispatch plugins cmds args route
 
--- | 内部：`--debug-perf` 由 runtime 原语读原始 argv/env，不参与子命令分发。
-stripPerfFlags : List String -> List String
-stripPerfFlags [] = []
-stripPerfFlags (a :: rest) =
-  if a == "--debug-perf" then stripPerfFlags rest else (::) a (stripPerfFlags rest)
+-- | 内部：去掉隐藏的性能旗标（它由 runtime 从原始 argv 读取，路由时要忽略）。
+withoutPerfFlag : List String -> List String
+withoutPerfFlag [] = []
+withoutPerfFlag (a :: rest) =
+  if a == "--debug-perf" then withoutPerfFlag rest else a :: withoutPerfFlag rest
 
--- | 内部：`-h` / `--help` 之前的可见参数（`--` 之后不参与），解析成命令路径。
---
--- `vuna lint --help` → `["lint"]`；`vuna --help` → `[]`；`vuna run pkg -- --help`
--- 的 `--help` 在 `--` 之后，不触发帮助。
-helpPath : List String -> Maybe (List String)
-helpPath args =
-  case beforeHelp (helpSurface args) of
-    Nothing => Nothing
-    Just tokens => Just (resolvedPath tokens)
+-- | 内部：分发——元命令就地处理，其余查插件。
+dispatch : List Plugin -> List Cmd -> List String -> List String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
+dispatch plugins cmds args route =
+  case route of
+    [] =>
+      do
+        _ <- consolePrint (renderOverview cmds)
+        pure 2
+    "help" :: rest => helpCommand plugins cmds rest
+    ["--vuna-describe"] => printText (Describe.render "vuna" cmds)
+    "--vuna-describe" :: file :: more => writeDescribe file cmds
+    arg :: _ =>
+      case findOwner 3 route plugins of
+        Just p => processRunIn "." (append [p.pluginBinary] args)
+        Nothing =>
+          case removedHint arg of
+            Just hint => removedCommand arg hint
+            Nothing =>
+              if startsWith "-" arg then runCompilerCliFor "vuna" args else unknownCommand cmds arg
 
--- | 内部：帮助扫描的可见区间——`--` 之前的部分。
-helpSurface : List String -> List String
-helpSurface [] = []
-helpSurface ("--" :: rest) = []
-helpSurface (arg :: rest) = (::) arg (helpSurface rest)
+-- | 内部：`vuna help <command>...`——解析成已登记路径后打印。
+helpCommand : List Plugin -> List Cmd -> List String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
+helpCommand plugins cmds rest =
+  case rest of
+    [] => helpOut plugins cmds []
+    _ =>
+      case matchCommandIn 3 rest cmds of
+        Just (Pair c _) => helpOut plugins cmds c.cmdPath
+        Nothing => unknownCommand cmds (join " " rest)
 
--- | 内部：帮助旗标之前的参数（保持顺序）；没有帮助旗标给 `Nothing`。
-beforeHelp : List String -> Maybe (List String)
-beforeHelp [] = Nothing
-beforeHelp ("-h" :: _) = Just []
-beforeHelp ("--help" :: _) = Just []
-beforeHelp (arg :: rest) =
-  case beforeHelp rest of
-    Nothing => Nothing
-    Just prior => Just (arg :: prior)
+-- | 内部：打印某路径的帮助。`[]` 是总览；delegated 命令转交插件（它才知道编译器 flag）。
+helpOut : List Plugin -> List Cmd -> List String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
+helpOut plugins cmds path =
+  if path == [] then
+    printText (renderOverview cmds)
+  else
+    case findCmdIn path cmds of
+      Nothing => unknownCommand cmds (join " " path)
+      Just c => if c.cmdDelegated then delegatedHelpOut plugins path else localHelp cmds path
 
--- | 内部：把帮助旗标之前的参数收敛成已登记的命令路径（匹配不到就是总览）。
-resolvedPath : List String -> List String
-resolvedPath tokens =
-  case matchCommand tokens of
-    Just (Pair c _) => c.cmdPath
-    Nothing => []
-
--- | 内部：打印某个路径的帮助；`[]` 是总览。
-printHelp : Member nConsole ConsoleOp r => List String -> Eff r Int
-printHelp [] = printText overviewText
-printHelp path =
-  case helpForPath path of
+-- | 内部：本地渲染（表里已有全部元数据）。
+localHelp : List Cmd -> List String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
+localHelp cmds path =
+  case helpForPathIn cmds noDelegated path of
     Just text => printText text
-    Nothing => unknownCommand (joinWords path)
+    Nothing => unknownCommand cmds (join " " path)
+
+-- | 内部：delegated 命令的帮助——转交拥有它的插件（`<path> --help`）。
+delegatedHelpOut : List Plugin -> List String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
+delegatedHelpOut plugins path =
+  case findOwner 3 path plugins of
+    Just p => processRunIn "." (append [p.pluginBinary] (append path ["--help"]))
+    Nothing => printText "error: command is not provided by any installed plugin\n"
+
+-- | 内部：永远不会被调用的 delegated 正文（delegated 命令走转发）。
+noDelegated : Cmd -> String
+noDelegated _ = ""
+
+-- | 内部：按最长前缀找拥有该命令的插件（最多 3 段）。
+findOwner : Int -> List String -> List Plugin -> Maybe Plugin
+findOwner depth args plugins =
+  if depth <= 0 then
+    Nothing
+  else
+    case ownerAt (take depth args) plugins of
+      Just p => Just p
+      Nothing => findOwner (depth - 1) args plugins
+
+-- | 内部：某个路径的拥有者。
+ownerAt : List String -> List Plugin -> Maybe Plugin
+ownerAt path [] = Nothing
+ownerAt path (p :: rest) =
+  case findCmdIn path p.pluginCommands of
+    Just _ => Just p
+    Nothing => ownerAt path rest
+
+-- | 内部：把合并命令表写到 `file`（`--vuna-describe FILE`）。
+writeDescribe : String -> List Cmd -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
+writeDescribe file cmds =
+  do
+    _ <- fsWriteFile file (Describe.render "vuna" cmds)
+    pure 0
 
 -- | 内部：打印文本并返回 0。
-printText : Member nConsole ConsoleOp r => String -> Eff r Int
+printText : String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
 printText text =
   do
     _ <- consolePrint text
     pure 0
 
--- | 内部：打印一行并返回 0。
-consoleLine : Member nConsole ConsoleOp r => String -> Eff r Int
-consoleLine msg = consolePrint msg >>= (\_ => pure 0)
-
 -- | 内部：打印版本号并返回 0。版本唯一真源在编译器包（`Vuna.Compiler.Base.Version`）。
-printVersion : Member nConsole ConsoleOp r => Int -> Eff r Int
-printVersion _ = consoleLine "vuna ${vunaVersion}\n"
-
--- | 内部：分发——元命令（`help` / `version`）就地处理，其余查 [Vuna.Cli.Registry]。
-dispatch : List String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
-dispatch args =
-  case args of
-    [] =>
-      do
-        _ <- consolePrint overviewText
-        pure 2
-    "help" :: rest => helpCommand rest
-    "version" :: _ => printVersion 0
-    "--version" :: _ => printVersion 0
-    arg :: _ =>
-      case Vuna.Cli.Registry.matchHandler args of
-        Just (Pair h rest) => h.handlerRun rest
-        Nothing =>
-          case removedHint arg of
-            Just hint => removedCommand arg hint
-            Nothing =>
-              if startsWith "-" arg then runCompilerCliFor "vuna" args else unknownCommand arg
-
--- | 内部：`vuna help <command>...`——解析成已登记路径后打印。
-helpCommand : Member nConsole ConsoleOp r => List String -> Eff r Int
-helpCommand [] = printText overviewText
-helpCommand rest =
-  case matchCommand rest of
-    Just (Pair c _) => printHelp c.cmdPath
-    Nothing => unknownCommand (joinWords rest)
+printVersion : Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
+printVersion = printText "vuna ${vunaVersion}\n"
 
 -- | 内部：已改名命令的迁移提示（旧名字不再分发）。
 removedHint : String -> Maybe String
@@ -151,21 +197,16 @@ removedHint name =
     Just "run `vuna deps pin [DIR]`"
   else if name == "clean" then Just "run `vuna store clean`" else Nothing
 
--- | 内部：未知命令（附最近候选与帮助提示），返回 2。
-unknownCommand : Member nConsole ConsoleOp r => String -> Eff r Int
-unknownCommand arg =
-  do
-    _ <- consolePrint (unknownCommandText arg)
-    pure 2
-
--- | 内部：未知命令文案。
-unknownCommandText : String -> String
-unknownCommandText arg =
-  case suggestOne topLevelNames arg of
+-- | 内部：未知命令文案（附最近候选）。
+unknownCommandText : List Cmd -> String -> String
+unknownCommandText cmds arg =
+  case suggestOne (topLevelNamesOf cmds) arg of
     Just guess => "error: unknown command `${arg}`; did you mean `${guess}`?\nrun `vuna help`\n"
     Nothing => "error: unknown command `${arg}`\nrun `vuna help`\n"
 
--- | 内部：路径用空格拼接。
-joinWords : List String -> String
-joinWords [] = ""
-joinWords (one :: rest) = if rest == [] then one else "${one} ${joinWords rest}"
+-- | 内部：未知命令（附最近候选与帮助提示），返回 2。
+unknownCommand : List Cmd -> String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
+unknownCommand cmds arg =
+  do
+    _ <- consolePrint (unknownCommandText cmds arg)
+    pure 2

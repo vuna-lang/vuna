@@ -166,8 +166,6 @@ commands =
       [valueFlag "addr" "ADDR" "server 地址"]
       [],
     topCmd ["lsp"] GService "启动 LSP server（JSON-RPC over stdio）" "vuna lsp" [] [],
-    topCmd ["version"] GMeta "显示版本" "vuna version | --version" [] [],
-    topCmd ["help"] GMeta "显示帮助" "vuna help [<command>...]" [] [],
     topCmd
       ["dev"]
       GDev

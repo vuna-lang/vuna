@@ -1,30 +1,66 @@
--- | 帮助渲染：全部从 [Vuna.Cli.Spec] 的命令表派生。
+-- | 帮助渲染：全部从调用方给的命令表派生（入口与插件共用）。
 --
 -- 三种形态：总览（按分组列出顶层命令）、分支帮助（列出直接子命令）、单命令帮助
--- （用法 + options + 补充说明）。编译器命令的 flag 由编译器实现解析，因此它们的帮助正文
--- 直接转发编译器用法文本，不在本模块重复一份。
-module Vuna.Cli.Help where
+-- （用法 + options + 补充说明）。`delegated` 命令的正文由调用方提供（插件里转发编译器
+-- 用法文本），本模块不绑定任何具体实现。
+module Vuna.Plugin.Help where
 
-import Vuna.Cli.Args
 import Vuna.Plugin.Command
-import Vuna.Plugin.Args
-import Vuna.Cli.Spec
-import Vuna.Compiler.Driver.CompilerCli
-import Vuna.Compiler.Base.Common
 import Base.Data.List as List
 import Base.Data.String as String
 import Base.Data.Bool as Bool
 
 -- | 总览帮助（`vuna help` / `vuna --help` / 无参数）。
-export overviewText : String
-overviewText =
+export renderOverview : List Cmd -> String
+renderOverview cmds =
   "vuna — Vuna 编译器与工具链\n\nusage:\n  vuna <command> [options]\n  vuna dev <command> [options]\n"
-    ++ renderSections "" (overviewCommands commands)
+    ++ renderSections "" (overviewCommands cmds)
     ++ "\n运行 `vuna help <command>` 或 `vuna <command> --help` 查看某条命令的完整用法。\n"
 
 -- | 总览里的顶层命令名（未知命令的候选建议用）。
-export topLevelNames : List String
-topLevelNames = nubNames (map headName (overviewCommands commands))
+export topLevelNamesOf : List Cmd -> List String
+topLevelNamesOf cmds = nubNames (map headName (overviewCommands cmds))
+
+-- | 帮助旗标之前的参数收敛成已登记的命令路径；`Nothing` = 没有帮助请求。
+-- `[]` = 总览。`--` 之后不参与；`-h` / `--help` 优先。
+export helpPathIn : Int -> List Cmd -> List String -> Maybe (List String)
+helpPathIn depth cmds args =
+  case beforeHelp (helpSurface args) of
+    Nothing => Nothing
+    Just tokens =>
+      case matchCommandIn depth tokens cmds of
+        Just (Pair c _) => Just c.cmdPath
+        Nothing => Just []
+
+-- | 某命令路径的帮助正文；`delegated` 决定 flag 正文由谁提供。
+export helpForPathIn : List Cmd -> (Cmd -> String) -> List String -> Maybe String
+helpForPathIn cmds delegated path =
+  case findCmdIn path cmds of
+    Nothing => Nothing
+    Just c => Just (if c.cmdDelegated then delegated c else commandHelp cmds c)
+
+-- | 某个命令路径的用法行（`Nothing` = 未登记）。
+export synopsisIn : List Cmd -> List String -> Maybe String
+synopsisIn cmds path =
+  case findCmdIn path cmds of
+    Nothing => Nothing
+    Just c => Just c.cmdSynopsis
+
+-- | 内部：帮助扫描的可见区间——`--` 之前的部分。
+helpSurface : List String -> List String
+helpSurface [] = []
+helpSurface ("--" :: rest) = []
+helpSurface (arg :: rest) = (::) arg (helpSurface rest)
+
+-- | 内部：帮助旗标之前的参数（保持顺序）；没有帮助旗标给 `Nothing`。
+beforeHelp : List String -> Maybe (List String)
+beforeHelp [] = Nothing
+beforeHelp ("-h" :: _) = Just []
+beforeHelp ("--help" :: _) = Just []
+beforeHelp (arg :: rest) =
+  case beforeHelp rest of
+    Nothing => Nothing
+    Just prior => Just (arg :: prior)
 
 -- | 内部：路径的第一段。
 headName : Cmd -> String
@@ -48,34 +84,12 @@ renderSections curTitle (c :: rest) =
 rowText : Cmd -> String
 rowText c = "  ${padRight 20 (join " " c.cmdPath)} ${c.cmdSummary}\n"
 
--- | 某个命令路径的帮助正文；路径不在表里给 `Nothing`。
-export helpForPath : List String -> Maybe String
-helpForPath path =
-  case findCmd path of
-    Nothing => Nothing
-    Just c => Just (if c.cmdDelegated then delegatedHelp c else commandHelp c)
-
--- | 某个命令路径的用法行（`Nothing` = 未登记）。
-export synopsisOf : List String -> Maybe String
-synopsisOf path =
-  case findCmd path of
-    Nothing => Nothing
-    Just c => Just c.cmdSynopsis
-
--- | 内部：编译器命令的帮助——转发编译器用法文本（flag 真源在编译器包里）。
-delegatedHelp : Cmd -> String
-delegatedHelp c =
-  "${c.cmdSynopsis}\n\n${c.cmdSummary}。flag 由编译器实现解析：\n\nusage:\n${compilerUsageLines "vuna"}"
-
 -- | 内部：单条命令（或分支）的帮助正文。
-commandHelp : Cmd -> String
-commandHelp c =
+commandHelp : List Cmd -> Cmd -> String
+commandHelp cmds c =
   "${join " " c.cmdPath} — ${c.cmdSummary}\n\nusage:\n  ${c.cmdSynopsis}\n"
-    ++ renderChildren (childrenOf c.cmdPath) ++ renderFlags c.cmdFlags ++ renderNotes c.cmdNotes
-
--- | 内部：`commands` 里的直接子命令。
-childrenOf : List String -> List Cmd
-childrenOf path = childrenIn path commands
+    ++ renderChildren (childrenIn c.cmdPath cmds)
+    ++ renderFlags c.cmdFlags ++ renderNotes c.cmdNotes
 
 -- | 内部：`childrenOf` 的线性扫描。
 childrenIn : List String -> List Cmd -> List Cmd

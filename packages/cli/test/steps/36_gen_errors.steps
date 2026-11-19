@@ -2,7 +2,7 @@
 #     沙箱里源码树只读，gen-errors 写 ROOT/docs/.generated/——用 tmp 根：软链 compiler +
 #     复制 Rules（readDir 跟随软链）。幂等改为两个独立根**并发生成**后逐字节比较：
 #     同输入同输出；墙钟从两次串行降到一次。
-run: sh -c 'for n in 1 2; do root="$TMPDIR/errroot$n"; mkdir -p "$root/lib/Vuna/Lint" "$root/docs"; ln -s "$VUNA_SUITE_ROOT/packages/compiler" "$root/compiler"; cp $VUNA_SUITE_ROOT/packages/cli/lib/Vuna/Lint/Rules.vuna "$root/lib/Vuna/Lint/Rules.vuna"; done'
+run: sh -c 'for n in 1 2; do root="$TMPDIR/errroot$n"; mkdir -p "$root/lib/Vuna/Lint" "$root/docs"; ln -s "$VUNA_SUITE_ROOT/packages/compiler" "$root/compiler"; cp $VUNA_SUITE_ROOT/packages/toolchain/lib/Vuna/Lint/Rules.vuna "$root/lib/Vuna/Lint/Rules.vuna"; done'
 run: sh -c '"$VUNA" dev errors gen "$TMPDIR/errroot1" >/dev/null 2>&1 & p1=$!; "$VUNA" dev errors gen "$TMPDIR/errroot2" >/dev/null 2>&1 & p2=$!; wait "$p1"; a=$?; wait "$p2"; b=$?; [ "$a" -eq 0 ] && [ "$b" -eq 0 ]'
 exit: 0
 file-contains: $TMPDIR/errroot1/docs/.generated/errors.md ## 类型检查 / 精化（TC_）

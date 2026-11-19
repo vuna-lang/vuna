@@ -1,0 +1,35 @@
+-- | vuna-toolchain：产品工具链插件入口（`vuna <cmd>` 由入口进程发现并转交）。
+--
+-- 注册的命令面见 `Vuna.Cli.Spec`，接线见 `Vuna.Cli.Registry`；`--vuna-describe [FILE]`
+-- 输出 describe 协议 v1 的命令表，供入口收集。
+--
+-- 工具链自采样只在显式设置 `VUNA_OBS_SAMPLE` 时启用（`vuna dev obs run --sample ...` 会设置它）。
+import Vuna.Cli.Registry
+import Base.Data.Obs as Obs
+import Base.Effect.Types as EffTypes
+import Base.Effect.Args as EffArgs
+import Base.Effect.Exit as EffExit
+import Base.Effect.Clock as EffClock
+import Base.Effect.Console as EffConsole
+import Base.Effect.Env as EffEnv
+import Base.Effect.Fs as EffFs
+import Base.Effect.Net as EffNet
+import Base.Effect.Process as EffProcess
+import Base.Effect.Stdin as EffStdin
+
+-- | 内部：环境里 `VUNA_OBS_SAMPLE` 非空才返回 True（空串与未设置都算关闭）。
+sampleWanted : Member nEnv EnvOp r => Eff r Bool
+sampleWanted =
+  do
+    mode <- envGetEnv "VUNA_OBS_SAMPLE"
+    pure (if mode == "" then False else True)
+
+-- | 进程入口：按需启动采样，读 argv 交给插件主体，最后以它的返回码 `exitWith` 退出。
+main : Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
+main =
+  do
+    sample <- sampleWanted
+    _ <- if sample then pure (obsSampleStart "" 0) else pure 0
+    code <- Vuna.Cli.Registry.runPlugin
+    _ <- if sample then pure (obsSampleStop 0) else pure 0
+    exitWith code

@@ -5,12 +5,18 @@
 -- 分组命令，漏接线会红。
 module Vuna.Cli.Registry where
 
+import Vuna.Cli.Help
 import Vuna.Cli.Dev
 import Vuna.Cli.Err
 import Vuna.Cli.Fmt
 import Vuna.Cli.Index
 import Vuna.Cli.Repl
+import Vuna.Cli.Spec
 import Vuna.Cli.Test
+import Vuna.Plugin.Command
+import Vuna.Plugin.Describe
+import Vuna.Plugin.Help
+import Vuna.Plugin.Suggest
 import Vuna.Add
 import Vuna.Clean
 import Vuna.Doc
@@ -63,6 +69,69 @@ handlers =
     Handler ["dev"] (\rest => devArgs rest)
   ]
 
+-- | 插件入口：读 argv，处理 describe / help，其余交给接线表。
+export runPlugin : Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
+runPlugin =
+  do
+    args <- argsGetArgs
+    runArgs args
+
+-- | 按 argv 执行一条命令；`--vuna-describe [FILE]` 与 `--help` 优先。
+export runArgs : List String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
+runArgs raw = runArgsClean (withoutPerfFlag raw)
+
+-- | 内部：`runArgs` 的主体（已去掉隐藏旗标）。
+runArgsClean : List String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
+runArgsClean args =
+  case args of
+    ["--vuna-describe"] => printText (Describe.render "toolchain" commands)
+    "--vuna-describe" :: file :: more => writeDescribe file
+    _ =>
+      case helpPathIn 3 commands args of
+        Just path => printHelp path
+        Nothing => dispatch args
+
+-- | 内部：把命令表写到 `file`（入口据此收集插件的命令面）。
+writeDescribe : String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
+writeDescribe file =
+  do
+    _ <- fsWriteFileAtomic file (Describe.render "toolchain" commands)
+    pure 0
+
+-- | 内部：打印某路径的帮助；未登记给未知命令。
+printHelp : List String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
+printHelp path =
+  case helpForPath path of
+    Just text => printText text
+    Nothing => printText (unknownCommandText (join " " path))
+
+-- | 内部：分派——查接线表，未知命令给建议。
+dispatch : List String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
+dispatch args =
+  case args of
+    [] =>
+      do
+        _ <- consolePrint overviewText
+        pure 2
+    arg :: _ =>
+      case matchHandler args of
+        Just (Pair h rest) => h.handlerRun rest
+        Nothing => printText (unknownCommandText arg)
+
+-- | 内部：打印文本并返回 0。
+printText : String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
+printText text =
+  do
+    _ <- consolePrint text
+    pure 0
+
+-- | 内部：未知命令文案（附最近候选）。
+unknownCommandText : String -> String
+unknownCommandText arg =
+  case suggestOne (topLevelNamesOf commands) arg of
+    Just guess => "error: unknown command `${arg}`; did you mean `${guess}`?\nrun `vuna help`\n"
+    Nothing => "error: unknown command `${arg}`\nrun `vuna help`\n"
+
 -- | 按最长前缀匹配一条命令（最多 3 段），返回实现与剩余参数。
 export matchHandler : List String -> Maybe (Pair Handler (List String))
 matchHandler args = matchDepth 3 args
@@ -107,3 +176,9 @@ storeArgs ("gc" :: more) = Vuna.Clean.runStoreGc more
 storeArgs ("clean" :: more) = Vuna.Clean.runClean more
 storeArgs [] = usageErrorFor ["store"]
 storeArgs (bad :: _) = unknownSubcommand ["store"] bad ["gc", "clean"]
+
+-- | 内部：去掉隐藏的性能旗标（runtime 从原始 argv 读取，命令解析要忽略）。
+withoutPerfFlag : List String -> List String
+withoutPerfFlag [] = []
+withoutPerfFlag (a :: rest) =
+  if a == "--debug-perf" then withoutPerfFlag rest else a :: withoutPerfFlag rest
