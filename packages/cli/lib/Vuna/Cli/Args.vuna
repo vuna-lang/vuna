@@ -10,9 +10,8 @@
 -- 目录创建显式在 `Eff r` 里（错误仍用 `Check` 携带）；纯 flag 解析 API 保持纯函数。
 module Vuna.Cli.Args where
 
--- | 参数说明表与解析结果由插件协议包提供。
-export import Vuna.Plugin.Args (Parsed(..), flagSet, flagValue, flagValues, argErrText)
-export import Vuna.Plugin.Command (ArgSpec(..), specName)
+import Vuna.Plugin.Args
+import Vuna.Plugin.Command
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Driver.CompilerCli
 import Base.Effect.Fs as EffFs
@@ -23,14 +22,14 @@ import Base.Effect.Process as EffProcess
 -- 的参数。
 export parseToolArgs : String -> List ArgSpec -> List String -> Check Parsed
 parseToolArgs cmd specs args =
-  case Vuna.Plugin.Args.parseToolArgs cmd specs args of
+  case Vuna.Plugin.Args.parseToolArgsOut cmd specs args of
     POk parsed => OkC parsed
     PErr e => err (Vuna.Plugin.Args.argErrText cmd e)
 
 -- | 与 [parseToolArgs] 相同，但对未知 flag 追加「最近候选」建议与已删提示。
 export parseCmdArgsOf : String -> List ArgSpec -> List String -> Check Parsed
 parseCmdArgsOf cmd specs args =
-  case Vuna.Plugin.Args.parseCmdArgsOf cmd specs args of
+  case Vuna.Plugin.Args.parseCmdArgsOut cmd specs args of
     POk parsed => OkC parsed
     PErr e => err (Vuna.Plugin.Args.argErrTextHinted removedHintFor cmd specs e)
 

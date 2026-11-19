@@ -19,6 +19,8 @@
 module Vuna.Clean where
 
 import Vuna.Cli.Args
+import Vuna.Plugin.Command
+import Vuna.Plugin.Args
 import Vuna.Cli.Spec
 import Base.Data.Maybe as Maybe
 import Vuna.Compiler.Base.Common

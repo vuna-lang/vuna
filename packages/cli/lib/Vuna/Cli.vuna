@@ -15,6 +15,7 @@ import Vuna.Cli.Err
 import Vuna.Cli.Help
 import Vuna.Cli.Registry
 import Vuna.Cli.Spec
+import Vuna.Plugin.Command
 import Vuna.Plugin.Describe
 import Vuna.Cli.Suggest
 import Vuna.Compiler.Base.Common
@@ -122,7 +123,8 @@ dispatch args =
         Nothing =>
           case removedHint arg of
             Just hint => removedCommand arg hint
-            Nothing => if startsWith "-" arg then runCompilerCliFor "vuna" args else unknownCommand arg
+            Nothing =>
+              if startsWith "-" arg then runCompilerCliFor "vuna" args else unknownCommand arg
 
 -- | 内部：`vuna help <command>...`——解析成已登记路径后打印。
 helpCommand : Member nConsole ConsoleOp r => List String -> Eff r Int

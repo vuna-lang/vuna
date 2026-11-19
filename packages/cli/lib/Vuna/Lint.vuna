@@ -23,6 +23,8 @@ import Vuna.Compiler.Base.Hash
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Packages.Pkg
 import Vuna.Cli.Args
+import Vuna.Plugin.Command
+import Vuna.Plugin.Args
 import Vuna.Cli.Spec
 import Vuna.Files
 import Vuna.FixityEnv

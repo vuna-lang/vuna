@@ -33,6 +33,8 @@
 module Vuna.Repl where
 
 import Vuna.Cli.Args
+import Vuna.Plugin.Command
+import Vuna.Plugin.Args
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Driver.Compile
 import Vuna.Compiler.Driver.Dt

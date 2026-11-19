@@ -10,6 +10,8 @@
 module Vuna.GenErrors where
 
 import Vuna.Cli.Args
+import Vuna.Plugin.Command
+import Vuna.Plugin.Args
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Base.Diagnostics
 import Vuna.Compiler.Base.Diagnostics.Rn

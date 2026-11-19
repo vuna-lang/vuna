@@ -24,6 +24,8 @@ import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Packages.Pkg
 import Vuna.Compiler.Driver.CompilerCli
 import Vuna.Cli.Args
+import Vuna.Plugin.Command
+import Vuna.Plugin.Args
 import Vuna.Cli.Spec
 import Vuna.Files
 import Base.Effect.Console as EffConsole

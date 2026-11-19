@@ -7,6 +7,8 @@
 module Vuna.Cli.Dev where
 
 import Vuna.Cli.Args
+import Vuna.Plugin.Command
+import Vuna.Plugin.Args
 import Vuna.Cli.Err
 import Vuna.Cli.Spec
 import Vuna.Cli.Suite

@@ -14,6 +14,8 @@
 module Vuna.Obs where
 
 import Vuna.Cli.Args
+import Vuna.Plugin.Command
+import Vuna.Plugin.Args
 import Vuna.Cli.Spec
 import Vuna.Compiler.Base.Common
 import Vuna.Json

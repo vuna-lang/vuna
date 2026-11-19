@@ -6,6 +6,8 @@
 module Vuna.Cli.Help where
 
 import Vuna.Cli.Args
+import Vuna.Plugin.Command
+import Vuna.Plugin.Args
 import Vuna.Cli.Spec
 import Vuna.Compiler.Driver.CompilerCli
 import Vuna.Compiler.Base.Common

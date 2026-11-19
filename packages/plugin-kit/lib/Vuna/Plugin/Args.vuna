@@ -68,12 +68,12 @@ hasValue name values =
     Nothing => False
 
 -- | 纯解析入口：不给已删 flag 提示。
-export parseToolArgs : String -> List ArgSpec -> List String -> ParseOut
-parseToolArgs cmd specs args = parseGo False specs args [] [] []
+export parseToolArgsOut : String -> List ArgSpec -> List String -> ParseOut
+parseToolArgsOut cmd specs args = parseGo False specs args [] [] []
 
 -- | 纯解析入口：允许表本身就是未知 flag 的候选建议来源。
-export parseCmdArgsOf : String -> List ArgSpec -> List String -> ParseOut
-parseCmdArgsOf cmd specs args = parseGo False specs args [] [] []
+export parseCmdArgsOut : String -> List ArgSpec -> List String -> ParseOut
+parseCmdArgsOut cmd specs args = parseGo False specs args [] [] []
 
 -- | 内部：在允许表里按名查找 flag 形态；不在表里即未允许。
 specOf : String -> List ArgSpec -> Maybe ArgSpec

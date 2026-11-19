@@ -7,6 +7,8 @@
 module Vuna.Explain where
 
 import Vuna.Cli.Args
+import Vuna.Plugin.Command
+import Vuna.Plugin.Args
 import Vuna.Cli.Spec
 import Base.Data.List as List
 import Base.Data.String as String

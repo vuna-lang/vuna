@@ -13,6 +13,8 @@ import Base.Data.String as String
 import Base.Effect.Types as EffTypes
 import Base.Effect.Fs as EffFs
 import Vuna.Cli.Args
+import Vuna.Plugin.Command
+import Vuna.Plugin.Args
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Toml
 import Vuna.Compiler.Frontend.Packages.Pkg

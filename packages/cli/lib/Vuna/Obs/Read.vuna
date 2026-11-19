@@ -16,6 +16,8 @@ import Base.Data.Maybe as Maybe
 import Base.Data.Pair as Pair
 import Base.Data.String as String
 import Vuna.Cli.Args
+import Vuna.Plugin.Command
+import Vuna.Plugin.Args
 import Vuna.Compiler.Base.Common
 import Vuna.Json
 import Vuna.Obs.Types

@@ -20,6 +20,8 @@ import Vuna.Compiler.Base.Diagnostics.Pkg
 import Vuna.Compiler.Frontend.Manifest
 import Vuna.Compiler.Frontend.Toml
 import Vuna.Cli.Args
+import Vuna.Plugin.Command
+import Vuna.Plugin.Args
 import Vuna.Compiler.Frontend.Packages.Source
 import Vuna.Compiler.Base.Store
 import Base.Data.List as List

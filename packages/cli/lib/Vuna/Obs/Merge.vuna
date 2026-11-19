@@ -29,6 +29,8 @@ import Base.Data.Pair as Pair
 import Base.Data.Sort as Sort
 import Base.Data.String as String
 import Vuna.Cli.Args
+import Vuna.Plugin.Command
+import Vuna.Plugin.Args
 import Vuna.Cli.Spec
 import Vuna.Compiler.Base.Common
 import Vuna.Json

@@ -11,6 +11,8 @@
 module Vuna.Fetch where
 
 import Vuna.Cli.Args
+import Vuna.Plugin.Command
+import Vuna.Plugin.Args
 import Vuna.Cli.Spec
 import Vuna.Compiler.Loader.Addr
 import Vuna.Compiler.Frontend.Canonical.Pkg
