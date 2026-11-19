@@ -669,6 +669,8 @@ loadModule fuel roots importerPkg modules stack imp =
                 let
                   path = firstOf found
                   root = secondOf found
+                  -- `compiler/steps_native/44f_incremental` 用这行断言「只 parse 脏模块」。
+                  _ = dbg! "parse-module=${name}"
                 in do
                   text <- fsReadFile path
                   parsed <- parseFileWithPath path text
