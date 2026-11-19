@@ -100,3 +100,14 @@ exit: 0
 run: sh -c '"$VUNA" dev ir dump --after ocaml $VUNA_SUITE_ROOT/packages/cli/test/corpus/packages/m34_summary/root 2>/dev/null | head -1 | grep -q "^type t_"'
 exit: 0
 
+# IR 节点类型填充：签名完全可命名的定义把类型带到 λ binder、case（scrutinee / 分支
+# binder / 结果）与部分应用上。
+run: sh -c '"$VUNA" dev ir dump $VUNA_SUITE_ROOT/packages/cli/test/corpus/packages/ir_types/root 2>/dev/null | grep -qF "lam [x:Int y:Int]"'
+exit: 0
+run: sh -c '"$VUNA" dev ir dump $VUNA_SUITE_ROOT/packages/cli/test/corpus/packages/ir_types/root 2>/dev/null | grep -qF "case Base.Data.List.List Int->Int"'
+exit: 0
+run: sh -c '"$VUNA" dev ir dump $VUNA_SUITE_ROOT/packages/cli/test/corpus/packages/ir_types/root 2>/dev/null | grep -qE "\:\:\[a[0-9]+:Int a[0-9]+:Base.Data.List.List Int\]"'
+exit: 0
+run: sh -c '"$VUNA" dev ir dump $VUNA_SUITE_ROOT/packages/cli/test/corpus/packages/ir_types/root 2>/dev/null | grep -qF "(app (Base.Data.List.List Int -> Base.Data.List.List Int)->Base.Data.List.List Int g:Base.Data.List.map"'
+exit: 0
+

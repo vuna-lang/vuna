@@ -40,7 +40,7 @@
 
 | ID | 仍未成立的事实 | 证据 | 归属 |
 | --- | --- | --- | --- |
-| D109 | **擦除后 IR 的类型信息是选择性填充的**：λ binder、`IrLam` 结果、`IrDef` 签名、`IrCast` 两端、`IrCtor` 类型实参、`IrApp` 函数/结果、`IrCase` scrutinee/结果、分支 binder、record / projection / update 结果都有类型槽；但 Lowering 只填可解析的部分，不可命名/未解析处保持 `Nothing` 或落 `IrTyOpaque`，也没有 IR 级类型检查器（非目标是不做第二套精化器） | `Ir/Model.vuna`（节点类型槽）、`Ir/Validate.vuna`（签名、注解、节点类型 arity、构造子值实参个数）、`Lowering/Ty.vuna`（`renderPiTy` / `annotTyOf` / `annotCalleeTy` / `ctorKeptFieldTys`）；[ir.md](ir.md)「已知边界」 | 后续（提高填充覆盖率；结构校验按需补充） |
+| D109 | **擦除后 IR 的类型信息是选择性填充的**：λ binder、`IrLam` 结果、`IrDef` 签名、`IrCast` 两端、`IrCtor` 类型实参、`IrApp` 函数/结果、`IrCase` scrutinee/结果、分支 binder、record / projection / update 结果都有类型槽；顶层 λ 链在签名完全可命名时按签名回填、case 结果经 `irResultTyOf` 在节点间传递、全局定义的部分应用按擦除实参实例化，但没有 IR 级类型检查器，内建 `IrRtApp`、`IrLam` 结果与不可命名字段仍保持 `Nothing` / `IrTyOpaque`（非目标是不做第二套精化器） | `Ir/Model.vuna`（节点类型槽、`irResultTyOf`）、`Ir/Validate.vuna`（签名、注解、节点类型 arity、构造子值实参个数）、`Lowering/Ty.vuna`（`renderPiTy` / `annotTyOf` / `annotCalleeTy` / `ctorKeptFieldTys`）、`Lowering/Program.vuna`（签名回填、分支 binder 回填、case 结果传递）；[ir.md](ir.md)「已知边界」 | 后续（内建与不可命名字段的类型；结构校验按需补充） |
 | D111 | **ANF 不是幂等规范化**：二次 ANF 会给已经 `let` 绑定的非简单右值再插一层 `let`（`__anf<n>` 编号递增），结构因此变化；wasm 的 CPS 路径恰好依赖「二次 ANF 从更高编号开始」来避免撞名，所以幂等门禁不成立 | `Ir/Anf.vuna`（`anfProgramDefs` / `next` 计数）；复现：`vuna dev ir dump --after anf` 与 `--after anf2` 的首个定义不同 | 后续（若要幂等：已 ANF 的右值不再 hoist，或把二次 ANF 换成显式命名空间） |
 
 ## 工具、构建与验证

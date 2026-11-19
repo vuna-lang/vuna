@@ -1,0 +1,5 @@
+[package]
+name = "ir-types-root"
+
+[dependencies]
+vuna-base = "../../../../../../../packages/base"

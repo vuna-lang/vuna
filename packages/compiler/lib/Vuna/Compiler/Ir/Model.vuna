@@ -198,6 +198,60 @@ export data Ir(..) : Type where
   -- | 线性 bind 的装箱实现：族名、构造子名、`EffUnit` 运行时类型。
   IrEffBind : String -> String -> IrTy -> Ir
 
+-- | IR 节点的运行时结果类型：只读节点自带的类型槽，未知返回 `Nothing`。
+-- 不重新推导类型，因此不会引入第二套精化；只把 Lowering 已经决定的类型槽
+-- 汇总成「这个表达式产出什么运行时类型」。
+export irResultTyOf : Ir -> Maybe IrTy
+irResultTyOf ir = irResultTyFuel 256 ir
+
+irResultTyFuel : Int -> Ir -> Maybe IrTy
+irResultTyFuel fuel ir =
+  if fuel <= 0 then
+    Nothing
+  else
+    case ir of
+      IrVar b => if b.irBinderErased then Nothing else b.irBinderTy
+      IrRecord _ resTy _ => resTy
+      IrProj _ _ _ resTy => resTy
+      IrRecUpd _ _ _ resTy => resTy
+      IrCast _ to _ => to
+      IrInt _ => Just IrTyInt
+      IrStr _ => Just IrTyStr
+      IrBool _ => Just IrTyBool
+      IrFloatLit _ => Just IrTyFloat
+      IrLet _ _ body => irResultTyFuel (fuel - 1) body
+      IrLam bs bodyTy _ => irLamTyFuel (fuel - 1) bodyTy bs
+      IrApp appTy _ _ =>
+        case appTy of
+          Just p => Just (secondOf p)
+          Nothing => Nothing
+      IrIf _ th el =>
+        case irResultTyFuel (fuel - 1) th of
+          Just ty => Just ty
+          Nothing => irResultTyFuel (fuel - 1) el
+      IrCase _ resultTy _ _ => resultTy
+      IrConcatMany _ => Just IrTyStr
+      _ => Nothing
+
+-- lambda 链的运行时函数类型：只含非擦除 binder，binder 类型必须全部已知。
+irLamTyFuel : Int -> Maybe IrTy -> List IrBinder -> Maybe IrTy
+irLamTyFuel fuel bodyTy bs =
+  if fuel <= 0 then
+    Nothing
+  else
+    case bs of
+      [] => bodyTy
+      b :: rest =>
+        case irLamTyFuel (fuel - 1) bodyTy rest of
+          Nothing => Nothing
+          Just inner =>
+            if b.irBinderErased then
+              Just inner
+            else
+              case b.irBinderTy of
+                Just ty => Just (IrTyFun ty inner)
+                Nothing => Nothing
+
 -- | `Eff` 的运行时类型名与构造子名：宿主效应直连时后端构造纯动作（`MkEff (\\u => r)`）用。
 export irEffTypeName : String
 irEffTypeName = "Base.Effect.Core.Eff"

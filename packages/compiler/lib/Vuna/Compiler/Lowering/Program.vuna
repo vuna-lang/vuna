@@ -217,24 +217,75 @@ lowerLamFuel fuel env st binders name rig slot sp body =
     icFuel "ir-lower"
   else
     case collectLamChainIn (TLam name rig slot sp body) of
-      LamChainIn params inner resultTy =>
-        let
-          bs = bindersOfParams env binders params
-          envB = append (reverse bs) binders
-          resultIr =
-            case resultTy of
-              Nothing => Nothing
-              Just t =>
-                case annotTyOf env envB t of
-                  Just ty => Just ty
-                  -- 族实参不可命名（类型变量、擦除占位）时仍要留下「结果是 Eff」这一位：
-                  -- 机器化 CPS 只按它判定 `a -> Eff r b`（见 Ir.Cps.isEffResultTy）。
-                  Nothing => effResultTyOf t
-        in Vuna.Compiler.Base.Common.bind (lowerTermFuel (fuel - 1) env st envB inner) (
-            \p =>
-              case p of
-                Pair b st2 => OkC (Pair (IrLam bs resultIr b) st2)
-          )
+      LamChainIn params inner resultTy => lowerLamChainFuel fuel env st binders [] params inner resultTy
+
+-- λ 链的公共部分：binder 表 + 结果类型 + 体。`hints` 是外层签名给的 runtime 域类型
+-- （按非擦除参数逐位对齐；为空表示全部走 Core 侧的注解）。
+lowerLamChainFuel : Int -> LwEnv -> LwSt -> List IrBinder -> List IrTy -> List LamParam -> Term -> Maybe Term -> Check (Pair Ir LwSt)
+lowerLamChainFuel fuel env st binders hints params inner resultTy =
+  if fuel <= 0 then
+    icFuel "ir-lower"
+  else
+    let
+      bs = bindersOfParamsHint env binders hints params
+      envB = append (reverse bs) binders
+      resultIr =
+        case resultTy of
+          Nothing => Nothing
+          Just t =>
+            case annotTyOf env envB t of
+              Just ty => Just ty
+              -- 族实参不可命名（类型变量、擦除占位）时仍要留下「结果是 Eff」这一位：
+              -- 机器化 CPS 只按它判定 `a -> Eff r b`（见 Ir.Cps.isEffResultTy）。
+              Nothing => effResultTyOf t
+    in Vuna.Compiler.Base.Common.bind (lowerTermFuel (fuel - 1) env st envB inner) (
+        \p =>
+          case p of
+            Pair b st2 => OkC (Pair (IrLam bs resultIr b) st2)
+      )
+
+-- 顶层定义体：签名箭头与 λ 链的运行时 binder 逐位对应时用签名回填 binder 类型
+-- （其余情形按 Core 侧注解 lowering）。
+lowerDefBodyTerm : LwEnv -> LwSt -> Term -> Maybe IrTy -> Check (Pair Ir LwSt)
+lowerDefBodyTerm env st body defTy =
+  case collectLamChainIn body of
+    LamChainIn [] _ _ => lowerTerm env st [] body
+    LamChainIn params inner resultTy =>
+      case defTy of
+        Nothing => lowerTerm env st [] body
+        Just sigTy =>
+          case sigArrowTys 256 sigTy of
+            Nothing => lowerTerm env st [] body
+            Just arrows =>
+              if listLength arrows == countRuntimeParams params then
+                lowerLamChainFuel
+                  (lowerBudgetFor (termSize body))
+                  env
+                  st
+                  []
+                  arrows
+                  params
+                  inner
+                  resultTy
+              else
+                lowerTerm env st [] body
+
+countRuntimeParams : List LamParam -> Int
+countRuntimeParams [] = 0
+countRuntimeParams (p :: rest) =
+  if rigIsErased p.lamParamRig then countRuntimeParams rest else 1 + countRuntimeParams rest
+
+sigArrowTys : Int -> IrTy -> Maybe (List IrTy)
+sigArrowTys fuel ty =
+  if fuel <= 0 then
+    Nothing
+  else
+    case ty of
+      IrTyFun dom cod =>
+        case sigArrowTys (fuel - 1) cod of
+          Nothing => Nothing
+          Just rest => Just (dom :: rest)
+      _ => Just []
 
 -- | 结果类型不可命名时的族身份：只认 `Eff`（实体是数据族，运行时类型实参无用途）。
 effResultTyOf : Term -> Maybe IrTy
@@ -268,6 +319,51 @@ binderOfParam env outer p =
         case annotTyOf env outer ty of
           Nothing => mkIrBinder p.lamParamName
           Just irTy => mkIrBinderTyped p.lamParamName irTy
+
+-- 带外层签名提示的 binder 表：非擦除参数按顺序消费一个提示类型。
+-- 提示类型必须完全可命名（不含 `IrTyOpaque` / 类型变量槽），否则不写注解——
+-- OCaml 侧的 lambda 参数注解会固定多态性，不透明类型会破坏 `List (a -> b)` 这类用法。
+bindersOfParamsHint : LwEnv -> List IrBinder -> List IrTy -> List LamParam -> List IrBinder
+bindersOfParamsHint env outer _ [] = []
+bindersOfParamsHint env outer hints (p :: rest) =
+  let
+    erased = rigIsErased p.lamParamRig
+    hint =
+      if erased then
+        Nothing
+      else
+        case hints of
+          h :: _ => if irTyClosedForAnnot h then Just h else Nothing
+          [] => Nothing
+    restHints =
+      if erased then
+        hints
+      else
+        case hints of
+          _ :: hs => hs
+          [] => []
+    b =
+      case hint of
+        Just ty => mkIrBinderTyped p.lamParamName ty
+        Nothing => binderOfParam env outer p
+  in b :: bindersOfParamsHint env (b :: outer) restHints rest
+
+-- 注解安全的运行时类型：整条类型都可命名（无 `IrTyOpaque` / 类型变量槽）。
+irTyClosedForAnnot : IrTy -> Bool
+irTyClosedForAnnot (IrTyVar _) = False
+irTyClosedForAnnot IrTyInt = True
+irTyClosedForAnnot IrTyStr = True
+irTyClosedForAnnot IrTyBool = True
+irTyClosedForAnnot IrTyFloat = True
+irTyClosedForAnnot IrTyOpaque = False
+irTyClosedForAnnot (IrTyArray a) = irTyClosedForAnnot a
+irTyClosedForAnnot (IrTyRef a) = irTyClosedForAnnot a
+irTyClosedForAnnot (IrTyData _ args) = allClosedIrTys args
+irTyClosedForAnnot (IrTyFun a b) = if irTyClosedForAnnot a then irTyClosedForAnnot b else False
+
+allClosedIrTys : List IrTy -> Bool
+allClosedIrTys [] = True
+allClosedIrTys (t :: rest) = if irTyClosedForAnnot t then allClosedIrTys rest else False
 
 -- 应用：先按构造子折叠（多维变体构造子是 tupled 的），再试内建内联 / `++` 展平 / 普通应用。
 lowerAppFuel : Int -> LwEnv -> LwSt -> List IrBinder -> Term -> Term -> Rig -> Check (Pair Ir LwSt)
@@ -640,6 +736,40 @@ typedPats (t :: ts) (b :: rest) = binderWithTy (Just t) b :: typedPats ts rest
 typedPatsAll : Maybe IrTy -> List IrBinder -> List IrBinder
 typedPatsAll ty bs = map (\b => binderWithTy ty b) bs
 
+-- 把 pattern 上的类型回填到 binder 环境：分支体里的 `IrVar` 因此也带运行时类型
+-- （分支体 lower 时用的是 env 里的 binder 对象，与 pattern 是同一批名字）。
+armTyTblOf : List IrBinder -> List (Pair Int IrTy)
+armTyTblOf [] = []
+armTyTblOf (b :: rest) =
+  let
+    tail = armTyTblOf rest
+  in case b.irBinderName of
+    IrBArm n =>
+      case b.irBinderTy of
+        Just ty => Pair n ty :: tail
+        Nothing => tail
+    _ => tail
+
+retagArmBinder : List (Pair Int IrTy) -> IrBinder -> IrBinder
+retagArmBinder tbl b =
+  case b.irBinderName of
+    IrBArm n =>
+      case lookupArmTy n tbl of
+        Just ty => binderWithTy (Just ty) b
+        Nothing => b
+    _ => b
+
+lookupArmTy : Int -> List (Pair Int IrTy) -> Maybe IrTy
+lookupArmTy n [] = Nothing
+lookupArmTy n ((Pair k ty) :: rest) = if k == n then Just ty else lookupArmTy n rest
+
+retagArmEnv : List (Pair Int IrTy) -> List IrBinder -> List IrBinder
+retagArmEnv tbl [] = []
+retagArmEnv tbl (b :: rest) = retagArmBinder tbl b :: retagArmEnv tbl rest
+
+retagAltEnv : AltEnvIn -> List IrBinder -> AltEnvIn
+retagAltEnv (AltEnvIn e _ s) typed = AltEnvIn (retagArmEnv (armTyTblOf typed) e) typed s
+
 -- 分支体：把分支 binder 栈接在外层上面后 lower。
 lowerArmBodyFuel : Int -> LwEnv -> AltEnvIn -> Term -> Check (Pair Ir LwSt)
 lowerArmBodyFuel fuel env bound body = lowerTermFuel fuel env (aeStOf bound) (aeEnvOf bound) body
@@ -688,14 +818,24 @@ lowerUnboxedCaseFuel fuel env st outer scrut alt =
                                 \fieldTys =>
                                   let
                                     argTys = map (irTySubstVars (irTyDataArgsOf (annotTyOf env outer scrut))) fieldTys
-                                  in Vuna.Compiler.Base.Common.bind (lowerArmBodyFuel (fuel - 1) env bound (caseAltBody alt)) (
+                                    typed = typedPats argTys (aePatsOf bound)
+                                    bound2 = retagAltEnv bound typed
+                                  in Vuna.Compiler.Base.Common.bind (lowerArmBodyFuel (fuel - 1) env bound2 (caseAltBody alt)) (
                                       \q =>
                                         case q of
-                                          Pair bodyIr st2 => OkC (Pair (IrLet (typedPats argTys (aePatsOf bound)) scrutIr bodyIr) st2)
+                                          Pair bodyIr st2 => OkC (Pair (IrLet typed scrutIr bodyIr) st2)
                                     )
                               )
                         )
               )
+
+-- 分支体的结果类型：先读已降低节点的类型槽（嵌套 case / app / record 自带类型），
+-- 缺失时再回退到 Core 类型注解。
+armResultTyOf : LwEnv -> AltEnvIn -> Ir -> Term -> Maybe IrTy
+armResultTyOf env bound bodyIr coreBody =
+  case irResultTyOf bodyIr of
+    Just ty => Just ty
+    Nothing => annotTyOf env (aeEnvOf bound) coreBody
 
 -- 每个分支：catch-all → pattern 只有非擦除 binder；构造子 → 按形状绑定。
 lowerArmFuel : Int -> LwEnv -> Maybe IrTy -> LwSt -> List IrBinder -> CaseAlt -> Check (Pair IrAlt (Pair (Maybe IrTy) LwSt))
@@ -705,10 +845,12 @@ lowerArmFuel fuel env scrutTy st outer alt =
   else if caseAltName alt == "" then
     let
       bound = altEnvIn st outer (binderPairs (caseAltBinders alt))
-    in Vuna.Compiler.Base.Common.bind (lowerArmBodyFuel (fuel - 1) env bound (caseAltBody alt)) (
+      typed = typedPatsAll scrutTy (aePatsOf bound)
+      bound2 = retagAltEnv bound typed
+    in Vuna.Compiler.Base.Common.bind (lowerArmBodyFuel (fuel - 1) env bound2 (caseAltBody alt)) (
         \p =>
           case p of
-            Pair bodyIr st2 => OkC (Pair (IrAlt Nothing (typedPatsAll scrutTy (aePatsOf bound)) bodyIr) (Pair (annotTyOf env (aeEnvOf bound) (caseAltBody alt)) st2))
+            Pair bodyIr st2 => OkC (Pair (IrAlt Nothing typed bodyIr) (Pair (armResultTyOf env bound2 bodyIr (caseAltBody alt)) st2))
       )
   else
     case HashMap.lookup (caseAltName alt) env.lwCtors of
@@ -720,10 +862,12 @@ lowerArmFuel fuel env scrutTy st outer alt =
                   \fieldTys =>
                     let
                       argTys = map (irTySubstVars (irTyDataArgsOf scrutTy)) fieldTys
-                    in Vuna.Compiler.Base.Common.bind (lowerArmBodyFuel (fuel - 1) env bound (caseAltBody alt)) (
+                      typed = typedPats argTys (aePatsOf bound)
+                      bound2 = retagAltEnv bound typed
+                    in Vuna.Compiler.Base.Common.bind (lowerArmBodyFuel (fuel - 1) env bound2 (caseAltBody alt)) (
                         \p =>
                           case p of
-                            Pair bodyIr st2 => OkC (Pair (IrAlt (Just (Pair family (caseAltName alt))) (typedPats argTys (aePatsOf bound)) bodyIr) (Pair (annotTyOf env (aeEnvOf bound) (caseAltBody alt)) st2))
+                            Pair bodyIr st2 => OkC (Pair (IrAlt (Just (Pair family (caseAltName alt))) typed bodyIr) (Pair (armResultTyOf env bound2 bodyIr (caseAltBody alt)) st2))
                       )
                 )
           )
@@ -793,10 +937,12 @@ lowerNatAltFuel fuel env st outer (Just alt) =
   else
     let
       bound = altEnvIn st outer (binderPairs (caseAltBinders alt))
-    in Vuna.Compiler.Base.Common.bind (lowerArmBodyFuel (fuel - 1) env bound (caseAltBody alt)) (
+      typed = typedPatsAll (Just IrTyInt) (aePatsOf bound)
+      bound2 = retagAltEnv bound typed
+    in Vuna.Compiler.Base.Common.bind (lowerArmBodyFuel (fuel - 1) env bound2 (caseAltBody alt)) (
         \p =>
           case p of
-            Pair bodyIr st2 => OkC (Pair (Just (IrAlt Nothing (typedPatsAll (Just IrTyInt) (aePatsOf bound)) bodyIr)) st2)
+            Pair bodyIr st2 => OkC (Pair (Just (IrAlt Nothing typed bodyIr)) st2)
       )
 
 lowerNatCaseFuel : Int -> LwEnv -> LwSt -> List IrBinder -> Term -> List CaseAlt -> Check (Pair Ir LwSt)
@@ -1003,12 +1149,12 @@ lowerDef env st d =
     Nothing =>
       case dtDefBody d of
         Just body =>
-          case lowerTerm env st [] body of
+          let
+            defTy = Just (renderPiTy [] env.lwTyParams env.lwDatas 0 (eval [] (dtDefType d)))
+          in case lowerDefBodyTerm env st body defTy of
             ErrC e => ErrC (withContext (dtDefSpan d) (dtDefName d) e)
             OkC (Pair bodyIr st2) =>
-              let
-                defTy = Just (renderPiTy [] env.lwTyParams env.lwDatas 0 (eval [] (dtDefType d)))
-              in OkC
+              OkC
                 (Pair (IrDef (dtDefName d) (runtimeArityIn body) (factsDepsOf env (dtDefName d)) defTy bodyIr (recursiveValueAllowedIn body) (initGuardOf env False (dtDefName d) body) (dtDefSpan d)) st2)
         Nothing =>
           ErrC

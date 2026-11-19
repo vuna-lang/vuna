@@ -231,10 +231,14 @@ binder 的**身份**在 Lowering 分配，前缀与编号渲染属后端：
   保持 `Nothing` 或落 `IrTyOpaque`，也没有 IR 级类型检查器。`IrCast` 位点仍靠 Lowering
   写对；结构化校验只查签名/注解/节点类型的形状、arity 与构造子实参数，不复刻精化器
   （见 [architecture-target.md](../architecture-target.md) 非目标）。
-- `IrApp` 的类型只在可解析出函数类型时填写（局部 binder、全局定义、部分应用）；
-  内建（`IrRtApp`）与嵌套部分应用可能保持 `Nothing`。`IrCase` 的结果与分支 binder 类型
-  同样受字段/类型实参可解析性限制。wasm / native 的 case 族优先用 `IrCase` 的 scrutinee
-  类型，缺失时回退到分支构造子名。
+- 填充顺序：顶层 λ 链在定义签名完全可命名（不含 `IrTyOpaque` / 类型变量槽）时按签名
+  逐位回填 binder 类型——**不透明类型不回填**，因为 OCaml 侧的 lambda 注解会固定多态性；
+  分支体先按构造子字段类型回填分支 binder，再 lower，case 结果依次取「已降低节点的类型槽
+  （`irResultTyOf`）→ Core 注解」，因此嵌套 case / `let` / `if` / 应用体的结果能连续传递。
+- `IrApp` 的类型在可解析出函数类型时填写：全局定义（含部分应用，擦除实参用来实例化定义
+  签名）、局部 binder 的 `IrTyFun` 链。内建（`IrRtApp`）保持 `Nothing`；`IrCase` 的
+  scrutinee/分支 binder 类型受字段/类型实参可解析性限制。wasm / native 的 case 族优先用
+  `IrCase` 的 scrutinee 类型，缺失时回退到分支构造子名。
 - CPS 的续延判定按 `IrLam` 结果类型（`Eff`）；handler clause 收集按 `IrDef` 签名
   （结果是 `Eff` 且参数是 `op -> k -> b` 形状），签名不可用时回退到 arity。
 - IR 没有 fuel：需要「结构上限」的地方改成按项规模派生（与 `Core.termSize` 同思路）。

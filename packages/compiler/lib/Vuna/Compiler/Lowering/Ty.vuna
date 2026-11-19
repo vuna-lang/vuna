@@ -302,17 +302,77 @@ annotHeadTy fuel env binders g args =
 
 -- | 应用头的运行时类型：局部变量/数据族仍走 `annotTyOf`；全局**函数**从定义表
 -- 取 `renderPiTy` 签名。只用于 `IrApp` 的节点类型，不参与 binder 注解。
+--
+-- 部分应用（`TApp` 脊）按已应用的实参剥 Pi：全局定义在剥的时候用项里的**擦除实参**
+-- （类型参数 / 证明）实例化闭包，因此 `map (add 1)` 得到 `List Int -> List Int` 而不是
+-- 不可命名的兜底；局部变量则从它自己的函数类型逐实参剥。
 export annotCalleeTy : LwEnv -> List IrBinder -> Term -> Maybe IrTy
 annotCalleeTy env binders t =
   case t of
-    TGlobal g =>
-      case findDtData g env.lwDatas of
-        Just _ => annotTyOf env binders t
-        Nothing =>
-          case HashMap.lookup g env.lwDefTbl of
-            Just d => Just (renderPiTy [] env.lwTyParams env.lwDatas 0 (eval [] (dtDefType d)))
-            Nothing => annotTyOf env binders t
+    TGlobal g => annotGlobalCalleeTy env binders g
+    TApp _ _ _ =>
+      case flattenAnnotAppRig t of
+        Pair (TGlobal g) args =>
+          case findDtData g env.lwDatas of
+            Just _ => annotTyOf env binders t
+            Nothing =>
+              case HashMap.lookup g env.lwDefTbl of
+                Just d => peelPiArgsTy 256 env (eval [] (dtDefType d)) args
+                Nothing => peelIrFuns (countRuntimeArgs args) (annotTyOf env binders (TGlobal g))
+        Pair head args => peelIrFuns (countRuntimeArgs args) (annotTyOf env binders head)
     _ => annotTyOf env binders t
+
+annotGlobalCalleeTy : LwEnv -> List IrBinder -> String -> Maybe IrTy
+annotGlobalCalleeTy env binders g =
+  case findDtData g env.lwDatas of
+    Just _ => annotTyOf env binders (TGlobal g)
+    Nothing =>
+      case HashMap.lookup g env.lwDefTbl of
+        Just d => Just (renderPiTy [] env.lwTyParams env.lwDatas 0 (eval [] (dtDefType d)))
+        Nothing => annotTyOf env binders (TGlobal g)
+
+-- 应用脊展平（保留每个实参的 rig；`TRecord` 等价于它的 `TGlobal` 应用脊）。
+flattenAnnotAppRig : Term -> Pair Term (List (Pair Term Rig))
+flattenAnnotAppRig t = flattenAnnotAppRigGo t []
+
+flattenAnnotAppRigGo : Term -> List (Pair Term Rig) -> Pair Term (List (Pair Term Rig))
+flattenAnnotAppRigGo (TApp f a rig) acc = flattenAnnotAppRigGo f (Pair a rig :: acc)
+flattenAnnotAppRigGo (TRecord name args) acc = Pair (TGlobal name) (append args acc)
+flattenAnnotAppRigGo t acc = Pair t acc
+
+countRuntimeArgs : List (Pair Term Rig) -> Int
+countRuntimeArgs [] = 0
+countRuntimeArgs ((Pair _ rig) :: rest) =
+  if rigIsErased rig then countRuntimeArgs rest else 1 + countRuntimeArgs rest
+
+peelIrFuns : Int -> Maybe IrTy -> Maybe IrTy
+peelIrFuns n Nothing = Nothing
+peelIrFuns n (Just ty) =
+  if n <= 0 then
+    Just ty
+  else
+    case ty of
+      IrTyFun _ cod => peelIrFuns (n - 1) (Just cod)
+      _ => Nothing
+
+-- 按定义签名逐个剥已应用的实参：擦除 binder 用项里的擦除实参实例化闭包，
+-- 其余 binder 只推进到后来的实参（结果类型不依赖运行时值本身）。
+peelPiArgsTy : Int -> LwEnv -> Value -> List (Pair Term Rig) -> Maybe IrTy
+peelPiArgsTy fuel env v args =
+  if fuel <= 0 then
+    Nothing
+  else
+    case v of
+      VPi name implicit rig dom clo =>
+        if rigIsErased rig then
+          case args of
+            (Pair arg arig) :: rest => if rigIsErased arig then peelPiArgsTy (fuel - 1) env (applyClosure clo (eval [] arg)) rest else peelPiArgsTy (fuel - 1) env (applyClosure clo (VNeutral (NVar name 0 []))) args
+            [] => Just (renderPiTy [] env.lwTyParams env.lwDatas 0 v)
+        else
+          case args of
+            (Pair _ _) :: rest => peelPiArgsTy (fuel - 1) env (applyClosure clo (VNeutral (NVar name 0 []))) rest
+            [] => Just (renderPiTy [] env.lwTyParams env.lwDatas 0 v)
+      _ => Just (renderPiTy [] env.lwTyParams env.lwDatas 0 v)
 
 -- 数据族的运行时类型实参：按族的**运行时参数槽**（`usedPats` 是族 telescope 的 level）
 -- 选实参，因此注解的实参个数与声明的类型参数个数逐位一致。
