@@ -312,7 +312,11 @@ iface 影子写 **~1.2 s**（compute 0.78 s + write 0.35 s，单遍 `iface-write
    `cg-erasure` ~0.10 s、逐单元 typedecls/genGroups ~0.5–1 s）。`groupRuntimeDefs` 已表化，
    `dtDefLocTable` 的右嵌套 `++` 已改 `strConcatMany`。
 5. **终止性 ~0.3 s（冷 build）**：`anyOwn` 的 O(n²) 已修；剩余是逐组 measure/SCT 与
-   usage/callGraph 的真实工作。
+   usage/callGraph 的真实工作。冷 `check packages/compiler` 的 `VUNA_OBS=1` 读数：
+   `vuna.term`（两处调用）共 ~0.92 s，其中 `vuna.term.sct` 52 次共 ~15 ms、单次最大
+   1.6 ms；SCT 规模上界：SCC ≤ 8 个函数、站点 ≤ 37、初始图 ≤ 19、闭包后图 ≤ 196/对、
+   闭包轮数 ≤ 3。512 图 / 240 轮的上限离触发很远，表结构重写的上限收益 ~15 ms，不做；
+   这条线的收益在判据精度（别名 / HOF / 投影），不在吞吐。
 6. **`genGroups`**：OCaml 文本生成，没有一眼可去的 O(n²)；codegen 并行的**逐单元可并
    部分只有 ~7–8%**，fork+序列化 DtProgram 的净收益 ~6–7%（不划算，不做；
    `build.sh` 的层内并行已覆盖链接侧）。

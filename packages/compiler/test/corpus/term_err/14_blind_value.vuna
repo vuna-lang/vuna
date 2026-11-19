@@ -1,10 +1,10 @@
--- callee 以值传递：`g x` 的调用头不是组内名字，看不到实参位置，
+-- callee 以值传递：`apply f x` 的调用头不是组内名字，看不到实参位置，
 -- 只能按盲调用（全弱边）计入并拒绝。
+apply : (Int -> Int) -> Int -> Int
+apply k x = k x
+
 f : Int -> Int
-f x =
-  let
-    g = f
-  in g x
+f x = apply f x
 
 main : Int
 main = f 0

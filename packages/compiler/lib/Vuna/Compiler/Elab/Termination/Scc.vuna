@@ -3,6 +3,8 @@ module Vuna.Compiler.Elab.Termination.Scc where
 -- Vuna.Compiler.Elab.Termination.Scc：size-change termination 引擎——
 -- 参数级 size-change 图、传递闭包、幂等图严格边判定（SCT 定理）。
 import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Base.Obs
+import Base.Data.Obs as Obs
 import Base.Container.HashMap as HashMap
 import Vuna.Compiler.Frontend.Rast
 import Vuna.Compiler.Frontend.Rast.Name
@@ -194,17 +196,126 @@ siteWalkMapPartialInline fuel comp ctors projs caller facts sizes region g pargs
       acc2 = siteCollectList (fuel - 1) comp ctors projs caller facts sizes region pargs acc1
     in Site caller g fullArgs elems region False :: acc2
 
+-- ---------------------------------------------------------------
+-- 别名解析：`let g = f in g x`（f 是同组函数）按直接调用参与尺寸分析。
+-- 只在绑定是裸 `PVar` + `EVar` 组内函数时替换；遇到同名 binder 立即屏蔽。
+-- ---------------------------------------------------------------
+aliasNameOf : Pair String String -> String
+aliasNameOf p = firstOf p
+
+lookupAlias : String -> List (Pair String String) -> Maybe String
+lookupAlias n [] = Nothing
+lookupAlias n ((Pair k v) :: rest) = if n == k then Just v else lookupAlias n rest
+
+dropAliases : List String -> List (Pair String String) -> List (Pair String String)
+dropAliases [] als = als
+dropAliases (n :: rest) als = dropAliases rest (filter (\p => aliasNameOf p /= n) als)
+
+aliasOf : List String -> Pair Pat Expr -> Maybe (Pair String String)
+aliasOf comp (Pair pat val) =
+  case pat of
+    PVar g gsp =>
+      case val of
+        EVar n nsp => if memName (rnameKey n) comp then Just (Pair g (rnameKey n)) else Nothing
+        _ => Nothing
+    _ => Nothing
+
+inlArgs : List String -> List (Pair String String) -> List Expr -> List Expr
+inlArgs comp als [] = []
+inlArgs comp als (a :: rest) = inlGo comp als a :: inlArgs comp als rest
+
+inlFields : List String -> List (Pair String String) -> List (Pair String Expr) -> List (Pair String Expr)
+inlFields comp als [] = []
+inlFields comp als ((Pair fn fe) :: rest) = Pair fn (inlGo comp als fe) :: inlFields comp als rest
+
+inlParts : List String -> List (Pair String String) -> List InterpPart -> List InterpPart
+inlParts comp als [] = []
+inlParts comp als (p :: rest) =
+  case p of
+    IPText t => IPText t :: inlParts comp als rest
+    IPHole e => IPHole (inlGo comp als e) :: inlParts comp als rest
+
+inlBinds : List String -> List (Pair String String) -> List (Pair Pat Expr) -> Pair (List (Pair Pat Expr)) (List (Pair String String))
+inlBinds comp als [] = Pair [] als
+inlBinds comp als ((Pair pat val) :: rest) =
+  let
+    rhs = inlGo comp als val
+  in case aliasOf comp (Pair pat rhs) of
+    -- 纯别名（`let g = f`）：绑定本身没有分析价值，丢掉以免它的裸值引用
+    -- 被当成「callee 以值传递」的盲站点；body 里的 `g` 已在 `inlGo` 里替换。
+    Just a =>
+      let
+        restP = inlBinds comp (a :: als) rest
+      in Pair (firstOf restP) (secondOf restP)
+    Nothing =>
+      let
+        restP = inlBinds comp (dropAliases (patNamesOf pat) als) rest
+      in Pair (Pair pat rhs :: firstOf restP) (secondOf restP)
+
+inlAlts : List String -> List (Pair String String) -> List (Pair Pat Expr) -> List (Pair Pat Expr)
+inlAlts comp als [] = []
+inlAlts comp als ((Pair pat body) :: rest) =
+  Pair pat (inlGo comp (dropAliases (patNamesOf pat) als) body) :: inlAlts comp als rest
+
+inlClauses : List String -> List (Pair String String) -> List (Pair (List Pat) Expr) -> List (Pair (List Pat) Expr)
+inlClauses comp als [] = []
+inlClauses comp als ((Pair pats body) :: rest) =
+  Pair pats (inlGo comp (dropAliases (patNamesOfPats pats) als) body) :: inlClauses comp als rest
+
+inlStmts : List String -> List (Pair String String) -> List DoStmt -> List DoStmt
+inlStmts comp als [] = []
+inlStmts comp als (s :: rest) =
+  case s of
+    DBind pat e sp =>
+      DBind pat (inlGo comp als e) sp :: inlStmts comp (dropAliases (patNamesOf pat) als) rest
+    DExpr e sp => DExpr (inlGo comp als e) sp :: inlStmts comp als rest
+
+inlGo : List String -> List (Pair String String) -> Expr -> Expr
+inlGo comp als (EVar n sp) =
+  case lookupAlias (rnameKey n) als of
+    Just target => EVar (classifyName target) sp
+    Nothing => EVar n sp
+inlGo comp als (ELam ns body sp) = ELam ns (inlGo comp (dropAliases (map firstOf ns) als) body) sp
+inlGo comp als (EApp fn args sp) = EApp (inlGo comp als fn) (inlArgs comp als args) sp
+inlGo comp als (EPi n implicit qty dom cod sp) =
+  EPi n implicit qty (inlGo comp als dom) (inlGo comp (dropAliases [n] als) cod) sp
+inlGo comp als (ELet binds body rec_ sp) =
+  let
+    p = inlBinds comp als binds
+  in ELet (firstOf p) (inlGo comp (secondOf p) body) rec_ sp
+inlGo comp als (ELocalFun clauses sp) = ELocalFun (inlClauses comp als clauses) sp
+inlGo comp als (ECase scrut alts sp) = ECase (inlGo comp als scrut) (inlAlts comp als alts) sp
+inlGo comp als (EIf c t el sp) = EIf (inlGo comp als c) (inlGo comp als t) (inlGo comp als el) sp
+inlGo comp als (EField base f sp) = EField (inlGo comp als base) f sp
+inlGo comp als (ERecord rn fields sp) = ERecord rn (inlFields comp als fields) sp
+inlGo comp als (ERecUpdate base fields sp) =
+  ERecUpdate (inlGo comp als base) (inlFields comp als fields) sp
+inlGo comp als (EDo stmts sp) = EDo (inlStmts comp als stmts) sp
+inlGo comp als (EInfix op l r sp) = EInfix op (inlGo comp als l) (inlGo comp als r) sp
+inlGo comp als (EParen e sp) = EParen (inlGo comp als e) sp
+inlGo comp als (EBacktick op l r sp) = EBacktick op (inlGo comp als l) (inlGo comp als r) sp
+inlGo comp als (ESectL op e sp) = ESectL op (inlGo comp als e) sp
+inlGo comp als (ESectR e op sp) = ESectR (inlGo comp als e) op sp
+inlGo comp als (EAnn value ty sp) = EAnn (inlGo comp als value) (inlGo comp als ty) sp
+inlGo comp als (EInterp multi parts sp) = EInterp multi (inlParts comp als parts) sp
+inlGo comp als e = e
+
+inlineAliases : List String -> Expr -> Expr
+inlineAliases comp e = inlGo comp [] e
+
 siteCollectClauses : List String -> List String -> List (Pair String (List Int)) -> HashMap String (List Int) -> String -> List (Pair (List Pat) Expr) -> List Site -> List Site
 siteCollectClauses comp ctors projs facts caller [] acc = acc
 siteCollectClauses comp ctors projs facts caller (cl :: rest) acc =
-  siteCollectClauses
+  let
+    body = inlineAliases comp (secondOf cl)
+  in siteCollectClauses
     comp
     ctors
     projs
     facts
     caller
     rest
-    (siteWalkC (exprBudget 32 (secondOf cl)) comp ctors projs caller facts (strSizeEntries (firstOf cl)) [] (secondOf cl) acc)
+    (siteWalkC (exprBudget 32 body) comp ctors projs caller facts (strSizeEntries (firstOf cl)) [] body acc)
 
 siteCollect : List String -> List String -> List (Pair String (List Int)) -> HashMap String (List (Pair (List Pat) Expr)) -> HashMap String (List Int) -> List Site
 siteCollect comp ctors projs defTbl facts = siteCollectGo comp ctors projs defTbl facts comp []
@@ -402,14 +513,14 @@ tableSubset ((Pair k gs) :: rest) b =
     Nothing => False
     Just gs2 => graphListSubset gs gs2 && tableSubset rest b
 
-closureLoop : List (Pair (Pair String String) (List (List ScEdge))) -> Int -> Pair (List (Pair (Pair String String) (List (List ScEdge)))) Bool
+closureLoop : List (Pair (Pair String String) (List (List ScEdge))) -> Int -> Pair (List (Pair (Pair String String) (List (List ScEdge)))) (Pair Bool Int)
 closureLoop table fuel =
   if fuel <= 0 then
-    Pair table False
+    Pair table (Pair False fuel)
   else
     case closureStep table of
-      Pair table2 True => if tableSame table table2 then Pair table2 True else closureLoop table2 (fuel - 1)
-      Pair table2 False => Pair table2 False
+      Pair table2 True => if tableSame table table2 then Pair table2 (Pair True fuel) else closureLoop table2 (fuel - 1)
+      Pair table2 False => Pair table2 (Pair False fuel)
 
 -- ---------------------------------------------------------------
 -- 从调用点构造图
@@ -670,15 +781,31 @@ sctBlindNote sites =
 
 export sctCheck : List String -> HashMap String (List (Pair (List Pat) Expr)) -> List String -> List (Pair String (List Int)) -> HashMap String (List Int) -> Diagnostic -> Check Int
 sctCheck comp defTbl ctors projs facts msg =
+  obsCheck "vuna.term.sct" (\_ => sctCheckGo comp defTbl ctors projs facts msg)
+
+-- | 表内图总数（SCT 规模读数）。
+countGraphs : List (Pair (Pair String String) (List (List ScEdge))) -> Int
+countGraphs [] = 0
+countGraphs ((Pair k gs) :: rest) = length gs + countGraphs rest
+
+sctCheckGo : List String -> HashMap String (List (Pair (List Pat) Expr)) -> List String -> List (Pair String (List Int)) -> HashMap String (List Int) -> Diagnostic -> Check Int
+sctCheckGo comp defTbl ctors projs facts msg =
   let
     sites = siteCollect comp ctors projs defTbl facts
     note = sctBlindNote sites
+    _ = Obs.obsCounter "vuna.counter.term.scc_size" (length comp)
+    _ = Obs.obsCounter "vuna.counter.term.sites" (length sites)
   in case initialTable defTbl sites ctors projs facts of
     Pair table0 ok0 =>
       if ok0 then
-        case closureLoop table0 sctClosureFuel of
-          Pair table1 True => if sctCheckTable table1 then OkC 0 else ErrC (appendMessage note (appendMessage " [SCT 无下降环：${sctDiag table1}]" msg))
-          Pair table1 False => ErrC (appendMessage note (appendMessage " [SCT 放弃：size-change 图闭包未收敛（每对函数上限 ${strFromInt tableGraphCap} 张图，${strFromInt sctClosureFuel} 轮）]" msg))
+        let
+          _ = Obs.obsCounter "vuna.counter.term.graphs" (countGraphs table0)
+        in case closureLoop table0 sctClosureFuel of
+          Pair table1 (Pair closed remaining) =>
+            let
+              _ = Obs.obsCounter "vuna.counter.term.closure_rounds" (sctClosureFuel - remaining)
+              _ = Obs.obsCounter "vuna.counter.term.graphs_final" (countGraphs table1)
+            in if closed then if sctCheckTable table1 then OkC 0 else ErrC (appendMessage note (appendMessage " [SCT 无下降环：${sctDiag table1}]" msg)) else ErrC (appendMessage note (appendMessage " [SCT 放弃：size-change 图闭包未收敛（每对函数上限 ${strFromInt tableGraphCap} 张图，${strFromInt sctClosureFuel} 轮）]" msg))
       else
         ErrC (appendMessage note (appendMessage " [SCT 放弃：size-change 图闭包未收敛（每对函数上限 ${strFromInt tableGraphCap} 张图，${strFromInt sctClosureFuel} 轮）]" msg))
 

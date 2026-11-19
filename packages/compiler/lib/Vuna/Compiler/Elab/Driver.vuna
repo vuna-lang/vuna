@@ -1314,7 +1314,7 @@ finishCore termAux decls core =
                       _ = dbg! "extradefs-done"
                     in Vuna.Compiler.Base.Common.bind (checkProgramUsage ec4 allDefs) (
                         \ec5 =>
-                          Vuna.Compiler.Base.Common.bind (checkTerminationDeclsWith (declFunNames decls) (append termAux decls)) (
+                          Vuna.Compiler.Base.Common.bind (obsCheck "vuna.term" (\_ => checkTerminationDeclsWith (declFunNames decls) (append termAux decls))) (
                               \_ =>
                                 let
                                   -- 用量检查就地发射的 warning 经 checkProgramUsage 返回的新 Ec 线程到出口；

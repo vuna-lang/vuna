@@ -1,0 +1,9 @@
+-- 别名解析后 `g x` 就是 `f x`：关系是相等，仍必须拒绝（不能算严格下降）。
+f : Int -> Int
+f x =
+  let
+    g = f
+  in g x
+
+main : Int
+main = f 0

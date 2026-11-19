@@ -1,0 +1,14 @@
+-- `let` 别名指向组内函数：解析后仍能看到实参下降（`n` 是形参的真子项）。
+data Nat : Type where
+  Zero : Nat
+  Succ : Nat -> Nat
+
+f : Nat -> Int
+f Zero = 0
+f (Succ n) =
+  let
+    g = f
+  in g n
+
+main : Int
+main = f (Succ Zero)

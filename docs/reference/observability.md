@@ -92,12 +92,16 @@ span / 计数 / 日志 / 采样栈写成 **Chrome Trace Event JSONL**；关闭�
   `vuna.elab` 的子区间）、`vuna.codegen.check`（lowering + 装配校验；整包检查与增量收尾的
   `dtCheckScoped` 各一处）、`vuna.parse.lex`（一次全文词法）、`vuna.parse.syntax`（token 流
   → AST 的语法分析）、`vuna.parse.cst`（无损 CST 组装，工具侧调用）、`vuna.cache.lookup` / `vuna.cache.write`
-  （对象库读写；`obsSpanEff` 的 begin/end token 对）；
+  （对象库读写；`obsSpanEff` 的 begin/end token 对）、`vuna.term`（终止性整段）、
+  `vuna.term.sct`（每个走 SCT 兜底的 SCC 一次）；
 - `ph:"X"` + `args.def`（level ≥ 2）：`vuna.def.elab`（逐定义）；
 - `ph:"i"` 阶段标记（`Eff` 边界，零宽度）：`vuna.load`、`vuna.resolve`、`vuna.iface.compute`、
   `vuna.iface.write`、`vuna.codegen.split`；
 - `ph:"C"` 计数：`vuna.counter.cache.hit`（接口对象 / 地址表 / check 结果命中）、
   `vuna.counter.cache.miss`（未命中）、`vuna.counter.cache.write`（check 结果落盘）；
+  终止性 / SCT 规模：`vuna.counter.term.scc_size`、`vuna.counter.term.sites`、
+  `vuna.counter.term.graphs`、`vuna.counter.term.graphs_final`、
+  `vuna.counter.term.closure_rounds`；
   增量装配 / 干净模块判定：`vuna.elab.incr.{clean,dirty,decls}`、
   `vuna.tool.clean.{cands,read,kept}` 与 `vuna.tool.clean.reject.{self,fresh,cached,missingdep,deps}`
   （每请求「预置了几个干净模块、要精化几个模块/多少条 decl、哪些模块为什么被拒」）；
