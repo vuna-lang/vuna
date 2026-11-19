@@ -150,9 +150,16 @@ dirOfDep root pid proj locked baseDir dep =
                         pure Nothing
                     OkC valid =>
                       do
-                        ps <- packageSourceEff abs valid
-                        code <- verifyPathDep dep ps
-                        if code /= 0 then pure Nothing else pure (Just abs)
+                        psR <- packageSourceEff abs valid
+                        case psR of
+                          ErrC e =>
+                            do
+                              _ <- printDiagEff e
+                              pure Nothing
+                          OkC ps =>
+                            do
+                              code <- verifyPathDep dep ps
+                              if code /= 0 then pure Nothing else pure (Just abs)
           else
             do
               _ <- fetchFailText "missing vuna.toml in ${abs}"
@@ -270,13 +277,19 @@ verifyMaterializedIdentityEff root dep digest =
                     pure False
                 OkC valid =>
                   do
-                    ps <- packageSourceEff dir valid
-                    if identityOkOf dep ps then
-                      pure True
-                    else
-                      do
-                        _ <- identityMismatch (depAliasOf dep) (fromMaybeText (depIdentityOf dep)) (identityHashOf ps)
-                        pure False
+                    psR <- packageSourceEff dir valid
+                    case psR of
+                      ErrC e =>
+                        do
+                          _ <- printDiagEff e
+                          pure False
+                      OkC ps =>
+                        if identityOkOf dep ps then
+                          pure True
+                        else
+                          do
+                            _ <- identityMismatch (depAliasOf dep) (fromMaybeText (depIdentityOf dep)) (identityHashOf ps)
+                            pure False
 
 -- | 内部：校验 path 依赖：有 `hash` 就比对内容摘要，无 `hash` 视为未锁定（只打印内容摘要）；
 -- 两种情况都继续比对 `identity`。成功返回 0，失败打印诊断并返回非零。
@@ -347,8 +360,13 @@ fetchGit root dep url rev expected =
                         pure Nothing
                     OkC valid =>
                       do
-                        ps <- packageSourceEff tmp valid
-                        verifyAndStore root dep expected ps
+                        psR <- packageSourceEff tmp valid
+                        case psR of
+                          ErrC e =>
+                            do
+                              _ <- printDiagEff e
+                              pure Nothing
+                          OkC ps => verifyAndStore root dep expected ps
 
 -- | 内部：校验声明摘要与身份后写对象 + 物化（git 与 url 共用）；成功返回实际摘要，
 -- 摘要或身份不符时打印诊断并返回 `Nothing`。
@@ -414,16 +432,22 @@ fetchUrl root dep url expected =
                           pure Nothing
                       OkC valid =>
                         do
-                          ps <- packageSourceEff dir valid
-                          if identityOkOf dep ps then
-                            do
-                              _ <- consolePrint "fetch: ${depAliasOf dep} ok\n"
-                              pure (Just expected)
-                          else
-                            do
-                              _ <- identityMismatch (depAliasOf dep) (fromMaybeText (depIdentityOf dep)) (identityHashOf ps)
-                              _ <- processRunIn root ["rm", "-rf", dir]
-                              pure Nothing
+                          psR <- packageSourceEff dir valid
+                          case psR of
+                            ErrC e =>
+                              do
+                                _ <- printDiagEff e
+                                pure Nothing
+                            OkC ps =>
+                              if identityOkOf dep ps then
+                                do
+                                  _ <- consolePrint "fetch: ${depAliasOf dep} ok\n"
+                                  pure (Just expected)
+                              else
+                                do
+                                  _ <- identityMismatch (depAliasOf dep) (fromMaybeText (depIdentityOf dep)) (identityHashOf ps)
+                                  _ <- processRunIn root ["rm", "-rf", dir]
+                                  pure Nothing
 
 -- | 内部：打印 `PKG_HashMismatch`（声明值与实际值并列）。
 hashMismatch : Member nConsole ConsoleOp r => String -> String -> String -> Eff r Int
@@ -580,13 +604,19 @@ resolveGitDigest root alias url rev =
                         pure Nothing
                     OkC valid =>
                       do
-                        ps <- packageSourceEff tmp valid
-                        let
-                          actual = contentHashOf ps
-                        in do
-                          _ <- writeObjectEff root actual ps.psFiles
-                          _ <- materializeEff root actual ps.psFiles
-                          pure (Just (Pair actual (identityHashOf ps)))
+                        psR <- packageSourceEff tmp valid
+                        case psR of
+                          ErrC e =>
+                            do
+                              _ <- printDiagEff e
+                              pure Nothing
+                          OkC ps =>
+                            let
+                              actual = contentHashOf ps
+                            in do
+                              _ <- writeObjectEff root actual ps.psFiles
+                              _ <- materializeEff root actual ps.psFiles
+                              pure (Just (Pair actual (identityHashOf ps)))
 
 -- | 内部：文本写回：只替换 `[dependencies.<alias>]` 段内已有的 `hash = ...` 行，并在其后写
 -- `identity = ...`。没有 hash 行（内联表 / 字符串简写 / 尚未写摘要）时不动该段：

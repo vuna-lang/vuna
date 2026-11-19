@@ -272,16 +272,19 @@ verifyIdentityEff dep dir manifest =
     Nothing => pure (OkC 0)
     Just expected =>
       do
-        ps <- packageSourceEff dir manifest
-        let
-          actual = identityHashOf ps
-        in if normalizeHash expected == actual then
-          pure (OkC 0)
-        else
-          do
+        psR <- packageSourceEff dir manifest
+        case psR of
+          ErrC e => pure (ErrC e)
+          OkC ps =>
             let
-              detail = "declared ${expected}, actual ${actual}"
-            in pure (pkgNoLoc (IdentityMismatch (depAliasOf dep) detail) [depAliasOf dep, detail])
+              actual = identityHashOf ps
+            in if normalizeHash expected == actual then
+              pure (OkC 0)
+            else
+              do
+                let
+                  detail = "declared ${expected}, actual ${actual}"
+                in pure (pkgNoLoc (IdentityMismatch (depAliasOf dep) detail) [depAliasOf dep, detail])
 
 -- path 依赖显式写摘要时校验（不写则跳过：可变输入，D12）。
 verifyPathHashEff : Member nFs FsOp r => Dependency -> String -> Eff r (Check Int)
@@ -290,16 +293,19 @@ verifyPathHashEff dep dir =
     Nothing => pure (OkC 0)
     Just expected =>
       do
-        files <- packageFilesEff dir
-        let
-          actual = contentHashOf (PackageSource "" [] [] files)
-        in if verifyHash expected actual then
-          pure (OkC 0)
-        else
-          do
+        filesR <- packageFilesEff dir
+        case filesR of
+          ErrC e => pure (ErrC e)
+          OkC files =>
             let
-              detail = "declared ${expected}, actual ${actual}"
-            in pure (pkgNoLoc (HashMismatch (depAliasOf dep) detail) [depAliasOf dep, detail])
+              actual = contentHashOf (PackageSource "" [] [] files)
+            in if verifyHash expected actual then
+              pure (OkC 0)
+            else
+              do
+                let
+                  detail = "declared ${expected}, actual ${actual}"
+                in pure (pkgNoLoc (HashMismatch (depAliasOf dep) detail) [depAliasOf dep, detail])
 
 loadDependencyList : Member nFs FsOp r, Member nEnv EnvOp r => Int -> List (Pair String String) -> String -> List Dependency -> Eff r (Check (List Package))
 loadDependencyList fuel stack baseDir deps =

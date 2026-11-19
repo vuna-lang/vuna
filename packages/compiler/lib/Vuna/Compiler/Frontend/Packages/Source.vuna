@@ -43,14 +43,31 @@ export verifyHash : String -> String -> Bool
 verifyHash expected actual = normalizeHash expected == normalizeHash actual
 
 -- | 包内全部文件（相对路径 + 字节），按路径升序。
-export packageFilesEff : Member nFs FsOp r => String -> Eff r (List PackageFile)
+-- 遍历燃料耗尽时报 `icFuel`：部分文件集合会让内容摘要判「一致」，不能静默截断。
+export packageFilesEff : Member nFs FsOp r => String -> Eff r (Check (List PackageFile))
 packageFilesEff root =
   do
     manifestFiles <- readManifestFile root
-    libFiles <- collectDirFiles 1048576 root "lib"
-    appFiles <- collectDirFiles 1048576 root "app"
-    testFiles <- collectDirFiles 1048576 root "test"
-    pure (sortByPath (append manifestFiles (append libFiles (append appFiles testFiles))))
+    libR <- collectDirFiles pkgSourceDepth root "lib"
+    case libR of
+      ErrC e => pure (ErrC e)
+      OkC libFiles =>
+        do
+          appR <- collectDirFiles pkgSourceDepth root "app"
+          case appR of
+            ErrC e => pure (ErrC e)
+            OkC appFiles =>
+              do
+                testR <- collectDirFiles pkgSourceDepth root "test"
+                case testR of
+                  ErrC e => pure (ErrC e)
+                  OkC testFiles => pure (OkC (sortByPath (append manifestFiles (append libFiles (append appFiles testFiles)))))
+
+-- 目录深度预算只在**下钻**时消耗（同一层的兄弟项共用父级的预算）。合法树受宿主路径
+-- 长度约束（PATH_MAX 4096，每层至少 2 字节 ⇒ 深度 ≤ 2048），因此 4096 对合法输入
+-- 不可达；耗尽只可能来自绕不过内核 ELOOP 的形态。
+pkgSourceDepth : Int
+pkgSourceDepth = 4096
 
 readManifestFile : Member nFs FsOp r => String -> Eff r (List PackageFile)
 readManifestFile root =
@@ -63,10 +80,10 @@ readManifestFile root =
     else
       pure []
 
-collectDirFiles : Member nFs FsOp r => Int -> String -> String -> Eff r (List PackageFile)
+collectDirFiles : Member nFs FsOp r => Int -> String -> String -> Eff r (Check (List PackageFile))
 collectDirFiles fuel root rel =
   if fuel <= 0 then
-    pure []
+    pure (icFuel "package file collection")
   else
     let
       dir = if rel == "" then root else "${root}/${rel}"
@@ -76,32 +93,38 @@ collectDirFiles fuel root rel =
       if exists && isDir then
         do
           names <- fsReadDir dir
-          collectNames (fuel - 1) root rel names
+          collectNames fuel root rel names
       else
-        pure []
+        pure (OkC [])
 
-collectNames : Member nFs FsOp r => Int -> String -> String -> List String -> Eff r (List PackageFile)
-collectNames fuel root rel [] = pure []
+collectNames : Member nFs FsOp r => Int -> String -> String -> List String -> Eff r (Check (List PackageFile))
+collectNames fuel root rel [] = pure (OkC [])
 collectNames fuel root rel (name :: rest) =
   if fuel <= 0 then
-    pure []
+    pure (icFuel "package file collection")
   else
     do
-      here <- walkName (fuel - 1) root rel name
-      there <- collectNames (fuel - 1) root rel rest
-      pure (append here there)
+      hereR <- walkName fuel root rel name
+      case hereR of
+        ErrC e => pure (ErrC e)
+        OkC here =>
+          do
+            thereR <- collectNames fuel root rel rest
+            case thereR of
+              ErrC e => pure (ErrC e)
+              OkC there => pure (OkC (append here there))
 
-walkName : Member nFs FsOp r => Int -> String -> String -> String -> Eff r (List PackageFile)
+walkName : Member nFs FsOp r => Int -> String -> String -> String -> Eff r (Check (List PackageFile))
 walkName fuel root rel name =
   if fuel <= 0 then
-    pure []
+    pure (icFuel "package file collection")
   else
     case name of
-      "." => pure []
-      ".." => pure []
+      "." => pure (OkC [])
+      ".." => pure (OkC [])
       _ =>
         if skipSourceDir name then
-          pure []
+          pure (OkC [])
         else
           let
             childRel = if rel == "" then name else "${rel}/${name}"
@@ -113,9 +136,9 @@ walkName fuel root rel name =
             else if endsWith ".vuna" name then
               do
                 content <- fsReadFile childPath
-                pure [PackageFile childRel content]
+                pure (OkC [PackageFile childRel content])
             else
-              pure []
+              pure (OkC [])
 
 filePathLe : PackageFile -> PackageFile -> Bool
 filePathLe a b = a.pfPath <= b.pfPath
@@ -124,12 +147,13 @@ sortByPath : List PackageFile -> List PackageFile
 sortByPath files = sortBy filePathLe files
 
 -- | 由 manifest + 文件集合构造 `PackageSource`（依赖声明只取别名与摘要）。
-export packageSourceEff : Member nFs FsOp r => String -> Manifest -> Eff r PackageSource
+export packageSourceEff : Member nFs FsOp r => String -> Manifest -> Eff r (Check PackageSource)
 packageSourceEff root manifest =
   do
-    files <- packageFilesEff root
-    pure
-      (PackageSource (packageNameOf manifest) (exportsOf manifest) (map depKeyOf manifest.manifestDependencies) files)
+    filesR <- packageFilesEff root
+    case filesR of
+      ErrC e => pure (ErrC e)
+      OkC files => pure (OkC (PackageSource (packageNameOf manifest) (exportsOf manifest) (map depKeyOf manifest.manifestDependencies) files))
 
 packageNameOf : Manifest -> String
 packageNameOf manifest =
