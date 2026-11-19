@@ -451,3 +451,14 @@ WASI preview1，宿主侧逐函数实现。下表的「允许」指浏览器平�
 - [native.md](native.md)：另一个产品后端（同样的「文本 canonical + 外部工具」策略；
   支持字符串与 bump 堆）。
 - [architecture.md](../architecture.md)：子系统地图与改动定位。
+
+## 插件形态
+
+wasm 后端在独立包 `packages/target-wasm`（二进制 `vuna-target-wasm`），不在 `seed/` 内。
+编译器完成 DT 检查 + Lowering 后，把 `IrProgram` 用 `Vuna.Ir.Codec` 编码，以子进程调用：
+
+```console
+vuna-target-wasm --ir FILE --out DIR [--print] [--diag FILE] [--files FILE]
+```
+
+`--diag` 同时承载 `WasmErr` 与入口行能力告警，编译器解码后走原有诊断/告警通道。

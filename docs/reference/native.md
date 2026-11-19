@@ -425,3 +425,15 @@ List / record / 用户 `data` 共用同一套对象布局（`[tag]` + 8 字节�
 - [architecture.md](../architecture.md)：子系统地图与改动定位。
 - [wasm.md](wasm.md)：第二个产品后端（同样的「文本 canonical + 外部工具」策略）。
 
+
+## 插件形态
+
+native 后端在独立包 `packages/target-native`（二进制 `vuna-target-native`），不在 `seed/` 内。
+编译器完成 DT 检查 + Lowering 后，把 `IrProgram` 用 `Vuna.Ir.Codec` 编码，以子进程调用：
+
+```console
+vuna-target-native --ir FILE --out DIR [--print] [--diag FILE] [--files FILE]
+```
+
+`--diag` 回传 `NativeErr` 诊断（`Vuna.Compiler.Base.Diag.Codec`），`--files` 回传产物清单
+（编译器据此生成链接脚本）；链接仍由 CLI 调 `cc` 完成。协议细节见 [cli.md](cli.md)「后端插件协议」。

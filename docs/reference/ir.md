@@ -11,16 +11,16 @@
 ## 位置与形状
 
 ```text
-Loader → Elab → Core ──Lowering──> IR ──Codegen.{Decl,Term,Assembly}──> OCaml 文本
+Loader → Elab → Core ──Lowering──> IR ──Vuna.Target.Ocaml.{Decl,Term,Assembly}──> OCaml 文本
                           │
                           └── Ir.Runtime：运行时符号契约（符号名 + 桥接标记）
-                              Codegen.Runtime：符号 → OCaml 运行时表达式
+                              Vuna.Target.Ocaml.Runtime：符号 → OCaml 运行时表达式
 ```
 
 - **IR 是后端唯一的输入面**：OCaml 后端不 import `Core` / `Elab` / `Intrinsics`，
   因此「后端要理解类型论」这个耦合被切断；wasm / native 只对接 IR。
   native 的支持面、ABI 与运行时子集见 [native.md](native.md)。
-  三个后端都是 `Model` + `Render` 两层：OCaml 的模型是 `Codegen.Ocaml.{Model,Render}`
+  三个后端都是 `Model` + `Render` 两层：OCaml 的模型是 `Vuna.Target.Ocaml.{Model,Render}`
   （运行时模板与内联内建展开是显式的 `ORaw`），wasm / native 各自有自己的模型。
 - **Lowering 是 Core 唯一的消费者**：擦除、表示决策、入口分类都发生在这一步，
   后端只做文本（名字编码、跨单元限定、fresh 名字、布局、`let rec` 分组、运行时模板）。
@@ -45,7 +45,7 @@ Loader → Elab → Core ──Lowering──> IR ──Codegen.{Decl,Term,Assem
 
 | 边界 | 规则 | 守护 |
 | --- | --- | --- |
-| 依赖方向 | `Vuna.Ir.*` 是独立包 `vuna-ir`，只依赖 `vuna-base` 与 `vuna-compiler-base`（位置 / 诊断 / 内建符号表）；跨包可见性由 `[export]` 管，包内没有 web 式层表。`Codegen/` 整目录只吃 IR；上游的唯一消费者是 `Lowering.Program`（Core → IR）与 `Lowering.Checks`（Core 侧检查）。声明归属切分与分文件装配在 `Driver.SplitGen`（Driver 层，允许 import `Elab` 的声明表，但必须路由到 `Lowering.Program`、不得自己消费 `Core` / `Intrinsics`） | `checks.ir-boundary`（正向断言与 IR 形状） + `packages/ir/vuna.toml` 的 `[dependencies]` |
+| 依赖方向 | `Vuna.Ir.*` 是独立包 `vuna-ir`，只依赖 `vuna-base` 与 `vuna-compiler-base`（位置 / 诊断 / 内建符号表）；跨包可见性由 `[export]` 管，包内没有 web 式层表。`packages/target-ocaml` 只吃 IR；上游的唯一消费者是 `Lowering.Program`（Core → IR）与 `Lowering.Checks`（Core 侧检查）。声明归属切分与分文件装配在 `Driver.SplitGen`（Driver 层，允许 import `Elab` 的声明表，但必须路由到 `Lowering.Program`、不得自己消费 `Core` / `Intrinsics`） | `checks.ir-boundary`（正向断言与 IR 形状） + `packages/ir/vuna.toml` 的 `[dependencies]` |
 | 名字 | IR 节点里只有**源码名**与**契约里的运行时符号**（`IrRt` / `IrRtApp`；节点里没有目标文本）；`v_` / `t_` / `C_` / `f_` 前缀、转义、`Unit.` 限定、运行时表达式都属于后端 | 同上 + review |
 | 数据 | IR 只有确定性纯数据（`String` / `Int` / `Bool` / `List` / `Pair` / `Maybe` / `Span`）：不含闭包、`HashMap`、`Value`、`Term` | `Vuna.Ir.Model` 的 import 面 |
 | 编码 | 跨进程边界只用 `Vuna.Ir.Codec`（`Vuna.Compiler.Base.Bytes` 的规范字节文法）；`encode`/`decode` 必须往返（`packages/ir/test/Codec.vuna`） | `vuna test packages/ir` |
@@ -140,10 +140,10 @@ binder 的**身份**在 Lowering 分配，前缀与编号渲染属后端：
 1. **全覆盖**：契约里每个符号都要有该目标的实现。OCaml 侧 `ocamlRtText` 必须 total
    （`rtTextGaps` 空），且不得有契约外的条目（`rtTextExtras` 空）。
 2. **桥接**：`irRtBridgesList` 为真的符号，其模板里的 `dtp_*` helper 要按 List 族归属单元
-   限定并把该单元记成直接依赖（机制在 `Codegen.Term.genBridgeRef`）。非 OCaml 后端要在
+   限定并把该单元记成直接依赖（机制在 `Vuna.Target.Ocaml.Term.genBridgeRef`）。非 OCaml 后端要在
    自己的对象表示上重建这套 helper（native 侧的设计约束见
    [native.md](native.md) §9——桥接是对象表示落地后的验收目标，不是独立切片）。
-3. **语义参考实现**：运行时库本身（`bi_*` / `dt_*` / `dtp_*` 的定义）仍是 `Codegen.Term`
+3. **语义参考实现**：运行时库本身（`bi_*` / `dt_*` / `dtp_*` 的定义）仍是 `Vuna.Target.Ocaml.Term`
    的 runtime 模板。契约只固定「符号面」（名字 + 桥接标记；arity 由 `irInlineArity` 定），
    不固定实现；新后端要按同一组语义重实现这套符号。
 
@@ -153,13 +153,13 @@ binder 的**身份**在 Lowering 分配，前缀与编号渲染属后端：
   等于 `irInlineArity`（违反即 `IC_InvariantViolated`）。
 - `Lowering.Program.checkRuntimeContract`（挂在 `checkProgramOf`）：`Base.Intrinsics` ↔ 契约名字集
   相等 + 后端表对契约双向全覆盖。三处任一漂移都是内部错，不新增用户诊断码。
-- `checks.ir-boundary`：方向交给 `[layers]`；脚本只留形状断言——规则 6（`IrRuntime` / `IrBridge`
+- `checks.ir-boundary`：方向由包依赖（`vuna-ir` 只依赖 base / compiler-base）保证；脚本只留形状断言——规则 6（`IrRuntime` / `IrBridge`
   不得复活）、规则 7（IR 数据模块的
   字面量只能是符号名，不含空格 / 括号）、规则 8（契约与后端表存在、`Lowering.Program` 用后端表做一致性
   检查）。
 
 改动规则：新增内建要同步三处——`Base.Intrinsics`（语义）+ `Ir.Runtime`（契约名字 / 桥接标记）+
-`Codegen.Runtime`（OCaml 文本）。漏任一处会在下一次 `vuna check` 直接报内部错，不会静默
+`Vuna.Target.Ocaml.Runtime`（OCaml 文本）。漏任一处会在下一次 `vuna check` 直接报内部错，不会静默
 生成坏代码。
 
 ## 表示选择（`Vuna.Ir.Represent`）
@@ -287,3 +287,15 @@ binder 的**身份**在 Lowering 分配，前缀与编号渲染属后端：
   `checks.ir-boundary`（IR 数据形状、`Ir/` 里没有目标文本、`IrRuntime`/`IrBridge` 不得复活）。
 - 运行时实现（GC / 字符串 / I/O / 一次性续延）只有 OCaml 参考实现是完整的；wasm 与 native
   各自重实现了纯子集。
+
+## 跨进程编码（`Vuna.Ir.Codec`）
+
+后端插件是独立进程，IR 必须能落成字节再读回（协议见 [cli.md](cli.md)「后端插件协议」）：
+
+- `encodeProgram : IrProgram -> String` / `decodeProgram : Int -> String -> Maybe IrProgram`
+  （`encodeUnit` / `decodeUnit` 用于单单元载荷）；
+- 编码复用 `Vuna.Compiler.Base.Bytes` 的原子文法（`#tag` / `i<n>;` / `s<len>:` / `[<n>:`），
+  字段顺序固定；解码吃节点预算并拒绝尾随字节；
+- 往返夹具在 `packages/ir/test/Codec.vuna`（全部构造子 + 单元 + 截断拒绝）；
+- 诊断走 `Vuna.Compiler.Base.Diag.Codec`，与 IR 载荷分离：编译器只解码诊断，
+  不把后端的目标文本读回来。
