@@ -245,7 +245,17 @@ strWalkEApp fuel comp ctors projs p sizes caller facts region fn args sp acc =
           Just rel => strWalkArgs (fuel - 1) comp ctors projs p sizes caller facts region args (addEdgeMode caller callee rel sp acc)
       Nothing =>
         case fn of
-          EVar nm nsp => if isMapLike (rnameKey nm) then strWalkEAppMap (fuel - 1) comp ctors projs p sizes caller facts region fn args acc else strWalkApp (fuel - 1) comp ctors projs p sizes caller facts region fn args acc
+          EVar nm nsp =>
+            case hofSpecOf nm of
+              Just spec =>
+                case hofLambdaCall spec args of
+                  Just hc =>
+                    let
+                      acc1 = strWalkArgs (fuel - 1) comp ctors projs p sizes caller facts region hc.hofSideArgs acc
+                      sizes2 = extendElemSizes sizes hc.hofListExpr hc.hofElemBinder
+                    in strWalk (fuel - 1) comp ctors projs p sizes2 caller facts region hc.hofBody acc1
+                  Nothing => if spec.hofLambdaArity == 1 then strWalkEAppMap (fuel - 1) comp ctors projs p sizes caller facts region fn args acc else strWalkApp (fuel - 1) comp ctors projs p sizes caller facts region fn args acc
+              Nothing => strWalkApp (fuel - 1) comp ctors projs p sizes caller facts region fn args acc
           _ => strWalkApp (fuel - 1) comp ctors projs p sizes caller facts region fn args acc
 
 strWalkEAppMap : Int -> List String -> List String -> List (Pair String (List Int)) -> Int -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> HashMap String (List Int) -> List String -> Expr -> List Expr -> Pair Bool (List (Pair (Pair (Pair String String) Int) Span)) -> Pair Bool (List (Pair (Pair (Pair String String) Int) Span))
@@ -254,11 +264,6 @@ strWalkEAppMap fuel comp ctors projs p sizes caller facts region fn args acc =
     markInvalid acc
   else
     case args of
-      [ELam ([Pair v _]) body lamsp, lst] =>
-        let
-          acc1 = strWalk (fuel - 1) comp ctors projs p sizes caller facts region lst acc
-          sizes2 = extendElemSizes sizes lst v
-        in strWalk (fuel - 1) comp ctors projs p sizes2 caller facts region body acc1
       [cb, lst] =>
         case cb of
           EApp (EVar g gsp) pargs cbsp => if memName (rnameKey g) comp then strWalkMapPartialInline (fuel - 1) comp ctors projs p sizes caller facts region (rnameKey g) pargs lst cbsp acc else strWalkArgs (fuel - 1) comp ctors projs p sizes caller facts region args acc

@@ -1,0 +1,18 @@
+-- foldr / foldl 的两参 lambda：只有元素参数是容器的真子项，累加器不带尺寸；
+-- 兼容 `\a, b =>` 与 `\a => \b =>` 两种写法。
+import Prelude
+
+data Tree : Type where
+  Leaf : Tree
+  Node : List Tree -> Tree
+
+sizeR : Tree -> Int
+sizeR Leaf = 0
+sizeR (Node ts) = foldr (\t, acc => sizeR t + acc) 0 ts
+
+sizeL : Tree -> Int
+sizeL Leaf = 0
+sizeL (Node ts) = foldl (\acc => \t => sizeL t + acc) 0 ts
+
+main : Int
+main = sizeR (Node [])

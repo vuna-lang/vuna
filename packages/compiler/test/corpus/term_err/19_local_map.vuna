@@ -1,0 +1,12 @@
+-- 本地定义的 `map` 不是 List.map：它把整表传给回调，不能把回调参数当元素。
+-- HOF 只认 base 的规范模块名，本地同名函数必须按普通调用处理并拒绝。
+import Prelude
+
+map : (List Int -> Int) -> List Int -> Int
+map f xs = f xs
+
+bad : List Int -> Int
+bad xs = map (\ys => bad ys) xs
+
+main : Int
+main = bad [1, 2]

@@ -193,7 +193,10 @@ quantity / 线性规则见 [qtt.md](qtt.md)（quantity 与擦除口径以该页�
   不能单独作证据（Int 上从负起点 `n - 1` 永不触底）。检查按调用图 + SCC 进行，每个 SCC
   的每个环都要有严格下降边；单测度位置覆盖不全时由 size-change termination 接管。
   递减要求覆盖所有调用形态：HOF 递归、`where` 绑定体里调外层函数、`Cons x (f x)` 这类
-  藏在实参里的递归同样检查。**重建构造子不算下降**：实参 `Ctor x0..xn` 只有在某个 `xk`
+  藏在实参里的递归同样检查。HOF 只按 base 的规范模块名识别（`Base.Data.List.{map,filter,
+  concatMap,mapMaybe,foldl,foldr}`、`Base.Data.Result.traverse`、`Common.traverse`）：
+  回调参数按容器的真子项计，折叠只有元素参数是子项、累加器不带尺寸；`\a, b =>` 与
+  `\a => \b =>` 两种写法都识别，本地同名函数（如自定义 `map`）按普通调用处理。**重建构造子不算下降**：实参 `Ctor x0..xn` 只有在某个 `xk`
   是形参对应字段的**真**子项时才严格下降；各字段都原样拼回（`xk` 就是该字段）只算相等。
   fuel 判据要么全组都带 `if fuel <= 0` 守卫，要么每个环都穿过一个守卫节点（不含守卫的
   子图无环）——无限下降必然反复经过守卫节点，而守卫节点在 `fuel <= 0` 时直接返回。

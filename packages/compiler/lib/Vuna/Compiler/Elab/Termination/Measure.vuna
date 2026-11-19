@@ -900,15 +900,86 @@ export nthExpr : List Expr -> Int -> Maybe Expr
 nthExpr [] i = Nothing
 nthExpr (e :: rest) i = if i <= 0 then Just e else nthExpr rest (i - 1)
 
-export dotBase : String -> String
-dotBase n = secondOf (splitLastDot (splitOnDot n))
+-- ---------------------------------------------------------------
+-- 已知高阶函数：lambda 的第 `hofElemParam` 个参数绑定第 `hofListArg` 个容器实参的元素，
+-- 其余 lambda 参数（折叠的累加器）不带尺寸。只认 base 的规范模块名：按短名匹配会把
+-- 用户自定义的 `map` 也当成按元素应用。
+-- ---------------------------------------------------------------
+record HofSpec where
+  hofLambdaArity : Int
+  hofElemParam : Int
+  hofListArg : Int
 
-export isMapLike : String -> Bool
-isMapLike n =
-  dotBase n
-    == "map"
-    || dotBase n
-    == "traverse" || dotBase n == "concatMap" || dotBase n == "mapMaybe" || dotBase n == "filter"
+record HofCall where
+  hofElemBinder : String
+  hofListExpr : Expr
+  hofSideArgs : List Expr
+  hofBody : Expr
+
+unaryHofSpec : HofSpec
+unaryHofSpec = HofSpec 1 0 1
+
+foldLHofSpec : HofSpec
+foldLHofSpec = HofSpec 2 1 2
+
+foldRHofSpec : HofSpec
+foldRHofSpec = HofSpec 2 0 2
+
+export hofSpecOf : RName -> Maybe HofSpec
+hofSpecOf name =
+  case name of
+    RGlobal m b =>
+      if m == "Base.Data.List" then
+        if b == "map" || b == "filter" || b == "concatMap" || b == "mapMaybe" then
+          Just unaryHofSpec
+        else if b == "foldl" then
+          Just foldLHofSpec
+        else if b == "foldr" then Just foldRHofSpec else Nothing
+      else if m == "Base.Data.Result" || m == "Vuna.Compiler.Base.Common" then
+        if b == "traverse" then Just unaryHofSpec else Nothing
+      else
+        Nothing
+    _ => Nothing
+
+nthName : List String -> Int -> Maybe String
+nthName [] i = Nothing
+nthName (n :: rest) i = if i <= 0 then Just n else nthName rest (i - 1)
+
+-- | 展开 `n` 个 lambda 参数（兼容 `\a, b =>` 与 `\a => \b =>` 两种写法）。
+peelLam : Int -> Expr -> Maybe (Pair (List String) Expr)
+peelLam n e =
+  if n <= 0 then
+    Just (Pair [] e)
+  else
+    case e of
+      ELam ns body sp =>
+        if length ns > n then
+          Nothing
+        else
+          case peelLam (n - length ns) body of
+            Just (Pair more final) => Just (Pair (append (map firstOf ns) more) final)
+            Nothing => Nothing
+      _ => Nothing
+
+-- | 若实参表匹配该 HOF 的形状且回调是 lambda，给出「元素 binder + 容器实参 +
+--   其余要照常遍历的实参 + lambda 体」。
+export hofLambdaCall : HofSpec -> List Expr -> Maybe HofCall
+hofLambdaCall spec args =
+  case args of
+    e :: rest =>
+      case peelLam spec.hofLambdaArity e of
+        Just (Pair ns body) =>
+          if length rest == spec.hofListArg then
+            case nthExpr rest (spec.hofListArg - 1) of
+              Just lst =>
+                case nthName ns spec.hofElemParam of
+                  Just v => Just (HofCall v lst rest body)
+                  Nothing => Nothing
+              Nothing => Nothing
+          else
+            Nothing
+        Nothing => Nothing
+    _ => Nothing
 
 export extendElemSizes : List (Pair String (Pair Int (Pair Int (List Int)))) -> Expr -> String -> List (Pair String (Pair Int (Pair Int (List Int))))
 extendElemSizes sizes (EVar n sp) v =

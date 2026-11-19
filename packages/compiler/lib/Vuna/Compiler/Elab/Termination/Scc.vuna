@@ -153,7 +153,17 @@ siteWalkEApp fuel comp ctors projs caller facts sizes region fn args acc =
       Just callee => siteCollectList (fuel - 1) comp ctors projs caller facts sizes region args (Site caller callee args sizes region False :: acc)
       Nothing =>
         case fn of
-          EVar nm nsp => if isMapLike (rnameKey nm) then siteWalkEAppMap (fuel - 1) comp ctors projs caller facts sizes region fn args acc else siteCollectList (fuel - 1) comp ctors projs caller facts sizes region args (siteWalkC (fuel - 1) comp ctors projs caller facts sizes region fn acc)
+          EVar nm nsp =>
+            case hofSpecOf nm of
+              Just spec =>
+                case hofLambdaCall spec args of
+                  Just hc =>
+                    let
+                      acc1 = siteCollectList (fuel - 1) comp ctors projs caller facts sizes region hc.hofSideArgs acc
+                      sizes2 = extendElemSizes sizes hc.hofListExpr hc.hofElemBinder
+                    in siteWalkC (fuel - 1) comp ctors projs caller facts sizes2 region hc.hofBody acc1
+                  Nothing => if spec.hofLambdaArity == 1 then siteWalkEAppMap (fuel - 1) comp ctors projs caller facts sizes region fn args acc else siteCollectList (fuel - 1) comp ctors projs caller facts sizes region args (siteWalkC (fuel - 1) comp ctors projs caller facts sizes region fn acc)
+              Nothing => siteCollectList (fuel - 1) comp ctors projs caller facts sizes region args (siteWalkC (fuel - 1) comp ctors projs caller facts sizes region fn acc)
           _ => siteCollectList (fuel - 1) comp ctors projs caller facts sizes region args (siteWalkC (fuel - 1) comp ctors projs caller facts sizes region fn acc)
 
 siteWalkEAppMap : Int -> List String -> List String -> List (Pair String (List Int)) -> String -> HashMap String (List Int) -> List (Pair String (Pair Int (Pair Int (List Int)))) -> List String -> Expr -> List Expr -> List Site -> List Site
@@ -162,11 +172,6 @@ siteWalkEAppMap fuel comp ctors projs caller facts sizes region fn args acc =
     append (blindSitesOf comp caller sizes region) acc
   else
     case args of
-      [ELam ([Pair v _]) body lamsp, lst] =>
-        let
-          acc1 = siteWalkC (fuel - 1) comp ctors projs caller facts sizes region lst acc
-          sizes2 = extendElemSizes sizes lst v
-        in siteWalkC (fuel - 1) comp ctors projs caller facts sizes2 region body acc1
       [cb, lst] =>
         case cb of
           EApp (EVar g gsp) pargs cbsp => if memName (rnameKey g) comp then siteWalkMapPartialInline (fuel - 1) comp ctors projs caller facts sizes region (rnameKey g) pargs lst cbsp acc else siteCollectList (fuel - 1) comp ctors projs caller facts sizes region args acc
