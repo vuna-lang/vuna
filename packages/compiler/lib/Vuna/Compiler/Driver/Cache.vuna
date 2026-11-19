@@ -352,9 +352,10 @@ summaryMetaSegment = 1073741824
 -- 必须覆盖全部 Term 构造子：(a) 漏 `TMk` / `TRecord` / `TProj` / `TRecUpd`（落到
 -- `_ => t`）会让 record 构造/更新里擦除位的残 meta 保持旧编号、与本包 fresh 编号撞号；
 -- (b) fuel 用尽必须报错（`icFuel "meta-shift"`：内部错误、可检测，绝不静默用未移位的项）。
--- fuel 取 `defaultFuel`，与 codegen / conv 的守卫同级（codegen 能接受的项深度内不会触发）。
+-- fuel 按项规模派生（深度 ≤ 节点数）：接口摘要里的项可能超过固定 512 的深度，
+-- 固定常量会把合法的深层项误报成内部错。
 shiftTerm : Int -> Term -> Check Term
-shiftTerm off t = shiftTermFuel defaultFuel off t
+shiftTerm off t = shiftTermFuel (termSize t + 16) off t
 
 shiftTermFuel : Int -> Int -> Term -> Check Term
 shiftTermFuel fuel off t =
