@@ -16,15 +16,15 @@ let
     pkgs.gcc
   ];
 
-  # wasm 目标的外部工具：`wasm-tools parse` 汇编 WAT，`wasmtime` 跑 `.wasm`。
-  # 两者都是**构建期/测试期工具**，不进 TCB、不进 seed（与 native 侧的 cc 同构）。
+  # wasm 目标的外部工具：`wasm-tools parse` 汇编 WAT；`.wasm` 由 Node/V8 宿主执行
+  # （`wasm-host/run.mjs`，nodejs 在 e2eTools 里）。两者都是**构建期/测试期工具**，
+  # 不进 TCB、不进 seed（与 native 侧的 cc 同构）。
   wasmTools = pkgs: [
     pkgs.wasm-tools
-    pkgs.wasmtime
   ];
 
   # CI e2e / 本地 `nix run .#vuna-run-tests` 的 PATH：两个后端的外部工具
-  # （native 的 cc/as/ld、wasm 的 wasm-tools/wasmtime）加上脚本用到的 git/jq。
+  # （native 的 cc/as/ld、wasm 的 wasm-tools / Node）加上脚本用到的 git/jq。
   # devShell 与 checks 共用这一份，避免「本地能跑、CI 缺工具」。
   e2eTools =
     pkgs:
@@ -34,7 +34,7 @@ let
       pkgs.util-linux
       pkgs.git
       pkgs.jq
-      # `108_obs_cdp` 的客户端冒烟脚本用 node 发 CDP 请求。
+      # wasm 产物的执行宿主（`wasm-host/run.mjs`）与 `108_obs_cdp` 的 CDP 冒烟都用 Node。
       pkgs.nodejs
     ];
 
