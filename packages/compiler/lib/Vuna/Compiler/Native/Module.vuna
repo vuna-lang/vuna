@@ -727,6 +727,11 @@ genEffThunk fuel st family ctor arity prim =
       outer = if arity <= 0 then mkEff else IrLam bs Nothing mkEff
     in genExpr (fuel - 1) st outer
 
+-- | 生成预算按定义体规模派生（每节点最多几步递归，与 `Ir.Cps` 的 `cpsFuelOfBody` 同口径）。
+--   固定 100000 会让大定义体在没有任何不变式被破坏时报 fuel exhausted。
+nativeFuelOfBody : Ir -> Int
+nativeFuelOfBody body = 64 + 16 * irSize body
+
 -- | 值位置生成：结果留在 `rax`，任何调用都正常返回。
 genExpr : Int -> FGen -> Ir -> NRes (Pair (List Instr) FGen)
 genExpr fuel st ir = genExprAt fuel st False ir
@@ -1429,7 +1434,7 @@ genDefFunc defs pools fams nextLabel (IrDef name arity _ _ body _ _ _) =
     pool = modulePoolOf (moduleKeyOf name) pools
     st0 = FGen defs pool [] fams 0 nextLabel [] room modPath name
   in if arity == 0 then
-    nbind (genExprAt 100000 st0 True body) (
+    nbind (genExprAt (nativeFuelOfBody body) st0 True body) (
         \p =>
           let
             st1 = secondOf p
@@ -1448,7 +1453,7 @@ genDefFunc defs pools fams nextLabel (IrDef name arity _ _ body _ _ _) =
         else
           nbind (bindArgs rbs st0) (
               \bp =>
-                nbind (genExprAt 100000 (secondOf bp) True inner) (
+                nbind (genExprAt (nativeFuelOfBody inner) (secondOf bp) True inner) (
                     \q =>
                       let
                         st1 = secondOf q
