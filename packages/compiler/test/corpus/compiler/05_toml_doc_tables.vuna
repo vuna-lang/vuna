@@ -1,0 +1,25 @@
+-- 表数组的树视图：每个元素就是一张字段表（`TTableArray` 的元素类型收窄后没有
+-- 「元素不是表」的静默兜底），顺序与内容都要正确。
+import Prelude
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Frontend.Toml
+
+fieldOf : String -> List (Pair String TomlValue) -> Maybe TomlValue
+fieldOf k [] = Nothing
+fieldOf k ((Pair k2 v) :: rest) = if k == k2 then Just v else fieldOf k rest
+
+nameIs : String -> List (Pair String TomlValue) -> Bool
+nameIs want fs =
+  case fieldOf "name" fs of
+    Just (TStr s) => s == want
+    _ => False
+
+main : Int
+main =
+  case parseTomlDoc "t" "[[bin]]\nname = \"a\"\n[[bin]]\nname = \"b\"\n" of
+    ErrC _ => 0
+    OkC doc =>
+      case fieldOf "bin" doc of
+        Just (TTableArray ([e1, e2])) =>
+          (if nameIs "a" e1 then 1 else 0) + (if nameIs "b" e2 then 2 else 0)
+        _ => 0

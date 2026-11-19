@@ -69,7 +69,8 @@ data TableKind : Type where
 data TomlNode : Type where
   NodeLeaf : TomlValue -> Int -> TomlNode
   NodeTable : List (Pair String TomlNode) -> TableKind -> Int -> TomlNode
-  NodeTableArray : List TomlNode -> Int -> TomlNode
+  -- 表数组的每个元素**就是**一张字段表（不存在「元素不是表」这个状态）。
+  NodeTableArray : List (List (Pair String TomlNode)) -> Int -> TomlNode
 
 -- ---------------------------------------------------------------- 通用小工具
 lenInt : List a -> Int
@@ -175,15 +176,15 @@ replaceField name node ((Pair k old) :: rest) =
   if k == name then Pair k node :: rest else Pair k old :: replaceField name node rest
 
 -- 最后一个表数组元素（用于 `[a.b]` 中 a 是表数组时取当前元素）。
-lastNode : List TomlNode -> Maybe TomlNode
-lastNode [] = Nothing
-lastNode ([x]) = Just x
-lastNode (_ :: rest) = lastNode rest
+lastFields : List (List (Pair String TomlNode)) -> Maybe (List (Pair String TomlNode))
+lastFields [] = Nothing
+lastFields ([x]) = Just x
+lastFields (_ :: rest) = lastFields rest
 
-replaceLastNode : TomlNode -> List TomlNode -> List TomlNode
-replaceLastNode node [] = [node]
-replaceLastNode node ([old]) = [node]
-replaceLastNode node (old :: rest) = old :: replaceLastNode node rest
+replaceLastFields : List (Pair String TomlNode) -> List (List (Pair String TomlNode)) -> List (List (Pair String TomlNode))
+replaceLastFields fields [] = [fields]
+replaceLastFields fields ([old]) = [fields]
+replaceLastFields fields (old :: rest) = old :: replaceLastFields fields rest
 
 kindIsExplicit : TableKind -> Bool
 kindIsExplicit KindExplicit = True
@@ -222,12 +223,12 @@ ensureTable fuel path line pathSegs kind fields =
                   ErrC e => ErrC e
                   OkC inner2 => OkC (replaceField name (NodeTable inner2 oldKind oldLine) fields)
               NodeTableArray elems arrayLine =>
-                case lastNode elems of
-                  Just (NodeTable inner oldKind oldLine) =>
+                case lastFields elems of
+                  Just inner =>
                     case ensureTable (fuel - 1) path line rest kind inner of
                       ErrC e => ErrC e
-                      OkC inner2 => OkC (replaceField name (NodeTableArray (replaceLastNode (NodeTable inner2 oldKind oldLine) elems) arrayLine) fields)
-                  _ => failAt path line "table array \"${name}\" has no current element"
+                      OkC inner2 => OkC (replaceField name (NodeTableArray (replaceLastFields inner2 elems) arrayLine) fields)
+                  Nothing => failAt path line "table array \"${name}\" has no current element"
               NodeLeaf _ leafLine => failAt path leafLine "key \"${name}\" is not a table"
 
 -- | 在 `path` 指向的表里追加一个表数组元素（`[[path]]`），返回更新后的根字段表。
@@ -240,10 +241,10 @@ appendTableArray fuel path line pathSegs fields =
       [] => failAt path line "empty table array path"
       [name] =>
         case lookupField name fields of
-          Nothing => OkC (append fields [Pair name (NodeTableArray [NodeTable [] KindExplicit line] line)])
+          Nothing => OkC (append fields [Pair name (NodeTableArray [[]] line)])
           Just existing =>
             case existing of
-              NodeTableArray elems arrayLine => OkC (replaceField name (NodeTableArray (append elems [NodeTable [] KindExplicit line]) arrayLine) fields)
+              NodeTableArray elems arrayLine => OkC (replaceField name (NodeTableArray (append elems [[]]) arrayLine) fields)
               NodeTable _ _ tableLine => failAt path tableLine "table [${name}] cannot become a table array"
               NodeLeaf _ leafLine => failAt path leafLine "key \"${name}\" is not a table"
       name :: rest =>
@@ -259,12 +260,12 @@ appendTableArray fuel path line pathSegs fields =
                   ErrC e => ErrC e
                   OkC inner2 => OkC (replaceField name (NodeTable inner2 oldKind oldLine) fields)
               NodeTableArray elems arrayLine =>
-                case lastNode elems of
-                  Just (NodeTable inner oldKind oldLine) =>
+                case lastFields elems of
+                  Just inner =>
                     case appendTableArray (fuel - 1) path line rest inner of
                       ErrC e => ErrC e
-                      OkC inner2 => OkC (replaceField name (NodeTableArray (replaceLastNode (NodeTable inner2 oldKind oldLine) elems) arrayLine) fields)
-                  _ => failAt path line "table array \"${name}\" has no current element"
+                      OkC inner2 => OkC (replaceField name (NodeTableArray (replaceLastFields inner2 elems) arrayLine) fields)
+                  Nothing => failAt path line "table array \"${name}\" has no current element"
               NodeLeaf _ leafLine => failAt path leafLine "key \"${name}\" is not a table"
 
 -- 重复 key 的 section 后缀（顶层 key 不带）。
@@ -309,12 +310,12 @@ insertValue fuel path line pathSegs section value fields =
                   ErrC e => ErrC e
                   OkC inner2 => OkC (replaceField name (NodeTable inner2 oldKind oldLine) fields)
               NodeTableArray elems arrayLine =>
-                case lastNode elems of
-                  Just (NodeTable inner oldKind oldLine) =>
+                case lastFields elems of
+                  Just inner =>
                     case insertValue (fuel - 1) path line rest section value inner of
                       ErrC e => ErrC e
-                      OkC inner2 => OkC (replaceField name (NodeTableArray (replaceLastNode (NodeTable inner2 oldKind oldLine) elems) arrayLine) fields)
-                  _ => failAt path line "table array \"${name}\" has no current element"
+                      OkC inner2 => OkC (replaceField name (NodeTableArray (replaceLastFields inner2 elems) arrayLine) fields)
+                  Nothing => failAt path line "table array \"${name}\" has no current element"
               NodeLeaf _ leafLine => failAt path leafLine "key \"${name}\" is not a table"
 
 -- ---------------------------------------------------------------- 展平
@@ -332,11 +333,11 @@ flattenNode fuel path (NodeLeaf value line) = flattenLeaf (fuel - 1) path value 
 flattenNode fuel path (NodeTable fields _ _) = flattenFields (fuel - 1) path fields
 flattenNode fuel path (NodeTableArray elems _) = flattenElems (fuel - 1) 0 path elems
 
-flattenElems : Int -> Int -> List String -> List TomlNode -> List TomlEntry
+flattenElems : Int -> Int -> List String -> List (List (Pair String TomlNode)) -> List TomlEntry
 flattenElems fuel i path [] = []
-flattenElems fuel i path (node :: rest) =
+flattenElems fuel i path (fields :: rest) =
   append
-    (flattenNode (fuel - 1) (appendPath path [strFromInt i]) node)
+    (flattenFields (fuel - 1) (appendPath path [strFromInt i]) fields)
     (flattenElems (fuel - 1) (i + 1) path rest)
 
 -- 内联表在扁平视图里展平进 section 路径（与子表写法等价）。
@@ -365,13 +366,9 @@ fieldValues fuel [] = []
 fieldValues fuel (p :: rest) =
   Pair (firstOf p) (nodeValue (fuel - 1) (secondOf p)) :: fieldValues (fuel - 1) rest
 
-tableFields : Int -> List TomlNode -> List (List (Pair String TomlValue))
+tableFields : Int -> List (List (Pair String TomlNode)) -> List (List (Pair String TomlValue))
 tableFields fuel [] = []
-tableFields fuel (node :: rest) = nodeFields (fuel - 1) node :: tableFields (fuel - 1) rest
-
-nodeFields : Int -> TomlNode -> List (Pair String TomlValue)
-nodeFields fuel (NodeTable fields _ _) = fieldValues (fuel - 1) fields
-nodeFields fuel _ = []
+tableFields fuel (fields :: rest) = fieldValues (fuel - 1) fields :: tableFields (fuel - 1) rest
 
 rootValue : Int -> List (Pair String TomlNode) -> TomlDoc
 rootValue fuel fields = fieldValues fuel fields
