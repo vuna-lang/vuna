@@ -132,7 +132,7 @@ ID 是稳定引用（`层前缀-序号`），改动时保留编号，删掉实�
 | IR-06 | `Ir/Cps.vuna` 的 `mCpsApply` | A | 耗尽返回 `IrGlobal "?"` 占位 | 开放 |
 | IR-07 | `Ir/Cps.vuna` 的 `mStepsDef` | A | 注入的 `machineRun` 全局不在 `irDefDeps` → SCC/可达性看不见 | 开放 |
 | IR-08 | `Ir/Cps.vuna` 的 `transformDef` | D | 直接风格 pass（`transformDirect` / `transformDef` / `selfBody`）与 def 签名已保留；机器 pass（`mHandlers` / `mSyms` / `mApplys` / `mMarked` / `mSteps`）仍属类型改变型，节点类型槽继续置空 | 开放（部分） |
-| IR-09 | `Ir/Cps.vuna` 的 `isHandleCombinator` | C | handler clause 退回 `startsWith "Base.Effect." && contains "handle"`；分类输入现由 `eraseDefSig` 显式擦除签名，避免与 CPS 是否保留签名耦合 | 开放 |
+| IR-09 | `Ir/Cps.vuna` 的 `isHandleCombinator` | C | handler 组合子按类型判据（结果 `Eff` + clause 参数）；opH 为裸类型变量的核心组合子（`handleCore` / `handleCoreAt` / `handleCoreLin` / `handleWith` / `handleWithAt`）用显式 allowlist，不再用字符串启发式 | 已清 |
 | IR-10 | `Ir/Cps.vuna` 的 `isEffResultTy` 注释 | C | 曾与 `Lowering.effResultTyOf` 的实参口径不符 | 已清（对齐注释） |
 | IR-11 | `Ir/Validate.vuna` 的 `ctorFieldCountOf` | C | 查不到构造子当 0 字段（跨单元表不全） | 开放 |
 | IR-12 | `Ir/Validate.vuna` 的 `IrTyVar` | C | 只查 `i >= 0`，不查族 arity | 开放 |
@@ -213,7 +213,7 @@ ID 是稳定引用（`层前缀-序号`），改动时保留编号，删掉实�
    `Ast`/`Rast`/`Canonical` 三份结构知识。
 4. **类型信息在 pass 之间丢失**：Lowering 填槽 → Anf/Cps 主动清空 → 后端按 arity/名字猜
    handler clause（debt D109 只覆盖前半段）。CPS 的直接风格路径已改为保留节点类型与 def
-   签名；机器 pass 仍清空，且 handler 分类显式依赖「擦除签名」的形态。
+   签名，handler 分类也已改为类型判据 + 核心组合子 allowlist；机器 pass 仍清空。
 5. **缓存口径分裂**：`mode=s/f` 进 key、两套模块排序、`ext:` 哨兵与源摘要并存。
 
 ## 相关阅读

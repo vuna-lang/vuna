@@ -951,15 +951,27 @@ hasClauseParam : IrTy -> Bool
 hasClauseParam (IrTyFun d c) = isClauseTy d || hasClauseParam c
 hasClauseParam _ = False
 
+-- | 核心 handler 组合子：opH 的类型是裸类型变量 `h`，类型判据看不出 clause，
+-- 只能按定义名点名（不是 `startsWith … contains` 的字符串启发式）。
+isCoreHandleCombinator : String -> Bool
+isCoreHandleCombinator n =
+  n
+    == "Base.Effect.Core.handleCore"
+    || n
+    == "Base.Effect.Core.handleCoreAt"
+    || n
+    == "Base.Effect.Core.handleCoreLin"
+    || n == "Base.Effect.Core.handleWith" || n == "Base.Effect.Core.handleWithAt"
+
 isHandleCombinator : HandlerTables -> String -> Bool
 isHandleCombinator t n =
   case sigOf t.htSigs n of
     Just ty =>
       if funArity ty == 0 then
-        String.startsWith "Base.Effect." n && String.contains "handle" n
+        isCoreHandleCombinator n
       else
-        isHandlerCombinatorTy ty
-    Nothing => String.startsWith "Base.Effect." n && String.contains "handle" n
+        isHandlerCombinatorTy ty || isCoreHandleCombinator n
+    Nothing => isCoreHandleCombinator n
 
 clauseArityOf : HandlerTables -> String -> Int
 clauseArityOf t n =
@@ -1522,18 +1534,13 @@ mStepsDef (IrDef n ar deps sigTy body r g sp) =
   IrDef n ar deps sigTy (mSteps (cpsFuelOfBody body) body) r g sp
 mStepsDef d = d
 
--- | handler 分类只看「签名已擦除」的形态：分类口径与 CPS 是否保留签名解耦。
-eraseDefSig : IrDef -> IrDef
-eraseDefSig (IrDef n ar deps _ body r g sp) = IrDef n ar deps Nothing body r g sp
-eraseDefSig d = d
-
 export cpsDefsMachine : List IrDef -> Result (List IrDef)
 cpsDefsMachine defs =
   case cpsDefs defs of
     Err msg => Err msg
     Ok ds =>
       let
-        handlerNames = collectHandleOpsDefs 100000 (map eraseDefSig ds)
+        handlerNames = collectHandleOpsDefs 100000 ds
       in Ok
         (map mStepsDef (map mApplysDef (map mMarkedDef (mDefs handlerNames (cpsFuelOfDefs ds) ds))))
 
