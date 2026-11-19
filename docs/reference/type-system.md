@@ -219,9 +219,12 @@ quantity / 线性规则见 [qtt.md](qtt.md)（quantity 与擦除口径以该页�
 ### 实现侧护栏（fuel / measure 站点）
 
 终止性判据之外，前端与加载器的状态机（词法、语法、TOML / JSON、目录遍历）用输入规模
-线性放大的显式 fuel 或可证明的结构递归；下表是各站点的真实上界。编译器、前端与加载器
-的站点耗尽守卫时报明确的 internal 错误；工具链站点（Fmt / Files / Index / Repl / Lsp）
-按不可达规模设置上界，正常输入不触发。深层 / 长输入夹具锁定合法规模不会耗尽守卫。
+线性放大的显式 fuel 或可证明的结构递归；精化 / 降级的入口同理：预算按
+`Rast.exprWeight`（节点数）派生，递归位置仍按 `fuel - 1` 递减，所以合法的大表达式
+（长算子链、长 `let` 链）不会因嵌套深度报 `IC_FuelExhausted`。下表是各站点的真实上界。
+编译器、前端与加载器的站点耗尽守卫时报明确的 internal 错误；工具链站点（Fmt / Files /
+Index / Repl / Lsp）按不可达规模设置上界，正常输入不触发。深层 / 长输入夹具锁定合法规模
+不会耗尽守卫。
 
 | 站点 | measure / 上界 |
 | --- | --- |
@@ -231,6 +234,9 @@ quantity / 线性规则见 [qtt.md](qtt.md)（quantity 与擦除口径以该页�
 | `Frontend.Toml` | 逐字符状态机 `2*len+16`；逐行主循环 `4*lines+16` |
 | `Loader.Resolve` | 显式 fuel 而非结构递归：每个子项重新播种 `1073741824`（1G），每步递减（守卫 Int 判据） |
 | `Frontend.Packages.Pkg` | `pkgFuelBound = 1048576`：每条依赖边 / 展开一个包目录消费 ≥1 步，`memStackDir` 防环 |
+| `Elab.Term` 入口（`checkE` / `inferE` / `checkType` / `checkTypeInfer` / `checkByInfer`） | `256 + 8*exprWeight`；嵌套深度 ≤ 节点数，应用脊椎每层经若干层包装器合计约 5 步 |
+| `Elab.Records`（record / record pattern 降级） | `512 + 8*exprWeight`、`64 + 8*patWeight`；每个节点至少 1 步 |
+| `Elab.Termination`（`strWalk` / `siteWalkC`） | `32 + 8*exprWeight`；每个被访问节点至少消耗 1 步 |
 | `Vuna.Json` | `8*len+64`；互递归组返回剩余输入，SCT 不可见，用同参数位 `fuel - 1` |
 | `Vuna.Fmt.Expr` | 固定预算 `formatFuelBound = 1073741824`（1G）；块级布局同时沿 AST 与缩进 / 模式前进 |
 | `Vuna.Files` / `Index.Scan` | 目录树每下钻一层递减（起点 `1048576`）；上界 = 目录深度，符号链接环被截断 |

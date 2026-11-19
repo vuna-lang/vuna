@@ -204,7 +204,7 @@ siteCollectClauses comp ctors projs facts caller (cl :: rest) acc =
     facts
     caller
     rest
-    (siteWalkC (exprBudget (secondOf cl)) comp ctors projs caller facts (strSizeEntries (firstOf cl)) [] (secondOf cl) acc)
+    (siteWalkC (exprBudget 32 (secondOf cl)) comp ctors projs caller facts (strSizeEntries (firstOf cl)) [] (secondOf cl) acc)
 
 siteCollect : List String -> List String -> List (Pair String (List Int)) -> HashMap String (List (Pair (List Pat) Expr)) -> HashMap String (List Int) -> List Site
 siteCollect comp ctors projs defTbl facts = siteCollectGo comp ctors projs defTbl facts comp []

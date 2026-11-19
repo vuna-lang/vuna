@@ -171,6 +171,95 @@ exprSpan (EDo stmts sp) = sp
 exprSpan (EAnn inner ty sp) = sp
 exprSpan (EInterp multi parts sp) = sp
 
+-- 节点计数与按规模派生的步数预算。
+--
+-- 精化 / 降级的入口用固定步数预算时，合法的大表达式（长算子链、长 `let` 链）
+-- 会被误报成 `IC_FuelExhausted`；各阶段的递归深度不会超过节点数，所以入口按
+-- 节点数派生、递归位置仍按 `fuel - 1` 递减。
+export patWeight : Pat -> Int
+patWeight (PVar _ _) = 1
+patWeight (PAs _ inner _) = 1 + patWeight inner
+patWeight (PWild _) = 1
+patWeight (PCon _ pats _) = 1 + patWeightList pats
+patWeight (PInt _ _) = 1
+patWeight (PStr _ _) = 1
+patWeight (PRecord _ fields _) = 1 + patWeightFields fields
+
+patWeightList : List Pat -> Int
+patWeightList [] = 0
+patWeightList (p :: rest) = patWeight p + patWeightList rest
+
+patWeightFields : List (Pair String Pat) -> Int
+patWeightFields [] = 0
+patWeightFields (f :: rest) = patWeight (secondOf f) + patWeightFields rest
+
+-- | RAST 表达式节点数（含模式、局部函数 clause body / do 语句 / record 字段）。
+--   每访问一个节点至少消耗 1 单位 fuel，因此 `exprBudget` 的上界成立；不要退回固定常数。
+export exprWeight : Expr -> Int
+exprWeight (EVar _ _) = 1
+exprWeight (EInt _ _) = 1
+exprWeight (EStr _ _) = 1
+exprWeight (EFloat _ _) = 1
+exprWeight (EInfix _ lhs rhs _) = 1 + exprWeight lhs + exprWeight rhs
+exprWeight (EParen inner _) = 1 + exprWeight inner
+exprWeight (EBacktick _ lhs rhs _) = 1 + exprWeight lhs + exprWeight rhs
+exprWeight (ESectOp _ _) = 1
+exprWeight (ESectL _ rhs _) = 1 + exprWeight rhs
+exprWeight (ESectR lhs _ _) = 1 + exprWeight lhs
+exprWeight (ELam _ body _) = 1 + exprWeight body
+exprWeight (EApp fn args _) = 1 + exprWeight fn + exprWeightList args
+exprWeight (EPi _ _ _ dom cod _) = 1 + exprWeight dom + exprWeight cod
+exprWeight (ELet binds body _ _) = 1 + patExprWeight binds + exprWeight body
+exprWeight (ELocalFun clauses _) = 1 + clauseWeight clauses
+exprWeight (ECase scrut alts _) = 1 + exprWeight scrut + patExprWeight alts
+exprWeight (EIf c t e _) = 1 + exprWeight c + exprWeight t + exprWeight e
+exprWeight (EField base _ _) = 1 + exprWeight base
+exprWeight (ERecord _ fields _) = 1 + exprWeightFields fields
+exprWeight (ERecUpdate base fields _) = 1 + exprWeight base + exprWeightFields fields
+exprWeight (EDo stmts _) = 1 + doStmtWeight stmts
+exprWeight (EAnn value ty _) = 1 + exprWeight value + exprWeight ty
+exprWeight (EInterp _ parts _) = 1 + interpWeight parts
+
+exprWeightList : List Expr -> Int
+exprWeightList [] = 0
+exprWeightList (e :: rest) = exprWeight e + exprWeightList rest
+
+patExprWeight : List (Pair Pat Expr) -> Int
+patExprWeight [] = 0
+patExprWeight (p :: rest) = patWeight (firstOf p) + exprWeight (secondOf p) + patExprWeight rest
+
+clauseWeight : List (Pair (List Pat) Expr) -> Int
+clauseWeight [] = 0
+clauseWeight (c :: rest) = patWeightList (firstOf c) + exprWeight (secondOf c) + clauseWeight rest
+
+exprWeightFields : List (Pair String Expr) -> Int
+exprWeightFields [] = 0
+exprWeightFields (f :: rest) = exprWeight (secondOf f) + exprWeightFields rest
+
+doStmtWeight : List DoStmt -> Int
+doStmtWeight [] = 0
+doStmtWeight (s :: rest) = oneDoStmtWeight s + doStmtWeight rest
+
+oneDoStmtWeight : DoStmt -> Int
+oneDoStmtWeight (DBind pat expr _) = 1 + patWeight pat + exprWeight expr
+oneDoStmtWeight (DExpr expr _) = 1 + exprWeight expr
+
+interpWeight : List InterpPart -> Int
+interpWeight [] = 0
+interpWeight (p :: rest) = oneInterpWeight p + interpWeight rest
+
+oneInterpWeight : InterpPart -> Int
+oneInterpWeight (IPText _) = 1
+oneInterpWeight (IPHole e) = 1 + exprWeight e
+
+-- | 表达式入口预算：`base` 是旧的固定值（小表达式行为不变），随节点数线性增长。
+export exprBudget : Int -> Expr -> Int
+exprBudget base e = base + 8 * exprWeight e
+
+-- | 模式入口预算（同上；模式比表达式廉价，调用方给更小的 `base`）。
+export patBudget : Int -> Pat -> Int
+patBudget base p = base + 8 * patWeight p
+
 export doStmtSpan : DoStmt -> Span
 doStmtSpan (DBind pat expr sp) = sp
 doStmtSpan (DExpr expr sp) = sp

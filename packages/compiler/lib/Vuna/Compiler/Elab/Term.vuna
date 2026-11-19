@@ -1,7 +1,7 @@
 module Vuna.Compiler.Elab.Term where
 
--- Vuna.Compiler.Elab.Term：项检查门面：对外暴露带常量 fuel 的 wrapper，
--- 实现见 `.Impl`，非递归 helper 见 `.Support`。
+-- Vuna.Compiler.Elab.Term：项检查门面：对外暴露的 wrapper 按表达式规模派生步数预算
+-- （`exprBudget`，小表达式取下界 = 旧的固定值），实现见 `.Impl`，非递归 helper 见 `.Support`。
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Core.Term
 import Vuna.Compiler.Core.Eval
@@ -28,10 +28,10 @@ export specializeEqApp : List (Pair String Term) -> Ctx -> Ec -> String -> List 
 specializeEqApp a1 a2 a3 a4 a5 a6 = specializeEqAppFuel 256 a1 a2 a3 a4 a5 a6
 
 export checkTypeInfer : List (Pair String Term) -> Ctx -> Ec -> Expr -> Check (Pair Term (Pair Level Ec))
-checkTypeInfer a1 a2 a3 a4 = checkTypeInferFuel 256 a1 a2 a3 a4
+checkTypeInfer a1 a2 a3 a4 = checkTypeInferFuel (exprBudget 256 a4) a1 a2 a3 a4
 
 export checkByInfer : List (Pair String Term) -> Ctx -> Ec -> Expr -> Value -> Check (Pair Term Ec)
-checkByInfer a1 a2 a3 a4 a5 = checkByInferFuel 256 a1 a2 a3 a4 a5
+checkByInfer a1 a2 a3 a4 a5 = checkByInferFuel (exprBudget 256 a4) a1 a2 a3 a4 a5
 
 export inferLetIgnored : List (Pair String Term) -> Ctx -> Ec -> Expr -> List (Pair Pat Expr) -> Expr -> Bool -> Span -> Span -> Check (Pair Term (Pair Value Ec))
 inferLetIgnored a1 a2 a3 a4 a5 a6 a7 a8 a9 = inferLetIgnoredFuel 256 a1 a2 a3 a4 a5 a6 a7 a8 a9
@@ -102,7 +102,7 @@ elabCatchAll a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 =
   elabCatchAllFuel 256 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12
 
 export checkE : List (Pair String Term) -> Ctx -> Ec -> Expr -> Value -> Check (Pair Term Ec)
-checkE a1 a2 a3 a4 a5 = checkEFuel 256 a1 a2 a3 a4 a5
+checkE a1 a2 a3 a4 a5 = checkEFuel (exprBudget 256 a4) a1 a2 a3 a4 a5
 
 export inferPi : List (Pair String Term) -> Ctx -> Ec -> String -> Bool -> Maybe Qty -> Expr -> Expr -> Span -> Check (Pair Term (Pair Value Ec))
 inferPi a1 a2 a3 a4 a5 a6 a7 a8 a9 = inferPiFuel 256 a1 a2 a3 a4 a5 a6 a7 a8 a9
@@ -111,7 +111,7 @@ export inferAnn : List (Pair String Term) -> Ctx -> Ec -> Expr -> Expr -> Span -
 inferAnn a1 a2 a3 a4 a5 a6 = inferAnnFuel 256 a1 a2 a3 a4 a5 a6
 
 export checkType : List (Pair String Term) -> Ctx -> Ec -> Expr -> Check (Pair Term (Pair Level Ec))
-checkType a1 a2 a3 a4 = checkTypeFuel 256 a1 a2 a3 a4
+checkType a1 a2 a3 a4 = checkTypeFuel (exprBudget 256 a4) a1 a2 a3 a4
 
 export inferAppUnderType : List (Pair String Term) -> Ctx -> Ec -> String -> List Expr -> Span -> Check (Pair Term (Pair Level Ec))
 inferAppUnderType a1 a2 a3 a4 a5 a6 = inferAppUnderTypeFuel 256 a1 a2 a3 a4 a5 a6
@@ -138,7 +138,7 @@ export checkCondBool : List (Pair String Term) -> Ctx -> Ec -> Expr -> Span -> C
 checkCondBool a1 a2 a3 a4 a5 = checkCondBoolFuel 256 a1 a2 a3 a4 a5
 
 export inferE : List (Pair String Term) -> Ctx -> Ec -> Expr -> Check (Pair Term (Pair Value Ec))
-inferE a1 a2 a3 a4 = inferEFuel 256 a1 a2 a3 a4
+inferE a1 a2 a3 a4 = inferEFuel (exprBudget 256 a4) a1 a2 a3 a4
 
 export inferCaseE : List (Pair String Term) -> Ctx -> Ec -> Expr -> List (Pair Pat Expr) -> Span -> Check (Pair Term (Pair Value Ec))
 inferCaseE a1 a2 a3 a4 a5 a6 = inferCaseEFuel 256 a1 a2 a3 a4 a5 a6

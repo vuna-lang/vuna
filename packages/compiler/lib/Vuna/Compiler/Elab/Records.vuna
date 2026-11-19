@@ -156,7 +156,7 @@ desugarRecordDecl records d =
     DExtern name cName ty sp => OkC d
 
 desugarPattern : List RecordMeta -> Pat -> Check Pat
-desugarPattern records pat = desugarPatternFuel 64 records pat
+desugarPattern records pat = desugarPatternFuel (patBudget 64 pat) records pat
 
 desugarPatternFuel : Int -> List RecordMeta -> Pat -> Check Pat
 desugarPatternFuel fuel records pat =
@@ -359,7 +359,7 @@ ctorName : String -> String
 ctorName dname = dname
 
 desugarExpr : List RecordMeta -> Expr -> Check Expr
-desugarExpr a1 a2 = desugarExprFuel 512 a1 a2
+desugarExpr a1 a2 = desugarExprFuel (exprBudget 512 a2) a1 a2
 
 -- case 分支左端的 as-pattern（`y@pat => body`）：等价于 `pat => let y = <scrutinee> in body`。
 -- 纯语言里 scrutinee 可重复求值；常见形态（scrutinee 是变量）无额外开销。

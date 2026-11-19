@@ -403,7 +403,7 @@ strWalkStmts fuel comp ctors projs p sizes caller facts region (s :: rest) acc =
 strClause : List String -> List String -> List (Pair String (List Int)) -> Int -> String -> HashMap String (List Int) -> Pair (List Pat) Expr -> Pair Bool (List (Pair (Pair (Pair String String) Int) Span))
 strClause comp ctors projs p caller facts clause =
   strWalk
-    (exprBudget (secondOf clause))
+    (exprBudget 32 (secondOf clause))
     comp
     ctors
     projs
