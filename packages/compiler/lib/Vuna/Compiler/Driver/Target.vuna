@@ -1,0 +1,143 @@
+-- | 目标后端插件驱动：DT 检查 + Lowering 之后，把 IR 交给独立进程。
+--
+-- 进程边界：
+--   vuna-target-<t> --ir FILE --out DIR [--print] [--diag FILE]
+--
+-- 写侧用 `Vuna.Ir.Codec.encodeProgram`，读侧只解码诊断
+-- （`Vuna.Compiler.Base.Diag.Codec`）。后端插件与入口一样从 `<exeDir>` / `$VUNA_EXEC_PATH`
+-- 发现，不扫 `PATH`。
+--
+-- 边界：本模块不 import 任何后端实现，只依赖 IR 与诊断编码。
+module Vuna.Compiler.Driver.Target where
+
+import Base.Effect.Types as EffTypes
+import Base.Data.List as List
+import Base.Data.Pair as Pair
+import Base.Data.String as String
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Base.Diag
+import Vuna.Compiler.Base.Diag.Codec
+import Vuna.Compiler.Driver.Compile
+import Vuna.Compiler.Driver.Dt
+import Vuna.Compiler.Frontend.Packages.Pkg
+import Vuna.Compiler.Lowering.Program
+import Vuna.Ir.Codec
+import Vuna.Ir.Model
+import Base.Effect.Env as EffEnv
+import Base.Effect.Fs as EffFs
+import Base.Effect.Process as EffProcess
+
+-- | 后端插件的二进制名。
+backendBinaryName : String -> String
+backendBinaryName target = "vuna-target-" ++ target
+
+-- | 路径的父目录（`/a/b` → `/a`；无 `/` → `.`）。
+dirOf : String -> String
+dirOf path =
+  case String.split "/" path of
+    [] => "."
+    parts => joinPathSlash (dropLast parts)
+
+dropLast : List String -> List String
+dropLast [] = []
+dropLast xs = reverse (drop 1 (reverse xs))
+
+joinPathSlash : List String -> String
+joinPathSlash [] = "/"
+joinPathSlash parts = join "/" parts
+
+-- | 找后端插件：`<exeDir>/vuna-target-<t>`，其次 `$VUNA_EXEC_PATH` 的目录。
+findBackend : Member nEnv EnvOp r, Member nFs FsOp r => String -> Eff r (Maybe String)
+findBackend target =
+  do
+    exe <- envExecPath
+    execEnv <- envGetEnv "VUNA_EXEC_PATH"
+    searchBackend (append [dirOf exe] (execDirs execEnv)) target
+
+execDirs : String -> List String
+execDirs s = if s == "" then [] else String.split ":" s
+
+searchBackend : Member nEnv EnvOp r, Member nFs FsOp r => List String -> String -> Eff r (Maybe String)
+searchBackend [] target = pure Nothing
+searchBackend (d :: rest) target =
+  if d == "" then
+    searchBackend rest target
+  else
+    do
+      exists <- fsFileExists (backendPath d target)
+      if exists then pure (Just (backendPath d target)) else searchBackend rest target
+
+-- | 编译到非 OCaml 目标：检查 + Lowering，再把 IR 交给后端插件。
+export compileBackend : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> String -> Bool -> String -> Eff r (Check (Pair (List String) (List Diagnostic)))
+compileBackend ctx target entry printResult outDir =
+  do
+    _ <- ensureDirPath outDir
+    checked <- dtCheckWithProgramParts ctx entry
+    case checked of
+      ErrC e => pure (ErrC e)
+      OkC pair =>
+        let
+          pkg = secondOf pair
+        in case lowerProgramOf pkg.checkedProgram.dtProgDatas pkg.checkedProgram.dtProgDefs pkg.checkedProgram.dtProgGlobals of
+          ErrC e => pure (ErrC e)
+          OkC program => dispatch target program printResult outDir
+
+dispatch : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> IrProgram -> Bool -> String -> Eff r (Check (Pair (List String) (List Diagnostic)))
+dispatch target program printResult outDir =
+  do
+    backend <- findBackend target
+    case backend of
+      Nothing => pure (ErrC (missingBackendDiag target))
+      Just bin =>
+        do
+          _ <- fsWriteFile (irPathOf outDir target) (encodeProgram program)
+          code <- processRunIn "." (append [bin, "--ir", irPathOf outDir target, "--out", outDir, "--diag", diagPathOf outDir target, "--files", filesPathOf outDir target] (if printResult then ["--print"] else []))
+          hasDiag <- fsFileExists (diagPathOf outDir target)
+          payload <- if hasDiag then fsReadFile (diagPathOf outDir target) else pure ""
+          hasFiles <- fsFileExists (filesPathOf outDir target)
+          filesPayload <- if hasFiles then fsReadFile (filesPathOf outDir target) else pure ""
+          _ <- fsRemoveFile (irPathOf outDir target)
+          _ <- if hasFiles then fsRemoveFile (filesPathOf outDir target) else pure 0
+          _ <- if hasDiag then fsRemoveFile (diagPathOf outDir target) else pure 0
+          if code == 0 then pure (OkC (Pair (splitNames filesPayload) (decodedDiags payload))) else pure (ErrC (firstDiagOr (decodedDiags payload) target code))
+
+decodedDiags : String -> List Diagnostic
+decodedDiags payload =
+  case decDiagnostics payload of
+    Just ds => ds
+    Nothing => []
+
+firstDiagOr : List Diagnostic -> String -> Int -> Diagnostic
+firstDiagOr (d :: _) _ _ = d
+firstDiagOr [] target code =
+  diagNoLoc
+    SevError
+    PhCodegen
+    CatCodegen
+    ""
+    "target backend `${backendBinaryName target}` failed with exit code ${strFromInt code}"
+
+missingBackendDiag : String -> Diagnostic
+missingBackendDiag target =
+  diagNoLoc
+    SevError
+    PhCodegen
+    CatCodegen
+    ""
+    "target backend plugin `${backendBinaryName target}` is not installed (expected next to `vuna`)"
+
+-- | 产物清单：插件按行写出，空行忽略。
+splitNames : String -> List String
+splitNames payload = filter (\s => s /= "") (String.split "\n" payload)
+
+backendPath : String -> String -> String
+backendPath dir target = "${dir}/${backendBinaryName target}"
+
+irPathOf : String -> String -> String
+irPathOf outDir target = "${outDir}/.vuna-ir-${target}"
+
+diagPathOf : String -> String -> String
+diagPathOf outDir target = "${outDir}/.vuna-diag-${target}"
+
+filesPathOf : String -> String -> String
+filesPathOf outDir target = "${outDir}/.vuna-files-${target}"

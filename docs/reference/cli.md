@@ -42,6 +42,8 @@
 | `vuna-toolchain` | `toolchain` | run / test / fmt / lint / doc / search / map / api / goal / errors / deps / store / repl / lsp |
 | `vuna-compiler` | `compiler` | check / build / compile；裸 flag（`vuna --typed`）也转给它（已删 flag 提示的真源） |
 | `vuna-dev` | `dev` | 仓库专用的 `vuna dev …`（suite / obs / errors gen / ir dump）——当前与工具链同包，未独立安装 |
+| `vuna-target-native` | `target-native` | `--target native` 的后端：读 IR 编码、写 x86-64 汇编文件集 |
+| `vuna-target-wasm` | `target-wasm` | `--target wasm` 的后端：读 IR 编码、写 `main.wat` + 能力告警 |
 
 `vuna-compiler` 与自举 stage-1 是**同一个产物**：包的入口就是产品插件入口，nix 把它装成两个名字。
 
@@ -156,3 +158,19 @@ flag 是 exit 2 的用法错误（附带最近候选建议）。`--debug-perf` �
 - lint / fmt / doc：[lint.md](lint.md)、[api-docs.md](api-docs.md)、[tooling.md](tooling.md)
 - 测试与 suite：[testing.md](testing.md)
 - 观测：[observability.md](observability.md)
+### 后端插件协议（`vuna-target-*`）
+
+编译器把 DT 检查 + Lowering 后的 IR 编码成字节（`Vuna.Ir.Codec.encodeProgram`），再以
+子进程调用后端：
+
+```console
+vuna-target-<t> --ir FILE --out DIR [--print] [--diag FILE] [--files FILE]
+```
+
+- `--ir`：`Vuna.Ir.Codec` 的载荷；`--out`：输出目录；
+- `--diag`：诊断回传（`Vuna.Compiler.Base.Diag.Codec` 编码；错误与非阻塞告警都走它）；
+- `--files`：产物清单（每行一个相对路径，编译器据此生成 native 链接脚本）；
+- 退出码：`0` 成功（诊断可为 warning）、`2` 后端拒绝（诊断已写回）、`3` 载荷无效。
+
+发现规则与命令插件相同（`<exeDir>` → `$VUNA_EXEC_PATH`）：缺插件时 `--target <t>`
+报 `target backend plugin ... is not installed`，不静默回落到 OCaml。

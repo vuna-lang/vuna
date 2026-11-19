@@ -27,6 +27,8 @@ let
     compilerBase = ../../packages/compiler-base;
     ir = ../../packages/ir;
     targetOcaml = ../../packages/target-ocaml;
+    targetNative = ../../packages/target-native;
+    targetWasm = ../../packages/target-wasm;
     base = ../../packages/base;
     pluginKit = ../../packages/plugin-kit;
     toolchain = ../../packages/toolchain;
@@ -59,6 +61,8 @@ let
     src.compilerBase
     src.ir
     src.targetOcaml
+    src.targetNative
+    src.targetWasm
     src.pluginKit
     src.toolchain
     src.cli
@@ -164,6 +168,8 @@ let
       src.compilerBase
       src.ir
       src.targetOcaml
+      src.targetNative
+      src.targetWasm
       src.base
       src.cli
       src.pluginKit
@@ -335,6 +341,8 @@ in
       src.compilerBase
       src.ir
       src.targetOcaml
+      src.targetNative
+      src.targetWasm
       src.base
       src.manifest
     ];
@@ -408,6 +416,8 @@ in
       src.compilerBase
       src.ir
       src.targetOcaml
+      src.targetNative
+      src.targetWasm
       src.cli
       src.base
       src.pluginKit
@@ -440,6 +450,8 @@ in
       src.compilerBase
       src.ir
       src.targetOcaml
+      src.targetNative
+      src.targetWasm
       src.base
     ];
     nativeBuildInputs = [

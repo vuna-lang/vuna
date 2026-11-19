@@ -1,6 +1,6 @@
-module Vuna.Compiler.Wasm.Instr where
+module Vuna.Target.Wasm.Instr where
 
--- Vuna.Compiler.Wasm.Instr：WAT 指令 ADT。
+-- Vuna.Target.Wasm.Instr：WAT 指令 ADT。
 --
 -- 只服务 WAT 文本渲染（`Wasm.Render`）：每个构造子对应一条 WAT 指令，操作数是
 -- 已渲染好的 WAT 名字（`$x`）或数字。不做二进制编码（D16：`.wasm` 由 wasm-tools 汇编）。

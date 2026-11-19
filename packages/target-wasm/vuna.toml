@@ -1,0 +1,21 @@
+# vuna-target-wasm：wasm 后端插件（IR → WAT 文本）。
+#
+# 不在种子闭包内：编译器只把 IR 编码后交给它，再读回诊断与产物文件。
+[package]
+name = "vuna-target-wasm"
+
+[dependencies]
+vuna-base = "../base"
+vuna-compiler-base = "../compiler-base"
+vuna-ir = "../ir"
+
+[export]
+modules = [
+  "Vuna.Target.Wasm.Instr",
+  "Vuna.Target.Wasm.Model",
+  "Vuna.Target.Wasm.Module",
+  "Vuna.Target.Wasm.Plugin",
+  "Vuna.Target.Wasm.Render",
+  "Vuna.Target.Wasm.Runtime",
+  "Vuna.Target.Wasm.Types",
+]

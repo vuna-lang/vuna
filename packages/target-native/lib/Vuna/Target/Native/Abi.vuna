@@ -1,4 +1,4 @@
-module Vuna.Compiler.Native.Abi where
+module Vuna.Target.Native.Abi where
 
 -- x86-64 SysV 的调用约定、栈帧、字符串对象布局、稳定命名。
 --
@@ -15,7 +15,7 @@ module Vuna.Compiler.Native.Abi where
 --     字符串不可变，所有构造都分配新对象；
 --   * 堆对象前有一个 8 字节块头 `[size | flags]`（见下），指针指向块头之后的 payload；
 --   * 堆是段链表（`.bss` 起始段 + `mmap` 新段），空闲块按尺寸类复用，标记-清扫 GC
---     见 `Vuna.Compiler.Native.Gc`。
+--     见 `Vuna.Target.Native.Gc`。
 --
 -- 边界：只 import Base 与 `Native.Model`。
 import Base.Data.Bool as Bool
@@ -23,7 +23,7 @@ import Base.Data.Int as Int
 import Base.Data.List as List
 import Base.Data.Pair as Pair
 import Base.Data.String as String
-import Vuna.Compiler.Native.Model
+import Vuna.Target.Native.Model
 
 -- | 运行时/桥接函数所属的模块路径（渲染成根目录的 `runtime.s`）。
 export nativeRuntimeModule : List String

@@ -135,7 +135,7 @@ if [ -f "$LOWER" ] && ! imports_of "$LOWER" | grep -qE '^Vuna\.Target\.Ocaml\.Ru
 fi
 
 # 规则 9（native 后端）：`Native.Module` 必须消费 IR。
-NATIVE_MODULE=packages/compiler/lib/Vuna/Compiler/Native/Module.vuna
+NATIVE_MODULE=packages/target-native/lib/Vuna/Target/Native/Module.vuna
 if [ -f "$NATIVE_MODULE" ]; then
   if ! imports_of "$NATIVE_MODULE" | grep -qE '^Vuna\.Ir(\.|$)'; then
     echo "ir-boundary: $NATIVE_MODULE does not import Vuna.Ir (native backend must consume IR)"
@@ -154,7 +154,7 @@ for model in packages/target-ocaml/lib/Vuna/Target/Ocaml/Model.vuna packages/ir/
 done
 
 # 规则 10（wasm 后端）：`Wasm.Module` 必须消费 IR。
-WASM_MODULE=packages/compiler/lib/Vuna/Compiler/Wasm/Module.vuna
+WASM_MODULE=packages/target-wasm/lib/Vuna/Target/Wasm/Module.vuna
 if [ -f "$WASM_MODULE" ]; then
   if ! imports_of "$WASM_MODULE" | grep -qE '^Vuna\.Ir(\.|$)'; then
     echo "ir-boundary: $WASM_MODULE does not import Vuna.Ir (wasm backend must consume IR)"

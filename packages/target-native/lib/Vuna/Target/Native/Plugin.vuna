@@ -1,0 +1,166 @@
+-- | `vuna-target-native` 插件入口：读 IR → native 汇编文本 → 落盘。
+--
+-- 协议（编译器与后端插件之间）：
+--   vuna-target-native --ir FILE --out DIR [--print] [--diag FILE]
+--
+-- `--ir` 是 `Vuna.Ir.Codec.encodeProgram` 的载荷；`--out` 是输出目录；`--print` 让后端
+-- 打印产物清单；`--diag` 是诊断回传文件（`Vuna.Compiler.Base.Diag.Codec` 的编码）。
+-- 退出码：0 = 成功（诊断可为 warning），2 = 源码/后端拒绝（诊断已写回），3 = 载荷无效。
+module Vuna.Target.Native.Plugin where
+
+import Vuna.Target.Native.Model
+import Vuna.Target.Native.Module
+import Vuna.Target.Native.Render
+import Vuna.Ir.Codec
+import Vuna.Ir.Model
+import Vuna.Compiler.Base.Diag
+import Vuna.Compiler.Base.Diag.Codec
+import Base.Data.List as List
+import Base.Data.Pair as Pair
+import Base.Data.String as String
+import Base.Effect.Args as EffArgs
+import Base.Effect.Clock as EffClock
+import Base.Effect.Console as EffConsole
+import Base.Effect.Env as EffEnv
+import Base.Effect.Exit as EffExit
+import Base.Effect.Fs as EffFs
+import Base.Effect.Process as EffProcess
+import Base.Effect.Types as EffTypes
+
+-- | 后端错误 → 诊断（插件侧构造，编译器只消费编码后的诊断）。
+nativeErrDiag : NativeErr -> Diagnostic
+nativeErrDiag err = diagNoLoc SevError PhCodegen CatCodegen "" (nativeErrText err)
+
+-- | 命令行参数。
+record Flags where
+  flagIr : String
+  flagOut : String
+  flagDiag : String
+  flagFiles : String
+  flagPrint : Bool
+
+defaultFlags : Flags
+defaultFlags = Flags "" "" "" "" False
+
+-- | 插件入口。
+export runPlugin : Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, ArgsOp] Int
+runPlugin =
+  do
+    args <- argsGetArgs
+    runWith (parseFlags args defaultFlags)
+
+parseFlags : List String -> Flags -> Flags
+parseFlags [] f = f
+parseFlags (a :: rest) f =
+  case a of
+    "--ir" =>
+      case rest of
+        p :: more => parseFlags more (Flags p f.flagOut f.flagDiag f.flagFiles f.flagPrint)
+        [] => f
+    "--out" =>
+      case rest of
+        p :: more => parseFlags more (Flags f.flagIr p f.flagDiag f.flagFiles f.flagPrint)
+        [] => f
+    "--diag" =>
+      case rest of
+        p :: more => parseFlags more (Flags f.flagIr f.flagOut p f.flagFiles f.flagPrint)
+        [] => f
+    "--files" =>
+      case rest of
+        p :: more => parseFlags more (Flags f.flagIr f.flagOut f.flagDiag p f.flagPrint)
+        [] => f
+    "--print" => parseFlags rest (Flags f.flagIr f.flagOut f.flagDiag f.flagFiles True)
+    _ => parseFlags rest f
+
+runWith : Flags -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, ArgsOp] Int
+runWith f =
+  if f.flagIr == "" || f.flagOut == "" then
+    do
+      _ <- consoleEprint "usage: vuna-target-native --ir FILE --out DIR [--print] [--diag FILE]\n"
+      pure 3
+  else
+    do
+      payload <- fsReadFile f.flagIr
+      case decodeProgram (strLength payload + 1) payload of
+        Nothing =>
+          do
+            _ <- consoleEprint "vuna-target-native: invalid IR payload\n"
+            pure 3
+        Just program => execute f program
+
+execute : Flags -> IrProgram -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, ArgsOp] Int
+execute f program =
+  do
+    _ <- ensureDirPath 256 f.flagOut
+    case build program f.flagPrint of
+      NativeRejected err => failWith f [nativeErrDiag err]
+      NativeOk m =>
+        let
+          files = renderFiles m
+        in do
+          _ <- writeFiles f.flagOut files
+          _ <- writeFileList f (map firstOf files)
+          _ <- writeDiagnostics f []
+          pure 0
+
+-- | 写诊断回传文件（错误路径退出 2）。
+failWith : Flags -> List Diagnostic -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, ArgsOp] Int
+failWith f diags =
+  do
+    _ <- writeDiagnostics f diags
+    pure 2
+
+writeDiagnostics : Flags -> List Diagnostic -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, ArgsOp] Int
+writeDiagnostics f diags =
+  if f.flagDiag == "" then
+    pure 0
+  else
+    do
+      _ <- fsWriteFile f.flagDiag (encDiagnostics diags)
+      pure 0
+
+writeFiles : String -> List (Pair String String) -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, ArgsOp] Int
+writeFiles _ [] = pure 0
+writeFiles outDir (f :: rest) =
+  do
+    _ <- ensureDirPath 256 (parentDirOf ("${outDir}/${firstOf f}"))
+    _ <- fsWriteFile "${outDir}/${firstOf f}" (secondOf f)
+    writeFiles outDir rest
+
+parentDirOf : String -> String
+parentDirOf path =
+  case dropLast (split "/" path) of
+    [] => "."
+    ps => join "/" ps
+
+dropLast : List a -> List a
+dropLast [] = []
+dropLast ([_]) = []
+dropLast (x :: rest) = x :: dropLast rest
+
+-- | 递归建目录（`fsMakeDir` 只建一层）。
+ensureDirPath : Int -> String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, ArgsOp] Int
+ensureDirPath fuel path =
+  if fuel <= 0 then
+    pure 0
+  else if path == "" || path == "." || path == "/" then
+    pure 0
+  else
+    do
+      exists <- fsFileExists path
+      if exists then
+        pure 0
+      else
+        do
+          _ <- ensureDirPath (fuel - 1) (parentDirOf path)
+          fsMakeDir path
+
+-- | 产物清单（编译器据此生成 native 链接脚本）。
+writeFileList : Flags -> List String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, ArgsOp] Int
+writeFileList f names =
+  if f.flagFiles == "" then
+    pure 0
+  else
+    do
+      _ <- fsWriteFile f.flagFiles (join "\n" names)
+      pure 0

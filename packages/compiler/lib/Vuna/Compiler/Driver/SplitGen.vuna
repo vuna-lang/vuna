@@ -29,7 +29,7 @@ import Vuna.Compiler.Elab.Term
 import Vuna.Compiler.Elab.Types
 
 -- 单元名同时是 seed 文件名与跨单元引用前缀，所以只取模块路径的**包内部分**：
---   Vuna.Compiler.Native.Abi → Native_dAbi
+--   Vuna.Target.Native.Abi → Native_dAbi
 --   Base.Data.List           → B_dData_dList
 -- 剥前缀只是命名策略，归属推导仍用完整模块名（`SplitMeta` 的表）；重名由
 -- `checkUniqueUnits` 在生成前报错。

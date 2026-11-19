@@ -1,6 +1,6 @@
-module Vuna.Compiler.Native.Module where
+module Vuna.Target.Native.Module where
 
--- Vuna.Compiler.Native.Module：IrProgram -> NativeProgram（x86-64 汇编）。
+-- Vuna.Target.Native.Module：IrProgram -> NativeProgram（x86-64 汇编）。
 --
 -- 覆盖 Int/Nat/Bool 纯值与 `String`（字面量、`++`、`strFromInt`、`strLength`、
 -- `strAt`、`strHash`、`strShow`、`strSubstring`、`bi_eq_str` / `bi_neq_str`、`IrConcatMany`、
@@ -30,10 +30,10 @@ import Vuna.Ir.Cps
 import Vuna.Ir.Analysis
 import Vuna.Ir.Runtime
 import Vuna.Ir.Tail
-import Vuna.Compiler.Native.Abi
-import Vuna.Compiler.Native.Audit
-import Vuna.Compiler.Native.Model
-import Vuna.Compiler.Native.Runtime
+import Vuna.Target.Native.Abi
+import Vuna.Target.Native.Audit
+import Vuna.Target.Native.Model
+import Vuna.Target.Native.Runtime
 
 -- ---------------------------------------------------------------
 -- 结果类型：区分「目标不支持」与「生成器不变式破坏」

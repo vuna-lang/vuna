@@ -1,4 +1,4 @@
-module Vuna.Compiler.Native.Gc where
+module Vuna.Target.Native.Gc where
 
 -- native 后端的保守标记-清扫 GC。
 --
@@ -16,8 +16,8 @@ import Base.Data.Bool as Bool
 import Base.Data.Int as Int
 import Base.Data.List as List
 import Base.Data.String as String
-import Vuna.Compiler.Native.Abi
-import Vuna.Compiler.Native.Model
+import Vuna.Target.Native.Abi
+import Vuna.Target.Native.Model
 
 -- ---------------------------------------------------------------
 -- 状态槽与只读数据

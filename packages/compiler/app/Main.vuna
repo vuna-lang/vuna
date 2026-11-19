@@ -24,7 +24,6 @@ import Vuna.Compiler.Core.Canonical
 import Vuna.Compiler.Elab.Canonical
 import Vuna.Compiler.Base.Bytes
 import Vuna.Compiler.Driver.ToolPayload
-import Vuna.Compiler.Native.Audit
 import Vuna.Compiler.Frontend.Cst
 import Vuna.Compiler.Frontend.Rast
 import Vuna.Compiler.Frontend.Rast.Bridge

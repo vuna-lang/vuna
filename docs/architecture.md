@@ -22,6 +22,10 @@ packages/ir/lib/Vuna/Ir/              （独立包 vuna-ir：擦除后的中间�
 │                             形状 / SCC / 运行时契约 / 校验 / 表示选择 / 变换 / 跨进程编码
 packages/target-ocaml/lib/Vuna/Target/Ocaml/  （独立包 vuna-target-ocaml：OCaml 后端，仍在种子闭包内）
 ├─ Decl Term Assembly Model Render Runtime   IR→OCaml 文本（不 import Core / Elab / Intrinsics）
+packages/target-native/lib/Vuna/Target/Native/  （独立包 vuna-target-native 插件：native 后端，不在种子内）
+├─ Abi Gc Model Module Render Runtime Audit Plugin   IR→x86-64 汇编文本（不 import Core / Elab）
+packages/target-wasm/lib/Vuna/Target/Wasm/      （独立包 vuna-target-wasm 插件：wasm 后端，不在种子内）
+├─ Instr Model Module Render Runtime Types Plugin     IR→WAT 文本
 packages/compiler/lib/Vuna/Compiler/   （目录即层：层名 = 模块前缀；依赖方向由 packages/compiler/vuna.toml
                                 的 [layers] 执行，见 reference/packages.md「层约束」）
 ├─ Frontend/    Ast Lexer Cst Parser Parser/Support Toml Manifest
@@ -33,17 +37,16 @@ packages/compiler/lib/Vuna/Compiler/   （目录即层：层名 = 模块前缀�
 ├─ Elab/        Sig Types Meta Case Dict Term Data Trait InstName Driver Termination
 │               Prelude Match Records Derive Canonical        双向精化
 ├─ Lowering/    Program Env Ty Entry Checks    Core→IR 唯一入口（程序级表/类型表面/入口形态）+ Core 侧检查
-├─ Native/      Abi Gc Model Module Render Runtime   native 后端（x86-64 汇编文本 + 保守标记-清扫 GC）
-├─ Wasm/        Instr Model Module Render Runtime Types   wasm 后端（WAT）
 └─ Driver/      Dt Compile Cache Iface Owner PerfCache ToolPayload CompilerCli
-                Split SplitGen Native Wasm                  输出模型 / facade / 后端驱动 / CLI
+                Split SplitGen Target                              输出模型 / facade / 后端插件驱动 / CLI
 产品 CLI 包 vuna（模块根 packages/cli/lib/，入口 packages/cli/app/Main.vuna）：Cli（+子模块 Spec/Help/Args/
   Err/Suggest/Test/Fmt/Index/Repl/Suite/Dev，命令表与分发，见 [reference/cli.md](reference/cli.md)）、
   Interp/Fmt/Lint/Index（门面+子模块）、
   Obs（+子模块 Types/Read/Validate/Summarize/Run；可观测性工具链，见
   [reference/observability.md](reference/observability.md)）、
   Repl/Run/Doc（+子模块）/Search（+子模块）/Sig/Lsp/Json/TestRunner/Files；suite 执行器在 Test/{Suite,Run}
-依赖图：vuna → vuna-compiler → {vuna-ir, vuna-compiler-base, vuna-target-ocaml} → vuna-base（vuna 也直接依赖 base）
+依赖图：vuna → vuna-compiler → {vuna-ir, vuna-compiler-base, vuna-target-ocaml} → vuna-base（vuna 也直接依赖 base）；
+  vuna-target-native / vuna-target-wasm 只依赖 base + compiler-base + ir，由编译器按 `--target` 起进程。
 中立库 vuna-http（模块根 packages/http/lib/）：Http.{Header,Request,Response,Parse,Render}，
   HTTP/1.1 消息编解码、严格解析规则与传输无关连接层；依赖 vuna-base，不进 seed
   （见 [reference/http.md](reference/http.md)）；依赖图 vuna-http → vuna-base。
@@ -61,8 +64,8 @@ packages/compiler/lib/Vuna/Compiler/   （目录即层：层名 = 模块前缀�
 （如 `Core.Term` / `Core.Eval` / `Core.Conv`、`Loader.Flatten` / `Loader.Modules`、
 `Codegen.Assembly`、`Elab.*`）；`Ir` 的校验入口在 `Ir.Validate`。数据定义只在叶子
 （`Core.Term`、`Elab.Types` 等）。目标每模块 ≤~800 行（当前最大 `Elab/Trait.vuna`，约 1.2k）。
-`packages/compiler/` 的入口闭包是 seed 唯一来源（`packages/compiler/app/Main.vuna` 的 import 闭包，跨 `vuna-ir` / `vuna-compiler-base`；数量以 `seed/` 与
-`nix/seed/files.txt` 与 `nix/seed/rotation.txt` 为准）；`packages/cli/` 工具链在 TCB 之外；`packages/base/` 模块名即 API。
+`packages/compiler/` 的入口闭包是 seed 唯一来源（`packages/compiler/app/Main.vuna` 的 import 闭包，跨 `vuna-ir` / `vuna-compiler-base` / `vuna-target-ocaml`；数量以 `seed/` 与
+`nix/seed/files.txt` 与 `nix/seed/rotation.txt` 为准）；`packages/cli/` 工具链与 `vuna-target-native` / `vuna-target-wasm` 在 TCB 之外；`packages/base/` 模块名即 API。
 
 ## 1. 编译链：Frontend → Loader → Elab → Codegen
 

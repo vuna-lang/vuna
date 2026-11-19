@@ -1,4 +1,4 @@
-module Vuna.Compiler.Wasm.Module where
+module Vuna.Target.Wasm.Module where
 
 -- IrProgram -> WasmModule（WAT 文本之前的结构）。
 --
@@ -25,10 +25,10 @@ import Vuna.Ir.Cps
 import Vuna.Ir.Anf
 import Vuna.Ir.Runtime
 import Vuna.Ir.Tail
-import Vuna.Compiler.Wasm.Instr
-import Vuna.Compiler.Wasm.Model
-import Vuna.Compiler.Wasm.Runtime
-import Vuna.Compiler.Wasm.Types
+import Vuna.Target.Wasm.Instr
+import Vuna.Target.Wasm.Model
+import Vuna.Target.Wasm.Runtime
+import Vuna.Target.Wasm.Types
 
 export data WasmOutcome(..) : Type where
   WasmOk : WasmModule -> WasmOutcome

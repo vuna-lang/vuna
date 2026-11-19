@@ -16,8 +16,7 @@ import Vuna.Compiler.Loader.Fingerprint
 import Vuna.Compiler.Base.Diagnostics.Sink
 import Vuna.Compiler.Frontend.Packages.Pkg
 import Vuna.Compiler.Driver.Compile
-import Vuna.Compiler.Driver.Wasm
-import Vuna.Compiler.Driver.Native
+import Vuna.Compiler.Driver.Target
 import Vuna.Compiler.Base.Store
 import Vuna.Compiler.Driver.Dt
 import Vuna.Compiler.Base.Version
@@ -812,22 +811,18 @@ compileRun printResult entry outDir o =
       withOpts o (dtPathErr entry)
 
 -- | 按 `--target` 选择后端；wasm/native 分支不产 OCaml split 目录。
-compileToTarget : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Bool -> String -> String -> Eff r (Check (Pair Int (List Diagnostic)))
+compileToTarget : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Bool -> String -> String -> Eff r (Check (Pair (List String) (List Diagnostic)))
 compileToTarget ctx entry printResult outDir target =
-  if target == "wasm" then
+  if target == "ocaml" then
     do
-      r <- compileWasm ctx entry printResult outDir
-      pure r
-  else if target == "native" then
-    do
-      r <- compileNative ctx entry printResult outDir
+      r <- compileToDir ctx entry printResult outDir
       pure (
           case r of
             ErrC e => ErrC e
-            OkC _ => OkC (Pair 1 [])
+            OkC p => OkC (Pair [] (secondOf p))
         )
   else
-    compileToDir ctx entry printResult outDir
+    compileBackend ctx target entry printResult outDir
 
 compileFileEntry : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Bool -> String -> String -> CliOpts -> Eff r (Pair Int CliOpts)
 compileFileEntry printResult entry outDir o =
@@ -1257,15 +1252,18 @@ buildNativeOne noCompile multiOut outM pkg o =
     binPath = "${binDir}/${name}"
   in do
     r <-
-      compileNative
+      compileBackend
         (contextWithRelease o.optRelease (packageContext pkg))
+        "native"
         (packageEntry pkg)
         True
         outDir
     case r of
       ErrC e => printDiag o e
-      OkC files =>
-        do
+      OkC p =>
+        let
+          files = firstOf p
+        in do
           _ <- fsWriteFile scriptPath (nativeBuildScript name files)
           if noCompile then
             do
@@ -1309,8 +1307,9 @@ buildWasmOne noCompile outM pkg o =
     args = ["wasm-tools", "parse", "main.wat", "-o", "main.wasm"]
   in do
     r <-
-      compileWasm
+      compileBackend
         (contextWithRelease o.optRelease (packageContext pkg))
+        "wasm"
         (packageEntry pkg)
         True
         outDir

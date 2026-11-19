@@ -1,6 +1,6 @@
-module Vuna.Compiler.Wasm.Render where
+module Vuna.Target.Wasm.Render where
 
--- Vuna.Compiler.Wasm.Render：WasmModule -> canonical WAT 文本。
+-- Vuna.Target.Wasm.Render：WasmModule -> canonical WAT 文本。
 --
 -- 布局规范（docs/reference/wasm.md）：最大 100 列、2 空格缩进、每条指令一行、
 -- 模块级名字稳定、section/类型/函数/data 固定顺序。生成结果不提交进 Git，
@@ -11,8 +11,8 @@ import Base.Data.List as List
 import Base.Data.Maybe as Maybe
 import Base.Data.Pair as Pair
 import Base.Data.String as String
-import Vuna.Compiler.Wasm.Instr
-import Vuna.Compiler.Wasm.Model
+import Vuna.Target.Wasm.Instr
+import Vuna.Target.Wasm.Model
 
 maxLine : Int
 maxLine = 100

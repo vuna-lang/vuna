@@ -1,4 +1,4 @@
-module Vuna.Compiler.Native.Model where
+module Vuna.Target.Native.Model where
 
 -- native 后端的汇编数据模型。
 --

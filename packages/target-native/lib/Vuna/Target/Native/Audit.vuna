@@ -1,4 +1,4 @@
-module Vuna.Compiler.Native.Audit where
+module Vuna.Target.Native.Audit where
 
 -- native 目标能力审计：把可达定义里**当前不支持**的构造按种类计数。
 --
@@ -16,8 +16,8 @@ import Base.Data.Pair as Pair
 import Base.Data.String as String
 import Vuna.Ir.Model
 import Vuna.Ir.Runtime
-import Vuna.Compiler.Native.Model
-import Vuna.Compiler.Native.Runtime
+import Vuna.Target.Native.Model
+import Vuna.Target.Native.Runtime
 
 auditErased : IrBinder -> Bool
 auditErased b = b.irBinderErased

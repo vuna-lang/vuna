@@ -7,9 +7,9 @@ module Vuna.Compiler.Base.Capabilities where
 -- 阻塞 sleep）记在 `docs/reference/wasm.md` §8.1，不在告警层重复。
 --
 -- 值来源（改运行时实现表时必须同步本表）：
---   wasm   → `Vuna.Compiler.Wasm.Runtime` 的 `rtImplOf`
+--   wasm   → `Vuna.Target.Wasm.Runtime` 的 `rtImplOf`
 --   ocaml  → `Vuna.Target.Ocaml.Runtime` 的 `dtp_*`
---   native → `Vuna.Compiler.Native.Runtime` 的 `nativeRtTargetHost`
+--   native → `Vuna.Target.Native.Runtime` 的 `nativeRtTargetHost`
 import Vuna.Compiler.Base.Common
 import Base.Data.String as String
 

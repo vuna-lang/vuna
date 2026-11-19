@@ -1,4 +1,4 @@
-module Vuna.Compiler.Native.Runtime where
+module Vuna.Target.Native.Runtime where
 
 -- native 运行时函数（汇编模板）+ IR 符号映射。
 --
@@ -23,9 +23,9 @@ import Base.Data.List as List
 import Base.Data.Maybe as Maybe
 import Base.Data.Pair as Pair
 import Base.Data.String as String
-import Vuna.Compiler.Native.Abi
-import Vuna.Compiler.Native.Gc
-import Vuna.Compiler.Native.Model
+import Vuna.Target.Native.Abi
+import Vuna.Target.Native.Gc
+import Vuna.Target.Native.Model
 
 -- ---------------------------------------------------------------
 -- 常量与只读数据

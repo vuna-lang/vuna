@@ -62,6 +62,8 @@ let
       cp -r ${../../packages/compiler-base} packages/compiler-base
       cp -r ${../../packages/ir} packages/ir
       cp -r ${../../packages/target-ocaml} packages/target-ocaml
+      cp -r ${../../packages/target-native} packages/target-native
+      cp -r ${../../packages/target-wasm} packages/target-wasm
       cp -r ${../../packages/base} packages/base
       chmod -R u+w .
       ${vuna-seed}/bin/vuna-seed build --no-compile --out stage1 packages/compiler
@@ -86,6 +88,10 @@ let
       cp packages/cli/.output/bin/vuna "$out/bin/vuna"
       ${vuna-compiler}/bin/vuna-compiler build --package vuna-toolchain .
       cp packages/toolchain/.output/bin/vuna-toolchain "$out/bin/vuna-toolchain"
+      ${vuna-compiler}/bin/vuna-compiler build --package vuna-target-native .
+      cp packages/target-native/.output/bin/vuna-target-native "$out/bin/vuna-target-native"
+      ${vuna-compiler}/bin/vuna-compiler build --package vuna-target-wasm .
+      cp packages/target-wasm/.output/bin/vuna-target-wasm "$out/bin/vuna-target-wasm"
       # 编译器命令走独立插件（同一个 stage-1 产物，安装名即插件名）。
       cp ${vuna-compiler}/bin/vuna-compiler "$out/bin/vuna-compiler"
       cp -r packages/base "$out/base"

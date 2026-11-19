@@ -1,0 +1,22 @@
+# vuna-target-native：native 后端插件（IR → x86-64 汇编文本）。
+#
+# 不在种子闭包内：编译器只把 IR 编码后交给它，再读回诊断与产物文件。
+[package]
+name = "vuna-target-native"
+
+[dependencies]
+vuna-base = "../base"
+vuna-compiler-base = "../compiler-base"
+vuna-ir = "../ir"
+
+[export]
+modules = [
+  "Vuna.Target.Native.Abi",
+  "Vuna.Target.Native.Audit",
+  "Vuna.Target.Native.Gc",
+  "Vuna.Target.Native.Model",
+  "Vuna.Target.Native.Module",
+  "Vuna.Target.Native.Plugin",
+  "Vuna.Target.Native.Render",
+  "Vuna.Target.Native.Runtime",
+]

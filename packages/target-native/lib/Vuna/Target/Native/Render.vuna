@@ -1,6 +1,6 @@
-module Vuna.Compiler.Native.Render where
+module Vuna.Target.Native.Render where
 
--- Vuna.Compiler.Native.Render：NativeProgram -> Intel 语法汇编文件集。
+-- Vuna.Target.Native.Render：NativeProgram -> Intel 语法汇编文件集。
 --
 -- 输出是 canonical 的（D16 同构）：段顺序、缩进、指令文本固定；不嵌入时间戳/
 -- 绝对路径，同一 IR 的文件集逐字节确定。`.wasm` 之于 wasm 相当于这里的 ELF：
@@ -16,7 +16,7 @@ import Base.Data.Int as Int
 import Base.Data.List as List
 import Base.Data.Pair as Pair
 import Base.Data.String as String
-import Vuna.Compiler.Native.Model
+import Vuna.Target.Native.Model
 
 -- ---------------------------------------------------------------
 -- 文本 helper

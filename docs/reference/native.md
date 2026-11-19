@@ -11,7 +11,7 @@
 > `main : Eff r a`（含带行的宿主效应，
 > 入口自动预装 `runXHost`）与 `IORef` 可用；`perform` / `handle` 走**库机器**
 > （`Control` 循环 + trampoline）实现一次性续延（§3.4）。FFI / extern 仍被明确拒绝（`NativeUnsupported`）。
-> 实现入口：`Vuna.Compiler.Native.{Model,Abi,Gc,Runtime,Module,Render}`，
+> 实现入口：`Vuna.Target.Native.{Model,Abi,Gc,Runtime,Module,Render}`，
 > 驱动 `Vuna.Compiler.Driver.Native`。边界见 §8。
 
 ## 1. 产物与工具链

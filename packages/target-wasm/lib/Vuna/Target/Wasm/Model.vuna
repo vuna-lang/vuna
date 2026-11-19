@@ -1,6 +1,6 @@
-module Vuna.Compiler.Wasm.Model where
+module Vuna.Target.Wasm.Model where
 
--- Vuna.Compiler.Wasm.Model：wasm 后端的 WAT 模块数据模型。
+-- Vuna.Target.Wasm.Model：wasm 后端的 WAT 模块数据模型。
 --
 -- 产物只有 WAT（D16）；`.wasm` 由 `wasm-tools parse` 汇编。本模块只描述模块结构，
 -- 渲染在 `Wasm.Render`，IR -> 模块在 `Wasm.Module`。
@@ -12,7 +12,7 @@ import Base.Data.List as List
 import Base.Data.Maybe as Maybe
 import Base.Data.Pair as Pair
 import Base.Data.String as String
-import Vuna.Compiler.Wasm.Instr
+import Vuna.Target.Wasm.Instr
 
 -- | 编译目标（CLI `--target`）。
 export data Target(..) : Type where

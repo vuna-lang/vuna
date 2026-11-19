@@ -45,7 +45,7 @@
 1. **当前 seed 必须能编译当前源码**（rotation 按需，触发条件见 bootstrap.md）——`seed/` 是提交入库的信任锚点；
 2. **seed rotation 后 stage1 == stage2**（文件集逐字节一致，fixed point）；
 3. **`seed/` 只含编译器入口闭包**（`packages/compiler/app/Main.vuna` 的 import 闭包，
-   含它依赖的 `vuna-ir` / `vuna-compiler-base` 模块）；
+   含它依赖的 `vuna-ir` / `vuna-compiler-base` / `vuna-target-ocaml` 模块；native/wasm 后端插件不在 seed）；
 4. **工具链不进 TCB**：整个 `packages/cli/` 永不进入 seed 闭包（fmt/lint/repl/doc/test/Index/LSP/
    obs/package manager 等都在 `packages/cli/lib/`）；黑名单与断言见 `nix/seed/forbidden.txt`；
 5. **动作入口与宿主层**：唯一动作类型是 `Eff r a`；用户面入口是 `main : Eff [] a`（行必须
@@ -127,7 +127,10 @@ nix run .#vuna -- map find <Module.name> # 定位符号；另有 map impact / ap
 编译器与 IR 共用的最低层（`Vuna.Compiler.Base.*`：位置 / 诊断 / 编码原语 / 摘要 / 落盘 / 内建符号表，**进 seed**）；
 `packages/ir/` = 擦除后 IR 库 `vuna-ir`（`Vuna.Ir.*`：形状 / SCC / 运行时契约 / 校验 / 表示 / 变换 / **跨进程 codec**，
 **进 seed**；编译器与后端插件都依赖它）；`packages/target-ocaml/` = OCaml 后端 `vuna-target-ocaml`
-（`Vuna.Target.Ocaml.*`：IR→OCaml 文本，**进 seed**——编译器用它把自身编译成 OCaml）；`packages/base/` =
+（`Vuna.Target.Ocaml.*`：IR→OCaml 文本，**进 seed**——编译器用它把自身编译成 OCaml）；
+`packages/target-native/` / `packages/target-wasm/` = native / wasm 后端插件
+（`Vuna.Target.{Native,Wasm}.*`，**不进 seed**：编译器按 `--target` 把 IR 编码后起子进程，
+见 [cli.md](docs/reference/cli.md)「后端插件协议」）；`packages/base/` =
 标准库 `vuna-base`（`Base.*` + `Prelude`，**进 seed**；跨包公开面只有门面
 `Base` / `Base.Data` / `Base.Trait` / `Base.Container` / `Base.Effect(.Core/.Pure)` / `Prelude`）；`packages/cli/` = 产品 CLI 包
 `vuna`（工具链 Cli/Interp/Files/Fmt/Lint/Repl/Run/Doc/Index/Lsp/TestRunner/Obs 在 `packages/cli/lib/`，

@@ -1,6 +1,6 @@
-module Vuna.Compiler.Wasm.Runtime where
+module Vuna.Target.Wasm.Runtime where
 
--- Vuna.Compiler.Wasm.Runtime：运行时函数的 WAT 指令实现 + IR 符号表。
+-- Vuna.Target.Wasm.Runtime：运行时函数的 WAT 指令实现 + IR 符号表。
 --
 -- 产物只有 WAT；运行时按 `Ir.Runtime` 契约的符号名生成 WAT 函数。子集外的符号映射到
 -- `RtUnsupported`，代码生成在引用点报 `WasmUnsupported`（编译期拒绝，不生成坏代码）。
@@ -16,8 +16,8 @@ import Base.Data.List as List
 import Base.Data.Maybe as Maybe
 import Base.Data.Pair as Pair
 import Base.Data.String as String
-import Vuna.Compiler.Wasm.Instr
-import Vuna.Compiler.Wasm.Model
+import Vuna.Target.Wasm.Instr
+import Vuna.Target.Wasm.Model
 
 -- ---------------------------------------------------------------
 -- 常量字符串在 `$d0` 里的位置（由 Wasm.Module 计算）

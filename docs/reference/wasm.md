@@ -7,7 +7,7 @@
 > `main : Eff r a` 与 handler（全部走显式效应机器 `@ir@m@*`：续延只返回 Control，见 [effect-machine.md](effect-machine.md)）；
 > WASI preview1 宿主层（fs / env / args / clock），能力上限是浏览器 WASI 可提供的子集。
 > 未实现的宿主操作在运行期显式失败（不伪造结果）；符号表外的原语（extern、网络等）
-> 在引用点拒绝。实现入口：`Vuna.Compiler.Wasm.{Model,Instr,Types,Runtime,Module,Render}`，
+> 在引用点拒绝。实现入口：`Vuna.Target.Wasm.{Model,Instr,Types,Runtime,Module,Render}`，
 > 驱动 `Vuna.Compiler.Driver.Wasm`。
 
 ## 1. 产物与工具链

@@ -1,6 +1,6 @@
-module Vuna.Compiler.Wasm.Types where
+module Vuna.Target.Wasm.Types where
 
--- Vuna.Compiler.Wasm.Types：IR 类型声明 -> WAT 类型/族表。
+-- Vuna.Target.Wasm.Types：IR 类型声明 -> WAT 类型/族表。
 --
 -- 表示决策（WasmGC，见 docs/reference/wasm.md）：
 --   * 变体族 = `(struct (field i32) (field anyref) ...)`，tag 为构造子声明序，
@@ -19,7 +19,7 @@ import Base.Data.String as String
 import Vuna.Ir.Model
 import Vuna.Ir.Analysis
 import Vuna.Ir.Runtime
-import Vuna.Compiler.Wasm.Model
+import Vuna.Target.Wasm.Model
 
 -- | 族的运行时形状。
 export data WasmFamKind(..) : Type where

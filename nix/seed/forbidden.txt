@@ -17,3 +17,6 @@ Lsp
 Json
 Run
 Clean
+# 后端插件（由编译器按 --target 起进程，不进信任锚点）。
+Target_dNative
+Target_dWasm
