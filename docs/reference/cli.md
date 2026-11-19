@@ -5,17 +5,22 @@
 
 | 模块 | 职责 |
 | --- | --- |
-| `Vuna.Cli.Spec` | 命令表（路径、分组、摘要、用法、flag 表）——**单一真源** |
+| `Vuna.Plugin.Command`（`packages/plugin-kit/lib/`） | 命令面数据模型（`Cmd` / `Group` / `FlagDoc` / `ArgSpec`）与表查询 |
+| `Vuna.Plugin.Args` / `Parse` / `Suggest` | 纯参数解析与近邻建议（不认识「已删 flag」，提示由调用方注入） |
+| `Vuna.Plugin.Err` | 统一错误出口（用法错误 / 未知子命令 / 已改名命令） |
+| `Vuna.Plugin.Describe` | describe 协议 v1 的渲染与解析 |
+| `Vuna.Cli.Spec` | 产品命令表（路径、分组、摘要、用法、flag 表）——**单一真源** |
+| `Vuna.Cli.Registry` | 路径 → 实现接线表（分发只查表，不写 `case` 链） |
 | `Vuna.Cli.Help` | 总览 / 分支 / 单命令帮助渲染，全部从命令表派生 |
-| `Vuna.Cli.Args` | flag 解析（`ArgSpec` / `Parsed`）、参数错误文案与建议 |
+| `Vuna.Cli.Args` | 门面：解析失败转 `Check` 文案、工具侧已删 flag 提示、读盘守卫 |
 | `Vuna.Cli.Err` | 工具命令错误出口（exit 2 用法错误 / exit 1 语义失败） |
 | `Vuna.Cli.Suggest` | 未知命令 / flag 的「是不是想输入」建议 |
 | `Vuna.Cli.{Test,Fmt,Index,Repl,Suite}` | 各命令族的参数校验与目录展开 |
-| `Vuna.Cli.Dev` | `vuna dev` 子命令（suite / 观测 / 错误码文档生成） |
-| `Vuna.Cli` | 顶层分发表 + `help` / `version` / 未知命令 |
+| `Vuna.Cli.Dev` | `vuna dev` 子命令（suite / 观测 / 错误码文档生成 / IR dump） |
+| `Vuna.Cli` | `help` / `version` / 分发 / 未知命令 |
 
 命令实现只调用 `Vuna.Cli.Spec.parseCmdArgs`：flag 表来自命令表，未知 flag 的校验与
-帮助文本不会各写一份。新增命令 = 命令表一条 + 顶层分发表一条；`packages/cli/test/steps/14_cli.steps`
+帮助文本不会各写一份。新增命令 = 命令表一条 + Registry 一条；`packages/cli/test/steps/14_cli.steps`
 逐条跑 `vuna help <path>` 与分组命令，漏接线会红。
 
 ## 1. 命令树

@@ -197,7 +197,8 @@ vuna.toml → Frontend.{Toml.parseToml, Manifest.parseManifest/validateManifest}
 
 **何时该看这里**：改 `vuna` 子命令、fmt/lint/repl/doc/test/map、解释器 facade。
 
-- `Vuna.Cli.runCli` 分发；`Vuna.Interp.interpretFile/evalExprInfoWithAux`（`PackageContext` 入参，
+- `Vuna.Cli.runCli` 分发（命令接线在 `Vuna.Cli.Registry`，命令面数据模型与纯解析在
+  `packages/plugin-kit/`）；`Vuna.Interp.interpretFile/evalExprInfoWithAux`（`PackageContext` 入参，
   实际 `Driver.Dt.dtEvalFile`）、`Vuna.Repl.runRepl`（`:type/:load/:reload/:browse`）、
   `Vuna.Repl.Server.runReplServer` / `Vuna.Repl.Client.runReplClient`（`vuna repl serve --listen` / `vuna repl client --addr`；
   协议与 agent 配方见 [tooling.md](reference/tooling.md) §5）、
