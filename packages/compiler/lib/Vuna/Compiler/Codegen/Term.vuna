@@ -141,7 +141,9 @@ let dtp_cleanup_run_to (mark : int) =
       | [] -> ()
       | f :: rest -> r := rest; (try f () with _ -> ()); go (fuel - 1)
   in
-  go 256
+  (* 预算 = 进入时的待跑条数：每轮 pop 一条必然递减，不需要魔法上限。 *)
+  let pending = List.length !r - mark in
+  if pending <= 0 then () else go pending
 let dtp_cleanup_run_all_for (fid : int) =
   let r = dtp_cleanup_stack_of fid in
   let rec go fuel =
@@ -150,7 +152,7 @@ let dtp_cleanup_run_all_for (fid : int) =
       | [] -> ()
       | f :: rest -> r := rest; (try f () with _ -> ()); go (fuel - 1)
   in
-  go 256
+  go (List.length !r)
 let dtp_cleanup_forget (fid : int) = Hashtbl.remove dtp_cleanup_stacks fid
 let dtp_cleanup_reset () =
   Hashtbl.reset dtp_cleanup_stacks;

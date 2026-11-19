@@ -152,7 +152,7 @@ stdout/stderr 大输出不受线性内存大小限制）；读按 `filestat` 的
 - **env / cwd / execPath / 时间**：`getenv` 一次 `environ_get` 进 scratch 后按 `KEY=`
   前缀匹配；`getcwd` 返回固定 `"/"`（虚拟 preopen 根，不读 `PWD`）；`execPath` 返回空串
   （WASI preview1 没有可执行路径）；`clockNow` 读 monotonic clock；`sleep` 是运行期 trap
-  （浏览器不能用同步忙等阻塞事件循环）；`isTty` 恒 `False`。
+  （浏览器不能用同步忙等阻塞事件循环）；`isTty` 恒 `False`（WASI preview1 无 isatty，stdout 终端性不可知，保守按管道处理）。
 - **未实现的宿主操作**走 `$rt_hostTrap<n>`：运行期 `vuna: runtime error: wasm host
   operation is not implemented` + exit 2，不返回伪造结果。直接调用多数
   `@vuna@prim_eff_*` 文件系统原语（`readFile` / `writeFile` / `writeFileAtomic` /

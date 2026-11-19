@@ -133,10 +133,13 @@ renderInstrFlat II31New = "ref.i31"
 renderInstrFlat II31GetU = "i31.get_u"
 renderInstrFlat II31GetS = "i31.get_s"
 renderInstrFlat (IThrow tag) = "throw ${tag}"
-renderInstrFlat (ITryTable _ _ _ _) = ""
-renderInstrFlat (IIf _ _ _) = ""
-renderInstrFlat (IBlock _ _ _) = ""
-renderInstrFlat (ILoop _ _ _) = ""
+-- 复合指令复用结构化渲染器后压平成单行（`renderGlobal` 的 const-expr 路径会用到；
+-- 结构化路径由 `renderInstr` 单独处理）。子指令按结构下降，不需要 fuel。
+renderInstrFlat (ITryTable label tag body normal) =
+  joinWith " " (renderTryTable 0 label tag body normal)
+renderInstrFlat (IIf resultTy th el) = joinWith " " (renderIf 0 resultTy th el)
+renderInstrFlat (IBlock label resultTy body) = joinWith " " (renderBlock 0 label resultTy body)
+renderInstrFlat (ILoop label resultTy body) = joinWith " " (renderLoop 0 label resultTy body)
 renderInstrFlat (IBr l) = "br ${l}"
 renderInstrFlat (IBrIf l) = "br_if ${l}"
 renderInstrFlat IMemoryGrow = "memory.grow"

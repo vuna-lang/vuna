@@ -485,7 +485,8 @@ stripDiagFormatGo (arg :: rest) acc found =
   else
     stripDiagFormatGo rest (arg :: acc) found
 
--- 终端探测：wasm/native 恒 False，OCaml 用 `Unix.isatty`。
+-- 终端探测：OCaml 用 `Unix.isatty Unix.stdout`，native 用 `ioctl(1, TCGETS)`；
+-- wasm 的 WASI preview1 没有 isatty，恒 False（诊断默认 short）。
 stdoutIsTty : {r : Row} -> Eff r Bool
 stdoutIsTty = raise @vuna@host@isTty
 

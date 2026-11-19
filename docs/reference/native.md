@@ -265,7 +265,7 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
   （List 桥接，不含 `argv[0]`）、`getenv`（扫 `envp` 的 `KEY=`）、`getcwd`（syscall 79）、
   `execPath`（`readlink /proc/self/exe`，syscall 89）失败时返回空串 / `"."`。
 - 时钟与 tty：`effTimeUs`（`clock_gettime`，syscall 228）、`prim_eff_sleep`（`nanosleep`，
-  syscall 35）、`@vuna@host@isTty`（`ioctl(0, TCGETS)`）、`@vuna@prim_eff_hostStatus`
+  syscall 35）、`@vuna@host@isTty`（`ioctl(1, TCGETS)`，stdout，与 OCaml 侧一致）、`@vuna@prim_eff_hostStatus`
   （读 `rt_host_status` 槽；fs / process 的 `try*` 后续写入）。
 - 文件系统：14 个叶子（`tryReadFile` / `tryWriteFile` / `tryWriteFileAtomic` /
   `tryReadDir` / `tryIsDirectory` / `tryMakeDir` / `tryMakeDirExclusive` / `tryRemoveFile` /

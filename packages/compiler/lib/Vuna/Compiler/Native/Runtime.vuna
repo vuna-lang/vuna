@@ -1093,13 +1093,13 @@ sleepUsFn =
     8
     [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IMov (OpReg Rax) (OpReg Rdi), IBinReg "xor" Rdx (OpReg Rdx), IMov (OpReg Rcx) (OpImm 1000000), IDivUnsigned Rcx, ILea R9 tsLabel, IMov (OpMem R9 0) (OpReg Rax), IBinReg "imul" Rdx (OpImm 1000), IMov (OpMem R9 8) (OpReg Rdx), IMov (OpReg Rdi) (OpReg R9), IBinReg "xor" Rsi (OpReg Rsi), IMov (OpReg Rax) (OpImm 35), ISyscall, IMov (OpReg Rax) (OpImm 0)]
 
--- | `ioctl(0, TCGETS)` 成功即 tty（0/1）。
+-- | `ioctl(1, TCGETS)` 成功即 tty（0/1）——口径与 OCaml 的 `Unix.isatty Unix.stdout` 一致。
 isTtyFn : NativeFunc
 isTtyFn =
   rtFunc
     "is_tty"
     0
-    [IBinReg "xor" Rdi (OpReg Rdi), IMov (OpReg Rsi) (OpImm 21505), ILea Rdx termiosLabel, IMov (OpReg Rax) (OpImm 16), ISyscall, ICmp (OpReg Rax) (OpImm 0), ISetcc "setge" Rax, IMovzxAl]
+    [IMov (OpReg Rdi) (OpImm 1), IMov (OpReg Rsi) (OpImm 21505), ILea Rdx termiosLabel, IMov (OpReg Rax) (OpImm 16), ISyscall, ICmp (OpReg Rax) (OpImm 0), ISetcc "setge" Rax, IMovzxAl]
 
 -- | 宿主状态槽（`try*` 原语写入；0 = 成功）。
 hostStatusFn : NativeFunc
