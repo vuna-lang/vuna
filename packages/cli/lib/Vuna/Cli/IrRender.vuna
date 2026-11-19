@@ -1,7 +1,7 @@
-module Vuna.Compiler.Ir.Render where
+module Vuna.Cli.IrRender where
 
 -- IR 的确定性调试文本（`vuna dev ir dump` 用）。
--- 只用于 diff / 观测，不是后端输入，也不承诺稳定 ABI。
+-- 只用于 diff / 观测，不是后端输入，也不承诺稳定 ABI；随 IrDump 一起留在 cli 包。
 import Base.Data.Bool as Bool
 import Base.Data.Int as Int
 import Base.Data.List as List

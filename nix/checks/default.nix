@@ -312,6 +312,17 @@ in
     script = ./vuna-typecheck.sh;
   };
 
+  # 编译器包必须一遍精化写全导出面（否则 check 静默跑两遍，依赖方回退全量）。
+  vuna-single-pass = vunaCheck {
+    name = "vuna-single-pass";
+    srcs = [
+      src.compiler
+      src.base
+      src.manifest
+    ];
+    script = ./vuna-single-pass.sh;
+  };
+
   vuna-lint = vunaCheck {
     name = "vuna-lint";
     srcs = workspace;

@@ -117,7 +117,9 @@ OCaml 二进制里的调试信息记录的是**相对**源码名（`build.sh` �
 ~22 s 里约**一半是重复精化**：入口闭包没覆盖 `[export]` 的全部模块
 （`iface-skip partial ... missing=Vuna.Compiler.Frontend.Canonical.Ast,
 Vuna.Compiler.Driver.ToolPayload`），于是每轮都补一遍 lib check（`collectSigs-done` 出现
-两次，两遍各 ~11–12 s）。**已修**（见下），冷 `check packages/compiler` 降到 ~12 s。
+两次，两遍各 ~11–12 s）。**已修**（见下），冷 `check packages/compiler` 降到 ~12 s；后又修了
+同一类的第二处（`IrDump` / `Ir.Render` 搬进 cli 包），当前 ~10.8 s，门禁
+`checks.vuna-single-pass`。
 
 冷 `build --no-compile compiler` 的墙钟读数**极不稳定**（同机同源码实测 12.5 / 15.9 /
 28.0 / 38.1 s）：它按直接依赖分层并行，与宿主负载强相关，且 `TMPDIR` 里的临时候选产物
@@ -290,10 +292,10 @@ HashMap.fromList / insert / insertAll / lookup / member / toList / size / ofName
 
 ## 4. 仍然存在的热点
 
-冷 `check packages/compiler` ~13 s（修后）的阶段构成（`--debug-perf` 时间戳相减，单次采样）：
-load/parse 前缀 + iface 摘要 **~4.0 s** → 逐定义精化（`collectSigs-done` → `bodies-done`）
-**~5.9 s** → 实例体/终止性 **~0.5 s** → codegen 检查（lowering + 分组 + 文本）**~1.4 s** →
-iface 影子写 **~1.2 s**（compute 0.78 s + write 0.35 s，单遍 `iface-write=107/107`）。
+冷 `check packages/compiler` ~10 s（修后）的阶段构成（`--debug-perf` 时间戳相减，单次采样）：
+load/parse 前缀 + iface 摘要 **~2.6 s** → 逐定义精化（`collectSigs-done` → `bodies-done`）
+**~4.6 s** → 实例体/终止性 **~0.4 s** → codegen 检查 + iface 影子写 **~3.2 s**
+（其中 compute 1.09 s + write 0.48 s，单遍 `iface-write=118/118`）。
 
 1. **iface 影子写 ~1.2 s**：`ownSourceInfos`（逐源文件内容哈希）+ `ifaceOfPackage`
    （逐模块 `cachedOfProgram` zonk 与 7 张表的规范化哈希）。写回侧已合并为单次读取
@@ -328,6 +330,13 @@ iface 影子写 **~1.2 s**（compute 0.78 s + write 0.35 s，单遍 `iface-write
    O(n²)、写接口的包接口双读**；`Elab.Usage` 全程序扫描（实测
    10–13 ms）、实例体/方法子句查找（13.5 ms）、`refsOfDef`（12–16 ms）、签名 banned 集、
    ctor/解表索引、`unsolvedFrom` 全解表扫描。
+9. **导出面落在入口闭包外（已修，同一类的第二个实例）**：`Driver.IrDump` / `Ir.Render` 被列进
+   compiler 的 `[export]`，但入口 `app/Main.vuna` 没 import ⇒ `iface-skip partial`（covered=118/120）
+   ⇒ 每轮补一遍 lib check、包接口写不出去（依赖方只能回退全量）。冷 `check packages/compiler`
+   **19.8 s → 10.8 s（-45%）**、`collectSigs-done` 2 → 1、`iface-write=118/118`；冷 `check .`
+   CPU **55.3 s → 39.3 s**（wall 22.8 s → 16.5 s）。处置：两个模块搬进 cli 包
+   （`Vuna.Cli.IrDump` / `Vuna.Cli.IrRender`，seed 不变），门禁 `checks.vuna-single-pass`。
+   注：`build` 不走这条 lib 补做路径，读数不变（`build . --no-compile` 仍 ~41 s）。
 
 ### 4.1 elab 内部的结构性开销（当前处置与读数）
 

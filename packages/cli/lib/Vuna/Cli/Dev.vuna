@@ -11,7 +11,7 @@ import Vuna.Cli.Err
 import Vuna.Cli.Spec
 import Vuna.Cli.Suite
 import Vuna.Compiler.Base.Common
-import Vuna.Compiler.Driver.IrDump
+import Vuna.Cli.IrDump
 import Vuna.Compiler.Frontend.Packages.Pkg
 import Vuna.GenErrors
 import Vuna.Obs

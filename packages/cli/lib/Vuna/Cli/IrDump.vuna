@@ -1,7 +1,7 @@
-module Vuna.Compiler.Driver.IrDump where
+module Vuna.Cli.IrDump where
 
 -- `vuna dev ir dump`：检查 + lowering 后输出确定性 IR 调试文本。
--- 只服务工具链/调试，不写产物，也不进 seed。
+-- 只服务工具链/调试，不写产物；属于 cli 包（`Vuna.Cli.*`），不进 seed。
 import Base.Effect.Types as EffTypes
 import Base.Data.Pair as Pair
 import Vuna.Compiler.Base.Common
@@ -13,7 +13,7 @@ import Vuna.Compiler.Frontend.Packages.Pkg
 import Vuna.Compiler.Ir.Anf
 import Vuna.Compiler.Ir.Cps
 import Vuna.Compiler.Ir.Model
-import Vuna.Compiler.Ir.Render
+import Vuna.Cli.IrRender
 import Vuna.Compiler.Lowering.Program
 import Base.Effect.Fs as EffFs
 import Base.Effect.Env as EffEnv

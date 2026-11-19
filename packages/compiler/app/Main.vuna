@@ -14,6 +14,9 @@ import Vuna.Compiler.Ir.Represent
 -- 否则 `iface-skip partial`（不写接口），`Compile.checkPackage` 于是补一遍 lib check，
 -- 同一份源码精化两遍（冷 `check compiler` 实测 21.5 s vs 单遍 12.5 s）。
 -- 新增导出模块时同步补这里的 import。
+-- 只服务工具链/调试的模块不要进 `[export]`：放到 `packages/cli/`（例：`Vuna.Cli.IrDump`），
+-- 否则要么进 seed（越过「工具链不进 TCB」），要么让 check 每轮精化两遍。
+-- 门禁：`checks.vuna-single-pass`（冷 check 不许出现 `iface-skip`、`collectSigs-done` 必须为 1）。
 import Vuna.Compiler.Frontend.Canonical.Ast
 import Vuna.Compiler.Frontend.Canonical.Pkg
 import Vuna.Compiler.Core.Canonical

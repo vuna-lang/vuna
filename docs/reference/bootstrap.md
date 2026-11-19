@@ -151,7 +151,10 @@ OCaml 种子是**当前唯一**锚点。方向是让 native 自举成熟后，�
 1. **当前 seed 必须能编译当前源码**——`checks.seed-selfhost` 守；不要求与源码逐字节同步；
 2. **stage1 == stage2**（文件集逐字节），即 fixed point；每次 CI 与 rotation 后都检查；
 3. **`seed/` 只含 compiler 包入口闭包**：工具链（fmt/lint/repl/doc/test/lsp/index）与
-   package manager 都不进 TCB；
+   package manager 都不进 TCB。**导出面 ⊆ 入口闭包**是同一件事的另一面：`[export].modules`
+   里的模块必须在 `app/Main.vuna` 的 import 闭包里，否则写侧判 `iface-skip partial`、
+   check 静默精化两遍；因此只服务工具链的模块一律放 `packages/cli/`（例：`Vuna.Cli.IrDump`），
+   不要为了工具链把它们加进 `[export]`。门禁 `checks.vuna-single-pass`；
 4. 编译器自检：当前编译器必须能类型检查自己的源码（`checks.vuna-typecheck`，`vuna check .`
    走 DT）；
 5. **唯一路径**：语言夹具、纯测试求值、包构建与 seed 全部走 DT（精化 + 擦除 codegen），
