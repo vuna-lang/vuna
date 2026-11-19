@@ -666,10 +666,20 @@ A/B 读数一致）。`map-cold`（2111）必须清 query store 才算冷：基�
   `-config` 是 `flambda: false`，`-O3` 因此是**空操作**——同一源码 `-O3` 与默认产物
   **逐字节相同**（25,458,312 B，编译 CPU 12.66 s vs 12.63 s）。`-inline 10` 让编译
   CPU +20%（12.63 → 15.12 s）、产物 +18%（29.99 MB），而冷 `check packages/compiler`
-  三对交替 10.52/11.26/11.19 vs 11.41/10.60/10.41（user），在噪声内。要动这一层必须先换
-  flambda 工具链（`pkgs.ocaml.override { flambdaSupport = true; }`），那是另一次实验，
-  不在本结论范围内。`-g` 只影响体积（25.3 → 21.2 MB，-16%），编译 CPU 不变
-  （12.83 → 12.92 s），保留（`#line` → DWARF 需要）。
+  三对交替 10.52/11.26/11.19 vs 11.41/10.60/10.41（user），在噪声内。`-g` 只影响体积
+  （25.3 → 21.2 MB，-16%），编译 CPU 不变（12.83 → 12.92 s），保留（`#line` → DWARF 需要）。
+- **flambda 工具链**（`pkgs.ocaml.override { flambdaSupport = true; }` →
+  `ocaml+flambda-5.5.1`，configure 确认 5.5.1 仍支持 `--enable-flambda`）：用**同一份**
+  生成的 `.ml`（compiler 包 183 个模块 / 61k 行）编译默认 / `-O2` / `-O3` 三颗二进制。
+  冷 `check packages/compiler`（空 store，各 3 轮交替，user 秒）：
+  10.08 / 9.92 / 10.01 → `-O2` 9.59 / 9.74 / 9.60（**-4.1%**）→ `-O3` 9.21 / 9.25 / 9.20
+  （**-8.0%**）；`check packages/cli` 14.34 → 13.50（-5.9%），`check .` 19.0 → 17.6（-7.4%）。
+  代价：编译 CPU 18.3 s → 30.9 s（`-O2`，+69%）/ 44.3 s（`-O3`，+142%），产物
+  25.5 MB → 33.1 MB / 40.1 MB。**否决**：本仓库的日常回路是「改编译器 →
+  `nix build .#vuna` → 测量」，编译翻倍的成本落在每一轮与每个 CI job（3 个 stage 各付一次），
+  换来的是 6–8%；对照已否决的 codegen 并行（6–7%）与 hash-consing（2–4%），这笔交换不成立。
+  唯一保留的可能性是**只给 elab 热点模块**（`Elab.Term.Impl` / `Elab.Trait` /
+  `Core.Eval` / `Core.Conv` 等）加 `-O3` 的分模块标志，未测。
 - **iface 哈希去排序（顺序无关折叠）**：把 `hashDefs`/`hashExports`/… 的「按名字插入
   排序 + 整表编码 + 摘要」改成逐项哈希的交换律折叠（双 lane Σh/Σh²）。
   （摘要用 SHA-256、载荷用 `Base.Bytes` 显式编码，「排序 + 整表编码」的结构不变，
