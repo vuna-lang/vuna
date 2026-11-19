@@ -635,6 +635,7 @@ primReduce defs sols fuel g sp =
           OpStrFromInt => intPrim1 sp (\n => VStr (strFromInt n))
           OpStrLength => strPrim1 sp (\s => VInt (strLength s))
           OpStrHash => strPrim1 sp (\s => VInt (strHashOf s))
+          OpStrDispatchId => strPrim1 sp (\s => VInt (dispatchIdOf s))
           OpStrAt => atPrim sp
           OpStrSubstring => substringPrim sp
           OpStrShow => strPrim1 sp (\s => VStr (showCoreString s))

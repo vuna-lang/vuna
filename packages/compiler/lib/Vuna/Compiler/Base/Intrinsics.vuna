@@ -390,6 +390,7 @@ export data IntrinsicOp(..) : Type where
   OpStrConcatMany : IntrinsicOp
   OpStrSubstTemplate : IntrinsicOp
   OpStrHash : IntrinsicOp
+  OpStrDispatchId : IntrinsicOp
   OpStrAt : IntrinsicOp
   OpStrSubstring : IntrinsicOp
   OpStrShow : IntrinsicOp
@@ -728,6 +729,7 @@ baseIntrinsics =
     Intrinsic "strConcatMany" (IFun (IList IStr) IStr) OpStrConcatMany True,
     Intrinsic "strSubstTemplate" (IFun IStr (IFun (IList IStr) IStr)) OpStrSubstTemplate True,
     Intrinsic "strHash" (IFun IStr IInt) OpStrHash True,
+    Intrinsic "effectId" (IFun IStr IInt) OpStrDispatchId True,
     Intrinsic "strAt" (IFun IStr (IFun IInt IInt)) OpStrAt True,
     Intrinsic "strSubstring" (IFun IInt (IFun IInt (IFun IStr IStr))) OpStrSubstring True,
     Intrinsic "strShow" (IFun IStr IStr) OpStrShow True,
@@ -755,8 +757,18 @@ baseIntrinsics =
       OpNone
       True,
     Intrinsic
+      "prim_effectPerformId"
+      (IPi "a" (IPi "b" (IFun IStr (IFun IStr (IFun IInt (IFun IInt (IFun (IVar "a") (IVar "b"))))))))
+      OpNone
+      True,
+    Intrinsic
       "prim_effectHandle"
       (IPi "u" (IPi "a" (IPi "b" (IPi "ret" (IPi "h" (IFun IStr (IFun IStr (IFun (IVar "ret") (IFun (IVar "h") (IFun (IFun (IVar "u") (IVar "a")) (IFun (IVar "u") (IVar "b"))))))))))))
+      OpNone
+      True,
+    Intrinsic
+      "prim_effectHandleId"
+      (IPi "u" (IPi "a" (IPi "b" (IPi "ret" (IPi "h" (IFun IStr (IFun IStr (IFun IInt (IFun IInt (IFun (IVar "ret") (IFun (IVar "h") (IFun (IFun (IVar "u") (IVar "a")) (IFun (IVar "u") (IVar "b"))))))))))))))
       OpNone
       True,
     Intrinsic
@@ -1178,3 +1190,17 @@ userIntrinsics = filter intrinsicVisible allIntrinsics
 -- | 用户可见的内建值名字（prelude 全局与「禁止重定义」名单共用）。
 export preludeValueNames : List String
 preludeValueNames = map intrinsicName userIntrinsics
+
+-- | 效应派发的运行时 id 内建名（源码可见；基库与 IR pass 共用）。
+export dispatchIdIntrinsicName : String
+dispatchIdIntrinsicName = "effectId"
+
+-- | 字符串 → 派发 id：FNV-1a 32 位，最后取低 30 位。
+-- 与 OCaml / native / wasm 三端运行时的实现一致（见 primitives.md）；
+-- 取低 30 位是为了让三端 `Int`（OCaml 63 位、wasm 装箱 i64）得到同一个非负值。
+export dispatchIdOf : String -> Int
+dispatchIdOf s = dispatchIdChars (strUnpack s) 2166136261
+
+dispatchIdChars : List Int -> Int -> Int
+dispatchIdChars [] h = bitAnd h 1073741823
+dispatchIdChars (c :: rest) h = dispatchIdChars rest (bitAnd ((bitXor h c) * 16777619) 4294967295)

@@ -104,7 +104,16 @@ ${dtPrimRuntime}"""
 -- `stdinReadBytes` 是**函数**（`Int -> String`）：最多读 n 字节、有数据就立即返回
 -- （可能少于 n），EOF 返回 `""`——LSP 的帧循环靠它精确读 Content-Length 字节。
 dtPrimRuntime : String
-dtPrimRuntime = ("""type _ Effect.t += Perform : string * string * Obj.t -> Obj.t Effect.t
+dtPrimRuntime = ("""type _ Effect.t += Perform : int * int * string * string * Obj.t -> Obj.t Effect.t
+
+(* 派发 id：与编译器 dispatchIdOf 及 native / wasm runtime 同一公式
+   （FNV-1a 32 位，最后取低 30 位），三端对同一路由串必须得到同一个数。 *)
+let dtp_effectId (s : string) : int =
+  let h = ref 2166136261 in
+  for i = 0 to String.length s - 1 do
+    h := ((!h lxor Char.code (String.unsafe_get s i)) * 16777619) land 0xFFFFFFFF
+  done;
+  !h land 0x3FFFFFFF
 
 (* bracket 的 abort cleanup 登记表（每纤程一份，LIFO）。
    `prim_effectHandle` 在安装 handler 时记下当前深度 mark；handler 正常返回 /
@@ -161,9 +170,9 @@ let dtp_cleanup_reset () =
 (* handler 的运行时壳：与旧内联实现等价，但 handler 退出时清掉其 extent 内残留的
    bracket cleanup（abort = 续延被丢弃，库层 finally 不会再跑）。 *)
 (* 当前 handler 的 self 栈（每个 Domain 一份）：opH 执行期间把
-   (key,name,ret,h) 压栈，`prim_effectSelf` 用它把子计算重新装进同一个 handler。 *)
-let dtp_selfK = Domain.DLS.new_key (fun () -> ref ([] : (string * string * Obj.t * Obj.t) list))
-let dtp_effect_run key name ret h th =
+   (keyId,nameId,key,name,ret,h) 压栈，`prim_effectSelf` 用它把子计算重新装进同一个 handler。 *)
+let dtp_selfK = Domain.DLS.new_key (fun () -> ref ([] : (int * int * string * string * Obj.t * Obj.t) list))
+let dtp_effect_run key name kid nid ret h th =
   let mark = dtp_cleanup_mark () in
   let run_cleanups () = dtp_cleanup_run_to mark in
   (* 外层 Obj.magic 与旧内联实现一致：effc 的 continue 返回 Obj.t，去掉它会让
@@ -173,11 +182,11 @@ let dtp_effect_run key name ret h th =
       { retc = (fun x -> (Obj.magic ret) x);
         exnc = (fun e -> raise e);
         effc = (fun (type a) (eff : a Effect.t) -> match eff with
-          | Perform (k, n, payload) when k = key && n = name ->
+          | Perform (k, n, kk, nn, payload) when k = kid && n = nid ->
             Some (fun (cont : (a, Obj.t) Effect.Deep.continuation) ->
               let st = Domain.DLS.get dtp_selfK in
               let saved = !st in
-              st := (key, name, Obj.repr ret, Obj.repr h) :: saved;
+              st := (kid, nid, key, name, Obj.repr ret, Obj.repr h) :: saved;
               Fun.protect
                 ~finally:(fun () -> st := saved)
                 (fun () ->
@@ -187,10 +196,12 @@ let dtp_effect_run key name ret h th =
     | r -> run_cleanups (); r
     | exception e -> run_cleanups (); raise e)
 let dtp_effect_handle key name ret h th =
-  fun u -> dtp_effect_run key name ret h (fun () -> (Obj.magic th) u)
+  fun u -> dtp_effect_run key name (dtp_effectId key) (dtp_effectId name) ret h (fun () -> (Obj.magic th) u)
+let dtp_effect_handle_id key name kid nid ret h th =
+  fun u -> dtp_effect_run key name kid nid ret h (fun () -> (Obj.magic th) u)
 let dtp_effect_self th =
   match !(Domain.DLS.get dtp_selfK) with
-  | (key, name, ret, h) :: _ -> dtp_effect_run key name ret h (fun () -> (Obj.magic th) 0)
+  | (kid, nid, key, name, ret, h) :: _ -> dtp_effect_run key name kid nid ret h (fun () -> (Obj.magic th) 0)
   | [] -> failwith \"self outside handler\"
 let dtp_print s =
   (try print_string s; flush stdout; String.length s
@@ -670,7 +681,7 @@ let dtp_sched_scope id =
 
 let dtp_sched_exn_msg e =
   match e with
-  | Effect.Unhandled (Perform (key, name, _)) ->
+  | Effect.Unhandled (Perform (_, _, key, name, _)) ->
     Printf.sprintf \"unhandled effect %s (instance %s)\" key name
   | Failure m -> m
   | _ -> Printexc.to_string e
@@ -1067,7 +1078,7 @@ let dt_bt_labels (bt : Printexc.raw_backtrace) : string list =
          | None -> go tl shown last acc)
     in go (Array.to_list slots) 0 \"\" []
 let dt_report_exn e bt =
-  let msg = match e with Effect.Unhandled (Perform (key, name, _)) -> Printf.sprintf \"unhandled effect %s (instance %s)\" key name | Failure m -> m | _ -> Printexc.to_string e in
+  let msg = match e with Effect.Unhandled (Perform (_, _, key, name, _)) -> Printf.sprintf \"unhandled effect %s (instance %s)\" key name | Failure m -> m | _ -> Printexc.to_string e in
   Printf.eprintf \"vuna: runtime error: %s\\n%!\" msg;
   List.iter (fun s -> Printf.eprintf \"  at %s\\n%!\" s) (dt_bt_labels bt)
 """
@@ -1572,6 +1583,7 @@ inlineText "bitXor" ([a, b]) = Just "(${a} lxor ${b})"
 inlineText "bitNot" ([a]) = Just "(lnot ${a})"
 inlineText "bitShl" ([a, b]) = Just "(if ${b} < 0 || ${b} >= 63 then 0 else ${a} lsl ${b})"
 inlineText "bitShr" ([a, b]) = Just "(if ${b} < 0 || ${b} >= 63 then 0 else ${a} lsr ${b})"
+inlineText "effectId" ([a]) = Just "(dtp_effectId ${a})"
 inlineText "++" ([a, b]) = Just "(${a} ^ ${b})"
 inlineText "bi_eq_int" ([a, b]) = Just "(${a} = ${b})"
 inlineText "bi_neq_int" ([a, b]) = Just "(${a} <> ${b})"

@@ -66,8 +66,13 @@ ocamlRtTextTable =
     Pair "arrayToList" "(fun a -> dtp_listOf (Array.to_list a))",
     Pair
       "prim_effectPerform"
-      "(fun key name v -> Obj.obj (Effect.perform (Perform (key, name, Obj.repr v))))",
+      "(fun key name v -> Obj.obj (Effect.perform (Perform (dtp_effectId key, dtp_effectId name, key, name, Obj.repr v))))",
+    Pair
+      "prim_effectPerformId"
+      "(fun key name kid nid v -> Obj.obj (Effect.perform (Perform (kid, nid, key, name, Obj.repr v))))",
+    Pair "effectId" "dtp_effectId",
     Pair "prim_effectHandle" "dtp_effect_handle",
+    Pair "prim_effectHandleId" "dtp_effect_handle_id",
     Pair "prim_effectSelf" "dtp_effect_self",
     Pair "prim_cleanupPush" "dtp_cleanup_push",
     Pair "prim_cleanupPop" "dtp_cleanup_pop",

@@ -464,6 +464,7 @@ irInlineArity "bitShr" = 2
 irInlineArity "++" = 2
 irInlineArity "bi_eq_int" = 2
 irInlineArity "bi_neq_int" = 2
+irInlineArity "effectId" = 1
 irInlineArity "bi_eq_str" = 2
 irInlineArity "bi_neq_str" = 2
 irInlineArity "bi_lt_int" = 2

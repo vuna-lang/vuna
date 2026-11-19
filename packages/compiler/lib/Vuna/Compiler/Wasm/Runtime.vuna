@@ -1578,6 +1578,25 @@ rtStrHash =
         [[ILocalGet "$p0", IRefCast "$str", ILocalSet "$s", ILocalGet "$s", IArrayLen, ILocalSet "$n", IConstI32 0, ILocalSet "$i", IConstI64 0, ILocalSet "$h"], loop, [ILocalGet "$h"], boxInt]
   in rtFunc "$rt_strHash" params [WvAnyRef] locals body
 
+-- | `effectId`：FNV-1a 32 位、最后取低 30 位；与 OCaml `dtp_effectId` / native
+--   `effect_id` 逐字节一致（派发 id 必须三端相同）。
+rtEffectId : WatFunc
+rtEffectId =
+  let
+    params = [Pair "$p0" WvAnyRef]
+    locals = [Pair "$s" (WvRef "$str"), Pair "$n" WvI32, Pair "$i" WvI32, Pair "$h" WvI64]
+    loop =
+      [
+        IBlock
+          "$id_done"
+          ""
+          [ILoop "$id_l" "" [ILocalGet "$i", ILocalGet "$n", IBinop "i32.ge_u", IBrIf "$id_done", ILocalGet "$h", ILocalGet "$s", ILocalGet "$i", IArrayGetU "$str", IPlain "i64.extend_i32_u", IBinop "i64.xor", IConstI64 16777619, IBinop "i64.mul", IConstI64 4294967295, IBinop "i64.and", ILocalSet "$h", ILocalGet "$i", IConstI32 1, IBinop "i32.add", ILocalSet "$i", IBr "$id_l"]]
+      ]
+    body =
+      cat
+        [[ILocalGet "$p0", IRefCast "$str", ILocalSet "$s", ILocalGet "$s", IArrayLen, ILocalSet "$n", IConstI32 0, ILocalSet "$i", IConstI64 2166136261, ILocalSet "$h"], loop, [ILocalGet "$h", IConstI64 1073741823, IBinop "i64.and"], boxInt]
+  in rtFunc "$rt_effectId" params [WvAnyRef] locals body
+
 -- | 字符串相等：先比长度，再逐字节短路比较（`bi_eq_str`）。
 rtEqStr : WatFunc
 rtEqStr =
@@ -1937,6 +1956,7 @@ rtFunctions c =
     rtStrAt,
     rtSubstring,
     rtStrHash,
+    rtEffectId,
     rtEqStr,
     rtNeqStr,
     rtBoxZero,
@@ -2051,6 +2071,7 @@ rtImplOf "strSubstTemplate" = RtFunc 2 "$rt_strSubstTemplate"
 rtImplOf "strAt" = RtFunc 2 "$rt_strAt"
 rtImplOf "strSubstring" = RtFunc 3 "$rt_substring"
 rtImplOf "strHash" = RtFunc 1 "$rt_strHash"
+rtImplOf "effectId" = RtFunc 1 "$rt_effectId"
 rtImplOf "bi_eq_str" = RtFunc 2 "$rt_eqStr"
 rtImplOf "bi_neq_str" = RtFunc 2 "$rt_neqStr"
 rtImplOf "bi_lt_str" = RtFunc 2 "$rt_ltValue"
