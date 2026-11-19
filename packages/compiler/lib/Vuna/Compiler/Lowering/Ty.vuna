@@ -58,7 +58,7 @@ reprTyIr name =
 
 renderTyGlobal : Int -> List Int -> HashMap String (List Int) -> List DtData -> String -> List Value -> IrTy
 renderTyGlobal fuel levels table datas g sp =
-  case renderTyIntrinsic g (map (\x => renderTyFuel (fuel - 1) levels table datas x) sp) of
+  case renderTyIntrinsicWith (\x => renderTyFuel (fuel - 1) levels table datas x) g sp of
     Just t => t
     Nothing =>
       case reprTyIr g of
@@ -71,10 +71,13 @@ renderTyGlobal fuel levels table datas g sp =
                 (renderFamilyArgs (fuel - 1) levels table datas (lookupTyParamsIn table g) sp)
             Nothing => IrTyOpaque
 
-renderTyIntrinsic : String -> List IrTy -> Maybe IrTy
-renderTyIntrinsic "Array" ([a]) = Just (IrTyArray a)
-renderTyIntrinsic "IORef" ([a]) = Just (IrTyRef a)
-renderTyIntrinsic _ _ = Nothing
+-- | intrinsic 族的 IR 运行时类型。实参由调用方传入的渲染函数**按需**渲染：非 intrinsic
+-- 族直接返回 `Nothing`，不碰实参。传「已渲染的实参表」会先把整棵内层类型算完再丢弃，
+-- 数据族每层嵌套就重复渲染一次（`renderFamilyArgs` 之后还会再渲染）。
+renderTyIntrinsicWith : (Value -> IrTy) -> String -> List Value -> Maybe IrTy
+renderTyIntrinsicWith render "Array" ([a]) = Just (IrTyArray (render a))
+renderTyIntrinsicWith render "IORef" ([a]) = Just (IrTyRef (render a))
+renderTyIntrinsicWith render _ _ = Nothing
 
 renderFamilyArgs : Int -> List Int -> HashMap String (List Int) -> List DtData -> List Int -> List Value -> List IrTy
 renderFamilyArgs fuel levels table datas usedPats args =
@@ -125,7 +128,7 @@ renderFieldTy levels table datas lvl (VNeutral n) slot =
           icInternal
             "constructor field type mentions a type variable outside the family's runtime parameter slots"
     NGlobal g sp =>
-      case renderTyIntrinsic g (map (\x => renderTyFuel 256 levels table datas x) sp) of
+      case renderTyIntrinsicWith (\x => renderTyFuel 256 levels table datas x) g sp of
         Just t => OkC (Pair t slot)
         Nothing =>
           case reprTyIr g of
