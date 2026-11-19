@@ -30,13 +30,13 @@ let v_Vuna_dCompiler_dBase_dBytes_dencConcat = (fun (parts : string Base_dData_d
 let v_Vuna_dCompiler_dBase_dBytes_dencTop = (fun f x -> (v_Vuna_dCompiler_dBase_dBytes_dencConcat ((f x) Base_dData_dList.C_Base_dData_dList_dList_Nil)))
 
 # 81 "Vuna/Compiler/Base/Bytes.vuna"
-let v_Vuna_dCompiler_dBase_dBytes_dencTag = (fun (n : int) (acc : string Base_dData_dList.t_Base_dData_dList_dList) -> (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((String.concat "" ["#"; (bi_strFromInt n); ";"]), acc)))
+let v_Vuna_dCompiler_dBase_dBytes_dencTag = (fun (n : int) (acc : string Base_dData_dList.t_Base_dData_dList_dList) -> (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("#", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((bi_strFromInt n), (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (";", acc)))))))
 
 # 85 "Vuna/Compiler/Base/Bytes.vuna"
-let v_Vuna_dCompiler_dBase_dBytes_dencInt = (fun (n : int) (acc : string Base_dData_dList.t_Base_dData_dList_dList) -> (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((String.concat "" ["i"; (bi_strFromInt n); ";"]), acc)))
+let v_Vuna_dCompiler_dBase_dBytes_dencInt = (fun (n : int) (acc : string Base_dData_dList.t_Base_dData_dList_dList) -> (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("i", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((bi_strFromInt n), (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (";", acc)))))))
 
 # 89 "Vuna/Compiler/Base/Bytes.vuna"
-let v_Vuna_dCompiler_dBase_dBytes_dencStr = (fun (s : string) (acc : string Base_dData_dList.t_Base_dData_dList_dList) -> (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((String.concat "" ["s"; (bi_strFromInt (bi_strLength s)); ":"]), (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (s, acc)))))
+let v_Vuna_dCompiler_dBase_dBytes_dencStr = (fun (s : string) (acc : string Base_dData_dList.t_Base_dData_dList_dList) -> (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("s", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((bi_strFromInt (bi_strLength s)), (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (":", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (s, acc)))))))))
 
 # 93 "Vuna/Compiler/Base/Bytes.vuna"
 let v_Vuna_dCompiler_dBase_dBytes_dencBool = (fun (mc0 : bool) (mc1 : string Base_dData_dList.t_Base_dData_dList_dList) -> (if mc0 then (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("b1", mc1)) else (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("b0", mc1))))
@@ -49,7 +49,7 @@ let rec v_Vuna_dCompiler_dBase_dBytes_dencListGo = (fun mc0 mc1 (mc2 : string Ba
 ))
 
 # 98 "Vuna/Compiler/Base/Bytes.vuna"
-let v_Vuna_dCompiler_dBase_dBytes_dencList = (fun f xs (acc : string Base_dData_dList.t_Base_dData_dList_dList) -> (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((String.concat "" ["["; (bi_strFromInt (v_Vuna_dCompiler_dBase_dBytes_dlenOf xs)); ":"]), (((v_Vuna_dCompiler_dBase_dBytes_dencListGo f) xs) acc))))
+let v_Vuna_dCompiler_dBase_dBytes_dencList = (fun f xs (acc : string Base_dData_dList.t_Base_dData_dList_dList) -> (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("[", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((bi_strFromInt (v_Vuna_dCompiler_dBase_dBytes_dlenOf xs)), (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (":", (((v_Vuna_dCompiler_dBase_dBytes_dencListGo f) xs) acc))))))))
 
 # 107 "Vuna/Compiler/Base/Bytes.vuna"
 let v_Vuna_dCompiler_dBase_dBytes_dencMaybe = (fun mc0 mc1 (mc2 : string Base_dData_dList.t_Base_dData_dList_dList) -> (match mc1 with

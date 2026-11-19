@@ -5,6 +5,7 @@ Base_dData_dBase64.ml
 Base_dData_dBits.ml
 Base_dData_dBool.ml
 Base_dData_dFloat.ml
+Base_dData_dFunction.ml
 Base_dData_dInt.ml
 Base_dData_dList.ml
 Base_dData_dMaybe.ml
@@ -149,6 +150,7 @@ Vuna_dCompiler_dIr_dDispatch.ml
 Vuna_dCompiler_dIr_dModel.ml
 Vuna_dCompiler_dIr_dRepresent.ml
 Vuna_dCompiler_dIr_dRuntime.ml
+Vuna_dCompiler_dIr_dTail.ml
 Vuna_dCompiler_dIr_dValidate.ml
 Vuna_dCompiler_dLoader_dAddr.ml
 Vuna_dCompiler_dLoader_dExpand.ml

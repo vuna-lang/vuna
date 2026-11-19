@@ -1,6 +1,6 @@
 let () = Printexc.record_backtrace true
 open Vuna_runtime
-# 40 "app/Main.vuna"
+# 43 "app/Main.vuna"
 let v_main = (try (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (Base_dEffect_dArgs.v_Base_dEffect_dArgs_dargsGetArgs "default")) (fun args -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((((((((Vuna_dCompiler_dDriver_dCompilerCli.v_Vuna_dCompiler_dDriver_dCompilerCli_drunCompilerCli "default") "default") "default") "default") "default") "default") "default") args)) (fun code -> ((Base_dEffect_dExit.v_Base_dEffect_dExit_dexitWith "default") code))))) with e -> dt_report_exn e (Printexc.get_raw_backtrace ()); exit 2)
 let () =
   Printexc.record_backtrace true;

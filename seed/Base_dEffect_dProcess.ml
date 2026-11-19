@@ -45,13 +45,13 @@ let v_Base_dEffect_dProcess_dprocessOpHIOWith = (fun (op : t_Base_dEffect_dProce
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 109 "Base/Effect/Process.vuna"
+# 108 "Base/Effect/Process.vuna"
 let v_Base_dEffect_dProcess_dhandleProcessHostWith = (fun (n : string) comp -> (((((((Base_dEffect_dCore.v_Base_dEffect_dCore_dhandleCoreAtId "process") n) 485051770) (dtp_effectId n)) (fun a -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) a))) v_Base_dEffect_dProcess_dprocessOpHIOWith) comp))
 
-# 117 "Base/Effect/Process.vuna"
+# 116 "Base/Effect/Process.vuna"
 let v_Base_dEffect_dProcess_dprocessHostStatus = (Base_dEffect_dCore.v_Base_dEffect_dCore_draise (Base_dEffect_dCore.C_Base_dEffect_dCore_dEff_MkEff (fun (_ : Base_dEffect_dCore.t_Base_dEffect_dCore_dEffUnit) -> (dtp_hostStatus ()))))
 
-# 121 "Base/Effect/Process.vuna"
+# 120 "Base/Effect/Process.vuna"
 let v_Base_dEffect_dProcess_dprocessOpHIOWithHost = (fun (op : t_Base_dEffect_dProcess_dProcessOp) k -> (match op with
   | C_Base_dEffect_dProcess_dProcessOp_Args -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (Base_dEffect_dCore.v_Base_dEffect_dCore_draise (Base_dEffect_dCore.C_Base_dEffect_dCore_dEff_MkEff (fun (_ : Base_dEffect_dCore.t_Base_dEffect_dCore_dEffUnit) -> (Base_dData_dList.dtp_listOf (dtp_getArgs ())))))) (fun xs -> ((Obj.magic k) xs)))
   | C_Base_dEffect_dProcess_dProcessOp_Exit (dtb__8) -> ((Obj.magic k) (Base_dEffect_dCore.v_Base_dEffect_dCore_drunPure ((fun dtio_0 -> Base_dEffect_dCore.C_Base_dEffect_dCore_dEff_MkEff (fun (_ : Base_dEffect_dCore.t_Base_dEffect_dCore_dEffUnit) -> dtp_exit dtio_0)) dtb__8)))
@@ -61,25 +61,25 @@ let v_Base_dEffect_dProcess_dprocessOpHIOWithHost = (fun (op : t_Base_dEffect_dP
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 145 "Base/Effect/Process.vuna"
+# 143 "Base/Effect/Process.vuna"
 let v_Base_dEffect_dProcess_dhandleProcessHostWithHost = (fun (n : string) comp -> (((((((Base_dEffect_dCore.v_Base_dEffect_dCore_dhandleCoreAtId "process") n) 485051770) (dtp_effectId n)) (fun a -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) a))) v_Base_dEffect_dProcess_dprocessOpHIOWithHost) comp))
 
-# 150 "Base/Effect/Process.vuna"
+# 148 "Base/Effect/Process.vuna"
 let v_Base_dEffect_dProcess_drunProcessHost = (fun comp -> (Base_dEffect_dCore.v_Base_dEffect_dCore_djoinEff ((v_Base_dEffect_dProcess_dhandleProcessHostWithHost "default") comp)))
 
-# 156 "Base/Effect/Process.vuna"
+# 152 "Base/Effect/Process.vuna"
 let v_Base_dEffect_dProcess_dprocessErrorRet = (fun a -> (Base_dData_dResult.C_Base_dData_dResult_dResult_Ok (a)))
 
-# 160 "Base/Effect/Process.vuna"
+# 156 "Base/Effect/Process.vuna"
 let v_Base_dEffect_dProcess_dprocessErrorOpHR = (fun (op : t_Base_dEffect_dProcess_dProcessErrorOp) _u -> (match op with
   | C_Base_dEffect_dProcess_dProcessErrorOp_ProcessFail (dtb__13) -> (Base_dData_dResult.C_Base_dData_dResult_dResult_Err ((v_Base_dEffect_dProcess_dprocessErrorText dtb__13)))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 166 "Base/Effect/Process.vuna"
+# 162 "Base/Effect/Process.vuna"
 let v_Base_dEffect_dProcess_drunProcessError = (fun (n : string) comp -> (((((((Base_dEffect_dCore.v_Base_dEffect_dCore_dhandleCoreAtId "process-error") n) 44116993) (dtp_effectId n)) v_Base_dEffect_dProcess_dprocessErrorRet) v_Base_dEffect_dProcess_dprocessErrorOpHR) comp))
 
-# 171 "Base/Effect/Process.vuna"
+# 167 "Base/Effect/Process.vuna"
 let v_Base_dEffect_dProcess_drunProcessErrorHost = (fun comp -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((v_Base_dEffect_dProcess_drunProcessError "process-error") comp)) (fun res -> (match res with
   | Base_dData_dResult.C_Base_dData_dResult_dResult_Ok (dtb__14) -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) dtb__14)
   | Base_dData_dResult.C_Base_dData_dResult_dResult_Err (dtb__15) -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (Base_dEffect_dCore.v_Base_dEffect_dCore_draise ((fun dtio_0 -> Base_dEffect_dCore.C_Base_dEffect_dCore_dEff_MkEff (fun (_ : Base_dEffect_dCore.t_Base_dEffect_dCore_dEffUnit) -> (fun s -> (try prerr_string s; flush stderr; String.length s with _ -> 0)) dtio_0)) (String.concat "" ["vuna: "; dtb__15; "\n"])))) (fun _u -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (Base_dEffect_dCore.v_Base_dEffect_dCore_draise ((fun dtio_0 -> Base_dEffect_dCore.C_Base_dEffect_dCore_dEff_MkEff (fun (_ : Base_dEffect_dCore.t_Base_dEffect_dCore_dEffUnit) -> dtp_exit dtio_0)) 1))) (fun _u -> ((fun msg -> failwith msg) "unreachable: process error handler")))))
