@@ -1,0 +1,906 @@
+{
+  "schema": 2,
+  "meta": {
+    "timestamp": "2026-11-19T02:28:21Z",
+    "git_head": "c6586e7f8279a678fa07175bd3c8fe29ba3ec2bc",
+    "git_dirty": true,
+    "compiler": "vuna 0.1.0",
+    "ocamlopt": "5.5.1",
+    "arch": "x86_64",
+    "nproc": 16,
+    "loadavg": "3.34",
+    "runs": 5,
+    "warmup": 2,
+    "target": "all",
+    "stack_policy": "unlimited; js-host (V8 wasm stack, no knob)",
+    "wasm_host": "js",
+    "wasm_host_runner": "/home/grass/.local/share/opencode/worktree/c1976f/perf-cps-compare/test/suite/fixtures/wasm_js_host/run.mjs",
+    "node": "v24.21.0",
+    "node_startup_ms": 25,
+    "rss_passes": 3,
+    "rss_method": "gnu-time max_rss (max of rss_passes)",
+    "baseline_set": "programs"
+  },
+  "benchmarks": {
+    "arith": {
+      "ocaml_ref": {
+        "run_ok": true,
+        "median_ms": 5,
+        "rss_kb": 2528
+      },
+      "vuna_ocaml": {
+        "run_ok": true,
+        "median_ms": 6,
+        "rss_kb": 4388,
+        "gc": {
+          "minor_words": 912,
+          "major_words": 0,
+          "minor_collections": 1,
+          "major_collections": 0,
+          "top_heap_words": 53248
+        }
+      },
+      "native": {
+        "run_ok": true,
+        "median_ms": 44,
+        "rss_kb": 3400,
+        "default_stack_ok": true
+      },
+      "wasm": {
+        "run_ok": true,
+        "median_ms": 103,
+        "rss_kb": 61000
+      },
+      "ratios": {
+        "vuna_ocaml": {
+          "vs_handwritten": 1.20,
+          "rss_vs_handwritten": 1.74
+        },
+        "native": {
+          "vs_handwritten": 8.80,
+          "rss_vs_handwritten": 1.34,
+          "vs_ocaml_backend": 7.33,
+          "rss_vs_ocaml_backend": 0.77
+        },
+        "wasm": {
+          "vs_handwritten": 20.60,
+          "rss_vs_handwritten": 24.13,
+          "vs_ocaml_backend": 17.17,
+          "rss_vs_ocaml_backend": 13.90
+        }
+      }
+    },
+    "string_ops": {
+      "ocaml_ref": {
+        "run_ok": true,
+        "median_ms": 3,
+        "rss_kb": 3132
+      },
+      "vuna_ocaml": {
+        "run_ok": true,
+        "median_ms": 4,
+        "rss_kb": 5028,
+        "gc": {
+          "minor_words": 915,
+          "major_words": 0,
+          "minor_collections": 1,
+          "major_collections": 0,
+          "top_heap_words": 53248
+        }
+      },
+      "native": {
+        "run_ok": true,
+        "median_ms": 4,
+        "rss_kb": 3400,
+        "default_stack_ok": true
+      },
+      "wasm": {
+        "run_ok": true,
+        "median_ms": 33,
+        "rss_kb": 57600
+      },
+      "ratios": {
+        "vuna_ocaml": {
+          "vs_handwritten": 1.33,
+          "rss_vs_handwritten": 1.61
+        },
+        "native": {
+          "vs_handwritten": 1.33,
+          "rss_vs_handwritten": 1.09,
+          "vs_ocaml_backend": 1.00,
+          "rss_vs_ocaml_backend": 0.68
+        },
+        "wasm": {
+          "vs_handwritten": 11.00,
+          "rss_vs_handwritten": 18.39,
+          "vs_ocaml_backend": 8.25,
+          "rss_vs_ocaml_backend": 11.46
+        }
+      }
+    },
+    "hashmap": {
+      "ocaml_ref": {
+        "run_ok": true,
+        "median_ms": 4,
+        "rss_kb": 3968
+      },
+      "vuna_ocaml": {
+        "run_ok": true,
+        "median_ms": 8,
+        "rss_kb": 9444,
+        "gc": {
+          "minor_words": 912,
+          "major_words": 0,
+          "minor_collections": 1,
+          "major_collections": 0,
+          "top_heap_words": 53248
+        }
+      },
+      "native": {
+        "run_ok": true,
+        "median_ms": 13,
+        "rss_kb": 3840,
+        "default_stack_ok": true
+      },
+      "wasm": {
+        "run_ok": true,
+        "median_ms": 50,
+        "rss_kb": 65420
+      },
+      "ratios": {
+        "vuna_ocaml": {
+          "vs_handwritten": 2.00,
+          "rss_vs_handwritten": 2.38
+        },
+        "native": {
+          "vs_handwritten": 3.25,
+          "rss_vs_handwritten": 0.97,
+          "vs_ocaml_backend": 1.62,
+          "rss_vs_ocaml_backend": 0.41
+        },
+        "wasm": {
+          "vs_handwritten": 12.50,
+          "rss_vs_handwritten": 16.49,
+          "vs_ocaml_backend": 6.25,
+          "rss_vs_ocaml_backend": 6.93
+        }
+      }
+    },
+    "list_recursion": {
+      "ocaml_ref": {
+        "run_ok": true,
+        "median_ms": 15,
+        "rss_kb": 11472
+      },
+      "vuna_ocaml": {
+        "run_ok": true,
+        "median_ms": 12,
+        "rss_kb": 14056,
+        "gc": {
+          "minor_words": 915,
+          "major_words": 0,
+          "minor_collections": 1,
+          "major_collections": 0,
+          "top_heap_words": 53248
+        }
+      },
+      "native": {
+        "run_ok": true,
+        "median_ms": 76,
+        "rss_kb": 40576,
+        "default_stack_ok": false
+      },
+      "wasm": {
+        "run_ok": false,
+        "skip_reason": "run"
+      },
+      "ratios": {
+        "vuna_ocaml": {
+          "vs_handwritten": 0.80,
+          "rss_vs_handwritten": 1.23
+        },
+        "native": {
+          "vs_handwritten": 5.07,
+          "rss_vs_handwritten": 3.54,
+          "vs_ocaml_backend": 6.33,
+          "rss_vs_ocaml_backend": 2.89
+        },
+        "wasm": {
+          "run_ok": false
+        }
+      }
+    },
+    "gc_pressure": {
+      "ocaml_ref": {
+        "run_ok": true,
+        "median_ms": 33,
+        "rss_kb": 11396
+      },
+      "vuna_ocaml": {
+        "run_ok": true,
+        "median_ms": 41,
+        "rss_kb": 35172,
+        "gc": {
+          "minor_words": 915,
+          "major_words": 0,
+          "minor_collections": 1,
+          "major_collections": 0,
+          "top_heap_words": 53248
+        }
+      },
+      "native": {
+        "run_ok": true,
+        "median_ms": 159,
+        "rss_kb": 51072,
+        "default_stack_ok": false
+      },
+      "wasm": {
+        "run_ok": false,
+        "skip_reason": "run"
+      },
+      "ratios": {
+        "vuna_ocaml": {
+          "vs_handwritten": 1.24,
+          "rss_vs_handwritten": 3.09
+        },
+        "native": {
+          "vs_handwritten": 4.82,
+          "rss_vs_handwritten": 4.48,
+          "vs_ocaml_backend": 3.88,
+          "rss_vs_ocaml_backend": 1.45
+        },
+        "wasm": {
+          "run_ok": false
+        }
+      }
+    },
+    "array": {
+      "ocaml_ref": {
+        "run_ok": true,
+        "median_ms": 24,
+        "rss_kb": 15784
+      },
+      "vuna_ocaml": {
+        "run_ok": true,
+        "median_ms": 20,
+        "rss_kb": 20076,
+        "gc": {
+          "minor_words": 912,
+          "major_words": 0,
+          "minor_collections": 1,
+          "major_collections": 0,
+          "top_heap_words": 53248
+        }
+      },
+      "native": {
+        "run_ok": true,
+        "median_ms": 41,
+        "rss_kb": 34304,
+        "default_stack_ok": false
+      },
+      "wasm": {
+        "run_ok": false,
+        "skip_reason": "run"
+      },
+      "ratios": {
+        "vuna_ocaml": {
+          "vs_handwritten": 0.83,
+          "rss_vs_handwritten": 1.27
+        },
+        "native": {
+          "vs_handwritten": 1.71,
+          "rss_vs_handwritten": 2.17,
+          "vs_ocaml_backend": 2.05,
+          "rss_vs_ocaml_backend": 1.71
+        },
+        "wasm": {
+          "run_ok": false
+        }
+      }
+    },
+    "records": {
+      "ocaml_ref": {
+        "run_ok": true,
+        "median_ms": 7,
+        "rss_kb": 4712
+      },
+      "vuna_ocaml": {
+        "run_ok": true,
+        "median_ms": 15,
+        "rss_kb": 22932,
+        "gc": {
+          "minor_words": 912,
+          "major_words": 0,
+          "minor_collections": 1,
+          "major_collections": 0,
+          "top_heap_words": 53248
+        }
+      },
+      "native": {
+        "run_ok": true,
+        "median_ms": 50,
+        "rss_kb": 3400,
+        "default_stack_ok": true
+      },
+      "wasm": {
+        "run_ok": true,
+        "median_ms": 77,
+        "rss_kb": 61256
+      },
+      "ratios": {
+        "vuna_ocaml": {
+          "vs_handwritten": 2.14,
+          "rss_vs_handwritten": 4.87
+        },
+        "native": {
+          "vs_handwritten": 7.14,
+          "rss_vs_handwritten": 0.72,
+          "vs_ocaml_backend": 3.33,
+          "rss_vs_ocaml_backend": 0.15
+        },
+        "wasm": {
+          "vs_handwritten": 11.00,
+          "rss_vs_handwritten": 13.00,
+          "vs_ocaml_backend": 5.13,
+          "rss_vs_ocaml_backend": 2.67
+        }
+      }
+    },
+    "closures": {
+      "ocaml_ref": {
+        "run_ok": true,
+        "median_ms": 10,
+        "rss_kb": 8796
+      },
+      "vuna_ocaml": {
+        "run_ok": true,
+        "median_ms": 12,
+        "rss_kb": 13296,
+        "gc": {
+          "minor_words": 912,
+          "major_words": 0,
+          "minor_collections": 1,
+          "major_collections": 0,
+          "top_heap_words": 53248
+        }
+      },
+      "native": {
+        "run_ok": true,
+        "median_ms": 93,
+        "rss_kb": 46848,
+        "default_stack_ok": false
+      },
+      "wasm": {
+        "run_ok": false,
+        "skip_reason": "run"
+      },
+      "ratios": {
+        "vuna_ocaml": {
+          "vs_handwritten": 1.20,
+          "rss_vs_handwritten": 1.51
+        },
+        "native": {
+          "vs_handwritten": 9.30,
+          "rss_vs_handwritten": 5.33,
+          "vs_ocaml_backend": 7.75,
+          "rss_vs_ocaml_backend": 3.52
+        },
+        "wasm": {
+          "run_ok": false
+        }
+      }
+    },
+    "sorting": {
+      "ocaml_ref": {
+        "run_ok": true,
+        "median_ms": 20,
+        "rss_kb": 9632
+      },
+      "vuna_ocaml": {
+        "run_ok": true,
+        "median_ms": 24,
+        "rss_kb": 35756,
+        "gc": {
+          "minor_words": 912,
+          "major_words": 0,
+          "minor_collections": 1,
+          "major_collections": 0,
+          "top_heap_words": 53248
+        }
+      },
+      "native": {
+        "run_ok": true,
+        "median_ms": 50,
+        "rss_kb": 19584,
+        "default_stack_ok": true
+      },
+      "wasm": {
+        "run_ok": false,
+        "skip_reason": "run"
+      },
+      "ratios": {
+        "vuna_ocaml": {
+          "vs_handwritten": 1.20,
+          "rss_vs_handwritten": 3.71
+        },
+        "native": {
+          "vs_handwritten": 2.50,
+          "rss_vs_handwritten": 2.03,
+          "vs_ocaml_backend": 2.08,
+          "rss_vs_ocaml_backend": 0.55
+        },
+        "wasm": {
+          "run_ok": false
+        }
+      }
+    },
+    "float_math": {
+      "ocaml_ref": {
+        "run_ok": true,
+        "median_ms": 7,
+        "rss_kb": 4708
+      },
+      "vuna_ocaml": {
+        "run_ok": true,
+        "median_ms": 14,
+        "rss_kb": 20012,
+        "gc": {
+          "minor_words": 915,
+          "major_words": 0,
+          "minor_collections": 1,
+          "major_collections": 0,
+          "top_heap_words": 53248
+        }
+      },
+      "native": {
+        "run_ok": true,
+        "median_ms": 80,
+        "rss_kb": 3400,
+        "default_stack_ok": true
+      },
+      "wasm": {
+        "run_ok": true,
+        "median_ms": 58,
+        "rss_kb": 60980
+      },
+      "ratios": {
+        "vuna_ocaml": {
+          "vs_handwritten": 2.00,
+          "rss_vs_handwritten": 4.25
+        },
+        "native": {
+          "vs_handwritten": 11.43,
+          "rss_vs_handwritten": 0.72,
+          "vs_ocaml_backend": 5.71,
+          "rss_vs_ocaml_backend": 0.17
+        },
+        "wasm": {
+          "vs_handwritten": 8.29,
+          "rss_vs_handwritten": 12.95,
+          "vs_ocaml_backend": 4.14,
+          "rss_vs_ocaml_backend": 3.05
+        }
+      }
+    },
+    "text_scan": {
+      "ocaml_ref": {
+        "run_ok": true,
+        "median_ms": 4,
+        "rss_kb": 3516
+      },
+      "vuna_ocaml": {
+        "run_ok": true,
+        "median_ms": 6,
+        "rss_kb": 6568,
+        "gc": {
+          "minor_words": 915,
+          "major_words": 0,
+          "minor_collections": 1,
+          "major_collections": 0,
+          "top_heap_words": 53248
+        }
+      },
+      "native": {
+        "run_ok": true,
+        "median_ms": 40,
+        "rss_kb": 30848,
+        "default_stack_ok": false
+      },
+      "wasm": {
+        "run_ok": false,
+        "skip_reason": "run"
+      },
+      "ratios": {
+        "vuna_ocaml": {
+          "vs_handwritten": 1.50,
+          "rss_vs_handwritten": 1.87
+        },
+        "native": {
+          "vs_handwritten": 10.00,
+          "rss_vs_handwritten": 8.77,
+          "vs_ocaml_backend": 6.67,
+          "rss_vs_ocaml_backend": 4.70
+        },
+        "wasm": {
+          "run_ok": false
+        }
+      }
+    },
+    "nat_bits": {
+      "ocaml_ref": {
+        "run_ok": true,
+        "median_ms": 3,
+        "rss_kb": 2536
+      },
+      "vuna_ocaml": {
+        "run_ok": true,
+        "median_ms": 5,
+        "rss_kb": 4400,
+        "gc": {
+          "minor_words": 912,
+          "major_words": 0,
+          "minor_collections": 1,
+          "major_collections": 0,
+          "top_heap_words": 53248
+        }
+      },
+      "native": {
+        "run_ok": true,
+        "median_ms": 17,
+        "rss_kb": 3404,
+        "default_stack_ok": true
+      },
+      "wasm": {
+        "run_ok": true,
+        "median_ms": 43,
+        "rss_kb": 61096
+      },
+      "ratios": {
+        "vuna_ocaml": {
+          "vs_handwritten": 1.67,
+          "rss_vs_handwritten": 1.74
+        },
+        "native": {
+          "vs_handwritten": 5.67,
+          "rss_vs_handwritten": 1.34,
+          "vs_ocaml_backend": 3.40,
+          "rss_vs_ocaml_backend": 0.77
+        },
+        "wasm": {
+          "vs_handwritten": 14.33,
+          "rss_vs_handwritten": 24.09,
+          "vs_ocaml_backend": 8.60,
+          "rss_vs_ocaml_backend": 13.89
+        }
+      }
+    },
+    "tco_mutual": {
+      "ocaml_ref": {
+        "run_ok": true,
+        "median_ms": 5,
+        "rss_kb": 2532
+      },
+      "vuna_ocaml": {
+        "run_ok": true,
+        "median_ms": 6,
+        "rss_kb": 4388,
+        "gc": {
+          "minor_words": 915,
+          "major_words": 0,
+          "minor_collections": 1,
+          "major_collections": 0,
+          "top_heap_words": 53248
+        }
+      },
+      "native": {
+        "run_ok": true,
+        "median_ms": 25,
+        "rss_kb": 3400,
+        "default_stack_ok": true
+      },
+      "wasm": {
+        "run_ok": true,
+        "median_ms": 39,
+        "rss_kb": 60896
+      },
+      "ratios": {
+        "vuna_ocaml": {
+          "vs_handwritten": 1.20,
+          "rss_vs_handwritten": 1.73
+        },
+        "native": {
+          "vs_handwritten": 5.00,
+          "rss_vs_handwritten": 1.34,
+          "vs_ocaml_backend": 4.17,
+          "rss_vs_ocaml_backend": 0.77
+        },
+        "wasm": {
+          "vs_handwritten": 7.80,
+          "rss_vs_handwritten": 24.05,
+          "vs_ocaml_backend": 6.50,
+          "rss_vs_ocaml_backend": 13.88
+        }
+      }
+    },
+    "tco_wide": {
+      "ocaml_ref": {
+        "run_ok": true,
+        "median_ms": 4,
+        "rss_kb": 2536
+      },
+      "vuna_ocaml": {
+        "run_ok": true,
+        "median_ms": 5,
+        "rss_kb": 4388,
+        "gc": {
+          "minor_words": 912,
+          "major_words": 0,
+          "minor_collections": 1,
+          "major_collections": 0,
+          "top_heap_words": 53248
+        }
+      },
+      "native": {
+        "run_ok": true,
+        "median_ms": 27,
+        "rss_kb": 3400,
+        "default_stack_ok": true
+      },
+      "wasm": {
+        "run_ok": true,
+        "median_ms": 56,
+        "rss_kb": 61100
+      },
+      "ratios": {
+        "vuna_ocaml": {
+          "vs_handwritten": 1.25,
+          "rss_vs_handwritten": 1.73
+        },
+        "native": {
+          "vs_handwritten": 6.75,
+          "rss_vs_handwritten": 1.34,
+          "vs_ocaml_backend": 5.40,
+          "rss_vs_ocaml_backend": 0.77
+        },
+        "wasm": {
+          "vs_handwritten": 14.00,
+          "rss_vs_handwritten": 24.09,
+          "vs_ocaml_backend": 11.20,
+          "rss_vs_ocaml_backend": 13.92
+        }
+      }
+    },
+    "gc_low_live": {
+      "ocaml_ref": {
+        "run_ok": true,
+        "median_ms": 380,
+        "rss_kb": 250164
+      },
+      "vuna_ocaml": {
+        "run_ok": true,
+        "median_ms": 330,
+        "rss_kb": 340260,
+        "gc": {
+          "minor_words": 33555222,
+          "major_words": 13016142,
+          "minor_collections": 3,
+          "major_collections": 0,
+          "top_heap_words": 26152960
+        }
+      },
+      "native": {
+        "run_ok": true,
+        "median_ms": 307,
+        "rss_kb": 5504,
+        "default_stack_ok": true
+      },
+      "wasm": {
+        "run_ok": false,
+        "skip_reason": "run"
+      },
+      "ratios": {
+        "vuna_ocaml": {
+          "vs_handwritten": 0.87,
+          "rss_vs_handwritten": 1.36
+        },
+        "native": {
+          "vs_handwritten": 0.81,
+          "rss_vs_handwritten": 0.02,
+          "vs_ocaml_backend": 0.93,
+          "rss_vs_ocaml_backend": 0.02
+        },
+        "wasm": {
+          "run_ok": false
+        }
+      }
+    },
+    "gc_array_churn": {
+      "ocaml_ref": {
+        "run_ok": true,
+        "median_ms": 356,
+        "rss_kb": 84108
+      },
+      "vuna_ocaml": {
+        "run_ok": true,
+        "median_ms": 443,
+        "rss_kb": 215460,
+        "gc": {
+          "minor_words": 36908030,
+          "major_words": 15116352,
+          "minor_collections": 5,
+          "major_collections": 2,
+          "top_heap_words": 9596126
+        }
+      },
+      "native": {
+        "run_ok": true,
+        "median_ms": 2899,
+        "rss_kb": 227968,
+        "default_stack_ok": true
+      },
+      "wasm": {
+        "run_ok": false,
+        "skip_reason": "run"
+      },
+      "ratios": {
+        "vuna_ocaml": {
+          "vs_handwritten": 1.24,
+          "rss_vs_handwritten": 2.56
+        },
+        "native": {
+          "vs_handwritten": 8.14,
+          "rss_vs_handwritten": 2.71,
+          "vs_ocaml_backend": 6.54,
+          "rss_vs_ocaml_backend": 1.06
+        },
+        "wasm": {
+          "run_ok": false
+        }
+      }
+    },
+    "eff_tick": {
+      "ocaml_ref": {
+        "run_ok": true,
+        "median_ms": 4,
+        "rss_kb": 5228
+      },
+      "vuna_ocaml": {
+        "run_ok": true,
+        "median_ms": 10,
+        "rss_kb": 16672,
+        "gc": {
+          "minor_words": 912,
+          "major_words": 0,
+          "minor_collections": 1,
+          "major_collections": 0,
+          "top_heap_words": 53248
+        }
+      },
+      "native": {
+        "run_ok": true,
+        "median_ms": 212,
+        "rss_kb": 57344,
+        "default_stack_ok": true
+      },
+      "wasm": {
+        "run_ok": true,
+        "median_ms": 189,
+        "rss_kb": 159176
+      },
+      "ratios": {
+        "vuna_ocaml": {
+          "vs_handwritten": 2.50,
+          "rss_vs_handwritten": 3.19
+        },
+        "native": {
+          "vs_handwritten": 53.00,
+          "rss_vs_handwritten": 10.97,
+          "vs_ocaml_backend": 21.20,
+          "rss_vs_ocaml_backend": 3.44
+        },
+        "wasm": {
+          "vs_handwritten": 47.25,
+          "rss_vs_handwritten": 30.45,
+          "vs_ocaml_backend": 18.90,
+          "rss_vs_ocaml_backend": 9.55
+        }
+      }
+    },
+    "eff_deep": {
+      "ocaml_ref": {
+        "run_ok": true,
+        "median_ms": 3,
+        "rss_kb": 3312
+      },
+      "vuna_ocaml": {
+        "run_ok": true,
+        "median_ms": 3,
+        "rss_kb": 4772,
+        "gc": {
+          "minor_words": 912,
+          "major_words": 0,
+          "minor_collections": 1,
+          "major_collections": 0,
+          "top_heap_words": 53248
+        }
+      },
+      "native": {
+        "run_ok": true,
+        "median_ms": 5,
+        "rss_kb": 3400,
+        "default_stack_ok": true
+      },
+      "wasm": {
+        "run_ok": true,
+        "median_ms": 37,
+        "rss_kb": 62372
+      },
+      "ratios": {
+        "vuna_ocaml": {
+          "vs_handwritten": 1.00,
+          "rss_vs_handwritten": 1.44
+        },
+        "native": {
+          "vs_handwritten": 1.67,
+          "rss_vs_handwritten": 1.03,
+          "vs_ocaml_backend": 1.67,
+          "rss_vs_ocaml_backend": 0.71
+        },
+        "wasm": {
+          "vs_handwritten": 12.33,
+          "rss_vs_handwritten": 18.83,
+          "vs_ocaml_backend": 12.33,
+          "rss_vs_ocaml_backend": 13.07
+        }
+      }
+    },
+    "eff_bracket": {
+      "ocaml_ref": {
+        "run_ok": true,
+        "median_ms": 3,
+        "rss_kb": 2532
+      },
+      "vuna_ocaml": {
+        "run_ok": true,
+        "median_ms": 14,
+        "rss_kb": 20252,
+        "gc": {
+          "minor_words": 915,
+          "major_words": 0,
+          "minor_collections": 1,
+          "major_collections": 0,
+          "top_heap_words": 53248
+        }
+      },
+      "native": {
+        "run_ok": true,
+        "median_ms": 320,
+        "rss_kb": 50688,
+        "default_stack_ok": true
+      },
+      "wasm": {
+        "run_ok": true,
+        "median_ms": 194,
+        "rss_kb": 155392
+      },
+      "ratios": {
+        "vuna_ocaml": {
+          "vs_handwritten": 4.67,
+          "rss_vs_handwritten": 8.00
+        },
+        "native": {
+          "vs_handwritten": 106.67,
+          "rss_vs_handwritten": 20.02,
+          "vs_ocaml_backend": 22.86,
+          "rss_vs_ocaml_backend": 2.50
+        },
+        "wasm": {
+          "vs_handwritten": 64.67,
+          "rss_vs_handwritten": 61.37,
+          "vs_ocaml_backend": 13.86,
+          "rss_vs_ocaml_backend": 7.67
+        }
+      }
+    }
+  }
+}

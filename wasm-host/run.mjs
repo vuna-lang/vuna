@@ -73,3 +73,10 @@ try {
     process.exitCode = 2;
   }
 }
+
+// bench 用：退出时报告线性内存大小（与 OCaml/native 的峰值口径分开记录）。
+if (process.env.VN_PERF_STATS === "1") {
+  const mem = instance.exports.memory;
+  const bytes = mem && mem.buffer ? mem.buffer.byteLength : 0;
+  process.stderr.write(`VN_PERF_WASM memory_bytes=${bytes}\n`);
+}

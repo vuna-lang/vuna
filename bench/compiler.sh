@@ -5,7 +5,7 @@
 # 本脚本测**编译器/工具链自己的墙钟**（check / build --no-compile / map / fmt）。
 #
 # 口径：每项先 warmup 再跑 --runs 次取中位数；只有绝对 ms（跨机器不可比，**同一台机器**
-# 上做回归对比）。`--check` 与 `bench/compiler-baseline.txt` 比，超过 --threshold% 打 WARN、
+# 上做回归对比）。`--check` 与 `bench/baselines/compiler.txt` 比，超过 --threshold% 打 WARN、
 # 超过 --fail-threshold%（默认 50%）直接 exit 1；`--save-baseline` 重写
 # 基线（复核读数后手动执行）。跨机器/跨输入规模的可比口径是 `nix/checks/compiler-growth.sh`
 # 的增长率门槛。
@@ -27,7 +27,7 @@
 # 用法（仓库根目录）：
 #   sh bench/compiler.sh                    # 测量全部并打印表格
 #   sh bench/compiler.sh --runs 5 --check   # 与基线对比
-#   sh bench/compiler.sh --save-baseline    # 重写 bench/compiler-baseline.txt
+#   sh bench/compiler.sh --save-baseline    # 重写 bench/baselines/compiler.txt
 #   sh bench/compiler.sh --alloc            # 额外打印冷 check . 的 GC 分配统计
 set -euo pipefail
 
@@ -42,7 +42,7 @@ JSON_OUT=""
 ONLY=""
 VUNA_BIN=${VUNA:-vuna}
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
-BASELINE="$ROOT/bench/compiler-baseline.txt"
+BASELINE="$ROOT/bench/baselines/compiler.txt"
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/vuna-cperf.XXXXXX")
 trap 'rm -rf "$WORK"' EXIT INT TERM
 
@@ -58,9 +58,10 @@ options:
   --only NAME            只跑一项（可重复）
   --compiler PATH        被测 vuna（默认 PATH 里的 vuna / $VUNA）
   --json FILE            写出 JSON 报告
-  --check                与 bench/compiler-baseline.txt 对比，超过 --threshold% 打 WARN
+  --check                与基线对比，超过 --threshold% 打 WARN
+  --baseline FILE        基线路径（默认 bench/baselines/compiler.txt）
   --alloc                结束后跑一次冷 check . 并打印分配的 GC 统计（VN_PERF_STATS=1）
-  --save-baseline        把本次中位数写回 bench/compiler-baseline.txt
+  --save-baseline        把本次中位数写回基线（--baseline / 默认路径）
   --threshold N          回退阈值，百分比（默认 20，超过打 WARN）
   --fail-threshold N     硬失败阈值，百分比（默认 50，超过 exit 1；配合 --check）
   -h, --help             显示帮助
@@ -84,6 +85,8 @@ while [ $# -gt 0 ]; do
     --json) [ $# -ge 2 ] || die "--json needs a value"; JSON_OUT=$2; shift 2 ;;
     --json=*) JSON_OUT=${1#*=}; shift ;;
     --check) CHECK=1; shift ;;
+    --baseline) [ $# -ge 2 ] || die "--baseline needs a value"; BASELINE=$2; shift 2 ;;
+    --baseline=*) BASELINE=${1#*=}; shift ;;
     --alloc) ALLOC=1; shift ;;
     --save-baseline) SAVE=1; shift ;;
     --threshold) [ $# -ge 2 ] || die "--threshold needs a value"; THRESHOLD=$2; shift 2 ;;
