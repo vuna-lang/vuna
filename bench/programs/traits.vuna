@@ -1,0 +1,22 @@
+-- 字典派发：约束多态 loop 在 Int 与 record 两个实例上各跑 50 万次。
+-- 手写 OCaml 对照见 traits.ml（显式字典 record，同算法）。
+trait Stepper a where
+  step : a -> a
+  score : a -> Int
+
+instance Stepper Int where
+  step x = x + 1
+  score x = x
+
+record Box where
+  v : Int
+
+instance Stepper Box where
+  step b = { b | v = b.v + 1 }
+  score b = b.v
+
+run : Stepper a => Int -> a -> a
+run n x = if n <= 0 then x else run (n - 1) (step x)
+
+main : Int
+main = score (run 500000 0) + score (run 500000 Box { v = 0 })

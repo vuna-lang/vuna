@@ -1,0 +1,30 @@
+-- 效应基准：N 层 handler 嵌套，内层完成后再在外层 perform；测 handler 帧链与回退。
+-- 手写 OCaml 对照见 eff_nested.ml（Effect.Deep，同算法）。
+import Base.Effect.Core as Eff
+import Base.Data.Nat as Nat
+
+data POp : Type -> Type where
+  P : Int -> POp Int
+
+layer : Nat -> Eff [POp] Int
+layer n =
+  case n of
+    Zero => pure 0
+    Succ m =>
+      weakenRow [POp] (
+          handle (
+            do
+              x <- layer m
+              perform (P x)
+          ) {
+            P x k -> k (x + 1)
+          }
+        )
+
+main : Int
+main =
+  runPure (
+      handle (layer (natFromInt 2000)) {
+        P n k -> k n
+      }
+    )

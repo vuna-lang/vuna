@@ -1,0 +1,25 @@
+-- 效应基准：非尾递归的每一层都 perform 一次（深度 2000 → 1），测深栈上的顺序续延。
+-- 手写 OCaml 对照见 eff_deepseq.ml（Effect.Deep，同算法）。
+import Base.Effect.Core as Eff
+import Base.Data.Nat as Nat
+
+data POp : Type -> Type where
+  P : Int -> POp Int
+
+sum : Nat -> Eff [POp] Int
+sum n =
+  case n of
+    Zero => pure 0
+    Succ m =>
+      do
+        x <- perform (P 1)
+        y <- sum m
+        pure (x + y)
+
+main : Int
+main =
+  runPure (
+      handle (sum (natFromInt 2000)) {
+        P n k -> k n
+      }
+    )

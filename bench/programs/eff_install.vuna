@@ -1,0 +1,29 @@
+-- 效应基准：每轮单独安装一次 handler、perform 一次再拆掉，测 MkHandle/finish 的固定成本。
+-- 手写 OCaml 对照见 eff_install.ml（Effect.Deep，同算法）。
+import Base.Effect.Core as Eff
+import Base.Data.Nat as Nat
+
+data POp : Type -> Type where
+  P : Int -> POp Int
+
+tick : Eff [POp] Int
+tick = perform (P 1)
+
+once : Eff [] Int
+once =
+  handle tick {
+    P v k -> k v
+  }
+
+loop : Nat -> Eff [] Int
+loop n =
+  case n of
+    Zero => pure 0
+    Succ m =>
+      do
+        x <- once
+        y <- loop m
+        pure (x + y)
+
+main : Int
+main = runPure (loop (natFromInt 10000))

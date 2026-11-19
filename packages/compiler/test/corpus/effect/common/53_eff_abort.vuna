@@ -1,0 +1,45 @@
+-- 效应基准：每轮 bracket 的 use 都 abort，release（cleanup）恰好执行一次。
+-- 手写 OCaml 对照见 eff_abort.ml（异常 + Fun.protect，同算法）。
+import Base.Effect.Core as Eff
+import Base.Effect.Exn as EffExn
+import Base.Effect.Pure.IORef as IORef
+import Base.Data.Nat as Nat
+import Base.Data.Result as Result
+
+bump : {r : Row} -> IORef Int -> Int -> Eff r Int
+bump ref k =
+  do
+    _ <- modifyRef ref (\x => x + 1)
+    pure k
+
+abortOnce : {r : Row} -> IORef Int -> Int -> Eff r Int
+abortOnce ref k =
+  do
+    _ <-
+      runExn "boom" (
+          bracket (pure 0) (\_ => bump ref 0) (
+              \_ =>
+                do
+                  _ <- throwExn "boom" "x"
+                  pure k
+            )
+        )
+    pure k
+
+loop : IORef Int -> Nat -> Eff [] Int
+loop ref n =
+  case n of
+    Zero => pure 0
+    Succ m =>
+      do
+        _ <- abortOnce ref m
+        loop ref m
+
+main : Int
+main =
+  runPure (
+      do
+        ref <- newRef 0
+        _ <- loop ref (natFromInt 2000)
+        readRef ref
+    )
