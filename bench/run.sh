@@ -33,7 +33,7 @@ OCAMLOPT_BIN=${OCAMLOPT:-ocamlopt}
 CC_BIN=${CC:-cc}
 VUNA_BASE_OVERRIDE=${VUNA_BASE:-}
 
-BENCHES="arith string_ops hashmap list_recursion gc_pressure array records closures sorting float_math text_scan nat_bits tco_mutual tco_wide gc_low_live gc_array_churn"
+BENCHES="arith string_ops hashmap list_recursion gc_pressure array records closures sorting float_math text_scan nat_bits tco_mutual tco_wide gc_low_live gc_array_churn eff_tick eff_deep eff_bracket"
 
 usage() {
   cat <<'EOF'

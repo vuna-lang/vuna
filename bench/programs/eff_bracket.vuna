@@ -1,0 +1,25 @@
+-- 效应基准：每轮 `bracket` 包一次 perform，测 cleanup 步骤（push/pop）与 do 续延。
+-- 手写 OCaml 对照见 eff_bracket.ml（同算法，release 直接内联）。
+import Base.Effect.Core as Eff
+import Base.Data.Nat as Nat
+
+data TickOp : Type -> Type where
+  Tick : Int -> TickOp Int
+
+loop : Nat -> Eff [TickOp] Int
+loop n =
+  case n of
+    Zero => pure 0
+    Succ m =>
+      do
+        x <- bracket (pure 0) (\_ => pure 1) (\_ => perform (Tick 1))
+        y <- loop m
+        pure (x + y)
+
+main : Int
+main =
+  runPure (
+      handle (loop (natFromInt 10000)) {
+        Tick n k -> k n
+      }
+    )

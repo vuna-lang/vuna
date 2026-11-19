@@ -1,0 +1,24 @@
+-- 效应基准：尾递归里顺序 perform + resume（浅续延），测一次 handler 派发的成本。
+-- 手写 OCaml 对照见 eff_tick.ml（Effect.Deep，同算法）。
+import Base.Effect.Core as Eff
+import Base.Data.Nat as Nat
+
+data TickOp : Type -> Type where
+  Tick : Int -> TickOp Int
+
+loop : Nat -> Int -> Eff [TickOp] Int
+loop n acc =
+  case n of
+    Zero => pure acc
+    Succ m =>
+      do
+        x <- perform (Tick 1)
+        loop m (acc + x)
+
+main : Int
+main =
+  runPure (
+      handle (loop (natFromInt 20000) 0) {
+        Tick n k -> k n
+      }
+    )

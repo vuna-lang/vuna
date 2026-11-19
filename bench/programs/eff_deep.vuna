@@ -1,0 +1,24 @@
+-- 效应基准：非尾递归到深度 N 才 perform 一次，测续延捕获/恢复的深度成本。
+-- 手写 OCaml 对照见 eff_deep.ml（Effect.Deep，同算法）。
+import Base.Effect.Core as Eff
+import Base.Data.Nat as Nat
+
+data TickOp : Type -> Type where
+  Tick : Int -> TickOp Int
+
+sum : Nat -> Eff [TickOp] Int
+sum n =
+  case n of
+    Zero => perform (Tick 1)
+    Succ m =>
+      do
+        y <- sum m
+        pure (y + 1)
+
+main : Int
+main =
+  runPure (
+      handle (sum (natFromInt 2000)) {
+        Tick n k -> k n
+      }
+    )
