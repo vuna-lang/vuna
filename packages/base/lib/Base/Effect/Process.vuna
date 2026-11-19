@@ -89,8 +89,7 @@ processOpHIOWith i op k =
       do
         xs <- @vuna@prim_eff_getArgs
         k xs
-    Exit c =>
-      k c
+    Exit c => k c
     RunIn dir args =>
       do
         c <- @vuna@prim_eff_runIn dir args
@@ -124,8 +123,7 @@ processOpHIOWithHost i op k =
       do
         xs <- raise @vuna@prim_eff_getArgs_process_host
         k xs
-    Exit c =>
-      k (runPure (@vuna@prim_eff_exit_process_host c))
+    Exit c => k (runPure (@vuna@prim_eff_exit_process_host c))
     RunIn dir args =>
       do
         c <- raise (@vuna@host@tryRunIn dir args)
@@ -147,9 +145,7 @@ handleProcessHostWithHost n comp =
 
 -- | entry 自动预装用（泛化 r）：真实退出路径 `Exit` 走 `@vuna@prim_eff_exit_process_host`，失败收口行 `ProcessErrorOp` 接到行尾。
 runProcessHost : {r : Row} -> {a : Type} -> Eff (Named "default" ProcessOp :: r) a -> Eff (rowAppend r [ProcessErrorOp@"process-error"]) a
-runProcessHost comp =
-  joinEff
-    (handleProcessHostWithHost "default" comp)
+runProcessHost comp = joinEff (handleProcessHostWithHost "default" comp)
 
 -- | 内部：`runProcessError` 的成功侧 `ret`——值包装成 `Ok`。
 processErrorRet : {a : Type} -> a -> Result a
