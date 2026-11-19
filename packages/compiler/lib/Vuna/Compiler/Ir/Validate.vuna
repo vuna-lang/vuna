@@ -26,7 +26,7 @@ validateUnit u =
     nameTbl = HashMap.ofNames (map irDefName defs)
   in Vuna.Compiler.Base.Common.bind
     (checkUniqueDefNames defs)
-    (\_ => Vuna.Compiler.Base.Common.bind (checkGroupOrder u.irUnitGroups nameTbl) (\_ => Vuna.Compiler.Base.Common.bind (checkSymbolRefs (irSymbolsOfUnit u)) (\_ => Vuna.Compiler.Base.Common.bind (checkScopedUnit u) (\_ => checkBinderTys u.irUnitTyDecls defs))))
+    (\_ => Vuna.Compiler.Base.Common.bind (checkGroupOrder u.irUnitGroups nameTbl) (\_ => Vuna.Compiler.Base.Common.bind (checkSymbolRefs (irSymbolsOfUnit u)) (\_ => Vuna.Compiler.Base.Common.bind (checkScopedUnit u) (\_ => Vuna.Compiler.Base.Common.bind (validateTyDecls u.irUnitTyDecls) (\_ => checkBinderTys u.irUnitTyDecls defs)))))
 
 -- 依赖可见性：组内成员可以互引；跨组引用只能指向已经产出的组。
 checkGroupOrder : List IrGroup -> HashMap String Bool -> Check Int
@@ -258,31 +258,68 @@ checkAltBinderTysM decls Nothing = OkC 0
 checkAltBinderTysM decls (Just alt) = checkBinderTysOf decls (irAltBindersOf alt)
 
 checkTyArity : List IrTyDecl -> IrTy -> Check Int
-checkTyArity decls (IrTyVar i) =
-  if i >= 0 then OkC 0 else icInternal "negative runtime type parameter slot"
-checkTyArity decls IrTyInt = OkC 0
-checkTyArity decls IrTyStr = OkC 0
-checkTyArity decls IrTyBool = OkC 0
-checkTyArity decls IrTyFloat = OkC 0
-checkTyArity decls IrTyOpaque = OkC 0
-checkTyArity decls (IrTyArray a) = checkTyArity decls a
-checkTyArity decls (IrTyRef a) = checkTyArity decls a
-checkTyArity decls (IrTyFun d c) =
-  Vuna.Compiler.Base.Common.bind (checkTyArity decls d) (\_ => checkTyArity decls c)
-checkTyArity decls (IrTyData fam args) =
+checkTyArity decls ty = checkTyArityIn decls Nothing ty
+
+-- | `slots` 是「本声明允许的类型参数槽个数」：`Nothing` = 当前位置没有可核对的上界
+--   （签名 / binder 注解里的槽已被 Lowering 替换成实参，残留即为 bug）。
+checkTyArityIn : List IrTyDecl -> Maybe Int -> IrTy -> Check Int
+checkTyArityIn decls slots (IrTyVar i) =
+  if i < 0 then
+    icInternal "negative runtime type parameter slot"
+  else
+    case slots of
+      Nothing => OkC 0
+      Just n => if i < n then OkC 0 else icInternal "runtime type parameter slot ${strFromInt i} is out of range (declaration has ${strFromInt n} type parameters)"
+checkTyArityIn decls slots IrTyInt = OkC 0
+checkTyArityIn decls slots IrTyStr = OkC 0
+checkTyArityIn decls slots IrTyBool = OkC 0
+checkTyArityIn decls slots IrTyFloat = OkC 0
+checkTyArityIn decls slots IrTyOpaque = OkC 0
+checkTyArityIn decls slots (IrTyArray a) = checkTyArityIn decls slots a
+checkTyArityIn decls slots (IrTyRef a) = checkTyArityIn decls slots a
+checkTyArityIn decls slots (IrTyFun d c) =
+  Vuna.Compiler.Base.Common.bind (checkTyArityIn decls slots d) (\_ => checkTyArityIn decls slots c)
+checkTyArityIn decls slots (IrTyData fam args) =
   case tyDeclArityOf decls fam of
     Just n =>
       if listLength args == n then
-        checkTyArityList decls args
+        checkTyArityListIn decls slots args
       else
         icInternal
           "binder type annotation has the wrong type argument count for `${fam}` (expected ${strFromInt n}, got ${strFromInt (listLength args)})"
-    Nothing => checkTyArityList decls args
+    Nothing => checkTyArityListIn decls slots args
 
 checkTyArityList : List IrTyDecl -> List IrTy -> Check Int
-checkTyArityList decls [] = OkC 0
-checkTyArityList decls (t :: rest) =
-  Vuna.Compiler.Base.Common.bind (checkTyArity decls t) (\_ => checkTyArityList decls rest)
+checkTyArityList decls tys = checkTyArityListIn decls Nothing tys
+
+checkTyArityListIn : List IrTyDecl -> Maybe Int -> List IrTy -> Check Int
+checkTyArityListIn decls slots [] = OkC 0
+checkTyArityListIn decls slots (t :: rest) =
+  Vuna.Compiler.Base.Common.bind
+    (checkTyArityIn decls slots t)
+    (\_ => checkTyArityListIn decls slots rest)
+
+-- | 声明体里的槽必须落在该声明自己的 arity 内（后端把它们渲染成 `'a<i>`，
+--   越界即产物里出现未绑定的类型变量）。
+export validateTyDecls : List IrTyDecl -> Check Int
+validateTyDecls decls = validateTyDeclsGo decls decls
+
+validateTyDeclsGo : List IrTyDecl -> List IrTyDecl -> Check Int
+validateTyDeclsGo all [] = OkC 0
+validateTyDeclsGo all (d :: rest) =
+  Vuna.Compiler.Base.Common.bind (checkDeclSlots all d) (\_ => validateTyDeclsGo all rest)
+
+checkDeclSlots : List IrTyDecl -> IrTyDecl -> Check Int
+checkDeclSlots all (IrVariantDecl name n ctors) = checkDeclCtorSlots all name n ctors
+checkDeclSlots all (IrRecordDecl name n fields tys) = checkTyArityListIn all (Just n) tys
+checkDeclSlots all (IrUnboxedDecl name n ty) = checkTyArityIn all (Just n) ty
+
+checkDeclCtorSlots : List IrTyDecl -> String -> Int -> List (Pair String (List IrTy)) -> Check Int
+checkDeclCtorSlots all name n [] = OkC 0
+checkDeclCtorSlots all name n ((Pair ctor tys) :: rest) =
+  Vuna.Compiler.Base.Common.bind
+    (checkTyArityListIn all (Just n) tys)
+    (\_ => checkDeclCtorSlots all name n rest)
 
 tyDeclArityOf : List IrTyDecl -> String -> Maybe Int
 tyDeclArityOf [] fam = Nothing

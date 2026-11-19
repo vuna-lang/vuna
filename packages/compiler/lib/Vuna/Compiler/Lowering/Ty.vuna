@@ -108,32 +108,36 @@ renderPiTyFuel fuel levels table datas lvl v =
       _ => renderTyFuel fuel levels table datas v
 
 -- 单个字段的运行时类型 + 下一个不透明参数槽。
-renderFieldTy : List Int -> HashMap String (List Int) -> List DtData -> Int -> Value -> Int -> Pair IrTy Int
+-- 只有「运行时隐式字段」会分配新槽；其余解析不到的形态一律报内部错——凭空造槽会让
+-- 声明的 arity 超过族真实参数个数（后端渲染成未绑定的 `'a<i>`）。
+renderFieldTy : List Int -> HashMap String (List Int) -> List DtData -> Int -> Value -> Int -> Check (Pair IrTy Int)
 renderFieldTy levels table datas lvl (dom@(VPi name implicit rig d clo)) slot =
   if implicit then
-    Pair (IrTyVar slot) (slot + 1)
+    OkC (Pair (IrTyVar slot) (slot + 1))
   else
-    Pair (renderPiTy levels table datas lvl dom) slot
+    OkC (Pair (renderPiTy levels table datas lvl dom) slot)
 renderFieldTy levels table datas lvl (VNeutral n) slot =
   case n of
     NVar name lvl2 sp =>
       case levelSlotIn levels lvl2 of
-        Just s => Pair (IrTyVar s) slot
-        Nothing => Pair (IrTyVar slot) (slot + 1)
+        Just s => OkC (Pair (IrTyVar s) slot)
+        Nothing =>
+          icInternal
+            "constructor field type mentions a type variable outside the family's runtime parameter slots"
     NGlobal g sp =>
       case renderTyIntrinsic g (map (\x => renderTyFuel 256 levels table datas x) sp) of
-        Just t => Pair t slot
+        Just t => OkC (Pair t slot)
         Nothing =>
           case reprTyIr g of
-            Just t => Pair t slot
+            Just t => OkC (Pair t slot)
             Nothing =>
               case findDtData g datas of
                 Just gd =>
-                  Pair
-                    (IrTyData g (renderFamilyArgs 256 levels table datas (lookupTyParamsIn table g) sp))
-                    slot
-                Nothing => Pair (IrTyVar slot) (slot + 1)
-renderFieldTy levels table datas lvl _ slot = Pair (IrTyVar slot) (slot + 1)
+                  OkC
+                    (Pair (IrTyData g (renderFamilyArgs 256 levels table datas (lookupTyParamsIn table g) sp)) slot)
+                Nothing => icInternal "constructor field type head is not a known family: ${g}"
+renderFieldTy levels table datas lvl _ slot =
+  icInternal "constructor field type has no runtime rendering"
 
 export flagMatchesRigIn : Bool -> Rig -> Bool
 flagMatchesRigIn True rig = not (rigIsErased rig)
@@ -163,13 +167,16 @@ ctorFieldTys levels table datas (keep :: flags) (opq :: opqs) ((Pair name rig) :
                     Pair tys slot3 => OkC (Pair (IrTyOpaque :: tys) slot3)
               )
           else
-            case renderFieldTy levels table datas lvl dom slot of
-              Pair text slot2 =>
-                Vuna.Compiler.Base.Common.bind (ctorFieldTys levels table datas flags opqs rest (lvl + 1) next slot2) (
-                    \p =>
-                      case p of
-                        Pair tys slot3 => OkC (Pair (text :: tys) slot3)
-                  )
+            Vuna.Compiler.Base.Common.bind (renderFieldTy levels table datas lvl dom slot) (
+                \p =>
+                  case p of
+                    Pair text slot2 =>
+                      Vuna.Compiler.Base.Common.bind (ctorFieldTys levels table datas flags opqs rest (lvl + 1) next slot2) (
+                          \q =>
+                            case q of
+                              Pair tys slot3 => OkC (Pair (text :: tys) slot3)
+                        )
+              )
         else
           ctorFieldTys levels table datas flags opqs rest (lvl + 1) next slot
       _ => icInternal "constructor telescope does not match its type"
@@ -487,17 +494,17 @@ tyDeclOf table allDatas unboxed d =
   in case lookupUnboxedInfo (dtDataName d) unboxed of
     Just (Pair c idx) =>
       Vuna.Compiler.Base.Common.bind
-        (ctorFieldTys levels table allDatas (ctorKeepFlags c) (ctorOpaqueFlagsOf allDatas c) (dtCtorTelescope c) 0 (eval [] (dtCtorType c)) (listLength levels))
+        (ctorFieldTys levels table allDatas (ctorKeepFlags c) (ctorOpaqueFlagsOf allDatas c) (dtCtorTelescope c) 0 (eval [] (dtCtorType c)) arity)
         (
           \p =>
             case firstOf p of
-              [only] => OkC (IrUnboxedDecl (dtDataName d) arity only)
+              [only] => OkC (IrUnboxedDecl (dtDataName d) (secondOf p) only)
               _ => icInternal "unboxed constructor does not have exactly one kept field: ${dtCtorName c}"
         )
     Nothing =>
       if hasRecordRepr d then
         case dtDataCtors d of
-          [c] => Vuna.Compiler.Base.Common.bind (ctorFieldTys levels table allDatas (ctorKeepFlags c) (ctorOpaqueFlagsOf allDatas c) (dtCtorTelescope c) 0 (eval [] (dtCtorType c)) (listLength levels)) (\p => OkC (IrRecordDecl (dtDataName d) arity (recordRtFields d) (firstOf p)))
+          [c] => Vuna.Compiler.Base.Common.bind (ctorFieldTys levels table allDatas (ctorKeepFlags c) (ctorOpaqueFlagsOf allDatas c) (dtCtorTelescope c) 0 (eval [] (dtCtorType c)) arity) (\p => OkC (IrRecordDecl (dtDataName d) (secondOf p) (recordRtFields d) (firstOf p)))
           _ => icInternal "record family must have exactly one constructor: ${dtDataName d}"
       else
         Vuna.Compiler.Base.Common.bind (dataArityNeed levels table allDatas (dtDataCtors d)) (\fullArity => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (\c => Vuna.Compiler.Base.Common.bind (ctorFieldTys levels table allDatas (ctorKeepFlags c) (ctorOpaqueFlagsOf allDatas c) (dtCtorTelescope c) 0 (eval [] (dtCtorType c)) (listLength levels)) (\p => OkC (Pair (dtCtorName c) (firstOf p)))) (dtDataCtors d)) (\ctors => OkC (IrVariantDecl (dtDataName d) fullArity ctors)))

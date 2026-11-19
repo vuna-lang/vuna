@@ -638,10 +638,11 @@ mIsControl (IrNatCase _ _ _ _ _) = True
 mIsControl _ = False
 
 -- | 逐个 CPS 实参，最后把运行时符号应用交给 k。
+-- 预算耗尽时保留**全部**实参、只放弃继续 CPS：不能丢掉剩余实参，否则产物是少参数的调用。
 mCpsArgs : Int -> IrBinder -> Ir -> String -> List Ir -> List Ir -> Ir
 mCpsArgs fuel r k sym args acc =
   if fuel <= 0 then
-    IrApp Nothing k (IrRtApp sym (reverse acc))
+    IrApp Nothing k (IrRtApp sym (append (reverse acc) args))
   else
     case args of
       [] => IrApp Nothing k (IrRtApp sym (reverse acc))
@@ -650,11 +651,16 @@ mCpsArgs fuel r k sym args acc =
           v = mFreshV fuel
         in mCps (fuel - 1) r (IrLam [v] Nothing (mCpsArgs (fuel - 1) r k sym rest (IrVar v :: acc))) a
 
--- | 逐个 CPS 一个应用脊（head :: args），最后 applyAll 交给 k。
+-- | 逐个 CPS 一个应用脊（head + args），最后 `applyAll` 交给 k。
+-- 预算耗尽时退化成直接应用（与 `mCps` 的 `fuel <= 0` 分支同口径）：保留真实 head 与实参，
+-- 不引入占位符号。
 mCpsApply : Int -> IrBinder -> Ir -> List Ir -> Ir
 mCpsApply fuel r k parts =
   if fuel <= 0 then
-    IrApp Nothing k (IrGlobal "?")
+    case parts of
+      -- `[]` 不可达（调用点保证 `head :: args`），保留只为模式穷尽。
+      [] => IrApp Nothing k (IrGlobal "?")
+      h :: t => IrApp Nothing k (applyAll h t)
   else
     case parts of
       [] => IrApp Nothing k (IrGlobal "?")
@@ -667,7 +673,7 @@ mCpsApply fuel r k parts =
 mCpsApplyArgs : Int -> IrBinder -> Ir -> List Ir -> List Ir -> IrBinder -> Ir
 mCpsApplyArgs fuel r k args acc headV =
   if fuel <= 0 then
-    IrApp Nothing k (IrGlobal "?")
+    IrApp Nothing k (applyAll (IrVar headV) (append (reverse acc) args))
   else
     case args of
       [] => IrApp Nothing k (applyAll (IrVar headV) (reverse acc))
