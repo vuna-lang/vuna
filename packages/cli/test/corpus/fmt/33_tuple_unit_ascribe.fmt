@@ -1,0 +1,28 @@
+module Vuna.TupleSample where
+
+pair : (Int, String)
+pair = (1, "a")
+
+triple : (Int, Int, Int)
+triple = (1, 2, 3)
+
+unitValue : ()
+unitValue = ()
+
+firstOf3 : (Int, Int, Int) -> Int
+firstOf3 (a, _) = a
+
+ascribed : Int
+ascribed = (1 : Int)
+
+applied : Int
+applied = (id : Int -> Int) 1
+
+picked : Int
+picked =
+  let
+    (n, _) = pair
+  in n
+
+main : String
+main = show (firstOf3 triple) ++ "/" ++ show ascribed ++ "/" ++ show applied ++ "/" ++ show picked

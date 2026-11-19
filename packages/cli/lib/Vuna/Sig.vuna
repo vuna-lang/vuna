@@ -17,7 +17,8 @@ import Vuna.Compiler.Frontend.Ast
 
 -- | 打印一个类型表达式（无签名约束前缀）：箭头右结合、应用参数与嵌套类型加括号。
 export renderType : Expr -> String
-renderType (EVar name sp) = if isListNilSyntax name then "[]" else name
+renderType (EVar name sp) =
+  if isTupleUnitSyntax name then "()" else if isListNilSyntax name then "[]" else name
 renderType (ty@(EApp (EVar op _) ([a, b]) _)) =
   if op == "->" then
     "${renderTypeArg a} -> ${renderType b}"
@@ -25,7 +26,7 @@ renderType (ty@(EApp (EVar op _) ([a, b]) _)) =
     case listTailText b of
       Just rest => "[" ++ renderType a ++ rest
       Nothing => renderTypePlain ty
-  else if op == "::" then "${renderTypeArg a} :: ${renderType b}" else renderTypePlain ty
+  else if isTuplePairSyntax op then "(" ++ renderType a ++ tupleTailText b ++ ")" else if op == "::" then "${renderTypeArg a} :: ${renderType b}" else renderTypePlain ty
 renderType (EInfix "->" a b sp) = "${renderTypeArg a} -> ${renderType b}"
 renderType (EPi name implicit qty dom cod sp) =
   let
@@ -36,6 +37,12 @@ renderType (EPi name implicit qty dom cod sp) =
         "(${renderQty qty}${name} : ${renderType dom})"
   in "${binder} -> ${renderType cod}"
 renderType ty = renderTypePlain ty
+
+-- | 内部：元组类型（parser 保留名）右嵌套尾段：`(a, b, c)` 的 `, b, c`。
+tupleTailText : Expr -> String
+tupleTailText (ty@(EApp (EVar name _) ([x, y]) sp)) =
+  if isTuplePairSyntax name then ", " ++ renderType x ++ tupleTailText y else ", " ++ renderType ty
+tupleTailText b = ", " ++ renderType b
 
 -- | 内部：列表字面量的尾段——`Nil` 结尾给 `"]"`，每个 cons 头给 `", <元素>"`。只认保留名
 -- （parser 的 `[..]` 形状）；`::` 链不走这里，保持中缀。
@@ -78,15 +85,21 @@ renderTypePlain _ = "_"
 
 -- | 内部：把表达式打印成应用参数位置的原子——变量与列表字面量不加括号，其余（含 `->`）加括号。
 renderTypeArg : Expr -> String
-renderTypeArg (EVar name sp) = if isListNilSyntax name then "[]" else name
+renderTypeArg (EVar name sp) =
+  if isTupleUnitSyntax name then "()" else if isListNilSyntax name then "[]" else name
 renderTypeArg (ty@(EApp (EVar cons _) ([_, _]) _)) =
-  if isListConsSyntax cons then renderType ty else "(${renderType ty})"
+  if isListConsSyntax cons then
+    renderType ty
+  else if isTuplePairSyntax cons then renderType ty else "(${renderType ty})"
 renderTypeArg (ty@(EInfix "->" a b sp)) = "(${renderType ty})"
 renderTypeArg ty = "(${renderType ty})"
 
 -- | 内部：把表达式打印成应用函数位置的原子（与 `renderTypeArg` 同策略）。
 renderTypeAtom : Expr -> String
-renderTypeAtom (EVar name sp) = if isListNilSyntax name then "[]" else name
+renderTypeAtom (EVar name sp) =
+  if isTupleUnitSyntax name then "()" else if isListNilSyntax name then "[]" else name
 renderTypeAtom (ty@(EApp (EVar cons _) ([_, _]) _)) =
-  if isListConsSyntax cons then renderType ty else "(${renderType ty})"
+  if isListConsSyntax cons then
+    renderType ty
+  else if isTuplePairSyntax cons then renderType ty else "(${renderType ty})"
 renderTypeAtom ty = "(${renderType ty})"

@@ -535,6 +535,34 @@ isListNilSyntax name = name == listNilSyntax
 export isListConsSyntax : String -> Bool
 isListConsSyntax name = name == listConsSyntax
 
+-- 元组与 unit 的保留名（parser 产出；Loader 改写成 `Pair` / `Unit` / `MkUnit` 后走名字解析，
+-- 因此元组语法要求这些名字在作用域里）。`(a, b, c)` 右嵌套成两个 pair。
+-- | 元组 pair 的保留名。
+export tuplePairSyntax : String
+tuplePairSyntax = "@vuna@tuple@pair"
+
+-- | 是否是元组 pair 保留名。
+export isTuplePairSyntax : String -> Bool
+isTuplePairSyntax name = name == tuplePairSyntax
+
+-- | unit `()` 的保留名（类型位置展开成 `Unit`，表达式 / 模式位置展开成 `MkUnit`）。
+export tupleUnitSyntax : String
+tupleUnitSyntax = "@vuna@tuple@unit"
+
+-- | 是否是 unit `()` 保留名。
+export isTupleUnitSyntax : String -> Bool
+isTupleUnitSyntax name = name == tupleUnitSyntax
+
+-- 表达式类型标注 `(e : T)`：parser 编码成
+-- `EApp (EVar "@vuna@ascribe") [e, T]`，Loader 改写成 `EAnn e T`（与 where 签名同一条精化路径）。
+-- | 类型标注 `(e : T)` 的保留名（parser 产出、Loader 改写）。
+export ascribeSyntax : String
+ascribeSyntax = "@vuna@ascribe"
+
+-- | 是否是类型标注保留名。
+export isAscribeSyntax : String -> Bool
+isAscribeSyntax name = name == ascribeSyntax
+
 -- ---------------------------------------------------------------
 -- do 块的内部标记链
 -- ---------------------------------------------------------------

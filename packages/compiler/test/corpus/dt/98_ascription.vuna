@@ -1,0 +1,16 @@
+-- 表达式类型标注 `(e : T)`：check 位按标注检查，推断位给出期望类型。
+empty : List Int
+empty = ([] : List Int)
+
+count : List Int -> Int
+count [] = 0
+count (_ :: xs) = 1 + count xs
+
+ascribed : Int
+ascribed = (1 : Int)
+
+viaAscribe : List Int
+viaAscribe = id ([] : List Int)
+
+main : String
+main = show (count empty) ++ "/" ++ show ascribed ++ "/" ++ show (count viaAscribe)

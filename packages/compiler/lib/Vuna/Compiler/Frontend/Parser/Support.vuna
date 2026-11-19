@@ -190,6 +190,23 @@ quantifiedHead st q =
         Nothing => Nothing
     _ => Nothing
 
+-- | `(` 之后（当前状态在开括号之后）扫描到配对的 `)`，判断紧随其后的是否 `->`。
+-- 用于区分 Pi binder `(x : A) -> B` 与类型标注 `(x : A)`：binder 头只说明「有名字 + `:`」，
+-- 只有闭括号后接 `->` 才是 binder。
+export piArrowAhead : PState -> Bool
+piArrowAhead st = piArrowAheadGo 1 st.toksOf
+
+piArrowAheadGo : Int -> List PTok -> Bool
+piArrowAheadGo depth [] = False
+piArrowAheadGo depth ((PTok (TSym "(") _) :: rest) = piArrowAheadGo (depth + 1) rest
+piArrowAheadGo depth ((PTok (TSym ")") _) :: rest) =
+  if depth == 1 then arrowAt rest else piArrowAheadGo (depth - 1) rest
+piArrowAheadGo depth (_ :: rest) = piArrowAheadGo depth rest
+
+arrowAt : List PTok -> Bool
+arrowAt ((PTok (TSym "->") _) :: _) = True
+arrowAt _ = False
+
 export atKw : PState -> String -> Bool
 atKw st k =
   case peekTok st of

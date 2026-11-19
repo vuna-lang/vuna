@@ -1,0 +1,23 @@
+-- 元组 / unit：类型、值、模式与右嵌套（`(a, b, c)` ≡ `Pair a (Pair b c)`）。
+pair : (Int, String)
+pair = (1, "a")
+
+triple : (Int, Int, Int)
+triple = (1, 2, 3)
+
+firstOf3 : (Int, Int, Int) -> Int
+firstOf3 (a, _) = a
+
+unitValue : ()
+unitValue = ()
+
+unitCase : Int
+unitCase =
+  case unitValue of
+    () => 7
+
+main : String
+main =
+  let
+    (n, s) = pair
+  in s ++ "/" ++ show n ++ "/" ++ show (firstOf3 triple) ++ "/" ++ show unitCase

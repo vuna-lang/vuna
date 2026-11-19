@@ -753,7 +753,7 @@ resolvePattern fuel modules label prefix ns imports pat =
       PAs name inner sp => Vuna.Compiler.Base.Common.bind (resolvePattern (fuel - 1) modules label prefix ns imports inner) (\p => OkC (Pair (PAs name (firstOf p) sp) ((::) name (secondOf p))))
       PInt n sp => OkC (Pair (PInt n sp) [])
       PStr s sp => OkC (Pair (PStr s sp) [])
-      PCon name pats sp => if isInternalSyntaxName name then Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (\dtv => resolvePattern (fuel - 1) modules label prefix ns imports dtv) pats) (\parts => OkC (Pair (PCon name (map firstOf parts) sp) (concatMap secondOf parts))) else Vuna.Compiler.Base.Common.bind (onErrDiag (withFallbackSpan sp) (resolveCtor modules label prefix ns imports name)) (\name2 => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (\dtv => resolvePattern (fuel - 1) modules label prefix ns imports dtv) pats) (\parts => OkC (Pair (PCon name2 (map firstOf parts) sp) (concatMap secondOf parts))))
+      PCon name pats sp => if isTuplePairSyntax name then resolvePattern (fuel - 1) modules label prefix ns imports (PCon "Pair" pats sp) else if isTupleUnitSyntax name then resolvePattern (fuel - 1) modules label prefix ns imports (PCon "MkUnit" [] sp) else if isInternalSyntaxName name then Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (\dtv => resolvePattern (fuel - 1) modules label prefix ns imports dtv) pats) (\parts => OkC (Pair (PCon name (map firstOf parts) sp) (concatMap secondOf parts))) else Vuna.Compiler.Base.Common.bind (onErrDiag (withFallbackSpan sp) (resolveCtor modules label prefix ns imports name)) (\name2 => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (\dtv => resolvePattern (fuel - 1) modules label prefix ns imports dtv) pats) (\parts => OkC (Pair (PCon name2 (map firstOf parts) sp) (concatMap secondOf parts))))
       PRecord name fields sp => Vuna.Compiler.Base.Common.bind (onErrDiag (withFallbackSpan sp) (resolveCtor modules label prefix ns imports name)) (\name2 => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (\dtv => resolveRecordPatternField (fuel - 1) modules label prefix ns imports dtv) fields) (\parts => OkC (Pair (PRecord name2 (map firstOf parts) sp) (concatMap secondOf parts))))
 
 resolveRecordPatternField : Int -> List Module -> String -> String -> Namespaces -> List Import -> Pair String Pat -> Check (Pair (Pair String Pat) (List String))
@@ -952,8 +952,28 @@ hiddenRef name sp =
     Just _ => OkC (EVar stripped sp)
     Nothing => icInternal "hidden reference to unknown intrinsic ${stripped}"
 
+-- `(e : T)` / `(a, b)` / `()` 的保留名归一：在名字解析前改写成普通表达式，
+-- 后续仍走同一条解析与精化路径（ascription 复用 where 签名的 `EAnn`）。
+normalizeSyntaxNames : Expr -> Maybe Expr
+normalizeSyntaxNames (EVar name sp) =
+  if isTupleUnitSyntax name then Just (EVar "MkUnit" sp) else Nothing
+normalizeSyntaxNames (EApp (EVar name sp) ([a, b]) asp) =
+  if isAscribeSyntax name then
+    Just (EAnn a b asp)
+  else if isTuplePairSyntax name then Just (EApp (EVar "Pair" sp) [a, b] asp) else Nothing
+normalizeSyntaxNames _ = Nothing
+
 resolveExpr : Int -> List Module -> String -> String -> Namespaces -> List Import -> List String -> Expr -> Check Expr
 resolveExpr fuel modules label prefix ns imports scope expr =
+  if fuel <= 0 then
+    icFuel "resolver"
+  else
+    case normalizeSyntaxNames expr of
+      Just normalized => resolveExpr (fuel - 1) modules label prefix ns imports scope normalized
+      Nothing => resolveExprRaw fuel modules label prefix ns imports scope expr
+
+resolveExprRaw : Int -> List Module -> String -> String -> Namespaces -> List Import -> List String -> Expr -> Check Expr
+resolveExprRaw fuel modules label prefix ns imports scope expr =
   if fuel <= 0 then
     icFuel "resolver"
   else
@@ -1225,8 +1245,25 @@ resolveTypeExpr fuel modules label prefix ns imports ty =
 
 -- 类型表达式里的显式 Pi binder 必须遮蔽同名 import；`bound` 只含 binder 名，
 -- 未绑定的名字才交给 resolveTypeName（本地值定义优先，其次 import 的导出面）。
+-- 类型位置的 `()` / `(a, b)` 归一：`()` 是类型 `Unit`，元组是 `Pair a b`。
+normalizeTypeSyntaxNames : Expr -> Maybe Expr
+normalizeTypeSyntaxNames (EVar name sp) =
+  if isTupleUnitSyntax name then Just (EVar "Unit" sp) else Nothing
+normalizeTypeSyntaxNames (EApp (EVar name sp) args asp) =
+  if isTuplePairSyntax name then Just (EApp (EVar "Pair" sp) args asp) else Nothing
+normalizeTypeSyntaxNames _ = Nothing
+
 resolveTypeExprScoped : Int -> List Module -> String -> String -> Namespaces -> List Import -> List String -> Expr -> Check Expr
 resolveTypeExprScoped fuel modules label prefix ns imports bound ty =
+  if fuel <= 0 then
+    icFuel "resolver"
+  else
+    case normalizeTypeSyntaxNames ty of
+      Just normalized => resolveTypeExprScoped (fuel - 1) modules label prefix ns imports bound normalized
+      Nothing => resolveTypeExprScopedRaw fuel modules label prefix ns imports bound ty
+
+resolveTypeExprScopedRaw : Int -> List Module -> String -> String -> Namespaces -> List Import -> List String -> Expr -> Check Expr
+resolveTypeExprScopedRaw fuel modules label prefix ns imports bound ty =
   if fuel <= 0 then
     icFuel "resolver"
   else

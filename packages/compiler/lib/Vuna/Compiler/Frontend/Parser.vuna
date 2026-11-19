@@ -1544,12 +1544,12 @@ parseAtomBase fuel st blockCol =
       PTok (TKw "Type") p => OkC (Pair (EVar "Type" (spanOf st (advance st))) (advance st))
       PTok (TSym "(") p =>
         case binderHead (advance st) of
-          Just qn => parsePiBinder (fuel - 1) st blockCol (firstOf qn) (secondOf qn) False "(" ")"
+          Just qn => if piArrowAhead (advance st) then parsePiBinder (fuel - 1) st blockCol (firstOf qn) (secondOf qn) False "(" ")" else parseParenAtom (fuel - 1) st blockCol
           -- `(+)` / `(+ e)` section。`(e op)` 由 parseInfix 的右 section 分支处理。
           Nothing =>
             case sectionOpAt st of
               Just op => parseSectionAtom (fuel - 1) st blockCol op
-              Nothing => Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) (advance st) blockCol) (\inner, st1 => Vuna.Compiler.Base.Common.bind (expectSym st1 ")") (\st2 => OkC (Pair (EParen inner (spanOf st st2)) st2)))
+              Nothing => parseParenAtom (fuel - 1) st blockCol
       PTok (TSym "[") p => parseListExpr (fuel - 1) st blockCol
       -- 命名洞 `?name`（`?` 与标识符紧邻）。编码成 `EVar "?name"`（不新增 AST 构造子），
       -- span 覆盖整个 `?name`；精化器据 `isHoleName` 把它当洞。
@@ -1622,6 +1622,38 @@ textPartsOf ((TPText s) :: rest) =
     Nothing => Nothing
     Just t => Just (s ++ t)
 textPartsOf ((TPHole toks) :: rest) = Nothing
+
+-- `()` / `(e)` / `(e, f, ...)` / `(e : T)`。进入时在 `(`；Pi binder 与 section 已排除。
+parseParenAtom : Int -> PState -> Int -> Check (Pair Expr PState)
+parseParenAtom fuel st blockCol =
+  if fuel <= 0 then
+    icFuel "parser"
+  else
+    Vuna.Compiler.Base.Common.bind (expectSym st "(") (
+        \st1 =>
+          if atSym st1 ")" then
+            let
+              st2 = advance st1
+            in OkC (Pair (EVar tupleUnitSyntax (spanOf st st2)) st2)
+          else
+            Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st1 blockCol) (\first, st2 => if atSym st2 "," then Vuna.Compiler.Base.Common.step (parseParenTupleRest (fuel - 1) (advance st2) blockCol [first]) (\elems, st3 => OkC (Pair (foldPairExprs (spanOf st st3) elems) st3)) else if atSym st2 ":" then Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) (advance st2) blockCol) (\ty, st3 => Vuna.Compiler.Base.Common.bind (expectSym st3 ")") (\st4 => OkC (Pair (EApp (EVar ascribeSyntax (spanOf st st2)) [first, ty] (spanOf st st4)) st4))) else Vuna.Compiler.Base.Common.bind (expectSym st2 ")") (\st3 => OkC (Pair (EParen first (spanOf st st3)) st3)))
+      )
+
+-- 元组剩余元素：进入时已消费逗号；收齐后要求 `)`。
+parseParenTupleRest : Int -> PState -> Int -> List Expr -> Check (Pair (List Expr) PState)
+parseParenTupleRest fuel st blockCol acc =
+  if fuel <= 0 then
+    icFuel "parser"
+  else
+    Vuna.Compiler.Base.Common.step
+      (parseExpr (fuel - 1) st blockCol)
+      (\e, st1 => if atSym st1 "," then parseParenTupleRest (fuel - 1) (advance st1) blockCol (e :: acc) else Vuna.Compiler.Base.Common.bind (expectSym st1 ")") (\st2 => OkC (Pair (reverse (e :: acc)) st2)))
+
+-- 元组右嵌套：`(a, b, c)` ≡ pair(a, pair(b, c))。
+foldPairExprs : Span -> List Expr -> Expr
+foldPairExprs sp [] = EVar tupleUnitSyntax sp
+foldPairExprs sp ([e]) = e
+foldPairExprs sp (a :: rest) = EApp (EVar tuplePairSyntax sp) [a, foldPairExprs sp rest] sp
 
 -- section 的 op 值 / 左 section 形态：`(op)` 与 `(op e)`。
 -- 进入时已在 `(`，op 已由 sectionOpAt 确认（TSym 且非保留名）。
@@ -2301,7 +2333,13 @@ parsePatternAtomBase fuel st blockCol =
               st2 = mkStateAt (fileOf st) advanced.toksOf endP advanced.toksLeft (pmodeOf st)
             in OkC (Pair (PStr s (spanOf st st2)) st2)
           Nothing => ps0 st TemplateInPattern
-      PTok (TSym "(") p => Vuna.Compiler.Base.Common.step (parsePatternSingle (fuel - 1) (advance st) blockCol) (\inner, st1 => Vuna.Compiler.Base.Common.bind (expectSym st1 ")") (\st2 => OkC (Pair inner st2)))
+      PTok (TSym "(") p =>
+        if atSym (advance st) ")" then
+          let
+            st2 = advance (advance st)
+          in OkC (Pair (PCon tupleUnitSyntax [] (spanOf st st2)) st2)
+        else
+          Vuna.Compiler.Base.Common.step (parsePatternSingle (fuel - 1) (advance st) blockCol) (\first, st1 => if atSym st1 "," then Vuna.Compiler.Base.Common.step (parsePatternTupleRest (fuel - 1) (advance st1) blockCol [first]) (\pats, st2 => OkC (Pair (foldPairPats (spanOf st st2) pats) st2)) else Vuna.Compiler.Base.Common.bind (expectSym st1 ")") (\st2 => OkC (Pair first st2)))
       PTok (TSym "[") p => parseListPattern (fuel - 1) st blockCol
       _ => ps0 st ExpectedPattern
 
@@ -2327,6 +2365,22 @@ parseListPatternElems fuel st blockCol =
 foldPCon : Span -> List Pat -> Pat
 foldPCon sp [] = PCon listNilSyntax [] sp
 foldPCon sp (p :: rest) = PCon listConsSyntax [p, foldPCon sp rest] sp
+
+-- 元组模式的剩余元素：进入时已消费逗号；收齐后要求 `)`。
+parsePatternTupleRest : Int -> PState -> Int -> List Pat -> Check (Pair (List Pat) PState)
+parsePatternTupleRest fuel st blockCol acc =
+  if fuel <= 0 then
+    icFuel "parser"
+  else
+    Vuna.Compiler.Base.Common.step
+      (parsePatternSingle (fuel - 1) st blockCol)
+      (\p, st1 => if atSym st1 "," then parsePatternTupleRest (fuel - 1) (advance st1) blockCol (p :: acc) else Vuna.Compiler.Base.Common.bind (expectSym st1 ")") (\st2 => OkC (Pair (reverse (p :: acc)) st2)))
+
+-- 元组模式右嵌套：`(a, b, c)` ≡ pair(a, pair(b, c))。
+foldPairPats : Span -> List Pat -> Pat
+foldPairPats sp [] = PCon tupleUnitSyntax [] sp
+foldPairPats sp ([p]) = p
+foldPairPats sp (p :: rest) = PCon tuplePairSyntax [p, foldPairPats sp rest] sp
 
 -- 文件加载专用：开启解析恢复（收集多个语法错误），调用范围外恢复短路。
 -- 返回「解析结果 + 恢复期收集到的非致命诊断」（诊断按出现顺序；空 = 没有语法错误）。
