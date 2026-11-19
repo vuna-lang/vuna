@@ -180,7 +180,8 @@ binder 的**身份**在 Lowering 分配，前缀与编号渲染属后端：
 - 标记只包调用形状：`IrApp` / `IrRtApp` / `IrRt` / 零参 `IrGlobal`。
 - native / wasm 在 `cpsDefsMachine` 之后消费标记：native 发 `jmp` / `jmp r11`，
   wasm 发 `return_call` / `return_call $rt_apply`。native 的来参区不够、闭包慢路径、
-  wasm 的非法目标仍回退普通调用。
+  wasm 的非法目标仍回退普通调用。wasm 的函数体还保留 blanket tail（效应机器的合成
+  lambda 依赖它）；`IrTail` 与这套函数体语义一致，不额外放宽。
 - wasm 的零参定义在 `_start` 里内联求值，因此 `genDefInit` 用 `stripTail` 去掉该上下文
   的标记；codegen 合成的效应 thunk / eta wrapper body 不标记（标记只来自 IR 里的
   `IrLam`，避免在效应机器里把普通返回误发成 `return_call`）。

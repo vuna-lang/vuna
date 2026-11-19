@@ -104,9 +104,10 @@ binder 全量拷进 `$env` 数组（与 native 同策略），闭包应用经 `$
   `Base.Data.Float.floatRender`）；其它自定义 Show 在生成期拒绝。`--no-print` 不打印，仍求值。
 - **零参定义**在 `_start` 里按依赖序初始化进全局（每次引用读全局，不重算）；
   **饱和函数**（arity > 0）生成 `$f_<name>` 并被 `call`。
-- **尾调用**：`IrTail` 标记的结果位置直调发 `return_call $f_<name>`；闭包的最后一次应用
-  发 `return_call $rt_apply`。零参定义在 `_start` 内联求值，生成期用 `stripTail` 去掉
-  该上下文的标记（`_start` 没有结果类型）。
+- **尾调用**：函数体统一按尾位置生成（效应机器合成的 lambda 依赖这一点）；结果位置直调
+  发 `return_call $f_<name>`，闭包的最后一次应用发 `return_call $rt_apply`。`IrTail`
+  是同一语义的共享标记。零参定义在 `_start` 内联求值，生成期用 `stripTail` 去掉该上下文的
+  标记（`_start` 没有结果类型）。
 
 ## 5. 运行时符号
 
