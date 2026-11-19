@@ -74,21 +74,21 @@ let rec v_Vuna_dCompiler_dLowering_dTy_drenderPiTyFuel = (fun (fuel : int) (leve
 # 96 "Vuna/Compiler/Lowering/Ty.vuna"
 let v_Vuna_dCompiler_dLowering_dTy_drenderPiTy = (fun (levels : int Base_dData_dList.t_Base_dData_dList_dList) (table : (string, int Base_dData_dList.t_Base_dData_dList_dList) Base_dContainer_dHashMap.t_Base_dContainer_dHashMap_dHashMap) (datas : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dDtData Base_dData_dList.t_Base_dData_dList_dList) (lvl : int) (v : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dValue) -> ((((((v_Vuna_dCompiler_dLowering_dTy_drenderPiTyFuel 256) levels) table) datas) lvl) v))
 
-# 112 "Vuna/Compiler/Lowering/Ty.vuna"
+# 114 "Vuna/Compiler/Lowering/Ty.vuna"
 let v_Vuna_dCompiler_dLowering_dTy_drenderFieldTy = (fun (mc0 : int Base_dData_dList.t_Base_dData_dList_dList) (mc1 : (string, int Base_dData_dList.t_Base_dData_dList_dList) Base_dContainer_dHashMap.t_Base_dContainer_dHashMap_dHashMap) (mc2 : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dDtData Base_dData_dList.t_Base_dData_dList_dList) (mc3 : int) (mc4 : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dValue) (mc5 : int) -> (match mc4 with
   | Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dValue_VNeutral (dtb__23) -> (match dtb__23 with
   | Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dNeutral_NVar (dtb__24, dtb__25, dtb__26) -> (match ((Vuna_dCompiler_dLowering_dEnv.v_Vuna_dCompiler_dLowering_dEnv_dlevelSlotIn mc0) dtb__25) with
-  | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__27) -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = (Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTy_IrTyVar (dtb__27)); Base_dData_dPair.f_Base_dData_dPair_dPair_second = mc5 }
-  | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = (Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTy_IrTyVar (mc5)); Base_dData_dPair.f_Base_dData_dPair_dPair_second = (mc5 + 1) }
+  | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__27) -> (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC ({ Base_dData_dPair.f_Base_dData_dPair_dPair_first = (Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTy_IrTyVar (dtb__27)); Base_dData_dPair.f_Base_dData_dPair_dPair_second = mc5 }))
+  | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> (Vuna_dCompiler_dBase_dDiag.v_Vuna_dCompiler_dBase_dDiag_dicInternal "constructor field type mentions a type variable outside the family's runtime parameter slots")
   | _ -> failwith "DT: impossible branch"
 )
   | Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dNeutral_NGlobal (dtb__28, dtb__29) -> (match ((v_Vuna_dCompiler_dLowering_dTy_drenderTyIntrinsic dtb__28) ((Base_dData_dList.v_Base_dData_dList_dmap (fun (x : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dValue) -> (((((v_Vuna_dCompiler_dLowering_dTy_drenderTyFuel 256) mc0) mc1) mc2) x))) dtb__29)) with
-  | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__30) -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__30; Base_dData_dPair.f_Base_dData_dPair_dPair_second = mc5 }
+  | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__30) -> (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC ({ Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__30; Base_dData_dPair.f_Base_dData_dPair_dPair_second = mc5 }))
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> (match (v_Vuna_dCompiler_dLowering_dTy_dreprTyIr dtb__28) with
-  | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__31) -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__31; Base_dData_dPair.f_Base_dData_dPair_dPair_second = mc5 }
+  | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__31) -> (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC ({ Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__31; Base_dData_dPair.f_Base_dData_dPair_dPair_second = mc5 }))
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> (match ((Vuna_dCompiler_dElab_dRepresentation.v_Vuna_dCompiler_dElab_dRepresentation_dfindDtData dtb__28) mc2) with
-  | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__32) -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = (Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTy_IrTyData (dtb__28, ((((((v_Vuna_dCompiler_dLowering_dTy_drenderFamilyArgs 256) mc0) mc1) mc2) ((Vuna_dCompiler_dLowering_dEnv.v_Vuna_dCompiler_dLowering_dEnv_dlookupTyParamsIn mc1) dtb__28)) dtb__29))); Base_dData_dPair.f_Base_dData_dPair_dPair_second = mc5 }
-  | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = (Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTy_IrTyVar (mc5)); Base_dData_dPair.f_Base_dData_dPair_dPair_second = (mc5 + 1) }
+  | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__32) -> (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC ({ Base_dData_dPair.f_Base_dData_dPair_dPair_first = (Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTy_IrTyData (dtb__28, ((((((v_Vuna_dCompiler_dLowering_dTy_drenderFamilyArgs 256) mc0) mc1) mc2) ((Vuna_dCompiler_dLowering_dEnv.v_Vuna_dCompiler_dLowering_dEnv_dlookupTyParamsIn mc1) dtb__28)) dtb__29))); Base_dData_dPair.f_Base_dData_dPair_dPair_second = mc5 }))
+  | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> (Vuna_dCompiler_dBase_dDiag.v_Vuna_dCompiler_dBase_dDiag_dicInternal ("constructor field type head is not a known family: " ^ dtb__28))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
@@ -97,14 +97,14 @@ let v_Vuna_dCompiler_dLowering_dTy_drenderFieldTy = (fun (mc0 : int Base_dData_d
 )
   | _ -> failwith "DT: impossible branch"
 )
-  | Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dValue_VPi (dtb__33, dtb__34, dtb__35, dtb__36, dtb__37) -> (if dtb__34 then { Base_dData_dPair.f_Base_dData_dPair_dPair_first = (Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTy_IrTyVar (mc5)); Base_dData_dPair.f_Base_dData_dPair_dPair_second = (mc5 + 1) } else { Base_dData_dPair.f_Base_dData_dPair_dPair_first = (((((v_Vuna_dCompiler_dLowering_dTy_drenderPiTy mc0) mc1) mc2) mc3) mc4); Base_dData_dPair.f_Base_dData_dPair_dPair_second = mc5 })
-  | _ -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = (Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTy_IrTyVar (mc5)); Base_dData_dPair.f_Base_dData_dPair_dPair_second = (mc5 + 1) }
+  | Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dValue_VPi (dtb__33, dtb__34, dtb__35, dtb__36, dtb__37) -> (if dtb__34 then (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC ({ Base_dData_dPair.f_Base_dData_dPair_dPair_first = (Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTy_IrTyVar (mc5)); Base_dData_dPair.f_Base_dData_dPair_dPair_second = (mc5 + 1) })) else (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC ({ Base_dData_dPair.f_Base_dData_dPair_dPair_first = (((((v_Vuna_dCompiler_dLowering_dTy_drenderPiTy mc0) mc1) mc2) mc3) mc4); Base_dData_dPair.f_Base_dData_dPair_dPair_second = mc5 })))
+  | _ -> (Vuna_dCompiler_dBase_dDiag.v_Vuna_dCompiler_dBase_dDiag_dicInternal "constructor field type has no runtime rendering")
 ))
 
-# 139 "Vuna/Compiler/Lowering/Ty.vuna"
+# 143 "Vuna/Compiler/Lowering/Ty.vuna"
 let v_Vuna_dCompiler_dLowering_dTy_dflagMatchesRigIn = (fun (mc0 : bool) (mc1 : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dRig) -> (if mc0 then (Base_dData_dBool.v_Base_dData_dBool_dnot (Vuna_dCompiler_dCore_dTerm.v_Vuna_dCompiler_dCore_dTerm_drigIsErased mc1)) else (Vuna_dCompiler_dCore_dTerm.v_Vuna_dCompiler_dCore_dTerm_drigIsErased mc1)))
 
-# 144 "Vuna/Compiler/Lowering/Ty.vuna"
+# 148 "Vuna/Compiler/Lowering/Ty.vuna"
 let rec v_Vuna_dCompiler_dLowering_dTy_dctorFieldTys = (fun (mc0 : int Base_dData_dList.t_Base_dData_dList_dList) (mc1 : (string, int Base_dData_dList.t_Base_dData_dList_dList) Base_dContainer_dHashMap.t_Base_dContainer_dHashMap_dHashMap) (mc2 : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dDtData Base_dData_dList.t_Base_dData_dList_dList) (mc3 : bool Base_dData_dList.t_Base_dData_dList_dList) (mc4 : bool Base_dData_dList.t_Base_dData_dList_dList) (mc5 : (string, Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dRig) Base_dData_dPair.t_Base_dData_dPair_dPair Base_dData_dList.t_Base_dData_dList_dList) (mc6 : int) (mc7 : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dValue) (mc8 : int) -> (match mc3 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__38, dtb__39) -> (match mc4 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__40, dtb__41) -> (match mc5 with
@@ -113,13 +113,13 @@ let rec v_Vuna_dCompiler_dLowering_dTy_dctorFieldTys = (fun (mc0 : int Base_dDat
   | Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dValue_VPi (dtb__46, dtb__47, dtb__48, dtb__49, dtb__50) -> ((fun next -> (if dtb__38 then (if dtb__40 then ((Vuna_dCompiler_dBase_dCommon.v_Vuna_dCompiler_dBase_dCommon_dbind (((((((((v_Vuna_dCompiler_dLowering_dTy_dctorFieldTys mc0) mc1) mc2) dtb__39) dtb__41) dtb__43) (mc6 + 1)) next) mc8)) (fun (p : (Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrTy Base_dData_dList.t_Base_dData_dList_dList, int) Base_dData_dPair.t_Base_dData_dPair_dPair) -> (match p with
   | { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__51; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__52 } -> (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC ({ Base_dData_dPair.f_Base_dData_dPair_dPair_first = (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTy_IrTyOpaque, dtb__51)); Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__52 }))
   | _ -> failwith "DT: impossible branch"
-))) else (match ((((((v_Vuna_dCompiler_dLowering_dTy_drenderFieldTy mc0) mc1) mc2) mc6) dtb__49) mc8) with
-  | { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__53; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__54 } -> ((Vuna_dCompiler_dBase_dCommon.v_Vuna_dCompiler_dBase_dCommon_dbind (((((((((v_Vuna_dCompiler_dLowering_dTy_dctorFieldTys mc0) mc1) mc2) dtb__39) dtb__41) dtb__43) (mc6 + 1)) next) dtb__54)) (fun (p : (Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrTy Base_dData_dList.t_Base_dData_dList_dList, int) Base_dData_dPair.t_Base_dData_dPair_dPair) -> (match p with
+))) else ((Vuna_dCompiler_dBase_dCommon.v_Vuna_dCompiler_dBase_dCommon_dbind ((((((v_Vuna_dCompiler_dLowering_dTy_drenderFieldTy mc0) mc1) mc2) mc6) dtb__49) mc8)) (fun (p : (Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrTy, int) Base_dData_dPair.t_Base_dData_dPair_dPair) -> (match p with
+  | { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__53; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__54 } -> ((Vuna_dCompiler_dBase_dCommon.v_Vuna_dCompiler_dBase_dCommon_dbind (((((((((v_Vuna_dCompiler_dLowering_dTy_dctorFieldTys mc0) mc1) mc2) dtb__39) dtb__41) dtb__43) (mc6 + 1)) next) dtb__54)) (fun (q : (Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrTy Base_dData_dList.t_Base_dData_dList_dList, int) Base_dData_dPair.t_Base_dData_dPair_dPair) -> (match q with
   | { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__55; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__56 } -> (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC ({ Base_dData_dPair.f_Base_dData_dPair_dPair_first = (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__53, dtb__55)); Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__56 }))
   | _ -> failwith "DT: impossible branch"
 )))
   | _ -> failwith "DT: impossible branch"
-)) else (((((((((v_Vuna_dCompiler_dLowering_dTy_dctorFieldTys mc0) mc1) mc2) dtb__39) dtb__41) dtb__43) (mc6 + 1)) next) mc8))) ((Vuna_dCompiler_dCore_dEval.v_Vuna_dCompiler_dCore_dEval_dapplyClosure dtb__50) (Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dValue_VNeutral ((Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dNeutral_NVar (dtb__46, mc6, Base_dData_dList.C_Base_dData_dList_dList_Nil))))))
+)))) else (((((((((v_Vuna_dCompiler_dLowering_dTy_dctorFieldTys mc0) mc1) mc2) dtb__39) dtb__41) dtb__43) (mc6 + 1)) next) mc8))) ((Vuna_dCompiler_dCore_dEval.v_Vuna_dCompiler_dCore_dEval_dapplyClosure dtb__50) (Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dValue_VNeutral ((Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dNeutral_NVar (dtb__46, mc6, Base_dData_dList.C_Base_dData_dList_dList_Nil))))))
   | _ -> (Vuna_dCompiler_dBase_dDiag.v_Vuna_dCompiler_dBase_dDiag_dicInternal "constructor telescope does not match its type")
 ) else (Vuna_dCompiler_dBase_dDiag.v_Vuna_dCompiler_dBase_dDiag_dicInternal "constructor keep flag disagrees with telescope rig"))
   | _ -> failwith "DT: impossible branch"
@@ -149,54 +149,54 @@ let rec v_Vuna_dCompiler_dLowering_dTy_dctorFieldTys = (fun (mc0 : int Base_dDat
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 180 "Vuna/Compiler/Lowering/Ty.vuna"
+# 187 "Vuna/Compiler/Lowering/Ty.vuna"
 let v_Vuna_dCompiler_dLowering_dTy_dctorArityNeed = (fun (levels : int Base_dData_dList.t_Base_dData_dList_dList) (table : (string, int Base_dData_dList.t_Base_dData_dList_dList) Base_dContainer_dHashMap.t_Base_dContainer_dHashMap_dHashMap) (datas : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dDtData Base_dData_dList.t_Base_dData_dList_dList) (c : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dDtCtor) -> ((Vuna_dCompiler_dBase_dCommon.v_Vuna_dCompiler_dBase_dCommon_dbind (((((((((v_Vuna_dCompiler_dLowering_dTy_dctorFieldTys levels) table) datas) (Vuna_dCompiler_dElab_dRepresentation.v_Vuna_dCompiler_dElab_dRepresentation_dctorKeepFlags c)) ((Vuna_dCompiler_dLowering_dEnv.v_Vuna_dCompiler_dLowering_dEnv_dctorOpaqueFlagsOf datas) c)) (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtCtorTelescope c)) 0) ((Vuna_dCompiler_dCore_dEval.v_Vuna_dCompiler_dCore_dEval_deval Base_dData_dList.C_Base_dData_dList_dList_Nil) (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtCtorType c))) (Vuna_dCompiler_dLowering_dEnv.v_Vuna_dCompiler_dLowering_dEnv_dlistLength levels))) (fun (p : (Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrTy Base_dData_dList.t_Base_dData_dList_dList, int) Base_dData_dPair.t_Base_dData_dPair_dPair) -> (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC (((Base_dData_dPair.v_Base_dData_dPair_dsecondOf p) - (Vuna_dCompiler_dLowering_dEnv.v_Vuna_dCompiler_dLowering_dEnv_dlistLength levels)))))))
 
-# 192 "Vuna/Compiler/Lowering/Ty.vuna"
+# 199 "Vuna/Compiler/Lowering/Ty.vuna"
 let rec v_Vuna_dCompiler_dLowering_dTy_dmaxIntListIn = (fun (mc0 : int Base_dData_dList.t_Base_dData_dList_dList) -> (match mc0 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__63, dtb__64) -> (if (dtb__63 >= (v_Vuna_dCompiler_dLowering_dTy_dmaxIntListIn dtb__64)) then dtb__63 else (v_Vuna_dCompiler_dLowering_dTy_dmaxIntListIn dtb__64))
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> 0
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 186 "Vuna/Compiler/Lowering/Ty.vuna"
+# 193 "Vuna/Compiler/Lowering/Ty.vuna"
 let v_Vuna_dCompiler_dLowering_dTy_ddataArityNeed = (fun (levels : int Base_dData_dList.t_Base_dData_dList_dList) (table : (string, int Base_dData_dList.t_Base_dData_dList_dList) Base_dContainer_dHashMap.t_Base_dContainer_dHashMap_dHashMap) (datas : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dDtData Base_dData_dList.t_Base_dData_dList_dList) (ctors : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dDtCtor Base_dData_dList.t_Base_dData_dList_dList) -> ((Vuna_dCompiler_dBase_dCommon.v_Vuna_dCompiler_dBase_dCommon_dbind ((Vuna_dCompiler_dBase_dCommon.v_Vuna_dCompiler_dBase_dCommon_dtraverse (((v_Vuna_dCompiler_dLowering_dTy_dctorArityNeed levels) table) datas)) ctors)) (fun (ns : int Base_dData_dList.t_Base_dData_dList_dList) -> (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC (((Vuna_dCompiler_dLowering_dEnv.v_Vuna_dCompiler_dLowering_dEnv_dlistLength levels) + (v_Vuna_dCompiler_dLowering_dTy_dmaxIntListIn ns)))))))
 
-# 273 "Vuna/Compiler/Lowering/Ty.vuna"
+# 280 "Vuna/Compiler/Lowering/Ty.vuna"
 let rec v_Vuna_dCompiler_dLowering_dTy_dbinderTyAtIn = (fun (mc0 : int) (mc1 : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrBinder Base_dData_dList.t_Base_dData_dList_dList) -> (match mc1 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__65, dtb__66) -> (if (mc0 <= 0) then (if (dtb__65).Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrBinder_irBinderErased then Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing else (dtb__65).Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrBinder_irBinderTy) else ((v_Vuna_dCompiler_dLowering_dTy_dbinderTyAtIn (mc0 - 1)) dtb__66))
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 282 "Vuna/Compiler/Lowering/Ty.vuna"
+# 289 "Vuna/Compiler/Lowering/Ty.vuna"
 let rec v_Vuna_dCompiler_dLowering_dTy_dflattenAnnotAppGo = (fun (mc0 : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dTerm) (mc1 : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dTerm Base_dData_dList.t_Base_dData_dList_dList) -> (match mc0 with
   | Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dTerm_TRecord (dtb__67, dtb__68) -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = (Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dTerm_TGlobal (dtb__67)); Base_dData_dPair.f_Base_dData_dPair_dPair_second = ((Base_dData_dList.v_Base_dData_dList_dappend ((Base_dData_dList.v_Base_dData_dList_dmap Base_dData_dPair.v_Base_dData_dPair_dfirstOf) dtb__68)) mc1) }
   | Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dTerm_TApp (dtb__69, dtb__70, dtb__71) -> ((v_Vuna_dCompiler_dLowering_dTy_dflattenAnnotAppGo dtb__69) (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__70, mc1)))
   | _ -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = mc0; Base_dData_dPair.f_Base_dData_dPair_dPair_second = mc1 }
 ))
 
-# 279 "Vuna/Compiler/Lowering/Ty.vuna"
+# 286 "Vuna/Compiler/Lowering/Ty.vuna"
 let v_Vuna_dCompiler_dLowering_dTy_dflattenAnnotApp = (fun (t : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dTerm) -> ((v_Vuna_dCompiler_dLowering_dTy_dflattenAnnotAppGo t) Base_dData_dList.C_Base_dData_dList_dList_Nil))
 
-# 344 "Vuna/Compiler/Lowering/Ty.vuna"
+# 351 "Vuna/Compiler/Lowering/Ty.vuna"
 let v_Vuna_dCompiler_dLowering_dTy_dglobalTyTermOf = (fun (env : Vuna_dCompiler_dLowering_dEnv.t_Vuna_dCompiler_dLowering_dEnv_dLwEnv) (g : string) -> (match ((((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dlookup Base_dData_dString.v_Hashable_uString) Base_dData_dString.v_Eq_uString) g) (env).Vuna_dCompiler_dLowering_dEnv.f_Vuna_dCompiler_dLowering_dEnv_dLwEnv_lwDefTbl) with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__72) -> (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just ((Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDefType dtb__72)))
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> ((((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dlookup Base_dData_dString.v_Hashable_uString) Base_dData_dString.v_Eq_uString) g) (env).Vuna_dCompiler_dLowering_dEnv.f_Vuna_dCompiler_dLowering_dEnv_dLwEnv_lwGlobals)
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 364 "Vuna/Compiler/Lowering/Ty.vuna"
+# 371 "Vuna/Compiler/Lowering/Ty.vuna"
 let rec v_Vuna_dCompiler_dLowering_dTy_dflattenAnnotAppRigGo = (fun (mc0 : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dTerm) (mc1 : (Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dTerm, Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dRig) Base_dData_dPair.t_Base_dData_dPair_dPair Base_dData_dList.t_Base_dData_dList_dList) -> (match mc0 with
   | Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dTerm_TRecord (dtb__73, dtb__74) -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = (Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dTerm_TGlobal (dtb__73)); Base_dData_dPair.f_Base_dData_dPair_dPair_second = ((Base_dData_dList.v_Base_dData_dList_dappend dtb__74) mc1) }
   | Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dTerm_TApp (dtb__75, dtb__76, dtb__77) -> ((v_Vuna_dCompiler_dLowering_dTy_dflattenAnnotAppRigGo dtb__75) (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ({ Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__76; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__77 }, mc1)))
   | _ -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = mc0; Base_dData_dPair.f_Base_dData_dPair_dPair_second = mc1 }
 ))
 
-# 361 "Vuna/Compiler/Lowering/Ty.vuna"
+# 368 "Vuna/Compiler/Lowering/Ty.vuna"
 let v_Vuna_dCompiler_dLowering_dTy_dflattenAnnotAppRig = (fun (t : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dTerm) -> ((v_Vuna_dCompiler_dLowering_dTy_dflattenAnnotAppRigGo t) Base_dData_dList.C_Base_dData_dList_dList_Nil))
 
-# 369 "Vuna/Compiler/Lowering/Ty.vuna"
+# 376 "Vuna/Compiler/Lowering/Ty.vuna"
 let rec v_Vuna_dCompiler_dLowering_dTy_dcountRuntimeArgs = (fun (mc0 : (Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dTerm, Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dRig) Base_dData_dPair.t_Base_dData_dPair_dPair Base_dData_dList.t_Base_dData_dList_dList) -> (match mc0 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__78, dtb__79) -> (match dtb__78 with
   | { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__80; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__81 } -> (if (Vuna_dCompiler_dCore_dTerm.v_Vuna_dCompiler_dCore_dTerm_drigIsErased dtb__81) then (v_Vuna_dCompiler_dLowering_dTy_dcountRuntimeArgs dtb__79) else (1 + (v_Vuna_dCompiler_dLowering_dTy_dcountRuntimeArgs dtb__79)))
@@ -206,7 +206,7 @@ let rec v_Vuna_dCompiler_dLowering_dTy_dcountRuntimeArgs = (fun (mc0 : (Vuna_dCo
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 374 "Vuna/Compiler/Lowering/Ty.vuna"
+# 381 "Vuna/Compiler/Lowering/Ty.vuna"
 let rec v_Vuna_dCompiler_dLowering_dTy_dpeelIrFuns = (fun (mc0 : int) (mc1 : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrTy Base_dData_dMaybe.t_Base_dData_dMaybe_dMaybe) -> (match mc1 with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__82) -> (if (mc0 <= 0) then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__82)) else (match dtb__82 with
   | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTy_IrTyFun (dtb__83, dtb__84) -> ((v_Vuna_dCompiler_dLowering_dTy_dpeelIrFuns (mc0 - 1)) (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__84)))
@@ -216,7 +216,7 @@ let rec v_Vuna_dCompiler_dLowering_dTy_dpeelIrFuns = (fun (mc0 : int) (mc1 : Vun
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 386 "Vuna/Compiler/Lowering/Ty.vuna"
+# 393 "Vuna/Compiler/Lowering/Ty.vuna"
 let rec v_Vuna_dCompiler_dLowering_dTy_dpeelPiArgsTy = (fun (fuel : int) (env : Vuna_dCompiler_dLowering_dEnv.t_Vuna_dCompiler_dLowering_dEnv_dLwEnv) (v : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dValue) (args : (Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dTerm, Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dRig) Base_dData_dPair.t_Base_dData_dPair_dPair Base_dData_dList.t_Base_dData_dList_dList) -> (if (fuel <= 0) then Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing else (match v with
   | Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dValue_VPi (dtb__85, dtb__86, dtb__87, dtb__88, dtb__89) -> (if (Vuna_dCompiler_dCore_dTerm.v_Vuna_dCompiler_dCore_dTerm_drigIsErased dtb__87) then ((fun nd_uscrut9 -> (match nd_uscrut9 with
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just ((((((v_Vuna_dCompiler_dLowering_dTy_drenderPiTy Base_dData_dList.C_Base_dData_dList_dList_Nil) (env).Vuna_dCompiler_dLowering_dEnv.f_Vuna_dCompiler_dLowering_dEnv_dLwEnv_lwTyParams) (env).Vuna_dCompiler_dLowering_dEnv.f_Vuna_dCompiler_dLowering_dEnv_dLwEnv_lwDatas) 0) v)))
@@ -236,14 +236,14 @@ let rec v_Vuna_dCompiler_dLowering_dTy_dpeelPiArgsTy = (fun (fuel : int) (env : 
   | _ -> (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just ((((((v_Vuna_dCompiler_dLowering_dTy_drenderPiTy Base_dData_dList.C_Base_dData_dList_dList_Nil) (env).Vuna_dCompiler_dLowering_dEnv.f_Vuna_dCompiler_dLowering_dEnv_dLwEnv_lwTyParams) (env).Vuna_dCompiler_dLowering_dEnv.f_Vuna_dCompiler_dLowering_dEnv_dLwEnv_lwDatas) 0) v)))
 )))
 
-# 423 "Vuna/Compiler/Lowering/Ty.vuna"
+# 430 "Vuna/Compiler/Lowering/Ty.vuna"
 let rec v_Vuna_dCompiler_dLowering_dTy_dnthTermIn = (fun (mc0 : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dTerm Base_dData_dList.t_Base_dData_dList_dList) (mc1 : int) -> (match mc0 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__98, dtb__99) -> (if (mc1 <= 0) then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__98)) else ((v_Vuna_dCompiler_dLowering_dTy_dnthTermIn dtb__99) (mc1 - 1)))
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 219 "Vuna/Compiler/Lowering/Ty.vuna"
+# 226 "Vuna/Compiler/Lowering/Ty.vuna"
 let rec v_Vuna_dCompiler_dLowering_dTy_dannotTyOfFuel = (fun (fuel : int) (dflt : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrTy Base_dData_dMaybe.t_Base_dData_dMaybe_dMaybe) (env : Vuna_dCompiler_dLowering_dEnv.t_Vuna_dCompiler_dLowering_dEnv_dLwEnv) (binders : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrBinder Base_dData_dList.t_Base_dData_dList_dList) (t : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dTerm) -> (if (fuel <= 0) then dflt else (match t with
   | Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dTerm_TVar (dtb__100, dtb__101, dtb__102) -> (match ((v_Vuna_dCompiler_dLowering_dTy_dbinderTyAtIn dtb__101) binders) with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__103) -> (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__103))
@@ -277,7 +277,7 @@ let rec v_Vuna_dCompiler_dLowering_dTy_dannotTyOfFuel = (fun (fuel : int) (dflt 
 ))
   | _ -> dflt
 )))
-# 256 "Vuna/Compiler/Lowering/Ty.vuna"
+# 263 "Vuna/Compiler/Lowering/Ty.vuna"
 and v_Vuna_dCompiler_dLowering_dTy_dannotConTy = (fun (fuel : int) (dflt : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrTy Base_dData_dMaybe.t_Base_dData_dMaybe_dMaybe) (env : Vuna_dCompiler_dLowering_dEnv.t_Vuna_dCompiler_dLowering_dEnv_dLwEnv) (c : string) (args : (Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dTerm, Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dRig) Base_dData_dPair.t_Base_dData_dPair_dPair Base_dData_dList.t_Base_dData_dList_dList) -> (if (fuel <= 0) then dflt else ((fun nd_uscrut5 -> (match nd_uscrut5 with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__131) -> (match dtb__131 with
   | { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__132; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__133 } -> (match (v_Vuna_dCompiler_dLowering_dTy_dreprTyIr dtb__132) with
@@ -294,7 +294,7 @@ and v_Vuna_dCompiler_dLowering_dTy_dannotConTy = (fun (fuel : int) (dflt : Vuna_
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> dflt
   | _ -> failwith "DT: impossible branch"
 )) ((((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dlookup Base_dData_dString.v_Hashable_uString) Base_dData_dString.v_Eq_uString) c) (env).Vuna_dCompiler_dLowering_dEnv.f_Vuna_dCompiler_dLowering_dEnv_dLwEnv_lwCtors))))
-# 287 "Vuna/Compiler/Lowering/Ty.vuna"
+# 294 "Vuna/Compiler/Lowering/Ty.vuna"
 and v_Vuna_dCompiler_dLowering_dTy_dannotHeadTy = (fun (fuel : int) (dflt : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrTy Base_dData_dMaybe.t_Base_dData_dMaybe_dMaybe) (env : Vuna_dCompiler_dLowering_dEnv.t_Vuna_dCompiler_dLowering_dEnv_dLwEnv) (binders : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrBinder Base_dData_dList.t_Base_dData_dList_dList) (g : string) (args : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dTerm Base_dData_dList.t_Base_dData_dList_dList) -> (if (fuel <= 0) then dflt else (if (g = "Array") then ((fun nd_uscrut6 -> (match nd_uscrut6 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__136, dtb__137) -> (match dtb__137 with
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> (match (((((v_Vuna_dCompiler_dLowering_dTy_dannotTyOfFuel (fuel - 1)) dflt) env) binders) dtb__136) with
@@ -331,7 +331,7 @@ and v_Vuna_dCompiler_dLowering_dTy_dannotHeadTy = (fun (fuel : int) (dflt : Vuna
 )
   | _ -> failwith "DT: impossible branch"
 )))))
-# 405 "Vuna/Compiler/Lowering/Ty.vuna"
+# 412 "Vuna/Compiler/Lowering/Ty.vuna"
 and v_Vuna_dCompiler_dLowering_dTy_dannotFamilyArgs = (fun (fuel : int) (dflt : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrTy Base_dData_dMaybe.t_Base_dData_dMaybe_dMaybe) (env : Vuna_dCompiler_dLowering_dEnv.t_Vuna_dCompiler_dLowering_dEnv_dLwEnv) (binders : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrBinder Base_dData_dList.t_Base_dData_dList_dList) (usedPats : int Base_dData_dList.t_Base_dData_dList_dList) (args : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dTerm Base_dData_dList.t_Base_dData_dList_dList) -> (if (fuel <= 0) then Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing else (match usedPats with
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (Base_dData_dList.C_Base_dData_dList_dList_Nil))
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__145, dtb__146) -> (match ((v_Vuna_dCompiler_dLowering_dTy_dnthTermIn args) dtb__145) with
@@ -349,7 +349,7 @@ and v_Vuna_dCompiler_dLowering_dTy_dannotFamilyArgs = (fun (fuel : int) (dflt : 
 )
   | _ -> failwith "DT: impossible branch"
 )))
-# 428 "Vuna/Compiler/Lowering/Ty.vuna"
+# 435 "Vuna/Compiler/Lowering/Ty.vuna"
 and v_Vuna_dCompiler_dLowering_dTy_dctorTypeArgsOf = (fun (env : Vuna_dCompiler_dLowering_dEnv.t_Vuna_dCompiler_dLowering_dEnv_dLwEnv) (ctor : string) (args : (Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dTerm, Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dRig) Base_dData_dPair.t_Base_dData_dPair_dPair Base_dData_dList.t_Base_dData_dList_dList) -> ((fun nd_uscrut3 -> (match nd_uscrut3 with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__150) -> (match dtb__150 with
@@ -363,17 +363,17 @@ and v_Vuna_dCompiler_dLowering_dTy_dctorTypeArgsOf = (fun (env : Vuna_dCompiler_
   | _ -> failwith "DT: impossible branch"
 )) ((((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dlookup Base_dData_dString.v_Hashable_uString) Base_dData_dString.v_Eq_uString) ctor) (env).Vuna_dCompiler_dLowering_dEnv.f_Vuna_dCompiler_dLowering_dEnv_dLwEnv_lwCtors)))
 
-# 208 "Vuna/Compiler/Lowering/Ty.vuna"
+# 215 "Vuna/Compiler/Lowering/Ty.vuna"
 let v_Vuna_dCompiler_dLowering_dTy_dannotTyOf = (fun (env : Vuna_dCompiler_dLowering_dEnv.t_Vuna_dCompiler_dLowering_dEnv_dLwEnv) (binders : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrBinder Base_dData_dList.t_Base_dData_dList_dList) (t : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dTerm) -> (((((v_Vuna_dCompiler_dLowering_dTy_dannotTyOfFuel 256) Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing) env) binders) t))
 
-# 211 "Vuna/Compiler/Lowering/Ty.vuna"
+# 218 "Vuna/Compiler/Lowering/Ty.vuna"
 let v_Vuna_dCompiler_dLowering_dTy_dannotTyOfTotal = (fun (env : Vuna_dCompiler_dLowering_dEnv.t_Vuna_dCompiler_dLowering_dEnv_dLwEnv) (binders : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrBinder Base_dData_dList.t_Base_dData_dList_dList) (t : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dTerm) -> (match (((((v_Vuna_dCompiler_dLowering_dTy_dannotTyOfFuel 256) (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTy_IrTyOpaque))) env) binders) t) with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__154) -> dtb__154
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTy_IrTyOpaque
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 351 "Vuna/Compiler/Lowering/Ty.vuna"
+# 358 "Vuna/Compiler/Lowering/Ty.vuna"
 let v_Vuna_dCompiler_dLowering_dTy_dannotGlobalTy = (fun (env : Vuna_dCompiler_dLowering_dEnv.t_Vuna_dCompiler_dLowering_dEnv_dLwEnv) (binders : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrBinder Base_dData_dList.t_Base_dData_dList_dList) (g : string) -> (match ((Vuna_dCompiler_dElab_dRepresentation.v_Vuna_dCompiler_dElab_dRepresentation_dfindDtData g) (env).Vuna_dCompiler_dLowering_dEnv.f_Vuna_dCompiler_dLowering_dEnv_dLwEnv_lwDatas) with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__155) -> (((v_Vuna_dCompiler_dLowering_dTy_dannotTyOf env) binders) (Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dTerm_TGlobal (g)))
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> (match ((v_Vuna_dCompiler_dLowering_dTy_dglobalTyTermOf env) g) with
@@ -384,7 +384,7 @@ let v_Vuna_dCompiler_dLowering_dTy_dannotGlobalTy = (fun (env : Vuna_dCompiler_d
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 325 "Vuna/Compiler/Lowering/Ty.vuna"
+# 332 "Vuna/Compiler/Lowering/Ty.vuna"
 let v_Vuna_dCompiler_dLowering_dTy_dannotCalleeTy = (fun (env : Vuna_dCompiler_dLowering_dEnv.t_Vuna_dCompiler_dLowering_dEnv_dLwEnv) (binders : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrBinder Base_dData_dList.t_Base_dData_dList_dList) (t : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dTerm) -> (match t with
   | Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dTerm_TGlobal (dtb__157) -> (((v_Vuna_dCompiler_dLowering_dTy_dannotGlobalTy env) binders) dtb__157)
   | Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dTerm_TApp (dtb__158, dtb__159, dtb__160) -> ((fun nd_uscrut6 -> (match nd_uscrut6 with
@@ -405,14 +405,14 @@ let v_Vuna_dCompiler_dLowering_dTy_dannotCalleeTy = (fun (env : Vuna_dCompiler_d
   | _ -> (((v_Vuna_dCompiler_dLowering_dTy_dannotTyOf env) binders) t)
 ))
 
-# 444 "Vuna/Compiler/Lowering/Ty.vuna"
+# 451 "Vuna/Compiler/Lowering/Ty.vuna"
 let rec v_Vuna_dCompiler_dLowering_dTy_dfindCtorInLocal = (fun (mc0 : string) (mc1 : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dDtCtor Base_dData_dList.t_Base_dData_dList_dList) -> (match mc1 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__166, dtb__167) -> (if ((Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtCtorName dtb__166) = mc0) then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__166)) else ((v_Vuna_dCompiler_dLowering_dTy_dfindCtorInLocal mc0) dtb__167))
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 450 "Vuna/Compiler/Lowering/Ty.vuna"
+# 457 "Vuna/Compiler/Lowering/Ty.vuna"
 let v_Vuna_dCompiler_dLowering_dTy_dctorKeptFieldTys = (fun (env : Vuna_dCompiler_dLowering_dEnv.t_Vuna_dCompiler_dLowering_dEnv_dLwEnv) (ctor : string) -> ((fun nd_uscrut2 -> (match nd_uscrut2 with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__168) -> (match dtb__168 with
   | { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__169; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__170 } -> (match ((Vuna_dCompiler_dElab_dRepresentation.v_Vuna_dCompiler_dElab_dRepresentation_dfindDtData dtb__169) (env).Vuna_dCompiler_dLowering_dEnv.f_Vuna_dCompiler_dLowering_dEnv_dLwEnv_lwDatas) with
@@ -430,19 +430,19 @@ let v_Vuna_dCompiler_dLowering_dTy_dctorKeptFieldTys = (fun (env : Vuna_dCompile
   | _ -> failwith "DT: impossible branch"
 )) ((((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dlookup Base_dData_dString.v_Hashable_uString) Base_dData_dString.v_Eq_uString) ctor) (env).Vuna_dCompiler_dLowering_dEnv.f_Vuna_dCompiler_dLowering_dEnv_dLwEnv_lwCtors)))
 
-# 483 "Vuna/Compiler/Lowering/Ty.vuna"
+# 490 "Vuna/Compiler/Lowering/Ty.vuna"
 let v_Vuna_dCompiler_dLowering_dTy_dtyDeclOf = (fun (table : (string, int Base_dData_dList.t_Base_dData_dList_dList) Base_dContainer_dHashMap.t_Base_dContainer_dHashMap_dHashMap) (allDatas : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dDtData Base_dData_dList.t_Base_dData_dList_dList) (unboxed : (string, (Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dDtCtor, int) Base_dData_dPair.t_Base_dData_dPair_dPair) Base_dData_dPair.t_Base_dData_dPair_dPair Base_dData_dList.t_Base_dData_dList_dList) (d : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dDtData) -> ((fun levels -> ((fun arity -> ((fun nd_uscrut6 -> (match nd_uscrut6 with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> (if (Vuna_dCompiler_dLowering_dEnv.v_Vuna_dCompiler_dLowering_dEnv_dhasRecordRepr d) then ((fun nd_uscrut8 -> (match nd_uscrut8 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__173, dtb__174) -> (match dtb__174 with
-  | Base_dData_dList.C_Base_dData_dList_dList_Nil -> ((Vuna_dCompiler_dBase_dCommon.v_Vuna_dCompiler_dBase_dCommon_dbind (((((((((v_Vuna_dCompiler_dLowering_dTy_dctorFieldTys levels) table) allDatas) (Vuna_dCompiler_dElab_dRepresentation.v_Vuna_dCompiler_dElab_dRepresentation_dctorKeepFlags dtb__173)) ((Vuna_dCompiler_dLowering_dEnv.v_Vuna_dCompiler_dLowering_dEnv_dctorOpaqueFlagsOf allDatas) dtb__173)) (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtCtorTelescope dtb__173)) 0) ((Vuna_dCompiler_dCore_dEval.v_Vuna_dCompiler_dCore_dEval_deval Base_dData_dList.C_Base_dData_dList_dList_Nil) (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtCtorType dtb__173))) (Vuna_dCompiler_dLowering_dEnv.v_Vuna_dCompiler_dLowering_dEnv_dlistLength levels))) (fun (p : (Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrTy Base_dData_dList.t_Base_dData_dList_dList, int) Base_dData_dPair.t_Base_dData_dPair_dPair) -> (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC ((Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTyDecl_IrRecordDecl ((Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDataName d), arity, (Vuna_dCompiler_dLowering_dEnv.v_Vuna_dCompiler_dLowering_dEnv_drecordRtFields d), (Base_dData_dPair.v_Base_dData_dPair_dfirstOf p)))))))
+  | Base_dData_dList.C_Base_dData_dList_dList_Nil -> ((Vuna_dCompiler_dBase_dCommon.v_Vuna_dCompiler_dBase_dCommon_dbind (((((((((v_Vuna_dCompiler_dLowering_dTy_dctorFieldTys levels) table) allDatas) (Vuna_dCompiler_dElab_dRepresentation.v_Vuna_dCompiler_dElab_dRepresentation_dctorKeepFlags dtb__173)) ((Vuna_dCompiler_dLowering_dEnv.v_Vuna_dCompiler_dLowering_dEnv_dctorOpaqueFlagsOf allDatas) dtb__173)) (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtCtorTelescope dtb__173)) 0) ((Vuna_dCompiler_dCore_dEval.v_Vuna_dCompiler_dCore_dEval_deval Base_dData_dList.C_Base_dData_dList_dList_Nil) (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtCtorType dtb__173))) arity)) (fun (p : (Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrTy Base_dData_dList.t_Base_dData_dList_dList, int) Base_dData_dPair.t_Base_dData_dPair_dPair) -> ((fun fields -> ((fun tys -> (if ((Vuna_dCompiler_dLowering_dEnv.v_Vuna_dCompiler_dLowering_dEnv_dlistLength fields) = (Vuna_dCompiler_dLowering_dEnv.v_Vuna_dCompiler_dLowering_dEnv_dlistLength tys)) then (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC ((Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTyDecl_IrRecordDecl ((Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDataName d), (Base_dData_dPair.v_Base_dData_dPair_dsecondOf p), fields, tys)))) else (Vuna_dCompiler_dBase_dDiag.v_Vuna_dCompiler_dBase_dDiag_dicInternal (String.concat "" ["record `"; (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDataName d); "` has "; (bi_strFromInt (Vuna_dCompiler_dLowering_dEnv.v_Vuna_dCompiler_dLowering_dEnv_dlistLength fields)); " runtime fields but "; (bi_strFromInt (Vuna_dCompiler_dLowering_dEnv.v_Vuna_dCompiler_dLowering_dEnv_dlistLength tys)); " field types"])))) (Base_dData_dPair.v_Base_dData_dPair_dfirstOf p))) (Vuna_dCompiler_dLowering_dEnv.v_Vuna_dCompiler_dLowering_dEnv_drecordRtFields d))))
   | _ -> (Vuna_dCompiler_dBase_dDiag.v_Vuna_dCompiler_dBase_dDiag_dicInternal ("record family must have exactly one constructor: " ^ (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDataName d)))
 )
   | _ -> (Vuna_dCompiler_dBase_dDiag.v_Vuna_dCompiler_dBase_dDiag_dicInternal ("record family must have exactly one constructor: " ^ (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDataName d)))
 )) (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDataCtors d)) else ((Vuna_dCompiler_dBase_dCommon.v_Vuna_dCompiler_dBase_dCommon_dbind ((((v_Vuna_dCompiler_dLowering_dTy_ddataArityNeed levels) table) allDatas) (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDataCtors d))) (fun (fullArity : int) -> ((Vuna_dCompiler_dBase_dCommon.v_Vuna_dCompiler_dBase_dCommon_dbind ((Vuna_dCompiler_dBase_dCommon.v_Vuna_dCompiler_dBase_dCommon_dtraverse (fun (c : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dDtCtor) -> ((Vuna_dCompiler_dBase_dCommon.v_Vuna_dCompiler_dBase_dCommon_dbind (((((((((v_Vuna_dCompiler_dLowering_dTy_dctorFieldTys levels) table) allDatas) (Vuna_dCompiler_dElab_dRepresentation.v_Vuna_dCompiler_dElab_dRepresentation_dctorKeepFlags c)) ((Vuna_dCompiler_dLowering_dEnv.v_Vuna_dCompiler_dLowering_dEnv_dctorOpaqueFlagsOf allDatas) c)) (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtCtorTelescope c)) 0) ((Vuna_dCompiler_dCore_dEval.v_Vuna_dCompiler_dCore_dEval_deval Base_dData_dList.C_Base_dData_dList_dList_Nil) (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtCtorType c))) (Vuna_dCompiler_dLowering_dEnv.v_Vuna_dCompiler_dLowering_dEnv_dlistLength levels))) (fun (p : (Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrTy Base_dData_dList.t_Base_dData_dList_dList, int) Base_dData_dPair.t_Base_dData_dPair_dPair) -> (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC ({ Base_dData_dPair.f_Base_dData_dPair_dPair_first = (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtCtorName c); Base_dData_dPair.f_Base_dData_dPair_dPair_second = (Base_dData_dPair.v_Base_dData_dPair_dfirstOf p) })))))) (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDataCtors d))) (fun (ctors : (string, Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrTy Base_dData_dList.t_Base_dData_dList_dList) Base_dData_dPair.t_Base_dData_dPair_dPair Base_dData_dList.t_Base_dData_dList_dList) -> (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC ((Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTyDecl_IrVariantDecl ((Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDataName d), fullArity, ctors)))))))))
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__175) -> (match dtb__175 with
-  | { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__176; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__177 } -> ((Vuna_dCompiler_dBase_dCommon.v_Vuna_dCompiler_dBase_dCommon_dbind (((((((((v_Vuna_dCompiler_dLowering_dTy_dctorFieldTys levels) table) allDatas) (Vuna_dCompiler_dElab_dRepresentation.v_Vuna_dCompiler_dElab_dRepresentation_dctorKeepFlags dtb__176)) ((Vuna_dCompiler_dLowering_dEnv.v_Vuna_dCompiler_dLowering_dEnv_dctorOpaqueFlagsOf allDatas) dtb__176)) (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtCtorTelescope dtb__176)) 0) ((Vuna_dCompiler_dCore_dEval.v_Vuna_dCompiler_dCore_dEval_deval Base_dData_dList.C_Base_dData_dList_dList_Nil) (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtCtorType dtb__176))) (Vuna_dCompiler_dLowering_dEnv.v_Vuna_dCompiler_dLowering_dEnv_dlistLength levels))) (fun (p : (Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrTy Base_dData_dList.t_Base_dData_dList_dList, int) Base_dData_dPair.t_Base_dData_dPair_dPair) -> ((fun nd_uscrut14 -> (match nd_uscrut14 with
+  | { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__176; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__177 } -> ((Vuna_dCompiler_dBase_dCommon.v_Vuna_dCompiler_dBase_dCommon_dbind (((((((((v_Vuna_dCompiler_dLowering_dTy_dctorFieldTys levels) table) allDatas) (Vuna_dCompiler_dElab_dRepresentation.v_Vuna_dCompiler_dElab_dRepresentation_dctorKeepFlags dtb__176)) ((Vuna_dCompiler_dLowering_dEnv.v_Vuna_dCompiler_dLowering_dEnv_dctorOpaqueFlagsOf allDatas) dtb__176)) (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtCtorTelescope dtb__176)) 0) ((Vuna_dCompiler_dCore_dEval.v_Vuna_dCompiler_dCore_dEval_deval Base_dData_dList.C_Base_dData_dList_dList_Nil) (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtCtorType dtb__176))) arity)) (fun (p : (Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrTy Base_dData_dList.t_Base_dData_dList_dList, int) Base_dData_dPair.t_Base_dData_dPair_dPair) -> ((fun nd_uscrut14 -> (match nd_uscrut14 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__178, dtb__179) -> (match dtb__179 with
-  | Base_dData_dList.C_Base_dData_dList_dList_Nil -> (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC ((Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTyDecl_IrUnboxedDecl ((Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDataName d), arity, dtb__178))))
+  | Base_dData_dList.C_Base_dData_dList_dList_Nil -> (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC ((Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTyDecl_IrUnboxedDecl ((Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDataName d), (Base_dData_dPair.v_Base_dData_dPair_dsecondOf p), dtb__178))))
   | _ -> (Vuna_dCompiler_dBase_dDiag.v_Vuna_dCompiler_dBase_dDiag_dicInternal ("unboxed constructor does not have exactly one kept field: " ^ (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtCtorName dtb__176)))
 )
   | _ -> (Vuna_dCompiler_dBase_dDiag.v_Vuna_dCompiler_dBase_dDiag_dicInternal ("unboxed constructor does not have exactly one kept field: " ^ (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtCtorName dtb__176)))
@@ -452,17 +452,17 @@ let v_Vuna_dCompiler_dLowering_dTy_dtyDeclOf = (fun (table : (string, int Base_d
   | _ -> failwith "DT: impossible branch"
 )) ((Vuna_dCompiler_dElab_dRepresentation.v_Vuna_dCompiler_dElab_dRepresentation_dlookupUnboxedInfo (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDataName d)) unboxed))) (Vuna_dCompiler_dLowering_dEnv.v_Vuna_dCompiler_dLowering_dEnv_dlistLength levels))) ((Vuna_dCompiler_dLowering_dEnv.v_Vuna_dCompiler_dLowering_dEnv_dlookupTyParamsIn table) (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDataName d))))
 
-# 476 "Vuna/Compiler/Lowering/Ty.vuna"
+# 483 "Vuna/Compiler/Lowering/Ty.vuna"
 let rec v_Vuna_dCompiler_dLowering_dTy_dtyDeclsGo = (fun (mc0 : (string, int Base_dData_dList.t_Base_dData_dList_dList) Base_dContainer_dHashMap.t_Base_dContainer_dHashMap_dHashMap) (mc1 : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dDtData Base_dData_dList.t_Base_dData_dList_dList) (mc2 : (string, (Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dDtCtor, int) Base_dData_dPair.t_Base_dData_dPair_dPair) Base_dData_dPair.t_Base_dData_dPair_dPair Base_dData_dList.t_Base_dData_dList_dList) (mc3 : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dDtData Base_dData_dList.t_Base_dData_dList_dList) -> (match mc3 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__180, dtb__181) -> ((Vuna_dCompiler_dBase_dCommon.v_Vuna_dCompiler_dBase_dCommon_dbind ((((v_Vuna_dCompiler_dLowering_dTy_dtyDeclOf mc0) mc1) mc2) dtb__180)) (fun (decl : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrTyDecl) -> ((Vuna_dCompiler_dBase_dCommon.v_Vuna_dCompiler_dBase_dCommon_dbind ((((v_Vuna_dCompiler_dLowering_dTy_dtyDeclsGo mc0) mc1) mc2) dtb__181)) (fun (tail : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrTyDecl Base_dData_dList.t_Base_dData_dList_dList) -> (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC ((Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (decl, tail))))))))
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC (Base_dData_dList.C_Base_dData_dList_dList_Nil))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 473 "Vuna/Compiler/Lowering/Ty.vuna"
+# 480 "Vuna/Compiler/Lowering/Ty.vuna"
 let v_Vuna_dCompiler_dLowering_dTy_dtyDeclsOf = (fun (tyParams : (string, int Base_dData_dList.t_Base_dData_dList_dList) Base_dContainer_dHashMap.t_Base_dContainer_dHashMap_dHashMap) (unboxed : (string, (Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dDtCtor, int) Base_dData_dPair.t_Base_dData_dPair_dPair) Base_dData_dPair.t_Base_dData_dPair_dPair Base_dData_dList.t_Base_dData_dList_dList) (allDatas : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dDtData Base_dData_dList.t_Base_dData_dList_dList) (subset : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dDtData Base_dData_dList.t_Base_dData_dList_dList) -> ((((v_Vuna_dCompiler_dLowering_dTy_dtyDeclsGo tyParams) allDatas) unboxed) subset))
 
-# 510 "Vuna/Compiler/Lowering/Ty.vuna"
+# 524 "Vuna/Compiler/Lowering/Ty.vuna"
 let v_Vuna_dCompiler_dLowering_dTy_dtyDeclTys = (fun (mc0 : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrTyDecl) -> (match mc0 with
   | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTyDecl_IrUnboxedDecl (dtb__182, dtb__183, dtb__184) -> (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__184, Base_dData_dList.C_Base_dData_dList_dList_Nil))
   | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTyDecl_IrRecordDecl (dtb__185, dtb__186, dtb__187, dtb__188) -> dtb__188
@@ -470,13 +470,13 @@ let v_Vuna_dCompiler_dLowering_dTy_dtyDeclTys = (fun (mc0 : Vuna_dCompiler_dIr_d
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 519 "Vuna/Compiler/Lowering/Ty.vuna"
+# 533 "Vuna/Compiler/Lowering/Ty.vuna"
 let rec v_Vuna_dCompiler_dLowering_dTy_dfoldlTyNames = (fun (mc0 : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrTy Base_dData_dList.t_Base_dData_dList_dList) (mc1 : string Base_dData_dList.t_Base_dData_dList_dList) -> (match mc0 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__192, dtb__193) -> ((v_Vuna_dCompiler_dLowering_dTy_dfoldlTyNames dtb__193) ((v_Vuna_dCompiler_dLowering_dTy_dtyNamesInto dtb__192) mc1))
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> mc1
   | _ -> failwith "DT: impossible branch"
 ))
-# 523 "Vuna/Compiler/Lowering/Ty.vuna"
+# 537 "Vuna/Compiler/Lowering/Ty.vuna"
 and v_Vuna_dCompiler_dLowering_dTy_dtyNamesInto = (fun (mc0 : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrTy) (mc1 : string Base_dData_dList.t_Base_dData_dList_dList) -> (match mc0 with
   | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTy_IrTyData (dtb__194, dtb__195) -> ((v_Vuna_dCompiler_dLowering_dTy_dfoldlTyNames dtb__195) ((Vuna_dCompiler_dLowering_dEnv.v_Vuna_dCompiler_dLowering_dEnv_dpushDep dtb__194) mc1))
   | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTy_IrTyFun (dtb__196, dtb__197) -> ((v_Vuna_dCompiler_dLowering_dTy_dtyNamesInto dtb__197) ((v_Vuna_dCompiler_dLowering_dTy_dtyNamesInto dtb__196) mc1))
@@ -491,12 +491,12 @@ and v_Vuna_dCompiler_dLowering_dTy_dtyNamesInto = (fun (mc0 : Vuna_dCompiler_dIr
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 515 "Vuna/Compiler/Lowering/Ty.vuna"
+# 529 "Vuna/Compiler/Lowering/Ty.vuna"
 let rec v_Vuna_dCompiler_dLowering_dTy_dtyDeclRefsGo = (fun (mc0 : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrTy Base_dData_dList.t_Base_dData_dList_dList Base_dData_dList.t_Base_dData_dList_dList) (mc1 : string Base_dData_dList.t_Base_dData_dList_dList) -> (match mc0 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__201, dtb__202) -> ((v_Vuna_dCompiler_dLowering_dTy_dtyDeclRefsGo dtb__202) ((v_Vuna_dCompiler_dLowering_dTy_dfoldlTyNames dtb__201) mc1))
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> (Base_dData_dList.v_Base_dData_dList_dreverse mc1)
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 507 "Vuna/Compiler/Lowering/Ty.vuna"
+# 521 "Vuna/Compiler/Lowering/Ty.vuna"
 let v_Vuna_dCompiler_dLowering_dTy_dtyDeclRefs = (fun (decls : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrTyDecl Base_dData_dList.t_Base_dData_dList_dList) -> ((v_Vuna_dCompiler_dLowering_dTy_dtyDeclRefsGo ((Base_dData_dList.v_Base_dData_dList_dmap v_Vuna_dCompiler_dLowering_dTy_dtyDeclTys) decls)) Base_dData_dList.C_Base_dData_dList_dList_Nil))
