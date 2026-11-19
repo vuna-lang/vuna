@@ -1,0 +1,4 @@
+import Vuna.Math
+
+main : Int
+main = Vuna.Math.three + Vuna.Math.double 20

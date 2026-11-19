@@ -1,0 +1,6 @@
+# 模块头导出列表之外的名字对导入方不可见。
+[package]
+name = "fix-106-header-export-private"
+
+[dependencies]
+vuna-base = "../../../../../../packages/base"

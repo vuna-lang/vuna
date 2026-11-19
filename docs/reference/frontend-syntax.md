@@ -141,12 +141,12 @@
 
 | 形式 | 例子 | 说明 | 入口 |
 | --- | --- | --- | --- |
-| 模块头 | `module A.B where` | 只解析名字；**导出列表语法尚未实现**（见 §11） | `Frontend.Parser.parseModDecl` |
+| 模块头 | `module A.B where` / `module A.B (x, T(..), module C) where` | 括号列表给出该模块的导出集；没有列表 = 不导出（模块默认私有） | `Frontend.Parser.parseModDecl` |
 | import | `import M` / `import qualified M` / `import M as P` / `import qualified M as P` | 四种引用形态：裸名 / 弱限定短名 / 强 alias / 完整模块名 | `Loader.Modules`、[language.md](language.md) |
 | 命名空间 import | `import A.X as Y` | 必须写 `as`；等价于按 A 导出的命名空间路径 X 找目标模块 | `Loader.Modules` |
 | 逐定义导出 | `export f : T` / `export data T(..)` / `export T(A, B)` | 模块默认私有；`T` 只导出类型，`T(..)` 导出全部构造子 | `Loader.Modules`、[language.md](language.md) |
 | 重导出 | `export import M (x, T(..))` / `export module M` / `export module M as X` | 平铺 vs 只导出命名空间路径 | `Loader.Modules` |
-| **不支持** | `module M (x, T(..)) where` 导出列表（解析器忽略） | §11：实现为 no-op，只有逐定义 `export` 生效 | `Frontend.Parser.parseModDecl` |
+| 导出方式互斥 | 模块头导出列表与逐定义 `export` 不能同时出现 | 同时写报 `RN_DuplicateExport`（`module header`） | `Loader.Flatten.computeExports` |
 
 ## 7. 效应表面语法
 
@@ -234,7 +234,7 @@
 | `newtype` / `type` 关键字 | ✓ | ✓ | ✓ | 刻意不做（`record` + `alias` 表达） | 不做 |
 | 命名实例 / 默认方法 / 关联类型 | 部分 | ✓ | — | 刻意不做 | 不做 |
 | 用户宏 / `syntax` 规则 | — | ✓ | — | 只有内置 `name!` | 走宏 / DSL 轨道，不做一次性糖 |
-| 模块头导出列表 | ✓ | ✓ | ✓ | 解析器只认 `module M where`，括号列表被忽略 | 未实现（缺口，非糖） |
+| 模块头导出列表 | ✓ | ✓ | ✓ | 括号列表逐项解析；与逐定义 `export` 互斥 | 已实现 |
 
 ## 12. 与其它页面的边界
 

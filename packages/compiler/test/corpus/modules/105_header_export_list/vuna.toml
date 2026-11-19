@@ -1,0 +1,6 @@
+# 模块头导出列表：只导出列出的名字（与逐定义 `export` 互斥）。
+[package]
+name = "fix-105-header-export-list"
+
+[dependencies]
+vuna-base = "../../../../../../packages/base"

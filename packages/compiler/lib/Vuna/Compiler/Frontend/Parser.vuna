@@ -95,7 +95,7 @@ parseModDecl st =
   if atKw st "module" then
     Vuna.Compiler.Base.Common.bind
       (expectKw st "module")
-      (\st1 => Vuna.Compiler.Base.Common.step (expectIdent st1) (\name, st2 => Vuna.Compiler.Base.Common.bind (expectKw st2 "where") (\st3 => OkC (Pair (Just (ModDecl name False [] [] [] [] (spanOf st st3))) st3))))
+      (\st1 => Vuna.Compiler.Base.Common.step (expectIdent st1) (\name, st2 => if atSym st2 "(" then Vuna.Compiler.Base.Common.step (parseExportItems st2) (\items, st3 => Vuna.Compiler.Base.Common.bind (expectKw st3 "where") (\st4 => OkC (Pair (Just (ModDecl name True items [] [] [] (spanOf st st4))) st4))) else Vuna.Compiler.Base.Common.bind (expectKw st2 "where") (\st3 => OkC (Pair (Just (ModDecl name False [] [] [] [] (spanOf st st3))) st3))))
   else
     OkC (Pair Nothing st)
 

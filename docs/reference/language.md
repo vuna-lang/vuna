@@ -218,8 +218,9 @@ vuna/base/compiler 三包源码统一按当前语言能力书写，新增/修改
   `c && e`，`not (a == b)` 写 `a /= b`；单簇 helper 用 `Base.Data.Bool.not`；
 - **单构造器类型用 `record` + 字段访问**：位置访问器在有高阶使用（`map acc`）或终止性
   投影处保留为函数，其余调用点写 `x.field`；
-- **导出用逐定义 `export`**：模块头导出列表尚未实现，只有逐定义 `export` 生效
-  （见 [frontend-syntax.md](frontend-syntax.md) §11）。
+- **导出有两种互斥写法**：模块头导出列表（`module M (x, T(..)) where`）或逐定义
+  `export`；同一模块不能同时写（报 `RN_DuplicateExport`），不写列表时模块默认私有
+  （见 [frontend-syntax.md](frontend-syntax.md) §6）。
 
 ## 函数定义与 η 展开
 
@@ -384,7 +385,7 @@ import / 导出的形式表见 [frontend-syntax.md](frontend-syntax.md) §6；�
   构造子）→ 本模块类型名 → import 模块导出的类型名（后两者是**类型作为项**的退路，
   见下节）。两个 open import 导出同名但指向不同定义时，裸名报歧义（指向同一定义的重复
   导出不算歧义，例如原模块与它的门面重导出）；写全名或 alias 即可消歧；import 只提供
-  目标模块**导出列表**中的名字（只看该模块的逐定义 `export`）；
+  目标模块**导出集**中的名字（模块头导出列表或逐定义 `export`）；
 - **构造子身份是「数据类型 + 构造子」**：data 构造子的 canonical 名是
   `Module.Data.Ctor`（entry 文件里是 `Data.Ctor`），record / trait 保持
   `Module.Name`。因此不同数据类型可以有同名构造子（`List.Nil` 与 `Vec.Nil`）；
