@@ -75,7 +75,10 @@ die() {
   exit 2
 }
 
-note() { printf '%s\n' "$*"; }
+note() {
+  # `--json -` 要求 stdout 只有 JSON；进度与检查都走 stderr。
+  if [ "$JSON_OUT" = "-" ]; then printf '%s\n' "$*" >&2; else printf '%s\n' "$*"; fi
+}
 
 while [ $# -gt 0 ]; do
   case $1 in
