@@ -80,12 +80,6 @@ Base_dObs.ml
 Base_dSource.ml
 Base_dStore.ml
 Base_dVersion.ml
-Codegen_dAssembly.ml
-Codegen_dDecl.ml
-Codegen_dOcaml_dModel.ml
-Codegen_dOcaml_dRender.ml
-Codegen_dRuntime.ml
-Codegen_dTerm.ml
 Core_dCanonical.ml
 Core_dConv.ml
 Core_dEval.ml
@@ -172,6 +166,12 @@ Vuna_dIr_dRepresent.ml
 Vuna_dIr_dRuntime.ml
 Vuna_dIr_dTail.ml
 Vuna_dIr_dValidate.ml
+Vuna_dTarget_dOcaml_dAssembly.ml
+Vuna_dTarget_dOcaml_dDecl.ml
+Vuna_dTarget_dOcaml_dModel.ml
+Vuna_dTarget_dOcaml_dRender.ml
+Vuna_dTarget_dOcaml_dRuntime.ml
+Vuna_dTarget_dOcaml_dTerm.ml
 Vuna_runtime.ml
 Wasm_dInstr.ml
 Wasm_dModel.ml
