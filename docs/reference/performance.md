@@ -662,6 +662,14 @@ A/B 读数一致）。`map-cold`（2111）必须清 query store 才算冷：基�
 
 **已量化否决的候选**（数据见 git 与 `_scratch` 探针，不要重复开题）：
 
+- **提高 OCaml 优化级别 / 内联阈值**（`build.sh` 的 `FLAGS`）：本机 `ocamlopt` 的
+  `-config` 是 `flambda: false`，`-O3` 因此是**空操作**——同一源码 `-O3` 与默认产物
+  **逐字节相同**（25,458,312 B，编译 CPU 12.66 s vs 12.63 s）。`-inline 10` 让编译
+  CPU +20%（12.63 → 15.12 s）、产物 +18%（29.99 MB），而冷 `check packages/compiler`
+  三对交替 10.52/11.26/11.19 vs 11.41/10.60/10.41（user），在噪声内。要动这一层必须先换
+  flambda 工具链（`pkgs.ocaml.override { flambdaSupport = true; }`），那是另一次实验，
+  不在本结论范围内。`-g` 只影响体积（25.3 → 21.2 MB，-16%），编译 CPU 不变
+  （12.83 → 12.92 s），保留（`#line` → DWARF 需要）。
 - **iface 哈希去排序（顺序无关折叠）**：把 `hashDefs`/`hashExports`/… 的「按名字插入
   排序 + 整表编码 + 摘要」改成逐项哈希的交换律折叠（双 lane Σh/Σh²）。
   （摘要用 SHA-256、载荷用 `Base.Bytes` 显式编码，「排序 + 整表编码」的结构不变，
