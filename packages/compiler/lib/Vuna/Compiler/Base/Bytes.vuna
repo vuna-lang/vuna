@@ -78,15 +78,15 @@ encTop f x = encConcat (f x [])
 
 -- | 和类型构造子序号：`#<n>;`。
 export encTag : Int -> List String -> List String
-encTag n acc = "#${strFromInt n};" :: acc
+encTag n acc = "#" :: strFromInt n :: ";" :: acc
 
 -- | 整数：`i<十进制>;`（负数带前置 `-`；无前导零）。
 export encInt : Int -> List String -> List String
-encInt n acc = "i${strFromInt n};" :: acc
+encInt n acc = "i" :: strFromInt n :: ";" :: acc
 
 -- | 字符串：`s<字节长度>:<原始字节>`（长度是字节数，不是字符数）。
 export encStr : String -> List String -> List String
-encStr s acc = "s${strFromInt (strLength s)}:" :: s :: acc
+encStr s acc = "s" :: strFromInt (strLength s) :: ":" :: s :: acc
 
 -- | 布尔：`b1` / `b0`。
 export encBool : Bool -> List String -> List String
@@ -95,7 +95,7 @@ encBool False acc = "b0" :: acc
 
 -- | 列表：`[<n>:<元素编码...>`（n = 元素个数）。
 export encList : (a -> List String -> List String) -> List a -> List String -> List String
-encList f xs acc = "[${strFromInt (lenOf xs)}:" :: encListGo f xs acc
+encList f xs acc = "[" :: strFromInt (lenOf xs) :: ":" :: encListGo f xs acc
 
 -- | 列表元素：正序 cons 到 acc 上（递归吃 tail；编码本身不拷贝子分片）。
 encListGo : (a -> List String -> List String) -> List a -> List String -> List String

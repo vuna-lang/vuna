@@ -346,6 +346,24 @@ load/parse 前缀 + iface 摘要 **~2.6 s** → 逐定义精化（`collectSigs-d
    代价是 wall 走依赖关键路径（base → compiler → cli），换来的是不重复精化；同一 store
    的第二遍也因此从 6.1 s 降到 0.23 s（**两段收敛**，见 §1）。成员依赖来自
    `Package.packageDependencies`（`checkMembersByLevel`）。
+11. **字符串当字符表 + 名字重复解析（已修两轮）**：冷 `check packages/compiler` 用工具链自采样
+   （`VUNA_OBS=3 VUNA_OBS_SAMPLE=cpu VUNA_OBS_INTERVAL=2000`，取 `args.stack[1]`）归因，
+   当时 5383 个样本里 **string↔`List Int` 20.9% + 容器/List 15.6%**：`strUnpack` 把整串摊成
+   cons cell，`splitOnDot`/`lastSeg`/`startsWith` 每次调用各摊一遍；`openModuleNames` 逐层
+   `nubNames` 是 O(n²) 叠加（实际 O(n³)）；`resolveModuleName` 同一名字切/拼两遍。
+   两轮处置（都不改语义、诊断与编码逐字节不变）：
+   - `splitOnDot`/`splitOnChar`/`containsDot`/`lastSeg`/`startsWith`/`endsWith` 改成
+     `strAt`/`strSubstring` 的索引扫描，只分配结果；`openModuleNames` 收集完再 `nubNames` 一次；
+     `resolveModuleName`/`resolvePathModule` 各自只算一次 `splitOnDot` / `joinDots`；
+   - `Base.Bytes` 的 `encTag`/`encInt`/`encStr`/`encList` 不再对每个原子做一次插值拼接，
+     改成分片直接 cons 进 difference list（顶层仍是一次 `strConcatMany`）。
+   读数（同机、空 store、3 轮、user）：**10.0 s → 7.1 s（-29%）**；冷 `check .` **20.5 s →
+   15.1 s（-26%）**；`minor_words` **6.42e9 → 1.63e9（-75%，51 GB → 13 GB）**。
+   本轮的测试面：`compiler` 全章 + `cli/steps_native` 通过（另修了 `depIfacesForToolSourceDetailed`
+   缺 `tool-closure` 探针导致的两条既有失败）。
+   下一轮剩下的顶部（同一份采样）：`Iface`/`Canonical` 的 `String.concat` 6.3%、`dtp_strHash` 6.2%、
+   `exportIndexOfModule`+`resolveModuleName` 7.7%（每次查导出现在都重解析模块名，没有按名字的
+   解析缓存）、`Lowering.Ty.renderTyGlobal` 3.0%、`Core.Eval.quote` 2.6%。
 
 ### 4.1 elab 内部的结构性开销（当前处置与读数）
 

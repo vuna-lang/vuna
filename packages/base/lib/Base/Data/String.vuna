@@ -85,21 +85,32 @@ trim s = trimLeft (trimRight s)
 export contains : String -> String -> Bool
 contains needle text = _containsChars (strUnpack needle) (strUnpack text)
 
--- | `text` 是否以 `prefix` 开头。
+-- | `text` 是否以 `prefix` 开头（逐字节比较，不经 `List Int`）。
 export startsWith : String -> String -> Bool
-startsWith prefix text = _startsWithChars (strUnpack prefix) (strUnpack text)
+startsWith prefix text =
+  let
+    lp = strLength prefix
+  in if lp > strLength text then False else sameBytes 0 prefix text 0 lp lp
 
 -- | `text` 是否以 `suffix` 结尾。
 export endsWith : String -> String -> Bool
 endsWith suffix text =
   let
     ls = strLength suffix
-  in let
     ltLen = strLength text
-  in if ls > ltLen then
-    False
+  in if ls > ltLen then False else sameBytes (ltLen - ls) suffix text 0 ls ls
+
+-- | 从 `off` 起比较 `pat[0..n)` 与 `text[off..off+n)`；`fuel` 只用于终止性检查。
+sameBytes : Int -> String -> String -> Int -> Int -> Int -> Bool
+sameBytes off pat text i n fuel =
+  if fuel <= 0 then
+    True
+  else if i >= n then
+    True
+  else if strAt pat i == strAt text (off + i) then
+    sameBytes off pat text (i + 1) n (fuel - 1)
   else
-    _startsWithChars (strUnpack suffix) (drop (ltLen - ls) (strUnpack text))
+    False
 
 -- | 把 `s` 重复 `n` 次（一次 `strConcatMany`，避免 O(n²) 拷贝）。
 export repeat : Nat -> String -> String

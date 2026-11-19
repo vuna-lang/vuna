@@ -201,12 +201,16 @@ checkImportAliasSyntax (imp :: rest) =
         onErrDiag (withImportSite imp.importSpan) (rnNoLoc1 (InvalidModuleAlias alias) alias)
 
 openModuleNames : List Import -> List String
-openModuleNames [] = []
-openModuleNames (imp :: rest) =
+openModuleNames imports = nubNames (openModuleNamesAll imports)
+
+-- 先按原顺序收集，末尾**一次**去重（逐层 `nubNames` 是 O(n²)）。
+openModuleNamesAll : List Import -> List String
+openModuleNamesAll [] = []
+openModuleNamesAll (imp :: rest) =
   if imp.importIsQualified then
-    openModuleNames rest
+    openModuleNamesAll rest
   else
-    nubNames ((::) (importName imp) (openModuleNames rest))
+    importName imp :: openModuleNamesAll rest
 
 -- 纯查找（不标记 used）：`import X` 或 `import X as Y` 里 `name` 对应的 import 模块名。
 export findImportModule : List Import -> String -> Maybe String
@@ -279,15 +283,20 @@ export resolveModuleName : List Module -> String -> Maybe String
 resolveModuleName modules name =
   case findModule modules name of
     Just _ => Just name
-    Nothing => resolvePathModule modules (splitOnDot name) (List.length (splitOnDot name) - 1)
+    Nothing =>
+      let
+        segs = splitOnDot name
+      in resolvePathModule modules segs (List.length segs - 1)
 
 resolvePathModule : List Module -> List String -> Int -> Maybe String
 resolvePathModule modules segs n =
   if n < 1 then
     Nothing
   else
-    case findModule modules (joinDots (takeSegsLocal n segs)) of
-      Just _ => walkNamespaceIndex modules (joinDots (takeSegsLocal n segs)) (dropFirst n segs)
+    let
+      joined = joinDots (takeSegsLocal n segs)
+    in case findModule modules joined of
+      Just _ => walkNamespaceIndex modules joined (dropFirst n segs)
       Nothing => resolvePathModule modules segs (n - 1)
 
 export exportsOf : List Module -> String -> Check (List ExportEntry)

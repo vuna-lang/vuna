@@ -122,35 +122,38 @@ memChar : Int -> List Int -> Bool
 memChar c [] = False
 memChar c (x :: rest) = x == c || memChar c rest
 
+-- | 从 `i` 起找字节 `c`：直接走 `strAt`，不把整串摊成 `List Int`。
+-- `fuel` 只用于终止性检查（每步前进一个字节）。
+scanFor : Int -> String -> Int -> Int -> Int -> Bool
+scanFor c s i n fuel =
+  if fuel <= 0 then
+    False
+  else if i >= n then False else if strAt s i == c then True else scanFor c s (i + 1) n (fuel - 1)
+
 -- | 字符串是否含 `.`（模块路径判定的快速路径）。
 export containsDot : String -> Bool
-containsDot s = memChar 46 (strUnpack s)
+containsDot s = scanFor 46 s 0 (strLength s) (strLength s)
 
 -- | 按 `.` 拆分模块路径 `A.B.C` → `["A","B","C"]`。
 export splitOnDot : String -> List String
-splitOnDot s = splitCharsOnDot (strUnpack s) [] []
+splitOnDot s = splitOnChar 46 s
 
 -- | 按任意分隔字符切分（`splitOnDot` 的泛化；内部标记名解码用）。
 export splitOnChar : Int -> String -> List String
-splitOnChar sep s = splitCharsOn sep (strUnpack s) [] []
+splitOnChar sep s = splitOnCharGo sep s 0 0 (strLength s) (strLength s + 1) []
 
--- | splitCharsOn。
-splitCharsOn : Int -> List Int -> List String -> List Int -> List String
-splitCharsOn sep [] acc seg = reverse (strPack (reverse seg) :: acc)
-splitCharsOn sep (c :: rest) acc seg =
-  if c == sep then
-    splitCharsOn sep rest (strPack (reverse seg) :: acc) []
+-- | 逐字节扫描并切段：段用 `strSubstring` 取，空段照旧保留。
+-- `fuel` 只用于终止性检查（每步前进一个字节，上界 = 字节数 + 1）。
+splitOnCharGo : Int -> String -> Int -> Int -> Int -> Int -> List String -> List String
+splitOnCharGo sep s start i n fuel acc =
+  if fuel <= 0 then
+    reverse (strSubstring start (n - start) s :: acc)
+  else if i >= n then
+    reverse (strSubstring start (i - start) s :: acc)
+  else if strAt s i == sep then
+    splitOnCharGo sep s (i + 1) (i + 1) n (fuel - 1) (strSubstring start (i - start) s :: acc)
   else
-    splitCharsOn sep rest acc (c :: seg)
-
--- | 把字符流按 `.` 切成段列表：`splitOnDot` 内部的展开实现，空段也保留。
-splitCharsOnDot : List Int -> List String -> List Int -> List String
-splitCharsOnDot [] acc seg = reverse (strPack (reverse seg) :: acc)
-splitCharsOnDot (c :: rest) acc seg =
-  if c == 46 then
-    splitCharsOnDot rest (strPack (reverse seg) :: acc) []
-  else
-    splitCharsOnDot rest acc (c :: seg)
+    splitOnCharGo sep s start (i + 1) n (fuel - 1) acc
 
 -- | 把已拆分的段列表的**最后一段**单独分出来：`["A","B"]` → `(["A"], "B")`；
 -- 空列表返回 `([], "")`。
@@ -169,8 +172,20 @@ joinDots (x :: rest) = "${x}.${joinDots rest}"
 -- | 名字的**末段**（`Base.Trait.Monad.fmap` → `fmap`；无点时返回原名本身）。
 -- 名字末段/前缀的唯一入口：`Elab.Meta.baseNameOf`、`Elab.Prelude` 的短名比较、
 -- `Elab.Term.Impl.shortGlobalName`、`Frontend.Ast.ctorShortName` 都转发到这里。
+-- 从右往左扫 `.`，只分配末段本身（不切整串）。
 export lastSeg : String -> String
-lastSeg name = secondOf (splitLastDot (splitOnDot name))
+lastSeg name = lastSegGo name (strLength name - 1) (strLength name + 1)
+
+lastSegGo : String -> Int -> Int -> String
+lastSegGo name i fuel =
+  if fuel <= 0 then
+    strSubstring (i + 1) (strLength name - i - 1) name
+  else if i < 0 then
+    name
+  else if strAt name i == 46 then
+    strSubstring (i + 1) (strLength name - i - 1) name
+  else
+    lastSegGo name (i - 1) (fuel - 1)
 
 -- | 名字的**模块前缀**（`Base.Trait.Monad.fmap` → `Base.Trait.Monad`；无点时返回 `""`）。
 export prefixOfName : String -> String
