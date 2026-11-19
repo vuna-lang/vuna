@@ -514,27 +514,25 @@ sctCheck comp defTbl ctors projs facts msg =
         (appendMessage " [SCT 放弃：size-change 图闭包未收敛（每对函数上限 ${strFromInt tableGraphCap} 张图，${strFromInt sctClosureFuel} 轮）]" msg)
 
 -- ===============================================================
--- 12. fuel 线程判据：整组函数的第 0 个形参是 Int fuel，函数体以
--- `if fuel <= 0 then <基例> else <body>` 守卫；每条组内调用把 callee 的 fuel
--- 传成 caller 的 fuel（`=`）或 `fuel - k`（k>0，严格下降）；每个环至少一条严格边。
--- 则任意调用链的 fuel 严格下降，触底即返回基例 ⇒ 终止（Int 可负也安全：
--- callee 在 fuel <= 0 时不再递归）。这是通用规则，不涉及具体函数/豁免。
+-- 12. fuel 线程判据：组内函数的某个形参是 Int fuel（通常第 0 个，也可能在别的
+-- 位置，如 `elsePartDoc blocky fuel …`），函数体以 `if fuel <= 0 then <基例> else <body>`
+-- 守卫；每条组内调用把 callee 的 fuel 传成 caller 的 fuel（`=`）或 `fuel - k`（k>0，
+-- 严格下降）；每个环至少一条严格边。则任意调用链的 fuel 严格下降，触底即返回基例
+-- ⇒ 终止（Int 可负也安全：callee 在 fuel <= 0 时不再递归）。不涉及具体函数/豁免。
 -- ===============================================================
-firstParamName : List Pat -> Maybe String
-firstParamName [] = Nothing
-firstParamName (p :: rest) =
+paramNamesOf : List Pat -> List String
+paramNamesOf [] = []
+paramNamesOf (p :: rest) =
   case p of
-    PVar n sp => Just n
-    _ => Nothing
+    PVar n sp => n :: paramNamesOf rest
+    _ => paramNamesOf rest
 
-firstParamOf : String -> HashMap String (List (Pair (List Pat) Expr)) -> String
-firstParamOf name defTbl =
-  case clausesOfDefTbl name defTbl of
-    [] => ""
-    cl :: rest =>
-      case firstParamName (firstOf cl) of
-        Just n => n
-        Nothing => ""
+paramIndexGo : List Pat -> String -> Int -> Maybe Int
+paramIndexGo [] name i = Nothing
+paramIndexGo (p :: rest) name i =
+  case p of
+    PVar n sp => if n == name then Just i else paramIndexGo rest name (i + 1)
+    _ => paramIndexGo rest name (i + 1)
 
 hasFuelGuard : String -> Expr -> Bool
 hasFuelGuard p0 (EIf c t el sp) =
@@ -543,48 +541,113 @@ hasFuelGuard p0 (EIf c t el sp) =
     Nothing => False
 hasFuelGuard p0 _ = False
 
--- 单个调用点：callee 第 0 实参是否 = caller 的 fuel（False）或 fuel-k（True）。
-siteFuelStrict : String -> Site -> Maybe Bool
-siteFuelStrict callerFuel site =
-  case nthExpr site.siteArgs 0 of
+guardParamGo : List String -> Expr -> Maybe String
+guardParamGo [] body = Nothing
+guardParamGo (n :: rest) body = if hasFuelGuard n body then Just n else guardParamGo rest body
+
+-- | 首个 clause 里被 `<= 0` 守卫的形参名（fuel 参数）。
+fuelParamNameOf : String -> HashMap String (List (Pair (List Pat) Expr)) -> Maybe String
+fuelParamNameOf name defTbl =
+  case clausesOfDefTbl name defTbl of
+    [] => Nothing
+    cl :: rest => guardParamGo (paramNamesOf (firstOf cl)) (secondOf cl)
+
+-- | callee 的 fuel 实参位置：有守卫时取守卫形参；否则按「与 caller 的 fuel 同名」的
+-- 形参定位（同一组里命名通常一致），都没有则退回第 0 个参数。
+fuelParamIndexOf : String -> String -> HashMap String (List (Pair (List Pat) Expr)) -> Maybe Int
+fuelParamIndexOf callee callerFuel defTbl =
+  case clausesOfDefTbl callee defTbl of
+    [] => Just 0
+    cl :: rest =>
+      let
+        pats = firstOf cl
+      in case fuelParamNameOf callee defTbl of
+        Just n => paramIndexGo pats n 0
+        Nothing =>
+          case paramIndexGo pats callerFuel 0 of
+            Just i => Just i
+            Nothing => Just 0
+
+callerFuelName : String -> HashMap String (List (Pair (List Pat) Expr)) -> String
+callerFuelName name defTbl =
+  case fuelParamNameOf name defTbl of
+    Just n => n
+    Nothing =>
+      case clausesOfDefTbl name defTbl of
+        [] => ""
+        cl :: rest =>
+          case paramNamesOf (firstOf cl) of
+            [] => ""
+            n :: rest2 => n
+
+paramsOf : String -> HashMap String (List (Pair (List Pat) Expr)) -> List String
+paramsOf name defTbl =
+  case clausesOfDefTbl name defTbl of
+    [] => []
+    cl :: rest => paramNamesOf (firstOf cl)
+
+-- 单个调用点：callee 的 fuel 实参是否 = caller 的 fuel（False）或 fuel-k（True）。
+-- caller 有守卫时按守卫变量名匹配；没有守卫时按「实参是 caller 的某个形参 / 形参减 k」
+-- 判弱边 / 严格边（这种调用者的环另外由 `fuelAcceptable` 的无守卫子图判定兜住）。
+siteFuelStrict : List String -> Maybe String -> Maybe Int -> Site -> Maybe Bool
+siteFuelStrict callerParams callerGuard calleeIdx site =
+  case calleeIdx of
     Nothing => Nothing
-    Just a =>
-      case a of
-        EVar n sp => if rnameKey n == callerFuel then Just False else Nothing
-        EApp (EVar op osp) xs sp =>
-          if isSubOpName (rnameKey op) then
-            case xs of
-              [EVar n nsp, EInt k ksp] => if rnameKey n == callerFuel then if k > 0 then Just True else Nothing else Nothing
-              _ => Nothing
-          else
-            Nothing
-        _ => Nothing
+    Just i =>
+      case nthExpr site.siteArgs i of
+        Nothing => Nothing
+        Just a =>
+          case callerGuard of
+            Nothing =>
+              case a of
+                EApp (EVar op osp) xs sp =>
+                  if isSubOpName (rnameKey op) then
+                    case xs of
+                      [EVar n nsp, EInt k ksp] => if k > 0 && memName (rnameKey n) callerParams then Just True else Just False
+                      _ => Just False
+                  else
+                    Just False
+                _ => Just False
+            Just callerFuel =>
+              case a of
+                EVar n sp => if rnameKey n == callerFuel then Just False else Nothing
+                EApp (EVar op osp) xs sp =>
+                  if isSubOpName (rnameKey op) then
+                    case xs of
+                      [EVar n nsp, EInt k ksp] => if rnameKey n == callerFuel then if k > 0 then Just True else Nothing else Nothing
+                      _ => Nothing
+                  else
+                    Nothing
+                _ => Nothing
 
 fuelEdgesOf : List String -> HashMap String (List (Pair (List Pat) Expr)) -> List Site -> List (Pair (Pair (Pair String String) Int) Span)
-fuelEdgesOf comp defTbl sites = fuelEdgesGo comp defTbl sites True []
+fuelEdgesOf comp defTbl sites = fuelEdgesGo comp defTbl sites []
 
-fuelEdgesGo : List String -> HashMap String (List (Pair (List Pat) Expr)) -> List Site -> Bool -> List (Pair (Pair (Pair String String) Int) Span) -> List (Pair (Pair (Pair String String) Int) Span)
-fuelEdgesGo comp defTbl [] ok acc = acc
-fuelEdgesGo comp defTbl (s :: rest) ok acc =
-  case siteFuelStrict (firstParamOf s.siteCaller defTbl) s of
-    Nothing => fuelEdgesGo comp defTbl rest False acc
-    Just strict =>
-      fuelEdgesGo
-        comp
-        defTbl
-        rest
-        ok
-        (Pair (Pair (Pair s.siteCaller s.siteCallee) (if strict then 1 else 0)) (Span "" 0 0 0 0 0 0) :: acc)
+-- | 收集调用边：识别出「fuel / fuel-k」的站点标严格边，其余**组内**站点按弱边计入。
+--   把未识别站点当弱边（而不是丢掉）是判据成立的前提：丢掉会让「弱环」在图上消失。
+fuelEdgesGo : List String -> HashMap String (List (Pair (List Pat) Expr)) -> List Site -> List (Pair (Pair (Pair String String) Int) Span) -> List (Pair (Pair (Pair String String) Int) Span)
+fuelEdgesGo comp defTbl [] acc = acc
+fuelEdgesGo comp defTbl (s :: rest) acc =
+  let
+    inGroup = memName s.siteCallee comp
+    mode =
+      case siteFuelStrict (paramsOf s.siteCaller defTbl) (fuelParamNameOf s.siteCaller defTbl) (fuelParamIndexOf s.siteCallee (callerFuelName s.siteCaller defTbl) defTbl) s of
+        Just True => 1
+        Just False => 0
+        Nothing => 0
+    acc2 =
+      if inGroup then
+        Pair (Pair (Pair s.siteCaller s.siteCallee) mode) (Span "" 0 0 0 0 0 0) :: acc
+      else
+        acc
+  in fuelEdgesGo comp defTbl rest acc2
 
--- | 单个成员是否有 `fuel <= 0` 守卫（取首个 clause 的守卫变量）。
+-- | 单个成员是否有 `fuel <= 0` 守卫（取首个 clause 里的守卫参数）。
 memberGuarded : String -> HashMap String (List (Pair (List Pat) Expr)) -> Bool
 memberGuarded f defTbl =
-  case clausesOfDefTbl f defTbl of
-    [] => False
-    cl :: cls =>
-      case firstParamName (firstOf cl) of
-        Nothing => False
-        Just p0 => hasFuelGuard p0 (secondOf cl)
+  case fuelParamNameOf f defTbl of
+    Just _ => True
+    Nothing => False
 
 unguardedOf : List String -> HashMap String (List (Pair (List Pat) Expr)) -> List String
 unguardedOf [] defTbl = []
@@ -628,11 +691,8 @@ tryFuelThread comp defTbl ctors projs facts msg =
     sites = siteCollect comp ctors projs defTbl facts
     edges = fuelEdgesOf comp defTbl sites
     strictCount = length (filterModes (map edgeModeOf edges))
-  in if strictCount > 0 then
-    if fuelAcceptable comp defTbl edges then
-      if hasWeakCycle comp edges then ErrC msg else OkC 0
-    else
-      ErrC msg
+  in if strictCount > 0 && fuelAcceptable comp defTbl edges && not (hasWeakCycle comp edges) then
+    OkC 0
   else
     ErrC msg
 

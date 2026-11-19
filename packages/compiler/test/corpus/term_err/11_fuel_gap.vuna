@@ -1,0 +1,11 @@
+-- 负例：fuel 穿线论证要求**每个**组内调用都传 `fuel` / `fuel - k`。
+-- 这里 `f (id fuel)` 传的是未知表达式；旧实现会把这个站点从调用图里丢掉，
+-- 只剩 `f (fuel - 1)` 的严格边 ⇒ 图上无弱环 ⇒ 误判可终止。
+f : Int -> Int
+f fuel = if fuel <= 0 then 0 else f (fuel - 1) + f (id fuel)
+
+id : Int -> Int
+id x = x
+
+main : Int
+main = 0
