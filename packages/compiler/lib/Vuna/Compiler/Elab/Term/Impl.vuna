@@ -3117,6 +3117,8 @@ identityArgs i k (a :: rest) =
     _ => False
 
 -- 恒等结果索引：`F x1..xk` 且 xi 就是第 i 个族 binder（de Bruijn index = teleLen-1-i）。
+-- `length args <= k`：非空且不超过 telescope 长度。无字段构造子
+-- （`Nothing : {a} -> Maybe a`）取等号，族参数直接由期望类型给出，不必再建元变量。
 ctorIdentitySpine : String -> DtCtor -> Bool
 ctorIdentitySpine fam ctor =
   let
@@ -3125,7 +3127,7 @@ ctorIdentitySpine fam ctor =
   in case ctorSpineOfType (dropPis (dtCtorType ctor)) of
     Pair h _ =>
       if h == fam then
-        if length args > 0 then if length args < k then identityArgs 0 k args else False else False
+        if length args > 0 then if length args <= k then identityArgs 0 k args else False else False
       else
         False
 

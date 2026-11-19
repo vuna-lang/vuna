@@ -382,6 +382,7 @@ load/parse 前缀 + iface 摘要 **~2.6 s** → 逐定义精化（`collectSigs-d
 | `Elab.Data.elabCtor` | 每个构造子两次从索引表重建 globals 列表 | 每趟算一次 |
 | `Elab.Data.checkViaDataDecls` | 每条声明重算去装箱候选集（含环检测） | 每趟算一次 |
 | `Ctx` 求值环境 | `evalCtx`/`varTypeValue` 每次用 `ctxEnvAt` 重建整份环境 | 绑定点前插维护（level 绝对编号 ⇒ 已有 binder 的 level 不变） |
+| `Impl.vuna` 的 `ctorIdentitySpine` | 无字段构造子（`Nothing` / `Nil`）的等长恒等脊被排除，每个实例先建元变量再整树 conv | `length args <= k`，族参数直接取自期望类型（构造子密集探针 750 → 710 ms） |
 
 读数（16 核、空 store、与「处置前源码」构建的编译器同窗口交替、各 8 次最小）：
 
