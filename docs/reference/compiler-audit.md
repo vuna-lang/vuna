@@ -66,9 +66,9 @@ ID 是稳定引用（`层前缀-序号`），改动时保留编号，删掉实�
 | EL-04 | `Measure.vuna` 的 `weakReach` | ⚠️C | 耗尽返回 `False`=无环（方向是放过） | 开放 |
 | EL-05 | `Measure.vuna` 的正性守卫 | C | 只认 `x <= 0` / `0 >= x` / `x < 1`；`n > 0` / `n >= 1` / `n /= 0` 不认 | 开放 |
 | EL-06 | `Measure.vuna` 的 `isMapLike` | C | 按点后短名硬编码 `map/traverse/…` | 开放 |
-| EL-07 | `Case.vuna` 的 `unifyIdxList` | C | 耗尽走 `TC_ImpossibleBranchIndex`（误导性错误码） | 开放 |
-| EL-08 | `Case.vuna` 的 `occursLevel` | ⚠️C | 耗尽返回 `False`=无 occurs | 开放 |
-| EL-09 | `Case.vuna` 的 `bindCtorTele` | C | 失败/残参时直接当可达分支 | 开放 |
+| EL-07 | `Case.vuna` 的 `unifyIdxList` | C | 耗尽走 `TC_ImpossibleBranchIndex`（误导性错误码） | 已清（耗尽报 `TC_IndexFuel`） |
+| EL-08 | `Case.vuna` 的 `occursLevel` | ⚠️C | 耗尽返回 `False`=无 occurs | 已清（耗尽按保守方向 `True`） |
+| EL-09 | `Case.vuna` 的 `bindCtorTele` | C | 失败/残参时直接当可达分支 | 已清（绑定失败报 ICE；IndexFuel 保守判可达） |
 | EL-10 | `Case.vuna` 的 `hasCatchAll` | A | 任何非 `PCon` 头（含 `PInt`/`PStr`/`PRecord`）都算兜底 → 跳过穷尽检查 | 已清（只认 `PVar`/`PWild`） |
 | EL-11 | `Records.vuna` 的 `desugarPatternFuel` | ⚠️A | 耗尽 `OkC pat` 静默返回半降级模式（对照组 `desugarExprFuel` 是 `icFuel`） | 已清（耗尽报 `icFuel`） |
 | EL-12 | `Match.vuna` 的 `familyCovered` | C | 缺族信息时补 `_` 兜底 → 注释自认会报假 `missing` | 开放 |
@@ -129,14 +129,14 @@ ID 是稳定引用（`层前缀-序号`），改动时保留编号，删掉实�
 | IR-03 | `Core/Term.vuna` 的 `substVarAt` | ⚠️A | `TRecUpd` 分支用 `idx - length tele`，与 `shift` 的 `depth + length tele` 相反 | 已清 |
 | IR-04 | `Ir/Anf.vuna` | ⚠️C | 燃料耗尽静默返回未变换子项，`anfProgramDefs` 恒 `Ok` | 已清（预算按程序规模派生） |
 | IR-05 | `Ir/Cps.vuna` | ⚠️C | 20+ 处 `if fuel <= 0 then e` 返回半 CPS 形态 | 已清（各 pass 预算按项规模派生） |
-| IR-06 | `Ir/Cps.vuna` 的 `mCpsApply` | A | 耗尽返回 `IrGlobal "?"` 占位 | 开放 |
+| IR-06 | `Ir/Cps.vuna` 的 `mCpsApply` | A | 耗尽返回 `IrGlobal "?"` 占位 | 已清（耗尽退化成直接应用，不再占位） |
 | IR-07 | `Ir/Cps.vuna` 的 `mStepsDef` | A | 注入的 `machineRun` 全局不在 `irDefDeps` → SCC/可达性看不见 | 开放 |
 | IR-08 | `Ir/Cps.vuna` 的 `transformDef` | D | 直接风格 pass（`transformDirect` / `transformDef` / `selfBody`）与 def 签名已保留；机器 pass（`mHandlers` / `mSyms` / `mApplys` / `mMarked` / `mSteps`）仍属类型改变型，节点类型槽继续置空 | 开放（部分） |
 | IR-09 | `Ir/Cps.vuna` 的 `isHandleCombinator` | C | handler 组合子按类型判据（结果 `Eff` + clause 参数）；opH 为裸类型变量的核心组合子（`handleCore` / `handleCoreAt` / `handleCoreLin` / `handleWith` / `handleWithAt`）用显式 allowlist，不再用字符串启发式 | 已清 |
 | IR-10 | `Ir/Cps.vuna` 的 `isEffResultTy` 注释 | C | 曾与 `Lowering.effResultTyOf` 的实参口径不符 | 已清（对齐注释） |
 | IR-11 | `Ir/Validate.vuna` 的 `ctorFieldCountOf` | C | 查不到构造子当 0 字段（跨单元表不全） | 开放 |
-| IR-12 | `Ir/Validate.vuna` 的 `IrTyVar` | C | 只查 `i >= 0`，不查族 arity | 开放 |
-| IR-13 | `Lowering/Ty.vuna` 的 `renderFieldTy` | C | 解析不到字段类型时凭空分配 `IrTyVar slot`，抬高声明 arity | 开放 |
+| IR-12 | `Ir/Validate.vuna` 的 `IrTyVar` | C | 只查 `i >= 0`，不查族 arity | 已清（声明体槽按本声明 arity 校验） |
+| IR-13 | `Lowering/Ty.vuna` 的 `renderFieldTy` | C | 解析不到字段类型时凭空分配 `IrTyVar slot`，抬高声明 arity | 已清（解析不到报 ICE；arity 计入额外槽） |
 | IR-14 | `Lowering/Env.vuna` 的 `usedTableFix` | C | 64 轮未收敛静默取近似 | 开放 |
 | IR-15 | `Lowering/Env.vuna` 的 `defTblOf`/`findDtDef` | C | 同键「后插优先」vs「首匹配」，重名时口径不同 | 已清（语义一致：重复名取靠前的一条；注释纠正） |
 | IR-16 | `Lowering/Program.vuna` 的 `zipFieldNames` | C | 字段表与实参表长度不一静默截断 | 开放 |
@@ -159,10 +159,10 @@ ID 是稳定引用（`层前缀-序号`），改动时保留编号，删掉实�
 | CG-07 | `Native/Runtime.vuna` 的 `remove_tree` | ⚠️C | 每层 40 KiB、无栈守卫、`c_strcpy` 无界 | 开放 |
 | CG-08 | `Wasm/Runtime.vuna` 的 `rt_pathCopyRel` | ⚠️A | 无长度上限，覆盖 iov/scratch | 已清（按目标区容量 trap） |
 | CG-09 | `Wasm/Runtime.vuna` 的原子写 | C | 临时名 `<path>.tmp` 无 pid（另两端有） | 已清（时间+序号） |
-| CG-10 | `Wasm/Render.vuna` 的 `renderInstrFlat` | C | 复合指令返回 `""` → 静默抹掉 | 开放 |
+| CG-10 | `Wasm/Render.vuna` 的 `renderInstrFlat` | C | 复合指令返回 `""` → 静默抹掉 | 已清（复合指令复用结构化渲染压平） |
 | CG-11 | `Wasm/Step.vuna` + `Module` 的 step 发射 | D | 整段死机器 + 9 类型/4 全局仍发射 + 注释与实现相反 | 已清（文件与发射已删） |
-| CG-12 | `Codegen/Term.vuna` 的 cleanup 兜底 | C | 硬上限 256（另两端无） | 开放 |
-| CG-13 | `Codegen/Term.vuna` 的 `isTty` | C | 看 stdout；native 看 stdin；wasm 恒 False | 开放 |
+| CG-12 | `Codegen/Term.vuna` 的 cleanup 兜底 | C | 硬上限 256（另两端无） | 已清（预算 = 进入时待跑条数） |
+| CG-13 | `Codegen/Term.vuna` 的 `isTty` | C | 看 stdout；native 看 stdin；wasm 恒 False | 已清（三端按 stdout；wasm 无 isatty，保守 False） |
 | CG-14 | `Codegen/Decl.vuna` 的 `recordFieldsOf` | C | 字段名表与类型表长度不一静默截断 | 开放 |
 | CG-15 | `Native/Module.vuna` 的 `genExprAt` | C | 定义体固定 100000 | 开放 |
 | CG-16 | `Wasm/Runtime.vuna` 的 `fsRemoveTree` | B | 只 unlink / 删空目录 | 开放 |
@@ -177,7 +177,7 @@ ID 是稳定引用（`层前缀-序号`），改动时保留编号，删掉实�
 | `fsReadFile` > 8 MiB | 全量 | io 错误（8 MiB 上界） | 全量 |
 | 非 try FS 失败 | exit 2 | 静默默认值 | trap |
 | `strPack` 越界 | 抛异常 | 截断低 8 位 | 截断低 8 位 |
-| `isTty` | stdout | stdin | 恒 False |
+| `isTty` | stdout | stdout | 恒 False（WASI 无 isatty，保守） |
 | 零参顶层定义 | 初始化时求值 | 每次引用重新调用 | `_start` 一次 |
 | 原子写临时名 | `<path>.<pid>.tmp` | `<path>.<pid>.tmp` | `<path>.tmp<µs><seq>` |
 
