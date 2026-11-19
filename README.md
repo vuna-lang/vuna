@@ -158,7 +158,8 @@ dune/OCaml 项目，只用 `ocamlopt` 编译生成的种子和程序。
 | [.agents/README.md](.agents/README.md) | AI 规则与场景技能索引（worktree、提交、探索、性能调试） |
 | [docs/architecture.md](docs/architecture.md) | 子系统地图：五条链路、入口符号、连带改动、测试标签 |
 | [docs/architecture-target.md](docs/architecture-target.md) | 终态架构：大方向、不变量、已决决策与非目标 |
-| [docs/reference/language.md](docs/reference/language.md) | core-v0 语法、模块系统、import 与导出规则 |
+| [docs/reference/language.md](docs/reference/language.md) | core-v0 语义、模块系统、import 与导出规则 |
+| [docs/reference/frontend-syntax.md](docs/reference/frontend-syntax.md) | 前端语法：表面形式、降级目标、工具约定、未支持与已决边界 |
 | [docs/reference/type-system.md](docs/reference/type-system.md) | 类型系统：宇宙/kind、索引归纳族、依赖匹配、相等证据、擦除、终止性 |
 | [docs/reference/qtt.md](docs/reference/qtt.md) | QTT：quantity 0/1/ω、用量检查、线性数据/记录、线性 ST 子集 |
 | [docs/reference/records-traits.md](docs/reference/records-traits.md) | 记录、trait / 实例 / `deriving`、`do` / Monad / 动作 |

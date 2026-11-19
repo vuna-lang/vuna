@@ -1,0 +1,241 @@
+# 前端语法：表面形式、降级与边界
+
+本文是 vuna **表面语法**的唯一清单：每种写法长什么样、解析后降级成什么、工具面怎么处理、
+哪些形式**不支持**以及为什么。语义规则不放这里——每张表的「语义」列指向对应主题页。
+
+阅读顺序：
+
+- 想知道「这个写法是什么意思」→ [language.md](language.md) / [type-system.md](type-system.md)
+  / [qtt.md](qtt.md) / [records-traits.md](records-traits.md) / [operators.md](operators.md)
+  / [templates.md](templates.md) / [effects.md](effects.md)；
+- 想知道「新增一个写法要动哪里、值不值得」→ §10 成本模型；
+- 想知道「为什么不支持 X」→ §11 未支持与已决边界。
+
+## 0. 分层约定
+
+```text
+源码文本 → Lexer → Parser/Ast（surface，含糖）→ Loader（fixity/section/do/模板/宏）
+        → Rast（名字已解析，糖已消失）→ Elab → Core → IR → 后端
+```
+
+- **表面语法只活到 `Frontend.Ast`**：`EInfix` / `EBacktick` / `ESect*` / `EParen` 是 parser
+  中间产物，`Loader.Fixity.reorderProgram` 之后必须消失；`Loader.Resolve` 对残留报 internal error。
+- 部分糖**不新增 AST 构造子**，而用保留名编码（`@vuna@list@*` / `@vuna@handle` /
+  `@vuna@macro@*` / `?hole`）：列表字面量、`perform` / `handle`、`f@name`、行条目
+  `[Op@name]`、洞、内置宏都走这条路。新增形式优先考虑这条路径（§10）。
+- **工具面看的是 `Frontend.Ast` 原形**：`Fmt` 按源码顺序打印、`Index`/`Lsp` 扫 binder 与引用、
+  `Lint` 做归一化建议。任何表面形式都必须在这三处有明确处理，否则工具会漂移。
+
+表格约定：
+
+- 「入口」写 `模块.符号`（不写行号，行号会漂；定位用 `vuna map find`）；
+- 状态只有三种：**支持** / **不支持（决定）** / **待评估**。
+
+## 1. 词法
+
+| 形式 | 写法 / 规则 | 入口 |
+| --- | --- | --- |
+| 行注释 | `--` 到行尾 | `Frontend.Lexer` |
+| 块注释 | `{- ... -}`，可嵌套 | `Frontend.Lexer` |
+| 标识符 | `[A-Za-z_][A-Za-z0-9_']*`，允许尾随 `'` | `Frontend.Lexer` |
+| 点号并 token | `.` 后接标识符时并入同一个 token（`p.x`、`A.B.c` 都是单 token）；Loader 再拆成字段链 / 模块路径。代价：限定运算符 `A.+` 不可达 | `Frontend.Lexer`、`Loader.Resolve` |
+| 内部名 | `@vuna@...` 只由 parser / loader 合成，源码写不出 | `Frontend.Lexer`、`Loader.Resolve` |
+| 整数 | 纯十进制，上限 63-bit | `Frontend.Lexer` |
+| 浮点 | 只有 `digits.digits`；无指数、无 `1.`、无前导 `.` | `Frontend.Lexer`、[floats.md](floats.md) |
+| 负号 | 不是字面量的一部分：`-1` 由 parser 折成负字面量，`-e` 展开成 `negate e` | `Frontend.Parser` |
+| 十六进制 / 下划线数字 | **不支持** | — |
+| 单行字符串 | `"..."` | `Frontend.Lexer` |
+| 多行字符串 | `"""..."""`，内容逐字，只丢开引号后的一个换行；不做 dedent | `Frontend.Lexer`、[templates.md](templates.md) |
+| 转义 | 仅 `\n \t \r \" \\ \' \$`；未知转义报错；无 raw string / `\u` | `Frontend.Lexer` |
+| 插值 | `"hi ${expr}"`，洞内是完整表达式 token 流 | `Frontend.Lexer`、`Loader.Resolve`、[templates.md](templates.md) |
+| 运算符字符集 | `! $ % & * + - . / < = > ? @ \ ^ \| ~ :` 连续成一个符号 token | `Frontend.Lexer.isOpChar` |
+| 保留语法符号 | `->` `=` `\|` `,` `\` `=>` `:` `.` `` ` `` 与括号 / 方括号 / 花括号；不能当可定义名 | `Frontend.Parser.Support.isSyntaxSym` |
+| layout | offside：顶层声明、`data` 构造子块、`case` 分支、`let`/`where` 绑定按块列对齐；跨行表达式必须缩进超过所在块列 | `Frontend.Parser` |
+| 关键字 | 硬关键字表见 `Frontend.Lexer.isKeyword`；`alias` / `boxed` / `export` 是软关键字（只在声明位置特定上下文生效） | `Frontend.Lexer` |
+| 私有构造子约定 | `_` 紧邻大写字母的标识符在模式里按构造子解析（`_C`）；单独 `_` 仍是通配，`_x` 是变量 | `Frontend.Parser.Support` |
+
+## 2. 表达式
+
+| 形式 | 例子 | 降级 / 语义落点 | 入口 |
+| --- | --- | --- | --- |
+| 应用 | `f a b` | `EApp` | `Frontend.Parser` |
+| 实例名覆盖（应用） | `f@audit x` | `f (@vuna@inst@arg audit) x`，在第一个隐式 String binder 处消费 | `Frontend.Parser`、`Elab.Term.Impl` |
+| 行条目实例名（后置） | `e @audit` | `@vuna@row@at` 编码，行展开期使用 | `Frontend.Parser`、`Elab.Term.Impl` |
+| 中缀 | `a + b` / `` a `f` b `` | 先收 `EInfix` / `EBacktick`，Loader 按可见 fixity 重排成 `EApp`；未知符号运算符报错 | `Loader.Fixity`、[operators.md](operators.md) |
+| section | `(+)` / `(+ e)` / `(e +)` | `EVar op` / lambda；直接应用 `(+ e) a` 折叠成 `a + e`（不生成 lambda） | `Loader.Fixity` |
+| `>>` | `a >> b` | `(>>=) a (\_ => b)`（用调用点可见的 `>>=`） | `Loader.Fixity.infixTerm` |
+| 一元负号 | `-1` / `-e` | 负字面量 / `negate e` | `Frontend.Parser` |
+| `if` | `if c then a else b` | `TIf`（三段必写） | `Elab.Term.Impl` |
+| `case` | `case e of pat => body` | `Elab.Match` 模式矩阵；字面量分支降成 `if` 链；单 scrutinee | `Elab.Match`、[type-system.md](type-system.md) |
+| `let` | `let` + 绑定块 + `in body` | 顺序 let：`TApp (TLam x body) value` | `Elab.Term.Impl`、[language.md](language.md) |
+| `where` | `f x = e where` + 绑定块 | 函数体后的绑定块（每个绑定必须写签名） | `Frontend.Parser`、`Elab.Term.Support`、[language.md](language.md) |
+| lambda | `\x, y => e` | `ELam`；参数只能是名字（逗号分隔，无 `->` 形式、无参数模式） | `Frontend.Parser` |
+| `do` | `pat <- e` / 裸表达式 | do 链（`@vuna@do@bind@*` 标记）；**最后一条必须是裸表达式**；不接受 `let`；`pat` 语义只允许变量 / `_` | `Loader.Resolve`、[records-traits.md](records-traits.md) |
+| `perform` | `perform (Print s)` | `Base.Effect.Core.performCore` | `Elab.Term.Impl`、[native-effects.md](native-effects.md) |
+| `handle` | `handle c { return x -> e`，随后每个 `C p k -> e` 一行，`}` 收尾 | `handleWith` / `handleWithAt` | `Elab.Term.Impl`、[native-effects.md](native-effects.md) |
+| 记录构造 | `Point { y = 2, x = 1 }` | 合成位置构造子应用；字段必须写全、必须写 `=` | `Elab.Records`、[records-traits.md](records-traits.md) |
+| 记录更新 | `{ p \| x = 3 }` | `TRecUpd`（语义 = 单分支 case） | `Elab.Term.Impl` |
+| 字段访问 | `p.x` / `s.start.x` | `TProj`；刚性类型变量走 `HasField` | `Elab.Term.Impl`、[records-traits.md](records-traits.md) |
+| 列表字面量 | `[]` / `[a, b]` | 保留名 `@vuna@list@nil` / `@vuna@list@cons`，按期望族展开成 `Nil` / `(::)` | `Elab.Term.Impl`、[language.md](language.md) |
+| 行字面量 | `[Fetch]` / `[ConsoleOp@audit]` | 与列表同一语法；行位置的元素展开成 `Named "default"/"audit" ...` | `Elab.Term.Impl`、[effects.md](effects.md) |
+| 模板字符串 | `"hi ${name}"` | `Base.Trait.Interp.interp e` + `++` 链 | `Loader.Resolve`、[templates.md](templates.md) |
+| 洞 | `_` / `?name` | goal（check 位必须有期望类型） | `Elab.Term.Support`、[language.md](language.md) |
+| 内置宏 | `dbg! x` / `obs! x` / `mark! name` | `Loader.Expand` 展开成隐藏 runtime 原语 | `Loader.Expand`、[observability.md](observability.md) |
+| **不支持** | tuple `(a, b)`、unit `()`、`(e : T)` 标注、`$` / `\|>`、guard、`\case`、range、comprehension | 见 §11 | — |
+
+## 3. 模式
+
+| 形式 | 例子 | 说明 | 入口 |
+| --- | --- | --- | --- |
+| 构造子 | `C p q`、`x :: xs`、`Just y` | 同名构造子按期望族 / scrutinee 族定向解析 | `Elab.Match`、[language.md](language.md) |
+| 符号构造子 | `(<+>) p q`、`(::)` | 声明位带括号，使用位裸写 | `Frontend.Parser` |
+| 字面量 | `42` / `"s"` | `Int` / `String` 分支；必须带变量 / `_` 兜底 | `Elab.Match` |
+| 变量 / 通配 | `x` / `_` | 兜底只能放最后一个分支 | `Elab.Match` |
+| as-pattern | `x@pat` / `_@x` | 整个值绑定到 `x`；case 分支里降成 `let` | `Elab.Match`、`Elab.Records` |
+| 记录模式 | `R { x = p, y }` | 可省略字段（= 通配）；`{ y }` 是 pun | `Elab.Records` |
+| 列表模式 | `[]` / `[a, b]` / `x :: xs` | 按 scrutinee 族展开 | `Elab.Term.Impl` |
+| 重复 binder | `f x x = ...` | 拒绝（`PS_RepeatedPatternBinder`）；不实现相等约束 | `Frontend.Parser` |
+| `let` / `where` 绑定左端 | `MkPoint x y = e` | 必须不可失败（穷尽）；绑定出的名字在后续绑定与 body 可见 | `Elab.Term.Impl` |
+| **不支持** | tuple 模式、guard、view pattern、pattern synonym、浮点字面量模式 | 见 §11 | — |
+
+## 4. 类型表达式
+
+| 形式 | 例子 | 说明 | 入口 |
+| --- | --- | --- | --- |
+| 宇宙 | `Type` | `Type : Type` 被拒绝；无累积性 | [type-system.md](type-system.md) |
+| Pi binder | `(x : T) -> U` / `{x : T} -> U` | 显式 / 隐式；同一组多名字展开成嵌套 Pi（`(x y : T) ->`） | `Frontend.Parser.parsePiBinder` |
+| QTT 量词 | `(0 x : T) -> U` / `(1 x : T) -> U` | 0 = 擦除，1 = 线性，缺省 = ω；没有依赖 multiplicity / multiplicity 多态 | [qtt.md](qtt.md) |
+| 自由小写名 | `vhead : Vec n a -> a` | 自动量化为隐式参数（`{a : Type}` 等），不需要显式 `forall` | `Elab.Driver`、[type-system.md](type-system.md) |
+| 约束前缀 | `f : Eq a, Show a => a -> String` | 只允许顶层签名与 trait 头；其它位置报 `PS_ConstraintUnsupportedHere` | [records-traits.md](records-traits.md) |
+| `Member` 签名糖 | `Member n ConsoleOp r => ...` | 展开成 `Member (Named n e) r` + 隐式 `Rig0` 证明 binder | `Elab.Driver`、[native-effects.md](native-effects.md) |
+| 类型层字面量 | `Vec 3 a`、`Box "books"` | 只放行 `Int` / `String`；其它（含浮点）报 invalid type expression | [type-system.md](type-system.md) |
+| 索引族应用 | `Vec (Succ n) a` | 索引构造子按名字解析 | [type-system.md](type-system.md) |
+| **不支持** | 类型层 lambda `\n => ...`、类型位置 `_` 洞、`f {e}` 隐式实参、`@T` 类型应用、`(n ** p)` | §11；`Sigma (\n => ...)` 因类型 lambda 缺失写不出来 | — |
+
+## 5. 声明
+
+| 形式 | 例子 | 说明 | 入口 |
+| --- | --- | --- | --- |
+| `data` | `data Vec : Nat -> Type -> Type where VCons : ...` | 参数是裸名字（不能写 kind 注解）；构造子逐行 `C : Ty`；Type-1 族合法 | `Elab.Data`、[type-system.md](type-system.md) |
+| `record` | `record Pair a b where first : a` | 名义类型 + 合成位置构造子；字段访问 / 更新 / 模式都按字段表 | `Elab.Records`、[records-traits.md](records-traits.md) |
+| 表示档位前缀 | `alias record R` / `boxed record R` / `linear record R` | 声明级表示选择，不改类型检查 | [records-traits.md](records-traits.md) |
+| 派生 | `deriving (Show, Eq)` / `deriving via field (Show)` | `Elab.Derive` 展开；`via field` 走字典委托 | `Elab.Derive` |
+| `trait` / `instance` | `trait Eq a where (==) : ...` | 无默认方法、无关联类型、无命名实例 | [records-traits.md](records-traits.md) |
+| `axiom` | `axiom t : Type` | 无体 / 类型层；运行时使用报 `CG_AxiomAtRuntime` | `Elab.Data` |
+| `extern` | `extern f "c_name" : T` | 绑定宿主符号 | `Elab.Data` |
+| 抽象修饰 | `opaque` / `transparent` / `abstract` | 对下游隐藏 / 显式默认 / 本模块 seal | `Frontend.Parser`、[language.md](language.md) |
+| 签名 | `f : C a => A -> B` | 可带约束前缀；η 展开：子句参数少于签名时自动补 | `Elab.Term.Support`、[language.md](language.md) |
+| fixity | `infixl 6 +` / `infixr 5 ::` / `infix 4 ==` | 声明位在 imports 之后、第一个声明之前；**不接受 `= target` 别名** | `Frontend.Parser.parseFixityDecl`、[operators.md](operators.md) |
+| 运算符定义 | `(<+>) : Int -> Int -> Int` + `(<+>) = add` | 符号名与标识符同等；声明位带括号 | `Frontend.Parser`、[operators.md](operators.md) |
+| **不支持** | `newtype` / `type` 关键字、`data T = A \| B`、`mutual`、`syntax` / `notation` 用户宏 | §11 | — |
+
+## 6. 模块、导入与导出
+
+| 形式 | 例子 | 说明 | 入口 |
+| --- | --- | --- | --- |
+| 模块头 | `module A.B where` | 只解析名字；**导出列表语法尚未实现**（见 §11） | `Frontend.Parser.parseModDecl` |
+| import | `import M` / `import qualified M` / `import M as P` / `import qualified M as P` | 四种引用形态：裸名 / 弱限定短名 / 强 alias / 完整模块名 | `Loader.Modules`、[language.md](language.md) |
+| 命名空间 import | `import A.X as Y` | 必须写 `as`；等价于按 A 导出的命名空间路径 X 找目标模块 | `Loader.Modules` |
+| 逐定义导出 | `export f : T` / `export data T(..)` / `export T(A, B)` | 模块默认私有；`T` 只导出类型，`T(..)` 导出全部构造子 | `Loader.Modules`、[language.md](language.md) |
+| 重导出 | `export import M (x, T(..))` / `export module M` / `export module M as X` | 平铺 vs 只导出命名空间路径 | `Loader.Modules` |
+| **不支持** | `module M (x, T(..)) where` 导出列表（解析器忽略） | §11：实现为 no-op，只有逐定义 `export` 生效 | `Frontend.Parser.parseModDecl` |
+
+## 7. 效应表面语法
+
+| 形式 | 例子 | 说明 | 入口 |
+| --- | --- | --- | --- |
+| 行类型 | `Eff [ConsoleOp@audit, StateOp Nat@counter] Nat` | 行就是列表字面量，元素可带实例名 | [effects.md](effects.md) |
+| 裸标签 | `Member n ConsoleOp r` | 实例名默认 `"default"` | [native-effects.md](native-effects.md) |
+| 显式实例名 | `f@audit` / `[ConsoleOp@audit]` | 只允许行解或字面量；不参与位置实参 | `Elab.Term.Impl` |
+| `perform` | `perform (Print s)` | 结果类型 = op 的索引 | `Elab.Term.Impl` |
+| `handle` | `handle comp { return x -> pure x`，随后每个 `Print msg k -> ...` 一行，`}` 收尾 | 省略 `return` 时是 `\x => x` | `Elab.Term.Impl` |
+| **不支持** | `consolePrintAt` 形式的具名调用、`Defaulted` / `:=` 默认参数、`a ->{r} b` 箭头效应 | 见 [native-effects.md](native-effects.md) 的非目标 | — |
+
+## 8. 洞与内置宏
+
+| 形式 | 规则 | 入口 |
+| --- | --- | --- |
+| 匿名洞 `_` | 只能在表达式 check 位；模式位报 `ExpectedPattern`，类型位按未绑定名报错 | `Elab.Term.Support` |
+| 命名洞 `?name` | `?` 与标识符紧邻；同名多次是互相独立的洞；未解报 `TC_UnsolvedHole` | `Elab.Term.Support` |
+| 宏调用 `name!` | `!` 与名字**紧邻**才算宏；`a ! b`（有空格）是普通中缀；`!=` / `!!` 不触发 | `Frontend.Parser.macroBangAt` |
+| 参数贪婪 | `f dbg! x` 解析为 `f (dbg! x)`；块实参用括号 | `Frontend.Parser` |
+| 内置宏集合 | `dbg!` / `obs!` / `mark!`；都展开成隐藏 runtime 原语，不需要 import | `Loader.Expand`、[observability.md](observability.md) |
+| 用户自定义宏 | **不支持**（宏 / DSL 在 `architecture-target.md` 的独立轨道） | — |
+
+## 9. 工具面对表面语法的约定
+
+- **Fmt**：`parse → 规范打印`，按源码顺序与源码括号输出，不按 fixity 重排；因此不需要程序级
+  fixity 闭包。新增表面形式必须能原样打印回可重新 parse 的源码（幂等）。
+- **Lint**：`vuna lint --fix` 的 `list-literal` 规则把表达式 / 类型位置的闭合 `::` 链与裸 `Nil`
+  归一成 `[..]`；模式里的 `::` 保持原样。
+- **Index / Lsp**：洞名与宏标记不算引用；`@` 实例名是静态名字；任何引入新 binder 的形式
+  （tuple 模式、类型层 binder 等）都要在绑定扫描与 rename 里有对应分支。
+- **Parser 工具模式**：`PmTool` 跳过部分严格检查（如重复 binder），供 fmt / lint / index / doc / LSP
+  在源码有错时仍能工作；编译器路径（`PmStrict`）仍然拒绝。
+
+## 10. 成本模型：新增一个表面形式要动什么
+
+实测一个**新 AST 节点**会落在约 18 个文件里（`ESect*` 的例子）：
+`Frontend.Ast` + `Frontend.Canonical.Ast`（哈希编码 / 解码）+ `Frontend.Rast` 与 `Rast.Bridge`
++ `Frontend.Parser` + `Loader.{Fixity,Expand,Flatten,Resolve}` + `Elab.{Match,Term.Impl}`
++ `Fmt.{Expr,Comment}` + `Index.Scan` + `Lint.Rules` + `Lsp.{Bindings,Rename}` + `Sig`。
+
+三条降低成本的路径：
+
+1. **保留名编码**：parser 合成 `@vuna@...` 名字，Elab / Loader 解释，AST 不变
+   （列表字面量、`perform` / `handle`、`f@name`、行条目、洞、宏）。
+2. **只在 Parser 降级**：直接构造已有节点（如 `(+ e) a` → `a + e`），但 Fmt 仍要能打印原形。
+3. **库层实现**：运算符只是普通名字 + fixity 声明，所以 `$` / `|>` / 组合子这类形式
+   **零编译器改动**（只需要 `Base` 里有定义 + `infix*` 声明）。
+
+另外两条硬约束：
+
+- `packages/compiler` 的前端**在 seed 闭包里**：改 Parser/Ast 就要 rotate seed，并满足
+  stage1 == stage2；「只是语法」不等于「不进 TCB」。
+- `packages/cli` 的 Fmt / Index / Lint / Lsp / Sig 不进 seed，但必须同轮更新，否则工具与编译器漂移。
+
+## 11. 未支持与已决边界
+
+记号：H = Haskell，I2 = Idris2，PS = PureScript。「决定」是当前结论，不是待办清单。
+
+| 形式 | H | I2 | PS | vuna 现状 | 决定 |
+| --- | --- | --- | --- | --- | --- |
+| `$` 低优先级应用 | ✓ | ✓ | ✓ | 无；`$` 可 lex | 库层可做（零编译器改动） |
+| 管道 `\|>` / `&` | `&` | — | `#` | 无（`#` 不在 `isOpChar`，需 lexer） | 库层可做，优先 `\|>` |
+| 组合子 `id` / `const` / `flip` / `compose` | ✓ | ✓ | ✓ | base 无定义 | 库层可做 |
+| `do` 内 `let` | ✓ | ✓ | ✓ | 只能写 `let ... in ...` 包住剩余块 | 待评估（parser + do 链） |
+| `do` 模式绑定 | ✓ | ✓ | ✓ | 语法接受，语义只允许变量 / `_` | 不做（需要失败语义 / `MonadFail`） |
+| guards（函数 / case / let） | ✓ | ✓ | ✓ | 无 | 不做（穷尽性 + 模式矩阵成本高） |
+| lambda 参数模式 | ✓ | ✓ | ✓ | 参数只能是名字 | 不做（无签名 lambda 无期望类型） |
+| `\case` | ✓ | — | ✓ | 无 | 不做 |
+| tuple / unit 语法 | ✓ | ✓ | ✓ | 无（`Pair` / `Unit` 是普通类型） | 待评估（右嵌套到 `Pair`） |
+| 表达式类型标注 `(e : T)` | ✓ | ✓ | ✓ | 无；`EAnn` 只由 `where` 签名产生 | 待评估（低成本、缓解推断边界） |
+| `case` 多 scrutinee | — | — | — | 无（单一 scrutinee） | 不做（tuple 落地后 `case (a,b)` 等价） |
+| 多 binder 重复（非线性模式） | — | ✓ | — | 拒绝 | 不做（需要相等约束） |
+| Sigma `(n ** p)` / 依赖对 | — | ✓ | — | 无 `Sigma`；`**` 只是未知运算符 | 阻塞于**类型层 lambda**（见下） |
+| 类型层 lambda / 类型层 section | — | ✓ | — | 报 invalid type expression | 类型系统特性，优先级低 |
+| `with` 记法 | — | ✓ | — | 无 | 等具体痛点 |
+| `rewrite` / `sym` / `trans` 糖 | — | ✓ | — | 无 | 同上 |
+| list range / comprehension | ✓ | ✓ | — | 无（`List.range` 是库函数） | 不做 |
+| `RecordWildCards` `{..}` | ✓ | — | — | 无（模式 pun 已支持） | 不做 |
+| `TypeApplications` `@T` | ✓ | `@{}` | — | `@` 已被实例名占用 | 不做（语义冲突） |
+| `MultiWayIf` / `ado` / unicode 语法 | 部分 | — | 部分 | 无 | 不做 |
+| 十六进制 / 下划线数字 / 指数 | ✓ | ✓ | ✓ | 无 | 不做 |
+| `newtype` / `type` 关键字 | ✓ | ✓ | ✓ | 刻意不做（`record` + `alias` 表达） | 不做 |
+| 命名实例 / 默认方法 / 关联类型 | 部分 | ✓ | — | 刻意不做 | 不做 |
+| 用户宏 / `syntax` 规则 | — | ✓ | — | 只有内置 `name!` | 走宏 / DSL 轨道，不做一次性糖 |
+| 模块头导出列表 | ✓ | ✓ | ✓ | 解析器只认 `module M where`，括号列表被忽略 | 未实现（缺口，非糖） |
+
+## 12. 与其它页面的边界
+
+| 内容 | 归属 |
+| --- | --- |
+| 表面形式、降级目标、工具约定、支持矩阵 | **本文** |
+| 语言语义：绑定块签名约束、case 穷尽性、模块解析顺序、导出语义、η 展开 | [language.md](language.md) |
+| 类型规则：宇宙、索引族、依赖匹配、相等证据、擦除、终止性 | [type-system.md](type-system.md) |
+| QTT 用量与线性 | [qtt.md](qtt.md) |
+| 记录 / trait / deriving / do / Monad | [records-traits.md](records-traits.md) |
+| 运算符语义、fixity 表、实例落点 | [operators.md](operators.md) |
+| 模板字符串语义与转义边界 | [templates.md](templates.md) |
+| 效应系统与 `perform` / `handle` 语义 | [effects.md](effects.md) / [native-effects.md](native-effects.md) |
+| 诊断码与错误形态 | [diagnostics.md](diagnostics.md) |

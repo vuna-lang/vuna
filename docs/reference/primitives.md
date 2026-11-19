@@ -31,7 +31,7 @@
   （[debt.md](debt.md) D21）。
   实例落点规则见 [operators.md](operators.md)。
 - **比较/相等运算符不是内建值**：`==` `/=` `<` `<=` `>` `>=` 是 `Base.Trait.Eq` /
-  `Base.Trait.Ord` 方法（`eq` / `neq` / `lt` / `le` / `gt` / `ge`）的解析期别名；Int/String 上的
+  `Base.Trait.Ord` 的方法名本身（`(==)` / `(/=)` / `(<)` / `(<=)` / `(>)` / `(>=)`）；Int/String 上的
   `bi_eq_int` / `bi_eq_str` / `bi_*_int` / `bi_*_str` / `bi_*_bool` 是这两个类的**内建实例实现**
   （不是运算符的独立语义）。详见 [operators.md](operators.md)。
 - **`Eff` 是唯一动作类型**，`Bool` / `List` / `Nat` 是 base 的

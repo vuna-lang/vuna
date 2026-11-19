@@ -394,8 +394,8 @@ pkg_err/packages/test-m30 → `packages/cli`；web → `packages/web-cli`；其�
 「只 compile+run、不做 interp 对拍」的夹具（效果程序 `main : Eff [] a`，以及核心求值器不可
 归约的夹具：`strUnpack` / `strPack` / `strConcatMany` / `strSubstTemplate`）用
 `<base>.run.out` 表达。负例统一用
-`<base>.diag.json`（结构化诊断），interp / compile 共用同一份（实测 142 个负例里 130 个完全一致，
-12 个仅 message 不同、`(code, line)` 全同）。
+`<base>.diag.json`（结构化诊断），interp / compile 共用同一份（绝大多数负例完全一致，少数仅 message
+不同、`(code, line)` 全同）。
 
 - `corpus/run/*.vuna`：`interp` 输出 vs `.out` golden；`compile` → ocamlopt → 运行再比对；
   `.run.out`（`10_string_pack`、`16_file_exists`、`17_file_meta`）只做 compile+run；
@@ -418,7 +418,7 @@ pkg_err/packages/test-m30 → `packages/cli`；web → `packages/web-cli`；其�
 - `corpus/traits/`：正例 `interp` 与 `compile` 比对 golden（含泛型字典穿参、多类型
   default；`14_constrained_instance`（`instance Eq a => Eq (Box a)` +
   `mem (Box 1) [...]`）、`15_parametric_deriving`（参数化 `deriving (Show, Eq, Ord)`）、`27_deriving_hashable`（`deriving (Eq, Hashable)`，data + 记录）、
-  `16_eq_ord_alias`（`==` / `eq`、`<` / `lt` 走同一路径，Int/String 特化 + Bool 实例）、
+  `16_eq_ord_alias`（`==` / `(==)`、`<` / `(<)` 走同一路径，Int/String 特化 + Bool 实例）、
   `17`–`22`（显式签名约束：单 / 多约束、结构化 `Eq (Box a)`、高阶 kind `Monad m`、
   约束函数互调、未使用约束））；
   命名实例特性不存在。错误例 90–95、98 要求错误片段、非 0 退出、不写

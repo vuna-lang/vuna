@@ -51,7 +51,7 @@ onlyX p = case p of
 
 `record` 声明抽取成 `RecordMeta`（`Elab.Records`）：名字 / 参数 / 字段表
 （`RecordFieldMeta` = 名字 + 类型 + 声明序号）/ 派生 / 表示档位 / 构造子 / 线性标记。
-它进 `ModuleIface.miRecords`（`vuna-iface 18`），并参与 `miIfaceHash`：字段重排、改名、
+它进 `ModuleIface.miRecords`（接口 schema 由 `Driver.Iface.ifaceSchema` 版本化），并参与 `miIfaceHash`：字段重排、改名、
 序号变化都会让依赖者失效；字段类型由 `hashDatas`（`DtData` 的 Marshal）覆盖。
 
 Core 侧每个 record 族的 `DtData.dtDataIsRecord = True`（`data` / 字典族为 `False`），
@@ -330,10 +330,10 @@ main = pretty Red ++ "/" ++ show Red
   `Base.Trait.Show` / `Base.Trait.Eq` / `Base.Trait.Ord`；实例按**落点规则**分布：`Int` → `Base.Data.Int`、
   `String` 的 Eq/Ord → `Base.Data.String`、`Show String` → `Base.Trait.Show`、`Show Bool` →
   `Base.Data.Bool`、`Eq/Ord Bool` → `Base.Trait.Eq` / `Base.Trait.Ord`；容器 `Show` 实例在各自类型模块。
-  运算符 `==` / `/=` / `<` 等是这些方法的解析期别名（见 [type-system.md](type-system.md)）。
+  运算符 `==` / `/=` / `<` 等就是这些方法名本身（见 [type-system.md](type-system.md)）。
   包上下文内所有源文件
   （含 ad-hoc 单文件）随自动注入的 `Prelude` 可用（`Prelude` 显式 `import Base.Data.Int`
-  以加载 Int 实例）；`show` / `eq` / `lt` 等短名不由编译器放行，必须经 import 解析。
+  以加载 Int 实例）；`show` / `(==)` / `(<)` 等短名不由编译器放行，必须经 import 解析。
   `deriving` 的展开使用 Loader 解析后的完整类名（如 `Base.Trait.Show.Show`）。详见
   [operators.md](operators.md)。
 - **没有结构性自动回退**：`List a` / `Box a` 这类要能比较 / 展示，必须有约束实例或

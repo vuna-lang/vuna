@@ -2,8 +2,9 @@
 
 vuna 只有一套类型检查器：依赖类型（DT）的双向精化 + NbE 定义性相等。没有可切换的
 检查器，也没有「DT 子集」开关；所有命令（`check` / `compile` / `build` /
-LSP / 测试夹具）都走它。本文是类型规则的语义页；语法与模块系统见
-[language.md](language.md)，记录 / trait / `do` 见 [records-traits.md](records-traits.md)，
+LSP / 测试夹具）都走它。本文是类型规则的语义页；表面语法见
+[frontend-syntax.md](frontend-syntax.md)，模块系统见 [language.md](language.md)，
+记录 / trait / `do` 见 [records-traits.md](records-traits.md)，
 quantity / 线性规则见 [qtt.md](qtt.md)（quantity 与擦除口径以该页为准）；Core 表示与
 合一实现见 [core.md](core.md)，未关闭的债务见 [debt.md](debt.md)。
 
@@ -100,9 +101,8 @@ quantity / 线性规则见 [qtt.md](qtt.md)（quantity 与擦除口径以该页�
   具体类型没有实例、函数类型相等、`Eq` 类不在作用域，都在 `check` 期报错
   （`TC_NoInstanceFound` / `TC_EqRequiresEvidence`）。**没有泛型结构比较兜底**，
   核心求值与编译产物也没有第二套相等算法。
-- **运算符是方法别名**：`==` / `/=` / `<` / `<=` / `>` / `>=` 不是独立的语义
-  入口，Loader 把它们解析成 `eq` / `neq` / `lt` / `le` / `gt` / `ge`（统一在
-  `Loader.Fixity` 的重排与别名表里）。`a == b`、`eq a b`、``a `eq` b`` 是同一个调用；
+- **运算符是方法名**：`==` / `/=` / `<` / `<=` / `>` / `>=` 不是独立的语义
+  入口，而是 `Base.Trait.Eq` / `Base.Trait.Ord` 的方法名本身。`a == b` 与 `(==) a b` 是同一个调用；
   Elab 的特化按「`Eq` / `Ord` 方法投影的饱和应用」判定（`Elab.Dict.isEqMethod` /
   `isCmpMethod`），不按运算符名。运算符不产生新的运行时名字。实例落点规则见
   [operators.md](operators.md)。
@@ -234,7 +234,8 @@ quantity / 线性规则见 [qtt.md](qtt.md)（quantity 与擦除口径以该页�
 
 ## 与其它页的分工
 
-- 语法、`let` / `where`、模块与命名空间：[language.md](language.md)
+- 表面语法（形式、降级、工具约定、未支持清单）：[frontend-syntax.md](frontend-syntax.md)
+- 模块系统、`let` / `where` 语义、命名空间：[language.md](language.md)
 - 记录、trait / 实例 / `deriving`、`do` / Monad：[records-traits.md](records-traits.md)
 - Core 表示、NbE、合一、精化器、擦除 codegen 不变量：[core.md](core.md)
 - 原语身份、Int / String 语义、宿主层：[primitives.md](primitives.md)

@@ -142,7 +142,7 @@ seed 工具（`seed/`）+ 开发工具（`tools/`）；`docs/` = 分层文档。
 - 终态方向、不变量与非目标：[`docs/architecture-target.md`](docs/architecture-target.md)
   （判断"某需求该不该进核心"先读它；现状见 architecture.md）
 - 语言 / 类型 / 效应 / 标准库 / 包：[`docs/reference/`](docs/reference/)——逐页说明见
-  [README 文档导航](README.md#文档导航)：language、type-system、qtt、records-traits、
+  [README 文档导航](README.md#文档导航)：frontend-syntax、language、type-system、qtt、records-traits、
   effects、stdlib、packages、package-store、primitives、operators
 - 编译器实现：compiler、core、ir、diagnostics、wasm、native、cache（同在 `docs/reference/`）
 - 工具链 / 测试 / 自举：tooling、testing、test-architecture、bootstrap（同在 `docs/reference/`）

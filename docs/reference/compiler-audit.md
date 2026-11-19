@@ -50,7 +50,6 @@ ID 是稳定引用（`层前缀-序号`），改动时保留编号，删掉实�
 | LD-10 | `Resolve.vuna` 的解析特判 | C | `Nil/Cons/::` 特判、`>>=`→`bind` 双名回落、`Type` 头不解析实参、隐式 binder 只认 String 域 | 开放 |
 | LD-11 | `Resolve.vuna` 的内部名旁路 | B | `@vuna@…` 与「属于编译器包」直接放行 | 开放 |
 | LD-12 | `Fixity.vuna` 的 `reorderDecl` | C | 实例体里非 `DSig`/`DFun` 声明原样放行 → 延后成 internal error | 开放 |
-| LD-13 | `Fixity.vuna` 的模式别名 | C | 只对 `::` 做别名替换，其它中缀构造子不查表 | 开放 |
 | LD-14 | `Addr.vuna` 的 `topoVisit` | ⚠️C | fuel 耗尽静默返回部分序 → 依赖地址退化 `ext:`，iface 永不命中 | 开放 |
 | LD-15 | `Addr.vuna` 的模块摘要 | C | 无条件并入 Prelude 摘要（过近似） | 开放 |
 | LD-16 | `Fingerprint.vuna` | C | 无 build-id 时身份退化为「路径+大小+mtime」 | 开放 |
@@ -95,7 +94,7 @@ ID 是稳定引用（`层前缀-序号`），改动时保留编号，删掉实�
 | EC-09 | `Dict.vuna` 的 `matchInstances` | C | 上一候选的解表污染下一候选（无候选快照） | 开放 |
 | EC-10 | `Dict.vuna` 的 `ctxMemberProofTermGo` | C | 用 `showTerm` 文本比较找同型证明 binder | 开放 |
 | EC-11 | `Dict.vuna` 的刚性快路径 | C | `rigidSearchFast` 按族 vs `allInstancesMono` 按全表，两份判据 | 开放 |
-| EC-12 | `Dict.vuna` 的方法别名 | D | 别名表 / `isEqMethod` / `cmpRuntimeName` 三处手写 | 开放 |
+| EC-12 | `Dict.vuna` 的方法判定 | D | `isEqMethod` / `isCmpMethod` / `numMethodOpName` / `cmpRuntimeName` 四处手写短名分支 | 开放 |
 | EC-13 | `Elab/Term/Impl.vuna` 的 `bindShapeOf` | D | do 块语义靠对 `bind` 签名项做硬编码 de Bruijn 索引匹配 | 开放 |
 | EC-14 | `Impl.vuna` 的 `perform`/`handle` | A | 三候选试错（`handleWithAt` → `…Hole` → `handleWith`），顺序由「是不是裸变量」决定 | 开放 |
 | EC-15 | `Impl.vuna` 的 `specializeInterpPrimApp` | A | `Interp` 实例语义硬编码进编译器 | 开放 |

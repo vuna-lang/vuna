@@ -2,7 +2,7 @@
 
 本文是运算符语义的**唯一权威**：运算符与函数的关系、`Eq` / `Ord` / `Num` 的真源、fixity 声明的唯一
 来源、可见闭包与去重、实例落点规则、内建特化、反引号 / section / 用户符号名，以及系统边界。
-语言语法见 [language.md](language.md)，trait / 字典见 [type-system.md](type-system.md)，原语见
+语言语法的形式清单见 [frontend-syntax.md](frontend-syntax.md)，trait / 字典见 [type-system.md](type-system.md)，原语见
 [primitives.md](primitives.md)。
 
 ## 终态模型
@@ -29,8 +29,7 @@ trait 方法、instance 方法与 data 构造子都可以用符号名声明。
 1. **parser 不做优先级**：任意中缀符号链收成右嵌套的 `EInfix` / `EBacktick`，括号收成
    `EParen`（保留分组边界）；`::` 在 pattern 里也保留符号原形。
 2. **Loader 在名字解析之前重排**：按模块可见 fixity 表做 precedence climbing，把链重排成
-   `EApp` / `EPi`；同一步完成**别名替换**（库内别名）与
-   **section 展开**。
+   `EApp` / `EPi`；同一步完成 **section 展开**。
 3. **重排后 AST 里没有 `EInfix` / `EBacktick` / `ESect*` / `EParen`**：Elab / codegen 看到的是
    普通应用；`Resolve` 对残留节点报 internal error（不静默透传）。
 4. **fixity 唯一来源 = 源码里的 `infixl` / `infixr` / `infix` 声明**（库或用户）；
@@ -55,8 +54,7 @@ trait 方法、instance 方法与 data 构造子都可以用符号名声明。
   `(>)` / `(>=)`。
 - `Elab` 的运算符特化按「名字是否为 Eq/Ord 类的方法投影」判定
   （`Elab.Dict.isEqMethod` / `isCmpMethod`，从类表取投影名，不硬编码模块前缀）；
-  投影名最后一段是运算符名（`Base.Trait.Eq.==` → `==`）；`Elab.Dict.opShortOf` 同时认
-  旧式标识符拼写（`eq` / `lt` 等），实例与派生体用哪种写法都能命中。
+  投影名最后一段就是运算符名（`Base.Trait.Eq.==` → `==`），实例与派生体用哪种写法都能命中。
 - Int / String / Float 上的特化（`bi_eq_int` / `bi_eq_str` / `bi_eq_float` / `bi_*_int` /
   `bi_*_float` / `bi_*_str` / `bi_*_bool`）是 **内建实例实现**，不是运算符的独立语义：它可以发生在
   方法投影的饱和应用上，因此手写实例、`deriving` 生成的比较都命中同一条规则；
@@ -84,23 +82,23 @@ trait 方法、instance 方法与 data 构造子都可以用符号名声明。
 
 ## 库声明表
 
-用 `infixl N op` / `infixr N op` / `infix N op`（可选 `= 目标名`）；声明位置是模块头与
+用 `infixl N op` / `infixr N op` / `infix N op`；声明位置是模块头与
 import 之后、第一个声明之前（fmt 的规范位置），每条一行。base 包的全部源码级 fixity 声明
 集中在 `Base.Internal.Operator`（引用这些运算符的模块 import 它）；`->` / `&&` / `||` 的 fixity 由
 编译器固定（`Loader.Fixity.builtinFixityDecls`），不在 `Base.Internal.Operator` 里。
 
-| 符号 | 优先级 / 结合 | 别名 | 定义所在模块 | 说明 |
-| --- | --- | --- | --- | --- |
-| `==` | 4 左 | — | `Base.Trait.Eq` | `Eq` 方法（`(==)`） |
-| `/=` | 4 左 | — | `Base.Trait.Eq` | `Eq` 方法（`(/=)`） |
-| `<` `<=` `>` `>=` | 4 左 | — | `Base.Trait.Ord` | `Ord` 方法（`(<)` 等） |
-| `&&` `\|\|` | 3 / 2 左 | — | `Base.Data.Bool` | 短路内建（不是 trait 方法）；fixity 由编译器固定 |
-| `+` `-` | 6 左 | — | `Base.Trait.Num` | `Num` 方法（`(+)` / `(-)`；实例由精化器特化回内建原语） |
-| `*` `/` | 7 左 | — | `Base.Trait.Num` | `Num` 方法（`(*)` / `(/)`） |
-| `++` | 5 右 | — | `Base.Data.String` | String 内建值 |
-| `::` | 5 右 | — | `Base.Data.List` / `Base.Effect.Core.Row` | 两个族各自的 cons 构造子（同名，按期望族定向解析） |
-| `>>=` | 1 右 | — | `Base.Trait.Monad` | `Monad` 方法（`(>>=)`） |
-| `>>` | 1 左 | —（do 派生） | `Base.Trait.Monad` | `a >> b` 展开为 `(>>=) a (\_ => b)`（Loader 的 do 派生，用调用点可见的 `>>=`） |
+| 符号 | 优先级 / 结合 | 定义所在模块 | 说明 |
+| --- | --- | --- | --- |
+| `==` | 4 左 | `Base.Trait.Eq` | `Eq` 方法（`(==)`） |
+| `/=` | 4 左 | `Base.Trait.Eq` | `Eq` 方法（`(/=)`） |
+| `<` `<=` `>` `>=` | 4 左 | `Base.Trait.Ord` | `Ord` 方法（`(<)` 等） |
+| `&&` `\|\|` | 3 / 2 左 | `Base.Data.Bool` | 短路内建（不是 trait 方法）；fixity 由编译器固定 |
+| `+` `-` | 6 左 | `Base.Trait.Num` | `Num` 方法（`(+)` / `(-)`；实例由精化器特化回内建原语） |
+| `*` `/` | 7 左 | `Base.Trait.Num` | `Num` 方法（`(*)` / `(/)`） |
+| `++` | 5 右 | `Base.Data.String` | String 内建值 |
+| `::` | 5 右 | `Base.Data.List` / `Base.Effect.Core.Row` | 两个族各自的 cons 构造子（同名，按期望族定向解析） |
+| `>>=` | 1 右 | `Base.Trait.Monad` | `Monad` 方法（`(>>=)`） |
+| `>>` | 1 左 | `Base.Trait.Monad` | `a >> b` 展开为 `(>>=) a (\_ => b)`（Loader 的 do 派生，用调用点可见的 `>>=`） |
 
 `>>` 留在 Loader 的 do 派生里：它需要「丢弃第一个结果」的适配，且必须用**调用点可见**
 的 `>>=`（模块内自定义 Monad trait 时也要绑对）；`Base.Trait.Monad` 提供它的 fixity 声明
@@ -117,13 +115,13 @@ import 之后、第一个声明之前（fmt 的规范位置），每条一行。
 - **反引号中缀**：`` a `f` b `` ≡ `f a b`。`f` 可以是标识符或符号名；fixity 按名字查表，
   没有声明时按 9 左结合（Haskell 默认），**不报错**（前缀形式本身无歧义）。
 - **section**（语法糖，Loader 在名字解析前展开）：
-  - `(+)` ≡ 运算符作为值（canonical 名：`(==)`→`eq` 等库内别名；`(::)` / `(>>=)` 是构造子/方法本身）；
+  - `(+)` ≡ 运算符作为值（`(==)` / `(::)` / `(>>=)` 就是方法 / 构造子本身）；
   - `(+ e)` ≡ `\vuna_section => vuna_section + e`；
   - `(e +)` ≡ `\vuna_section => e + vuna_section`。
   - section 不要求运算符有 fixity 声明（`(+)` 是无歧义的前缀使用）。
-  - 展开产物是 **lambda**，因此「直接应用」section（`(+ 3) 4`）会命中既有的 lambda 推断边界
-    `TC_LambdaNoSignature`（普通 `(\x => x) 5` 同样报错）；把 section 传给带签名的参数
-    （`inc : Int -> Int`、`inc = (+ 3)`）正常。
+  - 展开产物是 **lambda**，因此把 section 传给带签名的参数（`inc : Int -> Int`、
+    `inc = (+ 3)`）正常；推断位置直接写 `(+ 3) 4` 时 parser 把它折叠成 `3 + 4`（不生成
+    lambda），而当值传递且无期望类型时仍会命中 `TC_LambdaNoSignature`。
 - **用户符号名**：`<+> a b = ...` 与 `<+> : Int -> Int -> Int` 允许符号名 def / signature，
   可出现在中缀（需 `infix*` 声明）、反引号、section、导出列表；`->`、反引号与语法符号是保留
   集合，不能当可定义名。codegen 把非 `[A-Za-z0-9]` 字符转义成 `_x<code>_`
@@ -159,11 +157,11 @@ import 之后、第一个声明之前（fmt 的规范位置），每条一行。
   位置时 parser 立即停止中缀链，不是可声明的值名。
 - **内部生成名**：`Elab.Derive`（deriving 展开）与 `Elab.Match`（字面量模式降级）在 Elab 内部
   直接构造 `EVar "=="` / `EVar "<"`，不经过 Loader 重排；`Elab.Dict` 的
-  `isEqMethod` / `isCmpMethod` 显式接受这些内部名并把它们映射到方法短名。用户源码的 `==`
-  一律在 Loader 重排里变成 `eq`，因此内部名不会泄漏到用户语义。
+  `isEqMethod` / `isCmpMethod` 接受这些内部名。用户源码的 `==` 解析后也是同名方法投影，
+  内部名不会泄漏到用户语义。
 - **parser 没有固定运算符表**：`Frontend/Parser/Support.vuna` 没有 `infixInfo`；`::` / `>>=` /
-  `>>` 都由声明表的别名处理。`[]` / `[a, b]` 列表字面量与 pattern 仍以 `(::)`/`Nil`
-  折叠（语法糖，不是运算符）。
+  `>>` 都由声明表提供 fixity（`>>` 另走 do 派生）。`[]` / `[a, b]` 列表字面量与 pattern 仍以
+  `(::)`/`Nil` 折叠（语法糖，不是运算符）。
 - **`&&` / `||`** 是短路内建（不是 trait 方法），fixity 来自 `Base.Data.Bool` 声明。
 - **`++`** 是 String 内建值，fixity 来自 `Base.Data.String` 声明；**`+` / `-` / `*` / `/`** 是
   `Base.Trait.Num` 方法（fixity 来自 `Base.Trait.Num` 声明），内建名只保留给 codegen / 核心求值
@@ -194,7 +192,7 @@ import 之后、第一个声明之前（fmt 的规范位置），每条一行。
 
 | 关注点 | 位置 |
 | --- | --- |
-| 中缀重排 / 别名替换 / section 展开 / 严格/保留模式 | `Loader.Fixity`（`reorderProgram` / `lookupFixity` / `lookupFixityDecl` / `syntaxFixityDecls` / `tableOf` / `tableOfKeepOps` / `symbolOfTargetIn`） |
+| 中缀重排 / section 展开 / keep 模式 | `Loader.Fixity`（`reorderProgram` / `lookupFixity` / `lookupFixityDecl` / `syntaxFixityDecls` / `tableOf` / `tableOfKeepOps`） |
 | fixity 声明语法与收集 | `Frontend.Parser`（`parseFixityDecl` / `parseSectionAtom` / `parseInfix`）+ `Frontend.Ast`（`FixityDecl` / `Source.fixities`） |
 | 模块可见 fixity 闭包与去重 | `Loader.Modules.Module.fixities` + `Loader.Flatten.visibleFixitiesOf` / `dedupeFixities` |
 | 程序级 fixity（lint / index / doc / 符号排序） | `Loader.Flatten.fixitiesForSource` + `Loader.Fixity.reorderProgram` |
@@ -202,16 +200,18 @@ import 之后、第一个声明之前（fmt 的规范位置），每条一行。
 | 内建 runtime 名 | `Vuna.Compiler.Base.Intrinsics.allIntrinsics`（`bi_*` 仅内部可见） |
 | trait 声明 / 库声明表 | `packages/base/lib/Base/{Eq,Ord,Bool,Int,String,List,Monad,Applicative,Monoid,Foldable,Traversable,Hashable}.vuna` |
 | `>>` 的展开 | `Loader.Fixity.infixTerm`（`bind a (\_ -> b)`）；fixity 声明在 `packages/base/lib/Base/Monad.vuna` |
-| 终止性守卫识别 | `Elab.Termination.Measure.guardPosVar`（按方法短名 `le`/`ge`/`lt`） |
+| 终止性守卫识别 | `Elab.Termination.Measure.guardPosVar`（按 `Ord` 方法短名 `<`/`<=`/`>`/`>=`；实现也接受 `lt`/`le`/`ge` 形状） |
 
 ## 测试
 
-- `packages/compiler/test/corpus/traits/16_eq_ord_alias.vuna`：`==` 与 `eq`、`<` 与 `lt` 一致；Int/String
-  特化、Bool 模式匹配实例、`deriving (Eq, Ord)`、`mem` 的字典穿参。
+- `packages/compiler/test/corpus/traits/16_eq_ord_alias.vuna`：`==` / `/=` / `<` 等运算符与
+  `(==)` / `(<)` 前缀写法一致；Int/String 特化、Bool 模式匹配实例、`deriving (Eq, Ord)`、`mem` 的字典穿参。
 - `packages/compiler/test/corpus/dt/64_backtick_infix`：反引号中缀与默认 9 左结合、与 `+` / `*` 混排。
-- `packages/compiler/test/corpus/dt/65_section`：`(+)` / `(+ e)` / `(e +)`、`(::)` / `(==)` 别名、与普通括号混用。
+- `packages/compiler/test/corpus/dt/65_section`：`(+)` / `(+ e)` / `(e +)`、`(::)` / `(==)` 作为值、与普通括号混用。
 - `packages/compiler/test/corpus/dt/66_user_symbol_fn`：用户符号名定义 + `infixl` / `infixr` + 反引号 + section。
+- `packages/compiler/test/corpus/dt/96_fixity_operator_def`：`(<+>) = add` + `infixl 6 <+>`（运算符是普通名字）。
 - `packages/compiler/test/corpus/dt_err/53_unknown_fixity`：未知符号运算符报 `unknown fixity`。
+- `packages/compiler/test/corpus/dt_err/111_fixity_alias_target`：fixity 声明不写 `= target`（语法错误）。
 - `packages/cli/test/corpus/fmt/23_fixity_decls` / `24_backtick_sections` / `25_custom_ops`：声明打印与
   fmt 新语法往返。
 - `nix run .#vuna-run-tests` 全量；`sh nix/seed/rotate.sh <vuna>` 验证自举 fixed point。

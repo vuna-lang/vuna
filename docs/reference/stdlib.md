@@ -39,8 +39,8 @@
 | `Base.Trait.Traversable` | `Traversable t f`（双参数：容器 + Applicative）与方法 `mapM : (a -> f b) -> t a -> f (t b)`；`List` / `Maybe` / `Result` 实例 |
 | `Base.Trait.Show` | `Show` trait（`show : a -> String`）+ `String` 实例；`DebugShow` trait（`debugShow : a -> String`，blanket `instance Show a => DebugShow a`，所有 `Show` 实例自动获得）与 `dbgShow : DebugShow a => a -> a`（打印后返回原值）；`Show Int` / `Show Bool` 随类型模块（`Base.Data.Int` / `Base.Data.Bool`），`Show String` 因 String 经 Interp 依赖 Show 留在本模块 |
 | `Base.Trait.Interp` | 模板插值的转换 trait：`Interp a` + blanket `Show a => Interp a`（默认 = `show`）+ 具体 `Interp String`（原样输出）；插值降级与规则见 [templates.md](templates.md) |
-| `Base.Trait.Eq` | `Eq` trait（`eq` / `neq : a -> a -> Bool`）+ `Bool` 实例（Bool 是 `Eq` 返回类型，实例随 trait） |
-| `Base.Trait.Ord` | `Ord` trait（`lt` / `le` / `gt` / `ge : a -> a -> Bool`）+ `Bool` 实例；另含 `Ordering(..)`（`LT`/`EQ`/`GT`，带 `Eq`/`Ord`/`Show`/`Hashable` 实例）与 `compare` / `min` / `max` |
+| `Base.Trait.Eq` | `Eq` trait（方法 `(==)` / `(/=) : a -> a -> Bool`）+ `Bool` 实例（Bool 是 `Eq` 返回类型，实例随 trait） |
+| `Base.Trait.Ord` | `Ord` trait（方法 `(<)` / `(<=)` / `(>)` / `(>=) : a -> a -> Bool`）+ `Bool` 实例；另含 `Ordering(..)`（`LT`/`EQ`/`GT`，带 `Eq`/`Ord`/`Show`/`Hashable` 实例）与 `compare` / `min` / `max` |
 | `Base.Data.Int` | `Int` 的 `Eq` / `Ord` / `Show` / `Hashable` / `Num` 实例宿主（`Int` 是 primitive 类型；实例跟类型模块走；`Num Int` 的方法体由精化器特化回 `bi_*` 原语） |
 | `Base.Data.Float` | `Float` primitive 类型模块（**随 `Prelude` 自动导出**）：`FromFloat` trait + `abs` / `sqrt` / `intToFloat` / `floatToInt` + `Eq` / `Ord` / `Show` / `Num` 实例；字面量、算术/比较、`main : Float`、模板插值本来就不需要 import。Prelude 闭包包含本模块，所有程序的 runtime 都带浮点 helper（[floats.md](floats.md)） |
 | `Base.Trait.FromString` / `Base.Trait.FromInt` | 字面量转换 trait（`fromString` / `fromInt`）与 `String` / `Int` 恒等实例；`Prelude` 导出，`deriving (FromString)` / `(FromInt)` 为单字段包装类型自动派生（见 [floats.md](floats.md)） |
@@ -191,13 +191,13 @@ modules = [
   （String 经 Interp 依赖 Show）、`Show Bool` → `Base.Data.Bool`、`Eq/Ord Bool` → `Base.Trait.Eq` /
   `Base.Trait.Ord`（Bool 是方法返回类型）；容器 `Show` 实例在各自类型模块。实例随 `Prelude` 自动
   导入（`Prelude` 显式 `import Base.Data.Int` 加载 Int 实例）。编译器只保留**机制**：
-  `deriving (Show, Eq, Ord, Hashable)` 的展开、`eq` / `lt` 等的 `Int` / `String` 运行时特化、
-  `if` / 字面量等语法。**运算符是方法别名**：`==` / `/=` / `<` / `<=` / `>` / `>=`
-  在 Loader 被解析成 `eq` / `neq` / `lt` / `le` / `gt` / `ge`（fixity 与别名全部来自库模块里的
-  `infix*` 声明），因此 `a == b` 与 `eq a b`
-  是同一条路径；**`+` / `-` / `*` / `/` 同样是 `Base.Trait.Num` 方法 `add` / `sub` / `mul` /
-  `div` 的别名**（内建 `+ - * /` 只留给 codegen / 核心求值的 runtime 映射，对源码不可见）。
-  **相等证据驱动**：`eq`（含运算符写法）只有 Int/String 内建特化或 `Eq` 证据
+  `deriving (Show, Eq, Ord, Hashable)` 的展开、`(==)` / `(<)` 等的 `Int` / `String` 运行时特化、
+  `if` / 字面量等语法。**运算符就是方法名**：`==` / `/=` / `<` / `<=` / `>` / `>=` 是
+  `Base.Trait.Eq` / `Base.Trait.Ord` 的 `(==)` / `(/=)` / `(<)` / `(<=)` / `(>)` / `(>=)`
+  （fixity 由库模块里的 `infix*` 声明提供），因此 `a == b` 与 `(==) a b`
+  是同一条路径；**`+` / `-` / `*` / `/` 同样是 `Base.Trait.Num` 的方法 `(+)` / `(-)` / `(*)` /
+  `(/)`**（内建 `+ - * /` 只留给 codegen / 核心求值的 runtime 映射，对源码不可见）。
+  **相等证据驱动**：`(==)`（含运算符写法）只有 Int/String 内建特化或 `Eq` 证据
   （实例 / `deriving` / 约束实例），无实例与函数相等在 check 期报错；参数化类型的
   `deriving` 展开成约束实例（`instance Eq a => Eq (F a)`），库里可写的容器实例也按这个
   形态声明。字符串展示只有一个实现 `strShow`——`Base.Trait.Show` 的 `String` 实例是
