@@ -73,6 +73,7 @@
 | D92 | 模式矩阵降级在个别**嵌套模式 alt** 上会报无位置的假错 `TC_BranchTooFewArgs`（`:0:0`），同一文件把该 alt 改写成层层 `case`（不用嵌套模式）就能通过。复现形态：case 的一个 alt 里同时嵌套「构造子 + 列表模式」，例如对 `EApp (EVar "->" _) (dom :: cod :: rest)` 直接模式匹配；拆成 `EApp fn args` 再 `case fn of` / `case args of` 后正常 | 触发于 `Elab/Match` 的矩阵降级（`ctorAltList`/`clausesForCtor` 对嵌套构造子子模式个数的假设）；对照写法见 `Elab/Sig.kindDomains` | 后续（先收敛最小用例，再查 `ctorSubPatCount` 与 `bindCtorTele` 的分支 arity 口径） |
 | D93 | `Elab` 的选择性重导出门面已删除：子模块即公开面（`Elab.Types` / `Elab.Meta` / `Elab.Driver` 等对所有消费方可见），没有「门面只重导出部分公开名」的那层封装 | `packages/compiler/lib/Vuna/Compiler/Elab/*.vuna`（无 `Elab.vuna` 门面）、`packages/compiler/vuna.toml` 的 `[export]` 列全部模块；[compiler.md](compiler.md)「模块地图」 | 后续（要收紧时靠命名约定 / 文档，或重新引入显式重导出层） |
 | D112 | **workspace 热缓存二次 check 与冷启动不一致**：同一个 `VUNA_STORE` 下，`vuna check .` 第一次（冷）通过，第二次（复用第一次写下的缓存）在 `Vuna.Obs.Serve.duplexOf` 报 `TC_TypeMismatch: expected Row, got Type`（`(Int -> Eff r (Maybe String))` 的隐式 `r` 被当成 `Type`）。单包 `check packages/cli` 连跑两次不触发；清空 store 后再跑一次又通过，说明是跨包增量缓存/接口复用问题，不是源码错误 | 复现：`VUNA_STORE=/tmp/st vuna check .`（0）→ 同 store 再跑（1，`packages/cli/lib/Vuna/Obs/Serve.vuna` 第 242 行）；包级 clean 判定见 `Driver/Compile.vuna` | 后续（先查包级 clean 判定与模块顺序对象在跨包场景下的失效条件；CI 每次新 store 不受影响） |
+| D116 | `fmt` 在 `export import M (T(..), ...)` 上会重复展开导出项：每跑一次列表翻倍（实测 `Vuna.Cli.Spec` 的导出面从 1842 字节涨到 3650，再跑继续翻倍） | `packages/cli/lib/Vuna/Fmt/Decl.vuna`（import 渲染）；复现：给模块加一条含 `T(..)` 的 `export import`，连跑两次 `vuna fmt` | 后续（当前改成显式 `import` 规避） |
 
 ## 效应统一（Eff 已贯通）
 
