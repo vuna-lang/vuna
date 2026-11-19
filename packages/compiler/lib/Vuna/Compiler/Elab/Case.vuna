@@ -37,8 +37,9 @@ export unifyErr : Check a
 unifyErr = ErrC (tcMsg ImpossibleBranchIndex [])
 
 export unifyIdxList : Ec -> List (Pair Int Value) -> Int -> Int -> List Value -> List Value -> Check (List (Pair Int Value))
+-- 耗尽不是「分支不可达」：那条结论会让覆盖率放过一个可达分支。报独立的燃料错误。
 unifyIdxList ec acc depth fuel xs ys =
-  if fuel <= 0 then unifyErr else unifyIdxListGo ec acc depth fuel xs ys
+  if fuel <= 0 then ErrC (tcMsg IndexFuel []) else unifyIdxListGo ec acc depth fuel xs ys
 
 unifyIdxListGo : Ec -> List (Pair Int Value) -> Int -> Int -> List Value -> List Value -> Check (List (Pair Int Value))
 unifyIdxListGo ec acc depth fuel [] [] = OkC acc
@@ -166,12 +167,13 @@ unifyIdx ec acc depth fuel a b =
 -- tele 变量被精化成捕获局部变量的 Pi），按 env 扫会把「引用了分支作用域内的变量」误判成
 -- 「引用了 lvl」，于是索引合一失败、合法分支被报 `TC_ImpossibleBranchIndex`。
 -- 实例化变量用 `_occurs` 这个名字 + 不与 `lvl` 相同的 level（见 occursFreshLevel）。
--- 扫描带 fuel：实例化闭包后递归不再沿值结构下降（SCT 无法证明终止），用递减 fuel 兜底；
--- true 才是真 occurs，fuel 耗尽的 False 只会因为值异常巨大而发生（实际扫描深度 = 值大小）。
+-- 扫描带 fuel：实例化闭包后递归不再沿值结构下降（SCT 无法证明终止），用递减 fuel 兜底。
+-- 耗尽按**保守方向**回答 `True`（当成「可能 occurs」）：漏报 occurs 会把量词变量解到
+-- 含它自己的值里，得到无穷链；误报只会让这一次索引合一失败（可诊断），不会造出坏类型。
 export occursLevel : Int -> Int -> Int -> Value -> Bool
 occursLevel fuel depth lvl v =
   if fuel <= 0 then
-    False
+    True
   else
     case v of
       VNeutral n =>
@@ -276,20 +278,27 @@ branchAfterUnify ec branchCtx refs =
   if ctxHasEmptyBinder ec (ctxRefine branchCtx refs) then BranchImpossibleEmptyCtx else BranchOk
 
 -- 覆盖率用它模拟一个**未写出**的构造子分支：绑哑通配（只借绑定与求值），不合成分支体。
-export branchVerdict : Ctx -> Ec -> List Value -> DtCtor -> BranchVerdict
+-- 绑定失败 / 残参是内部口径不一致（`wildArgs` 与 `ctorExplicitArity` 同源），报 ICE；
+-- 索引合一燃料耗尽时保守判「可达」（要求写出分支），不能当成不可达而放过。
+export branchVerdict : Ctx -> Ec -> List Value -> DtCtor -> Check BranchVerdict
 branchVerdict ctx ec idxs ctor =
-  case bindCtorTele ctx (dtCtorType ctor) (wildArgs (ctorExplicitArity (dtCtorType ctor))) of
-    ErrC e => BranchOk
-    OkC (Pair branchCtx (Pair binders leftover)) =>
-      if nonEmpty leftover then
-        BranchOk
-      else
-        case unifyIdxListSized ec [] (ctxDepth branchCtx) (ctorResultValsIn branchCtx ctor) (map (\v => refineValue [] defaultFuel v) idxs) of
-          ErrC e => BranchImpossibleIndex
-          OkC refs => branchAfterUnify ec branchCtx refs
+  Vuna.Compiler.Base.Common.bind
+    (bindCtorTele ctx (dtCtorType ctor) (wildArgs (ctorExplicitArity (dtCtorType ctor))))
+    (
+      \p =>
+        case p of
+          Pair branchCtx (Pair binders leftover) =>
+            if nonEmpty leftover then
+              icInternal "case coverage: constructor telescope arity mismatch"
+            else
+              case unifyIdxListSized ec [] (ctxDepth branchCtx) (ctorResultValsIn branchCtx ctor) (map (\v => refineValue [] defaultFuel v) idxs) of
+                ErrC e => if e.diagCode == tcCode IndexFuel then OkC BranchOk else OkC BranchImpossibleIndex
+                OkC refs => OkC (branchAfterUnify ec branchCtx refs)
+    )
 
-export branchReachable : Ctx -> Ec -> List Value -> DtCtor -> Bool
-branchReachable ctx ec idxs ctor = branchIsReachable (branchVerdict ctx ec idxs ctor)
+export branchReachable : Ctx -> Ec -> List Value -> DtCtor -> Check Bool
+branchReachable ctx ec idxs ctor =
+  Vuna.Compiler.Base.Common.bind (branchVerdict ctx ec idxs ctor) (\v => OkC (branchIsReachable v))
 
 export wildArgs : Int -> List Pat
 wildArgs n = if n <= 0 then [] else (::) (PWild (Span "" 0 0 0 0 0 0)) (wildArgs (n - 1))
@@ -613,21 +622,19 @@ checkCoverage ctx ec dd idxs alts sp =
 
 export checkCovered : Ctx -> Ec -> DtData -> List Value -> List String -> List (Pair Pat Expr) -> Span -> List DtCtor -> Check Int
 checkCovered ctx ec dd idxs written alts sp ctors =
-  let
-    missing = missingCtors ctx ec idxs written ctors
-  in if length missing == 0 then OkC 0 else tcCoverageMissing sp missing
+  Vuna.Compiler.Base.Common.bind
+    (missingCtors ctx ec idxs written ctors)
+    (\missing => if length missing == 0 then OkC 0 else tcCoverageMissing sp missing)
 
-missingCtors : Ctx -> Ec -> List Value -> List String -> List DtCtor -> List (Pair String (Maybe Span))
-missingCtors ctx ec idxs written [] = []
+missingCtors : Ctx -> Ec -> List Value -> List String -> List DtCtor -> Check (List (Pair String (Maybe Span)))
+missingCtors ctx ec idxs written [] = OkC []
 missingCtors ctx ec idxs written (ctor :: rest) =
   if memName (dtCtorName ctor) written then
     missingCtors ctx ec idxs written rest
-  else if branchReachable ctx ec idxs ctor then
-    (::)
-      (Pair (ctorDisplayName (dtCtorName ctor)) ctor.dtCtorSpan)
-      (missingCtors ctx ec idxs written rest)
   else
-    missingCtors ctx ec idxs written rest
+    Vuna.Compiler.Base.Common.bind
+      (branchReachable ctx ec idxs ctor)
+      (\reachable => if reachable then Vuna.Compiler.Base.Common.bind (missingCtors ctx ec idxs written rest) (\tail => OkC (Pair (ctorDisplayName (dtCtorName ctor)) ctor.dtCtorSpan :: tail)) else missingCtors ctx ec idxs written rest)
 
 export checkCaseDone : Ec -> Ctx -> DtData -> List Value -> List (Pair Pat Expr) -> Value -> Span -> Term -> List CaseAlt -> Check (Pair Term Ec)
 checkCaseDone ec ctx dd idxs alts expected sp scrutTerm altTerms =
