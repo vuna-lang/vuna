@@ -134,7 +134,7 @@ if [ "$clean" -eq 1 ] && [ "$JOBS" -le 1 ]; then
   printf '%s' "$(stamp_want Vuna_dCompiler_dBase_dDiagnostics_dSink Base_dData_dString Vuna_runtime Vuna_dCompiler_dBase_dDiag Base_dContainer_dHashMap Vuna_dCompiler_dBase_dSource Base_dData_dMaybe Base_dData_dList)" > "Vuna_dCompiler_dBase_dDiagnostics_dSink.stamp"
   printf '%s' "$(stamp_want Base_dEffect_dPure_dIORef Vuna_runtime Base_dTrait_dMonad Base_dEffect_dCore)" > "Base_dEffect_dPure_dIORef.stamp"
   printf '%s' "$(stamp_want Vuna_dCompiler_dFrontend_dRast_dName Base_dData_dString Vuna_runtime Vuna_dCompiler_dBase_dIntrinsics Vuna_dCompiler_dFrontend_dAst Base_dData_dMaybe Base_dData_dPair Base_dData_dList)" > "Vuna_dCompiler_dFrontend_dRast_dName.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dLoader_dAddr Vuna_runtime Vuna_dCompiler_dBase_dBytes Vuna_dCompiler_dFrontend_dAst Base_dData_dMaybe Base_dData_dPair Base_dData_dList Vuna_dCompiler_dBase_dHash)" > "Vuna_dCompiler_dLoader_dAddr.stamp"
+  printf '%s' "$(stamp_want Vuna_dCompiler_dLoader_dAddr Vuna_runtime Vuna_dCompiler_dBase_dBytes Vuna_dCompiler_dFrontend_dAst Base_dData_dPair Base_dData_dList Vuna_dCompiler_dBase_dHash)" > "Vuna_dCompiler_dLoader_dAddr.stamp"
   printf '%s' "$(stamp_want Base_dEffect_dEnv Vuna_runtime Base_dTrait_dMonad Base_dTrait_dApplicative Base_dData_dMaybe Base_dEffect_dCore)" > "Base_dEffect_dEnv.stamp"
   printf '%s' "$(stamp_want Vuna_dCompiler_dNative_dRuntime Vuna_dCompiler_dNative_dGc Vuna_runtime Vuna_dCompiler_dNative_dAbi Vuna_dCompiler_dNative_dModel Base_dData_dMaybe Base_dData_dList)" > "Vuna_dCompiler_dNative_dRuntime.stamp"
   printf '%s' "$(stamp_want Base_dEffect_dState Vuna_runtime Base_dEffect_dCore)" > "Base_dEffect_dState.stamp"
@@ -428,7 +428,7 @@ compile_mod Base_dEffect_dPure_dIORef Vuna_runtime Base_dTrait_dMonad Base_dEffe
 pids="$pids $!"
 compile_mod Vuna_dCompiler_dFrontend_dRast_dName Base_dData_dString Vuna_runtime Vuna_dCompiler_dBase_dIntrinsics Vuna_dCompiler_dFrontend_dAst Base_dData_dMaybe Base_dData_dPair Base_dData_dList &
 pids="$pids $!"
-compile_mod Vuna_dCompiler_dLoader_dAddr Vuna_runtime Vuna_dCompiler_dBase_dBytes Vuna_dCompiler_dFrontend_dAst Base_dData_dMaybe Base_dData_dPair Base_dData_dList Vuna_dCompiler_dBase_dHash &
+compile_mod Vuna_dCompiler_dLoader_dAddr Vuna_runtime Vuna_dCompiler_dBase_dBytes Vuna_dCompiler_dFrontend_dAst Base_dData_dPair Base_dData_dList Vuna_dCompiler_dBase_dHash &
 pids="$pids $!"
 compile_mod Base_dEffect_dEnv Vuna_runtime Base_dTrait_dMonad Base_dTrait_dApplicative Base_dData_dMaybe Base_dEffect_dCore &
 pids="$pids $!"
