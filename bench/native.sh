@@ -45,7 +45,9 @@ EOF
 }
 
 die() { printf 'vuna-native: %s\n' "$*" >&2; exit 2; }
-note() { printf '%s\n' "$*"; }
+note() {
+  if [ "$JSON_OUT" = "-" ]; then printf '%s\n' "$*" >&2; else printf '%s\n' "$*"; fi
+}
 
 while [ $# -gt 0 ]; do
   case $1 in
