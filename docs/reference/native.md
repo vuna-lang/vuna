@@ -274,7 +274,10 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
   `rename` / `symlinkat`；失败写 `rt_host_status`（errno → 码表与 `dtp_hostCode` 一致：
   ENOENT=1、EACCES/EPERM=2、ENOSPC=3、ENOTDIR=4、EISDIR=5、EEXIST=6、其它=9）。
   `tryReadDir` 返回**字典序** `List String`；`tryRemoveTree` 递归删除时每层用自己的
-  32 KiB `getdents64` 缓冲；`tryWriteFileAtomic` 写 `<path>.<pid>.tmp` 再 `rename`。
+  8 KiB `getdents64` 缓冲，并在分配帧后检查栈下界（主栈取 `rt_stack_top - 4 MiB`，
+  迁移栈取 `rt_stack_limit`）——越界 trap `directory tree too deep` 而不是 SIGSEGV；
+  路径拷贝按容量上界检查，超出 trap `path too long`；`tryWriteFileAtomic` 写
+  `<path>.<pid>.tmp` 再 `rename`。
 - 进程：`runIn` / `tryRunIn`（`chdir` + `fork` + `execve("/bin/sh", ["-c", cmd])` + `wait4`
   + 恢复 cwd；实参按 shell 单引号转义）、`spawn`（`fork` + `execve("/proc/self/exe", argv)`，
   argv[0] 是本进程路径）、`wait`（`wait4` 取退出码，被信号杀死按 1）、`exit_process_host`。

@@ -385,3 +385,11 @@ run: sh -c 'd="$TMPDIR/inc"; printf "module Util where\n\nexport answer : Int\na
 out-contains: native-build: compiled 1 of 8
 run: "$TMPDIR/inc-out/bin/inc" 2>&1
 out-equals: 42
+
+# 9u) 深目录递归删除：每层栈帧有下界守卫——400 层 trap（exit 2），不再 SIGSEGV（139）。
+run: sh -c 'p="$TMPDIR/deep-tree"; rm -rf "$p"; i=0; while [ $i -lt 400 ]; do p="$p/d"; i=$((i+1)); done; mkdir -p "$p"'
+run: sh -c 'd="$TMPDIR/deeptree"; mkdir -p "$d/app"; printf "[package]\nname = \"deeptree\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Effect.Fs as EffFs\nimport Base.Effect.Core as Eff\n\nmain : Eff [FsOp] Int\nmain = fsRemoveTree \"$TMPDIR/deep-tree\"\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/deeptree-out" "$d"'
+exit: 0
+run: sh -c '"$TMPDIR/deeptree-out/bin/deeptree" 2>&1'
+exit: 2
+out-contains: directory tree too deep
