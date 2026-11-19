@@ -1,0 +1,7 @@
+-- 负例：`n /= 0` 只给「非零」，不给「非负」。
+-- Int 上从负起点出发 `n - 1` 只会越走越负，永不触底。
+bad : Int -> Int
+bad n = if n /= 0 then bad (n - 1) else 0
+
+main : Int
+main = 0

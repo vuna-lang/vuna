@@ -1,0 +1,16 @@
+-- 正性守卫的四种写法都能证明 `n - 1` 的非负性：
+-- `n > 0` / `n >= 1` / `0 < n` / `1 <= n`。
+g1 : Int -> Int
+g1 n = if n > 0 then g1 (n - 1) else 0
+
+g2 : Int -> Int
+g2 n = if n >= 1 then g2 (n - 1) else 0
+
+g3 : Int -> Int
+g3 n = if 0 < n then g3 (n - 1) else 0
+
+g4 : Int -> Int
+g4 n = if 1 <= n then g4 (n - 1) else 0
+
+main : Int
+main = 0

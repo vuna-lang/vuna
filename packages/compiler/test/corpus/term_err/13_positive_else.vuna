@@ -1,0 +1,7 @@
+-- 负例：`n > 0` 的正性事实只属于 then 分支；else 分支没有。
+-- 这里递归在 else，`n - 1` 拿不到 `n >= 1`，从非正起点永不触底。
+bad : Int -> Int
+bad n = if n > 0 then 0 else bad (n - 1)
+
+main : Int
+main = 0

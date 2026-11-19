@@ -155,33 +155,50 @@ dfsAll (n :: rest) fuel g visited post =
     case dfsPost [Pair n False] fuel g visited post of
       Pair v2 p2 => dfsAll rest (fuel - 1) g v2 p2
 
-postOrder : HashMap String (List String) -> List (Pair String (List String)) -> List String -> List String
-postOrder gT g nodes = dfsAll nodes (graphFuel g nodes) gT (HashMap.fromList []) []
+-- | `Pair ok post`：`ok = False` = DFS 未发射全部节点（fuel 耗尽）。
+postOrder : HashMap String (List String) -> List (Pair String (List String)) -> List String -> Pair Bool (List String)
+postOrder gT g nodes =
+  let
+    post = dfsAll nodes (graphFuel g nodes) gT (HashMap.fromList []) []
+  in Pair (length post == length nodes) post
 
-collectComp : List String -> Int -> HashMap String (List String) -> HashMap String Bool -> List String -> Pair (HashMap String Bool) (List String)
+collectComp : List String -> Int -> HashMap String (List String) -> HashMap String Bool -> List String -> Pair (HashMap String Bool) (Pair (List String) Bool)
+-- 耗尽：comp 只是前缀，不能当成完整分量。
 collectComp stack fuel rg assigned comp =
-  if fuel <= 0 then
-    Pair assigned comp
-  else
-    case stack of
-      [] => Pair assigned comp
-      m :: rest => if HashMap.member m assigned then collectComp rest (fuel - 1) rg assigned comp else collectComp (append (adjOf m rg) rest) (fuel - 1) rg (HashMap.insert m True assigned) (m :: comp)
+  case stack of
+    [] => Pair assigned (Pair comp True)
+    m :: rest =>
+      if fuel <= 0 then
+        Pair assigned (Pair comp False)
+      else if HashMap.member m assigned then
+        collectComp rest (fuel - 1) rg assigned comp
+      else
+        collectComp
+          (append (adjOf m rg) rest)
+          (fuel - 1)
+          rg
+          (HashMap.insert m True assigned)
+          (m :: comp)
 
-sccOf : List String -> Int -> HashMap String (List String) -> HashMap String Bool -> List (List String) -> List (List String)
-sccOf [] fuel rg assigned comps = comps
+-- | `Pair ok comps`：`ok = False` 表示某个分量被 fuel 截断。
+sccOf : List String -> Int -> HashMap String (List String) -> HashMap String Bool -> List (List String) -> Pair Bool (List (List String))
+sccOf [] fuel rg assigned comps = Pair True comps
 sccOf (n :: rest) fuel rg assigned comps =
   if fuel <= 0 then
-    comps
+    Pair False comps
   else if HashMap.member n assigned then
     sccOf rest (fuel - 1) rg assigned comps
   else
     case collectComp [n] (fuel - 1) rg assigned [] of
-      Pair assigned2 comp => sccOf rest (fuel - 1) rg assigned2 (comp :: comps)
+      Pair assigned2 (Pair comp ok) =>
+        case ok of
+          False => Pair False (comp :: comps)
+          True => sccOf rest (fuel - 1) rg assigned2 (comp :: comps)
 
 strWalk : Int -> List String -> List String -> List (Pair String (List Int)) -> Int -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> HashMap String (List Int) -> List String -> Expr -> Pair Bool (List (Pair (Pair (Pair String String) Int) Span)) -> Pair Bool (List (Pair (Pair (Pair String String) Int) Span))
 strWalk fuel comp ctors projs p sizes caller facts region e acc =
   if fuel <= 0 then
-    acc
+    markInvalid acc
   else
     case e of
       EApp fn args sp => strWalkEApp (fuel - 1) comp ctors projs p sizes caller facts region fn args sp acc
@@ -193,7 +210,14 @@ strWalk fuel comp ctors projs p sizes caller facts region e acc =
               acc1 = strWalk (fuel - 1) comp ctors projs p sizes caller facts region c acc
               acc2 = strWalk (fuel - 1) comp ctors projs p sizes caller facts region t acc1
             in strWalk (fuel - 1) comp ctors projs p sizes caller facts (v :: region) el acc2
-          Nothing => strWalk (fuel - 1) comp ctors projs p sizes caller facts region el (strWalk (fuel - 1) comp ctors projs p sizes caller facts region t (strWalk (fuel - 1) comp ctors projs p sizes caller facts region c acc))
+          Nothing =>
+            case guardThenPosVar c of
+              Just v =>
+                let
+                  acc1 = strWalk (fuel - 1) comp ctors projs p sizes caller facts region c acc
+                  acc2 = strWalk (fuel - 1) comp ctors projs p sizes caller facts (v :: region) t acc1
+                in strWalk (fuel - 1) comp ctors projs p sizes caller facts region el acc2
+              Nothing => strWalk (fuel - 1) comp ctors projs p sizes caller facts region el (strWalk (fuel - 1) comp ctors projs p sizes caller facts region t (strWalk (fuel - 1) comp ctors projs p sizes caller facts region c acc))
       ELam ns b sp => strWalk (fuel - 1) comp ctors projs p sizes caller facts region b acc
       ELet binds body rec_ sp =>
         let
@@ -212,11 +236,6 @@ strWalk fuel comp ctors projs p sizes caller facts region e acc =
       EVar n sp => if memName (rnameKey n) comp then markInvalid acc else acc
       _ => acc
 
-localClauseBinds : List (Pair (List Pat) Expr) -> List (Pair Pat Expr)
-localClauseBinds [] = []
-localClauseBinds ((Pair pats body) :: rest) =
-  Pair (PWild (exprSpan body)) body :: localClauseBinds rest
-
 -- 关系证不出来时记一条诊断边：位置 p 的实参为什么拿不到尺寸关系。
 hintEdge : String -> String -> Int -> List Expr -> List String -> List (Pair String (Pair Int (Pair Int (List Int)))) -> Span -> Pair Bool (List (Pair (Pair (Pair String String) Int) Span)) -> Pair Bool (List (Pair (Pair (Pair String String) Int) Span))
 hintEdge caller callee p args ctors sizes sp acc =
@@ -227,7 +246,7 @@ hintEdge caller callee p args ctors sizes sp acc =
 strWalkEApp : Int -> List String -> List String -> List (Pair String (List Int)) -> Int -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> HashMap String (List Int) -> List String -> Expr -> List Expr -> Span -> Pair Bool (List (Pair (Pair (Pair String String) Int) Span)) -> Pair Bool (List (Pair (Pair (Pair String String) Int) Span))
 strWalkEApp fuel comp ctors projs p sizes caller facts region fn args sp acc =
   if fuel <= 0 then
-    acc
+    markInvalid acc
   else
     case groupHead comp fn of
       Just callee =>
@@ -242,7 +261,7 @@ strWalkEApp fuel comp ctors projs p sizes caller facts region fn args sp acc =
 strWalkEAppMap : Int -> List String -> List String -> List (Pair String (List Int)) -> Int -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> HashMap String (List Int) -> List String -> Expr -> List Expr -> Pair Bool (List (Pair (Pair (Pair String String) Int) Span)) -> Pair Bool (List (Pair (Pair (Pair String String) Int) Span))
 strWalkEAppMap fuel comp ctors projs p sizes caller facts region fn args acc =
   if fuel <= 0 then
-    acc
+    markInvalid acc
   else
     case args of
       [ELam ([Pair v _]) body lamsp, lst] =>
@@ -260,7 +279,7 @@ strWalkEAppMap fuel comp ctors projs p sizes caller facts region fn args acc =
 strWalkMapPartialInline : Int -> List String -> List String -> List (Pair String (List Int)) -> Int -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> HashMap String (List Int) -> List String -> String -> List Expr -> Expr -> Span -> Pair Bool (List (Pair (Pair (Pair String String) Int) Span)) -> Pair Bool (List (Pair (Pair (Pair String String) Int) Span))
 strWalkMapPartialInline fuel comp ctors projs p sizes caller facts region g pargs lst cbsp acc =
   if fuel <= 0 then
-    acc
+    markInvalid acc
   else
     let
       acc1 = strWalk (fuel - 1) comp ctors projs p sizes caller facts region lst acc
@@ -274,7 +293,7 @@ strWalkMapPartialInline fuel comp ctors projs p sizes caller facts region g parg
 strWalkApp : Int -> List String -> List String -> List (Pair String (List Int)) -> Int -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> HashMap String (List Int) -> List String -> Expr -> List Expr -> Pair Bool (List (Pair (Pair (Pair String String) Int) Span)) -> Pair Bool (List (Pair (Pair (Pair String String) Int) Span))
 strWalkApp fuel comp ctors projs p sizes caller facts region fn args acc =
   if fuel <= 0 then
-    acc
+    markInvalid acc
   else
     strWalkArgs
       (fuel - 1)
@@ -294,7 +313,7 @@ strWalkArgs fuel comp ctors projs p sizes caller facts region [] acc =
   if fuel <= 0 then acc else acc
 strWalkArgs fuel comp ctors projs p sizes caller facts region (a :: rest) acc =
   if fuel <= 0 then
-    acc
+    markInvalid acc
   else
     strWalkArgs
       (fuel - 1)
@@ -314,7 +333,7 @@ strWalkAlts fuel comp ctors projs p sizes caller facts region scrut [] acc =
   if fuel <= 0 then acc else acc
 strWalkAlts fuel comp ctors projs p sizes caller facts region scrut ((Pair pat body) :: rest) acc =
   if fuel <= 0 then
-    acc
+    markInvalid acc
   else
     strWalkAlts
       (fuel - 1)
@@ -335,7 +354,7 @@ strWalkBinds fuel comp ctors projs p sizes caller facts region [] acc =
   if fuel <= 0 then acc else acc
 strWalkBinds fuel comp ctors projs p sizes caller facts region ((Pair pat val) :: rest) acc =
   if fuel <= 0 then
-    acc
+    markInvalid acc
   else
     strWalkBinds
       (fuel - 1)
@@ -355,7 +374,7 @@ strWalkFields fuel comp ctors projs p sizes caller facts region [] acc =
   if fuel <= 0 then acc else acc
 strWalkFields fuel comp ctors projs p sizes caller facts region ((Pair fn fe) :: rest) acc =
   if fuel <= 0 then
-    acc
+    markInvalid acc
   else
     strWalkFields
       (fuel - 1)
@@ -375,7 +394,7 @@ strWalkStmts fuel comp ctors projs p sizes caller facts region [] acc =
   if fuel <= 0 then acc else acc
 strWalkStmts fuel comp ctors projs p sizes caller facts region (s :: rest) acc =
   if fuel <= 0 then
-    acc
+    markInvalid acc
   else
     case s of
       DBind pat e sp => strWalkStmts (fuel - 1) comp ctors projs p (extendSizesStrict sizes e pat) caller facts region rest (strWalk (fuel - 1) comp ctors projs p sizes caller facts region e acc)
@@ -384,7 +403,7 @@ strWalkStmts fuel comp ctors projs p sizes caller facts region (s :: rest) acc =
 strClause : List String -> List String -> List (Pair String (List Int)) -> Int -> String -> HashMap String (List Int) -> Pair (List Pat) Expr -> Pair Bool (List (Pair (Pair (Pair String String) Int) Span))
 strClause comp ctors projs p caller facts clause =
   strWalk
-    100000
+    (exprBudget (secondOf clause))
     comp
     ctors
     projs
@@ -569,9 +588,14 @@ checkTerminationDeclsWith own decls =
     ownTbl = HashMap.ofNames own
     _ = dbg! "term-facts"
     fuel = graphFuel g nodes
-    post = postOrder gT g nodes
-    comps = sccOf post fuel rgT (HashMap.fromList []) []
-  in checkSccsWith ownTbl (reverse comps) defTbl ctors projs gT facts
+    postR = postOrder gT g nodes
+    compsR = sccOf (secondOf postR) fuel rgT (HashMap.fromList []) []
+  in case firstOf postR of
+    False => icFuel "termination-scc"
+    True =>
+      case firstOf compsR of
+        False => icFuel "termination-scc"
+        True => checkSccsWith ownTbl (reverse (secondOf compsR)) defTbl ctors projs gT facts
 
 anyOwnTbl : HashMap String Bool -> List String -> Bool
 anyOwnTbl ownTbl [] = False

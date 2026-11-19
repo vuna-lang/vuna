@@ -272,6 +272,60 @@ export varOfExpr : Expr -> Maybe String
 varOfExpr (EVar n sp) = Just (rnameKey n)
 varOfExpr _ = Nothing
 
+-- | 局部函数子句 → 只保留体的“绑定”视图（模式不影响正性/尺寸事实）。
+--   树的三种遍历共用这一份，避免各自实现漂移。
+export localClauseBinds : List (Pair (List Pat) Expr) -> List (Pair Pat Expr)
+localClauseBinds [] = []
+localClauseBinds ((Pair pats body) :: rest) =
+  Pair (PWild (exprSpan body)) body :: localClauseBinds rest
+
+-- | 条件为真时成立的「正性」守卫：`n > 0` / `n >= 1` / `0 < n` / `1 <= n`。
+--   与 `guardPosVar`（条件为假时的基例守卫）互补：`if <正性> then <递归> else <基例>`
+--   的 then 分支才有 `n >= 1` 这条事实，`n - 1` 的非负性才成立。
+export guardThenPosVar : Expr -> Maybe String
+guardThenPosVar e =
+  case e of
+    EApp (EVar op osp) args sp =>
+      case opBaseName (rnameKey op) of
+        "gt" => guardGTZero args
+        "ge" => guardGEOne args
+        "lt" => guardZeroLT args
+        "le" => guardOneLE args
+        ">" => guardGTZero args
+        ">=" => guardGEOne args
+        "<" => guardZeroLT args
+        "<=" => guardOneLE args
+        _ => Nothing
+    _ => Nothing
+
+guardGTZero : List Expr -> Maybe String
+guardGTZero ([lhs, rhs]) =
+  case rhs of
+    EInt k ksp => if k == 0 then varOfExpr lhs else Nothing
+    _ => Nothing
+guardGTZero _ = Nothing
+
+guardGEOne : List Expr -> Maybe String
+guardGEOne ([lhs, rhs]) =
+  case rhs of
+    EInt k ksp => if k == 1 then varOfExpr lhs else Nothing
+    _ => Nothing
+guardGEOne _ = Nothing
+
+guardZeroLT : List Expr -> Maybe String
+guardZeroLT ([lhs, rhs]) =
+  case lhs of
+    EInt k ksp => if k == 0 then varOfExpr rhs else Nothing
+    _ => Nothing
+guardZeroLT _ = Nothing
+
+guardOneLE : List Expr -> Maybe String
+guardOneLE ([lhs, rhs]) =
+  case lhs of
+    EInt k ksp => if k == 1 then varOfExpr rhs else Nothing
+    _ => Nothing
+guardOneLE _ = Nothing
+
 -- 一个实参是否「已知为正」：字面量 >0，或变量处于守卫区 / 调用方同位置形参已有正事实。
 export argPositive : List Expr -> Int -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> HashMap String (List Int) -> List String -> Bool
 argPositive args i sizes caller facts region =
@@ -343,6 +397,19 @@ export posWalkAlts : HashMap String Bool -> String -> List (Pair String (Pair In
 posWalkAlts namesTbl caller sizes facts region [] st = st
 posWalkAlts namesTbl caller sizes facts region ((Pair pat body) :: rest) st =
   posWalkAlts
+    namesTbl
+    caller
+    sizes
+    facts
+    region
+    rest
+    (posWalk namesTbl caller sizes facts region body st)
+
+-- 局部函数的 clause 列表：与 `posWalkAlts` 同形，沿子项结构下降（不走 fuel）。
+export posWalkClauses : HashMap String Bool -> String -> List (Pair String (Pair Int (Pair Int (List Int)))) -> HashMap String (List Int) -> List String -> List (Pair (List Pat) Expr) -> Pair (List (Pair String Int)) (List (Pair String Int)) -> Pair (List (Pair String Int)) (List (Pair String Int))
+posWalkClauses namesTbl caller sizes facts region [] st = st
+posWalkClauses namesTbl caller sizes facts region ((Pair pats body) :: rest) st =
+  posWalkClauses
     namesTbl
     caller
     sizes
@@ -425,10 +492,17 @@ posWalk namesTbl caller sizes facts region (EIf c t el sp) st =
         st2 = posWalk namesTbl caller sizes facts region t st1
       in posWalk namesTbl caller sizes facts (v :: region) el st2
     Nothing =>
-      let
-        st1 = posWalk namesTbl caller sizes facts region c st
-        st2 = posWalk namesTbl caller sizes facts region t st1
-      in posWalk namesTbl caller sizes facts region el st2
+      case guardThenPosVar c of
+        Just v =>
+          let
+            st1 = posWalk namesTbl caller sizes facts region c st
+            st2 = posWalk namesTbl caller sizes facts (v :: region) t st1
+          in posWalk namesTbl caller sizes facts region el st2
+        Nothing =>
+          let
+            st1 = posWalk namesTbl caller sizes facts region c st
+            st2 = posWalk namesTbl caller sizes facts region t st1
+          in posWalk namesTbl caller sizes facts region el st2
 posWalk namesTbl caller sizes facts region (ECase scrut alts sp) st =
   posWalkAlts
     namesTbl
@@ -440,6 +514,8 @@ posWalk namesTbl caller sizes facts region (ECase scrut alts sp) st =
     (posWalk namesTbl caller sizes facts region scrut st)
 posWalk namesTbl caller sizes facts region (ELam ns b sp) st =
   posWalk namesTbl caller sizes facts region b st
+posWalk namesTbl caller sizes facts region (ELocalFun clauses sp) st =
+  posWalkClauses namesTbl caller sizes facts region clauses st
 posWalk namesTbl caller sizes facts region (ELet binds body rec_ sp) st =
   posWalk
     namesTbl
@@ -791,6 +867,76 @@ isMapLike n =
     || dotBase n
     == "traverse" || dotBase n == "concatMap" || dotBase n == "mapMaybe" || dotBase n == "filter"
 
+-- ---------------------------------------------------------------
+-- 表达式规模（遍历预算用）
+-- ---------------------------------------------------------------
+-- | RAST 表达式节点数（含局部函数 clause body / do 语句 / record 字段）。
+--   `strWalk` / `siteWalkC` 每访问一个节点至少消耗 1 单位 fuel，因此
+--   `8 * exprWeight + 32` 是静态上界；不要退回固定常数。
+export exprWeight : Expr -> Int
+exprWeight e =
+  case e of
+    EVar n sp => 1
+    EInt k sp => 1
+    EStr s sp => 1
+    EFloat raw sp => 1
+    ELam ns body sp => 1 + exprWeight body
+    EApp fn args sp => 1 + exprWeight fn + exprWeightArgs args
+    EPi n implicit q dom cod sp => 1 + exprWeight dom + exprWeight cod
+    ELet binds body rec_ sp => 1 + exprWeightBinds binds + exprWeight body
+    ELocalFun clauses sp => 1 + exprWeightClauses clauses
+    ECase scrut alts sp => 1 + exprWeight scrut + exprWeightAlts alts
+    EIf c t el sp => 1 + exprWeight c + exprWeight t + exprWeight el
+    EField base f sp => 1 + exprWeight base
+    ERecord rn fields sp => 1 + exprWeightFields fields
+    ERecUpdate base fields sp => 1 + exprWeight base + exprWeightFields fields
+    EDo stmts sp => 1 + exprWeightStmts stmts
+    EInfix op l r sp => 1 + exprWeight l + exprWeight r
+    EParen inner sp => 1 + exprWeight inner
+    EBacktick op l r sp => 1 + exprWeight l + exprWeight r
+    ESectOp op sp => 1
+    ESectL op rhs sp => 1 + exprWeight rhs
+    ESectR lhs op sp => 1 + exprWeight lhs
+    EAnn value ty sp => 1 + exprWeight value + exprWeight ty
+    EInterp multi parts sp => 1 + exprWeightParts parts
+
+export exprBudget : Expr -> Int
+exprBudget e = 8 * exprWeight e + 32
+
+exprWeightArgs : List Expr -> Int
+exprWeightArgs [] = 0
+exprWeightArgs (a :: rest) = exprWeight a + exprWeightArgs rest
+
+exprWeightBinds : List (Pair Pat Expr) -> Int
+exprWeightBinds [] = 0
+exprWeightBinds ((Pair pat v) :: rest) = exprWeight v + exprWeightBinds rest
+
+exprWeightClauses : List (Pair (List Pat) Expr) -> Int
+exprWeightClauses [] = 0
+exprWeightClauses ((Pair pats body) :: rest) = exprWeight body + exprWeightClauses rest
+
+exprWeightAlts : List (Pair Pat Expr) -> Int
+exprWeightAlts [] = 0
+exprWeightAlts ((Pair pat body) :: rest) = exprWeight body + exprWeightAlts rest
+
+exprWeightFields : List (Pair String Expr) -> Int
+exprWeightFields [] = 0
+exprWeightFields ((Pair fn fe) :: rest) = exprWeight fe + exprWeightFields rest
+
+exprWeightStmts : List DoStmt -> Int
+exprWeightStmts [] = 0
+exprWeightStmts (s :: rest) =
+  case s of
+    DBind pat e sp => exprWeight e + exprWeightStmts rest
+    DExpr e sp => exprWeight e + exprWeightStmts rest
+
+exprWeightParts : List InterpPart -> Int
+exprWeightParts [] = 0
+exprWeightParts (p :: rest) =
+  case p of
+    IPText s => exprWeightParts rest
+    IPHole e => exprWeight e + exprWeightParts rest
+
 export extendElemSizes : List (Pair String (Pair Int (Pair Int (List Int)))) -> Expr -> String -> List (Pair String (Pair Int (Pair Int (List Int))))
 extendElemSizes sizes (EVar n sp) v =
   case sizeOfVarStrict (rnameKey n) sizes of
@@ -838,9 +984,10 @@ weakReach comp edges start frontier visited = weakReachFuel 100000 comp edges st
 export weakReachFuel : Int -> List String -> List (Pair (Pair (Pair String String) Int) Span) -> String -> List String -> List String -> Bool
 weakReachFuel fuel comp edges start frontier visited =
   if fuel <= 0 then
-    False
+    True
   else
     case frontier of
+      -- 耗尽不能回答「无环」：那会让 `hasWeakCycle` 放过一个环。按保守方向当成「可达」。
       [] => False
       n :: rest => if n == start then True else if memName n visited then weakReachFuel (fuel - 1) comp edges start rest visited else weakReachFuel (fuel - 1) comp edges start (append rest (weakAdj comp edges n)) (n :: visited)
 

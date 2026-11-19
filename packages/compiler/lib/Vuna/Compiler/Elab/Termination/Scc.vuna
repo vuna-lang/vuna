@@ -123,7 +123,14 @@ siteWalkC fuel comp ctors projs caller facts sizes region e acc =
               acc1 = siteWalkC (fuel - 1) comp ctors projs caller facts sizes region c acc
               acc2 = siteWalkC (fuel - 1) comp ctors projs caller facts sizes region t acc1
             in siteWalkC (fuel - 1) comp ctors projs caller facts sizes (v :: region) el acc2
-          Nothing => siteWalkC (fuel - 1) comp ctors projs caller facts sizes region el (siteWalkC (fuel - 1) comp ctors projs caller facts sizes region t (siteWalkC (fuel - 1) comp ctors projs caller facts sizes region c acc))
+          Nothing =>
+            case guardThenPosVar c of
+              Just v =>
+                let
+                  acc1 = siteWalkC (fuel - 1) comp ctors projs caller facts sizes region c acc
+                  acc2 = siteWalkC (fuel - 1) comp ctors projs caller facts sizes (v :: region) t acc1
+                in siteWalkC (fuel - 1) comp ctors projs caller facts sizes region el acc2
+              Nothing => siteWalkC (fuel - 1) comp ctors projs caller facts sizes region el (siteWalkC (fuel - 1) comp ctors projs caller facts sizes region t (siteWalkC (fuel - 1) comp ctors projs caller facts sizes region c acc))
       ELam ns b sp => siteWalkC (fuel - 1) comp ctors projs caller facts sizes region b acc
       ELet binds body rec_ sp => siteWalkC (fuel - 1) comp ctors projs caller facts (extendByBinds binds sizes) region body (siteCollectBinds (fuel - 1) comp ctors projs caller facts sizes region binds acc)
       EPi n implicit _ dom cod sp => siteWalkC (fuel - 1) comp ctors projs caller facts sizes region cod (siteWalkC (fuel - 1) comp ctors projs caller facts sizes region dom acc)
@@ -137,12 +144,6 @@ siteWalkC fuel comp ctors projs caller facts sizes region e acc =
       ELocalFun clauses sp => siteCollectBinds (fuel - 1) comp ctors projs caller facts sizes region (localClauseBinds clauses) acc
       EVar n sp => if memName (rnameKey n) comp then Site caller (rnameKey n) [] sizes region :: acc else acc
       _ => acc
-
--- 把局部函数的 clause 列表转成 `siteCollectBinds` 能吃的 binds（模式仅占位）。
-localClauseBinds : List (Pair (List Pat) Expr) -> List (Pair Pat Expr)
-localClauseBinds [] = []
-localClauseBinds ((Pair pats body) :: rest) =
-  Pair (PWild (exprSpan body)) body :: localClauseBinds rest
 
 siteWalkEApp : Int -> List String -> List String -> List (Pair String (List Int)) -> String -> HashMap String (List Int) -> List (Pair String (Pair Int (Pair Int (List Int)))) -> List String -> Expr -> List Expr -> List Site -> List Site
 siteWalkEApp fuel comp ctors projs caller facts sizes region fn args acc =
@@ -196,7 +197,7 @@ siteCollectClauses comp ctors projs facts caller (cl :: rest) acc =
     facts
     caller
     rest
-    (siteWalkC 100000 comp ctors projs caller facts (strSizeEntries (firstOf cl)) [] (secondOf cl) acc)
+    (siteWalkC (exprBudget (secondOf cl)) comp ctors projs caller facts (strSizeEntries (firstOf cl)) [] (secondOf cl) acc)
 
 siteCollect : List String -> List String -> List (Pair String (List Int)) -> HashMap String (List (Pair (List Pat) Expr)) -> HashMap String (List Int) -> List Site
 siteCollect comp ctors projs defTbl facts = siteCollectGo comp ctors projs defTbl facts comp []
