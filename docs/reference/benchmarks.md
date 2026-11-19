@@ -207,7 +207,7 @@ native 赢在「调用少、字符串/栈传参多」的形状（[performance.md
 
 另有 `startup`（`repeat=20` 的进程/运行时初始化地板）与 `traits`（约束多态的字典派发）。
 手写 OCaml 对照在同名 `.ml`（`Effect.Deep` 或直接内联）。`handleState` 这种 answer 是
-函数的库 handler 仍不可用（D111），没有进基准。
+函数的库 handler 仍不可用（D114），没有进基准。
 
 三端同窗口（HEAD，`--target all --runs 5 --warmup 2`，loadavg ≈2.5；
 ratio 相对手写 OCaml；wasm 括号里是减掉 `meta.node_startup_ms` = 22 ms 的 net）：

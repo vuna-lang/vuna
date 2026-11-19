@@ -15,14 +15,14 @@ ID 是稳定引用（`层前缀-序号`），改动时保留编号，删掉实�
 | --- | --- | --- | --- | --- |
 | FE-01 | `Packages/Source.vuna` 的 `collectDirFiles` | ⚠️C | fuel 耗尽 `pure []`：文件集合被静默截断，摘要据此判「内容一致」 | 已清（耗尽报 `IC_FuelExhausted`；预算按深度计） |
 | FE-02 | `Packages/Source.vuna` 的 `collectNames` / `walkName` | ⚠️C | 同上（同族另一口径 `Pkg.loadPackageWalk` 是 `icFuel`） | 已清（同 FE-01） |
-| FE-03 | `Frontend/Parser.vuna` 的 `parseModDecl` | ⚠️B | 显式导出列表从不解析，`modDeclHasExportList` 恒 False，但 Ast/Canonical/Fmt/LSP 都在读 | 开放 |
+| FE-03 | `Frontend/Parser.vuna` 的 `parseModDecl` | ⚠️B | 显式导出列表从不解析，`modDeclHasExportList` 恒 False，但 Ast/Canonical/Fmt/LSP 都在读 | 已清（`parseModDecl` 解析括号列表；与逐定义 `export` 互斥） |
 | FE-04 | `Parser.vuna` 的 `exportMarkerFollows` | A | 两个分支同值，`export x = 1` 被当成导出标记 | 已清 |
 | FE-05 | `Parser/Support.vuna` 的 `binderHead` | C | binder 组上限 64 名，超出静默退化成普通括号表达式 | 已清（名字串沿 token 列表结构扫描，无 64 上限） |
 | FE-06 | `Manifest.vuna` 的 `layerHasCycle` | ⚠️C | fuel 只按「层数+1」，队列更宽时环路漏检 | 开放 |
 | FE-07 | `Manifest.vuna` 的 schema 编码 | D | 注释 / `checkOneEntry` / `buildManifest` 三处手工同步 | 开放 |
 | FE-08 | `Toml.vuna` 的 `parseIntegerDigits` | C | 整数累加无溢出检查（词法器对源码字面量有 `IntLiteralOutOfRange`） | 已清（按 `Lexer.maxIntLiteral` 判界，报 `PKG_TomlSyntax`） |
 | FE-09 | `Toml.vuna` 的 `flatten*` / `nodeValue` | D | `fuel` 是 SCT 的测度、从不检查；越界不可达靠调用方论证 | 开放 |
-| FE-10 | `Toml.vuna` 的 `nodeFields` | C | 表数组元素不是表时静默给空表 | 开放 |
+| FE-10 | `Toml.vuna` 的 `nodeFields` | C | 表数组元素不是表时静默给空表 | 已清（`NodeTableArray` 元素即字段表，`nodeFields` 删除） |
 | FE-11 | `Cst.vuna` 的 `closeBlocks` / `buildCst` | ⚠️C | 4096 / `tokCount*4+64` 估算上界，耗尽静默留下未闭合节点 | 已清（`closeBlocks`/`closeDecls` fuel = 栈长，`buildCst` fuel = token 数） |
 | FE-12 | `Cst.vuna` 的 `scanStringEnd` / `scanDigitsEnd` | D | 为还原原文二次扫描，规则与 lexer 手工一致 | 开放 |
 | FE-13 | `Lexer.isOpChar` + `Parser.parseAtomBase` 的限定符号分支 | C | `.` 并入运算符 token，`A.+` 形状不可达（分支已删；限定运算符引用不存在） | 已清 |
@@ -70,10 +70,10 @@ ID 是稳定引用（`层前缀-序号`），改动时保留编号，删掉实�
 | EL-09 | `Case.vuna` 的 `bindCtorTele` | C | 失败/残参时直接当可达分支 | 已清（绑定失败报 ICE；IndexFuel 保守判可达） |
 | EL-10 | `Case.vuna` 的 `hasCatchAll` | A | 任何非 `PCon` 头（含 `PInt`/`PStr`/`PRecord`）都算兜底 → 跳过穷尽检查 | 已清（只认 `PVar`/`PWild`） |
 | EL-11 | `Records.vuna` 的 `desugarPatternFuel` | ⚠️A | 耗尽 `OkC pat` 静默返回半降级模式（对照组 `desugarExprFuel` 是 `icFuel`） | 已清（耗尽报 `icFuel`） |
-| EL-12 | `Match.vuna` 的 `familyCovered` | C | 缺族信息时补 `_` 兜底 → 注释自认会报假 `missing` | 开放 |
+| EL-12 | `Match.vuna` 的 `familyCovered` | C | 缺族信息时补 `_` 兜底 → 注释自认会报假 `missing` | 已清（列表字面量哨兵按短名折回族；族未知不补兜底） |
 | EL-13 | `Coverage.vuna` 的见证搜索 | C | fuel 耗尽 `Nothing`（少报见证） | 已清（燃料按矩阵节点数派生） |
 | EL-14 | `Data.vuna` 的 `eraseIndexMask` | B | 索引擦除只有分析，无消费者（死 API） | 开放 |
-| EL-15 | `Records.vuna` 的 `HasField` 注入 | C | 生成实例硬编码 base 具体名字（`Field`/`HasField`/`getField`） | 开放 |
+| EL-15 | `Records.vuna` 的 `HasField` 注入 | C | 生成实例硬编码 base 具体名字（`Field`/`HasField`/`getField`） | 已清（base 名字常量集中在 `Intrinsics`，生成只认 canonical trait） |
 | EL-16 | `Derive.vuna` 的 `boolTrue`/`boolFalse` | A | 用 `1 == 1` / `0 == 1` 造 Bool（派生实例不依赖源码 Bool 构造子） | 开放（有意） |
 | EL-17 | `Usage.vuna` 的捕获检查 | C | 上限后 `icInternal`（应保守拒绝） | 已清（报 `TC_CaptureFuel`，保守拒绝） |
 | EL-18 | `Representation.vuna` 的 `termIsFunction` | C | 只看顶层 `TPi`，别名展开的函数类型逃过判据 | 已清（沿单字段 record/alias 头展开到 `TPi`） |
