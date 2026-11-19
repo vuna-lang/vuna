@@ -121,3 +121,8 @@ exit: 0
 run: sh -c '"$VUNA" dev ir dump $VUNA_SUITE_ROOT/packages/cli/test/corpus/packages/ir_types/root 2>/dev/null | grep -qF "(app (Opaque -> Int)->Int (lam [x]:Int"'
 exit: 0
 
+
+# 插件协议：入口能自描述（describe v1 首行是版本行，命令行按 TAB 分隔）。
+run: sh -c '"$VUNA" --vuna-describe 2>/dev/null | head -1 | grep -q "^vuna-plugin"'
+run: sh -c '"$VUNA" --vuna-describe 2>/dev/null | grep -qE "^cmd[[:space:]]+check[[:space:]]"'
+run: sh -c '"$VUNA" --vuna-describe 2>/dev/null | grep -qE "^flag[[:space:]]+fmt[[:space:]]+bool[[:space:]]+check"'

@@ -15,6 +15,7 @@ import Vuna.Cli.Err
 import Vuna.Cli.Help
 import Vuna.Cli.Registry
 import Vuna.Cli.Spec
+import Vuna.Plugin.Describe
 import Vuna.Cli.Suggest
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Driver.CompilerCli
@@ -32,11 +33,15 @@ import Base.Effect.Stdin as EffStdin
 import Base.Effect.Types as EffTypes
 
 -- | CLI 总入口：去掉隐藏的性能旗标，`-h` / `--help` 优先，其余交给命令分发。
+-- `--vuna-describe` 打印本二进制的命令表（插件协议 v1），供入口与工具读取。
 export runCli : List String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
 runCli args =
-  case helpPath args of
-    Just path => printHelp path
-    Nothing => dispatch (stripPerfFlags args)
+  case args of
+    ["--vuna-describe"] => printText (Vuna.Plugin.Describe.render "cli" commands)
+    _ =>
+      case helpPath args of
+        Just path => printHelp path
+        Nothing => dispatch (stripPerfFlags args)
 
 -- | 内部：`--debug-perf` 由 runtime 原语读原始 argv/env，不参与子命令分发。
 stripPerfFlags : List String -> List String
