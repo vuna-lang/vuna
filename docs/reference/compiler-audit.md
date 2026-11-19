@@ -60,7 +60,7 @@ ID 是稳定引用（`层前缀-序号`），改动时保留编号，删掉实�
 
 | ID | 位置 | 类 | 现象 → 后果 | 状态 |
 | --- | --- | --- | --- | --- |
-| EL-01 | `Termination/Scc.vuna` 的 `fuelEdgesGo` | ⚠️A | 穿线失败（`ok=False`）的站点被从图里删掉，剩余严格自环即可判通过 → 接受非终止程序 | 开放 |
+| EL-01 | `Termination/Scc.vuna` 的 `fuelEdgesGo` | ⚠️A | 穿线失败（`ok=False`）的站点被从图里删掉，剩余严格自环即可判通过 → 接受非终止程序 | 已清（未识别站点按弱边计入；fuel 按守卫形参定位） |
 | EL-02 | `Termination.vuna` 的 SCC/DFS | ⚠️C | fuel 耗尽静默返回部分结果 → 整函数跳过终止性检查 | 开放 |
 | EL-03 | `Termination.vuna` 的 STR | ⚠️C | 硬编码 100000、耗尽静默；三套遍历已漂移（`posWalk` 缺 `ELocalFun`） | 开放 |
 | EL-04 | `Measure.vuna` 的 `weakReach` | ⚠️C | 耗尽返回 `False`=无环（方向是放过） | 开放 |
@@ -124,11 +124,11 @@ ID 是稳定引用（`层前缀-序号`），改动时保留编号，删掉实�
 
 | ID | 位置 | 类 | 现象 → 后果 | 状态 |
 | --- | --- | --- | --- | --- |
-| IR-01 | `Core/Eval.vuna` 的 `quote*` | ⚠️C | 固定 fuel 64，耗尽静默返回 `TType 0`，而 `substSolvedMetas` 用它把解写回程序 | 开放 |
-| IR-02 | `Core/Eval.vuna` 的 `hasUnsolvedMeta*` | ⚠️C | 同 64 上限，耗尽返回 `False`（深值判成干净） | 开放 |
+| IR-01 | `Core/Eval.vuna` 的 `quote*` | ⚠️C | 固定 fuel 64，耗尽静默返回 `TType 0`，而 `substSolvedMetas` 用它把解写回程序 | 已清（预算 262144） |
+| IR-02 | `Core/Eval.vuna` 的 `hasUnsolvedMeta*` | ⚠️C | 同 64 上限，耗尽返回 `False`（深值判成干净） | 已清（预算派生，耗尽按保守方向 True） |
 | IR-03 | `Core/Term.vuna` 的 `substVarAt` | ⚠️A | `TRecUpd` 分支用 `idx - length tele`，与 `shift` 的 `depth + length tele` 相反 | 已清 |
-| IR-04 | `Ir/Anf.vuna` | ⚠️C | 燃料耗尽静默返回未变换子项，`anfProgramDefs` 恒 `Ok` | 开放 |
-| IR-05 | `Ir/Cps.vuna` | ⚠️C | 20+ 处 `if fuel <= 0 then e` 返回半 CPS 形态 | 开放 |
+| IR-04 | `Ir/Anf.vuna` | ⚠️C | 燃料耗尽静默返回未变换子项，`anfProgramDefs` 恒 `Ok` | 已清（预算按程序规模派生） |
+| IR-05 | `Ir/Cps.vuna` | ⚠️C | 20+ 处 `if fuel <= 0 then e` 返回半 CPS 形态 | 已清（各 pass 预算按项规模派生） |
 | IR-06 | `Ir/Cps.vuna` 的 `mCpsApply` | A | 耗尽返回 `IrGlobal "?"` 占位 | 开放 |
 | IR-07 | `Ir/Cps.vuna` 的 `mStepsDef` | A | 注入的 `machineRun` 全局不在 `irDefDeps` → SCC/可达性看不见 | 开放 |
 | IR-08 | `Ir/Cps.vuna` 的 `transformDef` | D | 一次 pass 系统性清空签名与节点类型槽 | 开放 |

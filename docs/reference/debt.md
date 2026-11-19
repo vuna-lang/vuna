@@ -109,13 +109,12 @@
 
 | ID | 仍未成立的事实 | 证据 | 归属 |
 | --- | --- | --- | --- |
-| A01 | `Termination/Scc.fuelEdgesGo` 的 `ok` 累加器只写不读：穿线失败的递归站点被从图里删掉，剩余严格边即可判通过 → 接受非终止程序 | [compiler-audit.md](compiler-audit.md) EL-01；`Elab/Termination/Scc.vuna` 的 `fuelEdgesGo` / `tryFuelThread` | 后续 |
 | A02 | 元变量作用域检查靠负索引放行：`Conv.termScopedTo` 的 `i < extra` 与 `Eval.varIndex` 的越界 `-1` 哨兵叠加，越界解一律通过；显式收紧会打断 base 自身（`String.lines` 报 `TC_NoInstanceFound`），需与表示一起改 | [compiler-audit.md](compiler-audit.md) EC-01/EC-02；`Core/Conv.vuna`、`Core/Eval.vuna` | 后续（需设计） |
-| A03 | `Core.Eval.quote*` 固定 fuel 64、耗尽返回 `TType 0`，而 `substSolvedMetas` 用它把已解元变量写回程序；`hasUnsolvedMeta*` 同上限且耗尽返回 `False` | [compiler-audit.md](compiler-audit.md) IR-01/IR-02；`Core/Eval.vuna` | 后续 |
 | A04 | 包文件收集在 fuel 耗尽时返回部分列表（`collectDirFiles`/`collectNames`/`walkName`），摘要据此判「内容一致」 | [compiler-audit.md](compiler-audit.md) FE-01/FE-02；`Frontend/Packages/Source.vuna` | 后续 |
 | A05 | `Loader.Flatten.loadModule` 命中模块表即跳过可见性检查：依赖包未导出的模块、两个 root 的同名模块都按「先装入者」解析 | [compiler-audit.md](compiler-audit.md) LD-01；`Loader/Flatten.vuna` | 后续 |
 | A06 | split 的 cache key 编入 `mode=s/f`：摘要路径与全量路径产出不同字节，产物是「输入 + store 热度」的函数 | [compiler-audit.md](compiler-audit.md) DR-01；`Driver/Compile.vuna`（D112 疑源） | 后续（需设计） |
 | A07 | 非 try 的 `prim_eff_*` FS 原语在 native 上映射到 `try_*`：失败变成 `""`/`0`/`False` + status，而 OCaml 抛错、wasm trap | [compiler-audit.md](compiler-audit.md) CG-02；`Native/Runtime.vuna` | 后续（与 typed error 通道一起定） |
+| A08 | `Dt.topoVisit` / `Dt.closureGo` / `Compile.importClosureGo` 在 fuel 耗尽时返回部分结果（同层 `shiftTerm` 是 `icFuel`）：图更深时表现为「少精化/少写产物」而不是失败 | [compiler-audit.md](compiler-audit.md) DR-03；`Driver/Dt.vuna`、`Driver/Compile.vuna` | 后续 |
 
 ## 相关阅读
 
