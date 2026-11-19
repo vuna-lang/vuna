@@ -1,9 +1,7 @@
 module Vuna.Compiler.Driver.Iface where
 
 -- **模块级接口摘要**（TTC 思路）的载体与读写。
---
--- 粒度是模块：每个模块一份 `ModuleIface`，包级 manifest 是
--- `PackageIface`（模块按拓扑序）。`Driver.Cache.CachedProgram` 保留包级闭合结果。
+-- 粒度是模块：每个模块一份 `ModuleIface`（写侧按拓扑序）。`Driver.Cache.CachedProgram` 保留包级闭合结果。
 --
 -- 字段设计（对照 Idris2 TTC）：
 --   - `miCached`：模块自己的闭合精化产物（datas / defs 含 body / globals / insts /
@@ -59,7 +57,7 @@ import Vuna.Compiler.Loader.Flatten
 import Vuna.Compiler.Frontend.Packages.Pkg
 
 -- 源信息：模块名 → (绝对路径, 内容哈希, mtime, size)。路径只用于本机校验（换 checkout
--- 会失效，回退全量）；mtime/size 是可选快路径（`VUNA_CACHE_MTIME=1`），默认仍用内容哈希。
+-- 会失效，回退全量）；mtime/size 只用于校验时的同秒安全窗，判据仍是内容哈希。
 export record SourceInfo(..) where
   siPath : String
   siHash : String
@@ -98,14 +96,6 @@ export record ModuleIface(..) where
   -- `DtDef` 的 span 不在载荷里，必须用本表把干净模块的行补回位置表；否则「首次全量
   -- 构建」与「后续增量构建」的 `Vuna_runtime.ml` 不一致，产物身份就破了。
   miDefLocs : List (Pair String (Pair String Int))
-
-export record PackageIface(..) where
-  piSchema : String
-  piCompiler : String
-  piPackage : String
-  -- 包级环境指纹（manifest 的 `pmEnv`）：包配置/依赖图变化时整包失效。
-  piEnv : Int
-  piModules : List ModuleIface
 
 export siPathOf : SourceInfo -> String
 siPathOf s = s.siPath
@@ -770,7 +760,7 @@ firstCoverageIssue oi ourNames inherited ifaces prog =
 -- ---------------------------------------------------------------
 -- 包接口构造
 -- ---------------------------------------------------------------
--- 本包模块 → `PackageIface` 的模块列表（拓扑序：Loader 的列表是依赖者在前的反序）。
+-- 本包模块 → 模块接口列表（拓扑序：Loader 的列表是依赖者在前的反序）。
 -- 入口声明（合成模块 `Main`）不写接口：它没有导出面、加载侧永远从源码进；
 coverageResult : OwnerIndex -> List String -> List String -> List ModuleIface -> DtProgram -> Check (List ModuleIface)
 coverageResult oi ourNames inherited ifaces prog =
@@ -855,24 +845,9 @@ ifaceOfModule pkg si knownDeps inherited clean modules entryDecls prog name =
       else
         icInternal "iface: module ${name} has uncovered artifacts"
 
--- 包接口自检：schema/编译器指纹由读侧校验；这里只检查模块集合非空 + 摘要闭合。
-export packageIfaceValid : PackageIface -> Bool
-packageIfaceValid pi =
-  pi.piSchema == ifaceSchema && length pi.piModules > 0 && allValid pi.piModules
-
-allValid : List ModuleIface -> Bool
-allValid [] = True
-allValid (m :: rest) = cachedProgramValid (miCachedOf m) && allValid rest
-
 export moduleNamesOf : List ModuleIface -> List String
 moduleNamesOf [] = []
 moduleNamesOf (m :: rest) = miNameOf m :: moduleNamesOf rest
-
---
--- 写侧只重写「接口哈希变化或文件缺失」的模块；manifest 最后原子写 = 提交点。读侧先读
--- manifest，再逐模块读文件并校验「相对路径合法 ↔ 记录名 / 接口哈希」；缺件/损坏 ⇒
-export ifaceCodec : String
-ifaceCodec = "module-iface 4"
 
 -- | `SourceInfo`：路径 / 源内容摘要 / mtime / size（全部参与载荷 roundtrip）。
 export encSourceInfo : SourceInfo -> List String -> List String

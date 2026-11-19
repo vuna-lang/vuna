@@ -129,7 +129,7 @@ Vuna.Compiler.Driver.ToolPayload`），于是每轮都补一遍 lib check（`col
    判据、也不阻塞依赖方复用；代价是不变量从「入口 == lib 根」放宽成「入口 ⊇ 导出面」，
    仍然是硬约束（少一个导出模块，冷 check 会退回两遍，日志可见 `iface-skip partial
    ... required=88`）。同轮删掉两处死计算：`summaryCheckExeParts` / `summaryCheckLibParts`
-   原先为 `ownCleanModules` 算一遍 `depIfaceHashTable`，而 `ownCleanInfo` 忽略该参数——
+   原先为 `ownCleanModules` 算一遍 `depIfaceHashTable`，而 `ownCleanInfo` 只需要包上下文——
    每次 check 白跑一遍整闭包源扫描（`ifaceModsEff`）。
 2. **codegen 分组按 SCC 线性过滤全体定义**（`Lowering.Program.appendGroups`）：每个单点 SCC
    都 `filter (memList …) env.lwDefs` ⇒ O(n²)。改为「环境里一次建 `lwDefTbl`、组内按成员名
@@ -171,7 +171,7 @@ Vuna.Compiler.Driver.ToolPayload`），于是每轮都补一遍 lib check（`col
    `member` ⇒ 冷构建 termination 566 → 299 ms，合成 16k 档约 1313 → 25 ms。
 3. **写接口把包接口读两遍**：`Driver.Compile` 的 check 前段已为干净模块判定读过整包接口，
    `writeIfaceShadow` 又读一遍，`writePackageIface` 再读一遍解码全部模块文件。合并为一次
-   `ownCleanInfo` 读取（同时给出 clean 与「旧接口可读」标志），把标志传给
+   `ownCleanInfo` 读取，把结果传给
    `writePackageIface` ⇒ `check packages/compiler` 的 iface-write 244 → 16 ms。
 
 冷构建（全量精化 + codegen + ocamlopt）不走增量收尾，收益主要来自 (2) 与 (3)，见上表。

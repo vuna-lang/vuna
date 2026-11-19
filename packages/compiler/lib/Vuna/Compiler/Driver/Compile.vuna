@@ -1273,91 +1273,6 @@ pickDepMods ctx mods (n :: rest) seen =
       Just m => if m.cmPkg /= contextPackageName ctx then m :: pickDepMods ctx mods rest (n :: seen) else pickDepMods ctx mods rest (n :: seen)
       Nothing => pickDepMods ctx mods rest seen
 
-depModsOrdered : PackageContext -> List ClosureMod -> List ClosureMod
-depModsOrdered ctx mods = pickDepMods ctx mods (topoModules (moduleGraphOf mods)) []
-
--- 来源校验：接口记录的每个模块源信息 = 当前文件（默认内容哈希；`VUNA_CACHE_MTIME=1` 时
--- mtime+size 相同且落在安全窗外即视为未变，否则回落内容哈希）。反过来当前目录里的模块
--- 判据：接口记录的每个模块，其源文件必须仍然存在且内容未变。
--- **不做**「磁盘模块集合 == 接口模块集合」的相等比较：可执行包的接口只覆盖入口
--- import 闭包，磁盘上允许存在未被引用的模块（它们不参与编译，也不该进接口；
--- 工具包 / 本地夹具都可能带未引用模块）。
--- 集合变化由其它判据覆盖：新增并 import 的模块会改使用者源码哈希、`[export]` 变化会改
--- `pmEnv`、删除文件会让下面的 entry 查找直接失败。
-depIfaceSourcesValid : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r => List Root -> Package -> PackageIface -> Eff r Bool
-depIfaceSourcesValid roots p pi =
-  do
-    let
-      pkgRoots = filter (\r => rootName r == packageName p) roots
-    in do
-      walked <- sourcePathMapOfRoots pkgRoots
-      allModuleSourcesValid pi.piModules walked
-
-sourcePathMapOfRoots : Member nFs FsOp r => List Root -> Eff r (List (Pair String String))
-sourcePathMapOfRoots roots =
-  do
-    walked <-
-      mapEff (
-          \r =>
-            do
-              paths <- collectVunaMeta 1048576 (rootDir r)
-              pure (map (\path => Pair (moduleNameOfPath (rootDir r) path) path) paths)
-        ) roots
-    pure (concatMap (\xs => xs) walked)
-
-allModuleSourcesValid : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r => List ModuleIface -> List (Pair String String) -> Eff r Bool
-allModuleSourcesValid [] _ = pure True
-allModuleSourcesValid (m :: rest) paths =
-  case lookupPair (miNameOf m) paths of
-    Just path =>
-      do
-        unchanged <- sourceInfoUnchanged path (miSourceOf m)
-        if unchanged then allModuleSourcesValid rest paths else pure False
-    Nothing => pure False
-
--- mtime 秒精度的安全窗：`fsFileMtime` 只有秒级分辨率，同秒内改内容且大小不变的编辑
--- 用 mtime+size 不可分辨。mtime 距当前不足该窗口的文件一律回落内容哈希（近期编辑不走
--- 快路径）；窗口外可安全信任 mtime+size（写侧记录的是当时的内容哈希，记录后至少过了
--- 窗口才可能被信任）。窗口同样用于工具链会话的 `sourceFresh`。
-mtimeSafetyWindowSec : Int
-mtimeSafetyWindowSec = 5
-
-sourceInfoUnchanged : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r => String -> SourceInfo -> Eff r Bool
-sourceInfoUnchanged path si =
-  do
-    fast <- mtimeFastPath
-    if fast then
-      do
-        m <- fmap (fromMaybe 0) (fsFileMtime path)
-        sz <- fmap (\o => natToInt (fromMaybe Zero o)) (fsFileSize path)
-        if m == siMtimeOf si && sz == siSizeOf si then
-          do
-            now <- toolNowSec
-            if m + mtimeSafetyWindowSec < now then
-              pure True
-            else
-              do
-                content <- fsReadFile path
-                pure (payloadDigest content == siHashOf si)
-        else
-          do
-            content <- fsReadFile path
-            pure (payloadDigest content == siHashOf si)
-    else
-      do
-        content <- fsReadFile path
-        pure (payloadDigest content == siHashOf si)
-
--- 可选快路径（默认关闭；`VUNA_CACHE_MTIME=1` 打开）：mtime + size 相同且 mtime 落在安全窗
--- 外即跳过读文件算哈希。实测缓存命中路径收益 <1%（check/build 的缓存 key 本来就要读全部
--- 源文件算哈希），未达默认开启门槛（5%），见 docs/reference/cache.md。
--- 快路径默认关闭 ⇒ 正确性默认由内容哈希保证；打开后靠 mtimeSafetyWindowSec 兜住同秒编辑。
-mtimeFastPath : Member nEnv EnvOp r => Eff r Bool
-mtimeFastPath =
-  do
-    v <- envGetEnv "VUNA_CACHE_MTIME"
-    pure (v == "1")
-
 -- 把「本包依赖闭包的模块接口」暴露给工具链（不暴露内部实现）。
 -- 无包上下文/依赖接口不全时返回 Nothing，调用方退回全量。
 export depIfacesForCheck : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> Eff r (Maybe (List ModuleIface))
@@ -1504,9 +1419,13 @@ toolNowSec =
     us <- clockNow
     pure (us / 1000000)
 
+-- mtime 秒精度的安全窗：`fsFileMtime` 只有秒级分辨率，同秒内改内容且大小不变的编辑
+-- 用 mtime+size 不可分辨。mtime 距会话建立不足该窗口的文件一律回落内容哈希。
+mtimeSafetyWindowSec : Int
+mtimeSafetyWindowSec = 5
+
 -- 校验：文件还在，且（mtime+size 快路径）或（内容哈希）与记录一致。
--- 安全窗与 `sourceInfoUnchanged` 同一个（`mtimeSafetyWindowSec`）：记录的 mtime 距会话建立
--- 不足窗口时，同秒内同大小编辑不可分辨 ⇒ 回读哈希。
+-- 安全窗如上：记录的 mtime 距会话建立不足窗口时，同秒内同大小编辑不可分辨 ⇒ 回读哈希。
 export sourceFresh : Member nFs FsOp r => Int -> SourceInfo -> Eff r Bool
 sourceFresh builtSec si =
   do
@@ -1569,9 +1488,7 @@ depIfacesForToolSourceDetailed ctx label source =
               do
                 _ <- obsMarkEff "vuna.tool.ifaces.ready"
                 stats <- mapEff statOfClosureMod depMods
-                let
-                  _ = dbg! "tool-closure modules=${length ifs}"
-                in pure (Just (ToolContext ifs depHashes needed ownNames stats))
+                pure (Just (ToolContext ifs depHashes needed ownNames stats))
     else
       do
         _ <- obsMarkEff "vuna.tool.ifaces.disabled"
@@ -1964,9 +1881,8 @@ summaryCheckExeParts wantWarnings ctx entry =
             dtCheckWithProgramParts ctx entry
       Just ifaces =>
         do
-          -- `depTbl` 不被消费：`ownCleanInfo` 忽略该参数（见其签名），`ownCleanModules` 只是
-          -- 原样转发。此前这里传 `depIfaceHashTable ctx`，而那个函数内部会跑一整遍
-          -- `ifaceModsEff`（整闭包源扫描 + 地址表），一次 check 要跑 6 次以上——纯死计算。
+          -- `ownCleanInfo` 只需要包上下文；此前这里传 `depIfaceHashTable ctx`，那个函数内部
+          -- 会跑一整遍 `ifaceModsEff`（整闭包源扫描 + 地址表），一次 check 要跑 6 次以上——纯死计算。
           clean <- ownCleanModules ctx
           case clean of
             Just clean2 =>
@@ -2093,7 +2009,7 @@ readOneModIface m =
     mi <- readIfaceAtEff m.cmAddr
     pure (Pair m mi)
 
-ownCleanInfo : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> Eff r (Pair Bool (Maybe (List ModuleIface)))
+ownCleanInfo : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> Eff r (Maybe (List ModuleIface))
 ownCleanInfo ctx =
   do
     mods <- ifaceModsEff ctx
@@ -2104,7 +2020,7 @@ ownCleanInfo ctx =
       -- 接口读不到的模块先算脏（源/依赖变了，或还没写过接口）。
       missing = filter (\n => not (memName n (map miNameOf cands))) ownNames
       clean = collectClean missing cands
-    in pure (Pair True (if length clean == 0 then Nothing else Just clean))
+    in pure (if length clean == 0 then Nothing else Just clean)
 
 -- 候选（同包、接口可读）模块的接口列表。
 readIfaces : List (Pair ClosureMod (Maybe ModuleIface)) -> List ModuleIface
@@ -2151,7 +2067,7 @@ ownCleanModules : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp 
 ownCleanModules ctx =
   do
     info <- ownCleanInfo ctx
-    pure (secondOf info)
+    pure info
 
 -- 工具路径（LSP 冷启动写单模块接口）复用的干净模块：记录原样写回，避免用增量路径缺失的
 -- 整包 sols 重算导致擦除位残 meta 的 zonk 结果漂移。命令行 check/build 走
@@ -2197,9 +2113,6 @@ cleanHashOf (m :: rest) name =
 -- 切成每模块一份 `ModuleIface`，按地址写 `objects/module-iface/` + `objects/module-order/`（依赖侧的
 -- 接口加载与失效判定读它）；写失败/归属缺口只打 note（不影响 check 结果），缺口存在时
 -- **不写**（避免依赖方拿到不完整接口）。
-ifaceSchemaTag : String
-ifaceSchemaTag = ifaceSchema
-
 ifaceCompilerTag : Member nFs FsOp r, Member nEnv EnvOp r => Eff r String
 ifaceCompilerTag = compilerTagEff
 
@@ -2674,18 +2587,3 @@ readSplitBlob digest =
           Just bytes => decSplitFilesComplete bytes
           Nothing => Nothing
       )
-
--- 自检辅助：找出第一个 `cachedProgramValid` 不过的模块名（空 = 全部有效）。
-firstInvalidModule : PackageIface -> String
-firstInvalidModule p = firstInvalidGo (pmModulesOfIface p)
-
-pmModulesOfIface : PackageIface -> List ModuleIface
-pmModulesOfIface p = p.piModules
-
-firstInvalidGo : List ModuleIface -> String
-firstInvalidGo [] = ""
-firstInvalidGo (m :: rest) =
-  if cachedProgramValid (miCachedOf m) then
-    firstInvalidGo rest
-  else
-    "${miNameOf m}:${cachedProgramIssue (miCachedOf m)}"

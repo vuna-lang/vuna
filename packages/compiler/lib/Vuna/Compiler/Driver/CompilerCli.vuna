@@ -686,15 +686,16 @@ emitDiag o extra d =
 collectSarifIn : CliOpts -> Diagnostic -> CliOpts
 collectSarifIn o d = { o | optSarifItems = append o.optSarifItems [d] }
 
--- 从尾到头逐条输出诊断（丢弃退出码），累积更新后的 opts。`_ = map f xs` 依赖
--- `f x :: map f rest` 的右侧优先求值，打印/收集顺序是从尾到头；这里保持该顺序。
+-- 输入按「新→旧」给出；输出按源序（最旧在前）：显式 reverse 后顺序发射。
 emitDiagRevSeq : Member nFs FsOp r, Member nConsole ConsoleOp r => CliOpts -> String -> List Diagnostic -> Eff r CliOpts
-emitDiagRevSeq o extra [] = pure o
-emitDiagRevSeq o extra (d :: rest) =
+emitDiagRevSeq o extra ds = emitDiagSeq o extra (reverse ds)
+
+emitDiagSeq : Member nFs FsOp r, Member nConsole ConsoleOp r => CliOpts -> String -> List Diagnostic -> Eff r CliOpts
+emitDiagSeq o extra [] = pure o
+emitDiagSeq o extra (d :: rest) =
   do
-    o1 <- emitDiagRevSeq o extra rest
-    r <- emitDiag o1 extra d
-    pure (secondOf r)
+    r <- emitDiag o extra d
+    emitDiagSeq (secondOf r) extra rest
 
 printDiagWithPrefix : Member nFs FsOp r, Member nConsole ConsoleOp r => CliOpts -> String -> Diagnostic -> Eff r (Pair Int CliOpts)
 printDiagWithPrefix o extra d =

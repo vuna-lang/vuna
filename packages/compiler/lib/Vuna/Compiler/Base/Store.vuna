@@ -589,7 +589,7 @@ storeProjectPathRecordEff projectId projectPath =
       else
         fsWriteFileAtomic path projectPath
 
--- | 读项目路径（legacy 项目根没有 `.project` ⇒ Nothing）。
+-- | 读项目路径（`.project` 缺失 ⇒ Nothing）。
 export storeProjectPathEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Eff r (Maybe String)
 storeProjectPathEff projectId =
   do
@@ -606,31 +606,14 @@ storeProjectPathEff projectId =
         pure Nothing
 
 -- | 追加受保护摘要。布局 = `roots/<project>/.project` + `roots/<project>/<digest>`：
--- 并发追加互不覆盖（没有读-改-写），GC 仍按 digest 集合保留。读取侧同时接受
--- `roots/<project>` 单文件布局，写侧只写目录布局。
+-- 并发追加互不覆盖（没有读-改-写），GC 按 digest 集合保留。
 export storeRootAppendEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> List String -> Eff r Int
 storeRootAppendEff projectId projectPath digests =
   do
     _ <- storeProjectPathRecordEff projectId projectPath
     dir <- storeRootsPathEff projectId
-    exists <- fsFileExists dir
-    if exists then
-      do
-        isDir <- fsIsDirectory dir
-        if isDir then
-          writeRootFiles dir digests
-        else
-          do
-            -- 单文件布局迁移：`roots/<project>` 是单文件时先读成 digest 列表、删文件、建目录。
-            text <- fsReadFile dir
-            _ <- fsRemoveFile dir
-            _ <- storeEnsureDirEff dir
-            _ <- writeRootFiles dir (filter (\l => strLength l > 0) (split "\n" text))
-            writeRootFiles dir digests
-    else
-      do
-        _ <- storeEnsureDirEff dir
-        writeRootFiles dir digests
+    _ <- storeEnsureDirEff dir
+    writeRootFiles dir digests
 
 writeRootFiles : Member nFs FsOp r, Member nProcess ProcessOp r => String -> List String -> Eff r Int
 writeRootFiles _ [] = pure 0
@@ -641,8 +624,7 @@ writeRootFiles dir (d :: rest) =
     n <- writeRootFiles dir rest
     pure (n + 1)
 
--- | 读一个项目的 root 摘要：目录布局逐文件读（跳过 `.project` 这类点文件）；
--- 单文件布局逐行读。
+-- | 读一个项目的 root 摘要：目录布局逐文件读（跳过 `.project` 这类点文件）。
 export storeRootLoadEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Eff r (List String)
 storeRootLoadEff projectId =
   do
@@ -650,15 +632,8 @@ storeRootLoadEff projectId =
     exists <- fsFileExists path
     if exists then
       do
-        isDir <- fsIsDirectory path
-        if isDir then
-          do
-            names <- fsReadDir path
-            pure (filter (\n => not (startsWith "." n)) names)
-        else
-          do
-            text <- fsReadFile path
-            pure (filter (\l => strLength l > 0) (split "\n" text))
+        names <- fsReadDir path
+        pure (filter (\n => not (startsWith "." n)) names)
     else
       pure []
 

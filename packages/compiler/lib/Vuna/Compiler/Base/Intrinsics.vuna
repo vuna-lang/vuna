@@ -115,8 +115,6 @@ record BuiltinEffect where
   beRunHost : String
   -- | 内建名对应的 base 实现名（`Codegen` 生成引用时用；实现仍是 vuna 代码）。
   beImpl : String
-  -- | 默认实例名（`main` 行里裸标签展开成它）。
-  beDefaultName : String
 
 -- | 内建宿主效应的失败收口 handler（entry 追加在最外层；空串 = 该家族没有失败通道）。
 export builtinEffectErrorRunHostOf : String -> String
@@ -134,37 +132,19 @@ builtinEffects =
     BuiltinEffect
       "Base.Effect.Console.ConsoleOp"
       "@vuna@runConsoleHost"
-      "Base.Effect.Console.runConsoleHost"
-      "default",
-    BuiltinEffect "Base.Effect.Fs.FsOp" "@vuna@runFsHost" "Base.Effect.Fs.runFsHost" "default",
-    BuiltinEffect
-      "Base.Effect.Clock.ClockOp"
-      "@vuna@runClockHost"
-      "Base.Effect.Clock.runClockHost"
-      "default",
-    BuiltinEffect "Base.Effect.Env.EnvOp" "@vuna@runEnvHost" "Base.Effect.Env.runEnvHost" "default",
+      "Base.Effect.Console.runConsoleHost",
+    BuiltinEffect "Base.Effect.Fs.FsOp" "@vuna@runFsHost" "Base.Effect.Fs.runFsHost",
+    BuiltinEffect "Base.Effect.Clock.ClockOp" "@vuna@runClockHost" "Base.Effect.Clock.runClockHost",
+    BuiltinEffect "Base.Effect.Env.EnvOp" "@vuna@runEnvHost" "Base.Effect.Env.runEnvHost",
     BuiltinEffect
       "Base.Effect.Process.ProcessOp"
       "@vuna@runProcessHost"
-      "Base.Effect.Process.runProcessHost"
-      "default",
-    BuiltinEffect
-      "Base.Effect.Exit.ExitOp"
-      "@vuna@runExitHost"
-      "Base.Effect.Exit.runExitHost"
-      "default",
-    BuiltinEffect
-      "Base.Effect.Stdin.StdinOp"
-      "@vuna@runStdinHost"
-      "Base.Effect.Stdin.runStdinHost"
-      "default",
-    BuiltinEffect
-      "Base.Effect.Args.ArgsOp"
-      "@vuna@runArgsHost"
-      "Base.Effect.Args.runArgsHost"
-      "default",
-    BuiltinEffect "Base.Effect.Net.NetOp" "@vuna@runNetHost" "Base.Effect.Net.runNetHost" "default",
-    BuiltinEffect "Base.Effect.Ref.RefOp" "" "" "default"
+      "Base.Effect.Process.runProcessHost",
+    BuiltinEffect "Base.Effect.Exit.ExitOp" "@vuna@runExitHost" "Base.Effect.Exit.runExitHost",
+    BuiltinEffect "Base.Effect.Stdin.StdinOp" "@vuna@runStdinHost" "Base.Effect.Stdin.runStdinHost",
+    BuiltinEffect "Base.Effect.Args.ArgsOp" "@vuna@runArgsHost" "Base.Effect.Args.runArgsHost",
+    BuiltinEffect "Base.Effect.Net.NetOp" "@vuna@runNetHost" "Base.Effect.Net.runNetHost",
+    BuiltinEffect "Base.Effect.Ref.RefOp" "" ""
   ]
 
 -- | 标签对应的 `runXHost` 全名；不是内建宿主效应时返回空串。
