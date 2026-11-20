@@ -112,7 +112,7 @@
 
 | ID | 仍未成立的事实 | 证据 | 归属 |
 | --- | --- | --- | --- |
-| A02 | 元变量作用域检查靠负索引放行：`Conv.termScopedTo` 的 `i < extra` 与 `Eval.varIndex` 的越界 `-1` 哨兵叠加，越界解一律通过；显式收紧会打断 base 自身（`String.lines` 报 `TC_NoInstanceFound`），需与表示一起改 | [compiler-audit.md](compiler-audit.md) EC-01/EC-02；`Core/Conv.vuna`、`Core/Eval.vuna` | 后续（需设计） |
+| A02 | 元变量作用域检查靠负索引放行：`Conv.termScopedTo` 的 `i < extra` 与 `Eval.varIndex` 的越界 `-1` 哨兵叠加，越界解一律通过。收紧的前置已定位到两类：①多处求解把 `0` 当当前深度 quote（`Dict.tryMatchInst` / `localDictLookupGo` 的 `conv`、`CkDict` 的 `cdepth`、`Impl.constrainDictDomFuel`、全局 worklist 的 `eval []`），rhs 在非空 ctx 里求值 ⇒ `-1`；②`liftFreeDictGoals` 会把类参数是**字符串值**的字典目标提升成隐式参数（`Fs.runFsError` 签名里的 `{d : Dict_Eq "fs-error"}`），调用点靠 `-1` 通道满足。`String.lines` 本身无 meta / 无字典目标，不是阻塞点。顺序：quote 深度 → 拒非类型类参数的自由提升 → 收紧 `termScopedTo` → `varIndex` 改 `Maybe` | [compiler-audit.md](compiler-audit.md) EC-01/EC-02；`Core/Conv.vuna`、`Core/Eval.vuna`、`Elab/Dict.vuna`、`Elab/Term/Impl.vuna` | 后续（需设计） |
 | A06 | split 的 cache key 编入 `mode=s/f`：摘要路径与全量路径产出不同字节，产物是「输入 + store 热度」的函数 | [compiler-audit.md](compiler-audit.md) DR-01；`Driver/Compile.vuna`（split 身份路径） | 后续（需设计） |
 | A07 | 非 try 的 `prim_eff_*` FS 原语在 native 上映射到 `try_*`：失败变成 `""`/`0`/`False` + status，而 OCaml 抛错、wasm trap | [compiler-audit.md](compiler-audit.md) CG-02；`Native/Runtime.vuna` | 后续（与 typed error 通道一起定） |
 

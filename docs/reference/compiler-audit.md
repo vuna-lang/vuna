@@ -84,7 +84,7 @@ ID 是稳定引用（`层前缀-序号`），改动时保留编号，删掉实�
 
 | ID | 位置 | 类 | 现象 → 后果 | 状态 |
 | --- | --- | --- | --- | --- |
-| EC-01 | `Core/Conv.vuna` 的 `termScopedTo` | ⚠️A | `i < extra` 把负索引当本地 binder 放行；`Eval.varIndex` 越界拍成 `-1`，于是越界解一律通过 | 开放（收紧会打断整链，见下） |
+| EC-01 | `Core/Conv.vuna` 的 `termScopedTo` | ⚠️A | `i < extra` 把负索引当本地 binder 放行；`Eval.varIndex` 越界拍成 `-1`，于是越界解一律通过 | 开放（前置：quote 深度 + 非类型类参数，见下） |
 | EC-02 | `Core/Eval.vuna` 的 `varIndex` | ⚠️A | 越界返回 `-1` 哨兵，下游按 `i <= 0` 取最内层变量 → 静默错指 | 开放 |
 | EC-03 | `Core/Conv.vuna` 的 `metaCreatedDepth` | C | 未登记时回退当前深度 | 开放 |
 | EC-04 | `Core/Conv.vuna` 的 `VPi`/`VLam` | C | 定义性相等不比 `rig`（`rig` 是运行时擦除格子，不比是有意取舍） | 开放（有意） |
@@ -116,10 +116,21 @@ ID 是稳定引用（`层前缀-序号`），改动时保留编号，删掉实�
 | EC-30 | `Impl.vuna` 的 check 位 `if` | A | 分支检查失败后整体重推断（位置/期望类型信息丢失） | 开放 |
 | EC-31 | `Conv.vuna` 的 `convFuelBase` | C | 非 Nat 值的 conv 燃料固定 64：定义性相等嵌套 ≥ ~15 层就假报 `IC_FuelExhausted` | 已清（基值 4096 ≈ 1000 层；Nat 链仍按链深追加。`fuel` 是该互递归组唯一的 SCT 递减测度，结构比较不能停止扣减——要去掉层数上限只能给整个组换终止性测度） |
 
-`EC-01` 的事实（收紧即断链）：把 `i < 0` 显式判 False 后，`packages/base` 自身在
-`Base/Data/String.vuna` 的 `lines` 上报 `TC_NoInstanceFound`——说明正常编译链**依赖**
-负索引被放行，因此它不是一行可改的补丁，必须与 `varIndex` 的表示（越界即错误，
-或在 quote 处产生正当的本地 binder）一起改。
+`EC-01` 的前置（把 `i < 0` 判 False 后 base 立刻红，已定位到两类，均需先修）：
+
+1. **quote 深度传小**：`Dict.tryMatchInst` / `Dict.localDictLookupGo` 的 `conv`、`Dict` 的
+   `CkDict` 延迟约束 `cdepth`、`Impl.constrainDictDomFuel` 的 `solveMeta`、全局 worklist
+   `tryResolveDictGoal`（`eval []` + `cdepth`）都把 `0` 当「当前深度」，而 rhs 在非空 ctx
+   里求值；`varIndex` 因此拍成 `-1`，被 `i < extra` 当本地 binder 放行。
+2. **非类型类参数被提升**：`Base.Effect.Fs.runFsError` 的签名被 `liftFreeDictGoals` 补出
+   `{d : Dict_Eq "fs-error"}` / `{d : Dict_Hashable ((++ "readFile ") "fs-error")}` 这类
+   隐式字典参数（类参数是字符串**值**，不是类型）；调用点只能靠 `-1` 通道满足它们。
+   收紧后先红的是 `Base/Data/Pair.vuna:34`（实例 ctx 搜索）与
+   `Base/Effect/Fs.vuna:302`（`Dict_Eq "fs-error"`）。
+
+`Base/Data/String.vuna` 的 `lines` **不是**阻塞点：它本身没有 meta、没有字典目标
+（`split` 是闭函数）。终态顺序：修 quote 深度 → 拒绝类参数不是类型的自由字典提升 →
+收紧 `termScopedTo` → `varIndex` 改 `Maybe`。
 
 ## Core / IR / Lowering
 
