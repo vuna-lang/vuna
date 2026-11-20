@@ -285,7 +285,7 @@ env，**不进 codegen**（同一 IR 的产物逐字节确定）。解析失败�
 
 | env | 缺省 | 语义 |
 | --- | --- | --- |
-| `VUNA_NATIVE_MEM_LIMIT` | `1073741824`（1 GiB） | **live 堆**上限：分配的预留超过它时先做一次整堆回收，GC 后 `live + 本次` 仍超限才 `memory limit exceeded` + exit 2；`0` = 不限 |
+| `VUNA_NATIVE_MEM_LIMIT` | 自动：`max(1 GiB, 2 × live + 256 MiB)`，每次回收后按 live 抬高 | **live 堆**上限：分配的预留超过它时先做一次整堆回收，GC 后 `live + 本次` 仍超限才 `memory limit exceeded` + exit 2。缺省只升不降——固定的 1 GiB 在 live 见顶后会让每次分配都触发一次整堆回收（死锁）；显式设置时是硬上限，`0` = 不限 |
 | `VUNA_NATIVE_GC_MIN` | `1048576`（1 MiB） | 回收阈值的下限（也是新堆段的最小尺寸）：年轻代回收后阈值 = `max(GC_MIN, live/8, 上次扫到的栈字节数)`，整堆回收后 = `max(GC_MIN, 2 × live, 上次扫到的栈字节数)` |
 | `VUNA_NATIVE_GC_LOG` | 关 | 存在即向 stderr 打诊断行 `gc n=<次数> live=<字节> alloc=<自上次 GC 起的分配字节> cards=<本次扫过的脏卡片数> gen=<minor 或 full>` |
 | `VUNA_NATIVE_GC_STRESS` | 关 | 存在即每次分配前都做一次回收（年轻代 / 整堆按计数轮换；抓漏根与漏屏障的调试开关，不是运行模式） |
@@ -354,7 +354,8 @@ env，**不进 codegen**（同一 IR 的产物逐字节确定）。解析失败�
     清 mark），未标记的按尺寸类回收。
   - **整堆回收**（full）：标记全部（含老代），清扫全部，存活的也晋升。
   - 触发：默认每 `gcMinorRunsLimit`（8）次年轻代回收做一次整堆；分配预算压线、或
-    年轻代晋升量超过阈值一半时，下一次直接整堆。
+    年轻代晋升量超过阈值一半时，下一次直接整堆。缺省的分配预算随 live 抬高
+    （`max(1 GiB, 2 × live + 256 MiB)`，见 §7 的 env 表）。
   - 阈值：年轻代回收后 `max(GC_MIN, live/8, 栈跨度)`；整堆回收后
     `max(GC_MIN, 2 × live, 栈跨度)`（`live` 含老代；栈跨度 = `rt_stack_top - rsp`，
     是孤岛扫栈成本的上界，深递归按它摊还）。非移动、不压缩。

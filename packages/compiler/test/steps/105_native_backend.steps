@@ -240,8 +240,9 @@ run: sh -c '"$TMPDIR/fsmiss-out/bin/fsmiss" 2>&1'
 exit: 1
 out-contains: fs: readFile
 
-# 9t) 内存预算：缺省 1 GiB（`runtime.s` 里的常量），`VUNA_NATIVE_MEM_LIMIT` 生效时
-#     trap `memory limit exceeded` + exit 2；未超限时输出不变。
+# 9t) 内存预算：缺省是 `max(1 GiB, 2 × live + 256 MiB)`（常量在 `runtime.s`；
+#     缺省模式下每次回收后按 live 抬高），`VUNA_NATIVE_MEM_LIMIT` 显式设置时是硬上限：
+#     超限 trap `memory limit exceeded` + exit 2；未超限时输出不变。
 run: sh -c 'd="$TMPDIR/memlim"; mkdir -p "$d/app"; printf "[package]\nname = \"memlim\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Data.Nat as Nat\n\nrep : Nat -> String -> String\nrep n s = case n of\n  Zero => \"\"\n  Succ k => s ++ rep k s\n\nmain : Int\nmain = strLength (rep (natFromInt 5000) \"0123456789abcdef\")\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/memlim-out" "$d"'
 exit: 0
 file-contains: $TMPDIR/memlim-out/runtime.s 1073741824

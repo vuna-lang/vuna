@@ -179,6 +179,15 @@ nativeHugeFreeLabel = "rt_huge_free"
 export nativeGcMinDefaultBytes : Int
 nativeGcMinDefaultBytes = 1048576
 
+-- | live 堆预算（`VUNA_NATIVE_MEM_LIMIT`；0 = 不限）。`alloc` 与 `gc_collect` 都读它。
+export nativeMemLimitLabel : String
+nativeMemLimitLabel = "rt_mem_limit"
+
+-- | 默认内存预算的余量：缺省预算 = `max(1 GiB, 2 × live + 这个值)`，每次回收后按
+--   实际 live 抬高（只升不降），让 live 接近上限的进程不必每次分配都做整堆回收。
+export nativeMemSlackBytes : Int
+nativeMemSlackBytes = 268435456
+
 -- ---------------------------------------------------------------
 -- GC 根槽（保守标记的 `.bss` 白名单）
 -- ---------------------------------------------------------------

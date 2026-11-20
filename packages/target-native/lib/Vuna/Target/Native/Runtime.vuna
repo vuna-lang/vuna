@@ -80,7 +80,7 @@ cgroupCpuMaxPath = "/sys/fs/cgroup/cpu.max" ++ strPack [0]
 
 -- | 生效的内存预算（live 字节；0 = 不限）。
 memLimitLabel : String
-memLimitLabel = "rt_mem_limit"
+memLimitLabel = nativeMemLimitLabel
 
 -- | 生效的核数上限（0 = 不限；启动时算出的快照，仅诊断用）。
 cpuCountLabel : String
@@ -1493,7 +1493,7 @@ initMemFn : NativeFunc
 initMemFn =
   rtRawFunc
     "init_mem"
-    [ILea Rdi (nativeDataLabel "env_mem_limit"), ICall (nativeRtLabel "env_lookup"), ITest Rax Rax, IJcc "jz" ".Lrt_im_default", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "parse_u64"), ITest Rdx Rdx, IJcc "jz" ".Lrt_im_default", IMov (OpRip memLimitLabel) (OpReg Rax), IRet, ILabel ".Lrt_im_default", IMov (OpReg Rax) (OpImm nativeMemDefaultBytes), IMov (OpRip memLimitLabel) (OpReg Rax), IRet]
+    [ILea Rdi (nativeDataLabel "env_mem_limit"), ICall (nativeRtLabel "env_lookup"), ITest Rax Rax, IJcc "jz" ".Lrt_im_default", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "parse_u64"), ITest Rdx Rdx, IJcc "jz" ".Lrt_im_default", IMov (OpRip memLimitLabel) (OpReg Rax), IRet, ILabel ".Lrt_im_default", IMov (OpReg Rax) (OpImm nativeMemDefaultBytes), IMov (OpRip memLimitLabel) (OpReg Rax), IMov (OpReg Rcx) (OpImm 1), IMov (OpRip nativeMemAutoLabel) (OpReg Rcx), IRet]
 
 -- | cgroup v2 CPU 配额折算成核数（`ceil(quota/period)`，`max` = 不限 → 0）。
 --   读 `/sys/fs/cgroup/cpu.max`（容器的 `/sys/fs/cgroup` 就是它自己的根）；
