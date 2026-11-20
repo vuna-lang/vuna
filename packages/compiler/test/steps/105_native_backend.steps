@@ -223,9 +223,12 @@ run: sh -c 'test ! -e "$TMPDIR/fs-tree" && echo cleaned'
 out-equals: cleaned
 
 # 9r) readDir 按字典序（`Sys.readdir` + `sort compare` 语义）：建 c/a/b -> "abc"。
+#     GC_STRESS 下再跑一遍：名字在转成 Vuna String 前不能只躺在 GC 不扫的 .bss 数组里。
 run: sh -c 'd="$TMPDIR/fsdir"; mkdir -p "$d/app"; printf "[package]\nname = \"fsdir\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Effect.Core as Eff\nimport Base.Effect.Fs as EffFs\nimport Base.Data.Int as Int\nimport Base.Data.List as List\nimport Base.Data.String as String\n\ndir : String\ndir = \"$TMPDIR/fs-dir\"\n\nmain : Eff [FsOp] String\nmain = do\n  _ <- fsRemoveTree dir\n  _ <- fsMakeDir dir\n  _ <- fsWriteFile (dir ++ \"/c\") \"\"\n  _ <- fsWriteFile (dir ++ \"/a\") \"\"\n  _ <- fsWriteFile (dir ++ \"/b\") \"\"\n  xs <- fsReadDir dir\n  pure (case xs of\n    x :: y :: z :: _ => x ++ y ++ z\n    _ => \"?\")\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/fsdir-out" "$d"'
 exit: 0
 run: "$TMPDIR/fsdir-out/bin/fsdir" 2>&1
+out-equals: "abc"
+run: sh -c 'VUNA_NATIVE_GC_STRESS=1 "$TMPDIR/fsdir-out/bin/fsdir" 2>&1'
 out-equals: "abc"
 
 # 9s) fs 失败路径：读不存在的文件 -> typed error 收口（诊断 + exit 1），不伪造内容。
