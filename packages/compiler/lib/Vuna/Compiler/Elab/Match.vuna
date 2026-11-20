@@ -49,9 +49,39 @@ multiToExpr table clauses =
       if clauseArityTooMany n clauses then
         tcErr0 (firstPatSpan clauses) ClauseTooManyPatterns
       else
-        let
-          names = paramNames n
-        in Vuna.Compiler.Base.Common.bind (buildColumnExpr table clauses names (firstPatSpan clauses) 200) (\body => OkC (wrapLambdas names body))
+        Vuna.Compiler.Base.Common.bind (checkReachable table clauses) (
+            \_ =>
+              let
+                names = paramNames n
+              in Vuna.Compiler.Base.Common.bind (buildColumnExpr table clauses names (firstPatSpan clauses) 200) (\body => OkC (wrapLambdas names body))
+          )
+
+-- | 每个子句必须匹配到前面子句没覆盖的值。
+--   语法层已经挡掉「被单条前置子句蕴含」（`PS_ClauseShadowed`），这里补**并集**覆盖
+--   （`True` / `False` 之后再来 `_`）。未知族 / 重载构造子 / 燃料耗尽不报
+--   （`CovUnknown`）：不能证明不可达就不报。
+--   列数不一致的组（`where` / `let` 允许少模式的 catch-all）不判。
+export checkReachable : List (Pair String (Pair Bool (List (Pair String Int)))) -> List (Pair (List Pat) Expr) -> Check Bool
+checkReachable table clauses =
+  let
+    rows = matrixOf clauses
+  in if uniformArity rows then
+    reachableGo table (natFromInt (coverageFuelFor rows)) [] clauses
+  else
+    OkC True
+
+reachableGo : List (Pair String (Pair Bool (List (Pair String Int)))) -> Nat -> List (List Pat) -> List (Pair (List Pat) Expr) -> Check Bool
+reachableGo table fuel rows [] = OkC True
+reachableGo table fuel rows ((Pair pats body) :: rest) =
+  let
+    qs = map stripAsPat pats
+  in case clauseCover table fuel rows qs of
+    CovCovered => tcErr0 (clauseHeadSpan pats body) ClauseUnreachable
+    _ => reachableGo table fuel ((::) qs rows) rest
+
+clauseHeadSpan : List Pat -> Expr -> Span
+clauseHeadSpan (p :: _) body = patSpan p
+clauseHeadSpan [] body = exprSpan body
 
 -- 与 multiToExpr 同一套模式矩阵，但不包 lambda：`name` 是已在作用域里的位置名，
 -- 直接返回以它为 scrutinee 的嵌套 case 体。供 Elab 的 case 去重降级使用

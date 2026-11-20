@@ -1569,7 +1569,19 @@ altsPlacementOk src ((Pair pat body) :: rest) =
 caseToClausesFixable : LintSrc -> List Pat -> Int -> Span -> List (Pair Pat Expr) -> Bool
 caseToClausesFixable src pats headLine sp alts =
   patsOnLine pats headLine
-    && linesCleanRange src.lintSrcLines headLine (spanEndLine sp) && altsPlacementOk src alts
+    && linesCleanRange src.lintSrcLines headLine (spanEndLine sp)
+    && altsPlacementOk src alts && altsUnshadowed alts
+
+-- 前一个 alt 的模式蕴含后一个时，拆成 clause 会得到 `PS_ClauseShadowed` / `TC_ClauseUnreachable`
+-- 拒绝的源。`countVar x pats == 1` 保证被替换的位置只有一处，其余位置在各 clause 间相同，
+-- 所以只比 alt 模式本身即可。
+altsUnshadowed : List (Pair Pat Expr) -> Bool
+altsUnshadowed [] = True
+altsUnshadowed ((Pair pat body) :: rest) = not (anySubsumedBy pat rest) && altsUnshadowed rest
+
+anySubsumedBy : Pat -> List (Pair Pat Expr) -> Bool
+anySubsumedBy p [] = False
+anySubsumedBy p ((Pair q _) :: rest) = patSubsumes p q || anySubsumedBy p rest
 
 -- | 内部：构造把整个顶层 case 表达式替换成多条 clause 的编辑。
 caseToClausesEdit : LintSrc -> String -> List Pat -> Int -> Span -> List (Pair Pat Expr) -> Edit
@@ -2169,7 +2181,6 @@ declFindings src allDecls (DInstance ctxE head methods sp) rest =
   append
     (walkListLiteralExprs lintFuel src ctxE)
     (append (walkListLiteral lintFuel src head) (scanMethodDecls src methods))
-declFindings src allDecls _ rest = []
 
 -- | 内部：逐条声明收集 finding。
 scanDecls : LintSrc -> List Decl -> List Decl -> List Finding

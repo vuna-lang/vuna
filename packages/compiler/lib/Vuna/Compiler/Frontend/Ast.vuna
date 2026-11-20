@@ -233,6 +233,46 @@ patSpan (PInt n sp) = sp
 patSpan (PStr s sp) = sp
 patSpan (PRecord name fields sp) = sp
 
+-- | 模式蕴含：`patSubsumes p q` = 任何匹配 `q` 的值都匹配 `p`（变量 / `_` 顶，as-pattern
+--   只看内层）。**只做语法蕴含**：同一个构造子的子模式逐位比较，字面量同值，record 字段
+--   逐名比较。并集覆盖（`True` / `False` 之后再来 `_`）不在这一层判，由精化期的模式矩阵
+--   可达性检查负责。
+export patSubsumes : Pat -> Pat -> Bool
+patSubsumes (PVar _ _) q = True
+patSubsumes (PWild _) q = True
+patSubsumes (PAs _ inner _) q = patSubsumes inner q
+patSubsumes p (PAs _ inner _) = patSubsumes p inner
+patSubsumes (PCon c ps _) (PCon c2 qs _) = c == c2 && subsumePatList ps qs
+patSubsumes (PCon _ _ _) _ = False
+patSubsumes (PInt n _) (PInt m _) = n == m
+patSubsumes (PInt _ _) _ = False
+patSubsumes (PStr s _) (PStr t _) = s == t
+patSubsumes (PStr _ _) _ = False
+patSubsumes (PRecord name fs _) (PRecord name2 fs2 _) = name == name2 && subsumePatFields fs fs2
+patSubsumes (PRecord _ _ _) _ = False
+
+subsumePatList : List Pat -> List Pat -> Bool
+subsumePatList [] [] = True
+subsumePatList (p :: ps) (q :: qs) = patSubsumes p q && subsumePatList ps qs
+subsumePatList _ _ = False
+
+-- record 模式可以只写部分字段：`p` 约束了而 `q` 没写的字段，`q` 照样匹配全部取值。
+subsumePatFields : List (Pair String Pat) -> List (Pair String Pat) -> Bool
+subsumePatFields [] _ = True
+subsumePatFields ((Pair fn fp) :: rest) qs =
+  case fieldPatOf fn qs of
+    Just qp => patSubsumes fp qp && subsumePatFields rest qs
+    Nothing => subsumePatFields rest qs
+
+fieldPatOf : String -> List (Pair String Pat) -> Maybe Pat
+fieldPatOf fn [] = Nothing
+fieldPatOf fn ((Pair n p) :: rest) = if n == fn then Just p else fieldPatOf fn rest
+
+-- | 子句蕴含（参数个数不同时恒为 `False`：arity 由 `TC_DefMoreParams` 单独报）。
+--   零参子句之间恒为 `True`——同名的第二条零参定义不可达。
+export clauseSubsumedBy : List Pat -> List Pat -> Bool
+clauseSubsumedBy ps qs = subsumePatList ps qs
+
 export exprSpan : Expr -> Span
 exprSpan (EVar name sp) = sp
 exprSpan (EInfix op lhs rhs sp) = sp

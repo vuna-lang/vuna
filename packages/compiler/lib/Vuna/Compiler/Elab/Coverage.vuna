@@ -215,6 +215,67 @@ matrixWitness table clauses =
   else
     Nothing
 
+-- ---------------------------------------------------------------
+-- 子句可达性（usefulness）：`qs` 是否被 `rows` 完全覆盖。
+-- 与 `coverageWitness` 的区别：查询是**具体子句的模式向量**，所以要按查询自己的
+-- 构造子 / 字面量下降；并且「未知族 / 重载构造子 / 燃料耗尽」必须报 `CovUnknown`
+-- 而不是当成已覆盖（后者会把未知族误判成不可达子句）。
+-- ---------------------------------------------------------------
+export data ClauseCover(..) : Type where
+  CovUncovered : ClauseCover
+  CovCovered : ClauseCover
+  CovUnknown : ClauseCover
+
+export clauseCover : List (Pair String (Pair Bool (List (Pair String Int)))) -> Nat -> List (List Pat) -> List Pat -> ClauseCover
+clauseCover table fuel rows qs =
+  case fuel of
+    Zero => CovUnknown
+    Succ fuel2 =>
+      case qs of
+        [] => if hasNilRow rows then CovCovered else CovUncovered
+        q :: qsRest =>
+          case patHead q of
+            -- 查询头是构造子：只走该构造子的分支。
+            PCon c subs _ =>
+              clauseCover
+                table
+                fuel2
+                (specializeCtor (natToInt (length subs)) (rnameKey c) rows)
+                (append subs qsRest)
+            -- record 模式：字段匹配的覆盖性判据不在这一层，按未知处理（不报错）。
+            PRecord _ _ _ => CovUnknown
+            -- 查询头是字面量：只有该列的通配行能覆盖这个具体值
+            -- （同值字面量的重复子句由语法层 `PS_ClauseShadowed` 挡掉）。
+            PInt _ _ => clauseCover table fuel2 (defaultRows rows) qsRest
+            PStr _ _ => clauseCover table fuel2 (defaultRows rows) qsRest
+            -- 变量 / 通配 / as-通配：这一列要整个族的并集覆盖。
+            _ =>
+              case ctorHeadsOf rows of
+                [] => clauseCover table fuel2 (defaultRows rows) qsRest
+                h :: _ =>
+                  case familyCtors table h of
+                    Nothing => CovUnknown
+                    Just ctors =>
+                      clauseCoverCtorsGo
+                        table
+                        fuel2
+                        (orderedCtors ctors (ctorHeadsOf rows))
+                        rows
+                        qsRest
+                        CovCovered
+
+-- 逐个构造子尝试：任一支有缺口 ⇒ `CovUncovered`；否则只要有未知 ⇒ `CovUnknown`；
+-- 全部分支都被覆盖才是 `CovCovered`。
+clauseCoverCtorsGo : List (Pair String (Pair Bool (List (Pair String Int)))) -> Nat -> List (Pair String Int) -> List (List Pat) -> List Pat -> ClauseCover -> ClauseCover
+clauseCoverCtorsGo table fuel [] rows qsRest acc = acc
+clauseCoverCtorsGo table fuel (entry :: rest) rows qsRest acc =
+  let
+    ar = secondOf entry
+  in case clauseCover table fuel (specializeCtor ar (firstOf entry) rows) (append (wilds ar) qsRest) of
+    CovUncovered => CovUncovered
+    CovUnknown => clauseCoverCtorsGo table fuel rest rows qsRest CovUnknown
+    CovCovered => clauseCoverCtorsGo table fuel rest rows qsRest acc
+
 -- 模式节点数（每个 `Pat` 节点计 1；构造子子模式 / record 字段递归）。
 patNodes : Pat -> Int
 patNodes (PCon _ ps _) = 1 + patNodesList ps
@@ -235,7 +296,7 @@ matrixNodes [] = 0
 matrixNodes (row :: rest) = patNodesList row + matrixNodes rest
 
 -- 见证搜索每下降一步至少消耗 1；每个待试构造子还会重复下降剩余列 → 每节点给 4 步余量。
-coverageFuelFor : List (List Pat) -> Int
+export coverageFuelFor : List (List Pat) -> Int
 coverageFuelFor clauses =
   let
     scaled = 256 + 4 * matrixNodes clauses
@@ -245,7 +306,7 @@ coverageFuelMax : Int
 coverageFuelMax = 1000000
 
 -- 各行的列数必须一致（`where`/`let` 里允许不同 arity 的方程，矩阵算法不适用）。
-uniformArity : List (List Pat) -> Bool
+export uniformArity : List (List Pat) -> Bool
 uniformArity [] = False
 uniformArity (r :: rest) = allSameLen (natToInt (length r)) rest
 

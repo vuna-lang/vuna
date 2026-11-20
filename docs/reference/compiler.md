@@ -98,10 +98,10 @@
 | `Elab.Driver` | 精化入口与程序组装：签名（约束 ctx → 隐式字典 binder）→ data/trait/instance → 定义体（声明的字典目标先解到 ctx binder，剩余才提升）→ zonk/终止性检查 → `DtProgram`；洞目标（含洞名）。`goalsOfProgramTolerant` 与严格收尾拆开：只读 core 的 goals，未解洞也能给目标+上下文（供 `vuna goal` / LSP）。接口摘要路径用 `elabProgramFullWithAux`（起始 Ec 由依赖摘要注入；termAux 只喂终止性分析） | `elabProgramFull`、`elabProgramFullWithAux`、`goalsOfProgram`、`goalsOfProgramTolerant`、`dtEvalExprIn` |
 | `Elab.Termination` | 终止性检查：调用图 + SCC，结构下降/守卫 Int 判据（无包级豁免）。`checkTerminationDeclsWith` 允许把依赖包声明只作为 SCT 上下文、只报告本包函数的失败 | `checkTerminationDecls`、`checkTerminationDeclsWith` |
 | `Elab.Prelude` | 把 `Base.Intrinsics` 表翻译成 DT prelude globals（签名）；没有第二份名字/签名表 | `preludeGlobals`、`builtinTyName`、`cmpBuiltinTyName` |
-| `Elab.Match` | 多 clause 模式矩阵降级：构造子列 → `case`、字面量列 → `if` 链（纯 Ast→Ast） | `multiToExpr`、`buildColumnExpr` |
+| `Elab.Match` | 多 clause 模式矩阵降级：构造子列 → `case`、字面量列 → `if` 链（纯 Ast→Ast）；降级前先做子句可达性检查（`TC_ClauseUnreachable`） | `multiToExpr`、`checkReachable`、`buildColumnExpr` |
 | `Elab.Records` | `record` 的语法与结构化元数据：收集 `RecordMeta`、把 record 表达式/模式降级成**合成位置构造子**的引用（不降级成 `DData`）；`prepareDecls*` 返回的 decls 保留 `DRecord` | `desugarRecords`、`recordsOfDecls`、`prepareDecls` |
 | `Elab.Derive` | `deriving (Show, Eq, Ord, Hashable)` 的实例生成（展开成等价 `instance`，交给既有实例精化；`Hashable` 的字段哈希用 `Base.Trait.Hashable.hashCombine`） | `expandDerivings` |
-| `Elab.Coverage` | 覆盖性见证构造（缺失模式 / 冗余分支）与诊断渲染 | `improveExhaustive`、`coverageWitness`、`renderWitness` |
+| `Elab.Coverage` | 覆盖性见证构造（缺失模式 / 冗余分支）、子句可达性（usefulness）与诊断渲染 | `improveExhaustive`、`coverageWitness`、`clauseCover`、`renderWitness` |
 | `Elab.Usage` | 整程序用量检查（QTT 0/1/ω，见 [qtt.md](qtt.md)） | `checkProgramUsage`、`checkDefUsage` |
 | `Elab.Canonical` | 接口载荷与哈希输入域：`DtDef` / `DtData` / `DtInst` / `DtClass` / `RecordMeta` / `ExportEntry` / `FixityDecl` / `Import`（span 丢弃、字段全覆盖；`DtCtor` 随 `DtData` 编码） | `encDtDef`、`encDtData`、`encDtInst`、`encDtClass`、`encExportEntry`、`encRecordMeta`、`encFixity`、`encImport` |
 

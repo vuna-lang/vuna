@@ -3,6 +3,7 @@ module Vuna.Compiler.Frontend.Parser where
 -- vuna 源码 parser：offside layout，返回 AST 与 imports。
 import Base.Data.List as List
 import Base.Data.Nat as Nat
+import Base.Container.HashMap as HashMap
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Base.Diagnostics.Frontend
@@ -80,7 +81,7 @@ parseSourceFile recover st =
                   else
                     case peekPos st2 of
                       Pos line col _ _ =>
-                        Vuna.Compiler.Base.Common.step (parseDecls recover (stateFuel st2) st2 col emptyDeclAcc) (
+                        Vuna.Compiler.Base.Common.step (parseDecls recover (stateFuel st2) st2 col emptyDeclAcc emptyDeclBlock) (
                             \p, rest =>
                               case rest of
                                 Pair st3 errs =>
@@ -255,11 +256,105 @@ parseImports fuel st =
   else
     OkC (Pair (Pair [] []) st)
 
+-- ---------------------------------------------------------------
+-- 顶层定义块：同名子句必须连续，且不得被前面的子句覆盖（语法蕴含）。
+-- 判据只看源码顺序：fixity 行、逐定义 export / 归约修饰符行、任何别的声明都结束当前块。
+-- PmStrict 与 PmTool 同判（这是语法形状，不是语义推断）。
+-- ---------------------------------------------------------------
+record DeclBlock where
+  dbOpen : Maybe String
+  dbClauses : List (Pair (List Pat) Span)
+  dbFirst : HashMap String Span
+
+emptyDeclBlock : DeclBlock
+emptyDeclBlock = DeclBlock Nothing [] (HashMap.fromList [])
+
+dbClose : DeclBlock -> DeclBlock
+dbClose b = DeclBlock Nothing [] b.dbFirst
+
+-- 开新块：`dbFirst` 只记**第一次**出现的位置（后置诊断的 label 指它）。
+dbOpenAt : String -> Span -> DeclBlock -> DeclBlock
+dbOpenAt n sp b =
+  let
+    first2 = if HashMap.member n b.dbFirst then b.dbFirst else HashMap.insert n sp b.dbFirst
+  in DeclBlock (Just n) [] first2
+
+dbAddClause : DeclBlock -> List Pat -> Span -> DeclBlock
+dbAddClause b pats sp = DeclBlock b.dbOpen ((::) (Pair pats sp) b.dbClauses) b.dbFirst
+
+anyNullary : List (Pair (List Pat) Span) -> Bool
+anyNullary [] = False
+anyNullary ((Pair ps _) :: rest) =
+  case ps of
+    [] => True
+    _ => anyNullary rest
+
+findShadow : List (Pair (List Pat) Span) -> List Pat -> Maybe Span
+findShadow [] qs = Nothing
+findShadow ((Pair ps sp) :: rest) qs =
+  if clauseSubsumedBy ps qs then Just sp else findShadow rest qs
+
+clauseVerdict : DeclBlock -> String -> List Pat -> Span -> Maybe Diagnostic
+clauseVerdict b n [] sp =
+  if anyNullary b.dbClauses then
+    Just (withLabel (Label (Just sp) "" LabelPrimary Nothing) (psMsg (DefinitionDuplicate n) [n]))
+  else
+    Nothing
+clauseVerdict b n pats sp =
+  case findShadow b.dbClauses pats of
+    Just firstSp => Just (shadowDiag n sp firstSp)
+    Nothing => Nothing
+
+shadowDiag : String -> Span -> Span -> Diagnostic
+shadowDiag n sp firstSp =
+  withLabel
+    (Label (Just firstSp) "an earlier clause already matches these values" LabelSecondary Nothing)
+    (withLabel (Label (Just sp) "" LabelPrimary Nothing) (psMsg (ClauseShadowed n) [n]))
+
+reopenDiag : DeclBlock -> String -> Span -> Maybe Diagnostic
+reopenDiag b n sp =
+  case HashMap.lookup n b.dbFirst of
+    Just firstSp => Just (notAdjacentDiag n sp firstSp)
+    Nothing => Nothing
+
+notAdjacentDiag : String -> Span -> Span -> Diagnostic
+notAdjacentDiag n sp firstSp =
+  withLabel
+    (Label (Just firstSp) "the definition starts here" LabelSecondary Nothing)
+    (withLabel (Label (Just sp) "" LabelPrimary Nothing) (psMsg (ClauseNotAdjacent n) [n]))
+
+blockFun : DeclBlock -> String -> List Pat -> Span -> Pair (Maybe Diagnostic) DeclBlock
+blockFun b n pats sp =
+  case b.dbOpen of
+    Just cur =>
+      if cur == n then
+        Pair (clauseVerdict b n pats sp) (dbAddClause b pats sp)
+      else
+        Pair (reopenDiag b n sp) (dbOpenAt n sp (dbClose b))
+    Nothing => Pair (reopenDiag b n sp) (dbOpenAt n sp (dbClose b))
+
+blockSig : DeclBlock -> String -> Span -> Pair (Maybe Diagnostic) DeclBlock
+blockSig b n sp =
+  case b.dbOpen of
+    Just cur =>
+      if cur == n then Pair Nothing b else Pair (reopenDiag b n sp) (dbOpenAt n sp (dbClose b))
+    Nothing => Pair (reopenDiag b n sp) (dbOpenAt n sp b)
+
+-- `Nothing` = 这条声明不破坏规则；`Just d` = 规则错误（调用方按 recover 决定致命 / 累积）。
+blockStep : DeclBlock -> ParsedDecl -> Pair (Maybe Diagnostic) DeclBlock
+blockStep b (ParsedDecl (Just _) _ _ _) = Pair Nothing (dbClose b)
+blockStep b (ParsedDecl Nothing _ (Just _) _) = Pair Nothing (dbClose b)
+blockStep b (ParsedDecl Nothing _ Nothing (Just _)) = Pair Nothing (dbClose b)
+blockStep b (ParsedDecl Nothing (Just (DFun n pats _ sp)) Nothing Nothing) = blockFun b n pats sp
+blockStep b (ParsedDecl Nothing (Just (DSig n _ _ sp)) Nothing Nothing) = blockSig b n sp
+blockStep b (ParsedDecl Nothing (Just _) Nothing Nothing) = Pair Nothing (dbClose b)
+blockStep b (ParsedDecl Nothing Nothing Nothing Nothing) = Pair Nothing b
+
 -- `infixl` / `infixr` / `infix` 声明与顶层声明穿插收集（声明本身不进入 Decl，
 -- 由 Loader 在中缀重排时消费；见 `SourceFile.fixities`）。
 -- 累加器定义在文件前部（`DeclAcc` / `ParsedDecl`）。
-parseDecls : Bool -> Int -> PState -> Int -> DeclAcc -> Check (Pair DeclAcc (Pair PState (List Diagnostic)))
-parseDecls recover fuel st blockCol acc =
+parseDecls : Bool -> Int -> PState -> Int -> DeclAcc -> DeclBlock -> Check (Pair DeclAcc (Pair PState (List Diagnostic)))
+parseDecls recover fuel st blockCol acc blocks =
   if fuel <= 0 then
     icFuel "parser"
   else if isEof st then
@@ -273,7 +368,7 @@ parseDecls recover fuel st blockCol acc =
               if recover then
                 let
                   st2 = recoverDecl st blockCol
-                in Vuna.Compiler.Base.Common.step (parseDecls True (fuel - 1) st2 blockCol acc) (
+                in Vuna.Compiler.Base.Common.step (parseDecls True (fuel - 1) st2 blockCol acc (dbClose blocks)) (
                     \p, rest =>
                       case rest of
                         Pair st3 errs => OkC (Pair p (Pair st3 ((::) e errs)))
@@ -285,7 +380,18 @@ parseDecls recover fuel st blockCol acc =
                 pd = firstOf p
                 st1 = secondOf p
                 acc2 = addParsedDecl pd acc
-              in parseDecls recover (fuel - 1) st1 blockCol acc2
+                verdict = blockStep blocks pd
+              in case firstOf verdict of
+                Just e =>
+                  if recover then
+                    Vuna.Compiler.Base.Common.step (parseDecls True (fuel - 1) st1 blockCol acc2 (secondOf verdict)) (
+                        \q, rest =>
+                          case rest of
+                            Pair st3 errs => OkC (Pair q (Pair st3 ((::) e errs)))
+                      )
+                  else
+                    ErrC e
+                Nothing => parseDecls recover (fuel - 1) st1 blockCol acc2 (secondOf verdict)
         else
           ps1 st (ExpectedDeclAtColumn (strFromInt blockCol)) (strFromInt blockCol)
 

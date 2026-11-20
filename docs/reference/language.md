@@ -229,6 +229,22 @@ vuna/base/compiler 三包源码统一按当前语言能力书写，新增/修改
 `[TC_DefMoreParams]`。多 clause 与 where 绑定共用同一条精化路径，行为一致。
 定义形式本身见 [frontend-syntax.md](frontend-syntax.md) §5。
 
+### 子句块
+
+顶层同名子句必须组成**连续块**：
+
+- 块 = 可选的 1 行签名 + 1 条及以上同名子句；块内只允许空行与注释。别的声明、别的函数的
+  签名、`infixl` 之类的 fixity 行、逐定义 `export` 行都会结束当前块；同名子句在其后再次
+  出现报 `[PS_ClauseNotAdjacent]`（`PmTool` 与 `PmStrict` 同判：这是语法形状，不是语义推断）；
+- **零参定义只能有一条子句**：`f = 1` 之后再写 `f = 2` 报 `[PS_DefinitionDuplicate]`；
+- 子句**不得被前面的子句覆盖**：`f _ = 0` 之后再写任何 `f ...` 报 `[PS_ClauseShadowed]`
+  （语法蕴含：变量 / `_` 顶，构造子同名同元数逐位，字面量同值，record 字段逐名）；
+  并集覆盖（`f True` / `f False` 之后再写 `f _`）在精化期由模式矩阵判，报
+  `[TC_ClauseUnreachable]`；
+- 判据只对**参数个数相同**的子句生效（arity 不同由 `[TC_DefMoreParams]` 单独报），
+  列数不一致的定义组（`where` / `let` 里允许少模式的 catch-all）不做覆盖性判定；
+- 未知构造子族 / 重载构造子 / 覆盖性搜索耗尽燃料时不报（不能证明不可达就不报）。
+
 ## 洞（`_` / `?name`）
 
 表达式（check 位）可以留洞：匿名 `_`，或命名洞 `?name`（`?` 与标识符**紧邻**，不隔空格）。

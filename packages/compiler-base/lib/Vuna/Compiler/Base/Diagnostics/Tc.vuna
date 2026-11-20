@@ -24,6 +24,8 @@ export data TcErr(..) : Nat -> Type where
   CaptureFuel : TcErr Zero
   CatchAllNotLast : TcErr Zero
   ClauseTooManyPatterns : TcErr Zero
+  -- 子句被前面的同名子句（并集）完全覆盖：永远不会被选中。
+  ClauseUnreachable : TcErr Zero
   DataKindArrows : TcErr Zero
   DefMoreParams : TcErr Zero
   DefParamsMustBeVars : TcErr Zero
@@ -186,6 +188,7 @@ tcCode TypeMismatchCtorArity = "TC_TypeMismatchCtorArity"
 tcCode UniverseLevelNonNegative = "TC_UniverseLevelNonNegative"
 tcCode (AxiomWithDefinition _) = "TC_AxiomWithDefinition"
 tcCode (BranchTooManyArgs _) = "TC_BranchTooManyArgs"
+tcCode ClauseUnreachable = "TC_ClauseUnreachable"
 tcCode (CannotProveTermination _) = "TC_CannotProveTermination"
 tcCode (CannotRedefineBuiltin _) = "TC_CannotRedefineBuiltin"
 tcCode (CannotSolveMetavar _) = "TC_CannotSolveMetavar"
@@ -304,6 +307,8 @@ tcTemplate TypeMismatchCtorArity = "type mismatch: constructor arguments differ 
 tcTemplate UniverseLevelNonNegative = "universe level must be non-negative"
 tcTemplate (AxiomWithDefinition _) = "axiom <0> cannot have a definition"
 tcTemplate (BranchTooManyArgs _) = "branch for constructor <0> has too many arguments"
+tcTemplate ClauseUnreachable =
+  "clause is unreachable: the earlier clauses already match every value it matches"
 tcTemplate (CannotProveTermination _) = "cannot prove termination of <0>"
 tcTemplate (CannotRedefineBuiltin _) = "cannot redefine builtin <0>"
 tcTemplate (CannotSolveMetavar _) =
@@ -549,6 +554,10 @@ tcChunk5 =
       (tcCode (BranchTooManyArgs ""))
       (tcTemplate (BranchTooManyArgs ""))
       "分支的实参多于构造子字段",
+    TcEntry
+      (tcCode ClauseUnreachable)
+      (tcTemplate ClauseUnreachable)
+      "子句被前面的子句完全覆盖（不可达）",
     TcEntry
       (tcCode (CannotProveTermination ""))
       (tcTemplate (CannotProveTermination ""))

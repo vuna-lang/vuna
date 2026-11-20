@@ -1,0 +1,5 @@
+-- 并集覆盖：`True` / `False` 已经穷尽 `Bool`，兜底子句不可达。
+alwaysOne : Bool -> Int
+alwaysOne True = 1
+alwaysOne False = 2
+alwaysOne _ = 3

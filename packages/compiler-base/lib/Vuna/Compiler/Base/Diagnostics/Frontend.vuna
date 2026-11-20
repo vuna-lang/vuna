@@ -103,6 +103,12 @@ export data PsDiag(..) : Nat -> Type where
   -- arity 1
   ExpectedDeclAtColumn : String -> PsDiag (Succ Zero)
   ExpectedToken : String -> PsDiag (Succ Zero)
+  -- 顶层同名子句必须构成一个连续块（块内只允许空行 / 注释）。
+  ClauseNotAdjacent : String -> PsDiag (Succ Zero)
+  -- 零参定义只能有一条子句：第二条及以后永远不可达。
+  DefinitionDuplicate : String -> PsDiag (Succ Zero)
+  -- 子句被前面的同名子句完全覆盖（语法蕴含）。
+  ClauseShadowed : String -> PsDiag (Succ Zero)
 
 export psCode : {n : Nat} -> PsDiag n -> String
 psCode CaseAltNotIndented = "PS_CaseAltNotIndented"
@@ -146,6 +152,9 @@ psCode HandleReturnMisplaced = "PS_HandleReturnMisplaced"
 psCode (HandleContinuationNameMismatch _ _) = "PS_HandleContinuationNameMismatch"
 psCode (ExpectedDeclAtColumn _) = "PS_ExpectedDeclAtColumn"
 psCode (ExpectedToken _) = "PS_ExpectedToken"
+psCode (ClauseNotAdjacent _) = "PS_ClauseNotAdjacent"
+psCode (DefinitionDuplicate _) = "PS_DefinitionDuplicate"
+psCode (ClauseShadowed _) = "PS_ClauseShadowed"
 psCode (WhereSigBeforeClause _) = "PS_WhereSigBeforeClause"
 psCode (WhereSigDuplicate _) = "PS_WhereSigDuplicate"
 psCode (WhereSigMultiClause _) = "PS_WhereSigMultiClause"
@@ -202,6 +211,11 @@ psTemplate (WhereSigDuplicate _) = "duplicate binding signature for <0>"
 psTemplate (WhereSigMultiClause _) =
   "binding <0> has more than one clause (a signature can annotate only one)"
 psTemplate (WhereSigNoDef _) = "binding signature for <0> has no definition"
+psTemplate (ClauseNotAdjacent _) =
+  "clauses of <0> must be contiguous (no other declaration, signature or fixity line in between)"
+psTemplate (DefinitionDuplicate _) =
+  "definition <0> has no parameters, so only one clause is allowed"
+psTemplate (ClauseShadowed _) = "clause of <0> is shadowed by an earlier clause and can never match"
 
 -- ---------------------------------------------------------------
 -- 文档遍历源
@@ -379,7 +393,19 @@ psAll =
     PsEntry
       (psCode (HandleContinuationNameMismatch "" ""))
       (psTemplate (HandleContinuationNameMismatch "" ""))
-      "handle 各操作子句的续延绑定名必须一致"
+      "handle 各操作子句的续延绑定名必须一致",
+    PsEntry
+      (psCode (ClauseNotAdjacent ""))
+      (psTemplate (ClauseNotAdjacent ""))
+      "顶层同名子句必须连续（中间不能有别的声明 / 签名 / fixity）",
+    PsEntry
+      (psCode (DefinitionDuplicate ""))
+      (psTemplate (DefinitionDuplicate ""))
+      "零参定义只能有一条子句",
+    PsEntry
+      (psCode (ClauseShadowed ""))
+      (psTemplate (ClauseShadowed ""))
+      "子句被前面的子句完全覆盖"
   ]
 
 -- ---------------------------------------------------------------

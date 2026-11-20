@@ -1,0 +1,7 @@
+f : Int -> Int
+f 0 = 0
+
+g : Int
+g = 1
+
+f 1 = 1

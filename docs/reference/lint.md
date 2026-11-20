@@ -264,7 +264,9 @@ Bool / 字面量分派同样适用：`keep b = if b then b else b` → `keep b@T
 - **提升只在直接体**：嵌套 dispatch 需要上下文分发，lint 不做；保持原形。
 - **子句拆分只对单 clause 函数**：多 clause 函数里拆子句可能暴露 unreachable clause，
   因此 `if` / `case` 的 clause 拆分都要求 `countFunClauses == 1`；多 clause 函数的 Bool
-  if 保持 `if`。alt 拆分 / 替换要求该 alt 是最后一个。
+  if 保持 `if`。alt 拆分 / 替换要求该 alt 是最后一个。拆出来的子句之间**不能有模式蕴含**
+  （前一个 alt 的模式蕴含后一个时规则不动，否则会产出 `PS_ClauseShadowed` /
+  `TC_ClauseUnreachable` 拒绝的源）。
 - **签名含隐式 Pi 的函数跳过 clause 级改写**：`{n : Nat} -> ...` 这类隐式参数由精化器
   插入，把 dispatch 折叠进 clause 模式会改变模式矩阵与隐式 Pi 的对齐（`Base.Data.Vec.vhead`
   实测会把 `Cons` 错配到 `n : Nat`）；`literal-if-chain` / `dispatch-lift` 都跳过这类声明。
