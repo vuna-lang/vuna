@@ -16,6 +16,8 @@ OUT=${1:?usage: seed-selfhost.sh OUT}
 export VUNA_BASE="$PWD/packages/base"
 # 每一级都用全新对象库：单元缓存不可能命中，key 的逐模块声明编码是纯开销。
 export VUNA_UNIT_CACHE=0
+# 接口影子写同理：这一级的 store 不会再被读，接口计算与落盘是纯开销。
+export VUNA_IFACE_WRITE=0
 
 # 提交入库的 seed 只能含 compiler 闭包（工具链与 dynamic codegen 都不在 TCB 里）。
 sh nix/seed/tcb-check.sh nix/seed/forbidden.txt seed

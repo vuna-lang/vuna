@@ -25,6 +25,8 @@ VUNA=${1:-${VUNA:-./result/bin/vuna}}
 export VUNA_ELAB_FULL=1
 # 两遍都用各自全新的对象库：单元缓存不可能命中，key 的逐模块声明编码是纯开销。
 export VUNA_UNIT_CACHE=0
+# 同一原因：接口影子写完后这个 store 不会再被读，接口计算与落盘是纯开销。
+export VUNA_IFACE_WRITE=0
 
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/vuna-seed-rotate.XXXXXX") || exit 1
 # 分级替换用的临时名：复制到 seed.new.$$ 后再 rename，失败时用 seed.old.$$ 回滚。

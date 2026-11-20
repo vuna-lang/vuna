@@ -194,14 +194,7 @@ summarySplitParts ctx mods entry printResult =
     case depIfaces of
       Just ifaces =>
         do
-          clean <- ownCleanModulesWith ctx mods
-          let
-            _ =
-              case clean of
-                Just clean2 => dbg! "cache-own-clean=${length clean2}"
-                Nothing => 0
-          in do
-            dtSplitProjectWithIfaces ctx entry printResult modIds ifaces
+          dtSplitProjectWithIfaces ctx entry printResult modIds ifaces
       Nothing => dtSplitProjectParts ctx entry printResult modIds
 
 -- | 构建（codegen）入口：两级输入寻址。
@@ -244,55 +237,63 @@ rebuildSplit : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock Clo
 rebuildSplit ctx entry printResult outDir fast mods =
   do
     closureMods <- summaryClosureMods ctx
-    summary <- summarySplitParts ctx closureMods entry printResult
-    case summary of
-      ErrC e => pure (ErrC e)
-      OkC p =>
-        do
-          let
-            canon = canonicalTopo (firstOf p)
-            checked = secondOf p
-          in do
-            shadow <- writeIfaceShadowWith ctx checked (Just closureMods)
-            case shadow of
-              ErrC e => pure (ErrC e)
-              OkC modules =>
-                do
-                  tag <- cacheTagEff
-                  let
-                    -- 入口-only 包没有可写的模块面（`modules=[]`），语义 key 无从谈起：
-                    -- 退回源输入 key（正确优先，放弃这类包的注释复用）。
-                    sem =
-                      case modules of
-                        [] => fast
-                        _ => splitIdentityOf ctx printResult tag modules mods.cmKind mods.cmDeps
-                  in do
-                    cached <- readSplitBlob sem
-                    case cached of
-                      Just files =>
-                        do
-                          _ <- writeSplitPointer fast sem
-                          _ <- rootKeepEff ctx [fast, sem]
-                          let
-                            _ = dbg! "split-identity-hit cache-path=hit"
-                          in do
-                            n <- writeCompiledNormalized ctx outDir files
+    -- 同包干净模块的接口读一次：codegen 的语义 key 与写回都用这份表。
+    cleanR <- ownCleanInfoWith ctx closureMods
+    let
+      clean =
+        case cleanR of
+          Just xs => xs
+          Nothing => []
+    in do
+      summary <- summarySplitParts ctx closureMods entry printResult
+      case summary of
+        ErrC e => pure (ErrC e)
+        OkC p =>
+          do
+            let
+              canon = canonicalTopo (firstOf p)
+              checked = secondOf p
+            in do
+              shadow <- writeIfaceShadowWithClean ctx checked (Just closureMods) clean
+              case shadow of
+                ErrC e => pure (ErrC e)
+                OkC modules =>
+                  do
+                    tag <- cacheTagEff
+                    let
+                      -- 入口-only 包没有可写的模块面（`modules=[]`），语义 key 无从谈起：
+                      -- 退回源输入 key（正确优先，放弃这类包的注释复用）。
+                      sem =
+                        case modules of
+                          [] => fast
+                          _ => splitIdentityOf ctx printResult tag modules mods.cmKind mods.cmDeps
+                    in do
+                      cached <- readSplitBlob sem
+                      case cached of
+                        Just files =>
+                          do
+                            _ <- writeSplitPointer fast sem
+                            _ <- rootKeepEff ctx [fast, sem]
+                            let
+                              _ = dbg! "split-identity-hit cache-path=hit"
+                            in do
+                              n <- writeCompiledNormalized ctx outDir files
+                              pure (
+                                  case n of
+                                    ErrC e => ErrC e
+                                    OkC count => OkC (Pair count checked.checkedWarnings)
+                                )
+                        Nothing =>
+                          do
+                            _ <- writeSplitBlobAt sem canon
+                            _ <- writeSplitPointer fast sem
+                            _ <- rootKeepEff ctx [fast, sem]
+                            n <- writeCompiledNormalized ctx outDir canon
                             pure (
                                 case n of
                                   ErrC e => ErrC e
                                   OkC count => OkC (Pair count checked.checkedWarnings)
                               )
-                      Nothing =>
-                        do
-                          _ <- writeSplitBlobAt sem canon
-                          _ <- writeSplitPointer fast sem
-                          _ <- rootKeepEff ctx [fast, sem]
-                          n <- writeCompiledNormalized ctx outDir canon
-                          pure (
-                              case n of
-                                ErrC e => ErrC e
-                                OkC count => OkC (Pair count checked.checkedWarnings)
-                            )
 
 -- 审计（`VUNA_IFACE_AUDIT=1`）：同一进程分别走摘要路径与全量路径，codegen 产物逐字节比较；
 -- 一致才落盘，不一致报 `iface-audit-mismatch` 且**不写任何缓存/接口**。
@@ -2204,9 +2205,28 @@ exportedOwnOf ctx own =
 writeIfaceShadow : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> CheckedPackage -> Eff r (Check (List ModuleIface))
 writeIfaceShadow ctx checked = writeIfaceShadowWith ctx checked Nothing
 
+-- 写侧开关：一次性对象库（自举 / CI 每级全新的 store）里接口写完之后不会再被读到，
+-- 计算与落盘都是纯开销。默认开；`VUNA_IFACE_WRITE=0` 关闭。
+ifaceWriteEnabled : Member nEnv EnvOp r => Eff r Bool
+ifaceWriteEnabled =
+  do
+    v <- envGetEnv "VUNA_IFACE_WRITE"
+    pure (v /= "0")
+
 -- | 写 iface 影子；`pre` 是调用方已经算好的闭包扫描（`ifaceModsEff`），给了就不再算。
+-- 没有干净模块表时按全量重算（check 路径）。
 writeIfaceShadowWith : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> CheckedPackage -> Maybe (List ClosureMod) -> Eff r (Check (List ModuleIface))
-writeIfaceShadowWith ctx checked pre =
+writeIfaceShadowWith ctx checked pre = writeIfaceShadowWithClean ctx checked pre []
+
+-- | `clean` = 调用方已读出的同包干净接口：记录直接复用，只在写回时编码脏模块。
+writeIfaceShadowWithClean : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> CheckedPackage -> Maybe (List ClosureMod) -> List ModuleIface -> Eff r (Check (List ModuleIface))
+writeIfaceShadowWithClean ctx checked pre clean =
+  do
+    enabled <- ifaceWriteEnabled
+    if not enabled then pure (OkC []) else writeIfaceShadowGo ctx checked pre clean
+
+writeIfaceShadowGo : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> CheckedPackage -> Maybe (List ClosureMod) -> List ModuleIface -> Eff r (Check (List ModuleIface))
+writeIfaceShadowGo ctx checked pre clean =
   if contextPackageName ctx == "" then
     pure (OkC [])
   else if not (shadowAllowed ctx) then
@@ -2229,10 +2249,11 @@ writeIfaceShadowWith ctx checked pre =
         let
           depTbl = map modHashPair (depModsOf ctx mods)
           own = selfModsOf ctx mods
+          cleanNames = map miNameOf clean
           -- 完整性判据 = 导出面（不是 lib 根全部文件）。
           required = exportedOwnOf ctx own
         in do
-          case ifaceOfPackage (contextPackageName ctx) sources depTbl checked.checkedInherited [] checked.checkedModules checked.checkedEntryDecls checked.checkedProgram of
+          case ifaceOfPackage (contextPackageName ctx) sources depTbl checked.checkedInherited clean checked.checkedModules checked.checkedEntryDecls checked.checkedProgram of
             ErrC e =>
               do
                 let
@@ -2244,6 +2265,8 @@ writeIfaceShadowWith ctx checked pre =
                 t3 <- clockNow
                 let
                   unwritten = missingNamesOf required (map miNameOf modules)
+                  -- 只写脏模块（干净模块的接口已在它的地址上）。
+                  toWrite = filter (\mi => not (memName (miNameOf mi) cleanNames)) modules
                 in do
                   -- **只写完整的导出面**：一次 check 若没覆盖包的某个导出模块（典型：入口没
                   -- import 它，且它不是入口闭包的一部分），就不写接口 —— 否则同一个地址会先后
@@ -2264,11 +2287,11 @@ writeIfaceShadowWith ctx checked pre =
                       -- 载荷自证（`VUNA_IFACE_SELFTEST=1`）：写之前重算每个模块的 iface 哈希，
                       -- 与记录值比对。不一致说明「载荷与哈希字段漂移」，此时不写（写出去会把
                       -- 错误的依赖哈希传给下游），并留 `iface-hash-mismatch` 行给门禁。
-                      selfOk <- ifaceSelfCheckEff modules
+                      selfOk <- ifaceSelfCheckEff toWrite
                       if not selfOk then
                         do
                           let
-                            _ = dbg! "iface-selftest=skip-write ${strFromInt (length modules)}"
+                            _ = dbg! "iface-selftest=skip-write ${strFromInt (length toWrite)}"
                           in do
                             pure (OkC modules)
                       else
@@ -2280,7 +2303,7 @@ writeIfaceShadowWith ctx checked pre =
                           -- 样子），所以这里只打标记 + 保留既有 `iface-write=…` 文本行的四段 ms：
                           -- 阶段拆分靠文本行，结构化只报「写发生了」。
                           _ <- obsMarkEff "vuna.iface.write"
-                          n <- writeIfaceObjects own modules
+                          n <- writeIfaceObjects own toWrite
                           -- 依赖身份摘要：依赖方按 lib 根源闭包摘要 + 编译器 tag 读。
                           _ <- writePkgIfaceSummaryEff ctx modules
                           t4 <- clockNow

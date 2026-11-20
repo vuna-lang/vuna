@@ -82,6 +82,8 @@ let
       chmod -R u+w .
       # 构建在一次性对象库里跑：单元缓存不会命中，key 的逐模块声明编码是纯开销。
       export VUNA_UNIT_CACHE=0
+      # 接口影子写完后这个 store 不会再被读，接口计算与落盘是纯开销。
+      export VUNA_IFACE_WRITE=0
       ${vuna-seed}/bin/vuna-seed build --no-compile --out stage1 packages/compiler
       sh stage1/build.sh "$out/bin/vuna-compiler"
       sha256sum "$out/bin/vuna-compiler" | cut -d' ' -f1 > "$out/cache-tag"
