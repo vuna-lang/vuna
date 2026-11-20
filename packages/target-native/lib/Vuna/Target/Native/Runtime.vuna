@@ -1588,6 +1588,57 @@ nativeRtTargetBase "strAt" = Just (nativeRtLabel "str_at")
 nativeRtTargetBase "strSubstring" = Just (nativeRtLabel "str_substring")
 nativeRtTargetBase "strHash" = Just (nativeRtLabel "str_hash")
 nativeRtTargetBase "effectId" = Just (nativeRtLabel "effect_id")
+nativeRtTargetBase "@ir@m@runEff" = Just (nativeRtLabel "m_run_eff")
+nativeRtTargetBase "prim_erase" = Just (nativeRtLabel "prim_erase")
+nativeRtTargetBase "@vuna@prim@toObj" = Just (nativeRtLabel "prim_erase")
+nativeRtTargetBase "@vuna@prim@fromObj" = Just (nativeRtLabel "prim_erase")
+nativeRtTargetBase "floatFromInt" = Just (nativeRtLabel "float_from_int")
+nativeRtTargetBase "intFromFloat" = Just (nativeRtLabel "int_from_float")
+nativeRtTargetBase "floatAbs" = Just (nativeRtLabel "float_abs")
+nativeRtTargetBase "floatSqrt" = Just (nativeRtLabel "float_sqrt")
+nativeRtTargetBase "bi_add_float" = Just (nativeRtLabel "float_add")
+nativeRtTargetBase "bi_sub_float" = Just (nativeRtLabel "float_sub")
+nativeRtTargetBase "bi_mul_float" = Just (nativeRtLabel "float_mul")
+nativeRtTargetBase "bi_div_float" = Just (nativeRtLabel "float_div")
+nativeRtTargetBase "bi_eq_float" = Just (nativeRtLabel "float_eq")
+nativeRtTargetBase "bi_neq_float" = Just (nativeRtLabel "float_neq")
+nativeRtTargetBase "bi_lt_float" = Just (nativeRtLabel "float_lt")
+nativeRtTargetBase "bi_le_float" = Just (nativeRtLabel "float_le")
+nativeRtTargetBase "bi_gt_float" = Just (nativeRtLabel "float_gt")
+nativeRtTargetBase "bi_ge_float" = Just (nativeRtLabel "float_ge")
+nativeRtTargetBase "arrayEmpty" = Just (nativeRtLabel "array_empty")
+nativeRtTargetBase "arrayLength" = Just (nativeRtLabel "array_length")
+nativeRtTargetBase "arrayGet" = Just (nativeRtLabel "array_get")
+nativeRtTargetBase "arraySet" = Just (nativeRtLabel "array_set")
+nativeRtTargetBase "arrayMake" = Just (nativeRtLabel "array_make")
+nativeRtTargetBase "arrayFromList" = Just (nativeRtLabel "arrayFromList")
+nativeRtTargetBase "arrayToList" = Just (nativeRtLabel "arrayToList")
+-- List 桥接（M3b）：函数体在 `Native.Module`（需要 List 族的 tag）。
+nativeRtTargetBase "strUnpack" = Just (nativeRtLabel "strUnpack")
+nativeRtTargetBase "strPack" = Just (nativeRtLabel "strPack")
+nativeRtTargetBase "strConcatMany" = Just (nativeRtLabel "strConcatMany")
+nativeRtTargetBase "strSubstTemplate" = Just (nativeRtLabel "strSubstTemplate")
+nativeRtTargetBase "strShow" = Just (nativeRtLabel "show_str")
+nativeRtTargetBase "natAdd" = Just (nativeRtLabel "nat_add")
+nativeRtTargetBase "natSub" = Just (nativeRtLabel "nat_sub")
+nativeRtTargetBase "natMul" = Just (nativeRtLabel "nat_mul")
+nativeRtTargetBase "natDiv" = Just (nativeRtLabel "nat_div")
+nativeRtTargetBase "natToInt" = Just (nativeRtLabel "nat_to_int")
+nativeRtTargetBase "natFromInt" = Just (nativeRtLabel "nat_from_int")
+-- 可观测性叶子原语：no-op 桩（返回 0）。`@vuna@obs@span` 故意缺席（高阶，需闭包）。
+nativeRtTargetBase "@vuna@obs@level" = Just (nativeRtLabel "obs_level")
+nativeRtTargetBase "@vuna@obs@log" = Just (nativeRtLabel "obs_log")
+nativeRtTargetBase "@vuna@obs@counter" = Just (nativeRtLabel "obs_counter")
+nativeRtTargetBase "@vuna@obs@mark" = Just (nativeRtLabel "obs_mark")
+nativeRtTargetBase "@vuna@obs@spanBegin" = Just (nativeRtLabel "obs_span_begin")
+nativeRtTargetBase "@vuna@obs@spanEnd" = Just (nativeRtLabel "obs_span_end")
+nativeRtTargetBase "@vuna@obs@sampleStart" = Just (nativeRtLabel "obs_sample_start")
+nativeRtTargetBase "@vuna@obs@sampleStop" = Just (nativeRtLabel "obs_sample_stop")
+nativeRtTargetBase "@vuna@obs@span" = Just (nativeRtLabel "obs_span_run")
+nativeRtTargetBase "@vuna@obs@spanLab" = Just (nativeRtLabel "obs_span_lab_run")
+nativeRtTargetBase "@vuna@debug@on" = Just (nativeRtLabel "debug_on")
+nativeRtTargetBase "@vuna@debug@line" = Just (nativeRtLabel "debug_line")
+nativeRtTargetBase _ = Nothing
 
 -- | 宿主叶子：一个实现标签 + 它在内建 / IR 里的全部名字（同一实现按名字去重）。
 hostLeafGroups : List (Pair String (List String))
@@ -1690,61 +1741,6 @@ hostLeafTarget (g :: rest) sym =
 nativeRtTargetHost : String -> Maybe String
 nativeRtTargetHost sym = hostLeafTarget hostLeafGroups sym
 
-nativeRtTargetBase "@ir@m@runEff" = Just (nativeRtLabel "m_run_eff")
-nativeRtTargetBase "prim_erase" = Just (nativeRtLabel "prim_erase")
-nativeRtTargetBase "@vuna@prim@toObj" = Just (nativeRtLabel "prim_erase")
-nativeRtTargetBase "@vuna@prim@fromObj" = Just (nativeRtLabel "prim_erase")
--- 宿主：环境 / 入参 / 目录 / 时钟 / tty（`_host` 与 `@vuna@host@*` 是同一组叶子）。
--- 宿主：文件系统（try* 是真实叶子；`prim_eff_*` / `_host` / `@vuna@host@*` 是同一实现）。
--- 宿主：进程（runIn / spawn / wait / exit）。`spawn` 的 argv[0] = 本进程路径。
-nativeRtTargetBase "floatFromInt" = Just (nativeRtLabel "float_from_int")
-nativeRtTargetBase "intFromFloat" = Just (nativeRtLabel "int_from_float")
-nativeRtTargetBase "floatAbs" = Just (nativeRtLabel "float_abs")
-nativeRtTargetBase "floatSqrt" = Just (nativeRtLabel "float_sqrt")
-nativeRtTargetBase "bi_add_float" = Just (nativeRtLabel "float_add")
-nativeRtTargetBase "bi_sub_float" = Just (nativeRtLabel "float_sub")
-nativeRtTargetBase "bi_mul_float" = Just (nativeRtLabel "float_mul")
-nativeRtTargetBase "bi_div_float" = Just (nativeRtLabel "float_div")
-nativeRtTargetBase "bi_eq_float" = Just (nativeRtLabel "float_eq")
-nativeRtTargetBase "bi_neq_float" = Just (nativeRtLabel "float_neq")
-nativeRtTargetBase "bi_lt_float" = Just (nativeRtLabel "float_lt")
-nativeRtTargetBase "bi_le_float" = Just (nativeRtLabel "float_le")
-nativeRtTargetBase "bi_gt_float" = Just (nativeRtLabel "float_gt")
-nativeRtTargetBase "bi_ge_float" = Just (nativeRtLabel "float_ge")
-nativeRtTargetBase "arrayEmpty" = Just (nativeRtLabel "array_empty")
-nativeRtTargetBase "arrayLength" = Just (nativeRtLabel "array_length")
-nativeRtTargetBase "arrayGet" = Just (nativeRtLabel "array_get")
-nativeRtTargetBase "arraySet" = Just (nativeRtLabel "array_set")
-nativeRtTargetBase "arrayMake" = Just (nativeRtLabel "array_make")
-nativeRtTargetBase "arrayFromList" = Just (nativeRtLabel "arrayFromList")
-nativeRtTargetBase "arrayToList" = Just (nativeRtLabel "arrayToList")
--- List 桥接（M3b）：函数体在 `Native.Module`（需要 List 族的 tag）。
-nativeRtTargetBase "strUnpack" = Just (nativeRtLabel "strUnpack")
-nativeRtTargetBase "strPack" = Just (nativeRtLabel "strPack")
-nativeRtTargetBase "strConcatMany" = Just (nativeRtLabel "strConcatMany")
-nativeRtTargetBase "strSubstTemplate" = Just (nativeRtLabel "strSubstTemplate")
-nativeRtTargetBase "strShow" = Just (nativeRtLabel "show_str")
-nativeRtTargetBase "natAdd" = Just (nativeRtLabel "nat_add")
-nativeRtTargetBase "natSub" = Just (nativeRtLabel "nat_sub")
-nativeRtTargetBase "natMul" = Just (nativeRtLabel "nat_mul")
-nativeRtTargetBase "natDiv" = Just (nativeRtLabel "nat_div")
-nativeRtTargetBase "natToInt" = Just (nativeRtLabel "nat_to_int")
-nativeRtTargetBase "natFromInt" = Just (nativeRtLabel "nat_from_int")
--- 可观测性叶子原语：no-op 桩（返回 0）。`@vuna@obs@span` 故意缺席（高阶，需闭包）。
-nativeRtTargetBase "@vuna@obs@level" = Just (nativeRtLabel "obs_level")
-nativeRtTargetBase "@vuna@obs@log" = Just (nativeRtLabel "obs_log")
-nativeRtTargetBase "@vuna@obs@counter" = Just (nativeRtLabel "obs_counter")
-nativeRtTargetBase "@vuna@obs@mark" = Just (nativeRtLabel "obs_mark")
-nativeRtTargetBase "@vuna@obs@spanBegin" = Just (nativeRtLabel "obs_span_begin")
-nativeRtTargetBase "@vuna@obs@spanEnd" = Just (nativeRtLabel "obs_span_end")
-nativeRtTargetBase "@vuna@obs@sampleStart" = Just (nativeRtLabel "obs_sample_start")
-nativeRtTargetBase "@vuna@obs@sampleStop" = Just (nativeRtLabel "obs_sample_stop")
-nativeRtTargetBase "@vuna@obs@span" = Just (nativeRtLabel "obs_span_run")
-nativeRtTargetBase "@vuna@obs@spanLab" = Just (nativeRtLabel "obs_span_lab_run")
-nativeRtTargetBase "@vuna@debug@on" = Just (nativeRtLabel "debug_on")
-nativeRtTargetBase "@vuna@debug@line" = Just (nativeRtLabel "debug_line")
-nativeRtTargetBase _ = Nothing
-
 export nativeRtTarget : String -> Maybe String
 nativeRtTarget sym =
   case nativeRtTargetHost sym of
@@ -1763,39 +1759,8 @@ nativeRtValueArityBase "strUnpack" = 1
 nativeRtValueArityBase "strPack" = 1
 nativeRtValueArityBase "strConcatMany" = 1
 nativeRtValueArityBase "strSubstTemplate" = 2
-
-nativeRtValueArityHost "@vuna@host@print" = 1
-nativeRtValueArityHost "prim_eff_print_host" = 1
-nativeRtValueArityHost "@vuna@prim_eff_print_host" = 1
-nativeRtValueArityHost "@vuna@host@exitOp" = 1
-nativeRtValueArityHost "prim_eff_exitOp_host" = 1
-nativeRtValueArityHost "@vuna@prim_eff_exitOp_host" = 1
-nativeRtValueArityHost "@vuna@host@newRef" = 1
-nativeRtValueArityHost "prim_eff_newRef_host" = 1
-nativeRtValueArityHost "@vuna@prim_eff_newRef_host" = 1
-nativeRtValueArityHost "@vuna@host@readRef" = 1
-nativeRtValueArityHost "prim_eff_readRef_host" = 1
-nativeRtValueArityHost "@vuna@prim_eff_readRef_host" = 1
-nativeRtValueArityHost "@vuna@host@writeRef" = 2
-nativeRtValueArityHost "prim_eff_writeRef_host" = 2
-nativeRtValueArityHost "@vuna@prim_eff_writeRef_host" = 2
-
 nativeRtValueArityBase "prim_erase" = 1
 nativeRtValueArityBase "@ir@m@runEff" = 2
-
-nativeRtValueArityHost "prim_eff_newRef" = 1
-nativeRtValueArityHost "@vuna@prim_eff_newRef" = 1
-nativeRtValueArityHost "prim_eff_readRef" = 1
-nativeRtValueArityHost "@vuna@prim_eff_readRef" = 1
-nativeRtValueArityHost "prim_eff_writeRef" = 2
-nativeRtValueArityHost "@vuna@prim_eff_writeRef" = 2
-nativeRtValueArityHost "prim_eff_print" = 1
-nativeRtValueArityHost "@vuna@prim_eff_print" = 1
-nativeRtValueArityHost "prim_eff_eprint" = 1
-nativeRtValueArityHost "@vuna@prim_eff_eprint" = 1
-nativeRtValueArityHost "prim_eff_exit" = 1
-nativeRtValueArityHost "@vuna@prim_eff_exit" = 1
-
 nativeRtValueArityBase "floatFromInt" = 1
 nativeRtValueArityBase "intFromFloat" = 1
 nativeRtValueArityBase "floatAbs" = 1
@@ -1824,8 +1789,38 @@ nativeRtValueArityBase "@vuna@obs@spanBegin" = 2
 nativeRtValueArityBase "@vuna@obs@spanEnd" = 1
 nativeRtValueArityBase "@vuna@obs@sampleStart" = 2
 nativeRtValueArityBase "@vuna@obs@sampleStop" = 1
+nativeRtValueArityBase "@vuna@obs@span" = 3
+nativeRtValueArityBase "@vuna@obs@spanLab" = 4
+nativeRtValueArityBase _ = 0
 
 nativeRtValueArityHost : String -> Int
+nativeRtValueArityHost "@vuna@host@print" = 1
+nativeRtValueArityHost "prim_eff_print_host" = 1
+nativeRtValueArityHost "@vuna@prim_eff_print_host" = 1
+nativeRtValueArityHost "@vuna@host@exitOp" = 1
+nativeRtValueArityHost "prim_eff_exitOp_host" = 1
+nativeRtValueArityHost "@vuna@prim_eff_exitOp_host" = 1
+nativeRtValueArityHost "@vuna@host@newRef" = 1
+nativeRtValueArityHost "prim_eff_newRef_host" = 1
+nativeRtValueArityHost "@vuna@prim_eff_newRef_host" = 1
+nativeRtValueArityHost "@vuna@host@readRef" = 1
+nativeRtValueArityHost "prim_eff_readRef_host" = 1
+nativeRtValueArityHost "@vuna@prim_eff_readRef_host" = 1
+nativeRtValueArityHost "@vuna@host@writeRef" = 2
+nativeRtValueArityHost "prim_eff_writeRef_host" = 2
+nativeRtValueArityHost "@vuna@prim_eff_writeRef_host" = 2
+nativeRtValueArityHost "prim_eff_newRef" = 1
+nativeRtValueArityHost "@vuna@prim_eff_newRef" = 1
+nativeRtValueArityHost "prim_eff_readRef" = 1
+nativeRtValueArityHost "@vuna@prim_eff_readRef" = 1
+nativeRtValueArityHost "prim_eff_writeRef" = 2
+nativeRtValueArityHost "@vuna@prim_eff_writeRef" = 2
+nativeRtValueArityHost "prim_eff_print" = 1
+nativeRtValueArityHost "@vuna@prim_eff_print" = 1
+nativeRtValueArityHost "prim_eff_eprint" = 1
+nativeRtValueArityHost "@vuna@prim_eff_eprint" = 1
+nativeRtValueArityHost "prim_eff_exit" = 1
+nativeRtValueArityHost "@vuna@prim_eff_exit" = 1
 nativeRtValueArityHost "prim_eff_getenv" = 1
 nativeRtValueArityHost "@vuna@host@tryRunIn" = 2
 nativeRtValueArityHost "prim_eff_runIn" = 2
@@ -1911,11 +1906,6 @@ nativeRtValueArityHost "prim_eff_fileSize" = 1
 nativeRtValueArityHost "@vuna@prim_eff_fileSize" = 1
 nativeRtValueArityHost "prim_eff_fileSize_host" = 1
 nativeRtValueArityHost "@vuna@prim_eff_fileSize_host" = 1
-
-nativeRtValueArityBase "@vuna@obs@span" = 3
-nativeRtValueArityBase "@vuna@obs@spanLab" = 4
-nativeRtValueArityBase _ = 0
-
 nativeRtValueArityHost _ = 0
 
 export nativeRtValueArity : String -> Int
