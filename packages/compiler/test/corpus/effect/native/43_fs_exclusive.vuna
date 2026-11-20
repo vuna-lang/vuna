@@ -1,0 +1,25 @@
+-- `fsMakeDirExclusive` 的真宿主路径：首次建目录成功，再次因 EEXIST 返回 False，
+-- 已存在的普通文件同样返回 False；新建目录可继续写入。
+import Base.Effect.Core as Eff
+import Base.Effect.Fs as EffFs
+import Base.Effect.Console as EffConsole
+
+-- 把一组 Bool 压成一位字符序列。
+bits : List Bool -> String
+bits xs =
+  case xs of
+    [] => ""
+    b :: rest => (if b then "1" else "0") ++ bits rest
+
+main : Eff [FsOp, ConsoleOp] Int
+main =
+  do
+    _ <- fsRemoveTree "excl-dir"
+    _ <- fsWriteFile "excl-file" "x"
+    first <- fsMakeDirExclusive "excl-dir"
+    again <- fsMakeDirExclusive "excl-dir"
+    onFile <- fsMakeDirExclusive "excl-file"
+    _ <- fsWriteFile "excl-dir/inner.txt" "ok"
+    inner <- fsReadFile "excl-dir/inner.txt"
+    _ <- consolePrint (bits [first, again, onFile] ++ " " ++ inner ++ "\n")
+    pure 0

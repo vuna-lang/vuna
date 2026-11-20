@@ -575,3 +575,17 @@ run: sh -c 'd="$TMPDIR/bigread"; mkdir -p "$d/app"; printf "[package]\nname = \"
 exit: 0
 run: sh -c '"$TMPDIR/bigread-out/bin/bigread" 2>&1'
 out-equals: 12582912
+
+# 9y) strict 包装族：`prim_eff_readFileRange` / `writeFile` / `writeFileAtomic` /
+#     `readDir` / `isDirectory` / `makeDir` / `removeFile` 失败时都必须显式退出 2。
+#     除 writeFileAtomic（OCaml 的临时文件名带 pid，消息不可跨端逐字比）外，首行
+#     还必须与 OCaml 后端逐字一致。用 argv 选操作，避免七个包各建一次。
+run: sh -c 'd="$TMPDIR/strict7"; mkdir -p "$d/app"; printf "[package]\nname = \"strict7\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Effect.Core as Eff\n\npick : List String -> String\npick xs = case xs of\n  a :: _ => a\n  _ => \"none\"\n\nmain : Eff [] Int\nmain = do\n  args <- prim_eff_getArgs\n  let op = pick args\n  if op == \"readFileRange\" then do\n    _ <- prim_eff_readFileRange \"/nonexistent-vuna-strict7\" 0 4\n    pure 0\n  else if op == \"writeFile\" then do\n    _ <- prim_eff_writeFile \"/nonexistent-vuna-strict7/x\" \"s\"\n    pure 0\n  else if op == \"writeFileAtomic\" then do\n    _ <- prim_eff_writeFileAtomic \"/nonexistent-vuna-strict7/x\" \"s\"\n    pure 0\n  else if op == \"readDir\" then do\n    _ <- prim_eff_readDir \"/nonexistent-vuna-strict7\"\n    pure 0\n  else if op == \"isDirectory\" then do\n    _ <- prim_eff_isDirectory \"/nonexistent-vuna-strict7\"\n    pure 0\n  else if op == \"makeDir\" then do\n    n <- prim_eff_makeDir \"$TMPDIR/strict7-parent/child\"\n    pure n\n  else if op == \"removeFile\" then do\n    n <- prim_eff_removeFile \"$TMPDIR/strict7-nonempty\"\n    pure n\n  else pure 9\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/strict7-n" "$d"'
+exit: 0
+run: sh -c 'd="$TMPDIR/strict7"; "$VUNA" build --out "$TMPDIR/strict7-o" "$d"'
+exit: 0
+run: sh -c ': > "$TMPDIR/strict7-parent"; rm -rf "$TMPDIR/strict7-nonempty"; mkdir -p "$TMPDIR/strict7-nonempty"; : > "$TMPDIR/strict7-nonempty/x"'
+exit: 0
+run: sh -c 'ok=0; for op in readFileRange writeFile writeFileAtomic readDir isDirectory makeDir removeFile; do "$TMPDIR/strict7-n/bin/strict7" "$op" > /dev/null 2> "$TMPDIR/s7n-$op.err"; [ $? -eq 2 ] || ok=1; "$TMPDIR/strict7-o/bin/strict7" "$op" > /dev/null 2> "$TMPDIR/s7o-$op.err"; [ $? -eq 2 ] || ok=1; if [ "$op" != writeFileAtomic ]; then head -1 "$TMPDIR/s7n-$op.err" > "$TMPDIR/s7n-$op.line"; head -1 "$TMPDIR/s7o-$op.err" > "$TMPDIR/s7o-$op.line"; cmp -s "$TMPDIR/s7n-$op.line" "$TMPDIR/s7o-$op.line" || ok=2; fi; done; echo $ok'
+exit: 0
+out-equals: 0
