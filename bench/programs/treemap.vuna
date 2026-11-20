@@ -1,0 +1,37 @@
+-- 有序容器基准：Base.Container.TreeMap（AVL）的 insert / lookup / 有序遍历。
+-- 手写 OCaml 对照用标准库 Map（同算法上限，见 treemap.ml）。
+import Base.Container.TreeMap as TreeMap
+import Base.Data.Int as Int
+import Base.Data.List as List
+import Base.Data.Maybe as Maybe
+import Base.Data.Nat as Nat
+import Base.Data.Pair as Pair
+
+-- 伪随机键（7919 与 100003 互素，N=20000 内无重复），两边逐位一致。
+scramble : Int -> Int
+scramble i =
+  let
+    x = i * 7919
+  in x - x / 100003 * 100003
+
+build : Int -> TreeMap Int Int -> TreeMap Int Int
+build k t = if k <= 0 then t else build (k - 1) (TreeMap.insert (scramble k) k t)
+
+lookupSum : Int -> TreeMap Int Int -> Int -> Int
+lookupSum k t acc =
+  if k <= 0 then
+    acc
+  else
+    case TreeMap.lookup (scramble k) t of
+      Nothing => lookupSum (k - 1) t acc
+      Just v => lookupSum (k - 1) t (acc * 31 + v)
+
+ascSum : List (Pair Int Int) -> Int
+ascSum xs = List.foldl (\acc, p => acc * 31 + firstOf p) 0 xs
+
+main : Int
+main =
+  let
+    n = 20000
+    t = build n TreeMap.empty
+  in lookupSum n t 0 + ascSum (TreeMap.toAscList t) + natToInt (TreeMap.size t)

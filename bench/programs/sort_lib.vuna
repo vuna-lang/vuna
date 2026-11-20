@@ -1,0 +1,23 @@
+-- 库排序基准：Base.Data.Sort 的混合归并（有序探测 + 小表插入 + 归并）vs 手写 OCaml List.sort。
+-- 输入用尾递归构造，wasm 的 1 MB 栈也能跑完成。
+import Base.Data.Int as Int
+import Base.Data.List as List
+import Base.Data.Nat as Nat
+import Base.Data.Sort as Sort
+
+-- 伪随机排列（7919 与 100003 互素），vuna 与 .ml 逐位一致。
+scramble : Int -> Int
+scramble i =
+  let
+    x = i * 7919
+  in x - x / 100003 * 100003
+
+gen : Int -> List Int -> List Int
+gen k acc = if k <= 0 then acc else gen (k - 1) (scramble k :: acc)
+
+main : Int
+main =
+  let
+    xs = gen 20000 []
+    ys = Sort.sortBy (\a, b => a <= b) xs
+  in List.foldl (\acc, x => acc * 31 + x) 0 ys

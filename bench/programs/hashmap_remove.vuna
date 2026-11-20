@@ -1,0 +1,36 @@
+-- 哈希容器基准：Base.Container.HashMap 的 insert / remove / lookup / size（O(1) 计数）。
+-- 手写 OCaml 对照用标准库 Hashtbl（见 hashmap_remove.ml）。
+import Base.Container.HashMap as HashMap
+import Base.Data.Int as Int
+import Base.Data.List as List
+import Base.Data.Maybe as Maybe
+import Base.Data.Nat as Nat
+
+scramble : Int -> Int
+scramble i =
+  let
+    x = i * 7919
+  in x - x / 100003 * 100003
+
+insertAll : Int -> HashMap Int Int -> HashMap Int Int
+insertAll k t = if k <= 0 then t else insertAll (k - 1) (HashMap.insert (scramble k) k t)
+
+removeEven : Int -> HashMap Int Int -> HashMap Int Int
+removeEven k t = if k <= 0 then t else removeEven (k - 1) (HashMap.remove (scramble (k * 2)) t)
+
+lookupSum : Int -> HashMap Int Int -> Int -> Int
+lookupSum k t acc =
+  if k <= 0 then
+    acc
+  else
+    case HashMap.lookup (scramble k) t of
+      Nothing => lookupSum (k - 1) t acc
+      Just v => lookupSum (k - 1) t (acc * 31 + v)
+
+main : Int
+main =
+  let
+    n = 20000
+    t0 = insertAll n (HashMap.fromList [])
+    t1 = removeEven n t0
+  in lookupSum n t1 0 + natToInt (HashMap.size t1)

@@ -1,0 +1,27 @@
+-- 队列基准：Base.Container.Queue（双列表 FIFO）的 push / pop / size。
+-- 手写 OCaml 对照用标准库 Queue（可变实现，见 queue.ml）。
+import Base.Container.Queue as Queue
+import Base.Data.Bool
+import Base.Data.Int as Int
+import Base.Data.Maybe as Maybe
+import Base.Data.Nat as Nat
+import Base.Data.Pair as Pair
+
+pushAll : Int -> Queue Int -> Queue Int
+pushAll k q = if k <= 0 then q else pushAll (k - 1) (Queue.push (k * 3 - 7) q)
+
+popSum : Int -> Queue Int -> Int -> Int
+popSum k q acc =
+  if k <= 0 then
+    acc
+  else
+    case Queue.pop q of
+      Nothing => acc
+      Just (Pair x rest) => popSum (k - 1) rest (acc * 31 + x)
+
+main : Int
+main =
+  let
+    n = 50000
+    q = pushAll n Queue.empty
+  in popSum n q 0 + natToInt (Queue.size q)

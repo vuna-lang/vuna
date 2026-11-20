@@ -1,0 +1,32 @@
+-- 优先队列基准：Base.Container.PriorityQueue（左偏堆）的 push / pop / size。
+-- 手写 OCaml 对照用标准库 Set 当有序多重集（min 弹出，见 priority_queue.ml）。
+import Base.Container.PriorityQueue as PQ
+import Base.Data.Int as Int
+import Base.Data.Maybe as Maybe
+import Base.Data.Nat as Nat
+import Base.Data.Pair as Pair
+
+scramble : Int -> Int
+scramble i =
+  let
+    x = i * 7919
+  in x - x / 100003 * 100003
+
+pushAll : Int -> PriorityQueue Int -> PriorityQueue Int
+pushAll k q = if k <= 0 then q else pushAll (k - 1) (PQ.push (scramble k) q)
+
+popSum : Int -> PriorityQueue Int -> Int -> Int
+popSum k q acc =
+  if k <= 0 then
+    acc
+  else
+    case PQ.pop q of
+      Nothing => acc
+      Just (Pair x rest) => popSum (k - 1) rest (acc * 31 + x)
+
+main : Int
+main =
+  let
+    n = 20000
+    q = pushAll n PQ.empty
+  in popSum n q 0 + natToInt (PQ.size q)
