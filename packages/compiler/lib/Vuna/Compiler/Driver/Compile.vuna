@@ -794,24 +794,23 @@ checkModsLib ctx names =
       verHash = textHash (checkNodeSchema ++ vunaVersion) + fp
     in pure (checkModsOf (contextPackageName ctx) "lib:${hashText namesHash}" (hashText manHash) (hashText srcHash) (depIdentitiesHash deps) (hashText verHash) (releaseFlagOf ctx))
 
--- 依赖优先的 DFS 后序 + 按包名去重（与 Packages.Pkg.dependencyRoots 同规则）。
--- 记录字段访问（`p.packageDependencies`）不再被终止性判据识别为「结构投影」，
--- 非结构递归在 SCT 里没有下降参数；用 fuel 守卫（同 loader 的遍历惯例）。
+-- 依赖优先的 DFS 后序 + 按包名去重（与 `Packages.Pkg.dependencyRoots` 同规则）。
+-- 直接依赖经单 clause 投影 `depPackagesOf` 取（SCT 认作结构子项），遍历本身是结构递归，
+-- 不设 fuel：包图再深也不会截断成部分列表。
 collectDepPackages : List String -> List Package -> Pair (List String) (List Package)
-collectDepPackages seen ps = collectDepPackagesFuel 4096 seen ps
-
-collectDepPackagesFuel : Int -> List String -> List Package -> Pair (List String) (List Package)
-collectDepPackagesFuel fuel seen [] = Pair seen []
-collectDepPackagesFuel fuel seen (p :: rest) =
-  if fuel <= 0 then
-    Pair seen ((::) p rest)
-  else if memName (packageName p) seen then
-    collectDepPackagesFuel (fuel - 1) seen rest
+collectDepPackages seen [] = Pair seen []
+collectDepPackages seen (p :: rest) =
+  if memName (packageName p) seen then
+    collectDepPackages seen rest
   else
-    case collectDepPackagesFuel (fuel - 1) (packageName p :: seen) p.packageDependencies of
+    case collectDepPackages (packageName p :: seen) (depPackagesOf p) of
       Pair seen1 transitive =>
-        case collectDepPackagesFuel (fuel - 1) seen1 rest of
+        case collectDepPackages seen1 rest of
           Pair seen2 siblings => Pair seen2 (append transitive (p :: siblings))
+
+-- | 直接依赖的投影：单 clause 构造子模式是结构子项，终止性判据直接认。
+depPackagesOf : Package -> List Package
+depPackagesOf (Package _ ds _) = ds
 
 sameNameSet : List String -> List String -> Bool
 sameNameSet a b = length a == length b && allNamesIn a b && allNamesIn b a
