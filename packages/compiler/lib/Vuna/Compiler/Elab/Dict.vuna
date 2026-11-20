@@ -298,7 +298,7 @@ localDictLookupGo ctx i dom ec ((Pair name ty) :: rest) =
   let
     v = forceVal ec (varTypeValue ctx i ty)
   in if isDictValue ec v then
-    case conv (ecDefTbl ec) (ecSolsP ec) 0 v dom of
+    case conv (ecDefTbl ec) (ecSolsP ec) (ctxDepth ctx) v dom of
       OkC sols2 => Just (Pair (TVar name i (Span "" 0 0 0 0 0 0)) (ecPutSols ec (solsList sols2)))
       ErrC e => localDictLookupGo ctx (i + 1) dom ec rest
   else
@@ -379,7 +379,7 @@ tryMatchInst globals ctx fuel ec inst dom sp =
         let
           _ = dbg! "inst-try: ${dtInstName inst} head=${showTerm inst.dtInstHead} tele=${length inst.dtInstTele}"
           hd = eval (map (\m => VMeta m []) metas) inst.dtInstHead
-        in case conv (ecDefTbl ec1) (ecSolsP ec1) 0 dom hd of
+        in case conv (ecDefTbl ec1) (ecSolsP ec1) (ctxDepth ctx) dom hd of
           ErrC e =>
             let
               _ = dbg! "inst-conv-err: ${dtInstName inst} dom=${showValue dom} hd=${showValue hd}"
@@ -692,7 +692,7 @@ resolveRowGoalsCtxGo globals ctx sp ((c@(Constraint cid kind m dom cspan cdepth)
           else
             case searchInstanceIn globals ctx ec (forceVal ec dom) sp of
               OkC (Pair instTerm ec1) =>
-                case solveMeta (ecDefTbl ec1) (ecSolsP ec1) 0 m [] (eval (ctxEnv ctx) instTerm) of
+                case solveMeta (ecDefTbl ec1) (ecSolsP ec1) (ctxDepth ctx) m [] (eval (ctxEnv ctx) instTerm) of
                   OkC sols2 => resolveRowGoalsCtxGo globals ctx sp rest (ecPutSols ec1 (solsList sols2)) kept
                   ErrC e => resolveRowGoalsCtxGo globals ctx sp rest ec (c :: kept)
               ErrC e => resolveRowGoalsCtxGo globals ctx sp rest ec (c :: kept)
@@ -769,8 +769,12 @@ resolveDictGoalsFuel fuel globals ec0 =
 -- | 尝试求解一条延迟约束：行成员走 memberLookup，字典目标走实例搜索并回填元变量。
 tryResolveDictGoal : List (Pair String Term) -> Ec -> Constraint -> Value -> Maybe Ec
 tryResolveDictGoal globals ec (Constraint cid kind m dom cspan cdepth) forced =
-  if isMemberDomain ec dom then
+  if cdepth > 0 then
+    Nothing
+  else if isMemberDomain ec dom then
     case memberLookup 64 0 ec dom of
+      -- 目标创建时 ctx 非空：这里的求解没有那个 ctx（`eval []`），只适用于闭目标。
+      -- 带 ctx 的目标由 `resolveRowGoalsCtx` 按创建它的 ctx 处理。
       MemberFound proof ec2 =>
         case solveRowMeta ec2 cdepth m proof of
           OkC ec3 => Just ec3
@@ -1157,7 +1161,7 @@ deferEqDict globals ctx mname tyTerm aTerm bTerm sp dictTy ec =
   in case newMetaAt sp ctx ec of
     Pair metaTerm ec1 =>
       OkC
-        (Just (Pair (TApp (TApp (TApp (TApp (TGlobal mname) tyTerm Rig0) metaTerm RigOmega) aTerm Rig1) bTerm Rig1) (Pair boolTyValue (ecAddConstraint ec1 CkDict m dictTy (Just sp) 0))))
+        (Just (Pair (TApp (TApp (TApp (TApp (TGlobal mname) tyTerm Rig0) metaTerm RigOmega) aTerm Rig1) bTerm Rig1) (Pair boolTyValue (ecAddConstraint ec1 CkDict m dictTy (Just sp) (ctxDepth ctx)))))
 
 -- ---------------------------------------------------------------
 -- `<` / `<=` / `>` / `>=` 的饱和应用按实参类型特化

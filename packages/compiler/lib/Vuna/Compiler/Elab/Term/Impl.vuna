@@ -1630,7 +1630,8 @@ constrainDictDomFuel fuel globals ec ctx dom args sp =
                     \ecProbe =>
                       case metaLookup a (ecSolTbl ecProbe) of
                         Just v =>
-                          case solveMeta (ecDefTbl ec) (ecSolsP ec) 0 a [] v of
+                          case solveMeta (ecDefTbl ec) (ecSolsP ec) (ctxDepth ctx) a [] v of
+                            -- `v` 来自 ctx 下的 probe 推断：按 ctx 深度 quote。
                             OkC sols2 => OkC (ecPutSols ec (solsList sols2))
                             ErrC e => OkC ec
                         Nothing => OkC ec
@@ -1985,7 +1986,7 @@ overValueCandidateMatches : List (Pair String Term) -> Ctx -> Ec -> Value -> Str
 overValueCandidateMatches globals ctx ec expected target =
   case valueLookup globals ec target of
     Just (VEDef ty) =>
-      case conv (ecDefTbl ec) (ecSolsP ec) 0 (eval (ctxEnv ctx) ty) expected of
+      case conv (ecDefTbl ec) (ecSolsP ec) (ctxDepth ctx) (eval (ctxEnv ctx) ty) expected of
         OkC _ => True
         ErrC _ => False
     _ => False

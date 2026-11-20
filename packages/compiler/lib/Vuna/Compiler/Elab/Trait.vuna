@@ -376,7 +376,7 @@ elabInstanceWithClass globals allDecls cls info ec0 headExpr methods msp =
                         ctxSubs = firstOf solvedCtx
                         ec2 = secondOf solvedCtx
                         fields1 = map (applyCtxSubstsTo nTele ctxSubs) fieldTerms
-                      in Vuna.Compiler.Base.Common.bind (resolveRigidGoals globals bodyCtx msp (ecPendingList ec2) [] ec2) (
+                      in Vuna.Compiler.Base.Common.bind (resolveRigidGoals globals bodyCtx msp (ecNextConstraintId ec0) (ecPendingList ec2) [] ec2) (
                           \r =>
                             let
                               globSubs = firstOf r
@@ -1004,11 +1004,11 @@ matchCtxDictIdxGo ctx nCtx dom ec i (item :: rest) =
     Nothing
   else
     case item of
-      Pair name ty => if ctxDictDomEqual ec (varTypeValue ctx i ty) dom then Just i else matchCtxDictIdxGo ctx nCtx dom ec (i + 1) rest
+      Pair name ty => if ctxDictDomEqual ec (ctxDepth ctx) (varTypeValue ctx i ty) dom then Just i else matchCtxDictIdxGo ctx nCtx dom ec (i + 1) rest
 
-ctxDictDomEqual : Ec -> Value -> Value -> Bool
-ctxDictDomEqual ec a b =
-  case conv (ecDefTbl ec) (ecSolsP ec) 0 (forceVal ec a) (forceVal ec b) of
+ctxDictDomEqual : Ec -> Int -> Value -> Value -> Bool
+ctxDictDomEqual ec depth a b =
+  case conv (ecDefTbl ec) (ecSolsP ec) depth (forceVal ec a) (forceVal ec b) of
     OkC _ => True
     ErrC e => False
 
@@ -1022,25 +1022,29 @@ applyCtxSubstsTo nTele ((Pair m k) :: rest) t =
 
 -- 剩下的 goal：仍刚性 ⇒ 用带局部 ctx 的实例搜索解（`Dict_Eq (Box a)` 靠自实例 + ctx 递归）；
 -- 搜不到 ⇒ `TC_InstanceContextMissing`。非刚性（具体类型）的 goal 留给程序级搜索。
-resolveRigidGoals : List (Pair String Term) -> Ctx -> Span -> List Constraint -> List (Pair Int Term) -> Ec -> Check (Pair (List (Pair Int Term)) Ec)
-resolveRigidGoals globals ctx sp goals acc ec = resolveRigidGoalsGo globals ctx sp goals [] acc ec
+resolveRigidGoals : List (Pair String Term) -> Ctx -> Span -> Int -> List Constraint -> List (Pair Int Term) -> Ec -> Check (Pair (List (Pair Int Term)) Ec)
+resolveRigidGoals globals ctx sp minCid goals acc ec =
+  resolveRigidGoalsGo globals ctx sp minCid goals [] acc ec
 
-resolveRigidGoalsGo : List (Pair String Term) -> Ctx -> Span -> List Constraint -> List Constraint -> List (Pair Int Term) -> Ec -> Check (Pair (List (Pair Int Term)) Ec)
-resolveRigidGoalsGo globals ctx sp [] kept acc ec =
+resolveRigidGoalsGo : List (Pair String Term) -> Ctx -> Span -> Int -> List Constraint -> List Constraint -> List (Pair Int Term) -> Ec -> Check (Pair (List (Pair Int Term)) Ec)
+resolveRigidGoalsGo globals ctx sp minCid [] kept acc ec =
   OkC (Pair (reverse acc) (ecPutPending ec (reverse kept)))
-resolveRigidGoalsGo globals ctx sp ((g@(Constraint cid kind m dom cspan cdepth)) :: rest) kept acc ec =
-  if isRigidDictArg ec dom then
+resolveRigidGoalsGo globals ctx sp minCid ((g@(Constraint cid kind m dom cspan cdepth)) :: rest) kept acc ec =
+  if cid < minCid then
+    resolveRigidGoalsGo globals ctx sp minCid rest (g :: kept) acc ec
+  else if isRigidDictArg ec dom then
     case searchInstanceIn globals ctx ec dom sp of
+      -- 延迟队列跨定义累积：别的定义留下的目标原样退回，不当作本实例的 ctx 需求。
       ErrC e => tcErr1 sp (InstanceContextMissing (showValue dom)) (showValue dom)
       OkC (Pair rep ec1) =>
         case solveMeta (ecDefTbl ec1) (ecSolsP ec1) (ctxDepth ctx) m [] (eval (ctxEnv ctx) rep) of
-          OkC sols2 => resolveRigidGoalsGo globals ctx sp rest kept (Pair m rep :: acc) (ecPutSols ec1 (solsList sols2))
+          OkC sols2 => resolveRigidGoalsGo globals ctx sp minCid rest kept (Pair m rep :: acc) (ecPutSols ec1 (solsList sols2))
           -- 解不进去就不许替换：acc 不变、goal 退回 kept（与 `solveCtxGoalsGo` /
           -- `Driver.solveDeclaredDictGoalsGo` 的失败分支同形）。残留的未解 ?m 会在收尾
           -- 报 `TC_UnsolvedMetavar`，比静默写入一个没过 occurs / 作用域检查的字典好。
-          ErrC e => resolveRigidGoalsGo globals ctx sp rest (g :: kept) acc ec1
+          ErrC e => resolveRigidGoalsGo globals ctx sp minCid rest (g :: kept) acc ec1
   else
-    resolveRigidGoalsGo globals ctx sp rest (g :: kept) acc ec
+    resolveRigidGoalsGo globals ctx sp minCid rest (g :: kept) acc ec
 
 -- meta → 任意 term 的替换（term 在 `bodyDepth` 下有效；出现点 depth 更深时整体 shift）。
 applyTermSubstsTo : Int -> List (Pair Int Term) -> Term -> Term
@@ -1110,22 +1114,36 @@ record DictGoalGroup where
   dictGoalGroupDom : Value
   dictGoalGroupExtras : List Int
 
-export freeDictGoals : Ec -> List DictGoalGroup
-freeDictGoals ec = freeDictGoalsGo ec (ecPendingList ec) []
+export freeDictGoals : Int -> Ec -> List DictGoalGroup
+freeDictGoals minCid ec = freeDictGoalsGo minCid ec (ecPendingList ec) []
 
-export freeDictGoalsGo : Ec -> List Constraint -> List DictGoalGroup -> List DictGoalGroup
-freeDictGoalsGo ec [] acc = acc
-freeDictGoalsGo ec (g :: rest) acc =
+-- 类参数是值字面量 ⇒ 这个「字典域」并不是类型（把运行期标签/路径当成了类参数）。
+-- 这种目标不能提升成隐式参数，留在 pending 里按未解目标报告。
+literalClassArg : Value -> Bool
+literalClassArg (VStr _) = True
+literalClassArg (VInt _) = True
+literalClassArg (VBool _) = True
+literalClassArg (VFloat _) = True
+literalClassArg _ = False
+
+liftableDictDomain : Ec -> Value -> Bool
+liftableDictDomain ec dom = length (filter literalClassArg (dictClassArgs ec dom)) == 0
+
+-- 只看**本定义**新产生的约束（`cid >= minCid`）：延迟队列跨定义累积，别的定义留下的
+-- 目标不能被提升进当前签名（否则会把别人的 `Dict_Eq <label>` 之类塞进本函数的隐式参数）。
+export freeDictGoalsGo : Int -> Ec -> List Constraint -> List DictGoalGroup -> List DictGoalGroup
+freeDictGoalsGo minCid ec [] acc = acc
+freeDictGoalsGo minCid ec (g :: rest) acc =
   case g of
     Constraint cid kind m dom cspan cdepth =>
-      if isRigidDictArg ec dom then
+      if cid >= minCid && isRigidDictArg ec dom && liftableDictDomain ec dom then
         case metaLookup m (ecSolTbl ec) of
           -- 已提升过的目标不再重复提升（`solveLiftedMeta` 已把 ?m 解成 `d`）；否则后续每个
           -- 定义都会被塞进一个多余的字典 binder（`not b` 这类会被破坏成一次字典搜索）。
-          Just _ => freeDictGoalsGo ec rest acc
-          Nothing => freeDictGoalsGo ec rest (addDictGoalGroup ec m dom acc)
+          Just _ => freeDictGoalsGo minCid ec rest acc
+          Nothing => freeDictGoalsGo minCid ec rest (addDictGoalGroup ec m dom acc)
       else
-        freeDictGoalsGo ec rest acc
+        freeDictGoalsGo minCid ec rest acc
 
 -- 按 domain 的定义性相等归组：已提升的列表里第一组匹配即并入（追加到该组尾部）。
 addDictGoalGroup : Ec -> Int -> Value -> List DictGoalGroup -> List DictGoalGroup
@@ -1156,14 +1174,14 @@ solveLiftedMeta ec name level m =
     OkC sols2 => ecPutSols ec (solsList sols2)
     ErrC e => ec
 
-export liftFreeDictGoals : String -> Ec -> Term -> Term -> Pair Term (Pair Term Ec)
+export liftFreeDictGoals : String -> Int -> Ec -> Term -> Term -> Pair Term (Pair Term Ec)
 -- 冷路径：没有延迟字典目标时整段是恒等（省掉扫目标表与求隐式前缀长）。
-liftFreeDictGoals defName ec ty body =
+liftFreeDictGoals defName minCid ec ty body =
   case ecPendingList ec of
     [] => Pair ty (Pair body ec)
     _ =>
       let
-        groups = freeDictGoals ec
+        groups = freeDictGoals minCid ec
         nGroups = length groups
         -- 字典 binder 插在**原始签名**的最后一个隐式 binder 之后。
         -- `insertDictBinder`/`insertLamBinder` 的 idx 语义是「插在第 idx 个 binder 之后」，

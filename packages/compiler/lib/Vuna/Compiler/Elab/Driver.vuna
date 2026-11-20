@@ -371,6 +371,8 @@ elabOneDef : List Decl -> List (Pair String Term) -> String -> Term -> Span -> E
 elabOneDef decls globals name tyTerm sp ec =
   let
     _ = dbg! "DEF ${name}"
+    -- 本次定义新产生的约束 id 下界：跨定义累积的待处理目标不能提升进本签名。
+    startCid = ecNextConstraintId ec
   in Vuna.Compiler.Base.Common.bind
     (obsDefCheck "vuna.def.elab" name (\_ => elabFunDef globals ec (clausesOfTbl ec decls name) (eval [] tyTerm) sp))
     (
@@ -387,7 +389,7 @@ elabOneDef decls globals name tyTerm sp ec =
                     solvedDecl = solveDeclaredDictGoals ec1 tyTerm bodyTerm
                     bodyTerm1 = firstOf solvedDecl
                     ec1b = secondOf solvedDecl
-                    lifted = liftFreeDictGoals name ec1b tyTerm bodyTerm1
+                    lifted = liftFreeDictGoals name startCid ec1b tyTerm bodyTerm1
                     liftedTy = firstOf lifted
                     liftedBody = firstOf (secondOf lifted)
                     liftedEc = secondOf (secondOf lifted)

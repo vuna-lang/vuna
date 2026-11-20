@@ -505,7 +505,9 @@ metaCreatedDepth sols depth m =
 -- 本地 binder / 创建深度之前的自由变量 / pattern spine 里的变量。
 termScopedTo : Int -> Int -> Int -> List (Pair String Int) -> Term -> Bool
 termScopedTo created depth extra levels (TVar name i _) =
-  if i < extra then
+  if i < 0 then
+    False
+  else if i < extra then
     True
   else
     let

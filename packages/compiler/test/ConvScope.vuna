@@ -1,0 +1,39 @@
+-- A02：元变量解的作用域判据——负索引表示「level 在 quote 深度之外」，不能再当本地
+-- binder 放行。两条用例直接调 `Conv.solveMeta`，不经过语言表面。
+import Base
+import Base.Container.HashMap as HashMap
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Core.Conv
+import Vuna.Compiler.Core.Eval
+import Vuna.Compiler.Core.Term
+
+main : Eff [] String
+main =
+  case filter (\p => not (secondOf p)) results of
+    [] => pure ""
+    bad =>
+      do
+        _ <- prim_eff_print ("conv scope failed: " ++ join "; " (map firstOf bad) ++ "\n")
+        _ <- prim_eff_exit 1
+        pure ""
+
+results : List (Pair String Bool)
+results =
+  [Pair "in-scope-accepted" inScopeAccepted, Pair "out-of-scope-rejected" outOfScopeRejected]
+
+defs : HashMap String Term
+defs = HashMap.fromList []
+
+-- depth = 1：level 0 是本地 binder（index 0），合法。
+inScopeAccepted : Bool
+inScopeAccepted =
+  case solveMeta defs solsEmpty 1 7 [] (VNeutral (NVar "x" 0 [])) of
+    OkC _ => True
+    ErrC _ => False
+
+-- depth = 1：level 1 在作用域外（quote 出 -1）；必须拒绝，旧判据会当本地 binder 放行。
+outOfScopeRejected : Bool
+outOfScopeRejected =
+  case solveMeta defs solsEmpty 1 8 [] (VNeutral (NVar "x" 1 [])) of
+    OkC _ => False
+    ErrC _ => True

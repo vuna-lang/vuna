@@ -974,15 +974,21 @@ quoteNeutralFuel fuel depth n =
     TType levelZero
   else
     case n of
-      NVar name level sp => applyTermSpine (TVar name (varIndex depth level) (Span "" 0 0 0 0 0 0)) (map (\a => quoteFuel (fuel - 1) depth a) sp)
+      NVar name level sp =>
+        let
+          idx =
+            case varIndexM depth level of
+              Just i => i
+              -- 作用域外的 level：`quote` 是纯函数，仍要落成一个项。保留 `-1` 作为
+              -- 「越界」哨兵（`hasNegativeVar` 会拒绝它），但作用域判据不再依赖它。
+              Nothing => 0 - 1
+        in applyTermSpine (TVar name idx (Span "" 0 0 0 0 0 0)) (map (\a => quoteFuel (fuel - 1) depth a) sp)
       NGlobal g sp => applyTermSpine (TGlobal g) (map (\a => quoteFuel (fuel - 1) depth a) sp)
 
--- 越界的 level 不能静默当成最外层变量（index 0），那会错得无声。
--- quote 是纯函数、不返回 Result；这里对越界返回负 index（-1），后续
--- `binderAt` / 擦除检查会把它报成 "unbound runtime variable" 而不是悄悄指向 0。
--- 正常路径（level < depth）不变。
-export varIndex : Int -> Int -> Int
-varIndex depth level = if level < depth then depth - level - 1 else 0 - 1
+-- | `level` 在 quote 深度内时的 de Bruijn index；越界返回 `Nothing`（不在表示里
+--   伪装成本地 binder）。
+export varIndexM : Int -> Int -> Maybe Int
+varIndexM depth level = if level < depth then Just (depth - level - 1) else Nothing
 
 export applyTermSpine : Term -> List Term -> Term
 applyTermSpine head [] = head

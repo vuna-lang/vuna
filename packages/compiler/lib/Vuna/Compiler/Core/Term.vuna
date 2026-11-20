@@ -883,7 +883,8 @@ export anyAltFree : Int -> List CaseAlt -> Bool
 anyAltFree d [] = False
 anyAltFree d ((CaseAlt n bs b) :: rest) = hasFreeTermVar (d + length bs) b || anyAltFree d rest
 
--- 负 de Bruijn 索引：quote 的越界产物（`varIndex` 对越界 level 返回 -1）。`hasFreeTermVar`
+-- 负 de Bruijn 索引：quote 的越界产物（`varIndexM` 对越界 level 返回 `Nothing`，项里
+-- 落成 `-1` 哨兵）。`hasFreeTermVar`
 -- 只查上界，负索引会被 `lookupEnv` 的 `i <= 0` 当成**最内层**变量（静默错位），所以
 -- 序列化/摘要校验必须单独拒绝它。
 export hasNegativeVar : Term -> Bool

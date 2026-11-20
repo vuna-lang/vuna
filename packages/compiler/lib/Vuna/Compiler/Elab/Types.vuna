@@ -630,6 +630,12 @@ ecPendingCount ec =
   case ecConstraints ec of
     ConstraintStore pending next tried cnt passNext passSols ctorok => natToInt (Queue.size pending)
 
+-- | 下一条约束的 id（单调递增；用于「只看本定义新产生的约束」）。
+export ecNextConstraintId : Ec -> Int
+ecNextConstraintId ec =
+  case ecConstraints ec of
+    ConstraintStore pending next tried cnt passNext passSols ctorok => next
+
 -- | 从队首取一条待处理约束（摊还 O(1)）。
 export ecPopPending : Ec -> Maybe (Pair Constraint Ec)
 ecPopPending ec =
