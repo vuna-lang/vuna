@@ -99,24 +99,12 @@ packages/base/lib/
 抽象类型（`Map`、`HashMap`、`HashSet`、`TreeMap`、`TreeSet`、`Queue`、`PriorityQueue`）的构造器保持私有。`Map` / `Sort` / `HashMap` / `HashSet` / `TreeMap` / `TreeSet` / `Queue` / `PriorityQueue` 都不在 `Prelude` 里；`Base` 门面重导出 `Base.Container.Map` / `Base.Data.Sort`，但**不**含其余容器——它们与 `Map` 在 `insert` / `fromList` / `toList` / `size` 上同名（`HashMap` 还有 `lookup` / `member`，`HashSet` 有 `member` 与 `empty`），同时重导出会让 `insert` 等名字在使用点产生歧义（同名条目允许共存，按候选集解析）。
 用哈希容器时显式 `import Base.Container.HashMap as HashMap` / `...HashSet as HashSet`；同文件使用多个容器时写完整限定名（`HashMap.insert` / `HashSet.member`）。
 
-`packages/base/vuna.toml` 的 `[export]` 只列门面；叶子模块（`Base.Effect.Fs` / `Base.Container.HashMap` / …）
-不跨包可见，跨包 `import Base.Effect.Fs` 会报 `LD_ModuleNotFound`。包内模块之间仍按真实模块名互相 import。
+`packages/base/vuna.toml` 的 `[export]` 列出**全部** `Base.*` 模块：标准库没有「跨包不可见」
+的叶子，`import Base.Effect.Fs` / `Base.Container.HashMap` 等跨包都合法。门面仍是推荐入口
+（它们做扁平重导出），leaf 只在需要具体实现/类型时 import。新增 leaf 必须同时加进 `[export]`，
+否则依赖方会报 `LD_ModuleNotExported`。
 
-模块导出清单（`packages/base/vuna.toml`）：
-
-```toml
-[export]
-modules = [
-  "Base",
-  "Base.Data",
-  "Base.Trait",
-  "Base.Container",
-  "Base.Effect",
-  "Base.Effect.Core",
-  "Base.Effect.Pure",
-  "Prelude"
-]
-```
+`[export]` 名单与 `packages/base/lib/**` 的模块头一一对应（直接以 `vuna.toml` 为真源）。
 
 各门面内部的模块清单以 `packages/base/lib/Base/{Data,Trait,Container,Effect,Effect/Core,Effect/Pure}.vuna`
 与 `Prelude.vuna` 的模块头为真源。

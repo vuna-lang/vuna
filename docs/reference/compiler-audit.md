@@ -38,7 +38,7 @@ ID 是稳定引用（`层前缀-序号`），改动时保留编号，删掉实�
 
 | ID | 位置 | 类 | 现象 → 后果 | 状态 |
 | --- | --- | --- | --- | --- |
-| LD-01 | `Flatten.vuna` 的 `loadModule` | ⚠️A | `findModule` 命中即跳过 `rootAllows` → `[export]` 边界与同名歧义只在首次加载生效 | 开放 |
+| LD-01 | `Flatten.vuna` 的 `loadModule` | ⚠️A | `findModule` 命中即跳过 `rootAllows` → `[export]` 边界与同名歧义只在首次加载生效 | 已清（命中表也走 `moduleVisibleTo`；base 的 `[export]` 补齐全部模块） |
 | LD-02 | `Flatten.visibleFixitiesOf` + `Fixity.dedupeFixities` | ⚠️D | fixity 是程序全局表；iface 路径 span 全空 ⇒ 跨模块同名声明被静默去重 | 开放 |
 | LD-03 | `Layers.vuna` 的 `checkImports` | ⚠️A | import 目标不在模块表就跳过该边（`preloaded` 装配时越层不检查） | 开放 |
 | LD-04 | `Layers.vuna` 的 `closureGo` | C | fuel 耗尽静默返回已累积集合 | 已清（预算 = 层数 + uses 条目数 + 2） |

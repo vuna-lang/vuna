@@ -167,22 +167,16 @@ vuna-base = "base"
 ```
 
 ```toml
-# 成员包（库包）：用 [export] 限定跨包可见的模块（下为节选，完整列表见 packages/base/vuna.toml）
+# 成员包（库包）：用 [export] 列出跨包可见的模块
 [package]
-name = "vuna-base"
+name = "my-lib"
 
 [export]
-modules = [
-  "Base",
-  "Base.Data",
-  "Base.Trait",
-  "Base.Container",
-  "Base.Effect",
-  "Base.Effect.Core",
-  "Base.Effect.Pure",
-  "Prelude"
-]
+modules = ["My.Lib", "My.Lib.Internal"]
 ```
+
+（`vuna-base` 的名单同样列出全部 `Base.*` 模块——标准库叶子模块也是公开面；见
+[stdlib.md](stdlib.md)「模块」一节。）
 
 （`vuna-base` 不在 `[dependencies]` 里依赖别的包；上例的 `[dependencies]` 段从略。
 成员包 manifest 只有 `[package]` + `[export]`（可选 `[diagnostics]`、`[dependencies]`）：
