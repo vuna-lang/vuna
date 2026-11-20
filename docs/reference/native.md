@@ -412,8 +412,9 @@ env，**不进 codegen**（同一 IR 的产物逐字节确定）。解析失败�
   `Base.Effect.Core.step` 的 `trap_impossible`（`vuna: runtime error: impossible branch`，
   exit 2）。`Monad (Eff r)` 的 CPS 形态把一个返回裸 `Check`（实测 `OkC (List Module)`）的
   continuation 当成返回 `Control` 的续延，`step` 的 `MkApply` 按 tag 0 误配 `MkDone`，把
-  payload 当函数应用成部分应用闭包。与 GC、W3.1 的尾 resume 标记都无关。同一失败可用 OCaml 版
-  `vuna build packages/compiler --target native` 的产物复现，与本包的安装布局无关；记在
+  payload 当函数应用成部分应用闭包。**同一份源码编到 wasm 后能正常 `check`**，所以缺陷在 native
+  的调用/闭包生成，不在 CPS 或机器层；与 GC、W3.1 的尾 resume 标记、死槽清理都无关。同一失败可用
+  OCaml 版 `vuna build packages/compiler --target native` 的产物复现，与本包的安装布局无关；记在
   [debt.md](debt.md) D122。
   整仓 selfhost 的现状见 [testing.md](testing.md)「后端自举 conformance」：尾调用（§3）只覆盖
   **直接饱和直调**，非尾递归、被闭包包住的递归仍按帧吃宿主栈；效应侧另有延迟 answer 的
