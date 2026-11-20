@@ -177,6 +177,11 @@ h p = case firstOf p of
 的行片段末尾（同行后随 token 只允许 `else`）；scrutinee 在外层模式里恰好出现一次；所有
 替换 token 都能定位。body 引用 scrutinee 时生成 as-pattern（`b@True`、`label@"x"`）。
 
+提升失败时的 case 回退（`chainFindings`）只在整行可替换时给出修复：链的各 then 分支收束
+行片段，链尾（default 分支）**结束所在行**。链尾后还有外层 `else`
+（`if a then <链> else b`）时该链不报告也不修复——整行替换会丢掉那个 `else`；这类链保持
+原形，仍可由外层可提升的 shape 处理。
+
 ### 3.2 `dispatch-lift`
 
 - 单 alt case：`ECase (EVar x) [(pat, body)]`，`pat` 为 `PCon` / `PInt` / `PStr` /

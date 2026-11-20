@@ -77,3 +77,13 @@ file-contains: $TMPDIR/lint-pkg/lib/Probe.vuna label 1 =
 file-contains: $TMPDIR/lint-pkg/lib/Probe.vuna "one"
 run: "$VUNA" lint --max-warnings 0 "$TMPDIR/lint-pkg/lib/Probe.vuna" 2>&1
 exit: 0
+# 链尾后紧跟外层 `else` 时不能整行替换：改写会留下没有 `else` 的 `if`。修复只能处理
+# 行尾的链（`probe2` 的 else 分支），`if a && b then <链> else 6` 必须原样保留。
+run: sh -c 'printf "%s\n" "module Probe where" "" "probe : Bool -> Bool -> Int -> Int" "probe a b x = if a && b then if x == 8 then 3 else if x == 9 then 4 else 5 else 6" "" "probe2 : Bool -> Bool -> Int -> Int" "probe2 a b x = if a && b then if x == 8 then 3 else if x == 9 then 4 else 5 else if x == 0 then 6 else if x == 1 then 7 else 8" > "$TMPDIR/lint-pkg/lib/Probe.vuna"'
+exit: 0
+run: "$VUNA" lint --fix "$TMPDIR/lint-pkg/lib/Probe.vuna" 2>&1
+exit: 0
+file-contains: $TMPDIR/lint-pkg/lib/Probe.vuna probe a b x = if a && b then if x == 8 then 3 else if x == 9 then 4 else 5 else 6
+file-contains: $TMPDIR/lint-pkg/lib/Probe.vuna else case x of
+run: "$VUNA" lint --max-warnings 0 "$TMPDIR/lint-pkg/lib/Probe.vuna" 2>&1
+exit: 0

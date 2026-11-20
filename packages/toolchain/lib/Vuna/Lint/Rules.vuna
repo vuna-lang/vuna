@@ -723,6 +723,20 @@ segmentOk src e =
       Nothing => True
       Just t => if tokIsEof t then True else if tokLine t == spanEndLine (exprSpan e) then tokIsKw t "else" else True
 
+-- | 内部：表达式是否真的结束所在行（同行不再有任何 token，包括 `else`）。
+--
+-- 整行替换的修复（链改写成 `case`）会丢掉链尾之后的同行内容；`if a then <链> else b` 里
+-- 链尾后紧跟外层 `else`，此时改写会留下没有 `else` 的 `if`，因此这类形状不产出修复
+-- （`segmentOk` 允许 `else` 只适用于会被改写消费掉的链内 then 分支）。
+segmentEndOk : LintSrc -> Expr -> Bool
+segmentEndOk src e =
+  if not (exprSingleLine e) then
+    False
+  else
+    case nextTokenAfterOffset src (spanEndOffset (exprSpan e)) of
+      Nothing => True
+      Just t => tokIsEof t || tokLine t /= spanEndLine (exprSpan e)
+
 -- | 内部：把行内某个标识符 token 的出现替换成新文本。
 replaceIdentInLine : String -> PTok -> String -> String
 replaceIdentInLine line tok replacement =
@@ -1079,12 +1093,12 @@ itemsSegmentsOk src [] = True
 itemsSegmentsOk src ((ChainItem lit thenText expr) :: rest) =
   segmentOk src expr && itemsSegmentsOk src rest
 
--- | 内部：字面量链可安全改写成 case 的判据：行区间干净、各 then 分支收束行尾、default
--- 分支也能收束。
+-- | 内部：字面量链可安全改写成 case 的判据：行区间干净、各 then 分支收束行尾（后随 `else`
+-- 属于链本身、会被改写消费）、default 分支结束整行（链尾之后不能再有外层 `else`）。
 chainFixable : LintSrc -> Span -> List ChainItem -> Expr -> Bool
 chainFixable src sp items defaultExpr =
   linesCleanRange src.lintSrcLines (spanStartLine sp) (spanEndLine sp)
-    && itemsSegmentsOk src items && segmentOk src defaultExpr
+    && itemsSegmentsOk src items && segmentEndOk src defaultExpr
 
 -- | 内部：`literal-if-chain` 的 case 回退：链至少两个分支且可修复时，产出把整条链改写成
 -- `case scrut of` 的 finding；否则不产出（仍可能由提升分支处理）。
