@@ -1171,7 +1171,7 @@ shiftedDepPrograms ifaces =
   else
     shiftedDepProgramsGo (nameSlotTbl names 0) ifaces
 
--- 模块名排序（插入排序；依赖模块数 ~几十，与哈希表相比更省常数）。
+-- 模块名排序（`Base.Data.Sort.sortBy`：已有序输入直接返回，稳定升序）。
 -- 字符串升序（稳定）：与 `Driver/Compile` 的同名函数收敛到 `Base.Data.Sort.sortBy`。
 sortNames : List String -> List String
 sortNames = sortBy (\a, b => a <= b)

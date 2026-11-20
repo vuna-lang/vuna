@@ -280,12 +280,12 @@ convergedWithin fuel graph memo =
 -- 排序）。单元缓存复用已生成的 `SplitFile` 后列表顺序会随命中集合变化，build.sh 的层/顺序
 -- 不能因此漂移（否则增量/全量产物不一致）。深度用迭代松弛算（与列表顺序无关）。
 --
--- 三处叠加的 O(n²) 必须避开：① 迭代松弛每轮对每个依赖线性扫 memo 表；② 插入排序每次
+-- 三处叠加的 O(n²) 必须避开：① 迭代松弛每轮对每个依赖线性扫 memo 表；② 排序每次
 -- 比较重算 SHA-256 的 `unitTieKey`；③ 排序结果按名在 `files` 里线性找文件。做法：
 --   ① 迭代松弛改用 `HashMap String Int` memo（每轮查找 O(1)，缺失键按 0）；
 --   ② graph 单元 + 全部依赖去重成表，每个名字只算一次 tie key；
 --   ③ `HashMap String SplitFile` 文件名索引。
--- 不变量：depth 是最长路径的不动点、稳定插入排序、同 depth 内按
+-- 不变量：depth 是最长路径的不动点、稳定排序（`Base.Data.Sort.sortBy`）、同 depth 内按
 -- `unitTieKey` 升序（`<=`）。
 unitTieKey : String -> Int
 unitTieKey name = Vuna.Compiler.Base.Hash.contentKey "t:${name}"

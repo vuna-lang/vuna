@@ -254,7 +254,7 @@ depMissingHash = "missing"
 -- 哈希前按**语义键文本**规范化顺序（不再用哈希值当排序键）：同一集合在「全量 / 增量」
 -- 两条路径上的列表顺序可能不同（globals 由「干净模块产物 + 本次精化产物」拼接），
 -- 接口哈希不能因此漂移。按键文本排序是确定性的，也消除「两个名字哈希碰撞 ⇒ 顺序歧义」
--- 这一类隐患。插入排序仍是 O(d²)（已知边界：真实包每模块几十项，见 performance.md）。
+-- 这一类隐患。`sortBy` 是混合归并（已有序输入直接返回，O(d log d)）。
 sortTextPairs : List (Pair String a) -> List (Pair String a)
 sortTextPairs ps = sortBy (\a, b => firstOf a <= firstOf b) ps
 
