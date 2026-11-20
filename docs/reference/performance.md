@@ -257,10 +257,13 @@ load/parse 前缀 + iface 摘要 **~2.6 s** → 逐定义精化（`collectSigs-d
    （`--debug-perf` 口径），集中在 `conv`/`force`/`infer` 的项重算与分配
    （`Term/Impl`、`Core/Eval|Conv`）。每 def 的定义值记忆化已否决（安全前置检查比命中收益
    更贵，A/B -2~3%）；更深的共享需要参数相关记忆化，未做。
-4. **冷 build 的 load/parse ~2.6 s + codegen split ~0.7 s**（`--debug-perf` 单次采样）：
-   `cg-splitmeta` 61 ms、位置表 23 ms、逐单元 lowering 434 ms、`validateUnit` 54 ms、
-   类型声明 2 ms、正文文本 160 ms，余下是程序级擦除 / 归属检查与首单元。逐单元的定义与
-   数据来自**归属桶**（一次 `O(def)` 分桶），不在每个单元重扫全程序；单元缓存的 key
+4. **冷 build 的 load/parse ~2.6 s + codegen split ~0.6 s**（`--debug-perf` 单次采样）：
+   `cg-splitmeta` 61 ms、位置表 23 ms、逐单元 lowering ~0.5 s、`validateUnit` ~70 ms、
+   类型声明 2 ms、正文文本 ~0.17 s，余下是程序级擦除 / 归属检查与首单元。逐单元的定义与
+   数据来自**归属桶**（一次 `O(def)` 分桶），不在每个单元重扫全程序；类型渲染与注解的
+   数据族判定走 `LwEnv.lwDataTbl`（按名 O(1)），不再对全部运行时族线性扫（采样为
+   ~52 万次判定：`renderTyGlobal` 37 万、`annotHeadTy` 5.6 万、`annotCalleeTy` 4.6 万、
+   `annotGlobalTy` 2 万、字段渲染 2.1 万；lowering 588 → 514 ms）。单元缓存的 key
    （模块身份 + import 链 + `pr`）只在缓存启用时计算——自举 / CI 的一次性对象库里它
    不可能命中，构建脚本直接 `VUNA_UNIT_CACHE=0`。模块身份直接用闭包扫描的接口地址
    `cmAddr`（包环境 + 源摘要 + 直接依赖源摘要），不再逐模块编码整棵声明 AST。
