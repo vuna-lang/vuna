@@ -7,8 +7,8 @@
 -- 生命周期：会话状态跨连接保留（定义 / import / `:load` 目标都在内存里）。每个连接用
 -- [Vuna.Json.Server.serveConnection] 逐帧服务，方法有 `eval`（一次提交可含多行，
 -- `close:true` 默认按「输入结束」收尾）、`ping`（版本 + 包名，探活）、`shutdown` / `:quit`
--- （回响应后进程 exit 0 并清理 unix socket 路径）。对端关闭只关连接、继续 accept；传输层
--- 致命错误（超大帧 / fuel 耗尽）只影响该连接。
+-- （回响应后进程 exit 0，`unix:` 的 socket 路径随监听句柄关闭由运行时清理）。对端关闭只关
+-- 连接、继续 accept；传输层致命错误（超大帧 / fuel 耗尽）只影响该连接。
 --
 -- stdout 只用于启动时的一行 `listening <地址>`（agent 用它 / 后台作业日志判断就绪）；协议帧
 -- 全部走 socket；诊断走 stderr（`[vuna-repl-server]` 前缀）。
@@ -158,14 +158,6 @@ listeningText addr h =
     pure
       (if endsWith ":0" addr then "${substring 0 (natFromInt (strLength addr - 1)) addr}${strFromInt port}" else addr)
 
--- | 内部：`unix:PATH` 里的 `PATH` 部分。
-unixPathOf : String -> String
-unixPathOf addr = substring (natFromInt 5) (natFromInt (strLength addr - 5)) addr
-
--- | 内部：退出时清理监听地址——Unix socket 删掉文件，TCP 无需处理（返回 0）。
-cleanupAddr : Member nFs FsOp r => String -> Eff r Int
-cleanupAddr addr = if startsWith "unix:" addr then fsRemoveFile (unixPathOf addr) else pure 0
-
 -- | CLI 入口：起会话 → 监听 `addr` → 打印一行 `listening <地址>` → accept 循环。会话初始化失败
 -- 写 stderr 并给退出码 2。
 export runReplServer : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r, Member nNet NetOp r => PackageContext -> ReplStart -> String -> Eff r Int
@@ -193,8 +185,9 @@ runReplServer ctx start addr =
 serverFuelBound : Int
 serverFuelBound = 1073741824
 
--- | 内部：accept 循环——每个连接跑一次 `serveConnection` 再关连接；退出请求则关监听、清理
--- socket 路径并返回 0，对端关闭 / 致命错误则记录后继续 accept。
+-- | 内部：accept 循环——每个连接跑一次 `serveConnection` 再关连接；退出请求则关监听
+-- （`unix:` 的 socket 路径随监听句柄关闭由运行时清理）并返回 0，对端关闭 / 致命错误则记录后
+-- 继续 accept。
 acceptLoop : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r, Member nNet NetOp r => Int -> String -> Int -> ReplState -> Eff r Int
 acceptLoop fuel addr h st =
   if fuel <= 0 then
@@ -208,7 +201,6 @@ acceptLoop fuel addr h st =
         ExitRequested =>
           do
             _ <- netClose h
-            _ <- cleanupAddr addr
             pure 0
         ExitClosed => acceptLoop (fuel - 1) addr h (secondOf outcome)
         ExitFatal msg =>

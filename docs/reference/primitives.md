@@ -296,7 +296,8 @@
 - `prim_eff_netRecv : Int -> Int -> Eff [] String`：最多读 n 字节、**有数据就立即返回**（可能更少）；
   `""` 表示对端关闭；
 - `prim_eff_netSend : Int -> String -> Eff [] Int`：写完整串（内部循环处理部分写），返回字节数；
-- `prim_eff_netClose : Int -> Eff [] Int`：关闭句柄（幂等）；
+- `prim_eff_netClose : Int -> Eff [] Int`：关闭句柄（幂等）；`unix:` listener 关闭时删掉它绑定的
+  socket 路径（按 bind 时记下的 inode 判定：路径已被别的进程重新绑定就不删）；
 - `prim_eff_netConnect : String -> Eff [] Int`：客户端连接（`vuna repl client --addr` 与测试夹具用）。
 
 句柄是小整数，运行时映射到 `Unix.file_descr` 表，**不引入新的语言类型**；
@@ -376,7 +377,7 @@
 | `prim_eff_netAccept` | 阻塞接受一个连接，返回新句柄 |
 | `prim_eff_netRecv` | 阻塞 `Unix.read`：有数据即返回（可能少于 n），对端关闭返回 `""` |
 | `prim_eff_netSend` | 循环写完整串（处理部分写）；对端关闭时报 `net: send: connection closed` |
-| `prim_eff_netClose` | 关闭 fd 并从句柄表移除（幂等） |
+| `prim_eff_netClose` | 关闭 fd 并从句柄表移除（幂等）；`unix:` listener 关闭时按 bind 时记下的 inode 删掉自己那份 socket 路径（路径已被别人重新绑定则不动） |
 | `prim_eff_netConnect` | 客户端 `Unix.connect`（`tcp:`/`unix:` 同一套地址语法） |
 
 效果原语的 runtime 表（`dtp_*`）仍是**立即执行**的 OCaml 函数；生成器

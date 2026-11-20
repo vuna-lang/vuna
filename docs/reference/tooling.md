@@ -274,7 +274,7 @@ error。调试与运行时错误的整体工作流见 [debugging.md](debugging.m
 
 | 形式 | 说明 |
 | --- | --- |
-| `unix:PATH` | Unix domain socket；进程退出时清理该路径（bind 前也会删除残留路径） |
+| `unix:PATH` | Unix domain socket；关闭监听句柄时清理该路径（按 inode 判定，只删自己绑的那份；bind 前也会删除残留路径） |
 | `tcp:127.0.0.1:PORT` | loopback TCP；`PORT=0` 用临时端口，就绪行给出实际地址 |
 
 它**不是 stdio server**：协议帧走 socket，stdout 只输出一行就绪信息

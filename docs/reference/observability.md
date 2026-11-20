@@ -349,7 +349,7 @@ vuna dev obs serve --cdp ADDR [--allow-slow] [TRACE...]
     `/json/list`，再用 **WebSocket**（`Http.WebSocket` 的握手与帧）承载 JSON-RPC；
     编解码与连接循环来自中立库 `vuna-http`（[http.md](http.md)）。`ADDR` 只接受
     `tcp:127.0.0.1:PORT`（loopback，`PORT=0` 用临时端口 + 就绪行回填实际端口）或
-    `unix:PATH`（退出时删 socket 文件）；规则与 `vuna repl serve --listen` 同一套
+    `unix:PATH`（关闭监听句柄时按 inode 删掉自己绑的 socket 文件）；规则与 `vuna repl serve --listen` 同一套
     （能连上端点 = 能驱动这个进程）。串行 accept（最多 8 个连接，连接间空闲 250ms 即退出）；
     发现端点应答后关闭连接，客户端为新请求重连。
   - **离线性（必须诚实）**：数据源是命令行给的 `TRACE...`（`vuna-obs 1` JSONL，启动时一次

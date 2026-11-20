@@ -448,17 +448,31 @@ let dtp_wait (pid : int) : int =
   let (_, st) = Unix.waitpid [] pid in
   match st with Unix.WEXITED c -> c | _ -> 1
 let dtp_net_tbl : (int, Unix.file_descr) Hashtbl.t = Hashtbl.create 16
+(* 监听句柄绑定的 unix socket 路径与当时的 inode：关闭句柄时只删仍然指向自己的那份文件。
+   没有这条记录（tcp 句柄 / 已被替换的路径）就不删，免得删掉同一路径上后继进程的 socket。 *)
+let dtp_net_owned : (int, string * int) Hashtbl.t = Hashtbl.create 4
 let dtp_net_next = ref 1
 let dtp_net_put (fd : Unix.file_descr) : int =
   let k = !dtp_net_next in
   dtp_net_next := k + 1;
   Hashtbl.replace dtp_net_tbl k fd;
   k
+let dtp_net_put_owned (fd : Unix.file_descr) (path : string) : int =
+  let h = dtp_net_put fd in
+  (try Hashtbl.replace dtp_net_owned h (path, (Unix.stat path).Unix.st_ino) with _ -> ());
+  h
 let dtp_net_get (h : int) : Unix.file_descr =
   match Hashtbl.find_opt dtp_net_tbl h with
   | Some fd -> fd
   | None -> dtp_hostSetStatus 8; failwith \"net: invalid handle\"
-let dtp_net_drop (h : int) = (try Hashtbl.remove dtp_net_tbl h with _ -> ())
+let dtp_net_unlink_owned (h : int) =
+  match Hashtbl.find_opt dtp_net_owned h with
+  | Some (path, ino) ->
+    (try if (Unix.stat path).Unix.st_ino = ino then Sys.remove path with _ -> ())
+  | None -> ()
+let dtp_net_drop (h : int) =
+  (try Hashtbl.remove dtp_net_tbl h with _ -> ());
+  (try Hashtbl.remove dtp_net_owned h with _ -> ())
 let dtp_netCodeOf (ue : Unix.error) : int =
   match ue with
   | Unix.ECONNREFUSED | Unix.ENOENT -> 2
@@ -492,7 +506,7 @@ let dtp_net_listen (addr : string) : int =
   | `Unix path ->
     (try if Sys.file_exists path then Sys.remove path with _ -> ());
     let s = Unix.socket Unix.PF_UNIX Unix.SOCK_STREAM 0 in
-    (try Unix.bind s (Unix.ADDR_UNIX path); Unix.listen s 8; dtp_net_put s
+    (try Unix.bind s (Unix.ADDR_UNIX path); Unix.listen s 8; dtp_net_put_owned s path
      with e -> (try Unix.close s with _ -> ()); dtp_net_error \"listen\" e)
   | `Tcp (host, port) ->
     let s = Unix.socket Unix.PF_INET Unix.SOCK_STREAM 0 in
@@ -529,6 +543,7 @@ let dtp_net_send (h : int) (s : string) : int =
   go 0; n
 let dtp_net_close (h : int) : int =
   (try Unix.close (dtp_net_get h) with _ -> ());
+  dtp_net_unlink_owned h;
   dtp_net_drop h; 0
 let dtp_netStatus (e : exn) : int =
   match e with

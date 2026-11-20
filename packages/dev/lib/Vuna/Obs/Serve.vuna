@@ -21,7 +21,8 @@
 -- 生命周期：串行 accept（最多 8 个连接，连接间空闲 250ms 即退出）——listen → stdout 一行
 -- `listening <ADDR>`（`PORT=0` 时打印实际端口）→ 每个连接先走 HTTP 阶段（发现端点
 -- `/json/version` / `/json/list`，应答后关闭），升级后走 WS 帧循环直到客户端 close 帧 /
--- 断开或传输层致命错误 → 关连接与监听、清理 unix socket → 退出；不做并发连接。
+-- 断开或传输层致命错误 → 关连接与监听（`unix:` 的 socket 路径随监听句柄关闭由运行时清理）
+-- → 退出；不做并发连接。
 -- 退出码：0 = 正常结束；1 = 会话里出现过内容性失败；2 = 用法 / 参数 / 输入前提错误
 -- （flag、ADDR 格式、TRACE 不存在或结构坏、空 trace、传输层致命错误）。`--allow-slow` 接受
 -- 并忽略：本子命令没有墙钟阈值，保留 flag 只为固定命令行形状。规范见
@@ -181,7 +182,7 @@ acceptGraceMicros = 250000
 acceptLoop : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nNet NetOp r => Bool -> ServeState -> String -> Int -> Int -> Eff r Int
 acceptLoop first st addr h fuel =
   if fuel <= 0 then
-    finishServe st addr h 0
+    finishServe st h 0
   else
     do
       step <-
@@ -192,8 +193,8 @@ acceptLoop first st addr h fuel =
         else
           netAcceptWithin h acceptGraceMicros
       case step of
-        StepTimeout => finishServe st addr h 0
-        StepClosed => finishServe st addr h 0
+        StepTimeout => finishServe st h 0
+        StepClosed => finishServe st h 0
         StepOk conn =>
           do
             wsBase <- wsBaseOf addr h
@@ -203,15 +204,15 @@ acceptLoop first st addr h fuel =
               SessionFatal msg =>
                 do
                   _ <- consoleEprint "[vuna-obs-cdp] ${msg}\n"
-                  finishServe (secondOf outcome) addr h 2
+                  finishServe (secondOf outcome) h 2
               _ => acceptLoop False (secondOf outcome) addr h (fuel - 1)
 
--- | 内部：关监听、清地址、按会话状态映射退出码（显式 `code` 优先，其次有内容性失败 1）。
-finishServe : Member nFs FsOp r, Member nNet NetOp r => ServeState -> String -> Int -> Int -> Eff r Int
-finishServe st addr h code =
+-- | 内部：关监听（`unix:` 的 socket 路径随监听句柄关闭由运行时清理）、按会话状态映射退出码
+-- （显式 `code` 优先，其次有内容性失败 1）。
+finishServe : Member nNet NetOp r => ServeState -> Int -> Int -> Eff r Int
+finishServe st h code =
   do
     _ <- netClose h
-    _ <- cleanupAddr addr
     pure (if code /= 0 then code else if st.serveFailures > 0 then 1 else 0)
 
 -- ---------------------------------------------------------------
@@ -389,14 +390,6 @@ listeningText addr h =
     port <- netPort h
     pure
       (if endsWith ":0" addr then "${substring 0 (natFromInt (strLength addr - 1)) addr}${strFromInt port}" else addr)
-
--- | 内部：`unix:PATH` 里的路径部分（去掉 5 字符前缀）。
-unixPathOf : String -> String
-unixPathOf addr = substring (natFromInt 5) (natFromInt (strLength addr - 5)) addr
-
--- | 内部：unix socket 地址在退出前删掉监听文件；tcp 地址无事可做。
-cleanupAddr : Member nFs FsOp r => String -> Eff r Int
-cleanupAddr addr = if startsWith "unix:" addr then fsRemoveFile (unixPathOf addr) else pure 0
 
 -- | 内部：传输告警——stderr 一行诊断 + 回 `-32700`，让客户端不会空等。
 cdpWarn : Member nFs FsOp r, Member nConsole ConsoleOp r => String -> ServeState -> Eff r (Pair ServeState (List Json))
