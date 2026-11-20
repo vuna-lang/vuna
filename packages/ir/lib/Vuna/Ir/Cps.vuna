@@ -213,7 +213,7 @@ identityCont : Ir
 identityCont =
   let
     v = mkBinder "__cpsId"
-  in IrLam [v] Nothing (IrVar v)
+  in IrLam [v] (Just IrTyOpaque) (IrVar v)
 
 -- ---------------------------------------------------------------
 -- CPS 变换
@@ -230,22 +230,22 @@ cpsExpr fuel env e k =
       IrCase caseTy _ scrut alts =>
         let
           v = freshV fuel
-          kCase = IrLam [v] Nothing (IrCase caseTy Nothing (IrVar v) (mapAltCps (fuel - 1) env alts k))
+          kCase = IrLam [v] (Just IrTyOpaque) (IrCase caseTy (Just IrTyOpaque) (IrVar v) (mapAltCps (fuel - 1) env alts k))
         in cpsExpr (fuel - 1) env scrut kCase
       IrNatCase scrut fresh zero succ catch =>
         let
           v = freshV fuel
-          kCase = IrLam [v] Nothing (IrNatCase (IrVar v) fresh (cpsAltMaybe (fuel - 1) env zero k) (cpsAltMaybe (fuel - 1) env succ k) (cpsAltMaybe (fuel - 1) env catch k))
+          kCase = IrLam [v] (Just IrTyOpaque) (IrNatCase (IrVar v) fresh (cpsAltMaybe (fuel - 1) env zero k) (cpsAltMaybe (fuel - 1) env succ k) (cpsAltMaybe (fuel - 1) env catch k))
         in cpsExpr (fuel - 1) env scrut kCase
       IrIf c t el =>
         let
           v = freshV fuel
-          kIf = IrLam [v] Nothing (IrIf (IrVar v) (cpsExpr (fuel - 1) env t k) (cpsExpr (fuel - 1) env el k))
+          kIf = IrLam [v] (Just IrTyOpaque) (IrIf (IrVar v) (cpsExpr (fuel - 1) env t k) (cpsExpr (fuel - 1) env el k))
         in cpsExpr (fuel - 1) env c kIf
       IrLet bs scrut body =>
         let
           v = freshV fuel
-          kLet = IrLam [v] Nothing (IrLet bs (IrVar v) (cpsExpr (fuel - 1) env body k))
+          kLet = IrLam [v] (Just IrTyOpaque) (IrLet bs (IrVar v) (cpsExpr (fuel - 1) env body k))
         in cpsExpr (fuel - 1) env scrut kLet
       IrCast cFrom cTo inner => IrCast cFrom cTo (cpsExpr (fuel - 1) env inner k)
       _ => IrApp (Just (Pair IrTyOpaque IrTyOpaque)) k (transformDirect (fuel - 1) e)
@@ -279,7 +279,7 @@ cpsArgs fuel env args head acc k =
       a :: rest =>
         let
           v = freshV fuel
-        in cpsExpr (fuel - 1) env a (IrLam [v] Nothing (cpsArgs (fuel - 1) env rest head (IrVar v :: acc) k))
+        in cpsExpr (fuel - 1) env a (IrLam [v] (Just IrTyOpaque) (cpsArgs (fuel - 1) env rest head (IrVar v :: acc) k))
 
 -- | thunk 运行点：把 `k` 追加为最后一个实参。
 cpsThunkCall : Int -> Ir -> List Ir -> Ir -> Ir
@@ -301,15 +301,15 @@ cpsApp fuel env e k =
       args = secondOf p
       v = freshV fuel
     in case head of
-      IrVar b => if memBinder b env then cpsThunkCall (fuel - 1) head args k else cpsExpr (fuel - 1) env head (IrLam [v] Nothing (cpsArgs (fuel - 1) env args (IrVar v) [] k))
-      IrGlobal name => if name == runThunkName then cpsThunkCall (fuel - 1) head args k else cpsExpr (fuel - 1) env head (IrLam [v] Nothing (cpsArgs (fuel - 1) env args (IrVar v) [] k))
+      IrVar b => if memBinder b env then cpsThunkCall (fuel - 1) head args k else cpsExpr (fuel - 1) env head (IrLam [v] (Just IrTyOpaque) (cpsArgs (fuel - 1) env args (IrVar v) [] k))
+      IrGlobal name => if name == runThunkName then cpsThunkCall (fuel - 1) head args k else cpsExpr (fuel - 1) env head (IrLam [v] (Just IrTyOpaque) (cpsArgs (fuel - 1) env args (IrVar v) [] k))
       IrRt sym =>
         case sym of
           "prim_effectPerformId" => cpsThunkCall (fuel - 1) (IrRt irCpsPerformName) args k
           "prim_effectHandleId" => cpsThunkCall (fuel - 1) (IrRt irCpsHandleName) args k
           "prim_effectSelf" => cpsThunkCall (fuel - 1) (IrRt irCpsSelfName) args k
-          _ => cpsExpr (fuel - 1) env head (IrLam [v] Nothing (cpsArgs (fuel - 1) env args (IrVar v) [] k))
-      _ => cpsExpr (fuel - 1) env head (IrLam [v] Nothing (cpsArgs (fuel - 1) env args (IrVar v) [] k))
+          _ => cpsExpr (fuel - 1) env head (IrLam [v] (Just IrTyOpaque) (cpsArgs (fuel - 1) env args (IrVar v) [] k))
+      _ => cpsExpr (fuel - 1) env head (IrLam [v] (Just IrTyOpaque) (cpsArgs (fuel - 1) env args (IrVar v) [] k))
 
 -- ---------------------------------------------------------------
 -- 直接风格部分：只改写嵌套的 thunk 构造
@@ -327,7 +327,7 @@ transformDirect fuel e =
               let
                 k = freshK fuel
                 body1 = cpsExpr (fuel - 1) [] body (IrVar k)
-              in IrCtor family ctor tyArgs [IrLam (append bs [k]) Nothing body1]
+              in IrCtor family ctor tyArgs [IrLam (append bs [k]) (Just IrTyOpaque) body1]
             _ => IrCtor family ctor tyArgs (mapDirect (fuel - 1) args)
         else
           IrCtor family ctor tyArgs (mapDirect (fuel - 1) args)
@@ -337,8 +337,8 @@ transformDirect fuel e =
           k = freshK fuel
           argBs = map (\i => freshA fuel i) (range 0 arity)
           applied = applyAll (transformDirect (fuel - 1) prim) (map IrVar argBs)
-          inner = IrCtor family ctor Nothing [IrLam [u, k] Nothing (IrApp (Just (Pair IrTyOpaque IrTyOpaque)) (IrVar k) applied)]
-        in if arity <= 0 then inner else IrLam argBs Nothing inner
+          inner = IrCtor family ctor Nothing [IrLam [u, k] (Just IrTyOpaque) (IrApp (Just (Pair IrTyOpaque IrTyOpaque)) (IrVar k) applied)]
+        in if arity <= 0 then inner else IrLam argBs (Just IrTyOpaque) inner
       IrRecord family resTy fields => IrRecord family resTy (mapFieldsDirect (fuel - 1) fields)
       IrProj base family field resTy => IrProj (transformDirect (fuel - 1) base) family field resTy
       IrRecUpd base family fields resTy => IrRecUpd (transformDirect (fuel - 1) base) family (mapFieldsDirect (fuel - 1) fields) resTy
@@ -595,8 +595,8 @@ mRunEffTerm eff k =
   let
     th = mkBinder "__mEffTh"
   in IrCase
-    Nothing
-    Nothing
+    (Just IrTyOpaque)
+    (Just IrTyOpaque)
     eff
     [IrAlt (Just (Pair irEffTypeName irEffMkCtor)) [th] (IrRtApp irMRunEffName [IrVar th, k])]
 
@@ -614,7 +614,7 @@ mEffContLambda fuel r bs rt body =
   in IrLam
     bs
     rt
-    (IrCtor irEffTypeName irEffMkCtor Nothing [IrLam [u, kd] Nothing (mCps (fuel - 1) r (IrLam [v] Nothing (mRunEffTerm (IrVar v) (IrVar kd))) body)])
+    (IrCtor irEffTypeName irEffMkCtor Nothing [IrLam [u, kd] (Just IrTyOpaque) (mCps (fuel - 1) r (IrLam [v] (Just IrTyOpaque) (mRunEffTerm (IrVar v) (IrVar kd))) body)])
 
 mCpsAlts : Int -> IrBinder -> Ir -> List IrAlt -> List IrAlt
 mCpsAlts fuel r k alts =
@@ -652,7 +652,7 @@ mCpsArgs fuel r k sym args acc =
       a :: rest =>
         let
           v = mFreshV fuel
-        in mCps (fuel - 1) r (IrLam [v] Nothing (mCpsArgs (fuel - 1) r k sym rest (IrVar v :: acc))) a
+        in mCps (fuel - 1) r (IrLam [v] (Just IrTyOpaque) (mCpsArgs (fuel - 1) r k sym rest (IrVar v :: acc))) a
 
 -- | 逐个 CPS 一个应用脊（head + args），最后 `applyAll` 交给 k。
 -- 预算耗尽时退化成直接应用（与 `mCps` 的 `fuel <= 0` 分支同口径）：保留真实 head 与实参，
@@ -671,7 +671,7 @@ mCpsApply fuel r k parts =
       x :: rest =>
         let
           v = mFreshV fuel
-        in mCps (fuel - 1) r (IrLam [v] Nothing (mCpsApplyArgs (fuel - 1) r k rest [] v)) x
+        in mCps (fuel - 1) r (IrLam [v] (Just IrTyOpaque) (mCpsApplyArgs (fuel - 1) r k rest [] v)) x
 
 mCpsApplyArgs : Int -> IrBinder -> Ir -> List Ir -> List Ir -> IrBinder -> Ir
 mCpsApplyArgs fuel r k args acc headV =
@@ -683,7 +683,7 @@ mCpsApplyArgs fuel r k args acc headV =
       a :: rest =>
         let
           v = mFreshV fuel
-        in mCps (fuel - 1) r (IrLam [v] Nothing (mCpsApplyArgs (fuel - 1) r k rest (IrVar v :: acc) headV)) a
+        in mCps (fuel - 1) r (IrLam [v] (Just IrTyOpaque) (mCpsApplyArgs (fuel - 1) r k rest (IrVar v :: acc) headV)) a
 
 -- | handler clause 顶层的 kDone（`mFreshTailK`）：resume 在尾位置时用它标记段边界。
 isTailCont : Ir -> Bool
@@ -701,22 +701,22 @@ mCps fuel r k e =
       IrLet bs rhs body =>
         let
           v = mFreshV fuel
-          cont = IrLam [v] Nothing (IrLet bs (IrVar v) (mCps (fuel - 1) r k body))
+          cont = IrLam [v] (Just IrTyOpaque) (IrLet bs (IrVar v) (mCps (fuel - 1) r k body))
         in mCps (fuel - 1) r cont rhs
       IrCase caseTy _ scrut alts =>
         let
           v = mFreshV fuel
-          cont = IrLam [v] Nothing (IrCase caseTy Nothing (IrVar v) (mCpsAlts (fuel - 2) r k alts))
+          cont = IrLam [v] (Just IrTyOpaque) (IrCase caseTy (Just IrTyOpaque) (IrVar v) (mCpsAlts (fuel - 2) r k alts))
         in mCps (fuel - 1) r cont scrut
       IrIf c t el =>
         let
           v = mFreshV fuel
-          cont = IrLam [v] Nothing (IrIf (IrVar v) (mCps (fuel - 2) r k t) (mCps (fuel - 2) r k el))
+          cont = IrLam [v] (Just IrTyOpaque) (IrIf (IrVar v) (mCps (fuel - 2) r k t) (mCps (fuel - 2) r k el))
         in mCps (fuel - 1) r cont c
       IrNatCase scrut fr z su ca =>
         let
           v = mFreshV fuel
-          cont = IrLam [v] Nothing (IrNatCase (IrVar v) fr (mCpsAltM (fuel - 2) r k z) (mCpsAltM (fuel - 2) r k su) (mCpsAltM (fuel - 2) r k ca))
+          cont = IrLam [v] (Just IrTyOpaque) (IrNatCase (IrVar v) fr (mCpsAltM (fuel - 2) r k z) (mCpsAltM (fuel - 2) r k su) (mCpsAltM (fuel - 2) r k ca))
         in mCps (fuel - 1) r cont scrut
       IrCast cFrom cTo x => IrCast cFrom cTo (mCps (fuel - 1) r k x)
       IrRtApp sym args => mCpsArgs (fuel - 1) r k sym args []
@@ -730,7 +730,7 @@ mCps fuel r k e =
 mHandlerLam : Int -> List IrBinder -> Ir -> Ir
 mHandlerLam fuel bs body =
   case mResumption bs of
-    Nothing => IrLam bs Nothing (mHandlers (fuel - 1) body)
+    Nothing => IrLam bs (Just IrTyOpaque) (mHandlers (fuel - 1) body)
     Just r =>
       let
         kd = mFreshTailK fuel
@@ -766,15 +766,15 @@ mHandlers fuel e =
     case e of
       IrLam bs _ body => mHandlerLam (fuel - 1) bs body
       IrCtor fam ctor _ args => IrCtor fam ctor Nothing (mListH (fuel - 1) args)
-      IrRecord fam _ fs => IrRecord fam Nothing (mFieldsH (fuel - 1) fs)
-      IrProj b fam f _ => IrProj (mHandlers (fuel - 1) b) fam f Nothing
-      IrRecUpd b fam fs _ => IrRecUpd (mHandlers (fuel - 1) b) fam (mFieldsH (fuel - 1) fs) Nothing
+      IrRecord fam _ fs => IrRecord fam (Just IrTyOpaque) (mFieldsH (fuel - 1) fs)
+      IrProj b fam f _ => IrProj (mHandlers (fuel - 1) b) fam f (Just IrTyOpaque)
+      IrRecUpd b fam fs _ => IrRecUpd (mHandlers (fuel - 1) b) fam (mFieldsH (fuel - 1) fs) (Just IrTyOpaque)
       IrRtApp sym args => IrRtApp sym (mListH (fuel - 1) args)
       IrCast cFrom cTo x => IrCast cFrom cTo (mHandlers (fuel - 1) x)
       IrLet bs rhs body => IrLet bs (mHandlers (fuel - 1) rhs) (mHandlers (fuel - 1) body)
       IrApp _ f a => IrApp (Just (Pair IrTyOpaque IrTyOpaque)) (mHandlers (fuel - 1) f) (mHandlers (fuel - 1) a)
       IrIf c t el => IrIf (mHandlers (fuel - 1) c) (mHandlers (fuel - 1) t) (mHandlers (fuel - 1) el)
-      IrCase caseTy _ s alts => IrCase caseTy Nothing (mHandlers (fuel - 1) s) (mHandlersAlts (fuel - 1) alts)
+      IrCase caseTy _ s alts => IrCase caseTy (Just IrTyOpaque) (mHandlers (fuel - 1) s) (mHandlersAlts (fuel - 1) alts)
       IrNatCase s fr z su ca => IrNatCase (mHandlers (fuel - 1) s) fr (mHandlersAltM (fuel - 1) z) (mHandlersAltM (fuel - 1) su) (mHandlersAltM (fuel - 1) ca)
       IrConcatMany xs => IrConcatMany (mListH (fuel - 1) xs)
       IrEffThunk fam ctor u arity prim => IrEffThunk fam ctor u arity (mHandlers (fuel - 1) prim)
@@ -813,15 +813,15 @@ mSyms fuel e =
       IrRt x => IrRt (mSym x)
       IrRtApp x args => IrRtApp (mSym x) (mListS (fuel - 1) args)
       IrCtor f c _ args => IrCtor f c Nothing (mListS (fuel - 1) args)
-      IrRecord f _ fs => IrRecord f Nothing (mFieldsS (fuel - 1) fs)
-      IrProj b f x _ => IrProj (mSyms (fuel - 1) b) f x Nothing
-      IrRecUpd b f fs _ => IrRecUpd (mSyms (fuel - 1) b) f (mFieldsS (fuel - 1) fs) Nothing
+      IrRecord f _ fs => IrRecord f (Just IrTyOpaque) (mFieldsS (fuel - 1) fs)
+      IrProj b f x _ => IrProj (mSyms (fuel - 1) b) f x (Just IrTyOpaque)
+      IrRecUpd b f fs _ => IrRecUpd (mSyms (fuel - 1) b) f (mFieldsS (fuel - 1) fs) (Just IrTyOpaque)
       IrCast cFrom cTo x => IrCast cFrom cTo (mSyms (fuel - 1) x)
       IrLet bs r b => IrLet bs (mSyms (fuel - 1) r) (mSyms (fuel - 1) b)
       IrLam bs rt b => IrLam bs rt (mSyms (fuel - 1) b)
       IrApp _ f a => IrApp (Just (Pair IrTyOpaque IrTyOpaque)) (mSyms (fuel - 1) f) (mSyms (fuel - 1) a)
       IrIf c t el => IrIf (mSyms (fuel - 1) c) (mSyms (fuel - 1) t) (mSyms (fuel - 1) el)
-      IrCase caseTy _ sc alts => IrCase caseTy Nothing (mSyms (fuel - 1) sc) (mSymsAltsM (fuel - 1) alts)
+      IrCase caseTy _ sc alts => IrCase caseTy (Just IrTyOpaque) (mSyms (fuel - 1) sc) (mSymsAltsM (fuel - 1) alts)
       IrNatCase sc fr z su ca => IrNatCase (mSyms (fuel - 1) sc) fr (mSymsAltMM (fuel - 1) z) (mSymsAltMM (fuel - 1) su) (mSymsAltMM (fuel - 1) ca)
       IrConcatMany xs => IrConcatMany (mListS (fuel - 1) xs)
       IrEffThunk f c u a pr => IrEffThunk f c u a (mSyms (fuel - 1) pr)
@@ -867,7 +867,10 @@ mDoneCont : Ir
 mDoneCont =
   let
     v = mkBinder "__mDoneV"
-  in IrLam [v] Nothing (IrApp (Just (Pair IrTyOpaque IrTyOpaque)) (IrRt irMDoneName) (IrVar v))
+  in IrLam
+    [v]
+    (Just IrTyOpaque)
+    (IrApp (Just (Pair IrTyOpaque IrTyOpaque)) (IrRt irMDoneName) (IrVar v))
 
 mTrampolineBody : String -> Ir -> Result Ir
 mTrampolineBody name (IrLam bs rt inner) =
@@ -1145,14 +1148,14 @@ mScopedCalls fuel rs e =
           _ => IrApp (Just (Pair IrTyOpaque IrTyOpaque)) f1 a1
       IrRtApp sym args => IrRtApp sym (mScopedList (fuel - 1) rs args)
       IrCtor fam ctor _ args => IrCtor fam ctor Nothing (mScopedList (fuel - 1) rs args)
-      IrRecord fam _ fs => IrRecord fam Nothing (mScopedFields (fuel - 1) rs fs)
-      IrProj b fam x _ => IrProj (mScopedCalls (fuel - 1) rs b) fam x Nothing
-      IrRecUpd b fam fs _ => IrRecUpd (mScopedCalls (fuel - 1) rs b) fam (mScopedFields (fuel - 1) rs fs) Nothing
+      IrRecord fam _ fs => IrRecord fam (Just IrTyOpaque) (mScopedFields (fuel - 1) rs fs)
+      IrProj b fam x _ => IrProj (mScopedCalls (fuel - 1) rs b) fam x (Just IrTyOpaque)
+      IrRecUpd b fam fs _ => IrRecUpd (mScopedCalls (fuel - 1) rs b) fam (mScopedFields (fuel - 1) rs fs) (Just IrTyOpaque)
       IrCast cFrom cTo x => IrCast cFrom cTo (mScopedCalls (fuel - 1) rs x)
       IrLet bs rhs body => IrLet bs (mScopedCalls (fuel - 1) rs rhs) (mScopedCalls (fuel - 1) rs body)
       IrLam bs rt body => IrLam bs rt (mScopedCalls (fuel - 1) rs body)
       IrIf c t el => IrIf (mScopedCalls (fuel - 1) rs c) (mScopedCalls (fuel - 1) rs t) (mScopedCalls (fuel - 1) rs el)
-      IrCase caseTy _ sc alts => IrCase caseTy Nothing (mScopedCalls (fuel - 1) rs sc) (mScopedAlts (fuel - 1) rs alts)
+      IrCase caseTy _ sc alts => IrCase caseTy (Just IrTyOpaque) (mScopedCalls (fuel - 1) rs sc) (mScopedAlts (fuel - 1) rs alts)
       IrNatCase sc fr z su ca => IrNatCase (mScopedCalls (fuel - 1) rs sc) fr (mScopedAltM (fuel - 1) rs z) (mScopedAltM (fuel - 1) rs su) (mScopedAltM (fuel - 1) rs ca)
       IrConcatMany xs => IrConcatMany (mScopedList (fuel - 1) rs xs)
       IrEffThunk fam ctor u ar prim => IrEffThunk fam ctor u ar (mScopedCalls (fuel - 1) rs prim)
@@ -1209,12 +1212,12 @@ mCleanupDef n body =
     case body of
       IrLam bs _ _ =>
         case lastBinderOf bs of
-          Just th => Just (IrLam bs Nothing (IrCtor irEffTypeName irEffMkCtor Nothing [IrLam [mkBinder "__mCleanU", mkBinder "__mCleanK"] Nothing (IrCtor machineCtl (machineCtl ++ ".MkPushCleanup") Nothing [IrCtor "Base.Effect.Core.Cleanup" "Base.Effect.Core.Cleanup.MkCleanup" Nothing [IrVar th], IrVar (mkBinder "__mCleanK")])]))
+          Just th => Just (IrLam bs (Just IrTyOpaque) (IrCtor irEffTypeName irEffMkCtor Nothing [IrLam [mkBinder "__mCleanU", mkBinder "__mCleanK"] (Just IrTyOpaque) (IrCtor machineCtl (machineCtl ++ ".MkPushCleanup") Nothing [IrCtor "Base.Effect.Core.Cleanup" "Base.Effect.Core.Cleanup.MkCleanup" Nothing [IrVar th], IrVar (mkBinder "__mCleanK")])]))
           Nothing => Nothing
       _ => Nothing
   else if n == cleanupPopName then
     case body of
-      IrLam bs _ _ => Just (IrLam bs Nothing (IrCtor irEffTypeName irEffMkCtor Nothing [IrLam [mkBinder "__mCleanU", mkBinder "__mCleanK"] Nothing (IrCtor machineCtl (machineCtl ++ ".MkPopCleanup") Nothing [IrVar (mkBinder "__mCleanK")])]))
+      IrLam bs _ _ => Just (IrLam bs (Just IrTyOpaque) (IrCtor irEffTypeName irEffMkCtor Nothing [IrLam [mkBinder "__mCleanU", mkBinder "__mCleanK"] (Just IrTyOpaque) (IrCtor machineCtl (machineCtl ++ ".MkPopCleanup") Nothing [IrVar (mkBinder "__mCleanK")])]))
       _ => Nothing
   else
     Nothing
@@ -1235,7 +1238,7 @@ mHandlerFun fuel body =
               -- resume 仍走 `MkRestCont`——标记只沿尾位置传播。
               kd = mFreshTailK fuel
               rs = mFreshR fuel
-            in IrLam (append bs [kd, rs]) Nothing (mScopedCalls (fuel - 1) rs (mCps (fuel - 1) r (IrVar kd) inner))
+            in IrLam (append bs [kd, rs]) (Just IrTyOpaque) (mScopedCalls (fuel - 1) rs (mCps (fuel - 1) r (IrVar kd) inner))
           _ => body
       _ => body
 
@@ -1296,14 +1299,14 @@ mApplys fuel e =
           _ => IrApp (Just (Pair IrTyOpaque IrTyOpaque)) (mApplys (fuel - 1) f) (mApplys (fuel - 1) a)
       IrRtApp sym args => IrRtApp sym (mApplysList (fuel - 1) args)
       IrCtor fam ctor _ args => IrCtor fam ctor Nothing (mApplysList (fuel - 1) args)
-      IrRecord fam _ fs => IrRecord fam Nothing (mApplysFields (fuel - 1) fs)
-      IrProj b fam x _ => IrProj (mApplys (fuel - 1) b) fam x Nothing
-      IrRecUpd b fam fs _ => IrRecUpd (mApplys (fuel - 1) b) fam (mApplysFields (fuel - 1) fs) Nothing
+      IrRecord fam _ fs => IrRecord fam (Just IrTyOpaque) (mApplysFields (fuel - 1) fs)
+      IrProj b fam x _ => IrProj (mApplys (fuel - 1) b) fam x (Just IrTyOpaque)
+      IrRecUpd b fam fs _ => IrRecUpd (mApplys (fuel - 1) b) fam (mApplysFields (fuel - 1) fs) (Just IrTyOpaque)
       IrCast cFrom cTo x => IrCast cFrom cTo (mApplys (fuel - 1) x)
       IrLet bs rhs body => IrLet bs (mApplys (fuel - 1) rhs) (mApplys (fuel - 1) body)
       IrLam bs rt body => IrLam bs rt (mApplys (fuel - 1) body)
       IrIf c t el => IrIf (mApplys (fuel - 1) c) (mApplys (fuel - 1) t) (mApplys (fuel - 1) el)
-      IrCase caseTy _ sc alts => IrCase caseTy Nothing (mApplys (fuel - 1) sc) (mApplysAlts (fuel - 1) alts)
+      IrCase caseTy _ sc alts => IrCase caseTy (Just IrTyOpaque) (mApplys (fuel - 1) sc) (mApplysAlts (fuel - 1) alts)
       IrNatCase sc fr z su ca => IrNatCase (mApplys (fuel - 1) sc) fr (mApplysAltM (fuel - 1) z) (mApplysAltM (fuel - 1) su) (mApplysAltM (fuel - 1) ca)
       IrConcatMany xs => IrConcatMany (mApplysList (fuel - 1) xs)
       IrEffThunk fam ctor u ar prim => IrEffThunk fam ctor u ar (mApplys (fuel - 1) prim)
@@ -1362,14 +1365,14 @@ mMarked fuel e =
       IrApp _ (IrApp _ (IrRt "@ir@m@self") th) (IrLam ([_]) _ _) => IrApp (Just (Pair IrTyOpaque IrTyOpaque)) (IrRt irMRunName) (IrApp (Just (Pair IrTyOpaque IrTyOpaque)) (IrApp (Just (Pair IrTyOpaque IrTyOpaque)) (IrRt "@ir@m@self") (mMarked (fuel - 1) th)) mDoneCont)
       IrRtApp sym args => IrRtApp sym (mMarkedList (fuel - 1) args)
       IrCtor fam ctor _ args => IrCtor fam ctor Nothing (mMarkedList (fuel - 1) args)
-      IrRecord fam _ fs => IrRecord fam Nothing (mMarkedFields (fuel - 1) fs)
-      IrProj b fam x _ => IrProj (mMarked (fuel - 1) b) fam x Nothing
-      IrRecUpd b fam fs _ => IrRecUpd (mMarked (fuel - 1) b) fam (mMarkedFields (fuel - 1) fs) Nothing
+      IrRecord fam _ fs => IrRecord fam (Just IrTyOpaque) (mMarkedFields (fuel - 1) fs)
+      IrProj b fam x _ => IrProj (mMarked (fuel - 1) b) fam x (Just IrTyOpaque)
+      IrRecUpd b fam fs _ => IrRecUpd (mMarked (fuel - 1) b) fam (mMarkedFields (fuel - 1) fs) (Just IrTyOpaque)
       IrCast cFrom cTo x => IrCast cFrom cTo (mMarked (fuel - 1) x)
       IrLet bs rhs body => IrLet bs (mMarked (fuel - 1) rhs) (mMarked (fuel - 1) body)
       IrApp _ f a => IrApp (Just (Pair IrTyOpaque IrTyOpaque)) (mMarked (fuel - 1) f) (mMarked (fuel - 1) a)
       IrIf c t el => IrIf (mMarked (fuel - 1) c) (mMarked (fuel - 1) t) (mMarked (fuel - 1) el)
-      IrCase caseTy _ sc alts => IrCase caseTy Nothing (mMarked (fuel - 1) sc) (mMarkedAlts (fuel - 1) alts)
+      IrCase caseTy _ sc alts => IrCase caseTy (Just IrTyOpaque) (mMarked (fuel - 1) sc) (mMarkedAlts (fuel - 1) alts)
       IrNatCase sc fr z su ca => IrNatCase (mMarked (fuel - 1) sc) fr (mMarkedAltM (fuel - 1) z) (mMarkedAltM (fuel - 1) su) (mMarkedAltM (fuel - 1) ca)
       IrConcatMany xs => IrConcatMany (mMarkedList (fuel - 1) xs)
       IrEffThunk fam ctor u ar prim => IrEffThunk fam ctor u ar (mMarked (fuel - 1) prim)
@@ -1495,14 +1498,14 @@ mSteps fuel e =
                   foldAppMap (fuel - 1) (mSteps (fuel - 1) head) args
           _ => foldAppMap (fuel - 1) (mSteps (fuel - 1) head) args
       IrCtor fam ctor _ args => IrCtor fam ctor Nothing (mStepsList (fuel - 1) args)
-      IrRecord fam _ fs => IrRecord fam Nothing (mStepsFields (fuel - 1) fs)
-      IrProj b fam x _ => IrProj (mSteps (fuel - 1) b) fam x Nothing
-      IrRecUpd b fam fs _ => IrRecUpd (mSteps (fuel - 1) b) fam (mStepsFields (fuel - 1) fs) Nothing
+      IrRecord fam _ fs => IrRecord fam (Just IrTyOpaque) (mStepsFields (fuel - 1) fs)
+      IrProj b fam x _ => IrProj (mSteps (fuel - 1) b) fam x (Just IrTyOpaque)
+      IrRecUpd b fam fs _ => IrRecUpd (mSteps (fuel - 1) b) fam (mStepsFields (fuel - 1) fs) (Just IrTyOpaque)
       IrCast cFrom cTo x => IrCast cFrom cTo (mSteps (fuel - 1) x)
       IrLet bs rhs body => IrLet bs (mSteps (fuel - 1) rhs) (mSteps (fuel - 1) body)
       IrLam bs rt body => IrLam bs rt (mSteps (fuel - 1) body)
       IrIf c t el => IrIf (mSteps (fuel - 1) c) (mSteps (fuel - 1) t) (mSteps (fuel - 1) el)
-      IrCase caseTy _ sc alts => IrCase caseTy Nothing (mSteps (fuel - 1) sc) (mStepsAlts (fuel - 1) alts)
+      IrCase caseTy _ sc alts => IrCase caseTy (Just IrTyOpaque) (mSteps (fuel - 1) sc) (mStepsAlts (fuel - 1) alts)
       IrNatCase sc fr z su ca => IrNatCase (mSteps (fuel - 1) sc) fr (mStepsAltM (fuel - 1) z) (mStepsAltM (fuel - 1) su) (mStepsAltM (fuel - 1) ca)
       IrConcatMany xs => IrConcatMany (mStepsList (fuel - 1) xs)
       IrEffThunk fam ctor u ar prim => IrEffThunk fam ctor u ar (mSteps (fuel - 1) prim)

@@ -5,7 +5,7 @@
 -- 与「删掉擦除 binder / 实参」的做法不同：类型面不能删。IR 的类型注解
 -- （`Lowering.Ty.annotTyOf` / `annotCalleeTy`）与 CPS 的 `isEffResultTy` 都依赖
 -- 类型实参和 binder 槽；删掉它们会让 `Eff` / `List` 的应用退化成 `IrTyOpaque`，
--- native 的机器路径会错（见 debt IR-27 / IR-28）。因此这里保留完整的 Core 结构，
+-- native 的机器路径会错。因此这里保留完整的 Core 结构，
 -- 只规定运行时引用的**读法**：
 --
 --   * `TVar` 在运行时位置按下标 `runtimeIndexAt` 读（只数 `Rig1`/`Rigω` binder）；

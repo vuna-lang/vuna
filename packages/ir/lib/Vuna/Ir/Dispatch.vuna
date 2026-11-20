@@ -68,7 +68,7 @@ dispatchSpine (head@(IrGlobal name)) args =
         a :: b :: rest =>
           buildSpine
             (IrGlobal idName)
-            (a :: b :: SpineArg Nothing (dispatchIdArg a.saValue) :: SpineArg Nothing (dispatchIdArg b.saValue) :: rest)
+            (a :: b :: SpineArg (Just (Pair IrTyOpaque IrTyOpaque)) (dispatchIdArg a.saValue) :: SpineArg (Just (Pair IrTyOpaque IrTyOpaque)) (dispatchIdArg b.saValue) :: rest)
         _ => buildSpine head args
     Nothing => buildSpine head args
 dispatchSpine head args = buildSpine head args

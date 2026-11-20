@@ -147,7 +147,7 @@ binder 的**身份**在 Lowering 分配，前缀与编号渲染属后端：
    的 runtime 模板。契约只固定「符号面」（名字 + 桥接标记；arity 由 `irInlineArity` 定），
    不固定实现；新后端要按同一组语义重实现这套符号。
 
-校验（都在 check/build 路径上，不是文档约定）：
+校验（不是文档约定；`Ir.Validate` 只在 build 路径跑，见「校验入口」）：
 
 - `Ir.Validate.validateUnit` / `validateProgram`：IR 里每个符号必须已声明；`IrRtApp` 的实参个数必须
   等于 `irInlineArity`（违反即 `IC_InvariantViolated`）。
@@ -227,8 +227,9 @@ binder 的**身份**在 Lowering 分配，前缀与编号渲染属后端：
 
 - `Ir.Validate.validateUnit` / `Ir.Validate.validateProgram`：定义名唯一 + 分组自洽（每个依赖只指向更早的组
   或同组，线性扫描，不重跑 SCC）+ 入口引用的 `main` 存在 + 运行时符号已声明且 arity 一致
-  （见上节）。check 路径在 `lowerProgramOf` 末尾跑，split 路径经
-  `Lowering.Program.lowerUnitCheckedFrom` 逐单元跑一次（单元的定义/数据由归属桶直接给出）。
+  （见上节）。`vuna check` 不跑：它用 `lowerProgramOf` 得到的 IR 只做自检、随即丢弃。
+  build 路径跑——split 经 `Lowering.Program.lowerUnitCheckedFrom` 逐单元一次（单元的定义
+  / 数据由归属桶直接给出），后端插件经 `lowerProgramCheckedOf` 整程序一次。
 - **类型形状**：`checkDefTy` 校验 `IrDef` 的运行时签名；`checkNodeBinderTys` 校验 λ binder
   注解、`IrLam` 结果、`IrCast` 源/目标、`IrApp` 函数/结果、`IrCase` scrutinee/结果、
   `IrCtor` 类型实参与值实参个数、record/projection/update 结果类型
@@ -266,7 +267,8 @@ binder 的**身份**在 Lowering 分配，前缀与编号渲染属后端：
   用 `annotRunTyOf` / `annotRunCalleeTy` 读运行时项的类型，CPS 的 `isEffResultTy`
   因此仍有类型依据。擦除 binder / 类型实参**就是类型面**，有意保留；IR 侧
   `IrLam` 不再携带擦除占位，Lowering 的节点类型槽都填成 `Just`（未知落
-  `IrTyOpaque`）。CPS 机器 pass 仍会清空节点类型（IR-08）。
+  `IrTyOpaque`）。CPS 机器 pass 的节点类型是机器级（`Control` / 续延 / 步进），
+  `IrTy` 无法命名，统一落 `IrTyOpaque`，不再清空；`Ir.Validate` 拒绝空的节点类型槽。
 - binder 类型走**两种口径**：`annotTyOfTotal` 保留结构（`a -> b` 是 `Opaque -> Opaque`，
   不是整体未知），写入 `IrBinder`；OCaml 的 lambda 注解另由 `irTyAnnotatable` 过滤，
   **含 `IrTyOpaque` / 类型变量槽的类型不写进 OCaml**（那会固定多态性），因此 IR 侧信息
@@ -278,8 +280,9 @@ binder 的**身份**在 Lowering 分配，前缀与编号渲染属后端：
   签名）、trait 方法选择子（投影签名带运行时字典参数，字典按隐式实参实例化）、运行时原语
   （`lwGlobals` 的签名表）、局部 binder 的 `IrTyFun` 链；Core 侧解析不出时回退到
   **已降低 callee 的节点类型**（内联 lambda / `let` 脱糖出来的 lambda），域未记录时标成
-  `IrTyOpaque`、结果类型保持精确。仍保持 `Nothing` 的是：体类型未知的 lambda、
-  `prim_erase`（依赖的换型 cast，运行时类型确实不可命名）与 binder 类型完全未记录的局部变量。
+  `IrTyOpaque`、结果类型保持精确。节点类型槽由 `Ir.Validate` 强制为非空；
+  仍保持 `Nothing` 的是 `prim_erase` 的换型 cast（运行时类型确实不可命名）与
+  binder 类型未记录的局部变量。
   `IrCase` 的 scrutinee/分支 binder 类型受字段/类型实参可解析性限制；wasm / native 的
   case 族优先用 `IrCase` 的 scrutinee 类型，缺失时回退到分支构造子名。
 - CPS 的续延判定按 `IrLam` 结果类型（`Eff`）；handler clause 收集按 `IrDef` 签名

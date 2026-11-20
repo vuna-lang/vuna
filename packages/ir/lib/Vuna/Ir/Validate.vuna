@@ -161,18 +161,20 @@ checkNodeBinderTys shared decls (IrLam bs resultTy _) =
   if anyErasedBinder bs then
     icInternal "IR lambda carries an erased binder placeholder"
   else
-    Vuna.Compiler.Base.Common.bind (checkBinderTysOf decls bs) (\_ => checkIrTyM decls resultTy)
+    Vuna.Compiler.Base.Common.bind
+      (checkBinderTysOf decls bs)
+      (\_ => checkNodeTy decls "lambda" resultTy)
 checkNodeBinderTys shared decls (IrLet bs scrut body) = checkBinderTysOf decls bs
 checkNodeBinderTys shared decls (IrCase caseTy resultTy _ alts) =
   Vuna.Compiler.Base.Common.bind
-    (checkIrTyM decls caseTy)
-    (\_ => Vuna.Compiler.Base.Common.bind (checkIrTyM decls resultTy) (\_ => checkAltBinderTys decls alts))
-checkNodeBinderTys shared decls (IrApp appTy _ _) = checkAppTyM decls appTy
+    (checkNodeTy decls "case scrutinee" caseTy)
+    (\_ => Vuna.Compiler.Base.Common.bind (checkNodeTy decls "case" resultTy) (\_ => checkAltBinderTys decls alts))
+checkNodeBinderTys shared decls (IrApp appTy _ _) = checkAppTy decls appTy
 checkNodeBinderTys shared decls (IrCtor family ctor tys args) =
   checkCtorTys shared decls family ctor tys (listLength args)
-checkNodeBinderTys shared decls (IrRecord _ resTy _) = checkIrTyM decls resTy
-checkNodeBinderTys shared decls (IrProj _ _ _ resTy) = checkIrTyM decls resTy
-checkNodeBinderTys shared decls (IrRecUpd _ _ _ resTy) = checkIrTyM decls resTy
+checkNodeBinderTys shared decls (IrRecord _ resTy _) = checkNodeTy decls "record" resTy
+checkNodeBinderTys shared decls (IrProj _ _ _ resTy) = checkNodeTy decls "projection" resTy
+checkNodeBinderTys shared decls (IrRecUpd _ _ _ resTy) = checkNodeTy decls "update" resTy
 checkNodeBinderTys shared decls (IrNatCase scrut fresh zero succ catch) =
   Vuna.Compiler.Base.Common.bind
     (checkAltBinderTysM decls zero)
@@ -182,12 +184,12 @@ checkNodeBinderTys shared decls (IrCast from to _) =
 checkNodeBinderTys shared decls (IrTail inner) = checkNodeBinderTys shared decls inner
 checkNodeBinderTys shared decls _ = OkC 0
 
-checkAppTyM : List IrTyDecl -> Maybe (Pair IrTy IrTy) -> Check Int
-checkAppTyM decls Nothing = OkC 0
-checkAppTyM decls (Just p) =
+checkAppTy : List IrTyDecl -> Maybe (Pair IrTy IrTy) -> Check Int
+checkAppTy decls Nothing = icInternal "IR application has an empty runtime type slot"
+checkAppTy decls (Just p) =
   Vuna.Compiler.Base.Common.bind
-    (checkIrTyM decls (Just (firstOf p)))
-    (\_ => checkIrTyM decls (Just (secondOf p)))
+    (checkTyArity decls (firstOf p))
+    (\_ => checkTyArity decls (secondOf p))
 
 checkCtorTys : IrShared -> List IrTyDecl -> String -> String -> Maybe (List IrTy) -> Int -> Check Int
 checkCtorTys shared decls family ctor tys nargs =
@@ -229,6 +231,12 @@ countKeptFlags (k :: rest) = if k then 1 + countKeptFlags rest else countKeptFla
 checkIrTyM : List IrTyDecl -> Maybe IrTy -> Check Int
 checkIrTyM decls Nothing = OkC 0
 checkIrTyM decls (Just ty) = checkTyArity decls ty
+
+-- | 节点自身的类型槽必填：Lowering 与 CPS 都填 `Just`（不可命名时落
+--   `IrTyOpaque`）。空槽意味着某个 pass 又把类型清空了，后端只能按形状猜。
+checkNodeTy : List IrTyDecl -> String -> Maybe IrTy -> Check Int
+checkNodeTy decls what Nothing = icInternal "IR node `${what}` has an empty runtime type slot"
+checkNodeTy decls what (Just ty) = checkTyArity decls ty
 
 anyErasedBinder : List IrBinder -> Bool
 anyErasedBinder [] = False
