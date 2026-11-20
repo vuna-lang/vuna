@@ -408,8 +408,11 @@ env，**不进 codegen**（同一 IR 的产物逐字节确定）。解析失败�
   （[debt.md](debt.md) D101）。
 - FFI / extern；stdin 的 `readLine` / `readBytes` 与 net。
 - **自举运行**：`vuna build packages/compiler --target native` 产出可链接的 `bin/vuna-compiler`
-  （`version` / 帮助可用）；`check <小包>` 能跑完并给出正常诊断。冷 store 上
-  `check packages/cli/test/corpus/packages/m34_summary/root` **整包通过**（exit 0）。
+  （`version` / 帮助可用），但 `check` 目前连单文件都跑不完：第一轮派发落在
+  `Base.Effect.Core.step` 的 `trap_impossible`（`vuna: runtime error: impossible branch`，
+  exit 2），传入的是 `rt_apply` 的部分应用闭包而不是 `Control`。同一失败可用 OCaml 版
+  `vuna build packages/compiler --target native` 的产物复现，与本包的安装布局无关；记在
+  [debt.md](debt.md) D121。
   整仓 selfhost 的现状见 [testing.md](testing.md)「后端自举 conformance」：尾调用（§3）只覆盖
   **直接饱和直调**，非尾递归、被闭包包住的递归仍按帧吃宿主栈；效应侧另有延迟 answer 的
   handler 缺口（[debt.md](debt.md) D101）。

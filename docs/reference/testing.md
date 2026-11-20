@@ -624,7 +624,7 @@ dispatch 与带 `backend` 标签的 PR**——整轮成本高、且 native 后�
 
 | 包 | 产物 | 说明 |
 | --- | --- | --- |
-| `vuna-native` | `bin/vuna-native` + `packages/base/` | 原生可执行文件；编译器身份写 `$out/build-id` |
+| `vuna-native` | `bin/vuna-native` + `bin/vuna-target-{native,wasm}` + `packages/base/` | 原生可执行文件 + 它编非 OCaml 目标要用的后端插件（与产品 CLI 同构，插件按 `<exeDir>` 发现）；编译器身份写 `$out/build-id` |
 
 runner 是 `nix run .#backend-check -- --compiler native`，三个 scope：
 
@@ -651,6 +651,11 @@ nix run .#backend-check -- --compiler native --scope selfhost
 
 读数（16 核）：parity 53×3 在 native 编译器上按 `--jobs` 并行；corpus 686 条断言
 8 路并行。CI 里 native 任务仍是 `continue-on-error`（边界见 [native.md](native.md) §8）。
+
+**当前状态**：native 自举编译器能构建、`version` / 帮助可用，但 `check` 在第一轮派发就停在
+`Base.Effect.Core.step` 的 `trap_impossible`（`vuna: runtime error: impossible branch`，
+exit 2），所以 `selfhost` / `parity` / `corpus` 三个 scope 全部跑不过。根因与复现见
+[debt.md](debt.md) D121。
 
 **口径约束**：编译器必须与被测源码同一棵树构建——Nix 派生天然满足；手工跑时先
 `nix build .#vuna-native`，不要拿旧二进制去跑新源码（诊断会指向编译器的能力差异，而不是
