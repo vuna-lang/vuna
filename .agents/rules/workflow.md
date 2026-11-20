@@ -31,6 +31,9 @@ git rebase main
 提交信息格式、type/scope 与示例见技能 `vuna-commits`。硬规则：
 
 - **一次提交只做一件事**；不要把格式化、重命名、行为变更混在一起。
+- **提交前门禁**由 `.githooks/pre-commit` 执行（全仓库 `fmt --check` / `lint --max-warnings 0` /
+  `check .`，等价 CI 的三个 check）；`chore(seed):` 轮换这类刚重建过整链的提交用
+  `VUNA_SKIP_HOOKS=1` 跳过，别用 `--no-verify` 掩盖真正失败。
 - **seed rotation 必须独立成 `chore(seed): ...`**，不与特性提交混在一起。
 - 提交前检查 `git status --short`：不应出现 `result`、`.output`、`_scratch/`、`.local/`、
   `docs/api.html`、`docs/.generated/` 等生成物。

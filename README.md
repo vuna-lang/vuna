@@ -61,6 +61,12 @@ nix run .#vuna -- doc                          # 生成 docs/api.html（gitignor
 `nix build .#vuna --out-link result`，再用 `./result/bin/vuna`（`result` 是共享 out-link，可能
 指向别的产物或旧二进制）；远端稳定版是 `nix run vuna -- <subcommand>`（注册表别名）。
 
+提交门禁：`nix develop` / direnv 进入仓库时会把 `core.hooksPath` 指向 `.githooks`，
+`git commit` 前自动跑全仓库 `fmt --check`（含 `examples/`）、`lint --max-warnings 0`、
+`check .`（等价 CI 的三个 check）；没走 devShell 的环境手动
+`git config core.hooksPath .githooks` 启用。确需跳过用 `git commit --no-verify`，或设
+`VUNA_SKIP_HOOKS=1`（例如 `chore(seed):` 轮换提交）。
+
 ## 工具与自举链
 
 | 工具 | 作用 |

@@ -99,6 +99,10 @@
   **OCaml →（需要时）rotate seed → WASM → Native** 的顺序在同一轮内全部实现并验收；
   不允许只落一个后端再留 TODO（[verification.md](.agents/rules/verification.md)）。
 - **提交信息**用 `type(scope): 中文描述`（技能 `vuna-commits`）；一次提交只做一件事。
+- **提交前门禁**：`.githooks/pre-commit` 跑全仓库 `fmt --check`（含 `examples/`）、
+  `lint --max-warnings 0`、`check .`；devShell / direnv 进入仓库时自动设置
+  `core.hooksPath`。不要用 `--no-verify` 掩盖失败；`chore(seed):` 轮换这类刚重建过整链的
+  提交用 `VUNA_SKIP_HOOKS=1` 明示跳过。
 - 允许 `git add` / `git commit`；`git checkout` / `git reset` 会丢工作树改动，执行前先确认。
 
 ## 高频命令
@@ -114,6 +118,7 @@ sh nix/seed/rotate.sh ./result/bin/vuna   # 仅当需要轮换 seed；上面那�
 nix run .#vuna -- store gc --dry-run      # 缓存族 GC：先裁剪已消失的项目根，再按 roots+宽限淘汰
                                           # 对象库是单一根（默认 ~/.vuna/store，VUNA_STORE 覆盖）
 nix flake check                           # 3 packages + 29 checks（清单见 testing.md）
+git config core.hooksPath .githooks       # 启用 pre-commit（devShell/direnv 自动设置）
 nix run .#vuna -- map find <Module.name> # 定位符号；另有 map impact / api
 ```
 

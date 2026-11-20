@@ -1,0 +1,34 @@
+#!/bin/sh
+# 提交前门禁：全仓库 fmt / lint / check，对应 nix/checks 里的 vuna-fmt / vuna-lint / vuna-typecheck。
+set -eu
+
+if [ -n "${VUNA_SKIP_HOOKS:-}" ]; then
+  echo "pre-commit: VUNA_SKIP_HOOKS 已设置，跳过 fmt/lint/check" >&2
+  exit 0
+fi
+
+if ! command -v nix >/dev/null 2>&1; then
+  echo "pre-commit: 找不到 nix（门禁通过 nix run .#vuna 执行）" >&2
+  exit 1
+fi
+
+report_failure() {
+  status=$?
+  if [ "$status" -eq 0 ]; then
+    return 0
+  fi
+  echo "" >&2
+  echo "pre-commit 未通过：全仓库 fmt/lint/check 有失败项（exit $status）。" >&2
+  echo "  修复：nix run .#vuna -- fmt" >&2
+  echo "        nix run .#vuna -- lint --fix" >&2
+  echo "        nix run .#vuna -- check ." >&2
+  echo "  改完 git add 再提交；确需跳过用 git commit --no-verify。" >&2
+  exit "$status"
+}
+trap report_failure EXIT
+
+echo "pre-commit: 全仓库 fmt/lint/check（源码有改动时会先重建 vuna）…" >&2
+nix run .#vuna -- fmt --check
+nix run .#vuna -- fmt --check examples
+nix run .#vuna -- lint --max-warnings 0
+nix run .#vuna -- check .
