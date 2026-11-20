@@ -1360,8 +1360,9 @@ buildOne noCompile multiOut outM pkg o =
             Just out => buildExplicit out multiOut pkg ctx entry o
             Nothing =>
               do
-                viewDigest <- buildViewAddrOf ctx entry True
-                buildDefaultView ctx pkg name entry viewDigest o
+                inputs <- splitInputsOf ctx entry True
+                viewDigest <- buildViewAddrOf inputs
+                buildDefaultView inputs ctx pkg name entry viewDigest o
       else
         do
           r <- checkPackage o.optRelease False pkg
@@ -1394,8 +1395,8 @@ buildExplicit out multiOut pkg ctx entry o =
 
 -- 默认输出：`$VUNA_STORE/views/bin/<splitIn>`；`<pkg>/.output` 只是符号链接。
 -- 同一 digest 用 mkdir 锁串行化；在**最终 view 路径**构建，保证 codegen 路径稳定。
-buildDefaultView : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> Package -> String -> String -> String -> CliOpts -> Eff r (Pair Int CliOpts)
-buildDefaultView ctx pkg name entry viewDigest o =
+buildDefaultView : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => SplitInputs -> PackageContext -> Package -> String -> String -> String -> CliOpts -> Eff r (Pair Int CliOpts)
+buildDefaultView inputs ctx pkg name entry viewDigest o =
   do
     view <- storeViewPathEff "bin" viewDigest
     let
@@ -1423,7 +1424,7 @@ buildDefaultView ctx pkg name entry viewDigest o =
                   pure (Pair 0 o)
               else
                 do
-                  r <- compileToDir ctx entry True view
+                  r <- compileToDirGiven inputs ctx entry True view
                   case r of
                     ErrC e =>
                       do

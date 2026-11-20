@@ -305,11 +305,18 @@ load/parse 前缀 + iface 摘要 **~2.6 s** → 逐定义精化（`collectSigs-d
    不要用 `minor_words + major_words` 求差——`minor_words` 只在 minor GC 边界推进，
    minor heap 16M words 下会量化到 134 MB/格（见 [observability.md](observability.md)）。
 8. 已修热点（不要重复排查，读数见 §1）：**`Dt.dedup*` 的 O(n²)、`Termination.anyOwn` 的
-   O(n²)、写接口的包接口双读**；`Elab.Usage` 全程序扫描（实测
+   O(n²)、写接口的包接口双读、build 的重复闭包扫描**；`Elab.Usage` 全程序扫描（实测
    10–13 ms）、实例体/方法子句查找（13.5 ms）、`refsOfDef`（12–16 ms）、签名 banned 集、
    ctor/解表索引、`unsolvedFrom` 全解表扫描、iface/impl 双摘要共享子哈希
    （`defs` / `decls` 不再各编码一遍：冷 `check packages/compiler` 分配
    **1.187e9 → 1.131e9 words（−4.7%）**、CPU **4.76 s → 4.52 s（−5.2%）**）。
+
+   build 的重复闭包扫描：view 地址、快 key 与重建三处各自跑一遍 `ifaceModsEff`（整包源扫描 +
+   逐模块头解析 + 地址分配）与依赖接口读，冷 `build --no-compile compiler` 因此扫两遍。
+   `Driver.Compile.SplitInputs`（`splitInputsOf`）把闭包 / 依赖接口 / 输入摘要一次算好，
+   由 `compileToDirGiven` / `buildViewAddrOf` 复用。同机同窗口 A/B：冷
+   `build --no-compile compiler` **6.20–6.43 s → 5.89–5.90 s**（user 6.13 → 5.61 s）、
+   热 **0.363 → 0.354 s**，产物树 `diff -r` 逐字节一致；`check` 路径不变（本来就只扫一遍）。
 
    口径：接口载荷里的**依赖表值是模块对象地址 `cmAddr`（含编译器标签）**，不是 iface
    哈希——跨编译器比较 payload 会看到依赖项整体变化，那不代表哈希漂移；判定哈希是否变了

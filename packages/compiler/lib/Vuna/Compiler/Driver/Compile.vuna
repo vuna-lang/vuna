@@ -163,11 +163,19 @@ ensureDirPathFuel fuel path =
 export compileToDir : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Bool -> String -> Eff r (Check (Pair Int (List Diagnostic)))
 compileToDir ctx entry printResult outDir =
   do
+    inputs <- splitInputsOf ctx entry printResult
+    compileToDirGiven inputs ctx entry printResult outDir
+
+-- | 同上，复用调用方已经算好的 split 输入：`build` 的 view 地址与 codegen 判定共用同一次
+-- 闭包扫描 / 依赖接口读取（一次整包源扫描 + 每个模块的头解析）。
+export compileToDirGiven : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => SplitInputs -> PackageContext -> String -> Bool -> String -> Eff r (Check (Pair Int (List Diagnostic)))
+compileToDirGiven inputs ctx entry printResult outDir =
+  do
     audit <- ifaceAuditRequested
     if audit then
-      auditCompile ctx entry printResult outDir
+      auditCompile inputs ctx entry printResult outDir
     else
-      compileToDirNormal ctx entry printResult outDir
+      compileToDirNormal inputs ctx entry printResult outDir
 
 -- 单元缓存 key 的逐模块身份：闭包扫描已经算好的接口地址。
 modHashPair : ClosureMod -> Pair String String
@@ -184,18 +192,14 @@ modHashPair m = Pair m.cmName m.cmAddr
 -- 先后覆盖。
 -- 构建一律走全量 lowering（单元缓存仍按声明哈希命中，所以热构建依然快），
 -- 产物因此是输入摘要的纯函数。
-summarySplitParts : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> List ClosureMod -> String -> Bool -> Eff r (Check (Pair (List SplitFile) CheckedPackage))
-summarySplitParts ctx mods entry printResult =
+summarySplitParts : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> List ClosureMod -> Maybe (List ModuleIface) -> String -> Bool -> Eff r (Check (Pair (List SplitFile) CheckedPackage))
+summarySplitParts ctx mods depIfaces entry printResult =
   let
-    -- 单元缓存 key 的逐模块身份：闭包扫描已经算好的接口地址（包环境 + 源摘要 + 依赖源摘要）。
+    -- 单元缓存 key 的逐模块身份：闭包扫描已经算好的接口地址。
     modIds = map modHashPair mods
-  in do
-    depIfaces <- depIfacesOfWith ctx mods
-    case depIfaces of
-      Just ifaces =>
-        do
-          dtSplitProjectWithIfaces ctx entry printResult modIds ifaces
-      Nothing => dtSplitProjectParts ctx entry printResult modIds
+  in case depIfaces of
+    Just ifaces => dtSplitProjectWithIfaces ctx entry printResult modIds ifaces
+    Nothing => dtSplitProjectParts ctx entry printResult modIds
 
 -- | 构建（codegen）入口：两级输入寻址。
 --
@@ -204,12 +208,11 @@ summarySplitParts ctx mods entry printResult =
 -- 2. **语义 key**（`splitIdentityOf`）：本包 `pkgIfaceHash` + `pkgImplHash` + 布局摘要 +
 --    依赖身份 + 产物口径；`blobs/<语义 key>` 是产物真身。注释变更 ⇒ 快 key 变、语义 key
 --    不变 ⇒ 精化一次、codegen 复用；行移动 ⇒ 布局摘要变 ⇒ 重建（运行时位置表正确）。
-compileToDirNormal : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Bool -> String -> Eff r (Check (Pair Int (List Diagnostic)))
-compileToDirNormal ctx entry printResult outDir =
+compileToDirNormal : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => SplitInputs -> PackageContext -> String -> Bool -> String -> Eff r (Check (Pair Int (List Diagnostic)))
+compileToDirNormal inputs ctx entry printResult outDir =
   do
-    mods <- splitModsOf ctx entry printResult
     let
-      fast = splitInOf mods
+      fast = splitInOf inputs.siMods
     in do
       ptr <- readSplitPointer fast
       case ptr of
@@ -228,24 +231,23 @@ compileToDirNormal ctx entry printResult outDir =
                           ErrC e => ErrC e
                           OkC count => OkC (Pair count [])
                       )
-              Nothing => rebuildSplit ctx entry printResult outDir fast mods
-        Nothing => rebuildSplit ctx entry printResult outDir fast mods
+              Nothing => rebuildSplit inputs ctx entry printResult outDir fast
+        Nothing => rebuildSplit inputs ctx entry printResult outDir fast
 
 -- 快指针未命中：精化一次 → 写接口（返回模块摘要）→ 语义 key → blob 命中则复用，
 -- 否则 codegen + 写 blob + 写快指针。
-rebuildSplit : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Bool -> String -> String -> CheckMods -> Eff r (Check (Pair Int (List Diagnostic)))
-rebuildSplit ctx entry printResult outDir fast mods =
+rebuildSplit : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => SplitInputs -> PackageContext -> String -> Bool -> String -> String -> Eff r (Check (Pair Int (List Diagnostic)))
+rebuildSplit inputs ctx entry printResult outDir fast =
   do
-    closureMods <- summaryClosureMods ctx
     -- 同包干净模块的接口读一次：codegen 的语义 key 与写回都用这份表。
-    cleanR <- ownCleanInfoWith ctx closureMods
+    cleanR <- ownCleanInfoWith ctx inputs.siClosure
     let
       clean =
         case cleanR of
           Just xs => xs
           Nothing => []
     in do
-      summary <- summarySplitParts ctx closureMods entry printResult
+      summary <- summarySplitParts ctx inputs.siClosure inputs.siDepIfaces entry printResult
       case summary of
         ErrC e => pure (ErrC e)
         OkC p =>
@@ -254,7 +256,7 @@ rebuildSplit ctx entry printResult outDir fast mods =
               canon = canonicalTopo (firstOf p)
               checked = secondOf p
             in do
-              shadow <- writeIfaceShadowWithClean ctx checked (Just closureMods) clean
+              shadow <- writeIfaceShadowWithClean ctx checked (Just inputs.siClosure) clean
               case shadow of
                 ErrC e => pure (ErrC e)
                 OkC modules =>
@@ -266,7 +268,7 @@ rebuildSplit ctx entry printResult outDir fast mods =
                       sem =
                         case modules of
                           [] => fast
-                          _ => splitIdentityOf ctx printResult tag modules mods.cmKind mods.cmDeps
+                          _ => splitIdentityOf ctx printResult tag modules inputs.siMods.cmKind inputs.siMods.cmDeps
                     in do
                       cached <- readSplitBlob sem
                       case cached of
@@ -297,13 +299,11 @@ rebuildSplit ctx entry printResult outDir fast mods =
 
 -- 审计（`VUNA_IFACE_AUDIT=1`）：同一进程分别走摘要路径与全量路径，codegen 产物逐字节比较；
 -- 一致才落盘，不一致报 `iface-audit-mismatch` 且**不写任何缓存/接口**。
-auditCompile : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Bool -> String -> Eff r (Check (Pair Int (List Diagnostic)))
-auditCompile ctx entry printResult outDir =
+auditCompile : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => SplitInputs -> PackageContext -> String -> Bool -> String -> Eff r (Check (Pair Int (List Diagnostic)))
+auditCompile inputs ctx entry printResult outDir =
   do
-    mods <- splitModsOf ctx entry printResult
-    closureMods <- summaryClosureMods ctx
-    summary <- summarySplitParts ctx closureMods entry printResult
-    full <- dtSplitProjectParts ctx entry printResult (map modHashPair closureMods)
+    summary <- summarySplitParts ctx inputs.siClosure inputs.siDepIfaces entry printResult
+    full <- dtSplitProjectParts ctx entry printResult (map modHashPair inputs.siClosure)
     let
       _ = dbg! "iface-audit subject=compile entry=${entry}"
     in do
@@ -319,9 +319,9 @@ auditCompile ctx entry printResult outDir =
                   files = firstOf p
                   checked = secondOf p
                   canon = canonicalTopo files
-                  fast = splitInOf mods
+                  fast = splitInOf inputs.siMods
                 in do
-                  shadow <- writeIfaceShadowWith ctx checked (Just closureMods)
+                  shadow <- writeIfaceShadowWith ctx checked (Just inputs.siClosure)
                   case shadow of
                     ErrC e => pure (ErrC e)
                     OkC modules =>
@@ -331,7 +331,7 @@ auditCompile ctx entry printResult outDir =
                           sem =
                             case modules of
                               [] => fast
-                              _ => splitIdentityOf ctx printResult tag modules mods.cmKind mods.cmDeps
+                              _ => splitIdentityOf ctx printResult tag modules inputs.siMods.cmKind inputs.siMods.cmDeps
                         in do
                           _ <- writeSplitBlobAt sem canon
                           _ <- writeSplitPointer fast sem
@@ -2486,26 +2486,36 @@ splitBlobTag =
     pure "${splitNodeSchema}/${tag}"
 
 -- | split 节点的输入摘要：源闭包 / 依赖身份 / 版本+指纹+printResult。
-splitModsOf : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Bool -> Eff r CheckMods
-splitModsOf ctx entry printResult =
+-- | 一次 build 命令共用的 split 输入：闭包扫描 / 依赖接口 / 输入摘要。
+--
+-- 三者由同一次 `ifaceModsEff`（整包源扫描 + 逐模块头解析 + 地址分配）派生。`build` 的
+-- view 地址与 codegen 判定以前各算一遍，于是同一份源码在一个命令里被扫两到三次。
+export record SplitInputs(..) where
+  siClosure : List ClosureMod
+  siDepIfaces : Maybe (List ModuleIface)
+  siMods : CheckMods
+
+export splitInputsOf : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Bool -> Eff r SplitInputs
+splitInputsOf ctx entry printResult =
   do
+    closure <- ifaceModsEff ctx
+    depIfaces <- depIfacesOfWith ctx closure
     sources <- contextSources ctx entry
     deps <- depIdentitiesEff ctx
     fp <- compilerFingerprint
-    -- **产物口径**必须进判定 key：摘要路径（依赖接口齐全）与全量路径产出的代码不同
-    -- （实测 runtime 的 defloc 表在两条路径下长度不同）。只用源码/依赖摘要当 key 会让
-    -- 「先全量、后摘要」两次构建复用同一 blob 却覆盖不同内容。mode 因此进 kind。
-    ifaces <- depIfacesOf ctx
     let
       srcHash = closureHashOf sources 0
       verHash = textHash (splitNodeSchema ++ vunaVersion) + fp
       prHash = if printResult then 1 else 0
+      -- **产物口径**必须进判定 key：摘要路径（依赖接口齐全）与全量路径产出的代码不同
+      -- （实测 runtime 的 defloc 表在两条路径下长度不同）。只用源码/依赖摘要当 key 会让
+      -- 「先全量、后摘要」两次构建复用同一 blob 却覆盖不同内容。mode 因此进 kind。
       mode =
-        case ifaces of
+        case depIfaces of
           Just _ => "s"
           Nothing => "f"
       kind = "${mode}:${if printResult then "pr1" else "pr0"}"
-    in pure (checkModsOf (contextPackageName ctx) kind "" (hashText srcHash) (depIdentitiesHash deps) (hashText (verHash + prHash)) (releaseFlagOf ctx))
+    in pure (SplitInputs closure depIfaces (checkModsOf (contextPackageName ctx) kind "" (hashText srcHash) (depIdentitiesHash deps) (hashText (verHash + prHash)) (releaseFlagOf ctx)))
 
 -- | blob 路径：内容寻址（`<cache>/blobs/<digest>`）。
 splitBlobPath : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Eff r String
@@ -2616,12 +2626,11 @@ toolchainIdEff =
 
 -- | build 视图的地址：产物输入摘要 + 链接工具链身份。默认输出目录就是
 -- `$VUNA_STORE/views/bin/<该摘要>`，`.output` 只是指向它的符号链接。
-export buildViewAddrOf : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Bool -> Eff r String
-buildViewAddrOf ctx entry printResult =
+export buildViewAddrOf : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => SplitInputs -> Eff r String
+buildViewAddrOf inputs =
   do
-    mods <- splitModsOf ctx entry printResult
     tool <- toolchainIdEff
-    pure (addrOf ["view-bin", splitInOf mods, tool])
+    pure (addrOf ["view-bin", splitInOf inputs.siMods, tool])
 
 -- | check 的判定摘要：四个输入摘要 + 包 + kind。存在即「判过」。
 checkInOf : CheckMods -> String
