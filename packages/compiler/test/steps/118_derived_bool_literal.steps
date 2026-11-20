@@ -1,0 +1,9 @@
+# 118) deriving (Eq/Ord) 的派生体直接引用 canonical Bool 构造子（`true` / `false`），
+#      不再用 Int 比较（`(1 = 1)` / `(0 = 1)`）伪造 Bool。
+run: sh -c 'mkdir -p "$TMPDIR/p"; printf "%s\n" "data Color : Type where" "  Red : Color" "  Blue : Color" "deriving (Eq, Ord)" "" "main : Bool" "main = (Red == Red) && (Red /= Blue) && (Red < Blue)" > "$TMPDIR/p/dv.vuna"'
+run: "$VUNA" compile "$TMPDIR/p/dv.vuna" "$TMPDIR/p/out-dv"
+file-contains: $TMPDIR/p/out-dv/Main.ml true
+run: sh -c '! grep -q "(1 = 1)" "$TMPDIR/p/out-dv/Main.ml"'
+exit: 0
+run: sh -c '! grep -q "(0 = 1)" "$TMPDIR/p/out-dv/Main.ml"'
+exit: 0

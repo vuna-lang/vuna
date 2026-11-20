@@ -24,6 +24,7 @@ import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Rast
 import Vuna.Compiler.Frontend.Rast.Name
 import Vuna.Compiler.Base.Diagnostics
+import Vuna.Compiler.Base.Intrinsics
 import Vuna.Compiler.Elab.Records
 
 -- 类名最后一段：`Base.Trait.Show.Show` → `Show`；派生规则按它分派（找不到的类报不支持）。
@@ -438,12 +439,11 @@ geBody leProj sp =
 -- ---------------------------------------------------------------
 -- 派生体里产生 Bool 的辅助
 -- ---------------------------------------------------------------
--- 派生方法体不引用源码里的 `True` / `False`（它们没有 prelude 值桩，权威定义在
--- `Base.Data.Bool`，而派生实例可能出现在不 import Base.Data.Bool 的程序里）。
--- 用 Int 上的 `==`（精化期特化成 `bi_eq_int`）产生 Bool：`1 == 1` / `0 == 1`。
--- 这样派生 Eq/Ord 与源码是否声明 Bool 构造子无关。
+-- 派生展开发生在 Loader 名字解析之后：合成的裸 `True` / `False` 不会再经过 import 解析，
+-- 且可能被同名的用户构造子遮蔽。这里直接引用 canonical 构造子的完整符号
+-- （`Base.Data.Bool.Bool.True` / `.False`）——精化后就是 `TBool` 字面量。
 boolTrue : Span -> Expr
-boolTrue sp = EApp (EVar (classifyName "==") sp) [EInt 1 sp, EInt 1 sp] sp
+boolTrue sp = EVar (classifyName boolTrueCtor) sp
 
 boolFalse : Span -> Expr
-boolFalse sp = EApp (EVar (classifyName "==") sp) [EInt 0 sp, EInt 1 sp] sp
+boolFalse sp = EVar (classifyName boolFalseCtor) sp

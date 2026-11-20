@@ -1,0 +1,11 @@
+-- 用户 `data Bool` 的构造子与 canonical 的 `True` / `False` 同名：派生 Eq/Ord 生成的
+-- 方法体必须引用 canonical 构造子，不能被本地同名构造子抢走。
+data Bool : Type where
+  False : Bool
+  True : Bool
+deriving (Eq, Ord)
+
+main : Int
+main =
+  (if True == True then 1 else 0)
+    + (if True == False then 0 else 1) + (if False < True then 1 else 0)
