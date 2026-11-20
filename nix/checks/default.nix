@@ -333,6 +333,19 @@ in
     script = ./frontend-growth.sh;
   };
 
+  # 容器增长率门槛：HashMap / Queue / TreeMap / PriorityQueue / Sort 的合成探针，
+  # 按 N→2N 只测**运行**墙钟（借 ocamlopt 出产物，不测编译）。挡「O(1)/O(log n)
+  # 退化成线性/二次」（size 退回 O(n)、队列用 append、平衡树丢平衡、排序退回插入）。
+  vuna-container-growth = vunaCheck {
+    name = "vuna-container-growth";
+    srcs = [
+      src.base
+      src.manifest
+    ];
+    script = ./container-growth.sh;
+    nativeBuildInputs = e2eTools;
+  };
+
   vuna-typecheck = vunaCheck {
     name = "vuna-typecheck";
     srcs = workspace;
