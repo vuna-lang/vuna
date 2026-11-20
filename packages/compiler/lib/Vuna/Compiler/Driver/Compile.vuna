@@ -863,7 +863,9 @@ findClosureMod : String -> List ClosureMod -> Maybe ClosureMod
 findClosureMod _ [] = Nothing
 findClosureMod n (m :: rest) = if m.cmName == n then Just m else findClosureMod n rest
 
-closureModsEff : Member nFs FsOp r => PackageContext -> List PkgEntry -> Eff r (List ClosureMod)
+-- | 一次读盘同时算内容摘要与 header：`cmSrc` 是源摘要，`cmImports` 是解析出的 import 边
+-- （尾接隐式 Prelude 由 `appendPrelude` 在拿到全量模块表后做）。
+closureModsEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> List PkgEntry -> Eff r (List ClosureMod)
 closureModsEff ctx pkgs =
   do
     per <-
@@ -878,35 +880,42 @@ closureModsEff ctx pkgs =
                       \p =>
                         do
                           raw <- fsReadFile p
-                          pure (ClosureMod pe.peName pe.peKey pe.peEnv (moduleNameOfPath (rootDir r) p) p (contentAddress raw) [] "")
+                          closureModOf pe (rootDir r) p raw
                     ) paths
         ) (contextRoots ctx)
     pure (concatMap (\xs => xs) per)
+
+closureModOf : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PkgEntry -> String -> String -> String -> Eff r ClosureMod
+closureModOf pe root p raw =
+  do
+    parsed <- parseFileWithPath p raw
+    let
+      name = moduleNameOfPath root p
+    in case parsed of
+      ErrC _ => pure (ClosureMod pe.peName pe.peKey pe.peEnv name p (contentAddress raw) [] "")
+      OkC sf =>
+        let
+          h = headerOfSource name sf
+        in pure (ClosureMod pe.peName pe.peKey pe.peEnv name p (contentAddress raw) h.mhImports "")
 
 -- 尾接隐式 Prelude（作为**普通图边**）：不这样做的话，Prelude 会作为「每个模块的额外依赖」
 -- 后置在地址里，而它在拓扑序里没有前驱 ⇒ 早于 Prelude 的模块算地址时它还没分配，
 -- 退化成 `ext:Prelude` 哨兵。哨兵/真实地址混用会让地址依赖遍历顺序（跨上下文不稳定，
 -- 实测 `check compiler` 与 `check .` 算出两套地址）。写进 header 后它就是正常边。
-loadHeaderEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Bool -> ClosureMod -> Eff r ClosureMod
-loadHeaderEff hasPrelude m =
-  do
-    raw <- fsReadFile m.cmPath
-    parsed <- parseFileWithPath m.cmPath raw
-    case parsed of
-      ErrC _ => pure m
-      OkC sf =>
-        do
-          let
-            h = headerOfSource m.cmName sf
-            imports = withPrelude hasPrelude m h
-          in pure (ClosureMod m.cmPkg m.cmPkgKey m.cmPkgEnv m.cmName m.cmPath m.cmSrc imports "")
-
-withPrelude : Bool -> ClosureMod -> ModHeader -> List String
-withPrelude hasPrelude m h =
-  if hasPrelude && m.cmName /= "Prelude" && not (memName "Prelude" h.mhImports) then
-    append h.mhImports ["Prelude"]
+appendPrelude : Bool -> ClosureMod -> ClosureMod
+appendPrelude hasPrelude m =
+  if hasPrelude && m.cmName /= "Prelude" && not (memName "Prelude" m.cmImports) then
+    ClosureMod
+      m.cmPkg
+      m.cmPkgKey
+      m.cmPkgEnv
+      m.cmName
+      m.cmPath
+      m.cmSrc
+      (append m.cmImports ["Prelude"])
+      ""
   else
-    h.mhImports
+    m
 
 modGraphEntry : ClosureMod -> Pair String (List String)
 modGraphEntry m = Pair m.cmName m.cmImports
@@ -981,16 +990,13 @@ ifaceModsWithEff ctx pkgs =
     tb <- clockNow
     let
       hasPrelude = memName "Prelude" (map modNameOf mods0)
+      mods = map (appendPrelude hasPrelude) mods0
+      srcTbl = srcTblOf mods
+      assigned = map (withAddr srcTbl) mods
     in do
-      mods <- mapEff (loadHeaderEff hasPrelude) mods0
-      tc <- clockNow
-      let
-        srcTbl = srcTblOf mods
-        assigned = map (withAddr srcTbl) mods
-      in do
-        _ <- pure (dbg! "iface-mods-phases n=${strFromInt (length mods)} closure=${strFromInt ((tb - ta) / 1000)}ms headers=${strFromInt ((tc - tb) / 1000)}ms assign=direct")
-        _ <- obsMarkEff "vuna.iface.compute"
-        pure assigned
+      _ <- pure (dbg! "iface-mods-phases n=${strFromInt (length mods)} closure=${strFromInt ((tb - ta) / 1000)}ms assign=direct")
+      _ <- obsMarkEff "vuna.iface.compute"
+      pure assigned
 
 -- | 摘要路径与 iface 影子写共用的闭包扫描：无包上下文时给出空表
 -- （`depIfacesOfWith` 对无包上下文直接返回 `Nothing`，不会用到它）。
@@ -2135,25 +2141,18 @@ ifaceCompilerTag = cacheTagEff
 -- | iface 目录：默认与源码同布局（`<包目录>/lib/.../X.vuna` → 同目录 `X.iface`）；
 -- `VUNA_IFACE_DIR` 非空时整体镜像到该根（`<根>/<包绝对目录>/lib/.../X.iface`），便于
 -- 持久化/共享。相对值按进程 cwd 解析（启动时读取一次）。
-ownSourceInfos : Member nFs FsOp r, Member nEnv EnvOp r => PackageContext -> Eff r (List (Pair String SourceInfo))
-ownSourceInfos ctx =
+-- | 本包模块的 `SourceInfo`：源摘要直接取闭包扫描时算好的 `cmSrc`（同一个
+-- `contentAddress`），这里只补 mtime / size，不再重读源文件。
+ownSourceInfos : Member nFs FsOp r, Member nEnv EnvOp r => PackageContext -> List ClosureMod -> Eff r (List (Pair String SourceInfo))
+ownSourceInfos ctx mods = mapEff ownInfoOf (selfModsOf ctx mods)
+
+ownInfoOf : Member nFs FsOp r, Member nEnv EnvOp r => ClosureMod -> Eff r (Pair String SourceInfo)
+ownInfoOf m =
   do
-    walked <-
-      mapEff (
-          \root =>
-            do
-              paths <- collectVunaMeta (rootDir root)
-              mapEff (
-                  \p =>
-                    do
-                      abs <- absolutePath p
-                      raw <- fsReadFile abs
-                      mtime <- fmap (fromMaybe 0) (fsFileMtime abs)
-                      size <- fmap (\o => natToInt (fromMaybe Zero o)) (fsFileSize abs)
-                      pure (Pair (moduleNameOfPath (rootDir root) p) (SourceInfo abs (payloadDigest raw) mtime size))
-                ) paths
-        ) (filter (\r => rootName r == contextPackageName ctx) (contextRoots ctx))
-    pure (concatMap (\xs => xs) walked)
+    abs <- absolutePath m.cmPath
+    mtime <- fmap (fromMaybe 0) (fsFileMtime abs)
+    size <- fmap (\o => natToInt (fromMaybe Zero o)) (fsFileSize abs)
+    pure (Pair m.cmName (SourceInfo abs m.cmSrc mtime size))
 
 -- | 干净模块的 `miSource` 来自磁盘接口记录（可能是上一次以相对/绝对不同写法 check 时写入的
 -- 路径）。复用时必须换成本次上下文的路径，否则相对/绝对入口交替会算出空路径而整包跳过写。
@@ -2221,7 +2220,7 @@ writeIfaceShadowWith ctx checked pre =
             Just known => pure known
             Nothing => ifaceModsEff ctx
         t1 <- clockNow
-        sources <- ownSourceInfos ctx
+        sources <- ownSourceInfos ctx mods
         t2 <- clockNow
         let
           depTbl = map modHashPair (depModsOf ctx mods)
