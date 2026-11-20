@@ -41,7 +41,6 @@ ID 是稳定引用（`层前缀-序号`）：条目关闭即删除该行（历�
 
 | ID | 位置 | 类 | 现象 → 后果 | 状态 |
 | --- | --- | --- | --- | --- |
-| EL-14 | `Data.vuna` 的 `eraseIndexMask` | B | 索引擦除只有分析，无消费者（死 API） | 开放 |
 | EL-16 | `Derive.vuna` 的 `boolTrue`/`boolFalse` | A | 用 `1 == 1` / `0 == 1` 造 Bool（派生实例不依赖源码 Bool 构造子） | 开放（有意） |
 | EL-19 | `Data.vuna` 的 record 字段类型 | C | `shift 0 (0-i)` 硬假设字段类型不引用前序字段 | 开放 |
 

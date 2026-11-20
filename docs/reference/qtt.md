@@ -134,8 +134,7 @@ mk t = mkContI (\x => useToken t + x)   -- 捕获 t；rig-1 实参位置 → 允
 - 0 binder 的 λ 形参、应用实参、构造子字段、case binder 都不进入运行时表示；1/ω 保留。
 - codegen 的 `rigIsErased` 是唯一读取点；`Lowering.Checks` 的运行时使用检查保留为第二道
   防御。`(0 p : Int)` 在生成的 OCaml 中不应出现对应参数。
-- `TPi` 类型层项不参与用量；把值类型写成 0 现在是显式、可检查的擦除手段（索引擦除
-  诊断仍保留为提示）。
+- `TPi` 类型层项不参与用量；把值类型写成 0 是显式、可检查的擦除手段。
 
 ## 8. linear record 与线性子集
 
