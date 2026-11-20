@@ -16,6 +16,11 @@
 #      三条 Profiler 方法 + ping/pong（`ws-client.mjs` 独立算 `Sec-WebSocket-Accept`
 #      并校验）。没有 Node 就打印 SKIP（与 `56_repl_server.steps` 的 TCP 沙箱 SKIP 同风格）。
 #
+# 每段用**独立** socket 路径：同一路径复用会让「上一段的 server 还没退干净」与「新 server
+# 绑定同一路径」互相踩（旧进程退场时删掉新进程的 socket 文件），失败也难归因。
+# 停 server 一律经 `timeout` 包一层的进程组：`$!` 是路由层 `vuna`，真正的 server 是它
+# spawn 的插件子进程 `vuna-dev`，直接 `kill $!` 只会杀掉路由层。
+#
 # 为什么不进 `nix flake check`：需要 Node + 端口（沙箱不保证）；serve 本身无外部依赖，
 # 由 suite 的 e2e tier 覆盖。
 set -u
@@ -35,13 +40,28 @@ VUNA_BASE=${VUNA_BASE:-$REPO/packages/base}
 
 # socket 路径要短（sun_path 上限 108 字节）。
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/ocdp.XXXXXX") || exit 1
-sock=$tmp/cdp.sock
+sock_a=$tmp/a.sock
+sock_b=$tmp/b.sock
+sock_nostart=$tmp/nostart.sock
+sock_nocpu=$tmp/nocpu.sock
+sock_missing=$tmp/missing.sock
 pass=0
 fail=0
 srv_pid=''
+sock=''
+# 单个 serve 的生命上限（秒）：只是兜底，正常路径都是客户端断开后自行退出。
+serve_ttl=120
+
+stop_serve() {
+  if [ -n "$srv_pid" ]; then
+    kill "$srv_pid" 2>/dev/null || true
+    wait "$srv_pid" 2>/dev/null || true
+    srv_pid=''
+  fi
+}
 
 cleanup() {
-  if [ -n "$srv_pid" ]; then kill "$srv_pid" 2>/dev/null || true; fi
+  stop_serve
   if [ "${KEEP_TMP:-0}" = "1" ]; then echo "tmp kept: $tmp"; else rm -rf "$tmp"; fi
 }
 trap cleanup EXIT INT TERM
@@ -66,24 +86,13 @@ wait_ready() { # logfile timeout_ticks
   return 1
 }
 
-start_serve() { # trace log -> sets srv_pid, prints addr-less; returns 0/1
-  sv_trace=$1
-  log=$2
-  : >"$log"
-  "$VUNA" dev obs serve --cdp "unix:$sock" "$sv_trace" >"$log" 2>"$log.err" &
-  srv_pid=$!
-  wait_ready "$log" 400 && return 0
-  printf 'serve did not print a readiness line\n' >&2
-  cat "$log.err" >&2 2>/dev/null || true
-  return 1
-}
-
-stop_serve() {
-  if [ -n "$srv_pid" ]; then
-    kill "$srv_pid" 2>/dev/null || true
-    wait "$srv_pid" 2>/dev/null || true
-    srv_pid=''
+spawn_serve() { # addr trace log -> 起 serve（成功时 srv_pid 是它的进程组入口）
+  if command -v timeout >/dev/null 2>&1; then
+    timeout -s TERM -k 5 "$serve_ttl" "$VUNA" dev obs serve --cdp "$1" "$2" >"$3" 2>"$3.err" &
+  else
+    "$VUNA" dev obs serve --cdp "$1" "$2" >"$3" 2>"$3.err" &
   fi
+  srv_pid=$!
 }
 
 wait_exit() { # 等 serve 在宽限窗口内自行退出（最多约 5s）
@@ -93,6 +102,43 @@ wait_exit() { # 等 serve 在宽限窗口内自行退出（最多约 5s）
     i=$((i + 1))
     sleep 0.05
   done
+  return 1
+}
+
+wait_exit_code() { # 等 serve 自行退出（最多约 5s），返回其退出码；窗口内没退 = 255
+  i=0
+  while [ "$i" -lt 100 ]; do
+    if ! kill -0 "$srv_pid" 2>/dev/null; then
+      wait "$srv_pid" 2>/dev/null
+      return $?
+    fi
+    i=$((i + 1))
+    sleep 0.05
+  done
+  return 255
+}
+
+stop_after_client() { # 客户端已断开：等 serve 自行退出，返回退出码（没退则收掉并给 255）
+  wait_exit_code
+  rc=$?
+  if [ "$rc" = "255" ]; then
+    stop_serve
+    return 255
+  fi
+  srv_pid=''
+  return $rc
+}
+
+start_serve() { # trace log sock -> 0/1；成功时 sock 是这一段 server 的地址
+  sv_trace=$1
+  sv_log=$2
+  sock=$3
+  : >"$sv_log"
+  spawn_serve "unix:$sock" "$sv_trace" "$sv_log"
+  wait_ready "$sv_log" 400 && return 0
+  printf 'serve did not print a readiness line\n' >&2
+  cat "$sv_log.err" >&2 2>/dev/null || true
+  stop_serve
   return 1
 }
 
@@ -125,7 +171,7 @@ pid=$(sed -n 's/.*"pid":\([0-9][0-9]*\).*/\1/p' "$trace" | head -1)
 
 # ---------------------------------------------------------------- 2) serve 正常路径
 mkdir -p "$tmp/cap-a"
-if start_serve "$trace" "$tmp/serve-a.log"; then
+if start_serve "$trace" "$tmp/serve-a.log" "$sock_a"; then
   if node "$HERE/cdp-client.mjs" "unix:$sock" "$HERE/requests.json" "$tmp/cap-a" >"$tmp/client-a.log" 2>&1; then
     ok "serve: six CDP requests"
   else
@@ -149,7 +195,7 @@ fi
 
 # ---------------------------------------------------------------- 3) 确定性
 mkdir -p "$tmp/cap-b"
-if start_serve "$trace" "$tmp/serve-b.log"; then
+if start_serve "$trace" "$tmp/serve-b.log" "$sock_b"; then
   node "$HERE/cdp-client.mjs" "unix:$sock" "$HERE/requests.json" "$tmp/cap-b" >"$tmp/client-b.log" 2>&1 || true
   stop_serve
   a=$tmp/cap-a/frame-4.json
@@ -174,29 +220,30 @@ fi
 # ---------------------------------------------------------------- 4) 错误路径
 # 4a 没 start 就 stop → -32000 + 退出码 1。
 printf '[{"method":"Profiler.stop","params":{}}]\n' >"$tmp/nostart.json"
-if start_serve "$trace" "$tmp/serve-nostart.log"; then
+if start_serve "$trace" "$tmp/serve-nostart.log" "$sock_nostart"; then
   node "$HERE/cdp-client.mjs" "unix:$sock" "$tmp/nostart.json" >"$tmp/client-nostart.log" 2>&1
   node_rc=$?
-  wait "$srv_pid" 2>/dev/null
+  stop_after_client
   serve_rc=$?
-  srv_pid=''
   grep -q 'error code=-32000' "$tmp/client-nostart.log" && ok "serve: stop without start -> -32000" \
-    || no "serve: stop without start -> -32000" "$(cat "$tmp/client-nostart.log")"
-  [ "$serve_rc" = "1" ] && ok "serve: content failure exits 1" || no "serve: content failure exits 1" "got $serve_rc"
+    || no "serve: stop without start -> -32000" "$(cat "$tmp/client-nostart.log" 2>/dev/null)"
+  [ "$serve_rc" = "1" ] && ok "serve: content failure exits 1" \
+    || no "serve: content failure exits 1" "got $serve_rc (client $node_rc)$(tail -3 "$tmp/serve-nostart.log.err" 2>/dev/null)"
 else
   no "serve: startup (nostart)"
 fi
 
 # 4b 无 cpu 采样的 trace → -32000 + 退出码 1。
 printf '{"ph":"M","name":"vuna.obs.schema","pid":1,"tid":0,"args":{"schema":"vuna-obs 1"}}\n{"ph":"X","ts":1,"pid":1,"tid":0,"name":"app.x","cat":"vuna.user","dur":1,"args":{}}\n' >"$tmp/nocpu.jsonl"
-if start_serve "$tmp/nocpu.jsonl" "$tmp/serve-nocpu.log"; then
+if start_serve "$tmp/nocpu.jsonl" "$tmp/serve-nocpu.log" "$sock_nocpu"; then
   node "$HERE/cdp-client.mjs" "unix:$sock" "$tmp/nostart.json" >"$tmp/client-nocpu.log" 2>&1
-  wait "$srv_pid" 2>/dev/null
+  node_rc=$?
+  stop_after_client
   serve_rc=$?
-  srv_pid=''
   grep -q 'error code=-32000' "$tmp/client-nocpu.log" && ok "serve: no cpu samples -> -32000" \
-    || no "serve: no cpu samples -> -32000" "$(cat "$tmp/client-nocpu.log")"
-  [ "$serve_rc" = "1" ] && ok "serve: no cpu samples exits 1" || no "serve: no cpu samples exits 1" "got $serve_rc"
+    || no "serve: no cpu samples -> -32000" "$(cat "$tmp/client-nocpu.log" 2>/dev/null)"
+  [ "$serve_rc" = "1" ] && ok "serve: no cpu samples exits 1" \
+    || no "serve: no cpu samples exits 1" "got $serve_rc (client $node_rc)$(tail -3 "$tmp/serve-nocpu.log.err" 2>/dev/null)"
 else
   no "serve: startup (nocpu)"
 fi
@@ -206,7 +253,7 @@ fi
 [ "$?" = "2" ] && ok "serve: missing --cdp exits 2" || no "serve: missing --cdp exits 2"
 "$VUNA" dev obs serve --cdp tcp:0.0.0.0:9229 "$trace" >"$tmp/arg2.log" 2>&1
 [ "$?" = "2" ] && ok "serve: non-loopback ADDR exits 2" || no "serve: non-loopback ADDR exits 2"
-"$VUNA" dev obs serve --cdp "unix:$sock" "$tmp/nope.jsonl" >"$tmp/arg3.log" 2>&1
+"$VUNA" dev obs serve --cdp "unix:$sock_missing" "$tmp/nope.jsonl" >"$tmp/arg3.log" 2>&1
 [ "$?" = "2" ] && ok "serve: missing TRACE exits 2" || no "serve: missing TRACE exits 2"
 
 # ---------------------------------------------------------------- 5) 原生 WS 端点（可选）
@@ -216,8 +263,7 @@ else
   if ! command -v node >/dev/null 2>&1; then
     echo "SKIP ws endpoint (node not on PATH)"
   else
-    "$VUNA" dev obs serve --cdp "tcp:127.0.0.1:0" "$trace" >"$tmp/ws-serve.log" 2>"$tmp/ws-serve.err" &
-    ws_pid=$!
+    spawn_serve "tcp:127.0.0.1:0" "$trace" "$tmp/ws-serve.log"
     i=0
     while [ "$i" -lt 400 ]; do
       grep -q '^listening ' "$tmp/ws-serve.log" 2>/dev/null && break
@@ -240,8 +286,7 @@ else
     else
       no "ws: startup" "$(cat "$tmp/ws-serve.err" 2>/dev/null)"
     fi
-    kill "$ws_pid" 2>/dev/null || true
-    wait "$ws_pid" 2>/dev/null || true
+    stop_serve
   fi
 fi
 
