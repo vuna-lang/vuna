@@ -10,13 +10,11 @@ import Base.Effect.Console as EffConsole
 import Base.Data.Nat as Nat
 
 loop : Nat -> Int -> Eff [ConsoleOp] Int
-loop n acc =
-  case n of
-    Zero => pure acc
-    Succ m =>
-      do
-        _ <- consolePrint ""
-        loop m (acc + 1)
+loop Zero acc = pure acc
+loop (Succ m) acc =
+  do
+    _ <- consolePrint ""
+    loop m (acc + 1)
 
 main : Eff [ConsoleOp] Int
 main = loop (natFromInt 5000) 0

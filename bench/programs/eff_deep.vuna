@@ -7,13 +7,11 @@ data TickOp : Type -> Type where
   Tick : Int -> TickOp Int
 
 sum : Nat -> Eff [TickOp] Int
-sum n =
-  case n of
-    Zero => perform (Tick 1)
-    Succ m =>
-      do
-        y <- sum m
-        pure (y + 1)
+sum Zero = perform (Tick 1)
+sum (Succ m) =
+  do
+    y <- sum m
+    pure (y + 1)
 
 main : Int
 main =

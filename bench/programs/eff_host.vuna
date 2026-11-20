@@ -8,29 +8,25 @@ data TickOp : Type -> Type where
   Tick : Int -> TickOp Int
 
 loop : Nat -> Eff [ConsoleOp@mock] Int
-loop n =
-  case n of
-    Zero => pure 0
-    Succ m =>
-      do
-        _ <- consolePrint@mock "x"
-        y <- loop m
-        pure (y + 1)
+loop Zero = pure 0
+loop (Succ m) =
+  do
+    _ <- consolePrint@mock "x"
+    y <- loop m
+    pure (y + 1)
 
 ret : Int -> Eff [TickOp] Int
 ret a = pure a
 
 opH : (i : Type) -> (o : ConsoleOp i) -> (Eff.resIdx i o -> Eff [TickOp] Int) -> Eff [TickOp] Int
-opH i op k =
-  case op of
-    Print s =>
-      do
-        _ <- perform (Tick 1)
-        k (natFromInt 0)
-    EPrint s =>
-      do
-        _ <- perform (Tick 1)
-        k 0
+opH i (Print s) k =
+  do
+    _ <- perform (Tick 1)
+    k (natFromInt 0)
+opH i (EPrint s) k =
+  do
+    _ <- perform (Tick 1)
+    k 0
 
 main : Int
 main =

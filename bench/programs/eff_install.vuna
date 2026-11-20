@@ -16,14 +16,12 @@ once =
   }
 
 loop : Nat -> Eff [] Int
-loop n =
-  case n of
-    Zero => pure 0
-    Succ m =>
-      do
-        x <- once
-        y <- loop m
-        pure (x + y)
+loop Zero = pure 0
+loop (Succ m) =
+  do
+    x <- once
+    y <- loop m
+    pure (x + y)
 
 main : Int
 main = runPure (loop (natFromInt 10000))

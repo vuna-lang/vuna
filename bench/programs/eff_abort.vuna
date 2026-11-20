@@ -27,13 +27,11 @@ abortOnce ref k =
     pure k
 
 loop : IORef Int -> Nat -> Eff [] Int
-loop ref n =
-  case n of
-    Zero => pure 0
-    Succ m =>
-      do
-        _ <- abortOnce ref m
-        loop ref m
+loop ref Zero = pure 0
+loop ref (Succ m) =
+  do
+    _ <- abortOnce ref m
+    loop ref m
 
 main : Int
 main =
