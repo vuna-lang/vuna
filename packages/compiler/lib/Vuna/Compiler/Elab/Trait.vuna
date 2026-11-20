@@ -1194,7 +1194,9 @@ liftFreeDictGoalsGo defName ec ty body baseIdx nGroups k groups =
     (DictGoalGroup m dom extras) :: rest =>
       let
         -- 不可由源码写出的名字（`#` 不是标识符字符），不会与用户局部 `d12` 撞名。
-        dName = "#dict${m}"
+        -- 用组序号（不是元变量 id）：名字只依赖本定义的结构，旁边新增/删除定义
+        -- 不会改变它，也不会把元变量编号写进 Core 摘要。
+        dName = "#dict${k}"
         -- 第 k 组（0-based）的**最终** binder 位置：之后每插入一只更新的字典都把它推深 1
         -- （同位置反复插入 ⇒ 新字典在旧字典外侧）。
         finalPos = baseIdx + 1 + (nGroups - 1 - k)

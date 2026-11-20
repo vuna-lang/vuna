@@ -119,7 +119,7 @@ ID 是稳定引用（`层前缀-序号`）：条目关闭即删除该行，ID �
 | EC-34 · ⚠️C | 实例搜索把「递归深度」和「候选 / via 预算」压进同一个固定 `16`（`searchInstanceIn`），耗尽报 `TC_NoInstanceFound`：合法的深 ctx / via 链被报成「缺实例」 | `Elab/Dict.vuna`（`searchInstFuel` / `tryViaDict`） | 后续 |
 | EC-35 · C | 行标签的**诊断展示**用 `showValueAt 6`（深度 6 截断）：匹配本身走 `conv`，但歧义 / 缺实例的候选列表可能显示相同文本，难以区分 | `Elab/Dict.vuna`（`labelCandText` / `labelScan`） | 后续（展示层） |
 | EC-36 · ⚠️D | 同一个类在名字空间仍有多种拼法：`dictTypeName` 用全名、`instanceName` 用短名 + sanitize；内建特化已按**方法投影 / 规范类名**查找（不再依赖登记顺序），但非内建路径仍用 `findClassByShortName` 首个命中 | `Elab/Meta.vuna`、`Elab/InstName.vuna`、`Elab/InstCoherence.vuna` | 后续（实例名改用稳定 id） |
-| EC-38 · ⚠️D | 字典注入 `liftFreeDictGoals`：binder 位置靠手推索引算术（注释自述插入顺序反过来索引会偏）；生成名仍走名字编码（`#dict<m>` 源码写不出、不会撞名，但仍不是稳定 id）。注入预算已按项规模派生，`injectDictGoFuel` / `rewriteTaggedSpineFuel` 的耗尽分支不可达 | `Elab/Trait.vuna`（`liftFreeDictGoals` / `injectBudgetFor` / `altBudgetFor` / `spineSize`） | 后续（跟随名字 → id） |
+| EC-38 · ⚠️D | 字典注入 `liftFreeDictGoals`：binder 位置靠手推索引算术（注释自述插入顺序反过来索引会偏）。生成名已是按定义结构派生的 `#dict<组序号>`（不随无关定义的元变量编号漂移），不再把元变量 id 写进 Core 摘要。注入预算已按项规模派生，`injectDictGoFuel` / `rewriteTaggedSpineFuel` 的耗尽分支不可达 | `Elab/Trait.vuna`（`liftFreeDictGoals` / `injectBudgetFor` / `altBudgetFor` / `spineSize`） | 后续（索引算术改为结构化定位） |
 | EC-39 · ⚠️D | 「类型层 / 擦除」有五份判据且会互相矛盾：`Usage.isTypeForming`（只沿 cod）认为 `Int -> Type` 是类型层，`Meta.isTypeLayerValue`（每个域都须是类型层）认为不是；另有 `isTypeDomain` / `isKindWithCtx` / `isFamilyKindValue` / `rigIsErased` 重复实现 | `Elab/Usage.vuna`、`Elab/Meta.vuna`、`Elab/Term/Impl.vuna` | 后续 |
 | EC-40 · C | `Elab/Types.vuna` 的 `refineValue` 不下钻 `VCase` 分支体、不处理 `VProj`（`_ => v`）⇒ 索引精化在卡住的 case / 投影里静默丢失 | `Elab/Types.vuna` | 后续 |
 
