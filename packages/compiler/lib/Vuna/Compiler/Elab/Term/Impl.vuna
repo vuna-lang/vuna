@@ -2752,29 +2752,46 @@ checkLamFuel fuel globals ctx ec ((Pair name nameSp) :: rest) body expected sp =
       forced = forceVal ec expected
     in case forced of
       VPi pname implicit rig dom clo =>
-        let
-          lvl = ctxDepth ctx
-          v = freshVarValue pname lvl
-          ctx2 = ctxBindValue name dom ctx
-          expected2 = applyClosure clo v
-        in Vuna.Compiler.Base.Common.bind (rigForLinearDomain ec sp name rig dom) (
-            \lamRig =>
-              Vuna.Compiler.Base.Common.bind (checkLamFuel (fuel - 1) globals ctx2 ec rest body expected2 sp) (
-                  \p =>
-                    case p of
-                      -- lambda 形参与定义参数同一条规则——隐式 binder 恒擦除（隐式实参由
-                      -- 精化器插入，运行时不传），显式 binder 只有域是宇宙才擦除。
-                      -- 线性域的 binder 必须是 1；捕获外层线性值的 λ 不能逃逸。
-                      Pair inner ec1 =>
-                        let
-                          inner2 = if isOpaqueRuntimeTyIn ec1 ctx dom then wrapOpaqueUses [0] inner else inner
-                          -- 捕获线性值的 λ 不在这里直接拒绝——标记 binder 名，由 `Elab.Usage`
-                          -- 检查它是否落在「立即按 quantity 1 消费」的位置；不落则报
-                          -- TC_LinearCaptureEscapes（诊断码不变）。
-                          binderName = if ctxHasLinear ec ctx then if termHasOuterLinear ec ctx2 inner then linClosureName sp (ctxDepth ctx) name else name else name
-                        in OkC (Pair (TLam binderName lamRig (lamTyOf (Just (quote lvl dom)) (Just (quote (lvl + 1) expected2))) nameSp inner2) ec1)
-                )
-          )
+        if implicit then
+          if isDictDomain ec dom || isImplicitDomain ctx ec dom then
+            let
+              -- 隐式 binder 不占源码 λ 形参：与 `checkBinders` 同一规则自动引入。
+              -- 否则 `\x => …` 在 `{a : Type} -> …` 下会把 `x` 绑到隐含的类型参数上。
+              lvl = ctxDepth ctx
+              v = freshVarValue pname lvl
+              ctx2 = ctxBindValue pname dom ctx
+              expected2 = applyClosure clo v
+            in Vuna.Compiler.Base.Common.bind (checkLamFuel (fuel - 1) globals ctx2 ec (Pair name nameSp :: rest) body expected2 sp) (
+                \p =>
+                  case p of
+                    Pair inner ec1 => OkC (Pair (TLam pname rig (lamTyOf (Just (quote lvl dom)) (Just (quote (lvl + 1) expected2))) spanEmpty inner) ec1)
+              )
+          else
+            tcErr0 sp ImplicitParamKind
+        else
+          let
+            lvl = ctxDepth ctx
+            v = freshVarValue pname lvl
+            ctx2 = ctxBindValue name dom ctx
+            expected2 = applyClosure clo v
+          in Vuna.Compiler.Base.Common.bind (rigForLinearDomain ec sp name rig dom) (
+              \lamRig =>
+                Vuna.Compiler.Base.Common.bind (checkLamFuel (fuel - 1) globals ctx2 ec rest body expected2 sp) (
+                    \p =>
+                      case p of
+                        -- lambda 形参与定义参数同一条规则——隐式 binder 恒擦除（隐式实参由
+                        -- 精化器插入，运行时不传），显式 binder 只有域是宇宙才擦除。
+                        -- 线性域的 binder 必须是 1；捕获外层线性值的 λ 不能逃逸。
+                        Pair inner ec1 =>
+                          let
+                            inner2 = if isOpaqueRuntimeTyIn ec1 ctx dom then wrapOpaqueUses [0] inner else inner
+                            -- 捕获线性值的 λ 不在这里直接拒绝——标记 binder 名，由 `Elab.Usage`
+                            -- 检查它是否落在「立即按 quantity 1 消费」的位置；不落则报
+                            -- TC_LinearCaptureEscapes（诊断码不变）。
+                            binderName = if ctxHasLinear ec ctx then if termHasOuterLinear ec ctx2 inner then linClosureName sp (ctxDepth ctx) name else name else name
+                          in OkC (Pair (TLam binderName lamRig (lamTyOf (Just (quote lvl dom)) (Just (quote (lvl + 1) expected2))) nameSp inner2) ec1)
+                  )
+            )
       -- case 在推断位置时结果类型先是元变量；分支体是 λ 没有现成 Pi 可查。
       -- 为 domain/codomain 各建一个元变量，把期望元变量解成 Pi，再按普通 λ 检查。
       -- 仅处理空 spine 的裸元变量；非空 spine 的应用元变量维持原诊断。

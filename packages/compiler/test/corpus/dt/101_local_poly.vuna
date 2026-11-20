@@ -1,0 +1,17 @@
+-- 局部多态函数：`let` / `where` 的签名带隐式 binder 时，λ 形参不能吃掉隐式参数。
+-- 两处都在不同类型上复用同一个局部函数（多态必须真的泛化，而不是绑成单态）。
+pick : String
+pick =
+  let
+    id2 : {a : Type} -> a -> a
+    id2 x = x
+  in id2 "let" ++ "/" ++ (if id2 True then "true" else "false")
+
+tag : Int
+tag = go 2
+  where
+    go : {a : Type} -> a -> a
+    go x = x
+
+main : String
+main = pick ++ "/" ++ strFromInt tag
