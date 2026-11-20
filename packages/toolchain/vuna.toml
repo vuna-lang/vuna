@@ -14,6 +14,8 @@ vuna-compiler = "../compiler"
 vuna-http = "../http"
 vuna-plugin-kit = "../plugin-kit"
 
+# 导出面必须是入口闭包可达的模块（`checks.vuna-single-pass` 守）；只服务 dev 的测试
+# 夹具模块留在 `packages/dev/`，不要为了 dev 把它们放进产品工具链的导出面。
 [export]
 modules = [
   "Vuna.Add",
@@ -88,9 +90,6 @@ modules = [
   "Vuna.Search.Run",
   "Vuna.Search.Types",
   "Vuna.Sig",
-  "Vuna.Test.Expect",
-  "Vuna.Test.InProc",
   "Vuna.TestRunner",
-  "Vuna.Test.Session",
   "Vuna.Tool.Session",
 ]

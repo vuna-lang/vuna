@@ -69,7 +69,7 @@ fixture 用例（`CGolden` / `CError` / `CCheck` / `CLint` / `CFix`）**不 spaw
 runner 直接调用编译器/工具链的导出函数并断言返回值（细节见
 [testing.md](testing.md) 的「进程内断言」）。
 
-- **路径选择只在进程内**：增量会话（`Vuna.Test.Session`，依赖接口 + `AuxCache`）优先，
+- **路径选择只在进程内**：增量会话（`Vuna.Test.Session`，`packages/dev/lib/Vuna/Test/Session.vuna`，依赖接口 + `AuxCache`）优先，
   不可用时同进程退回全量精化。没有「回退子进程」这一步——那会把断言退回字符串匹配。
   增量会话不覆盖的只有 `warnUnusedDefsIn`，所以负例一律走全量。
 - **verdict key 只有输入摘要**（不含 env 分量），所以同一输入在不同环境共用同一裁决。

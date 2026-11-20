@@ -378,7 +378,7 @@ in
     script = ./vuna-typecheck.sh;
   };
 
-  # 编译器包必须一遍精化写全导出面（否则 check 静默跑两遍，依赖方回退全量）。
+  # 带导出面的包必须一遍精化写全包接口（否则 check 静默跑两遍，依赖方回退全量）。
   vuna-single-pass = vunaCheck {
     name = "vuna-single-pass";
     srcs = [
@@ -391,6 +391,9 @@ in
       src.pluginWeb
       src.dev
       src.base
+      src.pluginKit
+      src.toolchain
+      src.http
       src.manifest
     ];
     script = ./vuna-single-pass.sh;
