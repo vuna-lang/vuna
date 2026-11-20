@@ -264,8 +264,9 @@ binder 的**身份**在 Lowering 分配，前缀与编号渲染属后端：
   归一化（只数运行时 binder），类型面（`TLam` 槽、`TApp` 的 `Rig0` 实参、`TCon`
   族参数、telescope）原样保留；Lowering 用 `runtimeBinderAt` 读运行时变量、
   用 `annotRunTyOf` / `annotRunCalleeTy` 读运行时项的类型，CPS 的 `isEffResultTy`
-  因此仍有类型依据。擦除 binder / 实参的死语法尚未从 Core 结构里删除
-  （见 [debt.md](debt.md) IR-27）。
+  因此仍有类型依据。擦除 binder / 类型实参**就是类型面**，有意保留；IR 侧
+  `IrLam` 不再携带擦除占位，Lowering 的节点类型槽都填成 `Just`（未知落
+  `IrTyOpaque`）。CPS 机器 pass 仍会清空节点类型（IR-08）。
 - binder 类型走**两种口径**：`annotTyOfTotal` 保留结构（`a -> b` 是 `Opaque -> Opaque`，
   不是整体未知），写入 `IrBinder`；OCaml 的 lambda 注解另由 `irTyAnnotatable` 过滤，
   **含 `IrTyOpaque` / 类型变量槽的类型不写进 OCaml**（那会固定多态性），因此 IR 侧信息
