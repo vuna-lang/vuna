@@ -518,39 +518,6 @@ termGlobalNames (TBool b) = []
 termGlobalNames (TIf c th el) =
   append (termGlobalNames c) (append (termGlobalNames th) (termGlobalNames el))
 
--- | 从 term 出发沿定义引用做可达性扫描：是否真的触达浮点字面量/浮点内建。
--- interp/REPL 的浮点求值 guard 用它（不能只看程序里“有没有 Base.Data.Float 定义”，否则
--- `import Base` 的正常程序会被误拒）；工作列表 + fuel 限深（不做 visited：defs 环由
--- fuel 兜底）。
-export termReachesFloat : List (Pair String Term) -> List String -> Term -> Bool
-termReachesFloat defs names t = reachesTermsFuel 4096 defs names [t]
-
--- | 可达性扫描的工作列表步进：命中浮点即真，否则把该项引用的全局定义体加入待查
--- 列表继续；fuel 耗尽返回假，环由 fuel 兜底。
-reachesTermsFuel : Int -> List (Pair String Term) -> List String -> List Term -> Bool
-reachesTermsFuel fuel defs names [] = False
-reachesTermsFuel fuel defs names (t :: rest) =
-  if fuel <= 0 then
-    False
-  else if termUsesFloat names t then
-    True
-  else
-    reachesTermsFuel (fuel - 1) defs names (append rest (bodyTermsOf defs (termGlobalNames t)))
-
--- 全局名 → 有体定义的体（未知/axiom 跳过）。
--- | 把全局名列表解析成有体定义的定义体列表（未知/无体公理跳过）。
-bodyTermsOf : List (Pair String Term) -> List String -> List Term
-bodyTermsOf defs [] = []
-bodyTermsOf defs (n :: rest) =
-  case lookupPair n defs of
-    Just body => body :: bodyTermsOf defs rest
-    Nothing => bodyTermsOf defs rest
-
--- | 在 (名字, 项) 关联表里按名字查第一个匹配项，找不到返回 `Nothing`。
-lookupPair : String -> List (Pair String Term) -> Maybe Term
-lookupPair name [] = Nothing
-lookupPair name ((Pair n v) :: rest) = if n == name then Just v else lookupPair name rest
-
 export defLookup : String -> HashMap String Term -> Maybe Term
 defLookup name tbl = HashMap.lookup name tbl
 

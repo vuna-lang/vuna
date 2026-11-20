@@ -613,9 +613,6 @@ zonkTermFuel fuel ec depth t =
       TIf c th el => TIf (zonkTermFuel (fuel - 1) ec depth c) (zonkTermFuel (fuel - 1) ec depth th) (zonkTermFuel (fuel - 1) ec depth el)
       _ => t
 
-zonkAlt : Ec -> Int -> CaseAlt -> CaseAlt
-zonkAlt ec depth alt = zonkAltFuel 64 ec depth alt
-
 zonkAltFuel : Int -> Ec -> Int -> CaseAlt -> CaseAlt
 -- 燃料耗尽时原样返回该分支：伪造一个空名字的假分支会把「未替换」变成「结构损坏」，
 -- 而残留的元变量在 codegen 侧会以 `UnsolvedMetavarRuntime` 显式报错。
