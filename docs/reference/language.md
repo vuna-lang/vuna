@@ -452,6 +452,10 @@ import / 导出的形式表见 [frontend-syntax.md](frontend-syntax.md) §6；�
   `data Pair a b where Pair : a -> b -> Pair a b` 的 `Pair` 在类型位置是族、在值位置是
   构造子；显式 `(a : Type)` 参数处的族名（`firstTy Pair ...`）作为类型层实参可用，
   导入模块的类型名同样可用（例如 `:type Maybe` 打印 `Maybe` 的 kind）。
+- **导入面的值与构造子同名**：两者都作为重载候选，使用点按期望类型选；应用头按**结果
+  类型**选（`MkTag 1 : Int` 选返回 `Int` 的值，`: Tag` 选返回 `Tag` 的构造子）。只有
+  构造子候选时仍按族定向（`Nil`/`Cons` 的 `List`/`Row` 消歧）。无法唯一命中时报
+  `TC_AmbiguousName`（推断位置一律报歧义，不默认选一方）。
 - **不同命名空间不互相遮蔽**：本模块声明的**类型**名不抢走同名的导入**值**（
   `import Values (token)` + 本地 `data token : Type`：值位置的 `token` 是导入的 Int 值，
   类型位置的 `token` 是本地类型）；本模块的值定义也不进类型命名空间（除非走上面的类型层

@@ -45,7 +45,7 @@ ID 是稳定引用（`层前缀-序号`），改动时保留编号，删掉实�
 | LD-05 | `Expand.internalRef` + `Resolve` 的 `!` 前缀 | A | 隐藏原语走「非法标识符」通道 | 已清（剥前缀后校验 `findIntrinsic`） |
 | LD-06 | `Flatten.vuna` 的模块加载 | A | 生产路径残留 `dbg!` 探针 | 已清 |
 | LD-07 | `Flatten.vuna` 的 unused-import 判定 | C | 判据只认导出 target，漏「只为 fixity 而 import」；删除 span 假设独占一行 | 开放 |
-| LD-08 | `Resolve.vuna` 的 `ctorPairTargets` | A | 构造子候选非空时整组丢弃值条目 | 开放 |
+| LD-08 | `Resolve.vuna` 的 `ctorPairTargets` | A | 构造子候选非空时整组丢弃值条目 | 已清（值与构造子同为重载候选，使用点按期望/结果类型选；应用头也解析重载名；`modules/107`–`111`） |
 | LD-09 | `Modules.vuna` 的 `unifyEntryPairs` | A | 用户可见歧义被报成 `icInternal` | 已清（`RN_AmbiguousName` + `pkg_err/65_ambiguous_reexport`） |
 | LD-10 | `Resolve.vuna` 的解析特判 | C | `Nil/Cons/::` 特判、`>>=`→`bind` 双名回落、`Type` 头不解析实参、隐式 binder 只认 String 域 | 开放 |
 | LD-11 | `Resolve.vuna` 的内部名旁路 | B | `@vuna@…` 与「属于编译器包」直接放行 | 开放 |
