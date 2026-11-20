@@ -155,6 +155,16 @@ envpLabel = "rt_envp"
 export hostStatusLabel : String
 hostStatusLabel = "rt_host_status"
 
+-- | 正在等待的子进程 pid（0 = 没有）：`cmd_run_sh` / `spawn_exec` 在 fork 之后写、`wait`
+--   返回之后清 0。`sigalrm` 据此连带收掉子进程组。
+export childPidLabel : String
+childPidLabel = "rt_child_pid"
+
+-- | `VUNA_NATIVE_TIMEOUT_MS` 已生效（定时器已装）：`runIn` / `spawn` 的子进程在 `execve`
+--   前 `setpgid(0, 0)` 自成一组，超时才能整组收掉；未生效时子进程留在父进程组。
+export timeoutArmedLabel : String
+timeoutArmedLabel = "rt_timeout_armed"
+
 -- | `getcwd` / `readlink` 的路径缓冲。
 export pathBufLabel : String
 pathBufLabel = "rt_path_buf"
@@ -211,7 +221,7 @@ readBufLabel = "rt_read_buf"
 export nativeBss : List NativeBss
 nativeBss =
   append
-    [NativeBss nativeHeapSegLabel 32 8, NativeBss nativeHeapLabel nativeHeapBytes 16, NativeBss nativeHeapEndLabel 0 0, NativeBss nativeHeapPtrLabel 8 8, NativeBss nativeArenaEndLabel 8 8, NativeBss nativeSegsLabel 8 8, NativeBss nativeCurSegLabel 8 8, NativeBss nativeFreeTableLabel nativeFreeTableBytes 8, NativeBss nativeHugeFreeLabel 8 8, NativeBss stackTopLabel 8 8, NativeBss stackLimitLabel 8 8, NativeBss argcLabel 8 8, NativeBss argvLabel 8 8, NativeBss envpLabel 8 8, NativeBss hostStatusLabel 8 8, NativeBss pathBufLabel 4096 8, NativeBss tsLabel 16 8, NativeBss termiosLabel 64 8, NativeBss cleanupHeadLabel 8 8, NativeBss pathBuf2Label 4096 8, NativeBss statBufLabel 256 8, NativeBss dirBufLabel 32768 8, NativeBss dirNamesLabel 32256 8, NativeBss readBufLabel 8388608 8, NativeBss cmdBufLabel 65536 8, NativeBss cwdBufLabel 4096 8, NativeBss spawnArgvLabel 2048 8, NativeBss spawnBufLabel 65536 8, NativeBss shArgvLabel 32 8, NativeBss memLimitLabel 8 8, NativeBss cpuCountLabel 8 8, NativeBss sigActLabel 32 8, NativeBss itimerLabel 32 8, NativeBss cpuCurLabel 128 16, NativeBss cpuNewLabel 128 16, NativeBss cgBufLabel 64 8, NativeBss envChildLabel 8192 8]
+    [NativeBss nativeHeapSegLabel 32 8, NativeBss nativeHeapLabel nativeHeapBytes 16, NativeBss nativeHeapEndLabel 0 0, NativeBss nativeHeapPtrLabel 8 8, NativeBss nativeArenaEndLabel 8 8, NativeBss nativeSegsLabel 8 8, NativeBss nativeCurSegLabel 8 8, NativeBss nativeFreeTableLabel nativeFreeTableBytes 8, NativeBss nativeHugeFreeLabel 8 8, NativeBss stackTopLabel 8 8, NativeBss stackLimitLabel 8 8, NativeBss argcLabel 8 8, NativeBss argvLabel 8 8, NativeBss envpLabel 8 8, NativeBss hostStatusLabel 8 8, NativeBss childPidLabel 8 8, NativeBss timeoutArmedLabel 8 8, NativeBss pathBufLabel 4096 8, NativeBss tsLabel 16 8, NativeBss termiosLabel 64 8, NativeBss cleanupHeadLabel 8 8, NativeBss pathBuf2Label 4096 8, NativeBss statBufLabel 256 8, NativeBss dirBufLabel 32768 8, NativeBss dirNamesLabel 32256 8, NativeBss readBufLabel 8388608 8, NativeBss cmdBufLabel 65536 8, NativeBss cwdBufLabel 4096 8, NativeBss spawnArgvLabel 2048 8, NativeBss spawnBufLabel 65536 8, NativeBss shArgvLabel 32 8, NativeBss memLimitLabel 8 8, NativeBss cpuCountLabel 8 8, NativeBss sigActLabel 32 8, NativeBss itimerLabel 32 8, NativeBss cpuCurLabel 128 16, NativeBss cpuNewLabel 128 16, NativeBss cgBufLabel 64 8, NativeBss envChildLabel 8192 8]
     nativeGcBss
 
 -- ---------------------------------------------------------------
@@ -1170,28 +1180,31 @@ dirCloseFn = rtFunc "dir_close" 0 [IMov (OpReg Rax) (OpImm 3), ISyscall, IMov (O
 -- ---------------------------------------------------------------
 -- | `rdi` = C dir、`rsi` = C 命令行 → rax = 退出码（-1 = 失败，状态已写）。
 --   语义对齐 `dtp_runIn`：`chdir(dir)` → `/bin/sh -c cmd` → 恢复 cwd。
+--   装了总超时时子进程先 `setpgid(0, 0)` 自成一组（父进程把 pid 记进 `rt_child_pid`），
+--   `sigalrm` 才能连带收掉它起的后台作业；未装时子进程留在父进程组。
 cmdRunShFn : NativeFunc
 cmdRunShFn =
   rtFunc
     "cmd_run_sh"
     32
-    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IMov (OpMem Rbp (nativeSlotOff 1)) (OpReg Rsi), IBinReg "xor" Rax (OpReg Rax), IMov (OpRip hostStatusLabel) (OpReg Rax), ILea Rdi cwdBufLabel, IMov (OpReg Rsi) (OpImm 4096), IMov (OpReg Rax) (OpImm 79), ISyscall, IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 0)), IMov (OpReg Rax) (OpImm 80), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_sh_fail", ILea Rcx (nativeDataLabel "sh_path"), ILea Rdx shArgvLabel, IMov (OpMem Rdx 0) (OpReg Rcx), ILea Rcx (nativeDataLabel "sh_dash_c"), IMov (OpMem Rdx 8) (OpReg Rcx), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 1)), IMov (OpMem Rdx 16) (OpReg Rcx), IMov (OpMem Rdx 24) (OpImm 0), IMov (OpReg Rax) (OpImm 57), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_sh_fork_fail", IJcc "je" ".Lrt_sh_child", IMov (OpReg Rdi) (OpReg Rax), ILea Rsi statBufLabel, IBinReg "xor" Rdx (OpReg Rdx), IBinReg "xor" R10 (OpReg R10), IMov (OpReg Rax) (OpImm 61), ISyscall, ILea Rdi cwdBufLabel, IMov (OpReg Rax) (OpImm 80), ISyscall, ILea Rcx statBufLabel, IMov (OpReg Rax) (OpMem Rcx 0), IMov (OpReg Rcx) (OpReg Rax), IBinReg "and" Rcx (OpImm 127), ICmp (OpReg Rcx) (OpImm 0), IJcc "jne" ".Lrt_sh_signaled", IBinReg "shr" Rax (OpImm 8), IBinReg "and" Rax (OpImm 255), IRet, ILabel ".Lrt_sh_signaled", IMov (OpReg Rax) (OpImm 1), IRet, ILabel ".Lrt_sh_child", ICall (nativeRtLabel "env_filter"), IMov (OpReg Rdx) (OpReg Rax), ILea Rdi (nativeDataLabel "sh_path"), ILea Rsi shArgvLabel, IMov (OpReg Rax) (OpImm 59), ISyscall, IMov (OpReg Rdi) (OpImm 127), IMov (OpReg Rax) (OpImm 60), ISyscall, ILabel ".Lrt_sh_fork_fail", IMov (OpMem Rbp (nativeSlotOff 2)) (OpReg Rax), ILea Rdi cwdBufLabel, IMov (OpReg Rax) (OpImm 80), ISyscall, IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 2)), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm (0 - 1)), IRet, ILabel ".Lrt_sh_fail", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm (0 - 1))]
+    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IMov (OpMem Rbp (nativeSlotOff 1)) (OpReg Rsi), IBinReg "xor" Rax (OpReg Rax), IMov (OpRip hostStatusLabel) (OpReg Rax), ILea Rdi cwdBufLabel, IMov (OpReg Rsi) (OpImm 4096), IMov (OpReg Rax) (OpImm 79), ISyscall, IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 0)), IMov (OpReg Rax) (OpImm 80), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_sh_fail", ILea Rcx (nativeDataLabel "sh_path"), ILea Rdx shArgvLabel, IMov (OpMem Rdx 0) (OpReg Rcx), ILea Rcx (nativeDataLabel "sh_dash_c"), IMov (OpMem Rdx 8) (OpReg Rcx), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 1)), IMov (OpMem Rdx 16) (OpReg Rcx), IMov (OpMem Rdx 24) (OpImm 0), IMov (OpReg Rax) (OpImm 57), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_sh_fork_fail", IJcc "je" ".Lrt_sh_child", IMov (OpRip childPidLabel) (OpReg Rax), IMov (OpReg Rdi) (OpReg Rax), ILea Rsi statBufLabel, IBinReg "xor" Rdx (OpReg Rdx), IBinReg "xor" R10 (OpReg R10), IMov (OpReg Rax) (OpImm 61), ISyscall, IBinReg "xor" Rcx (OpReg Rcx), IMov (OpRip childPidLabel) (OpReg Rcx), ILea Rdi cwdBufLabel, IMov (OpReg Rax) (OpImm 80), ISyscall, ILea Rcx statBufLabel, IMov (OpReg Rax) (OpMem Rcx 0), IMov (OpReg Rcx) (OpReg Rax), IBinReg "and" Rcx (OpImm 127), ICmp (OpReg Rcx) (OpImm 0), IJcc "jne" ".Lrt_sh_signaled", IBinReg "shr" Rax (OpImm 8), IBinReg "and" Rax (OpImm 255), IRet, ILabel ".Lrt_sh_signaled", IMov (OpReg Rax) (OpImm 1), IRet, ILabel ".Lrt_sh_child", IMov (OpReg Rax) (OpRip timeoutArmedLabel), ITest Rax Rax, IJcc "jz" ".Lrt_sh_pg", IBinReg "xor" Rdi (OpReg Rdi), IBinReg "xor" Rsi (OpReg Rsi), IMov (OpReg Rax) (OpImm 109), ISyscall, ILabel ".Lrt_sh_pg", ICall (nativeRtLabel "env_filter"), IMov (OpReg Rdx) (OpReg Rax), ILea Rdi (nativeDataLabel "sh_path"), ILea Rsi shArgvLabel, IMov (OpReg Rax) (OpImm 59), ISyscall, IMov (OpReg Rdi) (OpImm 127), IMov (OpReg Rax) (OpImm 60), ISyscall, ILabel ".Lrt_sh_fork_fail", IMov (OpMem Rbp (nativeSlotOff 2)) (OpReg Rax), ILea Rdi cwdBufLabel, IMov (OpReg Rax) (OpImm 80), ISyscall, IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 2)), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm (0 - 1)), IRet, ILabel ".Lrt_sh_fail", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm (0 - 1))]
 
 -- | `rdi` = argv 指针数组（argv[0] 必须是本进程路径）、`rsi` = argc → rax = pid。
+--   装了总超时时子进程先 `setpgid(0, 0)`；pid 记进 `rt_child_pid`，`wait_pid` 负责清 0。
 spawnExecFn : NativeFunc
 spawnExecFn =
   rtFunc
     "spawn_exec"
     16
-    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IMov (OpMem Rbp (nativeSlotOff 1)) (OpReg Rsi), IMov (OpReg Rax) (OpImm 57), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_sp_fail", IJcc "je" ".Lrt_sp_child", IRet, ILabel ".Lrt_sp_child", ICall (nativeRtLabel "env_filter"), IMov (OpReg Rdx) (OpReg Rax), ILea Rdi (nativeDataLabel "proc_self_exe"), IMov (OpReg Rsi) (OpMem Rbp (nativeSlotOff 0)), IMov (OpReg Rax) (OpImm 59), ISyscall, IMov (OpReg Rdi) (OpImm 127), IMov (OpReg Rax) (OpImm 60), ISyscall, ILabel ".Lrt_sp_fail", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm (0 - 1))]
+    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IMov (OpMem Rbp (nativeSlotOff 1)) (OpReg Rsi), IMov (OpReg Rax) (OpImm 57), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_sp_fail", IJcc "je" ".Lrt_sp_child", IMov (OpRip childPidLabel) (OpReg Rax), IRet, ILabel ".Lrt_sp_child", IMov (OpReg Rax) (OpRip timeoutArmedLabel), ITest Rax Rax, IJcc "jz" ".Lrt_sp_pg", IBinReg "xor" Rdi (OpReg Rdi), IBinReg "xor" Rsi (OpReg Rsi), IMov (OpReg Rax) (OpImm 109), ISyscall, ILabel ".Lrt_sp_pg", ICall (nativeRtLabel "env_filter"), IMov (OpReg Rdx) (OpReg Rax), ILea Rdi (nativeDataLabel "proc_self_exe"), IMov (OpReg Rsi) (OpMem Rbp (nativeSlotOff 0)), IMov (OpReg Rax) (OpImm 59), ISyscall, IMov (OpReg Rdi) (OpImm 127), IMov (OpReg Rax) (OpImm 60), ISyscall, ILabel ".Lrt_sp_fail", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm (0 - 1))]
 
--- | `rdi` = pid → rax = 退出码（被信号杀死按 1；失败写状态槽）。
+-- | `rdi` = pid → rax = 退出码（被信号杀死按 1；失败写状态槽）。返回前清 `rt_child_pid`。
 waitPidFn : NativeFunc
 waitPidFn =
   rtFunc
     "wait_pid"
     16
-    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IBinReg "xor" Rax (OpReg Rax), IMov (OpRip hostStatusLabel) (OpReg Rax), ILea Rsi statBufLabel, IBinReg "xor" Rdx (OpReg Rdx), IBinReg "xor" R10 (OpReg R10), IMov (OpReg Rax) (OpImm 61), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_wp_fail", ILea Rcx statBufLabel, IMov (OpReg Rax) (OpMem Rcx 0), IMov (OpReg Rcx) (OpReg Rax), IBinReg "and" Rcx (OpImm 127), ICmp (OpReg Rcx) (OpImm 0), IJcc "jne" ".Lrt_wp_signaled", IBinReg "shr" Rax (OpImm 8), IBinReg "and" Rax (OpImm 255), IRet, ILabel ".Lrt_wp_signaled", IMov (OpReg Rax) (OpImm 1), IRet, ILabel ".Lrt_wp_fail", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm 1)]
+    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IBinReg "xor" Rax (OpReg Rax), IMov (OpRip hostStatusLabel) (OpReg Rax), ILea Rsi statBufLabel, IBinReg "xor" Rdx (OpReg Rdx), IBinReg "xor" R10 (OpReg R10), IMov (OpReg Rax) (OpImm 61), ISyscall, IBinReg "xor" Rcx (OpReg Rcx), IMov (OpRip childPidLabel) (OpReg Rcx), ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_wp_fail", ILea Rcx statBufLabel, IMov (OpReg Rax) (OpMem Rcx 0), IMov (OpReg Rcx) (OpReg Rax), IBinReg "and" Rcx (OpImm 127), ICmp (OpReg Rcx) (OpImm 0), IJcc "jne" ".Lrt_wp_signaled", IBinReg "shr" Rax (OpImm 8), IBinReg "and" Rax (OpImm 255), IRet, ILabel ".Lrt_wp_signaled", IMov (OpReg Rax) (OpImm 1), IRet, ILabel ".Lrt_wp_fail", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm 1)]
 
 -- | `rdi` = 退出码：真实退出进程（不返回）。
 exitWithFn : NativeFunc
@@ -1252,24 +1265,29 @@ initCpusFn =
     [IBinReg "xor" Rdi (OpReg Rdi), IMov (OpReg Rsi) (OpImm 128), ILea Rdx cpuCurLabel, IMov (OpReg Rax) (OpImm 204), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_ic_done", ILea R8 cpuCurLabel, IBinReg "xor" R11 (OpReg R11), IBinReg "xor" R9 (OpReg R9), ILabel ".Lrt_ic_cnt_byte", IMovzx R10 (OpMemX R8 R9 0), IBinReg "xor" Rcx (OpReg Rcx), ILabel ".Lrt_ic_cnt_bit", IBinReg "shr" R10 (OpImm 1), IJcc "jnc" ".Lrt_ic_cnt_next", IBinReg "add" R11 (OpImm 1), ILabel ".Lrt_ic_cnt_next", IBinReg "add" Rcx (OpImm 1), ICmp (OpReg Rcx) (OpImm 8), IJcc "jl" ".Lrt_ic_cnt_bit", IBinReg "add" R9 (OpImm 1), ICmp (OpReg R9) (OpImm 128), IJcc "jl" ".Lrt_ic_cnt_byte", ITest R11 R11, IJcc "jz" ".Lrt_ic_done", IMov (OpRip cpuCountLabel) (OpReg R11), ILea Rdi (nativeDataLabel "env_cpus"), ICall (nativeRtLabel "env_lookup"), ITest Rax Rax, IJcc "jz" ".Lrt_ic_auto", IMovzx Rdx (OpMem Rax 0), ICmp (OpReg Rdx) (OpImm 48), IJcc "jne" ".Lrt_ic_parse", IMovzx Rdx (OpMem Rax 1), ITest Rdx Rdx, IJcc "jz" ".Lrt_ic_unlimited", ILabel ".Lrt_ic_parse", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "parse_u64"), ITest Rdx Rdx, IJcc "jz" ".Lrt_ic_auto", ITest Rax Rax, IJcc "jz" ".Lrt_ic_unlimited", IMov (OpReg R10) (OpReg Rax), IJmp ".Lrt_ic_apply", ILabel ".Lrt_ic_auto", IMov (OpReg R10) (OpReg R11), ICmp (OpReg R11) (OpImm 1), IJcc "jle" ".Lrt_ic_done", ICall (nativeRtLabel "cgroup_cpus"), ITest Rax Rax, IJcc "jz" ".Lrt_ic_apply", ICmp (OpReg Rax) (OpReg R10), IJcc "jae" ".Lrt_ic_apply", IMov (OpReg R10) (OpReg Rax), ILabel ".Lrt_ic_apply", IMov (OpRip cpuCountLabel) (OpReg R10), ICmp (OpReg R10) (OpReg R11), IJcc "jae" ".Lrt_ic_done", IBinReg "xor" Rax (OpReg Rax), IBinReg "xor" R11 (OpReg R11), ILea R8 cpuCurLabel, ILea R9 cpuNewLabel, ILabel ".Lrt_ic_sel", ICmp (OpReg R11) (OpReg R10), IJcc "jae" ".Lrt_ic_sel_done", ICmp (OpReg Rax) (OpImm 1024), IJcc "jae" ".Lrt_ic_sel_done", IMov (OpReg Rdx) (OpReg Rax), IBinReg "shr" Rdx (OpImm 3), IMov (OpReg Rcx) (OpReg Rax), IBinReg "and" Rcx (OpImm 7), IMovzx Rsi (OpMemX R8 Rdx 0), IBinReg "shr" Rsi (OpReg Rcx), IBinReg "and" Rsi (OpImm 1), ITest Rsi Rsi, IJcc "jz" ".Lrt_ic_sel_next", IMovzx Rdi (OpMemX R9 Rdx 0), IMov (OpReg Rsi) (OpImm 1), IBinReg "shl" Rsi (OpReg Rcx), IBinReg "or" Rdi (OpReg Rsi), IMovByteRegOp (OpMemX R9 Rdx 0) Rdi, IBinReg "add" R11 (OpImm 1), ILabel ".Lrt_ic_sel_next", IBinReg "add" Rax (OpImm 1), IJmp ".Lrt_ic_sel", ILabel ".Lrt_ic_sel_done", IBinReg "xor" Rdi (OpReg Rdi), IMov (OpReg Rsi) (OpImm 128), ILea Rdx cpuNewLabel, IMov (OpReg Rax) (OpImm 203), ISyscall, IRet, ILabel ".Lrt_ic_unlimited", IMov (OpRip cpuCountLabel) (OpReg R11), ILabel ".Lrt_ic_done", IRet]
 
 -- | `VUNA_NATIVE_TIMEOUT_MS` → `setitimer(ITIMER_REAL)` + SIGALRM handler。
---   到点由 `rt_sigalrm` 写 `timeout exceeded` 并 exit 2（async-signal-safe：只 write/exit）。
+--   装好之后把 `rt_timeout_armed` 置 1：`runIn` / `spawn` 的子进程据此自成进程组。
+--   到点由 `rt_sigalrm` 收掉子进程组、写 `timeout exceeded` 并 exit 2
+--   （async-signal-safe：只 getpgid/kill/write/exit）。
 initTimeoutFn : NativeFunc
 initTimeoutFn =
   rtRawFunc
     "init_timeout"
-    [ILea Rdi (nativeDataLabel "env_timeout"), ICall (nativeRtLabel "env_lookup"), ITest Rax Rax, IJcc "jz" ".Lrt_it_done", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "parse_u64"), ITest Rdx Rdx, IJcc "jz" ".Lrt_it_done", ITest Rax Rax, IJcc "jz" ".Lrt_it_done", IBinReg "xor" Rdx (OpReg Rdx), IMov (OpReg Rcx) (OpImm 1000), IDivUnsigned Rcx, ILea R10 itimerLabel, IMov (OpMem R10 0) (OpImm 0), IMov (OpMem R10 8) (OpImm 0), IMov (OpMem R10 16) (OpReg Rax), IBinReg "imul" Rdx (OpImm 1000), IMov (OpMem R10 24) (OpReg Rdx), ILea R10 sigActLabel, ILea Rax (nativeRtLabel "sigalrm"), IMov (OpMem R10 0) (OpReg Rax), IMov (OpReg Rax) (OpImm 67108864), IMov (OpMem R10 8) (OpReg Rax), ILea Rax (nativeRtLabel "sigreturn_stub"), IMov (OpMem R10 16) (OpReg Rax), IMov (OpMem R10 24) (OpImm 0), IMov (OpReg Rdi) (OpImm 14), IMov (OpReg Rsi) (OpReg R10), IBinReg "xor" Rdx (OpReg Rdx), IMov (OpReg R10) (OpImm 8), IMov (OpReg Rax) (OpImm 13), ISyscall, IBinReg "xor" Rdi (OpReg Rdi), ILea Rsi itimerLabel, IBinReg "xor" Rdx (OpReg Rdx), IMov (OpReg Rax) (OpImm 38), ISyscall, ILabel ".Lrt_it_done", IRet]
+    [ILea Rdi (nativeDataLabel "env_timeout"), ICall (nativeRtLabel "env_lookup"), ITest Rax Rax, IJcc "jz" ".Lrt_it_done", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "parse_u64"), ITest Rdx Rdx, IJcc "jz" ".Lrt_it_done", ITest Rax Rax, IJcc "jz" ".Lrt_it_done", IBinReg "xor" Rdx (OpReg Rdx), IMov (OpReg Rcx) (OpImm 1000), IDivUnsigned Rcx, ILea R10 itimerLabel, IMov (OpMem R10 0) (OpImm 0), IMov (OpMem R10 8) (OpImm 0), IMov (OpMem R10 16) (OpReg Rax), IBinReg "imul" Rdx (OpImm 1000), IMov (OpMem R10 24) (OpReg Rdx), ILea R10 sigActLabel, ILea Rax (nativeRtLabel "sigalrm"), IMov (OpMem R10 0) (OpReg Rax), IMov (OpReg Rax) (OpImm 67108864), IMov (OpMem R10 8) (OpReg Rax), ILea Rax (nativeRtLabel "sigreturn_stub"), IMov (OpMem R10 16) (OpReg Rax), IMov (OpMem R10 24) (OpImm 0), IMov (OpReg Rdi) (OpImm 14), IMov (OpReg Rsi) (OpReg R10), IBinReg "xor" Rdx (OpReg Rdx), IMov (OpReg R10) (OpImm 8), IMov (OpReg Rax) (OpImm 13), ISyscall, IBinReg "xor" Rdi (OpReg Rdi), ILea Rsi itimerLabel, IBinReg "xor" Rdx (OpReg Rdx), IMov (OpReg Rax) (OpImm 38), ISyscall, IMov (OpReg Rax) (OpImm 1), IMov (OpRip timeoutArmedLabel) (OpReg Rax), ILabel ".Lrt_it_done", IRet]
 
 -- | SIGALRM 的 restorer：`rt_sigreturn`（静态无 libc 的必备桩；handler 直接 exit，
 --   正常不会走到这里）。
 sigreturnStubFn : NativeFunc
 sigreturnStubFn = rtRawFunc "sigreturn_stub" [IMov (OpReg Rax) (OpImm 15), ISyscall]
 
--- | SIGALRM handler：写固定文本 + exit 2。只做 async-signal-safe 的事，不分配。
+-- | SIGALRM handler：收掉在跑的子进程组 → 写固定文本 → exit 2。
+--   只做 async-signal-safe 的事（getpgid / kill / write / exit_group），不分配。
+--   `getpgid(child) == child` 才 `kill(-child)`（整组）；不等说明子进程还没 `setpgid`
+--   成功或已换组，只杀它自己——否则 `kill(-pgid)` 会打到父进程自己的组。
 sigalrmFn : NativeFunc
 sigalrmFn =
   rtRawFunc
     "sigalrm"
-    [IMov (OpReg Rax) (OpImm 1), IMov (OpReg Rdi) (OpImm 2), ILea Rsi (nativeDataLabel "timeout"), IMov (OpReg Rdx) (OpImm (strLength timeoutMessage)), ISyscall, IMov (OpReg Rax) (OpImm 60), IMov (OpReg Rdi) (OpImm 2), ISyscall]
+    [IMov (OpReg R9) (OpRip childPidLabel), ITest R9 R9, IJcc "jz" ".Lrt_sa_write", IMov (OpReg Rdi) (OpReg R9), IMov (OpReg Rax) (OpImm 121), ISyscall, ICmp (OpReg Rax) (OpReg R9), IJcc "jne" ".Lrt_sa_kill_one", IMov (OpReg Rdi) (OpReg R9), INeg Rdi, IMov (OpReg Rsi) (OpImm 9), IMov (OpReg Rax) (OpImm 62), ISyscall, IJmp ".Lrt_sa_write", ILabel ".Lrt_sa_kill_one", IMov (OpReg Rdi) (OpReg R9), IMov (OpReg Rsi) (OpImm 9), IMov (OpReg Rax) (OpImm 62), ISyscall, ILabel ".Lrt_sa_write", IMov (OpReg Rax) (OpImm 1), IMov (OpReg Rdi) (OpImm 2), ILea Rsi (nativeDataLabel "timeout"), IMov (OpReg Rdx) (OpImm (strLength timeoutMessage)), ISyscall, IMov (OpReg Rax) (OpImm 60), IMov (OpReg Rdi) (OpImm 2), ISyscall]
 
 trapMemLimitFn : NativeFunc
 trapMemLimitFn =

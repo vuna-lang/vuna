@@ -77,6 +77,7 @@
 | D116 | `fmt` 在 `export import M (T(..), ...)` 上会重复展开导出项：每跑一次列表翻倍（实测 `Vuna.Cli.Spec` 的导出面从 1842 字节涨到 3650，再跑继续翻倍） | `packages/toolchain/lib/Vuna/Fmt/Decl.vuna`（import 渲染）；复现：给模块加一条含 `T(..)` 的 `export import`，连跑两次 `vuna fmt` | 后续（当前改成显式 `import` 规避） |
 
 | D119 | 记录模式（`Ctx items env refs d`）的子模式个数与记录字段数不一致时，报 `TC_CaseBranchTooFewArgs`（文案是「case branch has too few arguments for its constructor」）且**没有 span**：给 `Elab.Types.Ctx` 加第 5 个字段后，`Elab.Meta.ctxHasLinear` 里遗留的 4 子模式让整个包 check 失败，只能靠肉眼搜 `Ctx `；记录模式被降级成单构造子 case 后由 `bindCtorGo` 在 `subpats = []` 处抛错，报错点丢失了记录名与缺的字段 | `packages/compiler/lib/Vuna/Compiler/Elab/Case.vuna`（`bindCtorGo` 的 `subpats` 空分支）、`packages/compiler/lib/Vuna/Compiler/Elab/Match.vuna`（记录模式降级） | 后续（在降级点先比子模式数与字段数，报带 span 的「记录模式少 N 个字段」） |
+| D120 | native 自超时的子进程组收尾只记**一个** pid 槽（`rt_child_pid`）：并发 `processSpawn` 之后分别 `processWait` 时，先返回的 wait 会清掉另一个仍在跑的 pid，超时只能收掉最后一个的组；`fork` 到子进程 `setpgid(0,0)` 之间的窗口内到点则退化为只杀直接子进程。当前仓库没有并发 spawn 的调用方 | `packages/target-native/lib/Vuna/Target/Native/Runtime.vuna`（`childPidLabel`、`sigalrm`、`waitPidFn`） | 后续（槽改成小栈/数组，或按 pid 计数） |
 
 ## 效应统一（Eff 已贯通）
 

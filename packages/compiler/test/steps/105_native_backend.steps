@@ -254,6 +254,23 @@ run: sh -c 'VUNA_NATIVE_TIMEOUT_MS=100 "$TMPDIR/sleepy-out/bin/sleepy" 2>&1'
 exit: 2
 out-equals: vuna: runtime error: timeout exceeded
 
+# 9u2) 超时连带子进程组：`runIn` 起的 `/bin/sh` 在超时生效时 `setpgid(0, 0)` 自成一组，
+#      SIGALRM 里 `kill(-pid)` 把它的后台 `sleep` 一起收掉（不能只剩父进程 exit 2）。
+run: sh -c 'd="$TMPDIR/timeoutkill"; mkdir -p "$d/app"; printf "[package]\nname = \"timeoutkill\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Effect.Core as Eff\nimport Base.Effect.Process as EffProcess\n\nmain : Eff [ProcessOp] Int\nmain = processRunIn \".\" [\"sh\", \"-c\", \"sleep 300 & echo \$! > \$TMPDIR/child.pid; wait\"]\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/timeoutkill-out" "$d"'
+exit: 0
+run: sh -c 'VUNA_NATIVE_TIMEOUT_MS=300 "$TMPDIR/timeoutkill-out/bin/timeoutkill" 2>&1'
+exit: 2
+out-equals: vuna: runtime error: timeout exceeded
+run: sh -c 'pid=$(cat "$TMPDIR/child.pid" 2>/dev/null); [ -n "$pid" ] || { echo "no child pid recorded"; exit 1; }; st=$(awk "{print \$3}" "/proc/$pid/stat" 2>/dev/null || echo gone); [ "$st" != S ] || { echo "child $pid still running"; exit 1; }; echo swept'
+out-equals: swept
+
+# 9u3) 未装定时器时不改进程组：`runIn` 的子进程 pgid 仍等于父进程（steps 自己的 shell）的
+#      pgid，保持 Ctrl-C 的原有语义。产物还会打印 main 的返回值，取首行比较。
+run: sh -c 'd="$TMPDIR/pgid"; mkdir -p "$d/app"; printf "[package]\nname = \"pgid\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Effect.Core as Eff\nimport Base.Effect.Process as EffProcess\n\nmain : Eff [ProcessOp] Int\nmain = processRunIn \".\" [\"sh\", \"-c\", \"ps -o pgid= -p \$\$\"]\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/pgid-out" "$d"'
+exit: 0
+run: sh -c 'out=$("$TMPDIR/pgid-out/bin/pgid" | head -n 1 | tr -d " "); me=$(ps -o pgid= -p $$ | tr -d " "); [ "$out" = "$me" ] || { echo "pgid $out != $me"; exit 1; }; echo same-group'
+out-equals: same-group
+
 # 9v) 核数：`VUNA_NATIVE_CPUS=1` 把进程钉到一个可用核上（`Cpus_allowed_list` 单项）。
 run: sh -c 'VUNA_NATIVE_CPUS=1 "$TMPDIR/sleepy-out/bin/sleepy" >/dev/null & p=$!; sleep 0.3; taskset -pc $p | sed "s/.*: //" | awk -F, "{print NF}"; wait'
 out-equals: 1

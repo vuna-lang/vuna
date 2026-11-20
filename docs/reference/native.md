@@ -262,12 +262,22 @@ env，**不进 codegen**（同一 IR 的产物逐字节确定）。解析失败�
 | `VUNA_NATIVE_GC_LOG` | 关 | 存在即向 stderr 打诊断行 `gc n=<次数> live=<字节> alloc=<自上次 GC 起的分配字节>` |
 | `VUNA_NATIVE_GC_STRESS` | 关 | 存在即每次分配前都做一次完整 GC（抓漏根的调试开关，不是运行模式） |
 | `VUNA_NATIVE_CPUS` | `auto` | `auto` = min(`sched_getaffinity` 计数, cgroup v2 `cpu.max` 的 `ceil(quota/period)`)，下限 1；`N` = 取前 N 个可用核；`0` = 不动亲和性；只缩小不放大 |
-| `VUNA_NATIVE_TIMEOUT_MS` | 不限 | wall-clock 总超时；`setitimer(ITIMER_REAL)` + SIGALRM（`SA_RESTORER` + `rt_sigreturn` 桩），handler 只 `write` + exit 2；`0` = 不限 |
+| `VUNA_NATIVE_TIMEOUT_MS` | 不限 | wall-clock 总超时；`setitimer(ITIMER_REAL)` + SIGALRM（`SA_RESTORER` + `rt_sigreturn` 桩）；到点先收掉在跑的子进程组，再写 `vuna: runtime error: timeout exceeded` + exit 2；`0` = 不限 |
 
 - 预算检查在 `alloc` 里分配之前（`live + 已分配 + 本次 > limit` → 先 GC；GC 后仍超才 trap）；
   `live` 由清扫阶段累计（见 §5.2）。
 - 亲和性是进程级：`fork` / `execve` 后子进程继承；`spawn` / `runIn` 的 env 默认**剔除**
   `VUNA_NATIVE_*`（`VUNA_NATIVE_INHERIT=1` 时原样传），避免子进程继承父进程的预算。
+- 超时生效（定时器已装）时，`runIn` / `spawn` 的子进程在 `execve` 前 `setpgid(0, 0)` 自成
+  一组，父进程把它的 pid 记在 `rt_child_pid`（`wait` 返回后清 0）。SIGALRM handler 只在
+  `getpgid(child)` 等于该 pid（确认子进程真的成了组首）时 `kill(-child, SIGKILL)` 收整组，
+  否则只 `kill(child, SIGKILL)`：`setpgid` 没生效时子进程与父进程同组，按组发信号会把父进程
+  自己一起杀掉。handler 只用 async-signal-safe 的 `getpgid` / `kill` / `write` / `exit_group`，
+  不分配。
+- 未装定时器时子进程留在父进程组，Ctrl-C / 终端作业控制语义不变。
+- 职责边界：产物内的自超时只在 native 上做。OCaml 侧没有产物内定时器，`vuna run --timeout`
+  额外包一层 coreutils `timeout -s TERM -k 5`（管它的直接子进程，见 [tooling.md](tooling.md) §4）；
+  wasm 没有子进程。
 - 口径边界：核数限制**不是 CPU 配额**（不限制单核跑多久，要限速用超时）；cgroup 只读 v2
   挂载根的 `cpu.max`（v1 或读不到时退化为 `sched_getaffinity` 计数）；超时是启动快照。
 
