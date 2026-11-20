@@ -1,0 +1,153 @@
+-- native 运行时符号表 ↔ `Ir.Runtime` 契约（CG-17）。
+--
+-- 两道门禁：
+--   1. 契约声明了 arity 的符号（`irInlineArity > 0`）在作为值出现时，表里的 arity
+--      （`nativeRtValueArity`，缺省回落到契约）必须一致；不一致会静默错配寄存器。
+--   2. 不在运行时表里的符号必须逐条登记在 `runtimeGaps`（含由生成器特化的 `&&` / `||`、
+--      `@ir@natSucc` 与入口 show），新增契约符号不能悄悄缺席。
+--
+-- 缺口语义与理由见 docs/reference/native.md。
+import Base
+import Base.Data.List as List
+import Base.Effect.Core
+import Vuna.Ir.Model
+import Vuna.Ir.Runtime
+import Vuna.Target.Native.Runtime
+
+main : Eff [] String
+main =
+  case problems of
+    [] => pure ""
+    ps =>
+      do
+        _ <- prim_eff_print ("native runtime table drifted:\n" ++ join "\n" ps ++ "\n")
+        _ <- prim_eff_exit 1
+        pure ""
+
+problems : List String
+problems = append (append (concatMap arityProblems irRtNames) missingProblems) extraProblems
+
+-- `&&` / `||` 由生成器发短路控制流，不作为运行时函数值出现。
+generatorSpecial : String -> Bool
+generatorSpecial sym = sym == "&&" || sym == "||"
+
+arityProblems : String -> List String
+arityProblems sym =
+  let
+    a = irInlineArity sym
+  in if a <= 0 || generatorSpecial sym then
+    []
+  else
+    case nativeRtTarget sym of
+      Nothing => ["arity " ++ sym ++ ": not implemented"]
+      Just _ =>
+        let
+          v = nativeRtValueArity sym
+        in if v > 0 && v /= a then ["arity " ++ sym ++ ": table " ++ strFromInt v ++ ", contract " ++ strFromInt a] else []
+
+missingProblems : List String
+missingProblems =
+  map
+    (\sym => "not implemented and not listed: " ++ sym)
+    (filter (\sym => not (memName sym runtimeGaps)) gaps)
+
+extraProblems : List String
+extraProblems =
+  map
+    (\sym => "listed as a gap but implemented: " ++ sym)
+    (filter (\sym => not (memName sym gaps)) runtimeGaps)
+
+gaps : List String
+gaps = filter isGap irRtNames
+
+isGap : String -> Bool
+isGap sym =
+  case nativeRtTarget sym of
+    Nothing => True
+    Just _ => False
+
+-- 当前不在运行时表里的契约符号；按契约声明顺序排列。
+runtimeGaps : List String
+runtimeGaps =
+  [
+    "&&",
+    "||",
+    "prim_effectPerformId",
+    "prim_effectHandleId",
+    "prim_effectSelf",
+    "prim_schedNewScope",
+    "prim_schedFork",
+    "prim_schedYield",
+    "prim_schedIsCancelled",
+    "prim_schedAwait",
+    "prim_schedTaskResult",
+    "prim_schedTaskError",
+    "prim_schedCancelTask",
+    "prim_schedCancelScope",
+    "prim_schedScopeWait",
+    "prim_schedScopeWaitTimeout",
+    "prim_schedScopeError",
+    "prim_schedScopeCount",
+    "strFromFloat",
+    "prim_eff_readLine",
+    "@vuna@prim_eff_readLine",
+    "prim_eff_readBytes",
+    "@vuna@prim_eff_readBytes",
+    "prim_eff_readLine_host",
+    "@vuna@prim_eff_readLine_host",
+    "@vuna@host@readLine",
+    "prim_eff_readBytes_host",
+    "@vuna@prim_eff_readBytes_host",
+    "@vuna@host@readBytes",
+    "prim_eff_netListen_host",
+    "@vuna@prim_eff_netListen_host",
+    "@vuna@host@netListen",
+    "prim_eff_netPort_host",
+    "@vuna@prim_eff_netPort_host",
+    "@vuna@host@netPort",
+    "prim_eff_netAccept_host",
+    "@vuna@prim_eff_netAccept_host",
+    "@vuna@host@netAccept",
+    "prim_eff_netRecv_host",
+    "@vuna@prim_eff_netRecv_host",
+    "@vuna@host@netRecv",
+    "prim_eff_netSend_host",
+    "@vuna@prim_eff_netSend_host",
+    "@vuna@host@netSend",
+    "prim_eff_netClose_host",
+    "@vuna@prim_eff_netClose_host",
+    "@vuna@host@netClose",
+    "prim_eff_netConnect_host",
+    "@vuna@prim_eff_netConnect_host",
+    "@vuna@host@netConnect",
+    "prim_eff_netListen",
+    "@vuna@prim_eff_netListen",
+    "prim_eff_netPort",
+    "@vuna@prim_eff_netPort",
+    "prim_eff_netAccept",
+    "@vuna@prim_eff_netAccept",
+    "prim_eff_netRecv",
+    "@vuna@prim_eff_netRecv",
+    "prim_eff_netSend",
+    "@vuna@prim_eff_netSend",
+    "prim_eff_netClose",
+    "@vuna@prim_eff_netClose",
+    "prim_eff_netConnect",
+    "@vuna@prim_eff_netConnect",
+    "@vuna@host@tryNetListen",
+    "@vuna@host@tryNetPort",
+    "@vuna@host@tryNetAccept",
+    "@vuna@host@tryNetRecv",
+    "@vuna@host@tryNetSend",
+    "@vuna@host@tryNetClose",
+    "@vuna@host@tryNetConnect",
+    "@vuna@host@tryNetAcceptWithin",
+    "@vuna@host@tryNetRecvWithin",
+    "@vuna@host@tryNetSendWithin",
+    "@ir@natSucc",
+    "@ir@showInt",
+    "@ir@showNat",
+    "@ir@showStr",
+    "@ir@showFloat",
+    "@ir@showBool"
+  ]

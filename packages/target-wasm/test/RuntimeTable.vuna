@@ -1,0 +1,186 @@
+-- wasm 运行时符号表 ↔ `Ir.Runtime` 契约（CG-17）。
+--
+-- 两道门禁：
+--   1. 契约声明了 arity 的符号（`irInlineArity > 0`）必须由同一 arity 的 `RtFunc` 实现；
+--      `RtValue` 落在会被应用的位置会静默退化成部分应用。
+--   2. 未实现的符号必须逐条登记在 `runtimeGaps`：新增契约符号不能悄悄缺席，关闭缺口
+--      时要删掉登记项（否则本测试报「listed as a gap but implemented」）。
+--
+-- 缺口语义与理由见 docs/reference/wasm.md §8。
+import Base
+import Base.Data.List as List
+import Base.Effect.Core
+import Vuna.Ir.Model
+import Vuna.Ir.Runtime
+import Vuna.Target.Wasm.Runtime
+
+main : Eff [] String
+main =
+  case problems of
+    [] => pure ""
+    ps =>
+      do
+        _ <- prim_eff_print ("wasm runtime table drifted:\n" ++ join "\n" ps ++ "\n")
+        _ <- prim_eff_exit 1
+        pure ""
+
+problems : List String
+problems = append (append (concatMap arityProblems irRtNames) missingProblems) extraProblems
+
+-- 契约 arity > 0 时，后端表必须给出同一个 arity。
+arityProblems : String -> List String
+arityProblems sym =
+  let
+    a = irInlineArity sym
+  in if a <= 0 then
+    []
+  else
+    case rtImplOf sym of
+      RtFunc n _ => if n == a then [] else ["arity " ++ sym ++ ": table " ++ strFromInt n ++ ", contract " ++ strFromInt a]
+      RtValue _ => ["shape " ++ sym ++ ": value where contract arity is " ++ strFromInt a]
+      RtUnsupported => ["arity " ++ sym ++ ": not implemented"]
+
+missingProblems : List String
+missingProblems =
+  map
+    (\sym => "not implemented and not listed: " ++ sym)
+    (filter (\sym => not (memName sym runtimeGaps)) gaps)
+
+extraProblems : List String
+extraProblems =
+  map
+    (\sym => "listed as a gap but implemented: " ++ sym)
+    (filter (\sym => not (memName sym gaps)) runtimeGaps)
+
+gaps : List String
+gaps = filter isGap irRtNames
+
+isGap : String -> Bool
+isGap sym =
+  case rtImplOf sym of
+    RtUnsupported => True
+    _ => False
+
+-- 当前未实现（`RtUnsupported`）的契约符号；按契约声明顺序排列。
+runtimeGaps : List String
+runtimeGaps =
+  [
+    "prim_effectPerformId",
+    "prim_effectHandleId",
+    "prim_effectSelf",
+    "prim_schedNewScope",
+    "prim_schedFork",
+    "prim_schedYield",
+    "prim_schedIsCancelled",
+    "prim_schedAwait",
+    "prim_schedTaskResult",
+    "prim_schedTaskError",
+    "prim_schedCancelTask",
+    "prim_schedCancelScope",
+    "prim_schedScopeWait",
+    "prim_schedScopeWaitTimeout",
+    "prim_schedScopeError",
+    "prim_schedScopeCount",
+    "strFromFloat",
+    "effTimeUs",
+    "prim_eff_sleep",
+    "prim_eff_readFile",
+    "prim_eff_writeFile",
+    "prim_eff_writeFileAtomic",
+    "prim_eff_readLine",
+    "prim_eff_readBytes",
+    "prim_eff_isDirectory",
+    "prim_eff_makeDir",
+    "prim_eff_removeFile",
+    "prim_eff_fileExists",
+    "prim_eff_fileMtime",
+    "prim_eff_fileSize",
+    "prim_eff_readFile_host",
+    "@vuna@prim_eff_readFile_host",
+    "@vuna@host@readFile",
+    "prim_eff_writeFile_host",
+    "@vuna@prim_eff_writeFile_host",
+    "@vuna@host@writeFile",
+    "prim_eff_writeFileAtomic_host",
+    "@vuna@prim_eff_writeFileAtomic_host",
+    "@vuna@host@writeFileAtomic",
+    "prim_eff_isDirectory_host",
+    "@vuna@prim_eff_isDirectory_host",
+    "@vuna@host@isDirectory",
+    "prim_eff_makeDir_host",
+    "@vuna@prim_eff_makeDir_host",
+    "@vuna@host@makeDir",
+    "prim_eff_removeFile_host",
+    "@vuna@prim_eff_removeFile_host",
+    "@vuna@host@removeFile",
+    "prim_eff_fileExists_host",
+    "@vuna@prim_eff_fileExists_host",
+    "prim_eff_fileMtime_host",
+    "@vuna@prim_eff_fileMtime_host",
+    "prim_eff_fileSize_host",
+    "@vuna@prim_eff_fileSize_host",
+    "prim_eff_getenv_host",
+    "@vuna@prim_eff_getenv_host",
+    "prim_eff_getcwd_host",
+    "@vuna@prim_eff_getcwd_host",
+    "prim_eff_execPath_host",
+    "@vuna@prim_eff_execPath_host",
+    "prim_eff_netListen_host",
+    "@vuna@prim_eff_netListen_host",
+    "@vuna@host@netListen",
+    "prim_eff_netPort_host",
+    "@vuna@prim_eff_netPort_host",
+    "@vuna@host@netPort",
+    "prim_eff_netAccept_host",
+    "@vuna@prim_eff_netAccept_host",
+    "@vuna@host@netAccept",
+    "prim_eff_netRecv_host",
+    "@vuna@prim_eff_netRecv_host",
+    "@vuna@host@netRecv",
+    "prim_eff_netSend_host",
+    "@vuna@prim_eff_netSend_host",
+    "@vuna@host@netSend",
+    "prim_eff_netClose_host",
+    "@vuna@prim_eff_netClose_host",
+    "@vuna@host@netClose",
+    "prim_eff_netConnect_host",
+    "@vuna@prim_eff_netConnect_host",
+    "@vuna@host@netConnect",
+    "prim_eff_netListen",
+    "@vuna@prim_eff_netListen",
+    "prim_eff_netPort",
+    "@vuna@prim_eff_netPort",
+    "prim_eff_netAccept",
+    "@vuna@prim_eff_netAccept",
+    "prim_eff_netRecv",
+    "@vuna@prim_eff_netRecv",
+    "prim_eff_netSend",
+    "@vuna@prim_eff_netSend",
+    "prim_eff_netClose",
+    "@vuna@prim_eff_netClose",
+    "prim_eff_netConnect",
+    "@vuna@prim_eff_netConnect",
+    "@vuna@host@tryNetListen",
+    "@vuna@host@tryNetPort",
+    "@vuna@host@tryNetAccept",
+    "@vuna@host@tryNetRecv",
+    "@vuna@host@tryNetSend",
+    "@vuna@host@tryNetClose",
+    "@vuna@host@tryNetConnect",
+    "@vuna@host@tryNetAcceptWithin",
+    "@vuna@host@tryNetRecvWithin",
+    "@vuna@host@tryNetSendWithin",
+    "prim_eff_getenv",
+    "prim_eff_getcwd",
+    "prim_eff_execPath",
+    "prim_eff_getArgs",
+    "prim_eff_readDir",
+    "prim_eff_readDir_host",
+    "@vuna@prim_eff_readDir_host",
+    "@vuna@host@readDir",
+    "prim_eff_runIn",
+    "@vuna@prim_eff_runIn",
+    "prim_eff_getArgs_host",
+    "@vuna@prim_eff_getArgs_host",
+    "@ir@showFloat"
+  ]
