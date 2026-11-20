@@ -79,7 +79,7 @@ compileBackend ctx target entry printResult outDir =
       OkC pair =>
         let
           pkg = secondOf pair
-        in case lowerProgramOf pkg.checkedProgram.dtProgDatas pkg.checkedProgram.dtProgDefs pkg.checkedProgram.dtProgGlobals of
+        in case lowerProgramCheckedOf pkg.checkedProgram.dtProgDatas pkg.checkedProgram.dtProgDefs pkg.checkedProgram.dtProgGlobals of
           ErrC e => pure (ErrC e)
           OkC program => dispatch target program printResult outDir
 

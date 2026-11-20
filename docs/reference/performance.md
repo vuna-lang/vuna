@@ -466,8 +466,8 @@ load/parse 前缀 + iface 摘要 **~2.6 s** → 逐定义精化（`collectSigs-d
 codegen 检查的分段（同一次冷跑、互不重叠的独占值）：逐定义 lowering `lowerDefs` **351 ms**
 （其中 `lowerDefBodyTerm` 307 ms / 412 MB）、`validateProgram` **210 ms**（`checkBinderTys`
 160 ms）、SCC 分组 **151 ms** / 229 MB、`prepareProgram` 88 ms / 177 MB、`makeLwEnv` 48 ms、
-`tyDeclsOf` / `representUnit` <10 ms。`validateProgram` 校验的 IR 在 check 路径上随即丢弃
-（见 [debt.md](debt.md) D123）。
+`tyDeclsOf` / `representUnit` <10 ms。check 路径不再跑 `validateProgram`（那份 IR 只用于自检、随即丢弃）；程序级校验只在
+后端插件路径（`lowerProgramCheckedOf`）与单单元 build（`lowerUnitCheckedFrom`）执行。
 
 同一口径的计数（`VUNA_OBS=2` 出 10^5 级、`VUNA_OBS=3` 出 `eval`）：
 

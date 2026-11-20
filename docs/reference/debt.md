@@ -137,8 +137,6 @@ ID 是稳定引用（`层前缀-序号`）：条目关闭即删除该行，ID �
 | CO-04 · ⚠️D | 三份元变量替换 walker 覆盖不一致：`substSolvedMetas` 覆盖 record 原语；`substSolvedMetasAtGo` 覆盖但 `TRecUpd` 深度不加 `tele`；`substSolvedMetasAtTblFuel` 对 `TMk/TRecord/TProj/TRecUpd` 直接 `_ => t`（残留 `TMeta` ⇒ iface 安全阀整份拒收 ⇒ 每次退回全量） | `Core/Eval.vuna`（三个 `substSolvedMetas*`） | 后续 |
 | CO-05 · ⚠️C | 安全谓词有假阴性：`hasUnsolvedMetaCloFuel` 只看闭包 env 不看 body；`hasUnsolvedMetaValue` / `levelEscapes` 跳过 `VCase` 分支体与 `VProj` 的 tele | `Core/Term.vuna` | 后续 |
 | CO-06 · ⚠️D | 表示 / 擦除判据有两份实现 + 两套上下文视图：`Elab.Meta.isOpaqueRuntimeTyIn` 用 `isTypeHeadOpaqueEc` + `nvarOpaqueCtx`，`Lowering.Env.ctorOpaqueFlagsOf` 用 `isTypeHeadOpaqueDatas` + `memOpaqueLevel`（已过滤 Bool/Nat）；`prim_erase` 在 Elab 插入、`IrCast` 在 Lowering 插入，靠注释对齐；`ctxEnv` / `ctxEnvRefined` 由每个调用点手选 | `Elab/Meta.vuna`、`Lowering/Env.vuna`、`Lowering/Program.vuna`、`Elab/Types.vuna`（`ctxEnv` / `ctxEnvRefined`） | 后续 |
-| IR-27 · ⚠️D | **擦除后 Core 的 typed view 已落地**（`Lowering.Erased`：运行时 `TVar` 下标归一化 + `validateErased`；类型面——binder 槽 / `Rig0` 类型实参 / 构造子族参数 / telescope——**有意保留**，IR 注解依赖这些位置）。IR 侧 `IrLam` 不再携带擦除占位；Lowering 的 binder / `IrLam` / `IrApp` / `IrCase` / record 结果类型都填成 `Just`（未知落 `IrTyOpaque`）。剩余：CPS 机器 pass 主动清空节点类型（IR-08），`Ir.Validate` 仍允许 `Nothing`，`check` 仍校验后丢弃（D123） | `Lowering/Erased.vuna`（`eraseTerm` / `validateErased`）、`Lowering/Env.vuna`（`eraseDefs`）、`Lowering/Ty.vuna`（`annotRunTyOf` / `annotRunCalleeTy`）、`Lowering/Program.vuna`（`runtimeBinderAt` / `justTy`）、`Ir/Cps.vuna`、`Ir/Validate.vuna`；[architecture-target.md](../architecture-target.md)「分层表示」 | 后续（IR-08 / 强制校验） |
-| D123 · C | `vuna check` 会校验随即丢弃的 IR：check 路径对整包跑 `validateProgram`，而这份 IR 只用于自检；实测占整跑 5.6% CPU，其中 `checkBinderTys` 单项 160 ms / 112 MB | `Lowering/Program.vuna`（`lowerProgramOf` 的 `validateProgram`）、`Ir/Validate.vuna`；[performance.md](performance.md) §4 | 待定：build-only + CI 门禁 |
 
 ## Driver / 缓存 / 编译入口
 
@@ -205,7 +203,6 @@ ID 是稳定引用（`层前缀-序号`）：条目关闭即删除该行，ID �
 | D107 | OCaml 后端退役后没有替代的独立语义 oracle：固定点只剩同一 codegen 的自洽回归，跨后端差分由 suite + wasm 交叉承担；退役前需要把这些覆盖写成可执行门禁 | [architecture-target.md](../architecture-target.md) D7、[bootstrap.md](bootstrap.md)「锚点演进」；`test/suite.toml` 的 `pure_cross` 与 `effect_native` 家族 | 后续（与 D106 同批决策） |
 | D127 | native 没有指令选择/窥孔优化：整数算术走 `rt_add` 调用而非内联，lambda 体占产物约 47%；产物体积与墙钟的剩余空间在这里 | `packages/target-native/lib/Vuna/Target/Native/Module.vuna`、`Native/Render.vuna`；[performance.md](performance.md)「产物规模」 | 后续 |
 | D122 | **native 自举还差最后一段**：在 `IrTail`（内联 lambda 的尾标记）修掉之后，又把零参顶层定义改成 CAF（`_start` 求值一次 + `.bss` 槽 + GC 根区间）——单文件 `check` 从>30 分钟不返回降到 **1.0 s**，`check packages/base` 17 s（OCaml 23 s 同量级）。仍不通的两处：① 工作区 `check .` 会按包 `processSpawn` 自己，而 native 生成的子进程 argv 是**拼接错**的（`checkpackages/plugin-web--max-errors20`，缺分隔）；② 整仓 `check . --error-format json` 的 live 集已到 1.5 GB+，默认 1 GiB 预算下 GC 每秒数千次、十分钟不返回（升预算只是掩盖） | `bin/vuna-native check <单文件>`（1 s）/ `check packages/base`（17 s）/ `check .`（挂）；对照 OCaml `check .` = 23 s；`nix/checks/native-artifact` 的 `runtime.s` 已随 CAF 的 GC 扫根更新 | 后续（修 spawn argv；压 live 集；再跑 backend-check selfhost） |
-| D123 | **`vuna check` 会校验随即丢弃的 IR**：check 路径的 `lowerProgramOf` 对整包跑 `validateProgram`（名字唯一 / 组序 / 运行时符号 / 作用域 / binder 类型槽），而这份 IR 在 check 里只用于自检、随即丢弃；`build` 的 per-unit `validateUnit` 覆盖同一组不变式。实测占整跑 **5.6% CPU**（4.62 s → 4.36 s，5 轮交替取最小），其中 `checkBinderTys` 单项 160 ms / 112 MB | `packages/compiler/lib/Vuna/Compiler/Lowering/Program.vuna`（`lowerProgramOf` 的 `validateProgram`）、`packages/ir/lib/Vuna/Ir/Validate.vuna`；[performance.md](performance.md) §4 | 待定：改成 build-only + CI 门禁（`check` 带 `VUNA_IR_VALIDATE=1` 冷跑）——代价是 check 不再当场暴露 IR 不变式违规 
 >>>>>>> e0981ed (docs(reference): 合并 compiler-audit 到 debt 并补齐新债务)
 
 | D125 · C | **CPS 合成的 binder 不带宽类型槽**：精确根集里这部分槽只能保守扫描（compiler self 4,824 / 45,835 个 binder 槽），加上 `IrTyOpaque` 的 3,865 个，共 ~19% 的槽没有确定 kind；槽 kind 全部可判定之前不做移动/压缩 | `packages/ir/lib/Vuna/Ir/Cps.vuna`（合成 binder 用 `mkBinder`、节点类型槽清成 `Nothing`）；`vuna dev ir dump --after repr-cps packages/compiler`；[performance.md](performance.md)「槽 kind 分布」 | 后续（与 D127 同批：先精确栈图，再看是否给 CPS 合成 binder 标注类型） |
@@ -231,8 +228,7 @@ ID 是稳定引用（`层前缀-序号`）：条目关闭即删除该行，ID �
    类型层 / 擦除五套判据（EC-39）、两套 layout（FE-24 / FE-25）、四份 AST 遍历（LD-20）、
    五份结构知识（FE-16 / FE-17 / FE-28 / FE-29）、三份解表真源（EC-31）、两份不透明判据（CO-06）。
 4. **类型信息在 pass 之间丢失或只是注解**：`TLam` 的 `Maybe` 类型槽、`quote` 丢 rig（CO-03）、
-   Lowering 填槽 → Cps 机器 pass 主动清空 → 后端按 arity / 名字猜 handler clause（IR-08）、
-   IR 类型槽选择性填充（D109）。
+   IR 类型槽选择性填充（D109）、CPS 机器级类型只有 `IrTyOpaque`（不再清空）。
 5. **失败路径伪造值**：`EInt 0`（`Elab/Match.litPatExpr`）、部分闭包（LD-22）、
    `TC_NoInstanceFound` 掩盖预算耗尽（EC-34）。
 6. **缓存口径分裂**：`mode=s/f` 进 key（DR-01 / A06）、两套模块排序（DR-02）、
@@ -247,6 +243,7 @@ ID 是稳定引用（`层前缀-序号`）：条目关闭即删除该行，ID �
 | EC-06 | 超过 `natChainMaxValue` 的 Nat 链饱和成相等（预算 `convFuelBase + 4*depth`、`convFuelMax` 封顶） | [core.md](core.md) §3 |
 | 前端不支持清单 | guard / `\case` / 类型层 lambda / 用户宏等已决边界 | [frontend-syntax.md](frontend-syntax.md) §11 |
 | 无 manifest 能力门控 | 任意包可直调 `prim_*` / `prim_eff_*`（保留为债务 D62 的已知损失） | [effects.md](effects.md) §8.6 |
+| CPS 机器节点类型 | 机器级类型（`Control` / 续延 / `Step`）不进 `IrTy`，机器 pass 的节点类型槽统一 `IrTyOpaque`；空槽由 `Ir.Validate` 拒绝 | [ir.md](ir.md)「已知边界」 |
 
 ## 相关阅读
 

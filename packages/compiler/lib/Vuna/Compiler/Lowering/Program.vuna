@@ -1518,26 +1518,23 @@ adjOfDef env d = Pair (dtDefName d) (factsDepsOf env (dtDefName d))
 groupOfPair : Pair Bool (List IrDef) -> IrGroup
 groupOfPair (Pair isRec ds) = IrGroup isRec ds
 
--- | 整个程序当作一个单元 lowering（check 路径；文本丢弃）。
+-- | 整个程序当作一个单元 lowering。
+--
+-- 不跑程序级 IR 校验：`vuna check` 只把这份 IR 用于自检、随即丢弃，
+-- 单单元 / 整程序校验分别由 `lowerUnitCheckedFrom` 与 `lowerProgramCheckedOf`
+-- 在 build 路径承担。
 export lowerProgramOf : List DtData -> List DtDef -> List (Pair String Term) -> Check IrProgram
 lowerProgramOf datas defs globals =
   Vuna.Compiler.Base.Common.bind
     (obsCheck "vuna.codegen.env" (\_ => mkLwEnv datas defs globals ""))
-    (
-      \env =>
-        Vuna.Compiler.Base.Common.bind (obsCheck "vuna.codegen.prepare" (\_ => checkProgramOf env)) (
-            \_ =>
-              Vuna.Compiler.Base.Common.bind (obsCheck "vuna.codegen.unit" (\_ => lowerUnitAfterChecks env (map dtDefName defs) (map dtDataName datas))) (
-                  \unitIr =>
-                    Vuna.Compiler.Base.Common.bind (obsCheck "vuna.codegen.entry" (\_ => lowerEntryOf env.lwDefs)) (
-                        \entry =>
-                          let
-                            program = IrProgram (lwEnvShared env) (IrUnit unitIr.irUnitTyDecls unitIr.irUnitGroups unitIr.irUnitHasListFamily unitIr.irUnitTypeRefs entry)
-                          in Vuna.Compiler.Base.Common.bind (validateProgram program) (\_ => OkC program)
-                      )
-                )
-          )
-    )
+    (\env => Vuna.Compiler.Base.Common.bind (obsCheck "vuna.codegen.prepare" (\_ => checkProgramOf env)) (\_ => Vuna.Compiler.Base.Common.bind (obsCheck "vuna.codegen.unit" (\_ => lowerUnitAfterChecks env (map dtDefName defs) (map dtDataName datas))) (\unitIr => Vuna.Compiler.Base.Common.bind (obsCheck "vuna.codegen.entry" (\_ => lowerEntryOf env.lwDefs)) (\entry => OkC (IrProgram (lwEnvShared env) (IrUnit unitIr.irUnitTyDecls unitIr.irUnitGroups unitIr.irUnitHasListFamily unitIr.irUnitTypeRefs entry))))))
+
+-- | 整程序 lowering + 程序级校验（后端插件路径：IR 要交给别的进程消费）。
+export lowerProgramCheckedOf : List DtData -> List DtDef -> List (Pair String Term) -> Check IrProgram
+lowerProgramCheckedOf datas defs globals =
+  Vuna.Compiler.Base.Common.bind
+    (lowerProgramOf datas defs globals)
+    (\program => Vuna.Compiler.Base.Common.bind (validateProgram program) (\_ => OkC program))
 
 -- | 运行时定义分区（不跑检查；Split 的归属表与名字护栏只看运行时定义——axiom /
 -- 类型级定义没有归属，也不进任何单元文件）。
