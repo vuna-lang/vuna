@@ -130,36 +130,20 @@ Vuna.Compiler.Driver.ToolPayload`），于是每轮都补一遍 lib check（`col
 28.0 / 38.1 s）：它按直接依赖分层并行，与宿主负载强相关，且 `TMPDIR` 里的临时候选产物
 会让同一 `--out` 目录的第二次调用假快。**只报 user+sys 或同时报 loadavg。**
 
-### 四个「同一份工作做两遍 / 按名线性查表」热点
+### 重复工作与按名线性扫表（已消除）
 
-同一 worktree、同一 HEAD、同机、同窗口交替、空 `VUNA_STORE`（独立进程；这些改动全部
-**不改变 codegen 产物**，整仓 `build --no-compile` 逐字节一致）：
+冷 `check packages/compiler` 21.6→11.4 s、合成探针 2321→397 ms、未使用告警探针
+7693→744 ms、脏模块增量探针 4233→3116 ms，产物逐字节不变。这类开销只有两个形状：
+同一份工作做两遍（精化、包接口、告警扫描），和按名线性扫表——后者统一成「入口一次建
+哈希索引 + 逐项 `member`」：
 
-| 命令 | 修前 | 修后 | 变化 |
-| --- | --- | --- | --- |
-| 冷 `check packages/compiler`（真实包） | 21.6–23.6 s | 11.4–13.4 s | **-45%** |
-| 冷 `check packages/compiler` 的 `collectSigs-done` 次数 | 2（逐 def 两次，共 10933 行） | 1（5470 行） | 精化遍数减半 |
-| 合成单文件 N=8000（`vuna-compiler-growth`） | 2321 ms | 397 ms | -83% |
-| 未使用告警探针 N=16000（入口 check） | 7693 ms | 744 ms | -90% |
-| 脏模块增量探针 N=8000（`-growth-incremental`） | 4233 ms | 3116 ms | -26% |
-| 冷 `check packages/compiler` 的 iface 写 | `iface-skip partial` | `iface-write=107/107` + `check-lib-skip covered=88` | 单遍收尾 |
+- SCC 组间定序（`Ir.Analysis.orderGroups`）与 codegen 分组（`Lowering.Program` 的 `lwDefTbl`）；
+- `recOkOfIn` / `spanOfIn`、`Dt.dedupGlobals`、`Elab.Termination.anyOwn`、告警去重与未使用
+  定义扫描（`Diagnostics.Sink` 的 `sameDiag` 键表、`Dt.warnUnusedDefsGo`）；
+- 包接口只读一遍（`ownCleanInfo` 传给 `writePackageIface`）。
 
-### 已消除的按名线性扫表
-
-包级路径上的历史热点都是同一个形状：每产出一项就重扫剩余表，退化成 O(n²)。这些路径
-现在统一成「入口一次建哈希索引 + 逐项 `member`」，输出顺序与逐字节产物都不变：
-
-- SCC 组间定序（`Ir.Analysis.orderGroups`：入度 + 反向边 + 最小下标优先出队）；
-- codegen 分组与 `recOkOfIn` / `spanOfIn`（`Lowering.Program` 的 `lwDefTbl`）；
-- 告警去重（`Diagnostics.Sink` 按 `sameDiag` 等价类建键表）与未使用定义扫描
-  （`Dt.warnUnusedDefsGo`）；
-- `Dt.dedupGlobals`、`Elab.Termination.anyOwn`、包接口只读一遍（`ownCleanInfo` 传给
-  `writePackageIface`）。
-
-回退护栏是 `nix/checks/compiler-growth.sh`（同形定义）与 `compiler-growth-ctor.sh`
-（构造子密集 + 反向依赖）：只看**相邻档增长率**（线性 ≈2），绝对读数用
-`bench/compiler.sh`，当前分段构成见 §5 / §6。
-
+入口 import 必须覆盖 `[export]` 全部模块（否则 `iface-skip partial`、每轮补一遍 lib check）；
+回退护栏是 `nix/checks/compiler-growth*.sh` 的相邻档增长率门槛，绝对读数与分段构成见 §5 / §6。
 ## 2. 探针设施：`dbg!` 日志行 + `VUNA_OBS` 结构化观测
 
 分两层，**两套独立开关**；绝对读数只用「都关闭」的口径（见 §7）：
