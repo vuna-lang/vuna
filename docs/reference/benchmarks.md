@@ -247,28 +247,27 @@ HashMap 升级」后同一档约 193 ms（wasm ≈149 ms，N=5000，`--runs 1`�
 原生 `str_eq` 只占单次 perform 的 ~1%（2 次比较 ≈7 ns / ~700 ns），这次改动是协议
 收敛（派发只比整数），不是性能项。
 
-**入口宿主叶子（W3.0）**：`eff_entry_host` 的同窗口读数（`--target all --runs 5 --warmup 2`，
-N=5000，loadavg ≈2.5）：手写 OCaml 3 ms / **OCaml 后端 5 ms（1.67x）** /
-**native 29–34 ms（9.7–17x）** / **wasm 32 ms（net ≈14，16x）**。同一窗口的对照：
-`eff_tick`（内联 clause、尾 resume）native 14 ms / 20000 次，即 ≈0.7 µs/perform；
-`eff_host`（用户 handler + answer row，5000 轮两次 perform）native 71 ms。
-两个后端的形状不同：native 走库机器（`MkPerform` → opH），wasm 走直连改写
-（`runMain (opH op pureK)`）；两条路都只跑**一台**机器——opH 里的 `runPure` 不算一台。
-入口宿主叶子是**非尾 resume**：库 opH（`consoleOpHIOHost`）把续延当普通函数参数调用，
-CPS 只对语法 clause 的 `k`（`__mchTK`）发 `MkRestTail`，所以每次 `perform` 都压一层
-`MkCtx`/续延槽。后果在 5000 以上才显形（native）：
+**入口宿主叶子（W3.0 / W3.1）**：`eff_entry_host` 的同窗口读数（`--target all --runs 5 --warmup 2`，
+N=5000）：手写 OCaml 3 ms / **OCaml 后端 5 ms（1.67x）** / **native 9 ms（3.0x）** /
+**wasm 29 ms（9.7x）**。同一窗口的对照：`eff_tick`（内联 clause、尾 resume）native 13 ms /
+20000 次，即 ≈0.7 µs/perform；`eff_host`（用户 handler + answer row，5000 轮两次 perform）
+native 65 ms。两个后端的形状不同：native 走库机器（`MkPerform` → opH），wasm 走直连改写
+（`runMain (opH op pureK)`）；两条路都只跑**一台**机器——opH 里的 `runPure` 不算一台
+（见下面的 W5 负结果）。
+
+W3.1 之前，库 opH 的 resume 走 `MkRestCont`（CPS 只给语法 clause 的 `k` 发 `MkRestTail`），
+每次 perform 压一层 `MkCtx`/续延槽，`live` 随次数线性增长（≈1.8 KB/叶），8k 之后进入
+「每次全堆扫描」的 GC 悬崖：
 
 | N（native，单次） | 2000 | 5000 | 8000 | 10000 | 16000 | 20000 |
 | --- | --- | --- | --- | --- | --- | --- |
-| 墙钟 | 8–11 ms | 9–13 ms | 39–52 ms | 89 ms | 252 ms | 300–1000 ms |
-| 末次 GC `live` | — | 4.4 MB | 9.0 MB | 18.5 MB | 36.5 MB | 38.6 MB |
+| 修复前墙钟 | 8–11 ms | 9–13 ms | 39–52 ms | 89 ms | 252 ms | 300–1000 ms |
+| 修复前末次 GC `live` | — | 4.4 MB | 9.0 MB | 18.5 MB | 36.5 MB | 38.6 MB |
 
-`live` 随 N 线性增长（≈1.8 KB/叶），GC 阈值 = 2×live 让 8k 之后进入「每次全堆扫描」的
-悬崖（20k 的 20k 次叶子 ≈ 0.3–1 s，RSS 63 MB）。用 `handleCore` + **全局** opH（`k v`）
-在用户代码里复现同样曲线（20k：295 ms / live 40 MB），而内联 clause 的 `eff_tick` 是
-14 ms / 4 MB——所以这是「库 opH 的 resume 不走尾路径」的机器问题，不是 console 特有。
-基准固定在 N=5000（稳定），悬崖与线性增长记在 [debt.md](debt.md) D121；W3.1 的
-`MkHandleHost` 因此从「可选优化」变成「宿主 resume 的尾路径 / ctx 回收」。
+W3.1 把 opH / 全局 clause 的续延换成尾标记（`__mchTK`）：`mCps` 只沿尾位置传播它，尾位置
+的 resume 发 `MkRestTail`（共享尾槽、不压 ctx），非尾位置仍走 `MkRestCont`。修复后同一
+程序 20000 次的 `live` 稳定在 ~3 KB、墙钟 20 ms；N=5000 的 native 读数 29 → **9 ms**、
+RSS 13 → 4 MB。基准固定在 N=5000。
 
 **W5 负结果（宿主叶子改裸值原语）**：原计划把三处 `runPure (@vuna@host@…)`
 （`Console` 的 `Print` / `EPrint`、`Process` 的 `Exit`）改成裸值 intrinsic，理由是

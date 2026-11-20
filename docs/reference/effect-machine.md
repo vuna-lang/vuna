@@ -205,10 +205,10 @@ Control       = Done value
 
 1. **尾 resume 不再压栈**；非尾 resume 的 `msCtx` 深度是真正的嵌套 resume 深度。CPS 管道里
    仍有普通 `IrApp` 决定每 perform 的步数，但它不再按 perform 次数堆 `msCtx/msUsed`
-   （200k 尾递归 perform 在默认 wasm 栈上通过）。**边界**：尾路径只对语法 clause 里命名的
-   `k`（`__mchTK…`）成立；库 opH（`run*Host` 与用户写的全局 opH）把续延当普通函数参数调用，
-   每次 perform 仍压一层 ctx/槽，循环型程序的 `live` 随 perform 次数线性增长
-   （[debt.md](debt.md) D121，读数见 [benchmarks.md](benchmarks.md) §1.4 的 `eff_entry_host`）。
+   （200k 尾递归 perform 在默认 wasm 栈上通过）。**尾判定**：续延 binder 带 `__mchTK` 标记时
+   resume 发 `MkRestTail`；语法 clause 与库 opH / 全局 clause（`mHandlerFun`）都用这个标记，
+   标记只沿尾位置传播，非尾位置的 resume 仍是 `MkRestCont`（读数见
+   [benchmarks.md](benchmarks.md) §1.4 的 `eff_entry_host`）。
 2. **cleanup 自身的效应/异常**走当前 handler 链（不吞）；native / OCaml 的旧实现是
    「release 只能访问外层 handler、自身异常被吞」，两边口径不同（debt D42）。
 3. `hframe` 的 cleanup 深度按「安装时的 `$g_cleanDepth`」记录：跨 resume 重装帧时沿用
@@ -534,7 +534,7 @@ ctx 深度是真正的嵌套 resume 深度。
 ### 9.5 宿主路径与派发收敛
 
 下面几项来自宿主效应/机器收敛的盘点；按门禁执行，不先做优化后找口径。
-W1 / W2 / W4 / W3.0 已落地；W5 评估后删除（见下），接下来做 W3.1（宿主 resume 的尾路径 / ctx 回收）。
+W1 / W2 / W4 / W3.0 / W3.1 已落地；W5 评估后删除（见下）。
 
 | 项 | 内容 | 门禁 / 状态 |
 |---|---|---|
@@ -543,7 +543,7 @@ W1 / W2 / W4 / W3.0 已落地；W5 评估后删除（见下），接下来做 W3
 | W4 | `collectHandleOpsDefs` 改吃 **CPS 前** 的 defs，让 handler 分类与 CPS 输出解耦 | **已达成**（机器 pass 仍是类型改变型，见 [compiler-audit.md](compiler-audit.md) IR-08；不声称关闭 IR-08/IR-09） |
 | W3.0 | 「入口宿主叶子」bench：`bench/programs/eff_entry_host`——`main : Eff [ConsoleOp] Int` 5000 次 `consolePrint ""`（**不装用户 handler**，entry 只预装 `runConsoleHost`），`.ml` 对照同算法 | **已达成**。同窗口：OCaml 后端 5 ms / native 29 ms（9.67x）/ wasm 74 ms（net 18.7x）；读数与 N 的悬崖见 [benchmarks.md](benchmarks.md) §1.4 |
 | W5 | 宿主叶子改裸值原语（`Console` 的 `Print`/`EPrint`、`Process` 的 `Exit` 三处 `runPure`） | **已评估并删除**：CPS 把 `runPure (MkEff leaf)` 折成对叶子的直接调用，三端产物与裸值版逐字节一致、跑分在噪声内（[benchmarks.md](benchmarks.md) §1.4「W5 负结果」）。不新增裸值 intrinsic |
-| W3.1 | 宿主 resume 的尾路径：`handleHostAt → MkHandleHost`，让库 opH 的 `k` 调用不必走 `MkRestCont`（不再按 perform 次数压 ctx / 占槽），顺带省掉宿主帧的槽位与 epoch；Ref 归入 Direct | **不再「随便复评」**：W3.0 证明库 opH 的 resume 非尾，`live` 随 perform 次数线性增长并在 8k 后进入 GC 悬崖（[debt.md](debt.md) D121）。W5 之后按剩余读数决定先做「尾路径」还是「按段回收 ctx」 |
+| W3.1 | 宿主 resume 的尾路径：让库 opH / 全局 clause 的尾位置 resume 走 `MkRestTail`（共享尾槽、不压 ctx），非尾位置仍走 `MkRestCont` | **已达成**（CPS 侧一个标记：`mHandlerFun` 用 `__mchTK`）。`eff_entry_host` constant：native 29 → 9 ms、RSS 13 → 4 MB；同程序 20000 次的 `live` 38 MB → ~3 KB、墙钟 0.3–1 s → 20 ms。`MkHandleHost` / 帧槽位与 epoch 的进一步优化没有剩余收益证据，不做 |
 
 ### 9.4 风险与边界
 
