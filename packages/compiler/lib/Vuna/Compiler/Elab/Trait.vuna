@@ -376,7 +376,7 @@ elabInstanceWithClass globals allDecls cls info ec0 headExpr methods msp =
                         ctxSubs = firstOf solvedCtx
                         ec2 = secondOf solvedCtx
                         fields1 = map (applyCtxSubstsTo nTele ctxSubs) fieldTerms
-                      in Vuna.Compiler.Base.Common.bind (resolveRigidGoals globals bodyCtx msp (ecPending ec2) [] ec2) (
+                      in Vuna.Compiler.Base.Common.bind (resolveRigidGoals globals bodyCtx msp (ecPendingList ec2) [] ec2) (
                           \r =>
                             let
                               globSubs = firstOf r
@@ -976,7 +976,7 @@ elabInstanceMethod globals ec mty clauses = elabInstanceMethodIn globals emptyCt
 -- 逐个消解：goal 域与第 i 个 ctx 字典 binder 的类型 conv 相等 ⇒ 该 goal 消解到
 -- `_ctx<nCtx-1-i>`（de Bruijn index = i）。返回 (meta, ctx 下标 k) 与已去掉这些 goal 的 Ec。
 solveCtxGoals : Ctx -> Int -> Int -> Ec -> List (Pair Int Int) -> Pair (List (Pair Int Int)) Ec
-solveCtxGoals ctx nCtx nTele ec acc = solveCtxGoalsGo ctx nCtx ec (ecPending ec) [] acc
+solveCtxGoals ctx nCtx nTele ec acc = solveCtxGoalsGo ctx nCtx ec (ecPendingList ec) [] acc
 
 solveCtxGoalsGo : Ctx -> Int -> Ec -> List Constraint -> List Constraint -> List (Pair Int Int) -> Pair (List (Pair Int Int)) Ec
 solveCtxGoalsGo ctx nCtx ec [] kept acc = Pair (reverse acc) (ecPutPending ec (reverse kept))
@@ -1111,7 +1111,7 @@ record DictGoalGroup where
   dictGoalGroupExtras : List Int
 
 export freeDictGoals : Ec -> List DictGoalGroup
-freeDictGoals ec = freeDictGoalsGo ec (ecPending ec) []
+freeDictGoals ec = freeDictGoalsGo ec (ecPendingList ec) []
 
 export freeDictGoalsGo : Ec -> List Constraint -> List DictGoalGroup -> List DictGoalGroup
 freeDictGoalsGo ec [] acc = acc
@@ -1159,7 +1159,7 @@ solveLiftedMeta ec name level m =
 export liftFreeDictGoals : String -> Ec -> Term -> Term -> Pair Term (Pair Term Ec)
 -- 冷路径：没有延迟字典目标时整段是恒等（省掉扫目标表与求隐式前缀长）。
 liftFreeDictGoals defName ec ty body =
-  case ecPending ec of
+  case ecPendingList ec of
     [] => Pair ty (Pair body ec)
     _ =>
       let

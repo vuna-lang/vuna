@@ -6,6 +6,7 @@ module Vuna.Compiler.Elab.Types where
 -- 对外门面是 `Vuna.Compiler.Elab`；本模块按真实调用图与其余 `Elab.*` 子模块分工。
 import Vuna.Compiler.Base.Common
 import Base.Container.HashMap as HashMap
+import Base.Container.Queue as Queue
 import Base.Data.List as List
 import Vuna.Compiler.Core.Term
 import Vuna.Compiler.Core.Eval
@@ -237,8 +238,8 @@ instStoreFamily store fam =
 -- 已声明的归纳族（case 精化需要知道族的构造子 telescope）。
 -- `dgoals` 是延迟的字典约束——类参数未解时延迟成裸元变量，解后由 `resolveDictGoals` 回填。
 -- 统一约束存储。`Constraint` 同时承载字典目标与行成员目标（kind 区分），带稳定 id、
--- 延迟点 span 与创建深度（诊断/作用域检查用；由延迟点填）。`csPending` 保持
--- 字典目标的列表顺序语义（尾部 append、旋转），`csNextId` 只用于分配 id。
+-- 延迟点 span 与创建深度（诊断/作用域检查用；由延迟点填）。`csPending` 是 FIFO 队列
+-- （从表头取、未解目标追加到表尾），`csNextId` 只用于分配 id。
 -- | 延迟约束的类别：`CkDict` 是字典目标，`CkRow` 是行成员（效应）目标。
 export data ConstraintKind(..) : Type where
   CkDict : ConstraintKind
@@ -253,9 +254,10 @@ export record Constraint(..) where
   conSpan : Maybe Span
   conDepth : Int
 
--- | 统一约束存储：待处理约束列表（保持字典目标的顺序语义）、下一个 id、id 到尝试 epoch 的记录。
+-- | 统一约束存储：待处理约束**队列**（FIFO：逐个从表头取、未解目标追加到表尾）、下一个 id、
+-- id 到尝试 epoch 的记录。
 export record ConstraintStore where
-  csPending : List Constraint
+  csPending : Queue Constraint
   csNextId : Int
   -- conId ↦ 上次尝试时的解表长度。只有解表增长才值得重试；没有进展的
   -- 目标在 program-level 每轮被跳过（仍留在 pending 里，供定义收尾 lift 用）。
@@ -272,7 +274,7 @@ export record ConstraintStore where
 
 -- | 空约束存储：无待处理约束、id 从 0 开始、无已尝试记录。
 export csEmpty : ConstraintStore
-csEmpty = ConstraintStore [] 0 (HashMap.fromList []) 0 (0 - 1) (0 - 1) False
+csEmpty = ConstraintStore Queue.empty 0 (HashMap.fromList []) 0 (0 - 1) (0 - 1) False
 
 -- 末尾两个字段是**可重建缓存**（真相始终是列表 / defTbl）：
 --   - `ecCtorTbl : HashMap String DtCtor`：构造子名 → DtCtor。`elabDatas` 之后建一次
@@ -618,27 +620,55 @@ ecPutConstraints (Ec next sols defs datas depths goals insts classes cons deftbl
     counters
     errors
 
--- | 取约束存储里的待处理约束列表（维持原有顺序）。
-export ecPending : Ec -> List Constraint
-ecPending ec =
+-- | 取待处理约束列表（按入队顺序；O(n)，只给需要整表扫描的调用点）。
+export ecPendingList : Ec -> List Constraint
+ecPendingList ec =
   case ecConstraints ec of
-    ConstraintStore pending next tried cnt passNext passSols ctorok => pending
+    ConstraintStore pending next tried cnt passNext passSols ctorok => Queue.toList pending
 
--- | 替换待处理约束列表，保留下一个 id 与已尝试记录。
+-- | 待处理约束个数（O(1)，求解器的 fuel 与空转判据使用）。
+export ecPendingCount : Ec -> Int
+ecPendingCount ec =
+  case ecConstraints ec of
+    ConstraintStore pending next tried cnt passNext passSols ctorok => natToInt (Queue.size pending)
+
+-- | 从队首取一条待处理约束（摊还 O(1)）。
+export ecPopPending : Ec -> Maybe (Pair Constraint Ec)
+ecPopPending ec =
+  case ecConstraints ec of
+    ConstraintStore pending next tried cnt passNext passSols ctorok =>
+      case Queue.pop pending of
+        Nothing => Nothing
+        Just (Pair c q2) =>
+          Just
+            (Pair c (ecPutConstraints ec (ConstraintStore q2 next tried cnt passNext passSols ctorok)))
+
+-- | 追加一条约束到队尾（O(1)）。
+export ecPushPending : Ec -> Constraint -> Ec
+ecPushPending ec c =
+  case ecConstraints ec of
+    ConstraintStore pending next tried cnt passNext passSols ctorok =>
+      ecPutConstraints
+        ec
+        (ConstraintStore (Queue.push c pending) next tried cnt passNext passSols ctorok)
+
+-- | 用列表替换待处理队列（保持列表顺序；O(n)）。
 export ecPutPending : Ec -> List Constraint -> Ec
 ecPutPending ec pending2 =
   case ecConstraints ec of
     ConstraintStore pending next tried cnt passNext passSols ctorok =>
-      ecPutConstraints ec (ConstraintStore pending2 next tried cnt passNext passSols ctorok)
+      ecPutConstraints
+        ec
+        (ConstraintStore (Queue.fromList pending2) next tried cnt passNext passSols ctorok)
 
--- | 分配新 id 并把一条约束追加到待处理列表末尾。
+-- | 分配新 id 并把一条约束追加到待处理队列末尾。
 export ecAddConstraint : Ec -> ConstraintKind -> Int -> Value -> Maybe Span -> Int -> Ec
 ecAddConstraint ec kind meta dom span depth =
   case ecConstraints ec of
     ConstraintStore pending next tried cnt passNext passSols ctorok =>
       ecPutConstraints
         ec
-        (ConstraintStore (append pending [Constraint next kind meta dom span depth]) (next + 1) tried cnt passNext passSols ctorok)
+        (ConstraintStore (Queue.push (Constraint next kind meta dom span depth) pending) (next + 1) tried cnt passNext passSols ctorok)
 
 -- 已尝试记录（epoch = 解表长度）。
 -- | 查某个约束上次尝试时的 epoch（解表长度）；没试过返回 Nothing。

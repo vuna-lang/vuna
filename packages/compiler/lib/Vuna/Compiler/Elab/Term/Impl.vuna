@@ -2375,7 +2375,7 @@ isRigidHeadValue ec v =
 -- 只有 conv 成功才带回解，失败返回 Nothing。
 tryUseHint : Int -> Ctx -> Value -> Ec -> Value -> Maybe Ec
 tryUseHint goals0 ctx expected ec piTy =
-  if length (ecPending ec) <= goals0 then
+  if ecPendingCount ec <= goals0 then
     Nothing
   else
     case stripPisWithMetas 64 ctx ec piTy of
@@ -2413,7 +2413,7 @@ inferEFuelHint fuel globals ctx ec expr expected =
               Just _ => Vuna.Compiler.Base.Common.bind (appAtCallExpr expr) (\callExpr => inferEFuel (fuel - 1) globals ctx ec callExpr)
               Nothing =>
                 case expr of
-                  EApp fn args sp => inferAppFuel (fuel - 1) globals ctx ec fn args sp (Just (Pair (length (ecPending ec)) expected))
+                  EApp fn args sp => inferAppFuel (fuel - 1) globals ctx ec fn args sp (Just (Pair (ecPendingCount ec) expected))
                   _ => inferEFuel fuel globals ctx ec expr
 
 -- ---------------------------------------------------------------

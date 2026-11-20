@@ -21,6 +21,7 @@ module Vuna.Compiler.Frontend.Manifest where
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Toml
 import Vuna.Compiler.Base.Diagnostics.Pkg
+import Base.Container.Queue as Queue
 import Base.Effect.Fs as EffFs
 
 -- | 依赖来源：相对路径（可变输入）/ git（url + rev）/ 单个 url。
@@ -187,14 +188,14 @@ layerUsesOf : List Layer -> String -> List String
 layerUsesOf [] name = []
 layerUsesOf (l :: rest) name = if l.layerName == name then l.layerUses else layerUsesOf rest name
 
-reachesFrom : Int -> List Layer -> List String -> List String -> String -> Bool
+reachesFrom : Int -> List Layer -> Queue String -> List String -> String -> Bool
 reachesFrom fuel layers todo seen target =
   if fuel <= 0 then
     False
   else
-    case todo of
-      [] => False
-      n :: rest => if n == target then True else if layerSeen n seen then reachesFrom (fuel - 1) layers rest seen target else reachesFrom (fuel - 1) layers (append rest (layerUsesOf layers n)) (n :: seen) target
+    case Queue.pop todo of
+      Nothing => False
+      Just (Pair n rest) => if n == target then True else if layerSeen n seen then reachesFrom (fuel - 1) layers rest seen target else reachesFrom (fuel - 1) layers (Queue.pushAll (layerUsesOf layers n) rest) (n :: seen) target
 
 -- 队列里每个节点最多被弹出一次；重复边会让同一节点重复入队，因此上界是
 -- 「节点数 + 边数 + 1」（只按层数给界时，宽图会在环路前耗尽）。
@@ -207,7 +208,12 @@ layerUsesTotal (l :: rest) = length l.layerUses + layerUsesTotal rest
 
 layerHasCycle : List Layer -> Layer -> Bool
 layerHasCycle layers l =
-  reachesFrom (layerVisitBound layers) layers (layerUsesOf layers l.layerName) [] l.layerName
+  reachesFrom
+    (layerVisitBound layers)
+    layers
+    (Queue.fromList (layerUsesOf layers l.layerName))
+    []
+    l.layerName
 
 validateLayers : String -> List Layer -> List Layer -> Check Int
 validateLayers path all [] = OkC 0

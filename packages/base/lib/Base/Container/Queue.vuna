@@ -45,6 +45,11 @@ empty = Queue [] [] 0
 export push : a -> Queue a -> Queue a
 push x (Queue front back n) = Queue front (x :: back) (n + 1)
 
+-- | 批量入队：按列表顺序追加（第一个元素先出队），O(列表长度)。
+export pushAll : List a -> Queue a -> Queue a
+pushAll [] q = q
+pushAll (x :: rest) q = pushAll rest (push x q)
+
 -- | 出队：返回队首元素与剩余队列；空队列返回 `Nothing`。`front` 空时反转 `back`（摊还 O(1)）。
 export pop : Queue a -> Maybe (Pair a (Queue a))
 pop (Queue front back n) =

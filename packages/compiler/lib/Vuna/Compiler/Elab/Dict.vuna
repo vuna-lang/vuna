@@ -263,7 +263,7 @@ showResolvedValue ec v = showTerm (zonkTerm ec 0 (quote 0 (forceVal ec v)))
 -- 未解字典目标里第一个插值目标（诊断用）——`Elab.Driver` 在报“未解元变量”之前
 -- 先命中它，给出可操作的 `TC_InterpNoInstance`（类型参数已确定的那些）。
 export firstUnsolvedInterpGoal : Ec -> Maybe String
-firstUnsolvedInterpGoal ec = firstUnsolvedInterpGoalGo ec (ecPending ec)
+firstUnsolvedInterpGoal ec = firstUnsolvedInterpGoalGo ec (ecPendingList ec)
 
 firstUnsolvedInterpGoalGo : Ec -> List Constraint -> Maybe String
 firstUnsolvedInterpGoalGo ec [] = Nothing
@@ -648,7 +648,7 @@ solveRowMeta ec depth m v =
     ErrC e => ErrC e
 
 export resolveRowGoalsCtx : List (Pair String Term) -> Ctx -> Ec -> Span -> Check Ec
-resolveRowGoalsCtx globals ctx ec sp = resolveRowGoalsCtxGo globals ctx sp (ecPending ec) ec []
+resolveRowGoalsCtx globals ctx ec sp = resolveRowGoalsCtxGo globals ctx sp (ecPendingList ec) ec []
 
 resolveRowGoalsCtxGo : List (Pair String Term) -> Ctx -> Span -> List Constraint -> Ec -> List Constraint -> Check Ec
 resolveRowGoalsCtxGo globals ctx sp [] ec kept = OkC (ecPutPending ec (reverse kept))
@@ -700,7 +700,7 @@ resolveRowGoalsCtxGo globals ctx sp ((c@(Constraint cid kind m dom cspan cdepth)
 export resolveDictGoals : List (Pair String Term) -> Ec -> Ec
 resolveDictGoals globals ec =
   let
-    n = length (ecPending ec)
+    n = ecPendingCount ec
   in if ecDictPassIdle ec then
     ec
   else
@@ -715,20 +715,19 @@ pendingBucket n =
     "0"
   else if n <= 4 then "1-4" else if n <= 16 then "5-16" else if n <= 64 then "17-64" else "65+"
 
--- 单趟 worklist：逐个处理表头，成功即提交；未解目标按原顺序追加到表尾（旋转语义：
--- 每趟从头部取一个目标）。把“处理尾部”算两遍（keep + 成功分支再递归）在目标同时可解时是 2^k；
--- 这里每个目标每趟只处理一次，指数消除。
+-- 单趟 worklist：逐个从队首取目标，成功即提交；未解目标按原顺序追加到队尾（FIFO）。
+-- 把“处理尾部”算两遍（keep + 成功分支再递归）在目标同时可解时是 2^k；这里每个目标每趟
+-- 只处理一次，指数消除。队列让「追加到队尾」从 O(长度) 降到 O(1)。
 resolveDictGoalsFuel : Int -> List (Pair String Term) -> Ec -> Ec
 resolveDictGoalsFuel fuel globals ec0 =
   if fuel <= 0 then
     ec0
   else
-    case ecPending ec0 of
-      [] => ec0
-      (c@(Constraint cid kind m dom cspan cdepth)) :: rest =>
+    case ecPopPending ec0 of
+      Nothing => ec0
+      Just (Pair (c@(Constraint cid kind m dom cspan cdepth)) ec) =>
         let
-          ec = ecBump ec0 "elab.dict.round"
-          ec1 = ecPutPending ec rest
+          ec1 = ecBump ec "elab.dict.round"
         in case metaLookup m (ecSolTbl ec1) of
           -- 已解/已提升的约束直接摘除（settled），不再占用后续轮次的扫描。
           Just _ => resolveDictGoalsFuel (fuel - 1) globals ec1
@@ -741,7 +740,7 @@ resolveDictGoalsFuel fuel globals ec0 =
                 if tried == solsNow then
                   let
                     ec2 = resolveDictGoalsFuel (fuel - 1) globals ec1
-                  in ecPutPending ec2 (append (ecPending ec2) [c])
+                  in ecPushPending ec2 c
                 else
                   let
                     forced = forceVal ec1 dom
@@ -753,7 +752,7 @@ resolveDictGoalsFuel fuel globals ec0 =
                       let
                         ec2 = resolveDictGoalsFuel (fuel - 1) globals ec1
                         ec3 = ecRecordTried ec2 cid solsTried
-                      in ecPutPending ec3 (append (ecPending ec3) [kept])
+                      in ecPushPending ec3 kept
               Nothing =>
                 let
                   forced = forceVal ec1 dom
@@ -765,7 +764,7 @@ resolveDictGoalsFuel fuel globals ec0 =
                     let
                       ec2 = resolveDictGoalsFuel (fuel - 1) globals ec1
                       ec3 = ecRecordTried ec2 cid solsTried
-                    in ecPutPending ec3 (append (ecPending ec3) [kept])
+                    in ecPushPending ec3 kept
 
 -- | 尝试求解一条延迟约束：行成员走 memberLookup，字典目标走实例搜索并回填元变量。
 tryResolveDictGoal : List (Pair String Term) -> Ec -> Constraint -> Value -> Maybe Ec
@@ -1260,7 +1259,7 @@ boolShortCircuit name a b = if name == "&&" then TIf a b (TBool False) else TIf 
 
 -- 收尾检查——仍未解的行成员证明（缺效应，或推断不足）。
 export firstUnsolvedMemberGoal : Ec -> Maybe String
-firstUnsolvedMemberGoal ec = firstUnsolvedMemberGoalGo ec (ecPending ec)
+firstUnsolvedMemberGoal ec = firstUnsolvedMemberGoalGo ec (ecPendingList ec)
 
 firstUnsolvedMemberGoalGo : Ec -> List Constraint -> Maybe String
 firstUnsolvedMemberGoalGo ec [] = Nothing
@@ -1277,7 +1276,7 @@ firstUnsolvedMemberGoalGo ec ((Constraint cid kind m dom cspan cdepth) :: rest) 
 -- 跳过三类：Interp/Member 有专门诊断；类参数仍含未解 meta 时保持原 unsolved 文案；
 -- 刚性类参数可能是待泛化的延迟目标，不能误报成缺实例。
 export firstUnsolvedDictGoal : Ec -> Maybe String
-firstUnsolvedDictGoal ec = firstUnsolvedDictGoalGo ec (ecPending ec)
+firstUnsolvedDictGoal ec = firstUnsolvedDictGoalGo ec (ecPendingList ec)
 
 firstUnsolvedDictGoalGo : Ec -> List Constraint -> Maybe String
 firstUnsolvedDictGoalGo ec [] = Nothing
@@ -1303,7 +1302,7 @@ firstUnsolvedDictGoalGo ec ((Constraint cid kind m dom cspan cdepth) :: rest) =
 -- 按目标类别精确取第一条未解约束的 span（与 `firstUnsolved*` 选中同一条）。
 -- | 第一条未解 Interp 目标的延迟点 span（按 pending 顺序扫描，跳过已解 meta）。
 export firstUnsolvedInterpGoalSpan : Ec -> Maybe Span
-firstUnsolvedInterpGoalSpan ec = firstUnsolvedInterpSpanGo ec (ecPending ec)
+firstUnsolvedInterpGoalSpan ec = firstUnsolvedInterpSpanGo ec (ecPendingList ec)
 
 -- | firstUnsolvedInterpGoalSpan 的递归实现：只保留 Interp 类目标的 span。
 firstUnsolvedInterpSpanGo : Ec -> List Constraint -> Maybe Span
@@ -1321,7 +1320,7 @@ firstUnsolvedInterpSpanGo ec ((Constraint cid kind m dom cspan cdepth) :: rest) 
 
 -- | 第一条未解行成员目标的延迟点 span（按 pending 顺序扫描，跳过已解 meta）。
 export firstUnsolvedMemberGoalSpan : Ec -> Maybe Span
-firstUnsolvedMemberGoalSpan ec = firstUnsolvedMemberSpanGo ec (ecPending ec)
+firstUnsolvedMemberGoalSpan ec = firstUnsolvedMemberSpanGo ec (ecPendingList ec)
 
 -- | firstUnsolvedMemberGoalSpan 的递归实现：只保留行成员目标的 span。
 firstUnsolvedMemberSpanGo : Ec -> List Constraint -> Maybe Span
@@ -1336,7 +1335,7 @@ firstUnsolvedMemberSpanGo ec ((Constraint cid kind m dom cspan cdepth) :: rest) 
 
 -- | 第一条未解普通字典目标的延迟点 span（跳过 Interp、行成员、含未解 meta 与刚性参数的目标）。
 export firstUnsolvedDictGoalSpan : Ec -> Maybe Span
-firstUnsolvedDictGoalSpan ec = firstUnsolvedDictSpanGo ec (ecPending ec)
+firstUnsolvedDictGoalSpan ec = firstUnsolvedDictSpanGo ec (ecPendingList ec)
 
 -- | firstUnsolvedDictGoalSpan 的递归实现，按与 firstUnsolvedDictGoal 相同的类别过滤。
 firstUnsolvedDictSpanGo : Ec -> List Constraint -> Maybe Span
@@ -1357,7 +1356,7 @@ firstUnsolvedDictSpanGo ec ((Constraint cid kind m dom cspan cdepth) :: rest) =
 
 -- | 第一条未解字典目标对应的元变量 id（供创建点溯源；与 `firstUnsolvedDictGoal` 同一条）。
 export firstUnsolvedDictGoalMeta : Ec -> Maybe Int
-firstUnsolvedDictGoalMeta ec = firstUnsolvedDictGoalMetaGo ec (ecPending ec)
+firstUnsolvedDictGoalMeta ec = firstUnsolvedDictGoalMetaGo ec (ecPendingList ec)
 
 -- | 扫描实现：跳过已解/非字典目标。
 firstUnsolvedDictGoalMetaGo : Ec -> List Constraint -> Maybe Int

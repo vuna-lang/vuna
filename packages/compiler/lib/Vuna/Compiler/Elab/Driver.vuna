@@ -262,14 +262,14 @@ declaredDictBindersGo ec ctx _ acc = reverse acc
 -- `declaredDictBinders` 整条隐式 Pi 前缀的求值（目标表非空时才要求值）。
 solveDeclaredDictGoals : Ec -> Term -> Term -> Pair Term Ec
 solveDeclaredDictGoals ec ty body =
-  case ecPending ec of
+  case ecPendingList ec of
     [] => Pair body ec
     _ =>
       case declaredDictBinders ec ty of
         [] => Pair body ec
         binders =>
           let
-            solved = solveDeclaredDictGoalsGo ec binders (ecPending ec) [] []
+            solved = solveDeclaredDictGoalsGo ec binders (ecPendingList ec) [] []
           in Pair (applyDeclaredDictSubsts (firstOf solved) body) (secondOf solved)
 
 record DictSubst where
@@ -1052,7 +1052,7 @@ elabProgramCoreWithAux recover startEc startGlobals records decls =
                                                                   -- 运行时位置的 TMeta）。
                                                                   ec3 = obsPure "vuna.elab.dictfix" (\_ => resolveDictGoalsFix globals ec3a 8)
                                                                   defs = obsPure "vuna.elab.rezonk" (\_ => rezonkDefs ec3 defs0)
-                                                                  _ = dbg! "bodies-done g=${length globals} sols=${length (ecSols ec3a)} defs=${length (ecDefs ec3a)} metas=${ecNext ec3a} dgoals=${length (ecPending ec3a)} datas=${length (ecDatas ec3a)} insts=${length (ecInsts ec3a)} classes=${length (ecClasses ec3a)} counters=${showCounters (ecCounters ec3a)}"
+                                                                  _ = dbg! "bodies-done g=${length globals} sols=${length (ecSols ec3a)} defs=${length (ecDefs ec3a)} metas=${ecNext ec3a} dgoals=${ecPendingCount ec3a} datas=${length (ecDatas ec3a)} insts=${length (ecInsts ec3a)} classes=${length (ecClasses ec3a)} counters=${showCounters (ecCounters ec3a)}"
                                                                   -- 实例表索引自检（派生索引 == 权威表）。只在 --debug-perf 下跑：
                                                                   -- `ecInstsAudit` 会扫全实例表，生产路径不付这个成本。
                                                                   _ = dbg! (if ecInstsAudit ec3a then "inst-index=ok" else "inst-index=MISMATCH")
@@ -1357,7 +1357,7 @@ rezonkDefs ec defs =
 -- 冷路径：没有目标时不需要跑（全包在 bodies 收尾处通常只剩个位数目标）。
 export resolveDictGoalsFix : List (Pair String Term) -> Ec -> Int -> Ec
 resolveDictGoalsFix globals ec n =
-  case ecPending ec of
+  case ecPendingList ec of
     [] => ec
     _ => resolveDictGoalsFixGo globals ec n
 
@@ -1367,7 +1367,7 @@ resolveDictGoalsFixGo globals ec n =
     ec2 = resolveDictGoals globals ec
   in if n <= 0 then
     ec2
-  else if length (ecPending ec2) < length (ecPending ec) then
+  else if ecPendingCount ec2 < ecPendingCount ec then
     resolveDictGoalsFixGo globals ec2 (n - 1)
   else
     ec2

@@ -18,7 +18,10 @@ import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Manifest
 import Vuna.Compiler.Frontend.Packages.Pkg
 import Vuna.Compiler.Loader.Modules
+import Base.Container.Queue as Queue
 import Base.Data.List as List
+import Base.Data.Maybe
+import Base.Data.Pair
 import Base.Data.String as String
 
 isLayerPrefix : String -> String -> Bool
@@ -28,14 +31,14 @@ usesOfLayer : List Layer -> String -> List String
 usesOfLayer [] name = []
 usesOfLayer (l :: rest) name = if l.layerName == name then l.layerUses else usesOfLayer rest name
 
-closureGo : Int -> List Layer -> List String -> List String -> List String
+closureGo : Int -> List Layer -> Queue String -> List String -> List String
 closureGo fuel layers todo acc =
   if fuel <= 0 then
     acc
   else
-    case todo of
-      [] => acc
-      n :: rest => if memName n acc then closureGo (fuel - 1) layers rest acc else closureGo (fuel - 1) layers (append rest (usesOfLayer layers n)) (n :: acc)
+    case Queue.pop todo of
+      Nothing => acc
+      Just (Pair n rest) => if memName n acc then closureGo (fuel - 1) layers rest acc else closureGo (fuel - 1) layers (Queue.pushAll (usesOfLayer layers n) rest) (n :: acc)
 
 -- 队列里每个层名最多被弹出一次；重复边会让同一名字重复入队，因此上界是
 -- 「层数 + uses 总数 + 2」（只按层数给界时，宽图会提前截断闭包）。
@@ -48,7 +51,8 @@ usesTotal (l :: rest) = length l.layerUses + usesTotal rest
 
 -- | 一行的许可集：自身层 + uses 的传递闭包。
 allowedByRow : List Layer -> Layer -> List String
-allowedByRow layers l = closureGo (closureBound layers) layers l.layerUses [l.layerName]
+allowedByRow layers l =
+  closureGo (closureBound layers) layers (Queue.fromList l.layerUses) [l.layerName]
 
 covered : List String -> String -> Bool
 covered [] name = False

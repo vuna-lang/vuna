@@ -1,1 +1,1 @@
-"pop=1 sz=4 peek=Just 1 list=[1, 2, 3, 4] empty=True drain=[1, 2, 3, 4]"
+"pop=1 sz=4 peek=Just 1 list=[1, 2, 3, 4] empty=True drain=[1, 2, 3, 4] pushAll=[7, 8]"
