@@ -1921,7 +1921,7 @@ checkEFuel fuel globals ctx ec expr expected =
               Nothing =>
                 case listLitElems expr of
                   Just elems => Vuna.Compiler.Base.Common.bind (expandListLit ec (listLitFamily ec (forceVal ec expected)) elems (exprSpan expr)) (\e2 => checkEFuel (fuel - 1) globals ctx ec e2 expected)
-                  Nothing => obsDefCheck "vuna.elab.term.core" (exprFormName expr) (\_ => checkEFuelNoRow fuel globals ctx ec expr expected)
+                  Nothing => obsDefCheckAt 3 "vuna.elab.term.core" (exprFormName expr) (\_ => checkEFuelNoRow fuel globals ctx ec expr expected)
 
 -- 字面量转换（FromString / FromInt）：期望类型不是内建字面量类型时，若期望类型上存在
 -- 对应 trait 的实例，就把字面量降级成 trait 方法应用（`fromString "s"` / `fromInt n`），
