@@ -38,6 +38,7 @@
 | `Base.Data.Nat` | 非负整数（`Zero` / `Succ`）；运行时是 OCaml `int`。`plus` / `minus` / `mult` / `toInt` / `fromInt` / `fromIntMaybe` / `pred` / `isZero` + `Num`（除法经 `Num.div` / `/`）+ `Eq` / `Ord` / `Show` / `Hashable` / `Semigroup` / `Monoid` 实例 |
 | `Base.Trait.Num` | 数值算术 trait：`add` / `sub` / `mul` / `div`；`+` / `-` / `*` / `/` 是它们的中缀别名（fixity 与别名声明在本模块）。`Int` / `Nat` / `Float` 实例在类型模块并由精化器特化回内建原语；用户类型实现 `Num`（配 `FromInt`）即可重载四则（见 [operators.md](operators.md)） |
 | `Base.Data.Vec` | `Vec(..)` 与 `substTemplate` / `vhead` / `vlen` / `vtail` |
+| `Base.Data.Stream` | 拉式流（`Stream a` 包 `Unit -> StreamStep a`，`SEnd` / `SOne` / `SSkip`）：`uncons` / `empty` / `cons` / `singleton` / `fromList` / `map` / `filter` / `take` / `toList` / `foldl`；无 memo，每次推进真实计算；构造不出无限流（无界余递归不过终止性判据），`filter` 的跳过落成 `SSkip` 由消费方推进 |
 | `Base.Trait.Monad` | `Monad` trait（只有 `bind`；父类 `Applicative`）；重导出 `Base.Trait.Applicative`（进而重导出 `Base.Trait.Functor`），路径 `import Base.Trait.Monad as Monad` 与扁平 `import Base.Trait` 都能看到 `fmap` / `pure` / `liftA2` / `ap` |
 | `Base.Trait.Applicative` | `Applicative` trait（`pure` / `ap` / `liftA2` 三个方法，各实例显式实现；父类 `Functor`，重导出 `Base.Trait.Functor`）；`Maybe` / `List` / `Result` / `State` / `Reader` / `Error` / `Eff` 实例 |
 | `Base.Trait.Functor` | `Functor` trait（`fmap`）；`Applicative` 的父类 |

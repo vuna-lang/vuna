@@ -35,6 +35,7 @@ modules = [
   "Base.Data.Result",
   "Base.Data.Sha1",
   "Base.Data.Sort",
+  "Base.Data.Stream",
   "Base.Data.String",
   "Base.Data.Unit",
   "Base.Data.Vec",

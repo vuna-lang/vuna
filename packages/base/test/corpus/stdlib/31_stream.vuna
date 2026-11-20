@@ -1,0 +1,16 @@
+-- stdlib：拉式流（无 memo、有限构造）；filter 的 SSkip 由消费方推进，take 只计产出。
+import Base.Data.Stream as Stream
+import Base.Data.List as List
+
+sumL : List Int -> Int
+sumL xs = List.foldl (\acc, x => acc + x) 0 xs
+
+main : String
+main =
+  strFromInt (sumL (Stream.toList (Stream.map (\x => x * 2) (Stream.fromList [1, 2, 3]))))
+    ++ "|"
+    ++ strFromInt
+      (sumL (Stream.take 2 (Stream.filter (\x => x == 2 || x == 4) (Stream.fromList [1, 2, 3, 4, 5]))))
+    ++ "|"
+    ++ strFromInt (Stream.foldl (\acc, x => acc + x) 0 (Stream.cons 9 (Stream.cons 1 Stream.empty)))
+    ++ "|" ++ strFromInt (List.length (Stream.take 5 (Stream.fromList [1, 2])))

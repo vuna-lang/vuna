@@ -1,0 +1,94 @@
+-- | 拉式流：每一步显式传 dummy `Unit` 才推进一格，尾是尚未计算的 thunk。
+--
+-- 与 [Base.Data.List] 的差别只在尾部：`List` 的尾已经算好，`Stream` 的尾调用一次才拿到。
+-- 没有记忆化：同一个 `Stream` 被消费两次就重算两次（要缓存用 [Base.Effect.Lazy]）。
+-- 也没有无限流：构造不出无限长结构（无界余递归过不了终止性判据），所以这里的分支
+-- 只要底层流有限就必然走完。组合子在以 `StreamStep` 为形参的 helper 里 `case`：
+-- payload 才是形参的子项，终止性判据认这个形状（在 `Stream` 形参上直接 `case uncons s` 不认）。
+module Base.Data.Stream where
+
+import Base.Data.Bool
+import Base.Data.List
+import Base.Data.Unit
+import Base.Trait.Num
+import Base.Trait.Ord
+
+-- | 拉式流：内部是「给定 dummy 值才推进一格」的 thunk。
+export data Stream a : Type where
+  MkStream : (Unit -> StreamStep a) -> Stream a
+
+-- | 一步的结果：`SEnd` 表示结束；`SOne x t` 产出 `x` 并给出剩余；`SSkip t` 本步不产出、
+-- 剩余仍是 `t`（`filter` 用它跳过被滤掉的元素，消费方继续推进）。
+export data StreamStep a : Type where
+  SEnd : StreamStep a
+  SOne : a -> Stream a -> StreamStep a
+  SSkip : Stream a -> StreamStep a
+
+-- | 推进一格；不产出任何东西（纯函数，不触碰宿主）。
+export uncons : Stream a -> StreamStep a
+uncons (MkStream f) = f MkUnit
+
+-- | 空流。
+export empty : Stream a
+empty = MkStream (\_ => SEnd)
+
+-- | 单元素流。
+export singleton : a -> Stream a
+singleton x = MkStream (\_ => SOne x empty)
+
+-- | 头部接一个元素；尾不预先计算。
+export cons : a -> Stream a -> Stream a
+cons x s = MkStream (\_ => SOne x s)
+
+-- | 从列表构造；每次推进只构造一个 `SOne`，不预先展开整个列表。
+export fromList : List a -> Stream a
+fromList xs = MkStream (\_ => fromListStep xs)
+
+fromListStep : List a -> StreamStep a
+fromListStep [] = SEnd
+fromListStep (x :: rest) = SOne x (fromList rest)
+
+-- | 逐元素映射。
+export map : (a -> b) -> Stream a -> Stream b
+map f s = MkStream (\_ => mapStep f (uncons s))
+
+mapStep : (a -> b) -> StreamStep a -> StreamStep b
+mapStep f SEnd = SEnd
+mapStep f (SOne x t) = SOne (f x) (map f t)
+mapStep f (SSkip t) = SSkip (map f t)
+
+-- | 保留满足谓词的元素；被滤掉的元素落成 `SSkip`，由消费方跳过。
+export filter : (a -> Bool) -> Stream a -> Stream a
+filter p s = MkStream (\_ => filterStep p (uncons s))
+
+filterStep : (a -> Bool) -> StreamStep a -> StreamStep a
+filterStep p SEnd = SEnd
+filterStep p (SOne x t) = if p x then SOne x (filter p t) else SSkip (filter p t)
+filterStep p (SSkip t) = SSkip t
+
+-- | 取前 `n` 个产出（`SSkip` 不计入 `n`）。
+export take : Int -> Stream a -> List a
+take n s = if n <= 0 then [] else takeStep n (uncons s)
+
+takeStep : Int -> StreamStep a -> List a
+takeStep n SEnd = []
+takeStep n (SOne x t) = x :: take (n - 1) t
+takeStep n (SSkip t) = take n t
+
+-- | 把整个流收成列表；只对有限流有意义（所有可构造的流都有限）。
+export toList : Stream a -> List a
+toList s = toListStep (uncons s)
+
+toListStep : StreamStep a -> List a
+toListStep SEnd = []
+toListStep (SOne x t) = x :: toList t
+toListStep (SSkip t) = toList t
+
+-- | 从左到右折叠：`f` 的第一个实参是累加器。
+export foldl : (b -> a -> b) -> b -> Stream a -> b
+foldl f acc s = foldlStep f acc (uncons s)
+
+foldlStep : (b -> a -> b) -> b -> StreamStep a -> b
+foldlStep f acc SEnd = acc
+foldlStep f acc (SOne x t) = foldl f (f acc x) t
+foldlStep f acc (SSkip t) = foldl f acc t
