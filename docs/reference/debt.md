@@ -203,9 +203,8 @@ ID 是稳定引用（`层前缀-序号`）：条目关闭即删除该行，ID �
 | D107 | OCaml 后端退役后没有替代的独立语义 oracle：固定点只剩同一 codegen 的自洽回归，跨后端差分由 suite + wasm 交叉承担；退役前需要把这些覆盖写成可执行门禁 | [architecture-target.md](../architecture-target.md) D7、[bootstrap.md](bootstrap.md)「锚点演进」；`test/suite.toml` 的 `pure_cross` 与 `effect_native` 家族 | 后续（与 D106 同批决策） |
 | D127 | native 没有指令选择/窥孔优化：整数算术走 `rt_add` 调用而非内联，lambda 体占产物约 47%；产物体积与墙钟的剩余空间在这里 | `packages/target-native/lib/Vuna/Target/Native/Module.vuna`、`Native/Render.vuna`；[performance.md](performance.md)「产物规模」 | 后续 |
 | D122 | **native 自举还差最后一段**：在 `IrTail`（内联 lambda 的尾标记）修掉之后，又把零参顶层定义改成 CAF（`_start` 求值一次 + `.bss` 槽 + GC 根区间）——单文件 `check` 从>30 分钟不返回降到 **1.0 s**，`check packages/base` 17 s（OCaml 23 s 同量级）。仍不通的两处：① 工作区 `check .` 会按包 `processSpawn` 自己，而 native 生成的子进程 argv 是**拼接错**的（`checkpackages/plugin-web--max-errors20`，缺分隔）；② 整仓 `check . --error-format json` 的 live 集已到 1.5 GB+，默认 1 GiB 预算下 GC 每秒数千次、十分钟不返回（升预算只是掩盖） | `bin/vuna-native check <单文件>`（1 s）/ `check packages/base`（17 s）/ `check .`（挂）；对照 OCaml `check .` = 23 s；`nix/checks/native-artifact` 的 `runtime.s` 已随 CAF 的 GC 扫根更新 | 后续（修 spawn argv；压 live 集；再跑 backend-check selfhost） |
->>>>>>> e0981ed (docs(reference): 合并 compiler-audit 到 debt 并补齐新债务)
+| D125 · C | **CPS 合成的 binder 不带宽类型槽**：精确根集里这部分槽只能保守扫描（compiler self 4,824 / 45,835 个 binder 槽），加上 `IrTyOpaque` 的 3,865 个，共 ~19% 的槽没有确定 kind；槽 kind 全部可判定之前不做移动/压缩 | `packages/ir/lib/Vuna/Ir/Cps.vuna`（合成 binder 用 `mkBinder`，没有 binder 类型槽；节点类型槽已统一落 `IrTyOpaque`）；`vuna dev ir dump --after repr-cps packages/compiler`；[performance.md](performance.md)「槽 kind 分布」 | 后续（与 D127 同批：先精确栈图，再看是否给 CPS 合成 binder 标注类型） |
 
-| D125 · C | **CPS 合成的 binder 不带宽类型槽**：精确根集里这部分槽只能保守扫描（compiler self 4,824 / 45,835 个 binder 槽），加上 `IrTyOpaque` 的 3,865 个，共 ~19% 的槽没有确定 kind；槽 kind 全部可判定之前不做移动/压缩 | `packages/ir/lib/Vuna/Ir/Cps.vuna`（合成 binder 用 `mkBinder`、节点类型槽清成 `Nothing`）；`vuna dev ir dump --after repr-cps packages/compiler`；[performance.md](performance.md)「槽 kind 分布」 | 后续（与 D127 同批：先精确栈图，再看是否给 CPS 合成 binder 标注类型） |
 ## wasm 后端
 
 | ID · 类 | 仍未成立的事实 | 证据 | 归属 |
