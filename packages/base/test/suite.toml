@@ -9,7 +9,7 @@ min_cases = 31
 
 [family.stdlib]
 dir = "corpus/stdlib"
-matrix = "pure"
+matrix = "pure-cross"
 check = false
 tags = ["stdlib"]
 
