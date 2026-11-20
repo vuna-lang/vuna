@@ -1,0 +1,26 @@
+-- 逐条 readdir + cookie 续读：多层嵌套（含只有空目录的分支）必须一次删净，
+-- 且父目录删除后不能留下已访问项的索引错位。
+import Base.Effect.Core as Eff
+import Base.Effect.Fs as EffFs
+import Base.Effect.Console as EffConsole
+
+root : String
+root = "deep-tree"
+
+main : Eff [FsOp, ConsoleOp] Int
+main =
+  do
+    _ <- fsRemoveTree root
+    _ <- fsMakeDir root
+    _ <- fsMakeDir (root ++ "/a")
+    _ <- fsMakeDir (root ++ "/a/b")
+    _ <- fsMakeDir (root ++ "/a/b/c")
+    _ <- fsMakeDir (root ++ "/a/d")
+    _ <- fsMakeDir (root ++ "/e")
+    _ <- fsWriteFile (root ++ "/top.txt") "t"
+    _ <- fsWriteFile (root ++ "/a/b/c/leaf.txt") "lll"
+    _ <- fsWriteFile (root ++ "/e/only.txt") "e"
+    _ <- fsRemoveTree root
+    gone <- fsFileExists root
+    _ <- consolePrint (if gone then "leak\n" else "ok\n")
+    pure 0

@@ -28,6 +28,10 @@ export function createNodeFs() {
       const st = fs.statSync(abs);
       return { isDirectory: () => st.isDirectory(), size: st.size };
     },
+    lstat: (abs) => {
+      const st = fs.lstatSync(abs);
+      return { isDirectory: () => st.isDirectory(), size: st.size };
+    },
     mkdir: wired((abs) => fs.mkdirSync(abs)),
     rmdir: wired((abs) => fs.rmdirSync(abs)),
     unlink: wired((abs) => fs.unlinkSync(abs)),

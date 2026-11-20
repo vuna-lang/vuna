@@ -1,0 +1,22 @@
+-- `fsRemoveTree` 的真实叶子：不存在也算成功，非空目录树三端都必须删净
+-- （wasm 宿主不能只 unlink / 删空目录）。
+import Base.Effect.Core as Eff
+import Base.Effect.Fs as EffFs
+import Base.Effect.Console as EffConsole
+
+tree : String
+tree = "rt-tree"
+
+main : Eff [FsOp, ConsoleOp] Int
+main =
+  do
+    _ <- fsRemoveTree tree
+    _ <- fsMakeDir tree
+    _ <- fsMakeDir (tree ++ "/sub")
+    _ <- fsMakeDir (tree ++ "/empty")
+    _ <- fsWriteFile (tree ++ "/a.txt") "aa"
+    _ <- fsWriteFile (tree ++ "/sub/b.txt") "bbb"
+    _ <- fsRemoveTree tree
+    gone <- fsFileExists tree
+    _ <- consolePrint (if gone then "leak\n" else "ok\n")
+    pure 0

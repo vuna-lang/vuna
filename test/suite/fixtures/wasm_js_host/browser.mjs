@@ -55,6 +55,7 @@ try {
     };
     const fsStub = {
       stat: trap,
+      lstat: trap,
       mkdir: trap,
       rmdir: trap,
       unlink: trap,

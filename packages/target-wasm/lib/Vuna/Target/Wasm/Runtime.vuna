@@ -775,15 +775,36 @@ rtTryRemoveFile =
       ]
   in rtFunc "$rt_tryRemoveFile" params [WvAnyRef] locals body
 
-rtTryRemoveTree : WatFunc
-rtTryRemoveTree =
+-- | 递归深度上限：超过即以 9（普通 I/O 失败）收口，不把引擎的栈耗尽变成不可控 trap。
+rtRemoveTreeMaxDepth : Int
+rtRemoveTreeMaxDepth = 512
+
+-- | 递归删除：文件/符号链接 unlink，目录先逐条删空再 rmdir。返回 0 = 成功，
+--   -1 = 失败（`$g_hostStatus` 已写码）。`fd_readdir` 的 cookie 是宿主目录项数组的
+--   下标，因此父目录的 fd 必须跨子递归保持打开（重开会让已删项之后的索引整体前移）。
+rtRemoveTreeGo : WatFunc
+rtRemoveTreeGo =
   let
-    params = [Pair "$s" WvAnyRef]
-    locals = [Pair "$len" WvI32, Pair "$err" WvI32]
+    params = [Pair "$s" WvAnyRef, Pair "$depth" WvI32]
+    locals =
+      [
+        Pair "$fd" WvI32,
+        Pair "$err" WvI32,
+        Pair "$len" WvI32,
+        Pair "$cookie" WvI64,
+        Pair "$used" WvI32,
+        Pair "$namlen" WvI32,
+        Pair "$name" WvAnyRef,
+        Pair "$child" WvAnyRef,
+        Pair "$sep" (WvRef "$str"),
+        Pair "$st" WvI32
+      ]
     body =
       [
-        IConstI32 0,
-        IGlobalSet "$g_hostStatus",
+        ILocalGet "$depth",
+        IConstI32 rtRemoveTreeMaxDepth,
+        IBinop "i32.gt_s",
+        IIf "" [IConstI32 9, IGlobalSet "$g_hostStatus", IConstI32 (0 - 1), IReturn] [INop],
         ILocalGet "$s",
         IConstI32 wasiPath1,
         ICall "$rt_pathCopyRel",
@@ -796,11 +817,47 @@ rtTryRemoveTree =
         ILocalGet "$err",
         IConstI32 0,
         IBinop "i32.eq",
-        IIf "" [IConstI64 0, IStructNew "$int", IReturn] [INop],
+        IIf "" [IConstI32 0, IReturn] [INop],
         ILocalGet "$err",
         IConstI32 44,
         IBinop "i32.eq",
-        IIf "" [IConstI64 0, IStructNew "$int", IReturn] [INop],
+        IIf "" [IConstI32 0, IReturn] [INop],
+        ILocalGet "$err",
+        IConstI32 31,
+        IBinop "i32.ne",
+        IIf
+          ""
+          [ILocalGet "$err", ICall "$rt_errno", IGlobalSet "$g_hostStatus", IConstI32 (0 - 1), IReturn]
+          [INop],
+        ILocalGet "$s",
+        IConstI32 2,
+        IConstI64 readRights,
+        ICall "$rt_pathOpen",
+        ILocalSet "$fd",
+        ILocalGet "$fd",
+        IConstI32 0,
+        IBinop "i32.lt_s",
+        IIf "" [IConstI32 (0 - 1), IReturn] [INop],
+        IConstI64 0,
+        ILocalSet "$cookie",
+        IConstI32 1,
+        IArrayNewDefault "$str",
+        ILocalSet "$sep",
+        ILocalGet "$sep",
+        IConstI32 0,
+        IConstI32 47,
+        IArraySet "$str",
+        IBlock
+          "$rt_done"
+          ""
+          [ILoop "$rt_l" "" [ILocalGet "$fd", IConstI32 wasiDir, IConstI32 wasiDirCap, ILocalGet "$cookie", IConstI32 wasiAux, ICall "$fd_readdir", ILocalSet "$err", ILocalGet "$err", IConstI32 0, IBinop "i32.ne", IIf "" [ILocalGet "$fd", ICall "$fd_close", IDrop, ILocalGet "$err", ICall "$rt_errno", IGlobalSet "$g_hostStatus", IConstI32 (0 - 1), IReturn] [INop], IConstI32 wasiAux, ILoad32, ILocalSet "$used", ILocalGet "$used", IConstI32 24, IBinop "i32.lt_s", IBrIf "$rt_done", IConstI32 wasiDir, ILoad64, ILocalSet "$cookie", IConstI32 (wasiDir + 16), ILoad32, ILocalSet "$namlen", IConstI32 (wasiDir + 24), ILocalGet "$namlen", ICall "$rt_memToStr", ILocalSet "$name", ILocalGet "$namlen", IConstI32 1, IBinop "i32.eq", IIf "i32" [IConstI32 (wasiDir + 24), ILoad8U, IConstI32 46, IBinop "i32.eq"] [IConstI32 0], ILocalGet "$namlen", IConstI32 2, IBinop "i32.eq", IIf "i32" [IConstI32 (wasiDir + 24), ILoad8U, IConstI32 46, IBinop "i32.eq", IConstI32 (wasiDir + 25), ILoad8U, IConstI32 46, IBinop "i32.eq", IBinop "i32.and"] [IConstI32 0], IBinop "i32.or", IBrIf "$rt_l", ILocalGet "$s", ILocalGet "$sep", ICall "$rt_strConcat", ILocalGet "$name", ICall "$rt_strConcat", ILocalSet "$child", ILocalGet "$child", ILocalGet "$depth", IConstI32 1, IBinop "i32.add", ICall "$rt_removeTreeGo", ILocalSet "$st", ILocalGet "$st", IConstI32 0, IBinop "i32.ne", IIf "" [ILocalGet "$fd", ICall "$fd_close", IDrop, IConstI32 (0 - 1), IReturn] [INop], IBr "$rt_l"]],
+        ILocalGet "$fd",
+        ICall "$fd_close",
+        IDrop,
+        ILocalGet "$s",
+        IConstI32 wasiPath1,
+        ICall "$rt_pathCopyRel",
+        ILocalSet "$len",
         IConstI32 3,
         IConstI32 wasiPath1,
         ILocalGet "$len",
@@ -809,18 +866,34 @@ rtTryRemoveTree =
         ILocalGet "$err",
         IConstI32 0,
         IBinop "i32.eq",
-        IIf "" [IConstI64 0, IStructNew "$int", IReturn] [INop],
+        IIf "" [IConstI32 0, IReturn] [INop],
         ILocalGet "$err",
         IConstI32 44,
         IBinop "i32.eq",
-        IIf "" [IConstI64 0, IStructNew "$int", IReturn] [INop],
+        IIf "" [IConstI32 0, IReturn] [INop],
         ILocalGet "$err",
         ICall "$rt_errno",
         IGlobalSet "$g_hostStatus",
+        IConstI32 (0 - 1)
+      ]
+  in rtFunc "$rt_removeTreeGo" params [WvI32] locals body
+
+rtTryRemoveTree : WatFunc
+rtTryRemoveTree =
+  let
+    params = [Pair "$s" WvAnyRef]
+    body =
+      [
+        IConstI32 0,
+        IGlobalSet "$g_hostStatus",
+        ILocalGet "$s",
+        IConstI32 0,
+        ICall "$rt_removeTreeGo",
+        IDrop,
         IConstI64 0,
         IStructNew "$int"
       ]
-  in rtFunc "$rt_tryRemoveTree" params [WvAnyRef] locals body
+  in rtFunc "$rt_tryRemoveTree" params [WvAnyRef] [] body
 
 rtTryRename : WatFunc
 rtTryRename =
@@ -1889,6 +1962,7 @@ rtFunctions c =
     rtTryMakeDir,
     rtTryMakeDirExclusive,
     rtTryRemoveFile,
+    rtRemoveTreeGo,
     rtTryRemoveTree,
     rtTryRename,
     rtHostStatus,

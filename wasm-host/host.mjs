@@ -6,6 +6,7 @@
 //
 // 文件系统经 `fs` 适配器注入（node fs / 内存 FS 同一接口）：
 //   stat(abs) -> { isDirectory(): Bool, size: Int }   失败抛带 `code` 的错误
+//   lstat(abs) -> { isDirectory(): Bool, size: Int }  可选：不跟随符号链接（unlink 判定用）
 //   mkdir / rmdir / unlink / rename(a, b) / truncate(abs) / createEmpty(abs)
 //   readFile(abs) -> Uint8Array
 //   writeFile(abs, bytes)
@@ -285,7 +286,7 @@ export function createHost({ rootDir, env = {}, args = [], fs, sink }) {
         const r = resolve(dirfd, pathPtr, pathLen);
         if (r.errno !== undefined) return r.errno;
         try {
-          if (fs.stat(r.abs).isDirectory()) return ERRNO.ISDIR;
+          if ((fs.lstat ?? fs.stat)(r.abs).isDirectory()) return ERRNO.ISDIR;
           fs.unlink(r.abs);
           return ERRNO.SUCCESS;
         } catch (e) {
