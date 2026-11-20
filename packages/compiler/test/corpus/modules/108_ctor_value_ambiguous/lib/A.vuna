@@ -1,0 +1,8 @@
+module A where
+
+export data Flag(..) : Type where
+  FlagOn : Flag
+  FlagOff : Flag
+
+export FlagOn : Flag
+FlagOn = FlagOff

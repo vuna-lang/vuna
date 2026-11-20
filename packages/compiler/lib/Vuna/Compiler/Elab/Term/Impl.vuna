@@ -817,7 +817,7 @@ inferEFuelCorePlain fuel globals ctx ec expr =
       EStr s sp => OkC (Pair (TStr s) (Pair (VNeutral (NGlobal "String" [])) ec))
       EFloat raw sp => OkC (Pair (TFloat raw) (Pair (VNeutral (NGlobal floatTypeName [])) ec))
       EPi name implicit qty dom cod sp => inferPiFuel (fuel - 1) globals ctx ec name implicit qty dom cod sp
-      EApp (EVar n fsp) args sp => if isInstArgSyntax (rnameKey n) then tcErr0 sp NoInstParam else inferAppFuel (fuel - 1) globals ctx ec (EVar n fsp) args sp Nothing
+      EApp (EVar n fsp) args sp => if isInstArgSyntax (rnameKey n) then tcErr0 sp NoInstParam else if isOverValueName (rnameKey n) then tcErr2 sp (AmbiguousName (overValueShort (rnameKey n)) (joinWithAt (overValueTargets (rnameKey n)))) (overValueShort (rnameKey n)) (joinWithAt (overValueTargets (rnameKey n))) else inferAppFuel (fuel - 1) globals ctx ec (EVar n fsp) args sp Nothing
       EApp fn args sp => inferAppFuel (fuel - 1) globals ctx ec fn args sp Nothing
       ELam names body sp => tcErr0 sp LambdaNoSignature
       EIf c t e sp =>
@@ -1989,9 +1989,55 @@ overValueCandidateMatches globals ctx ec expected target =
       case conv (ecDefTbl ec) (ecSolsP ec) (ctxDepth ctx) (eval (ctxEnv ctx) ty) expected of
         OkC _ => True
         ErrC _ => False
+    -- 重载候选里可以同时有值与构造子：构造子按自身类型比较。
+    Just (VECtor ctor) =>
+      case conv (ecDefTbl ec) (ecSolsP ec) (ctxDepth ctx) (eval (ctxEnv ctx) ctor.dtCtorType) expected of
+        OkC _ => True
+        ErrC _ => False
     _ => False
 
 -- | 重载值在 check 位按期望类型挑唯一候选（只选 target，不回溯候选体）。
+-- | 重载值在应用头位置按期望类型挑唯一候选：候选类型是函数时先用新鲜元变量剥掉 Pi，
+--   再拿**结果类型**与期望类型比（`MkTag : Int -> Int` 对 `MkTag 1 : Int`）。
+overValueAppCandidateMatches : List (Pair String Term) -> Ctx -> Ec -> Value -> String -> Bool
+overValueAppCandidateMatches globals ctx ec expected target =
+  case valueLookup globals ec target of
+    Just (VEDef ty) => overValueAppResultMatches ctx ec expected (eval (ctxEnv ctx) ty)
+    Just (VECtor ctor) =>
+      overValueAppResultMatches ctx ec expected (eval (ctxEnv ctx) ctor.dtCtorType)
+    _ => False
+
+overValueAppResultMatches : Ctx -> Ec -> Value -> Value -> Bool
+overValueAppResultMatches ctx ec expected v =
+  case stripPiWithMetas ctx ec v of
+    Pair res ec1 =>
+      case conv (ecDefTbl ec1) (ecSolsP ec1) (ctxDepth ctx) res expected of
+        OkC _ => True
+        ErrC _ => False
+
+stripPiWithMetas : Ctx -> Ec -> Value -> Pair Value Ec
+stripPiWithMetas ctx ec v = stripPiWithMetasFuel 64 ctx ec v
+
+stripPiWithMetasFuel : Int -> Ctx -> Ec -> Value -> Pair Value Ec
+stripPiWithMetasFuel fuel ctx ec v =
+  if fuel <= 0 then
+    Pair v ec
+  else
+    case forceVal ec v of
+      VPi _ _ _ _ clo =>
+        let
+          m = ecNext ec
+        in case newMeta ctx ec of
+          Pair _ ec1 => stripPiWithMetasFuel (fuel - 1) ctx ec1 (applyClosure clo (VMeta m []))
+      _ => Pair v ec
+
+-- | 应用头位置的重载值解析：按**结果类型**匹配，多命中/零命中报歧义。
+resolveOverValueAppTarget : List (Pair String Term) -> Ctx -> Ec -> String -> List String -> Value -> Span -> Check String
+resolveOverValueAppTarget globals ctx ec short targets expected sp =
+  case filter (overValueAppCandidateMatches globals ctx ec expected) targets of
+    [t] => OkC t
+    _ => tcErr2 sp (AmbiguousName short (joinWithAt targets)) short (joinWithAt targets)
+
 resolveOverValueTarget : List (Pair String Term) -> Ctx -> Ec -> String -> List String -> Value -> Span -> Check String
 resolveOverValueTarget globals ctx ec short targets expected sp =
   case filter (overValueCandidateMatches globals ctx ec expected) targets of
@@ -2826,8 +2872,11 @@ checkAppFuel fuel globals ctx ec fn args expected sp =
       EVar name vsp =>
         if isOverCtorName (rnameKey name) then
           Vuna.Compiler.Base.Common.bind (resolveOverCtor ec vsp (Just expected) (overCtorShort (rnameKey name)) (overCtorTargets (rnameKey name))) (\t => checkAppFuel (fuel - 1) globals ctx ec (EVar (classifyName t) vsp) args expected sp)
+        else if isOverValueName (rnameKey name) then
+          Vuna.Compiler.Base.Common.bind (resolveOverValueAppTarget globals ctx ec (overValueShort (rnameKey name)) (overValueTargets (rnameKey name)) expected sp) (\t => checkAppFuel (fuel - 1) globals ctx ec (EVar (classifyName t) vsp) args expected sp)
         else
           case ctxLookup (rnameKey name) ctx of
+            -- 值与构造子混排的重载候选：按**应用结果类型**选（与 check 位的裸名同口径）。
             -- 局部 binder 不可能是运算符方法（`+` / `==` / `Base.Trait.Num.x` 这类名字都要么是
             -- 全局、要么是运算符语法），直接走推断即可，省掉每处引用一次的运算符特化链。
             Just _ => checkByInferFuel (fuel - 1) globals ctx ec (EApp fn args sp) expected

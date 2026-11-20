@@ -1,0 +1,4 @@
+module F where
+
+export module A
+export module B

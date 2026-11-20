@@ -1,0 +1,6 @@
+import A
+
+main : Int
+main = case FlagOn of
+  FlagOn => 1
+  FlagOff => 0

@@ -1,0 +1,4 @@
+module B where
+
+export foo : Int -> String
+foo x = "b"

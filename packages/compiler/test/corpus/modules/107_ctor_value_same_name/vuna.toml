@@ -1,0 +1,5 @@
+[package]
+name = "fix-107-ctor-value-same-name"
+
+[dependencies]
+vuna-base = "../../../../../../packages/base"

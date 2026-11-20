@@ -635,6 +635,8 @@ isEmptyPaths (_ :: _) = False
 
 -- 值位置的裸名：值命名空间（def → ctor）优先；**类型作为项**是最后退路
 -- （`data T ...` 的 `T` 可以当类型层实参传给显式 `(a : Type)` 参数）。
+-- 导入面里同名值与构造子并存时，两者都作为重载候选（使用点按期望类型选，应用头按结果
+-- 类型选）；只有构造子候选时保留按族定向。歧义无法消解时报 `TC_AmbiguousName`。
 -- 命名空间分开后，本模块声明的**类型名不再抢走同名的导入值**：先查导入的值/构造子，
 -- 再到本模块类型名，最后到导入模块导出的类型名（与类型位置一样，本模块类型名优先）；
 -- 这样 `:type Maybe` / `f Bool` 这类「类型构造子当项」对导入名也成立（REPL 依赖它）。
@@ -685,8 +687,22 @@ resolveGlobal modules label prefix ns imports scope name =
                   _ =>
                     case ctorPairTargets modules pairs of
                       [] => OkC (pickValueOrOver name pairs)
-                      targets => OkC (pickCtorOrOver name (nubNames targets))
+                      targets =>
+                        case valuePairTargets modules pairs of
+                          -- 纯构造子：保留按族消歧（`Nil` 等列表/行构造子依赖这条）。
+                          [] => OkC (pickCtorOrOver name (nubNames targets))
+                          -- 同名值与构造子并存：两者都作为重载候选，交给使用点按期望类型选
+                          -- （与 val/val 同一口径）；不再让构造子无条件吞掉值条目。
+                          _ => OkC (overValueName name (nubNames (map pairExportTarget pairs)))
             )
+
+-- 同一批导出命中里的真值条目 target（排除 kind=ctor 与 target 是 data/record 构造子的条目）。
+valuePairTargets : List Module -> List (Pair String ExportEntry) -> List String
+valuePairTargets modules [] = []
+valuePairTargets modules ((Pair m e) :: rest) =
+  let
+    isCtor = e.kind == "ctor" || isDataOrRecordCtorTarget modules e.target
+  in if isCtor then valuePairTargets modules rest else (::) e.target (valuePairTargets modules rest)
 
 -- | 从候选 target 里选唯一名；多个不同 target 编码成重载值标记名，交给精化器按期望类型选。
 pickValueOrOver : String -> List (Pair String ExportEntry) -> String

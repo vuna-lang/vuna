@@ -1,0 +1,5 @@
+[package]
+name = "fix-111-overload-app-by-type"
+
+[dependencies]
+vuna-base = "../../../../../../packages/base"

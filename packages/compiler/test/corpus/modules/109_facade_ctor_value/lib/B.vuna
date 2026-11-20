@@ -1,0 +1,4 @@
+module B where
+
+export MkTag : Int -> Int
+MkTag x = x + 1

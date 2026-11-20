@@ -1,0 +1,5 @@
+[package]
+name = "fix-108-ctor-value-ambiguous"
+
+[dependencies]
+vuna-base = "../../../../../../packages/base"

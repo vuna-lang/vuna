@@ -1,0 +1,4 @@
+import F
+
+main : Int
+main = MkTag 1

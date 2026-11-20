@@ -1,0 +1,4 @@
+module A where
+
+export data Tag(..) : Type where
+  MkTag : Int -> Tag

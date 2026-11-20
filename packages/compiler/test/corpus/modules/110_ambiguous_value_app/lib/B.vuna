@@ -1,0 +1,4 @@
+module B where
+
+export foo : Int -> Int
+foo x = x + 1

@@ -1,0 +1,5 @@
+[package]
+name = "fix-109-facade-ctor-value"
+
+[dependencies]
+vuna-base = "../../../../../../packages/base"

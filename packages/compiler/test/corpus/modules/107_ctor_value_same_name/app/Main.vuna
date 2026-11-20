@@ -1,0 +1,14 @@
+import A
+
+fromValue : Int
+fromValue = MkTag 1
+
+tagValue : Tag
+tagValue = MkTag 2
+
+fromPattern : Int
+fromPattern = case tagValue of
+  MkTag n => n
+
+main : Int
+main = fromValue + fromPattern
