@@ -315,3 +315,39 @@ wasm 删掉 wat 机器后连纯程序也小了 ~4%；native 相反：`machineRun
 `nix run .#vuna-artifacts` 测量，读数与口径见 [performance.md §产物规模](performance.md)，
 基线 `bench/baselines/artifacts.json`。
 
+
+### 1.5 容器族（三端）
+
+`sort_lib` / `treemap` / `queue` / `priority_queue` / `hashmap_remove` 覆盖
+`Base.Data.Sort`、`Base.Container.{TreeMap,Queue,PriorityQueue,HashMap}` 的典型操作。
+每项是一对同算法实现：vuna 库 vs **手写 OCaml 上限**（`List.sort` / `Map` / `Queue` /
+`Set` / `Hashtbl`），golden 用**顺序敏感**校验和（遍历/出队顺序错了就失配）；输入与
+累加都用尾递归，三个后端都能跑完（wasm 1 MB 栈）。
+
+同机一档（HEAD，`--target all --runs 5 --warmup 2`，loadavg ≈5.6；wasm 括号内是减掉
+`meta.node_startup_ms` = 24 ms 的 net）：
+
+| benchmark | 规模 | 手写 ms | OCaml 后端 | native | wasm（net） |
+| --- | --- | --- | --- | --- | --- |
+| sort_lib（`Sort.sortBy` 排序） | 20000 Int | 7 | 19（2.71x） | 47（6.71x） | 82（58；8.29x） |
+| treemap（insert + lookup + 升序遍历） | 20000 键 | 10 | 22（2.20x） | 46（4.60x） | 101（77；7.70x） |
+| queue（push + pop + size） | 50000 次 | 4 | 7（1.75x） | 13（3.25x） | 62（38；9.50x） |
+| priority_queue（push + pop） | 20000 次 | 10 | 18（1.80x） | 41（4.10x） | 67（43；4.30x） |
+| hashmap_remove（insert + remove + lookup） | 20000 键 | 5 | 34（6.80x） | 148（29.60x） | 120（96；19.20x） |
+
+读法：
+
+- **比值口径是「库 vs 手写最优实现」**，不是后端之间的公平对照：OCaml 侧的 `Map`/`Set`
+  也是树、`List.sort` 是特化排序，而 vuna 侧是泛型容器 + 字典派发；
+- `hashmap_remove` 的常数最大（OCaml 后端 6.8x、native 29.6x）：持久 `HashMap` 每次
+  `insert`/`remove` 都要 copy-on-write 两个 32 元素数组并做桶内去重，对手是可变
+  `Hashtbl`。这是持久化的代价，不是复杂度退化（`checks.vuna-container-growth` 锁
+  O(1)/O(log n) 的增长形状）；
+- `sort_lib` 的 OCaml 后端 2.71x 来自泛型比较闭包与拆半/归并的分配；`Sort.sortBy` 对
+  已有序输入直接返回原列表（编译器里的排序点大多命中这条）；
+- wasm 的绝对 ms 含 node 启动地板；native/wasm 与 OCaml 后端的比值见
+  `bench/baselines/programs.json` 的 `vs_ocaml_backend`。
+
+重标：`VUNA=$PWD/result/bin/vuna ./bench/run.sh --target all --runs 5 --warmup 2 --json bench/baselines/programs.json`。
+复杂度契约见 [stdlib.md](stdlib.md)「容器复杂度契约」；增长形状由
+`checks.vuna-container-growth` 在 CI 里守（每翻倍 ≤3.0×）。
