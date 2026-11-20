@@ -84,8 +84,8 @@ ID 是稳定引用（`层前缀-序号`），改动时保留编号，删掉实�
 
 | ID | 位置 | 类 | 现象 → 后果 | 状态 |
 | --- | --- | --- | --- | --- |
-| EC-01 | `Core/Conv.vuna` 的 `termScopedTo` | ⚠️A | `i < extra` 把负索引当本地 binder 放行；`Eval.varIndex` 越界拍成 `-1`，于是越界解一律通过 | 开放（前置：quote 深度 + 非类型类参数，见下） |
-| EC-02 | `Core/Eval.vuna` 的 `varIndex` | ⚠️A | 越界返回 `-1` 哨兵，下游按 `i <= 0` 取最内层变量 → 静默错指 | 开放 |
+| EC-01 | `Core/Conv.vuna` 的 `termScopedTo` | ⚠️A | `i < extra` 把负索引当本地 binder 放行；`Eval.varIndex` 越界拍成 `-1`，于是越界解一律通过 | 已清（`i < 0` 判 False；求解点深度与 ctx 对齐，见下） |
+| EC-02 | `Core/Eval.vuna` 的 `varIndex` | ⚠️A | 越界返回 `-1` 哨兵，下游按 `i <= 0` 取最内层变量 → 静默错指 | 已清（`varIndexM : Int -> Int -> Maybe Int`；判据不再依赖哨兵） |
 | EC-03 | `Core/Conv.vuna` 的 `metaCreatedDepth` | C | 未登记时回退当前深度 | 开放 |
 | EC-04 | `Core/Conv.vuna` 的 `VPi`/`VLam` | C | 定义性相等不比 `rig`（`rig` 是运行时擦除格子，不比是有意取舍） | 开放（有意） |
 | EC-05 | `Core/Conv.vuna` 的 `patternSolution []` | C | 不可达分支伪造 `VType` | 已清（空 spine 取 n=0 的自然延拓：不伪造 `VType`） |
@@ -117,21 +117,22 @@ ID 是稳定引用（`层前缀-序号`），改动时保留编号，删掉实�
 | EC-31 | `Conv.vuna` 的 `convFuelBase` | C | 非 Nat 值的 conv 燃料固定 64：定义性相等嵌套 ≥ ~15 层就假报 `IC_FuelExhausted` | 已清（基值 4096 ≈ 1000 层；Nat 链仍按链深追加。`fuel` 是该互递归组唯一的 SCT 递减测度，结构比较不能停止扣减——要去掉层数上限只能给整个组换终止性测度） |
 | EC-32 | `Eval.vuna` 的 `normalizeIfFuel` 中性条件 | C | 条件归约不到 `Bool` 时继续正规化**两个分支**：每支都拿到近乎全新的 `force` 预算，深递归每次「条件卡住」都重展开一遍 ⇒ 工作随深度指数放大（85 层两分支递归 7 s 涨到 >3 GB） | 已清（只正规化条件、保持 `VIf` 卡住，与 `normalizeCaseFuel` 同口径；interp 预算改为 `interpFuelBound = 262144`） |
 
-`EC-01` 的前置（把 `i < 0` 判 False 后 base 立刻红，已定位到两类，均需先修）：
+`EC-01` / `EC-02` 的修复（同批）：
 
-1. **quote 深度传小**：`Dict.tryMatchInst` / `Dict.localDictLookupGo` 的 `conv`、`Dict` 的
-   `CkDict` 延迟约束 `cdepth`、`Impl.constrainDictDomFuel` 的 `solveMeta`、全局 worklist
-   `tryResolveDictGoal`（`eval []` + `cdepth`）都把 `0` 当「当前深度」，而 rhs 在非空 ctx
-   里求值；`varIndex` 因此拍成 `-1`，被 `i < extra` 当本地 binder 放行。
-2. **非类型类参数被提升**：`Base.Effect.Fs.runFsError` 的签名被 `liftFreeDictGoals` 补出
-   `{d : Dict_Eq "fs-error"}` / `{d : Dict_Hashable ((++ "readFile ") "fs-error")}` 这类
-   隐式字典参数（类参数是字符串**值**，不是类型）；调用点只能靠 `-1` 通道满足它们。
-   收紧后先红的是 `Base/Data/Pair.vuna:34`（实例 ctx 搜索）与
-   `Base/Effect/Fs.vuna:302`（`Dict_Eq "fs-error"`）。
+1. **延迟目标按定义归属**：`liftFreeDictGoals` 只提升 `cid >= 本定义起始 id` 的目标；
+   `resolveRigidGoals` 对更早的目标原样退回 pending。跨定义累积的队列不再把别人的
+   `Dict_Eq <label>` 塞进无关定义/实例的签名与 ctx。
+2. **非类型类参数不提升**：类参数是值字面量的字典域不提升（它说明目标本身不是类型，
+   例如把运行期标签当类参数），留在 pending 按未解目标报告。
+3. **求解深度与 ctx 对齐**：`Dict.tryMatchInst` / `localDictLookupGo` 的 `conv`、
+   `CkDict` 的 `cdepth`、`resolveRowGoalsCtxGo` 与 `constrainDictDomFuel` 的 `solveMeta`
+   都用当前 ctx 深度；全局 worklist 只处理闭目标（`cdepth > 0` 跳过，交给按 def ctx
+   求解的 `resolveRowGoalsCtx`）。
+4. **判据**：`termScopedTo` 把 `i < 0` 判 False；`Eval.varIndexM` 返回 `Maybe`，`quote`
+   对越界 level 仍落 `-1` 哨兵，但作用域判据不再依赖它。
 
-`Base/Data/String.vuna` 的 `lines` **不是**阻塞点：它本身没有 meta、没有字典目标
-（`split` 是闭函数）。终态顺序：修 quote 深度 → 拒绝类参数不是类型的自由字典提升 →
-收紧 `termScopedTo` → `varIndex` 改 `Maybe`。
+`Base/Data/String.vuna` 的 `lines` 与这些问题无关（没有 meta / 字典目标），不是阻塞点。
+夹具 `packages/compiler/test/ConvScope.vuna` 锁住「作用域外的解被拒绝、作用域内的解被接受」。
 
 ## Core / IR / Lowering
 

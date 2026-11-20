@@ -154,7 +154,8 @@ Track A 第一步（Core → IR → OCaml）之后这些不变量分两层：**�
   （构造子实参的 `Obj.magic`）、以及 arity / used-levels 的跳过规则。精化器侧的 binder
   cast 必须用同一判据（`Elab.Meta.valueOpaqueScoped`），两侧不一致就会在 `ocamlopt` 处报
   字段类型错配。
-- **de Bruijn 作用域护栏**：`Core.varIndex` 越界返回 `-1`（不是静默 0）；
+- **de Bruijn 作用域护栏**：`Core.varIndexM` 对越界 level 返回 `Nothing`，`quote` 落成
+  `-1` 哨兵（不静默指向 0），`Core.Conv.termScopedTo` 拒绝负索引；
   `Lowering.Program.checkProgramOf` → `Erase.checkAllDefScopes` 对运行时会生成的定义体做作用域
   校验，越界报内部错误。`IrVar` 携带 binder 身份（不是裸下标），所以「渲染出未绑定名字」
   在 IR 层不可表达。
