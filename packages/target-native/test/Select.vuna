@@ -23,7 +23,9 @@ main =
 
 problems : List String
 problems =
-  append (append (append wrapProblems cmpProblems) (append natProblems constProblems)) planProblems
+  append
+    (append (append wrapProblems cmpProblems) (append natProblems constProblems))
+    (append planProblems peepholeProblems)
 
 wrapProblems : List String
 wrapProblems =
@@ -110,3 +112,56 @@ planProblem p =
       let
         got = secondOf plan
       in if got == want then [] else ["plan " ++ sym ++ ": " ++ got ++ " /= " ++ want]
+
+peepholeProblems : List String
+peepholeProblems =
+  append
+    storeReloadProblems
+    (append jmpNextProblems (append immFoldProblems (append immKeepProblems cmpFoldProblems)))
+
+storeReloadProblems : List String
+storeReloadProblems =
+  case peephole [IMov (OpMem Rbp (0 - 16)) (OpReg Rax), IMov (OpReg Rax) (OpMem Rbp (0 - 16))] of
+    [IMov (OpMem _ _) (OpReg Rax)] => []
+    is => ["store/reload: " ++ strFromInt (length is) ++ " instrs"]
+
+jmpNextProblems : List String
+jmpNextProblems =
+  case peephole [IJmp ".L1", ILabel ".L1", INop] of
+    [ILabel ".L1", INop] => []
+    is => ["jmp to next label: " ++ strFromInt (length is) ++ " instrs"]
+
+immFoldProblems : List String
+immFoldProblems =
+  case peephole [IMov (OpReg R11) (OpImm 3), IBinReg "imul" R10 (OpReg R11), INop] of
+    [IBinReg "imul" R10 (OpImm 3), INop] => []
+    is => ["imm fold: " ++ strFromInt (length is) ++ " instrs"]
+
+cmpFoldProblems : List String
+cmpFoldProblems =
+  case peephole [IMov (OpReg R10) (OpImm 0), ICmp (OpReg R11) (OpReg R10), INop] of
+    [ICmp (OpReg R11) (OpImm 0), INop] => []
+    is => ["cmp imm fold: " ++ strFromInt (length is) ++ " instrs"]
+
+-- 折叠后 scratch 还会被读、或立即数超 imm32、或目标是 scratch 自身时必须保留原样。
+immKeepProblems : List String
+immKeepProblems = append scratchUsedProblems (append bigImmProblems selfFoldProblems)
+
+scratchUsedProblems : List String
+scratchUsedProblems =
+  case peephole [IMov (OpReg R11) (OpImm 3), IBinReg "imul" R10 (OpReg R11), IBinReg "add" Rax (OpReg R11)] of
+    [IMov (OpReg R11) (OpImm 3), IBinReg "imul" R10 (OpReg R11), IBinReg "add" Rax (OpReg R11)] =>
+      []
+    is => ["scratch still live: " ++ strFromInt (length is) ++ " instrs"]
+
+bigImmProblems : List String
+bigImmProblems =
+  case peephole [IMov (OpReg R11) (OpImm 4611686018427387903), IBinReg "imul" R10 (OpReg R11)] of
+    [IMov (OpReg R11) (OpImm _), IBinReg "imul" R10 (OpReg R11)] => []
+    is => ["large imm folded: " ++ strFromInt (length is) ++ " instrs"]
+
+selfFoldProblems : List String
+selfFoldProblems =
+  case peephole [IMov (OpReg R11) (OpImm 3), IBinReg "add" R11 (OpReg R11)] of
+    [IMov (OpReg R11) (OpImm 3), IBinReg "add" R11 (OpReg R11)] => []
+    is => ["self fold: " ++ strFromInt (length is) ++ " instrs"]

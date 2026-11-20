@@ -90,3 +90,102 @@ scalarInstrs ScalarNatFromInt a b =
   Pair a [IMov (OpReg b) (OpImm 0), ICmp (OpReg a) (OpReg b), ICmov "cmovl" a (OpReg b)]
 scalarInstrs ScalarNatToInt a _ = Pair a []
 scalarInstrs (ScalarConst n) a _ = Pair a [IMov (OpReg a) (OpImm n)]
+
+-- ---------------------------------------------------------------
+-- 窥孔：只做局部、可证明安全的合并
+-- ---------------------------------------------------------------
+-- | 槽写完又立刻读回（rax 里的值没变）时删掉读。
+-- | `jmp` 的目标就是下一条标签时删掉跳转；立即数装进 scratch 后只被下一条
+--   二元/比较指令消费时，把 scratch 折进立即数操作数。
+export peephole : List Instr -> List Instr
+peephole [] = []
+peephole ([one]) = [one]
+peephole (i :: rest) =
+  case rest of
+    next :: more =>
+      case i of
+        IMov (OpMem Rbp s1) (OpReg Rax) =>
+          case next of
+            IMov (OpReg Rax) (OpMem Rbp s2) =>
+              if s1 == s2 then peephole (i :: more) else i :: peephole rest
+            _ => i :: peephole rest
+        IJmp target =>
+          case next of
+            ILabel here => if target == here then peephole rest else i :: peephole rest
+            _ => i :: peephole rest
+        IMov (OpReg scratch) (OpImm n) =>
+          if not (immFits32 n) || not (isScratchReg scratch) then
+            i :: peephole rest
+          else
+            case next of
+              IBinReg op dst (OpReg src) => if sameReg src scratch && not (sameReg dst scratch) && regFreeAhead scratch more then IBinReg op dst (OpImm n) :: peephole more else i :: peephole rest
+              IBin op (OpReg src) => if sameReg src scratch && regFreeAhead scratch more then IBin op (OpImm n) :: peephole more else i :: peephole rest
+              ICmp left (OpReg src) => if sameReg src scratch && regFreeAhead scratch more then ICmp left (OpImm n) :: peephole more else i :: peephole rest
+              _ => i :: peephole rest
+        _ => i :: peephole rest
+    [] => [i]
+
+-- | 只折叠选择器自己分配的 scratch：其它寄存器可能有更远的用途。
+isScratchReg : Reg -> Bool
+isScratchReg r = sameReg r R10 || sameReg r R11
+
+immFits32 : Int -> Bool
+immFits32 n = n >= 0 - 2147483648 && n <= 2147483647
+
+-- | scratch 在后续直线上是否在「先读」之前先被重写（或块结束）。
+regFreeAhead : Reg -> List Instr -> Bool
+regFreeAhead _ [] = True
+regFreeAhead r (i :: rest) =
+  if instrReadsReg r i then
+    False
+  else if instrWritesReg r i then True else if isBlockBoundary i then False else regFreeAhead r rest
+
+isBlockBoundary : Instr -> Bool
+isBlockBoundary (ILabel _) = True
+isBlockBoundary (IJmp _) = True
+isBlockBoundary (IJmpReg _) = True
+isBlockBoundary (IJcc _ _) = True
+isBlockBoundary IRet = True
+isBlockBoundary _ = False
+
+operandReadsReg : Reg -> Operand -> Bool
+operandReadsReg r (OpReg x) = sameReg r x
+operandReadsReg r (OpMem base _) = sameReg r base
+operandReadsReg r (OpMemX base idx _) = sameReg r base || sameReg r idx
+operandReadsReg _ (OpImm _) = False
+operandReadsReg _ (OpRip _) = False
+
+instrReadsReg : Reg -> Instr -> Bool
+instrReadsReg r (IMov _ src) = operandReadsReg r src
+instrReadsReg r (IMovByteRegOp _ src) = sameReg r src
+instrReadsReg r (IMovzx _ src) = operandReadsReg r src
+instrReadsReg r (ILeaMem _ base _) = sameReg r base
+instrReadsReg r (IBin _ src) = operandReadsReg r src
+instrReadsReg r (IBinReg _ dst src) = sameReg r dst || operandReadsReg r src
+instrReadsReg r (ICmp a b) = operandReadsReg r a || operandReadsReg r b
+instrReadsReg r (ICmov _ _ src) = operandReadsReg r src
+instrReadsReg r (ITest a b) = sameReg r a || sameReg r b
+instrReadsReg r (INeg x) = sameReg r x
+instrReadsReg r (IDiv x) = sameReg r x
+instrReadsReg r (IDivUnsigned x) = sameReg r x
+instrReadsReg r (IJmpReg x) = sameReg r x
+instrReadsReg r (ICallReg x) = sameReg r x
+instrReadsReg r (IPush x) = sameReg r x
+instrReadsReg r (IXmmLoad _ op) = operandReadsReg r op
+instrReadsReg r (IXmmStore op _) = operandReadsReg r op
+instrReadsReg r (IXmmFromInt _ x) = sameReg r x
+instrReadsReg r (IXmmFromReg _ x) = sameReg r x
+instrReadsReg _ _ = False
+
+instrWritesReg : Reg -> Instr -> Bool
+instrWritesReg r (IMov (OpReg dst) _) = sameReg r dst
+instrWritesReg r (IMovzx dst _) = sameReg r dst
+instrWritesReg r (IBinReg _ dst _) = sameReg r dst
+instrWritesReg r (ISetcc _ dst) = sameReg r dst
+instrWritesReg r (ICmov _ dst _) = sameReg r dst
+instrWritesReg r (INeg x) = sameReg r x
+instrWritesReg r (IPop x) = sameReg r x
+instrWritesReg r (IXmmToInt x _) = sameReg r x
+instrWritesReg _ (ICall _) = True
+instrWritesReg _ (ICallReg _) = True
+instrWritesReg _ _ = False

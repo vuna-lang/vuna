@@ -731,10 +731,6 @@ genNatSuccCall fuel st isTail arg =
 -- ---------------------------------------------------------------
 -- 标量运行时叶子的调用点展开
 -- ---------------------------------------------------------------
--- | 寄存器名比较（槽里没有 Eq Reg；渲染文本即身份）。
-sameReg : Reg -> Reg -> Bool
-sameReg a b = regText a == regText b
-
 memReg : Reg -> List Reg -> Bool
 memReg _ [] = False
 memReg r (x :: rest) = if sameReg r x then True else memReg r rest
@@ -1262,7 +1258,7 @@ genLamValue fuel st bs body =
                         stF = secondOf q
                         frame = nativeFrameBytes stF.fgNextSlot
                         lamBody = append (firstOf cp) (append (firstOf bp) (firstOf q))
-                        lamAn = nativeAnnotateCalls (scalarSlotsOf stF) stF.fgNextLabel lamBody
+                        lamAn = nativeAnnotateCalls (scalarSlotsOf stF) stF.fgNextLabel (peephole lamBody)
                         lamFunc = NativeFunc lamName frame (append (nativePrologue frame) (append stackGuardInstrs (append (firstOf lamAn) nativeEpilogue))) st.fgModule (secondOf (secondOf lamAn))
                         allocP = genAlloc st1 (2 + ncap)
                         obj = firstOf (secondOf allocP)
@@ -1766,7 +1762,7 @@ genDefFunc defs pools fams nextLabel (IrDef name arity _ _ body _ _ _) =
           let
             st1 = secondOf p
             frame = nativeFrameBytes st1.fgNextSlot
-            an = nativeAnnotateCalls (scalarSlotsOf st1) st1.fgNextLabel (firstOf p)
+            an = nativeAnnotateCalls (scalarSlotsOf st1) st1.fgNextLabel (peephole (firstOf p))
             instrs = append (firstOf an) nativeEpilogue
             mainF = NativeFunc (nativeFuncLabel name) frame (append (nativePrologue frame) (append stackGuardInstrs instrs)) modPath (secondOf (secondOf an))
           in NOk (Pair (append st1.fgLams [mainF]) (Pair (firstOf (secondOf an)) st1.fgStatics))
@@ -1792,7 +1788,7 @@ genDefFunc defs pools fams nextLabel (IrDef name arity _ _ body _ _ _) =
                         st1 = secondOf q
                         frame = nativeFrameBytes st1.fgNextSlot
                         body0 = append (firstOf bp) (append [ILabel loopLabel] (firstOf q))
-                        an = nativeAnnotateCalls (scalarSlotsOf st1) st1.fgNextLabel body0
+                        an = nativeAnnotateCalls (scalarSlotsOf st1) st1.fgNextLabel (peephole body0)
                         instrs = append (firstOf an) nativeEpilogue
                         mainF = NativeFunc (nativeFuncLabel name) frame (append (nativePrologue frame) (append stackGuardInstrs instrs)) modPath (secondOf (secondOf an))
                       in NOk (Pair (append st1.fgLams [mainF]) (Pair (firstOf (secondOf an)) st1.fgStatics))
