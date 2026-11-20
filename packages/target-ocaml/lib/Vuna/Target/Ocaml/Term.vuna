@@ -1364,7 +1364,7 @@ let dtp_obs_shutdown () =
 let () = at_exit dtp_obs_shutdown
 
 let dtp_obs_span_emit (name : string) (cat : string) (label_opt : string option)
-    (t0 : int) (s0 : Gc.stat) (ok : bool) =
+    (t0 : int) (s0 : Gc.stat) (a0 : float) (ok : bool) =
   let t1 = dtp_timeUs () in
   let s1 = Gc.quick_stat () in
   let b = Buffer.create 192 in
@@ -1387,7 +1387,7 @@ let dtp_obs_span_emit (name : string) (cat : string) (label_opt : string option)
   dtp_obs_key b \"allocWords\";
   dtp_obs_int b
     (int_of_float
-       (s1.Gc.minor_words -. s0.Gc.minor_words +. (s1.Gc.major_words -. s0.Gc.major_words)));
+       ((Gc.allocated_bytes () -. a0) /. (float_of_int Sys.word_size /. 8.)));
   if not ok then begin
     Buffer.add_char b dtp_obs_comma;
     dtp_obs_key b \"error\";
@@ -1403,8 +1403,9 @@ let dtp_obs_span (name : string) (cat : string) (f : int -> 'a) : 'a =
   else begin
     let t0 = dtp_timeUs () in
     let s0 = Gc.quick_stat () in
-    let v = try f 0 with e -> dtp_obs_span_emit name cat None t0 s0 false; raise e in
-    dtp_obs_span_emit name cat None t0 s0 true;
+    let a0 = Gc.allocated_bytes () in
+    let v = try f 0 with e -> dtp_obs_span_emit name cat None t0 s0 a0 false; raise e in
+    dtp_obs_span_emit name cat None t0 s0 a0 true;
     v
   end
 
@@ -1413,12 +1414,13 @@ let dtp_obs_span_lab (name : string) (cat : string) (label : string) (f : int ->
   else begin
     let t0 = dtp_timeUs () in
     let s0 = Gc.quick_stat () in
-    let v = try f 0 with e -> dtp_obs_span_emit name cat (Some label) t0 s0 false; raise e in
-    dtp_obs_span_emit name cat (Some label) t0 s0 true;
+    let a0 = Gc.allocated_bytes () in
+    let v = try f 0 with e -> dtp_obs_span_emit name cat (Some label) t0 s0 a0 false; raise e in
+    dtp_obs_span_emit name cat (Some label) t0 s0 a0 true;
     v
   end
 
-let dtp_obs_open_spans : (int, string * string * int * Gc.stat) Hashtbl.t =
+let dtp_obs_open_spans : (int, string * string * int * Gc.stat * float) Hashtbl.t =
   Hashtbl.create 64
 
 let dtp_obs_span_seq = ref 0
@@ -1428,7 +1430,8 @@ let dtp_obs_span_begin (name : string) (cat : string) : int =
   else begin
     incr dtp_obs_span_seq;
     let id = !dtp_obs_span_seq in
-    Hashtbl.replace dtp_obs_open_spans id (name, cat, dtp_timeUs (), Gc.quick_stat ());
+    Hashtbl.replace dtp_obs_open_spans id
+      (name, cat, dtp_timeUs (), Gc.quick_stat (), Gc.allocated_bytes ());
     id
   end
 
@@ -1436,9 +1439,9 @@ let dtp_obs_span_end (id : int) : int =
   if id = 0 then 0
   else match Hashtbl.find_opt dtp_obs_open_spans id with
     | None -> 0
-    | Some (name, cat, t0, s0) ->
+    | Some (name, cat, t0, s0, a0) ->
       Hashtbl.remove dtp_obs_open_spans id;
-      dtp_obs_span_emit name cat None t0 s0 true;
+      dtp_obs_span_emit name cat None t0 s0 a0 true;
       0
 
 let dtp_obs_mark_like (ph : string) (name : string) (cat : string) (kv : (Buffer.t -> unit) option) =

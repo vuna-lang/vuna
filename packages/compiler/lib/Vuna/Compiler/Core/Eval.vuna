@@ -130,8 +130,12 @@ evalIf (VBool b) th el = if b then th else el
 evalIf c th el = VIf c th el
 
 export spineAppend : Neutral -> Value -> Neutral
-spineAppend (NVar name level sp) a = NVar name level (append sp [a])
-spineAppend (NGlobal g sp) a = NGlobal g (append sp [a])
+spineAppend n a =
+  let
+    _ = obsCountAt 3 "vuna.counter.core.spine" 1
+  in case n of
+    NVar name level sp => NVar name level (append sp [a])
+    NGlobal g sp => NGlobal g (append sp [a])
 
 export applyValue : Value -> Value -> Value
 applyValue f a = applyValueFuel 128 f a
@@ -203,7 +207,10 @@ force defs sols fuel v =
         case n of
           NGlobal g sp =>
             case defLookup g defs of
-              Just body => force defs sols (fuel - 1) (applySpine (eval [] body) sp)
+              Just body =>
+                let
+                  _ = obsCountAt 3 "vuna.counter.core.delta" 1
+                in force defs sols (fuel - 1) (applySpine (eval [] body) sp)
               Nothing =>
                 case primReduce defs sols (fuel - 1) g sp of
                   Just v2 => force defs sols (fuel - 1) v2
