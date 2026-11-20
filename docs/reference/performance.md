@@ -234,9 +234,15 @@ load/parse 前缀 + iface 摘要 **~2.6 s** → 逐定义精化（`collectSigs-d
    （`--debug-perf` 口径），集中在 `conv`/`force`/`infer` 的项重算与分配
    （`Term/Impl`、`Core/Eval|Conv`）。每 def 的定义值记忆化已否决（安全前置检查比命中收益
    更贵，A/B -2~3%）；更深的共享需要参数相关记忆化，未做。
-4. **冷 build 的 load/parse ~2.6 s + codegen split ~1.2–1.5 s**（`cg-groups` SCC ~0.27 s、
-   `cg-erasure` ~0.10 s、逐单元 typedecls/genGroups ~0.5–1 s）。`groupRuntimeDefs` 已表化，
-   `dtDefLocTable` 的右嵌套 `++` 已改 `strConcatMany`。
+4. **冷 build 的 load/parse ~2.6 s + codegen split ~0.7 s**（`--debug-perf` 单次采样）：
+   `cg-splitmeta` 61 ms、位置表 23 ms、逐单元 lowering 434 ms、`validateUnit` 54 ms、
+   类型声明 2 ms、正文文本 160 ms，余下是程序级擦除 / 归属检查与首单元。逐单元的定义与
+   数据来自**归属桶**（一次 `O(def)` 分桶），不在每个单元重扫全程序；单元缓存的 key
+   （逐模块声明规范编码 + SHA-256）只在缓存启用时计算——自举 / CI 的一次性对象库里它
+   不可能命中，构建脚本直接 `VUNA_UNIT_CACHE=0`。同机 A/B（空 store、同窗口交替，取最小）：
+   冷 `build --no-compile packages/compiler` user **5.8–6.4 s → 4.5–4.8 s**（wall ~6.2–6.9 s →
+   ~4.8–5.1 s）；缓存开启时 user 5.9 → 5.7–5.8 s。`groupRuntimeDefs` 已表化，`dtDefLocTable`
+   的右嵌套 `++` 已改 `strConcatMany`。
 5. **终止性 ~0.3 s（冷 build）**：`anyOwn` 的 O(n²) 已修；剩余是逐组 measure/SCT 与
    usage/callGraph 的真实工作。冷 `check packages/compiler` 的 `VUNA_OBS=1` 读数：
    `vuna.term`（两处调用）共 ~0.92 s，其中 `vuna.term.sct` 52 次共 ~15 ms、单次最大
