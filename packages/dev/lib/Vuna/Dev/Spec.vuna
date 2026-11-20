@@ -18,7 +18,7 @@ commands =
       ["dev", "suite"]
       GDev
       "跑原生 suite（test/suite.toml）"
-      "vuna dev suite [FILE] [--only PAT]... [--jobs auto|N]"
+      "vuna dev suite [FILE] [--only PAT]... [--jobs auto|N] [--timeout SECS]"
       [boolFlag "all" "跑 driver 清单（test/suite.toml）里的全部独立 suite", boolFlag "list" "只列 case", boolFlag "verbose" "结果行尾追加耗时", boolFlag "fail-fast" "首个失败即停止", boolFlag "json" "汇总输出单行 JSON", boolFlag "audit" "跑全部 case 并报告跳过项", boolFlag "strict-skips" "跳过项视为失败", boolFlag "timings" "输出计时表", boolFlag "last-failed" "只跑上次失败", boolFlag "bless" "重写 golden", boolFlag "bless-diag" "重写诊断夹具", boolFlag "watch" "变更后重跑", boolFlag "quiet" "只输出失败", multiFlag "only" "PAT" "按 owner / family / case id 过滤（可重复）", multiFlag "filter" "PAT" "按 id / tag 子串过滤（可重复）", multiFlag "tier" "NAME" "按层级过滤（可重复）", multiFlag "matrix" "NAME" "只跑指定矩阵（可重复）", multiFlag "backend" "ocaml|wasm|native" "后端矩阵（可重复）", valueFlag "jobs" "auto|N" "并行度（缺省 auto）", valueFlag "timeout" "SECS" "单个 case 超时", valueFlag "worker" "i/N" "内部分片（测试运行器自己用）", valueFlag "results-dir" "DIR" "结果目录", valueFlag "cache-dir" "DIR" "测试对象库与构建桶根", valueFlag "changed" "REV" "只跑相对 REV 改动覆盖的 case"]
       [],
     subCmd ["dev", "errors"] GDev "错误码文档生成" "vuna dev errors gen [ROOT]" [] [],

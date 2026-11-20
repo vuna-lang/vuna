@@ -26,6 +26,7 @@ vuna dev suite --all --backend wasm       # 只跑 matrix 允许 wasm 的 case
 vuna dev suite --all --matrix pure-cross  # 只跑三端差分精选集
 vuna dev suite --all --filter layer:effect  # 按层次 tag 筛选
 vuna dev suite --all --jobs 16            # 显式并行度（覆盖 auto）
+vuna dev suite --all --timeout 240        # 覆盖每个 case 的超时（秒）
 vuna dev suite --all --json               # 机器可读汇总（每个 suite 一行）
 ```
 
@@ -226,7 +227,7 @@ end:
 
 | 层 | 控制 | 默认 | 行为 |
 | --- | --- | --- | --- |
-| case | `--timeout` / family `timeout` | 300s | 超时计 FAIL 并继续其余 case；`timeout` 缺失时降级直跑 |
+| case | `--timeout` / family `timeout` | 300s | `--timeout` 覆盖全部 case（含并行 worker，固定值不是上限）；未给出时用 family `timeout`，再回落 `[suite].timeout`。超时计 FAIL 并继续其余 case；`timeout` 缺失时降级直跑 |
 | steps 单步 | 同上（继承 case timeout） | 300s | 单步超时即失败，失败信息带 `timed out after Ns` |
 
 ### 产品化过滤与更新

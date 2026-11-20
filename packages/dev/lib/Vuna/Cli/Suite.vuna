@@ -120,7 +120,8 @@ suiteJobsOf parsed =
         Nothing => err "--jobs requires a positive integer (>= 1) or `auto`, got `${text}`"
         Just n => OkC n
 
--- | 内部：suite 的 `--timeout`——缺省 0（不超时）；否则必须是 >= 1 的整数（秒）。
+-- | 内部：suite 的 `--timeout`——缺省 0（未给出，沿用 family / `[suite].timeout`）；
+-- 否则必须是 >= 1 的整数（秒），并覆盖每个 case 的预算。
 suiteTimeoutOf : Parsed -> Check Int
 suiteTimeoutOf parsed =
   case flagValue parsed "timeout" of

@@ -1976,6 +1976,14 @@ anyBackend (b :: rest) targets =
 filterCases : SuiteOpts -> List Case -> List Case
 filterCases opts cases = filter (caseMatches opts) cases
 
+-- | 内部：`--timeout` 覆盖全部 case 的预算（0 = 未给出，保持 discovery 的结果）。
+-- 覆盖是固定的，不是上限：family 写了更大的 timeout 也按 flag 走。
+applyTimeoutOverride : Int -> List Case -> List Case
+applyTimeoutOverride secs cases = if secs <= 0 then cases else map (setCaseTimeout secs) cases
+
+setCaseTimeout : Int -> Case -> Case
+setCaseTimeout secs c = Case c.caseId c.caseTags c.caseKind secs c.caseTier c.caseMatrix
+
 -- ---------------------------------------------------------------
 -- 打印与汇总
 -- ---------------------------------------------------------------
@@ -2315,8 +2323,9 @@ spawnWorkers env opts resultsDir jobs fuel index pids =
         case opts.suiteChanged of
           Just rev => ["--changed", rev]
           Nothing => []
+      timeoutArgs = if opts.suiteTimeout > 0 then ["--timeout", strOfInt opts.suiteTimeout] else []
       flagArgs = append (if opts.suiteFailFast then ["--fail-fast"] else []) (append (if opts.suiteJSON then ["--quiet"] else []) (append (if opts.suiteLastFailed then ["--last-failed"] else []) (append (if opts.suiteBless then ["--bless"] else []) (append (if opts.suiteBlessDiag then ["--bless-diag"] else []) (append cacheArgs changedArgs)))))
-      args = append ["dev", "suite", opts.suitePath, "--worker", workerArg, "--results-dir", resultsDir] (append filters flagArgs)
+      args = append ["dev", "suite", opts.suitePath, "--worker", workerArg, "--results-dir", resultsDir] (append filters (append timeoutArgs flagArgs))
     in do
       pid <- processSpawn args
       spawnWorkers env opts resultsDir jobs (fuel - 1) (index + 1) (pid :: pids)
@@ -2935,9 +2944,10 @@ runSuiteOnce opts suite =
     buildFp <- toolCompilerFingerprint
     buildDir <- pure "${cacheDir}/build/${scope}-${strOfInt buildFp}-${strOfInt baseHash}"
     ref <- newRef (sessionNew "${tmp}/iface-session")
-    discovered <- discoverCases suite
+    discovered0 <- discoverCases suite
     orphans <- familyOrphans suite
     let
+      discovered = applyTimeoutOverride opts.suiteTimeout discovered0
       env = Env root root testRoot tmp vuna vunaSeed baseDir ocamlopt helper cacheDir baseHash opts.suiteBless opts.suiteBlessDiag workerMode store buildDir ref opts.suiteBackends
       -- 两层默认护栏（局部 --only/--filter 时被过滤掉，符合预期）：
       --   ① 已声明 family 目录里的孤儿夹具（精确 source 认领）；

@@ -1,0 +1,11 @@
+# 69) `vuna dev suite --timeout` 覆盖 case 预算（含父进程 → worker 的转发）。
+#
+# 临时 suite 的 `[suite].timeout` 故意写大（300）：用例必须靠 flag 在 2s 结束；未接线时
+# 会按 300s 跑，外层 harness 超时才失败。`--jobs 2` 同时覆盖并行 worker 的参数转发。
+run: sh -c 'rm -rf "$TMPDIR/ct"; mkdir -p "$TMPDIR/ct/case"'
+run: sh -c 'printf "%s\n" "[workspace]" > "$TMPDIR/ct/vuna.toml"'
+run: sh -c 'printf "%s\n" "[suite]" "name = \"cli-timeout\"" "owner = \"cli-timeout\"" "timeout = 300" "" "[family.steps]" "dir = \"case\"" "kind = \"steps\"" > "$TMPDIR/ct/suite.toml"'
+run: sh -c 'printf "%s\n" "run: sh -c \"sleep 60\"" "exit: 0" > "$TMPDIR/ct/case/a.steps"'
+run: sh -c '"$VUNA" dev suite "$TMPDIR/ct/suite.toml" --jobs 2 --timeout 2 2>&1'
+exit: 1
+out-contains: timed out after 2s
