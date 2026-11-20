@@ -113,7 +113,7 @@ nix run .#vuna-artifacts -- --json bench/baselines/artifacts.json   # 重标
 ## 当前基线
 
 `--runs 3 --warmup 1`（native / wasm 列用 `--runs 5 --warmup 2`），x86_64 / 16 核 / ocamlopt 5.5.1
-（非 flambda）。读数见 [docs/reference/performance.md §8](../docs/reference/performance.md)：
+（非 flambda）。读数见 [benchmarks.md](../docs/reference/benchmarks.md)：
 
 | benchmark | 场景 | OCaml 后端 ratio | native ratio | wasm ratio |
 | --- | --- | --- | --- | --- |
@@ -135,14 +135,14 @@ nix run .#vuna-artifacts -- --json bench/baselines/artifacts.json   # 重标
 | gc_array_churn | 大对象 churn（Array COW） | ~1.7x | ~12.6x（RSS 2.7x；COW 复制是主成本） | 3.6x |
 
 wasm 列的 `skipped` 是 V8 的 wasm 栈上限（非尾深递归），浏览器路径同样如此；wasm 的
-绝对 ms、宿主启动地板与 RSS 口径见 [performance.md §8.3](../docs/reference/performance.md)。
+绝对 ms、宿主启动地板与 RSS 口径见 [benchmarks.md §1.3](../docs/reference/benchmarks.md)。
 OCaml 后端全部基准在 ~2× 手写 OCaml 内（最高的 `records` 约 2.1×）；native 的绝对值、峰值内存
-与 `default_stack_ok` 见 [performance.md §8](../docs/reference/performance.md)。分配 / GC 统计由
+与 `default_stack_ok` 见 [benchmarks.md](../docs/reference/benchmarks.md)。分配 / GC 统计由
 OCaml 后端生成 runtime 的 `VN_PERF_STATS=1` 输出，`bench/run.sh` 采集进 JSON 的 `gc` 字段；
 native 侧 GC 已落地（保守 mark-sweep）但无统计输出，只记峰值 RSS 与默认栈探针。死槽清零后
 `gc_low_live` 的 RSS 降到 5 MiB（0.02x 手写），`gc_array_churn` 仍是 GC 相关的最差项
 （COW 数组复制）。TCO 已覆盖直调、自递归 loop、饱和闭包、wrapper 与 runtime 符号；
-判定与读数见 [performance.md §8.2](../docs/reference/performance.md)。
+判定与读数见 [benchmarks.md §1.2](../docs/reference/benchmarks.md)。
 
 效应基准（`eff_tick` / `eff_deep` / `eff_deepseq` / `eff_bracket` / `eff_nested` /
 `eff_host` / `eff_abort` / `eff_install`）与 `startup`（sidecar `repeat=20`）、`traits`
@@ -161,4 +161,4 @@ compiler 包。基线 `bench/baselines/compiler.txt`（机器相关，仅同机�
 `--save-baseline` 重写基线，`--alloc` 额外打印冷 `check .` 的 GC 分配统计（`VN_PERF_STATS=1`）。
 跨机器/跨输入规模的可比口径是 `nix/checks/compiler-growth.sh`（合成 500/1000/2000/4000 同形
 定义，相邻档墙钟比 ≤2.3；进 `nix flake check`）。用法与读数见
-[performance.md §9](../docs/reference/performance.md)。
+[compiler-benchmarks.md](../docs/reference/compiler-benchmarks.md)。

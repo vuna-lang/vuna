@@ -1,7 +1,7 @@
 # 生成程序基准
 
 `vuna-perf` 测**生成程序**的运行时（编译器 / 工具链自身墙钟见
-[performance.md](performance.md) §9，命令耗时与编译热点也都在那里）。后端实现见
+[compiler-benchmarks.md](compiler-benchmarks.md)，命令耗时与编译热点也都在那里）。后端实现见
 [native.md](native.md)、[wasm.md](wasm.md)。
 
 ## 1. `vuna-perf` 读数

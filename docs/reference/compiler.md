@@ -262,7 +262,7 @@ fixities / imports、`miSource`、`miIfaceHash`、`miDepHashes`。
 - 接口物理单位是**模块**（per-module 文件 + manifest）；包内精化按模块增量（干净模块复用、脏性沿 import 保守传播）。
 - 依赖包的实例/类仍全部并入视图（过近似，与包级摘要一致）；模块签名隔离另立项。
 - codegen 按单元缓存（默认开）；纯代码生成仍整包跑（生成占冷 build ~10–20%，
-  逐单元可并部分仅 7–8%，并行收益 <7%；见 [performance.md](performance.md) §9）。
+  逐单元可并部分仅 7–8%，并行收益 <7%；见 [compiler-benchmarks.md](compiler-benchmarks.md)）。
 - LSP / REPL 消费接口默认开启（`VUNA_IFACE_TOOL=0` 关闭）：惰性闭包 + 会话缓存 + 单文件
   增量 + 单模块写回；工具写回与整包产物按 `meOrigin` 结构性隔离。残留擦除位 meta
   靠**按模块名排序后的名次**分配段号重编号（`Driver/Cache.shiftTerm` / `Driver/Dt.shiftedDepPrograms`；
