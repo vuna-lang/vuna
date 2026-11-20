@@ -1,0 +1,54 @@
+-- List 基础与 String 字节桥接：`map` / `filter` / `foldl` 都从左到右走一遍，
+-- `strUnpack` 给出 UTF-8 字节、`strPack` 把字节拼回同一个字符串。
+import Base.Data.List as List
+import Base.Data.Nat as Nat
+import Base.Data.Pair as Pair
+import Base.Data.String as String
+
+xs : List Int
+xs = [1, 2, 3, 4]
+
+mapped : List Int
+mapped = map (\x => x * 10) xs
+
+filtered : List Int
+filtered = filter (\x => x / 2 * 2 == x) xs
+
+-- 用拼接把遍历顺序体现在结果里：foldl 得到 "1234"，foldr 得到 "4321"。
+leftward : String
+leftward = foldl (\acc => \x => acc ++ show x) "" xs
+
+rightward : String
+rightward = foldr (\x => \acc => acc ++ show x) "" xs
+
+reversed : List Int
+reversed = reverse xs
+
+-- 没有 `concat`：用恒等函数的 `concatMap` 拍平。
+flattened : List Int
+flattened = concatMap (\ys => ys) [[1, 2], [], [3]]
+
+-- `zip` 截到较短的长度，元素是 `Pair`。
+zipped : List (Pair Int String)
+zipped = zip [1, 2] ["a", "b", "c"]
+
+-- 没有 `unzip`：分别投影两列。
+unzippedFst : List Int
+unzippedFst = map (\p => firstOf p) zipped
+
+unzippedSnd : List String
+unzippedSnd = map (\p => secondOf p) zipped
+
+utf8 : String
+utf8 = "héllo|λ|"
+
+bytes : List Int
+bytes = strUnpack utf8
+
+roundTrip : String
+roundTrip = strPack bytes
+
+main : String
+main =
+  unlines
+    [show mapped, show filtered, leftward, rightward, show reversed, show flattened, show zipped, show unzippedFst, show unzippedSnd, show (natToInt (List.length xs)), show (natToInt (List.length zipped)), show (natToInt (byteLength utf8)), show (natToInt (List.length bytes)), show roundTrip, show (roundTrip == utf8), show bytes]

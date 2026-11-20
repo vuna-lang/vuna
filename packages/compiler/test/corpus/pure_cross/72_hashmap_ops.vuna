@@ -1,0 +1,42 @@
+-- HashMap：`insert` 同键只保留最新值（计数不变），`remove` 摘除并维护计数，
+-- `toList` 按桶序展开（不保证插入序），所以比较前先按 key 排序。
+import Base.Container.HashMap as HashMap
+import Base.Data.List as List
+import Base.Data.Maybe as Maybe
+import Base.Data.Nat as Nat
+import Base.Data.Pair as Pair
+import Base.Data.Sort as Sort
+import Base.Data.String as String
+
+sortedIntKeyed : List (Pair Int String) -> List String
+sortedIntKeyed ps = map show (Sort.sortBy (\a, b => firstOf a <= firstOf b) ps)
+
+sortedStrKeyed : List (Pair String Int) -> List String
+sortedStrKeyed ps = map show (Sort.sortBy (\a, b => firstOf a <= firstOf b) ps)
+
+m0 : HashMap Int String
+m0 = HashMap.fromList [Pair 1 "a", Pair 2 "b", Pair 3 "c"]
+
+-- 同键覆盖：值换成 "A"，条目数仍为 3。
+m1 : HashMap Int String
+m1 = HashMap.insert 1 "A" m0
+
+-- 删除存在的键 2 与不存在的键 9：不存在的键原样返回。
+m2 : HashMap Int String
+m2 = HashMap.remove 9 (HashMap.remove 2 m0)
+
+-- 删除后再插入：键 2 重新进入表中。
+m3 : HashMap Int String
+m3 = HashMap.insert 2 "B2" m2
+
+-- 重复键构造：`fromList` 让前面的条目优先。
+dupInt : HashMap Int String
+dupInt = HashMap.fromList [Pair 1 "first", Pair 1 "second", Pair 2 "only"]
+
+dupStr : HashMap String Int
+dupStr = HashMap.fromList [Pair "k" 1, Pair "k" 2, Pair "z" 3]
+
+main : String
+main =
+  unlines
+    [show (HashMap.lookup 1 m0), show (HashMap.member 3 m0), show (natToInt (HashMap.size m0)), show (HashMap.lookup 1 m1), show (natToInt (HashMap.size m1)), show (HashMap.lookup 2 m2), show (HashMap.member 2 m2), show (HashMap.lookup 9 m2), show (natToInt (HashMap.size m2)), show (HashMap.lookup 2 m3), show (natToInt (HashMap.size m3)), show (HashMap.lookup 1 dupInt), show (natToInt (HashMap.size dupInt)), String.join "," (sortedIntKeyed (HashMap.toList m0)), String.join "," (sortedStrKeyed (HashMap.toList dupStr)), show (HashMap.lookup "k" dupStr), show (HashMap.lookup "z" dupStr), show (HashMap.member "nope" dupStr)]

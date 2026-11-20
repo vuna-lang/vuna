@@ -1,0 +1,58 @@
+-- Queue 是 FIFO（push 追加队尾、pop 从队首出队）；TreeMap 按键有序（toAscList 升序、toDescList 降序）。
+import Base.Container.Queue as Queue
+import Base.Container.TreeMap as TreeMap
+import Base.Data.Maybe as Maybe
+import Base.Data.Nat as Nat
+import Base.Data.Pair as Pair
+import Base.Data.String as String
+
+q : Queue Int
+q = Queue.pushAll [1, 2, 3] Queue.empty
+
+-- 连续出队三次：FIFO 顺序是 1、2、3。
+drained : List Int
+drained =
+  case Queue.pop q of
+    Nothing => []
+    Just (Pair x1 r1) =>
+      case Queue.pop r1 of
+        Nothing => [x1]
+        Just (Pair x2 r2) =>
+          case Queue.pop r2 of
+            Nothing => [x1, x2]
+            Just (Pair x3 _) => [x1, x2, x3]
+
+-- 先入 1、2，出队一次后并入 3：剩余顺序是 2、3。
+interleaved : List Int
+interleaved =
+  case Queue.pop (Queue.pushAll [1, 2] Queue.empty) of
+    Nothing => []
+    Just (Pair _ rest) => Queue.toList (Queue.push 3 rest)
+
+-- 空队列单态化到 `Queue Int`，与上面那组结果一起展示。
+emptyQ : Queue Int
+emptyQ = Queue.empty
+
+tm : TreeMap Int String
+tm = TreeMap.fromList [Pair 3 "c", Pair 1 "a", Pair 2 "b"]
+
+-- 覆盖已有键：值换成 "B"，条目数不变。
+tmOver : TreeMap Int String
+tmOver = TreeMap.insert 2 "B" tm
+
+-- 删除键 1。
+tmDel : TreeMap Int String
+tmDel = TreeMap.remove 1 tm
+
+-- 删除键 2 后重新插入：键 2 回到有序位置。
+tmRe : TreeMap Int String
+tmRe = TreeMap.insert 2 "B2" (TreeMap.remove 2 tm)
+
+-- 重复键构造：`fromList` 让后面的条目覆盖前面的。
+tmDup : TreeMap Int String
+tmDup = TreeMap.fromList [Pair 1 "first", Pair 1 "second"]
+
+main : String
+main =
+  unlines
+    [show (Queue.toList q), show (Queue.pop q), show drained, show (Queue.peek q), show (Queue.isEmpty emptyQ), show (natToInt (Queue.size q)), show (natToInt (Queue.size emptyQ)), show (Queue.pop emptyQ), show (Queue.peek emptyQ), show interleaved, show (TreeMap.toAscList tm), show (TreeMap.toDescList tm), show (TreeMap.range 2 3 tm), show (TreeMap.toAscList tmOver), show (TreeMap.lookup 2 tmOver), show (natToInt (TreeMap.size tmOver)), show (TreeMap.toAscList tmDel), show (TreeMap.lookup 1 tmDel), show (natToInt (TreeMap.size tmDel)), show (TreeMap.toAscList tmRe), show (natToInt (TreeMap.size tmRe)), show (TreeMap.toAscList tmDup)]

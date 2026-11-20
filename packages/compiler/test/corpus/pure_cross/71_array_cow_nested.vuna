@@ -1,0 +1,35 @@
+-- Array 的 copy-on-write：`arraySet` 每次都复制整块再写，原数组与共享的内层数组都不受影响。
+import Base.Container.Array as Array
+import Base.Data.List as List
+import Base.Data.Nat as Nat
+import Base.Data.String as String
+
+base : Array Int
+base = fromList [1, 2, 3]
+
+-- 对副本 set：只有副本变。
+once : Array Int
+once = arraySet base 1 20
+
+-- 同一副本连续两次 set：第二次基于第一次的结果，两次修改都保留。
+twice : Array Int
+twice = arraySet (arraySet base 0 7) 2 9
+
+nested : Array (Array Int)
+nested = fromList [fromList [1, 2], fromList [3, 4]]
+
+-- 替换外层元素：新外层持有新内层，旧外层第 0 项仍是 `[1, 2]`。
+outerReplaced : Array (Array Int)
+outerReplaced = arraySet nested 0 (fromList [5, 6])
+
+-- 只改内层：内层 set 复制自己，外层看到的内层保持 `[1, 2]`。
+innerCopy : Array Int
+innerCopy = arraySet (arrayGet nested 0) 1 99
+
+emptyList : List Int
+emptyList = []
+
+main : String
+main =
+  unlines
+    [show (arrayToList base), show (arrayToList once), show (arrayToList twice), show (arrayToList (arrayGet outerReplaced 0)), show (arrayToList (arrayGet outerReplaced 1)), show (arrayToList (arrayGet nested 0)), show (arrayGet innerCopy 1), show (natToInt (Array.length (arrayFromList emptyList))), show (arrayToList (arrayFromList [4, 5, 6]) == [4, 5, 6]), show (natToInt (Array.length (Array.make (natFromInt 0) 7))), show (arrayToList (Array.make (natFromInt 3) 7))]
