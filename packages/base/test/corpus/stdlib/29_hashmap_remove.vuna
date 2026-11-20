@@ -1,0 +1,35 @@
+-- stdlib：HashMap 去重式 insert 与 remove（计数、成员、toList 长度）；HashSet 同步获得 O(1) size 与 remove。
+import Base.Container.HashMap as HashMap
+import Base.Container.HashSet as HashSet
+import Base.Data.Bool
+import Base.Data.List as List
+import Base.Data.Maybe as Maybe
+import Base.Data.Nat as Nat
+
+main : String
+main =
+  let
+    t0 = HashMap.ofNames ("a" :: "b" :: "a" :: [])
+    t1 = HashMap.insert "a" True t0
+    t2 = HashMap.remove "b" t1
+    t3 = HashMap.remove "zz" t2
+    h0 = HashSet.fromList ("x" :: "y" :: "x" :: [])
+    h1 = HashSet.remove "y" h0
+  in "sz0="
+    ++ show (HashMap.size t0)
+    ++ " sz2="
+    ++ show (HashMap.size t2)
+    ++ " sz3="
+    ++ show (HashMap.size t3)
+    ++ " memB="
+    ++ show (HashMap.member "b" t2)
+    ++ " lkA="
+    ++ show (HashMap.lookup "a" t2)
+    ++ " n="
+    ++ show (List.length (HashMap.toList t3))
+    ++ " hsz="
+    ++ show (HashSet.size h1)
+    ++ " hmem="
+    ++ show (HashSet.member "x" h1)
+    ++ " hlist="
+    ++ show (List.length (HashSet.toList h1))

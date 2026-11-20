@@ -1,0 +1,19 @@
+-- stdlib：Base.Data.Sort（混合归并：稳定性、已有序输入、降序比较、重复元素、规模）。
+import Base.Data.List as List
+import Base.Data.Pair as Pair
+import Base.Data.Sort as Sort
+
+byFirst : Pair Int Int -> Pair Int Int -> Bool
+byFirst a b = firstOf a <= firstOf b
+
+main : String
+main =
+  "stable="
+    ++ show (Sort.sortBy byFirst (Pair 1 1 :: Pair 1 2 :: Pair 0 3 :: Pair 1 4 :: []))
+    ++ " asc="
+    ++ show (Sort.mergeSort (1 :: 2 :: 3 :: []))
+    ++ " desc="
+    ++ show (Sort.sortBy (\a, b => a >= b) (1 :: 3 :: 2 :: []))
+    ++ " dup="
+    ++ show (Sort.mergeSort (2 :: 1 :: 2 :: 1 :: []))
+    ++ " big=" ++ show (List.length (Sort.mergeSort (List.range 0 2000)))

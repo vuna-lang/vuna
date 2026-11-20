@@ -1,0 +1,40 @@
+-- stdlib：Base.Container.PriorityQueue（左偏堆：peek / pop / toAscList / 重复元素）。
+import Base.Container.PriorityQueue as PQ
+import Base.Data.Bool
+import Base.Data.Int
+import Base.Data.List as List
+import Base.Data.Maybe as Maybe
+import Base.Data.Nat as Nat
+import Base.Data.Pair as Pair
+
+popValue : PriorityQueue Int -> String
+popValue q =
+  case PQ.pop q of
+    Nothing => "-"
+    Just (Pair x rest) => show x ++ "/" ++ show (PQ.toAscList rest)
+
+drainAll : Int -> PriorityQueue Int -> List Int
+drainAll fuel q =
+  if fuel <= 0 then
+    []
+  else
+    case PQ.pop q of
+      Nothing => []
+      Just (Pair x rest) => x :: drainAll (fuel - 1) rest
+
+main : String
+main =
+  let
+    q = PQ.push 5 (PQ.push 1 (PQ.fromList (3 :: 3 :: 2 :: [])))
+  in "peek="
+    ++ show (PQ.peek q)
+    ++ " sz="
+    ++ show (PQ.size q)
+    ++ " asc="
+    ++ show (PQ.toAscList q)
+    ++ " pop="
+    ++ popValue q
+    ++ " drain="
+    ++ show (drainAll 10 q)
+    ++ " empty="
+    ++ show (PQ.isEmpty PQ.empty)

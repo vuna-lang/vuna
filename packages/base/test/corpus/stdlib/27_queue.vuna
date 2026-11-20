@@ -1,0 +1,40 @@
+-- stdlib：Base.Container.Queue（FIFO：push / pop / peek / size / toList）。
+import Base.Container.Queue as Queue
+import Base.Data.Bool
+import Base.Data.Int
+import Base.Data.List as List
+import Base.Data.Maybe as Maybe
+import Base.Data.Nat as Nat
+import Base.Data.Pair as Pair
+
+drainAll : Int -> Queue Int -> List Int
+drainAll fuel q =
+  if fuel <= 0 then
+    []
+  else
+    case Queue.pop q of
+      Nothing => []
+      Just (Pair x rest) => x :: drainAll (fuel - 1) rest
+
+popValue : Queue Int -> String
+popValue q =
+  case Queue.pop q of
+    Nothing => "-"
+    Just (Pair x _) => show x
+
+main : String
+main =
+  let
+    q = Queue.push 4 (Queue.fromList (1 :: 2 :: 3 :: []))
+  in "pop="
+    ++ popValue q
+    ++ " sz="
+    ++ show (Queue.size q)
+    ++ " peek="
+    ++ show (Queue.peek q)
+    ++ " list="
+    ++ show (Queue.toList q)
+    ++ " empty="
+    ++ show (Queue.isEmpty Queue.empty)
+    ++ " drain="
+    ++ show (drainAll 10 q)

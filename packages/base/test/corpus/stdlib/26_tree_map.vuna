@@ -1,0 +1,35 @@
+-- stdlib：Base.Container.TreeMap / TreeSet（有序持久容器：升 / 降序遍历、区间、去重、删除、高度不变量）。
+import Base.Container.TreeMap as TreeMap
+import Base.Container.TreeSet as TreeSet
+import Base.Data.List as List
+import Base.Data.Maybe as Maybe
+import Base.Data.Nat as Nat
+import Base.Data.Pair as Pair
+
+main : String
+main =
+  let
+    m0 = TreeMap.fromList (Pair 5 "e" :: Pair 1 "a" :: Pair 3 "c" :: Pair 3 "C" :: [])
+    m1 = TreeMap.insert 2 "b" (TreeMap.remove 5 m0)
+    st = TreeSet.fromList (3 :: 1 :: 2 :: 3 :: [])
+    st2 = TreeSet.remove 2 st
+  in "asc="
+    ++ show (TreeMap.toAscList m1)
+    ++ " desc="
+    ++ show (TreeMap.toDescList m1)
+    ++ " rng="
+    ++ show (TreeMap.range 2 3 m1)
+    ++ " sz="
+    ++ show (TreeMap.size m1)
+    ++ " lk="
+    ++ show (TreeMap.lookup 3 m1)
+    ++ " mem5="
+    ++ show (TreeMap.member 5 m1)
+    ++ " h="
+    ++ show (TreeMap.height m1)
+    ++ " set="
+    ++ show (TreeSet.toAscList st)
+    ++ " set2="
+    ++ show (TreeSet.toAscList st2)
+    ++ " ssz="
+    ++ show (TreeSet.size st)

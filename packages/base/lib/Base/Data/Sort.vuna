@@ -1,20 +1,89 @@
--- | 稳定排序。`mergeSort` 用 `Ord` 的 `<=`；`sortBy` 接受自定义比较函数，参数 `le` 表示 `<=`（`insertBy` 体里的 `<=` 经 fixity 解析到该参数）。实现是插入排序：递归吃 tail，满足 DT 的结构递归检查（归并排序的 `sortBy le (take half xs)` 不满足），稳定性与排序结果不变。
+-- | 稳定排序。`sortBy` 接受自定义比较函数（参数 `le` 表示 `<=`），实现是**混合归并排序**：
+-- 已按 `le` 有序的输入直接返回原列表（零分配）；长度 ≤ 16 走插入排序（小表常数更小）；
+-- 其余两两拆半归并，递归深度由列表长度上界的 fuel 守卫，归并步本身尾递归。
+-- 稳定性：归并相等时取左侧（`le x y` 成立），插入排序只在 `le y x` 成立时前插。
 module Base.Data.Sort where
 
 import Base.Data.List
 import Base.Data.Bool
--- `mergeSort` 的 `<=` 在刚性类型上提升成 Dict_Ord；显式 import 保证类存在与 split 单元顺序。
+import Base.Data.Int
+import Base.Data.Pair
+import Base.Trait.Num
+-- `mergeSort` 的 `<=` 是 Ord 方法别名；显式 import 保证类存在与 split 单元顺序。
 import Base.Trait.Ord
 
--- | 内部：插入步骤——按 `le` 把 `y` 插到已排序列表的第一个「不小于它」的位置之前，保持稳定。
-insertBy : (a -> a -> Bool) -> a -> List a -> List a
-insertBy cmp y [] = [y]
-insertBy cmp y (x :: xs) = if cmp y x then y :: x :: xs else x :: insertBy cmp y xs
+-- | 内部：以 `Int` 计长度（归并的 fuel 上界，避免每层 Nat 归一化）。
+lenInt : List a -> Int
+lenInt [] = 0
+lenInt (_ :: xs) = 1 + lenInt xs
 
--- | 自定义比较函数的**稳定**升序排序（实现是插入排序，递归吃 tail，满足 DT 的结构递归检查）。`le` 表示 `<=`。
+-- | 内部：相邻两两按 `le` 比较是否已有序；空表与单元素恒真。
+sortedBy : (a -> a -> Bool) -> List a -> Bool
+sortedBy le [] = True
+sortedBy le ([_]) = True
+sortedBy le (x :: y :: rest) = le x y && sortedBy le (y :: rest)
+
+-- | 内部：长度是否不超过 `k`（最多走 `k` 步）。
+shortList : Int -> List a -> Bool
+shortList k xs =
+  if k <= 0 then
+    True
+  else
+    case xs of
+      [] => True
+      _ :: rest => shortList (k - 1) rest
+
+-- | 内部：把 `y` 插到已排序列表的第一个「不小于它」的位置之前，保持稳定。
+insertBy : (a -> a -> Bool) -> a -> List a -> List a
+insertBy le y [] = [y]
+insertBy le y (x :: xs) = if le y x then y :: x :: xs else x :: insertBy le y xs
+
+-- | 内部：插入排序（小表与已有序输入的常数更优）。
+insertionSortBy : (a -> a -> Bool) -> List a -> List a
+insertionSortBy le [] = []
+insertionSortBy le (y :: ys) = insertBy le y (insertionSortBy le ys)
+
+-- | 内部：把 `xs` 的尾前插到 `acc`（尾递归）。
+revOnto : List a -> List a -> List a
+revOnto [] acc = acc
+revOnto (x :: xs) acc = revOnto xs (x :: acc)
+
+-- | 内部：两两拆半（尾递归），`left` / `right` 保持原相对顺序。
+splitHalves : List a -> List a -> List a -> Pair (List a) (List a)
+splitHalves left right xs =
+  case xs of
+    [] => Pair left right
+    x :: rest =>
+      case rest of
+        [] => Pair (x :: left) right
+        y :: more => splitHalves (x :: left) (y :: right) more
+
+-- | 内部：两路归并（尾递归，结果经 `revOnto` 还原顺序）；相等时取左侧，保持稳定。
+mergeOnto : (a -> a -> Bool) -> List a -> List a -> List a -> List a
+mergeOnto le acc [] b = revOnto acc b
+mergeOnto le acc a [] = revOnto acc a
+mergeOnto le acc (x :: xs) (y :: ys) =
+  if le x y then mergeOnto le (x :: acc) xs (y :: ys) else mergeOnto le (y :: acc) (x :: xs) ys
+
+-- | 内部：归并排序主体；`fuel` 以列表长度为上界，每层减 1（守卫保证终止）。
+msort : (a -> a -> Bool) -> Int -> List a -> List a
+msort le fuel xs =
+  if fuel <= 0 then
+    xs
+  else
+    case xs of
+      [] => []
+      [_] => xs
+      _ :: _ :: _ =>
+        case splitHalves [] [] xs of
+          Pair left right => mergeOnto le [] (msort le (fuel - 1) left) (msort le (fuel - 1) right)
+
+-- | 自定义比较函数的**稳定**升序排序；`le` 表示 `<=`。已有序输入原样返回，长度 ≤ 16 用插入排序，其余归并。
 export sortBy : (a -> a -> Bool) -> List a -> List a
-sortBy cmp [] = []
-sortBy cmp (y :: ys) = insertBy cmp y (sortBy cmp ys)
+sortBy le xs =
+  if sortedBy le xs then
+    xs
+  else if shortList 16 xs then insertionSortBy le xs else msort le (lenInt xs) xs
 
 -- | 用 `Ord` 的 `<=` 排序的稳定升序排序；等价于 `sortBy (\x, y => x <= y)`。
 export mergeSort : Ord a => List a -> List a

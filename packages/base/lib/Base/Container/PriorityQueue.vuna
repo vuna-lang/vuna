@@ -1,0 +1,104 @@
+-- | 键泛型的优先队列：左偏堆（min-heap），元素需 `Ord`。`push` / `pop` 是 O(log n)，
+-- `peek` / `size` 是 O(1)。同优先级元素的出队顺序由堆结构决定：确定但**不是插入序**。
+-- 构造器不导出。
+module Base.Container.PriorityQueue where
+
+-- base 模块不自动注入 Prelude，运算符 fixity 与实例需要显式 import。
+import Base.Data.Bool
+import Base.Data.Int
+import Base.Data.List
+import Base.Data.Maybe
+import Base.Data.Nat
+import Base.Data.Pair
+import Base.Trait.Eq
+import Base.Trait.Num
+-- `meld` / `push` 的 `<=` 提升成 `Dict_Ord`；显式 import 保证类存在与 split 单元顺序。
+import Base.Trait.Ord
+import Base.Trait.Show
+
+-- | 内部：左偏堆（构造器不导出）；`Node` 的第一个字段是 rank（右脊长度）。
+export data Heap a : Type where
+  -- | 空堆。
+  HEmpty : Heap a
+  -- | 节点：rank、元素、左子树、右子树。
+  HNode : Int -> a -> Heap a -> Heap a -> Heap a
+
+-- | 内部：节点 rank（空堆为 0）。
+rankOf : Heap a -> Int
+rankOf HEmpty = 0
+rankOf (HNode r _ _ _) = r
+
+-- | 内部：按 rank 选择较短一侧作右子树，满足左偏不变量。
+makeHeap : a -> Heap a -> Heap a -> Heap a
+makeHeap x a b =
+  if rankOf a >= rankOf b then HNode (rankOf b + 1) x a b else HNode (rankOf a + 1) x b a
+
+-- | 内部：合并两个堆；较小根胜出，递归合并其右子树与另一堆。
+meld : Ord a => Heap a -> Heap a -> Heap a
+meld h1 h2 =
+  case h1 of
+    HEmpty => h2
+    HNode _ x1 l1 r1 =>
+      case h2 of
+        HEmpty => h1
+        HNode _ x2 l2 r2 =>
+          if x1 <= x2 then makeHeap x1 l1 (meld r1 h2) else makeHeap x2 l2 (meld h1 r2)
+
+-- | 优先队列：左偏堆 + 元素计数；构造器不导出。
+export record PriorityQueue a where
+  -- | 左偏堆根。
+  priorityQueueHeap : Heap a
+  -- | 元素个数（`size` 的 O(1) 来源）。
+  priorityQueueCount : Int
+
+-- | 空队列。
+export empty : PriorityQueue a
+empty = PriorityQueue HEmpty 0
+
+-- | 入队（O(log n)）。
+export push : Ord a => a -> PriorityQueue a -> PriorityQueue a
+push x (PriorityQueue h n) = PriorityQueue (meld (HNode 1 x HEmpty HEmpty) h) (n + 1)
+
+-- | 只读最小元素（O(1)）。
+export peek : PriorityQueue a -> Maybe a
+peek (PriorityQueue h _) =
+  case h of
+    HEmpty => Nothing
+    HNode _ x _ _ => Just x
+
+-- | 出队最小元素并返回剩余队列（O(log n)）。
+export pop : PriorityQueue a -> Maybe (Pair a (PriorityQueue a))
+pop (PriorityQueue h n) =
+  case h of
+    HEmpty => Nothing
+    HNode _ x l r => Just (Pair x (PriorityQueue (meld l r) (n - 1)))
+
+-- | 元素个数（`Nat`，O(1)）。
+export size : PriorityQueue a -> Nat
+size (PriorityQueue _ n) = natFromInt n
+
+-- | 队列是否为空。
+export isEmpty : PriorityQueue a -> Bool
+isEmpty (PriorityQueue _ n) = n == 0
+
+-- | 从列表构造（逐个入队）。
+export fromList : Ord a => List a -> PriorityQueue a
+fromList xs = foldl (\acc, x => push x acc) empty xs
+
+-- | 内部：按元素个数逐个出队（`fuel` 守卫保证终止）。
+drain : Ord a => Int -> PriorityQueue a -> List a
+drain fuel q =
+  if fuel <= 0 then
+    []
+  else
+    case pop q of
+      Nothing => []
+      Just (Pair x rest) => x :: drain (fuel - 1) rest
+
+-- | 逐个出队展开为升序列表（O(n log n)）。
+export toAscList : Ord a => PriorityQueue a -> List a
+toAscList q@(PriorityQueue _ n) = drain n q
+
+-- 经 `toAscList` 展示（构造器不导出；`toAscList` 需要 `Ord`）。
+instance Ord a, Show a => Show (PriorityQueue a) where
+  show q = "fromList " `++` show (toAscList q)

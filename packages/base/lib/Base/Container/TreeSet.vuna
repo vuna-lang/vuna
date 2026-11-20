@@ -1,0 +1,55 @@
+-- | 键泛型的有序持久集合：内部是值恒为 `MkUnit` 的 `TreeMap a Unit`，键要求 `Ord`。
+-- 操作复杂度与 [Base.Container.TreeMap] 一致（`insert` / `remove` / `member` O(log n)，`size` O(1)）。
+-- 构造器不导出。
+module Base.Container.TreeSet where
+
+import Base.Data.Bool
+import Base.Data.List
+import Base.Data.Nat
+import Base.Data.Pair
+import Base.Data.Unit
+-- base 模块不自动注入 Prelude，限定名与实例需要显式 import。
+import Base.Container.TreeMap
+import Base.Trait.Ord
+import Base.Trait.Show
+
+-- | 有序持久集合；构造器不导出。
+export record TreeSet a where
+  -- | 底层有序映射；每个成员都映射到 `MkUnit`。
+  treeSetMap : TreeMap a Unit
+
+-- | 空集合。
+export empty : TreeSet a
+empty = TreeSet Base.Container.TreeMap.empty
+
+-- | 插入一个元素（重复插入幂等，O(log n)）。
+export insert : Ord a => a -> TreeSet a -> TreeSet a
+insert key (TreeSet m) = TreeSet (Base.Container.TreeMap.insert key MkUnit m)
+
+-- | 删除一个元素；不存在时原样返回（O(log n)）。
+export remove : Ord a => a -> TreeSet a -> TreeSet a
+remove key (TreeSet m) = TreeSet (Base.Container.TreeMap.remove key m)
+
+-- | 元素是否存在（O(log n)）。
+export member : Ord a => a -> TreeSet a -> Bool
+member key (TreeSet m) = Base.Container.TreeMap.member key m
+
+-- | 元素个数（`Nat`，O(1)）。
+export size : TreeSet a -> Nat
+size (TreeSet m) = Base.Container.TreeMap.size m
+
+-- | 按升序展开为列表。
+export toAscList : TreeSet a -> List a
+toAscList (TreeSet m) = map firstOf (Base.Container.TreeMap.toAscList m)
+
+-- | 按降序展开为列表。
+export toDescList : TreeSet a -> List a
+toDescList (TreeSet m) = map firstOf (Base.Container.TreeMap.toDescList m)
+
+-- | 从列表构造（重复元素自然去重）。
+export fromList : Ord a => List a -> TreeSet a
+fromList xs = foldl (\acc, x => insert x acc) empty xs
+
+-- 经 `toAscList` 展示（构造器不导出）。
+instance Show a => Show (TreeSet a) where
+  show s = "fromList " `++` show (toAscList s)

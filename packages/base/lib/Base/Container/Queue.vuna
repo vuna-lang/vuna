@@ -1,0 +1,86 @@
+-- | 持久 FIFO 队列：`(front, back)` 双列表，`push` 前插到 `back`、`pop` 从 `front` 取；
+-- `front` 空时把 `back` 整体反转。`push` / `pop` / `peek` 是 O(1) 摊还（一次反转摊销到该轮全部
+-- `pop`），`size` 由计数字段 O(1) 读取，`toList` 按出队顺序展开。构造器不导出。
+module Base.Container.Queue where
+
+-- base 模块不自动注入 Prelude，运算符 fixity 与实例需要显式 import。
+import Base.Data.Bool
+import Base.Data.Int
+import Base.Data.List
+import Base.Data.Maybe
+import Base.Data.Nat
+import Base.Data.Pair
+import Base.Trait.Eq
+import Base.Trait.Num
+import Base.Trait.Show
+
+-- | 持久 FIFO 队列；构造器不导出。
+export record Queue a where
+  -- | 队首一侧：按出队顺序排列。
+  queueFront : List a
+  -- | 队尾一侧：新元素前插，取空后整体反转成新的 `queueFront`。
+  queueBack : List a
+  -- | 元素个数（`size` 的 O(1) 来源）。
+  queueCount : Int
+
+-- | 内部：把 `xs` 的尾前插到 `acc`（尾递归）。
+revOnto : List a -> List a -> List a
+revOnto [] acc = acc
+revOnto (x :: xs) acc = revOnto xs (x :: acc)
+
+-- | 内部：拼接两个列表（尾递归，避免长队列的深递归）。
+appendLists : List a -> List a -> List a
+appendLists xs ys = revOnto (revOnto xs []) ys
+
+-- | 内部：以 `Int` 计长度（构造 `fromList` 时填计数）。
+lenInt : List a -> Int
+lenInt [] = 0
+lenInt (_ :: xs) = 1 + lenInt xs
+
+-- | 空队列。
+export empty : Queue a
+empty = Queue [] [] 0
+
+-- | 入队：追加到队尾，O(1)。
+export push : a -> Queue a -> Queue a
+push x (Queue front back n) = Queue front (x :: back) (n + 1)
+
+-- | 出队：返回队首元素与剩余队列；空队列返回 `Nothing`。`front` 空时反转 `back`（摊还 O(1)）。
+export pop : Queue a -> Maybe (Pair a (Queue a))
+pop (Queue front back n) =
+  case front of
+    x :: rest => Just (Pair x (Queue rest back (n - 1)))
+    [] =>
+      case reverse back of
+        [] => Nothing
+        x :: rest => Just (Pair x (Queue rest [] (n - 1)))
+
+-- | 只读队首元素；空队列返回 `Nothing`。
+export peek : Queue a -> Maybe a
+peek (Queue front back _) =
+  case front of
+    x :: _ => Just x
+    [] =>
+      case reverse back of
+        [] => Nothing
+        x :: _ => Just x
+
+-- | 队列是否为空。
+export isEmpty : Queue a -> Bool
+isEmpty (Queue _ _ n) = n == 0
+
+-- | 元素个数（`Nat`，计数字段 O(1)）。
+export size : Queue a -> Nat
+size (Queue _ _ n) = natFromInt n
+
+-- | 从列表构造：`front` 直接取列表本身，出队不付反转。
+export fromList : List a -> Queue a
+fromList xs = Queue xs [] (lenInt xs)
+
+-- | 按出队顺序展开为列表。
+export toList : Queue a -> List a
+toList (Queue front back _) = appendLists front (reverse back)
+
+-- 经 `toList` 展示（构造器不导出）。
+instance Show a => Show (Queue a) where
+  show q = "fromList " `++` show (toList q)
