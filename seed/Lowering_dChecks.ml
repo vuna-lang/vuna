@@ -60,7 +60,7 @@ let rec v_partitionDefsGo = (fun (mc0 : (string, Core_dTerm.t_Term) B_dContainer
 ))
 
 # 81 "Vuna/Compiler/Lowering/Checks.vuna"
-let v_partitionDefs = (fun (table : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List) (defs : Elab_dTypes.t_DtDef B_dData_dList.t_List) -> ((((v_partitionDefsGo ((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) table)) defs) B_dData_dList.C_List_Nil) B_dData_dList.C_List_Nil))
+let v_partitionDefs = (fun (table : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List) (defs : Elab_dTypes.t_DtDef B_dData_dList.t_List) -> ((((v_partitionDefsGo (((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) table)) defs) B_dData_dList.C_List_Nil) B_dData_dList.C_List_Nil))
 
 # 97 "Vuna/Compiler/Lowering/Checks.vuna"
 let v_defLocDiag = (fun (d : Elab_dTypes.t_DtDef) (e : Base_dDiag.t_Diagnostic) -> (((Base_dDiag.v_withContext (Elab_dTypes.v_dtDefSpan d)) (Elab_dTypes.v_dtDefName d)) e))

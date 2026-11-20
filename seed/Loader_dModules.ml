@@ -230,13 +230,13 @@ let v_entriesByName = (fun (name : string) (idx : (string, t_ExportEntry B_dData
 
 # 359 "Vuna/Compiler/Loader/Modules.vuna"
 let rec v_exportIndexOfGo = (fun (mc0 : t_ExportEntry B_dData_dList.t_List) (mc1 : (string, t_ExportEntry B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) -> (match mc0 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__128, dtb__129) -> ((fun tail -> ((((B_dContainer_dHashMap.v_insert B_dData_dString.v_Hashable_uString) (dtb__128).f_ExportEntry_public) (B_dData_dList.C_List__x58__x58_ (dtb__128, ((v_entriesByName (dtb__128).f_ExportEntry_public) tail)))) tail)) ((v_exportIndexOfGo dtb__129) mc1))
+  | B_dData_dList.C_List__x58__x58_ (dtb__128, dtb__129) -> ((fun tail -> (((((B_dContainer_dHashMap.v_insert B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) (dtb__128).f_ExportEntry_public) (B_dData_dList.C_List__x58__x58_ (dtb__128, ((v_entriesByName (dtb__128).f_ExportEntry_public) tail)))) tail)) ((v_exportIndexOfGo dtb__129) mc1))
   | B_dData_dList.C_List_Nil -> mc1
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 356 "Vuna/Compiler/Loader/Modules.vuna"
-let v_exportIndexOf = (fun (entries : t_ExportEntry B_dData_dList.t_List) -> ((v_exportIndexOfGo entries) ((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) B_dData_dList.C_List_Nil)))
+let v_exportIndexOf = (fun (entries : t_ExportEntry B_dData_dList.t_List) -> ((v_exportIndexOfGo entries) (((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) B_dData_dList.C_List_Nil)))
 
 # 380 "Vuna/Compiler/Loader/Modules.vuna"
 let rec v_lookupExport = (fun (mc0 : string B_dData_dList.t_List) (mc1 : string) (mc2 : t_ExportEntry B_dData_dList.t_List) -> (match mc2 with

@@ -20,7 +20,7 @@ let v_unitOfLocName = (fun (name : string) -> ((fun p -> (if (p = "") then (v_sp
 let v_mainInitPrologue = "let () = Printexc.record_backtrace true\n"
 
 # 73 "Vuna/Compiler/Driver/SplitGen.vuna"
-let v_ownerTblOf = (fun (pairs : (string, string) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (((B_dContainer_dHashMap.v_insertAll B_dData_dString.v_Hashable_uString) pairs) ((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) B_dData_dList.C_List_Nil)))
+let v_ownerTblOf = (fun (pairs : (string, string) B_dData_dPair.t_Pair B_dData_dList.t_List) -> ((((B_dContainer_dHashMap.v_insertAll B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) pairs) (((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) B_dData_dList.C_List_Nil)))
 
 # 76 "Vuna/Compiler/Driver/SplitGen.vuna"
 let v_ownerOfTbl = (fun (t : (string, string) B_dContainer_dHashMap.t_HashMap) (name : string) -> (match ((((B_dContainer_dHashMap.v_lookup B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) name) t) with

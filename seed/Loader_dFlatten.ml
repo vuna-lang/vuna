@@ -30,7 +30,7 @@ let v_fixityDeclKey = (fun (d : Frontend_dAst.t_FixityDecl) -> ((fun sp -> (Stri
 let rec v_dedupeFixitiesGo = (fun (mc0 : Frontend_dAst.t_FixityDecl B_dData_dList.t_List) (mc1 : (string, int) B_dContainer_dHashMap.t_HashMap) (mc2 : Frontend_dAst.t_FixityDecl B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__6, dtb__7) -> ((fun key -> (match ((((B_dContainer_dHashMap.v_lookup B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) key) mc1) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__8) -> (((v_dedupeFixitiesGo dtb__7) mc1) mc2)
-  | B_dData_dMaybe.C_Maybe_Nothing -> (((v_dedupeFixitiesGo dtb__7) ((((B_dContainer_dHashMap.v_insert B_dData_dString.v_Hashable_uString) key) 1) mc1)) (B_dData_dList.C_List__x58__x58_ (dtb__6, mc2)))
+  | B_dData_dMaybe.C_Maybe_Nothing -> (((v_dedupeFixitiesGo dtb__7) (((((B_dContainer_dHashMap.v_insert B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) key) 1) mc1)) (B_dData_dList.C_List__x58__x58_ (dtb__6, mc2)))
   | _ -> failwith "DT: impossible branch"
 )) (v_fixityDeclKey dtb__6))
   | B_dData_dList.C_List_Nil -> (B_dData_dList.v_reverse mc2)
@@ -38,7 +38,7 @@ let rec v_dedupeFixitiesGo = (fun (mc0 : Frontend_dAst.t_FixityDecl B_dData_dLis
 ))
 
 # 79 "Vuna/Compiler/Loader/Flatten.vuna"
-let v_dedupeFixities = (fun (ds : Frontend_dAst.t_FixityDecl B_dData_dList.t_List) -> (((v_dedupeFixitiesGo ds) ((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) B_dData_dList.C_List_Nil)) B_dData_dList.C_List_Nil))
+let v_dedupeFixities = (fun (ds : Frontend_dAst.t_FixityDecl B_dData_dList.t_List) -> (((v_dedupeFixitiesGo ds) (((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) B_dData_dList.C_List_Nil)) B_dData_dList.C_List_Nil))
 
 # 103 "Vuna/Compiler/Loader/Flatten.vuna"
 let v_isPrivateName = (fun (name : string) -> ((B_dData_dString.v_startsWith "_") name))
@@ -357,7 +357,7 @@ let v_exportEntryKey = (fun (e : Loader_dModules.t_ExportEntry) -> (String.conca
 let rec v_dedupeByFullKey = (fun (mc0 : Loader_dModules.t_ExportEntry B_dData_dList.t_List) (mc1 : (string, int) B_dContainer_dHashMap.t_HashMap) (mc2 : Loader_dModules.t_ExportEntry B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__215, dtb__216) -> ((fun key -> (match ((((B_dContainer_dHashMap.v_lookup B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) key) mc1) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__217) -> (((v_dedupeByFullKey dtb__216) mc1) mc2)
-  | B_dData_dMaybe.C_Maybe_Nothing -> (((v_dedupeByFullKey dtb__216) ((((B_dContainer_dHashMap.v_insert B_dData_dString.v_Hashable_uString) key) 1) mc1)) (B_dData_dList.C_List__x58__x58_ (dtb__215, mc2)))
+  | B_dData_dMaybe.C_Maybe_Nothing -> (((v_dedupeByFullKey dtb__216) (((((B_dContainer_dHashMap.v_insert B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) key) 1) mc1)) (B_dData_dList.C_List__x58__x58_ (dtb__215, mc2)))
   | _ -> failwith "DT: impossible branch"
 )) (v_exportEntryKey dtb__215))
   | B_dData_dList.C_List_Nil -> (B_dData_dList.v_reverse mc2)
@@ -365,7 +365,7 @@ let rec v_dedupeByFullKey = (fun (mc0 : Loader_dModules.t_ExportEntry B_dData_dL
 ))
 
 # 475 "Vuna/Compiler/Loader/Flatten.vuna"
-let v_dedupeExportEntries = (fun (entries : Loader_dModules.t_ExportEntry B_dData_dList.t_List) -> (((v_dedupeByFullKey entries) ((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) B_dData_dList.C_List_Nil)) B_dData_dList.C_List_Nil))
+let v_dedupeExportEntries = (fun (entries : Loader_dModules.t_ExportEntry B_dData_dList.t_List) -> (((v_dedupeByFullKey entries) (((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) B_dData_dList.C_List_Nil)) B_dData_dList.C_List_Nil))
 
 # 499 "Vuna/Compiler/Loader/Flatten.vuna"
 let rec v_exportItemsAll = (fun (mc0 : Loader_dModules.t_Module B_dData_dList.t_List) (mc1 : string) (mc2 : Frontend_dAst.t_Decl B_dData_dList.t_List) (mc3 : Frontend_dAst.t_Import B_dData_dList.t_List) (mc4 : Frontend_dAst.t_ExportItem B_dData_dList.t_List) -> (match mc4 with

@@ -987,7 +987,7 @@ let v_isRigidHeadValue = (fun (ec : Elab_dTypes.t_Ec) (v : Core_dTerm.t_Value) -
 )) ((Elab_dTypes.v_forceVal ec) v)))
 
 # 2377 "Vuna/Compiler/Elab/Term/Impl.vuna"
-let v_tryUseHint = (fun (goals0 : int) (ctx : Elab_dTypes.t_Ctx) (expected : Core_dTerm.t_Value) (ec : Elab_dTypes.t_Ec) (piTy : Core_dTerm.t_Value) -> (if ((B_dData_dList.v_length (Elab_dTypes.v_ecPending ec)) <= goals0) then B_dData_dMaybe.C_Maybe_Nothing else ((fun nd_uscrut5 -> (match nd_uscrut5 with
+let v_tryUseHint = (fun (goals0 : int) (ctx : Elab_dTypes.t_Ctx) (expected : Core_dTerm.t_Value) (ec : Elab_dTypes.t_Ec) (piTy : Core_dTerm.t_Value) -> (if ((Elab_dTypes.v_ecPendingCount ec) <= goals0) then B_dData_dMaybe.C_Maybe_Nothing else ((fun nd_uscrut5 -> (match nd_uscrut5 with
   | Base_dDiag.C_Check_OkC (dtb__444) -> (match dtb__444 with
   | { B_dData_dPair.f_Pair_first = dtb__445; B_dData_dPair.f_Pair_second = dtb__446 } -> ((fun forcedRes -> (if ((v_isMetaHeadedValue dtb__446) forcedRes) then (if ((v_isRigidHeadValue dtb__446) expected) then (match ((((Elab_dMeta.v_convEc dtb__446) (Elab_dTypes.v_ctxDepth ctx)) expected) forcedRes) with
   | Base_dDiag.C_Check_ErrC (dtb__447) -> B_dData_dMaybe.C_Maybe_Nothing
@@ -2746,7 +2746,7 @@ and v_inferEFuelHint = (fun (fuel : int) (globals : (string, Core_dTerm.t_Term) 
   | B_dData_dMaybe.C_Maybe_Nothing -> (match (v_appAtOperand expr) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__1376) -> ((Base_dCommon.v_bind (v_appAtCallExpr expr)) (fun (callExpr : Frontend_dRast.t_Expr) -> (((((v_inferEFuel (fuel - 1)) globals) ctx) ec) callExpr)))
   | B_dData_dMaybe.C_Maybe_Nothing -> (match expr with
-  | Frontend_dRast.C_Expr_EApp (dtb__1377, dtb__1378, dtb__1379) -> ((((((((v_inferAppFuel (fuel - 1)) globals) ctx) ec) dtb__1377) dtb__1378) dtb__1379) (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (B_dData_dList.v_length (Elab_dTypes.v_ecPending ec)); B_dData_dPair.f_Pair_second = expected })))
+  | Frontend_dRast.C_Expr_EApp (dtb__1377, dtb__1378, dtb__1379) -> ((((((((v_inferAppFuel (fuel - 1)) globals) ctx) ec) dtb__1377) dtb__1378) dtb__1379) (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Elab_dTypes.v_ecPendingCount ec); B_dData_dPair.f_Pair_second = expected })))
   | _ -> (((((v_inferEFuel fuel) globals) ctx) ec) expr)
 )
   | _ -> failwith "DT: impossible branch"

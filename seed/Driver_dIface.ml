@@ -124,7 +124,7 @@ let v_sortTextPairs = (fun ps -> ((B_dData_dSort.v_sortBy (fun a b -> (((B_dTrai
 let v_sortByText = (fun key xs -> ((B_dData_dList.v_map B_dData_dPair.v_secondOf) (v_sortTextPairs ((B_dData_dList.v_map (fun x -> { B_dData_dPair.f_Pair_first = (key x); B_dData_dPair.f_Pair_second = x })) xs))))
 
 # 272 "Vuna/Compiler/Driver/Iface.vuna"
-let v_canonStateEmpty = { f_CanonState_csNext = 0; f_CanonState_csMap = ((B_dContainer_dHashMap.v_fromList B_dData_dInt.v_Hashable_uInt) B_dData_dList.C_List_Nil) }
+let v_canonStateEmpty = { f_CanonState_csNext = 0; f_CanonState_csMap = (((B_dContainer_dHashMap.v_fromList B_dData_dInt.v_Hashable_uInt) B_dData_dInt.v_Eq_uInt) B_dData_dList.C_List_Nil) }
 
 # 275 "Vuna/Compiler/Driver/Iface.vuna"
 let rec v_canonTerm = (fun (mc0 : t_CanonState) (mc1 : Core_dTerm.t_Term) -> (match mc1 with
@@ -138,7 +138,7 @@ let rec v_canonTerm = (fun (mc0 : t_CanonState) (mc1 : Core_dTerm.t_Term) -> (ma
   | Core_dTerm.C_Term_TPi (dtb__26, dtb__27, dtb__28, dtb__29, dtb__30) -> ((fun pd -> ((fun pc -> { B_dData_dPair.f_Pair_first = (Core_dTerm.C_Term_TPi (dtb__26, dtb__27, dtb__28, (B_dData_dPair.v_firstOf pd), (B_dData_dPair.v_firstOf pc))); B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf pc) }) ((v_canonTerm (B_dData_dPair.v_secondOf pd)) dtb__30))) ((v_canonTerm mc0) dtb__29))
   | Core_dTerm.C_Term_TMeta (dtb__31) -> (match ((((B_dContainer_dHashMap.v_lookup B_dData_dInt.v_Hashable_uInt) B_dData_dInt.v_Eq_uInt) dtb__31) (mc0).f_CanonState_csMap) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__32) -> { B_dData_dPair.f_Pair_first = (Core_dTerm.C_Term_TMeta (dtb__32)); B_dData_dPair.f_Pair_second = mc0 }
-  | B_dData_dMaybe.C_Maybe_Nothing -> { B_dData_dPair.f_Pair_first = (Core_dTerm.C_Term_TMeta ((mc0).f_CanonState_csNext)); B_dData_dPair.f_Pair_second = { f_CanonState_csNext = ((mc0).f_CanonState_csNext + 1); f_CanonState_csMap = ((((B_dContainer_dHashMap.v_insert B_dData_dInt.v_Hashable_uInt) dtb__31) (mc0).f_CanonState_csNext) (mc0).f_CanonState_csMap) } }
+  | B_dData_dMaybe.C_Maybe_Nothing -> { B_dData_dPair.f_Pair_first = (Core_dTerm.C_Term_TMeta ((mc0).f_CanonState_csNext)); B_dData_dPair.f_Pair_second = { f_CanonState_csNext = ((mc0).f_CanonState_csNext + 1); f_CanonState_csMap = (((((B_dContainer_dHashMap.v_insert B_dData_dInt.v_Hashable_uInt) B_dData_dInt.v_Eq_uInt) dtb__31) (mc0).f_CanonState_csNext) (mc0).f_CanonState_csMap) } }
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> { B_dData_dPair.f_Pair_first = mc1; B_dData_dPair.f_Pair_second = mc0 }
@@ -305,7 +305,7 @@ let v_globalOwnerOf = (fun (oi : t_OwnerIndex) (name : string) -> (if ((B_dData_
 )))
 
 # 527 "Vuna/Compiler/Driver/Iface.vuna"
-let v_ownerIndexOf = (fun (meta : Driver_dOwner.t_SplitMeta) (datas : Elab_dTypes.t_DtData B_dData_dList.t_List) -> { f_OwnerIndex_oiDef = ((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) (meta).Driver_dOwner.f_SplitMeta_smDefOwners); f_OwnerIndex_oiData = ((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) (meta).Driver_dOwner.f_SplitMeta_smDataOwners); f_OwnerIndex_oiCtor = ((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) (v_ctorFamilyPairs datas)); f_OwnerIndex_oiKnown = (meta).Driver_dOwner.f_SplitMeta_smKnownModules })
+let v_ownerIndexOf = (fun (meta : Driver_dOwner.t_SplitMeta) (datas : Elab_dTypes.t_DtData B_dData_dList.t_List) -> { f_OwnerIndex_oiDef = (((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) (meta).Driver_dOwner.f_SplitMeta_smDefOwners); f_OwnerIndex_oiData = (((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) (meta).Driver_dOwner.f_SplitMeta_smDataOwners); f_OwnerIndex_oiCtor = (((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) (v_ctorFamilyPairs datas)); f_OwnerIndex_oiKnown = (meta).Driver_dOwner.f_SplitMeta_smKnownModules })
 
 # 558 "Vuna/Compiler/Driver/Iface.vuna"
 let v_bucketOf = (fun (name : string) tbl -> (match ((((B_dContainer_dHashMap.v_lookup B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) name) tbl) with
@@ -318,7 +318,7 @@ let v_bucketOf = (fun (name : string) tbl -> (match ((((B_dContainer_dHashMap.v_
 let rec v_partitionByOwnerGo = (fun mc0 mc1 mc2 -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__61, dtb__62) -> (match (mc0 dtb__61) with
   | B_dData_dMaybe.C_Maybe_Nothing -> (((v_partitionByOwnerGo mc0) dtb__62) mc2)
-  | B_dData_dMaybe.C_Maybe_Just (dtb__63) -> (((v_partitionByOwnerGo mc0) dtb__62) ((((B_dContainer_dHashMap.v_insert B_dData_dString.v_Hashable_uString) dtb__63) (B_dData_dList.C_List__x58__x58_ (dtb__61, ((v_bucketOf dtb__63) mc2)))) mc2))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__63) -> (((v_partitionByOwnerGo mc0) dtb__62) (((((B_dContainer_dHashMap.v_insert B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) dtb__63) (B_dData_dList.C_List__x58__x58_ (dtb__61, ((v_bucketOf dtb__63) mc2)))) mc2))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dList.C_List_Nil -> mc2
@@ -332,13 +332,13 @@ let v_reverseBucket = (fun mc0 -> (match mc0 with
 ))
 
 # 564 "Vuna/Compiler/Driver/Iface.vuna"
-let v_reverseBuckets = (fun tbl -> ((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) ((B_dData_dList.v_map v_reverseBucket) ((B_dContainer_dHashMap.v_toList B_dData_dString.v_Eq_uString) tbl))))
+let v_reverseBuckets = (fun tbl -> (((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) ((B_dData_dList.v_map v_reverseBucket) (B_dContainer_dHashMap.v_toList tbl))))
 
 # 548 "Vuna/Compiler/Driver/Iface.vuna"
-let v_partitionByOwner = (fun ownerOf xs -> (v_reverseBuckets (((v_partitionByOwnerGo ownerOf) xs) ((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) B_dData_dList.C_List_Nil))))
+let v_partitionByOwner = (fun ownerOf xs -> (v_reverseBuckets (((v_partitionByOwnerGo ownerOf) xs) (((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) B_dData_dList.C_List_Nil))))
 
 # 570 "Vuna/Compiler/Driver/Iface.vuna"
-let v_progPartsOf = (fun (oi : t_OwnerIndex) (prog : Elab_dTypes.t_DtProgram) -> { f_ProgParts_ppSols = ((B_dContainer_dHashMap.v_fromList B_dData_dInt.v_Hashable_uInt) (Elab_dTypes.v_dtProgSols prog)); f_ProgParts_ppDatas = ((v_partitionByOwner (fun (d : Elab_dTypes.t_DtData) -> ((v_dataOwnerOf oi) (Elab_dTypes.v_dtDataName d)))) (Elab_dTypes.v_dtProgDatas prog)); f_ProgParts_ppDefs = ((v_partitionByOwner (fun (d : Elab_dTypes.t_DtDef) -> ((v_defOwnerOf oi) (Elab_dTypes.v_dtDefName d)))) (Elab_dTypes.v_dtProgDefs prog)); f_ProgParts_ppGlobals = ((v_partitionByOwner (fun (p : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair) -> ((v_globalOwnerOf oi) (B_dData_dPair.v_firstOf p)))) (Elab_dTypes.v_dtProgGlobals prog)); f_ProgParts_ppInsts = ((v_partitionByOwner (fun (i : Elab_dTypes.t_DtInst) -> ((v_defOwnerOf oi) (Elab_dTypes.v_dtInstName i)))) (Elab_dTypes.v_dtProgInsts prog)); f_ProgParts_ppClasses = ((v_partitionByOwner (fun (c : Elab_dTypes.t_DtClass) -> ((v_defOwnerOf oi) (Elab_dTypes.v_dtClassName c)))) (Elab_dTypes.v_dtProgClasses prog)) })
+let v_progPartsOf = (fun (oi : t_OwnerIndex) (prog : Elab_dTypes.t_DtProgram) -> { f_ProgParts_ppSols = (((B_dContainer_dHashMap.v_fromList B_dData_dInt.v_Hashable_uInt) B_dData_dInt.v_Eq_uInt) (Elab_dTypes.v_dtProgSols prog)); f_ProgParts_ppDatas = ((v_partitionByOwner (fun (d : Elab_dTypes.t_DtData) -> ((v_dataOwnerOf oi) (Elab_dTypes.v_dtDataName d)))) (Elab_dTypes.v_dtProgDatas prog)); f_ProgParts_ppDefs = ((v_partitionByOwner (fun (d : Elab_dTypes.t_DtDef) -> ((v_defOwnerOf oi) (Elab_dTypes.v_dtDefName d)))) (Elab_dTypes.v_dtProgDefs prog)); f_ProgParts_ppGlobals = ((v_partitionByOwner (fun (p : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair) -> ((v_globalOwnerOf oi) (B_dData_dPair.v_firstOf p)))) (Elab_dTypes.v_dtProgGlobals prog)); f_ProgParts_ppInsts = ((v_partitionByOwner (fun (i : Elab_dTypes.t_DtInst) -> ((v_defOwnerOf oi) (Elab_dTypes.v_dtInstName i)))) (Elab_dTypes.v_dtProgInsts prog)); f_ProgParts_ppClasses = ((v_partitionByOwner (fun (c : Elab_dTypes.t_DtClass) -> ((v_defOwnerOf oi) (Elab_dTypes.v_dtClassName c)))) (Elab_dTypes.v_dtProgClasses prog)) })
 
 # 582 "Vuna/Compiler/Driver/Iface.vuna"
 let v_cpOfModule = (fun (parts : t_ProgParts) (prog : Elab_dTypes.t_DtProgram) (mod_ : string) (opaqueNames : string B_dData_dList.t_List) -> ((fun datas -> ((fun defs -> ((fun globals -> ((fun insts -> ((fun classes -> ((fun slice -> ((Driver_dCache.v_withCachedOpaque opaqueNames) ((Driver_dCache.v_cachedOfProgramWith (parts).f_ProgParts_ppSols) slice))) { Elab_dTypes.f_DtProgram_dtProgDatas = datas; Elab_dTypes.f_DtProgram_dtProgDefs = defs; Elab_dTypes.f_DtProgram_dtProgGoals = B_dData_dList.C_List_Nil; Elab_dTypes.f_DtProgram_dtProgSols = (Elab_dTypes.v_dtProgSols prog); Elab_dTypes.f_DtProgram_dtProgGlobals = globals; Elab_dTypes.f_DtProgram_dtProgInsts = insts; Elab_dTypes.f_DtProgram_dtProgClasses = classes; Elab_dTypes.f_DtProgram_dtProgNext = 0; Elab_dTypes.f_DtProgram_dtProgDepths = B_dData_dList.C_List_Nil; Elab_dTypes.f_DtProgram_dtProgWarnings = B_dData_dList.C_List_Nil })) ((v_bucketOf mod_) (parts).f_ProgParts_ppClasses))) ((v_bucketOf mod_) (parts).f_ProgParts_ppInsts))) ((v_bucketOf mod_) (parts).f_ProgParts_ppGlobals))) ((v_bucketOf mod_) (parts).f_ProgParts_ppDefs))) ((v_bucketOf mod_) (parts).f_ProgParts_ppDatas)))

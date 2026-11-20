@@ -58,16 +58,16 @@ let v_hasIntrinsic = (fun (name : string) -> (match (Base_dIntrinsics.v_findIntr
 ))
 
 # 102 "Vuna/Compiler/Frontend/Rast/Name.vuna"
-let rec v_lastDotAt = (fun (index : int) (cs : int B_dData_dList.t_List) (found : int) -> (match cs with
-  | B_dData_dList.C_List_Nil -> found
-  | B_dData_dList.C_List__x58__x58_ (dtb__16, dtb__17) -> (((v_lastDotAt (index + 1)) dtb__17) (if (dtb__16 = 46) then index else found))
+let rec v_lastDotAt = (fun (mc0 : int) (mc1 : int B_dData_dList.t_List) (mc2 : int) -> (match mc1 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__16, dtb__17) -> (((v_lastDotAt (mc0 + 1)) dtb__17) (if (dtb__16 = 46) then mc0 else mc2))
+  | B_dData_dList.C_List_Nil -> mc2
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 94 "Vuna/Compiler/Frontend/Rast/Name.vuna"
 let v_splitGlobalKey = (fun (name : string) -> ((fun cs -> ((fun at -> (if (at < 0) then B_dData_dMaybe.C_Maybe_Nothing else (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (B_dData_dList.dtp_pack ((B_dData_dList.v_take at) cs)); B_dData_dPair.f_Pair_second = (B_dData_dList.dtp_pack ((B_dData_dList.v_drop (at + 1)) cs)) })))) (((v_lastDotAt 0) cs) (0 - 1)))) (B_dData_dList.dtp_unpack name)))
 
-# 109 "Vuna/Compiler/Frontend/Rast/Name.vuna"
+# 107 "Vuna/Compiler/Frontend/Rast/Name.vuna"
 let v_isPreludeName = (fun (name : string) -> ((B_dData_dList.v_memName name) ((B_dData_dList.v_append (B_dData_dList.C_List__x58__x58_ ("Type", (B_dData_dList.C_List__x58__x58_ ("->", (B_dData_dList.C_List__x58__x58_ ("_", B_dData_dList.C_List_Nil))))))) ((B_dData_dList.v_append Base_dIntrinsics.v_preludeTypeNames) Base_dIntrinsics.v_preludeValueNames))))
 
 # 69 "Vuna/Compiler/Frontend/Rast/Name.vuna"

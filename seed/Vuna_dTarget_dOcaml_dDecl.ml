@@ -41,10 +41,10 @@ let v_ctorOcamlName = (fun (family : string) (ctor : string) -> (String.concat "
 let v_recordFieldLabel = (fun (family : string) (field : string) -> (String.concat "" ["f_"; (v_sanitizeName (v_localName family)); "_"; (v_sanitizeName field)]))
 
 # 113 "Vuna/Target/Ocaml/Decl.vuna"
-let v_noQual = { f_QualCtx_qcUnit = ""; f_QualCtx_qcDefs = ((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) B_dData_dList.C_List_Nil); f_QualCtx_qcDatas = ((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) B_dData_dList.C_List_Nil) }
+let v_noQual = { f_QualCtx_qcUnit = ""; f_QualCtx_qcDefs = (((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) B_dData_dList.C_List_Nil); f_QualCtx_qcDatas = (((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) B_dData_dList.C_List_Nil) }
 
 # 116 "Vuna/Target/Ocaml/Decl.vuna"
-let v_unitTblOf = (fun (pairs : (string, string) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (((B_dContainer_dHashMap.v_insertAll B_dData_dString.v_Hashable_uString) pairs) ((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) B_dData_dList.C_List_Nil)))
+let v_unitTblOf = (fun (pairs : (string, string) B_dData_dPair.t_Pair B_dData_dList.t_List) -> ((((B_dContainer_dHashMap.v_insertAll B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) pairs) (((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) B_dData_dList.C_List_Nil)))
 
 # 119 "Vuna/Target/Ocaml/Decl.vuna"
 let v_unitOfTbl = (fun (tbl : (string, string) B_dContainer_dHashMap.t_HashMap) (name : string) -> (match ((((B_dContainer_dHashMap.v_lookup B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) name) tbl) with

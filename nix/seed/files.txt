@@ -1,5 +1,12 @@
+B_dContainer.ml
 B_dContainer_dArray.ml
 B_dContainer_dHashMap.ml
+B_dContainer_dHashSet.ml
+B_dContainer_dMap.ml
+B_dContainer_dPriorityQueue.ml
+B_dContainer_dQueue.ml
+B_dContainer_dTreeMap.ml
+B_dContainer_dTreeSet.ml
 B_dData.ml
 B_dData_dBase64.ml
 B_dData_dBits.ml

@@ -18,11 +18,11 @@ let v_paddingCount = (fun (bs : int B_dData_dList.t_List) (n : int) -> (if (n = 
 # 67 "Base/Data/Base64.vuna"
 let v_zeroBytes = (fun (k : int) -> ((B_dData_dList.v_map (fun (_u : int) -> 0)) ((B_dData_dList.v_range 0) k)))
 
-# 85 "Base/Data/Base64.vuna"
+# 83 "Base/Data/Base64.vuna"
 let v_encodeDigit = (fun (n : int) -> (if (n < 26) then (B_dData_dList.dtp_pack (B_dData_dList.C_List__x58__x58_ ((65 + n), B_dData_dList.C_List_Nil))) else (if (n < 52) then (B_dData_dList.dtp_pack (B_dData_dList.C_List__x58__x58_ ((71 + n), B_dData_dList.C_List_Nil))) else (if (n < 62) then (B_dData_dList.dtp_pack (B_dData_dList.C_List__x58__x58_ (((48 + n) - 52), B_dData_dList.C_List_Nil))) else (if (n = 62) then "+" else "/")))))
 
 # 71 "Base/Data/Base64.vuna"
-let v_encodeGroup = (fun (g : int B_dData_dList.t_List) -> ((fun nd_uscrut1 -> (match nd_uscrut1 with
+let v_encodeGroup = (fun (mc0 : int B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__2, dtb__3) -> (match dtb__3 with
   | B_dData_dList.C_List__x58__x58_ (dtb__4, dtb__5) -> (match dtb__5 with
   | B_dData_dList.C_List__x58__x58_ (dtb__6, dtb__7) -> (match dtb__7 with
@@ -37,7 +37,7 @@ let v_encodeGroup = (fun (g : int B_dData_dList.t_List) -> ((fun nd_uscrut1 -> (
 )
   | B_dData_dList.C_List_Nil -> ""
   | _ -> failwith "DT: impossible branch"
-)) g))
+))
 
 # 18 "Base/Data/Base64.vuna"
 let v_base64Encode = (fun (bs : int B_dData_dList.t_List) -> (B_dData_dList.dtp_concatMany ((B_dData_dList.v_map v_encodeGroup) ((v_groups 3) bs))))
@@ -45,11 +45,11 @@ let v_base64Encode = (fun (bs : int B_dData_dList.t_List) -> (B_dData_dList.dtp_
 # 22 "Base/Data/Base64.vuna"
 let v_base64EncodeString = (fun (s : string) -> (v_base64Encode (B_dData_dList.dtp_unpack s)))
 
-# 94 "Base/Data/Base64.vuna"
+# 92 "Base/Data/Base64.vuna"
 let v_decodeDigit = (fun (c : int) -> (if (if (c >= 65) then (c <= 90) else false) then (B_dData_dMaybe.C_Maybe_Just ((c - 65))) else (if (if (c >= 97) then (c <= 122) else false) then (B_dData_dMaybe.C_Maybe_Just ((c - 71))) else (if (if (c >= 48) then (c <= 57) else false) then (B_dData_dMaybe.C_Maybe_Just ((c + 4))) else (if (c = 43) then (B_dData_dMaybe.C_Maybe_Just (62)) else (if (c = 47) then (B_dData_dMaybe.C_Maybe_Just (63)) else B_dData_dMaybe.C_Maybe_Nothing))))))
 
-# 105 "Base/Data/Base64.vuna"
-let v_decodeGroup = (fun (g : int B_dData_dList.t_List) -> ((fun nd_uscrut1 -> (match nd_uscrut1 with
+# 107 "Base/Data/Base64.vuna"
+let v_decodeGroup = (fun (mc0 : int B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__8, dtb__9) -> (match dtb__9 with
   | B_dData_dList.C_List__x58__x58_ (dtb__10, dtb__11) -> (match dtb__11 with
   | B_dData_dList.C_List__x58__x58_ (dtb__12, dtb__13) -> (match dtb__13 with
@@ -64,16 +64,16 @@ let v_decodeGroup = (fun (g : int B_dData_dList.t_List) -> ((fun nd_uscrut1 -> (
   | _ -> B_dData_dMaybe.C_Maybe_Nothing
 )
   | _ -> B_dData_dMaybe.C_Maybe_Nothing
-)) g))
+))
 
 # 121 "Base/Data/Base64.vuna"
-let v_step = (fun acc m -> (match acc with
-  | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
-  | B_dData_dMaybe.C_Maybe_Just (dtb__16) -> (match m with
+let v_step = (fun mc0 mc1 -> (match mc0 with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__16) -> (match mc1 with
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
   | B_dData_dMaybe.C_Maybe_Just (dtb__17) -> (B_dData_dMaybe.C_Maybe_Just ((B_dData_dList.C_List__x58__x58_ (dtb__17, dtb__16))))
   | _ -> failwith "DT: impossible branch"
 )
+  | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
 ))
 

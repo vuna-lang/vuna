@@ -78,7 +78,7 @@ let v_elabCtor = (fun (globals : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pai
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
-)) pk)))) ((B_dData_dList.v_append globals) ((B_dContainer_dHashMap.v_toList B_dData_dString.v_Eq_uString) (Elab_dTypes.v_ecGlobalsTbl ec))))) (if (Elab_dMeta.v_hasFamParams dtb__48) then dtb__48 else (((Elab_dMeta.v_prependFamParams famKind) dtb__48) dtb__50)))) (match ((Elab_dMeta.v_globalLookup fam) globals) with
+)) pk)))) ((B_dData_dList.v_append globals) (B_dContainer_dHashMap.v_toList (Elab_dTypes.v_ecGlobalsTbl ec))))) (if (Elab_dMeta.v_hasFamParams dtb__48) then dtb__48 else (((Elab_dMeta.v_prependFamParams famKind) dtb__48) dtb__50)))) (match ((Elab_dMeta.v_globalLookup fam) globals) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__57) -> dtb__57
   | B_dData_dMaybe.C_Maybe_Nothing -> (Core_dTerm.C_Term_TType (Core_dTerm.v_levelZero))
   | _ -> failwith "DT: impossible branch"

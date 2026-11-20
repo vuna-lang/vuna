@@ -29,7 +29,7 @@ let rec v_checkUniqueFixitiesGo = (fun (mc0 : Frontend_dAst.t_FixityDecl B_dData
   | B_dData_dMaybe.C_Maybe_Just (dtb__4) -> (((v_checkUniqueFixitiesGo dtb__3) mc1) mc2)
   | B_dData_dMaybe.C_Maybe_Nothing -> (match ((((B_dContainer_dHashMap.v_lookup B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) (dtb__2).Frontend_dAst.f_FixityDecl_fixityOp) mc1) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__5) -> ((Base_dDiag.v_onErrDiag (Base_dDiag.v_withFallbackSpan sp)) ((Base_dDiagnostics_dRn.v_rnNoLoc1 (Base_dDiagnostics_dRn.C_RnErr_DuplicateFixity ((dtb__2).Frontend_dAst.f_FixityDecl_fixityOp))) (dtb__2).Frontend_dAst.f_FixityDecl_fixityOp))
-  | B_dData_dMaybe.C_Maybe_Nothing -> ((Base_dCommon.v_bind (((v_checkUniqueFixitiesGo dtb__3) ((((B_dContainer_dHashMap.v_insert B_dData_dString.v_Hashable_uString) (dtb__2).Frontend_dAst.f_FixityDecl_fixityOp) 1) mc1)) ((((B_dContainer_dHashMap.v_insert B_dData_dString.v_Hashable_uString) declKey) 1) mc2))) (fun (tailDecls : Frontend_dAst.t_FixityDecl B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC ((B_dData_dList.C_List__x58__x58_ (dtb__2, tailDecls))))))
+  | B_dData_dMaybe.C_Maybe_Nothing -> ((Base_dCommon.v_bind (((v_checkUniqueFixitiesGo dtb__3) (((((B_dContainer_dHashMap.v_insert B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) (dtb__2).Frontend_dAst.f_FixityDecl_fixityOp) 1) mc1)) (((((B_dContainer_dHashMap.v_insert B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) declKey) 1) mc2))) (fun (tailDecls : Frontend_dAst.t_FixityDecl B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC ((B_dData_dList.C_List__x58__x58_ (dtb__2, tailDecls))))))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
@@ -39,7 +39,7 @@ let rec v_checkUniqueFixitiesGo = (fun (mc0 : Frontend_dAst.t_FixityDecl B_dData
 ))
 
 # 56 "Vuna/Compiler/Loader/Fixity.vuna"
-let v_checkUniqueFixities = (fun (ds : Frontend_dAst.t_FixityDecl B_dData_dList.t_List) -> (((v_checkUniqueFixitiesGo ds) ((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) B_dData_dList.C_List_Nil)) ((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) B_dData_dList.C_List_Nil)))
+let v_checkUniqueFixities = (fun (ds : Frontend_dAst.t_FixityDecl B_dData_dList.t_List) -> (((v_checkUniqueFixitiesGo ds) (((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) B_dData_dList.C_List_Nil)) (((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) B_dData_dList.C_List_Nil)))
 
 # 76 "Vuna/Compiler/Loader/Fixity.vuna"
 let rec v_lookupDecl = (fun (mc0 : string) (mc1 : Frontend_dAst.t_FixityDecl B_dData_dList.t_List) -> (match mc1 with

@@ -179,24 +179,24 @@ let rec v_flattenAnnotAppGo = (fun (mc0 : Core_dTerm.t_Term) (mc1 : Core_dTerm.t
 # 289 "Vuna/Compiler/Lowering/Ty.vuna"
 let v_flattenAnnotApp = (fun (t : Core_dTerm.t_Term) -> ((v_flattenAnnotAppGo t) B_dData_dList.C_List_Nil))
 
-# 354 "Vuna/Compiler/Lowering/Ty.vuna"
+# 351 "Vuna/Compiler/Lowering/Ty.vuna"
 let v_globalTyTermOf = (fun (env : Lowering_dEnv.t_LwEnv) (g : string) -> (match ((((B_dContainer_dHashMap.v_lookup B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) g) (env).Lowering_dEnv.f_LwEnv_lwDefTbl) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__72) -> (B_dData_dMaybe.C_Maybe_Just ((Elab_dTypes.v_dtDefType dtb__72)))
   | B_dData_dMaybe.C_Maybe_Nothing -> ((((B_dContainer_dHashMap.v_lookup B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) g) (env).Lowering_dEnv.f_LwEnv_lwGlobals)
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 374 "Vuna/Compiler/Lowering/Ty.vuna"
+# 371 "Vuna/Compiler/Lowering/Ty.vuna"
 let rec v_flattenAnnotAppRigGo = (fun (mc0 : Core_dTerm.t_Term) (mc1 : (Core_dTerm.t_Term, Core_dTerm.t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc0 with
   | Core_dTerm.C_Term_TRecord (dtb__73, dtb__74) -> { B_dData_dPair.f_Pair_first = (Core_dTerm.C_Term_TGlobal (dtb__73)); B_dData_dPair.f_Pair_second = ((B_dData_dList.v_append dtb__74) mc1) }
   | Core_dTerm.C_Term_TApp (dtb__75, dtb__76, dtb__77) -> ((v_flattenAnnotAppRigGo dtb__75) (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = dtb__76; B_dData_dPair.f_Pair_second = dtb__77 }, mc1)))
   | _ -> { B_dData_dPair.f_Pair_first = mc0; B_dData_dPair.f_Pair_second = mc1 }
 ))
 
-# 371 "Vuna/Compiler/Lowering/Ty.vuna"
+# 368 "Vuna/Compiler/Lowering/Ty.vuna"
 let v_flattenAnnotAppRig = (fun (t : Core_dTerm.t_Term) -> ((v_flattenAnnotAppRigGo t) B_dData_dList.C_List_Nil))
 
-# 379 "Vuna/Compiler/Lowering/Ty.vuna"
+# 376 "Vuna/Compiler/Lowering/Ty.vuna"
 let rec v_countRuntimeArgs = (fun (mc0 : (Core_dTerm.t_Term, Core_dTerm.t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__78, dtb__79) -> (match dtb__78 with
   | { B_dData_dPair.f_Pair_first = dtb__80; B_dData_dPair.f_Pair_second = dtb__81 } -> (if (Core_dTerm.v_rigIsErased dtb__81) then (v_countRuntimeArgs dtb__79) else (1 + (v_countRuntimeArgs dtb__79)))
@@ -206,7 +206,7 @@ let rec v_countRuntimeArgs = (fun (mc0 : (Core_dTerm.t_Term, Core_dTerm.t_Rig) B
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 384 "Vuna/Compiler/Lowering/Ty.vuna"
+# 381 "Vuna/Compiler/Lowering/Ty.vuna"
 let rec v_peelIrFuns = (fun (mc0 : int) (mc1 : Vuna_dIr_dModel.t_IrTy B_dData_dMaybe.t_Maybe) -> (match mc1 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__82) -> (if (mc0 <= 0) then (B_dData_dMaybe.C_Maybe_Just (dtb__82)) else (match dtb__82 with
   | Vuna_dIr_dModel.C_IrTy_IrTyFun (dtb__83, dtb__84) -> ((v_peelIrFuns (mc0 - 1)) (B_dData_dMaybe.C_Maybe_Just (dtb__84)))
@@ -216,7 +216,7 @@ let rec v_peelIrFuns = (fun (mc0 : int) (mc1 : Vuna_dIr_dModel.t_IrTy B_dData_dM
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 396 "Vuna/Compiler/Lowering/Ty.vuna"
+# 393 "Vuna/Compiler/Lowering/Ty.vuna"
 let rec v_peelPiArgsTy = (fun (fuel : int) (env : Lowering_dEnv.t_LwEnv) (v : Core_dTerm.t_Value) (args : (Core_dTerm.t_Term, Core_dTerm.t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (if (fuel <= 0) then B_dData_dMaybe.C_Maybe_Nothing else (match v with
   | Core_dTerm.C_Value_VPi (dtb__85, dtb__86, dtb__87, dtb__88, dtb__89) -> (if (Core_dTerm.v_rigIsErased dtb__87) then ((fun nd_uscrut9 -> (match nd_uscrut9 with
   | B_dData_dList.C_List_Nil -> (B_dData_dMaybe.C_Maybe_Just ((((((v_renderPiTy B_dData_dList.C_List_Nil) (env).Lowering_dEnv.f_LwEnv_lwTyParams) (env).Lowering_dEnv.f_LwEnv_lwDatas) 0) v)))
@@ -236,7 +236,7 @@ let rec v_peelPiArgsTy = (fun (fuel : int) (env : Lowering_dEnv.t_LwEnv) (v : Co
   | _ -> (B_dData_dMaybe.C_Maybe_Just ((((((v_renderPiTy B_dData_dList.C_List_Nil) (env).Lowering_dEnv.f_LwEnv_lwTyParams) (env).Lowering_dEnv.f_LwEnv_lwDatas) 0) v)))
 )))
 
-# 433 "Vuna/Compiler/Lowering/Ty.vuna"
+# 430 "Vuna/Compiler/Lowering/Ty.vuna"
 let rec v_nthTermIn = (fun (mc0 : Core_dTerm.t_Term B_dData_dList.t_List) (mc1 : int) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__98, dtb__99) -> (if (mc1 <= 0) then (B_dData_dMaybe.C_Maybe_Just (dtb__98)) else ((v_nthTermIn dtb__99) (mc1 - 1)))
   | B_dData_dList.C_List_Nil -> B_dData_dMaybe.C_Maybe_Nothing
@@ -331,7 +331,7 @@ and v_annotHeadTy = (fun (fuel : int) (dflt : Vuna_dIr_dModel.t_IrTy B_dData_dMa
 )
   | _ -> failwith "DT: impossible branch"
 )))))
-# 415 "Vuna/Compiler/Lowering/Ty.vuna"
+# 412 "Vuna/Compiler/Lowering/Ty.vuna"
 and v_annotFamilyArgs = (fun (fuel : int) (dflt : Vuna_dIr_dModel.t_IrTy B_dData_dMaybe.t_Maybe) (env : Lowering_dEnv.t_LwEnv) (binders : Vuna_dIr_dModel.t_IrBinder B_dData_dList.t_List) (usedPats : int B_dData_dList.t_List) (args : Core_dTerm.t_Term B_dData_dList.t_List) -> (if (fuel <= 0) then B_dData_dMaybe.C_Maybe_Nothing else (match usedPats with
   | B_dData_dList.C_List_Nil -> (B_dData_dMaybe.C_Maybe_Just (B_dData_dList.C_List_Nil))
   | B_dData_dList.C_List__x58__x58_ (dtb__145, dtb__146) -> (match ((v_nthTermIn args) dtb__145) with
@@ -349,7 +349,7 @@ and v_annotFamilyArgs = (fun (fuel : int) (dflt : Vuna_dIr_dModel.t_IrTy B_dData
 )
   | _ -> failwith "DT: impossible branch"
 )))
-# 438 "Vuna/Compiler/Lowering/Ty.vuna"
+# 435 "Vuna/Compiler/Lowering/Ty.vuna"
 and v_ctorTypeArgsOf = (fun (env : Lowering_dEnv.t_LwEnv) (ctor : string) (args : (Core_dTerm.t_Term, Core_dTerm.t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) -> ((fun nd_uscrut3 -> (match nd_uscrut3 with
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
   | B_dData_dMaybe.C_Maybe_Just (dtb__150) -> (match dtb__150 with
@@ -373,7 +373,7 @@ let v_annotTyOfTotal = (fun (env : Lowering_dEnv.t_LwEnv) (binders : Vuna_dIr_dM
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 361 "Vuna/Compiler/Lowering/Ty.vuna"
+# 358 "Vuna/Compiler/Lowering/Ty.vuna"
 let v_annotGlobalTy = (fun (env : Lowering_dEnv.t_LwEnv) (binders : Vuna_dIr_dModel.t_IrBinder B_dData_dList.t_List) (g : string) -> (match ((Elab_dRepresentation.v_findDtData g) (env).Lowering_dEnv.f_LwEnv_lwDatas) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__155) -> (((v_annotTyOf env) binders) (Core_dTerm.C_Term_TGlobal (g)))
   | B_dData_dMaybe.C_Maybe_Nothing -> (match ((v_globalTyTermOf env) g) with
@@ -385,34 +385,34 @@ let v_annotGlobalTy = (fun (env : Lowering_dEnv.t_LwEnv) (binders : Vuna_dIr_dMo
 ))
 
 # 335 "Vuna/Compiler/Lowering/Ty.vuna"
-let v_annotCalleeTy = (fun (env : Lowering_dEnv.t_LwEnv) (binders : Vuna_dIr_dModel.t_IrBinder B_dData_dList.t_List) (t : Core_dTerm.t_Term) -> (match t with
-  | Core_dTerm.C_Term_TGlobal (dtb__157) -> (((v_annotGlobalTy env) binders) dtb__157)
-  | Core_dTerm.C_Term_TApp (dtb__158, dtb__159, dtb__160) -> ((fun nd_uscrut6 -> (match nd_uscrut6 with
-  | { B_dData_dPair.f_Pair_first = dtb__161; B_dData_dPair.f_Pair_second = dtb__162 } -> (match dtb__161 with
-  | Core_dTerm.C_Term_TGlobal (dtb__163) -> (match ((Elab_dRepresentation.v_findDtData dtb__163) (env).Lowering_dEnv.f_LwEnv_lwDatas) with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__164) -> (((v_annotTyOf env) binders) t)
-  | B_dData_dMaybe.C_Maybe_Nothing -> (match ((v_globalTyTermOf env) dtb__163) with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__165) -> ((((v_peelPiArgsTy 256) env) ((Core_dEval.v_eval B_dData_dList.C_List_Nil) dtb__165)) dtb__162)
-  | B_dData_dMaybe.C_Maybe_Nothing -> ((v_peelIrFuns (v_countRuntimeArgs dtb__162)) (((v_annotTyOf env) binders) (Core_dTerm.C_Term_TGlobal (dtb__163))))
+let v_annotCalleeTy = (fun (mc0 : Lowering_dEnv.t_LwEnv) (mc1 : Vuna_dIr_dModel.t_IrBinder B_dData_dList.t_List) (mc2 : Core_dTerm.t_Term) -> (match mc2 with
+  | Core_dTerm.C_Term_TApp (dtb__157, dtb__158, dtb__159) -> ((fun nd_uscrut6 -> (match nd_uscrut6 with
+  | { B_dData_dPair.f_Pair_first = dtb__160; B_dData_dPair.f_Pair_second = dtb__161 } -> (match dtb__160 with
+  | Core_dTerm.C_Term_TGlobal (dtb__162) -> (match ((Elab_dRepresentation.v_findDtData dtb__162) (mc0).Lowering_dEnv.f_LwEnv_lwDatas) with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__163) -> (((v_annotTyOf mc0) mc1) mc2)
+  | B_dData_dMaybe.C_Maybe_Nothing -> (match ((v_globalTyTermOf mc0) dtb__162) with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__164) -> ((((v_peelPiArgsTy 256) mc0) ((Core_dEval.v_eval B_dData_dList.C_List_Nil) dtb__164)) dtb__161)
+  | B_dData_dMaybe.C_Maybe_Nothing -> ((v_peelIrFuns (v_countRuntimeArgs dtb__161)) (((v_annotTyOf mc0) mc1) (Core_dTerm.C_Term_TGlobal (dtb__162))))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
 )
-  | _ -> ((v_peelIrFuns (v_countRuntimeArgs dtb__162)) (B_dData_dMaybe.C_Maybe_Just ((((v_annotTyOfTotal env) binders) dtb__161))))
+  | _ -> ((v_peelIrFuns (v_countRuntimeArgs dtb__161)) (B_dData_dMaybe.C_Maybe_Just ((((v_annotTyOfTotal mc0) mc1) dtb__160))))
 )
   | _ -> failwith "DT: impossible branch"
-)) (v_flattenAnnotAppRig t))
-  | _ -> (((v_annotTyOf env) binders) t)
+)) (v_flattenAnnotAppRig mc2))
+  | Core_dTerm.C_Term_TGlobal (dtb__165) -> (((v_annotGlobalTy mc0) mc1) dtb__165)
+  | _ -> (((v_annotTyOf mc0) mc1) mc2)
 ))
 
-# 454 "Vuna/Compiler/Lowering/Ty.vuna"
+# 451 "Vuna/Compiler/Lowering/Ty.vuna"
 let rec v_findCtorInLocal = (fun (mc0 : string) (mc1 : Elab_dTypes.t_DtCtor B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__166, dtb__167) -> (if ((Elab_dTypes.v_dtCtorName dtb__166) = mc0) then (B_dData_dMaybe.C_Maybe_Just (dtb__166)) else ((v_findCtorInLocal mc0) dtb__167))
   | B_dData_dList.C_List_Nil -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 460 "Vuna/Compiler/Lowering/Ty.vuna"
+# 457 "Vuna/Compiler/Lowering/Ty.vuna"
 let v_ctorKeptFieldTys = (fun (env : Lowering_dEnv.t_LwEnv) (ctor : string) -> ((fun nd_uscrut2 -> (match nd_uscrut2 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__168) -> (match dtb__168 with
   | { B_dData_dPair.f_Pair_first = dtb__169; B_dData_dPair.f_Pair_second = dtb__170 } -> (match ((Elab_dRepresentation.v_findDtData dtb__169) (env).Lowering_dEnv.f_LwEnv_lwDatas) with
@@ -430,7 +430,7 @@ let v_ctorKeptFieldTys = (fun (env : Lowering_dEnv.t_LwEnv) (ctor : string) -> (
   | _ -> failwith "DT: impossible branch"
 )) ((((B_dContainer_dHashMap.v_lookup B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) ctor) (env).Lowering_dEnv.f_LwEnv_lwCtors)))
 
-# 493 "Vuna/Compiler/Lowering/Ty.vuna"
+# 490 "Vuna/Compiler/Lowering/Ty.vuna"
 let v_tyDeclOf = (fun (table : (string, int B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) (allDatas : Elab_dTypes.t_DtData B_dData_dList.t_List) (unboxed : (string, (Elab_dTypes.t_DtCtor, int) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (d : Elab_dTypes.t_DtData) -> ((fun levels -> ((fun arity -> ((fun nd_uscrut6 -> (match nd_uscrut6 with
   | B_dData_dMaybe.C_Maybe_Nothing -> (if (Lowering_dEnv.v_hasRecordRepr d) then ((fun nd_uscrut8 -> (match nd_uscrut8 with
   | B_dData_dList.C_List__x58__x58_ (dtb__173, dtb__174) -> (match dtb__174 with
@@ -452,17 +452,17 @@ let v_tyDeclOf = (fun (table : (string, int B_dData_dList.t_List) B_dContainer_d
   | _ -> failwith "DT: impossible branch"
 )) ((Elab_dRepresentation.v_lookupUnboxedInfo (Elab_dTypes.v_dtDataName d)) unboxed))) (Lowering_dEnv.v_listLength levels))) ((Lowering_dEnv.v_lookupTyParamsIn table) (Elab_dTypes.v_dtDataName d))))
 
-# 486 "Vuna/Compiler/Lowering/Ty.vuna"
+# 483 "Vuna/Compiler/Lowering/Ty.vuna"
 let rec v_tyDeclsGo = (fun (mc0 : (string, int B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) (mc1 : Elab_dTypes.t_DtData B_dData_dList.t_List) (mc2 : (string, (Elab_dTypes.t_DtCtor, int) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc3 : Elab_dTypes.t_DtData B_dData_dList.t_List) -> (match mc3 with
   | B_dData_dList.C_List__x58__x58_ (dtb__180, dtb__181) -> ((Base_dCommon.v_bind ((((v_tyDeclOf mc0) mc1) mc2) dtb__180)) (fun (decl : Vuna_dIr_dModel.t_IrTyDecl) -> ((Base_dCommon.v_bind ((((v_tyDeclsGo mc0) mc1) mc2) dtb__181)) (fun (tail : Vuna_dIr_dModel.t_IrTyDecl B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC ((B_dData_dList.C_List__x58__x58_ (decl, tail))))))))
   | B_dData_dList.C_List_Nil -> (Base_dDiag.C_Check_OkC (B_dData_dList.C_List_Nil))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 483 "Vuna/Compiler/Lowering/Ty.vuna"
+# 480 "Vuna/Compiler/Lowering/Ty.vuna"
 let v_tyDeclsOf = (fun (tyParams : (string, int B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) (unboxed : (string, (Elab_dTypes.t_DtCtor, int) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (allDatas : Elab_dTypes.t_DtData B_dData_dList.t_List) (subset : Elab_dTypes.t_DtData B_dData_dList.t_List) -> ((((v_tyDeclsGo tyParams) allDatas) unboxed) subset))
 
-# 527 "Vuna/Compiler/Lowering/Ty.vuna"
+# 524 "Vuna/Compiler/Lowering/Ty.vuna"
 let v_tyDeclTys = (fun (mc0 : Vuna_dIr_dModel.t_IrTyDecl) -> (match mc0 with
   | Vuna_dIr_dModel.C_IrTyDecl_IrUnboxedDecl (dtb__182, dtb__183, dtb__184) -> (B_dData_dList.C_List__x58__x58_ (dtb__184, B_dData_dList.C_List_Nil))
   | Vuna_dIr_dModel.C_IrTyDecl_IrRecordDecl (dtb__185, dtb__186, dtb__187, dtb__188) -> dtb__188
@@ -470,13 +470,13 @@ let v_tyDeclTys = (fun (mc0 : Vuna_dIr_dModel.t_IrTyDecl) -> (match mc0 with
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 536 "Vuna/Compiler/Lowering/Ty.vuna"
+# 533 "Vuna/Compiler/Lowering/Ty.vuna"
 let rec v_foldlTyNames = (fun (mc0 : Vuna_dIr_dModel.t_IrTy B_dData_dList.t_List) (mc1 : string B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__192, dtb__193) -> ((v_foldlTyNames dtb__193) ((v_tyNamesInto dtb__192) mc1))
   | B_dData_dList.C_List_Nil -> mc1
   | _ -> failwith "DT: impossible branch"
 ))
-# 540 "Vuna/Compiler/Lowering/Ty.vuna"
+# 537 "Vuna/Compiler/Lowering/Ty.vuna"
 and v_tyNamesInto = (fun (mc0 : Vuna_dIr_dModel.t_IrTy) (mc1 : string B_dData_dList.t_List) -> (match mc0 with
   | Vuna_dIr_dModel.C_IrTy_IrTyData (dtb__194, dtb__195) -> ((v_foldlTyNames dtb__195) ((Lowering_dEnv.v_pushDep dtb__194) mc1))
   | Vuna_dIr_dModel.C_IrTy_IrTyFun (dtb__196, dtb__197) -> ((v_tyNamesInto dtb__197) ((v_tyNamesInto dtb__196) mc1))
@@ -491,12 +491,12 @@ and v_tyNamesInto = (fun (mc0 : Vuna_dIr_dModel.t_IrTy) (mc1 : string B_dData_dL
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 532 "Vuna/Compiler/Lowering/Ty.vuna"
+# 529 "Vuna/Compiler/Lowering/Ty.vuna"
 let rec v_tyDeclRefsGo = (fun (mc0 : Vuna_dIr_dModel.t_IrTy B_dData_dList.t_List B_dData_dList.t_List) (mc1 : string B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__201, dtb__202) -> ((v_tyDeclRefsGo dtb__202) ((v_foldlTyNames dtb__201) mc1))
   | B_dData_dList.C_List_Nil -> (B_dData_dList.v_reverse mc1)
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 524 "Vuna/Compiler/Lowering/Ty.vuna"
+# 521 "Vuna/Compiler/Lowering/Ty.vuna"
 let v_tyDeclRefs = (fun (decls : Vuna_dIr_dModel.t_IrTyDecl B_dData_dList.t_List) -> ((v_tyDeclRefsGo ((B_dData_dList.v_map v_tyDeclTys) decls)) B_dData_dList.C_List_Nil))

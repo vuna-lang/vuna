@@ -64,7 +64,7 @@ let v_mainShowForNameIr = (fun (g : string) -> (match (v_mainShowRtIr g) with
 ))
 
 # 63 "Vuna/Compiler/Lowering/Entry.vuna"
-let v_mainShowIr = (fun (defTbl : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List) (tyTerm : Core_dTerm.t_Term) -> (match ((((Core_dEval.v_force ((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) defTbl)) Core_dTerm.v_solsEmpty) Core_dTerm.v_defaultFuel) ((Core_dEval.v_eval B_dData_dList.C_List_Nil) tyTerm)) with
+let v_mainShowIr = (fun (defTbl : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List) (tyTerm : Core_dTerm.t_Term) -> (match ((((Core_dEval.v_force (((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) defTbl)) Core_dTerm.v_solsEmpty) Core_dTerm.v_defaultFuel) ((Core_dEval.v_eval B_dData_dList.C_List_Nil) tyTerm)) with
   | Core_dTerm.C_Value_VNeutral (dtb__29) -> ((fun nd_uscrut3 -> (match nd_uscrut3 with
   | Core_dTerm.C_Neutral_NGlobal (dtb__30, dtb__31) -> (match dtb__31 with
   | B_dData_dList.C_List_Nil -> (v_mainShowForNameIr dtb__30)

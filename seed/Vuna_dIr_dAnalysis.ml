@@ -7,11 +7,11 @@ let v_neighborsOf = (fun (adjT : (string, string B_dData_dList.t_List) B_dContai
 ))
 
 # 28 "Vuna/Ir/Analysis.vuna"
-let v_adjTblOf = (fun (adj : (string, string B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (((B_dContainer_dHashMap.v_insertAll B_dData_dString.v_Hashable_uString) adj) ((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) B_dData_dList.C_List_Nil)))
+let v_adjTblOf = (fun (adj : (string, string B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) -> ((((B_dContainer_dHashMap.v_insertAll B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) adj) (((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) B_dData_dList.C_List_Nil)))
 
 # 31 "Vuna/Ir/Analysis.vuna"
 let rec v_addDependents = (fun (mc0 : string) (mc1 : string B_dData_dList.t_List) (mc2 : (string, string B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) -> (match mc1 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__1, dtb__2) -> ((fun cur -> (((v_addDependents mc0) dtb__2) ((((B_dContainer_dHashMap.v_insert B_dData_dString.v_Hashable_uString) dtb__1) (B_dData_dList.C_List__x58__x58_ (mc0, cur))) mc2))) (match ((((B_dContainer_dHashMap.v_lookup B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) dtb__1) mc2) with
+  | B_dData_dList.C_List__x58__x58_ (dtb__1, dtb__2) -> ((fun cur -> (((v_addDependents mc0) dtb__2) (((((B_dContainer_dHashMap.v_insert B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) dtb__1) (B_dData_dList.C_List__x58__x58_ (mc0, cur))) mc2))) (match ((((B_dContainer_dHashMap.v_lookup B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) dtb__1) mc2) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__3) -> dtb__3
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
@@ -26,14 +26,14 @@ let rec v_reverseAdjTbl = (fun (mc0 : (string, string B_dData_dList.t_List) B_dD
   | { B_dData_dPair.f_Pair_first = dtb__6; B_dData_dPair.f_Pair_second = dtb__7 } -> (((v_addDependents dtb__6) dtb__7) (v_reverseAdjTbl dtb__5))
   | _ -> failwith "DT: impossible branch"
 )
-  | B_dData_dList.C_List_Nil -> ((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) B_dData_dList.C_List_Nil)
+  | B_dData_dList.C_List_Nil -> (((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) B_dData_dList.C_List_Nil)
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 51 "Vuna/Ir/Analysis.vuna"
 let rec v_foldNeighborsPostFuel = (fun (fuel : int) (adjT : (string, string B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) (ms : string B_dData_dList.t_List) (visited : (string, bool) B_dContainer_dHashMap.t_HashMap) (order : string B_dData_dList.t_List) -> (if (fuel <= 0) then { B_dData_dPair.f_Pair_first = visited; B_dData_dPair.f_Pair_second = order } else (match ms with
   | B_dData_dList.C_List_Nil -> { B_dData_dPair.f_Pair_first = visited; B_dData_dPair.f_Pair_second = order }
-  | B_dData_dList.C_List__x58__x58_ (dtb__8, dtb__9) -> (if ((((B_dContainer_dHashMap.v_member B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) dtb__8) visited) then (((((v_foldNeighborsPostFuel (fuel - 1)) adjT) dtb__9) visited) order) else (match (((((v_dfsPostFuel (fuel - 1)) adjT) dtb__8) ((((B_dContainer_dHashMap.v_insert B_dData_dString.v_Hashable_uString) dtb__8) true) visited)) order) with
+  | B_dData_dList.C_List__x58__x58_ (dtb__8, dtb__9) -> (if ((((B_dContainer_dHashMap.v_member B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) dtb__8) visited) then (((((v_foldNeighborsPostFuel (fuel - 1)) adjT) dtb__9) visited) order) else (match (((((v_dfsPostFuel (fuel - 1)) adjT) dtb__8) (((((B_dContainer_dHashMap.v_insert B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) dtb__8) true) visited)) order) with
   | { B_dData_dPair.f_Pair_first = dtb__10; B_dData_dPair.f_Pair_second = dtb__11 } -> (((((v_foldNeighborsPostFuel (fuel - 1)) adjT) dtb__9) dtb__10) dtb__11)
   | _ -> failwith "DT: impossible branch"
 ))
@@ -53,7 +53,7 @@ let v_dfsPost = (fun (adjT : (string, string B_dData_dList.t_List) B_dContainer_
 
 # 76 "Vuna/Ir/Analysis.vuna"
 let rec v_postOrder = (fun (mc0 : (string, string B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) (mc1 : string B_dData_dList.t_List) (mc2 : (string, bool) B_dContainer_dHashMap.t_HashMap) (mc3 : string B_dData_dList.t_List) -> (match mc1 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__14, dtb__15) -> (if ((((B_dContainer_dHashMap.v_member B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) dtb__14) mc2) then ((((v_postOrder mc0) dtb__15) mc2) mc3) else (match ((((v_dfsPost mc0) dtb__14) ((((B_dContainer_dHashMap.v_insert B_dData_dString.v_Hashable_uString) dtb__14) true) mc2)) mc3) with
+  | B_dData_dList.C_List__x58__x58_ (dtb__14, dtb__15) -> (if ((((B_dContainer_dHashMap.v_member B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) dtb__14) mc2) then ((((v_postOrder mc0) dtb__15) mc2) mc3) else (match ((((v_dfsPost mc0) dtb__14) (((((B_dContainer_dHashMap.v_insert B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) dtb__14) true) mc2)) mc3) with
   | { B_dData_dPair.f_Pair_first = dtb__16; B_dData_dPair.f_Pair_second = dtb__17 } -> ((((v_postOrder mc0) dtb__15) dtb__16) dtb__17)
   | _ -> failwith "DT: impossible branch"
 ))
@@ -64,7 +64,7 @@ let rec v_postOrder = (fun (mc0 : (string, string B_dData_dList.t_List) B_dConta
 # 91 "Vuna/Ir/Analysis.vuna"
 let rec v_foldNeighborsCollectFuel = (fun (fuel : int) (adjT : (string, string B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) (ms : string B_dData_dList.t_List) (visited : (string, bool) B_dContainer_dHashMap.t_HashMap) (comp : string B_dData_dList.t_List) -> (if (fuel <= 0) then { B_dData_dPair.f_Pair_first = visited; B_dData_dPair.f_Pair_second = comp } else (match ms with
   | B_dData_dList.C_List_Nil -> { B_dData_dPair.f_Pair_first = visited; B_dData_dPair.f_Pair_second = comp }
-  | B_dData_dList.C_List__x58__x58_ (dtb__18, dtb__19) -> (if ((((B_dContainer_dHashMap.v_member B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) dtb__18) visited) then (((((v_foldNeighborsCollectFuel (fuel - 1)) adjT) dtb__19) visited) comp) else (match (((((v_dfsCollectFuel (fuel - 1)) adjT) dtb__18) ((((B_dContainer_dHashMap.v_insert B_dData_dString.v_Hashable_uString) dtb__18) true) visited)) comp) with
+  | B_dData_dList.C_List__x58__x58_ (dtb__18, dtb__19) -> (if ((((B_dContainer_dHashMap.v_member B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) dtb__18) visited) then (((((v_foldNeighborsCollectFuel (fuel - 1)) adjT) dtb__19) visited) comp) else (match (((((v_dfsCollectFuel (fuel - 1)) adjT) dtb__18) (((((B_dContainer_dHashMap.v_insert B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) dtb__18) true) visited)) comp) with
   | { B_dData_dPair.f_Pair_first = dtb__20; B_dData_dPair.f_Pair_second = dtb__21 } -> (((((v_foldNeighborsCollectFuel (fuel - 1)) adjT) dtb__19) dtb__20) dtb__21)
   | _ -> failwith "DT: impossible branch"
 ))
@@ -84,7 +84,7 @@ let v_dfsCollect = (fun (adjT : (string, string B_dData_dList.t_List) B_dContain
 
 # 116 "Vuna/Ir/Analysis.vuna"
 let rec v_collectComps = (fun (mc0 : (string, string B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) (mc1 : string B_dData_dList.t_List) (mc2 : (string, bool) B_dContainer_dHashMap.t_HashMap) (mc3 : string B_dData_dList.t_List B_dData_dList.t_List) -> (match mc1 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__24, dtb__25) -> (if ((((B_dContainer_dHashMap.v_member B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) dtb__24) mc2) then ((((v_collectComps mc0) dtb__25) mc2) mc3) else (match ((((v_dfsCollect mc0) dtb__24) ((((B_dContainer_dHashMap.v_insert B_dData_dString.v_Hashable_uString) dtb__24) true) mc2)) B_dData_dList.C_List_Nil) with
+  | B_dData_dList.C_List__x58__x58_ (dtb__24, dtb__25) -> (if ((((B_dContainer_dHashMap.v_member B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) dtb__24) mc2) then ((((v_collectComps mc0) dtb__25) mc2) mc3) else (match ((((v_dfsCollect mc0) dtb__24) (((((B_dContainer_dHashMap.v_insert B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) dtb__24) true) mc2)) B_dData_dList.C_List_Nil) with
   | { B_dData_dPair.f_Pair_first = dtb__26; B_dData_dPair.f_Pair_second = dtb__27 } -> ((((v_collectComps mc0) dtb__25) dtb__26) (B_dData_dList.C_List__x58__x58_ (dtb__27, mc3)))
   | _ -> failwith "DT: impossible branch"
 ))
@@ -93,11 +93,11 @@ let rec v_collectComps = (fun (mc0 : (string, string B_dData_dList.t_List) B_dCo
 ))
 
 # 126 "Vuna/Ir/Analysis.vuna"
-let v_componentTblOf = (fun (comps : string B_dData_dList.t_List B_dData_dList.t_List) -> (((B_dContainer_dHashMap.v_insertAll B_dData_dString.v_Hashable_uString) ((B_dData_dList.v_concatMap (fun (g : string B_dData_dList.t_List) -> ((B_dData_dList.v_map (fun (n : string) -> { B_dData_dPair.f_Pair_first = n; B_dData_dPair.f_Pair_second = g })) g))) comps)) ((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) B_dData_dList.C_List_Nil)))
+let v_componentTblOf = (fun (comps : string B_dData_dList.t_List B_dData_dList.t_List) -> ((((B_dContainer_dHashMap.v_insertAll B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) ((B_dData_dList.v_concatMap (fun (g : string B_dData_dList.t_List) -> ((B_dData_dList.v_map (fun (n : string) -> { B_dData_dPair.f_Pair_first = n; B_dData_dPair.f_Pair_second = g })) g))) comps)) (((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) B_dData_dList.C_List_Nil)))
 
 # 130 "Vuna/Ir/Analysis.vuna"
 let rec v_addAllNames = (fun (mc0 : string B_dData_dList.t_List) (mc1 : (string, bool) B_dContainer_dHashMap.t_HashMap) -> (match mc0 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__28, dtb__29) -> ((v_addAllNames dtb__29) ((((B_dContainer_dHashMap.v_insert B_dData_dString.v_Hashable_uString) dtb__28) true) mc1))
+  | B_dData_dList.C_List__x58__x58_ (dtb__28, dtb__29) -> ((v_addAllNames dtb__29) (((((B_dContainer_dHashMap.v_insert B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) dtb__28) true) mc1))
   | B_dData_dList.C_List_Nil -> mc1
   | _ -> failwith "DT: impossible branch"
 ))
@@ -130,7 +130,7 @@ let rec v_groupsFromCompsGo = (fun (mc0 : (string, string B_dData_dList.t_List) 
 ))
 
 # 135 "Vuna/Ir/Analysis.vuna"
-let v_groupsFromComps = (fun (comps : string B_dData_dList.t_List B_dData_dList.t_List) (names : string B_dData_dList.t_List) -> ((((v_groupsFromCompsGo (v_componentTblOf comps)) names) names) ((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) B_dData_dList.C_List_Nil)))
+let v_groupsFromComps = (fun (comps : string B_dData_dList.t_List B_dData_dList.t_List) (names : string B_dData_dList.t_List) -> ((((v_groupsFromCompsGo (v_componentTblOf comps)) names) names) (((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) B_dData_dList.C_List_Nil)))
 
 # 162 "Vuna/Ir/Analysis.vuna"
 let v_notIn = (fun (name : string) (names : string B_dData_dList.t_List) -> (B_dData_dBool.v_not ((B_dData_dList.v_memName name) names)))
@@ -143,12 +143,12 @@ let rec v_indexGroups = (fun (mc0 : int) (mc1 : string B_dData_dList.t_List B_dD
 ))
 
 # 193 "Vuna/Ir/Analysis.vuna"
-let v_groupIndexTbl = (fun (indexed : (int, string B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (((B_dContainer_dHashMap.v_insertAll B_dData_dString.v_Hashable_uString) ((B_dData_dList.v_concatMap (fun (p : (int, string B_dData_dList.t_List) B_dData_dPair.t_Pair) -> ((B_dData_dList.v_map (fun (n : string) -> { B_dData_dPair.f_Pair_first = n; B_dData_dPair.f_Pair_second = (B_dData_dPair.v_firstOf p) })) (B_dData_dPair.v_secondOf p)))) indexed)) ((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) B_dData_dList.C_List_Nil)))
+let v_groupIndexTbl = (fun (indexed : (int, string B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) -> ((((B_dContainer_dHashMap.v_insertAll B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) ((B_dData_dList.v_concatMap (fun (p : (int, string B_dData_dList.t_List) B_dData_dPair.t_Pair) -> ((B_dData_dList.v_map (fun (n : string) -> { B_dData_dPair.f_Pair_first = n; B_dData_dPair.f_Pair_second = (B_dData_dPair.v_firstOf p) })) (B_dData_dPair.v_secondOf p)))) indexed)) (((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) B_dData_dList.C_List_Nil)))
 
 # 205 "Vuna/Ir/Analysis.vuna"
 let rec v_groupDepIdxGo = (fun (mc0 : int) (mc1 : (string, int) B_dContainer_dHashMap.t_HashMap) (mc2 : string B_dData_dList.t_List) (mc3 : (int, bool) B_dContainer_dHashMap.t_HashMap) (mc4 : int B_dData_dList.t_List) -> (match mc2 with
   | B_dData_dList.C_List__x58__x58_ (dtb__39, dtb__40) -> (match ((((B_dContainer_dHashMap.v_lookup B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) dtb__39) mc1) with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__41) -> (if (if (dtb__41 = mc0) then true else ((((B_dContainer_dHashMap.v_member B_dData_dInt.v_Hashable_uInt) B_dData_dInt.v_Eq_uInt) dtb__41) mc3)) then (((((v_groupDepIdxGo mc0) mc1) dtb__40) mc3) mc4) else (((((v_groupDepIdxGo mc0) mc1) dtb__40) ((((B_dContainer_dHashMap.v_insert B_dData_dInt.v_Hashable_uInt) dtb__41) true) mc3)) (B_dData_dList.C_List__x58__x58_ (dtb__41, mc4))))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__41) -> (if (if (dtb__41 = mc0) then true else ((((B_dContainer_dHashMap.v_member B_dData_dInt.v_Hashable_uInt) B_dData_dInt.v_Eq_uInt) dtb__41) mc3)) then (((((v_groupDepIdxGo mc0) mc1) dtb__40) mc3) mc4) else (((((v_groupDepIdxGo mc0) mc1) dtb__40) (((((B_dContainer_dHashMap.v_insert B_dData_dInt.v_Hashable_uInt) B_dData_dInt.v_Eq_uInt) dtb__41) true) mc3)) (B_dData_dList.C_List__x58__x58_ (dtb__41, mc4))))
   | B_dData_dMaybe.C_Maybe_Nothing -> (((((v_groupDepIdxGo mc0) mc1) dtb__40) mc3) mc4)
   | _ -> failwith "DT: impossible branch"
 )
@@ -158,7 +158,7 @@ let rec v_groupDepIdxGo = (fun (mc0 : int) (mc1 : (string, int) B_dContainer_dHa
 
 # 201 "Vuna/Ir/Analysis.vuna"
 let v_groupDepIdx = (fun (mc0 : (string, string B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) (mc1 : (string, int) B_dContainer_dHashMap.t_HashMap) (mc2 : (int, string B_dData_dList.t_List) B_dData_dPair.t_Pair) -> (match mc2 with
-  | { B_dData_dPair.f_Pair_first = dtb__42; B_dData_dPair.f_Pair_second = dtb__43 } -> (((((v_groupDepIdxGo dtb__42) mc1) ((B_dData_dList.v_concatMap (v_neighborsOf mc0)) dtb__43)) ((B_dContainer_dHashMap.v_fromList B_dData_dInt.v_Hashable_uInt) B_dData_dList.C_List_Nil)) B_dData_dList.C_List_Nil)
+  | { B_dData_dPair.f_Pair_first = dtb__42; B_dData_dPair.f_Pair_second = dtb__43 } -> (((((v_groupDepIdxGo dtb__42) mc1) ((B_dData_dList.v_concatMap (v_neighborsOf mc0)) dtb__43)) (((B_dContainer_dHashMap.v_fromList B_dData_dInt.v_Hashable_uInt) B_dData_dInt.v_Eq_uInt) B_dData_dList.C_List_Nil)) B_dData_dList.C_List_Nil)
   | _ -> failwith "DT: impossible branch"
 ))
 
@@ -185,12 +185,12 @@ let v_lookupDeps = (fun (tbl : (int, int B_dData_dList.t_List) B_dContainer_dHas
 
 # 220 "Vuna/Ir/Analysis.vuna"
 let v_addReverseEdges = (fun (mc0 : (int, int B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) (mc1 : (int, int B_dData_dList.t_List) B_dData_dPair.t_Pair) -> (match mc1 with
-  | { B_dData_dPair.f_Pair_first = dtb__47; B_dData_dPair.f_Pair_second = dtb__48 } -> (((B_dData_dList.v_foldl (fun (acc : (int, int B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) (d : int) -> ((((B_dContainer_dHashMap.v_insert B_dData_dInt.v_Hashable_uInt) d) ((B_dData_dList.v_append ((v_lookupDeps acc) d)) (B_dData_dList.C_List__x58__x58_ (dtb__47, B_dData_dList.C_List_Nil)))) acc))) mc0) dtb__48)
+  | { B_dData_dPair.f_Pair_first = dtb__47; B_dData_dPair.f_Pair_second = dtb__48 } -> (((B_dData_dList.v_foldl (fun (acc : (int, int B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) (d : int) -> (((((B_dContainer_dHashMap.v_insert B_dData_dInt.v_Hashable_uInt) B_dData_dInt.v_Eq_uInt) d) ((B_dData_dList.v_append ((v_lookupDeps acc) d)) (B_dData_dList.C_List__x58__x58_ (dtb__47, B_dData_dList.C_List_Nil)))) acc))) mc0) dtb__48)
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 216 "Vuna/Ir/Analysis.vuna"
-let v_reverseDepTbl = (fun (pairs : (int, int B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (((B_dData_dList.v_foldl v_addReverseEdges) ((B_dContainer_dHashMap.v_fromList B_dData_dInt.v_Hashable_uInt) B_dData_dList.C_List_Nil)) pairs))
+let v_reverseDepTbl = (fun (pairs : (int, int B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (((B_dData_dList.v_foldl v_addReverseEdges) (((B_dContainer_dHashMap.v_fromList B_dData_dInt.v_Hashable_uInt) B_dData_dInt.v_Eq_uInt) B_dData_dList.C_List_Nil)) pairs))
 
 # 243 "Vuna/Ir/Analysis.vuna"
 let rec v_insertReady = (fun (mc0 : int) (mc1 : int B_dData_dList.t_List) -> (match mc1 with
@@ -202,7 +202,7 @@ let rec v_insertReady = (fun (mc0 : int) (mc1 : int B_dData_dList.t_List) -> (ma
 # 247 "Vuna/Ir/Analysis.vuna"
 let rec v_orderGroupsGo = (fun (fuel : int) (grpTbl : (int, string B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) (revTbl : (int, int B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) (indeg : (int, int) B_dContainer_dHashMap.t_HashMap) (ready : int B_dData_dList.t_List) (remaining : int) (acc : string B_dData_dList.t_List B_dData_dList.t_List) -> (if (fuel <= 0) then (Base_dDiagnostics_dCg.v_cgErr0 Base_dDiagnostics_dCg.C_CgErr_DependencyCycle) else (if (remaining = 0) then (Base_dDiag.C_Check_OkC ((B_dData_dList.v_reverse acc))) else (match ready with
   | B_dData_dList.C_List_Nil -> (Base_dDiagnostics_dCg.v_cgErr0 Base_dDiagnostics_dCg.C_CgErr_DependencyCycle)
-  | B_dData_dList.C_List__x58__x58_ (dtb__51, dtb__52) -> ((fun deps -> ((fun indeg2 -> ((fun ready2 -> (((((((v_orderGroupsGo (fuel - 1)) grpTbl) revTbl) indeg2) ready2) (remaining - 1)) (B_dData_dList.C_List__x58__x58_ (((v_lookupNames grpTbl) dtb__51), acc)))) (((B_dData_dList.v_foldl (fun (r : int B_dData_dList.t_List) (d : int) -> (if (((v_lookupInt indeg2) d) = 0) then ((v_insertReady d) r) else r))) dtb__52) deps))) (((B_dData_dList.v_foldl (fun (acc2 : (int, int) B_dContainer_dHashMap.t_HashMap) (d : int) -> ((((B_dContainer_dHashMap.v_insert B_dData_dInt.v_Hashable_uInt) d) (((v_lookupInt indeg) d) - 1)) acc2))) indeg) deps))) ((v_lookupDeps revTbl) dtb__51))
+  | B_dData_dList.C_List__x58__x58_ (dtb__51, dtb__52) -> ((fun deps -> ((fun indeg2 -> ((fun ready2 -> (((((((v_orderGroupsGo (fuel - 1)) grpTbl) revTbl) indeg2) ready2) (remaining - 1)) (B_dData_dList.C_List__x58__x58_ (((v_lookupNames grpTbl) dtb__51), acc)))) (((B_dData_dList.v_foldl (fun (r : int B_dData_dList.t_List) (d : int) -> (if (((v_lookupInt indeg2) d) = 0) then ((v_insertReady d) r) else r))) dtb__52) deps))) (((B_dData_dList.v_foldl (fun (acc2 : (int, int) B_dContainer_dHashMap.t_HashMap) (d : int) -> (((((B_dContainer_dHashMap.v_insert B_dData_dInt.v_Hashable_uInt) B_dData_dInt.v_Eq_uInt) d) (((v_lookupInt indeg) d) - 1)) acc2))) indeg) deps))) ((v_lookupDeps revTbl) dtb__51))
   | _ -> failwith "DT: impossible branch"
 ))))
 
@@ -274,11 +274,11 @@ let rec v_countList = (fun mc0 -> (match mc0 with
 ))
 
 # 172 "Vuna/Ir/Analysis.vuna"
-let v_orderGroups = (fun (adjT : (string, string B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) (groups : string B_dData_dList.t_List B_dData_dList.t_List) -> ((fun indexed -> ((fun groupIdxT -> ((fun grpTbl -> ((fun depPairs -> ((fun revTbl -> ((fun indeg -> ((fun ready -> (((((((v_orderGroupsGo ((v_countList groups) + 1)) grpTbl) revTbl) indeg) ready) (v_countList groups)) B_dData_dList.C_List_Nil)) ((B_dData_dList.v_filter (fun (n : int) -> (((v_lookupInt indeg) n) = 0))) ((B_dData_dList.v_map B_dData_dPair.v_firstOf) indexed)))) (((B_dData_dList.v_foldl (fun (acc : (int, int) B_dContainer_dHashMap.t_HashMap) (p : (int, int B_dData_dList.t_List) B_dData_dPair.t_Pair) -> ((((B_dContainer_dHashMap.v_insert B_dData_dInt.v_Hashable_uInt) (B_dData_dPair.v_firstOf p)) (v_countList (B_dData_dPair.v_secondOf p))) acc))) ((B_dContainer_dHashMap.v_fromList B_dData_dInt.v_Hashable_uInt) B_dData_dList.C_List_Nil)) depPairs))) (v_reverseDepTbl depPairs))) ((B_dData_dList.v_map (fun (p : (int, string B_dData_dList.t_List) B_dData_dPair.t_Pair) -> { B_dData_dPair.f_Pair_first = (B_dData_dPair.v_firstOf p); B_dData_dPair.f_Pair_second = (((v_groupDepIdx adjT) groupIdxT) p) })) indexed))) (((B_dContainer_dHashMap.v_insertAll B_dData_dInt.v_Hashable_uInt) ((B_dData_dList.v_map (fun (p : (int, string B_dData_dList.t_List) B_dData_dPair.t_Pair) -> { B_dData_dPair.f_Pair_first = (B_dData_dPair.v_firstOf p); B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf p) })) indexed)) ((B_dContainer_dHashMap.v_fromList B_dData_dInt.v_Hashable_uInt) B_dData_dList.C_List_Nil)))) (v_groupIndexTbl indexed))) (((v_indexGroups 0) groups) B_dData_dList.C_List_Nil)))
+let v_orderGroups = (fun (adjT : (string, string B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) (groups : string B_dData_dList.t_List B_dData_dList.t_List) -> ((fun indexed -> ((fun groupIdxT -> ((fun grpTbl -> ((fun depPairs -> ((fun revTbl -> ((fun indeg -> ((fun ready -> (((((((v_orderGroupsGo ((v_countList groups) + 1)) grpTbl) revTbl) indeg) ready) (v_countList groups)) B_dData_dList.C_List_Nil)) ((B_dData_dList.v_filter (fun (n : int) -> (((v_lookupInt indeg) n) = 0))) ((B_dData_dList.v_map B_dData_dPair.v_firstOf) indexed)))) (((B_dData_dList.v_foldl (fun (acc : (int, int) B_dContainer_dHashMap.t_HashMap) (p : (int, int B_dData_dList.t_List) B_dData_dPair.t_Pair) -> (((((B_dContainer_dHashMap.v_insert B_dData_dInt.v_Hashable_uInt) B_dData_dInt.v_Eq_uInt) (B_dData_dPair.v_firstOf p)) (v_countList (B_dData_dPair.v_secondOf p))) acc))) (((B_dContainer_dHashMap.v_fromList B_dData_dInt.v_Hashable_uInt) B_dData_dInt.v_Eq_uInt) B_dData_dList.C_List_Nil)) depPairs))) (v_reverseDepTbl depPairs))) ((B_dData_dList.v_map (fun (p : (int, string B_dData_dList.t_List) B_dData_dPair.t_Pair) -> { B_dData_dPair.f_Pair_first = (B_dData_dPair.v_firstOf p); B_dData_dPair.f_Pair_second = (((v_groupDepIdx adjT) groupIdxT) p) })) indexed))) ((((B_dContainer_dHashMap.v_insertAll B_dData_dInt.v_Hashable_uInt) B_dData_dInt.v_Eq_uInt) ((B_dData_dList.v_map (fun (p : (int, string B_dData_dList.t_List) B_dData_dPair.t_Pair) -> { B_dData_dPair.f_Pair_first = (B_dData_dPair.v_firstOf p); B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf p) })) indexed)) (((B_dContainer_dHashMap.v_fromList B_dData_dInt.v_Hashable_uInt) B_dData_dInt.v_Eq_uInt) B_dData_dList.C_List_Nil)))) (v_groupIndexTbl indexed))) (((v_indexGroups 0) groups) B_dData_dList.C_List_Nil)))
 
 # 269 "Vuna/Ir/Analysis.vuna"
-let v_groupNames = (fun (adj : (string, string B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) (names : string B_dData_dList.t_List) -> ((fun nameTbl -> ((fun adj2 -> ((fun adjT -> ((fun revT -> (match ((((v_postOrder adjT) names) ((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) B_dData_dList.C_List_Nil)) B_dData_dList.C_List_Nil) with
-  | { B_dData_dPair.f_Pair_first = dtb__70; B_dData_dPair.f_Pair_second = dtb__71 } -> ((fun comps -> ((fun groups -> ((Base_dCommon.v_bind ((v_orderGroups adjT) groups)) (fun (ordered : string B_dData_dList.t_List B_dData_dList.t_List) -> ((v_checkGroupsCover ordered) names)))) ((v_groupsFromComps comps) names))) ((((v_collectComps revT) dtb__71) ((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) B_dData_dList.C_List_Nil)) B_dData_dList.C_List_Nil))
+let v_groupNames = (fun (adj : (string, string B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) (names : string B_dData_dList.t_List) -> ((fun nameTbl -> ((fun adj2 -> ((fun adjT -> ((fun revT -> (match ((((v_postOrder adjT) names) (((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) B_dData_dList.C_List_Nil)) B_dData_dList.C_List_Nil) with
+  | { B_dData_dPair.f_Pair_first = dtb__70; B_dData_dPair.f_Pair_second = dtb__71 } -> ((fun comps -> ((fun groups -> ((Base_dCommon.v_bind ((v_orderGroups adjT) groups)) (fun (ordered : string B_dData_dList.t_List B_dData_dList.t_List) -> ((v_checkGroupsCover ordered) names)))) ((v_groupsFromComps comps) names))) ((((v_collectComps revT) dtb__71) (((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) B_dData_dList.C_List_Nil)) B_dData_dList.C_List_Nil))
   | _ -> failwith "DT: impossible branch"
 )) (v_reverseAdjTbl adj2))) (v_adjTblOf adj2))) ((B_dData_dList.v_map (fun (p : (string, string B_dData_dList.t_List) B_dData_dPair.t_Pair) -> { B_dData_dPair.f_Pair_first = (B_dData_dPair.v_firstOf p); B_dData_dPair.f_Pair_second = ((B_dData_dList.v_filter (fun (n : string) -> ((((B_dContainer_dHashMap.v_member B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) n) nameTbl))) (B_dData_dPair.v_secondOf p)) })) adj))) (B_dContainer_dHashMap.v_ofNames names)))
 
@@ -292,12 +292,12 @@ let rec v_reachableNames = (fun (fuel : int) (pending : string B_dData_dList.t_L
   | B_dData_dMaybe.C_Maybe_Nothing -> ((((v_reachableNames (fuel - 1)) dtb__73) defTbl) seen2)
   | B_dData_dMaybe.C_Maybe_Just (dtb__74) -> ((((v_reachableNames (fuel - 1)) ((B_dData_dList.v_append (Vuna_dIr_dModel.v_irDefDeps dtb__74)) dtb__73)) defTbl) seen2)
   | _ -> failwith "DT: impossible branch"
-)) ((((B_dContainer_dHashMap.v_insert B_dData_dString.v_Hashable_uString) dtb__72) true) seen)))
+)) (((((B_dContainer_dHashMap.v_insert B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) dtb__72) true) seen)))
   | _ -> failwith "DT: impossible branch"
 )))
 
 # 355 "Vuna/Ir/Analysis.vuna"
-let v_reachableDefs = (fun (seeds : string B_dData_dList.t_List) (defs : Vuna_dIr_dModel.t_IrDef B_dData_dList.t_List) -> ((fun defTbl -> ((fun budget -> ((fun seen -> ((B_dData_dList.v_filter (fun (d : Vuna_dIr_dModel.t_IrDef) -> ((((B_dContainer_dHashMap.v_member B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) (Vuna_dIr_dModel.v_irDefName d)) seen))) defs)) ((((v_reachableNames budget) seeds) defTbl) ((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) B_dData_dList.C_List_Nil)))) ((8 + (v_countList seeds)) + (v_depEdgeCount defs)))) (((B_dContainer_dHashMap.v_insertAll B_dData_dString.v_Hashable_uString) ((B_dData_dList.v_map (fun (d : Vuna_dIr_dModel.t_IrDef) -> { B_dData_dPair.f_Pair_first = (Vuna_dIr_dModel.v_irDefName d); B_dData_dPair.f_Pair_second = d })) defs)) ((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) B_dData_dList.C_List_Nil))))
+let v_reachableDefs = (fun (seeds : string B_dData_dList.t_List) (defs : Vuna_dIr_dModel.t_IrDef B_dData_dList.t_List) -> ((fun defTbl -> ((fun budget -> ((fun seen -> ((B_dData_dList.v_filter (fun (d : Vuna_dIr_dModel.t_IrDef) -> ((((B_dContainer_dHashMap.v_member B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) (Vuna_dIr_dModel.v_irDefName d)) seen))) defs)) ((((v_reachableNames budget) seeds) defTbl) (((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) B_dData_dList.C_List_Nil)))) ((8 + (v_countList seeds)) + (v_depEdgeCount defs)))) ((((B_dContainer_dHashMap.v_insertAll B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) ((B_dData_dList.v_map (fun (d : Vuna_dIr_dModel.t_IrDef) -> { B_dData_dPair.f_Pair_first = (Vuna_dIr_dModel.v_irDefName d); B_dData_dPair.f_Pair_second = d })) defs)) (((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) B_dData_dList.C_List_Nil))))
 
 # 392 "Vuna/Ir/Analysis.vuna"
 let rec v_irStringsOf = (fun (mc0 : Vuna_dIr_dModel.t_Ir) -> (match mc0 with
@@ -345,13 +345,13 @@ let v_irStringsOfDef = (fun (d : Vuna_dIr_dModel.t_IrDef) -> (match (Vuna_dIr_dM
 
 # 445 "Vuna/Ir/Analysis.vuna"
 let rec v_checkUniqueDefNamesGo = (fun (mc0 : string B_dData_dList.t_List) (mc1 : (string, bool) B_dContainer_dHashMap.t_HashMap) -> (match mc0 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__129, dtb__130) -> (if ((((B_dContainer_dHashMap.v_member B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) dtb__129) mc1) then (Base_dDiag.v_icInternal (String.concat "" ["duplicate runtime definition name in IR: `"; dtb__129; "`"])) else ((v_checkUniqueDefNamesGo dtb__130) ((((B_dContainer_dHashMap.v_insert B_dData_dString.v_Hashable_uString) dtb__129) true) mc1)))
+  | B_dData_dList.C_List__x58__x58_ (dtb__129, dtb__130) -> (if ((((B_dContainer_dHashMap.v_member B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) dtb__129) mc1) then (Base_dDiag.v_icInternal (String.concat "" ["duplicate runtime definition name in IR: `"; dtb__129; "`"])) else ((v_checkUniqueDefNamesGo dtb__130) (((((B_dContainer_dHashMap.v_insert B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) dtb__129) true) mc1)))
   | B_dData_dList.C_List_Nil -> (Base_dDiag.C_Check_OkC (0))
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 442 "Vuna/Ir/Analysis.vuna"
-let v_checkUniqueDefNames = (fun (defs : Vuna_dIr_dModel.t_IrDef B_dData_dList.t_List) -> ((v_checkUniqueDefNamesGo ((B_dData_dList.v_map Vuna_dIr_dModel.v_irDefName) defs)) ((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) B_dData_dList.C_List_Nil)))
+let v_checkUniqueDefNames = (fun (defs : Vuna_dIr_dModel.t_IrDef B_dData_dList.t_List) -> ((v_checkUniqueDefNamesGo ((B_dData_dList.v_map Vuna_dIr_dModel.v_irDefName) defs)) (((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) B_dData_dList.C_List_Nil)))
 
 # 482 "Vuna/Ir/Analysis.vuna"
 let rec v_firstBadRecName = (fun (mc0 : string B_dData_dList.t_List) (mc1 : (string) -> bool) -> (match mc0 with
