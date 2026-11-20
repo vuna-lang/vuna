@@ -14,6 +14,8 @@ OUT=${1:?usage: seed-selfhost.sh OUT}
 : "${VUNA_SEED:?VUNA_SEED 未设置}"
 # 包上下文取代 `--root`；由种子构建的 stage1 在仓库根，base 由 VUNA_BASE 显式给出。
 export VUNA_BASE="$PWD/packages/base"
+# 每一级都用全新对象库：单元缓存不可能命中，key 的逐模块声明编码是纯开销。
+export VUNA_UNIT_CACHE=0
 
 # 提交入库的 seed 只能含 compiler 闭包（工具链与 dynamic codegen 都不在 TCB 里）。
 sh nix/seed/tcb-check.sh nix/seed/forbidden.txt seed

@@ -80,6 +80,8 @@ let
       cp -r ${../../packages/target-wasm} packages/target-wasm
       cp -r ${../../packages/base} packages/base
       chmod -R u+w .
+      # 构建在一次性对象库里跑：单元缓存不会命中，key 的逐模块声明编码是纯开销。
+      export VUNA_UNIT_CACHE=0
       ${vuna-seed}/bin/vuna-seed build --no-compile --out stage1 packages/compiler
       sh stage1/build.sh "$out/bin/vuna-compiler"
       sha256sum "$out/bin/vuna-compiler" | cut -d' ' -f1 > "$out/cache-tag"
@@ -99,6 +101,8 @@ let
       cp ${../../vuna.toml} vuna.toml
       chmod -R u+w .
       export VUNA_STORE="$TMPDIR/vuna-store"
+      # 每个包各一次构建、对象库随 TMPDIR 丢弃：单元缓存不会命中。
+      export VUNA_UNIT_CACHE=0
       ${vuna-compiler}/bin/vuna-compiler build --package vuna .
       cp packages/cli/.output/bin/vuna "$out/bin/vuna"
       ${vuna-compiler}/bin/vuna-compiler build --package vuna-toolchain .

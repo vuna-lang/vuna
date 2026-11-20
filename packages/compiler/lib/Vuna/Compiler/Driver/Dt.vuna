@@ -1743,19 +1743,26 @@ splitGenerateCached : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEn
 splitGenerateCached ctx entry modules moduleParts entryDecls prog printResult extraDefLocs =
   let
     pkg = contextPackageName ctx
-    keys = unitKeysOf modules entryDecls printResult
     bucketKey = "${pkg}|${entry}"
     roots = map rootDir (contextRoots ctx)
     cdir = contextDir ctx
+    _ = dbg! "cg-generate-start"
   in do
     enabled <- unitCacheEnabled
-    base <- unitCacheDir pkg
-    let
-      dir = unitCacheEntryDir base bucketKey
-      keepNames = map (\p => unitCacheFileName (firstOf p) (secondOf p)) keys
-    in do
-      _ <- if enabled && pkg /= "" then unitCacheBucketGc dir keepNames else pure 0
-      if pkg == "" || not enabled then generateDtSplitProgram moduleParts entryDecls prog printResult roots cdir extraDefLocs else generateDtSplitProgramWith (unitCacheLookup dir keys) (unitCacheStore dir keys) moduleParts entryDecls prog printResult roots cdir extraDefLocs
+    if pkg == "" || not enabled then
+      generateDtSplitProgram moduleParts entryDecls prog printResult roots cdir extraDefLocs
+    else
+      do
+        base <- unitCacheDir pkg
+        let
+          -- key 要对**每个**模块的声明做一次规范编码 + 摘要；只在缓存真的启用时才付这笔钱。
+          keys = unitKeysOf modules entryDecls printResult
+          dir = unitCacheEntryDir base bucketKey
+          keepNames = map (\p => unitCacheFileName (firstOf p) (secondOf p)) keys
+          _ = dbg! "cg-keys-done"
+        in do
+          _ <- unitCacheBucketGc dir keepNames
+          generateDtSplitProgramWith (unitCacheLookup dir keys) (unitCacheStore dir keys) moduleParts entryDecls prog printResult roots cdir extraDefLocs
 
 dtGenerateIncremental : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Pair (List Decl) (List Module) -> CheckedPackage -> Bool -> List (Pair String (Pair String Int)) -> Eff r (Check (Pair (List SplitFile) CheckedPackage))
 dtGenerateIncremental ctx entry parts checked printResult extraDefLocs =
