@@ -470,6 +470,55 @@ pending 队列规模分桶（`elab.dict.pending.b*`，走 `--debug-perf` 的 `co
 （Canonical/地址编码）、`dtp_strHash`、`nubNames`/`reverseOnto`、`Core.Eval.quote`；
 求解器里还剩 `append pending [c]` 的 O(长度) 追加（旋转语义，改动要连语义一起重写）。
 
+### 4.2 名字解析（`vuna.resolve` 窗口）的分段读数
+
+冷 `check packages/compiler`（空 store、单进程、wall 5.1–5.3 s）的 `vuna.resolve` 标记到
+`vuna.elab` 起点之间是 **0.76–0.80 s（≈15%）**，此前只有标记没有子跨度。按模块聚合的
+子跨度（157 个模块，`VUNA_OBS=1`，处置前读数）：
+
+| span | 耗时 | 说明 |
+| --- | --- | --- |
+| `vuna.resolve.module` | 663–680 ms | `resolveProgram`（逐模块名字解析本身） |
+| `vuna.resolve.warn` | 141 → **68 ms** | 未用 import 判定；处置后见下 |
+| `vuna.resolve.reorder` | 9–11 ms | fixity 重排（`reorderProgram`） |
+| `vuna.resolve.expand` | 5–9 ms | 宏展开（`expandDecls`） |
+| `vuna.resolve.ns` | 2–5 ms | 命名空间 / 模块表建表（`namespacesOfWith`） |
+| `vuna.resolve.entry` | 0.8 ms | 入口声明解析 |
+
+`vuna.resolve.warn` 内部（处置前）：`.names` 93 ms（`declGlobalNames` 走一遍**已解析** AST
++ `interpReferencedInSource` 走一遍源码 + `HashMap.ofNames` 全量引用名）、`.sources` 43 ms
+（第二次走源码建全量引用名集合）、`.imports` 4 ms。同一棵源码 AST 被走两遍，且
+`sourceNames` 只被 `anyNameIn sourceNames (fixityOpsOf …)` 使用——它只需要「源码里出现过的、
+某个 import 提供的运算符」。处置：源码只走一遍，`sourceNames` 只保留可见 fixity 运算符
+（全包 10^5 量级 → 个位数），`.warn` **141 → 68 ms**。
+
+`.module` 的固定成本里最大一项是**按 import 名查模块的线性扫描**：`modulesExporting*` 对每个
+import 调 `exportIndexOfModule` → `resolvedName` → `resolveModuleName` → `findModule`（扫整张
+模块表，命中时还会重建 `Module` 记录）。采样（`VUNA_OBS=3` + `VUNA_OBS_SAMPLE=cpu`，
+`args.stack`）里 `Loader.Modules.resolveModuleName` / `exportIndexOfModule` 是编译器侧出现
+最多的两个叶帧。处置：`Namespaces` 增加 `nsModuleTbl`（`Modules.moduleTblOf` 一次建
+「模块名 → 模块」表），解析期走 `exportIndexOfModuleIn` / `modulesExporting*In`；命名空间
+路径的罕见回退按需把表展回列表。同一窗口 3 轮读数：
+
+| | 处置前 | 处置后 |
+| --- | --- | --- |
+| `vuna.resolve` 窗口（标记 → `vuna.elab`） | 0.76–0.80 s | **0.52 s** |
+| `vuna.resolve.module` | 663–680 ms | **426–447 ms** |
+| `vuna.resolve.warn` | 141 ms | **68 ms** |
+| 冷 `check packages/compiler` CPU（4 轮交替最小值） | 5.12 s | **4.87 s（−4.9%）** |
+
+剩余 `.module` 仍是**逐节点成本**（合成探针：1 个引用/定义 ≈3.2 µs；4000 引用单表达式
+≈1.2 µs/节点）：每个 `EVar` 付 `mangle` 拼接 + 3 个命名空间哈希查表 +
+`modulesExporting*` 的 O(imports) 哈希查表 + `Check` 的 bind 闭包。再往下需要函数级采样
+（`VUNA_OBS=3` + `VUNA_OBS_SAMPLE=cpu`，见 [observability.md](observability.md) §3.3）或把热
+形态改写成直接风格；合成探针试过的两个方向读数：`scopeNamesOf` 的隐式作用域表在 2000 定义/
+2000 表项时只多 3.5 ms，模块表长度在改成 O(1) 查表后已不是成本项，都不值得单独动。
+
+**已知复杂度缺陷（不在本行）**：`Loader.Fixity.collectChain` 对 parser 产出的**左嵌套**
+`EInfix` 链每层先 `reorderExpr l`，对长链是 O(n²)：`g = 1 + 1 + …`（纯字面量）
+2000/4000/8000 项 = 47/161/621 ms。真实源码受 100 列格式化约束、链很短，因此不解释上面的
+0.78 s；生成代码与 bench 的长链会撞，修法是展平两侧脊后只对边界操作数 reorder 一次。
+
 ## 5. 增长率（合成包）
 
 ### 5.1 单文件 `check`（全量精化路径）

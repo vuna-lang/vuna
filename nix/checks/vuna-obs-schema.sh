@@ -95,6 +95,10 @@ grep -q '"name":"vuna.elab.bodies"' "$compiler_trace" || fail "compiler trace mi
 # 前端两段：冷 store 下每个模块都要过 lex + 语法分析。
 grep -q '"name":"vuna.parse.lex"' "$compiler_trace" || fail "compiler trace misses the vuna.parse.lex span"
 grep -q '"name":"vuna.parse.syntax"' "$compiler_trace" || fail "compiler trace misses the vuna.parse.syntax span"
+# 名字解析的四段（reorder / expand / module / warn 都有逐模块调用，冷跑必然产出）。
+for span in vuna.resolve.reorder vuna.resolve.expand vuna.resolve.module vuna.resolve.warn; do
+  grep -q "\"name\":\"$span\"" "$compiler_trace" || fail "compiler trace misses the $span span"
+done
 # `Eff` 边界的零宽度标记（ph:"i"）：load / resolve / iface 计算与写回各一次。
 for mark in vuna.load vuna.resolve vuna.iface.compute vuna.iface.write; do
   grep -q "\"ph\":\"i\",.*\"name\":\"$mark\"" "$compiler_trace" \

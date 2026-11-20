@@ -61,7 +61,7 @@
 
 | 模块 | 职责 | 关键入口 |
 | --- | --- | --- |
-| `Loader.Modules` | 加载器的数据与模块图（叶子）：模块根、import 边、导出表结构 | `collectModuleFiles`、`moduleAllImportsOf` |
+| `Loader.Modules` | 加载器的数据与模块图（叶子）：模块根、import 边、导出表结构；模块名查找与按名查导出各有一张表（`moduleTblOf` / `moduleExportIndexOf`），解析期不再线性扫模块表或导出表 | `collectModuleFiles`、`moduleAllImportsOf`、`moduleTblOf`、`exportIndexOfModuleIn` |
 | `Loader.Resolve` | 名字解析：把 parse 后声明/表达式解析成带模块前缀的名字；内建 arity / prelude 放行消费 `Base.Intrinsics` | `resolveProgram` |
 | `Loader.Flatten` | 模块导出表计算、加载流程与 flatten（`Prelude` 自动导入——含 ad-hoc 单文件、`[export]` 可见性）；内存源码的**库模块**入口（LSP）；`parseFileWithPath` 每次从源文本 lex + 语法分析（不做 token/AST 缓存）；加载完成后调 `Loader.Layers` 跑一次层约束检查 | `loadProject`、`loadProjectModules`、`loadProjectSource`、`loadModuleSource`、`visibleFixitiesOf` / `dedupeFixities`、`fixitiesForSource` / `fixitiesForSourceIn`（lint/index/doc 的程序级 fixity） |
 | `Loader.Expand` | 内置宏展开 pass：parser 把 `name!` 编码成保留名 `@vuna@macro@name`，这里在 fixity 重排后、名字解析前做 AST→AST 展开（内置宏 `dbg!` / `obs!` / `mark!`，展开到隐藏 runtime 原语；插入节点 span = 调用点） | `expandDecls` |

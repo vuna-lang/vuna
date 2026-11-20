@@ -103,6 +103,10 @@ span / 计数 / 日志 / 采样栈写成 **Chrome Trace Event JSONL**；关闭�
   → AST 的语法分析）、`vuna.parse.cst`（无损 CST 组装，工具侧调用）、`vuna.cache.lookup` / `vuna.cache.write`
   （对象库读写；`obsSpanEff` 的 begin/end token 对）、`vuna.term`（终止性整段）、
   `vuna.term.sct`（每个走 SCT 兜底的 SCC 一次）；
+  `vuna.resolve.reorder` / `.expand` / `.entry` / `.ns` / `.module` / `.warn`
+  （名字解析：fixity 重排 / 宏展开 / 入口声明 / 命名空间建表 / 逐模块名字解析 /
+  未用 import 判定；逐模块四段同名按次聚合）与 `vuna.resolve.warn.names` / `.sources` /
+  `.imports`（未用 import 判定内部的两次名字收集与逐 import 检查）；
 - `ph:"X"` + `args.def`（level ≥ 2）：`vuna.def.elab`（逐定义）；
 - `ph:"X"` + `args.def`（level ≥ 3）：`vuna.elab.term.core`（逐表达式节点，`args.def` 是
   形态名 `EVar` / `EApp` / …）；一次 check 是 3.4×10^5 级，放 level 2 会把 trace 撑大一个量级；

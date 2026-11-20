@@ -23,6 +23,7 @@ import Vuna.Compiler.Loader.Fixity
 import Vuna.Compiler.Loader.Modules
 import Vuna.Compiler.Loader.Resolve
 import Vuna.Compiler.Base.Intrinsics
+import Vuna.Compiler.Base.Obs
 import Vuna.Compiler.Frontend.Packages.Pkg
 import Base.Effect.Fs as EffFs
 import Base.Effect.Types as EffTypes
@@ -932,25 +933,41 @@ export resolveProjectWith : Bool -> Project -> Check (Pair (List Diagnostic) (Pa
 resolveProjectWith release project = resolveProjectKeeping release [] project
 
 -- `keep` 里的模块已经解析过（来自接口文件），原样保留、不重解析。
+--
+-- 阶段跨度：`vuna.resolve.reorder` / `.expand` / `.entry` / `.warn` 是入口声明的四段；
+-- 逐模块的四段在 `resolveModulesKeep`（同名跨度，按次聚合）。名字解析本身没有内部的
+-- 结构化子阶段，`vuna.resolve` 标记到这组跨度之间只剩 `checkUniqueFixities` 与函数分派。
 export resolveProjectKeeping : Bool -> List String -> Project -> Check (Pair (List Diagnostic) (Pair (List Decl) (List Module)))
 resolveProjectKeeping release keep (Project decls imports implicit modules entryPkg entryFixes) =
   let
     projectFixities = dedupeFixitiesOf modules entryFixes
   in Vuna.Compiler.Base.Common.bind
     (checkUniqueFixities projectFixities)
-    (\fixes => Vuna.Compiler.Base.Common.bind (reorderProgram (tableOf fixes) decls) (\decls2 => Vuna.Compiler.Base.Common.bind (expandDecls decls2) (\decls3 => Vuna.Compiler.Base.Common.bind (resolveEntry release modules entryPkg (append imports implicit) decls3) (\entryDecls => Vuna.Compiler.Base.Common.bind (unusedImportWarnings modules imports entryDecls decls3 []) (\entryWarns => Vuna.Compiler.Base.Common.bind (resolveModulesKeep release keep fixes modules) (\p2 => OkC (Pair (append entryWarns (secondOf p2)) (Pair entryDecls (firstOf p2)))))))))
+    (\fixes => Vuna.Compiler.Base.Common.bind (obsCheck "vuna.resolve.reorder" (\_ => reorderProgram (tableOf fixes) decls)) (\decls2 => Vuna.Compiler.Base.Common.bind (obsCheck "vuna.resolve.expand" (\_ => expandDecls decls2)) (\decls3 => Vuna.Compiler.Base.Common.bind (obsCheck "vuna.resolve.entry" (\_ => resolveEntry release modules entryPkg (append imports implicit) decls3)) (\entryDecls => Vuna.Compiler.Base.Common.bind (obsCheck "vuna.resolve.warn" (\_ => unusedImportWarnings modules imports entryDecls decls3 [])) (\entryWarns => Vuna.Compiler.Base.Common.bind (resolveModulesKeep release keep fixes modules) (\p2 => OkC (Pair (append entryWarns (secondOf p2)) (Pair entryDecls (firstOf p2)))))))))
 
 resolveModulesKeep : Bool -> List String -> List FixityDecl -> List Module -> Check (Pair (List Module) (List Diagnostic))
 resolveModulesKeep release keep fixes [] = OkC (Pair [] [])
-resolveModulesKeep release keep fixes ((Module name pkg imports implicit decls exports fixities reexports opacity idx) :: rest) =
-  if memName name keep then
+resolveModulesKeep release keep fixes (m :: rest) =
+  if memName (moduleNameOf m) keep then
     Vuna.Compiler.Base.Common.bind
       (resolveModulesKeep release keep fixes rest)
-      (\p2 => OkC (Pair ((::) (Module name pkg imports implicit decls exports fixities reexports opacity idx) (firstOf p2)) (secondOf p2)))
+      (\p2 => OkC (Pair ((::) m (firstOf p2)) (secondOf p2)))
   else
     Vuna.Compiler.Base.Common.bind
-      (reorderProgram (tableOf fixes) decls)
-      (\decls2 => Vuna.Compiler.Base.Common.bind (expandDecls decls2) (\decls3 => Vuna.Compiler.Base.Common.bind (resolveProgram (Module name pkg imports implicit decls3 exports fixities reexports opacity idx :: rest) name name (namespacesOfWith release decls3) (append imports implicit) decls3) (\d1 => Vuna.Compiler.Base.Common.bind (unusedImportWarnings (Module name pkg imports implicit decls3 exports fixities reexports opacity idx :: rest) imports d1 decls3 reexports) (\warns => Vuna.Compiler.Base.Common.bind (resolveModulesKeep release keep fixes rest) (\p2 => OkC (Pair ((::) (Module name pkg imports implicit d1 exports fixities reexports opacity idx) (firstOf p2)) (append warns (secondOf p2))))))))
+      (obsCheck "vuna.resolve.reorder" (\_ => reorderProgram (tableOf fixes) (moduleDeclsOf m)))
+      (\decls2 => Vuna.Compiler.Base.Common.bind (resolveModuleGo release m rest (obsCheck "vuna.resolve.expand" (\_ => expandDecls decls2))) (\p => Vuna.Compiler.Base.Common.bind (resolveModulesKeep release keep fixes rest) (\p2 => OkC (Pair ((::) (firstOf p) (firstOf p2)) (append (secondOf p) (secondOf p2))))))
+
+-- | 单个模块 expand 之后的三段：命名空间建表 → 名字解析 → 未用 import 判定。
+-- `rest` 参与模块表：解析期要看到后续模块的导出面。
+resolveModuleGo : Bool -> Module -> List Module -> Check (List Decl) -> Check (Pair Module (List Diagnostic))
+resolveModuleGo release m rest declsR =
+  Vuna.Compiler.Base.Common.bind declsR (
+      \decls3 =>
+        let
+          modules2 = Module (moduleNameOf m) (modulePackageOf m) m.moduleImportsOf m.moduleImplicitImportsOf decls3 m.moduleExportsOf (moduleFixitiesOf m) (moduleReexportsOf m) (moduleOpaqueOf m) m.moduleExportIndexOf :: rest
+          ns = obsPure "vuna.resolve.ns" (\_ => namespacesOfWith release modules2 decls3)
+        in Vuna.Compiler.Base.Common.bind (obsCheck "vuna.resolve.module" (\_ => resolveProgram modules2 (moduleNameOf m) (moduleNameOf m) ns (moduleAllImportsOf m) decls3)) (\d1 => Vuna.Compiler.Base.Common.bind (obsCheck "vuna.resolve.warn" (\_ => unusedImportWarnings modules2 m.moduleImportsOf d1 decls3 (moduleReexportsOf m))) (\warns => OkC (Pair (Module (moduleNameOf m) (modulePackageOf m) m.moduleImportsOf m.moduleImplicitImportsOf d1 m.moduleExportsOf (moduleFixitiesOf m) (moduleReexportsOf m) (moduleOpaqueOf m) m.moduleExportIndexOf) warns)))
+    )
 
 -- ---------------------------------------------------------------
 -- unused import warning：显式 import 未在所属检查单元里被引用。
@@ -958,28 +975,41 @@ resolveModulesKeep release keep fixes ((Module name pkg imports implicit decls e
 -- ---------------------------------------------------------------
 unusedImportWarnings : List Module -> List Import -> List Decl -> List Decl -> List String -> Check (List Diagnostic)
 unusedImportWarnings modules imports decls sourceDecls reexports =
-  let
-    names0 = concatMap declGlobalNames decls
-    -- 模板字符串降级会合成 `Base.Trait.Interp.interp`（Resolve.lowerTemplate）：它是解析**之后**
-    -- 注入的 canonical 名，不算作 import 使用。源码没有显式引用 interp 时剔除合成名，
-    -- 只被模板串引用的 import 仍报 unused。
-    names =
-      if interpReferencedInSource sourceDecls then
-        names0
-      else
-        filter (\n => n /= interpMethodName) names0
-    nameSet = HashMap.ofNames names
-    -- 源码里出现过的名字（rename 前）：fixity 声明不进 `Decl`，某个 import 提供的 fixity
-    -- 是否真的被用到只能看源码里是否写了那个运算符。
-    sourceNames = HashMap.ofNames (concatMap declRefNames sourceDecls)
-  in unusedImportWarningsGo modules nameSet sourceNames imports decls reexports imports
+  obsCheck "vuna.resolve.warn.names" (
+      \_ =>
+        let
+          -- 源码名只走一遍：`interp` 判定与「源码里出现过哪些运算符」共用同一份引用名。
+          sourceRefs = concatMap declRefNames sourceDecls
+          -- 模板字符串降级会合成 `Base.Trait.Interp.interp`（Resolve.lowerTemplate）：它是解析**之后**
+          -- 注入的 canonical 名，不算作 import 使用。源码没有显式引用 interp 时剔除合成名，
+          -- 只被模板串引用的 import 仍报 unused。
+          interpRef = memName "interp" sourceRefs || memName interpMethodName sourceRefs
+          names0 = concatMap declGlobalNames decls
+          names = if interpRef then names0 else filter (\n => n /= interpMethodName) names0
+          nameSet = HashMap.ofNames names
+          -- fixity 判定只需要「源码里出现过的、某个 import 能提供的运算符」：
+          -- 全量引用名集合在整包上是 10^5 量级，过滤后通常只有个位数。
+          fixitySet = HashMap.ofNames (visibleFixityOps modules imports)
+        in obsCheck "vuna.resolve.warn.sources" (
+            \_ =>
+              obsCheck "vuna.resolve.warn.imports" (
+                  \_ =>
+                    let
+                      sourceNames = HashMap.ofNames (filter (\n => HashMap.member n fixitySet) sourceRefs)
+                    in unusedImportWarningsGo modules nameSet sourceNames imports decls reexports imports
+                )
+          )
+    )
 
--- | 源码里是否显式提到 `interp` / `Base.Trait.Interp.interp`（未解析 AST 的名字扫描）。
-interpReferencedInSource : List Decl -> Bool
-interpReferencedInSource decls =
-  let
-    names = concatMap declRefNames decls
-  in memName "interp" names || memName interpMethodName names
+-- | 当前检查单元里所有 import 的模块声明可见的 fixity 运算符（去重前的集合源）。
+visibleFixityOps : List Module -> List Import -> List String
+visibleFixityOps modules imports =
+  concatMap (
+      \imp =>
+        case findModule modules (importName imp) of
+          Just m => fixityOpsOf (moduleFixitiesOf m)
+          Nothing => []
+    ) imports
 
 unusedImportWarningsGo : List Module -> HashMap String Bool -> HashMap String Bool -> List Import -> List Decl -> List String -> List Import -> Check (List Diagnostic)
 unusedImportWarningsGo modules nameSet sourceNames imports decls reexports [] = OkC []

@@ -92,6 +92,8 @@ export record Namespaces(..) where
   -- data/record 构造子的候选表（短名 → 未加模块 prefix 的 "Data.Ctor"）。
   -- 同名构造子按族区分；trait 方法不在此表（不是族的构造子）。
   nsCtorCands : List (Pair String String)
+  -- | 模块名 → 模块（解析期按 import 名查导出，见 `Modules.moduleTblOf`）。
+  nsModuleTbl : HashMap String Module
   -- release 构建模式：Resolve 的 assert/todo 拒绝检查用（显式传入，不读进程环境）。
   nsRelease : Bool
 
@@ -340,6 +342,34 @@ resolveModuleName modules name =
         segs = splitOnDot name
       in resolvePathModule modules segs (List.length segs - 1)
 
+-- | 模块名 → 模块的查找表。解析期每个 EVar 都会按 import 名查模块，线性扫模块表是
+-- 名字解析里最大的一项固定成本；入口建一次表，后续都是 O(1)。
+export moduleTblOf : List Module -> HashMap String Module
+moduleTblOf modules =
+  HashMap.insertAll (map (\m => Pair (moduleNameOf m) m) modules) (HashMap.fromList [])
+
+-- | `resolveModuleName` 的表版本。名字不是真实模块时退回命名空间路径解析
+-- （罕见路径，按需把表展回列表）。
+export resolveModuleNameIn : HashMap String Module -> String -> Maybe String
+resolveModuleNameIn tbl name =
+  case HashMap.lookup name tbl of
+    Just _ => Just name
+    Nothing =>
+      let
+        segs = splitOnDot name
+      in resolvePathModuleIn tbl segs (List.length segs - 1)
+
+resolvePathModuleIn : HashMap String Module -> List String -> Int -> Maybe String
+resolvePathModuleIn tbl segs n =
+  if n < 1 then
+    Nothing
+  else
+    let
+      joined = joinDots (takeSegsLocal n segs)
+    in case HashMap.lookup joined tbl of
+      Just _ => walkNamespaceIndex (map secondOf (HashMap.toList tbl)) joined (dropFirst n segs)
+      Nothing => resolvePathModuleIn tbl segs (n - 1)
+
 resolvePathModule : List Module -> List String -> Int -> Maybe String
 resolvePathModule modules segs n =
   if n < 1 then
@@ -400,6 +430,19 @@ exportIndexOfModule modules name =
   case findModule modules (resolvedName modules name) of
     Just m => OkC m.moduleExportIndexOf
     Nothing => missingModule name
+
+-- | 表版本的 `exportIndexOfModule`（解析期热路径：每次按名字查导出都走这里）。
+export exportIndexOfModuleIn : HashMap String Module -> String -> Check (HashMap String (List ExportEntry))
+exportIndexOfModuleIn tbl name =
+  case HashMap.lookup (resolvedNameIn tbl name) tbl of
+    Just m => OkC m.moduleExportIndexOf
+    Nothing => missingModule name
+
+resolvedNameIn : HashMap String Module -> String -> String
+resolvedNameIn tbl name =
+  case resolveModuleNameIn tbl name of
+    Just real => real
+    Nothing => name
 
 -- 按命名空间查公开名：kinds 是允许的 kind 列表（val / ctor / type）。
 lookupExport : List String -> String -> List ExportEntry -> Maybe ExportEntry
@@ -472,48 +515,63 @@ findExportCtorsIn idx name = filterCtors name (entriesByName name idx)
 export findExportTypeIn : HashMap String (List ExportEntry) -> String -> Maybe ExportEntry
 findExportTypeIn idx name = lookupExport ["type"] name (entriesByName name idx)
 
-modulesExportingValueFrom : List Module -> List String -> String -> Check (List (Pair String ExportEntry))
-modulesExportingValueFrom modules [] name = OkC []
-modulesExportingValueFrom modules (m :: rest) name =
-  Vuna.Compiler.Base.Common.bind (exportIndexOfModule modules m) (
+modulesExportingValueFrom : (String -> Check (HashMap String (List ExportEntry))) -> List String -> String -> Check (List (Pair String ExportEntry))
+modulesExportingValueFrom idxOf [] name = OkC []
+modulesExportingValueFrom idxOf (m :: rest) name =
+  Vuna.Compiler.Base.Common.bind (idxOf m) (
       \idx =>
         case findExportValuesIn idx name of
-          [] => modulesExportingValueFrom modules rest name
-          entries => Vuna.Compiler.Base.Common.bind (modulesExportingValueFrom modules rest name) (\more => OkC (append (map (\e => Pair m e) entries) more))
+          [] => modulesExportingValueFrom idxOf rest name
+          entries => Vuna.Compiler.Base.Common.bind (modulesExportingValueFrom idxOf rest name) (\more => OkC (append (map (\e => Pair m e) entries) more))
     )
 
 export modulesExportingValue : List Module -> List Import -> String -> Check (List (Pair String ExportEntry))
 modulesExportingValue modules imports name =
-  modulesExportingValueFrom modules (openModuleNames imports) name
+  modulesExportingValueFrom (exportIndexOfModule modules) (openModuleNames imports) name
+
+-- | 表版本（解析期热路径）。
+export modulesExportingValueIn : HashMap String Module -> List Import -> String -> Check (List (Pair String ExportEntry))
+modulesExportingValueIn tbl imports name =
+  modulesExportingValueFrom (exportIndexOfModuleIn tbl) (openModuleNames imports) name
 
 -- | 在给定的多个模块里找同名构造子的导出条目（每个模块可贡献多条）。
-modulesExportingCtorFrom : List Module -> List String -> String -> Check (List (Pair String ExportEntry))
-modulesExportingCtorFrom modules [] name = OkC []
-modulesExportingCtorFrom modules (m :: rest) name =
-  Vuna.Compiler.Base.Common.bind (exportIndexOfModule modules m) (
+modulesExportingCtorFrom : (String -> Check (HashMap String (List ExportEntry))) -> List String -> String -> Check (List (Pair String ExportEntry))
+modulesExportingCtorFrom idxOf [] name = OkC []
+modulesExportingCtorFrom idxOf (m :: rest) name =
+  Vuna.Compiler.Base.Common.bind (idxOf m) (
       \idx =>
         let
           found = findExportCtorsIn idx name
-        in Vuna.Compiler.Base.Common.bind (modulesExportingCtorFrom modules rest name) (\more => OkC (append (map (\e => Pair m e) found) more))
+        in Vuna.Compiler.Base.Common.bind (modulesExportingCtorFrom idxOf rest name) (\more => OkC (append (map (\e => Pair m e) found) more))
     )
 
 export modulesExportingCtor : List Module -> List Import -> String -> Check (List (Pair String ExportEntry))
 modulesExportingCtor modules imports name =
-  modulesExportingCtorFrom modules (openModuleNames imports) name
+  modulesExportingCtorFrom (exportIndexOfModule modules) (openModuleNames imports) name
 
-modulesExportingTypeFrom : List Module -> List String -> String -> Check (List (Pair String ExportEntry))
-modulesExportingTypeFrom modules [] name = OkC []
-modulesExportingTypeFrom modules (m :: rest) name =
-  Vuna.Compiler.Base.Common.bind (exportIndexOfModule modules m) (
+-- | 表版本（解析期热路径）。
+export modulesExportingCtorIn : HashMap String Module -> List Import -> String -> Check (List (Pair String ExportEntry))
+modulesExportingCtorIn tbl imports name =
+  modulesExportingCtorFrom (exportIndexOfModuleIn tbl) (openModuleNames imports) name
+
+modulesExportingTypeFrom : (String -> Check (HashMap String (List ExportEntry))) -> List String -> String -> Check (List (Pair String ExportEntry))
+modulesExportingTypeFrom idxOf [] name = OkC []
+modulesExportingTypeFrom idxOf (m :: rest) name =
+  Vuna.Compiler.Base.Common.bind (idxOf m) (
       \idx =>
         case findExportTypesIn idx name of
-          [] => modulesExportingTypeFrom modules rest name
-          entries => Vuna.Compiler.Base.Common.bind (modulesExportingTypeFrom modules rest name) (\more => OkC (append (map (\e => Pair m e) entries) more))
+          [] => modulesExportingTypeFrom idxOf rest name
+          entries => Vuna.Compiler.Base.Common.bind (modulesExportingTypeFrom idxOf rest name) (\more => OkC (append (map (\e => Pair m e) entries) more))
     )
+
+-- | 表版本（解析期热路径）。
+export modulesExportingTypeIn : HashMap String Module -> List Import -> String -> Check (List (Pair String ExportEntry))
+modulesExportingTypeIn tbl imports name =
+  modulesExportingTypeFrom (exportIndexOfModuleIn tbl) (openModuleNames imports) name
 
 export modulesExportingType : List Module -> List Import -> String -> Check (List (Pair String ExportEntry))
 modulesExportingType modules imports name =
-  modulesExportingTypeFrom modules (openModuleNames imports) name
+  modulesExportingTypeFrom (exportIndexOfModule modules) (openModuleNames imports) name
 
 -- 重导出时同名可能来自多个模块；只要 target 相同就不是歧义（门面伞模块常见）。
 sameTargetRest : ExportEntry -> List (Pair a ExportEntry) -> Bool
