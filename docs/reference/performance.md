@@ -341,9 +341,9 @@ load/parse 前缀 + iface 摘要 **~2.6 s** → 逐定义精化（`collectSigs-d
 **净效果 ≈0.5%，在噪声内**（同窗口抖动 ±0.3 s）。热路径与处置前一致；早期用更旧的
 编译器做基线时看到的「热路径 +4 ms」来自 main 自己的提交，不是这些改动。
 
-结论要写清：elab 的瓶颈仍是 `conv`/`force`/`infer` 的项重算（分配 ~92%），
+结论要写清：分配的最大单项是 `vuna.elab.term.body`（1.5 GB / 全跑 16%，见第 7 条），
 `Ctx` 记账、零向量、族名判定这类结构开销只有千分之几，**不值得继续投入**。
-两项试过又撤掉的改动（连同原因）：
+试过又撤掉 / 不能去的改动（连同原因）：
 - 用量零向量按 depth 共享：`HashMap.insert` 是 copy-on-write（两次 32 元素数组复制），
   比建 5–10 条 cons 贵一个量级，而收益只是省几条 cons，撤（**不是**「查」慢：查是
   hash + 两次 `Array.get` + 桶内线性扫，Int 键在小桶里比建 cons 便宜）；
@@ -357,6 +357,16 @@ load/parse 前缀 + iface 摘要 **~2.6 s** → 逐定义精化（`collectSigs-d
 - 把 binder 类型在绑定点求值成 Value 直接复用（省 `shift`+`eval`）：会改变不透明/擦除
   决策（`isOpaqueRuntimeTyIn` 按**当前**精化重算类型），属语义改动，撤，并把该不变式
   写进 [core.md](core.md) §5。`Ctx` 只保留「求值环境前插维护」这一处结构简化。
+- **判定器用静默 `conv`**（失败不构造诊断，供 `ctxDictDomEqual` / `domainsEqual` 这类
+  「试一下相等吗」的调用点用）：把 `mismatchAt` 换成常量文案的上界 A/B 是 **0.32% 分配**
+  （3.98M words/check），时间在噪声内（±1%）；代价是给 13 个互递归函数各穿一个 `quiet`
+  参数，撤。
+- **写接口前 `termHasAnyMeta` 早退**：上界 **0.41% 分配**（5.1M words/check；20,740 次
+  `fixTerm` 里 20,711 次无元变量）。但要跳过 `substSolvedMetasAt*` 的整树重建，就得依赖
+  「`TLam` slot 不会出现 `Just (Pair Nothing Nothing)`」这条未成文不变量（重建时 `lamTyOf`
+  会把它归一化成 `Nothing`），换算成时间不足 0.1%，撤。
+- **去掉最终组装前的第 4 遍 `rezonkDefs`**：它用的是实例体之后的新解表（`ec4`），不是
+  重复遍历；能省的只有已被 `ec4` rezonk 过的 `instDefs`，收益是一次扫描的量级，撤。
 
 ### 4.1 逐定义精化与 codegen 检查的分段（span 口径）
 
