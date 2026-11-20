@@ -293,6 +293,16 @@ run: sh -c 'SLOTS_SLEEP=0 "$TMPDIR/spawnslots-out/bin/spawnslots" 2>&1'
 exit: 0
 out-contains: done
 
+# 9u5) spawn 的多实参按 argv 边界逐项 NUL 分隔：子进程必须看到三个独立实参，
+#      而不是一个拼接串。粘连时子进程走 fallback 并 exit 3，父进程报 spawn-argv-fail。
+run: sh -c 'd="$TMPDIR/spawnargv"; mkdir -p "$d/app"; printf "[package]\nname = \"spawnargv\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Effect.Core as Eff\nimport Base.Effect.Args as EffArgs\nimport Base.Effect.Exit as EffExit\nimport Base.Effect.Process as EffProcess\nimport Base.Data.Int as Int\n\nmain : Eff [ArgsOp, ExitOp, ProcessOp] String\nmain = do\n  args <- argsGetArgs\n  case args of\n    \"alpha\" :: \"beta\" :: \"gamma\" :: _ => pure \"child-argv-ok\"\n    [] => do\n      pid <- processSpawn [\"alpha\", \"beta\", \"gamma\"]\n      code <- processWait pid\n      pure (if code == 0 then \"spawn-argv-ok\" else \"spawn-argv-fail\")\n    _ => do\n      _ <- exitWith 3\n      pure \"unreachable\"\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/spawnargv-out" "$d"'
+exit: 0
+run: "$TMPDIR/spawnargv-out/bin/spawnargv" 2>&1
+exit: 0
+out-contains: child-argv-ok
+out-contains: spawn-argv-ok
+out-not-contains: spawn-argv-fail
+
 # 9v) 核数：`VUNA_NATIVE_CPUS=1` 把进程钉到一个可用核上（`Cpus_allowed_list` 单项）。
 run: sh -c 'VUNA_NATIVE_CPUS=1 "$TMPDIR/sleepy-out/bin/sleepy" >/dev/null & p=$!; sleep 0.3; taskset -pc $p | sed "s/.*: //" | awk -F, "{print NF}"; wait'
 out-equals: 1
