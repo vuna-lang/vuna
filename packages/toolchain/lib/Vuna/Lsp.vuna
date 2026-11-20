@@ -256,7 +256,7 @@ logTo line (LspState docs s pull idx tried hint logs dc dsess gs canc) =
   LspState docs s pull idx tried hint (line :: logs) dc dsess gs canc
 
 -- | 内部：退出时一次写出内存累积的日志（[Vuna.Lsp.Protocol] 的 `flushLogLines`）。
-flushLogs : Member nFs FsOp r => LspState -> Eff r Int
+flushLogs : Member nConsole ConsoleOp r => LspState -> Eff r Int
 flushLogs st = flushLogLines st.stateLogs
 
 -- | 内部：首次需要索引时构建；失败一次后不再重试（避免每个请求都全量扫描磁盘）。
@@ -877,7 +877,7 @@ lspWarn : String -> LspState -> Pair LspState (List Json)
 lspWarn m st = Pair (logTo m st) []
 
 -- | 内部：正常退出，flush 日志，收到过 shutdown 则退 0、否则退 1。
-exitCodeOf : Member nFs FsOp r => LspState -> Eff r Int
+exitCodeOf : Member nConsole ConsoleOp r => LspState -> Eff r Int
 exitCodeOf state =
   do
     _ <- flushLogs state
@@ -885,7 +885,7 @@ exitCodeOf state =
 
 -- | 内部：非正常结束（stdin EOF / 传输层致命错误），flush 日志后一律退 1。
 -- 不能把 `flushLogs` 的写入字节数当退出码。
-abnormalExit : Member nFs FsOp r => LspState -> Eff r Int
+abnormalExit : Member nConsole ConsoleOp r => LspState -> Eff r Int
 abnormalExit state =
   do
     _ <- flushLogs state
@@ -923,9 +923,10 @@ runLspTool args =
         [] => runLsp 0
         _ => lspToolError "usage: vuna lsp [--stdio]"
 
--- | 内部：`vuna lsp` 的用法错误出口（exit 2）。
+-- | 内部：`vuna lsp` 的用法错误出口（exit 2）。写 stderr：stdout 是协议通道，
+-- 客户端只会把 stderr 显示到日志面板。
 lspToolError : Member nConsole ConsoleOp r => String -> Eff r Int
 lspToolError msg =
   do
-    _ <- consolePrint "error: ${msg}\n"
+    _ <- consoleEprint "error: ${msg}\n"
     pure 2

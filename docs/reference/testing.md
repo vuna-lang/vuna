@@ -469,7 +469,8 @@ pkg_err/packages/test-m30 → `packages/cli`；web → `packages/web-cli`；其�
   `checks.vuna-lint` 对全部包源码要求零 finding；
 - `corpus/lsp/smoke.sh`：`vuna lsp` 的 JSON-RPC 冒烟。走包上下文（含 import 的文件真正
   类型检查），覆盖两模块临时包、formatting、documentSymbol、definition、references、
-  completion、workspace symbol、lint 诊断、URI `%XX` 与退出码；还覆盖模块名
+  completion、workspace symbol、lint 诊断、URI `%XX` 与退出码；`--stdio` 空操作、未知
+  flag 只写 stderr、stderr 为管道时日志仍可写；还覆盖模块名
   hover/definition（含模块 docstring）、局部绑定 hover/definition（语法级类型/值、遮蔽）、
   未解 `_` 洞的目标+上下文与命名洞 `?name` 的名字/目标/range；边界见
   [tooling.md](tooling.md) §2；

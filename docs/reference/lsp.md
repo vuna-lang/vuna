@@ -9,7 +9,8 @@
 `Lsp.Diagnostics` / `Lsp.Query` / `Lsp.Bindings`），**永不进入 seed 闭包**。
 
 启动参数只有 `--stdio`（空操作）：LSP 客户端惯例会把它加进 argv（例如
-vscode-languageclient 在 `transport = stdio` 时无条件追加）。
+vscode-languageclient 在 `transport = stdio` 时无条件追加）。**stdout 只放协议帧**，启动日志
+与参数错误都写 stderr（直接写 fd 2，stderr 是管道时也不会丢）。
 
 ### 帧格式
 

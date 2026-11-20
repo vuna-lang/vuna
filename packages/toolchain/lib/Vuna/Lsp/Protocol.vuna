@@ -12,7 +12,7 @@ module Vuna.Lsp.Protocol where
 
 import Vuna.Compiler.Base.Common
 import Vuna.Json
-import Base.Effect.Fs as EffFs
+import Base.Effect.Console as EffConsole
 import Base.Effect.Types as EffTypes
 export module Vuna.Json.Frame
 export module Vuna.Json.Rpc
@@ -275,13 +275,15 @@ scanNameLines lineNo isFirst firstCol lastLine remaining name =
         in case findSubstring name tailPart of
           hit => if hit >= 0 then Just (Pair lineNo (hit + from0 + 1)) else scanNameLines (lineNo + 1) False firstCol lastLine rest name
 
--- 逐行写 `/dev/stderr` 每次打开都会截断前面的行，所以内存累积、退出时 join 一次。
+-- 逐行写 stderr 会拆成多次系统调用，所以内存累积、退出时 join 一次。
 -- | 日志行前缀（`[vuna-lsp] ...`）。
 export logLine : String -> String
 logLine s = "[vuna-lsp] ${s}\n"
 
--- | 逆序累积的日志行 → 单次写 `/dev/stderr`，返回写入字节数。
-export flushLogLines : Member nFs FsOp r => List String -> Eff r Int
+-- | 逆序累积的日志行 → 单次写 stderr，返回写入字节数。
+--
+-- 必须走 `EPrint`（直接写 fd 2）：`fsWriteFile "/dev/stderr"` 落盘用临时文件 + 原子替换，
+-- stderr 是管道时没有可替换的目标，写入会失败，客户端（VSCode 等）里就完全看不到服务器日志。
+export flushLogLines : Member n ConsoleOp r => List String -> Eff r Int
 flushLogLines [] = pure 0
-flushLogLines logs =
-  fmap natToInt (fsWriteFile "/dev/stderr" (join "" (map logLine (reverse logs))))
+flushLogLines logs = consoleEprint (join "" (map logLine (reverse logs)))
