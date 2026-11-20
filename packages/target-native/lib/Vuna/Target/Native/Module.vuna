@@ -258,6 +258,47 @@ memInt : Int -> List Int -> Bool
 memInt _ [] = False
 memInt n (x :: rest) = n == x || memInt n rest
 
+-- ---------------------------------------------------------------
+-- GC 点的槽活跃集合（精确栈图的输入）
+-- ---------------------------------------------------------------
+-- | 每个 call 点上仍然活着的槽偏移：该槽在此点之后的下一个事件是「读」。
+--   文本序与死槽清零用同一近似（生成体除自递归回跳外没有回边；分支按文本序
+--   过近似，只会多留槽，不会漏根）。
+export nativeLiveSlotsAtCalls : List Instr -> List (Pair Int (List Int))
+nativeLiveSlotsAtCalls instrs =
+  let
+    events = slotEvents 0 instrs
+  in map (\c => Pair c (liveSlotsAfter c events [])) (callIndexes 0 instrs)
+
+slotEvents : Int -> List Instr -> List (Pair Int (Pair Int Bool))
+slotEvents _ [] = []
+slotEvents idx (i :: rest) =
+  append
+    (map (\off => Pair idx (Pair off True)) (instrSlotReads i))
+    (append (map (\off => Pair idx (Pair off False)) (instrSlotWrites i)) (slotEvents (idx + 1) rest))
+
+instrSlotWrites : Instr -> List Int
+instrSlotWrites i =
+  case slotWriteOf i of
+    Just off => [off]
+    Nothing => []
+
+liveSlotsAfter : Int -> List (Pair Int (Pair Int Bool)) -> List Int -> List Int
+liveSlotsAfter _ [] _ = []
+liveSlotsAfter c (e :: rest) decided =
+  if firstOf e <= c then
+    liveSlotsAfter c rest decided
+  else
+    let
+      off = firstOf (secondOf e)
+      isRead = secondOf (secondOf e)
+    in if memInt off decided then liveSlotsAfter c rest decided else if isRead then off :: liveSlotsAfter c rest (off :: decided) else liveSlotsAfter c rest (off :: decided)
+
+callIndexes : Int -> List Instr -> List Int
+callIndexes _ [] = []
+callIndexes idx (i :: rest) =
+  if isCallInstr i then idx :: callIndexes (idx + 1) rest else callIndexes (idx + 1) rest
+
 delInt : Int -> List Int -> List Int
 delInt _ [] = []
 delInt n (x :: rest) = if n == x then rest else x :: delInt n rest
