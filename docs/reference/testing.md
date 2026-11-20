@@ -661,9 +661,11 @@ nix run .#backend-check -- --compiler native --scope selfhost
 读数（16 核）：parity 53×3 在 native 编译器上按 `--jobs` 并行；corpus 686 条断言
 8 路并行。CI 里 native 任务仍是 `continue-on-error`（边界见 [native.md](native.md) §8）。
 
-**当前状态**：native 自举编译器能构建、`version` / 帮助可用，但 `check` 在第一轮派发就停在
-`Base.Effect.Core.step` 的 `trap_impossible`（`vuna: runtime error: impossible branch`，
-exit 2），所以 `selfhost` / `parity` / `corpus` 三个 scope 全部跑不过。根因与复现见
+**当前状态**：native 自举编译器能构建、`version` / 帮助可用，文本 `check .` 的成员包 spawn
+已按 argv 边界传参（105 的 9u5）；冷 store 下整仓检查仍会被年轻代回收随机打断（模式绑定处
+报 `RN_UnknownVariable` / `TC_UnknownName`，`GC_STRESS` 下稳定落到 `impossible branch`），
+预算抬到不触发回收时同一轮通过；`packages/toolchain` / `packages/dev` 还需要
+`ulimit -s unlimited`。因此 `selfhost` / `parity` / `corpus` 尚未稳定通过。证据与复现见
 [debt.md](debt.md) D122。
 
 **口径约束**：编译器必须与被测源码同一棵树构建——Nix 派生天然满足；手工跑时先

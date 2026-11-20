@@ -437,7 +437,8 @@ env，**不进 codegen**（同一 IR 的产物逐字节确定）。解析失败�
   闭包 ABI（`rdi` 占掉一个寄存器）算来参区——8 参 lambda 尾调 10 参函数正好用满 32 字节。
 - 宿主层（fs 写读/原子写/目录排序/stat/rename/symlink/递归删除、argv/env/cwd/execPath、
   clock/tty、bracket、runIn/spawn/wait）由 105 的 9o–9s 覆盖；宿主进程的超时收尾由
-  9u–9u3（单组 / 不改 pgid）与 9u4（并发 spawn 的两组）覆盖。
+  9u–9u3（单组 / 不改 pgid）与 9u4（并发 spawn 的两组）覆盖；spawn 的多实参 argv 边界
+  由 9u5 覆盖。
 - 共享语义（算术 / 字符串 / data / record / List 桥接 / 闭包 / 高阶 API）由
   suite 的 `pure-cross` 分类（`packages/compiler/test/corpus/pure_cross/`）对拍三端，OCaml 是语义 oracle。
 - 效应语义（handler / resume / abort / 嵌套 / return 改类型 / 宿主 console / 深递归）
@@ -453,13 +454,11 @@ env，**不进 codegen**（同一 IR 的产物逐字节确定）。解析失败�
   （[debt.md](debt.md) D101）。
 - FFI / extern；stdin 的 `readLine` / `readBytes` 与 net。
 - **自举运行**：`vuna build packages/compiler --target native` 产出可链接的 `bin/vuna-compiler`
-  （`version` / 帮助可用），但 `check` 目前连单文件都跑不完：第一轮派发落在
-  `Base.Effect.Core.step` 的 `trap_impossible`（`vuna: runtime error: impossible branch`，
-  exit 2）。`Monad (Eff r)` 的 CPS 形态把一个返回裸 `Check`（实测 `OkC (List Module)`）的
-  continuation 当成返回 `Control` 的续延，`step` 的 `MkApply` 按 tag 0 误配 `MkDone`，把
-  payload 当函数应用成部分应用闭包。**同一份源码编到 wasm 后能正常 `check`**，所以缺陷在 native
-  的调用/闭包生成，不在 CPS 或机器层；与 GC、W3.1 的尾 resume 标记都无关。同一失败可用
-  OCaml 版 `vuna build packages/compiler --target native` 的产物复现，与本包的安装布局无关；记在
+  （`version` / 帮助可用）；整仓 `check .` 的成员包 `processSpawn` 按 argv 边界逐项传参
+  （105 的 9u5 锁定），文本格式不再报 `unknown command`。冷 store 下整仓检查仍会被年轻代
+  回收打断：随机在模式绑定处报 `RN_UnknownVariable` / `TC_UnknownName`，`GC_STRESS` 下稳定
+  落到 `impossible branch`；把预算抬到工作集不触发回收时同一轮通过。`packages/toolchain` /
+  `packages/dev` 还需要 `ulimit -s unlimited`（非尾递归吃宿主栈）。缺口与复现记在
   [debt.md](debt.md) D122。
   整仓 selfhost 的现状见 [testing.md](testing.md)「后端自举 conformance」：尾调用（§3）只覆盖
   **直接饱和直调**，非尾递归、被闭包包住的递归仍按帧吃宿主栈；效应侧另有延迟 answer 的
