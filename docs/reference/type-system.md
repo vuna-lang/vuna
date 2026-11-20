@@ -199,6 +199,8 @@ quantity / 线性规则见 [qtt.md](qtt.md)（quantity 与擦除口径以该页�
   concatMap,mapMaybe,foldl,foldr}`、`Base.Data.Result.traverse`、`Common.traverse`）：
   回调参数按容器的真子项计，折叠只有元素参数是子项、累加器不带尺寸；`\a, b =>` 与
   `\a => \b =>` 两种写法都识别，本地同名函数（如自定义 `map`）按普通调用处理。
+  只把形参当函数调用、其余形参原样转交的转发器（`apply k x = k x`、
+  `flip k x y = k y x`）按定义性归约成直接调用后再分析。
   实例方法体同样参与检查：方法按短名在整个包内归为一组（覆盖 trait dispatch 的任意
   实例选择，派生实例也在内），同名方法的自递归 / 互递归都会被看到。
   **重建构造子不算下降**：实参 `Ctor x0..xn` 只有在某个 `xk`

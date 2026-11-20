@@ -1,0 +1,21 @@
+-- 转发器（只把形参当函数调用）按定义性归约处理：`apply f x` 就是 `f x`，
+-- `flip f x y` 就是 `f y x`；回调里的下降关系不再被「callee 以值传递」挡住。
+import Prelude
+
+data Nat : Type where
+  Zero : Nat
+  Succ : Nat -> Nat
+
+apply : (Nat -> Int) -> Nat -> Int
+apply k x = k x
+
+count : Nat -> Int
+count Zero = 0
+count (Succ n) = apply count n
+
+count2 : Nat -> Nat -> Int
+count2 Zero m = 0
+count2 (Succ n) m = flip count2 m n
+
+main : Int
+main = count (Succ Zero) + count2 (Succ Zero) Zero

@@ -1,10 +1,10 @@
--- callee 以值传递：`apply f x` 的调用头不是组内名字，看不到实参位置，
+-- callee 经函数参数转发、但回调实参不是纯形参（`k (k x)`）：看不到实参位置，
 -- 只能按盲调用（全弱边）计入并拒绝。
-apply : (Int -> Int) -> Int -> Int
-apply k x = k x
+applyTwice : (Int -> Int) -> Int -> Int
+applyTwice k x = k (k x)
 
 f : Int -> Int
-f x = apply f x
+f x = applyTwice f x
 
 main : Int
 main = f 0

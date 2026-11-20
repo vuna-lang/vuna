@@ -142,6 +142,192 @@ groupDefsGo tbl order ((Pair name clause) :: rest) =
 export defNames : List (Pair String (List (Pair (List Pat) Expr))) -> List String
 defNames defs = map firstOf defs
 
+-- ---------------------------------------------------------------
+-- 转发器：`g k x = k x` 这类只调用某个形参、其余形参原样转交的定义。终止性分析把
+-- 调用点 `g f a` 直接看成 `f a`（定义性 beta 归约），回调里的下降关系才不会被
+-- 「callee 以值传递」挡住。
+-- ---------------------------------------------------------------
+record Forwarder where
+  fwdCallee : String
+  fwdCbParam : Int
+  fwdArgParams : List Int
+
+pvarParamsOf : List Pat -> List String
+pvarParamsOf [] = []
+pvarParamsOf (p :: rest) =
+  case p of
+    PVar n sp => n :: pvarParamsOf rest
+    _ => []
+
+paramPositionOf : String -> List String -> Maybe Int
+paramPositionOf n [] = Nothing
+paramPositionOf n (p :: rest) =
+  if n == p then
+    Just 0
+  else
+    case paramPositionOf n rest of
+      Just i => Just (i + 1)
+      Nothing => Nothing
+
+argParamIndices : List String -> List Expr -> Maybe (List Int)
+argParamIndices params [] = Just []
+argParamIndices params (a :: rest) =
+  case a of
+    EVar n sp =>
+      case paramPositionOf (rnameKey n) params of
+        Just i =>
+          case argParamIndices params rest of
+            Just is => Just (i :: is)
+            Nothing => Nothing
+        Nothing => Nothing
+    _ => Nothing
+
+forwarderOfClause : String -> Pair (List Pat) Expr -> Maybe Forwarder
+forwarderOfClause name (Pair pats body) =
+  let
+    params = pvarParamsOf pats
+  in if length params == length pats then
+    case body of
+      EApp (EVar k ksp) cargs sp =>
+        case paramPositionOf (rnameKey k) params of
+          Just j =>
+            case argParamIndices params cargs of
+              Just idxs => Just (Forwarder name j idxs)
+              Nothing => Nothing
+          Nothing => Nothing
+      _ => Nothing
+  else
+    Nothing
+
+sameIntLists : List Int -> List Int -> Bool
+sameIntLists [] [] = True
+sameIntLists (x :: xs) (y :: ys) = x == y && sameIntLists xs ys
+sameIntLists _ _ = False
+
+sameForwarder : Forwarder -> Forwarder -> Bool
+sameForwarder a b = a.fwdCbParam == b.fwdCbParam && sameIntLists a.fwdArgParams b.fwdArgParams
+
+matchForwarders : Forwarder -> List (Pair (List Pat) Expr) -> Bool
+matchForwarders f [] = True
+matchForwarders f (cl :: rest) =
+  case forwarderOfClause f.fwdCallee cl of
+    Just g => sameForwarder f g && matchForwarders f rest
+    Nothing => False
+
+forwarderOfGroup : Pair String (List (Pair (List Pat) Expr)) -> Maybe Forwarder
+forwarderOfGroup (Pair name (cl :: rest)) =
+  case forwarderOfClause name cl of
+    Just f => if matchForwarders f rest then Just f else Nothing
+    Nothing => Nothing
+forwarderOfGroup _ = Nothing
+
+forwardersOfDefs : List (Pair String (List (Pair (List Pat) Expr))) -> List Forwarder
+forwardersOfDefs [] = []
+forwardersOfDefs (d :: rest) =
+  case forwarderOfGroup d of
+    Just f => f :: forwardersOfDefs rest
+    Nothing => forwardersOfDefs rest
+
+forwardersOf : List Decl -> List Forwarder
+forwardersOf decls = forwardersOfDefs (groupDefs decls)
+
+lookupForwarder : String -> List Forwarder -> Maybe Forwarder
+lookupForwarder n [] = Nothing
+lookupForwarder n (f :: rest) = if f.fwdCallee == n then Just f else lookupForwarder n rest
+
+argsAt : List Expr -> List Int -> Maybe (List Expr)
+argsAt args [] = Just []
+argsAt args (i :: rest) =
+  case nthExpr args i of
+    Just a =>
+      case argsAt args rest of
+        Just more => Just (a :: more)
+        Nothing => Nothing
+    Nothing => Nothing
+
+fwArgs : List Forwarder -> List Expr -> List Expr
+fwArgs fwds [] = []
+fwArgs fwds (a :: rest) = fwExpr fwds a :: fwArgs fwds rest
+
+fwFields : List Forwarder -> List (Pair String Expr) -> List (Pair String Expr)
+fwFields fwds [] = []
+fwFields fwds ((Pair fn fe) :: rest) = Pair fn (fwExpr fwds fe) :: fwFields fwds rest
+
+fwBinds : List Forwarder -> List (Pair Pat Expr) -> List (Pair Pat Expr)
+fwBinds fwds [] = []
+fwBinds fwds ((Pair pat val) :: rest) = Pair pat (fwExpr fwds val) :: fwBinds fwds rest
+
+fwAlts : List Forwarder -> List (Pair Pat Expr) -> List (Pair Pat Expr)
+fwAlts fwds [] = []
+fwAlts fwds ((Pair pat body) :: rest) = Pair pat (fwExpr fwds body) :: fwAlts fwds rest
+
+fwClauses : List Forwarder -> List (Pair (List Pat) Expr) -> List (Pair (List Pat) Expr)
+fwClauses fwds [] = []
+fwClauses fwds ((Pair pats body) :: rest) = Pair pats (fwExpr fwds body) :: fwClauses fwds rest
+
+fwStmts : List Forwarder -> List DoStmt -> List DoStmt
+fwStmts fwds [] = []
+fwStmts fwds (s :: rest) =
+  case s of
+    DBind pat e sp => DBind pat (fwExpr fwds e) sp :: fwStmts fwds rest
+    DExpr e sp => DExpr (fwExpr fwds e) sp :: fwStmts fwds rest
+    DLet binds sp => DLet (fwBinds fwds binds) sp :: fwStmts fwds rest
+
+fwParts : List Forwarder -> List InterpPart -> List InterpPart
+fwParts fwds [] = []
+fwParts fwds (p :: rest) =
+  case p of
+    IPText t => IPText t :: fwParts fwds rest
+    IPHole e => IPHole (fwExpr fwds e) :: fwParts fwds rest
+
+fwExpr : List Forwarder -> Expr -> Expr
+fwExpr fwds (EApp fn args sp) =
+  let
+    args2 = fwArgs fwds args
+  in case fn of
+    EVar g gsp =>
+      case lookupForwarder (rnameKey g) fwds of
+        Just f =>
+          case nthExpr args2 f.fwdCbParam of
+            Just (EVar v vsp) =>
+              case argsAt args2 f.fwdArgParams of
+                Just mapped => EApp (EVar v vsp) mapped sp
+                Nothing => EApp (EVar g gsp) args2 sp
+            _ => EApp (EVar g gsp) args2 sp
+        Nothing => EApp (fwExpr fwds fn) args2 sp
+    _ => EApp (fwExpr fwds fn) args2 sp
+fwExpr fwds (ELam ns body sp) = ELam ns (fwExpr fwds body) sp
+fwExpr fwds (ELet binds body rec_ sp) = ELet (fwBinds fwds binds) (fwExpr fwds body) rec_ sp
+fwExpr fwds (ELocalFun clauses sp) = ELocalFun (fwClauses fwds clauses) sp
+fwExpr fwds (ECase scrut alts sp) = ECase (fwExpr fwds scrut) (fwAlts fwds alts) sp
+fwExpr fwds (EIf c t el sp) = EIf (fwExpr fwds c) (fwExpr fwds t) (fwExpr fwds el) sp
+fwExpr fwds (EField base f sp) = EField (fwExpr fwds base) f sp
+fwExpr fwds (ERecord rn fields sp) = ERecord rn (fwFields fwds fields) sp
+fwExpr fwds (ERecUpdate base fields sp) = ERecUpdate (fwExpr fwds base) (fwFields fwds fields) sp
+fwExpr fwds (EDo stmts sp) = EDo (fwStmts fwds stmts) sp
+fwExpr fwds (EPi n implicit qty dom cod sp) =
+  EPi n implicit qty (fwExpr fwds dom) (fwExpr fwds cod) sp
+fwExpr fwds (EInfix op l r sp) = EInfix op (fwExpr fwds l) (fwExpr fwds r) sp
+fwExpr fwds (EParen e sp) = EParen (fwExpr fwds e) sp
+fwExpr fwds (EBacktick op l r sp) = EBacktick op (fwExpr fwds l) (fwExpr fwds r) sp
+fwExpr fwds (ESectL op e sp) = ESectL op (fwExpr fwds e) sp
+fwExpr fwds (ESectR e op sp) = ESectR (fwExpr fwds e) op sp
+fwExpr fwds (EAnn value ty sp) = EAnn (fwExpr fwds value) (fwExpr fwds ty) sp
+fwExpr fwds (EInterp multi parts sp) = EInterp multi (fwParts fwds parts) sp
+fwExpr fwds e = e
+
+fwDecl : List Forwarder -> Decl -> Decl
+fwDecl fwds (DFun name pats body sp) = DFun name pats (fwExpr fwds body) sp
+fwDecl fwds (DInstance ctxE head methods sp) = DInstance ctxE head (map (fwDecl fwds) methods) sp
+fwDecl fwds d = d
+
+-- | 把转发器调用 `g f a` 归约成 `f a`（只用于终止性分析；不改变精化/求值）。
+export expandForwarders : List Decl -> List Decl
+expandForwarders decls =
+  case forwardersOf decls of
+    [] => decls
+    fwds => map (fwDecl fwds) decls
+
 export clausesOfDef : String -> List (Pair String (List (Pair (List Pat) Expr))) -> List (Pair (List Pat) Expr)
 clausesOfDef name [] = []
 clausesOfDef name ((Pair n cls) :: rest) = if n == name then cls else clausesOfDef name rest

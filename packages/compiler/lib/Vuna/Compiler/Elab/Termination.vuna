@@ -574,7 +574,9 @@ dfunNames (d :: rest) =
 export checkTerminationDeclsWith : List String -> List Decl -> Check Int
 checkTerminationDeclsWith own decls =
   let
-    defs = groupDefs decls
+    -- 转发器调用先归约成直接调用（`apply f x` → `f x`），三套分析共用改写后的体。
+    resolved = expandForwarders decls
+    defs = groupDefs resolved
     defTbl = HashMap.fromList defs
     ctors = ctorNamesOf decls
     projs = append (projectionsOf defs) (fieldProjectionsOf decls)

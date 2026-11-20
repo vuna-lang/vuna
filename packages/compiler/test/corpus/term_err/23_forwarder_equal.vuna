@@ -1,0 +1,11 @@
+-- 转发器归约后仍是相等调用（`apply bad x` 就是 `bad x`），必须拒绝。
+import Prelude
+
+apply : (Int -> Int) -> Int -> Int
+apply k x = k x
+
+bad : Int -> Int
+bad x = apply bad x
+
+main : Int
+main = bad 0
