@@ -43,10 +43,10 @@ let v_peek = (fun mc0 -> (match mc0 with
 ))
 
 # 71 "Base/Container/PriorityQueue.vuna"
-let v_pop = (fun d4961 mc0 -> (match mc0 with
+let v_pop = (fun d4962 mc0 -> (match mc0 with
   | { f_PriorityQueue_priorityQueueHeap = dtb__20; f_PriorityQueue_priorityQueueCount = dtb__21 } -> (match dtb__20 with
   | C_Heap_HEmpty -> B_dData_dMaybe.C_Maybe_Nothing
-  | C_Heap_HNode (dtb__22, dtb__23, dtb__24, dtb__25) -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = dtb__23; B_dData_dPair.f_Pair_second = { f_PriorityQueue_priorityQueueHeap = (((v_meld d4961) dtb__24) dtb__25); f_PriorityQueue_priorityQueueCount = (dtb__21 - 1) } }))
+  | C_Heap_HNode (dtb__22, dtb__23, dtb__24, dtb__25) -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = dtb__23; B_dData_dPair.f_Pair_second = { f_PriorityQueue_priorityQueueHeap = (((v_meld d4962) dtb__24) dtb__25); f_PriorityQueue_priorityQueueCount = (dtb__21 - 1) } }))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
@@ -68,18 +68,18 @@ let v_isEmpty = (fun mc0 -> (match mc0 with
 let v_fromList = (fun _uctx0 xs -> (((B_dData_dList.v_foldl (fun acc x -> (((v_push _uctx0) x) acc))) v_empty) xs))
 
 # 90 "Base/Container/PriorityQueue.vuna"
-let rec v_drain = (fun _uctx0 (fuel : int) q -> (if (fuel <= 0) then B_dData_dList.C_List_Nil else ((fun nd_uscrut4 -> (match nd_uscrut4 with
+let rec v_drain = (fun _uctx0 (fuel : int) q acc -> (if (fuel <= 0) then (B_dData_dList.v_reverse acc) else ((fun nd_uscrut5 -> (match nd_uscrut5 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__30) -> (match dtb__30 with
-  | { B_dData_dPair.f_Pair_first = dtb__31; B_dData_dPair.f_Pair_second = dtb__32 } -> (B_dData_dList.C_List__x58__x58_ (dtb__31, (((v_drain _uctx0) (fuel - 1)) dtb__32)))
+  | { B_dData_dPair.f_Pair_first = dtb__31; B_dData_dPair.f_Pair_second = dtb__32 } -> ((((v_drain _uctx0) (fuel - 1)) dtb__32) (B_dData_dList.C_List__x58__x58_ (dtb__31, acc)))
   | _ -> failwith "DT: impossible branch"
 )
-  | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dList.C_List_Nil
+  | B_dData_dMaybe.C_Maybe_Nothing -> (B_dData_dList.v_reverse acc)
   | _ -> failwith "DT: impossible branch"
 )) ((v_pop _uctx0) q))))
 
 # 100 "Base/Container/PriorityQueue.vuna"
 let v_toAscList = (fun _uctx0 mc0 -> (match mc0 with
-  | { f_PriorityQueue_priorityQueueHeap = dtb__33; f_PriorityQueue_priorityQueueCount = dtb__34 } -> (((v_drain _uctx0) dtb__34) mc0)
+  | { f_PriorityQueue_priorityQueueHeap = dtb__33; f_PriorityQueue_priorityQueueCount = dtb__34 } -> ((((v_drain _uctx0) dtb__34) mc0) B_dData_dList.C_List_Nil)
   | _ -> failwith "DT: impossible branch"
 ))
 

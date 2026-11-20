@@ -2,7 +2,7 @@ open Vuna_runtime
 type 'a0 t_HashSet = ('a0, bool) B_dContainer_dHashMap.t_HashMap
 
 # 21 "Base/Container/HashSet.vuna"
-let v_empty = (fun d22875 d22876 -> (((B_dContainer_dHashMap.v_fromList d22875) d22876) B_dData_dList.C_List_Nil))
+let v_empty = (fun d22878 d22879 -> (((B_dContainer_dHashMap.v_fromList d22878) d22879) B_dData_dList.C_List_Nil))
 
 # 25 "Base/Container/HashSet.vuna"
 let v_insert = (fun _uctx0 _uctx1 mc0 mc1 -> (let dtb__0 = mc1 in (((((B_dContainer_dHashMap.v_insert _uctx0) _uctx1) mc0) true) dtb__0)))
