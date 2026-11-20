@@ -1,0 +1,14 @@
+-- 命名 Pi 与匿名箭头定义性相等：改名后仍必须报重复实例，不能因为名字不同就放过。
+import Prelude
+
+trait Pretty a where
+  pretty : a -> String
+
+instance Pretty ((n : Int) -> String) where
+  pretty _ = "a"
+
+instance Pretty (Int -> String) where
+  pretty _ = "b"
+
+main : Int
+main = 0

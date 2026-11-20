@@ -1,0 +1,16 @@
+-- 实例头的不同形状必须拿到不同的实例名：命名 Pi（`(n : Int) -> String`）不能与同名 data
+-- 共用占位名（否则 `findInstanceClash` 的名字判据把两个不重叠的 head 误报成重复）。
+trait Pretty a where
+  pretty : a -> String
+
+data X : Type where
+  MkX : X
+
+instance Pretty X where
+  pretty _ = "x"
+
+instance Pretty ((n : Int) -> String) where
+  pretty _ = "int-fn"
+
+main : String
+main = pretty MkX ++ "/" ++ pretty (\n => strFromInt n)

@@ -760,13 +760,6 @@ instTypeTele : Term -> List (Pair String Term) -> Term
 instTypeTele body [] = body
 instTypeTele body ((Pair n k) :: rest) = TPi n True Rig0 k (instTypeTele body rest)
 
--- 实例头 `Show Int` 的类型项（`Dict_Show Int`）。
--- 实例头的实参项：`Pretty Color` → `TGlobal "Color"`（每个类参数一个实参项）。
-export instanceHeadTerm : Expr -> Term
-instanceHeadTerm (EApp fn (a :: rest) sp) = TGlobal (argNameOf a)
-instanceHeadTerm (EVar n sp) = TGlobal (rnameKey n)
-instanceHeadTerm _ = TGlobal "Int"
-
 -- 实例里出现 trait 没声明的方法 ⇒ 硬错误（不得静默忽略多余方法）。
 -- 方法短名的规范形式：同一方法的两种写法（`eq` 与 `==`、`lt` 与 `<` …）视为同名。
 -- 库里方法可以是标识符或运算符，deriving/手写实例用哪一种都应命中。

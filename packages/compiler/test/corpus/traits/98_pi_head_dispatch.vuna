@@ -1,0 +1,19 @@
+-- 命名 Pi 与匿名箭头是同一个类型：两个实例必须同名同体（不再是两个占位名），
+-- 实例搜索与字典选择都必须命中同一份。
+trait Pretty a where
+  pretty : a -> String
+
+instance Pretty ((n : Int) -> Int) where
+  pretty _ = "int-pi"
+
+instance Pretty ((b : Bool) -> Bool) where
+  pretty _ = "bool-pi"
+
+f : Int -> Int
+f n = n + 1
+
+g : Bool -> Bool
+g b = b
+
+main : String
+main = pretty f ++ "/" ++ pretty g

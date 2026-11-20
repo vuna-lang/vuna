@@ -63,7 +63,10 @@ ID 是稳定引用（`层前缀-序号`）：条目关闭即删除该行（历�
 | EC-20 | `Meta.vuna` 的 `ctorRefTerm*` | D | Ec 版与全局版两份实现 | 开放 |
 | EC-21 | `Trait.vuna` 的 `instArgAt` | A | 实参取尽时伪造 `TGlobal "Int"`（调用点已被长度条件挡住，是不可达的兜底） | 开放 |
 | EC-23 | `Trait.vuna` 的 `methodClausesNamed` | C | 实例方法按短名收集（跨类同名方法会被并进来） | 开放 |
-| EC-26 | `InstName.vuna` 的 `exprNameFor`/`argNameOf` | A | 非 `EVar`/`EApp`/`EInt`/`EStr` 头伪造 `"X"` 名；`argNameOf` 的唯一消费者 `instanceHeadTerm` 无调用方 | 开放 |
+| EC-24 | `Trait.vuna` 的 `checkBodyAtEndFuel` | A | 剩余 Pi 静默 η 展开，`TC_DefFewerParams` 永不触发 | 已清（不再合成 `\_arityN` 参数：body 类型须与剩余 Pi η-收缩相容，否则 `TC_TypeMismatch`；`TC_DefFewerParams` 本就不存在于错误表；夹具 `dt/100`、`dt_err/113`） |
+| EC-25 | `Trait.vuna` 的 `applyCtxSubstsTo` | A | 注释的索引算术与实现不符 | 已清（q = nTele + k + 1，与注释一致） |
+| EC-26 | `InstName.vuna` 的 `exprNameFor`/`argNameOf` | A | 非 `EVar`/`EApp`/`EInt`/`EStr` 头伪造 `"X"` 名；`argNameOf` 的唯一消费者 `instanceHeadTerm` 无调用方 | 已清（命名 Pi 与匿名箭头同名 `Pi_dom_cod`；其余形状按规范编码 `?<hex>` 定址；删死码 `argNameOf`/`instanceHeadTerm`；夹具 `traits/97`、`98`、`dt_err/41`） |
+| EC-27 | `Prelude.vuna` 的 `ityToTermEnv` | A | `IVar` 查不到回退 `TGlobal`（拼错变全局引用） | 已清（`checkRuntimeContract` 自证每个 `IVar` 都被 `IPi` 绑定，否则 ICE；回退分支不可达） |
 | EC-28 | `Elab/Driver.vuna` 的 `resolveDictGoalsFix` | C | 字典收敛固定 8 轮 | 开放 |
 | EC-29 | `Elab/Driver.vuna` 的实例索引自检 | D | 只在 `--debug-perf` 下跑 | 开放 |
 | EC-30 | `Impl.vuna` 的 check 位 `if` | A | 分支检查失败后整体重推断（位置/期望类型信息丢失） | 开放 |
