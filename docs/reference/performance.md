@@ -77,17 +77,13 @@
 
 读法：
 
-- `minimal` 是**绝对地板**（最小可执行程序，纯 Int）：runtime + 最小 base 闭包就有
-  ocaml 33 个 `.ml` / 166 KB、native 7 个 `.s` / 270 KB、wasm 单个 361 KB `main.wat`
-  （汇编后 44 KB `main.wasm`）。程序本身只有 2 行。
+- `minimal` 是**绝对地板**（最小可执行程序，纯 Int）：runtime + 最小 base 闭包，
+  ocaml 33 个 `.ml` / 166 KB、native 7 个 `.s` / 270 KB、wasm 361 KB（汇编后 44 KB）。
 - `hello` 是**最小效应程序**（一次 Console 打印）：多一层 `Base.Effect.Core` 的 handler 面
-  （`Fs` / `Net` / `Process` / `Clock` … 整片效应模块）⇒ ocaml 55 个 `.ml` / 249 KB、
-  native 10 个 `.s` / 326 KB、wasm 454 KB（57 KB）。它比 `minimal` 多 22 个文件 / 83 KB
-  而源码只多 6 行——产物大小由闭包决定，不随源码行数走。
-- `defs-*` 在**单文件**里加定义：文件数不变（33 / 7 / 1），文本随定义数线性（ocaml
-  168→183→349 KB，native 274→305→624 KB）。
-- `mods-*` 在**包内**加模块：文件树随模块数线性（ocaml 43→133 个 `.ml`，
-  native 17→107 个 `.s`），wasm 始终是单文件 `main.wat`。
+  （`Fs`/`Net`/`Process`/`Clock` …）⇒ 55 个 `.ml` / 249 KB、10 个 `.s` / 326 KB、wasm 454 KB
+  ——比 `minimal` 多 22 个文件 / 83 KB 而源码只多 6 行：产物大小由闭包决定。
+- `defs-*` / `mods-*` 分别加顶层定义与包内模块：ocaml 文件数 33（定义不变）、43→133（模块），
+  文本随规模线性（defs 168→183→349 KB，native 274→305→624 KB）；wasm 始终单文件。
 - `self` 是真实最大负载：ocaml 165 个 `.ml` / 5.5 MB / 5.5 万行 → 18.0 MB 可执行
   （`-g`，含调试信息）；native 133 个 `.s` / 26 MB / 113 万行 → 6.6 MB 静态 ELF。
   tree-shaking 已由 `Ir.Analysis.reachableDefs` 做完（编译器自身只有 13 个函数 / 240 行未被引用）；
@@ -130,9 +126,8 @@ Vuna.Compiler.Driver.ToolPayload`），于是每轮都补一遍 lib check（`col
 同一类的第二处（`IrDump` / `Ir.Render` 搬进 cli 包），当前 ~10.8 s，门禁
 `checks.vuna-single-pass`。
 
-冷 `build --no-compile compiler` 的墙钟读数**极不稳定**（同机同源码实测 12.5 / 15.9 /
-28.0 / 38.1 s）：它按直接依赖分层并行，与宿主负载强相关，且 `TMPDIR` 里的临时候选产物
-会让同一 `--out` 目录的第二次调用假快。**只报 user+sys 或同时报 loadavg。**
+冷 `build --no-compile compiler` 的墙钟**极不稳定**（同机同源码实测 12.5–38.1 s：按直接依赖
+分层并行，且 `TMPDIR` 里的临时候选产物会让同一 `--out` 的第二次调用假快）：只报 user+sys，或同时报 loadavg。
 
 ### 重复工作与按名线性扫表（已消除）
 
