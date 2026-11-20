@@ -1,0 +1,7 @@
+-- 定义体参数少于签名且 body 不是函数值：按 `TC_TypeMismatch` 报，不再合成 λ 参数
+-- 把错误掩盖成「参数太多」。
+foo : Int -> Int -> Int
+foo x = x + 1
+
+main : Int
+main = 0

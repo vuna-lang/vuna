@@ -222,10 +222,11 @@ vuna/base/compiler 三包源码统一按当前语言能力书写，新增/修改
   `export`；同一模块不能同时写（报 `RN_DuplicateExport`），不写列表时模块默认私有
   （见 [frontend-syntax.md](frontend-syntax.md) §6）。
 
-## 函数定义与 η 展开
+## 函数定义与 η 收缩
 
-定义子句的参数可以少于签名：剩余 Pi 链按 **η 展开**自动补参数（`\_arityN`，body 应用到
-这些新参数），所以 `f : Int -> Int` 配 `f = inc` 合法；参数**多于**签名仍报
+定义子句的参数可以少于签名：剩余 Pi 与 body 的类型按 `conv` 做 **η 收缩**相容检查，
+所以 `f : Int -> Int` 配 `f = inc` 合法（body 本身就是函数值）。精化**不合成** `\_arityN`
+参数；body 不是函数值时按普通类型不匹配（`TC_TypeMismatch`）报错。参数**多于**签名仍报
 `[TC_DefMoreParams]`。多 clause 与 where 绑定共用同一条精化路径，行为一致。
 定义形式本身见 [frontend-syntax.md](frontend-syntax.md) §5。
 

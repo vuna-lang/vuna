@@ -1,16 +1,16 @@
--- 定义参数少于签名时按剩余 Pi 链做 η 展开（补 `\_arityN` 并把 body 应用到新参数）；
--- 参数不足本身不是错误。
+-- 定义参数少于签名时不做 η 展开：body 的类型必须已经是剩余 Pi（`inc2 = inc`、`add2 = addFn`
+-- 都是 body 本身就是函数值）。参数不足且 body 不是函数值时按普通类型不匹配报错。
 inc : Int -> Int
 inc x = x + 1
 
--- 零子句定义：body 是函数值，η 展开成 `\_arity0 => inc _arity0`。
+-- 零子句定义：body 是函数值，直接按签名检查（IR 里不额外生成闭包）。
 inc2 : Int -> Int
 inc2 = inc
 
 addFn : Int -> Int -> Int
 addFn x y = x + y
 
--- 两个剩余参数一起展开。
+-- 两个剩余参数：同样 body 本身就是函数值。
 add2 : Int -> Int -> Int
 add2 = addFn
 

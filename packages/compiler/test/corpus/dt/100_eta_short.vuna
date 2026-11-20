@@ -1,0 +1,16 @@
+-- 定义子句参数少于签名：不合成 `_arityN` 参数，body 的类型与剩余 Pi 按 conv 的 η 收缩相容。
+-- 零参别名、部分应用、实例方法三种形态都必须通过。
+add : Int -> Int -> Int
+add x y = x + y
+
+alias : Int -> Int -> Int
+alias = add
+
+compose : (b -> c) -> (a -> b) -> a -> c
+compose f g x = f (g x)
+
+compose2 : (b -> c) -> (a -> b) -> a -> c
+compose2 f = compose f
+
+main : Int
+main = alias 1 2 + compose2 (\x => x + 1) (\x => x * 2) 20

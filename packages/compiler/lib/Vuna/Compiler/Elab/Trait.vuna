@@ -1484,42 +1484,18 @@ bindIndexBinderFuel fuel globals ctx ec rig name dom clo pats body sp =
             Pair inner ec1 => OkC (Pair (TLam name rig Nothing spanEmpty inner) ec1)
       )
 
--- 模式用完后仍剩 Pi 时按 η 展开：body 是 lambda 时按 check 处理；
--- 否则按签名剩余 Pi 补 `\_arityN`（N 取当前上下文深度保证唯一），并把 body **应用**
--- 到这些新参数，整体按原签名继续 check——`f : A -> B` 配 `f = g` 因此成立。
--- 隐式 binder 沿用既有规则：index 域绑成擦除 λ（隐式实参由精化器插入），其它域仍是
--- ImplicitParamKind。
+-- 模式用完后仍剩 Pi：隐式 Pi 继续绑定（字典 / index binder 由精化器插入）；显式 Pi 交给
+-- `checkE` 按双向检查处理——body 本身是函数类型时由 `conv` 的 η 收缩接受（`f : A -> B`
+-- 配 `f = g`），不是函数时报 `TC_TypeMismatch`。这里**不合成** `\_arityN` 参数：那会把
+-- 「参数写少了」掩盖成应用错误，生成的闭包也不在源码里。
 checkBodyAtEndFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> Value -> Span -> Check (Pair Term Ec)
 checkBodyAtEndFuel fuel globals ctx ec body expected sp =
   if fuel <= 0 then
     icFuel "binder check"
   else
-    case body of
-      ELam names lambdaBody lambdaSp => Vuna.Compiler.Base.Common.bind (checkE globals ctx ec body expected) (\p => Vuna.Compiler.Base.Common.bind (resolveRowGoalsCtx globals ctx (secondOf p) sp) (\ec2 => OkC (Pair (firstOf p) ec2)))
-      _ =>
-        case forceVal ec expected of
-          VPi name implicit rig dom clo =>
-            if implicit then
-              if isDictDomain ec dom then bindDictBinderFuel (fuel - 1) globals ctx ec rig name dom clo [] body sp else if isImplicitDomain ctx ec dom then bindIndexBinderFuel (fuel - 1) globals ctx ec rig name dom clo [] body sp else tcErr0 sp ImplicitParamKind
-            else
-              let
-                lvl = ctxDepth ctx
-                etaName = "_arity${lvl}"
-                v = freshVarValue etaName lvl
-                ctx2 = ctxBindValue etaName dom ctx
-                body2 = EApp body [EVar (classifyName etaName) sp] sp
-              in Vuna.Compiler.Base.Common.bind (rigForLinearDomain ec sp etaName rig dom) (
-                  \etaRig =>
-                    Vuna.Compiler.Base.Common.bind (checkBodyAtEndFuel (fuel - 1) globals ctx2 ec body2 (applyClosure clo v) sp) (
-                        \p =>
-                          case p of
-                            Pair inner ec1 =>
-                              let
-                                inner2 = if isOpaqueRuntimeTyIn ec1 ctx dom then wrapOpaqueUses [0] inner else inner
-                              in OkC (Pair (TLam etaName etaRig Nothing spanEmpty inner2) ec1)
-                      )
-                )
-          _ => Vuna.Compiler.Base.Common.bind (checkE globals ctx ec body expected) (\p => Vuna.Compiler.Base.Common.bind (resolveRowGoalsCtx globals ctx (secondOf p) sp) (\ec2 => OkC (Pair (firstOf p) ec2)))
+    case forceVal ec expected of
+      VPi name implicit rig dom clo => if implicit then if isDictDomain ec dom then bindDictBinderFuel (fuel - 1) globals ctx ec rig name dom clo [] body sp else if isImplicitDomain ctx ec dom then bindIndexBinderFuel (fuel - 1) globals ctx ec rig name dom clo [] body sp else tcErr0 sp ImplicitParamKind else Vuna.Compiler.Base.Common.bind (checkE globals ctx ec body expected) (\p => Vuna.Compiler.Base.Common.bind (resolveRowGoalsCtx globals ctx (secondOf p) sp) (\ec2 => OkC (Pair (firstOf p) ec2)))
+      _ => Vuna.Compiler.Base.Common.bind (checkE globals ctx ec body expected) (\p => Vuna.Compiler.Base.Common.bind (resolveRowGoalsCtx globals ctx (secondOf p) sp) (\ec2 => OkC (Pair (firstOf p) ec2)))
 
 checkBindersFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> List Pat -> Expr -> Value -> Span -> Check (Pair Term Ec)
 checkBindersFuel fuel globals ctx ec [] body expected sp =

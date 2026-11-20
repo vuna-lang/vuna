@@ -132,7 +132,7 @@
 | `axiom` | `axiom t : Type` | 无体 / 类型层；运行时使用报 `CG_AxiomAtRuntime` | `Elab.Data` |
 | `extern` | `extern f "c_name" : T` | 绑定宿主符号 | `Elab.Data` |
 | 抽象修饰 | `opaque` / `transparent` / `abstract` | 对下游隐藏 / 显式默认 / 本模块 seal | `Frontend.Parser`、[language.md](language.md) |
-| 签名 | `f : C a => A -> B` | 可带约束前缀；η 展开：子句参数少于签名时自动补 | `Elab.Term.Support`、[language.md](language.md) |
+| 签名 | `f : C a => A -> B` | 可带约束前缀；η 收缩：子句参数少于签名时 body 须已是函数值 | `Elab.Trait`、[language.md](language.md) |
 | 子句块 | `f 0 = ...` 紧接 `f n = ...` | 同名子句必须相邻成块（块内只有空行 / 注释）；零参定义只能一条；子句不得被前面的子句覆盖 | `Frontend.Parser`（`PS_ClauseNotAdjacent` / `PS_DefinitionDuplicate` / `PS_ClauseShadowed`）、`Elab.Match`（`TC_ClauseUnreachable`）、[language.md](language.md) |
 | fixity | `infixl 6 +` / `infixr 5 ::` / `infix 4 ==` | 声明位在 imports 之后、第一个声明之前；**不接受 `= target` 别名** | `Frontend.Parser.parseFixityDecl`、[operators.md](operators.md) |
 | 运算符定义 | `(<+>) : Int -> Int -> Int` + `(<+>) = add` | 符号名与标识符同等；声明位带括号 | `Frontend.Parser`、[operators.md](operators.md) |

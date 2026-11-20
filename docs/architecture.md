@@ -126,8 +126,8 @@ Elab/codegen 看不到模板）。fmt/lint/index/doc 只 parse，仍按 `EInterp
 （卡住的类型族应用）另走「不透明擦除值 + 恒等 cast」表示（见 [effects.md](reference/effects.md) §5）；元变量求解在
 `Core.Conv.solveMeta`（created-depth 随 `Sols` 就地检查，非空 spine 走 Miller pattern）；
 已解元变量进项只经 `Elab.Meta.zonkTerm`；`axiom` 是无体擦除定义（`DtAxiom`，运行时使用由
-`Lowering.Checks.checkNoAxiomRuntime` 拒绝），定义参数少于签名时按剩余 Pi η 展开。细节见
-[core.md](reference/core.md)。
+`Lowering.Checks.checkNoAxiomRuntime` 拒绝），定义参数少于签名时 body 的类型须与剩余 Pi
+η-收缩相容（不合成额外 λ）。细节见 [core.md](reference/core.md)。
 
 **相等 / 实例 / 证明**：`==` / 比较是证据驱动的（Int/String 内建或 `Eq` / `Ord` 字典，
 无泛型兜底）；约束实例与参数化 `deriving` 可用，命名实例不存在；隐式值参数 `{x : a}` 与
