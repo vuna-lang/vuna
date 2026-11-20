@@ -50,8 +50,8 @@ span / 计数 / 日志 / 采样栈写成 **Chrome Trace Event JSONL**；关闭�
 | --- | --- | --- |
 | 0 | 无 | 每次探针一次 `Lazy.force`（无分配、无 I/O） |
 | 1 | 阶段 span + 计数器 | 每 span 两次时钟读 + 一行 JSON |
-| 2 | + 逐定义 span + `dbg!` 日志事件 | 每定义两次时钟读（compiler 实测 10933 条 `vuna.def.elab` / 5470 个定义） |
-| 3 | + CPU/内存采样 | 采样 1%/默认 1 ms、固定 8192 槽环形数组 |
+| 2 | + 逐定义 span + `dbg!` 日志事件 | 每定义两次时钟读（compiler 实测 12773 条 `vuna.def.elab`） |
+| 3 | + 逐表达式节点 span（`vuna.elab.term.core`）+ 高频计数器 + CPU/内存采样 | 每表达式节点一次时钟读（compiler 实测 3.4×10^5 条）；采样 1%/默认 1 ms、固定 8192 槽环形数组 |
 
 级差是**探针侧**的（`VUNA_OBS` 只被运行时读一次）：level 1 不发逐定义事件、level 1/2 不
 启采样。步数计数（`vuna.counter.steps`）**尚未实现**，见 §10。
@@ -104,6 +104,8 @@ span / 计数 / 日志 / 采样栈写成 **Chrome Trace Event JSONL**；关闭�
   （对象库读写；`obsSpanEff` 的 begin/end token 对）、`vuna.term`（终止性整段）、
   `vuna.term.sct`（每个走 SCT 兜底的 SCC 一次）；
 - `ph:"X"` + `args.def`（level ≥ 2）：`vuna.def.elab`（逐定义）；
+- `ph:"X"` + `args.def`（level ≥ 3）：`vuna.elab.term.core`（逐表达式节点，`args.def` 是
+  形态名 `EVar` / `EApp` / …）；一次 check 是 3.4×10^5 级，放 level 2 会把 trace 撑大一个量级；
 - `ph:"i"` 阶段标记（`Eff` 边界，零宽度）：`vuna.load`、`vuna.resolve`、`vuna.iface.compute`、
   `vuna.iface.write`、`vuna.codegen.split`；
 - `ph:"C"` 计数：`vuna.counter.cache.hit`（接口对象 / 地址表 / check 结果命中）、
@@ -130,10 +132,10 @@ span / 计数 / 日志 / 采样栈写成 **Chrome Trace Event JSONL**；关闭�
 `vuna.counter.core.force` / `vuna.counter.alloc.words` /
 `vuna.counter.heap.words` / `vuna.counter.steps`。加插桩时**不要**改名（工具/看板按名字聚合）。
 
-- 档次读数（在 `ph:"X"` 的 `args` 上，**不是**独立 count 事件）：`args.allocWords` /
-  `args.heapWords`（整数，span 期间分配/堆字数增量）；`validate` 只校验它们是整数，
-  不对 `vuna.counter.alloc.words` / `vuna.counter.heap.words` 做存在性断言（这两个名字
-  已从词汇表移除）；
+- 档次读数（在 `ph:"X"` 的 `args` 上，**不是**独立 count 事件）：`args.allocWords`
+  （整数，span 期间的分配字数增量）；`validate` 只校验它是整数，
+  不对 `vuna.counter.alloc.words` 做存在性断言（该名字已从词汇表移除）；
+  峰值内存不可用 span 字段表达（进程高水位不是区间增量，见 [debt.md](debt.md) D81）；
 - 采样（`ph:"i"`，`args.stack`）：`vuna.sample.cpu`、`vuna.sample.mem`；
 - 日志（`ph:"i"`，`args.text`）：`vuna.log`（`dbg!` 与库层 `obsLog` 共用）；
 - 标记（`ph:"i"`）：用户/编译器自定义名字（`vuna.mark.*` 前缀可选）。
