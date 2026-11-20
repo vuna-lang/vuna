@@ -1556,6 +1556,77 @@ machineRunGlobal = "Base.Effect.Core.machineRun"
 addDepOnce : String -> List String -> List String
 addDepOnce d ds = if memName d ds then ds else append ds [d]
 
+-- | 程序是否需要机器循环 `machineRun`。
+--
+-- 触发点都在 CPS **之前**就存在，三种形态取并集：
+--   * 直接风格的核心 handler 组合子（`handleCore…` 等全局引用）：`cpsDefs` 据此
+--     合成 `@ir@m@run`；
+--   * `runThunk` 跳板（`mTrampolineBody` 会把它包成 `@ir@m@run`）；
+--   * lowering 已产出的 `@ir@cps@*` / `@ir@m@*` 协议符号，以及直接构造的
+--     `Base.Effect.Core.Control`。
+--
+-- 可达性在 CPS 之前算（`mStepsDef` 的依赖边是 CPS 之后才补的），所以要按 CPS 前的
+-- 形状判一次；纯程序（无 handler / 无效应）三种形态都没有。
+-- ⚠️ 与 `cpsDefs` / `mTrampolineBody` 的触发条件手工同步：漏判会让代码引用到
+-- 不存在的 `machineRun`，后端会以 internal 错误停下（不会静默生成坏代码）。
+export usesMachineLoop : List IrDef -> Bool
+usesMachineLoop [] = False
+usesMachineLoop (d :: rest) =
+  case irDefBody d of
+    Nothing => usesMachineLoop rest
+    Just b => if mentionsMachine b then True else usesMachineLoop rest
+
+mentionsMachine : Ir -> Bool
+mentionsMachine (IrGlobal n) = isCoreHandleCombinator n || n == runThunkName
+mentionsMachine (IrRt n) = isMachineProtocolName n
+mentionsMachine (IrRtApp sym args) = isMachineProtocolName sym || anyMachine args
+mentionsMachine (IrCtor fam _ _ args) = fam == machineCtl || anyMachine args
+mentionsMachine (IrRecord _ _ fields) = anyMachineFields fields
+mentionsMachine (IrProj base _ _ _) = mentionsMachine base
+mentionsMachine (IrRecUpd base _ fields _) = mentionsMachine base || anyMachineFields fields
+mentionsMachine (IrCast _ _ inner) = mentionsMachine inner
+mentionsMachine (IrLet _ scrut body) = mentionsMachine scrut || mentionsMachine body
+mentionsMachine (IrLam _ _ body) = mentionsMachine body
+mentionsMachine (IrApp _ f a) = mentionsMachine f || mentionsMachine a
+mentionsMachine (IrIf c t e) = mentionsMachine c || (mentionsMachine t || mentionsMachine e)
+mentionsMachine (IrCase _ _ scrut alts) = mentionsMachine scrut || anyMachineAlts alts
+mentionsMachine (IrNatCase scrut _ z s c) =
+  mentionsMachine scrut || (anyMachineAltM z || (anyMachineAltM s || anyMachineAltM c))
+mentionsMachine (IrConcatMany parts) = anyMachine parts
+mentionsMachine (IrEffThunk _ _ _ _ prim) = mentionsMachine prim
+mentionsMachine _ = False
+
+isMachineProtocolName : String -> Bool
+isMachineProtocolName n =
+  n
+    == irCpsPerformName
+    || n
+    == irCpsHandleName
+    || n
+    == irCpsSelfName
+    || n
+    == irMPerformName
+    || n
+    == irMHandleName
+    || n
+    == irMSelfName || n == irMApplyName || n == irMRunName || n == irMRunEffName || n == irMDoneName
+
+anyMachine : List Ir -> Bool
+anyMachine [] = False
+anyMachine (x :: rest) = mentionsMachine x || anyMachine rest
+
+anyMachineFields : List (Pair String Ir) -> Bool
+anyMachineFields [] = False
+anyMachineFields ((Pair _ fe) :: rest) = mentionsMachine fe || anyMachineFields rest
+
+anyMachineAlts : List IrAlt -> Bool
+anyMachineAlts [] = False
+anyMachineAlts (alt :: rest) = mentionsMachine (irAltBodyOf alt) || anyMachineAlts rest
+
+anyMachineAltM : Maybe IrAlt -> Bool
+anyMachineAltM Nothing = False
+anyMachineAltM (Just alt) = mentionsMachine (irAltBodyOf alt)
+
 mStepsDef : IrDef -> IrDef
 mStepsDef (IrDef n ar deps sigTy body r g sp) =
   let

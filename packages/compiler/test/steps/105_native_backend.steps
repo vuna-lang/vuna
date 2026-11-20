@@ -461,13 +461,13 @@ exit: 0
 run: sh -c 'd="$TMPDIR/inc"; mkdir -p "$d/app" "$d/lib"; printf "[package]\nname = \"inc\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "module Util where\n\nexport answer : Int\nanswer = 41\n" > "$d/lib/Util.vuna"; printf "import Util\n\nmain : Int\nmain = answer + 1\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --no-compile --out "$TMPDIR/inc-out" "$d"'
 exit: 0
 run: sh -c 'cd "$TMPDIR/inc-out" && sh build.sh'
-out-contains: native-build: compiled 8 of 8
+out-contains: native-build: compiled 3 of 3
 run: sh -c 'cd "$TMPDIR/inc-out" && sh build.sh'
-out-contains: native-build: compiled 0 of 8
+out-contains: native-build: compiled 0 of 3
 run: "$TMPDIR/inc-out/bin/inc" 2>&1
 out-equals: 42
 run: sh -c 'd="$TMPDIR/inc"; printf "module Util where\n\nexport answer : Int\nanswer = if 1 == 1 then 41 else 0\n" > "$d/lib/Util.vuna"; "$VUNA" build --target native --no-compile --out "$TMPDIR/inc-out" "$d" && cd "$TMPDIR/inc-out" && sh build.sh'
-out-contains: native-build: compiled 1 of 8
+out-contains: native-build: compiled 1 of 3
 run: "$TMPDIR/inc-out/bin/inc" 2>&1
 out-equals: 42
 

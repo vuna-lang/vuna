@@ -1931,11 +1931,17 @@ build program printResult =
               Nothing => NativeRejected (NativeUnsupported "native target: custom Show entry is not supported yet")
               Just kind =>
                 let
-                  seeds =
+                  -- 机器循环只在 lowering 产出 `@ir@m@run` 时才需要：CPS 把它改写成
+                  -- `machineRun`，而那条依赖是 CPS 之后才补的（可达性在 CPS 之前算）。
+                  -- 纯程序（无 handler / 无效应）不注入，也就不再整份带进产物。
+                  baseSeeds =
                     case runMainM of
-                      Just rm => append ["Base.Effect.Core.machineRun", mainName, rm] (irEntryHandlersOf e)
-                      Nothing => append ["Base.Effect.Core.machineRun", mainName] (irEntryHandlersOf e)
-                  ordered = if kind == "float" then reachableDefs (floatRenderName :: seeds) defs else reachableDefs seeds defs
+                      Just rm => append [mainName, rm] (irEntryHandlersOf e)
+                      Nothing => append [mainName] (irEntryHandlersOf e)
+                  seeds0 = if kind == "float" then floatRenderName :: baseSeeds else baseSeeds
+                  reach0 = reachableDefs seeds0 defs
+                  seeds = if usesMachineLoop reach0 then "Base.Effect.Core.machineRun" :: seeds0 else seeds0
+                  ordered = if usesMachineLoop reach0 then reachableDefs seeds defs else reach0
                 in case cpsDefsMachine ordered of
                   Err msg => NativeRejected (NativeUnsupported msg)
                   Ok cpsOrdered =>

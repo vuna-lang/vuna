@@ -75,15 +75,19 @@
 | self | ocaml | 166 | 11,955,213 | 59,319 | 25,200,920 | 436 / 20,061 |
 | self | native | 146 | 48,263,150 | 1,983,880 | 12,313,216 | 16,366 / 3,490 |
 
+native 的纯程序不再带机器（D110 已关闭）：`minimal` 2 个 `.s` / 118 KB、`defs-1000`
+7 → 2 个、686 → 480 KB、`mods-100` 107 → 102 个、373 → 166 KB；`hello`（最小效应
+程序，带 Console handler）仍是 10 个 `.s`，与之前逐字节一致。
+
 读法：
 
 - `minimal` 是**绝对地板**（最小可执行程序，纯 Int）：runtime + 最小 base 闭包，
-  ocaml 33 个 `.ml` / 166 KB、native 7 个 `.s` / 270 KB、wasm 361 KB（汇编后 44 KB）。
+  ocaml 33 个 `.ml` / 166 KB、native 2 个 `.s` / 118 KB、wasm 361 KB（汇编后 44 KB）。
 - `hello` 是**最小效应程序**（一次 Console 打印）：多一层 `Base.Effect.Core` 的 handler 面
-  （`Fs`/`Net`/`Process`/`Clock` …）⇒ 55 个 `.ml` / 249 KB、10 个 `.s` / 326 KB、wasm 454 KB
+  （`Fs`/`Net`/`Process`/`Clock` …）⇒ 55 个 `.ml` / 249 KB、10 个 `.s` / 355 KB、wasm 454 KB
   ——比 `minimal` 多 22 个文件 / 83 KB 而源码只多 6 行：产物大小由闭包决定。
 - `defs-*` / `mods-*` 分别加顶层定义与包内模块：ocaml 文件数 33（定义不变）、43→133（模块），
-  文本随规模线性（defs 168→183→349 KB，native 274→305→624 KB）；wasm 始终单文件。
+  文本随规模线性（defs 168→183→349 KB，native 121→153→480 KB）；wasm 始终单文件。
 - `self` 是真实最大负载：ocaml 165 个 `.ml` / 5.5 MB / 5.5 万行 → 18.0 MB 可执行
   （`-g`，含调试信息）；native 133 个 `.s` / 26 MB / 113 万行 → 6.6 MB 静态 ELF。
   tree-shaking 已由 `Ir.Analysis.reachableDefs` 做完（编译器自身只有 13 个函数 / 240 行未被引用）；

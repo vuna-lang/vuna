@@ -19,6 +19,9 @@
 - **canonical 产物是按模块切分的 Intel 语法汇编文件集**：`runtime.s`（运行时常量 / `.bss` /
   `rt_*` 函数）加每模块一个 `<Module/Path>.s`（`Main.s` 是入口模块，含 `_start`）。
   文本可审查、可 diff，不嵌入时间戳/绝对路径；同一 IR 的文件集逐字节确定。
+- 可达根 = 入口 `main` + 入口预装的 handler（动作入口再加 `runMain`）。`Base.Effect.Core.machineRun`
+  只在程序里出现 handler 组合子 / `runThunk` 跳板时才进根集（`Ir.Cps.usesMachineLoop`），
+  纯程序不带机器。
 - `vuna compile <ENTRY|PKG> <OUT> --target native` → 写出上述 `.s` 文件集（不产 `build.sh`）。
 - `vuna build <PKG> --target native [--out OUT] [--no-compile]`：
   - 默认 `OUT = <pkg>/.output`；显式 `--out` 且在 workspace（多包）时按 `<OUT>/<pkg>`；

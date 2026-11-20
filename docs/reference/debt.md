@@ -97,7 +97,6 @@
 | D106 | `.s` 文件集还没有承担自举锚点：native 自举尚未成为阻塞门禁，`seed-selfhost` 仍只认 OCaml 种子，也没有发布资产 + 哈希 pin 的获取路径。目标形态与前提见 [bootstrap.md](bootstrap.md)「锚点演进」 | `nix/checks/seed-selfhost.sh`（只读 `seed/`）；`nix/run-tests.nix` 的 backend-check 非阻塞；`vuna build --no-compile --target native` 产物 | 后续（前置：native selfhost 通过 + 平台锁定决策） |
 | D107 | OCaml 后端退役后没有替代的独立语义 oracle：固定点只剩同一 codegen 的自洽回归，跨后端差分由 suite + wasm 交叉承担；退役前需要把这些覆盖写成可执行门禁 | [architecture-target.md](../architecture-target.md) D7、[bootstrap.md](bootstrap.md)「锚点演进」；`test/suite.toml` 的 `pure_cross` 与 `effect_native` 家族 | 后续（与 D106 同批决策） |
 | D108 | native 产物的体量仍以**保守 GC 需要的槽清零**为主：裁剪掉多余清除后，编译器自身约 189 万行汇编，其中 `mov qword ptr [rbp-N], 0` 仍占 ~13%；剩余清除都是在 GC 点前真的需要清的死槽。再往下压需要换根集模型（精确定位栈图 / 槽复用），不是 peephole。除此之外没有指令选择/窥孔优化（例如整数算术走 `rt_add` 调用而非内联），lambda 体占 ~47% | `packages/compiler/lib/Vuna/Compiler/Native/Module.vuna`（`clearDeadSlots` / `pruneClears` / `clearSlotsInstrs`）、`Native/Render.vuna`；[performance.md](performance.md)「产物规模」 | 后续（精确栈图是设计变更，先不做） |
-| D110 | `machineRun` 是无条件可达根（`Native/Module.build` 的 `seeds` 恒含 `Base.Effect.Core.machineRun`），所以**纯程序**也带一份机器：`arith` 的 native 产物从 2 个 `.s` / 119 KB 变成 7 个 / 274 KB（多出 `Base/Effect/Core.s`）。wasm 侧没有这个代价（机器代码仍经 DCE） | `packages/compiler/lib/Vuna/Compiler/Native/Module.vuna`（`seeds`）；[benchmarks.md](benchmarks.md) §1.4「产物」 | 后续（只有程序里出现 handler / 效应时才把机器加入根集） |
 
 ## wasm 后端
 
