@@ -76,7 +76,7 @@
 
 | D116 | `fmt` 在 `export import M (T(..), ...)` 上会重复展开导出项：每跑一次列表翻倍（实测 `Vuna.Cli.Spec` 的导出面从 1842 字节涨到 3650，再跑继续翻倍） | `packages/toolchain/lib/Vuna/Fmt/Decl.vuna`（import 渲染）；复现：给模块加一条含 `T(..)` 的 `export import`，连跑两次 `vuna fmt` | 后续（当前改成显式 `import` 规避） |
 
-| D118 | `vuna dev obs summarize` 在整个事件表上用 `Base.Data.Sort.sortBy`（插入排序，`stdlib.md` 明确「适合小表」）按 `ts` 排序：223k 事件 / 35 MB 的 level 2 trace 要 **133 s**（~0.6 ms/事件），事件翻倍后超过 10 min 不返回；`checks.vuna-obs-schema` 因此在这一步单步就要 2 min+。同一个 trace 的 `vuna dev obs validate` 只要 2.7 s，说明开销在折叠前的排序而不在读盘/解析 | `packages/dev/lib/Vuna/Obs/Summarize.vuna`（`groupByThread` 后的 `Sort.sortBy`）、`packages/base/lib/Base/Data/Sort.vuna`；实测 `VUNA_OBS=2 vuna check packages/compiler` 的 trace | 后续（按线程做一遍线性归并，或利用「子 span 先落盘」直接折叠） |
+| D118 | `vuna dev obs summarize` 折叠前按 `ts` 排每个线程的 span 用的是 `Base.Data.Sort.sortBy`（插入排序，`stdlib.md` 明确「适合小表」）：419k span / 67 MB 的 level 2 trace 现在 **5.0 s**（线程分组此前是 O(n²) 的 `append items [item]`，已改成前插累积：同一 trace 14 min → 5.0 s；`checks.vuna-obs-schema` 整步 40 s）。trace 再大仍会退化 | `packages/dev/lib/Vuna/Obs/Summarize.vuna`（`sortBySpanTs`）、`packages/base/lib/Base/Data/Sort.vuna` | 后续（按线程做一遍线性归并，或利用「子 span 先落盘」直接折叠） |
 
 ## 效应统一（Eff 已贯通）
 
