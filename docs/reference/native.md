@@ -84,8 +84,8 @@
   GC 栈图槽）；临时槽不回收，frame 取该函数的最大使用量。求值顺序因此显式、稳定。
 - **GC 栈图**：每个 `call` 点前写 `lea r10, [rip + .Lgc_<n>]; mov [rbp-8], r10`，
   指向本模块 `.rodata` 的一张栈图表（`[count][slot…]`，活槽序号升序；`Native.Map`）。
-  标签是文件局部 `.L` 符号，所以编号按模块累加，不跨模块扩散。GC 目前仍按保守扫描
-  读栈（见 §5.2），表是精确根集的数据面。
+  标签是文件局部 `.L` 符号，所以编号按模块累加，不跨模块扩散。GC 按这张表只扫活槽
+  （见 §5.2）。
 - 调用点：按 CBV 从左到右把实参求值到槽；前 6 个装入参数寄存器，其余**逆序压栈**
   （最后一个实参先压，第 7 个最终在 `[rbp+16]`）。栈参数个数为奇数时先 `sub rsp, 8`
   补空洞，保证 `call` 时 `rsp` 16 字节对齐（prologue 的 `push rbp` + 16 倍数 frame 是
@@ -137,8 +137,7 @@ native 与 wasm 跑同一份**库机器**（`Base.Effect.Core.Control` 循环，
   消费），续延链不占宿主栈；顺序 perform 的深度不随次数增长。
 - **one-shot**：续延槽 → epoch 表（`MSt.msUsed`）拒绝重放；尾 resume 复用 `tailSlot`。
 - 宿主 handler 与用户 handler 走同一套 `MkHandle`，没有「宿主直连」旁路。
-- GC 的保守根集是当前栈区间（`rt_stack_top`）与 `.bss` 的 cleanup 链头（`rt_cleanups`）；
-  handler 帧与续延都在堆上，随这两类根可达。
+- GC 沿帧栈图扫根（§5.2）；handler 帧与续延都在堆上，随栈槽与 cleanup 链可达。
 
 延迟 answer（`opH` 返回函数、`resume` 发生在 `MkHandle` 返回之后）仍不支持，见
 [debt.md](debt.md) D101。
@@ -312,7 +311,7 @@ env，**不进 codegen**（同一 IR 的产物逐字节确定）。解析失败�
 - 口径边界：核数限制**不是 CPU 配额**（不限制单核跑多久，要限速用超时）；cgroup 只读 v2
   挂载根的 `cpu.max`（v1 或读不到时退化为 `sched_getaffinity` 计数）；超时是启动快照。
 
-### 5.2 GC（保守标记-清扫，非移动）
+### 5.2 GC（精确栈图 + 保守孤岛，标记-清扫、非移动）
 
 实现在 `Native.Gc`，由 `Native.Runtime.alloc` 在预算或阈值处调用 `rt_gc_collect`。
 
@@ -323,10 +322,14 @@ env，**不进 codegen**（同一 IR 的产物逐字节确定）。解析失败�
   `rt_cur_seg` 是当前 bump 段。清扫按段线性走块头（空闲块保留自己的块头）。
 - **尺寸类**：块大小向上取整到 2 的幂（16 B … 64 MiB），清扫把死块挂回对应类的链表，
   分配先弹表再 bump。大于 64 MiB 的块单独占一个段，死块进 `rt_huge_free` 首次适配链。
-- **根集**（没有栈图，全部保守扫描）：
-  1. 机器栈 `[rsp, rt_stack_top)`；GC 入口先把通用寄存器（含 `r15`）溢进自己的帧；
-  2. `.bss` 白名单：cleanup 链头 `rt_cleanups`。
-  handler 帧与续延是 `Base.Effect.Core` 的普通堆对象，随这两类根可达，没有独立的 `.bss` 链。
+- **根集**：
+  1. **精确栈图**：沿 `rbp` 链逐帧走。生成函数的帧头 `[rbp-8]` 指向本模块 `.rodata`
+     的栈图（`[count][slot…]`，活槽序号升序，见 §3），GC 只扫列出的槽。
+  2. **保守孤岛**：描述符为 0 的帧（`rtFunc` 的运行时函数、`bridgeFn` 的桥接函数、入口）
+     按 `[上一帧 rbp + 16, rbp + 16)` 整段保守扫。GC 自己的帧也是孤岛，入口先把通用
+     寄存器（含 `r15`）溢进自己的帧。
+  3. `.bss`：cleanup 链头 `rt_cleanups` 与 CAF 求值区 `[rt_caf_begin, rt_caf_end)`。
+  handler 帧与续延是 `Base.Effect.Core` 的普通堆对象，随上面的根可达。
   `alloc` 的调用方寄存器快照（`rt_alloc_save_*`）只用于跨 `gc_collect` 保活寄存器，
   不是根：仍会被读取的值在调用方的栈槽里。
 - **候选判据**：字必须指向某个已注册堆段内、块头 16 对齐且合法、非空闲的 payload 起点
@@ -335,15 +338,11 @@ env，**不进 codegen**（同一 IR 的产物逐字节确定）。解析失败�
 - **不扫的块**：`leaf`（String / Float，payload 是字节或位型）；`pin` 标记的块同样不扫、
   清扫一律保留（`alloc_pinned` 目前没有调用方）。
 - **清扫**：清 mark、把未标记块按尺寸类回收、累计 `live`；之后
-  `threshold = max(GC_MIN, 2 × live, 本次扫到的栈字节数)`（深递归按扫栈成本摊还）。
-  非移动、不压缩，也没有分代/增量/并发。
-- **死槽清零**（`Native.Module`）：调用点把实参装进寄存器/栈后立即清零实参槽；函数体
-  在「文本上最后一次读」之后清零其余临时槽。函数体里唯一的回边是自递归尾调用的循环头：
-  回跳前只重写形参槽，且发生在清零之后，所以清零不会抹掉下一轮还要读的值。效果是活帧
-  不再把已消费的临时对象留给保守扫描（读数见 [benchmarks.md](benchmarks.md) §1.2）。
-  清除在 `clearDeadSlots` 里再裁一次：最后一次 `call` 之后的清除不会再有 GC 点（帧即将
-  结束），同一基本块里已经清过且之后没被写入的槽不再重复清。清除只影响保留量，裁掉多余
-  的不会漏根；编译器自身的清除指令因此减少约 38%。
+  `threshold = max(GC_MIN, 2 × live, 本次栈跨度)`（栈跨度 = `rt_stack_top - rsp`，
+  是孤岛扫栈成本的上界，深递归按它摊还）。非移动、不压缩，也没有分代/增量/并发。
+- **活槽**：`Native.Module` 在指令体上算每个 `call` 点的活槽——该槽在这个 call 之后的
+  下一个文本事件是「读」才算活（分支按文本序过近似，只多留、不漏根；自递归尾调用只重写
+  形参槽）。死槽不扫描，也不需要在调用点清零。
 - **标记栈**：首次 GC 时 `mmap` 1 MiB，溢出翻倍并拷贝；GC 内部只用 `mmap`，不走 `alloc`。
 
 **可观测性**（规范见 [observability.md](observability.md)）：`@vuna@obs@level` /
@@ -426,7 +425,7 @@ env，**不进 codegen**（同一 IR 的产物逐字节确定）。解析失败�
   exit 2）。`Monad (Eff r)` 的 CPS 形态把一个返回裸 `Check`（实测 `OkC (List Module)`）的
   continuation 当成返回 `Control` 的续延，`step` 的 `MkApply` 按 tag 0 误配 `MkDone`，把
   payload 当函数应用成部分应用闭包。**同一份源码编到 wasm 后能正常 `check`**，所以缺陷在 native
-  的调用/闭包生成，不在 CPS 或机器层；与 GC、W3.1 的尾 resume 标记、死槽清理都无关。同一失败可用
+  的调用/闭包生成，不在 CPS 或机器层；与 GC、W3.1 的尾 resume 标记都无关。同一失败可用
   OCaml 版 `vuna build packages/compiler --target native` 的产物复现，与本包的安装布局无关；记在
   [debt.md](debt.md) D122。
   整仓 selfhost 的现状见 [testing.md](testing.md)「后端自举 conformance」：尾调用（§3）只覆盖
@@ -434,11 +433,11 @@ env，**不进 codegen**（同一 IR 的产物逐字节确定）。解析失败�
   handler 缺口（[debt.md](debt.md) D101）。
   CI 的 `nix run .#backend-check -- --compiler native` 因此仍是非阻塞任务（口径见
   [testing.md](testing.md)「后端自举 conformance」）。
-- **GC 的边界**：保守、非移动、不分代、不压缩。因此
-  1. 活帧里**尚未清零的栈槽**仍被保守扫描；调用点实参槽与文本最后读取后会清零，所以
-     `gc_low_live` 这类「分配后用掉、再尾递归」的形状不按栈深度累计保留（读数见
-     [benchmarks.md](benchmarks.md) §1.2）。仍在跨调用临时值里的对象会被多留；
-  2. 形似指针的 `Int` 会多留对象；非移动所以不会让指针失效；
+- **GC 的边界**：精确到「哪些槽活着」，但每个活槽仍按机器字保守判断；非移动、不分代、
+  不压缩。因此
+  1. 活槽里的 `Int` / 字节偶然形似指针会多留对象；死槽不扫描（不需要清零）。孤岛帧整段
+     保守扫，其中已消费的临时值会多留；
+  2. 非移动，指针不会失效；也没有压缩，碎片见下；
   3. 空闲块按 2 的幂尺寸类复用、不合并相邻空块，内部碎片最多约 2×；
   4. 超过 64 MiB 的块单独占段、死块进 `rt_huge_free` 首次适配链（可复用，不 `munmap`）；
 - **宿主缓冲与算术边界**（失败一律显式，不静默截断/越界写）：

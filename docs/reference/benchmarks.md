@@ -141,11 +141,9 @@ native 的 TCO / GC 验证项。**GC 与 TCO 均已落地**；下表「前」列
   （~4.2 MiB）；上表四项都满足。`arith` / `records` 也翻真，说明它们的递归主体同样是
   **直接饱和尾调用**；`tco_wide` 覆盖 9 参（3 个栈实参）的自递归。
 - **GC**：主判据是 RSS 从「累计分配」降到「存活集」——`gc_low_live` 现在 5.4 MiB
-  （GC 前只有 bump 分配时 289 MiB；GC 上线但未清死槽时一度 319 MiB）；
-  `VUNA_NATIVE_GC_LOG=1` 可逐次看 `live`。墙钟由两件事决定：清扫/标记 live
-  与**保守扫活栈**，所以阈值取 `max(GC_MIN, 2×live, 本次扫到的栈字节数)`（见
-  [native.md](native.md) §5.1）；死槽清零（调用点实参槽 + 文本最后读取后清零）让活帧
-  不再留住已消费的临时对象，是 `gc_low_live` RSS 能降到 5 MiB 的原因。
+  （GC 前只有 bump 分配时 289 MiB）；`VUNA_NATIVE_GC_LOG=1` 可逐次看 `live`。墙钟由
+  标记/清扫 live 与扫栈决定，所以阈值取 `max(GC_MIN, 2×live, 本次栈跨度)`（见
+  [native.md](native.md) §5.2）；活槽由每个 GC 点的栈图给出，死槽不扫描。
 - 重标基线时 `default_stack_ok` 是布尔快照：直调、自递归、饱和闭包、wrapper 与 runtime
   符号的尾位置都应为 true；非尾深递归项（如 `list_recursion` 的拆半递归）仍为 false，
   那不是 TCO 漏覆盖——窄调宽与 `rt_apply` 慢路径仍回退普通调用。

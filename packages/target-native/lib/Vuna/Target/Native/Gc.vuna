@@ -74,6 +74,19 @@ gcTmpLabel = "rt_gc_tmp"
 gcSpanLabel : String
 gcSpanLabel = "rt_gc_span"
 
+-- | 帧遍历：当前帧 rbp、保守区下界、`gc_scan_map` 的游标与剩余槽数。
+gcFrameLabel : String
+gcFrameLabel = "rt_gc_frame"
+
+gcBoundLabel : String
+gcBoundLabel = "rt_gc_bound"
+
+gcMapPtrLabel : String
+gcMapPtrLabel = "rt_gc_map_ptr"
+
+gcMapCountLabel : String
+gcMapCountLabel = "rt_gc_map_n"
+
 -- | `alloc` 的请求字节数与调用方寄存器快照。`alloc` 不建栈帧，`rsi` / `r8` / `r9`
 --   靠这些槽跨 `gc_collect` 保活；它们不是 GC 根（活值在调用方的栈槽里）。
 export allocReqLabel : String
@@ -113,6 +126,10 @@ nativeGcBss =
     NativeBss gcHiLabel 8 8,
     NativeBss gcTmpLabel 8 8,
     NativeBss gcSpanLabel 8 8,
+    NativeBss gcFrameLabel 8 8,
+    NativeBss gcBoundLabel 8 8,
+    NativeBss gcMapPtrLabel 8 8,
+    NativeBss gcMapCountLabel 8 8,
     NativeBss allocReqLabel 8 8,
     NativeBss allocSaveRdiLabel 8 8,
     NativeBss allocSaveRsiLabel 8 8,
@@ -177,6 +194,17 @@ gcScanWordsFn =
     [ICmp (OpReg Rdi) (OpReg Rsi), IJcc "jae" ".Lgc_scan_done", IMov (OpRip gcLoLabel) (OpReg Rdi), IMov (OpRip gcHiLabel) (OpReg Rsi), ILabel ".Lgc_scan_loop", IMov (OpReg Rdi) (OpRip gcLoLabel), ICmp (OpReg Rdi) (OpRip gcHiLabel), IJcc "jae" ".Lgc_scan_done", IMov (OpReg Rdi) (OpMem Rdi 0), ICall (nativeRtLabel "gc_try"), IMov (OpReg Rax) (OpRip gcLoLabel), IBinReg "add" Rax (OpImm 8), IMov (OpRip gcLoLabel) (OpReg Rax), IJmp ".Lgc_scan_loop", ILabel ".Lgc_scan_done", IRet]
 
 -- ---------------------------------------------------------------
+-- 按栈图精确扫描一帧
+-- ---------------------------------------------------------------
+-- | `rdi` = 栈图描述符（`[count][slot…]`）、`rsi` = 帧 rbp；对每个活槽调 `gc_try`。
+--   游标与帧基址放 `.bss`：`gc_try` 会清 caller-saved 寄存器。
+gcScanMapFn : NativeFunc
+gcScanMapFn =
+  rtRawFunc
+    "gc_scan_map"
+    [IMov (OpRip gcFrameLabel) (OpReg Rsi), IMov (OpReg Rcx) (OpMem Rdi 0), IMov (OpRip gcMapCountLabel) (OpReg Rcx), IBinReg "add" Rdi (OpImm 8), IMov (OpRip gcMapPtrLabel) (OpReg Rdi), ILabel ".Lgc_map_loop", IMov (OpReg Rcx) (OpRip gcMapCountLabel), ITest Rcx Rcx, IJcc "jz" ".Lgc_map_done", IBinReg "sub" Rcx (OpImm 1), IMov (OpRip gcMapCountLabel) (OpReg Rcx), IMov (OpReg Rdi) (OpRip gcMapPtrLabel), IMov (OpReg Rdx) (OpMem Rdi 0), IBinReg "add" Rdi (OpImm 8), IMov (OpRip gcMapPtrLabel) (OpReg Rdi), IBinReg "add" Rdx (OpImm 2), IBinReg "shl" Rdx (OpImm 3), IMov (OpReg Rdi) (OpRip gcFrameLabel), IBinReg "sub" Rdi (OpReg Rdx), IMov (OpReg Rdi) (OpMem Rdi 0), ICall (nativeRtLabel "gc_try"), IJmp ".Lgc_map_loop", ILabel ".Lgc_map_done", IRet]
+
+-- ---------------------------------------------------------------
 -- 清扫：清标记、回收未标记块、累计 live
 -- ---------------------------------------------------------------
 gcSweepFn : NativeFunc
@@ -210,8 +238,18 @@ gcCollectFn =
   rtFunc
     "gc_collect"
     256
-    [IPush Rax, IPush Rcx, IPush Rdi, ILeaMem Rdi Rbp (0 - 256), IMov (OpReg Rcx) (OpImm 32), IBinReg "xor" Rax (OpReg Rax), ILabel ".Lgc_zero", IMov (OpMem Rdi 0) (OpReg Rax), IBinReg "add" Rdi (OpImm 8), IBinReg "sub" Rcx (OpImm 1), ICmp (OpReg Rcx) (OpImm 0), IJcc "jne" ".Lgc_zero", IPop Rdi, IPop Rcx, IPop Rax, IMov (OpReg R10) (OpRip gcRunningLabel), ITest R10 R10, IJcc "jnz" ".Lgc_ret", IMov (OpReg R10) (OpImm 1), IMov (OpRip gcRunningLabel) (OpReg R10), IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rax), IMov (OpMem Rbp (nativeSlotOff 1)) (OpReg Rcx), IMov (OpMem Rbp (nativeSlotOff 2)) (OpReg Rdx), IMov (OpMem Rbp (nativeSlotOff 3)) (OpReg Rsi), IMov (OpMem Rbp (nativeSlotOff 4)) (OpReg Rdi), IMov (OpMem Rbp (nativeSlotOff 5)) (OpReg R8), IMov (OpMem Rbp (nativeSlotOff 6)) (OpReg R9), IMov (OpMem Rbp (nativeSlotOff 7)) (OpReg R10), IMov (OpMem Rbp (nativeSlotOff 8)) (OpReg R11), IMov (OpMem Rbp (nativeSlotOff 9)) (OpReg R15), IMov (OpReg Rax) (OpRip nativeStackTopLabel), IBinReg "sub" Rax (OpReg Rsp), IMov (OpRip gcSpanLabel) (OpReg Rax), IMov (OpReg Rdi) (OpReg Rsp), IMov (OpReg Rsi) (OpRip nativeStackTopLabel), ICall (nativeRtLabel "gc_scan_words"), ILea Rdi nativeCafBeginLabel, ILea Rsi nativeCafEndLabel, ICall (nativeRtLabel "gc_scan_words"), IMov (OpReg Rdi) (OpRip nativeCleanupHeadLabel), ICall (nativeRtLabel "gc_try"), ILabel ".Lgc_mark", IMov (OpReg Rax) (OpRip markBaseLabel), IMov (OpReg Rcx) (OpRip markTopLabel), ICmp (OpReg Rax) (OpReg Rcx), IJcc "jae" ".Lgc_mark_done", IBinReg "sub" Rcx (OpImm 8), IMov (OpRip markTopLabel) (OpReg Rcx), IMov (OpReg Rdi) (OpMem Rcx 0), IMov (OpReg Rdx) (OpMem Rdi (0 - 8)), IMov (OpReg R8) (OpReg Rdx), IBinReg "and" R8 (OpImm nativeLeafFlag), ITest R8 R8, IJcc "jnz" ".Lgc_mark", IBinReg "and" Rdx (OpImm (0 - 16)), IMov (OpReg Rsi) (OpReg Rdi), IBinReg "add" Rsi (OpReg Rdx), IBinReg "sub" Rsi (OpImm 8), ICall (nativeRtLabel "gc_scan_words"), IJmp ".Lgc_mark", ILabel ".Lgc_mark_done", ICall (nativeRtLabel "gc_sweep"), IMov (OpReg Rax) (OpRip gcCountLabel), IBinReg "add" Rax (OpImm 1), IMov (OpRip gcCountLabel) (OpReg Rax), ICall (nativeRtLabel "gc_log"), IBinReg "xor" Rax (OpReg Rax), IMov (OpRip gcSinceLabel) (OpReg Rax), IMov (OpReg Rax) (OpRip gcLiveLabel), IBinReg "shl" Rax (OpImm 1), IMov (OpReg Rcx) (OpRip gcMinLabel), ICmp (OpReg Rax) (OpReg Rcx), IJcc "jae" ".Lgc_thr_min", IMov (OpReg Rax) (OpReg Rcx), ILabel ".Lgc_thr_min", IMov (OpReg Rcx) (OpRip gcSpanLabel), ICmp (OpReg Rax) (OpReg Rcx), IJcc "jae" ".Lgc_thr_ok", IMov (OpReg Rax) (OpReg Rcx), ILabel ".Lgc_thr_ok", IMov (OpRip gcThresholdLabel) (OpReg Rax), IBinReg "xor" Rax (OpReg Rax), IMov (OpRip gcRunningLabel) (OpReg Rax), ILabel ".Lgc_ret", IRet]
+    [IPush Rax, IPush Rcx, IPush Rdi, ILeaMem Rdi Rbp (0 - 256), IMov (OpReg Rcx) (OpImm 32), IBinReg "xor" Rax (OpReg Rax), ILabel ".Lgc_zero", IMov (OpMem Rdi 0) (OpReg Rax), IBinReg "add" Rdi (OpImm 8), IBinReg "sub" Rcx (OpImm 1), ICmp (OpReg Rcx) (OpImm 0), IJcc "jne" ".Lgc_zero", IPop Rdi, IPop Rcx, IPop Rax, IMov (OpReg R10) (OpRip gcRunningLabel), ITest R10 R10, IJcc "jnz" ".Lgc_ret", IMov (OpReg R10) (OpImm 1), IMov (OpRip gcRunningLabel) (OpReg R10), IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rax), IMov (OpMem Rbp (nativeSlotOff 1)) (OpReg Rcx), IMov (OpMem Rbp (nativeSlotOff 2)) (OpReg Rdx), IMov (OpMem Rbp (nativeSlotOff 3)) (OpReg Rsi), IMov (OpMem Rbp (nativeSlotOff 4)) (OpReg Rdi), IMov (OpMem Rbp (nativeSlotOff 5)) (OpReg R8), IMov (OpMem Rbp (nativeSlotOff 6)) (OpReg R9), IMov (OpMem Rbp (nativeSlotOff 7)) (OpReg R10), IMov (OpMem Rbp (nativeSlotOff 8)) (OpReg R11), IMov (OpMem Rbp (nativeSlotOff 9)) (OpReg R15), IMov (OpReg Rax) (OpRip nativeStackTopLabel), IBinReg "sub" Rax (OpReg Rsp), IMov (OpRip gcSpanLabel) (OpReg Rax), IMov (OpRip gcFrameLabel) (OpReg Rbp), IMov (OpRip gcBoundLabel) (OpReg Rsp), ILabel ".Lgc_walk", IMov (OpReg R10) (OpRip gcFrameLabel), ITest R10 R10, IJcc "jz" ".Lgc_walk_done", IMov (OpReg Rcx) (OpMem R10 (0 - 8)), ITest Rcx Rcx, IJcc "jz" ".Lgc_walk_island", IMov (OpReg Rdi) (OpReg Rcx), IMov (OpReg Rsi) (OpReg R10), ICall (nativeRtLabel "gc_scan_map"), IJmp ".Lgc_walk_next", ILabel ".Lgc_walk_island", IMov (OpReg Rdi) (OpRip gcBoundLabel), IMov (OpReg Rsi) (OpReg R10), IBinReg "add" Rsi (OpImm 16), ICall (nativeRtLabel "gc_scan_words"), ILabel ".Lgc_walk_next", IMov (OpReg R10) (OpRip gcFrameLabel), IBinReg "add" R10 (OpImm 16), IMov (OpRip gcBoundLabel) (OpReg R10), IMov (OpReg R10) (OpRip gcFrameLabel), IMov (OpReg R10) (OpMem R10 0), IMov (OpRip gcFrameLabel) (OpReg R10), IJmp ".Lgc_walk", ILabel ".Lgc_walk_done", ILea Rdi nativeCafBeginLabel, ILea Rsi nativeCafEndLabel, ICall (nativeRtLabel "gc_scan_words"), IMov (OpReg Rdi) (OpRip nativeCleanupHeadLabel), ICall (nativeRtLabel "gc_try"), ILabel ".Lgc_mark", IMov (OpReg Rax) (OpRip markBaseLabel), IMov (OpReg Rcx) (OpRip markTopLabel), ICmp (OpReg Rax) (OpReg Rcx), IJcc "jae" ".Lgc_mark_done", IBinReg "sub" Rcx (OpImm 8), IMov (OpRip markTopLabel) (OpReg Rcx), IMov (OpReg Rdi) (OpMem Rcx 0), IMov (OpReg Rdx) (OpMem Rdi (0 - 8)), IMov (OpReg R8) (OpReg Rdx), IBinReg "and" R8 (OpImm nativeLeafFlag), ITest R8 R8, IJcc "jnz" ".Lgc_mark", IBinReg "and" Rdx (OpImm (0 - 16)), IMov (OpReg Rsi) (OpReg Rdi), IBinReg "add" Rsi (OpReg Rdx), IBinReg "sub" Rsi (OpImm 8), ICall (nativeRtLabel "gc_scan_words"), IJmp ".Lgc_mark", ILabel ".Lgc_mark_done", ICall (nativeRtLabel "gc_sweep"), IMov (OpReg Rax) (OpRip gcCountLabel), IBinReg "add" Rax (OpImm 1), IMov (OpRip gcCountLabel) (OpReg Rax), ICall (nativeRtLabel "gc_log"), IBinReg "xor" Rax (OpReg Rax), IMov (OpRip gcSinceLabel) (OpReg Rax), IMov (OpReg Rax) (OpRip gcLiveLabel), IBinReg "shl" Rax (OpImm 1), IMov (OpReg Rcx) (OpRip gcMinLabel), ICmp (OpReg Rax) (OpReg Rcx), IJcc "jae" ".Lgc_thr_min", IMov (OpReg Rax) (OpReg Rcx), ILabel ".Lgc_thr_min", IMov (OpReg Rcx) (OpRip gcSpanLabel), ICmp (OpReg Rax) (OpReg Rcx), IJcc "jae" ".Lgc_thr_ok", IMov (OpReg Rax) (OpReg Rcx), ILabel ".Lgc_thr_ok", IMov (OpRip gcThresholdLabel) (OpReg Rax), IBinReg "xor" Rax (OpReg Rax), IMov (OpRip gcRunningLabel) (OpReg Rax), ILabel ".Lgc_ret", IRet]
 
 export nativeGcFuncs : List NativeFunc
 nativeGcFuncs =
-  [initGcFn, gcCollectFn, gcTryFn, gcScanWordsFn, gcGrowMarkFn, gcLogFn, gcSweepFn, gcAppendFn]
+  [
+    initGcFn,
+    gcCollectFn,
+    gcTryFn,
+    gcScanWordsFn,
+    gcScanMapFn,
+    gcGrowMarkFn,
+    gcLogFn,
+    gcSweepFn,
+    gcAppendFn
+  ]
