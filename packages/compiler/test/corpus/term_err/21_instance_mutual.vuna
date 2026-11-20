@@ -1,0 +1,14 @@
+-- 同名方法在整个包内共用一个组（覆盖 trait dispatch 的任意实例选择）：
+-- f 与 h 的互递归必须被拒绝。
+import Prelude
+
+trait T a where
+  f : a -> Int
+  h : a -> Int
+
+instance T Int where
+  f x = h x
+  h x = f x
+
+main : Int
+main = f 0

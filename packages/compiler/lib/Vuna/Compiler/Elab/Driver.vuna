@@ -364,6 +364,7 @@ declFunNames [] = []
 declFunNames (d :: rest) =
   case d of
     DFun name pats body sp => name :: declFunNames rest
+    DInstance ctx head methods sp => append (declFunNames methods) (declFunNames rest)
     _ => declFunNames rest
 
 -- 单个 `DFun` 的正文：检查 → 声明的字典目标 → 自由字典目标提升 → 入 delta 表。

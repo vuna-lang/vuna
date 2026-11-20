@@ -102,6 +102,9 @@ funDeclsOf [] = []
 funDeclsOf (d :: rest) =
   case d of
     DFun name pats body sp => Pair name (Pair pats body) :: funDeclsOf rest
+    -- 实例方法体同样参与终止性分析：按方法短名分组建 SCC（同名方法在整个包内
+    -- 共用一组，覆盖 trait dispatch 的任意实例选择；方向保守）。
+    DInstance ctx head methods sp => append (funDeclsOf methods) (funDeclsOf rest)
     _ => funDeclsOf rest
 
 export lookupGroup : String -> List (Pair String (List (Pair (List Pat) Expr))) -> Maybe (List (Pair (List Pat) Expr))

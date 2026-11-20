@@ -568,6 +568,7 @@ dfunNames [] = []
 dfunNames (d :: rest) =
   case d of
     DFun name pats body sp => name :: dfunNames rest
+    DInstance ctx head methods sp => append (dfunNames methods) (dfunNames rest)
     _ => dfunNames rest
 
 export checkTerminationDeclsWith : List String -> List Decl -> Check Int

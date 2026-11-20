@@ -1,0 +1,11 @@
+-- 实例方法体不再是终止性检查的盲区：自递归的方法必须被拒绝。
+import Prelude
+
+trait T a where
+  f : a -> Int
+
+instance T Int where
+  f x = f x
+
+main : Int
+main = f 0

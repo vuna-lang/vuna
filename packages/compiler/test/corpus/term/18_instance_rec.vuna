@@ -1,0 +1,17 @@
+-- 实例方法体参与终止性分析：结构递归的方法与同一类型的派生实例都必须通过。
+import Prelude
+
+data Nat : Type where
+  Zero : Nat
+  Succ : Nat -> Nat
+deriving (Eq)
+
+trait Down a where
+  down : a -> Int
+
+instance Down Nat where
+  down Zero = 0
+  down (Succ n) = down n
+
+main : Int
+main = down (Succ Zero)
