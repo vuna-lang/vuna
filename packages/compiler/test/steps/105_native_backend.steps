@@ -336,6 +336,15 @@ out-equals: 156
 run: sh -c '"$VUNA" compile "$TMPDIR/gcgrow/app/Main.vuna" "$TMPDIR/detgc-a" --target native; VUNA_NATIVE_GC_MIN=4096 VUNA_NATIVE_GC_LOG=1 VUNA_NATIVE_GC_STRESS=1 "$VUNA" compile "$TMPDIR/gcgrow/app/Main.vuna" "$TMPDIR/detgc-b" --target native; diff -r "$TMPDIR/detgc-a" "$TMPDIR/detgc-b"'
 exit: 0
 
+# 9aa1) 超大块（> 64 MiB）走后段 + rt_huge_free：分配后丢掉，下一次 GC 把它挂回
+#       链表；再分配仍能正常结束（回归：清扫曾把链表头当槽地址解引用 → SIGSEGV）。
+run: sh -c 'd="$TMPDIR/gchuge"; mkdir -p "$d/app"; printf "[package]\nname = \"gchuge\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Effect.Core as Eff\nimport Base.Container.Array as Array\nimport Base.Data.Int as Int\nimport Base.Data.Nat as Nat\nimport Base.Data.String as String\n\nmain : Eff [] Int\nmain = do\n  a <- pure (Array.length (Array.make (natFromInt 8400000) 7))\n  n <- pure (strLength (strFromInt 10000000))\n  pure (if a == natFromInt 8400000 && n >= 0 then 1 else 0)\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/gchuge-out" "$d"'
+exit: 0
+run: "$TMPDIR/gchuge-out/bin/gchuge" 2>&1
+out-equals: 1
+run: sh -c 'VUNA_NATIVE_GC_STRESS=1 "$TMPDIR/gchuge-out/bin/gchuge" 2>&1'
+out-equals: 1
+
 # 9aa2) 分代 GC 的记集：老代 IORef 写进年轻代值后，写屏障把它登记进记集，年轻代回收
 #       从记集出发扫到这个值。`GC_MIN` 压小让回收密集发生；`rem>=1` 的行证明某次年轻代
 #       回收确实从记集出发（只断言输出区分不出来：值也能经 Eff 闭包链活着）。
