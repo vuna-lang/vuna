@@ -1670,6 +1670,15 @@ topoModules mods =
 unitDeclsHash : Module -> String
 unitDeclsHash m = encTop encDecls (moduleDeclsOf m)
 
+-- | 单元的「内容身份」：优先用接口地址（`Driver.Compile.ClosureMod.cmAddr`：包环境 +
+-- 模块源摘要 + 直接依赖源摘要），没有闭包表的路径才退回声明规范编码。入口的闭包扫描
+-- 已经算好这些地址，这里只做一次查表，不再逐模块重编码整棵声明 AST。
+unitModuleId : List (Pair String String) -> Module -> String
+unitModuleId modIds m =
+  case lookupPair (moduleNameOf m) modIds of
+    Just addr => "a:${addr}"
+    Nothing => "d:${unitDeclsHash m}"
+
 pairKeyValue : Pair String String -> String
 pairKeyValue p = secondOf p
 
@@ -1686,20 +1695,21 @@ unitImportKey acc n =
     Just k => k
     Nothing => "?"
 
-unitKeyOne : List (Pair String String) -> Module -> String
-unitKeyOne acc m =
+unitKeyOne : List (Pair String String) -> List (Pair String String) -> Module -> String
+unitKeyOne modIds acc m =
   let
     deps = map (unitImportKey acc) (unitImportsOf m)
-  in shaText "u|${moduleNameOf m}|${unitDeclsHash m}|${concatKeys deps}"
+  in shaText "u|${moduleNameOf m}|${unitModuleId modIds m}|${concatKeys deps}"
 
-unitKeysGo : List Module -> List (Pair String String) -> List (Pair String String)
-unitKeysGo [] acc = reverse acc
-unitKeysGo (m :: rest) acc = unitKeysGo rest (Pair (moduleNameOf m) (unitKeyOne acc m) :: acc)
+unitKeysGo : List (Pair String String) -> List Module -> List (Pair String String) -> List (Pair String String)
+unitKeysGo modIds [] acc = reverse acc
+unitKeysGo modIds (m :: rest) acc =
+  unitKeysGo modIds rest (Pair (moduleNameOf m) (unitKeyOne modIds acc m) :: acc)
 
-unitKeysOf : List Module -> List Decl -> Bool -> List (Pair String String)
-unitKeysOf modules entryDecls printResult =
+unitKeysOf : List (Pair String String) -> List Module -> List Decl -> Bool -> List (Pair String String)
+unitKeysOf modIds modules entryDecls printResult =
   let
-    modKeys = unitKeysGo modules []
+    modKeys = unitKeysGo modIds modules []
     entryHash = encTop encDecls entryDecls
     entryKey =
       shaText
@@ -1739,8 +1749,8 @@ unitCacheEnabled =
     v <- envGetEnv "VUNA_UNIT_CACHE"
     pure (v /= "0")
 
-splitGenerateCached : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> List Module -> List (Pair String (List Decl)) -> List Decl -> DtProgram -> Bool -> List (Pair String (Pair String Int)) -> Eff r (Check (List SplitFile))
-splitGenerateCached ctx entry modules moduleParts entryDecls prog printResult extraDefLocs =
+splitGenerateCached : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> List (Pair String String) -> List Module -> List (Pair String (List Decl)) -> List Decl -> DtProgram -> Bool -> List (Pair String (Pair String Int)) -> Eff r (Check (List SplitFile))
+splitGenerateCached ctx entry modIds modules moduleParts entryDecls prog printResult extraDefLocs =
   let
     pkg = contextPackageName ctx
     bucketKey = "${pkg}|${entry}"
@@ -1755,8 +1765,9 @@ splitGenerateCached ctx entry modules moduleParts entryDecls prog printResult ex
       do
         base <- unitCacheDir pkg
         let
-          -- key 要对**每个**模块的声明做一次规范编码 + 摘要；只在缓存真的启用时才付这笔钱。
-          keys = unitKeysOf modules entryDecls printResult
+          -- key 要对**每个**模块的身份做一次摘要；身份来自入口闭包扫描已经算好的接口
+          -- 地址，只有拿不到地址的路径才退回逐模块声明编码。
+          keys = unitKeysOf modIds modules entryDecls printResult
           dir = unitCacheEntryDir base bucketKey
           keepNames = map (\p => unitCacheFileName (firstOf p) (secondOf p)) keys
           _ = dbg! "cg-keys-done"
@@ -1764,8 +1775,8 @@ splitGenerateCached ctx entry modules moduleParts entryDecls prog printResult ex
           _ <- unitCacheBucketGc dir keepNames
           generateDtSplitProgramWith (unitCacheLookup dir keys) (unitCacheStore dir keys) moduleParts entryDecls prog printResult roots cdir extraDefLocs
 
-dtGenerateIncremental : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Pair (List Decl) (List Module) -> CheckedPackage -> Bool -> List (Pair String (Pair String Int)) -> Eff r (Check (Pair (List SplitFile) CheckedPackage))
-dtGenerateIncremental ctx entry parts checked printResult extraDefLocs =
+dtGenerateIncremental : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> List (Pair String String) -> Pair (List Decl) (List Module) -> CheckedPackage -> Bool -> List (Pair String (Pair String Int)) -> Eff r (Check (Pair (List SplitFile) CheckedPackage))
+dtGenerateIncremental ctx entry modIds parts checked printResult extraDefLocs =
   let
     modules = topoModules (secondOf parts)
     moduleParts = map (\m => Pair (moduleNameOf m) (moduleDeclsOf m)) modules
@@ -1774,6 +1785,7 @@ dtGenerateIncremental ctx entry parts checked printResult extraDefLocs =
       splitGenerateCached
         ctx
         entry
+        modIds
         modules
         moduleParts
         (firstOf parts)
@@ -1802,7 +1814,7 @@ dtSplitProjectIncremental ctx entry printResult depIfaces cleanIfaces =
           extraDefLocs = concatMap miDefLocsOf cleanOwn
         in case dtIncrementalChecked ctx resolved (materializedDeps pkgName parts depIfaces) cleanOwn of
           ErrC e => pure (ErrC e)
-          OkC checked => dtGenerateIncremental ctx entry parts checked printResult extraDefLocs
+          OkC checked => dtGenerateIncremental ctx entry [] parts checked printResult extraDefLocs
 
 moduleOfIface : ModuleIface -> Module
 moduleOfIface mi =
@@ -1961,8 +1973,8 @@ dtCheckLibraryPackageWithIfacesParts ctx names ifaces =
 -- 只精化本包声明、从接口合并依赖产物，再走同一条逐模块 split；返回 codegen 文件 +
 -- CheckedPackage（构建路径也写接口摘要）。
 -- 观测：`vuna.codegen.split` 的进入/退出各一个瞬时标记（`Eff` 动作不能被纯跨度包住）。
-export dtSplitProjectWithIfaces : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Bool -> List ModuleIface -> Eff r (Check (Pair (List SplitFile) CheckedPackage))
-dtSplitProjectWithIfaces ctx entry printResult ifaces =
+export dtSplitProjectWithIfaces : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Bool -> List (Pair String String) -> List ModuleIface -> Eff r (Check (Pair (List SplitFile) CheckedPackage))
+dtSplitProjectWithIfaces ctx entry printResult modIds ifaces =
   do
     _ <- obsMarkEff "vuna.codegen.split"
     partsR <- dtLoadPartsWithIfaces ctx entry ifaces
@@ -1976,6 +1988,7 @@ dtSplitProjectWithIfaces ctx entry printResult ifaces =
               dtSplitPartsOursWith
                 ctx
                 entry
+                modIds
                 (secondOf resolved)
                 deps
                 printResult
@@ -1985,10 +1998,10 @@ dtSplitProjectWithIfaces ctx entry printResult ifaces =
 
 dtSplitPartsOurs : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Pair (List Decl) (List Module) -> List CachedProgram -> Bool -> Eff r (Check (Pair (List SplitFile) CheckedPackage))
 dtSplitPartsOurs ctx entry parts deps printResult =
-  dtSplitPartsOursWith ctx entry parts deps printResult []
+  dtSplitPartsOursWith ctx entry [] parts deps printResult []
 
-dtSplitPartsOursWith : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Pair (List Decl) (List Module) -> List CachedProgram -> Bool -> List (Pair String (Pair String Int)) -> Eff r (Check (Pair (List SplitFile) CheckedPackage))
-dtSplitPartsOursWith ctx entry parts deps printResult extraDefLocs =
+dtSplitPartsOursWith : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> List (Pair String String) -> Pair (List Decl) (List Module) -> List CachedProgram -> Bool -> List (Pair String (Pair String Int)) -> Eff r (Check (Pair (List SplitFile) CheckedPackage))
+dtSplitPartsOursWith ctx entry modIds parts deps printResult extraDefLocs =
   let
     pkgName = contextPackageName ctx
     modules = reverse (secondOf parts)
@@ -2026,6 +2039,7 @@ dtSplitPartsOursWith ctx entry parts deps printResult extraDefLocs =
           splitGenerateCached
             ctx
             entry
+            modIds
             modules
             moduleParts
             (firstOf parts)
@@ -2040,8 +2054,8 @@ dtSplitPartsOursWith ctx entry parts deps printResult extraDefLocs =
 
 -- 全量路径的 parts 版本（构建缓存未命中且依赖接口不可用）：同一份 CheckedPackage 供
 -- 接口影子写使用，避免 build 后还要再 check 一次才写接口。
-export dtSplitProjectParts : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Bool -> Eff r (Check (Pair (List SplitFile) CheckedPackage))
-dtSplitProjectParts ctx entry printResult =
+export dtSplitProjectParts : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Bool -> List (Pair String String) -> Eff r (Check (Pair (List SplitFile) CheckedPackage))
+dtSplitProjectParts ctx entry printResult modIds =
   do
     partsR <- dtLoadParts ctx entry
     case partsR of
@@ -2060,7 +2074,7 @@ dtSplitProjectParts ctx entry printResult =
           ErrC e => pure (ErrC e)
           OkC prog =>
             do
-              filesR <- splitGenerateCached ctx entry modules (map (\m => Pair (moduleNameOf m) (moduleDeclsOf m)) modules) (firstOf parts) prog printResult []
+              filesR <- splitGenerateCached ctx entry modIds modules (map (\m => Pair (moduleNameOf m) (moduleDeclsOf m)) modules) (firstOf parts) prog printResult []
               pure (
                   case filesR of
                     ErrC e => ErrC e

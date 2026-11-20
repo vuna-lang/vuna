@@ -169,6 +169,10 @@ compileToDir ctx entry printResult outDir =
     else
       compileToDirNormal ctx entry printResult outDir
 
+-- 单元缓存 key 的逐模块身份：闭包扫描已经算好的接口地址。
+modHashPair : ClosureMod -> Pair String String
+modHashPair m = Pair m.cmName m.cmAddr
+
 -- 摘要路径的 split（**不读 split 缓存**）：接口可用 ⇒ 摘要路径（干净模块 + 依赖接口），
 -- 否则全量。抽出来供正常路径与审计路径共用，保证两条路径的「摘要分支」完全一致。
 -- 构建路径的 codegen 口径：**只用同一套（全量）**。
@@ -182,7 +186,10 @@ compileToDir ctx entry printResult outDir =
 -- 产物因此是输入摘要的纯函数。
 summarySplitParts : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> List ClosureMod -> String -> Bool -> Eff r (Check (Pair (List SplitFile) CheckedPackage))
 summarySplitParts ctx mods entry printResult =
-  do
+  let
+    -- 单元缓存 key 的逐模块身份：闭包扫描已经算好的接口地址（包环境 + 源摘要 + 依赖源摘要）。
+    modIds = map modHashPair mods
+  in do
     depIfaces <- depIfacesOfWith ctx mods
     case depIfaces of
       Just ifaces =>
@@ -194,16 +201,16 @@ summarySplitParts ctx mods entry printResult =
                 Just clean2 => dbg! "cache-own-clean=${length clean2}"
                 Nothing => 0
           in do
-            dtSplitProjectWithIfaces ctx entry printResult ifaces
-      Nothing => dtSplitProjectParts ctx entry printResult
+            dtSplitProjectWithIfaces ctx entry printResult modIds ifaces
+      Nothing => dtSplitProjectParts ctx entry printResult modIds
 
 -- | 构建（codegen）入口：两级输入寻址。
 --
 -- 1. **快 key**（`splitInOf`）：源闭包 + 依赖身份 + 编译器指纹；命中
 --    `objects/splitptr/<快 key>` 就直接读语义 blob（未改动源码 = 零精化）；
--- 2. **语义 key**（`splitIdentityOf`）：本包 `pkgIfaceHash` + `pkgImplHash` + 布局摘要；
---    `blobs/<语义 key>` 是产物真身。注释变更 ⇒ 快 key 变、语义 key 不变 ⇒ 精化一次、
---    codegen 复用；行移动 ⇒ 布局摘要变 ⇒ 重建（运行时位置表正确）。
+-- 2. **语义 key**（`splitIdentityOf`）：本包 `pkgIfaceHash` + `pkgImplHash` + 布局摘要 +
+--    依赖身份 + 产物口径；`blobs/<语义 key>` 是产物真身。注释变更 ⇒ 快 key 变、语义 key
+--    不变 ⇒ 精化一次、codegen 复用；行移动 ⇒ 布局摘要变 ⇒ 重建（运行时位置表正确）。
 compileToDirNormal : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Bool -> String -> Eff r (Check (Pair Int (List Diagnostic)))
 compileToDirNormal ctx entry printResult outDir =
   do
@@ -228,13 +235,13 @@ compileToDirNormal ctx entry printResult outDir =
                           ErrC e => ErrC e
                           OkC count => OkC (Pair count [])
                       )
-              Nothing => rebuildSplit ctx entry printResult outDir fast
-        Nothing => rebuildSplit ctx entry printResult outDir fast
+              Nothing => rebuildSplit ctx entry printResult outDir fast mods
+        Nothing => rebuildSplit ctx entry printResult outDir fast mods
 
 -- 快指针未命中：精化一次 → 写接口（返回模块摘要）→ 语义 key → blob 命中则复用，
 -- 否则 codegen + 写 blob + 写快指针。
-rebuildSplit : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Bool -> String -> String -> Eff r (Check (Pair Int (List Diagnostic)))
-rebuildSplit ctx entry printResult outDir fast =
+rebuildSplit : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Bool -> String -> String -> CheckMods -> Eff r (Check (Pair Int (List Diagnostic)))
+rebuildSplit ctx entry printResult outDir fast mods =
   do
     closureMods <- summaryClosureMods ctx
     summary <- summarySplitParts ctx closureMods entry printResult
@@ -258,7 +265,7 @@ rebuildSplit ctx entry printResult outDir fast =
                     sem =
                       case modules of
                         [] => fast
-                        _ => splitIdentityOf ctx printResult tag modules
+                        _ => splitIdentityOf ctx printResult tag modules mods.cmKind mods.cmDeps
                   in do
                     cached <- readSplitBlob sem
                     case cached of
@@ -295,7 +302,7 @@ auditCompile ctx entry printResult outDir =
     mods <- splitModsOf ctx entry printResult
     closureMods <- summaryClosureMods ctx
     summary <- summarySplitParts ctx closureMods entry printResult
-    full <- dtSplitProjectParts ctx entry printResult
+    full <- dtSplitProjectParts ctx entry printResult (map modHashPair closureMods)
     let
       _ = dbg! "iface-audit subject=compile entry=${entry}"
     in do
@@ -323,7 +330,7 @@ auditCompile ctx entry printResult outDir =
                           sem =
                             case modules of
                               [] => fast
-                              _ => splitIdentityOf ctx printResult tag modules
+                              _ => splitIdentityOf ctx printResult tag modules mods.cmKind mods.cmDeps
                         in do
                           _ <- writeSplitBlobAt sem canon
                           _ <- writeSplitPointer fast sem
@@ -1503,9 +1510,6 @@ depIfacesForToolSourceDetailed ctx label source =
         _ <- obsMarkEff "vuna.tool.ifaces.disabled"
         pure Nothing
 
-modHashPair : ClosureMod -> Pair String String
-modHashPair m = Pair m.cmName m.cmAddr
-
 statOfClosureMod : Member nFs FsOp r => ClosureMod -> Eff r SourceInfo
 statOfClosureMod m =
   do
@@ -2511,9 +2515,10 @@ splitInOf m =
 -- ---------------------------------------------------------------
 -- 产物身份（代码即内容）：快 key → 语义 key 的指针 + 语义 blob。
 --
--- `splitIdentityOf` 只看本包接口面 / 产物面 / 布局（span 行号）与编译器 tag，不看源字节：
--- 注释变更不换语义 key（复用 codegen），行移动换布局摘要（重建位置表），
--- `opaque`/`abstract` 体变更换 `pkgImplHash`（只换本包产物）。
+-- `splitIdentityOf` 看本包接口面 / 产物面 / 布局（span 行号）、依赖身份、产物口径与
+-- 编译器 tag，不看本包源字节：注释变更不换语义 key（复用 codegen），行移动换布局摘要
+-- （重建位置表），`opaque`/`abstract` 体变更换 `pkgImplHash`（只换本包产物），
+-- 依赖包变化换 `deps`（产物文件集含依赖单元）。
 -- ---------------------------------------------------------------
 splitPtrKind : String
 splitPtrKind = "splitptr"
@@ -2545,13 +2550,19 @@ layoutDigestOf ctx modules =
   addrOf
     ("split-layout" :: concatMap (\m => map (\p => "${miNameOf m}|${defLocLine ctx p}") (miDefLocsOf m)) (sortModuleIfaces modules))
 
-splitIdentityOf : PackageContext -> Bool -> String -> List ModuleIface -> String
-splitIdentityOf ctx printResult tag modules =
+-- | 语义 key：本包接口面 / 产物面 / 布局（span 行号）+ **产物口径**（摘要 / 全量、
+--   printResult）+ **依赖身份** + 编译器 tag。
+--
+-- 依赖身份必须进 key：产物文件集包含依赖包的单元，只改依赖包（本包源码不变）时
+-- 语义 key 若不换，`split-identity-hit` 会复用含旧依赖单元的 blob。产物口径同理：
+-- 摘要路径与全量路径的 runtime defloc 表不同。
+splitIdentityOf : PackageContext -> Bool -> String -> List ModuleIface -> String -> String -> String
+splitIdentityOf ctx printResult tag modules kind deps =
   let
     pkg = contextPackageName ctx
     pr = if printResult then "1" else "0"
   in addrOf
-    ["split-identity", splitNodeSchema, pkg, pr, pkgIfaceHashOfModules pkg modules, pkgImplHashOfModules pkg modules, layoutDigestOf ctx modules, tag]
+    ["split-identity", splitNodeSchema, pkg, pr, kind, deps, pkgIfaceHashOfModules pkg modules, pkgImplHashOfModules pkg modules, layoutDigestOf ctx modules, tag]
 
 -- | 链接工具链身份：视图里放的是**链接产物**，它由生成的 .ml 与链接工具链共同决定。
 -- `views/bin` 的 key 因此 = 产物输入摘要 + 工具链身份；统一 store 下不会把别的工具链

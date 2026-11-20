@@ -4,8 +4,8 @@ module Vuna.Compiler.Driver.PerfCache where
 --
 -- 与包级 split 缓存（`List SplitFile` 一把存）不同，这里按**单元**存生成结果：
 -- 包内一个模块改动时，其余单元（源码/依赖哈希都没变）直接复用上次生成的 `SplitFile`
--- 文本，不重新跑 codegen。key 由调用方（`Driver.Dt`）算好：单元名 + 声明/import 内容
--- + 传递依赖单元 key + printResult。
+-- 文本，不重新跑 codegen。key 由调用方（`Driver.Dt`）算好：单元名 +
+-- 模块身份（接口地址；拿不到时退回声明规范编码）+ import 链的传递单元 key + printResult。
 --
 -- 文件 = `Store` framing + `SplitFile` 的**显式规范编码**（codec `split-file 1`，
 -- 见 `Driver.Split.encSplitFile`）。tag 里带编译器 tag（schema + 版本 + 二进制指纹）：
