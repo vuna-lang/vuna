@@ -76,7 +76,6 @@
 
 | D116 | `fmt` 在 `export import M (T(..), ...)` 上会重复展开导出项：每跑一次列表翻倍（实测 `Vuna.Cli.Spec` 的导出面从 1842 字节涨到 3650，再跑继续翻倍） | `packages/toolchain/lib/Vuna/Fmt/Decl.vuna`（import 渲染）；复现：给模块加一条含 `T(..)` 的 `export import`，连跑两次 `vuna fmt` | 后续（当前改成显式 `import` 规避） |
 
-| D118 | `vuna dev obs summarize` 折叠前按 `ts` 排每个线程的 span 用的是 `Base.Data.Sort.sortBy`（插入排序，`stdlib.md` 明确「适合小表」）：419k span / 67 MB 的 level 2 trace 现在 **5.0 s**（线程分组此前是 O(n²) 的 `append items [item]`，已改成前插累积：同一 trace 14 min → 5.0 s；`checks.vuna-obs-schema` 整步 40 s）。trace 再大仍会退化 | `packages/dev/lib/Vuna/Obs/Summarize.vuna`（`sortBySpanTs`）、`packages/base/lib/Base/Data/Sort.vuna` | 后续（按线程做一遍线性归并，或利用「子 span 先落盘」直接折叠） |
 | D119 | 记录模式（`Ctx items env refs d`）的子模式个数与记录字段数不一致时，报 `TC_CaseBranchTooFewArgs`（文案是「case branch has too few arguments for its constructor」）且**没有 span**：给 `Elab.Types.Ctx` 加第 5 个字段后，`Elab.Meta.ctxHasLinear` 里遗留的 4 子模式让整个包 check 失败，只能靠肉眼搜 `Ctx `；记录模式被降级成单构造子 case 后由 `bindCtorGo` 在 `subpats = []` 处抛错，报错点丢失了记录名与缺的字段 | `packages/compiler/lib/Vuna/Compiler/Elab/Case.vuna`（`bindCtorGo` 的 `subpats` 空分支）、`packages/compiler/lib/Vuna/Compiler/Elab/Match.vuna`（记录模式降级） | 后续（在降级点先比子模式数与字段数，报带 span 的「记录模式少 N 个字段」） |
 
 ## 效应统一（Eff 已贯通）

@@ -17,10 +17,14 @@
 | `Base.Data.Pair` / `Base.Data.Bool` / `Base.Data.List` / `Base.Data.Maybe` / `Base.Data.Result` | 核心代数数据类型与常用 helper（append/reverse/map/filter/foldl/foldr/traverse/step/...）；`List` 另有候选选择组合子 `firstJust`（首个 `Just`）与 `firstSuccess`（顺序尝试动作，命中即停）；`Result` / `Maybe` / `List` 带 `Functor`/`Applicative`/`Monad` 实例（`do` 可用）；容器带约束 `Show`，代数容器另带 `Eq`（List/Maybe/Pair 还有 `Ord`），容器 `Show` 的插值经 blanket `Interp` 复用 |
 | `Base.Trait.Field` / `Base.Trait.Record` | `Field` 类型级字段标签（`Field "id"`）+ `HasField` trait：nominal record 的泛型读访问；`Base.Trait.Record` 重导出 `Base.Trait.Field`；实例由编译器按 record 字段自动生成（仅导入 Base.Trait.Record 的模块）。见 [records-traits.md](records-traits.md)「HasField」 |
 | `Base.Data.String` | split/join/lines/unlines/trim/contains/startsWith/endsWith/repeat/substring；`byteLength : String -> Nat` |
-| `Base.Data.Sort` | 稳定排序 `mergeSort` / `sortBy`（当前实现是插入排序：稳定、O(n²)，适合小表） |
+| `Base.Data.Sort` | 稳定排序 `mergeSort` / `sortBy`：已有序输入直接返回，长度 ≤16 走插入排序，其余混合归并（O(n log n)，归并步尾递归） |
 | `Base.Container.Map` | 关联表实现的抽象 Map（empty/insert/lookup/remove/keys/values/size/...）；小表用 |
-| `Base.Container.HashMap` | 键与值都泛型的持久哈希映射（1024 桶；insert/insertAll/lookup/member/fromList/toList/size/ofNames；键需 `Eq` + `Hashable`；空表写 `fromList []`）；大表、构造后频繁查找 |
-| `Base.Container.HashSet` | 键泛型的集合（内部 `HashMap a Bool`；empty/insert/member/fromList/toList/size；键需 `Eq` + `Hashable`） |
+| `Base.Container.HashMap` | 键与值都泛型的持久哈希映射（1024 桶；insert/insertAll/remove/lookup/member/fromList/toList/size/ofNames；`insert` 即去重、`size` O(1)；键需 `Eq` + `Hashable`；空表写 `fromList []`）；大表、构造后频繁查找 |
+| `Base.Container.HashSet` | 键泛型的集合（内部 `HashMap a Bool`；empty/insert/remove/member/fromList/toList/size；`size` O(1)；键需 `Eq` + `Hashable`） |
+| `Base.Container.TreeMap` | 键与值都泛型的有序持久映射（AVL；insert/remove/lookup/member/size/height/toAscList/toDescList/range/fromList；键需 `Ord`；`size` O(1)）；需要有序遍历或区间查询 |
+| `Base.Container.TreeSet` | 键泛型的有序持久集合（内部 `TreeMap a Unit`；empty/insert/remove/member/size/toAscList/toDescList/fromList；键需 `Ord`） |
+| `Base.Container.Queue` | 持久 FIFO 队列（双列表；push/pushAll/pop/peek/isEmpty/size/fromList/toList；push/pop O(1) 摊还、size O(1)）；worklist / BFS |
+| `Base.Container.PriorityQueue` | 键泛型的优先队列（左偏堆，min-heap；push/pop O(log n)、peek/size O(1)、toAscList/fromList；元素需 `Ord`） |
 | `Base.Data.Unit` | 单元素类型 `Unit(..)`（`MkUnit`）+ `Eq` / `Ord` / `Show` / `Semigroup` / `Monoid` / `Hashable` 实例 |
 | `Base.Trait.Hashable` | 通用哈希 trait：`hash : a -> Int`、`hashStr`（String 的 0..1023 哈希）、`hashCombine`；`String`/`Int`/`Bool`/`Nat`/`Unit`/`List`/`Maybe`/`Pair`/`Result`/`Ordering` 实例，用户类型可 `deriving (Hashable)` |
 | `Base.Data.Bits` | 位运算命名库 + 32-bit 固定宽度包装：`band` / `bor` / `bxor` / `bnot` / `shl` / `shr`（63-bit 语义，移位越界 = 0）+ `mask8` / `mask32` / `shl32` / `shr32` / `add32` / `rotr32` / `rol32`；SHA-256 / 编码类算法使用 |
@@ -64,7 +68,7 @@
 | `Base.Effect.Process` | process 标签（命名实例，如 `"mock"`/`"real"`）：`Args`/`Exit`/`RunIn`；`processArgs`/`processExit`/`processRunIn`/`handleProcess`/`handleProcessHost`（真实 handler 用 `prim_eff_getArgs`/`prim_eff_exit`/`prim_eff_runIn`）/`handleProcessHostWith`（自定义 `onExit`）/`handleProcessHostObserved`（`Exit` 可观察、不退出）；启动失败（cwd 不存在 / 权限）抛 `ProcessErrorOp`（`ProcessError`，`processErrorText` 渲染），`runProcessError n` 收成 `Result`，entry 预装的 `runProcessErrorHost` 打印 `vuna: process: …` 并 exit 1；**子进程非零退出码仍是值** |
 | `Base.Data` | 数据门面：扁平重导出 `Pair` / `Bool` / `List` / `Maybe` / `Result` / `String` / `Unit` / `Vec` / `Nat` / `Int` / `Float` / `Bits` / `Sort` / `Obs` / `Obs.Span`；也可写路径（`import Base.Data.List as List`）。叶子模块本身不跨包导出 |
 | `Base.Trait` | trait 门面：扁平重导出 `Eq` / `Ord` / `Show` / `Interp` / `Hashable` / `Monoid` / `Foldable` / `Traversable` / `Monad`（含 `Applicative` / `Functor`）/ `Record`（含 `Field`）/ `Num` / `Neg` / `FromInt` / `FromString`；也可写路径（`import Base.Trait.Monad as Monad`） |
-| `Base.Container` | 容器门面（只提供路径）：`import Base.Container.Map as Map` / `...HashMap` / `...HashSet` / `...Array` / `...Sort`，用路径区分 `insert` / `fromList` / `toList` / `size` 等同名操作 |
+| `Base.Container` | 容器门面（只提供路径）：`import Base.Container.Map as Map` / `...HashMap` / `...HashSet` / `...TreeMap` / `...TreeSet` / `...Queue` / `...PriorityQueue` / `...Array` / `...Sort`，用路径区分 `insert` / `fromList` / `toList` / `size` 等同名操作 |
 | `Base.Effect` | 效应门面（只提供路径）：`Core`（运行时核心）/ `Types`（类型面）/ `State` / `Reader` / `Error` / `Exn` / `Ref` / `Fs` / `Console` / `Clock` / `Env` / `Args` / `Stdin` / `Exit` / `Net` / `Process`，以及 `Pure` 子树 |
 | `Base.Effect.Pure` | 纯效应表示门面（只提供路径，无运行时 handler）：`Base.Effect.Pure.State` / `Reader` / `Error` / `IORef` |
 | `Base` | 包门面：整模块重导出核心模块（含 `Base.Data.Nat` / `Base.Trait.Num` / `Base.Data.Unit` / `Base.Trait.Applicative`(经 Monad) / `Base.Trait.Monoid` / `Base.Trait.Foldable` / `Base.Trait.Traversable` / `Base.Trait.Hashable`；不含 `Vec` 与哈希容器；`import Base` 即可用） |
@@ -85,14 +89,14 @@ packages/base/lib/
   Base/Data/Obs/Span.vuna
   Base/Trait/{Eq,Ord,Show,Interp,Hashable,Monoid,Foldable,Traversable,
               Functor,Applicative,Monad,Record,Field,Num,Neg,FromInt,FromString}.vuna
-  Base/Container/{Map,HashMap,HashSet,Array}.vuna
+  Base/Container/{Map,HashMap,HashSet,TreeMap,TreeSet,Queue,PriorityQueue,Array}.vuna
   Base/Effect/{Core,Types,State,Reader,Error,Exn,Ref,Fs,Console,Clock,
                Env,Args,Stdin,Exit,Net,Process}.vuna
   Base/Effect/Pure.vuna      Base/Effect/Pure/{State,Reader,Error,IORef}.vuna
   Base/Internal/Operator.vuna
 ```
 
-抽象类型（`Map`、`HashMap`、`HashSet`）的构造器保持私有。`Map` / `Sort` / `HashMap` / `HashSet` 都不在 `Prelude` 里；`Base` 门面重导出 `Base.Container.Map` / `Base.Data.Sort`，但**不**含 HashMap / HashSet——它们与 `Map` 在 `insert` / `fromList` / `toList` / `size` 上同名（`HashMap` 还有 `lookup` / `member`，`HashSet` 有 `member` 与 `empty`），同时重导出会让 `insert` 等名字在使用点产生歧义（同名条目允许共存，按候选集解析）。
+抽象类型（`Map`、`HashMap`、`HashSet`、`TreeMap`、`TreeSet`、`Queue`、`PriorityQueue`）的构造器保持私有。`Map` / `Sort` / `HashMap` / `HashSet` / `TreeMap` / `TreeSet` / `Queue` / `PriorityQueue` 都不在 `Prelude` 里；`Base` 门面重导出 `Base.Container.Map` / `Base.Data.Sort`，但**不**含其余容器——它们与 `Map` 在 `insert` / `fromList` / `toList` / `size` 上同名（`HashMap` 还有 `lookup` / `member`，`HashSet` 有 `member` 与 `empty`），同时重导出会让 `insert` 等名字在使用点产生歧义（同名条目允许共存，按候选集解析）。
 用哈希容器时显式 `import Base.Container.HashMap as HashMap` / `...HashSet as HashSet`；同文件使用多个容器时写完整限定名（`HashMap.insert` / `HashSet.member`）。
 
 `packages/base/vuna.toml` 的 `[export]` 只列门面；叶子模块（`Base.Effect.Fs` / `Base.Container.HashMap` / …）
@@ -125,7 +129,8 @@ modules = [
 
 - **公开度量用 Nat**：`List.length`、`Array.length/get/set/make`、
   `String.byteLength/substring/repeat`、`Base.Effect.Fs.fsFileSize`、
-  `Map.size`、`HashMap.size`、`HashSet.size`、`Vec.vlen`。
+  `Map.size`、`HashMap.size`、`HashSet.size`、`TreeMap.size`、`TreeSet.size`、
+  `Queue.size`、`PriorityQueue.size`、`Vec.vlen`。
 - **Nat 归一化只留在 Eff handler 的 result 族**：`Base.Effect.Console` 的 `Print` 与
   `Base.Effect.Fs` 的 `WriteFile` / `FileSize` 结果是 `Nat`（handler 在边界用 `natFromInt` 转）；
   直接调用 `prim_eff_print` / `prim_eff_writeFile` / `prim_eff_fileSize` 得到 `Eff [] Int`；
@@ -215,12 +220,34 @@ modules = [
 - split 输出（`compile` / `build` 目录）的编译单元只有 `Vuna_runtime` + 各源码模块 +
   `Main`；文件集以 `seed/` 与 `nix/seed/files.txt` 为准。
 
+## 容器复杂度契约
+
+| 容器 | 操作 | 复杂度 | 说明 |
+| --- | --- | --- | --- |
+| `List` | 头插 / 模式匹配 / `foldl` | O(1) | 尾部访问与 `length` 是 O(n) |
+| `Array` | `get` / `length` | O(1) | `set` 是 copy-on-write，O(n) |
+| `Map` | `lookup` / `insert` / `remove` / `size` | O(n) | assoc list；适合小表 |
+| `HashMap` | `lookup` / `insert` / `remove` | O(1) 期望 | 1024 桶 + 桶内短链；无 resize |
+| `HashMap` | `size` | O(1) | 计数字段（`insert` 即去重） |
+| `HashMap` | `toList` | O(n) | 桶序展开，不保证插入序 |
+| `HashSet` | 同 `HashMap` | — | 内部 `HashMap a Bool` |
+| `TreeMap` | `lookup` / `insert` / `remove` | O(log n) | AVL；`size` O(1)、`height` O(1) |
+| `TreeMap` | `toAscList` / `toDescList` | O(n) | 中序 / 逆中序 |
+| `TreeMap` | `range lo hi` | O(log n + k) | 越界子树整棵剪掉（k = 命中条目数） |
+| `TreeSet` | 同 `TreeMap` | — | 内部 `TreeMap a Unit` |
+| `Queue` | `push` / `pushAll` / `pop` / `peek` | O(1) 摊还 | 双列表；`size` O(1) |
+| `PriorityQueue` | `push` / `pop` | O(log n) | 左偏堆（min-heap）；`peek` / `size` O(1) |
+| `Sort` | `sortBy` / `mergeSort` | O(n log n) 最坏 | 已有序输入 O(n) 且零分配；长度 ≤16 走插入排序 |
+
+契约由 `checks.vuna-container-growth`（相邻档 ≤3.0×）与 `bench/programs` 的三端 ratio 基线共同锁住。
+
 ## 已知边界
 
 - `Map` 是关联表（assoc list）实现的抽象类型，无平衡树；适合小表；
-- `HashMap k v` / `HashSet a` 是 1024 桶的持久哈希容器：键需 `Eq` + `Hashable`；无 `remove`、无 resize；
-  `toList` 按桶序展开（不保证插入序）；`size` 是 O(n)（没有计数字段）；桶结构是
-  `Array (Array (List ...))`（`Array.get` O(1)，`insert` 两次 32 元素 copy-on-write）；
+- `HashMap k v` / `HashSet a` 是 1024 桶的持久哈希容器：键需 `Eq` + `Hashable`；`insert` 即去重
+  （桶内命中就替换）、有 `remove`、`size` 由计数字段 O(1) 读；`toList` 按桶序展开（不保证插入序）；
+  桶结构是 `Array (Array (List ...))`（`Array.get` O(1)，`insert` 两次 32 元素 copy-on-write）；
+  **无 resize**：桶数固定 1024，键数远大于它时桶内链表变长、查找常数退化；
 - **只有 `HashMap` 移除了 `empty`**：空表统一写 `fromList []`。原因是空表在 OCaml 侧用
   `Array.make` 构造会引入弱类型变量（`'_weak`），跨模块使用时会被固定；`fromList []` 走
   `HashMap arrayEmpty`（`[||]` 字面量，non-expansive）可正常泛化。`HashSet.empty` 仍在；
@@ -228,8 +255,9 @@ modules = [
   `Base.Container.Map.fromList` 的查找语义一致），`insertAll` **后面**的条目覆盖前面的。两者都是
   既定 API 语义，不要合并或用错；
 - 哈希容器的键由 `Eq` + `Hashable` 约束覆盖（没有 String/Int 专用容器）；`Hashable` 实例
-  覆盖 primitive 与常用容器，用户类型可 `deriving (Hashable)`。仍**没有有序持久容器**
-  （TreeMap/TreeSet）：需要有序时用 `Base.Data.Sort`，大表查找用哈希容器；
+  覆盖 primitive 与常用容器，用户类型可 `deriving (Hashable)`。有序需求用 `TreeMap` / `TreeSet`
+  （AVL，`Ord` 键，O(log n)）；只排一次序用 `Base.Data.Sort`。二者都不提供批量
+  union / 区间删除；`PriorityQueue` 同优先级元素的出队顺序确定但**不是插入序**；
 - **容器与可变数据**：不可变 `Base.Container.Array`、`Eff []` 内 `IORef`；`Array.get` 越界是
   宿主 `Invalid_argument`；`Array.set` 返回新数组；可变数据句柄只经 `Eff []` 动作使用
   （见 [effects.md](effects.md)）。没有局部可变入口（region/ST、可变数组、字符串缓冲），

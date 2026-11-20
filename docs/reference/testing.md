@@ -509,10 +509,11 @@ pkg_err/packages/test-m30 → `packages/cli`；web → `packages/web-cli`；其�
 
 ## Nix checks 清单
 
-`nix flake check` 实测 **27 项**：3 个 package 构建（`vuna` / `vuna-compiler` /
-`vuna-seed`，同时暴露为 checks）+ 24 个 check 语义项（`context-budget`、
+`nix flake check` 实测 **28 项**：3 个 package 构建（`vuna` / `vuna-compiler` /
+`vuna-seed`，同时暴露为 checks）+ 25 个 check 语义项（`context-budget`、
 `seed-selfhost`、`vscode-ext`、`vuna-checks-inventory`、`vuna-compiler-growth`、
-`vuna-compiler-growth-ctor`、`vuna-compiler-growth-incremental`、`vuna-diag`、`vuna-fmt`、`vuna-frontend-growth`、
+`vuna-compiler-growth-ctor`、`vuna-compiler-growth-incremental`、`vuna-container-growth`、
+`vuna-diag`、`vuna-fmt`、`vuna-frontend-growth`、
 `vuna-lint`、`vuna-metrics`、`vuna-nix-fmt`、`vuna-obs-dwarf`、`vuna-obs-overhead`、
 `vuna-obs-schema`、`vuna-single-pass`、`vuna-static`、`vuna-tests-e2e`、`vuna-tests-gate`、
 `vuna-tests-native`、`vuna-tests-wasm`、`vuna-wasm-browser`、
@@ -586,6 +587,9 @@ CI 把它拆成三个 job（`.github/workflows/ci.yml`）：`flake-check` 跑除
   `vuna.parse.syntax` 的 `totalUs`，再加 `fmt --check` 墙钟，相邻档 ≤2.5×；与
   `vuna-compiler-growth` 互补（整条 check 里前端只占几个百分点，n² 会被精化成本掩盖）。
   读数见 [performance.md](performance.md) §6.1；
+- `vuna-container-growth`：HashMap / Queue / TreeMap / PriorityQueue / Sort 各三档合成探针
+  （N / 2N / 4N），先编译成 OCaml 后端产物、只测**运行**墙钟（编译不计），相邻档 ≤3.0×；
+  线性路径 ≈2、n² 退化 ≈4。容器契约见 [stdlib.md](stdlib.md)「容器复杂度契约」；
 - `vuna-metrics`：冻结夹具（`corpus/codegen`）的 codegen 产物对
   `nix/checks/data/codegen.baseline` 的精确基线；种子尺寸不设门槛（见 [compiler.md](compiler.md)
   §codegen 夹具基线）；

@@ -67,6 +67,13 @@ A/B 读数一致）。`map-cold`（2111）必须清 query store 才算冷：基�
 **增量路径**，每翻倍 ≤3.3×）；`vuna-compiler-perf` 含包内增量语义断言（clean≥10、parse≤20）
 与 REPL 默认走接口路径的断言。
 
+**容器复杂度契约**：`checks.vuna-container-growth`（HashMap / Queue / TreeMap /
+PriorityQueue / Sort，三档合成探针，只测 OCaml 后端产物的运行墙钟，相邻档 ≤3.0×）与
+`bench/programs` 的 `sort_lib` / `treemap` / `queue` / `priority_queue` / `hashmap_remove`
+三端 ratio 基线共同锁住（契约表见 [stdlib.md](stdlib.md)）。Elab 的约束 worklist 已换成
+`Base.Container.Queue`（FIFO）：`check packages/compiler` 冷读数与产物逐字节不变，
+收益是去掉最坏情况 O(长度) 的尾部追加（实测中性，pending 峰值很小）。
+
 **已量化否决的候选**（数据见 git 与 `_scratch` 探针，不要重复开题）：
 
 - **增量摘要 / 分片哈希（`sha256OfParts`）与编码分片合并**：采样里 iface 阶段仍剩
