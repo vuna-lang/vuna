@@ -1,19 +1,19 @@
 {
   "schema": 1,
   "meta": {
-    "timestamp": "2026-11-20T20:55:23Z",
-    "git_head": "a476cd050629e060938ac808df26ba88ce159d47",
-    "git_dirty": false,
+    "timestamp": "2026-11-20T23:03:04Z",
+    "git_head": "325ca0bef15e3032786fea4e016f241fa02a2d1e",
+    "git_dirty": true,
     "compiler": "vuna-compiler 0.1.0",
     "arch": "x86_64",
     "nproc": 16,
-    "loadavg": "12.57",
+    "loadavg": "2.16",
     "runs": 3,
     "full": false
   },
   "metrics": {
-    "size_bytes": 11359584,
-    "check_base_cold_ms": 22759,
-    "check_base_warm_ms": 40
+    "size_bytes": 11370816,
+    "check_base_cold_ms": 2422,
+    "check_base_warm_ms": 38
   }
 }

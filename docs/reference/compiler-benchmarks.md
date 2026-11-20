@@ -28,11 +28,12 @@
 | fmt-check | 1139 |
 
 **编译器自身编到 native**（`sh bench/native.sh`，基线 `bench/baselines/native.json`，只做同机
-对比）：`70d7817` 的 `check packages/base` 冷（空 store）**24–25 s**、热 **39 ms**，
-二进制 11,359,584 B。冷读数的 `user+sys` ≈ 23.8 s（99% CPU），是真实计算不是等待；
-与 OCaml 产物的同命令（~0.4 s）相差约 60x，来源是 native 缺少指令选择/窥孔（D127）
-与零参定义/闭包经由运行时的调用面。`check packages/compiler` 目前仍跑不完（D122），
-所以基线只含 base 一档（`"full": false`）。
+对比）：`325ca0b` 的 `check packages/base` 冷（空 store）**2.4 s**、热 **38 ms**，
+二进制 11,370,816 B。冷读数从 24–25 s 降到 2.4 s：段索引把 GC 的段定位从线性走链表改成
+二分（[native.md](native.md) §5.2），缺省内存预算也不再在 live 见顶后死锁。与 OCaml
+产物同命令（~0.4 s）的剩余差距主要来自 native 缺少指令选择/窥孔（D127）与零参定义/闭包
+经由运行时的调用面。`check packages/compiler` 现在跑得完（live 1.1 GB，同机 40–100 s），
+但重复读数散布大，基线仍只含 base 一档（`"full": false`）。
 
 **冷路径的成本来源（显式编码与 `Base.Store` framing 的代价，不是查询图引入的）**：check-compiler /
 build-compiler / build-all 要为每个模块把缓存载荷**显式规范编码 + `Base.Store` framing（含 SHA-256

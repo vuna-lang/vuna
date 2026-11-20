@@ -8,7 +8,7 @@
 | `bootstrap.json` | 构建链 / 自举 / 编译墙钟与产物尺寸 | `nix run .#vuna-bench -- --quick --json bench/baselines/bootstrap.json` | `vuna-bench --check` |
 | `compiler.txt` | 工具链命令（check/build/map/fmt）墙钟 | `sh bench/compiler.sh --save-baseline` | `compiler.sh --check` |
 | `artifacts.json` | 三端产物：文本文件树/字节/行数、最终二进制大小、分段构建时间（minimal / hello / defs-N / mods-N / self） | `nix run .#vuna-artifacts -- --json bench/baselines/artifacts.json` | `vuna-artifacts --check` |
-| `native.json` | 编译器编到 native 后的端到端（`check packages/base` 冷/热；`--full` 加 compiler 包，compiler 档在 D122 关闭前跑不完，当前基线 `"full": false`） | `sh bench/native.sh --runs 3 --json bench/baselines/native.json`（`--full` 可用时再加） | `native.sh --check` |
+| `native.json` | 编译器编到 native 后的端到端（`check packages/base` 冷/热；`--full` 加 compiler 包）。compiler 档现在跑得完（缺省内存预算随 live 抬高 + 段索引之后），但同机重复读数散布大（~40–100 s），所以基线仍是 `"full": false` | `sh bench/native.sh --runs 3 --json bench/baselines/native.json`（compiler 档读数稳定后再加 `--full`） | `native.sh --check` |
 
 统一重标：
 
