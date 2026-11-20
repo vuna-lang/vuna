@@ -514,15 +514,15 @@ defs / globals / sols 三张索引表。要继续压，先看 bodies（逐定义
 
 | 目标 | `vuna.parse.lex` | `vuna.parse.syntax` | 参考：冷墙钟 |
 | --- | --- | --- | --- |
-| `check packages/base` | 213 次 / ~22 ms | 213 次 / ~13 ms | ~0.43 s |
+| `check packages/base` | 142 次 / ~18 ms | 142 次 / ~9 ms | ~0.42 s |
 | `check packages/compiler` | 335 次 / ~212 ms | 335 次 / ~105 ms | ~5.3 s（无 obs 口径；obs 口径 elab ~2.1 s） |
 
 三条结论：
 
 * lex : syntax ≈ 2:1，词法仍是前端里更贵的那一半（`src` 扫描 + token 构造）；
-* `syntax` 次数 ≈ 模块数的 **1.9 倍**（335 / 181）：加载一次 + `ifaceModsEff` 的 header
-  解析一次。闭包扫描原先在「摘要判定」与「写 iface 影子」各跑一遍（2× header），已在
-  检查入口合并为一次；库检查路径（`check packages/base`）还多一次 header 扫描；
+* `syntax` 次数 ≈ 模块数的 **2 倍**（base 142 / 71、compiler 335 / 181）：加载一次 +
+  `ifaceModsEff` 的 header 解析一次。闭包扫描原先在「摘要判定」「写 iface 影子」
+  「干净模块判定」各跑一遍，已全部合并到检查入口的那一次；
 * 前端整体约占冷 `check` 的 **6%**（0.32 s / 5.3 s）：减少**次数**（债 D88 剩余的那一次
   复用）比加快单次解析收益更直接。
 

@@ -187,7 +187,7 @@ summarySplitParts ctx mods entry printResult =
     case depIfaces of
       Just ifaces =>
         do
-          clean <- ownCleanModules ctx
+          clean <- ownCleanModulesWith ctx mods
           let
             _ =
               case clean of
@@ -1887,7 +1887,7 @@ summaryCheckExeParts wantWarnings ctx mods entry =
         do
           -- `ownCleanInfo` 只需要包上下文；此前这里传 `depIfaceHashTable ctx`，那个函数内部
           -- 会跑一整遍 `ifaceModsEff`（整闭包源扫描 + 地址表），一次 check 要跑 6 次以上——纯死计算。
-          clean <- ownCleanModules ctx
+          clean <- ownCleanModulesWith ctx mods
           case clean of
             Just clean2 =>
               do
@@ -2019,6 +2019,12 @@ ownCleanInfo : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, 
 ownCleanInfo ctx =
   do
     mods <- ifaceModsEff ctx
+    ownCleanInfoWith ctx mods
+
+-- | 干净模块判定：闭包由调用方传入（摘要路径已经算过一次，别再扫一遍）。
+ownCleanInfoWith : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> List ClosureMod -> Eff r (Maybe (List ModuleIface))
+ownCleanInfoWith ctx mods =
+  do
     reads <- mapEff readOneModIface (selfModsOf ctx mods)
     let
       ownNames = map modNameOf (selfModsOf ctx mods)
@@ -2074,6 +2080,10 @@ ownCleanModules ctx =
   do
     info <- ownCleanInfo ctx
     pure info
+
+-- | 同 `ownCleanModules`，闭包由调用方传入（复用摘要路径的那次扫描）。
+ownCleanModulesWith : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> List ClosureMod -> Eff r (Maybe (List ModuleIface))
+ownCleanModulesWith ctx mods = ownCleanInfoWith ctx mods
 
 -- 工具路径（LSP 冷启动写单模块接口）复用的干净模块：记录原样写回，避免用增量路径缺失的
 -- 整包 sols 重算导致擦除位残 meta 的 zonk 结果漂移。命令行 check/build 走
@@ -2371,7 +2381,7 @@ summaryCheckLibParts wantWarnings ctx mods names =
       Just ifaces =>
         do
           -- 同 `summarySplitParts`：依赖表参数不被消费，传 `[]` 免一次 `ifaceModsEff`。
-          clean <- ownCleanModules ctx
+          clean <- ownCleanModulesWith ctx mods
           case clean of
             Just clean2 =>
               do
