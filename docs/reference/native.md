@@ -272,11 +272,16 @@ env，**不进 codegen**（同一 IR 的产物逐字节确定）。解析失败�
 - 亲和性是进程级：`fork` / `execve` 后子进程继承；`spawn` / `runIn` 的 env 默认**剔除**
   `VUNA_NATIVE_*`（`VUNA_NATIVE_INHERIT=1` 时原样传），避免子进程继承父进程的预算。
 - 超时生效（定时器已装）时，`runIn` / `spawn` 的子进程在 `execve` 前 `setpgid(0, 0)` 自成
-  一组，父进程把它的 pid 记在 `rt_child_pid`（`wait` 返回后清 0）。SIGALRM handler 只在
-  `getpgid(child)` 等于该 pid（确认子进程真的成了组首）时 `kill(-child, SIGKILL)` 收整组，
-  否则只 `kill(child, SIGKILL)`：`setpgid` 没生效时子进程与父进程同组，按组发信号会把父进程
-  自己一起杀掉。handler 只用 async-signal-safe 的 `getpgid` / `kill` / `write` / `exit_group`，
-  不分配。
+  一组，父进程把它的 pid 记进 pid 槽表（`rt_child_pids`，`rt_child_count` 个在用；
+  `wait` 返回后按 pid 摘掉自己那一槽——并发 spawn 的其它组不受影响）。到点时 SIGALRM
+  handler 遍历槽表，只在 `getpgid(child)` 等于该 pid（确认子进程真的成了组首）时
+  `kill(-child, SIGKILL)` 收整组，否则只 `kill(child, SIGKILL)`：`setpgid` 没生效时子进程与
+  父进程同组，按组发信号会把父进程自己一起杀掉。handler 只用 async-signal-safe 的
+  `getpgid` / `kill` / `write` / `exit_group`，不分配。
+- fork 到子进程 `setpgid` 之间的窗口也关掉了：父进程 fork 前用 `rt_sigprocmask` 屏蔽
+  SIGALRM（`rt_sigalrm_set` 是 SIGALRM 的位），父进程 `setpgid(child, child)` 入表之后才解除
+  屏蔽，子进程在 `execve` 前自己 `setpgid(0, 0)` 并解除屏蔽（屏蔽字跨 `execve` 保留）。
+  所以 handler 跑起来时每组的组首必然已经成立。
 - 未装定时器时子进程留在父进程组，Ctrl-C / 终端作业控制语义不变。
 - 职责边界：产物内的自超时只在 native 上做。OCaml 侧没有产物内定时器，`vuna run --timeout`
   额外包一层 coreutils `timeout -s TERM -k 5`（管它的直接子进程，见 [tooling.md](tooling.md) §4）；
@@ -364,7 +369,8 @@ env，**不进 codegen**（同一 IR 的产物逐字节确定）。解析失败�
   `GC_STRESS` 下输出一致；9ag 带尾调用的产物两次编译逐字节一致；9ah 闭包体按
   闭包 ABI（`rdi` 占掉一个寄存器）算来参区——8 参 lambda 尾调 10 参函数正好用满 32 字节。
 - 宿主层（fs 写读/原子写/目录排序/stat/rename/symlink/递归删除、argv/env/cwd/execPath、
-  clock/tty、bracket、runIn/spawn/wait）由 105 的 9o–9s 覆盖。
+  clock/tty、bracket、runIn/spawn/wait）由 105 的 9o–9s 覆盖；宿主进程的超时收尾由
+  9u–9u3（单组 / 不改 pgid）与 9u4（并发 spawn 的两组）覆盖。
 - 共享语义（算术 / 字符串 / data / record / List 桥接 / 闭包 / 高阶 API）由
   suite 的 `pure-cross` 分类（`packages/compiler/test/corpus/pure_cross/`）对拍三端，OCaml 是语义 oracle。
 - 效应语义（handler / resume / abort / 嵌套 / return 改类型 / 宿主 console / 深递归）

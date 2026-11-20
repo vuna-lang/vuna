@@ -271,6 +271,22 @@ exit: 0
 run: sh -c 'out=$("$TMPDIR/pgid-out/bin/pgid" | head -n 1 | tr -d " "); me=$(ps -o pgid= -p $$ | tr -d " "); [ "$out" = "$me" ] || { echo "pgid $out != $me"; exit 1; }; echo same-group'
 out-equals: same-group
 
+# 9u4) 并发 spawn：两个 `processSpawn` 各自成组，只 `processWait` 第一个；超时 handler 必须
+#      遍历 pid 槽把**两组**都收掉（先返回的 wait 不能清掉另一组的槽）。native 的 `spawn` 是
+#      `execve(/proc/self/exe, args)`，所以子进程按 argv 变成 worker，再从 worker 里起
+#      `/bin/sh`：这样每组都带一个后台 `sleep`，能验证整组（不只是直接子进程）被收掉。
+run: sh -c 'd="$TMPDIR/spawnslots"; mkdir -p "$d/app"; printf "[package]\nname = \"spawnslots\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Data.Int as Int\nimport Base.Data.List as List\nimport Base.Data.String as String\nimport Base.Effect.Args as EffArgs\nimport Base.Effect.Core as Eff\nimport Base.Effect.Env as EffEnv\nimport Base.Effect.Fs as EffFs\nimport Base.Effect.Process as EffProcess\n\nworker : String -> Eff [EnvOp, ProcessOp] String\nworker c = do\n  _ <- processRunIn \".\" [\"sh\", \"-c\", c]\n  pure \"worker\"\n\nparent : Eff [EnvOp, FsOp, ProcessOp] String\nparent = do\n  tmp <- envGetEnv \"TMPDIR\"\n  secs <- envGetEnv \"SLOTS_SLEEP\"\n  p1 <- processSpawn [\"sleep \" ++ secs ++ \" & echo \$! > \" ++ tmp ++ \"/s1.pid; wait\"]\n  p2 <- processSpawn [\"sleep \" ++ secs ++ \" & echo \$! > \" ++ tmp ++ \"/s2.pid; wait\"]\n  _ <- fsWriteFile (tmp ++ \"/c1.pid\") (strFromInt p1)\n  _ <- fsWriteFile (tmp ++ \"/c2.pid\") (strFromInt p2)\n  _ <- processWait p1\n  _ <- processWait p2\n  pure \"done\"\n\nmain : Eff [ArgsOp, EnvOp, FsOp, ProcessOp] String\nmain = do\n  args <- argsGetArgs\n  case args of\n    c :: _ => worker c\n    [] => parent\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/spawnslots-out" "$d"'
+exit: 0
+run: sh -c 'VUNA_NATIVE_TIMEOUT_MS=500 SLOTS_SLEEP=300 "$TMPDIR/spawnslots-out/bin/spawnslots" 2>&1'
+exit: 2
+out-equals: vuna: runtime error: timeout exceeded
+run: sh -c 'for f in c1 c2 s1 s2; do pid=$(cat "$TMPDIR/$f.pid" 2>/dev/null); [ -n "$pid" ] || { echo "no $f pid"; exit 1; }; st=$(awk "{print \$3}" "/proc/$pid/stat" 2>/dev/null || echo gone); [ "$st" != S ] || { echo "$f $pid still running"; exit 1; }; done; echo swept-both'
+out-equals: swept-both
+# 反向：不设超时时同产物能正常等两次并 exit 0（spawn 语义或屏蔽/解除屏蔽接线坏了会在这里挂住）。
+run: sh -c 'SLOTS_SLEEP=0 "$TMPDIR/spawnslots-out/bin/spawnslots" 2>&1'
+exit: 0
+out-contains: done
+
 # 9v) 核数：`VUNA_NATIVE_CPUS=1` 把进程钉到一个可用核上（`Cpus_allowed_list` 单项）。
 run: sh -c 'VUNA_NATIVE_CPUS=1 "$TMPDIR/sleepy-out/bin/sleepy" >/dev/null & p=$!; sleep 0.3; taskset -pc $p | sed "s/.*: //" | awk -F, "{print NF}"; wait'
 out-equals: 1
