@@ -1841,6 +1841,20 @@ effUnitTypeNameIr = "Base.Effect.Core.EffUnit"
 export genIr : GenSt -> Ir -> Check (Pair OTerm GenSt)
 genIr st node = genIrNode st node
 
+-- | 普通应用：把函数与实参分别生成后拼成 `(f a)`。
+genAppNode : GenSt -> Ir -> Ir -> Check (Pair OTerm GenSt)
+genAppNode st f a =
+  Vuna.Compiler.Base.Common.bind (genIr st f) (
+      \p =>
+        case p of
+          Pair fTerm st1 =>
+            Vuna.Compiler.Base.Common.bind (genIr st1 a) (
+                \q =>
+                  case q of
+                    Pair aTerm st2 => OkC (Pair (OApp fTerm aTerm) st2)
+              )
+    )
+
 genIrNode : GenSt -> Ir -> Check (Pair OTerm GenSt)
 genIrNode st (IrVar b) = OkC (Pair (OName (irBinderText b)) st)
 genIrNode st (IrGlobal name) =
@@ -1938,16 +1952,24 @@ genIrNode st (IrLam bs _ body) =
     )
 genIrNode st (IrTail inner) = genIrNode st inner
 genIrNode st (IrApp _ f a) =
-  Vuna.Compiler.Base.Common.bind (genIr st f) (
-      \p =>
-        case p of
-          Pair fTerm st1 =>
-            Vuna.Compiler.Base.Common.bind (genIr st1 a) (
-                \q =>
-                  case q of
-                    Pair aTerm st2 => OkC (Pair (OApp fTerm aTerm) st2)
-              )
-    )
+  case f of
+    -- 直接应用 λ 落成 `let`：OCaml 的 `let` 会对**语法上的函数**做泛化，
+    -- 而 `(fun x -> …) a` 的形参是单态的。两者都丢弃临时栈帧，语义在 CBV 下相同。
+    IrLam ([b]) _ body =>
+      if nonErasedBinderText b == "" then
+        genAppNode st f a
+      else
+        Vuna.Compiler.Base.Common.bind (genIr st a) (
+            \p =>
+              case p of
+                Pair aTerm st1 =>
+                  Vuna.Compiler.Base.Common.bind (genIr st1 body) (
+                      \q =>
+                        case q of
+                          Pair bodyTerm st2 => OkC (Pair (OLet (OPVar (nonErasedBinderText b)) aTerm bodyTerm) st2)
+                    )
+          )
+    _ => genAppNode st f a
 genIrNode st (IrIf c th el) =
   Vuna.Compiler.Base.Common.bind (genIr st c) (
       \p =>
