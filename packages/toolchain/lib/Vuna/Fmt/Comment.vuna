@@ -345,6 +345,8 @@ fieldExprAnchors (Pair fname value) = exprAnchors value
 doStmtAnchors : DoStmt -> List Span
 doStmtAnchors (DBind pat value sp) = sp :: exprAnchors value
 doStmtAnchors (DExpr value sp) = sp :: exprAnchors value
+doStmtAnchors (DLet binds sp) =
+  sp :: append (map bindingAnchor binds) (concatMap bindingValueAnchors binds)
 
 -- | 内部：表达式里可挂注释的条目（let 绑定、case 分支、do 语句、签名行、局部函数
 -- clause 等），按源码顺序。

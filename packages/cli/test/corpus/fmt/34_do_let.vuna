@@ -1,0 +1,29 @@
+module Vuna.DoLetSample where
+
+import Base.Data.Maybe as Maybe
+import Base.Trait.Monad as Monad
+
+run : Maybe Int
+run = do
+  (n, label) <- pure (Pair 41 "x")
+  let step = n + 1
+  let
+    a = step + 1
+    b = a + 1
+  let
+    double : Int -> Int
+    double x = x + x
+  let
+    scale : Int -> Int
+    scale x = double x
+  clamped <- pure (scale b)
+  pure clamped
+
+whole : Maybe Int
+whole = do
+  pair@(x, _) <- pure (Pair 1 2)
+  let total = firstOf pair + x
+  pure total
+
+main : Maybe Int
+main = run

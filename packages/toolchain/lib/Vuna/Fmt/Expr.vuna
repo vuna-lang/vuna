@@ -1202,6 +1202,25 @@ stmtDoc fuel env at stmt =
           valueD = exprDoc (fuel - 1) env at value
         in attachAt at sp (if multilineExpr value then appendDoc headD (nest 2 (appendDoc hard valueD)) else group (appendDoc headD (nest 2 (appendDoc line valueD))))
       DExpr value sp => attachAt at sp (group (exprDoc (fuel - 1) env at value))
+      DLet binds sp =>
+        attachAt at sp (
+            case binds of
+              [b] => if inlineLetBind b then appendDoc (text "let ") (bindingDoc (fuel - 1) env at b) else letBlockDoc (fuel - 1) env at binds
+              _ => letBlockDoc (fuel - 1) env at binds
+          )
+
+-- | 内部：`do` 里的 `let` 绑定块（`let` + 缩进 2 的绑定表）。
+letBlockDoc : Int -> List FixityDecl -> TriviaCtx -> List (Pair Pat Expr) -> Doc
+letBlockDoc fuel env at binds =
+  appendDoc (text "let") (nest 2 (appendDoc hard (vsep (map (bindingDoc (fuel - 1) env at) binds))))
+
+-- 单条绑定能否写成 `let pat = value`：签名行、局部函数组与块结构值必须走绑定块，
+-- 因为它们的后续行要与绑定列对齐。
+-- | 内部：单条 `let` 绑定是否可以内联成 `let pat = value`。
+inlineLetBind : Pair Pat Expr -> Bool
+inlineLetBind (Pair _ (EAnn _ _ _)) = False
+inlineLetBind (Pair _ (ELocalFun _ _)) = False
+inlineLetBind (Pair _ value) = not (multilineExpr value)
 
 -- | 内部：绑定（`name = value`，可带签名行 / 局部函数 clause）。
 bindingDoc : Int -> List FixityDecl -> TriviaCtx -> Pair Pat Expr -> Doc

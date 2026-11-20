@@ -1038,6 +1038,10 @@ walkDo fuel env scope line col name stmts =
         case walkExpr (fuel - 1) env scope line col name value of
           Just hit => Just hit
           Nothing => walkDo (fuel - 1) env scope line col name rest
+      (DLet binds sp) :: rest =>
+        case walkBinds (fuel - 1) env scope line col name "let" binds of
+          Just hit => Just hit
+          Nothing => walkDo (fuel - 1) env (append scope (bindersOfBinds env "let" binds)) line col name rest
 
 -- | 内部：遍历函数子句：参数 binder（可按 `mSig` 的 domain 列表补类型）只在该子句 body 里可见。
 -- kind 固定为 `parameter`（顶层函数与局部函数同口径）。

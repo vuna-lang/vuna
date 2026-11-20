@@ -549,6 +549,7 @@ stmtUses fuel ctx stmt =
     case stmt of
       DBind pat value sp => append (patUses (fuel - 1) ctx pat) (usesInExpr (fuel - 1) ctx value)
       DExpr value sp => usesInExpr (fuel - 1) ctx value
+      DLet binds sp => concatMap (bindUses (fuel - 1) ctx) binds
 
 -- | 内部：记录字面量 / 更新（`R { f = v }` / `{ r | f = v }`）里的字段标签位置——标签是
 -- value 之前**最近**一次整词出现。

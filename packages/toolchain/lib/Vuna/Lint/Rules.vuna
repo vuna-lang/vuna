@@ -607,6 +607,7 @@ startStmt fuel stmt =
     case stmt of
       DBind pat e sp => startExpr (fuel - 1) e
       DExpr e sp => startExpr (fuel - 1) e
+      DLet binds sp => minPair (startFromSpan sp) (startBinds (fuel - 1) binds)
 
 -- | 内部：表达式的真实起始行。
 exprStartLine : Expr -> Int
@@ -1033,6 +1034,7 @@ mentionsStmt fuel name stmt =
     case stmt of
       DBind pat e sp => mentionsExpr (fuel - 1) name e
       DExpr e sp => mentionsExpr (fuel - 1) name e
+      DLet binds sp => mentionsBinds (fuel - 1) name binds
 
 -- ---------------------------------------------------------------
 -- 规则 1：literal-if-chain
@@ -1827,6 +1829,7 @@ walkStmt allow fuel src stmt =
     case stmt of
       DBind pat e sp => walkExprGo allow (fuel - 1) src e
       DExpr e sp => walkExprGo allow (fuel - 1) src e
+      DLet binds sp => walkBinds allow (fuel - 1) src binds
 
 -- ---------------------------------------------------------------
 -- 规则 4：list-literal（闭合 cons 链 / 裸 Nil → 列表字面量）
@@ -2069,6 +2072,7 @@ walkListLiteralStmt fuel src stmt =
     case stmt of
       DBind pat e sp => walkListLiteral (fuel - 1) src e
       DExpr e sp => walkListLiteral (fuel - 1) src e
+      DLet binds sp => walkListLiteralBinds (fuel - 1) src binds
 
 -- ---------------------------------------------------------------
 -- 声明遍历与结果整理

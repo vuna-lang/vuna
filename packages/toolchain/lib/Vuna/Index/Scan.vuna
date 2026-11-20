@@ -431,6 +431,7 @@ refsInDoStmts sMod (s :: rest) acc =
   case s of
     DBind p x tsp => refsInDoStmts sMod rest (refsInExprGo sMod x acc)
     DExpr x tsp => refsInDoStmts sMod rest (refsInExprGo sMod x acc)
+    DLet binds tsp => refsInDoStmts sMod rest (refsInBinds sMod binds acc)
 
 -- 累积器版本（difference list 语义）：每节点 O(1) cons，最后 reverse 一次；若逐分支左结合
 -- append 子树引用列表，在应用 spine / 嵌套表达式上会呈 O(n²)。输出顺序仍是源码顺序。
