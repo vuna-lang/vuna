@@ -109,12 +109,12 @@ suiteOptsOf parsed jobs timeout worker suitePath =
     (flagValues parsed "matrix")
     (flagValues parsed "backend")
 
--- | 内部：suite 的 `--jobs`——缺省 0（auto）；`auto` 也映射到 0。
+-- | 内部：suite 的 `--jobs`——缺省 0（未给出，用 `[suite].jobs`）；`auto` = -1（强制自动探测）。
 suiteJobsOf : Parsed -> Check Int
 suiteJobsOf parsed =
   case flagValue parsed "jobs" of
     Nothing => OkC 0
-    Just "auto" => OkC 0
+    Just "auto" => OkC (0 - 1)
     Just text =>
       case parsePositiveInt text of
         Nothing => err "--jobs requires a positive integer (>= 1) or `auto`, got `${text}`"

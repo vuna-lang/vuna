@@ -2392,9 +2392,15 @@ positiveOrOne : Maybe Int -> Int
 positiveOrOne Nothing = 1
 positiveOrOne (Just n) = if n > 0 then n else 1
 
--- | 解析并发数：`--jobs` 为 0 时自动探测，否则用给定值。
-resolveJobs : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Env -> SuiteOpts -> Eff r Int
-resolveJobs env opts = if opts.suiteJobs == 0 then detectJobs env else pure opts.suiteJobs
+-- | 解析并发数：`--jobs N` 直接用；`--jobs auto`（-1）强制自动探测；未给出（0）用
+-- `[suite].jobs`，仍为 0 时自动探测。
+resolveJobs : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Env -> SuiteOpts -> Suite -> Eff r Int
+resolveJobs env opts suite =
+  if opts.suiteJobs > 0 then
+    pure opts.suiteJobs
+  else if opts.suiteJobs < 0 then
+    detectJobs env
+  else if suite.suiteDefaultJobs > 0 then pure suite.suiteDefaultJobs else detectJobs env
 
 -- ---------------------------------------------------------------
 -- 父进程
@@ -2591,7 +2597,7 @@ finishResults env opts rawResults =
 runParent : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Env -> SuiteOpts -> Suite -> List Case -> Eff r Int
 runParent env opts suite cases =
   do
-    jobs <- resolveJobs env opts
+    jobs <- resolveJobs env opts suite
     let
       n = listLength cases
       effective = if jobs > n then if n <= 0 then 1 else n else jobs

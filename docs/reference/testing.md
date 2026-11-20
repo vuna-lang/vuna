@@ -45,7 +45,8 @@ vuna dev suite --all --json               # 机器可读汇总（每个 suite �
 
 case id = `<owner>/<family>/<相对路径>`；`--only dt` / `--only compiler/` 都是子串匹配。
 fixture 与 steps 的相对路径以**所属包的 `test/`** 为根（见 `[family] dir`）。
-`--jobs auto`（默认）= 探测到的全部可用核（`VUNA_TEST_JOBS` 可覆盖，`--jobs N` 显式）。
+`--jobs N` 显式；未给出时用 `[suite].jobs`，再回落探测到的全部可用核（`VUNA_TEST_JOBS`
+可覆盖）；`--jobs auto` 强制自动探测。
 每个子进程仍有独立 `TMPDIR`；但 `VUNA_STORE` 由父进程解析一次、所有 worker/case 共享
 （对象库是输入寻址的，见「共享对象库」）。
 
@@ -159,7 +160,7 @@ end:
 
 ### 执行模型
 
-- 父进程发现 case 后按 `--jobs` spawn N 个自身（隐藏 `--worker i/N`），worker 按
+- 父进程发现 case 后按 `--jobs`（未给出时用 `[suite].jobs`，再回落自动探测）spawn N 个自身（隐藏 `--worker i/N`），worker 按
   `index mod N` 静态分片；每个 case 写一份 TSV 结果到共享临时目录，父进程按序读回。
 - 每个 case 有独立临时目录与 per-case 超时（默认 300s，`--timeout` / family `timeout`
   覆盖）。子进程输出经固定 shell helper 捕获（`timeout -s TERM -k 10 ... >out 2>err`，

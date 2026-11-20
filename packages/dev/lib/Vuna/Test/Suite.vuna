@@ -19,11 +19,12 @@ import Base.Effect.Env as EffEnv
 import Base.Effect.Fs as EffFs
 import Base.Effect.Types as EffTypes
 
--- | `vuna dev suite` 的选项；jobs = 0 表示 auto（由 runner 探测全部可用核）。
+-- | `vuna dev suite` 的选项；jobs = 0 表示未给出（用 `[suite].jobs`，再回落自动探测），
+-- -1 表示显式 `auto`（强制探测全部可用核）。
 export record SuiteOpts(..) where
   -- | suite 文件路径（`--suite`）。
   suitePath : String
-  -- | 并行 job 数（`--jobs`；0 = auto）。
+  -- | 并行 job 数（`--jobs`；0 = 未给出，用 `[suite].jobs` 再回落自动探测；-1 = 显式 `auto`）。
   suiteJobs : Int
   -- | `--list`：只列 case，不执行。
   suiteListOnly : Bool

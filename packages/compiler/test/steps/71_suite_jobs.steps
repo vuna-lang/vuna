@@ -1,0 +1,13 @@
+# 71) `[suite].jobs` 是 `--jobs` 未给出时的默认并行度；`--jobs auto` 强制自动探测。
+#
+# 两个 case 互相等对方在共享目录里的标记（最多等 1s）：并行时都成功，串行时都失败。
+# `[suite] jobs = 1` ⇒ 不传 flag 必须串行（嵌套 suite 判失败）；`--jobs auto` ⇒ 并行成功。
+run: sh -c 'rm -rf "$TMPDIR/jobs" "$TMPDIR/jobs-base"; mkdir -p "$TMPDIR/jobs/case" "$TMPDIR/jobs/marks" "$TMPDIR/jobs-base"'
+run: sh -c 'printf "%s\n" "[workspace]" > "$TMPDIR/jobs/vuna.toml"'
+run: sh -c 'printf "%s\n" "[suite]" "name = \"jobs\"" "owner = \"jobs\"" "timeout = 30" "jobs = 1" "" "[family.steps]" "dir = \"case\"" "kind = \"steps\"" > "$TMPDIR/jobs/suite.toml"'
+run: sh -c 'printf "%s\n" "run: sh -c \"touch $TMPDIR/jobs/marks/a; for i in 1 2 3 4 5 6 7 8 9 10; do [ -f $TMPDIR/jobs/marks/b ] && exit 0; sleep 0.1; done; exit 1\"" > "$TMPDIR/jobs/case/a.steps"'
+run: sh -c 'printf "%s\n" "run: sh -c \"touch $TMPDIR/jobs/marks/b; for i in 1 2 3 4 5 6 7 8 9 10; do [ -f $TMPDIR/jobs/marks/a ] && exit 0; sleep 0.1; done; exit 1\"" > "$TMPDIR/jobs/case/b.steps"'
+run: sh -c 'rm -f "$TMPDIR/jobs/marks"/*; TMPDIR="$TMPDIR/jobs-base" "$VUNA" dev suite "$TMPDIR/jobs/suite.toml" 2>&1'
+exit: 1
+run: sh -c 'rm -f "$TMPDIR/jobs/marks"/*; TMPDIR="$TMPDIR/jobs-base" "$VUNA" dev suite "$TMPDIR/jobs/suite.toml" --jobs auto 2>&1'
+exit: 0
