@@ -1,120 +1,268 @@
 # 技术债务与未实现能力（debt）
 
-本文件只登记**当前仍未关闭**的债务、缺陷与能力缺口；关闭即删除（历史在 git）。每条给
-**可复现证据**（命令或 file:line）。
+本文件是仓库**唯一的债务清单**（原 `compiler-audit.md` 已并入）。只登记**当前仍未关闭**的
+事实；关闭即删除（历史在 git）。每条给可复现证据（命令或 file:line）。语义规则与已落地
+事实不放这里——见 [type-system.md](type-system.md)、[core.md](core.md)、[effects.md](effects.md)、
+[ir.md](ir.md)、[compiler.md](compiler.md) 等主题页。
 
-分工（避免重复）：**规则与语义、已落地的事实**都在各主题参考页
-（[type-system.md](type-system.md)、[primitives.md](primitives.md)、[effects.md](effects.md)、
-[tooling.md](tooling.md) 等），本文件不复述。摘要只陈述**仍未成立的那个事实**，不写
-「部分修复」；同义项合并为一行。
+分类：**A** 补丁/绕过 · **B** 能力缺口降级 · **C** 近似（启发式/硬编码/只覆盖某形状）·
+**D** 结构妥协（多真源、手工同步）。⚠️ 表示后果是**静默错误**而不是保守误拒。
+标「有意」的条目是已定取舍，统一放在末节「已决取舍」，不算待办。
+
+ID 是稳定引用（`层前缀-序号`）：条目关闭即删除该行，ID 不复用，新条目续号。
 
 ## 语言与精化器
 
-| ID | 仍未成立的事实 | 证据 | 归属 |
+| ID · 类 | 仍未成立的事实 | 证据 | 归属 |
 | --- | --- | --- | --- |
-| B07 | 高阶合一只有空 spine 与 Miller pattern 是完整的，其余走「头一致就提取」的近似，提取不到才报错 | `Core/Conv.vuna` 的 `solveMetaFuel` / `solveMetaHoLegacyFuel`；`TC_CannotSolveHigherOrder` | 后续 |
-| B29 | `where` / `let` 局部签名不接受 `C a =>`（需 scope-aware 局部签名解析 + 局部泛化）；trait **方法签名**上的约束（方法级）未实现；trait 头的父类约束已支持（`trait Functor f => Applicative f`）；`axiom` / `extern` / 构造子 / record 字段上的约束不计划 | `Frontend/Parser.rejectCtxSuffix`；夹具 `99_explicit_where_rejected`、`99_explicit_trait_method_rejected` | 后续（trait 方法约束不计划） |
-| B30 | 无有序持久容器（TreeMap/TreeSet）；哈希容器固定 1024 桶、无 remove | `packages/base/lib/Base/Container/{HashMap,HashSet}.vuna`；[stdlib.md](stdlib.md) 的容器边界 | 后续 |
-| D21 | 完整 FFI 未做：无回调 / GC root / pin、无 C 头文件解析、无字符串双向可变共享 | [primitives.md](primitives.md) §10「受限 FFI」 | 后续 |
-| D22 | 无依赖 multiplicity / 线性箭头 / 借用 / 一次性续延；线性值传给 ω 形参的通用函数被 `TC_LinearOverused` 拒绝（保守近似只误拒不误放） | `Elab/Usage.vuna`；[qtt.md](qtt.md) | 后续 |
-| D63 | 局部可变/region 安全：`Base.ST` 随未使用代码清理删除，当前没有安全的局部可变入口；重建前必须先定「纯签名如何执行局部效果」（不得沿用「宿主 `IORef` + `runPure`」的旧捷径，否则重复 `Eff []` 不纯问题），与显式 `Host` 行/IO 模型一起设计 | `Base.ST`（历史）；[effects.md](effects.md) §4；[qtt.md](qtt.md) §8 | 后续 |
-| D64 | 可变数组/可变字符串缓冲：`Base.MArray` / `Base.Buffer` 与内建类型构造子、8 个原语一并删除；需要时按新架构重建（先定表示与 `Eff []` 纯度模型） | `packages/base/lib/Base/{MArray,Buffer}.vuna`（历史）；[primitives.md](primitives.md) §6 | 后续 |
-| D24 | Nat 字面量编译期展开为 `Zero`/`Succ` 链（Core / iface 载荷随字面量大小线性增长）；codegen 侧无固定步数预算（`Lowering` 按项规模派生预算，`Codegen.Term` 无预算），剩余问题只有字面量本身的展开成本 | `Elab/Term/Impl.natLitTerm`；[primitives.md](primitives.md) §3.1 | 后续 |
-| D27 | 精化期未解 meta 按「可表示」处理会漏插 cast（终解后才知道类型不可表示）；handler 续延域的 `resIdx i o` 走不透明值 + 恒等 cast | `Elab/Meta.vuna` 的未解 meta 判据；[effects.md](effects.md) §5 | 后续 |
-| D62 | manifest 门控已删除（显式接受的损失）：任意包可直调 `prim_*` / `prim_eff_*`；没有每包原语白名单、`unsafe` 定义级审计，网络原语对任何包可见 | `packages/compiler/lib/Vuna/Compiler/Base/Intrinsics.vuna`、`packages/base/lib/Base/Effect/*.vuna`；[effects.md](effects.md) §8.6 | 后续（表示层权限或新模型） |
-| D66 | 宿主效应内建化（策略见 [effects.md](effects.md) §2.1）：行 IType（`IEffRow`/`IRowCons`/`IGlobal`）、隐藏 `Base.Effect.Core.runMain`、`rowAppend` 行拼接（编译器 `appendReduce`）与 `joinEff` 泛化、`builtinEffects` 表、通用 entry 自动预装（`Lowering` 按 main 行收集 handler 名进 `IrEntry`，后端嵌套 `runXHost`）；带行 handler + `_host` 原语：Console/Fs/Clock/Env/Process/Exit/Stdin/Args；新建 `Base.Effect.Ref`/`Base.Effect.Net`（Net 另有 `net-error` 收口；Ref 只允许行、不需要 handler）；夹具 90–94。剩余：Sched（`forkTask` 携带子计算、不是一阶 op，需要单独的带行类型面设计；`EffSched` 仍 `Eff []`）、旧 `handleXHost`/`runX` 迁移到带行 + 工具链自身 IO（`Cli.consoleLine`/`CompilerCli`）、`prim_eff_*` 全部改 `@vuna@` 隐藏、eff-boundary 守卫改写 | `packages/compiler/lib/Vuna/Compiler/{Base/Intrinsics,Core/Eval,Elab/Prelude,Elab/Driver,Lowering/Program,Codegen/Term}.vuna`、`packages/base/lib/Base/Effect/*.vuna`；[effects.md](effects.md) §2.1 | 后续 |
-| D32 | 顶层签名的自由隐式变量 kind：按应用次数 + 类型构造子实参位置的参数 kind 推断（`Box f` 已可用）；**头可合一的重叠实例仍被拒**（设计如此，见 [records-traits.md](records-traits.md)） | `Elab/Sig.quantifyTopKinds`/`quantifyTopSigCtxCachedKinds`、`Elab/Trait.{instanceTeleMetas,classParamKindOf}` | 细节 |
-| D37 | `runEff` 内部信任入口仍接受任意行；运行时 `unhandled effect` 兜底仍服务库内部路径 | `packages/base/lib/Base/Effect/Core.vuna`（`runEff`）；`packages/compiler/lib/Vuna/Compiler/Elab/Term/Impl.vuna`（`unhandledEffectLabel`）；[effects.md](effects.md) §8.4/§8.6 | 后续 |
-| D41 | 无 Domain 并行、父 fiber handler 继承 | `Base.EffSched`；[effects.md](effects.md) §8.5 | 后续 |
-| D42 | 无通用线性箭头类型 / multiplicity 多态；`bracket` 的 cleanup 只能访问外层 handler、自身异常被吞、调度器硬中止路径无 handler 栈；线性值可经非线性 data 字段被复制 | `Base.Effect.Core`（`Cont`/`bracket`/`finally`）、`Base/Intrinsics.vuna`（`prim_cleanupPush/Pop`）；[effects-layers.md](effects-layers.md) | wasm 侧已在机器帧上实现退出钩子：弹帧（`kDone`/`Return`）前跑该帧 base 之上的 cleanup，正常路径仍由 `bracket` 带内 pop；release 自身的效应/异常走当前 handler 链（不吞），与 native/OCaml 的「吞掉」不同口径。其余限制见左 | 后续 |
-| D44 | 协作式取消只在挂起点生效；超时硬中止丢弃续延、未执行的清理不跑；超时是逻辑步数（无真实时钟）；任务体只能 `Eff Nil a`、无法继承父 handler 栈；Mutex/Semaphore/Channel 是忙等实现 | `Base.EffSched`；`packages/target-ocaml/lib/Vuna/Target/Ocaml/Term.vuna`（`dtSchedRuntime`）；[effects.md](effects.md) §8.5 | 后续 |
-| D54 | `handle`/`perform` 语法支持结果索引族（`<Op> : params… -> Type -> Type`），包括 scope 族：`ExnOp : Type -> Type` + `Scoped a` 字段，`handle` 块可直接写 `Try sub k -> k (handleScoped sub)`。**剩余限制**：显式参数不是类型的族（如 `Boom : Row -> Type -> Type`）仍报 `TC_HandleFamilyUnsupported`；完整高阶效应类型（对子计算的行/answer 做 rank-2 量化、multi-shot）不做，scope 子计算的行在 `scope` 构造点检查、之后擦除 | `packages/compiler/lib/Vuna/Compiler/Elab/Term/Impl.vuna`（`opFamilyArityOf`/`handleOpArity`/`handleCallExprWith`）、`packages/base/lib/Base/Effect/Core.vuna`（`Scoped`/`scope`/`handleScoped`/`EffSig`）、`packages/base/lib/Base/Effect/Exn.vuna`；夹具 `dt_err/100_eff_handle_family_unsupported`、`pure_cross/08_scoped_exn`、`pure_cross/09_handle_exn`；[native-effects.md](native-effects.md) §9 | 剩余仅非类型参数族（无当前用例）；完整高阶类型另行设计 |
-| D57 | `handle` 语法与 base 的手写 wrapper（`get`/`put`/`ask`/`runConsole`…）**key 不配对**：语法降级的 key 是 op 族规范名，wrapper 手写 `"state"`/`"console"` 等；语法程序只能用 `perform` 写、wrapper 程序只能手写 handler | `packages/compiler/lib/Vuna/Compiler/Elab/Term/Impl.vuna`（`performCallExpr`/`handleCallExprWith`）、`packages/base/lib/Base/Effect/*.vuna`；[native-effects.md](native-effects.md) §9 第 5 条 | 后续（统一 key） |
-| D60 | `perform`/`handle` 语法本身仍没有显式实例名：多实例行上裸标签（条目 `Named ?n Op` 的名字 meta）必然 `TC_AmbiguousInstance`；**wrapper 调用**支持 `f@name`（`Member n e r =>` 签名糖展开成 `Member (Named n e) r` + 隐式 String 名），但语法内联的 `perform`/`handle` 仍只能用行解/默认名，指定实例需用 wrapper 或 `sendCore`/`handleCore` | `packages/compiler/lib/Vuna/Compiler/Elab/Term/Impl.vuna`（`performCallExpr`/`handleCall`）、`packages/base/lib/Base/Effect/*.vuna`；夹具 `dt_base/82`、`dt_err/108`、`dt_err/109`；[native-effects.md](native-effects.md) §9/§10 | 后续（若语法内联也需要，加 `perform @name`） |
-| D61 | 高阶入口（如 `Bool -> Check PackageContext`）上使用 `pure (case ...)`/`fmap` 时，实例字典元变量可能被解成类型级名字（生成 `pure v_Int` 或 `CG_TypeLevelNameRuntime`） | 在工具链 CLI 的上下文选择处用显式 `case` 分支规避；未改 Elab/codegen | 后续若再遇，修字典解元或登记更精确限制 |
-| D65 | 只有内置宏：没有用户自定义宏 / 模式宏 / 宏生成宏；宏名是全局内置名（不参与模块作用域，不能遮蔽），实参只做 AST 替换（无 hygiene 重命名、无 typed macro / reflection） | `packages/compiler/lib/Vuna/Compiler/Loader/Expand.vuna`（`expandMacro`）、`Frontend/Ast.vuna`（`macroSyntaxName`）；[language.md](language.md)「内置宏」 | 终局见 architecture-target D4（typed macro 之前的 AST→AST 阶段） |
-| D115 | 宏展开只有调用点 span：展开出的节点共享 `name!` 的 span，没有 per-展开节点的 source map；LSP 不能 goto 宏定义 / 展开视图，fmt / lint / index 只按调用形式处理 | `Loader/Expand.vuna` 的 span 约定；`packages/toolchain/lib/Vuna/Fmt/Expr.vuna`（标记回渲染）、`packages/toolchain/lib/Vuna/Index/Scan.vuna`（标记过滤） | 后续（与 D4 / LSP 语义化一起做） |
-| D104 | 有界计数器（升序 `i + 1` 配 `i >= n` 上界）没有判定规则：只有递减构成长度证据，升序一律报 `TC_CannotProveTermination`（诊断写明「ascending counters are not supported」）；同形态只能改写成显式递减 fuel 或显式上界 | `packages/compiler/lib/Vuna/Compiler/Elab/Termination/Measure.vuna`（`arithMinusBase` / `isAddOpName`）；`packages/compiler/test/corpus/term_err/08_up_counter.vuna`；[type-system.md](type-system.md)「定义与终止性」 | 后续（需要上界推理，不是局部规则） |
-| D113 | 转发器（`apply k x = k x`、`flip k x y = k y x`，回调实参全是形参）已按定义性归约参与判据；剩余：回调实参不是纯形参（`k (g x)`）、转发器被部分应用后再调用、以及跨实例字典派发（需要类型信息） | `packages/compiler/lib/Vuna/Compiler/Elab/Termination/Measure.vuna`（`forwardersOf` / `expandForwarders`）；`packages/compiler/test/corpus/term/20_forwarder.vuna`、`term_err/23_forwarder_equal.vuna` | 后续（非形参实参需要按实参求值位置建关系） |
-| D124 | **包上下文的实例方法体仍逃过终止性分析**：Loader 把 trait 方法投影 mangle 成 `<模块前缀>.<方法短名>`，实例里的方法声明保留短名，调用点按名字连边时对不上（ad-hoc 单文件没有模块前缀，只有那种形态能命中）；按投影名对齐后又会遇到跨实例字典派发（`Eq (Array a)` 委托 `Eq (List a)`、原始类型运算符特化），需要类型/字典信息才能区分「同一实例递归」与「另一个实例」 | 复现：`lib/App/Foo.vuna` 写 `instance T Int where f x = f x`，`vuna check <包目录>` 通过；`packages/compiler/lib/Vuna/Compiler/Elab/Termination/Measure.vuna`（`funDeclsOf` 的 `DInstance` 分支） | 后续（在 Core/Dt 层用类型做派发分析，或引入「方法组 + 跨实例边」判定） |
-| D120 | **未选中的 `if` 分支在纯求值器里也被弱头求值**：`TIf` 落成 `evalIf (eval c) (eval th) (eval el)`，`VIf` 只存 `Value`，分支没法留到选中再算；`normalize` 与 codegen 都只处理选中支。后果是「核心求值器与 codegen 一致」在未选支的求值次数上不成立：`vuna test` / REPL 的纯求值为未选支付一次 WHNF 的时间与分配。结果本身不受影响（`eval` 不做 delta，未选支的求值总可终止；燃料耗尽另退化为 `VType levelZero`） | `packages/compiler/lib/Vuna/Compiler/Core/Eval.vuna`（`TIf` 两支都 `evalFuel`、`evalIf`、`normalizeIfFuel` 只下钻选中支）；[language.md](language.md)「`&&`/`||` 短路」 | 后续（修法是把 `VIf` 两支改成 `Closure`，连带 `quote` / `Conv` 与全部消费点；收益只在纯求值路径） |
+| B07 · B | 高阶合一只有空 spine 与 Miller pattern 是完整的，其余走「头一致就提取」的近似，提取不到才报错 | `Core/Conv.vuna` 的 `solveMetaFuel` / `solveMetaHoLegacyFuel`；`TC_CannotSolveHigherOrder` | 后续 |
+| B29 · B | `where` / `let` 局部签名不接受 `C a =>`（需 scope-aware 局部签名解析 + 局部泛化）；trait **方法签名**上的约束（方法级）未实现；trait 头的父类约束已支持；`axiom` / `extern` / 构造子 / record 字段上的约束不计划 | `Frontend/Parser.rejectCtxSuffix`；夹具 `99_explicit_where_rejected`、`99_explicit_trait_method_rejected` | 后续（trait 方法约束不计划） |
+| B30 · B | 无有序持久容器（TreeMap/TreeSet）；哈希容器固定 1024 桶、无 remove | `packages/base/lib/Base/Container/{HashMap,HashSet}.vuna`；[stdlib.md](stdlib.md) 的容器边界 | 后续 |
+| D21 · B | 完整 FFI 未做：无回调 / GC root / pin、无 C 头文件解析、无字符串双向可变共享 | [primitives.md](primitives.md) §10「受限 FFI」 | 后续 |
+| D22 · B | 无依赖 multiplicity / 线性箭头 / 借用 / 一次性续延；线性值传给 ω 形参的通用函数被 `TC_LinearOverused` 拒绝（保守近似只误拒不误放） | `Elab/Usage.vuna`；[qtt.md](qtt.md) | 后续 |
+| D24 · C | Nat 字面量编译期展开为 `Zero`/`Succ` 链（Core / iface 载荷随字面量大小线性增长）；codegen 侧无固定步数预算（`Lowering` 按项规模派生预算，`Codegen.Term` 无预算），剩余问题只有字面量本身的展开成本 | `Elab/Term/Impl.natLitTerm`；[primitives.md](primitives.md) §3.1 | 后续 |
+| D27 · C | 精化期未解 meta 按「可表示」处理会漏插 cast（终解后才知道类型不可表示）；handler 续延域的 `resIdx i o` 走不透明值 + 恒等 cast | `Elab/Meta.vuna` 的未解 meta 判据；[effects.md](effects.md) §5 | 后续 |
+| D32 · C | 顶层签名的自由隐式变量 kind：按应用次数 + 类型构造子实参位置的参数 kind 推断（`Box f` 已可用）；**头可合一的重叠实例仍被拒**（设计如此，见 [records-traits.md](records-traits.md)） | `Elab/Sig.quantifyTopKinds`/`quantifyTopSigCtxCachedKinds`、`Elab/Trait.{instanceTeleMetas,classParamKindOf}` | 细节 |
+| D37 · B | `runEff` 内部信任入口仍接受任意行；运行时 `unhandled effect` 兜底仍服务库内部路径 | `packages/base/lib/Base/Effect/Core.vuna`（`runEff`）；`Elab/Term/Impl.vuna`（`unhandledEffectLabel`）；[effects.md](effects.md) §8.4/§8.6 | 后续 |
+| D41 · B | 无 Domain 并行、父 fiber handler 继承 | `Base.EffSched`；[effects.md](effects.md) §8.5 | 后续 |
+| D42 · B | 无通用线性箭头类型 / multiplicity 多态；`bracket` 的 cleanup 只能访问外层 handler、自身异常被吞、调度器硬中止路径无 handler 栈；线性值可经非线性 data 字段被复制 | `Base.Effect.Core`（`Cont`/`bracket`/`finally`）、`Base/Intrinsics.vuna`（`prim_cleanupPush/Pop`）；[effects-layers.md](effects-layers.md) | 后续 |
+| D54 · B | `handle`/`perform` 语法支持结果索引族，包括 scope 族；**剩余限制**：显式参数不是类型的族（如 `Boom : Row -> Type -> Type`）仍报 `TC_HandleFamilyUnsupported`；完整高阶效应类型（对子计算的行/answer 做 rank-2 量化、multi-shot）不做 | `Elab/Term/Impl.vuna`（`opFamilyArityOf`/`handleOpArity`）、`Base/Effect/Core.vuna`（`Scoped`/`scope`/`handleScoped`/`EffSig`）；夹具 `dt_err/100_eff_handle_family_unsupported`、`pure_cross/08_scoped_exn`；[native-effects.md](native-effects.md) §9 | 剩余仅非类型参数族（无当前用例） |
+| D57 · B | `handle` 语法与 base 的手写 wrapper（`get`/`put`/`ask`/`runConsole`…）**key 不配对**：语法降级的 key 是 op 族规范名，wrapper 手写 `"state"`/`"console"` 等；语法程序只能用 `perform` 写、wrapper 程序只能手写 handler | `Elab/Term/Impl.vuna`（`performCallExpr`/`handleCallExprWith`）、`Base/Effect/*.vuna`；[native-effects.md](native-effects.md) §9 | 后续（统一 key） |
+| D60 · B | `perform`/`handle` 语法本身仍没有显式实例名：多实例行上裸标签必然 `TC_AmbiguousInstance`；wrapper 调用支持 `f@name`，语法内联的 `perform`/`handle` 仍只能用行解/默认名 | `Elab/Term/Impl.vuna`（`performCallExpr`/`handleCall`）；夹具 `dt_base/82`、`dt_err/108`、`dt_err/109` | 后续（若需要加 `perform @name`） |
+| D61 · C | 高阶入口（如 `Bool -> Check PackageContext`）上使用 `pure (case ...)`/`fmap` 时，实例字典元变量可能被解成类型级名字（生成 `pure v_Int` 或 `CG_TypeLevelNameRuntime`） | 工具链 CLI 的上下文选择处用显式 `case` 分支规避；未改 Elab/codegen | 后续若再遇，修字典解元 |
+| D62 · B | manifest 门控已删除（显式接受的损失）：任意包可直调 `prim_*` / `prim_eff_*`；没有每包原语白名单、`unsafe` 定义级审计 | `Base/Intrinsics.vuna`、`Base/Effect/*.vuna`；[effects.md](effects.md) §8.6 | 后续（表示层权限或新模型） |
+| D63 · B | 局部可变/region 安全：`Base.ST` 已删除，当前没有安全的局部可变入口；重建前必须先定「纯签名如何执行局部效果」，与显式 `Host` 行/IO 模型一起设计 | `Base.ST`（历史）；[effects.md](effects.md) §4；[qtt.md](qtt.md) §8 | 后续 |
+| D64 · B | 可变数组/可变字符串缓冲：`Base.MArray` / `Base.Buffer` 与内建类型构造子、8 个原语一并删除；需要时按新架构重建 | `packages/base/lib/Base/{MArray,Buffer}.vuna`（历史）；[primitives.md](primitives.md) §6 | 后续 |
+| D65 · B | 只有内置宏：没有用户自定义宏 / 模式宏 / 宏生成宏；宏名是全局内置名（不参与模块作用域，不能遮蔽），实参只做 AST 替换（无 hygiene 重命名、无 typed macro / reflection） | `Loader/Expand.vuna`（`expandMacro`）、`Frontend/Ast.vuna`（`macroSyntaxName`）；[language.md](language.md)「内置宏」 | 终局见 architecture-target D4 |
+| D66 · B | 宿主效应内建化的剩余项：Sched（`forkTask` 携带子计算、不是一阶 op，`EffSched` 仍 `Eff []`）、旧 `handleXHost`/`runX` 迁移、工具链自身 IO（`Cli.consoleLine`/`CompilerCli`）、`prim_eff_*` 改 `@vuna@` 隐藏、eff-boundary 守卫改写 | `Base/Intrinsics.vuna`、`Elab/Prelude.vuna`、`Elab/Driver.vuna`、`Lowering/Program.vuna`、`Codegen/Term.vuna`、`Base/Effect/*.vuna`；[effects.md](effects.md) §2.1 | 后续 |
+| D104 · B | 有界计数器（升序 `i + 1` 配 `i >= n` 上界）没有判定规则：升序一律报 `TC_CannotProveTermination` | `Elab/Termination/Measure.vuna`（`arithMinusBase` / `isAddOpName`）；夹具 `term_err/08_up_counter.vuna` | 后续（需要上界推理） |
+| D113 · C | 转发器已按定义性归约参与判据；剩余：回调实参不是纯形参（`k (g x)`）、转发器被部分应用后再调用、跨实例字典派发（需要类型信息） | `Elab/Termination/Measure.vuna`（`forwardersOf` / `expandForwarders`）；夹具 `term/20_forwarder.vuna`、`term_err/23_forwarder_equal.vuna` | 后续 |
+| D115 · C | 宏展开只有调用点 span：展开出的节点共享 `name!` 的 span，没有 per-展开节点的 source map；LSP 不能 goto 宏定义 / 展开视图，fmt / lint / index 只按调用形式处理 | `Loader/Expand.vuna` 的 span 约定；`Vuna.Fmt.Expr`、`Vuna.Index.Scan` | 后续（与 D65 一起做） |
+| D120 · C | 未选中的 `if` 分支在纯求值器里也被弱头求值：`TIf` 落成 `evalIf (eval c) (eval th) (eval el)`，`VIf` 只存 `Value`；`normalize` / codegen 只处理选中支 | `Core/Eval.vuna`（`TIf`、`evalIf`、`normalizeIfFuel`）；[language.md](language.md)「`&&`/`\|\|` 短路」 | 后续（把 `VIf` 两支改成 `Closure`） |
+| D124 · ⚠️B | **包上下文的实例方法体仍逃过终止性分析**：Loader 把 trait 方法投影 mangle 成 `<模块前缀>.<方法短名>`，实例里的方法声明保留短名，调用点按名字连边时对不上；按投影名对齐后又会遇到跨实例字典派发 | `Elab/Termination/Measure.vuna`（`funDeclsOf` 的 `DInstance` 分支）；复现：包内 `instance T Int where f x = f x` 通过 `check` | 后续（用类型/字典信息做派发分析） |
 
-## 中间表示
+## 前端（Frontend）
 
-| ID | 仍未成立的事实 | 证据 | 归属 |
+| ID · 类 | 仍未成立的事实 | 证据 | 归属 |
 | --- | --- | --- | --- |
-| D109 | **擦除后 IR 的类型信息是选择性填充的**：λ binder、`IrLam` 结果、`IrDef` 签名、`IrCast` 两端、`IrCtor` 类型实参、`IrApp` 函数/结果、`IrCase` scrutinee/结果、分支 binder、record / projection / update 结果都有类型槽；binder 类型按「保留结构 + 不透明洞」的总口径写入（OCaml 注解另由 `irTyAnnotatable` 过滤，不固定多态性），顶层 λ 链优先按签名域回填，`IrLam` 结果取体节点类型，`IrApp` 依次尝试 Core 侧解析与已降低 callee 的节点类型（含 `let` 脱糖出的内联 lambda），全局定义 / trait 方法选择子的部分应用按擦除实参实例化，运行时原语签名取自 `lwGlobals`，但没有 IR 级类型检查器；仍保持 `Nothing` 的是体类型未知的 lambda、`prim_erase`（依赖换型 cast）与 binder 类型完全未记录的局部变量（非目标是不做第二套精化器） | `Ir/Model.vuna`（节点类型槽、`irResultTyOf`、`irTyAnnotatable`）、`Ir/Validate.vuna`（签名、注解、节点类型 arity、构造子值实参个数、`arity ≤ 签名箭头数`）、`Lowering/Env.vuna`（`lwGlobals`）、`Lowering/Ty.vuna`（`annotTyOf` / `annotTyOfTotal` / `annotGlobalTy` / `ctorKeptFieldTys`）、`Lowering/Program.vuna`（签名回填、分支 binder 回填、`IrLam` 结果与 app 类型兜底）、`Codegen/Term.vuna`（注解过滤）；[ir.md](ir.md)「已知边界」 | 后续（`prim_erase` 与完全未记录 binder 类型的情形；结构校验按需补充） |
-| D111 | **ANF 不是幂等规范化**：二次 ANF 会给已经 `let` 绑定的非简单右值再插一层 `let`（`__anf<n>` 编号递增），结构因此变化；wasm 的 CPS 路径恰好依赖「二次 ANF 从更高编号开始」来避免撞名，所以幂等门禁不成立 | `Ir/Anf.vuna`（`anfProgramDefs` / `next` 计数）；复现：`vuna dev ir dump --after anf` 与 `--after anf2` 的首个定义不同 | 后续（若要幂等：已 ANF 的右值不再 hoist，或把二次 ANF 换成显式命名空间） |
+| FE-07 · D | `Manifest.vuna` 的 schema 编码：注释 / `isDepSourceKey` / `checkOneEntry` / `applyDepEntry` / `buildManifest` 多处手工同步，没有表驱动 | `Frontend/Manifest.vuna` | 后续 |
+| FE-09 · D | `Toml.vuna` 的 `flatten*` / `nodeValue`：`fuel` 是 SCT 的测度、从不检查；越界不可达靠调用方论证 | `Frontend/Toml.vuna` | 后续 |
+| FE-12 · D | `Cst.vuna` 的 `scanStringEnd` / `scanDigitsEnd`：为还原原文二次扫描，规则与 lexer 手工一致 | `Frontend/Cst.vuna` | 后续 |
+| FE-14 · A | `Parser.vuna` 的 `parseDoStmt`：任何模式错误都被吞掉、改按表达式重试 | `Frontend/Parser.vuna` | 后续 |
+| FE-15 · C | `Parser/Support.vuna` 的 `stateFuel`：估算上界 + 手写「零 token 链 ≤16」证明，不在门禁里 | `Frontend/Parser/Support.vuna` | 后续 |
+| FE-16 · D | `Rast.vuna` + `Rast/Bridge.vuna`：多份同构 AST + 手写双向搬运，漏改不报错 | `Frontend/{Ast,Rast,Rast/Bridge,Canonical/Ast}.vuna` | 后续 |
+| FE-17 · C | `Canonical/Ast.vuna` 的 tag 编码：tag = 构造子声明顺序，中间插一个即整体位移且解码仍成功 | `Frontend/Canonical/Ast.vuna` | 后续 |
+| FE-19 · D | `Packages/Source.vuna` 的 `skipSourceDir`：跳过名单在工具链另有 `Files.skipGenerated` / `Clean.skipCleanDir` / `Index.Scan` 三份，且不一致 | `Frontend/Packages/Source.vuna` | 后续 |
+| FE-20 · C | `Pkg.vuna` 的 `DepGit` url/rev：store 查找只用 `hash`，url/rev 只进 `depSourceText`，不校验仓库出处 | `Frontend/Packages/Pkg.vuna` | 后续 |
+| FE-21 · A | Parser 的错误恢复只到顶层声明粒度：声明内部首个错误直接冒泡；`parseSourceFile` 末尾 `isEof` 失败会把已收集的 `errs` 整批丢掉；`recoverDecl` 只按列跳，可能落在多行表达式中间造出假声明 | `Frontend/Parser.vuna`（`parseDecls` / `parseSourceFile` / `recoverDecl` / `skipToDeclLine`） | 后续 |
+| FE-22 · A | `do` 里第二处「吞掉真错、按表达式重解」：`parseLetBindings` 失败后从原始状态把同一段 token 再解析成表达式，`let` 块内的缩进 / 签名错误被替换成无关诊断 | `Frontend/Parser.vuna`（`doLetOrExpr`） | 后续 |
+| FE-23 · C | `case` 之后的缩进判定靠 5 个 token 的白名单（`)`/`]`/`,`/`else`/`in`/`then`）：case 结果上的后缀 / 深层 `where` 被误杀，新语法不改表就误判 | `Frontend/Parser/Support.vuna`（`terminatesExpression` / `badCaseIndent`） | 后续 |
+| FE-24 · D | offside 布局没有 layout 栈：`canContinue` 只有「同行 or 列 > 调用方手里的 blockCol」，括号内部不重置；`blockCol = 0` 当「关掉布局」的哨兵；`sameLineState` 伪造 `Pos line 0 0 0` | `Frontend/Parser/Support.vuna`、`Frontend/Parser.vuna` | 后续 |
+| FE-25 · D | `Cst` 的节点树是第二套布局实现且没有生产消费者：注释声称「parser 与格式化器共用」，但 parser 不 import Cst、Fmt/LSP 只用 token 流、`buildCst` 的唯一使用者是测试夹具；两套布局语义不同，可静默漂移 | `Frontend/Cst.vuna`（`layoutStep` / `buildCst`）、`Frontend/Parser/Support.vuna`；夹具 `compiler/04_cst_deep` | 后续 |
+| FE-26 · D | token 宽度 / 原文有四个来源（lexer 末尾偏移、Cst 贪心重扫、`tokenSpan` 的 endOffset、`?`/`-`/`!` 的列相邻判定）；列的単位未定义（一律 UTF-8 字节，LSP 需要 UTF-16 由消费方换算） | `Frontend/Lexer.vuna`、`Frontend/Cst.vuna`、`Frontend/Parser/Support.vuna`、`Vuna.Lsp.Semantic` | 后续 |
+| FE-27 · C | `.` 一个语法被切在 lexer / parser / loader 三层：`a.b` 先合成单 token，parser 的字段后缀只处理独立点，loader 再拆；字段访问没有单一产生点，两条路径的 span / 诊断不同 | `Frontend/Lexer.vuna`（`collectIdent`）、`Frontend/Parser.vuna`（`parseFieldSuffix`）、`Loader/Resolve.vuna` | 后续 |
+| FE-28 · D | `Rast` 是 `Ast` 的整份复制：约 250 行名字分类 / 访问器工具各两份，`ExportItem`/`Import`/`FixityDecl` 又直接 re-export `Ast`；同模块里共享类型与影子类型混用，改一份不会让另一份编译失败 | `Frontend/Rast.vuna`、`Frontend/Ast.vuna` | 后续 |
+| FE-29 · D | `Canonical/Ast` 的 `Import` / `FixityDecl` 有两份编码器（为绕 import 环，靠一条断言保持逐字节一致）；`ExportItem` 的 tag 已违反本模块「tag = 构造子声明顺序」的规则 | `Frontend/Canonical/Ast.vuna`（`encImportLike` / `encFixityLike` / `encExportItem`） | 后续 |
+| FE-30 · D | 依赖路径归一化两个口径：`Pkg.joinPath` 走 `normalizeDir`，`Manifest.resolveManifestPath` 只拼字符串；`./`、`a/../b`、尾 `/` 会产生两个字符串，而 store / 缓存键 / 循环检测都按字符串比较 | `Frontend/Manifest.vuna`、`Frontend/Packages/Pkg.vuna` | 后续 |
+| FE-31 · A | `exportMarkerFollows` 的 `TIdent` 分支两种结果都是 `True`（死分支）：手写 token lookahead 没有测试覆盖 | `Frontend/Parser.vuna` | 后续 |
+
+## Loader
+
+| ID · 类 | 仍未成立的事实 | 证据 | 归属 |
+| --- | --- | --- | --- |
+| LD-10 · C | `Resolve.vuna` 的解析特判：`Nil/Cons/::` 特判、`>>=`→`bind` 双名回落、`Type` 头不解析实参、隐式 binder 只认 String 域 | `Loader/Resolve.vuna` | 后续 |
+| LD-11 · B | `Resolve.vuna` 的内部名旁路：`@vuna@…` 与「属于编译器包」直接放行 | `Loader/Resolve.vuna` | 后续 |
+| LD-12 · C | `Fixity.vuna` 的 `reorderDecl`：实例体里非 `DSig`/`DFun` 声明原样放行 → 延后成 internal error | `Loader/Fixity.vuna` | 后续 |
+| LD-15 · C | `Addr.vuna` 的模块摘要：无条件并入 Prelude 摘要（过近似） | `Loader/Addr.vuna` | 后续 |
+| LD-16 · C | `Fingerprint.vuna`：无 build-id 时身份退化为「路径+大小+mtime」 | `Loader/Fingerprint.vuna` | 后续 |
+| LD-17 · B | `Expand.vuna` 的宏入口：只在表达式位置、只认裸 `EVar` 应用头 | `Loader/Expand.vuna` | 后续 |
+| LD-18 · ⚠️A | section 展开的 lambda binder 会捕获用户变量：`(+ e)` → `\vuna_section -> (+) vuna_section e`，`e` 中同名的自由变量被静默替换；binder span 是 `spanEmpty` | `Loader/Fixity.vuna`（`reorderNonChain` 的 `ESectL`/`ESectR`） | 后续 |
+| LD-19 · D | fixity 有两套可见性真源：重排吃 `dedupeFixitiesOf` 汇总的**全部已加载模块**声明，unused-import 判据只看**直接 import** 并宣称 import 是唯一手段；`Module.moduleFixitiesOf` 的注释与实现相反 | `Loader/Fixity.vuna`、`Loader/Flatten.vuna`（`dedupeFixitiesOf` / `importProvidesUsedFixity`）、`Loader/Modules.vuna` | 后续 |
+| LD-20 · D | 同一 AST 形状有四份手写遍历（Fixity / Expand / Resolve / Flatten）：Fixity 用 catch-all `icInternal`，新增节点只在这条链「编译期不报错」；Flatten 的 `declRefNames` 漏节点会静默影响 unused-import | `Loader/{Fixity,Expand,Resolve,Flatten}.vuna` | 后续 |
+| LD-21 · D | Loader 的 prelude 名单与 `Elab.Sig` 不同：`Resolve.dtPreludeNames` 含内建类型构造子，`Sig.topPreludeNames` 不含；值位置的裸 `Array`/`IORef` 在两层得到不同结论 | `Loader/Resolve.vuna`、`Elab/Sig.vuna`、`Base/Intrinsics.vuna` | 后续 |
+| LD-22 · ⚠️C | `Layers.vuna` 的层闭包靠手算上界，`closureGo` 耗尽**返回部分闭包不报错** ⇒ 越层 import 可被静默放过；`LayerViolation` 的字段先塞空串再由 `ldErr4` 另带参数；`checkProjectLayers` 的计数被调用方丢弃 | `Loader/Layers.vuna`、`Loader/Flatten.vuna` | 后续 |
+| LD-23 · ⚠️C | 缓存身份回落：`cacheTagEff` 无 `cache-tag` 时回落到源码闭包身份（同一源码由不同 seed 构建的二进制会共享缓存键）；`projectIdAddrOf` 只做词法绝对化（symlink / 未规范化路径得到两个 project id） | `Loader/Fingerprint.vuna`、`Loader/Addr.vuna`、`Frontend/Packages/Pkg.vuna` | 后续 |
+| LD-24 · D | 导出表索引只迁移了一半：`modulesExporting*In` 用索引，其余限定名 / 命名空间路径仍 `exportsOf` 后线性扫；`namespacesOfWith` 每个模块重建整张 module 表（O(n²)），列表版与索引版两套实现需同步修 | `Loader/Modules.vuna`、`Loader/Resolve.vuna` | 后续 |
+| LD-25 · C | unused-import 的删除编辑：`importStartsLine` 用 `spanStartCol == 8 或 18` 判断，缩进 / tab 下静默不给 quickfix；`importRemovalSpan` 的 `endOffset` 指向本行行首而非下一行行首，offset 与 line/col 不自洽 | `Loader/Flatten.vuna` | 后续 |
+| LD-26 · D | 加载流程残留：`providers = []` 参与 re-export 拼接、`modules1 = modules` / `imports1` 原样透传（已删机制的脚手架）；`fixitiesForSourceIn` 的 `hdr` 两分支同构；`1048576` 在 6 个入口各写一份 | `Loader/Flatten.vuna` | 后续 |
+| LD-27 · A | `Resolve.resolveGlobal` 的构造子回退分支是死代码（`modulesExportingValueIn` 已含 `kind="ctor"`）；`pickCtorOrOver` 空表回 `overCtorName … []`，`pickValueOrOver` 空表回裸短名，同一个「没找到」两种内部形态 | `Loader/Resolve.vuna`、`Loader/Modules.vuna` | 后续 |
+
+## Elab：声明 / 终止性 / 覆盖率
+
+| ID · 类 | 仍未成立的事实 | 证据 | 归属 |
+| --- | --- | --- | --- |
+| EL-20 · ⚠️B | `Termination/Measure.vuna` 的 `funDeclsOf`：只收顶层 `DFun` 时实例方法体完全不进终止性分析（已部分修）；包上下文的 trait 投影改名仍未对齐（D124） | `Elab/Termination/Measure.vuna` | 后续 |
+| EL-22 · D | 终止性有三份几乎同构的手写遍历（`posWalk` / `strWalk` / `siteWalkC`），全部工作在 Rast 语法层（没有类型 / 实例信息），HOF 识别是 `Base.Data.List.{map,filter,concatMap,mapMaybe,foldl,foldr}` / `Result.traverse` / `Common.traverse` 的 canonical 模块名白名单；三处对 `EInfix`/`ESect`/`EInterp` 的覆盖各不相同 | `Elab/Termination.vuna`、`Elab/Termination/{Measure,Scc}.vuna` | 后续 |
+| EL-23 · C | 终止性判据的容量兜底把「放弃」渲染成「证明失败」：`tableGraphCap = 512`、`sctClosureFuel = 240`、正性不动点 1024、弱可达 100000 耗尽一律判失败；`blindSitesOf` 把「没分析到」落成全弱边，错误码与真正的非终止相同 | `Elab/Termination/Scc.vuna`、`Elab/Termination.vuna`、`Elab/Termination/Measure.vuna` | 后续 |
+| EL-24 · ⚠️C | 覆盖率 / 可达性有五处口径：`Case.BranchVerdict`、`Coverage.clauseCover`、`Match.familyCovered`、`Coverage.familyCtors`、`Impl` 的 Bool/Nat/Int/String 专用路径；索引族与未知族一律按「已覆盖」静默放行 | `Elab/{Case,Coverage,Match}.vuna`、`Elab/Term/Impl.vuna` | 后续 |
+| EL-25 · D | `Sig.vuna` 里四份手写 AST 遍历（`exprMaxAppArity` / `exprLowerVars` / `memberDomainOverridesOne` / `Trait.exprFreeLower`）覆盖的构造子集合各不相同且都不完整；`methodArgRigsOf` 的 `rigOf` 参数从未被调用，却对每个域白做一次 `eval` | `Elab/Sig.vuna`、`Elab/Trait.vuna` | 后续 |
+
+## Elab：状态 / 项 / 元变量 / 字典 / trait
+
+| ID · 类 | 仍未成立的事实 | 证据 | 归属 |
+| --- | --- | --- | --- |
+| EC-03 · C | `Core/Conv.vuna` 的 `metaCreatedDepth`：未登记时回退当前深度 | `Core/Conv.vuna` | 后续 |
+| EC-09 · C | `Dict.vuna` 的 `matchInstances`：上一候选的解表污染下一候选（无候选快照） | `Elab/Dict.vuna` | 后续 |
+| EC-10 · C | `Dict.vuna` 的 `ctxMemberProofTermGo`：用 `showTerm` 文本比较找同型证明 binder | `Elab/Dict.vuna` | 后续 |
+| EC-11 · C | `Dict.vuna` 的刚性快路径：`rigidSearchFast` 按族 vs `allInstancesMono` 按全表，两份判据 | `Elab/Dict.vuna` | 后续 |
+| EC-12 · D | `Dict.vuna` 的方法判定：`isEqMethod` / `isCmpMethod` / `numMethodOpName` / `cmpRuntimeName` 四处手写短名分支 | `Elab/Dict.vuna` | 后续 |
+| EC-13 · D | `Impl.vuna` 的 `bindShapeOf`：do 块语义靠对 `bind` 签名项做硬编码 de Bruijn 索引匹配（`imD/imE/imM/imR` 与两套 `iaE/iaL/ibL/ibR`） | `Elab/Term/Impl.vuna` | 后续 |
+| EC-14 · A | `Impl.vuna` 的 `perform`/`handle`：三候选试错（`handleWithAt` → `…Hole` → `handleWith`），顺序由「是不是裸变量」决定，最后一个失败时抛第一个错误 | `Elab/Term/Impl.vuna` | 后续 |
+| EC-15 · A | `Impl.vuna` 的 `specializeInterpPrimApp`：`Interp` 实例语义硬编码进编译器（与 base 实例双真源） | `Elab/Term/Impl.vuna` | 后续 |
+| EC-16 · D | `Impl.vuna` 的效果协议名字：字面串绕过 `Intrinsics` 的单一真源（`performCore`/`sigFn`/`raise`/`weaken`/`Int`/`String`） | `Elab/Term/Impl.vuna` | 后续 |
+| EC-17 · C | `Impl.vuna` 的 `sameLabelValue`：行标签包含关系用 `showTerm (quote 0 …)` 文本判等；depth 0 下只剩名字 ⇒ 同名不同变量相等 | `Elab/Term/Impl.vuna` | 后续 |
+| EC-20 · D | `Meta.vuna` 的 `ctorRefTerm*`：Ec 版与全局版两份实现 | `Elab/Meta.vuna` | 后续 |
+| EC-21 · A | `Trait.vuna` 的 `instArgAt`：实参取尽时伪造 `TGlobal "Int"`（不可达兜底） | `Elab/Trait.vuna` | 后续 |
+| EC-23 · C | `Trait.vuna` 的 `methodClausesNamed`：实例方法按短名收集（跨类同名方法会被并进来） | `Elab/Trait.vuna` | 后续 |
+| EC-28 · C | `Elab/Driver.vuna` 的 `resolveDictGoalsFix`：字典收敛固定 8 轮（三处调用点） | `Elab/Driver.vuna` | 后续 |
+| EC-29 · D | `Elab/Driver.vuna` 的实例索引自检：只在 `--debug-perf` 下跑 | `Elab/Driver.vuna` | 后续 |
+| EC-30 · A | `Impl.vuna` 的 check 位 `if`：分支检查失败后整体重推断（位置 / 期望类型信息丢失，回退用原 `ec`） | `Elab/Term/Impl.vuna` | 后续 |
+| EC-31 · ⚠️D | `Ec` 是 22 字段巨型状态：每个 setter 按位置重列全部字段（15 处），漏一处即静默串字段；解表有三份真源（`ecSols` 列表 / `ecSolTbl` 哈希 / `csSolsCount`），靠「新解必须前插」这条隐式不变量同步 | `Elab/Types.vuna`（`Ec`、`ecPut*`、`solsDelta`） | 后续 |
+| EC-32 · D | `ConstraintStore` 一个记录兼任 5 种无关状态：待处理队列、id 分配、重试表、解表计数、**构造子索引是否完整**；`ecPutCtorTbl` 也会改它 | `Elab/Types.vuna`、`Elab/Meta.vuna` | 后续 |
+| EC-33 · ⚠️C | 每定义的诊断状态住在全局 `Ec`：`checkDefCapture` 在 `checkDefUsage` 之前跑，而 `ecUseSpans` 只在后者入口清空 ⇒ 捕获 / 顶层的诊断读到上一个定义的使用点 | `Elab/Usage.vuna`、`Elab/Types.vuna` | 后续 |
+| EC-34 · ⚠️C | 实例搜索把「递归深度」和「候选 / via 预算」压进同一个固定 `16`（`searchInstanceIn`），耗尽报 `TC_NoInstanceFound`：合法的深 ctx / via 链被报成「缺实例」 | `Elab/Dict.vuna`（`searchInstFuel` / `tryViaDict`） | 后续 |
+| EC-35 · ⚠️C | 行标签 / 成员证明的身份是展示文本：`memberNameText` 用 `showValueAt 6`（深度 6 截断），候选去重 / 歧义判定 / 诊断都以该串为键 | `Elab/Dict.vuna`（`labelCandText` / `labelScan`） | 后续 |
+| EC-36 · ⚠️D | 同一个类在三条名字空间有三种拼法：`dictTypeName` 用全名、`instanceName` 用短名 + sanitize、`Dict_`/`MkDict_` 不做同样处理；`findClassByShortName` 取 `ecClasses` 首个命中 ⇒ 同名 trait 的相干性 / 特化依赖登记顺序 | `Elab/Meta.vuna`、`Elab/InstName.vuna`、`Elab/InstCoherence.vuna` | 后续 |
+| EC-37 · ⚠️A | 生成定义靠 `Ec` 差分重建，缺条目时静默伪造：`defBodyOf` 返回 `TInt 0`、`defTypeOrDefaultTbl` 返回 `TGlobal "Int"`；`ecAddDef` 对与 data 族同名的定义不插 defTbl，正好走到兜底 | `Elab/Trait.vuna`（`instanceDefsOf` / `defBodyOf` / `defTypeOrDefaultTbl`）、`Elab/Types.vuna`（`ecAddDef`） | 后续 |
+| EC-38 · ⚠️A | 字典注入 `liftFreeDictGoals`：binder 位置靠手推索引算术、生成名 `d<元变量号>`（无不可碰撞前缀）、`injectDictGoFuel` 耗尽返回未改写项、`rewriteTaggedSpineFuel` 耗尽把整条应用脊退化成裸全局名 | `Elab/Trait.vuna`（`liftFreeDictGoals` / `injectDictGoFuel` / `rewriteTaggedSpineFuel`） | 后续 |
+| EC-39 · ⚠️D | 「类型层 / 擦除」有五份判据且会互相矛盾：`Usage.isTypeForming`（只沿 cod）认为 `Int -> Type` 是类型层，`Meta.isTypeLayerValue`（每个域都须是类型层）认为不是；另有 `isTypeDomain` / `isKindWithCtx` / `isFamilyKindValue` / `rigIsErased` 重复实现 | `Elab/Usage.vuna`、`Elab/Meta.vuna`、`Elab/Term/Impl.vuna` | 后续 |
+| EC-40 · C | `Elab/Types.vuna` 的 `refineValue` 不下钻 `VCase` 分支体、不处理 `VProj`（`_ => v`）⇒ 索引精化在卡住的 case / 投影里静默丢失 | `Elab/Types.vuna` | 后续 |
+
+## Core / 中间表示 / 擦除
+
+> `EC-03` / `EC-04` / `EC-06` 是历史上按 EC 编号的 `Core.Conv` 条目，编号保持不变；
+> 新增 Core 条目用 `CO-`。
+
+| ID · 类 | 仍未成立的事实 | 证据 | 归属 |
+| --- | --- | --- | --- |
+| EC-04 · C | `Core/Conv.vuna` 的 `VPi`/`VLam`：定义性相等不比 `rig`（`rig` 是运行时擦除格子，不比是有意取舍） | `Core/Conv.vuna`；[core.md](core.md) §3 | 有意（见末节） |
+| EC-06 · C | `Core/Conv.vuna` 的 Nat 折算：长度超过 `natChainMaxValue` 的 Nat 链饱和成相等 | `Core/Conv.vuna`；[core.md](core.md) §3 | 有意（见末节） |
+| CO-01 · ⚠️A | `applyClosureBinder` 在喂完实参后返回哨兵 `VCon "_alt" []`，**从不求值闭包 body**：`quoteCaseAltFuel` 丢掉卡住 case 的全部分支体，`convOneAltFuel` 对同一 scrutinee 的两个卡住 case 只比构造子名 / binder 数，分支体恒等 | `Core/Eval.vuna`（`applyClosureBinder`、`quoteCaseAltFuel`）、`Core/Conv.vuna`（`convOneAltFuel`） | 后续（先补最小负例） |
+| CO-02 · ⚠️A | 固定 128 的求值预算直接换掉语义值：`applyCaseAlt` / `evalCase` 耗尽返回 `VType levelZero`（不是卡住），`evalArgTerms` 耗尽把实参截成 `[]`；构造子数或字段数 > 128 的族会中途命中 | `Core/Eval.vuna`（`evalCase` / `applyCaseAlt` / `evalArgTerms`） | 后续 |
+| CO-03 · ⚠️D | `quote` 硬编码 `RigOmega`，值 → 项不可逆；`Dict` 只能另写一份按实例签名恢复 rig 的 quote。`rezonkDefs` / `substSolvedMetas*` 走裸 quote 时会把 `Rig0` 实参变回运行时实参；Lowering 的 `alignCtorArgs` / 分支 binder 形状又靠 rig 猜「全 telescope / 仅保留字段」两种约定 | `Core/Eval.vuna`（`quote` / `quoteArgValues`）、`Elab/Dict.vuna`（`dictTermOfValueAt`）、`Lowering/Program.vuna`（`alignCtorArgs`） | 后续 |
+| CO-04 · ⚠️D | 三份元变量替换 walker 覆盖不一致：`substSolvedMetas` 覆盖 record 原语；`substSolvedMetasAtGo` 覆盖但 `TRecUpd` 深度不加 `tele`；`substSolvedMetasAtTblFuel` 对 `TMk/TRecord/TProj/TRecUpd` 直接 `_ => t`（残留 `TMeta` ⇒ iface 安全阀整份拒收 ⇒ 每次退回全量） | `Core/Eval.vuna`（三个 `substSolvedMetas*`） | 后续 |
+| CO-05 · ⚠️C | 安全谓词有假阴性：`hasUnsolvedMetaCloFuel` 只看闭包 env 不看 body；`hasUnsolvedMetaValue` / `levelEscapes` 跳过 `VCase` 分支体与 `VProj` 的 tele | `Core/Term.vuna` | 后续 |
+| CO-06 · ⚠️D | 表示 / 擦除判据有两份实现 + 两套上下文视图：`Elab.Meta.isOpaqueRuntimeTyIn` 用 `isTypeHeadOpaqueEc` + `nvarOpaqueCtx`，`Lowering.Env.ctorOpaqueFlagsOf` 用 `isTypeHeadOpaqueDatas` + `memOpaqueLevel`（已过滤 Bool/Nat）；`prim_erase` 在 Elab 插入、`IrCast` 在 Lowering 插入，靠注释对齐；`ctxEnv` / `ctxEnvRefined` 由每个调用点手选 | `Elab/Meta.vuna`、`Lowering/Env.vuna`、`Lowering/Program.vuna`、`Elab/Types.vuna`（`ctxEnv` / `ctxEnvRefined`） | 后续 |
+| IR-27 · ⚠️D | **没有「擦除后 Core」这一层**：`Lowering.Program` 的 `lowerTerm` 一个 pass 同时做擦除、去装箱 / record 表示、`TRecord`→应用脊、`TProj`/`TRecUpd`→`case`、Nat 折叠与 Nat case 降级、内联 arity、实参对齐、分支 binder 形状、入口分类；既是规范化又是 pass，但没有幂等断言。IR 类型槽是选择性填充（D109），没有 IR 级类型检查器（IR-08），`check` 还先校验再丢弃（D123） | `Lowering/Program.vuna`（`lowerTerm` / `lowerUnitOf` / `checkProgramOf`）、`Ir/Model.vuna`、`Ir/Validate.vuna`；[architecture-target.md](../architecture-target.md)「分层表示」 | 后续（设计变更） |
+| D109 · ⚠️C | 擦除后 IR 的类型信息是选择性填充的：λ binder / `IrLam` 结果 / `IrDef` 签名 / `IrCast` 两端 / `IrCtor` 类型实参 / `IrApp` / `IrCase` / 分支 binder / record 结果都有槽；`Nothing` 的仍是体类型未知的 lambda、`prim_erase`、未记录 binder 类型的局部变量 | `Ir/Model.vuna`、`Ir/Validate.vuna`、`Lowering/{Env,Ty,Program}.vuna`；[ir.md](ir.md)「已知边界」 | 后续 |
+| D111 · C | ANF 不是幂等规范化：二次 ANF 会给已 `let` 绑定的非简单右值再插一层 `let`（`__anf<n>` 递增）；wasm 的 CPS 路径依赖「二次 ANF 从更高编号开始」避撞名，幂等门禁不成立 | `Ir/Anf.vuna`；复现：`vuna dev ir dump --after anf` 与 `--after anf2` | 后续 |
+| IR-08 · D | `Ir/Cps.vuna` 的机器 pass（`mHandlers` / `mSyms` / `mApplys` / `mMarked` / `mSteps`）仍是类型改变型，节点类型槽继续置空；直接风格路径已保留节点类型与 def 签名 | `Ir/Cps.vuna`（`transformDef`） | 后续（部分） |
+| IR-20 · D | `Ir/Anf.vuna` 的 `__anf` 编号靠 `startsWith "__anf"` 计数避撞名（D111）；CPS 的 `freshV`/`freshK` 同样按 fuel 拼名 | `Ir/Anf.vuna`、`Ir/Cps.vuna` | 后续 |
+| IR-21 · C | `Core/Canonical.vuna`：规范化编码含 binder 名 ⇒ 重命名即换 iface 哈希 | `Core/Canonical.vuna` | 后续 |
+| D123 · C | `vuna check` 会校验随即丢弃的 IR：check 路径对整包跑 `validateProgram`，而这份 IR 只用于自检；实测占整跑 5.6% CPU，其中 `checkBinderTys` 单项 160 ms / 112 MB | `Lowering/Program.vuna`（`lowerProgramOf` 的 `validateProgram`）、`Ir/Validate.vuna`；[performance.md](performance.md) §4 | 待定：build-only + CI 门禁 |
+
+## Driver / 缓存 / 编译入口
+
+| ID · 类 | 仍未成立的事实 | 证据 | 归属 |
+| --- | --- | --- | --- |
+| DR-01 · ⚠️D | `Compile.vuna` 的 `splitModsOf` / `summarySplitParts`：`mode=s/f` 进 split key，产物是「输入 + store 热度」的函数（D112 疑源） | `Driver/Compile.vuna`（split 身份路径） | 后续（需设计） |
+| DR-02 · D | `Dt.dtProjectDecls` vs codegen 的 `topoModules`：两套模块排序；起点键还是模块名哈希 | `Driver/Dt.vuna`、`Driver/SplitGen.vuna` | 后续 |
+| DR-04 · A | `CompilerCli.vuna` 的 `stdoutIsTty`：走隐藏原语，绕过 `ConsoleOp` 行 | `Driver/CompilerCli.vuna` | 后续 |
+| DR-05 · B | `CompilerCli.vuna` + `Capabilities.vuna`：native 目标没有 entry 能力检查 | `Driver/CompilerCli.vuna`、`Base/Capabilities.vuna` | 后续 |
+| DR-11 · D | `app/Main.vuna` 的导出 import：人肉同步；漏一个 ⇒ `iface-skip partial` ⇒ 同一源码精化两遍 | `packages/compiler/app/Main.vuna` | 后续 |
+| DR-12 · D | `Dt.vuna` / `Compile.vuna` 的体量：单模块横跨 6+ 阶段 | `Driver/{Dt,Compile}.vuna` | 后续 |
+| DR-13 · D | `CompilerCli.vuna` 的 `build`：五条实现路径，缓存 / 告警 / 清理各不相同 | `Driver/CompilerCli.vuna` | 后续 |
+| DR-14 · C | `Compile.vuna` 的哈希折叠：`acc*1000003+h`、63-bit 相加与 SHA 口径并存 | `Driver/Compile.vuna` | 后续 |
+| DR-15 · C | `Compile.vuna` 的 `toolchainIdEff`：取不到就回落常量 `"none"` | `Driver/Compile.vuna` | 后续 |
+| DR-16 · D | 模块接口必须携带 `miDecls`（已 Loader-resolved 的源码 AST）：record 语法降级与终止性 SCT 都工作在源码层，依赖方要这两类上下文；接口无法瘦身，增量边界被语法耦合 | `Driver/Iface.vuna`、`Driver/Dt.vuna`（`termAux`）、`Elab/{Records,Termination}` | 后续 |
+| A06 · ⚠️D | split 的 cache key 编入 `mode=s/f`：摘要路径与全量路径产出不同字节，产物是「输入 + store 热度」的函数 | 同 DR-01；`Driver/Compile.vuna` | 后续（需设计） |
 
 ## 工具、构建与验证
 
-| ID | 仍未成立的事实 | 证据 | 归属 |
+| ID · 类 | 仍未成立的事实 | 证据 | 归属 |
 | --- | --- | --- | --- |
-| C37 | 擦除位置残留未解 meta 仍靠跨包段重编号共享（**A 已修**：`shiftTerm` 覆盖全部 Term 构造子、fuel 用尽报可检测内部错误而非静默漏移；dep 段号按模块名排序后的名次分配、与 iface 列表顺序无关。**仍未做**：语义方案 B——在精化收尾冻结擦除位未解 meta，需用户拍板「依赖方不再能替别的模块解洞」） | `Driver/Cache`（`shiftTerm`/`shiftCachedProgram`）、`Driver/Dt`（`shiftedDepPrograms`）、`packages/compiler/test/steps/66_meta_shift.steps`；[cache.md](cache.md) | 后续（B 待决策） |
-| C38 | LSP case split：不检查依赖模块导出面；构造子 / record 解析是 parse 级；洞在类型位置仍可能生成非法 `case`；索引族 case split 需要精化器暴露可达构造子（研究，非债务）。洞目标本身按 (uri, 文本内容) 缓存，且优先走增量装配（`Dt.dtGoalsSourceIncremental`）；整包从源码加载只作 case split 的最后回退 | `packages/toolchain/lib/Vuna/Lsp/Query.caseSplitActions`、`packages/toolchain/lib/Vuna/Lsp/Diagnostics.goalsForDoc`、`packages/toolchain/lib/Vuna/Lsp/Bindings`；`packages/cli/test/corpus/lsp/smoke.sh`；[lsp.md](lsp.md) | 后续 |
-| C45 | LSP 缺局部绑定推断类型：λ / `as` / 记录 pun 等无语法标注的 binder 只能给文本推导位置/类型；同名 `?name` 不共享求解 | `packages/toolchain/lib/Vuna/Lsp/Bindings.vuna`、`Elab/Driver.goalsOfProgramTolerant`；[lsp.md](lsp.md) | 后续 |
-| C46 | `vuna test` 的 main 通过判据只认 `Int`/`Nat`/`String`/`Bool` 与 `Eff [] a`（动作 main 只按退出码 0，不比较返回值） | `packages/dev/lib/Vuna/Test/Run.vuna`（`dtMainKind`）；[primitives.md](primitives.md) §5 | 后续 |
-| C47 | 增量会话（`Dt.dtIncrementalCheckedCore`）只汇总 loader + `dtProgWarnings`，**不跑**全量尾部的 `warnUnusedDefsIn`：未使用定义 / 遮蔽类 warning 在会话路径上不可得。runner 因此让 fixture 负例一律走全量；若将来要求正例也断言 warning，得把 `warnUnusedDefsIn` 接进增量尾部 | `packages/compiler/lib/Vuna/Compiler/Driver/Dt.vuna`（`dtIncrementalCheckedCore` 与 `checkDeclsWithWarns` 的差异）；`packages/dev/lib/Vuna/Test/InProc.vuna`（`checkFileSessioned` 的注释）；[testing.md](testing.md)「进程内断言」 | 后续 |
-| C48 | steps 里仍有 82 个文件 spawn `vuna` 子进程（进程绑定岛）：PTY / stdio 帧 / 产物执行 / 多进程 store / CLI 渲染文本这几类是构造性的，但没有逐个做到「只断状态的步骤」的极限压缩，ratchet 上限 `nix/checks/data/steps-inproc.max` 只降不增 | `test/suite/process-bound.txt`；`nix/checks/lib/steps-inproc.sh`；[testing.md](testing.md)「进程绑定岛」 | 后续（按需逐条迁移） |
-| C50 | iface 对象与编译器 tag 绑定：换编译器二进制后旧 iface 失配，LSP 工具会话退化为全量检查，直到用**同一个**二进制跑一次 `vuna check <pkg>` / `vuna build`。LSP 不自动重建（只观测 `vuna.tool.iface.miss:<模块>`），失败也不记忆（每条新内容仍会尝试一次建会话） | `Compiler/Driver/Compile.depIfacesForToolSourceDetailed`、`Lsp.Diagnostics.buildSession`；`bench/lsp-probe.py`；[lsp.md](lsp.md) | 后续（候选：`check` 在 tag 失配时补写 iface；LSP 侧记住「会话不可用」） |
-| D30 | docstring 覆盖未全仓化：`vuna doc --check` 受管辖包仍是 compiler+base，`packages/cli/lib/`、`packages/cli/app/` 未被收集；无 CI 门禁（ratchet 门禁已移除，只在本地按需跑）；多页 HTML 与零缺失不计划（内部符号为主、单文件可直接打开） | `packages/toolchain/lib/Vuna/Doc/*`；[api-docs.md](api-docs.md) | 后续（多页/零缺失不计划） |
-| D33 | 运行时错误只有定义级位置：无表达式级 span、局部变量值、断点（无 DAP）；`ocamlopt` 单元内联会把抛错点归到调用者帧；非入口单元顶层初始化的异常不在捕获范围 | `Codegen/Term`（`dtDefLocTable` / `dtRuntimeWith`）；[debugging.md](debugging.md) §2 | 后续 |
-| D67 | 隐藏旗标仍有两处原生读点：`--debug-perf` 在入口 `Vuna.Cli.withoutPerfFlag` / 插件 `Vuna.Cli.Registry.withoutPerfFlag` 与生成的 runtime 文本里各匹配一次（入口转发、插件摘掉、runtime 读原始 argv），仍无单一常量真源；`--release` 的 argv 解析在编译器包（`CompilerCli`）与 `VUNA_RELEASE` 读取处，工具命令的 `--release` 由 `Vuna.Cli.Spec` 声明 | `packages/cli/lib/Vuna/Cli.vuna`、`packages/compiler/lib/Vuna/Compiler/Driver/CompilerCli.vuna`、`packages/target-ocaml/lib/Vuna/Target/Ocaml/Term.vuna`；[cli.md](cli.md) §2 | 后续（不影响行为） |
-| D68 | 编译器 trace 开关是**运行时原语**（`@vuna@debug@on` 读 argv/env），不是显式传参：深部探针在 `Elab`/`Conv`/`Codegen` 的纯函数里，传 trace 能力会把整条纯核心 effect 化 | `packages/compiler/lib/Vuna/Compiler/Base/Intrinsics.vuna`、`Codegen/Term.vuna`（`dtTraceRuntime`）、`Loader/Expand.vuna` | 终局若要求零 ambient 配置，只能删深部探针或引入显式 trace 效应（与 D4 一起评估） |
-| D80 | 表达式级 / 分支级观测定位不存在：Core `Term` 里 `TVar` 与 binder（`TLam` / `CaseAlt` 的 `Binder`）带 span，其余节点（应用 / 构造子 / `if` / 记录原语）擦除时仍丢失位置，所以探针只能到「定义级 + 采样」；要表达式级归因须给 Core 全部节点补 span，并同步 `Core.Canonical` 与全部缓存 codec | `packages/compiler/lib/Vuna/Compiler/Core/Term.vuna`（`TVar` / `TLam` / `Binder` 带 span）、`Codegen/Term.lineDirectiveOf`（只按定义起始行写 `#line`）；[observability.md](observability.md) §5/§10 | 后续（与 D33 一起做） |
-| D81 | 进程 RSS / 峰值内存不可测：OCaml 5.5 的 `Unix` 没有 `getrusage`，`Gc.quick_stat` 只给分配字数（span 的 `args.allocWords` 用 `Gc.allocated_bytes ()` 求差，是精确的区间增量）；峰值内存只能靠 `/proc/self/statm` 轮询或外部 `time` | `packages/target-ocaml/lib/Vuna/Target/Ocaml/Term.vuna`（`dtObsRuntime` 的 `dtp_obs_span`）；[observability.md](observability.md) §6/§10 | 后续（RSS 只能 `/proc/self/statm` 轮询或外部 `time`） |
-| D82 | 观测只覆盖主 domain：`ITIMER_PROF`/`SIGPROF` 是进程级单定时器，fiber 全在主 domain 上跑所以够用；多 domain 采样要每 domain 独立 timer + 合并（`Runtime_events` 的 GC/调度事件也没接） | `Codegen/Term.vuna`（`dtp_obs_cpu_tick`）；[observability.md](observability.md) §1 O9 | 后续（与 D41 一起） |
-| D35 | REPL 的 resize 重绘靠空闲轮询（tty 关闭退化为空闲轮询，接受为限制）；Index 只覆盖 workspace 源码（外部依赖模块只能 `:load` 不能 `:browse`） | `packages/toolchain/lib/Vuna/Repl/Edit.vuna`、`packages/toolchain/lib/Vuna/Index/*`；[tooling.md](tooling.md) §4 | 后续 |
-| D79 | 记录更新 `{ r | f = v }` 直接作函数实参时精化器报 `TC_ErasedBinderUsed a#fam`（内部构造子字段 binder 被当运行时使用）；只能先在 `let`/函数体里位构造绕开 | `packages/compiler/lib/Vuna/Compiler/Elab/Term/Impl.vuna`（record update 降级）、`Elab/Records` | 后续 |
-| C49 | `vuna check` 仍会生成整套 codegen 文本再丢弃（`Driver.Dt.checkDtProgramOf` = lowering + `genUnitParts`），冷 `check packages/compiler` 的 codegen 段约 1.4 s 里相当一部分是纯文本拼接 | `packages/compiler/lib/Vuna/Compiler/Driver/Dt.vuna`（`checkDtProgramOf` / `dtCheckScoped`）、`Codegen/Assembly.vuna`（`genUnitParts` 注释「check 路径并丢弃文本」） | 后续（拆「校验 pass / 文本生成 pass」，需先列清哪些诊断确实来自文本生成段） |
-| D84 | `examples/multi` 的包管理冒烟没有 CI 门禁：原 `checks.vuna-package` 在 239f525 被 `vuna-tests-e2e` 取代后未迁移，`nix/checks/vuna-package.sh` 仍在但未登记；现有 gate/e2e/tools tier 与 steps 都不覆盖 `examples/multi` 的 build/test | `nix/checks/default.nix`（无 `vuna-package`）、`nix/checks/vuna-package.sh`（未登记）、`packages/cli/test/steps/28_packages.steps` | 后续（重新登记 check，或把冒烟迁成 steps） |
-| D86 | token/`Span` 已带 `[start,end)` 字节偏移，lint 的表达式文本与 token 定位走字节偏移；模式文本仍因 parser pattern span 偏移不完整而回落到行/列路径 | `packages/toolchain/lib/Vuna/Lint/Rules.vuna`（`patText` / pattern span 产生点）；lex/elab/diag codec 已 bump | 后续（只剩 pattern span 偏移补全） |
-| D87 | 词法扫描器的 fuel 初值仍是 `4*len+64` 的**估算上界**（主循环每 token 扣 1、各扫描器每字符扣 1，但初值不是从剩余长度天生递减）；字符游标已改成「原串 + 偏移」（D87 的分配部分已落地，冷 `check packages/compiler` 的 `vuna.parse.lex` 194 ms → 174 ms） | `packages/compiler/lib/Vuna/Compiler/Frontend/Lexer.vuna`（`sourceFuel` 与各 `collect*` / `skip*` 的 fuel 形参）；[performance.md](performance.md) §4.1 | 后续（低优先；耗尽即 internal 错误，当前无已知触发路径） |
-| D88 | 同一模块在一次 `check` 里仍被语法分析约 **2 次**：加载本身一次 + `ifaceModsEff` 的 header 解析一次（闭包扫描原先在摘要判定 / 影子写 / 干净模块判定各跑一遍，已全部合并到检查入口的那一次）。冷 `check packages/compiler`：`vuna.parse.syntax` 335 次 / 89 ms + `lex` 205 ms ≈ 0.29 s；`check packages/base` 142 次 / 71 模块 | `vuna.parse.syntax` 计数（`VUNA_OBS=1` + `vuna dev obs summarize`）；`Loader/Flatten.parseFileWithPath`、`Driver/Compile.loadHeaderEff`；[performance.md](performance.md) §6.1 | 后续（低优先；剩余收益上限是「加载 → header」这一次复用） |
-| D91 | 互递归组的调用出现在 `let` / `case` 位置时，实参个数推断曾在部分形状上误报 `TC_TooManyArgs`（不是函数），把调用移出 `let`/`case` 即消失。当前编译器上以下形状都只报 `TC_CannotProveTermination`（正确路径）：自递归 + `let … in case <组调用> of`、互递归 3 参 + `let … in case <组调用> of`、`case` 直接作 let 绑定值、`where` + 递归调用；4 参以上互递归 + 嵌套 `case` 内的 `let` 仍在 `case` 上先撞 `TC_IntStringCaseRestriction`。原始触发用例未保留 | `packages/compiler/test/corpus/term/12_let_case_call.vuna`（互递归 + `let … in case` 的通过路径）；`packages/compiler/lib/Vuna/Compiler/Elab/Term/Impl.vuna`（应用脊椎的 `inferArgsGo` arity 判定） | 后续（需要原始用例；若确认不可复现则关闭） |
-| D92 | 模式矩阵降级在个别**嵌套模式 alt** 上会报无位置的假错 `TC_BranchTooFewArgs`（`:0:0`），同一文件把该 alt 改写成层层 `case`（不用嵌套模式）就能通过。复现形态：case 的一个 alt 里同时嵌套「构造子 + 列表模式」，例如对 `EApp (EVar "->" _) (dom :: cod :: rest)` 直接模式匹配；拆成 `EApp fn args` 再 `case fn of` / `case args of` 后正常 | 触发于 `Elab/Match` 的矩阵降级（`ctorAltList`/`clausesForCtor` 对嵌套构造子子模式个数的假设）；对照写法见 `Elab/Sig.kindDomains` | 后续（先收敛最小用例，再查 `ctorSubPatCount` 与 `bindCtorTele` 的分支 arity 口径） |
-| D93 | `Elab` 的选择性重导出门面已删除：子模块即公开面（`Elab.Types` / `Elab.Meta` / `Elab.Driver` 等对所有消费方可见），没有「门面只重导出部分公开名」的那层封装 | `packages/compiler/lib/Vuna/Compiler/Elab/*.vuna`（无 `Elab.vuna` 门面）、`packages/compiler/vuna.toml` 的 `[export]` 列全部模块；[compiler.md](compiler.md)「模块地图」 | 后续（要收紧时靠命名约定 / 文档，或重新引入显式重导出层） |
-| D116 | `fmt` 在 `export import M (T(..), ...)` 上会重复展开导出项：每跑一次列表翻倍（实测 `Vuna.Cli.Spec` 的导出面从 1842 字节涨到 3650，再跑继续翻倍） | `packages/toolchain/lib/Vuna/Fmt/Decl.vuna`（import 渲染）；复现：给模块加一条含 `T(..)` 的 `export import`，连跑两次 `vuna fmt` | 后续（当前改成显式 `import` 规避） |
-| D126 | `kill` 插件的命令只停路由层：`vuna dev …` / `vuna web …` 由产品入口发现插件后经 `processRunIn` 起子进程（`vuna-dev` / `vuna-web`），信号不转发——杀掉 `vuna` 会把真正在跑的插件进程留成孤儿（仍在 accept / 仍占 socket）。测试侧只能给 server 套一层 `timeout`，让信号经进程组下发 | `packages/cli/lib/Vuna/Cli.vuna`（`dispatch` 的 `processRunIn`）；`packages/cli/test/corpus/obs-cdp/smoke.sh`（`spawn_serve`）；复现：起 `vuna dev obs serve --cdp unix:$PWD/s /tmp/t.jsonl` 后 `kill $!`，`pgrep -f "vuna-dev dev obs serve"` 仍在 | 后续（插件命令用 exec 替换进程，或路由层转发 SIGTERM/SIGINT——后者要动宿主信号与三端） |
-| D119 | 记录模式（`Ctx items env refs d`）的子模式个数与记录字段数不一致时，报 `TC_CaseBranchTooFewArgs`（文案是「case branch has too few arguments for its constructor」）且**没有 span**：给 `Elab.Types.Ctx` 加第 5 个字段后，`Elab.Meta.ctxHasLinear` 里遗留的 4 子模式让整个包 check 失败，只能靠肉眼搜 `Ctx `；记录模式被降级成单构造子 case 后由 `bindCtorGo` 在 `subpats = []` 处抛错，报错点丢失了记录名与缺的字段 | `packages/compiler/lib/Vuna/Compiler/Elab/Case.vuna`（`bindCtorGo` 的 `subpats` 空分支）、`packages/compiler/lib/Vuna/Compiler/Elab/Match.vuna`（记录模式降级） | 后续（在降级点先比子模式数与字段数，报带 span 的「记录模式少 N 个字段」） |
+| C37 · C | 擦除位置残留未解 meta 仍靠跨包段重编号共享（A 已修：`shiftTerm` 覆盖全部构造子、dep 段号按模块名排序分配。仍未做：语义方案 B——精化收尾冻结擦除位未解 meta） | `Driver/Cache`（`shiftTerm`/`shiftCachedProgram`）、`Driver/Dt`（`shiftedDepPrograms`）、`compiler/test/steps/66_meta_shift.steps`；[cache.md](cache.md) | 后续（B 待决策） |
+| C38 · C | LSP case split：不检查依赖模块导出面；构造子 / record 解析是 parse 级；洞在类型位置仍可能生成非法 `case`；索引族 case split 需要精化器暴露可达构造子 | `Vuna.Lsp.Query.caseSplitActions`、`Vuna.Lsp.Diagnostics.goalsForDoc`、`Vuna.Lsp.Bindings`；[lsp.md](lsp.md) | 后续 |
+| C45 · C | LSP 缺局部绑定推断类型：λ / `as` / 记录 pun 等无语法标注的 binder 只能给文本推导位置 / 类型；同名 `?name` 不共享求解 | `Vuna.Lsp.Bindings`、`Elab/Driver.goalsOfProgramTolerant`；[lsp.md](lsp.md) | 后续 |
+| C46 · C | `vuna test` 的 main 通过判据只认 `Int`/`Nat`/`String`/`Bool` 与 `Eff [] a`（动作 main 只按退出码 0，不比较返回值） | `packages/dev/lib/Vuna/Test/Run.vuna`（`dtMainKind`）；[primitives.md](primitives.md) §5 | 后续 |
+| C47 · C | 增量会话（`Dt.dtIncrementalCheckedCore`）只汇总 loader + `dtProgWarnings`，不跑全量尾部的 `warnUnusedDefsIn`：未使用定义 / 遮蔽类 warning 在会话路径上不可得 | `Elab/Driver`/`Driver/Dt.vuna`（`dtIncrementalCheckedCore` 与 `checkDeclsWithWarns`）、`packages/dev`（`checkFileSessioned`）；[testing.md](testing.md)「进程内断言」 | 后续 |
+| C48 · C | steps 里仍有 82 个文件 spawn `vuna` 子进程（进程绑定岛）：PTY / stdio / 产物执行 / 多进程 store / CLI 渲染文本这几类是构造性的，但未逐个压到「只断状态」；ratchet 上限 `nix/checks/data/steps-inproc.max` 只降不增 | `test/suite/process-bound.txt`、`nix/checks/lib/steps-inproc.sh`；[testing.md](testing.md) | 后续（按需迁移） |
+| C49 · C | `vuna check` 仍会生成整套 codegen 文本再丢弃（`checkDtProgramOf` = lowering + `genUnitParts`），冷 `check packages/compiler` 的 codegen 段约 1.4 s | `Driver/Dt.vuna`、`Codegen/Assembly.vuna`（`genUnitParts` 注释） | 后续（拆校验 pass / 文本 pass） |
+| C50 · C | iface 对象与编译器 tag 绑定：换编译器二进制后旧 iface 失配，LSP 工具会话退化为全量检查，直到用同一个二进制跑一次 `vuna check` / `build`；LSP 不自动重建、失败也不记忆 | `Driver/Compile.depIfacesForToolSourceDetailed`、`Lsp.Diagnostics.buildSession`；[lsp.md](lsp.md) | 后续 |
+| D30 · C | docstring 覆盖未全仓化：`vuna doc --check` 受管辖包仍是 compiler+base；无 CI 门禁；多页 HTML 与零缺失不计划 | `Vuna.Doc.*`；[api-docs.md](api-docs.md) | 后续 |
+| D33 · C | 运行时错误只有定义级位置：无表达式级 span、局部变量值、断点（无 DAP）；`ocamlopt` 内联会把抛错点归到调用者帧 | `Codegen/Term`（`dtDefLocTable` / `dtRuntimeWith`）；[debugging.md](debugging.md) §2 | 后续 |
+| D35 · C | REPL 的 resize 重绘靠空闲轮询；Index 只覆盖 workspace 源码（外部依赖模块只能 `:load` 不能 `:browse`） | `Vuna.Repl.Edit`、`Vuna.Index.*`；[tooling.md](tooling.md) §4 | 后续 |
+| D67 · C | 隐藏旗标仍有两处原生读点：`--debug-perf` 在入口 / 插件各匹配一次、runtime 文本读原始 argv；`--release` 的解析在编译器包与 `VUNA_RELEASE` 读取处 | `Vuna.Cli`、`Driver/CompilerCli.vuna`、`Target/Ocaml/Term.vuna`；[cli.md](cli.md) §2 | 后续（不影响行为） |
+| D68 · C | 编译器 trace 开关是运行时原语（`@vuna@debug@on` 读 argv/env），不是显式传参：深部探针在 `Elab`/`Conv`/`Codegen` 的纯函数里 | `Base/Intrinsics.vuna`、`Codegen/Term.vuna`、`Loader/Expand.vuna` | 终局若要求零 ambient 配置，只能删探针或引入显式 trace 效应 |
+| D79 · ⚠️A | 记录更新 `{ r \| f = v }` 直接作函数实参时精化器报 `TC_ErasedBinderUsed a#fam`（内部构造子字段 binder 被当运行时使用）；只能先在 `let` / 函数体里位构造绕开 | `Elab/Term/Impl.vuna`（record update 降级）、`Elab/Records.vuna` | 后续 |
+| D80 · C | 表达式级 / 分支级观测定位不存在：Core `Term` 里只有 `TVar` 与 `Binder` 带 span，其余节点擦除时丢位置；探针只能到「定义级 + 采样」 | `Core/Term.vuna`、`Codegen/Term.lineDirectiveOf`；[observability.md](observability.md) §5/§10 | 后续（与 D33 一起做） |
+| D81 · C | 进程 RSS / 峰值内存不可测：OCaml 5.5 的 `Unix` 没有 `getrusage`，`Gc.quick_stat` 只给分配字数；峰值只能 `/proc/self/statm` 轮询或外部 `time` | `Target/Ocaml/Term.vuna`（`dtp_obs_span`）；[observability.md](observability.md) §6/§10 | 后续 |
+| D82 · C | 观测只覆盖主 domain：`ITIMER_PROF`/`SIGPROF` 是进程级单定时器；多 domain 采样要每 domain 独立 timer + 合并 | `Codegen/Term.vuna`（`dtp_obs_cpu_tick`）；[observability.md](observability.md) §1 O9 | 后续（与 D41 一起） |
+| D84 · C | `examples/multi` 的包管理冒烟没有 CI 门禁：原 `checks.vuna-package` 未登记，现有 gate/e2e/tools tier 与 steps 都不覆盖它的 build/test | `nix/checks/default.nix`、`nix/checks/vuna-package.sh`、`cli/test/steps/28_packages.steps` | 后续 |
+| D86 · C | pattern span 的字节偏移不完整：lint 的表达式文本 / token 定位已走字节偏移，模式文本仍回落行 / 列路径 | `Vuna.Lint.Rules`（`patText` / pattern span 产生点） | 后续 |
+| D87 · C | 词法扫描器的 fuel 初值仍是 `4*len+64` 的估算上界；字符游标已改成「原串 + 偏移」 | `Frontend/Lexer.vuna`（`sourceFuel`、`collect*` / `skip*`）；[performance.md](performance.md) §4.1 | 后续（低优先） |
+| D88 · C | 同一模块在一次 `check` 里仍被语法分析约 2 次：加载一次 + `ifaceModsEff` 的 header 解析一次 | `Loader/Flatten.parseFileWithPath`、`Driver/Compile.loadHeaderEff`；[performance.md](performance.md) §6.1 | 后续（低优先） |
+| D91 · C | 互递归组的调用出现在 `let` / `case` 位置时，实参个数推断曾在部分形状上误报 `TC_TooManyArgs`；当前编译器上已知形状都走正确路径，原始触发用例未保留 | `compiler/test/corpus/term/12_let_case_call.vuna`、`Elab/Term/Impl.vuna`（应用脊椎的 `inferArgsGo`） | 后续（需要原始用例） |
+| D92 · C | 模式矩阵降级在个别嵌套模式 alt 上报无位置的假错 `TC_BranchTooFewArgs`（`:0:0`）；改写成层层 `case` 即通过 | `Elab/Match`（`ctorAltList` / `clausesForCtor`）、`Elab/Sig.kindDomains` | 后续 |
+| D93 · C | `Elab` 的选择性重导出门面已删除：子模块即公开面，没有「门面只重导出部分公开名」的封装 | `Elab/*.vuna`、`packages/compiler/vuna.toml` 的 `[export]`；[compiler.md](compiler.md) | 后续 |
+| D116 · ⚠️C | `fmt` 在 `export import M (T(..), ...)` 上会重复展开导出项：每跑一次列表翻倍 | `Vuna.Fmt.Decl`（import 渲染）；复现：给模块加一条含 `T(..)` 的 `export import`，连跑两次 | 后续 |
+| D126 · ⚠️B | `kill` 插件的命令只停路由层：`vuna dev …` / `vuna web …` 由产品入口发现插件后经 `processRunIn` 起子进程（`vuna-dev` / `vuna-web`），信号不转发——杀掉 `vuna` 会把真正在跑的插件进程留成孤儿（仍在 accept / 仍占 socket） | `packages/cli/lib/Vuna/Cli.vuna`（`dispatch` 的 `processRunIn`）；`packages/cli/test/corpus/obs-cdp/smoke.sh`（`spawn_serve`）；复现：起 `vuna dev obs serve --cdp unix:$PWD/s /tmp/t.jsonl` 后 `kill $!`，`pgrep -f "vuna-dev dev obs serve"` 仍在 | 后续（插件命令用 exec 替换进程，或路由层转发 SIGTERM/SIGINT） |
+| D119 · ⚠️C | 记录模式（`Ctx items env refs d`）的子模式个数与字段数不一致时报 `TC_CaseBranchTooFewArgs` 且**没有 span**；记录模式降级后由 `bindCtorGo` 在 `subpats = []` 处抛错，丢记录名与缺的字段 | `Elab/Case.vuna`（`bindCtorGo` 的 `subpats` 空分支）、`Elab/Match.vuna`（记录模式降级） | 后续 |
 
 ## 效应统一（Eff 已贯通）
 
-| ID | 仍未成立的事实 | 证据 | 归属 |
+| ID · 类 | 仍未成立的事实 | 证据 | 归属 |
 | --- | --- | --- | --- |
-| D101 | **延迟 answer 的 handler 在机器上不工作**：`07_eff_main` 的 state handler 让 `opH` 返回「等待 state 的函数」，`resume` 发生在 handler 的 `MkHandle` 返回之后；库机器把续延槽 / frame 绑在 `MkPerform → opH` 的调用点上，`finish` 之后帧已失效（native `impossible branch`、wasm `illegal cast`；OCaml 正常，期望 84）。该夹具的 `matrix` 只跑 OCaml，effect-common 没覆盖到 | `Base/Effect/Core.vuna`（`step` 的 `MkPerform`/`MkResume`、`unwind`/`finish`）；`packages/compiler/test/corpus/effect/ocaml/07_eff_main.vuna`；复现：`--target native\|wasm` 后运行 | 后续（把 handler 帧寿命挂到答案上，或对延迟 answer 的 handler 走独立路径） |
-| D114 | answer 类型是函数的库 handler（`handleState`：`s -> Pair a s`）在三端运行期不一致：native 报 `vuna: runtime error: impossible branch`、wasm 报 `illegal cast`，OCaml 后端正常。`dt_base/17_eff_state` 是 `matrix = pure`（只跑 OCaml），`effect` 家族的运行期用例没有覆盖这种高阶 `opH`，所以机器路径上没有夹具兜住。原因不在 `Ir.Cps` 的 pass 形状：把 `mCpsApply` 的 `parts` 拆成 head/args 形参后同一夹具行为不变，`--backend native` 全矩阵仍通过 | 最小复现：建一个只依赖 `vuna-base` 的包，`app/Main.vuna` 抄 `packages/compiler/test/corpus/dt_base/17_eff_state.vuna`，`vuna run <DIR> --target ocaml` 得 `8`，`--target native` 报 `vuna: runtime error: impossible branch`；`packages/base/lib/Base/Effect/State.vuna`（`handleState`） | 后续（lowering 对高阶 `opH` 的 clause 识别；补一条 `effect-common` 运行期夹具） |
-| D90 | 宿主失败通道已完整：fs / process / net 都是 typed error 效应 + entry 收口（诊断 + exit 1），`runFsError`/`runProcessError`/`runNetError` 可局部收成 `Result`；无值统一走 `Maybe`；net 有单次超时变体（`NetStep`）与 `NetBadHandle`。**已知取舍**：(a) 收口文本只有操作上下文（`fs: writeFile /x: …`），没有源码位置帧——typed error 在 handler 里抛，用户 `Eff` 闭包经尾调用链执行，调用栈里没有用户 def 帧（崩溃路径仍有帧）；(b) net 仍是阻塞式单连接，无全局 deadline / 异步 / TLS（非目标）；(c) 事件循环在 accept/recv 上阻塞时无法同时服务其它连接 | `packages/base/lib/Base/Effect/{Fs,Process,Net}.vuna`；`packages/target-ocaml/lib/Vuna/Target/Ocaml/{Runtime,Term}.vuna` | 后续（源码帧需要 per-send 调用点元数据；并发/超时语义另立设计） |
-
-| D94 | 类型定向重载值消歧只覆盖非应用位置（`x : T; x = name`）：`check` 位比较候选签名与期望类型；应用头（`name arg`）本身歧义时仍报 `TC_AmbiguousName`，没有做候选应用回溯（在 `Elab/Term/Impl` 的互递归组里回溯会触发终止性检查爆炸） | `packages/compiler/lib/Vuna/Compiler/Elab/Term/Impl.vuna`（`resolveOverValueTarget`）、`Loader/Resolve.vuna`（`pickValueOrOver`）；`packages/compiler/test/corpus/modules/103_type_directed_value`、`104_ambiguous_value` | 后续（需要独立的候选应用检查入口，避免加入现有互递归组） |
-
+| D90 · C | 宿主失败通道已完整（fs / process / net 是 typed error 效应 + entry 收口）；已知取舍：(a) 收口文本没有源码位置帧；(b) net 仍阻塞式单连接，无全局 deadline / 异步 / TLS；(c) 事件循环在 accept/recv 上阻塞时无法同时服务其它连接 | `Base/Effect/{Fs,Process,Net}.vuna`、`Target/Ocaml/{Runtime,Term}` | 后续 |
+| D94 · B | 类型定向重载值消歧只覆盖非应用位置；应用头歧义仍报 `TC_AmbiguousName`，没有候选应用回溯 | `Elab/Term/Impl.vuna`（`resolveOverValueTarget`）、`Loader/Resolve.vuna`（`pickValueOrOver`）；夹具 `modules/103`、`104` | 后续 |
+| D101 · ⚠️B | 延迟 answer 的 handler 在机器上不工作（native `impossible branch`、wasm `illegal cast`；OCaml 正常）；`effect` 家族没覆盖到 | `Base/Effect/Core.vuna`（`step` / `unwind` / `finish`）；夹具 `effect/ocaml/07_eff_main.vuna` | 后续 |
+| D114 · ⚠️B | answer 类型是函数的库 handler（`handleState`）在三端运行期不一致；`dt_base/17_eff_state` 是 `matrix = pure`，机器路径没有夹具兜住 | `Base/Effect/State.vuna`（`handleState`）；[native-effects.md](native-effects.md) §9 | 后续 |
 
 ## native 后端
 
-| ID | 仍未成立的事实 | 证据 | 归属 |
+| ID · 类 | 仍未成立的事实 | 证据 | 归属 |
 | --- | --- | --- | --- |
 | D106 | `.s` 文件集还没有承担自举锚点：native 自举尚未成为阻塞门禁，`seed-selfhost` 仍只认 OCaml 种子，也没有发布资产 + 哈希 pin 的获取路径。目标形态与前提见 [bootstrap.md](bootstrap.md)「锚点演进」 | `nix/checks/seed-selfhost.sh`（只读 `seed/`）；`nix/run-tests.nix` 的 backend-check 非阻塞；`vuna build --no-compile --target native` 产物 | 后续（前置：native selfhost 通过 + 平台锁定决策） |
 | D107 | OCaml 后端退役后没有替代的独立语义 oracle：固定点只剩同一 codegen 的自洽回归，跨后端差分由 suite + wasm 交叉承担；退役前需要把这些覆盖写成可执行门禁 | [architecture-target.md](../architecture-target.md) D7、[bootstrap.md](bootstrap.md)「锚点演进」；`test/suite.toml` 的 `pure_cross` 与 `effect_native` 家族 | 后续（与 D106 同批决策） |
 | D127 | native 没有指令选择/窥孔优化：整数算术走 `rt_add` 调用而非内联，lambda 体占产物约 47%；产物体积与墙钟的剩余空间在这里 | `packages/target-native/lib/Vuna/Target/Native/Module.vuna`、`Native/Render.vuna`；[performance.md](performance.md)「产物规模」 | 后续 |
 | D122 | **native 自举还差最后一段**：在 `IrTail`（内联 lambda 的尾标记）修掉之后，又把零参顶层定义改成 CAF（`_start` 求值一次 + `.bss` 槽 + GC 根区间）——单文件 `check` 从>30 分钟不返回降到 **1.0 s**，`check packages/base` 17 s（OCaml 23 s 同量级）。仍不通的两处：① 工作区 `check .` 会按包 `processSpawn` 自己，而 native 生成的子进程 argv 是**拼接错**的（`checkpackages/plugin-web--max-errors20`，缺分隔）；② 整仓 `check . --error-format json` 的 live 集已到 1.5 GB+，默认 1 GiB 预算下 GC 每秒数千次、十分钟不返回（升预算只是掩盖） | `bin/vuna-native check <单文件>`（1 s）/ `check packages/base`（17 s）/ `check .`（挂）；对照 OCaml `check .` = 23 s；`nix/checks/native-artifact` 的 `runtime.s` 已随 CAF 的 GC 扫根更新 | 后续（修 spawn argv；压 live 集；再跑 backend-check selfhost） |
 | D123 | **`vuna check` 会校验随即丢弃的 IR**：check 路径的 `lowerProgramOf` 对整包跑 `validateProgram`（名字唯一 / 组序 / 运行时符号 / 作用域 / binder 类型槽），而这份 IR 在 check 里只用于自检、随即丢弃；`build` 的 per-unit `validateUnit` 覆盖同一组不变式。实测占整跑 **5.6% CPU**（4.62 s → 4.36 s，5 轮交替取最小），其中 `checkBinderTys` 单项 160 ms / 112 MB | `packages/compiler/lib/Vuna/Compiler/Lowering/Program.vuna`（`lowerProgramOf` 的 `validateProgram`）、`packages/ir/lib/Vuna/Ir/Validate.vuna`；[performance.md](performance.md) §4 | 待定：改成 build-only + CI 门禁（`check` 带 `VUNA_IR_VALIDATE=1` 冷跑）——代价是 check 不再当场暴露 IR 不变式违规 
+>>>>>>> e0981ed (docs(reference): 合并 compiler-audit 到 debt 并补齐新债务)
 
+| D125 · C | **CPS 合成的 binder 不带宽类型槽**：精确根集里这部分槽只能保守扫描（compiler self 4,824 / 45,835 个 binder 槽），加上 `IrTyOpaque` 的 3,865 个，共 ~19% 的槽没有确定 kind；槽 kind 全部可判定之前不做移动/压缩 | `packages/ir/lib/Vuna/Ir/Cps.vuna`（合成 binder 用 `mkBinder`、节点类型槽清成 `Nothing`）；`vuna dev ir dump --after repr-cps packages/compiler`；[performance.md](performance.md)「槽 kind 分布」 | 后续（与 D127 同批：先精确栈图，再看是否给 CPS 合成 binder 标注类型） |
 ## wasm 后端
 
-| ID | 仍未成立的事实 | 证据 | 归属 |
+| ID · 类 | 仍未成立的事实 | 证据 | 归属 |
 | --- | --- | --- | --- |
-| D96 | 能力矩阵是手写表，与三张运行时实现表的一致性靠人工同步；改 `rtImplOf` / `dtp_*` / `nativeRtTargetHost` 时必须同步改矩阵，没有自动校验 | `packages/compiler/lib/Vuna/Compiler/Base/Capabilities.vuna`；[wasm.md](wasm.md) §8 | 后续（硬拒绝落地时补一致性测试） |
-| D97 | 入口行的不可用效应只能构建期告警 + 运行期 trap，不能构建期拒绝：`Base/Store.vuna` 的 `dirReady` 用 `processRunIn mkdir -p` bootstrap 存储根，所以 `packages/compiler/app/Main.vuna` 的行必须带 `ProcessOp`，按符号生成期拒绝会把编译器自己拒掉 | `packages/compiler/lib/Vuna/Compiler/Base/Store.vuna`（`dirReady`）、`packages/compiler/app/Main.vuna`；[wasm.md](wasm.md) §8 | 后续（前置：该调用改成 FsOp 逐级建目录，并清理签名链上的 `Member nProcess ProcessOp r`） |
+| D96 · D | 能力矩阵是手写表，与三张运行时实现表的一致性靠人工同步；改 `rtImplOf` / `dtp_*` / `nativeRtTargetHost` 时必须同步改矩阵，没有自动校验 | `Base/Capabilities.vuna`；[wasm.md](wasm.md) §8 | 后续 |
+| D97 · B | 入口行的不可用效应只能构建期告警 + 运行期 trap，不能构建期拒绝：`Base/Store.vuna` 的 `dirReady` 用 `processRunIn mkdir -p`，所以编译器入口行必须带 `ProcessOp` | `Base/Store.vuna`（`dirReady`）、`packages/compiler/app/Main.vuna`；[wasm.md](wasm.md) §8 | 后续（前置：改成 FsOp 建目录） |
 
-## 编译器实现债（⚠️ 静默错误项）
+## 跨层根因
 
-完整分层清单见 [compiler-audit.md](compiler-audit.md)（按 ID 引用）。本文件只登记其中
-后果是**静默错误**、需要单独跟踪的条目：
+1. **名字即身份 / 名字即接口**：`RName` 是字符串、`Rast.Bridge` 用空作用域重分类、`IrBinder` 无唯一 id、
+   `bindShapeOf` 的索引模式匹配、`__anf`/`__cps` 编号借 fuel、`showTerm`/`showValueAt 6` 当相等判据
+   （EC-10 / EC-17 / EC-35），以及把元数据编进名字（`#linclos`、`d${m}`、`vuna_section`、`_alt`、
+   `@vuna@…`）与按短名分组的类 / 方法 / 实例（EC-12 / EC-23 / EC-36 / D124）。
+2. **fuel 仍是主要的终止性证书**：多数路径已改成「预算按输入规模派生 + 耗尽 `icFuel`」，
+   残留「固定常数直接换掉语义值 / 静默降级」（`Core/Eval` 的 128 → `VType`、`applyClosureBinder` 的 `_alt`）、
+   「只有 SCT 测度、从不检查的 fuel」（FE-09）、「派生预算不可达仅靠注释论证的静默兜底」
+   （`Ir/Anf` / `Ir/Cps` 的半变换）、以及把容量上限当成语义结论（EL-23）。
+3. **多真源手工同步**：内建名字（`Intrinsics` vs `Impl` 字面串，EC-16）、prelude 名单（LD-21）、
+   运算符别名（`Fixity` / `Dict` / `Prelude`）、能力矩阵（D96）、覆盖率五套口径（EL-24）、
+   类型层 / 擦除五套判据（EC-39）、两套 layout（FE-24 / FE-25）、四份 AST 遍历（LD-20）、
+   五份结构知识（FE-16 / FE-17 / FE-28 / FE-29）、三份解表真源（EC-31）、两份不透明判据（CO-06）。
+4. **类型信息在 pass 之间丢失或只是注解**：`TLam` 的 `Maybe` 类型槽、`quote` 丢 rig（CO-03）、
+   Lowering 填槽 → Cps 机器 pass 主动清空 → 后端按 arity / 名字猜 handler clause（IR-08）、
+   IR 类型槽选择性填充（D109）。
+5. **失败路径伪造值**：`_alt`（CO-01）、`VType levelZero` / `[]`（CO-02）、`TInt 0` / `TGlobal "Int"`（EC-37）、
+   `EInt 0`（`Elab/Match.litPatExpr`）、`d0` 兜底（EC-38）、部分闭包（LD-22）、丢弃应用脊（EC-38）、
+   `TC_NoInstanceFound` 掩盖预算耗尽（EC-34）。
+6. **缓存口径分裂**：`mode=s/f` 进 key（DR-01 / A06）、两套模块排序（DR-02）、
+   `acc*1000003+h` 与 SHA-256 两种哈希口径（DR-14）、cacheTag 回落（LD-23）、
+   iface 必须携带源码 AST（DR-16）。
 
-| ID | 仍未成立的事实 | 证据 | 归属 |
-| --- | --- | --- | --- |
-| A06 | split 的 cache key 编入 `mode=s/f`：摘要路径与全量路径产出不同字节，产物是「输入 + store 热度」的函数 | [compiler-audit.md](compiler-audit.md) DR-01；`Driver/Compile.vuna`（split 身份路径） | 后续（需设计） |
+## 已决取舍（不是债务）
+
+| ID | 取舍 | 位置 |
+| --- | --- | --- |
+| EC-04 | 定义性相等不比 `rig`（擦除格子不参与类型相等） | [core.md](core.md) §3 |
+| EC-06 | 超过 `natChainMaxValue` 的 Nat 链饱和成相等（预算 `convFuelBase + 4*depth`、`convFuelMax` 封顶） | [core.md](core.md) §3 |
+| 前端不支持清单 | guard / `\case` / 类型层 lambda / 用户宏等已决边界 | [frontend-syntax.md](frontend-syntax.md) §11 |
+| 无 manifest 能力门控 | 任意包可直调 `prim_*` / `prim_eff_*`（保留为债务 D62 的已知损失） | [effects.md](effects.md) §8.6 |
 
 ## 相关阅读
 
 - 规则与语义：各主题参考页（见 `AGENTS.md` 的「文档导航」）
+- 编译器模块地图：[compiler.md](compiler.md)
+- Core / NbE / 精化器：[core.md](core.md) / [ir.md](ir.md)
+- 性能读数与已否决的优化：[performance.md](performance.md)

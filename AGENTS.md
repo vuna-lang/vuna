@@ -163,8 +163,8 @@ seed 工具（`seed/`）+ 开发工具（`tools/`）；`docs/` = 分层文档。
 - 性能与观测：[performance.md](docs/reference/performance.md)（量什么/读数）、
   [observability.md](docs/reference/observability.md)（`VUNA_OBS` 分级 / `Base.Data.Obs` / `vuna dev obs` / `#line` → DWARF）
 - AI 规则与技能：[`.agents/README.md`](.agents/README.md)（规则 `rules/`、技能 `skills/`）
-- 债务 / 已知缺口：[debt.md](docs/reference/debt.md)（只含开放项，带证据）、
-  [compiler-audit.md](docs/reference/compiler-audit.md)（编译器各层的实现债分层清单）
+- 债务 / 已知缺口：[debt.md](docs/reference/debt.md)（唯一清单：只含开放项、带证据，
+  同时收录编译器分层实现债并保留其 ID）
 
 > 文档分层规则：`README.md` 只保留定位/上手/目录/硬约束/导航；细节在 `docs/reference/`；
 > AI 规则与场景技能在 `.agents/`；已完成阶段 / 已落地决策 / 历史在 git 历史。

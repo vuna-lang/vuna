@@ -1,4 +1,4 @@
--- EL-19：record 字段类型只依赖族参数。`recordFieldIndependent i dom` 的判据是
+-- record 字段类型只依赖族参数。`recordFieldIndependent i dom` 的判据是
 -- `shift 0 (-i)` 后没有负索引——负索引在求值时会静默当成最内层变量。
 import Base
 import Vuna.Compiler.Base.Common

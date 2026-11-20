@@ -540,7 +540,7 @@ W1 / W2 / W4 / W3.0 / W3.1 已落地；W5 评估后删除（见下）。
 |---|---|---|
 | W1 | 入口命名实例 fail closed：`main : Eff [ConsoleOp@mock] …` 曾能编译、运行期才 `unhandled effect`；现在精化期报 `TC_EntryInstanceNotDefault` | **已达成**；夹具 `dt_err/112_entry_instance_not_default`、`dt_base/93_eff_named_row_handled`、`dt_base/94_eff_named_row_default_explicit` |
 | W2 | 宿主表收敛成 `Base.Intrinsics.builtinEffects` 的 `HostClass = HostHandled \| HostDirect key opH \| HostAbort key text`；entry 预装与 wasm 直连同源，删死字段（`@vuna@run*Host` 名、`irHost*` 表、`opHOf`） | **已达成**；`corpus/compiler/05_host_table` 锁分类与 `sendCore`/`sendCoreId` 两种名字 |
-| W4 | `collectHandleOpsDefs` 改吃 **CPS 前** 的 defs，让 handler 分类与 CPS 输出解耦 | **已达成**（机器 pass 仍是类型改变型，见 [compiler-audit.md](compiler-audit.md) IR-08；不声称关闭 IR-08/IR-09） |
+| W4 | `collectHandleOpsDefs` 改吃 **CPS 前** 的 defs，让 handler 分类与 CPS 输出解耦 | **已达成**（机器 pass 仍是类型改变型，见 [debt.md](debt.md) IR-08；不声称关闭 IR-08） |
 | W3.0 | 「入口宿主叶子」bench：`bench/programs/eff_entry_host`——`main : Eff [ConsoleOp] Int` 5000 次 `consolePrint ""`（**不装用户 handler**，entry 只预装 `runConsoleHost`），`.ml` 对照同算法 | **已达成**。同窗口：OCaml 后端 5 ms / native 29 ms（9.67x）/ wasm 74 ms（net 18.7x）；读数与 N 的悬崖见 [benchmarks.md](benchmarks.md) §1.4 |
 | W5 | 宿主叶子改裸值原语（`Console` 的 `Print`/`EPrint`、`Process` 的 `Exit` 三处 `runPure`） | **已评估并删除**：CPS 把 `runPure (MkEff leaf)` 折成对叶子的直接调用，三端产物与裸值版逐字节一致、跑分在噪声内（[benchmarks.md](benchmarks.md) §1.4「W5 负结果」）。不新增裸值 intrinsic |
 | W3.1 | 宿主 resume 的尾路径：让库 opH / 全局 clause 的尾位置 resume 走 `MkRestTail`（共享尾槽、不压 ctx），非尾位置仍走 `MkRestCont` | **已达成**（CPS 侧一个标记：`mHandlerFun` 用 `__mchTK`）。`eff_entry_host` constant：native 29 → 9 ms、RSS 13 → 4 MB；同程序 20000 次的 `live` 38 MB → ~3 KB、墙钟 0.3–1 s → 20 ms。`MkHandleHost` / 帧槽位与 epoch 的进一步优化没有剩余收益证据，不做 |
