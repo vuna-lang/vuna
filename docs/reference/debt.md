@@ -36,6 +36,7 @@
 | D115 | 宏展开只有调用点 span：展开出的节点共享 `name!` 的 span，没有 per-展开节点的 source map；LSP 不能 goto 宏定义 / 展开视图，fmt / lint / index 只按调用形式处理 | `Loader/Expand.vuna` 的 span 约定；`packages/toolchain/lib/Vuna/Fmt/Expr.vuna`（标记回渲染）、`packages/toolchain/lib/Vuna/Index/Scan.vuna`（标记过滤） | 后续（与 D4 / LSP 语义化一起做） |
 | D104 | 有界计数器（升序 `i + 1` 配 `i >= n` 上界）没有判定规则：只有递减构成长度证据，升序一律报 `TC_CannotProveTermination`（诊断写明「ascending counters are not supported」）；同形态只能改写成显式递减 fuel 或显式上界 | `packages/compiler/lib/Vuna/Compiler/Elab/Termination/Measure.vuna`（`arithMinusBase` / `isAddOpName`）；`packages/compiler/test/corpus/term_err/08_up_counter.vuna`；[type-system.md](type-system.md)「定义与终止性」 | 后续（需要上界推理，不是局部规则） |
 | D113 | 经函数参数 / 高阶值转发的调用仍看不到实参位置（`apply f x` 只落全弱边并报「SCT 未识别调用」）；`let g = f` 这类指向组内函数的直别名已在站点收集前解析替换 | `packages/compiler/lib/Vuna/Compiler/Elab/Termination/Scc.vuna`（`inlineAliases` / `siteBlind` / `blindEdges`）；`packages/compiler/test/corpus/term_err/14_blind_value.vuna` | 后续（需要把 HOF 实参与形参的调用关系纳入分析，且不能引入新站点形状） |
+| D120 | **未选中的 `if` 分支在纯求值器里也被弱头求值**：`TIf` 落成 `evalIf (eval c) (eval th) (eval el)`，`VIf` 只存 `Value`，分支没法留到选中再算；`normalize` 与 codegen 都只处理选中支。后果是「核心求值器与 codegen 一致」在未选支的求值次数上不成立：`vuna test` / REPL 的纯求值为未选支付一次 WHNF 的时间与分配。结果本身不受影响（`eval` 不做 delta，未选支的求值总可终止；燃料耗尽另退化为 `VType levelZero`） | `packages/compiler/lib/Vuna/Compiler/Core/Eval.vuna`（`TIf` 两支都 `evalFuel`、`evalIf`、`normalizeIfFuel` 只下钻选中支）；[language.md](language.md)「`&&`/`||` 短路」 | 后续（修法是把 `VIf` 两支改成 `Closure`，连带 `quote` / `Conv` 与全部消费点；收益只在纯求值路径） |
 
 ## 中间表示
 
