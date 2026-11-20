@@ -32,10 +32,14 @@ revOnto (x :: xs) acc = revOnto xs (x :: acc)
 appendLists : List a -> List a -> List a
 appendLists xs ys = revOnto (revOnto xs []) ys
 
--- | 内部：以 `Int` 计长度（构造 `fromList` 时填计数）。
+-- | 内部：以 `Int` 计长度（尾递归，构造 `fromList` 时填计数）。
 lenInt : List a -> Int
-lenInt [] = 0
-lenInt (_ :: xs) = 1 + lenInt xs
+lenInt xs = lenIntGo 0 xs
+
+-- | 内部：`lenInt` 的累加实现。
+lenIntGo : Int -> List a -> Int
+lenIntGo acc [] = acc
+lenIntGo acc (_ :: xs) = lenIntGo (acc + 1) xs
 
 -- | 空队列。
 export empty : Queue a

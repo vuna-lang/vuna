@@ -1,10 +1,24 @@
 -- stdlib：Base.Container.TreeMap / TreeSet（有序持久容器：升 / 降序遍历、区间、去重、删除、高度不变量）。
 import Base.Container.TreeMap as TreeMap
 import Base.Container.TreeSet as TreeSet
+import Base.Data.Int
 import Base.Data.List as List
 import Base.Data.Maybe as Maybe
 import Base.Data.Nat as Nat
 import Base.Data.Pair as Pair
+
+-- 升序插入 100 个键（触发旋转），再删掉全部偶数键。
+buildAll : Int -> TreeMap Int Int -> TreeMap Int Int
+buildAll k t = if k <= 0 then t else buildAll (k - 1) (TreeMap.insert k k t)
+
+dropEven : Int -> TreeMap Int Int -> TreeMap Int Int
+dropEven k t =
+  if k <= 0 then
+    t
+  else if k - k / 2 * 2 == 0 then dropEven (k - 1) (TreeMap.remove k t) else dropEven (k - 1) t
+
+bulkKeys : TreeMap Int Int -> String
+bulkKeys t = show (map firstOf (TreeMap.toAscList t))
 
 main : String
 main =
@@ -13,6 +27,7 @@ main =
     m1 = TreeMap.insert 2 "b" (TreeMap.remove 5 m0)
     st = TreeSet.fromList (3 :: 1 :: 2 :: 3 :: [])
     st2 = TreeSet.remove 2 st
+    bulk = dropEven 100 (buildAll 100 TreeMap.empty)
   in "asc="
     ++ show (TreeMap.toAscList m1)
     ++ " desc="
@@ -29,4 +44,9 @@ main =
     ++ show (TreeMap.height m1)
     ++ " set="
     ++ show (TreeSet.toAscList st)
-    ++ " set2=" ++ show (TreeSet.toAscList st2) ++ " ssz=" ++ show (TreeSet.size st)
+    ++ " set2="
+    ++ show (TreeSet.toAscList st2)
+    ++ " ssz="
+    ++ show (TreeSet.size st)
+    ++ " bulk="
+    ++ bulkKeys bulk ++ " bsz=" ++ show (TreeMap.size bulk) ++ " bh=" ++ show (TreeMap.height bulk)

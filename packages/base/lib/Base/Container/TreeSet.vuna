@@ -40,11 +40,15 @@ size (TreeSet m) = Base.Container.TreeMap.size m
 
 -- | 按升序展开为列表。
 export toAscList : TreeSet a -> List a
-toAscList (TreeSet m) = map firstOf (Base.Container.TreeMap.toAscList m)
+toAscList (TreeSet m) = keysOf (Base.Container.TreeMap.toAscList m)
 
 -- | 按降序展开为列表。
 export toDescList : TreeSet a -> List a
-toDescList (TreeSet m) = map firstOf (Base.Container.TreeMap.toDescList m)
+toDescList (TreeSet m) = keysOf (Base.Container.TreeMap.toDescList m)
+
+-- | 内部：取条目键（尾递归累积 + 一次反转，长集合也不加深递归）。
+keysOf : List (Pair a b) -> List a
+keysOf xs = reverse (foldl (\acc, p => firstOf p :: acc) [] xs)
 
 -- | 从列表构造（重复元素自然去重）。
 export fromList : Ord a => List a -> TreeSet a

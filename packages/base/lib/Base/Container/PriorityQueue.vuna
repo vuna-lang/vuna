@@ -85,19 +85,19 @@ isEmpty (PriorityQueue _ n) = n == 0
 export fromList : Ord a => List a -> PriorityQueue a
 fromList xs = foldl (\acc, x => push x acc) empty xs
 
--- | 内部：按元素个数逐个出队（`fuel` 守卫保证终止）。
-drain : Ord a => Int -> PriorityQueue a -> List a
-drain fuel q =
+-- | 内部：按元素个数逐个出队（`fuel` 守卫保证终止；`acc` 逆序累积，末尾一次反转）。
+drain : Ord a => Int -> PriorityQueue a -> List a -> List a
+drain fuel q acc =
   if fuel <= 0 then
-    []
+    reverse acc
   else
     case pop q of
-      Nothing => []
-      Just (Pair x rest) => x :: drain (fuel - 1) rest
+      Nothing => reverse acc
+      Just (Pair x rest) => drain (fuel - 1) rest (x :: acc)
 
 -- | 逐个出队展开为升序列表（O(n log n)）。
 export toAscList : Ord a => PriorityQueue a -> List a
-toAscList (q@(PriorityQueue _ n)) = drain n q
+toAscList (q@(PriorityQueue _ n)) = drain n q []
 
 -- 经 `toAscList` 展示（构造器不导出；`toAscList` 需要 `Ord`）。
 instance Ord a, Show a => Show (PriorityQueue a) where
