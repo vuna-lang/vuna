@@ -196,7 +196,9 @@ let
   # 自举后端编译器：由 stage 1 编译器把自己的源码编到 native。
   # 它是开发 / CI 产物（不进 seed、不进 TCB），口径见 docs/reference/testing.md。
   #
-  # native：产物直接是原生可执行文件；身份写 `$out/build-id`（Loader.Fingerprint 读它）。
+  # 产物与产品 CLI 同构：`bin/` 里是自举出的 `vuna-native` 加上它编译非 OCaml 目标时
+  # 需要的后端插件（`vuna-target-native` / `vuna-target-wasm`，插件按 `<exeDir>` 发现）；
+  # 身份写 `$out/build-id`（Loader.Fingerprint 读它）。
   vuna-native =
     pkgs.runCommand "vuna-native-${version}"
       {
@@ -209,15 +211,21 @@ let
         };
       }
       ''
-        mkdir -p packages
-        cp -r ${../../packages/compiler} packages/compiler
-        cp -r ${../../packages/base} packages/base
+        mkdir -p "$out/bin"
+        cp -r ${../../packages} packages
         cp ${../../vuna.toml} vuna.toml
         chmod -R u+w .
         export VUNA_STORE="$TMPDIR/store"
-        ${vuna-compiler}/bin/vuna-compiler build packages/compiler --target native --out "$out/out"
-        mkdir -p "$out/bin"
-        cp "$out/out/bin/vuna-compiler" "$out/bin/vuna-native"
+        # 后端插件先用 stage 1 编译器建好：parity / corpus 用 `vuna-native` 编到
+        # native 与 wasm，插件必须与它同目录（`<exeDir>` 优先于 `$VUNA_EXEC_PATH`）。
+        ${vuna-compiler}/bin/vuna-compiler build --package vuna-target-native .
+        cp packages/target-native/.output/bin/vuna-target-native "$out/bin/vuna-target-native"
+        ${vuna-compiler}/bin/vuna-compiler build --package vuna-target-wasm .
+        cp packages/target-wasm/.output/bin/vuna-target-wasm "$out/bin/vuna-target-wasm"
+        # 自举这一步本身就经插件边界：把刚建好的插件目录交给 stage 1 编译器。
+        export VUNA_EXEC_PATH="$out/bin"
+        ${vuna-compiler}/bin/vuna-compiler build packages/compiler --target native --out "$TMPDIR/native"
+        cp "$TMPDIR/native/bin/vuna-compiler" "$out/bin/vuna-native"
         cp -r packages/base "$out/base"
         printf '%s' "vuna-native-$(sha256sum "$out/bin/vuna-native" | cut -d' ' -f1)" > "$out/build-id"
       '';
