@@ -495,6 +495,15 @@ posWalkStmts namesTbl caller sizes facts region (s :: rest) st =
         region
         rest
         (posWalk namesTbl caller sizes facts region e st)
+    DLet binds sp =>
+      posWalkStmts
+        namesTbl
+        caller
+        sizes
+        facts
+        region
+        rest
+        (posWalkBinds namesTbl caller sizes facts region binds st)
 
 export posWalk : HashMap String Bool -> String -> List (Pair String (Pair Int (Pair Int (List Int)))) -> HashMap String (List Int) -> List String -> Expr -> Pair (List (Pair String Int)) (List (Pair String Int)) -> Pair (List (Pair String Int)) (List (Pair String Int))
 posWalk namesTbl caller sizes facts region (EApp fn args sp) st =

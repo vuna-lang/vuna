@@ -25,6 +25,10 @@ patsNames ps = concatMap patNames ps
 refsOfStmt : List String -> DoStmt -> Pair (List String) (List String)
 refsOfStmt bound (DBind pat e sp) = Pair (patNames pat) (exprRefsB bound e)
 refsOfStmt bound (DExpr e sp) = Pair [] (exprRefsB bound e)
+refsOfStmt bound (DLet binds sp) =
+  Pair
+    (concatMap (\bd => patNames (firstOf bd)) binds)
+    (concatMap (\bd => exprRefsB bound (secondOf bd)) binds)
 
 refsOfStmts : List String -> List DoStmt -> Pair (List String) (List String)
 refsOfStmts bound [] = Pair [] []
@@ -393,6 +397,7 @@ strWalkStmts fuel comp ctors projs p sizes caller facts region (s :: rest) acc =
     case s of
       DBind pat e sp => strWalkStmts (fuel - 1) comp ctors projs p (extendSizesStrict sizes e pat) caller facts region rest (strWalk (fuel - 1) comp ctors projs p sizes caller facts region e acc)
       DExpr e sp => strWalkStmts (fuel - 1) comp ctors projs p sizes caller facts region rest (strWalk (fuel - 1) comp ctors projs p sizes caller facts region e acc)
+      DLet binds sp => strWalkStmts (fuel - 1) comp ctors projs p (extendByBinds binds sizes) caller facts region rest (strWalkBinds (fuel - 1) comp ctors projs p sizes caller facts region binds acc)
 
 strClause : List String -> List String -> List (Pair String (List Int)) -> Int -> String -> HashMap String (List Int) -> Pair (List Pat) Expr -> Pair Bool (List (Pair (Pair (Pair String String) Int) Span))
 strClause comp ctors projs p caller facts clause =

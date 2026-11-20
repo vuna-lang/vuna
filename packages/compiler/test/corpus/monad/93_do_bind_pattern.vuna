@@ -1,4 +1,4 @@
--- 反例：do 绑定模式只支持变量或 `_`。
+-- 反例：do 模式绑定要求不可反驳模式；`Just x` 缺 `Nothing` 分支。
 trait Monad m where
   (>>=) : m a -> (a -> m b) -> m b
   pure : a -> m a
@@ -8,12 +8,14 @@ data Maybe a : Type where
   Just : a -> Maybe a
 
 instance Monad Maybe where
-  (>>=) m f = case m of
-    Nothing => Nothing
-    Just x => f x
+  (>>=) m f =
+    case m of
+      Nothing => Nothing
+      Just x => f x
   pure x = Just x
 
 main : Maybe Int
-main = do
-  Just x <- Just 1
-  pure x
+main =
+  do
+    Just x <- pure (Just 1)
+    pure x

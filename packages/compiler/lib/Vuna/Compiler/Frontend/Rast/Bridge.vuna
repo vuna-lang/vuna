@@ -58,6 +58,10 @@ toAstFieldValue (Pair fname value) = Pair fname (toAstExpr value)
 toAstStmt : Rast.DoStmt -> Ast.DoStmt
 toAstStmt (Rast.DBind pat value sp) = Ast.DBind (toAstPat pat) (toAstExpr value) sp
 toAstStmt (Rast.DExpr value sp) = Ast.DExpr (toAstExpr value) sp
+toAstStmt (Rast.DLet binds sp) = Ast.DLet (map toAstBind binds) sp
+
+toAstBind : Pair Rast.Pat Rast.Expr -> Pair Ast.Pat Ast.Expr
+toAstBind (Pair pat value) = Pair (toAstPat pat) (toAstExpr value)
 
 toAstPat : Rast.Pat -> Ast.Pat
 toAstPat (Rast.PVar name sp) = Ast.PVar name sp

@@ -186,6 +186,7 @@ expandDoStmts fuel stmts =
         case stmt of
           DBind pat stmtExpr sp => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) stmtExpr) (\stmtExpr2 => Vuna.Compiler.Base.Common.bind (expandDoStmts (fuel - 1) rest) (\rest2 => OkC ((::) (DBind pat stmtExpr2 sp) rest2)))
           DExpr stmtExpr sp => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) stmtExpr) (\stmtExpr2 => Vuna.Compiler.Base.Common.bind (expandDoStmts (fuel - 1) rest) (\rest2 => OkC ((::) (DExpr stmtExpr2 sp) rest2)))
+          DLet binds sp => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (\b => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) (secondOf b)) (\v2 => OkC (Pair (firstOf b) v2))) binds) (\binds2 => Vuna.Compiler.Base.Common.bind (expandDoStmts (fuel - 1) rest) (\rest2 => OkC ((::) (DLet binds2 sp) rest2)))
 
 expandInterpParts : Int -> List InterpPart -> Check (List InterpPart)
 expandInterpParts fuel parts =

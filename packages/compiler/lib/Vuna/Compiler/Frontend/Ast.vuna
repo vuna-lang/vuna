@@ -122,6 +122,8 @@ fixitySpan (FixityDecl op level assoc sp) = sp
 export data DoStmt(..) : Type where
   DBind : Pat -> Expr -> Span -> DoStmt
   DExpr : Expr -> Span -> DoStmt
+  -- `let pat = e`（同组可多条，含签名行与局部函数组）：纯绑定，只对块内后续语句可见。
+  DLet : List (Pair Pat Expr) -> Span -> DoStmt
 
 export record Ctor(..) where
   ctorName : String
@@ -301,10 +303,7 @@ exprSpan (EInterp multi parts sp) = sp
 export doStmtSpan : DoStmt -> Span
 doStmtSpan (DBind pat expr sp) = sp
 doStmtSpan (DExpr expr sp) = sp
-
-export doStmtExpr : DoStmt -> Expr
-doStmtExpr (DBind pat expr sp) = expr
-doStmtExpr (DExpr expr sp) = expr
+doStmtSpan (DLet binds sp) = sp
 
 export declSpan : Decl -> Span
 declSpan (DData name params kind ctors derivings viaField repr lin sp) = sp
@@ -742,3 +741,9 @@ doSyntaxCanonical name =
     Just (dropNamePrefix doIgnoreSyntaxPrefix name)
   else
     Nothing
+
+-- 一般模式绑定（`Pair a b <- e`）降级时引入的中间 binder 名：模式拆解在续延里用
+-- `case <该名> of pat => 后续语句` 完成。用户源码写不出这个名字，不会与用户 binder 冲突。
+-- | 模式绑定降级时的中间 binder 名（Loader 产出）。
+export doPatternBinderName : String
+doPatternBinderName = "@vuna@do@pat"

@@ -215,10 +215,11 @@ encPat (PInt n _) acc = encTag 4 (encInt n acc)
 encPat (PStr s _) acc = encTag 5 (encStr s acc)
 encPat (PRecord name fields _) acc = encTag 6 (encStr name (encStrPatList fields acc))
 
--- | `DoStmt` 的规范编码：do 语句：绑定 / 裸表达式；`span` 丢弃。
+-- | `DoStmt` 的规范编码：do 语句：绑定 / 裸表达式 / `let`；`span` 丢弃。
 encDoStmt : DoStmt -> List String -> List String
 encDoStmt (DBind pat expr _) acc = encTag 0 (encPat pat (encExpr expr acc))
 encDoStmt (DExpr expr _) acc = encTag 1 (encExpr expr acc)
+encDoStmt (DLet binds _) acc = encTag 2 (encPatExprList binds acc)
 
 -- | `Expr` 的规范编码：表达式：tag 与 `Frontend.Ast` 的声明顺序一致（新增只能追加）；`span` 丢弃。
 export encExpr : Expr -> List String -> List String
@@ -412,6 +413,10 @@ decDoStmt fuel bytes =
             case decExpr (fuel - 1) b1 of
               Nothing => Nothing
               Just (Pair v1 b2) => Just (Pair (DExpr v1 noSpan) b2)
+          2 =>
+            case decList decPatExpr (fuel - 1) b1 of
+              Nothing => Nothing
+              Just (Pair v1 b2) => Just (Pair (DLet v1 noSpan) b2)
           _ => Nothing
 
 -- | 解析 `Expr`：tag 必须与 `encExpr` 一致。

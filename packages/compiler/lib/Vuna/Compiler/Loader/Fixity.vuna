@@ -351,6 +351,8 @@ reorderDoStmt t (DBind pat expr sp) =
     (\p2 => Vuna.Compiler.Base.Common.bind (reorderExpr t expr) (\e2 => OkC (DBind p2 e2 sp)))
 reorderDoStmt t (DExpr expr sp) =
   Vuna.Compiler.Base.Common.bind (reorderExpr t expr) (\e2 => OkC (DExpr e2 sp))
+reorderDoStmt t (DLet binds sp) =
+  Vuna.Compiler.Base.Common.bind (reorderBinds t binds) (\b2 => OkC (DLet b2 sp))
 
 export reorderPattern : FixityTable -> Pat -> Check Pat
 reorderPattern t pat =

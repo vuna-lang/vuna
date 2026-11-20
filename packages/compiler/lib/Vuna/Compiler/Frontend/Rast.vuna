@@ -89,10 +89,11 @@ export data Expr(..) : Type where
   -- `Float` 字面量：原始十进制文本（放末尾以保持既有构造子 tag 顺序）。
   EFloat : String -> Span -> Expr
 
--- do 语句：`pat <- expr` 或裸表达式；最后一条必须是裸表达式。
+-- do 语句：`pat <- expr`、`let` 绑定或裸表达式；最后一条必须是裸表达式。
 export data DoStmt(..) : Type where
   DBind : Pat -> Expr -> Span -> DoStmt
   DExpr : Expr -> Span -> DoStmt
+  DLet : List (Pair Pat Expr) -> Span -> DoStmt
 
 export record Ctor(..) where
   ctorName : String
@@ -243,6 +244,7 @@ doStmtWeight (s :: rest) = oneDoStmtWeight s + doStmtWeight rest
 oneDoStmtWeight : DoStmt -> Int
 oneDoStmtWeight (DBind pat expr _) = 1 + patWeight pat + exprWeight expr
 oneDoStmtWeight (DExpr expr _) = 1 + exprWeight expr
+oneDoStmtWeight (DLet binds _) = 1 + patExprWeight binds
 
 interpWeight : List InterpPart -> Int
 interpWeight [] = 0
@@ -263,10 +265,7 @@ patBudget base p = base + 8 * patWeight p
 export doStmtSpan : DoStmt -> Span
 doStmtSpan (DBind pat expr sp) = sp
 doStmtSpan (DExpr expr sp) = sp
-
-export doStmtExpr : DoStmt -> Expr
-doStmtExpr (DBind pat expr sp) = expr
-doStmtExpr (DExpr expr sp) = expr
+doStmtSpan (DLet binds sp) = sp
 
 export declSpan : Decl -> Span
 declSpan (DData name params kind ctors derivings viaField repr lin sp) = sp
@@ -817,6 +816,10 @@ ofStmts scope (stmt :: rest) =
     Ast.DBind pat value sp =>
       DBind (ofPat scope pat) (ofExpr scope value) sp
         :: ofStmts (append (patBinders pat) scope) rest
+    Ast.DLet binds sp =>
+      let
+        bound = append (concatMap bindingBinders binds) scope
+      in DLet (map (ofBinding bound scope) binds) sp :: ofStmts bound rest
     Ast.DExpr value sp => DExpr (ofExpr scope value) sp :: ofStmts scope rest
 
 patFieldBinders : Pair String Ast.Pat -> List String

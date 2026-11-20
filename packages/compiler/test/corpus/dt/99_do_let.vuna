@@ -1,0 +1,39 @@
+-- do 内 `let`：单条内联、多绑定块、签名行、局部函数、模式绑定都只对后续语句可见。
+data Maybe a : Type where
+  Nothing : Maybe a
+  Just : a -> Maybe a
+
+trait Monad m where
+  (>>=) : m a -> (a -> m b) -> m b
+  pure : a -> m a
+
+instance Monad Maybe where
+  (>>=) m f =
+    case m of
+      Nothing => Nothing
+      Just x => f x
+  pure x = Just x
+
+add : Int -> Int -> Int
+add x y = x + y
+
+prog : Maybe Int
+prog =
+  do
+    (a, b) <- pure (2, 3)
+    let sum = add a b
+    let
+      double = sum + sum
+      bump : Int -> Int
+      bump x = x + 1
+    let
+      scaled : Int
+      scaled = double * 2
+    shifted <- pure (bump scaled)
+    pure (shifted + sum)
+
+main : String
+main =
+  case prog of
+    Nothing => "nothing"
+    Just n => show n

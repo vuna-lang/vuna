@@ -1218,6 +1218,8 @@ clauseRefNames p = append (concatMap patRefNames (firstOf p)) (exprRefNames (sec
 doStmtRefNames : DoStmt -> List String
 doStmtRefNames (DBind pat e sp) = append (patRefNames pat) (exprRefNames e)
 doStmtRefNames (DExpr e sp) = exprRefNames e
+doStmtRefNames (DLet binds sp) =
+  concatMap (\b => append (patRefNames (firstOf b)) (exprRefNames (secondOf b))) binds
 
 -- | 模板片段里的引用名（洞内表达式）。
 interpPartRefNames : InterpPart -> List String

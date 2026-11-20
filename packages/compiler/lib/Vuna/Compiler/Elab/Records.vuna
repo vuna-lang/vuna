@@ -227,6 +227,7 @@ desugarDoStmtFuel fuel records stmt =
     case stmt of
       DBind p e sp => Vuna.Compiler.Base.Common.bind (desugarPatternFuel (fuel - 1) records p) (\p2 => Vuna.Compiler.Base.Common.bind (desugarExprFuel (fuel - 1) records e) (\e2 => OkC (DBind p2 e2 sp)))
       DExpr e sp => Vuna.Compiler.Base.Common.bind (desugarExprFuel (fuel - 1) records e) (\e2 => OkC (DExpr e2 sp))
+      DLet binds sp => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (desugarBindFuel (fuel - 1) records) binds) (\b2 => OkC (DLet b2 sp))
 
 desugarRecordValuesFuel : Int -> List RecordMeta -> List RecordFieldMeta -> List (Pair String Expr) -> Span -> Check (List Expr)
 desugarRecordValuesFuel fuel records [] provided sp =

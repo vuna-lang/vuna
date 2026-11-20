@@ -50,7 +50,6 @@ export data PsDiag(..) : Nat -> Type where
   CaseAltNotIndented : PsDiag Zero
   CaseNeedsAlternative : PsDiag Zero
   DoBlockMustEndWithExpr : PsDiag Zero
-  DoBindPattern : PsDiag Zero
   DoBlockNeedsStatement : PsDiag Zero
   DoStatementNotIndented : PsDiag Zero
   ExpectedCommaOrBracket : PsDiag Zero
@@ -114,7 +113,6 @@ export psCode : {n : Nat} -> PsDiag n -> String
 psCode CaseAltNotIndented = "PS_CaseAltNotIndented"
 psCode CaseNeedsAlternative = "PS_CaseNeedsAlternative"
 psCode DoBlockMustEndWithExpr = "PS_DoBlockMustEndWithExpr"
-psCode DoBindPattern = "PS_DoBindPattern"
 psCode DoBlockNeedsStatement = "PS_DoBlockNeedsStatement"
 psCode DoStatementNotIndented = "PS_DoStatementNotIndented"
 psCode ExpectedCommaOrBracket = "PS_ExpectedCommaOrBracket"
@@ -164,7 +162,6 @@ export psTemplate : {n : Nat} -> PsDiag n -> String
 psTemplate CaseAltNotIndented = "case alternative is not indented enough"
 psTemplate CaseNeedsAlternative = "case expression must have an alternative"
 psTemplate DoBlockMustEndWithExpr = "do block must end with an expression"
-psTemplate DoBindPattern = "do bind pattern must be a variable or _"
 psTemplate DoBlockNeedsStatement = "do block must contain at least one statement"
 psTemplate DoStatementNotIndented = "do block statement is not indented enough"
 psTemplate ExpectedCommaOrBracket = "expected a comma or closing bracket"
@@ -262,7 +259,6 @@ psAll =
       (psCode DoBlockMustEndWithExpr)
       (psTemplate DoBlockMustEndWithExpr)
       "do 块必须以表达式结尾",
-    PsEntry (psCode DoBindPattern) (psTemplate DoBindPattern) "do 绑定模式必须是变量或 _",
     PsEntry
       (psCode DoBlockNeedsStatement)
       (psTemplate DoBlockNeedsStatement)

@@ -116,6 +116,7 @@ siteCollectStmts fuel comp ctors projs caller facts sizes region (s :: rest) acc
     case s of
       DBind pat e sp => siteCollectStmts (fuel - 1) comp ctors projs caller facts (extendSizesStrict sizes e pat) region rest (siteWalkC (fuel - 1) comp ctors projs caller facts sizes region e acc)
       DExpr e sp => siteCollectStmts (fuel - 1) comp ctors projs caller facts sizes region rest (siteWalkC (fuel - 1) comp ctors projs caller facts sizes region e acc)
+      DLet binds sp => siteCollectStmts (fuel - 1) comp ctors projs caller facts (extendByBinds binds sizes) region rest (siteCollectBinds (fuel - 1) comp ctors projs caller facts sizes region binds acc)
 
 siteWalkC : Int -> List String -> List String -> List (Pair String (List Int)) -> String -> HashMap String (List Int) -> List (Pair String (Pair Int (Pair Int (List Int)))) -> List String -> Expr -> List Site -> List Site
 siteWalkC fuel comp ctors projs caller facts sizes region e acc =
@@ -262,6 +263,10 @@ inlStmts comp als (s :: rest) =
     DBind pat e sp =>
       DBind pat (inlGo comp als e) sp :: inlStmts comp (dropAliases (patNamesOf pat) als) rest
     DExpr e sp => DExpr (inlGo comp als e) sp :: inlStmts comp als rest
+    DLet binds sp =>
+      let
+        p = inlBinds comp als binds
+      in DLet (firstOf p) sp :: inlStmts comp (secondOf p) rest
 
 inlGo : List String -> List (Pair String String) -> Expr -> Expr
 inlGo comp als (EVar n sp) =
@@ -631,6 +636,10 @@ argBasesStmts sizes locals (s :: rest) =
     DBind pat e sp =>
       append (argBasesGo sizes locals e) (argBasesStmts sizes (append (patNamesOf pat) locals) rest)
     DExpr e sp => append (argBasesGo sizes locals e) (argBasesStmts sizes locals rest)
+    DLet binds sp =>
+      append
+        (argBasesBinds sizes locals binds)
+        (argBasesStmts sizes (append (patNamesOfBinds binds) locals) rest)
 
 argBasesParts : List (Pair String (Pair Int (Pair Int (List Int)))) -> List String -> List InterpPart -> List Int
 argBasesParts sizes locals [] = []

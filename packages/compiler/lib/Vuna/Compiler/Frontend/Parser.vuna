@@ -2198,7 +2198,7 @@ parseIf fuel st blockCol =
       (expectKw st "if")
       (\st1 => Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st1 blockCol) (\cond, st2 => Vuna.Compiler.Base.Common.bind (expectKw st2 "then") (\st3 => Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st3 blockCol) (\yes, st4 => Vuna.Compiler.Base.Common.bind (expectKw st4 "else") (\st5 => Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st5 blockCol) (\no, st6 => OkC (Pair (EIf cond yes no (spanOf st st6)) st6)))))))
 
--- do 块：`do` + 缩进对齐的语句，语句是 `pat <- expr` 或裸表达式；
+-- do 块：`do` + 缩进对齐的语句，语句是 `let pat = e`、`pat <- expr` 或裸表达式；
 -- 最后一条必须是裸表达式（do 本身不引入 pure，最后表达式即块结果）。
 parseDo : Int -> PState -> Int -> Check (Pair Expr PState)
 parseDo fuel st blockCol =
@@ -2247,10 +2247,27 @@ parseDoStmt : Int -> PState -> Int -> Check (Pair DoStmt PState)
 parseDoStmt fuel st stmtCol =
   if fuel <= 0 then
     icFuel "parser"
+  else if atKw st "let" then
+    doLetOrExpr fuel st stmtCol
   else
     case parsePatternSingle (stateFuel st) st stmtCol of
       OkC (Pair pat st1) => if atSym st1 "<-" then Vuna.Compiler.Base.Common.bind (checkBindersAt st [pat]) (\_ => Vuna.Compiler.Base.Common.bind (expectSym st1 "<-") (\st2 => Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st2 stmtCol) (\e, st3 => OkC (Pair (DBind pat e (spanOf st st3)) st3)))) else parseDoExprStmt (fuel - 1) st stmtCol
       ErrC _ => parseDoExprStmt (fuel - 1) st stmtCol
+
+-- do 语句位置的 `let`：do-let（绑定块后没有 `in`）或 `let ... in ...` 表达式语句。
+-- 两者共享同一个 `let` 前缀，只能在绑定块之后按是否出现 `in` 区分；parser 状态不可变，
+-- 判定为表达式时从原状态重新解析。
+doLetOrExpr : Int -> PState -> Int -> Check (Pair DoStmt PState)
+doLetOrExpr fuel st stmtCol =
+  if fuel <= 0 then
+    icFuel "parser"
+  else
+    case expectKw st "let" of
+      ErrC _ => parseDoExprStmt (fuel - 1) st stmtCol
+      OkC st1 =>
+        case parseLetBindings (fuel - 1) st1 stmtCol of
+          ErrC _ => parseDoExprStmt (fuel - 1) st stmtCol
+          OkC (Pair binds st2) => if atKw st2 "in" then parseDoExprStmt (fuel - 1) st stmtCol else OkC (Pair (DLet binds (spanOf st st2)) st2)
 
 parseDoExprStmt : Int -> PState -> Int -> Check (Pair DoStmt PState)
 parseDoExprStmt fuel st stmtCol =

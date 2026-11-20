@@ -1,0 +1,33 @@
+-- do 模式绑定：不可反驳模式（元组 / 嵌套元组 / 单构造子记录 / as）直接拆 monadic 结果。
+data Maybe a : Type where
+  Nothing : Maybe a
+  Just : a -> Maybe a
+
+trait Monad m where
+  (>>=) : m a -> (a -> m b) -> m b
+  pure : a -> m a
+
+instance Monad Maybe where
+  (>>=) m f =
+    case m of
+      Nothing => Nothing
+      Just x => f x
+  pure x = Just x
+
+wholeFirst : (Int, Int) -> Int
+wholeFirst pair = firstOf pair
+
+prog : Maybe Int
+prog =
+  do
+    (a, b) <- pure (1, 2)
+    (c, d, e) <- pure (3, 4, 5)
+    whole@(f, g) <- pure (6, 7)
+    let total = a + b + c + d + e + f + g
+    pure (total + wholeFirst whole)
+
+main : String
+main =
+  case prog of
+    Nothing => "nothing"
+    Just n => show n

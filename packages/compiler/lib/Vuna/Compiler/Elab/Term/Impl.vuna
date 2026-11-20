@@ -2257,6 +2257,10 @@ expandDoStmt ec (DBind pat value sp) =
   Vuna.Compiler.Base.Common.bind (expandLocalFuns ec value) (\v2 => OkC (DBind pat v2 sp))
 expandDoStmt ec (DExpr value sp) =
   Vuna.Compiler.Base.Common.bind (expandLocalFuns ec value) (\v2 => OkC (DExpr v2 sp))
+expandDoStmt ec (DLet binds sp) =
+  Vuna.Compiler.Base.Common.bind
+    (Vuna.Compiler.Base.Common.traverse (expandBind ec) binds)
+    (\b2 => OkC (DLet b2 sp))
 
 -- 推断位的 `let`（嵌套 let 的 value 位置就是推断位）。
 export inferLetFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> List (Pair Pat Expr) -> Expr -> Bool -> Span -> Check (Pair Term (Pair Value Ec))
