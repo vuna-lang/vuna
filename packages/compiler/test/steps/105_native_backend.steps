@@ -345,6 +345,17 @@ out-equals: 1
 run: sh -c 'VUNA_NATIVE_GC_STRESS=1 "$TMPDIR/gchuge-out/bin/gchuge" 2>&1'
 out-equals: 1
 
+# 9aa15) 多个非初始段：三个 1.6–2.4 MB 的数组各自落新段（bump 扩容路径），中间穿插
+#        64 KB 的短命数组触发回收；段索引必须能让 GC 在任意段里认出根。
+run: sh -c 'd="$TMPDIR/gcseg"; mkdir -p "$d/app"; printf "[package]\nname = \"gcseg\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Effect.Core as Eff\nimport Base.Container.Array as Array\nimport Base.Data.Int as Int\nimport Base.Data.Nat as Nat\n\nmk : Int -> Array Int\nmk n = Array.make (natFromInt n) 7\n\nchurn : Int -> Int -> Int\nchurn n acc = if n <= 0 then acc else churn (n - 1) (acc + Nat.toInt (Array.length (Array.make (natFromInt 8000) 3)))\n\nmain : Eff [] Int\nmain = do\n  a <- pure (mk 200000)\n  b <- pure (mk 250000)\n  c <- pure (mk 300000)\n  n <- pure (churn 150 0)\n  la <- pure (Array.length a)\n  lb <- pure (Array.length b)\n  lc <- pure (Array.length c)\n  pure (if la == natFromInt 200000 && lb == natFromInt 250000 && lc == natFromInt 300000 && n >= 0 then 1 else 0)\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/gcseg-out" "$d"'
+exit: 0
+run: "$TMPDIR/gcseg-out/bin/gcseg" 2>&1
+out-equals: 1
+run: sh -c 'VUNA_NATIVE_GC_STRESS=1 "$TMPDIR/gcseg-out/bin/gcseg" 2>&1'
+out-equals: 1
+run: sh -c 'VUNA_NATIVE_GC_MIN=4096 "$TMPDIR/gcseg-out/bin/gcseg" 2>&1'
+out-equals: 1
+
 # 9aa2) 分代 GC 的卡片表：老代 IORef 写进年轻代值后，写屏障把所在卡片置脏，年轻代回收
 #       从脏卡片出发扫到这个值。`GC_MIN` 压小让回收密集发生；`cards>=1` 的行证明某次
 #       年轻代回收确实扫了脏卡片（只断言输出区分不出来：值也能经 Eff 闭包链活着）。

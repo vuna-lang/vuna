@@ -342,6 +342,11 @@ env，**不进 codegen**（同一 IR 的产物逐字节确定）。解析失败�
 - **候选判据**：字必须指向某个已注册堆段内、块头 16 对齐且合法、非空闲的 payload 起点
   （块头 + 8）。`Int` / 字节型偶然形似指针只会多留对象（非移动，不会失效）；`.rodata`
   字面量不进堆，天然忽略。
+- **段索引**：`gc_try` 对每个候选字都要定位所在段，线性走 `rt_segs` 的代价是每字一次
+  链表遍历（大堆上是缓存缺失的主要来源），所以段按块区起点排成有序数组 `rt_seg_idx`
+  （每项 `{start, seg}` 16 字节），`rt_seg_find` 二分查找 O(log n)。`alloc` 每次建段
+  （bump 扩容 / 超大块）调用 `rt_seg_index_add` 插入；`_start` 建好初始段后调
+  `rt_seg_index_init` 重建。写屏障定位段走同一个函数。
 - **不扫的块**：`leaf`（String / Float，payload 是字节或位型）。
 - **两代**：
   - **年轻代回收**（minor）：`gc_try` 只接受不带 `old` 的块，所以只沿根集标记年轻代
@@ -384,9 +389,9 @@ env，**不进 codegen**（同一 IR 的产物逐字节确定）。解析失败�
   `O_*`、权限位、`AT_SYMLINK_NOFOLLOW`、`TCGETS`）、内核结构布局（`stat` 字段偏移、
   `PATH_MAX`、`cpu_set_t` / `timespec` / `termios`）、errno 码表。与 `Abi` 的分界：
   Abi 是架构（换架构要改），Pal 是内核接口（换内核 ABI 只改这里）。
-- `Native.Gc`：两代标记-清扫 GC——块头判据、根集扫描（精确栈图 / 保守孤岛 /
-  脏卡片）、写屏障与卡片表、年轻代 / 整堆回收的决定、标记栈（倍增 mmap）、清扫与尺寸类
-  回收、`GC_LOG` 诊断行；`alloc` 在预算/阈值处调 `rt_gc_collect`。
+- `Native.Gc`：两代标记-清扫 GC——块头判据、段索引（二分定位）、根集扫描（精确栈图 /
+  保守孤岛 / 脏卡片）、写屏障与卡片表、年轻代 / 整堆回收的决定、标记栈（倍增 mmap）、
+  清扫与尺寸类回收、`GC_LOG` 诊断行；`alloc` 在预算/阈值处调 `rt_gc_collect`。
 - `Native.Runtime`：`rt_*` 汇编模板、只读数据、`.bss` 布局、IR 符号 → 运行时标签白名单
   与值形态 arity。
 - `Native.Module`：`IrProgram` → `NativeProgram`（可达性、入口、栈槽、**按模块切分的

@@ -103,6 +103,22 @@ gcMinorRunsLabel = "rt_gc_minor_runs"
 gcCardsLabel : String
 gcCardsLabel = "rt_gc_cards"
 
+-- | 段索引：按块区起点升序的 `{start, seg}` 数组（每项 16 字节）。
+--   `gc_try` 对每个候选字都要定位段，线性走 `rt_segs` 在大堆上是主要开销
+--   （每字一次链路遍历，且是缓存缺失）；改成二分。
+export segIdxLabel : String
+segIdxLabel = "rt_seg_idx"
+
+export segIdxCountLabel : String
+segIdxCountLabel = "rt_seg_idx_n"
+
+segTmpLabel : String
+segTmpLabel = "rt_seg_tmp"
+
+-- | 索引容量（1 MiB 段下可覆盖 32 GiB 堆；超了 trap）。
+segIdxCapacity : Int
+segIdxCapacity = 32768
+
 -- | 本次年轻代回收晋升的字节数（存活率高就提前安排整堆回收）。
 gcPromotedLabel : String
 gcPromotedLabel = "rt_gc_promoted"
@@ -158,6 +174,9 @@ nativeGcBss =
     NativeBss gcMinorRunsLabel 8 8,
     NativeBss nativeGcForceMajorLabel 8 8,
     NativeBss gcCardsLabel 8 8,
+    NativeBss segIdxCountLabel 8 8,
+    NativeBss segTmpLabel 8 8,
+    NativeBss segIdxLabel (16 * segIdxCapacity) 8,
     NativeBss gcPromotedLabel 8 8,
     NativeBss allocReqLabel 8 8,
     NativeBss allocSaveRdiLabel 8 8,
@@ -213,7 +232,33 @@ gcTryFn : NativeFunc
 gcTryFn =
   rtRawFunc
     "gc_try"
-    [ITest Rdi Rdi, IJcc "jz" ".Lgc_try_ret", IMov (OpReg R10) (OpReg Rdi), IBinReg "and" R10 (OpImm 7), ITest R10 R10, IJcc "jnz" ".Lgc_try_ret", IMov (OpReg Rax) (OpReg Rdi), IBinReg "sub" Rax (OpImm nativeBlockHeaderBytes), IMov (OpReg R10) (OpReg Rax), IBinReg "and" R10 (OpImm 15), ITest R10 R10, IJcc "jnz" ".Lgc_try_ret", IMov (OpReg Rcx) (OpRip nativeSegsLabel), ILabel ".Lgc_try_seg", ITest Rcx Rcx, IJcc "jz" ".Lgc_try_ret", IMov (OpReg Rdx) (OpReg Rcx), IBinReg "add" Rdx (OpImm nativeSegHeaderBytes), ICmp (OpReg Rax) (OpReg Rdx), IJcc "jb" ".Lgc_try_next", IMov (OpReg R9) (OpMem Rcx 16), ICmp (OpReg Rax) (OpReg R9), IJcc "jb" ".Lgc_try_found", ILabel ".Lgc_try_next", IMov (OpReg Rcx) (OpMem Rcx 0), IJmp ".Lgc_try_seg", ILabel ".Lgc_try_found", IMov (OpReg R8) (OpMem Rax 0), IMov (OpReg R10) (OpReg R8), IBinReg "and" R10 (OpImm 15), IMov (OpReg R11) (OpReg R10), IBinReg "and" R11 (OpImm nativeFreeFlag), ITest R11 R11, IJcc "jnz" ".Lgc_try_ret", IMov (OpReg R11) (OpRip gcMinorLabel), ITest R11 R11, IJcc "jz" ".Lgc_try_any_gen", IMov (OpReg R11) (OpReg R10), IBinReg "and" R11 (OpImm nativeOldFlag), ITest R11 R11, IJcc "jnz" ".Lgc_try_ret", ILabel ".Lgc_try_any_gen", IMov (OpReg R11) (OpReg R8), IBinReg "and" R11 (OpImm (0 - 16)), ICmp (OpReg R11) (OpImm nativeMinBlockBytes), IJcc "jb" ".Lgc_try_ret", IMov (OpReg Rdx) (OpReg Rax), IBinReg "add" Rdx (OpReg R11), ICmp (OpReg Rdx) (OpReg R9), IJcc "ja" ".Lgc_try_ret", IMov (OpReg R10) (OpReg R8), IBinReg "and" R10 (OpImm nativeMarkFlag), ITest R10 R10, IJcc "jnz" ".Lgc_try_ret", IBinReg "or" R8 (OpImm nativeMarkFlag), IMov (OpMem Rax 0) (OpReg R8), IMov (OpReg Rcx) (OpRip markTopLabel), IMov (OpReg Rdx) (OpRip markEndLabel), ICmp (OpReg Rcx) (OpReg Rdx), IJcc "jae" ".Lgc_try_grow", IMov (OpMem Rcx 0) (OpReg Rdi), IBinReg "add" Rcx (OpImm 8), IMov (OpRip markTopLabel) (OpReg Rcx), ILabel ".Lgc_try_ret", IRet, ILabel ".Lgc_try_grow", IMov (OpRip gcTmpLabel) (OpReg Rdi), ICall (nativeRtLabel "gc_grow_mark"), IRet]
+    [ITest Rdi Rdi, IJcc "jz" ".Lgc_try_ret", IMov (OpReg R10) (OpReg Rdi), IBinReg "and" R10 (OpImm 7), ITest R10 R10, IJcc "jnz" ".Lgc_try_ret", IMov (OpReg Rax) (OpReg Rdi), IBinReg "sub" Rax (OpImm nativeBlockHeaderBytes), IMov (OpReg R10) (OpReg Rax), IBinReg "and" R10 (OpImm 15), ITest R10 R10, IJcc "jnz" ".Lgc_try_ret", IMov (OpReg R10) (OpReg Rax), IMov (OpReg Rdi) (OpReg R10), ICall (nativeRtLabel "seg_find"), ITest Rax Rax, IJcc "jz" ".Lgc_try_ret", IMov (OpReg Rcx) (OpReg Rax), IMov (OpReg R9) (OpMem Rcx 16), IMov (OpReg Rax) (OpReg R10), IMov (OpReg Rdi) (OpReg R10), IBinReg "add" Rdi (OpImm nativeBlockHeaderBytes), IMov (OpReg R8) (OpMem Rax 0), IMov (OpReg R10) (OpReg R8), IBinReg "and" R10 (OpImm 15), IMov (OpReg R11) (OpReg R10), IBinReg "and" R11 (OpImm nativeFreeFlag), ITest R11 R11, IJcc "jnz" ".Lgc_try_ret", IMov (OpReg R11) (OpRip gcMinorLabel), ITest R11 R11, IJcc "jz" ".Lgc_try_any_gen", IMov (OpReg R11) (OpReg R10), IBinReg "and" R11 (OpImm nativeOldFlag), ITest R11 R11, IJcc "jnz" ".Lgc_try_ret", ILabel ".Lgc_try_any_gen", IMov (OpReg R11) (OpReg R8), IBinReg "and" R11 (OpImm (0 - 16)), ICmp (OpReg R11) (OpImm nativeMinBlockBytes), IJcc "jb" ".Lgc_try_ret", IMov (OpReg Rdx) (OpReg Rax), IBinReg "add" Rdx (OpReg R11), ICmp (OpReg Rdx) (OpReg R9), IJcc "ja" ".Lgc_try_ret", IMov (OpReg R10) (OpReg R8), IBinReg "and" R10 (OpImm nativeMarkFlag), ITest R10 R10, IJcc "jnz" ".Lgc_try_ret", IBinReg "or" R8 (OpImm nativeMarkFlag), IMov (OpMem Rax 0) (OpReg R8), IMov (OpReg Rcx) (OpRip markTopLabel), IMov (OpReg Rdx) (OpRip markEndLabel), ICmp (OpReg Rcx) (OpReg Rdx), IJcc "jae" ".Lgc_try_grow", IMov (OpMem Rcx 0) (OpReg Rdi), IBinReg "add" Rcx (OpImm 8), IMov (OpRip markTopLabel) (OpReg Rcx), ILabel ".Lgc_try_ret", IRet, ILabel ".Lgc_try_grow", IMov (OpRip gcTmpLabel) (OpReg Rdi), ICall (nativeRtLabel "gc_grow_mark"), IRet]
+
+-- ---------------------------------------------------------------
+-- 段索引
+-- ---------------------------------------------------------------
+-- | `rdi` = 块头地址 → `rax` = 所在段（没有则 0）。二分查找，O(log n)。
+--   只碰 caller-saved 寄存器；保留 `rdi` 与 `r10`（调用方用它存块头）。
+segFindFn : NativeFunc
+segFindFn =
+  rtRawFunc
+    "seg_find"
+    [IMov (OpReg R8) (OpRip segIdxCountLabel), ITest R8 R8, IJcc "jz" ".Lsf_miss", IBinReg "xor" Rcx (OpReg Rcx), IMov (OpReg R9) (OpReg R8), ILabel ".Lsf_loop", ICmp (OpReg Rcx) (OpReg R9), IJcc "jae" ".Lsf_before", IMov (OpReg R11) (OpReg Rcx), IBinReg "add" R11 (OpReg R9), IBinReg "shr" R11 (OpImm 1), IMov (OpReg Rsi) (OpReg R11), IBinReg "shl" Rsi (OpImm 4), ILea Rdx segIdxLabel, IBinReg "add" Rdx (OpReg Rsi), ICmp (OpReg Rdi) (OpMem Rdx 0), IJcc "jb" ".Lsf_upper", IMov (OpReg Rcx) (OpReg R11), IBinReg "add" Rcx (OpImm 1), IJmp ".Lsf_loop", ILabel ".Lsf_upper", IMov (OpReg R9) (OpReg R11), IJmp ".Lsf_loop", ILabel ".Lsf_before", ITest Rcx Rcx, IJcc "jz" ".Lsf_miss", IBinReg "sub" Rcx (OpImm 1), IMov (OpReg Rsi) (OpReg Rcx), IBinReg "shl" Rsi (OpImm 4), ILea Rdx segIdxLabel, IBinReg "add" Rdx (OpReg Rsi), IMov (OpReg Rax) (OpMem Rdx 8), ICmp (OpReg Rdi) (OpMem Rax 16), IJcc "jae" ".Lsf_miss", IRet, ILabel ".Lsf_miss", IBinReg "xor" Rax (OpReg Rax), IRet]
+
+-- | `rdi` = 新段（段头地址）。按块区起点插入有序数组；保留全部 caller-saved 寄存器
+--   （`alloc` 在段创建点调用它，之后还要用 `rcx` 的块大小等）。
+segIndexAddFn : NativeFunc
+segIndexAddFn =
+  rtRawFunc
+    "seg_index_add"
+    [IPush Rax, IPush Rcx, IPush Rdx, IPush Rsi, IPush Rdi, IPush R8, IPush R9, IPush R10, IPush R11, IMov (OpReg R8) (OpRip segIdxCountLabel), ICmp (OpReg R8) (OpImm segIdxCapacity), IJcc "jae" (nativeRtLabel "trap_oom"), IMov (OpReg Rcx) (OpReg Rdi), IBinReg "add" Rcx (OpImm nativeSegHeaderBytes), IBinReg "xor" Rdx (OpReg Rdx), ILabel ".Lsa_find", ICmp (OpReg Rdx) (OpReg R8), IJcc "jae" ".Lsa_pos", IMov (OpReg R9) (OpReg Rdx), IBinReg "shl" R9 (OpImm 4), ILea R10 segIdxLabel, IBinReg "add" R10 (OpReg R9), ICmp (OpReg Rcx) (OpMem R10 0), IJcc "jb" ".Lsa_pos", IBinReg "add" Rdx (OpImm 1), IJmp ".Lsa_find", ILabel ".Lsa_pos", IMov (OpReg R9) (OpReg R8), ILabel ".Lsa_shift", ICmp (OpReg R9) (OpReg Rdx), IJcc "jbe" ".Lsa_shift_done", IMov (OpReg R10) (OpReg R9), IBinReg "shl" R10 (OpImm 4), ILea R11 segIdxLabel, IBinReg "add" R11 (OpReg R10), IMov (OpReg R10) (OpMem R11 (0 - 16)), IMov (OpMem R11 0) (OpReg R10), IMov (OpReg R10) (OpMem R11 (0 - 8)), IMov (OpMem R11 8) (OpReg R10), IBinReg "sub" R9 (OpImm 1), IJmp ".Lsa_shift", ILabel ".Lsa_shift_done", IMov (OpReg R10) (OpReg Rdx), IBinReg "shl" R10 (OpImm 4), ILea R11 segIdxLabel, IBinReg "add" R11 (OpReg R10), IMov (OpMem R11 0) (OpReg Rcx), IMov (OpMem R11 8) (OpReg Rdi), IBinReg "add" R8 (OpImm 1), IMov (OpRip segIdxCountLabel) (OpReg R8), IPop R11, IPop R10, IPop R9, IPop R8, IPop Rdi, IPop Rsi, IPop Rdx, IPop Rcx, IPop Rax, IRet]
+
+-- | 清空索引并按 `rt_segs` 现有段重建（`_start` 建好初始段后调用一次）。
+segIndexInitFn : NativeFunc
+segIndexInitFn =
+  rtRawFunc
+    "seg_index_init"
+    [IBinReg "xor" Rax (OpReg Rax), IMov (OpRip segIdxCountLabel) (OpReg Rax), IMov (OpReg R10) (OpRip nativeSegsLabel), ILabel ".Lsi_loop", ITest R10 R10, IJcc "jz" ".Lsi_done", IMov (OpReg R11) (OpReg R10), IMov (OpReg R10) (OpMem R10 0), IMov (OpRip segTmpLabel) (OpReg R10), IMov (OpReg Rdi) (OpReg R11), ICall (nativeRtLabel "seg_index_add"), IMov (OpReg R10) (OpRip segTmpLabel), IJmp ".Lsi_loop", ILabel ".Lsi_done", IRet]
 
 -- ---------------------------------------------------------------
 -- 保守扫描一段内存
@@ -282,7 +327,7 @@ gcWriteBarrierFn : NativeFunc
 gcWriteBarrierFn =
   rtRawFunc
     "write_barrier"
-    [IMov (OpReg R10) (OpMem Rdi (0 - 8)), IMov (OpReg R11) (OpReg R10), IBinReg "and" R11 (OpImm nativeOldFlag), ITest R11 R11, IJcc "jz" ".Lwb_done", IMov (OpReg Rcx) (OpRip nativeSegsLabel), ILabel ".Lwb_seg", ITest Rcx Rcx, IJcc "jz" ".Lwb_done", IMov (OpReg R8) (OpReg Rcx), IBinReg "add" R8 (OpImm nativeSegHeaderBytes), ICmp (OpReg Rdi) (OpReg R8), IJcc "jb" ".Lwb_next", ICmp (OpReg Rdi) (OpMem Rcx 8), IJcc "jae" ".Lwb_next", IMov (OpReg R9) (OpReg Rdi), IBinReg "sub" R9 (OpReg R8), IBinReg "shr" R9 (OpImm nativeCardShift), IMov (OpReg R8) (OpMem Rcx 32), IMovByteOp (OpMemX R8 R9 0) 1, IJmp ".Lwb_done", ILabel ".Lwb_next", IMov (OpReg Rcx) (OpMem Rcx 0), IJmp ".Lwb_seg", ILabel ".Lwb_done", IRet]
+    [IMov (OpReg R10) (OpMem Rdi (0 - 8)), IMov (OpReg R11) (OpReg R10), IBinReg "and" R11 (OpImm nativeOldFlag), ITest R11 R11, IJcc "jz" ".Lwb_done", IMov (OpReg R10) (OpReg Rdi), IBinReg "sub" Rdi (OpImm nativeBlockHeaderBytes), ICall (nativeRtLabel "seg_find"), ITest Rax Rax, IJcc "jz" ".Lwb_done", IMov (OpReg R9) (OpReg R10), IBinReg "sub" R9 (OpReg Rax), IBinReg "sub" R9 (OpImm nativeSegHeaderBytes), IBinReg "shr" R9 (OpImm nativeCardShift), IMov (OpReg R8) (OpMem Rax 32), IMovByteOp (OpMemX R8 R9 0) 1, ILabel ".Lwb_done", IRet]
 
 export nativeGcFuncs : List NativeFunc
 nativeGcFuncs =
@@ -293,6 +338,9 @@ nativeGcFuncs =
     gcWriteBarrierFn,
     gcScanWordsFn,
     gcScanMapFn,
+    segFindFn,
+    segIndexAddFn,
+    segIndexInitFn,
     gcGrowMarkFn,
     gcLogFn,
     gcSweepFn,

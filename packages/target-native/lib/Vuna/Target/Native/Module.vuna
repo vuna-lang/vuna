@@ -1715,7 +1715,8 @@ startFunc printResult kind mainName runMainM handlers cafs =
         IMov (OpMem Rax 8) (OpReg Rcx),
         IMov (OpMem Rax 16) (OpReg Rdx),
         IMov (OpRip nativeArenaEndLabel) (OpReg Rcx),
-        IMov (OpRip nativeHeapPtrLabel) (OpReg Rdx)
+        IMov (OpRip nativeHeapPtrLabel) (OpReg Rdx),
+        ICall (nativeRtLabel "seg_index_init")
       ]
     -- 资源限制：全部来自 env（缺省 1 GiB live / auto 核数 / 超时不限），不进 codegen。
     initLimits =
