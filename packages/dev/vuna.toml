@@ -9,6 +9,7 @@ vuna-compiler-base = "../compiler-base"
 vuna-http = "../http"
 vuna-ir = "../ir"
 vuna-target-ocaml = "../target-ocaml"
+vuna-target-native = "../target-native"
 vuna-plugin-kit = "../plugin-kit"
 vuna-toolchain = "../toolchain"
 

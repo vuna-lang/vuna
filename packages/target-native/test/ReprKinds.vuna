@@ -1,0 +1,97 @@
+-- native 槽 kind 分类（`Vuna.Target.Native.Repr`）的单元测试。
+--
+-- 锁住三件事：运行时类型 → kind 的映射（含去装箱族与 Float 的堆指针口径）、
+-- 运行时符号的结果 kind、以及一次最小 IR 遍历的 binder / 值计数。
+import Base
+import Base.Data.Int as Int
+import Base.Data.List as List
+import Base.Data.String as String
+import Base.Effect.Core
+import Vuna.Ir.Model
+import Vuna.Target.Native.Repr
+
+main : Eff [] String
+main =
+  case problems of
+    [] => pure ""
+    ps =>
+      do
+        _ <- prim_eff_print ("native repr kinds drifted:\n" ++ join "\n" ps ++ "\n")
+        _ <- prim_eff_exit 1
+        pure ""
+
+problems : List String
+problems = filter (\s => s /= "") (append tyChecks (append rtChecks walkChecks))
+
+expectCls : String -> NCls -> Maybe NCls -> String
+expectCls label want got =
+  case got of
+    Nothing => label ++ ": no classification"
+    Just c =>
+      if nClsText c == nClsText want then
+        ""
+      else
+        label ++ ": want " ++ nClsText want ++ ", got " ++ nClsText c
+
+tyDecls : List IrTyDecl
+tyDecls = [IrUnboxedDecl "BoxInt" 0 IrTyInt, IrUnboxedDecl "BoxStr" 0 IrTyStr]
+
+tyChecks : List String
+tyChecks =
+  [
+    expectCls "int" NClsScalar (Just (nKindOfTy [] (Just IrTyInt))),
+    expectCls "bool" NClsScalar (Just (nKindOfTy [] (Just IrTyBool))),
+    expectCls "str" NClsPtr (Just (nKindOfTy [] (Just IrTyStr))),
+    expectCls "float" NClsPtr (Just (nKindOfTy [] (Just IrTyFloat))),
+    expectCls "array" NClsPtr (Just (nKindOfTy [] (Just (IrTyArray IrTyInt)))),
+    expectCls "ref" NClsPtr (Just (nKindOfTy [] (Just (IrTyRef IrTyInt)))),
+    expectCls "fun" NClsPtr (Just (nKindOfTy [] (Just (IrTyFun IrTyInt IrTyInt)))),
+    expectCls "tyvar" NClsVar (Just (nKindOfTy [] (Just (IrTyVar 0)))),
+    expectCls "opaque" NClsOpaque (Just (nKindOfTy [] (Just IrTyOpaque))),
+    expectCls "missing" NClsMissing (Just (nKindOfTy [] Nothing)),
+    expectCls "data" NClsPtr (Just (nKindOfTy [] (Just (IrTyData "Pair" [])))),
+    expectCls "unboxed-int" NClsScalar (Just (nKindOfTy tyDecls (Just (IrTyData "BoxInt" [])))),
+    expectCls "unboxed-str" NClsPtr (Just (nKindOfTy tyDecls (Just (IrTyData "BoxStr" []))))
+  ]
+
+rtChecks : List String
+rtChecks =
+  [
+    expectCls "rt ++" NClsPtr (Just (nRtCls "++")),
+    expectCls "rt bi_eq_int" NClsScalar (Just (nRtCls "bi_eq_int")),
+    expectCls "rt bi_add_float" NClsPtr (Just (nRtCls "bi_add_float")),
+    expectCls "rt prim_erase" NClsVar (Just (nRtCls "prim_erase")),
+    expectCls "rt unknown" NClsSymbol (Just (nRtCls "no_such_symbol"))
+  ]
+
+sampleDefs : List IrDef
+sampleDefs =
+  [
+    IrDef
+      "f"
+      0
+      []
+      (Just (IrTyFun IrTyInt IrTyInt))
+      (IrLam [mkIrBinderTyped "x" IrTyInt] (Just IrTyInt) (IrVar (mkIrBinderTyped "x" IrTyInt)))
+      False
+      False
+      Nothing
+  ]
+
+checkEq : String -> Int -> Int -> String
+checkEq label want got =
+  if want == got then "" else label ++ ": want " ++ strFromInt want ++ ", got " ++ strFromInt got
+
+walkChecks : List String
+walkChecks =
+  let
+    w = nReprCounts [] sampleDefs
+  in [
+    checkEq "walk binders scalar" 1 w.nwBinders.ncScalar,
+    checkEq "walk values ptr" 1 w.nwValues.ncPtr,
+    checkEq "walk values scalar" 1 w.nwValues.ncScalar,
+    checkEq
+      "walk values unknown"
+      0
+      (w.nwValues.ncVar + w.nwValues.ncOpaque + w.nwValues.ncMissing + w.nwValues.ncSymbol)
+  ]

@@ -19,5 +19,6 @@ modules = [
   "Vuna.Target.Native.Pal",
   "Vuna.Target.Native.Plugin",
   "Vuna.Target.Native.Render",
+  "Vuna.Target.Native.Repr",
   "Vuna.Target.Native.Runtime",
 ]

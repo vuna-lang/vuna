@@ -103,6 +103,25 @@ OCaml 二进制里的调试信息记录的是**相对**源码名（`build.sh` �
 vuna 的运行时报错与回栈标签来自 `dt_def_locs` 数据表和 `-g` 编进 `.data` 的 frametable，
 不依赖 ELF 符号表，剥离后仍打印 `名字 (文件:行)`；要 gdb 级调试就在源码树里自己重编。
 
+### 槽 kind 分布（GC 根集模型的输入）
+
+`nix run .#vuna -- dev ir dump --after repr|repr-cps <带入口的包>` 用
+`Vuna.Target.Native.Repr` 把 binder 槽与值位置归到 ptr / static / scalar / unknown，
+并分开统计 unknown 的来源。`packages/compiler`（`self` 负载）的读数：
+
+| 形态 | binder 槽 | ptr | scalar | unknown（opaque / missing / var） | 需要清零 |
+| --- | --- | --- | --- | --- | --- |
+| lowering 后 | 34,408 | 27,181 | 3,893 | 3,334（1,160 / 2,174 / 0） | 88% |
+| CPS 后 | 34,488 | 27,181 | 3,891 | 3,416（1,160 / 2,256 / 0） | 88% |
+
+值位置（含实参临时槽）在 lowering 后 236,808 个、unknown 4.9%；CPS 后 239,313 个、
+unknown 39%（其中 missing 89,347）——CPS 合成的 binder 不带宽类型槽。
+`packages/cli`（含 toolchain / web 的更大闭包）上 binder 的 unknown 比例是 29%。
+
+读法：未装箱标量只占槽的 ~11%，所以「按 kind 定向清零」最多省一成清除；清除的大头是
+「已死但仍被保守扫描的指针槽」，只能靠每个 GC 点的活跃位图去掉。`IrTyVar` 在这两个
+程序里都是 0，精确根集的主要盲区是 CPS 之后的 missing，而不是多态实例化。
+
 ### 冷 / 热必须分开报
 
 §1 的「典型值」是**热 store** 口径（默认根 `~/.vuna/store` 已预热），同一源码在**空

@@ -8,6 +8,7 @@ import Vuna.Compiler.Base.Common
 import Vuna.Target.Ocaml.Decl
 import Vuna.Target.Ocaml.Render
 import Vuna.Target.Ocaml.Term
+import Vuna.Target.Native.Repr
 import Vuna.Compiler.Driver.Dt
 import Vuna.Compiler.Frontend.Packages.Pkg
 import Vuna.Ir.Anf
@@ -53,7 +54,26 @@ dumpAfter "machine" program = dumpMachine program
 dumpAfter "anf" program = dumpAnf 1 program
 dumpAfter "anf2" program = dumpAnf 2 program
 dumpAfter "ocaml" program = dumpOcaml program
+dumpAfter "repr" program = dumpRepr "raw" program
+dumpAfter "repr-cps" program = dumpReprCps program
 dumpAfter _ program = OkC (renderProgram program)
+
+-- | 槽/值 kind 分布：lowering 之后（`raw`）与 native 实际输入的 CPS 之后（`cps`）。
+dumpRepr : String -> IrProgram -> Check String
+dumpRepr mode program =
+  let
+    unit = program.irProgUnit
+    defs = concatMap irGroupDefs unit.irUnitGroups
+  in OkC (nReprReport mode unit.irUnitTyDecls defs)
+
+dumpReprCps : IrProgram -> Check String
+dumpReprCps program =
+  let
+    unit = program.irProgUnit
+    defs = concatMap irGroupDefs unit.irUnitGroups
+  in case cpsDefsMachine defs of
+    Err msg => OkC ("repr-cps: " ++ msg)
+    Ok switched => OkC (nReprReport "cps" unit.irUnitTyDecls switched)
 
 -- | OCaml 后端视图：类型声明 + 每个顶层的 `name = <渲染后的 OTerm>`。
 -- 名字编码与前缀是完整的（`v_` / `C_` / `f_`），check 路径的 `noQual` 因此不写跨单元限定。
