@@ -46,8 +46,12 @@ data Term where
 
 ## 2. NbE
 
-- `eval : List Value -> Term -> Value`：call-by-name（闭包 + 环境），全局保持 opaque
-  neutral；`applyClosure` 把实参压入闭包环境。
+- `eval : List Value -> Term -> Value`：环境闭包求值。函数与实参都先 `eval` 成值再
+  `applyClosure`（闭包环境里放的是**已求值的值**，不是 thunk）；全局保持 opaque neutral。
+  真正按需发生的只有 `force` 对全局定义的 delta 展开（下一条），这里没有 call-by-name
+  意义上的惰性。
+- `TIf` 的两支在 `eval` 里也各做一次**弱头**求值（`VIf` 槽里存 `Value`），只有 `normalize`
+  对选中支下钻；codegen 只执行选中支（差异见 [debt.md](debt.md) D120）。
 - `force`：展开已解元变量，并按需 **delta 展开**有定义的全局；步数上限
   `defaultFuel = 512`，到限返回 stuck（不 panic）。`primReduce` 在 force 内做内建归约
   （`IntrinsicOp` 分派）。delta 每次重新求值定义体，没有求值缓存（按定义记忆化的前置
