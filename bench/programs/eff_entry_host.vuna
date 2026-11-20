@@ -1,0 +1,21 @@
+-- 效应基准：**入口宿主叶子**。main 的行是内建 `ConsoleOp`，entry 只预装
+-- `runConsoleHost`，没有用户 handler；每轮 `consolePrint ""` 走
+-- `MkPerform` → 机器的 `opH` → `runPure (@vuna@host@print "")`（opH 内部的第二台机器循环）。
+-- 空串让每次叶子只有一次零字节 write，测到的是效应机器 + 宿主叶子的固定成本。
+-- 手写 OCaml 对照见 eff_entry_host.ml（同算法；`output_string ""` 不产生 syscall，
+-- 所以比值里含 vuna 侧那 N 次零字节 write 的常数，W5 的前后对比不受影响）。
+import Base.Effect.Core as Eff
+import Base.Effect.Console as EffConsole
+import Base.Data.Nat as Nat
+
+loop : Nat -> Int -> Eff [ConsoleOp] Int
+loop n acc =
+  case n of
+    Zero => pure acc
+    Succ m =>
+      do
+        _ <- consolePrint ""
+        loop m (acc + 1)
+
+main : Eff [ConsoleOp] Int
+main = loop (natFromInt 5000) 0
