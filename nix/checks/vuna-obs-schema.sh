@@ -33,15 +33,17 @@ fail() {
 }
 
 # 每次 run 用全新的对象库：否则 check 命中缓存直接返回，阶段跨度根本不会产生。
-run_with_obs() { # level pkg store-suffix trace-suffix
+run_with_obs() { # level pkg store-suffix trace-suffix [full-elab]
   level=$1
   pkg=$2
   store="$OUT/store-$3"
   dir="$trace_root/$4"
+  full=${5:-1}
   rm -rf "$store" "$dir"
   # `VUNA_ELAB_FULL=1`：`check packages/base` 等库包默认走「依赖序覆盖」捷径跳过精化，
-  # 那样不产生任何阶段跨度；门禁要验的是「打开观测后确实有跨度」，因此强制全量。
-  VUNA_STORE="$store" VUNA_ELAB_FULL=1 VUNA_OBS="$level" VUNA_OBS_DIR="$dir" \
+  # 那样不产生任何阶段跨度；门禁要验的是「打开观测后确实有跨度」，因此默认强制全量。
+  # 传 `0` 关掉，用于验证缓存计数（全量口径绕过 check-outcome 缓存）。
+  VUNA_STORE="$store" VUNA_ELAB_FULL="$full" VUNA_OBS="$level" VUNA_OBS_DIR="$dir" \
     "$VUNA" check "$pkg" >"$OUT/check-$4.out" 2>&1 || {
     echo "vuna-obs-schema: check $pkg failed (level $level)" >&2
     cat "$OUT/check-$4.out" >&2
@@ -98,9 +100,21 @@ for mark in vuna.load vuna.resolve vuna.iface.compute vuna.iface.write; do
   grep -q "\"ph\":\"i\",.*\"name\":\"$mark\"" "$compiler_trace" \
     || fail "compiler trace misses the $mark Eff-boundary mark"
 done
-# 缓存计数（ph:"C"）：空 store + 全量口径下依赖接口必然 miss 至少一次。
+# 计数器（ph:"C"）：全量口径照跑终止性分析，必然产出 `vuna.counter.term.*`。
 grep -q '"ph":"C"' "$compiler_trace" || fail "compiler trace has no counter (ph:\"C\") events"
-grep -q '"name":"vuna.counter.cache.miss"' "$compiler_trace" \
-  || fail "compiler trace misses vuna.counter.cache.miss"
+grep -q '"name":"vuna.counter.term.sites"' "$compiler_trace" \
+  || fail "compiler trace misses vuna.counter.term.sites"
+
+# ---------------------------------------------------------------- 5) 缓存计数
+# `VUNA_ELAB_FULL=1` 故意绕过 check-outcome 缓存（每条路径都全量），所以缓存的
+# hit/miss/write 计数要另一个**不开全量**的冷 check 才看得到：空 store 下必然 miss
+# 并写回一次。
+cache_dir=$(run_with_obs 2 packages/base cache cache 0)
+cache_trace=$(find "$cache_dir" -name '*.jsonl' -type f | head -1)
+[ -n "$cache_trace" ] || fail "no trace file produced for the cold cache-check run"
+grep -q '"name":"vuna.counter.cache.miss"' "$cache_trace" \
+  || fail "cold cache-check trace misses vuna.counter.cache.miss"
+grep -q '"name":"vuna.counter.cache.write"' "$cache_trace" \
+  || fail "cold cache-check trace misses vuna.counter.cache.write"
 
 echo "vuna-obs-schema: ok (traces in $OUT/traces)"
