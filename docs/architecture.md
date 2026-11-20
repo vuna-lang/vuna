@@ -36,7 +36,7 @@ packages/compiler/lib/Vuna/Compiler/   （目录即层：层名 = 模块前缀�
 ├─ Core/        Term Eval Conv Canonical      Core TT / NbE / 定义性相等 / 规范编码
 ├─ Elab/        Sig Types Meta Case Dict Term Data Trait InstName Driver Termination
 │               Prelude Match Records Derive Canonical        双向精化
-├─ Lowering/    Program Env Ty Entry Checks    Core→IR 唯一入口（程序级表/类型表面/入口形态）+ Core 侧检查
+├─ Lowering/    Program Env Ty Entry Erased Checks    Core→IR 唯一入口（程序级表/类型表面/入口形态）+ 擦除视图 + Core 侧检查
 └─ Driver/      Dt Compile Cache Iface Owner PerfCache ToolPayload CompilerCli
                 Split SplitGen Target                              输出模型 / facade / 后端插件驱动 / CLI
 产品 CLI 包 vuna（模块根 packages/cli/lib/，入口 packages/cli/app/Main.vuna）：Cli（+子模块 Spec/Help/Args/
@@ -81,7 +81,8 @@ packages/compiler/lib/Vuna/Compiler/   （目录即层：层名 = 模块前缀�
  → Loader.Flatten.loadProject    （import 图 → 名字解析 → flatten；ad-hoc 自动注入 Prelude；随后 `Loader.Expand` 展开内置宏）
  → Frontend.Rast.Bridge.toRastDecls （解析后的 Ast → RAst：引用名换成 RName；Elab 的唯一输入层）
  → Elab.Driver.elabProgramFull   （只读 RAst；Records/Derive 展开 → 精化）
- → Lowering.Program               （Core → Ir：擦除/表示/形态/入口分类，程序级检查）
+ → Lowering.Erased                （运行时 TVar 下标归一化 + 校验；类型面保留）
+ → Lowering.Program               （Core → Ir：表示/形态/入口分类，程序级检查）
  → Codegen.Assembly              （IrUnit 的装配：open 头/类型/桥接/正文/依赖表）
  → Driver.SplitGen.generateDtSplitProgram  （唯一生成器：runtime + 各模块 + Main，带直接依赖）
  → sh build.sh                   （Driver.Split：层内并行；ocamlopt 链接）

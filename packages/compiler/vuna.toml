@@ -79,6 +79,7 @@ modules = [
   "Vuna.Compiler.Lowering.Checks",
   "Vuna.Compiler.Lowering.Entry",
   "Vuna.Compiler.Lowering.Env",
+  "Vuna.Compiler.Lowering.Erased",
   "Vuna.Compiler.Lowering.Program",
   "Vuna.Compiler.Lowering.Ty",
 ]

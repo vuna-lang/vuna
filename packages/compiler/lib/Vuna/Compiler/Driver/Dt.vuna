@@ -1482,11 +1482,9 @@ dtFinishScoped depCps cleanCps prog cache =
 -- `dtFinishScoped`）因此各得一个 span，不重复包。
 dtCheckScoped : List DtData -> List DtData -> List DtDef -> List (Pair String Term) -> Check Int
 dtCheckScoped allDatas unitDatas defs globals =
-  let
-    env = mkLwEnv allDatas defs globals ""
-  in obsCheck
-    "vuna.codegen.check"
-    (\_ => Vuna.Compiler.Base.Common.bind (obsCheck "vuna.codegen.lower" (\_ => lowerUnitOf env (map dtDefName defs) (map dtDataName unitDatas))) (\unitIr => Vuna.Compiler.Base.Common.bind (obsCheck "vuna.codegen.gen" (\_ => checkUnitParts (lwEnvShared env) unitIr)) (\_ => OkC 0)))
+  Vuna.Compiler.Base.Common.bind
+    (mkLwEnv allDatas defs globals "")
+    (\env => obsCheck "vuna.codegen.check" (\_ => Vuna.Compiler.Base.Common.bind (obsCheck "vuna.codegen.lower" (\_ => lowerUnitOf env (map dtDefName defs) (map dtDataName unitDatas))) (\unitIr => Vuna.Compiler.Base.Common.bind (obsCheck "vuna.codegen.gen" (\_ => checkUnitParts (lwEnvShared env) unitIr)) (\_ => OkC 0))))
 
 -- 单文件（LSP buffer / REPL 所在模块）的增量精化。
 --   1. 依赖包模块与**干净的同包模块**以「预置模块」进 Loader（零 parse/resolve）；

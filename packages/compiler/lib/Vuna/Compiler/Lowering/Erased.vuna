@@ -1,0 +1,197 @@
+-- | 擦除后 Core 的**typed view**：保留类型面（binder 槽、`TApp` 的类型实参、
+-- `TCon` 的族参数），只把**运行时位置**的 `TVar` 下标归一化到「只数运行时 binder」的
+-- 空间。
+--
+-- 与「删掉擦除 binder / 实参」的做法不同：类型面不能删。IR 的类型注解
+-- （`Lowering.Ty.annotTyOf` / `annotCalleeTy`）与 CPS 的 `isEffResultTy` 都依赖
+-- 类型实参和 binder 槽；删掉它们会让 `Eff` / `List` 的应用退化成 `IrTyOpaque`，
+-- native 的机器路径会错（见 debt IR-27 / IR-28）。因此这里保留完整的 Core 结构，
+-- 只规定运行时引用的**读法**：
+--
+--   * `TVar` 在运行时位置按下标 `runtimeIndexAt` 读（只数 `Rig1`/`Rigω` binder）；
+--   * `TApp` 的 `Rig0` 实参、`TLam` 的类型槽、`TProj`/`TRecUpd` 的 telescope 是
+--     类型面，保持原样（仍用 Core 的完整上下文）；
+--   * `validateErased` 自证：运行时位置没有指向 `Rig0` binder 的引用。
+--
+-- 这样 Lowering 只需在运行时位置用「运行时 binder 表」解析 `TVar`，类型位置仍用
+-- 原上下文；产物与「直接 lowering」逐字节一致。
+module Vuna.Compiler.Lowering.Erased where
+
+import Base.Data.List as List
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Core.Term
+
+-- ---------------------------------------------------------------
+-- 运行时下标
+-- ---------------------------------------------------------------
+-- | `ctx` 是「最近绑定在前」的 binder 表（True = 运行时 binder）。
+runtimeIndexAt : List Bool -> Int -> Maybe Int
+runtimeIndexAt ctx i = runtimeIndexGo 0 ctx i
+
+runtimeIndexGo : Int -> List Bool -> Int -> Maybe Int
+runtimeIndexGo seen [] i = Nothing
+runtimeIndexGo seen (k :: rest) i =
+  if i <= 0 then
+    if k then Just seen else Nothing
+  else
+    runtimeIndexGo (if k then seen + 1 else seen) rest (i - 1)
+
+countKept : List Bool -> Int
+countKept [] = 0
+countKept (k :: rest) = if k then 1 + countKept rest else countKept rest
+
+binderKept : Binder -> Bool
+binderKept b = not (rigIsErased (binderRigOf b))
+
+-- ---------------------------------------------------------------
+-- 擦除归一化
+-- ---------------------------------------------------------------
+-- | 闭项：运行时 `TVar` 下标 → 运行时空间；类型面不动。
+export eraseTerm : Term -> Check Term
+eraseTerm t =
+  Vuna.Compiler.Base.Common.bind
+    (eraseTermIn False [] t)
+    (\t2 => Vuna.Compiler.Base.Common.bind (validateErasedIn [] t2) (\_ => OkC t2))
+
+eraseTermIn : Bool -> List Bool -> Term -> Check Term
+eraseTermIn allowErased ctx t =
+  case t of
+    TVar name i sp =>
+      case runtimeIndexAt ctx i of
+        Just j => OkC (TVar name j sp)
+        Nothing =>
+          if allowErased then
+            OkC (TVar name i sp)
+          else
+            icInternal "erased core: erased binder ${name} used at runtime"
+    TGlobal name => OkC (TGlobal name)
+    TInt n => OkC (TInt n)
+    TStr s => OkC (TStr s)
+    TFloat raw => OkC (TFloat raw)
+    TBool b => OkC (TBool b)
+    TIf c th el =>
+      Vuna.Compiler.Base.Common.bind
+        (eraseTermIn allowErased ctx c)
+        (\c2 => Vuna.Compiler.Base.Common.bind (eraseTermIn allowErased ctx th) (\th2 => Vuna.Compiler.Base.Common.bind (eraseTermIn allowErased ctx el) (\el2 => OkC (TIf c2 th2 el2))))
+    TLam name rig slot sp body =>
+      Vuna.Compiler.Base.Common.bind
+        (eraseTermIn allowErased (not (rigIsErased rig) :: ctx) body)
+        (\body2 => OkC (TLam name rig slot sp body2))
+    TApp f a rig =>
+      Vuna.Compiler.Base.Common.bind
+        (eraseTermIn allowErased ctx f)
+        (\f2 => if rigIsErased rig then OkC (TApp f2 a rig) else Vuna.Compiler.Base.Common.bind (eraseTermIn allowErased ctx a) (\a2 => OkC (TApp f2 a2 rig)))
+    -- 类型位置的实参：保留原样（类型面）。
+    TCon c args => eraseCtorArgs allowErased ctx c args False
+    TMk c args => eraseCtorArgs allowErased ctx c args True
+    TRecord name args =>
+      Vuna.Compiler.Base.Common.bind
+        (eraseArgs allowErased ctx args)
+        (\args2 => OkC (TRecord name args2))
+    TProj base c tele i fi =>
+      Vuna.Compiler.Base.Common.bind
+        (eraseTermIn allowErased ctx base)
+        (\base2 => OkC (TProj base2 c tele i fi))
+    TRecUpd base c tele idxs body =>
+      let
+        -- `Lowering` 对 record update 的 tele 一律用擦除占位，只 lower 被更新的字段实参；
+        -- 未更新字段的 binder 引用保留原下标（不会被 lower）。
+        ctx2 = append (reverse (map (\_ => False) tele)) ctx
+      in Vuna.Compiler.Base.Common.bind
+        (eraseTermIn allowErased ctx base)
+        (\base2 => Vuna.Compiler.Base.Common.bind (eraseTermIn True ctx2 body) (\body2 => OkC (TRecUpd base2 c tele idxs body2)))
+    TCase scrut alts =>
+      Vuna.Compiler.Base.Common.bind
+        (eraseTermIn allowErased ctx scrut)
+        (\scrut2 => Vuna.Compiler.Base.Common.bind (eraseAlts allowErased ctx alts) (\alts2 => OkC (TCase scrut2 alts2)))
+    TPi name implicit rig dom cod => OkC (TPi name implicit rig dom cod)
+    TType l => OkC (TType l)
+    TMeta m => OkC (TMeta m)
+
+eraseAlts : Bool -> List Bool -> List CaseAlt -> Check (List CaseAlt)
+eraseAlts allowErased ctx [] = OkC []
+eraseAlts allowErased ctx ((CaseAlt name bs body) :: rest) =
+  let
+    ctx2 = append (reverse (map binderKept bs)) ctx
+  in Vuna.Compiler.Base.Common.bind
+    (eraseTermIn allowErased ctx2 body)
+    (\body2 => Vuna.Compiler.Base.Common.bind (eraseAlts allowErased ctx rest) (\rest2 => OkC (CaseAlt name bs body2 :: rest2)))
+
+eraseCtorArgs : Bool -> List Bool -> String -> List (Pair Term Rig) -> Bool -> Check Term
+eraseCtorArgs allowErased ctx c args isMk =
+  Vuna.Compiler.Base.Common.bind
+    (eraseArgs allowErased ctx args)
+    (\args2 => OkC (if isMk then TMk c args2 else TCon c args2))
+
+-- 只擦运行时实参；`Rig0` 实参是类型面，原样保留。
+eraseArgs : Bool -> List Bool -> List (Pair Term Rig) -> Check (List (Pair Term Rig))
+eraseArgs allowErased ctx [] = OkC []
+eraseArgs allowErased ctx (a :: rest) =
+  if rigIsErased (secondOf a) then
+    Vuna.Compiler.Base.Common.bind
+      (eraseArgs allowErased ctx rest)
+      (\rest2 => OkC (Pair (firstOf a) (secondOf a) :: rest2))
+  else
+    Vuna.Compiler.Base.Common.bind
+      (eraseTermIn allowErased ctx (firstOf a))
+      (\a2 => Vuna.Compiler.Base.Common.bind (eraseArgs allowErased ctx rest) (\rest2 => OkC (Pair a2 (secondOf a) :: rest2)))
+
+-- ---------------------------------------------------------------
+-- 校验
+-- ---------------------------------------------------------------
+-- | 运行时位置的下标必须落在运行时 binder 表内（`ctx` 只收运行时 binder）。
+export validateErased : Term -> Check Int
+validateErased t = validateErasedIn [] t
+
+validateErasedIn : List Bool -> Term -> Check Int
+validateErasedIn ctx t =
+  case t of
+    TVar _ i _ =>
+      if i < 0 || i >= countKept ctx then
+        icInternal "erased core: runtime variable out of scope"
+      else
+        OkC 0
+    TGlobal _ => OkC 0
+    TInt _ => OkC 0
+    TStr _ => OkC 0
+    TFloat _ => OkC 0
+    TBool _ => OkC 0
+    TIf c th el =>
+      Vuna.Compiler.Base.Common.bind
+        (validateErasedIn ctx c)
+        (\_ => Vuna.Compiler.Base.Common.bind (validateErasedIn ctx th) (\_ => validateErasedIn ctx el))
+    TLam _ rig _ _ body => validateErasedIn (not (rigIsErased rig) :: ctx) body
+    TApp f a rig =>
+      Vuna.Compiler.Base.Common.bind
+        (validateErasedIn ctx f)
+        (\_ => if rigIsErased rig then OkC 0 else validateErasedIn ctx a)
+    TCon c args => validateErasedArgs ctx args
+    TMk c args => validateErasedArgs ctx args
+    TRecord _ args => validateErasedArgs ctx args
+    TProj base _ _ _ _ => validateErasedIn ctx base
+    TRecUpd base _ _ _ _ => validateErasedIn ctx base
+    -- 体保持原始下标（见 `eraseTermIn` 的同名分支）。
+    TCase scrut alts =>
+      Vuna.Compiler.Base.Common.bind
+        (validateErasedIn ctx scrut)
+        (\_ => validateErasedAlts ctx alts)
+    TPi _ _ _ _ _ => icInternal "erased core: Pi at runtime"
+    TType _ => icInternal "erased core: Type at runtime"
+    TMeta _ => icInternal "erased core: unsolved meta at runtime"
+
+validateErasedArgs : List Bool -> List (Pair Term Rig) -> Check Int
+validateErasedArgs ctx [] = OkC 0
+validateErasedArgs ctx (a :: rest) =
+  if rigIsErased (secondOf a) then
+    validateErasedArgs ctx rest
+  else
+    Vuna.Compiler.Base.Common.bind
+      (validateErasedIn ctx (firstOf a))
+      (\_ => validateErasedArgs ctx rest)
+
+validateErasedAlts : List Bool -> List CaseAlt -> Check Int
+validateErasedAlts ctx [] = OkC 0
+validateErasedAlts ctx ((CaseAlt _ bs body) :: rest) =
+  Vuna.Compiler.Base.Common.bind
+    (validateErasedIn (append (reverse (map binderKept bs)) ctx) body)
+    (\_ => validateErasedAlts ctx rest)

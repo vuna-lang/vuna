@@ -331,6 +331,38 @@ annotHeadTy fuel dflt env binders g args =
 -- 部分应用（`TApp` 脊）按已应用的实参剥 Pi：全局定义在剥的时候用项里的**擦除实参**
 -- （类型参数 / 证明）实例化闭包，因此 `map (add 1)` 得到 `List Int -> List Int` 而不是
 -- 不可命名的兜底；局部变量则从它自己的函数类型逐实参剥。
+-- | 运行时项的类型：`TVar` 用**运行时下标**解析（擦除后 Core 的运行时位置）。
+-- 其余形状（数据族 / 构造子 / 全局头）里的类型实参仍走原始上下文的 `annotTyOf`。
+export annotRunTyOf : LwEnv -> List IrBinder -> Term -> Maybe IrTy
+annotRunTyOf env binders t =
+  case t of
+    TVar _ i _ => binderTyAtRuntime i binders
+    TIf _ a _ => annotRunTyOf env binders a
+    _ => annotTyOf env binders t
+
+-- 运行时下标 → binder 类型（跳过擦除占位）。
+binderTyAtRuntime : Int -> List IrBinder -> Maybe IrTy
+binderTyAtRuntime j [] = Nothing
+binderTyAtRuntime j (b :: rest) =
+  if b.irBinderErased then
+    binderTyAtRuntime j rest
+  else if j <= 0 then b.irBinderTy else binderTyAtRuntime (j - 1) rest
+
+-- | `annotCalleeTy` 的运行时版本：局部头用运行时下标；全局头仍按签名。
+export annotRunCalleeTy : LwEnv -> List IrBinder -> Term -> Maybe IrTy
+annotRunCalleeTy env binders (TGlobal g) = annotGlobalTy env binders g
+annotRunCalleeTy env binders (t@(TApp _ _ _)) =
+  case flattenAnnotAppRig t of
+    Pair (TGlobal g) args => annotCalleeTy env binders t
+    Pair head args => peelIrFuns (countRuntimeArgs args) (Just (annotRunTyOfTotal env binders head))
+annotRunCalleeTy env binders t = annotRunTyOf env binders t
+
+annotRunTyOfTotal : LwEnv -> List IrBinder -> Term -> IrTy
+annotRunTyOfTotal env binders t =
+  case annotRunTyOf env binders t of
+    Just ty => ty
+    Nothing => IrTyOpaque
+
 export annotCalleeTy : LwEnv -> List IrBinder -> Term -> Maybe IrTy
 annotCalleeTy env binders (TGlobal g) = annotGlobalTy env binders g
 annotCalleeTy env binders (t@(TApp _ _ _)) =

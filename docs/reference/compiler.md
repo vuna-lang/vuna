@@ -12,7 +12,7 @@
 代码按**目录即层**组织：`Base → Frontend → Loader → Core → Elab → Ir`，`Codegen` /
 `Lowering` / `Native` / `Wasm` 各自独立成层，`Driver` 在最上；依赖方向由
 `packages/compiler/vuna.toml` 的 `[layers]` 声明、由 loader 强制（语义见
-[packages.md](packages.md)「层约束」）。全包 **114 个模块，全部在 `[export]` 里**——
+[packages.md](packages.md)「层约束」）。全包 **115 个模块，全部在 `[export]` 里**——
 没有内部模块，纯门面模块（原 `Core.vuna` / `Elab.vuna` / `Loader.vuna` / `Codegen.vuna`；
 `Ir` 的校验入口拆到 `Ir.Validate`）已删除，
 消费方直接 import 具体子模块；`Elab` 的选择性重导出也一并消失，子模块即公开面
@@ -124,6 +124,7 @@
 | `Lowering.Env` | `LwEnv` / `LwSt`、表示判定、类型参数槽不动点、共享元数据、定义体使用事实（`termUseInto`） | `mkLwEnv`、`lwEnvWithUnit`、`termUseInto` |
 | `Lowering.Ty` | 类型表面：`IrTy` 渲染与类型声明（纯函数，不进项） | `irTyOf`、`irTyDeclsOf` |
 | `Lowering.Entry` | 入口形态：动作行 / 值入口分类、展示函数、宿主 handler 序列 | `lowerEntryOf`、`entryShapeOf` |
+| `Lowering.Erased` | **擦除后 Core 的 typed view**：运行时 `TVar` 下标归一化 + 校验；类型面（binder 槽 / 类型实参 / telescope）保留 | `eraseTerm`、`validateErased` |
 | `Lowering.Checks` | Core 侧检查（不产生 IR）：擦除检查、axiom 运行时使用检查、de Bruijn 作用域护栏、定义体事实（`termUseInto`：运行时依赖 + float/tracing/obs 旗标，一次遍历） | `checkAllErasure`、`checkAllDefScopes`、`checkNoAxiomRuntime`、`termUseInto`、`partitionDefs` |
 | `Codegen.Decl` | 名字编码（sanitize/前缀/保留字）+ 跨单元引用限定（`Unit.name`）+ IR 类型/声明 → 后端模型 | `irTyText`、`irTypeDeclsText`、`ctorOcamlName`、`qualValueText` |
 | `Codegen.Ocaml.Model` | OCaml 后端模型：类型面 `OTy` / `OCtor` / `ODecl`，项面 `OPat` / `OTerm` / `ODef`。**不含目标文本**（运行时模板与内联内建展开是显式的 `ORaw`）；名字编码、限定与括号在渲染侧 | `OTy`、`OTerm`、`OPat`、`ODef` |
@@ -150,7 +151,7 @@
 | `Driver.CompilerCli` | 编译器自己的 CLI（`vuna-compiler`）；含受限进程执行入口 `runIn`；workspace check/build 单元、`build --package`、`version` | `runCompilerCli`、`compilerUsageLines`、`runIn` |
 | `Driver.Native` / `Driver.Wasm` | 后端驱动：检查 + lowering + 写 `.s` 文件集 / `main.wat`；不 import Core/Elab/Intrinsics | `compileNative`、`compileWasm` |
 
-`packages/compiler/vuna.toml` 的 `[export]` 列出全部 114 个模块（模块即公开面，没有内部模块）；
+`packages/compiler/vuna.toml` 的 `[export]` 列出全部 115 个模块（模块即公开面，没有内部模块）；
 编译器直接使用 `prim_*`（无 manifest 能力/特权声明）。工具链模块不在此包。
 
 ## 产品 CLI 工具链模块（`packages/cli/lib/`，不进 seed）

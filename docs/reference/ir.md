@@ -260,10 +260,12 @@ binder 的**身份**在 Lowering 分配，前缀与编号渲染属后端：
   projection / update 结果都已带类型槽；不可命名的部分落 `IrTyOpaque`，没有 IR 级类型检查器。
   `IrCast` 位点仍靠 Lowering 写对；结构化校验只查签名/注解/节点类型的形状、arity 与
   构造子实参数，不复刻精化器（见 [architecture-target.md](../architecture-target.md) 非目标）。
-- **这些注解读的是 Core 里的类型实参与 binder 类型槽**（`TApp` 的 `Rig0` 实参、
-  `TLam` 槽、`TCon` 族参数）：先擦除再 lowering 会把这些位置删掉，注解退化成
-  `IrTyOpaque`，CPS 的 `isEffResultTy` 与 native 的判定随之失准。擦除后 Core
-  必须自带类型面（见 [debt.md](debt.md) IR-27 / IR-28）。
+- **擦除后 Core 是 typed view**：`Lowering.Erased` 只把运行时位置的 `TVar` 下标
+  归一化（只数运行时 binder），类型面（`TLam` 槽、`TApp` 的 `Rig0` 实参、`TCon`
+  族参数、telescope）原样保留；Lowering 用 `runtimeBinderAt` 读运行时变量、
+  用 `annotRunTyOf` / `annotRunCalleeTy` 读运行时项的类型，CPS 的 `isEffResultTy`
+  因此仍有类型依据。擦除 binder / 实参的死语法尚未从 Core 结构里删除
+  （见 [debt.md](debt.md) IR-27）。
 - binder 类型走**两种口径**：`annotTyOfTotal` 保留结构（`a -> b` 是 `Opaque -> Opaque`，
   不是整体未知），写入 `IrBinder`；OCaml 的 lambda 注解另由 `irTyAnnotatable` 过滤，
   **含 `IrTyOpaque` / 类型变量槽的类型不写进 OCaml**（那会固定多态性），因此 IR 侧信息

@@ -81,8 +81,8 @@ lowerTermFuel fuel env st binders t =
   else
     case t of
       TVar name i sp =>
-        case binderAtIn i binders of
-          Just b => if binderErasedOf b then cgErr1 (TypeLevelBindingRuntime name) name else OkC (Pair (IrVar b) st)
+        case runtimeBinderAt i binders of
+          Just b => if binderErasedOf b then icInternal "erased binder ${name}: runtime idx ${strFromInt i} of ${strFromInt (listLength binders)} binders" else OkC (Pair (IrVar b) st)
           Nothing => icInternal "unbound runtime variable"
       TGlobal name => Vuna.Compiler.Base.Common.bind (lowerGlobalRef env name) (\ir => OkC (Pair ir st))
       TInt n => OkC (Pair (IrInt n) st)
@@ -129,7 +129,7 @@ lowerTermFuel fuel env st binders t =
                             Vuna.Compiler.Base.Common.bind (ctorKeptFieldTys env c) (
                                 \fieldTys =>
                                   let
-                                    args = irTyDataArgsOf (annotTyOf env binders base)
+                                    args = irTyDataArgsOf (annotRunTyOf env binders base)
                                     resTy =
                                       case lookupRtPosIn fi fields 0 of
                                         Just pos => irTyAt (map (irTySubstVars args) fieldTys) pos
@@ -146,6 +146,28 @@ lowerTermFuel fuel env st binders t =
 binderAtIn : Int -> List IrBinder -> Maybe IrBinder
 binderAtIn i [] = Nothing
 binderAtIn i (b :: rest) = if i <= 0 then Just b else binderAtIn (i - 1) rest
+
+-- | 擦除后 Core 的运行时下标：只数非擦除 binder（跳过 `irBinderErased`）。
+runtimeBinderAt : Int -> List IrBinder -> Maybe IrBinder
+runtimeBinderAt j [] = Nothing
+runtimeBinderAt j (b :: rest) =
+  if binderErasedOf b then
+    runtimeBinderAt j rest
+  else if j <= 0 then Just b else runtimeBinderAt (j - 1) rest
+
+-- | 第 `i` 个（Core 下标）binder 在运行时表里的位置（用于合成 `TVar`）。
+runtimeIndexInPairs : Int -> List (Pair String Rig) -> Maybe Int
+runtimeIndexInPairs i ctx = runtimePairGo 0 ctx i
+
+runtimePairGo : Int -> List (Pair String Rig) -> Int -> Maybe Int
+runtimePairGo seen [] i = Nothing
+runtimePairGo seen (p :: rest) i =
+  let
+    erased = rigIsErased (secondOf p)
+  in if i <= 0 then
+    if erased then Nothing else Just seen
+  else
+    runtimePairGo (if erased then seen else seen + 1) rest (i - 1)
 
 recordFieldNameAt : Int -> List (Pair Int String) -> Check String
 recordFieldNameAt i [] = icInternal "record field position out of range"
@@ -398,7 +420,7 @@ lowerPlainAppFuel fuel env st binders t =
 
 appTyOf : LwEnv -> List IrBinder -> Term -> Maybe (Pair IrTy IrTy)
 appTyOf env binders f =
-  case annotCalleeTy env binders f of
+  case annotRunCalleeTy env binders f of
     Just (fn@(IrTyFun _ cod)) => Just (Pair fn cod)
     _ => Nothing
 
@@ -558,7 +580,7 @@ lowerConArgsFuel fuel env st binders (opq :: opqs) ((Pair arg rig) :: rest) =
               Vuna.Compiler.Base.Common.bind (lowerConArgsFuel (fuel - 1) env st2 binders opqs rest) (
                   \q =>
                     case q of
-                      Pair irs st3 => OkC (Pair ((::) (ctorArgIr (annotTyOf env binders arg) opq ir) irs) st3)
+                      Pair irs st3 => OkC (Pair ((::) (ctorArgIr (annotRunTyOf env binders arg) opq ir) irs) st3)
                 )
       )
 
@@ -827,7 +849,7 @@ lowerUnboxedCaseFuel fuel env st outer scrut alt =
                             Vuna.Compiler.Base.Common.bind (ctorKeptFieldTys env name) (
                                 \fieldTys =>
                                   let
-                                    argTys = map (irTySubstVars (irTyDataArgsOf (annotTyOf env outer scrut))) fieldTys
+                                    argTys = map (irTySubstVars (irTyDataArgsOf (annotRunTyOf env outer scrut))) fieldTys
                                     typed = typedPats argTys (aePatsOf bound)
                                     bound2 = retagAltEnv bound typed
                                   in Vuna.Compiler.Base.Common.bind (lowerArmBodyFuel (fuel - 1) env bound2 (caseAltBody alt)) (
@@ -850,8 +872,8 @@ armResultTyOf env bound bodyIr coreBody =
         IrGlobal g =>
           case annotGlobalTy env (aeEnvOf bound) g of
             Just ty => Just ty
-            Nothing => annotTyOf env (aeEnvOf bound) coreBody
-        _ => annotTyOf env (aeEnvOf bound) coreBody
+            Nothing => annotRunTyOf env (aeEnvOf bound) coreBody
+        _ => annotRunTyOf env (aeEnvOf bound) coreBody
 
 -- 每个分支：catch-all → pattern 只有非擦除 binder；构造子 → 按形状绑定。
 lowerArmFuel : Int -> LwEnv -> Maybe IrTy -> LwSt -> List IrBinder -> CaseAlt -> Check (Pair IrAlt (Pair (Maybe IrTy) LwSt))
@@ -1008,7 +1030,7 @@ lowerCaseFuel fuel env st outer scrut alts =
           case p of
             Pair scrutIr st1 =>
               let
-                scrutTy = annotTyOf env outer scrut
+                scrutTy = annotRunTyOf env outer scrut
               in Vuna.Compiler.Base.Common.bind (lowerArmsFuel (fuel - 1) env scrutTy st1 outer alts) (
                   \q =>
                     case q of
@@ -1024,7 +1046,10 @@ lowerProjAsCaseFuel fuel env st outer base c tele i fi =
   else
     let
       n = listLength tele
-    in lowerTermFuel (fuel - 1) env st outer (TCase base [CaseAlt c (bindersOfPairs (projBindersIn tele 0)) (TVar (recordProjVarIn fi) (n - 1 - fi) (Span "" 0 0 0 0 0 0))])
+      srcIdx = n - 1 - fi
+    in case runtimeIndexInPairs srcIdx tele of
+      Just ridx => lowerTermFuel (fuel - 1) env st outer (TCase base [CaseAlt c (bindersOfPairs (projBindersIn tele 0)) (TVar (recordProjVarIn fi) ridx (Span "" 0 0 0 0 0 0))])
+      Nothing => icInternal "projection of an erased binder"
 
 recordProjVarIn : Int -> String
 recordProjVarIn i = "@vuna@record@proj${i}"
@@ -1081,7 +1106,7 @@ lowerRecordUpdateFuel fuel env st outer base c tele fields idxs body =
           case p of
             Pair baseIr st1 =>
               let
-                baseTy = annotTyOf env outer base
+                baseTy = annotRunTyOf env outer base
               in case body of
                 TMk c2 args => lowerRecordUpdateArgsFuel (fuel - 1) env st1 (recordAltBindersIn tele outer) baseIr baseTy c fields idxs args
                 TCon c2 args => lowerRecordUpdateArgsFuel (fuel - 1) env st1 (recordAltBindersIn tele outer) baseIr baseTy c fields idxs args
@@ -1364,7 +1389,7 @@ mapMaybeDef tbl (n :: rest) =
 export checkProgramOf : LwEnv -> Check Int
 checkProgramOf env =
   Vuna.Compiler.Base.Common.bind
-    (prepareProgram env.lwDatas env.lwDefs)
+    (prepareProgram env.lwDatas env.lwOrigDefs)
     (\_ => checkRuntimeContract)
 
 -- | 内建签名里的 `IVar` 必须由外层 `IPi` 绑定：否则 `Prelude.ityToTermEnv` 会把它退化成
@@ -1484,14 +1509,14 @@ groupOfPair (Pair isRec ds) = IrGroup isRec ds
 export lowerProgramOf : List DtData -> List DtDef -> List (Pair String Term) -> Check IrProgram
 lowerProgramOf datas defs globals =
   Vuna.Compiler.Base.Common.bind
-    (obsCheck "vuna.codegen.env" (\_ => OkC (mkLwEnv datas defs globals "")))
+    (obsCheck "vuna.codegen.env" (\_ => mkLwEnv datas defs globals ""))
     (
       \env =>
         Vuna.Compiler.Base.Common.bind (obsCheck "vuna.codegen.prepare" (\_ => checkProgramOf env)) (
             \_ =>
               Vuna.Compiler.Base.Common.bind (obsCheck "vuna.codegen.unit" (\_ => lowerUnitAfterChecks env (map dtDefName defs) (map dtDataName datas))) (
                   \unitIr =>
-                    Vuna.Compiler.Base.Common.bind (obsCheck "vuna.codegen.entry" (\_ => lowerEntryOf defs)) (
+                    Vuna.Compiler.Base.Common.bind (obsCheck "vuna.codegen.entry" (\_ => lowerEntryOf env.lwDefs)) (
                         \entry =>
                           let
                             program = IrProgram (lwEnvShared env) (IrUnit unitIr.irUnitTyDecls unitIr.irUnitGroups unitIr.irUnitHasListFamily unitIr.irUnitTypeRefs entry)

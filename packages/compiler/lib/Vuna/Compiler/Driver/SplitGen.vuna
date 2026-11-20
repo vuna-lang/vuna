@@ -361,36 +361,48 @@ generateDtSplitProgram modules entryDecls prog printResult roots contextDir extr
 -- 命中即跳过该单元的 lowering + 文本生成，`store` 只对重新生成的单元调用）。
 export generateDtSplitProgramWith : {r : Row} -> (String -> Eff r (Maybe SplitFile)) -> (String -> SplitFile -> Eff r Int) -> List (Pair String (List Decl)) -> List Decl -> DtProgram -> Bool -> List String -> String -> List (Pair String (Pair String Int)) -> Eff r (Check (List SplitFile))
 generateDtSplitProgramWith lookup store modules entryDecls prog printResult roots contextDir extraDefLocs =
-  let
-    -- 把「精化完成 → 装配开始」之间的构建独有开销分段；stamp 关闭时只花一次分支。
-    _ = dbg! "cg-splitstart"
-    allDatas = rtDatasOf (dtProgDatas prog)
-    allDefs = dtProgDefs prog
-    runtimeDefs = partitionRuntimeDefs allDefs
-    env = mkLwEnv (dtProgDatas prog) allDefs (dtProgGlobals prog) (splitUnitOfModule entryOwner)
-    shared = lwEnvShared env
-    meta = splitMetaOf modules entryDecls
-    _ = dbg! "cg-splitmeta-done"
-    -- 位置表：Lowering 已算好本程序的运行时定义行；增量路径复用模块的额外行在这里合并
-    -- （`extraDefLocs` 来自接口的 `miDefLocs`，落盘前统一排序，全量/增量一致）。
-    locRows = append shared.irSharedDefLocs extraDefLocs
-    locTbl = dtDefLocTable (splitLocPath roots contextDir) unitOfLocName locRows
-    _ = dbg! "cg-deflocs-done"
-    runtimeText =
-      dtRuntimeWith locTbl shared.irSharedUsesFloat shared.irSharedUsesTrace shared.irSharedUsesObs
-    _ = dbg! "cg-runtimeText-done"
-  in splitProgramFilesWith
-    lookup
-    store
-    env
-    modules
-    entryDecls
-    printResult
-    runtimeDefs
-    allDatas
-    meta
-    (splitLocPath roots contextDir)
-    runtimeText
+  case eraseDefs (dtProgDefs prog) of
+    ErrC e => pure (ErrC e)
+    OkC allDefs =>
+      let
+        -- 把「精化完成 → 装配开始」之间的构建独有开销分段；stamp 关闭时只花一次分支。
+        _ = dbg! "cg-splitstart"
+        allDatas = rtDatasOf (dtProgDatas prog)
+        runtimeDefs = partitionRuntimeDefs allDefs
+        env =
+          mkLwEnvFromErased
+            (dtProgDatas prog)
+            allDefs
+            (dtProgDefs prog)
+            (dtProgGlobals prog)
+            (splitUnitOfModule entryOwner)
+        shared = lwEnvShared env
+        meta = splitMetaOf modules entryDecls
+        _ = dbg! "cg-splitmeta-done"
+        -- 位置表：Lowering 已算好本程序的运行时定义行；增量路径复用模块的额外行在这里合并
+        -- （`extraDefLocs` 来自接口的 `miDefLocs`，落盘前统一排序，全量/增量一致）。
+        locRows = append shared.irSharedDefLocs extraDefLocs
+        locTbl = dtDefLocTable (splitLocPath roots contextDir) unitOfLocName locRows
+        _ = dbg! "cg-deflocs-done"
+        runtimeText =
+          dtRuntimeWith
+            locTbl
+            shared.irSharedUsesFloat
+            shared.irSharedUsesTrace
+            shared.irSharedUsesObs
+        _ = dbg! "cg-runtimeText-done"
+      in splitProgramFilesWith
+        lookup
+        store
+        env
+        modules
+        entryDecls
+        printResult
+        runtimeDefs
+        allDatas
+        meta
+        (splitLocPath roots contextDir)
+        runtimeText
 
 splitProgramFilesWith : {r : Row} -> (String -> Eff r (Maybe SplitFile)) -> (String -> SplitFile -> Eff r Int) -> LwEnv -> List (Pair String (List Decl)) -> List Decl -> Bool -> List DtDef -> List DtData -> SplitMeta -> (String -> String) -> String -> Eff r (Check (List SplitFile))
 splitProgramFilesWith lookup store env modules entryDecls printResult runtimeDefs allDatas meta normPath runtimeText =
