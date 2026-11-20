@@ -115,6 +115,7 @@ ID 是稳定引用（`层前缀-序号`），改动时保留编号，删掉实�
 | EC-29 | `Elab/Driver.vuna` 的实例索引自检 | D | 只在 `--debug-perf` 下跑 | 开放 |
 | EC-30 | `Impl.vuna` 的 check 位 `if` | A | 分支检查失败后整体重推断（位置/期望类型信息丢失） | 开放 |
 | EC-31 | `Conv.vuna` 的 `convFuelBase` | C | 非 Nat 值的 conv 燃料固定 64：定义性相等嵌套 ≥ ~15 层就假报 `IC_FuelExhausted` | 已清（基值 4096 ≈ 1000 层；Nat 链仍按链深追加。`fuel` 是该互递归组唯一的 SCT 递减测度，结构比较不能停止扣减——要去掉层数上限只能给整个组换终止性测度） |
+| EC-32 | `Eval.vuna` 的 `normalizeIfFuel` 中性条件 | C | 条件归约不到 `Bool` 时继续正规化**两个分支**：每支都拿到近乎全新的 `force` 预算，深递归每次「条件卡住」都重展开一遍 ⇒ 工作随深度指数放大（85 层两分支递归 7 s 涨到 >3 GB） | 已清（只正规化条件、保持 `VIf` 卡住，与 `normalizeCaseFuel` 同口径；interp 预算改为 `interpFuelBound = 262144`） |
 
 `EC-01` 的前置（把 `i < 0` 判 False 后 base 立刻红，已定位到两类，均需先修）：
 

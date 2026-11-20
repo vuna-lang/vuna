@@ -884,8 +884,10 @@ normalizeIfFuel fuel defs sols evalFuel c th el =
   else
     case normalizeFuel (fuel - 1) defs sols (evalFuel - 1) c of
       VBool b => normalizeFuel (fuel - 1) defs sols (evalFuel - 1) (if b then th else el)
-      VNeutral n => VIf (VNeutral n) (normalizeFuel (fuel - 1) defs sols (evalFuel - 1) th) (normalizeFuel (fuel - 1) defs sols (evalFuel - 1) el)
-      other => VIf other (normalizeFuel (fuel - 1) defs sols (evalFuel - 1) th) (normalizeFuel (fuel - 1) defs sols (evalFuel - 1) el)
+      -- 条件卡住时只正规化条件，分支保持原值（与 `normalizeCaseFuel` 对中性 scrutinee
+      -- 的处理一致）。此前这里会继续正规化**两个分支**：每个分支都拿到近乎全新的
+      -- `evalFuel`，于是深递归里每次「条件卡住」都重新展开一遍，工作随深度指数放大。
+      other => VIf other th el
 
 -- ---------------------------------------------------------------
 -- quote：值 → 项（level 转 de Bruijn index）
