@@ -257,10 +257,9 @@ load/parse 前缀 + iface 摘要 **~2.6 s** → 逐定义精化（`collectSigs-d
    最大单项是 `vuna.elab.term.body`（逐表达式正文检查）1.5 GB——term 重写（`conv`/
    `force`/`quote`/`applySpine`）是分配的大头之一，但**不是九成**；分配份额 ≠ 墙钟份额
    （词法分配多但快，term 重写在判等逻辑本身）。
-   计数（level 3、冷 `check packages/compiler`）：`eval` 1.59e6、`spineAppend` 0.99e6、
-   `conv` 1.8e5（失配 3.2e4，18%）、`meta.zonk` 7.5e3、delta 展开 1.4e4（≈`eval` 的 1%）、
-   应用表达式重试（`elab.retry.{hole,third}`）**0 次**。⇒ 按定义缓存 delta 求值的上限就是
-   这 1%（与既有 A/B 的 −2~3% 一致）；三重尝试阶梯在本次两档里不触发。
+   计数（level 3、冷 `check packages/compiler`）：`eval` 1.59e6、`conv` 1.8e5（失配 3.2e4，
+   18%）、`meta.zonk` 7.5e3、**delta 展开 1.4e4（≈`eval` 的 1%）**。⇒ 按定义缓存 delta
+   求值的上限就是这 1%，与既有 A/B 的 −2~3% 一致。
    **三个 1.x e9 不同口径**：本节 1.1–1.2e9 是单包单进程；第 11 条的 1.63e9 是 `check .`
    全树；cli 成员的 1.55e9 是子进程合计。复现：
    `VN_PERF_STATS=1 VUNA_STORE=$(mktemp -d) ./result/bin/vuna check packages/compiler`
@@ -390,8 +389,6 @@ load/parse 前缀 + iface 摘要 **~2.6 s** → 逐定义精化（`collectSigs-d
 | `vuna.counter.conv.mismatch` | ~3.2×10^4（18%） | conv 失配（level 3）；每次失配要付两次 `showValueAt`，这是「被丢弃的诊断」成本上界 |
 | `vuna.counter.core.reduce` | ~1.59×10^6 | `eval` 调用（level 3） |
 | `vuna.counter.core.delta` | ~1.4×10^4 | delta 展开次数（`eval` 的 1%） |
-| `vuna.counter.core.spine` | ~9.9×10^5 | `spineAppend` 追加次数 |
-| `vuna.counter.elab.retry.{hole,third}` | 0 | 应用表达式第二 / 三次尝试；两档（base / compiler）都不触发 |
 
 pending 队列规模分桶（`elab.dict.pending.b*`，走 `--debug-perf` 的 `counters=` 行）：
 0 规模 10,878 轮、1–4 1,953 轮、5–16 1,244 轮、17–64 263 轮、65+ 2 轮。即「一趟 worklist
