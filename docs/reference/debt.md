@@ -121,7 +121,7 @@ ID 是稳定引用（`层前缀-序号`）：条目关闭即删除该行，ID �
 | EC-34 · ⚠️C | 实例搜索把「递归深度」和「候选 / via 预算」压进同一个固定 `16`（`searchInstanceIn`），耗尽报 `TC_NoInstanceFound`：合法的深 ctx / via 链被报成「缺实例」 | `Elab/Dict.vuna`（`searchInstFuel` / `tryViaDict`） | 后续 |
 | EC-35 · ⚠️C | 行标签 / 成员证明的身份是展示文本：`memberNameText` 用 `showValueAt 6`（深度 6 截断），候选去重 / 歧义判定 / 诊断都以该串为键 | `Elab/Dict.vuna`（`labelCandText` / `labelScan`） | 后续 |
 | EC-36 · ⚠️D | 同一个类在三条名字空间有三种拼法：`dictTypeName` 用全名、`instanceName` 用短名 + sanitize、`Dict_`/`MkDict_` 不做同样处理；`findClassByShortName` 取 `ecClasses` 首个命中 ⇒ 同名 trait 的相干性 / 特化依赖登记顺序 | `Elab/Meta.vuna`、`Elab/InstName.vuna`、`Elab/InstCoherence.vuna` | 后续 |
-| EC-38 · ⚠️A | 字典注入 `liftFreeDictGoals`：binder 位置靠手推索引算术、生成名 `d<元变量号>`（无不可碰撞前缀）、`injectDictGoFuel` 耗尽返回未改写项、`rewriteTaggedSpineFuel` 耗尽把整条应用脊退化成裸全局名 | `Elab/Trait.vuna`（`liftFreeDictGoals` / `injectDictGoFuel` / `rewriteTaggedSpineFuel`） | 后续 |
+| EC-38 · ⚠️D | 字典注入 `liftFreeDictGoals`：binder 位置靠手推索引算术（注释自述插入顺序反过来索引会偏）；生成名仍走名字编码（`#dict<m>` 源码写不出、不会撞名，但仍不是稳定 id）。注入预算已按项规模派生，`injectDictGoFuel` / `rewriteTaggedSpineFuel` 的耗尽分支不可达 | `Elab/Trait.vuna`（`liftFreeDictGoals` / `injectBudgetFor` / `altBudgetFor` / `spineSize`） | 后续（跟随名字 → id） |
 | EC-39 · ⚠️D | 「类型层 / 擦除」有五份判据且会互相矛盾：`Usage.isTypeForming`（只沿 cod）认为 `Int -> Type` 是类型层，`Meta.isTypeLayerValue`（每个域都须是类型层）认为不是；另有 `isTypeDomain` / `isKindWithCtx` / `isFamilyKindValue` / `rigIsErased` 重复实现 | `Elab/Usage.vuna`、`Elab/Meta.vuna`、`Elab/Term/Impl.vuna` | 后续 |
 | EC-40 · C | `Elab/Types.vuna` 的 `refineValue` 不下钻 `VCase` 分支体、不处理 `VProj`（`_ => v`）⇒ 索引精化在卡住的 case / 投影里静默丢失 | `Elab/Types.vuna` | 后续 |
 
@@ -227,7 +227,7 @@ ID 是稳定引用（`层前缀-序号`）：条目关闭即删除该行，ID �
 
 1. **名字即身份 / 名字即接口**：`RName` 是字符串、`Rast.Bridge` 用空作用域重分类、`IrBinder` 无唯一 id、
    `bindShapeOf` 的索引模式匹配、`__anf`/`__cps` 编号借 fuel、`showTerm`/`showValueAt 6` 当相等判据
-   （EC-10 / EC-17 / EC-35），以及把元数据编进名字（`#linclos`、`d${m}`、`#section`、
+   （EC-10 / EC-17 / EC-35），以及把元数据编进名字（`#linclos`、`#dict<m>`、`#section`、
    `@vuna@…`）与按短名分组的类 / 方法 / 实例（EC-12 / EC-23 / EC-36 / D124）。
 2. **fuel 仍是主要的终止性证书**：多数路径已改成「预算按输入规模派生 + 耗尽 `icFuel`」，
    残留「把固定容量上限当成语义结论」（EL-23、CO-07 的 conv 预算）、
@@ -240,8 +240,8 @@ ID 是稳定引用（`层前缀-序号`）：条目关闭即删除该行，ID �
 4. **类型信息在 pass 之间丢失或只是注解**：`TLam` 的 `Maybe` 类型槽、`quote` 丢 rig（CO-03）、
    Lowering 填槽 → Cps 机器 pass 主动清空 → 后端按 arity / 名字猜 handler clause（IR-08）、
    IR 类型槽选择性填充（D109）。
-5. **失败路径伪造值**：`EInt 0`（`Elab/Match.litPatExpr`）、`d0` 兜底（EC-38）、
-   部分闭包（LD-22）、丢弃应用脊（EC-38）、`TC_NoInstanceFound` 掩盖预算耗尽（EC-34）。
+5. **失败路径伪造值**：`EInt 0`（`Elab/Match.litPatExpr`）、部分闭包（LD-22）、
+   `TC_NoInstanceFound` 掩盖预算耗尽（EC-34）。
 6. **缓存口径分裂**：`mode=s/f` 进 key（DR-01 / A06）、两套模块排序（DR-02）、
    `acc*1000003+h` 与 SHA-256 两种哈希口径（DR-14）、cacheTag 回落（LD-23）、
    iface 必须携带源码 AST（DR-16）。

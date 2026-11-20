@@ -1191,7 +1191,8 @@ liftFreeDictGoalsGo defName ec ty body baseIdx nGroups k groups =
     [] => Pair ty (Pair body ec)
     (DictGoalGroup m dom extras) :: rest =>
       let
-        dName = "d${m}"
+        -- 不可由源码写出的名字（`#` 不是标识符字符），不会与用户局部 `d12` 撞名。
+        dName = "#dict${m}"
         -- 第 k 组（0-based）的**最终** binder 位置：之后每插入一只更新的字典都把它推深 1
         -- （同位置反复插入 ⇒ 新字典在旧字典外侧）。
         finalPos = baseIdx + 1 + (nGroups - 1 - k)
@@ -1230,7 +1231,16 @@ export insertDictCalls : String -> String -> Int -> Term -> Term
 insertDictCalls defName dName appPos t = injectDictGo defName dName appPos 0 t
 
 export injectDictGo : String -> String -> Int -> Int -> Term -> Term
-injectDictGo defName dName appPos depth t = injectDictGoFuel 128 defName dName appPos depth t
+injectDictGo defName dName appPos depth t =
+  injectDictGoFuel (injectBudgetFor t) defName dName appPos depth t
+
+-- | 注入预算按项规模派生：固定 128 只够约 30 个节点，更大的定义体会静默跳过注入
+-- （调用点少一个字典实参，最终报成 arity / 类型错误）。
+injectBudgetFor : Term -> Int
+injectBudgetFor t = 64 + 4 * termSize t
+
+altBudgetFor : CaseAlt -> Int
+altBudgetFor (CaseAlt _ bs body) = injectBudgetFor body + length bs
 
 injectDictGoFuel : Int -> String -> String -> Int -> Int -> Term -> Term
 injectDictGoFuel fuel defName dName appPos depth t =
@@ -1258,7 +1268,8 @@ injectDictGoFuel fuel defName dName appPos depth t =
       _ => t
 
 export injectAltGo : String -> String -> Int -> Int -> CaseAlt -> CaseAlt
-injectAltGo defName dName appPos depth alt = injectAltGoFuel 128 defName dName appPos depth alt
+injectAltGo defName dName appPos depth alt =
+  injectAltGoFuel (altBudgetFor alt) defName dName appPos depth alt
 
 injectAltGoFuel : Int -> String -> String -> Int -> Int -> CaseAlt -> CaseAlt
 injectAltGoFuel fuel defName dName appPos depth alt =
@@ -1270,7 +1281,11 @@ injectAltGoFuel fuel defName dName appPos depth alt =
 
 export rewriteTaggedSpine : String -> String -> Int -> Int -> String -> List (Pair Term Rig) -> Term
 rewriteTaggedSpine defName dName appPos depth g args =
-  rewriteTaggedSpineFuel 128 defName dName appPos depth g args
+  rewriteTaggedSpineFuel (64 + 4 * spineSize args) defName dName appPos depth g args
+
+spineSize : List (Pair Term Rig) -> Int
+spineSize [] = 0
+spineSize (p :: rest) = termSize (firstOf p) + spineSize rest
 
 rewriteTaggedSpineFuel : Int -> String -> String -> Int -> Int -> String -> List (Pair Term Rig) -> Term
 rewriteTaggedSpineFuel fuel defName dName appPos depth g args =
