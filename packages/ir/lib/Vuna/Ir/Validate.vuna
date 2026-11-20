@@ -158,7 +158,10 @@ checkBinderTysWork shared fuel decls work =
 
 checkNodeBinderTys : IrShared -> List IrTyDecl -> Ir -> Check Int
 checkNodeBinderTys shared decls (IrLam bs resultTy _) =
-  Vuna.Compiler.Base.Common.bind (checkBinderTysOf decls bs) (\_ => checkIrTyM decls resultTy)
+  if anyErasedBinder bs then
+    icInternal "IR lambda carries an erased binder placeholder"
+  else
+    Vuna.Compiler.Base.Common.bind (checkBinderTysOf decls bs) (\_ => checkIrTyM decls resultTy)
 checkNodeBinderTys shared decls (IrLet bs scrut body) = checkBinderTysOf decls bs
 checkNodeBinderTys shared decls (IrCase caseTy resultTy _ alts) =
   Vuna.Compiler.Base.Common.bind
@@ -226,6 +229,10 @@ countKeptFlags (k :: rest) = if k then 1 + countKeptFlags rest else countKeptFla
 checkIrTyM : List IrTyDecl -> Maybe IrTy -> Check Int
 checkIrTyM decls Nothing = OkC 0
 checkIrTyM decls (Just ty) = checkTyArity decls ty
+
+anyErasedBinder : List IrBinder -> Bool
+anyErasedBinder [] = False
+anyErasedBinder (b :: rest) = if b.irBinderErased then True else anyErasedBinder rest
 
 checkBinderTysOf : List IrTyDecl -> List IrBinder -> Check Int
 checkBinderTysOf decls [] = OkC 0

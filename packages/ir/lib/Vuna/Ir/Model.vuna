@@ -194,7 +194,7 @@ export data Ir(..) : Type where
   -- | `let` 绑定（unboxed case 降级用）。binder 表是**完整 telescope**（含擦除占位），
   -- 因此体的 de Bruijn 下标不变；只有非擦除 binder 进渲染的 pattern。
   IrLet : List IrBinder -> Ir -> Ir -> Ir
-  -- | lambda 链（擦除 binder 占位不渲染；无运行时 binder 时退化成体）。
+  -- | lambda 链（只含运行时 binder；无运行时 binder 时退化成体）。
   -- 第二个字段是体（链的最终结果）的运行时类型；未知时 `Nothing`。
   IrLam : List IrBinder -> Maybe IrTy -> Ir -> Ir
   -- | 应用（擦除实参已在 Lowering 丢弃）。第一个字段是函数类型与结果类型

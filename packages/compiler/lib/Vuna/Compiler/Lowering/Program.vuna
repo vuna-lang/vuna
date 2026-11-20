@@ -271,7 +271,7 @@ lowerLamChainFuel fuel env st binders hints params inner resultTy =
                   case resultIr of
                     Just _ => resultIr
                     Nothing => irResultTyOf b
-              in OkC (Pair (IrLam bs resultIr2 b) st2)
+              in OkC (Pair (IrLam (filter (\x => not (binderErasedOf x)) bs) resultIr2 b) st2)
       )
 
 -- 顶层定义体：签名箭头与 λ 链的运行时 binder 逐位对应时用签名回填 binder 类型
