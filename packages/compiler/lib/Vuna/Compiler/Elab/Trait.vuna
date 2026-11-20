@@ -883,16 +883,17 @@ substInstParamsGo n args depth (TLam nm r slot sp body) =
     slot2 =
       case slot of
         Nothing => Nothing
-        Just (Pair bt rt) =>
-          lamTyOf (
+        Just (Pair mark (Pair bt rt)) =>
+          let
+            bt2 =
               case bt of
                 Nothing => Nothing
                 Just t => Just (substInstParamsGo n args depth t)
-            ) (
+            rt2 =
               case rt of
                 Nothing => Nothing
                 Just t => Just (substInstParamsGo n args (depth + 1) t)
-            )
+          in Just (Pair mark (Pair bt2 rt2))
   in TLam nm r slot2 sp (substInstParamsGo n args (depth + 1) body)
 substInstParamsGo n args depth (TApp f a r) =
   TApp (substInstParamsGo n args depth f) (substInstParamsGo n args depth a) r
@@ -1057,16 +1058,17 @@ substMetaTermGo m rep depth (TLam n r slot sp b) =
     slot2 =
       case slot of
         Nothing => Nothing
-        Just (Pair bt rt) =>
-          lamTyOf (
+        Just (Pair mark (Pair bt rt)) =>
+          let
+            bt2 =
               case bt of
                 Nothing => Nothing
                 Just t => Just (substMetaTermGo m rep depth t)
-            ) (
+            rt2 =
               case rt of
                 Nothing => Nothing
                 Just t => Just (substMetaTermGo m rep (depth + 1) t)
-            )
+          in Just (Pair mark (Pair bt2 rt2))
   in TLam n r slot2 sp (substMetaTermGo m rep (depth + 1) b)
 substMetaTermGo m rep depth (TApp f a r) =
   TApp (substMetaTermGo m rep depth f) (substMetaTermGo m rep depth a) r
@@ -1253,7 +1255,17 @@ injectDictGoFuel fuel defName dName appPos depth t =
           slot2 =
             case slot of
               Nothing => Nothing
-              Just (Pair bt rt) => lamTyOf (mapTermMaybe (injectDictGoFuel (fuel - 1) defName dName appPos depth) bt) (mapTermMaybe (injectDictGoFuel (fuel - 1) defName dName appPos (depth + 1)) rt)
+              Just (Pair mark (Pair bt rt)) =>
+                let
+                  bt2 =
+                    case bt of
+                      Nothing => Nothing
+                      Just t => Just (injectDictGoFuel (fuel - 1) defName dName appPos depth t)
+                  rt2 =
+                    case rt of
+                      Nothing => Nothing
+                      Just t => Just (injectDictGoFuel (fuel - 1) defName dName appPos (depth + 1) t)
+                in Just (Pair mark (Pair bt2 rt2))
         in TLam n r slot2 sp (injectDictGoFuel (fuel - 1) defName dName appPos (depth + 1) b)
       TPi n i r d c => TPi n i r (injectDictGoFuel (fuel - 1) defName dName appPos depth d) (injectDictGoFuel (fuel - 1) defName dName appPos (depth + 1) c)
       TApp f a r =>

@@ -147,7 +147,9 @@ fieldsValid arity (f :: rest) = termValidAt arity f.dtFieldType && fieldsValid a
 datasValid : List DtData -> Bool
 datasValid [] = True
 datasValid (d :: rest) =
-  termValidAt 0 (dtDataKind d) && ctorsValid (dtDataCtors d) && fieldsValid (length d.dtDataParams) (dtDataFields d) && datasValid rest
+  termValidAt 0 (dtDataKind d)
+    && ctorsValid (dtDataCtors d)
+    && fieldsValid (length d.dtDataParams) (dtDataFields d) && datasValid rest
 
 defsValid : List DtDef -> Bool
 defsValid [] = True
@@ -214,7 +216,8 @@ dataIssue d =
     let
       ctorResult = ctorIssues (dtDataCtors d)
     in if ctorResult == "" then fieldIssues (length d.dtDataParams) (dtDataFields d) else ctorResult
-  else "${dtDataName d} kind:${kindIssue}"
+  else
+    "${dtDataName d} kind:${kindIssue}"
 
 ctorIssues : List DtCtor -> String
 ctorIssues [] = ""
@@ -398,12 +401,14 @@ shiftTermFuel fuel off t =
       TFloat raw => OkC (TFloat raw)
 
 -- λ 类型槽（binder 类型 + 结果类型）的 meta 移位。
-shiftLamTyFuel : Int -> Int -> Maybe (Pair (Maybe Term) (Maybe Term)) -> Check (Maybe (Pair (Maybe Term) (Maybe Term)))
+shiftLamTyFuel : Int -> Int -> Maybe (Pair LamMark (Pair (Maybe Term) (Maybe Term))) -> Check (Maybe (Pair LamMark (Pair (Maybe Term) (Maybe Term))))
 shiftLamTyFuel fuel off Nothing = OkC Nothing
 shiftLamTyFuel fuel off (Just p) =
-  Vuna.Compiler.Base.Common.bind
-    (shiftTermMaybeFuel fuel off (firstOf p))
-    (\b => Vuna.Compiler.Base.Common.bind (shiftTermMaybeFuel fuel off (secondOf p)) (\r => OkC (lamTyOf b r)))
+  let
+    tys = secondOf p
+  in Vuna.Compiler.Base.Common.bind
+    (shiftTermMaybeFuel fuel off (firstOf tys))
+    (\b => Vuna.Compiler.Base.Common.bind (shiftTermMaybeFuel fuel off (secondOf tys)) (\r => OkC (Just (Pair (firstOf p) (Pair b r)))))
 
 -- λ binder 类型槽的 meta 移位（`Nothing` 不动）。
 shiftTermMaybeFuel : Int -> Int -> Maybe Term -> Check (Maybe Term)

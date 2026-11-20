@@ -130,7 +130,7 @@ export data Term(..) : Type where
   -- 类型槽是 `Pair binderTy resultTy`：binder 类型在外层上下文里（不引用该 binder
   -- 自己），结果类型在 binder 的作用域里。binder span 只服务诊断
   -- （未使用/遮蔽/线性用量），不参与语义与编码。
-  TLam : String -> Rig -> Maybe (Pair (Maybe Term) (Maybe Term)) -> Span -> Term -> Term
+  TLam : String -> Rig -> Maybe (Pair LamMark (Pair (Maybe Term) (Maybe Term))) -> Span -> Term -> Term
   TApp : Term -> Term -> Rig -> Term
   -- 构造子应用（自携每个实参的 multiplicity，与 TApp 一致）。
   TCon : String -> List (Pair Term Rig) -> Term
@@ -350,9 +350,10 @@ termSizeAltTerms : List CaseAlt -> List Term
 termSizeAltTerms [] = []
 termSizeAltTerms (alt :: rest) = caseAltBody alt :: termSizeAltTerms rest
 
-termSizeSlotTerms : Maybe (Pair (Maybe Term) (Maybe Term)) -> List Term
+termSizeSlotTerms : Maybe (Pair LamMark (Pair (Maybe Term) (Maybe Term))) -> List Term
 termSizeSlotTerms Nothing = []
-termSizeSlotTerms (Just (Pair b r)) = append (termSizeMaybeTerms b) (termSizeMaybeTerms r)
+termSizeSlotTerms (Just p) =
+  append (termSizeMaybeTerms (firstOf (secondOf p))) (termSizeMaybeTerms (secondOf (secondOf p)))
 
 termSizeMaybeTerms : Maybe Term -> List Term
 termSizeMaybeTerms Nothing = []
@@ -427,7 +428,8 @@ termHasUnsolvedMeta sols (TLam name rig slot _ body) =
     tys =
       case slot of
         Nothing => False
-        Just (Pair b r) => termHasUnsolvedMetaMaybe sols b || termHasUnsolvedMetaMaybe sols r
+        Just (Pair _ (Pair b r)) =>
+          termHasUnsolvedMetaMaybe sols b || termHasUnsolvedMetaMaybe sols r
   in tys || termHasUnsolvedMeta sols body
 termHasUnsolvedMeta sols (TApp f a rig) = termHasUnsolvedMeta sols f || termHasUnsolvedMeta sols a
 termHasUnsolvedMeta sols (TCon c args) = termHasUnsolvedMetaArgs sols args
@@ -534,7 +536,7 @@ hasFreeVar depth (TLam name rig slot _ body) =
     tys =
       case slot of
         Nothing => False
-        Just (Pair b r) => hasFreeVarMaybe depth b || hasFreeVarMaybe (depth + 1) r
+        Just (Pair _ (Pair b r)) => hasFreeVarMaybe depth b || hasFreeVarMaybe (depth + 1) r
   in tys || hasFreeVar (depth + 1) body
 hasFreeVar depth (TApp f a rig) = hasFreeVar depth f || hasFreeVar depth a
 hasFreeVar depth (TCon c args) = hasFreeVarArgs depth args
@@ -574,7 +576,7 @@ hasMeta m depth (TLam name rig slot _ body) =
     tys =
       case slot of
         Nothing => False
-        Just (Pair b r) => hasMetaMaybe m depth b || hasMetaMaybe m (depth + 1) r
+        Just (Pair _ (Pair b r)) => hasMetaMaybe m depth b || hasMetaMaybe m (depth + 1) r
   in tys || hasMeta m (depth + 1) body
 hasMeta m depth (TApp f a rig) = hasMeta m depth f || hasMeta m depth a
 hasMeta m depth (TCon c args) = hasMetaArgs m depth args
@@ -612,31 +614,50 @@ mapTermMaybe f (Just t) = Just (f t)
 -- λ 类型槽（binder 类型 + 结果类型）
 -- ---------------------------------------------------------------
 --
--- `TLam` 的类型槽是 `Maybe (Pair (Maybe Term) (Maybe Term))`：外层 `Nothing` 表示
--- 两类类型都没记录；否则第一项是 binder 类型（外层上下文），第二项是结果类型
--- （binder 作用域）。两项各自可缺，便于精化期只填已知的一侧。
-export lamBinderTyOf : Maybe (Pair (Maybe Term) (Maybe Term)) -> Maybe Term
-lamBinderTyOf Nothing = Nothing
-lamBinderTyOf (Just p) = firstOf p
+-- `TLam` 的槽：`Maybe (Pair LamMark (Pair (Maybe Term) (Maybe Term)))`。外层 `Nothing`
+-- 表示没有记录；`LamMark` 是结构的 λ 标记（不再把标记编进 binder 名），两项类型各自可缺。
+export data LamMark(..) : Type where
+  LamPlain : LamMark
+  LamLinearClosure : LamMark
 
-export lamResultTyOf : Maybe (Pair (Maybe Term) (Maybe Term)) -> Maybe Term
-lamResultTyOf Nothing = Nothing
-lamResultTyOf (Just p) = secondOf p
+export lamMarkOf : Maybe (Pair LamMark (Pair (Maybe Term) (Maybe Term))) -> LamMark
+lamMarkOf Nothing = LamPlain
+lamMarkOf (Just p) = firstOf p
 
-export lamTyOf : Maybe Term -> Maybe Term -> Maybe (Pair (Maybe Term) (Maybe Term))
+export lamSlotTys : Maybe (Pair LamMark (Pair (Maybe Term) (Maybe Term))) -> Maybe (Pair (Maybe Term) (Maybe Term))
+lamSlotTys Nothing = Nothing
+lamSlotTys (Just p) = Just (secondOf p)
+
+export lamBinderTyOf : Maybe (Pair LamMark (Pair (Maybe Term) (Maybe Term))) -> Maybe Term
+lamBinderTyOf slot =
+  case lamSlotTys slot of
+    Nothing => Nothing
+    Just p => firstOf p
+
+export lamResultTyOf : Maybe (Pair LamMark (Pair (Maybe Term) (Maybe Term))) -> Maybe Term
+lamResultTyOf slot =
+  case lamSlotTys slot of
+    Nothing => Nothing
+    Just p => secondOf p
+
+export lamTyOf : Maybe Term -> Maybe Term -> Maybe (Pair LamMark (Pair (Maybe Term) (Maybe Term)))
 lamTyOf Nothing Nothing = Nothing
-lamTyOf binderTy resultTy = Just (Pair binderTy resultTy)
+lamTyOf binderTy resultTy = Just (Pair LamPlain (Pair binderTy resultTy))
 
-export lamTyWithBinder : Maybe Term -> Maybe (Pair (Maybe Term) (Maybe Term))
+export markLamLinear : Maybe (Pair LamMark (Pair (Maybe Term) (Maybe Term))) -> Maybe (Pair LamMark (Pair (Maybe Term) (Maybe Term)))
+markLamLinear slot =
+  let
+    tys =
+      case lamSlotTys slot of
+        Nothing => Pair Nothing Nothing
+        Just p => p
+  in Just (Pair LamLinearClosure tys)
+
+export lamTyWithBinder : Maybe Term -> Maybe (Pair LamMark (Pair (Maybe Term) (Maybe Term)))
 lamTyWithBinder binderTy = lamTyOf binderTy Nothing
 
-export lamTyWithResult : Maybe Term -> Maybe (Pair (Maybe Term) (Maybe Term))
+export lamTyWithResult : Maybe Term -> Maybe (Pair LamMark (Pair (Maybe Term) (Maybe Term)))
 lamTyWithResult resultTy = lamTyOf Nothing resultTy
-
-export lamTyMap : (Int -> Term -> Term) -> Int -> Maybe (Pair (Maybe Term) (Maybe Term)) -> Maybe (Pair (Maybe Term) (Maybe Term))
-lamTyMap f depth Nothing = Nothing
-lamTyMap f depth (Just p) =
-  lamTyOf (mapTermMaybe (f depth) (firstOf p)) (mapTermMaybe (f (depth + 1)) (secondOf p))
 
 -- ---------------------------------------------------------------
 -- de Bruijn 移动：把项从深度 depth 的上下文嵌入到更深上下文（自由变量 +amount）。
@@ -654,16 +675,17 @@ shift depth amount (TLam name rig slot sp body) =
     slot2 =
       case slot of
         Nothing => Nothing
-        Just (Pair bt rt) =>
-          lamTyOf (
+        Just (Pair mark (Pair bt rt)) =>
+          let
+            bt2 =
               case bt of
                 Nothing => Nothing
                 Just t => Just (shift depth amount t)
-            ) (
+            rt2 =
               case rt of
                 Nothing => Nothing
                 Just t => Just (shift (depth + 1) amount t)
-            )
+          in Just (Pair mark (Pair bt2 rt2))
   in TLam name rig slot2 sp (shift (depth + 1) amount body)
 shift depth amount (TApp f a rig) = TApp (shift depth amount f) (shift depth amount a) rig
 shift depth amount (TCon c args) = TCon c (shiftArgs depth amount args)
@@ -707,16 +729,17 @@ substVarAt idx arg (TLam n erased slot sp body) =
     slot2 =
       case slot of
         Nothing => Nothing
-        Just (Pair bt rt) =>
-          lamTyOf (
+        Just (Pair mark (Pair bt rt)) =>
+          let
+            bt2 =
               case bt of
                 Nothing => Nothing
                 Just t => Just (substVarAt idx arg t)
-            ) (
+            rt2 =
               case rt of
                 Nothing => Nothing
                 Just t => Just (substVarAt (idx + 1) arg t)
-            )
+          in Just (Pair mark (Pair bt2 rt2))
   in TLam n erased slot2 sp (substVarAt (idx + 1) arg body)
 substVarAt idx arg (TApp f a erased) = TApp (substVarAt idx arg f) (substVarAt idx arg a) erased
 substVarAt idx arg (TCon c cargs) =
@@ -757,16 +780,17 @@ substMetaVarGo m name q depth (TLam n r slot sp b) =
     slot2 =
       case slot of
         Nothing => Nothing
-        Just (Pair bt rt) =>
-          lamTyOf (
+        Just (Pair mark (Pair bt rt)) =>
+          let
+            bt2 =
               case bt of
                 Nothing => Nothing
                 Just t => Just (substMetaVarGo m name q depth t)
-            ) (
+            rt2 =
               case rt of
                 Nothing => Nothing
                 Just t => Just (substMetaVarGo m name q (depth + 1) t)
-            )
+          in Just (Pair mark (Pair bt2 rt2))
   in TLam n r slot2 sp (substMetaVarGo m name q (depth + 1) b)
 substMetaVarGo m name q depth (TApp f a r) =
   TApp (substMetaVarGo m name q depth f) (substMetaVarGo m name q depth a) r
@@ -856,7 +880,7 @@ hasFreeTermVar d (TLam n r slot _ b) =
     tys =
       case slot of
         Nothing => False
-        Just (Pair bt rt) => hasFreeTermVarMaybe d bt || hasFreeTermVarMaybe (d + 1) rt
+        Just (Pair _ (Pair bt rt)) => hasFreeTermVarMaybe d bt || hasFreeTermVarMaybe (d + 1) rt
   in tys || hasFreeTermVar (d + 1) b
 hasFreeTermVar d (TApp f a r) = hasFreeTermVar d f || hasFreeTermVar d a
 hasFreeTermVar d (TCon c args) = anyPairFree d args
@@ -895,7 +919,7 @@ hasNegativeVar (TLam n r slot _ b) =
     tys =
       case slot of
         Nothing => False
-        Just (Pair bt rt) => hasNegativeVarMaybe bt || hasNegativeVarMaybe rt
+        Just (Pair _ (Pair bt rt)) => hasNegativeVarMaybe bt || hasNegativeVarMaybe rt
   in tys || hasNegativeVar b
 hasNegativeVar (TApp f a r) = hasNegativeVar f || hasNegativeVar a
 hasNegativeVar (TCon c args) = anyNegativeVarArgs args

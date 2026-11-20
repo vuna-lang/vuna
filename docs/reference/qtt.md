@@ -103,9 +103,8 @@ linear data Token : Type where
 
 实现分两段（两处都在编译器源码里，改一处必须同步另一处）：
 
-- `Elab/Term/Impl.checkLam`：捕获线性值的 λ 不在此处报错，而是给 binder 名打
-  `#linclos…` 私有标记（`Elab/Meta.linClosureName`；`#` 不是源码标识符字符、codegen
-  会 sanitize，用户不可见；名字里编入 span 与 ctx 深度以保证嵌套 λ 不撞名）；
+- `Elab/Term/Impl.checkLam`：捕获线性值的 λ 不在此处报错，而是在 `TLam` 的类型槽上
+  打结构化的 `LamLinearClosure` 标记（`Core.Term.LamMark`），不再把标记编进 binder 名；
 - `Elab/Usage.checkDefCapture`：沿项结构检查标记 λ 的位置，只有上面三种「立即消费」
   放行；构造子字段还要求族本身是 `linear data`（否则族值可复制，一次性承诺不可靠）。
 

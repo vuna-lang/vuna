@@ -570,7 +570,7 @@ termScopedTo created depth extra levels (TLam name rig slot _ body) =
     slotOk =
       case slot of
         Nothing => True
-        Just (Pair bt _) =>
+        Just (Pair _ (Pair bt _)) =>
           case bt of
             Nothing => True
             Just ty => termScopedTo created depth extra levels ty
@@ -669,16 +669,17 @@ absPatternBody n created depth extra levels (TLam name rig slot sp body) =
     slot2 =
       case slot of
         Nothing => Nothing
-        Just (Pair bt rt) =>
-          lamTyOf (
+        Just (Pair mark (Pair bt rt)) =>
+          let
+            bt2 =
               case bt of
                 Nothing => Nothing
                 Just t => Just (absPatternBody n created depth extra levels t)
-            ) (
+            rt2 =
               case rt of
                 Nothing => Nothing
                 Just t => Just (absPatternBody n created depth (extra + 1) levels t)
-            )
+          in Just (Pair mark (Pair bt2 rt2))
   in TLam name rig slot2 sp (absPatternBody n created depth (extra + 1) levels body)
 absPatternBody n created depth extra levels (TApp f a rig) =
   TApp

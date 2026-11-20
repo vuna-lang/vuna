@@ -756,7 +756,7 @@ metaIdsOf (TLam _ _ slot _ body) =
     tys =
       case slot of
         Nothing => []
-        Just (Pair b r) => append (metaIdsOfMaybe b) (metaIdsOfMaybe r)
+        Just (Pair _ (Pair b r)) => append (metaIdsOfMaybe b) (metaIdsOfMaybe r)
   in append tys (metaIdsOf body)
 metaIdsOf (TApp f a _) = append (metaIdsOf f) (metaIdsOf a)
 metaIdsOf (TCon _ args) = metaIdsOfArgs args
@@ -789,7 +789,7 @@ maxMetaArity m (TLam _ _ slot _ body) =
     tys =
       case slot of
         Nothing => 0
-        Just (Pair b r) => imax (maxMetaArityMaybe m b) (maxMetaArityMaybe m r)
+        Just (Pair _ (Pair b r)) => imax (maxMetaArityMaybe m b) (maxMetaArityMaybe m r)
   in imax tys (maxMetaArity m body)
 maxMetaArity m (TCon _ args) = maxMetaArityArgs m args
 maxMetaArity m (TCase scrut alts) = imax (maxMetaArity m scrut) (maxMetaArityAlts m alts)

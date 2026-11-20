@@ -541,7 +541,7 @@ valueListEqFuel fuel _ _ = Just False
 -- 比较前把名字 force 一次、把标签（中性 spine 的一层实参）各 force 一次：已解 meta 变
 -- 具体值，未解 meta 原样保留（随后照常卡住）。
 -- | 把标签值中性 spine 的一层实参 force 一次（已解 meta 变具体值，未解原样）。
-forceLabelArgs : HashMap String Term -> Sols -> Int -> Value -> Value
+export forceLabelArgs : HashMap String Term -> Sols -> Int -> Value -> Value
 forceLabelArgs defs sols fuel v =
   case force defs sols fuel v of
     VNeutral (NGlobal g sp) => VNeutral (NGlobal g (map (\a => force defs sols fuel a) sp))
@@ -1016,16 +1016,17 @@ substSolvedMetas sols (TLam n r slot sp b) =
     slot2 =
       case slot of
         Nothing => Nothing
-        Just (Pair bt rt) =>
-          lamTyOf (
+        Just (Pair mark (Pair bt rt)) =>
+          let
+            bt2 =
               case bt of
                 Nothing => Nothing
                 Just t => Just (substSolvedMetas sols t)
-            ) (
+            rt2 =
               case rt of
                 Nothing => Nothing
                 Just t => Just (substSolvedMetas sols t)
-            )
+          in Just (Pair mark (Pair bt2 rt2))
   in TLam n r slot2 sp (substSolvedMetas sols b)
 substSolvedMetas sols (TApp f a r) = TApp (substSolvedMetas sols f) (substSolvedMetas sols a) r
 substSolvedMetas sols (TCon c args) =
@@ -1068,16 +1069,17 @@ substSolvedMetasAtGo depth sols (TLam n r slot sp b) =
     slot2 =
       case slot of
         Nothing => Nothing
-        Just (Pair bt rt) =>
-          lamTyOf (
+        Just (Pair mark (Pair bt rt)) =>
+          let
+            bt2 =
               case bt of
                 Nothing => Nothing
                 Just t => Just (substSolvedMetasAtGo depth sols t)
-            ) (
+            rt2 =
               case rt of
                 Nothing => Nothing
-                Just t => Just (substSolvedMetasAtGo (depth + 1) sols t)
-            )
+                Just t => Just (substSolvedMetasAtGo depth sols t)
+          in Just (Pair mark (Pair bt2 rt2))
   in TLam n r slot2 sp (substSolvedMetasAtGo depth sols b)
 substSolvedMetasAtGo depth sols (TApp f a r) =
   TApp (substSolvedMetasAtGo depth sols f) (substSolvedMetasAtGo depth sols a) r
@@ -1182,16 +1184,17 @@ substSolvedMetasAtTblFuel fuel sols depth t =
           slot2 =
             case slot of
               Nothing => Nothing
-              Just (Pair bt rt) =>
-                lamTyOf (
+              Just (Pair mark (Pair bt rt)) =>
+                let
+                  bt2 =
                     case bt of
                       Nothing => Nothing
                       Just t => Just (substSolvedMetasAtTblFuel (fuel - 1) sols depth t)
-                  ) (
+                  rt2 =
                     case rt of
                       Nothing => Nothing
                       Just t => Just (substSolvedMetasAtTblFuel (fuel - 1) sols (depth + 1) t)
-                  )
+                in Just (Pair mark (Pair bt2 rt2))
         in TLam n r slot2 sp (substSolvedMetasAtTblFuel (fuel - 1) sols (depth + 1) b)
       TApp f a r => TApp (substSolvedMetasAtTblFuel (fuel - 1) sols depth f) (substSolvedMetasAtTblFuel (fuel - 1) sols depth a) r
       TCon c args => TCon c (map (\p => Pair (substSolvedMetasAtTblFuel (fuel - 1) sols depth (firstOf p)) (secondOf p)) args)

@@ -235,7 +235,7 @@ collectLamChainIn (TLam name rig slot _ body) =
   in LamChainIn (LamParam name rig (lamBinderTyOf slot) :: p.lamChainBinders) p.lamChainBody result
 collectLamChainIn t = LamChainIn [] t Nothing
 
-lowerLamFuel : Int -> LwEnv -> LwSt -> List IrBinder -> String -> Rig -> Maybe (Pair (Maybe Term) (Maybe Term)) -> Span -> Term -> Check (Pair Ir LwSt)
+lowerLamFuel : Int -> LwEnv -> LwSt -> List IrBinder -> String -> Rig -> Maybe (Pair LamMark (Pair (Maybe Term) (Maybe Term))) -> Span -> Term -> Check (Pair Ir LwSt)
 lowerLamFuel fuel env st binders name rig slot sp body =
   if fuel <= 0 then
     icFuel "ir-lower"

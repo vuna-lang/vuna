@@ -407,12 +407,12 @@ checkTermScopesMaybe : Int -> Maybe Term -> Check Int
 checkTermScopesMaybe depth Nothing = OkC 0
 checkTermScopesMaybe depth (Just t) = checkTermScopes depth t
 
-checkTermScopesSlot : Int -> Maybe (Pair (Maybe Term) (Maybe Term)) -> Check Int
+checkTermScopesSlot : Int -> Maybe (Pair LamMark (Pair (Maybe Term) (Maybe Term))) -> Check Int
 checkTermScopesSlot depth Nothing = OkC 0
 checkTermScopesSlot depth (Just p) =
   Vuna.Compiler.Base.Common.bind
-    (checkTermScopesMaybe depth (firstOf p))
-    (\_ => checkTermScopesMaybe (depth + 1) (secondOf p))
+    (checkTermScopesMaybe depth (firstOf (secondOf p)))
+    (\_ => checkTermScopesMaybe (depth + 1) (secondOf (secondOf p)))
 
 checkTermScopesArgs : Int -> List (Pair Term Rig) -> Check Int
 checkTermScopesArgs depth [] = OkC 0

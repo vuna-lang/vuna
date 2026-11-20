@@ -325,7 +325,10 @@ capCheckFuel fuel ec sp t allowed =
       TType l => OkC 0
       -- 类型层项不产生运行时闭包（λ 只在值层出现）。
       TPi name implicit rig dom cod => OkC 0
-      TLam name rig _ _ body => if isLinClosureName name then if allowed then capCheckFuel (fuel - 1) ec sp body False else tcErr1 sp (LinearCaptureEscapes (linClosureOrigName name)) (linClosureOrigName name) else capCheckFuel (fuel - 1) ec sp body False
+      TLam name rig slot _ body =>
+        case lamMarkOf slot of
+          LamLinearClosure => if allowed then capCheckFuel (fuel - 1) ec sp body False else tcErr1 sp (LinearCaptureEscapes name) name
+          LamPlain => capCheckFuel (fuel - 1) ec sp body False
       TApp f a rig => Vuna.Compiler.Base.Common.bind (capCheckFuel (fuel - 1) ec sp f True) (\_ => if isRigZero rig then capCheckFuel (fuel - 1) ec sp a False else capCheckFuel (fuel - 1) ec sp a (rigIsLinear rig))
       TCon c args => capArgsFuel fuel ec sp c args
       TMk c args => capArgsFuel fuel ec sp c args

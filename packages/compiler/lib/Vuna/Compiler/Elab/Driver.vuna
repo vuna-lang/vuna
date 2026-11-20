@@ -1229,7 +1229,7 @@ synthMainShowInner ec globals defs bodies sp inner kind =
 
 synthMainShowGo : Ec -> List (Pair String Term) -> List DtDef -> Span -> Value -> Check (List DtDef)
 synthMainShowGo ec globals defs sp tyVal =
-  case findClassByShortName "Show" (ecClasses ec) of
+  case findClassByName "Base.Trait.Show.Show" (ecClasses ec) of
     Nothing => mainShowMissing sp tyVal
     Just cls =>
       let
@@ -1418,7 +1418,7 @@ termHasMeta m (TLam n rig slot _ body) =
     tys =
       case slot of
         Nothing => False
-        Just (Pair b r) => termHasMetaMaybe m b || termHasMetaMaybe m r
+        Just (Pair _ (Pair b r)) => termHasMetaMaybe m b || termHasMetaMaybe m r
   in tys || termHasMeta m body
 termHasMeta m (TApp f a rig) = termHasMeta m f || termHasMeta m a
 termHasMeta m (TCon c args) = anyArgHasMeta m args
@@ -1458,7 +1458,7 @@ termHasAnyMeta (TLam n rig slot _ body) =
     tys =
       case slot of
         Nothing => False
-        Just (Pair b r) => termHasAnyMetaMaybe b || termHasAnyMetaMaybe r
+        Just (Pair _ (Pair b r)) => termHasAnyMetaMaybe b || termHasAnyMetaMaybe r
   in tys || termHasAnyMeta body
 termHasAnyMeta (TApp f a rig) = termHasAnyMeta f || termHasAnyMeta a
 termHasAnyMeta (TCon c args) = anyArgHasAnyMeta args

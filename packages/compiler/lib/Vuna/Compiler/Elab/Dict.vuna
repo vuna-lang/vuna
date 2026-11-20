@@ -610,21 +610,6 @@ memberLookupRowLabel fuel depth ec eVal rVal =
                   ErrC _ => MemberStuck
               _ => MemberAmbiguous (map labelCandName cands)
 
--- 在局部上下文里找同类型的隐式证明 binder（wrapper 体里 `{w : Member e r}`）。
-ctxMemberProofTermGo : List (Pair String Term) -> Int -> String -> Maybe Term
-ctxMemberProofTermGo [] idx target = Nothing
-ctxMemberProofTermGo ((Pair name ty) :: rest) idx target =
-  if showTerm ty == target then
-    Just (TVar name idx (Span "" 0 0 0 0 0 0))
-  else
-    ctxMemberProofTermGo rest (idx + 1) target
-
-ctxMemberProofTerm : Ctx -> Ec -> Value -> Maybe Term
-ctxMemberProofTerm ctx ec dom =
-  ctxMemberProofTermGo ctx.ctxItems 0 (showTerm (quote (ctxDepth ctx) dom))
-
--- 结构 proof 卡住时，用局部 binder 的类型与目标 dom 统一（例如 wrapper 体里
--- `sendCore` 的行元变量尚未与 wrapper 的 r 统一）。
 ctxMemberProofUnify : Ctx -> Ec -> Value -> Maybe (Pair Term Ec)
 ctxMemberProofUnify ctx ec dom = ctxMemberProofUnifyGo ctx ctx.ctxItems 0 ec dom
 
@@ -669,18 +654,12 @@ resolveRowGoalsCtxGo globals ctx sp ((c@(Constraint cid kind m dom cspan cdepth)
             "effect instance"
             (join ", " cands)
         MemberStuck =>
-          case ctxMemberProofTerm ctx ec dom of
-            Just proofTerm =>
-              case solveRowMeta ec (ctxDepth ctx) m (eval (ctxEnv ctx) proofTerm) of
-                OkC ec2 => resolveRowGoalsCtxGo globals ctx sp rest ec2 kept
+          case ctxMemberProofUnify ctx ec dom of
+            Just (Pair proofTerm ec2) =>
+              case solveRowMeta ec2 (ctxDepth ctx) m (eval (ctxEnv ctx) proofTerm) of
+                OkC ec3 => resolveRowGoalsCtxGo globals ctx sp rest ec3 kept
                 ErrC e => ErrC e
-            Nothing =>
-              case ctxMemberProofUnify ctx ec dom of
-                Just (Pair proofTerm ec2) =>
-                  case solveRowMeta ec2 (ctxDepth ctx) m (eval (ctxEnv ctx) proofTerm) of
-                    OkC ec3 => resolveRowGoalsCtxGo globals ctx sp rest ec3 kept
-                    ErrC e => ErrC e
-                Nothing => tcErr1 sp (NoInstanceFound "row membership") "row membership"
+            Nothing => tcErr1 sp (NoInstanceFound "row membership") "row membership"
     False =>
       case dictClassArgs ec dom of
         [] => resolveRowGoalsCtxGo globals ctx sp rest ec (c :: kept)
@@ -824,16 +803,17 @@ substDictTermGo ec depth (TLam n r slot sp b) =
     slot2 =
       case slot of
         Nothing => Nothing
-        Just (Pair bt rt) =>
-          lamTyOf (
+        Just (Pair mark (Pair bt rt)) =>
+          let
+            bt2 =
               case bt of
                 Nothing => Nothing
                 Just t => Just (substDictTermGo ec depth t)
-            ) (
+            rt2 =
               case rt of
                 Nothing => Nothing
                 Just t => Just (substDictTermGo ec (depth + 1) t)
-            )
+          in Just (Pair mark (Pair bt2 rt2))
   in TLam n r slot2 sp (substDictTermGo ec (depth + 1) b)
 substDictTermGo ec depth (TApp f a r) =
   TApp (substDictTermGo ec depth f) (substDictTermGo ec depth a) r
@@ -1050,9 +1030,23 @@ anyValueHasRigidNVar ec fuel (v :: rest) =
 -- 判定（从类表取投影名，不硬编码模块前缀），没有运算符名判断。
 classHasProjection : String -> String -> String -> Ec -> Bool
 classHasProjection className short name ec =
-  case findClassByShortName className (ecClasses ec) of
+  case findClassByName className (ecClasses ec) of
     Nothing => False
     Just cls => classMethodProjection cls.dtClassMethods short == name
+
+-- 类身份：优先按方法投影全名命中 owning class；短名（`==` 这类由 Derive/Match
+-- 直接构造的名字）退回内建类的规范名。
+findEqClass : String -> Ec -> Maybe DtClass
+findEqClass name ec =
+  case findClassByMethod name (ecClasses ec) of
+    Just c => Just c
+    Nothing => findClassByName "Base.Trait.Eq.Eq" (ecClasses ec)
+
+findOrdClass : String -> Ec -> Maybe DtClass
+findOrdClass name ec =
+  case findClassByMethod name (ecClasses ec) of
+    Just c => Just c
+    Nothing => findClassByName "Base.Trait.Ord.Ord" (ecClasses ec)
 
 -- 投影名/符号名的最后一段（`Base.Trait.Eq.==` → `==`）。
 opShortOf : String -> String
@@ -1129,7 +1123,7 @@ specializeEqTy globals ctx name aTerm bTerm sp aTy ec =
         (eqRuntimeName (eqMethodShortOf name) tyName)
         (\rt => OkC (Just (Pair (TApp (TApp (TGlobal rt) aTerm Rig1) bTerm Rig1) (Pair boolTyValue ec))))
     Nothing =>
-      case findClassByShortName "Eq" (ecClasses ec) of
+      case findEqClass name ec of
         Nothing =>
           let
             st = showValue (forceVal ec aTy)
@@ -1237,7 +1231,7 @@ specializeCmpTy globals ctx name aTerm bTerm sp aTy ec =
         (cmpRuntimeName sp (cmpMethodShortOf name) tyName)
         (\rt => OkC (Just (Pair (TApp (TApp (TGlobal rt) aTerm Rig1) bTerm Rig1) (Pair boolTyValue ec))))
     Nothing =>
-      case findClassByShortName "Ord" (ecClasses ec) of
+      case findOrdClass name ec of
         Nothing =>
           let
             st = showValue (forceVal ec aTy)

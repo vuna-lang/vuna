@@ -2635,8 +2635,16 @@ unhandledEffectLabel ec expected actual =
 -- 普通 mismatch）。期望是 `Eff []` 时也不触发：那是未处理效应，必须报 `TC_UnhandledEffects`。
 -- 行包含判断（actual 行 ⊆ expected 行，按 label 值相等，无序）。
 -- 只在 Elab 内部用；lift 后运行时恒等（Eff 的行擦除），不插入项。
-sameLabelValue : Value -> Value -> Bool
-sameLabelValue a b = showTerm (quote 0 a) == showTerm (quote 0 b)
+sameLabelValue : Ec -> Value -> Value -> Bool
+sameLabelValue ec a b =
+  let
+    defs = ecDefTbl ec
+    sols = ecSolsP ec
+    fa = forceLabelArgs defs sols defaultFuel a
+    fb = forceLabelArgs defs sols defaultFuel b
+  in case valueEqFuel defaultFuel fa fb of
+    Just True => True
+    _ => False
 
 rowContainsValue : Ec -> Int -> Value -> Value -> Bool
 rowContainsValue ec fuel expected label =
@@ -2647,7 +2655,7 @@ rowContainsValue ec fuel expected label =
       VCon g args =>
         if g == effRowConsCtor then
           case rowEntryLabelTail (VCon g args) of
-            Just (Pair l2 tail) => sameLabelValue label l2 || rowContainsValue ec (fuel - 1) (forceVal ec tail) label
+            Just (Pair l2 tail) => sameLabelValue ec label l2 || rowContainsValue ec (fuel - 1) (forceVal ec tail) label
             Nothing => False
         else
           False
@@ -2792,8 +2800,9 @@ checkLamFuel fuel globals ctx ec ((Pair name nameSp) :: rest) body expected sp =
                             -- 捕获线性值的 λ 不在这里直接拒绝——标记 binder 名，由 `Elab.Usage`
                             -- 检查它是否落在「立即按 quantity 1 消费」的位置；不落则报
                             -- TC_LinearCaptureEscapes（诊断码不变）。
-                            binderName = if ctxHasLinear ec ctx then if termHasOuterLinear ec ctx2 inner then linClosureName sp (ctxDepth ctx) name else name else name
-                          in OkC (Pair (TLam binderName lamRig (lamTyOf (Just (quote lvl dom)) (Just (quote (lvl + 1) expected2))) nameSp inner2) ec1)
+                            slot0 = lamTyOf (Just (quote lvl dom)) (Just (quote (lvl + 1) expected2))
+                            slot = if ctxHasLinear ec ctx then if termHasOuterLinear ec ctx2 inner then markLamLinear slot0 else slot0 else slot0
+                          in OkC (Pair (TLam name lamRig slot nameSp inner2) ec1)
                   )
             )
       -- case 在推断位置时结果类型先是元变量；分支体是 λ 没有现成 Pi 可查。
@@ -3662,18 +3671,14 @@ doBindAppTerm ecLinear ecPaper ctx sp binderSp plan binder aVal eTerm argRig lam
     depth = ctxDepth ctx
     ctx2 = ctxBindValue binder aVal ctx
     inner2 = if isOpaqueRuntimeTyIn ecPaper ctx aVal then wrapOpaqueUses [0] inner else inner
-    binderName =
+    slot0 =
+      lamTyOf Nothing (Just (shift 0 1 (quote depth (applyValue plan.planMVal plan.planAVal))))
+    slot =
       if ctxHasLinear ecLinear ctx then
-        if termHasOuterLinear ecLinear ctx2 inner then linClosureName sp depth binder else binder
+        if termHasOuterLinear ecLinear ctx2 inner then markLamLinear slot0 else slot0
       else
-        binder
-    lamTerm =
-      TLam
-        binderName
-        lamRig
-        (lamTyOf Nothing (Just (shift 0 1 (quote depth (applyValue plan.planMVal plan.planAVal)))))
-        binderSp
-        inner2
+        slot0
+    lamTerm = TLam binder lamRig slot binderSp inner2
     args =
       [
         Pair plan.planMTerm Rig0,

@@ -199,7 +199,7 @@ termMetasAll (TLam n rig slot _ body) =
     tys =
       case slot of
         Nothing => []
-        Just (Pair b r) => append (termMetasAllMaybe b) (termMetasAllMaybe r)
+        Just (Pair _ (Pair b r)) => append (termMetasAllMaybe b) (termMetasAllMaybe r)
   in append tys (termMetasAll body)
 termMetasAll (TApp f a rig) = append (termMetasAll f) (termMetasAll a)
 termMetasAll (TCon c args) = concatMap (\p => termMetasAll (firstOf p)) args
@@ -604,7 +604,17 @@ zonkTermFuel fuel ec depth t =
           slot2 =
             case slot of
               Nothing => Nothing
-              Just (Pair bt rt) => lamTyOf (mapTermMaybe (zonkTermFuel (fuel - 1) ec depth) bt) (mapTermMaybe (zonkTermFuel (fuel - 1) ec (depth + 1)) rt)
+              Just (Pair mark (Pair bt rt)) =>
+                let
+                  bt2 =
+                    case bt of
+                      Nothing => Nothing
+                      Just t => Just (zonkTermFuel (fuel - 1) ec depth t)
+                  rt2 =
+                    case rt of
+                      Nothing => Nothing
+                      Just t => Just (zonkTermFuel (fuel - 1) ec (depth + 1) t)
+                in Just (Pair mark (Pair bt2 rt2))
         in TLam n r slot2 sp (zonkTermFuel (fuel - 1) ec (depth + 1) b)
       TApp f a r => TApp (zonkTermFuel (fuel - 1) ec depth f) (zonkTermFuel (fuel - 1) ec depth a) r
       TCon c args => TCon c (map (\p => Pair (zonkTermFuel (fuel - 1) ec depth (firstOf p)) (secondOf p)) args)
@@ -747,6 +757,26 @@ findClassByShortName short [] = Nothing
 findClassByShortName short (c :: rest) =
   if baseNameOf (dtClassName c) == short then Just c else findClassByShortName short rest
 
+-- | 先按完整类名精确匹配，找不到再退回短名。内建特化（`Eq`/`Ord`/`Show`）必须优先
+-- 命中 `Base.Trait.*` 的类，避免用户模块里同短名的类按登记顺序抢先。
+export findClassByName : String -> List DtClass -> Maybe DtClass
+findClassByName name classes =
+  case findClassByFullName name classes of
+    Just c => Just c
+    Nothing => findClassByShortName name classes
+
+findClassByFullName : String -> List DtClass -> Maybe DtClass
+findClassByFullName name [] = Nothing
+findClassByFullName name (c :: rest) =
+  if dtClassName c == name then Just c else findClassByFullName name rest
+
+-- | 方法投影全名 → owning class：按类的**方法表**精确匹配，不靠从名字切前缀
+-- （类的完整名是 `<模块>.<类短名>`，投影名是 `<模块>.<方法短名>`，不能简单去尾段）。
+export findClassByMethod : String -> List DtClass -> Maybe DtClass
+findClassByMethod name [] = Nothing
+findClassByMethod name (c :: rest) =
+  if memName name (map firstOf c.dtClassMethods) then Just c else findClassByMethod name rest
+
 -- blanket 实例（fallback 实例）判定——头是 `Dict_C x1 .. xn`，且每个 `x` 都是
 -- 本实例自己的**裸 tele 变量**（例如 `instance Show a => Interp a`）。`n` 是 tele 长度，
 -- head 在该 n 个 binder 之下，所以合法索引是 0..n-1。多参数 trait 的所有头实参都满足
@@ -778,36 +808,6 @@ isBlanketInst (DtInst name tele ctx head sp) = isBlanketInstHead (length tele) h
 -- 这里按 **索引** 替换（不按名字），避免上游换名失效。
 export substClassParam : String -> Term -> Term -> Term
 substClassParam pname arg ty = substVarAt 0 arg ty
-
--- ---------------------------------------------------------------
--- 线性捕获标记（binder 名编码）
--- ---------------------------------------------------------------
--- 捕获线性值的 λ 不能一律拒绝：当它被**立即按 quantity 1 消费**（函数位应用 /
--- rig-1 实参 / 线性数据的 rig-1 字段）时是安全的。精化期知道 ctx 里哪些 binder 是
--- 线性类型（`termHasOuterLinear`），此时给 λ 的 binder 名加前缀标记；用量检查
--- （`Elab.Usage`）按位置规则接受或拒绝，拒绝时报 `TC_LinearCaptureEscapes`。
--- 名字必须**唯一**：codegen 用 binder 名渲染 OCaml 变量，两个同名的嵌套 λ 会让
--- 内层遮蔽外层（引用外层时解析到内层）。因此把 span + ctx 深度编进名字；`#` 不是
--- 源码标识符字符，`sanitizeName` 会把它变成合法 OCaml 名，用户不可见。
-linClosureMark : String
-linClosureMark = "#linclos"
-
-export linClosureName : Span -> Int -> String -> String
-linClosureName sp depth name =
-  "${linClosureMark}${strFromInt sp.spanStartLine}_${strFromInt sp.spanStartCol}_${strFromInt depth}:${name}"
-
--- ---------------------------------------------------------------
--- 线性捕获标记（binder 名编码）的读取
--- ---------------------------------------------------------------
-export isLinClosureName : String -> Bool
-isLinClosureName name = startsWith linClosureMark name
-
-export linClosureOrigName : String -> String
-linClosureOrigName name = if isLinClosureName name then linClosureOrigGo (strUnpack name) else name
-
-linClosureOrigGo : List Int -> String
-linClosureOrigGo [] = ""
-linClosureOrigGo (c :: rest) = if c == 58 then strPack rest else linClosureOrigGo rest
 
 -- 字面量比较的运行时函数名（`==` 的跨类型特化；codegen 按名字映射）。
 export litEqName : String -> String
@@ -1111,7 +1111,17 @@ wrapOpaqueUsesFuel fuel depth idxs t =
           slot2 =
             case slot of
               Nothing => Nothing
-              Just (Pair bt rt) => lamTyOf (mapTermMaybe (wrapOpaqueUsesFuel (fuel - 1) depth idxs) bt) (mapTermMaybe (wrapOpaqueUsesFuel (fuel - 1) (depth + 1) idxs) rt)
+              Just (Pair mark (Pair bt rt)) =>
+                let
+                  bt2 =
+                    case bt of
+                      Nothing => Nothing
+                      Just t => Just (wrapOpaqueUsesFuel (fuel - 1) depth idxs t)
+                  rt2 =
+                    case rt of
+                      Nothing => Nothing
+                      Just t => Just (wrapOpaqueUsesFuel (fuel - 1) (depth + 1) idxs t)
+                in Just (Pair mark (Pair bt2 rt2))
         in TLam name rig slot2 sp (wrapOpaqueUsesFuel (fuel - 1) (depth + 1) idxs body)
       TApp f a rig => TApp (wrapOpaqueUsesFuel (fuel - 1) depth idxs f) (wrapOpaqueUsesFuel (fuel - 1) depth idxs a) rig
       TCon c args => TCon c (map (\p => Pair (wrapOpaqueUsesFuel (fuel - 1) depth idxs (firstOf p)) (secondOf p)) args)
