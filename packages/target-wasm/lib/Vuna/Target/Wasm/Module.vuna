@@ -580,6 +580,8 @@ genApplyArgs fuel tail st acc (a :: rest) =
         in genApplyArgs (fuel - 1) tail (withTail st.gsTail (secondOf p)) (append acc (append (firstOf p) [callInstr])) rest
 
 -- | 立即 lambda 应用：运行时 binder 必须恰好一个、实参恰好一个（`let` 的降级形态）。
+--   体内残留的 `IrTail` 是「函数体结果位置」的注解，内联后已不成立，先 `stripTail` 再按
+--   调用方的 `gsTail` 生成（只保留嵌套 lambda 体的标记）。
 genLamApp : Int -> GenState -> List IrBinder -> Ir -> List Ir -> Result (Pair (List Instr) GenState)
 genLamApp fuel st bs body args =
   if fuel <= 0 then
@@ -602,7 +604,7 @@ genLamApp fuel st bs body args =
                 [b] =>
                   case freshLocal (withTail st.gsTail (secondOf pa)) WvAnyRef of
                     Pair local st1 =>
-                      case genExpr (fuel - 1) (pushBinder b local (withTail st.gsTail st1)) body of
+                      case genExpr (fuel - 1) (pushBinder b local (withTail st.gsTail st1)) (stripTail body) of
                         Err e => Err e
                         Ok pb => Ok (Pair (append (firstOf pa) (append [ILocalSet local] (firstOf pb))) (restoreScope savedScope (secondOf pb)))
                 _ => Err "wasm target: lambda binder shape mismatch"

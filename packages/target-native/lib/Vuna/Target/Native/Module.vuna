@@ -894,8 +894,12 @@ genBoolChain fuel st args isAnd =
       _ => internal "`&&`/`||` must have exactly two arguments"
 
 -- 应用：flatten 左脊，支持饱和顶层调用、`@ir@natSucc`、运行时值函数。
-genLamApp : Int -> FGen -> IrBinder -> Ir -> Ir -> NRes (Pair (List Instr) FGen)
-genLamApp fuel st b arg body =
+--
+-- | 立即应用的 lambda：参数求值到槽后把体就地内联。体内残留的 `IrTail` 是「函数体
+--   结果位置」的注解，内联后已不在尾位置，必须用 `IrTail.stripTail` 去掉（只保留嵌套
+--   lambda 体里的标记，那是它们自己的函数体）；内联点的尾位置由调用方的 `isTail` 决定。
+genLamApp : Int -> FGen -> Bool -> IrBinder -> Ir -> Ir -> NRes (Pair (List Instr) FGen)
+genLamApp fuel st isTail b arg body =
   if fuel <= 0 then
     internal "native codegen fuel exhausted"
   else
@@ -905,7 +909,7 @@ genLamApp fuel st b arg body =
             slotP = freshSlot (secondOf p)
             slot = firstOf slotP
             st1 = secondOf slotP
-          in nbind (genExpr (fuel - 1) (pushBinder b slot st1) body) (\q => NOk (Pair (append (firstOf p) (append (storeSlot slot) (firstOf q))) (restoreBinderScope (secondOf q) st.fgSlots)))
+          in nbind (genExprAt (fuel - 1) (pushBinder b slot st1) isTail (stripTail body)) (\q => NOk (Pair (append (firstOf p) (append (storeSlot slot) (firstOf q))) (restoreBinderScope (secondOf q) st.fgSlots)))
       )
 
 genApp : Int -> FGen -> Bool -> Ir -> NRes (Pair (List Instr) FGen)
@@ -921,7 +925,7 @@ genApp fuel st isTail ir =
             case runtimeBinders bs of
               [b] =>
                 case args of
-                  [a] => genLamApp (fuel - 1) st b a body
+                  [a] => genLamApp (fuel - 1) st isTail b a body
                   _ => genApplyHead (fuel - 1) st isTail head args
               _ => genApplyHead (fuel - 1) st isTail head args
           IrRt s =>
