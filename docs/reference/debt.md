@@ -209,6 +209,7 @@ ID 是稳定引用（`层前缀-序号`）：条目关闭即删除该行，ID �
 | ID · 类 | 仍未成立的事实 | 证据 | 归属 |
 | --- | --- | --- | --- |
 | D96 · D | 能力矩阵是手写表，与三张运行时实现表的一致性靠人工同步；改 `rtImplOf` / `dtp_*` / `nativeRtTargetHost` 时必须同步改矩阵，没有自动校验 | `Base/Capabilities.vuna`；[wasm.md](wasm.md) §8 | 后续 |
+| D128 · C | **wasm 后端丢失顶层函数的直调**：擦除后 Core 把顶层函数（如 `Base.Data.Nat.plus`）压成零参定义 + 闭包，wasm 把它们落成全局，调用点从 `call $f_…` 变成 `global.get` + 两次 `call $rt_apply`。`nat_bits` 因此 41–42 ms → 69–72 ms（+70%，同机同窗口 5 次取中位数，3 次复现）；OCaml 后端与手写对照不变 | `packages/target-wasm/lib/Vuna/Target/Wasm/Module.vuna`（零参定义落全局的函数值调用走 `rt_apply`）；wat 证据：`9acaf33` 是 `(func $f_Base_Data_Nat_plus (param …))` + 直接 `call`，`70d7817` 是 `ref.func $lam37` → `struct.new $clo` → `global.set $g_Base_Data_Nat_plus`，调用点 `global.get` + `call $rt_apply`；[benchmarks.md](benchmarks.md) §1.1 重标段 | 后续（按闭包 arity 恢复直调，或零参定义保留 arity） |
 | D97 · B | 入口行的不可用效应只能构建期告警 + 运行期 trap，不能构建期拒绝：`Base/Store.vuna` 的 `dirReady` 用 `processRunIn mkdir -p`，所以编译器入口行必须带 `ProcessOp` | `Base/Store.vuna`（`dirReady`）、`packages/compiler/app/Main.vuna`；[wasm.md](wasm.md) §8 | 后续（前置：改成 FsOp 建目录） |
 
 ## 跨层根因
