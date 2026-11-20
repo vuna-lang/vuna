@@ -161,8 +161,9 @@ end:
 - 父进程发现 case 后按 `--jobs` spawn N 个自身（隐藏 `--worker i/N`），worker 按
   `index mod N` 静态分片；每个 case 写一份 TSV 结果到共享临时目录，父进程按序读回。
 - 每个 case 有独立临时目录与 per-case 超时（默认 300s，`--timeout` / family `timeout`
-  覆盖）。子进程输出经固定 shell helper 捕获（`timeout --foreground ... >out 2>err`，
-  可选合并），不新增编译器原语。
+  覆盖）。子进程输出经固定 shell helper 捕获（`timeout -s TERM -k 10 ... >out 2>err`，
+  可选合并），不新增编译器原语；超时按 `timeout` 建的进程组收尾，steps 经 `sh -c` 起的
+  孙进程一并退出。
 - family 与 `*.steps` case 都进 worker 并行；worker 按 `index mod N` 静态分片。每个
   steps case 有独立的 `TMPDIR` / `VUNA_REPL_HISTORY`；对象库默认与 suite 共用，
   只有文件头带 `# store-isolated` 的 case 用 `${caseTmp}/store`（断言缓存布局/GC/

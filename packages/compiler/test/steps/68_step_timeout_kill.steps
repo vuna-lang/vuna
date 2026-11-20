@@ -1,0 +1,15 @@
+# 68) steps 步骤超时后不留孙进程。
+#
+# `run:` 一律经 `sh -c`，用例常在其中起后台子进程；超时必须按 `timeout` 建的进程组
+# 收尾。这里临时套一个 `timeout = 2` 的 suite：它的 case 起 60s 后台 sleep 并记下 pid，
+# 超时判 FAIL 后该 sleep 必须已经退出（否则会一直占满一个核）。
+run: sh -c 'rm -rf "$TMPDIR/tk"; mkdir -p "$TMPDIR/tk/case"'
+run: sh -c 'printf "%s\n" "[workspace]" > "$TMPDIR/tk/vuna.toml"'
+run: sh -c 'printf "%s\n" "[suite]" "name = \"timeout-kill\"" "owner = \"timeout-kill\"" "timeout = 2" "" "[family.steps]" "dir = \"case\"" "kind = \"steps\"" > "$TMPDIR/tk/suite.toml"'
+run: sh -c 'printf "%s\n" "#!/bin/sh" "sleep 60 &" "echo \$! > \"\$1\"" "wait" > "$TMPDIR/tk/worker.sh"'
+run: sh -c 'printf "%s\n" "run: sh $TMPDIR/tk/worker.sh $TMPDIR/tk/pid" > "$TMPDIR/tk/case/a.steps"'
+run: sh -c '"$VUNA" dev suite "$TMPDIR/tk/suite.toml" 2>&1'
+exit: 1
+out-contains: timed out after 2s
+run: sh -c 'p=$(cat "$TMPDIR/tk/pid"); for i in 1 2 3 4 5 6 7 8 9 10; do kill -0 "$p" 2>/dev/null || exit 0; sleep 1; done; exit 1'
+exit: 0

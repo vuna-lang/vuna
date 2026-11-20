@@ -292,9 +292,11 @@ makeTempRoot tag =
 -- | 子进程捕获 helper 的 shell 正文：`$1` 超时秒数、`$2`/`$3` 输出文件、`$4` stdin 文件
 -- （`-` = 不重定向）、`$5` 合并标志，其余为命令 argv。超时与合并共四种执行组合，
 -- `timeout` 的退出码原样透传；秒数为 0 或没有 `timeout` 命令时直接执行。
+-- `timeout` 不带 `--foreground`：命令放进独立进程组，超时时整组收尾，`sh -c` 起的
+-- 孙进程不会留下来占 CPU。
 helperScript : String
 helperScript =
-  "#!/bin/sh\nsecs=$1\nout=$2\nerr=$3\ninp=$4\nmerge=$5\nshift 5\nif [ \"$secs\" -gt 0 ] && command -v timeout >/dev/null 2>&1; then\n  if [ \"$merge\" = \"1\" ]; then\n    if [ \"$inp\" = \"-\" ]; then\n      timeout --foreground -s TERM -k 10 \"$secs\" \"$@\" >\"$out\" 2>&1\n    else\n      timeout --foreground -s TERM -k 10 \"$secs\" \"$@\" <\"$inp\" >\"$out\" 2>&1\n    fi\n  else\n    if [ \"$inp\" = \"-\" ]; then\n      timeout --foreground -s TERM -k 10 \"$secs\" \"$@\" >\"$out\" 2>\"$err\"\n    else\n      timeout --foreground -s TERM -k 10 \"$secs\" \"$@\" <\"$inp\" >\"$out\" 2>\"$err\"\n    fi\n  fi\n  rc=$?\nelse\n  if [ \"$merge\" = \"1\" ]; then\n    if [ \"$inp\" = \"-\" ]; then\n      \"$@\" >\"$out\" 2>&1\n    else\n      \"$@\" <\"$inp\" >\"$out\" 2>&1\n    fi\n  else\n    if [ \"$inp\" = \"-\" ]; then\n      \"$@\" >\"$out\" 2>\"$err\"\n    else\n      \"$@\" <\"$inp\" >\"$out\" 2>\"$err\"\n    fi\n  fi\n  rc=$?\nfi\nexit $rc\n"
+  "#!/bin/sh\nsecs=$1\nout=$2\nerr=$3\ninp=$4\nmerge=$5\nshift 5\nif [ \"$secs\" -gt 0 ] && command -v timeout >/dev/null 2>&1; then\n  if [ \"$merge\" = \"1\" ]; then\n    if [ \"$inp\" = \"-\" ]; then\n      timeout -s TERM -k 10 \"$secs\" \"$@\" >\"$out\" 2>&1\n    else\n      timeout -s TERM -k 10 \"$secs\" \"$@\" <\"$inp\" >\"$out\" 2>&1\n    fi\n  else\n    if [ \"$inp\" = \"-\" ]; then\n      timeout -s TERM -k 10 \"$secs\" \"$@\" >\"$out\" 2>\"$err\"\n    else\n      timeout -s TERM -k 10 \"$secs\" \"$@\" <\"$inp\" >\"$out\" 2>\"$err\"\n    fi\n  fi\n  rc=$?\nelse\n  if [ \"$merge\" = \"1\" ]; then\n    if [ \"$inp\" = \"-\" ]; then\n      \"$@\" >\"$out\" 2>&1\n    else\n      \"$@\" <\"$inp\" >\"$out\" 2>&1\n    fi\n  else\n    if [ \"$inp\" = \"-\" ]; then\n      \"$@\" >\"$out\" 2>\"$err\"\n    else\n      \"$@\" <\"$inp\" >\"$out\" 2>\"$err\"\n    fi\n  fi\n  rc=$?\nfi\nexit $rc\n"
 
 -- | 内部：把 `helperScript` 写进 `tmp/run-capture.sh` 并返回其路径。
 writeHelper : Member nFs FsOp r => String -> Eff r String
