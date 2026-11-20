@@ -1919,12 +1919,22 @@ rwDef n d =
   case irDefBody d of
     Nothing => d
     Just b =>
-      IrDef
+      let
+        body2 = rw n b
+        globals = irGlobalsOf body2
+        -- 改写会把 `sendCore(Id)` 调用换成 `runMain (opH op pureK)`；静态 deps 里那条
+        -- 引用要一起删，否则可达集里永远「还有 send」，直连判据恒为假。body 里仍有
+        -- 该全局时（未改写的族）保留原 dep。
+        deps2 =
+          filter
+            (\dep => if isSendCoreName dep then List.memName dep globals else True)
+            (irDefDeps d)
+      in IrDef
         (irDefName d)
         (irDefArity d)
-        (irDefDeps d)
+        deps2
         (irDefTy d)
-        (rw n b)
+        body2
         (irDefRecValueOk d)
         (irDefInitGuard d)
         (irDefSpan d)

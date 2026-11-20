@@ -248,12 +248,14 @@ HashMap 升级」后同一档约 193 ms（wasm ≈149 ms，N=5000，`--runs 1`�
 
 **入口宿主叶子（W3.0）**：`eff_entry_host` 的同窗口读数（`--target all --runs 5 --warmup 2`，
 N=5000，loadavg ≈2.5）：手写 OCaml 3 ms / **OCaml 后端 5 ms（1.67x）** /
-**native 29 ms（9.67x）** / **wasm 74 ms（net ≈56，18.7x）**。同一窗口的对照：
+**native 29–34 ms（9.7–17x）** / **wasm 32 ms（net ≈14，16x）**。同一窗口的对照：
 `eff_tick`（内联 clause、尾 resume）native 14 ms / 20000 次，即 ≈0.7 µs/perform；
 `eff_host`（用户 handler + answer row，5000 轮两次 perform）native 71 ms。
+两个后端的形状不同：native 走库机器（`MkPerform` + opH 里的 `runPure`），wasm 走直连
+改写（`runMain (opH op pureK)` + opH 里的 `runPure`），都还是「每次叶子两台机器循环」。
 入口宿主叶子是**非尾 resume**：库 opH（`consoleOpHIOHost`）把续延当普通函数参数调用，
 CPS 只对语法 clause 的 `k`（`__mchTK`）发 `MkRestTail`，所以每次 `perform` 都压一层
-`MkCtx`/续延槽。后果在 5000 以上才显形：
+`MkCtx`/续延槽。后果在 5000 以上才显形（native）：
 
 | N（native，单次） | 2000 | 5000 | 8000 | 10000 | 16000 | 20000 |
 | --- | --- | --- | --- | --- | --- | --- |

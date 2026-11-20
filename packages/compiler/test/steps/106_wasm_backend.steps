@@ -176,3 +176,15 @@ out-equals: "none"
 run: sh -c 'd="$TMPDIR/cap-stdin"; mkdir -p "$d/app"; printf "[package]\nname = \"capstdin\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Effect.Core as Eff\nimport Base.Effect.Stdin as EffStdin\n\nmain : Eff [StdinOp] Int\nmain = do\n  _ <- stdinReadLine\n  pure 0\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm -W --out "$TMPDIR/cap-stdin-out" "$d" 2>&1'
 exit: 0
 out-contains: [UN_TargetEffectUnavailable]
+
+# 24) 入口宿主效应走直连改写：产物里不装 `run*Host`、含纯动作续延 `pureK`，运行结果不变。
+#     直连判据要求改写后可达集里不再有 send/perform——`rwDef` 必须同步裁掉静态 deps 里的
+#     sendCore 引用，否则判据恒假、悄悄退回整台机器。
+run: sh -c 'd="$TMPDIR/direct"; mkdir -p "$d/app"; printf "[package]\nname = \"direct\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Effect.Core as Eff\nimport Base.Effect.Console as EffConsole\n\nmain : Eff [ConsoleOp] Int\nmain = do\n  _ <- consolePrint \"\"\n  pure 7\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/direct-out" "$d"'
+exit: 0
+file-contains: $TMPDIR/direct-out/main.wat host_x64_pureK
+run: sh -c '! grep -q runConsoleHost "$TMPDIR/direct-out/main.wat"'
+exit: 0
+run: sh -c 'cd "$TMPDIR/direct-out" && node "$VUNA_SUITE_ROOT/wasm-host/run.mjs" main.wasm 2>&1'
+exit: 0
+out-equals: 7

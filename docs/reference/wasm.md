@@ -435,6 +435,10 @@ WASI preview1，宿主侧逐函数实现。下表的「允许」指浏览器平�
   可直连，`HostAbort key text` 是可直连的失败收口，`HostHandled` 只能走库机器。
   entry 预装的每个 handler（含 `runXErrorHost`）都要在表里且不是 `HostHandled`，
   缺一个就整体走显式效应机器。
+- **改写要同步裁 deps**：`rwDef` 把 `sendCore(Id)` 换成 `runMain (opH op pureK)` 时，必须把
+  静态 `irDefDeps` 里那条 send 引用一起删（body 里仍引用时保留）。可达集 = 体引用 ∪ deps，
+  留着旧 dep 会让「可达集里还有 send/perform」永远为真，直连判据恒假、静默退回整台机器
+  （`106` 的步骤 24 锁产物：含 `pureK`、不含 `runConsoleHost`）。
 - 改写按 `sendCore` 的应用脊椎匹配（`isSendCoreName` 同时认派发前的 `sendCore` 与派发后的
   `sendCoreId`）：实参末尾五元组是 (key 字面量, name, keyId, nameId, op)，key 命中即改写。
 - 改写后按**体引用**重算可达集（静态依赖表会漏掉字典实例等隐式引用，因此保留集用「全依赖
