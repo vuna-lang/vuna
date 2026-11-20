@@ -1,0 +1,16 @@
+-- 派生只支持内建类：用户模块里同短名的 `Show` 不是 `Base.Trait.Show.Show`，
+-- 不能按名字最后一段当成内建 Show 派生。
+import Prelude
+
+trait Show a where
+  render : a -> String
+
+data Box : Type where
+  MkBox : Box
+deriving (Show)
+
+instance Show Box where
+  render _ = "box"
+
+main : String
+main = render MkBox

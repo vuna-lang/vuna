@@ -1229,7 +1229,7 @@ synthMainShowInner ec globals defs bodies sp inner kind =
 
 synthMainShowGo : Ec -> List (Pair String Term) -> List DtDef -> Span -> Value -> Check (List DtDef)
 synthMainShowGo ec globals defs sp tyVal =
-  case findClassByName "Base.Trait.Show.Show" (ecClasses ec) of
+  case findClass "Base.Trait.Show.Show" (ecClasses ec) of
     Nothing => mainShowMissing sp tyVal
     Just cls =>
       let

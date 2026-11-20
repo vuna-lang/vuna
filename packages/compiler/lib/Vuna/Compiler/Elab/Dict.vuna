@@ -1023,12 +1023,22 @@ anyValueHasRigidNVar ec fuel [] = False
 anyValueHasRigidNVar ec fuel (v :: rest) =
   valueHasRigidNVar ec fuel v || anyValueHasRigidNVar ec fuel rest
 
+-- 内建特化类用**完整类名**定位（类身份是完整名；短名回落已删除）。
+eqClassName : String
+eqClassName = "Base.Trait.Eq.Eq"
+
+ordClassName : String
+ordClassName = "Base.Trait.Ord.Ord"
+
+numClassName : String
+numClassName = "Base.Trait.Num.Num"
+
 -- `==` / `/=` / `<` 等已由 Loader 解析成 Eq / Ord 的**方法名**，Elab 看到的
 -- 是方法投影的完整名（如 `Base.Trait.Eq.eq`）。特化入口按「名字是否为该类的方法投影」
 -- 判定（从类表取投影名，不硬编码模块前缀），没有运算符名判断。
 classHasProjection : String -> String -> String -> Ec -> Bool
-classHasProjection className short name ec =
-  case findClassByName className (ecClasses ec) of
+classHasProjection fullClassName short name ec =
+  case findClass fullClassName (ecClasses ec) of
     Nothing => False
     Just cls => classMethodProjection cls.dtClassMethods short == name
 
@@ -1038,13 +1048,13 @@ findEqClass : String -> Ec -> Maybe DtClass
 findEqClass name ec =
   case findClassByMethod name (ecClasses ec) of
     Just c => Just c
-    Nothing => findClassByName "Base.Trait.Eq.Eq" (ecClasses ec)
+    Nothing => findClass eqClassName (ecClasses ec)
 
 findOrdClass : String -> Ec -> Maybe DtClass
 findOrdClass name ec =
   case findClassByMethod name (ecClasses ec) of
     Just c => Just c
-    Nothing => findClassByName "Base.Trait.Ord.Ord" (ecClasses ec)
+    Nothing => findClass ordClassName (ecClasses ec)
 
 -- 投影名/符号名的最后一段（`Base.Trait.Eq.==` → `==`）。
 opShortOf : String -> String
@@ -1057,7 +1067,8 @@ isEqMethod ec name =
   opShortOf name
     == "=="
     || opShortOf name
-    == "/=" || classHasProjection "Eq" "==" name ec || classHasProjection "Eq" "/=" name ec
+    == "/="
+    || classHasProjection eqClassName "==" name ec || classHasProjection eqClassName "/=" name ec
 
 export isCmpMethod : Ec -> String -> Bool
 isCmpMethod ec name =
@@ -1069,9 +1080,9 @@ isCmpMethod ec name =
     == ">"
     || baseNameOf name
     == ">="
-    || classHasProjection "Ord" "<" name ec
-    || classHasProjection "Ord" "<=" name ec
-    || classHasProjection "Ord" ">" name ec || classHasProjection "Ord" ">=" name ec
+    || classHasProjection ordClassName "<" name ec
+    || classHasProjection ordClassName "<=" name ec
+    || classHasProjection ordClassName ">" name ec || classHasProjection ordClassName ">=" name ec
 
 -- `Base.Trait.Num` 四则方法（`(+)` / `(-)` / `(*)` / `(/)`）的投影判定。
 -- 与 `isEqMethod` / `isCmpMethod` 同一套「从类表取投影名」判定，不硬编码模块前缀。
@@ -1080,13 +1091,13 @@ isCmpMethod ec name =
 -- | 把 `Base.Trait.Num` 的方法投影映射回规范运算符名（`+` / `-` / `*` / `/`）；不是 Num 方法时返回 `Nothing`。
 export numMethodOpName : Ec -> String -> Maybe String
 numMethodOpName ec name =
-  if baseNameOf name == "+" || classHasProjection "Num" "+" name ec then
+  if baseNameOf name == "+" || classHasProjection numClassName "+" name ec then
     Just "+"
-  else if classHasProjection "Num" "-" name ec then
+  else if classHasProjection numClassName "-" name ec then
     Just "-"
-  else if classHasProjection "Num" "*" name ec then
+  else if classHasProjection numClassName "*" name ec then
     Just "*"
-  else if classHasProjection "Num" "/" name ec then Just "/" else Nothing
+  else if classHasProjection numClassName "/" name ec then Just "/" else Nothing
 
 -- 方法投影的**短名**（`Base.Trait.Eq.==` → `==`）：特化只按短名选 runtime 函数。
 methodShortOf : String -> String

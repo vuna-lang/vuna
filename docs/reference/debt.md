@@ -39,7 +39,7 @@ ID 是稳定引用（`层前缀-序号`）：条目关闭即删除该行，ID �
 | D113 · C | 转发器已按定义性归约参与判据；剩余：回调实参不是纯形参（`k (g x)`）、转发器被部分应用后再调用、跨实例字典派发（需要类型信息） | `Elab/Termination/Measure.vuna`（`forwardersOf` / `expandForwarders`）；夹具 `term/20_forwarder.vuna`、`term_err/23_forwarder_equal.vuna` | 后续 |
 | D115 · C | 宏展开只有调用点 span：展开出的节点共享 `name!` 的 span，没有 per-展开节点的 source map；LSP 不能 goto 宏定义 / 展开视图，fmt / lint / index 只按调用形式处理 | `Loader/Expand.vuna` 的 span 约定；`Vuna.Fmt.Expr`、`Vuna.Index.Scan` | 后续（与 D65 一起做） |
 | D120 · C | 未选中的 `if` 分支在纯求值器里也被弱头求值：`TIf` 落成 `evalIf (eval c) (eval th) (eval el)`，`VIf` 只存 `Value`；`normalize` / codegen 只处理选中支 | `Core/Eval.vuna`（`TIf`、`evalIf`、`normalizeIfFuel`）；[language.md](language.md)「`&&`/`\|\|` 短路」 | 后续（把 `VIf` 两支改成 `Closure`） |
-| D124 · ⚠️B | **包上下文的实例方法体仍逃过终止性分析**：Loader 把 trait 方法投影 mangle 成 `<模块前缀>.<方法短名>`，实例里的方法声明保留短名，调用点按名字连边时对不上；按投影名对齐后又会遇到跨实例字典派发 | `Elab/Termination/Measure.vuna`（`funDeclsOf` 的 `DInstance` 分支）；复现：包内 `instance T Int where f x = f x` 通过 `check` | 后续（用类型/字典信息做派发分析） |
+| D124 · ⚠️B | **包上下文的实例方法体仍逃过终止性分析**：Loader 把 trait 方法投影 mangle 成 `<模块前缀>.<方法短名>`，实例里的方法声明保留短名，调用点按名字连边时对不上 | `Elab/Termination/Measure.vuna`（`funDeclsOf` 的 `DInstance` 分支）；复现：包内 `instance T Int where f x = f x` 通过 `check`。**Rast 名字层补前缀不可行**：`instance Applicative EffCheck where pure x = EffCheck (pure x)` 的 `pure` 是跨实例字典派发（`Eff` 的实例），补前缀后会变成自递归误报；修它必须用精化后的字典信息区分「本实例方法」与「上下文字典投影」 | 后续（需要精化后的字典/类型信息，不在 Rast 名字层做） |
 
 ## 前端（Frontend）
 
@@ -110,7 +110,7 @@ ID 是稳定引用（`层前缀-序号`）：条目关闭即删除该行，ID �
 | EC-16 · D | `Impl.vuna` 的效果协议名字：字面串绕过 `Intrinsics` 的单一真源（`performCore`/`sigFn`/`raise`/`weaken`/`Int`/`String`） | `Elab/Term/Impl.vuna` | 后续 |
 | EC-20 · D | `Meta.vuna` 的 `ctorRefTerm*`：Ec 版与全局版两份实现 | `Elab/Meta.vuna` | 后续 |
 | EC-21 · A | `Trait.vuna` 的 `instArgAt`：实参取尽时伪造 `TGlobal "Int"`（不可达兜底） | `Elab/Trait.vuna` | 后续 |
-| EC-23 · C | `Trait.vuna` 的 `methodClausesNamed`：实例方法按短名收集（跨类同名方法会被并进来） | `Elab/Trait.vuna` | 后续 |
+| EC-23 · C | 同一实例里同一方法的两种写法（`eq` / `==`）不会被判重复：`methodClausesNamed` 按规范短名把两组子句并成一组，`firstUnknownInstanceMethod` 也只看集合归属 | `Elab/Trait.vuna`（`methodClausesNamed` / `firstUnknownInstanceMethodGo`） | 后续（按类方法投影去重） |
 | EC-28 · C | `Elab/Driver.vuna` 的 `resolveDictGoalsFix`：字典收敛固定 8 轮（三处调用点） | `Elab/Driver.vuna` | 后续 |
 | EC-29 · D | `Elab/Driver.vuna` 的实例索引自检：只在 `--debug-perf` 下跑 | `Elab/Driver.vuna` | 后续 |
 | EC-30 · A | `Impl.vuna` 的 check 位 `if`：分支检查失败后整体重推断（位置 / 期望类型信息丢失，回退用原 `ec`） | `Elab/Term/Impl.vuna` | 后续 |
@@ -118,7 +118,6 @@ ID 是稳定引用（`层前缀-序号`）：条目关闭即删除该行，ID �
 | EC-32 · D | `ConstraintStore` 一个记录兼任 5 种无关状态：待处理队列、id 分配、重试表、解表计数、**构造子索引是否完整**；`ecPutCtorTbl` 也会改它 | `Elab/Types.vuna`、`Elab/Meta.vuna` | 后续 |
 | EC-34 · ⚠️C | 实例搜索把「递归深度」和「候选 / via 预算」压进同一个固定 `16`（`searchInstanceIn`），耗尽报 `TC_NoInstanceFound`：合法的深 ctx / via 链被报成「缺实例」 | `Elab/Dict.vuna`（`searchInstFuel` / `tryViaDict`） | 后续 |
 | EC-35 · C | 行标签的**诊断展示**用 `showValueAt 6`（深度 6 截断）：匹配本身走 `conv`，但歧义 / 缺实例的候选列表可能显示相同文本，难以区分 | `Elab/Dict.vuna`（`labelCandText` / `labelScan`） | 后续（展示层） |
-| EC-36 · ⚠️D | 同一个类在名字空间仍有多种拼法：`dictTypeName` 用全名、`instanceName` 用短名 + sanitize；内建特化已按**方法投影 / 规范类名**查找（不再依赖登记顺序），但非内建路径仍用 `findClassByShortName` 首个命中 | `Elab/Meta.vuna`、`Elab/InstName.vuna`、`Elab/InstCoherence.vuna` | 后续（实例名改用稳定 id） |
 | EC-38 · ⚠️D | 字典注入 `liftFreeDictGoals`：binder 位置靠手推索引算术（注释自述插入顺序反过来索引会偏）。生成名已是按定义结构派生的 `#dict<组序号>`（不随无关定义的元变量编号漂移），不再把元变量 id 写进 Core 摘要。注入预算已按项规模派生，`injectDictGoFuel` / `rewriteTaggedSpineFuel` 的耗尽分支不可达 | `Elab/Trait.vuna`（`liftFreeDictGoals` / `injectBudgetFor` / `altBudgetFor` / `spineSize`） | 后续（索引算术改为结构化定位） |
 | EC-39 · ⚠️D | 「类型层 / 擦除」有五份判据且会互相矛盾：`Usage.isTypeForming`（只沿 cod）认为 `Int -> Type` 是类型层，`Meta.isTypeLayerValue`（每个域都须是类型层）认为不是；另有 `isTypeDomain` / `isKindWithCtx` / `isFamilyKindValue` / `rigIsErased` 重复实现 | `Elab/Usage.vuna`、`Elab/Meta.vuna`、`Elab/Term/Impl.vuna` | 后续 |
 | EC-40 · C | `Elab/Types.vuna` 的 `refineValue` 不下钻 `VCase` 分支体、不处理 `VProj`（`_ => v`）⇒ 索引精化在卡住的 case / 投影里静默丢失 | `Elab/Types.vuna` | 后续 |
@@ -216,8 +215,8 @@ ID 是稳定引用（`层前缀-序号`）：条目关闭即删除该行，ID �
 
 1. **名字即身份 / 名字即接口**：`RName` 是字符串、`Rast.Bridge` 用空作用域重分类、`IrBinder` 无唯一 id、
    `bindShapeOf` 的索引模式匹配、`__anf`/`__cps` 编号借 fuel、`showTerm`/`showValueAt 6` 当相等判据
-   （仅剩诊断展示 EC-35），以及把元数据编进名字（`#dict<m>`、`#section`、`@vuna@…`）
-   与按短名分组的类 / 方法 / 实例（EC-12 / EC-23 / EC-36 / D124）。
+   （仅剩诊断展示 EC-35），以及把元数据编进名字（`#section`、`@vuna@…`）
+   与按短名分组的方法 / 实例（EC-12 / EC-23 / D124）。
 2. **fuel 仍是主要的终止性证书**：多数路径已改成「预算按输入规模派生 + 耗尽 `icFuel`」，
    残留「把固定容量上限当成语义结论」（EL-23、CO-07 的 conv 预算）、
    「只有 SCT 测度、从不检查的 fuel」（FE-09）、「派生预算不可达仅靠注释论证的静默兜底」

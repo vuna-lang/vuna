@@ -101,7 +101,7 @@
 | `Elab.Prelude` | 把 `Base.Intrinsics` 表翻译成 DT prelude globals（签名）；没有第二份名字/签名表 | `preludeGlobals`、`builtinTyName`、`cmpBuiltinTyName` |
 | `Elab.Match` | 多 clause 模式矩阵降级：构造子列 → `case`、字面量列 → `if` 链（纯 Ast→Ast）；降级前先做子句可达性检查（`TC_ClauseUnreachable`） | `multiToExpr`、`checkReachable`、`buildColumnExpr` |
 | `Elab.Records` | `record` 的语法与结构化元数据：收集 `RecordMeta`、把 record 表达式/模式降级成**合成位置构造子**的引用（不降级成 `DData`）；`prepareDecls*` 返回的 decls 保留 `DRecord` | `desugarRecords`、`recordsOfDecls`、`prepareDecls` |
-| `Elab.Derive` | `deriving (Show, Eq, Ord, Hashable)` 的实例生成（展开成等价 `instance`，交给既有实例精化；`Hashable` 的字段哈希用 `Base.Trait.Hashable.hashCombine`；Eq/Ord 的 Bool 结果引用 canonical `Base.Data.Bool.Bool.True/False`） | `expandDerivings` |
+| `Elab.Derive` | `deriving (Show, Eq, Ord, Hashable)` 的实例生成（展开成等价 `instance`，交给既有实例精化；派生规则按**完整类名**匹配，用户模块里同短名的 trait 不会被当成内建类；`Hashable` 的字段哈希用 `Base.Trait.Hashable.hashCombine`；Eq/Ord 的 Bool 结果引用 canonical `Base.Data.Bool.Bool.True/False`） | `expandDerivings` |
 | `Elab.Coverage` | 覆盖性见证构造（缺失模式 / 冗余分支）、子句可达性（usefulness）与诊断渲染 | `improveExhaustive`、`coverageWitness`、`clauseCover`、`renderWitness` |
 | `Elab.Usage` | 整程序用量检查（QTT 0/1/ω，见 [qtt.md](qtt.md)） | `checkProgramUsage`、`checkDefUsage` |
 | `Elab.Canonical` | 接口载荷与哈希输入域：`DtDef` / `DtData` / `DtInst` / `DtClass` / `RecordMeta` / `ExportEntry` / `FixityDecl` / `Import`（span 丢弃、字段全覆盖；`DtCtor` 随 `DtData` 编码） | `encDtDef`、`encDtData`、`encDtInst`、`encDtClass`、`encExportEntry`、`encRecordMeta`、`encFixity`、`encImport` |

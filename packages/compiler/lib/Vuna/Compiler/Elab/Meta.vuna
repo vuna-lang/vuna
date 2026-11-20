@@ -750,26 +750,6 @@ fieldBinderGoGo remaining n acc =
   else
     fieldBinderGoGo (remaining - 1) n (Pair (fieldVarName (n - remaining)) RigOmega :: acc)
 
--- 按**短名**查类（库里的类名带模块前缀，如 `Base.Trait.Eq.Eq`；`==` / `<` 的字典
--- 查找从 `ecClasses` 按最后一段反查，找不到时调用方退回泛型运行时兜底）。
-export findClassByShortName : String -> List DtClass -> Maybe DtClass
-findClassByShortName short [] = Nothing
-findClassByShortName short (c :: rest) =
-  if baseNameOf (dtClassName c) == short then Just c else findClassByShortName short rest
-
--- | 先按完整类名精确匹配，找不到再退回短名。内建特化（`Eq`/`Ord`/`Show`）必须优先
--- 命中 `Base.Trait.*` 的类，避免用户模块里同短名的类按登记顺序抢先。
-export findClassByName : String -> List DtClass -> Maybe DtClass
-findClassByName name classes =
-  case findClassByFullName name classes of
-    Just c => Just c
-    Nothing => findClassByShortName name classes
-
-findClassByFullName : String -> List DtClass -> Maybe DtClass
-findClassByFullName name [] = Nothing
-findClassByFullName name (c :: rest) =
-  if dtClassName c == name then Just c else findClassByFullName name rest
-
 -- | 方法投影全名 → owning class：按类的**方法表**精确匹配，不靠从名字切前缀
 -- （类的完整名是 `<模块>.<类短名>`，投影名是 `<模块>.<方法短名>`，不能简单去尾段）。
 export findClassByMethod : String -> List DtClass -> Maybe DtClass

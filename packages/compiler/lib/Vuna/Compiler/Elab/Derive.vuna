@@ -8,10 +8,9 @@ module Vuna.Compiler.Elab.Derive where
 --
 -- trait 声明、方法投影与内建类型实例的权威定义都在 `Base.Trait.Show` / `Base.Trait.Eq` /
 -- `Base.Trait.Ord`（编译器不注入内建 trait/实例）。本模块拿到的 derivings 名字已经由
--- Loader 解析过：包模式经 `Prelude` 重导出得到完整类名（`Base.Trait.Show.Show`），单文件里
--- 自己声明的 trait 则保持无前缀（`Show`）。因此：
---   - 实例头用**解析后的完整类名**；
---   - 构造子的分派按类名**最后一段**（`Show` / `Eq` / `Ord`）；
+-- Loader 解析成完整类名（`Base.Trait.Show.Show`）。因此：
+--   - 实例头与派生规则都按**解析后的完整类名**匹配（用户模块里同短名的 trait 不会被
+--     当成内建类；不在支持列表的类报 `DeriveUnsupportedKind`）；
 --   - 方法体里对同类方法的递归调用（`show` / `eq` / `lt` / `le`）必须用解析后的
 --     **投影全局名**（`Base.Trait.Show.show` …）：Loader 不复写裸方法名，裸名解析不到投影。
 --
@@ -27,9 +26,16 @@ import Vuna.Compiler.Base.Diagnostics
 import Vuna.Compiler.Base.Intrinsics
 import Vuna.Compiler.Elab.Records
 
--- 类名最后一段：`Base.Trait.Show.Show` → `Show`；派生规则按它分派（找不到的类报不支持）。
+-- 类名最后一段：`Base.Trait.Show.Show` → `Show`（只用于诊断展示）。
 traitShortName : String -> String
 traitShortName tname = secondOf (splitLastDot (splitOnDot tname))
+
+-- 支持派生的类用**完整类名**匹配：用户模块里同短名的 trait 不会被当成内建类。
+showEqClassName : String
+showEqClassName = "Base.Trait.Eq.Eq"
+
+showOrdClassName : String
+showOrdClassName = "Base.Trait.Ord.Ord"
 
 -- 类方法的投影全局名：Loader 把 trait 方法 mangle 成 `<模块前缀>.<方法短名>`
 -- （`resolveTraitMethod`）；单文件内联 trait 没有模块前缀时就是短名。
@@ -67,7 +73,7 @@ anyTraitHasMethod [] cls m = False
 anyTraitHasMethod (d :: rest) cls m =
   case d of
     DTrait tname params supers methods sp =>
-      if traitShortName tname == cls && memName m (map traitMethodName methods) then
+      if tname == cls && memName m (map traitMethodName methods) then
         True
       else
         anyTraitHasMethod rest cls m
@@ -155,28 +161,28 @@ deriveInstance all dname params ctors tn sp =
     hd = instHead tn dname params sp
     used = deriveCtxParams params ctors
     ctxExprs = map (\p => EApp (EVar (classifyName tn) sp) [EVar (classifyName p) sp] sp) used
-  in case traitShortName tn of
-    "Show" =>
+  in case tn of
+    "Base.Trait.Show.Show" =>
       let
         proj = traitMethodGlobal tn "show"
         ms = [DFun "show" [PVar "sx" sp] (showBody proj ctors "sx" sp) sp]
       in OkC (DInstance ctxExprs hd ms sp)
-    "Eq" =>
+    "Base.Trait.Eq.Eq" =>
       let
-        eqName = traitMethodOf all "Eq" "==" "eq"
-        neqName = traitMethodOf all "Eq" "/=" "neq"
+        eqName = traitMethodOf all showEqClassName "==" "eq"
+        neqName = traitMethodOf all showEqClassName "/=" "neq"
         ms =
           [
             DFun eqName [PVar "sx" sp, PVar "sy" sp] (eqBody ctors sp) sp,
             DFun neqName [PVar "sx" sp, PVar "sy" sp] (neqBody "==" sp) sp
           ]
       in OkC (DInstance ctxExprs hd ms sp)
-    "Ord" =>
+    "Base.Trait.Ord.Ord" =>
       let
-        ltName = traitMethodOf all "Ord" "<" "lt"
-        leName = traitMethodOf all "Ord" "<=" "le"
-        gtName = traitMethodOf all "Ord" ">" "gt"
-        geName = traitMethodOf all "Ord" ">=" "ge"
+        ltName = traitMethodOf all showOrdClassName "<" "lt"
+        leName = traitMethodOf all showOrdClassName "<=" "le"
+        gtName = traitMethodOf all showOrdClassName ">" "gt"
+        geName = traitMethodOf all showOrdClassName ">=" "ge"
         ms =
           [
             DFun ltName [PVar "sx" sp, PVar "sy" sp] (ordBody "<=" ctors sp) sp,
@@ -185,15 +191,15 @@ deriveInstance all dname params ctors tn sp =
             DFun geName [PVar "sx" sp, PVar "sy" sp] (geBody "<=" sp) sp
           ]
       in OkC (DInstance ctxExprs hd ms sp)
-    "Hashable" =>
+    "Base.Trait.Hashable.Hashable" =>
       let
         hashProj = traitMethodGlobal tn "hash"
         combineProj = traitMethodGlobal tn "hashCombine"
         ms = [DFun "hash" [PVar "sx" sp] (hashBody hashProj combineProj ctors sp) sp]
       in OkC (DInstance ctxExprs hd ms sp)
-    "FromString" => deriveWrapper tn "fromString" "String" ctors hd sp
-    "FromInt" => deriveWrapper tn "fromInt" "Int" ctors hd sp
-    "FromFloat" => deriveWrapper tn "fromFloat" "Float" ctors hd sp
+    "Base.Trait.FromString.FromString" => deriveWrapper tn "fromString" "String" ctors hd sp
+    "Base.Trait.FromInt.FromInt" => deriveWrapper tn "fromInt" "Int" ctors hd sp
+    "Base.Data.Float.FromFloat" => deriveWrapper tn "fromFloat" "Float" ctors hd sp
     kind => tcErr1 sp (DeriveUnsupportedKind kind) kind
 
 -- 字面量转换派生（FromString / FromInt / FromFloat）：只接受「一个构造子、一个字段、
