@@ -194,7 +194,7 @@ native 赢在「调用少、字符串/栈传参多」的形状（[performance.md
 ### 1.4 效应机器（CPS）
 
 `eff_tick` / `eff_deep` / `eff_deepseq` / `eff_bracket` / `eff_nested` / `eff_host` /
-`eff_abort` / `eff_install` 覆盖 handler 派发与续延：
+`eff_abort` / `eff_install` / `eff_entry_host` 覆盖 handler 派发与续延：
 
 - `eff_tick`：尾递归里 20000 次顺序 `perform` + `resume`（浅续延吞吐）；
 - `eff_deep`：非尾递归到深度 2000 才 `perform` 一次（单次捕获深度）；
@@ -203,7 +203,11 @@ native 赢在「调用少、字符串/栈传参多」的形状（[performance.md
 - `eff_nested`：2000 层 handler 嵌套，内层完成后再在外层 perform（帧链 / 回退）；
 - `eff_host`：Console handler 的 answer 是 `Eff`（answer row），每轮额外发一个 Tick；
 - `eff_abort`：2000 轮 `bracket` 的 use 都 abort（cleanup 恰好一次）；
-- `eff_install`：10000 轮独立安装 handler + perform + 拆掉（`MkHandle`/`finish` 固定成本）。
+- `eff_install`：10000 轮独立安装 handler + perform + 拆掉（`MkHandle`/`finish` 固定成本）；
+- `eff_entry_host`：**入口宿主叶子**——`main : Eff [ConsoleOp] Int` 5000 次
+  `consolePrint ""`，entry 只预装 `runConsoleHost`、没有用户 handler；每轮是 1 次零字节
+  write + 两次机器循环（`MkPerform` 一次、`opH` 里 `runPure (@vuna@host@print …)` 一次）。
+  `.ml` 对照用 `output_string ""`（不产生 syscall），所以比值里含那 N 次 write 的常数。
 
 另有 `startup`（`repeat=20` 的进程/运行时初始化地板）与 `traits`（约束多态的字典派发）。
 手写 OCaml 对照在同名 `.ml`（`Effect.Deep` 或直接内联）。`handleState` 这种 answer 是
@@ -242,13 +246,26 @@ HashMap 升级」后同一档约 193 ms（wasm ≈149 ms，N=5000，`--runs 1`�
 原生 `str_eq` 只占单次 perform 的 ~1%（2 次比较 ≈7 ns / ~700 ns），这次改动是协议
 收敛（派发只比整数），不是性能项。
 
-**还缺的口径（W3.0）**：现有 `eff_*` 覆盖用户 handler 与 answer row（`eff_host` 也是
-`handleConsole "mock"` + Tick），但没有量**入口宿主叶子**——entry 只预装 `runXHost` 时，
-每次 `consolePrint` 都会在 opH 里再跑一次 `runPure (@vuna@host@print …)`（嵌套机器）。
-计划中的对照项是 `eff_entry_host`：`main : Eff [ConsoleOp] Int` 循环 20000 次
-`consolePrint ""`（I/O 字节≈0，量到的是每次叶子 = 1 次 syscall + 2 台机器循环），
-同时记 `.s` / bytes（纯程序已在 `8b0c254` 后不带效应机器，入口宿主程序仍带）。
-在补出这条 bench 之前，不评估「宿主叶子改裸值原语」（W5）与 `MkHandleHost`（W3.1）的收益。
+**入口宿主叶子（W3.0）**：`eff_entry_host` 的同窗口读数（`--target all --runs 5 --warmup 2`，
+N=5000，loadavg ≈2.5）：手写 OCaml 3 ms / **OCaml 后端 5 ms（1.67x）** /
+**native 29 ms（9.67x）** / **wasm 74 ms（net ≈56，18.7x）**。同一窗口的对照：
+`eff_tick`（内联 clause、尾 resume）native 14 ms / 20000 次，即 ≈0.7 µs/perform；
+`eff_host`（用户 handler + answer row，5000 轮两次 perform）native 71 ms。
+入口宿主叶子是**非尾 resume**：库 opH（`consoleOpHIOHost`）把续延当普通函数参数调用，
+CPS 只对语法 clause 的 `k`（`__mchTK`）发 `MkRestTail`，所以每次 `perform` 都压一层
+`MkCtx`/续延槽。后果在 5000 以上才显形：
+
+| N（native，单次） | 2000 | 5000 | 8000 | 10000 | 16000 | 20000 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 墙钟 | 8–11 ms | 9–13 ms | 39–52 ms | 89 ms | 252 ms | 300–1000 ms |
+| 末次 GC `live` | — | 4.4 MB | 9.0 MB | 18.5 MB | 36.5 MB | 38.6 MB |
+
+`live` 随 N 线性增长（≈1.8 KB/叶），GC 阈值 = 2×live 让 8k 之后进入「每次全堆扫描」的
+悬崖（20k 的 20k 次叶子 ≈ 0.3–1 s，RSS 63 MB）。用 `handleCore` + **全局** opH（`k v`）
+在用户代码里复现同样曲线（20k：295 ms / live 40 MB），而内联 clause 的 `eff_tick` 是
+14 ms / 4 MB——所以这是「库 opH 的 resume 不走尾路径」的机器问题，不是 console 特有。
+基准固定在 N=5000（稳定），悬崖与线性增长记在 [debt.md](debt.md) D121；W3.1 的
+`MkHandleHost` 因此从「可选优化」变成「宿主 resume 的尾路径 / ctx 回收」。
 
 **CPS 前后**（wasm：`445315d` 的 wat 机器 → HEAD 的库机器；native：`e663921` 的栈拷贝 →
 HEAD 的库机器；`--runs 3 --warmup 1`，源码与 harness 都是 HEAD）：
