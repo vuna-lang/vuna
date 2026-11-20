@@ -237,6 +237,12 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
   迁移栈取 `rt_stack_limit`）——越界 trap `directory tree too deep` 而不是 SIGSEGV；
   路径拷贝按容量上界检查，超出 trap `path too long`；`tryWriteFileAtomic` 写
   `<path>.<pid>.tmp` 再 `rename`。
+- **非 try 符号的失败显式可见**：`prim_eff_readFile` / `writeFile` / `writeFileAtomic` /
+  `readDir` / `isDirectory` / `makeDir` / `removeFile` 走 `strict_*` 包装——跑同一个
+  `try_*` 叶子，状态槽非 0 时按 `vuna: runtime error: <op><path>: <reason>` 报告并
+  exit 2。`fs_fail` 额外记下原始 errno（`rt_host_errno`），reason 取自 `Pal` 的
+  errno→`strerror` 表，因此首行与 OCaml `dtp_*` 在 C locale 下逐字一致（没有 `at ...`
+  行）。库层 `Base.Effect.Fs` 仍走 `@vuna@host@try*`，把失败变成 typed `FsError`。
 - 进程：`runIn` / `tryRunIn`（`chdir` + `fork` + `execve("/bin/sh", ["-c", cmd])` + `wait4`
   + 恢复 cwd；实参按 shell 单引号转义）、`spawn`（`fork` + `execve("/proc/self/exe", argv)`，
   argv[0] 是本进程路径）、`wait`（`wait4` 取退出码，被信号杀死按 1）、`exit_process_host`。
