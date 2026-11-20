@@ -44,6 +44,7 @@ ID 是稳定引用（`层前缀-序号`）：条目关闭即删除该行（历�
 | EL-16 | `Derive.vuna` 的 `boolTrue`/`boolFalse` | A | 用 `1 == 1` / `0 == 1` 造 Bool（派生实例不依赖源码 Bool 构造子） | 已清（直接引用 canonical `Base.Data.Bool.Bool.True/False`，精化成 `TBool`；夹具 `dt/101`、`steps/118`） |
 | EL-19 | `Data.vuna` 的 record 字段类型 | C | `shift 0 (0-i)` 硬假设字段类型不引用前序字段 | 已清（`recordFieldIndependent` 在构造 `DtData` 时断言，`Driver.Cache` 按族参数校验字段类型；夹具 `dt_err/114`、`records/14`、`RecordFieldScope`） |
 | EL-20 | `Termination/Measure.vuna` 的 `funDeclsOf` | ⚠️B | 只收顶层 `DFun`：`DInstance` 里的方法体完全不进终止性分析（`f x = f x` 的实例可通过 `check`） | 已清（方法体并入分组，按短名在包内保守合并；派生实例同时纳入） |
+| EL-21 | `Termination/Measure.vuna` 的 `relOfArg` / `extendSizesStrict` | C | 只认 `EVar`：记录 / 元组字段投影 `r.f` 与 `case r.f of` 都不产生尺寸证据 | 已清（非 alias record 的字段按声明顺序下推；alias 投影与同名字段下标冲突一律丢弃） |
 
 ## Elab：Term / Meta / Conv / Dict / Trait
 

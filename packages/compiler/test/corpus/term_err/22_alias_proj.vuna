@@ -1,0 +1,11 @@
+-- alias record 的投影是定义性恒等，不能当严格下降：`Wrap w.value` 就是 `w`。
+import Prelude
+
+alias record Wrap where
+  value : Int
+
+bad : Wrap -> Int
+bad w = bad (Wrap w.value)
+
+main : Int
+main = bad (Wrap 0)

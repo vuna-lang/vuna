@@ -201,26 +201,40 @@ export strSizeEntriesGo : List Pat -> Int -> List (Pair String (Pair Int (Pair I
 strSizeEntriesGo [] i = []
 strSizeEntriesGo (p :: rest) i = append (patSizeStrict p i [] []) (strSizeEntriesGo rest (i + 1))
 
-export extendSizesStrict : List (Pair String (Pair Int (Pair Int (List Int)))) -> Expr -> Pat -> List (Pair String (Pair Int (Pair Int (List Int))))
-extendSizesStrict sizes (EVar vname vsp) pat =
-  case sizeOfVarStrict (rnameKey vname) sizes of
+-- | 表达式携带的尺寸：变量直接查表；非 alias record 的字段投影按声明顺序下推一位。
+-- alias record 的投影是恒等，不能在字段表里出现（`fieldProjectionsOf` 会剔除）。
+export sizeOfExpr : List (Pair String (List Int)) -> List (Pair String (Pair Int (Pair Int (List Int)))) -> Expr -> Maybe (Pair Int (Pair Int (List Int)))
+sizeOfExpr projs sizes (EVar n sp) = sizeOfVarStrict (rnameKey n) sizes
+sizeOfExpr projs sizes (EField base f sp) =
+  case sizeOfExpr projs sizes base of
+    Just (Pair b (Pair d path)) =>
+      case fieldIndexOf f projs of
+        Just k => Just (Pair b (Pair (d + 1) (append path [k])))
+        Nothing => Nothing
+    Nothing => Nothing
+sizeOfExpr projs sizes (EParen e sp) = sizeOfExpr projs sizes e
+sizeOfExpr projs sizes _ = Nothing
+
+export extendSizesStrict : List (Pair String (List Int)) -> List (Pair String (Pair Int (Pair Int (List Int)))) -> Expr -> Pat -> List (Pair String (Pair Int (Pair Int (List Int))))
+extendSizesStrict projs sizes scrut pat =
+  case sizeOfExpr projs sizes scrut of
     Just sz =>
       case sz of
         Pair base (Pair depth path) =>
           case pat of
             -- `let ys = xs` / `do ys <- xs`：别名继承被绑定变量的尺寸。
             PVar n nsp => Pair n sz :: sizes
-            PAs n inner asp => extendSizesStrict (Pair n sz :: sizes) (EVar vname vsp) inner
+            PAs n inner asp => extendSizesStrict projs (Pair n sz :: sizes) scrut inner
             PCon c ps sp2 => append sizes (patsSizeStrict ps base path 0 [])
             PRecord rn fields sp2 => append sizes (fieldsSizeStrict fields base path 0 [])
             _ => sizes
     Nothing => sizes
-extendSizesStrict sizes _ pat = sizes
 
 -- | 顺序绑定块：第 k 条的尺寸只对后面的绑定与 body 可见。
-export extendByBinds : List (Pair Pat Expr) -> List (Pair String (Pair Int (Pair Int (List Int)))) -> List (Pair String (Pair Int (Pair Int (List Int))))
-extendByBinds [] sizes = sizes
-extendByBinds ((Pair pat val) :: rest) sizes = extendByBinds rest (extendSizesStrict sizes val pat)
+export extendByBinds : List (Pair String (List Int)) -> List (Pair Pat Expr) -> List (Pair String (Pair Int (Pair Int (List Int)))) -> List (Pair String (Pair Int (Pair Int (List Int))))
+extendByBinds projs [] sizes = sizes
+extendByBinds projs ((Pair pat val) :: rest) sizes =
+  extendByBinds projs rest (extendSizesStrict projs sizes val pat)
 
 export sizeOfVarStrict : String -> List (Pair String (Pair Int (Pair Int (List Int)))) -> Maybe (Pair Int (Pair Int (List Int)))
 sizeOfVarStrict name [] = Nothing
@@ -701,6 +715,85 @@ projectionsOf (d :: rest) =
     Just pr => pr :: projectionsOf rest
     Nothing => projectionsOf rest
 
+-- ---------------------------------------------------------------
+-- 记录字段投影：非 alias record 的字段按声明顺序编号，`r.f` 的尺寸 = `r` 的尺寸
+-- 再下推一位。alias record 的投影是定义性恒等，必须排除；同名字段在不同记录里
+-- 下标不一致时也丢弃（拿不到确切下标就不给证据）。
+-- ---------------------------------------------------------------
+fieldProjPrefix : String
+fieldProjPrefix = "$field."
+
+fieldEntryName : Pair String Int -> String
+fieldEntryName p = firstOf p
+
+fieldEntryIndex : Pair String Int -> Int
+fieldEntryIndex p = secondOf p
+
+fieldNameOfField : Field -> String
+fieldNameOfField f = f.fieldName
+
+numberedFieldNames : List Field -> Int -> List (Pair String Int)
+numberedFieldNames [] i = []
+numberedFieldNames (f :: rest) i = Pair (fieldNameOfField f) i :: numberedFieldNames rest (i + 1)
+
+recordFieldEntries : List Decl -> Pair (List (Pair String Int)) (List String)
+recordFieldEntries [] = Pair [] []
+recordFieldEntries (d :: rest) =
+  let
+    prev = recordFieldEntries rest
+  in case d of
+    DRecord name params fields derivings viaField repr lin sp =>
+      if reprAlias repr then
+        Pair (firstOf prev) (append (map fieldNameOfField fields) (secondOf prev))
+      else
+        Pair (append (numberedFieldNames fields 0) (firstOf prev)) (secondOf prev)
+    _ => prev
+
+reprAlias : ReprTier -> Bool
+reprAlias t =
+  case t of
+    ReprAlias => True
+    _ => False
+
+fieldIndexOfEntries : String -> List (Pair String Int) -> Maybe Int
+fieldIndexOfEntries name entries =
+  case dedupInts (map fieldEntryIndex (filter (\p => fieldEntryName p == name) entries)) of
+    [k] => Just k
+    _ => Nothing
+
+export fieldProjectionsOf : List Decl -> List (Pair String (List Int))
+fieldProjectionsOf decls =
+  let
+    collected = recordFieldEntries decls
+    entries = firstOf collected
+    poisoned = secondOf collected
+  in fieldProjectionsGo (dedup (map fieldEntryName entries)) entries poisoned
+
+fieldProjectionsGo : List String -> List (Pair String Int) -> List String -> List (Pair String (List Int))
+fieldProjectionsGo [] entries poisoned = []
+fieldProjectionsGo (n :: rest) entries poisoned =
+  if memName n poisoned then
+    fieldProjectionsGo rest entries poisoned
+  else
+    case fieldIndexOfEntries n entries of
+      Just k => Pair (fieldProjPrefix ++ n) [k] :: fieldProjectionsGo rest entries poisoned
+      Nothing => fieldProjectionsGo rest entries poisoned
+
+-- | 字段名 → 声明顺序下标（只查 `fieldProjectionsOf` 写进 `projs` 的规范条目）。
+export fieldIndexOf : String -> List (Pair String (List Int)) -> Maybe Int
+fieldIndexOf f projs =
+  case fieldProjPath (fieldProjPrefix ++ f) projs of
+    Just path =>
+      case path of
+        [k] => Just k
+        _ => Nothing
+    Nothing => Nothing
+
+fieldProjPath : String -> List (Pair String (List Int)) -> Maybe (List Int)
+fieldProjPath name [] = Nothing
+fieldProjPath name ((Pair g path) :: rest) =
+  if name == g then Just path else fieldProjPath name rest
+
 export projHas : String -> List (Pair String (List Int)) -> Bool
 projHas f [] = False
 projHas f ((Pair g path) :: rest) = f == g || projHas f rest
@@ -827,6 +920,10 @@ relOfArg p (EVar n sp) sizes ctors projs caller facts region =
       case sz of
         Pair base (Pair depth path) =>
           if base == p then if depth > 0 then Just 1 else Just 0 else Nothing
+    Nothing => Nothing
+relOfArg p (EField base f sp) sizes ctors projs caller facts region =
+  case sizeOfExpr projs sizes (EField base f sp) of
+    Just (Pair b (Pair d path)) => if b == p then if d > 0 then Just 1 else Just 0 else Nothing
     Nothing => Nothing
 relOfArg p (a@(EApp fn cargs sp)) sizes ctors projs caller facts region =
   case fn of

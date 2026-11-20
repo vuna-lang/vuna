@@ -85,7 +85,7 @@ siteCollectAlts fuel comp ctors projs caller facts sizes region scrut ((Pair pat
       region
       scrut
       rest
-      (siteWalkC (fuel - 1) comp ctors projs caller facts (extendSizesStrict sizes scrut pat) region body acc)
+      (siteWalkC (fuel - 1) comp ctors projs caller facts (extendSizesStrict projs sizes scrut pat) region body acc)
 
 siteCollectBinds : Int -> List String -> List String -> List (Pair String (List Int)) -> String -> HashMap String (List Int) -> List (Pair String (Pair Int (Pair Int (List Int)))) -> List String -> List (Pair Pat Expr) -> List Site -> List Site
 siteCollectBinds fuel comp ctors projs caller facts sizes region [] acc =
@@ -101,7 +101,7 @@ siteCollectBinds fuel comp ctors projs caller facts sizes region ((Pair pat val)
       projs
       caller
       facts
-      (extendSizesStrict sizes val pat)
+      (extendSizesStrict projs sizes val pat)
       region
       rest
       (siteWalkC (fuel - 1) comp ctors projs caller facts sizes region val acc)
@@ -114,9 +114,9 @@ siteCollectStmts fuel comp ctors projs caller facts sizes region (s :: rest) acc
     append (blindSitesOf comp caller sizes region) acc
   else
     case s of
-      DBind pat e sp => siteCollectStmts (fuel - 1) comp ctors projs caller facts (extendSizesStrict sizes e pat) region rest (siteWalkC (fuel - 1) comp ctors projs caller facts sizes region e acc)
+      DBind pat e sp => siteCollectStmts (fuel - 1) comp ctors projs caller facts (extendSizesStrict projs sizes e pat) region rest (siteWalkC (fuel - 1) comp ctors projs caller facts sizes region e acc)
       DExpr e sp => siteCollectStmts (fuel - 1) comp ctors projs caller facts sizes region rest (siteWalkC (fuel - 1) comp ctors projs caller facts sizes region e acc)
-      DLet binds sp => siteCollectStmts (fuel - 1) comp ctors projs caller facts (extendByBinds binds sizes) region rest (siteCollectBinds (fuel - 1) comp ctors projs caller facts sizes region binds acc)
+      DLet binds sp => siteCollectStmts (fuel - 1) comp ctors projs caller facts (extendByBinds projs binds sizes) region rest (siteCollectBinds (fuel - 1) comp ctors projs caller facts sizes region binds acc)
 
 siteWalkC : Int -> List String -> List String -> List (Pair String (List Int)) -> String -> HashMap String (List Int) -> List (Pair String (Pair Int (Pair Int (List Int)))) -> List String -> Expr -> List Site -> List Site
 siteWalkC fuel comp ctors projs caller facts sizes region e acc =
@@ -132,7 +132,7 @@ siteWalkC fuel comp ctors projs caller facts sizes region e acc =
           acc2 = siteWalkC (fuel - 1) comp ctors projs caller facts sizes (append (guardThenPosVars c) region) t acc1
         in siteWalkC (fuel - 1) comp ctors projs caller facts sizes (append (guardElsePosVars c) region) el acc2
       ELam ns b sp => siteWalkC (fuel - 1) comp ctors projs caller facts sizes region b acc
-      ELet binds body rec_ sp => siteWalkC (fuel - 1) comp ctors projs caller facts (extendByBinds binds sizes) region body (siteCollectBinds (fuel - 1) comp ctors projs caller facts sizes region binds acc)
+      ELet binds body rec_ sp => siteWalkC (fuel - 1) comp ctors projs caller facts (extendByBinds projs binds sizes) region body (siteCollectBinds (fuel - 1) comp ctors projs caller facts sizes region binds acc)
       EPi n implicit _ dom cod sp => siteWalkC (fuel - 1) comp ctors projs caller facts sizes region cod (siteWalkC (fuel - 1) comp ctors projs caller facts sizes region dom acc)
       EField base f sp => siteWalkC (fuel - 1) comp ctors projs caller facts sizes region base acc
       ERecord rn fields sp => siteCollectFields (fuel - 1) comp ctors projs caller facts sizes region fields acc

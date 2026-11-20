@@ -214,7 +214,7 @@ strWalk fuel comp ctors projs p sizes caller facts region e acc =
       ELam ns b sp => strWalk (fuel - 1) comp ctors projs p sizes caller facts region b acc
       ELet binds body rec_ sp =>
         let
-          sizes2 = extendByBinds binds sizes
+          sizes2 = extendByBinds projs binds sizes
         in strWalk (fuel - 1) comp ctors projs p sizes2 caller facts region body (strWalkBinds (fuel - 1) comp ctors projs p sizes caller facts region binds acc)
       EPi n implicit _ dom cod sp => strWalk (fuel - 1) comp ctors projs p sizes caller facts region cod (strWalk (fuel - 1) comp ctors projs p sizes caller facts region dom acc)
       EField base f sp => strWalk (fuel - 1) comp ctors projs p sizes caller facts region base acc
@@ -345,7 +345,7 @@ strWalkAlts fuel comp ctors projs p sizes caller facts region scrut ((Pair pat b
       region
       scrut
       rest
-      (strWalk (fuel - 1) comp ctors projs p (extendSizesStrict sizes scrut pat) caller facts region body acc)
+      (strWalk (fuel - 1) comp ctors projs p (extendSizesStrict projs sizes scrut pat) caller facts region body acc)
 
 strWalkBinds : Int -> List String -> List String -> List (Pair String (List Int)) -> Int -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> HashMap String (List Int) -> List String -> List (Pair Pat Expr) -> Pair Bool (List (Pair (Pair (Pair String String) Int) Span)) -> Pair Bool (List (Pair (Pair (Pair String String) Int) Span))
 strWalkBinds fuel comp ctors projs p sizes caller facts region [] acc =
@@ -360,7 +360,7 @@ strWalkBinds fuel comp ctors projs p sizes caller facts region ((Pair pat val) :
       ctors
       projs
       p
-      (extendSizesStrict sizes val pat)
+      (extendSizesStrict projs sizes val pat)
       caller
       facts
       region
@@ -395,9 +395,9 @@ strWalkStmts fuel comp ctors projs p sizes caller facts region (s :: rest) acc =
     markInvalid acc
   else
     case s of
-      DBind pat e sp => strWalkStmts (fuel - 1) comp ctors projs p (extendSizesStrict sizes e pat) caller facts region rest (strWalk (fuel - 1) comp ctors projs p sizes caller facts region e acc)
+      DBind pat e sp => strWalkStmts (fuel - 1) comp ctors projs p (extendSizesStrict projs sizes e pat) caller facts region rest (strWalk (fuel - 1) comp ctors projs p sizes caller facts region e acc)
       DExpr e sp => strWalkStmts (fuel - 1) comp ctors projs p sizes caller facts region rest (strWalk (fuel - 1) comp ctors projs p sizes caller facts region e acc)
-      DLet binds sp => strWalkStmts (fuel - 1) comp ctors projs p (extendByBinds binds sizes) caller facts region rest (strWalkBinds (fuel - 1) comp ctors projs p sizes caller facts region binds acc)
+      DLet binds sp => strWalkStmts (fuel - 1) comp ctors projs p (extendByBinds projs binds sizes) caller facts region rest (strWalkBinds (fuel - 1) comp ctors projs p sizes caller facts region binds acc)
 
 strClause : List String -> List String -> List (Pair String (List Int)) -> Int -> String -> HashMap String (List Int) -> Pair (List Pat) Expr -> Pair Bool (List (Pair (Pair (Pair String String) Int) Span))
 strClause comp ctors projs p caller facts clause =
@@ -577,7 +577,7 @@ checkTerminationDeclsWith own decls =
     defs = groupDefs decls
     defTbl = HashMap.fromList defs
     ctors = ctorNamesOf decls
-    projs = projectionsOf defs
+    projs = append (projectionsOf defs) (fieldProjectionsOf decls)
     g = callGraph defs
     gT = adjTblOf g
     nodes = defNames defs

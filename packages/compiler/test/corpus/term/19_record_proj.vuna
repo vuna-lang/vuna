@@ -1,0 +1,27 @@
+-- 记录 / 元组字段投影是构造子的真子项；`case <投影>` 的模式仍然继承尺寸。
+import Prelude
+
+record Node2 where
+  left : Tree
+  right : Tree
+
+data Tree : Type where
+  Leaf : Tree
+  Node : Node2 -> Tree
+
+treeSum : Tree -> Int
+treeSum Leaf = 0
+treeSum (Node n) = treeSum n.left + treeSum n.right
+
+data Nat : Type where
+  Zero : Nat
+  Succ : Nat -> Nat
+
+pairSum : Pair Nat Nat -> Int
+pairSum p =
+  case p.first of
+    Zero => 0
+    Succ n => pairSum (Pair n (secondOf p))
+
+main : Int
+main = treeSum Leaf + pairSum (Pair Zero Zero)
