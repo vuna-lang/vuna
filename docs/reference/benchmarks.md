@@ -142,7 +142,7 @@ native 的 TCO / GC 验证项。**GC 与 TCO 均已落地**；下表「前」列
   **直接饱和尾调用**；`tco_wide` 覆盖 9 参（3 个栈实参）的自递归。
 - **GC**：主判据是 RSS 从「累计分配」降到「存活集」——`gc_low_live` 现在 242 ms /
   4.2 MiB RSS、335 次回收（GC 前只有 bump 分配时 289 MiB）；`VUNA_NATIVE_GC_LOG=1`
-  可逐次看 `live` / `gen`。两代回收里年轻代只扫根集与记集、整堆回收按计数轮换（见
+  可逐次看 `live` / `gen`。两代回收里年轻代只扫根集与脏卡片、整堆回收按计数轮换（见
   [native.md](native.md) §5.2），墙钟从整堆版（`--target native` 同机 288 ms）降到
   242 ms；阈值取 `max(GC_MIN, live/8, 栈跨度)`（年轻代）与
   `max(GC_MIN, 2 × live, 栈跨度)`（整堆）摊销扫栈成本；活槽由每个 GC 点的栈图给出，

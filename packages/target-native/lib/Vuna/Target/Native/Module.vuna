@@ -1642,6 +1642,8 @@ startFunc printResult kind mainName runMainM handlers cafs =
         IMov (OpReg Rcx) (OpImm 0),
         IMov (OpMem Rax 0) (OpReg Rcx),
         IMov (OpMem Rax 24) (OpReg Rcx),
+        ILea Rcx nativeHeapCardsLabel,
+        IMov (OpMem Rax 32) (OpReg Rcx),
         IMov (OpRip nativeSegsLabel) (OpReg Rax),
         IMov (OpRip nativeCurSegLabel) (OpReg Rax),
         IMov (OpReg Rcx) (OpReg Rdx),

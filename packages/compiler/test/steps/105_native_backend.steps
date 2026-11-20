@@ -345,16 +345,16 @@ out-equals: 1
 run: sh -c 'VUNA_NATIVE_GC_STRESS=1 "$TMPDIR/gchuge-out/bin/gchuge" 2>&1'
 out-equals: 1
 
-# 9aa2) 分代 GC 的记集：老代 IORef 写进年轻代值后，写屏障把它登记进记集，年轻代回收
-#       从记集出发扫到这个值。`GC_MIN` 压小让回收密集发生；`rem>=1` 的行证明某次年轻代
-#       回收确实从记集出发（只断言输出区分不出来：值也能经 Eff 闭包链活着）。
+# 9aa2) 分代 GC 的卡片表：老代 IORef 写进年轻代值后，写屏障把所在卡片置脏，年轻代回收
+#       从脏卡片出发扫到这个值。`GC_MIN` 压小让回收密集发生；`cards>=1` 的行证明某次
+#       年轻代回收确实扫了脏卡片（只断言输出区分不出来：值也能经 Eff 闭包链活着）。
 run: sh -c 'd="$TMPDIR/gcrem"; mkdir -p "$d/app"; printf "[package]\nname = \"gcrem\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Effect.Core as Eff\nimport Base.Effect.Pure.IORef as IORef\nimport Base.Data.Int as Int\nimport Base.Data.String as String\n\nchurn : Int -> Int -> Int\nchurn n acc = if n <= 0 then acc else churn (n - 1) (acc + strLength (strFromInt (10000000 + n)))\n\npad : Int -> String -> String\npad n s = if n <= 0 then s else pad (n - 1) (s ++ \"ab\")\n\nmain : Eff [] Int\nmain = do\n  cell <- newRef \"seed\"\n  n1 <- pure (churn 3000 0)\n  m <- pure (strLength (pad 20000 \"xy\"))\n  n0 <- pure (churn 1 0)\n  _ <- writeRef cell (pad 5 \"xy\")\n  n2 <- pure (churn 3000 0)\n  v <- readRef cell\n  pure (if n1 >= 0 && n2 >= 0 && m >= 0 && n0 >= 0 then strLength v else 0 - 1)\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/gcrem-out" "$d"'
 exit: 0
 run: "$TMPDIR/gcrem-out/bin/gcrem" 2>&1
 out-equals: 12
 run: sh -c 'VUNA_NATIVE_GC_STRESS=1 "$TMPDIR/gcrem-out/bin/gcrem" 2>&1'
 out-equals: 12
-run: sh -c 'VUNA_NATIVE_GC_MIN=1000 VUNA_NATIVE_GC_LOG=1 "$TMPDIR/gcrem-out/bin/gcrem" >/dev/null 2>"$TMPDIR/gcrem.log"; grep -q "gen=minor" "$TMPDIR/gcrem.log" && grep -q "rem=[1-9]" "$TMPDIR/gcrem.log"'
+run: sh -c 'VUNA_NATIVE_GC_MIN=1000 VUNA_NATIVE_GC_LOG=1 "$TMPDIR/gcrem-out/bin/gcrem" >/dev/null 2>"$TMPDIR/gcrem.log"; grep -q "gen=minor" "$TMPDIR/gcrem.log" && grep -q "cards=[1-9]" "$TMPDIR/gcrem.log"'
 exit: 0
 run: sh -c 'grep -q "call rt_write_barrier" "$TMPDIR/gcrem-out/runtime.s"'
 exit: 0

@@ -116,13 +116,28 @@ nativeClassCount = 23
 export nativeFreeTableBytes : Int
 nativeFreeTableBytes = 256
 
--- | 段头字节数：`[0]=next [8]=end [16]=bump [24]=kind`；块区从段头之后开始。
+-- | 段头字节数：`[0]=next [8]=end [16]=bump [24]=kind [32]=cards`；
+--   块区从段头之后开始（`[40..47]` 是对齐填充）。
 export nativeSegHeaderBytes : Int
-nativeSegHeaderBytes = 32
+nativeSegHeaderBytes = 48
 
 -- | 初始堆缓冲大小（1 MiB；`.bss` 零填充，不占 ELF 文件体积）。
 export nativeHeapBytes : Int
 nativeHeapBytes = 1048576
+
+-- | 卡片大小 2^9 = 512 字节：写屏障按卡片记脏，年轻代回收只扫脏卡片覆盖的区间。
+export nativeCardShift : Int
+nativeCardShift = 9
+
+export nativeCardBytes : Int
+nativeCardBytes = 512
+
+-- | 初始堆段的静态卡片表（每段一张；新段的表在 `alloc` 里 `mmap`）。
+export nativeHeapCardsLabel : String
+nativeHeapCardsLabel = "rt_heap_cards"
+
+export nativeHeapCardTableBytes : Int
+nativeHeapCardTableBytes = (nativeHeapBytes + nativeCardBytes - 1) / nativeCardBytes
 
 -- | 初始堆段的段头标签（紧跟 1 MiB 缓冲）。
 export nativeHeapSegLabel : String
