@@ -132,6 +132,13 @@
       "wasm": { "run_ok": false, "skip_reason": "run" },
       "ratios": {"vuna_ocaml": { "vs_handwritten": 1.11, "rss_vs_handwritten": 3.11 }, "native": { "vs_handwritten": 1.74, "rss_vs_handwritten": 3.94, "vs_ocaml_backend": 1.57, "rss_vs_ocaml_backend": 1.27 }, "wasm": { "run_ok": false } }
     },
+    "gc_retain": {
+      "ocaml_ref": { "run_ok": true, "median_ms": 39, "rss_kb": 19892 },
+      "vuna_ocaml": { "run_ok": true, "median_ms": 74, "rss_kb": 112380, "artifact": { "bytes": 175536, "lines": 3283, "files": 33, "max_file": { "path": "Vuna_runtime.ml", "bytes": 74011, "lines": 1418 }, "binary_bytes": 2796264 }, "build": { "codegen_ms": 113, "codegen_cpu_ms": 113, "toolchain_ms": 662, "toolchain_cpu_ms": 1359 }, "gc": { "minor_words": 902, "major_words": 771, "minor_collections": 1, "major_collections": 0, "top_heap_words": 53248 } },
+      "native": { "run_ok": true, "median_ms": 195, "rss_kb": 56576, "artifact": { "bytes": 144972, "lines": 7619, "files": 3, "max_file": { "path": "runtime.s", "bytes": 134037, "lines": 7054 }, "binary_bytes": 54648 }, "build": { "codegen_ms": 159, "codegen_cpu_ms": 158, "toolchain_ms": 59, "toolchain_cpu_ms": 61 }, "gc": { "collections": 24, "live_bytes": 19256160, "alloc_bytes": 2426912 }, "default_stack_ok": true },
+      "wasm": { "run_ok": true, "median_ms": 261, "rss_kb": 162056, "net_median_ms": 239, "artifact": { "wat_bytes": 388893, "wat_lines": 15460, "wasm_bytes": 47822, "files": 1, "max_file": { "path": "main.wat", "bytes": 388893, "lines": 15460 } }, "build": { "codegen_ms": 152, "codegen_cpu_ms": 151, "toolchain_ms": 9, "toolchain_cpu_ms": 8 }, "memory_bytes": 262144 },
+      "ratios": {"vuna_ocaml": { "vs_handwritten": 1.90, "rss_vs_handwritten": 5.65 }, "native": { "vs_handwritten": 5.00, "rss_vs_handwritten": 2.84, "vs_ocaml_backend": 2.64, "rss_vs_ocaml_backend": 0.50 }, "wasm": { "vs_handwritten": 6.69, "rss_vs_handwritten": 8.15, "net_vs_handwritten": 6.13, "vs_ocaml_backend": 3.53, "rss_vs_ocaml_backend": 1.44 } }
+    },
     "hashmap": {
       "ocaml_ref": { "run_ok": true, "median_ms": 4, "rss_kb": 4044 },
       "vuna_ocaml": { "run_ok": true, "median_ms": 8, "rss_kb": 10656, "artifact": { "bytes": 214274, "lines": 3331, "files": 33, "max_file": { "path": "Vuna_runtime.ml", "bytes": 122008, "lines": 1773 }, "binary_bytes": 3175320 }, "build": { "codegen_ms": 176, "codegen_cpu_ms": 174, "toolchain_ms": 644, "toolchain_cpu_ms": 1377 }, "gc": { "minor_words": 902, "major_words": 0, "minor_collections": 1, "major_collections": 0, "top_heap_words": 53248 } },

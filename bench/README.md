@@ -133,6 +133,7 @@ nix run .#vuna-artifacts -- --json bench/baselines/artifacts.json   # 重标
 | tco_wide | 9 参数尾递归 | ~1.3x | ~10x（尾调用 + 栈实参重写） | 15.3x |
 | gc_low_live | 低存活集、大累计分配 | ~0.8x | ~0.95x（RSS 0.02x；GC 主判据） | 2.5x |
 | gc_array_churn | 大对象 churn（Array COW） | ~1.7x | ~12.6x（RSS 2.7x；COW 复制是主成本） | 3.6x |
+| gc_retain | 高存活集（live ~19 MB）+ 等量 churn | ~1.9x | ~5.0x（整堆重扫存活集；触发策略的测量项） | 6.7x |
 
 wasm 列的 `skipped` 是 V8 的 wasm 栈上限（非尾深递归），浏览器路径同样如此；wasm 的
 绝对 ms、宿主启动地板与 RSS 口径见 [benchmarks.md §1.3](../docs/reference/benchmarks.md)。
@@ -142,7 +143,9 @@ OCaml 后端生成 runtime 的 `VN_PERF_STATS=1` 输出，`bench/run.sh` 采集�
 native 侧由 `VUNA_NATIVE_GC_LOG=1` 的末次诊断行采集 `collections` / `live_bytes` /
 `alloc_bytes`（两代 mark-sweep，见 [native.md](../docs/reference/native.md) §5.2），
 另记峰值 RSS 与默认栈探针。`gc_low_live` 的 RSS 约 4 MiB（0.02x 手写），
-`gc_array_churn` 仍是 GC 相关的最差项（COW 数组复制）。TCO 已覆盖直调、自递归 loop、饱和闭包、wrapper 与 runtime 符号；
+`gc_array_churn` 仍是 GC 相关的最差项（COW 数组复制）；`gc_retain` 是反向的一档——
+live 单调上升（~19 MB），整堆回收必须重扫整个存活集，是 `gen=` 分布与整堆触发策略的
+测量项（低存活的 `gc_low_live` / `gc_pressure` 覆盖不到）。TCO 已覆盖直调、自递归 loop、饱和闭包、wrapper 与 runtime 符号；
 判定与读数见 [benchmarks.md §1.2](../docs/reference/benchmarks.md)。
 
 效应基准（`eff_tick` / `eff_deep` / `eff_deepseq` / `eff_bracket` / `eff_nested` /

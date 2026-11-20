@@ -1,0 +1,25 @@
+-- 高存活集 GC：保留一个持续变大的 List (List Int)（live 单调上升），同时每轮分配
+-- 同尺寸的临时列表后丢弃——整堆回收要重扫整个存活集，这是「晋升压力 → 整堆」那条
+-- 策略的测量项（低存活集的 gc_low_live / gc_pressure 覆盖不到）。
+-- 手写 OCaml 对照见 gc_retain.ml（同算法）。
+count : List Int -> Int
+count [] = 0
+count (_ :: rest) = 1 + count rest
+
+build : Int -> List (List Int) -> List (List Int)
+build n acc = if n <= 0 then acc else build (n - 1) (range 0 1000 :: acc)
+
+sumAll : List (List Int) -> Int
+sumAll [] = 0
+sumAll (ys :: rest) = count ys + sumAll rest
+
+churn : Int -> Int -> Int
+churn n acc = if n <= 0 then acc else churn (n - 1) (acc + count (range 0 1000))
+
+main : Int
+main =
+  let
+    live = build 600 []
+  in let
+    n = churn 4000 0
+  in sumAll live + n
