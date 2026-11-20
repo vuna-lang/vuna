@@ -180,10 +180,10 @@ compileToDir ctx entry printResult outDir =
 -- 先后覆盖。
 -- 构建一律走全量 lowering（单元缓存仍按声明哈希命中，所以热构建依然快），
 -- 产物因此是输入摘要的纯函数。
-summarySplitParts : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Bool -> Eff r (Check (Pair (List SplitFile) CheckedPackage))
-summarySplitParts ctx entry printResult =
+summarySplitParts : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> List ClosureMod -> String -> Bool -> Eff r (Check (Pair (List SplitFile) CheckedPackage))
+summarySplitParts ctx mods entry printResult =
   do
-    depIfaces <- depIfacesOf ctx
+    depIfaces <- depIfacesOfWith ctx mods
     case depIfaces of
       Just ifaces =>
         do
@@ -236,7 +236,8 @@ compileToDirNormal ctx entry printResult outDir =
 rebuildSplit : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Bool -> String -> String -> Eff r (Check (Pair Int (List Diagnostic)))
 rebuildSplit ctx entry printResult outDir fast =
   do
-    summary <- summarySplitParts ctx entry printResult
+    closureMods <- summaryClosureMods ctx
+    summary <- summarySplitParts ctx closureMods entry printResult
     case summary of
       ErrC e => pure (ErrC e)
       OkC p =>
@@ -245,7 +246,7 @@ rebuildSplit ctx entry printResult outDir fast =
             canon = canonicalTopo (firstOf p)
             checked = secondOf p
           in do
-            shadow <- writeIfaceShadow ctx checked
+            shadow <- writeIfaceShadowWith ctx checked (Just closureMods)
             case shadow of
               ErrC e => pure (ErrC e)
               OkC modules =>
@@ -292,7 +293,8 @@ auditCompile : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock Clo
 auditCompile ctx entry printResult outDir =
   do
     mods <- splitModsOf ctx entry printResult
-    summary <- summarySplitParts ctx entry printResult
+    closureMods <- summaryClosureMods ctx
+    summary <- summarySplitParts ctx closureMods entry printResult
     full <- dtSplitProjectParts ctx entry printResult
     let
       _ = dbg! "iface-audit subject=compile entry=${entry}"
@@ -311,7 +313,7 @@ auditCompile ctx entry printResult outDir =
                   canon = canonicalTopo files
                   fast = splitInOf mods
                 in do
-                  shadow <- writeIfaceShadow ctx checked
+                  shadow <- writeIfaceShadowWith ctx checked (Just closureMods)
                   case shadow of
                     ErrC e => pure (ErrC e)
                     OkC modules =>
@@ -990,6 +992,26 @@ ifaceModsWithEff ctx pkgs =
         _ <- obsMarkEff "vuna.iface.compute"
         pure assigned
 
+-- | 摘要路径与 iface 影子写共用的闭包扫描：无包上下文时给出空表
+-- （`depIfacesOfWith` 对无包上下文直接返回 `Nothing`，不会用到它）。
+summaryClosureMods : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> Eff r (List ClosureMod)
+summaryClosureMods ctx =
+  case ctx.contextPackage of
+    Nothing => pure []
+    Just _ => ifaceModsEff ctx
+
+-- | 只给影子写用的闭包扫描：不可写影子时返回 `Nothing`，让写侧跳过并省掉这次扫描。
+shadowClosureMods : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> Eff r (Maybe (List ClosureMod))
+shadowClosureMods ctx =
+  if contextPackageName ctx == "" then
+    pure Nothing
+  else if not (shadowAllowed ctx) then
+    pure Nothing
+  else
+    do
+      mods <- ifaceModsEff ctx
+      pure (Just mods)
+
 -- | 只有 roots、没有包记录的上下文（单文件夹具 / base-only 会话）：按 root 名建表。
 -- env 与 `packageEnvHash` 在「无依赖」时同口径（`<toml 内容哈希>|<tag>|`）。
 rootEnvHashOf : Member nFs FsOp r, Member nEnv EnvOp r => String -> Eff r Int
@@ -1086,11 +1108,18 @@ selfModsOf ctx mods = filter (isSelfModOf ctx) mods
 
 depIfacesOf : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> Eff r (Maybe (List ModuleIface))
 depIfacesOf ctx =
+  do
+    mods <- ifaceModsEff ctx
+    depIfacesOfWith ctx mods
+
+-- | 依赖接口 + 同一次闭包扫描。检查路径把它同时交给写 iface 影子，避免再跑一遍
+-- `ifaceModsEff`（整闭包源扫描 + header 解析）。
+export depIfacesOfWith : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> List ClosureMod -> Eff r (Maybe (List ModuleIface))
+depIfacesOfWith ctx mods =
   case ctx.contextPackage of
     Nothing => pure Nothing
     Just _ =>
       do
-        mods <- ifaceModsEff ctx
         ordered <- depModsByOrderEff ctx mods
         case ordered of
           Nothing =>
@@ -1832,20 +1861,21 @@ checkUncachedExe wantWarnings ctx entry =
       fullCheckExe ctx entry
     else
       do
+        mods <- summaryClosureMods ctx
         audit <- ifaceAuditRequested
         if audit then
-          auditCheckExe wantWarnings ctx entry
+          auditCheckExe wantWarnings ctx mods entry
         else
           do
-            summary <- summaryCheckExeParts wantWarnings ctx entry
-            checkAndShadow ctx (pure summary)
+            summary <- summaryCheckExeParts wantWarnings ctx mods entry
+            checkAndShadowWith ctx (Just mods) (pure summary)
 
 -- 摘要路径（**不落盘**）：接口不可用 ⇒ 全量（只是不直接写缓存）。
 -- wantWarnings 时 clean 列表清空 ⇒ 本包模块全部重算（warning 不在缓存里）。
-summaryCheckExeParts : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Bool -> PackageContext -> String -> Eff r (Check (Pair (List Diagnostic) CheckedPackage))
-summaryCheckExeParts wantWarnings ctx entry =
+summaryCheckExeParts : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Bool -> PackageContext -> List ClosureMod -> String -> Eff r (Check (Pair (List Diagnostic) CheckedPackage))
+summaryCheckExeParts wantWarnings ctx mods entry =
   do
-    depIfaces <- depIfacesOf ctx
+    depIfaces <- depIfacesOfWith ctx mods
     case depIfaces of
       Nothing =>
         do
@@ -1878,14 +1908,16 @@ fullCheckExe : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, 
 fullCheckExe ctx entry =
   let
     _ = dbg! "cache-path=full"
-  in checkAndShadow ctx (dtCheckWithProgramParts ctx entry)
+  in do
+    mods <- shadowClosureMods ctx
+    checkAndShadowWith ctx mods (dtCheckWithProgramParts ctx entry)
 
 -- 审计（`VUNA_IFACE_AUDIT=1`）：摘要路径 vs 全量路径的诊断逐字节对拍。一致才按摘要结果
 -- 落盘；不一致报 `iface-audit-mismatch` 并**不写缓存/接口**。
-auditCheckExe : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Bool -> PackageContext -> String -> Eff r (Check (List Diagnostic))
-auditCheckExe wantWarnings ctx entry =
+auditCheckExe : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Bool -> PackageContext -> List ClosureMod -> String -> Eff r (Check (List Diagnostic))
+auditCheckExe wantWarnings ctx mods entry =
   do
-    summary <- summaryCheckExeParts wantWarnings ctx entry
+    summary <- summaryCheckExeParts wantWarnings ctx mods entry
     full <- dtCheckWithProgramParts ctx entry
     let
       _ = dbg! "iface-audit subject=check entry=${entry}"
@@ -1893,7 +1925,7 @@ auditCheckExe wantWarnings ctx entry =
       compared <- pure (auditCompare "check" entry (checkSignatureOf summary) (checkSignatureOf full))
       case compared of
         ErrC e => pure (ErrC e)
-        OkC _ => checkAndShadow ctx (pure summary)
+        OkC _ => checkAndShadowWith ctx (Just mods) (pure summary)
 
 -- `VUNA_ELAB_FULL=1`：强制全量精化（接口摘要路径的排障开关；默认关闭）。
 elabFullRequested : Member nEnv EnvOp r => Eff r Bool
@@ -2157,7 +2189,11 @@ exportedOwnOf ctx own =
         Just names => filter (nameExportedBy names) own
 
 writeIfaceShadow : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> CheckedPackage -> Eff r (Check (List ModuleIface))
-writeIfaceShadow ctx checked =
+writeIfaceShadow ctx checked = writeIfaceShadowWith ctx checked Nothing
+
+-- | 写 iface 影子；`pre` 是调用方已经算好的闭包扫描（`ifaceModsEff`），给了就不再算。
+writeIfaceShadowWith : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> CheckedPackage -> Maybe (List ClosureMod) -> Eff r (Check (List ModuleIface))
+writeIfaceShadowWith ctx checked pre =
   if contextPackageName ctx == "" then
     pure (OkC [])
   else if not (shadowAllowed ctx) then
@@ -2170,7 +2206,10 @@ writeIfaceShadow ctx checked =
         -- 闭包只算一次：让 `depIfaceHashTable` 自己再跑一遍 `ifaceModsEff`（那是「读全部源文件
         -- + 算地址 + 取 header」的全量扫描）等于把最贵的一步做两遍。
         t0 <- clockNow
-        mods <- ifaceModsEff ctx
+        mods <-
+          case pre of
+            Just known => pure known
+            Nothing => ifaceModsEff ctx
         t1 <- clockNow
         sources <- ownSourceInfos ctx
         t2 <- clockNow
@@ -2277,14 +2316,17 @@ sameIfaceHashes (m :: rest) ys =
 
 -- 成功收尾：写接口影子（check 结果节点由 `checkViaGraph` 提交，这里不再写 marker 文件）。
 checkAndShadow : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> Eff r (Check (Pair (List Diagnostic) CheckedPackage)) -> Eff r (Check (List Diagnostic))
-checkAndShadow ctx checked =
+checkAndShadow ctx checked = checkAndShadowWith ctx Nothing checked
+
+checkAndShadowWith : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> Maybe (List ClosureMod) -> Eff r (Check (Pair (List Diagnostic) CheckedPackage)) -> Eff r (Check (List Diagnostic))
+checkAndShadowWith ctx pre checked =
   do
     checkedR <- checked
     case checkedR of
       ErrC e => pure (ErrC e)
       OkC pr =>
         do
-          shadow <- writeIfaceShadow ctx (secondOf pr)
+          shadow <- writeIfaceShadowWith ctx (secondOf pr) pre
           case shadow of
             ErrC e => pure (ErrC e)
             OkC _ => pure (OkC (firstOf pr))
@@ -2306,18 +2348,19 @@ checkUncachedLib wantWarnings ctx names =
       fullCheckLib ctx names
     else
       do
+        mods <- summaryClosureMods ctx
         audit <- ifaceAuditRequested
         if audit then
-          auditCheckLib wantWarnings ctx names
+          auditCheckLib wantWarnings ctx mods names
         else
           do
-            summary <- summaryCheckLibParts wantWarnings ctx names
-            checkAndShadow ctx (pure summary)
+            summary <- summaryCheckLibParts wantWarnings ctx mods names
+            checkAndShadowWith ctx (Just mods) (pure summary)
 
-summaryCheckLibParts : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Bool -> PackageContext -> List String -> Eff r (Check (Pair (List Diagnostic) CheckedPackage))
-summaryCheckLibParts wantWarnings ctx names =
+summaryCheckLibParts : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Bool -> PackageContext -> List ClosureMod -> List String -> Eff r (Check (Pair (List Diagnostic) CheckedPackage))
+summaryCheckLibParts wantWarnings ctx mods names =
   do
-    depIfaces <- depIfacesOf ctx
+    depIfaces <- depIfacesOfWith ctx mods
     case depIfaces of
       Nothing =>
         do
@@ -2349,12 +2392,14 @@ fullCheckLib : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, 
 fullCheckLib ctx names =
   let
     _ = dbg! "cache-path=full"
-  in checkAndShadow ctx (dtCheckLibraryWithProgramParts ctx names)
+  in do
+    mods <- shadowClosureMods ctx
+    checkAndShadowWith ctx mods (dtCheckLibraryWithProgramParts ctx names)
 
-auditCheckLib : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Bool -> PackageContext -> List String -> Eff r (Check (List Diagnostic))
-auditCheckLib wantWarnings ctx names =
+auditCheckLib : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Bool -> PackageContext -> List ClosureMod -> List String -> Eff r (Check (List Diagnostic))
+auditCheckLib wantWarnings ctx mods names =
   do
-    summary <- summaryCheckLibParts wantWarnings ctx names
+    summary <- summaryCheckLibParts wantWarnings ctx mods names
     full <- dtCheckLibraryWithProgramParts ctx names
     let
       subject = joinLines names

@@ -222,9 +222,9 @@ load/parse 前缀 + iface 摘要 **~2.6 s** → 逐定义精化（`collectSigs-d
 （旧 §1 第 3 条）。接口哈希的「排序规范化」已改为混合归并（O(d log d)），单模块
    数千项时不再二次退化（§5.2 的 8000 档 3116 → 1067 ms）。
 2. **load/parse 前缀 ~4.0 s（冷 store，含 iface 摘要读取）**：`check packages/compiler` 的闭包要
-   解析 107 个模块；冷 TMPDIR 还含 lex 载荷写。前端本身（lex + 语法分析）在 `VUNA_OBS=1`
-   下可单独归因：冷 `check packages/compiler` = `vuna.parse.lex` 165 次 / **135 ms** +
-   `vuna.parse.syntax` 461 次 / **158 ms**（≈0.3 s，见 §6.1）。剩下的前缀耗时在 iface
+   解析 181 个模块；冷 TMPDIR 还含 lex 载荷写。前端本身（lex + 语法分析）在 `VUNA_OBS=1`
+   下可单独归因：冷 `check packages/compiler` = `vuna.parse.lex` 335 次 / **212 ms** +
+   `vuna.parse.syntax` 335 次 / **105 ms**（≈0.32 s，见 §6.1）。剩下的前缀耗时在 iface
    摘要、地址计算与 flatten，不在词法/语法。
 3. **冷 build 的 elab bodies**：`build --package vuna .` 的 6159 def 约 3.1 s
    （`--debug-perf` 口径），集中在 `conv`/`force`/`infer` 的项重算与分配
@@ -510,21 +510,21 @@ defs / globals / sols 三张索引表。要继续压，先看 bodies（逐定义
 全文词法（每次 check 都跑）、`vuna.parse.syntax` 是 token 流 → AST、`vuna.parse.cst`
 是无损 CST 组装（工具侧）。
 
-冷 store、`VUNA_ELAB_FULL=1` 单次采样：
+冷 store、`vuna dev obs summarize` 单次采样（`check packages/base` 总量小、噪声占比更高）：
 
-| 目标 | `vuna.parse.lex` | `vuna.parse.syntax` | 参考：elab |
+| 目标 | `vuna.parse.lex` | `vuna.parse.syntax` | 参考：冷墙钟 |
 | --- | --- | --- | --- |
-| `check packages/base` | 57 次 / ~11 ms | 114 次 / ~4.6 ms | ~127 ms |
-| `check packages/compiler` | 180 次 / ~92 ms | 496 次 / ~220 ms | 冷 check 总墙钟 ~21 s（两遍口径） |
+| `check packages/base` | 213 次 / ~22 ms | 213 次 / ~13 ms | ~0.43 s |
+| `check packages/compiler` | 335 次 / ~212 ms | 335 次 / ~105 ms | ~5.3 s（无 obs 口径；obs 口径 elab ~2.1 s） |
 
 三条结论：
 
-* lex : syntax ≈ 1:2.4，词法不再是前端里更贵的那一半；
-* `syntax` 次数 = 模块数的 **4.4 倍**（496 / 114）：同一份源码在一次 check 里被反复
-  `parseSourceRecoveringTokens`（加载、fixity 表、header 各走一遍）。减少**次数**比加快
-  单次解析收益更直接（债 D88）；
-* 前端整体在冷 `check` 里只有 ~1.5%：lex/parse 不再是瓶颈，工具链（fmt / lint / map / LSP）
-  才是它的主要消费者。
+* lex : syntax ≈ 2:1，词法仍是前端里更贵的那一半（`src` 扫描 + token 构造）；
+* `syntax` 次数 ≈ 模块数的 **1.9 倍**（335 / 181）：加载一次 + `ifaceModsEff` 的 header
+  解析一次。闭包扫描原先在「摘要判定」与「写 iface 影子」各跑一遍（2× header），已在
+  检查入口合并为一次；库检查路径（`check packages/base`）还多一次 header 扫描；
+* 前端整体约占冷 `check` 的 **6%**（0.32 s / 5.3 s）：减少**次数**（债 D88 剩余的那一次
+  复用）比加快单次解析收益更直接。
 
 增长率门槛 `checks.vuna-frontend-growth`（合成 N 个同形定义，相邻档 ≤2.5×；本机）：
 
