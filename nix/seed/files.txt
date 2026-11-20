@@ -25,10 +25,12 @@ B_dEffect_dArgs.ml
 B_dEffect_dClock.ml
 B_dEffect_dConsole.ml
 B_dEffect_dCore.ml
+B_dEffect_dCursor.ml
 B_dEffect_dEnv.ml
 B_dEffect_dExit.ml
 B_dEffect_dFs.ml
 B_dEffect_dProcess.ml
+B_dEffect_dPure_dIORef.ml
 B_dEffect_dStdin.ml
 B_dEffect_dTypes.ml
 B_dInternal_dOperator.ml

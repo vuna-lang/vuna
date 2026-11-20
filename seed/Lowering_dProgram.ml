@@ -1059,48 +1059,71 @@ let rec v_appendGroups = (fun (mc0 : Lowering_dEnv.t_LwEnv) (mc1 : t_LwSt) (mc2 
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1398 "Vuna/Compiler/Lowering/Program.vuna"
+# 1373 "Vuna/Compiler/Lowering/Program.vuna"
+let rec v_ivarBound = (fun (mc0 : string B_dData_dList.t_List) (mc1 : Base_dIntrinsics.t_IType) -> (match mc1 with
+  | Base_dIntrinsics.C_IType_IPi (dtb__430, dtb__431) -> ((v_ivarBound (B_dData_dList.C_List__x58__x58_ (dtb__430, mc0))) dtb__431)
+  | Base_dIntrinsics.C_IType_IVar (dtb__432) -> ((B_dData_dList.v_memName dtb__432) mc0)
+  | Base_dIntrinsics.C_IType_IFun1 (dtb__433, dtb__434) -> (if ((v_ivarBound mc0) dtb__433) then ((v_ivarBound mc0) dtb__434) else false)
+  | Base_dIntrinsics.C_IType_IFun (dtb__435, dtb__436) -> (if ((v_ivarBound mc0) dtb__435) then ((v_ivarBound mc0) dtb__436) else false)
+  | Base_dIntrinsics.C_IType_IEff (dtb__437) -> ((v_ivarBound mc0) dtb__437)
+  | Base_dIntrinsics.C_IType_IRef (dtb__438) -> ((v_ivarBound mc0) dtb__438)
+  | Base_dIntrinsics.C_IType_IArray (dtb__439) -> ((v_ivarBound mc0) dtb__439)
+  | Base_dIntrinsics.C_IType_IList (dtb__440) -> ((v_ivarBound mc0) dtb__440)
+  | Base_dIntrinsics.C_IType_IGlobal (dtb__441) -> true
+  | Base_dIntrinsics.C_IType_IFloat -> true
+  | Base_dIntrinsics.C_IType_INat -> true
+  | Base_dIntrinsics.C_IType_IBool -> true
+  | Base_dIntrinsics.C_IType_IStr -> true
+  | Base_dIntrinsics.C_IType_IInt -> true
+  | Base_dIntrinsics.C_IType_ITy -> true
+  | _ -> failwith "DT: impossible branch"
+))
+
+# 1390 "Vuna/Compiler/Lowering/Program.vuna"
+let v_intrinsicWithUnboundIvar = (fun (is : Base_dIntrinsics.t_Intrinsic B_dData_dList.t_List) -> ((B_dData_dList.v_map Base_dIntrinsics.v_intrinsicName) ((B_dData_dList.v_filter (fun (i : Base_dIntrinsics.t_Intrinsic) -> (B_dData_dBool.v_not ((v_ivarBound B_dData_dList.C_List_Nil) (Base_dIntrinsics.v_intrinsicSignature i))))) is)))
+
+# 1424 "Vuna/Compiler/Lowering/Program.vuna"
 let v_firstOfList = (fun (mc0 : string B_dData_dList.t_List) -> (match mc0 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__430, dtb__431) -> dtb__430
+  | B_dData_dList.C_List__x58__x58_ (dtb__442, dtb__443) -> dtb__442
   | B_dData_dList.C_List_Nil -> ""
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1374 "Vuna/Compiler/Lowering/Program.vuna"
-let v_checkRuntimeContract = ((fun intrinsicNames -> ((fun contractNames -> ((fun missingFromContract -> ((fun extrasInContract -> (if ((Lowering_dEnv.v_listLength missingFromContract) > 0) then (Base_dDiag.v_icInternal (String.concat "" ["runtime contract misses intrinsic `"; (v_firstOfList missingFromContract); "`"])) else (if ((Lowering_dEnv.v_listLength extrasInContract) > 0) then (Base_dDiag.v_icInternal (String.concat "" ["runtime contract declares unknown symbol `"; (v_firstOfList extrasInContract); "`"])) else (if ((Lowering_dEnv.v_listLength Vuna_dTarget_dOcaml_dRuntime.v_rtTextGaps) > 0) then (Base_dDiag.v_icInternal (String.concat "" ["OCaml runtime table misses contract symbol `"; (v_firstOfList Vuna_dTarget_dOcaml_dRuntime.v_rtTextGaps); "`"])) else (if ((Lowering_dEnv.v_listLength Vuna_dTarget_dOcaml_dRuntime.v_rtTextExtras) > 0) then (Base_dDiag.v_icInternal (String.concat "" ["OCaml runtime table has symbol outside the contract: `"; (v_firstOfList Vuna_dTarget_dOcaml_dRuntime.v_rtTextExtras); "`"])) else (Base_dDiag.C_Check_OkC (0))))))) ((B_dData_dList.v_filter (fun (n : string) -> (if ((B_dData_dList.v_memName n) intrinsicNames) then false else (if ((B_dData_dList.v_memName n) Vuna_dIr_dRuntime.v_irRtSyntheticNames) then false else true)))) contractNames))) ((B_dData_dList.v_filter (fun (n : string) -> (if (n = Base_dIntrinsics.v_primEffBind1Name) then false else (if ((B_dData_dList.v_memName n) contractNames) then false else true)))) intrinsicNames))) Vuna_dIr_dRuntime.v_irRtNames)) ((B_dData_dList.v_map Base_dIntrinsics.v_intrinsicName) Base_dIntrinsics.v_allIntrinsics))
+# 1397 "Vuna/Compiler/Lowering/Program.vuna"
+let v_checkRuntimeContract = ((fun intrinsicNames -> ((fun contractNames -> ((fun badIvars -> ((fun missingFromContract -> ((fun extrasInContract -> (if ((Lowering_dEnv.v_listLength badIvars) > 0) then (Base_dDiag.v_icInternal (String.concat "" ["intrinsic `"; (v_firstOfList badIvars); "` has an unbound type variable in its signature"])) else (if ((Lowering_dEnv.v_listLength missingFromContract) > 0) then (Base_dDiag.v_icInternal (String.concat "" ["runtime contract misses intrinsic `"; (v_firstOfList missingFromContract); "`"])) else (if ((Lowering_dEnv.v_listLength extrasInContract) > 0) then (Base_dDiag.v_icInternal (String.concat "" ["runtime contract declares unknown symbol `"; (v_firstOfList extrasInContract); "`"])) else (if ((Lowering_dEnv.v_listLength Vuna_dTarget_dOcaml_dRuntime.v_rtTextGaps) > 0) then (Base_dDiag.v_icInternal (String.concat "" ["OCaml runtime table misses contract symbol `"; (v_firstOfList Vuna_dTarget_dOcaml_dRuntime.v_rtTextGaps); "`"])) else (if ((Lowering_dEnv.v_listLength Vuna_dTarget_dOcaml_dRuntime.v_rtTextExtras) > 0) then (Base_dDiag.v_icInternal (String.concat "" ["OCaml runtime table has symbol outside the contract: `"; (v_firstOfList Vuna_dTarget_dOcaml_dRuntime.v_rtTextExtras); "`"])) else (Base_dDiag.C_Check_OkC (0)))))))) ((B_dData_dList.v_filter (fun (n : string) -> (if ((B_dData_dList.v_memName n) intrinsicNames) then false else (if ((B_dData_dList.v_memName n) Vuna_dIr_dRuntime.v_irRtSyntheticNames) then false else true)))) contractNames))) ((B_dData_dList.v_filter (fun (n : string) -> (if (n = Base_dIntrinsics.v_primEffBind1Name) then false else (if ((B_dData_dList.v_memName n) contractNames) then false else true)))) intrinsicNames))) (v_intrinsicWithUnboundIvar Base_dIntrinsics.v_allIntrinsics))) Vuna_dIr_dRuntime.v_irRtNames)) ((B_dData_dList.v_map Base_dIntrinsics.v_intrinsicName) Base_dIntrinsics.v_allIntrinsics))
 
 # 1365 "Vuna/Compiler/Lowering/Program.vuna"
 let v_checkProgramOf = (fun (env : Lowering_dEnv.t_LwEnv) -> ((Base_dCommon.v_bind ((v_prepareProgram (env).Lowering_dEnv.f_LwEnv_lwDatas) (env).Lowering_dEnv.f_LwEnv_lwDefs)) (fun (_u : Elab_dTypes.t_DtDef B_dData_dList.t_List) -> v_checkRuntimeContract)))
 
-# 1443 "Vuna/Compiler/Lowering/Program.vuna"
+# 1469 "Vuna/Compiler/Lowering/Program.vuna"
 let v_adjOfDef = (fun (env : Lowering_dEnv.t_LwEnv) (d : Elab_dTypes.t_DtDef) -> { B_dData_dPair.f_Pair_first = (Elab_dTypes.v_dtDefName d); B_dData_dPair.f_Pair_second = ((Lowering_dEnv.v_factsDepsOf env) (Elab_dTypes.v_dtDefName d)) })
 
 # 1294 "Vuna/Compiler/Lowering/Program.vuna"
 let v_groupDefs = (fun (env : Lowering_dEnv.t_LwEnv) (defs : Elab_dTypes.t_DtDef B_dData_dList.t_List) -> ((fun adj -> ((fun names -> ((fun tbl -> ((Base_dCommon.v_bind ((((Vuna_dIr_dAnalysis.v_assembleGroupNames adj) names) (v_recOkOfTbl tbl)) (v_spanOfTbl tbl))) (fun (groups : (bool, string B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) -> ((Base_dCommon.v_bind (((v_appendGroups env) 0) groups)) (fun (q : ((bool, Vuna_dIr_dModel.t_IrDef B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List, t_LwSt) B_dData_dPair.t_Pair) -> (match q with
-  | { B_dData_dPair.f_Pair_first = dtb__432; B_dData_dPair.f_Pair_second = dtb__433 } -> (Base_dDiag.C_Check_OkC (dtb__432))
+  | { B_dData_dPair.f_Pair_first = dtb__444; B_dData_dPair.f_Pair_second = dtb__445 } -> (Base_dDiag.C_Check_OkC (dtb__444))
   | _ -> failwith "DT: impossible branch"
 )))))) (Lowering_dEnv.v_defTblOf defs))) ((B_dData_dList.v_map Elab_dTypes.v_dtDefName) defs))) ((B_dData_dList.v_map (v_adjOfDef env)) defs)))
 
-# 1446 "Vuna/Compiler/Lowering/Program.vuna"
-let v_groupOfPair = (fun (mc0 : (bool, Vuna_dIr_dModel.t_IrDef B_dData_dList.t_List) B_dData_dPair.t_Pair) -> (match mc0 with
-  | { B_dData_dPair.f_Pair_first = dtb__434; B_dData_dPair.f_Pair_second = dtb__435 } -> { Vuna_dIr_dModel.f_IrGroup_irGroupIsRec = dtb__434; Vuna_dIr_dModel.f_IrGroup_irGroupDefs = dtb__435 }
-  | _ -> failwith "DT: impossible branch"
-))
-
 # 1472 "Vuna/Compiler/Lowering/Program.vuna"
-let v_partitionRuntimeDefs = (fun (defs : Elab_dTypes.t_DtDef B_dData_dList.t_List) -> (match ((Lowering_dChecks.v_partitionDefs (Lowering_dChecks.v_defTable defs)) defs) with
-  | { B_dData_dPair.f_Pair_first = dtb__436; B_dData_dPair.f_Pair_second = dtb__437 } -> dtb__436
+let v_groupOfPair = (fun (mc0 : (bool, Vuna_dIr_dModel.t_IrDef B_dData_dList.t_List) B_dData_dPair.t_Pair) -> (match mc0 with
+  | { B_dData_dPair.f_Pair_first = dtb__446; B_dData_dPair.f_Pair_second = dtb__447 } -> { Vuna_dIr_dModel.f_IrGroup_irGroupIsRec = dtb__446; Vuna_dIr_dModel.f_IrGroup_irGroupDefs = dtb__447 }
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1421 "Vuna/Compiler/Lowering/Program.vuna"
+# 1498 "Vuna/Compiler/Lowering/Program.vuna"
+let v_partitionRuntimeDefs = (fun (defs : Elab_dTypes.t_DtDef B_dData_dList.t_List) -> (match ((Lowering_dChecks.v_partitionDefs (Lowering_dChecks.v_defTable defs)) defs) with
+  | { B_dData_dPair.f_Pair_first = dtb__448; B_dData_dPair.f_Pair_second = dtb__449 } -> dtb__448
+  | _ -> failwith "DT: impossible branch"
+))
+
+# 1447 "Vuna/Compiler/Lowering/Program.vuna"
 let v_lowerUnitAfterChecks = (fun (env : Lowering_dEnv.t_LwEnv) (defNames : string B_dData_dList.t_List) (dataNames : string B_dData_dList.t_List) -> ((fun datas -> ((fun defNameTbl -> ((fun defs -> ((fun dataNameTbl -> ((fun unitDatas -> ((fun runtime -> ((Base_dCommon.v_bind ((v_groupDefs env) runtime)) (fun (groups : (bool, Vuna_dIr_dModel.t_IrDef B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) -> ((Base_dCommon.v_bind ((((Lowering_dTy.v_tyDeclsOf (env).Lowering_dEnv.f_LwEnv_lwTyParams) (env).Lowering_dEnv.f_LwEnv_lwUnboxedInfo) datas) unitDatas)) (fun (decls : Vuna_dIr_dModel.t_IrTyDecl B_dData_dList.t_List) -> ((fun groups2 -> ((fun hasList -> (Base_dDiag.C_Check_OkC ((Vuna_dIr_dDispatch.v_dispatchIdsUnit ((Vuna_dIr_dRepresent.v_representUnit (Lowering_dEnv.v_lwEnvShared env)) { Vuna_dIr_dModel.f_IrUnit_irUnitTyDecls = decls; Vuna_dIr_dModel.f_IrUnit_irUnitGroups = groups2; Vuna_dIr_dModel.f_IrUnit_irUnitHasListFamily = hasList; Vuna_dIr_dModel.f_IrUnit_irUnitTypeRefs = (Lowering_dTy.v_tyDeclRefs decls); Vuna_dIr_dModel.f_IrUnit_irUnitEntry = B_dData_dMaybe.C_Maybe_Nothing }))))) ((Lowering_dEnv.v_hasDataNamed Base_dIntrinsics.v_listFamilyName) unitDatas))) ((B_dData_dList.v_map v_groupOfPair) groups))))))) (v_partitionRuntimeDefs defs))) ((B_dData_dList.v_filter (fun (d : Elab_dTypes.t_DtData) -> ((((B_dContainer_dHashMap.v_member B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) (Elab_dTypes.v_dtDataName d)) dataNameTbl))) datas))) (B_dContainer_dHashMap.v_ofNames dataNames))) ((B_dData_dList.v_filter (fun (d : Elab_dTypes.t_DtDef) -> ((((B_dContainer_dHashMap.v_member B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) (Elab_dTypes.v_dtDefName d)) defNameTbl))) (env).Lowering_dEnv.f_LwEnv_lwDefs))) (B_dContainer_dHashMap.v_ofNames defNames))) (env).Lowering_dEnv.f_LwEnv_lwDatas))
 
-# 1405 "Vuna/Compiler/Lowering/Program.vuna"
+# 1431 "Vuna/Compiler/Lowering/Program.vuna"
 let v_lowerUnitOf = (fun (env : Lowering_dEnv.t_LwEnv) (defNames : string B_dData_dList.t_List) (dataNames : string B_dData_dList.t_List) -> ((Base_dCommon.v_bind (v_checkProgramOf env)) (fun (_u : int) -> (((v_lowerUnitAfterChecks env) defNames) dataNames))))
 
-# 1412 "Vuna/Compiler/Lowering/Program.vuna"
+# 1438 "Vuna/Compiler/Lowering/Program.vuna"
 let v_lowerUnitChecked = (fun (env : Lowering_dEnv.t_LwEnv) (defNames : string B_dData_dList.t_List) (dataNames : string B_dData_dList.t_List) -> ((Base_dCommon.v_bind (((v_lowerUnitAfterChecks env) defNames) dataNames)) (fun (u : Vuna_dIr_dModel.t_IrUnit) -> ((Base_dCommon.v_bind ((Vuna_dIr_dValidate.v_validateUnit (Lowering_dEnv.v_lwEnvShared env)) u)) (fun (_u : int) -> (Base_dDiag.C_Check_OkC (u)))))))
 
-# 1450 "Vuna/Compiler/Lowering/Program.vuna"
+# 1476 "Vuna/Compiler/Lowering/Program.vuna"
 let v_lowerProgramOf = (fun (datas : Elab_dTypes.t_DtData B_dData_dList.t_List) (defs : Elab_dTypes.t_DtDef B_dData_dList.t_List) (globals : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List) -> ((Base_dCommon.v_bind ((Base_dObs.v_obsCheck "vuna.codegen.env") (fun (_u : int) -> (Base_dDiag.C_Check_OkC (((((Lowering_dEnv.v_mkLwEnv datas) defs) globals) "")))))) (fun (env : Lowering_dEnv.t_LwEnv) -> ((Base_dCommon.v_bind ((Base_dObs.v_obsCheck "vuna.codegen.prepare") (fun (_u : int) -> (v_checkProgramOf env)))) (fun (_u : int) -> ((Base_dCommon.v_bind ((Base_dObs.v_obsCheck "vuna.codegen.unit") (fun (_u : int) -> (((v_lowerUnitAfterChecks env) ((B_dData_dList.v_map Elab_dTypes.v_dtDefName) defs)) ((B_dData_dList.v_map Elab_dTypes.v_dtDataName) datas))))) (fun (unitIr : Vuna_dIr_dModel.t_IrUnit) -> ((Base_dCommon.v_bind ((Base_dObs.v_obsCheck "vuna.codegen.entry") (fun (_u : int) -> (Lowering_dEntry.v_lowerEntryOf defs)))) (fun (entry : Vuna_dIr_dModel.t_IrEntry B_dData_dMaybe.t_Maybe) -> ((fun program -> ((Base_dCommon.v_bind (Vuna_dIr_dValidate.v_validateProgram program)) (fun (_u : int) -> (Base_dDiag.C_Check_OkC (program))))) { Vuna_dIr_dModel.f_IrProgram_irProgShared = (Lowering_dEnv.v_lwEnvShared env); Vuna_dIr_dModel.f_IrProgram_irProgUnit = { Vuna_dIr_dModel.f_IrUnit_irUnitTyDecls = (unitIr).Vuna_dIr_dModel.f_IrUnit_irUnitTyDecls; Vuna_dIr_dModel.f_IrUnit_irUnitGroups = (unitIr).Vuna_dIr_dModel.f_IrUnit_irUnitGroups; Vuna_dIr_dModel.f_IrUnit_irUnitHasListFamily = (unitIr).Vuna_dIr_dModel.f_IrUnit_irUnitHasListFamily; Vuna_dIr_dModel.f_IrUnit_irUnitTypeRefs = (unitIr).Vuna_dIr_dModel.f_IrUnit_irUnitTypeRefs; Vuna_dIr_dModel.f_IrUnit_irUnitEntry = entry } }))))))))))
