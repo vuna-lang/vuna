@@ -13,6 +13,9 @@
 # 由 nix/checks/default.nix 的 mkCheck 调用：cwd 是已暂存的工作树，$1 是输出目录。
 set -eu
 
+# 基线必须与宿主 locale 无关（排序 / 字符类）。
+export LC_ALL=C
+
 OUT=${1:?usage: vuna-native-surface.sh OUT}
 SRC=packages/target-native/lib/Vuna/Target/Native/Runtime.vuna
 BASE=nix/checks/data/native-surface.baseline

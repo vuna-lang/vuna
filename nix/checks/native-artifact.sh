@@ -11,6 +11,9 @@
 # `--no-compile` 不需要 cc。基线更新必须与改动同提交（`--no-compile` 保证只比文本）。
 set -eu
 
+# 基线必须与宿主 locale 无关（排序 / 字符类）。
+export LC_ALL=C
+
 OUT=${1:?usage: vuna-native-artifact.sh OUT}
 : "${VUNA:?VUNA 未设置}"
 BASE=nix/checks/data/native-artifact.sha
