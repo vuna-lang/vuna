@@ -129,6 +129,10 @@ mkIrBinder name = IrBinder (IrBUser name) False Nothing
 export mkIrBinderTyped : String -> IrTy -> IrBinder
 mkIrBinderTyped name ty = IrBinder (IrBUser name) False (Just ty)
 
+-- | 类型未知的运行时 binder（落 `IrTyOpaque`；OCaml 注解会按不可命名过滤）。
+export mkIrBinderOpaque : String -> IrBinder
+mkIrBinderOpaque name = IrBinder (IrBUser name) False (Just IrTyOpaque)
+
 -- | 擦除占位 binder。
 export mkIrBinderErased : IrBinder
 mkIrBinderErased = IrBinder IrBWild True Nothing

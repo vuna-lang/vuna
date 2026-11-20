@@ -27,10 +27,10 @@ run: sh -c 'd="$TMPDIR/irtail"; mkdir -p "$d/app"; printf "[package]\nname = \"i
 exit: 0
 run: sh -c 'grep "def loop/1" "$TMPDIR/irtail.ir" | grep -q "(tail (app"'
 exit: 0
-run: sh -c '! grep "def nontail/1" "$TMPDIR/irtail.ir" | grep -q "(tail (app ? g:nontail"'
+run: sh -c '! grep "def nontail/1" "$TMPDIR/irtail.ir" | grep -q "(tail (app .*g:nontail"'
 exit: 0
 run: sh -c 'grep "def apply/2" "$TMPDIR/irtail.ir" | grep -q "(tail (app"'
 exit: 0
-run: sh -c 'grep "def rtTail/1" "$TMPDIR/irtail.ir" | grep -q "(tail (app ? rt:strLength"'
+run: sh -c 'grep "def rtTail/1" "$TMPDIR/irtail.ir" | grep -q "(tail (app .*rt:strLength"'
 exit: 0
 run: sh -c '"$VUNA" dev ir dump --after machine "$TMPDIR/irtail" > "$TMPDIR/irtail2.ir"; cmp "$TMPDIR/irtail.ir" "$TMPDIR/irtail2.ir"'

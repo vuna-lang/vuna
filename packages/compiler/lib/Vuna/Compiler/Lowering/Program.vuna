@@ -134,7 +134,7 @@ lowerTermFuel fuel env st binders t =
                                       case lookupRtPosIn fi fields 0 of
                                         Just pos => irTyAt (map (irTySubstVars args) fieldTys) pos
                                         Nothing => Nothing
-                                  in OkC (Pair (IrProj baseIr c label resTy) st2)
+                                  in OkC (Pair (IrProj baseIr c label (justTy resTy)) st2)
                               )
                     )
               )
@@ -142,6 +142,11 @@ lowerTermFuel fuel env st binders t =
       TPi name implicit rig dom cod => cgErr0 TypeUsedAtRuntime
       TType l => cgErr0 TypeUsedAtRuntime
       TMeta m => cgErr1 (UnsolvedMetavarRuntime (showMetaHint m)) (showMetaHint m)
+
+-- | 运行时注解必填：未知就落 `IrTyOpaque`（OCaml 侧不会写不透明注解，产物不变）。
+justTy : Maybe IrTy -> Maybe IrTy
+justTy Nothing = Just IrTyOpaque
+justTy (Just t) = Just t
 
 binderAtIn : Int -> List IrBinder -> Maybe IrBinder
 binderAtIn i [] = Nothing
@@ -271,7 +276,7 @@ lowerLamChainFuel fuel env st binders hints params inner resultTy =
                   case resultIr of
                     Just _ => resultIr
                     Nothing => irResultTyOf b
-              in OkC (Pair (IrLam (filter (\x => not (binderErasedOf x)) bs) resultIr2 b) st2)
+              in OkC (Pair (IrLam (filter (\x => not (binderErasedOf x)) bs) (justTy resultIr2) b) st2)
       )
 
 -- 顶层定义体：签名箭头与 λ 链的运行时 binder 逐位对应时用签名回填 binder 类型
@@ -344,7 +349,7 @@ binderOfParam env outer p =
     mkIrBinderErased
   else
     case p.lamParamTy of
-      Nothing => mkIrBinder p.lamParamName
+      Nothing => mkIrBinderOpaque p.lamParamName
       Just ty => mkIrBinderTyped p.lamParamName (annotTyOfTotal env outer ty)
 
 -- 带外层签名提示的 binder 表：非擦除参数按顺序消费一个提示类型。
@@ -431,6 +436,10 @@ appTyOfIr ir =
     Just (fn@(IrTyFun _ cod)) => Just (Pair fn cod)
     _ => Nothing
 
+justAppTy : Maybe (Pair IrTy IrTy) -> Maybe (Pair IrTy IrTy)
+justAppTy Nothing = Just (Pair IrTyOpaque IrTyOpaque)
+justAppTy (Just p) = Just p
+
 appTyFrom : LwEnv -> List IrBinder -> Term -> Ir -> Maybe (Pair IrTy IrTy)
 appTyFrom env binders f irF =
   case appTyOf env binders f of
@@ -449,7 +458,7 @@ lowerAppFallbackFuel fuel env st binders f a rig =
               Vuna.Compiler.Base.Common.bind (lowerTermFuel (fuel - 1) env st1 binders a) (
                   \pa =>
                     case pa of
-                      Pair irA st2 => OkC (Pair (IrApp (appTyFrom env binders f irF) irF irA) st2)
+                      Pair irA st2 => OkC (Pair (IrApp (justAppTy (appTyFrom env binders f irF)) irF irA) st2)
                 )
       )
 
@@ -627,7 +636,7 @@ lowerConAppNonChainFuel fuel env st binders c args =
                   case irs of
                     ir :: rest =>
                       case rest of
-                        [] => OkC (Pair (IrApp Nothing (IrRt irRtNatSucc) ir) st2)
+                        [] => OkC (Pair (IrApp (justAppTy Nothing) (IrRt irRtNatSucc) ir) st2)
                         _ => icInternal "Nat Succ must have exactly one runtime argument"
                     [] => icInternal "Nat Succ must have exactly one runtime argument"
           )
@@ -657,7 +666,7 @@ lowerConAppFinish env st family c args irs =
         recTy =
           case ctorTypeArgsOf env c args of
             Just tys => Just (IrTyData family tys)
-            Nothing => Nothing
+            Nothing => Just IrTyOpaque
       in Vuna.Compiler.Base.Common.bind
         (zipFieldNames fields irs)
         (\pairs => OkC (Pair (IrRecord family recTy pairs) st))
@@ -758,7 +767,11 @@ altEnvKeptIn st label outer ((Pair name rig) :: rest) pats =
 
 -- 分支 binder 的运行时类型：按构造子字段类型实例化族参数槽；catch-all 用 scrutinee 类型。
 binderWithTy : Maybe IrTy -> IrBinder -> IrBinder
-binderWithTy ty b = IrBinder b.irBinderName b.irBinderErased ty
+binderWithTy ty b =
+  if b.irBinderErased then
+    IrBinder b.irBinderName True Nothing
+  else
+    IrBinder b.irBinderName False (justTy ty)
 
 typedPats : List IrTy -> List IrBinder -> List IrBinder
 typedPats [] bs = bs
@@ -1034,7 +1047,7 @@ lowerCaseFuel fuel env st outer scrut alts =
               in Vuna.Compiler.Base.Common.bind (lowerArmsFuel (fuel - 1) env scrutTy st1 outer alts) (
                   \q =>
                     case q of
-                      Pair arms (Pair resultTy st2) => OkC (Pair (IrCase scrutTy resultTy scrutIr arms) st2)
+                      Pair arms (Pair resultTy st2) => OkC (Pair (IrCase (justTy scrutTy) (justTy resultTy) scrutIr arms) st2)
                 )
       )
 
@@ -1131,7 +1144,7 @@ lowerRecordUpdateArgsFuel fuel env st binders baseIr baseTy c fields idxs args =
                         Vuna.Compiler.Base.Common.bind (lowerUpdFieldsFuel (fuel - 1) env st binders fields (ctorOpaqueKeptFlags keepFlags opqs) positions runtimeArgs) (
                             \q =>
                               case q of
-                                Pair updates st2 => OkC (Pair (IrRecUpd baseIr c updates baseTy) st2)
+                                Pair updates st2 => OkC (Pair (IrRecUpd baseIr c updates (justTy baseTy)) st2)
                           )
                     )
               )

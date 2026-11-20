@@ -118,7 +118,7 @@ exit: 0
 # lambda 结果与内联 lambda callee：体类型已知时填充（域未记录则标不透明）。
 run: sh -c '"$VUNA" dev ir dump $VUNA_SUITE_ROOT/packages/cli/test/corpus/packages/ir_types/root 2>/dev/null | grep -qF "(lam [xs:Base.Data.List.List Int]:Int"'
 exit: 0
-run: sh -c '"$VUNA" dev ir dump $VUNA_SUITE_ROOT/packages/cli/test/corpus/packages/ir_types/root 2>/dev/null | grep -qF "(app (Opaque -> Int)->Int (lam [x]:Int"'
+run: sh -c '"$VUNA" dev ir dump $VUNA_SUITE_ROOT/packages/cli/test/corpus/packages/ir_types/root 2>/dev/null | grep -qF "(app (Opaque -> Int)->Int (lam [x:Opaque]:Int"'
 exit: 0
 
 

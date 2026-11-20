@@ -56,7 +56,7 @@ spineOfIr x = Pair x []
 
 applyIrs : Ir -> List Ir -> Ir
 applyIrs f [] = f
-applyIrs f (a :: rest) = applyIrs (IrApp Nothing f a) rest
+applyIrs f (a :: rest) = applyIrs (IrApp (Just (Pair IrTyOpaque IrTyOpaque)) f a) rest
 
 isSimple : Ir -> Bool
 isSimple (IrVar _) = True
