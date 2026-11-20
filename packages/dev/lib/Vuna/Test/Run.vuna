@@ -289,6 +289,111 @@ makeTempRoot tag =
     stamp <- clockNow
     freshTempRoot 1000 "${base}/vuna-suite-${strOfInt stamp}-${safeName tag}"
 
+-- ---------------------------------------------------------------
+-- 陈旧 run 清扫
+-- ---------------------------------------------------------------
+-- runner 被 SIGKILL 时收不到信号，`timeout` 为 case 建的进程组会留下来继续占 CPU。
+-- 每次 run 在临时根写 `runner.pid`（本进程 pid）；下次启动先做 best-effort 清扫：
+-- 标记进程已死的根 ⇒ 按 `TMPDIR` 环境把这些进程收掉，再删目录。并发 run 的标记进程
+-- 还活着，直接跳过；没有 `/proc` 的平台不做清扫。
+runMarkerFile : String
+runMarkerFile = "runner.pid"
+
+-- | 内部：本进程 pid（`/proc/self/stat` 首字段）；没有 `/proc` 时 `Nothing`。
+selfPid : Member nFs FsOp r => Eff r (Maybe Int)
+selfPid =
+  do
+    exists <- pathExistsFile "/proc/self/stat"
+    if exists then
+      do
+        text <- fsReadFile "/proc/self/stat"
+        pure (parseLeadingInt text)
+    else
+      pure Nothing
+
+-- | 内部：在本次 run 的临时根写标记；`/proc` 不可用时跳过（清扫也不会碰这个根）。
+writeRunMarker : Member nFs FsOp r => String -> Eff r Int
+writeRunMarker root =
+  do
+    pid <- selfPid
+    case pid of
+      Nothing => pure 0
+      Just p =>
+        do
+          _ <- fsWriteFile "${root}/${runMarkerFile}" "${strOfInt p}\n"
+          pure 0
+
+-- | 内部：根目录名是否是本 runner 的临时根。
+isRunRootName : String -> Bool
+isRunRootName name = startsWith "vuna-suite-" name
+
+-- | 内部：清扫 `<base>` 下标记进程已死的 run 根；返回清扫个数。
+sweepStaleRuns : Member nFs FsOp r, Member nProcess ProcessOp r => String -> Eff r Int
+sweepStaleRuns base =
+  do
+    exists <- pathExistsDir base
+    names <- if exists then fsReadDir base else pure []
+    sweepRunRoots base (filter isRunRootName names) 0
+
+sweepRunRoots : Member nFs FsOp r, Member nProcess ProcessOp r => String -> List String -> Int -> Eff r Int
+sweepRunRoots base [] n = pure n
+sweepRunRoots base (name :: rest) n =
+  do
+    alive <- runMarkerAlive "${base}/${name}"
+    if alive then
+      sweepRunRoots base rest n
+    else
+      do
+        _ <- reclaimRunRoot "${base}/${name}"
+        sweepRunRoots base rest (n + 1)
+
+-- | 内部：根里的 `runner.pid` 进程是否还活着；标记缺失时按「可能正在初始化」处理。
+runMarkerAlive : Member nFs FsOp r, Member nProcess ProcessOp r => String -> Eff r Bool
+runMarkerAlive root =
+  do
+    exists <- pathExistsFile "${root}/${runMarkerFile}"
+    if not exists then
+      pure True
+    else
+      do
+        text <- fsReadFile "${root}/${runMarkerFile}"
+        case parseLeadingInt text of
+          Nothing => pure False
+          Just pid =>
+            do
+              code <- processRunIn "/" ["sh", "-c", markerAliveScript pid]
+              pure (code == 0)
+
+-- 僵尸进程（已退出但还没被回收）视为已死：只查 pid 存在会把它们误判成存活。
+markerAliveScript : Int -> String
+markerAliveScript pid =
+  "s=$(sed 's/.*) //' /proc/"
+    ++ strOfInt pid ++ "/stat 2>/dev/null | cut -c1); [ -n \"$s\" ] && [ \"$s\" != Z ]"
+
+-- | 内部：收掉挂在某个死根上的进程（`TMPDIR` 指向该根），再删目录。
+reclaimRunRoot : Member nFs FsOp r, Member nProcess ProcessOp r => String -> Eff r Int
+reclaimRunRoot root =
+  do
+    _ <- processRunIn "/" ["sh", "-c", reclaimScript root]
+    _ <- processRunIn "/" ["rm", "-rf", root]
+    pure 0
+
+-- 按环境变量认领：case 进程的 `TMPDIR` 是 `<根>/c-…`，iface 预热是 `<根>` 本身；
+-- 收掉 case 命令后 `timeout` / helper 链自然退出。路径里带单引号时不清扫。
+reclaimScript : String -> String
+reclaimScript root =
+  if contains "'" root || contains "\n" root then
+    "exit 0"
+  else
+    "root='"
+      ++ root
+      ++ "'\n"
+      ++ "if [ ! -d /proc ]; then exit 0; fi\n"
+      ++ "for e in /proc/[0-9]*/environ; do\n"
+      ++ "  if [ -r \"$e\" ] && grep -aqF \"TMPDIR=$root\" \"$e\" 2>/dev/null; then\n"
+      ++ "    p=$(basename \"$(dirname \"$e\")\")\n"
+      ++ "    kill -9 \"$p\" 2>/dev/null || true\n" ++ "  fi\n" ++ "done\n" ++ "exit 0\n"
+
 -- | 子进程捕获 helper 的 shell 正文：`$1` 超时秒数、`$2`/`$3` 输出文件、`$4` stdin 文件
 -- （`-` = 不重定向）、`$5` 合并标志，其余为命令 argv。超时与合并共四种执行组合，
 -- `timeout` 的退出码原样透传；秒数为 0 或没有 `timeout` 命令时直接执行。
@@ -2926,7 +3031,15 @@ runSuiteOnce opts suite =
         Just _ => True
         Nothing => False
   in do
+    tmpBase <- tempBase 0
+    swept <- if opts.suiteListOnly || workerMode then pure 0 else sweepStaleRuns tmpBase
+    _ <-
+      if swept > 0 && not opts.suiteJSON then
+        printLine "swept ${strOfInt swept} stale run root(s)"
+      else
+        pure 0
     tmp <- makeTempRoot tag
+    _ <- writeRunMarker tmp
     helper <- writeHelper tmp
     baseDir <- envOr "VUNA_BASE" "${root}/packages/base"
     baseHash <- hashTree baseDir

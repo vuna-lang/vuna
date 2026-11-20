@@ -1,0 +1,27 @@
+# 70) runner 被 SIGKILL 后，下一次启动清扫它留下的 case 进程。
+#
+# 嵌套 suite 的 case 起 300s 后台 sleep 并记 pid；SIGKILL 掉嵌套 runner（收不到任何
+# 信号），确认 sleep 仍活着；再把 case 改成秒退并重跑同一个 suite：启动时的清扫必须
+# 收掉旧 run 根里的进程并删掉目录。
+run: sh -c 'rm -rf "$TMPDIR/sweep" "$TMPDIR/sweep-base"; mkdir -p "$TMPDIR/sweep/case" "$TMPDIR/sweep-base"'
+run: sh -c 'printf "%s\n" "[workspace]" > "$TMPDIR/sweep/vuna.toml"'
+run: sh -c 'printf "%s\n" "[suite]" "name = \"sweep\"" "owner = \"sweep\"" "timeout = 300" "" "[family.steps]" "dir = \"case\"" "kind = \"steps\"" > "$TMPDIR/sweep/suite.toml"'
+run: sh -c 'printf "%s\n" "#!/bin/sh" "sleep 300 &" "echo \$! > \"\$1\"" "wait" > "$TMPDIR/sweep/worker.sh"'
+run: sh -c 'printf "%s\n" "run: sh $TMPDIR/sweep/worker.sh $TMPDIR/sweep/child.pid" > "$TMPDIR/sweep/case/a.steps"'
+# 后台起嵌套 runner（步骤立刻返回）；TMPDIR 指到 manifest-free 目录 ⇒ run 根就在它下面。
+run: sh -c 'TMPDIR="$TMPDIR/sweep-base" "$VUNA" dev suite "$TMPDIR/sweep/suite.toml" >/dev/null 2>&1 & echo $! > "$TMPDIR/sweep/router.pid"; for i in $(seq 1 100); do [ -s "$TMPDIR/sweep/child.pid" ] && exit 0; sleep 0.2; done; exit 1'
+exit: 0
+# SIGKILL 真正的 runner：vuna 路由器 spawn 插件，持有 run 根并写 `runner.pid` 的是插件。
+run: sh -c 'for d in "$TMPDIR/sweep-base"/vuna-suite-*; do kill -9 "$(cat "$d/runner.pid" 2>/dev/null)" 2>/dev/null; done; kill -9 "$(cat "$TMPDIR/sweep/router.pid")" 2>/dev/null; sleep 1'
+exit: 0
+# 硬杀不经过信号处理：sleep 应该还在（否则这条用例没测到东西）。
+run: sh -c 'test -s "$TMPDIR/sweep/child.pid" && kill -0 "$(cat "$TMPDIR/sweep/child.pid")"'
+exit: 0
+run: sh -c 'printf "%s\n" "run: true" > "$TMPDIR/sweep/case/a.steps"'
+run: sh -c 'TMPDIR="$TMPDIR/sweep-base" "$VUNA" dev suite "$TMPDIR/sweep/suite.toml" 2>&1'
+exit: 0
+out-contains: swept 1 stale run root(s)
+run: sh -c 'for i in $(seq 1 20); do kill -0 "$(cat "$TMPDIR/sweep/child.pid")" 2>/dev/null || exit 0; sleep 0.5; done; exit 1'
+exit: 0
+run: sh -c 'test -z "$(ls -d "$TMPDIR/sweep-base"/vuna-suite-* 2>/dev/null)"'
+exit: 0

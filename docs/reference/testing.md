@@ -165,6 +165,9 @@ end:
   覆盖）。子进程输出经固定 shell helper 捕获（`timeout -s TERM -k 10 ... >out 2>err`，
   可选合并），不新增编译器原语；超时按 `timeout` 建的进程组收尾，steps 经 `sh -c` 起的
   孙进程一并退出。
+- SIGKILL runner 时收不到信号：每次 run 在临时根写 `runner.pid`，下次启动先清扫这些根
+  （标记进程已死 ⇒ 按 `TMPDIR` 收掉残留进程再删目录；并发 run 的标记仍存活则跳过）。
+  只在有 `/proc` 的平台生效。
 - family 与 `*.steps` case 都进 worker 并行；worker 按 `index mod N` 静态分片。每个
   steps case 有独立的 `TMPDIR` / `VUNA_REPL_HISTORY`；对象库默认与 suite 共用，
   只有文件头带 `# store-isolated` 的 case 用 `${caseTmp}/store`（断言缓存布局/GC/
