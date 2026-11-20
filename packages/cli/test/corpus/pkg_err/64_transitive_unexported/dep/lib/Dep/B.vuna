@@ -1,0 +1,4 @@
+module Dep.B where
+
+export b : Int
+b = 1

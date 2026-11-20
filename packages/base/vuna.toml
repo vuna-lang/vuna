@@ -3,20 +3,82 @@
 name = "vuna-base"
 
 
-# 公开面只有门面：叶子模块（Base.Effect.Fs / Base.Container.HashMap / …）不跨包可见。
-# - Base：扁平核心门面（import Base 即可用）
-# - Base.Data / Base.Trait：扁平 + 命名空间路径
-# - Base.Container / Base.Effect：只提供命名空间路径
-# - Base.Effect.Core / Base.Effect.Pure：Eff 核心与纯效应表示的扁平/路径子门面
-# - Prelude：按包上下文自动注入
+# 标准库的模块面就是公开面：所有 `Base.*` 模块都可跨包 import（叶子模块不设隐藏边界）。
+# 门面（`Base` / `Base.Data` / `Base.Trait` / `Base.Container` / `Base.Effect(.Core/.Pure)` /
+# `Prelude`）仍是推荐入口：它们做扁平重导出，leaf 只在需要具体实现/类型时才 import。
+# 新增 leaf 要同时加进这份名单，否则依赖方会报 `LD_ModuleNotExported`。
 [export]
 modules = [
   "Base",
-  "Base.Data",
-  "Base.Trait",
   "Base.Container",
+  "Base.Container.Array",
+  "Base.Container.HashMap",
+  "Base.Container.HashSet",
+  "Base.Container.Map",
+  "Base.Container.PriorityQueue",
+  "Base.Container.Queue",
+  "Base.Container.TreeMap",
+  "Base.Container.TreeSet",
+  "Base.Data",
+  "Base.Data.Base64",
+  "Base.Data.Bits",
+  "Base.Data.Bool",
+  "Base.Data.Float",
+  "Base.Data.Function",
+  "Base.Data.Int",
+  "Base.Data.List",
+  "Base.Data.Maybe",
+  "Base.Data.Nat",
+  "Base.Data.Obs",
+  "Base.Data.Obs.Span",
+  "Base.Data.Pair",
+  "Base.Data.Result",
+  "Base.Data.Sha1",
+  "Base.Data.Sort",
+  "Base.Data.String",
+  "Base.Data.Unit",
+  "Base.Data.Vec",
   "Base.Effect",
+  "Base.Effect.Args",
+  "Base.Effect.Clock",
+  "Base.Effect.Console",
   "Base.Effect.Core",
+  "Base.Effect.Env",
+  "Base.Effect.Error",
+  "Base.Effect.Exit",
+  "Base.Effect.Exn",
+  "Base.Effect.Fs",
+  "Base.Effect.Net",
+  "Base.Effect.Process",
   "Base.Effect.Pure",
+  "Base.Effect.Pure.Error",
+  "Base.Effect.Pure.IORef",
+  "Base.Effect.Pure.Reader",
+  "Base.Effect.Pure.State",
+  "Base.Effect.Reader",
+  "Base.Effect.Ref",
+  "Base.Effect.State",
+  "Base.Effect.Stdin",
+  "Base.Effect.Types",
+  "Base.Internal.Operator",
+  "Base.Trait",
+  "Base.Trait.Applicative",
+  "Base.Trait.Eq",
+  "Base.Trait.Field",
+  "Base.Trait.Foldable",
+  "Base.Trait.FromInt",
+  "Base.Trait.FromString",
+  "Base.Trait.Functor",
+  "Base.Trait.Hashable",
+  "Base.Trait.Interp",
+  "Base.Trait.Monad",
+  "Base.Trait.Monoid",
+  "Base.Trait.Neg",
+  "Base.Trait.Num",
+  "Base.Trait.Ord",
+  "Base.Trait.Record",
+  "Base.Trait.Show",
+  "Base.Trait.Traversable",
   "Prelude"
+
 ]

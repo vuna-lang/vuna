@@ -637,7 +637,7 @@ loadModule fuel roots importerPkg modules stack imp =
     pure (icFuel "loader")
   else
     case findModule modules name of
-      Just m => pure (OkC modules)
+      Just m => if moduleVisibleTo roots importerPkg m then pure (OkC modules) else pure (onErrDiag (withImportSpan imp) (ldErr2 (ModuleNotExported name (modulePackageOf m)) name (modulePackageOf m)))
       Nothing =>
         if memName name stack then
           pure (onErrDiag (withImportSpan imp) (ldErr1 (ImportCycle (showCycle name stack)) (showCycle name stack)))
@@ -664,7 +664,7 @@ loadModule fuel roots importerPkg modules stack imp =
                                   Just provider =>
                                     case walkNamespaceIndex modules1 prefix (nsDropLocal n (splitOnDot name)) of
                                       Nothing => pure (ErrC e)
-                                      Just target => loadModule (fuel - 1) roots (modulePackageOf provider) modules1 stack (Import target True Nothing imp.importSpan)
+                                      Just target => loadModule (fuel - 1) roots importerPkg modules1 stack (Import target True Nothing imp.importSpan)
               OkC found =>
                 let
                   path = firstOf found

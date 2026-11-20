@@ -1,0 +1,7 @@
+module Main where
+
+import Dep.A
+import Dep.B
+
+main : Int
+main = a + b

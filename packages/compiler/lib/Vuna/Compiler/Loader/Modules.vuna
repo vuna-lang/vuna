@@ -513,6 +513,19 @@ rootAllows importerPkg root name =
     Nothing => True
     Just mods => rootName root == importerPkg || memName name mods
 
+rootOfName : String -> List Root -> Maybe Root
+rootOfName _ [] = Nothing
+rootOfName n (root :: rest) = if rootName root == n then Just root else rootOfName n rest
+
+-- | 已加载模块 `m` 对 `importerPkg` 是否可见：按 `modulePackageOf m` 找回它的 root，
+--   再用同一套 `rootAllows` 判定（同包永远可见；跨包只认 `[export]`）。
+--   找不到该包的 root（ad-hoc / 预置模块来自闭包外）时放行：没有 root 就没有可判定的边界。
+export moduleVisibleTo : List Root -> String -> Module -> Bool
+moduleVisibleTo roots importerPkg m =
+  case rootOfName (modulePackageOf m) roots of
+    Nothing => True
+    Just root => rootAllows importerPkg root (moduleNameOf m)
+
 -- 模块根候选的**存在性探测**是宿主动作，显式在 `Eff []` 里；
 -- 可见性判定与候选分类保持纯。
 export collectModuleFiles : Member nFs FsOp r => List Root -> String -> String -> List (Pair String Root) -> List String -> Eff r (Pair (List (Pair String Root)) (List String))

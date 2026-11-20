@@ -1,0 +1,6 @@
+module Dep.A where
+
+import Dep.B
+
+export a : Int
+a = b
