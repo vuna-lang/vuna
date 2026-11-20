@@ -154,7 +154,7 @@ checkBinderTysWork shared fuel decls work =
   else
     case work of
       [] => OkC 0
-      ir :: rest => Vuna.Compiler.Base.Common.bind (checkNodeBinderTys shared decls ir) (\_ => checkBinderTysWork shared (fuel - 1) decls (append (map secondOf (scopedChildren [] ir)) rest))
+      ir :: rest => Vuna.Compiler.Base.Common.bind (checkNodeBinderTys shared decls ir) (\_ => checkBinderTysWork shared (fuel - 1) decls (append (irChildren ir) rest))
 
 checkNodeBinderTys : IrShared -> List IrTyDecl -> Ir -> Check Int
 checkNodeBinderTys shared decls (IrLam bs resultTy _) =
@@ -395,6 +395,37 @@ altWork : List IrBinder -> List IrAlt -> List (Pair (List IrBinder) Ir)
 altWork scope [] = []
 altWork scope (alt :: rest) =
   Pair (append (irAltBindersOf alt) scope) (irAltBodyOf alt) :: altWork scope rest
+
+-- 结构子节点（不含作用域）：`checkBinderTys` 只按节点校验注解，不需要 binder 作用域；
+-- 用它替代 `scopedChildren []` 省掉「造 scope 对、再 map secondOf 丢掉」的整轮分配。
+irChildren : Ir -> List Ir
+irChildren (IrCtor family ctor _ args) = args
+irChildren (IrRecord family _ fields) = map secondOf fields
+irChildren (IrProj base family field _) = [base]
+irChildren (IrRecUpd base family fields _) = base :: map secondOf fields
+irChildren (IrRtApp sym args) = args
+irChildren (IrCast cFrom cTo inner) = [inner]
+irChildren (IrLet bs scrut body) = [scrut, body]
+irChildren (IrLam bs _ body) = [body]
+irChildren (IrApp _ f a) = [f, a]
+irChildren (IrIf c th el) = [c, th, el]
+irChildren (IrCase _ _ scrut alts) = scrut :: altBodies alts
+irChildren (IrNatCase scrut fresh zero succ catch) =
+  append
+    [scrut]
+    (append (maybeAltBodies zero) (append (maybeAltBodies succ) (maybeAltBodies catch)))
+irChildren (IrConcatMany parts) = parts
+irChildren (IrEffThunk family ctor unitTy arity prim) = [prim]
+irChildren (IrTail inner) = [inner]
+irChildren _ = []
+
+altBodies : List IrAlt -> List Ir
+altBodies [] = []
+altBodies (alt :: rest) = irAltBodyOf alt :: altBodies rest
+
+maybeAltBodies : Maybe IrAlt -> List Ir
+maybeAltBodies Nothing = []
+maybeAltBodies (Just alt) = [irAltBodyOf alt]
 
 memBinder : IrBinder -> List IrBinder -> Bool
 memBinder b [] = False
