@@ -661,7 +661,7 @@ let v_depStartOfAt = (fun (next : int) (progs : Driver_dCache.t_CachedProgram B_
 let v_depStartOf = (fun (progs : Driver_dCache.t_CachedProgram B_dData_dList.t_List) -> ((v_depStartOfAt 0) progs))
 
 # 1185 "Vuna/Compiler/Driver/Dt.vuna"
-let v_sortNames = (fun (_uarity0 : string B_dData_dList.t_List) -> ((B_dData_dSort.v_sortBy (fun (a : string) (b : string) -> (((B_dTrait_dOrd.v__x60__x61_ B_dData_dString.v_Ord_uString) a) b))) _uarity0))
+let v_sortNames = (B_dData_dSort.v_sortBy (fun (a : string) (b : string) -> (((B_dTrait_dOrd.v__x60__x61_ B_dData_dString.v_Ord_uString) a) b)))
 
 # 1193 "Vuna/Compiler/Driver/Dt.vuna"
 let rec v_dedupSortedGo = (fun (mc0 : string B_dData_dList.t_List) (mc1 : string B_dData_dList.t_List) -> (match mc0 with

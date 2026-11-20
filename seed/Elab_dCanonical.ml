@@ -23,7 +23,7 @@ let v_encSpan = (fun (s : Base_dSource.t_Span) (acc : string B_dData_dList.t_Lis
 let v_decSpan = (fun (fuel : int) (c : Base_dBytes.t_Cur) -> ((Base_dBytes.v_thenPair ((Base_dBytes.v_decStr (fuel - 1)) c)) (fun (file : string) (b1 : Base_dBytes.t_Cur) -> ((Base_dBytes.v_thenPair ((Base_dBytes.v_decInt (fuel - 1)) b1)) (fun (sl : int) (b2 : Base_dBytes.t_Cur) -> ((Base_dBytes.v_thenPair ((Base_dBytes.v_decInt (fuel - 1)) b2)) (fun (sc : int) (b3 : Base_dBytes.t_Cur) -> ((Base_dBytes.v_thenPair ((Base_dBytes.v_decInt (fuel - 1)) b3)) (fun (el : int) (b4 : Base_dBytes.t_Cur) -> ((Base_dBytes.v_thenPair ((Base_dBytes.v_decInt (fuel - 1)) b4)) (fun (ec : int) (b5 : Base_dBytes.t_Cur) -> ((Base_dBytes.v_thenPair ((Base_dBytes.v_decInt (fuel - 1)) b5)) (fun (so : int) (b6 : Base_dBytes.t_Cur) -> ((Base_dBytes.v_thenPair ((Base_dBytes.v_decInt (fuel - 1)) b6)) (fun (eo : int) (b7 : Base_dBytes.t_Cur) -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = { Base_dSource.f_Span_spanFile = file; Base_dSource.f_Span_spanStartLine = sl; Base_dSource.f_Span_spanStartCol = sc; Base_dSource.f_Span_spanEndLine = el; Base_dSource.f_Span_spanEndCol = ec; Base_dSource.f_Span_spanStartOffset = so; Base_dSource.f_Span_spanEndOffset = eo }; B_dData_dPair.f_Pair_second = b7 })))))))))))))))))
 
 # 76 "Vuna/Compiler/Elab/Canonical.vuna"
-let v_encMaybeSpan = (fun (_uarity0 : Base_dSource.t_Span B_dData_dMaybe.t_Maybe) (_uarity1 : string B_dData_dList.t_List) -> (((Base_dBytes.v_encMaybe v_encSpan) _uarity0) _uarity1))
+let v_encMaybeSpan = (Base_dBytes.v_encMaybe v_encSpan)
 
 # 104 "Vuna/Compiler/Elab/Canonical.vuna"
 let v_encTelePair = (fun (mc0 : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair) (mc1 : string B_dData_dList.t_List) -> (match mc0 with

@@ -33,7 +33,7 @@ let v_Monad_uVuna_uCompiler_uBase_uDiag_uCheck = (B_dTrait_dMonad.C_Monad_Monad 
 ))) : Obj.t)))
 
 # 531 "Vuna/Compiler/Base/Diag.vuna"
-let v_Applicative_uVuna_uCompiler_uBase_uDiag_uCheck = (B_dTrait_dApplicative.C_Applicative_Applicative (((Obj.magic (fun _uarity1 -> (C_Check_OkC (_uarity1)))) : Obj.t), ((Obj.magic (fun mf mx -> (match mf with
+let v_Applicative_uVuna_uCompiler_uBase_uDiag_uCheck = (B_dTrait_dApplicative.C_Applicative_Applicative (((Obj.magic (fun _heta0 -> (C_Check_OkC (_heta0)))) : Obj.t), ((Obj.magic (fun mf mx -> (match mf with
   | C_Check_OkC (dtb__4) -> (match mx with
   | C_Check_OkC (dtb__5) -> (C_Check_OkC ((dtb__4 dtb__5)))
   | C_Check_ErrC (dtb__6) -> (C_Check_ErrC (dtb__6))

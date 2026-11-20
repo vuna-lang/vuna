@@ -53,7 +53,7 @@ let rec v_ctorCandsOf = (fun (mc0 : Frontend_dAst.t_Decl B_dData_dList.t_List) -
 let v_namespacesOfWith = (fun (release : bool) (decls : Frontend_dAst.t_Decl B_dData_dList.t_List) -> ((fun vals -> ((fun cts -> ((fun tys -> ((fun cands -> { Loader_dModules.f_Namespaces_nsValues = vals; Loader_dModules.f_Namespaces_nsCtors = cts; Loader_dModules.f_Namespaces_nsTypes = tys; Loader_dModules.f_Namespaces_nsValueSet = (B_dContainer_dHashMap.v_ofNames vals); Loader_dModules.f_Namespaces_nsCtorSet = (B_dContainer_dHashMap.v_ofNames cts); Loader_dModules.f_Namespaces_nsTypeSet = (B_dContainer_dHashMap.v_ofNames tys); Loader_dModules.f_Namespaces_nsCtorCands = cands; Loader_dModules.f_Namespaces_nsRelease = release }) (v_ctorCandsOf decls))) (Frontend_dAst.v_typeNamesOf decls))) (Frontend_dAst.v_ctorsOf decls))) (v_valueNamesOf decls)))
 
 # 145 "Vuna/Compiler/Loader/Resolve.vuna"
-let v_namespacesOf = (fun (_uarity0 : Frontend_dAst.t_Decl B_dData_dList.t_List) -> ((v_namespacesOfWith false) _uarity0))
+let v_namespacesOf = (v_namespacesOfWith false)
 
 # 150 "Vuna/Compiler/Loader/Resolve.vuna"
 let v_localCtorTargets = (fun (prefix : string) (ns : Loader_dModules.t_Namespaces) (name : string) -> ((B_dData_dList.v_map (fun (p : (string, string) B_dData_dPair.t_Pair) -> ((Loader_dModules.v_mangle prefix) (B_dData_dPair.v_secondOf p)))) ((B_dData_dList.v_filter (fun (p : (string, string) B_dData_dPair.t_Pair) -> ((B_dData_dPair.v_firstOf p) = name))) (ns).Loader_dModules.f_Namespaces_nsCtorCands)))

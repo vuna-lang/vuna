@@ -151,7 +151,7 @@ let rec v_storeEnsureDirFuel = (fun (nFs : string) (nProcess : string) (fuel : i
 let v_storeEnsureDirEff = (fun (nFs : string) (nProcess : string) (path : string) -> ((((v_storeEnsureDirFuel nFs) nProcess) 256) path))
 
 # 314 "Vuna/Compiler/Base/Store.vuna"
-let v_storeParentPathOf = (fun (_uarity0 : string) -> (v_storeParentOf _uarity0))
+let v_storeParentPathOf = v_storeParentOf
 
 # 340 "Vuna/Compiler/Base/Store.vuna"
 let v_storeRootEff = (fun (nEnv : string) -> (v_storeDataRootEff nEnv))
@@ -220,7 +220,7 @@ let v_storeViewLockEff = (fun (nFs : string) (nClock : string) (nEnv : string) (
 let v_storeScratchClaimEff = (fun (nFs : string) (nClock : string) (nEnv : string) (nProcess : string) (kind : string) (digest : string) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((((v_storeScratchPathEff nFs) nEnv) nProcess) kind) digest)) (fun path -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((v_storeEnsureDirEff nFs) nProcess) (v_storeParentPathOf path))) (fun _u -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((B_dEffect_dFs.v_fsMakeDirExclusive nFs) path)) (fun ok -> (if ok then ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) true) else (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((v_scratchStale nFs) nClock) path)) (fun stale -> (if (B_dData_dBool.v_not stale) then ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) false) else (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((B_dEffect_dFs.v_fsRemoveTree nFs) path)) (fun _u -> ((B_dEffect_dFs.v_fsMakeDirExclusive nFs) path))))))))))))))
 
 # 530 "Vuna/Compiler/Base/Store.vuna"
-let v_storeScratchPathOfClaim = (fun (nFs : string) (nEnv : string) (nProcess : string) (_uarity7 : string) (_uarity8 : string) -> (((((v_storeScratchPathEff nFs) nEnv) nProcess) _uarity7) _uarity8))
+let v_storeScratchPathOfClaim = (fun nFs nEnv nProcess -> (((v_storeScratchPathEff nFs) nEnv) nProcess))
 
 # 534 "Vuna/Compiler/Base/Store.vuna"
 let v_storeScratchDropEff = (fun (nFs : string) (nEnv : string) (nProcess : string) (kind : string) (digest : string) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((((v_storeScratchPathEff nFs) nEnv) nProcess) kind) digest)) (fun path -> ((B_dEffect_dFs.v_fsRemoveTree nFs) path))))

@@ -58,10 +58,10 @@ let v_weaken = (fun comp -> (match comp with
 ))
 
 # 120 "Base/Effect/Core.vuna"
-let v_runThunk = (fun e (_uarity3 : t_EffUnit) -> ((match e with
+let v_runThunk = (fun e -> (match e with
   | C_Eff_MkEff (dtb__8) -> dtb__8
   | _ -> failwith "DT: impossible branch"
-) _uarity3))
+))
 
 # 126 "Base/Effect/Core.vuna"
 let v_runPure = (fun e -> ((v_runThunk e) C_EffUnit_MkEffUnit))

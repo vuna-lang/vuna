@@ -92,7 +92,7 @@ let rec v_append = (fun mc0 mc1 -> (match mc0 with
 ))
 
 # 224 "Base/Data/List.vuna"
-let v_Semigroup_uBase_uData_uList_uList_ua = (B_dTrait_dMonoid.C_Semigroup_Semigroup ((fun _uarity1 _uarity2 -> ((v_append _uarity1) _uarity2))))
+let v_Semigroup_uBase_uData_uList_uList_ua = (B_dTrait_dMonoid.C_Semigroup_Semigroup (v_append))
 
 # 37 "Base/Data/List.vuna"
 let rec v_reverseOnto = (fun mc0 mc1 -> (match mc0 with

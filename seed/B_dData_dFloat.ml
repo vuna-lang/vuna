@@ -23,16 +23,16 @@ let v_fromFloat = (fun _ud (x0 : float) -> (match _ud with
 ))
 
 # 51 "Base/Data/Float.vuna"
-let v_abs = (fun (_uarity0 : float) -> (abs_float _uarity0))
+let v_abs = abs_float
 
 # 55 "Base/Data/Float.vuna"
-let v_sqrt = (fun (_uarity0 : float) -> (sqrt _uarity0))
+let v_sqrt = sqrt
 
 # 59 "Base/Data/Float.vuna"
-let v_intToFloat = (fun (_uarity0 : int) -> (float_of_int _uarity0))
+let v_intToFloat = float_of_int
 
 # 63 "Base/Data/Float.vuna"
-let v_floatToInt = (fun (_uarity0 : float) -> (int_of_float _uarity0))
+let v_floatToInt = int_of_float
 
 # 71 "Base/Data/Float.vuna"
 let v_normStep = (fun (p : (int, float) B_dData_dPair.t_Pair) (_u : int) -> ((fun e -> ((fun m -> (if (m >= 10.0) then { B_dData_dPair.f_Pair_first = (e + 1); B_dData_dPair.f_Pair_second = (m /. 10.0) } else (if (m < 1.0) then { B_dData_dPair.f_Pair_first = (e - 1); B_dData_dPair.f_Pair_second = (m *. 10.0) } else p))) (B_dData_dPair.v_secondOf p))) (B_dData_dPair.v_firstOf p)))

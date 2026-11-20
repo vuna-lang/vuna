@@ -64,7 +64,7 @@ let v_applicabilityName = (fun (mc0 : Base_dDiag.t_Applicability) -> (match mc0 
 ))
 
 # 78 "Vuna/Compiler/Base/Diag/Format.vuna"
-let v_renderShort = (fun (_uarity0 : Base_dDiag.t_Diagnostic) -> (Base_dDiag.v_diagText _uarity0))
+let v_renderShort = Base_dDiag.v_diagText
 
 # 85 "Vuna/Compiler/Base/Diag/Format.vuna"
 let rec v_primarySpan = (fun (mc0 : Base_dDiag.t_Label B_dData_dList.t_List) -> (match mc0 with
