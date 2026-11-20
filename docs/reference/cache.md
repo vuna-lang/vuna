@@ -37,7 +37,7 @@
 
 ```
 $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/store → $TMPDIR/vuna-store
-  objects/module-iface/<模块接口地址>  # 模块接口（codec module-iface 4；带实例/方法 span）。
+  objects/module-iface/<模块接口地址>  # 模块接口（codec module-iface 5；带实例/方法 span）。
                                     # 入口包（`[export]` 为空）也写：模块面 = 入口闭包，
                                     # 供 LSP/REPL 把本包模块当干净模块预置
   objects/module-order/<包源闭包+tag 摘要>  # 该包的模块顺序（split 串接要精化顺序，不是拓扑序）

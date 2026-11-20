@@ -162,8 +162,10 @@ dtClassName (DtClass name params supers projs fieldTys spans) = name
 -- `as name` 的命名实例**不参与**自动实例搜索（只能 `@name` 选中，与 HM 一致），
 -- 否则 `instance Pretty Color` 与 `instance Pretty Color as fancy` 会撞成歧义。
 export record DtInst(..) where
-  -- | 实例字典的符号名（codegen / diagnostics 用；派生规则见 `Elab.InstName`）。
+  -- | 显示名（诊断 / 候选列表；类短名 + head 名，见 `Elab.InstName.instanceName`）。
   dtInstName : String
+  -- | codegen 的字典符号（完整类名 + head 名，见 `instanceSymbol`）。
+  dtInstSym : String
   -- | 稳定身份：完整类名 + 头（telescope 变量归一、span 无关）的规范摘要。
   --   与源码名 / 排序 / span 解耦；`ecAddInst`、coherence、iface 排序与缓存去重都用它。
   dtInstKey : String
@@ -174,6 +176,9 @@ export record DtInst(..) where
 
 export dtInstName : DtInst -> String
 dtInstName i = i.dtInstName
+
+export dtInstSym : DtInst -> String
+dtInstSym i = i.dtInstSym
 
 export dtInstKey : DtInst -> String
 dtInstKey i = i.dtInstKey
@@ -493,7 +498,7 @@ bucketCount (p :: rest) = length (secondOf p) + bucketCount rest
 allBucketsMatch : List DtInst -> List (Pair String (List DtInst)) -> Bool
 allBucketsMatch list [] = True
 allBucketsMatch list ((Pair fam bucket) :: rest) =
-  instNamesEq (map dtInstName bucket) (map dtInstName (filter (\i => instFamilyOf i == fam) list))
+  instNamesEq (map dtInstSym bucket) (map dtInstSym (filter (\i => instFamilyOf i == fam) list))
     && allBucketsMatch list rest
 
 -- | 逐项比较两个实例名列表是否相等。
@@ -540,9 +545,10 @@ export hasInstKey : String -> List DtInst -> Bool
 hasInstKey key [] = False
 hasInstKey key (i :: rest) = i.dtInstKey == key || hasInstKey key rest
 
-export hasInstName : String -> List DtInst -> Bool
-hasInstName name [] = False
-hasInstName name (i :: rest) = dtInstName i == name || hasInstName name rest
+-- | 字典符号是否已登记（符号撞名在 codegen 层是硬错误）。
+export hasInstSym : String -> List DtInst -> Bool
+hasInstSym sym [] = False
+hasInstSym sym (i :: rest) = i.dtInstSym == sym || hasInstSym sym rest
 
 export ecAddInstRaw : Ec -> DtInst -> Ec
 ecAddInstRaw (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl haslin mspans uspans warnings counters errors) i =

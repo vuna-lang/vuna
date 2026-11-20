@@ -77,15 +77,17 @@ encMaybeSpan = encMaybe encSpan
 
 -- | `DtInst` 的**语义**编码：名字 / telescope / 约束上下文 / 头（span 丢弃，供接口哈希）。
 export encDtInstSem : DtInst -> List String -> List String
-encDtInstSem (DtInst name key tele ctxE head _) acc =
-  encStr name (encStr key (encList encTelePair tele (encList encTerm ctxE (encTerm head acc))))
+encDtInstSem (DtInst name sym key tele ctxE head _) acc =
+  encStr
+    name
+    (encStr sym (encStr key (encList encTelePair tele (encList encTerm ctxE (encTerm head acc)))))
 
 -- | `DtInst` 载荷编码：语义字段 + 声明 span（跨 iface 保留，供诊断候选定位）。
 export encDtInst : DtInst -> List String -> List String
-encDtInst (DtInst name key tele ctxE head sp) acc =
+encDtInst (DtInst name sym key tele ctxE head sp) acc =
   encStr
     name
-    (encStr key (encList encTelePair tele (encList encTerm ctxE (encTerm head (encMaybeSpan sp acc)))))
+    (encStr sym (encStr key (encList encTelePair tele (encList encTerm ctxE (encTerm head (encMaybeSpan sp acc))))))
 
 -- | `DtClass` 的**语义**编码：名字 / 参数名 / 方法投影 / 字段类型（span 丢弃）。
 export encDtClassSem : DtClass -> List String -> List String
@@ -243,7 +245,7 @@ export decDtInst : Int -> Cur -> Maybe (Pair DtInst Cur)
 decDtInst fuel bytes =
   thenPair
     (decStr (fuel - 1) bytes)
-    (\name, b1 => thenPair (decStr (fuel - 1) b1) (\key, b2 => thenPair (decList decTelePair (fuel - 1) b2) (\tele, b3 => thenPair (decList decTerm (fuel - 1) b3) (\ctxE, b4 => thenPair (decTerm (fuel - 1) b4) (\head, b5 => thenPair (decMaybe decSpan (fuel - 1) b5) (\sp, b6 => Just (Pair (DtInst name key tele ctxE head sp) b6)))))))
+    (\name, b1 => thenPair (decStr (fuel - 1) b1) (\sym, b2 => thenPair (decStr (fuel - 1) b2) (\key, b3 => thenPair (decList decTelePair (fuel - 1) b3) (\tele, b4 => thenPair (decList decTerm (fuel - 1) b4) (\ctxE, b5 => thenPair (decTerm (fuel - 1) b5) (\head, b6 => thenPair (decMaybe decSpan (fuel - 1) b6) (\sp, b7 => Just (Pair (DtInst name sym key tele ctxE head sp) b7))))))))
 
 -- | 解析 `DtClass`（含方法 span 表）。
 export decDtClass : Int -> Cur -> Maybe (Pair DtClass Cur)

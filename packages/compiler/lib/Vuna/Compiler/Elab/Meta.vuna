@@ -781,7 +781,7 @@ allTeleArgs n (arg :: rest) =
     _ => False
 
 export isBlanketInst : DtInst -> Bool
-isBlanketInst (DtInst name key tele ctx head sp) = isBlanketInstHead (length tele) head
+isBlanketInst (DtInst name sym key tele ctx head sp) = isBlanketInstHead (length tele) head
 
 -- 把方法类型里对类参数的引用（de Bruijn 0）替换成实例头实参。
 -- 字段类型是在 `{a : Type}` 之下检查的闭合项，所以类参数恒为 index 0；

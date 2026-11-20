@@ -105,10 +105,17 @@ fixTele tbl depth ((Pair n t) :: rest) =
   Pair n (fixTerm tbl depth t) :: fixTele tbl (depth + 1) rest
 
 fixInst : HashMap Int Value -> DtInst -> DtInst
-fixInst tbl (DtInst n key tele ctxE head sp) =
+fixInst tbl (DtInst n sym key tele ctxE head sp) =
   let
     nTele = length tele
-  in DtInst n key (fixTele tbl 0 tele) (map (fixTerm tbl nTele) ctxE) (fixTerm tbl nTele head) sp
+  in DtInst
+    n
+    sym
+    key
+    (fixTele tbl 0 tele)
+    (map (fixTerm tbl nTele) ctxE)
+    (fixTerm tbl nTele head)
+    sp
 
 export cachedOfProgram : DtProgram -> CachedProgram
 cachedOfProgram prog = cachedOfProgramWith (HashMap.fromList (dtProgSols prog)) prog
@@ -469,10 +476,10 @@ shiftClass off (DtClass n ps supers projs tys spans) =
     (\supers2 => Vuna.Compiler.Base.Common.bind (shiftTele off projs) (\projs2 => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (shiftTerm off) tys) (\tys2 => OkC (DtClass n ps supers2 projs2 tys2 spans))))
 
 shiftInst : Int -> DtInst -> Check DtInst
-shiftInst off (DtInst n key tele ctxE head sp) =
+shiftInst off (DtInst n sym key tele ctxE head sp) =
   Vuna.Compiler.Base.Common.bind
     (shiftTele off tele)
-    (\tele2 => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (shiftTerm off) ctxE) (\ctx2 => Vuna.Compiler.Base.Common.bind (shiftTerm off head) (\head2 => OkC (DtInst n key tele2 ctx2 head2 sp))))
+    (\tele2 => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (shiftTerm off) ctxE) (\ctx2 => Vuna.Compiler.Base.Common.bind (shiftTerm off head) (\head2 => OkC (DtInst n sym key tele2 ctx2 head2 sp))))
 
 shiftGlobal : Int -> Pair String Term -> Check (Pair String Term)
 shiftGlobal off (Pair n t) =

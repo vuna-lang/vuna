@@ -298,8 +298,10 @@ main = pretty Red ++ "/" ++ show Red
   `overlapping instance`（含 `deriving` 生成的实例）。**没有命名实例**：不存在
   `instance C T as name` 或 `@name` 选择，相干性只靠「同一 head 唯一」。
   实例的**身份**是 `DtInst.dtInstKey`（完整类名 + 头在 telescope 变量归一后的规范摘要，
-  span / 声明顺序无关）；`dtInstName` 只是 codegen 的字典符号与诊断显示名。
-  `ecAddInst` 去重、coherence、iface 排序与缓存去重都用 key。
+  span / 声明顺序无关）。`dtInstSym` 是 codegen 的字典符号（类短名 + 完整类名的 16 位十六进制摘要（64 bit） + head，
+  注入式转义；不同模块的同名类也得到不同符号），`dtInstName` 是诊断 / 候选列表的
+  显示名（类短名 + head）。`ecAddInst` 去重、
+  coherence、iface 排序与缓存去重都用 key；符号撞名仍单独拒绝。
 - **blanket 实例是 fallback**：head 实参是裸类参数（全部 tele 都是类参数）的实例
   是兜底，例如 base 的 `instance Show a => Interp a`；搜索分两阶段——具体实例先匹配，匹配
   不到才试 blanket。**具体实例覆盖 blanket**（`instance Interp String` 赢过 blanket），

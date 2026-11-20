@@ -363,6 +363,7 @@ elabInstanceWithClass globals allDecls cls info ec0 headExpr methods msp =
             nTele = length (instSigTele info)
             bodyDepth = nTele + nCtx
             iname = instanceName (dtClassName cls) headExpr
+            isym = instanceSymbol (dtClassName cls) headExpr
           in Vuna.Compiler.Base.Common.bind
             (checkSuperClasses globals bodyCtx nCtx iname msp (instSigArgs info) cls.dtClassSupers ec0)
             (
@@ -384,7 +385,7 @@ elabInstanceWithClass globals allDecls cls info ec0 headExpr methods msp =
                               fields2 = map (applyTermSubstsTo bodyDepth globSubs) fields1
                               dictTerm = instValueOf info (dictCtorName (dtClassName cls)) fields2
                               dictTyTerm = instTypeOf info
-                            in OkC (Pair [Pair iname dictTyTerm] (ecAddDef ec3 (Pair iname dictTerm)))
+                            in OkC (Pair [Pair isym dictTyTerm] (ecAddDef ec3 (Pair isym dictTerm)))
                         )
                   )
             )
@@ -1345,13 +1346,14 @@ checkInstanceHeadsGo ((d@(Pair decl dsp)) :: rest) classes globals ec acc insts 
               Pair info ec1 =>
                 let
                   iname = instanceName (instSigClass info) headExpr
+                  isym = instanceSymbol (instSigClass info) headExpr
                   ikey = instanceKey ec1 (instSigClass info) (instSigTele info) (instSigHead info)
                   ty = instTypeOf info
-                  inst = DtInst iname ikey (instSigTele info) (instSigCtx info) (instSigHead info) (Just msp)
-                in case findInstanceClash ec1 iname ikey (instSigTele info) (instSigHead info) (append (ecInsts ec1) seen) of
+                  inst = DtInst iname isym ikey (instSigTele info) (instSigCtx info) (instSigHead info) (Just msp)
+                in case findInstanceClash ec1 iname isym ikey (instSigTele info) (instSigHead info) (append (ecInsts ec1) seen) of
                   Pair (Just ClashDuplicate) ec2 => tcErr1 msp (DuplicateInstance iname) iname
                   Pair (Just ClashOverlap) ec2 => tcErr1 msp (OverlappingInstances iname) iname
-                  Pair Nothing ec2 => checkInstanceHeadsGo rest classes globals ec2 (Pair iname ty :: acc) (inst :: insts) (inst :: seen)
+                  Pair Nothing ec2 => checkInstanceHeadsGo rest classes globals ec2 (Pair isym ty :: acc) (inst :: insts) (inst :: seen)
         )
     _ => checkInstanceHeadsGo rest classes globals ec acc insts seen
 

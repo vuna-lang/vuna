@@ -34,12 +34,12 @@ export data InstClash(..) : Type where
   ClashDuplicate : InstClash
   ClashOverlap : InstClash
 
-export findInstanceClash : Ec -> String -> String -> List (Pair String Term) -> Term -> List DtInst -> Pair (Maybe InstClash) Ec
--- 名字是 codegen 的 dict 符号：两个实例撞同一个符号仍然必须拒绝。
-findInstanceClash ec name key tele head seen =
+export findInstanceClash : Ec -> String -> String -> String -> List (Pair String Term) -> Term -> List DtInst -> Pair (Maybe InstClash) Ec
+-- 符号是 codegen 的 dict 名：两个实例撞同一个符号仍然必须拒绝。
+findInstanceClash ec name sym key tele head seen =
   if hasInstKey key seen then
     Pair (Just ClashDuplicate) ec
-  else if hasInstName name seen then
+  else if hasInstSym sym seen then
     Pair (Just ClashDuplicate) ec
   else if anyInstanceExact ec (length tele) head seen then
     Pair (Just ClashDuplicate) ec

@@ -822,7 +822,7 @@ depPackageCount ctx = length (depPackageList ctx)
 -- 缺失时现 parse 一次并写回 —— 冷启动只付一次 parse，之后不再 parse 依赖包。
 -- ---------------------------------------------------------------
 ifaceObjectCodec : String
-ifaceObjectCodec = "module-iface 4"
+ifaceObjectCodec = "module-iface 5"
 
 export record PkgEntry(..) where
   peName : String

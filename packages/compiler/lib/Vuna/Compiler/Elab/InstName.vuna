@@ -3,8 +3,9 @@ module Vuna.Compiler.Elab.InstName where
 
 -- Vuna.Compiler.Elab.InstName：实例名派生（trait 投影/实例字典的符号名）。
 -- 与 `Elab.Trait` 分工：实例名的派生规则单独成模块，避免 Trait 继续膨胀。
--- 纯函数、无状态；Trait 与 Driver.SplitGen 共用 `instanceName` / `derivedInstName`。
+-- 纯函数、无状态；Trait 与 Driver 共用 `instanceName`（显示）/ `instanceSymbol`（符号）/ `derivedInstName`。
 import Vuna.Compiler.Base.Bytes
+import Base.Data.String as String
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Base.Hash
 import Vuna.Compiler.Elab.Meta
@@ -23,8 +24,20 @@ import Vuna.Compiler.Frontend.Rast.Name
 -- 同一个 dict 名——否则 `findInstanceClash` 的名字判重会把两个合法 head 误报成
 -- duplicate。同一类内的 head 唯一性仍由 coherence 保证
 -- （`anyInstanceExact` / `anyInstanceOverlap` 按 head 判定）。
+-- | 诊断 / 候选列表用的显示名：类**短名** + head 名。
 export instanceName : String -> Expr -> String
 instanceName cname headExpr = sanitizeInstName "${baseNameOf cname}_${derivedInstName headExpr}"
+
+-- | codegen 的字典符号：类短名 + **完整类名的 16 位十六进制摘要（64 bit）** + head 名。
+--
+-- 摘要让不同模块的同名类也得到不同符号，同时把符号长度控制在 wat / 汇编可读的
+-- 范围内（完整类名直接进符号会让生成行的长度失控）。显示名仍走 `instanceName`。
+export instanceSymbol : String -> Expr -> String
+instanceSymbol cname headExpr =
+  sanitizeInstName "${baseNameOf cname}_${classDigest cname}_${derivedInstName headExpr}"
+
+classDigest : String -> String
+classDigest cname = String.substring 0 16 (digestHex (digestOfString cname))
 
 -- | 实例符号名里的转义：非 `[A-Za-z0-9_]` 字符写成 `$<code>$`。
 --

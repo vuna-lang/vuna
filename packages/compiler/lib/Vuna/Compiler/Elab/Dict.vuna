@@ -396,7 +396,7 @@ tryMatchInst globals ctx fuel ec inst dom sp =
                   ctxVals = map (\t => forceVal ec2 (eval env2 t)) inst.dtInstCtx
                 in case solveDictCtxs globals ctx (fuel - 1) ec2 sp ctxVals [] of
                   Nothing => Nothing
-                  Just (Pair dictArgs ec3) => Just (Pair (foldAppTerms (TGlobal (dtInstName inst)) (append teleArgs dictArgs)) ec3)
+                  Just (Pair dictArgs ec3) => Just (Pair (foldAppTerms (TGlobal (dtInstSym inst)) (append teleArgs dictArgs)) ec3)
 
 export allocTeleMetas : Maybe Span -> Ctx -> Ec -> List (Pair String Term) -> Pair (List Int) Ec
 allocTeleMetas msp ctx ec [] = Pair [] ec
@@ -888,7 +888,7 @@ piRigsOfInst ec g = piRigsOfInstGo g (ecInsts ec)
 piRigsOfInstGo : String -> List DtInst -> Maybe (List Rig)
 piRigsOfInstGo g [] = Nothing
 piRigsOfInstGo g (i :: rest) =
-  if dtInstName i == g then
+  if dtInstSym i == g then
     Just (append (map (\p => Rig0) i.dtInstTele) (map (\t => RigOmega) i.dtInstCtx))
   else
     piRigsOfInstGo g rest

@@ -1023,7 +1023,7 @@ cachedNamesOne : CachedProgram -> List String
 cachedNamesOne cp =
   append
     (map dtDataName (cachedDatas cp))
-    (append (concatMap (\d => map dtCtorName (dtDataCtors d)) (cachedDatas cp)) (append (map dtDefName (cachedDefs cp)) (append (map firstOf (cachedGlobals cp)) (append (map dtInstName (cachedInsts cp)) (map dtClassName (cachedClasses cp))))))
+    (append (concatMap (\d => map dtCtorName (dtDataCtors d)) (cachedDatas cp)) (append (map dtDefName (cachedDefs cp)) (append (map firstOf (cachedGlobals cp)) (append (map dtInstSym (cachedInsts cp)) (map dtClassName (cachedClasses cp))))))
 
 dtCheckOursParts : PackageContext -> Pair (List Diagnostic) (Pair (List Decl) (List Module)) -> List CachedProgram -> Check (Pair (List Diagnostic) CheckedPackage)
 dtCheckOursParts ctx resolved deps =

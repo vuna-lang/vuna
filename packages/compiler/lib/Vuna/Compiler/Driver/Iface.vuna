@@ -214,7 +214,7 @@ ifaceSchema = "vuna-iface 30"
 -- | 接口哈希的**算法格式版本**：参与哈希输入（与 `ifaceSchema` 独立——schema 管载荷
 -- 布局，本版本管摘要算法/分片编码；换算法时旧哈希自然换代）。
 ifaceHashVersion : String
-ifaceHashVersion = "vuna-iface-hash 12 (instance stable key + injective symbol)"
+ifaceHashVersion = "vuna-iface-hash 13 (instance stable key + full-class symbol)"
 
 -- ---------------------------------------------------------------
 -- 哈希：接口哈希必须比 `strHash`（10 bit）强得多
@@ -581,7 +581,7 @@ progPartsOf oi prog =
     (partitionByOwner (\d => dataOwnerOf oi (dtDataName d)) (dtProgDatas prog))
     (partitionByOwner (\d => defOwnerOf oi (dtDefName d)) (dtProgDefs prog))
     (partitionByOwner (\p => globalOwnerOf oi (firstOf p)) (dtProgGlobals prog))
-    (partitionByOwner (\i => defOwnerOf oi (dtInstName i)) (dtProgInsts prog))
+    (partitionByOwner (\i => defOwnerOf oi (dtInstSym i)) (dtProgInsts prog))
     (partitionByOwner (\c => defOwnerOf oi (dtClassName c)) (dtProgClasses prog))
 
 -- 单模块的闭合产物：从预分桶取切片，再用整包 sols 做一次深度 zonk。sols 表由
@@ -739,7 +739,7 @@ artifactNamesOf : DtProgram -> List String
 artifactNamesOf prog =
   filter
     (\n => not (isSealName n))
-    (append (map dtDataName (dtProgDatas prog)) (append (map dtDefName (dtProgDefs prog)) (append (map dtInstName (dtProgInsts prog)) (append (map dtClassName (dtProgClasses prog)) (map firstOf (dtProgGlobals prog))))))
+    (append (map dtDataName (dtProgDatas prog)) (append (map dtDefName (dtProgDefs prog)) (append (map dtInstSym (dtProgInsts prog)) (append (map dtClassName (dtProgClasses prog)) (map firstOf (dtProgGlobals prog))))))
 
 -- 摘要里已出现的全部名字（data / ctor / def / inst / class / global），用于覆盖性检查。
 dataNamesOf : CachedProgram -> List String
@@ -754,7 +754,7 @@ ifaceNamesOf m =
     cp = miCachedOf m
   in append
     (dataNamesOf cp)
-    (append (ctorNamesOf cp) (append (map dtDefName (cachedDefs cp)) (append (map dtInstName (cachedInsts cp)) (append (map dtClassName (cachedClasses cp)) (map firstOf (cachedGlobals cp))))))
+    (append (ctorNamesOf cp) (append (map dtDefName (cachedDefs cp)) (append (map dtInstSym (cachedInsts cp)) (append (map dtClassName (cachedClasses cp)) (map firstOf (cachedGlobals cp))))))
 
 ifaceArtifactNames : List ModuleIface -> List String
 ifaceArtifactNames ifaces = concatMap ifaceNamesOf ifaces
