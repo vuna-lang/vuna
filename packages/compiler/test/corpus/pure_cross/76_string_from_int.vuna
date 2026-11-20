@@ -1,0 +1,14 @@
+import Base.Data.String as String
+
+-- strFromInt 输出十进制，负数带 `-`；63 位边界值同样按可表示字面量构造。
+intMax : Int
+intMax = 4611686018427387903
+
+intMin : Int
+intMin = 0 - 4611686018427387903 - 1
+
+main : String
+main =
+  String.join
+    ","
+    ["zero=" ++ strFromInt 0, "pos=" ++ strFromInt 7, "neg=" ++ strFromInt (0 - 7), "max=" ++ strFromInt intMax, "min=" ++ strFromInt intMin, "one=" ++ strFromInt 1, "negOne=" ++ strFromInt (0 - 1), "minLen=" ++ show (String.byteLength (strFromInt intMin)), "maxLen=" ++ show (String.byteLength (strFromInt intMax))]

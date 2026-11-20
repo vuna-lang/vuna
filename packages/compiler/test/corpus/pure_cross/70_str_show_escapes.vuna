@@ -1,0 +1,14 @@
+import Base.Data.Nat as Nat
+import Base.Data.String as String
+
+-- strShow 加双引号并转义 `"` `\` LF TAB CR；其余字节（含 UTF-8 多字节）原样保留。
+main : String
+main =
+  let
+    escapes = "q\"b\\s\tt\n\r"
+    utf8 = "héllo λ 日"
+    nums = [1, 2, 3]
+    strings = ["a", "b"]
+  in String.join
+    "|"
+    [show escapes, strShow escapes, show utf8, show (0 - 42), show (Nat.fromInt 7), show True, show False, show nums, show strings]

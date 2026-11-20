@@ -1,0 +1,21 @@
+import Base.Data.String as String
+
+-- 除法向零截断；取余按 a - (a / b) * b 定义（符号随被除数）。
+remInt : Int -> Int -> Int
+remInt a b = a - a / b * b
+
+-- Int 没有 abs 原语：按 `0 - x` 绕回语义实现。
+absInt : Int -> Int
+absInt x = if x < 0 then 0 - x else x
+
+intMax : Int
+intMax = 4611686018427387903
+
+intMin : Int
+intMin = 0 - 4611686018427387903 - 1
+
+main : String
+main =
+  String.join
+    ","
+    ["divPP=" ++ show (7 / 2), "divNP=" ++ show ((0 - 7) / 2), "divPN=" ++ show (7 / (0 - 2)), "divNN=" ++ show ((0 - 7) / (0 - 2)), "remPP=" ++ show (remInt 7 2), "remNP=" ++ show (remInt (0 - 7) 2), "remPN=" ++ show (remInt 7 (0 - 2)), "remNN=" ++ show (remInt (0 - 7) (0 - 2)), "absNeg=" ++ show (absInt (0 - 7)), "absZero=" ++ show (absInt 0), "absPos=" ++ show (absInt 7), "absMin=" ++ show (absInt intMin), "minNeg=" ++ show (min (0 - 5) 3), "maxNeg=" ++ show (max (0 - 5) 3), "minBounds=" ++ show (min intMin intMax), "maxBounds=" ++ show (max intMin intMax), "minEq=" ++ show (min 4 4), "maxEq=" ++ show (max 4 4)]

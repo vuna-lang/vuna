@@ -1,0 +1,1 @@
+"count=3,eq=True,neq=False,zero=True,nonzero=False,mbNeg=Nothing,mbZero=Just 0,mbPos=Just 4,toInt=4,fromInt=4,clamp=0,roundTrip=3,lt=True,le=True,gt=False,eqOp=True,cmpZero=LT,cmpLt=LT,cmpEq=EQ"

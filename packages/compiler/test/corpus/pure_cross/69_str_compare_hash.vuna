@@ -1,0 +1,8 @@
+import Base.Data.String as String
+
+-- 比较按 UTF-8 字节序；strHash 固定 1024 桶，只断言相等/不等与范围，不断言具体数值。
+main : String
+main =
+  String.join
+    ","
+    ["emptyEq=" ++ show (compare "" ""), "emptyLt=" ++ show (compare "" "a"), "emptyGt=" ++ show (compare "a" ""), "prefixLt=" ++ show (compare "abc" "abcd"), "prefixGt=" ++ show (compare "abcd" "abc"), "caseLt=" ++ show (compare "ABC" "abc"), "byteLt=" ++ show (compare "abc" "abd"), "eq=" ++ show ("abc" == "abc"), "neq=" ++ show ("abc" /= "abd"), "neqLen=" ++ show ("abc" /= "ab"), "ltOp=" ++ show ("abc" < "abd"), "leOp=" ++ show ("abc" <= "abc"), "gtOp=" ++ show ("abd" > "abc"), "hashEq=" ++ show (strHash "abc" == strHash "abc"), "hashNeq=" ++ show (strHash "abc" /= strHash "abd"), "hashStrEq=" ++ show (hashStr "λ" == strHash "λ"), "hashRange=" ++ show (strHash "日本語" >= 0 && strHash "日本語" < 1024), "emptyHashRange=" ++ show (strHash "" >= 0 && strHash "" < 1024)]

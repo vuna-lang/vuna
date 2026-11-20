@@ -1,0 +1,8 @@
+import Base.Data.String as String
+
+-- 长度、下标与切片都以 UTF-8 字节计；strAt 越界返回 -1 哨兵。
+main : String
+main =
+  String.join
+    ","
+    ["at0=" ++ show (strAt "ABC" 0), "at2=" ++ show (strAt "ABC" 2), "atEnd=" ++ show (strAt "ABC" 3), "atNeg=" ++ show (strAt "ABC" (0 - 1)), "atEmpty=" ++ show (strAt "" 0), "lenAscii=" ++ show (String.byteLength "ABC"), "lenTwoByte=" ++ show (String.byteLength "é"), "lenLambda=" ++ show (String.byteLength "λ"), "lenCjk=" ++ show (String.byteLength "日本語"), "lenEmpty=" ++ show (String.byteLength ""), "sub00=" ++ strShow (strSubstring 0 0 "abc"), "sub0Len=" ++ strShow (strSubstring 0 3 "abc"), "subLen0=" ++ strShow (strSubstring 3 0 "abc"), "subPastEnd=" ++ strShow (strSubstring 0 5 "abc"), "subNegStart=" ++ strShow (strSubstring (0 - 2) 2 "abc"), "subNegLen=" ++ strShow (strSubstring 1 (0 - 2) "abc"), "concatLeftEmpty=" ++ strShow ("" ++ "abc"), "concatRightEmpty=" ++ strShow ("abc" ++ ""), "concatBothEmpty=" ++ strShow ("" ++ ""), "repeat0=" ++ strShow (String.repeat 0 "xy"), "repeat1=" ++ strShow (String.repeat 1 "xy"), "repeat3=" ++ strShow (String.repeat 3 "ab")]

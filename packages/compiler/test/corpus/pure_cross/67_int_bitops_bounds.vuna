@@ -1,0 +1,8 @@
+import Base.Data.String as String
+
+-- 63-bit 二进制补码：移位计数 n < 0 或 n >= 63 结果为 0；bitShr 是逻辑右移。
+main : String
+main =
+  String.join
+    ","
+    ["shl0=" ++ show (bitShl 1 0), "shl62=" ++ show (bitShl 1 62), "shl63=" ++ show (bitShl 1 63), "shl64=" ++ show (bitShl 1 64), "shlNeg=" ++ show (bitShl 1 (0 - 1)), "shr0=" ++ show (bitShr 256 0), "shr62=" ++ show (bitShr (0 - 1) 62), "shr63=" ++ show (bitShr (0 - 1) 63), "shrNeg=" ++ show (bitShr (0 - 1) 1), "not0=" ++ show (bitNot 0), "notNeg1=" ++ show (bitNot (0 - 1)), "not5=" ++ show (bitNot 5), "andNeg=" ++ show (bitAnd (0 - 1) 255), "andMinMax=" ++ show (bitAnd (0 - 4611686018427387903 - 1) 4611686018427387903), "orNeg=" ++ show (bitOr (0 - 8) 3), "xorNeg=" ++ show (bitXor (0 - 1) 255)]

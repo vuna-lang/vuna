@@ -1,0 +1,41 @@
+import Base.Data.Nat as Nat
+import Base.Data.Maybe as Maybe
+import Base.Data.String as String
+
+-- Succ 逐层剥离：结构递归在 Zero 终止。
+count : Nat -> Int
+count n =
+  case n of
+    Zero => 0
+    Succ k => 1 + count k
+
+-- 双参数结构递归：两个构造子逐个对齐。
+eqNat : Nat -> Nat -> Bool
+eqNat a b =
+  case a of
+    Zero =>
+      case b of
+        Zero => True
+        Succ _ => False
+    Succ x =>
+      case b of
+        Zero => False
+        Succ y => eqNat x y
+
+showMaybeNat : Maybe Nat -> String
+showMaybeNat m =
+  case m of
+    Nothing => "Nothing"
+    Just n => "Just " ++ show n
+
+main : String
+main =
+  let
+    three = Succ (Succ (Succ Zero))
+    four = Succ three
+    shifted = Nat.fromInt 4
+    clamped = Nat.fromInt (0 - 5)
+    roundTrip = Nat.fromInt (Nat.toInt three)
+  in String.join
+    ","
+    ["count=" ++ show (count three), "eq=" ++ show (eqNat three (Succ (Succ (Succ Zero)))), "neq=" ++ show (eqNat three four), "zero=" ++ show (Nat.isZero Zero), "nonzero=" ++ show (Nat.isZero three), "mbNeg=" ++ showMaybeNat (Nat.fromIntMaybe (0 - 5)), "mbZero=" ++ showMaybeNat (Nat.fromIntMaybe 0), "mbPos=" ++ showMaybeNat (Nat.fromIntMaybe 4), "toInt=" ++ show (Nat.toInt four), "fromInt=" ++ show (Nat.toInt shifted), "clamp=" ++ show (Nat.toInt clamped), "roundTrip=" ++ show (Nat.toInt roundTrip), "lt=" ++ show (Zero < three), "le=" ++ show (three <= three), "gt=" ++ show (three > four), "eqOp=" ++ show (three == Succ (Succ (Succ Zero))), "cmpZero=" ++ show (compare Zero three), "cmpLt=" ++ show (compare three four), "cmpEq=" ++ show (compare three three)]
