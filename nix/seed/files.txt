@@ -93,6 +93,7 @@ Driver_dPerfCache.ml
 Driver_dSplit.ml
 Driver_dSplitGen.ml
 Driver_dTarget.ml
+Driver_dTargetCache.ml
 Driver_dToolPayload.ml
 Elab_dCanonical.ml
 Elab_dCase.ml
