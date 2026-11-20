@@ -221,10 +221,14 @@ load/parse 前缀 + iface 摘要 **~2.6 s** → 逐定义精化（`collectSigs-d
 **~4.6 s** → 实例体/终止性 **~0.4 s** → codegen 检查 + iface 影子写 **~3.2 s**
 （其中 compute 1.09 s + write 0.48 s，单遍 `iface-write=118/118`）。
 
-1. **iface 影子写 ~1.2 s**：`ownSourceInfos`（逐源文件内容哈希）+ `ifaceOfPackage`
-   （逐模块 `cachedOfProgram` zonk 与 7 张表的规范化哈希）。写回侧已合并为单次读取
-（旧 §1 第 3 条）。接口哈希的「排序规范化」已改为混合归并（O(d log d)），单模块
-   数千项时不再二次退化（§5.2 的 8000 档 3116 → 1067 ms）。
+1. **iface 影子写（缓存开启的增量构建）**：`ownSourceInfos`（逐源文件内容哈希，闭包扫描已
+   给出）+ `ifaceOfPackage`（逐模块 `cachedOfProgram` zonk 与 7 张表的规范化哈希）+ 写回。
+   同包干净模块（`cmAddr` 上已有接口）现在记录原样复用、只编码脏模块：单模块增量
+   `compute` 410 → 53 ms、`write` 366 → 26 ms（68 个模块里 67 个干净）。自举 / CI 的每级
+   一次性对象库里接口写完之后不会再被读，`VUNA_IFACE_WRITE=0` 直接跳过：冷
+   `build --no-compile packages/compiler` user 4.49–4.54 s → 3.70–3.74 s。接口哈希的
+   「排序规范化」已改为混合归并（O(d log d)），单模块数千项时不再二次退化
+   （§5.2 的 8000 档 3116 → 1067 ms）。
 2. **load/parse 前缀 ~4.0 s（冷 store，含 iface 摘要读取）**：`check packages/compiler` 的闭包要
    解析 181 个模块；冷 TMPDIR 还含 lex 载荷写。前端本身（lex + 语法分析）在 `VUNA_OBS=1`
    下可单独归因：冷 `check packages/compiler` = `vuna.parse.lex` 335 次 / **212 ms** +
@@ -240,12 +244,12 @@ load/parse 前缀 + iface 摘要 **~2.6 s** → 逐定义精化（`collectSigs-d
    数据来自**归属桶**（一次 `O(def)` 分桶），不在每个单元重扫全程序；单元缓存的 key
    （模块身份 + import 链 + `pr`）只在缓存启用时计算——自举 / CI 的一次性对象库里它
    不可能命中，构建脚本直接 `VUNA_UNIT_CACHE=0`。模块身份直接用闭包扫描的接口地址
-   `cmAddr`（包环境 + 源摘要 + 直接依赖源摘要），不再逐模块编码整棵声明 AST：
-   缓存开启的单模块增量构建（改一个定义后重建 `packages/compiler`，其余单元全部命中）
-   user **5.1–5.4 s → 4.05–4.15 s**。同机 A/B（空 store、同窗口交替，取最小）：
-   冷 `build --no-compile packages/compiler` user **5.8–6.4 s → 4.5–4.8 s**（wall ~6.2–6.9 s →
-   ~4.8–5.1 s）；缓存开启的冷构建 user 5.9 → 5.7–5.8 s。`groupRuntimeDefs` 已表化，
-   `dtDefLocTable` 的右嵌套 `++` 已改 `strConcatMany`。
+   `cmAddr`（包环境 + 源摘要 + 直接依赖源摘要），不再逐模块编码整棵声明 AST。
+   同机 A/B（空 store、同窗口交替，取最小，基线 = 本轮改动前的主干二进制）：
+   冷 `build --no-compile packages/compiler` user **4.49–4.54 s → 3.70–3.74 s**（含
+   `VUNA_IFACE_WRITE=0`）；缓存开启的单模块增量构建 user **4.27–4.36 s → 3.88–3.93 s**
+   （接口 compute/write 见第 1 条）。`groupRuntimeDefs` 已表化，`dtDefLocTable` 的右嵌套
+   `++` 已改 `strConcatMany`。
 5. **终止性 ~0.3 s（冷 build）**：`anyOwn` 的 O(n²) 已修；剩余是逐组 measure/SCT 与
    usage/callGraph 的真实工作。冷 `check packages/compiler` 的 `VUNA_OBS=1` 读数：
    `vuna.term`（两处调用）共 ~0.92 s，其中 `vuna.term.sct` 52 次共 ~15 ms、单次最大
