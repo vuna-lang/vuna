@@ -372,6 +372,13 @@ load/parse 前缀 + iface 摘要 **~2.6 s** → 逐定义精化（`collectSigs-d
   （`peelPiArgsTy` 16.3 万次调用、`annotTyOf` 5.1 万、`ctorTypeArgsOf` 3.3 万），
   按定义 / 构造子重复求值的只有 ~2 万次（`ctorOpaqueFlagsOf` 18.5k、`ctorArityNeed` 0.8k、
   `dataUsedLevels` 0.9k）——上限 ~0.3% 分配，撤。类型渲染本身是逐应用的真实工作。
+- **iface / impl 双摘要共享子哈希**：iface 摘要整段实测 **1145 ms**（整跑 ~23%）——
+  `defs` 512 ms（iface 205 + impl 307）、`decls` 249 ms（107 + 142）、`globals` 130 ms、
+  `digestParts` 27 ms；其中**编码占 ~84%**（`payloadDigest` 的预折叠 + SHA 只有 184 ms）。
+  两个摘要只在 opaque 体上不同，共享子哈希在模块级可证明逐字节一致（进程内对照：
+  base 74 + compiler-base 25 个模块全部相等），但**依赖可见的哈希仍会变**
+  （`hashOfImportName` 取值的路径未定位），所以不落地。动这块之前先补一个
+  「重算哈希 == 存盘哈希」的对照口径。
 
 ### 4.1 逐定义精化与 codegen 检查的分段（span 口径）
 
