@@ -9,10 +9,10 @@ and t_ExportRef = { f_ExportRef_refKind : string; f_ExportRef_refTarget : string
 let rec v_Eq_uVuna_uCompiler_uLoader_uModules_uExportEntry = (B_dTrait_dEq.C_Eq_Eq ((fun sx sy -> (match sx with
   | { f_ExportEntry_kind = dtb__0; f_ExportEntry_public = dtb__1; f_ExportEntry_target = dtb__2; f_ExportEntry_parent = dtb__3 } -> (match sy with
   | { f_ExportEntry_kind = dtb__4; f_ExportEntry_public = dtb__5; f_ExportEntry_target = dtb__6; f_ExportEntry_parent = dtb__7 } -> (if (dtb__0 = dtb__4) then (if (dtb__1 = dtb__5) then (if (dtb__2 = dtb__6) then (dtb__3 = dtb__7) else false) else false) else false)
-  | _ -> (0 = 1)
+  | _ -> false
 )
   | _ -> failwith "DT: impossible branch"
-)), (fun sx sy -> (if (((B_dTrait_dEq.v__x61__x61_ v_Eq_uVuna_uCompiler_uLoader_uModules_uExportEntry) sx) sy) then (0 = 1) else (1 = 1)))))
+)), (fun sx sy -> (if (((B_dTrait_dEq.v__x61__x61_ v_Eq_uVuna_uCompiler_uLoader_uModules_uExportEntry) sx) sy) then false else true))))
 
 # 54 "Vuna/Compiler/Loader/Modules.vuna"
 let v_moduleNameOf = (fun (mc0 : t_Module) -> (match mc0 with
