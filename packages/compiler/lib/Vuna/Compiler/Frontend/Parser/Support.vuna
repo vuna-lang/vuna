@@ -172,14 +172,12 @@ tokTail (_ :: rest) = rest
 
 -- 从给定 token 列表起收集连续的标识符，直到 `:`；递归沿列表结构下降（无长度上限）。
 binderNameTail : List PTok -> List String -> Maybe (List String)
-binderNameTail toks acc =
-  case toks of
-    [] => Nothing
-    t :: rest =>
-      case t of
-        PTok (TIdent name) _ => binderNameTail rest (name :: acc)
-        PTok (TSym ":") _ => Just (reverse acc)
-        _ => Nothing
+binderNameTail [] acc = Nothing
+binderNameTail (t :: rest) acc =
+  case t of
+    PTok (TIdent name) _ => binderNameTail rest (name :: acc)
+    PTok (TSym ":") _ => Just (reverse acc)
+    _ => Nothing
 
 quantifiedHead : PState -> Qty -> Maybe (Pair (Maybe Qty) (List String))
 quantifiedHead st q =

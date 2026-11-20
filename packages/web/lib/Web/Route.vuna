@@ -45,14 +45,12 @@ decodeSegment s = strPack (decodeBytes (strUnpack s) [])
 
 -- | `decodeSegment` 的字节扫描（逆序累积）。
 decodeBytes : List Int -> List Int -> List Int
-decodeBytes xs acc =
-  case xs of
-    [] => reverse acc
-    37 :: h :: l :: rest =>
-      case hexPair h l of
-        Just b => decodeBytes rest (b :: acc)
-        Nothing => decodeBytes rest (l :: h :: 37 :: acc)
-    c :: rest => decodeBytes rest (c :: acc)
+decodeBytes [] acc = reverse acc
+decodeBytes (37 :: h :: l :: rest) acc =
+  case hexPair h l of
+    Just b => decodeBytes rest (b :: acc)
+    Nothing => decodeBytes rest (l :: h :: 37 :: acc)
+decodeBytes (c :: rest) acc = decodeBytes rest (c :: acc)
 
 -- | 两位十六进制字节值。
 hexPair : Int -> Int -> Maybe Int
@@ -83,18 +81,16 @@ paramName p = substring (natFromInt 1) (natFromInt (strLength p - 1)) p
 
 -- | 段模式匹配；成功时返回捕获的参数（按出现顺序）。
 export matchSegments : List String -> List String -> Maybe (List (Pair String String))
-matchSegments pat actual =
-  case pat of
-    [] => if actual == [] then Just [] else Nothing
-    p :: ps =>
-      case actual of
-        [] => Nothing
-        a :: ar =>
-          if isParam p then
-            case matchSegments ps ar of
-              Nothing => Nothing
-              Just rest => Just (Pair (paramName p) a :: rest)
-          else if p == a then matchSegments ps ar else Nothing
+matchSegments [] actual = if actual == [] then Just [] else Nothing
+matchSegments (p :: ps) actual =
+  case actual of
+    [] => Nothing
+    a :: ar =>
+      if isParam p then
+        case matchSegments ps ar of
+          Nothing => Nothing
+          Just rest => Just (Pair (paramName p) a :: rest)
+      else if p == a then matchSegments ps ar else Nothing
 
 -- | 按方法 + 路径匹配路由（方法大小写不敏感）。
 export matchRoute : List Route -> String -> String -> Maybe (Pair Route (List (Pair String String)))
@@ -102,16 +98,14 @@ matchRoute routes method path = matchGo routes method (splitPath path)
 
 -- | `matchRoute` 的线性扫描。
 matchGo : List Route -> String -> List String -> Maybe (Pair Route (List (Pair String String)))
-matchGo routes method segs =
-  case routes of
-    [] => Nothing
-    r :: rest =>
-      if sameMethod r.method method then
-        case matchSegments r.segments segs of
-          Just params => Just (Pair r params)
-          Nothing => matchGo rest method segs
-      else
-        matchGo rest method segs
+matchGo [] method segs = Nothing
+matchGo (r :: rest) method segs =
+  if sameMethod r.method method then
+    case matchSegments r.segments segs of
+      Just params => Just (Pair r params)
+      Nothing => matchGo rest method segs
+  else
+    matchGo rest method segs
 
 -- | 路径命中、但方法可能不符时，用于 405 的 `Allow` 列表（去重、保序）。
 export allowedMethods : List Route -> String -> List String
@@ -131,16 +125,11 @@ dedupe xs = dedupeGo xs [] (natToInt (length xs) + 1)
 
 -- | `dedupe` 的累积循环；`fuel` 保证终止。
 dedupeGo : List String -> List String -> Int -> List String
-dedupeGo xs seen fuel =
-  case xs of
-    [] => reverse seen
-    x :: rest =>
-      if fuel <= 0 then
-        reverse seen
-      else if mem x seen then
-        dedupeGo rest seen (fuel - 1)
-      else
-        dedupeGo rest (x :: seen) (fuel - 1)
+dedupeGo [] seen fuel = reverse seen
+dedupeGo (x :: rest) seen fuel =
+  if fuel <= 0 then
+    reverse seen
+  else if mem x seen then dedupeGo rest seen (fuel - 1) else dedupeGo rest (x :: seen) (fuel - 1)
 
 -- | 方法比较（ASCII 大写归一）。
 export sameMethod : String -> String -> Bool

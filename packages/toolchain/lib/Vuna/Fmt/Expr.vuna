@@ -1035,21 +1035,19 @@ applyDoc fuel env at fn args =
 
 -- | 内部：把中缀 / 反引号链按源码顺序摊平成「操作数表 + 运算符表」。
 sourceInfixParts : Expr -> Pair (List Expr) (List String)
-sourceInfixParts e =
-  case e of
-    EInfix op l r sp =>
-      let
-        lp = sourceInfixParts l
-        rp = sourceInfixParts r
-      in Pair (append (firstOf lp) (firstOf rp)) (append (secondOf lp) (append [op] (secondOf rp)))
-    EBacktick name l r sp =>
-      let
-        lp = sourceInfixParts l
-        rp = sourceInfixParts r
-      in Pair
-        (append (firstOf lp) (firstOf rp))
-        (append (secondOf lp) (append ["`" ++ name ++ "`"] (secondOf rp)))
-    _ => Pair [e] []
+sourceInfixParts (EInfix op l r sp) =
+  let
+    lp = sourceInfixParts l
+    rp = sourceInfixParts r
+  in Pair (append (firstOf lp) (firstOf rp)) (append (secondOf lp) (append [op] (secondOf rp)))
+sourceInfixParts (EBacktick name l r sp) =
+  let
+    lp = sourceInfixParts l
+    rp = sourceInfixParts r
+  in Pair
+    (append (firstOf lp) (firstOf rp))
+    (append (secondOf lp) (append ["`" ++ name ++ "`"] (secondOf rp)))
+sourceInfixParts e = Pair [e] []
 
 -- | 内部：中缀链的单行渲染（操作数之间 ` op `）。
 inlineInfixChain : Int -> List FixityDecl -> Expr -> Maybe String
@@ -1122,18 +1120,16 @@ infixDoc fuel env at p assoc label a b =
 
 -- | 内部：实例名调用的后缀（`@name` / `@(expr)`）。
 instanceSuffix : List FixityDecl -> Expr -> Maybe String
+instanceSuffix env (EStr s sp) = Just ("@" ++ instanceNameText s)
+instanceSuffix env (EParen e sp) =
+  case inlineExprGo formatFuelBound env e of
+    Just ps => Just ("@(" ++ ps ++ ")")
+    Nothing => Nothing
+instanceSuffix env (EVar vn sp) = Just ("@(" ++ vn ++ ")")
 instanceSuffix env nm =
-  case nm of
-    EStr s sp => Just ("@" ++ instanceNameText s)
-    EParen e sp =>
-      case inlineExprGo formatFuelBound env e of
-        Just ps => Just ("@(" ++ ps ++ ")")
-        Nothing => Nothing
-    EVar vn sp => Just ("@(" ++ vn ++ ")")
-    _ =>
-      case inlineExprGo formatFuelBound env nm of
-        Just ns => Just ("@(" ++ ns ++ ")")
-        Nothing => Nothing
+  case inlineExprGo formatFuelBound env nm of
+    Just ns => Just ("@(" ++ ns ++ ")")
+    Nothing => Nothing
 
 -- | 内部：实例名调用 `f@name args`。
 appAtDoc : Int -> List FixityDecl -> TriviaCtx -> Expr -> Expr -> Expr -> List Expr -> Doc

@@ -237,7 +237,7 @@ payloadDigest s = Vuna.Compiler.Base.Hash.contentAddress s
 
 -- | 可解析分片：长度前缀，保证多段拼接无歧义。
 partOf : String -> List String
-partOf s = strFromInt (strLength s) :: ":" :: s :: []
+partOf s = [strFromInt (strLength s), ":", s]
 
 -- | 多个规范分片 → 一个内容摘要。
 digestParts : List String -> String

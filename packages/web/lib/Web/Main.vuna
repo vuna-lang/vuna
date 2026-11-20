@@ -31,7 +31,5 @@ main a =
 
 -- | 取第一个参数作为监听地址。
 addrOf : List String -> String
-addrOf args =
-  case args of
-    a :: _ => a
-    [] => defaultAddr
+addrOf (a :: _) = a
+addrOf [] = defaultAddr

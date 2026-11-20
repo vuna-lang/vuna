@@ -142,7 +142,8 @@ dfsPost steps fuel g visited post =
   else
     case steps of
       [] => Pair visited post
-      (Pair n emit) :: rest => if emit then dfsPost rest (fuel - 1) g visited (n :: post) else if HashMap.member n visited then dfsPost rest (fuel - 1) g visited post else dfsPost (append (map (\m => Pair m False) (adjOf n g)) (Pair n True :: rest)) (fuel - 1) g (HashMap.insert n True visited) post
+      (Pair n True) :: rest => dfsPost rest (fuel - 1) g visited (n :: post)
+      (Pair n False) :: rest => if HashMap.member n visited then dfsPost rest (fuel - 1) g visited post else dfsPost (append (map (\m => Pair m False) (adjOf n g)) (Pair n True :: rest)) (fuel - 1) g (HashMap.insert n True visited) post
 
 dfsAll : List String -> Int -> HashMap String (List String) -> HashMap String Bool -> List String -> List String
 dfsAll [] fuel g visited post = post
@@ -164,21 +165,19 @@ postOrder gT g nodes =
 
 collectComp : List String -> Int -> HashMap String (List String) -> HashMap String Bool -> List String -> Pair (HashMap String Bool) (Pair (List String) Bool)
 -- 耗尽：comp 只是前缀，不能当成完整分量。
-collectComp stack fuel rg assigned comp =
-  case stack of
-    [] => Pair assigned (Pair comp True)
-    m :: rest =>
-      if fuel <= 0 then
-        Pair assigned (Pair comp False)
-      else if HashMap.member m assigned then
-        collectComp rest (fuel - 1) rg assigned comp
-      else
-        collectComp
-          (append (adjOf m rg) rest)
-          (fuel - 1)
-          rg
-          (HashMap.insert m True assigned)
-          (m :: comp)
+collectComp [] fuel rg assigned comp = Pair assigned (Pair comp True)
+collectComp (m :: rest) fuel rg assigned comp =
+  if fuel <= 0 then
+    Pair assigned (Pair comp False)
+  else if HashMap.member m assigned then
+    collectComp rest (fuel - 1) rg assigned comp
+  else
+    collectComp
+      (append (adjOf m rg) rest)
+      (fuel - 1)
+      rg
+      (HashMap.insert m True assigned)
+      (m :: comp)
 
 -- | `Pair ok comps`：`ok = False` 表示某个分量被 fuel 截断。
 sccOf : List String -> Int -> HashMap String (List String) -> HashMap String Bool -> List (List String) -> Pair Bool (List (List String))

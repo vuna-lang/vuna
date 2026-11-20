@@ -58,11 +58,9 @@ printHelp path =
     Nothing => printText (unknownCommandText (join " " path))
 
 dispatch : List String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
-dispatch args =
-  case args of
-    "web" :: "version" :: _ => printText "vuna web ${Version.vunaVersion}\n"
-    "web" :: rest => runWebCli rest
-    _ => printText (unknownCommandText (join " " args))
+dispatch ("web" :: "version" :: _) = printText "vuna web ${Version.vunaVersion}\n"
+dispatch ("web" :: rest) = runWebCli rest
+dispatch args = printText (unknownCommandText (join " " args))
 
 printText : String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
 printText text =

@@ -207,13 +207,11 @@ dropAliases [] als = als
 dropAliases (n :: rest) als = dropAliases rest (filter (\p => aliasNameOf p /= n) als)
 
 aliasOf : List String -> Pair Pat Expr -> Maybe (Pair String String)
-aliasOf comp (Pair pat val) =
-  case pat of
-    PVar g gsp =>
-      case val of
-        EVar n nsp => if memName (rnameKey n) comp then Just (Pair g (rnameKey n)) else Nothing
-        _ => Nothing
+aliasOf comp (Pair (PVar g gsp) val) =
+  case val of
+    EVar n nsp => if memName (rnameKey n) comp then Just (Pair g (rnameKey n)) else Nothing
     _ => Nothing
+aliasOf comp (Pair _ val) = Nothing
 
 inlArgs : List String -> List (Pair String String) -> List Expr -> List Expr
 inlArgs comp als [] = []
@@ -881,35 +879,33 @@ paramsOf name defTbl =
 -- caller 有守卫时按守卫变量名匹配；没有守卫时按「实参是 caller 的某个形参 / 形参减 k」
 -- 判弱边 / 严格边（这种调用者的环另外由 `fuelAcceptable` 的无守卫子图判定兜住）。
 siteFuelStrict : List String -> Maybe String -> Maybe Int -> Site -> Maybe Bool
-siteFuelStrict callerParams callerGuard calleeIdx site =
-  case calleeIdx of
+siteFuelStrict callerParams callerGuard Nothing site = Nothing
+siteFuelStrict callerParams callerGuard (Just i) site =
+  case nthExpr site.siteArgs i of
     Nothing => Nothing
-    Just i =>
-      case nthExpr site.siteArgs i of
-        Nothing => Nothing
-        Just a =>
-          case callerGuard of
-            Nothing =>
-              case a of
-                EApp (EVar op osp) xs sp =>
-                  if isSubOpName (rnameKey op) then
-                    case xs of
-                      [EVar n nsp, EInt k ksp] => if k > 0 && memName (rnameKey n) callerParams then Just True else Just False
-                      _ => Just False
-                  else
-                    Just False
-                _ => Just False
-            Just callerFuel =>
-              case a of
-                EVar n sp => if rnameKey n == callerFuel then Just False else Nothing
-                EApp (EVar op osp) xs sp =>
-                  if isSubOpName (rnameKey op) then
-                    case xs of
-                      [EVar n nsp, EInt k ksp] => if rnameKey n == callerFuel then if k > 0 then Just True else Nothing else Nothing
-                      _ => Nothing
-                  else
-                    Nothing
-                _ => Nothing
+    Just a =>
+      case callerGuard of
+        Nothing =>
+          case a of
+            EApp (EVar op osp) xs sp =>
+              if isSubOpName (rnameKey op) then
+                case xs of
+                  [EVar n nsp, EInt k ksp] => if k > 0 && memName (rnameKey n) callerParams then Just True else Just False
+                  _ => Just False
+              else
+                Just False
+            _ => Just False
+        Just callerFuel =>
+          case a of
+            EVar n sp => if rnameKey n == callerFuel then Just False else Nothing
+            EApp (EVar op osp) xs sp =>
+              if isSubOpName (rnameKey op) then
+                case xs of
+                  [EVar n nsp, EInt k ksp] => if rnameKey n == callerFuel then if k > 0 then Just True else Nothing else Nothing
+                  _ => Nothing
+              else
+                Nothing
+            _ => Nothing
 
 fuelEdgesOf : List String -> HashMap String (List (Pair (List Pat) Expr)) -> List Site -> List (Pair (Pair (Pair String String) Int) Span)
 fuelEdgesOf comp defTbl sites = fuelEdgesGo comp defTbl sites []

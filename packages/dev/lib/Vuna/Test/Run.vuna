@@ -1232,7 +1232,11 @@ runtimeCase env c source expectedErr expectedExit =
               r <- runCmdMerged env "${c.caseId}-run" env.envCwd c.caseTimeout ["${outdir}/prog"]
               let
                 fragmentA = if fragmentText == "" then [] else [assertContains "runtime fragment" (combinedOut r) (trimNewlines fragmentText)]
-                exitA = if expectedExit == 0 then assertExitNonZero "runtime exit" r.cmdCode else if expectedExit == 256 then assertExit "runtime exit 0" r.cmdCode else Assertion "runtime exit" (r.cmdCode == expectedExit) "expected exit ${strOfInt expectedExit}, got ${strOfInt r.cmdCode}"
+                exitA =
+                  case expectedExit of
+                    0 => assertExitNonZero "runtime exit" r.cmdCode
+                    256 => assertExit "runtime exit 0" r.cmdCode
+                    _ => Assertion "runtime exit" (r.cmdCode == expectedExit) "expected exit ${strOfInt expectedExit}, got ${strOfInt r.cmdCode}"
               in pure (append fragmentA [exitA])
           else
             pure [assertExit "build exit" b.cmdCode]

@@ -61,10 +61,8 @@ printHelp path =
 
 -- | 内部：分派——`vuna dev` 之后的一切交给 `devArgs`。
 dispatch : List String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
-dispatch args =
-  case args of
-    "dev" :: rest => Vuna.Cli.Dev.devArgs rest
-    _ => printText (unknownCommandText (join " " args))
+dispatch ("dev" :: rest) = Vuna.Cli.Dev.devArgs rest
+dispatch args = printText (unknownCommandText (join " " args))
 
 -- | 内部：打印文本并返回 0。
 printText : String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int

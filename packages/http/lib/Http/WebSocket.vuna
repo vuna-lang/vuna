@@ -119,7 +119,15 @@ parseFrame requireMask buf =
       op = band b0 15
       masked = band b1 128
       len7 = band b1 127
-    in if rsv /= 0 then FrameInvalid "reserved bits set" else if requireMask && masked == 0 then FrameInvalid "client frame must be masked" else if len7 == 127 then FrameInvalid "64-bit length unsupported" else if len7 == 126 then if strLength buf < 4 then FrameNeedMore else finishFrame op fin buf 4 (byteAt buf 2 * 256 + byteAt buf 3) masked else finishFrame op fin buf 2 len7 masked
+    in if rsv /= 0 then
+      FrameInvalid "reserved bits set"
+    else if requireMask && masked == 0 then
+      FrameInvalid "client frame must be masked"
+    else
+      case len7 of
+        127 => FrameInvalid "64-bit length unsupported"
+        126 => if strLength buf < 4 then FrameNeedMore else finishFrame op fin buf 4 (byteAt buf 2 * 256 + byteAt buf 3) masked
+        _ => finishFrame op fin buf 2 len7 masked
 
 -- | 帧头已解析后取载荷。
 finishFrame : Int -> Int -> String -> Int -> Int -> Int -> FrameParsed
@@ -137,7 +145,23 @@ finishFrame op fin buf off len masked =
       raw = strSubstring (off + keyLen) len buf
       payload = if masked == 128 then unmask key raw else raw
       rest = strSubstring total (strLength buf - total) buf
-    in if op >= 8 then if fin == 0 then FrameInvalid "fragmented control frame" else if len > 125 then FrameInvalid "control frame too large" else if op == 8 then FrameOk (FrameClose (closeCode payload) (closeReason payload)) rest else if op == 9 then FrameOk (FramePing payload) rest else if op == 10 then FrameOk (FramePong payload) rest else FrameInvalid "unknown control opcode" else if op == 0 then FrameInvalid "fragmentation unsupported" else if op == 1 then FrameOk (FrameText payload) rest else if op == 2 then FrameOk (FrameBinary payload) rest else FrameInvalid "unknown opcode"
+    in if op >= 8 then
+      if fin == 0 then
+        FrameInvalid "fragmented control frame"
+      else if len > 125 then
+        FrameInvalid "control frame too large"
+      else
+        case op of
+          8 => FrameOk (FrameClose (closeCode payload) (closeReason payload)) rest
+          9 => FrameOk (FramePing payload) rest
+          10 => FrameOk (FramePong payload) rest
+          _ => FrameInvalid "unknown control opcode"
+    else
+      case op of
+        0 => FrameInvalid "fragmentation unsupported"
+        1 => FrameOk (FrameText payload) rest
+        2 => FrameOk (FrameBinary payload) rest
+        _ => FrameInvalid "unknown opcode"
 
 -- | close 帧的状态码（不足两字节按 0）。
 closeCode : String -> Int
@@ -169,24 +193,20 @@ renderWith key mask f =
 
 -- | 帧的 opcode。
 opcodeOf : Frame -> Int
-opcodeOf f =
-  case f of
-    FrameText _ => 1
-    FrameBinary _ => 2
-    FrameClose _ _ => 8
-    FramePing _ => 9
-    FramePong _ => 10
+opcodeOf (FrameText _) = 1
+opcodeOf (FrameBinary _) = 2
+opcodeOf (FrameClose _ _) = 8
+opcodeOf (FramePing _) = 9
+opcodeOf (FramePong _) = 10
 
 -- | 帧的载荷（close 帧拼上状态码）。
 payloadOf : Frame -> String
-payloadOf f =
-  case f of
-    FrameText s => s
-    FrameBinary s => s
-    FramePing s => s
-    FramePong s => s
-    FrameClose code reason =>
-      strPack (append [code / 256, code - code / 256 * 256] (strUnpack reason))
+payloadOf (FrameText s) = s
+payloadOf (FrameBinary s) = s
+payloadOf (FramePing s) = s
+payloadOf (FramePong s) = s
+payloadOf (FrameClose code reason) =
+  strPack (append [code / 256, code - code / 256 * 256] (strUnpack reason))
 
 -- | 长度字段的低 7 位标记。
 lenMarker : Int -> Int

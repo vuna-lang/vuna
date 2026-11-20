@@ -101,16 +101,14 @@ printHelp path =
 
 -- | 内部：分派——查接线表，未知命令给建议。
 dispatch : List String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
-dispatch args =
-  case args of
-    [] =>
-      do
-        _ <- consolePrint overviewText
-        pure 2
-    arg :: _ =>
-      case matchHandler args of
-        Just (Pair h rest) => h.handlerRun rest
-        Nothing => printText (unknownCommandText arg)
+dispatch [] =
+  do
+    _ <- consolePrint overviewText
+    pure 2
+dispatch (args@(arg :: _)) =
+  case matchHandler args of
+    Just (Pair h rest) => h.handlerRun rest
+    Nothing => printText (unknownCommandText arg)
 
 -- | 内部：打印文本并返回 0。
 printText : String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int

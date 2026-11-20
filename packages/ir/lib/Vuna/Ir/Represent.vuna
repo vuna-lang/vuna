@@ -24,52 +24,52 @@ representGroup : IrShared -> IrGroup -> IrGroup
 representGroup shared g = IrGroup g.irGroupIsRec (map (representDef shared) g.irGroupDefs)
 
 representDef : IrShared -> IrDef -> IrDef
-representDef shared d =
-  case d of
-    IrDef name arity deps ty body recOk initGuard span =>
-      IrDef name arity deps ty (representIr shared body) recOk initGuard span
-    IrExternDef name ty cName span => d
+representDef shared (IrDef name arity deps ty body recOk initGuard span) =
+  IrDef name arity deps ty (representIr shared body) recOk initGuard span
+representDef shared (d@(IrExternDef name ty cName span)) = d
 
 representIr : IrShared -> Ir -> Ir
-representIr shared ir =
-  case ir of
-    IrCtor family ctor tys args =>
-      let
-        args2 = map (representIr shared) args
-      in case irSharedUnboxedOf family shared.irSharedUnboxed of
-        Just _ =>
-          case args2 of
-            [only] => only
-            _ => IrCtor family ctor tys args2
-        Nothing => IrCtor family ctor tys args2
-    IrRecord family resTy fields =>
-      IrRecord family resTy (map (\p => Pair (firstOf p) (representIr shared (secondOf p))) fields)
-    IrRecUpd base family fields resTy =>
-      IrRecUpd
-        (representIr shared base)
-        family
-        (map (\p => Pair (firstOf p) (representIr shared (secondOf p))) fields)
-        resTy
-    IrProj base family field resTy => IrProj (representIr shared base) family field resTy
-    IrRtApp sym args => IrRtApp sym (map (representIr shared) args)
-    IrCast cFrom cTo inner => IrCast cFrom cTo (representIr shared inner)
-    IrLet bs scrut body => IrLet bs (representIr shared scrut) (representIr shared body)
-    IrLam bs rt body => IrLam bs rt (representIr shared body)
-    IrApp appTy f a => IrApp appTy (representIr shared f) (representIr shared a)
-    IrTail inner => IrTail (representIr shared inner)
-    IrIf c th el => IrIf (representIr shared c) (representIr shared th) (representIr shared el)
-    IrCase caseTy resultTy scrut alts => representCase shared caseTy resultTy scrut alts
-    IrNatCase scrut fresh zero succ catch =>
-      IrNatCase
-        (representIr shared scrut)
-        fresh
-        (representAlt shared zero)
-        (representAlt shared succ)
-        (representAlt shared catch)
-    IrConcatMany parts => IrConcatMany (map (representIr shared) parts)
-    IrEffThunk family ctor unitTy arity prim =>
-      IrEffThunk family ctor unitTy arity (representIr shared prim)
-    _ => ir
+representIr shared (IrCtor family ctor tys args) =
+  let
+    args2 = map (representIr shared) args
+  in case irSharedUnboxedOf family shared.irSharedUnboxed of
+    Just _ =>
+      case args2 of
+        [only] => only
+        _ => IrCtor family ctor tys args2
+    Nothing => IrCtor family ctor tys args2
+representIr shared (IrRecord family resTy fields) =
+  IrRecord family resTy (map (\p => Pair (firstOf p) (representIr shared (secondOf p))) fields)
+representIr shared (IrRecUpd base family fields resTy) =
+  IrRecUpd
+    (representIr shared base)
+    family
+    (map (\p => Pair (firstOf p) (representIr shared (secondOf p))) fields)
+    resTy
+representIr shared (IrProj base family field resTy) =
+  IrProj (representIr shared base) family field resTy
+representIr shared (IrRtApp sym args) = IrRtApp sym (map (representIr shared) args)
+representIr shared (IrCast cFrom cTo inner) = IrCast cFrom cTo (representIr shared inner)
+representIr shared (IrLet bs scrut body) =
+  IrLet bs (representIr shared scrut) (representIr shared body)
+representIr shared (IrLam bs rt body) = IrLam bs rt (representIr shared body)
+representIr shared (IrApp appTy f a) = IrApp appTy (representIr shared f) (representIr shared a)
+representIr shared (IrTail inner) = IrTail (representIr shared inner)
+representIr shared (IrIf c th el) =
+  IrIf (representIr shared c) (representIr shared th) (representIr shared el)
+representIr shared (IrCase caseTy resultTy scrut alts) =
+  representCase shared caseTy resultTy scrut alts
+representIr shared (IrNatCase scrut fresh zero succ catch) =
+  IrNatCase
+    (representIr shared scrut)
+    fresh
+    (representAlt shared zero)
+    (representAlt shared succ)
+    (representAlt shared catch)
+representIr shared (IrConcatMany parts) = IrConcatMany (map (representIr shared) parts)
+representIr shared (IrEffThunk family ctor unitTy arity prim) =
+  IrEffThunk family ctor unitTy arity (representIr shared prim)
+representIr shared ir = ir
 
 -- 单构造子去装箱族的 case → `let`：分支 binder 表就是完整 telescope，体的下标不变。
 representCase : IrShared -> Maybe IrTy -> Maybe IrTy -> Ir -> List IrAlt -> Ir
@@ -98,10 +98,8 @@ allCatchAll (alt :: rest) =
     Just _ => False
 
 representAlt : IrShared -> Maybe IrAlt -> Maybe IrAlt
-representAlt shared alt =
-  case alt of
-    Nothing => Nothing
-    Just x => Just (representAltIr shared x)
+representAlt shared Nothing = Nothing
+representAlt shared (Just x) = Just (representAltIr shared x)
 
 representAltIr : IrShared -> IrAlt -> IrAlt
 representAltIr shared (IrAlt ctor bs body) = IrAlt ctor bs (representIr shared body)

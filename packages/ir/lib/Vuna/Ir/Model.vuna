@@ -53,18 +53,16 @@ export data IrTy(..) : Type where
 
 -- | 用类型实参替换 `IrTyVar` 槽；越界/缺失的槽落 `IrTyOpaque`。
 export irTySubstVars : List IrTy -> IrTy -> IrTy
-irTySubstVars args ty =
-  case ty of
-    IrTyVar i => irTyVarAt args i
-    IrTyInt => IrTyInt
-    IrTyStr => IrTyStr
-    IrTyBool => IrTyBool
-    IrTyFloat => IrTyFloat
-    IrTyOpaque => IrTyOpaque
-    IrTyArray a => IrTyArray (irTySubstVars args a)
-    IrTyRef a => IrTyRef (irTySubstVars args a)
-    IrTyData f xs => IrTyData f (map (\x => irTySubstVars args x) xs)
-    IrTyFun d c => IrTyFun (irTySubstVars args d) (irTySubstVars args c)
+irTySubstVars args (IrTyVar i) = irTyVarAt args i
+irTySubstVars args IrTyInt = IrTyInt
+irTySubstVars args IrTyStr = IrTyStr
+irTySubstVars args IrTyBool = IrTyBool
+irTySubstVars args IrTyFloat = IrTyFloat
+irTySubstVars args IrTyOpaque = IrTyOpaque
+irTySubstVars args (IrTyArray a) = IrTyArray (irTySubstVars args a)
+irTySubstVars args (IrTyRef a) = IrTyRef (irTySubstVars args a)
+irTySubstVars args (IrTyData f xs) = IrTyData f (map (\x => irTySubstVars args x) xs)
+irTySubstVars args (IrTyFun d c) = IrTyFun (irTySubstVars args d) (irTySubstVars args c)
 
 irTyVarAt : List IrTy -> Int -> IrTy
 irTyVarAt [] _ = IrTyOpaque
@@ -567,25 +565,23 @@ irSize (IrTail inner) = irSize inner
 irSize ir = 1 + irSizeChildren ir
 
 irSizeChildren : Ir -> Int
-irSizeChildren ir =
-  case ir of
-    IrCtor family ctor _ args => irSizeList args
-    IrRecord family _ fields => irSizeFields fields
-    IrProj base family field _ => irSize base
-    IrRecUpd base family fields _ => irSize base + irSizeFields fields
-    IrRtApp sym args => irSizeList args
-    IrCast cFrom cTo inner => irSize inner
-    IrLet bs scrut body => irSize scrut + irSize body
-    IrLam bs _ body => irSize body
-    IrApp _ f a => irSize f + irSize a
-    IrTail inner => irSize inner
-    IrIf c th el => irSize c + irSize th + irSize el
-    IrCase _ _ scrut alts => irSize scrut + irSizeAlts alts
-    IrNatCase scrut fresh zero succ catch =>
-      irSize scrut + irSizeAlt zero + irSizeAlt succ + irSizeAlt catch
-    IrConcatMany parts => irSizeList parts
-    IrEffThunk family ctor unitTy arity prim => irSize prim
-    _ => 0
+irSizeChildren (IrCtor family ctor _ args) = irSizeList args
+irSizeChildren (IrRecord family _ fields) = irSizeFields fields
+irSizeChildren (IrProj base family field _) = irSize base
+irSizeChildren (IrRecUpd base family fields _) = irSize base + irSizeFields fields
+irSizeChildren (IrRtApp sym args) = irSizeList args
+irSizeChildren (IrCast cFrom cTo inner) = irSize inner
+irSizeChildren (IrLet bs scrut body) = irSize scrut + irSize body
+irSizeChildren (IrLam bs _ body) = irSize body
+irSizeChildren (IrApp _ f a) = irSize f + irSize a
+irSizeChildren (IrTail inner) = irSize inner
+irSizeChildren (IrIf c th el) = irSize c + irSize th + irSize el
+irSizeChildren (IrCase _ _ scrut alts) = irSize scrut + irSizeAlts alts
+irSizeChildren (IrNatCase scrut fresh zero succ catch) =
+  irSize scrut + irSizeAlt zero + irSizeAlt succ + irSizeAlt catch
+irSizeChildren (IrConcatMany parts) = irSizeList parts
+irSizeChildren (IrEffThunk family ctor unitTy arity prim) = irSize prim
+irSizeChildren _ = 0
 
 export irSizeList : List Ir -> Int
 irSizeList [] = 0

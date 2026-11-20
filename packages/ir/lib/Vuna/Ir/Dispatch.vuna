@@ -23,20 +23,15 @@ dispatchIdNameOf : String -> Int -> Maybe String
 dispatchIdNameOf name arity =
   if name == effSendCoreName then
     if arity == 3 then Just effSendCoreIdName else Nothing
-  else if name == "Base.Effect.Core.performCore" then
-    if arity == 3 then Just "Base.Effect.Core.performCoreId" else Nothing
-  else if name == "Base.Effect.Core.handleCore" then
-    if arity == 5 then Just "Base.Effect.Core.handleCoreId" else Nothing
-  else if name == "Base.Effect.Core.handleCoreAt" then
-    if arity == 5 then Just "Base.Effect.Core.handleCoreAtId" else Nothing
-  else if name == "Base.Effect.Core.handleCoreLin" then
-    if arity == 5 then Just "Base.Effect.Core.handleCoreLinId" else Nothing
-  else if name == "Base.Effect.Core.handleWith" then
-    if arity == 5 then Just "Base.Effect.Core.handleWithId" else Nothing
-  else if name == "Base.Effect.Core.handleWithAt" then
-    if arity == 5 then Just "Base.Effect.Core.handleWithAtId" else Nothing
   else
-    Nothing
+    case name of
+      "Base.Effect.Core.performCore" => if arity == 3 then Just "Base.Effect.Core.performCoreId" else Nothing
+      "Base.Effect.Core.handleCore" => if arity == 5 then Just "Base.Effect.Core.handleCoreId" else Nothing
+      "Base.Effect.Core.handleCoreAt" => if arity == 5 then Just "Base.Effect.Core.handleCoreAtId" else Nothing
+      "Base.Effect.Core.handleCoreLin" => if arity == 5 then Just "Base.Effect.Core.handleCoreLinId" else Nothing
+      "Base.Effect.Core.handleWith" => if arity == 5 then Just "Base.Effect.Core.handleWithId" else Nothing
+      "Base.Effect.Core.handleWithAt" => if arity == 5 then Just "Base.Effect.Core.handleWithAtId" else Nothing
+      _ => Nothing
 
 -- | 应用脊的一个实参：保留原节点的类型槽（插入的新实参没有槽）。
 record SpineArg where
@@ -66,19 +61,17 @@ dispatchIdArg e = IrRtApp dispatchIdIntrinsicName [e]
 -- | 一个应用脊的派发改写：旧 arity 命中时在路由对后面插入两个 id 实参。
 -- 只在**最外层**调用：子前缀（`f a` / `f a b`）不是调用点，不能按旧 arity 改写。
 dispatchSpine : Ir -> List SpineArg -> Ir
-dispatchSpine head args =
-  case head of
-    IrGlobal name =>
-      case dispatchIdNameOf name (argCount args) of
-        Just idName =>
-          case args of
-            a :: b :: rest =>
-              buildSpine
-                (IrGlobal idName)
-                (a :: b :: SpineArg Nothing (dispatchIdArg a.saValue) :: SpineArg Nothing (dispatchIdArg b.saValue) :: rest)
-            _ => buildSpine head args
-        Nothing => buildSpine head args
-    _ => buildSpine head args
+dispatchSpine (head@(IrGlobal name)) args =
+  case dispatchIdNameOf name (argCount args) of
+    Just idName =>
+      case args of
+        a :: b :: rest =>
+          buildSpine
+            (IrGlobal idName)
+            (a :: b :: SpineArg Nothing (dispatchIdArg a.saValue) :: SpineArg Nothing (dispatchIdArg b.saValue) :: rest)
+        _ => buildSpine head args
+    Nothing => buildSpine head args
+dispatchSpine head args = buildSpine head args
 
 dispatchSpineArgs : Int -> List SpineArg -> List SpineArg
 dispatchSpineArgs fuel args =

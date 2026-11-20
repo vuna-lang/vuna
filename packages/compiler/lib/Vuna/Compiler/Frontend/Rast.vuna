@@ -687,39 +687,37 @@ ofDecls decls = map (ofDecl []) decls
 
 -- | 单条声明。
 export ofDecl : List String -> Ast.Decl -> Decl
-ofDecl scope d =
-  case d of
-    Ast.DData name params kind ctors derivings via repr lin sp =>
-      DData
-        name
-        params
-        (ofExpr (append params scope) kind)
-        (map (ofCtor (append params scope)) ctors)
-        derivings
-        via
-        repr
-        lin
-        sp
-    Ast.DAxiom name ty sp => DAxiom name (ofExpr scope ty) sp
-    Ast.DExtern name cName ty sp => DExtern name cName (ofExpr scope ty) sp
-    Ast.DSig name ctx ty sp => DSig name (map (ofExpr scope) ctx) (ofExpr scope ty) sp
-    Ast.DFun name pats body sp =>
-      let
-        bound = append (bindersOfPats pats) scope
-      in DFun name (map (ofPat scope) pats) (ofExpr bound body) sp
-    Ast.DRecord name params fields derivings via repr lin sp =>
-      DRecord name params (map (ofField (append params scope)) fields) derivings via repr lin sp
-    Ast.DTrait name params supers methods sp =>
-      let
-        bound = append (map astTraitParamName params) scope
-      in DTrait
-        name
-        (map (ofTraitParam bound) params)
-        (map (ofExpr bound) supers)
-        (map (ofTraitMethod bound) methods)
-        sp
-    Ast.DInstance ctx head methods sp =>
-      DInstance (map (ofExpr scope) ctx) (ofExpr scope head) (map (ofDecl scope) methods) sp
+ofDecl scope (Ast.DData name params kind ctors derivings via repr lin sp) =
+  DData
+    name
+    params
+    (ofExpr (append params scope) kind)
+    (map (ofCtor (append params scope)) ctors)
+    derivings
+    via
+    repr
+    lin
+    sp
+ofDecl scope (Ast.DAxiom name ty sp) = DAxiom name (ofExpr scope ty) sp
+ofDecl scope (Ast.DExtern name cName ty sp) = DExtern name cName (ofExpr scope ty) sp
+ofDecl scope (Ast.DSig name ctx ty sp) = DSig name (map (ofExpr scope) ctx) (ofExpr scope ty) sp
+ofDecl scope (Ast.DFun name pats body sp) =
+  let
+    bound = append (bindersOfPats pats) scope
+  in DFun name (map (ofPat scope) pats) (ofExpr bound body) sp
+ofDecl scope (Ast.DRecord name params fields derivings via repr lin sp) =
+  DRecord name params (map (ofField (append params scope)) fields) derivings via repr lin sp
+ofDecl scope (Ast.DTrait name params supers methods sp) =
+  let
+    bound = append (map astTraitParamName params) scope
+  in DTrait
+    name
+    (map (ofTraitParam bound) params)
+    (map (ofExpr bound) supers)
+    (map (ofTraitMethod bound) methods)
+    sp
+ofDecl scope (Ast.DInstance ctx head methods sp) =
+  DInstance (map (ofExpr scope) ctx) (ofExpr scope head) (map (ofDecl scope) methods) sp
 
 ofCtor : List String -> Ast.Ctor -> Ctor
 ofCtor scope (Ast.Ctor name ty arity sp) = Ctor name (ofExpr scope ty) arity sp
@@ -732,30 +730,27 @@ ofTraitMethod scope (Ast.TraitMethod name ty sp) = TraitMethod name (ofExpr scop
 
 -- | 模式：引用名（构造子 / 记录）换成 RName；binder 名保持短名。
 ofPat : List String -> Ast.Pat -> Pat
-ofPat scope p =
-  case p of
-    Ast.PVar name sp => PVar name sp
-    Ast.PAs name inner sp => PAs name (ofPat scope inner) sp
-    Ast.PWild sp => PWild sp
-    Ast.PCon name pats sp => PCon (nameOf scope name) (map (ofPat scope) pats) sp
-    Ast.PInt n sp => PInt n sp
-    Ast.PStr s sp => PStr s sp
-    Ast.PRecord name fields sp => PRecord (nameOf scope name) (map (ofPatField scope) fields) sp
+ofPat scope (Ast.PVar name sp) = PVar name sp
+ofPat scope (Ast.PAs name inner sp) = PAs name (ofPat scope inner) sp
+ofPat scope (Ast.PWild sp) = PWild sp
+ofPat scope (Ast.PCon name pats sp) = PCon (nameOf scope name) (map (ofPat scope) pats) sp
+ofPat scope (Ast.PInt n sp) = PInt n sp
+ofPat scope (Ast.PStr s sp) = PStr s sp
+ofPat scope (Ast.PRecord name fields sp) =
+  PRecord (nameOf scope name) (map (ofPatField scope) fields) sp
 
 ofPatField : List String -> Pair String Ast.Pat -> Pair String Pat
 ofPatField scope (Pair fname pat) = Pair fname (ofPat scope pat)
 
 -- | 模式引入的 binder 名。
 patBinders : Ast.Pat -> List String
-patBinders p =
-  case p of
-    Ast.PVar name sp => [name]
-    Ast.PAs name inner sp => name :: patBinders inner
-    Ast.PWild sp => []
-    Ast.PCon name pats sp => concatMap patBinders pats
-    Ast.PInt n sp => []
-    Ast.PStr s sp => []
-    Ast.PRecord name fields sp => concatMap patFieldBinders fields
+patBinders (Ast.PVar name sp) = [name]
+patBinders (Ast.PAs name inner sp) = name :: patBinders inner
+patBinders (Ast.PWild sp) = []
+patBinders (Ast.PCon name pats sp) = concatMap patBinders pats
+patBinders (Ast.PInt n sp) = []
+patBinders (Ast.PStr s sp) = []
+patBinders (Ast.PRecord name fields sp) = concatMap patFieldBinders fields
 
 bindersOfPats : List Ast.Pat -> List String
 bindersOfPats pats = concatMap patBinders pats
@@ -812,21 +807,17 @@ ofFieldValue : List String -> Pair String Ast.Expr -> Pair String Expr
 ofFieldValue scope (Pair fname value) = Pair fname (ofExpr scope value)
 
 ofInterpPart : List String -> Ast.InterpPart -> InterpPart
-ofInterpPart scope part =
-  case part of
-    Ast.IPText s => IPText s
-    Ast.IPHole e => IPHole (ofExpr scope e)
+ofInterpPart scope (Ast.IPText s) = IPText s
+ofInterpPart scope (Ast.IPHole e) = IPHole (ofExpr scope e)
 
 ofStmts : List String -> List Ast.DoStmt -> List DoStmt
-ofStmts scope stmts =
-  case stmts of
-    [] => []
-    stmt :: rest =>
-      case stmt of
-        Ast.DBind pat value sp =>
-          DBind (ofPat scope pat) (ofExpr scope value) sp
-            :: ofStmts (append (patBinders pat) scope) rest
-        Ast.DExpr value sp => DExpr (ofExpr scope value) sp :: ofStmts scope rest
+ofStmts scope [] = []
+ofStmts scope (stmt :: rest) =
+  case stmt of
+    Ast.DBind pat value sp =>
+      DBind (ofPat scope pat) (ofExpr scope value) sp
+        :: ofStmts (append (patBinders pat) scope) rest
+    Ast.DExpr value sp => DExpr (ofExpr scope value) sp :: ofStmts scope rest
 
 patFieldBinders : Pair String Ast.Pat -> List String
 patFieldBinders (Pair fname pat) = patBinders pat

@@ -99,10 +99,8 @@ splitGlobalKey name =
 
 -- | 最后一个点的下标（没有则 -1）。
 lastDotAt : Int -> List Int -> Int -> Int
-lastDotAt index cs found =
-  case cs of
-    [] => found
-    c :: rest => lastDotAt (index + 1) rest (if c == 46 then index else found)
+lastDotAt index [] found = found
+lastDotAt index (c :: rest) found = lastDotAt (index + 1) rest (if c == 46 then index else found)
 
 -- | DT prelude 的裸名（`Type` / `->` / 内建类型与用户可见内建值）：属于内建，不是局部变量。
 isPreludeName : String -> Bool

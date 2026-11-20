@@ -94,19 +94,17 @@ splitHead msg =
 
 -- | 逐行解析头部；折叠行（以空格或制表符开头）非法。
 parseHeaders : List String -> Maybe (List (Pair String String))
-parseHeaders lines =
-  case lines of
-    [] => Just []
-    line :: rest =>
-      if startsWith " " line || startsWith "\t" line then
-        Nothing
-      else
-        case Header.parseHeaderLine line of
+parseHeaders [] = Just []
+parseHeaders (line :: rest) =
+  if startsWith " " line || startsWith "\t" line then
+    Nothing
+  else
+    case Header.parseHeaderLine line of
+      Nothing => Nothing
+      Just h =>
+        case parseHeaders rest of
           Nothing => Nothing
-          Just h =>
-            case parseHeaders rest of
-              Nothing => Nothing
-              Just hs => Just (h :: hs)
+          Just hs => Just (h :: hs)
 
 -- | 按头部决定体框架：分块、`Content-Length` 或空体。
 parseBody : List (Pair String String) -> String -> Parsed String
@@ -138,10 +136,9 @@ decimal s = if strLength s == 0 || strLength s > 10 then Nothing else decimalGo 
 
 -- | `decimal` 的扫描循环。
 decimalGo : List Int -> Int -> Maybe Int
-decimalGo xs acc =
-  case xs of
-    [] => Just acc
-    c :: rest => if c >= 48 && c <= 57 then decimalGo rest (acc * 10 + c - 48) else Nothing
+decimalGo [] acc = Just acc
+decimalGo (c :: rest) acc =
+  if c >= 48 && c <= 57 then decimalGo rest (acc * 10 + c - 48) else Nothing
 
 -- | 分块解码：返回已解码的体与剩余字节。零长度块之后只接受空行（尾部字段不支持，显式拒绝）。
 export decodeChunked : String -> Parsed String
@@ -182,13 +179,11 @@ hexValue s = if strLength s == 0 || strLength s > 8 then Nothing else hexGo (str
 
 -- | `hexValue` 的扫描循环。
 hexGo : List Int -> Int -> Maybe Int
-hexGo xs acc =
-  case xs of
-    [] => Just acc
-    c :: rest =>
-      case hexDigit c of
-        Nothing => Nothing
-        Just v => hexGo rest (acc * 16 + v)
+hexGo [] acc = Just acc
+hexGo (c :: rest) acc =
+  case hexDigit c of
+    Nothing => Nothing
+    Just v => hexGo rest (acc * 16 + v)
 
 -- | 单个十六进制字节值。
 hexDigit : Int -> Maybe Int

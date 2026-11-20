@@ -239,11 +239,9 @@ hostClassOfSendKeyRest key (e :: rest) =
         Nothing => hostClassOfSendKeyRest key rest
 
 directClassForKey : String -> HostClass -> Maybe HostClass
-directClassForKey key c =
-  case c of
-    HostDirect k _ => if k == key then Just c else Nothing
-    HostAbort k _ => if k == key then Just c else Nothing
-    HostHandled => Nothing
+directClassForKey key (c@(HostDirect k _)) = if k == key then Just c else Nothing
+directClassForKey key (c@(HostAbort k _)) = if k == key then Just c else Nothing
+directClassForKey key HostHandled = Nothing
 
 -- | 该标签是否是内建宿主效应（`beImpl` 为空表示只允许行、无需预装 handler）。
 export isBuiltinEffectTag : String -> Bool

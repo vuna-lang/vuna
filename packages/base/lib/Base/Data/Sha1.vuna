@@ -54,17 +54,15 @@ bigEndian32 x = [mask8 (shr32 x 24), mask8 (shr32 x 16), mask8 (shr32 x 8), mask
 
 -- | 一个 64 字节块：消息扩展 + 80 轮压缩，结果与链接变量按 32-bit 相加。
 compressBlock : List Int -> List Int -> List Int
-compressBlock hs blk =
-  case hs of
-    [h0, h1, h2, h3, h4] =>
-      let
-        st = foldl sha1Round (Pair (expand (wordsOf blk)) [h0, h1, h2, h3, h4]) (range 0 80)
-      in case st of
-        Pair _ regs =>
-          case regs of
-            [a, b, c, d, e] => [add32 h0 a, add32 h1 b, add32 h2 c, add32 h3 d, add32 h4 e]
-            _ => hs
-    _ => hs
+compressBlock (hs@([h0, h1, h2, h3, h4])) blk =
+  let
+    st = foldl sha1Round (Pair (expand (wordsOf blk)) [h0, h1, h2, h3, h4]) (range 0 80)
+  in case st of
+    Pair _ regs =>
+      case regs of
+        [a, b, c, d, e] => [add32 h0 a, add32 h1 b, add32 h2 c, add32 h3 d, add32 h4 e]
+        _ => hs
+compressBlock hs blk = hs
 
 -- | 把 64 字节块切成 16 个大端 32-bit 字。
 wordsOf : List Int -> List Int
@@ -72,10 +70,8 @@ wordsOf blk = map (\i => pack4 (drop (i * 4) blk)) (range 0 16)
 
 -- | 四个字节合成一个大端 32-bit 字。
 pack4 : List Int -> Int
-pack4 xs =
-  case xs of
-    a :: b :: c :: d :: _ => a * 16777216 + b * 65536 + c * 256 + d
-    _ => 0
+pack4 (a :: b :: c :: d :: _) = a * 16777216 + b * 65536 + c * 256 + d
+pack4 _ = 0
 
 -- | 消息扩展：16 个字扩到 80 个（`w[t] = rotl(w[t-3] ^ w[t-8] ^ w[t-14] ^ w[t-16], 1)`）。
 expand : List Int -> List Int
@@ -98,18 +94,14 @@ headAfter k xs =
 
 -- | 单轮：位移寄存器并写回新的 a。
 sha1Round : Pair (List Int) (List Int) -> Int -> Pair (List Int) (List Int)
-sha1Round st t =
-  case st of
-    Pair w regs =>
-      case w of
-        [] => Pair w regs
-        wt :: rest =>
-          case regs of
-            [a, b, c, d, e] =>
-              let
-                tmp = add32 (add32 (add32 (add32 (rol32 a 5) (roundF t b c d)) e) (roundK t)) wt
-              in Pair rest [tmp, a, rol32 b 30, c, d]
-            _ => Pair w regs
+sha1Round (Pair (w@[]) regs) t = Pair w regs
+sha1Round (Pair (w@(wt :: rest)) regs) t =
+  case regs of
+    [a, b, c, d, e] =>
+      let
+        tmp = add32 (add32 (add32 (add32 (rol32 a 5) (roundF t b c d)) e) (roundK t)) wt
+      in Pair rest [tmp, a, rol32 b 30, c, d]
+    _ => Pair w regs
 
 -- | 轮函数 `f`（按轮次区间选择）。
 roundF : Int -> Int -> Int -> Int -> Int

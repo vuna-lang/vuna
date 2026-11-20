@@ -93,7 +93,5 @@ mapBytes f xs = map f xs
 
 -- | 全部字节满足谓词。
 export allBytes : (Int -> Bool) -> List Int -> Bool
-allBytes p xs =
-  case xs of
-    [] => True
-    c :: rest => if p c then allBytes p rest else False
+allBytes p [] = True
+allBytes p (c :: rest) = if p c then allBytes p rest else False

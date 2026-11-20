@@ -721,7 +721,9 @@ parseArrayItems fuel path cs acc =
                     TomlCursor chars2 line2 col2 =>
                       case chars2 of
                         [] => failAt path line2 "unterminated array"
-                        c2 :: rest2 => if c2 == 44 then parseArrayItems (fuel - 1) path (advanceCursor (TomlCursor chars2 line2 col2)) (value :: acc) else if c2 == 93 then OkC (Pair (TArray (reverse (value :: acc))) (advanceCursor (TomlCursor chars2 line2 col2))) else failAt path line2 "expected ',' or ']' in array"
+                        44 :: rest2 => parseArrayItems (fuel - 1) path (advanceCursor (TomlCursor chars2 line2 col2)) (value :: acc)
+                        93 :: rest2 => OkC (Pair (TArray (reverse (value :: acc))) (advanceCursor (TomlCursor chars2 line2 col2)))
+                        _ :: rest2 => failAt path line2 "expected ',' or ']' in array"
 
 -- 内联表：`{ k = v, ... }`（单行；可嵌套、可空；点键按 TOML 规则插入）。
 parseInlineTable : Int -> String -> TomlCursor -> Check (Pair TomlValue TomlCursor)
@@ -765,7 +767,9 @@ parseInlineFields fuel path cs fields =
                                       TomlCursor chars3 line3 col3 =>
                                         case chars3 of
                                           [] => failAt path line3 "unterminated inline table"
-                                          c3 :: rest3 => if c3 == 44 then parseInlineFields (fuel - 1) path (TomlCursor rest3 line3 (col3 + 1)) fields2 else if c3 == 125 then OkC (Pair (TTable (rootValue fuel fields2)) (advanceCursor (TomlCursor chars3 line3 col3))) else failAt path line3 "expected ',' or '}' in inline table"
+                                          44 :: rest3 => parseInlineFields (fuel - 1) path (TomlCursor rest3 line3 (col3 + 1)) fields2
+                                          125 :: rest3 => OkC (Pair (TTable (rootValue fuel fields2)) (advanceCursor (TomlCursor chars3 line3 col3)))
+                                          _ :: rest3 => failAt path line3 "expected ',' or '}' in inline table"
                           else
                             failAt path line2 "expected '=' in inline table"
 

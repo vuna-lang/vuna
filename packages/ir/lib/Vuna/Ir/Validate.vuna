@@ -157,28 +157,27 @@ checkBinderTysWork shared fuel decls work =
       ir :: rest => Vuna.Compiler.Base.Common.bind (checkNodeBinderTys shared decls ir) (\_ => checkBinderTysWork shared (fuel - 1) decls (append (map secondOf (scopedChildren [] ir)) rest))
 
 checkNodeBinderTys : IrShared -> List IrTyDecl -> Ir -> Check Int
-checkNodeBinderTys shared decls ir =
-  case ir of
-    IrLam bs resultTy _ =>
-      Vuna.Compiler.Base.Common.bind (checkBinderTysOf decls bs) (\_ => checkIrTyM decls resultTy)
-    IrLet bs scrut body => checkBinderTysOf decls bs
-    IrCase caseTy resultTy _ alts =>
-      Vuna.Compiler.Base.Common.bind
-        (checkIrTyM decls caseTy)
-        (\_ => Vuna.Compiler.Base.Common.bind (checkIrTyM decls resultTy) (\_ => checkAltBinderTys decls alts))
-    IrApp appTy _ _ => checkAppTyM decls appTy
-    IrCtor family ctor tys args => checkCtorTys shared decls family ctor tys (listLength args)
-    IrRecord _ resTy _ => checkIrTyM decls resTy
-    IrProj _ _ _ resTy => checkIrTyM decls resTy
-    IrRecUpd _ _ _ resTy => checkIrTyM decls resTy
-    IrNatCase scrut fresh zero succ catch =>
-      Vuna.Compiler.Base.Common.bind
-        (checkAltBinderTysM decls zero)
-        (\_ => Vuna.Compiler.Base.Common.bind (checkAltBinderTysM decls succ) (\_ => checkAltBinderTysM decls catch))
-    IrCast from to _ =>
-      Vuna.Compiler.Base.Common.bind (checkIrTyM decls from) (\_ => checkIrTyM decls to)
-    IrTail inner => checkNodeBinderTys shared decls inner
-    _ => OkC 0
+checkNodeBinderTys shared decls (IrLam bs resultTy _) =
+  Vuna.Compiler.Base.Common.bind (checkBinderTysOf decls bs) (\_ => checkIrTyM decls resultTy)
+checkNodeBinderTys shared decls (IrLet bs scrut body) = checkBinderTysOf decls bs
+checkNodeBinderTys shared decls (IrCase caseTy resultTy _ alts) =
+  Vuna.Compiler.Base.Common.bind
+    (checkIrTyM decls caseTy)
+    (\_ => Vuna.Compiler.Base.Common.bind (checkIrTyM decls resultTy) (\_ => checkAltBinderTys decls alts))
+checkNodeBinderTys shared decls (IrApp appTy _ _) = checkAppTyM decls appTy
+checkNodeBinderTys shared decls (IrCtor family ctor tys args) =
+  checkCtorTys shared decls family ctor tys (listLength args)
+checkNodeBinderTys shared decls (IrRecord _ resTy _) = checkIrTyM decls resTy
+checkNodeBinderTys shared decls (IrProj _ _ _ resTy) = checkIrTyM decls resTy
+checkNodeBinderTys shared decls (IrRecUpd _ _ _ resTy) = checkIrTyM decls resTy
+checkNodeBinderTys shared decls (IrNatCase scrut fresh zero succ catch) =
+  Vuna.Compiler.Base.Common.bind
+    (checkAltBinderTysM decls zero)
+    (\_ => Vuna.Compiler.Base.Common.bind (checkAltBinderTysM decls succ) (\_ => checkAltBinderTysM decls catch))
+checkNodeBinderTys shared decls (IrCast from to _) =
+  Vuna.Compiler.Base.Common.bind (checkIrTyM decls from) (\_ => checkIrTyM decls to)
+checkNodeBinderTys shared decls (IrTail inner) = checkNodeBinderTys shared decls inner
+checkNodeBinderTys shared decls _ = OkC 0
 
 checkAppTyM : List IrTyDecl -> Maybe (Pair IrTy IrTy) -> Check Int
 checkAppTyM decls Nothing = OkC 0
@@ -367,27 +366,26 @@ checkScopedWork fuel work =
 
 -- 子节点 + 它们的作用域：只有 `IrLam` / `IrLet` / `IrCase` / `IrNatCase` 引入 binder。
 scopedChildren : List IrBinder -> Ir -> List (Pair (List IrBinder) Ir)
-scopedChildren scope ir =
-  case ir of
-    IrCtor family ctor _ args => map (\a => Pair scope a) args
-    IrRecord family _ fields => map (\p => Pair scope (secondOf p)) fields
-    IrProj base family field _ => [Pair scope base]
-    IrRecUpd base family fields _ => Pair scope base :: map (\p => Pair scope (secondOf p)) fields
-    IrRtApp sym args => map (\a => Pair scope a) args
-    IrCast cFrom cTo inner => [Pair scope inner]
-    IrLet bs scrut body => [Pair scope scrut, Pair (append bs scope) body]
-    IrLam bs _ body => [Pair (append bs scope) body]
-    IrApp _ f a => [Pair scope f, Pair scope a]
-    IrIf c th el => [Pair scope c, Pair scope th, Pair scope el]
-    IrCase _ _ scrut alts => Pair scope scrut :: altWork scope alts
-    IrNatCase scrut fresh zero succ catch =>
-      append
-        [Pair scope scrut]
-        (append (altWork scope (maybeAlts zero)) (append (altWork scope (maybeAlts succ)) (altWork scope (maybeAlts catch))))
-    IrConcatMany parts => map (\a => Pair scope a) parts
-    IrEffThunk family ctor unitTy arity prim => [Pair scope prim]
-    IrTail inner => [Pair scope inner]
-    _ => []
+scopedChildren scope (IrCtor family ctor _ args) = map (\a => Pair scope a) args
+scopedChildren scope (IrRecord family _ fields) = map (\p => Pair scope (secondOf p)) fields
+scopedChildren scope (IrProj base family field _) = [Pair scope base]
+scopedChildren scope (IrRecUpd base family fields _) =
+  Pair scope base :: map (\p => Pair scope (secondOf p)) fields
+scopedChildren scope (IrRtApp sym args) = map (\a => Pair scope a) args
+scopedChildren scope (IrCast cFrom cTo inner) = [Pair scope inner]
+scopedChildren scope (IrLet bs scrut body) = [Pair scope scrut, Pair (append bs scope) body]
+scopedChildren scope (IrLam bs _ body) = [Pair (append bs scope) body]
+scopedChildren scope (IrApp _ f a) = [Pair scope f, Pair scope a]
+scopedChildren scope (IrIf c th el) = [Pair scope c, Pair scope th, Pair scope el]
+scopedChildren scope (IrCase _ _ scrut alts) = Pair scope scrut :: altWork scope alts
+scopedChildren scope (IrNatCase scrut fresh zero succ catch) =
+  append
+    [Pair scope scrut]
+    (append (altWork scope (maybeAlts zero)) (append (altWork scope (maybeAlts succ)) (altWork scope (maybeAlts catch))))
+scopedChildren scope (IrConcatMany parts) = map (\a => Pair scope a) parts
+scopedChildren scope (IrEffThunk family ctor unitTy arity prim) = [Pair scope prim]
+scopedChildren scope (IrTail inner) = [Pair scope inner]
+scopedChildren scope _ = []
 
 maybeAlts : Maybe IrAlt -> List IrAlt
 maybeAlts Nothing = []

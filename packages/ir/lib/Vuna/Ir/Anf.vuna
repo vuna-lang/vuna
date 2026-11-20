@@ -55,10 +55,8 @@ spineOfIr (IrApp _ f a) =
 spineOfIr x = Pair x []
 
 applyIrs : Ir -> List Ir -> Ir
-applyIrs f xs =
-  case xs of
-    [] => f
-    a :: rest => applyIrs (IrApp Nothing f a) rest
+applyIrs f [] = f
+applyIrs f (a :: rest) = applyIrs (IrApp Nothing f a) rest
 
 isSimple : Ir -> Bool
 isSimple (IrVar _) = True

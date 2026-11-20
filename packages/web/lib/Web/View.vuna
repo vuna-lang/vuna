@@ -17,13 +17,11 @@ export data View(..) : Type where
 
 -- | 渲染成 HTML 文本。
 export renderView : View -> String
-renderView v =
-  case v of
-    Text s => escapeHtml s
-    Raw s => s
-    Fragment vs => renderChildren vs
-    Element name attrs children =>
-      "<" ++ name ++ renderAttrsPart attrs ++ ">" ++ renderChildren children ++ closeTag name
+renderView (Text s) = escapeHtml s
+renderView (Raw s) = s
+renderView (Fragment vs) = renderChildren vs
+renderView (Element name attrs children) =
+  "<" ++ name ++ renderAttrsPart attrs ++ ">" ++ renderChildren children ++ closeTag name
 
 -- | 一个完整的 HTML 文档骨架。
 export document : String -> List View -> View
@@ -52,10 +50,8 @@ isSafeAttr a = strLength a.first > 0 && allNameBytes (strUnpack a.first)
 
 -- | 全部字节都满足元素 / 属性名规则。
 allNameBytes : List Int -> Bool
-allNameBytes xs =
-  case xs of
-    [] => True
-    c :: rest => if isNameByte c then allNameBytes rest else False
+allNameBytes [] = True
+allNameBytes (c :: rest) = if isNameByte c then allNameBytes rest else False
 
 -- | 属性 / 元素名允许的字节。
 isNameByte : Int -> Bool
@@ -98,11 +94,9 @@ escapeHtml s = strConcatMany (map escapeByte (strUnpack s))
 
 -- | 单个字节的转义。
 escapeByte : Int -> String
-escapeByte c =
-  if c == 38 then
-    "&amp;"
-  else if c == 60 then
-    "&lt;"
-  else if c == 62 then
-    "&gt;"
-  else if c == 34 then "&quot;" else if c == 39 then "&#39;" else strPack [c]
+escapeByte 38 = "&amp;"
+escapeByte 60 = "&lt;"
+escapeByte 62 = "&gt;"
+escapeByte 34 = "&quot;"
+escapeByte 39 = "&#39;"
+escapeByte c = strPack [c]

@@ -332,21 +332,18 @@ annotHeadTy fuel dflt env binders g args =
 -- （类型参数 / 证明）实例化闭包，因此 `map (add 1)` 得到 `List Int -> List Int` 而不是
 -- 不可命名的兜底；局部变量则从它自己的函数类型逐实参剥。
 export annotCalleeTy : LwEnv -> List IrBinder -> Term -> Maybe IrTy
-annotCalleeTy env binders t =
-  case t of
-    TGlobal g => annotGlobalTy env binders g
-    TApp _ _ _ =>
-      case flattenAnnotAppRig t of
-        Pair (TGlobal g) args =>
-          case findDtData g env.lwDatas of
-            Just _ => annotTyOf env binders t
-            Nothing =>
-              case globalTyTermOf env g of
-                Just ty => peelPiArgsTy 256 env (eval [] ty) args
-                Nothing => peelIrFuns (countRuntimeArgs args) (annotTyOf env binders (TGlobal g))
-        Pair head args =>
-          peelIrFuns (countRuntimeArgs args) (Just (annotTyOfTotal env binders head))
-    _ => annotTyOf env binders t
+annotCalleeTy env binders (TGlobal g) = annotGlobalTy env binders g
+annotCalleeTy env binders (t@(TApp _ _ _)) =
+  case flattenAnnotAppRig t of
+    Pair (TGlobal g) args =>
+      case findDtData g env.lwDatas of
+        Just _ => annotTyOf env binders t
+        Nothing =>
+          case globalTyTermOf env g of
+            Just ty => peelPiArgsTy 256 env (eval [] ty) args
+            Nothing => peelIrFuns (countRuntimeArgs args) (annotTyOf env binders (TGlobal g))
+    Pair head args => peelIrFuns (countRuntimeArgs args) (Just (annotTyOfTotal env binders head))
+annotCalleeTy env binders t = annotTyOf env binders t
 
 -- | 全局名的**类型项**：运行时定义走 `lwDefTbl`，其余（trait 方法选择子等）走
 -- `lwGlobals`。只读类型，不看定义体。

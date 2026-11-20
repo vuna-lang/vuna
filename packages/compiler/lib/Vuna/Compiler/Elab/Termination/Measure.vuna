@@ -290,98 +290,84 @@ guardInter (x :: rest) b = if memName x b then x :: guardInter rest b else guard
 
 -- | 单个比较为真时成立的「正性」：`x > k`（k ≥ 0）/ `x ≥ k`（k ≥ 1）及其字面量在左的写法。
 guardThenPosAtom : String -> List Expr -> Maybe String
-guardThenPosAtom op args =
-  case args of
-    [lhs, rhs] =>
-      case rhs of
+guardThenPosAtom op ([lhs, rhs]) =
+  case rhs of
+    EInt k ksp =>
+      if op == "gt" || op == ">" then
+        if k >= 0 then varOfExpr lhs else Nothing
+      else if op == "ge" || op == ">=" then if k >= 1 then varOfExpr lhs else Nothing else Nothing
+    _ =>
+      case lhs of
         EInt k ksp =>
-          if op == "gt" || op == ">" then
-            if k >= 0 then varOfExpr lhs else Nothing
-          else if op == "ge" || op == ">=" then
-            if k >= 1 then varOfExpr lhs else Nothing
+          if op == "lt" || op == "<" then
+            if k >= 0 then varOfExpr rhs else Nothing
+          else if op == "le" || op == "<=" then
+            if k >= 1 then varOfExpr rhs else Nothing
           else
             Nothing
-        _ =>
-          case lhs of
-            EInt k ksp =>
-              if op == "lt" || op == "<" then
-                if k >= 0 then varOfExpr rhs else Nothing
-              else if op == "le" || op == "<=" then
-                if k >= 1 then varOfExpr rhs else Nothing
-              else
-                Nothing
-            _ => Nothing
-    _ => Nothing
+        _ => Nothing
+guardThenPosAtom op _ = Nothing
 
 -- | 单个比较为假时成立的「正性」：`x <= k`（k ≥ 0）为假 ⇒ `x > 0`；
 -- `x < k`（k ≥ 1）为假 ⇒ `x ≥ 1 > 0`。字面量在左的写法按同一口径镜像。
 guardElsePosAtom : String -> List Expr -> Maybe String
-guardElsePosAtom op args =
-  case args of
-    [lhs, rhs] =>
-      case rhs of
+guardElsePosAtom op ([lhs, rhs]) =
+  case rhs of
+    EInt k ksp =>
+      if op == "le" || op == "<=" then
+        if k >= 0 then varOfExpr lhs else Nothing
+      else if op == "lt" || op == "<" then if k >= 1 then varOfExpr lhs else Nothing else Nothing
+    _ =>
+      case lhs of
         EInt k ksp =>
-          if op == "le" || op == "<=" then
-            if k >= 0 then varOfExpr lhs else Nothing
-          else if op == "lt" || op == "<" then
-            if k >= 1 then varOfExpr lhs else Nothing
+          if op == "ge" || op == ">=" then
+            if k >= 0 then varOfExpr rhs else Nothing
+          else if op == "gt" || op == ">" then
+            if k >= 1 then varOfExpr rhs else Nothing
           else
             Nothing
-        _ =>
-          case lhs of
-            EInt k ksp =>
-              if op == "ge" || op == ">=" then
-                if k >= 0 then varOfExpr rhs else Nothing
-              else if op == "gt" || op == ">" then
-                if k >= 1 then varOfExpr rhs else Nothing
-              else
-                Nothing
-            _ => Nothing
-    _ => Nothing
+        _ => Nothing
+guardElsePosAtom op _ = Nothing
 
 -- | 条件为真时成立的全部正性事实。`a && b` 取并；`a || b` 只有两侧都为真才成立的
 --   事实才可用（取交），否则会把「至少一侧为正」误当成两侧都为正。
 export guardThenPosVars : Expr -> List String
-guardThenPosVars e =
-  case e of
-    EApp (EVar op osp) args sp =>
-      let
-        opn = opBaseName (rnameKey op)
-      in if opn == "&&" then
-        case args of
-          [a, b] => guardUnion (guardThenPosVars a) (guardThenPosVars b)
-          _ => []
-      else if opn == "||" then
-        case args of
-          [a, b] => guardInter (guardThenPosVars a) (guardThenPosVars b)
-          _ => []
-      else
-        case guardThenPosAtom opn args of
-          Just v => [v]
-          Nothing => []
-    _ => []
+guardThenPosVars (EApp (EVar op osp) args sp) =
+  let
+    opn = opBaseName (rnameKey op)
+  in if opn == "&&" then
+    case args of
+      [a, b] => guardUnion (guardThenPosVars a) (guardThenPosVars b)
+      _ => []
+  else if opn == "||" then
+    case args of
+      [a, b] => guardInter (guardThenPosVars a) (guardThenPosVars b)
+      _ => []
+  else
+    case guardThenPosAtom opn args of
+      Just v => [v]
+      Nothing => []
+guardThenPosVars _ = []
 
 -- | 条件为假时成立的全部正性事实：`a || b` 为假 ⇒ 两侧都假（取并）；
 --   `a && b` 为假只说明至少一侧为假（取交）。
 export guardElsePosVars : Expr -> List String
-guardElsePosVars e =
-  case e of
-    EApp (EVar op osp) args sp =>
-      let
-        opn = opBaseName (rnameKey op)
-      in if opn == "&&" then
-        case args of
-          [a, b] => guardInter (guardElsePosVars a) (guardElsePosVars b)
-          _ => []
-      else if opn == "||" then
-        case args of
-          [a, b] => guardUnion (guardElsePosVars a) (guardElsePosVars b)
-          _ => []
-      else
-        case guardElsePosAtom opn args of
-          Just v => [v]
-          Nothing => []
-    _ => []
+guardElsePosVars (EApp (EVar op osp) args sp) =
+  let
+    opn = opBaseName (rnameKey op)
+  in if opn == "&&" then
+    case args of
+      [a, b] => guardInter (guardElsePosVars a) (guardElsePosVars b)
+      _ => []
+  else if opn == "||" then
+    case args of
+      [a, b] => guardUnion (guardElsePosVars a) (guardElsePosVars b)
+      _ => []
+  else
+    case guardElsePosAtom opn args of
+      Just v => [v]
+      Nothing => []
+guardElsePosVars _ = []
 
 -- 一个实参是否「已知为正」：字面量 >0，或变量处于守卫区 / 调用方同位置形参已有正事实。
 export argPositive : List Expr -> Int -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> HashMap String (List Int) -> List String -> Bool
@@ -926,20 +912,17 @@ foldRHofSpec : HofSpec
 foldRHofSpec = HofSpec 2 0 2
 
 export hofSpecOf : RName -> Maybe HofSpec
-hofSpecOf name =
-  case name of
-    RGlobal m b =>
-      if m == "Base.Data.List" then
-        if b == "map" || b == "filter" || b == "concatMap" || b == "mapMaybe" then
-          Just unaryHofSpec
-        else if b == "foldl" then
-          Just foldLHofSpec
-        else if b == "foldr" then Just foldRHofSpec else Nothing
-      else if m == "Base.Data.Result" || m == "Vuna.Compiler.Base.Common" then
-        if b == "traverse" then Just unaryHofSpec else Nothing
-      else
-        Nothing
-    _ => Nothing
+hofSpecOf (RGlobal m b) =
+  if m == "Base.Data.List" then
+    if b == "map" || b == "filter" || b == "concatMap" || b == "mapMaybe" then
+      Just unaryHofSpec
+    else
+      case b of
+        "foldl" => Just foldLHofSpec
+        "foldr" => Just foldRHofSpec
+        _ => Nothing
+  else if m == "Base.Data.Result" || m == "Vuna.Compiler.Base.Common" then if b == "traverse" then Just unaryHofSpec else Nothing else Nothing
+hofSpecOf _ = Nothing
 
 nthName : List String -> Int -> Maybe String
 nthName [] i = Nothing
@@ -964,22 +947,20 @@ peelLam n e =
 -- | 若实参表匹配该 HOF 的形状且回调是 lambda，给出「元素 binder + 容器实参 +
 --   其余要照常遍历的实参 + lambda 体」。
 export hofLambdaCall : HofSpec -> List Expr -> Maybe HofCall
-hofLambdaCall spec args =
-  case args of
-    e :: rest =>
-      case peelLam spec.hofLambdaArity e of
-        Just (Pair ns body) =>
-          if length rest == spec.hofListArg then
-            case nthExpr rest (spec.hofListArg - 1) of
-              Just lst =>
-                case nthName ns spec.hofElemParam of
-                  Just v => Just (HofCall v lst rest body)
-                  Nothing => Nothing
+hofLambdaCall spec (e :: rest) =
+  case peelLam spec.hofLambdaArity e of
+    Just (Pair ns body) =>
+      if length rest == spec.hofListArg then
+        case nthExpr rest (spec.hofListArg - 1) of
+          Just lst =>
+            case nthName ns spec.hofElemParam of
+              Just v => Just (HofCall v lst rest body)
               Nothing => Nothing
-          else
-            Nothing
-        Nothing => Nothing
-    _ => Nothing
+          Nothing => Nothing
+      else
+        Nothing
+    Nothing => Nothing
+hofLambdaCall spec _ = Nothing
 
 export extendElemSizes : List (Pair String (Pair Int (Pair Int (List Int)))) -> Expr -> String -> List (Pair String (Pair Int (Pair Int (List Int))))
 extendElemSizes sizes (EVar n sp) v =

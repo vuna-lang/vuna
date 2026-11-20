@@ -91,10 +91,9 @@ depDirOf name ctx =
 
 -- | 模块根里名为 `name` 的目录。
 rootDirNamed : String -> List Pkg.Root -> Maybe String
-rootDirNamed name roots =
-  case roots of
-    [] => Nothing
-    r :: rest => if Pkg.rootName r == name then Just (Pkg.rootDir r) else rootDirNamed name rest
+rootDirNamed name [] = Nothing
+rootDirNamed name (r :: rest) =
+  if Pkg.rootName r == name then Just (Pkg.rootDir r) else rootDirNamed name rest
 
 -- | 去掉模块根的 `/lib` 尾巴，得到包目录。
 stripLibSuffix : String -> String

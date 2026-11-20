@@ -22,10 +22,8 @@ arityTableOf : List IrDef -> HashMap String Int
 arityTableOf defs = foldl addDef (HashMap.fromList []) defs
 
 addDef : HashMap String Int -> IrDef -> HashMap String Int
-addDef tbl d =
-  case d of
-    IrDef name arity _ _ _ _ _ _ => HashMap.insert name arity tbl
-    IrExternDef _ _ _ _ => tbl
+addDef tbl (IrDef name arity _ _ _ _ _ _) = HashMap.insert name arity tbl
+addDef tbl (IrExternDef _ _ _ _) = tbl
 
 arityOfTable : HashMap String Int -> String -> Maybe Int
 arityOfTable tbl name = HashMap.lookup name tbl
@@ -37,11 +35,9 @@ annotateDefsWith : (String -> Maybe Int) -> List IrDef -> List IrDef
 annotateDefsWith arityOf defs = map (annotateDef arityOf) defs
 
 annotateDef : (String -> Maybe Int) -> IrDef -> IrDef
-annotateDef arityOf d =
-  case d of
-    IrDef name arity deps ty body recOk initGuard span =>
-      IrDef name arity deps ty (annotateAt (tailFuelOf body) arityOf True body) recOk initGuard span
-    IrExternDef _ _ _ _ => d
+annotateDef arityOf (IrDef name arity deps ty body recOk initGuard span) =
+  IrDef name arity deps ty (annotateAt (tailFuelOf body) arityOf True body) recOk initGuard span
+annotateDef arityOf (d@(IrExternDef _ _ _ _)) = d
 
 -- | 对一段函数体做标记（顶层就是结果位置）。codegen 合成效应 thunk 时用。
 export annotateBody : (String -> Maybe Int) -> Ir -> Ir
@@ -96,10 +92,8 @@ stripAlt : Int -> IrAlt -> IrAlt
 stripAlt fuel alt = IrAlt alt.irAltCtor alt.irAltBinders (stripTailAt fuel alt.irAltBody)
 
 stripAltM : Int -> Maybe IrAlt -> Maybe IrAlt
-stripAltM fuel m =
-  case m of
-    Nothing => Nothing
-    Just alt => Just (stripAlt fuel alt)
+stripAltM fuel Nothing = Nothing
+stripAltM fuel (Just alt) = Just (stripAlt fuel alt)
 
 annotateAt : Int -> (String -> Maybe Int) -> Bool -> Ir -> Ir
 annotateAt fuel arityOf tail ir =
@@ -152,7 +146,5 @@ annotateAlt fuel arityOf tail alt =
   IrAlt alt.irAltCtor alt.irAltBinders (annotateAt fuel arityOf tail alt.irAltBody)
 
 annotateAltMaybe : Int -> (String -> Maybe Int) -> Bool -> Maybe IrAlt -> Maybe IrAlt
-annotateAltMaybe fuel arityOf tail m =
-  case m of
-    Nothing => Nothing
-    Just alt => Just (annotateAlt fuel arityOf tail alt)
+annotateAltMaybe fuel arityOf tail Nothing = Nothing
+annotateAltMaybe fuel arityOf tail (Just alt) = Just (annotateAlt fuel arityOf tail alt)

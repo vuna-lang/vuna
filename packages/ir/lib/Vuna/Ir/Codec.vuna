@@ -148,19 +148,17 @@ decIrTy fuel c =
     B.thenPair (B.decTag fuel c) (\tag, c1 => decIrTyTag tag (fuel - 1) c1)
 
 decIrTyTag : Int -> Int -> B.Cur -> Maybe (Pair IrTy B.Cur)
-decIrTyTag tag fuel c =
-  case tag of
-    0 => B.thenPair (B.decInt fuel c) (\i, c1 => Just (Pair (IrTyVar i) c1))
-    1 => Just (Pair IrTyInt c)
-    2 => Just (Pair IrTyStr c)
-    3 => Just (Pair IrTyBool c)
-    4 => Just (Pair IrTyFloat c)
-    5 => Just (Pair IrTyOpaque c)
-    6 => decIrTyWrap IrTyArray fuel c
-    7 => decIrTyWrap IrTyRef fuel c
-    8 => decIrTyData fuel c
-    9 => decIrTyFun fuel c
-    _ => Nothing
+decIrTyTag 0 fuel c = B.thenPair (B.decInt fuel c) (\i, c1 => Just (Pair (IrTyVar i) c1))
+decIrTyTag 1 fuel c = Just (Pair IrTyInt c)
+decIrTyTag 2 fuel c = Just (Pair IrTyStr c)
+decIrTyTag 3 fuel c = Just (Pair IrTyBool c)
+decIrTyTag 4 fuel c = Just (Pair IrTyFloat c)
+decIrTyTag 5 fuel c = Just (Pair IrTyOpaque c)
+decIrTyTag 6 fuel c = decIrTyWrap IrTyArray fuel c
+decIrTyTag 7 fuel c = decIrTyWrap IrTyRef fuel c
+decIrTyTag 8 fuel c = decIrTyData fuel c
+decIrTyTag 9 fuel c = decIrTyFun fuel c
+decIrTyTag _ fuel c = Nothing
 
 decIrTyWrap : (IrTy -> IrTy) -> Int -> B.Cur -> Maybe (Pair IrTy B.Cur)
 decIrTyWrap wrap fuel c = B.thenPair (decIrTy fuel c) (\a, c1 => Just (Pair (wrap a) c1))
@@ -184,12 +182,10 @@ decIrTyM fuel c = B.decMaybe decIrTy fuel c
 -- IrBName / IrBinder
 -- ---------------------------------------------------------------
 encBName : IrBName -> List String -> List String
-encBName b acc =
-  case b of
-    IrBUser s => B.encTag 0 (B.encStr s acc)
-    IrBArm n => B.encTag 1 (B.encInt n acc)
-    IrBNat n => B.encTag 2 (B.encInt n acc)
-    IrBWild => B.encTag 3 acc
+encBName (IrBUser s) acc = B.encTag 0 (B.encStr s acc)
+encBName (IrBArm n) acc = B.encTag 1 (B.encInt n acc)
+encBName (IrBNat n) acc = B.encTag 2 (B.encInt n acc)
+encBName IrBWild acc = B.encTag 3 acc
 
 decBName : Int -> B.Cur -> Maybe (Pair IrBName B.Cur)
 decBName fuel c =
@@ -199,13 +195,11 @@ decBName fuel c =
     B.thenPair (B.decTag fuel c) (\tag, c1 => decBNameTag tag (fuel - 1) c1)
 
 decBNameTag : Int -> Int -> B.Cur -> Maybe (Pair IrBName B.Cur)
-decBNameTag tag fuel c =
-  case tag of
-    0 => B.thenPair (B.decStr fuel c) (\s, c1 => Just (Pair (IrBUser s) c1))
-    1 => B.thenPair (B.decInt fuel c) (\n, c1 => Just (Pair (IrBArm n) c1))
-    2 => B.thenPair (B.decInt fuel c) (\n, c1 => Just (Pair (IrBNat n) c1))
-    3 => Just (Pair IrBWild c)
-    _ => Nothing
+decBNameTag 0 fuel c = B.thenPair (B.decStr fuel c) (\s, c1 => Just (Pair (IrBUser s) c1))
+decBNameTag 1 fuel c = B.thenPair (B.decInt fuel c) (\n, c1 => Just (Pair (IrBArm n) c1))
+decBNameTag 2 fuel c = B.thenPair (B.decInt fuel c) (\n, c1 => Just (Pair (IrBNat n) c1))
+decBNameTag 3 fuel c = Just (Pair IrBWild c)
+decBNameTag _ fuel c = Nothing
 
 encBinder : Int -> IrBinder -> List String -> List String
 encBinder fuel b acc =
@@ -350,58 +344,52 @@ encIr : Int -> Ir -> List String -> List String
 encIr fuel ir acc = if fuel <= 0 then acc else encIrCases fuel ir acc
 
 encIrCases : Int -> Ir -> List String -> List String
-encIrCases fuel ir acc =
-  case ir of
-    IrVar b => B.encTag 0 (encBinder (fuel - 1) b acc)
-    IrGlobal name => B.encTag 1 (B.encStr name acc)
-    IrCtor fam ctor tys args =>
-      B.encTag
-        2
-        (B.encStr fam (B.encStr ctor (B.encMaybe (encIrTys (fuel - 1)) tys (encIrs (fuel - 1) args acc))))
-    IrRecord fam resTy fields =>
-      B.encTag 3 (B.encStr fam (encIrTyM (fuel - 1) resTy (encFields (fuel - 1) fields acc)))
-    IrProj base fam field resTy =>
-      B.encTag
-        4
-        (encIr (fuel - 1) base (B.encStr fam (B.encStr field (encIrTyM (fuel - 1) resTy acc))))
-    IrRecUpd base fam fields resTy =>
-      B.encTag
-        5
-        (encIr (fuel - 1) base (B.encStr fam (encFields (fuel - 1) fields (encIrTyM (fuel - 1) resTy acc))))
-    IrRt sym => B.encTag 6 (B.encStr sym acc)
-    IrRtApp sym args => B.encTag 7 (B.encStr sym (encIrs (fuel - 1) args acc))
-    IrCast from to inner =>
-      B.encTag 8 (encIrTyM (fuel - 1) from (encIrTyM (fuel - 1) to (encIr (fuel - 1) inner acc)))
-    IrInt n => B.encTag 9 (B.encInt n acc)
-    IrStr s => B.encTag 10 (B.encStr s acc)
-    IrBool b => B.encTag 11 (B.encBool b acc)
-    IrFloatLit s => B.encTag 12 (B.encStr s acc)
-    IrLet bs scrut body =>
-      B.encTag 13 (encBinders (fuel - 1) bs (encIr (fuel - 1) scrut (encIr (fuel - 1) body acc)))
-    IrLam bs bodyTy body =>
-      B.encTag
-        14
-        (encBinders (fuel - 1) bs (encIrTyM (fuel - 1) bodyTy (encIr (fuel - 1) body acc)))
-    IrApp appTy f a =>
-      B.encTag 15 (encAppTy (fuel - 1) appTy (encIr (fuel - 1) f (encIr (fuel - 1) a acc)))
-    IrTail inner => B.encTag 16 (encIr (fuel - 1) inner acc)
-    IrIf cond th el =>
-      B.encTag 17 (encIr (fuel - 1) cond (encIr (fuel - 1) th (encIr (fuel - 1) el acc)))
-    IrCase scrutTy resTy scrut alts =>
-      B.encTag
-        18
-        (encIrTyM (fuel - 1) scrutTy (encIrTyM (fuel - 1) resTy (encIr (fuel - 1) scrut (encAlts (fuel - 1) alts acc))))
-    IrNatCase scrut fresh zero succ catch =>
-      B.encTag
-        19
-        (encIr (fuel - 1) scrut (B.encInt fresh (encAltM (fuel - 1) zero (encAltM (fuel - 1) succ (encAltM (fuel - 1) catch acc)))))
-    IrConcatMany parts => B.encTag 20 (encIrs (fuel - 1) parts acc)
-    IrEffThunk fam ctor unitTy arity prim =>
-      B.encTag
-        21
-        (B.encStr fam (B.encStr ctor (encIrTy (fuel - 1) unitTy (B.encInt arity (encIr (fuel - 1) prim acc)))))
-    IrEffBind fam ctor unitTy =>
-      B.encTag 22 (B.encStr fam (B.encStr ctor (encIrTy (fuel - 1) unitTy acc)))
+encIrCases fuel (IrVar b) acc = B.encTag 0 (encBinder (fuel - 1) b acc)
+encIrCases fuel (IrGlobal name) acc = B.encTag 1 (B.encStr name acc)
+encIrCases fuel (IrCtor fam ctor tys args) acc =
+  B.encTag
+    2
+    (B.encStr fam (B.encStr ctor (B.encMaybe (encIrTys (fuel - 1)) tys (encIrs (fuel - 1) args acc))))
+encIrCases fuel (IrRecord fam resTy fields) acc =
+  B.encTag 3 (B.encStr fam (encIrTyM (fuel - 1) resTy (encFields (fuel - 1) fields acc)))
+encIrCases fuel (IrProj base fam field resTy) acc =
+  B.encTag 4 (encIr (fuel - 1) base (B.encStr fam (B.encStr field (encIrTyM (fuel - 1) resTy acc))))
+encIrCases fuel (IrRecUpd base fam fields resTy) acc =
+  B.encTag
+    5
+    (encIr (fuel - 1) base (B.encStr fam (encFields (fuel - 1) fields (encIrTyM (fuel - 1) resTy acc))))
+encIrCases fuel (IrRt sym) acc = B.encTag 6 (B.encStr sym acc)
+encIrCases fuel (IrRtApp sym args) acc = B.encTag 7 (B.encStr sym (encIrs (fuel - 1) args acc))
+encIrCases fuel (IrCast from to inner) acc =
+  B.encTag 8 (encIrTyM (fuel - 1) from (encIrTyM (fuel - 1) to (encIr (fuel - 1) inner acc)))
+encIrCases fuel (IrInt n) acc = B.encTag 9 (B.encInt n acc)
+encIrCases fuel (IrStr s) acc = B.encTag 10 (B.encStr s acc)
+encIrCases fuel (IrBool b) acc = B.encTag 11 (B.encBool b acc)
+encIrCases fuel (IrFloatLit s) acc = B.encTag 12 (B.encStr s acc)
+encIrCases fuel (IrLet bs scrut body) acc =
+  B.encTag 13 (encBinders (fuel - 1) bs (encIr (fuel - 1) scrut (encIr (fuel - 1) body acc)))
+encIrCases fuel (IrLam bs bodyTy body) acc =
+  B.encTag 14 (encBinders (fuel - 1) bs (encIrTyM (fuel - 1) bodyTy (encIr (fuel - 1) body acc)))
+encIrCases fuel (IrApp appTy f a) acc =
+  B.encTag 15 (encAppTy (fuel - 1) appTy (encIr (fuel - 1) f (encIr (fuel - 1) a acc)))
+encIrCases fuel (IrTail inner) acc = B.encTag 16 (encIr (fuel - 1) inner acc)
+encIrCases fuel (IrIf cond th el) acc =
+  B.encTag 17 (encIr (fuel - 1) cond (encIr (fuel - 1) th (encIr (fuel - 1) el acc)))
+encIrCases fuel (IrCase scrutTy resTy scrut alts) acc =
+  B.encTag
+    18
+    (encIrTyM (fuel - 1) scrutTy (encIrTyM (fuel - 1) resTy (encIr (fuel - 1) scrut (encAlts (fuel - 1) alts acc))))
+encIrCases fuel (IrNatCase scrut fresh zero succ catch) acc =
+  B.encTag
+    19
+    (encIr (fuel - 1) scrut (B.encInt fresh (encAltM (fuel - 1) zero (encAltM (fuel - 1) succ (encAltM (fuel - 1) catch acc)))))
+encIrCases fuel (IrConcatMany parts) acc = B.encTag 20 (encIrs (fuel - 1) parts acc)
+encIrCases fuel (IrEffThunk fam ctor unitTy arity prim) acc =
+  B.encTag
+    21
+    (B.encStr fam (B.encStr ctor (encIrTy (fuel - 1) unitTy (B.encInt arity (encIr (fuel - 1) prim acc)))))
+encIrCases fuel (IrEffBind fam ctor unitTy) acc =
+  B.encTag 22 (B.encStr fam (B.encStr ctor (encIrTy (fuel - 1) unitTy acc)))
 
 encIrs : Int -> List Ir -> List String -> List String
 encIrs fuel xs acc = "[" :: strFromInt (B.lenOf xs) :: ":" :: encIrsGo fuel xs acc
@@ -430,32 +418,30 @@ decIr fuel c =
     B.thenPair (B.decTag fuel c) (\tag, c1 => decIrTag tag (fuel - 1) c1)
 
 decIrTag : Int -> Int -> B.Cur -> Maybe (Pair Ir B.Cur)
-decIrTag tag fuel c =
-  case tag of
-    0 => decIrVar fuel c
-    1 => decIrGlobal fuel c
-    2 => decIrCtor fuel c
-    3 => decIrRecord fuel c
-    4 => decIrProj fuel c
-    5 => decIrRecUpd fuel c
-    6 => decIrRt fuel c
-    7 => decIrRtApp fuel c
-    8 => decIrCast fuel c
-    9 => decIrInt fuel c
-    10 => decIrStr fuel c
-    11 => decIrBool fuel c
-    12 => decIrFloat fuel c
-    13 => decIrLet fuel c
-    14 => decIrLam fuel c
-    15 => decIrApp fuel c
-    16 => decIrTail fuel c
-    17 => decIrIf fuel c
-    18 => decIrCase fuel c
-    19 => decIrNatCase fuel c
-    20 => decIrConcat fuel c
-    21 => decIrEffThunk fuel c
-    22 => decIrEffBind fuel c
-    _ => Nothing
+decIrTag 0 fuel c = decIrVar fuel c
+decIrTag 1 fuel c = decIrGlobal fuel c
+decIrTag 2 fuel c = decIrCtor fuel c
+decIrTag 3 fuel c = decIrRecord fuel c
+decIrTag 4 fuel c = decIrProj fuel c
+decIrTag 5 fuel c = decIrRecUpd fuel c
+decIrTag 6 fuel c = decIrRt fuel c
+decIrTag 7 fuel c = decIrRtApp fuel c
+decIrTag 8 fuel c = decIrCast fuel c
+decIrTag 9 fuel c = decIrInt fuel c
+decIrTag 10 fuel c = decIrStr fuel c
+decIrTag 11 fuel c = decIrBool fuel c
+decIrTag 12 fuel c = decIrFloat fuel c
+decIrTag 13 fuel c = decIrLet fuel c
+decIrTag 14 fuel c = decIrLam fuel c
+decIrTag 15 fuel c = decIrApp fuel c
+decIrTag 16 fuel c = decIrTail fuel c
+decIrTag 17 fuel c = decIrIf fuel c
+decIrTag 18 fuel c = decIrCase fuel c
+decIrTag 19 fuel c = decIrNatCase fuel c
+decIrTag 20 fuel c = decIrConcat fuel c
+decIrTag 21 fuel c = decIrEffThunk fuel c
+decIrTag 22 fuel c = decIrEffBind fuel c
+decIrTag _ fuel c = Nothing
 
 decIrVar : Int -> B.Cur -> Maybe (Pair Ir B.Cur)
 decIrVar fuel c = B.thenPair (decBinder fuel c) (\b, c1 => Just (Pair (IrVar b) c1))
@@ -695,12 +681,10 @@ decTyDecl fuel c =
     B.thenPair (B.decTag fuel c) (\tag, c1 => decTyDeclTag tag (fuel - 1) c1)
 
 decTyDeclTag : Int -> Int -> B.Cur -> Maybe (Pair IrTyDecl B.Cur)
-decTyDeclTag tag fuel c =
-  case tag of
-    0 => decTyDeclVariant fuel c
-    1 => decTyDeclRecord fuel c
-    2 => decTyDeclUnboxed fuel c
-    _ => Nothing
+decTyDeclTag 0 fuel c = decTyDeclVariant fuel c
+decTyDeclTag 1 fuel c = decTyDeclRecord fuel c
+decTyDeclTag 2 fuel c = decTyDeclUnboxed fuel c
+decTyDeclTag _ fuel c = Nothing
 
 decTyDeclVariant : Int -> B.Cur -> Maybe (Pair IrTyDecl B.Cur)
 decTyDeclVariant fuel c = B.thenPair (B.decStr fuel c) (\fam, c1 => decTyDeclVariant1 fuel c1 fam)
@@ -763,11 +747,9 @@ decDef fuel c =
     B.thenPair (B.decTag fuel c) (\tag, c1 => decDefTag tag (fuel - 1) c1)
 
 decDefTag : Int -> Int -> B.Cur -> Maybe (Pair IrDef B.Cur)
-decDefTag tag fuel c =
-  case tag of
-    0 => decDefRec fuel c
-    1 => decDefExtern fuel c
-    _ => Nothing
+decDefTag 0 fuel c = decDefRec fuel c
+decDefTag 1 fuel c = decDefExtern fuel c
+decDefTag _ fuel c = Nothing
 
 decDefRec : Int -> B.Cur -> Maybe (Pair IrDef B.Cur)
 decDefRec fuel c = B.thenPair (B.decStr fuel c) (\name, c1 => decDefRec1 fuel c1 name)

@@ -35,7 +35,13 @@ renderResponse r =
 -- | 该状态码是否携带体。
 export statusHasBody : Int -> Bool
 statusHasBody code =
-  if code < 200 then False else if code == 204 then False else if code == 304 then False else True
+  if code < 200 then
+    False
+  else
+    case code of
+      204 => False
+      304 => False
+      _ => True
 
 -- | 缺 `Content-Length` 时按体字节数补一个（保序追加在末尾）。
 export withLength : List (Pair String String) -> String -> List (Pair String String)

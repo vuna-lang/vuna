@@ -687,10 +687,8 @@ mCpsApplyArgs fuel r k args acc headV =
 
 -- | handler clause 顶层的 kDone（`mFreshTailK`）：resume 在尾位置时用它标记段边界。
 isTailCont : Ir -> Bool
-isTailCont e =
-  case e of
-    IrVar b => String.startsWith "__mchTK" (mBNameText b.irBinderName)
-    _ => False
+isTailCont (IrVar b) = String.startsWith "__mchTK" (mBNameText b.irBinderName)
+isTailCont _ = False
 
 mCps : Int -> IrBinder -> Ir -> Ir -> Ir
 mCps fuel r k e =
@@ -1022,10 +1020,8 @@ clauseGlobals t args =
               _ => clauseGlobals t rest
 
 lenOf : List a -> Int
-lenOf xs =
-  case xs of
-    [] => 0
-    _ :: rest => 1 + lenOf rest
+lenOf [] = 0
+lenOf (_ :: rest) = 1 + lenOf rest
 
 fuelOf : List Ir -> Int
 fuelOf _ = 1
@@ -1198,13 +1194,11 @@ mScopedAltM fuel rs m =
       Just a => Just (IrAlt a.irAltCtor a.irAltBinders (mScopedCalls (fuel - 1) rs a.irAltBody))
 
 lastBinderOf : List IrBinder -> Maybe IrBinder
-lastBinderOf bs =
-  case bs of
-    [] => Nothing
-    b :: rest =>
-      case rest of
-        [] => Just b
-        _ => lastBinderOf rest
+lastBinderOf [] = Nothing
+lastBinderOf (b :: rest) =
+  case rest of
+    [] => Just b
+    _ => lastBinderOf rest
 
 -- | `pushCleanup` / `popCleanup` 的机器形态：thunk 直接变成 Control 步骤
 -- （CPS 层无法用类型语言构造 Control，所以按名字在 lowering 里落）。

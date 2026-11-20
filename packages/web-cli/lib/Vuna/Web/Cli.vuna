@@ -23,18 +23,16 @@ usage =
 
 -- | 入口：分发并返回退出码。
 export runWebCli : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => List String -> Eff r Int
-runWebCli args =
-  case args of
-    "build" :: rest => buildCmd rest
-    "check" :: rest => checkCmd rest
-    "version" :: _ =>
-      do
-        _ <- consolePrint "vuna-web-cli ${Version.vunaVersion}\n"
-        pure 0
-    _ =>
-      do
-        _ <- consolePrint usage
-        pure 2
+runWebCli ("build" :: rest) = buildCmd rest
+runWebCli ("check" :: rest) = checkCmd rest
+runWebCli ("version" :: _) =
+  do
+    _ <- consolePrint "vuna-web-cli ${Version.vunaVersion}\n"
+    pure 0
+runWebCli _ =
+  do
+    _ <- consolePrint usage
+    pure 2
 
 -- | `build`：解析选项后交给 [Build.buildApp]。
 buildCmd : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => List String -> Eff r Int
@@ -48,13 +46,11 @@ buildCmd rest =
 
 -- | `check`：单个位置参数。
 checkCmd : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => List String -> Eff r Int
-checkCmd rest =
-  case rest of
-    [dir] => Build.checkApp dir
-    _ =>
-      do
-        _ <- consoleEprint "error: check requires exactly one <app-dir>\n"
-        pure 2
+checkCmd ([dir]) = Build.checkApp dir
+checkCmd _ =
+  do
+    _ <- consoleEprint "error: check requires exactly one <app-dir>\n"
+    pure 2
 
 -- | 解析 `build` 的参数：位置参数是应用目录，其余是开关。
 parseBuild : List String -> Check (Pair String Build.BuildOpts)

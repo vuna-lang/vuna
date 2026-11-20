@@ -50,16 +50,12 @@ backendVersionEff bin =
     pure "${sizePart size}-${mtPart mt}"
 
 sizePart : Maybe Nat -> String
-sizePart size =
-  case size of
-    Just n => strFromInt (natToInt n)
-    Nothing => "0"
+sizePart (Just n) = strFromInt (natToInt n)
+sizePart Nothing = "0"
 
 mtPart : Maybe Int -> String
-mtPart mt =
-  case mt of
-    Just t => strFromInt t
-    Nothing => "0"
+mtPart (Just t) = strFromInt t
+mtPart Nothing = "0"
 
 -- | 产物缓存的键：IR 内容 + 目标 + 后端身份 + 输出模式。
 export outputsKeyOf : String -> String -> String -> Bool -> String

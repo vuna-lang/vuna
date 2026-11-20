@@ -308,13 +308,11 @@ commaItems at (item :: rest) =
 
 -- | 内部：多行导出列表（逗号前置）：首项 `( a`，其余 `, b`，收尾 `) where`。
 renderExportListBlock : TriviaCtx -> String -> List ExportItem -> Doc
-renderExportListBlock at name items =
-  case items of
-    [] => text "module ${name} () where"
-    first :: rest =>
-      appendDoc
-        (text "module ${name}")
-        (nest 2 (appendDoc hard (appendDoc (appendDoc (text "( ") (renderExportItemDoc at first)) (appendDoc (hcat (map (\item => appendDoc hard (appendDoc (text ", ") (renderExportItemDoc at item))) rest)) (appendDoc hard (text ") where"))))))
+renderExportListBlock at name [] = text "module ${name} () where"
+renderExportListBlock at name (first :: rest) =
+  appendDoc
+    (text "module ${name}")
+    (nest 2 (appendDoc hard (appendDoc (appendDoc (text "( ") (renderExportItemDoc at first)) (appendDoc (hcat (map (\item => appendDoc hard (appendDoc (text ", ") (renderExportItemDoc at item))) rest)) (appendDoc hard (text ") where"))))))
 
 -- | 内部：单条导出项（贴上该项的注释）。
 renderExportItemDoc : TriviaCtx -> ExportItem -> Doc

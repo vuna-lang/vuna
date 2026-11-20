@@ -300,37 +300,35 @@ wsStep d buf fuel st =
 
 -- | 内部：处理一条已解析的帧（不递归）。
 frameAction : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r => HttpConn.Duplex r -> String -> ServeState -> Ws.Frame -> Eff r WsStep
-frameAction d rest st frame =
-  case frame of
-    Ws.FrameClose code reason =>
+frameAction d rest st (Ws.FrameClose code reason) =
+  do
+    _ <- HttpConn.writeAllOf d (Ws.renderFrame (Ws.FrameClose code reason))
+    pure (WsDone SessionRequested st)
+frameAction d rest st (Ws.FramePing payload) =
+  do
+    _ <- HttpConn.writeAllOf d (Ws.renderFrame (Ws.FramePong payload))
+    pure (WsAgain rest st)
+frameAction d rest st (Ws.FramePong _) = pure (WsAgain rest st)
+frameAction d rest st (Ws.FrameBinary _) =
+  do
+    w <- cdpWarn "binary frame ignored" st
+    _ <- writeWsFrames d (secondOf w)
+    pure (WsAgain rest (firstOf w))
+frameAction d rest st (Ws.FrameText text) =
+  case parseJson text of
+    ErrC e =>
       do
-        _ <- HttpConn.writeAllOf d (Ws.renderFrame (Ws.FrameClose code reason))
-        pure (WsDone SessionRequested st)
-    Ws.FramePing payload =>
-      do
-        _ <- HttpConn.writeAllOf d (Ws.renderFrame (Ws.FramePong payload))
-        pure (WsAgain rest st)
-    Ws.FramePong _ => pure (WsAgain rest st)
-    Ws.FrameBinary _ =>
-      do
-        w <- cdpWarn "binary frame ignored" st
+        w <- cdpWarn "malformed frame: ${diagText e}" st
         _ <- writeWsFrames d (secondOf w)
         pure (WsAgain rest (firstOf w))
-    Ws.FrameText text =>
-      case parseJson text of
-        ErrC e =>
-          do
-            w <- cdpWarn "malformed frame: ${diagText e}" st
-            _ <- writeWsFrames d (secondOf w)
-            pure (WsAgain rest (firstOf w))
-        OkC msg =>
-          do
-            result <- handleCdp msg st
-            _ <- writeWsFrames d (secondOf (secondOf result))
-            if firstOf result then
-              pure (WsDone SessionRequested (firstOf (secondOf result)))
-            else
-              pure (WsAgain rest (firstOf (secondOf result)))
+    OkC msg =>
+      do
+        result <- handleCdp msg st
+        _ <- writeWsFrames d (secondOf (secondOf result))
+        if firstOf result then
+          pure (WsDone SessionRequested (firstOf (secondOf result)))
+        else
+          pure (WsAgain rest (firstOf (secondOf result)))
 
 -- | 内部：把一组 JSON-RPC 响应渲染成一串文本帧写出去。
 writeWsFrames : {r : Row} -> HttpConn.Duplex r -> List Json -> Eff r Int
@@ -347,12 +345,10 @@ isJsonPath t = t == "/json/version" || t == "/json/list"
 -- | 内部：发现端点的响应；其它路径 404。
 jsonEndpoint : String -> HttpReq.Request -> ServeState -> HttpResponse.Response
 jsonEndpoint wsBase req st =
-  if req.target == "/json/version" then
-    jsonResponse versionJson
-  else if req.target == "/json/list" then
-    jsonResponse (renderJson (JArr [targetJson wsBase st]))
-  else
-    HttpResponse.response 404 "not found"
+  case req.target of
+    "/json/version" => jsonResponse versionJson
+    "/json/list" => jsonResponse (renderJson (JArr [targetJson wsBase st]))
+    _ => HttpResponse.response 404 "not found"
 
 -- | 内部：`application/json` 响应；发现端点一次性应答并关闭连接（客户端会为新请求重连）。
 jsonResponse : String -> HttpResponse.Response

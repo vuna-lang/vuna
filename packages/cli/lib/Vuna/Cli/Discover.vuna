@@ -123,8 +123,9 @@ domainOf name = substring 5 (byteLength name - 5) name
 
 -- | 内部：目录 + 文件名（`dir` 为 `.` 或 `/` 时也要拼对）。
 appendPath : String -> String -> String
-appendPath dir name =
-  if dir == "/" then "/${name}" else if dir == "." then "./${name}" else "${dir}/${name}"
+appendPath "/" name = "/${name}"
+appendPath "." name = "./${name}"
+appendPath dir name = "${dir}/${name}"
 
 -- | 内部：按域去重（先出现的目录优先）。
 dedupByDomain : List (Pair String String) -> List (Pair String String)
@@ -215,14 +216,10 @@ parsedPlugin domain bin text =
 
 -- | 内部：文件大小的文本（取不到给 0）。
 sizePart : Maybe Nat -> String
-sizePart size =
-  case size of
-    Just n => strFromInt (natToInt n)
-    Nothing => "0"
+sizePart (Just n) = strFromInt (natToInt n)
+sizePart Nothing = "0"
 
 -- | 内部：mtime 的文本（取不到给 0）。
 mtPart : Maybe Int -> String
-mtPart mt =
-  case mt of
-    Just t => strFromInt t
-    Nothing => "0"
+mtPart (Just t) = strFromInt t
+mtPart Nothing = "0"
