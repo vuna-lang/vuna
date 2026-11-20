@@ -1,0 +1,4 @@
+module Amb.A where
+
+export x : Int
+x = 1

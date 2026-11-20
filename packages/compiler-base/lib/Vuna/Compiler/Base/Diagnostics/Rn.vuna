@@ -50,6 +50,8 @@ export data RnErr(..) : Nat -> Type where
   -- arity 3
   -- | 内置宏的实参个数与注册 arity 不符。
   MacroArity : String -> String -> String -> RnErr (Succ (Succ (Succ Zero)))
+  -- | 两个 import 提供了同名但 target 不同的条目（种类 / 名字 / 来源模块）。
+  AmbiguousName : String -> String -> String -> RnErr (Succ (Succ (Succ Zero)))
 
 -- | 诊断域实现：Vuna.Compiler.Base.Diagnostics.Rn.rnCode（目录/模板见 diagnostics.md）。
 export rnCode : {n : Nat} -> RnErr n -> String
@@ -81,6 +83,7 @@ rnCode (AmbiguousConstructorInExport _ _) = "RN_AmbiguousConstructorInExport"
 rnCode (TypeNotExported _ _) = "RN_TypeNotExported"
 rnCode (ValueNotExported _ _) = "RN_ValueNotExported"
 rnCode (MacroArity _ _ _) = "RN_MacroArity"
+rnCode (AmbiguousName _ _ _) = "RN_AmbiguousName"
 
 -- | 诊断域实现：Vuna.Compiler.Base.Diagnostics.Rn.rnTemplate（目录/模板见 diagnostics.md）。
 export rnTemplate : {n : Nat} -> RnErr n -> String
@@ -117,6 +120,8 @@ rnTemplate (AmbiguousConstructorInExport _ _) =
 rnTemplate (TypeNotExported _ _) = "type <0> is not exported by <1>"
 rnTemplate (ValueNotExported _ _) = "<0> is not exported by <1>"
 rnTemplate (MacroArity _ _ _) = "macro <0> expects <1> argument(s), got <2>"
+rnTemplate (AmbiguousName _ _ _) =
+  "ambiguous <0> <1> (imported from <2>; qualify it at the use site)"
 
 -- | 诊断域实现：Vuna.Compiler.Base.Diagnostics.Rn.rnMsg（目录/模板见 diagnostics.md）。
 export rnMsg : {n : Nat} -> RnErr n -> Vec n String -> Diagnostic
@@ -157,6 +162,10 @@ rnNoLoc1 e a0 = rnNoLoc e [a0]
 -- | 诊断域实现：Vuna.Compiler.Base.Diagnostics.Rn.rnNoLoc2（目录/模板见 diagnostics.md）。
 export rnNoLoc2 : RnErr (Succ (Succ Zero)) -> String -> String -> Check a
 rnNoLoc2 e a0 a1 = rnNoLoc e [a0, a1]
+
+-- | 诊断域实现：Vuna.Compiler.Base.Diagnostics.Rn.rnNoLoc3（目录/模板见 diagnostics.md）。
+export rnNoLoc3 : RnErr (Succ (Succ (Succ Zero))) -> String -> String -> String -> Check a
+rnNoLoc3 e a0 a1 a2 = rnNoLoc e [a0, a1, a2]
 
 -- | 诊断域实现：Vuna.Compiler.Base.Diagnostics.Rn.RnEntry（目录/模板见 diagnostics.md）。
 export record RnEntry(..) where
@@ -249,5 +258,9 @@ rnAll =
     RnEntry
       (rnCode (MacroArity "" "" ""))
       (rnTemplate (MacroArity "" "" ""))
-      "宏实参个数不匹配"
+      "宏实参个数不匹配",
+    RnEntry
+      (rnCode (AmbiguousName "" "" ""))
+      (rnTemplate (AmbiguousName "" "" ""))
+      "导入的条目名歧义"
   ]

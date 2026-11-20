@@ -1,0 +1,4 @@
+module Amb.Facade (x) where
+
+import Amb.A
+import Amb.B

@@ -500,8 +500,11 @@ unifyEntryPairs label kindLabel name (p :: rest) =
   if sameTargetRest (secondOf p) rest then
     OkC p
   else
-    icInternal
-      "${label}: ambiguous ${kindLabel} ${name} (imported from ${_joinNames (map firstOf (p :: rest))}); qualifying at the use site is the supported path"
+    let
+      -- 用户可见的歧义（同一名字由多个模块提供、target 不同）：报名字解析诊断，
+      -- 不伪装成内部错误。`label` 是导入前缀，具体来源在 modules 列表里。
+      mods = _joinNames (map firstOf (p :: rest))
+    in rnNoLoc3 (AmbiguousName kindLabel name mods) kindLabel name mods
 
 modulePath : Root -> String -> String
 modulePath root name = "${rootDir root}/${joinSlashes (splitOnDot name)}.vuna"

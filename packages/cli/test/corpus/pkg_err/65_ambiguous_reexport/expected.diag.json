@@ -1,0 +1,1 @@
+{"version":1,"tool":"vuna","diagnostics":[{"code":"RN_AmbiguousName","severity":"error","phase":"resolve","category":"names","message":"ambiguous name x (imported from Amb.A, Amb.B; qualify it at the use site)","labels":[],"fields":[],"trace":[],"notes":[],"suggestions":[],"origin":{"kind":"direct"},"internal":false,"ice":null,"absent":"synthetic"}]}

@@ -1,0 +1,6 @@
+module Main where
+
+import Amb.Facade
+
+main : Int
+main = x
