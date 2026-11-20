@@ -1,0 +1,92 @@
+module Vuna.Target.Native.Select where
+
+-- native 后端的标量指令选择。
+--
+-- 把白名单里**不分配、不触发 GC、只碰 rax/r11** 的运行时叶子在调用点展开成机器
+-- 序列：`Module` 用 [scalarPlanOf] 判断能否内联，用 [scalarInstrs] 发射。语义与
+-- `Native.Runtime` 的同名模板逐条对应（63-bit wrap、Nat 饱和/夹取、比较返回 0/1），
+-- 词表只有这里一份；`RuntimeTable` 单测用 [scalarPlanOf] 第二项与
+-- `Runtime.nativeRtTarget` 交叉校验。
+--
+-- 边界：只 import Base 与 `Native.{Abi,Model}`；不依赖 IR。
+import Base.Data.Bool as Bool
+import Base.Data.Int as Int
+import Base.Data.List as List
+import Base.Data.Maybe as Maybe
+import Base.Data.Pair as Pair
+import Vuna.Target.Native.Abi
+import Vuna.Target.Native.Model
+
+-- | 一个可内联的标量叶子。
+export data ScalarOp(..) : Type where
+  -- | 63-bit wrap 的二元指令（`add` / `sub` / `imul` / `and` / `or` / `xor`）。
+  ScalarWrap : String -> ScalarOp
+  -- | 比较：`cmp` + `setcc` + `movzx`，结果 0/1。
+  ScalarCmp : String -> ScalarOp
+  -- | `xor -1` 再 wrap（`bitNot`）。
+  ScalarBitNot : ScalarOp
+  -- | Nat 饱和加法。
+  ScalarNatAdd : ScalarOp
+  -- | Nat 截断减法（下溢到 0）。
+  ScalarNatSub : ScalarOp
+  -- | Int -> Nat（负数夹到 0）。
+  ScalarNatFromInt : ScalarOp
+  -- | Nat -> Int（恒等）。
+  ScalarNatToInt : ScalarOp
+  -- | 恒返回常量的零参桩（调试 / 可观测性叶子）。
+  ScalarConst : Int -> ScalarOp
+
+-- | IR 符号 -> 内联计划 + 对应运行时标签（后者只用于一致性测试）。
+export scalarPlanOf : String -> Maybe (Pair ScalarOp String)
+scalarPlanOf "+" = Just (Pair (ScalarWrap "add") (nativeRtLabel "add"))
+scalarPlanOf "-" = Just (Pair (ScalarWrap "sub") (nativeRtLabel "sub"))
+scalarPlanOf "*" = Just (Pair (ScalarWrap "imul") (nativeRtLabel "mul"))
+scalarPlanOf "bitAnd" = Just (Pair (ScalarWrap "and") (nativeRtLabel "bit_and"))
+scalarPlanOf "bitOr" = Just (Pair (ScalarWrap "or") (nativeRtLabel "bit_or"))
+scalarPlanOf "bitXor" = Just (Pair (ScalarWrap "xor") (nativeRtLabel "bit_xor"))
+scalarPlanOf "bitNot" = Just (Pair ScalarBitNot (nativeRtLabel "bit_not"))
+scalarPlanOf "bi_eq_int" = Just (Pair (ScalarCmp "sete") (nativeRtLabel "eq_int"))
+scalarPlanOf "bi_neq_int" = Just (Pair (ScalarCmp "setne") (nativeRtLabel "neq_int"))
+scalarPlanOf "bi_lt_int" = Just (Pair (ScalarCmp "setl") (nativeRtLabel "lt_int"))
+scalarPlanOf "bi_le_int" = Just (Pair (ScalarCmp "setle") (nativeRtLabel "le_int"))
+scalarPlanOf "bi_gt_int" = Just (Pair (ScalarCmp "setg") (nativeRtLabel "gt_int"))
+scalarPlanOf "bi_ge_int" = Just (Pair (ScalarCmp "setge") (nativeRtLabel "ge_int"))
+scalarPlanOf "bi_lt_bool" = Just (Pair (ScalarCmp "setl") (nativeRtLabel "lt_int"))
+scalarPlanOf "bi_le_bool" = Just (Pair (ScalarCmp "setle") (nativeRtLabel "le_int"))
+scalarPlanOf "bi_gt_bool" = Just (Pair (ScalarCmp "setg") (nativeRtLabel "gt_int"))
+scalarPlanOf "bi_ge_bool" = Just (Pair (ScalarCmp "setge") (nativeRtLabel "ge_int"))
+scalarPlanOf "natToInt" = Just (Pair ScalarNatToInt (nativeRtLabel "nat_to_int"))
+scalarPlanOf "natFromInt" = Just (Pair ScalarNatFromInt (nativeRtLabel "nat_from_int"))
+scalarPlanOf "natAdd" = Just (Pair ScalarNatAdd (nativeRtLabel "nat_add"))
+scalarPlanOf "natSub" = Just (Pair ScalarNatSub (nativeRtLabel "nat_sub"))
+scalarPlanOf "@vuna@debug@on" = Just (Pair (ScalarConst 0) (nativeRtLabel "debug_on"))
+scalarPlanOf "@vuna@debug@line" = Just (Pair (ScalarConst 0) (nativeRtLabel "debug_line"))
+scalarPlanOf "@vuna@obs@level" = Just (Pair (ScalarConst 0) (nativeRtLabel "obs_level"))
+scalarPlanOf "@vuna@obs@log" = Just (Pair (ScalarConst 0) (nativeRtLabel "obs_log"))
+scalarPlanOf "@vuna@obs@counter" = Just (Pair (ScalarConst 0) (nativeRtLabel "obs_counter"))
+scalarPlanOf "@vuna@obs@mark" = Just (Pair (ScalarConst 0) (nativeRtLabel "obs_mark"))
+scalarPlanOf "@vuna@obs@spanBegin" = Just (Pair (ScalarConst 0) (nativeRtLabel "obs_span_begin"))
+scalarPlanOf "@vuna@obs@spanEnd" = Just (Pair (ScalarConst 0) (nativeRtLabel "obs_span_end"))
+scalarPlanOf "@vuna@obs@sampleStart" =
+  Just (Pair (ScalarConst 0) (nativeRtLabel "obs_sample_start"))
+scalarPlanOf "@vuna@obs@sampleStop" = Just (Pair (ScalarConst 0) (nativeRtLabel "obs_sample_stop"))
+scalarPlanOf _ = Nothing
+
+-- | 展开序列：`a` / `b` 是实参寄存器（一元 / 零元的 `b` 只作 scratch），返回结果
+--   寄存器与指令。可能改写两个实参寄存器，调用方把两者都当临时寄存器回收。
+export scalarInstrs : ScalarOp -> Reg -> Reg -> Pair Reg (List Instr)
+scalarInstrs (ScalarWrap op) a b =
+  Pair a [IBinReg op a (OpReg b), IBinReg "shl" a (OpImm 1), IBinReg "sar" a (OpImm 1)]
+scalarInstrs (ScalarCmp cond) a b = Pair Rax [ICmp (OpReg a) (OpReg b), ISetcc cond Rax, IMovzxAl]
+scalarInstrs ScalarBitNot a _ =
+  Pair a [IBinReg "xor" a (OpImm (0 - 1)), IBinReg "shl" a (OpImm 1), IBinReg "sar" a (OpImm 1)]
+scalarInstrs ScalarNatAdd a b =
+  Pair
+    a
+    [IBinReg "add" a (OpReg b), IMov (OpReg b) (OpImm nativeMaxInt), ICmp (OpReg a) (OpReg b), ICmov "cmovg" a (OpReg b)]
+scalarInstrs ScalarNatSub a b =
+  Pair a [IBinReg "sub" a (OpReg b), IMov (OpReg b) (OpImm 0), ICmov "cmovl" a (OpReg b)]
+scalarInstrs ScalarNatFromInt a b =
+  Pair a [IMov (OpReg b) (OpImm 0), ICmp (OpReg a) (OpReg b), ICmov "cmovl" a (OpReg b)]
+scalarInstrs ScalarNatToInt a _ = Pair a []
+scalarInstrs (ScalarConst n) a _ = Pair a [IMov (OpReg a) (OpImm n)]

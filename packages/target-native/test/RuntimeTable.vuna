@@ -9,10 +9,12 @@
 -- 缺口语义与理由见 docs/reference/native.md。
 import Base
 import Base.Data.List as List
+import Base.Data.Pair as Pair
 import Base.Effect.Core
 import Vuna.Ir.Model
 import Vuna.Ir.Runtime
 import Vuna.Target.Native.Runtime
+import Vuna.Target.Native.Select
 
 main : Eff [] String
 main =
@@ -25,7 +27,10 @@ main =
         pure ""
 
 problems : List String
-problems = append (append (concatMap arityProblems irRtNames) missingProblems) extraProblems
+problems =
+  append
+    (append (append (concatMap arityProblems irRtNames) missingProblems) extraProblems)
+    inlineProblems
 
 -- `&&` / `||` 由生成器发短路控制流，不作为运行时函数值出现。
 generatorSpecial : String -> Bool
@@ -56,6 +61,22 @@ extraProblems =
   map
     (\sym => "listed as a gap but implemented: " ++ sym)
     (filter (\sym => not (memName sym gaps)) runtimeGaps)
+
+-- 内联计划里的运行时标签必须与 `nativeRtTarget` 选中的实现一致；两边任一漂移都会
+-- 让调用点的语义与直接调用分叉。
+inlineProblems : List String
+inlineProblems = concatMap inlineProblem irRtNames
+
+inlineProblem : String -> List String
+inlineProblem sym =
+  case scalarPlanOf sym of
+    Nothing => []
+    Just plan =>
+      let
+        want = secondOf plan
+      in case nativeRtTarget sym of
+        Nothing => ["inline " ++ sym ++ ": runtime target missing"]
+        Just got => if got == want then [] else ["inline " ++ sym ++ ": " ++ want ++ " /= " ++ got]
 
 gaps : List String
 gaps = filter isGap irRtNames

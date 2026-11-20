@@ -90,6 +90,7 @@ renderInstr (ICmp dst src) =
     "cmp qword ptr ${renderOperand dst}, ${renderOperand src}"
   else
     "cmp ${renderOperand dst}, ${renderOperand src}"
+renderInstr (ICmov cond dst src) = "${cond} ${regText dst}, ${renderOperand src}"
 renderInstr (ITest a b) = "test ${regText a}, ${regText b}"
 renderInstr (ISetcc cond r) = "${cond} ${reg8Text r}"
 renderInstr (INeg r) = "neg ${regText r}"

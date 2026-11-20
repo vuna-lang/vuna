@@ -31,14 +31,6 @@ import Vuna.Target.Native.Pal
 -- ---------------------------------------------------------------
 -- 常量与只读数据
 -- ---------------------------------------------------------------
--- | 63-bit 有符号的上界（与 OCaml `max_int` / `irNatChainMax` 一致）。
-nativeMaxInt : Int
-nativeMaxInt = 4611686018427387903
-
--- | 同上界对应的下界（`min_int = -2^62`；字面量上界是 `2^62-1`，因此写成 `-max - 1`）。
-nativeMinInt : Int
-nativeMinInt = -4611686018427387903 - 1
-
 divZeroMessage : String
 divZeroMessage = "vuna: runtime error: division by zero\n"
 

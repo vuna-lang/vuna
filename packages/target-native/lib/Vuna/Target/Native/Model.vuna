@@ -110,6 +110,8 @@ export data Instr(..) : Type where
   IBinReg : String -> Reg -> Operand -> Instr
   -- | `cmp dst, src`。
   ICmp : Operand -> Operand -> Instr
+  -- | `cmovcc dst, src`（`dst` 必须是寄存器；`src` 是寄存器/内存）。
+  ICmov : String -> Reg -> Operand -> Instr
   -- | `test r1, r2`。
   ITest : Reg -> Reg -> Instr
   -- | `setcc reg8`（结果只有 0/1，需配合 `IMovzxAl`）。

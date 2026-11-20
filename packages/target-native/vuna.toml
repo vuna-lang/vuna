@@ -21,4 +21,5 @@ modules = [
   "Vuna.Target.Native.Render",
   "Vuna.Target.Native.Repr",
   "Vuna.Target.Native.Runtime",
+  "Vuna.Target.Native.Select",
 ]

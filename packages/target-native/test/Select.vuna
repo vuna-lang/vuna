@@ -1,0 +1,112 @@
+-- 标量指令选择（`Native.Select`）的单测。
+--
+-- 锁三件事：白名单符号与运行时标签/契约一致；每个算子的寄存器序列形状；
+-- 63-bit wrap、Nat 饱和/夹取与比较结果寄存器（`rax` + `setcc`/`movzx`）不被改坏。
+import Base
+import Base.Data.List as List
+import Base.Data.Pair as Pair
+import Base.Effect.Core
+import Vuna.Target.Native.Abi
+import Vuna.Target.Native.Model
+import Vuna.Target.Native.Runtime
+import Vuna.Target.Native.Select
+
+main : Eff [] String
+main =
+  case problems of
+    [] => pure ""
+    ps =>
+      do
+        _ <- prim_eff_print ("native select drifted:\n" ++ join "\n" ps ++ "\n")
+        _ <- prim_eff_exit 1
+        pure ""
+
+problems : List String
+problems =
+  append (append (append wrapProblems cmpProblems) (append natProblems constProblems)) planProblems
+
+wrapProblems : List String
+wrapProblems =
+  case scalarInstrs (ScalarWrap "add") R11 R10 of
+    Pair R11 ([IBinReg "add" R11 (OpReg R10), IBinReg "shl" R11 (OpImm 1), IBinReg "sar" R11 (OpImm 1)]) =>
+      []
+    Pair r is => ["wrap add: reg " ++ regText r ++ ", " ++ strFromInt (length is) ++ " instrs"]
+
+cmpProblems : List String
+cmpProblems =
+  case scalarInstrs (ScalarCmp "setl") R11 R10 of
+    Pair Rax ([ICmp (OpReg R11) (OpReg R10), ISetcc "setl" Rax, IMovzxAl]) => []
+    Pair r is => ["cmp setl: reg " ++ regText r ++ ", " ++ strFromInt (length is) ++ " instrs"]
+
+natProblems : List String
+natProblems = append natAddProblems (append natSubProblems (append natFromProblems natToProblems))
+
+natAddProblems : List String
+natAddProblems =
+  case scalarInstrs ScalarNatAdd R11 R10 of
+    Pair R11 ([IBinReg "add" R11 (OpReg R10), IMov (OpReg R10) (OpImm m), ICmp (OpReg R11) (OpReg R10), ICmov "cmovg" R11 (OpReg R10)]) =>
+      if m == nativeMaxInt then [] else ["nat add: saturation constant drifted"]
+    Pair r is => ["nat add: reg " ++ regText r ++ ", " ++ strFromInt (length is) ++ " instrs"]
+
+natSubProblems : List String
+natSubProblems =
+  case scalarInstrs ScalarNatSub R11 R10 of
+    Pair R11 ([IBinReg "sub" R11 (OpReg R10), IMov (OpReg R10) (OpImm 0), ICmov "cmovl" R11 (OpReg R10)]) =>
+      []
+    Pair r is => ["nat sub: reg " ++ regText r ++ ", " ++ strFromInt (length is) ++ " instrs"]
+
+natFromProblems : List String
+natFromProblems =
+  case scalarInstrs ScalarNatFromInt R11 R10 of
+    Pair R11 ([IMov (OpReg R10) (OpImm 0), ICmp (OpReg R11) (OpReg R10), ICmov "cmovl" R11 (OpReg R10)]) =>
+      []
+    Pair r is => ["nat from int: reg " ++ regText r ++ ", " ++ strFromInt (length is) ++ " instrs"]
+
+natToProblems : List String
+natToProblems =
+  case scalarInstrs ScalarNatToInt R11 R10 of
+    Pair R11 [] => []
+    Pair r is => ["nat to int: reg " ++ regText r ++ ", " ++ strFromInt (length is) ++ " instrs"]
+
+constProblems : List String
+constProblems =
+  case scalarInstrs (ScalarConst 7) Rax R11 of
+    Pair Rax ([IMov (OpReg Rax) (OpImm 7)]) => []
+    Pair r is => ["const 7: reg " ++ regText r ++ ", " ++ strFromInt (length is) ++ " instrs"]
+
+-- | 内联计划必须指向同一个运行时实现；`RuntimeTable` 也从契约符号方向做同一校验。
+expectedPlans : List (Pair String String)
+expectedPlans =
+  [
+    Pair "+" (nativeRtLabel "add"),
+    Pair "-" (nativeRtLabel "sub"),
+    Pair "*" (nativeRtLabel "mul"),
+    Pair "bitAnd" (nativeRtLabel "bit_and"),
+    Pair "bitOr" (nativeRtLabel "bit_or"),
+    Pair "bitXor" (nativeRtLabel "bit_xor"),
+    Pair "bitNot" (nativeRtLabel "bit_not"),
+    Pair "bi_eq_int" (nativeRtLabel "eq_int"),
+    Pair "bi_lt_int" (nativeRtLabel "lt_int"),
+    Pair "bi_ge_bool" (nativeRtLabel "ge_int"),
+    Pair "natToInt" (nativeRtLabel "nat_to_int"),
+    Pair "natFromInt" (nativeRtLabel "nat_from_int"),
+    Pair "natAdd" (nativeRtLabel "nat_add"),
+    Pair "natSub" (nativeRtLabel "nat_sub"),
+    Pair "@vuna@debug@on" (nativeRtLabel "debug_on"),
+    Pair "@vuna@obs@level" (nativeRtLabel "obs_level")
+  ]
+
+planProblems : List String
+planProblems = concatMap planProblem expectedPlans
+
+planProblem : Pair String String -> List String
+planProblem p =
+  let
+    sym = firstOf p
+    want = secondOf p
+  in case scalarPlanOf sym of
+    Nothing => ["plan " ++ sym ++ ": missing"]
+    Just plan =>
+      let
+        got = secondOf plan
+      in if got == want then [] else ["plan " ++ sym ++ ": " ++ got ++ " /= " ++ want]

@@ -35,6 +35,7 @@ import Vuna.Target.Native.Audit
 import Vuna.Target.Native.Model
 import Vuna.Target.Native.Repr
 import Vuna.Target.Native.Runtime
+import Vuna.Target.Native.Select
 
 -- ---------------------------------------------------------------
 -- 结果类型：区分「目标不支持」与「生成器不变式破坏」
@@ -226,6 +227,7 @@ instrSlotReads (ILeaMem _ base off) = baseSlotRead base off
 instrSlotReads (IBin _ op) = slotReadOff op
 instrSlotReads (IBinReg _ _ op) = slotReadOff op
 instrSlotReads (ICmp a b) = append (slotReadOff a) (slotReadOff b)
+instrSlotReads (ICmov _ _ op) = slotReadOff op
 instrSlotReads (ITest _ _) = []
 instrSlotReads (ISetcc _ _) = []
 instrSlotReads (INeg _) = []
@@ -726,6 +728,164 @@ genNatSuccCall fuel st isTail arg =
       (genExpr (fuel - 1) st arg)
       (\p => NOk (Pair (append (firstOf p) [IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "nat_succ")]) (secondOf p)))
 
+-- ---------------------------------------------------------------
+-- 标量运行时叶子的调用点展开
+-- ---------------------------------------------------------------
+-- | 寄存器名比较（槽里没有 Eq Reg；渲染文本即身份）。
+sameReg : Reg -> Reg -> Bool
+sameReg a b = regText a == regText b
+
+memReg : Reg -> List Reg -> Bool
+memReg _ [] = False
+memReg r (x :: rest) = if sameReg r x then True else memReg r rest
+
+dropReg : Reg -> List Reg -> List Reg
+dropReg _ [] = []
+dropReg r (x :: rest) = if sameReg r x then rest else x :: dropReg r rest
+
+-- | 可用临时寄存器池：调用点前后都空闲的 caller-saved 寄存器。`r10` 只被
+--   annotation 在 call 前两条指令里写，内联序列没有 call，所以也能用。
+scalarRegs : List Reg
+scalarRegs = [Rax, R11, R10, R8, R9]
+
+-- | 把纯标量表达式选进寄存器：只接受字面量、槽变量、标量 cast 与白名单 `IrRtApp`；
+--   返回结果寄存器、指令与回收后的寄存器池。其它形态返回 Nothing（整棵子树回退）。
+genScalarInto : FGen -> List Reg -> Ir -> Maybe (Pair Reg (Pair (List Instr) (List Reg)))
+genScalarInto st pool (IrInt n) =
+  case pool of
+    r :: rest => Just (Pair r (Pair [IMov (OpReg r) (OpImm n)] rest))
+    [] => Nothing
+genScalarInto st pool (IrVar b) =
+  case lookupBinder b st.fgSlots of
+    Just slot =>
+      case pool of
+        r :: rest => Just (Pair r (Pair [IMov (OpReg r) (OpMem Rbp (nativeSlotOff slot))] rest))
+        [] => Nothing
+    Nothing => Nothing
+genScalarInto st pool (IrCast from to inner) =
+  if isScalarCls (clsOfTy st from) && isScalarCls (clsOfTy st to) then
+    genScalarInto st pool inner
+  else
+    Nothing
+genScalarInto st pool (IrRtApp sym args) =
+  case scalarPlanOf sym of
+    Nothing => Nothing
+    Just plan =>
+      if length args /= irInlineArity sym then Nothing else genScalarOp st pool (firstOf plan) args
+genScalarInto _ _ _ = Nothing
+
+-- | 白名单算子的寄存器选择；`ScalarCmp` 的结果固定在 rax（`setcc` + `movzx rax, al`）。
+genScalarOp : FGen -> List Reg -> ScalarOp -> List Ir -> Maybe (Pair Reg (Pair (List Instr) (List Reg)))
+genScalarOp st pool (ScalarConst n) _ =
+  case pool of
+    r :: rest => Just (Pair r (Pair [IMov (OpReg r) (OpImm n)] rest))
+    [] => Nothing
+genScalarOp st pool (ScalarCmp cc) args =
+  if not (memReg Rax pool) then
+    Nothing
+  else
+    case args of
+      [a, b] =>
+        case genScalarInto st (dropReg Rax pool) a of
+          Just pa =>
+            case genScalarInto st (secondOf (secondOf pa)) b of
+              Just pb =>
+                let
+                  rA = firstOf pa
+                  inA = firstOf (secondOf pa)
+                  rB = firstOf pb
+                  inB = firstOf (secondOf pb)
+                  rest = secondOf (secondOf pb)
+                  res = scalarInstrs (ScalarCmp cc) rA rB
+                in Just (Pair (firstOf res) (Pair (append inA (append inB (secondOf res))) (rA :: rB :: Rax :: rest)))
+              Nothing => Nothing
+          Nothing => Nothing
+      _ => Nothing
+genScalarOp st pool ScalarNatFromInt args =
+  case args of
+    [a] =>
+      case pool of
+        r :: rest =>
+          case genScalarInto st (r :: rest) a of
+            Just pa =>
+              case secondOf (secondOf pa) of
+                s :: rest2 =>
+                  let
+                    res = scalarInstrs ScalarNatFromInt (firstOf pa) s
+                  in Just
+                    (Pair (firstOf res) (Pair (append (firstOf (secondOf pa)) (secondOf res)) (firstOf pa :: s :: rest2)))
+                [] => Nothing
+            Nothing => Nothing
+        [] => Nothing
+    _ => Nothing
+genScalarOp st pool op args =
+  case args of
+    [] =>
+      case pool of
+        r :: rest =>
+          let
+            res = scalarInstrs op r r
+          in Just (Pair (firstOf res) (Pair (secondOf res) (r :: rest)))
+        [] => Nothing
+    [a] =>
+      case pool of
+        r :: rest =>
+          case genScalarInto st (r :: rest) a of
+            Just pa =>
+              let
+                res = scalarInstrs op (firstOf pa) (firstOf pa)
+              in Just
+                (Pair (firstOf res) (Pair (append (firstOf (secondOf pa)) (secondOf res)) (firstOf pa :: secondOf (secondOf pa))))
+            Nothing => Nothing
+        [] => Nothing
+    [a, b] =>
+      case pool of
+        r :: rest =>
+          case genScalarInto st (r :: rest) a of
+            Just pa =>
+              case genScalarInto st (secondOf (secondOf pa)) b of
+                Just pb =>
+                  let
+                    rA = firstOf pa
+                    inA = firstOf (secondOf pa)
+                    rB = firstOf pb
+                    inB = firstOf (secondOf pb)
+                    restB = secondOf (secondOf pb)
+                    res = scalarInstrs op rA rB
+                  in Just
+                    (Pair (firstOf res) (Pair (append inA (append inB (secondOf res))) (rA :: rB :: restB)))
+                Nothing => Nothing
+            Nothing => Nothing
+        [] => Nothing
+    _ => Nothing
+
+-- | `IrRtApp` 的标量选择：命中返回以 rax 收尾的指令序列，否则 Nothing（调用方回退）。
+genInlineRt : FGen -> String -> List Ir -> Maybe (List Instr)
+genInlineRt st sym args =
+  case scalarPlanOf sym of
+    Nothing => Nothing
+    Just plan =>
+      if length args /= irInlineArity sym then
+        Nothing
+      else
+        case genScalarOp st scalarRegs (firstOf plan) args of
+          Nothing => Nothing
+          Just p =>
+            let
+              r = firstOf p
+              instrs = firstOf (secondOf p)
+            in Just (if sameReg r Rax then instrs else append instrs [IMov (OpReg Rax) (OpReg r)])
+
+-- | 零参常量桩（调试 / 可观测性叶子）的内联值。
+scalarConstOf : String -> Maybe Int
+scalarConstOf sym =
+  case scalarPlanOf sym of
+    Nothing => Nothing
+    Just plan =>
+      case firstOf plan of
+        ScalarConst n => Just n
+        _ => Nothing
+
 genRtApp : Int -> FGen -> Bool -> String -> List Ir -> NRes (Pair (List Instr) FGen)
 genRtApp fuel st isTail sym args =
   if fuel <= 0 then
@@ -735,9 +895,12 @@ genRtApp fuel st isTail sym args =
       "&&" => genBoolChain (fuel - 1) st args True
       "||" => genBoolChain (fuel - 1) st args False
       _ =>
-        case nativeRtTarget sym of
-          Nothing => unsupported "native target: runtime symbol `${sym}` is not supported yet"
-          Just label => if length args /= irInlineArity sym then internal "runtime symbol arity mismatch: ${sym}" else if isTail then genTailCall (fuel - 1) st label args else genSaturatedCall (fuel - 1) st label args
+        case genInlineRt st sym args of
+          Just instrs => NOk (Pair instrs st)
+          Nothing =>
+            case nativeRtTarget sym of
+              Nothing => unsupported "native target: runtime symbol `${sym}` is not supported yet"
+              Just label => if length args /= irInlineArity sym then internal "runtime symbol arity mismatch: ${sym}" else if isTail then genTailCall (fuel - 1) st label args else genSaturatedCall (fuel - 1) st label args
 
 -- | `IrApp (IrRt sym) args`：运行时常量函数值的应用（`irInlineArity = 0` 的那些）。
 --   饱和走直调；部分/过度应用先求值成闭包再交给 `rt_apply`。
@@ -952,7 +1115,13 @@ genExprAt fuel st isTail ir =
           arity = rtValueArityOf sym
         in case nativeRtTarget sym of
           Nothing => unsupported "native target: runtime symbol `${sym}` is not supported yet"
-          Just label => if arity <= 0 then if isTail then NOk (Pair (tailCallSlotsInstrs label []) st) else NOk (Pair [ICall label] st) else genValueClosure st nativeRuntimeModule (nativeRtValueLabel sym) arity label
+          Just label =>
+            if arity <= 0 then
+              case scalarConstOf sym of
+                Just n => NOk (Pair [IMov (OpReg Rax) (OpImm n)] st)
+                Nothing => if isTail then NOk (Pair (tailCallSlotsInstrs label []) st) else NOk (Pair [ICall label] st)
+            else
+              genValueClosure st nativeRuntimeModule (nativeRtValueLabel sym) arity label
       IrFloatLit raw => genFloatLit st raw
       IrEffThunk family ctor _unitTy arity prim => genEffThunk (fuel - 1) st family ctor arity prim
       IrTail inner => genExprAt (fuel - 1) st True inner
