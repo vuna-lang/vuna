@@ -367,6 +367,11 @@ load/parse 前缀 + iface 摘要 **~2.6 s** → 逐定义精化（`collectSigs-d
   会把它归一化成 `Nothing`），换算成时间不足 0.1%，撤。
 - **去掉最终组装前的第 4 遍 `rezonkDefs`**：它用的是实例体之后的新解表（`ec4`），不是
   重复遍历；能省的只有已被 `ec4` rezonk 过的 `instDefs`，收益是一次扫描的量级，撤。
+- **codegen 的类型求值缓存**（按定义 / 构造子名缓存 `eval [] (dtCtorType / dtDefType)`）：
+  `vuna.codegen.unit` 里的 57.6 万次 `eval` 有 **73% 来自类型渲染的 `applyClosure`**
+  （`peelPiArgsTy` 16.3 万次调用、`annotTyOf` 5.1 万、`ctorTypeArgsOf` 3.3 万），
+  按定义 / 构造子重复求值的只有 ~2 万次（`ctorOpaqueFlagsOf` 18.5k、`ctorArityNeed` 0.8k、
+  `dataUsedLevels` 0.9k）——上限 ~0.3% 分配，撤。类型渲染本身是逐应用的真实工作。
 
 ### 4.1 逐定义精化与 codegen 检查的分段（span 口径）
 
