@@ -623,6 +623,8 @@ genSelfTailCall fuel st args =
           in if length argSlots == length st.fgSelfParams then NOk (Pair (append (firstOf p) (append (selfSlotMoves argSlots st.fgSelfParams) [IJmp st.fgSelfLoop])) (secondOf (secondOf p))) else internal "self tail call arity mismatch"
       )
 
+-- | 全局应用。`irDefArity` 为 0 的定义是 η-收缩后的别名（body 本身就是函数值）：
+-- 取它的值再应用实参（与 wasm 侧 `genGlobalRef` 同口径），不能当作无参函数调用。
 genGlobalCall : Int -> FGen -> Bool -> String -> List Ir -> NRes (Pair (List Instr) FGen)
 genGlobalCall fuel st isTail name args =
   if fuel <= 0 then
@@ -633,7 +635,7 @@ genGlobalCall fuel st isTail name args =
       Just d =>
         let
           arity = irDefArity d
-        in if isTail && st.fgSelfLoop /= "" && st.fgSelfLabel == nativeFuncLabel name && arity == length args then genSelfTailCall (fuel - 1) st args else if arity == length args then if isTail && tailCallFits st (nativeStackArgCount arity nativeMaxArgs) then genTailCall (fuel - 1) st (nativeFuncLabel name) args else genSaturatedCall (fuel - 1) st (nativeFuncLabel name) args else if arity == 0 then internal "zero-argument global used as a function" else genApplyHead (fuel - 1) st isTail (IrGlobal name) args
+        in if isTail && st.fgSelfLoop /= "" && st.fgSelfLabel == nativeFuncLabel name && arity == length args then genSelfTailCall (fuel - 1) st args else if arity == length args then if isTail && tailCallFits st (nativeStackArgCount arity nativeMaxArgs) then genTailCall (fuel - 1) st (nativeFuncLabel name) args else genSaturatedCall (fuel - 1) st (nativeFuncLabel name) args else genApplyHead (fuel - 1) st isTail (IrGlobal name) args
 
 genNatSuccCall : Int -> FGen -> Bool -> Ir -> NRes (Pair (List Instr) FGen)
 genNatSuccCall fuel st isTail arg =
