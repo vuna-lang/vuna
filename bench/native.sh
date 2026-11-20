@@ -104,6 +104,7 @@ if command -v git >/dev/null 2>&1 && git rev-parse --git-dir >/dev/null 2>&1; th
   [ -n "$(git status --porcelain 2>/dev/null || true)" ] && GIT_DIRTY=true
 fi
 SIZE_BYTES=$(wc -c <"$VUNA_NATIVE" | tr -d ' ')
+COMPILER_SHA=$(sha256sum "$VUNA_NATIVE" | cut -d' ' -f1)
 
 json_escape() {
   local s=$1
@@ -143,6 +144,7 @@ emit_json() {
   printf '    "git_head": "%s",\n' "$(json_escape "$GIT_HEAD")"
   printf '    "git_dirty": %s,\n' "$GIT_DIRTY"
   printf '    "compiler": "%s",\n' "$(json_escape "$VUNA_VERSION")"
+  printf '    "compiler_sha256": "%s",\n' "$(json_escape "$COMPILER_SHA")"
   printf '    "arch": "%s",\n' "$(json_escape "$ARCH")"
   printf '    "nproc": %s,\n' "$(case $NPROC in *[!0-9]*|'') printf 'null' ;; *) printf '%s' "$NPROC" ;; esac)"
   printf '    "loadavg": "%s",\n' "$(json_escape "$LOADAVG")"
