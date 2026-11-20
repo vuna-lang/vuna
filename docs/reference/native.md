@@ -11,8 +11,8 @@
 > `main : Eff r a`（含带行的宿主效应，
 > 入口自动预装 `runXHost`）与 `IORef` 可用；`perform` / `handle` 走**库机器**
 > （`Control` 循环 + trampoline）实现一次性续延（§3.4）。FFI / extern 仍被明确拒绝（`NativeUnsupported`）。
-> 实现入口：`Vuna.Target.Native.{Model,Abi,Gc,Runtime,Module,Render}`，
-> 驱动 `Vuna.Compiler.Driver.Native`。边界见 §8。
+> 实现入口：`Vuna.Target.Native.{Model,Abi,Pal,Gc,Runtime,Module,Render}`，
+> 插件入口 `Vuna.Target.Native.Plugin`。边界见 §8。
 
 ## 1. 产物与工具链
 
@@ -38,7 +38,9 @@
 ## 2. 平台与值表示
 
 - 目标：x86-64 Linux（SysV AMD64），静态、无 libc；入口 `_start` 走 Linux syscall
-  (`write` / `exit`)。不支持 aarch64 / macOS / Windows。
+  (`write` / `exit`)。不支持 aarch64 / macOS / Windows。平台知识（syscall 号、`stat` /
+  `dirent` 布局、errno 码表、`PATH_MAX`）全在 `Native.Pal` 一张表里；架构约定（寄存器、
+  栈槽、对象头）在 `Native.Abi`。
 - `Int` / `Nat`：63-bit 有符号（与 OCaml `int` 同域），`+ - *` wrap，`/` 向零截断、
   除零 trap；`natAdd/natSub/natMul` 饱和，`natSucc` 饱和到 `max_int`。
 - `Bool`：0/1（不是变体）。
@@ -332,6 +334,10 @@ env，**不进 codegen**（同一 IR 的产物逐字节确定）。解析失败�
   `NativeStrLit` / `NativeBss`。
 - `Native.Abi`：参数寄存器、栈槽偏移、frame 对齐、字符串头大小、堆大小与标签、
   prologue/epilogue、稳定命名（函数 / 运行时 / 字面量 / 内部 label / 数据标签）。
+- `Native.Pal`：**平台面**——x86-64 Linux syscall 号、syscall 参数常量（`AT_FDCWD`、
+  `O_*`、权限位、`AT_SYMLINK_NOFOLLOW`、`TCGETS`）、内核结构布局（`stat` 字段偏移、
+  `PATH_MAX`、`cpu_set_t` / `timespec` / `termios`）、errno 码表。与 `Abi` 的分界：
+  Abi 是架构（换架构要改），Pal 是内核接口（换内核 ABI 只改这里）。
 - `Native.Gc`：标记-清扫 GC——块头判据、根集扫描、标记栈（倍增 mmap）、清扫与尺寸类
   回收、`GC_LOG` 诊断行；`alloc` 在预算/阈值处调 `rt_gc_collect`。
 - `Native.Runtime`：`rt_*` 汇编模板、只读数据、`.bss` 布局、IR 符号 → 运行时标签白名单
@@ -340,7 +346,13 @@ env，**不进 codegen**（同一 IR 的产物逐字节确定）。解析失败�
   字面量池**、**模块内 `.L` label 编号**、fuel）。
 - `Native.Render`：`NativeProgram` → `.s` 文件集（`runtime.s` + 每模块一个文件；固定段
   顺序、缩进、一条指令一行、八进制转义字节）。
-- `Driver.Native`：检查 + lowering + 写 `.s` 文件集；不 import Core/Elab/Intrinsics。
+- `Native.Plugin`：插件入口（IR codec → 检查 → lowering → 写 `.s` 文件集）；
+  不 import Core/Elab/Intrinsics。
+
+平台面的守卫：`checks.vuna-native-surface` 把 `Runtime` 的 syscall 站点、`.bss` 宿主缓冲
+尺寸与内核路径摊平成 `nix/checks/data/native-surface.baseline`；`checks.vuna-native-artifact`
+锁定 `runtime.s` / `Main.s` 的逐字节基线。前者让平台知识的变化显形，后者证明纯重构
+零行为变化（`runtime.s` 与程序无关，覆盖全部运行时函数）。
 
 每个文件固定布局：`.intel_syntax noprefix` → `.rodata`（runtime：运行时常量；模块：自己的
 字面量池）→ `.bss`（只在 runtime）→ `.text` → `.note.GNU-stack`。名字由 Vuna 全限定名派生
@@ -350,8 +362,7 @@ env，**不进 codegen**（同一 IR 的产物逐字节确定）。解析失败�
 `.globl`。
 
 依赖方向：IR 是独立包 `vuna-ir`（`Native.*` 跨包 import 它），`packages/compiler/vuna.toml` 的 `[layers]` 不再约束 Native：`Native.*` 不得 import
-`Core` / `Elab` / `Intrinsics` / `Codegen` / `Wasm`；`Driver/Native` 不得 import
-`Core` / `Elab` / `Intrinsics`。`checks.ir-boundary` 保留形状与正向断言
+`Core` / `Elab` / `Intrinsics` / `Codegen` / `Wasm`。`checks.ir-boundary` 保留形状与正向断言
 （`Native.Module` 必须 import `Ir`）。
 
 ## 7. 验证
@@ -441,6 +452,7 @@ List / record / 用户 `data` 共用同一套对象布局（`[tag]` + 8 字节�
 ## 10. 相关阅读
 
 - [ir.md](ir.md)：IR 节点、运行时契约、后端义务。
+- [native-platform.md](native-platform.md)：平台层（syscall 垫片 / libc）的判据与实测读数。
 - [architecture.md](../architecture.md)：子系统地图与改动定位。
 - [wasm.md](wasm.md)：第二个产品后端（同样的「文本 canonical + 外部工具」策略）。
 

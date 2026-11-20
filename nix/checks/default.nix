@@ -289,6 +289,32 @@ in
     script = ./vuna-metrics.sh;
   };
 
+  # native 平台面（syscall 号 / 宿主缓冲上限 / 内核路径）的结构基线：这张表长在
+  # `Runtime.vuna` 里，摊平成基线后任何平台面变化都在 diff 里显形（见 native.md §2）。
+  vuna-native-surface = mkCheck {
+    name = "vuna-native-surface";
+    srcs = [
+      src.targetNative
+      ../../nix/checks/data/native-surface.baseline
+    ];
+    nativeBuildInputs = [
+      pkgs.gawk
+      pkgs.gnugrep
+    ];
+    script = ./native-surface.sh;
+  };
+
+  # native 产物（`.s` 文件集）逐字节基线：`runtime.s` 与程序无关，覆盖全部运行时
+  # 函数与 syscall 站点，是纯重构（平台表数据化、符号别名归一）的零行为变化判据。
+  vuna-native-artifact = vunaCheck {
+    name = "vuna-native-artifact";
+    srcs = [
+      src.base
+      ../../nix/checks/data/native-artifact.sha
+    ];
+    script = ./native-artifact.sh;
+  };
+
   # 编译器增长率门槛（合成 N 个同形定义，相邻档墙钟比有上界）。
   # 绝对时间不可跨机器比；增长率可比，用来挡「某次改动把线性路径退化成 n²」。
   vuna-compiler-growth = vunaCheck {

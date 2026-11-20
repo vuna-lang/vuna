@@ -26,6 +26,7 @@ import Base.Data.String as String
 import Vuna.Target.Native.Abi
 import Vuna.Target.Native.Gc
 import Vuna.Target.Native.Model
+import Vuna.Target.Native.Pal
 
 -- ---------------------------------------------------------------
 -- 常量与只读数据
@@ -235,7 +236,7 @@ readBufLabel = "rt_read_buf"
 export nativeBss : List NativeBss
 nativeBss =
   append
-    [NativeBss nativeHeapSegLabel 32 8, NativeBss nativeHeapLabel nativeHeapBytes 16, NativeBss nativeHeapEndLabel 0 0, NativeBss nativeHeapPtrLabel 8 8, NativeBss nativeArenaEndLabel 8 8, NativeBss nativeSegsLabel 8 8, NativeBss nativeCurSegLabel 8 8, NativeBss nativeFreeTableLabel nativeFreeTableBytes 8, NativeBss nativeHugeFreeLabel 8 8, NativeBss stackTopLabel 8 8, NativeBss stackLimitLabel 8 8, NativeBss argcLabel 8 8, NativeBss argvLabel 8 8, NativeBss envpLabel 8 8, NativeBss hostStatusLabel 8 8, NativeBss childPidsLabel 64 8, NativeBss childCountLabel 8 8, NativeBss timeoutArmedLabel 8 8, NativeBss sigalrmSetLabel 8 8, NativeBss pathBufLabel 4096 8, NativeBss tsLabel 16 8, NativeBss termiosLabel 64 8, NativeBss cleanupHeadLabel 8 8, NativeBss pathBuf2Label 4096 8, NativeBss statBufLabel 256 8, NativeBss dirBufLabel 32768 8, NativeBss dirNamesLabel 32256 8, NativeBss readBufLabel 8388608 8, NativeBss cmdBufLabel 65536 8, NativeBss cwdBufLabel 4096 8, NativeBss spawnArgvLabel 2048 8, NativeBss spawnBufLabel 65536 8, NativeBss shArgvLabel 32 8, NativeBss memLimitLabel 8 8, NativeBss cpuCountLabel 8 8, NativeBss sigActLabel 32 8, NativeBss itimerLabel 32 8, NativeBss cpuCurLabel 128 16, NativeBss cpuNewLabel 128 16, NativeBss cgBufLabel 64 8, NativeBss envChildLabel 8192 8]
+    [NativeBss nativeHeapSegLabel 32 8, NativeBss nativeHeapLabel nativeHeapBytes 16, NativeBss nativeHeapEndLabel 0 0, NativeBss nativeHeapPtrLabel 8 8, NativeBss nativeArenaEndLabel 8 8, NativeBss nativeSegsLabel 8 8, NativeBss nativeCurSegLabel 8 8, NativeBss nativeFreeTableLabel nativeFreeTableBytes 8, NativeBss nativeHugeFreeLabel 8 8, NativeBss stackTopLabel 8 8, NativeBss stackLimitLabel 8 8, NativeBss argcLabel 8 8, NativeBss argvLabel 8 8, NativeBss envpLabel 8 8, NativeBss hostStatusLabel 8 8, NativeBss childPidsLabel 64 8, NativeBss childCountLabel 8 8, NativeBss timeoutArmedLabel 8 8, NativeBss sigalrmSetLabel 8 8, NativeBss pathBufLabel pathMaxBytes 8, NativeBss tsLabel timespecBytes 8, NativeBss termiosLabel termiosBytes 8, NativeBss cleanupHeadLabel 8 8, NativeBss pathBuf2Label pathMaxBytes 8, NativeBss statBufLabel statBufBytes 8, NativeBss dirBufLabel 32768 8, NativeBss dirNamesLabel 32256 8, NativeBss readBufLabel 8388608 8, NativeBss cmdBufLabel 65536 8, NativeBss cwdBufLabel pathMaxBytes 8, NativeBss spawnArgvLabel 2048 8, NativeBss spawnBufLabel 65536 8, NativeBss shArgvLabel 32 8, NativeBss memLimitLabel 8 8, NativeBss cpuCountLabel 8 8, NativeBss sigActLabel sigActBytes 8, NativeBss itimerLabel itimerBytes 8, NativeBss cpuCurLabel cpuSetBytes 16, NativeBss cpuNewLabel cpuSetBytes 16, NativeBss cgBufLabel 64 8, NativeBss envChildLabel 8192 8]
     nativeGcBss
 
 -- ---------------------------------------------------------------
@@ -554,13 +555,13 @@ trapStackOverflowFn : NativeFunc
 trapStackOverflowFn =
   rtRawFunc
     "trap_stack_overflow"
-    [IMov (OpReg Rax) (OpImm 1), IMov (OpReg Rdi) (OpImm 2), ILea Rsi (nativeDataLabel "stack_overflow"), IMov (OpReg Rdx) (OpImm (strLength stackOverflowMessage)), ISyscall, IMov (OpReg Rax) (OpImm 60), IMov (OpReg Rdi) (OpImm 2), ISyscall]
+    [IMov (OpReg Rax) (OpImm (sysNr "write")), IMov (OpReg Rdi) (OpImm 2), ILea Rsi (nativeDataLabel "stack_overflow"), IMov (OpReg Rdx) (OpImm (strLength stackOverflowMessage)), ISyscall, IMov (OpReg Rax) (OpImm (sysNr "exit")), IMov (OpReg Rdi) (OpImm 2), ISyscall]
 
 trapRmtreeDeepFn : NativeFunc
 trapRmtreeDeepFn =
   rtRawFunc
     "trap_rmtree_deep"
-    [IMov (OpReg Rax) (OpImm 1), IMov (OpReg Rdi) (OpImm 2), ILea Rsi (nativeDataLabel "rmtree_deep"), IMov (OpReg Rdx) (OpImm (strLength rmtreeDeepMessage)), ISyscall, IMov (OpReg Rax) (OpImm 60), IMov (OpReg Rdi) (OpImm 2), ISyscall]
+    [IMov (OpReg Rax) (OpImm (sysNr "write")), IMov (OpReg Rdi) (OpImm 2), ILea Rsi (nativeDataLabel "rmtree_deep"), IMov (OpReg Rdx) (OpImm (strLength rmtreeDeepMessage)), ISyscall, IMov (OpReg Rax) (OpImm (sysNr "exit")), IMov (OpReg Rdi) (OpImm 2), ISyscall]
 
 -- | 向上取整到 2 的幂（最小 64 B）：`rdi` -> `rax`。堆段按 2 的幂分档，
 --   增长时才能复用同一批段，而不是每次都新 mmap。
@@ -596,7 +597,7 @@ effPrintFn name fd =
   rtFunc
     name
     0
-    [IMov (OpReg Rdx) (OpMem Rdi 0), ILeaMem Rsi Rdi 8, IMov (OpReg Rdi) (OpImm fd), IMov (OpReg Rax) (OpImm 1), ISyscall]
+    [IMov (OpReg Rdx) (OpMem Rdi 0), ILeaMem Rsi Rdi 8, IMov (OpReg Rdi) (OpImm fd), IMov (OpReg Rax) (OpImm (sysNr "write")), ISyscall]
 
 -- | `prim_erase`：运行时恒等（擦除 cast）。
 -- | `@ir@m@runEff th k`：把 thunk 应用到 unit 再把结果交给 k（机器 lowering 的
@@ -612,7 +613,7 @@ eraseFn : NativeFunc
 eraseFn = rtFunc "prim_erase" 0 [IMov (OpReg Rax) (OpReg Rdi)]
 
 effExitFn : NativeFunc
-effExitFn = rtFunc "prim_eff_exit" 0 [IMov (OpReg Rax) (OpImm 60), ISyscall, IRet]
+effExitFn = rtFunc "prim_eff_exit" 0 [IMov (OpReg Rax) (OpImm (sysNr "exit")), ISyscall, IRet]
 
 -- ---------------------------------------------------------------
 -- 数组（不可变、copy-on-write）
@@ -663,7 +664,7 @@ printIntFn =
   rtFunc
     "print_int"
     64
-    [IMov (OpReg R8) (OpReg Rdi), IMov (OpReg R9) (OpImm 0), ITest R8 R8, IJcc "jns" ".Lrt_pi_pos", INeg R8, IMov (OpReg R9) (OpImm 1), ILabel ".Lrt_pi_pos", IMov (OpReg Rcx) (OpReg Rbp), IMov (OpReg Rax) (OpReg R8), IMov (OpReg R10) (OpImm 10), ITest Rax Rax, IJcc "jne" ".Lrt_pi_loop", IBinReg "sub" Rcx (OpImm 1), IMov (OpReg Rdx) (OpImm 48), IMovByteRegOp (OpMem Rcx 0) Rdx, IJmp ".Lrt_pi_sign", ILabel ".Lrt_pi_loop", IBinReg "xor" Rdx (OpReg Rdx), IDivUnsigned R10, IBinReg "add" Rdx (OpImm 48), IBinReg "sub" Rcx (OpImm 1), IMovByteRegOp (OpMem Rcx 0) Rdx, ITest Rax Rax, IJcc "jne" ".Lrt_pi_loop", ILabel ".Lrt_pi_sign", ITest R9 R9, IJcc "jz" ".Lrt_pi_write", IBinReg "sub" Rcx (OpImm 1), IMov (OpReg Rdx) (OpImm 45), IMovByteRegOp (OpMem Rcx 0) Rdx, ILabel ".Lrt_pi_write", ILeaMem Rdx Rbp 0, IBinReg "sub" Rdx (OpReg Rcx), IMov (OpReg Rsi) (OpReg Rcx), IMov (OpReg Rax) (OpImm 1), IMov (OpReg Rdi) (OpImm 1), ISyscall, IMov (OpReg Rax) (OpImm 1), IMov (OpReg Rdi) (OpImm 1), ILea Rsi (nativeDataLabel "nl"), IMov (OpReg Rdx) (OpImm 1), ISyscall, IRet]
+    [IMov (OpReg R8) (OpReg Rdi), IMov (OpReg R9) (OpImm 0), ITest R8 R8, IJcc "jns" ".Lrt_pi_pos", INeg R8, IMov (OpReg R9) (OpImm 1), ILabel ".Lrt_pi_pos", IMov (OpReg Rcx) (OpReg Rbp), IMov (OpReg Rax) (OpReg R8), IMov (OpReg R10) (OpImm 10), ITest Rax Rax, IJcc "jne" ".Lrt_pi_loop", IBinReg "sub" Rcx (OpImm 1), IMov (OpReg Rdx) (OpImm 48), IMovByteRegOp (OpMem Rcx 0) Rdx, IJmp ".Lrt_pi_sign", ILabel ".Lrt_pi_loop", IBinReg "xor" Rdx (OpReg Rdx), IDivUnsigned R10, IBinReg "add" Rdx (OpImm 48), IBinReg "sub" Rcx (OpImm 1), IMovByteRegOp (OpMem Rcx 0) Rdx, ITest Rax Rax, IJcc "jne" ".Lrt_pi_loop", ILabel ".Lrt_pi_sign", ITest R9 R9, IJcc "jz" ".Lrt_pi_write", IBinReg "sub" Rcx (OpImm 1), IMov (OpReg Rdx) (OpImm 45), IMovByteRegOp (OpMem Rcx 0) Rdx, ILabel ".Lrt_pi_write", ILeaMem Rdx Rbp 0, IBinReg "sub" Rdx (OpReg Rcx), IMov (OpReg Rsi) (OpReg Rcx), IMov (OpReg Rax) (OpImm (sysNr "write")), IMov (OpReg Rdi) (OpImm 1), ISyscall, IMov (OpReg Rax) (OpImm (sysNr "write")), IMov (OpReg Rdi) (OpImm 1), ILea Rsi (nativeDataLabel "nl"), IMov (OpReg Rdx) (OpImm 1), ISyscall, IRet]
 
 -- | 打印 rdi 为 True/False + 换行。
 printBoolFn : NativeFunc
@@ -671,7 +672,7 @@ printBoolFn =
   rtFunc
     "print_bool"
     0
-    [ILea Rsi (nativeDataLabel "false"), IMov (OpReg Rdx) (OpImm (strLength "False")), ITest Rdi Rdi, IJcc "jz" ".Lrt_pb_write", ILea Rsi (nativeDataLabel "true"), IMov (OpReg Rdx) (OpImm (strLength "True")), ILabel ".Lrt_pb_write", IMov (OpReg Rax) (OpImm 1), IMov (OpReg Rdi) (OpImm 1), ISyscall, IMov (OpReg Rax) (OpImm 1), IMov (OpReg Rdi) (OpImm 1), ILea Rsi (nativeDataLabel "nl"), IMov (OpReg Rdx) (OpImm 1), ISyscall, IRet]
+    [ILea Rsi (nativeDataLabel "false"), IMov (OpReg Rdx) (OpImm (strLength "False")), ITest Rdi Rdi, IJcc "jz" ".Lrt_pb_write", ILea Rsi (nativeDataLabel "true"), IMov (OpReg Rdx) (OpImm (strLength "True")), ILabel ".Lrt_pb_write", IMov (OpReg Rax) (OpImm (sysNr "write")), IMov (OpReg Rdi) (OpImm 1), ISyscall, IMov (OpReg Rax) (OpImm (sysNr "write")), IMov (OpReg Rdi) (OpImm 1), ILea Rsi (nativeDataLabel "nl"), IMov (OpReg Rdx) (OpImm 1), ISyscall, IRet]
 
 -- | 打印 rdi 为 String（原样字节）+ 换行。
 printStrFn : NativeFunc
@@ -679,7 +680,7 @@ printStrFn =
   rtFunc
     "print_str"
     0
-    [IMov (OpReg Rdx) (OpMem Rdi 0), ILeaMem Rsi Rdi 8, IMov (OpReg Rdi) (OpImm 1), IMov (OpReg Rax) (OpImm 1), ISyscall, IMov (OpReg Rax) (OpImm 1), IMov (OpReg Rdi) (OpImm 1), ILea Rsi (nativeDataLabel "nl"), IMov (OpReg Rdx) (OpImm 1), ISyscall, IRet]
+    [IMov (OpReg Rdx) (OpMem Rdi 0), ILeaMem Rsi Rdi 8, IMov (OpReg Rdi) (OpImm 1), IMov (OpReg Rax) (OpImm (sysNr "write")), ISyscall, IMov (OpReg Rax) (OpImm (sysNr "write")), IMov (OpReg Rdi) (OpImm 1), ILea Rsi (nativeDataLabel "nl"), IMov (OpReg Rdx) (OpImm 1), ISyscall, IRet]
 
 -- | 一次分配需要的块尺寸（`rax` = payload + 块头向上取整；`rcx` = 尺寸类；`r8` = 类序号）。
 --   payload 字节数在 `rt_alloc_req`（`alloc` 在任何分配/G C 之前存下）。
@@ -709,7 +710,7 @@ allocFn : NativeFunc
 allocFn =
   rtRawFunc
     "alloc"
-    (append [IMov (OpRip allocReqLabel) (OpReg Rdi), IMov (OpRip allocSaveRdiLabel) (OpReg Rdi), IMov (OpRip allocSaveRsiLabel) (OpReg Rsi), IMov (OpRip allocSaveR8Label) (OpReg R8), IMov (OpRip allocSaveR9Label) (OpReg R9)] (append (allocClassInstrs "init") (append [IMov (OpReg R9) (OpRip gcLiveLabel), IBinReg "add" R9 (OpRip gcSinceLabel), IBinReg "add" R9 (OpReg Rcx), IMov (OpReg R10) (OpRip memLimitLabel), ITest R10 R10, IJcc "jz" ".Lrt_alloc_budget_ok", ICmp (OpReg R9) (OpReg R10), IJcc "jbe" ".Lrt_alloc_budget_ok", ICall (nativeRtLabel "gc_collect"), IJmp ".Lrt_alloc_after_gc", ILabel ".Lrt_alloc_budget_ok", IMov (OpReg R9) (OpRip gcStressLabel), ITest R9 R9, IJcc "jnz" ".Lrt_alloc_do_gc", IMov (OpReg R9) (OpRip gcSinceLabel), ICmp (OpReg R9) (OpRip gcThresholdLabel), IJcc "jbe" ".Lrt_alloc_go", ILabel ".Lrt_alloc_do_gc", ICall (nativeRtLabel "gc_collect"), IJmp ".Lrt_alloc_after_gc", ILabel ".Lrt_alloc_after_gc"] (append (allocClassInstrs "after") (append [IMov (OpReg R10) (OpRip memLimitLabel), ITest R10 R10, IJcc "jz" ".Lrt_alloc_go", IMov (OpReg R9) (OpRip gcLiveLabel), IBinReg "add" R9 (OpReg Rcx), ICmp (OpReg R9) (OpReg R10), IJcc "ja" (nativeRtLabel "trap_mem_limit"), ILabel ".Lrt_alloc_go", ICmp (OpReg Rcx) (OpImm nativeMaxClassBytes), IJcc "ja" ".Lrt_alloc_huge", ILea Rdx nativeFreeTableLabel, IMov (OpReg Rax) (OpReg R8), IBinReg "shl" Rax (OpImm 3), IBinReg "add" Rdx (OpReg Rax), IMov (OpReg Rax) (OpMem Rdx 0), ITest Rax Rax, IJcc "jz" ".Lrt_alloc_bump", IMov (OpReg Rsi) (OpMem Rax 8), IMov (OpMem Rdx 0) (OpReg Rsi), IMov (OpMem Rax 0) (OpReg Rcx), IJmp ".Lrt_alloc_count", ILabel ".Lrt_alloc_bump", IMov (OpReg Rax) (OpRip nativeHeapPtrLabel), IMov (OpReg Rdx) (OpReg Rax), IBinReg "add" Rdx (OpReg Rcx), ICmp (OpReg Rdx) (OpRip nativeArenaEndLabel), IJcc "jbe" ".Lrt_alloc_bump_ok", IMov (OpReg Rdi) (OpReg Rcx), IBinReg "add" Rdi (OpImm (nativeSegHeaderBytes + 15)), ICall (nativeRtLabel "pow2_ceil"), ICmp (OpReg Rax) (OpImm nativeHeapBytes), IJcc "jae" ".Lrt_alloc_seg_size", IMov (OpReg Rax) (OpImm nativeHeapBytes), ILabel ".Lrt_alloc_seg_size", IPush Rax, IMov (OpReg Rsi) (OpReg Rax), IBinReg "xor" Rdi (OpReg Rdi), IMov (OpReg Rdx) (OpImm 3), IMov (OpReg R10) (OpImm 34), IMov (OpReg R8) (OpImm (0 - 1)), IBinReg "xor" R9 (OpReg R9), IMov (OpReg Rax) (OpImm 9), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jl" (nativeRtLabel "trap_oom"), IPop R8, IMov (OpReg Rdx) (OpReg Rax), IMov (OpReg R9) (OpRip nativeSegsLabel), IMov (OpMem Rdx 0) (OpReg R9), IMov (OpRip nativeSegsLabel) (OpReg Rdx), IMov (OpReg R9) (OpReg Rdx), IBinReg "add" R9 (OpReg R8), IMov (OpMem Rdx 8) (OpReg R9), IMov (OpReg R9) (OpReg Rdx), IBinReg "add" R9 (OpImm nativeSegHeaderBytes), IMov (OpMem Rdx 16) (OpReg R9), IMov (OpReg Rcx) (OpImm 0), IMov (OpMem Rdx 24) (OpReg Rcx), IMov (OpRip nativeCurSegLabel) (OpReg Rdx), IMov (OpRip nativeHeapPtrLabel) (OpReg R9), IMov (OpReg R9) (OpReg Rdx), IBinReg "add" R9 (OpReg R8), IMov (OpRip nativeArenaEndLabel) (OpReg R9)] (append (allocClassInstrs "grow") [IMov (OpReg Rax) (OpRip nativeHeapPtrLabel), IJmp ".Lrt_alloc_bump_ok", ILabel ".Lrt_alloc_bump_ok", IMov (OpMem Rax 0) (OpReg Rcx), IMov (OpReg Rdx) (OpReg Rax), IBinReg "add" Rdx (OpReg Rcx), IMov (OpRip nativeHeapPtrLabel) (OpReg Rdx), IMov (OpReg R9) (OpRip nativeCurSegLabel), IMov (OpMem R9 16) (OpReg Rdx), IJmp ".Lrt_alloc_count", ILabel ".Lrt_alloc_huge", IMov (OpReg Rsi) (OpReg Rax), IBinReg "xor" R11 (OpReg R11), IMov (OpReg Rax) (OpRip nativeHugeFreeLabel), ILabel ".Lrt_alloc_huge_loop", ITest Rax Rax, IJcc "jz" ".Lrt_alloc_huge_fresh", IMov (OpReg R10) (OpMem Rax 0), IBinReg "and" R10 (OpImm (0 - 16)), ICmp (OpReg R10) (OpReg Rsi), IJcc "jae" ".Lrt_alloc_huge_found", IMov (OpReg R11) (OpReg Rax), IMov (OpReg Rax) (OpMem Rax 8), IJmp ".Lrt_alloc_huge_loop", ILabel ".Lrt_alloc_huge_found", IMov (OpReg Rdx) (OpMem Rax 8), ITest R11 R11, IJcc "jz" ".Lrt_alloc_huge_head", IMov (OpMem R11 8) (OpReg Rdx), IJmp ".Lrt_alloc_huge_got", ILabel ".Lrt_alloc_huge_head", IMov (OpRip nativeHugeFreeLabel) (OpReg Rdx), ILabel ".Lrt_alloc_huge_got", IMov (OpMem Rax 0) (OpReg R10), IMov (OpReg Rcx) (OpReg R10), IJmp ".Lrt_alloc_count", ILabel ".Lrt_alloc_huge_fresh", IMov (OpReg Rdi) (OpReg Rsi), IBinReg "add" Rdi (OpImm (nativeSegHeaderBytes + 15)), ICall (nativeRtLabel "pow2_ceil"), IPush Rax, IMov (OpReg Rsi) (OpReg Rax), IBinReg "xor" Rdi (OpReg Rdi), IMov (OpReg Rdx) (OpImm 3), IMov (OpReg R10) (OpImm 34), IMov (OpReg R8) (OpImm (0 - 1)), IBinReg "xor" R9 (OpReg R9), IMov (OpReg Rax) (OpImm 9), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jl" (nativeRtLabel "trap_oom"), IPop R8, IMov (OpReg Rdx) (OpReg Rax), IMov (OpReg R9) (OpRip nativeSegsLabel), IMov (OpMem Rdx 0) (OpReg R9), IMov (OpRip nativeSegsLabel) (OpReg Rdx), IMov (OpReg R9) (OpReg Rdx), IBinReg "add" R9 (OpReg R8), IMov (OpMem Rdx 8) (OpReg R9), IMov (OpMem Rdx 16) (OpReg R9), IMov (OpReg Rcx) (OpImm 2), IMov (OpMem Rdx 24) (OpReg Rcx), IMov (OpReg Rax) (OpReg Rdx), IBinReg "add" Rax (OpImm nativeSegHeaderBytes), IMov (OpReg Rcx) (OpReg R8), IBinReg "sub" Rcx (OpImm nativeSegHeaderBytes), IMov (OpMem Rax 0) (OpReg Rcx), IJmp ".Lrt_alloc_count", ILabel ".Lrt_alloc_count", IMov (OpReg R9) (OpRip gcSinceLabel), IBinReg "add" R9 (OpReg Rcx), IMov (OpRip gcSinceLabel) (OpReg R9), ILabel ".Lrt_alloc_ret", IBinReg "add" Rax (OpImm nativeBlockHeaderBytes), IMov (OpReg Rdi) (OpRip allocSaveRdiLabel), IMov (OpReg Rsi) (OpRip allocSaveRsiLabel), IMov (OpReg R8) (OpRip allocSaveR8Label), IMov (OpReg R9) (OpRip allocSaveR9Label), IBinReg "xor" R11 (OpReg R11), IMov (OpRip allocSaveRdiLabel) (OpReg R11), IMov (OpRip allocSaveRsiLabel) (OpReg R11), IMov (OpRip allocSaveR8Label) (OpReg R11), IMov (OpRip allocSaveR9Label) (OpReg R11), IRet]))))))
+    (append [IMov (OpRip allocReqLabel) (OpReg Rdi), IMov (OpRip allocSaveRdiLabel) (OpReg Rdi), IMov (OpRip allocSaveRsiLabel) (OpReg Rsi), IMov (OpRip allocSaveR8Label) (OpReg R8), IMov (OpRip allocSaveR9Label) (OpReg R9)] (append (allocClassInstrs "init") (append [IMov (OpReg R9) (OpRip gcLiveLabel), IBinReg "add" R9 (OpRip gcSinceLabel), IBinReg "add" R9 (OpReg Rcx), IMov (OpReg R10) (OpRip memLimitLabel), ITest R10 R10, IJcc "jz" ".Lrt_alloc_budget_ok", ICmp (OpReg R9) (OpReg R10), IJcc "jbe" ".Lrt_alloc_budget_ok", ICall (nativeRtLabel "gc_collect"), IJmp ".Lrt_alloc_after_gc", ILabel ".Lrt_alloc_budget_ok", IMov (OpReg R9) (OpRip gcStressLabel), ITest R9 R9, IJcc "jnz" ".Lrt_alloc_do_gc", IMov (OpReg R9) (OpRip gcSinceLabel), ICmp (OpReg R9) (OpRip gcThresholdLabel), IJcc "jbe" ".Lrt_alloc_go", ILabel ".Lrt_alloc_do_gc", ICall (nativeRtLabel "gc_collect"), IJmp ".Lrt_alloc_after_gc", ILabel ".Lrt_alloc_after_gc"] (append (allocClassInstrs "after") (append [IMov (OpReg R10) (OpRip memLimitLabel), ITest R10 R10, IJcc "jz" ".Lrt_alloc_go", IMov (OpReg R9) (OpRip gcLiveLabel), IBinReg "add" R9 (OpReg Rcx), ICmp (OpReg R9) (OpReg R10), IJcc "ja" (nativeRtLabel "trap_mem_limit"), ILabel ".Lrt_alloc_go", ICmp (OpReg Rcx) (OpImm nativeMaxClassBytes), IJcc "ja" ".Lrt_alloc_huge", ILea Rdx nativeFreeTableLabel, IMov (OpReg Rax) (OpReg R8), IBinReg "shl" Rax (OpImm 3), IBinReg "add" Rdx (OpReg Rax), IMov (OpReg Rax) (OpMem Rdx 0), ITest Rax Rax, IJcc "jz" ".Lrt_alloc_bump", IMov (OpReg Rsi) (OpMem Rax 8), IMov (OpMem Rdx 0) (OpReg Rsi), IMov (OpMem Rax 0) (OpReg Rcx), IJmp ".Lrt_alloc_count", ILabel ".Lrt_alloc_bump", IMov (OpReg Rax) (OpRip nativeHeapPtrLabel), IMov (OpReg Rdx) (OpReg Rax), IBinReg "add" Rdx (OpReg Rcx), ICmp (OpReg Rdx) (OpRip nativeArenaEndLabel), IJcc "jbe" ".Lrt_alloc_bump_ok", IMov (OpReg Rdi) (OpReg Rcx), IBinReg "add" Rdi (OpImm (nativeSegHeaderBytes + 15)), ICall (nativeRtLabel "pow2_ceil"), ICmp (OpReg Rax) (OpImm nativeHeapBytes), IJcc "jae" ".Lrt_alloc_seg_size", IMov (OpReg Rax) (OpImm nativeHeapBytes), ILabel ".Lrt_alloc_seg_size", IPush Rax, IMov (OpReg Rsi) (OpReg Rax), IBinReg "xor" Rdi (OpReg Rdi), IMov (OpReg Rdx) (OpImm 3), IMov (OpReg R10) (OpImm 34), IMov (OpReg R8) (OpImm (0 - 1)), IBinReg "xor" R9 (OpReg R9), IMov (OpReg Rax) (OpImm (sysNr "mmap")), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jl" (nativeRtLabel "trap_oom"), IPop R8, IMov (OpReg Rdx) (OpReg Rax), IMov (OpReg R9) (OpRip nativeSegsLabel), IMov (OpMem Rdx 0) (OpReg R9), IMov (OpRip nativeSegsLabel) (OpReg Rdx), IMov (OpReg R9) (OpReg Rdx), IBinReg "add" R9 (OpReg R8), IMov (OpMem Rdx 8) (OpReg R9), IMov (OpReg R9) (OpReg Rdx), IBinReg "add" R9 (OpImm nativeSegHeaderBytes), IMov (OpMem Rdx 16) (OpReg R9), IMov (OpReg Rcx) (OpImm 0), IMov (OpMem Rdx 24) (OpReg Rcx), IMov (OpRip nativeCurSegLabel) (OpReg Rdx), IMov (OpRip nativeHeapPtrLabel) (OpReg R9), IMov (OpReg R9) (OpReg Rdx), IBinReg "add" R9 (OpReg R8), IMov (OpRip nativeArenaEndLabel) (OpReg R9)] (append (allocClassInstrs "grow") [IMov (OpReg Rax) (OpRip nativeHeapPtrLabel), IJmp ".Lrt_alloc_bump_ok", ILabel ".Lrt_alloc_bump_ok", IMov (OpMem Rax 0) (OpReg Rcx), IMov (OpReg Rdx) (OpReg Rax), IBinReg "add" Rdx (OpReg Rcx), IMov (OpRip nativeHeapPtrLabel) (OpReg Rdx), IMov (OpReg R9) (OpRip nativeCurSegLabel), IMov (OpMem R9 16) (OpReg Rdx), IJmp ".Lrt_alloc_count", ILabel ".Lrt_alloc_huge", IMov (OpReg Rsi) (OpReg Rax), IBinReg "xor" R11 (OpReg R11), IMov (OpReg Rax) (OpRip nativeHugeFreeLabel), ILabel ".Lrt_alloc_huge_loop", ITest Rax Rax, IJcc "jz" ".Lrt_alloc_huge_fresh", IMov (OpReg R10) (OpMem Rax 0), IBinReg "and" R10 (OpImm (0 - 16)), ICmp (OpReg R10) (OpReg Rsi), IJcc "jae" ".Lrt_alloc_huge_found", IMov (OpReg R11) (OpReg Rax), IMov (OpReg Rax) (OpMem Rax 8), IJmp ".Lrt_alloc_huge_loop", ILabel ".Lrt_alloc_huge_found", IMov (OpReg Rdx) (OpMem Rax 8), ITest R11 R11, IJcc "jz" ".Lrt_alloc_huge_head", IMov (OpMem R11 8) (OpReg Rdx), IJmp ".Lrt_alloc_huge_got", ILabel ".Lrt_alloc_huge_head", IMov (OpRip nativeHugeFreeLabel) (OpReg Rdx), ILabel ".Lrt_alloc_huge_got", IMov (OpMem Rax 0) (OpReg R10), IMov (OpReg Rcx) (OpReg R10), IJmp ".Lrt_alloc_count", ILabel ".Lrt_alloc_huge_fresh", IMov (OpReg Rdi) (OpReg Rsi), IBinReg "add" Rdi (OpImm (nativeSegHeaderBytes + 15)), ICall (nativeRtLabel "pow2_ceil"), IPush Rax, IMov (OpReg Rsi) (OpReg Rax), IBinReg "xor" Rdi (OpReg Rdi), IMov (OpReg Rdx) (OpImm 3), IMov (OpReg R10) (OpImm 34), IMov (OpReg R8) (OpImm (0 - 1)), IBinReg "xor" R9 (OpReg R9), IMov (OpReg Rax) (OpImm (sysNr "mmap")), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jl" (nativeRtLabel "trap_oom"), IPop R8, IMov (OpReg Rdx) (OpReg Rax), IMov (OpReg R9) (OpRip nativeSegsLabel), IMov (OpMem Rdx 0) (OpReg R9), IMov (OpRip nativeSegsLabel) (OpReg Rdx), IMov (OpReg R9) (OpReg Rdx), IBinReg "add" R9 (OpReg R8), IMov (OpMem Rdx 8) (OpReg R9), IMov (OpMem Rdx 16) (OpReg R9), IMov (OpReg Rcx) (OpImm 2), IMov (OpMem Rdx 24) (OpReg Rcx), IMov (OpReg Rax) (OpReg Rdx), IBinReg "add" Rax (OpImm nativeSegHeaderBytes), IMov (OpReg Rcx) (OpReg R8), IBinReg "sub" Rcx (OpImm nativeSegHeaderBytes), IMov (OpMem Rax 0) (OpReg Rcx), IJmp ".Lrt_alloc_count", ILabel ".Lrt_alloc_count", IMov (OpReg R9) (OpRip gcSinceLabel), IBinReg "add" R9 (OpReg Rcx), IMov (OpRip gcSinceLabel) (OpReg R9), ILabel ".Lrt_alloc_ret", IBinReg "add" Rax (OpImm nativeBlockHeaderBytes), IMov (OpReg Rdi) (OpRip allocSaveRdiLabel), IMov (OpReg Rsi) (OpRip allocSaveRsiLabel), IMov (OpReg R8) (OpRip allocSaveR8Label), IMov (OpReg R9) (OpRip allocSaveR9Label), IBinReg "xor" R11 (OpReg R11), IMov (OpRip allocSaveRdiLabel) (OpReg R11), IMov (OpRip allocSaveRsiLabel) (OpReg R11), IMov (OpRip allocSaveR8Label) (OpReg R11), IMov (OpRip allocSaveR9Label) (OpReg R11), IRet]))))))
 
 -- | 字符串 / Float：payload 全是字节或位型，标记时不扫。
 allocLeafFn : NativeFunc
@@ -729,31 +730,31 @@ trapImpossibleFn : NativeFunc
 trapImpossibleFn =
   rtRawFunc
     "trap_impossible"
-    [IMov (OpReg Rax) (OpImm 1), IMov (OpReg Rdi) (OpImm 2), ILea Rsi (nativeDataLabel "impossible"), IMov (OpReg Rdx) (OpImm (strLength impossibleMessage)), ISyscall, IMov (OpReg Rax) (OpImm 60), IMov (OpReg Rdi) (OpImm 2), ISyscall]
+    [IMov (OpReg Rax) (OpImm (sysNr "write")), IMov (OpReg Rdi) (OpImm 2), ILea Rsi (nativeDataLabel "impossible"), IMov (OpReg Rdx) (OpImm (strLength impossibleMessage)), ISyscall, IMov (OpReg Rax) (OpImm (sysNr "exit")), IMov (OpReg Rdi) (OpImm 2), ISyscall]
 
 trapDivZeroFn : NativeFunc
 trapDivZeroFn =
   rtRawFunc
     "trap_divzero"
-    [IMov (OpReg Rax) (OpImm 1), IMov (OpReg Rdi) (OpImm 2), ILea Rsi (nativeDataLabel "divzero"), IMov (OpReg Rdx) (OpImm (strLength divZeroMessage)), ISyscall, IMov (OpReg Rax) (OpImm 60), IMov (OpReg Rdi) (OpImm 2), ISyscall]
+    [IMov (OpReg Rax) (OpImm (sysNr "write")), IMov (OpReg Rdi) (OpImm 2), ILea Rsi (nativeDataLabel "divzero"), IMov (OpReg Rdx) (OpImm (strLength divZeroMessage)), ISyscall, IMov (OpReg Rax) (OpImm (sysNr "exit")), IMov (OpReg Rdi) (OpImm 2), ISyscall]
 
 trapArrayOobFn : NativeFunc
 trapArrayOobFn =
   rtRawFunc
     "trap_array_oob"
-    [IMov (OpReg Rax) (OpImm 1), IMov (OpReg Rdi) (OpImm 2), ILea Rsi (nativeDataLabel "array_oob"), IMov (OpReg Rdx) (OpImm (strLength arrayOobMessage)), ISyscall, IMov (OpReg Rax) (OpImm 60), IMov (OpReg Rdi) (OpImm 2), ISyscall]
+    [IMov (OpReg Rax) (OpImm (sysNr "write")), IMov (OpReg Rdi) (OpImm 2), ILea Rsi (nativeDataLabel "array_oob"), IMov (OpReg Rdx) (OpImm (strLength arrayOobMessage)), ISyscall, IMov (OpReg Rax) (OpImm (sysNr "exit")), IMov (OpReg Rdi) (OpImm 2), ISyscall]
 
 trapOomFn : NativeFunc
 trapOomFn =
   rtRawFunc
     "trap_oom"
-    [IMov (OpReg Rax) (OpImm 1), IMov (OpReg Rdi) (OpImm 2), ILea Rsi (nativeDataLabel "oom"), IMov (OpReg Rdx) (OpImm (strLength oomMessage)), ISyscall, IMov (OpReg Rax) (OpImm 60), IMov (OpReg Rdi) (OpImm 2), ISyscall]
+    [IMov (OpReg Rax) (OpImm (sysNr "write")), IMov (OpReg Rdi) (OpImm 2), ILea Rsi (nativeDataLabel "oom"), IMov (OpReg Rdx) (OpImm (strLength oomMessage)), ISyscall, IMov (OpReg Rax) (OpImm (sysNr "exit")), IMov (OpReg Rdi) (OpImm 2), ISyscall]
 
 trapPathLongFn : NativeFunc
 trapPathLongFn =
   rtRawFunc
     "trap_path_long"
-    [IMov (OpReg Rax) (OpImm 1), IMov (OpReg Rdi) (OpImm 2), ILea Rsi (nativeDataLabel "path_long"), IMov (OpReg Rdx) (OpImm (strLength pathTooLongMessage)), ISyscall, IMov (OpReg Rax) (OpImm 60), IMov (OpReg Rdi) (OpImm 2), ISyscall]
+    [IMov (OpReg Rax) (OpImm (sysNr "write")), IMov (OpReg Rdi) (OpImm 2), ILea Rsi (nativeDataLabel "path_long"), IMov (OpReg Rdx) (OpImm (strLength pathTooLongMessage)), ISyscall, IMov (OpReg Rax) (OpImm (sysNr "exit")), IMov (OpReg Rdi) (OpImm 2), ISyscall]
 
 -- ---------------------------------------------------------------
 -- 断言 / 未实现占位 / 显式失败
@@ -767,7 +768,7 @@ trapPathLongFn =
 writeErrRaw : String -> Int -> List Instr
 writeErrRaw label len =
   [
-    IMov (OpReg Rax) (OpImm 1),
+    IMov (OpReg Rax) (OpImm (sysNr "write")),
     IMov (OpReg Rdi) (OpImm 2),
     ILea Rsi label,
     IMov (OpReg Rdx) (OpImm len),
@@ -780,7 +781,7 @@ writeErrMsg =
   [
     IMov (OpReg Rdx) (OpMem R8 0),
     ILeaMem Rsi R8 8,
-    IMov (OpReg Rax) (OpImm 1),
+    IMov (OpReg Rax) (OpImm (sysNr "write")),
     IMov (OpReg Rdi) (OpImm 2),
     ISyscall
   ]
@@ -789,12 +790,12 @@ writeErrMsg =
 errFinish : List Instr
 errFinish =
   [
-    IMov (OpReg Rax) (OpImm 1),
+    IMov (OpReg Rax) (OpImm (sysNr "write")),
     IMov (OpReg Rdi) (OpImm 2),
     ILea Rsi (nativeDataLabel "nl"),
     IMov (OpReg Rdx) (OpImm 1),
     ISyscall,
-    IMov (OpReg Rax) (OpImm 60),
+    IMov (OpReg Rax) (OpImm (sysNr "exit")),
     IMov (OpReg Rdi) (OpImm 2),
     ISyscall
   ]
@@ -925,7 +926,7 @@ getcwdFn =
   rtFunc
     "getcwd"
     0
-    [ILea Rdi pathBufLabel, IMov (OpReg Rsi) (OpImm 4096), IMov (OpReg Rax) (OpImm 79), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_gcwd_fail", ILea Rdi pathBufLabel, ICall (nativeRtLabel "str_from_c"), IRet, ILabel ".Lrt_gcwd_fail", IMov (OpReg Rdi) (OpImm 46), ICall (nativeRtLabel "str_one_char"), IRet]
+    [ILea Rdi pathBufLabel, IMov (OpReg Rsi) (OpImm pathMaxBytes), IMov (OpReg Rax) (OpImm (sysNr "getcwd")), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_gcwd_fail", ILea Rdi pathBufLabel, ICall (nativeRtLabel "str_from_c"), IRet, ILabel ".Lrt_gcwd_fail", IMov (OpReg Rdi) (OpImm 46), ICall (nativeRtLabel "str_one_char"), IRet]
 
 -- | `execPath`：`readlink("/proc/self/exe")`；失败返回 `"."`。
 execPathFn : NativeFunc
@@ -933,7 +934,7 @@ execPathFn =
   rtFunc
     "exec_path"
     8
-    [ILea Rdi (nativeDataLabel "proc_self_exe"), ILea Rsi pathBufLabel, IMov (OpReg Rdx) (OpImm 4095), IMov (OpReg Rax) (OpImm 89), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jle" ".Lrt_ep_fail", IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rax), ILea Rdi pathBufLabel, IMov (OpReg Rsi) (OpMem Rbp (nativeSlotOff 0)), ICall (nativeRtLabel "str_from_bytes"), IRet, ILabel ".Lrt_ep_fail", IMov (OpReg Rdi) (OpImm 46), ICall (nativeRtLabel "str_one_char"), IRet]
+    [ILea Rdi (nativeDataLabel "proc_self_exe"), ILea Rsi pathBufLabel, IMov (OpReg Rdx) (OpImm pathMaxUsable), IMov (OpReg Rax) (OpImm (sysNr "readlink")), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jle" ".Lrt_ep_fail", IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rax), ILea Rdi pathBufLabel, IMov (OpReg Rsi) (OpMem Rbp (nativeSlotOff 0)), ICall (nativeRtLabel "str_from_bytes"), IRet, ILabel ".Lrt_ep_fail", IMov (OpReg Rdi) (OpImm 46), ICall (nativeRtLabel "str_one_char"), IRet]
 
 -- | 当前时间（微秒）：`clock_gettime(CLOCK_REALTIME)`。
 --   `ts` 在 `.bss`，`lea` 一次拿地址后读 `[sec]` / `[nsec]`。
@@ -942,7 +943,7 @@ nowUsFn =
   rtFunc
     "now_us"
     0
-    [IBinReg "xor" Rdi (OpReg Rdi), ILea Rsi tsLabel, IMov (OpReg Rax) (OpImm 228), ISyscall, ILea Rcx tsLabel, IMov (OpReg Rax) (OpMem Rcx 0), IBinReg "imul" Rax (OpImm 1000000), IMov (OpReg R8) (OpReg Rax), IMov (OpReg Rax) (OpMem Rcx 8), IBinReg "xor" Rdx (OpReg Rdx), IMov (OpReg R9) (OpImm 1000), IDivUnsigned R9, IBinReg "add" Rax (OpReg R8)]
+    [IBinReg "xor" Rdi (OpReg Rdi), ILea Rsi tsLabel, IMov (OpReg Rax) (OpImm (sysNr "clock_gettime")), ISyscall, ILea Rcx tsLabel, IMov (OpReg Rax) (OpMem Rcx 0), IBinReg "imul" Rax (OpImm 1000000), IMov (OpReg R8) (OpReg Rax), IMov (OpReg Rax) (OpMem Rcx 8), IBinReg "xor" Rdx (OpReg Rdx), IMov (OpReg R9) (OpImm 1000), IDivUnsigned R9, IBinReg "add" Rax (OpReg R8)]
 
 -- | 阻塞睡眠 `us` 微秒：`nanosleep({us/1e6, (us%1e6)*1000})`，返回 0。
 sleepUsFn : NativeFunc
@@ -950,7 +951,7 @@ sleepUsFn =
   rtFunc
     "sleep_us"
     8
-    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IMov (OpReg Rax) (OpReg Rdi), IBinReg "xor" Rdx (OpReg Rdx), IMov (OpReg Rcx) (OpImm 1000000), IDivUnsigned Rcx, ILea R9 tsLabel, IMov (OpMem R9 0) (OpReg Rax), IBinReg "imul" Rdx (OpImm 1000), IMov (OpMem R9 8) (OpReg Rdx), IMov (OpReg Rdi) (OpReg R9), IBinReg "xor" Rsi (OpReg Rsi), IMov (OpReg Rax) (OpImm 35), ISyscall, IMov (OpReg Rax) (OpImm 0)]
+    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IMov (OpReg Rax) (OpReg Rdi), IBinReg "xor" Rdx (OpReg Rdx), IMov (OpReg Rcx) (OpImm 1000000), IDivUnsigned Rcx, ILea R9 tsLabel, IMov (OpMem R9 0) (OpReg Rax), IBinReg "imul" Rdx (OpImm 1000), IMov (OpMem R9 8) (OpReg Rdx), IMov (OpReg Rdi) (OpReg R9), IBinReg "xor" Rsi (OpReg Rsi), IMov (OpReg Rax) (OpImm (sysNr "nanosleep")), ISyscall, IMov (OpReg Rax) (OpImm 0)]
 
 -- | `ioctl(1, TCGETS)` 成功即 tty（0/1）——口径与 OCaml 的 `Unix.isatty Unix.stdout` 一致。
 isTtyFn : NativeFunc
@@ -958,7 +959,7 @@ isTtyFn =
   rtFunc
     "is_tty"
     0
-    [IMov (OpReg Rdi) (OpImm 1), IMov (OpReg Rsi) (OpImm 21505), ILea Rdx termiosLabel, IMov (OpReg Rax) (OpImm 16), ISyscall, ICmp (OpReg Rax) (OpImm 0), ISetcc "setge" Rax, IMovzxAl]
+    [IMov (OpReg Rdi) (OpImm 1), IMov (OpReg Rsi) (OpImm ioctlTcgets), ILea Rdx termiosLabel, IMov (OpReg Rax) (OpImm (sysNr "ioctl")), ISyscall, ICmp (OpReg Rax) (OpImm 0), ISetcc "setge" Rax, IMovzxAl]
 
 -- | 宿主状态槽（`try*` 原语写入；0 = 成功）。
 hostStatusFn : NativeFunc
@@ -988,13 +989,49 @@ cleanupPopFn =
 -- errno → 码表与 `dtp_hostCode` 一致（ENOENT=1、EACCES/EPERM=2、ENOSPC=3、
 -- ENOTDIR=4、EISDIR=5、EEXIST=6、其它=9）。
 -- | 临时诊断：SIGSEGV 处理（把 RIP/RSP/RBP 原样写到 stderr 后 exit 70）。
+-- | errno 码表 → 宿主状态码的比较链（`hostCodeOfErrno` 是唯一真源）。
+--   标签按**状态码**分组（`.Lrt_fs_e<code>`），与 `dtp_hostCode` 的分支一一对应。
+fsFailCmpInstrs : List Instr
+fsFailCmpInstrs =
+  concatMap
+    (\p => [ICmp (OpReg Rdi) (OpImm (firstOf p)), IJcc "je" (fsCodeLabel (secondOf p))])
+    hostCodeOfErrno
+
+fsCodeLabel : Int -> String
+fsCodeLabel code = ".Lrt_fs_e" ++ strFromInt code
+
+fsDoneLabel : String
+fsDoneLabel = ".Lrt_fs_edone"
+
+-- | 状态码的去重序列（首个出现的顺序即表顺序）。
+fsCodeSeen : Int -> List Int -> Bool
+fsCodeSeen _ [] = False
+fsCodeSeen code (c :: rest) = if c == code then True else fsCodeSeen code rest
+
+fsCodesOf : List (Pair Int Int) -> List Int
+fsCodesOf pairs =
+  List.foldl
+    (\acc, p => if fsCodeSeen (secondOf p) acc then acc else append acc [secondOf p])
+    [] pairs
+
+-- | 每个状态码的落点：最后一个省掉 `jmp`（直接落到 `fsDoneLabel`）。
+fsCodeBodyInstrs : List Int -> List Instr
+fsCodeBodyInstrs [] = []
+fsCodeBodyInstrs (code :: rest) =
+  case rest of
+    [] => [ILabel (fsCodeLabel code), IMov (OpReg Rax) (OpImm code)]
+    _ => append [ILabel (fsCodeLabel code), IMov (OpReg Rax) (OpImm code), IJmp fsDoneLabel] (fsCodeBodyInstrs rest)
+
 -- | `rdi` = 负 errno（syscall 返回值）→ rax = 宿主码，并写状态槽。
+--   原始 errno 先写进 `rt_host_errno`，供非 try 符号还原 `<reason>` 文本。
 fsFailFn : NativeFunc
 fsFailFn =
   rtFunc
     "fs_fail"
     0
-    [INeg Rdi, IMov (OpReg Rax) (OpImm 9), ICmp (OpReg Rdi) (OpImm 2), IJcc "je" ".Lrt_fs_e1", ICmp (OpReg Rdi) (OpImm 1), IJcc "je" ".Lrt_fs_e2", ICmp (OpReg Rdi) (OpImm 13), IJcc "je" ".Lrt_fs_e2", ICmp (OpReg Rdi) (OpImm 28), IJcc "je" ".Lrt_fs_e3", ICmp (OpReg Rdi) (OpImm 20), IJcc "je" ".Lrt_fs_e4", ICmp (OpReg Rdi) (OpImm 21), IJcc "je" ".Lrt_fs_e5", ICmp (OpReg Rdi) (OpImm 17), IJcc "je" ".Lrt_fs_e6", IJmp ".Lrt_fs_edone", ILabel ".Lrt_fs_e1", IMov (OpReg Rax) (OpImm 1), IJmp ".Lrt_fs_edone", ILabel ".Lrt_fs_e2", IMov (OpReg Rax) (OpImm 2), IJmp ".Lrt_fs_edone", ILabel ".Lrt_fs_e3", IMov (OpReg Rax) (OpImm 3), IJmp ".Lrt_fs_edone", ILabel ".Lrt_fs_e4", IMov (OpReg Rax) (OpImm 4), IJmp ".Lrt_fs_edone", ILabel ".Lrt_fs_e5", IMov (OpReg Rax) (OpImm 5), IJmp ".Lrt_fs_edone", ILabel ".Lrt_fs_e6", IMov (OpReg Rax) (OpImm 6), ILabel ".Lrt_fs_edone", IMov (OpRip hostStatusLabel) (OpReg Rax)]
+    (append
+      [INeg Rdi, IMov (OpReg Rax) (OpImm hostCodeOther)]
+      (append fsFailCmpInstrs (append [IJmp fsDoneLabel] (append (fsCodeBodyInstrs (fsCodesOf hostCodeOfErrno)) [ILabel fsDoneLabel, IMov (OpRip hostStatusLabel) (OpReg Rax)]))))
 
 -- | `rdi` = Vuna String → rax = `rt_path_buf` 里的 NUL 结尾副本。
 strToCFn : NativeFunc
@@ -1002,7 +1039,7 @@ strToCFn =
   rtFunc
     "str_to_c"
     0
-    [IMov (OpReg Rcx) (OpMem Rdi 0), ICmp (OpReg Rcx) (OpImm 4095), IJcc "jl" ".Lrt_stc_ok", ICall (nativeRtLabel "trap_path_long"), ILabel ".Lrt_stc_ok", ILeaMem Rsi Rdi 8, ILea Rdi pathBufLabel, IRepMovsb, IMovByteOp (OpMem Rdi 0) 0, ILea Rax pathBufLabel]
+    [IMov (OpReg Rcx) (OpMem Rdi 0), ICmp (OpReg Rcx) (OpImm pathMaxUsable), IJcc "jl" ".Lrt_stc_ok", ICall (nativeRtLabel "trap_path_long"), ILabel ".Lrt_stc_ok", ILeaMem Rsi Rdi 8, ILea Rdi pathBufLabel, IRepMovsb, IMovByteOp (OpMem Rdi 0) 0, ILea Rax pathBufLabel]
 
 -- | 同 `str_to_c`，写到 `rt_path_buf2`。
 strToC2Fn : NativeFunc
@@ -1010,7 +1047,7 @@ strToC2Fn =
   rtFunc
     "str_to_c2"
     0
-    [IMov (OpReg Rcx) (OpMem Rdi 0), ICmp (OpReg Rcx) (OpImm 4095), IJcc "jl" ".Lrt_stc2_ok", ICall (nativeRtLabel "trap_path_long"), ILabel ".Lrt_stc2_ok", ILeaMem Rsi Rdi 8, ILea Rdi pathBuf2Label, IRepMovsb, IMovByteOp (OpMem Rdi 0) 0, ILea Rax pathBuf2Label]
+    [IMov (OpReg Rcx) (OpMem Rdi 0), ICmp (OpReg Rcx) (OpImm pathMaxUsable), IJcc "jl" ".Lrt_stc2_ok", ICall (nativeRtLabel "trap_path_long"), ILabel ".Lrt_stc2_ok", ILeaMem Rsi Rdi 8, ILea Rdi pathBuf2Label, IRepMovsb, IMovByteOp (OpMem Rdi 0) 0, ILea Rax pathBuf2Label]
 
 -- | `rdi` = Vuna String、`rsi` = 目的缓冲 → rax = 目的端（指向新 NUL）。
 strCopyIntoFn : NativeFunc
@@ -1043,7 +1080,7 @@ statPathFn =
   rtFunc
     "stat_path"
     0
-    [IMov (OpReg Rsi) (OpReg Rdi), IMov (OpReg Rdi) (OpImm (0 - 100)), ILea Rdx statBufLabel, IBinReg "xor" R10 (OpReg R10), IMov (OpReg Rax) (OpImm 262), ISyscall]
+    [IMov (OpReg Rsi) (OpReg Rdi), IMov (OpReg Rdi) (OpImm atFdCwd), ILea Rdx statBufLabel, IBinReg "xor" R10 (OpReg R10), IMov (OpReg Rax) (OpImm (sysNr "newfstatat")), ISyscall]
 
 -- | 同 `stat_path`，但不跟随符号链接（`AT_SYMLINK_NOFOLLOW = 256`）。
 lstatPathFn : NativeFunc
@@ -1051,7 +1088,7 @@ lstatPathFn =
   rtFunc
     "lstat_path"
     0
-    [IMov (OpReg Rsi) (OpReg Rdi), IMov (OpReg Rdi) (OpImm (0 - 100)), ILea Rdx statBufLabel, IMov (OpReg R10) (OpImm 256), IMov (OpReg Rax) (OpImm 262), ISyscall]
+    [IMov (OpReg Rsi) (OpReg Rdi), IMov (OpReg Rdi) (OpImm atFdCwd), ILea Rdx statBufLabel, IMov (OpReg R10) (OpImm atSymlinkNofollow), IMov (OpReg Rax) (OpImm (sysNr "newfstatat")), ISyscall]
 
 -- | `rdi` = Vuna String path → rax = 0/1（存在；不改状态槽）。
 fileExistsFn : NativeFunc
@@ -1067,7 +1104,7 @@ fileMtimeFn =
   rtFunc
     "file_mtime"
     8
-    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IBinReg "xor" Rax (OpReg Rax), IMov (OpRip hostStatusLabel) (OpReg Rax), ICall (nativeRtLabel "str_to_c"), IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "stat_path"), ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_mtime_fail", ILea Rcx statBufLabel, IMov (OpReg Rax) (OpMem Rcx 88), IRet, ILabel ".Lrt_mtime_fail", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm 0)]
+    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IBinReg "xor" Rax (OpReg Rax), IMov (OpRip hostStatusLabel) (OpReg Rax), ICall (nativeRtLabel "str_to_c"), IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "stat_path"), ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_mtime_fail", ILea Rcx statBufLabel, IMov (OpReg Rax) (OpMem Rcx statOffMtime), IRet, ILabel ".Lrt_mtime_fail", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm 0)]
 
 -- | `rdi` = Vuna String path → rax = 文件字节数；失败写状态槽并返回 0。
 fileSizeFn : NativeFunc
@@ -1075,7 +1112,7 @@ fileSizeFn =
   rtFunc
     "file_size"
     8
-    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IBinReg "xor" Rax (OpReg Rax), IMov (OpRip hostStatusLabel) (OpReg Rax), ICall (nativeRtLabel "str_to_c"), IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "stat_path"), ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_fsize_fail", ILea Rcx statBufLabel, IMov (OpReg Rax) (OpMem Rcx 48), IRet, ILabel ".Lrt_fsize_fail", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm 0)]
+    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IBinReg "xor" Rax (OpReg Rax), IMov (OpRip hostStatusLabel) (OpReg Rax), ICall (nativeRtLabel "str_to_c"), IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "stat_path"), ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_fsize_fail", ILea Rcx statBufLabel, IMov (OpReg Rax) (OpMem Rcx statOffSize), IRet, ILabel ".Lrt_fsize_fail", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm 0)]
 
 -- | `rdi` = Vuna String path → rax = 0/1（是否目录）；失败写状态槽并返回 0。
 tryIsDirFn : NativeFunc
@@ -1083,7 +1120,7 @@ tryIsDirFn =
   rtFunc
     "try_is_dir"
     8
-    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IBinReg "xor" Rax (OpReg Rax), IMov (OpRip hostStatusLabel) (OpReg Rax), ICall (nativeRtLabel "str_to_c"), IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "stat_path"), ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_isdir_fail", ILea Rcx statBufLabel, IMov (OpReg Rax) (OpMem Rcx 24), IBinReg "and" Rax (OpImm 61440), ICmp (OpReg Rax) (OpImm 16384), ISetcc "sete" Rax, IMovzxAl, IRet, ILabel ".Lrt_isdir_fail", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm 0)]
+    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IBinReg "xor" Rax (OpReg Rax), IMov (OpRip hostStatusLabel) (OpReg Rax), ICall (nativeRtLabel "str_to_c"), IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "stat_path"), ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_isdir_fail", ILea Rcx statBufLabel, IMov (OpReg Rax) (OpMem Rcx statOffMode), IBinReg "and" Rax (OpImm statModeTypeMask), ICmp (OpReg Rax) (OpImm statModeDir), ISetcc "sete" Rax, IMovzxAl, IRet, ILabel ".Lrt_isdir_fail", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm 0)]
 
 -- | `rdi` = Vuna String path → rax = 文件内容；失败写状态槽并返回空串。
 --   运行时读缓冲是 8 MiB；超过上界报 io 错误（不静默截断）。
@@ -1093,7 +1130,7 @@ tryReadFileFn =
   rtFunc
     "try_read_file"
     16
-    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IBinReg "xor" Rax (OpReg Rax), IMov (OpRip hostStatusLabel) (OpReg Rax), ICall (nativeRtLabel "str_to_c"), IMov (OpReg Rsi) (OpReg Rax), IMov (OpReg Rdi) (OpImm (0 - 100)), IBinReg "xor" Rdx (OpReg Rdx), IBinReg "xor" R10 (OpReg R10), IMov (OpReg Rax) (OpImm 257), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_rf_fail", IMov (OpMem Rbp (nativeSlotOff 1)) (OpReg Rax), IMov (OpMem Rbp (nativeSlotOff 2)) (OpImm 0), ILabel ".Lrt_rf_loop", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 1)), ILea Rsi readBufLabel, IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 2)), IBinReg "add" Rsi (OpReg Rcx), IMov (OpReg Rdx) (OpImm 8388608), IBinReg "sub" Rdx (OpReg Rcx), IMov (OpReg Rax) (OpImm 0), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_rf_read_fail", IJcc "je" ".Lrt_rf_done", IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 2)), IBinReg "add" Rcx (OpReg Rax), IMov (OpMem Rbp (nativeSlotOff 2)) (OpReg Rcx), ICmp (OpReg Rcx) (OpImm 8388608), IJcc "jl" ".Lrt_rf_loop", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 1)), ILea Rsi readBufLabel, IMov (OpReg Rdx) (OpImm 1), IMov (OpReg Rax) (OpImm 0), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "je" ".Lrt_rf_done", IJcc "jl" ".Lrt_rf_read_fail", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 1)), IMov (OpReg Rax) (OpImm 3), ISyscall, IMov (OpReg Rdi) (OpImm (0 - 5)), ICall (nativeRtLabel "fs_fail"), ICall (nativeRtLabel "str_empty"), IRet, ILabel ".Lrt_rf_done", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 1)), IMov (OpReg Rax) (OpImm 3), ISyscall, ILea Rdi readBufLabel, IMov (OpReg Rsi) (OpMem Rbp (nativeSlotOff 2)), ICall (nativeRtLabel "str_from_bytes"), IRet, ILabel ".Lrt_rf_read_fail", IMov (OpMem Rbp (nativeSlotOff 3)) (OpReg Rax), IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 1)), IMov (OpReg Rax) (OpImm 3), ISyscall, IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 3)), ICall (nativeRtLabel "fs_fail"), ICall (nativeRtLabel "str_empty"), IRet, ILabel ".Lrt_rf_fail", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "fs_fail"), ICall (nativeRtLabel "str_empty"), IRet]
+    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IBinReg "xor" Rax (OpReg Rax), IMov (OpRip hostStatusLabel) (OpReg Rax), ICall (nativeRtLabel "str_to_c"), IMov (OpReg Rsi) (OpReg Rax), IMov (OpReg Rdi) (OpImm atFdCwd), IBinReg "xor" Rdx (OpReg Rdx), IBinReg "xor" R10 (OpReg R10), IMov (OpReg Rax) (OpImm (sysNr "openat")), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_rf_fail", IMov (OpMem Rbp (nativeSlotOff 1)) (OpReg Rax), IMov (OpMem Rbp (nativeSlotOff 2)) (OpImm 0), ILabel ".Lrt_rf_loop", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 1)), ILea Rsi readBufLabel, IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 2)), IBinReg "add" Rsi (OpReg Rcx), IMov (OpReg Rdx) (OpImm 8388608), IBinReg "sub" Rdx (OpReg Rcx), IMov (OpReg Rax) (OpImm (sysNr "read")), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_rf_read_fail", IJcc "je" ".Lrt_rf_done", IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 2)), IBinReg "add" Rcx (OpReg Rax), IMov (OpMem Rbp (nativeSlotOff 2)) (OpReg Rcx), ICmp (OpReg Rcx) (OpImm 8388608), IJcc "jl" ".Lrt_rf_loop", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 1)), ILea Rsi readBufLabel, IMov (OpReg Rdx) (OpImm 1), IMov (OpReg Rax) (OpImm (sysNr "read")), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "je" ".Lrt_rf_done", IJcc "jl" ".Lrt_rf_read_fail", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 1)), IMov (OpReg Rax) (OpImm (sysNr "close")), ISyscall, IMov (OpReg Rdi) (OpImm (0 - 5)), ICall (nativeRtLabel "fs_fail"), ICall (nativeRtLabel "str_empty"), IRet, ILabel ".Lrt_rf_done", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 1)), IMov (OpReg Rax) (OpImm (sysNr "close")), ISyscall, ILea Rdi readBufLabel, IMov (OpReg Rsi) (OpMem Rbp (nativeSlotOff 2)), ICall (nativeRtLabel "str_from_bytes"), IRet, ILabel ".Lrt_rf_read_fail", IMov (OpMem Rbp (nativeSlotOff 3)) (OpReg Rax), IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 1)), IMov (OpReg Rax) (OpImm (sysNr "close")), ISyscall, IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 3)), ICall (nativeRtLabel "fs_fail"), ICall (nativeRtLabel "str_empty"), IRet, ILabel ".Lrt_rf_fail", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "fs_fail"), ICall (nativeRtLabel "str_empty"), IRet]
 
 -- | `rdi` = path、`rsi` = contents → rax = 写入字节数（Nat）；失败写状态槽并返回 0。
 tryWriteFileFn : NativeFunc
@@ -1101,7 +1138,7 @@ tryWriteFileFn =
   rtFunc
     "try_write_file"
     48
-    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IMov (OpMem Rbp (nativeSlotOff 1)) (OpReg Rsi), IMov (OpReg Rax) (OpMem Rsi 0), IMov (OpMem Rbp (nativeSlotOff 2)) (OpReg Rax), IBinReg "xor" Rax (OpReg Rax), IMov (OpRip hostStatusLabel) (OpReg Rax), IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 0)), ICall (nativeRtLabel "str_to_c"), IMov (OpReg Rsi) (OpReg Rax), IMov (OpReg Rdi) (OpImm (0 - 100)), IMov (OpReg Rdx) (OpImm 577), IMov (OpReg R10) (OpImm 438), IMov (OpReg Rax) (OpImm 257), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_wf_fail", IMov (OpMem Rbp (nativeSlotOff 3)) (OpReg Rax), IMov (OpMem Rbp (nativeSlotOff 4)) (OpImm 0), ILabel ".Lrt_wf_loop", IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 4)), ICmp (OpReg Rcx) (OpMem Rbp (nativeSlotOff 2)), IJcc "jge" ".Lrt_wf_done", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 3)), IMov (OpReg Rsi) (OpMem Rbp (nativeSlotOff 1)), IBinReg "add" Rsi (OpImm 8), IBinReg "add" Rsi (OpReg Rcx), IMov (OpReg Rdx) (OpMem Rbp (nativeSlotOff 2)), IBinReg "sub" Rdx (OpReg Rcx), IMov (OpReg Rax) (OpImm 1), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jle" ".Lrt_wf_write_fail", IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 4)), IBinReg "add" Rcx (OpReg Rax), IMov (OpMem Rbp (nativeSlotOff 4)) (OpReg Rcx), IJmp ".Lrt_wf_loop", ILabel ".Lrt_wf_done", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 3)), IMov (OpReg Rax) (OpImm 3), ISyscall, IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 2)), IRet, ILabel ".Lrt_wf_write_fail", IMov (OpMem Rbp (nativeSlotOff 5)) (OpReg Rax), IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 3)), IMov (OpReg Rax) (OpImm 3), ISyscall, IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 5)), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm 0), IRet, ILabel ".Lrt_wf_fail", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm 0)]
+    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IMov (OpMem Rbp (nativeSlotOff 1)) (OpReg Rsi), IMov (OpReg Rax) (OpMem Rsi 0), IMov (OpMem Rbp (nativeSlotOff 2)) (OpReg Rax), IBinReg "xor" Rax (OpReg Rax), IMov (OpRip hostStatusLabel) (OpReg Rax), IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 0)), ICall (nativeRtLabel "str_to_c"), IMov (OpReg Rsi) (OpReg Rax), IMov (OpReg Rdi) (OpImm atFdCwd), IMov (OpReg Rdx) (OpImm openWriteCreateTrunc), IMov (OpReg R10) (OpImm modeFileDefault), IMov (OpReg Rax) (OpImm (sysNr "openat")), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_wf_fail", IMov (OpMem Rbp (nativeSlotOff 3)) (OpReg Rax), IMov (OpMem Rbp (nativeSlotOff 4)) (OpImm 0), ILabel ".Lrt_wf_loop", IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 4)), ICmp (OpReg Rcx) (OpMem Rbp (nativeSlotOff 2)), IJcc "jge" ".Lrt_wf_done", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 3)), IMov (OpReg Rsi) (OpMem Rbp (nativeSlotOff 1)), IBinReg "add" Rsi (OpImm 8), IBinReg "add" Rsi (OpReg Rcx), IMov (OpReg Rdx) (OpMem Rbp (nativeSlotOff 2)), IBinReg "sub" Rdx (OpReg Rcx), IMov (OpReg Rax) (OpImm (sysNr "write")), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jle" ".Lrt_wf_write_fail", IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 4)), IBinReg "add" Rcx (OpReg Rax), IMov (OpMem Rbp (nativeSlotOff 4)) (OpReg Rcx), IJmp ".Lrt_wf_loop", ILabel ".Lrt_wf_done", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 3)), IMov (OpReg Rax) (OpImm (sysNr "close")), ISyscall, IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 2)), IRet, ILabel ".Lrt_wf_write_fail", IMov (OpMem Rbp (nativeSlotOff 5)) (OpReg Rax), IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 3)), IMov (OpReg Rax) (OpImm (sysNr "close")), ISyscall, IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 5)), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm 0), IRet, ILabel ".Lrt_wf_fail", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm 0)]
 
 -- | `rdi` = path、`rsi` = contents → rax = 写入字节数；先写 `<path>.<pid>.tmp` 再 rename。
 tryWriteFileAtomicFn : NativeFunc
@@ -1109,7 +1146,7 @@ tryWriteFileAtomicFn =
   rtFunc
     "try_write_file_atomic"
     64
-    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IMov (OpMem Rbp (nativeSlotOff 1)) (OpReg Rsi), IMov (OpReg Rax) (OpMem Rsi 0), IMov (OpMem Rbp (nativeSlotOff 2)) (OpReg Rax), IBinReg "xor" Rax (OpReg Rax), IMov (OpRip hostStatusLabel) (OpReg Rax), IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 0)), ICall (nativeRtLabel "str_to_c"), ILea Rdi pathBufLabel, ILea Rsi pathBuf2Label, IMov (OpReg Rdx) (OpImm 4096), ICall (nativeRtLabel "c_strcpy"), IMov (OpMem Rbp (nativeSlotOff 3)) (OpReg Rax), IMovByteOp (OpMem Rax 0) 46, IBinReg "add" Rax (OpImm 1), IMov (OpMem Rbp (nativeSlotOff 3)) (OpReg Rax), IMov (OpReg Rax) (OpImm 39), ISyscall, IMov (OpReg Rdi) (OpReg Rax), IMov (OpReg Rsi) (OpMem Rbp (nativeSlotOff 3)), ICall (nativeRtLabel "u64_to_dec"), IMov (OpReg Rsi) (OpReg Rax), ILea Rdx pathBuf2Label, IBinReg "add" Rdx (OpImm 4096), IBinReg "sub" Rdx (OpReg Rsi), ILea Rdi (nativeDataLabel "tmp_suffix"), ICall (nativeRtLabel "c_strcpy"), IMov (OpReg Rdi) (OpImm (0 - 100)), ILea Rsi pathBuf2Label, IMov (OpReg Rdx) (OpImm 577), IMov (OpReg R10) (OpImm 438), IMov (OpReg Rax) (OpImm 257), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_wfa_open_fail", IMov (OpMem Rbp (nativeSlotOff 4)) (OpReg Rax), IMov (OpMem Rbp (nativeSlotOff 5)) (OpImm 0), ILabel ".Lrt_wfa_loop", IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 5)), ICmp (OpReg Rcx) (OpMem Rbp (nativeSlotOff 2)), IJcc "jge" ".Lrt_wfa_written", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 4)), IMov (OpReg Rsi) (OpMem Rbp (nativeSlotOff 1)), IBinReg "add" Rsi (OpImm 8), IBinReg "add" Rsi (OpReg Rcx), IMov (OpReg Rdx) (OpMem Rbp (nativeSlotOff 2)), IBinReg "sub" Rdx (OpReg Rcx), IMov (OpReg Rax) (OpImm 1), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jle" ".Lrt_wfa_write_fail", IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 5)), IBinReg "add" Rcx (OpReg Rax), IMov (OpMem Rbp (nativeSlotOff 5)) (OpReg Rcx), IJmp ".Lrt_wfa_loop", ILabel ".Lrt_wfa_written", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 4)), IMov (OpReg Rax) (OpImm 3), ISyscall, ILea Rdi pathBuf2Label, ILea Rsi pathBufLabel, IMov (OpReg Rax) (OpImm 82), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_wfa_rename_fail", IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 2)), IRet, ILabel ".Lrt_wfa_rename_fail", IMov (OpMem Rbp (nativeSlotOff 6)) (OpReg Rax), ILea Rdi pathBuf2Label, ICall (nativeRtLabel "remove_tree"), IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 6)), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm 0), IRet, ILabel ".Lrt_wfa_write_fail", IMov (OpMem Rbp (nativeSlotOff 6)) (OpReg Rax), IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 4)), IMov (OpReg Rax) (OpImm 3), ISyscall, ILea Rdi pathBuf2Label, ICall (nativeRtLabel "remove_tree"), IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 6)), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm 0), IRet, ILabel ".Lrt_wfa_open_fail", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm 0)]
+    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IMov (OpMem Rbp (nativeSlotOff 1)) (OpReg Rsi), IMov (OpReg Rax) (OpMem Rsi 0), IMov (OpMem Rbp (nativeSlotOff 2)) (OpReg Rax), IBinReg "xor" Rax (OpReg Rax), IMov (OpRip hostStatusLabel) (OpReg Rax), IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 0)), ICall (nativeRtLabel "str_to_c"), ILea Rdi pathBufLabel, ILea Rsi pathBuf2Label, IMov (OpReg Rdx) (OpImm pathMaxBytes), ICall (nativeRtLabel "c_strcpy"), IMov (OpMem Rbp (nativeSlotOff 3)) (OpReg Rax), IMovByteOp (OpMem Rax 0) 46, IBinReg "add" Rax (OpImm 1), IMov (OpMem Rbp (nativeSlotOff 3)) (OpReg Rax), IMov (OpReg Rax) (OpImm (sysNr "getpid")), ISyscall, IMov (OpReg Rdi) (OpReg Rax), IMov (OpReg Rsi) (OpMem Rbp (nativeSlotOff 3)), ICall (nativeRtLabel "u64_to_dec"), IMov (OpReg Rsi) (OpReg Rax), ILea Rdx pathBuf2Label, IBinReg "add" Rdx (OpImm pathMaxBytes), IBinReg "sub" Rdx (OpReg Rsi), ILea Rdi (nativeDataLabel "tmp_suffix"), ICall (nativeRtLabel "c_strcpy"), IMov (OpReg Rdi) (OpImm atFdCwd), ILea Rsi pathBuf2Label, IMov (OpReg Rdx) (OpImm openWriteCreateTrunc), IMov (OpReg R10) (OpImm modeFileDefault), IMov (OpReg Rax) (OpImm (sysNr "openat")), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_wfa_open_fail", IMov (OpMem Rbp (nativeSlotOff 4)) (OpReg Rax), IMov (OpMem Rbp (nativeSlotOff 5)) (OpImm 0), ILabel ".Lrt_wfa_loop", IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 5)), ICmp (OpReg Rcx) (OpMem Rbp (nativeSlotOff 2)), IJcc "jge" ".Lrt_wfa_written", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 4)), IMov (OpReg Rsi) (OpMem Rbp (nativeSlotOff 1)), IBinReg "add" Rsi (OpImm 8), IBinReg "add" Rsi (OpReg Rcx), IMov (OpReg Rdx) (OpMem Rbp (nativeSlotOff 2)), IBinReg "sub" Rdx (OpReg Rcx), IMov (OpReg Rax) (OpImm (sysNr "write")), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jle" ".Lrt_wfa_write_fail", IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 5)), IBinReg "add" Rcx (OpReg Rax), IMov (OpMem Rbp (nativeSlotOff 5)) (OpReg Rcx), IJmp ".Lrt_wfa_loop", ILabel ".Lrt_wfa_written", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 4)), IMov (OpReg Rax) (OpImm (sysNr "close")), ISyscall, ILea Rdi pathBuf2Label, ILea Rsi pathBufLabel, IMov (OpReg Rax) (OpImm (sysNr "rename")), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_wfa_rename_fail", IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 2)), IRet, ILabel ".Lrt_wfa_rename_fail", IMov (OpMem Rbp (nativeSlotOff 6)) (OpReg Rax), ILea Rdi pathBuf2Label, ICall (nativeRtLabel "remove_tree"), IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 6)), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm 0), IRet, ILabel ".Lrt_wfa_write_fail", IMov (OpMem Rbp (nativeSlotOff 6)) (OpReg Rax), IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 4)), IMov (OpReg Rax) (OpImm (sysNr "close")), ISyscall, ILea Rdi pathBuf2Label, ICall (nativeRtLabel "remove_tree"), IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 6)), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm 0), IRet, ILabel ".Lrt_wfa_open_fail", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm 0)]
 
 -- | `rdi` = path → rax = 0/1（0 = 成功或已存在）。
 tryMakeDirFn : NativeFunc
@@ -1117,7 +1154,7 @@ tryMakeDirFn =
   rtFunc
     "try_make_dir"
     8
-    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IBinReg "xor" Rax (OpReg Rax), IMov (OpRip hostStatusLabel) (OpReg Rax), ICall (nativeRtLabel "str_to_c"), IMov (OpReg Rsi) (OpReg Rax), IMov (OpReg Rdi) (OpImm (0 - 100)), IMov (OpReg Rdx) (OpImm 493), IMov (OpReg Rax) (OpImm 258), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jge" ".Lrt_mkdir_ok", ICmp (OpReg Rax) (OpImm (0 - 17)), IJcc "je" ".Lrt_mkdir_ok", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm 1), IRet, ILabel ".Lrt_mkdir_ok", IMov (OpReg Rax) (OpImm 0)]
+    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IBinReg "xor" Rax (OpReg Rax), IMov (OpRip hostStatusLabel) (OpReg Rax), ICall (nativeRtLabel "str_to_c"), IMov (OpReg Rsi) (OpReg Rax), IMov (OpReg Rdi) (OpImm atFdCwd), IMov (OpReg Rdx) (OpImm modeDirDefault), IMov (OpReg Rax) (OpImm (sysNr "mkdirat")), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jge" ".Lrt_mkdir_ok", ICmp (OpReg Rax) (OpImm (0 - errnoEexist)), IJcc "je" ".Lrt_mkdir_ok", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm 1), IRet, ILabel ".Lrt_mkdir_ok", IMov (OpReg Rax) (OpImm 0)]
 
 -- | `rdi` = path → rax = 0/1（0 = 成功；已存在算失败）。
 tryMakeDirExclusiveFn : NativeFunc
@@ -1125,7 +1162,7 @@ tryMakeDirExclusiveFn =
   rtFunc
     "try_make_dir_excl"
     8
-    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IBinReg "xor" Rax (OpReg Rax), IMov (OpRip hostStatusLabel) (OpReg Rax), ICall (nativeRtLabel "str_to_c"), IMov (OpReg Rsi) (OpReg Rax), IMov (OpReg Rdi) (OpImm (0 - 100)), IMov (OpReg Rdx) (OpImm 493), IMov (OpReg Rax) (OpImm 258), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jge" ".Lrt_mkdirx_ok", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm 1), IRet, ILabel ".Lrt_mkdirx_ok", IMov (OpReg Rax) (OpImm 0)]
+    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IBinReg "xor" Rax (OpReg Rax), IMov (OpRip hostStatusLabel) (OpReg Rax), ICall (nativeRtLabel "str_to_c"), IMov (OpReg Rsi) (OpReg Rax), IMov (OpReg Rdi) (OpImm atFdCwd), IMov (OpReg Rdx) (OpImm modeDirDefault), IMov (OpReg Rax) (OpImm (sysNr "mkdirat")), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jge" ".Lrt_mkdirx_ok", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm 1), IRet, ILabel ".Lrt_mkdirx_ok", IMov (OpReg Rax) (OpImm 0)]
 
 -- | `rdi` = path → rax = 0/1（0 = 成功或本来就不存在）。
 tryRemoveFileFn : NativeFunc
@@ -1133,7 +1170,7 @@ tryRemoveFileFn =
   rtFunc
     "try_remove_file"
     8
-    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IBinReg "xor" Rax (OpReg Rax), IMov (OpRip hostStatusLabel) (OpReg Rax), ICall (nativeRtLabel "str_to_c"), IMov (OpReg Rsi) (OpReg Rax), IMov (OpReg Rdi) (OpImm (0 - 100)), IBinReg "xor" Rdx (OpReg Rdx), IMov (OpReg Rax) (OpImm 263), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jge" ".Lrt_rmf_ok", ICmp (OpReg Rax) (OpImm (0 - 2)), IJcc "je" ".Lrt_rmf_ok", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm 1), IRet, ILabel ".Lrt_rmf_ok", IMov (OpReg Rax) (OpImm 0)]
+    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IBinReg "xor" Rax (OpReg Rax), IMov (OpRip hostStatusLabel) (OpReg Rax), ICall (nativeRtLabel "str_to_c"), IMov (OpReg Rsi) (OpReg Rax), IMov (OpReg Rdi) (OpImm atFdCwd), IBinReg "xor" Rdx (OpReg Rdx), IMov (OpReg Rax) (OpImm (sysNr "unlinkat")), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jge" ".Lrt_rmf_ok", ICmp (OpReg Rax) (OpImm (0 - errnoEnoent)), IJcc "je" ".Lrt_rmf_ok", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm 1), IRet, ILabel ".Lrt_rmf_ok", IMov (OpReg Rax) (OpImm 0)]
 
 -- | `rdi` = src、`rsi` = dst → rax = 0/1。
 tryRenameFn : NativeFunc
@@ -1141,7 +1178,7 @@ tryRenameFn =
   rtFunc
     "try_rename"
     8
-    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rsi), IBinReg "xor" Rax (OpReg Rax), IMov (OpRip hostStatusLabel) (OpReg Rax), ICall (nativeRtLabel "str_to_c"), IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 0)), ICall (nativeRtLabel "str_to_c2"), ILea Rdi pathBufLabel, ILea Rsi pathBuf2Label, IMov (OpReg Rax) (OpImm 82), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jge" ".Lrt_ren_ok", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm 1), IRet, ILabel ".Lrt_ren_ok", IMov (OpReg Rax) (OpImm 0)]
+    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rsi), IBinReg "xor" Rax (OpReg Rax), IMov (OpRip hostStatusLabel) (OpReg Rax), ICall (nativeRtLabel "str_to_c"), IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 0)), ICall (nativeRtLabel "str_to_c2"), ILea Rdi pathBufLabel, ILea Rsi pathBuf2Label, IMov (OpReg Rax) (OpImm (sysNr "rename")), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jge" ".Lrt_ren_ok", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm 1), IRet, ILabel ".Lrt_ren_ok", IMov (OpReg Rax) (OpImm 0)]
 
 -- | `rdi` = target、`rsi` = link → rax = 0/1。
 trySymlinkFn : NativeFunc
@@ -1149,7 +1186,7 @@ trySymlinkFn =
   rtFunc
     "try_symlink"
     8
-    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rsi), IBinReg "xor" Rax (OpReg Rax), IMov (OpRip hostStatusLabel) (OpReg Rax), ICall (nativeRtLabel "str_to_c"), IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 0)), ICall (nativeRtLabel "str_to_c2"), ILea Rdi pathBufLabel, IMov (OpReg Rsi) (OpImm (0 - 100)), ILea Rdx pathBuf2Label, IMov (OpReg Rax) (OpImm 266), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jge" ".Lrt_sym_ok", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm 1), IRet, ILabel ".Lrt_sym_ok", IMov (OpReg Rax) (OpImm 0)]
+    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rsi), IBinReg "xor" Rax (OpReg Rax), IMov (OpRip hostStatusLabel) (OpReg Rax), ICall (nativeRtLabel "str_to_c"), IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 0)), ICall (nativeRtLabel "str_to_c2"), ILea Rdi pathBufLabel, IMov (OpReg Rsi) (OpImm atFdCwd), ILea Rdx pathBuf2Label, IMov (OpReg Rax) (OpImm (sysNr "symlinkat")), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jge" ".Lrt_sym_ok", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm 1), IRet, ILabel ".Lrt_sym_ok", IMov (OpReg Rax) (OpImm 0)]
 
 -- | 递归删除：`rdi` = C path → rax = 0/1。目录走 `getdents64` + 递归 + `rmdir`，
 --   其余 `unlinkat`；每层的 ENOENT 都按成功处理。
@@ -1158,7 +1195,7 @@ removeTreeFn =
   rtFunc
     "remove_tree"
     96
-    [IBinReg "sub" Rsp (OpImm 12288), IMov (OpMem Rbp (nativeSlotOff 7)) (OpReg Rsp), IMov (OpReg Rax) (OpReg Rsp), IBinReg "add" Rax (OpImm 4096), IMov (OpMem Rbp (nativeSlotOff 8)) (OpReg Rax), IMov (OpReg R11) (OpRip stackLimitLabel), ITest R11 R11, IJcc "jnz" ".Lrt_rt_floor", IMov (OpReg R11) (OpRip stackTopLabel), IBinReg "sub" R11 (OpImm 4194304), ILabel ".Lrt_rt_floor", ICmp (OpReg Rsp) (OpReg R11), IJcc "jb" (nativeRtLabel "trap_rmtree_deep"), IMov (OpReg Rsi) (OpReg Rsp), IMov (OpReg Rdx) (OpImm 4096), ICall (nativeRtLabel "c_strcpy"), IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rax), IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 7)), ICall (nativeRtLabel "lstat_path"), ICmp (OpReg Rax) (OpImm 0), IJcc "jge" ".Lrt_rt_stat_ok", ICmp (OpReg Rax) (OpImm (0 - 2)), IJcc "je" ".Lrt_rt_ok", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm 1), IRet, ILabel ".Lrt_rt_stat_ok", ILea Rcx statBufLabel, IMov (OpReg Rax) (OpMem Rcx 24), IBinReg "and" Rax (OpImm 61440), ICmp (OpReg Rax) (OpImm 16384), IJcc "jne" ".Lrt_rt_file", IMov (OpReg Rsi) (OpMem Rbp (nativeSlotOff 7)), IMov (OpReg Rdi) (OpImm (0 - 100)), IMov (OpReg Rdx) (OpImm 65536), IBinReg "xor" R10 (OpReg R10), IMov (OpReg Rax) (OpImm 257), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_rt_open_fail", IMov (OpMem Rbp (nativeSlotOff 1)) (OpReg Rax), ILabel ".Lrt_rt_outer", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 1)), IMov (OpReg Rsi) (OpMem Rbp (nativeSlotOff 8)), IMov (OpReg Rdx) (OpImm 8192), IMov (OpReg Rax) (OpImm 217), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_rt_read_fail", IJcc "je" ".Lrt_rt_dir_done", IMov (OpMem Rbp (nativeSlotOff 3)) (OpReg Rax), IMov (OpMem Rbp (nativeSlotOff 2)) (OpImm 0), ILabel ".Lrt_rt_entry", IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 2)), ICmp (OpReg Rcx) (OpMem Rbp (nativeSlotOff 3)), IJcc "jge" ".Lrt_rt_outer", IMov (OpReg R8) (OpMem Rbp (nativeSlotOff 8)), IBinReg "add" R8 (OpReg Rcx), IMov (OpReg Rax) (OpMem R8 16), IBinReg "and" Rax (OpImm 65535), IMov (OpMem Rbp (nativeSlotOff 4)) (OpReg Rax), ILeaMem R9 R8 19, IMov (OpMem Rbp (nativeSlotOff 5)) (OpReg R9), IMovzx Rax (OpMem R9 0), ICmp (OpReg Rax) (OpImm 46), IJcc "jne" ".Lrt_rt_child", IMovzx Rax (OpMem R9 1), ICmp (OpReg Rax) (OpImm 0), IJcc "je" ".Lrt_rt_skip", ICmp (OpReg Rax) (OpImm 46), IJcc "jne" ".Lrt_rt_child", IMovzx Rax (OpMem R9 2), ICmp (OpReg Rax) (OpImm 0), IJcc "je" ".Lrt_rt_skip", ILabel ".Lrt_rt_child", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 7)), ILea Rsi pathBufLabel, IMov (OpReg Rdx) (OpImm 4096), ICall (nativeRtLabel "c_strcpy"), IMov (OpReg Rsi) (OpReg Rax), IMov (OpReg Rcx) (OpReg Rsi), IBinReg "sub" Rcx (OpImm 1), IMovzx Rax (OpMem Rcx 0), ICmp (OpReg Rax) (OpImm 47), IJcc "je" ".Lrt_rt_sep_done", IMovByteOp (OpMem Rsi 0) 47, IBinReg "add" Rsi (OpImm 1), ILabel ".Lrt_rt_sep_done", ILea Rdx pathBufLabel, IBinReg "add" Rdx (OpImm 4096), IBinReg "sub" Rdx (OpReg Rsi), IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 5)), ICall (nativeRtLabel "c_strcpy"), ILea Rdi pathBufLabel, ICall (nativeRtLabel "remove_tree"), ICmp (OpReg Rax) (OpImm 0), IJcc "jne" ".Lrt_rt_child_fail", ILabel ".Lrt_rt_skip", IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 2)), IBinReg "add" Rcx (OpMem Rbp (nativeSlotOff 4)), IMov (OpMem Rbp (nativeSlotOff 2)) (OpReg Rcx), IJmp ".Lrt_rt_entry", ILabel ".Lrt_rt_child_fail", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 1)), IMov (OpReg Rax) (OpImm 3), ISyscall, IMov (OpReg Rax) (OpImm 1), IRet, ILabel ".Lrt_rt_dir_done", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 1)), IMov (OpReg Rax) (OpImm 3), ISyscall, IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 7)), IMov (OpReg Rax) (OpImm 84), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jge" ".Lrt_rt_ok", ICmp (OpReg Rax) (OpImm (0 - 2)), IJcc "je" ".Lrt_rt_ok", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm 1), IRet, ILabel ".Lrt_rt_file", IMov (OpReg Rsi) (OpMem Rbp (nativeSlotOff 7)), IMov (OpReg Rdi) (OpImm (0 - 100)), IBinReg "xor" Rdx (OpReg Rdx), IMov (OpReg Rax) (OpImm 263), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jge" ".Lrt_rt_ok", ICmp (OpReg Rax) (OpImm (0 - 2)), IJcc "je" ".Lrt_rt_ok", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm 1), IRet, ILabel ".Lrt_rt_read_fail", IMov (OpMem Rbp (nativeSlotOff 6)) (OpReg Rax), IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 1)), IMov (OpReg Rax) (OpImm 3), ISyscall, IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 6)), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm 1), IRet, ILabel ".Lrt_rt_open_fail", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm 1), IRet, ILabel ".Lrt_rt_ok", IMov (OpReg Rax) (OpImm 0)]
+    [IBinReg "sub" Rsp (OpImm 12288), IMov (OpMem Rbp (nativeSlotOff 7)) (OpReg Rsp), IMov (OpReg Rax) (OpReg Rsp), IBinReg "add" Rax (OpImm pathMaxBytes), IMov (OpMem Rbp (nativeSlotOff 8)) (OpReg Rax), IMov (OpReg R11) (OpRip stackLimitLabel), ITest R11 R11, IJcc "jnz" ".Lrt_rt_floor", IMov (OpReg R11) (OpRip stackTopLabel), IBinReg "sub" R11 (OpImm 4194304), ILabel ".Lrt_rt_floor", ICmp (OpReg Rsp) (OpReg R11), IJcc "jb" (nativeRtLabel "trap_rmtree_deep"), IMov (OpReg Rsi) (OpReg Rsp), IMov (OpReg Rdx) (OpImm pathMaxBytes), ICall (nativeRtLabel "c_strcpy"), IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rax), IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 7)), ICall (nativeRtLabel "lstat_path"), ICmp (OpReg Rax) (OpImm 0), IJcc "jge" ".Lrt_rt_stat_ok", ICmp (OpReg Rax) (OpImm (0 - errnoEnoent)), IJcc "je" ".Lrt_rt_ok", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm 1), IRet, ILabel ".Lrt_rt_stat_ok", ILea Rcx statBufLabel, IMov (OpReg Rax) (OpMem Rcx statOffMode), IBinReg "and" Rax (OpImm statModeTypeMask), ICmp (OpReg Rax) (OpImm statModeDir), IJcc "jne" ".Lrt_rt_file", IMov (OpReg Rsi) (OpMem Rbp (nativeSlotOff 7)), IMov (OpReg Rdi) (OpImm atFdCwd), IMov (OpReg Rdx) (OpImm 65536), IBinReg "xor" R10 (OpReg R10), IMov (OpReg Rax) (OpImm (sysNr "openat")), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_rt_open_fail", IMov (OpMem Rbp (nativeSlotOff 1)) (OpReg Rax), ILabel ".Lrt_rt_outer", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 1)), IMov (OpReg Rsi) (OpMem Rbp (nativeSlotOff 8)), IMov (OpReg Rdx) (OpImm 8192), IMov (OpReg Rax) (OpImm (sysNr "getdents64")), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_rt_read_fail", IJcc "je" ".Lrt_rt_dir_done", IMov (OpMem Rbp (nativeSlotOff 3)) (OpReg Rax), IMov (OpMem Rbp (nativeSlotOff 2)) (OpImm 0), ILabel ".Lrt_rt_entry", IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 2)), ICmp (OpReg Rcx) (OpMem Rbp (nativeSlotOff 3)), IJcc "jge" ".Lrt_rt_outer", IMov (OpReg R8) (OpMem Rbp (nativeSlotOff 8)), IBinReg "add" R8 (OpReg Rcx), IMov (OpReg Rax) (OpMem R8 16), IBinReg "and" Rax (OpImm 65535), IMov (OpMem Rbp (nativeSlotOff 4)) (OpReg Rax), ILeaMem R9 R8 19, IMov (OpMem Rbp (nativeSlotOff 5)) (OpReg R9), IMovzx Rax (OpMem R9 0), ICmp (OpReg Rax) (OpImm 46), IJcc "jne" ".Lrt_rt_child", IMovzx Rax (OpMem R9 1), ICmp (OpReg Rax) (OpImm 0), IJcc "je" ".Lrt_rt_skip", ICmp (OpReg Rax) (OpImm 46), IJcc "jne" ".Lrt_rt_child", IMovzx Rax (OpMem R9 2), ICmp (OpReg Rax) (OpImm 0), IJcc "je" ".Lrt_rt_skip", ILabel ".Lrt_rt_child", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 7)), ILea Rsi pathBufLabel, IMov (OpReg Rdx) (OpImm pathMaxBytes), ICall (nativeRtLabel "c_strcpy"), IMov (OpReg Rsi) (OpReg Rax), IMov (OpReg Rcx) (OpReg Rsi), IBinReg "sub" Rcx (OpImm 1), IMovzx Rax (OpMem Rcx 0), ICmp (OpReg Rax) (OpImm 47), IJcc "je" ".Lrt_rt_sep_done", IMovByteOp (OpMem Rsi 0) 47, IBinReg "add" Rsi (OpImm 1), ILabel ".Lrt_rt_sep_done", ILea Rdx pathBufLabel, IBinReg "add" Rdx (OpImm pathMaxBytes), IBinReg "sub" Rdx (OpReg Rsi), IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 5)), ICall (nativeRtLabel "c_strcpy"), ILea Rdi pathBufLabel, ICall (nativeRtLabel "remove_tree"), ICmp (OpReg Rax) (OpImm 0), IJcc "jne" ".Lrt_rt_child_fail", ILabel ".Lrt_rt_skip", IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 2)), IBinReg "add" Rcx (OpMem Rbp (nativeSlotOff 4)), IMov (OpMem Rbp (nativeSlotOff 2)) (OpReg Rcx), IJmp ".Lrt_rt_entry", ILabel ".Lrt_rt_child_fail", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 1)), IMov (OpReg Rax) (OpImm (sysNr "close")), ISyscall, IMov (OpReg Rax) (OpImm 1), IRet, ILabel ".Lrt_rt_dir_done", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 1)), IMov (OpReg Rax) (OpImm (sysNr "close")), ISyscall, IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 7)), IMov (OpReg Rax) (OpImm (sysNr "rmdir")), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jge" ".Lrt_rt_ok", ICmp (OpReg Rax) (OpImm (0 - errnoEnoent)), IJcc "je" ".Lrt_rt_ok", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm 1), IRet, ILabel ".Lrt_rt_file", IMov (OpReg Rsi) (OpMem Rbp (nativeSlotOff 7)), IMov (OpReg Rdi) (OpImm atFdCwd), IBinReg "xor" Rdx (OpReg Rdx), IMov (OpReg Rax) (OpImm (sysNr "unlinkat")), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jge" ".Lrt_rt_ok", ICmp (OpReg Rax) (OpImm (0 - errnoEnoent)), IJcc "je" ".Lrt_rt_ok", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm 1), IRet, ILabel ".Lrt_rt_read_fail", IMov (OpMem Rbp (nativeSlotOff 6)) (OpReg Rax), IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 1)), IMov (OpReg Rax) (OpImm (sysNr "close")), ISyscall, IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 6)), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm 1), IRet, ILabel ".Lrt_rt_open_fail", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm 1), IRet, ILabel ".Lrt_rt_ok", IMov (OpReg Rax) (OpImm 0)]
 
 -- | `rdi` = Vuna String path → rax = 0/1（递归删除；`remove_tree` 吃 C 路径）。
 tryRemoveTreeFn : NativeFunc
@@ -1174,7 +1211,7 @@ dirOpenFn =
   rtFunc
     "dir_open"
     0
-    [IMov (OpReg Rsi) (OpReg Rdi), IMov (OpReg Rdi) (OpImm (0 - 100)), IMov (OpReg Rdx) (OpImm 65536), IBinReg "xor" R10 (OpReg R10), IMov (OpReg Rax) (OpImm 257), ISyscall]
+    [IMov (OpReg Rsi) (OpReg Rdi), IMov (OpReg Rdi) (OpImm atFdCwd), IMov (OpReg Rdx) (OpImm 65536), IBinReg "xor" R10 (OpReg R10), IMov (OpReg Rax) (OpImm (sysNr "openat")), ISyscall]
 
 -- | `rdi` = fd → rax = 名字个数（写 `rt_dir_names`），失败返回负 errno。
 --   名字数组上限 4032；超出报 io 错误（不静默丢弃条目）。
@@ -1183,11 +1220,11 @@ dirNamesFn =
   rtFunc
     "dir_names"
     48
-    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IMov (OpMem Rbp (nativeSlotOff 1)) (OpImm 0), ILabel ".Lrt_dn_outer", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 0)), ILea Rsi dirBufLabel, IMov (OpReg Rdx) (OpImm 32768), IMov (OpReg Rax) (OpImm 217), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_dn_ret", IJcc "je" ".Lrt_dn_done", IMov (OpMem Rbp (nativeSlotOff 3)) (OpReg Rax), IMov (OpMem Rbp (nativeSlotOff 2)) (OpImm 0), ILabel ".Lrt_dn_entry", IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 2)), ICmp (OpReg Rcx) (OpMem Rbp (nativeSlotOff 3)), IJcc "jge" ".Lrt_dn_outer", ILea R8 dirBufLabel, IBinReg "add" R8 (OpReg Rcx), IMov (OpReg Rax) (OpMem R8 16), IBinReg "and" Rax (OpImm 65535), IMov (OpMem Rbp (nativeSlotOff 4)) (OpReg Rax), ILeaMem R9 R8 19, IMov (OpMem Rbp (nativeSlotOff 5)) (OpReg R9), IMovzx Rax (OpMem R9 0), ICmp (OpReg Rax) (OpImm 46), IJcc "jne" ".Lrt_dn_take", IMovzx Rax (OpMem R9 1), ICmp (OpReg Rax) (OpImm 0), IJcc "je" ".Lrt_dn_skip", ICmp (OpReg Rax) (OpImm 46), IJcc "jne" ".Lrt_dn_take", IMovzx Rax (OpMem R9 2), ICmp (OpReg Rax) (OpImm 0), IJcc "je" ".Lrt_dn_skip", ILabel ".Lrt_dn_take", IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 1)), ICmp (OpReg Rcx) (OpImm 4032), IJcc "jl" ".Lrt_dn_store", IMov (OpReg Rax) (OpImm (0 - 5)), IRet, ILabel ".Lrt_dn_store", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 5)), ICall (nativeRtLabel "str_from_c"), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 1)), ILea Rdx dirNamesLabel, IBinReg "shl" Rcx (OpImm 3), IBinReg "add" Rdx (OpReg Rcx), IMov (OpMem Rdx 0) (OpReg Rax), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 1)), IBinReg "add" Rcx (OpImm 1), IMov (OpMem Rbp (nativeSlotOff 1)) (OpReg Rcx), ILabel ".Lrt_dn_skip", IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 2)), IBinReg "add" Rcx (OpMem Rbp (nativeSlotOff 4)), IMov (OpMem Rbp (nativeSlotOff 2)) (OpReg Rcx), IJmp ".Lrt_dn_entry", ILabel ".Lrt_dn_done", IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 1)), IRet, ILabel ".Lrt_dn_ret", IRet]
+    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IMov (OpMem Rbp (nativeSlotOff 1)) (OpImm 0), ILabel ".Lrt_dn_outer", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 0)), ILea Rsi dirBufLabel, IMov (OpReg Rdx) (OpImm 32768), IMov (OpReg Rax) (OpImm (sysNr "getdents64")), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_dn_ret", IJcc "je" ".Lrt_dn_done", IMov (OpMem Rbp (nativeSlotOff 3)) (OpReg Rax), IMov (OpMem Rbp (nativeSlotOff 2)) (OpImm 0), ILabel ".Lrt_dn_entry", IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 2)), ICmp (OpReg Rcx) (OpMem Rbp (nativeSlotOff 3)), IJcc "jge" ".Lrt_dn_outer", ILea R8 dirBufLabel, IBinReg "add" R8 (OpReg Rcx), IMov (OpReg Rax) (OpMem R8 16), IBinReg "and" Rax (OpImm 65535), IMov (OpMem Rbp (nativeSlotOff 4)) (OpReg Rax), ILeaMem R9 R8 19, IMov (OpMem Rbp (nativeSlotOff 5)) (OpReg R9), IMovzx Rax (OpMem R9 0), ICmp (OpReg Rax) (OpImm 46), IJcc "jne" ".Lrt_dn_take", IMovzx Rax (OpMem R9 1), ICmp (OpReg Rax) (OpImm 0), IJcc "je" ".Lrt_dn_skip", ICmp (OpReg Rax) (OpImm 46), IJcc "jne" ".Lrt_dn_take", IMovzx Rax (OpMem R9 2), ICmp (OpReg Rax) (OpImm 0), IJcc "je" ".Lrt_dn_skip", ILabel ".Lrt_dn_take", IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 1)), ICmp (OpReg Rcx) (OpImm 4032), IJcc "jl" ".Lrt_dn_store", IMov (OpReg Rax) (OpImm (0 - 5)), IRet, ILabel ".Lrt_dn_store", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 5)), ICall (nativeRtLabel "str_from_c"), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 1)), ILea Rdx dirNamesLabel, IBinReg "shl" Rcx (OpImm 3), IBinReg "add" Rdx (OpReg Rcx), IMov (OpMem Rdx 0) (OpReg Rax), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 1)), IBinReg "add" Rcx (OpImm 1), IMov (OpMem Rbp (nativeSlotOff 1)) (OpReg Rcx), ILabel ".Lrt_dn_skip", IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 2)), IBinReg "add" Rcx (OpMem Rbp (nativeSlotOff 4)), IMov (OpMem Rbp (nativeSlotOff 2)) (OpReg Rcx), IJmp ".Lrt_dn_entry", ILabel ".Lrt_dn_done", IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 1)), IRet, ILabel ".Lrt_dn_ret", IRet]
 
 -- | `rdi` = fd → rax = 0（忽略关闭失败）。
 dirCloseFn : NativeFunc
-dirCloseFn = rtFunc "dir_close" 0 [IMov (OpReg Rax) (OpImm 3), ISyscall, IMov (OpReg Rax) (OpImm 0)]
+dirCloseFn = rtFunc "dir_close" 0 [IMov (OpReg Rax) (OpImm (sysNr "close")), ISyscall, IMov (OpReg Rax) (OpImm 0)]
 
 -- ---------------------------------------------------------------
 -- 宿主层：进程（fork / execve / wait4）
@@ -1217,7 +1254,7 @@ sigBlockFn =
   rtFunc
     "sig_block"
     0
-    [IBinReg "xor" Rdi (OpReg Rdi), ILea Rsi sigalrmSetLabel, IBinReg "xor" Rdx (OpReg Rdx), IMov (OpReg R10) (OpImm 8), IMov (OpReg Rax) (OpImm 14), ISyscall, IRet]
+    [IBinReg "xor" Rdi (OpReg Rdi), ILea Rsi sigalrmSetLabel, IBinReg "xor" Rdx (OpReg Rdx), IMov (OpReg R10) (OpImm 8), IMov (OpReg Rax) (OpImm (sysNr "rt_sigprocmask")), ISyscall, IRet]
 
 -- | `rt_sigprocmask(SIG_UNBLOCK, rt_sigalrm_set, NULL, 8)`：确实成了组首之后再放行 SIGALRM。
 --   屏蔽字跨 `execve` 保留，子进程在 `execve` 前必须解掉。
@@ -1226,7 +1263,7 @@ sigUnblockFn =
   rtFunc
     "sig_unblock"
     0
-    [IMov (OpReg Rdi) (OpImm 1), ILea Rsi sigalrmSetLabel, IBinReg "xor" Rdx (OpReg Rdx), IMov (OpReg R10) (OpImm 8), IMov (OpReg Rax) (OpImm 14), ISyscall, IRet]
+    [IMov (OpReg Rdi) (OpImm 1), ILea Rsi sigalrmSetLabel, IBinReg "xor" Rdx (OpReg Rdx), IMov (OpReg R10) (OpImm 8), IMov (OpReg Rax) (OpImm (sysNr "rt_sigprocmask")), ISyscall, IRet]
 
 -- | `rdi` = C dir、`rsi` = C 命令行 → rax = 退出码（-1 = 失败，状态已写）。
 --   语义对齐 `dtp_runIn`：`chdir(dir)` → `/bin/sh -c cmd` → 恢复 cwd。
@@ -1239,7 +1276,7 @@ cmdRunShFn =
   rtFunc
     "cmd_run_sh"
     32
-    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IMov (OpMem Rbp (nativeSlotOff 1)) (OpReg Rsi), IBinReg "xor" Rax (OpReg Rax), IMov (OpRip hostStatusLabel) (OpReg Rax), ILea Rdi cwdBufLabel, IMov (OpReg Rsi) (OpImm 4096), IMov (OpReg Rax) (OpImm 79), ISyscall, IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 0)), IMov (OpReg Rax) (OpImm 80), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_sh_fail", ILea Rcx (nativeDataLabel "sh_path"), ILea Rdx shArgvLabel, IMov (OpMem Rdx 0) (OpReg Rcx), ILea Rcx (nativeDataLabel "sh_dash_c"), IMov (OpMem Rdx 8) (OpReg Rcx), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 1)), IMov (OpMem Rdx 16) (OpReg Rcx), IMov (OpMem Rdx 24) (OpImm 0), IMov (OpReg Rax) (OpRip timeoutArmedLabel), ITest Rax Rax, IJcc "jz" ".Lrt_sh_noblk", ICall (nativeRtLabel "sig_block"), ILabel ".Lrt_sh_noblk", IMov (OpReg Rax) (OpImm 57), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_sh_fork_fail", IJcc "je" ".Lrt_sh_child", IMov (OpMem Rbp (nativeSlotOff 3)) (OpReg Rax), IMov (OpReg Rax) (OpRip timeoutArmedLabel), ITest Rax Rax, IJcc "jz" ".Lrt_sh_wait", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 3)), IMov (OpReg Rsi) (OpReg Rdi), IMov (OpReg Rax) (OpImm 109), ISyscall, IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 3)), ICall (nativeRtLabel "child_push"), ICall (nativeRtLabel "sig_unblock"), ILabel ".Lrt_sh_wait", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 3)), ILea Rsi statBufLabel, IBinReg "xor" Rdx (OpReg Rdx), IBinReg "xor" R10 (OpReg R10), IMov (OpReg Rax) (OpImm 61), ISyscall, IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 3)), ICall (nativeRtLabel "child_drop"), ILea Rdi cwdBufLabel, IMov (OpReg Rax) (OpImm 80), ISyscall, ILea Rcx statBufLabel, IMov (OpReg Rax) (OpMem Rcx 0), IMov (OpReg Rcx) (OpReg Rax), IBinReg "and" Rcx (OpImm 127), ICmp (OpReg Rcx) (OpImm 0), IJcc "jne" ".Lrt_sh_signaled", IBinReg "shr" Rax (OpImm 8), IBinReg "and" Rax (OpImm 255), IRet, ILabel ".Lrt_sh_signaled", IMov (OpReg Rax) (OpImm 1), IRet, ILabel ".Lrt_sh_child", IMov (OpReg Rax) (OpRip timeoutArmedLabel), ITest Rax Rax, IJcc "jz" ".Lrt_sh_pg", IBinReg "xor" Rdi (OpReg Rdi), IBinReg "xor" Rsi (OpReg Rsi), IMov (OpReg Rax) (OpImm 109), ISyscall, ICall (nativeRtLabel "sig_unblock"), ILabel ".Lrt_sh_pg", ICall (nativeRtLabel "env_filter"), IMov (OpReg Rdx) (OpReg Rax), ILea Rdi (nativeDataLabel "sh_path"), ILea Rsi shArgvLabel, IMov (OpReg Rax) (OpImm 59), ISyscall, IMov (OpReg Rdi) (OpImm 127), IMov (OpReg Rax) (OpImm 60), ISyscall, ILabel ".Lrt_sh_fork_fail", IMov (OpMem Rbp (nativeSlotOff 2)) (OpReg Rax), ICall (nativeRtLabel "sig_unblock"), ILea Rdi cwdBufLabel, IMov (OpReg Rax) (OpImm 80), ISyscall, IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 2)), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm (0 - 1)), IRet, ILabel ".Lrt_sh_fail", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm (0 - 1))]
+    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IMov (OpMem Rbp (nativeSlotOff 1)) (OpReg Rsi), IBinReg "xor" Rax (OpReg Rax), IMov (OpRip hostStatusLabel) (OpReg Rax), ILea Rdi cwdBufLabel, IMov (OpReg Rsi) (OpImm pathMaxBytes), IMov (OpReg Rax) (OpImm (sysNr "getcwd")), ISyscall, IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 0)), IMov (OpReg Rax) (OpImm (sysNr "chdir")), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_sh_fail", ILea Rcx (nativeDataLabel "sh_path"), ILea Rdx shArgvLabel, IMov (OpMem Rdx 0) (OpReg Rcx), ILea Rcx (nativeDataLabel "sh_dash_c"), IMov (OpMem Rdx 8) (OpReg Rcx), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 1)), IMov (OpMem Rdx 16) (OpReg Rcx), IMov (OpMem Rdx 24) (OpImm 0), IMov (OpReg Rax) (OpRip timeoutArmedLabel), ITest Rax Rax, IJcc "jz" ".Lrt_sh_noblk", ICall (nativeRtLabel "sig_block"), ILabel ".Lrt_sh_noblk", IMov (OpReg Rax) (OpImm (sysNr "fork")), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_sh_fork_fail", IJcc "je" ".Lrt_sh_child", IMov (OpMem Rbp (nativeSlotOff 3)) (OpReg Rax), IMov (OpReg Rax) (OpRip timeoutArmedLabel), ITest Rax Rax, IJcc "jz" ".Lrt_sh_wait", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 3)), IMov (OpReg Rsi) (OpReg Rdi), IMov (OpReg Rax) (OpImm (sysNr "setpgid")), ISyscall, IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 3)), ICall (nativeRtLabel "child_push"), ICall (nativeRtLabel "sig_unblock"), ILabel ".Lrt_sh_wait", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 3)), ILea Rsi statBufLabel, IBinReg "xor" Rdx (OpReg Rdx), IBinReg "xor" R10 (OpReg R10), IMov (OpReg Rax) (OpImm (sysNr "wait4")), ISyscall, IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 3)), ICall (nativeRtLabel "child_drop"), ILea Rdi cwdBufLabel, IMov (OpReg Rax) (OpImm (sysNr "chdir")), ISyscall, ILea Rcx statBufLabel, IMov (OpReg Rax) (OpMem Rcx 0), IMov (OpReg Rcx) (OpReg Rax), IBinReg "and" Rcx (OpImm 127), ICmp (OpReg Rcx) (OpImm 0), IJcc "jne" ".Lrt_sh_signaled", IBinReg "shr" Rax (OpImm 8), IBinReg "and" Rax (OpImm 255), IRet, ILabel ".Lrt_sh_signaled", IMov (OpReg Rax) (OpImm 1), IRet, ILabel ".Lrt_sh_child", IMov (OpReg Rax) (OpRip timeoutArmedLabel), ITest Rax Rax, IJcc "jz" ".Lrt_sh_pg", IBinReg "xor" Rdi (OpReg Rdi), IBinReg "xor" Rsi (OpReg Rsi), IMov (OpReg Rax) (OpImm (sysNr "setpgid")), ISyscall, ICall (nativeRtLabel "sig_unblock"), ILabel ".Lrt_sh_pg", ICall (nativeRtLabel "env_filter"), IMov (OpReg Rdx) (OpReg Rax), ILea Rdi (nativeDataLabel "sh_path"), ILea Rsi shArgvLabel, IMov (OpReg Rax) (OpImm (sysNr "execve")), ISyscall, IMov (OpReg Rdi) (OpImm 127), IMov (OpReg Rax) (OpImm (sysNr "exit")), ISyscall, ILabel ".Lrt_sh_fork_fail", IMov (OpMem Rbp (nativeSlotOff 2)) (OpReg Rax), ICall (nativeRtLabel "sig_unblock"), ILea Rdi cwdBufLabel, IMov (OpReg Rax) (OpImm (sysNr "chdir")), ISyscall, IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 2)), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm (0 - 1)), IRet, ILabel ".Lrt_sh_fail", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm (0 - 1))]
 
 -- | `rdi` = argv 指针数组（argv[0] 必须是本进程路径）、`rsi` = argc → rax = pid。
 --   装了总超时时子进程先 `setpgid(0, 0)`；pid 记进 `rt_child_pids`，`wait_pid` 负责摘掉。
@@ -1249,7 +1286,7 @@ spawnExecFn =
   rtFunc
     "spawn_exec"
     32
-    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IMov (OpMem Rbp (nativeSlotOff 1)) (OpReg Rsi), IMov (OpReg Rax) (OpRip timeoutArmedLabel), ITest Rax Rax, IJcc "jz" ".Lrt_sp_noblk", ICall (nativeRtLabel "sig_block"), ILabel ".Lrt_sp_noblk", IMov (OpReg Rax) (OpImm 57), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_sp_fail", IJcc "je" ".Lrt_sp_child", IMov (OpMem Rbp (nativeSlotOff 2)) (OpReg Rax), IMov (OpReg Rax) (OpRip timeoutArmedLabel), ITest Rax Rax, IJcc "jz" ".Lrt_sp_ret", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 2)), IMov (OpReg Rsi) (OpReg Rdi), IMov (OpReg Rax) (OpImm 109), ISyscall, IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 2)), ICall (nativeRtLabel "child_push"), ICall (nativeRtLabel "sig_unblock"), ILabel ".Lrt_sp_ret", IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 2)), IRet, ILabel ".Lrt_sp_child", IMov (OpReg Rax) (OpRip timeoutArmedLabel), ITest Rax Rax, IJcc "jz" ".Lrt_sp_pg", IBinReg "xor" Rdi (OpReg Rdi), IBinReg "xor" Rsi (OpReg Rsi), IMov (OpReg Rax) (OpImm 109), ISyscall, ICall (nativeRtLabel "sig_unblock"), ILabel ".Lrt_sp_pg", ICall (nativeRtLabel "env_filter"), IMov (OpReg Rdx) (OpReg Rax), ILea Rdi (nativeDataLabel "proc_self_exe"), IMov (OpReg Rsi) (OpMem Rbp (nativeSlotOff 0)), IMov (OpReg Rax) (OpImm 59), ISyscall, IMov (OpReg Rdi) (OpImm 127), IMov (OpReg Rax) (OpImm 60), ISyscall, ILabel ".Lrt_sp_fail", IMov (OpMem Rbp (nativeSlotOff 3)) (OpReg Rax), ICall (nativeRtLabel "sig_unblock"), IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 3)), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm (0 - 1))]
+    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IMov (OpMem Rbp (nativeSlotOff 1)) (OpReg Rsi), IMov (OpReg Rax) (OpRip timeoutArmedLabel), ITest Rax Rax, IJcc "jz" ".Lrt_sp_noblk", ICall (nativeRtLabel "sig_block"), ILabel ".Lrt_sp_noblk", IMov (OpReg Rax) (OpImm (sysNr "fork")), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_sp_fail", IJcc "je" ".Lrt_sp_child", IMov (OpMem Rbp (nativeSlotOff 2)) (OpReg Rax), IMov (OpReg Rax) (OpRip timeoutArmedLabel), ITest Rax Rax, IJcc "jz" ".Lrt_sp_ret", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 2)), IMov (OpReg Rsi) (OpReg Rdi), IMov (OpReg Rax) (OpImm (sysNr "setpgid")), ISyscall, IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 2)), ICall (nativeRtLabel "child_push"), ICall (nativeRtLabel "sig_unblock"), ILabel ".Lrt_sp_ret", IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 2)), IRet, ILabel ".Lrt_sp_child", IMov (OpReg Rax) (OpRip timeoutArmedLabel), ITest Rax Rax, IJcc "jz" ".Lrt_sp_pg", IBinReg "xor" Rdi (OpReg Rdi), IBinReg "xor" Rsi (OpReg Rsi), IMov (OpReg Rax) (OpImm (sysNr "setpgid")), ISyscall, ICall (nativeRtLabel "sig_unblock"), ILabel ".Lrt_sp_pg", ICall (nativeRtLabel "env_filter"), IMov (OpReg Rdx) (OpReg Rax), ILea Rdi (nativeDataLabel "proc_self_exe"), IMov (OpReg Rsi) (OpMem Rbp (nativeSlotOff 0)), IMov (OpReg Rax) (OpImm (sysNr "execve")), ISyscall, IMov (OpReg Rdi) (OpImm 127), IMov (OpReg Rax) (OpImm (sysNr "exit")), ISyscall, ILabel ".Lrt_sp_fail", IMov (OpMem Rbp (nativeSlotOff 3)) (OpReg Rax), ICall (nativeRtLabel "sig_unblock"), IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 3)), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm (0 - 1))]
 
 -- | `rdi` = pid → rax = 退出码（被信号杀死按 1；失败写状态槽）。返回前按 pid 从
 --   `rt_child_pids` 摘掉它，其余在跑的子进程槽不受影响。
@@ -1258,11 +1295,11 @@ waitPidFn =
   rtFunc
     "wait_pid"
     16
-    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IBinReg "xor" Rax (OpReg Rax), IMov (OpRip hostStatusLabel) (OpReg Rax), ILea Rsi statBufLabel, IBinReg "xor" Rdx (OpReg Rdx), IBinReg "xor" R10 (OpReg R10), IMov (OpReg Rax) (OpImm 61), ISyscall, IMov (OpMem Rbp (nativeSlotOff 1)) (OpReg Rax), IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 0)), ICall (nativeRtLabel "child_drop"), IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 1)), ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_wp_fail", ILea Rcx statBufLabel, IMov (OpReg Rax) (OpMem Rcx 0), IMov (OpReg Rcx) (OpReg Rax), IBinReg "and" Rcx (OpImm 127), ICmp (OpReg Rcx) (OpImm 0), IJcc "jne" ".Lrt_wp_signaled", IBinReg "shr" Rax (OpImm 8), IBinReg "and" Rax (OpImm 255), IRet, ILabel ".Lrt_wp_signaled", IMov (OpReg Rax) (OpImm 1), IRet, ILabel ".Lrt_wp_fail", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm 1)]
+    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IBinReg "xor" Rax (OpReg Rax), IMov (OpRip hostStatusLabel) (OpReg Rax), ILea Rsi statBufLabel, IBinReg "xor" Rdx (OpReg Rdx), IBinReg "xor" R10 (OpReg R10), IMov (OpReg Rax) (OpImm (sysNr "wait4")), ISyscall, IMov (OpMem Rbp (nativeSlotOff 1)) (OpReg Rax), IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 0)), ICall (nativeRtLabel "child_drop"), IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 1)), ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_wp_fail", ILea Rcx statBufLabel, IMov (OpReg Rax) (OpMem Rcx 0), IMov (OpReg Rcx) (OpReg Rax), IBinReg "and" Rcx (OpImm 127), ICmp (OpReg Rcx) (OpImm 0), IJcc "jne" ".Lrt_wp_signaled", IBinReg "shr" Rax (OpImm 8), IBinReg "and" Rax (OpImm 255), IRet, ILabel ".Lrt_wp_signaled", IMov (OpReg Rax) (OpImm 1), IRet, ILabel ".Lrt_wp_fail", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm 1)]
 
 -- | `rdi` = 退出码：真实退出进程（不返回）。
 exitWithFn : NativeFunc
-exitWithFn = rtFunc "exit_with" 0 [IMov (OpReg Rax) (OpImm 60), ISyscall]
+exitWithFn = rtFunc "exit_with" 0 [IMov (OpReg Rax) (OpImm (sysNr "exit")), ISyscall]
 
 -- ---------------------------------------------------------------
 -- 资源限制：内存预算 / 核数（亲和性）/ 总超时
@@ -1307,7 +1344,7 @@ cgroupCpusFn : NativeFunc
 cgroupCpusFn =
   rtRawFunc
     "cgroup_cpus"
-    [IMov (OpReg Rdi) (OpImm (0 - 100)), ILea Rsi (nativeDataLabel "cg_cpu_max"), IBinReg "xor" Rdx (OpReg Rdx), IBinReg "xor" R10 (OpReg R10), IMov (OpReg Rax) (OpImm 257), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_cg_none", IMov (OpReg R8) (OpReg Rax), IMov (OpReg Rdi) (OpReg R8), ILea Rsi cgBufLabel, IMov (OpReg Rdx) (OpImm 63), IBinReg "xor" Rax (OpReg Rax), ISyscall, IMov (OpReg R9) (OpReg Rax), IMov (OpReg Rdi) (OpReg R8), IMov (OpReg Rax) (OpImm 3), ISyscall, ICmp (OpReg R9) (OpImm 0), IJcc "jle" ".Lrt_cg_none", ILea R10 cgBufLabel, IMovByteOp (OpMemX R10 R9 0) 0, IMovzx Rax (OpMem R10 0), ICmp (OpReg Rax) (OpImm 109), IJcc "je" ".Lrt_cg_none", IMov (OpReg Rdi) (OpReg R10), ICall (nativeRtLabel "parse_u64"), ITest Rdx Rdx, IJcc "jz" ".Lrt_cg_none", IMov (OpReg R11) (OpReg Rax), IBinReg "xor" Rcx (OpReg Rcx), ILabel ".Lrt_cg_scan", IMovzx Rax (OpMemX R10 Rcx 0), ICmp (OpReg Rax) (OpImm 32), IJcc "je" ".Lrt_cg_space", ITest Rax Rax, IJcc "jz" ".Lrt_cg_none", IBinReg "add" Rcx (OpImm 1), IJmp ".Lrt_cg_scan", ILabel ".Lrt_cg_space", IBinReg "add" Rcx (OpImm 1), IMov (OpReg Rdi) (OpReg R10), IBinReg "add" Rdi (OpReg Rcx), ICall (nativeRtLabel "parse_u64"), ITest Rdx Rdx, IJcc "jz" ".Lrt_cg_none", ITest Rax Rax, IJcc "jz" ".Lrt_cg_none", IMov (OpReg Rcx) (OpReg Rax), IMov (OpReg Rax) (OpReg R11), IBinReg "add" Rax (OpReg Rcx), IBinReg "sub" Rax (OpImm 1), IBinReg "xor" Rdx (OpReg Rdx), IDivUnsigned Rcx, ITest Rax Rax, IJcc "jz" ".Lrt_cg_none", IRet, ILabel ".Lrt_cg_none", IBinReg "xor" Rax (OpReg Rax), IRet]
+    [IMov (OpReg Rdi) (OpImm atFdCwd), ILea Rsi (nativeDataLabel "cg_cpu_max"), IBinReg "xor" Rdx (OpReg Rdx), IBinReg "xor" R10 (OpReg R10), IMov (OpReg Rax) (OpImm (sysNr "openat")), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_cg_none", IMov (OpReg R8) (OpReg Rax), IMov (OpReg Rdi) (OpReg R8), ILea Rsi cgBufLabel, IMov (OpReg Rdx) (OpImm 63), IMov (OpReg Rax) (OpImm (sysNr "read")), ISyscall, IMov (OpReg R9) (OpReg Rax), IMov (OpReg Rdi) (OpReg R8), IMov (OpReg Rax) (OpImm (sysNr "close")), ISyscall, ICmp (OpReg R9) (OpImm 0), IJcc "jle" ".Lrt_cg_none", ILea R10 cgBufLabel, IMovByteOp (OpMemX R10 R9 0) 0, IMovzx Rax (OpMem R10 0), ICmp (OpReg Rax) (OpImm 109), IJcc "je" ".Lrt_cg_none", IMov (OpReg Rdi) (OpReg R10), ICall (nativeRtLabel "parse_u64"), ITest Rdx Rdx, IJcc "jz" ".Lrt_cg_none", IMov (OpReg R11) (OpReg Rax), IBinReg "xor" Rcx (OpReg Rcx), ILabel ".Lrt_cg_scan", IMovzx Rax (OpMemX R10 Rcx 0), ICmp (OpReg Rax) (OpImm 32), IJcc "je" ".Lrt_cg_space", ITest Rax Rax, IJcc "jz" ".Lrt_cg_none", IBinReg "add" Rcx (OpImm 1), IJmp ".Lrt_cg_scan", ILabel ".Lrt_cg_space", IBinReg "add" Rcx (OpImm 1), IMov (OpReg Rdi) (OpReg R10), IBinReg "add" Rdi (OpReg Rcx), ICall (nativeRtLabel "parse_u64"), ITest Rdx Rdx, IJcc "jz" ".Lrt_cg_none", ITest Rax Rax, IJcc "jz" ".Lrt_cg_none", IMov (OpReg Rcx) (OpReg Rax), IMov (OpReg Rax) (OpReg R11), IBinReg "add" Rax (OpReg Rcx), IBinReg "sub" Rax (OpImm 1), IBinReg "xor" Rdx (OpReg Rdx), IDivUnsigned Rcx, ITest Rax Rax, IJcc "jz" ".Lrt_cg_none", IRet, ILabel ".Lrt_cg_none", IBinReg "xor" Rax (OpReg Rax), IRet]
 
 -- | `VUNA_NATIVE_CPUS` → `sched_setaffinity`。
 --   `auto`（缺省）= min(`sched_getaffinity` 计数, cgroup 配额)，下限 1；
@@ -1316,7 +1353,7 @@ initCpusFn : NativeFunc
 initCpusFn =
   rtRawFunc
     "init_cpus"
-    [IBinReg "xor" Rdi (OpReg Rdi), IMov (OpReg Rsi) (OpImm 128), ILea Rdx cpuCurLabel, IMov (OpReg Rax) (OpImm 204), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_ic_done", ILea R8 cpuCurLabel, IBinReg "xor" R11 (OpReg R11), IBinReg "xor" R9 (OpReg R9), ILabel ".Lrt_ic_cnt_byte", IMovzx R10 (OpMemX R8 R9 0), IBinReg "xor" Rcx (OpReg Rcx), ILabel ".Lrt_ic_cnt_bit", IBinReg "shr" R10 (OpImm 1), IJcc "jnc" ".Lrt_ic_cnt_next", IBinReg "add" R11 (OpImm 1), ILabel ".Lrt_ic_cnt_next", IBinReg "add" Rcx (OpImm 1), ICmp (OpReg Rcx) (OpImm 8), IJcc "jl" ".Lrt_ic_cnt_bit", IBinReg "add" R9 (OpImm 1), ICmp (OpReg R9) (OpImm 128), IJcc "jl" ".Lrt_ic_cnt_byte", ITest R11 R11, IJcc "jz" ".Lrt_ic_done", IMov (OpRip cpuCountLabel) (OpReg R11), ILea Rdi (nativeDataLabel "env_cpus"), ICall (nativeRtLabel "env_lookup"), ITest Rax Rax, IJcc "jz" ".Lrt_ic_auto", IMovzx Rdx (OpMem Rax 0), ICmp (OpReg Rdx) (OpImm 48), IJcc "jne" ".Lrt_ic_parse", IMovzx Rdx (OpMem Rax 1), ITest Rdx Rdx, IJcc "jz" ".Lrt_ic_unlimited", ILabel ".Lrt_ic_parse", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "parse_u64"), ITest Rdx Rdx, IJcc "jz" ".Lrt_ic_auto", ITest Rax Rax, IJcc "jz" ".Lrt_ic_unlimited", IMov (OpReg R10) (OpReg Rax), IJmp ".Lrt_ic_apply", ILabel ".Lrt_ic_auto", IMov (OpReg R10) (OpReg R11), ICmp (OpReg R11) (OpImm 1), IJcc "jle" ".Lrt_ic_done", ICall (nativeRtLabel "cgroup_cpus"), ITest Rax Rax, IJcc "jz" ".Lrt_ic_apply", ICmp (OpReg Rax) (OpReg R10), IJcc "jae" ".Lrt_ic_apply", IMov (OpReg R10) (OpReg Rax), ILabel ".Lrt_ic_apply", IMov (OpRip cpuCountLabel) (OpReg R10), ICmp (OpReg R10) (OpReg R11), IJcc "jae" ".Lrt_ic_done", IBinReg "xor" Rax (OpReg Rax), IBinReg "xor" R11 (OpReg R11), ILea R8 cpuCurLabel, ILea R9 cpuNewLabel, ILabel ".Lrt_ic_sel", ICmp (OpReg R11) (OpReg R10), IJcc "jae" ".Lrt_ic_sel_done", ICmp (OpReg Rax) (OpImm 1024), IJcc "jae" ".Lrt_ic_sel_done", IMov (OpReg Rdx) (OpReg Rax), IBinReg "shr" Rdx (OpImm 3), IMov (OpReg Rcx) (OpReg Rax), IBinReg "and" Rcx (OpImm 7), IMovzx Rsi (OpMemX R8 Rdx 0), IBinReg "shr" Rsi (OpReg Rcx), IBinReg "and" Rsi (OpImm 1), ITest Rsi Rsi, IJcc "jz" ".Lrt_ic_sel_next", IMovzx Rdi (OpMemX R9 Rdx 0), IMov (OpReg Rsi) (OpImm 1), IBinReg "shl" Rsi (OpReg Rcx), IBinReg "or" Rdi (OpReg Rsi), IMovByteRegOp (OpMemX R9 Rdx 0) Rdi, IBinReg "add" R11 (OpImm 1), ILabel ".Lrt_ic_sel_next", IBinReg "add" Rax (OpImm 1), IJmp ".Lrt_ic_sel", ILabel ".Lrt_ic_sel_done", IBinReg "xor" Rdi (OpReg Rdi), IMov (OpReg Rsi) (OpImm 128), ILea Rdx cpuNewLabel, IMov (OpReg Rax) (OpImm 203), ISyscall, IRet, ILabel ".Lrt_ic_unlimited", IMov (OpRip cpuCountLabel) (OpReg R11), ILabel ".Lrt_ic_done", IRet]
+    [IBinReg "xor" Rdi (OpReg Rdi), IMov (OpReg Rsi) (OpImm 128), ILea Rdx cpuCurLabel, IMov (OpReg Rax) (OpImm (sysNr "sched_getaffinity")), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_ic_done", ILea R8 cpuCurLabel, IBinReg "xor" R11 (OpReg R11), IBinReg "xor" R9 (OpReg R9), ILabel ".Lrt_ic_cnt_byte", IMovzx R10 (OpMemX R8 R9 0), IBinReg "xor" Rcx (OpReg Rcx), ILabel ".Lrt_ic_cnt_bit", IBinReg "shr" R10 (OpImm 1), IJcc "jnc" ".Lrt_ic_cnt_next", IBinReg "add" R11 (OpImm 1), ILabel ".Lrt_ic_cnt_next", IBinReg "add" Rcx (OpImm 1), ICmp (OpReg Rcx) (OpImm 8), IJcc "jl" ".Lrt_ic_cnt_bit", IBinReg "add" R9 (OpImm 1), ICmp (OpReg R9) (OpImm 128), IJcc "jl" ".Lrt_ic_cnt_byte", ITest R11 R11, IJcc "jz" ".Lrt_ic_done", IMov (OpRip cpuCountLabel) (OpReg R11), ILea Rdi (nativeDataLabel "env_cpus"), ICall (nativeRtLabel "env_lookup"), ITest Rax Rax, IJcc "jz" ".Lrt_ic_auto", IMovzx Rdx (OpMem Rax 0), ICmp (OpReg Rdx) (OpImm 48), IJcc "jne" ".Lrt_ic_parse", IMovzx Rdx (OpMem Rax 1), ITest Rdx Rdx, IJcc "jz" ".Lrt_ic_unlimited", ILabel ".Lrt_ic_parse", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "parse_u64"), ITest Rdx Rdx, IJcc "jz" ".Lrt_ic_auto", ITest Rax Rax, IJcc "jz" ".Lrt_ic_unlimited", IMov (OpReg R10) (OpReg Rax), IJmp ".Lrt_ic_apply", ILabel ".Lrt_ic_auto", IMov (OpReg R10) (OpReg R11), ICmp (OpReg R11) (OpImm 1), IJcc "jle" ".Lrt_ic_done", ICall (nativeRtLabel "cgroup_cpus"), ITest Rax Rax, IJcc "jz" ".Lrt_ic_apply", ICmp (OpReg Rax) (OpReg R10), IJcc "jae" ".Lrt_ic_apply", IMov (OpReg R10) (OpReg Rax), ILabel ".Lrt_ic_apply", IMov (OpRip cpuCountLabel) (OpReg R10), ICmp (OpReg R10) (OpReg R11), IJcc "jae" ".Lrt_ic_done", IBinReg "xor" Rax (OpReg Rax), IBinReg "xor" R11 (OpReg R11), ILea R8 cpuCurLabel, ILea R9 cpuNewLabel, ILabel ".Lrt_ic_sel", ICmp (OpReg R11) (OpReg R10), IJcc "jae" ".Lrt_ic_sel_done", ICmp (OpReg Rax) (OpImm 1024), IJcc "jae" ".Lrt_ic_sel_done", IMov (OpReg Rdx) (OpReg Rax), IBinReg "shr" Rdx (OpImm 3), IMov (OpReg Rcx) (OpReg Rax), IBinReg "and" Rcx (OpImm 7), IMovzx Rsi (OpMemX R8 Rdx 0), IBinReg "shr" Rsi (OpReg Rcx), IBinReg "and" Rsi (OpImm 1), ITest Rsi Rsi, IJcc "jz" ".Lrt_ic_sel_next", IMovzx Rdi (OpMemX R9 Rdx 0), IMov (OpReg Rsi) (OpImm 1), IBinReg "shl" Rsi (OpReg Rcx), IBinReg "or" Rdi (OpReg Rsi), IMovByteRegOp (OpMemX R9 Rdx 0) Rdi, IBinReg "add" R11 (OpImm 1), ILabel ".Lrt_ic_sel_next", IBinReg "add" Rax (OpImm 1), IJmp ".Lrt_ic_sel", ILabel ".Lrt_ic_sel_done", IBinReg "xor" Rdi (OpReg Rdi), IMov (OpReg Rsi) (OpImm 128), ILea Rdx cpuNewLabel, IMov (OpReg Rax) (OpImm (sysNr "sched_setaffinity")), ISyscall, IRet, ILabel ".Lrt_ic_unlimited", IMov (OpRip cpuCountLabel) (OpReg R11), ILabel ".Lrt_ic_done", IRet]
 
 -- | `VUNA_NATIVE_TIMEOUT_MS` → `setitimer(ITIMER_REAL)` + SIGALRM handler。
 --   装好之后写 `rt_sigalrm_set`（SIGALRM 的位）与 `rt_timeout_armed`：`runIn` / `spawn`
@@ -1327,12 +1364,12 @@ initTimeoutFn : NativeFunc
 initTimeoutFn =
   rtRawFunc
     "init_timeout"
-    [ILea Rdi (nativeDataLabel "env_timeout"), ICall (nativeRtLabel "env_lookup"), ITest Rax Rax, IJcc "jz" ".Lrt_it_done", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "parse_u64"), ITest Rdx Rdx, IJcc "jz" ".Lrt_it_done", ITest Rax Rax, IJcc "jz" ".Lrt_it_done", IBinReg "xor" Rdx (OpReg Rdx), IMov (OpReg Rcx) (OpImm 1000), IDivUnsigned Rcx, ILea R10 itimerLabel, IMov (OpMem R10 0) (OpImm 0), IMov (OpMem R10 8) (OpImm 0), IMov (OpMem R10 16) (OpReg Rax), IBinReg "imul" Rdx (OpImm 1000), IMov (OpMem R10 24) (OpReg Rdx), ILea R10 sigActLabel, ILea Rax (nativeRtLabel "sigalrm"), IMov (OpMem R10 0) (OpReg Rax), IMov (OpReg Rax) (OpImm 67108864), IMov (OpMem R10 8) (OpReg Rax), ILea Rax (nativeRtLabel "sigreturn_stub"), IMov (OpMem R10 16) (OpReg Rax), IMov (OpMem R10 24) (OpImm 0), IMov (OpReg Rdi) (OpImm 14), IMov (OpReg Rsi) (OpReg R10), IBinReg "xor" Rdx (OpReg Rdx), IMov (OpReg R10) (OpImm 8), IMov (OpReg Rax) (OpImm 13), ISyscall, IBinReg "xor" Rdi (OpReg Rdi), ILea Rsi itimerLabel, IBinReg "xor" Rdx (OpReg Rdx), IMov (OpReg Rax) (OpImm 38), ISyscall, IMov (OpReg Rax) (OpImm 8192), IMov (OpRip sigalrmSetLabel) (OpReg Rax), IMov (OpReg Rax) (OpImm 1), IMov (OpRip timeoutArmedLabel) (OpReg Rax), ILabel ".Lrt_it_done", IRet]
+    [ILea Rdi (nativeDataLabel "env_timeout"), ICall (nativeRtLabel "env_lookup"), ITest Rax Rax, IJcc "jz" ".Lrt_it_done", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "parse_u64"), ITest Rdx Rdx, IJcc "jz" ".Lrt_it_done", ITest Rax Rax, IJcc "jz" ".Lrt_it_done", IBinReg "xor" Rdx (OpReg Rdx), IMov (OpReg Rcx) (OpImm 1000), IDivUnsigned Rcx, ILea R10 itimerLabel, IMov (OpMem R10 0) (OpImm 0), IMov (OpMem R10 8) (OpImm 0), IMov (OpMem R10 16) (OpReg Rax), IBinReg "imul" Rdx (OpImm 1000), IMov (OpMem R10 24) (OpReg Rdx), ILea R10 sigActLabel, ILea Rax (nativeRtLabel "sigalrm"), IMov (OpMem R10 0) (OpReg Rax), IMov (OpReg Rax) (OpImm 67108864), IMov (OpMem R10 8) (OpReg Rax), ILea Rax (nativeRtLabel "sigreturn_stub"), IMov (OpMem R10 16) (OpReg Rax), IMov (OpMem R10 24) (OpImm 0), IMov (OpReg Rdi) (OpImm 14), IMov (OpReg Rsi) (OpReg R10), IBinReg "xor" Rdx (OpReg Rdx), IMov (OpReg R10) (OpImm 8), IMov (OpReg Rax) (OpImm (sysNr "rt_sigaction")), ISyscall, IBinReg "xor" Rdi (OpReg Rdi), ILea Rsi itimerLabel, IBinReg "xor" Rdx (OpReg Rdx), IMov (OpReg Rax) (OpImm (sysNr "setitimer")), ISyscall, IMov (OpReg Rax) (OpImm 8192), IMov (OpRip sigalrmSetLabel) (OpReg Rax), IMov (OpReg Rax) (OpImm 1), IMov (OpRip timeoutArmedLabel) (OpReg Rax), ILabel ".Lrt_it_done", IRet]
 
 -- | SIGALRM 的 restorer：`rt_sigreturn`（静态无 libc 的必备桩；handler 直接 exit，
 --   正常不会走到这里）。
 sigreturnStubFn : NativeFunc
-sigreturnStubFn = rtRawFunc "sigreturn_stub" [IMov (OpReg Rax) (OpImm 15), ISyscall]
+sigreturnStubFn = rtRawFunc "sigreturn_stub" [IMov (OpReg Rax) (OpImm (sysNr "rt_sigreturn")), ISyscall]
 
 -- | SIGALRM handler：逐个收掉在跑的子进程组 → 写固定文本 → exit 2。
 --   只做 async-signal-safe 的事（getpgid / kill / write / exit_group），不分配。
@@ -1343,13 +1380,13 @@ sigalrmFn : NativeFunc
 sigalrmFn =
   rtRawFunc
     "sigalrm"
-    [IMov (OpReg R8) (OpRip childCountLabel), ILea R9 childPidsLabel, IBinReg "xor" R10 (OpReg R10), ILabel ".Lrt_sa_loop", ICmp (OpReg R10) (OpReg R8), IJcc "jge" ".Lrt_sa_write", IMov (OpReg Rax) (OpReg R10), IBinReg "shl" Rax (OpImm 3), IMov (OpReg Rdi) (OpMemX R9 Rax 0), ITest Rdi Rdi, IJcc "jz" ".Lrt_sa_next", IMov (OpReg Rax) (OpImm 121), ISyscall, ICmp (OpReg Rax) (OpReg Rdi), IJcc "jne" ".Lrt_sa_kill_one", INeg Rdi, IMov (OpReg Rsi) (OpImm 9), IMov (OpReg Rax) (OpImm 62), ISyscall, IJmp ".Lrt_sa_next", ILabel ".Lrt_sa_kill_one", IMov (OpReg Rsi) (OpImm 9), IMov (OpReg Rax) (OpImm 62), ISyscall, ILabel ".Lrt_sa_next", IBinReg "add" R10 (OpImm 1), IJmp ".Lrt_sa_loop", ILabel ".Lrt_sa_write", IMov (OpReg Rax) (OpImm 1), IMov (OpReg Rdi) (OpImm 2), ILea Rsi (nativeDataLabel "timeout"), IMov (OpReg Rdx) (OpImm (strLength timeoutMessage)), ISyscall, IMov (OpReg Rax) (OpImm 60), IMov (OpReg Rdi) (OpImm 2), ISyscall]
+    [IMov (OpReg R8) (OpRip childCountLabel), ILea R9 childPidsLabel, IBinReg "xor" R10 (OpReg R10), ILabel ".Lrt_sa_loop", ICmp (OpReg R10) (OpReg R8), IJcc "jge" ".Lrt_sa_write", IMov (OpReg Rax) (OpReg R10), IBinReg "shl" Rax (OpImm 3), IMov (OpReg Rdi) (OpMemX R9 Rax 0), ITest Rdi Rdi, IJcc "jz" ".Lrt_sa_next", IMov (OpReg Rax) (OpImm (sysNr "getpgid")), ISyscall, ICmp (OpReg Rax) (OpReg Rdi), IJcc "jne" ".Lrt_sa_kill_one", INeg Rdi, IMov (OpReg Rsi) (OpImm 9), IMov (OpReg Rax) (OpImm (sysNr "kill")), ISyscall, IJmp ".Lrt_sa_next", ILabel ".Lrt_sa_kill_one", IMov (OpReg Rsi) (OpImm 9), IMov (OpReg Rax) (OpImm (sysNr "kill")), ISyscall, ILabel ".Lrt_sa_next", IBinReg "add" R10 (OpImm 1), IJmp ".Lrt_sa_loop", ILabel ".Lrt_sa_write", IMov (OpReg Rax) (OpImm (sysNr "write")), IMov (OpReg Rdi) (OpImm 2), ILea Rsi (nativeDataLabel "timeout"), IMov (OpReg Rdx) (OpImm (strLength timeoutMessage)), ISyscall, IMov (OpReg Rax) (OpImm (sysNr "exit")), IMov (OpReg Rdi) (OpImm 2), ISyscall]
 
 trapMemLimitFn : NativeFunc
 trapMemLimitFn =
   rtRawFunc
     "trap_mem_limit"
-    [IMov (OpReg Rax) (OpImm 1), IMov (OpReg Rdi) (OpImm 2), ILea Rsi (nativeDataLabel "mem_limit"), IMov (OpReg Rdx) (OpImm (strLength memLimitMessage)), ISyscall, IMov (OpReg Rax) (OpImm 60), IMov (OpReg Rdi) (OpImm 2), ISyscall]
+    [IMov (OpReg Rax) (OpImm (sysNr "write")), IMov (OpReg Rdi) (OpImm 2), ILea Rsi (nativeDataLabel "mem_limit"), IMov (OpReg Rdx) (OpImm (strLength memLimitMessage)), ISyscall, IMov (OpReg Rax) (OpImm (sysNr "exit")), IMov (OpReg Rdi) (OpImm 2), ISyscall]
 
 -- | `env_filter` → `rax` = 传给子进程的 envp 数组：去掉 `VUNA_NATIVE_*`。
 --   `VUNA_NATIVE_INHERIT=1` 时原样返回 `rt_envp`。
@@ -1409,150 +1446,73 @@ nativeRtTargetBase "strSubstring" = Just (nativeRtLabel "str_substring")
 nativeRtTargetBase "strHash" = Just (nativeRtLabel "str_hash")
 nativeRtTargetBase "effectId" = Just (nativeRtLabel "effect_id")
 
+-- | 宿主叶子：一个实现标签 + 它在内建 / IR 里的全部名字（同一实现按名字去重）。
+hostLeafGroups : List (Pair String (List String))
+hostLeafGroups =
+  [
+    Pair "cleanup_pop" ["prim_cleanupPop"],
+    Pair "cleanup_push" ["prim_cleanupPush"],
+    Pair "exec_path" ["prim_eff_execPath", "@vuna@prim_eff_execPath", "prim_eff_execPath_host", "@vuna@prim_eff_execPath_host", "@vuna@host@execPath"],
+    Pair "exit_with" ["prim_eff_exit_process_host", "@vuna@prim_eff_exit_process_host"],
+    Pair "file_exists" ["@vuna@host@fileExists", "prim_eff_fileExists", "@vuna@prim_eff_fileExists", "prim_eff_fileExists_host", "@vuna@prim_eff_fileExists_host"],
+    Pair "file_mtime" ["@vuna@host@fileMtime", "prim_eff_fileMtime", "@vuna@prim_eff_fileMtime", "prim_eff_fileMtime_host", "@vuna@prim_eff_fileMtime_host"],
+    Pair "file_size" ["@vuna@host@fileSize", "prim_eff_fileSize", "@vuna@prim_eff_fileSize", "prim_eff_fileSize_host", "@vuna@prim_eff_fileSize_host"],
+    Pair "getArgs" ["prim_eff_getArgs", "@vuna@prim_eff_getArgs", "prim_eff_getArgs_host", "@vuna@prim_eff_getArgs_host", "@vuna@host@getArgs", "prim_eff_getArgs_process_host", "@vuna@prim_eff_getArgs_process_host"],
+    Pair "getcwd" ["prim_eff_getcwd", "@vuna@prim_eff_getcwd", "prim_eff_getcwd_host", "@vuna@prim_eff_getcwd_host", "@vuna@host@getcwd"],
+    Pair "getenv" ["prim_eff_getenv", "@vuna@prim_eff_getenv", "prim_eff_getenv_host", "@vuna@prim_eff_getenv_host", "@vuna@host@getenv"],
+    Pair "host_status_get" ["@vuna@prim_eff_hostStatus"],
+    Pair "is_tty" ["@vuna@host@isTty"],
+    Pair "now_us" ["effTimeUs", "effTimeUs_host"],
+    Pair "prim_eff_eprint" ["prim_eff_eprint", "@vuna@prim_eff_eprint"],
+    Pair "prim_eff_exit" ["@vuna@host@exitOp", "prim_eff_exitOp_host", "@vuna@prim_eff_exitOp_host", "prim_eff_exit", "@vuna@prim_eff_exit"],
+    Pair "prim_eff_new_ref" ["@vuna@host@newRef", "prim_eff_newRef_host", "@vuna@prim_eff_newRef_host", "prim_eff_newRef", "@vuna@prim_eff_newRef"],
+    Pair "prim_eff_print" ["@vuna@host@print", "prim_eff_print_host", "@vuna@prim_eff_print_host", "prim_eff_print", "@vuna@prim_eff_print"],
+    Pair "prim_eff_read_ref" ["@vuna@host@readRef", "prim_eff_readRef_host", "@vuna@prim_eff_readRef_host", "prim_eff_readRef", "@vuna@prim_eff_readRef"],
+    Pair "prim_eff_write_ref" ["@vuna@host@writeRef", "prim_eff_writeRef_host", "@vuna@prim_eff_writeRef_host", "prim_eff_writeRef", "@vuna@prim_eff_writeRef"],
+    Pair "sleep_us" ["prim_eff_sleep", "@vuna@prim_eff_sleep", "prim_eff_sleep_host", "@vuna@prim_eff_sleep_host", "@vuna@host@sleep"],
+    Pair "spawn_self" ["prim_eff_spawn", "@vuna@prim_eff_spawn"],
+    Pair "strict_is_dir" ["prim_eff_isDirectory", "@vuna@prim_eff_isDirectory", "prim_eff_isDirectory_host", "@vuna@prim_eff_isDirectory_host", "@vuna@host@isDirectory"],
+    Pair "strict_make_dir" ["prim_eff_makeDir", "@vuna@prim_eff_makeDir", "prim_eff_makeDir_host", "@vuna@prim_eff_makeDir_host", "@vuna@host@makeDir"],
+    Pair "strict_read_dir" ["prim_eff_readDir", "@vuna@prim_eff_readDir", "prim_eff_readDir_host", "@vuna@prim_eff_readDir_host", "@vuna@host@readDir"],
+    Pair "strict_read_file" ["prim_eff_readFile", "@vuna@prim_eff_readFile", "prim_eff_readFile_host", "@vuna@prim_eff_readFile_host", "@vuna@host@readFile"],
+    Pair "strict_remove_file" ["prim_eff_removeFile", "@vuna@prim_eff_removeFile", "prim_eff_removeFile_host", "@vuna@prim_eff_removeFile_host", "@vuna@host@removeFile"],
+    Pair "strict_write_file" ["prim_eff_writeFile", "@vuna@prim_eff_writeFile", "prim_eff_writeFile_host", "@vuna@prim_eff_writeFile_host", "@vuna@host@writeFile"],
+    Pair "strict_write_file_atomic" ["prim_eff_writeFileAtomic", "@vuna@prim_eff_writeFileAtomic", "prim_eff_writeFileAtomic_host", "@vuna@prim_eff_writeFileAtomic_host", "@vuna@host@writeFileAtomic"],
+    Pair "tryReadDir" ["@vuna@host@tryReadDir"],
+    Pair "tryRunIn" ["@vuna@host@tryRunIn", "prim_eff_runIn", "@vuna@prim_eff_runIn", "prim_eff_runIn_host", "@vuna@prim_eff_runIn_host", "@vuna@host@runIn"],
+    Pair "try_is_dir" ["@vuna@host@tryIsDirectory"],
+    Pair "try_make_dir" ["@vuna@host@tryMakeDir"],
+    Pair "try_make_dir_excl" ["@vuna@host@tryMakeDirExclusive"],
+    Pair "try_read_file" ["@vuna@host@tryReadFile"],
+    Pair "try_remove_file" ["@vuna@host@tryRemoveFile"],
+    Pair "try_remove_tree" ["@vuna@host@tryRemoveTree"],
+    Pair "try_rename" ["@vuna@host@tryRename"],
+    Pair "try_symlink" ["@vuna@host@trySymlink"],
+    Pair "try_write_file" ["@vuna@host@tryWriteFile"],
+    Pair "try_write_file_atomic" ["@vuna@host@tryWriteFileAtomic"],
+    Pair "wait_pid" ["prim_eff_wait", "@vuna@prim_eff_wait"]
+  ]
+
+nameInGroup : String -> List String -> Bool
+nameInGroup _ [] = False
+nameInGroup name (n :: rest) = if n == name then True else nameInGroup name rest
+
+hostLeafTarget : List (Pair String (List String)) -> String -> Maybe String
+hostLeafTarget [] _ = Nothing
+hostLeafTarget (g :: rest) sym =
+  if nameInGroup sym (secondOf g) then Just (nativeRtLabel (firstOf g)) else hostLeafTarget rest sym
+
 nativeRtTargetHost : String -> Maybe String
-nativeRtTargetHost "@vuna@host@print" = Just (nativeRtLabel "prim_eff_print")
-nativeRtTargetHost "prim_eff_print_host" = Just (nativeRtLabel "prim_eff_print")
-nativeRtTargetHost "@vuna@prim_eff_print_host" = Just (nativeRtLabel "prim_eff_print")
-nativeRtTargetHost "@vuna@host@exitOp" = Just (nativeRtLabel "prim_eff_exit")
-nativeRtTargetHost "prim_eff_exitOp_host" = Just (nativeRtLabel "prim_eff_exit")
-nativeRtTargetHost "@vuna@prim_eff_exitOp_host" = Just (nativeRtLabel "prim_eff_exit")
-nativeRtTargetHost "@vuna@host@newRef" = Just (nativeRtLabel "prim_eff_new_ref")
-nativeRtTargetHost "prim_eff_newRef_host" = Just (nativeRtLabel "prim_eff_new_ref")
-nativeRtTargetHost "@vuna@prim_eff_newRef_host" = Just (nativeRtLabel "prim_eff_new_ref")
-nativeRtTargetHost "@vuna@host@readRef" = Just (nativeRtLabel "prim_eff_read_ref")
-nativeRtTargetHost "prim_eff_readRef_host" = Just (nativeRtLabel "prim_eff_read_ref")
-nativeRtTargetHost "@vuna@prim_eff_readRef_host" = Just (nativeRtLabel "prim_eff_read_ref")
-nativeRtTargetHost "@vuna@host@writeRef" = Just (nativeRtLabel "prim_eff_write_ref")
-nativeRtTargetHost "prim_eff_writeRef_host" = Just (nativeRtLabel "prim_eff_write_ref")
-nativeRtTargetHost "@vuna@prim_eff_writeRef_host" = Just (nativeRtLabel "prim_eff_write_ref")
+nativeRtTargetHost sym = hostLeafTarget hostLeafGroups sym
 
 nativeRtTargetBase "@ir@m@runEff" = Just (nativeRtLabel "m_run_eff")
 nativeRtTargetBase "prim_erase" = Just (nativeRtLabel "prim_erase")
 nativeRtTargetBase "@vuna@prim@toObj" = Just (nativeRtLabel "prim_erase")
 nativeRtTargetBase "@vuna@prim@fromObj" = Just (nativeRtLabel "prim_erase")
 
-nativeRtTargetHost "prim_eff_newRef" = Just (nativeRtLabel "prim_eff_new_ref")
-nativeRtTargetHost "@vuna@prim_eff_newRef" = Just (nativeRtLabel "prim_eff_new_ref")
-nativeRtTargetHost "prim_eff_readRef" = Just (nativeRtLabel "prim_eff_read_ref")
-nativeRtTargetHost "@vuna@prim_eff_readRef" = Just (nativeRtLabel "prim_eff_read_ref")
-nativeRtTargetHost "prim_eff_writeRef" = Just (nativeRtLabel "prim_eff_write_ref")
-nativeRtTargetHost "@vuna@prim_eff_writeRef" = Just (nativeRtLabel "prim_eff_write_ref")
-nativeRtTargetHost "prim_eff_print" = Just (nativeRtLabel "prim_eff_print")
-nativeRtTargetHost "@vuna@prim_eff_print" = Just (nativeRtLabel "prim_eff_print")
-nativeRtTargetHost "prim_eff_eprint" = Just (nativeRtLabel "prim_eff_eprint")
-nativeRtTargetHost "@vuna@prim_eff_eprint" = Just (nativeRtLabel "prim_eff_eprint")
-nativeRtTargetHost "prim_eff_exit" = Just (nativeRtLabel "prim_eff_exit")
-nativeRtTargetHost "@vuna@prim_eff_exit" = Just (nativeRtLabel "prim_eff_exit")
 -- 宿主：环境 / 入参 / 目录 / 时钟 / tty（`_host` 与 `@vuna@host@*` 是同一组叶子）。
-nativeRtTargetHost "effTimeUs" = Just (nativeRtLabel "now_us")
-nativeRtTargetHost "effTimeUs_host" = Just (nativeRtLabel "now_us")
-nativeRtTargetHost "prim_eff_sleep" = Just (nativeRtLabel "sleep_us")
-nativeRtTargetHost "@vuna@prim_eff_sleep" = Just (nativeRtLabel "sleep_us")
-nativeRtTargetHost "prim_eff_sleep_host" = Just (nativeRtLabel "sleep_us")
-nativeRtTargetHost "@vuna@prim_eff_sleep_host" = Just (nativeRtLabel "sleep_us")
-nativeRtTargetHost "@vuna@host@sleep" = Just (nativeRtLabel "sleep_us")
-nativeRtTargetHost "prim_eff_getenv" = Just (nativeRtLabel "getenv")
-nativeRtTargetHost "@vuna@prim_eff_getenv" = Just (nativeRtLabel "getenv")
-nativeRtTargetHost "prim_eff_getenv_host" = Just (nativeRtLabel "getenv")
-nativeRtTargetHost "@vuna@prim_eff_getenv_host" = Just (nativeRtLabel "getenv")
-nativeRtTargetHost "@vuna@host@getenv" = Just (nativeRtLabel "getenv")
-nativeRtTargetHost "prim_eff_getcwd" = Just (nativeRtLabel "getcwd")
-nativeRtTargetHost "@vuna@prim_eff_getcwd" = Just (nativeRtLabel "getcwd")
-nativeRtTargetHost "prim_eff_getcwd_host" = Just (nativeRtLabel "getcwd")
-nativeRtTargetHost "@vuna@prim_eff_getcwd_host" = Just (nativeRtLabel "getcwd")
-nativeRtTargetHost "@vuna@host@getcwd" = Just (nativeRtLabel "getcwd")
-nativeRtTargetHost "prim_eff_execPath" = Just (nativeRtLabel "exec_path")
-nativeRtTargetHost "@vuna@prim_eff_execPath" = Just (nativeRtLabel "exec_path")
-nativeRtTargetHost "prim_eff_execPath_host" = Just (nativeRtLabel "exec_path")
-nativeRtTargetHost "@vuna@prim_eff_execPath_host" = Just (nativeRtLabel "exec_path")
-nativeRtTargetHost "@vuna@host@execPath" = Just (nativeRtLabel "exec_path")
-nativeRtTargetHost "prim_eff_getArgs" = Just (nativeRtLabel "getArgs")
-nativeRtTargetHost "@vuna@prim_eff_getArgs" = Just (nativeRtLabel "getArgs")
-nativeRtTargetHost "prim_eff_getArgs_host" = Just (nativeRtLabel "getArgs")
-nativeRtTargetHost "@vuna@prim_eff_getArgs_host" = Just (nativeRtLabel "getArgs")
-nativeRtTargetHost "@vuna@host@getArgs" = Just (nativeRtLabel "getArgs")
-nativeRtTargetHost "prim_eff_getArgs_process_host" = Just (nativeRtLabel "getArgs")
-nativeRtTargetHost "@vuna@prim_eff_getArgs_process_host" = Just (nativeRtLabel "getArgs")
-nativeRtTargetHost "@vuna@host@isTty" = Just (nativeRtLabel "is_tty")
-nativeRtTargetHost "@vuna@prim_eff_hostStatus" = Just (nativeRtLabel "host_status_get")
-nativeRtTargetHost "prim_cleanupPush" = Just (nativeRtLabel "cleanup_push")
-nativeRtTargetHost "prim_cleanupPop" = Just (nativeRtLabel "cleanup_pop")
 -- 宿主：文件系统（try* 是真实叶子；`prim_eff_*` / `_host` / `@vuna@host@*` 是同一实现）。
 -- 宿主：进程（runIn / spawn / wait / exit）。`spawn` 的 argv[0] = 本进程路径。
-nativeRtTargetHost "@vuna@host@tryRunIn" = Just (nativeRtLabel "tryRunIn")
-nativeRtTargetHost "prim_eff_runIn" = Just (nativeRtLabel "tryRunIn")
-nativeRtTargetHost "@vuna@prim_eff_runIn" = Just (nativeRtLabel "tryRunIn")
-nativeRtTargetHost "prim_eff_runIn_host" = Just (nativeRtLabel "tryRunIn")
-nativeRtTargetHost "@vuna@prim_eff_runIn_host" = Just (nativeRtLabel "tryRunIn")
-nativeRtTargetHost "@vuna@host@runIn" = Just (nativeRtLabel "tryRunIn")
-nativeRtTargetHost "prim_eff_spawn" = Just (nativeRtLabel "spawn_self")
-nativeRtTargetHost "@vuna@prim_eff_spawn" = Just (nativeRtLabel "spawn_self")
-nativeRtTargetHost "prim_eff_wait" = Just (nativeRtLabel "wait_pid")
-nativeRtTargetHost "@vuna@prim_eff_wait" = Just (nativeRtLabel "wait_pid")
-nativeRtTargetHost "prim_eff_exit_process_host" = Just (nativeRtLabel "exit_with")
-nativeRtTargetHost "@vuna@prim_eff_exit_process_host" = Just (nativeRtLabel "exit_with")
-nativeRtTargetHost "@vuna@host@tryReadFile" = Just (nativeRtLabel "try_read_file")
-nativeRtTargetHost "prim_eff_readFile" = Just (nativeRtLabel "try_read_file")
-nativeRtTargetHost "@vuna@prim_eff_readFile" = Just (nativeRtLabel "try_read_file")
-nativeRtTargetHost "prim_eff_readFile_host" = Just (nativeRtLabel "try_read_file")
-nativeRtTargetHost "@vuna@prim_eff_readFile_host" = Just (nativeRtLabel "try_read_file")
-nativeRtTargetHost "@vuna@host@readFile" = Just (nativeRtLabel "try_read_file")
-nativeRtTargetHost "@vuna@host@tryWriteFile" = Just (nativeRtLabel "try_write_file")
-nativeRtTargetHost "prim_eff_writeFile" = Just (nativeRtLabel "try_write_file")
-nativeRtTargetHost "@vuna@prim_eff_writeFile" = Just (nativeRtLabel "try_write_file")
-nativeRtTargetHost "prim_eff_writeFile_host" = Just (nativeRtLabel "try_write_file")
-nativeRtTargetHost "@vuna@prim_eff_writeFile_host" = Just (nativeRtLabel "try_write_file")
-nativeRtTargetHost "@vuna@host@writeFile" = Just (nativeRtLabel "try_write_file")
-nativeRtTargetHost "@vuna@host@tryWriteFileAtomic" = Just (nativeRtLabel "try_write_file_atomic")
-nativeRtTargetHost "prim_eff_writeFileAtomic" = Just (nativeRtLabel "try_write_file_atomic")
-nativeRtTargetHost "@vuna@prim_eff_writeFileAtomic" = Just (nativeRtLabel "try_write_file_atomic")
-nativeRtTargetHost "prim_eff_writeFileAtomic_host" = Just (nativeRtLabel "try_write_file_atomic")
-nativeRtTargetHost "@vuna@prim_eff_writeFileAtomic_host" =
-  Just (nativeRtLabel "try_write_file_atomic")
-nativeRtTargetHost "@vuna@host@writeFileAtomic" = Just (nativeRtLabel "try_write_file_atomic")
-nativeRtTargetHost "@vuna@host@tryReadDir" = Just (nativeRtLabel "tryReadDir")
-nativeRtTargetHost "prim_eff_readDir" = Just (nativeRtLabel "tryReadDir")
-nativeRtTargetHost "@vuna@prim_eff_readDir" = Just (nativeRtLabel "tryReadDir")
-nativeRtTargetHost "prim_eff_readDir_host" = Just (nativeRtLabel "tryReadDir")
-nativeRtTargetHost "@vuna@prim_eff_readDir_host" = Just (nativeRtLabel "tryReadDir")
-nativeRtTargetHost "@vuna@host@readDir" = Just (nativeRtLabel "tryReadDir")
-nativeRtTargetHost "@vuna@host@tryIsDirectory" = Just (nativeRtLabel "try_is_dir")
-nativeRtTargetHost "prim_eff_isDirectory" = Just (nativeRtLabel "try_is_dir")
-nativeRtTargetHost "@vuna@prim_eff_isDirectory" = Just (nativeRtLabel "try_is_dir")
-nativeRtTargetHost "prim_eff_isDirectory_host" = Just (nativeRtLabel "try_is_dir")
-nativeRtTargetHost "@vuna@prim_eff_isDirectory_host" = Just (nativeRtLabel "try_is_dir")
-nativeRtTargetHost "@vuna@host@isDirectory" = Just (nativeRtLabel "try_is_dir")
-nativeRtTargetHost "@vuna@host@tryMakeDir" = Just (nativeRtLabel "try_make_dir")
-nativeRtTargetHost "prim_eff_makeDir" = Just (nativeRtLabel "try_make_dir")
-nativeRtTargetHost "@vuna@prim_eff_makeDir" = Just (nativeRtLabel "try_make_dir")
-nativeRtTargetHost "prim_eff_makeDir_host" = Just (nativeRtLabel "try_make_dir")
-nativeRtTargetHost "@vuna@prim_eff_makeDir_host" = Just (nativeRtLabel "try_make_dir")
-nativeRtTargetHost "@vuna@host@makeDir" = Just (nativeRtLabel "try_make_dir")
-nativeRtTargetHost "@vuna@host@tryMakeDirExclusive" = Just (nativeRtLabel "try_make_dir_excl")
-nativeRtTargetHost "@vuna@host@tryRemoveFile" = Just (nativeRtLabel "try_remove_file")
-nativeRtTargetHost "prim_eff_removeFile" = Just (nativeRtLabel "try_remove_file")
-nativeRtTargetHost "@vuna@prim_eff_removeFile" = Just (nativeRtLabel "try_remove_file")
-nativeRtTargetHost "prim_eff_removeFile_host" = Just (nativeRtLabel "try_remove_file")
-nativeRtTargetHost "@vuna@prim_eff_removeFile_host" = Just (nativeRtLabel "try_remove_file")
-nativeRtTargetHost "@vuna@host@removeFile" = Just (nativeRtLabel "try_remove_file")
-nativeRtTargetHost "@vuna@host@tryRemoveTree" = Just (nativeRtLabel "try_remove_tree")
-nativeRtTargetHost "@vuna@host@tryRename" = Just (nativeRtLabel "try_rename")
-nativeRtTargetHost "@vuna@host@trySymlink" = Just (nativeRtLabel "try_symlink")
-nativeRtTargetHost "@vuna@host@fileExists" = Just (nativeRtLabel "file_exists")
-nativeRtTargetHost "prim_eff_fileExists" = Just (nativeRtLabel "file_exists")
-nativeRtTargetHost "@vuna@prim_eff_fileExists" = Just (nativeRtLabel "file_exists")
-nativeRtTargetHost "prim_eff_fileExists_host" = Just (nativeRtLabel "file_exists")
-nativeRtTargetHost "@vuna@prim_eff_fileExists_host" = Just (nativeRtLabel "file_exists")
-nativeRtTargetHost "@vuna@host@fileMtime" = Just (nativeRtLabel "file_mtime")
-nativeRtTargetHost "prim_eff_fileMtime" = Just (nativeRtLabel "file_mtime")
-nativeRtTargetHost "@vuna@prim_eff_fileMtime" = Just (nativeRtLabel "file_mtime")
-nativeRtTargetHost "prim_eff_fileMtime_host" = Just (nativeRtLabel "file_mtime")
-nativeRtTargetHost "@vuna@prim_eff_fileMtime_host" = Just (nativeRtLabel "file_mtime")
-nativeRtTargetHost "@vuna@host@fileSize" = Just (nativeRtLabel "file_size")
-nativeRtTargetHost "prim_eff_fileSize" = Just (nativeRtLabel "file_size")
-nativeRtTargetHost "@vuna@prim_eff_fileSize" = Just (nativeRtLabel "file_size")
-nativeRtTargetHost "prim_eff_fileSize_host" = Just (nativeRtLabel "file_size")
-nativeRtTargetHost "@vuna@prim_eff_fileSize_host" = Just (nativeRtLabel "file_size")
 
 nativeRtTargetBase "floatFromInt" = Just (nativeRtLabel "float_from_int")
 nativeRtTargetBase "intFromFloat" = Just (nativeRtLabel "int_from_float")
@@ -1602,7 +1562,6 @@ nativeRtTargetBase "@vuna@debug@on" = Just (nativeRtLabel "debug_on")
 nativeRtTargetBase "@vuna@debug@line" = Just (nativeRtLabel "debug_line")
 nativeRtTargetBase _ = Nothing
 
-nativeRtTargetHost _ = Nothing
 
 export nativeRtTarget : String -> Maybe String
 nativeRtTarget sym =

@@ -1,0 +1,168 @@
+module Vuna.Target.Native.Pal where
+
+-- native 后端的**平台面**：x86-64 Linux 的 syscall 号、syscall 参数常量、内核结构
+-- 布局与 errno 码表。
+--
+-- 与 `Native.Abi` 的分层：Abi 是**架构**（寄存器、栈槽、frame、对象头），本模块是
+-- **平台**（内核接口）。换架构要动 Abi 与指令选择；换内核 ABI 版本只动这里。
+-- 目标面仍是 x86-64 Linux（`docs/reference/native.md` §2）。
+--
+-- 本模块只有数据与查表，不构造指令。`checks.vuna-native-surface` 把这里的取值与
+-- `Runtime` 的调用点摊平成 `nix/checks/data/native-surface.baseline`，所以表与用法
+-- 任何一处漂移都会在 diff 里显形。
+import Base.Data.List as List
+import Base.Data.Pair as Pair
+
+-- ---------------------------------------------------------------
+-- syscall 号（x86-64，`arch/x86/entry/syscalls/syscall_64.tbl`）
+-- ---------------------------------------------------------------
+-- | 名字 → syscall 号。未知名返回 -1：调用点只允许写常量名，写错会让产物与
+--   `native-artifact` 基线不一致（构建期即失败），不会静默落到某个有效 syscall。
+export sysNr : String -> Int
+sysNr "read" = 0
+sysNr "write" = 1
+sysNr "close" = 3
+sysNr "mmap" = 9
+sysNr "rt_sigaction" = 13
+sysNr "rt_sigprocmask" = 14
+sysNr "rt_sigreturn" = 15
+sysNr "ioctl" = 16
+sysNr "nanosleep" = 35
+sysNr "setitimer" = 38
+sysNr "getpid" = 39
+sysNr "fork" = 57
+sysNr "execve" = 59
+sysNr "exit" = 60
+sysNr "wait4" = 61
+sysNr "kill" = 62
+sysNr "getcwd" = 79
+sysNr "chdir" = 80
+sysNr "rename" = 82
+sysNr "rmdir" = 84
+sysNr "readlink" = 89
+sysNr "setpgid" = 109
+sysNr "getpgid" = 121
+sysNr "sched_setaffinity" = 203
+sysNr "sched_getaffinity" = 204
+sysNr "getdents64" = 217
+sysNr "clock_gettime" = 228
+sysNr "openat" = 257
+sysNr "mkdirat" = 258
+sysNr "newfstatat" = 262
+sysNr "unlinkat" = 263
+sysNr "symlinkat" = 266
+sysNr _ = -1
+
+-- ---------------------------------------------------------------
+-- syscall 参数常量
+-- ---------------------------------------------------------------
+-- | `*at` 族的 dirfd：相对当前工作目录（`AT_FDCWD`）。
+export atFdCwd : Int
+atFdCwd = -100
+
+-- | `openat` flags：写 + 不存在则建 + 截断（`O_WRONLY|O_CREAT|O_TRUNC`）。
+export openWriteCreateTrunc : Int
+openWriteCreateTrunc = 577
+
+-- | 新建普通文件 / 目录的权限位（`0666` / `0755`；受 umask 约束）。
+export modeFileDefault : Int
+modeFileDefault = 438
+
+export modeDirDefault : Int
+modeDirDefault = 493
+
+-- | `newfstatat` flags：不跟随符号链接（`AT_SYMLINK_NOFOLLOW`）。
+export atSymlinkNofollow : Int
+atSymlinkNofollow = 256
+
+-- | `ioctl` 请求：读终端属性（`TCGETS`）；失败即「不是 tty」。
+export ioctlTcgets : Int
+ioctlTcgets = 21505
+
+-- ---------------------------------------------------------------
+-- 内核结构布局（x86-64）
+-- ---------------------------------------------------------------
+-- | `struct stat`：真实 144 B；缓冲留到 256 B（对齐后仍是 16 的倍数）。
+export statBufBytes : Int
+statBufBytes = 256
+
+export statOffMode : Int
+statOffMode = 24
+
+export statOffSize : Int
+statOffSize = 48
+
+-- | `st_mtim.tv_sec`。
+export statOffMtime : Int
+statOffMtime = 88
+
+export statModeTypeMask : Int
+statModeTypeMask = 61440
+
+export statModeDir : Int
+statModeDir = 16384
+
+-- | 路径缓冲：内核 `PATH_MAX` 是 4096（含结尾 NUL），可用字节数 4095。
+export pathMaxBytes : Int
+pathMaxBytes = 4096
+
+export pathMaxUsable : Int
+pathMaxUsable = 4095
+
+-- | `cpu_set_t`（1024 bit）。
+export cpuSetBytes : Int
+cpuSetBytes = 128
+
+-- | `struct itimerval` / `rt_sigaction` 的 act / `struct timespec` / `struct termios`。
+export itimerBytes : Int
+itimerBytes = 32
+
+export sigActBytes : Int
+sigActBytes = 32
+
+export timespecBytes : Int
+timespecBytes = 16
+
+export termiosBytes : Int
+termiosBytes = 64
+
+-- ---------------------------------------------------------------
+-- errno（x86-64 Linux）
+-- ---------------------------------------------------------------
+export errnoEperm : Int
+errnoEperm = 1
+
+export errnoEnoent : Int
+errnoEnoent = 2
+
+export errnoEacces : Int
+errnoEacces = 13
+
+export errnoEexist : Int
+errnoEexist = 17
+
+export errnoEnotdir : Int
+errnoEnotdir = 20
+
+export errnoEisdir : Int
+errnoEisdir = 21
+
+export errnoEnospc : Int
+errnoEnospc = 28
+
+-- | errno → 宿主状态码（`dtp_hostCode` 的口径：ENOENT=1、EACCES/EPERM=2、ENOSPC=3、
+--   ENOTDIR=4、EISDIR=5、EEXIST=6，其它=9）。顺序即 `fs_fail` 的比较链顺序。
+export hostCodeOfErrno : List (Pair Int Int)
+hostCodeOfErrno =
+  [
+    Pair errnoEnoent 1,
+    Pair errnoEperm 2,
+    Pair errnoEacces 2,
+    Pair errnoEnospc 3,
+    Pair errnoEnotdir 4,
+    Pair errnoEisdir 5,
+    Pair errnoEexist 6
+  ]
+
+export hostCodeOther : Int
+hostCodeOther = 9

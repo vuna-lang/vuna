@@ -1,0 +1,90 @@
+# syscall sites（函数名: 该站点的 syscall 号）
+allocFn                          "mmap" "mmap"
+cgroupCpusFn                     "openat" "read" "close"
+cmdRunShFn                       "getcwd" "chdir" "fork" "setpgid" "wait4" "chdir" "setpgid" "execve" "exit" "chdir"
+dirCloseFn                       "close"
+dirNamesFn                       "getdents64"
+dirOpenFn                        "openat"
+effExitFn                        "exit"
+effPrintFn                       "write"
+errFinish                        "write" "exit"
+execPathFn                       "readlink"
+exitWithFn                       "exit"
+getcwdFn                         "getcwd"
+initCpusFn                       "sched_getaffinity" "sched_setaffinity"
+initTimeoutFn                    "rt_sigaction" "setitimer"
+isTtyFn                          "ioctl"
+lstatPathFn                      "newfstatat"
+nowUsFn                          "clock_gettime"
+printBoolFn                      "write" "write"
+printIntFn                       "write" "write"
+printStrFn                       "write" "write"
+removeTreeFn                     "openat" "getdents64" "close" "close" "rmdir" "unlinkat" "close"
+sigalrmFn                        "getpgid" "kill" "kill" "write" "exit"
+sigBlockFn                       "rt_sigprocmask"
+sigreturnStubFn                  "rt_sigreturn"
+sigUnblockFn                     "rt_sigprocmask"
+sleepUsFn                        "nanosleep"
+spawnExecFn                      "fork" "setpgid" "setpgid" "execve" "exit"
+statPathFn                       "newfstatat"
+stderrWrite                      "write"
+strictFailFn                     "exit"
+trapArrayOobFn                   "write" "exit"
+trapDivZeroFn                    "write" "exit"
+trapImpossibleFn                 "write" "exit"
+trapMemLimitFn                   "write" "exit"
+trapOomFn                        "write" "exit"
+trapPathLongFn                   "write" "exit"
+trapRmtreeDeepFn                 "write" "exit"
+trapStackOverflowFn              "write" "exit"
+tryMakeDirExclusiveFn            "mkdirat"
+tryMakeDirFn                     "mkdirat"
+tryReadFileFn                    "openat" "read" "read" "close" "close" "close"
+tryRemoveFileFn                  "unlinkat"
+tryRenameFn                      "rename"
+trySymlinkFn                     "symlinkat"
+tryWriteFileAtomicFn             "getpid" "openat" "write" "close" "rename" "close"
+tryWriteFileFn                   "openat" "write" "close" "close"
+waitPidFn                        "wait4"
+writeErrMsg                      "write"
+writeErrRaw                      "write"
+# bss buffers（标签 字节数）
+argcLabel 8
+argvLabel 8
+cgBufLabel 64
+childCountLabel 8
+childPidsLabel 64
+cleanupHeadLabel 8
+cmdBufLabel 65536
+cpuCountLabel 8
+dirBufLabel 32768
+dirNamesLabel 32256
+envChildLabel 8192
+envpLabel 8
+hostErrnoLabel 8
+hostStatusLabel 8
+memLimitLabel 8
+nativeArenaEndLabel 8
+nativeCurSegLabel 8
+nativeHeapEndLabel 0
+nativeHeapPtrLabel 8
+nativeHeapSegLabel 32
+nativeHugeFreeLabel 8
+nativeSegsLabel 8
+readBufLabel 8388608
+shArgvLabel 32
+sigalrmSetLabel 8
+spawnArgvLabel 2048
+spawnBufLabel 65536
+stackLimitLabel 8
+stackTopLabel 8
+timeoutArmedLabel 8
+# 内核路径 / env 键
+/bin/sh
+/proc/self/exe
+/sys/fs/cgroup/cpu.max
+VUNA_NATIVE_
+VUNA_NATIVE_CPUS
+VUNA_NATIVE_INHERIT
+VUNA_NATIVE_MEM_LIMIT
+VUNA_NATIVE_TIMEOUT_MS
