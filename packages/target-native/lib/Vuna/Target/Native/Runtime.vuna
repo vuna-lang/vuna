@@ -169,7 +169,7 @@ hostReasonRodata : List NativeRodata
 hostReasonRodata =
   append
     (map (\p => NativeRodata (hostReasonLabel (firstOf p)) (secondOf p)) hostReasonTexts)
-    [NativeRodata (nativeDataLabel "errno_unknown") strictReasonUnknown, NativeRodata (nativeDataLabel "op_readFile") "readFile: ", NativeRodata (nativeDataLabel "op_writeFile") "writeFile: ", NativeRodata (nativeDataLabel "op_writeFileAtomic") "", NativeRodata (nativeDataLabel "op_readDir") "readDir: ", NativeRodata (nativeDataLabel "op_isDirectory") "isDirectory: ", NativeRodata (nativeDataLabel "op_makeDir") "makeDir: ", NativeRodata (nativeDataLabel "op_removeFile") "removeFile: "]
+    [NativeRodata (nativeDataLabel "errno_unknown") strictReasonUnknown, NativeRodata (nativeDataLabel "op_readFile") "readFile: ", NativeRodata (nativeDataLabel "op_readFileRange") "readFileRange: ", NativeRodata (nativeDataLabel "op_writeFile") "writeFile: ", NativeRodata (nativeDataLabel "op_writeFileAtomic") "", NativeRodata (nativeDataLabel "op_readDir") "readDir: ", NativeRodata (nativeDataLabel "op_isDirectory") "isDirectory: ", NativeRodata (nativeDataLabel "op_makeDir") "makeDir: ", NativeRodata (nativeDataLabel "op_removeFile") "removeFile: "]
 
 -- | 目录树太深：`remove_tree` 的递归帧放不进当前栈。
 rmtreeDeepMessage : String
@@ -1147,6 +1147,14 @@ strictReadFileFn : NativeFunc
 strictReadFileFn =
   strictWrapFn "strict_read_file" "try_read_file" "op_readFile" (strLength "readFile: ")
 
+strictReadFileRangeFn : NativeFunc
+strictReadFileRangeFn =
+  strictWrapFn
+    "strict_read_file_range"
+    "try_read_file_range"
+    "op_readFileRange"
+    (strLength "readFileRange: ")
+
 strictWriteFileFn : NativeFunc
 strictWriteFileFn =
   strictWrapFn "strict_write_file" "try_write_file" "op_writeFile" (strLength "writeFile: ")
@@ -1269,6 +1277,16 @@ tryReadFileFn =
     "try_read_file"
     16
     [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IBinReg "xor" Rax (OpReg Rax), IMov (OpRip hostStatusLabel) (OpReg Rax), ICall (nativeRtLabel "str_to_c"), IMov (OpReg Rsi) (OpReg Rax), IMov (OpReg Rdi) (OpImm atFdCwd), IBinReg "xor" Rdx (OpReg Rdx), IBinReg "xor" R10 (OpReg R10), IMov (OpReg Rax) (OpImm (sysNr "openat")), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_rf_fail", IMov (OpMem Rbp (nativeSlotOff 1)) (OpReg Rax), IMov (OpMem Rbp (nativeSlotOff 2)) (OpImm 0), ILabel ".Lrt_rf_loop", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 1)), ILea Rsi readBufLabel, IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 2)), IBinReg "add" Rsi (OpReg Rcx), IMov (OpReg Rdx) (OpImm 8388608), IBinReg "sub" Rdx (OpReg Rcx), IMov (OpReg Rax) (OpImm (sysNr "read")), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_rf_read_fail", IJcc "je" ".Lrt_rf_done", IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 2)), IBinReg "add" Rcx (OpReg Rax), IMov (OpMem Rbp (nativeSlotOff 2)) (OpReg Rcx), ICmp (OpReg Rcx) (OpImm 8388608), IJcc "jl" ".Lrt_rf_loop", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 1)), ILea Rsi readBufLabel, IMov (OpReg Rdx) (OpImm 1), IMov (OpReg Rax) (OpImm (sysNr "read")), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "je" ".Lrt_rf_done", IJcc "jl" ".Lrt_rf_read_fail", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 1)), IMov (OpReg Rax) (OpImm (sysNr "close")), ISyscall, IMov (OpReg Rdi) (OpImm (0 - 5)), ICall (nativeRtLabel "fs_fail"), ICall (nativeRtLabel "str_empty"), IRet, ILabel ".Lrt_rf_done", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 1)), IMov (OpReg Rax) (OpImm (sysNr "close")), ISyscall, ILea Rdi readBufLabel, IMov (OpReg Rsi) (OpMem Rbp (nativeSlotOff 2)), ICall (nativeRtLabel "str_from_bytes"), IRet, ILabel ".Lrt_rf_read_fail", IMov (OpMem Rbp (nativeSlotOff 3)) (OpReg Rax), IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 1)), IMov (OpReg Rax) (OpImm (sysNr "close")), ISyscall, IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 3)), ICall (nativeRtLabel "fs_fail"), ICall (nativeRtLabel "str_empty"), IRet, ILabel ".Lrt_rf_fail", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "fs_fail"), ICall (nativeRtLabel "str_empty"), IRet]
+
+-- | `rdi` = path、`rsi` = offset、`rdx` = length → rax = 该区间的字节串。
+--   语义：`offset < 0` 按 0；`length <= 0` 或 `offset` 越过 EOF 得空串；`length` 截到
+--   `min(length, 8 MiB)`（运行时读缓冲上界），实际长度再截到 EOF。失败写状态槽并返回空串。
+tryReadFileRangeFn : NativeFunc
+tryReadFileRangeFn =
+  rtFunc
+    "try_read_file_range"
+    64
+    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IMov (OpMem Rbp (nativeSlotOff 1)) (OpReg Rsi), IMov (OpMem Rbp (nativeSlotOff 2)) (OpReg Rdx), IBinReg "xor" Rax (OpReg Rax), IMov (OpRip hostStatusLabel) (OpReg Rax), ICall (nativeRtLabel "str_to_c"), IMov (OpReg Rsi) (OpReg Rax), IMov (OpReg Rdi) (OpImm atFdCwd), IBinReg "xor" Rdx (OpReg Rdx), IBinReg "xor" R10 (OpReg R10), IMov (OpReg Rax) (OpImm (sysNr "openat")), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_rfr_fail", IMov (OpMem Rbp (nativeSlotOff 3)) (OpReg Rax), ICmp (OpMem Rbp (nativeSlotOff 1)) (OpImm 0), IJcc "jge" ".Lrt_rfr_off_ok", IMov (OpMem Rbp (nativeSlotOff 1)) (OpImm 0), ILabel ".Lrt_rfr_off_ok", ICmp (OpMem Rbp (nativeSlotOff 2)) (OpImm 0), IJcc "jge" ".Lrt_rfr_len_pos", IMov (OpMem Rbp (nativeSlotOff 2)) (OpImm 0), ILabel ".Lrt_rfr_len_pos", ICmp (OpMem Rbp (nativeSlotOff 2)) (OpImm 8388608), IJcc "jle" ".Lrt_rfr_len_ok", IMov (OpMem Rbp (nativeSlotOff 2)) (OpImm 8388608), ILabel ".Lrt_rfr_len_ok", ICmp (OpMem Rbp (nativeSlotOff 2)) (OpImm 0), IJcc "je" ".Lrt_rfr_empty", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 3)), IMov (OpReg Rsi) (OpMem Rbp (nativeSlotOff 1)), IMov (OpReg Rdx) (OpImm seekSet), IMov (OpReg Rax) (OpImm (sysNr "lseek")), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_rfr_read_fail", IMov (OpMem Rbp (nativeSlotOff 4)) (OpImm 0), ILabel ".Lrt_rfr_loop", IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 4)), ICmp (OpReg Rcx) (OpMem Rbp (nativeSlotOff 2)), IJcc "jge" ".Lrt_rfr_done", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 3)), ILea Rsi readBufLabel, IBinReg "add" Rsi (OpReg Rcx), IMov (OpReg Rdx) (OpMem Rbp (nativeSlotOff 2)), IBinReg "sub" Rdx (OpReg Rcx), IMov (OpReg Rax) (OpImm (sysNr "read")), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_rfr_read_fail", IJcc "je" ".Lrt_rfr_done", IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 4)), IBinReg "add" Rcx (OpReg Rax), IMov (OpMem Rbp (nativeSlotOff 4)) (OpReg Rcx), IJmp ".Lrt_rfr_loop", ILabel ".Lrt_rfr_done", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 3)), IMov (OpReg Rax) (OpImm (sysNr "close")), ISyscall, ILea Rdi readBufLabel, IMov (OpReg Rsi) (OpMem Rbp (nativeSlotOff 4)), ICall (nativeRtLabel "str_from_bytes"), IRet, ILabel ".Lrt_rfr_empty", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 3)), IMov (OpReg Rax) (OpImm (sysNr "close")), ISyscall, ICall (nativeRtLabel "str_empty"), IRet, ILabel ".Lrt_rfr_read_fail", IMov (OpMem Rbp (nativeSlotOff 5)) (OpReg Rax), IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 3)), IMov (OpReg Rax) (OpImm (sysNr "close")), ISyscall, IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 5)), ICall (nativeRtLabel "fs_fail"), ICall (nativeRtLabel "str_empty"), IRet, ILabel ".Lrt_rfr_fail", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "fs_fail"), ICall (nativeRtLabel "str_empty"), IRet]
 
 -- | `rdi` = path、`rsi` = contents → rax = 写入字节数（Nat）；失败写状态槽并返回 0。
 tryWriteFileFn : NativeFunc
@@ -1545,7 +1563,7 @@ envFilterFn =
 export nativeRtFuncs : List NativeFunc
 nativeRtFuncs =
   append
-    [intBinary "add" "add", intBinary "sub" "sub", intBinary "mul" "imul", divFn, intBinary "bit_and" "and", intBinary "bit_or" "or", intBinary "bit_xor" "xor", bitNotFn, bitShlFn, bitShrFn, intCompare "eq_int" "sete", intCompare "neq_int" "setne", intCompare "lt_int" "setl", intCompare "le_int" "setle", intCompare "gt_int" "setg", intCompare "ge_int" "setge", natAddFn, natSubFn, natMulFn, natDivFn, natToIntFn, natFromIntFn, natSuccFn, obsZeroFn "obs_level", obsZeroFn "obs_log", obsZero2Fn "obs_counter", obsZeroFn "obs_mark", obsZero2Fn "obs_span_begin", obsZeroFn "obs_span_end", obsZero2Fn "obs_sample_start", obsZeroFn "obs_sample_stop", obsSpanFn, obsSpanLabFn, debugOnFn, debugLineFn, strAllocFn, strLengthFn, strConcatFn, bytesEqFn, bytesCmpFn, strEqFn, strNeqFn, strCompareFn, strCompareFnOf "str_lt" "setl", strCompareFnOf "str_le" "setle", strCompareFnOf "str_gt" "setg", strCompareFnOf "str_ge" "setge", strFromIntFn, strAtFn, strSubstringFn, strHashFn, effectIdFn, strShowFn, printIntFn, printBoolFn, printStrFn, assertFn, primFailFn, todoFn, trapMsgFn, trapAssertFn, trapTodoFn, allocFn, allocLeafFn, allocPinnedFn, applyFn, applyExactFn, applyShimFn, strFromBytesFn, strFromCFn, strOneCharFn, strEmptyFn, getenvFn, getcwdFn, execPathFn, nowUsFn, sleepUsFn, isTtyFn, hostStatusFn, cleanupPushFn, cleanupPopFn, fsFailFn, strictFailFn, strictReadFileFn, strictWriteFileFn, strictWriteFileAtomicFn, strictReadDirFn, strictIsDirFn, strictMakeDirFn, strictRemoveFileFn, strToCFn, strToC2Fn, strCopyIntoFn, cStrCpyFn, u64ToDecFn, statPathFn, lstatPathFn, fileExistsFn, fileMtimeFn, fileSizeFn, tryIsDirFn, tryReadFileFn, tryWriteFileFn, tryWriteFileAtomicFn, tryMakeDirFn, tryMakeDirExclusiveFn, tryRemoveFileFn, tryRenameFn, trySymlinkFn, removeTreeFn, tryRemoveTreeFn, dirOpenFn, dirNamesFn, dirCloseFn, childPushFn, childDropFn, sigBlockFn, sigUnblockFn, cmdRunShFn, spawnExecFn, waitPidFn, exitWithFn, trapImpossibleFn, trapDivZeroFn, trapArrayOobFn, trapOomFn, trapPathLongFn, trapMemLimitFn, initMemFn, initCpusFn, initTimeoutFn, envLookupFn, parseU64Fn, cgroupCpusFn, envFilterFn, sigreturnStubFn, sigalrmFn, arrayEmptyFn, arrayLengthFn, arrayGetFn, arraySetFn, arrayMakeFn, trapRmtreeDeepFn, trapStackOverflowFn, mRunEffFn, pow2CeilFn, eraseFn, effNewRefFn, effReadRefFn, effWriteRefFn, effPrintFn "prim_eff_print" 1, effPrintFn "prim_eff_eprint" 2, effExitFn, floatFromIntFn, intFromFloatFn, floatBinFn "float_add" "add", floatBinFn "float_sub" "sub", floatBinFn "float_mul" "mul", floatBinFn "float_div" "div", floatCmpFn "float_eq" (floatCmpOrdered "sete"), floatCmpFn "float_neq" floatCmpNeq, floatCmpFn "float_lt" (floatCmpOrdered "setb"), floatCmpFn "float_le" (floatCmpOrdered "setbe"), floatCmpFn "float_gt" (floatCmpOrdered "seta"), floatCmpFn "float_ge" (floatCmpOrdered "setae"), floatAbsFn, floatSqrtFn]
+    [intBinary "add" "add", intBinary "sub" "sub", intBinary "mul" "imul", divFn, intBinary "bit_and" "and", intBinary "bit_or" "or", intBinary "bit_xor" "xor", bitNotFn, bitShlFn, bitShrFn, intCompare "eq_int" "sete", intCompare "neq_int" "setne", intCompare "lt_int" "setl", intCompare "le_int" "setle", intCompare "gt_int" "setg", intCompare "ge_int" "setge", natAddFn, natSubFn, natMulFn, natDivFn, natToIntFn, natFromIntFn, natSuccFn, obsZeroFn "obs_level", obsZeroFn "obs_log", obsZero2Fn "obs_counter", obsZeroFn "obs_mark", obsZero2Fn "obs_span_begin", obsZeroFn "obs_span_end", obsZero2Fn "obs_sample_start", obsZeroFn "obs_sample_stop", obsSpanFn, obsSpanLabFn, debugOnFn, debugLineFn, strAllocFn, strLengthFn, strConcatFn, bytesEqFn, bytesCmpFn, strEqFn, strNeqFn, strCompareFn, strCompareFnOf "str_lt" "setl", strCompareFnOf "str_le" "setle", strCompareFnOf "str_gt" "setg", strCompareFnOf "str_ge" "setge", strFromIntFn, strAtFn, strSubstringFn, strHashFn, effectIdFn, strShowFn, printIntFn, printBoolFn, printStrFn, assertFn, primFailFn, todoFn, trapMsgFn, trapAssertFn, trapTodoFn, allocFn, allocLeafFn, allocPinnedFn, applyFn, applyExactFn, applyShimFn, strFromBytesFn, strFromCFn, strOneCharFn, strEmptyFn, getenvFn, getcwdFn, execPathFn, nowUsFn, sleepUsFn, isTtyFn, hostStatusFn, cleanupPushFn, cleanupPopFn, fsFailFn, strictFailFn, strictReadFileFn, strictReadFileRangeFn, strictWriteFileFn, strictWriteFileAtomicFn, strictReadDirFn, strictIsDirFn, strictMakeDirFn, strictRemoveFileFn, strToCFn, strToC2Fn, strCopyIntoFn, cStrCpyFn, u64ToDecFn, statPathFn, lstatPathFn, fileExistsFn, fileMtimeFn, fileSizeFn, tryIsDirFn, tryReadFileFn, tryReadFileRangeFn, tryWriteFileFn, tryWriteFileAtomicFn, tryMakeDirFn, tryMakeDirExclusiveFn, tryRemoveFileFn, tryRenameFn, trySymlinkFn, removeTreeFn, tryRemoveTreeFn, dirOpenFn, dirNamesFn, dirCloseFn, childPushFn, childDropFn, sigBlockFn, sigUnblockFn, cmdRunShFn, spawnExecFn, waitPidFn, exitWithFn, trapImpossibleFn, trapDivZeroFn, trapArrayOobFn, trapOomFn, trapPathLongFn, trapMemLimitFn, initMemFn, initCpusFn, initTimeoutFn, envLookupFn, parseU64Fn, cgroupCpusFn, envFilterFn, sigreturnStubFn, sigalrmFn, arrayEmptyFn, arrayLengthFn, arrayGetFn, arraySetFn, arrayMakeFn, trapRmtreeDeepFn, trapStackOverflowFn, mRunEffFn, pow2CeilFn, eraseFn, effNewRefFn, effReadRefFn, effWriteRefFn, effPrintFn "prim_eff_print" 1, effPrintFn "prim_eff_eprint" 2, effExitFn, floatFromIntFn, intFromFloatFn, floatBinFn "float_add" "add", floatBinFn "float_sub" "sub", floatBinFn "float_mul" "mul", floatBinFn "float_div" "div", floatCmpFn "float_eq" (floatCmpOrdered "sete"), floatCmpFn "float_neq" floatCmpNeq, floatCmpFn "float_lt" (floatCmpOrdered "setb"), floatCmpFn "float_le" (floatCmpOrdered "setbe"), floatCmpFn "float_gt" (floatCmpOrdered "seta"), floatCmpFn "float_ge" (floatCmpOrdered "setae"), floatAbsFn, floatSqrtFn]
     nativeGcFuncs
 
 -- | IR 符号 -> 运行时函数标签。白名单之外返回 Nothing（Module 报 NativeUnsupported）。
@@ -1704,6 +1722,9 @@ hostLeafGroups =
       "strict_read_file"
       ["prim_eff_readFile", "@vuna@prim_eff_readFile", "prim_eff_readFile_host", "@vuna@prim_eff_readFile_host", "@vuna@host@readFile"],
     Pair
+      "strict_read_file_range"
+      ["prim_eff_readFileRange", "@vuna@prim_eff_readFileRange", "prim_eff_readFileRange_host", "@vuna@prim_eff_readFileRange_host", "@vuna@host@readFileRange"],
+    Pair
       "strict_remove_file"
       ["prim_eff_removeFile", "@vuna@prim_eff_removeFile", "prim_eff_removeFile_host", "@vuna@prim_eff_removeFile_host", "@vuna@host@removeFile"],
     Pair
@@ -1720,6 +1741,7 @@ hostLeafGroups =
     Pair "try_make_dir" ["@vuna@host@tryMakeDir"],
     Pair "try_make_dir_excl" ["@vuna@host@tryMakeDirExclusive"],
     Pair "try_read_file" ["@vuna@host@tryReadFile"],
+    Pair "try_read_file_range" ["@vuna@host@tryReadFileRange"],
     Pair "try_remove_file" ["@vuna@host@tryRemoveFile"],
     Pair "try_remove_tree" ["@vuna@host@tryRemoveTree"],
     Pair "try_rename" ["@vuna@host@tryRename"],
@@ -1846,11 +1868,17 @@ nativeRtValueArityHost "@vuna@host@sleep" = 1
 nativeRtValueArityHost "prim_cleanupPush" = 1
 nativeRtValueArityHost "prim_cleanupPop" = 1
 nativeRtValueArityHost "@vuna@host@tryReadFile" = 1
+nativeRtValueArityHost "@vuna@host@tryReadFileRange" = 3
 nativeRtValueArityHost "prim_eff_readFile" = 1
 nativeRtValueArityHost "@vuna@prim_eff_readFile" = 1
 nativeRtValueArityHost "prim_eff_readFile_host" = 1
 nativeRtValueArityHost "@vuna@prim_eff_readFile_host" = 1
 nativeRtValueArityHost "@vuna@host@readFile" = 1
+nativeRtValueArityHost "prim_eff_readFileRange" = 3
+nativeRtValueArityHost "@vuna@prim_eff_readFileRange" = 3
+nativeRtValueArityHost "prim_eff_readFileRange_host" = 3
+nativeRtValueArityHost "@vuna@prim_eff_readFileRange_host" = 3
+nativeRtValueArityHost "@vuna@host@readFileRange" = 3
 nativeRtValueArityHost "@vuna@host@tryWriteFile" = 2
 nativeRtValueArityHost "prim_eff_writeFile" = 2
 nativeRtValueArityHost "@vuna@prim_eff_writeFile" = 2

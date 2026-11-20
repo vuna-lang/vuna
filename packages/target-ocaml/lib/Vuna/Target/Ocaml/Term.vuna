@@ -246,6 +246,17 @@ let dtp_readFile path =
     Fun.protect ~finally:(fun () -> close_in_noerr ch)
       (fun () -> really_input_string ch (in_channel_length ch))
   with Sys_error msg -> failwith (\"readFile: \" ^ msg)
+let dtp_readFileRange path offset length =
+  try
+    if offset < 0 || length <= 0 then \"\"
+    else
+      let ch = open_in_bin path in
+      Fun.protect ~finally:(fun () -> close_in_noerr ch)
+        (fun () ->
+           let size = in_channel_length ch in
+           if offset >= size then \"\"
+           else (seek_in ch offset; really_input_string ch (min length (size - offset))))
+  with Sys_error msg -> failwith (\"readFileRange: \" ^ msg)
 let dtp_writeFile path contents =
   try
     let ch = open_out_bin path in
@@ -303,6 +314,26 @@ let dtp_tryReadFile path =
             let n = Unix.read fd tmp 0 (Bytes.length tmp) in
             if n > 0 then (Buffer.add_subbytes buf tmp 0 n; go ()) in
           go (); Buffer.contents buf)
+   with e -> dtp_hostMark (dtp_hostCode e) e; \"\")
+let dtp_tryReadFileRange path offset length =
+  (try
+     dtp_hostReset ();
+     if offset < 0 || length <= 0 then \"\"
+     else
+       let fd = Unix.openfile path [Unix.O_RDONLY] 0 in
+       Fun.protect ~finally:(fun () -> (try Unix.close fd with _ -> ()))
+         (fun () ->
+            let size = (Unix.stat path).Unix.st_size in
+            if offset >= size then \"\"
+            else
+              let want = min length (size - offset) in
+              ignore (Unix.lseek fd offset Unix.SEEK_SET);
+              let b = Bytes.create want in
+              let rec go pos =
+                if pos < want then
+                  let k = Unix.read fd b pos (want - pos) in
+                  if k > 0 then go (pos + k) in
+              go 0; Bytes.sub_string b 0 want)
    with e -> dtp_hostMark (dtp_hostCode e) e; \"\")
 let dtp_tryWriteFile path contents =
   (try

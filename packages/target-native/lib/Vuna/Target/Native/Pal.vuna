@@ -22,6 +22,7 @@ export sysNr : String -> Int
 sysNr "read" = 0
 sysNr "write" = 1
 sysNr "close" = 3
+sysNr "lseek" = 8
 sysNr "mmap" = 9
 sysNr "rt_sigaction" = 13
 sysNr "rt_sigprocmask" = 14
@@ -63,6 +64,10 @@ atFdCwd = -100
 -- | `openat` flags：写 + 不存在则建 + 截断（`O_WRONLY|O_CREAT|O_TRUNC`）。
 export openWriteCreateTrunc : Int
 openWriteCreateTrunc = 577
+
+-- | `lseek` 的 whence：绝对偏移（`SEEK_SET`）。
+export seekSet : Int
+seekSet = 0
 
 -- | 新建普通文件 / 目录的权限位（`0666` / `0755`；受 umask 约束）。
 export modeFileDefault : Int

@@ -994,6 +994,12 @@ effIntrinsics =
     Intrinsic "@vuna@prim_eff_eprint" (IFun IStr (IEff IInt)) OpNone False,
     Intrinsic "prim_eff_readFile" (IFun IStr (IEff IStr)) OpNone True,
     Intrinsic "@vuna@prim_eff_readFile" (IFun IStr (IEff IStr)) OpNone False,
+    Intrinsic "prim_eff_readFileRange" (IFun IStr (IFun IInt (IFun IInt (IEff IStr)))) OpNone True,
+    Intrinsic
+      "@vuna@prim_eff_readFileRange"
+      (IFun IStr (IFun IInt (IFun IInt (IEff IStr))))
+      OpNone
+      False,
     Intrinsic "prim_eff_writeFile" (IFun IStr (IFun IStr (IEff IInt))) OpNone True,
     Intrinsic "@vuna@prim_eff_writeFile" (IFun IStr (IFun IStr (IEff IInt))) OpNone False,
     Intrinsic "prim_eff_writeFileAtomic" (IFun IStr (IFun IStr (IEff IInt))) OpNone True,
@@ -1021,6 +1027,26 @@ effIntrinsics =
     Intrinsic "prim_eff_readFile_host" (IFun IStr (IEff IStr)) OpNone True,
     Intrinsic "@vuna@prim_eff_readFile_host" (IFun IStr (IEff IStr)) OpNone False,
     Intrinsic "@vuna@host@readFile" (IFun IStr (IEff IStr)) OpNone False,
+    Intrinsic
+      "prim_eff_readFileRange_host"
+      (IFun IStr (IFun IInt (IFun IInt (IEff IStr))))
+      OpNone
+      True,
+    Intrinsic
+      "@vuna@prim_eff_readFileRange_host"
+      (IFun IStr (IFun IInt (IFun IInt (IEff IStr))))
+      OpNone
+      False,
+    Intrinsic
+      "@vuna@host@readFileRange"
+      (IFun IStr (IFun IInt (IFun IInt (IEff IStr))))
+      OpNone
+      False,
+    Intrinsic
+      "@vuna@host@tryReadFileRange"
+      (IFun IStr (IFun IInt (IFun IInt (IEff IStr))))
+      OpNone
+      False,
     Intrinsic "prim_eff_writeFile_host" (IFun IStr (IFun IStr (IEff IInt))) OpNone True,
     Intrinsic "@vuna@prim_eff_writeFile_host" (IFun IStr (IFun IStr (IEff IInt))) OpNone False,
     Intrinsic "@vuna@host@writeFile" (IFun IStr (IFun IStr (IEff IInt))) OpNone False,
