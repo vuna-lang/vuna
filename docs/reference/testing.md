@@ -655,7 +655,7 @@ nix run .#backend-check -- --compiler native --scope selfhost
 **当前状态**：native 自举编译器能构建、`version` / 帮助可用，但 `check` 在第一轮派发就停在
 `Base.Effect.Core.step` 的 `trap_impossible`（`vuna: runtime error: impossible branch`，
 exit 2），所以 `selfhost` / `parity` / `corpus` 三个 scope 全部跑不过。根因与复现见
-[debt.md](debt.md) D121。
+[debt.md](debt.md) D122。
 
 **口径约束**：编译器必须与被测源码同一棵树构建——Nix 派生天然满足；手工跑时先
 `nix build .#vuna-native`，不要拿旧二进制去跑新源码（诊断会指向编译器的能力差异，而不是
