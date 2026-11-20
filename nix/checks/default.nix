@@ -359,6 +359,18 @@ in
     script = ./frontend-growth.sh;
   };
 
+  # 名字收集对**长中缀链**的增长率门槛：重排后的左结合链是左嵌套
+  # （`((a+b)+c)+…`），按层 `append (左子结果) …` 是 O(n²)。合成 `g = 1 + 1 + …`，
+  # 按 N→2N 看 `vuna.resolve.warn`（来自 trace）；真实源码链短，别的探针看不见它。
+  vuna-resolve-chain-growth = vunaCheck {
+    name = "vuna-resolve-chain-growth";
+    srcs = [
+      src.base
+      src.manifest
+    ];
+    script = ./resolve-chain-growth.sh;
+  };
+
   # 容器增长率门槛：HashMap / Queue / TreeMap / PriorityQueue / Sort 的合成探针，
   # 按 N→2N 只测**运行**墙钟（借 ocamlopt 出产物，不测编译）。挡「O(1)/O(log n)
   # 退化成线性/二次」（size 退回 O(n)、队列用 append、平衡树丢平衡、排序退回插入）。

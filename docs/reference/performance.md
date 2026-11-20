@@ -514,10 +514,15 @@ import 调 `exportIndexOfModule` → `resolvedName` → `resolveModuleName` → 
 形态改写成直接风格；合成探针试过的两个方向读数：`scopeNamesOf` 的隐式作用域表在 2000 定义/
 2000 表项时只多 3.5 ms，模块表长度在改成 O(1) 查表后已不是成本项，都不值得单独动。
 
-**已知复杂度缺陷（不在本行）**：`Loader.Fixity.collectChain` 对 parser 产出的**左嵌套**
-`EInfix` 链每层先 `reorderExpr l`，对长链是 O(n²)：`g = 1 + 1 + …`（纯字面量）
-2000/4000/8000 项 = 47/161/621 ms。真实源码受 100 列格式化约束、链很短，因此不解释上面的
-0.78 s；生成代码与 bench 的长链会撞，修法是展平两侧脊后只对边界操作数 reorder 一次。
+**长链的二次行为在名字收集，不在 fixity**：parser 把中缀链收成**右嵌套**（`a + (b + c)`），
+`Fixity.collectChain` 沿右脊展平、每层只 reorder 一个左操作数——实测 `vuna.resolve.reorder`
+对 2000/4000/8000 项纯字面量链是 0.4/0.6/1.1 ms（线性）。二次项在 `unusedImportWarnings`
+的名字收集：重排后的左结合链是**左嵌套** `((a+b)+c)+…`，`exprRefNames` 每一层
+`append (左子结果) …` 会复制整段左子结果。`g = 1 + 1 + …` 的 `vuna.resolve.warn`
+2000/4000/8000 项 = 30/105/433 ms；改成累加器（每个节点只 cons 一次，顺序未定义、
+调用方都按集合消费）后 **1.7/2.1/3.1 ms**，门禁 `checks.vuna-resolve-chain-growth`。
+真实源码受 100 列格式化约束、链很短，这一项在整包里只占 ~60–70 ms，因此本轮的收益是
+复杂度（长链/生成代码），不是常数。
 
 ## 5. 增长率（合成包）
 

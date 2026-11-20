@@ -1200,58 +1200,97 @@ traitMethodRefNames m = exprRefNames m.traitMethodType
 
 -- | 模式里的引用名（构造子 / record 名；binder 名不是引用）。
 patRefNames : Pat -> List String
-patRefNames (PVar name sp) = []
-patRefNames (PAs name inner sp) = patRefNames inner
-patRefNames (PWild sp) = []
-patRefNames (PCon name pats sp) = (::) name (concatMap patRefNames pats)
-patRefNames (PInt n sp) = []
-patRefNames (PStr s sp) = []
-patRefNames (PRecord name fields sp) = (::) name (concatMap (\f => patRefNames (secondOf f)) fields)
+patRefNames p = patRefNamesGo p []
 
--- | 表达式里出现的引用名（EVar 已由解析期换成 canonical target）。
+patRefNamesGo : Pat -> List String -> List String
+patRefNamesGo (PVar name sp) acc = acc
+patRefNamesGo (PAs name inner sp) acc = patRefNamesGo inner acc
+patRefNamesGo (PWild sp) acc = acc
+patRefNamesGo (PCon name pats sp) acc = patRefNamesListGo pats ((::) name acc)
+patRefNamesGo (PInt n sp) acc = acc
+patRefNamesGo (PStr s sp) acc = acc
+patRefNamesGo (PRecord name fields sp) acc = fieldPatsGo fields ((::) name acc)
+
+patRefNamesListGo : List Pat -> List String -> List String
+patRefNamesListGo [] acc = acc
+patRefNamesListGo (p :: rest) acc = patRefNamesListGo rest (patRefNamesGo p acc)
+
+fieldPatsGo : List (Pair String Pat) -> List String -> List String
+fieldPatsGo [] acc = acc
+fieldPatsGo (f :: rest) acc = fieldPatsGo rest (patRefNamesGo (secondOf f) acc)
+
+-- | 表达式里出现的引用名（`EVar` 已由解析期换成 canonical target）。
+-- 用累加器而不是 `append` 拼接：重排后的左结合应用链是左嵌套（`((a+b)+c)+…`），
+-- `append (子结果) …` 在每一层复制整段左子结果就是 O(n²)。累加器每个节点只 cons 一次；
+-- **返回顺序未定义**（调用方都按集合消费：`HashMap.ofNames` / `memName`）。
 exprRefNames : Expr -> List String
-exprRefNames (EVar n sp) = (::) n []
-exprRefNames (EInt n sp) = []
-exprRefNames (EStr s sp) = []
-exprRefNames (EFloat raw sp) = []
-exprRefNames (ELam ps body sp) = exprRefNames body
-exprRefNames (EApp fn args sp) = append (exprRefNames fn) (concatMap exprRefNames args)
-exprRefNames (EPi name implicit qty dom cod sp) = append (exprRefNames dom) (exprRefNames cod)
-exprRefNames (ELet binds body rec_ sp) = append (concatMap bindRefNames binds) (exprRefNames body)
-exprRefNames (ELocalFun clauses sp) = concatMap clauseRefNames clauses
-exprRefNames (ECase scrut alts sp) = append (exprRefNames scrut) (concatMap bindRefNames alts)
-exprRefNames (EIf c t el sp) = append (exprRefNames c) (append (exprRefNames t) (exprRefNames el))
-exprRefNames (EField base fname sp) = exprRefNames base
-exprRefNames (ERecord name fields sp) =
-  (::) name (concatMap (\f => exprRefNames (secondOf f)) fields)
-exprRefNames (ERecUpdate base fields sp) =
-  append (exprRefNames base) (concatMap (\f => exprRefNames (secondOf f)) fields)
-exprRefNames (EDo stmts sp) = concatMap doStmtRefNames stmts
-exprRefNames (EInfix op lhs rhs sp) = (::) op (append (exprRefNames lhs) (exprRefNames rhs))
-exprRefNames (EParen inner sp) = exprRefNames inner
-exprRefNames (EBacktick op lhs rhs sp) = (::) op (append (exprRefNames lhs) (exprRefNames rhs))
-exprRefNames (ESectOp op sp) = (::) op []
-exprRefNames (ESectL op rhs sp) = (::) op (exprRefNames rhs)
-exprRefNames (ESectR lhs op sp) = (::) op (exprRefNames lhs)
-exprRefNames (EAnn value ty sp) = append (exprRefNames value) (exprRefNames ty)
-exprRefNames (EInterp multi parts sp) = concatMap interpPartRefNames parts
+exprRefNames e = exprRefNamesGo e []
+
+exprRefNamesGo : Expr -> List String -> List String
+exprRefNamesGo (EVar n sp) acc = (::) n acc
+exprRefNamesGo (EInt n sp) acc = acc
+exprRefNamesGo (EStr s sp) acc = acc
+exprRefNamesGo (EFloat raw sp) acc = acc
+exprRefNamesGo (ELam ps body sp) acc = exprRefNamesGo body acc
+exprRefNamesGo (EApp fn args sp) acc = exprRefNamesGo fn (exprRefNamesListGo args acc)
+exprRefNamesGo (EPi name implicit qty dom cod sp) acc = exprRefNamesGo dom (exprRefNamesGo cod acc)
+exprRefNamesGo (ELet binds body rec_ sp) acc = exprRefNamesGo body (bindRefNamesListGo binds acc)
+exprRefNamesGo (ELocalFun clauses sp) acc = clauseRefNamesListGo clauses acc
+exprRefNamesGo (ECase scrut alts sp) acc = exprRefNamesGo scrut (bindRefNamesListGo alts acc)
+exprRefNamesGo (EIf c t el sp) acc = exprRefNamesGo c (exprRefNamesGo t (exprRefNamesGo el acc))
+exprRefNamesGo (EField base fname sp) acc = exprRefNamesGo base acc
+exprRefNamesGo (ERecord name fields sp) acc = fieldExprsGo fields ((::) name acc)
+exprRefNamesGo (ERecUpdate base fields sp) acc = exprRefNamesGo base (fieldExprsGo fields acc)
+exprRefNamesGo (EDo stmts sp) acc = doStmtRefNamesListGo stmts acc
+exprRefNamesGo (EInfix op lhs rhs sp) acc = exprRefNamesGo lhs (exprRefNamesGo rhs ((::) op acc))
+exprRefNamesGo (EParen inner sp) acc = exprRefNamesGo inner acc
+exprRefNamesGo (EBacktick op lhs rhs sp) acc = exprRefNamesGo lhs (exprRefNamesGo rhs ((::) op acc))
+exprRefNamesGo (ESectOp op sp) acc = (::) op acc
+exprRefNamesGo (ESectL op rhs sp) acc = (::) op (exprRefNamesGo rhs acc)
+exprRefNamesGo (ESectR lhs op sp) acc = (::) op (exprRefNamesGo lhs acc)
+exprRefNamesGo (EAnn value ty sp) acc = exprRefNamesGo value (exprRefNamesGo ty acc)
+exprRefNamesGo (EInterp multi parts sp) acc = interpPartRefNamesListGo parts acc
+
+exprRefNamesListGo : List Expr -> List String -> List String
+exprRefNamesListGo [] acc = acc
+exprRefNamesListGo (e :: rest) acc = exprRefNamesListGo rest (exprRefNamesGo e acc)
+
+fieldExprsGo : List (Pair String Expr) -> List String -> List String
+fieldExprsGo [] acc = acc
+fieldExprsGo (f :: rest) acc = fieldExprsGo rest (exprRefNamesGo (secondOf f) acc)
 
 -- | `pat = expr` 绑定里的引用名（模式 binder 不算引用）。
-bindRefNames : Pair Pat Expr -> List String
-bindRefNames p = append (patRefNames (firstOf p)) (exprRefNames (secondOf p))
+bindRefNamesGo : Pair Pat Expr -> List String -> List String
+bindRefNamesGo p acc = patRefNamesGo (firstOf p) (exprRefNamesGo (secondOf p) acc)
+
+bindRefNamesListGo : List (Pair Pat Expr) -> List String -> List String
+bindRefNamesListGo [] acc = acc
+bindRefNamesListGo (b :: rest) acc = bindRefNamesListGo rest (bindRefNamesGo b acc)
 
 -- | 局部函数 clause（参数模式 + body）里的引用名。
-clauseRefNames : Pair (List Pat) Expr -> List String
-clauseRefNames p = append (concatMap patRefNames (firstOf p)) (exprRefNames (secondOf p))
+clauseRefNamesGo : Pair (List Pat) Expr -> List String -> List String
+clauseRefNamesGo p acc = patRefNamesListGo (firstOf p) (exprRefNamesGo (secondOf p) acc)
+
+clauseRefNamesListGo : List (Pair (List Pat) Expr) -> List String -> List String
+clauseRefNamesListGo [] acc = acc
+clauseRefNamesListGo (c :: rest) acc = clauseRefNamesListGo rest (clauseRefNamesGo c acc)
 
 -- | do 语句里的引用名。
-doStmtRefNames : DoStmt -> List String
-doStmtRefNames (DBind pat e sp) = append (patRefNames pat) (exprRefNames e)
-doStmtRefNames (DExpr e sp) = exprRefNames e
-doStmtRefNames (DLet binds sp) =
-  concatMap (\b => append (patRefNames (firstOf b)) (exprRefNames (secondOf b))) binds
+doStmtRefNamesGo : DoStmt -> List String -> List String
+doStmtRefNamesGo (DBind pat e sp) acc = patRefNamesGo pat (exprRefNamesGo e acc)
+doStmtRefNamesGo (DExpr e sp) acc = exprRefNamesGo e acc
+doStmtRefNamesGo (DLet binds sp) acc = bindRefNamesListGo binds acc
+
+doStmtRefNamesListGo : List DoStmt -> List String -> List String
+doStmtRefNamesListGo [] acc = acc
+doStmtRefNamesListGo (s :: rest) acc = doStmtRefNamesListGo rest (doStmtRefNamesGo s acc)
 
 -- | 模板片段里的引用名（洞内表达式）。
-interpPartRefNames : InterpPart -> List String
-interpPartRefNames (IPText s) = []
-interpPartRefNames (IPHole e) = exprRefNames e
+interpPartRefNamesGo : InterpPart -> List String -> List String
+interpPartRefNamesGo (IPText s) acc = acc
+interpPartRefNamesGo (IPHole e) acc = exprRefNamesGo e acc
+
+interpPartRefNamesListGo : List InterpPart -> List String -> List String
+interpPartRefNamesListGo [] acc = acc
+interpPartRefNamesListGo (p :: rest) acc =
+  interpPartRefNamesListGo rest (interpPartRefNamesGo p acc)
