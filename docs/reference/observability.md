@@ -138,9 +138,9 @@ span / 计数 / 日志 / 采样栈写成 **Chrome Trace Event JSONL**；关闭�
 - 档次读数（在 `ph:"X"` 的 `args` 上，**不是**独立 count 事件）：`args.allocWords`
   （整数，span 期间的分配字数增量）；`validate` 只校验它是整数，
   不对 `vuna.counter.alloc.words` 做存在性断言（该名字已从词汇表移除）；
-  该值按 `minor_words + major_words` 求差，而 `minor_words` 只在 minor GC 边界推进
-  （minor heap 16M words ⇒ 量化到 134 MB/格，短 span 恒为 0）；精确的区间分配需改用
-  `Gc.allocated_bytes ()`（见 [debt.md](debt.md) D81）；
+  该值是 `Gc.allocated_bytes ()` 的差值（精确到 words）；不要改用
+  `minor_words + major_words` 求差——`minor_words` 只在 minor GC 边界推进
+  （minor heap 16M words ⇒ 量化到 134 MB/格，短 span 恒为 0）；
   峰值内存不可用 span 字段表达（进程高水位不是区间增量，同见 D81）；
 - 采样（`ph:"i"`，`args.stack`）：`vuna.sample.cpu`、`vuna.sample.mem`；
 - 日志（`ph:"i"`，`args.text`）：`vuna.log`（`dbg!` 与库层 `obsLog` 共用）；

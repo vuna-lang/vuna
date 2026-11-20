@@ -249,21 +249,27 @@ load/parse 前缀 + iface 摘要 **~2.6 s** → 逐定义精化（`collectSigs-d
 7. **分配（累计量，不是内存占用）**：冷 `check packages/compiler` 单进程 `minor_words`
    **1.17e9 words（×8 B ≈ 9.3 GB 累计分配）**、`major_words`（晋升）74M words（590 MB）、
    `top_heap_words`（堆高水位）37M words（294 MB）、maxRSS 437 MB；同一次 check 精化
-   7157 个定义 ⇒ **每定义 163k words ≈ 1.3 MB**，分配速率 ~160M words/s（≈1.3 GB/s）。
-   大头是 `eval`/`force`/`conv` 的逐次调用：按 §4 的计数行 `eval` 1.6e6 次、
-   `forceVal` 5.3e6 次摊算，单次百来 words 就是数亿 words 量级，而整树复制一个定义体
-   只有万级 words。elab 占分配 ~92%，瓶颈是 `quote`/`zonk`/`applySpine` 的瞬时 churn，
-   不是表示重复。
+   7157 个定义 ⇒ **每定义 163k words ≈ 1.3 MB**（其中 `vuna.def.elab` span 自身均值
+   325 KB / 中位 189 KB），分配速率 ~160M words/s（≈1.3 GB/s）。
+   **阶段份额**（同一份冷跑，互不重叠的四段）：精化 `vuna.elab` 3.5 GB（37%）、
+   codegen 检查 1.15 GB（12%）、`vuna.parse.lex` 0.89 GB（9%）、`vuna.parse.syntax`
+   0.43 GB（4.6%）；余下 ~37% 落在没有 span 的 load/resolve/iface 编码落盘上。精化内部
+   最大单项是 `vuna.elab.term.body`（逐表达式正文检查）1.5 GB——term 重写（`conv`/
+   `force`/`quote`/`applySpine`）是分配的大头之一，但**不是九成**；分配份额 ≠ 墙钟份额
+   （词法分配多但快，term 重写在判等逻辑本身）。
+   计数（level 3、冷 `check packages/compiler`）：`eval` 1.59e6、`spineAppend` 0.99e6、
+   `conv` 1.8e5（失配 3.2e4，18%）、`meta.zonk` 7.5e3、delta 展开 1.4e4（≈`eval` 的 1%）、
+   应用表达式重试（`elab.retry.{hole,third}`）**0 次**。⇒ 按定义缓存 delta 求值的上限就是
+   这 1%（与既有 A/B 的 −2~3% 一致）；三重尝试阶梯在本次两档里不触发。
    **三个 1.x e9 不同口径**：本节 1.1–1.2e9 是单包单进程；第 11 条的 1.63e9 是 `check .`
    全树；cli 成员的 1.55e9 是子进程合计。复现：
    `VN_PERF_STATS=1 VUNA_STORE=$(mktemp -d) ./result/bin/vuna check packages/compiler`
    （结束在 stderr 打 `VN_PERF minor_words=… major_words=… minor_collections=… top_heap_words=…`）。
    hash-consing 需要全局 intern 表、改变 Marshal 布局、与纯精化/元变量/摘要三处不变量
    冲突；预计收益 2–4%，不做。
-   注：**per-span `args.allocWords` 暂不可用于归因**——它按 `minor_words + major_words`
-   求差，而 `Gc.quick_stat` 的 `minor_words` 只在 minor GC 边界推进（minor heap 16M words
-   下量化到 134 MB/格；实测 6390 个 `vuna.def.elab` span 里 6375 个报 0）；精确的区间分配
-   用 `Gc.allocated_bytes ()`（见 [observability.md](observability.md)、[debt.md](debt.md) D81）。
+   注：span 的 `args.allocWords` 是 `Gc.allocated_bytes ()` 的差值（精确到 words）；
+   不要用 `minor_words + major_words` 求差——`minor_words` 只在 minor GC 边界推进，
+   minor heap 16M words 下会量化到 134 MB/格（见 [observability.md](observability.md)）。
 8. 已修热点（不要重复排查，读数见 §1）：**`Dt.dedup*` 的 O(n²)、`Termination.anyOwn` 的
    O(n²)、写接口的包接口双读**；`Elab.Usage` 全程序扫描（实测
    10–13 ms）、实例体/方法子句查找（13.5 ms）、`refsOfDef`（12–16 ms）、签名 banned 集、
@@ -378,11 +384,14 @@ load/parse 前缀 + iface 摘要 **~2.6 s** → 逐定义精化（`collectSigs-d
 
 | 计数 | 次数 | 读法 |
 | --- | --- | --- |
-| `vuna.counter.meta.solve` | ~6.3×10^3 | 元变量求解 |
-| `vuna.counter.meta.zonk` | ~7.4×10^3 | `zonkTerm` 调用；按项规模派生 fuel 的量级太小，不值得改 |
-| `vuna.counter.core.conv` | ~2.08×10^5 | conv 调用（level 3） |
-| `vuna.counter.conv.mismatch` | ~5.9×10^4（28%） | conv 失配（level 3）；每次失配要付两次 `showValueAt`，这是「被丢弃的诊断」成本上界 |
-| `vuna.counter.core.reduce` | ~1.60×10^6 | `eval` 调用（level 3；每次入口算一遍 `termSize` 派生 fuel，是待办优化） |
+| `vuna.counter.meta.solve` | ~3.6×10^3 | 元变量求解 |
+| `vuna.counter.meta.zonk` | ~7.5×10^3 | `zonkTerm` 调用 |
+| `vuna.counter.core.conv` | ~1.8×10^5 | conv 调用（level 3） |
+| `vuna.counter.conv.mismatch` | ~3.2×10^4（18%） | conv 失配（level 3）；每次失配要付两次 `showValueAt`，这是「被丢弃的诊断」成本上界 |
+| `vuna.counter.core.reduce` | ~1.59×10^6 | `eval` 调用（level 3） |
+| `vuna.counter.core.delta` | ~1.4×10^4 | delta 展开次数（`eval` 的 1%） |
+| `vuna.counter.core.spine` | ~9.9×10^5 | `spineAppend` 追加次数 |
+| `vuna.counter.elab.retry.{hole,third}` | 0 | 应用表达式第二 / 三次尝试；两档（base / compiler）都不触发 |
 
 pending 队列规模分桶（`elab.dict.pending.b*`，走 `--debug-perf` 的 `counters=` 行）：
 0 规模 10,878 轮、1–4 1,953 轮、5–16 1,244 轮、17–64 263 轮、65+ 2 轮。即「一趟 worklist
