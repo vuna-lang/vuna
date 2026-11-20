@@ -7,16 +7,19 @@ keysFrom : Int -> Int -> List String
 keysFrom i k = if k <= 0 then [] else strFromInt i :: keysFrom (i + 1) (k - 1)
 
 fill : List String -> Int -> HashMap String Int
-fill ks i = case ks of
-  [] => HashMap.fromList []
-  k :: rest => HashMap.insert k (i * 3) (fill rest (i + 1))
+fill ks i =
+  case ks of
+    [] => HashMap.fromList []
+    k :: rest => HashMap.insert k (i * 3) (fill rest (i + 1))
 
 total : List String -> HashMap String Int -> Int
-total ks t = case ks of
-  [] => 0
-  k :: rest => case HashMap.lookup k t of
-    Nothing => total rest t
-    Just v => v + total rest t
+total ks t =
+  case ks of
+    [] => 0
+    k :: rest =>
+      case HashMap.lookup k t of
+        Nothing => total rest t
+        Just v => v + total rest t
 
 main : Int
 main =

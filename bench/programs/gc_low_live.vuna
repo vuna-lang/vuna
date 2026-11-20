@@ -1,17 +1,20 @@
 -- 低存活集 GC 压力：每轮分配 1000 个 List 单元 + 1 KB 字符串后丢弃。
 -- 手写 OCaml 对照见 gc_low_live.ml（同算法）。
 count : List Int -> Int
-count xs = case xs of
-  [] => 0
-  _ :: rest => 1 + count rest
+count xs =
+  case xs of
+    [] => 0
+    _ :: rest => 1 + count rest
 
 churn : Int -> Int
-churn n = if n <= 0 then 0
-else
-  let
-    xs = range 0 1000
-    s = repeat 100 "0123456789"
-  in count xs + strLength s + churn (n - 1)
+churn n =
+  if n <= 0 then
+    0
+  else
+    let
+      xs = range 0 1000
+      s = repeat 100 "0123456789"
+    in count xs + strLength s + churn (n - 1)
 
 main : Int
 main = churn 10000

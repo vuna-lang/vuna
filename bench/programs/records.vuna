@@ -9,9 +9,10 @@ record Point where
   y : Int
 
 apply : Op -> Int -> Int -> Int
-apply op a b = case op of
-  Add => a + b
-  Mul => a * b
+apply op a b =
+  case op of
+    Add => a + b
+    Mul => a * b
 
 bound : Int -> Int
 bound n = n - n / 1000 * 1000

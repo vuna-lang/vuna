@@ -3,7 +3,7 @@ module Dep.B where
 import Prelude
 
 export mkB : Int
-mkB = g Nil
+mkB = g []
 
 g : {a : Type} -> List a -> Int
 g xs = 0

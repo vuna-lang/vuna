@@ -5,12 +5,14 @@ import Base.Data.List as List
 import Base.Data.Nat as Nat
 
 churn : Int -> Int
-churn n = if n <= 0 then 0
-else
-  let
-    a = Array.fromList (range 0 1000)
-    b = Array.set a (Nat.fromInt 0) n
-  in Nat.toInt (Array.length b) + Array.get b (Nat.fromInt 0) + churn (n - 1)
+churn n =
+  if n <= 0 then
+    0
+  else
+    let
+      a = Array.fromList (range 0 1000)
+      b = Array.set a (Nat.fromInt 0) n
+    in Nat.toInt (Array.length b) + Array.get b (Nat.fromInt 0) + churn (n - 1)
 
 main : Int
 main = churn 8000
