@@ -1,10 +1,9 @@
 # 66) 接口摘要「擦除位残 meta」的移位/段分配。
 #
-# A① `shiftTerm` 覆盖全部 Term 构造子、fuel 用尽返回可检测错误：
-#     只递归部分构造子会让 TMk/TRecord/TProj/TRecUpd 里的残 meta 漏移；fuel 用尽后
-#     原样返回整棵子树则让 record 构造/更新里的残 meta 沿用未移位的编号、与本包 fresh 编号
-#     撞号（静默错项）。这里断言这几类构造子里的 meta 全部 +off；600 层嵌套超过 fuel
-#     guard 时返回可检测的 ErrC，而不是静默漏移。
+# A① `shiftTerm` 覆盖全部 Term 构造子、深项不被误报成燃料耗尽：
+#     只递归部分构造子会让 TMk/TRecord/TProj/TRecUpd 里的残 meta 漏移；这里断言这几类
+#     构造子里的 meta 全部 +off。燃料按项规模派生（`termSize t + 16`，深度 ≤ 节点数），
+#     600 层线性嵌套的合法深项必须整体移位成功，而不是返回燃料耗尽。
 #
 # A② dep 段号与 iface 列表顺序无关：
 #     夹具 dep 有两个**互不 import** 的模块（A/B），翻转 `[export].modules` 顺序会改变
@@ -19,10 +18,11 @@ run: sh -c 'printf "%s\n" "[package]" "name = \"metashift\"" "" "[dependencies]"
 run: sh -c 'TMPDIR="$TMPDIR/meta-shift-cache" "$VUNA" run "$TMPDIR/meta-shift" 2>&1'
 exit: 0
 out-contains: SHIFT_OK
-out-contains: FUEL_ERR
+out-contains: DEEP_OK
 out-not-contains: SHIFT_BAD
 out-not-contains: SHIFT_ERR
-out-not-contains: FUEL_SILENT_BAD
+out-not-contains: DEEP_BAD
+out-not-contains: DEEP_ERR
 # --- A②：dep 模块序翻转后 app 的 codegen 产物逐字节稳定 ---
 run: sh -c 'rm -rf "$TMPDIR/ms-order"; mkdir -p "$TMPDIR/ms-order/dep/lib/Dep" "$TMPDIR/ms-order/app/app"'
 run: sh -c 'cp "$VUNA_SUITE_ROOT/test/suite/fixtures/meta_shift/order/dep_A.vuna" "$TMPDIR/ms-order/dep/lib/Dep/A.vuna"'
