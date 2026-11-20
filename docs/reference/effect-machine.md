@@ -534,7 +534,7 @@ ctx 深度是真正的嵌套 resume 深度。
 ### 9.5 宿主路径与派发收敛
 
 下面几项来自宿主效应/机器收敛的盘点；按门禁执行，不先做优化后找口径。
-W1 / W2 / W4 / W3.0 已落地；接下来按 W5 → W3.1（宿主 resume 的尾路径 / ctx 回收）推进。
+W1 / W2 / W4 / W3.0 已落地；W5 评估后删除（见下），接下来做 W3.1（宿主 resume 的尾路径 / ctx 回收）。
 
 | 项 | 内容 | 门禁 / 状态 |
 |---|---|---|
@@ -542,7 +542,7 @@ W1 / W2 / W4 / W3.0 已落地；接下来按 W5 → W3.1（宿主 resume 的尾�
 | W2 | 宿主表收敛成 `Base.Intrinsics.builtinEffects` 的 `HostClass = HostHandled \| HostDirect key opH \| HostAbort key text`；entry 预装与 wasm 直连同源，删死字段（`@vuna@run*Host` 名、`irHost*` 表、`opHOf`） | **已达成**；`corpus/compiler/05_host_table` 锁分类与 `sendCore`/`sendCoreId` 两种名字 |
 | W4 | `collectHandleOpsDefs` 改吃 **CPS 前** 的 defs，让 handler 分类与 CPS 输出解耦 | **已达成**（机器 pass 仍是类型改变型，见 [compiler-audit.md](compiler-audit.md) IR-08；不声称关闭 IR-08/IR-09） |
 | W3.0 | 「入口宿主叶子」bench：`bench/programs/eff_entry_host`——`main : Eff [ConsoleOp] Int` 5000 次 `consolePrint ""`（**不装用户 handler**，entry 只预装 `runConsoleHost`），`.ml` 对照同算法 | **已达成**。同窗口：OCaml 后端 5 ms / native 29 ms（9.67x）/ wasm 74 ms（net 18.7x）；读数与 N 的悬崖见 [benchmarks.md](benchmarks.md) §1.4 |
-| W5 | 宿主叶子改裸值原语：目前只有三处 `runPure (@vuna@host@…)`——`Console` 的 `Print` / `EPrint`、`Process` 的 `Exit`；三端运行时实现本来就返回裸值，所以只需新增隐藏的裸值 intrinsic（`String -> Int` 等）并在三端符号表里指向同一实现，`base` 侧去掉 `runPure`/`raise` 包装 | 先过 W3.0（已满足）。改动面：`packages/base`（进 seed）+ `packages/compiler-base`（内建表）+ 三个 `packages/target-*`（插件，不进 seed，无需 rotation）。它只去掉每次叶子的第二台机器循环，**不改变** D121 的 ctx 线性增长 |
+| W5 | 宿主叶子改裸值原语（`Console` 的 `Print`/`EPrint`、`Process` 的 `Exit` 三处 `runPure`） | **已评估并删除**：CPS 把 `runPure (MkEff leaf)` 折成对叶子的直接调用，三端产物与裸值版逐字节一致、跑分在噪声内（[benchmarks.md](benchmarks.md) §1.4「W5 负结果」）。不新增裸值 intrinsic |
 | W3.1 | 宿主 resume 的尾路径：`handleHostAt → MkHandleHost`，让库 opH 的 `k` 调用不必走 `MkRestCont`（不再按 perform 次数压 ctx / 占槽），顺带省掉宿主帧的槽位与 epoch；Ref 归入 Direct | **不再「随便复评」**：W3.0 证明库 opH 的 resume 非尾，`live` 随 perform 次数线性增长并在 8k 后进入 GC 悬崖（[debt.md](debt.md) D121）。W5 之后按剩余读数决定先做「尾路径」还是「按段回收 ctx」 |
 
 ### 9.4 风险与边界

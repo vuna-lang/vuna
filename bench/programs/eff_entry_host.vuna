@@ -1,7 +1,8 @@
 -- 效应基准：**入口宿主叶子**。main 的行是内建 `ConsoleOp`，没有用户 handler：
--- native 由 entry 预装 `runConsoleHost`，wasm 走直连改写；两条路都是
--- `MkPerform`/`runMain` → 机器的 `opH` → `runPure (@vuna@host@print "")`（第二台机器循环）。
--- 空串让每次叶子只有一次零字节 write，测到的是效应机器 + 宿主叶子的固定成本。
+-- native 由 entry 预装 `runConsoleHost`，wasm 走直连改写；每轮一次机器转移
+-- （`MkPerform` / `runMain`）后由 opH 直接调宿主叶子（`runPure` 包 `MkEff` 会被 CPS
+-- 折掉，不是第二台机器）。空串让每次叶子只有一次零字节 write，测到的是效应机器
+-- （含非尾 resume 的 ctx 保留）+ 宿主叶子的固定成本。
 -- 手写 OCaml 对照见 eff_entry_host.ml（同算法；`output_string ""` 不产生 syscall，
 -- 所以比值里含 vuna 侧那 N 次零字节 write 的常数，W5 的前后对比不受影响）。
 import Base.Effect.Core as Eff

@@ -206,7 +206,8 @@ native 赢在「调用少、字符串/栈传参多」的形状（[performance.md
 - `eff_install`：10000 轮独立安装 handler + perform + 拆掉（`MkHandle`/`finish` 固定成本）；
 - `eff_entry_host`：**入口宿主叶子**——`main : Eff [ConsoleOp] Int` 5000 次
   `consolePrint ""`，entry 只预装 `runConsoleHost`、没有用户 handler；每轮是 1 次零字节
-  write + 两次机器循环（`MkPerform` 一次、`opH` 里 `runPure (@vuna@host@print …)` 一次）。
+  write + 一次机器转移（`MkPerform` → `opH`）。`opH` 里没有第二台机器：`runPure (MkEff leaf)`
+  在 CPS 里折成对叶子的直接调用（见下面的 W5 负结果）。
   `.ml` 对照用 `output_string ""`（不产生 syscall），所以比值里含那 N 次 write 的常数。
 
 另有 `startup`（`repeat=20` 的进程/运行时初始化地板）与 `traits`（约束多态的字典派发）。
@@ -251,8 +252,8 @@ N=5000，loadavg ≈2.5）：手写 OCaml 3 ms / **OCaml 后端 5 ms（1.67x）*
 **native 29–34 ms（9.7–17x）** / **wasm 32 ms（net ≈14，16x）**。同一窗口的对照：
 `eff_tick`（内联 clause、尾 resume）native 14 ms / 20000 次，即 ≈0.7 µs/perform；
 `eff_host`（用户 handler + answer row，5000 轮两次 perform）native 71 ms。
-两个后端的形状不同：native 走库机器（`MkPerform` + opH 里的 `runPure`），wasm 走直连
-改写（`runMain (opH op pureK)` + opH 里的 `runPure`），都还是「每次叶子两台机器循环」。
+两个后端的形状不同：native 走库机器（`MkPerform` → opH），wasm 走直连改写
+（`runMain (opH op pureK)`）；两条路都只跑**一台**机器——opH 里的 `runPure` 不算一台。
 入口宿主叶子是**非尾 resume**：库 opH（`consoleOpHIOHost`）把续延当普通函数参数调用，
 CPS 只对语法 clause 的 `k`（`__mchTK`）发 `MkRestTail`，所以每次 `perform` 都压一层
 `MkCtx`/续延槽。后果在 5000 以上才显形（native）：
@@ -268,6 +269,15 @@ CPS 只对语法 clause 的 `k`（`__mchTK`）发 `MkRestTail`，所以每次 `p
 14 ms / 4 MB——所以这是「库 opH 的 resume 不走尾路径」的机器问题，不是 console 特有。
 基准固定在 N=5000（稳定），悬崖与线性增长记在 [debt.md](debt.md) D121；W3.1 的
 `MkHandleHost` 因此从「可选优化」变成「宿主 resume 的尾路径 / ctx 回收」。
+
+**W5 负结果（宿主叶子改裸值原语）**：原计划把三处 `runPure (@vuna@host@…)`
+（`Console` 的 `Print` / `EPrint`、`Process` 的 `Exit`）改成裸值 intrinsic，理由是
+「每次 print 再跑一台机器」。实测不成立：CPS 把 `runPure (MkEff leaf)` 折成对叶子的
+直接调用，三端产物与裸值版**逐字节一致**（native `consoleOpHIOHost` 的 `.s` 函数体、
+wasm `main.wat` 全文、OCaml `B_dEffect_dConsole.ml`），跑分在噪声内
+（`eff_entry_host` native 28→27 ms、wasm 34→35 ms；`VUNA_NATIVE_GC_MIN=2G` 下 19→19）。
+所以不新增裸值 intrinsic（同一运行时函数留两个调用面，只是把名字表撑大），真正要做的
+是 W3.1 的 resume 尾路径 / ctx 回收。
 
 **CPS 前后**（wasm：`445315d` 的 wat 机器 → HEAD 的库机器；native：`e663921` 的栈拷贝 →
 HEAD 的库机器；`--runs 3 --warmup 1`，源码与 harness 都是 HEAD）：
