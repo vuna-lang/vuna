@@ -223,10 +223,11 @@ end:
 | §44q | 闭合判定的 binder 深度口径：含 record-update（`TRecUpd.body` 在 `tele` 之下）的最小包，冷/热缓存的 check audit 都必须 exit 0；`build --no-compile` 另断言 `iface-audit subject=compile`（摘要 codegen vs 全量 codegen） |
 
 基础开关：`VUNA_IFACE_AUDIT=1`（同一进程跑摘要 + 全量、逐字节比较、不一致即失败且不落盘）、
-`VUNA_IFACE_SELFTEST=1`（写侧读回 + `hashOfIface` 载荷自证）。两者可以**同时**开启（CI/排障
-组合）；注意 AUDIT 会绕过 check 图命中、强制每次重算两条路径，全量双跑成本高，不适合放在
-热路径。`44q` 只覆盖 AUDIT；SELFTEST 由 `VUNA_IFACE_SELFTEST=1` 的本地/排障运行覆盖，不
-单独成 steps。
+`VUNA_IFACE_SELFTEST=1`（写侧载荷自证：写前逐个模块重算 `hashOfIface` 并与记录值比对，
+不一致就不写并留 `iface-hash-mismatch`；复用侧 `payloadSelfOk` 用同一口径）。两者可以
+**同时**开启；注意 AUDIT 会绕过 check 图命中、强制每次重算两条路径，全量双跑成本高，不适合
+放在热路径。`44q` 只覆盖 AUDIT；SELFTEST 由 `checks.vuna-iface-selftest`（base + compiler
+冷跑）覆盖，不单独成 steps。
 
 ### 超时
 
@@ -515,11 +516,11 @@ pkg_err/packages/test-m30 → `packages/cli`；web → `packages/web-cli`；其�
 
 ## Nix checks 清单
 
-`nix flake check` 实测 **30 项**：3 个 package 构建（`vuna` / `vuna-compiler` /
-`vuna-seed`，同时暴露为 checks）+ 27 个 check 语义项（`context-budget`、
+`nix flake check` 实测 **31 项**：3 个 package 构建（`vuna` / `vuna-compiler` /
+`vuna-seed`，同时暴露为 checks）+ 28 个 check 语义项（`context-budget`、
 `seed-selfhost`、`vscode-ext`、`vuna-checks-inventory`、`vuna-compiler-growth`、
 `vuna-compiler-growth-ctor`、`vuna-compiler-growth-incremental`、`vuna-container-growth`、
-`vuna-diag`、`vuna-fmt`、`vuna-frontend-growth`、
+`vuna-diag`、`vuna-fmt`、`vuna-frontend-growth`、`vuna-iface-selftest`、
 `vuna-lint`、`vuna-metrics`、`vuna-native-artifact`、`vuna-native-surface`、
 `vuna-nix-fmt`、`vuna-obs-dwarf`、`vuna-obs-overhead`、
 `vuna-obs-schema`、`vuna-single-pass`、`vuna-static`、`vuna-tests-e2e`、`vuna-tests-gate`、

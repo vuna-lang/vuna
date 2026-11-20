@@ -399,6 +399,27 @@ in
     script = ./vuna-single-pass.sh;
   };
 
+  # 接口载荷必须能重算出记录里的 iface 哈希（写侧自证；漂移会让增量复用错接口）。
+  vuna-iface-selftest = vunaCheck {
+    name = "vuna-iface-selftest";
+    srcs = [
+      src.compiler
+      src.compilerBase
+      src.ir
+      src.targetOcaml
+      src.targetNative
+      src.targetWasm
+      src.pluginWeb
+      src.dev
+      src.base
+      src.pluginKit
+      src.toolchain
+      src.http
+      src.manifest
+    ];
+    script = ./vuna-iface-selftest.sh;
+  };
+
   vuna-lint = vunaCheck {
     name = "vuna-lint";
     srcs = workspace;

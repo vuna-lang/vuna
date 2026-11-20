@@ -2257,21 +2257,33 @@ writeIfaceShadowWith ctx checked pre =
                         pure (OkC [])
                   else
                     do
-                      -- 先写「模块顺序」再写接口对象：读侧只有两份都在时才用接口路径。
-                      _ <- writeOrderEff ctx (map miNameOf modules)
-                      -- 接口写边界：`Eff` 动作，标记而非跨度；`vuna.counter.cache.write` 不是
-                      -- 词汇表里的名字（只有 `vuna.cache.write`，且它是保留的 span 名而不是计数名的
-                      -- 样子），所以这里只打标记 + 保留既有 `iface-write=…` 文本行的四段 ms：
-                      -- 阶段拆分靠文本行，结构化只报「写发生了」。
-                      _ <- obsMarkEff "vuna.iface.write"
-                      n <- writeIfaceObjects own modules
-                      -- 依赖身份摘要：依赖方按 lib 根源闭包摘要 + 编译器 tag 读。
-                      _ <- writePkgIfaceSummaryEff ctx modules
-                      t4 <- clockNow
-                      let
-                        _ = dbg! "iface-write=${n}/${length modules} closure=${length own} phases mods=${strFromInt ((t1 - t0) / 1000)}ms sources=${strFromInt ((t2 - t1) / 1000)}ms compute=${strFromInt ((t3 - t2) / 1000)}ms write=${strFromInt ((t4 - t3) / 1000)}ms"
-                      in do
-                        pure (OkC modules)
+                      -- 载荷自证（`VUNA_IFACE_SELFTEST=1`）：写之前重算每个模块的 iface 哈希，
+                      -- 与记录值比对。不一致说明「载荷与哈希字段漂移」，此时不写（写出去会把
+                      -- 错误的依赖哈希传给下游），并留 `iface-hash-mismatch` 行给门禁。
+                      selfOk <- ifaceSelfCheckEff modules
+                      if not selfOk then
+                        do
+                          let
+                            _ = dbg! "iface-selftest=skip-write ${strFromInt (length modules)}"
+                          in do
+                            pure (OkC modules)
+                      else
+                        do
+                          -- 先写「模块顺序」再写接口对象：读侧只有两份都在时才用接口路径。
+                          _ <- writeOrderEff ctx (map miNameOf modules)
+                          -- 接口写边界：`Eff` 动作，标记而非跨度；`vuna.counter.cache.write` 不是
+                          -- 词汇表里的名字（只有 `vuna.cache.write`，且它是保留的 span 名而不是计数名的
+                          -- 样子），所以这里只打标记 + 保留既有 `iface-write=…` 文本行的四段 ms：
+                          -- 阶段拆分靠文本行，结构化只报「写发生了」。
+                          _ <- obsMarkEff "vuna.iface.write"
+                          n <- writeIfaceObjects own modules
+                          -- 依赖身份摘要：依赖方按 lib 根源闭包摘要 + 编译器 tag 读。
+                          _ <- writePkgIfaceSummaryEff ctx modules
+                          t4 <- clockNow
+                          let
+                            _ = dbg! "iface-write=${n}/${length modules} closure=${length own} phases mods=${strFromInt ((t1 - t0) / 1000)}ms sources=${strFromInt ((t2 - t1) / 1000)}ms compute=${strFromInt ((t3 - t2) / 1000)}ms write=${strFromInt ((t4 - t3) / 1000)}ms"
+                          in do
+                            pure (OkC modules)
 
 -- 闭包里没有对应接口产物的模块名（写侧覆盖性诊断）。
 missingNamesOf : List ClosureMod -> List String -> List String
@@ -2281,6 +2293,25 @@ missingNamesOf (m :: rest) written =
     missingNamesOf rest written
   else
     m.cmName :: missingNamesOf rest written
+
+-- 载荷自证：重算每个模块的 iface 哈希，与记录值比对（`VUNA_IFACE_SELFTEST=1` 才跑）。
+-- 不变式是「`miIfaceHash` == `hashOfIface` 对该载荷的结果」——载荷里任何字段
+-- （含 depends 表）被改写而哈希没跟着变，都会在这里暴露。
+ifaceSelfCheckEff : Member nEnv EnvOp r => List ModuleIface -> Eff r Bool
+ifaceSelfCheckEff mods =
+  do
+    self <- ifaceSelfTestRequested
+    pure (if self then ifaceSelfCheckGo mods else True)
+
+ifaceSelfCheckGo : List ModuleIface -> Bool
+ifaceSelfCheckGo [] = True
+ifaceSelfCheckGo (m :: rest) =
+  let
+    h = miIfaceHashOf m
+    h2 = hashOfIface m
+    _ = if h == h2 then 0 else dbg! "iface-hash-mismatch ${miNameOf m} stored=${h} recomputed=${h2}"
+    _ = if h == h2 then 0 else obsCounter "vuna.counter.iface.hash.mismatch" 1
+  in h == h2 && ifaceSelfCheckGo rest
 
 -- 按地址写模块接口（同一地址重复写幂等）。
 -- 只统计**内容变化**的写入（`storeObjectWriteEff` 在字节相同时返回 0）：收敛后的
@@ -2299,29 +2330,14 @@ writeIfaceObjects mods (mi :: rest) =
 -- 真正写接口：入口-only 包（没有 lib 模块）不写（没有可复用的模块接口；写空包只会让
 -- 消费者读到 invalid 接口）。每模块按地址只写内容变化的接口对象，模块顺序最后提交。
 -- 目标存储不可写（Nix store / 只读 store）时读侧没有接口就回退全量。
--- 影子写的自检（`VUNA_IFACE_SELFTEST=1`）：读回 + 包接口校验 + 模块名集合/接口哈希一致。
--- 失败让 check 失败（宁可暴露，不静默写坏缓存）。
+-- 写侧自证（`VUNA_IFACE_SELFTEST=1`）：写前逐个模块重算 `hashOfIface` 并与记录值比对
+-- （`ifaceSelfCheckEff`），不一致就不写并留 `iface-hash-mismatch`。
+-- CI 由 `checks.vuna-iface-selftest` 覆盖；复用侧另有 `payloadSelfOk` 的同口径检查。
 ifaceSelfTestRequested : Member nEnv EnvOp r => Eff r Bool
 ifaceSelfTestRequested =
   do
     v <- envGetEnv "VUNA_IFACE_SELFTEST"
     pure (v == "1")
-
-ifaceHashOfName : List ModuleIface -> String -> Maybe String
-ifaceHashOfName [] _ = Nothing
-ifaceHashOfName (m :: rest) name =
-  if miNameOf m == name then Just (miIfaceHashOf m) else ifaceHashOfName rest name
-
-allSelfHashesOk : List ModuleIface -> Bool
-allSelfHashesOk [] = True
-allSelfHashesOk (m :: rest) = hashOfIface m == miIfaceHashOf m && allSelfHashesOk rest
-
-sameIfaceHashes : List ModuleIface -> List ModuleIface -> Bool
-sameIfaceHashes [] _ = True
-sameIfaceHashes (m :: rest) ys =
-  case ifaceHashOfName ys (miNameOf m) of
-    Just h => h == miIfaceHashOf m && sameIfaceHashes rest ys
-    Nothing => False
 
 -- 成功收尾：写接口影子（check 结果节点由 `checkViaGraph` 提交，这里不再写 marker 文件）。
 checkAndShadow : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> Eff r (Check (Pair (List Diagnostic) CheckedPackage)) -> Eff r (Check (List Diagnostic))
