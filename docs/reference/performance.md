@@ -338,27 +338,27 @@ load/parse 前缀 + iface 摘要 **~2.6 s** → 逐定义精化（`collectSigs-d
 
 ### 4.1 逐定义精化与 codegen 检查的分段（span 口径）
 
-`VUNA_OBS=1`、空 `VUNA_STORE`、单进程冷跑 `check packages/compiler`（整跑 6.0 s；绝对数随
-机器负载浮动，看份额即可）。`vuna.elab` 的账已闭合到子毫秒残差：下表各段之和等于
-`vuna.elab`，`vuna.codegen.check` 是它的**兄弟**跨度，不再被算进精化：
+`VUNA_OBS=1`、空 `VUNA_STORE`、单进程冷跑 `check packages/compiler`（整跑 5.9 s；绝对数随
+机器负载浮动，看份额即可）。`vuna.elab` 的账已闭合到毫秒级残差：下表各段之和等于
+`vuna.elab`（2193 ms 对 2200 ms），`vuna.codegen.check` 是它的**兄弟**跨度，不再被算进精化：
 
 | span | 耗时 | 占 `vuna.elab` | 说明 |
 | --- | --- | --- | --- |
-| `vuna.elab` | 2.30 s | 100% | 整段精化 |
-| `vuna.elab.bodies` | 1.62 s | 71% | 逐定义精化（`vuna.def.elab` 6307 次；其子跨度 `vuna.elab.term` 正文检查 ~1.39 s） |
-| `vuna.elab.tail` | 0.28 s | 12% | 收尾：`vuna.term` 0.21 s、`usage` 0.045 s、`rezonk` 0.007 s、`main.show`/`extra` ~0.004 s |
-| `vuna.elab.rast` | 0.14 s | 6% | `toRastDecls`（AST → RAST） |
-| `vuna.elab.sigs` | 0.10 s | 5% | 签名精化 |
-| `vuna.elab.collectsigs` | 0.035 s | 2% | 签名收集 |
-| `vuna.elab.instbodies` | 0.033 s | 1.4% | 实例体 |
-| `vuna.elab.prepare` | 0.029 s | 1.3% | record 降级（`deriving` 展开 <1 ms） |
-| `vuna.elab.datas` | 0.026 s | 1.1% | data 精化 |
+| `vuna.elab` | 2.20 s | 100% | 整段精化 |
+| `vuna.elab.bodies` | 1.49 s | 68% | 逐定义精化（`vuna.def.elab` 6326 次；其子跨度 `vuna.elab.term` 正文检查 ~1.3 s） |
+| `vuna.elab.tail` | 0.32 s | 15% | 收尾：`vuna.term` 0.24 s、`usage` 0.049 s、`rezonk` 0.008 s、`extra`/`main.show` ~0.004 s |
+| `vuna.elab.rast` | 0.149 s | 7% | `toRastDecls`（AST → RAST） |
+| `vuna.elab.sigs` | 0.099 s | 4.5% | 签名精化 |
+| `vuna.elab.collectsigs` | 0.037 s | 1.7% | 签名收集 |
+| `vuna.elab.instbodies` | 0.037 s | 1.7% | 实例体 |
+| `vuna.elab.datas` | 0.030 s | 1.3% | data 精化 |
 | `vuna.elab.instheads` | 0.010 s | 0.4% | 实例头 |
-| `vuna.elab.defined` | 0.009 s | 0.4% | 定义齐备性检查 |
 | `vuna.elab.rezonk` | 0.008 s | 0.4% | 收尾 zonk（3 处） |
+| `vuna.elab.prepare` | 0.008 s | 0.3% | record 降级（`deriving` 展开 <1 ms） |
+| `vuna.elab.defined` | 0.007 s | 0.3% | 定义齐备性检查 |
 | `vuna.elab.dictfix` | ~0 | — | `resolveDictGoalsFix`：收尾时 pending 已空 |
-| `vuna.codegen.check` | 0.95 s | — | `.lower` 0.95 s（`.unit` 0.6 s）；`.gen` <1 ms |
-| `vuna.parse.lex` / `.syntax` | 0.19 / 0.16 s | — | 509 / 509 次 |
+| `vuna.codegen.check` | 0.91 s | — | `.lower` 0.91 s（`.unit` 0.55 s）；`.gen` <1 ms |
+| `vuna.parse.lex` / `.syntax` | 0.26 / 0.17 s | — | 512 / 512 次 |
 
 同一口径的计数（`VUNA_OBS=2` 出 10^5 级、`VUNA_OBS=3` 出 `eval`）：
 
@@ -414,6 +414,12 @@ pending 队列规模分桶（`elab.dict.pending.b*`，走 `--debug-perf` 的 `co
   扫描器按 `charsPeek` / `charsStep` 推进，不再整串 `strUnpack`。实测 `vuna.parse.lex`
   冷 `check packages/compiler` 194 ms → 174 ms（~10%），占整条冷检查不到 0.3%——**采样里剩下的
   `dtp_unpack` 主要来自 Canonical/Store/Hash 的字节编码，不是 lexer**。
+
+- 精化的三处「按次浪费」：`eval` / `zonkTerm` 的燃料改固定上限（原来每次调用按 `termSize`
+  派生一遍，`eval` 1.6×10^6 次/检查）；`isMemberDomain` 直接看值头部，不再 `quote` 整个字典域；
+  `Ctx` 在精化/绑定点缓存「已代入精化的求值环境」（`refineValue` 8.3×10^6 次/检查 → 分支内
+  每次类型求值不再重建整个环境），并给 `refineValue []` 加恒等快路径。
+  同一窗口 3 轮交替：冷 `check packages/compiler` 5.60 → 5.46 s（user 5.30 → 5.19，**−2.5%**）。
 
 此时自采样的剩余热点：`dtp_unpack`（Canonical/Store 的字节处理）、`String.concat`
 （Canonical/地址编码）、`dtp_strHash`、`nubNames`/`reverseOnto`、`Core.Eval.quote`；
@@ -705,6 +711,15 @@ A/B 读数一致）。`map-cold`（2111）必须清 query store 才算冷：基�
 - `Elab.Usage` 全程序快速路径（实测 10–13 ms）、实例体/方法子句查找（13.5 ms）、
   `refsOfDef`（12–16 ms）、conv「同 head 同 spine 直通」（<2%）、模块级并行 codegen
   （1–2%）：均低于门槛，记录不做。
+- **conv 失配不渲染**：每次检查 5.9×10^4 次失配、每次两次 `showValueAt`，看着像大头；把
+  `mismatchAt` 换成不渲染的轻量错误（临时探针）在 `eval` 燃料修复之上只再省 ~0.1%
+  （3 轮交替：整包 5.591 → 5.552 s，其中大部分是燃料修复的 0.6%）。失配两侧基本是变量 /
+  常量，渲染就是一个短名字符串，不做。
+- **全局 / 构造子类型值缓存**：`eval` 里 `env` 为空的只占 3.86×10^5 / 1.61×10^6（**24%**），
+  且每次都是小项；缓存还要处理 `globals` 收尾重建（`liftFreeDictGoals` 换签名类型）后的
+  失效，收益 <1%，不做。
+- `zonkTerm` 燃料按项规模派生（7.4×10^3 次/检查）、pending 双队列旋转（一趟 >16 个目标只有
+  265 轮）、`resolveDictGoalsFix`（收尾时 pending 已空，实测 1 µs）：量级都不够，不做。
 
 ## 相关阅读
 
