@@ -124,11 +124,13 @@ insertGroup groups row =
   in addToGroup groups key row
 
 -- | 内部：把一行事件追加到它所属的线程组（组不存在则新建）。
+-- 用**前插**累积（`item :: items`），顺序在 `groupStageStats` 里一次 `reverse` 还原：
+-- 逐行 `append items [item]` 在单线程大 trace 上是 O(n²)（67 MB trace 实测 14 分钟）。
 addToGroup : List (Pair (Pair Int Int) (List (Pair Int ObsEvent))) -> Pair Int Int -> Pair Int ObsEvent -> List (Pair (Pair Int Int) (List (Pair Int ObsEvent)))
 addToGroup [] key item = [Pair key [item]]
 addToGroup ((Pair k items) :: rest) key item =
   if sameThread key k then
-    Pair k (append items [item]) :: rest
+    Pair k (item :: items) :: rest
   else
     Pair k items :: addToGroup rest key item
 
@@ -142,10 +144,11 @@ isSpan : ObsEvent -> Bool
 isSpan ev = eventPh ev == "X"
 
 -- | 内部：一个线程组 -> 阶段样本列表（只取 span，按 `ts` 排序后折叠）。
+-- `reverse` 还原 `addToGroup` 前插累积的文件顺序（`ts` 相同的 span 要按文件顺序排）。
 groupStageStats : Pair (Pair Int Int) (List (Pair Int ObsEvent)) -> List SpanSample
 groupStageStats (Pair _ items) =
   let
-    spans = sortBySpanTs (map secondOf (filterSpanRows items))
+    spans = sortBySpanTs (map secondOf (filterSpanRows (List.reverse items)))
   in (foldSpans spans (FoldState [] [])).foldSamples
 
 -- | 内部：过滤出 span 行（保留行号）。
