@@ -1120,16 +1120,16 @@ export showValue : Value -> String
 showValue v = showValueAt 0 v
 
 export normalize : HashMap String Term -> Sols -> Int -> Value -> Value
-normalize a1 a2 a3 a4 = normalizeFuel 1024 a1 a2 a3 a4
+normalize a1 a2 a3 a4 = normalizeFuel a3 a1 a2 a3 a4
 
 export normalizeCase : HashMap String Term -> Sols -> Int -> Value -> List VCaseAlt -> Value
-normalizeCase a1 a2 a3 a4 a5 = normalizeCaseFuel 1024 a1 a2 a3 a4 a5
+normalizeCase a1 a2 a3 a4 a5 = normalizeCaseFuel a3 a1 a2 a3 a4 a5
 
 export normalizeNeutral : HashMap String Term -> Sols -> Int -> Neutral -> Value
-normalizeNeutral a1 a2 a3 a4 = normalizeNeutralFuel 1024 a1 a2 a3 a4
+normalizeNeutral a1 a2 a3 a4 = normalizeNeutralFuel a3 a1 a2 a3 a4
 
 export normalizeIf : HashMap String Term -> Sols -> Int -> Value -> Value -> Value -> Value
-normalizeIf a1 a2 a3 a4 a5 a6 = normalizeIfFuel 1024 a1 a2 a3 a4 a5 a6
+normalizeIf a1 a2 a3 a4 a5 a6 = normalizeIfFuel a3 a1 a2 a3 a4 a5 a6
 
 -- 已解元变量的**深度感知**内联（接口摘要 zonk 与字典提升共用的唯一入口）。
 -- `depth` 是 `?m` 出现点的 binder 深度：解是 level 形态的 Value，必须按出现点深度 quote，
@@ -1139,7 +1139,18 @@ normalizeIf a1 a2 a3 a4 a5 a6 = normalizeIfFuel 1024 a1 a2 a3 a4 a5 a6
 -- **不内联**、保留 `TMeta`，由接口摘要安全阀拒绝这份摘要（宁可回退全量，不静默错）。
 -- 替换出来的项可能仍含已解元变量：同深度递归（限 fuel 防环）。
 export substSolvedMetasAtTbl : HashMap Int Value -> Int -> Term -> Term
-substSolvedMetasAtTbl sols depth t = substSolvedMetasAtTblFuel 128 sols depth t
+substSolvedMetasAtTbl sols depth t = substSolvedMetasAtTblFuel (substFuelFor t) sols depth t
+
+-- | 燃料按项规模派生（`termSize` 必 ≥ 嵌套深度；每节点 4 步）。固定上限会让更深的项
+-- 静默停在原项上——摘要里残留 `TMeta` 会被安全阀整份拒绝，等于每次 `check` 都退回全量。
+substFuelFor : Term -> Int
+substFuelFor t =
+  let
+    need = 128 + 4 * termSize t
+  in if need > substFuelMax then substFuelMax else need
+
+substFuelMax : Int
+substFuelMax = 1000000
 
 substSolvedMetasAtTblFuel : Int -> HashMap Int Value -> Int -> Term -> Term
 substSolvedMetasAtTblFuel fuel sols depth t =

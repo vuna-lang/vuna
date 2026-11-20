@@ -245,6 +245,8 @@ Index / Repl / Lsp）按不可达规模设置上界，正常输入不触发。�
 | `Elab.Term` 入口（`checkE` / `inferE` / `checkType` / `checkTypeInfer` / `checkByInfer`） | `256 + 8*exprWeight`；嵌套深度 ≤ 节点数，应用脊椎每层经若干层包装器合计约 5 步 |
 | `Elab.Records`（record / record pattern 降级） | `512 + 8*exprWeight`、`64 + 8*patWeight`；每个节点至少 1 步 |
 | `Elab.Termination`（`strWalk` / `siteWalkC`） | `32 + 8*exprWeight`；每个被访问节点至少消耗 1 步 |
+| `Elab.Meta.zonkTerm` / `Core.Eval.substSolvedMetasAtTbl` | `128 + 4*termSize`（上限 1e6）：预算按项规模派生，深项不再静默停在原项上 |
+| `Core.Conv`（`convFuel`） | 基值 `convFuelBase = 4096`；`fuel` 同时是该互递归组唯一的 SCT 递减测度，所以结构比较每层扣 1（≈1000 层嵌套），元变量求解另按解链扣减 |
 | `Vuna.Json` | `8*len+64`；互递归组返回剩余输入，SCT 不可见，用同参数位 `fuel - 1` |
 | `Vuna.Fmt.Expr` | 固定预算 `formatFuelBound = 1073741824`（1G）；块级布局同时沿 AST 与缩进 / 模式前进 |
 | `Vuna.Files` / `Index.Scan` | 目录树每下钻一层递减（起点 `1048576`）；上界 = 目录深度，符号链接环被截断 |

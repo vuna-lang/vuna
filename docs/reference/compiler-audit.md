@@ -114,7 +114,7 @@ ID 是稳定引用（`层前缀-序号`），改动时保留编号，删掉实�
 | EC-28 | `Elab/Driver.vuna` 的 `resolveDictGoalsFix` | C | 字典收敛固定 8 轮 | 开放 |
 | EC-29 | `Elab/Driver.vuna` 的实例索引自检 | D | 只在 `--debug-perf` 下跑 | 开放 |
 | EC-30 | `Impl.vuna` 的 check 位 `if` | A | 分支检查失败后整体重推断（位置/期望类型信息丢失） | 开放 |
-| EC-31 | `Conv.vuna` 的 `convFuelBase` | C | 非 Nat 值的 conv 燃料固定 64：定义性相等嵌套 ≥ ~15 层就假报 `IC_FuelExhausted` | 已清（基值 4096 ≈ 1000 层；Nat 链仍按链深追加） |
+| EC-31 | `Conv.vuna` 的 `convFuelBase` | C | 非 Nat 值的 conv 燃料固定 64：定义性相等嵌套 ≥ ~15 层就假报 `IC_FuelExhausted` | 已清（基值 4096 ≈ 1000 层；Nat 链仍按链深追加。`fuel` 是该互递归组唯一的 SCT 递减测度，结构比较不能停止扣减——要去掉层数上限只能给整个组换终止性测度） |
 
 `EC-01` 的事实（收紧即断链）：把 `i < 0` 显式判 False 后，`packages/base` 自身在
 `Base/Data/String.vuna` 的 `lines` 上报 `TC_NoInstanceFound`——说明正常编译链**依赖**
