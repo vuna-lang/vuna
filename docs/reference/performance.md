@@ -144,89 +144,21 @@ Vuna.Compiler.Driver.ToolPayload`），于是每轮都补一遍 lib check（`col
 | 脏模块增量探针 N=8000（`-growth-incremental`） | 4233 ms | 3116 ms | -26% |
 | 冷 `check packages/compiler` 的 iface 写 | `iface-skip partial` | `iface-write=107/107` + `check-lib-skip covered=88` | 单遍收尾 |
 
-### Core→IR 段的二次项（已修）
+### 已消除的按名线性扫表
 
-- **SCC 组间定序**（`Ir.Analysis.orderGroups`）：旧实现每产出一组就重扫剩余组并重算
-  `groupDeps`，源码序与依赖序相反的探针（`f0 = f1 + 1 …`）是 O(V²)。改成入度 + 反向边
-  + 最小下标优先出队（与旧输出逐项一致）后，同一探针的 codegen 段
-  **N=4000：1265 ms → 37 ms**（N=2000：22 ms）。构造子 / 类型参数 / record 字段查表
-  从逐次线性扫改成 `LwEnv` 里的哈希索引；程序级不动点与 `unboxedInfo` 只在建环境时算一次
-  （原先 split 路径每单元重算一次）。
-- 回退护栏：`nix/checks/compiler-growth-ctor.sh`（构造子密集 + 反向依赖探针）。它只作
-  粗粒度护栏（阈值 3.5）：该形状里 elab / 前端占主导，codegen 单次 <1 ms，精确读数仍以
-  `bench/compiler.sh` 与本页的 A/B 为准。
+包级路径上的历史热点都是同一个形状：每产出一项就重扫剩余表，退化成 O(n²)。这些路径
+现在统一成「入口一次建哈希索引 + 逐项 `member`」，输出顺序与逐字节产物都不变：
 
-1. **入口闭包漏两个导出模块 ⇒ 每轮重复精化**（`packages/compiler/app/Main.vuna`）：`compiler`
-   的 `[export].modules` 含 `Vuna.Compiler.Frontend.Canonical.Ast` 与 `Vuna.Compiler.Driver.ToolPayload`，
-   但入口没有 import 它们 ⇒ `writeIfaceShadow` 判 `iface-skip partial`（不写包接口）⇒
-   `Compile.checkPackage` 的 `check-lib-skip` 永不成立，每轮都补一遍 lib check。补两个
-   import 后 `collectSigs-done` 从 2 次降到 1 次。**规则**：入口 import 集合必须覆盖
-   `[export]` 全部模块，见该文件顶部注释。
-   **判据收口**：完整性判据从「lib 根下全部 `.vuna`」改为
-   **`[export].modules`**（`Compile.exportedOwnOf`），读侧 `goPkgs` 同口径
-   （`exportedDepModsOf`：导出面 ⊆ 写侧顺序即可）。这样未导出的内部模块既不参与写侧
-   判据、也不阻塞依赖方复用；代价是不变量从「入口 == lib 根」放宽成「入口 ⊇ 导出面」，
-   仍然是硬约束（少一个导出模块，冷 check 会退回两遍，日志可见 `iface-skip partial
-   ... required=88`）。同轮删掉两处死计算：`summaryCheckExeParts` / `summaryCheckLibParts`
-   原先为 `ownCleanModules` 算一遍 `depIfaceHashTable`，而 `ownCleanInfo` 只需要包上下文——
-   每次 check 白跑一遍整闭包源扫描（`ifaceModsEff`）。
-2. **codegen 分组按 SCC 线性过滤全体定义**（`Lowering.Program.appendGroups`）：每个单点 SCC
-   都 `filter (memList …) env.lwDefs` ⇒ O(n²)。改为「环境里一次建 `lwDefTbl`、组内按成员名
-   查表」；`recOkOfIn`/`spanOfIn` 同为逐名 `findDtDef` 线性扫，改成同一张表。
-   合成探针的 codegen 段（`termination-done → cg-typedecls-done`）修前 89/284/1083 ms
-   （N=2000/4000/8000，逐档 ×3.2/×3.8），修后随 N 线性。
-3. **告警去重 O(n²)**（`Base.Diagnostics.Sink.dedupeWarnings`）：`containsDiag` 对新诊断逐个
-   线性扫历史；`UN_UnusedDefinition` 一次上千条时退化（N=16000 探针这部分占 ~3 s）。改为
-   按 `sameDiag` 的等价类建一次键表（码 + 消息 + 严重度 + 全部 label 的 span 序列，长度
-   前缀拼接），O(n) 且**告警输出逐字节不变**（已对三个探针对拍）。
-4. **未使用定义扫描按名线性查「是否被引用」**（`Driver/Dt.warnUnusedDefsGo`）：同为
-   O(n²)。入口 `HashMap.ofNames used` 一次建表后逐项 `member`，输出顺序不变。
+- SCC 组间定序（`Ir.Analysis.orderGroups`：入度 + 反向边 + 最小下标优先出队）；
+- codegen 分组与 `recOkOfIn` / `spanOfIn`（`Lowering.Program` 的 `lwDefTbl`）；
+- 告警去重（`Diagnostics.Sink` 按 `sameDiag` 等价类建键表）与未使用定义扫描
+  （`Dt.warnUnusedDefsGo`）；
+- `Dt.dedupGlobals`、`Elab.Termination.anyOwn`、包接口只读一遍（`ownCleanInfo` 传给
+  `writePackageIface`）。
 
-这四处都不改语义：唯一可观察变化是「不再有第二轮精化」与「同样的告警以同样的顺序打印」。
-
-### 包级增量收尾的三处 O(n²)
-
-同一 worktree、同一 HEAD、同机 A/B（独立进程；check/build 用 `bench/compiler.sh` 口径，
-`--runs 2` 取中位；冷构建用仓库副本 + 独立空 TMPDIR）：
-
-| 命令 | 修前 | 修后 | 变化 |
-| --- | --- | --- | --- |
-| `check packages/compiler` | 2242 ms | 785 ms | -65% |
-| `check .` | 3711 ms | 1430 ms | -61% |
-| `build packages/compiler --no-compile` | 3261 ms | 1769 ms | -46% |
-| `build . --no-compile`（workspace，bench build-all） | 8793 ms | 5186 ms | -41% |
-| 增量 `build --package vuna .`（接口热） | 5.62 s | 3.53 s | -37% |
-| 冷 `build --package vuna .`（全新副本，codegen） | 8.53 s | 8.21 s | -4% |
-
-三处根因都是「按名字线性扫全表」的 O(n²)，且都在**包级增量收尾**（单文件探针测不到，
-见 §5 的新门槛）：
-
-1. **`Dt.dedupGlobals` 及同族去重**：`memName (key x) (map key rest)` 对每个元素重建剩余
-   表；增量收尾的 globals 表达上万项（16k 项实测 17.6 s）。改为从右往左一次走 +
-   `HashMap String Bool` 记已见名（保持 last-wins 与「最后一次出现」的相对顺序）⇒ O(n)：
-   `check packages/compiler` 的收尾段（`termination-done → cg-partition-done`）872 → 2.4 ms。
-2. **`Elab.Termination.anyOwn`**：每个 SCC 用 `memName` 线性扫 `own`（n 个单点 SCC
-   ⇒ n²/2 次比较；16k 项 1313 ms）。改为入口建一次 `HashMap.ofNames own`、逐 SCC
-   `member` ⇒ 冷构建 termination 566 → 299 ms，合成 16k 档约 1313 → 25 ms。
-3. **写接口把包接口读两遍**：`Driver.Compile` 的 check 前段已为干净模块判定读过整包接口，
-   `writeIfaceShadow` 又读一遍，`writePackageIface` 再读一遍解码全部模块文件。合并为一次
-   `ownCleanInfo` 读取，把结果传给
-   `writePackageIface` ⇒ `check packages/compiler` 的 iface-write 244 → 16 ms。
-
-冷构建（全量精化 + codegen + ocamlopt）不走增量收尾，收益主要来自 (2) 与 (3)，见上表。
-
-容器改造（私有 `HashTbl` → `Base.Container.HashMap`；元变量解表合并为 `HashMap Int`）的实测对比：
-同一 worktree、同一份源码、独立进程各 3 次取中位数（本机绝对值与上表读数不可直接
-比较；改造前 = 编译器内部哈希表 + 解表 String 键，改造后 = 标准库容器 + Int 键索引）：
-
-| 命令 | 改造前 | 改造后 | 变化 |
-| --- | --- | --- | --- |
-| `check packages/compiler` | ~4.87 s | ~4.18 s | -14% |
-| `check .` | ~13.4 s | ~11.3 s | -15% |
-
-除 `map` 冷启动全量重建外，所有命令都在 10 s 以内；增长率见 §5。构建口径必须
-一致：同一份源码在逐模块 split 产物下测量；`compile` / `build` / seed 只有这一种产物，不再有
-单文件 `main.ml` 口径。
+回退护栏是 `nix/checks/compiler-growth.sh`（同形定义）与 `compiler-growth-ctor.sh`
+（构造子密集 + 反向依赖）：只看**相邻档增长率**（线性 ≈2），绝对读数用
+`bench/compiler.sh`，当前分段构成见 §5 / §6。
 
 ## 2. 探针设施：`dbg!` 日志行 + `VUNA_OBS` 结构化观测
 
