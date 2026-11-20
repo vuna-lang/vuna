@@ -230,6 +230,8 @@ run: "$TMPDIR/fsdir-out/bin/fsdir" 2>&1
 out-equals: "abc"
 run: sh -c 'VUNA_NATIVE_GC_STRESS=1 "$TMPDIR/fsdir-out/bin/fsdir" 2>&1'
 out-equals: "abc"
+run: sh -c 'test "$(grep -c "call rt_write_barrier" "$TMPDIR/fsdir-out/runtime.s")" -ge 4'
+exit: 0
 
 # 9s) fs 失败路径：读不存在的文件 -> typed error 收口（诊断 + exit 1），不伪造内容。
 run: sh -c 'd="$TMPDIR/fsmiss"; mkdir -p "$d/app"; printf "[package]\nname = \"fsmiss\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Effect.Core as Eff\nimport Base.Effect.Fs as EffFs\nimport Base.Data.Int as Int\nimport Base.Data.String as String\n\nmain : Eff [FsOp] Int\nmain = do\n  s <- fsReadFile \"$TMPDIR/fs-missing-file\"\n  pure (strLength s)\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/fsmiss-out" "$d"'
@@ -332,6 +334,20 @@ out-equals: 156
 
 # 9aa) GC 的 env 开关也不进 codegen：`GC_MIN` / `GC_LOG` / `GC_STRESS` 不影响产物。
 run: sh -c '"$VUNA" compile "$TMPDIR/gcgrow/app/Main.vuna" "$TMPDIR/detgc-a" --target native; VUNA_NATIVE_GC_MIN=4096 VUNA_NATIVE_GC_LOG=1 VUNA_NATIVE_GC_STRESS=1 "$VUNA" compile "$TMPDIR/gcgrow/app/Main.vuna" "$TMPDIR/detgc-b" --target native; diff -r "$TMPDIR/detgc-a" "$TMPDIR/detgc-b"'
+exit: 0
+
+# 9aa2) 分代 GC 的记集：老代 IORef 写进年轻代值后，写屏障把它登记进记集，年轻代回收
+#       从记集出发扫到这个值。`GC_MIN` 压小让回收密集发生；`rem>=1` 的行证明某次年轻代
+#       回收确实从记集出发（只断言输出区分不出来：值也能经 Eff 闭包链活着）。
+run: sh -c 'd="$TMPDIR/gcrem"; mkdir -p "$d/app"; printf "[package]\nname = \"gcrem\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Effect.Core as Eff\nimport Base.Effect.Pure.IORef as IORef\nimport Base.Data.Int as Int\nimport Base.Data.String as String\n\nchurn : Int -> Int -> Int\nchurn n acc = if n <= 0 then acc else churn (n - 1) (acc + strLength (strFromInt (10000000 + n)))\n\npad : Int -> String -> String\npad n s = if n <= 0 then s else pad (n - 1) (s ++ \"ab\")\n\nmain : Eff [] Int\nmain = do\n  cell <- newRef \"seed\"\n  n1 <- pure (churn 3000 0)\n  m <- pure (strLength (pad 20000 \"xy\"))\n  n0 <- pure (churn 1 0)\n  _ <- writeRef cell (pad 5 \"xy\")\n  n2 <- pure (churn 3000 0)\n  v <- readRef cell\n  pure (if n1 >= 0 && n2 >= 0 && m >= 0 && n0 >= 0 then strLength v else 0 - 1)\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/gcrem-out" "$d"'
+exit: 0
+run: "$TMPDIR/gcrem-out/bin/gcrem" 2>&1
+out-equals: 12
+run: sh -c 'VUNA_NATIVE_GC_STRESS=1 "$TMPDIR/gcrem-out/bin/gcrem" 2>&1'
+out-equals: 12
+run: sh -c 'VUNA_NATIVE_GC_MIN=1000 VUNA_NATIVE_GC_LOG=1 "$TMPDIR/gcrem-out/bin/gcrem" >/dev/null 2>"$TMPDIR/gcrem.log"; grep -q "gen=minor" "$TMPDIR/gcrem.log" && grep -q "rem=[1-9]" "$TMPDIR/gcrem.log"'
+exit: 0
+run: sh -c 'grep -q "call rt_write_barrier" "$TMPDIR/gcrem-out/runtime.s"'
 exit: 0
 
 # 9ab) 尾调用：互递归（even/odd）400 万层在默认 8 MiB 栈上跑完（不尾调用会栈溢出）。

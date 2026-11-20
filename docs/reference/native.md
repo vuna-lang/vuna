@@ -7,7 +7,8 @@
 > `@vuna@debug@on` / `@vuna@debug@line`、**栈传参**（arity > 6）+ 用户 `data`（变体 tag
 > 分派）、record 构造/投影/更新与通用 `case` + List 桥接（`strUnpack` / `strPack` /
 > `strConcatMany` / `strSubstTemplate`）+ 闭包与高阶应用 + Float（算术/比较/转换/展示）。
-> 堆是段链表 + 尺寸类复用 + **保守标记-清扫 GC**（非移动）；对象布局见 §2，回收契约见 §5.2。
+> 堆是段链表 + 尺寸类复用 + **两代标记-清扫 GC**（非移动；年轻代按栈图精确扫根，
+> 老代靠写屏障登记的记集）；对象布局见 §2，回收契约见 §5.2。
 > `main : Eff r a`（含带行的宿主效应，
 > 入口自动预装 `runXHost`）与 `IORef` 可用；`perform` / `handle` 走**库机器**
 > （`Control` 循环 + trampoline）实现一次性续延（§3.4）。FFI / extern 仍被明确拒绝（`NativeUnsupported`）。
@@ -52,8 +53,8 @@
   对象。字符是字节（UTF-8 字面量按字节存放，`strLength` 返回**字节数**，与 OCaml
   `String.length` 一致）。
 - **堆**：段链表（`.bss` 里的 1 MiB 起始段 + 按需 `mmap` 的新段，段按 2 的幂增长）。
-  每个块前有 8 字节块头 `[size | flags]`（标志：mark / free / leaf / pin），对象指针指向
-  块头之后。空闲块按 2 的幂尺寸类复用；**保守标记-清扫 GC**（非移动）见 §5.2。
+  每个块前有 8 字节块头 `[size | flags]`（标志：mark / free / leaf / old），对象指针指向
+  块头之后。空闲块按 2 的幂尺寸类复用；**两代标记-清扫 GC**（非移动）见 §5.2。
 - 入口打印：`Int`/`Nat` 十进制 + `\n`，`Bool` 为 `True`/`False`，`String` 走
   `show`（`strShow` 带引号 + 转义）再打印，全部与 OCaml 入口钩子的
   `print_endline (show main)` 逐字一致。
@@ -224,8 +225,7 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
   逐段 `write` 到 stderr 后 exit 2。
 - 入口打印：`print_int` / `print_bool` / `print_str`（栈上 itoa / 原样字节 + 换行）。
 - 对象与分配：`alloc`（`rdi` = payload 字节数 → `rax` = 对象地址；尺寸类空闲链 → bump →
-  新段，越界 trap OOM）；`alloc_leaf`（字符串 / Float）与 `alloc_pinned`（续延捕获缓冲）
-  在块头上打对应标志。变体对象
+  新段，越界 trap OOM）；`alloc_leaf`（字符串 / Float）在块头上打 `leaf` 标志。变体对象
   `[0]`=tag、`[8]` 起字段；record 对象 `[0]` 起就是字段；字段按最大 arity 补齐（补 0）。
   `trap_impossible` 是 case 无匹配臂时的兜底 trap（与 OCaml 的 `DT: impossible branch` 同义）。
 - 效应叶子：`prim_eff_newRef` / `readRef` / `writeRef`（`IORef`，单槽对象）、
@@ -282,14 +282,14 @@ env，**不进 codegen**（同一 IR 的产物逐字节确定）。解析失败�
 
 | env | 缺省 | 语义 |
 | --- | --- | --- |
-| `VUNA_NATIVE_MEM_LIMIT` | `1073741824`（1 GiB） | **live 堆**上限（含被钉住的续延捕获缓冲）：分配的预留超过它时先做一次完整 GC，GC 后 `live + 本次` 仍超限才 `memory limit exceeded` + exit 2；`0` = 不限 |
-| `VUNA_NATIVE_GC_MIN` | `1048576`（1 MiB） | 触发阈值下限（也是新堆段的最小尺寸）：阈值 = `max(GC_MIN, 2 × live, 上次 GC 扫到的栈字节数)` |
-| `VUNA_NATIVE_GC_LOG` | 关 | 存在即向 stderr 打诊断行 `gc n=<次数> live=<字节> alloc=<自上次 GC 起的分配字节>` |
-| `VUNA_NATIVE_GC_STRESS` | 关 | 存在即每次分配前都做一次完整 GC（抓漏根的调试开关，不是运行模式） |
+| `VUNA_NATIVE_MEM_LIMIT` | `1073741824`（1 GiB） | **live 堆**上限：分配的预留超过它时先做一次整堆回收，GC 后 `live + 本次` 仍超限才 `memory limit exceeded` + exit 2；`0` = 不限 |
+| `VUNA_NATIVE_GC_MIN` | `1048576`（1 MiB） | 回收阈值的下限（也是新堆段的最小尺寸）：年轻代回收后阈值 = `max(GC_MIN, live/8, 上次扫到的栈字节数)`，整堆回收后 = `max(GC_MIN, 2 × live, 上次扫到的栈字节数)` |
+| `VUNA_NATIVE_GC_LOG` | 关 | 存在即向 stderr 打诊断行 `gc n=<次数> live=<字节> alloc=<自上次 GC 起的分配字节> rem=<本次记集项数> gen=<minor 或 full>` |
+| `VUNA_NATIVE_GC_STRESS` | 关 | 存在即每次分配前都做一次回收（年轻代 / 整堆按计数轮换；抓漏根与漏屏障的调试开关，不是运行模式） |
 | `VUNA_NATIVE_CPUS` | `auto` | `auto` = min(`sched_getaffinity` 计数, cgroup v2 `cpu.max` 的 `ceil(quota/period)`)，下限 1；`N` = 取前 N 个可用核；`0` = 不动亲和性；只缩小不放大 |
 | `VUNA_NATIVE_TIMEOUT_MS` | 不限 | wall-clock 总超时；`setitimer(ITIMER_REAL)` + SIGALRM（`SA_RESTORER` + `rt_sigreturn` 桩）；到点先收掉在跑的子进程组，再写 `vuna: runtime error: timeout exceeded` + exit 2；`0` = 不限 |
 
-- 预算检查在 `alloc` 里分配之前（`live + 已分配 + 本次 > limit` → 先 GC；GC 后仍超才 trap）；
+- 预算检查在 `alloc` 里分配之前（`live + 已分配 + 本次 > limit` → 先强制整堆回收；GC 后仍超才 trap）；
   `live` 由清扫阶段累计（见 §5.2）。
 - 亲和性是进程级：`fork` / `execve` 后子进程继承；`spawn` / `runIn` 的 env 默认**剔除**
   `VUNA_NATIVE_*`（`VUNA_NATIVE_INHERIT=1` 时原样传），避免子进程继承父进程的预算。
@@ -311,13 +311,14 @@ env，**不进 codegen**（同一 IR 的产物逐字节确定）。解析失败�
 - 口径边界：核数限制**不是 CPU 配额**（不限制单核跑多久，要限速用超时）；cgroup 只读 v2
   挂载根的 `cpu.max`（v1 或读不到时退化为 `sched_getaffinity` 计数）；超时是启动快照。
 
-### 5.2 GC（精确栈图 + 保守孤岛，标记-清扫、非移动）
+### 5.2 GC（两代、精确栈图 + 保守孤岛，非移动）
 
 实现在 `Native.Gc`，由 `Native.Runtime.alloc` 在预算或阈值处调用 `rt_gc_collect`。
 
 - **块头**：8 字节 `[size | flags]` 放在 payload 之前；`size` 16 对齐，低 4 位是
-  `mark` / `free` / `leaf` / `pin`。对象指针 = 块头 + 8，因此 payload 布局
-  （`[0]=len/tag`、`[8]=字段`）不变。
+  `mark` / `free` / `leaf` / `old`。对象指针 = 块头 + 8，因此 payload 布局
+  （`[0]=len/tag`、`[8]=字段`）不变。新分配（含复用空闲块）的块不带 `old`，
+  晋升或整堆回收存活时置位。
 - **段**：段头 32 字节 `[next][end][bump][kind]`，块区从段头之后开始；`rt_segs` 串起全部段，
   `rt_cur_seg` 是当前 bump 段。清扫按段线性走块头（空闲块保留自己的块头）。
 - **尺寸类**：块大小向上取整到 2 的幂（16 B … 64 MiB），清扫把死块挂回对应类的链表，
@@ -335,11 +336,24 @@ env，**不进 codegen**（同一 IR 的产物逐字节确定）。解析失败�
 - **候选判据**：字必须指向某个已注册堆段内、块头 16 对齐且合法、非空闲的 payload 起点
   （块头 + 8）。`Int` / 字节型偶然形似指针只会多留对象（非移动，不会失效）；`.rodata`
   字面量不进堆，天然忽略。
-- **不扫的块**：`leaf`（String / Float，payload 是字节或位型）；`pin` 标记的块同样不扫、
-  清扫一律保留（`alloc_pinned` 目前没有调用方）。
-- **清扫**：清 mark、把未标记块按尺寸类回收、累计 `live`；之后
-  `threshold = max(GC_MIN, 2 × live, 本次栈跨度)`（栈跨度 = `rt_stack_top - rsp`，
-  是孤岛扫栈成本的上界，深递归按它摊还）。非移动、不压缩，也没有分代/增量/并发。
+- **不扫的块**：`leaf`（String / Float，payload 是字节或位型）。
+- **两代**：
+  - **年轻代回收**（minor）：`gc_try` 只接受不带 `old` 的块，所以只沿根集标记年轻代
+    对象；`gc_sweep` 跳过老代块，把带 mark 的年轻代块晋升（置 `old`、保留 `leaf`、
+    清 mark），未标记的按尺寸类回收。
+  - **整堆回收**（full）：标记全部（含老代），清扫全部，存活的也晋升。
+  - 触发：默认每 `gcMinorRunsLimit`（8）次年轻代回收做一次整堆；记集到水位
+    （容量的 3/4）、分配预算压线、或年轻代晋升量超过阈值一半时，下一次直接整堆。
+  - 阈值：年轻代回收后 `max(GC_MIN, live/8, 栈跨度)`；整堆回收后
+    `max(GC_MIN, 2 × live, 栈跨度)`（`live` 含老代；栈跨度 = `rt_stack_top - rsp`，
+    是孤岛扫栈成本的上界，深递归按它摊还）。非移动、不压缩。
+- **写屏障与记集**：年轻代回收不扫老代，所以「老代对象字段指向年轻代对象」的引用必须
+  单独记录。`rt_write_barrier`（`rdi` = 被写对象）在老代对象被写时把它登记进
+  `rt_gc_rem`：4096 项开放寻址表，每项 `[对象指针][epoch]`；epoch 落后于当前代数即视为
+  空，所以清表就是 epoch 自增。年轻代回收在扫完普通根之后，把记集里的对象字段当额外根
+  扫一遍。可变点只有 `prim_eff_writeRef` 与 `insert_sorted` / `sort_list` 的原地改接；
+  构造器 / 闭包字段只在对象刚分配（年轻代）时写，数组是 COW、record 不可变，都不需要
+  屏障。记集满水位就置「强制整堆」，避免开放寻址退化。
 - **活槽**：`Native.Module` 在指令体上算每个 `call` 点的活槽——该槽在这个 call 之后的
   下一个文本事件是「读」才算活（分支按文本序过近似，只多留、不漏根；自递归尾调用只重写
   形参槽）。死槽不扫描，也不需要在调用点清零。
@@ -361,7 +375,8 @@ env，**不进 codegen**（同一 IR 的产物逐字节确定）。解析失败�
   `O_*`、权限位、`AT_SYMLINK_NOFOLLOW`、`TCGETS`）、内核结构布局（`stat` 字段偏移、
   `PATH_MAX`、`cpu_set_t` / `timespec` / `termios`）、errno 码表。与 `Abi` 的分界：
   Abi 是架构（换架构要改），Pal 是内核接口（换内核 ABI 只改这里）。
-- `Native.Gc`：标记-清扫 GC——块头判据、根集扫描、标记栈（倍增 mmap）、清扫与尺寸类
+- `Native.Gc`：两代标记-清扫 GC——块头判据、根集扫描（精确栈图 / 保守孤岛 /
+  记集）、写屏障与记集、年轻代 / 整堆回收的决定、标记栈（倍增 mmap）、清扫与尺寸类
   回收、`GC_LOG` 诊断行；`alloc` 在预算/阈值处调 `rt_gc_collect`。
 - `Native.Runtime`：`rt_*` 汇编模板、只读数据、`.bss` 布局、IR 符号 → 运行时标签白名单
   与值形态 arity。
@@ -433,13 +448,15 @@ env，**不进 codegen**（同一 IR 的产物逐字节确定）。解析失败�
   handler 缺口（[debt.md](debt.md) D101）。
   CI 的 `nix run .#backend-check -- --compiler native` 因此仍是非阻塞任务（口径见
   [testing.md](testing.md)「后端自举 conformance」）。
-- **GC 的边界**：精确到「哪些槽活着」，但每个活槽仍按机器字保守判断；非移动、不分代、
+- **GC 的边界**：精确到「哪些槽活着」，但每个活槽仍按机器字保守判断；两代、非移动、
   不压缩。因此
   1. 活槽里的 `Int` / 字节偶然形似指针会多留对象；死槽不扫描（不需要清零）。孤岛帧整段
      保守扫，其中已消费的临时值会多留；
-  2. 非移动，指针不会失效；也没有压缩，碎片见下；
-  3. 空闲块按 2 的幂尺寸类复用、不合并相邻空块，内部碎片最多约 2×；
-  4. 超过 64 MiB 的块单独占段、死块进 `rt_huge_free` 首次适配链（可复用，不 `munmap`）；
+  2. 记集是固定容量表（4096 项）：写屏障面（`writeRef` 与两处列表改接）之外的宿主缓冲
+     不应持有堆指针；表满水位会退化为整堆回收。漏登记的引用在年轻代回收里会被当成死块；
+  3. 非移动，指针不会失效；也没有压缩，碎片见下；
+  4. 空闲块按 2 的幂尺寸类复用、不合并相邻空块，内部碎片最多约 2×；
+  5. 超过 64 MiB 的块单独占段、死块进 `rt_huge_free` 首次适配链（可复用，不 `munmap`）；
 - **宿主缓冲与算术边界**（失败一律显式，不静默截断/越界写）：
   - `fsReadFile` 没有固定缓冲上界：先 `stat` 拿大小、按 `max(size, 64 KiB)` 一次分配字符串
     再读到 EOF，读满则容量加倍续读（数据搬一次）；`stat` 给 0 的伪文件（`/proc` 等）从 64 KiB

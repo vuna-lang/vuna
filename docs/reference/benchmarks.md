@@ -79,7 +79,7 @@ sorting,float_math,text_scan,nat_bits,tco_mutual,tco_wide,gc_low_live,gc_array_c
   `hashmap` / `sorting` / `gc_low_live` / `gc_array_churn` 能过），所以所有 native 进程统一在
   `ulimit -s unlimited` 下运行（JSON `meta.stack_policy` 记录该口径）；每个 native 项另记
   `default_stack_ok`（8 MiB soft limit 下能否正常退出，探针不参与计时）；
-- native 有**保守标记-清扫 GC**（[native.md](native.md) §5.2），峰值 RSS = 栈页 + live 堆；
+- native 有**两代标记-清扫 GC**（[native.md](native.md) §5.2），峰值 RSS = 栈页 + live 堆；
   `--rss-passes 3` 取最大值，与墙钟分开采样；
 - `--runs 5 --warmup 2` 取中位数；基线记录生成时的 `meta.loadavg`，跨机器只比 ratio。
 
@@ -140,10 +140,13 @@ native 的 TCO / GC 验证项。**GC 与 TCO 均已落地**；下表「前」列
 - **TCO**：判据是 `default_stack_ok` 由 false 翻为 true，且 RSS 从百 MB 降到进程基线
   （~4.2 MiB）；上表四项都满足。`arith` / `records` 也翻真，说明它们的递归主体同样是
   **直接饱和尾调用**；`tco_wide` 覆盖 9 参（3 个栈实参）的自递归。
-- **GC**：主判据是 RSS 从「累计分配」降到「存活集」——`gc_low_live` 现在 5.4 MiB
-  （GC 前只有 bump 分配时 289 MiB）；`VUNA_NATIVE_GC_LOG=1` 可逐次看 `live`。墙钟由
-  标记/清扫 live 与扫栈决定，所以阈值取 `max(GC_MIN, 2×live, 本次栈跨度)`（见
-  [native.md](native.md) §5.2）；活槽由每个 GC 点的栈图给出，死槽不扫描。
+- **GC**：主判据是 RSS 从「累计分配」降到「存活集」——`gc_low_live` 现在 242 ms /
+  4.2 MiB RSS、335 次回收（GC 前只有 bump 分配时 289 MiB）；`VUNA_NATIVE_GC_LOG=1`
+  可逐次看 `live` / `gen`。两代回收里年轻代只扫根集与记集、整堆回收按计数轮换（见
+  [native.md](native.md) §5.2），墙钟从整堆版（`--target native` 同机 288 ms）降到
+  242 ms；阈值取 `max(GC_MIN, live/8, 栈跨度)`（年轻代）与
+  `max(GC_MIN, 2 × live, 栈跨度)`（整堆）摊销扫栈成本；活槽由每个 GC 点的栈图给出，
+  死槽不扫描。`gc_pressure` 峰值 RSS 44.9 MB（整堆版基线 54.8 MB）。
 - 重标基线时 `default_stack_ok` 是布尔快照：直调、自递归、饱和闭包、wrapper 与 runtime
   符号的尾位置都应为 true；非尾深递归项（如 `list_recursion` 的拆半递归）仍为 false，
   那不是 TCO 漏覆盖——窄调宽与 `rt_apply` 慢路径仍回退普通调用。

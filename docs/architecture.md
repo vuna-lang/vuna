@@ -165,7 +165,7 @@ data（`Base.Data.Bool.Bool` / `Base.Data.List.List` / `Base.Data.Nat.Nat`），
 再由 CLI 的 `build` 分支调 `cc` 链接成静态 ELF；驱动入口
 `Vuna.Compiler.Driver.Native.compileNative`。覆盖 Int/Nat/Bool 纯值 + String
 （字面量 / `++` / `strFromInt` / `strLength` / `strAt` / `strSubstring` / `strHash` /
-`strShow` / 字符串相等 / String 入口）与堆段 + 尺寸类复用 + 保守标记-清扫 GC；支持面、
+`strShow` / 字符串相等 / String 入口）与堆段 + 尺寸类复用 + 两代标记-清扫 GC；支持面、
 ABI、值表示、运行时符号与边界见 [native.md](reference/native.md)。
 
 **wasm 后端**：`IR --Wasm.Module.build--> WasmModule --Wasm.Render.renderModule-->

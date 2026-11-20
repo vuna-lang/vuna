@@ -25,7 +25,7 @@
 | libc 面 | 本仓 |
 | --- | --- |
 | syscall 包装（`unistd.h` / `sys/stat.h` / `dirent.h` / `signal.h`） | `Native.Runtime` 的宿主层（约 320 行汇编模板） |
-| `malloc` / `free` | **不存在**，换成了段链表 + 尺寸类复用 + 保守标记-清扫（表示层，本来就不属于 libc） |
+| `malloc` / `free` | **不存在**，换成了段链表 + 尺寸类复用 + 两代标记-清扫（表示层，本来就不属于 libc） |
 | `stdio` 缓冲 / `printf` 格式引擎 | **不存在**，裸 `write` + 自己 itoa |
 | `errno` + 返回值 | 换成 `rt_host_status` 状态槽 + `try*` 返回默认值 |
 | `memcpy` / `memcmp` | `rep movsb` / `repe cmpsb` |

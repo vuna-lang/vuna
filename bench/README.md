@@ -139,9 +139,10 @@ wasm 列的 `skipped` 是 V8 的 wasm 栈上限（非尾深递归），浏览器
 OCaml 后端全部基准在 ~2× 手写 OCaml 内（最高的 `records` 约 2.1×）；native 的绝对值、峰值内存
 与 `default_stack_ok` 见 [benchmarks.md](../docs/reference/benchmarks.md)。分配 / GC 统计由
 OCaml 后端生成 runtime 的 `VN_PERF_STATS=1` 输出，`bench/run.sh` 采集进 JSON 的 `gc` 字段；
-native 侧 GC 已落地（保守 mark-sweep）但无统计输出，只记峰值 RSS 与默认栈探针。死槽清零后
-`gc_low_live` 的 RSS 降到 5 MiB（0.02x 手写），`gc_array_churn` 仍是 GC 相关的最差项
-（COW 数组复制）。TCO 已覆盖直调、自递归 loop、饱和闭包、wrapper 与 runtime 符号；
+native 侧由 `VUNA_NATIVE_GC_LOG=1` 的末次诊断行采集 `collections` / `live_bytes` /
+`alloc_bytes`（两代 mark-sweep，见 [native.md](../docs/reference/native.md) §5.2），
+另记峰值 RSS 与默认栈探针。`gc_low_live` 的 RSS 约 4 MiB（0.02x 手写），
+`gc_array_churn` 仍是 GC 相关的最差项（COW 数组复制）。TCO 已覆盖直调、自递归 loop、饱和闭包、wrapper 与 runtime 符号；
 判定与读数见 [benchmarks.md §1.2](../docs/reference/benchmarks.md)。
 
 效应基准（`eff_tick` / `eff_deep` / `eff_deepseq` / `eff_bracket` / `eff_nested` /
