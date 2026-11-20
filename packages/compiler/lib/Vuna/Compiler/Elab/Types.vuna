@@ -162,14 +162,21 @@ dtClassName (DtClass name params supers projs fieldTys spans) = name
 -- `as name` 的命名实例**不参与**自动实例搜索（只能 `@name` 选中，与 HM 一致），
 -- 否则 `instance Pretty Color` 与 `instance Pretty Color as fancy` 会撞成歧义。
 export record DtInst(..) where
+  -- | 实例字典的符号名（codegen / diagnostics 用；派生规则见 `Elab.InstName`）。
   dtInstName : String
+  -- | 稳定身份：完整类名 + 头（telescope 变量归一、span 无关）的规范摘要。
+  --   与源码名 / 排序 / span 解耦；`ecAddInst`、coherence、iface 排序与缓存去重都用它。
+  dtInstKey : String
   dtInstTele : List (Pair String Term)
   dtInstCtx : List Term
   dtInstHead : Term
   dtInstSpan : Maybe Span
 
 export dtInstName : DtInst -> String
-dtInstName (DtInst name tele ctxE head sp) = name
+dtInstName i = i.dtInstName
+
+export dtInstKey : DtInst -> String
+dtInstKey i = i.dtInstKey
 
 -- 把一个项拆成「全局头 + 带 multiplicity 的实参表」（`Dict_C a` ⇒ `(Dict_C, [a])`）。
 -- 非全局头（元变量/局部变量/lambda/…）返回 Nothing。实例头识别、族名提取共用它。
@@ -527,7 +534,11 @@ ecAddGoal (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl
     errors
 
 export ecAddInst : Ec -> DtInst -> Ec
-ecAddInst ec i = if hasInstName (dtInstName i) (ecInsts ec) then ec else ecAddInstRaw ec i
+ecAddInst ec i = if hasInstKey i.dtInstKey (ecInsts ec) then ec else ecAddInstRaw ec i
+
+export hasInstKey : String -> List DtInst -> Bool
+hasInstKey key [] = False
+hasInstKey key (i :: rest) = i.dtInstKey == key || hasInstKey key rest
 
 export hasInstName : String -> List DtInst -> Bool
 hasInstName name [] = False

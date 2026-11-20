@@ -15,9 +15,12 @@ module Vuna.Compiler.Elab.InstCoherence where
 -- blanket（头 α-等价）仍按 `TC_DuplicateInstance` 拒绝。搜索侧的“具体优先”在
 -- `Elab/Dict.vuna` 的 `searchInstFuel` 里实现。
 import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Base.Bytes
+import Vuna.Compiler.Base.Hash
 import Vuna.Compiler.Core.Term
 import Vuna.Compiler.Core.Eval
 import Vuna.Compiler.Core.Conv
+import Vuna.Compiler.Core.Canonical
 import Vuna.Compiler.Elab.Dict
 import Vuna.Compiler.Elab.Meta
 import Vuna.Compiler.Elab.Types
@@ -31,9 +34,12 @@ export data InstClash(..) : Type where
   ClashDuplicate : InstClash
   ClashOverlap : InstClash
 
-export findInstanceClash : Ec -> String -> List (Pair String Term) -> Term -> List DtInst -> Pair (Maybe InstClash) Ec
-findInstanceClash ec name tele head seen =
-  if hasInstName name seen then
+export findInstanceClash : Ec -> String -> String -> List (Pair String Term) -> Term -> List DtInst -> Pair (Maybe InstClash) Ec
+-- 名字是 codegen 的 dict 符号：两个实例撞同一个符号仍然必须拒绝。
+findInstanceClash ec name key tele head seen =
+  if hasInstKey key seen then
+    Pair (Just ClashDuplicate) ec
+  else if hasInstName name seen then
     Pair (Just ClashDuplicate) ec
   else if anyInstanceExact ec (length tele) head seen then
     Pair (Just ClashDuplicate) ec
@@ -73,6 +79,19 @@ headsAlphaEqual ec n a b =
   case conv (ecDefTbl ec) (ecSolsP ec) 0 (eval (teleAlphaEnv n) a) (eval (teleAlphaEnv n) b) of
     OkC _ => True
     ErrC e => False
+
+-- | 实例的稳定身份：完整类名 + 规范化的头。
+--
+-- 头先按已解元变量 zonk，再把 telescope 变量实例化成 `#tele` 刚性占位（与 coherence
+-- 的 α-等价判定同一套环境），quote 后走 span-free 的 Core 规范编码取摘要。
+-- 因此与源码 binder 名、声明顺序、span、哪个包先加载都无关。
+export instanceKey : Ec -> String -> List (Pair String Term) -> Term -> String
+instanceKey ec cname tele head =
+  let
+    zonked = zonkTerm ec 0 head
+    n = length tele
+    canon = quote n (eval (teleAlphaEnv n) zonked)
+  in cname ++ "#" ++ digestHex (digestOfString (encTop encTerm canon))
 
 export teleAlphaEnv : Int -> List Value
 teleAlphaEnv n = teleAlphaEnvGo n 0

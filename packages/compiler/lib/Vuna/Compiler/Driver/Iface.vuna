@@ -214,7 +214,7 @@ ifaceSchema = "vuna-iface 30"
 -- | 接口哈希的**算法格式版本**：参与哈希输入（与 `ifaceSchema` 独立——schema 管载荷
 -- 布局，本版本管摘要算法/分片编码；换算法时旧哈希自然换代）。
 ifaceHashVersion : String
-ifaceHashVersion = "vuna-iface-hash 10 (opaque/abstract bodies excluded)"
+ifaceHashVersion = "vuna-iface-hash 11 (instance stable key)"
 
 -- ---------------------------------------------------------------
 -- 哈希：接口哈希必须比 `strHash`（10 bit）强得多
@@ -372,7 +372,7 @@ hashDatas : List DtData -> String
 hashDatas ds = payloadDigest (encTop (encList encDtData) (sortByText (\d => dtDataName d) ds))
 
 hashInsts : List DtInst -> String
-hashInsts is = payloadDigest (encTop (encList encDtInstSem) (sortByText (\i => dtInstName i) is))
+hashInsts is = payloadDigest (encTop (encList encDtInstSem) (sortByText dtInstKey is))
 
 hashClasses : List DtClass -> String
 hashClasses cs =

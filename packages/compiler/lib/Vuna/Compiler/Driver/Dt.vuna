@@ -1146,7 +1146,7 @@ dedupDatas : List DtData -> List DtData
 dedupDatas ds = dedupKeepLast dtDataName ds
 
 dedupInsts : List DtInst -> List DtInst
-dedupInsts ds = dedupKeepLast dtInstName ds
+dedupInsts ds = dedupKeepLast dtInstKey ds
 
 dedupClasses : List DtClass -> List DtClass
 dedupClasses ds = dedupKeepLast dtClassName ds
