@@ -228,7 +228,7 @@ binder 的**身份**在 Lowering 分配，前缀与编号渲染属后端：
 - `Ir.Validate.validateUnit` / `Ir.Validate.validateProgram`：定义名唯一 + 分组自洽（每个依赖只指向更早的组
   或同组，线性扫描，不重跑 SCC）+ 入口引用的 `main` 存在 + 运行时符号已声明且 arity 一致
   （见上节）。check 路径在 `lowerProgramOf` 末尾跑，split 路径经
-  `Lowering.Program.lowerUnitChecked` 逐单元跑一次。
+  `Lowering.Program.lowerUnitCheckedFrom` 逐单元跑一次（单元的定义/数据由归属桶直接给出）。
 - **类型形状**：`checkDefTy` 校验 `IrDef` 的运行时签名；`checkNodeBinderTys` 校验 λ binder
   注解、`IrLam` 结果、`IrCast` 源/目标、`IrApp` 函数/结果、`IrCase` scrutinee/结果、
   `IrCtor` 类型实参与值实参个数、record/projection/update 结果类型

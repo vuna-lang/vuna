@@ -72,17 +72,42 @@ mainInitPrologue = "let () = Printexc.record_backtrace true\n"
 ownerTblOf : List (Pair String String) -> HashMap String String
 ownerTblOf pairs = HashMap.insertAll pairs (HashMap.fromList [])
 
-ownerOfTbl : HashMap String String -> String -> String
-ownerOfTbl t name =
-  case HashMap.lookup name t of
-    Just o => o
-    Nothing => ""
+-- 归属 → 本单元的定义（保持程序顺序）。逐单元分组与 lowering 都直接取桶：
+-- 原来每个单元对全体 def/data 各过滤一遍是 O(单元数 × 定义数)，大包上就是几百万次查表。
+-- 桶在 `reverse` 后的列表上做前插，取出来的顺序与原程序顺序一致。
+defBucketsOf : HashMap String String -> List DtDef -> HashMap String (List DtDef)
+defBucketsOf ownerT defs = defBucketsGo ownerT (reverse defs) (HashMap.fromList [])
 
-datasInUnit : HashMap String String -> String -> List DtData -> List DtData
-datasInUnit ownerT u datas = filter (\d => ownerOfTbl ownerT (dtDataName d) == u) datas
+defBucketsGo : HashMap String String -> List DtDef -> HashMap String (List DtDef) -> HashMap String (List DtDef)
+defBucketsGo ownerT [] acc = acc
+defBucketsGo ownerT (d :: rest) acc =
+  let
+    owner =
+      case HashMap.lookup (dtDefName d) ownerT of
+        Just o => o
+        Nothing => ""
+    bucket =
+      case HashMap.lookup owner acc of
+        Just ds => ds
+        Nothing => []
+  in defBucketsGo ownerT rest (HashMap.insert owner (d :: bucket) acc)
 
-defsInUnit : HashMap String String -> String -> List DtDef -> List DtDef
-defsInUnit ownerT u defs = filter (\d => ownerOfTbl ownerT (dtDefName d) == u) defs
+dataBucketsOf : HashMap String String -> List DtData -> HashMap String (List DtData)
+dataBucketsOf ownerT datas = dataBucketsGo ownerT (reverse datas) (HashMap.fromList [])
+
+dataBucketsGo : HashMap String String -> List DtData -> HashMap String (List DtData) -> HashMap String (List DtData)
+dataBucketsGo ownerT [] acc = acc
+dataBucketsGo ownerT (d :: rest) acc =
+  let
+    owner =
+      case HashMap.lookup (dtDataName d) ownerT of
+        Just o => o
+        Nothing => ""
+    bucket =
+      case HashMap.lookup owner acc of
+        Just ds => ds
+        Nothing => []
+  in dataBucketsGo ownerT rest (HashMap.insert owner (d :: bucket) acc)
 
 -- ---------------------------------------------------------------
 -- 依赖：每单元的直接依赖必须都是本次程序的已知单元（`runtime` / 模块 / 入口）。
@@ -162,15 +187,29 @@ checkSplitAcyclic files =
 record SplitGenCtx where
   -- Lowering 环境（程序级表 + 当前单元名；每单元用 `lwEnvWithUnit` 换单元）。
   sgcEnv : LwEnv
-  sgcAllDatas : List DtData
   sgcAllDefs : List DtDef
   sgcDefOwnerT : HashMap String String
   sgcDataOwnerT : HashMap String String
   sgcDefUnitT : HashMap String String
   sgcDataUnitT : HashMap String String
   sgcOrdered : List String
+  -- 归属 → 定义 / 数据（一次分桶，逐单元直接取）。
+  sgcDefBuckets : HashMap String (List DtDef)
+  sgcDataBuckets : HashMap String (List DtData)
   -- `#line` 路径归一（包相对）：与 `dt_def_locs` 位置表用同一函数（`splitLocPath`）。
   sgcNormPath : String -> String
+
+defsOfUnit : SplitGenCtx -> String -> List DtDef
+defsOfUnit ctx u =
+  case HashMap.lookup u ctx.sgcDefBuckets of
+    Just ds => ds
+    Nothing => []
+
+datasOfUnit : SplitGenCtx -> String -> List DtData
+datasOfUnit ctx u =
+  case HashMap.lookup u ctx.sgcDataBuckets of
+    Just ds => ds
+    Nothing => []
 
 mapToUnit : List (Pair String String) -> List (Pair String String)
 mapToUnit pairs = map (\q => Pair (firstOf q) (splitUnitOfModule (secondOf q))) pairs
@@ -398,6 +437,8 @@ splitProgramCheckedWith lookup store env modules entryDecls printResult runtimeD
 splitWithOwnersWith : {r : Row} -> (String -> Eff r (Maybe SplitFile)) -> (String -> SplitFile -> Eff r Int) -> LwEnv -> List (Pair String (List Decl)) -> Bool -> List DtData -> List DtDef -> List (Pair String String) -> List (Pair String String) -> (String -> String) -> String -> Eff r (Check (List SplitFile))
 splitWithOwnersWith lookup store env modules printResult allDatas allDefs defPairs dataPairs normPath runtimeText =
   let
+    defOwnerT = ownerTblOf defPairs
+    dataOwnerT = ownerTblOf dataPairs
     defUnitT = unitTblOf (mapToUnit defPairs)
     dataUnitT = unitTblOf (mapToUnit dataPairs)
     ordered =
@@ -407,13 +448,14 @@ splitWithOwnersWith lookup store env modules printResult allDatas allDefs defPai
     ctx =
       SplitGenCtx
         env
-        allDatas
         allDefs
-        (ownerTblOf defPairs)
-        (ownerTblOf dataPairs)
+        defOwnerT
+        dataOwnerT
         defUnitT
         dataUnitT
         ordered
+        (defBucketsOf defOwnerT allDefs)
+        (dataBucketsOf dataOwnerT allDatas)
         normPath
   in do
     moduleFilesR <- splitModuleFilesWith lookup store ctx modules
@@ -457,11 +499,11 @@ splitModuleFilesWith lookup store ctx ((Pair mname decls) :: rest) =
             )
       Nothing =>
         let
-          unitDatas = datasInUnit ctx.sgcDataOwnerT mname ctx.sgcAllDatas
-          unitDefs = defsInUnit ctx.sgcDefOwnerT mname ctx.sgcAllDefs
+          unitDatas = datasOfUnit ctx mname
+          unitDefs = defsOfUnit ctx mname
           qc = QualCtx unit ctx.sgcDefUnitT ctx.sgcDataUnitT
           envU = lwEnvWithUnit unit ctx.sgcEnv
-        in case lowerUnitChecked envU (map dtDefName unitDefs) (map dtDataName unitDatas) of
+        in case lowerUnitCheckedFrom envU unitDatas unitDefs of
           ErrC e => pure (ErrC e)
           OkC unitIr =>
             case genUnitPartsWith ctx.sgcNormPath qc (lwEnvShared envU) unitIr of
@@ -493,11 +535,11 @@ splitMainFileWith lookup store ctx printResult =
       Nothing =>
         let
           entryUnit = splitUnitOfModule entryOwner
-          entryDefs = defsInUnit ctx.sgcDefOwnerT entryOwner ctx.sgcAllDefs
-          entryDatas = datasInUnit ctx.sgcDataOwnerT entryOwner ctx.sgcAllDatas
+          entryDefs = defsOfUnit ctx entryOwner
+          entryDatas = datasOfUnit ctx entryOwner
           qc = QualCtx entryUnit ctx.sgcDefUnitT ctx.sgcDataUnitT
           envU = lwEnvWithUnit entryUnit ctx.sgcEnv
-        in case lowerUnitChecked envU (map dtDefName entryDefs) (map dtDataName entryDatas) of
+        in case lowerUnitCheckedFrom envU entryDatas entryDefs of
           ErrC e => pure (ErrC e)
           OkC unitIr =>
             case lowerEntryOf ctx.sgcAllDefs of

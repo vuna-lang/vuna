@@ -1433,26 +1433,35 @@ lowerUnitOf env defNames dataNames =
     (checkProgramOf env)
     (\_ => lowerUnitAfterChecks env defNames dataNames)
 
--- | 降一个单元并自证 IR（split 路径用它：分组/符号校验与降级同一入口）。
-export lowerUnitChecked : LwEnv -> List String -> List String -> Check IrUnit
-lowerUnitChecked env defNames dataNames =
-  Vuna.Compiler.Base.Common.bind
-    (lowerUnitAfterChecks env defNames dataNames)
-    (\u => Vuna.Compiler.Base.Common.bind (validateUnit (lwEnvShared env) u) (\_ => OkC u))
+-- | 已按归属分好桶的单元：定义/数据直接给，跳过「从全体 def/data 里过滤本单元」。
+-- split 路径每单元从 owner 桶取一遍，不再对全程序做 O(单元数 × 定义数) 的线性过滤。
+export lowerUnitCheckedFrom : LwEnv -> List DtData -> List DtDef -> Check IrUnit
+lowerUnitCheckedFrom env unitDatas defs =
+  Vuna.Compiler.Base.Common.bind (lowerUnitPrepared env unitDatas defs) (
+      \u =>
+        let
+          _ = dbg! "cg-unit-validate-start"
+        in Vuna.Compiler.Base.Common.bind (validateUnit (lwEnvShared env) u) (\_ => OkC u)
+    )
 
--- | 只做 lowering（程序级检查已由 `checkProgramOf` 跑过；split 路径每个单元用它）。
+-- | 只做 lowering（程序级检查已由 `checkProgramOf` 跑过）。
 --
 -- 分区只取本单元的运行时定义：类型级定义 / axiom 没有运行时表示，不进任何单元文件。
 export lowerUnitAfterChecks : LwEnv -> List String -> List String -> Check IrUnit
 lowerUnitAfterChecks env defNames dataNames =
   let
-    datas = env.lwDatas
     -- 保留 `env.lwDefs` 的**程序顺序**（分区/分组都按它），只把「是否属于本单元」的
-    -- 判定从线性 `memName` 换成一次建表（split 路径每单元一次，原来是 O(单元数×全程序)）。
+    -- 判定从线性 `memName` 换成一次建表。
     defNameTbl = HashMap.ofNames defNames
     defs = filter (\d => HashMap.member (dtDefName d) defNameTbl) env.lwDefs
     dataNameTbl = HashMap.ofNames dataNames
-    unitDatas = filter (\d => HashMap.member (dtDataName d) dataNameTbl) datas
+    unitDatas = filter (\d => HashMap.member (dtDataName d) dataNameTbl) env.lwDatas
+  in lowerUnitPrepared env unitDatas defs
+
+lowerUnitPrepared : LwEnv -> List DtData -> List DtDef -> Check IrUnit
+lowerUnitPrepared env unitDatas defs =
+  let
+    datas = env.lwDatas
     runtime = partitionRuntimeDefs defs
   in Vuna.Compiler.Base.Common.bind (groupDefs env runtime) (
       \groups =>
