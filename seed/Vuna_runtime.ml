@@ -5,8 +5,9 @@ let () =
   if (try Sys.getenv "VN_PERF_STATS" with Not_found -> "") <> "" then
     at_exit (fun () ->
       let s = Gc.quick_stat () in
-      Printf.eprintf "VN_PERF minor_words=%.0f major_words=%.0f minor_collections=%d major_collections=%d top_heap_words=%d\n"
-        s.Gc.minor_words s.Gc.major_words s.Gc.minor_collections s.Gc.major_collections s.Gc.top_heap_words)
+      Printf.eprintf "VN_PERF minor_words=%.0f major_words=%.0f minor_collections=%d major_collections=%d top_heap_words=%d allocated_words=%.0f\n"
+        s.Gc.minor_words s.Gc.major_words s.Gc.minor_collections s.Gc.major_collections s.Gc.top_heap_words
+        (Gc.allocated_bytes () /. (float_of_int Sys.word_size /. 8.)))
 let bi_add a b = a + b
 let bi_sub a b = a - b
 let bi_mul a b = a * b
@@ -7496,65 +7497,65 @@ let dt_def_locs = [
   ("Vuna_dTarget_dOcaml_dRuntime.v_rtTextExtras", ("Vuna.Target.Ocaml.Runtime.rtTextExtras", "Vuna/Target/Ocaml/Runtime.vuna:365"));
   ("Vuna_dTarget_dOcaml_dRuntime.v_rtTextGaps", ("Vuna.Target.Ocaml.Runtime.rtTextGaps", "Vuna/Target/Ocaml/Runtime.vuna:355"));
   ("Vuna_dTarget_dOcaml_dRuntime.v_rtTextMissing", ("Vuna.Target.Ocaml.Runtime.rtTextMissing", "Vuna/Target/Ocaml/Runtime.vuna:348"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_bindAndOf", ("Vuna.Target.Ocaml.Term.bindAndOf", "Vuna/Target/Ocaml/Term.vuna:2305"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_bindFirstOf", ("Vuna.Target.Ocaml.Term.bindFirstOf", "Vuna/Target/Ocaml/Term.vuna:2302"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_bindGroupOf", ("Vuna.Target.Ocaml.Term.bindGroupOf", "Vuna/Target/Ocaml/Term.vuna:2297"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_bindKeywordOf", ("Vuna.Target.Ocaml.Term.bindKeywordOf", "Vuna/Target/Ocaml/Term.vuna:2308"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_bridgeUnitOf", ("Vuna.Target.Ocaml.Term.bridgeUnitOf", "Vuna/Target/Ocaml/Term.vuna:1805"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_dtDefLocTable", ("Vuna.Target.Ocaml.Term.dtDefLocTable", "Vuna/Target/Ocaml/Term.vuna:1729"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_dtFloatRuntime", ("Vuna.Target.Ocaml.Term.dtFloatRuntime", "Vuna/Target/Ocaml/Term.vuna:1123"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_dtListBridge", ("Vuna.Target.Ocaml.Term.dtListBridge", "Vuna/Target/Ocaml/Term.vuna:1676"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_dtObsRuntime", ("Vuna.Target.Ocaml.Term.dtObsRuntime", "Vuna/Target/Ocaml/Term.vuna:1163"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_dtPrimRuntime", ("Vuna.Target.Ocaml.Term.dtPrimRuntime", "Vuna/Target/Ocaml/Term.vuna:107"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_dtReporterRuntime", ("Vuna.Target.Ocaml.Term.dtReporterRuntime", "Vuna/Target/Ocaml/Term.vuna:1082"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_bindAndOf", ("Vuna.Target.Ocaml.Term.bindAndOf", "Vuna/Target/Ocaml/Term.vuna:2306"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_bindFirstOf", ("Vuna.Target.Ocaml.Term.bindFirstOf", "Vuna/Target/Ocaml/Term.vuna:2303"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_bindGroupOf", ("Vuna.Target.Ocaml.Term.bindGroupOf", "Vuna/Target/Ocaml/Term.vuna:2298"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_bindKeywordOf", ("Vuna.Target.Ocaml.Term.bindKeywordOf", "Vuna/Target/Ocaml/Term.vuna:2309"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_bridgeUnitOf", ("Vuna.Target.Ocaml.Term.bridgeUnitOf", "Vuna/Target/Ocaml/Term.vuna:1806"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_dtDefLocTable", ("Vuna.Target.Ocaml.Term.dtDefLocTable", "Vuna/Target/Ocaml/Term.vuna:1730"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_dtFloatRuntime", ("Vuna.Target.Ocaml.Term.dtFloatRuntime", "Vuna/Target/Ocaml/Term.vuna:1124"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_dtListBridge", ("Vuna.Target.Ocaml.Term.dtListBridge", "Vuna/Target/Ocaml/Term.vuna:1677"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_dtObsRuntime", ("Vuna.Target.Ocaml.Term.dtObsRuntime", "Vuna/Target/Ocaml/Term.vuna:1164"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_dtPrimRuntime", ("Vuna.Target.Ocaml.Term.dtPrimRuntime", "Vuna/Target/Ocaml/Term.vuna:108"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_dtReporterRuntime", ("Vuna.Target.Ocaml.Term.dtReporterRuntime", "Vuna/Target/Ocaml/Term.vuna:1083"));
   ("Vuna_dTarget_dOcaml_dTerm.v_dtRuntime", ("Vuna.Target.Ocaml.Term.dtRuntime", "Vuna/Target/Ocaml/Term.vuna:32"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_dtRuntimeWith", ("Vuna.Target.Ocaml.Term.dtRuntimeWith", "Vuna/Target/Ocaml/Term.vuna:1664"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_dtSchedRuntime", ("Vuna.Target.Ocaml.Term.dtSchedRuntime", "Vuna/Target/Ocaml/Term.vuna:620"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_dtTraceRuntime", ("Vuna.Target.Ocaml.Term.dtTraceRuntime", "Vuna/Target/Ocaml/Term.vuna:1140"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_effThunkText", ("Vuna.Target.Ocaml.Term.effThunkText", "Vuna/Target/Ocaml/Term.vuna:2047"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_effUnitTyPair", ("Vuna.Target.Ocaml.Term.effUnitTyPair", "Vuna/Target/Ocaml/Term.vuna:1830"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_effUnitTypeNameIr", ("Vuna.Target.Ocaml.Term.effUnitTypeNameIr", "Vuna/Target/Ocaml/Term.vuna:1836"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_foldHandlers", ("Vuna.Target.Ocaml.Term.foldHandlers", "Vuna/Target/Ocaml/Term.vuna:2402"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_genAppNode", ("Vuna.Target.Ocaml.Term.genAppNode", "Vuna/Target/Ocaml/Term.vuna:1846"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_genArm", ("Vuna.Target.Ocaml.Term.genArm", "Vuna/Target/Ocaml/Term.vuna:2164"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_genArms", ("Vuna.Target.Ocaml.Term.genArms", "Vuna/Target/Ocaml/Term.vuna:2150"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_genAssignedFields", ("Vuna.Target.Ocaml.Term.genAssignedFields", "Vuna/Target/Ocaml/Term.vuna:2085"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_genBridgeRef", ("Vuna.Target.Ocaml.Term.genBridgeRef", "Vuna/Target/Ocaml/Term.vuna:1823"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_genCtorRef", ("Vuna.Target.Ocaml.Term.genCtorRef", "Vuna/Target/Ocaml/Term.vuna:1784"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_genDef", ("Vuna.Target.Ocaml.Term.genDef", "Vuna/Target/Ocaml/Term.vuna:2341"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_genEntryHook", ("Vuna.Target.Ocaml.Term.genEntryHook", "Vuna/Target/Ocaml/Term.vuna:2374"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_genGroup", ("Vuna.Target.Ocaml.Term.genGroup", "Vuna/Target/Ocaml/Term.vuna:2280"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_genGroupDefs", ("Vuna.Target.Ocaml.Term.genGroupDefs", "Vuna/Target/Ocaml/Term.vuna:2327"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_genGroups", ("Vuna.Target.Ocaml.Term.genGroups", "Vuna/Target/Ocaml/Term.vuna:2266"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_genIr", ("Vuna.Target.Ocaml.Term.genIr", "Vuna/Target/Ocaml/Term.vuna:1842"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_genIrArgs", ("Vuna.Target.Ocaml.Term.genIrArgs", "Vuna/Target/Ocaml/Term.vuna:2070"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_genIrNode", ("Vuna.Target.Ocaml.Term.genIrNode", "Vuna/Target/Ocaml/Term.vuna:1859"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_genLamParams", ("Vuna.Target.Ocaml.Term.genLamParams", "Vuna/Target/Ocaml/Term.vuna:2110"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_genLamParamsUnannotated", ("Vuna.Target.Ocaml.Term.genLamParamsUnannotated", "Vuna/Target/Ocaml/Term.vuna:2131"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_genNatAlt", ("Vuna.Target.Ocaml.Term.genNatAlt", "Vuna/Target/Ocaml/Term.vuna:2244"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_genNatBranches", ("Vuna.Target.Ocaml.Term.genNatBranches", "Vuna/Target/Ocaml/Term.vuna:2202"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_genValueRef", ("Vuna.Target.Ocaml.Term.genValueRef", "Vuna/Target/Ocaml/Term.vuna:1777"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_gsAddDep", ("Vuna.Target.Ocaml.Term.gsAddDep", "Vuna/Target/Ocaml/Term.vuna:1769"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_gsDepOfFamily", ("Vuna.Target.Ocaml.Term.gsDepOfFamily", "Vuna/Target/Ocaml/Term.vuna:1791"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_gsWithTyDeps", ("Vuna.Target.Ocaml.Term.gsWithTyDeps", "Vuna/Target/Ocaml/Term.vuna:2140"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_hasCatchAll", ("Vuna.Target.Ocaml.Term.hasCatchAll", "Vuna/Target/Ocaml/Term.vuna:2143"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_hookText", ("Vuna.Target.Ocaml.Term.hookText", "Vuna/Target/Ocaml/Term.vuna:2409"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_inlineText", ("Vuna.Target.Ocaml.Term.inlineText", "Vuna/Target/Ocaml/Term.vuna:1606"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_ioParamNames", ("Vuna.Target.Ocaml.Term.ioParamNames", "Vuna/Target/Ocaml/Term.vuna:2058"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_lineDirectiveOf", ("Vuna.Target.Ocaml.Term.lineDirectiveOf", "Vuna/Target/Ocaml/Term.vuna:2318"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_locRowOf", ("Vuna.Target.Ocaml.Term.locRowOf", "Vuna/Target/Ocaml/Term.vuna:1735"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_mkGenSt", ("Vuna.Target.Ocaml.Term.mkGenSt", "Vuna/Target/Ocaml/Term.vuna:1762"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_mkGenStWith", ("Vuna.Target.Ocaml.Term.mkGenStWith", "Vuna/Target/Ocaml/Term.vuna:1765"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_nonErasedBinderText", ("Vuna.Target.Ocaml.Term.nonErasedBinderText", "Vuna/Target/Ocaml/Term.vuna:2103"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_qualifyBridgeNames", ("Vuna.Target.Ocaml.Term.qualifyBridgeNames", "Vuna/Target/Ocaml/Term.vuna:1814"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_qualifyBridgeText", ("Vuna.Target.Ocaml.Term.qualifyBridgeText", "Vuna/Target/Ocaml/Term.vuna:1819"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_recordLabelOf", ("Vuna.Target.Ocaml.Term.recordLabelOf", "Vuna/Target/Ocaml/Term.vuna:1797"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_recordPatFields", ("Vuna.Target.Ocaml.Term.recordPatFields", "Vuna/Target/Ocaml/Term.vuna:2190"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_renderDefOf", ("Vuna.Target.Ocaml.Term.renderDefOf", "Vuna/Target/Ocaml/Term.vuna:2362"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_replaceAll", ("Vuna.Target.Ocaml.Term.replaceAll", "Vuna/Target/Ocaml/Term.vuna:1811"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_sortLocRows", ("Vuna.Target.Ocaml.Term.sortLocRows", "Vuna/Target/Ocaml/Term.vuna:1732"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_takeNames", ("Vuna.Target.Ocaml.Term.takeNames", "Vuna/Target/Ocaml/Term.vuna:2061"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_termOrImpossible", ("Vuna.Target.Ocaml.Term.termOrImpossible", "Vuna/Target/Ocaml/Term.vuna:2240"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_dtRuntimeWith", ("Vuna.Target.Ocaml.Term.dtRuntimeWith", "Vuna/Target/Ocaml/Term.vuna:1665"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_dtSchedRuntime", ("Vuna.Target.Ocaml.Term.dtSchedRuntime", "Vuna/Target/Ocaml/Term.vuna:621"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_dtTraceRuntime", ("Vuna.Target.Ocaml.Term.dtTraceRuntime", "Vuna/Target/Ocaml/Term.vuna:1141"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_effThunkText", ("Vuna.Target.Ocaml.Term.effThunkText", "Vuna/Target/Ocaml/Term.vuna:2048"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_effUnitTyPair", ("Vuna.Target.Ocaml.Term.effUnitTyPair", "Vuna/Target/Ocaml/Term.vuna:1831"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_effUnitTypeNameIr", ("Vuna.Target.Ocaml.Term.effUnitTypeNameIr", "Vuna/Target/Ocaml/Term.vuna:1837"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_foldHandlers", ("Vuna.Target.Ocaml.Term.foldHandlers", "Vuna/Target/Ocaml/Term.vuna:2403"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_genAppNode", ("Vuna.Target.Ocaml.Term.genAppNode", "Vuna/Target/Ocaml/Term.vuna:1847"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_genArm", ("Vuna.Target.Ocaml.Term.genArm", "Vuna/Target/Ocaml/Term.vuna:2165"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_genArms", ("Vuna.Target.Ocaml.Term.genArms", "Vuna/Target/Ocaml/Term.vuna:2151"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_genAssignedFields", ("Vuna.Target.Ocaml.Term.genAssignedFields", "Vuna/Target/Ocaml/Term.vuna:2086"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_genBridgeRef", ("Vuna.Target.Ocaml.Term.genBridgeRef", "Vuna/Target/Ocaml/Term.vuna:1824"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_genCtorRef", ("Vuna.Target.Ocaml.Term.genCtorRef", "Vuna/Target/Ocaml/Term.vuna:1785"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_genDef", ("Vuna.Target.Ocaml.Term.genDef", "Vuna/Target/Ocaml/Term.vuna:2342"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_genEntryHook", ("Vuna.Target.Ocaml.Term.genEntryHook", "Vuna/Target/Ocaml/Term.vuna:2375"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_genGroup", ("Vuna.Target.Ocaml.Term.genGroup", "Vuna/Target/Ocaml/Term.vuna:2281"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_genGroupDefs", ("Vuna.Target.Ocaml.Term.genGroupDefs", "Vuna/Target/Ocaml/Term.vuna:2328"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_genGroups", ("Vuna.Target.Ocaml.Term.genGroups", "Vuna/Target/Ocaml/Term.vuna:2267"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_genIr", ("Vuna.Target.Ocaml.Term.genIr", "Vuna/Target/Ocaml/Term.vuna:1843"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_genIrArgs", ("Vuna.Target.Ocaml.Term.genIrArgs", "Vuna/Target/Ocaml/Term.vuna:2071"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_genIrNode", ("Vuna.Target.Ocaml.Term.genIrNode", "Vuna/Target/Ocaml/Term.vuna:1860"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_genLamParams", ("Vuna.Target.Ocaml.Term.genLamParams", "Vuna/Target/Ocaml/Term.vuna:2111"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_genLamParamsUnannotated", ("Vuna.Target.Ocaml.Term.genLamParamsUnannotated", "Vuna/Target/Ocaml/Term.vuna:2132"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_genNatAlt", ("Vuna.Target.Ocaml.Term.genNatAlt", "Vuna/Target/Ocaml/Term.vuna:2245"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_genNatBranches", ("Vuna.Target.Ocaml.Term.genNatBranches", "Vuna/Target/Ocaml/Term.vuna:2203"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_genValueRef", ("Vuna.Target.Ocaml.Term.genValueRef", "Vuna/Target/Ocaml/Term.vuna:1778"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_gsAddDep", ("Vuna.Target.Ocaml.Term.gsAddDep", "Vuna/Target/Ocaml/Term.vuna:1770"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_gsDepOfFamily", ("Vuna.Target.Ocaml.Term.gsDepOfFamily", "Vuna/Target/Ocaml/Term.vuna:1792"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_gsWithTyDeps", ("Vuna.Target.Ocaml.Term.gsWithTyDeps", "Vuna/Target/Ocaml/Term.vuna:2141"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_hasCatchAll", ("Vuna.Target.Ocaml.Term.hasCatchAll", "Vuna/Target/Ocaml/Term.vuna:2144"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_hookText", ("Vuna.Target.Ocaml.Term.hookText", "Vuna/Target/Ocaml/Term.vuna:2410"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_inlineText", ("Vuna.Target.Ocaml.Term.inlineText", "Vuna/Target/Ocaml/Term.vuna:1607"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_ioParamNames", ("Vuna.Target.Ocaml.Term.ioParamNames", "Vuna/Target/Ocaml/Term.vuna:2059"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_lineDirectiveOf", ("Vuna.Target.Ocaml.Term.lineDirectiveOf", "Vuna/Target/Ocaml/Term.vuna:2319"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_locRowOf", ("Vuna.Target.Ocaml.Term.locRowOf", "Vuna/Target/Ocaml/Term.vuna:1736"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_mkGenSt", ("Vuna.Target.Ocaml.Term.mkGenSt", "Vuna/Target/Ocaml/Term.vuna:1763"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_mkGenStWith", ("Vuna.Target.Ocaml.Term.mkGenStWith", "Vuna/Target/Ocaml/Term.vuna:1766"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_nonErasedBinderText", ("Vuna.Target.Ocaml.Term.nonErasedBinderText", "Vuna/Target/Ocaml/Term.vuna:2104"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_qualifyBridgeNames", ("Vuna.Target.Ocaml.Term.qualifyBridgeNames", "Vuna/Target/Ocaml/Term.vuna:1815"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_qualifyBridgeText", ("Vuna.Target.Ocaml.Term.qualifyBridgeText", "Vuna/Target/Ocaml/Term.vuna:1820"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_recordLabelOf", ("Vuna.Target.Ocaml.Term.recordLabelOf", "Vuna/Target/Ocaml/Term.vuna:1798"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_recordPatFields", ("Vuna.Target.Ocaml.Term.recordPatFields", "Vuna/Target/Ocaml/Term.vuna:2191"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_renderDefOf", ("Vuna.Target.Ocaml.Term.renderDefOf", "Vuna/Target/Ocaml/Term.vuna:2363"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_replaceAll", ("Vuna.Target.Ocaml.Term.replaceAll", "Vuna/Target/Ocaml/Term.vuna:1812"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_sortLocRows", ("Vuna.Target.Ocaml.Term.sortLocRows", "Vuna/Target/Ocaml/Term.vuna:1733"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_takeNames", ("Vuna.Target.Ocaml.Term.takeNames", "Vuna/Target/Ocaml/Term.vuna:2062"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_termOrImpossible", ("Vuna.Target.Ocaml.Term.termOrImpossible", "Vuna/Target/Ocaml/Term.vuna:2241"));
 ]
 let rec dt_frame_parts parts =
   match parts with
