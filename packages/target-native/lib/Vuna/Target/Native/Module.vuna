@@ -299,6 +299,39 @@ callIndexes _ [] = []
 callIndexes idx (i :: rest) =
   if isCallInstr i then idx :: callIndexes (idx + 1) rest else callIndexes (idx + 1) rest
 
+-- ---------------------------------------------------------------
+-- 在每个 call 前写栈图指针（`[rbp-8]`），并收集本函数的栈图表
+-- ---------------------------------------------------------------
+-- | 槽偏移 -> 槽序号（`[rbp-8]` 是描述符槽，值槽从 `[rbp-16]` 起）。
+slotIndexOf : Int -> Int
+slotIndexOf off = (0 - off) / 8 - 2
+
+-- | 在每个 call 指令前插 `lea r10, [rip + map]; mov [rbp-8], r10`，返回新指令体、
+--   之后的模块内 label 计数与本函数的栈图表（按 call 顺序）。
+export nativeAnnotateCalls : Int -> List Instr -> Pair (List Instr) (Pair Int (List NativeMap))
+nativeAnnotateCalls nextLabel instrs = annotateGo nextLabel (nativeLiveSlotsAtCalls instrs) 0 instrs
+
+annotateGo : Int -> List (Pair Int (List Int)) -> Int -> List Instr -> Pair (List Instr) (Pair Int (List NativeMap))
+annotateGo nextLabel _ _ [] = Pair [] (Pair nextLabel [])
+annotateGo nextLabel calls idx (i :: rest) =
+  case calls of
+    (Pair c lives) :: more =>
+      if c == idx then
+        let
+          label = nativeMapLabel nextLabel
+          inner = annotateGo (nextLabel + 1) more (idx + 1) rest
+          store = [ILea R10 label, IMov (OpMem Rbp nativeDescriptorOff) (OpReg R10)]
+          mp = NativeMap label (map slotIndexOf lives)
+        in Pair (append store (i :: firstOf inner)) (Pair (firstOf (secondOf inner)) (mp :: secondOf (secondOf inner)))
+      else
+        let
+          inner = annotateGo nextLabel calls (idx + 1) rest
+        in Pair (i :: firstOf inner) (secondOf inner)
+    [] =>
+      let
+        inner = annotateGo nextLabel [] (idx + 1) rest
+      in Pair (i :: firstOf inner) (secondOf inner)
+
 delInt : Int -> List Int -> List Int
 delInt _ [] = []
 delInt n (x :: rest) = if n == x then rest else x :: delInt n rest
@@ -547,6 +580,7 @@ valueWrapperFunc modPath label arity target =
     frame
     (append (nativePrologue frame) (append stackGuardInstrs (append loads (tailCallSlotsInstrs target slots))))
     modPath
+    []
 
 nativeStaticClosureLabel : String -> Int -> String
 nativeStaticClosureLabel label arity = "vuna_static_${nativeName label}_${strFromInt arity}"
@@ -1069,7 +1103,9 @@ genLamValue fuel st bs body =
                       let
                         stF = secondOf q
                         frame = nativeFrameBytes stF.fgNextSlot
-                        lamFunc = NativeFunc lamName frame (append (nativePrologue frame) (append stackGuardInstrs (append (firstOf cp) (append (firstOf bp) (append (clearDeadSlots (firstOf q)) nativeEpilogue))))) st.fgModule
+                        lamBody = append (firstOf cp) (append (firstOf bp) (clearDeadSlots (firstOf q)))
+                        lamAn = nativeAnnotateCalls stF.fgNextLabel lamBody
+                        lamFunc = NativeFunc lamName frame (append (nativePrologue frame) (append stackGuardInstrs (append (firstOf lamAn) nativeEpilogue))) st.fgModule (secondOf (secondOf lamAn))
                         allocP = genAlloc st1 (2 + ncap)
                         obj = firstOf (secondOf allocP)
                         st2 = secondOf (secondOf allocP)
@@ -1077,7 +1113,7 @@ genLamValue fuel st bs body =
                         lams = append st1.fgLams (append stF.fgLams [lamFunc])
                         st3 = { st2 | fgLams = lams, fgStatics = append st2.fgStatics stF.fgStatics }
                         -- 闭包函数体里用掉的内部 label 必须回写：否则父函数继续编号会撞名。
-                        st4 = { st3 | fgNextLabel = stF.fgNextLabel }
+                        st4 = { st3 | fgNextLabel = firstOf (secondOf lamAn) }
                       in NOk (Pair bodyIns st4)
                   )
             )
@@ -1572,9 +1608,10 @@ genDefFunc defs pools fams nextLabel (IrDef name arity _ _ body _ _ _) =
           let
             st1 = secondOf p
             frame = nativeFrameBytes st1.fgNextSlot
-            instrs = append (clearDeadSlots (firstOf p)) nativeEpilogue
-            mainF = NativeFunc (nativeFuncLabel name) frame (append (nativePrologue frame) (append stackGuardInstrs instrs)) modPath
-          in NOk (Pair (append st1.fgLams [mainF]) (Pair st1.fgNextLabel st1.fgStatics))
+            an = nativeAnnotateCalls st1.fgNextLabel (clearDeadSlots (firstOf p))
+            instrs = append (firstOf an) nativeEpilogue
+            mainF = NativeFunc (nativeFuncLabel name) frame (append (nativePrologue frame) (append stackGuardInstrs instrs)) modPath (secondOf (secondOf an))
+          in NOk (Pair (append st1.fgLams [mainF]) (Pair (firstOf (secondOf an)) st1.fgStatics))
       )
   else
     case body of
@@ -1596,9 +1633,11 @@ genDefFunc defs pools fams nextLabel (IrDef name arity _ _ body _ _ _) =
                       let
                         st1 = secondOf q
                         frame = nativeFrameBytes st1.fgNextSlot
-                        instrs = append (firstOf bp) (append [ILabel loopLabel] (append (clearDeadSlots (firstOf q)) nativeEpilogue))
-                        mainF = NativeFunc (nativeFuncLabel name) frame (append (nativePrologue frame) (append stackGuardInstrs instrs)) modPath
-                      in NOk (Pair (append st1.fgLams [mainF]) (Pair st1.fgNextLabel st1.fgStatics))
+                        body0 = append (firstOf bp) (append [ILabel loopLabel] (clearDeadSlots (firstOf q)))
+                        an = nativeAnnotateCalls st1.fgNextLabel body0
+                        instrs = append (firstOf an) nativeEpilogue
+                        mainF = NativeFunc (nativeFuncLabel name) frame (append (nativePrologue frame) (append stackGuardInstrs instrs)) modPath (secondOf (secondOf an))
+                      in NOk (Pair (append st1.fgLams [mainF]) (Pair (firstOf (secondOf an)) st1.fgStatics))
                   )
             )
       _ => internal "function body is not a lambda: ${name}"
@@ -1727,8 +1766,9 @@ startFunc printResult kind mainName runMainM handlers cafs =
   in NativeFunc
     nativeEntryLabel
     0
-    (append captureArgs (append initHeap (append initLimits (append callMain (append printer exitInstrs)))))
+    (append [IBinReg "xor" Rbp (OpReg Rbp)] (append captureArgs (append initHeap (append initLimits (append callMain (append printer exitInstrs))))))
     (modulePathOf mainName)
+    []
 
 -- ---------------------------------------------------------------
 -- List 桥接：strUnpack / strPack / strConcatMany / strSubstTemplate
@@ -1779,6 +1819,7 @@ bridgeFn name slots body =
     frame
     (append (nativePrologue frame) (append stackGuardInstrs (append body nativeEpilogue)))
     nativeRuntimeModule
+    []
 
 nlistCellBytes : NListDesc -> Int
 nlistCellBytes d = 8 * (1 + d.nlMaxArity)
@@ -1800,7 +1841,7 @@ getArgsFn d =
 --   （tail 已指向 nil 单元）-> rax = 新表头。
 insertSortedFn : NListDesc -> NativeFunc
 insertSortedFn d =
-  bridgeFn
+  bridgeFnExits
     "insert_sorted"
     3
     [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IMov (OpMem Rbp (nativeSlotOff 1)) (OpReg Rsi), IMov (OpReg Rax) (OpMem Rdi 0), ICmp (OpReg Rax) (OpImm d.nlNilTag), IJcc "je" ".Lrt_is_before", IMov (OpReg Rax) (OpMem Rsi 8), IMov (OpReg Rcx) (OpMem Rdi 8), IMov (OpReg Rdi) (OpReg Rax), IMov (OpReg Rsi) (OpReg Rcx), ICall (nativeRtLabel "str_compare"), ICmp (OpReg Rax) (OpImm 0), IJcc "jle" ".Lrt_is_before", IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 0)), IMov (OpMem Rbp (nativeSlotOff 2)) (OpReg Rcx), ILabel ".Lrt_is_walk", IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 2)), IMov (OpReg Rdx) (OpMem Rcx 16), IMov (OpReg Rax) (OpMem Rdx 0), ICmp (OpReg Rax) (OpImm d.nlNilTag), IJcc "je" ".Lrt_is_append", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 1)), IMov (OpReg Rdi) (OpMem Rdi 8), IMov (OpReg Rsi) (OpMem Rdx 8), ICall (nativeRtLabel "str_compare"), ICmp (OpReg Rax) (OpImm 0), IJcc "jle" ".Lrt_is_splice", IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 2)), IMov (OpReg Rcx) (OpMem Rcx 16), IMov (OpMem Rbp (nativeSlotOff 2)) (OpReg Rcx), IJmp ".Lrt_is_walk", ILabel ".Lrt_is_splice", IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 2)), IMov (OpReg Rdx) (OpMem Rbp (nativeSlotOff 1)), IMov (OpReg R8) (OpMem Rcx 16), IMov (OpMem Rdx 16) (OpReg R8), IMov (OpMem Rcx 16) (OpReg Rdx), IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 0)), IRet, ILabel ".Lrt_is_append", IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 2)), IMov (OpReg Rdx) (OpMem Rbp (nativeSlotOff 1)), IMov (OpMem Rcx 16) (OpReg Rdx), IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 0)), IRet, ILabel ".Lrt_is_before", IMov (OpReg Rdx) (OpMem Rbp (nativeSlotOff 1)), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 0)), IMov (OpMem Rdx 16) (OpReg Rcx), IMov (OpReg Rax) (OpReg Rdx)]

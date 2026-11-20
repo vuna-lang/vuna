@@ -1,0 +1,63 @@
+-- GC 栈图标注（`Native.Module.nativeAnnotateCalls`）的单元测试。
+--
+-- 锁住 call 点前的 `lea r10, [rip + map]; mov [rbp-8], r10` 与栈图表（标签 /
+-- 活槽序号 / 下一个 label 计数）。
+import Base
+import Base.Data.Int as Int
+import Base.Data.List as List
+import Base.Data.Pair as Pair
+import Base.Data.String as String
+import Base.Effect.Core
+import Vuna.Target.Native.Model
+import Vuna.Target.Native.Abi
+import Vuna.Target.Native.Module
+
+main : Eff [] String
+main =
+  case problems of
+    [] => pure ""
+    ps =>
+      do
+        _ <- prim_eff_print ("native annotate drifted:\n" ++ join "\n" ps ++ "\n")
+        _ <- prim_eff_exit 1
+        pure ""
+
+sample : List Instr
+sample =
+  [
+    IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rax),
+    ICall "f",
+    IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 0))
+  ]
+
+problems : List String
+problems =
+  case nativeAnnotateCalls 0 sample of
+    Pair instrs rest =>
+      filter
+        (\s => s /= "")
+        (append [checkEq "next label" 1 (firstOf rest), checkEq "map count" 1 (length (secondOf rest)), checkEq "instr count" 5 (length instrs), checkStore instrs, checkMap (secondOf rest)] [])
+    _ => ["annotate returned"]
+
+checkEq : String -> Int -> Int -> String
+checkEq label want got =
+  if want == got then "" else label ++ ": want " ++ strFromInt want ++ ", got " ++ strFromInt got
+
+checkStore : List Instr -> String
+checkStore (_ :: (ILea R10 label) :: (IMov (OpMem Rbp off) (OpReg R10)) :: _) =
+  if label == ".Lgc_0" && off == 0 - 8 then
+    ""
+  else
+    "descriptor store: label=${label} off=${strFromInt off}"
+checkStore _ = "annotate: missing descriptor store"
+
+checkMap : List NativeMap -> String
+checkMap ([m]) =
+  if m.nmLabel == ".Lgc_0" && joinInts m.nmSlots == "0" then
+    ""
+  else
+    "map: label=${m.nmLabel} slots=[${joinInts m.nmSlots}]"
+checkMap ms = "map count ${strFromInt (length ms)}"
+
+joinInts : List Int -> String
+joinInts xs = String.join "," (map strFromInt xs)

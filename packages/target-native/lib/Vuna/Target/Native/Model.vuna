@@ -169,14 +169,23 @@ export data Instr(..) : Type where
 -- ---------------------------------------------------------------
 -- 程序
 -- ---------------------------------------------------------------
--- | 一个函数：标签、帧大小（字节，16 倍数）、指令体、所属模块路径。
+-- | 一个函数：标签、帧大小（字节，16 倍数）、指令体、所属模块路径、GC 栈图。
 --   `nfModule` 是模块路径段（如 `["Vuna", "Compiler", "Native", "Render"]`）；
 --   `["runtime"]` 是运行时/桥接文件，`["Main"]` 是入口（含无模块头的 ad-hoc 文件）。
+--   `nfMaps` 是该函数里每个 GC 点的栈图（按 call 出现顺序编号）。
 export record NativeFunc(..) where
   nfLabel : String
   nfFrame : Int
   nfBody : List Instr
   nfModule : List String
+  nfMaps : List NativeMap
+
+-- | GC 栈图：`nmSlots` 是该 GC 点上仍然活着的槽序号（升序）。
+--   描述符内存布局：`[count][slot0]…[count-1]`；`count = 0` 表示「这个帧没有精确图」，
+--   GC 对整个帧区间保守扫描。
+export record NativeMap(..) where
+  nmLabel : String
+  nmSlots : List Int
 
 -- | 只读数据：标签 + 原始文本（无长度头；只用于运行时常量）。
 export record NativeRodata(..) where

@@ -168,6 +168,16 @@ renderClosure c =
     indent ".quad ${strFromInt c.ncArity}"
   ]
 
+-- | GC 栈图：`[count][slot0]…`；标签是文件局部 `.Lgc_<n>`。
+renderMap : NativeMap -> List String
+renderMap m =
+  append
+    [".align 8", "${m.nmLabel}:", indent ".quad ${strFromInt (length m.nmSlots)}"]
+    (map (\s => indent ".quad ${strFromInt s}") m.nmSlots)
+
+mapsOfFunc : NativeFunc -> List NativeMap
+mapsOfFunc f = f.nfMaps
+
 -- | 函数标签跨文件可见（模块之间的调用、`_start` 调 `main`），所以全部 `.globl`。
 renderFunc : NativeFunc -> List String
 renderFunc f =
@@ -212,9 +222,10 @@ renderProgramFile p key =
     isRuntime = key == "runtime"
     funcs = funcsOfKey key p.npFuncs
     rodataLits = concatMap renderStrLit (litsOfKey key p.npModuleLits)
+    rodataMaps = concatMap renderMap (concatMap mapsOfFunc funcs)
     rodataConsts = if isRuntime then concatMap renderRodata p.npRodata else []
     rodataClosures = if isRuntime then concatMap renderClosure p.npClosures else []
-    rodataPart = append rodataConsts (append rodataClosures rodataLits)
+    rodataPart = append rodataConsts (append rodataClosures (append rodataLits rodataMaps))
     rodataSection = if isEmpty rodataPart then [] else ".section .rodata" :: rodataPart
     bssPart = if isRuntime then concatMap renderBss p.npBss else []
     bssSection = if isEmpty bssPart then [] else ".section .bss" :: bssPart

@@ -73,14 +73,19 @@
   ```text
   push rbp
   mov rbp, rsp
-  sub rsp, <frame>      ; frame = align16(8 * slots)
+  sub rsp, <frame>      ; frame = align16(8 * (slots + 1))
+  mov qword ptr [rbp-8], 0   ; GC 栈图槽（0 = 没有精确图）
   <body>                ; 结果在 rax
   mov rsp, rbp
   pop rbp
   ret
   ```
-- **不做寄存器分配**：binder 和中间值都分配 `[rbp - 8*(slot+1)]` 栈槽；临时槽不回收，
-  frame 取该函数的最大使用量。求值顺序因此显式、稳定。
+- **不做寄存器分配**：binder 和中间值都分配 `[rbp - 8*(slot+2)]` 栈槽（`[rbp-8]` 留给
+  GC 栈图槽）；临时槽不回收，frame 取该函数的最大使用量。求值顺序因此显式、稳定。
+- **GC 栈图**：每个 `call` 点前写 `lea r10, [rip + .Lgc_<n>]; mov [rbp-8], r10`，
+  指向本模块 `.rodata` 的一张栈图表（`[count][slot…]`，活槽序号升序；`Native.Map`）。
+  标签是文件局部 `.L` 符号，所以编号按模块累加，不跨模块扩散。GC 目前仍按保守扫描
+  读栈（见 §5.2），表是精确根集的数据面。
 - 调用点：按 CBV 从左到右把实参求值到槽；前 6 个装入参数寄存器，其余**逆序压栈**
   （最后一个实参先压，第 7 个最终在 `[rbp+16]`）。栈参数个数为奇数时先 `sub rsp, 8`
   补空洞，保证 `call` 时 `rsp` 16 字节对齐（prologue 的 `push rbp` + 16 倍数 frame 是
@@ -98,7 +103,9 @@
   `rbp`，不碰 `rbx/r12-r15`，因此无需保存 callee-saved（生成代码与运行时都不使用它们）。
 - **单出口**：带栈帧的运行时函数体内出现的 `IRet` 由 `Native.Runtime.rtFunc` 统一改写
   成跳到函数尾标签（`mov rsp, rbp; pop rbp; ret`）；只有无栈帧的入口/陷阱（`rtRawFunc`）
-  直接写 `ret`。手写分支因此不会「提前 ret 把 rsp 留在 frame 里」，不会崩在返回地址上。
+  直接写 `ret`。`Native.Module` 的桥接函数同理：体内有 `IRet` 的必须走 `bridgeFnExits`
+  （`bridgeFn` 只负责 prologue/epilogue，直接 `ret` 会在 frame 里弹出返回地址）。
+  手写分支因此不会「提前 ret 把 rsp 留在 frame 里」，不会崩在返回地址上。
 - 入口 `_start`：初始化堆指针 → `and rsp, -16` → `call vuna_main` → 按入口 show
   打印 → `exit(0)`；不解析 argv，无栈溢出检查。
 - **尾调用**：结果位置由 `Ir.Tail` 标记（`cpsDefsMachine` 之后）。native 的覆盖面：
