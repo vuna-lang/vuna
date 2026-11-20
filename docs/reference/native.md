@@ -130,8 +130,8 @@ native 与 wasm 跑同一份**库机器**（`Base.Effect.Core.Control` 循环，
   消费），续延链不占宿主栈；顺序 perform 的深度不随次数增长。
 - **one-shot**：续延槽 → epoch 表（`MSt.msUsed`）拒绝重放；尾 resume 复用 `tailSlot`。
 - 宿主 handler 与用户 handler 走同一套 `MkHandle`，没有「宿主直连」旁路。
-- 旧栈拷贝实现（`rt_eff_*`、`rt_handlers`、捕获缓冲与迁移栈段、`rt_next_host` 标记）
-  已删除；GC 的保守根集只有当前栈区间（`rt_stack_top`）与 `rt_cleanups`。
+- GC 的保守根集是当前栈区间（`rt_stack_top`）与 `.bss` 的 cleanup 链头（`rt_cleanups`）；
+  handler 帧与续延都在堆上，随这两类根可达。
 
 延迟 answer（`opH` 返回函数、`resume` 发生在 `MkHandle` 返回之后）仍不支持，见
 [debt.md](debt.md) D101。
@@ -252,7 +252,8 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
   argv[0] 是本进程路径）、`wait`（`wait4` 取退出码，被信号杀死按 1）、`exit_process_host`。
 - 未实现的宿主面：stdin 的 `readLine` / `readBytes`（编译器闭包不可达）与 net。
 - 续延：`perform` / `handle` 由库机器（`Base.Effect.Core` 的 `Control` 循环）执行，见 §3.4；
-  旧的 `rt_eff_*` 栈拷贝实现已删除。其余 `prim_eff_*` 宿主原语仍未实现。
+  `prim_eff_*` 的实现面以 `Native.Runtime` 的符号映射为准，未列出的符号由
+  `RuntimeTable` 测试登记为缺口。
 - 浮点：`float_from_int` / `int_from_float`（截断）/ `float_abs` / `float_sqrt`、
   `float_add/sub/mul/div`、`float_eq/neq/lt/le/gt/ge`；展示不是运行时符号，
   走 `Base.Data.Float.floatRender`（Vuna 实现，三端共用）。
@@ -315,13 +316,15 @@ env，**不进 codegen**（同一 IR 的产物逐字节确定）。解析失败�
   分配先弹表再 bump。大于 64 MiB 的块单独占一个段，死块进 `rt_huge_free` 首次适配链。
 - **根集**（没有栈图，全部保守扫描）：
   1. 机器栈 `[rsp, rt_stack_top)`；GC 入口先把通用寄存器（含 `r15`）溢进自己的帧；
-  2. `.bss` 白名单：`rt_cleanups`，以及 `alloc` 的调用方寄存器
-     快照（`rt_alloc_save_rdi/rsi/r8/r9`：`alloc` 不建栈帧，这四个寄存器靠 `.bss` 保活）。
-  3. 没有续延记录链：栈拷贝路径已删除，机器状态都是栈上的普通值，随第 1 项被扫到。
-- **候选判据**：字必须指向某个已注册堆段内、16 对齐、块头合法且非空闲的 payload 起点。
-  `Int` / 字节型偶然形似指针只会多留对象（非移动，不会失效）；`.rodata` 字面量不进堆，天然忽略。
-- **不扫的块**：`leaf`（String / Float，payload 是字节或位型）与 `pin`（当前没有调用方；
-  留给需要长期驻留的宿主缓冲）。
+  2. `.bss` 白名单：cleanup 链头 `rt_cleanups`。
+  handler 帧与续延是 `Base.Effect.Core` 的普通堆对象，随这两类根可达，没有独立的 `.bss` 链。
+  `alloc` 的调用方寄存器快照（`rt_alloc_save_*`）只用于跨 `gc_collect` 保活寄存器，
+  不是根：仍会被读取的值在调用方的栈槽里。
+- **候选判据**：字必须指向某个已注册堆段内、块头 16 对齐且合法、非空闲的 payload 起点
+  （块头 + 8）。`Int` / 字节型偶然形似指针只会多留对象（非移动，不会失效）；`.rodata`
+  字面量不进堆，天然忽略。
+- **不扫的块**：`leaf`（String / Float，payload 是字节或位型）；`pin` 标记的块同样不扫、
+  清扫一律保留（`alloc_pinned` 目前没有调用方）。
 - **清扫**：清 mark、把未标记块按尺寸类回收、累计 `live`；之后
   `threshold = max(GC_MIN, 2 × live, 本次扫到的栈字节数)`（深递归按扫栈成本摊还）。
   非移动、不压缩，也没有分代/增量/并发。
@@ -423,9 +426,8 @@ env，**不进 codegen**（同一 IR 的产物逐字节确定）。解析失败�
   [testing.md](testing.md)「后端自举 conformance」）。
 - **GC 的边界**：保守、非移动、不分代、不压缩。因此
   1. 活帧里**尚未清零的栈槽**仍被保守扫描；调用点实参槽与文本最后读取后会清零，所以
-     `gc_low_live` 这类「分配后用掉、再尾递归」的形状不再按栈深度累计保留（死槽清零前
-     `GC_LOG` live 从 0.9 MB 涨到 320 MB、墙钟 0.31 s → 9.5 s；清零后 322 ms / 5.4 MiB，
-     见 [benchmarks.md](benchmarks.md) §1.2）。仍在跨调用临时值里的对象会被多留；
+     `gc_low_live` 这类「分配后用掉、再尾递归」的形状不按栈深度累计保留（读数见
+     [benchmarks.md](benchmarks.md) §1.2）。仍在跨调用临时值里的对象会被多留；
   2. 形似指针的 `Int` 会多留对象；非移动所以不会让指针失效；
   3. 空闲块按 2 的幂尺寸类复用、不合并相邻空块，内部碎片最多约 2×；
   4. 超过 64 MiB 的块单独占段、死块进 `rt_huge_free` 首次适配链（可复用，不 `munmap`）；

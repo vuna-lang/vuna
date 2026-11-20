@@ -2,13 +2,14 @@ module Vuna.Target.Native.Gc where
 
 -- native 后端的保守标记-清扫 GC。
 --
--- 根集只有三类（没有栈图，靠保守扫描）：
+-- 根集只有两类（没有栈图，靠保守扫描）：
 --   * 机器栈：`[rsp, rt_stack_top)`（GC 先把通用寄存器溢进自己的帧）；
---   * `.bss` 指针槽：handler 链、当前 handler、cleanup 链；
---   * 活动续延记录：记录本身 + 它挂起的那段旧栈 `[record+56, record+88)`。
+--   * `.bss` 的 cleanup 链头 `rt_cleanups`。
 --
--- 候选指针的判据：指向已注册堆段内一个块头的**后一个字节**（payload 起点）、
--- 块头合法且不是空闲块。非移动清扫，所以保守多留只会多占内存，不会让指针失效。
+-- handler 帧与续延是 `Base.Effect.Core` 的普通堆对象，随这两类根可达，没有专门的根。
+--
+-- 候选指针的判据：指向已注册堆段内某个 16 对齐块头之后的 payload 起点、块头合法且不是
+-- 空闲块。非移动清扫，所以保守多留只会多占内存，不会让指针失效。
 --
 -- 分配器（`Native.Runtime.alloc`）在预算或阈值处调用 `rt_gc_collect`；
 -- 空闲块按 2 的幂尺寸类复用，超过 `nativeMaxClassBytes` 的块进 `rt_huge_free`。
@@ -73,7 +74,8 @@ gcTmpLabel = "rt_gc_tmp"
 gcSpanLabel : String
 gcSpanLabel = "rt_gc_span"
 
--- | `alloc` 的请求字节数与调用方寄存器快照（`.bss`，GC 当根扫描）。
+-- | `alloc` 的请求字节数与调用方寄存器快照。`alloc` 不建栈帧，`rsi` / `r8` / `r9`
+--   靠这些槽跨 `gc_collect` 保活；它们不是 GC 根（活值在调用方的栈槽里）。
 export allocReqLabel : String
 allocReqLabel = "rt_alloc_req"
 
