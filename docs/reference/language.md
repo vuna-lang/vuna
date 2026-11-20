@@ -276,10 +276,11 @@ vuna/base/compiler 三包源码统一按当前语言能力书写，新增/修改
   [primitives.md](primitives.md)），不依赖库模块、不捕获调用方局部名字；宏名不能被局部
   绑定遮蔽；每个实参只出现一次。
 - **span**：展开出的节点继承调用点 span（实参保留自身 span），诊断可回溯到 `name!`。
-- **唯一的内置宏**：`dbg! text`，展开为
-  `if @vuna@debug@on 0 then @vuna@debug@line text else 0`。它在任何包可用、不需要
-  import；`--debug-perf` / `VUNA_DEBUG_PERF=1` 打开时向 stderr 写
-  `DEBUG <epoch-us> <text>`（逐行 flush），关闭时实参**不求值**；表达式返回 `Int 0`。
+- **内置宏**：`dbg! text`（`if @vuna@debug@on 0 then @vuna@debug@line text else 0`）、
+  `obs! msg`（结构化日志事件）、`mark! name`（瞬时标记事件）。它们在任何包可用、不需要
+  import；`dbg!` 在 `--debug-perf` / `VUNA_DEBUG_PERF=1` 打开时向 stderr 写
+  `DEBUG <epoch-us> <text>`（逐行 flush），关闭时实参**不求值**，表达式返回 `Int 0`；
+  `obs!` / `mark!` 的 schema 见 [observability.md](observability.md) §4.3。
   见 [debugging.md](debugging.md) §3 与 [performance.md](performance.md) §2。
 - **错误**：未知宏 `[RN_UnknownMacro]`、参数个数不符 `[RN_MacroArity]`，都带调用点 span。
 - **边界**：暂不支持用户自定义宏 / 模式宏 / 宏生成宏；宏名是全局内置名，不参与模块作用域

@@ -21,9 +21,9 @@
 - **表面语法只活到 `Frontend.Ast`**：`EInfix` / `EBacktick` / `ESect*` / `EParen` 是 parser
   中间产物，`Loader.Fixity.reorderProgram` 之后必须消失；`Loader.Resolve` 对残留报 internal error。
 - 部分糖**不新增 AST 构造子**，而用保留名编码（`@vuna@list@*` / `@vuna@handle` /
-  `@vuna@macro@*` / `@vuna@tuple@*` / `@vuna@ascribe` / `?hole`）：列表字面量、`perform` /
-  `handle`、`f@name`、行条目、元组 / unit、类型标注、洞、内置宏都走这条路。新增形式优先
-  考虑这条路径（§10）。
+  `@vuna@macro@*` / `@vuna@tuple@*` / `@vuna@ascribe` / `@vuna@do@*` / `?hole`）：列表字面量、
+  `perform` / `handle`、`f@name`、行条目、元组 / unit、类型标注、do 链、洞、内置宏都走这条路。
+  新增形式优先考虑这条路径（§10）。
 - **工具面看的是 `Frontend.Ast` 原形**：`Fmt` 按源码顺序打印、`Index`/`Lsp` 扫 binder 与引用、
   `Lint` 做归一化建议。任何表面形式都必须在这三处有明确处理，否则工具会漂移。
 
@@ -71,7 +71,7 @@
 | `let` | `let` + 绑定块 + `in body` | 顺序 let：`TApp (TLam x body) value` | `Elab.Term.Impl`、[language.md](language.md) |
 | `where` | `f x = e where` + 绑定块 | 函数体后的绑定块（每个绑定必须写签名） | `Frontend.Parser`、`Elab.Term.Support`、[language.md](language.md) |
 | lambda | `\x, y => e` | `ELam`；参数只能是名字（逗号分隔，无 `->` 形式、无参数模式） | `Frontend.Parser` |
-| `do` | `pat <- e` / 裸表达式 | do 链（`@vuna@do@bind@*` 标记）；**最后一条必须是裸表达式**；不接受 `let`；`pat` 语义只允许变量 / `_` | `Loader.Resolve`、[records-traits.md](records-traits.md) |
+| `do` | `let pat = e` / `pat <- e` / 裸表达式 | do 链（`@vuna@do@bind@*` 标记）；**最后一条必须是裸表达式**；`let` 是纯绑定（对后续语句可见）；`pat <- e` 接受任意不可反驳模式，可反驳模式按普通 `case` 报穷尽性错误 | `Frontend.Parser`、`Loader.Resolve`、[records-traits.md](records-traits.md) |
 | `perform` | `perform (Print s)` | `Base.Effect.Core.performCore` | `Elab.Term.Impl`、[native-effects.md](native-effects.md) |
 | `handle` | `handle c { return x -> e`，随后每个 `C p k -> e` 一行，`}` 收尾 | `handleWith` / `handleWithAt` | `Elab.Term.Impl`、[native-effects.md](native-effects.md) |
 | 记录构造 | `Point { y = 2, x = 1 }` | 合成位置构造子应用；字段必须写全、必须写 `=` | `Elab.Records`、[records-traits.md](records-traits.md) |
@@ -216,8 +216,8 @@
 | `$` 低优先级应用 | ✓ | ✓ | ✓ | `Base.Data.Function.($)`，`infixr 0` | 已支持（库层） |
 | 管道 `\|>` / `&` | `&` | — | `#` | `Base.Data.Function.(\|>)`，`infixl 1`（`&` / `#` 不做） | 已支持（库层） |
 | 组合子 `id` / `const` / `flip` / `compose` | ✓ | ✓ | ✓ | `Base.Data.Function`，随 `Prelude` 可见 | 已支持 |
-| `do` 内 `let` | ✓ | ✓ | ✓ | 只能写 `let ... in ...` 包住剩余块 | 待评估（parser + do 链） |
-| `do` 模式绑定 | ✓ | ✓ | ✓ | 语法接受，语义只允许变量 / `_` | 不做（需要失败语义 / `MonadFail`） |
+| `do` 内 `let` | ✓ | ✓ | ✓ | `let` + 绑定块（签名行 / 局部函数 / `let pat = e` 都可用） | 已支持（纯绑定） |
+| `do` 模式绑定 | ✓ | ✓ | ✓ | 降级成 `bind e (\v -> case v of pat => 后续语句)` | 已支持（不可反驳模式；可反驳模式报 `TC_NotExhaustive`，无 `MonadFail`） |
 | guards（函数 / case / let） | ✓ | ✓ | ✓ | 无 | 不做（穷尽性 + 模式矩阵成本高） |
 | lambda 参数模式 | ✓ | ✓ | ✓ | 参数只能是名字 | 不做（无签名 lambda 无期望类型） |
 | `\case` | ✓ | — | ✓ | 无 | 不做 |

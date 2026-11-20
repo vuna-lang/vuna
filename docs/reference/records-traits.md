@@ -393,12 +393,13 @@ main = case (MkEmail "x@y") of MkEmail s => s
 
 ## do、Monad 与 Functor
 
-- 语法：`do` 块，语句是 `pat <- expr`（pat 只支持变量或 `_`）或裸表达式，最后一条
-  必须是裸表达式；`a >>= f` 等价 `bind a f`，`a >> b` 等价
-  `bind a (\_ -> b)`（顺序执行）。
-- **`do` 块不接受 `let` 绑定**：`do` 里写 `let x = 1` 报
-  `PS_ExpectedToken: expected in`（`let` 仍是表达式，必须带 `in`）。需要中间绑定时把
-  `let … in <后续表达式>` 写在表达式位置，或抽成带签名的顶层辅助函数。
+- 语法：`do` 块，语句是 `let pat = e`、`pat <- expr` 或裸表达式，最后一条必须是裸表达式；
+  `a >>= f` 等价 `bind a f`，`a >> b` 等价 `bind a (\_ -> b)`（顺序执行）。
+- **`do` 内 `let`** 是纯绑定（`let` + 绑定块，签名行 / 局部函数 / `let pat = e` 都可用），
+  只对块内后续语句可见；需要包住整段表达式时仍可写 `let … in …` 作为语句。
+- **`do` 模式绑定**接受任意不可反驳模式（变量、`_`、元组、单构造子/单字段记录的构造子模式），
+  降级成 `bind e (\v -> case v of pat => 后续语句)`；可反驳模式（如 `Just x`）缺分支时按普通
+  `case` 报 `TC_NotExhaustive`——vuna 没有 `MonadFail` 等价的运行期失败路径。
 - `do` 在 Loader 里 desugar 成 `bind` / lambda（Parser 保留 `EDo`，formatter 因此能
   还原 do 语法）：
 
