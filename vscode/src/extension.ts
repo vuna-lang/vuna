@@ -24,7 +24,6 @@ import {
   LanguageClient,
   type LanguageClientOptions,
   type ServerOptions,
-  TransportKind,
 } from 'vscode-languageclient/node';
 
 const execFileAsync = promisify(execFile) as (
@@ -223,11 +222,12 @@ async function startClient(): Promise<void> {
   else log('[vuna] VUNA_BASE is not set (no vuna.basePath and no workspace base/ directory)');
 
   const workspaceRoot = primaryWorkspaceFolder()?.uri.fsPath;
+  // Do not set `transport` here: for an `Executable` server the client defaults to
+  // stdio, but `TransportKind.stdio` additionally appends `--stdio` to the argv.
   const serverOptions: ServerOptions = {
     command: resolution.command,
     args: [...LSP_ARGS],
     options: { cwd: workspaceRoot, env: buildServerEnvironment() },
-    transport: TransportKind.stdio,
   };
   const clientOptions: LanguageClientOptions = {
     documentSelector: [{ scheme: 'file', language: LANGUAGE_ID }],

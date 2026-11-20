@@ -17933,18 +17933,18 @@ var require_main4 = __commonJS({
     __exportStar(require_node2(), exports2);
     __exportStar(require_api3(), exports2);
     var REQUIRED_VSCODE_VERSION = "^1.82.0";
-    var TransportKind2;
-    (function(TransportKind3) {
-      TransportKind3[TransportKind3["stdio"] = 0] = "stdio";
-      TransportKind3[TransportKind3["ipc"] = 1] = "ipc";
-      TransportKind3[TransportKind3["pipe"] = 2] = "pipe";
-      TransportKind3[TransportKind3["socket"] = 3] = "socket";
-    })(TransportKind2 || (exports2.TransportKind = TransportKind2 = {}));
+    var TransportKind;
+    (function(TransportKind2) {
+      TransportKind2[TransportKind2["stdio"] = 0] = "stdio";
+      TransportKind2[TransportKind2["ipc"] = 1] = "ipc";
+      TransportKind2[TransportKind2["pipe"] = 2] = "pipe";
+      TransportKind2[TransportKind2["socket"] = 3] = "socket";
+    })(TransportKind || (exports2.TransportKind = TransportKind = {}));
     var Transport;
     (function(Transport2) {
       function isSocket(value) {
         const candidate = value;
-        return candidate && candidate.kind === TransportKind2.socket && Is.number(candidate.port);
+        return candidate && candidate.kind === TransportKind.socket && Is.number(candidate.port);
       }
       Transport2.isSocket = isSocket;
     })(Transport || (Transport = {}));
@@ -18145,7 +18145,7 @@ var require_main4 = __commonJS({
         return this._getServerWorkingDir(json.options).then((serverWorkingDir) => {
           if (NodeModule.is(json) && json.module) {
             let node = json;
-            let transport = node.transport || TransportKind2.stdio;
+            let transport = node.transport || TransportKind.stdio;
             if (node.runtime) {
               const args = [];
               const options = node.options ?? /* @__PURE__ */ Object.create(null);
@@ -18161,32 +18161,32 @@ var require_main4 = __commonJS({
               execOptions.env = getEnvironment(options.env, false);
               const runtime = this._getRuntimePath(node.runtime, serverWorkingDir);
               let pipeName = void 0;
-              if (transport === TransportKind2.ipc) {
+              if (transport === TransportKind.ipc) {
                 execOptions.stdio = [null, null, null, "ipc"];
                 args.push("--node-ipc");
-              } else if (transport === TransportKind2.stdio) {
+              } else if (transport === TransportKind.stdio) {
                 args.push("--stdio");
-              } else if (transport === TransportKind2.pipe) {
+              } else if (transport === TransportKind.pipe) {
                 pipeName = (0, node_1.generateRandomPipeName)();
                 args.push(`--pipe=${pipeName}`);
               } else if (Transport.isSocket(transport)) {
                 args.push(`--socket=${transport.port}`);
               }
               args.push(`--clientProcessId=${process.pid.toString()}`);
-              if (transport === TransportKind2.ipc || transport === TransportKind2.stdio) {
+              if (transport === TransportKind.ipc || transport === TransportKind.stdio) {
                 const serverProcess = cp.spawn(runtime, args, execOptions);
                 if (!serverProcess || !serverProcess.pid) {
                   return handleChildProcessStartError(serverProcess, `Launching server using runtime ${runtime} failed.`);
                 }
                 this._serverProcess = serverProcess;
                 serverProcess.stderr.on("data", (data) => this.outputChannel.append(Is.string(data) ? data : data.toString(encoding)));
-                if (transport === TransportKind2.ipc) {
+                if (transport === TransportKind.ipc) {
                   serverProcess.stdout.on("data", (data) => this.outputChannel.append(Is.string(data) ? data : data.toString(encoding)));
                   return Promise.resolve({ reader: new node_1.IPCMessageReader(serverProcess), writer: new node_1.IPCMessageWriter(serverProcess) });
                 } else {
                   return Promise.resolve({ reader: new node_1.StreamMessageReader(serverProcess.stdout), writer: new node_1.StreamMessageWriter(serverProcess.stdin) });
                 }
-              } else if (transport === TransportKind2.pipe) {
+              } else if (transport === TransportKind.pipe) {
                 return (0, node_1.createClientPipeTransport)(pipeName).then((transport2) => {
                   const process2 = cp.spawn(runtime, args, execOptions);
                   if (!process2 || !process2.pid) {
@@ -18217,11 +18217,11 @@ var require_main4 = __commonJS({
               let pipeName = void 0;
               return new Promise((resolve2, reject) => {
                 const args = (node.args && node.args.slice()) ?? [];
-                if (transport === TransportKind2.ipc) {
+                if (transport === TransportKind.ipc) {
                   args.push("--node-ipc");
-                } else if (transport === TransportKind2.stdio) {
+                } else if (transport === TransportKind.stdio) {
                   args.push("--stdio");
-                } else if (transport === TransportKind2.pipe) {
+                } else if (transport === TransportKind.pipe) {
                   pipeName = (0, node_1.generateRandomPipeName)();
                   args.push(`--pipe=${pipeName}`);
                 } else if (Transport.isSocket(transport)) {
@@ -18233,18 +18233,18 @@ var require_main4 = __commonJS({
                 options.execArgv = options.execArgv || [];
                 options.cwd = serverWorkingDir;
                 options.silent = true;
-                if (transport === TransportKind2.ipc || transport === TransportKind2.stdio) {
+                if (transport === TransportKind.ipc || transport === TransportKind.stdio) {
                   const sp = cp.fork(node.module, args || [], options);
                   assertStdio(sp);
                   this._serverProcess = sp;
                   sp.stderr.on("data", (data) => this.outputChannel.append(Is.string(data) ? data : data.toString(encoding)));
-                  if (transport === TransportKind2.ipc) {
+                  if (transport === TransportKind.ipc) {
                     sp.stdout.on("data", (data) => this.outputChannel.append(Is.string(data) ? data : data.toString(encoding)));
                     resolve2({ reader: new node_1.IPCMessageReader(this._serverProcess), writer: new node_1.IPCMessageWriter(this._serverProcess) });
                   } else {
                     resolve2({ reader: new node_1.StreamMessageReader(sp.stdout), writer: new node_1.StreamMessageWriter(sp.stdin) });
                   }
-                } else if (transport === TransportKind2.pipe) {
+                } else if (transport === TransportKind.pipe) {
                   (0, node_1.createClientPipeTransport)(pipeName).then((transport2) => {
                     const sp = cp.fork(node.module, args || [], options);
                     assertStdio(sp);
@@ -18274,19 +18274,19 @@ var require_main4 = __commonJS({
             const args = json.args !== void 0 ? json.args.slice(0) : [];
             let pipeName = void 0;
             const transport = json.transport;
-            if (transport === TransportKind2.stdio) {
+            if (transport === TransportKind.stdio) {
               args.push("--stdio");
-            } else if (transport === TransportKind2.pipe) {
+            } else if (transport === TransportKind.pipe) {
               pipeName = (0, node_1.generateRandomPipeName)();
               args.push(`--pipe=${pipeName}`);
             } else if (Transport.isSocket(transport)) {
               args.push(`--socket=${transport.port}`);
-            } else if (transport === TransportKind2.ipc) {
+            } else if (transport === TransportKind.ipc) {
               throw new Error(`Transport kind ipc is not support for command executable`);
             }
             const options = Object.assign({}, command.options);
             options.cwd = options.cwd || serverWorkingDir;
-            if (transport === void 0 || transport === TransportKind2.stdio) {
+            if (transport === void 0 || transport === TransportKind.stdio) {
               const serverProcess = cp.spawn(command.command, args, options);
               if (!serverProcess || !serverProcess.pid) {
                 return handleChildProcessStartError(serverProcess, `Launching server using command ${command.command} failed.`);
@@ -18295,7 +18295,7 @@ var require_main4 = __commonJS({
               this._serverProcess = serverProcess;
               this._isDetached = !!options.detached;
               return Promise.resolve({ reader: new node_1.StreamMessageReader(serverProcess.stdout), writer: new node_1.StreamMessageWriter(serverProcess.stdin) });
-            } else if (transport === TransportKind2.pipe) {
+            } else if (transport === TransportKind.pipe) {
               return (0, node_1.createClientPipeTransport)(pipeName).then((transport2) => {
                 const serverProcess = cp.spawn(command.command, args, options);
                 if (!serverProcess || !serverProcess.pid) {
@@ -18579,8 +18579,7 @@ async function startClient() {
   const serverOptions = {
     command: resolution.command,
     args: [...LSP_ARGS],
-    options: { cwd: workspaceRoot, env: buildServerEnvironment() },
-    transport: import_node.TransportKind.stdio
+    options: { cwd: workspaceRoot, env: buildServerEnvironment() }
   };
   const clientOptions = {
     documentSelector: [{ scheme: "file", language: LANGUAGE_ID }],
