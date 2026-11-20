@@ -77,26 +77,26 @@ let rec v_layersOfRoot = (fun (mc0 : Frontend_dPackages_dPkg.t_Root B_dData_dLis
 let v_withImportSpan = (fun (imp : Frontend_dAst.t_Import) (e : Base_dDiag.t_Diagnostic) -> (if ((Base_dSource.v_spanFile (imp).Frontend_dAst.f_Import_importSpan) = "") then e else ((Base_dDiag.v_withFallbackSpan (imp).Frontend_dAst.f_Import_importSpan) e)))
 
 # 94 "Vuna/Compiler/Loader/Layers.vuna"
-let rec v_checkImports = (fun (mc0 : Frontend_dManifest.t_Layer B_dData_dList.t_List) (mc1 : Frontend_dManifest.t_Layer B_dData_dList.t_List) (mc2 : string) (mc3 : string) (mc4 : Loader_dModules.t_Module B_dData_dList.t_List) (mc5 : Frontend_dAst.t_Import B_dData_dList.t_List) -> (match mc5 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__17, dtb__18) -> (match ((Loader_dModules.v_findModule mc4) (Loader_dModules.v_importName dtb__17)) with
-  | B_dData_dMaybe.C_Maybe_Nothing -> ((((((v_checkImports mc0) mc1) mc2) mc3) mc4) dtb__18)
-  | B_dData_dMaybe.C_Maybe_Just (dtb__19) -> (if ((Loader_dModules.v_modulePackageOf dtb__19) <> mc3) then ((((((v_checkImports mc0) mc1) mc2) mc3) mc4) dtb__18) else (if (((v_importAllowed mc0) mc1) (Loader_dModules.v_moduleNameOf dtb__19)) then ((((((v_checkImports mc0) mc1) mc2) mc3) mc4) dtb__18) else ((Base_dDiag.v_onErrDiag (v_withImportSpan dtb__17)) (((((Base_dDiagnostics_dLoader.v_ldErr4 (Base_dDiagnostics_dLoader.C_LdDiag_LayerViolation ("", "", "", ""))) mc2) (Loader_dModules.v_moduleNameOf dtb__19)) ((v_labelOf mc0) mc2)) ((v_labelOf mc0) (Loader_dModules.v_moduleNameOf dtb__19))))))
+let rec v_checkImports = (fun (mc0 : Frontend_dManifest.t_Layer B_dData_dList.t_List) (mc1 : Frontend_dManifest.t_Layer B_dData_dList.t_List) (mc2 : string) (mc3 : string) (mc4 : string) (mc5 : Loader_dModules.t_Module B_dData_dList.t_List) (mc6 : Frontend_dAst.t_Import B_dData_dList.t_List) -> (match mc6 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__17, dtb__18) -> (match ((Loader_dModules.v_findModule mc5) (Loader_dModules.v_importName dtb__17)) with
+  | B_dData_dMaybe.C_Maybe_Nothing -> (if (if (if (mc3 = mc4) then ((B_dData_dList.v_length ((v_matchingLayers mc0) (Loader_dModules.v_importName dtb__17))) > 0) else false) then (B_dData_dBool.v_not (((v_importAllowed mc0) mc1) (Loader_dModules.v_importName dtb__17))) else false) then ((Base_dDiag.v_onErrDiag (v_withImportSpan dtb__17)) (((((Base_dDiagnostics_dLoader.v_ldErr4 (Base_dDiagnostics_dLoader.C_LdDiag_LayerViolation ("", "", "", ""))) mc2) (Loader_dModules.v_importName dtb__17)) ((v_labelOf mc0) mc2)) ((v_labelOf mc0) (Loader_dModules.v_importName dtb__17)))) else (((((((v_checkImports mc0) mc1) mc2) mc3) mc4) mc5) dtb__18))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__19) -> (if ((Loader_dModules.v_modulePackageOf dtb__19) <> mc3) then (((((((v_checkImports mc0) mc1) mc2) mc3) mc4) mc5) dtb__18) else (if (((v_importAllowed mc0) mc1) (Loader_dModules.v_moduleNameOf dtb__19)) then (((((((v_checkImports mc0) mc1) mc2) mc3) mc4) mc5) dtb__18) else ((Base_dDiag.v_onErrDiag (v_withImportSpan dtb__17)) (((((Base_dDiagnostics_dLoader.v_ldErr4 (Base_dDiagnostics_dLoader.C_LdDiag_LayerViolation ("", "", "", ""))) mc2) (Loader_dModules.v_moduleNameOf dtb__19)) ((v_labelOf mc0) mc2)) ((v_labelOf mc0) (Loader_dModules.v_moduleNameOf dtb__19))))))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dList.C_List_Nil -> (Base_dDiag.C_Check_OkC (0))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 109 "Vuna/Compiler/Loader/Layers.vuna"
-let rec v_checkModules = (fun (mc0 : Frontend_dPackages_dPkg.t_Root B_dData_dList.t_List) (mc1 : Loader_dModules.t_Module B_dData_dList.t_List) (mc2 : Loader_dModules.t_Module B_dData_dList.t_List) -> (match mc2 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__20, dtb__21) -> ((fun rules -> ((fun matched -> (if ((B_dData_dList.v_length matched) = 0) then (((v_checkModules mc0) mc1) dtb__21) else (match ((((((v_checkImports rules) matched) (Loader_dModules.v_moduleNameOf dtb__20)) (Loader_dModules.v_modulePackageOf dtb__20)) mc1) (Loader_dModules.v_moduleAllImportsOf dtb__20)) with
+# 117 "Vuna/Compiler/Loader/Layers.vuna"
+let rec v_checkModules = (fun (mc0 : Frontend_dPackages_dPkg.t_Root B_dData_dList.t_List) (mc1 : string) (mc2 : Loader_dModules.t_Module B_dData_dList.t_List) (mc3 : Loader_dModules.t_Module B_dData_dList.t_List) -> (match mc3 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__20, dtb__21) -> ((fun rules -> ((fun matched -> (if ((B_dData_dList.v_length matched) = 0) then ((((v_checkModules mc0) mc1) mc2) dtb__21) else (match (((((((v_checkImports rules) matched) (Loader_dModules.v_moduleNameOf dtb__20)) (Loader_dModules.v_modulePackageOf dtb__20)) mc1) mc2) (Loader_dModules.v_moduleAllImportsOf dtb__20)) with
   | Base_dDiag.C_Check_ErrC (dtb__22) -> (Base_dDiag.C_Check_ErrC (dtb__22))
-  | Base_dDiag.C_Check_OkC (dtb__23) -> (((v_checkModules mc0) mc1) dtb__21)
+  | Base_dDiag.C_Check_OkC (dtb__23) -> ((((v_checkModules mc0) mc1) mc2) dtb__21)
   | _ -> failwith "DT: impossible branch"
 ))) ((v_matchingLayers rules) (Loader_dModules.v_moduleNameOf dtb__20)))) ((v_layersOfRoot mc0) (Loader_dModules.v_modulePackageOf dtb__20)))
   | B_dData_dList.C_List_Nil -> (Base_dDiag.C_Check_OkC (0))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 123 "Vuna/Compiler/Loader/Layers.vuna"
-let v_checkProjectLayers = (fun (roots : Frontend_dPackages_dPkg.t_Root B_dData_dList.t_List) (project : Loader_dModules.t_Project) -> (((v_checkModules roots) (project).Loader_dModules.f_Project_projectModules) (project).Loader_dModules.f_Project_projectModules))
+# 131 "Vuna/Compiler/Loader/Layers.vuna"
+let v_checkProjectLayers = (fun (roots : Frontend_dPackages_dPkg.t_Root B_dData_dList.t_List) (project : Loader_dModules.t_Project) -> ((((v_checkModules roots) (project).Loader_dModules.f_Project_projectEntryPkg) (project).Loader_dModules.f_Project_projectModules) (project).Loader_dModules.f_Project_projectModules))
