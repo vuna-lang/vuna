@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "meta": {
+    "timestamp": "2026-11-20T20:55:23Z",
+    "git_head": "a476cd050629e060938ac808df26ba88ce159d47",
+    "git_dirty": false,
+    "compiler": "vuna-compiler 0.1.0",
+    "arch": "x86_64",
+    "nproc": 16,
+    "loadavg": "12.57",
+    "runs": 3,
+    "full": false
+  },
+  "metrics": {
+    "size_bytes": 11359584,
+    "check_base_cold_ms": 22759,
+    "check_base_warm_ms": 40
+  }
+}
