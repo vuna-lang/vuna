@@ -1871,6 +1871,10 @@ genAppNode st f a =
               )
     )
 
+-- 负数字面量在实参与中缀位置会被 OCaml 读成减法（`f -1` = `f - 1`），统一套括号。
+ocamlLitText : String -> String
+ocamlLitText s = if strAt s 0 == 45 then "(" ++ s ++ ")" else s
+
 genIrNode : GenSt -> Ir -> Check (Pair OTerm GenSt)
 genIrNode st (IrVar b) = OkC (Pair (OName (irBinderText b)) st)
 genIrNode st (IrGlobal name) =
@@ -1934,10 +1938,10 @@ genIrNode st (IrCast cFrom cTo inner) =
               Nothing => OkC (Pair (OCast term) st1)
               Just ty => OkC (Pair (OAnnot (OCast term) (irTyText st1.gsQual ty)) st1)
     )
-genIrNode st (IrInt n) = OkC (Pair (OName (strFromInt n)) st)
+genIrNode st (IrInt n) = OkC (Pair (OName (ocamlLitText (strFromInt n))) st)
 genIrNode st (IrStr s) = OkC (Pair (OName (ocamlString s)) st)
 genIrNode st (IrBool b) = OkC (Pair (OName (boolText b)) st)
-genIrNode st (IrFloatLit raw) = OkC (Pair (OName raw) st)
+genIrNode st (IrFloatLit raw) = OkC (Pair (OName (ocamlLitText raw)) st)
 genIrNode st (IrLet bs scrut body) =
   Vuna.Compiler.Base.Common.bind (genIr st scrut) (
       \p =>

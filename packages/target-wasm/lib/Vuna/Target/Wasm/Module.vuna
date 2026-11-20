@@ -185,8 +185,9 @@ emptyStr = [IConstI32 0, IArrayNewDefault "$str"]
 -- ---------------------------------------------------------------
 -- 浮点字面量
 -- ---------------------------------------------------------------
--- 原文只有数字与一个小数点（词法层保证）。用 `int / 10^k` 在运行期算成 double：
+-- 原文是数字、一个小数点与可选的前导 `-`。用 `int / 10^k` 在运行期算成 double：
 -- 分子分母都 < 2^53 时与宿主解析同一舍入结果；更长字面量按 Int 精度截断。
+-- 符号单独折成 `-1.0 * mag`，`-0.0` 才能得到 IEEE 负零。
 floatDigitsOf : String -> Int
 floatDigitsOf s = floatDigitsGo (strUnpack s) 0
 
@@ -198,6 +199,17 @@ floatDigitsGo (c :: rest) acc =
 floatPow10 : Int -> Int
 floatPow10 n = if n <= 0 then 1 else 10 * floatPow10 (n - 1)
 
+floatLitNegative : String -> Bool
+floatLitNegative s = strAt s 0 == 45
+
+finishFloatLit : Bool -> GenState -> List Instr -> Result (Pair (List Instr) GenState)
+finishFloatLit False st is = Ok (Pair is st)
+finishFloatLit True st is =
+  case freshLocal st WvAnyRef of
+    Pair l st1 =>
+      Ok
+        (Pair (append is [ILocalSet l, IConstI64 (-1), IStructNew "$int", ICall "$rt_floatFromInt", ILocalGet l, ICall "$rt_floatMul"]) st1)
+
 genFloatLit : GenState -> String -> Result (Pair (List Instr) GenState)
 genFloatLit st raw =
   case String.split "." raw of
@@ -206,11 +218,15 @@ genFloatLit st raw =
         num = floatDigitsOf (ip ++ fp)
         den = floatPow10 (strLength fp)
       in if den == 1 then
-        Ok (Pair [IConstI64 num, IStructNew "$int", ICall "$rt_floatFromInt"] st)
+        finishFloatLit (floatLitNegative raw) st [IConstI64 num, IStructNew "$int", ICall "$rt_floatFromInt"]
       else
         case freshLocal st WvAnyRef of
-          Pair l st1 => Ok (Pair [IConstI64 den, IStructNew "$int", ICall "$rt_floatFromInt", ILocalSet l, IConstI64 num, IStructNew "$int", ICall "$rt_floatFromInt", ILocalGet l, ICall "$rt_floatDiv"] st1)
-    _ => Ok (Pair [IConstI64 (floatDigitsOf raw), IStructNew "$int", ICall "$rt_floatFromInt"] st)
+          Pair l st1 => finishFloatLit (floatLitNegative raw) st1 [IConstI64 den, IStructNew "$int", ICall "$rt_floatFromInt", ILocalSet l, IConstI64 num, IStructNew "$int", ICall "$rt_floatFromInt", ILocalGet l, ICall "$rt_floatDiv"]
+    _ =>
+      finishFloatLit
+        (floatLitNegative raw)
+        st
+        [IConstI64 (floatDigitsOf raw), IStructNew "$int", ICall "$rt_floatFromInt"]
 
 -- ---------------------------------------------------------------
 -- Eff thunk（效应原语包装成 `MkEff (fun _ => prim args)`）
