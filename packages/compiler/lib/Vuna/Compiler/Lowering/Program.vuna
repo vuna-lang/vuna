@@ -1171,7 +1171,7 @@ lowerDef env st d =
       case dtDefBody d of
         Just body =>
           let
-            defTy = Just (renderPiTy [] env.lwTyParams env.lwDatas 0 (eval [] (dtDefType d)))
+            defTy = Just (renderPiTy [] env.lwTyParams env.lwDataTbl 0 (eval [] (dtDefType d)))
           in case lowerDefBodyTerm env st body defTy of
             ErrC e => ErrC (withContext (dtDefSpan d) (dtDefName d) e)
             OkC (Pair bodyIr st2) =>
@@ -1465,7 +1465,7 @@ lowerUnitPrepared env unitDatas defs =
     runtime = partitionRuntimeDefs defs
   in Vuna.Compiler.Base.Common.bind (groupDefs env runtime) (
       \groups =>
-        Vuna.Compiler.Base.Common.bind (tyDeclsOf env.lwTyParams env.lwUnboxedInfo datas unitDatas) (
+        Vuna.Compiler.Base.Common.bind (tyDeclsOf env.lwDataTbl env.lwTyParams env.lwUnboxedInfo datas unitDatas) (
             \decls =>
               let
                 groups2 = map groupOfPair groups
