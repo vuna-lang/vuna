@@ -69,32 +69,31 @@ parseWith mode path toks =
 
 -- fixity 是**程序级**属性：加载闭包里所有模块的声明构成一张表（import 到就全局生效），
 -- 不再按逐模块的可见闭包拼接。`Module` 里存的是该模块自己的声明。
-visibleFixitiesOf : List Module -> List Import -> List FixityDecl
-visibleFixitiesOf modules imports = concatMap moduleFixitiesOf modules
+-- | 声明身份 = 所属模块 + 运算符 + 级别 + 结合性 + 源码位置。iface 路径的 span 全空，
+-- 必须靠模块名区分不同模块的同名声明（否则会被静默去重，`RN_DuplicateFixity` 失效）。
+-- `local` 是入口文件自己的声明（不属于任何模块）。
+dedupeFixitiesOf : List Module -> List FixityDecl -> List FixityDecl
+dedupeFixitiesOf modules local =
+  dedupeFixitiesGo
+    (append (concatMap (\m => map (\d => Pair "${moduleNameOf m}|${fixityDeclKey d}" d) (moduleFixitiesOf m)) modules) (map (\d => Pair "|entry|${fixityDeclKey d}" d) local))
+    (HashMap.fromList [])
+    []
 
--- 按「声明身份」去重（文件 + 起始行列）：同一个模块的声明从不同 import 路径到达时
--- 只保留一份；不同模块对同一运算符的声明都保留，交给 `checkUniqueFixities` 报重复。
--- 去重后长度是 O(不同声明数)，闭包拼接保持线性（import 图有大量 diamond）。
-dedupeFixities : List FixityDecl -> List FixityDecl
-dedupeFixities ds = dedupeFixitiesGo ds (HashMap.fromList []) []
-
-dedupeFixitiesGo : List FixityDecl -> HashMap String Int -> List FixityDecl -> List FixityDecl
+dedupeFixitiesGo : List (Pair String FixityDecl) -> HashMap String Int -> List FixityDecl -> List FixityDecl
 dedupeFixitiesGo [] seen acc = reverse acc
-dedupeFixitiesGo (d :: rest) seen acc =
+dedupeFixitiesGo (p :: rest) seen acc =
   let
-    key = fixityDeclKey d
+    key = firstOf p
   in case HashMap.lookup key seen of
     Just _ => dedupeFixitiesGo rest seen acc
-    Nothing => dedupeFixitiesGo rest (HashMap.insert key 1 seen) (d :: acc)
+    Nothing => dedupeFixitiesGo rest (HashMap.insert key 1 seen) (secondOf p :: acc)
 
--- 声明身份键：**运算符 + 声明处位置**。iface 里 span 被归一化成空，位置相同的不同
--- 运算符不能互相去重，所以 op 必须进键；同一模块对同一运算符声明两次（值相同）在
--- 源码装载时由模块级检查报错。
+-- 声明身份键：**运算符 + 形状 + 声明处位置**（模块名由调用方前缀）。
 fixityDeclKey : FixityDecl -> String
 fixityDeclKey d =
   let
     sp = d.fixitySpan
-  in "${d.fixityOp}@${spanFile sp}:${spanStartLine sp}:${spanStartCol sp}"
+  in "${d.fixityOp}|${strFromInt d.fixityLevel}|${strFromInt d.fixityAssoc}|${spanFile sp}:${spanStartLine sp}:${spanStartCol sp}"
 
 -- ---------------------------------------------------------------
 -- 模块导出表计算
@@ -893,7 +892,7 @@ fixitiesForSourceIn ctx modules0 label source =
                         pure (
                             case modulesR of
                               ErrC e => ErrC e
-                              OkC modules => OkC (Pair modules (dedupeFixities (append fixities (visibleFixitiesOf modules (append (normalizeImports modules imports) implicit)))))
+                              OkC modules => OkC (Pair modules (dedupeFixitiesOf modules fixities))
                           )
           Just (ModDecl name hasList items _ _ _ sp) =>
             case validateImports name imports of
@@ -909,7 +908,7 @@ fixitiesForSourceIn ctx modules0 label source =
                         pure (
                             case modulesR of
                               ErrC e => ErrC e
-                              OkC modules => OkC (Pair modules (dedupeFixities (append fixities (visibleFixitiesOf modules (append (normalizeImports modules imports) implicit)))))
+                              OkC modules => OkC (Pair modules (dedupeFixitiesOf modules fixities))
                           )
 
 -- 单文件便捷入口（LSP formatting / fmt 探针）：不跨调用复用模块表。
@@ -936,7 +935,7 @@ resolveProjectWith release project = resolveProjectKeeping release [] project
 export resolveProjectKeeping : Bool -> List String -> Project -> Check (Pair (List Diagnostic) (Pair (List Decl) (List Module)))
 resolveProjectKeeping release keep (Project decls imports implicit modules entryPkg entryFixes) =
   let
-    projectFixities = dedupeFixities (append (concatMap moduleFixitiesOf modules) entryFixes)
+    projectFixities = dedupeFixitiesOf modules entryFixes
   in Vuna.Compiler.Base.Common.bind
     (checkUniqueFixities projectFixities)
     (\fixes => Vuna.Compiler.Base.Common.bind (reorderProgram (tableOf fixes) decls) (\decls2 => Vuna.Compiler.Base.Common.bind (expandDecls decls2) (\decls3 => Vuna.Compiler.Base.Common.bind (resolveEntry release modules entryPkg (append imports implicit) decls3) (\entryDecls => Vuna.Compiler.Base.Common.bind (unusedImportWarnings modules imports entryDecls decls3 []) (\entryWarns => Vuna.Compiler.Base.Common.bind (resolveModulesKeep release keep fixes modules) (\p2 => OkC (Pair (append entryWarns (secondOf p2)) (Pair entryDecls (firstOf p2)))))))))

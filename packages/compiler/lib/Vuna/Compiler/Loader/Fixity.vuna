@@ -50,26 +50,26 @@ builtinFixityOps = map fixityOpOf builtinFixityDecls
 fixityOpOf : FixityDecl -> String
 fixityOpOf d = d.fixityOp
 
--- 全程序唯一：同一运算符只能有一处声明。同一份声明（文件 + 起始位置相同）经不同
--- import 路径到达时不算重复。
+-- 全程序唯一：同一运算符只能有一处声明。声明身份的去重由
+-- `Flatten.dedupeFixitiesOf` 按「模块 + 形状 + 位置」完成，这里只判 op 唯一性。
 export checkUniqueFixities : List FixityDecl -> Check (List FixityDecl)
-checkUniqueFixities ds = checkUniqueFixitiesGo ds (HashMap.fromList []) (HashMap.fromList [])
+checkUniqueFixities ds = checkUniqueFixitiesGo ds (HashMap.fromList [])
 
-checkUniqueFixitiesGo : List FixityDecl -> HashMap String Int -> HashMap String Int -> Check (List FixityDecl)
-checkUniqueFixitiesGo [] opSeen declSeen = OkC []
-checkUniqueFixitiesGo (d :: rest) opSeen declSeen =
+checkUniqueFixitiesGo : List FixityDecl -> HashMap String Int -> Check (List FixityDecl)
+checkUniqueFixitiesGo [] opSeen = OkC []
+checkUniqueFixitiesGo (d :: rest) opSeen =
   let
     sp = d.fixitySpan
-    declKey = "${d.fixityOp}@${spanFile sp}:${spanStartLine sp}:${spanStartCol sp}"
   in if memName d.fixityOp builtinFixityOps then
-    onErrDiag (withFallbackSpan sp) (rnNoLoc1 (BuiltinFixity d.fixityOp) d.fixityOp)
+    onErrDiag (withFixitySpan sp) (rnNoLoc1 (BuiltinFixity d.fixityOp) d.fixityOp)
   else
-    case HashMap.lookup declKey declSeen of
-      Just _ => checkUniqueFixitiesGo rest opSeen declSeen
-      Nothing =>
-        case HashMap.lookup d.fixityOp opSeen of
-          Just _ => onErrDiag (withFallbackSpan sp) (rnNoLoc1 (DuplicateFixity d.fixityOp) d.fixityOp)
-          Nothing => Vuna.Compiler.Base.Common.bind (checkUniqueFixitiesGo rest (HashMap.insert d.fixityOp 1 opSeen) (HashMap.insert declKey 1 declSeen)) (\tailDecls => OkC (d :: tailDecls))
+    case HashMap.lookup d.fixityOp opSeen of
+      Just _ => onErrDiag (withFixitySpan sp) (rnNoLoc1 (DuplicateFixity d.fixityOp) d.fixityOp)
+      Nothing => Vuna.Compiler.Base.Common.bind (checkUniqueFixitiesGo rest (HashMap.insert d.fixityOp 1 opSeen)) (\tailDecls => OkC (d :: tailDecls))
+
+-- iface 来源的声明没有 span：不给假位置（与 `Layers.withImportSpan` 同口径）。
+withFixitySpan : Span -> Diagnostic -> Diagnostic
+withFixitySpan sp e = if spanFile sp == "" then e else withFallbackSpan sp e
 
 -- 第一处匹配生效：调用方把「本模块 + imports 闭包」放在前面、语法表放在后面。
 lookupDecl : String -> List FixityDecl -> Maybe FixityDecl

@@ -1,0 +1,10 @@
+# store-isolated: 先写依赖 iface，再让本包消费（走 iface 路径），使用 case 私有 store。
+# 116) fixity 是程序级属性：两个依赖包各自声明同一运算符，本包同时 import ⇒ 必须报
+#      RN_DuplicateFixity。iface 里的声明没有 span，去重键必须含模块名，否则会被静默合并。
+run: sh -c 'S="$TMPDIR/fx"; rm -rf "$S"; mkdir -p "$S/d1/lib" "$S/d2/lib" "$S/p/app"; printf "[package]\nname = \"d1\"\n[export]\nmodules = [\"D1\"]\n" > "$S/d1/vuna.toml"; printf "module D1 where\n\ninfixl 6 <+>\n\n(<+>) : Int -> Int -> Int\n(<+>) a b = a\n\nexport v1 : Int\nv1 = 1\n" > "$S/d1/lib/D1.vuna"; printf "[package]\nname = \"d2\"\n[export]\nmodules = [\"D2\"]\n" > "$S/d2/vuna.toml"; printf "module D2 where\n\ninfixr 5 <+>\n\n(<+>) : Int -> Int -> Int\n(<+>) a b = b\n\nexport v2 : Int\nv2 = 2\n" > "$S/d2/lib/D2.vuna"; printf "[package]\nname = \"p\"\n\n[dependencies.d1]\npath = \"../d1\"\n[dependencies.d2]\npath = \"../d2\"\n" > "$S/p/vuna.toml"; printf "import D1\nimport D2\n\nmain : Int\nmain = v1\n" > "$S/p/app/Main.vuna"; VUNA_STORE="$S/store" "$VUNA" check "$S/d1" >/dev/null 2>&1 && VUNA_STORE="$S/store" "$VUNA" check "$S/d2" >/dev/null 2>&1'
+exit: 0
+
+# 两个依赖各自只有一处 <+> 声明；本包同时 import 两者 ⇒ 依赖 iface 路径也必须报重复。
+run: sh -c 'S="$TMPDIR/fx"; VUNA_STORE="$S/store" "$VUNA" check "$S/p" 2>&1'
+exit: 1
+out-contains: RN_DuplicateFixity
