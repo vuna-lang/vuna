@@ -290,11 +290,58 @@ sameNeutralAtom (NVar name1 lvl1 sp1) n2 =
     NVar name2 lvl2 sp2 => name1 == name2 && lvl1 == lvl2 && isNilList sp1 && isNilList sp2
     _ => False
 
+-- | 已解元变量的一步展开（只解顶层；解里还有 meta 时留给 conv 继续走）。
+zonkMetaValue : Sols -> Value -> Value
+zonkMetaValue sols v =
+  case v of
+    VMeta m sp =>
+      case solsLookup m sols of
+        Just t => applySpine t sp
+        Nothing => v
+    _ => v
+
+-- | 中性脊的**充分**相等：先把每个实参的顶层已解 meta 展开，再 `fastSame`。
+-- 命中时不 force，避免把同一个递归函数的卡住应用反复 delta 展开：
+-- `plus k ?m`（`?m` 已解成 `n`）与 `plus k n` 必须在这里判等，否则两侧都会展开成
+-- `case k of …`，分支体里又出现 `plus k' …`，逐层引入新 binder 不终止。
+sameSpineFast : Sols -> List Value -> List Value -> Bool
+sameSpineFast sols [] [] = True
+sameSpineFast sols (a :: rest1) (b :: rest2) =
+  fastSame (zonkMetaValue sols a) (zonkMetaValue sols b) && sameSpineFast sols rest1 rest2
+sameSpineFast sols _ _ = False
+
+-- | `fastSame` 的元变量感知版：只覆盖「同一中性头 / 同一卡住应用」的形态。
+fastSameSols : Sols -> Value -> Value -> Bool
+fastSameSols sols a b =
+  case a of
+    VNeutral n1 =>
+      case b of
+        VNeutral n2 =>
+          case n1 of
+            NGlobal g1 sp1 =>
+              case n2 of
+                NGlobal g2 sp2 => g1 == g2 && sameSpineFast sols sp1 sp2
+                _ => False
+            NVar name1 lvl1 sp1 =>
+              case n2 of
+                NVar name2 lvl2 sp2 => name1 == name2 && lvl1 == lvl2 && sameSpineFast sols sp1 sp2
+                _ => False
+        _ => False
+    VApp f1 x1 =>
+      case b of
+        VApp f2 x2 =>
+          fastSame (zonkMetaValue sols f1) (zonkMetaValue sols f2)
+            && fastSame (zonkMetaValue sols x1) (zonkMetaValue sols x2)
+        _ => False
+    _ => False
+
 convFuel : Int -> HashMap String Term -> Sols -> Int -> Value -> Value -> Check Sols
 convFuel fuel defs sols depth a b =
   if fuel <= 0 then
     icFuel "conv"
   else if fastSame a b then
+    OkC sols
+  else if fastSameSols sols a b then
     OkC sols
   else
     let

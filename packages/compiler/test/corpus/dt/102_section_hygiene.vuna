@@ -1,0 +1,18 @@
+-- section 展开的 binder 名不能由源码写出：`(+ e)` / `(e +)` 里的 `e`
+-- 引用同名用户变量时不能被展开用的 binder 捕获。
+import Prelude
+
+vuna_section : Int
+vuna_section = 41
+
+applyTo : (Int -> Int) -> Int
+applyTo f = f 1
+
+left : Int
+left = applyTo (+ vuna_section)
+
+right : Int
+right = applyTo (vuna_section +)
+
+main : Int
+main = left + right

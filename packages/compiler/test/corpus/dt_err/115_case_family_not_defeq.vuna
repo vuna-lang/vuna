@@ -1,0 +1,23 @@
+-- 负例：卡住的 case 分支体必须参与定义性相等。
+-- `f b` 与 `g b` 的 scrutinee / 构造子名 / binder 数都相同，但分支体不同（Int vs String），
+-- 不能判等。
+import Prelude
+
+data B : Type where
+  T : B
+  F : B
+
+f : B -> Type
+f b =
+  case b of
+    T => Int
+    F => Int
+
+g : B -> Type
+g b =
+  case b of
+    T => String
+    F => String
+
+bad : (b : B) -> f b -> g b
+bad b x = x

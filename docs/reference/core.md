@@ -66,6 +66,8 @@ data Term where
 `Core.Conv.conv` 做 beta + delta + eta 的结构比较：
 
 - 先走 `fastSame` 原子快速路径（同一类型常量、字面量、同层变量等，不做 delta）；
+  `fastSameSols` 另外展开实参顶层的已解元变量后比较同一中性头 / 同一卡住应用——
+  否则递归定义在卡住 case 上会被反复 delta 展开（每层引入新 binder，不终止）；
 - `VPi` / `VLam` 做 eta（fresh var）；neutral 逐 spine 比较；`VCon` / `VCase` 逐
   构造子 / 分支比较；卡住的 `VCase` 与 `VCon` 不相等；
 - 失败返回 `type mismatch: expected X, got Y`（带位置的版本 `mismatchAt`）。

@@ -1302,40 +1302,36 @@ finishCore termAux decls core =
                         (tcErr1NoLoc (NoInstanceFound sd) sd)
                 Nothing => ErrC (unsolvedMessage ec4 m)
             Nothing =>
-              let
-                extra =
-                  obsPure
-                    "vuna.elab.extra"
-                    (\_ => extraDefsOf globals ec4 projSpans (append instDefs defs))
-                allDefs0 =
-                  obsPure
-                    "vuna.elab.rezonk"
-                    (\_ => rezonkDefs ec4 (append instDefs (append extra defs)))
-              in Vuna.Compiler.Base.Common.bind
-                (obsCheck "vuna.elab.main.show" (\_ => synthMainShow ec4 globals allDefs0))
+              Vuna.Compiler.Base.Common.bind
+                (obsCheck "vuna.elab.extra" (\_ => extraDefsOf globals ec4 projSpans (append instDefs defs)))
                 (
-                  \allDefs =>
+                  \extra =>
                     let
-                      -- 正文阶段不逐定义重建 globals（O(n²)）；这里用最终定义集一次性把签名类型
-                      -- 换成提升后的类型（O(n)）。
-                      defsTblOut = HashMap.insertAll (map (\x => Pair (dtDefName x) (dtDefType x)) allDefs) (HashMap.fromList [])
-                      globalsOut =
-                        map (
-                            \g =>
-                              case HashMap.lookup (firstOf g) defsTblOut of
-                                Just ty => Pair (firstOf g) ty
-                                Nothing => g
-                          ) globals
-                      _ = dbg! "extradefs-done"
-                    in Vuna.Compiler.Base.Common.bind (obsCheck "vuna.elab.usage" (\_ => checkProgramUsage ec4 allDefs)) (
-                        \ec5 =>
-                          Vuna.Compiler.Base.Common.bind (obsCheck "vuna.term" (\_ => checkTerminationDeclsWith (declFunNames decls) (append termAux decls))) (
-                              \_ =>
-                                let
-                                  -- 用量检查就地发射的 warning 经 checkProgramUsage 返回的新 Ec 线程到出口；
-                                  -- 丢掉这个 Ec 会静默丢失全部 UN_* 告警（warning 由 Ec 显式线程，不是全局收集器）。
-                                  _ = dbg! "termination-done"
-                                in OkC (DtProgram datas1 allDefs (ecGoals ec5) (ecSols ec5) globalsOut (ecInsts ec5) (ecClasses ec5) (ecNext ec5) (HashMap.toList (ecDepthTbl ec5)) (ecWarnings ec5))
+                      allDefs0 = obsPure "vuna.elab.rezonk" (\_ => rezonkDefs ec4 (append instDefs (append extra defs)))
+                    in Vuna.Compiler.Base.Common.bind (obsCheck "vuna.elab.main.show" (\_ => synthMainShow ec4 globals allDefs0)) (
+                        \allDefs =>
+                          let
+                            -- 正文阶段不逐定义重建 globals（O(n²)）；这里用最终定义集一次性把签名类型
+                            -- 换成提升后的类型（O(n)）。
+                            defsTblOut = HashMap.insertAll (map (\x => Pair (dtDefName x) (dtDefType x)) allDefs) (HashMap.fromList [])
+                            globalsOut =
+                              map (
+                                  \g =>
+                                    case HashMap.lookup (firstOf g) defsTblOut of
+                                      Just ty => Pair (firstOf g) ty
+                                      Nothing => g
+                                ) globals
+                            _ = dbg! "extradefs-done"
+                          in Vuna.Compiler.Base.Common.bind (obsCheck "vuna.elab.usage" (\_ => checkProgramUsage ec4 allDefs)) (
+                              \ec5 =>
+                                Vuna.Compiler.Base.Common.bind (obsCheck "vuna.term" (\_ => checkTerminationDeclsWith (declFunNames decls) (append termAux decls))) (
+                                    \_ =>
+                                      let
+                                        -- 用量检查就地发射的 warning 经 checkProgramUsage 返回的新 Ec 线程到出口；
+                                        -- 丢掉这个 Ec 会静默丢失全部 UN_* 告警（warning 由 Ec 显式线程，不是全局收集器）。
+                                        _ = dbg! "termination-done"
+                                      in OkC (DtProgram datas1 allDefs (ecGoals ec5) (ecSols ec5) globalsOut (ecInsts ec5) (ecClasses ec5) (ecNext ec5) (HashMap.toList (ecDepthTbl ec5)) (ecWarnings ec5))
+                                  )
                             )
                       )
                 )

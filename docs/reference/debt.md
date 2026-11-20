@@ -76,7 +76,6 @@ ID 是稳定引用（`层前缀-序号`）：条目关闭即删除该行，ID �
 | LD-15 · C | `Addr.vuna` 的模块摘要：无条件并入 Prelude 摘要（过近似） | `Loader/Addr.vuna` | 后续 |
 | LD-16 · C | `Fingerprint.vuna`：无 build-id 时身份退化为「路径+大小+mtime」 | `Loader/Fingerprint.vuna` | 后续 |
 | LD-17 · B | `Expand.vuna` 的宏入口：只在表达式位置、只认裸 `EVar` 应用头 | `Loader/Expand.vuna` | 后续 |
-| LD-18 · ⚠️A | section 展开的 lambda binder 会捕获用户变量：`(+ e)` → `\vuna_section -> (+) vuna_section e`，`e` 中同名的自由变量被静默替换；binder span 是 `spanEmpty` | `Loader/Fixity.vuna`（`reorderNonChain` 的 `ESectL`/`ESectR`） | 后续 |
 | LD-19 · D | fixity 有两套可见性真源：重排吃 `dedupeFixitiesOf` 汇总的**全部已加载模块**声明，unused-import 判据只看**直接 import** 并宣称 import 是唯一手段；`Module.moduleFixitiesOf` 的注释与实现相反 | `Loader/Fixity.vuna`、`Loader/Flatten.vuna`（`dedupeFixitiesOf` / `importProvidesUsedFixity`）、`Loader/Modules.vuna` | 后续 |
 | LD-20 · D | 同一 AST 形状有四份手写遍历（Fixity / Expand / Resolve / Flatten）：Fixity 用 catch-all `icInternal`，新增节点只在这条链「编译期不报错」；Flatten 的 `declRefNames` 漏节点会静默影响 unused-import | `Loader/{Fixity,Expand,Resolve,Flatten}.vuna` | 后续 |
 | LD-21 · D | Loader 的 prelude 名单与 `Elab.Sig` 不同：`Resolve.dtPreludeNames` 含内建类型构造子，`Sig.topPreludeNames` 不含；值位置的裸 `Array`/`IORef` 在两层得到不同结论 | `Loader/Resolve.vuna`、`Elab/Sig.vuna`、`Base/Intrinsics.vuna` | 后续 |
@@ -119,11 +118,9 @@ ID 是稳定引用（`层前缀-序号`）：条目关闭即删除该行，ID �
 | EC-30 · A | `Impl.vuna` 的 check 位 `if`：分支检查失败后整体重推断（位置 / 期望类型信息丢失，回退用原 `ec`） | `Elab/Term/Impl.vuna` | 后续 |
 | EC-31 · ⚠️D | `Ec` 是 22 字段巨型状态：每个 setter 按位置重列全部字段（15 处），漏一处即静默串字段；解表有三份真源（`ecSols` 列表 / `ecSolTbl` 哈希 / `csSolsCount`），靠「新解必须前插」这条隐式不变量同步 | `Elab/Types.vuna`（`Ec`、`ecPut*`、`solsDelta`） | 后续 |
 | EC-32 · D | `ConstraintStore` 一个记录兼任 5 种无关状态：待处理队列、id 分配、重试表、解表计数、**构造子索引是否完整**；`ecPutCtorTbl` 也会改它 | `Elab/Types.vuna`、`Elab/Meta.vuna` | 后续 |
-| EC-33 · ⚠️C | 每定义的诊断状态住在全局 `Ec`：`checkDefCapture` 在 `checkDefUsage` 之前跑，而 `ecUseSpans` 只在后者入口清空 ⇒ 捕获 / 顶层的诊断读到上一个定义的使用点 | `Elab/Usage.vuna`、`Elab/Types.vuna` | 后续 |
 | EC-34 · ⚠️C | 实例搜索把「递归深度」和「候选 / via 预算」压进同一个固定 `16`（`searchInstanceIn`），耗尽报 `TC_NoInstanceFound`：合法的深 ctx / via 链被报成「缺实例」 | `Elab/Dict.vuna`（`searchInstFuel` / `tryViaDict`） | 后续 |
 | EC-35 · ⚠️C | 行标签 / 成员证明的身份是展示文本：`memberNameText` 用 `showValueAt 6`（深度 6 截断），候选去重 / 歧义判定 / 诊断都以该串为键 | `Elab/Dict.vuna`（`labelCandText` / `labelScan`） | 后续 |
 | EC-36 · ⚠️D | 同一个类在三条名字空间有三种拼法：`dictTypeName` 用全名、`instanceName` 用短名 + sanitize、`Dict_`/`MkDict_` 不做同样处理；`findClassByShortName` 取 `ecClasses` 首个命中 ⇒ 同名 trait 的相干性 / 特化依赖登记顺序 | `Elab/Meta.vuna`、`Elab/InstName.vuna`、`Elab/InstCoherence.vuna` | 后续 |
-| EC-37 · ⚠️A | 生成定义靠 `Ec` 差分重建，缺条目时静默伪造：`defBodyOf` 返回 `TInt 0`、`defTypeOrDefaultTbl` 返回 `TGlobal "Int"`；`ecAddDef` 对与 data 族同名的定义不插 defTbl，正好走到兜底 | `Elab/Trait.vuna`（`instanceDefsOf` / `defBodyOf` / `defTypeOrDefaultTbl`）、`Elab/Types.vuna`（`ecAddDef`） | 后续 |
 | EC-38 · ⚠️A | 字典注入 `liftFreeDictGoals`：binder 位置靠手推索引算术、生成名 `d<元变量号>`（无不可碰撞前缀）、`injectDictGoFuel` 耗尽返回未改写项、`rewriteTaggedSpineFuel` 耗尽把整条应用脊退化成裸全局名 | `Elab/Trait.vuna`（`liftFreeDictGoals` / `injectDictGoFuel` / `rewriteTaggedSpineFuel`） | 后续 |
 | EC-39 · ⚠️D | 「类型层 / 擦除」有五份判据且会互相矛盾：`Usage.isTypeForming`（只沿 cod）认为 `Int -> Type` 是类型层，`Meta.isTypeLayerValue`（每个域都须是类型层）认为不是；另有 `isTypeDomain` / `isKindWithCtx` / `isFamilyKindValue` / `rigIsErased` 重复实现 | `Elab/Usage.vuna`、`Elab/Meta.vuna`、`Elab/Term/Impl.vuna` | 后续 |
 | EC-40 · C | `Elab/Types.vuna` 的 `refineValue` 不下钻 `VCase` 分支体、不处理 `VProj`（`_ => v`）⇒ 索引精化在卡住的 case / 投影里静默丢失 | `Elab/Types.vuna` | 后续 |
@@ -137,8 +134,7 @@ ID 是稳定引用（`层前缀-序号`）：条目关闭即删除该行，ID �
 | --- | --- | --- | --- |
 | EC-04 · C | `Core/Conv.vuna` 的 `VPi`/`VLam`：定义性相等不比 `rig`（`rig` 是运行时擦除格子，不比是有意取舍） | `Core/Conv.vuna`；[core.md](core.md) §3 | 有意（见末节） |
 | EC-06 · C | `Core/Conv.vuna` 的 Nat 折算：长度超过 `natChainMaxValue` 的 Nat 链饱和成相等 | `Core/Conv.vuna`；[core.md](core.md) §3 | 有意（见末节） |
-| CO-01 · ⚠️A | `applyClosureBinder` 在喂完实参后返回哨兵 `VCon "_alt" []`，**从不求值闭包 body**：`quoteCaseAltFuel` 丢掉卡住 case 的全部分支体，`convOneAltFuel` 对同一 scrutinee 的两个卡住 case 只比构造子名 / binder 数，分支体恒等 | `Core/Eval.vuna`（`applyClosureBinder`、`quoteCaseAltFuel`）、`Core/Conv.vuna`（`convOneAltFuel`） | 后续（先补最小负例） |
-| CO-02 · ⚠️A | 固定 128 的求值预算直接换掉语义值：`applyCaseAlt` / `evalCase` 耗尽返回 `VType levelZero`（不是卡住），`evalArgTerms` 耗尽把实参截成 `[]`；构造子数或字段数 > 128 的族会中途命中 | `Core/Eval.vuna`（`evalCase` / `applyCaseAlt` / `evalArgTerms`） | 后续 |
+| CO-07 · C | 卡住 case 的相等仍可能耗尽 conv fuel：两边是不同递归函数在同一中性 scrutinee 上、分支体推进后又生成新的卡住应用时，`fastSameSols` 只能判等不能判不等，最终报 `IC_FuelExhausted`（保守失败，不是静默判等）；`f b`/`g b` 分支体静态不同（非递归）的负例已锁 | `Core/Conv.vuna`（`convOneAltFuel` / `fastSameSols`）；夹具 `dt_err/115_case_family_not_defeq` | 后续（按头与参数关系判停） |
 | CO-03 · ⚠️D | `quote` 硬编码 `RigOmega`，值 → 项不可逆；`Dict` 只能另写一份按实例签名恢复 rig 的 quote。`rezonkDefs` / `substSolvedMetas*` 走裸 quote 时会把 `Rig0` 实参变回运行时实参；Lowering 的 `alignCtorArgs` / 分支 binder 形状又靠 rig 猜「全 telescope / 仅保留字段」两种约定 | `Core/Eval.vuna`（`quote` / `quoteArgValues`）、`Elab/Dict.vuna`（`dictTermOfValueAt`）、`Lowering/Program.vuna`（`alignCtorArgs`） | 后续 |
 | CO-04 · ⚠️D | 三份元变量替换 walker 覆盖不一致：`substSolvedMetas` 覆盖 record 原语；`substSolvedMetasAtGo` 覆盖但 `TRecUpd` 深度不加 `tele`；`substSolvedMetasAtTblFuel` 对 `TMk/TRecord/TProj/TRecUpd` 直接 `_ => t`（残留 `TMeta` ⇒ iface 安全阀整份拒收 ⇒ 每次退回全量） | `Core/Eval.vuna`（三个 `substSolvedMetas*`） | 后续 |
 | CO-05 · ⚠️C | 安全谓词有假阴性：`hasUnsolvedMetaCloFuel` 只看闭包 env 不看 body；`hasUnsolvedMetaValue` / `levelEscapes` 跳过 `VCase` 分支体与 `VProj` 的 tele | `Core/Term.vuna` | 后续 |
@@ -231,10 +227,10 @@ ID 是稳定引用（`层前缀-序号`）：条目关闭即删除该行，ID �
 
 1. **名字即身份 / 名字即接口**：`RName` 是字符串、`Rast.Bridge` 用空作用域重分类、`IrBinder` 无唯一 id、
    `bindShapeOf` 的索引模式匹配、`__anf`/`__cps` 编号借 fuel、`showTerm`/`showValueAt 6` 当相等判据
-   （EC-10 / EC-17 / EC-35），以及把元数据编进名字（`#linclos`、`d${m}`、`vuna_section`、`_alt`、
+   （EC-10 / EC-17 / EC-35），以及把元数据编进名字（`#linclos`、`d${m}`、`#section`、
    `@vuna@…`）与按短名分组的类 / 方法 / 实例（EC-12 / EC-23 / EC-36 / D124）。
 2. **fuel 仍是主要的终止性证书**：多数路径已改成「预算按输入规模派生 + 耗尽 `icFuel`」，
-   残留「固定常数直接换掉语义值 / 静默降级」（`Core/Eval` 的 128 → `VType`、`applyClosureBinder` 的 `_alt`）、
+   残留「把固定容量上限当成语义结论」（EL-23、CO-07 的 conv 预算）、
    「只有 SCT 测度、从不检查的 fuel」（FE-09）、「派生预算不可达仅靠注释论证的静默兜底」
    （`Ir/Anf` / `Ir/Cps` 的半变换）、以及把容量上限当成语义结论（EL-23）。
 3. **多真源手工同步**：内建名字（`Intrinsics` vs `Impl` 字面串，EC-16）、prelude 名单（LD-21）、
@@ -244,9 +240,8 @@ ID 是稳定引用（`层前缀-序号`）：条目关闭即删除该行，ID �
 4. **类型信息在 pass 之间丢失或只是注解**：`TLam` 的 `Maybe` 类型槽、`quote` 丢 rig（CO-03）、
    Lowering 填槽 → Cps 机器 pass 主动清空 → 后端按 arity / 名字猜 handler clause（IR-08）、
    IR 类型槽选择性填充（D109）。
-5. **失败路径伪造值**：`_alt`（CO-01）、`VType levelZero` / `[]`（CO-02）、`TInt 0` / `TGlobal "Int"`（EC-37）、
-   `EInt 0`（`Elab/Match.litPatExpr`）、`d0` 兜底（EC-38）、部分闭包（LD-22）、丢弃应用脊（EC-38）、
-   `TC_NoInstanceFound` 掩盖预算耗尽（EC-34）。
+5. **失败路径伪造值**：`EInt 0`（`Elab/Match.litPatExpr`）、`d0` 兜底（EC-38）、
+   部分闭包（LD-22）、丢弃应用脊（EC-38）、`TC_NoInstanceFound` 掩盖预算耗尽（EC-34）。
 6. **缓存口径分裂**：`mode=s/f` 进 key（DR-01 / A06）、两套模块排序（DR-02）、
    `acc*1000003+h` 与 SHA-256 两种哈希口径（DR-14）、cacheTag 回落（LD-23）、
    iface 必须携带源码 AST（DR-16）。

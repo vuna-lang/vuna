@@ -71,8 +71,10 @@ export evalAlts : List Value -> List CaseAlt -> List VCaseAlt
 evalAlts env [] = []
 evalAlts env (alt :: rest) = evalAlt env alt :: evalAlts env rest
 
+-- 求值分支体时重新播种自己的预算：`fuel` 只数扫描了多少个分支，
+-- 不能再兼作分支体的求值深度。
 export evalArgTerms : List Value -> List (Pair Term Rig) -> List Value
-evalArgTerms env args = evalArgTermsFuel 128 env args
+evalArgTerms env args = evalArgTermsFuel (length args + 1) env args
 
 evalArgTermsFuel : Int -> List Value -> List (Pair Term Rig) -> List Value
 evalArgTermsFuel fuel env args =
@@ -81,12 +83,12 @@ evalArgTermsFuel fuel env args =
   else
     case args of
       [] => []
-      (Pair a rig) :: rest => evalFuel (fuel - 1) env a :: evalArgTermsFuel (fuel - 1) env rest
+      (Pair a rig) :: rest => evalFuel evalFuelMax env a :: evalArgTermsFuel (fuel - 1) env rest
 
 -- case 求值：命中构造子则把该构造子的实参绑进分支闭包，否则卡住。
 -- 构造子实参按「最近绑定在前」入环境（与 ctxBind 的 de Bruijn 约定一致）。
 export evalCase : Value -> List VCaseAlt -> Value
-evalCase scrut alts = evalCaseFuel 128 scrut alts
+evalCase scrut alts = evalCaseFuel (length alts + 1) scrut alts
 
 evalCaseFuel : Int -> Value -> List VCaseAlt -> Value
 evalCaseFuel fuel scrut alts =
@@ -98,7 +100,7 @@ evalCaseFuel fuel scrut alts =
       _ => VCase scrut alts
 
 export applyCaseAlt : String -> List Value -> List VCaseAlt -> Value
-applyCaseAlt c args alts = applyCaseAltFuel 128 c args alts
+applyCaseAlt c args alts = applyCaseAltFuel (length alts + 1) c args alts
 
 applyCaseAltFuel : Int -> String -> List Value -> List VCaseAlt -> Value
 applyCaseAltFuel fuel c args alts =
@@ -110,12 +112,12 @@ applyCaseAltFuel fuel c args alts =
       alt :: rest =>
         if alt.vCaseAltName == c then
           case alt.vCaseAltClosure of
-            Closure env body => evalFuel (fuel - 1) (append (reverse args) env) body
+            Closure env body => evalFuel evalFuelMax (append (reverse args) env) body
         else if alt.vCaseAltName == "" then
           case alt.vCaseAltClosure of
             -- 兜底分支（源码里写的是变量/通配，精化后名字为空串）。变量兜底带一个 binder，
             -- 要把 scrutinee 压进环境；通配兜底无 binder。
-            Closure env body => evalFuel (fuel - 1) (catchAllEnv alt (VCon c args) env) body
+            Closure env body => evalFuel evalFuelMax (catchAllEnv alt (VCon c args) env) body
         else
           applyCaseAltFuel (fuel - 1) c args rest
 
@@ -959,10 +961,9 @@ argValsAt ((Pair name rig) :: rest) depth i =
   freshVar name (depth + i) :: argValsAt rest depth (i + 1)
 
 -- 逐个把实参喂给闭包：闭包 env 是分支外环境，实参按 arg0 先喂的顺序。
+-- 喂完后必须求值 body（`quote` / `conv` 都靠它拿到分支体）。
 export applyClosureBinder : Closure -> List Value -> Value
-applyClosureBinder clo [] = VCon "_alt" []
-applyClosureBinder (Closure env body) (a :: rest) =
-  applyClosureBinder (Closure (a :: env) body) rest
+applyClosureBinder (Closure env body) args = eval (append (reverse args) env) body
 
 export freshVar : String -> Int -> Value
 freshVar name level = VNeutral (NVar name level [])

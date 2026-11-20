@@ -387,7 +387,12 @@ checkProgramUsageGo ec (d :: rest) =
   else
     case dtDefBody d of
       Nothing => checkProgramUsageGo ec rest
-      Just body => Vuna.Compiler.Base.Common.bind (checkDefCapture ec d body) (\_ => Vuna.Compiler.Base.Common.bind (checkDefUsage ec (dtDefSpan d) (dtDefName d) body) (\ec2 => checkProgramUsageGo ec2 rest))
+      Just body =>
+        let
+          -- 使用点登记是「每定义一份」的状态：在捕获检查之前清空，
+          -- 不能等到用量遍历入口再清（否则捕获/顶层的诊断会读到上一个定义）。
+          ec0 = resetUseSpans ec
+        in Vuna.Compiler.Base.Common.bind (checkDefCapture ec0 d body) (\_ => Vuna.Compiler.Base.Common.bind (checkDefUsage ec0 (dtDefSpan d) (dtDefName d) body) (\ec2 => checkProgramUsageGo ec2 rest))
 
 defSpanOf : DtDef -> Span
 defSpanOf d =

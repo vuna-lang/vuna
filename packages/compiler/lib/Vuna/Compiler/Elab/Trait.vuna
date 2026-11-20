@@ -1353,33 +1353,34 @@ elabInstanceBodiesGo recover (d :: rest) allDecls classes datas globals ec acc =
     OkC p =>
       case p of
         Pair gs ec1 =>
-          let
-            -- 实例生成的字典/方法定义统一挂**实例声明 span**（`d` 的 span）。
-            newDefs = instanceDefsOf ec ec1 (Just (secondOf d)) gs
-            ecTbl = ecPutGlobalsTbl ec1 (HashMap.insertAll gs (ecGlobalsTbl ec1))
-          in elabInstanceBodiesGo
-            recover
-            rest
-            allDecls
-            classes
-            datas
-            (append globals gs)
-            ecTbl
-            (append newDefs acc)
+          Vuna.Compiler.Base.Common.bind (instanceDefsOf ec ec1 (Just (secondOf d)) gs) (
+              \newDefs =>
+                let
+                  -- 实例生成的字典/方法定义统一挂**实例声明 span**（`d` 的 span）。
+                  ecTbl = ecPutGlobalsTbl ec1 (HashMap.insertAll gs (ecGlobalsTbl ec1))
+                in elabInstanceBodiesGo recover rest allDecls classes datas (append globals gs) ecTbl (append newDefs acc)
+            )
 
 -- 从「精化前后 Ec 的 defs 差集」里取出这一条 instance 生成的定义。
 -- `srcSpan` 是该实例声明的位置（`Nothing` 时诊断保持无位置）。
-export instanceDefsOf : Ec -> Ec -> Maybe Span -> List (Pair String Term) -> List DtDef
+-- 每个名字都必须能查到类型与体：查不到是内部不变量被破坏（例如与 data 族同名的定义
+-- 不进 defTbl），不能伪造一个定义继续往下走。
+export instanceDefsOf : Ec -> Ec -> Maybe Span -> List (Pair String Term) -> Check (List DtDef)
 instanceDefsOf ecBefore ecAfter srcSpan gs =
-  map
-    (\g => DtDef (firstOf g) (defTypeOrDefaultTbl (HashMap.fromList gs) (firstOf g)) (substDictTerm ecAfter (defBodyOf (ecDefTbl ecAfter) (firstOf g))) srcSpan)
-    gs
+  instanceDefsGo ecAfter srcSpan (HashMap.fromList gs) (ecDefTbl ecAfter) gs []
 
-export defBodyOf : HashMap String Term -> String -> Term
+instanceDefsGo : Ec -> Maybe Span -> HashMap String Term -> HashMap String Term -> List (Pair String Term) -> List DtDef -> Check (List DtDef)
+instanceDefsGo ecAfter srcSpan tyTbl bodyTbl [] acc = OkC (reverse acc)
+instanceDefsGo ecAfter srcSpan tyTbl bodyTbl (g :: rest) acc =
+  Vuna.Compiler.Base.Common.bind
+    (defTypeOfTbl tyTbl (firstOf g))
+    (\ty => Vuna.Compiler.Base.Common.bind (defBodyOf bodyTbl (firstOf g)) (\body => instanceDefsGo ecAfter srcSpan tyTbl bodyTbl rest (DtDef (firstOf g) ty (substDictTerm ecAfter body) srcSpan :: acc)))
+
+export defBodyOf : HashMap String Term -> String -> Check Term
 defBodyOf defs name =
   case defLookup name defs of
-    Just body => body
-    Nothing => TInt 0
+    Just body => OkC body
+    Nothing => icInternal "instance body missing for ${name}"
 
 -- 逐条精化 trait，收集字典 data / 投影签名 / 类表 / 投影名→声明 span。
 export elabTraits : List (Pair Decl Span) -> List (Pair String Term) -> Ec -> Check (Pair (List DtData) (Pair (List (Pair String Term)) (Pair (List DtClass) (Pair (List (Pair String Span)) Ec))))
@@ -1413,32 +1414,29 @@ elabInstancesGo (d :: rest) classes datas globals ec acc =
 -- 它们的类型从 globals 里查（投影签名 / 实例头类型都在 elabTraits/elabInstances 时入表）。
 -- `srcSpans` 是「名字 → 最近声明 span」表（trait 投影用 trait 声明 span；
 -- 找不到的生成项给 `Nothing`，诊断保持无位置）。
-export extraDefsOf : List (Pair String Term) -> Ec -> List (Pair String Span) -> List DtDef -> List DtDef
+export extraDefsOf : List (Pair String Term) -> Ec -> List (Pair String Span) -> List DtDef -> Check (List DtDef)
 extraDefsOf globals ec srcSpans sourceDefs =
   extraDefsGo (ecGlobalsTbl ec) (HashMap.ofNames (map dtDefName sourceDefs)) srcSpans (ecDefs ec) []
 
-export extraDefsGo : HashMap String Term -> HashMap String Bool -> List (Pair String Span) -> List (Pair String Term) -> List DtDef -> List DtDef
-extraDefsGo globalsTbl sourceNames srcSpans [] acc = reverse acc
+export extraDefsGo : HashMap String Term -> HashMap String Bool -> List (Pair String Span) -> List (Pair String Term) -> List DtDef -> Check (List DtDef)
+extraDefsGo globalsTbl sourceNames srcSpans [] acc = OkC (reverse acc)
 extraDefsGo globalsTbl sourceNames srcSpans (d :: rest) acc =
   if HashMap.member (firstOf d) sourceNames then
     extraDefsGo globalsTbl sourceNames srcSpans rest acc
   else
-    extraDefsGo
-      globalsTbl
-      sourceNames
-      srcSpans
-      rest
-      (DtDef (firstOf d) (defTypeOrDefaultTbl globalsTbl (firstOf d)) (secondOf d) (spanOfName (firstOf d) srcSpans) :: acc)
+    Vuna.Compiler.Base.Common.bind
+      (defTypeOfTbl globalsTbl (firstOf d))
+      (\ty => extraDefsGo globalsTbl sourceNames srcSpans rest (DtDef (firstOf d) ty (secondOf d) (spanOfName (firstOf d) srcSpans) :: acc))
 
 spanOfName : String -> List (Pair String Span) -> Maybe Span
 spanOfName name [] = Nothing
 spanOfName name ((Pair n sp) :: rest) = if n == name then Just sp else spanOfName name rest
 
-export defTypeOrDefaultTbl : HashMap String Term -> String -> Term
-defTypeOrDefaultTbl tbl name =
+export defTypeOfTbl : HashMap String Term -> String -> Check Term
+defTypeOfTbl tbl name =
   case HashMap.lookup name tbl of
-    Just ty => ty
-    Nothing => TGlobal "Int"
+    Just ty => OkC ty
+    Nothing => icInternal "generated definition has no type: ${name}"
 
 -- ---------------------------------------------------------------
 -- 定义：签名 + 变量模式 → lambda 化的体
