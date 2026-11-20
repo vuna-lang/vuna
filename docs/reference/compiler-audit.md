@@ -42,7 +42,7 @@ ID 是稳定引用（`层前缀-序号`）：条目关闭即删除该行（历�
 | ID | 位置 | 类 | 现象 → 后果 | 状态 |
 | --- | --- | --- | --- | --- |
 | EL-16 | `Derive.vuna` 的 `boolTrue`/`boolFalse` | A | 用 `1 == 1` / `0 == 1` 造 Bool（派生实例不依赖源码 Bool 构造子） | 已清（直接引用 canonical `Base.Data.Bool.Bool.True/False`，精化成 `TBool`；夹具 `dt/101`、`steps/118`） |
-| EL-19 | `Data.vuna` 的 record 字段类型 | C | `shift 0 (0-i)` 硬假设字段类型不引用前序字段 | 开放 |
+| EL-19 | `Data.vuna` 的 record 字段类型 | C | `shift 0 (0-i)` 硬假设字段类型不引用前序字段 | 已清（`recordFieldIndependent` 在构造 `DtData` 时断言，`Driver.Cache` 按族参数校验字段类型；夹具 `dt_err/114`、`records/14`、`RecordFieldScope`） |
 
 ## Elab：Term / Meta / Conv / Dict / Trait
 

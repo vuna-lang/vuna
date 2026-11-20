@@ -1,0 +1,14 @@
+-- 字段类型可以引用族参数，也允许自带 Pi：`shift 0 (-i)` 只移动自由变量，内层 binder 不动。
+record R a where
+  f : a
+  g : (x : a) -> a
+  h : a
+
+use : R Int -> Int
+use r = r.g r.h
+
+mk : R Int
+mk = R { f = 1, g = \x => x + 1, h = 41 }
+
+main : Int
+main = use mk

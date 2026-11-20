@@ -57,7 +57,9 @@ onlyX p = case p of
 Core 侧每个 record 族的 `DtData.dtDataIsRecord = True`（`data` / 字典族为 `False`），
 `DtData.dtDataFields : List DtFieldMeta` 存（名字、序号、外层字段类型）；字段类型在精化
 record 体时取合成构造子 telescope 的域项并用 `shift 0 (-i)` 去掉前序字段 binder 槽位，
-因此投影只需 `eval (reverse idxs) dtFieldType`。`EField` / `ERecUpdate` 在精化期消歧后，
+因此投影只需 `eval (reverse idxs) dtFieldType`。该「字段类型只依赖族参数」是硬不变量：
+字段名不在字段类型的 scope 里，`Elab.Data.recordFieldIndependent` 在构造 `DtData` 时检查
+（移位后出现负索引即内部错），`Driver.Cache` 读摘要时也按族参数个数校验字段类型。`EField` / `ERecUpdate` 在精化期消歧后，
 解析计划 `FieldAccessPlan` / `UpdateAccessPlan` 显式携带（记录名，字段序号 / 被改字段
 序号）标注，供 `TProj` 原语直接消费；AST 形状不变。
 

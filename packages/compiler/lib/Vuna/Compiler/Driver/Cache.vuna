@@ -139,10 +139,15 @@ ctorsValid : List DtCtor -> Bool
 ctorsValid [] = True
 ctorsValid (c :: rest) = termValidAt 0 (dtCtorType c) && ctorsValid rest
 
+-- 字段类型处在外层上下文（只剩族参数）：`arity` 之外的自由变量与负索引都不可重建。
+fieldsValid : Int -> List DtFieldMeta -> Bool
+fieldsValid arity [] = True
+fieldsValid arity (f :: rest) = termValidAt arity f.dtFieldType && fieldsValid arity rest
+
 datasValid : List DtData -> Bool
 datasValid [] = True
 datasValid (d :: rest) =
-  termValidAt 0 (dtDataKind d) && ctorsValid (dtDataCtors d) && datasValid rest
+  termValidAt 0 (dtDataKind d) && ctorsValid (dtDataCtors d) && fieldsValid (length d.dtDataParams) (dtDataFields d) && datasValid rest
 
 defsValid : List DtDef -> Bool
 defsValid [] = True
@@ -205,7 +210,11 @@ dataIssue : DtData -> String
 dataIssue d =
   let
     kindIssue = termIssueAt 0 (dtDataKind d)
-  in if kindIssue == "" then ctorIssues (dtDataCtors d) else "${dtDataName d} kind:${kindIssue}"
+  in if kindIssue == "" then
+    let
+      ctorResult = ctorIssues (dtDataCtors d)
+    in if ctorResult == "" then fieldIssues (length d.dtDataParams) (dtDataFields d) else ctorResult
+  else "${dtDataName d} kind:${kindIssue}"
 
 ctorIssues : List DtCtor -> String
 ctorIssues [] = ""
@@ -213,6 +222,13 @@ ctorIssues (c :: rest) =
   let
     issue = termIssueAt 0 (dtCtorType c)
   in if issue == "" then ctorIssues rest else "${dtCtorName c} ctor:${issue}"
+
+fieldIssues : Int -> List DtFieldMeta -> String
+fieldIssues arity [] = ""
+fieldIssues arity (f :: rest) =
+  let
+    issue = termIssueAt arity f.dtFieldType
+  in if issue == "" then fieldIssues arity rest else "${f.dtFieldName} field:${issue}"
 
 datasIssue : List DtData -> String
 datasIssue [] = ""

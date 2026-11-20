@@ -1,0 +1,35 @@
+-- EL-19：record 字段类型只依赖族参数。`recordFieldIndependent i dom` 的判据是
+-- `shift 0 (-i)` 后没有负索引——负索引在求值时会静默当成最内层变量。
+import Base
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Base.Source
+import Vuna.Compiler.Core.Term
+import Vuna.Compiler.Elab.Data
+
+main : Eff [] String
+main =
+  case filter (\p => not (secondOf p)) results of
+    [] => pure ""
+    bad =>
+      do
+        _ <- prim_eff_print ("record field scope failed: " ++ join "; " (map firstOf bad) ++ "\n")
+        _ <- prim_eff_exit 1
+        pure ""
+
+results : List (Pair String Bool)
+results =
+  [
+    Pair "family-param-accepted" familyParamAccepted,
+    Pair "prior-field-rejected-0" (not (recordFieldIndependent 2 (TVar "x" 0 spanEmpty))),
+    Pair "prior-field-rejected-1" (not (recordFieldIndependent 2 (TVar "x" 1 spanEmpty))),
+    Pair "inner-binder-accepted" innerBinderAccepted
+  ]
+
+-- i = 2：族参数在构造子 telescope 里的索引是 k-1-j+i，移位后落到外层上下文。
+familyParamAccepted : Bool
+familyParamAccepted = recordFieldIndependent 2 (TVar "a" 2 spanEmpty)
+
+-- 字段类型自带 Pi：内层 binder 的 cutoff 递增，不被移动；自由变量照常减 i。
+innerBinderAccepted : Bool
+innerBinderAccepted =
+  recordFieldIndependent 2 (TPi "x" False RigOmega (TVar "a" 2 spanEmpty) (TVar "x" 0 spanEmpty))
