@@ -1104,8 +1104,8 @@ isNilList [] = True
 isNilList _ = False
 
 export showValueAt : Int -> Value -> String
--- 快速路径：原子值直接给名字，免掉 quote+showTerm 的递归（mismatchAt 在试探路径上
--- 每次 check 会构造 ~600 万条被丢弃的诊断消息，格式化是主要成本之一）。
+-- 快速路径：原子值直接给名字，免掉 quote+showTerm 的递归（试探路径上的失配诊断
+-- 大多会被上层丢弃，原子值不该为此付整树 quote 的成本）。
 showValueAt depth v =
   case v of
     -- 宇宙层级参与诊断（严格分层下 `Type 0` 与 `Type 1` 不相等，只说 "Type"

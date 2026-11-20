@@ -811,7 +811,7 @@ dtEvalExprInInfoCore prog expr =
       let
         -- axiom 无体，不进 delta 展开 / 求值环境（只剩 globals 里的类型）。
         bodies = defBodyPairs defs
-        -- 表达式求值与程序同一套环（构造子索引 + 定义值共享缓存）。
+        -- 表达式求值与程序同一套环（构造子索引）。
         ec0 =
           Ec
             next

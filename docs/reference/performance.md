@@ -246,10 +246,24 @@ load/parse 前缀 + iface 摘要 **~2.6 s** → 逐定义精化（`collectSigs-d
 6. **`genGroups`**：OCaml 文本生成，没有一眼可去的 O(n²)；codegen 并行的**逐单元可并
    部分只有 ~7–8%**，fork+序列化 DtProgram 的净收益 ~6–7%（不划算，不做；
    `build.sh` 的层内并行已覆盖链接侧）。
-7. **分配**：冷 `check packages/compiler` minor_words ≈1.1e9、cli 包子进程 ≈1.55e9；elab 占分配
-   ~92%，活数据仅 ~2.5MB，瓶颈是 `quote`/`zonk`/`applySpine` 的瞬时 churn，不是表示重复。
+7. **分配（累计量，不是内存占用）**：冷 `check packages/compiler` 单进程 `minor_words`
+   **1.17e9 words（×8 B ≈ 9.3 GB 累计分配）**、`major_words`（晋升）74M words（590 MB）、
+   `top_heap_words`（堆高水位）37M words（294 MB）、maxRSS 437 MB；同一次 check 精化
+   7157 个定义 ⇒ **每定义 163k words ≈ 1.3 MB**，分配速率 ~160M words/s（≈1.3 GB/s）。
+   大头是 `eval`/`force`/`conv` 的逐次调用：按 §4 的计数行 `eval` 1.6e6 次、
+   `forceVal` 5.3e6 次摊算，单次百来 words 就是数亿 words 量级，而整树复制一个定义体
+   只有万级 words。elab 占分配 ~92%，瓶颈是 `quote`/`zonk`/`applySpine` 的瞬时 churn，
+   不是表示重复。
+   **三个 1.x e9 不同口径**：本节 1.1–1.2e9 是单包单进程；第 11 条的 1.63e9 是 `check .`
+   全树；cli 成员的 1.55e9 是子进程合计。复现：
+   `VN_PERF_STATS=1 VUNA_STORE=$(mktemp -d) ./result/bin/vuna check packages/compiler`
+   （结束在 stderr 打 `VN_PERF minor_words=… major_words=… minor_collections=… top_heap_words=…`）。
    hash-consing 需要全局 intern 表、改变 Marshal 布局、与纯精化/元变量/摘要三处不变量
    冲突；预计收益 2–4%，不做。
+   注：**per-span `args.allocWords` 暂不可用于归因**——它按 `minor_words + major_words`
+   求差，而 `Gc.quick_stat` 的 `minor_words` 只在 minor GC 边界推进（minor heap 16M words
+   下量化到 134 MB/格；实测 6390 个 `vuna.def.elab` span 里 6375 个报 0）；精确的区间分配
+   用 `Gc.allocated_bytes ()`（见 [observability.md](observability.md)、[debt.md](debt.md) D81）。
 8. 已修热点（不要重复排查，读数见 §1）：**`Dt.dedup*` 的 O(n²)、`Termination.anyOwn` 的
    O(n²)、写接口的包接口双读**；`Elab.Usage` 全程序扫描（实测
    10–13 ms）、实例体/方法子句查找（13.5 ms）、`refsOfDef`（12–16 ms）、签名 banned 集、
@@ -282,7 +296,8 @@ load/parse 前缀 + iface 摘要 **~2.6 s** → 逐定义精化（`collectSigs-d
    - `Base.Bytes` 的 `encTag`/`encInt`/`encStr`/`encList` 不再对每个原子做一次插值拼接，
      改成分片直接 cons 进 difference list（顶层仍是一次 `strConcatMany`）。
    读数（同机、空 store、3 轮、user）：**10.0 s → 7.1 s（-29%）**；冷 `check .` **20.5 s →
-   15.1 s（-26%）**；`minor_words` **6.42e9 → 1.63e9（-75%，51 GB → 13 GB）**。
+   15.1 s（-26%）**；`minor_words` **6.42e9 → 1.63e9（-75%，51 GB → 13 GB）**
+   （`check .` 全树口径，含成员子进程；与 §4 第 7 条的单包 1.1e9 不可直接比）。
    本轮的测试面：`compiler` 全章 + `cli/steps_native` 通过（另修了 `depIfacesForToolSourceDetailed`
    缺 `tool-closure` 探针导致的两条既有失败）。
    下一轮剩下的顶部（同一份采样）：`Iface`/`Canonical` 的 `String.concat` 6.3%、`dtp_strHash` 6.2%、
