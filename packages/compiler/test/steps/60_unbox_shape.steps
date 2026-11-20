@@ -20,5 +20,5 @@ out-not-contains: C_Pair2_Pair2
 run: printf 'record UserId where\n  uid : Int\nderiving via field (Show, Eq)\n\nu : UserId\nu = UserId { uid = 3 }\n\nmain : String\nmain = show u ++ (if u == u then "/eq" else "/ne")\n' >"$TMPDIR/unbox-shape/Deleg.vuna"
 run: "$VUNA" compile --no-print "$TMPDIR/unbox-shape/Deleg.vuna" "$TMPDIR/unbox-shape/deleg" >/dev/null 2>&1
 read: $TMPDIR/unbox-shape/deleg/Main.ml
-out-contains: v_Base_dTrait_dShow_dshow
-out-contains: v_Base_dTrait_dEq_d_x61__x61_
+out-contains: B_dTrait_dShow.v_show B_dData_dInt.v_Show_uInt
+out-contains: B_dTrait_dEq.v__x61__x61_ B_dData_dInt.v_Eq_uInt

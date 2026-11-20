@@ -24,10 +24,11 @@ exit: 0
 run: sh -c 'S="$TMPDIR/det"; find "$S/store-a2/blobs" -type f | sed "s|$S/store-a2/||" | sort > "$S/blob-a2"; find "$S/store-b2/blobs" -type f | sed "s|$S/store-b2/||" | sort > "$S/blob-b2"; diff -u "$S/blob-a2" "$S/blob-b2"; diff -r "$S/out-a2" "$S/out-b2"'
 exit: 0
 
-# 编译器身份：取可执行文件旁 `build-id` 的内容，不取路径/mtime。
-# 同一二进制复制到别的目录、并改 mtime ⇒ 对象地址与产物仍逐字节一致。
-# `build-id` 缺失时会回退到 stat 兜底（未安装的临时产物），这一档就是那种退化的哨兵。
-run: sh -c 'H=$(dirname "$(dirname "$VUNA")"); test -f "$H/build-id" || { echo "missing $H/build-id"; exit 3; }; S="$TMPDIR/det"; rm -rf "$S/x"; mkdir -p "$S/x/bin"; cp "$VUNA" "$S/x/bin/vuna"; cp "$H/build-id" "$S/x/build-id"; touch -d "2020-01-01" "$S/x/bin/vuna"; VUNA_BASE="$VUNA_BASE" VUNA_STORE="$S/store-x" "$S/x/bin/vuna" check "$S/a" >/dev/null 2>&1 || exit 1; VUNA_BASE="$VUNA_BASE" VUNA_STORE="$S/store-x" "$S/x/bin/vuna" build --no-compile --out "$S/out-x" "$S/a" >/dev/null 2>&1 || exit 2'
+# 编译器身份：取可执行文件旁 `build-id`（源码闭包）与 `cache-tag`（二进制）的内容，
+# 不取路径/mtime。同一安装布局复制到别的目录、并改 mtime ⇒ 对象地址与产物仍逐字节一致。
+# 拷贝要连插件一起：发现只看 `<exeDir>`（不扫 PATH），`check` / `build` 由 `vuna-compiler` 提供。
+# 身份文件缺失时会回退到 build-id / stat 兜底，这一档就是那种退化的哨兵。
+run: sh -c 'H=$(dirname "$(dirname "$VUNA")"); test -f "$H/build-id" || { echo "missing $H/build-id"; exit 3; }; test -f "$H/cache-tag" || { echo "missing $H/cache-tag"; exit 3; }; test -f "$H/bin/vuna-compiler" || { echo "missing $H/bin/vuna-compiler"; exit 3; }; S="$TMPDIR/det"; rm -rf "$S/x"; mkdir -p "$S/x/bin"; cp "$VUNA" "$S/x/bin/vuna"; cp "$H/bin/vuna-compiler" "$S/x/bin/vuna-compiler"; cp "$H/build-id" "$S/x/build-id"; cp "$H/cache-tag" "$S/x/cache-tag"; touch -d "2020-01-01" "$S/x/bin/vuna" "$S/x/bin/vuna-compiler"; VUNA_BASE="$VUNA_BASE" VUNA_STORE="$S/store-x" "$S/x/bin/vuna" check "$S/a" >/dev/null 2>&1 || exit 1; VUNA_BASE="$VUNA_BASE" VUNA_STORE="$S/store-x" "$S/x/bin/vuna" build --no-compile --out "$S/out-x" "$S/a" >/dev/null 2>&1 || exit 2'
 exit: 0
 run: sh -c 'S="$TMPDIR/det"; find "$S/store-x/objects" -type f | sed "s|$S/store-x/||" | sort > "$S/addr-x"; diff -u "$S/addr-a" "$S/addr-x"'
 exit: 0
