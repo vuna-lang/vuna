@@ -26,6 +26,17 @@ import Base.Effect.Types as EffTypes
 export obsCheck : String -> (Int -> Check a) -> Check a
 obsCheck name f = @vuna@obs@span name "vuna.phase" (\u => f u)
 
+-- | 纯变换的阶段跨度：`rezonk` / 额外定义生成这类收尾工作不返回 `Check`，用这个包
+-- （分类与 `obsCheck` 一致）。关闭时只付一次 `Lazy.force` + 直接调用。
+export obsPure : String -> (Int -> a) -> a
+obsPure name f = ObsSpan.obsSpan name "vuna.phase" f
+
+-- | 高频计数器（`ph:"C"`）：`minLevel` 是发事件的最低观测级别。一次 check 里 conv /
+-- 求值的调用量是 10^5–10^6 级，默认压到 level 3，避免把 level 2 的 trace 撑大。
+-- 调用方给常量 `v`（关闭时不跳过实参求值）。关闭路径 = 一次 `Lazy.force` + 分支。
+export obsCountAt : Int -> String -> Int -> Int
+obsCountAt minLevel name v = if obsLevel 0 >= minLevel then obsCounter name v else 0
+
 -- | 逐定义 span（规范 §2：**只有 level >= 2** 才有逐定义 span），`args.def` 携带定义名
 -- （位置由产物侧 `#line` 承担）：`vuna.def.elab` 等。关闭 / level 1 时直接 `f 0`
 -- （一次 `Lazy.force` + 分支，零额外分配）。

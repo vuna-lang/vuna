@@ -88,8 +88,17 @@ span / 计数 / 日志 / 采样栈写成 **Chrome Trace Event JSONL**；关闭�
 
 **已插桩**（本仓库代码真的会产出这些名字）：
 
-- `ph:"X"` 跨度：`vuna.elab`（整段精化的汇总跨度）、`vuna.elab.bodies`（逐定义精化段，
-  `vuna.elab` 的子区间）、`vuna.codegen.check`（lowering + 装配校验；整包检查与增量收尾的
+- `ph:"X"` 跨度：`vuna.elab`（整段精化的汇总跨度，不含 `vuna.codegen.check`）、
+  `vuna.elab.rast`（`toRastDecls`）、`vuna.elab.collectsigs`（签名收集）、
+  `vuna.elab.prepare` / `vuna.elab.deriving`
+  （record 降级与 `deriving` 展开）、`vuna.elab.datas` / `vuna.elab.traits` /
+  `vuna.elab.instheads` / `vuna.elab.sigs`（data / trait / 实例头 / 签名四段）、
+  `vuna.elab.defined`（定义齐备性检查）、`vuna.elab.bodies`
+  （逐定义精化段，`vuna.elab` 的子区间）、`vuna.elab.instbodies`（实例体）、`vuna.elab.dictfix`
+  （`resolveDictGoalsFix` 收敛）、`vuna.elab.rezonk` / `vuna.elab.extra`（收尾 zonk 与生成定义的
+  纯变换）、`vuna.elab.tail`（`finishCore` 整段，含 `main.show` / `usage` / `vuna.term` 子跨度）、
+  `vuna.elab.main.show`（`main` 展示函数合成）、`vuna.elab.usage`（用量检查）、
+  `vuna.codegen.check`（lowering + 装配校验；整包检查与增量收尾的
   `dtCheckScoped` 各一处）、`vuna.parse.lex`（一次全文词法）、`vuna.parse.syntax`（token 流
   → AST 的语法分析）、`vuna.parse.cst`（无损 CST 组装，工具侧调用）、`vuna.cache.lookup` / `vuna.cache.write`
   （对象库读写；`obsSpanEff` 的 begin/end token 对）、`vuna.term`（终止性整段）、
@@ -99,6 +108,10 @@ span / 计数 / 日志 / 采样栈写成 **Chrome Trace Event JSONL**；关闭�
   `vuna.iface.write`、`vuna.codegen.split`；
 - `ph:"C"` 计数：`vuna.counter.cache.hit`（接口对象 / 地址表 / check 结果命中）、
   `vuna.counter.cache.miss`（未命中）、`vuna.counter.cache.write`（check 结果落盘）；
+  精化规模：`vuna.counter.meta.solve`（元变量求解）、`vuna.counter.meta.zonk`（`zonkTerm`）；
+  高频三项 `vuna.counter.core.conv`（conv 调用）、`vuna.counter.conv.mismatch`（conv 失配）、
+  `vuna.counter.core.reduce`（`eval` 调用）**只在 level ≥ 3 发**：一次 check 是
+  1.6×10^6（`eval`）/ 2×10^5（`conv`）级，放 level 2 会把 trace 撑大一个量级；
   终止性 / SCT 规模：`vuna.counter.term.scc_size`、`vuna.counter.term.sites`、
   `vuna.counter.term.graphs`、`vuna.counter.term.graphs_final`、
   `vuna.counter.term.closure_rounds`；
@@ -112,10 +125,9 @@ span / 计数 / 日志 / 采样栈写成 **Chrome Trace Event JSONL**；关闭�
 - `vuna.log` / `vuna.mark.*` / `vuna.sample.cpu` / `vuna.sample.mem` / `vuna.obs.schema`。
 
 **保留名**（在词汇表里、`vuna dev obs validate` 认，但**尚无插桩点**）：`vuna.parse`（伞名：
-前端整体阶段，实际耗时由三个子跨度承担）、`vuna.elab.sigs`、`vuna.elab.datas`、`vuna.elab.traits`、`vuna.elab.instheads`、
-`vuna.elab.instbodies`、`vuna.elab.tail`、`vuna.codegen.unit`、
+前端整体阶段，实际耗时由三个子跨度承担）、`vuna.codegen.unit`、
 `vuna.check`、`vuna.build`、`vuna.link`、`vuna.def.lower`、`vuna.def.text`、
-`vuna.counter.core.*` / `vuna.counter.meta.*` / `vuna.counter.alloc.words` /
+`vuna.counter.core.force` / `vuna.counter.alloc.words` /
 `vuna.counter.heap.words` / `vuna.counter.steps`。加插桩时**不要**改名（工具/看板按名字聚合）。
 
 - 档次读数（在 `ph:"X"` 的 `args` 上，**不是**独立 count 事件）：`args.allocWords` /

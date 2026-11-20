@@ -418,20 +418,45 @@ load/parse 前缀 + iface 摘要 **~2.6 s** → 逐定义精化（`collectSigs-d
 
 ### 4.1 逐定义精化与 codegen 检查的分段（span 口径）
 
-`VUNA_OBS=1`、空 `VUNA_STORE`、单进程冷跑 `check packages/compiler`（绝对数随机器负载浮动，
-看份额即可）：
+`VUNA_OBS=1`、空 `VUNA_STORE`、单进程冷跑 `check packages/compiler`（整跑 6.0 s；绝对数随
+机器负载浮动，看份额即可）。`vuna.elab` 的账已闭合到子毫秒残差：下表各段之和等于
+`vuna.elab`，`vuna.codegen.check` 是它的**兄弟**跨度，不再被算进精化：
 
-| span | 耗时 | 说明 |
+| span | 耗时 | 占 `vuna.elab` | 说明 |
+| --- | --- | --- | --- |
+| `vuna.elab` | 2.30 s | 100% | 整段精化 |
+| `vuna.elab.bodies` | 1.62 s | 71% | 逐定义精化（`vuna.def.elab` 6307 次；其子跨度 `vuna.elab.term` 正文检查 ~1.39 s） |
+| `vuna.elab.tail` | 0.28 s | 12% | 收尾：`vuna.term` 0.21 s、`usage` 0.045 s、`rezonk` 0.007 s、`main.show`/`extra` ~0.004 s |
+| `vuna.elab.rast` | 0.14 s | 6% | `toRastDecls`（AST → RAST） |
+| `vuna.elab.sigs` | 0.10 s | 5% | 签名精化 |
+| `vuna.elab.collectsigs` | 0.035 s | 2% | 签名收集 |
+| `vuna.elab.instbodies` | 0.033 s | 1.4% | 实例体 |
+| `vuna.elab.prepare` | 0.029 s | 1.3% | record 降级（`deriving` 展开 <1 ms） |
+| `vuna.elab.datas` | 0.026 s | 1.1% | data 精化 |
+| `vuna.elab.instheads` | 0.010 s | 0.4% | 实例头 |
+| `vuna.elab.defined` | 0.009 s | 0.4% | 定义齐备性检查 |
+| `vuna.elab.rezonk` | 0.008 s | 0.4% | 收尾 zonk（3 处） |
+| `vuna.elab.dictfix` | ~0 | — | `resolveDictGoalsFix`：收尾时 pending 已空 |
+| `vuna.codegen.check` | 0.95 s | — | `.lower` 0.95 s（`.unit` 0.6 s）；`.gen` <1 ms |
+| `vuna.parse.lex` / `.syntax` | 0.19 / 0.16 s | — | 509 / 509 次 |
+
+同一口径的计数（`VUNA_OBS=2` 出 10^5 级、`VUNA_OBS=3` 出 `eval`）：
+
+| 计数 | 次数 | 读法 |
 | --- | --- | --- |
-| `vuna.elab.bodies` | ~9.2 s | 逐定义精化（`vuna.def.elab` 5784 次） |
-| `vuna.elab.term` / `.term.body` | ~9.0 s | `checkDefIn` 的正文检查 |
-| `vuna.codegen.check` | ~1.4 s | `.lower` ~1.4 s（`.unit` ~1.0 s）；`.gen` <10 ms |
-| `vuna.parse.syntax` / `.lex` | 0.14 s / 0.11 s | 315 / 166 次 |
+| `vuna.counter.meta.solve` | ~6.3×10^3 | 元变量求解 |
+| `vuna.counter.meta.zonk` | ~7.4×10^3 | `zonkTerm` 调用；按项规模派生 fuel 的量级太小，不值得改 |
+| `vuna.counter.core.conv` | ~2.08×10^5 | conv 调用（level 3） |
+| `vuna.counter.conv.mismatch` | ~5.9×10^4（28%） | conv 失配（level 3）；每次失配要付两次 `showValueAt`，这是「被丢弃的诊断」成本上界 |
+| `vuna.counter.core.reduce` | ~1.60×10^6 | `eval` 调用（level 3；每次入口算一遍 `termSize` 派生 fuel，是待办优化） |
 
-按表达式形态归因 `vuna.elab.term.core`（level 2 逐节点 span 的自用时间）：`EApp` ~4.6 s、
-`EVar` ~3.6 s，其余形态合计 <1 s。所以剩余成本是**每个表达式节点的推断/统一**，
-不是可以整段跳过的阶段；再往下需要给工具链自身接 CPU 采样
-（`@vuna@obs@sampleStart` 目前只接在用户程序运行时），用函数级栈定位 `conv` / `force`。
+pending 队列规模分桶（`elab.dict.pending.b*`，走 `--debug-perf` 的 `counters=` 行）：
+0 规模 10,878 轮、1–4 1,953 轮、5–16 1,244 轮、17–64 263 轮、65+ 2 轮。即「一趟 worklist
+要处理 >16 个目标」只有 265 轮，旋转语义的二次代价不在关键路径上。
+
+按表达式形态看 `vuna.elab.term.core` 的事件**次数**（level 2 逐节点 span）：`EVar` ~8.0×10^4、
+`EApp` ~5.5×10^4、`ECase` ~8.2×10^3、`ELam` ~7.3×10^3、`EIf` ~3.4×10^3、`ELet` ~1.8×10^3——
+约 21 个节点/定义。所以剩余成本是**每个表达式节点的推断/统一**，不是可以整段跳过的阶段。
 
 用工具链自采样（`observability.md` §6.1）看函数级热点，冷 `check packages/compiler` 的顶部是
 **解析期的名字解析**（`Loader.Modules.isDataOrRecordCtorTarget` 与 `mangle` 的字符串拼接、

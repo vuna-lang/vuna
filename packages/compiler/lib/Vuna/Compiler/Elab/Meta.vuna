@@ -19,6 +19,7 @@ import Vuna.Compiler.Elab.Sig
 import Vuna.Compiler.Elab.Types
 import Vuna.Compiler.Frontend.Rast
 import Vuna.Compiler.Frontend.Rast.Name
+import Vuna.Compiler.Base.Obs
 
 -- 引用零参（无显式参数）构造子时，其隐式类型/族参数必须实例化成元变量；
 -- 否则 `inferE (EVar "Nil")` 会给出 `{a}->List a`（函数类型），而 `Nil` 是值。
@@ -574,7 +575,10 @@ resultSpine ty = spineOfType ty
 -- 这是**唯一**的「已解元变量 → 项」入口（解在求解点已保证作用域，所以正常输入不会
 -- 出现越界）。
 export zonkTerm : Ec -> Int -> Term -> Term
-zonkTerm ec depth t = zonkTermFuel (zonkFuelFor t) ec depth t
+zonkTerm ec depth t =
+  let
+    _ = obsCountAt 2 "vuna.counter.meta.zonk" 1
+  in zonkTermFuel (zonkFuelFor t) ec depth t
 
 -- | 燃料按项规模派生（`termSize` 必 ≥ 嵌套深度；每节点 4 步，与 `Eval.evalFuelFor` 同口径）。
 -- 固定上限会在更深的项上中途停在原项，残留元变量推迟到 codegen 才报。

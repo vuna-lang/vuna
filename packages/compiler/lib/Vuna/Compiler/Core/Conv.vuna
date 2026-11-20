@@ -12,6 +12,7 @@ import Vuna.Compiler.Core.Term
 import Vuna.Compiler.Core.Eval
 import Vuna.Compiler.Base.Diagnostics
 import Vuna.Compiler.Base.Intrinsics
+import Vuna.Compiler.Base.Obs
 
 -- ---------------------------------------------------------------
 -- 定义性相等（beta + delta + eta）与一阶元变量求解
@@ -475,6 +476,7 @@ convOneAltFuel fuel defs sols depth a b =
 export mismatchAt : Int -> Value -> Value -> Check a
 mismatchAt depth a b =
   let
+    _ = obsCountAt 3 "vuna.counter.conv.mismatch" 1
     sa = showValueAt depth a
     sb = showValueAt depth b
   in tcTypeMismatchNoLoc sa sb
@@ -777,6 +779,7 @@ solveMetaNew defs sols depth m rhs = solveMetaEmpty sols depth m rhs
 export conv : HashMap String Term -> Sols -> Int -> Value -> Value -> Check Sols
 conv a1 a2 a3 a4 a5 =
   let
+    _ = obsCountAt 3 "vuna.counter.core.conv" 1
     _ =
       dbg!
         "conv-in: ${showTerm (quote a3 a4)} <> ${showTerm (quote a3 a5)} |v: ${showValueAt a3 a4} <> ${showValueAt a3 a5} @${a3}"
@@ -807,4 +810,7 @@ export etaRight : HashMap String Term -> Sols -> Int -> String -> Closure -> Val
 etaRight a1 a2 a3 a4 a5 a6 = etaRightFuel convFuelBase a1 a2 a3 a4 a5 a6
 
 export solveMeta : HashMap String Term -> Sols -> Int -> Int -> List Value -> Value -> Check Sols
-solveMeta a1 a2 a3 a4 a5 a6 = solveMetaFuel convFuelBase a1 a2 a3 a4 a5 a6
+solveMeta a1 a2 a3 a4 a5 a6 =
+  let
+    _ = obsCountAt 2 "vuna.counter.meta.solve" 1
+  in solveMetaFuel convFuelBase a1 a2 a3 a4 a5 a6

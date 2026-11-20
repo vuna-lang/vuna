@@ -690,10 +690,21 @@ resolveRowGoalsCtxGo globals ctx sp ((c@(Constraint cid kind m dom cspan cdepth)
 
 export resolveDictGoals : List (Pair String Term) -> Ec -> Ec
 resolveDictGoals globals ec =
-  if ecDictPassIdle ec then
+  let
+    n = length (ecPending ec)
+  in if ecDictPassIdle ec then
     ec
   else
-    ecPutPassMarker (resolveDictGoalsFuel (length (ecPending ec) + 1) globals ec)
+    ecPutPassMarker
+      (resolveDictGoalsFuel (n + 1) globals (ecBump ec "elab.dict.pending.b${pendingBucket n}"))
+
+-- | pending 队列规模分桶：`--debug-perf` 的 counters 行按桶聚合成直方图，
+-- 最大桶即本次 check 的 pending 峰值量级。
+pendingBucket : Int -> String
+pendingBucket n =
+  if n <= 0 then
+    "0"
+  else if n <= 4 then "1-4" else if n <= 16 then "5-16" else if n <= 64 then "17-64" else "65+"
 
 -- 单趟 worklist：逐个处理表头，成功即提交；未解目标按原顺序追加到表尾（旋转语义：
 -- 每趟从头部取一个目标）。把“处理尾部”算两遍（keep + 成功分支再递归）在目标同时可解时是 2^k；

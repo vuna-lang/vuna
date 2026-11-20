@@ -912,10 +912,10 @@ export elabProgramFull : List Decl -> Check DtProgram
 elabProgramFull decls =
   let
     decls2 = maybeAddHasFieldInstances preludeGlobals decls
-  in Vuna.Compiler.Base.Common.bind (prepareDecls decls2) (
+  in Vuna.Compiler.Base.Common.bind (obsCheck "vuna.elab.prepare" (\_ => prepareDecls decls2)) (
       \p =>
         case p of
-          Pair records ds => Vuna.Compiler.Base.Common.bind (expandDerivings ds) (\ds2 => elabProgramGoWith ecEmpty preludeGlobals records ds2)
+          Pair records ds => Vuna.Compiler.Base.Common.bind (obsCheck "vuna.elab.deriving" (\_ => expandDerivings ds)) (\ds2 => elabProgramGoWith ecEmpty preludeGlobals records ds2)
     )
 
 -- 单遍逐定义恢复：返回收集到的错误（源序）。空列表 = 通过。
@@ -962,16 +962,18 @@ export elabProgramFullWithAux : Ec -> List (Pair String Term) -> List Decl -> Li
 elabProgramFullWithAux startEc startGlobals termAux decls =
   let
     decls2 = maybeAddHasFieldInstances startGlobals decls
-  in Vuna.Compiler.Base.Common.bind (prepareDeclsWith termAux decls2) (
+  in Vuna.Compiler.Base.Common.bind
+    (obsCheck "vuna.elab.prepare" (\_ => prepareDeclsWith termAux decls2))
+    (
       \p =>
         case p of
           Pair records ds =>
-            Vuna.Compiler.Base.Common.bind (expandDerivings ds) (
+            Vuna.Compiler.Base.Common.bind (obsCheck "vuna.elab.deriving" (\_ => expandDerivings ds)) (
                 \ds2 =>
-                  Vuna.Compiler.Base.Common.bind (prepareDecls termAux) (
+                  Vuna.Compiler.Base.Common.bind (obsCheck "vuna.elab.prepare" (\_ => prepareDecls termAux)) (
                       \ap =>
                         case ap of
-                          Pair _ ads => Vuna.Compiler.Base.Common.bind (expandDerivings ads) (\ads2 => elabProgramGoWithAux startEc startGlobals records ads2 ds2)
+                          Pair _ ads => Vuna.Compiler.Base.Common.bind (obsCheck "vuna.elab.deriving" (\_ => expandDerivings ads)) (\ads2 => elabProgramGoWithAux startEc startGlobals records ads2 ds2)
                     )
               )
     )
@@ -994,11 +996,11 @@ record ElabCore where
 
 elabProgramCoreWithAux : Bool -> Ec -> List (Pair String Term) -> List RecordMeta -> List Decl -> Check ElabCore
 elabProgramCoreWithAux recover startEc startGlobals records decls =
-  Vuna.Compiler.Base.Common.bind (collectSigs decls) (
+  Vuna.Compiler.Base.Common.bind (obsCheck "vuna.elab.collectsigs" (\_ => collectSigs decls)) (
       \sigs =>
         let
           _ = dbg! "collectSigs-done"
-        in Vuna.Compiler.Base.Common.bind (elabDatas (collectDataDecls decls []) records startGlobals startEc) (
+        in Vuna.Compiler.Base.Common.bind (obsCheck "vuna.elab.datas" (\_ => elabDatas (collectDataDecls decls []) records startGlobals startEc)) (
             \pd =>
               case pd of
                 Pair datas (Pair globals0 ec0) =>
@@ -1007,7 +1009,7 @@ elabProgramCoreWithAux recover startEc startGlobals records decls =
                     -- 索引 miss 会回落线性扫 `ecDatas`，所以这里只影响速度。
                     ec0b = ecPutCtorTbl ec0 (ctorTblOfDatas (ecDatas ec0))
                     _ = dbg! "datas-done"
-                  in Vuna.Compiler.Base.Common.bind (elabTraits (collectTraitDecls decls []) globals0 ec0b) (
+                  in Vuna.Compiler.Base.Common.bind (obsCheck "vuna.elab.traits" (\_ => elabTraits (collectTraitDecls decls []) globals0 ec0b)) (
                       \pt =>
                         case pt of
                           Pair classDatas (Pair projGlobals (Pair _ (Pair projSpans ec1))) =>
@@ -1019,14 +1021,14 @@ elabProgramCoreWithAux recover startEc startGlobals records decls =
                               -- `Base.Trait.Eq.Eq` 找不到）。全量路径下两者相同。
                               classesAll = ecClasses ec1
                               _ = dbg! "traits-done"
-                            in Vuna.Compiler.Base.Common.bind (checkInstanceHeads (collectInstDecls decls []) classesAll globals1 ec1) (
+                            in Vuna.Compiler.Base.Common.bind (obsCheck "vuna.elab.instheads" (\_ => checkInstanceHeads (collectInstDecls decls []) classesAll globals1 ec1)) (
                                 \pih =>
                                   case pih of
                                     Pair instHeads ec1b =>
                                       let
                                         globals2 = append globals1 instHeads
                                         _ = dbg! "instheads-done"
-                                      in Vuna.Compiler.Base.Common.bind (elabSigs sigs globals2 ec1b) (
+                                      in Vuna.Compiler.Base.Common.bind (obsCheck "vuna.elab.sigs" (\_ => elabSigs sigs globals2 ec1b)) (
                                           \p =>
                                             case p of
                                               Pair globals ec2 =>
@@ -1034,7 +1036,7 @@ elabProgramCoreWithAux recover startEc startGlobals records decls =
                                                   -- 正文检查前的唯一一次建表：globals 此时已固定（sigs + inst heads）。
                                                   ec2b = ecPutClausesTbl (ecSetGlobalsComplete (ecPutGlobalsTbl ec2 (globalsTableOf globals)) True) (clausesTblOf decls)
                                                   _ = dbg! "sigs-elab-done"
-                                                in Vuna.Compiler.Base.Common.bind (checkAllDefined sigs globals decls) (
+                                                in Vuna.Compiler.Base.Common.bind (obsCheck "vuna.elab.defined" (\_ => checkAllDefined sigs globals decls)) (
                                                     \_ =>
                                                       Vuna.Compiler.Base.Common.bind (obsCheck "vuna.elab.bodies" (\_ => elabBodies recover decls globals [] [] ec2b)) (
                                                           \q =>
@@ -1048,19 +1050,19 @@ elabProgramCoreWithAux recover startEc startGlobals records decls =
                                                                   -- resolveDictGoals 只在 checkByInfer 路径调用；每轮定义体之后先收敛
                                                                   -- 一轮，定义体里的延迟字典实参要被替换成实例项（否则擦除检查会看到
                                                                   -- 运行时位置的 TMeta）。
-                                                                  ec3 = resolveDictGoalsFix globals ec3a 8
-                                                                  defs = rezonkDefs ec3 defs0
+                                                                  ec3 = obsPure "vuna.elab.dictfix" (\_ => resolveDictGoalsFix globals ec3a 8)
+                                                                  defs = obsPure "vuna.elab.rezonk" (\_ => rezonkDefs ec3 defs0)
                                                                   _ = dbg! "bodies-done g=${length globals} sols=${length (ecSols ec3a)} defs=${length (ecDefs ec3a)} metas=${ecNext ec3a} dgoals=${length (ecPending ec3a)} datas=${length (ecDatas ec3a)} insts=${length (ecInsts ec3a)} classes=${length (ecClasses ec3a)} counters=${showCounters (ecCounters ec3a)}"
                                                                   -- 实例表索引自检（派生索引 == 权威表）。只在 --debug-perf 下跑：
                                                                   -- `ecInstsAudit` 会扫全实例表，生产路径不付这个成本。
                                                                   _ = dbg! (if ecInstsAudit ec3a then "inst-index=ok" else "inst-index=MISMATCH")
-                                                                in Vuna.Compiler.Base.Common.bind (elabInstanceBodies recover decls classesAll datas1 globals ec3) (
+                                                                in Vuna.Compiler.Base.Common.bind (obsCheck "vuna.elab.instbodies" (\_ => elabInstanceBodies recover decls classesAll datas1 globals ec3)) (
                                                                     \pi =>
                                                                       case pi of
                                                                         Pair instDefs0 ec4a =>
                                                                           let
-                                                                            ec4 = resolveDictGoalsFix globals ec4a 8
-                                                                            instDefs = rezonkDefs ec4 instDefs0
+                                                                            ec4 = obsPure "vuna.elab.dictfix" (\_ => resolveDictGoalsFix globals ec4a 8)
+                                                                            instDefs = obsPure "vuna.elab.rezonk" (\_ => rezonkDefs ec4 instDefs0)
                                                                             _ = dbg! "instbodies-done"
                                                                           in OkC (ElabCore datas1 ec4 defs instDefs globals projSpans)
                                                                   )
@@ -1298,9 +1300,17 @@ finishCore termAux decls core =
                 Nothing => ErrC (unsolvedMessage ec4 m)
             Nothing =>
               let
-                extra = extraDefsOf globals ec4 projSpans (append instDefs defs)
-                allDefs0 = rezonkDefs ec4 (append instDefs (append extra defs))
-              in Vuna.Compiler.Base.Common.bind (synthMainShow ec4 globals allDefs0) (
+                extra =
+                  obsPure
+                    "vuna.elab.extra"
+                    (\_ => extraDefsOf globals ec4 projSpans (append instDefs defs))
+                allDefs0 =
+                  obsPure
+                    "vuna.elab.rezonk"
+                    (\_ => rezonkDefs ec4 (append instDefs (append extra defs)))
+              in Vuna.Compiler.Base.Common.bind
+                (obsCheck "vuna.elab.main.show" (\_ => synthMainShow ec4 globals allDefs0))
+                (
                   \allDefs =>
                     let
                       -- 正文阶段不逐定义重建 globals（O(n²)）；这里用最终定义集一次性把签名类型
@@ -1314,7 +1324,7 @@ finishCore termAux decls core =
                                 Nothing => g
                           ) globals
                       _ = dbg! "extradefs-done"
-                    in Vuna.Compiler.Base.Common.bind (checkProgramUsage ec4 allDefs) (
+                    in Vuna.Compiler.Base.Common.bind (obsCheck "vuna.elab.usage" (\_ => checkProgramUsage ec4 allDefs)) (
                         \ec5 =>
                           Vuna.Compiler.Base.Common.bind (obsCheck "vuna.term" (\_ => checkTerminationDeclsWith (declFunNames decls) (append termAux decls))) (
                               \_ =>
@@ -1331,7 +1341,7 @@ export elabProgramGoWithAux : Ec -> List (Pair String Term) -> List RecordMeta -
 elabProgramGoWithAux startEc startGlobals records termAux decls =
   Vuna.Compiler.Base.Common.bind
     (elabProgramCoreWithAux False startEc startGlobals records decls)
-    (\core => finishCore termAux decls core)
+    (\core => obsCheck "vuna.elab.tail" (\_ => finishCore termAux decls core))
 
 -- 用当前解重新 zonk 定义体（延迟字典元变量 → 实例项）；axiom 无体，原样保留。
 export rezonkDefs : Ec -> List DtDef -> List DtDef

@@ -12,6 +12,7 @@ import Vuna.Compiler.Base.Common
 import Base.Container.HashMap as HashMap
 import Vuna.Compiler.Core.Term
 import Vuna.Compiler.Base.Intrinsics
+import Vuna.Compiler.Base.Obs
 
 -- ---------------------------------------------------------------
 -- 环境与求值（beta）
@@ -21,7 +22,10 @@ lookupEnv i [] = Nothing
 lookupEnv i (v :: rest) = if i <= 0 then Just v else lookupEnv (i - 1) rest
 
 export eval : List Value -> Term -> Value
-eval env t = evalFuel (evalFuelFor t) env t
+eval env t =
+  let
+    _ = obsCountAt 3 "vuna.counter.core.reduce" 1
+  in evalFuel (evalFuelFor t) env t
 
 -- | 求值 fuel 派生（D24）：固定 128 对深 Nat 链不够——字面量展开成 `Zero`/`Succ` 链后
 -- 每层约消耗 2 步燃料，≥64 层的字面量（如 `n = 300`）会在结构递归中途耗尽，而
