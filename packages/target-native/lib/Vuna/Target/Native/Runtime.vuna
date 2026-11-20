@@ -169,16 +169,7 @@ hostReasonRodata : List NativeRodata
 hostReasonRodata =
   append
     (map (\p => NativeRodata (hostReasonLabel (firstOf p)) (secondOf p)) hostReasonTexts)
-    [
-      NativeRodata (nativeDataLabel "errno_unknown") strictReasonUnknown,
-      NativeRodata (nativeDataLabel "op_readFile") "readFile: ",
-      NativeRodata (nativeDataLabel "op_writeFile") "writeFile: ",
-      NativeRodata (nativeDataLabel "op_writeFileAtomic") "",
-      NativeRodata (nativeDataLabel "op_readDir") "readDir: ",
-      NativeRodata (nativeDataLabel "op_isDirectory") "isDirectory: ",
-      NativeRodata (nativeDataLabel "op_makeDir") "makeDir: ",
-      NativeRodata (nativeDataLabel "op_removeFile") "removeFile: "
-    ]
+    [NativeRodata (nativeDataLabel "errno_unknown") strictReasonUnknown, NativeRodata (nativeDataLabel "op_readFile") "readFile: ", NativeRodata (nativeDataLabel "op_writeFile") "writeFile: ", NativeRodata (nativeDataLabel "op_writeFileAtomic") "", NativeRodata (nativeDataLabel "op_readDir") "readDir: ", NativeRodata (nativeDataLabel "op_isDirectory") "isDirectory: ", NativeRodata (nativeDataLabel "op_makeDir") "makeDir: ", NativeRodata (nativeDataLabel "op_removeFile") "removeFile: "]
 
 -- | 目录树太深：`remove_tree` 的递归帧放不进当前栈。
 rmtreeDeepMessage : String
@@ -451,26 +442,45 @@ strConcatFn =
     [IMov (OpMem Rbp (0 - 8)) (OpReg Rdi), IMov (OpMem Rbp (0 - 16)) (OpReg Rsi), IMov (OpReg Rax) (OpMem Rdi 0), IBin "add" (OpMem Rsi 0), IMov (OpMem Rbp (0 - 24)) (OpReg Rax), IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "str_alloc"), IMov (OpReg R11) (OpReg Rax), IMov (OpReg Rax) (OpMem Rbp (0 - 24)), IMov (OpMem R11 0) (OpReg Rax), ILeaMem Rdi R11 8, IMov (OpReg Rsi) (OpMem Rbp (0 - 8)), IBinReg "add" Rsi (OpImm 8), IMov (OpReg Rcx) (OpMem Rsi (0 - 8)), IRepMovsb, IMov (OpReg Rsi) (OpMem Rbp (0 - 16)), IBinReg "add" Rsi (OpImm 8), IMov (OpReg Rcx) (OpMem Rsi (0 - 8)), IRepMovsb, IMov (OpReg Rax) (OpReg R11), IRet]
 
 -- | `==`：rdi/rsi = 两个字符串 -> rax = 0/1。
+-- | 逐字节相等（`rdi`/`rsi` = 数据起点、`rcx` = 字节数）→ rax = 0/1。
+--   按 8 字节字比较，尾部逐字节：`repe cmpsb` 在短字符串上比等价的标量循环慢一个数量级
+--   （实测 32 B 约 5.8×、64 B 约 9.7×），而编译器自身的 HashMap 键比较全是短字符串。
+bytesEqFn : NativeFunc
+bytesEqFn =
+  rtFunc
+    "bytes_eq"
+    0
+    [ILabel ".Lrt_beq_loop", ICmp (OpReg Rcx) (OpImm 8), IJcc "jb" ".Lrt_beq_tail", IMov (OpReg R9) (OpMem Rdi 0), ICmp (OpReg R9) (OpMem Rsi 0), IJcc "jne" ".Lrt_beq_no", IBinReg "add" Rdi (OpImm 8), IBinReg "add" Rsi (OpImm 8), IBinReg "sub" Rcx (OpImm 8), IJmp ".Lrt_beq_loop", ILabel ".Lrt_beq_tail", ITest Rcx Rcx, IJcc "jz" ".Lrt_beq_yes", IMovzx R9 (OpMem Rdi 0), IMovzx R10 (OpMem Rsi 0), ICmp (OpReg R9) (OpReg R10), IJcc "jne" ".Lrt_beq_no", IBinReg "add" Rdi (OpImm 1), IBinReg "add" Rsi (OpImm 1), IBinReg "sub" Rcx (OpImm 1), IJmp ".Lrt_beq_tail", ILabel ".Lrt_beq_yes", IMov (OpReg Rax) (OpImm 1), IRet, ILabel ".Lrt_beq_no", IMov (OpReg Rax) (OpImm 0)]
+
+-- | `==`：rdi/rsi = 两个字符串 -> rax = 0/1（先比长度，再比字节）。
 strEqFn : NativeFunc
 strEqFn =
   rtFunc
     "str_eq"
     0
-    [IMov (OpReg Rax) (OpMem Rdi 0), ICmp (OpReg Rax) (OpMem Rsi 0), IJcc "jne" ".Lrt_seq_false", IMov (OpReg Rcx) (OpMem Rdi 0), ILeaMem Rdi Rdi 8, ILeaMem Rsi Rsi 8, ITest Rcx Rcx, IJcc "jz" ".Lrt_seq_true", IRepeCmpsb, IJcc "je" ".Lrt_seq_true", IJmp ".Lrt_seq_false", ILabel ".Lrt_seq_true", IMov (OpReg Rax) (OpImm 1), IRet, ILabel ".Lrt_seq_false", IMov (OpReg Rax) (OpImm 0), IRet]
+    [IMov (OpReg Rax) (OpMem Rdi 0), ICmp (OpReg Rax) (OpMem Rsi 0), IJcc "jne" ".Lrt_seq_false", IMov (OpReg Rcx) (OpMem Rdi 0), ILeaMem Rdi Rdi 8, ILeaMem Rsi Rsi 8, ICall (nativeRtLabel "bytes_eq"), IRet, ILabel ".Lrt_seq_false", IMov (OpReg Rax) (OpImm 0)]
 
 -- | `!=`：`str_eq` 的结果取反。
 strNeqFn : NativeFunc
 strNeqFn = rtFunc "str_neq" 0 [ICall (nativeRtLabel "str_eq"), IBin "xor" (OpImm 1), IRet]
 
+-- | 按字节比较公共前缀（`rdi`/`rsi` = 数据起点、`rcx` = 字节数）→ rax = -1 / 0 / 1。
+--   0 表示前缀相同（调用方再比长度）。无符号逐字节，与 `str_compare` 的语义一致。
+bytesCmpFn : NativeFunc
+bytesCmpFn =
+  rtFunc
+    "bytes_cmp"
+    0
+    [ILabel ".Lrt_bcmp_loop", ICmp (OpReg Rcx) (OpImm 8), IJcc "jb" ".Lrt_bcmp_tail", IMov (OpReg R9) (OpMem Rdi 0), IMov (OpReg R10) (OpMem Rsi 0), ICmp (OpReg R9) (OpReg R10), IJcc "jne" ".Lrt_bcmp_tail", IBinReg "add" Rdi (OpImm 8), IBinReg "add" Rsi (OpImm 8), IBinReg "sub" Rcx (OpImm 8), IJmp ".Lrt_bcmp_loop", ILabel ".Lrt_bcmp_tail", ITest Rcx Rcx, IJcc "jz" ".Lrt_bcmp_eq", IMovzx R9 (OpMem Rdi 0), IMovzx R10 (OpMem Rsi 0), ICmp (OpReg R9) (OpReg R10), IJcc "jb" ".Lrt_bcmp_less", IJcc "ja" ".Lrt_bcmp_greater", IBinReg "add" Rdi (OpImm 1), IBinReg "add" Rsi (OpImm 1), IBinReg "sub" Rcx (OpImm 1), IJmp ".Lrt_bcmp_tail", ILabel ".Lrt_bcmp_eq", IMov (OpReg Rax) (OpImm 0), IRet, ILabel ".Lrt_bcmp_less", IMov (OpReg Rax) (OpImm (0 - 1)), IRet, ILabel ".Lrt_bcmp_greater", IMov (OpReg Rax) (OpImm 1)]
+
 -- | `str_compare`：rdi/rsi = 两个字符串 -> rax = -1 / 0 / 1。
 --   语义与 OCaml `compare` 的字符串分支一致：逐字节无符号比较，公共前缀相同则比长度。
---   `cmpsb` 的 flags 反映 `[rsi] - [rdi]`（第二操作数减第一），所以「a < b」对应 `ja`。
 strCompareFn : NativeFunc
 strCompareFn =
   rtFunc
     "str_compare"
     16
-    [IMov (OpReg Rax) (OpMem Rdi 0), IMov (OpMem Rbp (0 - 8)) (OpReg Rax), IMov (OpReg Rax) (OpMem Rsi 0), IMov (OpMem Rbp (0 - 16)) (OpReg Rax), IMov (OpReg Rcx) (OpMem Rbp (0 - 8)), ICmp (OpReg Rcx) (OpMem Rbp (0 - 16)), IJcc "jle" ".Lrt_sc_len_ok", IMov (OpReg Rcx) (OpMem Rbp (0 - 16)), ILabel ".Lrt_sc_len_ok", ILeaMem Rdi Rdi 8, ILeaMem Rsi Rsi 8, ITest Rcx Rcx, IJcc "jz" ".Lrt_sc_prefix", IRepeCmpsb, IJcc "je" ".Lrt_sc_prefix", IJcc "ja" ".Lrt_sc_less", IJmp ".Lrt_sc_greater", ILabel ".Lrt_sc_prefix", IMov (OpReg Rax) (OpMem Rbp (0 - 8)), ICmp (OpReg Rax) (OpMem Rbp (0 - 16)), IJcc "jl" ".Lrt_sc_less", IJcc "jg" ".Lrt_sc_greater", IMov (OpReg Rax) (OpImm 0), IRet, ILabel ".Lrt_sc_less", IMov (OpReg Rax) (OpImm (0 - 1)), IRet, ILabel ".Lrt_sc_greater", IMov (OpReg Rax) (OpImm 1), IRet]
+    [IMov (OpMem Rbp (0 - 8)) (OpReg Rdi), IMov (OpMem Rbp (0 - 16)) (OpReg Rsi), IMov (OpReg Rax) (OpMem Rdi 0), IMov (OpReg Rcx) (OpMem Rsi 0), ICmp (OpReg Rax) (OpReg Rcx), IJcc "jle" ".Lrt_sc_min", IMov (OpReg Rcx) (OpMem Rdi 0), ILabel ".Lrt_sc_min", ILeaMem Rdi Rdi 8, ILeaMem Rsi Rsi 8, ICall (nativeRtLabel "bytes_cmp"), ICmp (OpReg Rax) (OpImm 0), IJcc "jne" ".Lrt_sc_done", IMov (OpReg Rdi) (OpMem Rbp (0 - 8)), IMov (OpReg Rsi) (OpMem Rbp (0 - 16)), IMov (OpReg Rax) (OpMem Rdi 0), ICmp (OpReg Rax) (OpMem Rsi 0), IJcc "jl" ".Lrt_sc_less", IJcc "jg" ".Lrt_sc_greater", IMov (OpReg Rax) (OpImm 0), IJmp ".Lrt_sc_done", ILabel ".Lrt_sc_less", IMov (OpReg Rax) (OpImm (0 - 1)), IJmp ".Lrt_sc_done", ILabel ".Lrt_sc_greater", IMov (OpReg Rax) (OpImm 1), ILabel ".Lrt_sc_done"]
 
 -- | `str_compare` 的结果映射成 Bool（0/1）。
 strCompareFnOf : String -> String -> NativeFunc
@@ -1061,7 +1071,8 @@ fsCodesOf : List (Pair Int Int) -> List Int
 fsCodesOf pairs =
   List.foldl
     (\acc, p => if fsCodeSeen (secondOf p) acc then acc else append acc [secondOf p])
-    [] pairs
+    []
+    pairs
 
 -- | 每个状态码的落点：最后一个省掉 `jmp`（直接落到 `fsDoneLabel`）。
 fsCodeBodyInstrs : List Int -> List Instr
@@ -1069,7 +1080,10 @@ fsCodeBodyInstrs [] = []
 fsCodeBodyInstrs (code :: rest) =
   case rest of
     [] => [ILabel (fsCodeLabel code), IMov (OpReg Rax) (OpImm code)]
-    _ => append [ILabel (fsCodeLabel code), IMov (OpReg Rax) (OpImm code), IJmp fsDoneLabel] (fsCodeBodyInstrs rest)
+    _ =>
+      append
+        [ILabel (fsCodeLabel code), IMov (OpReg Rax) (OpImm code), IJmp fsDoneLabel]
+        (fsCodeBodyInstrs rest)
 
 -- | `rdi` = 负 errno（syscall 返回值）→ rax = 宿主码，并写状态槽。
 --   原始 errno 先写进 `rt_host_errno`，供非 try 符号还原 `<reason>` 文本。
@@ -1078,9 +1092,7 @@ fsFailFn =
   rtFunc
     "fs_fail"
     0
-    (append
-      [INeg Rdi, IMov (OpRip hostErrnoLabel) (OpReg Rdi), IMov (OpReg Rax) (OpImm hostCodeOther)]
-      (append fsFailCmpInstrs (append [IJmp fsDoneLabel] (append (fsCodeBodyInstrs (fsCodesOf hostCodeOfErrno)) [ILabel fsDoneLabel, IMov (OpRip hostStatusLabel) (OpReg Rax)]))))
+    (append [INeg Rdi, IMov (OpRip hostErrnoLabel) (OpReg Rdi), IMov (OpReg Rax) (OpImm hostCodeOther)] (append fsFailCmpInstrs (append [IJmp fsDoneLabel] (append (fsCodeBodyInstrs (fsCodesOf hostCodeOfErrno)) [ILabel fsDoneLabel, IMov (OpRip hostStatusLabel) (OpReg Rax)]))))
 
 -- ---------------------------------------------------------------
 -- 非 try 宿主符号的严格失败
@@ -1100,14 +1112,7 @@ strictReasonCmpInstrs =
 strictReasonBodyInstrs : List Instr
 strictReasonBodyInstrs =
   concatMap
-    (\p =>
-      [
-        ILabel (strictReasonBranch (firstOf p)),
-        ILea R11 (hostReasonLabel (firstOf p)),
-        IMov (OpMem Rbp (nativeSlotOff 3)) (OpReg R11),
-        IMov (OpMem Rbp (nativeSlotOff 4)) (OpImm (strLength (secondOf p))),
-        IJmp ".Lrt_sf_write"
-      ])
+    (\p => [ILabel (strictReasonBranch (firstOf p)), ILea R11 (hostReasonLabel (firstOf p)), IMov (OpMem Rbp (nativeSlotOff 3)) (OpReg R11), IMov (OpMem Rbp (nativeSlotOff 4)) (OpImm (strLength (secondOf p))), IJmp ".Lrt_sf_write"])
     hostReasonTexts
 
 -- | 先装载 `rsi`/`rdx`，再 `write(2, ...)`。
@@ -1125,26 +1130,7 @@ strictFailFn =
   rtFunc
     "fail_strict"
     48
-    (joinInstrs
-      [
-        [
-          IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rsi),
-          IMov (OpMem Rbp (nativeSlotOff 1)) (OpReg Rdx),
-          IMov (OpMem Rbp (nativeSlotOff 2)) (OpReg Rcx),
-          ILea R11 (nativeDataLabel "errno_unknown"),
-          IMov (OpMem Rbp (nativeSlotOff 3)) (OpReg R11),
-          IMov (OpMem Rbp (nativeSlotOff 4)) (OpImm (strLength strictReasonUnknown))
-        ],
-        strictReasonCmpInstrs,
-        [IJmp ".Lrt_sf_write"],
-        strictReasonBodyInstrs,
-        [ILabel ".Lrt_sf_write"],
-        stderrWrite [ILea Rsi (nativeDataLabel "err_prefix"), IMov (OpReg Rdx) (OpImm (strLength errPrefix))],
-        stderrWrite [IMov (OpReg Rsi) (OpMem Rbp (nativeSlotOff 1)), IMov (OpReg Rdx) (OpMem Rbp (nativeSlotOff 2))],
-        stderrWrite [IMov (OpReg R8) (OpMem Rbp (nativeSlotOff 0)), IMov (OpReg Rdx) (OpMem R8 0), ILeaMem Rsi R8 8],
-        stderrWrite [IMov (OpReg Rsi) (OpMem Rbp (nativeSlotOff 3)), IMov (OpReg Rdx) (OpMem Rbp (nativeSlotOff 4))],
-        [IMov (OpReg Rax) (OpImm (sysNr "exit")), IMov (OpReg Rdi) (OpImm 2), ISyscall]
-      ])
+    (joinInstrs [[IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rsi), IMov (OpMem Rbp (nativeSlotOff 1)) (OpReg Rdx), IMov (OpMem Rbp (nativeSlotOff 2)) (OpReg Rcx), ILea R11 (nativeDataLabel "errno_unknown"), IMov (OpMem Rbp (nativeSlotOff 3)) (OpReg R11), IMov (OpMem Rbp (nativeSlotOff 4)) (OpImm (strLength strictReasonUnknown))], strictReasonCmpInstrs, [IJmp ".Lrt_sf_write"], strictReasonBodyInstrs, [ILabel ".Lrt_sf_write"], stderrWrite [ILea Rsi (nativeDataLabel "err_prefix"), IMov (OpReg Rdx) (OpImm (strLength errPrefix))], stderrWrite [IMov (OpReg Rsi) (OpMem Rbp (nativeSlotOff 1)), IMov (OpReg Rdx) (OpMem Rbp (nativeSlotOff 2))], stderrWrite [IMov (OpReg R8) (OpMem Rbp (nativeSlotOff 0)), IMov (OpReg Rdx) (OpMem R8 0), ILeaMem Rsi R8 8], stderrWrite [IMov (OpReg Rsi) (OpMem Rbp (nativeSlotOff 3)), IMov (OpReg Rdx) (OpMem Rbp (nativeSlotOff 4))], [IMov (OpReg Rax) (OpImm (sysNr "exit")), IMov (OpReg Rdi) (OpImm 2), ISyscall]])
 
 -- | 非 try 包装：跑 `try*` 叶子，状态槽非 0 就报错退出，否则原样返回结果。
 --   参数约定与目标叶子一致（path 在 `rdi`）；只保存第一个实参用于错误文本。
@@ -1152,29 +1138,18 @@ strictWrapFn : String -> String -> String -> Int -> NativeFunc
 strictWrapFn name target opLabel prefixLen =
   let
     okLabel = ".Lrt_" ++ name ++ "_ok"
-  in
-    rtFunc
-      name
-      16
-      [
-        IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi),
-        ICall (nativeRtLabel target),
-        IMov (OpReg R9) (OpRip hostStatusLabel),
-        ITest R9 R9,
-        IJcc "jz" okLabel,
-        IMov (OpReg Rdi) (OpRip hostErrnoLabel),
-        IMov (OpReg Rsi) (OpMem Rbp (nativeSlotOff 0)),
-        ILea Rdx (nativeDataLabel opLabel),
-        IMov (OpReg Rcx) (OpImm prefixLen),
-        ICall (nativeRtLabel "fail_strict"),
-        ILabel okLabel
-      ]
+  in rtFunc
+    name
+    16
+    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), ICall (nativeRtLabel target), IMov (OpReg R9) (OpRip hostStatusLabel), ITest R9 R9, IJcc "jz" okLabel, IMov (OpReg Rdi) (OpRip hostErrnoLabel), IMov (OpReg Rsi) (OpMem Rbp (nativeSlotOff 0)), ILea Rdx (nativeDataLabel opLabel), IMov (OpReg Rcx) (OpImm prefixLen), ICall (nativeRtLabel "fail_strict"), ILabel okLabel]
 
 strictReadFileFn : NativeFunc
-strictReadFileFn = strictWrapFn "strict_read_file" "try_read_file" "op_readFile" (strLength "readFile: ")
+strictReadFileFn =
+  strictWrapFn "strict_read_file" "try_read_file" "op_readFile" (strLength "readFile: ")
 
 strictWriteFileFn : NativeFunc
-strictWriteFileFn = strictWrapFn "strict_write_file" "try_write_file" "op_writeFile" (strLength "writeFile: ")
+strictWriteFileFn =
+  strictWrapFn "strict_write_file" "try_write_file" "op_writeFile" (strLength "writeFile: ")
 
 -- `dtp_writeFileAtomic` 直接重抛 `Sys_error`（无操作名前缀），首行形如 `<tmp>: <reason>`；
 -- 这里同样不加前缀，路径取调用方给的目标路径（tmp 名由本运行时生成）。
@@ -1186,7 +1161,8 @@ strictReadDirFn : NativeFunc
 strictReadDirFn = strictWrapFn "strict_read_dir" "tryReadDir" "op_readDir" (strLength "readDir: ")
 
 strictIsDirFn : NativeFunc
-strictIsDirFn = strictWrapFn "strict_is_dir" "try_is_dir" "op_isDirectory" (strLength "isDirectory: ")
+strictIsDirFn =
+  strictWrapFn "strict_is_dir" "try_is_dir" "op_isDirectory" (strLength "isDirectory: ")
 
 strictMakeDirFn : NativeFunc
 strictMakeDirFn = strictWrapFn "strict_make_dir" "try_make_dir" "op_makeDir" (strLength "makeDir: ")
@@ -1386,7 +1362,11 @@ dirNamesFn =
 
 -- | `rdi` = fd → rax = 0（忽略关闭失败）。
 dirCloseFn : NativeFunc
-dirCloseFn = rtFunc "dir_close" 0 [IMov (OpReg Rax) (OpImm (sysNr "close")), ISyscall, IMov (OpReg Rax) (OpImm 0)]
+dirCloseFn =
+  rtFunc
+    "dir_close"
+    0
+    [IMov (OpReg Rax) (OpImm (sysNr "close")), ISyscall, IMov (OpReg Rax) (OpImm 0)]
 
 -- ---------------------------------------------------------------
 -- 宿主层：进程（fork / execve / wait4）
@@ -1531,7 +1511,8 @@ initTimeoutFn =
 -- | SIGALRM 的 restorer：`rt_sigreturn`（静态无 libc 的必备桩；handler 直接 exit，
 --   正常不会走到这里）。
 sigreturnStubFn : NativeFunc
-sigreturnStubFn = rtRawFunc "sigreturn_stub" [IMov (OpReg Rax) (OpImm (sysNr "rt_sigreturn")), ISyscall]
+sigreturnStubFn =
+  rtRawFunc "sigreturn_stub" [IMov (OpReg Rax) (OpImm (sysNr "rt_sigreturn")), ISyscall]
 
 -- | SIGALRM handler：逐个收掉在跑的子进程组 → 写固定文本 → exit 2。
 --   只做 async-signal-safe 的事（getpgid / kill / write / exit_group），不分配。
@@ -1564,7 +1545,7 @@ envFilterFn =
 export nativeRtFuncs : List NativeFunc
 nativeRtFuncs =
   append
-    [intBinary "add" "add", intBinary "sub" "sub", intBinary "mul" "imul", divFn, intBinary "bit_and" "and", intBinary "bit_or" "or", intBinary "bit_xor" "xor", bitNotFn, bitShlFn, bitShrFn, intCompare "eq_int" "sete", intCompare "neq_int" "setne", intCompare "lt_int" "setl", intCompare "le_int" "setle", intCompare "gt_int" "setg", intCompare "ge_int" "setge", natAddFn, natSubFn, natMulFn, natDivFn, natToIntFn, natFromIntFn, natSuccFn, obsZeroFn "obs_level", obsZeroFn "obs_log", obsZero2Fn "obs_counter", obsZeroFn "obs_mark", obsZero2Fn "obs_span_begin", obsZeroFn "obs_span_end", obsZero2Fn "obs_sample_start", obsZeroFn "obs_sample_stop", obsSpanFn, obsSpanLabFn, debugOnFn, debugLineFn, strAllocFn, strLengthFn, strConcatFn, strEqFn, strNeqFn, strCompareFn, strCompareFnOf "str_lt" "setl", strCompareFnOf "str_le" "setle", strCompareFnOf "str_gt" "setg", strCompareFnOf "str_ge" "setge", strFromIntFn, strAtFn, strSubstringFn, strHashFn, effectIdFn, strShowFn, printIntFn, printBoolFn, printStrFn, assertFn, primFailFn, todoFn, trapMsgFn, trapAssertFn, trapTodoFn, allocFn, allocLeafFn, allocPinnedFn, applyFn, applyExactFn, applyShimFn, strFromBytesFn, strFromCFn, strOneCharFn, strEmptyFn, getenvFn, getcwdFn, execPathFn, nowUsFn, sleepUsFn, isTtyFn, hostStatusFn, cleanupPushFn, cleanupPopFn, fsFailFn, strictFailFn, strictReadFileFn, strictWriteFileFn, strictWriteFileAtomicFn, strictReadDirFn, strictIsDirFn, strictMakeDirFn, strictRemoveFileFn, strToCFn, strToC2Fn, strCopyIntoFn, cStrCpyFn, u64ToDecFn, statPathFn, lstatPathFn, fileExistsFn, fileMtimeFn, fileSizeFn, tryIsDirFn, tryReadFileFn, tryWriteFileFn, tryWriteFileAtomicFn, tryMakeDirFn, tryMakeDirExclusiveFn, tryRemoveFileFn, tryRenameFn, trySymlinkFn, removeTreeFn, tryRemoveTreeFn, dirOpenFn, dirNamesFn, dirCloseFn, childPushFn, childDropFn, sigBlockFn, sigUnblockFn, cmdRunShFn, spawnExecFn, waitPidFn, exitWithFn, trapImpossibleFn, trapDivZeroFn, trapArrayOobFn, trapOomFn, trapPathLongFn, trapMemLimitFn, initMemFn, initCpusFn, initTimeoutFn, envLookupFn, parseU64Fn, cgroupCpusFn, envFilterFn, sigreturnStubFn, sigalrmFn, arrayEmptyFn, arrayLengthFn, arrayGetFn, arraySetFn, arrayMakeFn, trapRmtreeDeepFn, trapStackOverflowFn, mRunEffFn, pow2CeilFn, eraseFn, effNewRefFn, effReadRefFn, effWriteRefFn, effPrintFn "prim_eff_print" 1, effPrintFn "prim_eff_eprint" 2, effExitFn, floatFromIntFn, intFromFloatFn, floatBinFn "float_add" "add", floatBinFn "float_sub" "sub", floatBinFn "float_mul" "mul", floatBinFn "float_div" "div", floatCmpFn "float_eq" (floatCmpOrdered "sete"), floatCmpFn "float_neq" floatCmpNeq, floatCmpFn "float_lt" (floatCmpOrdered "setb"), floatCmpFn "float_le" (floatCmpOrdered "setbe"), floatCmpFn "float_gt" (floatCmpOrdered "seta"), floatCmpFn "float_ge" (floatCmpOrdered "setae"), floatAbsFn, floatSqrtFn]
+    [intBinary "add" "add", intBinary "sub" "sub", intBinary "mul" "imul", divFn, intBinary "bit_and" "and", intBinary "bit_or" "or", intBinary "bit_xor" "xor", bitNotFn, bitShlFn, bitShrFn, intCompare "eq_int" "sete", intCompare "neq_int" "setne", intCompare "lt_int" "setl", intCompare "le_int" "setle", intCompare "gt_int" "setg", intCompare "ge_int" "setge", natAddFn, natSubFn, natMulFn, natDivFn, natToIntFn, natFromIntFn, natSuccFn, obsZeroFn "obs_level", obsZeroFn "obs_log", obsZero2Fn "obs_counter", obsZeroFn "obs_mark", obsZero2Fn "obs_span_begin", obsZeroFn "obs_span_end", obsZero2Fn "obs_sample_start", obsZeroFn "obs_sample_stop", obsSpanFn, obsSpanLabFn, debugOnFn, debugLineFn, strAllocFn, strLengthFn, strConcatFn, bytesEqFn, bytesCmpFn, strEqFn, strNeqFn, strCompareFn, strCompareFnOf "str_lt" "setl", strCompareFnOf "str_le" "setle", strCompareFnOf "str_gt" "setg", strCompareFnOf "str_ge" "setge", strFromIntFn, strAtFn, strSubstringFn, strHashFn, effectIdFn, strShowFn, printIntFn, printBoolFn, printStrFn, assertFn, primFailFn, todoFn, trapMsgFn, trapAssertFn, trapTodoFn, allocFn, allocLeafFn, allocPinnedFn, applyFn, applyExactFn, applyShimFn, strFromBytesFn, strFromCFn, strOneCharFn, strEmptyFn, getenvFn, getcwdFn, execPathFn, nowUsFn, sleepUsFn, isTtyFn, hostStatusFn, cleanupPushFn, cleanupPopFn, fsFailFn, strictFailFn, strictReadFileFn, strictWriteFileFn, strictWriteFileAtomicFn, strictReadDirFn, strictIsDirFn, strictMakeDirFn, strictRemoveFileFn, strToCFn, strToC2Fn, strCopyIntoFn, cStrCpyFn, u64ToDecFn, statPathFn, lstatPathFn, fileExistsFn, fileMtimeFn, fileSizeFn, tryIsDirFn, tryReadFileFn, tryWriteFileFn, tryWriteFileAtomicFn, tryMakeDirFn, tryMakeDirExclusiveFn, tryRemoveFileFn, tryRenameFn, trySymlinkFn, removeTreeFn, tryRemoveTreeFn, dirOpenFn, dirNamesFn, dirCloseFn, childPushFn, childDropFn, sigBlockFn, sigUnblockFn, cmdRunShFn, spawnExecFn, waitPidFn, exitWithFn, trapImpossibleFn, trapDivZeroFn, trapArrayOobFn, trapOomFn, trapPathLongFn, trapMemLimitFn, initMemFn, initCpusFn, initTimeoutFn, envLookupFn, parseU64Fn, cgroupCpusFn, envFilterFn, sigreturnStubFn, sigalrmFn, arrayEmptyFn, arrayLengthFn, arrayGetFn, arraySetFn, arrayMakeFn, trapRmtreeDeepFn, trapStackOverflowFn, mRunEffFn, pow2CeilFn, eraseFn, effNewRefFn, effReadRefFn, effWriteRefFn, effPrintFn "prim_eff_print" 1, effPrintFn "prim_eff_eprint" 2, effExitFn, floatFromIntFn, intFromFloatFn, floatBinFn "float_add" "add", floatBinFn "float_sub" "sub", floatBinFn "float_mul" "mul", floatBinFn "float_div" "div", floatCmpFn "float_eq" (floatCmpOrdered "sete"), floatCmpFn "float_neq" floatCmpNeq, floatCmpFn "float_lt" (floatCmpOrdered "setb"), floatCmpFn "float_le" (floatCmpOrdered "setbe"), floatCmpFn "float_gt" (floatCmpOrdered "seta"), floatCmpFn "float_ge" (floatCmpOrdered "setae"), floatAbsFn, floatSqrtFn]
     nativeGcFuncs
 
 -- | IR 符号 -> 运行时函数标签。白名单之外返回 Nothing（Module 报 NativeUnsupported）。
@@ -1614,34 +1595,76 @@ hostLeafGroups =
   [
     Pair "cleanup_pop" ["prim_cleanupPop"],
     Pair "cleanup_push" ["prim_cleanupPush"],
-    Pair "exec_path" ["prim_eff_execPath", "@vuna@prim_eff_execPath", "prim_eff_execPath_host", "@vuna@prim_eff_execPath_host", "@vuna@host@execPath"],
+    Pair
+      "exec_path"
+      ["prim_eff_execPath", "@vuna@prim_eff_execPath", "prim_eff_execPath_host", "@vuna@prim_eff_execPath_host", "@vuna@host@execPath"],
     Pair "exit_with" ["prim_eff_exit_process_host", "@vuna@prim_eff_exit_process_host"],
-    Pair "file_exists" ["@vuna@host@fileExists", "prim_eff_fileExists", "@vuna@prim_eff_fileExists", "prim_eff_fileExists_host", "@vuna@prim_eff_fileExists_host"],
-    Pair "file_mtime" ["@vuna@host@fileMtime", "prim_eff_fileMtime", "@vuna@prim_eff_fileMtime", "prim_eff_fileMtime_host", "@vuna@prim_eff_fileMtime_host"],
-    Pair "file_size" ["@vuna@host@fileSize", "prim_eff_fileSize", "@vuna@prim_eff_fileSize", "prim_eff_fileSize_host", "@vuna@prim_eff_fileSize_host"],
-    Pair "getArgs" ["prim_eff_getArgs", "@vuna@prim_eff_getArgs", "prim_eff_getArgs_host", "@vuna@prim_eff_getArgs_host", "@vuna@host@getArgs", "prim_eff_getArgs_process_host", "@vuna@prim_eff_getArgs_process_host"],
-    Pair "getcwd" ["prim_eff_getcwd", "@vuna@prim_eff_getcwd", "prim_eff_getcwd_host", "@vuna@prim_eff_getcwd_host", "@vuna@host@getcwd"],
-    Pair "getenv" ["prim_eff_getenv", "@vuna@prim_eff_getenv", "prim_eff_getenv_host", "@vuna@prim_eff_getenv_host", "@vuna@host@getenv"],
+    Pair
+      "file_exists"
+      ["@vuna@host@fileExists", "prim_eff_fileExists", "@vuna@prim_eff_fileExists", "prim_eff_fileExists_host", "@vuna@prim_eff_fileExists_host"],
+    Pair
+      "file_mtime"
+      ["@vuna@host@fileMtime", "prim_eff_fileMtime", "@vuna@prim_eff_fileMtime", "prim_eff_fileMtime_host", "@vuna@prim_eff_fileMtime_host"],
+    Pair
+      "file_size"
+      ["@vuna@host@fileSize", "prim_eff_fileSize", "@vuna@prim_eff_fileSize", "prim_eff_fileSize_host", "@vuna@prim_eff_fileSize_host"],
+    Pair
+      "getArgs"
+      ["prim_eff_getArgs", "@vuna@prim_eff_getArgs", "prim_eff_getArgs_host", "@vuna@prim_eff_getArgs_host", "@vuna@host@getArgs", "prim_eff_getArgs_process_host", "@vuna@prim_eff_getArgs_process_host"],
+    Pair
+      "getcwd"
+      ["prim_eff_getcwd", "@vuna@prim_eff_getcwd", "prim_eff_getcwd_host", "@vuna@prim_eff_getcwd_host", "@vuna@host@getcwd"],
+    Pair
+      "getenv"
+      ["prim_eff_getenv", "@vuna@prim_eff_getenv", "prim_eff_getenv_host", "@vuna@prim_eff_getenv_host", "@vuna@host@getenv"],
     Pair "host_status_get" ["@vuna@prim_eff_hostStatus"],
     Pair "is_tty" ["@vuna@host@isTty"],
     Pair "now_us" ["effTimeUs", "effTimeUs_host"],
     Pair "prim_eff_eprint" ["prim_eff_eprint", "@vuna@prim_eff_eprint"],
-    Pair "prim_eff_exit" ["@vuna@host@exitOp", "prim_eff_exitOp_host", "@vuna@prim_eff_exitOp_host", "prim_eff_exit", "@vuna@prim_eff_exit"],
-    Pair "prim_eff_new_ref" ["@vuna@host@newRef", "prim_eff_newRef_host", "@vuna@prim_eff_newRef_host", "prim_eff_newRef", "@vuna@prim_eff_newRef"],
-    Pair "prim_eff_print" ["@vuna@host@print", "prim_eff_print_host", "@vuna@prim_eff_print_host", "prim_eff_print", "@vuna@prim_eff_print"],
-    Pair "prim_eff_read_ref" ["@vuna@host@readRef", "prim_eff_readRef_host", "@vuna@prim_eff_readRef_host", "prim_eff_readRef", "@vuna@prim_eff_readRef"],
-    Pair "prim_eff_write_ref" ["@vuna@host@writeRef", "prim_eff_writeRef_host", "@vuna@prim_eff_writeRef_host", "prim_eff_writeRef", "@vuna@prim_eff_writeRef"],
-    Pair "sleep_us" ["prim_eff_sleep", "@vuna@prim_eff_sleep", "prim_eff_sleep_host", "@vuna@prim_eff_sleep_host", "@vuna@host@sleep"],
+    Pair
+      "prim_eff_exit"
+      ["@vuna@host@exitOp", "prim_eff_exitOp_host", "@vuna@prim_eff_exitOp_host", "prim_eff_exit", "@vuna@prim_eff_exit"],
+    Pair
+      "prim_eff_new_ref"
+      ["@vuna@host@newRef", "prim_eff_newRef_host", "@vuna@prim_eff_newRef_host", "prim_eff_newRef", "@vuna@prim_eff_newRef"],
+    Pair
+      "prim_eff_print"
+      ["@vuna@host@print", "prim_eff_print_host", "@vuna@prim_eff_print_host", "prim_eff_print", "@vuna@prim_eff_print"],
+    Pair
+      "prim_eff_read_ref"
+      ["@vuna@host@readRef", "prim_eff_readRef_host", "@vuna@prim_eff_readRef_host", "prim_eff_readRef", "@vuna@prim_eff_readRef"],
+    Pair
+      "prim_eff_write_ref"
+      ["@vuna@host@writeRef", "prim_eff_writeRef_host", "@vuna@prim_eff_writeRef_host", "prim_eff_writeRef", "@vuna@prim_eff_writeRef"],
+    Pair
+      "sleep_us"
+      ["prim_eff_sleep", "@vuna@prim_eff_sleep", "prim_eff_sleep_host", "@vuna@prim_eff_sleep_host", "@vuna@host@sleep"],
     Pair "spawn_self" ["prim_eff_spawn", "@vuna@prim_eff_spawn"],
-    Pair "strict_is_dir" ["prim_eff_isDirectory", "@vuna@prim_eff_isDirectory", "prim_eff_isDirectory_host", "@vuna@prim_eff_isDirectory_host", "@vuna@host@isDirectory"],
-    Pair "strict_make_dir" ["prim_eff_makeDir", "@vuna@prim_eff_makeDir", "prim_eff_makeDir_host", "@vuna@prim_eff_makeDir_host", "@vuna@host@makeDir"],
-    Pair "strict_read_dir" ["prim_eff_readDir", "@vuna@prim_eff_readDir", "prim_eff_readDir_host", "@vuna@prim_eff_readDir_host", "@vuna@host@readDir"],
-    Pair "strict_read_file" ["prim_eff_readFile", "@vuna@prim_eff_readFile", "prim_eff_readFile_host", "@vuna@prim_eff_readFile_host", "@vuna@host@readFile"],
-    Pair "strict_remove_file" ["prim_eff_removeFile", "@vuna@prim_eff_removeFile", "prim_eff_removeFile_host", "@vuna@prim_eff_removeFile_host", "@vuna@host@removeFile"],
-    Pair "strict_write_file" ["prim_eff_writeFile", "@vuna@prim_eff_writeFile", "prim_eff_writeFile_host", "@vuna@prim_eff_writeFile_host", "@vuna@host@writeFile"],
-    Pair "strict_write_file_atomic" ["prim_eff_writeFileAtomic", "@vuna@prim_eff_writeFileAtomic", "prim_eff_writeFileAtomic_host", "@vuna@prim_eff_writeFileAtomic_host", "@vuna@host@writeFileAtomic"],
+    Pair
+      "strict_is_dir"
+      ["prim_eff_isDirectory", "@vuna@prim_eff_isDirectory", "prim_eff_isDirectory_host", "@vuna@prim_eff_isDirectory_host", "@vuna@host@isDirectory"],
+    Pair
+      "strict_make_dir"
+      ["prim_eff_makeDir", "@vuna@prim_eff_makeDir", "prim_eff_makeDir_host", "@vuna@prim_eff_makeDir_host", "@vuna@host@makeDir"],
+    Pair
+      "strict_read_dir"
+      ["prim_eff_readDir", "@vuna@prim_eff_readDir", "prim_eff_readDir_host", "@vuna@prim_eff_readDir_host", "@vuna@host@readDir"],
+    Pair
+      "strict_read_file"
+      ["prim_eff_readFile", "@vuna@prim_eff_readFile", "prim_eff_readFile_host", "@vuna@prim_eff_readFile_host", "@vuna@host@readFile"],
+    Pair
+      "strict_remove_file"
+      ["prim_eff_removeFile", "@vuna@prim_eff_removeFile", "prim_eff_removeFile_host", "@vuna@prim_eff_removeFile_host", "@vuna@host@removeFile"],
+    Pair
+      "strict_write_file"
+      ["prim_eff_writeFile", "@vuna@prim_eff_writeFile", "prim_eff_writeFile_host", "@vuna@prim_eff_writeFile_host", "@vuna@host@writeFile"],
+    Pair
+      "strict_write_file_atomic"
+      ["prim_eff_writeFileAtomic", "@vuna@prim_eff_writeFileAtomic", "prim_eff_writeFileAtomic_host", "@vuna@prim_eff_writeFileAtomic_host", "@vuna@host@writeFileAtomic"],
     Pair "tryReadDir" ["@vuna@host@tryReadDir"],
-    Pair "tryRunIn" ["@vuna@host@tryRunIn", "prim_eff_runIn", "@vuna@prim_eff_runIn", "prim_eff_runIn_host", "@vuna@prim_eff_runIn_host", "@vuna@host@runIn"],
+    Pair
+      "tryRunIn"
+      ["@vuna@host@tryRunIn", "prim_eff_runIn", "@vuna@prim_eff_runIn", "prim_eff_runIn_host", "@vuna@prim_eff_runIn_host", "@vuna@host@runIn"],
     Pair "try_is_dir" ["@vuna@host@tryIsDirectory"],
     Pair "try_make_dir" ["@vuna@host@tryMakeDir"],
     Pair "try_make_dir_excl" ["@vuna@host@tryMakeDirExclusive"],
@@ -1671,11 +1694,9 @@ nativeRtTargetBase "@ir@m@runEff" = Just (nativeRtLabel "m_run_eff")
 nativeRtTargetBase "prim_erase" = Just (nativeRtLabel "prim_erase")
 nativeRtTargetBase "@vuna@prim@toObj" = Just (nativeRtLabel "prim_erase")
 nativeRtTargetBase "@vuna@prim@fromObj" = Just (nativeRtLabel "prim_erase")
-
 -- 宿主：环境 / 入参 / 目录 / 时钟 / tty（`_host` 与 `@vuna@host@*` 是同一组叶子）。
 -- 宿主：文件系统（try* 是真实叶子；`prim_eff_*` / `_host` / `@vuna@host@*` 是同一实现）。
 -- 宿主：进程（runIn / spawn / wait / exit）。`spawn` 的 argv[0] = 本进程路径。
-
 nativeRtTargetBase "floatFromInt" = Just (nativeRtLabel "float_from_int")
 nativeRtTargetBase "intFromFloat" = Just (nativeRtLabel "int_from_float")
 nativeRtTargetBase "floatAbs" = Just (nativeRtLabel "float_abs")
@@ -1723,7 +1744,6 @@ nativeRtTargetBase "@vuna@obs@spanLab" = Just (nativeRtLabel "obs_span_lab_run")
 nativeRtTargetBase "@vuna@debug@on" = Just (nativeRtLabel "debug_on")
 nativeRtTargetBase "@vuna@debug@line" = Just (nativeRtLabel "debug_line")
 nativeRtTargetBase _ = Nothing
-
 
 export nativeRtTarget : String -> Maybe String
 nativeRtTarget sym =

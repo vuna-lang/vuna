@@ -202,7 +202,8 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
   bit_shl/bit_shr`（63-bit 语义；移位计数 `n < 0 || n >= 63` → 0，`bit_shr` 保留 bit 62）；比较返回 0/1。
 - `Nat`：饱和加法/乘法、下溢到 0 的减法、除零 trap、`natToInt` / `natFromInt` / `natSucc`。
 - `String`：`str_alloc`（bump 分配，含长度头）、`str_concat`、`str_eq` / `str_neq`
-  （先比长度，再 `repe cmpsb`）、`str_length`、`str_at`（越界 -1，与 `dtp_strAt` 一致）、
+  （先比长度，再走 `bytes_eq`：8 字节字比较 + 字节尾部）、`str_compare`（先走 `bytes_cmp`
+  比公共前缀，再比长度）、`str_length`、`str_at`（越界 -1，与 `dtp_strAt` 一致）、
   `str_substring`（`start`/`len` 夹取到 `[0, n]`，与 `dtp_substring` 一致）、
   `str_hash`（`((h*33)+c) land 1023`，与 `dtp_strHash` 一致）、`str_from_int`（含负号）、
   `show_str`（引号 + `\"` `\\` `\n` `\t` `\r` 转义，与 `dt_show_string` 一致）。
