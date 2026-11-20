@@ -171,6 +171,18 @@ nativeStackTopLabel = "rt_stack_top"
 export nativeCleanupHeadLabel : String
 nativeCleanupHeadLabel = "rt_cleanups"
 
+-- | 零参顶层定义的缓存区（CAF）：`[caf_begin, caf_end)` 是连续的 8 字节槽，
+--   每个零参定义一格，`_start` 求值一次后写入；GC 按这段区间扫根。
+export nativeCafBeginLabel : String
+nativeCafBeginLabel = "rt_caf_begin"
+
+export nativeCafEndLabel : String
+nativeCafEndLabel = "rt_caf_end"
+
+-- | 单个零参定义的缓存槽标签（与 `nativeName` 同编码）。
+export nativeCafCellLabel : String -> String
+nativeCafCellLabel name = "rt_caf_${nativeName name}"
+
 -- ---------------------------------------------------------------
 -- 函数框架
 -- ---------------------------------------------------------------

@@ -556,6 +556,29 @@ hasNativeClosure _ [] = False
 hasNativeClosure label (c :: rest) =
   if c.ncLabel == label then True else hasNativeClosure label rest
 
+-- | 零参顶层定义的 CAF 槽：每个 `IrDef` arity 0 一格，`_start` 求值一次后写入；
+--   GC 按 `[rt_caf_begin, rt_caf_end)` 扫根（见 `Gc.gcCollectFn`）。
+cafBssOf : List IrDef -> List NativeBss
+cafBssOf defs =
+  append
+    [NativeBss nativeCafBeginLabel 0 8]
+    (append (concatMap cafCellOf defs) [NativeBss nativeCafEndLabel 0 8])
+
+cafCellOf : IrDef -> List NativeBss
+cafCellOf d = if isCafDef d then [NativeBss (nativeCafCellLabel (irDefName d)) 8 8] else []
+
+-- | 有体的零参定义（extern 的 `irDefArity` 也是 0，但没有可求值的体）。
+isCafDef : IrDef -> Bool
+isCafDef d =
+  case irDefBody d of
+    Just _ => irDefArity d == 0
+    Nothing => False
+
+-- | 入口要预先求值的零参定义（`main` 由入口单独调用）。
+cafNamesOf : String -> List IrDef -> List String
+cafNamesOf mainName defs =
+  concatMap (\d => if isCafDef d && irDefName d /= mainName then [irDefName d] else []) defs
+
 -- | 把「顶层函数 / 运行时符号」求值成闭包对象：`[code][arity]`（无捕获）。
 --   无捕获闭包是只读静态对象，引用点只 `lea`，不分配堆。
 genValueClosure : FGen -> List String -> String -> Int -> String -> NRes (Pair (List Instr) FGen)
@@ -850,7 +873,7 @@ genExprAt fuel st isTail ir =
       IrGlobal name =>
         case findDef name st.fgDefs of
           Nothing => internal "undefined global in native codegen: ${name}"
-          Just d => if irDefArity d == 0 then if isTail then NOk (Pair (tailCallSlotsInstrs (nativeFuncLabel name) []) st) else NOk (Pair [ICall (nativeFuncLabel name)] st) else genValueClosure st (modulePathOf name) (nativeGlobalValueLabel name) (irDefArity d) (nativeFuncLabel name)
+          Just d => if isCafDef d then NOk (Pair [IMov (OpReg Rax) (OpRip (nativeCafCellLabel name))] st) else if irDefArity d == 0 then if isTail then NOk (Pair (tailCallSlotsInstrs (nativeFuncLabel name) []) st) else NOk (Pair [ICall (nativeFuncLabel name)] st) else genValueClosure st (modulePathOf name) (nativeGlobalValueLabel name) (irDefArity d) (nativeFuncLabel name)
       IrInt n => if n < 0 - 4611686018427387903 - 1 || n > 4611686018427387903 then unsupported "native target: integer literal outside the 63-bit range" else NOk (Pair [IMov (OpReg Rax) (OpImm n)] st)
       IrStr s =>
         case poolLabelOf s st.fgPool of
@@ -1631,8 +1654,8 @@ entryShowKind (IrRt s) =
     _ => Nothing
 entryShowKind _ = Nothing
 
-startFunc : Bool -> String -> String -> Maybe String -> List String -> NativeFunc
-startFunc printResult kind mainName runMainM handlers =
+startFunc : Bool -> String -> String -> Maybe String -> List String -> List String -> NativeFunc
+startFunc printResult kind mainName runMainM handlers cafs =
   let
     -- 初始栈：`[rsp]=argc`、`[rsp+8]=argv[0]…`、`argv+8*(argc+1)=envp[0]…`。
     -- 必须在 `and rsp,-16` 之前取。
@@ -1681,10 +1704,16 @@ startFunc printResult kind mainName runMainM handlers =
     markHost : String -> List Instr
     markHost h = [IMov (OpReg Rdi) (OpReg Rax), ICall (nativeFuncLabel h)]
     handlerPart = concatMap markHost handlers
+    -- 零参顶层定义在入口求值一次：值写回各自的 `.bss` 槽（`IrGlobal` 引用只读槽）。
+    -- 依赖顺序由 `cpsOrdered` 的 SCC 序保证（被依赖的定义在前）。
+    cafInit =
+      concatMap
+        (\n => [ICall (nativeFuncLabel n), IMov (OpRip (nativeCafCellLabel n)) (OpReg Rax)])
+        cafs
     callMain =
       append
-        [IBinReg "and" Rsp (OpImm (0 - 16)), IMov (OpRip nativeStackTopLabel) (OpReg Rsp), ICall (nativeFuncLabel mainName)]
-        (append handlerPart runPart)
+        [IBinReg "and" Rsp (OpImm (0 - 16)), IMov (OpRip nativeStackTopLabel) (OpReg Rsp)]
+        (append cafInit (append [ICall (nativeFuncLabel mainName)] (append handlerPart runPart)))
     printer =
       if printResult then
         case kind of
@@ -1998,7 +2027,7 @@ build program printResult =
                       NFail err => NativeRejected (nativeAuditEnrich err cpsOrdered)
                       NOk pair =>
                         let
-                          start = startFunc printResult kind mainName runMainM (irEntryHandlersOf e)
+                          start = startFunc printResult kind mainName runMainM (irEntryHandlersOf e) (cafNamesOf mainName cpsOrdered)
                           moduleLits = map (\p => Pair (split "." (firstOf p)) (poolItems (secondOf p))) pools
                           statics = dedupeClosures (secondOf (secondOf pair))
-                        in NativeOk (NativeProgram nativeRodata nativeBss statics (dedupeFuncs (append (nativeBridgeFuncs (irProgSharedOf program).irSharedListFam unit.irUnitTyDecls) (append nativeRtFuncs (append (firstOf pair) [start])))) moduleLits)
+                        in NativeOk (NativeProgram nativeRodata (append nativeBss (cafBssOf cpsOrdered)) statics (dedupeFuncs (append (nativeBridgeFuncs (irProgSharedOf program).irSharedListFam unit.irUnitTyDecls) (append nativeRtFuncs (append (firstOf pair) [start])))) moduleLits)

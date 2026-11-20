@@ -150,7 +150,7 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
 | --- | --- | --- |
 | `IrVar` / `IrInt` / `IrBool` / `IrCast` | 支持 | `IrInt` 检查 63-bit 范围 |
 | `IrStr` | 支持 | `.rodata` 里 `{.quad len; .ascii bytes}`，求值成 `lea`（内容去重，首现顺序编号） |
-| `IrGlobal` | 支持 | 零参引用生成 `call vuna_<name>`（结果位置时 `jmp`，§3）；作为函数值传递时生成闭包（wrapper） |
+| `IrGlobal` | 支持 | 零参定义是 **CAF**：`_start` 求值一次写进 `.bss` 缓存槽，引用只读槽（`rt_caf_<name>`）；作为函数值传递时生成闭包（wrapper） |
 | `IrLet` | 支持（≤1 运行时 binder） | 多运行时 binder（boxed case 降级）拒绝；body 按结果位置生成 |
 | `IrApp` | 支持 | 饱和顶层直调；结果位置且来参区够用时走尾调用（§3）；部分 / 过度应用、动态 head 与运行时目标走 `rt_apply` |
 | `IrIf` | 支持 | 条件按 0/1 判 |
@@ -188,8 +188,10 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
 - List 桥接符号（`strUnpack` / `strPack` / `strConcatMany` / `strSubstTemplate`）支持：
   函数体在 `Native.Module` 按 List 族的 tag 生成，复用对象表示（`head` 是未装箱 Int；
   两遍扫描：先算长度，再分配填充）。
-- **零参顶层定义**编成零参函数，每次引用都 `call`。零参定义必须保持纯值语义（重复求值
-  等价）；带副作用的值要走 `Eff` 动作，不能藏在零参定义里。
+- **零参顶层定义**是 CAF：`_start` 按 SCC 序（被依赖者在前）求值一次，结果写进连续的
+  `.bss` 缓存槽 `rt_caf_<name>`；引用只读槽。槽区间 `[rt_caf_begin, rt_caf_end)` 由 GC
+  当根扫描（GC 非移动，值一次写入后稳定）。零参定义仍必须是纯值：程序启动即求值，
+  带副作用的值要走 `Eff` 动作。
 - 入口 `main` 必须是零参值；`main : Eff r a` 支持：入口先按 `irEntryHandlersOf` 预装宿主
   handler（`runConsoleHost` / `runExitHost` / …），再用 `runMain` 执行，最后按 `a` 展示。
   入口 show 只接受 `@ir@showInt` /
@@ -453,7 +455,6 @@ env，**不进 codegen**（同一 IR 的产物逐字节确定）。解析失败�
 - 多文件目标链接/对象文件：IR 已经是整程序单单元；不需要独立目标文件。
 - 对象库/增量缓存、`vuna run --target`、`--target native` 的 release 差异。
 - aarch64 及非 Linux 平台；寄存器分配与优化；栈溢出检查；位置表/backtrace。
-- 零参定义的重算优化（引入副作用前必须改）。
 
 ### 8.1 与 OCaml / wasm 的语义差异（总览）
 
@@ -464,7 +465,7 @@ env，**不进 codegen**（同一 IR 的产物逐字节确定）。解析失败�
 | 非 try FS 失败 | exit 2 | exit 2 | trap |
 | `strPack` 越界 | 抛异常 | 截断低 8 位 | 截断低 8 位 |
 | `isTty` | stdout | stdout | 恒 False（WASI 无 isatty，保守） |
-| 零参顶层定义 | 初始化时求值 | 每次引用重新调用 | `_start` 一次 |
+| 零参顶层定义 | 初始化时求值 | `_start` 一次（CAF 槽） | `_start` 一次 |
 | 原子写临时名 | `<path>.<pid>.tmp` | `<path>.<pid>.tmp` | `<path>.tmp<µs><seq>` |
 
 ## 9. 对象表示与 List 桥接
