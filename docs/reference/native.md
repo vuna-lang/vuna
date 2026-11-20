@@ -198,6 +198,19 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
 - List 桥接符号（`strUnpack` / `strPack` / `strConcatMany` / `strSubstTemplate`）支持：
   函数体在 `Native.Module` 按 List 族的 tag 生成，复用对象表示（`head` 是未装箱 Int；
   两遍扫描：先算长度，再分配填充）。
+- **指令选择**（`Native.Select`）：白名单里无分配、无 GC 的标量叶子在调用点展开成寄存器
+  序列，不走 `call rt_*`：`+ - *`、`bitAnd` / `bitOr` / `bitXor` / `bitNot`、
+  `bi_*_int` / `bi_*_bool`、`natAdd` / `natSub` / `natFromInt` / `natToInt` 与
+  调试 / 可观测性零参桩。符号词表只有一份（`scalarPlanOf`），`RuntimeTable` 单测校验
+  它与 `nativeRtTarget` 指向同一实现。
+  - 63-bit wrap 仍是 `shl 1 / sar 1`；Nat 饱和 / 夹取用 `cmov`；比较结果固定在 `rax`
+    （`setcc` + `movzx`）。除零、移位计数越界、`natMul` / `natDiv` 仍走运行时。
+  - 实参只接受**原子标量**（字面量、槽变量、标量 cast）；任何非标量子树整体回退
+    `call rt_*`，不重排求值。寄存器池是 `rax` / `r11` / `r10` / `r8` / `r9`；序列内
+    没有 `call`，因此不产生新的 GC 点。
+  - 生成的函数体在 annotation 之前跑 `Native.Select.peephole`：写槽后立刻读回、
+    `jmp` 到下一条标签、scratch 立即数只被下一条二元 / 比较消费时合并；GC 栈图仍按
+    改写后的 call 序重算，槽编号与帧不变。手写运行时 / 桥接体不参与窥孔。
 - **零参顶层定义**是 CAF：`_start` 按 SCC 序（被依赖者在前）求值一次，结果写进连续的
   `.bss` 缓存槽 `rt_caf_<name>`；引用只读槽。槽区间 `[rt_caf_begin, rt_caf_end)` 由 GC
   当根扫描（GC 非移动，值一次写入后稳定）。零参定义仍必须是纯值：程序启动即求值，
@@ -441,6 +454,10 @@ env，**不进 codegen**（同一 IR 的产物逐字节确定）。解析失败�
   由 9u5 覆盖。
 - 共享语义（算术 / 字符串 / data / record / List 桥接 / 闭包 / 高阶 API）由
   suite 的 `pure-cross` 分类（`packages/compiler/test/corpus/pure_cross/`）对拍三端，OCaml 是语义 oracle。
+- 指令选择与窥孔：`packages/target-native/test/Select.vuna` 锁序列形状与边界
+  （63-bit wrap、Nat 饱和、`cmov`、立即数折叠的保留条件）；`RuntimeTable` 锁内联计划与
+  `nativeRtTarget` 的标签一致；`pure_cross` 的 `62_nat_sat` / `63_nested_scalar` 覆盖
+  饱和语义与嵌套标量表达式的寄存器分配。
 - 效应语义（handler / resume / abort / 嵌套 / return 改类型 / 宿主 console / 深递归）
   已并入 suite `pure-cross` 分类的三端对拍。
 - 工具链：`cc` 缺失时 steps 首步明确失败；e2e 的 `nativeBuildInputs` 含
