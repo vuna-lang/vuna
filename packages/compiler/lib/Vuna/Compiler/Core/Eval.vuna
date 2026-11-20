@@ -25,19 +25,11 @@ export eval : List Value -> Term -> Value
 eval env t =
   let
     _ = obsCountAt 3 "vuna.counter.core.reduce" 1
-  in evalFuel (evalFuelFor t) env t
+  in evalFuel evalFuelMax env t
 
--- | 求值 fuel 派生（D24）：固定 128 对深 Nat 链不够——字面量展开成 `Zero`/`Succ` 链后
--- 每层约消耗 2 步燃料，≥64 层的字面量（如 `n = 300`）会在结构递归中途耗尽，而
--- `evalFuel` 的兜底是**静默**返回 `VType 0`，interp 因此报 `CG_MainNotValue`。
--- 求值不展开定义（delta 在 `force` 里，另有燃料），本函数是纯结构递归，燃料只是兜底；
--- 按项节点数派生（每节点最多几步），上限 `evalFuelMax` 防失控输入。
-evalFuelFor : Term -> Int
-evalFuelFor t =
-  let
-    need = 128 + 4 * termSize t
-  in if need > evalFuelMax then evalFuelMax else need
-
+-- | 求值燃料上限。`eval` 不展开定义（delta 在 `force` 里，另有燃料），是纯结构递归，
+-- 每节点最多消耗几步，所以这个上限只是一道防失控的兜底：按项规模逐次派生一次
+-- `termSize` 得不到更多信息（任何真实项都远小于上限对应的节点数），只在热路径上多一遍遍历。
 evalFuelMax : Int
 evalFuelMax = 1000000
 

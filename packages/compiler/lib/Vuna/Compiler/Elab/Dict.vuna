@@ -472,10 +472,19 @@ export data MemberLookup(..) : Type where
   -- 命名行：标签候选 ≥2，推迟到最终化报 TC_AmbiguousInstance；携带候选文本。
   MemberAmbiguous : List String -> MemberLookup
 
+-- 字典域判定只看头部（`Member` 族的 2 参应用），不引化整个值：dom 的脊椎形态是
+-- `VNeutral (NGlobal 族 …)`，`quote` 一遍再匹配头部在热路径（每个隐式实参、每轮 pending
+-- 目标）上是纯浪费。
 export isMemberDomain : Ec -> Value -> Bool
-isMemberDomain ec dom =
-  case quote 0 dom of
-    TApp (TApp (TGlobal g) _ _) _ _ => g == memberDomName
+isMemberDomain _ec dom =
+  case dom of
+    VNeutral (NGlobal g sp) =>
+      if g == memberDomName then
+        case sp of
+          [_, _] => True
+          _ => False
+      else
+        False
     _ => False
 
 memberSpine : Value -> Maybe (Pair Value Value)

@@ -1062,7 +1062,8 @@ datasHaveLinear (d :: rest) = dtDataLinear d || datasHaveLinear rest
 --     已有的 level 在 (idx+1, depth+1) 下不变，所以不需要重建。
 --
 -- refinements 是索引精化：level ↦ Value（level 形态，可提到更新的 binder，无需 de Bruijn
--- 搬运）。用到时才代入求值环境（`refinedEnv`），于是所有类型的求值/相等检查自动享受精化。
+-- 搬运）。代入后的求值环境在精化/绑定点算一次（`ctxEnvRF`），取用侧 O(1) —— 分支里每次
+-- 类型求值都重建一遍整个环境的话，代价是 O(深度 × 类型尺寸)，实测是热路径。
 export record Ctx(..) where
   ctxItems : List (Pair String Term)
   ctxEnvF : List Value
@@ -1070,22 +1071,31 @@ export record Ctx(..) where
   -- 深度在绑定点维护：`length ctxItems` 是 O(depth)，而它在每个变量引用/分支/隐式实参
   -- 上都会被读，实测是热路径。
   ctxDepthF : Int
+  -- 已代入精化的求值环境（`ctxRefVals` 为空时与 `ctxEnvF` 同一个列表）。
+  ctxEnvRF : List Value
 
 export ctxDepth : Ctx -> Int
 ctxDepth ctx = ctx.ctxDepthF
 
 export ctxBind : String -> Term -> Ctx -> Ctx
-ctxBind name ty (Ctx items env refs d) =
-  Ctx (Pair name ty :: items) (VNeutral (NVar name d []) :: env) refs (d + 1)
+ctxBind name ty (Ctx items env refs d rEnv) =
+  let
+    v = VNeutral (NVar name d [])
+  in Ctx (Pair name ty :: items) (v :: env) refs (d + 1) (v :: rEnv)
 
 -- 把一个 Value 形态的类型重新 quote 成项再入上下文（Pi 值里的域只有 Value）。
 export ctxBindValue : String -> Value -> Ctx -> Ctx
-ctxBindValue name dom (Ctx items env refs d) =
-  Ctx (Pair name (quote d dom) :: items) (VNeutral (NVar name d []) :: env) refs (d + 1)
+ctxBindValue name dom (Ctx items env refs d rEnv) =
+  let
+    v = VNeutral (NVar name d [])
+  in Ctx (Pair name (quote d dom) :: items) (v :: env) refs (d + 1) (v :: rEnv)
 
--- 记录一批精化（不做链式化简，代入在 refinedEnv 里做）。
+-- 记录一批精化：新 binder 不受影响（精化只指更老的 level），环境其余部分重算一次。
 export ctxRefine : Ctx -> List (Pair Int Value) -> Ctx
-ctxRefine (Ctx items env refs d) more = Ctx items env (append refs more) d
+ctxRefine (Ctx items env refs d rEnvOld) more =
+  let
+    refs2 = append refs more
+  in Ctx items env refs2 d (refinedEnv refs2 env)
 
 export ctxLookupAt : String -> List (Pair String Term) -> Int -> Maybe (Pair Int Term)
 ctxLookupAt name [] idx = Nothing
@@ -1109,15 +1119,16 @@ ctxEnvAt ((Pair name ty) :: rest) idx depth =
 -- 未代入精化的求值环境（声明侧视角）：`isOpaqueRuntimeTyIn` 等判据要求「声明成什么
 -- 就按什么算」，不能被 case 的索引精化改写。环境在绑定点增量维护，这里只读。
 export ctxEnv : Ctx -> List Value
-ctxEnv (Ctx items env refs d) = env
+ctxEnv (Ctx items env refs d rEnv) = env
 
 -- 代入索引精化后的求值环境（取用侧视角：分支内所有类型求值都享受等式）。
 export ctxEnvRefined : Ctx -> List Value
-ctxEnvRefined ctx = refinedEnv ctx.ctxRefVals (ctxEnv ctx)
+ctxEnvRefined ctx = ctx.ctxEnvRF
 
 -- 把精化代入一个值。精化是「level ↦ Value」，而求值环境里的 binder 都是中性变量，
 -- 求值后做一次重写即可（索引位置上出现的基本是中性变量或构造子值）。resolveLevel 处理链式精化。
 export refineValue : List (Pair Int Value) -> Int -> Value -> Value
+refineValue [] fuel v = v
 refineValue refs fuel v =
   if fuel <= 0 then
     v
@@ -1153,7 +1164,7 @@ export varTypeValue : Ctx -> Int -> Term -> Value
 varTypeValue ctx idx ty = eval (ctxEnvRefined ctx) (shift 0 (idx + 1) ty)
 
 export emptyCtx : Ctx
-emptyCtx = Ctx [] [] [] 0
+emptyCtx = Ctx [] [] [] 0 []
 
 -- ---------------------------------------------------------------
 -- 错误 / 状态 helper

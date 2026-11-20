@@ -578,16 +578,10 @@ export zonkTerm : Ec -> Int -> Term -> Term
 zonkTerm ec depth t =
   let
     _ = obsCountAt 2 "vuna.counter.meta.zonk" 1
-  in zonkTermFuel (zonkFuelFor t) ec depth t
+  in zonkTermFuel zonkFuelMax ec depth t
 
--- | 燃料按项规模派生（`termSize` 必 ≥ 嵌套深度；每节点 4 步，与 `Eval.evalFuelFor` 同口径）。
--- 固定上限会在更深的项上中途停在原项，残留元变量推迟到 codegen 才报。
-zonkFuelFor : Term -> Int
-zonkFuelFor t =
-  let
-    need = 128 + 4 * termSize t
-  in if need > zonkFuelMax then zonkFuelMax else need
-
+-- | 燃料上限。递归在子项上结构递减，替换已解元变量最多把项展开到整张解表的规模，
+-- 都远小于这个上限；每次调用派生一遍 `termSize` 只会让热路径多一次遍历。
 zonkFuelMax : Int
 zonkFuelMax = 1000000
 
@@ -1197,7 +1191,7 @@ rigOfLinearValue ec dom = if isLinearType ec dom then Rig1 else RigOmega
 
 -- 外层 context 是否含线性类型（决定是否需要对 λ body 做捕获扫描）。
 export ctxHasLinear : Ec -> Ctx -> Bool
-ctxHasLinear ec (Ctx items env refs d) = ctxHasLinearItems ec (Ctx items env refs d) items 0
+ctxHasLinear ec ctx = ctxHasLinearItems ec ctx ctx.ctxItems 0
 
 ctxHasLinearItems : Ec -> Ctx -> List (Pair String Term) -> Int -> Bool
 ctxHasLinearItems ec ctx [] i = False
