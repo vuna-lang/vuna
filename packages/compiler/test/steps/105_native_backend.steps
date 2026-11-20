@@ -493,3 +493,10 @@ run: sh -c 'head -1 "$TMPDIR/strictfs-n.err"'
 out-equals: vuna: runtime error: readFile: /nonexistent-vuna-strict: No such file or directory
 run: sh -c 'head -1 "$TMPDIR/strictfs-n.err" > "$TMPDIR/strictfs-n.line"; head -1 "$TMPDIR/strictfs-o.err" > "$TMPDIR/strictfs-o.line"; cmp "$TMPDIR/strictfs-n.line" "$TMPDIR/strictfs-o.line"'
 exit: 0
+
+# 9w) 大文件读取：没有固定缓冲上界（12 MiB > 8 MiB 旧上界），按 stat 尺寸一次分配再读到 EOF。
+run: sh -c 'dd if=/dev/zero of="$TMPDIR/big-read.dat" bs=1024 count=12288 2>/dev/null'
+run: sh -c 'd="$TMPDIR/bigread"; mkdir -p "$d/app"; printf "[package]\nname = \"bigread\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Effect.Core as Eff\nimport Base.Effect.Fs as EffFs\n\nmain : Eff [FsOp] Int\nmain = do\n  s <- fsReadFile \"$TMPDIR/big-read.dat\"\n  pure (strLength s)\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/bigread-out" "$d"'
+exit: 0
+run: sh -c '"$TMPDIR/bigread-out/bin/bigread" 2>&1'
+out-equals: 12582912

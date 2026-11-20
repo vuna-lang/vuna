@@ -424,8 +424,9 @@ env，**不进 codegen**（同一 IR 的产物逐字节确定）。解析失败�
   3. 空闲块按 2 的幂尺寸类复用、不合并相邻空块，内部碎片最多约 2×；
   4. 超过 64 MiB 的块单独占段、死块进 `rt_huge_free` 首次适配链（可复用，不 `munmap`）；
 - **宿主缓冲与算术边界**（失败一律显式，不静默截断/越界写）：
-  - `fsReadFile` 的读缓冲 8 MiB：超过上界报 io 错误（`vuna: fs: readFile …: host I/O error`，
-    exit 1）；OCaml / wasm 没有这个上界；
+  - `fsReadFile` 没有固定缓冲上界：先 `stat` 拿大小、按 `max(size, 64 KiB)` 一次分配字符串
+    再读到 EOF，读满则容量加倍续读（数据搬一次）；`stat` 给 0 的伪文件（`/proc` 等）从 64 KiB
+    起步。`readFileRange` 的单次 `length` 仍截到 8 MiB 读缓冲上界；
   - `readDir` 的名字数组上限 4032 项：超出报 io 错误；
   - 路径缓冲 4096 字节：超长路径 trap（`vuna: runtime error: path too long`，exit 2）；
   - `Int` 除法 `min_int / -1` 返回 `min_int`（与 OCaml / wasm 一致，不触发 x86 `#DE`）。
@@ -451,7 +452,6 @@ env，**不进 codegen**（同一 IR 的产物逐字节确定）。解析失败�
 
 | 语义 | OCaml | Native | WASM |
 | --- | --- | --- | --- |
-| `fsReadFile` > 8 MiB | 全量 | io 错误（8 MiB 上界） | 全量 |
 | 非 try FS 失败 | exit 2 | exit 2 | trap |
 | `strPack` 越界 | 抛异常 | 截断低 8 位 | 截断低 8 位 |
 | `isTty` | stdout | stdout | 恒 False（WASI 无 isatty，保守） |
