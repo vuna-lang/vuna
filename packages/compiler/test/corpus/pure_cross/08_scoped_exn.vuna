@@ -5,13 +5,15 @@ import Base.Data.Nat as Nat
 import Base.Data.Result as Result
 
 prog : Eff [ExnOp@boom] Nat
-prog = do
-  r <- tryWith "boom" (throwExn "boom" "inner")
-  case r of
-    Ok n => pure n
-    Err _ => pure 7
+prog =
+  do
+    r <- tryWith "boom" (throwExn "boom" "inner")
+    case r of
+      Ok n => pure n
+      Err _ => pure 7
 
 main : Nat
-main = case runPure (runExn "boom" prog) of
-  Ok n => n
-  Err _ => 0
+main =
+  case runPure (runExn "boom" prog) of
+    Ok n => n
+    Err _ => 0

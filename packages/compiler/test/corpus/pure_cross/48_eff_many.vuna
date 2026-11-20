@@ -5,15 +5,19 @@ data POp : Type -> Type where
   P : Int -> POp Int
 
 many : Nat -> Eff [POp] Int
-many n = case n of
-  Zero => pure 0
-  Succ m => do
-    x <- perform P 1
-    y <- many m
-    pure (x + y)
+many n =
+  case n of
+    Zero => pure 0
+    Succ m =>
+      do
+        x <- perform (P 1)
+        y <- many m
+        pure (x + y)
 
 main : Int
-main = runPure (handle (many (natFromInt 200)) {
-  P n k -> k n
-}
-)
+main =
+  runPure (
+      handle (many (natFromInt 200)) {
+        P n k -> k n
+      }
+    )

@@ -5,13 +5,14 @@ import Base.Effect.Pure.IORef as IORef
 import Base.Data.Result as Result
 
 prog : Eff [] Int
-prog = do
-  ref <- newRef 0
-  r <- runExn "boom" (bracket (pure 0) (\_ => writeRef ref 7) (\_ => throwExn "boom" "x"))
-  v <- readRef ref
-  case r of
-    Err _ => pure (v * 10 + 1)
-    Ok _ => pure v
+prog =
+  do
+    ref <- newRef 0
+    r <- runExn "boom" (bracket (pure 0) (\_ => writeRef ref 7) (\_ => throwExn "boom" "x"))
+    v <- readRef ref
+    case r of
+      Err _ => pure (v * 10 + 1)
+      Ok _ => pure v
 
 main : Int
 main = runPure prog

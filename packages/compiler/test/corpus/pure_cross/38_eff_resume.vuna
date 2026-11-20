@@ -4,7 +4,9 @@ data POp : Type -> Type where
   P : Int -> POp Int
 
 main : Int
-main = runPure (handle (perform P 3) {
-  P n k -> k (n + 1)
-}
-)
+main =
+  runPure (
+      handle (perform P 3) {
+        P n k -> k (n + 1)
+      }
+    )

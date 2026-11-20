@@ -7,17 +7,21 @@ data BOp : Type -> Type where
   B : Int -> BOp Int
 
 prog : Eff (Named "a" AOp :: [BOp@b]) Int
-prog = do
-  x <- perform A 1
-  pure x
+prog =
+  do
+    x <- perform (A 1)
+    pure x
 
 inner : Eff (Named "a" AOp :: [BOp@b]) Int -> Eff [BOp@b] Int
-inner comp = handle comp {
-  A n k -> k (n + 10)
-}
+inner comp =
+  handle comp {
+    A n k -> k (n + 10)
+  }
 
 main : Int
-main = runPure (handle (inner prog) {
-  B n k -> k (n * 100)
-}
-)
+main =
+  runPure (
+      handle (inner prog) {
+        B n k -> k (n * 100)
+      }
+    )

@@ -2,8 +2,9 @@ import Base.Effect.Core as Eff
 import Base.Effect.Pure.IORef as IORef
 
 main : Eff [] Int
-main = do
-  r <- newRef 10
-  _ <- writeRef r 32
-  v <- readRef r
-  pure (v + 1)
+main =
+  do
+    r <- newRef 10
+    _ <- writeRef r 32
+    v <- readRef r
+    pure (v + 1)

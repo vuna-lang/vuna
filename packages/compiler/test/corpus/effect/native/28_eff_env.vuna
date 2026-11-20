@@ -5,32 +5,37 @@ import Base.Effect.Env as EffEnv
 import Base.Effect.Console as EffConsole
 
 prog : (n : String) -> Eff (Named n EnvOp :: []) Int
-prog n = do
-  m <- envGetEnv@(n) "VUNA_W10_MISSING_ENV_VAR"
-  c <- envGetCwd@(n)
-  e <- envExecPath@(n)
-  pure ((if m == "" then 1 else 0) + (if c /= "" then 1 else 0) + (if e /= "" then 1 else 0))
+prog n =
+  do
+    m <- envGetEnv@(n) "VUNA_W10_MISSING_ENV_VAR"
+    c <- envGetCwd@(n)
+    e <- envExecPath@(n)
+    pure ((if m == "" then 1 else 0) + (if c /= "" then 1 else 0) + (if e /= "" then 1 else 0))
 
 progReal : Eff [ConsoleOp, EnvOp] Int
-progReal = do
-  m <- envGetEnv "VUNA_W10_MISSING_ENV_VAR"
-  c <- envGetCwd
-  e <- envExecPath
-  pure ((if m == "" then 1 else 0) + (if c /= "" then 1 else 0) + (if e /= "" then 1 else 0))
+progReal =
+  do
+    m <- envGetEnv "VUNA_W10_MISSING_ENV_VAR"
+    c <- envGetCwd
+    e <- envExecPath
+    pure ((if m == "" then 1 else 0) + (if c /= "" then 1 else 0) + (if e /= "" then 1 else 0))
 
 mret : Int -> Int
 mret a = a
 
 mopH : (i : Type) -> (o : EnvOp i) -> (Eff.resIdx i o -> Int) -> Int
-mopH i op k = case op of
-  GetEnv name => k ""
-  GetCwd => k "/mock/cwd"
-  ExecPath => k "/mock/exe"
+mopH i op k =
+  case op of
+    GetEnv name => k ""
+    GetCwd => k "/mock/cwd"
+    ExecPath => k "/mock/exe"
 
 main : Eff [ConsoleOp, EnvOp] Int
-main = case runPure (handleEnv "mock" mret mopH (prog "mock")) of
-  mockScore => do
-    _ <- consolePrint ("mock " ++ strFromInt mockScore ++ "\n")
-    realScore <- progReal
-    _ <- consolePrint ("real " ++ strFromInt realScore ++ "\n")
-    pure 0
+main =
+  case runPure (handleEnv "mock" mret mopH (prog "mock")) of
+    mockScore =>
+      do
+        _ <- consolePrint ("mock " ++ strFromInt mockScore ++ "\n")
+        realScore <- progReal
+        _ <- consolePrint ("real " ++ strFromInt realScore ++ "\n")
+        pure 0

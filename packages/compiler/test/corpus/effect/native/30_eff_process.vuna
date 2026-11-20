@@ -6,32 +6,37 @@ import Base.Effect.Console as EffConsole
 import Base.Data.List as List
 
 prog : (n : String) -> Eff (Named n ProcessOp :: []) String
-prog n = do
-  args <- processArgs@(n)
-  code <- processRunIn@(n) "." ["true"]
-  pure (join "," args ++ "|" ++ strFromInt code)
+prog n =
+  do
+    args <- processArgs@(n)
+    code <- processRunIn@(n) "." ["true"]
+    pure (join "," args ++ "|" ++ strFromInt code)
 
 progReal : Eff [ConsoleOp, ProcessOp] String
-progReal = do
-  args <- processArgs
-  code <- processRunIn "." ["true"]
-  pure (join "," args ++ "|" ++ strFromInt code)
+progReal =
+  do
+    args <- processArgs
+    code <- processRunIn "." ["true"]
+    pure (join "," args ++ "|" ++ strFromInt code)
 
 mret : String -> String
 mret a = a
 
 mopH : (i : Type) -> (o : ProcessOp i) -> (Eff.resIdx i o -> String) -> String
-mopH i op k = case op of
-  Args => k ("a" :: "b" :: [])
-  Exit c => k c
-  RunIn dir args => k 3
-  Spawn args => k 9
-  Wait h => k 0
+mopH i op k =
+  case op of
+    Args => k ("a" :: "b" :: [])
+    Exit c => k c
+    RunIn dir args => k 3
+    Spawn args => k 9
+    Wait h => k 0
 
 main : Eff [ConsoleOp, ProcessOp] Int
-main = case runPure (handleProcess "mock" mret mopH (prog "mock")) of
-  mockLog => do
-    _ <- consolePrint ("mock " ++ mockLog ++ "\n")
-    realLog <- progReal
-    _ <- consolePrint ("real " ++ realLog ++ "\n")
-    pure 0
+main =
+  case runPure (handleProcess "mock" mret mopH (prog "mock")) of
+    mockLog =>
+      do
+        _ <- consolePrint ("mock " ++ mockLog ++ "\n")
+        realLog <- progReal
+        _ <- consolePrint ("real " ++ realLog ++ "\n")
+        pure 0

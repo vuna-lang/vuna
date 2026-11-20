@@ -7,9 +7,10 @@ data Wrap : Type where
   N : Wrap
 
 get : Wrap -> Int
-get w = case w of
-  W p => p.a + p.b
-  N => 0
+get w =
+  case w of
+    W p => p.a + p.b
+    N => 0
 
 main : Int
 main = get (W P2 { a = 20, b = 22 }) + get N

@@ -5,22 +5,28 @@ import Base.Effect.Fs as EffFs
 import Base.Data.Maybe as Maybe
 
 prog : Eff [FsOp] Int
-prog = do
-  _ <- fsWriteFile "meta-probe.txt" "abc"
-  self <- fsFileSize "meta-probe.txt"
-  stamp <- fsFileMtime "meta-probe.txt"
-  missingSize <- fsFileSize "definitely-not-a-file-xyz"
-  missingMtime <- fsFileMtime "definitely-not-a-file-xyz"
-  pure ((((case self of
-    Just n => if natToInt n > 0 then 1 else 0
-    Nothing => 0
-  ) + (case stamp of
-    Just s => if s > 1000000000 then 1 else 0
-    Nothing => 0
-  )
-  ) + (if isNothing missingSize then 1 else 0)
-  ) + (if isNothing missingMtime then 1 else 0)
-  )
+prog =
+  do
+    _ <- fsWriteFile "meta-probe.txt" "abc"
+    self <- fsFileSize "meta-probe.txt"
+    stamp <- fsFileMtime "meta-probe.txt"
+    missingSize <- fsFileSize "definitely-not-a-file-xyz"
+    missingMtime <- fsFileMtime "definitely-not-a-file-xyz"
+    pure (
+        (
+          (
+            (
+              case self of
+                Just n => if natToInt n > 0 then 1 else 0
+                Nothing => 0
+            ) + (
+                case stamp of
+                  Just s => if s > 1000000000 then 1 else 0
+                  Nothing => 0
+              )
+          ) + (if isNothing missingSize then 1 else 0)
+        ) + (if isNothing missingMtime then 1 else 0)
+      )
 
 main : Eff [FsOp] Int
 main = prog

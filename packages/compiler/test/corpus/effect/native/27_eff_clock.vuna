@@ -5,31 +5,36 @@ import Base.Effect.Clock as EffClock
 import Base.Effect.Console as EffConsole
 
 prog : (n : String) -> Eff (Named n ClockOp :: []) Int
-prog n = do
-  t0 <- clockNow@(n)
-  _ <- clockSleepMicros@(n) 2000
-  t1 <- clockNow@(n)
-  pure (t1 - t0)
+prog n =
+  do
+    t0 <- clockNow@(n)
+    _ <- clockSleepMicros@(n) 2000
+    t1 <- clockNow@(n)
+    pure (t1 - t0)
 
 progReal : Eff [ConsoleOp, ClockOp] Int
-progReal = do
-  t0 <- clockNow
-  _ <- clockSleepMicros 2000
-  t1 <- clockNow
-  pure (t1 - t0)
+progReal =
+  do
+    t0 <- clockNow
+    _ <- clockSleepMicros 2000
+    t1 <- clockNow
+    pure (t1 - t0)
 
 mret : Int -> Int
 mret a = a
 
 mopH : (i : Type) -> (o : ClockOp i) -> (Eff.resIdx i o -> Int) -> Int
-mopH i op k = case op of
-  Now => k 1000
-  SleepMicros us => k 0
+mopH i op k =
+  case op of
+    Now => k 1000
+    SleepMicros us => k 0
 
 main : Eff [ConsoleOp, ClockOp] Int
-main = case runPure (handleClock "mock" mret mopH (prog "mock")) of
-  mockElapsed => do
-    _ <- consolePrint ("mock " ++ strFromInt mockElapsed ++ "\n")
-    realElapsed <- progReal
-    _ <- consolePrint ("real " ++ strFromInt (if realElapsed >= 1000 then 1 else 0) ++ "\n")
-    pure 0
+main =
+  case runPure (handleClock "mock" mret mopH (prog "mock")) of
+    mockElapsed =>
+      do
+        _ <- consolePrint ("mock " ++ strFromInt mockElapsed ++ "\n")
+        realElapsed <- progReal
+        _ <- consolePrint ("real " ++ strFromInt (if realElapsed >= 1000 then 1 else 0) ++ "\n")
+        pure 0

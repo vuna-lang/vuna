@@ -6,24 +6,28 @@ import Base.Data.Nat as Nat
 import Base.Data.Result as Result
 
 sub : Eff [ExnOp@boom] Nat
-sub = perform ThrowExn "inner"
+sub = perform (ThrowExn "inner")
 
 prog : Eff [ExnOp@boom] Nat
-prog = do
-  r <- perform Try (scope sub)
-  case r of
-    Ok n => pure n
-    Err _ => pure 7
+prog =
+  do
+    r <- perform (Try (scope sub))
+    case r of
+      Ok n => pure n
+      Err _ => pure 7
 
 run : Eff [ExnOp@boom] Nat -> Result Nat
-run comp = runPure (handle comp {
-  return x -> Ok x
-  ThrowExn msg k -> Err msg
-  Try sub k -> k (handleScoped sub)
-}
-)
+run comp =
+  runPure (
+      handle comp {
+        return x -> Ok x
+        ThrowExn msg k -> Err msg
+        Try sub k -> k (handleScoped sub)
+      }
+    )
 
 main : Nat
-main = case run prog of
-  Ok n => n
-  Err _ => 0
+main =
+  case run prog of
+    Ok n => n
+    Err _ => 0

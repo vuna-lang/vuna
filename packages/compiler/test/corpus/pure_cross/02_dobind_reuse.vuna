@@ -3,11 +3,12 @@ import Base.Effect.Core as Eff
 import Base.Effect.Console as EffConsole
 
 prog : Eff [ConsoleOp] Int
-prog = do
-  x <- pure 41
-  x <- pure 42
-  _ <- consolePrint "dobind:"
-  pure x
+prog =
+  do
+    x <- pure 41
+    x <- pure 42
+    _ <- consolePrint "dobind:"
+    pure x
 
 main : Eff [ConsoleOp] Int
 main = prog

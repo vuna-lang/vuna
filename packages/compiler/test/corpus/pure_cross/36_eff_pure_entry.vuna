@@ -1,6 +1,7 @@
 import Base.Effect.Core as Eff
 
 main : Eff [] Int
-main = do
-  x <- pure 40
-  pure (x + 2)
+main =
+  do
+    x <- pure 40
+    pure (x + 2)

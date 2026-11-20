@@ -12,22 +12,34 @@ sorted : List String
 sorted = sortBy (\a, b => a <= b) ["b", "a", "c"]
 
 joined : List String -> String
-joined xs = case xs of
-  a :: b :: c :: _ => a ++ b ++ c
-  _ => ""
+joined xs =
+  case xs of
+    a :: b :: c :: _ => a ++ b ++ c
+    _ => ""
 
 main : String
-main = flag ("abc" < "abd") ++ (flag ("abc" < "ab") ++ (flag ("ab" < "abc") ++ (flag ("b" < "a") ++ (flag ("a" <= "a") ++ (flag ("abc" > "abd") ++ (flag (True > False) ++ (flag (False >= True) ++ (flag (True <= False) ++ ((case compare "b" "a" of
-  LT => "L"
-  EQ => "E"
-  GT => "G"
-) ++ joined sorted
-)
-)
-)
-)
-)
-)
-)
-)
-)
+main =
+  flag ("abc" < "abd") ++ (
+      flag ("abc" < "ab") ++ (
+          flag ("ab" < "abc") ++ (
+              flag ("b" < "a") ++ (
+                  flag ("a" <= "a") ++ (
+                      flag ("abc" > "abd") ++ (
+                          flag (True > False) ++ (
+                              flag (False >= True) ++ (
+                                  flag (True <= False) ++ (
+                                      (
+                                        case compare "b" "a" of
+                                          LT => "L"
+                                          EQ => "E"
+                                          GT => "G"
+                                      ) ++ joined sorted
+                                    )
+                                )
+                            )
+                        )
+                    )
+                )
+            )
+        )
+    )

@@ -5,20 +5,25 @@ data POp : Type -> Type where
   P : Int -> POp Int
 
 sum : Nat -> Eff [POp] Int
-sum n = case n of
-  Zero => pure 0
-  Succ m => do
-    y <- sum m
-    pure (y + 1)
+sum n =
+  case n of
+    Zero => pure 0
+    Succ m =>
+      do
+        y <- sum m
+        pure (y + 1)
 
 prog : Eff [POp] Int
-prog = do
-  x <- perform P 1
-  y <- sum (natFromInt 300)
-  pure (x + y)
+prog =
+  do
+    x <- perform (P 1)
+    y <- sum (natFromInt 300)
+    pure (x + y)
 
 main : Int
-main = runPure (handle prog {
-  P n k -> k n
-}
-)
+main =
+  runPure (
+      handle prog {
+        P n k -> k n
+      }
+    )

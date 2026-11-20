@@ -4,9 +4,10 @@ import Base.Data.Maybe as Maybe
 -- 分支 binder 与参数同名（遮蔽）：`Nothing` 分支必须看到**参数** x，而不是
 -- `Just` 分支的 binder 槽（作用域不能跨分支泄漏）。
 leak : Maybe Int -> Int -> Int
-leak m x = case m of
-  Just x => x + 1
-  Nothing => x + 2
+leak m x =
+  case m of
+    Just x => x + 1
+    Nothing => x + 2
 
 main : Int
 main = leak Nothing 40 + leak (Just 1) 99

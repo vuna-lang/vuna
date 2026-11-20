@@ -7,28 +7,30 @@ import Base.Effect.Console as EffConsole
 import Base.Data.List as List
 
 prog : (n : String) -> Eff (Named n ProcessOp :: []) Int
-prog n = do
-  c <- processExit@(n) 7
-  pure c
+prog n =
+  do
+    c <- processExit@(n) 7
+    pure c
 
 mret : Int -> Int
 mret a = a
 
 mopH : (i : Type) -> (o : ProcessOp i) -> (Eff.resIdx i o -> Int) -> Int
-mopH i op k = case op of
-  Args => k []
-  Exit c => k c
-  RunIn dir args => k 0
-  Spawn args => k 9
-  Wait h => k 0
+mopH i op k =
+  case op of
+    Args => k []
+    Exit c => k c
+    RunIn dir args => k 0
+    Spawn args => k 9
+    Wait h => k 0
 
 main : Eff [ConsoleOp, ProcessOp] Int
-main = do
-  _ <-
-    consolePrint
-      ("mock " ++ strFromInt (runPure (handleProcess "mock" mret mopH (prog "mock"))) ++ "\n")
-  observed <-
-    raiseTo [ConsoleOp, ProcessOp]
-      (joinEff (handleProcessHostWith "observed" (prog "observed")))
-  _ <- consolePrint ("observed " ++ strFromInt observed ++ "\n")
-  pure 0
+main =
+  do
+    _ <-
+      consolePrint
+        ("mock " ++ strFromInt (runPure (handleProcess "mock" mret mopH (prog "mock"))) ++ "\n")
+    observed <-
+      raiseTo [ConsoleOp, ProcessOp] (joinEff (handleProcessHostWith "observed" (prog "observed")))
+    _ <- consolePrint ("observed " ++ strFromInt observed ++ "\n")
+    pure 0

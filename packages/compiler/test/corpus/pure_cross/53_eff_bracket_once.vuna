@@ -6,15 +6,18 @@ import Base.Effect.Pure.IORef as IORef
 import Base.Data.Result as Result
 
 bump : {r : Row} -> IORef Int -> Eff r Int
-bump ref = do
-  v <- raise (readRef ref)
-  _ <- raise (writeRef ref (v + 1))
-  pure (v + 1)
+bump ref =
+  do
+    v <- raise (readRef ref)
+    _ <- raise (writeRef ref (v + 1))
+    pure (v + 1)
 
 main : Int
-main = runPure (do
-  ref <- newRef 0
-  _ <- runExn "boom" (bracket (pure 0) (\_ => bump ref) (\_ => pure 5))
-  _ <- runExn "boom" (bracket (pure 0) (\_ => bump ref) (\_ => throwExn "boom" "x"))
-  readRef ref
-)
+main =
+  runPure (
+      do
+        ref <- newRef 0
+        _ <- runExn "boom" (bracket (pure 0) (\_ => bump ref) (\_ => pure 5))
+        _ <- runExn "boom" (bracket (pure 0) (\_ => bump ref) (\_ => throwExn "boom" "x"))
+        readRef ref
+    )

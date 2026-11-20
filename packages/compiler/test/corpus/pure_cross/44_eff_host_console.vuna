@@ -3,7 +3,8 @@ import Base.Effect.Console as EffConsole
 import Base.Data.Nat as Nat
 
 main : Eff [ConsoleOp] Nat
-main = do
-  a <- consolePrint "a"
-  b <- consolePrint "b"
-  pure (a * 10 + b)
+main =
+  do
+    a <- consolePrint "a"
+    b <- consolePrint "b"
+    pure (a * 10 + b)
