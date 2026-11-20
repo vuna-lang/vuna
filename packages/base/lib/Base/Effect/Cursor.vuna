@@ -1,0 +1,72 @@
+-- | 有界消费的效应游标：一个游标是「每 `next` 一次前进一格」的有状态源，EOF 给 `Nothing`。
+--
+-- 只提供**有界**消费者（`takeC` / `foldC`），循环由 `Int` 上界守卫，库内没有无界递归，
+-- 也没有无界消费入口，所以游标不会把「长度未知」传播到调用方。源由调用方给：
+-- `stdinReadLine` / `stdinReadBytes`、`IORef` 包住的列表都是合法来源（`ofList` 就是后者）。
+module Base.Effect.Cursor where
+
+import Base.Effect.Core
+import Base.Effect.Pure.IORef
+import Base.Data.List
+import Base.Data.Maybe
+import Base.Data.Unit
+import Base.Trait.Monad
+import Base.Trait.Num
+import Base.Trait.Ord
+
+-- | 游标：`Unit -> Eff r (Maybe a)`，`Nothing` 表示源已结束。
+export data Cursor : Row -> Type -> Type where
+  MkCursor : {r : Row} -> {a : Type} -> (Unit -> Eff r (Maybe a)) -> Cursor r a
+
+-- | 前进一格；源结束时给 `Nothing`。
+export next : Cursor r a -> Eff r (Maybe a)
+next (MkCursor f) = f MkUnit
+
+-- | 逐步映射；不缓存，也不预取。
+export mapC : (a -> b) -> Cursor r a -> Cursor r b
+mapC f (MkCursor g) = MkCursor (\_ => mapStepC f g)
+
+mapStepC : (a -> b) -> (Unit -> Eff r (Maybe a)) -> Eff r (Maybe b)
+mapStepC f g =
+  do
+    m <- g MkUnit
+    pure (fmap f m)
+
+-- | 用 `IORef` 包一个列表当源：之后每次 `next` 取走一个元素。
+export ofList : List a -> Eff r (Cursor r a)
+ofList xs =
+  do
+    cell <- newRef xs
+    pure (MkCursor (\_ => popCell cell))
+
+popCell : IORef (List a) -> Eff r (Maybe a)
+popCell cell = readRef cell >>= popStep cell
+
+popStep : IORef (List a) -> List a -> Eff r (Maybe a)
+popStep _ [] = pure Nothing
+popStep cell (x :: rest) =
+  do
+    _ <- writeRef cell rest
+    pure (Just x)
+
+-- | 最多消费 `n` 个元素；提前遇到 EOF 就停。
+export takeC : Int -> Cursor r a -> Eff r (List a)
+takeC n c =
+  if n <= 0 then
+    pure []
+  else
+    next c >>= \m =>
+        case m of
+          Nothing => pure []
+          Just x => takeC (n - 1) c >>= \rest => pure (x :: rest)
+
+-- | 最多消费 `n` 个元素做左折叠；`f` 的第一个实参是累加器。
+export foldC : Int -> (b -> a -> b) -> b -> Cursor r a -> Eff r b
+foldC n f acc c =
+  if n <= 0 then
+    pure acc
+  else
+    next c >>= \m =>
+        case m of
+          Nothing => pure acc
+          Just x => foldC (n - 1) f (f acc x) c

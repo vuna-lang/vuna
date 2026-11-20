@@ -1,0 +1,22 @@
+-- stdlib：有界游标；takeC 从 IORef 列表源按需取，EOF 后继续 takeC 给空。
+import Base.Effect.Core
+import Base.Effect.Cursor as Cursor
+import Base.Effect.Console as EffConsole
+import Base.Trait.Monad
+import Base.Data.List as List
+
+sumL : List Int -> Int
+sumL xs = List.foldl (\acc, x => acc + x) 0 xs
+
+main : Eff [ConsoleOp] Int
+main =
+  do
+    c <- Cursor.ofList [1, 2, 3, 4]
+    xs <- Cursor.takeC 2 c
+    ys <- Cursor.takeC 5 c
+    c2 <- Cursor.ofList [10, 20, 30]
+    folded <- Cursor.foldC 2 (\acc, x => acc + x) 0 c2
+    _ <-
+      consolePrint
+        (strFromInt (sumL xs) ++ "/" ++ strFromInt (sumL ys) ++ "/" ++ strFromInt folded ++ "\n")
+    pure (sumL xs + sumL ys + folded)

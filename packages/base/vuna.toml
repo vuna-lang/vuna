@@ -43,6 +43,7 @@ modules = [
   "Base.Effect.Clock",
   "Base.Effect.Console",
   "Base.Effect.Core",
+  "Base.Effect.Cursor",
   "Base.Effect.Env",
   "Base.Effect.Error",
   "Base.Effect.Exit",
