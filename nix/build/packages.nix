@@ -12,6 +12,19 @@
 let
   inherit (pkgs) lib;
 
+  # 安装时剥符号表：vuna 的运行时报错/回栈标签来自 `dt_def_locs`（`.data` 里的
+  # 数据表）+ frametable（`-g` 编进去的 `.data`），不依赖 ELF 的 `.symtab` / `.debug_*`
+  # ——剥离后的二进制作过回栈验证，仍打印 `名字 (文件:行)`。单个二进制小 ~25%。
+  # 需要 gdb / DWARF 级调试时在源码树里自己重编（`-g` 仍在 build.sh 里）。
+  stripBins = ''
+    for f in "$out"/bin/*; do
+      if [ -f "$f" ]; then
+        chmod u+w "$f"
+        ${pkgs.binutils}/bin/strip "$f"
+      fi
+    done
+  '';
+
   # 所有 stage 产物共享的派生形状；build 脚本内容决定 drvPath，改动会改变
   # vuna-seed / vuna-compiler / vuna 的派生哈希。
   mkStage =
@@ -22,7 +35,7 @@ let
       build,
     }:
     pkgs.runCommand name {
-      nativeBuildInputs = ocamlTools;
+      nativeBuildInputs = ocamlTools ++ [ pkgs.binutils ];
       # 本仓库没有二进制缓存：不向 substituter 查询，避免离线构建被无意义地阻塞。
       allowSubstitutes = false;
 
@@ -30,7 +43,7 @@ let
         inherit description mainProgram;
         license = lib.licenses.mit;
       };
-    } build;
+    } (build + stripBins);
 
   # stage 0：提交入库的多文件信任锚点种子，用 seed/build.sh 构建。
   # base 与可执行文件按「可执行文件相对布局」安装（$out/base），无 manifest 的
