@@ -1,0 +1,7 @@
+-- 实例符号名必须无歧义：`M.A.B` 与 `M_A.B` 的旧 sanitize（点→下划线）都会变成
+-- `Show_M_A_B`，会撞同一个 dict 符号；注入式转义后两者可共存。
+import M.A as MA
+import M_A as MB
+
+main : String
+main = show MA.MkB ++ "/" ++ show MB.MkB

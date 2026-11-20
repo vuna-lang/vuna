@@ -26,11 +26,23 @@ import Vuna.Compiler.Frontend.Rast.Name
 export instanceName : String -> Expr -> String
 instanceName cname headExpr = sanitizeInstName "${baseNameOf cname}_${derivedInstName headExpr}"
 
--- 实例名里的限定名（`Base.Trait.Field.Field`）带点；codegen 按名字前缀切模块时会把
--- `HasField_Base.Field` 误判成模块前缀。实例名只是内部符号，统一把点换成下划线。
--- | 实例名里的限定名带点；把点统一换成下划线，避免 codegen 按名字前缀误判模块。
-sanitizeInstName : String -> String
-sanitizeInstName s = join "_" (split "." s)
+-- | 实例符号名里的转义：非 `[A-Za-z0-9_]` 字符写成 `$<code>$`。
+--
+-- `$` 不是源码标识符字符，所以编码无歧义：`A.B` → `A$46$B`，源码里的 `A_B` 仍是
+-- `A_B`。实例名不带 `.`（codegen 不会把它误判成模块前缀）；`$` 由各后端按自己的
+-- 标识符规则再渲染（OCaml `_x36_`、wasm `_x36_`、native 汇编允许 `$`）。
+export sanitizeInstName : String -> String
+sanitizeInstName s = strPack (concatMap instNameChar (strUnpack s))
+
+instNameChar : Int -> List Int
+instNameChar c =
+  if isAsciiAlphaNum c || c == 95 then
+    [c]
+  else
+    append (strUnpack "$") (append (strUnpack (strFromInt c)) (strUnpack "$"))
+
+isAsciiAlphaNum : Int -> Bool
+isAsciiAlphaNum c = (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || (c >= 48 && c <= 57)
 
 -- | 实例头的名字后缀（类名本身不计入，类短名已由 `instanceName` 加过一次）：
 -- `Eq Int` → `Int`、`Eq Base.Data.Bool.Bool` → `Base.Data.Bool.Bool`、`Eq (Box a)` → `Box_a`。

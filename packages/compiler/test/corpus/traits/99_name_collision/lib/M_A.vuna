@@ -1,0 +1,9 @@
+module M_A where
+
+import Base.Trait.Show
+
+export data B(..) : Type where
+  MkB : B
+
+instance Show B where
+  show _ = "M_A.B"
