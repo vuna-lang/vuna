@@ -1495,7 +1495,7 @@ bindIndexBinderFuel fuel globals ctx ec rig name dom clo pats body sp =
 -- 否则按签名剩余 Pi 补 `\_arityN`（N 取当前上下文深度保证唯一），并把 body **应用**
 -- 到这些新参数，整体按原签名继续 check——`f : A -> B` 配 `f = g` 因此成立。
 -- 隐式 binder 沿用既有规则：index 域绑成擦除 λ（隐式实参由精化器插入），其它域仍是
--- ImplicitParamKind。`TC_DefFewerParams` 保留在错误表里但不再触发（见 Diagnostics）。
+-- ImplicitParamKind。
 checkBodyAtEndFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> Value -> Span -> Check (Pair Term Ec)
 checkBodyAtEndFuel fuel globals ctx ec body expected sp =
   if fuel <= 0 then

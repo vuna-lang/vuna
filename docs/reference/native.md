@@ -445,6 +445,19 @@ env，**不进 codegen**（同一 IR 的产物逐字节确定）。解析失败�
 - aarch64 及非 Linux 平台；寄存器分配与优化；栈溢出检查；位置表/backtrace。
 - 零参定义的重算优化（引入副作用前必须改）。
 
+### 8.1 与 OCaml / wasm 的语义差异（总览）
+
+逐项细节见上文条目；这里只列**有意保留**的差异（suite 的 `pure-cross` 对拍不覆盖它们）：
+
+| 语义 | OCaml | Native | WASM |
+| --- | --- | --- | --- |
+| `fsReadFile` > 8 MiB | 全量 | io 错误（8 MiB 上界） | 全量 |
+| 非 try FS 失败 | exit 2 | exit 2 | trap |
+| `strPack` 越界 | 抛异常 | 截断低 8 位 | 截断低 8 位 |
+| `isTty` | stdout | stdout | 恒 False（WASI 无 isatty，保守） |
+| 零参顶层定义 | 初始化时求值 | 每次引用重新调用 | `_start` 一次 |
+| 原子写临时名 | `<path>.<pid>.tmp` | `<path>.<pid>.tmp` | `<path>.tmp<µs><seq>` |
+
 ## 9. 对象表示与 List 桥接
 
 List / record / 用户 `data` 共用同一套对象布局（`[tag]` + 8 字节字段，按该族最大 arity
