@@ -130,12 +130,8 @@ evalIf (VBool b) th el = if b then th else el
 evalIf c th el = VIf c th el
 
 export spineAppend : Neutral -> Value -> Neutral
-spineAppend n a =
-  let
-    _ = obsCountAt 3 "vuna.counter.core.spine" 1
-  in case n of
-    NVar name level sp => NVar name level (append sp [a])
-    NGlobal g sp => NGlobal g (append sp [a])
+spineAppend (NVar name level sp) a = NVar name level (append sp [a])
+spineAppend (NGlobal g sp) a = NGlobal g (append sp [a])
 
 export applyValue : Value -> Value -> Value
 applyValue f a = applyValueFuel 128 f a

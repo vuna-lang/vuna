@@ -114,9 +114,8 @@ span / 计数 / 日志 / 采样栈写成 **Chrome Trace Event JSONL**；关闭�
   高频三项 `vuna.counter.core.conv`（conv 调用）、`vuna.counter.conv.mismatch`（conv 失配）、
   `vuna.counter.core.reduce`（`eval` 调用）**只在 level ≥ 3 发**：一次 check 是
   1.6×10^6（`eval`）/ 2×10^5（`conv`）级，放 level 2 会把 trace 撑大一个量级；
-  同一档位还有 `vuna.counter.core.delta`（delta 展开次数）、`vuna.counter.core.spine`
-  （`spineAppend` 追加次数）、`vuna.counter.elab.retry.{hole,third}`（应用表达式第二 /
-  第三次尝试），用于把分配归因到「重算次数」而不是「表示重复」；
+  同一档位还有 `vuna.counter.core.delta`（delta 展开次数），用于把分配归因到
+  「重算次数」而不是「表示重复」；
   终止性 / SCT 规模：`vuna.counter.term.scc_size`、`vuna.counter.term.sites`、
   `vuna.counter.term.graphs`、`vuna.counter.term.graphs_final`、
   `vuna.counter.term.closure_rounds`；

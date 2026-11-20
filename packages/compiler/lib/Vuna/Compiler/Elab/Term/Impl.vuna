@@ -1899,16 +1899,12 @@ checkEFuel fuel globals ctx ec expr expected =
               case checkEFuel (fuel - 1) globals ctx ec callExpr expected of
                 OkC r => OkC r
                 ErrC e1 =>
-                  let
-                    _ = obsCountAt 3 "vuna.counter.elab.retry.hole" 1
-                  in Vuna.Compiler.Base.Common.bind (handleCallExprAtHole globals ec expr (exprSpan expr)) (
+                  Vuna.Compiler.Base.Common.bind (handleCallExprAtHole globals ec expr (exprSpan expr)) (
                       \callExpr2 =>
                         case checkEFuel (fuel - 1) globals ctx ec callExpr2 expected of
                           OkC r2 => OkC r2
                           ErrC _ =>
-                            let
-                              _ = obsCountAt 3 "vuna.counter.elab.retry.third" 1
-                            in Vuna.Compiler.Base.Common.bind thirdCall (
+                            Vuna.Compiler.Base.Common.bind thirdCall (
                                 \callExpr3 =>
                                   case obsCheck "vuna.elab.term.retry-third" (\_ => checkEFuel (fuel - 1) globals ctx ec callExpr3 expected) of
                                     OkC r3 => OkC r3
