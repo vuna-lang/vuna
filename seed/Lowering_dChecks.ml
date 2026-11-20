@@ -374,22 +374,22 @@ let rec v_checkAllErasure = (fun (mc0 : string B_dData_dList.t_List) (mc1 : Elab
 # 477 "Vuna/Compiler/Lowering/Checks.vuna"
 let rec v_erasureFuelForArgs = (fun (mc0 : (Core_dTerm.t_Term, Core_dTerm.t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__252, dtb__253) -> (match dtb__252 with
-  | { B_dData_dPair.f_Pair_first = dtb__254; B_dData_dPair.f_Pair_second = dtb__255 } -> ((Core_dTerm.v_termSize dtb__254) + (v_erasureFuelForArgs dtb__253))
+  | { B_dData_dPair.f_Pair_first = dtb__254; B_dData_dPair.f_Pair_second = dtb__255 } -> ((fun total -> (if (total > v_erasureFuelMax) then v_erasureFuelMax else total)) ((Core_dTerm.v_termSize dtb__254) + (v_erasureFuelForArgs dtb__253)))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dList.C_List_Nil -> 0
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 481 "Vuna/Compiler/Lowering/Checks.vuna"
+# 484 "Vuna/Compiler/Lowering/Checks.vuna"
 let v_checkConArgsErasure = (fun (a1 : string B_dData_dList.t_List) (a2 : (string, Core_dTerm.t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) (a3 : (Core_dTerm.t_Term, Core_dTerm.t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) -> ((((v_checkConArgsErasureFuel (v_erasureFuelFor (v_erasureFuelForArgs a3))) a1) a2) a3))
 
-# 488 "Vuna/Compiler/Lowering/Checks.vuna"
+# 491 "Vuna/Compiler/Lowering/Checks.vuna"
 let rec v_erasureFuelForAlts = (fun (mc0 : Core_dTerm.t_CaseAlt B_dData_dList.t_List) -> (match mc0 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__256, dtb__257) -> ((Core_dTerm.v_termSize (Core_dTerm.v_caseAltBody dtb__256)) + (v_erasureFuelForAlts dtb__257))
+  | B_dData_dList.C_List__x58__x58_ (dtb__256, dtb__257) -> ((fun total -> (if (total > v_erasureFuelMax) then v_erasureFuelMax else total)) ((Core_dTerm.v_termSize (Core_dTerm.v_caseAltBody dtb__256)) + (v_erasureFuelForAlts dtb__257)))
   | B_dData_dList.C_List_Nil -> 0
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 485 "Vuna/Compiler/Lowering/Checks.vuna"
+# 488 "Vuna/Compiler/Lowering/Checks.vuna"
 let v_checkAltErasure = (fun (a1 : string B_dData_dList.t_List) (a2 : (string, Core_dTerm.t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) (a3 : Core_dTerm.t_CaseAlt B_dData_dList.t_List) -> ((((v_checkAltErasureFuel (v_erasureFuelFor (v_erasureFuelForAlts a3))) a1) a2) a3))

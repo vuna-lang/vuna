@@ -43,10 +43,10 @@ let v_peek = (fun mc0 -> (match mc0 with
 ))
 
 # 71 "Base/Container/PriorityQueue.vuna"
-let v_pop = (fun d4962 mc0 -> (match mc0 with
+let v_pop = (fun d4964 mc0 -> (match mc0 with
   | { f_PriorityQueue_priorityQueueHeap = dtb__20; f_PriorityQueue_priorityQueueCount = dtb__21 } -> (match dtb__20 with
   | C_Heap_HEmpty -> B_dData_dMaybe.C_Maybe_Nothing
-  | C_Heap_HNode (dtb__22, dtb__23, dtb__24, dtb__25) -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = dtb__23; B_dData_dPair.f_Pair_second = { f_PriorityQueue_priorityQueueHeap = (((v_meld d4962) dtb__24) dtb__25); f_PriorityQueue_priorityQueueCount = (dtb__21 - 1) } }))
+  | C_Heap_HNode (dtb__22, dtb__23, dtb__24, dtb__25) -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = dtb__23; B_dData_dPair.f_Pair_second = { f_PriorityQueue_priorityQueueHeap = (((v_meld d4964) dtb__24) dtb__25); f_PriorityQueue_priorityQueueCount = (dtb__21 - 1) } }))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
