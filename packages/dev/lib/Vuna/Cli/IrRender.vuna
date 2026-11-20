@@ -140,13 +140,12 @@ renderIr fuel e =
 
 export renderDef : IrDef -> String
 renderDef (IrExternDef n ty c _) = "extern " ++ n ++ " : " ++ tyText ty ++ " = " ++ c
+renderDef (IrDef n ar _ ty body _ _ _) =
+  "def " ++ n ++ "/" ++ strFromInt ar ++ defSigText ty ++ " = " ++ renderIr 2000 body
 
 defSigText : Maybe IrTy -> String
 defSigText Nothing = ""
 defSigText (Just t) = " : " ++ tyText t
-
-renderDef (IrDef n ar _ ty body _ _ _) =
-  "def " ++ n ++ "/" ++ strFromInt ar ++ defSigText ty ++ " = " ++ renderIr 2000 body
 
 renderTyDecl : IrTyDecl -> String
 renderTyDecl (IrVariantDecl n p ctors) =

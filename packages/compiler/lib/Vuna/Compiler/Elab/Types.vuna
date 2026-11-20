@@ -120,8 +120,6 @@ dtDataKind (DtData name params ctors kind viaClasses lin repr fields isRec) = ki
 dtDataViaClasses : DtData -> List String
 dtDataViaClasses (DtData name params ctors kind viaClasses lin repr fields isRec) = viaClasses
 
-export dtDataLinear : DtData -> Bool
-
 -- | 表示档位（`ReprAuto` = 未声明，回落自动去装箱推断；档位进 iface，下游与 FFI 可依赖）。
 export dtDataRepr : DtData -> ReprTier
 dtDataRepr (DtData name params ctors kind viaClasses lin repr fields isRec) = repr
@@ -134,6 +132,7 @@ dtDataFields (DtData name params ctors kind viaClasses lin repr fields isRec) = 
 export dtDataIsRecord : DtData -> Bool
 dtDataIsRecord (DtData name params ctors kind viaClasses lin repr fields isRec) = isRec
 
+export dtDataLinear : DtData -> Bool
 dtDataLinear (DtData name params ctors kind viaClasses lin repr fields isRec) = lin
 
 -- 一个洞的目标。编号、位置、目标类型（level 形态）、绑定时上下文快照。
@@ -312,8 +311,6 @@ export record Ec(..) where
   -- 逐定义恢复时收集的诊断（前插；出口 reverse）。严格路径不用它（首个错误直接短路）。
   ecErrors : List Diagnostic
 
-export ecNext : Ec -> Int
-
 export ecPutNext : Ec -> Int -> Ec
 ecPutNext (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl haslin mspans uspans warnings counters errors) n =
   Ec
@@ -366,6 +363,7 @@ ecPutClausesTbl (Ec next sols defs datas depths goals insts classes dgoals deftb
     counters
     errors
 
+export ecNext : Ec -> Int
 ecNext (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl haslin mspans uspans warnings counters errors) =
   next
 
@@ -718,13 +716,12 @@ export ecSolTbl : Ec -> HashMap Int Value
 ecSolTbl (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl haslin mspans uspans warnings counters errors) =
   soltbl
 
-export ecPutSols : Ec -> List (Pair Int Value) -> Ec
-
 -- force/conv 的解表包装：list（权威）+ 哈希索引（O(1) 查）+ 元变量创建深度索引
 -- （求解点就地检查解的作用域）。
 export ecSolsP : Ec -> Sols
 ecSolsP ec = solsOf (ecSolTbl ec) (ecSols ec) (ecDepthTbl ec)
 
+export ecPutSols : Ec -> List (Pair Int Value) -> Ec
 ecPutSols ec sols2 =
   let
     delta = solsDelta (ecSols ec) sols2

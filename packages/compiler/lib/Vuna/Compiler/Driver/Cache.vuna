@@ -69,11 +69,10 @@ fixDef tbl (DtExtern n ty c sp) = DtExtern n (fixTerm tbl 0 ty) c sp
 fixCtor : HashMap Int Value -> DtCtor -> DtCtor
 fixCtor tbl (DtCtor n fam tele ty sp) = DtCtor n fam tele (fixTerm tbl 0 ty) sp
 
-fixData : HashMap Int Value -> DtData -> DtData
-
 fixFieldMeta : HashMap Int Value -> DtFieldMeta -> DtFieldMeta
 fixFieldMeta tbl (DtFieldMeta fn fi fty) = DtFieldMeta fn fi (fixTerm tbl 0 fty)
 
+fixData : HashMap Int Value -> DtData -> DtData
 fixData tbl (DtData n ps ctors kind viaClasses lin repr fields isRec) =
   DtData
     n

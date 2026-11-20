@@ -487,9 +487,6 @@ parseInstant line json =
 -- ---------------------------------------------------------------
 -- | 事件 -> 规范 JSON 对象；缺失的语义字段（`ts` / `dur` / `value`）不写出。
 export eventToJson : ObsEvent -> Json
-eventToJson (ObsMetaEvent m) =
-  JObj
-    (append [Pair "ph" (JStr "M"), Pair "name" (JStr m.metaName), Pair "pid" (JNum m.metaPid), Pair "tid" (JNum m.metaTid)] [Pair "args" (JObj (metaArgsJson m))])
 
 -- | 内部：元数据事件的 `args` 对象；`t0` 缺失时不写出该键。
 metaArgsJson : ObsMetaData -> List (Pair String Json)
@@ -502,6 +499,9 @@ metaArgsJson m =
         Nothing => []
     )
 
+eventToJson (ObsMetaEvent m) =
+  JObj
+    (append [Pair "ph" (JStr "M"), Pair "name" (JStr m.metaName), Pair "pid" (JNum m.metaPid), Pair "tid" (JNum m.metaTid)] [Pair "args" (JObj (metaArgsJson m))])
 eventToJson (ObsSpanEvent base dur) =
   JObj
     (append (append [Pair "ph" (JStr "X"), Pair "pid" (JNum base.basePid), Pair "tid" (JNum base.baseTid), Pair "name" (JStr base.baseName)] (append (tsPair base) (catPairs base))) (append (durPairs dur) (argsPairs base)))

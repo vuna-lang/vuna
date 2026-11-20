@@ -1311,6 +1311,7 @@ listLitElems : Expr -> Maybe (List Expr)
 listLitElems (EVar name sp) = if isListNilSyntax (rnameKey name) then Just [] else Nothing
 listLitElems (EApp (EVar name csp) ([h, t]) sp) =
   if isListConsSyntax (rnameKey name) then listLitConsTail h t else Nothing
+listLitElems _ = Nothing
 
 -- | 在元素列表前插入一个元素（列表字面量拆解用）。
 listLitConsTail : Expr -> Expr -> Maybe (List Expr)
@@ -1318,8 +1319,6 @@ listLitConsTail h t =
   case listLitElems t of
     Just rest => Just (h :: rest)
     Nothing => Nothing
-
-listLitElems _ = Nothing
 
 -- | 在构造子列表里按短名查构造子。
 findCtorByShort : String -> List DtCtor -> Maybe DtCtor

@@ -451,6 +451,7 @@ listExprElems : Expr -> Maybe (List Expr)
 listExprElems (EVar name sp) = if name == "Nil" || isListNilSyntax name then Just [] else Nothing
 listExprElems (EApp (EVar name csp) ([a, rest]) sp) =
   if isListConsSyntax name then listExprCons a rest else Nothing
+listExprElems _ = Nothing
 
 -- | 内部：cons 链展开的辅助：把 `a : rest` 接在 `rest` 展开出的元素前面。
 listExprCons : Expr -> Expr -> Maybe (List Expr)
@@ -458,8 +459,6 @@ listExprCons a rest =
   case listExprElems rest of
     Just elems => Just (a :: elems)
     Nothing => Nothing
-
-listExprElems _ = Nothing
 
 -- 元组语法（parser 保留名）右嵌套展开成元素表；`Nothing` = 不是元组语法。
 tupleExprElems : Expr -> Maybe (List Expr)

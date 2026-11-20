@@ -1976,12 +1976,11 @@ dtSplitProjectWithIfaces ctx entry printResult ifaces =
     _ <- obsMarkEff "vuna.codegen.split"
     pure r
 
-dtSplitPartsOursWith : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Pair (List Decl) (List Module) -> List CachedProgram -> Bool -> List (Pair String (Pair String Int)) -> Eff r (Check (Pair (List SplitFile) CheckedPackage))
-
 dtSplitPartsOurs : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Pair (List Decl) (List Module) -> List CachedProgram -> Bool -> Eff r (Check (Pair (List SplitFile) CheckedPackage))
 dtSplitPartsOurs ctx entry parts deps printResult =
   dtSplitPartsOursWith ctx entry parts deps printResult []
 
+dtSplitPartsOursWith : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Pair (List Decl) (List Module) -> List CachedProgram -> Bool -> List (Pair String (Pair String Int)) -> Eff r (Check (Pair (List SplitFile) CheckedPackage))
 dtSplitPartsOursWith ctx entry parts deps printResult extraDefLocs =
   let
     pkgName = contextPackageName ctx
