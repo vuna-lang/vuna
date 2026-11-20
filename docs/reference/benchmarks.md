@@ -324,16 +324,16 @@ wasm 删掉 wat 机器后连纯程序也小了 ~4%；native 相反：`machineRun
 `Set` / `Hashtbl`），golden 用**顺序敏感**校验和（遍历/出队顺序错了就失配）；输入与
 累加都用尾递归，三个后端都能跑完（wasm 1 MB 栈）。
 
-同机一档（HEAD，`--target all --runs 5 --warmup 2`，loadavg ≈5.6；wasm 括号内是减掉
-`meta.node_startup_ms` = 24 ms 的 net）：
+同机一档（HEAD，`--target all --runs 5 --warmup 2`，loadavg ≈3.6；wasm 括号内是减掉
+`meta.node_startup_ms` = 23 ms 的 net）：
 
 | benchmark | 规模 | 手写 ms | OCaml 后端 | native | wasm（net） |
 | --- | --- | --- | --- | --- | --- |
-| sort_lib（`Sort.sortBy` 排序） | 20000 Int | 7 | 19（2.71x） | 47（6.71x） | 82（58；8.29x） |
-| treemap（insert + lookup + 升序遍历） | 20000 键 | 10 | 22（2.20x） | 46（4.60x） | 101（77；7.70x） |
-| queue（push + pop + size） | 50000 次 | 4 | 7（1.75x） | 13（3.25x） | 62（38；9.50x） |
-| priority_queue（push + pop） | 20000 次 | 10 | 18（1.80x） | 41（4.10x） | 67（43；4.30x） |
-| hashmap_remove（insert + remove + lookup） | 20000 键 | 5 | 34（6.80x） | 148（29.60x） | 120（96；19.20x） |
+| sort_lib（`Sort.sortBy` 排序） | 20000 Int | 7 | 19（2.71x） | 47（6.71x） | 81（58；8.29x） |
+| treemap（insert + lookup + 升序遍历） | 20000 键 | 11 | 22（2.00x） | 48（4.36x） | 111（88；8.00x） |
+| queue（push + pop + size） | 50000 次 | 5 | 8（1.60x） | 13（2.60x） | 58（35；7.00x） |
+| priority_queue（push + pop） | 20000 次 | 11 | 20（1.82x） | 39（3.55x） | 69（46；4.18x） |
+| hashmap_remove（insert + remove + lookup） | 20000 键 | 5 | 34（6.80x） | 144（28.80x） | 109（86；17.20x） |
 
 读法：
 
