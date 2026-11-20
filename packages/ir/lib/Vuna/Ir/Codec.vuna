@@ -203,18 +203,23 @@ decBNameTag _ fuel c = Nothing
 
 encBinder : Int -> IrBinder -> List String -> List String
 encBinder fuel b acc =
-  encBName b.irBinderName (B.encBool b.irBinderErased (encIrTyM (fuel - 1) b.irBinderTy acc))
+  B.encInt
+    b.irBinderId
+    (encBName b.irBinderName (B.encBool b.irBinderErased (encIrTyM (fuel - 1) b.irBinderTy acc)))
 
 decBinder : Int -> B.Cur -> Maybe (Pair IrBinder B.Cur)
-decBinder fuel c = B.thenPair (decBName fuel c) (\name, c1 => decBinder1 fuel c1 name)
+decBinder fuel c = B.thenPair (B.decInt fuel c) (\id, c1 => decBinder0 fuel c1 id)
 
-decBinder1 : Int -> B.Cur -> IrBName -> Maybe (Pair IrBinder B.Cur)
-decBinder1 fuel c name =
-  B.thenPair (B.decBool fuel c) (\erased, c1 => decBinder2 fuel c1 name erased)
+decBinder0 : Int -> B.Cur -> Int -> Maybe (Pair IrBinder B.Cur)
+decBinder0 fuel c id = B.thenPair (decBName fuel c) (\name, c1 => decBinder1 fuel c1 id name)
 
-decBinder2 : Int -> B.Cur -> IrBName -> Bool -> Maybe (Pair IrBinder B.Cur)
-decBinder2 fuel c name erased =
-  B.thenPair (decIrTyM fuel c) (\ty, c1 => Just (Pair (IrBinder name erased ty) c1))
+decBinder1 : Int -> B.Cur -> Int -> IrBName -> Maybe (Pair IrBinder B.Cur)
+decBinder1 fuel c id name =
+  B.thenPair (B.decBool fuel c) (\erased, c1 => decBinder2 fuel c1 id name erased)
+
+decBinder2 : Int -> B.Cur -> Int -> IrBName -> Bool -> Maybe (Pair IrBinder B.Cur)
+decBinder2 fuel c id name erased =
+  B.thenPair (decIrTyM fuel c) (\ty, c1 => Just (Pair (IrBinder id name erased ty) c1))
 
 encBinders : Int -> List IrBinder -> List String -> List String
 encBinders fuel xs acc = "[" :: strFromInt (B.lenOf xs) :: ":" :: encBindersGo fuel xs acc

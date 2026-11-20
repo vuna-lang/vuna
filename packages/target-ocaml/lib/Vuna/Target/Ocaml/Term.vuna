@@ -2116,8 +2116,8 @@ genAssignedFields st family (f :: rest) =
     )
 
 nonErasedBinderText : IrBinder -> String
-nonErasedBinderText (IrBinder nm True _) = ""
-nonErasedBinderText (IrBinder nm False _) = irBinderText (IrBinder nm False Nothing)
+nonErasedBinderText (IrBinder _ nm True _) = ""
+nonErasedBinderText b = irBinderText b
 
 -- | λ 参数表：擦除占位不渲染；有可命名运行时类型的 binder 渲染成 `(x : ty)`。
 -- 注解里的跨单元类型引用记成依赖（与构造子 / record 引用同一条通道）。

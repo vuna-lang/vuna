@@ -243,16 +243,38 @@ anyErasedBinder [] = False
 anyErasedBinder (b :: rest) = if b.irBinderErased then True else anyErasedBinder rest
 
 checkBinderTysOf : List IrTyDecl -> List IrBinder -> Check Int
-checkBinderTysOf decls [] = OkC 0
-checkBinderTysOf decls (b :: rest) =
+checkBinderTysOf decls bs =
+  Vuna.Compiler.Base.Common.bind (checkBinderIds bs) (\_ => checkBinderTysList decls bs)
+
+-- 运行时 binder 必须有稳定 id，且同一 telescope 内不重复（擦除占位共享 0）。
+checkBinderIds : List IrBinder -> Check Int
+checkBinderIds [] = OkC 0
+checkBinderIds (b :: rest) =
+  if b.irBinderErased then
+    checkBinderIds rest
+  else if b.irBinderId == 0 then
+    icInternal "runtime binder has no stable id"
+  else if memBinderId b.irBinderId rest then
+    icInternal "duplicate binder id in the same telescope"
+  else
+    checkBinderIds rest
+
+memBinderId : Int -> List IrBinder -> Bool
+memBinderId id [] = False
+memBinderId id (b :: rest) =
+  if b.irBinderErased then memBinderId id rest else b.irBinderId == id || memBinderId id rest
+
+checkBinderTysList : List IrTyDecl -> List IrBinder -> Check Int
+checkBinderTysList decls [] = OkC 0
+checkBinderTysList decls (b :: rest) =
   if b.irBinderErased then
     case b.irBinderTy of
-      Nothing => checkBinderTysOf decls rest
+      Nothing => checkBinderTysList decls rest
       Just _ => icInternal "erased binder carries a runtime type annotation"
   else
     case b.irBinderTy of
-      Nothing => checkBinderTysOf decls rest
-      Just ty => Vuna.Compiler.Base.Common.bind (checkTyArity decls ty) (\_ => checkBinderTysOf decls rest)
+      Nothing => checkBinderTysList decls rest
+      Just ty => Vuna.Compiler.Base.Common.bind (checkTyArity decls ty) (\_ => checkBinderTysList decls rest)
 
 checkAltBinderTys : List IrTyDecl -> List IrAlt -> Check Int
 checkAltBinderTys decls [] = OkC 0
@@ -447,12 +469,4 @@ memBinder b [] = False
 memBinder b (x :: rest) = if sameBinder b x then True else memBinder b rest
 
 sameBinder : IrBinder -> IrBinder -> Bool
-sameBinder b1 b2 =
-  b1.irBinderErased == b2.irBinderErased && sameBName b1.irBinderName b2.irBinderName
-
-sameBName : IrBName -> IrBName -> Bool
-sameBName (IrBUser a) (IrBUser b) = a == b
-sameBName (IrBArm a) (IrBArm b) = a == b
-sameBName (IrBNat a) (IrBNat b) = a == b
-sameBName IrBWild IrBWild = True
-sameBName a b = False
+sameBinder = sameBinderId

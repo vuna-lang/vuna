@@ -133,15 +133,8 @@ loadReg r slot = [IMov (OpReg r) (OpMem Rbp (nativeSlotOff slot))]
 -- ---------------------------------------------------------------
 -- binder
 -- -----------------------------------------------------------
-bNameEq : IrBName -> IrBName -> Bool
-bNameEq (IrBUser x) (IrBUser y) = x == y
-bNameEq (IrBArm x) (IrBArm y) = x == y
-bNameEq (IrBNat x) (IrBNat y) = x == y
-bNameEq IrBWild IrBWild = True
-bNameEq _ _ = False
-
 binderEq : IrBinder -> IrBinder -> Bool
-binderEq a b = bNameEq a.irBinderName b.irBinderName && a.irBinderErased == b.irBinderErased
+binderEq a b = sameBinderId a b
 
 lookupBinder : IrBinder -> List (Pair IrBinder Int) -> Maybe Int
 lookupBinder _ [] = Nothing
@@ -844,12 +837,18 @@ applyAllIr : Ir -> List Ir -> Ir
 applyAllIr f [] = f
 applyAllIr f (a :: rest) = applyAllIr (IrApp Nothing f a) rest
 
+-- | 后端合成 binder 的保留 id 区间（与 Lowering / CPS / ANF 不相交）。
+backendBinderId : Int -> Int
+backendBinderId n = 0 - (200000000000000000 + n)
+
 effUnitBinder : IrBinder
-effUnitBinder = IrBinder (IrBUser "effUnitArg") False Nothing
+effUnitBinder = IrBinder (backendBinderId 1) (IrBUser "effUnitArg") False Nothing
 
 effArgBinders : Int -> List IrBinder
 effArgBinders n =
-  map (\i => IrBinder (IrBUser ("effArg" ++ strFromInt i)) False Nothing) (range 0 n)
+  map
+    (\i => IrBinder (backendBinderId (100 + i)) (IrBUser ("effArg" ++ strFromInt i)) False Nothing)
+    (range 0 n)
 
 nativeArityOf : FGen -> String -> Maybe Int
 nativeArityOf st name =

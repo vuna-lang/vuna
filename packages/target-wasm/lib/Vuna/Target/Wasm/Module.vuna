@@ -55,31 +55,13 @@ record GenState where
   gsNextLam : Int
 
 binderNameOf : IrBinder -> IrBName
-binderNameOf (IrBinder nm _ _) = nm
+binderNameOf (IrBinder _ nm _ _) = nm
 
 binderErasedOf : IrBinder -> Bool
-binderErasedOf (IrBinder _ erased _) = erased
-
-bNameEq : IrBName -> IrBName -> Bool
-bNameEq (IrBUser x) b =
-  case b of
-    IrBUser y => x == y
-    _ => False
-bNameEq (IrBArm x) b =
-  case b of
-    IrBArm y => x == y
-    _ => False
-bNameEq (IrBNat x) b =
-  case b of
-    IrBNat y => x == y
-    _ => False
-bNameEq IrBWild b =
-  case b of
-    IrBWild => True
-    _ => False
+binderErasedOf b = b.irBinderErased
 
 binderEq : IrBinder -> IrBinder -> Bool
-binderEq a b = bNameEq (binderNameOf a) (binderNameOf b) && binderErasedOf a == binderErasedOf b
+binderEq a b = sameBinderId a b
 
 lookupBinder : IrBinder -> List (Pair IrBinder String) -> Maybe String
 lookupBinder _ [] = Nothing
@@ -238,11 +220,13 @@ applyAllIr f [] = f
 applyAllIr f (a :: rest) = applyAllIr (IrApp Nothing f a) rest
 
 effUnitBinder : IrBinder
-effUnitBinder = IrBinder (IrBUser "effUnitArg") False Nothing
+effUnitBinder = IrBinder (backendBinderId 1) (IrBUser "effUnitArg") False Nothing
 
 effArgBinders : Int -> List IrBinder
 effArgBinders n =
-  map (\i => IrBinder (IrBUser ("effArg" ++ strFromInt i)) False Nothing) (range 0 n)
+  map
+    (\i => IrBinder (backendBinderId (100 + i)) (IrBUser ("effArg" ++ strFromInt i)) False Nothing)
+    (range 0 n)
 
 genEffThunk : Int -> GenState -> String -> String -> Int -> Ir -> Result (Pair (List Instr) GenState)
 genEffThunk fuel st family ctor arity prim =
@@ -327,8 +311,15 @@ genRtValue fuel st sym =
           bodyIr = IrRtApp sym (map (\b => IrVar b) bs)
         in genLamValue (fuel - 1) st bs Nothing bodyIr
 
+-- | 后端合成 binder 的保留 id 区间（与 Lowering / CPS / ANF 不相交）。
+backendBinderId : Int -> Int
+backendBinderId n = 0 - (200000000000000000 + n)
+
 etaBinders : Int -> List IrBinder
-etaBinders n = map (\i => IrBinder (IrBUser ("__eta" ++ strFromInt i)) False Nothing) (range 0 n)
+etaBinders n =
+  map
+    (\i => IrBinder (backendBinderId (200 + i)) (IrBUser ("__eta" ++ strFromInt i)) False Nothing)
+    (range 0 n)
 
 splitAt : Int -> List a -> Pair (List a) (List a)
 splitAt n xs =
@@ -1831,7 +1822,7 @@ opFieldOf ir = ir
 directSend : String -> String -> Ir -> Ir
 directSend runName opHName op =
   let
-    u = mkIrBinder "hostUnit"
+    u = mkIrBinder (backendBinderId 300) "hostUnit"
     applied = IrApp Nothing (IrApp Nothing (IrGlobal opHName) op) (IrGlobal hcPureK)
     ran = IrApp Nothing (IrGlobal runName) applied
   in IrCtor irEffTypeName irEffMkCtor Nothing [IrLam [u] Nothing ran]
@@ -1840,8 +1831,8 @@ directSend runName opHName op =
 abortSend : String -> Ir -> Ir
 abortSend textName op =
   let
-    u = mkIrBinder "hostUnit"
-    dead = mkIrBinder "hostDead"
+    u = mkIrBinder (backendBinderId 300) "hostUnit"
+    dead = mkIrBinder (backendBinderId 301) "hostDead"
     msg =
       IrConcatMany [IrStr "vuna: ", IrApp Nothing (IrGlobal textName) (opFieldOf op), IrStr "\n"]
     eprinted = IrRtApp "@vuna@prim_eff_eprint" [msg]
@@ -1945,8 +1936,8 @@ rwDef n d =
 pureKDef : IrDef
 pureKDef =
   let
-    r = mkIrBinder "pureKR"
-    u = mkIrBinder "pureKU"
+    r = mkIrBinder (backendBinderId 302) "pureKR"
+    u = mkIrBinder (backendBinderId 303) "pureKU"
   in IrDef
     hcPureK
     1

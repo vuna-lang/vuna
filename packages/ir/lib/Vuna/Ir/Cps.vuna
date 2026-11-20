@@ -106,43 +106,44 @@ cpsFuelOfDefs defs = cpsFuelBase + 8 * cpsDefsSize defs
 -- ---------------------------------------------------------------
 -- 小工具
 -- ---------------------------------------------------------------
-bNameEq : IrBName -> IrBName -> Bool
-bNameEq (IrBUser x) (IrBUser y) = x == y
-bNameEq (IrBArm x) (IrBArm y) = x == y
-bNameEq (IrBNat x) (IrBNat y) = x == y
-bNameEq IrBWild IrBWild = True
-bNameEq _ _ = False
-
 binderEq : IrBinder -> IrBinder -> Bool
-binderEq (IrBinder na ea ta) (IrBinder nb eb tb) = bNameEq na nb && ea == eb
+binderEq a b = sameBinderId a b
 
 memBinder : IrBinder -> List IrBinder -> Bool
 memBinder _ [] = False
 memBinder b (x :: rest) = binderEq b x || memBinder b rest
 
 binderErased : IrBinder -> Bool
-binderErased (IrBinder _ erased _) = erased
+binderErased b = b.irBinderErased
 
 -- | 运行时 binder（擦除占位不进作用域）。
 runtimeBinders : List IrBinder -> List IrBinder
 runtimeBinders bs = filter (\b => not (binderErased b)) bs
 
-mkBinder : String -> IrBinder
-mkBinder name = mkIrBinder name
+-- | CPS 合成 binder 的保留 id 区间：`kind` 区分前缀（1..8 是各 fresh 前缀，
+--   9 是固定名字），`fuel` 在同一路径上严格递减、`i` 区分同一 fuel 的多参 binder
+--   （仅 `__cpsA` 用）。范围与 Lowering（正数）/ ANF / 后端（更负的区间）不相交。
+cpsSynthId : Int -> Int -> Int -> Int
+cpsSynthId kind fuel i = 0 - (1 + kind * 1000000000000000 + fuel * 1000000 + i)
 
--- binder 名字带燃料编号：同一路径上燃料严格递减，嵌套 binder 不会撞名
--- （binder 身份是 name + erased，纯同名会被内层遮蔽）。
+cpsFixedId : Int -> Int
+cpsFixedId n = cpsSynthId 9 0 n
+
+mkBinderAt : Int -> String -> IrBinder
+mkBinderAt id name = mkIrBinder id name
+
 freshV : Int -> IrBinder
-freshV fuel = mkBinder ("__cpsV" ++ strFromInt fuel)
+freshV fuel = mkBinderAt (cpsSynthId 1 fuel 0) ("__cpsV" ++ strFromInt fuel)
 
 freshK : Int -> IrBinder
-freshK fuel = mkBinder ("__cpsK" ++ strFromInt fuel)
+freshK fuel = mkBinderAt (cpsSynthId 2 fuel 0) ("__cpsK" ++ strFromInt fuel)
 
 freshU : Int -> IrBinder
-freshU fuel = mkBinder ("__cpsU" ++ strFromInt fuel)
+freshU fuel = mkBinderAt (cpsSynthId 3 fuel 0) ("__cpsU" ++ strFromInt fuel)
 
 freshA : Int -> Int -> IrBinder
-freshA fuel i = mkBinder ("__cpsA" ++ strFromInt fuel ++ "_" ++ strFromInt i)
+freshA fuel i =
+  mkBinderAt (cpsSynthId 4 fuel i) ("__cpsA" ++ strFromInt fuel ++ "_" ++ strFromInt i)
 
 applyAll : Ir -> List Ir -> Ir
 applyAll f [] = f
@@ -212,7 +213,7 @@ thunkBindersOfAlt alt = if isThunkAlt alt then runtimeBinders alt.irAltBinders e
 identityCont : Ir
 identityCont =
   let
-    v = mkBinder "__cpsId"
+    v = mkBinderAt (cpsFixedId 1) "__cpsId"
   in IrLam [v] (Just IrTyOpaque) (IrVar v)
 
 -- ---------------------------------------------------------------
@@ -562,17 +563,17 @@ mIsResumeAppGo r (e@(IrApp _ _ _)) =
 mIsResumeAppGo r _ = False
 
 mFreshV : Int -> IrBinder
-mFreshV n = mkBinder ("__mchV" ++ strFromInt n)
+mFreshV n = mkBinderAt (cpsSynthId 5 n 0) ("__mchV" ++ strFromInt n)
 
 mFreshK : Int -> IrBinder
-mFreshK n = mkBinder ("__mchK" ++ strFromInt n)
+mFreshK n = mkBinderAt (cpsSynthId 6 n 0) ("__mchK" ++ strFromInt n)
 
 -- | handler clause 的 kDone：尾位置 resume 用它作为段边界标记（`MkRestTail`）。
 mFreshTailK : Int -> IrBinder
-mFreshTailK n = mkBinder ("__mchTK" ++ strFromInt n)
+mFreshTailK n = mkBinderAt (cpsSynthId 7 n 0) ("__mchTK" ++ strFromInt n)
 
 mFreshR : Int -> IrBinder
-mFreshR n = mkBinder ("__mchR" ++ strFromInt n)
+mFreshR n = mkBinderAt (cpsSynthId 8 n 0) ("__mchR" ++ strFromInt n)
 
 -- | λ 的结果类型是不是 `Eff r a`：机器化 CPS 据此区分 `a -> Eff r b` 与普通函数。
 -- `Eff` 的运行时实参记成 `[IrTyOpaque]`（结果类型不可命名时）；这里只比族名。
@@ -593,7 +594,7 @@ isEffThunkBody _ = False
 mRunEffTerm : Ir -> Ir -> Ir
 mRunEffTerm eff k =
   let
-    th = mkBinder "__mEffTh"
+    th = mkBinderAt (cpsFixedId 2) "__mEffTh"
   in IrCase
     (Just IrTyOpaque)
     (Just IrTyOpaque)
@@ -601,7 +602,7 @@ mRunEffTerm eff k =
     [IrAlt (Just (Pair irEffTypeName irEffMkCtor)) [th] (IrRtApp irMRunEffName [IrVar th, k])]
 
 mNoResumption : IrBinder
-mNoResumption = mkBinder "@vuna@noresume"
+mNoResumption = mkBinderAt (cpsFixedId 3) "@vuna@noresume"
 
 -- | do 块续延 λ：保持一个参数（`>>=` 仍按 1 参调用），返回一个 Eff，其 thunk
 -- 以 (u, K) 运行；resumption 的 kRest 接成 K。
@@ -609,7 +610,7 @@ mEffContLambda : Int -> IrBinder -> List IrBinder -> Maybe IrTy -> Ir -> Ir
 mEffContLambda fuel r bs rt body =
   let
     kd = mFreshK fuel
-    u = mkBinder "__mEffU"
+    u = mkBinderAt (cpsFixedId 4) "__mEffU"
     v = mFreshV fuel
   in IrLam
     bs
@@ -866,7 +867,7 @@ mSymsAltMM fuel m =
 mDoneCont : Ir
 mDoneCont =
   let
-    v = mkBinder "__mDoneV"
+    v = mkBinderAt (cpsFixedId 5) "__mDoneV"
   in IrLam
     [v]
     (Just IrTyOpaque)
@@ -1212,12 +1213,12 @@ mCleanupDef n body =
     case body of
       IrLam bs _ _ =>
         case lastBinderOf bs of
-          Just th => Just (IrLam bs (Just IrTyOpaque) (IrCtor irEffTypeName irEffMkCtor Nothing [IrLam [mkBinder "__mCleanU", mkBinder "__mCleanK"] (Just IrTyOpaque) (IrCtor machineCtl (machineCtl ++ ".MkPushCleanup") Nothing [IrCtor "Base.Effect.Core.Cleanup" "Base.Effect.Core.Cleanup.MkCleanup" Nothing [IrVar th], IrVar (mkBinder "__mCleanK")])]))
+          Just th => Just (IrLam bs (Just IrTyOpaque) (IrCtor irEffTypeName irEffMkCtor Nothing [IrLam [mkBinderAt (cpsFixedId 6) "__mCleanU", mkBinderAt (cpsFixedId 7) "__mCleanK"] (Just IrTyOpaque) (IrCtor machineCtl (machineCtl ++ ".MkPushCleanup") Nothing [IrCtor "Base.Effect.Core.Cleanup" "Base.Effect.Core.Cleanup.MkCleanup" Nothing [IrVar th], IrVar (mkBinderAt (cpsFixedId 7) "__mCleanK")])]))
           Nothing => Nothing
       _ => Nothing
   else if n == cleanupPopName then
     case body of
-      IrLam bs _ _ => Just (IrLam bs (Just IrTyOpaque) (IrCtor irEffTypeName irEffMkCtor Nothing [IrLam [mkBinder "__mCleanU", mkBinder "__mCleanK"] (Just IrTyOpaque) (IrCtor machineCtl (machineCtl ++ ".MkPopCleanup") Nothing [IrVar (mkBinder "__mCleanK")])]))
+      IrLam bs _ _ => Just (IrLam bs (Just IrTyOpaque) (IrCtor irEffTypeName irEffMkCtor Nothing [IrLam [mkBinderAt (cpsFixedId 6) "__mCleanU", mkBinderAt (cpsFixedId 7) "__mCleanK"] (Just IrTyOpaque) (IrCtor machineCtl (machineCtl ++ ".MkPopCleanup") Nothing [IrVar (mkBinderAt (cpsFixedId 7) "__mCleanK")])]))
       _ => Nothing
   else
     Nothing

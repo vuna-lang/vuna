@@ -322,15 +322,8 @@ nRtUnknown _ = False
 -- ---------------------------------------------------------------
 -- 绑定环境（推断）
 -- ---------------------------------------------------------------
-nBNameEq : IrBName -> IrBName -> Bool
-nBNameEq (IrBUser x) (IrBUser y) = x == y
-nBNameEq (IrBArm x) (IrBArm y) = x == y
-nBNameEq (IrBNat x) (IrBNat y) = x == y
-nBNameEq IrBWild IrBWild = True
-nBNameEq _ _ = False
-
 nBinderEq : IrBinder -> IrBinder -> Bool
-nBinderEq a b = nBNameEq a.irBinderName b.irBinderName && a.irBinderErased == b.irBinderErased
+nBinderEq a b = sameBinderId a b
 
 nLookupEnv : IrBinder -> List (Pair IrBinder NCls) -> Maybe NCls
 nLookupEnv _ [] = Nothing

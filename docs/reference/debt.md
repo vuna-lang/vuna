@@ -214,7 +214,7 @@ ID 是稳定引用（`层前缀-序号`）：条目关闭即删除该行，ID �
 
 ## 跨层根因
 
-1. **名字即身份 / 名字即接口**：`RName` 是字符串、`Rast.Bridge` 用空作用域重分类、`IrBinder` 无唯一 id、
+1. **名字即身份 / 名字即接口**：`RName` 是字符串、`Rast.Bridge` 用空作用域重分类、
    `bindShapeOf` 的索引模式匹配、`__anf`/`__cps` 编号借 fuel、`showTerm`/`showValueAt 6` 当相等判据
    （仅剩诊断展示 EC-35），以及把元数据编进名字（`#section`、`@vuna@…`）
    与按短名分组的方法 / 实例（EC-12 / EC-23 / D124）。

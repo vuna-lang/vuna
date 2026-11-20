@@ -73,7 +73,7 @@ sampleDefs =
       0
       []
       (Just (IrTyFun IrTyInt IrTyInt))
-      (IrLam [mkIrBinderTyped "x" IrTyInt] (Just IrTyInt) (IrVar (mkIrBinderTyped "x" IrTyInt)))
+      (IrLam [mkIrBinderTyped 1 "x" IrTyInt] (Just IrTyInt) (IrVar (mkIrBinderTyped 1 "x" IrTyInt)))
       False
       False
       Nothing
@@ -106,7 +106,7 @@ inferDefs =
       0
       []
       Nothing
-      (IrLam [] Nothing (IrLet [mkIrBinder "s"] (IrStr "x") (IrVar (mkIrBinder "s"))))
+      (IrLam [] Nothing (IrLet [mkIrBinder 1 "s"] (IrStr "x") (IrVar (mkIrBinder 1 "s"))))
       False
       False
       Nothing
@@ -123,7 +123,7 @@ caseDefs =
       0
       []
       Nothing
-      (IrCase (Just (IrTyData "Option" [IrTyStr])) Nothing (IrVar (mkIrBinder "o")) [IrAlt (Just (Pair "Option" "Some")) [mkIrBinder "v"] (IrVar (mkIrBinder "v")), IrAlt Nothing [] (IrInt 0)])
+      (IrCase (Just (IrTyData "Option" [IrTyStr])) Nothing (IrVar (mkIrBinder 1 "o")) [IrAlt (Just (Pair "Option" "Some")) [mkIrBinder 2 "v"] (IrVar (mkIrBinder 2 "v")), IrAlt Nothing [] (IrInt 0)])
       False
       False
       Nothing

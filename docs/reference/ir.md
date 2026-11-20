@@ -90,6 +90,22 @@ binder 的**身份**在 Lowering 分配，前缀与编号渲染属后端：
 | `IrBNat n` | `dtnat__<n>` | Nat case 的 scrutinee binder |
 | `IrBWild` | `_` | 丢弃 |
 
+`IrBName` 只负责渲染；binder 的**身份**是 `IrBinder` 的 `irBinderId`
+（`sameBinderId` 只比这个值，名字与类型不参与比较）：
+
+| id 区间 | 分配者 | 说明 |
+| --- | --- | --- |
+| `1..` | Lowering（`LwSt.lwBinder`） | 每单元单调递增，跨定义不复用 |
+| `-1` | 类型注解遍历 | 不进 IR 的临时 binder 哨兵 |
+| `-(kind*10^15 + fuel*10^6 + i)` | CPS | kind 区分 fresh 前缀；fuel 沿作用域链严格递减 |
+| `-(10^17 + n)` | ANF | `__anf<n>` |
+| `-(2*10^17 + n)` | native / wasm 合成 | `effArg` / `eta` / 宿主包装 |
+| `0` | 全仓共享 | 擦除占位（不进运行时，`IrVar` 不得引用） |
+
+id 只需沿作用域链唯一，不同定义 / 单元可复用。Pass 里的合成 binder 区间互不相交，
+因此与 Lowering 的正数 id 不会误判相等。`Ir.Validate` 校验运行时 binder 的 id 非 0、
+同一 telescope 内不重复。
+
 `irBinderErased = True` 只占 de Bruijn 槽位、不进 pattern / 参数表。
 `irBinderTy` 是可选的运行时类型（`IrTy`）：Lowering 只在外层 binder 与类型实参都能
 落到可命名的运行时类型时填入，擦除占位与类型参数保持 `Nothing`；后端渲染成

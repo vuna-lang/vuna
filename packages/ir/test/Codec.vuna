@@ -38,14 +38,14 @@ sampleTy =
 sampleIr : Ir
 sampleIr =
   IrLet
-    [mkIrBinder "x", mkIrBinderErased]
+    [mkIrBinder 1 "x", mkIrBinderErased]
     (IrCtor "Fam" "Ctor" (Just [IrTyInt]) [IrInt 3, IrStr "hi"])
-    (IrCase (Just IrTyInt) (Just IrTyStr) (IrVar (mkIrBinderTyped "x" IrTyInt)) [IrAlt (Just (Pair "Fam" "Some")) [mkIrBinderArm 1] (IrGlobal "y"), IrAlt Nothing [] (IrRtApp "+" [IrInt 1, IrInt 2])])
+    (IrCase (Just IrTyInt) (Just IrTyStr) (IrVar (mkIrBinderTyped 1 "x" IrTyInt)) [IrAlt (Just (Pair "Fam" "Some")) [mkIrBinderArm 2 1] (IrGlobal "y"), IrAlt Nothing [] (IrRtApp "+" [IrInt 1, IrInt 2])])
 
 sampleBody : Ir
 sampleBody =
   IrTail
-    (IrIf (IrBool True) (IrApp (Just (Pair IrTyInt IrTyStr)) (IrGlobal "f") (IrInt 7)) (IrNatCase (IrInt 2) 9 (Just (IrAlt Nothing [mkIrBinderNat 9] (IrStr "zero"))) (Just (IrAlt Nothing [mkIrBinderNat 10] (IrStr "succ"))) Nothing))
+    (IrIf (IrBool True) (IrApp (Just (Pair IrTyInt IrTyStr)) (IrGlobal "f") (IrInt 7)) (IrNatCase (IrInt 2) 9 (Just (IrAlt Nothing [mkIrBinderNat 3 9] (IrStr "zero"))) (Just (IrAlt Nothing [mkIrBinderNat 4 10] (IrStr "succ"))) Nothing))
 
 richIr : Ir
 richIr =

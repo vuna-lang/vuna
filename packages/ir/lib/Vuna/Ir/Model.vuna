@@ -115,39 +115,47 @@ export data IrBName(..) : Type where
   IrBWild : IrBName
 
 export record IrBinder(..) where
+  -- | 稳定身份：同一次 lowering / pass 产物里**沿作用域链唯一**。
+  --   正值 = Lowering 分配；负值 = 各 pass 的保留区间（CPS / ANF / 后端合成）；
+  --   `0` = 擦除占位（占槽位但不进运行时，`IrVar` 不得引用）。
+  irBinderId : Int
   irBinderName : IrBName
   -- | 擦除占位：占 de Bruijn 槽位，但不进运行时表示（不渲染参数 / pattern）。
   irBinderErased : Bool
   -- | binder 的运行时类型（选择性标注）：`Nothing` = 未记录或运行时类型不可命名。
   irBinderTy : Maybe IrTy
 
+-- | binder 身份：只比稳定 id（名字、类型只是渲染 / 注解）。
+export sameBinderId : IrBinder -> IrBinder -> Bool
+sameBinderId a b = a.irBinderId == b.irBinderId
+
 -- | 源码名 binder。
-export mkIrBinder : String -> IrBinder
-mkIrBinder name = IrBinder (IrBUser name) False Nothing
+export mkIrBinder : Int -> String -> IrBinder
+mkIrBinder id name = IrBinder id (IrBUser name) False Nothing
 
 -- | 带运行时类型标注的源码名 binder。
-export mkIrBinderTyped : String -> IrTy -> IrBinder
-mkIrBinderTyped name ty = IrBinder (IrBUser name) False (Just ty)
+export mkIrBinderTyped : Int -> String -> IrTy -> IrBinder
+mkIrBinderTyped id name ty = IrBinder id (IrBUser name) False (Just ty)
 
 -- | 类型未知的运行时 binder（落 `IrTyOpaque`；OCaml 注解会按不可命名过滤）。
-export mkIrBinderOpaque : String -> IrBinder
-mkIrBinderOpaque name = IrBinder (IrBUser name) False (Just IrTyOpaque)
+export mkIrBinderOpaque : Int -> String -> IrBinder
+mkIrBinderOpaque id name = IrBinder id (IrBUser name) False (Just IrTyOpaque)
 
--- | 擦除占位 binder。
+-- | 擦除占位 binder（id 0：共享哨兵，运行时不可引用）。
 export mkIrBinderErased : IrBinder
-mkIrBinderErased = IrBinder IrBWild True Nothing
+mkIrBinderErased = IrBinder 0 IrBWild True Nothing
 
--- | case 分支 fresh binder。
-export mkIrBinderArm : Int -> IrBinder
-mkIrBinderArm n = IrBinder (IrBArm n) False Nothing
+-- | case 分支 fresh binder：稳定 id + 渲染序号。
+export mkIrBinderArm : Int -> Int -> IrBinder
+mkIrBinderArm id n = IrBinder id (IrBArm n) False Nothing
 
--- | Nat case scrutinee binder。
-export mkIrBinderNat : Int -> IrBinder
-mkIrBinderNat n = IrBinder (IrBNat n) False Nothing
+-- | Nat case scrutinee binder：稳定 id + 渲染序号。
+export mkIrBinderNat : Int -> Int -> IrBinder
+mkIrBinderNat id n = IrBinder id (IrBNat n) False Nothing
 
 -- | 丢弃 binder（`let _ = e in ...` 的 `_`）。
-export mkIrBinderWild : IrBinder
-mkIrBinderWild = IrBinder IrBWild False Nothing
+export mkIrBinderWild : Int -> IrBinder
+mkIrBinderWild id = IrBinder id IrBWild False Nothing
 
 -- ---------------------------------------------------------------
 -- case 分支

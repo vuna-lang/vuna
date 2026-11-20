@@ -49,10 +49,12 @@ export module Vuna.Compiler.Lowering.Entry
 -- | 单元内生成状态（唯一可变量：case / Nat case 的 fresh binder 计数）。
 export record LwSt where
   lwNext : Int
+  -- | 下一个 binder 稳定 id（正数；擦除占位固定 0）。
+  lwBinder : Int
 
 -- record 字段访问器（vuna 不为 record 生成字段函数，统一用位置模式）。
 binderErasedOf : IrBinder -> Bool
-binderErasedOf (IrBinder nm erased ty) = erased
+binderErasedOf b = b.irBinderErased
 
 -- ---------------------------------------------------------------
 -- 项 → IR
@@ -256,7 +258,9 @@ lowerLamChainFuel fuel env st binders hints params inner resultTy =
     icFuel "ir-lower"
   else
     let
-      bs = bindersOfParamsHint env binders hints params
+      pb = bindersOfParamsHint env binders hints st.lwBinder params
+      bs = firstOf pb
+      stIds = LwSt st.lwNext (secondOf pb)
       envB = append (reverse bs) binders
       resultIr =
         case resultTy of
@@ -267,7 +271,7 @@ lowerLamChainFuel fuel env st binders hints params inner resultTy =
               -- 族实参不可命名（类型变量、擦除占位）时仍要留下「结果是 Eff」这一位：
               -- 机器化 CPS 只按它判定 `a -> Eff r b`（见 Ir.Cps.isEffResultTy）。
               Nothing => effResultTyOf t
-    in Vuna.Compiler.Base.Common.bind (lowerTermFuel (fuel - 1) env st envB inner) (
+    in Vuna.Compiler.Base.Common.bind (lowerTermFuel (fuel - 1) env stIds envB inner) (
         \p =>
           case p of
             Pair b st2 =>
@@ -336,28 +340,21 @@ headGlobalOf (TRecord g _) = Just g
 headGlobalOf _ = Nothing
 
 -- lambda 链的 binder 表（外→内）：每个 binder 的注解按它自己的外层上下文解析。
-bindersOfParams : LwEnv -> List IrBinder -> List LamParam -> List IrBinder
-bindersOfParams env outer [] = []
-bindersOfParams env outer (p :: rest) =
-  let
-    b = binderOfParam env outer p
-  in b :: bindersOfParams env (b :: outer) rest
-
-binderOfParam : LwEnv -> List IrBinder -> LamParam -> IrBinder
-binderOfParam env outer p =
+binderOfParam : LwEnv -> List IrBinder -> Int -> LamParam -> IrBinder
+binderOfParam env outer id p =
   if rigIsErased p.lamParamRig then
     mkIrBinderErased
   else
     case p.lamParamTy of
-      Nothing => mkIrBinderOpaque p.lamParamName
-      Just ty => mkIrBinderTyped p.lamParamName (annotTyOfTotal env outer ty)
+      Nothing => mkIrBinderOpaque id p.lamParamName
+      Just ty => mkIrBinderTyped id p.lamParamName (annotTyOfTotal env outer ty)
 
 -- 带外层签名提示的 binder 表：非擦除参数按顺序消费一个提示类型。
 -- 提示类型可以含 `IrTyOpaque`：OCaml 侧的 lambda 注解由 `irTyAnnotatable` 过滤，
 -- 不透明类型不会写进 OCaml，因此不会固定多态性。
-bindersOfParamsHint : LwEnv -> List IrBinder -> List IrTy -> List LamParam -> List IrBinder
-bindersOfParamsHint env outer _ [] = []
-bindersOfParamsHint env outer hints (p :: rest) =
+bindersOfParamsHint : LwEnv -> List IrBinder -> List IrTy -> Int -> List LamParam -> Pair (List IrBinder) Int
+bindersOfParamsHint env outer _ id [] = Pair [] id
+bindersOfParamsHint env outer hints id (p :: rest) =
   let
     erased = rigIsErased p.lamParamRig
     hint =
@@ -376,9 +373,10 @@ bindersOfParamsHint env outer hints (p :: rest) =
           [] => []
     b =
       case hint of
-        Just ty => mkIrBinderTyped p.lamParamName ty
-        Nothing => binderOfParam env outer p
-  in b :: bindersOfParamsHint env (b :: outer) restHints rest
+        Just ty => mkIrBinderTyped id p.lamParamName ty
+        Nothing => binderOfParam env outer id p
+    tail = bindersOfParamsHint env (b :: outer) restHints (id + 1) rest
+  in Pair (b :: firstOf tail) (secondOf tail)
 
 -- 应用：先按构造子折叠（多维变体构造子是 tupled 的），再试内建内联 / `++` 展平 / 普通应用。
 lowerAppFuel : Int -> LwEnv -> LwSt -> List IrBinder -> Term -> Term -> Rig -> Check (Pair Ir LwSt)
@@ -716,8 +714,9 @@ altEnvGo st env ((Pair name rig) :: rest) pats =
   else
     let
       fresh = st.lwNext
-      b = mkIrBinderArm fresh
-    in altEnvGo (LwSt (fresh + 1)) (b :: env) rest (b :: pats)
+      bid = st.lwBinder
+      b = mkIrBinderArm bid fresh
+    in altEnvGo (LwSt (fresh + 1) (bid + 1)) (b :: env) rest (b :: pats)
 
 altEnvIn : LwSt -> List IrBinder -> List (Pair String Rig) -> AltEnvIn
 altEnvIn st outer tele = altEnvGo st outer tele []
@@ -747,8 +746,9 @@ altEnvFullIn st label outer ((Pair name rig) :: rest) flags pats =
         if keep then
           let
             fresh = st.lwNext
-            b = mkIrBinderArm fresh
-          in altEnvFullIn (LwSt (fresh + 1)) label (b :: outer) rest flags2 (b :: pats)
+            bid = st.lwBinder
+            b = mkIrBinderArm bid fresh
+          in altEnvFullIn (LwSt (fresh + 1) (bid + 1)) label (b :: outer) rest flags2 (b :: pats)
         else
           altEnvFullIn st label (mkIrBinderErased :: outer) rest flags2 pats
       else
@@ -762,16 +762,17 @@ altEnvKeptIn st label outer ((Pair name rig) :: rest) pats =
   else
     let
       fresh = st.lwNext
-      b = mkIrBinderArm fresh
-    in altEnvKeptIn (LwSt (fresh + 1)) label (b :: outer) rest (b :: pats)
+      bid = st.lwBinder
+      b = mkIrBinderArm bid fresh
+    in altEnvKeptIn (LwSt (fresh + 1) (bid + 1)) label (b :: outer) rest (b :: pats)
 
 -- 分支 binder 的运行时类型：按构造子字段类型实例化族参数槽；catch-all 用 scrutinee 类型。
 binderWithTy : Maybe IrTy -> IrBinder -> IrBinder
 binderWithTy ty b =
   if b.irBinderErased then
-    IrBinder b.irBinderName True Nothing
+    IrBinder b.irBinderId b.irBinderName True Nothing
   else
-    IrBinder b.irBinderName False (justTy ty)
+    IrBinder b.irBinderId b.irBinderName False (justTy ty)
 
 typedPats : List IrTy -> List IrBinder -> List IrBinder
 typedPats [] bs = bs
@@ -1007,7 +1008,7 @@ lowerNatCaseFuel fuel env st outer scrut alts =
             Pair scrutIr st1 =>
               let
                 fresh = st1.lwNext
-                st2 = LwSt (fresh + 1)
+                st2 = LwSt (fresh + 1) st1.lwBinder
                 zeroAlt = findAltBy natZeroCtor alts
                 succAlt = findAltBy natSuccCtor alts
                 catchAlt = findCatchAllAlt alts
@@ -1340,7 +1341,7 @@ groupDefs env defs =
     (assembleGroupNames adj names (recOkOfTbl tbl) (spanOfTbl tbl))
     (
       \groups =>
-        Vuna.Compiler.Base.Common.bind (appendGroups env (LwSt 0) groups) (
+        Vuna.Compiler.Base.Common.bind (appendGroups env (LwSt 0 1) groups) (
             \q =>
               case q of
                 Pair grouped _ => OkC grouped

@@ -69,8 +69,12 @@ isSimple (IrFloatLit _) = True
 isSimple (IrCtor _ _ _ []) = True
 isSimple _ = False
 
+-- | ANF 合成 binder 的保留 id 区间（与 Lowering 正数、CPS 的 kind 区间不相交）。
+anfIdBase : Int
+anfIdBase = 100000000000000000
+
 freshBinder : Int -> IrBinder
-freshBinder n = mkIrBinder ("__anf" ++ strFromInt n)
+freshBinder n = mkIrBinder (0 - (anfIdBase + n)) ("__anf" ++ strFromInt n)
 
 bindSimple : Int -> List (Pair IrBinder Ir) -> Ir -> Bound
 bindSimple next lets e =

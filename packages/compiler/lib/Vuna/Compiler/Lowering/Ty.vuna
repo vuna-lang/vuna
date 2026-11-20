@@ -217,6 +217,10 @@ maxIntListIn (x :: rest) = if x >= maxIntListIn rest then x else maxIntListIn re
 export annotTyOf : LwEnv -> List IrBinder -> Term -> Maybe IrTy
 annotTyOf env binders t = annotTyOfFuel 256 Nothing env binders t
 
+-- 类型注解遍历里的临时 binder：不进 IR，用与运行时 binder 不相交的哨兵 id。
+tempAnnotBinderId : Int
+tempAnnotBinderId = 0 - 1
+
 export annotTyOfTotal : LwEnv -> List IrBinder -> Term -> IrTy
 annotTyOfTotal env binders t =
   case annotTyOfFuel 256 (Just IrTyOpaque) env binders t of
@@ -257,7 +261,7 @@ annotTyOfFuel fuel dflt env binders t =
           case annotTyOfFuel (fuel - 1) dflt env binders dom of
             Nothing => Nothing
             Just domTy =>
-              case annotTyOfFuel (fuel - 1) dflt env (mkIrBinderTyped name domTy :: binders) cod of
+              case annotTyOfFuel (fuel - 1) dflt env (mkIrBinderTyped tempAnnotBinderId name domTy :: binders) cod of
                 Nothing => Nothing
                 Just codTy => Just (IrTyFun domTy codTy)
       _ => dflt
