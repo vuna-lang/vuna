@@ -30,6 +30,4 @@ main =
     ++ " hsz="
     ++ show (HashSet.size h1)
     ++ " hmem="
-    ++ show (HashSet.member "x" h1)
-    ++ " hlist="
-    ++ show (List.length (HashSet.toList h1))
+    ++ show (HashSet.member "x" h1) ++ " hlist=" ++ show (List.length (HashSet.toList h1))
