@@ -1,0 +1,17 @@
+-- Nat 饱和/夹取：plus / mult 饱和到 max_int，minus 截断到 0，fromInt 把负数夹成 0。
+-- max_int = 2^62-1；ocaml 是语义 oracle，wasm / native 必须逐字一致。
+import Base.Data.Nat as Nat
+
+maxNat : Nat
+maxNat = Nat.fromInt 4611686018427387903
+
+main : String
+main =
+  strFromInt (Nat.toInt (Nat.plus maxNat (Nat.fromInt 5)))
+    ++ "|"
+    ++ strFromInt (Nat.toInt (Nat.plus maxNat maxNat))
+    ++ "|"
+    ++ strFromInt (Nat.toInt (Nat.minus (Nat.fromInt 3) (Nat.fromInt 5)))
+    ++ "|"
+    ++ strFromInt (Nat.toInt (Nat.mult maxNat (Nat.fromInt 2)))
+    ++ "|" ++ strFromInt (Nat.toInt (Nat.fromInt (0 - 7)))

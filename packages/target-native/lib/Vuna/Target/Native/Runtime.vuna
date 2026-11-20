@@ -380,7 +380,7 @@ natAddFn =
   rtFunc
     "nat_add"
     0
-    [IMov (OpReg Rax) (OpReg Rdi), IMov (OpReg R11) (OpImm nativeMaxInt), IBinReg "sub" R11 (OpReg Rsi), ICmp (OpReg Rax) (OpReg R11), IJcc "jg" ".Lrt_nat_add_sat", IBin "add" (OpReg Rsi), IRet, ILabel ".Lrt_nat_add_sat", IMov (OpReg Rax) (OpReg R11)]
+    [IMov (OpReg Rax) (OpReg Rdi), IMov (OpReg R11) (OpImm nativeMaxInt), IBinReg "sub" R11 (OpReg Rsi), ICmp (OpReg Rax) (OpReg R11), IJcc "jg" ".Lrt_nat_add_sat", IBin "add" (OpReg Rsi), IRet, ILabel ".Lrt_nat_add_sat", IMov (OpReg Rax) (OpImm nativeMaxInt)]
 
 natSubFn : NativeFunc
 natSubFn =
