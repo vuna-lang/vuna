@@ -90,34 +90,43 @@ withImportSpan : Import -> Diagnostic -> Diagnostic
 withImportSpan imp e =
   if spanFile imp.importSpan == "" then e else withFallbackSpan imp.importSpan e
 
-checkImports : List Layer -> List Layer -> String -> String -> List Module -> List Import -> Check Int
-checkImports allRules matched srcName srcPkg modules [] = OkC 0
-checkImports allRules matched srcName srcPkg modules (imp :: rest) =
+checkImports : List Layer -> List Layer -> String -> String -> String -> List Module -> List Import -> Check Int
+checkImports allRules matched srcName srcPkg checkedPkg modules [] = OkC 0
+checkImports allRules matched srcName srcPkg checkedPkg modules (imp :: rest) =
   case findModule modules (importName imp) of
-    Nothing => checkImports allRules matched srcName srcPkg modules rest
+    -- 目标不在表里（preloaded 装配下依赖模块未被装入）：只有目标名落在本包声明的层里
+    -- 才可能判定（跨包/无层目标无法从名字推归属），此时仍按名字判定，不能跳过。
+    Nothing =>
+      if srcPkg == checkedPkg && length (matchingLayers allRules (importName imp)) > 0 && not (importAllowed allRules matched (importName imp)) then
+        onErrDiag
+          (withImportSpan imp)
+          (ldErr4 (LayerViolation "" "" "" "") srcName (importName imp) (labelOf allRules srcName) (labelOf allRules (importName imp)))
+      else
+        checkImports allRules matched srcName srcPkg checkedPkg modules rest
     Just t =>
       if modulePackageOf t /= srcPkg then
-        checkImports allRules matched srcName srcPkg modules rest
+        checkImports allRules matched srcName srcPkg checkedPkg modules rest
       else if importAllowed allRules matched (moduleNameOf t) then
-        checkImports allRules matched srcName srcPkg modules rest
+        checkImports allRules matched srcName srcPkg checkedPkg modules rest
       else
         onErrDiag
           (withImportSpan imp)
           (ldErr4 (LayerViolation "" "" "" "") srcName (moduleNameOf t) (labelOf allRules srcName) (labelOf allRules (moduleNameOf t)))
 
-checkModules : List Root -> List Module -> List Module -> Check Int
-checkModules roots all [] = OkC 0
-checkModules roots all (m :: rest) =
+checkModules : List Root -> String -> List Module -> List Module -> Check Int
+checkModules roots checkedPkg all [] = OkC 0
+checkModules roots checkedPkg all (m :: rest) =
   let
     rules = layersOfRoot roots (modulePackageOf m)
     matched = matchingLayers rules (moduleNameOf m)
   in if length matched == 0 then
-    checkModules roots all rest
+    checkModules roots checkedPkg all rest
   else
-    case checkImports rules matched (moduleNameOf m) (modulePackageOf m) all (moduleAllImportsOf m) of
+    case checkImports rules matched (moduleNameOf m) (modulePackageOf m) checkedPkg all (moduleAllImportsOf m) of
       ErrC e => ErrC e
-      OkC _ => checkModules roots all rest
+      OkC _ => checkModules roots checkedPkg all rest
 
 -- | 项目级层检查：逐个模块检查直接 import 边是否越过层边界。
 export checkProjectLayers : List Root -> Project -> Check Int
-checkProjectLayers roots project = checkModules roots project.projectModules project.projectModules
+checkProjectLayers roots project =
+  checkModules roots project.projectEntryPkg project.projectModules project.projectModules

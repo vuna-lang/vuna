@@ -1,0 +1,60 @@
+-- LD-03：模块表不闭合（preloaded 装配）时，目标缺失的 import 边仍要按层判定；
+-- 目标不在任何已声明层里时无法从名字推归属，放行（防御分支）。
+import Base
+import Base.Container.HashMap as HashMap
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.Manifest
+import Vuna.Compiler.Frontend.Packages.Pkg
+import Vuna.Compiler.Loader.Layers
+import Vuna.Compiler.Loader.Modules
+
+main : Eff [] String
+main =
+  case filter (\p => not (secondOf p)) results of
+    [] => pure ""
+    bad =>
+      do
+        _ <- prim_eff_print ("layer scope failed: " ++ join "; " (map firstOf bad) ++ "\n")
+        _ <- prim_eff_exit 1
+        pure ""
+
+results : List (Pair String Bool)
+results = [Pair "denied" denied, Pair "allowed" allowed, Pair "outside-layers" outsideLayers]
+
+-- L.A 不允许 import L.B，目标不在模块表里（模拟 preloaded 装配的缺失边）。
+denied : Bool
+denied =
+  case checkProjectLayers [deniedRoot] (mkProject ["L.B.Two"]) of
+    ErrC d => d.diagCode == "LD_LayerViolation"
+    OkC _ => False
+
+-- L.A 允许 L.B：同一缺失边放行。
+allowed : Bool
+allowed =
+  case checkProjectLayers [allowedRoot] (mkProject ["L.B.Two"]) of
+    OkC _ => True
+    ErrC _ => False
+
+-- 目标不在任何声明层里：归属不可判定，放行。
+outsideLayers : Bool
+outsideLayers =
+  case checkProjectLayers [deniedRoot] (mkProject ["Util"]) of
+    OkC _ => True
+    ErrC _ => False
+
+deniedRoot : Root
+deniedRoot = Root "/p/lib" "p" (Just ["L.A", "L.B"]) [Layer "L.A" [] 0, Layer "L.B" [] 0]
+
+allowedRoot : Root
+allowedRoot = Root "/p/lib" "p" (Just ["L.A", "L.B"]) [Layer "L.A" ["L.B"] 0, Layer "L.B" [] 0]
+
+emptyIndex : HashMap String (List ExportEntry)
+emptyIndex = HashMap.fromList []
+
+mkImport : String -> Import
+mkImport name = Import name False Nothing (Span "" 0 0 0 0 0 0)
+
+mkProject : List String -> Project
+mkProject imports =
+  Project [] [] [] [Module "L.A.One" "p" (map mkImport imports) [] [] [] [] [] [] emptyIndex] "p" []
