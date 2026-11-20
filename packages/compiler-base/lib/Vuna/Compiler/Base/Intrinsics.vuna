@@ -40,7 +40,7 @@ export data IType(..) : Type where
   IFun : IType -> IType -> IType
   -- 参数 binder 为 1 的函数（线性 continuation）；只给底层原语用。
   IFun1 : IType -> IType -> IType
-  -- 内建类型构造子与签名里的类型变量。
+  -- 内建类型构造子与签名里的类型变量（必须由外层 `IPi` 绑定；`checkRuntimeContract` 自证）。
   IVar : String -> IType
   IArray : IType -> IType
   IRef : IType -> IType

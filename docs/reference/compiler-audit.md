@@ -110,7 +110,7 @@ ID 是稳定引用（`层前缀-序号`），改动时保留编号，删掉实�
 | EC-24 | `Trait.vuna` 的 `checkBodyAtEndFuel` | A | 剩余 Pi 静默 η 展开，`TC_DefFewerParams` 永不触发 | 开放 |
 | EC-25 | `Trait.vuna` 的 `applyCtxSubstsTo` | A | 注释的索引算术与实现不符 | 已清（q = nTele + k + 1，与注释一致） |
 | EC-26 | `InstName.vuna` 的 `exprNameFor`/`argNameOf` | A | 未知形状伪造 `"X"`/`"Int"` 名 | 开放 |
-| EC-27 | `Prelude.vuna` 的 `ityToTermEnv` | A | `IVar` 查不到回退 `TGlobal`（拼错变全局引用） | 开放 |
+| EC-27 | `Prelude.vuna` 的 `ityToTermEnv` | A | `IVar` 查不到回退 `TGlobal`（拼错变全局引用） | 已清（`checkRuntimeContract` 自证每个 `IVar` 都被 `IPi` 绑定，否则 ICE；回退分支不可达） |
 | EC-28 | `Elab/Driver.vuna` 的 `resolveDictGoalsFix` | C | 字典收敛固定 8 轮 | 开放 |
 | EC-29 | `Elab/Driver.vuna` 的实例索引自检 | D | 只在 `--debug-perf` 下跑 | 开放 |
 | EC-30 | `Impl.vuna` 的 check 位 `if` | A | 分支检查失败后整体重推断（位置/期望类型信息丢失） | 开放 |

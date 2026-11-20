@@ -1367,6 +1367,29 @@ checkProgramOf env =
     (prepareProgram env.lwDatas env.lwDefs)
     (\_ => checkRuntimeContract)
 
+-- | 内建签名里的 `IVar` 必须由外层 `IPi` 绑定：否则 `Prelude.ityToTermEnv` 会把它退化成
+-- 同名全局引用（拼错也静默通过）。这里在每次 check 时自证，把「表写错」变成内部错误。
+ivarBound : List String -> IType -> Bool
+ivarBound env ITy = True
+ivarBound env IInt = True
+ivarBound env IStr = True
+ivarBound env IBool = True
+ivarBound env INat = True
+ivarBound env IFloat = True
+ivarBound env (IGlobal _) = True
+ivarBound env (IList e) = ivarBound env e
+ivarBound env (IArray e) = ivarBound env e
+ivarBound env (IRef e) = ivarBound env e
+ivarBound env (IEff e) = ivarBound env e
+ivarBound env (IFun a b) = ivarBound env a && ivarBound env b
+ivarBound env (IFun1 a b) = ivarBound env a && ivarBound env b
+ivarBound env (IVar n) = memName n env
+ivarBound env (IPi n body) = ivarBound (n :: env) body
+
+intrinsicWithUnboundIvar : List Intrinsic -> List String
+intrinsicWithUnboundIvar is =
+  map intrinsicName (filter (\i => not (ivarBound [] (intrinsicSignature i))) is)
+
 -- | 运行时契约一致性：`Intrinsics` ↔ `Ir.Runtime` ↔ OCaml 后端符号表。
 --
 -- 三处任何一处漂移都是编译器 bug（内部错），不是用户面诊断；用户面诊断码不变。
@@ -1375,6 +1398,7 @@ checkRuntimeContract =
   let
     intrinsicNames = map intrinsicName allIntrinsics
     contractNames = irRtNames
+    badIvars = intrinsicWithUnboundIvar allIntrinsics
     missingFromContract =
       filter
         (\n => if n == primEffBind1Name then False else if memName n contractNames then False else True)
@@ -1383,7 +1407,9 @@ checkRuntimeContract =
       filter
         (\n => if memName n intrinsicNames then False else if memName n irRtSyntheticNames then False else True)
         contractNames
-  in if listLength missingFromContract > 0 then
+  in if listLength badIvars > 0 then
+    icInternal "intrinsic `${firstOfList badIvars}` has an unbound type variable in its signature"
+  else if listLength missingFromContract > 0 then
     icInternal "runtime contract misses intrinsic `${firstOfList missingFromContract}`"
   else if listLength extrasInContract > 0 then
     icInternal "runtime contract declares unknown symbol `${firstOfList extrasInContract}`"
