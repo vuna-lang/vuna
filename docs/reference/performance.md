@@ -107,20 +107,27 @@ vuna 的运行时报错与回栈标签来自 `dt_def_locs` 数据表和 `-g` 编
 
 `nix run .#vuna -- dev ir dump --after repr|repr-cps <带入口的包>` 用
 `Vuna.Target.Native.Repr` 把 binder 槽与值位置归到 ptr / static / scalar / unknown，
-并分开统计 unknown 的来源。`packages/compiler`（`self` 负载）的读数：
+未知按来源（类型变量 / opaque / 缺类型 / 未归类符号）与绑定位置（lam / let / alt）拆开；
+缺类型的 binder 按绑定点推断（`let` 的 scrutinee、`case` 构造子字段、Nat 分支）。
+`packages/compiler`（`self` 负载）的读数：
 
 | 形态 | binder 槽 | ptr | scalar | unknown（opaque / missing / var） | 需要清零 |
 | --- | --- | --- | --- | --- | --- |
-| lowering 后 | 34,408 | 27,181 | 3,893 | 3,334（1,160 / 2,174 / 0） | 88% |
-| CPS 后 | 34,488 | 27,181 | 3,891 | 3,416（1,160 / 2,256 / 0） | 88% |
+| lowering 后 | 44,895 | 32,518 | 4,530 | 7,847（3,865 / 3,982 / 0） | 89% |
+| CPS 后 | 45,835 | 32,585 | 4,528 | 8,722（3,865 / 4,857 / 0） | 90% |
 
-值位置（含实参临时槽）在 lowering 后 236,808 个、unknown 4.9%；CPS 后 239,313 个、
-unknown 39%（其中 missing 89,347）——CPS 合成的 binder 不带宽类型槽。
-`packages/cli`（含 toolchain / web 的更大闭包）上 binder 的 unknown 比例是 29%。
+值位置（含实参临时槽）在 lowering 后 236,943 个、unknown 4.9%；CPS 后 239,448 个、
+unknown 39%（其中 missing 89,339）——CPS 合成的节点不带宽类型槽。
 
-读法：未装箱标量只占槽的 ~11%，所以「按 kind 定向清零」最多省一成清除；清除的大头是
+CPS 后缺 kind 的 binder 按位置是 `lam=4,824 / let=0 / alt=33`：几乎全在 lambda 形参
+（CPS 合成的续延/闭包参数），`let` binder 已能被绑定点推断覆盖。缺 kind 的值位置是
+`var=6,392 / app=69,663 / other=13,284`。`packages/cli`（路由 CLI，不含编译器闭包）
+的 binder unknown 是 55%（lam=1,690）。
+
+读法：未装箱标量只占槽的 ~10%，所以「按 kind 定向清零」最多省一成清除；清除的大头是
 「已死但仍被保守扫描的指针槽」，只能靠每个 GC 点的活跃位图去掉。`IrTyVar` 在这两个
-程序里都是 0，精确根集的主要盲区是 CPS 之后的 missing，而不是多态实例化。
+程序里都是 0；精确根集的盲区是 CPS 合成的 lambda 形参（没有源码类型可必填）与 opaque，
+精确栈图对这部分保留保守扫描即可。
 
 ### 冷 / 热必须分开报
 

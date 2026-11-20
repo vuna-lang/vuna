@@ -7,8 +7,11 @@ module Vuna.Target.Native.Repr where
 -- 归到 `Ptr` / `Static` / `Scalar` / `Unknown`，并把 `Unknown` 的来源分开统计
 -- （类型变量、`IrTyOpaque`、缺类型、未分类的运行时符号），作为换根集模型的决策输入。
 --
--- 分类只读 IR 自带的类型槽（`irBinderTy` / 节点结果类型），不重新推导类型；读不到
--- 就记 `Unknown`。`IrTyFloat` 是堆上 leaf 对象，因此按 `Ptr` 计。
+-- 分类先读 binder 自带的类型槽；`Nothing` 时按绑定点的值 kind 推断（`let` 的
+-- scrutinee、`case` 分支 binder 的构造子字段类型、Nat 分支的标量），因此 CPS 合成的
+-- 无类型 binder 能从它的定义值拿到 kind。声明的类型永远优先于推断。
+--
+-- `IrTyFloat` 是堆上 leaf 对象，因此按 `Ptr` 计；`.rodata` 静态闭包按 `Static` 计。
 --
 -- 边界：只 import Base 与 `Ir.Model`；不 import 编译器阶段，也不参与 codegen。
 import Base.Data.Bool as Bool
@@ -42,7 +45,7 @@ export data NCls(..) : Type where
   NClsVar : NCls
   -- | `IrTyOpaque`（擦除后无法命名的值）。
   NClsOpaque : NCls
-  -- | 类型槽缺失（`Nothing`）。
+  -- | 类型槽缺失且绑定点的 kind 也推不出来。
   NClsMissing : NCls
   -- | 运行时符号没有归类的 kind。
   NClsSymbol : NCls
@@ -318,11 +321,65 @@ nRtUnknown sym =
     "@vuna@prim@fromObj" => True
     "arrayGet" => True
     "prim_eff_readRef" => True
-    "@vuna@prim_eff_readRef" => True
-    "@vuna@prim_eff_readRef_host" => True
+    "@vuna@prim@readRef" => True
+    "@vuna@prim@readRef_host" => True
     "@vuna@obs@span" => True
     "@vuna@obs@spanLab" => True
     _ => False
+
+-- ---------------------------------------------------------------
+-- 绑定环境（推断）
+-- ---------------------------------------------------------------
+nBNameEq : IrBName -> IrBName -> Bool
+nBNameEq (IrBUser x) (IrBUser y) = x == y
+nBNameEq (IrBArm x) (IrBArm y) = x == y
+nBNameEq (IrBNat x) (IrBNat y) = x == y
+nBNameEq IrBWild IrBWild = True
+nBNameEq _ _ = False
+
+nBinderEq : IrBinder -> IrBinder -> Bool
+nBinderEq a b = nBNameEq a.irBinderName b.irBinderName && a.irBinderErased == b.irBinderErased
+
+nLookupEnv : IrBinder -> List (Pair IrBinder NCls) -> Maybe NCls
+nLookupEnv _ [] = Nothing
+nLookupEnv b (p :: rest) = if nBinderEq b (firstOf p) then Just (secondOf p) else nLookupEnv b rest
+
+-- | binder 的 kind：声明类型优先；缺类型时用绑定点的推断值。
+nBinderCls : List IrTyDecl -> Maybe NCls -> IrBinder -> NCls
+nBinderCls decls fallback b =
+  case b.irBinderTy of
+    Just ty => nKindOfTy decls (Just ty)
+    Nothing =>
+      case fallback of
+        Just cls => cls
+        Nothing => NClsMissing
+
+nIsMissing : NCls -> Bool
+nIsMissing cls =
+  case cls of
+    NClsMissing => True
+    _ => False
+
+-- | 把一组 binder 加进环境；返回新环境、这些 binder 的计数（擦除占位不计）
+--   与其中缺 kind 的个数。
+export record NBind(..) where
+  nbEnv : List (Pair IrBinder NCls)
+  nbCounts : NCounts
+  nbMissing : Int
+
+nBindAll : List IrTyDecl -> List IrBinder -> Maybe NCls -> List (Pair IrBinder NCls) -> NBind
+nBindAll decls bs fallback env = nBindAllGo decls bs fallback (NBind env nZeroCounts 0)
+
+nBindAllGo : List IrTyDecl -> List IrBinder -> Maybe NCls -> NBind -> NBind
+nBindAllGo decls [] _ acc = acc
+nBindAllGo decls (b :: rest) fallback acc =
+  if b.irBinderErased then
+    nBindAllGo decls rest fallback acc
+  else
+    let
+      cls = nBinderCls decls fallback b
+      miss = if nIsMissing cls then acc.nbMissing + 1 else acc.nbMissing
+    in nBindAllGo decls rest fallback (NBind (Pair b cls :: acc.nbEnv) (nBump cls acc.nbCounts) miss)
 
 -- ---------------------------------------------------------------
 -- 值位置 → 分类
@@ -335,10 +392,16 @@ nDefTyIn name (d :: rest) =
     IrExternDef nm ty _ _ => if nm == name then Just ty else nDefTyIn name rest
 
 -- | 一个值位置的分类；控制构造（`let` / `if` / 尾标记）不产出独立的值，返回 `Nothing`。
-export nValueCls : List IrTyDecl -> List IrDef -> Ir -> Maybe NCls
-nValueCls decls defs ir =
+export nValueCls : List IrTyDecl -> List IrDef -> List (Pair IrBinder NCls) -> Ir -> Maybe NCls
+nValueCls decls defs env ir =
   case ir of
-    IrVar b => Just (nKindOfTy decls b.irBinderTy)
+    IrVar b =>
+      case b.irBinderTy of
+        Just ty => Just (nKindOfTy decls (Just ty))
+        Nothing =>
+          case nLookupEnv b env of
+            Just cls => Just cls
+            Nothing => Just NClsMissing
     IrGlobal name => Just (nKindOfTy decls (nDefTyIn name defs))
     IrCtor _ _ _ _ => Just NClsPtr
     IrRecord _ resTy _ => Just (nKindOfTy decls resTy)
@@ -366,108 +429,196 @@ nValueCls decls defs ir =
     IrIf _ _ _ => Nothing
 
 -- ---------------------------------------------------------------
+-- case 分支 binder：按构造子字段类型推断
+-- ---------------------------------------------------------------
+nCaseArgsOf : Maybe IrTy -> List IrTy
+nCaseArgsOf (Just (IrTyData _ args)) = args
+nCaseArgsOf _ = []
+
+nCtorFieldTys : String -> String -> List IrTyDecl -> List IrTy
+nCtorFieldTys _ _ [] = []
+nCtorFieldTys fam ctor (d :: rest) =
+  case d of
+    IrVariantDecl f _ ctors =>
+      if f == fam then nCtorFieldTysGo ctor ctors else nCtorFieldTys fam ctor rest
+    IrRecordDecl f _ _ fields => if f == fam then fields else nCtorFieldTys fam ctor rest
+    IrUnboxedDecl _ _ _ => nCtorFieldTys fam ctor rest
+
+nCtorFieldTysGo : String -> List (Pair String (List IrTy)) -> List IrTy
+nCtorFieldTysGo _ [] = []
+nCtorFieldTysGo ctor (p :: rest) =
+  if firstOf p == ctor then secondOf p else nCtorFieldTysGo ctor rest
+
+-- | 分支 binder 的 fallback：有构造子就按字段类型（代入 scrutinee 的类型实参），
+--   否则用 scrutinee 自己的 kind。
+nAltBinderFallback : List IrTyDecl -> Maybe IrTy -> Maybe (Pair String String) -> Int -> Maybe NCls
+nAltBinderFallback decls caseTy mctor idx =
+  case mctor of
+    Just p =>
+      case nDeclOf (firstOf p) decls of
+        Just _ =>
+          case irTyAt (nCtorFieldTys (firstOf p) (secondOf p) decls) idx of
+            Just fieldTy =>
+              Just (nKindOfTy decls (Just (irTySubstVars (nCaseArgsOf caseTy) fieldTy)))
+            Nothing => Just (nKindOfTy decls caseTy)
+        Nothing => Just (nKindOfTy decls caseTy)
+    Nothing => Just (nKindOfTy decls caseTy)
+
+nAltEnvGo : List IrTyDecl -> Maybe IrTy -> Maybe (Pair String String) -> List IrBinder -> Int -> NBind -> NBind
+nAltEnvGo decls caseTy mctor [] _ acc = acc
+nAltEnvGo decls caseTy mctor (b :: rest) idx acc =
+  if b.irBinderErased then
+    nAltEnvGo decls caseTy mctor rest idx acc
+  else
+    let
+      cls = nBinderCls decls (nAltBinderFallback decls caseTy mctor idx) b
+      miss = if nIsMissing cls then acc.nbMissing + 1 else acc.nbMissing
+    in nAltEnvGo decls caseTy mctor rest (idx + 1) (NBind (Pair b cls :: acc.nbEnv) (nBump cls acc.nbCounts) miss)
+
+-- ---------------------------------------------------------------
 -- 遍历
 -- ---------------------------------------------------------------
 export record NWalk(..) where
   nwBinders : NCounts
   nwValues : NCounts
+  -- | 缺 kind 的 binder，按绑定位置拆开。
+  nwMissLam : Int
+  nwMissLet : Int
+  nwMissAlt : Int
+  -- | 缺 kind 的值位置，按节点形状拆开。
+  nwMissVar : Int
+  nwMissApp : Int
+  nwMissOther : Int
 
 nEmptyWalk : NWalk
-nEmptyWalk = NWalk nZeroCounts nZeroCounts
+nEmptyWalk = NWalk nZeroCounts nZeroCounts 0 0 0 0 0 0
 
 nAddWalk : NWalk -> NWalk -> NWalk
-nAddWalk a b = NWalk (nAddCounts a.nwBinders b.nwBinders) (nAddCounts a.nwValues b.nwValues)
+nAddWalk a b =
+  NWalk
+    (nAddCounts a.nwBinders b.nwBinders)
+    (nAddCounts a.nwValues b.nwValues)
+    (a.nwMissLam + b.nwMissLam)
+    (a.nwMissLet + b.nwMissLet)
+    (a.nwMissAlt + b.nwMissAlt)
+    (a.nwMissVar + b.nwMissVar)
+    (a.nwMissApp + b.nwMissApp)
+    (a.nwMissOther + b.nwMissOther)
 
-nBinderCounts : List IrTyDecl -> List IrBinder -> NCounts
-nBinderCounts decls bs = nBinderCountsGo decls bs nZeroCounts
+nWalkList : List IrTyDecl -> List IrDef -> List (Pair IrBinder NCls) -> List Ir -> NWalk
+nWalkList decls defs env xs = nWalkListGo decls defs env xs nEmptyWalk
 
-nBinderCountsGo : List IrTyDecl -> List IrBinder -> NCounts -> NCounts
-nBinderCountsGo decls [] acc = acc
-nBinderCountsGo decls (b :: rest) acc =
-  if b.irBinderErased then
-    nBinderCountsGo decls rest acc
-  else
-    nBinderCountsGo decls rest (nBump (nKindOfTy decls b.irBinderTy) acc)
+nWalkListGo : List IrTyDecl -> List IrDef -> List (Pair IrBinder NCls) -> List Ir -> NWalk -> NWalk
+nWalkListGo decls defs env [] acc = acc
+nWalkListGo decls defs env (x :: rest) acc =
+  nWalkListGo decls defs env rest (nAddWalk (nWalk decls defs env x) acc)
 
-nWalkList : List IrTyDecl -> List IrDef -> List Ir -> NWalk
-nWalkList decls defs xs = nWalkListGo decls defs xs nEmptyWalk
+nWalkFields : List IrTyDecl -> List IrDef -> List (Pair IrBinder NCls) -> List (Pair String Ir) -> NWalk
+nWalkFields decls defs env fields = nWalkFieldsGo decls defs env fields nEmptyWalk
 
-nWalkListGo : List IrTyDecl -> List IrDef -> List Ir -> NWalk -> NWalk
-nWalkListGo decls defs [] acc = acc
-nWalkListGo decls defs (x :: rest) acc =
-  nWalkListGo decls defs rest (nAddWalk (nWalk decls defs x) acc)
+nWalkFieldsGo : List IrTyDecl -> List IrDef -> List (Pair IrBinder NCls) -> List (Pair String Ir) -> NWalk -> NWalk
+nWalkFieldsGo decls defs env [] acc = acc
+nWalkFieldsGo decls defs env (p :: rest) acc =
+  nWalkFieldsGo decls defs env rest (nAddWalk (nWalk decls defs env (secondOf p)) acc)
 
-nWalkFields : List IrTyDecl -> List IrDef -> List (Pair String Ir) -> NWalk
-nWalkFields decls defs fields = nWalkFieldsGo decls defs fields nEmptyWalk
-
-nWalkFieldsGo : List IrTyDecl -> List IrDef -> List (Pair String Ir) -> NWalk -> NWalk
-nWalkFieldsGo decls defs [] acc = acc
-nWalkFieldsGo decls defs (p :: rest) acc =
-  nWalkFieldsGo decls defs rest (nAddWalk (nWalk decls defs (secondOf p)) acc)
-
-nWalkAlt : List IrTyDecl -> List IrDef -> Maybe IrAlt -> NWalk
-nWalkAlt decls defs Nothing = nEmptyWalk
-nWalkAlt decls defs (Just alt) =
+nWalkAlt : List IrTyDecl -> List IrDef -> List (Pair IrBinder NCls) -> Maybe IrTy -> Maybe IrAlt -> NWalk
+nWalkAlt decls defs env caseTy Nothing = nEmptyWalk
+nWalkAlt decls defs env caseTy (Just alt) =
   let
-    bodyWalk = nWalk decls defs alt.irAltBody
-  in NWalk (nBinderCounts decls alt.irAltBinders) bodyWalk.nwValues
+    bound = nAltEnvGo decls caseTy alt.irAltCtor alt.irAltBinders 0 (NBind env nZeroCounts 0)
+    bodyWalk = nWalk decls defs bound.nbEnv alt.irAltBody
+  in nAddWalk (NWalk bound.nbCounts nZeroCounts 0 0 bound.nbMissing 0 0 0) bodyWalk
 
-nWalkAlts : List IrTyDecl -> List IrDef -> List IrAlt -> NWalk
-nWalkAlts decls defs alts = nWalkAltsGo decls defs alts nEmptyWalk
+nWalkAlts : List IrTyDecl -> List IrDef -> List (Pair IrBinder NCls) -> Maybe IrTy -> List IrAlt -> NWalk
+nWalkAlts decls defs env caseTy alts = nWalkAltsGo decls defs env caseTy alts nEmptyWalk
 
-nWalkAltsGo : List IrTyDecl -> List IrDef -> List IrAlt -> NWalk -> NWalk
-nWalkAltsGo decls defs [] acc = acc
-nWalkAltsGo decls defs (a :: rest) acc =
-  nWalkAltsGo decls defs rest (nAddWalk (nWalkAlt decls defs (Just a)) acc)
+nWalkAltsGo : List IrTyDecl -> List IrDef -> List (Pair IrBinder NCls) -> Maybe IrTy -> List IrAlt -> NWalk -> NWalk
+nWalkAltsGo decls defs env caseTy [] acc = acc
+nWalkAltsGo decls defs env caseTy (a :: rest) acc =
+  nWalkAltsGo decls defs env caseTy rest (nAddWalk (nWalkAlt decls defs env caseTy (Just a)) acc)
 
-nKids : List IrTyDecl -> List IrDef -> Ir -> NWalk
-nKids decls defs ir =
+-- | Nat 分支的 binder（前驱 / 兜底）都是 Nat 标量。
+nWalkNatAlt : List IrTyDecl -> List IrDef -> List (Pair IrBinder NCls) -> Maybe IrAlt -> NWalk
+nWalkNatAlt decls defs env Nothing = nEmptyWalk
+nWalkNatAlt decls defs env (Just alt) =
+  let
+    bound = nBindAll decls alt.irAltBinders (Just NClsScalar) env
+    bodyWalk = nWalk decls defs bound.nbEnv alt.irAltBody
+  in nAddWalk (NWalk bound.nbCounts nZeroCounts 0 0 bound.nbMissing 0 0 0) bodyWalk
+
+-- | 缺 kind 的值位置：按节点形状记账，决定下一步补哪一类推断。
+nMissingValueWalk : Ir -> NWalk
+nMissingValueWalk ir =
+  case ir of
+    IrVar _ => NWalk nZeroCounts (nBump NClsMissing nZeroCounts) 0 0 0 1 0 0
+    IrApp _ _ _ => NWalk nZeroCounts (nBump NClsMissing nZeroCounts) 0 0 0 0 1 0
+    _ => NWalk nZeroCounts (nBump NClsMissing nZeroCounts) 0 0 0 0 0 1
+
+nWalk : List IrTyDecl -> List IrDef -> List (Pair IrBinder NCls) -> Ir -> NWalk
+nWalk decls defs env ir =
+  let
+    kids = nKids decls defs env ir
+    ownB =
+      case ir of
+        IrLam bs _ _ =>
+          let
+            bound = nBindAll decls bs Nothing env
+          in NWalk bound.nbCounts nZeroCounts bound.nbMissing 0 0 0 0 0
+        IrLet bs scrut _ =>
+          let
+            bound = nBindAll decls bs (nValueCls decls defs env scrut) env
+          in NWalk bound.nbCounts nZeroCounts 0 bound.nbMissing 0 0 0 0
+        _ => nEmptyWalk
+    ownV =
+      case nValueCls decls defs env ir of
+        Just cls =>
+          if nIsMissing cls then
+            nMissingValueWalk ir
+          else
+            NWalk nZeroCounts (nBump cls nZeroCounts) 0 0 0 0 0 0
+        Nothing => nEmptyWalk
+  in nAddWalk (nAddWalk ownB ownV) kids
+
+nKids : List IrTyDecl -> List IrDef -> List (Pair IrBinder NCls) -> Ir -> NWalk
+nKids decls defs env ir =
   case ir of
     IrVar _ => nEmptyWalk
     IrGlobal _ => nEmptyWalk
-    IrCtor _ _ _ args => nWalkList decls defs args
-    IrRecord _ _ fields => nWalkFields decls defs fields
-    IrProj base _ _ _ => nWalk decls defs base
-    IrRecUpd base _ fields _ => nAddWalk (nWalk decls defs base) (nWalkFields decls defs fields)
+    IrCtor _ _ _ args => nWalkList decls defs env args
+    IrRecord _ _ fields => nWalkFields decls defs env fields
+    IrProj base _ _ _ => nWalk decls defs env base
+    IrRecUpd base _ fields _ =>
+      nAddWalk (nWalk decls defs env base) (nWalkFields decls defs env fields)
     IrRt _ => nEmptyWalk
-    IrRtApp _ args => nWalkList decls defs args
-    IrCast _ _ inner => nWalk decls defs inner
+    IrRtApp _ args => nWalkList decls defs env args
+    IrCast _ _ inner => nWalk decls defs env inner
     IrInt _ => nEmptyWalk
     IrStr _ => nEmptyWalk
     IrBool _ => nEmptyWalk
     IrFloatLit _ => nEmptyWalk
-    IrLet _ scrut body => nAddWalk (nWalk decls defs scrut) (nWalk decls defs body)
-    IrLam _ _ body => nWalk decls defs body
-    IrApp _ f a => nAddWalk (nWalk decls defs f) (nWalk decls defs a)
-    IrTail inner => nWalk decls defs inner
+    IrLet bs scrut body =>
+      let
+        bound = nBindAll decls bs (nValueCls decls defs env scrut) env
+      in nAddWalk (nWalk decls defs env scrut) (nWalk decls defs bound.nbEnv body)
+    IrLam bs _ body =>
+      let
+        bound = nBindAll decls bs Nothing env
+      in nWalk decls defs bound.nbEnv body
+    IrApp _ f a => nAddWalk (nWalk decls defs env f) (nWalk decls defs env a)
+    IrTail inner => nWalk decls defs env inner
     IrIf c th el =>
-      nAddWalk (nWalk decls defs c) (nAddWalk (nWalk decls defs th) (nWalk decls defs el))
-    IrCase _ _ scrut alts => nAddWalk (nWalk decls defs scrut) (nWalkAlts decls defs alts)
+      nAddWalk
+        (nWalk decls defs env c)
+        (nAddWalk (nWalk decls defs env th) (nWalk decls defs env el))
+    IrCase caseTy _ scrut alts =>
+      nAddWalk (nWalk decls defs env scrut) (nWalkAlts decls defs env caseTy alts)
     IrNatCase scrut _ z s c =>
       nAddWalk
-        (nWalk decls defs scrut)
-        (nAddWalk (nWalkAlt decls defs z) (nAddWalk (nWalkAlt decls defs s) (nWalkAlt decls defs c)))
-    IrConcatMany parts => nWalkList decls defs parts
-    IrEffThunk _ _ _ _ prim => nWalk decls defs prim
+        (nWalk decls defs env scrut)
+        (nAddWalk (nWalkNatAlt decls defs env z) (nAddWalk (nWalkNatAlt decls defs env s) (nWalkNatAlt decls defs env c)))
+    IrConcatMany parts => nWalkList decls defs env parts
+    IrEffThunk _ _ _ _ prim => nWalk decls defs env prim
     IrEffBind _ _ _ => nEmptyWalk
-
-nOwnBinders : List IrTyDecl -> Ir -> NCounts
-nOwnBinders decls ir =
-  case ir of
-    IrLam bs _ _ => nBinderCounts decls bs
-    IrLet bs _ _ => nBinderCounts decls bs
-    _ => nZeroCounts
-
-nWalk : List IrTyDecl -> List IrDef -> Ir -> NWalk
-nWalk decls defs ir =
-  let
-    kids = nKids decls defs ir
-    ownB = nOwnBinders decls ir
-    ownV =
-      case nValueCls decls defs ir of
-        Just cls => nBump cls nZeroCounts
-        Nothing => nZeroCounts
-  in NWalk (nAddCounts ownB kids.nwBinders) (nAddCounts ownV kids.nwValues)
 
 nWalkDefs : List IrTyDecl -> List IrDef -> List IrDef -> NWalk
 nWalkDefs decls defs defs0 =
@@ -475,10 +626,10 @@ nWalkDefs decls defs defs0 =
     [] => nEmptyWalk
     d :: rest =>
       case d of
-        IrDef _ _ _ _ body _ _ _ => nAddWalk (nWalk decls defs body) (nWalkDefs decls defs rest)
+        IrDef _ _ _ _ body _ _ _ => nAddWalk (nWalk decls defs [] body) (nWalkDefs decls defs rest)
         IrExternDef _ _ _ _ => nWalkDefs decls defs rest
 
--- | binder（槽）与值位置的 kind 分布。
+-- | binder（槽）与值位置的 kind 分布。缺类型的 binder 按绑定点推断。
 export nReprCounts : List IrTyDecl -> List IrDef -> NWalk
 nReprCounts decls defs = nWalkDefs decls defs defs
 
@@ -491,4 +642,16 @@ nReprReport mode decls defs =
     ++ mode
     ++ "] defs="
     ++ strFromInt (length defs)
-    ++ "\n  binders " ++ nCountsText w.nwBinders ++ "\n  values  " ++ nCountsText w.nwValues
+    ++ "\n  binders "
+    ++ nCountsText w.nwBinders
+    ++ "\n  values  "
+    ++ nCountsText w.nwValues
+    ++ "\n  miss    lam="
+    ++ strFromInt w.nwMissLam
+    ++ " let="
+    ++ strFromInt w.nwMissLet
+    ++ " alt="
+    ++ strFromInt w.nwMissAlt
+    ++ " var="
+    ++ strFromInt w.nwMissVar
+    ++ " app=" ++ strFromInt w.nwMissApp ++ " other=" ++ strFromInt w.nwMissOther

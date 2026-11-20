@@ -21,7 +21,8 @@ main =
         pure ""
 
 problems : List String
-problems = filter (\s => s /= "") (append tyChecks (append rtChecks walkChecks))
+problems =
+  filter (\s => s /= "") (append tyChecks (append rtChecks (append walkChecks inferChecks)))
 
 expectCls : String -> NCls -> Maybe NCls -> String
 expectCls label want got =
@@ -94,4 +95,49 @@ walkChecks =
       "walk values unknown"
       0
       (w.nwValues.ncVar + w.nwValues.ncOpaque + w.nwValues.ncMissing + w.nwValues.ncSymbol)
+  ]
+
+-- 缺类型的 `let` binder 从 scrutinee 推断；case 分支 binder 从构造子字段类型推断。
+inferDefs : List IrDef
+inferDefs =
+  [
+    IrDef
+      "g"
+      0
+      []
+      Nothing
+      (IrLam [] Nothing (IrLet [mkIrBinder "s"] (IrStr "x") (IrVar (mkIrBinder "s"))))
+      False
+      False
+      Nothing
+  ]
+
+optionDecls : List IrTyDecl
+optionDecls = [IrVariantDecl "Option" 1 [Pair "Some" [IrTyVar 0], Pair "None" []]]
+
+caseDefs : List IrDef
+caseDefs =
+  [
+    IrDef
+      "h"
+      0
+      []
+      Nothing
+      (IrCase (Just (IrTyData "Option" [IrTyStr])) Nothing (IrVar (mkIrBinder "o")) [IrAlt (Just (Pair "Option" "Some")) [mkIrBinder "v"] (IrVar (mkIrBinder "v")), IrAlt Nothing [] (IrInt 0)])
+      False
+      False
+      Nothing
+  ]
+
+inferChecks : List String
+inferChecks =
+  let
+    wLet = nReprCounts [] inferDefs
+    wCase = nReprCounts optionDecls caseDefs
+  in [
+    checkEq "infer let binder ptr" 1 wLet.nwBinders.ncPtr,
+    checkEq "infer let binder missing" 0 wLet.nwBinders.ncMissing,
+    checkEq "infer let value ptr" 3 wLet.nwValues.ncPtr,
+    checkEq "infer case binder ptr" 1 wCase.nwBinders.ncPtr,
+    checkEq "infer case binder missing" 0 wCase.nwBinders.ncMissing
   ]
