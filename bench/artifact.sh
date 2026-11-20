@@ -10,12 +10,17 @@
 #       - 分段构建时间：`vuna compile` 的 codegen 与外部工具链（ocamlopt / cc / wasm-tools），
 #         外加一次热工具链调用（ocaml 走 build.sh 内容哈希；native 为重链；wasm 为重新汇编）。
 #
+# 用例的两端：`minimal` 是**最小可执行程序**（纯 Int，runtime + 最小 base 闭包，绝对地板），
+# `hello` 是**最小效应程序**（多一层 `Base.Effect.Core` 的 handler 面）；两者一起说明产物
+# 大小由闭包决定，不随源码行数走。
+#
 # 可比性：
 #   * 生成物不含绝对路径/时间戳；build.sh 进入产物目录、用相对模块名编译，因此
 #     OCaml 产物调试信息里是相对路径。`ocamlopt`/`cc`/`wasm-tools` 由 flake 固定版本，
 #     所以字节/行数/文件数/二进制大小可跨机器比较；
 #   * 构建耗时只与同机（arch + nproc）基线比较，且是**软判定**：尺寸 FAIL 才影响退出码，
-#     耗时行只报告；基线 <100ms 的耗时行不判定（调度噪声与读数同量级）。
+#     耗时行只报告；基线 <100ms 的耗时行不判定（调度噪声与读数同量级）。每次构建都用
+#     独立空 `VUNA_STORE`（`<dir>.store`），codegen 冷热不随宿主缓存漂移。
 #
 # 用法（仓库根目录）：
 #   sh bench/artifact.sh                          # 测全部用例 × 三端
@@ -53,8 +58,8 @@ usage: vuna-artifacts [options]
 options:
   --runs N                  每用例构建重复次数（默认 1；尺寸取最后一次，时间取中位）
   --target T                ocaml / native / wasm / both / all（默认 all）
-  --only CASE               只跑一个用例（可重复）：hello / defs-10 / defs-100 /
-                            defs-1000 / mods-10 / mods-100 / self
+  --only CASE               只跑一个用例（可重复）：minimal / hello / defs-10 /
+                            defs-100 / defs-1000 / mods-10 / mods-100 / self
   --quick                   等价于跳过 self（最慢的一项）
   --list                    列出用例与目标，不测量
   --compiler PATH           被测 vuna（默认 PATH 里的 vuna / $VUNA）
@@ -192,7 +197,7 @@ json_escape() {
 }
 
 # ---------------------------------------------------------------- 用例
-ALL_CASES="hello defs-10 defs-100 defs-1000 mods-10 mods-100 self"
+ALL_CASES="minimal hello defs-10 defs-100 defs-1000 mods-10 mods-100 self"
 [ "$QUICK" = 1 ] && ALL_CASES=${ALL_CASES% self}
 CASES=""
 case_selected() {
@@ -268,6 +273,7 @@ gen_mods() { # n dir
 prepare_case() { # case → 输入路径
   local c=$1 n
   case $c in
+    minimal) printf '%s' "$REPO/bench/artifacts/cases/minimal.vuna" ;;
     hello) printf '%s' "$REPO/bench/artifacts/cases/hello.vuna" ;;
     defs-*)
       n=${c#defs-}
@@ -288,6 +294,7 @@ prepare_case() { # case → 输入路径
 expected_output() { # case → 期望 stdout（空 = 不校验）
   local c=$1 n
   case $c in
+    minimal) cat "$REPO/bench/artifacts/cases/minimal.out" ;;
     hello) cat "$REPO/bench/artifacts/cases/hello.out" ;;
     defs-*)
       n=${c#defs-}
@@ -324,6 +331,7 @@ if [ "$LIST" = 1 ]; then
   printf '  %-10s %-24s %s\n' case targets source
   for c in $CASES; do
     case $c in
+      minimal) s="single-file" ;;
       hello) s="single-file" ;;
       defs-*) s="single-file (generated)" ;;
       mods-*) s="package (generated)" ;;
@@ -370,6 +378,9 @@ for c in $CASES; do
     for ((r = 1; r <= RUNS; r++)); do
       dir=$WORK/out/$c/$t/last
       if [ "$r" -lt "$RUNS" ]; then dir=$WORK/out/$c/$t/r$r; fi
+      # 每次构建用独立空对象库：codegen 与工具链的冷热不随宿主缓存漂移，时间列才可比。
+      export VUNA_STORE="$dir.store"
+      rm -rf "$VUNA_STORE"
       if ! vuna_build_target "$src" "$t" "$dir" >&2; then
         note "  $c ($t): build failed (see $dir.codegen.log / $dir.toolchain.log)"
         die "build failed: $c ($t)"

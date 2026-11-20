@@ -1,0 +1,4 @@
+-- 最小可执行程序：纯 Int，不 import 任何效应模块。
+-- 产物基线的**绝对地板**：runtime + 最小 base 闭包（没有任何 handler 面）。
+main : Int
+main = 0

@@ -6,7 +6,7 @@
 | --- | --- | --- |
 | `bench/bootstrap.sh` | 编译器**构建/编译**墙钟、OCaml 文本尺寸、codegen 计数 | `nix run .#vuna-bench` |
 | `bench/run.sh` | **生成程序运行时**（vuna 产物 vs 手写 OCaml）；target = ocaml / native / wasm / both / all；另记每个后端的产物文件数/二进制大小/构建耗时 | `nix run .#vuna-perf` |
-| `bench/artifact.sh` | **三端产物基线**：`.ml` / `.s` / `.wat` 的文件树、字节、行数，最终二进制大小，分段构建时间；按 `hello` / `defs-N` / `mods-N` / `self` 分档 | `nix run .#vuna-artifacts` |
+| `bench/artifact.sh` | **三端产物基线**：`.ml` / `.s` / `.wat` 的文件树、字节、行数，最终二进制大小，分段构建时间；按 `minimal` / `hello` / `defs-N` / `mods-N` / `self` 分档 | `nix run .#vuna-artifacts` |
 | `bench/compiler.sh` | **工具链命令**墙钟（check/build/map/fmt，冷/热） | `sh bench/compiler.sh` |
 | `bench/native.sh` | 编译器编到 **native** 后的端到端（`check packages/base` / `--full` 加 compiler） | `sh bench/native.sh`（需 `result-native`） |
 
@@ -91,7 +91,8 @@ nix run .#vuna-artifacts -- --only hello --check
 nix run .#vuna-artifacts -- --json bench/baselines/artifacts.json   # 重标
 ```
 
-用例：`hello`（最小 hello world）、`defs-10/100/1000`（单文件顶层定义数；入口体是直连的
+用例：`minimal`（最小可执行程序：纯 Int，runtime + 最小 base 闭包）、`hello`（最小效应
+程序：多一层 `Base.Effect.Core` 的 handler 面）、`defs-10/100/1000`（单文件顶层定义数；入口体是直连的
 左嵌套加法链，同时钉住精化入口按表达式规模派生的预算）、`mods-10/100`（包内模块数）、
 `self`（`packages/compiler`；wasm 不支持该目标）。
 
@@ -101,7 +102,8 @@ nix run .#vuna-artifacts -- --json bench/baselines/artifacts.json   # 重标
 - 最终二进制：`prog`（ocaml / native）与 `main.wasm`；
 - 构建：`codegen_ms`（`vuna compile`）与 `toolchain_ms`（ocamlopt / cc / wasm-tools），
   各带 `*_cpu_ms`（user+sys），另有 `toolchain_warm_ms`（ocaml 走 build.sh 内容哈希、
-  native 为重链、wasm 为重新汇编）；
+  native 为重链、wasm 为重新汇编）；每次构建用独立空 `VUNA_STORE`（`<dir>.store`），
+  codegen 冷热不随宿主缓存漂移；
 - 生成物不含绝对路径/时间戳，工具链由 flake 固定，所以**尺寸与二进制大小跨机器可比**
   （默认 5% WARN / 20% FAIL，FAIL 退出 1）；**时间只同机可比**，负载波动时看 CPU 口径
   （20% / 50%，软判定：只报告，不影响退出码；基线 <100ms 的行不判定）。

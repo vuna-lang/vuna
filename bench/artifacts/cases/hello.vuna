@@ -1,5 +1,7 @@
--- 最小 hello world：一次 Console 打印 + 纯 Int 返回（入口自动预装宿主 handler）。
--- 产物基线的绝对地板：runtime + base 的最小闭包。
+-- 最小效应程序：一次 Console 打印 + 纯 Int 返回（入口自动预装宿主 handler）。
+-- 比 `minimal` 多一层**效应闭包**：`Base.Effect.Core` 是 handler 集合，一进来就带上
+-- `Fs` / `Net` / `Process` / `Console` / `Clock` … 整片效应模块（体积因此比纯 Int 程序大
+-- ~70 KB）。两者一起钉住「闭包决定产物大小」的两端。
 import Base.Effect.Core as Eff
 import Base.Effect.Console as EffConsole
 

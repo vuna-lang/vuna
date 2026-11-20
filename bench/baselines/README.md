@@ -7,7 +7,7 @@
 | `programs.json` | `vuna-perf`：全部生成程序 × ocaml/native/wasm | `sh bench/run.sh --target all --runs 5 --warmup 2 --json bench/baselines/programs.json` | `vuna-perf --check`（只比本次跑的 target / benchmark；`--only eff_*` 就是效应子集） |
 | `bootstrap.json` | 构建链 / 自举 / 编译墙钟与产物尺寸 | `nix run .#vuna-bench -- --quick --json bench/baselines/bootstrap.json` | `vuna-bench --check` |
 | `compiler.txt` | 工具链命令（check/build/map/fmt）墙钟 | `sh bench/compiler.sh --save-baseline` | `compiler.sh --check` |
-| `artifacts.json` | 三端产物：文本文件树/字节/行数、最终二进制大小、分段构建时间（hello / defs-N / mods-N / self） | `nix run .#vuna-artifacts -- --json bench/baselines/artifacts.json` | `vuna-artifacts --check` |
+| `artifacts.json` | 三端产物：文本文件树/字节/行数、最终二进制大小、分段构建时间（minimal / hello / defs-N / mods-N / self） | `nix run .#vuna-artifacts -- --json bench/baselines/artifacts.json` | `vuna-artifacts --check` |
 | `native.json` | 编译器编到 native 后的端到端（`check packages/base` 冷/热；`--full` 加 compiler 包） | `sh bench/native.sh --full --json bench/baselines/native.json` | `native.sh --check` |
 
 统一重标：
