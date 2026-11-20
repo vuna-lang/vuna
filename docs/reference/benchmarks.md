@@ -242,10 +242,13 @@ HashMap 升级」后同一档约 193 ms（wasm ≈149 ms，N=5000，`--runs 1`�
 原生 `str_eq` 只占单次 perform 的 ~1%（2 次比较 ≈7 ns / ~700 ns），这次改动是协议
 收敛（派发只比整数），不是性能项。
 
-**还缺的口径（W3.0）**：现有 `eff_*` 覆盖用户 handler 与 answer row，但没有量
-**入口宿主叶子**——entry 预装 `runXHost` 后，每次 `consolePrint` 都会在 opH 里再跑一次
-`runPure (@vuna@host@print …)`（嵌套机器）。在补出这条 bench 之前，不评估
-「宿主叶子改裸值原语」与 `MkHandleHost` 的收益。
+**还缺的口径（W3.0）**：现有 `eff_*` 覆盖用户 handler 与 answer row（`eff_host` 也是
+`handleConsole "mock"` + Tick），但没有量**入口宿主叶子**——entry 只预装 `runXHost` 时，
+每次 `consolePrint` 都会在 opH 里再跑一次 `runPure (@vuna@host@print …)`（嵌套机器）。
+计划中的对照项是 `eff_entry_host`：`main : Eff [ConsoleOp] Int` 循环 20000 次
+`consolePrint ""`（I/O 字节≈0，量到的是每次叶子 = 1 次 syscall + 2 台机器循环），
+同时记 `.s` / bytes（纯程序已在 `8b0c254` 后不带效应机器，入口宿主程序仍带）。
+在补出这条 bench 之前，不评估「宿主叶子改裸值原语」（W5）与 `MkHandleHost`（W3.1）的收益。
 
 **CPS 前后**（wasm：`445315d` 的 wat 机器 → HEAD 的库机器；native：`e663921` 的栈拷贝 →
 HEAD 的库机器；`--runs 3 --warmup 1`，源码与 harness 都是 HEAD）：

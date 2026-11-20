@@ -528,17 +528,18 @@ ctx 深度是真正的嵌套 resume 深度。
 | 4 | **OCaml** 接机器（先保留 `Effect.Deep` 作为差分 oracle 跑同一组夹具，再切库机器） | 同一组夹具两端逐字一致（**未做**：OCaml 仍走 `Effect.Deep`） |
 | 5 | **wasm** 接同一台机器（`@ir@m@*` 变成对库函数的 `IrGlobal` 调用；手写 wat 机器已删除） | `106` 默认栈；`114/115` 冒烟（已达成） |
 
-### 9.5 宿主路径与派发收敛（待做）
+### 9.5 宿主路径与派发收敛
 
 下面几项来自宿主效应/机器收敛的盘点；按门禁执行，不先做优化后找口径。
+W1 / W2 / W4 已落地；剩下的三项按 W3.0 → W5 →（复评）W3.1 顺序推进。
 
 | 项 | 内容 | 门禁 / 状态 |
 |---|---|---|
 | W1 | 入口命名实例 fail closed：`main : Eff [ConsoleOp@mock] …` 曾能编译、运行期才 `unhandled effect`；现在精化期报 `TC_EntryInstanceNotDefault` | **已达成**；夹具 `dt_err/112_entry_instance_not_default`、`dt_base/93_eff_named_row_handled`、`dt_base/94_eff_named_row_default_explicit` |
 | W2 | 宿主表收敛成 `Base.Intrinsics.builtinEffects` 的 `HostClass = HostHandled \| HostDirect key opH \| HostAbort key text`；entry 预装与 wasm 直连同源，删死字段（`@vuna@run*Host` 名、`irHost*` 表、`opHOf`） | **已达成**；`corpus/compiler/05_host_table` 锁分类与 `sendCore`/`sendCoreId` 两种名字 |
 | W4 | `collectHandleOpsDefs` 改吃 **CPS 前** 的 defs，让 handler 分类与 CPS 输出解耦 | **已达成**（机器 pass 仍是类型改变型，见 [compiler-audit.md](compiler-audit.md) IR-08；不声称关闭 IR-08/IR-09） |
-| W3.0 | 补「入口宿主叶子」bench：entry 预装 handler + 每次 `consolePrint` 的 `runPure (@vuna@host@print …)` 嵌套机器 | W5 / W3.1 的前置；读数写进 [benchmarks.md](benchmarks.md) §1.4 |
-| W5 | 宿主叶子改裸值原语，去掉每次 print 的嵌套 `machineRun` | 先过 W3.0；预计是本批最大收益 |
+| W3.0 | 补「入口宿主叶子」bench：`bench/programs/eff_entry_host`——`main : Eff [ConsoleOp] Int` 循环 20000 次 `consolePrint ""`（**不装用户 handler**，entry 只预装 `runConsoleHost`），`.ml` 对照同算法；同时记产物 `files/bytes` | W5 / W3.1 的前置；读数写进 [benchmarks.md](benchmarks.md) §1.4。空串让 I/O 字节≈0，量到的是「每次宿主叶子 = 1 次 syscall + 2 台机器循环」 |
+| W5 | 宿主叶子改裸值原语：目前只有三处 `runPure (@vuna@host@…)`——`Console` 的 `Print` / `EPrint`、`Process` 的 `Exit`；三端运行时实现本来就返回裸值，所以只需新增隐藏的裸值 intrinsic（`String -> Int` 等）并在三端符号表里指向同一实现，`base` 侧去掉 `runPure`/`raise` 包装 | 先过 W3.0；预计是本批最大收益。改动面：`packages/base`（进 seed）+ `packages/compiler-base`（内建表）+ 三个 `packages/target-*`（插件，不进 seed，无需 rotation） |
 | W3.1 | `handleHostAt → MkHandleHost`，宿主帧免槽位/epoch，Ref 归入 Direct | **不独立开工**：W5 落地后复评，若宿主帧仍显著再做，否则删 |
 
 ### 9.4 风险与边界
