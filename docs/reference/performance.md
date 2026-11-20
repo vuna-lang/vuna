@@ -263,7 +263,10 @@ load/parse 前缀 + iface 摘要 **~2.6 s** → 逐定义精化（`collectSigs-d
    **三个 1.x e9 不同口径**：本节 1.1–1.2e9 是单包单进程；第 11 条的 1.63e9 是 `check .`
    全树；cli 成员的 1.55e9 是子进程合计。复现：
    `VN_PERF_STATS=1 VUNA_STORE=$(mktemp -d) ./result/bin/vuna check packages/compiler`
-   （结束在 stderr 打 `VN_PERF minor_words=… major_words=… minor_collections=… top_heap_words=…`）。
+   （结束在 stderr 打 `VN_PERF minor_words=… major_words=… minor_collections=… top_heap_words=…
+   allocated_words=…`）。**分辨率**：`minor_words` 只在 minor GC 边界推进，分辨率为
+   minor heap（16M words ≈ 整跑的 1.4%），小于它的改动在这行上看不出来；跨轮比较小改动
+   用同一行的 `allocated_words`（`Gc.allocated_bytes ()`，精确到 words）。
    hash-consing 需要全局 intern 表、改变 Marshal 布局、与纯精化/元变量/摘要三处不变量
    冲突；预计收益 2–4%，不做。
    注：span 的 `args.allocWords` 是 `Gc.allocated_bytes ()` 的差值（精确到 words）；

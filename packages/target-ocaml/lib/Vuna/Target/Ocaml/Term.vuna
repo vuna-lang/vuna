@@ -36,8 +36,9 @@ let () =
   if (try Sys.getenv \"VN_PERF_STATS\" with Not_found -> \"\") <> \"\" then
     at_exit (fun () ->
       let s = Gc.quick_stat () in
-      Printf.eprintf \"VN_PERF minor_words=%.0f major_words=%.0f minor_collections=%d major_collections=%d top_heap_words=%d\\n\"
-        s.Gc.minor_words s.Gc.major_words s.Gc.minor_collections s.Gc.major_collections s.Gc.top_heap_words)
+      Printf.eprintf \"VN_PERF minor_words=%.0f major_words=%.0f minor_collections=%d major_collections=%d top_heap_words=%d allocated_words=%.0f\\n\"
+        s.Gc.minor_words s.Gc.major_words s.Gc.minor_collections s.Gc.major_collections s.Gc.top_heap_words
+        (Gc.allocated_bytes () /. (float_of_int Sys.word_size /. 8.)))
 let bi_add a b = a + b
 let bi_sub a b = a - b
 let bi_mul a b = a * b
