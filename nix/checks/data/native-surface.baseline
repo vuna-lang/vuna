@@ -1,5 +1,5 @@
 # syscall sites（函数名: 该站点的 syscall 号）
-allocFn                          "mmap" "mmap"
+allocFn                          "mmap" "mmap" "mmap" "mmap"
 cgroupCpusFn                     "openat" "read" "close"
 cmdRunShFn                       "getcwd" "chdir" "fork" "setpgid" "wait4" "chdir" "setpgid" "execve" "exit" "chdir"
 dirCloseFn                       "close"
@@ -69,7 +69,6 @@ nativeArenaEndLabel 8
 nativeCurSegLabel 8
 nativeHeapEndLabel 0
 nativeHeapPtrLabel 8
-nativeHeapSegLabel 32
 nativeHugeFreeLabel 8
 nativeSegsLabel 8
 readBufLabel 8388608
