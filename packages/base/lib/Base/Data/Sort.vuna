@@ -12,10 +12,14 @@ import Base.Trait.Num
 -- `mergeSort` 的 `<=` 是 Ord 方法别名；显式 import 保证类存在与 split 单元顺序。
 import Base.Trait.Ord
 
--- | 内部：以 `Int` 计长度（归并的 fuel 上界，避免每层 Nat 归一化）。
+-- | 内部：以 `Int` 计长度（尾递归，wasm 的 1 MB 栈也能量长表）。
 lenInt : List a -> Int
-lenInt [] = 0
-lenInt (_ :: xs) = 1 + lenInt xs
+lenInt xs = lenIntGo 0 xs
+
+-- | 内部：`lenInt` 的累加实现。
+lenIntGo : Int -> List a -> Int
+lenIntGo acc [] = acc
+lenIntGo acc (_ :: xs) = lenIntGo (acc + 1) xs
 
 -- | 内部：相邻两两按 `le` 比较是否已有序；空表与单元素恒真。
 sortedBy : (a -> a -> Bool) -> List a -> Bool
@@ -23,15 +27,12 @@ sortedBy le [] = True
 sortedBy le ([_]) = True
 sortedBy le (x :: y :: rest) = le x y && sortedBy le (y :: rest)
 
--- | 内部：长度是否不超过 `k`（最多走 `k` 步）。
+-- | 内部：长度是否不超过 `k`（最多走 `k` 步；走满仍未到表尾即 `False`）。
 shortList : Int -> List a -> Bool
 shortList k xs =
-  if k <= 0 then
-    True
-  else
-    case xs of
-      [] => True
-      _ :: rest => shortList (k - 1) rest
+  case xs of
+    [] => True
+    _ :: rest => if k <= 0 then False else shortList (k - 1) rest
 
 -- | 内部：把 `y` 插到已排序列表的第一个「不小于它」的位置之前，保持稳定。
 insertBy : (a -> a -> Bool) -> a -> List a -> List a
