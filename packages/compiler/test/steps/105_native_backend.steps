@@ -478,3 +478,18 @@ exit: 0
 run: sh -c '"$TMPDIR/deeptree-out/bin/deeptree" 2>&1'
 exit: 2
 out-contains: directory tree too deep
+
+# 9v) 非 try 宿主符号失败：必须显式可见（exit 2），且首行与 OCaml 后端逐字一致。
+#     `try*` 叶子仍返回默认值 + 状态码（库的 Fs handler 走那条路）。
+run: sh -c 'd="$TMPDIR/strictfs"; mkdir -p "$d/app"; printf "[package]\nname = \"strictfs\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Effect.Core as Eff\n\nmain : Eff [] Int\nmain = do\n  s <- prim_eff_readFile \"/nonexistent-vuna-strict\"\n  pure (strLength s)\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/strictfs-n" "$d"'
+exit: 0
+run: sh -c 'd="$TMPDIR/strictfs"; "$VUNA" build --out "$TMPDIR/strictfs-o" "$d"'
+exit: 0
+run: sh -c '"$TMPDIR/strictfs-n/bin/strictfs" 2> "$TMPDIR/strictfs-n.err"; echo $?'
+out-equals: 2
+run: sh -c '"$TMPDIR/strictfs-o/bin/strictfs" 2> "$TMPDIR/strictfs-o.err"; echo $?'
+out-equals: 2
+run: sh -c 'head -1 "$TMPDIR/strictfs-n.err"'
+out-equals: vuna: runtime error: readFile: /nonexistent-vuna-strict: No such file or directory
+run: sh -c 'head -1 "$TMPDIR/strictfs-n.err" > "$TMPDIR/strictfs-n.line"; head -1 "$TMPDIR/strictfs-o.err" > "$TMPDIR/strictfs-o.line"; cmp "$TMPDIR/strictfs-n.line" "$TMPDIR/strictfs-o.line"'
+exit: 0

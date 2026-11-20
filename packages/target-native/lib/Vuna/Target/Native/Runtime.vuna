@@ -131,6 +131,55 @@ arrayOobMessage = "vuna: runtime error: Invalid_argument(\"index out of bounds\"
 pathTooLongMessage : String
 pathTooLongMessage = "vuna: runtime error: path too long\n"
 
+-- | 宿主 errno（正数；`fs_fail` 在映射成状态码**之前**写入）。非 try 符号失败时用它
+--   还原 `Sys_error` 的 `<reason>` 文本（见 `docs/reference/native-platform.md` §7）。
+export hostErrnoLabel : String
+hostErrnoLabel = "rt_host_errno"
+
+-- | errno → `strerror` 文本（含 `": "` 分隔与结尾换行）。与 OCaml `Sys_error` 在 C locale
+--   下的首行一致；不在表里的 errno 走 `strictReasonUnknown`。
+hostReasonTexts : List (Pair Int String)
+hostReasonTexts =
+  [
+    Pair errnoEnoent ": No such file or directory\n",
+    Pair errnoEacces ": Permission denied\n",
+    Pair errnoEperm ": Operation not permitted\n",
+    Pair errnoEexist ": File exists\n",
+    Pair errnoEnotdir ": Not a directory\n",
+    Pair errnoEisdir ": Is a directory\n",
+    Pair errnoEnospc ": No space left on device\n",
+    Pair 5 ": Input/output error\n",
+    Pair 12 ": Cannot allocate memory\n",
+    Pair 22 ": Invalid argument\n",
+    Pair 23 ": Too many open files in system\n",
+    Pair 24 ": Too many open files\n",
+    Pair 30 ": Read-only file system\n",
+    Pair 36 ": File name too long\n",
+    Pair 40 ": Too many levels of symbolic links\n"
+  ]
+
+strictReasonUnknown : String
+strictReasonUnknown = ": unknown error\n"
+
+-- | `strerror` 文本的只读数据标签（按 errno 编号，文件内唯一）。
+hostReasonLabel : Int -> String
+hostReasonLabel n = nativeDataLabel ("errno_" ++ strFromInt n)
+
+hostReasonRodata : List NativeRodata
+hostReasonRodata =
+  append
+    (map (\p => NativeRodata (hostReasonLabel (firstOf p)) (secondOf p)) hostReasonTexts)
+    [
+      NativeRodata (nativeDataLabel "errno_unknown") strictReasonUnknown,
+      NativeRodata (nativeDataLabel "op_readFile") "readFile: ",
+      NativeRodata (nativeDataLabel "op_writeFile") "writeFile: ",
+      NativeRodata (nativeDataLabel "op_writeFileAtomic") "",
+      NativeRodata (nativeDataLabel "op_readDir") "readDir: ",
+      NativeRodata (nativeDataLabel "op_isDirectory") "isDirectory: ",
+      NativeRodata (nativeDataLabel "op_makeDir") "makeDir: ",
+      NativeRodata (nativeDataLabel "op_removeFile") "removeFile: "
+    ]
+
 -- | 目录树太深：`remove_tree` 的递归帧放不进当前栈。
 rmtreeDeepMessage : String
 rmtreeDeepMessage = "vuna: runtime error: directory tree too deep\n"
@@ -139,7 +188,7 @@ export nativeRodata : List NativeRodata
 nativeRodata =
   append
     [NativeRodata (nativeDataLabel "true") "True", NativeRodata (nativeDataLabel "false") "False", NativeRodata (nativeDataLabel "nl") "\n", NativeRodata (nativeDataLabel "divzero") divZeroMessage, NativeRodata (nativeDataLabel "oom") oomMessage, NativeRodata (nativeDataLabel "mem_limit") memLimitMessage, NativeRodata (nativeDataLabel "timeout") timeoutMessage, NativeRodata (nativeDataLabel "err_prefix") errPrefix, NativeRodata (nativeDataLabel "assert_prefix") assertPrefix, NativeRodata (nativeDataLabel "todo_prefix") todoPrefix, NativeRodata (nativeDataLabel "impossible") impossibleMessage, NativeRodata (nativeDataLabel "array_oob") arrayOobMessage, NativeRodata (nativeDataLabel "path_long") pathTooLongMessage, NativeRodata (nativeDataLabel "rmtree_deep") rmtreeDeepMessage, NativeRodata (nativeDataLabel "stack_overflow") stackOverflowMessage, NativeRodata (nativeDataLabel "proc_self_exe") ("/proc/self/exe" ++ strPack [0]), NativeRodata (nativeDataLabel "tmp_suffix") (".tmp" ++ strPack [0]), NativeRodata (nativeDataLabel "sh_path") ("/bin/sh" ++ strPack [0]), NativeRodata (nativeDataLabel "sh_dash_c") ("-c" ++ strPack [0]), NativeRodata (nativeDataLabel "env_mem_limit") memLimitKey, NativeRodata (nativeDataLabel "env_timeout") timeoutKey, NativeRodata (nativeDataLabel "env_cpus") cpusKey, NativeRodata (nativeDataLabel "env_inherit") inheritKey, NativeRodata (nativeDataLabel "env_prefix") nativeEnvPrefix, NativeRodata (nativeDataLabel "cg_cpu_max") cgroupCpuMaxPath]
-    nativeGcRodata
+    (append hostReasonRodata nativeGcRodata)
 
 -- | `_start` 从初始栈拷下来的进程入参（`argc` / `argv` / `envp`）。
 export argcLabel : String
@@ -236,7 +285,7 @@ readBufLabel = "rt_read_buf"
 export nativeBss : List NativeBss
 nativeBss =
   append
-    [NativeBss nativeHeapSegLabel 32 8, NativeBss nativeHeapLabel nativeHeapBytes 16, NativeBss nativeHeapEndLabel 0 0, NativeBss nativeHeapPtrLabel 8 8, NativeBss nativeArenaEndLabel 8 8, NativeBss nativeSegsLabel 8 8, NativeBss nativeCurSegLabel 8 8, NativeBss nativeFreeTableLabel nativeFreeTableBytes 8, NativeBss nativeHugeFreeLabel 8 8, NativeBss stackTopLabel 8 8, NativeBss stackLimitLabel 8 8, NativeBss argcLabel 8 8, NativeBss argvLabel 8 8, NativeBss envpLabel 8 8, NativeBss hostStatusLabel 8 8, NativeBss childPidsLabel 64 8, NativeBss childCountLabel 8 8, NativeBss timeoutArmedLabel 8 8, NativeBss sigalrmSetLabel 8 8, NativeBss pathBufLabel pathMaxBytes 8, NativeBss tsLabel timespecBytes 8, NativeBss termiosLabel termiosBytes 8, NativeBss cleanupHeadLabel 8 8, NativeBss pathBuf2Label pathMaxBytes 8, NativeBss statBufLabel statBufBytes 8, NativeBss dirBufLabel 32768 8, NativeBss dirNamesLabel 32256 8, NativeBss readBufLabel 8388608 8, NativeBss cmdBufLabel 65536 8, NativeBss cwdBufLabel pathMaxBytes 8, NativeBss spawnArgvLabel 2048 8, NativeBss spawnBufLabel 65536 8, NativeBss shArgvLabel 32 8, NativeBss memLimitLabel 8 8, NativeBss cpuCountLabel 8 8, NativeBss sigActLabel sigActBytes 8, NativeBss itimerLabel itimerBytes 8, NativeBss cpuCurLabel cpuSetBytes 16, NativeBss cpuNewLabel cpuSetBytes 16, NativeBss cgBufLabel 64 8, NativeBss envChildLabel 8192 8]
+    [NativeBss nativeHeapSegLabel 32 8, NativeBss nativeHeapLabel nativeHeapBytes 16, NativeBss nativeHeapEndLabel 0 0, NativeBss nativeHeapPtrLabel 8 8, NativeBss nativeArenaEndLabel 8 8, NativeBss nativeSegsLabel 8 8, NativeBss nativeCurSegLabel 8 8, NativeBss nativeFreeTableLabel nativeFreeTableBytes 8, NativeBss nativeHugeFreeLabel 8 8, NativeBss stackTopLabel 8 8, NativeBss stackLimitLabel 8 8, NativeBss argcLabel 8 8, NativeBss argvLabel 8 8, NativeBss envpLabel 8 8, NativeBss hostStatusLabel 8 8, NativeBss hostErrnoLabel 8 8, NativeBss childPidsLabel 64 8, NativeBss childCountLabel 8 8, NativeBss timeoutArmedLabel 8 8, NativeBss sigalrmSetLabel 8 8, NativeBss pathBufLabel pathMaxBytes 8, NativeBss tsLabel timespecBytes 8, NativeBss termiosLabel termiosBytes 8, NativeBss cleanupHeadLabel 8 8, NativeBss pathBuf2Label pathMaxBytes 8, NativeBss statBufLabel statBufBytes 8, NativeBss dirBufLabel 32768 8, NativeBss dirNamesLabel 32256 8, NativeBss readBufLabel 8388608 8, NativeBss cmdBufLabel 65536 8, NativeBss cwdBufLabel pathMaxBytes 8, NativeBss spawnArgvLabel 2048 8, NativeBss spawnBufLabel 65536 8, NativeBss shArgvLabel 32 8, NativeBss memLimitLabel 8 8, NativeBss cpuCountLabel 8 8, NativeBss sigActLabel sigActBytes 8, NativeBss itimerLabel itimerBytes 8, NativeBss cpuCurLabel cpuSetBytes 16, NativeBss cpuNewLabel cpuSetBytes 16, NativeBss cgBufLabel 64 8, NativeBss envChildLabel 8192 8]
     nativeGcBss
 
 -- ---------------------------------------------------------------
@@ -1030,8 +1079,121 @@ fsFailFn =
     "fs_fail"
     0
     (append
-      [INeg Rdi, IMov (OpReg Rax) (OpImm hostCodeOther)]
+      [INeg Rdi, IMov (OpRip hostErrnoLabel) (OpReg Rdi), IMov (OpReg Rax) (OpImm hostCodeOther)]
       (append fsFailCmpInstrs (append [IJmp fsDoneLabel] (append (fsCodeBodyInstrs (fsCodesOf hostCodeOfErrno)) [ILabel fsDoneLabel, IMov (OpRip hostStatusLabel) (OpReg Rax)]))))
+
+-- ---------------------------------------------------------------
+-- 非 try 宿主符号的严格失败
+-- ---------------------------------------------------------------
+-- `try*` 叶子把失败变成默认值 + 状态码；非 try 符号必须**显式失败**：报告
+-- `vuna: runtime error: <op><path>: <reason>` 后 exit 2。首行与 OCaml `dtp_*` 抛出的
+-- `Sys_error` 在 C locale 下逐字一致（native 没有报告器的 `at ...` 行）。
+strictReasonBranch : Int -> String
+strictReasonBranch n = ".Lrt_sf_r" ++ strFromInt n
+
+strictReasonCmpInstrs : List Instr
+strictReasonCmpInstrs =
+  concatMap
+    (\p => [ICmp (OpReg Rdi) (OpImm (firstOf p)), IJcc "je" (strictReasonBranch (firstOf p))])
+    hostReasonTexts
+
+strictReasonBodyInstrs : List Instr
+strictReasonBodyInstrs =
+  concatMap
+    (\p =>
+      [
+        ILabel (strictReasonBranch (firstOf p)),
+        ILea R11 (hostReasonLabel (firstOf p)),
+        IMov (OpMem Rbp (nativeSlotOff 3)) (OpReg R11),
+        IMov (OpMem Rbp (nativeSlotOff 4)) (OpImm (strLength (secondOf p))),
+        IJmp ".Lrt_sf_write"
+      ])
+    hostReasonTexts
+
+-- | 先装载 `rsi`/`rdx`，再 `write(2, ...)`。
+stderrWrite : List Instr -> List Instr
+stderrWrite load =
+  append load [IMov (OpReg Rax) (OpImm (sysNr "write")), IMov (OpReg Rdi) (OpImm 2), ISyscall]
+
+-- | `rdi` = errno（正数）、`rsi` = path String、`rdx` = 操作名前缀标签、`rcx` = 前缀字节数。
+--   不返回。
+joinInstrs : List (List Instr) -> List Instr
+joinInstrs parts = concatMap (\p => p) parts
+
+strictFailFn : NativeFunc
+strictFailFn =
+  rtFunc
+    "fail_strict"
+    48
+    (joinInstrs
+      [
+        [
+          IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rsi),
+          IMov (OpMem Rbp (nativeSlotOff 1)) (OpReg Rdx),
+          IMov (OpMem Rbp (nativeSlotOff 2)) (OpReg Rcx),
+          ILea R11 (nativeDataLabel "errno_unknown"),
+          IMov (OpMem Rbp (nativeSlotOff 3)) (OpReg R11),
+          IMov (OpMem Rbp (nativeSlotOff 4)) (OpImm (strLength strictReasonUnknown))
+        ],
+        strictReasonCmpInstrs,
+        [IJmp ".Lrt_sf_write"],
+        strictReasonBodyInstrs,
+        [ILabel ".Lrt_sf_write"],
+        stderrWrite [ILea Rsi (nativeDataLabel "err_prefix"), IMov (OpReg Rdx) (OpImm (strLength errPrefix))],
+        stderrWrite [IMov (OpReg Rsi) (OpMem Rbp (nativeSlotOff 1)), IMov (OpReg Rdx) (OpMem Rbp (nativeSlotOff 2))],
+        stderrWrite [IMov (OpReg R8) (OpMem Rbp (nativeSlotOff 0)), IMov (OpReg Rdx) (OpMem R8 0), ILeaMem Rsi R8 8],
+        stderrWrite [IMov (OpReg Rsi) (OpMem Rbp (nativeSlotOff 3)), IMov (OpReg Rdx) (OpMem Rbp (nativeSlotOff 4))],
+        [IMov (OpReg Rax) (OpImm (sysNr "exit")), IMov (OpReg Rdi) (OpImm 2), ISyscall]
+      ])
+
+-- | 非 try 包装：跑 `try*` 叶子，状态槽非 0 就报错退出，否则原样返回结果。
+--   参数约定与目标叶子一致（path 在 `rdi`）；只保存第一个实参用于错误文本。
+strictWrapFn : String -> String -> String -> Int -> NativeFunc
+strictWrapFn name target opLabel prefixLen =
+  let
+    okLabel = ".Lrt_" ++ name ++ "_ok"
+  in
+    rtFunc
+      name
+      16
+      [
+        IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi),
+        ICall (nativeRtLabel target),
+        IMov (OpReg R9) (OpRip hostStatusLabel),
+        ITest R9 R9,
+        IJcc "jz" okLabel,
+        IMov (OpReg Rdi) (OpRip hostErrnoLabel),
+        IMov (OpReg Rsi) (OpMem Rbp (nativeSlotOff 0)),
+        ILea Rdx (nativeDataLabel opLabel),
+        IMov (OpReg Rcx) (OpImm prefixLen),
+        ICall (nativeRtLabel "fail_strict"),
+        ILabel okLabel
+      ]
+
+strictReadFileFn : NativeFunc
+strictReadFileFn = strictWrapFn "strict_read_file" "try_read_file" "op_readFile" (strLength "readFile: ")
+
+strictWriteFileFn : NativeFunc
+strictWriteFileFn = strictWrapFn "strict_write_file" "try_write_file" "op_writeFile" (strLength "writeFile: ")
+
+-- `dtp_writeFileAtomic` 直接重抛 `Sys_error`（无操作名前缀），首行形如 `<tmp>: <reason>`；
+-- 这里同样不加前缀，路径取调用方给的目标路径（tmp 名由本运行时生成）。
+strictWriteFileAtomicFn : NativeFunc
+strictWriteFileAtomicFn =
+  strictWrapFn "strict_write_file_atomic" "try_write_file_atomic" "op_writeFileAtomic" 0
+
+strictReadDirFn : NativeFunc
+strictReadDirFn = strictWrapFn "strict_read_dir" "tryReadDir" "op_readDir" (strLength "readDir: ")
+
+strictIsDirFn : NativeFunc
+strictIsDirFn = strictWrapFn "strict_is_dir" "try_is_dir" "op_isDirectory" (strLength "isDirectory: ")
+
+strictMakeDirFn : NativeFunc
+strictMakeDirFn = strictWrapFn "strict_make_dir" "try_make_dir" "op_makeDir" (strLength "makeDir: ")
+
+strictRemoveFileFn : NativeFunc
+strictRemoveFileFn =
+  strictWrapFn "strict_remove_file" "try_remove_file" "op_removeFile" (strLength "removeFile: ")
 
 -- | `rdi` = Vuna String → rax = `rt_path_buf` 里的 NUL 结尾副本。
 strToCFn : NativeFunc
@@ -1402,7 +1564,7 @@ envFilterFn =
 export nativeRtFuncs : List NativeFunc
 nativeRtFuncs =
   append
-    [intBinary "add" "add", intBinary "sub" "sub", intBinary "mul" "imul", divFn, intBinary "bit_and" "and", intBinary "bit_or" "or", intBinary "bit_xor" "xor", bitNotFn, bitShlFn, bitShrFn, intCompare "eq_int" "sete", intCompare "neq_int" "setne", intCompare "lt_int" "setl", intCompare "le_int" "setle", intCompare "gt_int" "setg", intCompare "ge_int" "setge", natAddFn, natSubFn, natMulFn, natDivFn, natToIntFn, natFromIntFn, natSuccFn, obsZeroFn "obs_level", obsZeroFn "obs_log", obsZero2Fn "obs_counter", obsZeroFn "obs_mark", obsZero2Fn "obs_span_begin", obsZeroFn "obs_span_end", obsZero2Fn "obs_sample_start", obsZeroFn "obs_sample_stop", obsSpanFn, obsSpanLabFn, debugOnFn, debugLineFn, strAllocFn, strLengthFn, strConcatFn, strEqFn, strNeqFn, strCompareFn, strCompareFnOf "str_lt" "setl", strCompareFnOf "str_le" "setle", strCompareFnOf "str_gt" "setg", strCompareFnOf "str_ge" "setge", strFromIntFn, strAtFn, strSubstringFn, strHashFn, effectIdFn, strShowFn, printIntFn, printBoolFn, printStrFn, assertFn, primFailFn, todoFn, trapMsgFn, trapAssertFn, trapTodoFn, allocFn, allocLeafFn, allocPinnedFn, applyFn, applyExactFn, applyShimFn, strFromBytesFn, strFromCFn, strOneCharFn, strEmptyFn, getenvFn, getcwdFn, execPathFn, nowUsFn, sleepUsFn, isTtyFn, hostStatusFn, cleanupPushFn, cleanupPopFn, fsFailFn, strToCFn, strToC2Fn, strCopyIntoFn, cStrCpyFn, u64ToDecFn, statPathFn, lstatPathFn, fileExistsFn, fileMtimeFn, fileSizeFn, tryIsDirFn, tryReadFileFn, tryWriteFileFn, tryWriteFileAtomicFn, tryMakeDirFn, tryMakeDirExclusiveFn, tryRemoveFileFn, tryRenameFn, trySymlinkFn, removeTreeFn, tryRemoveTreeFn, dirOpenFn, dirNamesFn, dirCloseFn, childPushFn, childDropFn, sigBlockFn, sigUnblockFn, cmdRunShFn, spawnExecFn, waitPidFn, exitWithFn, trapImpossibleFn, trapDivZeroFn, trapArrayOobFn, trapOomFn, trapPathLongFn, trapMemLimitFn, initMemFn, initCpusFn, initTimeoutFn, envLookupFn, parseU64Fn, cgroupCpusFn, envFilterFn, sigreturnStubFn, sigalrmFn, arrayEmptyFn, arrayLengthFn, arrayGetFn, arraySetFn, arrayMakeFn, trapRmtreeDeepFn, trapStackOverflowFn, mRunEffFn, pow2CeilFn, eraseFn, effNewRefFn, effReadRefFn, effWriteRefFn, effPrintFn "prim_eff_print" 1, effPrintFn "prim_eff_eprint" 2, effExitFn, floatFromIntFn, intFromFloatFn, floatBinFn "float_add" "add", floatBinFn "float_sub" "sub", floatBinFn "float_mul" "mul", floatBinFn "float_div" "div", floatCmpFn "float_eq" (floatCmpOrdered "sete"), floatCmpFn "float_neq" floatCmpNeq, floatCmpFn "float_lt" (floatCmpOrdered "setb"), floatCmpFn "float_le" (floatCmpOrdered "setbe"), floatCmpFn "float_gt" (floatCmpOrdered "seta"), floatCmpFn "float_ge" (floatCmpOrdered "setae"), floatAbsFn, floatSqrtFn]
+    [intBinary "add" "add", intBinary "sub" "sub", intBinary "mul" "imul", divFn, intBinary "bit_and" "and", intBinary "bit_or" "or", intBinary "bit_xor" "xor", bitNotFn, bitShlFn, bitShrFn, intCompare "eq_int" "sete", intCompare "neq_int" "setne", intCompare "lt_int" "setl", intCompare "le_int" "setle", intCompare "gt_int" "setg", intCompare "ge_int" "setge", natAddFn, natSubFn, natMulFn, natDivFn, natToIntFn, natFromIntFn, natSuccFn, obsZeroFn "obs_level", obsZeroFn "obs_log", obsZero2Fn "obs_counter", obsZeroFn "obs_mark", obsZero2Fn "obs_span_begin", obsZeroFn "obs_span_end", obsZero2Fn "obs_sample_start", obsZeroFn "obs_sample_stop", obsSpanFn, obsSpanLabFn, debugOnFn, debugLineFn, strAllocFn, strLengthFn, strConcatFn, strEqFn, strNeqFn, strCompareFn, strCompareFnOf "str_lt" "setl", strCompareFnOf "str_le" "setle", strCompareFnOf "str_gt" "setg", strCompareFnOf "str_ge" "setge", strFromIntFn, strAtFn, strSubstringFn, strHashFn, effectIdFn, strShowFn, printIntFn, printBoolFn, printStrFn, assertFn, primFailFn, todoFn, trapMsgFn, trapAssertFn, trapTodoFn, allocFn, allocLeafFn, allocPinnedFn, applyFn, applyExactFn, applyShimFn, strFromBytesFn, strFromCFn, strOneCharFn, strEmptyFn, getenvFn, getcwdFn, execPathFn, nowUsFn, sleepUsFn, isTtyFn, hostStatusFn, cleanupPushFn, cleanupPopFn, fsFailFn, strictFailFn, strictReadFileFn, strictWriteFileFn, strictWriteFileAtomicFn, strictReadDirFn, strictIsDirFn, strictMakeDirFn, strictRemoveFileFn, strToCFn, strToC2Fn, strCopyIntoFn, cStrCpyFn, u64ToDecFn, statPathFn, lstatPathFn, fileExistsFn, fileMtimeFn, fileSizeFn, tryIsDirFn, tryReadFileFn, tryWriteFileFn, tryWriteFileAtomicFn, tryMakeDirFn, tryMakeDirExclusiveFn, tryRemoveFileFn, tryRenameFn, trySymlinkFn, removeTreeFn, tryRemoveTreeFn, dirOpenFn, dirNamesFn, dirCloseFn, childPushFn, childDropFn, sigBlockFn, sigUnblockFn, cmdRunShFn, spawnExecFn, waitPidFn, exitWithFn, trapImpossibleFn, trapDivZeroFn, trapArrayOobFn, trapOomFn, trapPathLongFn, trapMemLimitFn, initMemFn, initCpusFn, initTimeoutFn, envLookupFn, parseU64Fn, cgroupCpusFn, envFilterFn, sigreturnStubFn, sigalrmFn, arrayEmptyFn, arrayLengthFn, arrayGetFn, arraySetFn, arrayMakeFn, trapRmtreeDeepFn, trapStackOverflowFn, mRunEffFn, pow2CeilFn, eraseFn, effNewRefFn, effReadRefFn, effWriteRefFn, effPrintFn "prim_eff_print" 1, effPrintFn "prim_eff_eprint" 2, effExitFn, floatFromIntFn, intFromFloatFn, floatBinFn "float_add" "add", floatBinFn "float_sub" "sub", floatBinFn "float_mul" "mul", floatBinFn "float_div" "div", floatCmpFn "float_eq" (floatCmpOrdered "sete"), floatCmpFn "float_neq" floatCmpNeq, floatCmpFn "float_lt" (floatCmpOrdered "setb"), floatCmpFn "float_le" (floatCmpOrdered "setbe"), floatCmpFn "float_gt" (floatCmpOrdered "seta"), floatCmpFn "float_ge" (floatCmpOrdered "setae"), floatAbsFn, floatSqrtFn]
     nativeGcFuncs
 
 -- | IR 符号 -> 运行时函数标签。白名单之外返回 Nothing（Module 报 NativeUnsupported）。
