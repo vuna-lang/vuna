@@ -105,7 +105,7 @@ gc_retain}.vuna`。
 | tco_wide | 26 | 5 | 4 | 6.5x | 5.2x | 4.1 MiB | 2.7 MiB | 1.56x |
 | gc_low_live | 230 | 288 | 340 | 0.68x | 0.8x | 4.1 MiB | 244.3 MiB | 0.02x |
 | gc_array_churn | 140 | 188 | 115 | 1.22x | 0.74x | 3.8 MiB | 82.1 MiB | 0.05x |
-| gc_retain | 195 | 74 | 39 | 5.0x | 2.64x | 55.2 MiB | 19.4 MiB | 2.84x |
+| gc_retain | 196 | 76 | 40 | 4.9x | 2.58x | 55.1 MiB | 19.3 MiB | 2.85x |
 
 读法：
 
@@ -125,7 +125,7 @@ gc_retain}.vuna`。
   340 ms / 244 MiB——墙钟更快、RSS 降到 0.02x；`gc_pressure` 的 RSS 也从 59 MiB 降到
   43.6 MiB。`gc_array_churn`（每轮 `Array.of_list` + COW 复制）140 ms / 3.8 MiB，
   比手写高 1.22x（整堆版曾是 1443 ms / 223 MiB）。`gc_retain` 是反向的一档：live 单调
-  上升到 ~19 MB，整堆回收要重扫整个存活集（195 ms / 55.2 MiB，5.0x 手写）；它是
+  上升到 ~19 MB，整堆回收要重扫整个存活集（196 ms / 55.1 MiB，4.9x 手写）；它是
   `VUNA_NATIVE_GC_LOG` 里 `gen=` 分布与整堆触发策略的测量项（[native.md](native.md) §5.2）。
 - 峰值 RSS 的语义：OCaml 侧是 GC 后高水位，native 侧是栈页 + live 堆；两者只作量级参考。
 - 这组数不是 CI 门槛：跨机器、跨负载不可比；回归判断用 `--target native --check` 对
