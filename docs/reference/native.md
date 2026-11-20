@@ -229,18 +229,19 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
 - 时钟与 tty：`effTimeUs`（`clock_gettime`，syscall 228）、`prim_eff_sleep`（`nanosleep`，
   syscall 35）、`@vuna@host@isTty`（`ioctl(1, TCGETS)`，stdout，与 OCaml 侧一致）、`@vuna@prim_eff_hostStatus`
   （读 `rt_host_status` 槽；fs / process 的 `try*` 后续写入）。
-- 文件系统：14 个叶子（`tryReadFile` / `tryWriteFile` / `tryWriteFileAtomic` /
+- 文件系统：15 个叶子（`tryReadFile` / `tryReadFileRange` / `tryWriteFile` / `tryWriteFileAtomic` /
   `tryReadDir` / `tryIsDirectory` / `tryMakeDir` / `tryMakeDirExclusive` / `tryRemoveFile` /
   `tryRemoveTree` / `tryRename` / `trySymlink` / `fileExists` / `fileMtime` / `fileSize`）
-  走 `openat` / `read` / `write` / `fstat` / `getdents64` / `mkdirat` / `unlinkat` / `rmdir` /
-  `rename` / `symlinkat`；失败写 `rt_host_status`（errno → 码表与 `dtp_hostCode` 一致：
+  走 `openat` / `read` / `write` / `lseek` / `fstat` / `getdents64` / `mkdirat` / `unlinkat` /
+  `rmdir` / `rename` / `symlinkat`；`tryReadFileRange` 用 `openat` + `lseek(SEEK_SET)` + 定长
+  `read` 循环，单次 `length` 截到 8 MiB 读缓冲上界；失败写 `rt_host_status`（errno → 码表与 `dtp_hostCode` 一致：
   ENOENT=1、EACCES/EPERM=2、ENOSPC=3、ENOTDIR=4、EISDIR=5、EEXIST=6、其它=9）。
   `tryReadDir` 返回**字典序** `List String`；`tryRemoveTree` 递归删除时每层用自己的
   8 KiB `getdents64` 缓冲，并在分配帧后检查栈下界（主栈取 `rt_stack_top - 4 MiB`，
   迁移栈取 `rt_stack_limit`）——越界 trap `directory tree too deep` 而不是 SIGSEGV；
   路径拷贝按容量上界检查，超出 trap `path too long`；`tryWriteFileAtomic` 写
   `<path>.<pid>.tmp` 再 `rename`。
-- **非 try 符号的失败显式可见**：`prim_eff_readFile` / `writeFile` / `writeFileAtomic` /
+- **非 try 符号的失败显式可见**：`prim_eff_readFile` / `readFileRange` / `writeFile` / `writeFileAtomic` /
   `readDir` / `isDirectory` / `makeDir` / `removeFile` 走 `strict_*` 包装——跑同一个
   `try_*` 叶子，状态槽非 0 时按 `vuna: runtime error: <op><path>: <reason>` 报告并
   exit 2。`fs_fail` 额外记下原始 errno（`rt_host_errno`），reason 取自 `Pal` 的

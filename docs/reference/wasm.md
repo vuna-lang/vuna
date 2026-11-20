@@ -123,7 +123,7 @@ binder 全量拷进 `$env` 数组（与 native 同策略），闭包应用经 `$
 | 入口 / 诊断 | `@ir@showInt` / `showNat` / `showBool` / `showStr`、`prim_erase`、`assert`、`prim_fail`、`todo` |
 | 宿主（WASI preview1 import） | `fd_write`（经 `$rt_writeChunked`，每次 ≤64 KiB）、`fd_read`、`fd_close`、`path_open`、`path_filestat_get`、`path_create_directory`、`path_remove_directory`、`path_unlink_file`、`path_rename`、`fd_readdir`、`environ_get` / `environ_sizes_get`、`args_get` / `args_sizes_get`、`clock_time_get`、`proc_exit` |
 | 宿主叶子（`@vuna@host@*`） | `tryReadFile` / `tryWriteFile` / `tryWriteFileAtomic` / `tryReadDir` / `tryIsDirectory` / `tryMakeDir` / `tryMakeDirExclusive` / `tryRemoveFile` / `tryRemoveTree` / `tryRename`、`fileExists` / `fileSize`、`getenv` / `getcwd` / `execPath` / `getArgs`、`print` / `exitOp`、`newRef` / `readRef` / `writeRef`、`isTty`（恒 `False`） |
-| 显式降级 / 拒绝的叶子 | `trySymlink`（trap）、`fileMtime`（状态置不可用，`FsOp.FileMtime` 得 `Nothing`）、`sleep`（trap）、`readLine` / `readBytes`（trap）、`runIn` / `spawn` / `wait`（trap） |
+| 显式降级 / 拒绝的叶子 | `trySymlink`（trap）、`tryReadFileRange`（trap：宿主把整文件读进内存，区间读没有收益）、`fileMtime`（状态置不可用，`FsOp.FileMtime` 得 `Nothing`）、`sleep`（trap）、`readLine` / `readBytes`（trap）、`runIn` / `spawn` / `wait`（trap） |
 | 其它 | `arrayEmpty`（空数组值）；`@vuna@debug@on`（恒 `False`）/ `@vuna@debug@line`（桩）；obs 叶子桩（见下） |
 
 契约 ↔ 表的一致性（`irInlineArity` 的 arity、未实现符号清单）由
@@ -291,7 +291,8 @@ WASI preview1，宿主侧逐函数实现。下表的「允许」指浏览器平�
 - **stdin / raw 网络**：分别 trap 与生成期拒绝；浏览器默认 stdin closed，raw TCP/UDP/DNS
   不暴露。
 - **直接 `prim_eff_*` 文件系统原语**：多数仍是 trap；base 的 `FsOp` handler 走
-  `@vuna@host@try*`，是可用路径。
+  `@vuna@host@try*`，是可用路径。例外是 `FsOp.ReadFileRange`：宿主侧把整文件读进内存，
+  按偏移读没有收益，运行期 trap（`vuna: runtime error: wasm host operation is not implemented`）。
 
 ### 8.3 浏览器允许但当前未实现
 
@@ -318,7 +319,7 @@ WASI preview1，宿主侧逐函数实现。下表的「允许」指浏览器平�
 | `ProcessOp` | 部分 | `Args` / `Exit` 可用；`Spawn` / `Wait` / `RunIn` trap；家族告警 |
 | `StdinOp` | 不支持 | 构建期告警；执行到叶子 trap（exit 2） |
 | `NetOp` | 不支持 | 构建期告警；raw socket 生成期拒绝 |
-| `FsOp.Symlink` / `FsOp.FileMtime` | 降级 | symlink trap；mtime 得 `Nothing` |
+| `FsOp.Symlink` / `FsOp.FileMtime` / `FsOp.ReadFileRange` | 降级 | symlink 与 readFileRange trap；mtime 得 `Nothing` |
 | 网络宿主原语 / extern / FFI | 不支持 | 生成期拒绝（exit 1） |
 
 入口行的能力检查在构建期给出：`vuna build --target wasm -W` 显示
