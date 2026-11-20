@@ -1,0 +1,17 @@
+import Base.Data.Nat as Nat
+import Base.Data.String as String
+
+-- Nat 算术边界：除法向下取整、减法/前驱截断到 0、加法与乘法饱和到 max_int。
+maxNat : Nat
+maxNat = Nat.fromInt 4611686018427387903
+
+main : String
+main =
+  let
+    q = Nat.fromInt 7 / Nat.fromInt 2
+    half = Nat.fromInt 1 / Nat.fromInt 2
+    under = Nat.minus (Nat.fromInt 2) (Nat.fromInt 5)
+    predZero = Nat.pred Zero
+    satAdd = Nat.plus maxNat (Nat.fromInt 1)
+    satMul = Nat.mult maxNat (Nat.fromInt 2)
+  in String.join "," [show q, show half, show under, show predZero, show satAdd, show satMul]
