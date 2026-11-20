@@ -3,7 +3,7 @@
 -- 规则（error = 退出码 1，warning = 只打印）：首事件必须是 `ph:"M"` 且
 -- `args.schema == "vuna-obs 1"`，`M` 出现在其它位置是 error；每个非 `M` 事件必须有整数
 -- `ts`；同一 `pid` / `tid` 内 `ts` 单调不减（嵌套 span 除外）；`ph:"X"` 必须有 `dur >= 0`
--- 且 `args.allocWords` / `args.heapWords`（若有）必须是整数；`ph:"C"` 必须有整数
+-- 且 `args.allocWords`（若有）必须是整数；`ph:"C"` 必须有整数
 -- `args.value`；采样事件必须有字符串数组 `args.stack`、`vuna.log` 必须有字符串
 -- `args.text`；`vuna.*` 名字必须在词汇表内（`vuna.mark.*` 前缀放行），非 `vuna.` 前缀一律
 -- 放行；文件截断的 warning 由 [Vuna.Obs.Read] 产出，这里只转发、不升级为 error。
@@ -160,10 +160,9 @@ durRequired line (Just d) =
   if d < 0 then [errorAt line "span `dur` must be >= 0, got ${strFromInt d}"] else []
 durRequired line Nothing = [errorAt line "span (ph:\"X\") is missing integer field `dur`"]
 
--- | 内部：span 上的 `args.allocWords` / `args.heapWords`（若有）必须是整数。
+-- | 内部：span 上的 `args.allocWords`（若有）必须是整数。
 allocWordsIssue : Int -> ObsEvent -> List ValidateIssue
-allocWordsIssue line ev =
-  append (intArgIssue line "allocWords" ev) (intArgIssue line "heapWords" ev)
+allocWordsIssue line ev = intArgIssue line "allocWords" ev
 
 -- | 内部：某个 `args` 字段若存在必须是整数。
 intArgIssue : Int -> String -> ObsEvent -> List ValidateIssue

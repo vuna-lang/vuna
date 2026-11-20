@@ -37,12 +37,16 @@ obsPure name f = ObsSpan.obsSpan name "vuna.phase" f
 export obsCountAt : Int -> String -> Int -> Int
 obsCountAt minLevel name v = if obsLevel 0 >= minLevel then obsCounter name v else 0
 
--- | 逐定义 span（规范 §2：**只有 level >= 2** 才有逐定义 span），`args.def` 携带定义名
--- （位置由产物侧 `#line` 承担）：`vuna.def.elab` 等。关闭 / level 1 时直接 `f 0`
+-- | 逐定义 span（规范 §2：**level >= 2** 才有），`args.def` 携带定义名
+-- （位置由产物侧 `#line` 承担）：`vuna.def.elab` 等。关闭 / 级别不够时直接 `f 0`
 -- （一次 `Lazy.force` + 分支，零额外分配）。
+export obsDefCheckAt : Int -> String -> String -> (Int -> Check a) -> Check a
+obsDefCheckAt minLevel name def f =
+  if obsLevel 0 >= minLevel then @vuna@obs@spanLab name "vuna.def" def (\u => f u) else f 0
+
+-- | 逐定义 span 的常用档位（level >= 2）。
 export obsDefCheck : String -> String -> (Int -> Check a) -> Check a
-obsDefCheck name def f =
-  if obsLevel 0 > 1 then @vuna@obs@spanLab name "vuna.def" def (\u => f u) else f 0
+obsDefCheck name def f = obsDefCheckAt 2 name def f
 
 -- | 带分类的 Effect 阶段标记（`Eff r` 边界用；零宽度 instant）。
 export obsMarkEff : {r : Row} -> String -> Eff r Int

@@ -1388,9 +1388,6 @@ let dtp_obs_span_emit (name : string) (cat : string) (label_opt : string option)
   dtp_obs_int b
     (int_of_float
        (s1.Gc.minor_words -. s0.Gc.minor_words +. (s1.Gc.major_words -. s0.Gc.major_words)));
-  Buffer.add_char b dtp_obs_comma;
-  dtp_obs_key b \"heapWords\";
-  dtp_obs_int b s1.Gc.top_heap_words;
   if not ok then begin
     Buffer.add_char b dtp_obs_comma;
     dtp_obs_key b \"error\";
