@@ -1230,8 +1230,8 @@ mHandlerFun fuel body =
             let
               -- opH / 全局 clause 的续延：resume 落在函数尾位置时就是段边界，用尾标记让
               -- `mCps` 发 `MkRestTail`（否则循环型 opH 每次 perform 都压一层 ctx/槽，
-              -- `live` 随次数线性增长，见 debt D121）。非尾位置的 resume 仍走
-              -- `MkRestCont`——标记只沿尾位置传播。
+              -- `live` 随次数线性增长；读数见 effect-machine.md §9.5）。非尾位置的
+              -- resume 仍走 `MkRestCont`——标记只沿尾位置传播。
               kd = mFreshTailK fuel
               rs = mFreshR fuel
             in IrLam (append bs [kd, rs]) Nothing (mScopedCalls (fuel - 1) rs (mCps (fuel - 1) r (IrVar kd) inner))
