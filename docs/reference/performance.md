@@ -78,14 +78,14 @@
 读法：
 
 - `minimal` 是**绝对地板**（最小可执行程序，纯 Int）：runtime + 最小 base 闭包就有
-  ocaml 33 个 `.ml` / 170 KB、native 7 个 `.s` / 277 KB、wasm 单个 370 KB `main.wat`
-  （汇编后 45 KB `main.wasm`）。程序本身只有 2 行。
+  ocaml 33 个 `.ml` / 166 KB、native 7 个 `.s` / 270 KB、wasm 单个 361 KB `main.wat`
+  （汇编后 44 KB `main.wasm`）。程序本身只有 2 行。
 - `hello` 是**最小效应程序**（一次 Console 打印）：多一层 `Base.Effect.Core` 的 handler 面
-  （`Fs` / `Net` / `Process` / `Clock` … 整片效应模块）⇒ ocaml 55 个 `.ml` / 255 KB、
-  native 10 个 `.s` / 333 KB、wasm 465 KB（58 KB）。它比 `minimal` 多 22 个文件 / 85 KB
+  （`Fs` / `Net` / `Process` / `Clock` … 整片效应模块）⇒ ocaml 55 个 `.ml` / 249 KB、
+  native 10 个 `.s` / 326 KB、wasm 454 KB（57 KB）。它比 `minimal` 多 22 个文件 / 83 KB
   而源码只多 6 行——产物大小由闭包决定，不随源码行数走。
 - `defs-*` 在**单文件**里加定义：文件数不变（33 / 7 / 1），文本随定义数线性（ocaml
-  170→188→357 KB，native 277→312→639 KB）。
+  168→183→349 KB，native 274→305→624 KB）。
 - `mods-*` 在**包内**加模块：文件树随模块数线性（ocaml 43→133 个 `.ml`，
   native 17→107 个 `.s`），wasm 始终是单文件 `main.wat`。
 - `self` 是真实最大负载：ocaml 165 个 `.ml` / 5.5 MB / 5.5 万行 → 18.0 MB 可执行
