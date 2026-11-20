@@ -42,6 +42,7 @@ vuna dev suite --all --json               # 机器可读汇总（每个 suite �
 | `cli` | `packages/cli/test/suite.toml` | fmt / lint / fix / doc / 包管理 / store / LSP / REPL + 工具链 steps |
 | `web-cli` | `packages/web-cli/test/suite.toml` | `vuna-web-cli` 静态服务 e2e |
 | `http` / `web` | `packages/*/test/*.vuna` | `vuna test <pkg>` 的包 API 单测（不经过 suite） |
+| `target-native` / `target-wasm` | `packages/*/test/RuntimeTable.vuna` | 运行时符号表 ↔ `Ir.Runtime` 契约：arity 一致 + 未实现符号的冻结清单 |
 
 case id = `<owner>/<family>/<相对路径>`；`--only dt` / `--only compiler/` 都是子串匹配。
 fixture 与 steps 的相对路径以**所属包的 `test/`** 为根（见 `[family] dir`）。

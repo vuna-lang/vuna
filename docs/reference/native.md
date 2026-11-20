@@ -249,6 +249,9 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
   error: `、`assertion failed: `、`TODO: `、`vuna: runtime error: impossible branch`）；由
   `Native.Runtime.nativeRodata` 提供。字符串字面量由 `Native.Module` 收集成
   `NativeStrLit`（`npStrLits`）。
+- 契约一致性：`irInlineArity` 声明的 arity 与未实现符号清理由
+  `packages/target-native/test/RuntimeTable.vuna` 冻结（CI 的 `vuna test` 会跑）；关闭缺口
+  时同步删掉登记项，否则测试报「listed as a gap but implemented」。
 
 ### 5.1 资源限制（内存 / 核数 / 超时）
 

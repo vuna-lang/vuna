@@ -166,8 +166,8 @@ ID 是稳定引用（`层前缀-序号`），改动时保留编号，删掉实�
 | CG-13 | `Codegen/Term.vuna` 的 `isTty` | C | 看 stdout；native 看 stdin；wasm 恒 False | 已清（三端按 stdout；wasm 无 isatty，保守 False） |
 | CG-14 | `Codegen/Decl.vuna` 的 `recordFieldsOf` | C | 字段名表与类型表长度不一静默截断 | 已清（字段名表与类型表长度不等报 ICE） |
 | CG-15 | `Native/Module.vuna` 的 `genExprAt` | C | 定义体固定 100000 | 已清（预算按定义体 `irSize` 派生） |
-| CG-16 | `Wasm/Runtime.vuna` 的 `fsRemoveTree` | B | 只 unlink / 删空目录 | 开放 |
-| CG-17 | 运行时符号表 | D | `Ir/Runtime` / `Native/Module` / `Native/Runtime` / `Wasm/Runtime` / `Codegen/Runtime` 手写同步 | 开放 |
+| CG-16 | `Wasm/Runtime.vuna` 的 `fsRemoveTree` | B | 只 unlink / 删空目录 | 已清（guest 侧 `fd_readdir` 递归 + 深度上限；宿主 `path_unlink_file` 用 `lstat`） |
+| CG-17 | 运行时符号表 | D | `Ir/Runtime` / `Native/Module` / `Native/Runtime` / `Wasm/Runtime` / `Codegen/Runtime` 手写同步 | 已清（`target-native` / `target-wasm` 的 `test/RuntimeTable.vuna`：arity 一致 + 缺口冻结表） |
 
 ### 三端语义不一致
 

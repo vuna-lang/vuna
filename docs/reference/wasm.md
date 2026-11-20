@@ -126,6 +126,9 @@ binder 全量拷进 `$env` 数组（与 native 同策略），闭包应用经 `$
 | 显式降级 / 拒绝的叶子 | `trySymlink`（trap）、`fileMtime`（状态置不可用，`FsOp.FileMtime` 得 `Nothing`）、`sleep`（trap）、`readLine` / `readBytes`（trap）、`runIn` / `spawn` / `wait`（trap） |
 | 其它 | `arrayEmpty`（空数组值）；`@vuna@debug@on`（恒 `False`）/ `@vuna@debug@line`（桩）；obs 叶子桩（见下） |
 
+契约 ↔ 表的一致性（`irInlineArity` 的 arity、未实现符号清单）由
+`packages/target-wasm/test/RuntimeTable.vuna` 冻结（CI 的 `vuna test` 会跑）。
+
 - **运行时错误报告**统一为 `vuna: runtime error: <msg>\n`（stderr，exit 2），与 OCaml
   报告器 `dt_report_exn` 的第一行一致；`assert` / `todo` 分别加 `assertion failed: ` /
   `TODO: ` 前缀。`rt_failStr` 是唯一的失败出口（拼前缀后走 `rt_write`）。
@@ -280,7 +283,9 @@ WASI preview1，宿主侧逐函数实现。下表的「允许」指浏览器平�
   根；文件访问必须在宿主注入的 preopen 内，多个 preopen 不支持。
 - **原子写**：`WriteFileAtomic` 保留「写临时文件 + rename」的 best-effort 语义；
   浏览器 adapter 不承诺 rename 的原子性。
-- **递归删除**：`RemoveTree` 只做 unlink 文件或删空目录，不递归（见下）。
+- **递归删除**：`RemoveTree` 在 guest 侧用 `fd_readdir` 逐条递归（深度上限 512，超出按
+  `FsIo` 失败收口），文件与符号链接直接 unlink；宿主 `path_unlink_file` 用 `lstat` 判定，
+  不跟随链接。
 - **进程**：`ProcessOp.Args` / `Exit` 可用（`Exit` 走 `proc_exit`）；`Spawn` / `Wait` /
   `RunIn` 运行期 trap。家族整体仍按不可用告警。
 - **stdin / raw 网络**：分别 trap 与生成期拒绝；浏览器默认 stdin closed，raw TCP/UDP/DNS
@@ -340,8 +345,10 @@ WASI preview1，宿主侧逐函数实现。下表的「允许」指浏览器平�
   extern / FFI 在生成期拒绝。
 - 直接调用 `@vuna@prim_eff_*` 文件系统原语（`readFile` / `writeFile` / …）是运行期
   trap；base 的 `FsOp` handler 走 `@vuna@host@try*`，是可用路径（见 §5）。
-- wasm 的 `tryRemoveTree` 只做「unlink 文件」或「删空目录」（`path_unlink_file` +
-  `path_remove_directory`），不递归；要删非空树需调用方逐层处理。
+- wasm 的 `tryRemoveTree` 在 guest 侧递归：先 `path_unlink_file`（宿主用 `lstat`，符号链接
+  删链接本身），目录再 `path_open` + `fd_readdir` 逐条删子项，最后 `path_remove_directory`。
+  递归深度上限 512（超出报 `FsIo`）；嵌套路径超过 4096 字节仍按 `rt_pathCopyRel` 的容量
+  规则 trap。
 - 栈：V8 的 wasm 栈约 1 MB 且没有开关；长列表上的非尾辅助函数（`append` 之类
   `1 + f rest`）栈深与列表长度成正比，超出后以 `Maximum call stack size exceeded` 收口
   （§8 执行边界）。
