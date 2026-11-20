@@ -93,3 +93,4 @@
 114_wasm_engine_probe.steps	(indirect)	artifact-exec;build-link
 115_wasm_js_host.steps	(indirect)	artifact-exec;build-link
 110_plugin_requires.steps	help,fake	cli-text
+111_target_cache.steps	build	cli-text

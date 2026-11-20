@@ -1,0 +1,147 @@
+-- | 后端产物缓存：IR 编码 + 目标产物。
+--
+-- 两层、两种键口径：
+--
+--   `objects/target-out/<键>`                     `(irHash, target, backendVersion, print)`
+--                                                 → 产物文件表 + 诊断
+--
+-- 后端产物缓存命中时**不启动插件进程**：把存下的文件表写回 `outDir` 即可。键里带
+-- 后端二进制的 stat 身份（nix store 不可变；开发重建会换 mtime），插件换了就不会复用
+-- 旧产物；`targetOutCodec` 是手工 schema 版本，编码语义变化时 bump。
+--
+-- 边界：本模块不知道任何具体后端，只做「IR 字节 ↔ 文件表」的落盘与物化。
+module Vuna.Compiler.Driver.TargetCache where
+
+import Base.Data.List as List
+import Base.Data.Maybe as Maybe
+import Base.Data.Nat as Nat
+import Base.Data.Pair as Pair
+import Base.Data.String as String
+import Vuna.Compiler.Base.Bytes as Bytes
+import Vuna.Compiler.Base.Diag
+import Vuna.Compiler.Base.Diag.Codec
+import Vuna.Compiler.Base.Hash as Hash
+import Vuna.Compiler.Base.Store as Store
+import Vuna.Compiler.Driver.Compile
+import Vuna.Compiler.Loader.Addr as Addr
+import Base.Effect.Env as EffEnv
+import Base.Effect.Fs as EffFs
+import Base.Effect.Process as EffProcess
+import Base.Effect.Types as EffTypes
+
+-- | 后端产物对象（`objects/target-out/`）的编码 schema。
+targetOutCodec : String
+targetOutCodec = "target-out 1"
+
+-- | 后端产物对象的 kind。
+targetOutKind : String
+targetOutKind = "target-out"
+
+-- | IR 载荷的内容地址（目标无关）。
+export irHashOf : String -> String
+irHashOf irText = Hash.contentAddress irText
+
+-- | 后端二进制身份（size + mtime）：nix store 不可变，开发重建会换 mtime。
+export backendVersionEff : Member nFs FsOp r => String -> Eff r String
+backendVersionEff bin =
+  do
+    size <- fsFileSize bin
+    mt <- fsFileMtime bin
+    pure "${sizePart size}-${mtPart mt}"
+
+sizePart : Maybe Nat -> String
+sizePart size =
+  case size of
+    Just n => strFromInt (natToInt n)
+    Nothing => "0"
+
+mtPart : Maybe Int -> String
+mtPart mt =
+  case mt of
+    Just t => strFromInt t
+    Nothing => "0"
+
+-- | 产物缓存的键：IR 内容 + 目标 + 后端身份 + 输出模式。
+export outputsKeyOf : String -> String -> String -> Bool -> String
+outputsKeyOf target version irHash printResult =
+  Addr.addrOf
+    (append ["target-out", targetOutCodec, target, version, irHash] (if printResult then ["print"] else ["quiet"]))
+
+-- | 读产物缓存；未命中或载荷不完整 ⇒ `Nothing`。
+export readOutputsEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Eff r (Maybe (Pair (List (Pair String String)) (List Diagnostic)))
+readOutputsEff key =
+  do
+    raw <- Store.storeObjectReadEff targetOutKind targetOutCodec key
+    pure (bindRaw raw)
+
+bindRaw : Maybe String -> Maybe (Pair (List (Pair String String)) (List Diagnostic))
+bindRaw Nothing = Nothing
+bindRaw (Just raw) = decodeOutputs raw
+
+-- | 写产物缓存。
+export writeOutputsEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> List (Pair String String) -> List Diagnostic -> Eff r Int
+writeOutputsEff key files diags =
+  Store.storeObjectWriteEff targetOutKind targetOutCodec key (encodeOutputs files diags)
+
+-- | 内部：载荷 = `(文件表, 诊断编码)`。
+encodeOutputs : List (Pair String String) -> List Diagnostic -> String
+encodeOutputs files diags =
+  Bytes.encTop
+    (Bytes.encPair (Bytes.encList (Bytes.encPair Bytes.encStr Bytes.encStr)) Bytes.encStr)
+    (Pair files (encDiagnostics diags))
+
+decodeOutputs : String -> Maybe (Pair (List (Pair String String)) (List Diagnostic))
+decodeOutputs raw =
+  if strLength raw <= 0 then
+    Nothing
+  else
+    case Bytes.decPair (Bytes.decList (Bytes.decPair Bytes.decStr Bytes.decStr)) Bytes.decStr (strLength raw + 1) (Bytes.curOf raw) of
+      Nothing => Nothing
+      Just (Pair (Pair files diagText) rest) => if Bytes.curAtEnd rest then Just (Pair files (decodedDiags diagText)) else Nothing
+
+decodedDiags : String -> List Diagnostic
+decodedDiags text =
+  case decDiagnostics text of
+    Just ds => ds
+    Nothing => []
+
+-- | 把产物文件表写回目录（命中路径用；与插件写侧同一布局）。
+export materializeEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> List (Pair String String) -> Eff r Int
+materializeEff outDir files =
+  do
+    _ <- ensureDirPath outDir
+    writeFiles outDir files
+
+writeFiles : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> List (Pair String String) -> Eff r Int
+writeFiles outDir [] = pure 0
+writeFiles outDir (f :: rest) =
+  do
+    _ <- ensureDirPath (parentDirOf ("${outDir}/${firstOf f}"))
+    _ <- fsWriteFile "${outDir}/${firstOf f}" (secondOf f)
+    writeFiles outDir rest
+
+parentDirOf : String -> String
+parentDirOf path =
+  case dropLast (String.split "/" path) of
+    [] => "."
+    ps => join "/" ps
+
+dropLast : List a -> List a
+dropLast [] = []
+dropLast ([_]) = []
+dropLast (x :: rest) = x :: dropLast rest
+
+-- | 读回插件写出的产物（缓存 miss 时用它填充产物表）。
+export readProducedEff : Member nFs FsOp r => String -> List String -> Eff r (List (Pair String String))
+readProducedEff outDir [] = pure []
+readProducedEff outDir (name :: rest) =
+  do
+    one <- readProduced outDir name
+    more <- readProducedEff outDir rest
+    pure (one :: more)
+
+readProduced : Member nFs FsOp r => String -> String -> Eff r (Pair String String)
+readProduced outDir name =
+  do
+    content <- fsReadFile "${outDir}/${name}"
+    pure (Pair name content)

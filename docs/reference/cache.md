@@ -45,6 +45,8 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
   objects/tool-context/<工具会话地址>  # LSP / REPL / vuna map 的会话载荷
   objects/pkg-iface/<key>           # 依赖接口身份摘要（key = 包名 + lib 源闭包 + 编译器 tag）
   objects/splitptr/<快 splitIn>     # 产物快指针：源输入 → 语义产物身份（注释复用 codegen）
+  objects/target-out/<键>           # 后端产物（`target-out 1`）：文件表 + 诊断，
+                                    # 键 = irHash + target + 后端二进制身份 + print
   objects/pkg/<64hex>               # 取包对象族（`pkg-source 1`，见 package-store.md）
   blobs/<splitIdentity>             # 构建产物（split 文件集，规范拓扑序）
   units/<包哈希>/e-<h>-<h>/         # split-unit 缓存（按声明摘要命中）
@@ -61,7 +63,7 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
 
 | 类 | 域 | 生命周期 |
 | --- | --- | --- |
-| 缓存 | `module-iface` `check-outcome` `tool-context` `splitptr` + `blobs` `units` `views` | 派生、可删、可重建；`clean --store` / `gc` 管理 |
+| 缓存 | `module-iface` `check-outcome` `tool-context` `splitptr` `target-out` + `blobs` `units` `views` | 派生、可删、可重建；`clean --store` / `gc` 管理 |
 | 身份与决策记录 | `module-order` / `pkg-iface` | 承载确定性或产物身份；GC 不淘汰，仅显式 `clean --store` 清理 |
 | 源对象 | `pkg` / `pkgs` | 取来的源；`clean --packages` 管理，删了要重新 fetch |
 
@@ -80,6 +82,7 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
 | 依赖身份 | `objects/pkg-iface/<key>` 存在 | 回退 `manifest:<toml 摘要>` 身份 |
 | 工具会话（LSP/REPL/`map`） | `objects/tool-context/<addr>` 存在 | 重建会话载荷 |
 | 单元级 codegen（`units`） | 文件名存在 + framing 通过 + 载荷依赖 ⊆ 本次单元集 | 重跑该单元 codegen |
+| 后端产物（`--target native\|wasm`） | `objects/target-out/<键>` 存在且可解码 | 起后端插件，读回产物与诊断 |
 
 `checkIn` / `splitIn` 的输入（缺一不可）：
 
@@ -129,6 +132,20 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
 
 它只参与缓存 key，不写进产物、不参与 rotation 的 fixed point（`seed/build-id` 仍是源码身份）。
 代价是同一源码的两次字节不同构建会各自冷一次缓存；这是正确性优先的取舍。
+
+### 后端产物缓存（`target-out`）
+
+`--target native|wasm` 走进程边界（见 [cli.md](cli.md)「后端插件协议」）。IR 本身
+**不落盘**（对象库准入规则：中间表示不建域）；只把 IR 的**内容哈希**编进产物键：
+
+- `objects/target-out/<键>`：插件写出的文件表（名 → 内容）+ 诊断编码。键 =
+  `irHash + target + 后端二进制身份 + print`。后端身份取插件文件的 size+mtime
+  （nix store 不可变；开发重建会换 mtime），因此换插件不会复用旧产物；
+  `targetOutCodec`（`target-out 1`）是手工 schema 版本，编码语义变化时 bump。
+
+命中时**不启动插件**：解码文件表后按原布局写回 `outDir`（含子目录），诊断（如 wasm 的
+能力告警）一并回放。miss 时才编码 IR、写临时载荷并起插件，成功后再读回产物写入缓存。
+`vuna check .` 的包级缓存与本层正交：前者省精化，后者省「IR → 目标文本」。
 
 ## 单一 store 根
 

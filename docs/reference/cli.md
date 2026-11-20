@@ -176,3 +176,7 @@ vuna-target-<t> --ir FILE --out DIR [--print] [--diag FILE] [--files FILE]
 
 发现规则与命令插件相同（`<exeDir>` → `$VUNA_EXEC_PATH`）：缺插件时 `--target <t>`
 报 `target backend plugin ... is not installed`，不静默回落到 OCaml。
+
+产物有内容寻址缓存（`objects/target-out/<irHash+target+后端身份+print>`）：命中时编译器
+直接物化上次的文件表与诊断，**不启动插件**；IR 本身不落盘（中间表示不建域），只把它的内容哈希编进键。
+详见 [cache.md](cache.md)「后端产物缓存」。

@@ -18,6 +18,7 @@ import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Base.Diag
 import Vuna.Compiler.Base.Diag.Codec
 import Vuna.Compiler.Driver.Compile
+import Vuna.Compiler.Driver.TargetCache
 import Vuna.Compiler.Driver.Dt
 import Vuna.Compiler.Frontend.Packages.Pkg
 import Vuna.Compiler.Lowering.Program
@@ -88,18 +89,55 @@ dispatch target program printResult outDir =
     backend <- findBackend target
     case backend of
       Nothing => pure (ErrC (missingBackendDiag target))
-      Just bin =>
-        do
-          _ <- fsWriteFile (irPathOf outDir target) (encodeProgram program)
-          code <- processRunIn "." (append [bin, "--ir", irPathOf outDir target, "--out", outDir, "--diag", diagPathOf outDir target, "--files", filesPathOf outDir target] (if printResult then ["--print"] else []))
-          hasDiag <- fsFileExists (diagPathOf outDir target)
-          payload <- if hasDiag then fsReadFile (diagPathOf outDir target) else pure ""
-          hasFiles <- fsFileExists (filesPathOf outDir target)
-          filesPayload <- if hasFiles then fsReadFile (filesPathOf outDir target) else pure ""
-          _ <- fsRemoveFile (irPathOf outDir target)
-          _ <- if hasFiles then fsRemoveFile (filesPathOf outDir target) else pure 0
-          _ <- if hasDiag then fsRemoveFile (diagPathOf outDir target) else pure 0
-          if code == 0 then pure (OkC (Pair (splitNames filesPayload) (decodedDiags payload))) else pure (ErrC (firstDiagOr (decodedDiags payload) target code))
+      Just bin => dispatchWith target bin program printResult outDir
+
+-- | 内部：先查产物缓存；未命中才编码 IR、写临时文件并起插件。
+dispatchWith : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> IrProgram -> Bool -> String -> Eff r (Check (Pair (List String) (List Diagnostic)))
+dispatchWith target bin program printResult outDir =
+  let
+    irText = encodeProgram program
+    irHash = irHashOf irText
+  in do
+    version <- backendVersionEff bin
+    let
+      key = outputsKeyOf target version irHash printResult
+    in do
+      cached <- readOutputsEff key
+      case cached of
+        Just (Pair files diags) =>
+          do
+            _ <- pure (dbg! "target-cache=hit ${target}")
+            _ <- materializeEff outDir files
+            pure (OkC (Pair (map firstOf files) diags))
+        Nothing => runBackend target bin key irText irHash printResult outDir
+
+-- | 内部：缓存未命中——写 IR、起插件、读回诊断与产物，最后写产物缓存。
+runBackend : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> String -> String -> String -> Bool -> String -> Eff r (Check (Pair (List String) (List Diagnostic)))
+runBackend target bin key irText irHash printResult outDir =
+  do
+    _ <- pure (dbg! "target-cache=miss ${target}")
+    _ <- fsWriteFile (irPathOf outDir target) irText
+    code <-
+      processRunIn
+        "."
+        (append [bin, "--ir", irPathOf outDir target, "--out", outDir, "--diag", diagPathOf outDir target, "--files", filesPathOf outDir target] (if printResult then ["--print"] else []))
+    hasDiag <- fsFileExists (diagPathOf outDir target)
+    payload <- if hasDiag then fsReadFile (diagPathOf outDir target) else pure ""
+    hasFiles <- fsFileExists (filesPathOf outDir target)
+    filesPayload <- if hasFiles then fsReadFile (filesPathOf outDir target) else pure ""
+    _ <- fsRemoveFile (irPathOf outDir target)
+    _ <- if hasFiles then fsRemoveFile (filesPathOf outDir target) else pure 0
+    _ <- if hasDiag then fsRemoveFile (diagPathOf outDir target) else pure 0
+    if code == 0 then
+      let
+        names = splitNames filesPayload
+        diags = decodedDiags payload
+      in do
+        contents <- readProducedEff outDir names
+        _ <- writeOutputsEff key contents diags
+        pure (OkC (Pair names diags))
+    else
+      pure (ErrC (firstDiagOr (decodedDiags payload) target code))
 
 decodedDiags : String -> List Diagnostic
 decodedDiags payload =

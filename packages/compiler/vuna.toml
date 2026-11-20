@@ -22,6 +22,7 @@ modules = [
   "Vuna.Compiler.Driver.Dt",
   "Vuna.Compiler.Driver.Iface",
   "Vuna.Compiler.Driver.Target",
+  "Vuna.Compiler.Driver.TargetCache",
   "Vuna.Compiler.Driver.Owner",
   "Vuna.Compiler.Driver.PerfCache",
   "Vuna.Compiler.Driver.Split",
