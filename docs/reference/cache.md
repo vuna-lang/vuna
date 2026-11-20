@@ -49,7 +49,7 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
                                     # 键 = irHash + target + 后端二进制身份 + print
   objects/pkg/<64hex>               # 取包对象族（`pkg-source 1`，见 package-store.md）
   blobs/<splitIdentity>             # 构建产物（split 文件集，规范拓扑序）
-  units/<包哈希>/e-<h>-<h>/         # split-unit 缓存（按声明摘要命中）
+  units/<包哈希>/e-<h>-<h>/         # split-unit 缓存（按单元身份 + 依赖单元 key 命中）
   views/bin/<视图摘要>/             # 构建视图（产物真身，含 .complete；key = splitIn + 链接工具链）
   views/testbin/<testBin>/          # effect 测试编译产物（bin/vuna-test，含 .complete）
   pkgs/<64hex>/                     # 包物化视图（可删可重建）
@@ -95,10 +95,17 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
 - `ver` = 编译器身份（见下节「编译器身份」）；
 - `flags` = 语义开关（`release` / `debug`：release 的 debug-only 构造诊断不同，必须进地址）。
 
-`splitIdentity`（产物身份）的输入：包名 + `pr0|pr1` + `pkgIfaceHash` + `pkgImplHash` +
-布局摘要（排序后的定义名/相对文件/startLine）+ 编译器 tag。它不看源字节：注释变更不换
-语义 key，行移动换布局摘要，`opaque`/`abstract` 体变更换 `pkgImplHash`。快指针
+`splitIdentity`（产物身份）的输入：包名 + `pr0|pr1` + 产物口径（摘要 `s` / 全量 `f`）+
+依赖身份（`deps`）+ `pkgIfaceHash` + `pkgImplHash` + 布局摘要（排序后的定义名/相对文件/
+startLine）+ 编译器 tag。它不看本包源字节：注释变更不换语义 key，行移动换布局摘要，
+`opaque`/`abstract` 体变更换 `pkgImplHash`；依赖包源码变化换 `deps`（产物文件集包含依赖
+单元），摘要 / 全量两条路径的 runtime defloc 表不同所以产物口径必须区分。快指针
 `objects/splitptr/<splitIn>` 只是「源输入 → 语义产物」的别名，不是身份。
+
+单元级 codegen 缓存的 key = 单元名 + 模块身份（`Driver.Compile.ClosureMod.cmAddr`：
+包环境 + 源摘要 + 直接依赖源摘要；没有闭包表的路径退回 `encDecls` 规范编码）+
+import 链的传递单元 key + `pr0|pr1`。闭包扫描已经算好 `cmAddr`，命中判定只做查表，
+不再逐模块重编码声明 AST。
 
 ## 编译器身份
 
