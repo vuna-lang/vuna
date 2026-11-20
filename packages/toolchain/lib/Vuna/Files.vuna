@@ -1,8 +1,8 @@
 -- | 目录遍历工具（fmt / doc / test / Index 共用）。
 --
--- 只依赖 `fsReadDir` / `fsIsDirectory` / `fsFileExists` 内建；`fsReadDir` 返回字典序，
--- 遍历顺序确定。路径拆分（`splitPath` / `baseName`）在 `Vuna.Compiler.Base.Common`，
--- 供编译器驱动与工具共用。
+-- 遍历骨架在 [Vuna.Compiler.Base.Walk]：`.gitignore` 生效（`result-*` / `.direnv` 等
+-- 生成物由仓库规则排除），本模块只提供 `skipGenerated` 名单与后缀谓词。
+-- 路径拆分（`splitPath` / `baseName`）在 `Vuna.Compiler.Base.Common`，供编译器驱动与工具共用。
 --
 -- 内建 `fsIsDirectory` 对**不存在的路径**会抛异常（直接终止进程），所以任何来自用户输入的
 -- 路径都必须先用 [Vuna.Files.pathExistsDir] 判存在，不要直接调用 `fsIsDirectory`。
@@ -14,10 +14,7 @@ module Vuna.Files where
 import Base.Effect.Types as EffTypes
 import Base.Effect.Fs as EffFs
 import Vuna.Compiler.Base.Common
-
--- | 内部：工具链 fuel 耗尽不是「空结果」，而是内部不变量被破坏；与编译器一致硬失败。
-toolFuelExhausted : String -> a
-toolFuelExhausted what = prim_fail "vuna: internal: ${what} fuel exhausted"
+import Vuna.Compiler.Base.Walk
 
 -- | 内部：效果列表遍历（本模块自用；顺序与纯 `map` 一致）。
 mapEff : {r : Row} -> (a -> Eff r b) -> List a -> Eff r (List b)
@@ -27,15 +24,6 @@ mapEff f (x :: rest) =
     y <- f x
     ys <- mapEff f rest
     pure (y :: ys)
-
--- | 内部：效果列表映射并拼接（本模块自用；顺序与纯 `concatMap` 一致）。
-concatMapEff : {r : Row} -> (a -> Eff r (List b)) -> List a -> Eff r (List b)
-concatMapEff f [] = pure []
-concatMapEff f (x :: rest) =
-  do
-    xs <- f x
-    ys <- concatMapEff f rest
-    pure (append xs ys)
 
 -- | 遍历时按条目名跳过的目录：生成物、本地缓存、工具产物与夹具目录。它们可能包含符号链接或
 -- 超大文件，既不该被格式化，也不该被 doc / test 扫描；`corpus` 下的 `.vuna` 大量是故意
@@ -56,84 +44,15 @@ skipGenerated name =
     == ".vscode"
     || name == "_scratch" || name == ".dsh-plugins" || name == "result" || name == "corpus"
 
--- | 递归收集目录下所有 `.vuna` 文件（跳过 `.` / `..`、`skipGenerated` 命中的目录与非
--- `.vuna` 文件）；目录不存在返回空列表。
+-- | 递归收集目录下所有 `.vuna` 文件（跳过 `.git`、`.gitignore` 命中项与 `skipGenerated`
+-- 命中的目录；目录不存在返回空列表）。
 export collectVunaFiles : Member n FsOp r => String -> Eff r (List String)
-collectVunaFiles dir = collectVunaFilesGo 1048576 dir
+collectVunaFiles dir = collectFilesEff skipGenerated (\name => endsWith ".vuna" name) dir
 
--- | 内部：带 fuel 的 `.vuna` 收集。目录树是文件系统图（符号链接可成环），递归无法用结构下降
--- 证明，因此用显式 fuel：每进入下一层目录消耗 1，触底硬失败（合法目录树远小于该上限）。
-collectVunaFilesGo : Member n FsOp r => Int -> String -> Eff r (List String)
-collectVunaFilesGo fuel dir =
-  if fuel <= 0 then
-    toolFuelExhausted "directory walk"
-  else
-    do
-      exists <- pathExistsDir dir
-      if exists then
-        do
-          names <- fsReadDir dir
-          concatMapEff (walkVunaGo (fuel - 1) dir) names
-      else
-        pure []
-
--- | 内部：`collectVunaFilesGo` 的单条目步进——目录下钻，文件按后缀 `".vuna"` 保留。
-walkVunaGo : Member n FsOp r => Int -> String -> String -> Eff r (List String)
-walkVunaGo fuel dir name =
-  if fuel <= 0 then
-    toolFuelExhausted "directory walk"
-  else
-    case name of
-      "." => pure []
-      ".." => pure []
-      _ =>
-        if skipGenerated name then
-          pure []
-        else
-          let
-            path = "${dir}/${name}"
-          in do
-            exists <- pathExistsDir path
-            if exists then collectVunaFilesGo (fuel - 1) path else pure (if endsWith ".vuna" name then [path] else [])
-
--- | 递归收集目录下所有非隐藏项（文件与目录，同样跳过 `skipGenerated`）；用于不按后缀筛选的
--- 通用遍历。目录不存在返回空列表。
+-- | 递归收集目录下所有非隐藏项（文件与目录，同样跳过 `.gitignore` 命中项与
+-- `skipGenerated`）；用于不按后缀筛选的通用遍历。目录不存在返回空列表。
 export collectSourceFiles : Member n FsOp r => String -> Eff r (List String)
-collectSourceFiles dir = collectSourceFilesGo 1048576 dir
-
--- | 内部：带 fuel 的通用收集（fuel 语义与 `collectVunaFilesGo` 相同）。
-collectSourceFilesGo : Member n FsOp r => Int -> String -> Eff r (List String)
-collectSourceFilesGo fuel dir =
-  if fuel <= 0 then
-    toolFuelExhausted "directory walk"
-  else
-    do
-      exists <- pathExistsDir dir
-      if exists then
-        do
-          names <- fsReadDir dir
-          concatMapEff (walkAnyGo (fuel - 1) dir) names
-      else
-        pure []
-
--- | 内部：`collectSourceFilesGo` 的单条目步进——目录下钻，文件原样返回（不过滤后缀）。
-walkAnyGo : Member n FsOp r => Int -> String -> String -> Eff r (List String)
-walkAnyGo fuel dir name =
-  if fuel <= 0 then
-    toolFuelExhausted "directory walk"
-  else
-    case name of
-      "." => pure []
-      ".." => pure []
-      _ =>
-        if skipGenerated name then
-          pure []
-        else
-          let
-            path = "${dir}/${name}"
-          in do
-            exists <- pathExistsDir path
-            if exists then collectSourceFilesGo (fuel - 1) path else pure [path]
+collectSourceFiles dir = collectFilesEff skipGenerated (\_ => True) dir
 
 -- | 安全的目录判定：不存在返回 `False`，而不是抛异常（`fsIsDirectory` 的前置守卫）。
 export pathExistsDir : Member n FsOp r => String -> Eff r Bool

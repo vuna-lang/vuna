@@ -25,6 +25,7 @@ import Vuna.Compiler.Base.Diagnostics.Pkg
 import Vuna.Compiler.Base.Bytes
 import Vuna.Compiler.Loader.Fingerprint
 import Vuna.Compiler.Base.Store
+import Vuna.Compiler.Base.Walk
 import Vuna.Compiler.Frontend.Packages.Pkg
 import Vuna.Compiler.Frontend.Packages.Source
 import Vuna.Compiler.Driver.Dt
@@ -447,45 +448,10 @@ compilerFingerprint = compilerFingerprintEff
 cacheBase : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Eff r String
 cacheBase = storeRootReadyEff
 
--- 目录遍历（模块根内的 .vuna）。跳过名单与包内容收集共用一份（`Packages.Source`），
--- 避免「什么算包内容」出现两套规则。fuel 守卫目录图（符号链接环）。
-skipMetaDir : String -> Bool
-skipMetaDir name = skipSourceDir name
-
-collectVunaMeta : Member nFs FsOp r => Int -> String -> Eff r (List String)
-collectVunaMeta fuel dir =
-  if fuel <= 0 then
-    pure []
-  else
-    do
-      exists <- fsFileExists dir
-      isDir <- if exists then fsIsDirectory dir else pure False
-      if exists && isDir then
-        do
-          names <- fsReadDir dir
-          concatMapEff (walkVunaMeta (fuel - 1) dir) names
-      else
-        pure []
-
-walkVunaMeta : Member nFs FsOp r => Int -> String -> String -> Eff r (List String)
-walkVunaMeta fuel dir name =
-  if fuel <= 0 then
-    pure []
-  else
-    case name of
-      "." => pure []
-      ".." => pure []
-      _ =>
-        if skipMetaDir name then
-          pure []
-        else
-          do
-            let
-              path = "${dir}/${name}"
-            in do
-              exists <- fsFileExists path
-              isDir <- if exists then fsIsDirectory path else pure False
-              if exists && isDir then collectVunaMeta (fuel - 1) path else pure (if endsWith ".vuna" name then [path] else [])
+-- 目录遍历（模块根内的 .vuna）。`.gitignore` 与包内容跳过名单同一份
+-- （`Packages.Source`），避免「什么算包内容」出现两套规则。
+collectVunaMeta : Member nFs FsOp r => String -> Eff r (List String)
+collectVunaMeta dir = collectFilesEff skipSourceDir (\name => endsWith ".vuna" name) dir
 
 dropPrefixMeta : String -> String -> String
 dropPrefixMeta prefix s =
@@ -510,7 +476,7 @@ moduleNameOfPath rootPath path =
 rootSources : Member nFs FsOp r => Root -> Eff r (List (Pair String Int))
 rootSources root =
   do
-    paths <- collectVunaMeta 1048576 (rootDir root)
+    paths <- collectVunaMeta (rootDir root)
     mapEff (
         \p =>
           do
@@ -905,7 +871,7 @@ closureModsEff ctx pkgs =
               Nothing => pure []
               Just pe =>
                 do
-                  paths <- collectVunaMeta 1048576 (rootDir r)
+                  paths <- collectVunaMeta (rootDir r)
                   mapEff (
                       \p =>
                         do
@@ -2134,7 +2100,7 @@ ownSourceInfos ctx =
       mapEff (
           \root =>
             do
-              paths <- collectVunaMeta 1048576 (rootDir root)
+              paths <- collectVunaMeta (rootDir root)
               mapEff (
                   \p =>
                     do

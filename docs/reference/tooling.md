@@ -328,8 +328,8 @@ printf '%s' '{"jsonrpc":"2.0","id":2,"method":"shutdown"}' | vuna repl client --
 ## 5. `vuna fmt`
 
 `vuna fmt [--check] [PATH]...` 把源码按规范形重排：PATH 可为文件或目录；省略 PATH 时
-格式化 workspace 内各成员包的 `lib` / `app` / `test`。目录扫描跳过隐藏项、生成物与
-`corpus` 夹具。`--check` 只报告差异（`would reformat: <path>`，exit 1）；不带 `--check`
+格式化 workspace 内各成员包的 `lib` / `app` / `test`。目录扫描遵守 `.gitignore`（`result-*` /
+`.direnv` 等生成物不进入扫描），并跳过隐藏项、生成物与 `corpus` 夹具。`--check` 只报告差异（`would reformat: <path>`，exit 1）；不带 `--check`
 时原地改写并打印 `formatted <path>`。非 workspace 且省略 PATH、路径不存在都是工具错误
 （exit 2）。
 

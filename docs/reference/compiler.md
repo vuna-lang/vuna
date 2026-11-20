@@ -33,6 +33,8 @@
 | `Base.Diagnostics.{Rn,Pkg,Loader,Frontend,Warning,Sink,Ic,Common}` | 各阶段错误码域（`RN_` / `PKG_` / `LD_` / `LX_` / `UN_` / `IC_`）与告警去重入口 | `rnCode`、`pkgCode`、`ldCode`、`dedupeWarnings` |
 | `Base.Bytes` | 规范字节编码的原子层：自定界文法 `#tag;` / `i<n>;` / `s<len>:<bytes>` / `b0\|b1` / `[<n>:…]` / `0\|1…`，累积器编码 + 游标解码器（`Cur` = 原串 + 偏移，避免 `strUnpack` 整串拷贝） | `encConcat`、`encTag`、`encInt`、`encStr`、`encMaybe`、`decStr`、`curOf`、`thenPair` |
 | `Base.Hash` | 内容寻址摘要原语：**SHA-256**（用 `Base.Data.Bits` 的 32-bit 包装在语言内实现：OCaml / wasm / 核心求值同摘要）；`digestHex`（64 位十六进制）/ `digestInt`（63-bit 派生键）/ `prehashOfString`（MB 级载荷折叠）/ `contentKey`·`contentAddress`（大输入：预折叠 + SHA，缓存 key 与内容地址） | `digestOfString`、`digestHex`、`digestIntOf`、`contentKey`、`contentAddress`、`prehashOfString` |
+| `Base.Ignore` | `.gitignore` 规则解析与匹配（`!` 取反、尾部 `/` 目录专用、含 `/` 锚定、`**` 跨段）；从 git 根逐层加载规则，扫描根不在仓库时只读本层及更深层 | `parseGitignore`、`ignoreContextEff`、`loadIgnoreFile`、`isIgnored` |
+| `Base.Walk` | `.gitignore` 感知的目录遍历骨架（fmt / lint / doc / test / index / lsp 共用）；调用方传目录跳过谓词与文件名保留谓词 | `collectFilesEff` |
 | `Base.Version` | 版本号唯一真源；产品 CLI / `vuna-compiler` / build meta / VSCode 探测共用 | `vunaVersion` |
 | `Base.Store` | **唯一**缓存载荷落盘层：`vuna-cache-frame 2\|<tag>\|<codec>\|<len>\|<内容地址>\n<payload>` 的编解码（纯）、读侧三层校验（framing → 头内内容地址 → 调用方语义自证）、原子写、去抖写、缓存根探测、对象族读写（`objects/<kind>/`）、roots 与视图锁 | `storeEncode`、`storeDecode`、`storeReadEff`、`storeReadAsEff`、`storeWriteEff`、`storeWriteIfChangedEff`、`storeObjectWriteEff`、`storeRootAppendEff`、`storeCacheBaseEff` |
 | `Base.Data.Obs` | 观测插桩适配层（`obsCheck` / `obsDefCheck` / `obsMarkEff`；规范见 [observability.md](observability.md)） | `obsCheck`、`obsDefCheck`、`obsMarkEff` |
@@ -156,7 +158,7 @@
 | --- | --- |
 | `Vuna.Cli` | 产品 CLI：工具命令分发 + in-process 调 compiler 命令（`runCli`） |
 | `Vuna.Interp` | 解释器 facade（DT 精化 + 核心求值，调 `Driver.Dt.dtEvalFile`；工具链侧） |
-| `Vuna.Files` | 目录遍历小工具（fmt/doc/test/Index 共用，`collectVunaFiles`） |
+| `Vuna.Files` | 目录遍历小工具（fmt/doc/test/Index 共用，`collectVunaFiles`；骨架在 `Vuna.Compiler.Base.Walk`，遵守 `.gitignore`） |
 | `Vuna.Fmt`（+ `Fmt.Comment`/`Decl`/`Expr`/`Util`） | 源码格式化器（`vuna fmt`，parse → 规范打印；门面只导出 `formatSourceWith`） |
 | `Vuna.Lint`（+ `Lint.Rules`/`Fix`/`Diagnostics`） | 风格检查与自动修复（`vuna lint`）；规则见 [lint.md](lint.md) |
 | `Vuna.Repl` | 交互式 REPL（`vuna repl`；定义自动签名、行编辑/Ctrl-R、`:load` 文件/目录/模块；表达式经 DT 求值） |

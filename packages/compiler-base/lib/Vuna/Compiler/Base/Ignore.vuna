@@ -1,0 +1,251 @@
+-- | `.gitignore` 规则：解析、匹配与上下文加载。
+--
+-- 目录扫描（fmt / lint / check / index / lsp / doc）要跳过构建产物与本地缓存；这些路径
+-- 已经写在仓库的 `.gitignore` 里，工具再抄一份黑名单会漏掉 `result-*` 这类前缀规则。
+-- 本模块把 `.gitignore` 变成扫描输入：
+--
+--   - 规则从扫描根向上找到的 git 根（含 `.git` 的目录）开始逐层加载；扫描根不在 git
+--     仓库里时只读扫描根及更深层的 `.gitignore`；
+--   - 同一文件内后出现的规则覆盖前面的，深层目录的规则覆盖浅层；`!` 取反；
+--   - 模式按 gitignore 口径切段：含 `/` 的模式锚定到规则所在目录（相对路径完整匹配），
+--     不含 `/` 的模式匹配任意深度的同名条目；`**` 匹配零个或多个路径段；
+--   - 目录被忽略时整棵子树不再下钻（不读取其 `.gitignore`），与 git 不重新包含
+--     被忽略目录子项的行为一致。
+--
+-- 不支持：`[...]` 字符类、`\ ` 转义尾随空格、`.git/info/exclude` 与全局 excludesFile。
+-- 这些形态在仓库的 `.gitignore` 里没有出现；遇到时按字面字符处理。
+module Vuna.Compiler.Base.Ignore where
+
+import Vuna.Compiler.Base.Common
+import Base.Data.List as List
+import Base.Data.String as String
+import Base.Effect.Fs as EffFs
+import Base.Effect.Types as EffTypes
+
+-- | 一条已解析的规则。
+export record IgnoreRule(..) where
+  -- | 规则所在目录（相对 git 根；git 根自身为 `""`）。
+  ignoreBase : String
+  -- | `!` 取反。
+  ignoreNegate : Bool
+  -- | 尾部 `/`：只匹配目录。
+  ignoreDirOnly : Bool
+  -- | 含 `/`（或前导 `/`）：相对规则目录完整匹配；否则匹配任意深度的末段。
+  ignoreAnchored : Bool
+  -- | 按 `/` 切开的模式段；某段为 `**` 时匹配任意数量的路径段。
+  ignoreSegs : List String
+
+-- | 一次扫描的忽略上下文。
+export record IgnoreContext(..) where
+  -- | 规则锚点：git 根，或扫描根（不在 git 仓库里时）。
+  ignoreRoot : String
+  -- | 扫描根相对 [ignoreRoot] 的前缀（git 根自身为 `""`）。
+  ignorePrefix : String
+  -- | 已加载规则，按加载顺序排列。
+  ignoreRules : List IgnoreRule
+
+-- | 把一个 `.gitignore` 的文本解析成规则；`base` 是该文件目录相对 git 根的路径。
+export parseGitignore : String -> String -> List IgnoreRule
+parseGitignore base text = mapMaybe (parseGitignoreLine base) (lines text)
+
+-- | 内部：一行 → 规则；空行与 `#` 注释行返回 `Nothing`。
+parseGitignoreLine : String -> String -> Maybe IgnoreRule
+parseGitignoreLine base raw =
+  let
+    line = trimRight raw
+  in if line == "" || startsWith "#" line then
+    Nothing
+  else if startsWith "\\#" line then
+    Just (buildRule base (strSubstring 1 (strLength line - 1) line) False)
+  else if startsWith "!" line then
+    let
+      body = strSubstring 1 (strLength line - 1) line
+    in if body == "" then Nothing else Just (buildRule base body True)
+  else if startsWith "\\!" line then Just (buildRule base (strSubstring 1 (strLength line - 1) line) False) else Just (buildRule base line False)
+
+-- | 内部：去掉尾部 `/` 与前导 `/`，切段并判定锚定。
+buildRule : String -> String -> Bool -> IgnoreRule
+buildRule base body negate =
+  let
+    dirOnly = endsWith "/" body
+    body1 = if dirOnly then strSubstring 0 (strLength body - 1) body else body
+    leadingSlash = startsWith "/" body1
+    body2 = if leadingSlash then strSubstring 1 (strLength body1 - 1) body1 else body1
+    anchored = leadingSlash || contains "/" body2
+  in IgnoreRule base negate dirOnly anchored (split "/" body2)
+
+-- | 扫描根对应的忽略上下文：加载 git 根到扫描根父级的所有 `.gitignore`
+-- （扫描根本身的 `.gitignore` 由遍历进入该目录时加载）。
+export ignoreContextEff : Member nFs FsOp r => String -> Eff r IgnoreContext
+ignoreContextEff root = ignoreContextAt (trimTrailingSlash root)
+
+-- | 内部：`ignoreContextEff` 的主体（扫描根已去掉尾部 `/`）。
+ignoreContextAt : Member nFs FsOp r => String -> Eff r IgnoreContext
+ignoreContextAt scanRoot =
+  do
+    found <- findGitRoot 512 scanRoot
+    let
+      ignoreRoot =
+        case found of
+          Nothing => scanRoot
+          Just gitRoot => gitRoot
+      chain = ancestorChain 512 ignoreRoot scanRoot
+    in loadChain chain ignoreRoot (IgnoreContext ignoreRoot (relUnder ignoreRoot scanRoot) [])
+
+-- | 内部：去掉尾部 `/`（根 `/` 保留），避免 `parentOfPath` 把 `a/b/` 看成 `.`。
+trimTrailingSlash : String -> String
+trimTrailingSlash path =
+  if strLength path > 1 && endsWith "/" path then strSubstring 0 (strLength path - 1) path else path
+
+-- | 内部：从 git 根到扫描根的目录链（扫描根在末尾）。
+ancestorChain : Int -> String -> String -> List String
+ancestorChain fuel stop dir =
+  if fuel <= 0 then
+    [dir]
+  else if dir == stop then
+    [dir]
+  else
+    let
+      parent = parentOfPath dir
+    in if parent == dir then [dir] else append (ancestorChain (fuel - 1) stop parent) [dir]
+
+-- | 内部：逐个目录加载 `.gitignore`，但跳过链尾的扫描根本身。
+loadChain : Member nFs FsOp r => List String -> String -> IgnoreContext -> Eff r IgnoreContext
+loadChain [] _ ctx = pure ctx
+loadChain (dir :: rest) ignoreRoot ctx =
+  if rest == [] then
+    pure ctx
+  else
+    do
+      ctx2 <- loadIgnoreFile dir (relUnder ignoreRoot dir) ctx
+      loadChain rest ignoreRoot ctx2
+
+-- | 内部：向上找含 `.git` 的目录；`.git` 可以是目录（普通仓库）或文件（worktree / 子模块）。
+findGitRoot : Member nFs FsOp r => Int -> String -> Eff r (Maybe String)
+findGitRoot fuel dir =
+  if fuel <= 0 then
+    pure Nothing
+  else
+    do
+      found <- fsFileExists "${dir}/.git"
+      if found then
+        pure (Just dir)
+      else
+        let
+          parent = parentOfPath dir
+        in if parent == dir then pure Nothing else findGitRoot (fuel - 1) parent
+
+-- | 读取 `dir/.gitignore` 并把规则追加到上下文；`base` 是 `dir` 相对 [ignoreRoot] 的路径。
+export loadIgnoreFile : Member nFs FsOp r => String -> String -> IgnoreContext -> Eff r IgnoreContext
+loadIgnoreFile dir base ctx =
+  let
+    path = "${dir}/.gitignore"
+  in do
+    exists <- fsFileExists path
+    if exists then
+      do
+        isDir <- fsIsDirectory path
+        if isDir then
+          pure ctx
+        else
+          do
+            text <- fsReadFile path
+            pure (IgnoreContext ctx.ignoreRoot ctx.ignorePrefix (append ctx.ignoreRules (parseGitignore base text)))
+    else
+      pure ctx
+
+-- | 内部：`base` 是 git 根，`dir` 在其之下；返回相对路径（base 为 `.` 时去掉 `./`）。
+relUnder : String -> String -> String
+relUnder base dir =
+  if base == dir then
+    ""
+  else if base == "." then
+    if startsWith "./" dir then strSubstring 2 (strLength dir - 2) dir else dir
+  else if startsWith "${base}/" dir then
+    strSubstring (strLength base + 1) (strLength dir - strLength base - 1) dir
+  else
+    dir
+
+-- | 条目相对忽略锚点的完整路径（规则基址）。
+export ignorePathOf : IgnoreContext -> String -> String
+ignorePathOf ctx rel = if ctx.ignorePrefix == "" then rel else "${ctx.ignorePrefix}/${rel}"
+
+-- | 条目是否被忽略；`rel` 相对扫描根，`isDir` 决定目录专用规则是否生效。
+export isIgnored : IgnoreContext -> String -> Bool -> Bool
+isIgnored ctx rel isDir = lastMatch ctx.ignoreRules (ignorePathOf ctx rel) isDir False
+
+-- | 内部：按顺序折叠规则，后匹配的覆盖先匹配的。
+lastMatch : List IgnoreRule -> String -> Bool -> Bool -> Bool
+lastMatch [] path isDir acc = acc
+lastMatch (rule :: rest) path isDir acc =
+  lastMatch rest path isDir (if ruleMatches rule path isDir then not rule.ignoreNegate else acc)
+
+-- | 内部：单条规则是否命中。
+ruleMatches : IgnoreRule -> String -> Bool -> Bool
+ruleMatches rule path isDir =
+  if rule.ignoreDirOnly && not isDir then
+    False
+  else
+    case stripBase rule.ignoreBase path of
+      Nothing => False
+      Just sub => if sub == "" then False else if rule.ignoreAnchored then matchSegments rule.ignoreSegs (split "/" sub) else matchSegments rule.ignoreSegs [baseName sub]
+
+-- | 内部：`path` 在 `base` 之下时返回相对部分（`base` 为 `""` 时原样返回）。
+stripBase : String -> String -> Maybe String
+stripBase base path =
+  if base == "" then
+    Just path
+  else if path == base then
+    Just ""
+  else if startsWith "${base}/" path then
+    Just (strSubstring (strLength base + 1) (strLength path - strLength base - 1) path)
+  else
+    Nothing
+
+-- | 内部：段序列匹配；`**` 匹配零个或多个段。
+matchSegments : List String -> List String -> Bool
+matchSegments [] [] = True
+matchSegments [] _ = False
+matchSegments ("**" :: rest) path = matchAnySegments rest path
+matchSegments (pat :: rest) (seg :: segs) = matchSegment pat seg && matchSegments rest segs
+matchSegments (_ :: _) [] = False
+
+-- | 内部：`**` 之后可以从任意段位置继续匹配。
+matchAnySegments : List String -> List String -> Bool
+matchAnySegments rest [] = matchSegments rest []
+matchAnySegments rest (seg :: segs) = matchSegments rest (seg :: segs) || matchAnySegments rest segs
+
+-- | 内部：单个路径段的 glob（`*` / `?`，不跨段）。
+matchSegment : String -> String -> Bool
+matchSegment pat seg =
+  matchSegmentChars ((strLength pat + 1) * (strLength seg + 1) + 2) (strUnpack pat) (strUnpack seg)
+
+-- | 内部：带 fuel 的逐字符匹配。
+matchSegmentChars : Int -> List Int -> List Int -> Bool
+matchSegmentChars fuel pat seg = if fuel <= 0 then False else matchSegmentGo (fuel - 1) pat seg
+
+-- | 内部：`matchSegmentChars` 的主体（fuel 已扣减）。
+matchSegmentGo : Int -> List Int -> List Int -> Bool
+matchSegmentGo fuel [] [] = True
+matchSegmentGo fuel [] seg = False
+matchSegmentGo fuel (42 :: rest) seg = matchSegmentStar (fuel - 1) rest seg
+matchSegmentGo fuel (63 :: rest) seg =
+  case seg of
+    c :: cret => matchSegmentChars (fuel - 1) rest cret
+    [] => False
+matchSegmentGo fuel (p :: rest) seg =
+  case seg of
+    c :: cret => p == c && matchSegmentChars (fuel - 1) rest cret
+    [] => False
+
+-- | 内部：`*` 匹配当前段内任意长度（含空）。
+matchSegmentStar : Int -> List Int -> List Int -> Bool
+matchSegmentStar fuel rest seg =
+  if fuel <= 0 then
+    False
+  else
+    matchSegmentChars fuel rest seg || (
+        case seg of
+          c :: cret => matchSegmentStar (fuel - 1) rest cret
+          [] => False
+      )

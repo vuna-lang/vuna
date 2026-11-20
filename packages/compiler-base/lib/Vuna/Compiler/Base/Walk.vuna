@@ -1,0 +1,85 @@
+-- | 目录遍历（`.gitignore` 感知）。fmt / lint / doc / test / index / lsp 共用。
+--
+-- 只依赖 [Vuna.Compiler.Base.Ignore] 与 `fsReadDir` / `fsIsDirectory` / `fsFileExists`；
+-- `fsReadDir` 返回字典序，遍历顺序确定。调用方传入自己的目录名黑名单（生成物、夹具等
+-- 语义排除）与文件名保留谓词，本模块只负责「怎么走」：跳过 `.git`、按 `.gitignore`
+-- 剪枝、每层加载该目录的 `.gitignore`。
+--
+-- 内建 `fsIsDirectory` 对不存在的路径会抛异常，因此进入目录前先判存在。
+module Vuna.Compiler.Base.Walk where
+
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Base.Ignore
+import Base.Effect.Fs as EffFs
+import Base.Effect.Types as EffTypes
+
+-- | 内部：工具链 fuel 耗尽不是「空结果」，而是内部不变量被破坏；与编译器一致硬失败。
+walkFuelExhausted : String -> a
+walkFuelExhausted what = prim_fail "vuna: internal: ${what} fuel exhausted"
+
+-- | 收集 `root` 下的文件路径（`keep` 命中的才收）。`skipDir` 命中的目录名不进入；
+-- `.git` 与 `.gitignore` 命中的条目总是跳过。`root` 不存在或不是目录时返回空列表。
+export collectFilesEff : Member nFs FsOp r => (String -> Bool) -> (String -> Bool) -> String -> Eff r (List String)
+collectFilesEff skipDir keep root =
+  do
+    exists <- fsFileExists root
+    isDir <- if exists then fsIsDirectory root else pure False
+    if exists && isDir then
+      do
+        ctx <- ignoreContextEff root
+        collectGo skipDir keep 1048576 ctx root ""
+    else
+      pure []
+
+-- | 内部：带 fuel 的递归收集。目录树是文件系统图（符号链接可成环），递归无法用结构
+-- 下降证明，因此用显式 fuel：每进入下一层目录消耗 1，触底硬失败。
+collectGo : Member nFs FsOp r => (String -> Bool) -> (String -> Bool) -> Int -> IgnoreContext -> String -> String -> Eff r (List String)
+collectGo skipDir keep fuel ctx dir rel =
+  if fuel <= 0 then
+    walkFuelExhausted "directory walk"
+  else
+    do
+      ctx2 <- loadIgnoreFile dir (ignorePathOf ctx rel) ctx
+      names <- fsReadDir dir
+      concatMapEff (walkName skipDir keep (fuel - 1) ctx2 dir rel) names
+
+-- | 内部：处理一个目录条目。
+walkName : Member nFs FsOp r => (String -> Bool) -> (String -> Bool) -> Int -> IgnoreContext -> String -> String -> String -> Eff r (List String)
+walkName skipDir keep fuel ctx dir rel name =
+  if fuel <= 0 then
+    walkFuelExhausted "directory walk"
+  else
+    case name of
+      "." => pure []
+      ".." => pure []
+      ".git" => pure []
+      _ =>
+        if skipDir name then
+          pure []
+        else
+          let
+            rel2 = if rel == "" then name else "${rel}/${name}"
+          in if isIgnored ctx rel2 False then
+            pure []
+          else
+            let
+              path = "${dir}/${name}"
+            in do
+              isDir <- pathExistsDir path
+              if isDir then if isIgnored ctx rel2 True then pure [] else collectGo skipDir keep fuel ctx path rel2 else if keep name then pure [path] else pure []
+
+-- | 内部：安全的目录判定：不存在返回 `False`，而不是抛异常。
+pathExistsDir : Member nFs FsOp r => String -> Eff r Bool
+pathExistsDir path =
+  do
+    exists <- fsFileExists path
+    if exists then fsIsDirectory path else pure False
+
+-- | 内部：效果列表映射并拼接（本模块自用；顺序与纯 `concatMap` 一致）。
+concatMapEff : {r : Row} -> (a -> Eff r (List b)) -> List a -> Eff r (List b)
+concatMapEff f [] = pure []
+concatMapEff f (x :: rest) =
+  do
+    xs <- f x
+    ys <- concatMapEff f rest
+    pure (append xs ys)

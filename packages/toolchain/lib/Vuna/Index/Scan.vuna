@@ -14,6 +14,7 @@
 module Vuna.Index.Scan where
 
 import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Base.Walk
 import Base.Data.Nat as Nat
 import Base.Data.Maybe as Maybe
 import Base.Container.HashMap as HashMap
@@ -35,10 +36,6 @@ import Base.Effect.Env as EffEnv
 import Base.Effect.Fs as EffFs
 import Base.Effect.Types as EffTypes
 import Base.Effect.Process as EffProcess
-
--- | 内部：工具链 fuel 耗尽不是「空结果」，而是内部不变量被破坏；与编译器一致硬失败。
-indexFuelExhausted : String -> a
-indexFuelExhausted what = prim_fail "vuna: internal: ${what} fuel exhausted"
 
 -- ---------------------------------------------------------------
 -- 小型 helper（本模块自用，避免污染 Base）
@@ -111,33 +108,9 @@ skipDir name =
     == "_scratch"
     || name == ".dsh-plugins" || name == "result" || name == "node_modules" || name == ".vscode"
 
--- | 内部：递归收集目录下的 `.vuna` 文件（fuel 上限 1048576）。
+-- | 内部：递归收集目录下的 `.vuna` 文件（`.gitignore` 生效，跳过 `skipDir`）。
 collectVuna : Member nFs FsOp r => String -> Eff r (List String)
-collectVuna dir = collectVunaGo 1048576 dir
-
--- | 内部：目录树递归的入口，每下钻一层消耗 1 个 fuel（符号链接可成环，故用显式守卫）。
-collectVunaGo : Member nFs FsOp r => Int -> String -> Eff r (List String)
-collectVunaGo fuel dir =
-  if fuel <= 0 then
-    indexFuelExhausted "directory walk"
-  else
-    do
-      names <- fsReadDir dir
-      concatMapEff (walkVunaGo (fuel - 1) dir) names
-
--- | 内部：处理目录里的一个条目——命中黑名单就跳过，是目录就下钻，否则只收 `.vuna` 后缀。
-walkVunaGo : Member nFs FsOp r => Int -> String -> String -> Eff r (List String)
-walkVunaGo fuel dir name =
-  if fuel <= 0 then
-    indexFuelExhausted "directory walk"
-  else if skipDir name then
-    pure []
-  else
-    let
-      path = "${dir}/${name}"
-    in do
-      exists <- dirExists path
-      if exists then collectVunaGo (fuel - 1) path else pure (if endsWith ".vuna" name then [path] else [])
+collectVuna dir = collectFilesEff skipDir (\name => endsWith ".vuna" name) dir
 
 -- | 内部：路径存在且是目录（`fsIsDirectory` 对不存在的路径会抛异常，故先判存在）。
 dirExists : Member nFs FsOp r => String -> Eff r Bool

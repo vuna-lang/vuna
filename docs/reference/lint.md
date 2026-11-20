@@ -26,7 +26,7 @@ vuna lint --list | --explain <RULE>
   `packages/toolchain/lib/Vuna/Lsp/Diagnostics.vuna`。
 - 退出码：0 = 无 error 且 warning 未超 `max-warnings`；1 = 有 error / warning 超限；2 = 用法、
   配置、读盘、解析或 fixity 上下文错误。error/warning 由规则配置决定。
-- 目录会递归收集 `.vuna`（跳过生成物 / corpus）；重复路径去重，顺序保持用户/目录顺序。
+- 目录会递归收集 `.vuna`（遵守 `.gitignore`，并跳过生成物 / corpus）；重复路径去重，顺序保持用户/目录顺序。
 - `--fix` 原子写盘，只应用可安全修复的 finding（被替换行含注释 / tab / CR 时跳过），每轮
   复验后余下的 finding 照常报告。
 

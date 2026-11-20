@@ -28,9 +28,11 @@ modules = [
   "Vuna.Compiler.Base.Diagnostics.Tc",
   "Vuna.Compiler.Base.Diagnostics.Warning",
   "Vuna.Compiler.Base.Hash",
+  "Vuna.Compiler.Base.Ignore",
   "Vuna.Compiler.Base.Intrinsics",
   "Vuna.Compiler.Base.Obs",
   "Vuna.Compiler.Base.Source",
   "Vuna.Compiler.Base.Store",
   "Vuna.Compiler.Base.Version",
+  "Vuna.Compiler.Base.Walk",
 ]

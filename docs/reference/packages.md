@@ -29,7 +29,8 @@
   `[workspace].members` 加一行。
 - 每包固定三目录：`lib/`（模块根）、`app/`（入口，恒为 `app/Main.vuna`）、`test/`
   （测试模块）。依赖只向下流：`app`/`test` 可用本包 `lib` + 依赖包 `lib`；依赖包之间是
-  DAG（循环依赖报错）。
+  DAG（循环依赖报错）。包内容收集（`check` / 内容摘要 / 语义身份）遵守 `.gitignore`：
+  被忽略的源文件不进入包内容，生成物不会改变包摘要。
 - **包名 ≠ 模块命名空间**：模块名仍由路径决定（`packages/base/lib/Base/List.vuna` ⇔ `Base.Data.List`）；
   每个源文件按**包上下文**解析 import——向上找最近的 `vuna.toml`，可用模块根 = 本包 `lib/`
   + 依赖闭包的 `lib/`（DFS 后序、按包名去重），跨包只认依赖包 `[export]` 列表，隐藏模块报

@@ -4,13 +4,14 @@ module Vuna.Compiler.Frontend.Packages.Source where
 -- Vuna.Compiler.Frontend.Packages.Source：包内容的**收集与摘要**（D12 的输入侧）。
 --
 -- 包内容集合 = `vuna.toml` + `lib/**/*.vuna` + `app/**/*.vuna` + `test/**/*.vuna`，
--- 跳过名单见 `skipSourceDir`（与构建/接口缓存同一份规则，避免两套「什么算包内容」）。
+-- 跳过名单见 `skipSourceDir`，并额外遵守 `.gitignore`（生成物不进入包内容与摘要）。
 -- 收集是显式 `Eff []`（读目录/读文件）；摘要与身份是纯函数（`Canonical.Pkg`）。
 --
 -- 摘要口径见 `Canonical.Pkg`：内容摘要含全部文件字节；语义身份把文件折成内容摘要、
 -- 且 `path` 依赖记 `"path"`（可变输入）。两者都不含绝对路径、mtime、遍历顺序。
 import Vuna.Compiler.Frontend.Canonical.Pkg
 import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Base.Ignore
 import Vuna.Compiler.Frontend.Manifest
 import Vuna.Compiler.Base.Hash
 import Base.Data.List as List
@@ -42,23 +43,26 @@ normalizeHash h = if startsWith "sha256:" h then substring 7 64 h else h
 export verifyHash : String -> String -> Bool
 verifyHash expected actual = normalizeHash expected == normalizeHash actual
 
--- | 包内全部文件（相对路径 + 字节），按路径升序。
+-- | 包内全部文件（相对路径 + 字节），按路径升序。`.gitignore` 命中的文件与目录不参与
+-- 包内容（生成物不改变内容摘要与语义身份）。
 -- 遍历燃料耗尽时报 `icFuel`：部分文件集合会让内容摘要判「一致」，不能静默截断。
 export packageFilesEff : Member nFs FsOp r => String -> Eff r (Check (List PackageFile))
 packageFilesEff root =
   do
+    ignoreCtx0 <- ignoreContextEff root
+    ignoreCtx <- loadIgnoreFile root (ignorePathOf ignoreCtx0 "") ignoreCtx0
     manifestFiles <- readManifestFile root
-    libR <- collectDirFiles pkgSourceDepth root "lib"
+    libR <- collectDirFiles ignoreCtx pkgSourceDepth root "lib"
     case libR of
       ErrC e => pure (ErrC e)
       OkC libFiles =>
         do
-          appR <- collectDirFiles pkgSourceDepth root "app"
+          appR <- collectDirFiles ignoreCtx pkgSourceDepth root "app"
           case appR of
             ErrC e => pure (ErrC e)
             OkC appFiles =>
               do
-                testR <- collectDirFiles pkgSourceDepth root "test"
+                testR <- collectDirFiles ignoreCtx pkgSourceDepth root "test"
                 case testR of
                   ErrC e => pure (ErrC e)
                   OkC testFiles => pure (OkC (sortByPath (append manifestFiles (append libFiles (append appFiles testFiles)))))
@@ -80,8 +84,8 @@ readManifestFile root =
     else
       pure []
 
-collectDirFiles : Member nFs FsOp r => Int -> String -> String -> Eff r (Check (List PackageFile))
-collectDirFiles fuel root rel =
+collectDirFiles : Member nFs FsOp r => IgnoreContext -> Int -> String -> String -> Eff r (Check (List PackageFile))
+collectDirFiles ctx fuel root rel =
   if fuel <= 0 then
     pure (icFuel "package file collection")
   else
@@ -92,30 +96,31 @@ collectDirFiles fuel root rel =
       isDir <- if exists then fsIsDirectory dir else pure False
       if exists && isDir then
         do
+          ctx2 <- loadIgnoreFile dir (ignorePathOf ctx rel) ctx
           names <- fsReadDir dir
-          collectNames fuel root rel names
+          collectNames ctx2 fuel root rel names
       else
         pure (OkC [])
 
-collectNames : Member nFs FsOp r => Int -> String -> String -> List String -> Eff r (Check (List PackageFile))
-collectNames fuel root rel [] = pure (OkC [])
-collectNames fuel root rel (name :: rest) =
+collectNames : Member nFs FsOp r => IgnoreContext -> Int -> String -> String -> List String -> Eff r (Check (List PackageFile))
+collectNames ctx fuel root rel [] = pure (OkC [])
+collectNames ctx fuel root rel (name :: rest) =
   if fuel <= 0 then
     pure (icFuel "package file collection")
   else
     do
-      hereR <- walkName fuel root rel name
+      hereR <- walkName ctx fuel root rel name
       case hereR of
         ErrC e => pure (ErrC e)
         OkC here =>
           do
-            thereR <- collectNames fuel root rel rest
+            thereR <- collectNames ctx fuel root rel rest
             case thereR of
               ErrC e => pure (ErrC e)
               OkC there => pure (OkC (append here there))
 
-walkName : Member nFs FsOp r => Int -> String -> String -> String -> Eff r (Check (List PackageFile))
-walkName fuel root rel name =
+walkName : Member nFs FsOp r => IgnoreContext -> Int -> String -> String -> String -> Eff r (Check (List PackageFile))
+walkName ctx fuel root rel name =
   if fuel <= 0 then
     pure (icFuel "package file collection")
   else
@@ -129,16 +134,19 @@ walkName fuel root rel name =
           let
             childRel = if rel == "" then name else "${rel}/${name}"
             childPath = "${root}/${childRel}"
-          in do
-            isDir <- fsIsDirectory childPath
-            if isDir then
-              collectDirFiles (fuel - 1) root childRel
-            else if endsWith ".vuna" name then
-              do
-                content <- fsReadFile childPath
-                pure (OkC [PackageFile childRel content])
-            else
-              pure (OkC [])
+          in if isIgnored ctx childRel False then
+            pure (OkC [])
+          else
+            do
+              isDir <- fsIsDirectory childPath
+              if isDir then
+                if isIgnored ctx childRel True then pure (OkC []) else collectDirFiles ctx (fuel - 1) root childRel
+              else if endsWith ".vuna" name then
+                do
+                  content <- fsReadFile childPath
+                  pure (OkC [PackageFile childRel content])
+              else
+                pure (OkC [])
 
 filePathLe : PackageFile -> PackageFile -> Bool
 filePathLe a b = a.pfPath <= b.pfPath

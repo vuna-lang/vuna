@@ -87,3 +87,26 @@ file-contains: $TMPDIR/lint-pkg/lib/Probe.vuna probe a b x = if a && b then if x
 file-contains: $TMPDIR/lint-pkg/lib/Probe.vuna else case x of
 run: "$VUNA" lint --max-warnings 0 "$TMPDIR/lint-pkg/lib/Probe.vuna" 2>&1
 exit: 0
+# 目录扫描遵守 `.gitignore`：被忽略的源码不进入 lint / fmt；`result-*` 这类前缀规则
+# 也要在任意深度生效（否则会扫进 nix 的 result-* 软链）。
+run: sh -c 'p="$TMPDIR/ignore-scan"; mkdir -p "$p/lib/ignored" "$p/lib/result-cache"; printf "ignored/\nresult-*\n" > "$p/.gitignore"; printf "[package]\nname = \"ignore-scan\"\n\n[export]\nmodules = [\"Clean\"]\n\n[dependencies]\nvuna-base = \"%s\"\n\n[lint]\npreset = \"recommended\"\nmax-warnings = 0\n" "$VUNA_BASE" > "$p/vuna.toml"; printf "%s\n" "module Clean where" "" "clean : Int -> Int" "clean x = x" > "$p/lib/Clean.vuna"; printf "%s\n" "module Bad where" "" "bad = (" > "$p/lib/ignored/Bad.vuna"; printf "%s\n" "module Worse where" "" "worse = (" > "$p/lib/result-cache/Worse.vuna"'
+exit: 0
+run: "$VUNA" lint "$TMPDIR/ignore-scan" 2>&1
+exit: 0
+run: "$VUNA" fmt --check "$TMPDIR/ignore-scan" 2>&1
+exit: 0
+run: "$VUNA" check "$TMPDIR/ignore-scan" 2>&1
+exit: 0
+# 去掉 ignore 文件后 lint 会读到故意损坏的夹具。
+run: sh -c 'rm "$TMPDIR/ignore-scan/.gitignore"'
+exit: 0
+run: "$VUNA" lint "$TMPDIR/ignore-scan" 2>&1
+exit: nonzero
+# 锚定、`**` 与取反：`lib/Anchored.vuna` 只匹配锚定路径，`**/Deep.vuna` 匹配任意深度，
+# `!lib/Keep.gen.vuna` 从 `*.gen.vuna` 里重新包含。
+run: sh -c 'p="$TMPDIR/ignore-patterns"; mkdir -p "$p/lib/sub"; printf "**/Deep.vuna\nlib/Anchored.vuna\n*.gen.vuna\n!lib/Keep.gen.vuna\n" > "$p/.gitignore"; printf "[package]\nname = \"ignore-patterns\"\n\n[export]\nmodules = [\"Clean\"]\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$p/vuna.toml"; printf "%s\n" "module Clean where" "" "clean : Int -> Int" "clean x = x" > "$p/lib/Clean.vuna"; printf "%s\n" "module Deep where" "" "deep = (" > "$p/lib/Deep.vuna"; printf "%s\n" "module Deep2 where" "" "deep2 = (" > "$p/lib/sub/Deep.vuna"; printf "%s\n" "module Anchored where" "" "anchored = (" > "$p/lib/Anchored.vuna"; printf "%s\n" "module Bad where" "" "bad = (" > "$p/lib/Bad.gen.vuna"; printf "%s\n" "module Keep where" "" "-- TODO: keep this visible" "keep : Int -> Int" "keep x = x" > "$p/lib/Keep.gen.vuna"'
+exit: 0
+run: "$VUNA" lint --select todo-marker --max-warnings 0 "$TMPDIR/ignore-patterns" 2>&1
+exit: 1
+out-contains: Keep.gen.vuna
+out-contains: LN_TodoMarker
