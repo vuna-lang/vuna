@@ -30,6 +30,6 @@ run n =
     pure x
 
 fac : Int -> Int
-fac n = 1
+fac 0 = 1
 -- 第二子句前置
 fac n = n

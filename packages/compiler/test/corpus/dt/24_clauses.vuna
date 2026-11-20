@@ -27,16 +27,11 @@ len : MyList Nat -> Int
 len (MyNil a) = 0
 len (MyCons a y ys) = 1 + len ys
 
--- 同一构造子的多个 clause（子模式细化）+ 变量兜底。
+-- 同一构造子的多个 clause（子模式细化）。
 pick : MyMaybe Nat -> Int
 pick (MyNothing a) = 0
 pick (MyJust a Zero) = 1
 pick (MyJust a (Succ k)) = 2
-
--- 兜底 clause 在最前（前面的 clause 匹配所有值时后者不可达，语义按 clause 顺序）。
-alwaysOne : Nat -> Int
-alwaysOne n = 1
-alwaysOne Zero = 99
 
 four : Nat
 four = Succ (Succ (Succ (Succ Zero)))
@@ -45,4 +40,4 @@ list1 : MyList Nat
 list1 = MyCons Nat Zero (MyCons Nat (Succ Zero) (MyNil Nat))
 
 main : Int
-main = toInt (plus four four) + len list1 + pick (MyJust Nat (Succ Zero)) + alwaysOne four
+main = toInt (plus four four) + len list1 + pick (MyJust Nat (Succ Zero))

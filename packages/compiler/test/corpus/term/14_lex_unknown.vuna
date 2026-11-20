@@ -8,11 +8,9 @@ h : Nat -> Nat
 h n = Succ n
 
 down : Nat -> Nat -> Nat
-
-step : Nat -> Nat -> Nat
-
 down Zero n = n
 down (Succ m) n = step m n
 
+step : Nat -> Nat -> Nat
 step m Zero = down m (h Zero)
 step m (Succ n) = step m n
