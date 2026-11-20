@@ -97,7 +97,7 @@ drain fuel q =
 
 -- | 逐个出队展开为升序列表（O(n log n)）。
 export toAscList : Ord a => PriorityQueue a -> List a
-toAscList q@(PriorityQueue _ n) = drain n q
+toAscList (q@(PriorityQueue _ n)) = drain n q
 
 -- 经 `toAscList` 展示（构造器不导出；`toAscList` 需要 `Ord`）。
 instance Ord a, Show a => Show (PriorityQueue a) where

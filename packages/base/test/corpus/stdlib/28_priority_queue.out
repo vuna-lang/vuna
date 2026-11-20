@@ -1,0 +1,1 @@
+"peek=Just 1 sz=5 asc=[1, 2, 3, 3, 5] pop=1/[2, 3, 3, 5] drain=[1, 2, 3, 3, 5] empty=True"

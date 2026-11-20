@@ -34,7 +34,4 @@ main =
     ++ show (Queue.peek q)
     ++ " list="
     ++ show (Queue.toList q)
-    ++ " empty="
-    ++ show (Queue.isEmpty Queue.empty)
-    ++ " drain="
-    ++ show (drainAll 10 q)
+    ++ " empty=" ++ show (Queue.isEmpty Queue.empty) ++ " drain=" ++ show (drainAll 10 q)

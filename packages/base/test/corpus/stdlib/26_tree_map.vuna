@@ -29,7 +29,4 @@ main =
     ++ show (TreeMap.height m1)
     ++ " set="
     ++ show (TreeSet.toAscList st)
-    ++ " set2="
-    ++ show (TreeSet.toAscList st2)
-    ++ " ssz="
-    ++ show (TreeSet.size st)
+    ++ " set2=" ++ show (TreeSet.toAscList st2) ++ " ssz=" ++ show (TreeSet.size st)

@@ -33,8 +33,4 @@ main =
     ++ " asc="
     ++ show (PQ.toAscList q)
     ++ " pop="
-    ++ popValue q
-    ++ " drain="
-    ++ show (drainAll 10 q)
-    ++ " empty="
-    ++ show (PQ.isEmpty PQ.empty)
+    ++ popValue q ++ " drain=" ++ show (drainAll 10 q) ++ " empty=" ++ show (PQ.isEmpty PQ.empty)

@@ -55,23 +55,15 @@ rebalance key val l r =
   let
     b = heightTree l - heightTree r
   in if b > 1 then
-       case l of
-         Node _ lk lv ll lr =>
-           if heightTree ll >= heightTree lr then
-             rotateRight key val l r
-           else
-             rotateRight key val (rotateLeft lk lv ll lr) r
-         Leaf => mkTree key val l r
-     else if b < 0 - 1 then
-       case r of
-         Node _ rk rv rl rr =>
-           if heightTree rr >= heightTree rl then
-             rotateLeft key val l r
-           else
-             rotateLeft key val l (rotateRight rk rv rl rr)
-         Leaf => mkTree key val l r
-     else
-       mkTree key val l r
+    case l of
+      Node _ lk lv ll lr => if heightTree ll >= heightTree lr then rotateRight key val l r else rotateRight key val (rotateLeft lk lv ll lr) r
+      Leaf => mkTree key val l r
+  else if b < 0 - 1 then
+    case r of
+      Node _ rk rv rl rr => if heightTree rr >= heightTree rl then rotateLeft key val l r else rotateLeft key val l (rotateRight rk rv rl rr)
+      Leaf => mkTree key val l r
+  else
+    mkTree key val l r
 
 -- | 内部：插入并返回「是否新建键」；已存在的键只替换值。
 insertTree : Ord k => k -> v -> Tree k v -> Pair Bool (Tree k v)
@@ -107,10 +99,10 @@ removeTree key (Node _ k2 v2 l r) =
   else
     case l of
       Leaf => Pair True r
-      Node _ _ _ _ =>
+      Node _ _ _ _ _ =>
         case r of
           Leaf => Pair True l
-          Node _ _ _ _ =>
+          Node _ _ _ _ _ =>
             case popMinTree r of
               Pair (Just (Pair mk mv)) r2 => Pair True (rebalance mk mv l r2)
               -- `r` 非空时 `popMinTree` 必返回 `Just`；该分支只为穷尽匹配。
@@ -138,10 +130,7 @@ rangeGo lo hi Leaf acc = acc
 rangeGo lo hi (Node _ k v l r) acc =
   if k < lo then
     rangeGo lo hi r acc
-  else if hi < k then
-    rangeGo lo hi l acc
-  else
-    rangeGo lo hi l (Pair k v :: rangeGo lo hi r acc)
+  else if hi < k then rangeGo lo hi l acc else rangeGo lo hi l (Pair k v :: rangeGo lo hi r acc)
 
 -- | 有序持久映射：AVL 树根 + 元素计数；构造器不导出。
 export record TreeMap k v where
