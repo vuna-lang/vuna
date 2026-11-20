@@ -18,50 +18,55 @@ b2i : Bool -> Int
 b2i b = if b then 1 else 0
 
 prog : (n : String) -> Eff (Named n FsOp :: []) String
-prog n = do
-  _ <- fsMakeDir@(n) dir
-  _ <- fsRemoveFile@(n) path
-  w <- fsWriteFile@(n) path "hello"
-  s <- fsReadFile@(n) path
-  e <- fsFileExists@(n) path
-  sz <- fmap (\o => natToInt (fromMaybe Zero o)) (fsFileSize@(n) path)
-  _ <- fsRemoveFile@(n) path
-  pure (join "," (strFromInt w :: s :: strFromInt (b2i e) :: strFromInt sz :: []))
+prog n =
+  do
+    _ <- fsMakeDir@(n) dir
+    _ <- fsRemoveFile@(n) path
+    w <- fsWriteFile@(n) path "hello"
+    s <- fsReadFile@(n) path
+    e <- fsFileExists@(n) path
+    sz <- fmap (\o => natToInt (fromMaybe Zero o)) (fsFileSize@(n) path)
+    _ <- fsRemoveFile@(n) path
+    pure (join "," (strFromInt w :: s :: strFromInt (b2i e) :: strFromInt sz :: []))
 
 progReal : Eff [FsOp, ConsoleOp] String
-progReal = do
-  _ <- fsMakeDir dir
-  _ <- fsRemoveFile path
-  w <- fsWriteFile path "hello"
-  s <- fsReadFile path
-  e <- fsFileExists path
-  sz <- fmap (\o => natToInt (fromMaybe Zero o)) (fsFileSize path)
-  _ <- fsRemoveFile path
-  pure (join "," (strFromInt w :: s :: strFromInt (b2i e) :: strFromInt sz :: []))
+progReal =
+  do
+    _ <- fsMakeDir dir
+    _ <- fsRemoveFile path
+    w <- fsWriteFile path "hello"
+    s <- fsReadFile path
+    e <- fsFileExists path
+    sz <- fmap (\o => natToInt (fromMaybe Zero o)) (fsFileSize path)
+    _ <- fsRemoveFile path
+    pure (join "," (strFromInt w :: s :: strFromInt (b2i e) :: strFromInt sz :: []))
 
 mret : String -> String
 mret a = a
 
 mopH : (i : Type) -> (o : FsOp i) -> (Eff.resIdx i o -> String) -> String
-mopH i op k = case op of
-  ReadFile p => k "M"
-  WriteFile p s => k 5
-  WriteFileAtomic p s => k 5
-  ReadDir p => k []
-  IsDirectory p => k True
-  MakeDir p => k 0
-  RemoveFile p => k 0
-  FileExists p => k True
-  FileMtime p => k (Just 0)
-  FileSize p => k (Just 42)
-  RemoveTree p => k 0
-  Rename s d => k 0
-  Symlink t l => k 0
-  MakeDirExclusive p => k True
+mopH i op k =
+  case op of
+    ReadFile p => k "M"
+    ReadFileRange p off len => k "MR"
+    WriteFile p s => k 5
+    WriteFileAtomic p s => k 5
+    ReadDir p => k []
+    IsDirectory p => k True
+    MakeDir p => k 0
+    RemoveFile p => k 0
+    FileExists p => k True
+    FileMtime p => k (Just 0)
+    FileSize p => k (Just 42)
+    RemoveTree p => k 0
+    Rename s d => k 0
+    Symlink t l => k 0
+    MakeDirExclusive p => k True
 
 main : Eff [FsOp, ConsoleOp] Int
-main = do
-  _ <- consolePrint ("mock " ++ runPure (handleFs "mock" mret mopH (prog "mock")) ++ "\n")
-  real <- progReal
-  _ <- consolePrint ("real " ++ real ++ "\n")
-  pure 0
+main =
+  do
+    _ <- consolePrint ("mock " ++ runPure (handleFs "mock" mret mopH (prog "mock")) ++ "\n")
+    real <- progReal
+    _ <- consolePrint ("real " ++ real ++ "\n")
+    pure 0

@@ -1,0 +1,33 @@
+-- 按偏移读片段 + 按块读文件的游标（typed fs effects；entry 自动预装 handler）。
+-- 区间读覆盖：正常窗口、尾窗截断、越过 EOF、`length <= 0`；游标覆盖：分块推进到 EOF。
+import Base.Effect.Core as Eff
+import Base.Effect.Fs as EffFs
+import Base.Effect.Cursor as Cursor
+import Base.Data.List as List
+import Base.Data.String as Str
+
+path : String
+path = "range-probe.txt"
+
+prog : Eff [FsOp] Int
+prog =
+  do
+    _ <- fsWriteFile path "abcdefghij"
+    a <- fsReadFileRange path 0 3
+    b <- fsReadFileRange path 3 3
+    c <- fsReadFileRange path 8 100
+    d <- fsReadFileRange path 100 5
+    e <- fsReadFileRange path 2 0
+    cur <- fsFileCursor path 4
+    parts <- Cursor.takeC 4 cur
+    afterEof <- Cursor.next cur
+    pure (
+        (if a == "abc" then 1 else 0) + (if b == "def" then 1 else 0) + (if c == "ij" then 1 else 0) + (if d == "" then 1 else 0) + (if e == "" then 1 else 0) + (if Str.join "" parts == "abcdefghij" then 1 else 0) + (if List.length parts == 3 then 1 else 0) + (
+            case afterEof of
+              Nothing => 1
+              Just _ => 0
+          )
+      )
+
+main : Eff [FsOp] Int
+main = prog
