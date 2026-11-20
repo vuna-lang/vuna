@@ -314,9 +314,16 @@ load/parse 前缀 + iface 摘要 **~2.6 s** → 逐定义精化（`collectSigs-d
    build 的重复闭包扫描：view 地址、快 key 与重建三处各自跑一遍 `ifaceModsEff`（整包源扫描 +
    逐模块头解析 + 地址分配）与依赖接口读，冷 `build --no-compile compiler` 因此扫两遍。
    `Driver.Compile.SplitInputs`（`splitInputsOf`）把闭包 / 依赖接口 / 输入摘要一次算好，
-   由 `compileToDirGiven` / `buildViewAddrOf` 复用。同机同窗口 A/B：冷
-   `build --no-compile compiler` **6.20–6.43 s → 5.89–5.90 s**（user 6.13 → 5.61 s）、
-   热 **0.363 → 0.354 s**，产物树 `diff -r` 逐字节一致；`check` 路径不变（本来就只扫一遍）。
+   由 `compileToDirGiven` / `buildViewAddrOf` 复用。同机同窗口 A/B 对 main：热
+   `build --no-compile compiler` **0.424–0.429 → 0.290–0.310 s**、冷
+   `build --no-compile compiler` 5.7–6.0 s → 5.6–5.8 s（噪声内）、产物树 `diff -r`
+   逐字节一致；`check` 路径不变（本来就只扫一遍）。
+
+   模块头缓存：闭包扫描原先对每个模块 `lex + parse` 一遍，只为拿 import 边算接口地址
+   （整包 183 个模块约 125 ms）。import 名单是源字节的纯函数，现在按源内容地址落在
+   `objects/module-header`（`Loader.Header`，键与编译器身份无关），命中只读一个小对象：
+   闭包扫描 **125 ms → 34 ms**、`build` up-to-date **0.42–0.44 → 0.34–0.40 s**；
+   同一份源码冷 / 热两次构建的产物树 `diff -r` 逐字节一致（命中不改变产物）。
 
    口径：接口载荷里的**依赖表值是模块对象地址 `cmAddr`（含编译器标签）**，不是 iface
    哈希——跨编译器比较 payload 会看到依赖项整体变化，那不代表哈希漂移；判定哈希是否变了

@@ -35,6 +35,7 @@ import Vuna.Compiler.Base.Diag.Codec
 import Vuna.Compiler.Driver.Split
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Loader.Flatten
+import Vuna.Compiler.Loader.Header
 import Vuna.Compiler.Loader.Modules
 import Vuna.Compiler.Frontend.Manifest
 import Vuna.Compiler.Base.Version
@@ -896,15 +897,12 @@ closureModsEff ctx pkgs =
 closureModOf : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PkgEntry -> String -> String -> String -> Eff r ClosureMod
 closureModOf pe root p raw =
   do
-    parsed <- parseFileWithPath p raw
     let
       name = moduleNameOfPath root p
-    in case parsed of
-      ErrC _ => pure (ClosureMod pe.peName pe.peKey pe.peEnv name p (contentAddress raw) [] "")
-      OkC sf =>
-        let
-          h = headerOfSource name sf
-        in pure (ClosureMod pe.peName pe.peKey pe.peEnv name p (contentAddress raw) h.mhImports "")
+      src = contentAddress raw
+    in do
+      imports <- headerImportsEff p src raw
+      pure (ClosureMod pe.peName pe.peKey pe.peEnv name p src imports "")
 
 -- 尾接隐式 Prelude（作为**普通图边**）：不这样做的话，Prelude 会作为「每个模块的额外依赖」
 -- 后置在地址里，而它在拓扑序里没有前驱 ⇒ 早于 Prelude 的模块算地址时它还没分配，
