@@ -514,12 +514,13 @@ pkg_err/packages/test-m30 → `packages/cli`；web → `packages/web-cli`；其�
 
 ## Nix checks 清单
 
-`nix flake check` 实测 **28 项**：3 个 package 构建（`vuna` / `vuna-compiler` /
-`vuna-seed`，同时暴露为 checks）+ 25 个 check 语义项（`context-budget`、
+`nix flake check` 实测 **30 项**：3 个 package 构建（`vuna` / `vuna-compiler` /
+`vuna-seed`，同时暴露为 checks）+ 27 个 check 语义项（`context-budget`、
 `seed-selfhost`、`vscode-ext`、`vuna-checks-inventory`、`vuna-compiler-growth`、
 `vuna-compiler-growth-ctor`、`vuna-compiler-growth-incremental`、`vuna-container-growth`、
 `vuna-diag`、`vuna-fmt`、`vuna-frontend-growth`、
-`vuna-lint`、`vuna-metrics`、`vuna-nix-fmt`、`vuna-obs-dwarf`、`vuna-obs-overhead`、
+`vuna-lint`、`vuna-metrics`、`vuna-native-artifact`、`vuna-native-surface`、
+`vuna-nix-fmt`、`vuna-obs-dwarf`、`vuna-obs-overhead`、
 `vuna-obs-schema`、`vuna-single-pass`、`vuna-static`、`vuna-tests-e2e`、`vuna-tests-gate`、
 `vuna-tests-native`、`vuna-tests-wasm`、`vuna-wasm-browser`、
 `vuna-typecheck`；主体是 `nix/checks/<name>.sh`，共享实现与并入门禁的实现放在
@@ -598,6 +599,11 @@ CI 把它拆成三个 job（`.github/workflows/ci.yml`）：`flake-check` 跑除
 - `vuna-metrics`：冻结夹具（`corpus/codegen`）的 codegen 产物对
   `nix/checks/data/codegen.baseline` 的精确基线；种子尺寸不设门槛（见 [compiler.md](compiler.md)
   §codegen 夹具基线）；
+- `vuna-native-surface`：native 平台面（syscall 站点、`.bss` 宿主缓冲上限、内核路径）
+  对 `nix/checks/data/native-surface.baseline`；平台知识只能经这条基线变化
+  （见 [native-platform.md](native-platform.md)）；
+- `vuna-native-artifact`：最小程序的 `runtime.s` / `Main.s` 逐字节基线。`runtime.s` 与
+  程序无关、覆盖全部运行时函数，因此纯重构必须保持它不变（见 [native.md](native.md) §6）；
 - `context-budget`：入口文档字节数与单模块行数对 `nix/checks/data/context.budget`（预算按实测 ×1.5
   留余量；超过预算失败，达到 70% 只打印 `WARN`。`WARN` 在本机跑 check 时可见，nix 只在
   失败时打印 builder 日志，所以 CI 成功时不显示）；

@@ -163,7 +163,7 @@ ID 是稳定引用（`层前缀-序号`），改动时保留编号，删掉实�
 | ID | 位置 | 类 | 现象 → 后果 | 状态 |
 | --- | --- | --- | --- | --- |
 | CG-01 | `Native/Runtime.vuna` 的 `divFn` | ⚠️A | 无 `min_int / -1` 守卫 → `#DE`/SIGFPE，三端唯一进程崩溃 | 已清（守卫返回 min_int） |
-| CG-02 | `Native/Runtime.vuna` 的 `prim_eff_*` | ⚠️B | 非 try 的 FS 原语全映射到 `try_*`：失败变默认真值 + status | 开放 |
+| CG-02 | `Native/Runtime.vuna` 的 `prim_eff_*` | ⚠️B | 非 try 的 FS 原语曾全映射到 `try_*`（失败变默认真值 + status）；现走 `strict_*` 包装，首行与 OCaml 一致 | 已清 |
 | CG-03 | `Native/Runtime.vuna` 的 `try_read_file` | ⚠️A | 8 MiB 固定缓冲，读满即成功 → 静默截断大文件 | 已清（超上界报 io 错误） |
 | CG-04 | `Native/Runtime.vuna` 的 `dir_names` | C | 目录项上限 4032，超出 skip | 已清（超上限报 io 错误） |
 | CG-05 | `Native/Runtime.vuna` 的 `str_to_c` | ⚠️A | 无界 `rep movsb` 写 4096 `.bss` | 已清（超长 trap） |
