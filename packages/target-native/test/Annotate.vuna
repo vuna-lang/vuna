@@ -1,7 +1,7 @@
 -- GC 栈图标注（`Native.Module.nativeAnnotateCalls`）的单元测试。
 --
--- 锁住 call 点前的 `lea r10, [rip + map]; mov [rbp-8], r10` 与栈图表（标签 /
--- 活槽序号 / 下一个 label 计数）。
+-- 锁住 call 点前的 `lea r10, [rip + map]; mov [rbp-8], r10`、栈图表（标签 / 活槽序号 /
+-- 下一个 label 计数），以及「标量槽不进图」：`scalarSlots` 里的槽即使活着也不列。
 import Base
 import Base.Data.Int as Int
 import Base.Data.List as List
@@ -30,14 +30,36 @@ sample =
     IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 0))
   ]
 
+-- | 两个槽都在 call 点活着：0 是指针，1 是标量。
+scalarSample : List Instr
+scalarSample =
+  [
+    IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rax),
+    IMov (OpMem Rbp (nativeSlotOff 1)) (OpReg Rax),
+    ICall "f",
+    IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 0)),
+    IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 1))
+  ]
+
 problems : List String
 problems =
-  case nativeAnnotateCalls 0 sample of
-    Pair instrs rest =>
-      filter
-        (\s => s /= "")
-        (append [checkEq "next label" 1 (firstOf rest), checkEq "map count" 1 (length (secondOf rest)), checkEq "instr count" 5 (length instrs), checkStore instrs, checkMap (secondOf rest)] [])
-    _ => ["annotate returned"]
+  filter (\s => s /= "") (
+      append (
+          case nativeAnnotateCalls [] 0 sample of
+            Pair instrs rest => [checkEq "next label" 1 (firstOf rest), checkEq "map count" 1 (length (secondOf rest)), checkEq "instr count" 5 (length instrs), checkStore instrs, checkMap (secondOf rest)]
+            _ => ["annotate returned"]
+        ) (
+          append (
+              case nativeAnnotateCalls [] 0 scalarSample of
+                Pair _ rest => [checkSlots "no scalar filter" "0,1" (secondOf rest)]
+                _ => ["annotate returned (scalar sample)"]
+            ) (
+              case nativeAnnotateCalls [1] 0 scalarSample of
+                Pair _ rest => [checkSlots "scalar filtered" "0" (secondOf rest)]
+                _ => ["annotate returned (scalar filter)"]
+            )
+        )
+    )
 
 checkEq : String -> Int -> Int -> String
 checkEq label want got =
@@ -58,6 +80,11 @@ checkMap ([m]) =
   else
     "map: label=${m.nmLabel} slots=[${joinInts m.nmSlots}]"
 checkMap ms = "map count ${strFromInt (length ms)}"
+
+checkSlots : String -> String -> List NativeMap -> String
+checkSlots label want ([m]) =
+  if joinInts m.nmSlots == want then "" else "${label}: want [${want}], got [${joinInts m.nmSlots}]"
+checkSlots label _ ms = "${label}: map count ${strFromInt (length ms)}"
 
 joinInts : List Int -> String
 joinInts xs = String.join "," (map strFromInt xs)

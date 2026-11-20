@@ -33,6 +33,7 @@ import Vuna.Ir.Tail
 import Vuna.Target.Native.Abi
 import Vuna.Target.Native.Audit
 import Vuna.Target.Native.Model
+import Vuna.Target.Native.Repr
 import Vuna.Target.Native.Runtime
 
 -- ---------------------------------------------------------------
@@ -76,6 +77,9 @@ record FGen where
   fgDefs : List IrDef
   fgPool : List (Pair String String)
   fgSlots : List (Pair IrBinder Int)
+  -- | 槽序号 → 运行时 kind（标量槽不进 GC 栈图，见 `nativeAnnotateCalls`）。
+  --   槽不复用，所以这张表只增不减。
+  fgSlotCls : List (Pair Int NCls)
   fgFams : List IrTyDecl
   fgNextSlot : Int
   fgNextLabel : Int
@@ -103,6 +107,12 @@ freshSlot st =
     slot = st.fgNextSlot
     st1 = { st | fgNextSlot = st.fgNextSlot + 1 }
   in Pair slot st1
+
+freshSlotCls : NCls -> FGen -> Pair Int FGen
+freshSlotCls cls st =
+  let
+    p = freshSlot st
+  in Pair (firstOf p) (setSlotCls (firstOf p) cls (secondOf p))
 
 freshLabel : FGen -> Pair String FGen
 freshLabel st =
@@ -140,6 +150,54 @@ lookupBinder b (p :: rest) =
 
 pushBinder : IrBinder -> Int -> FGen -> FGen
 pushBinder b slot st = { st | fgSlots = Pair b slot :: st.fgSlots }
+
+-- ---------------------------------------------------------------
+-- 槽 kind（GC 栈图的输入）
+-- ---------------------------------------------------------------
+-- | 登记槽的 kind。kind 来自 `Native.Repr`：binder 的声明类型优先，缺类型时只信
+--   绑定点的值（字面量 / 已绑定 binder / 结果类型已知的符号），推不出来就记
+--   `NClsMissing`——按「可能是指针」处理，照样进栈图。
+setSlotCls : Int -> NCls -> FGen -> FGen
+setSlotCls slot cls st = { st | fgSlotCls = Pair slot cls :: st.fgSlotCls }
+
+pushBinderCls : IrBinder -> Int -> NCls -> FGen -> FGen
+pushBinderCls b slot cls st = setSlotCls slot cls (pushBinder b slot st)
+
+slotClsAt : Int -> List (Pair Int NCls) -> NCls
+slotClsAt _ [] = NClsMissing
+slotClsAt slot (p :: rest) = if firstOf p == slot then secondOf p else slotClsAt slot rest
+
+isScalarCls : NCls -> Bool
+isScalarCls NClsScalar = True
+isScalarCls _ = False
+
+clsOfTy : FGen -> Maybe IrTy -> NCls
+clsOfTy st mty = nKindOfTy st.fgFams mty
+
+-- | binder 的 kind：声明类型优先，`Nothing` 时用绑定点的推断值。
+binderCls : FGen -> Maybe NCls -> IrBinder -> NCls
+binderCls st fallback b =
+  case nKindOfTy st.fgFams b.irBinderTy of
+    NClsMissing =>
+      case fallback of
+        Just cls => cls
+        Nothing => NClsMissing
+    cls => cls
+
+-- | 值位置的 kind。`IrCast` 只在源/目标都是标量时按标量算（native 把 cast 渲染成
+--   恒等，两边 kind 不一致时不能信任何一边）。
+valueCls : FGen -> Ir -> NCls
+valueCls st (IrVar b) = binderCls st Nothing b
+valueCls st (IrCast from to _) =
+  if isScalarCls (clsOfTy st from) && isScalarCls (clsOfTy st to) then NClsScalar else NClsMissing
+valueCls st ir =
+  case nValueCls st.fgFams st.fgDefs [] ir of
+    Just cls => cls
+    Nothing => NClsMissing
+
+-- | 本函数的标量槽：栈图不列它们（标量不可能是堆指针）。
+scalarSlotsOf : FGen -> List Int
+scalarSlotsOf st = map (\p => firstOf p) (filter (\p => isScalarCls (secondOf p)) st.fgSlotCls)
 
 isErasedBinder : IrBinder -> Bool
 isErasedBinder b = b.irBinderErased
@@ -269,28 +327,31 @@ slotIndexOf off = (0 - off) / 8 - 2
 
 -- | 在每个 call 指令前插 `lea r10, [rip + map]; mov [rbp-8], r10`，返回新指令体、
 --   之后的模块内 label 计数与本函数的栈图表（按 call 顺序）。
-export nativeAnnotateCalls : Int -> List Instr -> Pair (List Instr) (Pair Int (List NativeMap))
-nativeAnnotateCalls nextLabel instrs = annotateGo nextLabel (nativeLiveSlotsAtCalls instrs) 0 instrs
+--   栈图只列活槽里可能指向堆的那些（`scalarSlots` 是标量槽，见 `scalarSlotsOf`）：
+--   标量槽不可能指向堆，进图只会让 GC 白读一次。
+export nativeAnnotateCalls : List Int -> Int -> List Instr -> Pair (List Instr) (Pair Int (List NativeMap))
+nativeAnnotateCalls scalarSlots nextLabel instrs =
+  annotateGo scalarSlots nextLabel (nativeLiveSlotsAtCalls instrs) 0 instrs
 
-annotateGo : Int -> List (Pair Int (List Int)) -> Int -> List Instr -> Pair (List Instr) (Pair Int (List NativeMap))
-annotateGo nextLabel _ _ [] = Pair [] (Pair nextLabel [])
-annotateGo nextLabel calls idx (i :: rest) =
+annotateGo : List Int -> Int -> List (Pair Int (List Int)) -> Int -> List Instr -> Pair (List Instr) (Pair Int (List NativeMap))
+annotateGo _ nextLabel _ _ [] = Pair [] (Pair nextLabel [])
+annotateGo scalarSlots nextLabel calls idx (i :: rest) =
   case calls of
     (Pair c lives) :: more =>
       if c == idx then
         let
           label = nativeMapLabel nextLabel
-          inner = annotateGo (nextLabel + 1) more (idx + 1) rest
+          inner = annotateGo scalarSlots (nextLabel + 1) more (idx + 1) rest
           store = [ILea R10 label, IMov (OpMem Rbp nativeDescriptorOff) (OpReg R10)]
-          mp = NativeMap label (map slotIndexOf lives)
+          mp = NativeMap label (map slotIndexOf (filter (\off => not (memInt (slotIndexOf off) scalarSlots)) lives))
         in Pair (append store (i :: firstOf inner)) (Pair (firstOf (secondOf inner)) (mp :: secondOf (secondOf inner)))
       else
         let
-          inner = annotateGo nextLabel calls (idx + 1) rest
+          inner = annotateGo scalarSlots nextLabel calls (idx + 1) rest
         in Pair (i :: firstOf inner) (secondOf inner)
     [] =>
       let
-        inner = annotateGo nextLabel [] (idx + 1) rest
+        inner = annotateGo scalarSlots nextLabel [] (idx + 1) rest
       in Pair (i :: firstOf inner) (secondOf inner)
 
 -- ---------------------------------------------------------------
@@ -378,7 +439,7 @@ genArgs fuel st (a :: rest) =
         \p =>
           let
             st1 = secondOf p
-            slotP = freshSlot st1
+            slotP = freshSlotCls (valueCls st1 a) st1
             slot = firstOf slotP
             st2 = secondOf slotP
           in nbind (genArgs (fuel - 1) st2 rest) (
@@ -854,7 +915,7 @@ genExprAt fuel st isTail ir =
                     slotP = freshSlot st1
                     slot = firstOf slotP
                     st2 = secondOf slotP
-                  in nbind (genExprAt (fuel - 1) (pushBinder b slot st2) isTail body) (\q => NOk (Pair (append (firstOf p) (append (storeSlot slot) (firstOf q))) (restoreBinderScope (secondOf q) st1.fgSlots)))
+                  in nbind (genExprAt (fuel - 1) (pushBinderCls b slot (binderCls st1 (Just (valueCls st1 scrut)) b) st2) isTail body) (\q => NOk (Pair (append (firstOf p) (append (storeSlot slot) (firstOf q))) (restoreBinderScope (secondOf q) st1.fgSlots)))
                 _ => unsupported "native target: let with more than one runtime binder is not supported yet"
           )
       IrIf c t e =>
@@ -933,7 +994,7 @@ genLamApp fuel st isTail b arg body =
             slotP = freshSlot (secondOf p)
             slot = firstOf slotP
             st1 = secondOf slotP
-          in nbind (genExprAt (fuel - 1) (pushBinder b slot st1) isTail (stripTail body)) (\q => NOk (Pair (append (firstOf p) (append (storeSlot slot) (firstOf q))) (restoreBinderScope (secondOf q) st.fgSlots)))
+          in nbind (genExprAt (fuel - 1) (pushBinderCls b slot (binderCls st1 (Just (valueCls st arg)) b) st1) isTail (stripTail body)) (\q => NOk (Pair (append (firstOf p) (append (storeSlot slot) (firstOf q))) (restoreBinderScope (secondOf q) st.fgSlots)))
       )
 
 genApp : Int -> FGen -> Bool -> Ir -> NRes (Pair (List Instr) FGen)
@@ -977,16 +1038,19 @@ closureArgRegs : List Reg
 closureArgRegs = [Rsi, Rdx, Rcx, R8, R9]
 
 -- | 闭包函数入口：把捕获值从 `[rdi + 8 + 8*i]` 拷进本帧槽并绑定 binder。
-bindCaptures : FGen -> List (Pair IrBinder Int) -> Int -> NRes (Pair (List Instr) FGen)
-bindCaptures st [] _ = NOk (Pair [] st)
-bindCaptures st ((Pair b src) :: rest) i =
+--   `parentCls` 是创建处（父帧）的槽 kind 表：捕获值搬过来，kind 也跟过来。
+bindCaptures : FGen -> List (Pair Int NCls) -> List (Pair IrBinder Int) -> Int -> NRes (Pair (List Instr) FGen)
+bindCaptures st _ [] _ = NOk (Pair [] st)
+bindCaptures st parentCls ((Pair b src) :: rest) i =
   let
     slotP = freshSlot st
     slot = firstOf slotP
-    st1 = pushBinder b slot (secondOf slotP)
+    st1 = pushBinderCls b slot (slotClsAt src parentCls) (secondOf slotP)
     ins =
       [IMov (OpReg Rax) (OpMem Rdi (16 + 8 * i)), IMov (OpMem Rbp (nativeSlotOff slot)) (OpReg Rax)]
-  in nbind (bindCaptures st1 rest (i + 1)) (\q => NOk (Pair (append ins (firstOf q)) (secondOf q)))
+  in nbind
+    (bindCaptures st1 parentCls rest (i + 1))
+    (\q => NOk (Pair (append ins (firstOf q)) (secondOf q)))
 
 storeCloCode : Int -> String -> List Instr
 storeCloCode obj label =
@@ -1019,8 +1083,8 @@ genLamValue fuel st bs body =
       st1 = { st | fgNextLabel = idx + 1 }
       -- 闭包体自己的来参区由闭包 ABI 决定（`rdi` 是闭包自身，实参从 `rsi` 起）。
       lamRoom = nativeTailRoomBytes (nativeStackArgCount (length rbs) (length closureArgRegs))
-      stBody = FGen st1.fgDefs st1.fgPool [] st1.fgFams 0 st1.fgNextLabel [] lamRoom st1.fgModule st1.fgOwner "" "" [] []
-    in nbind (bindCaptures stBody caps 0) (
+      stBody = FGen st1.fgDefs st1.fgPool [] [] st1.fgFams 0 st1.fgNextLabel [] lamRoom st1.fgModule st1.fgOwner "" "" [] []
+    in nbind (bindCaptures stBody st.fgSlotCls caps 0) (
         \cp =>
           nbind (bindArgsGo rbs 1 (secondOf cp)) (
               \bp =>
@@ -1030,7 +1094,7 @@ genLamValue fuel st bs body =
                         stF = secondOf q
                         frame = nativeFrameBytes stF.fgNextSlot
                         lamBody = append (firstOf cp) (append (firstOf bp) (firstOf q))
-                        lamAn = nativeAnnotateCalls stF.fgNextLabel lamBody
+                        lamAn = nativeAnnotateCalls (scalarSlotsOf stF) stF.fgNextLabel lamBody
                         lamFunc = NativeFunc lamName frame (append (nativePrologue frame) (append stackGuardInstrs (append (firstOf lamAn) nativeEpilogue))) st.fgModule (secondOf (secondOf lamAn))
                         allocP = genAlloc st1 (2 + ncap)
                         obj = firstOf (secondOf allocP)
@@ -1283,7 +1347,7 @@ genCase fuel st isTail caseTy scrut alts =
     nbind (genExpr (fuel - 1) st scrut) (
         \p =>
           let
-            scP = freshSlot (secondOf p)
+            scP = freshSlotCls (clsOfTy st caseTy) (secondOf p)
             sc = firstOf scP
           in nbind (genCaseAlts (fuel - 1) (secondOf scP) isTail caseTy sc alts) (\q => NOk (Pair (cat [firstOf p, setLocal sc, firstOf q]) (secondOf q)))
       )
@@ -1343,7 +1407,7 @@ genArm fuel st isTail sc alt =
         let
           slotP = freshSlot st
           slot = firstOf slotP
-        in nbind (genExprAt (fuel - 1) (pushBinder b slot (secondOf slotP)) isTail (irAltBodyOf alt)) (\q => NOk (Pair (cat [getLocal sc, setLocal slot, firstOf q]) (restoreBinderScope (secondOf q) st.fgSlots)))
+        in nbind (genExprAt (fuel - 1) (pushBinderCls b slot (slotClsAt sc st.fgSlotCls) (secondOf slotP)) isTail (irAltBodyOf alt)) (\q => NOk (Pair (cat [getLocal sc, setLocal slot, firstOf q]) (restoreBinderScope (secondOf q) st.fgSlots)))
       _ => internal "case arm has more than one runtime binder"
 
 tagOfScrut : Int -> List Instr
@@ -1393,7 +1457,7 @@ bindFields st sc idx (b :: rest) =
     slotP = freshSlot st
     slot = firstOf slotP
   in nbind
-    (bindFields (pushBinder b slot (secondOf slotP)) sc (idx + 1) rest)
+    (bindFields (pushBinderCls b slot (binderCls st Nothing b) (secondOf slotP)) sc (idx + 1) rest)
     (\q => NOk (Pair (cat [getObjField sc (8 * idx), setLocal slot, firstOf q]) (secondOf q)))
 
 -- | record 分支只有一个（按字段序绑定）；catch-all 兜底。
@@ -1428,7 +1492,7 @@ genNatArm fuel st isTail (Just alt) mode srcSlot =
             slot = firstOf slotP
             st1 = secondOf slotP
             bindInstrs = if mode == "pred" then append (loadSlot srcSlot) [IBin "sub" (OpImm 1)] else loadSlot srcSlot
-          in nbind (genExprAt (fuel - 1) (pushBinder b slot st1) isTail (irAltBodyOf alt)) (\q => NOk (Pair (append bindInstrs (append (storeSlot slot) (firstOf q))) (restoreBinderScope (secondOf q) st.fgSlots)))
+          in nbind (genExprAt (fuel - 1) (pushBinderCls b slot NClsScalar st1) isTail (irAltBodyOf alt)) (\q => NOk (Pair (append bindInstrs (append (storeSlot slot) (firstOf q))) (restoreBinderScope (secondOf q) st.fgSlots)))
       _ => internal "Nat case arm has more than one runtime binder"
 
 hasNatBranch : Maybe IrAlt -> Maybe IrAlt -> Bool
@@ -1445,7 +1509,7 @@ genNatCase fuel st isTail scrut zero succ catch =
         \p =>
           let
             st1 = secondOf p
-            slotP = freshSlot st1
+            slotP = freshSlotCls NClsScalar st1
             slotSc = firstOf slotP
             st2 = secondOf slotP
             lzP = freshLabel st2
@@ -1513,7 +1577,7 @@ bindArgsGo (b :: rest) i st =
     st1 = secondOf slotP
     store = append src [IMov (OpMem Rbp (nativeSlotOff slot)) (OpReg Rax)]
   in nbind
-    (bindArgsGo rest (i + 1) (pushBinder b slot st1))
+    (bindArgsGo rest (i + 1) (pushBinderCls b slot (binderCls st Nothing b) st1))
     (\q => NOk (Pair (append store (firstOf q)) (secondOf q)))
 
 -- | 生成一个定义；返回函数与该定义之后**模块内** label/slot 计数（`.L` 是文件局部
@@ -1527,14 +1591,14 @@ genDefFunc defs pools fams nextLabel (IrDef name arity _ _ body _ _ _) =
     room = nativeTailRoomBytes (nativeStackArgCount arity nativeMaxArgs)
     modPath = modulePathOf name
     pool = modulePoolOf (moduleKeyOf name) pools
-    st0 = FGen defs pool [] fams 0 nextLabel [] room modPath name "" "" [] []
+    st0 = FGen defs pool [] [] fams 0 nextLabel [] room modPath name "" "" [] []
   in if arity == 0 then
     nbind (genExpr (nativeFuelOfBody body) st0 body) (
         \p =>
           let
             st1 = secondOf p
             frame = nativeFrameBytes st1.fgNextSlot
-            an = nativeAnnotateCalls st1.fgNextLabel (firstOf p)
+            an = nativeAnnotateCalls (scalarSlotsOf st1) st1.fgNextLabel (firstOf p)
             instrs = append (firstOf an) nativeEpilogue
             mainF = NativeFunc (nativeFuncLabel name) frame (append (nativePrologue frame) (append stackGuardInstrs instrs)) modPath (secondOf (secondOf an))
           in NOk (Pair (append st1.fgLams [mainF]) (Pair (firstOf (secondOf an)) st1.fgStatics))
@@ -1560,7 +1624,7 @@ genDefFunc defs pools fams nextLabel (IrDef name arity _ _ body _ _ _) =
                         st1 = secondOf q
                         frame = nativeFrameBytes st1.fgNextSlot
                         body0 = append (firstOf bp) (append [ILabel loopLabel] (firstOf q))
-                        an = nativeAnnotateCalls st1.fgNextLabel body0
+                        an = nativeAnnotateCalls (scalarSlotsOf st1) st1.fgNextLabel body0
                         instrs = append (firstOf an) nativeEpilogue
                         mainF = NativeFunc (nativeFuncLabel name) frame (append (nativePrologue frame) (append stackGuardInstrs instrs)) modPath (secondOf (secondOf an))
                       in NOk (Pair (append st1.fgLams [mainF]) (Pair (firstOf (secondOf an)) st1.fgStatics))
