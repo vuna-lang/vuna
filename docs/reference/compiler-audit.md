@@ -39,14 +39,14 @@ ID 是稳定引用（`层前缀-序号`），改动时保留编号，删掉实�
 | ID | 位置 | 类 | 现象 → 后果 | 状态 |
 | --- | --- | --- | --- | --- |
 | LD-01 | `Flatten.vuna` 的 `loadModule` | ⚠️A | `findModule` 命中即跳过 `rootAllows` → `[export]` 边界与同名歧义只在首次加载生效 | 已清（命中表也走 `moduleVisibleTo`；base 的 `[export]` 补齐全部模块） |
-| LD-02 | `Flatten.visibleFixitiesOf` + `Fixity.dedupeFixities` | ⚠️D | fixity 是程序全局表；iface 路径 span 全空 ⇒ 跨模块同名声明被静默去重 | 开放 |
-| LD-03 | `Layers.vuna` 的 `checkImports` | ⚠️A | import 目标不在模块表就跳过该边（`preloaded` 装配时越层不检查） | 开放 |
+| LD-02 | `Flatten.visibleFixitiesOf` + `Fixity.dedupeFixities` | ⚠️D | fixity 是程序全局表；iface 路径 span 全空 ⇒ 跨模块同名声明被静默去重 | 已清（去重键含模块名 + 形状；`checkUniqueFixities` 只判 op；`116_fixity_global`） |
+| LD-03 | `Layers.vuna` 的 `checkImports` | ⚠️A | import 目标不在模块表就跳过该边（`preloaded` 装配时越层不检查） | 已清（目标落在本包层里就按名字判定；`LayerScope` 单测 + `lay10`） |
 | LD-04 | `Layers.vuna` 的 `closureGo` | C | fuel 耗尽静默返回已累积集合 | 已清（预算 = 层数 + uses 条目数 + 2） |
 | LD-05 | `Expand.internalRef` + `Resolve` 的 `!` 前缀 | A | 隐藏原语走「非法标识符」通道 | 已清（剥前缀后校验 `findIntrinsic`） |
 | LD-06 | `Flatten.vuna` 的模块加载 | A | 生产路径残留 `dbg!` 探针 | 已清 |
 | LD-07 | `Flatten.vuna` 的 unused-import 判定 | C | 判据只认导出 target，漏「只为 fixity 而 import」；删除 span 假设独占一行 | 开放 |
 | LD-08 | `Resolve.vuna` 的 `ctorPairTargets` | A | 构造子候选非空时整组丢弃值条目 | 开放 |
-| LD-09 | `Modules.vuna` 的 `unifyEntryPairs` | A | 用户可见歧义被报成 `icInternal` | 开放 |
+| LD-09 | `Modules.vuna` 的 `unifyEntryPairs` | A | 用户可见歧义被报成 `icInternal` | 已清（`RN_AmbiguousName` + `pkg_err/65_ambiguous_reexport`） |
 | LD-10 | `Resolve.vuna` 的解析特判 | C | `Nil/Cons/::` 特判、`>>=`→`bind` 双名回落、`Type` 头不解析实参、隐式 binder 只认 String 域 | 开放 |
 | LD-11 | `Resolve.vuna` 的内部名旁路 | B | `@vuna@…` 与「属于编译器包」直接放行 | 开放 |
 | LD-12 | `Fixity.vuna` 的 `reorderDecl` | C | 实例体里非 `DSig`/`DFun` 声明原样放行 → 延后成 internal error | 开放 |
@@ -90,7 +90,7 @@ ID 是稳定引用（`层前缀-序号`），改动时保留编号，删掉实�
 | EC-04 | `Core/Conv.vuna` 的 `VPi`/`VLam` | C | 定义性相等不比 `rig`（`rig` 是运行时擦除格子，不比是有意取舍） | 开放（有意） |
 | EC-05 | `Core/Conv.vuna` 的 `patternSolution []` | C | 不可达分支伪造 `VType` | 已清（空 spine 取 n=0 的自然延拓：不伪造 `VType`） |
 | EC-06 | `Core/Conv.vuna` 的 Nat 折算 | C | 饱和成相等；`convNatFuel` 用幻数推预算 | 开放（预算已按 `convFuelBase + 4*depth` 派生并以 `convFuelMax` 封顶；饱和相等是有意取舍） |
-| EC-07 | `Elab/Dict.vuna` 的 `tryResolveDictGoal` | ⚠️A | 程序级求解用空 ctx + `Span ""` + depth 0，与收尾路径不等价 | 开放 |
+| EC-07 | `Elab/Dict.vuna` 的 `tryResolveDictGoal` | ⚠️A | 程序级求解用空 ctx + `Span ""` + depth 0，与收尾路径不等价 | 已清（worklist 只处理 `cdepth == 0` 的闭目标；带 ctx 的目标归 `resolveRowGoalsCtx`） |
 | EC-08 | `Dict`/`Trait`/`Driver` 的 `solveMeta … 0` | C | 一批延迟求解点传 depth 0，等于跳过作用域检查 | 已清（传 `ctxDepth` 与约束的 `cdepth`） |
 | EC-09 | `Dict.vuna` 的 `matchInstances` | C | 上一候选的解表污染下一候选（无候选快照） | 开放 |
 | EC-10 | `Dict.vuna` 的 `ctxMemberProofTermGo` | C | 用 `showTerm` 文本比较找同型证明 binder | 开放 |
