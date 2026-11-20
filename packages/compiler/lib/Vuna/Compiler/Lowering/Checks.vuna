@@ -475,7 +475,10 @@ erasureFuelMax = 1000000
 
 erasureFuelForArgs : List (Pair Term Rig) -> Int
 erasureFuelForArgs [] = 0
-erasureFuelForArgs ((Pair a _) :: rest) = termSize a + erasureFuelForArgs rest
+erasureFuelForArgs ((Pair a _) :: rest) =
+  let
+    total = termSize a + erasureFuelForArgs rest
+  in if total > erasureFuelMax then erasureFuelMax else total
 
 checkConArgsErasure : List String -> List (Pair String Rig) -> List (Pair Term Rig) -> Check Int
 checkConArgsErasure a1 a2 a3 =
@@ -486,4 +489,7 @@ checkAltErasure a1 a2 a3 = checkAltErasureFuel (erasureFuelFor (erasureFuelForAl
 
 erasureFuelForAlts : List CaseAlt -> Int
 erasureFuelForAlts [] = 0
-erasureFuelForAlts (alt :: rest) = termSize (caseAltBody alt) + erasureFuelForAlts rest
+erasureFuelForAlts (alt :: rest) =
+  let
+    total = termSize (caseAltBody alt) + erasureFuelForAlts rest
+  in if total > erasureFuelMax then erasureFuelMax else total

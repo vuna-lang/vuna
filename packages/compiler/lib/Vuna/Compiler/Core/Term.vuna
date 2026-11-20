@@ -247,7 +247,7 @@ defaultFuel = 512
 -- check）成本都随字面量大小线性增长，固定 fuel 因此会在「值 ≥256 / 索引 ≥20」时假报
 -- `DT: internal: ... fuel exhausted`（D24）。这里提供两个纯数据 helper：
 --   * `natChainValue`：把链 O(1) 折回整数（等价判定与燃料派生用）；
---   * `termSize`：项节点数（把固定 fuel 改成按项规模派生时用）。
+--   * `termSize`：项节点数（把固定 fuel 改成按项规模派生时用），饱和在 `termSizeCap`。
 -- 链折回的整数上限与运行时 Nat 饱和上限一致（OCaml 63 位 int 的 max_int）。
 natChainMax : Int
 natChainMax = 4611686018427387903
@@ -300,46 +300,63 @@ flattenTermAppGo (TApp f a rig) acc = flattenTermAppGo f (Pair a rig :: acc)
 flattenTermAppGo (TRecord name args) acc = Pair (TGlobal name) (append args acc)
 flattenTermAppGo t acc = Pair t acc
 
--- | 项的节点数（`TVar` / 字面量 / binder 各计 1，case 只数 scrutinee 与分支体）。
--- 用一个线性遍历把「固定 fuel」换成「按项规模派生 + 显式上限」，深项不再假报
--- fuel 耗尽；调用方各自再套上限防 DoS。
+-- | 项的节点数（`TVar` / 字面量 / binder 各计 1，case 只数 scrutinee 与分支体），
+-- **饱和**在 `termSizeCap`。
+--
+-- 项按出现次数计数：同一子项被多处引用（精化期的按引用内联、do 块复用计划项）会让规模
+-- 指数级增长，逐节点递归在这里就会不返回。因此规模计算本身也走节点预算：最多访问
+-- `termSizeCap` 个节点，超过就返回上限，调用方派生的燃料随之封顶，由各自的燃料耗尽路径
+-- 收尾；正常大小的项仍得到精确节点数。
 export termSize : Term -> Int
-termSize (TVar _ _ _) = 1
-termSize (TMeta _) = 1
-termSize (TGlobal _) = 1
-termSize (TType _) = 1
-termSize (TPi _ _ _ dom cod) = 1 + termSize dom + termSize cod
-termSize (TLam _ _ slot _ body) =
-  let
-    tys =
-      case slot of
-        Nothing => 0
-        Just (Pair b r) => termSizeMaybe b + termSizeMaybe r
-  in 1 + tys + termSize body
-termSize (TApp f a _) = 1 + termSize f + termSize a
-termSize (TCon _ args) = 1 + termSizeArgs args
-termSize (TMk _ args) = 1 + termSizeArgs args
-termSize (TRecord _ args) = 1 + termSizeArgs args
-termSize (TCase scrut alts) = 1 + termSize scrut + termSizeAlts alts
-termSize (TProj base c tele i fi) = 1 + termSize base
-termSize (TRecUpd base c tele idxs body) = 1 + termSize base + termSize body
-termSize (TInt _) = 1
-termSize (TStr _) = 1
-termSize (TFloat _) = 1
-termSize (TBool _) = 1
-termSize (TIf c th el) = 1 + termSize c + termSize th + termSize el
+termSize t = termSizeGo termSizeCap [t]
 
-termSizeMaybe : Maybe Term -> Int
-termSizeMaybe Nothing = 0
-termSizeMaybe (Just t) = termSize t
+-- | 项规模的计数上限（节点数）。派生的燃料最坏与它同阶：`lowerBudgetFor` 是
+-- `512 + 8 * termSize`，即上限 800 万步。
+export termSizeCap : Int
+termSizeCap = 1000000
 
-termSizeArgs : List (Pair Term Rig) -> Int
-termSizeArgs [] = 0
-termSizeArgs ((Pair a _) :: rest) = termSize a + termSizeArgs rest
+-- `fuel` 是剩余节点预算，每展开一个节点减 1；耗尽后返回已计数（= 上限）。
+termSizeGo : Int -> List Term -> Int
+termSizeGo fuel [] = 0
+termSizeGo fuel (t :: rest) =
+  if fuel <= 0 then 0 else 1 + termSizeGo (fuel - 1) (append (termSizeWork t) rest)
 
-termSizeAlts : List CaseAlt -> Int
-termSizeAlts [] = 0
-termSizeAlts (alt :: rest) = termSize (caseAltBody alt) + termSizeAlts rest
+-- 直接子项（顺序无关，只用于计数）。
+termSizeWork : Term -> List Term
+termSizeWork (TVar _ _ _) = []
+termSizeWork (TMeta _) = []
+termSizeWork (TGlobal _) = []
+termSizeWork (TType _) = []
+termSizeWork (TInt _) = []
+termSizeWork (TStr _) = []
+termSizeWork (TFloat _) = []
+termSizeWork (TBool _) = []
+termSizeWork (TPi _ _ _ dom cod) = [dom, cod]
+termSizeWork (TLam _ _ slot _ body) = append (termSizeSlotTerms slot) [body]
+termSizeWork (TApp f a _) = [f, a]
+termSizeWork (TCon _ args) = termSizeArgTerms args
+termSizeWork (TMk _ args) = termSizeArgTerms args
+termSizeWork (TRecord _ args) = termSizeArgTerms args
+termSizeWork (TCase scrut alts) = scrut :: termSizeAltTerms alts
+termSizeWork (TProj base _ _ _ _) = [base]
+termSizeWork (TRecUpd base _ _ _ body) = [base, body]
+termSizeWork (TIf c th el) = [c, th, el]
+
+termSizeArgTerms : List (Pair Term Rig) -> List Term
+termSizeArgTerms [] = []
+termSizeArgTerms ((Pair a _) :: rest) = a :: termSizeArgTerms rest
+
+termSizeAltTerms : List CaseAlt -> List Term
+termSizeAltTerms [] = []
+termSizeAltTerms (alt :: rest) = caseAltBody alt :: termSizeAltTerms rest
+
+termSizeSlotTerms : Maybe (Pair (Maybe Term) (Maybe Term)) -> List Term
+termSizeSlotTerms Nothing = []
+termSizeSlotTerms (Just (Pair b r)) = append (termSizeMaybeTerms b) (termSizeMaybeTerms r)
+
+termSizeMaybeTerms : Maybe Term -> List Term
+termSizeMaybeTerms Nothing = []
+termSizeMaybeTerms (Just t) = [t]
 
 -- ---------------------------------------------------------------
 -- 元变量 / 定义表（解是 level 形态的 Value，可以提到当前上下文里的局部变量）

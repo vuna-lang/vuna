@@ -1,0 +1,16 @@
+# 67) 项规模（`Core.Term.termSize`）的饱和与精确性。
+#
+# 项按出现次数计数：同一子项被多处引用（精化期按引用内联、do 块复用计划项）时规模可以
+# 指数级，逐节点递归会在「算预算」这一步挂死。规模计算必须走节点预算并在超过
+# `termSizeCap` 时饱和返回上限；线性深项仍要得到精确节点数。
+#
+# 夹具按真实依赖布局构造（compiler / base 作为依赖包），只用 $VUNA / $VUNA_BASE / $TMPDIR。
+run: sh -c 'rm -rf "$TMPDIR/term-size" "$TMPDIR/term-size-cache"; mkdir -p "$TMPDIR/term-size/app" "$TMPDIR/term-size-cache"'
+run: sh -c 'cp "$VUNA_SUITE_ROOT/test/suite/fixtures/term_size/Main.vuna" "$TMPDIR/term-size/app/Main.vuna"'
+run: sh -c 'printf "%s\n" "[package]" "name = \"termsize\"" "" "[dependencies]" "vuna-compiler = \"$VUNA_BASE/../compiler\"" > "$TMPDIR/term-size/vuna.toml"'
+run: sh -c 'TMPDIR="$TMPDIR/term-size-cache" "$VUNA" run "$TMPDIR/term-size" 2>&1'
+exit: 0
+out-contains: SIZE_CAP
+out-contains: SIZE_EXACT
+out-not-contains: SIZE_BAD
+out-not-contains: SIZE_OFF

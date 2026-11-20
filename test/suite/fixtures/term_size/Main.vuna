@@ -1,0 +1,33 @@
+import Prelude
+import Base.Data.List as List
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Core.Term
+
+-- 指数级规模：600 层、每层三份子树（按出现次数计数是 3^600 节点）。
+-- 规模计算必须在节点预算内饱和返回上限，而不是逐节点展开。
+wideStep : Term -> Int -> Term
+wideStep acc _ = TIf acc acc acc
+
+wideBody : Term
+wideBody = foldl wideStep (TMeta 0) (range 0 600)
+
+wideSize : String
+wideSize =
+  if termSize wideBody == termSizeCap then
+    "SIZE_CAP"
+  else
+    "SIZE_BAD:" ++ strFromInt (termSize wideBody)
+
+-- 线性深项：规模仍要精确（每层 1 个 `TIf` + 2 个叶子 meta，另加基底）。
+deepBody : Term
+deepBody = foldl (\acc, i => TIf acc (TMeta i) (TMeta i)) (TMeta 0) (range 0 600)
+
+deepSize : String
+deepSize =
+  if termSize deepBody == 1 + 3 * 600 then
+    "SIZE_EXACT"
+  else
+    "SIZE_OFF:" ++ strFromInt (termSize deepBody)
+
+main : String
+main = wideSize ++ " " ++ deepSize
