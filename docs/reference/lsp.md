@@ -8,6 +8,9 @@
 日志一律走 stderr。它是产品 CLI 工具链模块（`packages/toolchain/lib/Vuna/Lsp.vuna` + `Lsp.Protocol` /
 `Lsp.Diagnostics` / `Lsp.Query` / `Lsp.Bindings`），**永不进入 seed 闭包**。
 
+启动参数只有 `--stdio`（空操作）：LSP 客户端惯例会把它加进 argv（例如
+vscode-languageclient 在 `transport = stdio` 时无条件追加）。
+
 ### 帧格式
 
 ```text

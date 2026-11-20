@@ -912,7 +912,8 @@ runLsp _ =
       ExitClosed => abnormalExit state
       ExitFatal msg => abnormalExit (logTo msg state)
 
--- | CLI 入口：参数面为空（`vuna lsp` 不接受位置参数或 flag），由 Vuna.Cli 插入分发。
+-- | CLI 入口：只接受位置参数为空的调用；`--stdio` 是空操作（LSP 客户端惯例会追加它，
+-- 例如 vscode-languageclient 在 transport=stdio 时），由 Vuna.Cli 插入分发。
 export runLspTool : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nStdin StdinOp r, Member nArgs ArgsOp r => List String -> Eff r Int
 runLspTool args =
   case parseCmdArgs ["lsp"] args of
@@ -920,7 +921,7 @@ runLspTool args =
     OkC parsed =>
       case parsed.positionals of
         [] => runLsp 0
-        _ => lspToolError "usage: vuna lsp"
+        _ => lspToolError "usage: vuna lsp [--stdio]"
 
 -- | 内部：`vuna lsp` 的用法错误出口（exit 2）。
 lspToolError : Member nConsole ConsoleOp r => String -> Eff r Int

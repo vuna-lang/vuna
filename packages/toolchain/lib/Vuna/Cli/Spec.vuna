@@ -152,7 +152,13 @@ commands =
       "vuna repl client --addr ADDR"
       [valueFlag "addr" "ADDR" "server 地址"]
       [],
-    topCmd ["lsp"] GService "启动 LSP server（JSON-RPC over stdio）" "vuna lsp" [] []
+    topCmd
+      ["lsp"]
+      GService
+      "启动 LSP server（JSON-RPC over stdio）"
+      "vuna lsp [--stdio]"
+      [boolFlag "stdio" "空操作（LSP 客户端惯例会传入）"]
+      []
   ]
 
 -- | 按路径精确查找一条命令。

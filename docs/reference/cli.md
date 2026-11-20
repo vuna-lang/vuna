@@ -83,7 +83,7 @@ vuna store clean [--dry-run] [--store|--packages|--gc|--all]
 vuna repl [FILE|DIR|MODULE]
 vuna repl serve --listen ADDR [FILE|DIR|MODULE]
 vuna repl client --addr ADDR
-vuna lsp
+vuna lsp [--stdio]
 
 vuna version | -V | --version
 vuna help [<command>...]

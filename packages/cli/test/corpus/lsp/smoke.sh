@@ -475,6 +475,13 @@ printf 'Content-Length: 44\r\n\r\n{"jsonrpc":"2.0","id":1,"method":"shutdown"}' 
 "$VUNA" lsp <"$tmp/eof.bin" >/dev/null 2>&1
 check_eq "收到 shutdown 但无 exit（EOF）退出码 1" "1" "$?"
 
+# ---- 17b) 启动参数面：`--stdio` 空操作 ----
+# LSP 客户端惯例会追加 `--stdio`（vscode-languageclient 的 Executable + transport=stdio
+# 就无条件加），服务端必须把它当空操作，不能按普通未知 flag 退 2。
+"$VUNA" lsp --stdio <"$tmp/ok.bin" >"$tmp/stdio.out" 2>"$tmp/stdio.err"
+check_eq "--stdio 空操作退出码 0" "0" "$?"
+check_contains "--stdio 空操作仍回 shutdown" "$(tr -d '\r' <"$tmp/stdio.out")" '"id":1,"result":null'
+
 # ---- 18) 交互式帧读取：body 后没有换行、客户端等响应时也必须立刻处理 ----
 # 读取层按 Content-Length 读满整个 body：标准 LSP 帧的 body **不带换行**，按行读会让
 # initialize 的响应等下一帧写入才出现（客户端在等响应，不会再写 → 永久挂起）。
