@@ -10,14 +10,14 @@ let rec v_usesOfLayer = (fun (mc0 : Frontend_dManifest.t_Layer B_dData_dList.t_L
 ))
 
 # 35 "Vuna/Compiler/Loader/Layers.vuna"
-let rec v_closureGo = (fun (fuel : int) (layers : Frontend_dManifest.t_Layer B_dData_dList.t_List) (todo : string B_dContainer_dQueue.t_Queue) (acc : string B_dData_dList.t_List) -> (if (fuel <= 0) then acc else ((fun nd_uscrut4 -> (match nd_uscrut4 with
+let rec v_closureGo = (fun (fuel : int) (layers : Frontend_dManifest.t_Layer B_dData_dList.t_List) (todo : string B_dContainer_dQueue.t_Queue) (acc : string B_dData_dList.t_List) -> (if (fuel <= 0) then acc else (let nd_uscrut4 = (B_dContainer_dQueue.v_pop todo) in (match nd_uscrut4 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__2) -> (match dtb__2 with
   | { B_dData_dPair.f_Pair_first = dtb__3; B_dData_dPair.f_Pair_second = dtb__4 } -> (if ((B_dData_dList.v_memName dtb__3) acc) then ((((v_closureGo (fuel - 1)) layers) dtb__4) acc) else ((((v_closureGo (fuel - 1)) layers) ((B_dContainer_dQueue.v_pushAll ((v_usesOfLayer layers) dtb__3)) dtb__4)) (B_dData_dList.C_List__x58__x58_ (dtb__3, acc))))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> acc
   | _ -> failwith "DT: impossible branch"
-)) (B_dContainer_dQueue.v_pop todo))))
+))))
 
 # 49 "Vuna/Compiler/Loader/Layers.vuna"
 let rec v_usesTotal = (fun (mc0 : Frontend_dManifest.t_Layer B_dData_dList.t_List) -> (match mc0 with
@@ -89,11 +89,11 @@ let rec v_checkImports = (fun (mc0 : Frontend_dManifest.t_Layer B_dData_dList.t_
 
 # 117 "Vuna/Compiler/Loader/Layers.vuna"
 let rec v_checkModules = (fun (mc0 : Frontend_dPackages_dPkg.t_Root B_dData_dList.t_List) (mc1 : string) (mc2 : Loader_dModules.t_Module B_dData_dList.t_List) (mc3 : Loader_dModules.t_Module B_dData_dList.t_List) -> (match mc3 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__20, dtb__21) -> ((fun rules -> ((fun matched -> (if ((B_dData_dList.v_length matched) = 0) then ((((v_checkModules mc0) mc1) mc2) dtb__21) else (match (((((((v_checkImports rules) matched) (Loader_dModules.v_moduleNameOf dtb__20)) (Loader_dModules.v_modulePackageOf dtb__20)) mc1) mc2) (Loader_dModules.v_moduleAllImportsOf dtb__20)) with
+  | B_dData_dList.C_List__x58__x58_ (dtb__20, dtb__21) -> (let rules = ((v_layersOfRoot mc0) (Loader_dModules.v_modulePackageOf dtb__20)) in (let matched = ((v_matchingLayers rules) (Loader_dModules.v_moduleNameOf dtb__20)) in (if ((B_dData_dList.v_length matched) = 0) then ((((v_checkModules mc0) mc1) mc2) dtb__21) else (match (((((((v_checkImports rules) matched) (Loader_dModules.v_moduleNameOf dtb__20)) (Loader_dModules.v_modulePackageOf dtb__20)) mc1) mc2) (Loader_dModules.v_moduleAllImportsOf dtb__20)) with
   | Base_dDiag.C_Check_ErrC (dtb__22) -> (Base_dDiag.C_Check_ErrC (dtb__22))
   | Base_dDiag.C_Check_OkC (dtb__23) -> ((((v_checkModules mc0) mc1) mc2) dtb__21)
   | _ -> failwith "DT: impossible branch"
-))) ((v_matchingLayers rules) (Loader_dModules.v_moduleNameOf dtb__20)))) ((v_layersOfRoot mc0) (Loader_dModules.v_modulePackageOf dtb__20)))
+))))
   | B_dData_dList.C_List_Nil -> (Base_dDiag.C_Check_OkC (0))
   | _ -> failwith "DT: impossible branch"
 ))

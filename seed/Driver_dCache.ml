@@ -90,7 +90,7 @@ let rec v_fixTele = (fun (mc0 : (int, Core_dTerm.t_Value) B_dContainer_dHashMap.
 
 # 108 "Vuna/Compiler/Driver/Cache.vuna"
 let v_fixInst = (fun (mc0 : (int, Core_dTerm.t_Value) B_dContainer_dHashMap.t_HashMap) (mc1 : Elab_dTypes.t_DtInst) -> (match mc1 with
-  | { Elab_dTypes.f_DtInst_dtInstName = dtb__80; Elab_dTypes.f_DtInst_dtInstTele = dtb__81; Elab_dTypes.f_DtInst_dtInstCtx = dtb__82; Elab_dTypes.f_DtInst_dtInstHead = dtb__83; Elab_dTypes.f_DtInst_dtInstSpan = dtb__84 } -> ((fun nTele -> { Elab_dTypes.f_DtInst_dtInstName = dtb__80; Elab_dTypes.f_DtInst_dtInstTele = (((v_fixTele mc0) 0) dtb__81); Elab_dTypes.f_DtInst_dtInstCtx = ((B_dData_dList.v_map ((v_fixTerm mc0) nTele)) dtb__82); Elab_dTypes.f_DtInst_dtInstHead = (((v_fixTerm mc0) nTele) dtb__83); Elab_dTypes.f_DtInst_dtInstSpan = dtb__84 }) (B_dData_dList.v_length dtb__81))
+  | { Elab_dTypes.f_DtInst_dtInstName = dtb__80; Elab_dTypes.f_DtInst_dtInstTele = dtb__81; Elab_dTypes.f_DtInst_dtInstCtx = dtb__82; Elab_dTypes.f_DtInst_dtInstHead = dtb__83; Elab_dTypes.f_DtInst_dtInstSpan = dtb__84 } -> (let nTele = (B_dData_dList.v_length dtb__81) in { Elab_dTypes.f_DtInst_dtInstName = dtb__80; Elab_dTypes.f_DtInst_dtInstTele = (((v_fixTele mc0) 0) dtb__81); Elab_dTypes.f_DtInst_dtInstCtx = ((B_dData_dList.v_map ((v_fixTerm mc0) nTele)) dtb__82); Elab_dTypes.f_DtInst_dtInstHead = (((v_fixTerm mc0) nTele) dtb__83); Elab_dTypes.f_DtInst_dtInstSpan = dtb__84 })
   | _ -> failwith "DT: impossible branch"
 ))
 
@@ -160,14 +160,14 @@ let rec v_termsValidAt = (fun (mc0 : int) (mc1 : Core_dTerm.t_Term B_dData_dList
 
 # 172 "Vuna/Compiler/Driver/Cache.vuna"
 let rec v_instsValid = (fun (mc0 : Elab_dTypes.t_DtInst B_dData_dList.t_List) -> (match mc0 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__102, dtb__103) -> ((fun nTele -> (if (if (if ((v_teleValid 0) (dtb__102).Elab_dTypes.f_DtInst_dtInstTele) then ((v_termsValidAt nTele) (dtb__102).Elab_dTypes.f_DtInst_dtInstCtx) else false) then ((v_termValidAt nTele) (dtb__102).Elab_dTypes.f_DtInst_dtInstHead) else false) then (v_instsValid dtb__103) else false)) (B_dData_dList.v_length (dtb__102).Elab_dTypes.f_DtInst_dtInstTele))
+  | B_dData_dList.C_List__x58__x58_ (dtb__102, dtb__103) -> (let nTele = (B_dData_dList.v_length (dtb__102).Elab_dTypes.f_DtInst_dtInstTele) in (if (if (if ((v_teleValid 0) (dtb__102).Elab_dTypes.f_DtInst_dtInstTele) then ((v_termsValidAt nTele) (dtb__102).Elab_dTypes.f_DtInst_dtInstCtx) else false) then ((v_termValidAt nTele) (dtb__102).Elab_dTypes.f_DtInst_dtInstHead) else false) then (v_instsValid dtb__103) else false))
   | B_dData_dList.C_List_Nil -> true
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 180 "Vuna/Compiler/Driver/Cache.vuna"
 let rec v_classesValid = (fun (mc0 : Elab_dTypes.t_DtClass B_dData_dList.t_List) -> (match mc0 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__104, dtb__105) -> ((fun projs -> (if (if (if ((v_termsValidAt 0) projs) then ((v_termsValidAt (B_dData_dList.v_length (dtb__104).Elab_dTypes.f_DtClass_dtClassParams)) (dtb__104).Elab_dTypes.f_DtClass_dtClassSupers) else false) then ((v_termsValidAt (B_dData_dList.v_length (dtb__104).Elab_dTypes.f_DtClass_dtClassParams)) (dtb__104).Elab_dTypes.f_DtClass_dtClassFieldTys) else false) then (v_classesValid dtb__105) else false)) ((B_dData_dList.v_map (fun (p : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair) -> (B_dData_dPair.v_secondOf p))) (dtb__104).Elab_dTypes.f_DtClass_dtClassMethods))
+  | B_dData_dList.C_List__x58__x58_ (dtb__104, dtb__105) -> (let projs = ((B_dData_dList.v_map (fun (p : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair) -> (B_dData_dPair.v_secondOf p))) (dtb__104).Elab_dTypes.f_DtClass_dtClassMethods) in (if (if (if ((v_termsValidAt 0) projs) then ((v_termsValidAt (B_dData_dList.v_length (dtb__104).Elab_dTypes.f_DtClass_dtClassParams)) (dtb__104).Elab_dTypes.f_DtClass_dtClassSupers) else false) then ((v_termsValidAt (B_dData_dList.v_length (dtb__104).Elab_dTypes.f_DtClass_dtClassParams)) (dtb__104).Elab_dTypes.f_DtClass_dtClassFieldTys) else false) then (v_classesValid dtb__105) else false))
   | B_dData_dList.C_List_Nil -> true
   | _ -> failwith "DT: impossible branch"
 ))
@@ -183,17 +183,17 @@ let v_termIssueAt = (fun (depth : int) (t : Core_dTerm.t_Term) -> (if ((B_dData_
 
 # 211 "Vuna/Compiler/Driver/Cache.vuna"
 let rec v_ctorIssues = (fun (mc0 : Elab_dTypes.t_DtCtor B_dData_dList.t_List) -> (match mc0 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__112, dtb__113) -> ((fun issue -> (if (issue = "") then (v_ctorIssues dtb__113) else (String.concat "" [(Elab_dTypes.v_dtCtorName dtb__112); " ctor:"; issue]))) ((v_termIssueAt 0) (Elab_dTypes.v_dtCtorType dtb__112)))
+  | B_dData_dList.C_List__x58__x58_ (dtb__112, dtb__113) -> (let issue = ((v_termIssueAt 0) (Elab_dTypes.v_dtCtorType dtb__112)) in (if (issue = "") then (v_ctorIssues dtb__113) else (String.concat "" [(Elab_dTypes.v_dtCtorName dtb__112); " ctor:"; issue])))
   | B_dData_dList.C_List_Nil -> ""
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 205 "Vuna/Compiler/Driver/Cache.vuna"
-let v_dataIssue = (fun (d : Elab_dTypes.t_DtData) -> ((fun kindIssue -> (if (kindIssue = "") then (v_ctorIssues (Elab_dTypes.v_dtDataCtors d)) else (String.concat "" [(Elab_dTypes.v_dtDataName d); " kind:"; kindIssue]))) ((v_termIssueAt 0) (Elab_dTypes.v_dtDataKind d))))
+let v_dataIssue = (fun (d : Elab_dTypes.t_DtData) -> (let kindIssue = ((v_termIssueAt 0) (Elab_dTypes.v_dtDataKind d)) in (if (kindIssue = "") then (v_ctorIssues (Elab_dTypes.v_dtDataCtors d)) else (String.concat "" [(Elab_dTypes.v_dtDataName d); " kind:"; kindIssue]))))
 
 # 218 "Vuna/Compiler/Driver/Cache.vuna"
 let rec v_datasIssue = (fun (mc0 : Elab_dTypes.t_DtData B_dData_dList.t_List) -> (match mc0 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__114, dtb__115) -> ((fun issue -> (if (issue = "") then (v_datasIssue dtb__115) else issue)) (v_dataIssue dtb__114))
+  | B_dData_dList.C_List__x58__x58_ (dtb__114, dtb__115) -> (let issue = (v_dataIssue dtb__114) in (if (issue = "") then (v_datasIssue dtb__115) else issue))
   | B_dData_dList.C_List_Nil -> ""
   | _ -> failwith "DT: impossible branch"
 ))
@@ -202,15 +202,15 @@ let rec v_datasIssue = (fun (mc0 : Elab_dTypes.t_DtData B_dData_dList.t_List) ->
 let v_bodyIssueAt = (fun (t : Core_dTerm.t_Term) -> (if ((B_dData_dList.v_length (Elab_dMeta.v_termMetasRuntime t)) > 0) then "meta" else (if (Core_dTerm.v_hasNegativeVar t) then "negative-index" else (if ((Core_dTerm.v_hasFreeTermVar 0) t) then "free-var" else ""))))
 
 # 231 "Vuna/Compiler/Driver/Cache.vuna"
-let v_defIssue = (fun (d : Elab_dTypes.t_DtDef) -> ((fun typeIssue -> (if (typeIssue = "") then (match (Elab_dTypes.v_dtDefBody d) with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__116) -> ((fun bodyIssue -> (if (bodyIssue = "") then "" else (String.concat "" [(Elab_dTypes.v_dtDefName d); " body:"; bodyIssue]))) (v_bodyIssueAt dtb__116))
+let v_defIssue = (fun (d : Elab_dTypes.t_DtDef) -> (let typeIssue = ((v_termIssueAt 0) (Elab_dTypes.v_dtDefType d)) in (if (typeIssue = "") then (match (Elab_dTypes.v_dtDefBody d) with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__116) -> (let bodyIssue = (v_bodyIssueAt dtb__116) in (if (bodyIssue = "") then "" else (String.concat "" [(Elab_dTypes.v_dtDefName d); " body:"; bodyIssue])))
   | B_dData_dMaybe.C_Maybe_Nothing -> ""
   | _ -> failwith "DT: impossible branch"
-) else (String.concat "" [(Elab_dTypes.v_dtDefName d); " type:"; typeIssue]))) ((v_termIssueAt 0) (Elab_dTypes.v_dtDefType d))))
+) else (String.concat "" [(Elab_dTypes.v_dtDefName d); " type:"; typeIssue]))))
 
 # 245 "Vuna/Compiler/Driver/Cache.vuna"
 let rec v_defsIssue = (fun (mc0 : Elab_dTypes.t_DtDef B_dData_dList.t_List) -> (match mc0 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__117, dtb__118) -> ((fun issue -> (if (issue = "") then (v_defsIssue dtb__118) else issue)) (v_defIssue dtb__117))
+  | B_dData_dList.C_List__x58__x58_ (dtb__117, dtb__118) -> (let issue = (v_defIssue dtb__117) in (if (issue = "") then (v_defsIssue dtb__118) else issue))
   | B_dData_dList.C_List_Nil -> ""
   | _ -> failwith "DT: impossible branch"
 ))
@@ -218,7 +218,7 @@ let rec v_defsIssue = (fun (mc0 : Elab_dTypes.t_DtDef B_dData_dList.t_List) -> (
 # 252 "Vuna/Compiler/Driver/Cache.vuna"
 let rec v_globalsIssue = (fun (mc0 : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__119, dtb__120) -> (match dtb__119 with
-  | { B_dData_dPair.f_Pair_first = dtb__121; B_dData_dPair.f_Pair_second = dtb__122 } -> ((fun issue -> (if (issue = "") then (v_globalsIssue dtb__120) else (String.concat "" [dtb__121; ":"; issue]))) ((v_termIssueAt 0) dtb__122))
+  | { B_dData_dPair.f_Pair_first = dtb__121; B_dData_dPair.f_Pair_second = dtb__122 } -> (let issue = ((v_termIssueAt 0) dtb__122) in (if (issue = "") then (v_globalsIssue dtb__120) else (String.concat "" [dtb__121; ":"; issue])))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dList.C_List_Nil -> ""
@@ -228,7 +228,7 @@ let rec v_globalsIssue = (fun (mc0 : (string, Core_dTerm.t_Term) B_dData_dPair.t
 # 276 "Vuna/Compiler/Driver/Cache.vuna"
 let rec v_teleIssueGo = (fun (mc0 : int) (mc1 : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__123, dtb__124) -> (match dtb__123 with
-  | { B_dData_dPair.f_Pair_first = dtb__125; B_dData_dPair.f_Pair_second = dtb__126 } -> ((fun issue -> (if (issue = "") then ((v_teleIssueGo (mc0 + 1)) dtb__124) else (String.concat "" [dtb__125; ":"; issue]))) ((v_termIssueAt mc0) dtb__126))
+  | { B_dData_dPair.f_Pair_first = dtb__125; B_dData_dPair.f_Pair_second = dtb__126 } -> (let issue = ((v_termIssueAt mc0) dtb__126) in (if (issue = "") then ((v_teleIssueGo (mc0 + 1)) dtb__124) else (String.concat "" [dtb__125; ":"; issue])))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dList.C_List_Nil -> ""
@@ -237,34 +237,34 @@ let rec v_teleIssueGo = (fun (mc0 : int) (mc1 : (string, Core_dTerm.t_Term) B_dD
 
 # 283 "Vuna/Compiler/Driver/Cache.vuna"
 let rec v_ctxIssues = (fun (mc0 : int) (mc1 : Core_dTerm.t_Term B_dData_dList.t_List) -> (match mc1 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__127, dtb__128) -> ((fun issue -> (if (issue = "") then ((v_ctxIssues mc0) dtb__128) else issue)) ((v_termIssueAt mc0) dtb__127))
+  | B_dData_dList.C_List__x58__x58_ (dtb__127, dtb__128) -> (let issue = ((v_termIssueAt mc0) dtb__127) in (if (issue = "") then ((v_ctxIssues mc0) dtb__128) else issue))
   | B_dData_dList.C_List_Nil -> ""
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 259 "Vuna/Compiler/Driver/Cache.vuna"
-let v_instIssue = (fun (i : Elab_dTypes.t_DtInst) -> ((fun nTele -> ((fun teleIssue -> (if (teleIssue <> "") then (String.concat "" [(Elab_dTypes.v_dtInstName i); " tele:"; teleIssue]) else ((fun ctxIssue -> (if (ctxIssue <> "") then (String.concat "" [(Elab_dTypes.v_dtInstName i); " ctx:"; ctxIssue]) else ((fun headIssue -> (if (headIssue = "") then "" else (String.concat "" [(Elab_dTypes.v_dtInstName i); " head:"; headIssue]))) ((v_termIssueAt nTele) (i).Elab_dTypes.f_DtInst_dtInstHead)))) ((v_ctxIssues nTele) (i).Elab_dTypes.f_DtInst_dtInstCtx)))) ((v_teleIssueGo 0) (i).Elab_dTypes.f_DtInst_dtInstTele))) (B_dData_dList.v_length (i).Elab_dTypes.f_DtInst_dtInstTele)))
+let v_instIssue = (fun (i : Elab_dTypes.t_DtInst) -> (let nTele = (B_dData_dList.v_length (i).Elab_dTypes.f_DtInst_dtInstTele) in (let teleIssue = ((v_teleIssueGo 0) (i).Elab_dTypes.f_DtInst_dtInstTele) in (if (teleIssue <> "") then (String.concat "" [(Elab_dTypes.v_dtInstName i); " tele:"; teleIssue]) else (let ctxIssue = ((v_ctxIssues nTele) (i).Elab_dTypes.f_DtInst_dtInstCtx) in (if (ctxIssue <> "") then (String.concat "" [(Elab_dTypes.v_dtInstName i); " ctx:"; ctxIssue]) else (let headIssue = ((v_termIssueAt nTele) (i).Elab_dTypes.f_DtInst_dtInstHead) in (if (headIssue = "") then "" else (String.concat "" [(Elab_dTypes.v_dtInstName i); " head:"; headIssue])))))))))
 
 # 290 "Vuna/Compiler/Driver/Cache.vuna"
 let rec v_instsIssue = (fun (mc0 : Elab_dTypes.t_DtInst B_dData_dList.t_List) -> (match mc0 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__129, dtb__130) -> ((fun issue -> (if (issue = "") then (v_instsIssue dtb__130) else issue)) (v_instIssue dtb__129))
+  | B_dData_dList.C_List__x58__x58_ (dtb__129, dtb__130) -> (let issue = (v_instIssue dtb__129) in (if (issue = "") then (v_instsIssue dtb__130) else issue))
   | B_dData_dList.C_List_Nil -> ""
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 297 "Vuna/Compiler/Driver/Cache.vuna"
-let v_classIssue = (fun (c : Elab_dTypes.t_DtClass) -> ((fun projIssue -> (if (projIssue <> "") then (String.concat "" [(Elab_dTypes.v_dtClassName c); " proj:"; projIssue]) else ((fun superIssue -> (if (superIssue <> "") then (String.concat "" [(Elab_dTypes.v_dtClassName c); " super:"; superIssue]) else ((fun fieldIssue -> (if (fieldIssue = "") then "" else (String.concat "" [(Elab_dTypes.v_dtClassName c); " field:"; fieldIssue]))) ((v_ctxIssues (B_dData_dList.v_length (c).Elab_dTypes.f_DtClass_dtClassParams)) (c).Elab_dTypes.f_DtClass_dtClassFieldTys)))) ((v_ctxIssues (B_dData_dList.v_length (c).Elab_dTypes.f_DtClass_dtClassParams)) (c).Elab_dTypes.f_DtClass_dtClassSupers)))) ((v_ctxIssues 0) ((B_dData_dList.v_map (fun (p : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair) -> (B_dData_dPair.v_secondOf p))) (c).Elab_dTypes.f_DtClass_dtClassMethods))))
+let v_classIssue = (fun (c : Elab_dTypes.t_DtClass) -> (let projIssue = ((v_ctxIssues 0) ((B_dData_dList.v_map (fun (p : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair) -> (B_dData_dPair.v_secondOf p))) (c).Elab_dTypes.f_DtClass_dtClassMethods)) in (if (projIssue <> "") then (String.concat "" [(Elab_dTypes.v_dtClassName c); " proj:"; projIssue]) else (let superIssue = ((v_ctxIssues (B_dData_dList.v_length (c).Elab_dTypes.f_DtClass_dtClassParams)) (c).Elab_dTypes.f_DtClass_dtClassSupers) in (if (superIssue <> "") then (String.concat "" [(Elab_dTypes.v_dtClassName c); " super:"; superIssue]) else (let fieldIssue = ((v_ctxIssues (B_dData_dList.v_length (c).Elab_dTypes.f_DtClass_dtClassParams)) (c).Elab_dTypes.f_DtClass_dtClassFieldTys) in (if (fieldIssue = "") then "" else (String.concat "" [(Elab_dTypes.v_dtClassName c); " field:"; fieldIssue]))))))))
 
 # 313 "Vuna/Compiler/Driver/Cache.vuna"
 let rec v_classesIssue = (fun (mc0 : Elab_dTypes.t_DtClass B_dData_dList.t_List) -> (match mc0 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__131, dtb__132) -> ((fun issue -> (if (issue = "") then (v_classesIssue dtb__132) else issue)) (v_classIssue dtb__131))
+  | B_dData_dList.C_List__x58__x58_ (dtb__131, dtb__132) -> (let issue = (v_classIssue dtb__131) in (if (issue = "") then (v_classesIssue dtb__132) else issue))
   | B_dData_dList.C_List_Nil -> ""
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 320 "Vuna/Compiler/Driver/Cache.vuna"
 let v_cachedProgramIssue = (fun (mc0 : t_CachedProgram) -> (match mc0 with
-  | { f_CachedProgram_cachedDatas = dtb__133; f_CachedProgram_cachedDefs = dtb__134; f_CachedProgram_cachedGlobals = dtb__135; f_CachedProgram_cachedInsts = dtb__136; f_CachedProgram_cachedClasses = dtb__137; f_CachedProgram_cachedOpaque = dtb__138 } -> ((fun datasI -> ((fun defsI -> ((fun globalsI -> ((fun instsI -> ((fun classesI -> (if (datasI <> "") then ("datas " ^ datasI) else (if (defsI <> "") then ("defs " ^ defsI) else (if (globalsI <> "") then ("globals " ^ globalsI) else (if (instsI <> "") then ("insts " ^ instsI) else (if (classesI <> "") then ("classes " ^ classesI) else "")))))) (v_classesIssue dtb__137))) (v_instsIssue dtb__136))) (v_globalsIssue dtb__135))) (v_defsIssue dtb__134))) (v_datasIssue dtb__133))
+  | { f_CachedProgram_cachedDatas = dtb__133; f_CachedProgram_cachedDefs = dtb__134; f_CachedProgram_cachedGlobals = dtb__135; f_CachedProgram_cachedInsts = dtb__136; f_CachedProgram_cachedClasses = dtb__137; f_CachedProgram_cachedOpaque = dtb__138 } -> (let datasI = (v_datasIssue dtb__133) in (let defsI = (v_defsIssue dtb__134) in (let globalsI = (v_globalsIssue dtb__135) in (let instsI = (v_instsIssue dtb__136) in (let classesI = (v_classesIssue dtb__137) in (if (datasI <> "") then ("datas " ^ datasI) else (if (defsI <> "") then ("defs " ^ defsI) else (if (globalsI <> "") then ("globals " ^ globalsI) else (if (instsI <> "") then ("insts " ^ instsI) else (if (classesI <> "") then ("classes " ^ classesI) else ""))))))))))
   | _ -> failwith "DT: impossible branch"
 ))
 
@@ -403,11 +403,11 @@ let v_decGlobalPair = (fun (fuel : int) (c : Base_dBytes.t_Cur) -> ((Base_dBytes
 let v_decCachedProgram = (fun (fuel : int) (c : Base_dBytes.t_Cur) -> ((Base_dBytes.v_thenPair (((Base_dBytes.v_decList Elab_dCanonical.v_decDtData) (fuel - 1)) c)) (fun (datas : Elab_dTypes.t_DtData B_dData_dList.t_List) (b1 : Base_dBytes.t_Cur) -> ((Base_dBytes.v_thenPair (((Base_dBytes.v_decList Elab_dCanonical.v_decDtDef) (fuel - 1)) b1)) (fun (defs : Elab_dTypes.t_DtDef B_dData_dList.t_List) (b2 : Base_dBytes.t_Cur) -> ((Base_dBytes.v_thenPair (((Base_dBytes.v_decList v_decGlobalPair) (fuel - 1)) b2)) (fun (globals : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List) (b3 : Base_dBytes.t_Cur) -> ((Base_dBytes.v_thenPair (((Base_dBytes.v_decList Elab_dCanonical.v_decDtInst) (fuel - 1)) b3)) (fun (insts : Elab_dTypes.t_DtInst B_dData_dList.t_List) (b4 : Base_dBytes.t_Cur) -> ((Base_dBytes.v_thenPair (((Base_dBytes.v_decList Elab_dCanonical.v_decDtClass) (fuel - 1)) b4)) (fun (classes : Elab_dTypes.t_DtClass B_dData_dList.t_List) (b5 : Base_dBytes.t_Cur) -> ((Base_dBytes.v_thenPair (((Base_dBytes.v_decList Base_dBytes.v_decStr) (fuel - 1)) b5)) (fun (names : string B_dData_dList.t_List) (b6 : Base_dBytes.t_Cur) -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = { f_CachedProgram_cachedDatas = datas; f_CachedProgram_cachedDefs = defs; f_CachedProgram_cachedGlobals = globals; f_CachedProgram_cachedInsts = insts; f_CachedProgram_cachedClasses = classes; f_CachedProgram_cachedOpaque = names }; B_dData_dPair.f_Pair_second = b6 })))))))))))))))
 
 # 488 "Vuna/Compiler/Driver/Cache.vuna"
-let v_decCachedProgramComplete = (fun (s : string) -> ((fun nd_uscrut1 -> (match nd_uscrut1 with
+let v_decCachedProgramComplete = (fun (s : string) -> (let nd_uscrut1 = ((v_decCachedProgram (bi_strLength s)) (Base_dBytes.v_curOf s)) in (match nd_uscrut1 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__247) -> (match dtb__247 with
   | { B_dData_dPair.f_Pair_first = dtb__248; B_dData_dPair.f_Pair_second = dtb__249 } -> (if (Base_dBytes.v_curAtEnd dtb__249) then (B_dData_dMaybe.C_Maybe_Just (dtb__248)) else B_dData_dMaybe.C_Maybe_Nothing)
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
-)) ((v_decCachedProgram (bi_strLength s)) (Base_dBytes.v_curOf s))))
+)))

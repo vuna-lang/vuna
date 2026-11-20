@@ -33,21 +33,21 @@ let v_idxIsNatSuccHead = (fun (mc0 : Core_dTerm.t_Value) -> (match mc0 with
 
 # 112 "Vuna/Compiler/Elab/Case.vuna"
 let rec v_idxNatPrefixGo = (fun (fuel : int) (v : Core_dTerm.t_Value) -> (if (fuel <= 0) then 100000 else (match v with
-  | Core_dTerm.C_Value_VCon (dtb__12, dtb__13) -> (if (dtb__12 = Base_dIntrinsics.v_natSuccCtor) then ((fun nd_uscrut4 -> (match nd_uscrut4 with
+  | Core_dTerm.C_Value_VCon (dtb__12, dtb__13) -> (if (dtb__12 = Base_dIntrinsics.v_natSuccCtor) then (let nd_uscrut4 = dtb__13 in (match nd_uscrut4 with
   | B_dData_dList.C_List__x58__x58_ (dtb__14, dtb__15) -> (match dtb__15 with
   | B_dData_dList.C_List_Nil -> (1 + ((v_idxNatPrefixGo (fuel - 1)) dtb__14))
   | _ -> 0
 )
   | _ -> 0
-)) dtb__13) else 0)
+)) else 0)
   | Core_dTerm.C_Value_VNeutral (dtb__16) -> (match dtb__16 with
-  | Core_dTerm.C_Neutral_NGlobal (dtb__17, dtb__18) -> (if (dtb__17 = Base_dIntrinsics.v_natSuccCtor) then ((fun nd_uscrut5 -> (match nd_uscrut5 with
+  | Core_dTerm.C_Neutral_NGlobal (dtb__17, dtb__18) -> (if (dtb__17 = Base_dIntrinsics.v_natSuccCtor) then (let nd_uscrut5 = dtb__18 in (match nd_uscrut5 with
   | B_dData_dList.C_List__x58__x58_ (dtb__19, dtb__20) -> (match dtb__20 with
   | B_dData_dList.C_List_Nil -> (1 + ((v_idxNatPrefixGo (fuel - 1)) dtb__19))
   | _ -> 0
 )
   | _ -> 0
-)) dtb__18) else 0)
+)) else 0)
   | _ -> 0
 )
   | Core_dTerm.C_Value_VApp (dtb__21, dtb__22) -> (if (v_idxIsNatSuccHead dtb__21) then (1 + ((v_idxNatPrefixGo (fuel - 1)) dtb__22)) else 0)
@@ -59,7 +59,7 @@ let v_idxNatPrefixDepth = (fun (v : Core_dTerm.t_Value) -> ((v_idxNatPrefixGo 10
 
 # 72 "Vuna/Compiler/Elab/Case.vuna"
 let rec v_idxNatDepthOfList = (fun (mc0 : Core_dTerm.t_Value B_dData_dList.t_List) -> (match mc0 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__23, dtb__24) -> ((fun d -> ((fun r -> (if (d >= r) then d else r)) (v_idxNatDepthOfList dtb__24))) (v_idxNatDepthNear dtb__23))
+  | B_dData_dList.C_List__x58__x58_ (dtb__23, dtb__24) -> (let d = (v_idxNatDepthNear dtb__23) in (let r = (v_idxNatDepthOfList dtb__24) in (if (d >= r) then d else r)))
   | B_dData_dList.C_List_Nil -> 0
   | _ -> failwith "DT: impossible branch"
 ))
@@ -76,7 +76,7 @@ and v_idxNatDepthNear = (fun (v : Core_dTerm.t_Value) -> (if (v_idxIsNatHead v) 
 )))
 
 # 63 "Vuna/Compiler/Elab/Case.vuna"
-let v_idxFuelFor = (fun (xs : Core_dTerm.t_Value B_dData_dList.t_List) (ys : Core_dTerm.t_Value B_dData_dList.t_List) -> ((fun need -> (if (need > v_idxFuelMax) then v_idxFuelMax else need)) (512 + (4 * ((v_idxNatDepthOfList xs) + (v_idxNatDepthOfList ys))))))
+let v_idxFuelFor = (fun (xs : Core_dTerm.t_Value B_dData_dList.t_List) (ys : Core_dTerm.t_Value B_dData_dList.t_List) -> (let need = (512 + (4 * ((v_idxNatDepthOfList xs) + (v_idxNatDepthOfList ys)))) in (if (need > v_idxFuelMax) then v_idxFuelMax else need)))
 
 # 201 "Vuna/Compiler/Elab/Case.vuna"
 let v_occursFreshLevel = (fun (depth : int) (lvl : int) -> (if (depth = lvl) then (lvl + 1) else depth))
@@ -135,10 +135,10 @@ and v_unifyIdxListGo = (fun (mc0 : Elab_dTypes.t_Ec) (mc1 : (int, Core_dTerm.t_V
   | _ -> failwith "DT: impossible branch"
 ))
 # 147 "Vuna/Compiler/Elab/Case.vuna"
-and v_unifyIdx = (fun (ec : Elab_dTypes.t_Ec) (acc : (int, Core_dTerm.t_Value) B_dData_dPair.t_Pair B_dData_dList.t_List) (depth : int) (fuel : int) (a : Core_dTerm.t_Value) (b : Core_dTerm.t_Value) -> (if (fuel <= 0) then (Base_dDiag.C_Check_ErrC (((Base_dDiagnostics_dTc.v_tcMsg Base_dDiagnostics_dTc.C_TcErr_IndexFuel) B_dData_dVec.C_Vec_Nil))) else ((fun a2 -> ((fun b2 -> ((fun nd_uscrut8 -> (match nd_uscrut8 with
+and v_unifyIdx = (fun (ec : Elab_dTypes.t_Ec) (acc : (int, Core_dTerm.t_Value) B_dData_dPair.t_Pair B_dData_dList.t_List) (depth : int) (fuel : int) (a : Core_dTerm.t_Value) (b : Core_dTerm.t_Value) -> (if (fuel <= 0) then (Base_dDiag.C_Check_ErrC (((Base_dDiagnostics_dTc.v_tcMsg Base_dDiagnostics_dTc.C_TcErr_IndexFuel) B_dData_dVec.C_Vec_Nil))) else (let a2 = ((((Core_dEval.v_force (Elab_dTypes.v_ecDefTbl ec)) (Elab_dTypes.v_ecSolsP ec)) Core_dTerm.v_defaultFuel) (((Elab_dTypes.v_refineValue acc) Core_dTerm.v_defaultFuel) a)) in (let b2 = ((((Core_dEval.v_force (Elab_dTypes.v_ecDefTbl ec)) (Elab_dTypes.v_ecSolsP ec)) Core_dTerm.v_defaultFuel) (((Elab_dTypes.v_refineValue acc) Core_dTerm.v_defaultFuel) b)) in (let nd_uscrut8 = a2 in (match nd_uscrut8 with
   | Core_dTerm.C_Value_VNeutral (dtb__78) -> (match dtb__78 with
   | Core_dTerm.C_Neutral_NVar (dtb__79, dtb__80, dtb__81) -> (match dtb__81 with
-  | B_dData_dList.C_List_Nil -> ((fun nd_uscrut14 -> (match nd_uscrut14 with
+  | B_dData_dList.C_List_Nil -> (let nd_uscrut14 = b2 in (match nd_uscrut14 with
   | Core_dTerm.C_Value_VNeutral (dtb__82) -> (match dtb__82 with
   | Core_dTerm.C_Neutral_NVar (dtb__83, dtb__84, dtb__85) -> (match dtb__85 with
   | B_dData_dList.C_List_Nil -> (if (dtb__80 = dtb__84) then (Base_dDiag.C_Check_OkC (acc)) else (if (dtb__80 < dtb__84) then (if ((((v_occursLevel v_occursFuel) depth) dtb__84) a2) then v_unifyErr else (Base_dDiag.C_Check_OkC ((B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = dtb__84; B_dData_dPair.f_Pair_second = a2 }, acc))))) else (if ((((v_occursLevel v_occursFuel) depth) dtb__80) b2) then v_unifyErr else (Base_dDiag.C_Check_OkC ((B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = dtb__80; B_dData_dPair.f_Pair_second = b2 }, acc)))))))
@@ -147,8 +147,8 @@ and v_unifyIdx = (fun (ec : Elab_dTypes.t_Ec) (acc : (int, Core_dTerm.t_Value) B
   | _ -> (if ((((v_occursLevel v_occursFuel) depth) dtb__80) b2) then v_unifyErr else (Base_dDiag.C_Check_OkC ((B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = dtb__80; B_dData_dPair.f_Pair_second = b2 }, acc)))))
 )
   | _ -> (if ((((v_occursLevel v_occursFuel) depth) dtb__80) b2) then v_unifyErr else (Base_dDiag.C_Check_OkC ((B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = dtb__80; B_dData_dPair.f_Pair_second = b2 }, acc)))))
-)) b2)
-  | _ -> ((fun nd_uscrut13 -> (match nd_uscrut13 with
+))
+  | _ -> (let nd_uscrut13 = b2 in (match nd_uscrut13 with
   | Core_dTerm.C_Value_VNeutral (dtb__86) -> (match dtb__86 with
   | Core_dTerm.C_Neutral_NVar (dtb__87, dtb__88, dtb__89) -> (match dtb__89 with
   | B_dData_dList.C_List_Nil -> (if ((((v_occursLevel v_occursFuel) depth) dtb__88) a2) then v_unifyErr else (Base_dDiag.C_Check_OkC ((B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = dtb__88; B_dData_dPair.f_Pair_second = a2 }, acc)))))
@@ -157,9 +157,9 @@ and v_unifyIdx = (fun (ec : Elab_dTypes.t_Ec) (acc : (int, Core_dTerm.t_Value) B
   | _ -> ((((((v_unifyIdxRigid ec) acc) depth) (fuel - 1)) a2) b2)
 )
   | _ -> ((((((v_unifyIdxRigid ec) acc) depth) (fuel - 1)) a2) b2)
-)) b2)
+))
 )
-  | _ -> ((fun nd_uscrut10 -> (match nd_uscrut10 with
+  | _ -> (let nd_uscrut10 = b2 in (match nd_uscrut10 with
   | Core_dTerm.C_Value_VNeutral (dtb__90) -> (match dtb__90 with
   | Core_dTerm.C_Neutral_NVar (dtb__91, dtb__92, dtb__93) -> (match dtb__93 with
   | B_dData_dList.C_List_Nil -> (if ((((v_occursLevel v_occursFuel) depth) dtb__92) a2) then v_unifyErr else (Base_dDiag.C_Check_OkC ((B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = dtb__92; B_dData_dPair.f_Pair_second = a2 }, acc)))))
@@ -168,9 +168,9 @@ and v_unifyIdx = (fun (ec : Elab_dTypes.t_Ec) (acc : (int, Core_dTerm.t_Value) B
   | _ -> ((((((v_unifyIdxRigid ec) acc) depth) (fuel - 1)) a2) b2)
 )
   | _ -> ((((((v_unifyIdxRigid ec) acc) depth) (fuel - 1)) a2) b2)
-)) b2)
+))
 )
-  | _ -> ((fun nd_uscrut9 -> (match nd_uscrut9 with
+  | _ -> (let nd_uscrut9 = b2 in (match nd_uscrut9 with
   | Core_dTerm.C_Value_VNeutral (dtb__94) -> (match dtb__94 with
   | Core_dTerm.C_Neutral_NVar (dtb__95, dtb__96, dtb__97) -> (match dtb__97 with
   | B_dData_dList.C_List_Nil -> (if ((((v_occursLevel v_occursFuel) depth) dtb__96) a2) then v_unifyErr else (Base_dDiag.C_Check_OkC ((B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = dtb__96; B_dData_dPair.f_Pair_second = a2 }, acc)))))
@@ -179,10 +179,10 @@ and v_unifyIdx = (fun (ec : Elab_dTypes.t_Ec) (acc : (int, Core_dTerm.t_Value) B
   | _ -> ((((((v_unifyIdxRigid ec) acc) depth) (fuel - 1)) a2) b2)
 )
   | _ -> ((((((v_unifyIdxRigid ec) acc) depth) (fuel - 1)) a2) b2)
-)) b2)
-)) a2)) ((((Core_dEval.v_force (Elab_dTypes.v_ecDefTbl ec)) (Elab_dTypes.v_ecSolsP ec)) Core_dTerm.v_defaultFuel) (((Elab_dTypes.v_refineValue acc) Core_dTerm.v_defaultFuel) b)))) ((((Core_dEval.v_force (Elab_dTypes.v_ecDefTbl ec)) (Elab_dTypes.v_ecSolsP ec)) Core_dTerm.v_defaultFuel) (((Elab_dTypes.v_refineValue acc) Core_dTerm.v_defaultFuel) a)))))
+))
+))))))
 # 215 "Vuna/Compiler/Elab/Case.vuna"
-and v_unifyIdxRigid = (fun (ec : Elab_dTypes.t_Ec) (acc : (int, Core_dTerm.t_Value) B_dData_dPair.t_Pair B_dData_dList.t_List) (depth : int) (fuel : int) (a : Core_dTerm.t_Value) (b : Core_dTerm.t_Value) -> (if (fuel <= 0) then v_unifyErr else ((fun nd_uscrut6 -> (match nd_uscrut6 with
+and v_unifyIdxRigid = (fun (ec : Elab_dTypes.t_Ec) (acc : (int, Core_dTerm.t_Value) B_dData_dPair.t_Pair B_dData_dList.t_List) (depth : int) (fuel : int) (a : Core_dTerm.t_Value) (b : Core_dTerm.t_Value) -> (if (fuel <= 0) then v_unifyErr else (let nd_uscrut6 = a in (match nd_uscrut6 with
   | Core_dTerm.C_Value_VBool (dtb__98) -> (match b with
   | Core_dTerm.C_Value_VBool (dtb__99) -> (if (((B_dTrait_dEq.v__x61__x61_ B_dTrait_dEq.v_Eq_uBase_uData_uBool_uBool) dtb__98) dtb__99) then (Base_dDiag.C_Check_OkC (acc)) else v_unifyErr)
   | _ -> v_unifyErr
@@ -204,13 +204,13 @@ and v_unifyIdxRigid = (fun (ec : Elab_dTypes.t_Ec) (acc : (int, Core_dTerm.t_Val
   | _ -> v_unifyErr
 )
   | Core_dTerm.C_Value_VNeutral (dtb__108) -> (match dtb__108 with
-  | Core_dTerm.C_Neutral_NGlobal (dtb__109, dtb__110) -> ((fun nd_uscrut10 -> (match nd_uscrut10 with
+  | Core_dTerm.C_Neutral_NGlobal (dtb__109, dtb__110) -> (let nd_uscrut10 = b in (match nd_uscrut10 with
   | Core_dTerm.C_Value_VNeutral (dtb__111) -> (match dtb__111 with
   | Core_dTerm.C_Neutral_NGlobal (dtb__112, dtb__113) -> (if (dtb__109 = dtb__112) then ((((((v_unifyIdxList ec) acc) depth) (fuel - 1)) dtb__110) dtb__113) else (((((v_unifyIdxConv ec) acc) depth) a) b))
   | _ -> (((((v_unifyIdxConv ec) acc) depth) a) b)
 )
   | _ -> (((((v_unifyIdxConv ec) acc) depth) a) b)
-)) b)
+))
   | _ -> (((((v_unifyIdxConv ec) acc) depth) a) b)
 )
   | Core_dTerm.C_Value_VCon (dtb__114, dtb__115) -> (match b with
@@ -218,7 +218,7 @@ and v_unifyIdxRigid = (fun (ec : Elab_dTypes.t_Ec) (acc : (int, Core_dTerm.t_Val
   | _ -> v_unifyErr
 )
   | _ -> (((((v_unifyIdxConv ec) acc) depth) a) b)
-)) a)))
+))))
 
 # 60 "Vuna/Compiler/Elab/Case.vuna"
 let v_unifyIdxListSized = (fun (ec : Elab_dTypes.t_Ec) (acc : (int, Core_dTerm.t_Value) B_dData_dPair.t_Pair B_dData_dList.t_List) (depth : int) (xs : Core_dTerm.t_Value B_dData_dList.t_List) (ys : Core_dTerm.t_Value B_dData_dList.t_List) -> ((((((v_unifyIdxList ec) acc) depth) ((v_idxFuelFor xs) ys)) xs) ys))
@@ -257,7 +257,7 @@ and v_isRigidVal = (fun (mc0 : Core_dTerm.t_Value) -> (match mc0 with
 
 # 375 "Vuna/Compiler/Elab/Case.vuna"
 let rec v_bindCtorGo = (fun (ctx : Elab_dTypes.t_Ctx) (ty : Core_dTerm.t_Term) (subpats : Frontend_dRast.t_Pat B_dData_dList.t_List) (acc : Core_dTerm.t_Binder B_dData_dList.t_List) -> (match ty with
-  | Core_dTerm.C_Term_TPi (dtb__132, dtb__133, dtb__134, dtb__135, dtb__136) -> ((fun domVal -> (if dtb__133 then ((fun famName -> ((fun ctx2 -> ((((v_bindCtorGo ctx2) dtb__136) subpats) (B_dData_dList.C_List__x58__x58_ ((Core_dTerm.v_binderOfPair { B_dData_dPair.f_Pair_first = famName; B_dData_dPair.f_Pair_second = Core_dTerm.C_Rig_Rig0 }), acc)))) (((Elab_dTypes.v_ctxBindValue famName) domVal) ctx))) (dtb__132 ^ "#fam")) else (match subpats with
+  | Core_dTerm.C_Term_TPi (dtb__132, dtb__133, dtb__134, dtb__135, dtb__136) -> (let domVal = ((Core_dEval.v_eval (Elab_dTypes.v_ctxEnv ctx)) dtb__135) in (if dtb__133 then (let famName = (dtb__132 ^ "#fam") in (let ctx2 = (((Elab_dTypes.v_ctxBindValue famName) domVal) ctx) in ((((v_bindCtorGo ctx2) dtb__136) subpats) (B_dData_dList.C_List__x58__x58_ ((Core_dTerm.v_binderOfPair { B_dData_dPair.f_Pair_first = famName; B_dData_dPair.f_Pair_second = Core_dTerm.C_Rig_Rig0 }), acc))))) else (match subpats with
   | B_dData_dList.C_List_Nil -> (Base_dDiag.C_Check_ErrC (((Base_dDiagnostics_dTc.v_tcMsg Base_dDiagnostics_dTc.C_TcErr_CaseBranchTooFewArgs) B_dData_dVec.C_Vec_Nil)))
   | B_dData_dList.C_List__x58__x58_ (dtb__137, dtb__138) -> (match dtb__137 with
   | Frontend_dRast.C_Pat_PVar (dtb__139, dtb__140) -> ((((((((v_bindCtorField ctx) dtb__134) domVal) dtb__136) dtb__139) ((Base_dSource.v_spanAtName dtb__139) dtb__140)) dtb__138) acc)
@@ -265,11 +265,11 @@ let rec v_bindCtorGo = (fun (ctx : Elab_dTypes.t_Ctx) (ty : Core_dTerm.t_Term) (
   | _ -> ((Base_dDiagnostics_dTc.v_tcErr0 (Frontend_dRast.v_patSpan dtb__137)) Base_dDiagnostics_dTc.C_TcErr_NestedPatterns)
 )
   | _ -> failwith "DT: impossible branch"
-))) ((Core_dEval.v_eval (Elab_dTypes.v_ctxEnv ctx)) dtb__135))
+)))
   | _ -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = ctx; B_dData_dPair.f_Pair_second = { B_dData_dPair.f_Pair_first = (B_dData_dList.v_reverse acc); B_dData_dPair.f_Pair_second = subpats } }))
 ))
 # 397 "Vuna/Compiler/Elab/Case.vuna"
-and v_bindCtorField = (fun (ctx : Elab_dTypes.t_Ctx) (rig : Core_dTerm.t_Rig) (domVal : Core_dTerm.t_Value) (cod : Core_dTerm.t_Term) (binderName : string) (binderSp : Base_dSource.t_Span) (rest : Frontend_dRast.t_Pat B_dData_dList.t_List) (acc : Core_dTerm.t_Binder B_dData_dList.t_List) -> ((fun ctx2 -> ((((v_bindCtorGo ctx2) cod) rest) (B_dData_dList.C_List__x58__x58_ ({ Core_dTerm.f_Binder_binderName = binderName; Core_dTerm.f_Binder_binderRig = rig; Core_dTerm.f_Binder_binderSpan = binderSp }, acc)))) (((Elab_dTypes.v_ctxBindValue binderName) domVal) ctx)))
+and v_bindCtorField = (fun (ctx : Elab_dTypes.t_Ctx) (rig : Core_dTerm.t_Rig) (domVal : Core_dTerm.t_Value) (cod : Core_dTerm.t_Term) (binderName : string) (binderSp : Base_dSource.t_Span) (rest : Frontend_dRast.t_Pat B_dData_dList.t_List) (acc : Core_dTerm.t_Binder B_dData_dList.t_List) -> (let ctx2 = (((Elab_dTypes.v_ctxBindValue binderName) domVal) ctx) in ((((v_bindCtorGo ctx2) cod) rest) (B_dData_dList.C_List__x58__x58_ ({ Core_dTerm.f_Binder_binderName = binderName; Core_dTerm.f_Binder_binderRig = rig; Core_dTerm.f_Binder_binderSpan = binderSp }, acc)))))
 
 # 372 "Vuna/Compiler/Elab/Case.vuna"
 let v_bindCtorTele = (fun (ctx : Elab_dTypes.t_Ctx) (ty : Core_dTerm.t_Term) (subpats : Frontend_dRast.t_Pat B_dData_dList.t_List) -> ((((v_bindCtorGo ctx) ty) subpats) B_dData_dList.C_List_Nil))
@@ -291,7 +291,7 @@ let v_ctorResultTerms = (fun (c : Elab_dTypes.t_DtCtor) -> (match (Elab_dMeta.v_
 ))
 
 # 409 "Vuna/Compiler/Elab/Case.vuna"
-let v_ctorResultVals = (fun (c : Elab_dTypes.t_DtCtor) (base : int) -> ((fun tele -> ((fun env -> ((B_dData_dList.v_map (fun (t : Core_dTerm.t_Term) -> ((Core_dEval.v_eval env) t))) (v_ctorResultTerms c))) (B_dData_dList.v_reverse (((v_freshTeleVals tele) base) 0)))) (Elab_dTypes.v_dtCtorTelescope c)))
+let v_ctorResultVals = (fun (c : Elab_dTypes.t_DtCtor) (base : int) -> (let tele = (Elab_dTypes.v_dtCtorTelescope c) in (let env = (B_dData_dList.v_reverse (((v_freshTeleVals tele) base) 0)) in ((B_dData_dList.v_map (fun (t : Core_dTerm.t_Term) -> ((Core_dEval.v_eval env) t))) (v_ctorResultTerms c)))))
 
 # 359 "Vuna/Compiler/Elab/Case.vuna"
 let rec v_allCtorsUnsatisfiableGo = (fun (mc0 : Elab_dTypes.t_Ec) (mc1 : Elab_dTypes.t_DtCtor B_dData_dList.t_List) (mc2 : Core_dTerm.t_Value B_dData_dList.t_List) (mc3 : int) -> (match mc1 with
@@ -340,7 +340,7 @@ let v_branchAfterUnify = (fun (ec : Elab_dTypes.t_Ec) (branchCtx : Elab_dTypes.t
 let v_ctorResultValsIn = (fun (ctx : Elab_dTypes.t_Ctx) (c : Elab_dTypes.t_DtCtor) -> ((B_dData_dList.v_map (fun (t : Core_dTerm.t_Term) -> ((Elab_dTypes.v_evalCtx ctx) t))) (v_ctorResultTerms c)))
 
 # 284 "Vuna/Compiler/Elab/Case.vuna"
-let v_branchVerdict = (fun (ctx : Elab_dTypes.t_Ctx) (ec : Elab_dTypes.t_Ec) (idxs : Core_dTerm.t_Value B_dData_dList.t_List) (ctor : Elab_dTypes.t_DtCtor) -> ((Base_dCommon.v_bind (((v_bindCtorTele ctx) (Elab_dTypes.v_dtCtorType ctor)) (v_wildArgs (v_ctorExplicitArity (Elab_dTypes.v_dtCtorType ctor))))) (fun (p : (Elab_dTypes.t_Ctx, (Core_dTerm.t_Binder B_dData_dList.t_List, Frontend_dRast.t_Pat B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair) -> ((fun nd_uscrut5 -> (match nd_uscrut5 with
+let v_branchVerdict = (fun (ctx : Elab_dTypes.t_Ctx) (ec : Elab_dTypes.t_Ec) (idxs : Core_dTerm.t_Value B_dData_dList.t_List) (ctor : Elab_dTypes.t_DtCtor) -> ((Base_dCommon.v_bind (((v_bindCtorTele ctx) (Elab_dTypes.v_dtCtorType ctor)) (v_wildArgs (v_ctorExplicitArity (Elab_dTypes.v_dtCtorType ctor))))) (fun (p : (Elab_dTypes.t_Ctx, (Core_dTerm.t_Binder B_dData_dList.t_List, Frontend_dRast.t_Pat B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair) -> (let nd_uscrut5 = p in (match nd_uscrut5 with
   | { B_dData_dPair.f_Pair_first = dtb__160; B_dData_dPair.f_Pair_second = dtb__161 } -> (match dtb__161 with
   | { B_dData_dPair.f_Pair_first = dtb__162; B_dData_dPair.f_Pair_second = dtb__163 } -> (if (Elab_dMeta.v_nonEmpty dtb__163) then (Base_dDiag.v_icInternal "case coverage: constructor telescope arity mismatch") else (match (((((v_unifyIdxListSized ec) B_dData_dList.C_List_Nil) (Elab_dTypes.v_ctxDepth dtb__160)) ((v_ctorResultValsIn dtb__160) ctor)) ((B_dData_dList.v_map (fun (v : Core_dTerm.t_Value) -> (((Elab_dTypes.v_refineValue B_dData_dList.C_List_Nil) Core_dTerm.v_defaultFuel) v))) idxs)) with
   | Base_dDiag.C_Check_ErrC (dtb__164) -> (if ((dtb__164).Base_dDiag.f_Diagnostic_diagCode = (Base_dDiagnostics_dTc.v_tcCode Base_dDiagnostics_dTc.C_TcErr_IndexFuel)) then (Base_dDiag.C_Check_OkC (C_BranchVerdict_BranchOk)) else (Base_dDiag.C_Check_OkC (C_BranchVerdict_BranchImpossibleIndex)))
@@ -350,7 +350,7 @@ let v_branchVerdict = (fun (ctx : Elab_dTypes.t_Ctx) (ec : Elab_dTypes.t_Ec) (id
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
-)) p))))
+)))))
 
 # 300 "Vuna/Compiler/Elab/Case.vuna"
 let v_branchReachable = (fun (ctx : Elab_dTypes.t_Ctx) (ec : Elab_dTypes.t_Ec) (idxs : Core_dTerm.t_Value B_dData_dList.t_List) (ctor : Elab_dTypes.t_DtCtor) -> ((Base_dCommon.v_bind ((((v_branchVerdict ctx) ec) idxs) ctor)) (fun (v : t_BranchVerdict) -> (Base_dDiag.C_Check_OkC ((v_branchIsReachable v))))))
@@ -363,13 +363,13 @@ let v_ctorValueIn = (fun (ctx : Elab_dTypes.t_Ctx) (c : Elab_dTypes.t_DtCtor) ->
 
 # 448 "Vuna/Compiler/Elab/Case.vuna"
 let v_reflectScrutinee = (fun (ec : Elab_dTypes.t_Ec) (depth : int) (refs : (int, Core_dTerm.t_Value) B_dData_dPair.t_Pair B_dData_dList.t_List) (ctorVal : Core_dTerm.t_Value) (scrutVal : Core_dTerm.t_Value) -> (match ((((Core_dEval.v_force (Elab_dTypes.v_ecDefTbl ec)) (Elab_dTypes.v_ecSolsP ec)) Core_dTerm.v_defaultFuel) (((Elab_dTypes.v_refineValue refs) Core_dTerm.v_defaultFuel) scrutVal)) with
-  | Core_dTerm.C_Value_VNeutral (dtb__166) -> ((fun nd_uscrut6 -> (match nd_uscrut6 with
+  | Core_dTerm.C_Value_VNeutral (dtb__166) -> (let nd_uscrut6 = dtb__166 in (match nd_uscrut6 with
   | Core_dTerm.C_Neutral_NVar (dtb__167, dtb__168, dtb__169) -> (match dtb__169 with
   | B_dData_dList.C_List_Nil -> ((((((v_unifyIdx ec) refs) depth) Core_dTerm.v_defaultFuel) (Core_dTerm.C_Value_VNeutral (dtb__166))) ctorVal)
   | _ -> (Base_dDiag.C_Check_OkC (refs))
 )
   | _ -> (Base_dDiag.C_Check_OkC (refs))
-)) dtb__166)
+))
   | _ -> (Base_dDiag.C_Check_OkC (refs))
 ))
 
@@ -539,16 +539,16 @@ let v_removeBranchSuggest = (fun (title : string) (patSpan : Base_dSource.t_Span
 # 556 "Vuna/Compiler/Elab/Case.vuna"
 let v_checkCatchAll = (fun (mc0 : Elab_dTypes.t_Ec) (mc1 : (Frontend_dRast.t_Pat, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc2 : (Frontend_dRast.t_Pat, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair) (mc3 : (Frontend_dRast.t_Pat, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc4 : Base_dSource.t_Span) -> (match mc3 with
   | B_dData_dList.C_List_Nil -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = 0; B_dData_dPair.f_Pair_second = mc0 }))
-  | _ -> (if (v_hasLitHead mc3) then ((fun ec1 -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = 0; B_dData_dPair.f_Pair_second = ec1 }))) ((((Elab_dUsage.v_warnAt0Mod mc0) (((v_removeBranchSuggest "remove unreachable branch") mc4) (B_dData_dPair.v_secondOf mc2))) mc4) Base_dDiagnostics_dWarning.C_WarnErr_WarnBranchAfterCatchAll)) else ((Base_dDiagnostics_dTc.v_tcErr0 mc4) Base_dDiagnostics_dTc.C_TcErr_CatchAllNotLast))
+  | _ -> (if (v_hasLitHead mc3) then (let ec1 = ((((Elab_dUsage.v_warnAt0Mod mc0) (((v_removeBranchSuggest "remove unreachable branch") mc4) (B_dData_dPair.v_secondOf mc2))) mc4) Base_dDiagnostics_dWarning.C_WarnErr_WarnBranchAfterCatchAll) in (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = 0; B_dData_dPair.f_Pair_second = ec1 }))) else ((Base_dDiagnostics_dTc.v_tcErr0 mc4) Base_dDiagnostics_dTc.C_TcErr_CatchAllNotLast))
 ))
 
 # 521 "Vuna/Compiler/Elab/Case.vuna"
-let rec v_checkCaseAltsGo = (fun (ec : Elab_dTypes.t_Ec) (prevs : (Frontend_dRast.t_Pat, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) (alts : (Frontend_dRast.t_Pat, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) -> ((fun nd_uscrut3 -> (match nd_uscrut3 with
+let rec v_checkCaseAltsGo = (fun (ec : Elab_dTypes.t_Ec) (prevs : (Frontend_dRast.t_Pat, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) (alts : (Frontend_dRast.t_Pat, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (let nd_uscrut3 = alts in (match nd_uscrut3 with
   | B_dData_dList.C_List__x58__x58_ (dtb__241, dtb__242) -> (match dtb__241 with
   | { B_dData_dPair.f_Pair_first = dtb__243; B_dData_dPair.f_Pair_second = dtb__244 } -> (match dtb__243 with
-  | Frontend_dRast.C_Pat_PCon (dtb__245, dtb__246, dtb__247) -> (if ((v_ctorHeadCovered (Frontend_dRast_dName.v_rnameKey dtb__245)) prevs) then ((fun ec1 -> (((v_checkCaseAltsGo ec1) (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = dtb__243; B_dData_dPair.f_Pair_second = dtb__244 }, prevs))) dtb__242)) (((((Elab_dUsage.v_warnAt1Mod ec) (((v_removeBranchSuggest "remove redundant constructor branch") dtb__247) dtb__244)) dtb__247) (Base_dDiagnostics_dWarning.C_WarnErr_WarnRedundantCtorBranch ((Frontend_dRast_dName.v_rnameKey dtb__245)))) (Frontend_dRast_dName.v_rnameKey dtb__245))) else (((v_checkCaseAltsGo ec) (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = dtb__243; B_dData_dPair.f_Pair_second = dtb__244 }, prevs))) dtb__242))
-  | Frontend_dRast.C_Pat_PInt (dtb__248, dtb__249) -> (if ((v_litHeadCovered dtb__243) prevs) then ((fun ec1 -> (((v_checkCaseAltsGo ec1) (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = dtb__243; B_dData_dPair.f_Pair_second = dtb__244 }, prevs))) dtb__242)) (((((Elab_dUsage.v_warnAt1Mod ec) (((v_removeBranchSuggest "remove redundant literal branch") dtb__249) dtb__244)) dtb__249) (Base_dDiagnostics_dWarning.C_WarnErr_WarnRedundantLiteralBranch ((v_litLabel dtb__243)))) (v_litLabel dtb__243))) else (((v_checkCaseAltsGo ec) (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = dtb__243; B_dData_dPair.f_Pair_second = dtb__244 }, prevs))) dtb__242))
-  | Frontend_dRast.C_Pat_PStr (dtb__250, dtb__251) -> (if ((v_litHeadCovered dtb__243) prevs) then ((fun ec1 -> (((v_checkCaseAltsGo ec1) (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = dtb__243; B_dData_dPair.f_Pair_second = dtb__244 }, prevs))) dtb__242)) (((((Elab_dUsage.v_warnAt1Mod ec) (((v_removeBranchSuggest "remove redundant literal branch") dtb__251) dtb__244)) dtb__251) (Base_dDiagnostics_dWarning.C_WarnErr_WarnRedundantLiteralBranch ((v_litLabel dtb__243)))) (v_litLabel dtb__243))) else (((v_checkCaseAltsGo ec) (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = dtb__243; B_dData_dPair.f_Pair_second = dtb__244 }, prevs))) dtb__242))
+  | Frontend_dRast.C_Pat_PCon (dtb__245, dtb__246, dtb__247) -> (if ((v_ctorHeadCovered (Frontend_dRast_dName.v_rnameKey dtb__245)) prevs) then (let ec1 = (((((Elab_dUsage.v_warnAt1Mod ec) (((v_removeBranchSuggest "remove redundant constructor branch") dtb__247) dtb__244)) dtb__247) (Base_dDiagnostics_dWarning.C_WarnErr_WarnRedundantCtorBranch ((Frontend_dRast_dName.v_rnameKey dtb__245)))) (Frontend_dRast_dName.v_rnameKey dtb__245)) in (((v_checkCaseAltsGo ec1) (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = dtb__243; B_dData_dPair.f_Pair_second = dtb__244 }, prevs))) dtb__242)) else (((v_checkCaseAltsGo ec) (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = dtb__243; B_dData_dPair.f_Pair_second = dtb__244 }, prevs))) dtb__242))
+  | Frontend_dRast.C_Pat_PInt (dtb__248, dtb__249) -> (if ((v_litHeadCovered dtb__243) prevs) then (let ec1 = (((((Elab_dUsage.v_warnAt1Mod ec) (((v_removeBranchSuggest "remove redundant literal branch") dtb__249) dtb__244)) dtb__249) (Base_dDiagnostics_dWarning.C_WarnErr_WarnRedundantLiteralBranch ((v_litLabel dtb__243)))) (v_litLabel dtb__243)) in (((v_checkCaseAltsGo ec1) (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = dtb__243; B_dData_dPair.f_Pair_second = dtb__244 }, prevs))) dtb__242)) else (((v_checkCaseAltsGo ec) (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = dtb__243; B_dData_dPair.f_Pair_second = dtb__244 }, prevs))) dtb__242))
+  | Frontend_dRast.C_Pat_PStr (dtb__250, dtb__251) -> (if ((v_litHeadCovered dtb__243) prevs) then (let ec1 = (((((Elab_dUsage.v_warnAt1Mod ec) (((v_removeBranchSuggest "remove redundant literal branch") dtb__251) dtb__244)) dtb__251) (Base_dDiagnostics_dWarning.C_WarnErr_WarnRedundantLiteralBranch ((v_litLabel dtb__243)))) (v_litLabel dtb__243)) in (((v_checkCaseAltsGo ec1) (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = dtb__243; B_dData_dPair.f_Pair_second = dtb__244 }, prevs))) dtb__242)) else (((v_checkCaseAltsGo ec) (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = dtb__243; B_dData_dPair.f_Pair_second = dtb__244 }, prevs))) dtb__242))
   | Frontend_dRast.C_Pat_PAs (dtb__252, dtb__253, dtb__254) -> (((v_checkCaseAltsGo ec) (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = dtb__243; B_dData_dPair.f_Pair_second = dtb__244 }, prevs))) dtb__242)
   | Frontend_dRast.C_Pat_PVar (dtb__255, dtb__256) -> (((((v_checkCatchAll ec) prevs) { B_dData_dPair.f_Pair_first = dtb__243; B_dData_dPair.f_Pair_second = dtb__244 }) dtb__242) dtb__256)
   | Frontend_dRast.C_Pat_PWild (dtb__257) -> (((((v_checkCatchAll ec) prevs) { B_dData_dPair.f_Pair_first = dtb__243; B_dData_dPair.f_Pair_second = dtb__244 }) dtb__242) dtb__257)
@@ -559,7 +559,7 @@ let rec v_checkCaseAltsGo = (fun (ec : Elab_dTypes.t_Ec) (prevs : (Frontend_dRas
 )
   | B_dData_dList.C_List_Nil -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = 0; B_dData_dPair.f_Pair_second = ec }))
   | _ -> failwith "DT: impossible branch"
-)) alts))
+)))
 
 # 518 "Vuna/Compiler/Elab/Case.vuna"
 let v_checkCaseAltsFlat = (fun (ec : Elab_dTypes.t_Ec) (alts : (Frontend_dRast.t_Pat, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (((v_checkCaseAltsGo ec) B_dData_dList.C_List_Nil) (v_stripAsPats alts)))

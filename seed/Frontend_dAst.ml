@@ -260,14 +260,14 @@ let rec v_collectClauses = (fun (mc0 : t_Decl B_dData_dList.t_List) (mc1 : strin
 let v_clausesFor = (fun (decls : t_Decl B_dData_dList.t_List) (name : string) -> ((v_collectClauses decls) name))
 
 # 362 "Vuna/Compiler/Frontend/Ast.vuna"
-let v_funArity = (fun (name : string) (decls : t_Decl B_dData_dList.t_List) -> ((fun nd_uscrut2 -> (match nd_uscrut2 with
+let v_funArity = (fun (name : string) (decls : t_Decl B_dData_dList.t_List) -> (let nd_uscrut2 = ((v_clausesFor decls) name) in (match nd_uscrut2 with
   | B_dData_dList.C_List__x58__x58_ (dtb__243, dtb__244) -> (match dtb__243 with
   | { B_dData_dPair.f_Pair_first = dtb__245; B_dData_dPair.f_Pair_second = dtb__246 } -> (B_dData_dMaybe.C_Maybe_Just ((B_dData_dList.v_length dtb__245)))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dList.C_List_Nil -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
-)) ((v_clausesFor decls) name)))
+)))
 
 # 368 "Vuna/Compiler/Frontend/Ast.vuna"
 let v_ctorName = (fun (mc0 : t_Ctor) -> (match mc0 with
@@ -279,7 +279,7 @@ let v_ctorName = (fun (mc0 : t_Ctor) -> (match mc0 with
 let v_ctorShortName = (fun (name : string) -> (Base_dSource.v_lastSeg name))
 
 # 380 "Vuna/Compiler/Frontend/Ast.vuna"
-let v_ctorDisplayName = (fun (name : string) -> ((fun nd_uscrut1 -> (match nd_uscrut1 with
+let v_ctorDisplayName = (fun (name : string) -> (let nd_uscrut1 = (Base_dSource.v_splitLastDot (Base_dSource.v_splitOnDot name)) in (match nd_uscrut1 with
   | { B_dData_dPair.f_Pair_first = dtb__251; B_dData_dPair.f_Pair_second = dtb__252 } -> (match dtb__251 with
   | B_dData_dList.C_List_Nil -> dtb__252
   | _ -> (match (B_dData_dList.v_reverse dtb__251) with
@@ -289,7 +289,7 @@ let v_ctorDisplayName = (fun (name : string) -> ((fun nd_uscrut1 -> (match nd_us
 )
 )
   | _ -> failwith "DT: impossible branch"
-)) (Base_dSource.v_splitLastDot (Base_dSource.v_splitOnDot name))))
+)))
 
 # 389 "Vuna/Compiler/Frontend/Ast.vuna"
 let v_ctorType = (fun (mc0 : t_Ctor) -> (match mc0 with
@@ -391,13 +391,13 @@ let v_declDerivings = (fun (mc0 : t_Decl) -> (match mc0 with
 ))
 
 # 468 "Vuna/Compiler/Frontend/Ast.vuna"
-let v_holeNamed = (fun (name : string) -> ((fun nd_uscrut1 -> (match nd_uscrut1 with
+let v_holeNamed = (fun (name : string) -> (let nd_uscrut1 = (B_dData_dList.dtp_unpack name) in (match nd_uscrut1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__414, dtb__415) -> (if (dtb__414 = 63) then (match dtb__415 with
   | B_dData_dList.C_List__x58__x58_ (dtb__416, dtb__417) -> true
   | _ -> false
 ) else false)
   | _ -> false
-)) (B_dData_dList.dtp_unpack name)))
+)))
 
 # 465 "Vuna/Compiler/Frontend/Ast.vuna"
 let v_isHoleName = (fun (name : string) -> (if (name = "_") then true else (v_holeNamed name)))

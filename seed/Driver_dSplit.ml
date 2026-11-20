@@ -34,7 +34,7 @@ let rec v_writeSplitFiles = (fun (nFs : string) (mc0 : string) (mc1 : t_SplitFil
 let rec v_writeSplitFilesIfChanged = (fun (nFs : string) (mc0 : string) (mc1 : t_SplitFile B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__13, dtb__14) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((v_writeSplitFilesIfChanged nFs) mc0) dtb__14)) (fun restR -> (match restR with
   | Base_dDiag.C_Check_ErrC (dtb__15) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) (Base_dDiag.C_Check_ErrC (dtb__15)))
-  | Base_dDiag.C_Check_OkC (dtb__16) -> ((fun path -> ((fun text -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((B_dEffect_dFs.v_fsFileExists nFs) path)) (fun exists -> (if exists then (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((B_dEffect_dFs.v_fsReadFile nFs) path)) (fun old -> (if (old = text) then ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) (Base_dDiag.C_Check_OkC ((dtb__16 + 1)))) else (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((B_dEffect_dFs.v_fsWriteFile nFs) path) text)) (fun _u -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) (Base_dDiag.C_Check_OkC ((dtb__16 + 1))))))))) else (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((B_dEffect_dFs.v_fsWriteFile nFs) path) text)) (fun _u -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) (Base_dDiag.C_Check_OkC ((dtb__16 + 1)))))))))) (v_splitText dtb__13))) (String.concat "" [mc0; "/"; (v_splitName dtb__13)]))
+  | Base_dDiag.C_Check_OkC (dtb__16) -> (let path = (String.concat "" [mc0; "/"; (v_splitName dtb__13)]) in (let text = (v_splitText dtb__13) in (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((B_dEffect_dFs.v_fsFileExists nFs) path)) (fun exists -> (if exists then (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((B_dEffect_dFs.v_fsReadFile nFs) path)) (fun old -> (if (old = text) then ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) (Base_dDiag.C_Check_OkC ((dtb__16 + 1)))) else (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((B_dEffect_dFs.v_fsWriteFile nFs) path) text)) (fun _u -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) (Base_dDiag.C_Check_OkC ((dtb__16 + 1))))))))) else (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((B_dEffect_dFs.v_fsWriteFile nFs) path) text)) (fun _u -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) (Base_dDiag.C_Check_OkC ((dtb__16 + 1)))))))))))
   | _ -> failwith "DT: impossible branch"
 )))
   | B_dData_dList.C_List_Nil -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) (Base_dDiag.C_Check_OkC (0)))
@@ -46,7 +46,7 @@ let v_stripMl = (fun (name : string) -> (((B_dData_dString.v_substring 0) (bi_na
 
 # 83 "Vuna/Compiler/Driver/Split.vuna"
 let rec v_splitGraph = (fun (mc0 : t_SplitFile B_dData_dList.t_List) -> (match mc0 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__17, dtb__18) -> ((fun name -> (if ((B_dData_dString.v_endsWith ".ml") name) then (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = (v_stripMl name); B_dData_dPair.f_Pair_second = (v_splitDeps dtb__17) }, (v_splitGraph dtb__18))) else (v_splitGraph dtb__18))) (v_splitName dtb__17))
+  | B_dData_dList.C_List__x58__x58_ (dtb__17, dtb__18) -> (let name = (v_splitName dtb__17) in (if ((B_dData_dString.v_endsWith ".ml") name) then (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = (v_stripMl name); B_dData_dPair.f_Pair_second = (v_splitDeps dtb__17) }, (v_splitGraph dtb__18))) else (v_splitGraph dtb__18)))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
 ))
@@ -91,7 +91,7 @@ let rec v_graphMaxDepth = (fun (mc0 : (string, string B_dData_dList.t_List) B_dD
 # 99 "Vuna/Compiler/Driver/Split.vuna"
 let v_splitLayers = (fun (mc0 : (string, string B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
-  | _ -> ((fun depths -> ((fun maxD -> ((B_dData_dList.v_map (fun (d : int) -> ((B_dData_dList.v_filter (fun (q : (string, string B_dData_dList.t_List) B_dData_dPair.t_Pair) -> (((v_depthOfUnit depths) (B_dData_dPair.v_firstOf q)) = d))) mc0))) ((B_dData_dList.v_range 0) (maxD + 1)))) (((v_graphMaxDepth mc0) depths) 0))) ((v_splitDepths mc0) (((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) B_dData_dList.C_List_Nil)))
+  | _ -> (let depths = ((v_splitDepths mc0) (((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) B_dData_dList.C_List_Nil)) in (let maxD = (((v_graphMaxDepth mc0) depths) 0) in ((B_dData_dList.v_map (fun (d : int) -> ((B_dData_dList.v_filter (fun (q : (string, string B_dData_dList.t_List) B_dData_dPair.t_Pair) -> (((v_depthOfUnit depths) (B_dData_dPair.v_firstOf q)) = d))) mc0))) ((B_dData_dList.v_range 0) (maxD + 1)))))
 ))
 
 # 254 "Vuna/Compiler/Driver/Split.vuna"
@@ -167,14 +167,14 @@ let v_tieOf = (fun (ties : (string, int) B_dContainer_dHashMap.t_HashMap) (name 
 
 # 317 "Vuna/Compiler/Driver/Split.vuna"
 let rec v_maxDepth = (fun (mc0 : (string, int) B_dContainer_dHashMap.t_HashMap) (mc1 : string B_dData_dList.t_List) -> (match mc1 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__49, dtb__50) -> ((fun dd -> ((fun mm -> (if (dd > mm) then dd else mm)) ((v_maxDepth mc0) dtb__50))) ((v_depthOfUnit mc0) dtb__49))
+  | B_dData_dList.C_List__x58__x58_ (dtb__49, dtb__50) -> (let dd = ((v_depthOfUnit mc0) dtb__49) in (let mm = ((v_maxDepth mc0) dtb__50) in (if (dd > mm) then dd else mm)))
   | B_dData_dList.C_List_Nil -> (0 - 1)
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 325 "Vuna/Compiler/Driver/Split.vuna"
 let rec v_stepDepths = (fun (mc0 : (string, int) B_dContainer_dHashMap.t_HashMap) (mc1 : (string, string B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc1 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__51, dtb__52) -> ((fun md -> (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = (B_dData_dPair.v_firstOf dtb__51); B_dData_dPair.f_Pair_second = (if (md < 0) then 0 else (md + 1)) }, ((v_stepDepths mc0) dtb__52)))) ((v_maxDepth mc0) (B_dData_dPair.v_secondOf dtb__51)))
+  | B_dData_dList.C_List__x58__x58_ (dtb__51, dtb__52) -> (let md = ((v_maxDepth mc0) (B_dData_dPair.v_secondOf dtb__51)) in (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = (B_dData_dPair.v_firstOf dtb__51); B_dData_dPair.f_Pair_second = (if (md < 0) then 0 else (md + 1)) }, ((v_stepDepths mc0) dtb__52))))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
 ))
@@ -187,13 +187,13 @@ let rec v_sameDepthTable = (fun (mc0 : (string, int) B_dContainer_dHashMap.t_Has
 ))
 
 # 271 "Vuna/Compiler/Driver/Split.vuna"
-let rec v_convergedWithin = (fun (fuel : int) (graph : (string, string B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) (memo : (string, int) B_dContainer_dHashMap.t_HashMap) -> (if (fuel <= 0) then false else ((fun next -> (if ((v_sameDepthTable memo) next) then true else (((v_convergedWithin (fuel - 1)) graph) (((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) next)))) ((v_stepDepths memo) graph))))
+let rec v_convergedWithin = (fun (fuel : int) (graph : (string, string B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) (memo : (string, int) B_dContainer_dHashMap.t_HashMap) -> (if (fuel <= 0) then false else (let next = ((v_stepDepths memo) graph) in (if ((v_sameDepthTable memo) next) then true else (((v_convergedWithin (fuel - 1)) graph) (((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) next))))))
 
 # 264 "Vuna/Compiler/Driver/Split.vuna"
-let v_splitGraphAcyclic = (fun (files : t_SplitFile B_dData_dList.t_List) -> ((fun graph -> ((fun baseMemo -> (((v_convergedWithin ((B_dData_dList.v_length graph) + 2)) graph) baseMemo)) (((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) ((B_dData_dList.v_map (fun (p : (string, string B_dData_dList.t_List) B_dData_dPair.t_Pair) -> { B_dData_dPair.f_Pair_first = (B_dData_dPair.v_firstOf p); B_dData_dPair.f_Pair_second = 0 })) graph)))) (v_splitGraph files)))
+let v_splitGraphAcyclic = (fun (files : t_SplitFile B_dData_dList.t_List) -> (let graph = (v_splitGraph files) in (let baseMemo = (((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) ((B_dData_dList.v_map (fun (p : (string, string B_dData_dList.t_List) B_dData_dPair.t_Pair) -> { B_dData_dPair.f_Pair_first = (B_dData_dPair.v_firstOf p); B_dData_dPair.f_Pair_second = 0 })) graph)) in (((v_convergedWithin ((B_dData_dList.v_length graph) + 2)) graph) baseMemo))))
 
 # 338 "Vuna/Compiler/Driver/Split.vuna"
-let rec v_fixDepths = (fun (fuel : int) (graph : (string, string B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) (memo : (string, int) B_dContainer_dHashMap.t_HashMap) -> (if (fuel <= 0) then memo else ((fun next -> (if ((v_sameDepthTable memo) next) then memo else (((v_fixDepths (fuel - 1)) graph) (((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) next)))) ((v_stepDepths memo) graph))))
+let rec v_fixDepths = (fun (fuel : int) (graph : (string, string B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) (memo : (string, int) B_dContainer_dHashMap.t_HashMap) -> (if (fuel <= 0) then memo else (let next = ((v_stepDepths memo) graph) in (if ((v_sameDepthTable memo) next) then memo else (((v_fixDepths (fuel - 1)) graph) (((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) next))))))
 
 # 348 "Vuna/Compiler/Driver/Split.vuna"
 let v_depthEntryLess = (fun (a : ((int, int) B_dData_dPair.t_Pair, string) B_dData_dPair.t_Pair) (b : ((int, int) B_dData_dPair.t_Pair, string) B_dData_dPair.t_Pair) -> (if ((B_dData_dPair.v_firstOf (B_dData_dPair.v_firstOf a)) <> (B_dData_dPair.v_firstOf (B_dData_dPair.v_firstOf b))) then ((B_dData_dPair.v_firstOf (B_dData_dPair.v_firstOf a)) < (B_dData_dPair.v_firstOf (B_dData_dPair.v_firstOf b))) else ((B_dData_dPair.v_secondOf (B_dData_dPair.v_firstOf a)) <= (B_dData_dPair.v_secondOf (B_dData_dPair.v_firstOf b)))))
@@ -222,7 +222,7 @@ let v_sortDepsByTie = (fun (ties : (string, int) B_dContainer_dHashMap.t_HashMap
 let v_normalizeFileDeps = (fun (ties : (string, int) B_dContainer_dHashMap.t_HashMap) (f : t_SplitFile) -> { f_SplitFile_splitName = (v_splitName f); f_SplitFile_splitText = (v_splitText f); f_SplitFile_splitDeps = ((v_sortDepsByTie ties) (v_splitDeps f)) })
 
 # 366 "Vuna/Compiler/Driver/Split.vuna"
-let v_canonicalTopo = (fun (files : t_SplitFile B_dData_dList.t_List) -> ((fun graph -> ((fun ties -> ((fun fileTable -> ((fun baseMemo -> ((fun depths -> ((fun keyed -> ((fun ordered -> ((B_dData_dList.v_map (v_normalizeFileDeps ties)) ((v_filesOfDepthEntries fileTable) ordered))) ((B_dData_dList.v_map B_dData_dPair.v_secondOf) (v_sortDepthEntries keyed)))) ((B_dData_dList.v_map (fun (p : (string, string B_dData_dList.t_List) B_dData_dPair.t_Pair) -> { B_dData_dPair.f_Pair_first = { B_dData_dPair.f_Pair_first = ((v_depthOfUnit depths) (B_dData_dPair.v_firstOf p)); B_dData_dPair.f_Pair_second = ((v_tieOf ties) (B_dData_dPair.v_firstOf p)) }; B_dData_dPair.f_Pair_second = (B_dData_dPair.v_firstOf p) })) graph))) (((v_fixDepths ((B_dData_dList.v_length graph) + 2)) graph) baseMemo))) (((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) ((B_dData_dList.v_map (fun (p : (string, string B_dData_dList.t_List) B_dData_dPair.t_Pair) -> { B_dData_dPair.f_Pair_first = (B_dData_dPair.v_firstOf p); B_dData_dPair.f_Pair_second = 0 })) graph)))) (((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) ((B_dData_dList.v_map (fun (f : t_SplitFile) -> { B_dData_dPair.f_Pair_first = (v_splitName f); B_dData_dPair.f_Pair_second = f })) files)))) (v_tieTableOf graph))) (v_splitGraph files)))
+let v_canonicalTopo = (fun (files : t_SplitFile B_dData_dList.t_List) -> (let graph = (v_splitGraph files) in (let ties = (v_tieTableOf graph) in (let fileTable = (((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) ((B_dData_dList.v_map (fun (f : t_SplitFile) -> { B_dData_dPair.f_Pair_first = (v_splitName f); B_dData_dPair.f_Pair_second = f })) files)) in (let baseMemo = (((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) ((B_dData_dList.v_map (fun (p : (string, string B_dData_dList.t_List) B_dData_dPair.t_Pair) -> { B_dData_dPair.f_Pair_first = (B_dData_dPair.v_firstOf p); B_dData_dPair.f_Pair_second = 0 })) graph)) in (let depths = (((v_fixDepths ((B_dData_dList.v_length graph) + 2)) graph) baseMemo) in (let keyed = ((B_dData_dList.v_map (fun (p : (string, string B_dData_dList.t_List) B_dData_dPair.t_Pair) -> { B_dData_dPair.f_Pair_first = { B_dData_dPair.f_Pair_first = ((v_depthOfUnit depths) (B_dData_dPair.v_firstOf p)); B_dData_dPair.f_Pair_second = ((v_tieOf ties) (B_dData_dPair.v_firstOf p)) }; B_dData_dPair.f_Pair_second = (B_dData_dPair.v_firstOf p) })) graph) in (let ordered = ((B_dData_dList.v_map B_dData_dPair.v_secondOf) (v_sortDepthEntries keyed)) in ((B_dData_dList.v_map (v_normalizeFileDeps ties)) ((v_filesOfDepthEntries fileTable) ordered))))))))))
 
 # 398 "Vuna/Compiler/Driver/Split.vuna"
 let v_encSplitFile = (fun (f : t_SplitFile) (acc : string B_dData_dList.t_List) -> ((Base_dBytes.v_encStr (f).f_SplitFile_splitName) ((Base_dBytes.v_encStr (f).f_SplitFile_splitText) (((Base_dBytes.v_encList Base_dBytes.v_encStr) (f).f_SplitFile_splitDeps) acc))))
@@ -234,21 +234,21 @@ let v_decSplitFile = (fun (fuel : int) (c : Base_dBytes.t_Cur) -> (((B_dTrait_dM
 let v_encSplitFiles = (fun (fs : t_SplitFile B_dData_dList.t_List) (acc : string B_dData_dList.t_List) -> (((Base_dBytes.v_encList v_encSplitFile) fs) acc))
 
 # 414 "Vuna/Compiler/Driver/Split.vuna"
-let v_decSplitFilesComplete = (fun (s : string) -> ((fun nd_uscrut1 -> (match nd_uscrut1 with
+let v_decSplitFilesComplete = (fun (s : string) -> (let nd_uscrut1 = (((Base_dBytes.v_decList v_decSplitFile) (bi_strLength s)) (Base_dBytes.v_curOf s)) in (match nd_uscrut1 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__58) -> (match dtb__58 with
   | { B_dData_dPair.f_Pair_first = dtb__59; B_dData_dPair.f_Pair_second = dtb__60 } -> (if (Base_dBytes.v_curAtEnd dtb__60) then (B_dData_dMaybe.C_Maybe_Just (dtb__59)) else B_dData_dMaybe.C_Maybe_Nothing)
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
-)) (((Base_dBytes.v_decList v_decSplitFile) (bi_strLength s)) (Base_dBytes.v_curOf s))))
+)))
 
 # 421 "Vuna/Compiler/Driver/Split.vuna"
-let v_decSplitFileComplete = (fun (s : string) -> ((fun nd_uscrut1 -> (match nd_uscrut1 with
+let v_decSplitFileComplete = (fun (s : string) -> (let nd_uscrut1 = ((v_decSplitFile (bi_strLength s)) (Base_dBytes.v_curOf s)) in (match nd_uscrut1 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__61) -> (match dtb__61 with
   | { B_dData_dPair.f_Pair_first = dtb__62; B_dData_dPair.f_Pair_second = dtb__63 } -> (if (Base_dBytes.v_curAtEnd dtb__63) then (B_dData_dMaybe.C_Maybe_Just (dtb__62)) else B_dData_dMaybe.C_Maybe_Nothing)
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
-)) ((v_decSplitFile (bi_strLength s)) (Base_dBytes.v_curOf s))))
+)))

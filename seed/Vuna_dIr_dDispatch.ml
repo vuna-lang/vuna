@@ -6,7 +6,7 @@ let v_dispatchIdNameOf = (fun (name : string) (arity : int) -> (if (name = Base_
 
 # 42 "Vuna/Ir/Dispatch.vuna"
 let rec v_flattenSpine = (fun (mc0 : Vuna_dIr_dModel.t_Ir) -> (match mc0 with
-  | Vuna_dIr_dModel.C_Ir_IrApp (dtb__0, dtb__1, dtb__2) -> ((fun p -> { B_dData_dPair.f_Pair_first = (B_dData_dPair.v_firstOf p); B_dData_dPair.f_Pair_second = ((B_dData_dList.v_append (B_dData_dPair.v_secondOf p)) (B_dData_dList.C_List__x58__x58_ ({ f_SpineArg_saTy = dtb__0; f_SpineArg_saValue = dtb__2 }, B_dData_dList.C_List_Nil))) }) (v_flattenSpine dtb__1))
+  | Vuna_dIr_dModel.C_Ir_IrApp (dtb__0, dtb__1, dtb__2) -> (let p = (v_flattenSpine dtb__1) in { B_dData_dPair.f_Pair_first = (B_dData_dPair.v_firstOf p); B_dData_dPair.f_Pair_second = ((B_dData_dList.v_append (B_dData_dPair.v_secondOf p)) (B_dData_dList.C_List__x58__x58_ ({ f_SpineArg_saTy = dtb__0; f_SpineArg_saValue = dtb__2 }, B_dData_dList.C_List_Nil))) })
   | _ -> { B_dData_dPair.f_Pair_first = mc0; B_dData_dPair.f_Pair_second = B_dData_dList.C_List_Nil }
 ))
 
@@ -33,13 +33,13 @@ let v_dispatchIdArg = (fun (mc0 : Vuna_dIr_dModel.t_Ir) -> (match mc0 with
 # 64 "Vuna/Ir/Dispatch.vuna"
 let v_dispatchSpine = (fun (mc0 : Vuna_dIr_dModel.t_Ir) (mc1 : t_SpineArg B_dData_dList.t_List) -> (match mc0 with
   | Vuna_dIr_dModel.C_Ir_IrGlobal (dtb__8) -> (match ((v_dispatchIdNameOf dtb__8) (v_argCount mc1)) with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__9) -> ((fun nd_uscrut5 -> (match nd_uscrut5 with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__9) -> (let nd_uscrut5 = mc1 in (match nd_uscrut5 with
   | B_dData_dList.C_List__x58__x58_ (dtb__10, dtb__11) -> (match dtb__11 with
   | B_dData_dList.C_List__x58__x58_ (dtb__12, dtb__13) -> ((v_buildSpine (Vuna_dIr_dModel.C_Ir_IrGlobal (dtb__9))) (B_dData_dList.C_List__x58__x58_ (dtb__10, (B_dData_dList.C_List__x58__x58_ (dtb__12, (B_dData_dList.C_List__x58__x58_ ({ f_SpineArg_saTy = B_dData_dMaybe.C_Maybe_Nothing; f_SpineArg_saValue = (v_dispatchIdArg (dtb__10).f_SpineArg_saValue) }, (B_dData_dList.C_List__x58__x58_ ({ f_SpineArg_saTy = B_dData_dMaybe.C_Maybe_Nothing; f_SpineArg_saValue = (v_dispatchIdArg (dtb__12).f_SpineArg_saValue) }, dtb__13)))))))))
   | _ -> ((v_buildSpine mc0) mc1)
 )
   | _ -> ((v_buildSpine mc0) mc1)
-)) mc1)
+))
   | B_dData_dMaybe.C_Maybe_Nothing -> ((v_buildSpine mc0) mc1)
   | _ -> failwith "DT: impossible branch"
 )
@@ -66,7 +66,7 @@ and v_dispatch = (fun (fuel : int) (e : Vuna_dIr_dModel.t_Ir) -> (if (fuel <= 0)
   | Vuna_dIr_dModel.C_Ir_IrRecord (dtb__30, dtb__31, dtb__32) -> (Vuna_dIr_dModel.C_Ir_IrRecord (dtb__30, dtb__31, ((v_dispatchFields (fuel - 1)) dtb__32)))
   | Vuna_dIr_dModel.C_Ir_IrProj (dtb__33, dtb__34, dtb__35, dtb__36) -> (Vuna_dIr_dModel.C_Ir_IrProj (((v_dispatch (fuel - 1)) dtb__33), dtb__34, dtb__35, dtb__36))
   | Vuna_dIr_dModel.C_Ir_IrRecUpd (dtb__37, dtb__38, dtb__39, dtb__40) -> (Vuna_dIr_dModel.C_Ir_IrRecUpd (((v_dispatch (fuel - 1)) dtb__37), dtb__38, ((v_dispatchFields (fuel - 1)) dtb__39), dtb__40))
-  | Vuna_dIr_dModel.C_Ir_IrApp (dtb__41, dtb__42, dtb__43) -> ((fun p -> ((v_dispatchSpine ((v_dispatch (fuel - 1)) (B_dData_dPair.v_firstOf p))) ((v_dispatchSpineArgs (fuel - 1)) (B_dData_dPair.v_secondOf p)))) (v_flattenSpine (Vuna_dIr_dModel.C_Ir_IrApp (dtb__41, dtb__42, dtb__43))))
+  | Vuna_dIr_dModel.C_Ir_IrApp (dtb__41, dtb__42, dtb__43) -> (let p = (v_flattenSpine (Vuna_dIr_dModel.C_Ir_IrApp (dtb__41, dtb__42, dtb__43))) in ((v_dispatchSpine ((v_dispatch (fuel - 1)) (B_dData_dPair.v_firstOf p))) ((v_dispatchSpineArgs (fuel - 1)) (B_dData_dPair.v_secondOf p))))
   | Vuna_dIr_dModel.C_Ir_IrIf (dtb__44, dtb__45, dtb__46) -> (Vuna_dIr_dModel.C_Ir_IrIf (((v_dispatch (fuel - 1)) dtb__44), ((v_dispatch (fuel - 1)) dtb__45), ((v_dispatch (fuel - 1)) dtb__46)))
   | Vuna_dIr_dModel.C_Ir_IrCase (dtb__47, dtb__48, dtb__49, dtb__50) -> (Vuna_dIr_dModel.C_Ir_IrCase (dtb__47, dtb__48, ((v_dispatch (fuel - 1)) dtb__49), ((v_dispatchAlts (fuel - 1)) dtb__50)))
   | Vuna_dIr_dModel.C_Ir_IrNatCase (dtb__51, dtb__52, dtb__53, dtb__54, dtb__55) -> (Vuna_dIr_dModel.C_Ir_IrNatCase (((v_dispatch (fuel - 1)) dtb__51), dtb__52, ((v_dispatchAltM (fuel - 1)) dtb__53), ((v_dispatchAltM (fuel - 1)) dtb__54), ((v_dispatchAltM (fuel - 1)) dtb__55)))
@@ -76,7 +76,7 @@ and v_dispatch = (fun (fuel : int) (e : Vuna_dIr_dModel.t_Ir) -> (if (fuel <= 0)
   | Vuna_dIr_dModel.C_Ir_IrLet (dtb__65, dtb__66, dtb__67) -> (Vuna_dIr_dModel.C_Ir_IrLet (dtb__65, ((v_dispatch (fuel - 1)) dtb__66), ((v_dispatch (fuel - 1)) dtb__67)))
   | Vuna_dIr_dModel.C_Ir_IrLam (dtb__68, dtb__69, dtb__70) -> (Vuna_dIr_dModel.C_Ir_IrLam (dtb__68, dtb__69, ((v_dispatch (fuel - 1)) dtb__70)))
   | Vuna_dIr_dModel.C_Ir_IrTail (dtb__71) -> (Vuna_dIr_dModel.C_Ir_IrTail (((v_dispatch (fuel - 1)) dtb__71)))
-  | Vuna_dIr_dModel.C_Ir_IrRtApp (dtb__72, dtb__73) -> ((fun args1 -> (if (dtb__72 = Base_dIntrinsics.v_dispatchIdIntrinsicName) then ((fun nd_uscrut5 -> (match nd_uscrut5 with
+  | Vuna_dIr_dModel.C_Ir_IrRtApp (dtb__72, dtb__73) -> (let args1 = ((v_dispatchList (fuel - 1)) dtb__73) in (if (dtb__72 = Base_dIntrinsics.v_dispatchIdIntrinsicName) then (let nd_uscrut5 = args1 in (match nd_uscrut5 with
   | B_dData_dList.C_List__x58__x58_ (dtb__74, dtb__75) -> (match dtb__74 with
   | Vuna_dIr_dModel.C_Ir_IrStr (dtb__76) -> (match dtb__75 with
   | B_dData_dList.C_List_Nil -> (Vuna_dIr_dModel.C_Ir_IrInt ((Base_dIntrinsics.v_dispatchIdOf dtb__76)))
@@ -85,7 +85,7 @@ and v_dispatch = (fun (fuel : int) (e : Vuna_dIr_dModel.t_Ir) -> (if (fuel <= 0)
   | _ -> (Vuna_dIr_dModel.C_Ir_IrRtApp (dtb__72, args1))
 )
   | _ -> (Vuna_dIr_dModel.C_Ir_IrRtApp (dtb__72, args1))
-)) args1) else (Vuna_dIr_dModel.C_Ir_IrRtApp (dtb__72, args1)))) ((v_dispatchList (fuel - 1)) dtb__73))
+)) else (Vuna_dIr_dModel.C_Ir_IrRtApp (dtb__72, args1))))
   | _ -> failwith "DT: impossible branch"
 )))
 # 128 "Vuna/Ir/Dispatch.vuna"

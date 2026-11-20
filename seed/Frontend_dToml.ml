@@ -110,14 +110,14 @@ let v_appendPath = (fun (xs : string B_dData_dList.t_List) (ys : string B_dData_
 let rec v_splitLast = (fun (mc0 : string B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__25, dtb__26) -> (match dtb__26 with
   | B_dData_dList.C_List_Nil -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = B_dData_dList.C_List_Nil; B_dData_dPair.f_Pair_second = dtb__25 }))
-  | _ -> ((fun nd_uscrut4 -> (match nd_uscrut4 with
+  | _ -> (let nd_uscrut4 = (v_splitLast dtb__26) in (match nd_uscrut4 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__27) -> (match dtb__27 with
   | { B_dData_dPair.f_Pair_first = dtb__28; B_dData_dPair.f_Pair_second = dtb__29 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (B_dData_dList.C_List__x58__x58_ (dtb__25, dtb__28)); B_dData_dPair.f_Pair_second = dtb__29 }))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
-)) (v_splitLast dtb__26))
+))
 )
   | B_dData_dList.C_List_Nil -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
@@ -176,7 +176,7 @@ let v_kindIsDotted = (fun (mc0 : t_TableKind) -> (match mc0 with
 ))
 
 # 200 "Vuna/Compiler/Frontend/Toml.vuna"
-let rec v_ensureTable = (fun (fuel : int) (path : string) (line : int) (pathSegs : string B_dData_dList.t_List) (kind : t_TableKind) (fields : (string, t_TomlNode) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (if (fuel <= 0) then (Base_dDiag.v_icFuel "toml") else ((fun nd_uscrut6 -> (match nd_uscrut6 with
+let rec v_ensureTable = (fun (fuel : int) (path : string) (line : int) (pathSegs : string B_dData_dList.t_List) (kind : t_TableKind) (fields : (string, t_TomlNode) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (if (fuel <= 0) then (Base_dDiag.v_icFuel "toml") else (let nd_uscrut6 = pathSegs in (match nd_uscrut6 with
   | B_dData_dList.C_List__x58__x58_ (dtb__42, dtb__43) -> (match dtb__43 with
   | B_dData_dList.C_List_Nil -> (match ((v_lookupField dtb__42) fields) with
   | B_dData_dMaybe.C_Maybe_Nothing -> (Base_dDiag.C_Check_OkC (((B_dData_dList.v_append fields) (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = dtb__42; B_dData_dPair.f_Pair_second = (C_TomlNode_NodeTable (B_dData_dList.C_List_Nil, kind, line)) }, B_dData_dList.C_List_Nil)))))
@@ -215,10 +215,10 @@ let rec v_ensureTable = (fun (fuel : int) (path : string) (line : int) (pathSegs
 )
   | B_dData_dList.C_List_Nil -> (((v_failAt path) line) "empty table path")
   | _ -> failwith "DT: impossible branch"
-)) pathSegs)))
+))))
 
 # 236 "Vuna/Compiler/Frontend/Toml.vuna"
-let rec v_appendTableArray = (fun (fuel : int) (path : string) (line : int) (pathSegs : string B_dData_dList.t_List) (fields : (string, t_TomlNode) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (if (fuel <= 0) then (Base_dDiag.v_icFuel "toml") else ((fun nd_uscrut5 -> (match nd_uscrut5 with
+let rec v_appendTableArray = (fun (fuel : int) (path : string) (line : int) (pathSegs : string B_dData_dList.t_List) (fields : (string, t_TomlNode) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (if (fuel <= 0) then (Base_dDiag.v_icFuel "toml") else (let nd_uscrut5 = pathSegs in (match nd_uscrut5 with
   | B_dData_dList.C_List__x58__x58_ (dtb__63, dtb__64) -> (match dtb__64 with
   | B_dData_dList.C_List_Nil -> (match ((v_lookupField dtb__63) fields) with
   | B_dData_dMaybe.C_Maybe_Nothing -> (Base_dDiag.C_Check_OkC (((B_dData_dList.v_append fields) (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = dtb__63; B_dData_dPair.f_Pair_second = (C_TomlNode_NodeTableArray ((B_dData_dList.C_List__x58__x58_ (B_dData_dList.C_List_Nil, B_dData_dList.C_List_Nil)), line)) }, B_dData_dList.C_List_Nil)))))
@@ -259,23 +259,23 @@ let rec v_appendTableArray = (fun (fuel : int) (path : string) (line : int) (pat
 )
   | B_dData_dList.C_List_Nil -> (((v_failAt path) line) "empty table array path")
   | _ -> failwith "DT: impossible branch"
-)) pathSegs)))
+))))
 
 # 273 "Vuna/Compiler/Frontend/Toml.vuna"
-let v_sectionOfPath = (fun (pathSegs : string B_dData_dList.t_List) -> ((fun nd_uscrut1 -> (match nd_uscrut1 with
+let v_sectionOfPath = (fun (pathSegs : string B_dData_dList.t_List) -> (let nd_uscrut1 = (v_splitLast pathSegs) in (match nd_uscrut1 with
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dList.C_List_Nil
   | B_dData_dMaybe.C_Maybe_Just (dtb__88) -> (match dtb__88 with
   | { B_dData_dPair.f_Pair_first = dtb__89; B_dData_dPair.f_Pair_second = dtb__90 } -> dtb__89
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
-)) (v_splitLast pathSegs)))
+)))
 
 # 279 "Vuna/Compiler/Frontend/Toml.vuna"
 let v_duplicateKeyMsg = (fun (name : string) (section : string B_dData_dList.t_List) -> (if ((v_lenInt section) = 0) then (String.concat "" ["duplicate key \""; name; "\""]) else (String.concat "" ["duplicate key \""; name; "\" in ["; (Base_dSource.v_joinDots section); "]"])))
 
 # 287 "Vuna/Compiler/Frontend/Toml.vuna"
-let rec v_insertValue = (fun (fuel : int) (path : string) (line : int) (pathSegs : string B_dData_dList.t_List) (section : string B_dData_dList.t_List) (value : t_TomlValue) (fields : (string, t_TomlNode) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (if (fuel <= 0) then (Base_dDiag.v_icFuel "toml") else ((fun nd_uscrut7 -> (match nd_uscrut7 with
+let rec v_insertValue = (fun (fuel : int) (path : string) (line : int) (pathSegs : string B_dData_dList.t_List) (section : string B_dData_dList.t_List) (value : t_TomlValue) (fields : (string, t_TomlNode) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (if (fuel <= 0) then (Base_dDiag.v_icFuel "toml") else (let nd_uscrut7 = pathSegs in (match nd_uscrut7 with
   | B_dData_dList.C_List__x58__x58_ (dtb__91, dtb__92) -> (match dtb__92 with
   | B_dData_dList.C_List_Nil -> (match ((v_lookupField dtb__91) fields) with
   | B_dData_dMaybe.C_Maybe_Nothing -> (Base_dDiag.C_Check_OkC (((B_dData_dList.v_append fields) (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = dtb__91; B_dData_dPair.f_Pair_second = (C_TomlNode_NodeLeaf (value, line)) }, B_dData_dList.C_List_Nil)))))
@@ -314,19 +314,19 @@ let rec v_insertValue = (fun (fuel : int) (path : string) (line : int) (pathSegs
 )
   | B_dData_dList.C_List_Nil -> (((v_failAt path) line) "empty key")
   | _ -> failwith "DT: impossible branch"
-)) pathSegs)))
+))))
 
 # 345 "Vuna/Compiler/Frontend/Toml.vuna"
 let rec v_flattenLeaf = (fun (mc0 : int) (mc1 : string B_dData_dList.t_List) (mc2 : t_TomlValue) (mc3 : int) -> (match mc2 with
   | C_TomlValue_TTable (dtb__111) -> ((((v_flattenLeafFields (mc0 - 1)) mc1) dtb__111) mc3)
-  | _ -> ((fun nd_uscrut4 -> (match nd_uscrut4 with
+  | _ -> (let nd_uscrut4 = (v_splitLast mc1) in (match nd_uscrut4 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__112) -> (match dtb__112 with
   | { B_dData_dPair.f_Pair_first = dtb__113; B_dData_dPair.f_Pair_second = dtb__114 } -> (B_dData_dList.C_List__x58__x58_ ({ f_TomlEntry_tomlEntrySection = dtb__113; f_TomlEntry_tomlEntryKey = dtb__114; f_TomlEntry_tomlEntryValue = mc2; f_TomlEntry_tomlEntryLine = mc3 }, B_dData_dList.C_List_Nil))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
-)) (v_splitLast mc1))
+))
 ))
 # 352 "Vuna/Compiler/Frontend/Toml.vuna"
 and v_flattenLeafFields = (fun (mc0 : int) (mc1 : string B_dData_dList.t_List) (mc2 : (string, t_TomlValue) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc3 : int) -> (match mc2 with
@@ -437,14 +437,14 @@ and v_parseBasicEscape = (fun (fuel : int) (path : string) (startCs : t_TomlCurs
   | _ -> failwith "DT: impossible branch"
 )))
 # 468 "Vuna/Compiler/Frontend/Toml.vuna"
-and v_parseUnicodeEscape = (fun (fuel : int) (digits : int) (path : string) (startCs : t_TomlCursor) (cs : t_TomlCursor) (acc : int B_dData_dList.t_List) -> (if (fuel <= 0) then (Base_dDiag.v_icFuel "toml") else ((fun nd_uscrut6 -> (match nd_uscrut6 with
+and v_parseUnicodeEscape = (fun (fuel : int) (digits : int) (path : string) (startCs : t_TomlCursor) (cs : t_TomlCursor) (acc : int B_dData_dList.t_List) -> (if (fuel <= 0) then (Base_dDiag.v_icFuel "toml") else (let nd_uscrut6 = ((((((v_parseHexCode (v_cursorFuel cs)) digits) path) cs) 0) 0) in (match nd_uscrut6 with
   | Base_dDiag.C_Check_OkC (dtb__160) -> (match dtb__160 with
   | { B_dData_dPair.f_Pair_first = dtb__161; B_dData_dPair.f_Pair_second = dtb__162 } -> (if (dtb__161 > 1114111) then (((v_failAt path) (startCs).f_TomlCursor_cursorLine) "unicode escape out of range") else (if (v_isSurrogate dtb__161) then (((v_failAt path) (startCs).f_TomlCursor_cursorLine) "unicode escape is a surrogate code point") else (((((v_parseBasicChars (fuel - 1)) path) startCs) dtb__162) ((B_dData_dList.v_append (B_dData_dList.v_reverse (v_utf8OfCode dtb__161))) acc))))
   | _ -> failwith "DT: impossible branch"
 )
   | Base_dDiag.C_Check_ErrC (dtb__163) -> (Base_dDiag.C_Check_ErrC (dtb__163))
   | _ -> failwith "DT: impossible branch"
-)) ((((((v_parseHexCode (v_cursorFuel cs)) digits) path) cs) 0) 0))))
+))))
 
 # 428 "Vuna/Compiler/Frontend/Toml.vuna"
 let v_parseBasicString = (fun (path : string) (cs : t_TomlCursor) -> (match (cs).f_TomlCursor_cursorChars with
@@ -501,7 +501,7 @@ and v_parseMultilineEscape = (fun (fuel : int) (path : string) (startCs : t_Toml
 )))
 
 # 511 "Vuna/Compiler/Frontend/Toml.vuna"
-let v_parseMultilineBasic = (fun (path : string) (cs : t_TomlCursor) -> ((fun afterOpen -> (((((v_parseMultilineBasicChars (v_cursorFuel afterOpen)) path) cs) afterOpen) B_dData_dList.C_List_Nil)) (v_dropFirstNewline cs)))
+let v_parseMultilineBasic = (fun (path : string) (cs : t_TomlCursor) -> (let afterOpen = (v_dropFirstNewline cs) in (((((v_parseMultilineBasicChars (v_cursorFuel afterOpen)) path) cs) afterOpen) B_dData_dList.C_List_Nil)))
 
 # 568 "Vuna/Compiler/Frontend/Toml.vuna"
 let rec v_parseMultilineLiteralChars = (fun (fuel : int) (path : string) (startCs : t_TomlCursor) (cs : t_TomlCursor) (acc : int B_dData_dList.t_List) -> (if (fuel <= 0) then (Base_dDiag.v_icFuel "toml") else (match (cs).f_TomlCursor_cursorChars with
@@ -511,7 +511,7 @@ let rec v_parseMultilineLiteralChars = (fun (fuel : int) (path : string) (startC
 )))
 
 # 562 "Vuna/Compiler/Frontend/Toml.vuna"
-let v_parseMultilineLiteral = (fun (path : string) (cs : t_TomlCursor) -> ((fun afterOpen -> (((((v_parseMultilineLiteralChars (v_cursorFuel afterOpen)) path) cs) afterOpen) B_dData_dList.C_List_Nil)) (v_dropFirstNewline cs)))
+let v_parseMultilineLiteral = (fun (path : string) (cs : t_TomlCursor) -> (let afterOpen = (v_dropFirstNewline cs) in (((((v_parseMultilineLiteralChars (v_cursorFuel afterOpen)) path) cs) afterOpen) B_dData_dList.C_List_Nil)))
 
 # 582 "Vuna/Compiler/Frontend/Toml.vuna"
 let rec v_collectBareKey = (fun (mc0 : t_TomlCursor) (mc1 : int B_dData_dList.t_List) -> (match mc0 with
@@ -533,26 +533,26 @@ let v_parseBareKey = (fun (path : string) (cs : t_TomlCursor) -> (match (cs).f_T
 # 601 "Vuna/Compiler/Frontend/Toml.vuna"
 let v_parseKeySegment = (fun (path : string) (cs : t_TomlCursor) -> (match (cs).f_TomlCursor_cursorChars with
   | B_dData_dList.C_List_Nil -> (((v_failAt path) (cs).f_TomlCursor_cursorLine) "expected a key")
-  | B_dData_dList.C_List__x58__x58_ (dtb__193, dtb__194) -> (if (dtb__193 = 34) then ((fun nd_uscrut5 -> (match nd_uscrut5 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__193, dtb__194) -> (if (dtb__193 = 34) then (let nd_uscrut5 = ((v_parseBasicString path) cs) in (match nd_uscrut5 with
   | Base_dDiag.C_Check_OkC (dtb__195) -> (match dtb__195 with
   | { B_dData_dPair.f_Pair_first = dtb__196; B_dData_dPair.f_Pair_second = dtb__197 } -> (if (dtb__196 = "") then (((v_failAt path) (cs).f_TomlCursor_cursorLine) "expected a key") else (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = dtb__196; B_dData_dPair.f_Pair_second = dtb__197 })))
   | _ -> failwith "DT: impossible branch"
 )
   | Base_dDiag.C_Check_ErrC (dtb__198) -> (Base_dDiag.C_Check_ErrC (dtb__198))
   | _ -> failwith "DT: impossible branch"
-)) ((v_parseBasicString path) cs)) else (if (dtb__193 = 39) then ((fun nd_uscrut5 -> (match nd_uscrut5 with
+)) else (if (dtb__193 = 39) then (let nd_uscrut5 = ((v_parseLiteralString path) cs) in (match nd_uscrut5 with
   | Base_dDiag.C_Check_OkC (dtb__199) -> (match dtb__199 with
   | { B_dData_dPair.f_Pair_first = dtb__200; B_dData_dPair.f_Pair_second = dtb__201 } -> (if (dtb__200 = "") then (((v_failAt path) (cs).f_TomlCursor_cursorLine) "expected a key") else (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = dtb__200; B_dData_dPair.f_Pair_second = dtb__201 })))
   | _ -> failwith "DT: impossible branch"
 )
   | Base_dDiag.C_Check_ErrC (dtb__202) -> (Base_dDiag.C_Check_ErrC (dtb__202))
   | _ -> failwith "DT: impossible branch"
-)) ((v_parseLiteralString path) cs)) else ((v_parseBareKey path) cs)))
+)) else ((v_parseBareKey path) cs)))
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 623 "Vuna/Compiler/Frontend/Toml.vuna"
-let rec v_parseKeySegments = (fun (fuel : int) (path : string) (cs : t_TomlCursor) (acc : string B_dData_dList.t_List) -> (if (fuel <= 0) then (Base_dDiag.v_icFuel "toml") else ((fun nd_uscrut4 -> (match nd_uscrut4 with
+let rec v_parseKeySegments = (fun (fuel : int) (path : string) (cs : t_TomlCursor) (acc : string B_dData_dList.t_List) -> (if (fuel <= 0) then (Base_dDiag.v_icFuel "toml") else (let nd_uscrut4 = ((v_parseKeySegment path) (v_skipBlank cs)) in (match nd_uscrut4 with
   | Base_dDiag.C_Check_OkC (dtb__203) -> (match dtb__203 with
   | { B_dData_dPair.f_Pair_first = dtb__204; B_dData_dPair.f_Pair_second = dtb__205 } -> (match (v_skipBlank dtb__205) with
   | { f_TomlCursor_cursorChars = dtb__206; f_TomlCursor_cursorLine = dtb__207; f_TomlCursor_cursorCol = dtb__208 } -> (match dtb__206 with
@@ -566,7 +566,7 @@ let rec v_parseKeySegments = (fun (fuel : int) (path : string) (cs : t_TomlCurso
 )
   | Base_dDiag.C_Check_ErrC (dtb__211) -> (Base_dDiag.C_Check_ErrC (dtb__211))
   | _ -> failwith "DT: impossible branch"
-)) ((v_parseKeySegment path) (v_skipBlank cs)))))
+))))
 
 # 620 "Vuna/Compiler/Frontend/Toml.vuna"
 let v_parseKeyPath = (fun (path : string) (cs : t_TomlCursor) -> ((((v_parseKeySegments (v_cursorFuel cs)) path) cs) B_dData_dList.C_List_Nil))
@@ -574,40 +574,40 @@ let v_parseKeyPath = (fun (path : string) (cs : t_TomlCursor) -> ((((v_parseKeyS
 # 667 "Vuna/Compiler/Frontend/Toml.vuna"
 let v_parseSingleStringValue = (fun (path : string) (cs : t_TomlCursor) -> (match (cs).f_TomlCursor_cursorChars with
   | B_dData_dList.C_List_Nil -> (((v_failAt path) (cs).f_TomlCursor_cursorLine) "expected a string")
-  | B_dData_dList.C_List__x58__x58_ (dtb__212, dtb__213) -> (if (dtb__212 = 34) then ((fun nd_uscrut5 -> (match nd_uscrut5 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__212, dtb__213) -> (if (dtb__212 = 34) then (let nd_uscrut5 = ((v_parseBasicString path) cs) in (match nd_uscrut5 with
   | Base_dDiag.C_Check_OkC (dtb__214) -> (match dtb__214 with
   | { B_dData_dPair.f_Pair_first = dtb__215; B_dData_dPair.f_Pair_second = dtb__216 } -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (C_TomlValue_TStr (dtb__215)); B_dData_dPair.f_Pair_second = dtb__216 }))
   | _ -> failwith "DT: impossible branch"
 )
   | Base_dDiag.C_Check_ErrC (dtb__217) -> (Base_dDiag.C_Check_ErrC (dtb__217))
   | _ -> failwith "DT: impossible branch"
-)) ((v_parseBasicString path) cs)) else ((fun nd_uscrut5 -> (match nd_uscrut5 with
+)) else (let nd_uscrut5 = ((v_parseLiteralString path) cs) in (match nd_uscrut5 with
   | Base_dDiag.C_Check_OkC (dtb__218) -> (match dtb__218 with
   | { B_dData_dPair.f_Pair_first = dtb__219; B_dData_dPair.f_Pair_second = dtb__220 } -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (C_TomlValue_TStr (dtb__219)); B_dData_dPair.f_Pair_second = dtb__220 }))
   | _ -> failwith "DT: impossible branch"
 )
   | Base_dDiag.C_Check_ErrC (dtb__221) -> (Base_dDiag.C_Check_ErrC (dtb__221))
   | _ -> failwith "DT: impossible branch"
-)) ((v_parseLiteralString path) cs)))
+)))
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 682 "Vuna/Compiler/Frontend/Toml.vuna"
-let v_parseMultilineValue = (fun (basic : bool) (path : string) (cs : t_TomlCursor) -> ((fun after -> (if basic then ((fun nd_uscrut4 -> (match nd_uscrut4 with
+let v_parseMultilineValue = (fun (basic : bool) (path : string) (cs : t_TomlCursor) -> (let after = ((v_advanceChars 3) cs) in (if basic then (let nd_uscrut4 = ((v_parseMultilineBasic path) after) in (match nd_uscrut4 with
   | Base_dDiag.C_Check_OkC (dtb__222) -> (match dtb__222 with
   | { B_dData_dPair.f_Pair_first = dtb__223; B_dData_dPair.f_Pair_second = dtb__224 } -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (C_TomlValue_TStr (dtb__223)); B_dData_dPair.f_Pair_second = dtb__224 }))
   | _ -> failwith "DT: impossible branch"
 )
   | Base_dDiag.C_Check_ErrC (dtb__225) -> (Base_dDiag.C_Check_ErrC (dtb__225))
   | _ -> failwith "DT: impossible branch"
-)) ((v_parseMultilineBasic path) after)) else ((fun nd_uscrut4 -> (match nd_uscrut4 with
+)) else (let nd_uscrut4 = ((v_parseMultilineLiteral path) after) in (match nd_uscrut4 with
   | Base_dDiag.C_Check_OkC (dtb__226) -> (match dtb__226 with
   | { B_dData_dPair.f_Pair_first = dtb__227; B_dData_dPair.f_Pair_second = dtb__228 } -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (C_TomlValue_TStr (dtb__227)); B_dData_dPair.f_Pair_second = dtb__228 }))
   | _ -> failwith "DT: impossible branch"
 )
   | Base_dDiag.C_Check_ErrC (dtb__229) -> (Base_dDiag.C_Check_ErrC (dtb__229))
   | _ -> failwith "DT: impossible branch"
-)) ((v_parseMultilineLiteral path) after)))) ((v_advanceChars 3) cs)))
+)))))
 
 # 814 "Vuna/Compiler/Frontend/Toml.vuna"
 let v_makeInteger = (fun (mc0 : int) (mc1 : bool) -> (if mc1 then (0 - mc0) else mc0))
@@ -622,7 +622,7 @@ let v_finishInteger = (fun (path : string) (startCs : t_TomlCursor) (cs : t_Toml
 # 790 "Vuna/Compiler/Frontend/Toml.vuna"
 let rec v_parseIntegerDigits = (fun (fuel : int) (path : string) (startCs : t_TomlCursor) (cs : t_TomlCursor) (count : int) (acc : int) (negative : bool) -> (if (fuel <= 0) then (Base_dDiag.v_icFuel "toml") else (match (cs).f_TomlCursor_cursorChars with
   | B_dData_dList.C_List_Nil -> ((((((v_finishInteger path) startCs) cs) count) acc) negative)
-  | B_dData_dList.C_List__x58__x58_ (dtb__232, dtb__233) -> (if (v_isDigitChar dtb__232) then ((fun d -> (if (acc > (if 10 = 0 then failwith "division by zero" else (Frontend_dLexer.v_maxIntLiteral - d) / 10)) then (((v_failAt path) (startCs).f_TomlCursor_cursorLine) "integer literal is out of range (max is 4611686018427387903)") else (((((((v_parseIntegerDigits (fuel - 1)) path) startCs) (v_advanceCursor cs)) (count + 1)) ((acc * 10) + d)) negative))) (dtb__232 - 48)) else ((((((v_finishInteger path) startCs) cs) count) acc) negative))
+  | B_dData_dList.C_List__x58__x58_ (dtb__232, dtb__233) -> (if (v_isDigitChar dtb__232) then (let d = (dtb__232 - 48) in (if (acc > (if 10 = 0 then failwith "division by zero" else (Frontend_dLexer.v_maxIntLiteral - d) / 10)) then (((v_failAt path) (startCs).f_TomlCursor_cursorLine) "integer literal is out of range (max is 4611686018427387903)") else (((((((v_parseIntegerDigits (fuel - 1)) path) startCs) (v_advanceCursor cs)) (count + 1)) ((acc * 10) + d)) negative))) else ((((((v_finishInteger path) startCs) cs) count) acc) negative))
   | _ -> failwith "DT: impossible branch"
 )))
 
@@ -634,14 +634,14 @@ let v_parseInteger = (fun (path : string) (cs : t_TomlCursor) -> (match (cs).f_T
 ))
 
 # 818 "Vuna/Compiler/Frontend/Toml.vuna"
-let v_parseIntValue = (fun (path : string) (cs : t_TomlCursor) -> ((fun nd_uscrut2 -> (match nd_uscrut2 with
+let v_parseIntValue = (fun (path : string) (cs : t_TomlCursor) -> (let nd_uscrut2 = ((v_parseInteger path) cs) in (match nd_uscrut2 with
   | Base_dDiag.C_Check_OkC (dtb__236) -> (match dtb__236 with
   | { B_dData_dPair.f_Pair_first = dtb__237; B_dData_dPair.f_Pair_second = dtb__238 } -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (C_TomlValue_TInt (dtb__237)); B_dData_dPair.f_Pair_second = dtb__238 }))
   | _ -> failwith "DT: impossible branch"
 )
   | Base_dDiag.C_Check_ErrC (dtb__239) -> (Base_dDiag.C_Check_ErrC (dtb__239))
   | _ -> failwith "DT: impossible branch"
-)) ((v_parseInteger path) cs)))
+)))
 
 # 825 "Vuna/Compiler/Frontend/Toml.vuna"
 let rec v_matchChars = (fun (mc0 : int B_dData_dList.t_List) (mc1 : t_TomlCursor) -> (match mc0 with
@@ -692,21 +692,21 @@ and v_parseArrayValue = (fun (fuel : int) (path : string) (cs : t_TomlCursor) ->
 and v_parseArrayItems = (fun (fuel : int) (path : string) (cs : t_TomlCursor) (acc : t_TomlValue B_dData_dList.t_List) -> (if (fuel <= 0) then (Base_dDiag.v_icFuel "toml") else (match (v_skipGap cs) with
   | { f_TomlCursor_cursorChars = dtb__256; f_TomlCursor_cursorLine = dtb__257; f_TomlCursor_cursorCol = dtb__258 } -> (match dtb__256 with
   | B_dData_dList.C_List_Nil -> (((v_failAt path) dtb__257) "unterminated array")
-  | B_dData_dList.C_List__x58__x58_ (dtb__259, dtb__260) -> (if (dtb__259 = 93) then (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (C_TomlValue_TArray ((B_dData_dList.v_reverse acc))); B_dData_dPair.f_Pair_second = (v_advanceCursor { f_TomlCursor_cursorChars = dtb__256; f_TomlCursor_cursorLine = dtb__257; f_TomlCursor_cursorCol = dtb__258 }) })) else ((fun nd_uscrut10 -> (match nd_uscrut10 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__259, dtb__260) -> (if (dtb__259 = 93) then (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (C_TomlValue_TArray ((B_dData_dList.v_reverse acc))); B_dData_dPair.f_Pair_second = (v_advanceCursor { f_TomlCursor_cursorChars = dtb__256; f_TomlCursor_cursorLine = dtb__257; f_TomlCursor_cursorCol = dtb__258 }) })) else (let nd_uscrut10 = (((v_parseValue (fuel - 1)) path) { f_TomlCursor_cursorChars = dtb__256; f_TomlCursor_cursorLine = dtb__257; f_TomlCursor_cursorCol = dtb__258 }) in (match nd_uscrut10 with
   | Base_dDiag.C_Check_OkC (dtb__261) -> (match dtb__261 with
   | { B_dData_dPair.f_Pair_first = dtb__262; B_dData_dPair.f_Pair_second = dtb__263 } -> (match (v_skipGap dtb__263) with
-  | { f_TomlCursor_cursorChars = dtb__264; f_TomlCursor_cursorLine = dtb__265; f_TomlCursor_cursorCol = dtb__266 } -> ((fun nd_uscrut20 -> (match nd_uscrut20 with
+  | { f_TomlCursor_cursorChars = dtb__264; f_TomlCursor_cursorLine = dtb__265; f_TomlCursor_cursorCol = dtb__266 } -> (let nd_uscrut20 = dtb__264 in (match nd_uscrut20 with
   | B_dData_dList.C_List__x58__x58_ (dtb__267, dtb__268) -> (if (dtb__267 = 44) then ((((v_parseArrayItems (fuel - 1)) path) (v_advanceCursor { f_TomlCursor_cursorChars = dtb__264; f_TomlCursor_cursorLine = dtb__265; f_TomlCursor_cursorCol = dtb__266 })) (B_dData_dList.C_List__x58__x58_ (dtb__262, acc))) else (if (dtb__267 = 93) then (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (C_TomlValue_TArray ((B_dData_dList.v_reverse (B_dData_dList.C_List__x58__x58_ (dtb__262, acc))))); B_dData_dPair.f_Pair_second = (v_advanceCursor { f_TomlCursor_cursorChars = dtb__264; f_TomlCursor_cursorLine = dtb__265; f_TomlCursor_cursorCol = dtb__266 }) })) else (((v_failAt path) dtb__265) "expected ',' or ']' in array")))
   | B_dData_dList.C_List_Nil -> (((v_failAt path) dtb__265) "unterminated array")
   | _ -> failwith "DT: impossible branch"
-)) dtb__264)
+))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
 )
   | Base_dDiag.C_Check_ErrC (dtb__269) -> (Base_dDiag.C_Check_ErrC (dtb__269))
   | _ -> failwith "DT: impossible branch"
-)) (((v_parseValue (fuel - 1)) path) { f_TomlCursor_cursorChars = dtb__256; f_TomlCursor_cursorLine = dtb__257; f_TomlCursor_cursorCol = dtb__258 })))
+)))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
@@ -721,21 +721,21 @@ and v_parseInlineTable = (fun (fuel : int) (path : string) (cs : t_TomlCursor) -
 and v_parseInlineFields = (fun (fuel : int) (path : string) (cs : t_TomlCursor) (fields : (string, t_TomlNode) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (if (fuel <= 0) then (Base_dDiag.v_icFuel "toml") else (match (v_skipBlank cs) with
   | { f_TomlCursor_cursorChars = dtb__272; f_TomlCursor_cursorLine = dtb__273; f_TomlCursor_cursorCol = dtb__274 } -> (match dtb__272 with
   | B_dData_dList.C_List_Nil -> (((v_failAt path) dtb__273) "unterminated inline table")
-  | B_dData_dList.C_List__x58__x58_ (dtb__275, dtb__276) -> (if (dtb__275 = 125) then (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (C_TomlValue_TTable (((v_rootValue fuel) fields))); B_dData_dPair.f_Pair_second = (v_advanceCursor { f_TomlCursor_cursorChars = dtb__272; f_TomlCursor_cursorLine = dtb__273; f_TomlCursor_cursorCol = dtb__274 }) })) else ((fun nd_uscrut10 -> (match nd_uscrut10 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__275, dtb__276) -> (if (dtb__275 = 125) then (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (C_TomlValue_TTable (((v_rootValue fuel) fields))); B_dData_dPair.f_Pair_second = (v_advanceCursor { f_TomlCursor_cursorChars = dtb__272; f_TomlCursor_cursorLine = dtb__273; f_TomlCursor_cursorCol = dtb__274 }) })) else (let nd_uscrut10 = ((v_parseKeyPath path) { f_TomlCursor_cursorChars = dtb__272; f_TomlCursor_cursorLine = dtb__273; f_TomlCursor_cursorCol = dtb__274 }) in (match nd_uscrut10 with
   | Base_dDiag.C_Check_OkC (dtb__277) -> (match dtb__277 with
   | { B_dData_dPair.f_Pair_first = dtb__278; B_dData_dPair.f_Pair_second = dtb__279 } -> (match (v_skipBlank dtb__279) with
   | { f_TomlCursor_cursorChars = dtb__280; f_TomlCursor_cursorLine = dtb__281; f_TomlCursor_cursorCol = dtb__282 } -> (match dtb__280 with
   | B_dData_dList.C_List_Nil -> (((v_failAt path) dtb__281) "expected '=' in inline table")
-  | B_dData_dList.C_List__x58__x58_ (dtb__283, dtb__284) -> (if (dtb__283 = 61) then ((fun nd_uscrut23 -> (match nd_uscrut23 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__283, dtb__284) -> (if (dtb__283 = 61) then (let nd_uscrut23 = (((v_parseValue (fuel - 1)) path) (v_skipBlank { f_TomlCursor_cursorChars = dtb__284; f_TomlCursor_cursorLine = dtb__281; f_TomlCursor_cursorCol = (dtb__282 + 1) })) in (match nd_uscrut23 with
   | Base_dDiag.C_Check_OkC (dtb__285) -> (match dtb__285 with
   | { B_dData_dPair.f_Pair_first = dtb__286; B_dData_dPair.f_Pair_second = dtb__287 } -> (match (((((((v_insertValue (v_pathFuel dtb__278)) path) dtb__281) dtb__278) (v_sectionOfPath dtb__278)) dtb__286) fields) with
   | Base_dDiag.C_Check_ErrC (dtb__288) -> (Base_dDiag.C_Check_ErrC (dtb__288))
   | Base_dDiag.C_Check_OkC (dtb__289) -> (match (v_skipBlank dtb__287) with
-  | { f_TomlCursor_cursorChars = dtb__290; f_TomlCursor_cursorLine = dtb__291; f_TomlCursor_cursorCol = dtb__292 } -> ((fun nd_uscrut35 -> (match nd_uscrut35 with
+  | { f_TomlCursor_cursorChars = dtb__290; f_TomlCursor_cursorLine = dtb__291; f_TomlCursor_cursorCol = dtb__292 } -> (let nd_uscrut35 = dtb__290 in (match nd_uscrut35 with
   | B_dData_dList.C_List__x58__x58_ (dtb__293, dtb__294) -> (if (dtb__293 = 44) then ((((v_parseInlineFields (fuel - 1)) path) { f_TomlCursor_cursorChars = dtb__294; f_TomlCursor_cursorLine = dtb__291; f_TomlCursor_cursorCol = (dtb__292 + 1) }) dtb__289) else (if (dtb__293 = 125) then (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (C_TomlValue_TTable (((v_rootValue fuel) dtb__289))); B_dData_dPair.f_Pair_second = (v_advanceCursor { f_TomlCursor_cursorChars = dtb__290; f_TomlCursor_cursorLine = dtb__291; f_TomlCursor_cursorCol = dtb__292 }) })) else (((v_failAt path) dtb__291) "expected ',' or '}' in inline table")))
   | B_dData_dList.C_List_Nil -> (((v_failAt path) dtb__291) "unterminated inline table")
   | _ -> failwith "DT: impossible branch"
-)) dtb__290)
+))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
@@ -744,7 +744,7 @@ and v_parseInlineFields = (fun (fuel : int) (path : string) (cs : t_TomlCursor) 
 )
   | Base_dDiag.C_Check_ErrC (dtb__295) -> (Base_dDiag.C_Check_ErrC (dtb__295))
   | _ -> failwith "DT: impossible branch"
-)) (((v_parseValue (fuel - 1)) path) (v_skipBlank { f_TomlCursor_cursorChars = dtb__284; f_TomlCursor_cursorLine = dtb__281; f_TomlCursor_cursorCol = (dtb__282 + 1) }))) else (((v_failAt path) dtb__281) "expected '=' in inline table"))
+)) else (((v_failAt path) dtb__281) "expected '=' in inline table"))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
@@ -753,7 +753,7 @@ and v_parseInlineFields = (fun (fuel : int) (path : string) (cs : t_TomlCursor) 
 )
   | Base_dDiag.C_Check_ErrC (dtb__296) -> (Base_dDiag.C_Check_ErrC (dtb__296))
   | _ -> failwith "DT: impossible branch"
-)) ((v_parseKeyPath path) { f_TomlCursor_cursorChars = dtb__272; f_TomlCursor_cursorLine = dtb__273; f_TomlCursor_cursorCol = dtb__274 })))
+)))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
@@ -780,7 +780,7 @@ let v_expectEol = (fun (path : string) (cs : t_TomlCursor) -> (match (v_skipBlan
 ))
 
 # 866 "Vuna/Compiler/Frontend/Toml.vuna"
-let rec v_parseSectionLine = (fun (fuel : int) (path : string) (cs : t_TomlCursor) (currentPath : string B_dData_dList.t_List) (fields : (string, t_TomlNode) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (if (fuel <= 0) then (Base_dDiag.v_icFuel "toml") else ((fun nd_uscrut5 -> (match nd_uscrut5 with
+let rec v_parseSectionLine = (fun (fuel : int) (path : string) (cs : t_TomlCursor) (currentPath : string B_dData_dList.t_List) (fields : (string, t_TomlNode) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (if (fuel <= 0) then (Base_dDiag.v_icFuel "toml") else (let nd_uscrut5 = ((v_parseKeyPath path) (v_advanceCursor cs)) in (match nd_uscrut5 with
   | Base_dDiag.C_Check_OkC (dtb__307) -> (match dtb__307 with
   | { B_dData_dPair.f_Pair_first = dtb__308; B_dData_dPair.f_Pair_second = dtb__309 } -> (match (v_skipBlank dtb__309) with
   | { f_TomlCursor_cursorChars = dtb__310; f_TomlCursor_cursorLine = dtb__311; f_TomlCursor_cursorCol = dtb__312 } -> (match dtb__310 with
@@ -794,7 +794,7 @@ let rec v_parseSectionLine = (fun (fuel : int) (path : string) (cs : t_TomlCurso
 )
   | Base_dDiag.C_Check_ErrC (dtb__315) -> (Base_dDiag.C_Check_ErrC (dtb__315))
   | _ -> failwith "DT: impossible branch"
-)) ((v_parseKeyPath path) (v_advanceCursor cs)))))
+))))
 # 880 "Vuna/Compiler/Frontend/Toml.vuna"
 and v_afterSingleBracket = (fun (fuel : int) (path : string) (line : int) (col : int) (rest : int B_dData_dList.t_List) (newSection : string B_dData_dList.t_List) (fields : (string, t_TomlNode) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (if (fuel <= 0) then (Base_dDiag.v_icFuel "toml") else (match ((v_expectEol path) { f_TomlCursor_cursorChars = rest; f_TomlCursor_cursorLine = line; f_TomlCursor_cursorCol = (col + 1) }) with
   | Base_dDiag.C_Check_ErrC (dtb__316) -> (Base_dDiag.C_Check_ErrC (dtb__316))
@@ -806,7 +806,7 @@ and v_afterSingleBracket = (fun (fuel : int) (path : string) (line : int) (col :
   | _ -> failwith "DT: impossible branch"
 )))
 # 893 "Vuna/Compiler/Frontend/Toml.vuna"
-and v_parseTableArrayLine = (fun (fuel : int) (path : string) (cs : t_TomlCursor) (currentPath : string B_dData_dList.t_List) (fields : (string, t_TomlNode) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (if (fuel <= 0) then (Base_dDiag.v_icFuel "toml") else ((fun nd_uscrut5 -> (match nd_uscrut5 with
+and v_parseTableArrayLine = (fun (fuel : int) (path : string) (cs : t_TomlCursor) (currentPath : string B_dData_dList.t_List) (fields : (string, t_TomlNode) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (if (fuel <= 0) then (Base_dDiag.v_icFuel "toml") else (let nd_uscrut5 = ((v_parseKeyPath path) (v_advanceCursor (v_advanceCursor cs))) in (match nd_uscrut5 with
   | Base_dDiag.C_Check_OkC (dtb__320) -> (match dtb__320 with
   | { B_dData_dPair.f_Pair_first = dtb__321; B_dData_dPair.f_Pair_second = dtb__322 } -> (match (v_skipBlank dtb__322) with
   | { f_TomlCursor_cursorChars = dtb__323; f_TomlCursor_cursorLine = dtb__324; f_TomlCursor_cursorCol = dtb__325 } -> (match dtb__323 with
@@ -820,7 +820,7 @@ and v_parseTableArrayLine = (fun (fuel : int) (path : string) (cs : t_TomlCursor
 )
   | Base_dDiag.C_Check_ErrC (dtb__328) -> (Base_dDiag.C_Check_ErrC (dtb__328))
   | _ -> failwith "DT: impossible branch"
-)) ((v_parseKeyPath path) (v_advanceCursor (v_advanceCursor cs))))))
+))))
 # 907 "Vuna/Compiler/Frontend/Toml.vuna"
 and v_afterDoubleBracket = (fun (fuel : int) (path : string) (line : int) (col : int) (rest : int B_dData_dList.t_List) (newSection : string B_dData_dList.t_List) (fields : (string, t_TomlNode) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (if (fuel <= 0) then (Base_dDiag.v_icFuel "toml") else (match rest with
   | B_dData_dList.C_List__x58__x58_ (dtb__329, dtb__330) -> (if (dtb__329 = 93) then (match ((v_expectEol path) { f_TomlCursor_cursorChars = dtb__330; f_TomlCursor_cursorLine = line; f_TomlCursor_cursorCol = (col + 2) }) with
@@ -835,24 +835,24 @@ and v_afterDoubleBracket = (fun (fuel : int) (path : string) (line : int) (col :
   | _ -> (((v_failAt path) line) "expected ']]' in table array header")
 )))
 # 925 "Vuna/Compiler/Frontend/Toml.vuna"
-and v_parseEntryValue = (fun (fuel : int) (path : string) (cs : t_TomlCursor) (keyLine : int) (keyPath : string B_dData_dList.t_List) (currentPath : string B_dData_dList.t_List) (fields : (string, t_TomlNode) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (if (fuel <= 0) then (Base_dDiag.v_icFuel "toml") else ((fun nd_uscrut7 -> (match nd_uscrut7 with
+and v_parseEntryValue = (fun (fuel : int) (path : string) (cs : t_TomlCursor) (keyLine : int) (keyPath : string B_dData_dList.t_List) (currentPath : string B_dData_dList.t_List) (fields : (string, t_TomlNode) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (if (fuel <= 0) then (Base_dDiag.v_icFuel "toml") else (let nd_uscrut7 = (((v_parseValue (fuel - 1)) path) (v_skipBlank cs)) in (match nd_uscrut7 with
   | Base_dDiag.C_Check_OkC (dtb__335) -> (match dtb__335 with
   | { B_dData_dPair.f_Pair_first = dtb__336; B_dData_dPair.f_Pair_second = dtb__337 } -> (match ((v_expectEol path) dtb__337) with
   | Base_dDiag.C_Check_ErrC (dtb__338) -> (Base_dDiag.C_Check_ErrC (dtb__338))
-  | Base_dDiag.C_Check_OkC (dtb__339) -> ((fun fullPath -> (match (((((((v_insertValue (v_pathFuel fullPath)) path) keyLine) fullPath) (v_sectionOfPath fullPath)) dtb__336) fields) with
+  | Base_dDiag.C_Check_OkC (dtb__339) -> (let fullPath = ((v_appendPath currentPath) keyPath) in (match (((((((v_insertValue (v_pathFuel fullPath)) path) keyLine) fullPath) (v_sectionOfPath fullPath)) dtb__336) fields) with
   | Base_dDiag.C_Check_ErrC (dtb__340) -> (Base_dDiag.C_Check_ErrC (dtb__340))
   | Base_dDiag.C_Check_OkC (dtb__341) -> (((((v_parseTomlLoop (fuel - 1)) path) dtb__339) currentPath) dtb__341)
   | _ -> failwith "DT: impossible branch"
-)) ((v_appendPath currentPath) keyPath))
+))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
 )
   | Base_dDiag.C_Check_ErrC (dtb__342) -> (Base_dDiag.C_Check_ErrC (dtb__342))
   | _ -> failwith "DT: impossible branch"
-)) (((v_parseValue (fuel - 1)) path) (v_skipBlank cs)))))
+))))
 # 942 "Vuna/Compiler/Frontend/Toml.vuna"
-and v_parseKeyLine = (fun (fuel : int) (path : string) (cs : t_TomlCursor) (currentPath : string B_dData_dList.t_List) (fields : (string, t_TomlNode) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (if (fuel <= 0) then (Base_dDiag.v_icFuel "toml") else ((fun nd_uscrut5 -> (match nd_uscrut5 with
+and v_parseKeyLine = (fun (fuel : int) (path : string) (cs : t_TomlCursor) (currentPath : string B_dData_dList.t_List) (fields : (string, t_TomlNode) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (if (fuel <= 0) then (Base_dDiag.v_icFuel "toml") else (let nd_uscrut5 = ((v_parseKeyPath path) cs) in (match nd_uscrut5 with
   | Base_dDiag.C_Check_OkC (dtb__343) -> (match dtb__343 with
   | { B_dData_dPair.f_Pair_first = dtb__344; B_dData_dPair.f_Pair_second = dtb__345 } -> (match (v_skipBlank dtb__345) with
   | { f_TomlCursor_cursorChars = dtb__346; f_TomlCursor_cursorLine = dtb__347; f_TomlCursor_cursorCol = dtb__348 } -> (match dtb__346 with
@@ -866,7 +866,7 @@ and v_parseKeyLine = (fun (fuel : int) (path : string) (cs : t_TomlCursor) (curr
 )
   | Base_dDiag.C_Check_ErrC (dtb__351) -> (Base_dDiag.C_Check_ErrC (dtb__351))
   | _ -> failwith "DT: impossible branch"
-)) ((v_parseKeyPath path) cs))))
+))))
 # 956 "Vuna/Compiler/Frontend/Toml.vuna"
 and v_parseTomlLoop = (fun (fuel : int) (path : string) (cs : t_TomlCursor) (currentPath : string B_dData_dList.t_List) (fields : (string, t_TomlNode) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (if (fuel <= 0) then (Base_dDiag.v_icFuel "toml") else (((((v_parseTomlLoopAt (fuel - 1)) path) (v_skipGap cs)) currentPath) fields)))
 # 963 "Vuna/Compiler/Frontend/Toml.vuna"
@@ -885,21 +885,21 @@ and v_parseBracketLine = (fun (fuel : int) (path : string) (cs : t_TomlCursor) (
 )))
 
 # 989 "Vuna/Compiler/Frontend/Toml.vuna"
-let v_parseTomlAt = (fun (path : string) (source : string) -> ((fun cs -> (match (((((v_parseTomlLoop (v_lineFuel cs)) path) cs) B_dData_dList.C_List_Nil) B_dData_dList.C_List_Nil) with
+let v_parseTomlAt = (fun (path : string) (source : string) -> (let cs = { f_TomlCursor_cursorChars = (v_stripCR (B_dData_dList.dtp_unpack source)); f_TomlCursor_cursorLine = 1; f_TomlCursor_cursorCol = 1 } in (match (((((v_parseTomlLoop (v_lineFuel cs)) path) cs) B_dData_dList.C_List_Nil) B_dData_dList.C_List_Nil) with
   | Base_dDiag.C_Check_ErrC (dtb__358) -> (Base_dDiag.C_Check_ErrC (dtb__358))
   | Base_dDiag.C_Check_OkC (dtb__359) -> (Base_dDiag.C_Check_OkC ((((v_flattenFields (v_flattenFuel cs)) B_dData_dList.C_List_Nil) dtb__359)))
   | _ -> failwith "DT: impossible branch"
-)) { f_TomlCursor_cursorChars = (v_stripCR (B_dData_dList.dtp_unpack source)); f_TomlCursor_cursorLine = 1; f_TomlCursor_cursorCol = 1 }))
+)))
 
 # 986 "Vuna/Compiler/Frontend/Toml.vuna"
 let v_parseToml = (fun (source : string) -> ((v_parseTomlAt "") source))
 
 # 998 "Vuna/Compiler/Frontend/Toml.vuna"
-let v_parseTomlDoc = (fun (path : string) (source : string) -> ((fun cs -> (match (((((v_parseTomlLoop (v_lineFuel cs)) path) cs) B_dData_dList.C_List_Nil) B_dData_dList.C_List_Nil) with
+let v_parseTomlDoc = (fun (path : string) (source : string) -> (let cs = { f_TomlCursor_cursorChars = (v_stripCR (B_dData_dList.dtp_unpack source)); f_TomlCursor_cursorLine = 1; f_TomlCursor_cursorCol = 1 } in (match (((((v_parseTomlLoop (v_lineFuel cs)) path) cs) B_dData_dList.C_List_Nil) B_dData_dList.C_List_Nil) with
   | Base_dDiag.C_Check_ErrC (dtb__360) -> (Obj.magic (Base_dDiag.C_Check_ErrC (dtb__360)))
   | Base_dDiag.C_Check_OkC (dtb__361) -> (Obj.magic (Base_dDiag.C_Check_OkC (((v_rootValue (v_flattenFuel cs)) dtb__361))))
   | _ -> failwith "DT: impossible branch"
-)) { f_TomlCursor_cursorChars = (v_stripCR (B_dData_dList.dtp_unpack source)); f_TomlCursor_cursorLine = 1; f_TomlCursor_cursorCol = 1 }))
+)))
 
 # 1007 "Vuna/Compiler/Frontend/Toml.vuna"
 let rec v_arrayStrings = (fun (mc0 : t_TomlValue B_dData_dList.t_List) -> (match mc0 with
@@ -918,14 +918,14 @@ let rec v_arrayStrings = (fun (mc0 : t_TomlValue B_dData_dList.t_List) -> (match
 # 1055 "Vuna/Compiler/Frontend/Toml.vuna"
 let rec v_splitAtList = (fun (n : int) xs -> (if (n <= 0) then (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = B_dData_dList.C_List_Nil; B_dData_dPair.f_Pair_second = xs })) else (match xs with
   | B_dData_dList.C_List_Nil -> B_dData_dMaybe.C_Maybe_Nothing
-  | B_dData_dList.C_List__x58__x58_ (dtb__366, dtb__367) -> ((fun nd_uscrut6 -> (match nd_uscrut6 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__366, dtb__367) -> (let nd_uscrut6 = ((v_splitAtList (n - 1)) dtb__367) in (match nd_uscrut6 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__368) -> (match dtb__368 with
   | { B_dData_dPair.f_Pair_first = dtb__369; B_dData_dPair.f_Pair_second = dtb__370 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (B_dData_dList.C_List__x58__x58_ (dtb__366, dtb__369)); B_dData_dPair.f_Pair_second = dtb__370 }))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
-)) ((v_splitAtList (n - 1)) dtb__367))
+))
   | _ -> failwith "DT: impossible branch"
 )))
 
@@ -963,29 +963,29 @@ let rec v_lookupEntryLine = (fun (mc0 : string B_dData_dList.t_List) (mc1 : stri
 ))
 
 # 1043 "Vuna/Compiler/Frontend/Toml.vuna"
-let v_childSectionOf = (fun (prefix : string B_dData_dList.t_List) (section : string B_dData_dList.t_List) -> ((fun nd_uscrut2 -> (match nd_uscrut2 with
+let v_childSectionOf = (fun (prefix : string B_dData_dList.t_List) (section : string B_dData_dList.t_List) -> (let nd_uscrut2 = ((v_splitAtList (v_lenInt prefix)) section) in (match nd_uscrut2 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__387) -> (match dtb__387 with
-  | { B_dData_dPair.f_Pair_first = dtb__388; B_dData_dPair.f_Pair_second = dtb__389 } -> (if (((v_samePath B_dData_dString.v_Eq_uString) dtb__388) prefix) then ((fun nd_uscrut9 -> (match nd_uscrut9 with
+  | { B_dData_dPair.f_Pair_first = dtb__388; B_dData_dPair.f_Pair_second = dtb__389 } -> (if (((v_samePath B_dData_dString.v_Eq_uString) dtb__388) prefix) then (let nd_uscrut9 = dtb__389 in (match nd_uscrut9 with
   | B_dData_dList.C_List__x58__x58_ (dtb__390, dtb__391) -> (match dtb__391 with
   | B_dData_dList.C_List_Nil -> (B_dData_dMaybe.C_Maybe_Just (dtb__390))
   | _ -> B_dData_dMaybe.C_Maybe_Nothing
 )
   | _ -> B_dData_dMaybe.C_Maybe_Nothing
-)) dtb__389) else B_dData_dMaybe.C_Maybe_Nothing)
+)) else B_dData_dMaybe.C_Maybe_Nothing)
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
-)) ((v_splitAtList (v_lenInt prefix)) section)))
+)))
 
 # 1029 "Vuna/Compiler/Frontend/Toml.vuna"
 let rec v_sectionsUnderGo = (fun (mc0 : string B_dData_dList.t_List) (mc1 : t_TomlEntry B_dData_dList.t_List) (mc2 : string B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__392, dtb__393) -> (match dtb__392 with
-  | { f_TomlEntry_tomlEntrySection = dtb__394; f_TomlEntry_tomlEntryKey = dtb__395; f_TomlEntry_tomlEntryValue = dtb__396; f_TomlEntry_tomlEntryLine = dtb__397 } -> ((fun childName -> (match childName with
+  | { f_TomlEntry_tomlEntrySection = dtb__394; f_TomlEntry_tomlEntryKey = dtb__395; f_TomlEntry_tomlEntryValue = dtb__396; f_TomlEntry_tomlEntryLine = dtb__397 } -> (let childName = ((v_childSectionOf mc0) dtb__394) in (match childName with
   | B_dData_dMaybe.C_Maybe_Nothing -> (((v_sectionsUnderGo mc0) dtb__393) mc2)
   | B_dData_dMaybe.C_Maybe_Just (dtb__398) -> (if ((B_dData_dList.v_memName dtb__398) mc2) then (((v_sectionsUnderGo mc0) dtb__393) mc2) else (((v_sectionsUnderGo mc0) dtb__393) (B_dData_dList.C_List__x58__x58_ (dtb__398, mc2))))
   | _ -> failwith "DT: impossible branch"
-)) ((v_childSectionOf mc0) dtb__394))
+))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dList.C_List_Nil -> (B_dData_dList.v_reverse mc2)

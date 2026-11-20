@@ -169,11 +169,11 @@ let v_decRecordMeta = (fun (fuel : int) (bytes : Base_dBytes.t_Cur) -> ((Base_dB
 let v_decRecordMetas = (fun (fuel : int) (bytes : Base_dBytes.t_Cur) -> (if (fuel <= 0) then B_dData_dMaybe.C_Maybe_Nothing else (((Base_dBytes.v_decList v_decRecordMeta) fuel) bytes)))
 
 # 306 "Vuna/Compiler/Elab/Canonical.vuna"
-let v_decDtDefsComplete = (fun (s : string) -> ((fun nd_uscrut1 -> (match nd_uscrut1 with
+let v_decDtDefsComplete = (fun (s : string) -> (let nd_uscrut1 = ((v_decDtDefs (bi_strLength s)) (Base_dBytes.v_curOf s)) in (match nd_uscrut1 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__54) -> (match dtb__54 with
   | { B_dData_dPair.f_Pair_first = dtb__55; B_dData_dPair.f_Pair_second = dtb__56 } -> (if (Base_dBytes.v_curAtEnd dtb__56) then (B_dData_dMaybe.C_Maybe_Just (dtb__55)) else B_dData_dMaybe.C_Maybe_Nothing)
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
-)) ((v_decDtDefs (bi_strLength s)) (Base_dBytes.v_curOf s))))
+)))

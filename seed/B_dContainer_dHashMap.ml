@@ -2,7 +2,7 @@ open Vuna_runtime
 type ('a0, 'a1) t_HashMap = { f_HashMap_hashMapBuckets : ((('a0, 'a1) B_dData_dPair.t_Pair B_dData_dList.t_List array) array); f_HashMap_hashMapCount : int }
 
 # 28 "Base/Container/HashMap.vuna"
-let v__ubucketOf = (fun (n : int) -> ((fun m -> (if (m < 0) then (m + 1024) else m)) (n - ((if 1024 = 0 then failwith "division by zero" else n / 1024) * 1024))))
+let v__ubucketOf = (fun (n : int) -> (let m = (n - ((if 1024 = 0 then failwith "division by zero" else n / 1024) * 1024)) in (if (m < 0) then (m + 1024) else m)))
 
 # 35 "Base/Container/HashMap.vuna"
 let rec v__ubucketInsert = (fun _uctx0 mc0 mc1 mc2 -> (match mc2 with
@@ -42,25 +42,25 @@ let rec v__ulookupAssoc = (fun _uctx0 mc0 mc1 -> (match mc1 with
 
 # 61 "Base/Container/HashMap.vuna"
 let v_insert = (fun _uctx0 _uctx1 mc0 mc1 mc2 -> (match mc2 with
-  | { f_HashMap_hashMapBuckets = dtb__16; f_HashMap_hashMapCount = dtb__17 } -> ((fun base -> ((fun b -> ((fun qi -> ((fun oi -> ((fun ii -> ((fun outer -> ((fun inner -> (match ((((v__ubucketInsert _uctx1) mc0) mc1) inner) with
+  | { f_HashMap_hashMapBuckets = dtb__16; f_HashMap_hashMapCount = dtb__17 } -> (let base = (if ((B_dContainer_dArray.v_length dtb__16) = 0) then ((B_dContainer_dArray.v_make 32) ((B_dContainer_dArray.v_make 32) B_dData_dList.C_List_Nil)) else dtb__16) in (let b = (v__ubucketOf ((B_dTrait_dHashable.v_hash _uctx0) mc0)) in (let qi = (if 32 = 0 then failwith "division by zero" else b / 32) in (let oi = (bi_natFromInt qi) in (let ii = (bi_natFromInt (b - (qi * 32))) in (let outer = ((B_dContainer_dArray.v_get base) oi) in (let inner = ((B_dContainer_dArray.v_get outer) ii) in (match ((((v__ubucketInsert _uctx1) mc0) mc1) inner) with
   | { B_dData_dPair.f_Pair_first = dtb__18; B_dData_dPair.f_Pair_second = dtb__19 } -> { f_HashMap_hashMapBuckets = (((B_dContainer_dArray.v_set base) oi) (((B_dContainer_dArray.v_set outer) ii) dtb__19)); f_HashMap_hashMapCount = (if dtb__18 then (dtb__17 + 1) else dtb__17) }
   | _ -> failwith "DT: impossible branch"
-)) ((B_dContainer_dArray.v_get outer) ii))) ((B_dContainer_dArray.v_get base) oi))) (bi_natFromInt (b - (qi * 32))))) (bi_natFromInt qi))) (if 32 = 0 then failwith "division by zero" else b / 32))) (v__ubucketOf ((B_dTrait_dHashable.v_hash _uctx0) mc0)))) (if ((B_dContainer_dArray.v_length dtb__16) = 0) then ((B_dContainer_dArray.v_make 32) ((B_dContainer_dArray.v_make 32) B_dData_dList.C_List_Nil)) else dtb__16))
+))))))))
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 82 "Base/Container/HashMap.vuna"
 let v_remove = (fun _uctx0 _uctx1 mc0 mc1 -> (match mc1 with
-  | { f_HashMap_hashMapBuckets = dtb__20; f_HashMap_hashMapCount = dtb__21 } -> (if ((B_dContainer_dArray.v_length dtb__20) = 0) then mc1 else ((fun b -> ((fun qi -> ((fun oi -> ((fun ii -> ((fun outer -> ((fun inner -> ((fun nd_uscrut16 -> (match nd_uscrut16 with
+  | { f_HashMap_hashMapBuckets = dtb__20; f_HashMap_hashMapCount = dtb__21 } -> (if ((B_dContainer_dArray.v_length dtb__20) = 0) then mc1 else (let b = (v__ubucketOf ((B_dTrait_dHashable.v_hash _uctx0) mc0)) in (let qi = (if 32 = 0 then failwith "division by zero" else b / 32) in (let oi = (bi_natFromInt qi) in (let ii = (bi_natFromInt (b - (qi * 32))) in (let outer = ((B_dContainer_dArray.v_get dtb__20) oi) in (let inner = ((B_dContainer_dArray.v_get outer) ii) in (let nd_uscrut16 = (((v__ubucketRemove _uctx1) mc0) inner) in (match nd_uscrut16 with
   | { B_dData_dPair.f_Pair_first = dtb__22; B_dData_dPair.f_Pair_second = dtb__23 } -> (if dtb__22 then { f_HashMap_hashMapBuckets = (((B_dContainer_dArray.v_set dtb__20) oi) (((B_dContainer_dArray.v_set outer) ii) dtb__23)); f_HashMap_hashMapCount = (dtb__21 - 1) } else mc1)
   | _ -> failwith "DT: impossible branch"
-)) (((v__ubucketRemove _uctx1) mc0) inner))) ((B_dContainer_dArray.v_get outer) ii))) ((B_dContainer_dArray.v_get dtb__20) oi))) (bi_natFromInt (b - (qi * 32))))) (bi_natFromInt qi))) (if 32 = 0 then failwith "division by zero" else b / 32))) (v__ubucketOf ((B_dTrait_dHashable.v_hash _uctx0) mc0))))
+)))))))))
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 99 "Base/Container/HashMap.vuna"
 let v_lookup = (fun _uctx0 _uctx1 mc0 mc1 -> (match mc1 with
-  | { f_HashMap_hashMapBuckets = dtb__24; f_HashMap_hashMapCount = dtb__25 } -> (if ((B_dContainer_dArray.v_length dtb__24) = 0) then B_dData_dMaybe.C_Maybe_Nothing else ((fun b -> ((fun qi -> ((fun oi -> ((fun ii -> (((v__ulookupAssoc _uctx1) mc0) ((B_dContainer_dArray.v_get ((B_dContainer_dArray.v_get dtb__24) oi)) ii))) (bi_natFromInt (b - (qi * 32))))) (bi_natFromInt qi))) (if 32 = 0 then failwith "division by zero" else b / 32))) (v__ubucketOf ((B_dTrait_dHashable.v_hash _uctx0) mc0))))
+  | { f_HashMap_hashMapBuckets = dtb__24; f_HashMap_hashMapCount = dtb__25 } -> (if ((B_dContainer_dArray.v_length dtb__24) = 0) then B_dData_dMaybe.C_Maybe_Nothing else (let b = (v__ubucketOf ((B_dTrait_dHashable.v_hash _uctx0) mc0)) in (let qi = (if 32 = 0 then failwith "division by zero" else b / 32) in (let oi = (bi_natFromInt qi) in (let ii = (bi_natFromInt (b - (qi * 32))) in (((v__ulookupAssoc _uctx1) mc0) ((B_dContainer_dArray.v_get ((B_dContainer_dArray.v_get dtb__24) oi)) ii)))))))
   | _ -> failwith "DT: impossible branch"
 ))
 

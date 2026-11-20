@@ -108,17 +108,17 @@ let v_stabilityOfTag = (fun (mc0 : int) -> (if (mc0 = 0) then (B_dData_dMaybe.C_
 let v_encSpan = (fun (sp : Base_dSource.t_Span) (acc : string B_dData_dList.t_List) -> ((Base_dBytes.v_encStr (sp).Base_dSource.f_Span_spanFile) ((Base_dBytes.v_encInt (sp).Base_dSource.f_Span_spanStartLine) ((Base_dBytes.v_encInt (sp).Base_dSource.f_Span_spanStartCol) ((Base_dBytes.v_encInt (sp).Base_dSource.f_Span_spanEndLine) ((Base_dBytes.v_encInt (sp).Base_dSource.f_Span_spanEndCol) ((Base_dBytes.v_encInt (sp).Base_dSource.f_Span_spanStartOffset) ((Base_dBytes.v_encInt (sp).Base_dSource.f_Span_spanEndOffset) acc))))))))
 
 # 166 "Vuna/Compiler/Base/Diag/Codec.vuna"
-let rec v_readCount = (fun (fuel : int) (acc : int) (c : Base_dBytes.t_Cur) -> (if (fuel <= 0) then B_dData_dMaybe.C_Maybe_Nothing else ((fun nd_uscrut3 -> (match nd_uscrut3 with
+let rec v_readCount = (fun (fuel : int) (acc : int) (c : Base_dBytes.t_Cur) -> (if (fuel <= 0) then B_dData_dMaybe.C_Maybe_Nothing else (let nd_uscrut3 = (Base_dBytes.v_curChar c) in (match nd_uscrut3 with
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
   | B_dData_dMaybe.C_Maybe_Just (dtb__0) -> (if (dtb__0 = 58) then (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = acc; B_dData_dPair.f_Pair_second = (Base_dBytes.v_curSkip c) })) else (if (if (dtb__0 >= 48) then (dtb__0 <= 57) else false) then (((v_readCount (fuel - 1)) ((acc * 10) + (dtb__0 - 48))) (Base_dBytes.v_curSkip c)) else B_dData_dMaybe.C_Maybe_Nothing))
   | _ -> failwith "DT: impossible branch"
-)) (Base_dBytes.v_curChar c))))
+))))
 
 # 176 "Vuna/Compiler/Base/Diag/Codec.vuna"
-let v_decCount = (fun (fuel : int) (c : Base_dBytes.t_Cur) -> ((fun nd_uscrut2 -> (match nd_uscrut2 with
+let v_decCount = (fun (fuel : int) (c : Base_dBytes.t_Cur) -> (let nd_uscrut2 = (Base_dBytes.v_curChar c) in (match nd_uscrut2 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__1) -> (if (dtb__1 = 91) then (((v_readCount (fuel - 1)) 0) (Base_dBytes.v_curSkip c)) else B_dData_dMaybe.C_Maybe_Nothing)
   | _ -> B_dData_dMaybe.C_Maybe_Nothing
-)) (Base_dBytes.v_curChar c)))
+)))
 
 # 182 "Vuna/Compiler/Base/Diag/Codec.vuna"
 let v_thenPair = (fun mc0 mc1 -> (match mc0 with
@@ -259,23 +259,23 @@ let rec v_decDiag = (fun (fuel : int) (c : Base_dBytes.t_Cur) -> (if (fuel <= 0)
   | _ -> failwith "DT: impossible branch"
 )))))))
 # 418 "Vuna/Compiler/Base/Diag/Codec.vuna"
-and v_decDiagList = (fun (fuel : int) (c : Base_dBytes.t_Cur) -> (if (fuel <= 0) then B_dData_dMaybe.C_Maybe_Nothing else ((fun nd_uscrut2 -> (match nd_uscrut2 with
+and v_decDiagList = (fun (fuel : int) (c : Base_dBytes.t_Cur) -> (if (fuel <= 0) then B_dData_dMaybe.C_Maybe_Nothing else (let nd_uscrut2 = ((v_decCount (fuel - 1)) c) in (match nd_uscrut2 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__39) -> (match dtb__39 with
   | { B_dData_dPair.f_Pair_first = dtb__40; B_dData_dPair.f_Pair_second = dtb__41 } -> ((((v_decDiagItems (fuel - 1)) dtb__40) dtb__41) B_dData_dList.C_List_Nil)
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
-)) ((v_decCount (fuel - 1)) c))))
+))))
 # 427 "Vuna/Compiler/Base/Diag/Codec.vuna"
-and v_decDiagItems = (fun (fuel : int) (n : int) (c : Base_dBytes.t_Cur) (acc : Base_dDiag.t_Diagnostic B_dData_dList.t_List) -> (if (fuel <= 0) then B_dData_dMaybe.C_Maybe_Nothing else (if (n <= 0) then (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (B_dData_dList.v_reverse acc); B_dData_dPair.f_Pair_second = c })) else ((fun nd_uscrut4 -> (match nd_uscrut4 with
+and v_decDiagItems = (fun (fuel : int) (n : int) (c : Base_dBytes.t_Cur) (acc : Base_dDiag.t_Diagnostic B_dData_dList.t_List) -> (if (fuel <= 0) then B_dData_dMaybe.C_Maybe_Nothing else (if (n <= 0) then (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (B_dData_dList.v_reverse acc); B_dData_dPair.f_Pair_second = c })) else (let nd_uscrut4 = ((v_decDiag (fuel - 1)) c) in (match nd_uscrut4 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__42) -> (match dtb__42 with
   | { B_dData_dPair.f_Pair_first = dtb__43; B_dData_dPair.f_Pair_second = dtb__44 } -> ((((v_decDiagItems (fuel - 1)) (n - 1)) dtb__44) (B_dData_dList.C_List__x58__x58_ (dtb__43, acc)))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
-)) ((v_decDiag (fuel - 1)) c)))))
+)))))
 
 # 446 "Vuna/Compiler/Base/Diag/Codec.vuna"
 let v_absentEnc = (fun (r : Base_dDiag.t_NoSourceReason) (acc : string B_dData_dList.t_List) -> ((Base_dBytes.v_encTag (v_absentTag r)) acc))
@@ -298,14 +298,14 @@ and v_encDiag = (fun (mc0 : Base_dDiag.t_Diagnostic) (mc1 : string B_dData_dList
 let v_encDiagnostics = (fun (ds : Base_dDiag.t_Diagnostic B_dData_dList.t_List) -> (Base_dBytes.v_encConcat ((v_encDiagList ds) B_dData_dList.C_List_Nil)))
 
 # 456 "Vuna/Compiler/Base/Diag/Codec.vuna"
-let v_decDiagnostics = (fun (payload : string) -> ((fun fuel -> ((fun nd_uscrut2 -> (match nd_uscrut2 with
+let v_decDiagnostics = (fun (payload : string) -> (let fuel = ((bi_strLength payload) + 1) in (let nd_uscrut2 = ((v_decDiagList fuel) (Base_dBytes.v_curOf payload)) in (match nd_uscrut2 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__64) -> (match dtb__64 with
   | { B_dData_dPair.f_Pair_first = dtb__65; B_dData_dPair.f_Pair_second = dtb__66 } -> (if (Base_dBytes.v_curAtEnd dtb__66) then (B_dData_dMaybe.C_Maybe_Just (dtb__65)) else B_dData_dMaybe.C_Maybe_Nothing)
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
-)) ((v_decDiagList fuel) (Base_dBytes.v_curOf payload)))) ((bi_strLength payload) + 1)))
+))))
 
 # 469 "Vuna/Compiler/Base/Diag/Codec.vuna"
 let v_checkOutcomeCodec = "check-result 1"
@@ -327,11 +327,11 @@ let v_checkResultCodec = v_checkOutcomeCodec
 let v_encCheckOutcome = (fun (o : t_CheckOutcome) -> (Base_dBytes.v_encConcat ((v_encOutcome o) B_dData_dList.C_List_Nil)))
 
 # 496 "Vuna/Compiler/Base/Diag/Codec.vuna"
-let v_decCheckOutcome = (fun (payload : string) -> ((fun fuel -> ((fun nd_uscrut2 -> (match nd_uscrut2 with
+let v_decCheckOutcome = (fun (payload : string) -> (let fuel = ((bi_strLength payload) + 1) in (let nd_uscrut2 = ((v_decOutcome fuel) (Base_dBytes.v_curOf payload)) in (match nd_uscrut2 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__69) -> (match dtb__69 with
   | { B_dData_dPair.f_Pair_first = dtb__70; B_dData_dPair.f_Pair_second = dtb__71 } -> (if (Base_dBytes.v_curAtEnd dtb__71) then (B_dData_dMaybe.C_Maybe_Just (dtb__70)) else B_dData_dMaybe.C_Maybe_Nothing)
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
-)) ((v_decOutcome fuel) (Base_dBytes.v_curOf payload)))) ((bi_strLength payload) + 1)))
+))))

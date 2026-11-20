@@ -9,28 +9,28 @@ let v_internalRef = (fun (name : string) (sp : Base_dSource.t_Span) -> (Frontend
 let v_debugOnRef = (fun (sp : Base_dSource.t_Span) -> (Frontend_dAst.C_Expr_EApp (((v_internalRef Base_dIntrinsics.v_debugOnIntrinsicName) sp), (B_dData_dList.C_List__x58__x58_ ((Frontend_dAst.C_Expr_EInt (0, sp)), B_dData_dList.C_List_Nil)), sp)))
 
 # 219 "Vuna/Compiler/Loader/Expand.vuna"
-let v_macroArityMismatch = (fun (name : string) (expected : int) (args : Frontend_dAst.t_Expr B_dData_dList.t_List) (sp : Base_dSource.t_Span) -> ((fun expectedText -> ((fun actualText -> (((((Base_dDiagnostics_dRn.v_rnAt3 sp) (Base_dDiagnostics_dRn.C_RnErr_MacroArity (name, expectedText, actualText))) name) expectedText) actualText)) (bi_strFromInt (B_dData_dList.v_length args)))) (bi_strFromInt expected)))
+let v_macroArityMismatch = (fun (name : string) (expected : int) (args : Frontend_dAst.t_Expr B_dData_dList.t_List) (sp : Base_dSource.t_Span) -> (let expectedText = (bi_strFromInt expected) in (let actualText = (bi_strFromInt (B_dData_dList.v_length args)) in (((((Base_dDiagnostics_dRn.v_rnAt3 sp) (Base_dDiagnostics_dRn.C_RnErr_MacroArity (name, expectedText, actualText))) name) expectedText) actualText))))
 
 # 235 "Vuna/Compiler/Loader/Expand.vuna"
-let v_expandMacro = (fun (name : string) (args : Frontend_dAst.t_Expr B_dData_dList.t_List) (sp : Base_dSource.t_Span) -> (if (name = "dbg") then ((fun nd_uscrut3 -> (match nd_uscrut3 with
+let v_expandMacro = (fun (name : string) (args : Frontend_dAst.t_Expr B_dData_dList.t_List) (sp : Base_dSource.t_Span) -> (if (name = "dbg") then (let nd_uscrut3 = args in (match nd_uscrut3 with
   | B_dData_dList.C_List__x58__x58_ (dtb__0, dtb__1) -> (match dtb__1 with
   | B_dData_dList.C_List_Nil -> (Base_dDiag.C_Check_OkC ((Frontend_dAst.C_Expr_EIf ((v_debugOnRef sp), (Frontend_dAst.C_Expr_EApp (((v_internalRef Base_dIntrinsics.v_debugLineIntrinsicName) sp), (B_dData_dList.C_List__x58__x58_ (dtb__0, B_dData_dList.C_List_Nil)), sp)), (Frontend_dAst.C_Expr_EInt (0, sp)), sp))))
   | _ -> ((((v_macroArityMismatch name) 1) args) sp)
 )
   | _ -> ((((v_macroArityMismatch name) 1) args) sp)
-)) args) else (if (name = "obs") then ((fun nd_uscrut3 -> (match nd_uscrut3 with
+)) else (if (name = "obs") then (let nd_uscrut3 = args in (match nd_uscrut3 with
   | B_dData_dList.C_List__x58__x58_ (dtb__2, dtb__3) -> (match dtb__3 with
   | B_dData_dList.C_List_Nil -> (Base_dDiag.C_Check_OkC ((Frontend_dAst.C_Expr_EApp (((v_internalRef Base_dIntrinsics.v_obsLogIntrinsicName) sp), (B_dData_dList.C_List__x58__x58_ (dtb__2, B_dData_dList.C_List_Nil)), sp))))
   | _ -> ((((v_macroArityMismatch name) 1) args) sp)
 )
   | _ -> ((((v_macroArityMismatch name) 1) args) sp)
-)) args) else (if (name = "mark") then ((fun nd_uscrut3 -> (match nd_uscrut3 with
+)) else (if (name = "mark") then (let nd_uscrut3 = args in (match nd_uscrut3 with
   | B_dData_dList.C_List__x58__x58_ (dtb__4, dtb__5) -> (match dtb__5 with
   | B_dData_dList.C_List_Nil -> (Base_dDiag.C_Check_OkC ((Frontend_dAst.C_Expr_EApp (((v_internalRef Base_dIntrinsics.v_obsMarkIntrinsicName) sp), (B_dData_dList.C_List__x58__x58_ (dtb__4, B_dData_dList.C_List_Nil)), sp))))
   | _ -> ((((v_macroArityMismatch name) 1) args) sp)
 )
   | _ -> ((((v_macroArityMismatch name) 1) args) sp)
-)) args) else (((Base_dDiagnostics_dRn.v_rnAt1 sp) (Base_dDiagnostics_dRn.C_RnErr_UnknownMacro (name))) name)))))
+)) else (((Base_dDiagnostics_dRn.v_rnAt1 sp) (Base_dDiagnostics_dRn.C_RnErr_UnknownMacro (name))) name)))))
 
 # 104 "Vuna/Compiler/Loader/Expand.vuna"
 let rec v_expandExprs = (fun (fuel : int) (exprs : Frontend_dAst.t_Expr B_dData_dList.t_List) -> (if (fuel <= 0) then (Base_dDiag.v_icFuel "macro expansion") else (match exprs with
@@ -77,32 +77,32 @@ and v_expandExpr = (fun (fuel : int) (e : Frontend_dAst.t_Expr) -> (if (fuel <= 
   | _ -> failwith "DT: impossible branch"
 )))
 # 152 "Vuna/Compiler/Loader/Expand.vuna"
-and v_expandPatExprs = (fun (fuel : int) (pairs : (Frontend_dAst.t_Pat, Frontend_dAst.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (if (fuel <= 0) then (Base_dDiag.v_icFuel "macro expansion") else ((fun nd_uscrut2 -> (match nd_uscrut2 with
+and v_expandPatExprs = (fun (fuel : int) (pairs : (Frontend_dAst.t_Pat, Frontend_dAst.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (if (fuel <= 0) then (Base_dDiag.v_icFuel "macro expansion") else (let nd_uscrut2 = pairs in (match nd_uscrut2 with
   | B_dData_dList.C_List__x58__x58_ (dtb__80, dtb__81) -> (match dtb__80 with
   | { B_dData_dPair.f_Pair_first = dtb__82; B_dData_dPair.f_Pair_second = dtb__83 } -> ((Base_dCommon.v_bind ((v_expandExpr (fuel - 1)) dtb__83)) (fun (value2 : Frontend_dAst.t_Expr) -> ((Base_dCommon.v_bind ((v_expandPatExprs (fuel - 1)) dtb__81)) (fun (rest2 : (Frontend_dAst.t_Pat, Frontend_dAst.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC ((B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = dtb__82; B_dData_dPair.f_Pair_second = value2 }, rest2))))))))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dList.C_List_Nil -> (Base_dDiag.C_Check_OkC (B_dData_dList.C_List_Nil))
   | _ -> failwith "DT: impossible branch"
-)) pairs)))
+))))
 # 161 "Vuna/Compiler/Loader/Expand.vuna"
-and v_expandClauses = (fun (fuel : int) (clauses : (Frontend_dAst.t_Pat B_dData_dList.t_List, Frontend_dAst.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (if (fuel <= 0) then (Base_dDiag.v_icFuel "macro expansion") else ((fun nd_uscrut2 -> (match nd_uscrut2 with
+and v_expandClauses = (fun (fuel : int) (clauses : (Frontend_dAst.t_Pat B_dData_dList.t_List, Frontend_dAst.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (if (fuel <= 0) then (Base_dDiag.v_icFuel "macro expansion") else (let nd_uscrut2 = clauses in (match nd_uscrut2 with
   | B_dData_dList.C_List__x58__x58_ (dtb__84, dtb__85) -> (match dtb__84 with
   | { B_dData_dPair.f_Pair_first = dtb__86; B_dData_dPair.f_Pair_second = dtb__87 } -> ((Base_dCommon.v_bind ((v_expandExpr (fuel - 1)) dtb__87)) (fun (body2 : Frontend_dAst.t_Expr) -> ((Base_dCommon.v_bind ((v_expandClauses (fuel - 1)) dtb__85)) (fun (rest2 : (Frontend_dAst.t_Pat B_dData_dList.t_List, Frontend_dAst.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC ((B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = dtb__86; B_dData_dPair.f_Pair_second = body2 }, rest2))))))))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dList.C_List_Nil -> (Base_dDiag.C_Check_OkC (B_dData_dList.C_List_Nil))
   | _ -> failwith "DT: impossible branch"
-)) clauses)))
+))))
 # 170 "Vuna/Compiler/Loader/Expand.vuna"
-and v_expandFieldExprs = (fun (fuel : int) (fields : (string, Frontend_dAst.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (if (fuel <= 0) then (Base_dDiag.v_icFuel "macro expansion") else ((fun nd_uscrut2 -> (match nd_uscrut2 with
+and v_expandFieldExprs = (fun (fuel : int) (fields : (string, Frontend_dAst.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (if (fuel <= 0) then (Base_dDiag.v_icFuel "macro expansion") else (let nd_uscrut2 = fields in (match nd_uscrut2 with
   | B_dData_dList.C_List__x58__x58_ (dtb__88, dtb__89) -> (match dtb__88 with
   | { B_dData_dPair.f_Pair_first = dtb__90; B_dData_dPair.f_Pair_second = dtb__91 } -> ((Base_dCommon.v_bind ((v_expandExpr (fuel - 1)) dtb__91)) (fun (value2 : Frontend_dAst.t_Expr) -> ((Base_dCommon.v_bind ((v_expandFieldExprs (fuel - 1)) dtb__89)) (fun (rest2 : (string, Frontend_dAst.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC ((B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = dtb__90; B_dData_dPair.f_Pair_second = value2 }, rest2))))))))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dList.C_List_Nil -> (Base_dDiag.C_Check_OkC (B_dData_dList.C_List_Nil))
   | _ -> failwith "DT: impossible branch"
-)) fields)))
+))))
 # 179 "Vuna/Compiler/Loader/Expand.vuna"
 and v_expandDoStmts = (fun (fuel : int) (stmts : Frontend_dAst.t_DoStmt B_dData_dList.t_List) -> (if (fuel <= 0) then (Base_dDiag.v_icFuel "macro expansion") else (match stmts with
   | B_dData_dList.C_List_Nil -> (Base_dDiag.C_Check_OkC (B_dData_dList.C_List_Nil))

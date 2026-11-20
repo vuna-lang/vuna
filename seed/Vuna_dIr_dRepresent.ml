@@ -26,22 +26,22 @@ let rec v_representIr = (fun (mc0 : Vuna_dIr_dModel.t_IrShared) (mc1 : Vuna_dIr_
   | Vuna_dIr_dModel.C_Ir_IrProj (dtb__36, dtb__37, dtb__38, dtb__39) -> (Vuna_dIr_dModel.C_Ir_IrProj (((v_representIr mc0) dtb__36), dtb__37, dtb__38, dtb__39))
   | Vuna_dIr_dModel.C_Ir_IrRecUpd (dtb__40, dtb__41, dtb__42, dtb__43) -> (Vuna_dIr_dModel.C_Ir_IrRecUpd (((v_representIr mc0) dtb__40), dtb__41, ((B_dData_dList.v_map (fun (p : (string, Vuna_dIr_dModel.t_Ir) B_dData_dPair.t_Pair) -> { B_dData_dPair.f_Pair_first = (B_dData_dPair.v_firstOf p); B_dData_dPair.f_Pair_second = ((v_representIr mc0) (B_dData_dPair.v_secondOf p)) })) dtb__42), dtb__43))
   | Vuna_dIr_dModel.C_Ir_IrRecord (dtb__44, dtb__45, dtb__46) -> (Vuna_dIr_dModel.C_Ir_IrRecord (dtb__44, dtb__45, ((B_dData_dList.v_map (fun (p : (string, Vuna_dIr_dModel.t_Ir) B_dData_dPair.t_Pair) -> { B_dData_dPair.f_Pair_first = (B_dData_dPair.v_firstOf p); B_dData_dPair.f_Pair_second = ((v_representIr mc0) (B_dData_dPair.v_secondOf p)) })) dtb__46)))
-  | Vuna_dIr_dModel.C_Ir_IrCtor (dtb__47, dtb__48, dtb__49, dtb__50) -> ((fun args2 -> (match ((Vuna_dIr_dModel.v_irSharedUnboxedOf dtb__47) (mc0).Vuna_dIr_dModel.f_IrShared_irSharedUnboxed) with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__51) -> ((fun nd_uscrut9 -> (match nd_uscrut9 with
+  | Vuna_dIr_dModel.C_Ir_IrCtor (dtb__47, dtb__48, dtb__49, dtb__50) -> (let args2 = ((B_dData_dList.v_map (v_representIr mc0)) dtb__50) in (match ((Vuna_dIr_dModel.v_irSharedUnboxedOf dtb__47) (mc0).Vuna_dIr_dModel.f_IrShared_irSharedUnboxed) with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__51) -> (let nd_uscrut9 = args2 in (match nd_uscrut9 with
   | B_dData_dList.C_List__x58__x58_ (dtb__52, dtb__53) -> (match dtb__53 with
   | B_dData_dList.C_List_Nil -> dtb__52
   | _ -> (Vuna_dIr_dModel.C_Ir_IrCtor (dtb__47, dtb__48, dtb__49, args2))
 )
   | _ -> (Vuna_dIr_dModel.C_Ir_IrCtor (dtb__47, dtb__48, dtb__49, args2))
-)) args2)
+))
   | B_dData_dMaybe.C_Maybe_Nothing -> (Vuna_dIr_dModel.C_Ir_IrCtor (dtb__47, dtb__48, dtb__49, args2))
   | _ -> failwith "DT: impossible branch"
-)) ((B_dData_dList.v_map (v_representIr mc0)) dtb__50))
+))
   | _ -> mc1
 ))
 # 76 "Vuna/Ir/Represent.vuna"
-and v_representCase = (fun (shared : Vuna_dIr_dModel.t_IrShared) (caseTy : Vuna_dIr_dModel.t_IrTy B_dData_dMaybe.t_Maybe) (resultTy : Vuna_dIr_dModel.t_IrTy B_dData_dMaybe.t_Maybe) (scrut : Vuna_dIr_dModel.t_Ir) (alts : Vuna_dIr_dModel.t_IrAlt B_dData_dList.t_List) -> ((fun scrut2 -> (match alts with
-  | B_dData_dList.C_List__x58__x58_ (dtb__54, dtb__55) -> ((fun nd_uscrut9 -> (match nd_uscrut9 with
+and v_representCase = (fun (shared : Vuna_dIr_dModel.t_IrShared) (caseTy : Vuna_dIr_dModel.t_IrTy B_dData_dMaybe.t_Maybe) (resultTy : Vuna_dIr_dModel.t_IrTy B_dData_dMaybe.t_Maybe) (scrut : Vuna_dIr_dModel.t_Ir) (alts : Vuna_dIr_dModel.t_IrAlt B_dData_dList.t_List) -> (let scrut2 = ((v_representIr shared) scrut) in (match alts with
+  | B_dData_dList.C_List__x58__x58_ (dtb__54, dtb__55) -> (let nd_uscrut9 = (Vuna_dIr_dModel.v_irAltCtorOf dtb__54) in (match nd_uscrut9 with
   | B_dData_dMaybe.C_Maybe_Nothing -> (Vuna_dIr_dModel.C_Ir_IrCase (caseTy, resultTy, scrut2, ((B_dData_dList.v_map (v_representAltIr shared)) alts)))
   | B_dData_dMaybe.C_Maybe_Just (dtb__56) -> (match dtb__56 with
   | { B_dData_dPair.f_Pair_first = dtb__57; B_dData_dPair.f_Pair_second = dtb__58 } -> (match ((Vuna_dIr_dModel.v_irSharedUnboxedOf dtb__57) (shared).Vuna_dIr_dModel.f_IrShared_irSharedUnboxed) with
@@ -52,10 +52,10 @@ and v_representCase = (fun (shared : Vuna_dIr_dModel.t_IrShared) (caseTy : Vuna_
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
-)) (Vuna_dIr_dModel.v_irAltCtorOf dtb__54))
+))
   | B_dData_dList.C_List_Nil -> (Vuna_dIr_dModel.C_Ir_IrCase (caseTy, resultTy, scrut2, B_dData_dList.C_List_Nil))
   | _ -> failwith "DT: impossible branch"
-)) ((v_representIr shared) scrut)))
+)))
 # 101 "Vuna/Ir/Represent.vuna"
 and v_representAlt = (fun (mc0 : Vuna_dIr_dModel.t_IrShared) (mc1 : Vuna_dIr_dModel.t_IrAlt B_dData_dMaybe.t_Maybe) -> (match mc1 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__60) -> (B_dData_dMaybe.C_Maybe_Just (((v_representAltIr mc0) dtb__60)))

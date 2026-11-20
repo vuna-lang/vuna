@@ -42,7 +42,7 @@ let v_decodedDiags = (fun (text : string) -> (match (Base_dDiag_dCodec.v_decDiag
 ))
 
 # 90 "Vuna/Compiler/Driver/TargetCache.vuna"
-let v_decodeOutputs = (fun (raw : string) -> (if ((bi_strLength raw) <= 0) then B_dData_dMaybe.C_Maybe_Nothing else ((fun nd_uscrut1 -> (match nd_uscrut1 with
+let v_decodeOutputs = (fun (raw : string) -> (if ((bi_strLength raw) <= 0) then B_dData_dMaybe.C_Maybe_Nothing else (let nd_uscrut1 = ((((Base_dBytes.v_decPair (Base_dBytes.v_decList ((Base_dBytes.v_decPair Base_dBytes.v_decStr) Base_dBytes.v_decStr))) Base_dBytes.v_decStr) ((bi_strLength raw) + 1)) (Base_dBytes.v_curOf raw)) in (match nd_uscrut1 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__3) -> (match dtb__3 with
   | { B_dData_dPair.f_Pair_first = dtb__4; B_dData_dPair.f_Pair_second = dtb__5 } -> (match dtb__4 with
   | { B_dData_dPair.f_Pair_first = dtb__6; B_dData_dPair.f_Pair_second = dtb__7 } -> (if (Base_dBytes.v_curAtEnd dtb__5) then (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = dtb__6; B_dData_dPair.f_Pair_second = (v_decodedDiags dtb__7) })) else B_dData_dMaybe.C_Maybe_Nothing)
@@ -52,7 +52,7 @@ let v_decodeOutputs = (fun (raw : string) -> (if ((bi_strLength raw) <= 0) then 
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
-)) ((((Base_dBytes.v_decPair (Base_dBytes.v_decList ((Base_dBytes.v_decPair Base_dBytes.v_decStr) Base_dBytes.v_decStr))) Base_dBytes.v_decStr) ((bi_strLength raw) + 1)) (Base_dBytes.v_curOf raw)))))
+))))
 
 # 74 "Vuna/Compiler/Driver/TargetCache.vuna"
 let v_bindRaw = (fun (mc0 : string B_dData_dMaybe.t_Maybe) -> (match mc0 with

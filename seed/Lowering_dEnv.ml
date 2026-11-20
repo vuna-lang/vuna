@@ -49,13 +49,13 @@ let rec v_memOpaqueLevel = (fun (mc0 : int) (mc1 : int B_dData_dList.t_List) -> 
 ))
 
 # 114 "Vuna/Compiler/Lowering/Env.vuna"
-let v_isRecordData = (fun (d : Elab_dTypes.t_DtData) -> (if (Elab_dTypes.v_dtDataIsRecord d) then ((fun nd_uscrut1 -> (match nd_uscrut1 with
+let v_isRecordData = (fun (d : Elab_dTypes.t_DtData) -> (if (Elab_dTypes.v_dtDataIsRecord d) then (let nd_uscrut1 = (Elab_dTypes.v_dtDataCtors d) in (match nd_uscrut1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__36, dtb__37) -> (match dtb__37 with
   | B_dData_dList.C_List_Nil -> true
   | _ -> false
 )
   | _ -> false
-)) (Elab_dTypes.v_dtDataCtors d)) else false))
+)) else false))
 
 # 133 "Vuna/Compiler/Lowering/Env.vuna"
 let rec v_recordRtFieldsGo = (fun (mc0 : string) (mc1 : bool B_dData_dList.t_List) (mc2 : Elab_dTypes.t_DtFieldMeta B_dData_dList.t_List) -> (match mc1 with
@@ -69,13 +69,13 @@ let rec v_recordRtFieldsGo = (fun (mc0 : string) (mc1 : bool B_dData_dList.t_Lis
 ))
 
 # 124 "Vuna/Compiler/Lowering/Env.vuna"
-let v_recordRtFields = (fun (d : Elab_dTypes.t_DtData) -> ((fun nd_uscrut1 -> (match nd_uscrut1 with
+let v_recordRtFields = (fun (d : Elab_dTypes.t_DtData) -> (let nd_uscrut1 = (Elab_dTypes.v_dtDataCtors d) in (match nd_uscrut1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__42, dtb__43) -> (match dtb__43 with
-  | B_dData_dList.C_List_Nil -> ((fun arity -> (((v_recordRtFieldsGo (Elab_dTypes.v_dtDataName d)) ((B_dData_dList.v_drop arity) (Elab_dRepresentation.v_ctorKeepFlags dtb__42))) (Elab_dTypes.v_dtDataFields d))) (v_listLength (d).Elab_dTypes.f_DtData_dtDataParams))
+  | B_dData_dList.C_List_Nil -> (let arity = (v_listLength (d).Elab_dTypes.f_DtData_dtDataParams) in (((v_recordRtFieldsGo (Elab_dTypes.v_dtDataName d)) ((B_dData_dList.v_drop arity) (Elab_dRepresentation.v_ctorKeepFlags dtb__42))) (Elab_dTypes.v_dtDataFields d)))
   | _ -> B_dData_dList.C_List_Nil
 )
   | _ -> B_dData_dList.C_List_Nil
-)) (Elab_dTypes.v_dtDataCtors d)))
+)))
 
 # 143 "Vuna/Compiler/Lowering/Env.vuna"
 let v_hasRecordRepr = (fun (d : Elab_dTypes.t_DtData) -> (if (v_isRecordData d) then (match (v_recordRtFields d) with
@@ -90,7 +90,7 @@ let v_rtDatasOf = (fun (datas : Elab_dTypes.t_DtData B_dData_dList.t_List) -> ((
 let rec v_ctorOpaqueGo = (fun (mc0 : Elab_dTypes.t_DtData B_dData_dList.t_List) (mc1 : (string, Core_dTerm.t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc2 : int) (mc3 : Core_dTerm.t_Value) (mc4 : int B_dData_dList.t_List) (mc5 : bool B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__44, dtb__45) -> (match dtb__44 with
   | { B_dData_dPair.f_Pair_first = dtb__46; B_dData_dPair.f_Pair_second = dtb__47 } -> (match mc3 with
-  | Core_dTerm.C_Value_VPi (dtb__48, dtb__49, dtb__50, dtb__51, dtb__52) -> ((fun flag -> ((fun fam2 -> ((fun next -> ((((((v_ctorOpaqueGo mc0) dtb__45) (mc2 + 1)) next) fam2) (B_dData_dList.C_List__x58__x58_ (flag, mc5)))) ((Core_dEval.v_applyClosure dtb__52) (Core_dTerm.C_Value_VNeutral ((Core_dTerm.C_Neutral_NVar (dtb__48, mc2, B_dData_dList.C_List_Nil))))))) (if (Elab_dMeta.v_isFamilyKindValue dtb__51) then (B_dData_dList.C_List__x58__x58_ (mc2, mc4)) else mc4))) (if (B_dData_dBool.v_not (Core_dTerm.v_rigIsErased dtb__47)) then (if (((((Elab_dMeta.v_valueOpaqueScoped (fun (l : int) -> ((v_memOpaqueLevel l) mc4))) (v_isTypeHeadOpaqueDatas mc0)) mc2) mc4) dtb__51) then true else (Elab_dMeta.v_valueHasImplicitPi dtb__51)) else false))
+  | Core_dTerm.C_Value_VPi (dtb__48, dtb__49, dtb__50, dtb__51, dtb__52) -> (let flag = (if (B_dData_dBool.v_not (Core_dTerm.v_rigIsErased dtb__47)) then (if (((((Elab_dMeta.v_valueOpaqueScoped (fun (l : int) -> ((v_memOpaqueLevel l) mc4))) (v_isTypeHeadOpaqueDatas mc0)) mc2) mc4) dtb__51) then true else (Elab_dMeta.v_valueHasImplicitPi dtb__51)) else false) in (let fam2 = (if (Elab_dMeta.v_isFamilyKindValue dtb__51) then (B_dData_dList.C_List__x58__x58_ (mc2, mc4)) else mc4) in (let next = ((Core_dEval.v_applyClosure dtb__52) (Core_dTerm.C_Value_VNeutral ((Core_dTerm.C_Neutral_NVar (dtb__48, mc2, B_dData_dList.C_List_Nil))))) in ((((((v_ctorOpaqueGo mc0) dtb__45) (mc2 + 1)) next) fam2) (B_dData_dList.C_List__x58__x58_ (flag, mc5))))))
   | _ -> (B_dData_dList.v_reverse mc5)
 )
   | _ -> failwith "DT: impossible branch"
@@ -198,7 +198,7 @@ let v_collectFamilyArgs = (fun (tps : int B_dData_dList.t_List) (table : (string
 let rec v_ctorUsedLevels = (fun (mc0 : int B_dData_dList.t_List) (mc1 : (string, int B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc2 : Elab_dTypes.t_DtData B_dData_dList.t_List) (mc3 : int B_dData_dList.t_List) (mc4 : (string, Core_dTerm.t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc5 : int) (mc6 : Core_dTerm.t_Value) -> (match mc4 with
   | B_dData_dList.C_List__x58__x58_ (dtb__82, dtb__83) -> (match dtb__82 with
   | { B_dData_dPair.f_Pair_first = dtb__84; B_dData_dPair.f_Pair_second = dtb__85 } -> (match mc6 with
-  | Core_dTerm.C_Value_VPi (dtb__86, dtb__87, dtb__88, dtb__89, dtb__90) -> ((fun isOpq -> ((fun fam2 -> ((fun next -> (if (Core_dTerm.v_rigIsErased dtb__85) then (((((((v_ctorUsedLevels mc0) mc1) mc2) fam2) dtb__83) (mc5 + 1)) next) else (if isOpq then (((((((v_ctorUsedLevels mc0) mc1) mc2) fam2) dtb__83) (mc5 + 1)) next) else ((B_dData_dList.v_append (((((v_collectUsedLevels mc0) mc1) mc2) mc5) dtb__89)) (((((((v_ctorUsedLevels mc0) mc1) mc2) fam2) dtb__83) (mc5 + 1)) next))))) ((Core_dEval.v_applyClosure dtb__90) (Core_dTerm.C_Value_VNeutral ((Core_dTerm.C_Neutral_NVar (dtb__86, mc5, B_dData_dList.C_List_Nil))))))) (if (Elab_dMeta.v_isFamilyKindValue dtb__89) then (B_dData_dList.C_List__x58__x58_ (mc5, mc3)) else mc3))) (((((Elab_dMeta.v_valueOpaqueScoped (fun (l : int) -> ((v_memOpaqueLevel l) mc3))) (v_isTypeHeadOpaqueDatas mc2)) mc5) mc3) dtb__89))
+  | Core_dTerm.C_Value_VPi (dtb__86, dtb__87, dtb__88, dtb__89, dtb__90) -> (let isOpq = (((((Elab_dMeta.v_valueOpaqueScoped (fun (l : int) -> ((v_memOpaqueLevel l) mc3))) (v_isTypeHeadOpaqueDatas mc2)) mc5) mc3) dtb__89) in (let fam2 = (if (Elab_dMeta.v_isFamilyKindValue dtb__89) then (B_dData_dList.C_List__x58__x58_ (mc5, mc3)) else mc3) in (let next = ((Core_dEval.v_applyClosure dtb__90) (Core_dTerm.C_Value_VNeutral ((Core_dTerm.C_Neutral_NVar (dtb__86, mc5, B_dData_dList.C_List_Nil))))) in (if (Core_dTerm.v_rigIsErased dtb__85) then (((((((v_ctorUsedLevels mc0) mc1) mc2) fam2) dtb__83) (mc5 + 1)) next) else (if isOpq then (((((((v_ctorUsedLevels mc0) mc1) mc2) fam2) dtb__83) (mc5 + 1)) next) else ((B_dData_dList.v_append (((((v_collectUsedLevels mc0) mc1) mc2) mc5) dtb__89)) (((((((v_ctorUsedLevels mc0) mc1) mc2) fam2) dtb__83) (mc5 + 1)) next)))))))
   | _ -> B_dData_dList.C_List_Nil
 )
   | _ -> failwith "DT: impossible branch"
@@ -208,7 +208,7 @@ let rec v_ctorUsedLevels = (fun (mc0 : int B_dData_dList.t_List) (mc1 : (string,
 ))
 
 # 305 "Vuna/Compiler/Lowering/Env.vuna"
-let v_dataUsedLevels = (fun (d : Elab_dTypes.t_DtData) (table : (string, int B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) (datas : Elab_dTypes.t_DtData B_dData_dList.t_List) -> ((fun raw -> ((B_dData_dList.v_filter (fun (l : int) -> ((v_memIntIn l) raw))) (v_typeParamLevels d))) ((B_dData_dList.v_concatMap (fun (c : Elab_dTypes.t_DtCtor) -> (((((((v_ctorUsedLevels (v_typeParamLevels d)) table) datas) B_dData_dList.C_List_Nil) (Elab_dTypes.v_dtCtorTelescope c)) 0) ((Core_dEval.v_eval B_dData_dList.C_List_Nil) (Elab_dTypes.v_dtCtorType c))))) (Elab_dTypes.v_dtDataCtors d))))
+let v_dataUsedLevels = (fun (d : Elab_dTypes.t_DtData) (table : (string, int B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) (datas : Elab_dTypes.t_DtData B_dData_dList.t_List) -> (let raw = ((B_dData_dList.v_concatMap (fun (c : Elab_dTypes.t_DtCtor) -> (((((((v_ctorUsedLevels (v_typeParamLevels d)) table) datas) B_dData_dList.C_List_Nil) (Elab_dTypes.v_dtCtorTelescope c)) 0) ((Core_dEval.v_eval B_dData_dList.C_List_Nil) (Elab_dTypes.v_dtCtorType c))))) (Elab_dTypes.v_dtDataCtors d)) in ((B_dData_dList.v_filter (fun (l : int) -> ((v_memIntIn l) raw))) (v_typeParamLevels d))))
 
 # 314 "Vuna/Compiler/Lowering/Env.vuna"
 let rec v_levelListEq = (fun (mc0 : int B_dData_dList.t_List) (mc1 : int B_dData_dList.t_List) -> (match mc0 with
@@ -247,7 +247,7 @@ let rec v_usedSlotCount = (fun (mc0 : Elab_dTypes.t_DtData B_dData_dList.t_List)
 let v_usedFixRounds = (fun (datas : Elab_dTypes.t_DtData B_dData_dList.t_List) -> (1 + (v_usedSlotCount datas)))
 
 # 340 "Vuna/Compiler/Lowering/Env.vuna"
-let rec v_usedTableFixFuel = (fun (fuel : int) (datas : Elab_dTypes.t_DtData B_dData_dList.t_List) (table : (string, int B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (if (fuel <= 0) then table else ((fun next -> (if ((v_sameLevelTable next) table) then next else (((v_usedTableFixFuel (fuel - 1)) datas) next))) ((B_dData_dList.v_map (fun (d : Elab_dTypes.t_DtData) -> { B_dData_dPair.f_Pair_first = (Elab_dTypes.v_dtDataName d); B_dData_dPair.f_Pair_second = (((v_dataUsedLevels d) table) datas) })) datas))))
+let rec v_usedTableFixFuel = (fun (fuel : int) (datas : Elab_dTypes.t_DtData B_dData_dList.t_List) (table : (string, int B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (if (fuel <= 0) then table else (let next = ((B_dData_dList.v_map (fun (d : Elab_dTypes.t_DtData) -> { B_dData_dPair.f_Pair_first = (Elab_dTypes.v_dtDataName d); B_dData_dPair.f_Pair_second = (((v_dataUsedLevels d) table) datas) })) datas) in (if ((v_sameLevelTable next) table) then next else (((v_usedTableFixFuel (fuel - 1)) datas) next)))))
 
 # 337 "Vuna/Compiler/Lowering/Env.vuna"
 let v_usedTableFix = (fun (datas : Elab_dTypes.t_DtData B_dData_dList.t_List) (table : (string, int B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (((v_usedTableFixFuel (v_usedFixRounds datas)) datas) table))
@@ -323,7 +323,7 @@ let v_listFamOf = (fun (datas : Elab_dTypes.t_DtData B_dData_dList.t_List) -> (m
 let v_ctorTableOf = (fun (datas : Elab_dTypes.t_DtData B_dData_dList.t_List) -> ((B_dData_dList.v_concatMap (fun (d : Elab_dTypes.t_DtData) -> ((B_dData_dList.v_map (fun (c : Elab_dTypes.t_DtCtor) -> { B_dData_dPair.f_Pair_first = (Elab_dTypes.v_dtCtorName c); B_dData_dPair.f_Pair_second = { B_dData_dPair.f_Pair_first = (Elab_dTypes.v_dtCtorFamily c); B_dData_dPair.f_Pair_second = (Elab_dRepresentation.v_ctorKeepFlags c) } })) (Elab_dTypes.v_dtDataCtors d)))) datas))
 
 # 375 "Vuna/Compiler/Lowering/Env.vuna"
-let v_lowerSharedOf = (fun (datas : Elab_dTypes.t_DtData B_dData_dList.t_List) (defs : Elab_dTypes.t_DtDef B_dData_dList.t_List) (facts : (string, Lowering_dChecks.t_TermUse) B_dContainer_dHashMap.t_HashMap) -> ((fun runtime -> ((fun locRows -> { Vuna_dIr_dModel.f_IrShared_irSharedRecordFields = (v_recordFieldsOf runtime); Vuna_dIr_dModel.f_IrShared_irSharedListFam = (v_listFamOf runtime); Vuna_dIr_dModel.f_IrShared_irSharedUsesFloat = (((v_anyDefFlag (fun (f : Lowering_dChecks.t_TermUse) -> (if ((f).Lowering_dChecks.f_TermUse_termUseFlags).Lowering_dChecks.f_UseFlags_useFlagsFloat then true else (f).Lowering_dChecks.f_TermUse_termUseFloatLit))) defs) facts); Vuna_dIr_dModel.f_IrShared_irSharedUsesTrace = (((v_anyDefFlag (fun (f : Lowering_dChecks.t_TermUse) -> ((f).Lowering_dChecks.f_TermUse_termUseFlags).Lowering_dChecks.f_UseFlags_useFlagsTrace)) defs) facts); Vuna_dIr_dModel.f_IrShared_irSharedUsesObs = (((v_anyDefFlag (fun (f : Lowering_dChecks.t_TermUse) -> ((f).Lowering_dChecks.f_TermUse_termUseFlags).Lowering_dChecks.f_UseFlags_useFlagsObs)) defs) facts); Vuna_dIr_dModel.f_IrShared_irSharedDefLocs = locRows; Vuna_dIr_dModel.f_IrShared_irSharedUnboxed = ((B_dData_dList.v_map v_unboxedRowOf) (Elab_dRepresentation.v_unboxedInfoOf runtime)); Vuna_dIr_dModel.f_IrShared_irSharedCtorShapes = (v_ctorTableOf runtime) }) ((v_mapSome v_locRowPair) defs))) (v_rtDatasOf datas)))
+let v_lowerSharedOf = (fun (datas : Elab_dTypes.t_DtData B_dData_dList.t_List) (defs : Elab_dTypes.t_DtDef B_dData_dList.t_List) (facts : (string, Lowering_dChecks.t_TermUse) B_dContainer_dHashMap.t_HashMap) -> (let runtime = (v_rtDatasOf datas) in (let locRows = ((v_mapSome v_locRowPair) defs) in { Vuna_dIr_dModel.f_IrShared_irSharedRecordFields = (v_recordFieldsOf runtime); Vuna_dIr_dModel.f_IrShared_irSharedListFam = (v_listFamOf runtime); Vuna_dIr_dModel.f_IrShared_irSharedUsesFloat = (((v_anyDefFlag (fun (f : Lowering_dChecks.t_TermUse) -> (if ((f).Lowering_dChecks.f_TermUse_termUseFlags).Lowering_dChecks.f_UseFlags_useFlagsFloat then true else (f).Lowering_dChecks.f_TermUse_termUseFloatLit))) defs) facts); Vuna_dIr_dModel.f_IrShared_irSharedUsesTrace = (((v_anyDefFlag (fun (f : Lowering_dChecks.t_TermUse) -> ((f).Lowering_dChecks.f_TermUse_termUseFlags).Lowering_dChecks.f_UseFlags_useFlagsTrace)) defs) facts); Vuna_dIr_dModel.f_IrShared_irSharedUsesObs = (((v_anyDefFlag (fun (f : Lowering_dChecks.t_TermUse) -> ((f).Lowering_dChecks.f_TermUse_termUseFlags).Lowering_dChecks.f_UseFlags_useFlagsObs)) defs) facts); Vuna_dIr_dModel.f_IrShared_irSharedDefLocs = locRows; Vuna_dIr_dModel.f_IrShared_irSharedUnboxed = ((B_dData_dList.v_map v_unboxedRowOf) (Elab_dRepresentation.v_unboxedInfoOf runtime)); Vuna_dIr_dModel.f_IrShared_irSharedCtorShapes = (v_ctorTableOf runtime) })))
 
 # 437 "Vuna/Compiler/Lowering/Env.vuna"
 let v_ctorOpaqueTableOf = (fun (datas : Elab_dTypes.t_DtData B_dData_dList.t_List) -> ((B_dData_dList.v_concatMap (fun (d : Elab_dTypes.t_DtData) -> ((B_dData_dList.v_map (fun (c : Elab_dTypes.t_DtCtor) -> { B_dData_dPair.f_Pair_first = (Elab_dTypes.v_dtCtorName c); B_dData_dPair.f_Pair_second = ((v_ctorOpaqueFlagsOf datas) c) })) (Elab_dTypes.v_dtDataCtors d)))) datas))
@@ -370,7 +370,7 @@ let rec v_nameSetOf = (fun (mc0 : string B_dData_dList.t_List) -> (match mc0 wit
 ))
 
 # 467 "Vuna/Compiler/Lowering/Env.vuna"
-let v_defFactsTblOf = (fun (defs : Elab_dTypes.t_DtDef B_dData_dList.t_List) -> ((fun names -> ((((B_dContainer_dHashMap.v_insertAll B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) ((B_dData_dList.v_map (fun (d : Elab_dTypes.t_DtDef) -> { B_dData_dPair.f_Pair_first = (Elab_dTypes.v_dtDefName d); B_dData_dPair.f_Pair_second = ((v_defFactsOf names) d) })) defs)) (((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) B_dData_dList.C_List_Nil))) (v_nameSetOf (B_dData_dList.C_List__x58__x58_ ("strFromFloat", (Lowering_dChecks.v_runtimeNamesOf defs))))))
+let v_defFactsTblOf = (fun (defs : Elab_dTypes.t_DtDef B_dData_dList.t_List) -> (let names = (v_nameSetOf (B_dData_dList.C_List__x58__x58_ ("strFromFloat", (Lowering_dChecks.v_runtimeNamesOf defs)))) in ((((B_dContainer_dHashMap.v_insertAll B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) ((B_dData_dList.v_map (fun (d : Elab_dTypes.t_DtDef) -> { B_dData_dPair.f_Pair_first = (Elab_dTypes.v_dtDefName d); B_dData_dPair.f_Pair_second = ((v_defFactsOf names) d) })) defs)) (((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) B_dData_dList.C_List_Nil))))
 
 # 444 "Vuna/Compiler/Lowering/Env.vuna"
-let v_mkLwEnv = (fun (datas : Elab_dTypes.t_DtData B_dData_dList.t_List) (defs : Elab_dTypes.t_DtDef B_dData_dList.t_List) (globals : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List) (unit : string) -> ((fun facts -> ((fun shared -> ((fun runtime -> { f_LwEnv_lwShared = shared; f_LwEnv_lwDatas = runtime; f_LwEnv_lwTyParams = (v_strTblOf (v_tyParamsOf runtime)); f_LwEnv_lwUnboxedInfo = (Elab_dRepresentation.v_unboxedInfoOf runtime); f_LwEnv_lwRecordFields = (v_strTblOf (shared).Vuna_dIr_dModel.f_IrShared_irSharedRecordFields); f_LwEnv_lwCtors = (v_strTblOf (v_ctorTableOf runtime)); f_LwEnv_lwOpaques = (v_strTblOf (v_ctorOpaqueTableOf runtime)); f_LwEnv_lwUnboxed = (B_dContainer_dHashMap.v_ofNames (Elab_dRepresentation.v_unboxedFamilySet runtime)); f_LwEnv_lwHasListFamily = ((v_hasDataNamed Base_dIntrinsics.v_listFamilyName) datas); f_LwEnv_lwDefs = defs; f_LwEnv_lwDefTbl = (v_defTblOf defs); f_LwEnv_lwGlobals = (v_strTblOf globals); f_LwEnv_lwFacts = facts; f_LwEnv_lwUnit = unit }) (v_rtDatasOf datas))) (((v_lowerSharedOf datas) defs) facts))) (v_defFactsTblOf defs)))
+let v_mkLwEnv = (fun (datas : Elab_dTypes.t_DtData B_dData_dList.t_List) (defs : Elab_dTypes.t_DtDef B_dData_dList.t_List) (globals : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List) (unit : string) -> (let facts = (v_defFactsTblOf defs) in (let shared = (((v_lowerSharedOf datas) defs) facts) in (let runtime = (v_rtDatasOf datas) in { f_LwEnv_lwShared = shared; f_LwEnv_lwDatas = runtime; f_LwEnv_lwTyParams = (v_strTblOf (v_tyParamsOf runtime)); f_LwEnv_lwUnboxedInfo = (Elab_dRepresentation.v_unboxedInfoOf runtime); f_LwEnv_lwRecordFields = (v_strTblOf (shared).Vuna_dIr_dModel.f_IrShared_irSharedRecordFields); f_LwEnv_lwCtors = (v_strTblOf (v_ctorTableOf runtime)); f_LwEnv_lwOpaques = (v_strTblOf (v_ctorOpaqueTableOf runtime)); f_LwEnv_lwUnboxed = (B_dContainer_dHashMap.v_ofNames (Elab_dRepresentation.v_unboxedFamilySet runtime)); f_LwEnv_lwHasListFamily = ((v_hasDataNamed Base_dIntrinsics.v_listFamilyName) datas); f_LwEnv_lwDefs = defs; f_LwEnv_lwDefTbl = (v_defTblOf defs); f_LwEnv_lwGlobals = (v_strTblOf globals); f_LwEnv_lwFacts = facts; f_LwEnv_lwUnit = unit }))))

@@ -28,11 +28,11 @@ let v_withFixitySpan = (fun (sp : Base_dSource.t_Span) (e : Base_dDiag.t_Diagnos
 
 # 59 "Vuna/Compiler/Loader/Fixity.vuna"
 let rec v_checkUniqueFixitiesGo = (fun (mc0 : Frontend_dAst.t_FixityDecl B_dData_dList.t_List) (mc1 : (string, int) B_dContainer_dHashMap.t_HashMap) -> (match mc0 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__2, dtb__3) -> ((fun sp -> (if ((B_dData_dList.v_memName (dtb__2).Frontend_dAst.f_FixityDecl_fixityOp) v_builtinFixityOps) then ((Base_dDiag.v_onErrDiag (v_withFixitySpan sp)) ((Base_dDiagnostics_dRn.v_rnNoLoc1 (Base_dDiagnostics_dRn.C_RnErr_BuiltinFixity ((dtb__2).Frontend_dAst.f_FixityDecl_fixityOp))) (dtb__2).Frontend_dAst.f_FixityDecl_fixityOp)) else (match ((((B_dContainer_dHashMap.v_lookup B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) (dtb__2).Frontend_dAst.f_FixityDecl_fixityOp) mc1) with
+  | B_dData_dList.C_List__x58__x58_ (dtb__2, dtb__3) -> (let sp = (dtb__2).Frontend_dAst.f_FixityDecl_fixitySpan in (if ((B_dData_dList.v_memName (dtb__2).Frontend_dAst.f_FixityDecl_fixityOp) v_builtinFixityOps) then ((Base_dDiag.v_onErrDiag (v_withFixitySpan sp)) ((Base_dDiagnostics_dRn.v_rnNoLoc1 (Base_dDiagnostics_dRn.C_RnErr_BuiltinFixity ((dtb__2).Frontend_dAst.f_FixityDecl_fixityOp))) (dtb__2).Frontend_dAst.f_FixityDecl_fixityOp)) else (match ((((B_dContainer_dHashMap.v_lookup B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) (dtb__2).Frontend_dAst.f_FixityDecl_fixityOp) mc1) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__4) -> ((Base_dDiag.v_onErrDiag (v_withFixitySpan sp)) ((Base_dDiagnostics_dRn.v_rnNoLoc1 (Base_dDiagnostics_dRn.C_RnErr_DuplicateFixity ((dtb__2).Frontend_dAst.f_FixityDecl_fixityOp))) (dtb__2).Frontend_dAst.f_FixityDecl_fixityOp))
   | B_dData_dMaybe.C_Maybe_Nothing -> ((Base_dCommon.v_bind ((v_checkUniqueFixitiesGo dtb__3) (((((B_dContainer_dHashMap.v_insert B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) (dtb__2).Frontend_dAst.f_FixityDecl_fixityOp) 1) mc1))) (fun (tailDecls : Frontend_dAst.t_FixityDecl B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC ((B_dData_dList.C_List__x58__x58_ (dtb__2, tailDecls))))))
   | _ -> failwith "DT: impossible branch"
-))) (dtb__2).Frontend_dAst.f_FixityDecl_fixitySpan)
+)))
   | B_dData_dList.C_List_Nil -> (Base_dDiag.C_Check_OkC (B_dData_dList.C_List_Nil))
   | _ -> failwith "DT: impossible branch"
 ))
@@ -79,10 +79,10 @@ let rec v_climb = (fun (fuel : int) (t : t_FixityTable) (minPrec : int) (lhs : F
   | B_dData_dList.C_List_Nil -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = lhs; B_dData_dPair.f_Pair_second = B_dData_dList.C_List_Nil }))
   | B_dData_dList.C_List__x58__x58_ (dtb__10, dtb__11) -> (match ((v_fixityOf t) dtb__10) with
   | Base_dDiag.C_Check_ErrC (dtb__12) -> (Base_dDiag.C_Check_ErrC (dtb__12))
-  | Base_dDiag.C_Check_OkC (dtb__13) -> ((fun level -> ((fun assoc -> ((fun nextMin -> ((fun rhs -> (if (level < minPrec) then (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = lhs; B_dData_dPair.f_Pair_second = rest })) else ((Base_dCommon.v_bind ((((((v_climb (fuel - 1)) t) nextMin) rhs) dtb__11) sp)) (fun (p : (Frontend_dAst.t_Expr, t_ChainOp B_dData_dList.t_List) B_dData_dPair.t_Pair) -> (match p with
+  | Base_dDiag.C_Check_OkC (dtb__13) -> (let level = (B_dData_dPair.v_firstOf dtb__13) in (let assoc = (B_dData_dPair.v_secondOf dtb__13) in (let nextMin = (if (assoc = 2) then level else (level + 1)) in (let rhs = (dtb__10).f_ChainOp_chainRhs in (if (level < minPrec) then (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = lhs; B_dData_dPair.f_Pair_second = rest })) else ((Base_dCommon.v_bind ((((((v_climb (fuel - 1)) t) nextMin) rhs) dtb__11) sp)) (fun (p : (Frontend_dAst.t_Expr, t_ChainOp B_dData_dList.t_List) B_dData_dPair.t_Pair) -> (match p with
   | { B_dData_dPair.f_Pair_first = dtb__14; B_dData_dPair.f_Pair_second = dtb__15 } -> ((((((v_climb (fuel - 1)) t) minPrec) (((((v_infixTerm t) dtb__10) lhs) dtb__14) sp)) dtb__15) sp)
   | _ -> failwith "DT: impossible branch"
-))))) (dtb__10).f_ChainOp_chainRhs)) (if (assoc = 2) then level else (level + 1)))) (B_dData_dPair.v_secondOf dtb__13))) (B_dData_dPair.v_firstOf dtb__13))
+))))))))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"

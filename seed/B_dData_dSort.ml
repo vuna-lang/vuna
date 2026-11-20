@@ -71,7 +71,7 @@ let rec v_mergeOnto = (fun mc0 mc1 mc2 mc3 -> (match mc2 with
 ))
 
 # 71 "Base/Data/Sort.vuna"
-let rec v_msort = (fun le (fuel : int) xs -> (if (fuel <= 0) then xs else ((fun nd_uscrut4 -> (match nd_uscrut4 with
+let rec v_msort = (fun le (fuel : int) xs -> (if (fuel <= 0) then xs else (let nd_uscrut4 = xs in (match nd_uscrut4 with
   | B_dData_dList.C_List__x58__x58_ (dtb__22, dtb__23) -> (match dtb__23 with
   | B_dData_dList.C_List__x58__x58_ (dtb__24, dtb__25) -> (match (((v_splitHalves B_dData_dList.C_List_Nil) B_dData_dList.C_List_Nil) xs) with
   | { B_dData_dPair.f_Pair_first = dtb__26; B_dData_dPair.f_Pair_second = dtb__27 } -> ((((v_mergeOnto le) B_dData_dList.C_List_Nil) (((v_msort le) (fuel - 1)) dtb__26)) (((v_msort le) (fuel - 1)) dtb__27))
@@ -82,7 +82,7 @@ let rec v_msort = (fun le (fuel : int) xs -> (if (fuel <= 0) then xs else ((fun 
 )
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
-)) xs)))
+))))
 
 # 84 "Base/Data/Sort.vuna"
 let v_sortBy = (fun le xs -> (if ((v_sortedBy le) xs) then xs else (if ((v_shortList 16) xs) then ((v_insertionSortBy le) xs) else (((v_msort le) (v_lenInt xs)) xs))))

@@ -40,10 +40,10 @@ let v_unlines = (fun (mc0 : string B_dData_dList.t_List) -> (match mc0 with
 let rec v_sameBytes = (fun (off : int) (pat : string) (text : string) (i : int) (n : int) (fuel : int) -> (if (fuel <= 0) then true else (if (i >= n) then true else (if (((dtp_strAt pat) i) = ((dtp_strAt text) (off + i))) then ((((((v_sameBytes off) pat) text) (i + 1)) n) (fuel - 1)) else false))))
 
 # 90 "Base/Data/String.vuna"
-let v_startsWith = (fun (prefix : string) (text : string) -> ((fun lp -> (if (lp > (bi_strLength text)) then false else ((((((v_sameBytes 0) prefix) text) 0) lp) lp))) (bi_strLength prefix)))
+let v_startsWith = (fun (prefix : string) (text : string) -> (let lp = (bi_strLength prefix) in (if (lp > (bi_strLength text)) then false else ((((((v_sameBytes 0) prefix) text) 0) lp) lp))))
 
 # 97 "Base/Data/String.vuna"
-let v_endsWith = (fun (suffix : string) (text : string) -> ((fun ls -> ((fun ltLen -> (if (ls > ltLen) then false else ((((((v_sameBytes (ltLen - ls)) suffix) text) 0) ls) ls))) (bi_strLength text))) (bi_strLength suffix)))
+let v_endsWith = (fun (suffix : string) (text : string) -> (let ls = (bi_strLength suffix) in (let ltLen = (bi_strLength text) in (if (ls > ltLen) then false else ((((((v_sameBytes (ltLen - ls)) suffix) text) 0) ls) ls)))))
 
 # 117 "Base/Data/String.vuna"
 let v_repeat = (fun (n : int) (s : string) -> (B_dData_dList.dtp_concatMany ((B_dData_dList.v_map (fun (_u : int) -> s)) ((B_dData_dList.v_range 0) n))))

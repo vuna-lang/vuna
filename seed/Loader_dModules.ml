@@ -102,7 +102,7 @@ let rec v_sliceEqGo = (fun (i : int) (srcOff : int) (src : string) (dstOff : int
 let v_sliceEq = (fun (srcOff : int) (src : string) (dstOff : int) (dst : string) (n : int) -> (((((((v_sliceEqGo 0) srcOff) src) dstOff) dst) n) n))
 
 # 146 "Vuna/Compiler/Loader/Modules.vuna"
-let v_isMangled = (fun (prefix : string) (name : string) (target : string) -> (if (prefix = "") then (name = target) else ((fun lp -> ((fun ln -> (if (if (if ((bi_strLength target) = ((lp + 1) + ln)) then (((dtp_strAt target) lp) = 46) else false) then (((((v_sliceEq 0) prefix) 0) target) lp) else false) then (((((v_sliceEq 0) name) (lp + 1)) target) ln) else false)) (bi_strLength name))) (bi_strLength prefix))))
+let v_isMangled = (fun (prefix : string) (name : string) (target : string) -> (if (prefix = "") then (name = target) else (let lp = (bi_strLength prefix) in (let ln = (bi_strLength name) in (if (if (if ((bi_strLength target) = ((lp + 1) + ln)) then (((dtp_strAt target) lp) = 46) else false) then (((((v_sliceEq 0) prefix) 0) target) lp) else false) then (((((v_sliceEq 0) name) (lp + 1)) target) ln) else false)))))
 
 # 173 "Vuna/Compiler/Loader/Modules.vuna"
 let v_ctorCanonical = (fun (prefix : string) (dname : string) (cname : string) -> ((v_mangle prefix) (String.concat "" [dname; "."; cname])))
@@ -140,7 +140,7 @@ let v_notEmptyList = (fun mc0 -> (match mc0 with
 ))
 
 # 188 "Vuna/Compiler/Loader/Modules.vuna"
-let v_qualifierCandidates = (fun (imports : Frontend_dAst.t_Import B_dData_dList.t_List) (q : string) -> ((fun strong -> (if (v_notEmptyList strong) then strong else (B_dData_dList.v_nubNames ((B_dData_dList.v_map v_importName) ((B_dData_dList.v_filter (fun (imp : Frontend_dAst.t_Import) -> ((v_lastSegment (v_importName imp)) = q))) imports))))) (B_dData_dList.v_nubNames ((B_dData_dList.v_append ((B_dData_dList.v_map v_importName) ((B_dData_dList.v_filter (fun (imp : Frontend_dAst.t_Import) -> ((v_importName imp) = q))) imports))) ((B_dData_dList.v_map v_importName) ((B_dData_dList.v_filter (fun (imp : Frontend_dAst.t_Import) -> ((v_aliasIs q) imp))) imports))))))
+let v_qualifierCandidates = (fun (imports : Frontend_dAst.t_Import B_dData_dList.t_List) (q : string) -> (let strong = (B_dData_dList.v_nubNames ((B_dData_dList.v_append ((B_dData_dList.v_map v_importName) ((B_dData_dList.v_filter (fun (imp : Frontend_dAst.t_Import) -> ((v_importName imp) = q))) imports))) ((B_dData_dList.v_map v_importName) ((B_dData_dList.v_filter (fun (imp : Frontend_dAst.t_Import) -> ((v_aliasIs q) imp))) imports)))) in (if (v_notEmptyList strong) then strong else (B_dData_dList.v_nubNames ((B_dData_dList.v_map v_importName) ((B_dData_dList.v_filter (fun (imp : Frontend_dAst.t_Import) -> ((v_lastSegment (v_importName imp)) = q))) imports))))))
 
 # 219 "Vuna/Compiler/Loader/Modules.vuna"
 let rec v_checkImportAliasSyntax = (fun (mc0 : Frontend_dAst.t_Import B_dData_dList.t_List) -> (match mc0 with
@@ -179,11 +179,11 @@ let rec v_findImportModule = (fun (mc0 : Frontend_dAst.t_Import B_dData_dList.t_
 
 # 294 "Vuna/Compiler/Loader/Modules.vuna"
 let rec v_importByPrefix = (fun (mc0 : Frontend_dAst.t_Import B_dData_dList.t_List) (mc1 : string) -> (match mc0 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__108, dtb__109) -> ((fun prefix -> (if ((B_dData_dString.v_startsWith (prefix ^ ".")) mc1) then (B_dData_dMaybe.C_Maybe_Just ((v_importName dtb__108))) else ((v_importByPrefix dtb__109) mc1))) (match (dtb__108).Frontend_dAst.f_Import_importAlias with
+  | B_dData_dList.C_List__x58__x58_ (dtb__108, dtb__109) -> (let prefix = (match (dtb__108).Frontend_dAst.f_Import_importAlias with
   | B_dData_dMaybe.C_Maybe_Just (dtb__110) -> dtb__110
   | B_dData_dMaybe.C_Maybe_Nothing -> (dtb__108).Frontend_dAst.f_Import_importName
   | _ -> failwith "DT: impossible branch"
-))
+) in (if ((B_dData_dString.v_startsWith (prefix ^ ".")) mc1) then (B_dData_dMaybe.C_Maybe_Just ((v_importName dtb__108))) else ((v_importByPrefix dtb__109) mc1)))
   | B_dData_dList.C_List_Nil -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
 ))
@@ -253,7 +253,7 @@ let v_entriesByName = (fun (name : string) (idx : (string, t_ExportEntry B_dData
 
 # 385 "Vuna/Compiler/Loader/Modules.vuna"
 let rec v_exportIndexOfGo = (fun (mc0 : t_ExportEntry B_dData_dList.t_List) (mc1 : (string, t_ExportEntry B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) -> (match mc0 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__139, dtb__140) -> ((fun tail -> (((((B_dContainer_dHashMap.v_insert B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) (dtb__139).f_ExportEntry_public) (B_dData_dList.C_List__x58__x58_ (dtb__139, ((v_entriesByName (dtb__139).f_ExportEntry_public) tail)))) tail)) ((v_exportIndexOfGo dtb__140) mc1))
+  | B_dData_dList.C_List__x58__x58_ (dtb__139, dtb__140) -> (let tail = ((v_exportIndexOfGo dtb__140) mc1) in (((((B_dContainer_dHashMap.v_insert B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) (dtb__139).f_ExportEntry_public) (B_dData_dList.C_List__x58__x58_ (dtb__139, ((v_entriesByName (dtb__139).f_ExportEntry_public) tail)))) tail))
   | B_dData_dList.C_List_Nil -> mc1
   | _ -> failwith "DT: impossible branch"
 ))
@@ -339,7 +339,7 @@ let rec v_sameTargetRest = (fun (mc0 : t_ExportEntry) mc1 -> (match mc1 with
 
 # 524 "Vuna/Compiler/Loader/Modules.vuna"
 let v_unifyEntryPairs = (fun (mc0 : string) (mc1 : string) (mc2 : string) (mc3 : (string, t_ExportEntry) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc3 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__151, dtb__152) -> (if ((v_sameTargetRest (B_dData_dPair.v_secondOf dtb__151)) dtb__152) then (Base_dDiag.C_Check_OkC (dtb__151)) else ((fun mods -> ((((Base_dDiagnostics_dRn.v_rnNoLoc3 (Base_dDiagnostics_dRn.C_RnErr_AmbiguousName (mc1, mc2, mods))) mc1) mc2) mods)) (v__ujoinNames ((B_dData_dList.v_map B_dData_dPair.v_firstOf) (B_dData_dList.C_List__x58__x58_ (dtb__151, dtb__152))))))
+  | B_dData_dList.C_List__x58__x58_ (dtb__151, dtb__152) -> (if ((v_sameTargetRest (B_dData_dPair.v_secondOf dtb__151)) dtb__152) then (Base_dDiag.C_Check_OkC (dtb__151)) else (let mods = (v__ujoinNames ((B_dData_dList.v_map B_dData_dPair.v_firstOf) (B_dData_dList.C_List__x58__x58_ (dtb__151, dtb__152)))) in ((((Base_dDiagnostics_dRn.v_rnNoLoc3 (Base_dDiagnostics_dRn.C_RnErr_AmbiguousName (mc1, mc2, mods))) mc1) mc2) mods)))
   | B_dData_dList.C_List_Nil -> (Base_dDiag.v_icInternal "unifyEntryPairs: empty candidates")
   | _ -> failwith "DT: impossible branch"
 ))
@@ -370,7 +370,7 @@ let v_moduleVisibleTo = (fun (roots : Frontend_dPackages_dPkg.t_Root B_dData_dLi
 
 # 561 "Vuna/Compiler/Loader/Modules.vuna"
 let rec v_collectModuleFiles = (fun (nFs : string) (mc0 : Frontend_dPackages_dPkg.t_Root B_dData_dList.t_List) (mc1 : string) (mc2 : string) (mc3 : (string, Frontend_dPackages_dPkg.t_Root) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc4 : string B_dData_dList.t_List) -> (match mc0 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__157, dtb__158) -> ((fun path -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((B_dEffect_dFs.v_fsFileExists nFs) path)) (fun exists -> (if exists then (if (((v_rootAllows mc2) dtb__157) mc1) then ((((((v_collectModuleFiles nFs) dtb__158) mc1) mc2) (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = path; B_dData_dPair.f_Pair_second = dtb__157 }, mc3))) mc4) else ((((((v_collectModuleFiles nFs) dtb__158) mc1) mc2) mc3) (B_dData_dList.C_List__x58__x58_ ((Frontend_dPackages_dPkg.v_rootName dtb__157), mc4)))) else ((((((v_collectModuleFiles nFs) dtb__158) mc1) mc2) mc3) mc4))))) ((v_modulePath dtb__157) mc1))
+  | B_dData_dList.C_List__x58__x58_ (dtb__157, dtb__158) -> (let path = ((v_modulePath dtb__157) mc1) in (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((B_dEffect_dFs.v_fsFileExists nFs) path)) (fun exists -> (if exists then (if (((v_rootAllows mc2) dtb__157) mc1) then ((((((v_collectModuleFiles nFs) dtb__158) mc1) mc2) (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = path; B_dData_dPair.f_Pair_second = dtb__157 }, mc3))) mc4) else ((((((v_collectModuleFiles nFs) dtb__158) mc1) mc2) mc3) (B_dData_dList.C_List__x58__x58_ ((Frontend_dPackages_dPkg.v_rootName dtb__157), mc4)))) else ((((((v_collectModuleFiles nFs) dtb__158) mc1) mc2) mc3) mc4)))))
   | B_dData_dList.C_List_Nil -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) { B_dData_dPair.f_Pair_first = (B_dData_dList.v_reverse mc3); B_dData_dPair.f_Pair_second = (B_dData_dList.v_reverse mc4) })
   | _ -> failwith "DT: impossible branch"
 ))
@@ -385,7 +385,7 @@ let v_candidateDir = (fun (candidate : (string, Frontend_dPackages_dPkg.t_Root) 
 let v_withImporterSpan = (fun (sp : Base_dSource.t_Span) (d : Base_dDiag.t_Diagnostic) -> (if ((Base_dSource.v_spanFile sp) = "") then d else ((Base_dDiag.v_withFallbackSpan sp) d)))
 
 # 587 "Vuna/Compiler/Loader/Modules.vuna"
-let v_findModuleFile = (fun (nFs : string) (roots : Frontend_dPackages_dPkg.t_Root B_dData_dList.t_List) (name : string) (importerPkg : string) (importerSpan : Base_dSource.t_Span) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((((((v_collectModuleFiles nFs) roots) name) importerPkg) B_dData_dList.C_List_Nil) B_dData_dList.C_List_Nil)) (fun collected -> ((fun allowed -> ((fun hidden -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) ((fun nd_uscrut10 -> (match nd_uscrut10 with
+let v_findModuleFile = (fun (nFs : string) (roots : Frontend_dPackages_dPkg.t_Root B_dData_dList.t_List) (name : string) (importerPkg : string) (importerSpan : Base_dSource.t_Span) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((((((v_collectModuleFiles nFs) roots) name) importerPkg) B_dData_dList.C_List_Nil) B_dData_dList.C_List_Nil)) (fun collected -> (let allowed = (B_dData_dPair.v_firstOf collected) in (let hidden = (B_dData_dPair.v_secondOf collected) in ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) (let nd_uscrut10 = allowed in (match nd_uscrut10 with
   | B_dData_dList.C_List__x58__x58_ (dtb__159, dtb__160) -> (match dtb__160 with
   | B_dData_dList.C_List_Nil -> (Base_dDiag.C_Check_OkC (dtb__159))
   | _ -> ((Base_dDiag.v_onErrDiag (v_withImporterSpan importerSpan)) (((Base_dDiagnostics_dRn.v_rnNoLoc2 (Base_dDiagnostics_dRn.C_RnErr_AmbiguousModule (name, (v__ujoinNames ((B_dData_dList.v_map v_candidateDir) allowed))))) name) (v__ujoinNames ((B_dData_dList.v_map v_candidateDir) allowed))))
@@ -395,7 +395,7 @@ let v_findModuleFile = (fun (nFs : string) (roots : Frontend_dPackages_dPkg.t_Ro
   | dtb__161 -> ((Base_dDiag.v_onErrDiag (v_withImporterSpan importerSpan)) (((Base_dDiagnostics_dLoader.v_ldErr2 (Base_dDiagnostics_dLoader.C_LdDiag_ModuleNotExported (name, (v__ujoinNames hidden)))) name) (v__ujoinNames hidden)))
 )
   | _ -> failwith "DT: impossible branch"
-)) allowed))) (B_dData_dPair.v_secondOf collected))) (B_dData_dPair.v_firstOf collected)))))
+))))))))
 
 # 609 "Vuna/Compiler/Loader/Modules.vuna"
 let v_moduleExportIndexOfOf = (fun (mc0 : t_Module) -> (match mc0 with
@@ -435,14 +435,14 @@ let rec v_findModule = (fun (mc0 : t_Module B_dData_dList.t_List) (mc1 : string)
 ))
 
 # 323 "Vuna/Compiler/Loader/Modules.vuna"
-let v_moduleDecls = (fun (modules : t_Module B_dData_dList.t_List) (name : string) -> ((fun nd_uscrut2 -> (match nd_uscrut2 with
+let v_moduleDecls = (fun (modules : t_Module B_dData_dList.t_List) (name : string) -> (let nd_uscrut2 = ((v_findModule modules) name) in (match nd_uscrut2 with
   | B_dData_dMaybe.C_Maybe_Nothing -> (v_missingModule name)
   | B_dData_dMaybe.C_Maybe_Just (dtb__189) -> (match dtb__189 with
   | { f_Module_moduleNameOf = dtb__190; f_Module_modulePackageOf = dtb__191; f_Module_moduleImportsOf = dtb__192; f_Module_moduleImplicitImportsOf = dtb__193; f_Module_moduleDeclsOf = dtb__194; f_Module_moduleExportsOf = dtb__195; f_Module_moduleFixitiesOf = dtb__196; f_Module_moduleReexportsOf = dtb__197; f_Module_moduleOpaqueOf = dtb__198; f_Module_moduleExportIndexOf = dtb__199 } -> (Base_dDiag.C_Check_OkC (dtb__194))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
-)) ((v_findModule modules) name)))
+)))
 
 # 329 "Vuna/Compiler/Loader/Modules.vuna"
 let v_moduleCtors = (fun (modules : t_Module B_dData_dList.t_List) (name : string) -> ((Base_dCommon.v_bind ((v_moduleDecls modules) name)) (fun (decls : Frontend_dAst.t_Decl B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC ((Frontend_dAst.v_ctorsOf decls))))))
@@ -450,14 +450,14 @@ let v_moduleCtors = (fun (modules : t_Module B_dData_dList.t_List) (name : strin
 # 612 "Vuna/Compiler/Loader/Modules.vuna"
 let rec v_walkNamespaceIndexFuel = (fun (fuel : int) (modules : t_Module B_dData_dList.t_List) (m : string) (segs : string B_dData_dList.t_List) -> (if (fuel <= 0) then B_dData_dMaybe.C_Maybe_Nothing else (match ((v_findModule modules) m) with
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
-  | B_dData_dMaybe.C_Maybe_Just (dtb__200) -> (if ((B_dData_dList.v_length segs) <= 0) then (B_dData_dMaybe.C_Maybe_Just ((v_moduleNameOf dtb__200))) else ((fun nd_uscrut6 -> (match nd_uscrut6 with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__200) -> (if ((B_dData_dList.v_length segs) <= 0) then (B_dData_dMaybe.C_Maybe_Just ((v_moduleNameOf dtb__200))) else (let nd_uscrut6 = (((v_longestIndexPrefix (v_moduleExportIndexOfOf dtb__200)) segs) (B_dData_dList.v_length segs)) in (match nd_uscrut6 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__201) -> (match dtb__201 with
   | { B_dData_dPair.f_Pair_first = dtb__202; B_dData_dPair.f_Pair_second = dtb__203 } -> ((((v_walkNamespaceIndexFuel (fuel - 1)) modules) dtb__202) ((v_dropFirst dtb__203) segs))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
-)) (((v_longestIndexPrefix (v_moduleExportIndexOfOf dtb__200)) segs) (B_dData_dList.v_length segs))))
+)))
   | _ -> failwith "DT: impossible branch"
 )))
 
@@ -465,16 +465,16 @@ let rec v_walkNamespaceIndexFuel = (fun (fuel : int) (modules : t_Module B_dData
 let v_walkNamespaceIndex = (fun (modules : t_Module B_dData_dList.t_List) (m : string) (segs : string B_dData_dList.t_List) -> ((((v_walkNamespaceIndexFuel (1 + (B_dData_dList.v_length segs))) modules) m) segs))
 
 # 344 "Vuna/Compiler/Loader/Modules.vuna"
-let rec v_resolvePathModule = (fun (modules : t_Module B_dData_dList.t_List) (segs : string B_dData_dList.t_List) (n : int) -> (if (n < 1) then B_dData_dMaybe.C_Maybe_Nothing else ((fun joined -> (match ((v_findModule modules) joined) with
+let rec v_resolvePathModule = (fun (modules : t_Module B_dData_dList.t_List) (segs : string B_dData_dList.t_List) (n : int) -> (if (n < 1) then B_dData_dMaybe.C_Maybe_Nothing else (let joined = (Base_dSource.v_joinDots ((v_takeSegsLocal n) segs)) in (match ((v_findModule modules) joined) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__204) -> (((v_walkNamespaceIndex modules) joined) ((v_dropFirst n) segs))
   | B_dData_dMaybe.C_Maybe_Nothing -> (((v_resolvePathModule modules) segs) (n - 1))
   | _ -> failwith "DT: impossible branch"
-)) (Base_dSource.v_joinDots ((v_takeSegsLocal n) segs)))))
+))))
 
 # 335 "Vuna/Compiler/Loader/Modules.vuna"
 let v_resolveModuleName = (fun (modules : t_Module B_dData_dList.t_List) (name : string) -> (match ((v_findModule modules) name) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__205) -> (B_dData_dMaybe.C_Maybe_Just (name))
-  | B_dData_dMaybe.C_Maybe_Nothing -> ((fun segs -> (((v_resolvePathModule modules) segs) ((B_dData_dList.v_length segs) - 1))) (Base_dSource.v_splitOnDot name))
+  | B_dData_dMaybe.C_Maybe_Nothing -> (let segs = (Base_dSource.v_splitOnDot name) in (((v_resolvePathModule modules) segs) ((B_dData_dList.v_length segs) - 1)))
   | _ -> failwith "DT: impossible branch"
 ))
 
@@ -486,14 +486,14 @@ let v_resolvedName = (fun (modules : t_Module B_dData_dList.t_List) (name : stri
 ))
 
 # 355 "Vuna/Compiler/Loader/Modules.vuna"
-let v_exportsOf = (fun (modules : t_Module B_dData_dList.t_List) (name : string) -> ((fun nd_uscrut2 -> (match nd_uscrut2 with
+let v_exportsOf = (fun (modules : t_Module B_dData_dList.t_List) (name : string) -> (let nd_uscrut2 = ((v_findModule modules) ((v_resolvedName modules) name)) in (match nd_uscrut2 with
   | B_dData_dMaybe.C_Maybe_Nothing -> (v_missingModule name)
   | B_dData_dMaybe.C_Maybe_Just (dtb__207) -> (match dtb__207 with
   | { f_Module_moduleNameOf = dtb__208; f_Module_modulePackageOf = dtb__209; f_Module_moduleImportsOf = dtb__210; f_Module_moduleImplicitImportsOf = dtb__211; f_Module_moduleDeclsOf = dtb__212; f_Module_moduleExportsOf = dtb__213; f_Module_moduleFixitiesOf = dtb__214; f_Module_moduleReexportsOf = dtb__215; f_Module_moduleOpaqueOf = dtb__216; f_Module_moduleExportIndexOf = dtb__217 } -> (Base_dDiag.C_Check_OkC (dtb__213))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
-)) ((v_findModule modules) ((v_resolvedName modules) name))))
+)))
 
 # 370 "Vuna/Compiler/Loader/Modules.vuna"
 let rec v_normalizeImports = (fun (mc0 : t_Module B_dData_dList.t_List) (mc1 : Frontend_dAst.t_Import B_dData_dList.t_List) -> (match mc1 with
@@ -531,7 +531,7 @@ let v_modulesExportingValue = (fun (modules : t_Module B_dData_dList.t_List) (im
 
 # 491 "Vuna/Compiler/Loader/Modules.vuna"
 let rec v_modulesExportingCtorFrom = (fun (mc0 : t_Module B_dData_dList.t_List) (mc1 : string B_dData_dList.t_List) (mc2 : string) -> (match mc1 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__229, dtb__230) -> ((Base_dCommon.v_bind ((v_exportIndexOfModule mc0) dtb__229)) (fun (idx : (string, t_ExportEntry B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) -> ((fun found -> ((Base_dCommon.v_bind (((v_modulesExportingCtorFrom mc0) dtb__230) mc2)) (fun (more : (string, t_ExportEntry) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC (((B_dData_dList.v_append ((B_dData_dList.v_map (fun (e : t_ExportEntry) -> { B_dData_dPair.f_Pair_first = dtb__229; B_dData_dPair.f_Pair_second = e })) found)) more)))))) ((v_findExportCtorsIn idx) mc2))))
+  | B_dData_dList.C_List__x58__x58_ (dtb__229, dtb__230) -> ((Base_dCommon.v_bind ((v_exportIndexOfModule mc0) dtb__229)) (fun (idx : (string, t_ExportEntry B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) -> (let found = ((v_findExportCtorsIn idx) mc2) in ((Base_dCommon.v_bind (((v_modulesExportingCtorFrom mc0) dtb__230) mc2)) (fun (more : (string, t_ExportEntry) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC (((B_dData_dList.v_append ((B_dData_dList.v_map (fun (e : t_ExportEntry) -> { B_dData_dPair.f_Pair_first = dtb__229; B_dData_dPair.f_Pair_second = e })) found)) more))))))))
   | B_dData_dList.C_List_Nil -> (Base_dDiag.C_Check_OkC (B_dData_dList.C_List_Nil))
   | _ -> failwith "DT: impossible branch"
 ))
@@ -572,16 +572,16 @@ let rec v_isCtorTargetInDecls = (fun (mc0 : string) (mc1 : string) (mc2 : string
 
 # 662 "Vuna/Compiler/Loader/Modules.vuna"
 let rec v_anyModuleCtorTarget = (fun (mc0 : t_Module B_dData_dList.t_List) (mc1 : string) (mc2 : string) (mc3 : string) -> (match mc0 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__255, dtb__256) -> ((fun mname -> (if (B_dData_dBool.v_not ((B_dData_dString.v_startsWith mname) mc1)) then ((((v_anyModuleCtorTarget dtb__256) mc1) mc2) mc3) else (if (((((v_isCtorTargetInDecls mname) mc1) mc2) mc3) (v_moduleDeclsOf dtb__255)) then true else ((((v_anyModuleCtorTarget dtb__256) mc1) mc2) mc3)))) (v_moduleNameOf dtb__255))
+  | B_dData_dList.C_List__x58__x58_ (dtb__255, dtb__256) -> (let mname = (v_moduleNameOf dtb__255) in (if (B_dData_dBool.v_not ((B_dData_dString.v_startsWith mname) mc1)) then ((((v_anyModuleCtorTarget dtb__256) mc1) mc2) mc3) else (if (((((v_isCtorTargetInDecls mname) mc1) mc2) mc3) (v_moduleDeclsOf dtb__255)) then true else ((((v_anyModuleCtorTarget dtb__256) mc1) mc2) mc3))))
   | B_dData_dList.C_List_Nil -> false
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 655 "Vuna/Compiler/Loader/Modules.vuna"
-let v_isDataOrRecordCtorTarget = (fun (modules : t_Module B_dData_dList.t_List) (target : string) -> ((fun cname -> ((fun dprefix -> (if (dprefix = "") then false else ((((v_anyModuleCtorTarget modules) target) dprefix) cname))) (Base_dSource.v_prefixOfName target))) (Base_dSource.v_lastSeg target)))
+let v_isDataOrRecordCtorTarget = (fun (modules : t_Module B_dData_dList.t_List) (target : string) -> (let cname = (Base_dSource.v_lastSeg target) in (let dprefix = (Base_dSource.v_prefixOfName target) in (if (dprefix = "") then false else ((((v_anyModuleCtorTarget modules) target) dprefix) cname)))))
 
 # 698 "Vuna/Compiler/Loader/Modules.vuna"
-let v_isCtorCanonical = (fun (mname : string) (dname : string) (cname : string) (target : string) -> ((fun lm -> ((fun ld -> ((fun lc -> ((fun second -> (if (if (if (if (if ((bi_strLength target) = ((second + 1) + lc)) then (((dtp_strAt target) lm) = 46) else false) then (((dtp_strAt target) second) = 46) else false) then (((((v_sliceEq 0) mname) 0) target) lm) else false) then (((((v_sliceEq 0) dname) (lm + 1)) target) ld) else false) then (((((v_sliceEq 0) cname) (second + 1)) target) lc) else false)) ((lm + 1) + ld))) (bi_strLength cname))) (bi_strLength dname))) (bi_strLength mname)))
+let v_isCtorCanonical = (fun (mname : string) (dname : string) (cname : string) (target : string) -> (let lm = (bi_strLength mname) in (let ld = (bi_strLength dname) in (let lc = (bi_strLength cname) in (let second = ((lm + 1) + ld) in (if (if (if (if (if ((bi_strLength target) = ((second + 1) + lc)) then (((dtp_strAt target) lm) = 46) else false) then (((dtp_strAt target) second) = 46) else false) then (((((v_sliceEq 0) mname) 0) target) lm) else false) then (((((v_sliceEq 0) dname) (lm + 1)) target) ld) else false) then (((((v_sliceEq 0) cname) (second + 1)) target) lc) else false))))))
 
 # 692 "Vuna/Compiler/Loader/Modules.vuna"
 let rec v_anyCtorTarget = (fun (mc0 : string) (mc1 : string) (mc2 : string) (mc3 : Frontend_dAst.t_Ctor B_dData_dList.t_List) -> (match mc3 with

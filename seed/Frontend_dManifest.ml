@@ -75,17 +75,17 @@ let v_fieldLoc = (fun (path : string) (section : string B_dData_dList.t_List) (k
 ))
 
 # 125 "Vuna/Compiler/Frontend/Manifest.vuna"
-let v_stringField = (fun (path : string) (section : string B_dData_dList.t_List) (key : string) (entries : Frontend_dToml.t_TomlEntry B_dData_dList.t_List) -> ((fun nd_uscrut4 -> (match nd_uscrut4 with
+let v_stringField = (fun (path : string) (section : string B_dData_dList.t_List) (key : string) (entries : Frontend_dToml.t_TomlEntry B_dData_dList.t_List) -> (let nd_uscrut4 = (((Frontend_dToml.v_lookupEntry section) key) entries) in (match nd_uscrut4 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__22) -> (match dtb__22 with
   | Frontend_dToml.C_TomlValue_TStr (dtb__23) -> (Base_dDiag.C_Check_OkC ((B_dData_dMaybe.C_Maybe_Just (dtb__23))))
   | _ -> ((((Base_dDiagnostics_dPkg.v_pkgAt1 path) ((((v_fieldLine path) section) key) entries)) (Base_dDiagnostics_dPkg.C_PkgErr_ExpectedString (key))) key)
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> (Base_dDiag.C_Check_OkC (B_dData_dMaybe.C_Maybe_Nothing))
   | _ -> failwith "DT: impossible branch"
-)) (((Frontend_dToml.v_lookupEntry section) key) entries)))
+)))
 
 # 132 "Vuna/Compiler/Frontend/Manifest.vuna"
-let v_stringListField = (fun (path : string) (section : string B_dData_dList.t_List) (key : string) (entries : Frontend_dToml.t_TomlEntry B_dData_dList.t_List) -> ((fun nd_uscrut4 -> (match nd_uscrut4 with
+let v_stringListField = (fun (path : string) (section : string B_dData_dList.t_List) (key : string) (entries : Frontend_dToml.t_TomlEntry B_dData_dList.t_List) -> (let nd_uscrut4 = (((Frontend_dToml.v_lookupEntry section) key) entries) in (match nd_uscrut4 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__24) -> (match dtb__24 with
   | Frontend_dToml.C_TomlValue_TArray (dtb__25) -> (match (Frontend_dToml.v_arrayStrings dtb__25) with
   | B_dData_dMaybe.C_Maybe_Nothing -> ((((Base_dDiagnostics_dPkg.v_pkgAt1 path) ((((v_fieldLine path) section) key) entries)) (Base_dDiagnostics_dPkg.C_PkgErr_ExpectedStringArray (key))) key)
@@ -96,27 +96,27 @@ let v_stringListField = (fun (path : string) (section : string B_dData_dList.t_L
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> (Base_dDiag.C_Check_OkC (B_dData_dMaybe.C_Maybe_Nothing))
   | _ -> failwith "DT: impossible branch"
-)) (((Frontend_dToml.v_lookupEntry section) key) entries)))
+)))
 
 # 143 "Vuna/Compiler/Frontend/Manifest.vuna"
-let v_intField = (fun (path : string) (section : string B_dData_dList.t_List) (key : string) (entries : Frontend_dToml.t_TomlEntry B_dData_dList.t_List) -> ((fun nd_uscrut4 -> (match nd_uscrut4 with
+let v_intField = (fun (path : string) (section : string B_dData_dList.t_List) (key : string) (entries : Frontend_dToml.t_TomlEntry B_dData_dList.t_List) -> (let nd_uscrut4 = (((Frontend_dToml.v_lookupEntry section) key) entries) in (match nd_uscrut4 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__27) -> (match dtb__27 with
   | Frontend_dToml.C_TomlValue_TInt (dtb__28) -> (Base_dDiag.C_Check_OkC ((B_dData_dMaybe.C_Maybe_Just (dtb__28))))
   | _ -> ((((Base_dDiagnostics_dPkg.v_pkgAt1 path) ((((v_fieldLine path) section) key) entries)) (Base_dDiagnostics_dPkg.C_PkgErr_ExpectedInt (key))) key)
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> (Base_dDiag.C_Check_OkC (B_dData_dMaybe.C_Maybe_Nothing))
   | _ -> failwith "DT: impossible branch"
-)) (((Frontend_dToml.v_lookupEntry section) key) entries)))
+)))
 
 # 150 "Vuna/Compiler/Frontend/Manifest.vuna"
-let v_boolField = (fun (path : string) (section : string B_dData_dList.t_List) (key : string) (entries : Frontend_dToml.t_TomlEntry B_dData_dList.t_List) -> ((fun nd_uscrut4 -> (match nd_uscrut4 with
+let v_boolField = (fun (path : string) (section : string B_dData_dList.t_List) (key : string) (entries : Frontend_dToml.t_TomlEntry B_dData_dList.t_List) -> (let nd_uscrut4 = (((Frontend_dToml.v_lookupEntry section) key) entries) in (match nd_uscrut4 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__29) -> (match dtb__29 with
   | Frontend_dToml.C_TomlValue_TBool (dtb__30) -> (Base_dDiag.C_Check_OkC ((B_dData_dMaybe.C_Maybe_Just (dtb__30))))
   | _ -> ((((Base_dDiagnostics_dPkg.v_pkgAt1 path) ((((v_fieldLine path) section) key) entries)) (Base_dDiagnostics_dPkg.C_PkgErr_ExpectedBool (key))) key)
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> (Base_dDiag.C_Check_OkC (B_dData_dMaybe.C_Maybe_Nothing))
   | _ -> failwith "DT: impossible branch"
-)) (((Frontend_dToml.v_lookupEntry section) key) entries)))
+)))
 
 # 157 "Vuna/Compiler/Frontend/Manifest.vuna"
 let v_orEmptyList = (fun mc0 -> (match mc0 with
@@ -166,14 +166,14 @@ let rec v_layerUsesOf = (fun (mc0 : t_Layer B_dData_dList.t_List) (mc1 : string)
 ))
 
 # 192 "Vuna/Compiler/Frontend/Manifest.vuna"
-let rec v_reachesFrom = (fun (fuel : int) (layers : t_Layer B_dData_dList.t_List) (todo : string B_dContainer_dQueue.t_Queue) (seen : string B_dData_dList.t_List) (target : string) -> (if (fuel <= 0) then false else ((fun nd_uscrut5 -> (match nd_uscrut5 with
+let rec v_reachesFrom = (fun (fuel : int) (layers : t_Layer B_dData_dList.t_List) (todo : string B_dContainer_dQueue.t_Queue) (seen : string B_dData_dList.t_List) (target : string) -> (if (fuel <= 0) then false else (let nd_uscrut5 = (B_dContainer_dQueue.v_pop todo) in (match nd_uscrut5 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__48) -> (match dtb__48 with
   | { B_dData_dPair.f_Pair_first = dtb__49; B_dData_dPair.f_Pair_second = dtb__50 } -> (if (dtb__49 = target) then true else (if ((v_layerSeen dtb__49) seen) then (((((v_reachesFrom (fuel - 1)) layers) dtb__50) seen) target) else (((((v_reachesFrom (fuel - 1)) layers) ((B_dContainer_dQueue.v_pushAll ((v_layerUsesOf layers) dtb__49)) dtb__50)) (B_dData_dList.C_List__x58__x58_ (dtb__49, seen))) target)))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> false
   | _ -> failwith "DT: impossible branch"
-)) (B_dContainer_dQueue.v_pop todo))))
+))))
 
 # 206 "Vuna/Compiler/Frontend/Manifest.vuna"
 let rec v_layerUsesTotal = (fun (mc0 : t_Layer B_dData_dList.t_List) -> (match mc0 with
@@ -290,7 +290,7 @@ let v_stringValueOf = (fun (mc0 : string) (mc1 : string) (mc2 : Frontend_dToml.t
 ))
 
 # 325 "Vuna/Compiler/Frontend/Manifest.vuna"
-let v_applyDepEntry = (fun (path : string) (alias : string) (key : string) (value : Frontend_dToml.t_TomlValue) (line : int) (acc : t_DepAcc B_dData_dList.t_List) -> ((fun ensured -> (if (key = "path") then (match ((((v_stringValueOf path) key) value) line) with
+let v_applyDepEntry = (fun (path : string) (alias : string) (key : string) (value : Frontend_dToml.t_TomlValue) (line : int) (acc : t_DepAcc B_dData_dList.t_List) -> (let ensured = (((v_ensureAcc alias) line) acc) in (if (key = "path") then (match ((((v_stringValueOf path) key) value) line) with
   | Base_dDiag.C_Check_ErrC (dtb__78) -> (Base_dDiag.C_Check_ErrC (dtb__78))
   | Base_dDiag.C_Check_OkC (dtb__79) -> (Base_dDiag.C_Check_OkC ((((v_mapAcc alias) (v_setAccPath dtb__79)) ensured)))
   | _ -> failwith "DT: impossible branch"
@@ -314,7 +314,7 @@ let v_applyDepEntry = (fun (path : string) (alias : string) (key : string) (valu
   | Base_dDiag.C_Check_ErrC (dtb__88) -> (Base_dDiag.C_Check_ErrC (dtb__88))
   | Base_dDiag.C_Check_OkC (dtb__89) -> (Base_dDiag.C_Check_OkC ((((v_mapAcc alias) (v_setAccIdentity dtb__89)) ensured)))
   | _ -> failwith "DT: impossible branch"
-))))))) (((v_ensureAcc alias) line) acc)))
+))))))))
 
 # 355 "Vuna/Compiler/Frontend/Manifest.vuna"
 let rec v_collectTables = (fun (mc0 : string) (mc1 : Frontend_dToml.t_TomlEntry B_dData_dList.t_List) (mc2 : t_DepAcc B_dData_dList.t_List) -> (match mc1 with
@@ -612,7 +612,7 @@ let rec v_dirFromRev = (fun (mc0 : int B_dData_dList.t_List) -> (match mc0 with
 let v_manifestDir = (fun (path : string) -> (v_dirFromRev (B_dData_dList.v_reverse (B_dData_dList.dtp_unpack path))))
 
 # 640 "Vuna/Compiler/Frontend/Manifest.vuna"
-let v_resolveManifestPath = (fun (manifest : t_Manifest) (rel : string) -> ((fun dir -> (if ((B_dData_dString.v_startsWith "/") rel) then rel else (if (dir = ".") then rel else (String.concat "" [dir; "/"; rel])))) (v_manifestDir (manifest).f_Manifest_manifestPath)))
+let v_resolveManifestPath = (fun (manifest : t_Manifest) (rel : string) -> (let dir = (v_manifestDir (manifest).f_Manifest_manifestPath) in (if ((B_dData_dString.v_startsWith "/") rel) then rel else (if (dir = ".") then rel else (String.concat "" [dir; "/"; rel])))))
 
 # 647 "Vuna/Compiler/Frontend/Manifest.vuna"
 let v_validateDiagLang = (fun (mc0 : string) (mc1 : string B_dData_dMaybe.t_Maybe) -> (match mc1 with

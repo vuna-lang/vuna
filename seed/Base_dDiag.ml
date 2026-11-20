@@ -155,7 +155,7 @@ let v_locPrefixOf = (fun (labels : t_Label B_dData_dList.t_List) -> (match (v_pr
 ))
 
 # 471 "Vuna/Compiler/Base/Diag.vuna"
-let v_diagText = (fun (d : t_Diagnostic) -> ((fun body -> (String.concat "" [(v_locPrefixOf (d).f_Diagnostic_diagLabels); (v_contextPrefixOf (d).f_Diagnostic_diagLabels); body])) (if ((d).f_Diagnostic_diagCode = "") then (d).f_Diagnostic_diagMessage else (String.concat "" ["["; (d).f_Diagnostic_diagCode; "] "; (d).f_Diagnostic_diagMessage]))))
+let v_diagText = (fun (d : t_Diagnostic) -> (let body = (if ((d).f_Diagnostic_diagCode = "") then (d).f_Diagnostic_diagMessage else (String.concat "" ["["; (d).f_Diagnostic_diagCode; "] "; (d).f_Diagnostic_diagMessage])) in (String.concat "" [(v_locPrefixOf (d).f_Diagnostic_diagLabels); (v_contextPrefixOf (d).f_Diagnostic_diagLabels); body])))
 
 # 478 "Vuna/Compiler/Base/Diag.vuna"
 let v_withMessage = (fun (msg : string) (d : t_Diagnostic) -> { f_Diagnostic_diagId = (d).f_Diagnostic_diagId; f_Diagnostic_diagSeverity = (d).f_Diagnostic_diagSeverity; f_Diagnostic_diagPhase = (d).f_Diagnostic_diagPhase; f_Diagnostic_diagCategory = (d).f_Diagnostic_diagCategory; f_Diagnostic_diagCode = (d).f_Diagnostic_diagCode; f_Diagnostic_diagMessage = msg; f_Diagnostic_diagLabels = (d).f_Diagnostic_diagLabels; f_Diagnostic_diagFields = (d).f_Diagnostic_diagFields; f_Diagnostic_diagTrace = (d).f_Diagnostic_diagTrace; f_Diagnostic_diagNotes = (d).f_Diagnostic_diagNotes; f_Diagnostic_diagSuggestions = (d).f_Diagnostic_diagSuggestions; f_Diagnostic_diagOrigin = (d).f_Diagnostic_diagOrigin; f_Diagnostic_diagChildren = (d).f_Diagnostic_diagChildren; f_Diagnostic_diagInternal = (d).f_Diagnostic_diagInternal; f_Diagnostic_diagIce = (d).f_Diagnostic_diagIce; f_Diagnostic_diagAbsent = (d).f_Diagnostic_diagAbsent; f_Diagnostic_diagStability = (d).f_Diagnostic_diagStability })
@@ -202,11 +202,11 @@ let v_withLabel = (fun (l : t_Label) (d : t_Diagnostic) -> (v_normalizeSite { f_
 let v_withAbsent = (fun (reason : t_NoSourceReason) (d : t_Diagnostic) -> (if (v_hasPrimaryLabel (d).f_Diagnostic_diagLabels) then d else { { d with f_Diagnostic_diagAbsent = (B_dData_dMaybe.C_Maybe_Just (reason)) } with f_Diagnostic_diagStability = (v_stabilityOfAbsent reason) }))
 
 # 440 "Vuna/Compiler/Base/Diag.vuna"
-let v_withContext = (fun (msp : Base_dSource.t_Span B_dData_dMaybe.t_Maybe) (name : string) (d : t_Diagnostic) -> ((fun added -> (match msp with
+let v_withContext = (fun (msp : Base_dSource.t_Span B_dData_dMaybe.t_Maybe) (name : string) (d : t_Diagnostic) -> (let added = ((v_withLabel { f_Label_labelSpan = msp; f_Label_labelText = (String.concat "" ["in `"; name; "`"]); f_Label_labelStyle = C_LabelStyle_LabelContext; f_Label_labelProvenance = B_dData_dMaybe.C_Maybe_Nothing }) d) in (match msp with
   | B_dData_dMaybe.C_Maybe_Just (dtb__60) -> ((v_withLabel { f_Label_labelSpan = (B_dData_dMaybe.C_Maybe_Just (dtb__60)); f_Label_labelText = ""; f_Label_labelStyle = C_LabelStyle_LabelPrimary; f_Label_labelProvenance = B_dData_dMaybe.C_Maybe_Nothing }) added)
   | B_dData_dMaybe.C_Maybe_Nothing -> added
   | _ -> failwith "DT: impossible branch"
-)) ((v_withLabel { f_Label_labelSpan = msp; f_Label_labelText = (String.concat "" ["in `"; name; "`"]); f_Label_labelStyle = C_LabelStyle_LabelContext; f_Label_labelProvenance = B_dData_dMaybe.C_Maybe_Nothing }) d)))
+)))
 
 # 569 "Vuna/Compiler/Base/Diag.vuna"
 let v_withFallbackSpan = (fun (sp : Base_dSource.t_Span) (d : t_Diagnostic) -> (if (v_hasPrimaryLabel (d).f_Diagnostic_diagLabels) then d else ((v_withLabel { f_Label_labelSpan = (B_dData_dMaybe.C_Maybe_Just (sp)); f_Label_labelText = ""; f_Label_labelStyle = C_LabelStyle_LabelPrimary; f_Label_labelProvenance = B_dData_dMaybe.C_Maybe_Nothing }) d)))
@@ -229,19 +229,19 @@ let v_onErrDiag = (fun (mc0 : (t_Diagnostic) -> t_Diagnostic) mc1 -> (match mc1 
 
 # 663 "Vuna/Compiler/Base/Diag.vuna"
 let rec v_primaryLabelOf = (fun (mc0 : t_Label B_dData_dList.t_List) -> (match mc0 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__63, dtb__64) -> ((fun nd_uscrut4 -> (match nd_uscrut4 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__63, dtb__64) -> (let nd_uscrut4 = dtb__63 in (match nd_uscrut4 with
   | { f_Label_labelSpan = dtb__65; f_Label_labelText = dtb__66; f_Label_labelStyle = dtb__67; f_Label_labelProvenance = dtb__68 } -> (match dtb__67 with
   | C_LabelStyle_LabelPrimary -> (B_dData_dMaybe.C_Maybe_Just (dtb__63))
   | _ -> (v_primaryLabelOf dtb__64)
 )
   | _ -> failwith "DT: impossible branch"
-)) dtb__63)
+))
   | B_dData_dList.C_List_Nil -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 656 "Vuna/Compiler/Base/Diag.vuna"
-let v_diagFileOf = (fun (d : t_Diagnostic) -> ((fun nd_uscrut1 -> (match nd_uscrut1 with
+let v_diagFileOf = (fun (d : t_Diagnostic) -> (let nd_uscrut1 = (v_primaryLabelOf (d).f_Diagnostic_diagLabels) in (match nd_uscrut1 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__69) -> (match dtb__69 with
   | { f_Label_labelSpan = dtb__70; f_Label_labelText = dtb__71; f_Label_labelStyle = dtb__72; f_Label_labelProvenance = dtb__73 } -> (match dtb__70 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__74) -> (Base_dSource.v_spanFile dtb__74)
@@ -251,7 +251,7 @@ let v_diagFileOf = (fun (d : t_Diagnostic) -> ((fun nd_uscrut1 -> (match nd_uscr
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> ""
   | _ -> failwith "DT: impossible branch"
-)) (v_primaryLabelOf (d).f_Diagnostic_diagLabels)))
+)))
 
 # 670 "Vuna/Compiler/Base/Diag.vuna"
 let v_sameSeverity = (fun (mc0 : t_Severity) (mc1 : t_Severity) -> (match mc0 with

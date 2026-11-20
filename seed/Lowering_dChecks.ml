@@ -77,27 +77,27 @@ let rec v_binderAt = (fun (mc0 : int) (mc1 : (string, Core_dTerm.t_Rig) B_dData_
 
 # 142 "Vuna/Compiler/Lowering/Checks.vuna"
 let rec v_checkErasureNode = (fun (fuel : int) (typeNames : string B_dData_dList.t_List) (binders : (string, Core_dTerm.t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) (t : Core_dTerm.t_Term) -> (if (fuel <= 0) then (Base_dDiag.v_icFuel "erasure") else (match t with
-  | Core_dTerm.C_Term_TVar (dtb__20, dtb__21, dtb__22) -> ((fun nd_uscrut7 -> (match nd_uscrut7 with
+  | Core_dTerm.C_Term_TVar (dtb__20, dtb__21, dtb__22) -> (let nd_uscrut7 = ((v_binderAt dtb__21) binders) in (match nd_uscrut7 with
   | B_dData_dMaybe.C_Maybe_Nothing -> (Base_dDiag.v_icInternal (String.concat "" ["unbound runtime variable "; dtb__20; " (index "; (bi_strFromInt dtb__21); ", binders "; (bi_strFromInt (B_dData_dList.v_length binders)); ")"]))
   | B_dData_dMaybe.C_Maybe_Just (dtb__23) -> (match dtb__23 with
   | { B_dData_dPair.f_Pair_first = dtb__24; B_dData_dPair.f_Pair_second = dtb__25 } -> (if (Core_dTerm.v_rigIsErased dtb__25) then ((Base_dDiagnostics_dCg.v_cgErr1 (Base_dDiagnostics_dCg.C_CgErr_TypeLevelBindingRuntime (dtb__20))) dtb__20) else (Base_dDiag.C_Check_OkC (0)))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
-)) ((v_binderAt dtb__21) binders))
+))
   | Core_dTerm.C_Term_TGlobal (dtb__26) -> (if ((B_dData_dList.v_memName dtb__26) typeNames) then ((Base_dDiagnostics_dCg.v_cgErr1 (Base_dDiagnostics_dCg.C_CgErr_TypeLevelNameRuntime (dtb__26))) dtb__26) else (Base_dDiag.C_Check_OkC (0)))
   | Core_dTerm.C_Term_TType (dtb__27) -> (Base_dDiagnostics_dCg.v_cgErr0 Base_dDiagnostics_dCg.C_CgErr_TypeUsedAtRuntime)
   | Core_dTerm.C_Term_TPi (dtb__28, dtb__29, dtb__30, dtb__31, dtb__32) -> (Base_dDiagnostics_dCg.v_cgErr0 Base_dDiagnostics_dCg.C_CgErr_TypeUsedAtRuntime)
   | Core_dTerm.C_Term_TMeta (dtb__33) -> ((Base_dDiagnostics_dCg.v_cgErr1 (Base_dDiagnostics_dCg.C_CgErr_UnsolvedMetavarRuntime ((v_showMetaHint dtb__33)))) (v_showMetaHint dtb__33))
   | Core_dTerm.C_Term_TLam (dtb__34, dtb__35, dtb__36, dtb__37, dtb__38) -> ((((v_checkErasureFuel (fuel - 1)) typeNames) (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = dtb__34; B_dData_dPair.f_Pair_second = dtb__35 }, binders))) dtb__38)
-  | Core_dTerm.C_Term_TApp (dtb__39, dtb__40, dtb__41) -> ((fun nd_uscrut7 -> (match nd_uscrut7 with
+  | Core_dTerm.C_Term_TApp (dtb__39, dtb__40, dtb__41) -> (let nd_uscrut7 = (v_flattenConApp t) in (match nd_uscrut7 with
   | B_dData_dMaybe.C_Maybe_Nothing -> (if (Core_dTerm.v_rigIsErased dtb__41) then ((((v_checkErasureFuel (fuel - 1)) typeNames) binders) dtb__39) else ((Base_dCommon.v_bind ((((v_checkErasureFuel (fuel - 1)) typeNames) binders) dtb__39)) (fun (_u : int) -> ((((v_checkErasureFuel (fuel - 1)) typeNames) binders) dtb__40))))
   | B_dData_dMaybe.C_Maybe_Just (dtb__42) -> (match dtb__42 with
   | { B_dData_dPair.f_Pair_first = dtb__43; B_dData_dPair.f_Pair_second = dtb__44 } -> ((((v_checkConArgsErasureFuel (fuel - 1)) typeNames) binders) dtb__44)
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
-)) (v_flattenConApp t))
+))
   | Core_dTerm.C_Term_TCon (dtb__45, dtb__46) -> ((((v_checkConArgsErasureFuel (fuel - 1)) typeNames) binders) dtb__46)
   | Core_dTerm.C_Term_TMk (dtb__47, dtb__48) -> ((((v_checkConArgsErasureFuel (fuel - 1)) typeNames) binders) dtb__48)
   | Core_dTerm.C_Term_TRecord (dtb__49, dtb__50) -> (Base_dDiag.C_Check_OkC (0))
@@ -122,7 +122,7 @@ and v_checkConArgsErasureFuel = (fun (mc0 : int) (mc1 : string B_dData_dList.t_L
 ))
 # 189 "Vuna/Compiler/Lowering/Checks.vuna"
 and v_checkAltErasureFuel = (fun (mc0 : int) (mc1 : string B_dData_dList.t_List) (mc2 : (string, Core_dTerm.t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc3 : Core_dTerm.t_CaseAlt B_dData_dList.t_List) -> (match mc3 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__74, dtb__75) -> (if (mc0 <= 0) then (Base_dDiag.v_icFuel "erasure") else ((fun altBinders -> ((fun env -> ((Base_dCommon.v_bind ((((v_checkErasureFuel (mc0 - 1)) mc1) env) (Core_dTerm.v_caseAltBody dtb__74))) (fun (_u : int) -> ((((v_checkAltErasureFuel (mc0 - 1)) mc1) mc2) dtb__75)))) ((B_dData_dList.v_append (B_dData_dList.v_reverse altBinders)) mc2))) (Core_dTerm.v_binderPairs (Core_dTerm.v_caseAltBinders dtb__74))))
+  | B_dData_dList.C_List__x58__x58_ (dtb__74, dtb__75) -> (if (mc0 <= 0) then (Base_dDiag.v_icFuel "erasure") else (let altBinders = (Core_dTerm.v_binderPairs (Core_dTerm.v_caseAltBinders dtb__74)) in (let env = ((B_dData_dList.v_append (B_dData_dList.v_reverse altBinders)) mc2) in ((Base_dCommon.v_bind ((((v_checkErasureFuel (mc0 - 1)) mc1) env) (Core_dTerm.v_caseAltBody dtb__74))) (fun (_u : int) -> ((((v_checkAltErasureFuel (mc0 - 1)) mc1) mc2) dtb__75))))))
   | B_dData_dList.C_List_Nil -> (if (mc0 <= 0) then (Base_dDiag.v_icFuel "erasure") else (Base_dDiag.C_Check_OkC (0)))
   | _ -> failwith "DT: impossible branch"
 ))
@@ -148,14 +148,14 @@ let rec v_termDepsIntoFuel = (fun (fuel : int) (runtimeNames : (string, bool) B_
   | Core_dTerm.C_Term_TType (dtb__84) -> acc
   | Core_dTerm.C_Term_TPi (dtb__85, dtb__86, dtb__87, dtb__88, dtb__89) -> acc
   | Core_dTerm.C_Term_TLam (dtb__90, dtb__91, dtb__92, dtb__93, dtb__94) -> ((((v_termDepsIntoFuel (fuel - 1)) runtimeNames) acc) dtb__94)
-  | Core_dTerm.C_Term_TApp (dtb__95, dtb__96, dtb__97) -> ((fun nd_uscrut7 -> (match nd_uscrut7 with
+  | Core_dTerm.C_Term_TApp (dtb__95, dtb__96, dtb__97) -> (let nd_uscrut7 = (v_flattenConApp t) in (match nd_uscrut7 with
   | B_dData_dMaybe.C_Maybe_Nothing -> (if (Core_dTerm.v_rigIsErased dtb__97) then ((((v_termDepsIntoFuel (fuel - 1)) runtimeNames) acc) dtb__95) else ((((v_termDepsIntoFuel (fuel - 1)) runtimeNames) ((((v_termDepsIntoFuel (fuel - 1)) runtimeNames) acc) dtb__95)) dtb__96))
   | B_dData_dMaybe.C_Maybe_Just (dtb__98) -> (match dtb__98 with
   | { B_dData_dPair.f_Pair_first = dtb__99; B_dData_dPair.f_Pair_second = dtb__100 } -> ((((v_termDepsArgsFuel (fuel - 1)) runtimeNames) acc) dtb__100)
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
-)) (v_flattenConApp t))
+))
   | Core_dTerm.C_Term_TCon (dtb__101, dtb__102) -> ((((v_termDepsArgsFuel (fuel - 1)) runtimeNames) acc) dtb__102)
   | Core_dTerm.C_Term_TMk (dtb__103, dtb__104) -> ((((v_termDepsArgsFuel (fuel - 1)) runtimeNames) acc) dtb__104)
   | Core_dTerm.C_Term_TRecord (dtb__105, dtb__106) -> acc
@@ -344,7 +344,7 @@ let v_termDepsAlts = (fun (a1 : (string, bool) B_dContainer_dHashMap.t_HashMap) 
 let v_erasureFuelMax = 1000000
 
 # 468 "Vuna/Compiler/Lowering/Checks.vuna"
-let v_erasureFuelFor = (fun (size : int) -> ((fun scaled -> (if (scaled > v_erasureFuelMax) then v_erasureFuelMax else scaled)) (512 + (4 * size))))
+let v_erasureFuelFor = (fun (size : int) -> (let scaled = (512 + (4 * size)) in (if (scaled > v_erasureFuelMax) then v_erasureFuelMax else scaled)))
 
 # 451 "Vuna/Compiler/Lowering/Checks.vuna"
 let v_checkErasure = (fun (typeNames : string B_dData_dList.t_List) (binders : (string, Core_dTerm.t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) (t : Core_dTerm.t_Term) -> ((((v_checkErasureFuel (v_erasureFuelFor (Core_dTerm.v_termSize t))) typeNames) binders) t))
@@ -374,7 +374,7 @@ let rec v_checkAllErasure = (fun (mc0 : string B_dData_dList.t_List) (mc1 : Elab
 # 477 "Vuna/Compiler/Lowering/Checks.vuna"
 let rec v_erasureFuelForArgs = (fun (mc0 : (Core_dTerm.t_Term, Core_dTerm.t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__252, dtb__253) -> (match dtb__252 with
-  | { B_dData_dPair.f_Pair_first = dtb__254; B_dData_dPair.f_Pair_second = dtb__255 } -> ((fun total -> (if (total > v_erasureFuelMax) then v_erasureFuelMax else total)) ((Core_dTerm.v_termSize dtb__254) + (v_erasureFuelForArgs dtb__253)))
+  | { B_dData_dPair.f_Pair_first = dtb__254; B_dData_dPair.f_Pair_second = dtb__255 } -> (let total = ((Core_dTerm.v_termSize dtb__254) + (v_erasureFuelForArgs dtb__253)) in (if (total > v_erasureFuelMax) then v_erasureFuelMax else total))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dList.C_List_Nil -> 0
@@ -386,7 +386,7 @@ let v_checkConArgsErasure = (fun (a1 : string B_dData_dList.t_List) (a2 : (strin
 
 # 491 "Vuna/Compiler/Lowering/Checks.vuna"
 let rec v_erasureFuelForAlts = (fun (mc0 : Core_dTerm.t_CaseAlt B_dData_dList.t_List) -> (match mc0 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__256, dtb__257) -> ((fun total -> (if (total > v_erasureFuelMax) then v_erasureFuelMax else total)) ((Core_dTerm.v_termSize (Core_dTerm.v_caseAltBody dtb__256)) + (v_erasureFuelForAlts dtb__257)))
+  | B_dData_dList.C_List__x58__x58_ (dtb__256, dtb__257) -> (let total = ((Core_dTerm.v_termSize (Core_dTerm.v_caseAltBody dtb__256)) + (v_erasureFuelForAlts dtb__257)) in (if (total > v_erasureFuelMax) then v_erasureFuelMax else total))
   | B_dData_dList.C_List_Nil -> 0
   | _ -> failwith "DT: impossible branch"
 ))

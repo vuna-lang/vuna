@@ -34,7 +34,7 @@ let v_peekTok = (fun (mc0 : t_PState) -> (match mc0 with
 let v_peekPos = (fun (st : t_PState) -> ((v_peekTok st)).Frontend_dLexer.f_PTok_ptokPos)
 
 # 61 "Vuna/Compiler/Frontend/Parser/Support.vuna"
-let v_tokenSpan = (fun (st : t_PState) -> ((fun p -> ((fun len -> { Base_dSource.f_Span_spanFile = (v_fileOf st); Base_dSource.f_Span_spanStartLine = (Base_dSource.v_posLine p); Base_dSource.f_Span_spanStartCol = (Base_dSource.v_posCol p); Base_dSource.f_Span_spanEndLine = (Base_dSource.v_posLine p); Base_dSource.f_Span_spanEndCol = ((Base_dSource.v_posCol p) + len); Base_dSource.f_Span_spanStartOffset = (Base_dSource.v_posOffset p); Base_dSource.f_Span_spanEndOffset = (Base_dSource.v_posEndOffset p) }) ((Base_dSource.v_posEndOffset p) - (Base_dSource.v_posOffset p)))) (v_peekPos st)))
+let v_tokenSpan = (fun (st : t_PState) -> (let p = (v_peekPos st) in (let len = ((Base_dSource.v_posEndOffset p) - (Base_dSource.v_posOffset p)) in { Base_dSource.f_Span_spanFile = (v_fileOf st); Base_dSource.f_Span_spanStartLine = (Base_dSource.v_posLine p); Base_dSource.f_Span_spanStartCol = (Base_dSource.v_posCol p); Base_dSource.f_Span_spanEndLine = (Base_dSource.v_posLine p); Base_dSource.f_Span_spanEndCol = ((Base_dSource.v_posCol p) + len); Base_dSource.f_Span_spanStartOffset = (Base_dSource.v_posOffset p); Base_dSource.f_Span_spanEndOffset = (Base_dSource.v_posEndOffset p) })))
 
 # 94 "Vuna/Compiler/Frontend/Parser/Support.vuna"
 let v_lastPos = (fun (mc0 : t_PState) -> (match mc0 with
@@ -46,38 +46,38 @@ let v_lastPos = (fun (mc0 : t_PState) -> (match mc0 with
 let v_spanOf = (fun (st : t_PState) (st2 : t_PState) -> { Base_dSource.f_Span_spanFile = (v_fileOf st); Base_dSource.f_Span_spanStartLine = (Base_dSource.v_posLine (v_peekPos st)); Base_dSource.f_Span_spanStartCol = (Base_dSource.v_posCol (v_peekPos st)); Base_dSource.f_Span_spanEndLine = (Base_dSource.v_posLine (v_lastPos st2)); Base_dSource.f_Span_spanEndCol = (Base_dSource.v_posCol (v_lastPos st2)); Base_dSource.f_Span_spanStartOffset = (Base_dSource.v_posOffset (v_peekPos st)); Base_dSource.f_Span_spanEndOffset = (Base_dSource.v_posOffset (v_lastPos st2)) })
 
 # 84 "Vuna/Compiler/Frontend/Parser/Support.vuna"
-let v_tokSpan = (fun (st : t_PState) -> ((fun nd_uscrut1 -> (match nd_uscrut1 with
+let v_tokSpan = (fun (st : t_PState) -> (let nd_uscrut1 = (v_peekTok st) in (match nd_uscrut1 with
   | { Frontend_dLexer.f_PTok_ptokTok = dtb__22; Frontend_dLexer.f_PTok_ptokPos = dtb__23 } -> (match dtb__22 with
-  | Frontend_dLexer.C_Tok_TEof -> ((fun p -> { Base_dSource.f_Span_spanFile = (v_fileOf st); Base_dSource.f_Span_spanStartLine = (Base_dSource.v_posLine p); Base_dSource.f_Span_spanStartCol = (Base_dSource.v_posCol p); Base_dSource.f_Span_spanEndLine = (Base_dSource.v_posLine p); Base_dSource.f_Span_spanEndCol = (Base_dSource.v_posCol p); Base_dSource.f_Span_spanStartOffset = (Base_dSource.v_posOffset p); Base_dSource.f_Span_spanEndOffset = (Base_dSource.v_posOffset p) }) (v_lastPos st))
+  | Frontend_dLexer.C_Tok_TEof -> (let p = (v_lastPos st) in { Base_dSource.f_Span_spanFile = (v_fileOf st); Base_dSource.f_Span_spanStartLine = (Base_dSource.v_posLine p); Base_dSource.f_Span_spanStartCol = (Base_dSource.v_posCol p); Base_dSource.f_Span_spanEndLine = (Base_dSource.v_posLine p); Base_dSource.f_Span_spanEndCol = (Base_dSource.v_posCol p); Base_dSource.f_Span_spanStartOffset = (Base_dSource.v_posOffset p); Base_dSource.f_Span_spanEndOffset = (Base_dSource.v_posOffset p) })
   | _ -> { Base_dSource.f_Span_spanFile = (v_fileOf st); Base_dSource.f_Span_spanStartLine = (Base_dSource.v_posLine dtb__23); Base_dSource.f_Span_spanStartCol = (Base_dSource.v_posCol dtb__23); Base_dSource.f_Span_spanEndLine = (Base_dSource.v_posLine dtb__23); Base_dSource.f_Span_spanEndCol = (Base_dSource.v_posCol dtb__23); Base_dSource.f_Span_spanStartOffset = (Base_dSource.v_posOffset dtb__23); Base_dSource.f_Span_spanEndOffset = (Base_dSource.v_posOffset dtb__23) }
 )
   | _ -> failwith "DT: impossible branch"
-)) (v_peekTok st)))
+)))
 
 # 97 "Vuna/Compiler/Frontend/Parser/Support.vuna"
 let v_advance = (fun (mc0 : t_PState) -> (match mc0 with
   | { f_PState_fileOf = dtb__24; f_PState_toksOf = dtb__25; f_PState_lastPos = dtb__26; f_PState_toksLeft = dtb__27; f_PState_pmodeOf = dtb__28 } -> (match dtb__25 with
   | B_dData_dList.C_List_Nil -> { f_PState_fileOf = dtb__24; f_PState_toksOf = dtb__25; f_PState_lastPos = dtb__26; f_PState_toksLeft = dtb__27; f_PState_pmodeOf = dtb__28 }
-  | B_dData_dList.C_List__x58__x58_ (dtb__29, dtb__30) -> ((fun nd_uscrut9 -> (match nd_uscrut9 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__29, dtb__30) -> (let nd_uscrut9 = dtb__29 in (match nd_uscrut9 with
   | { Frontend_dLexer.f_PTok_ptokTok = dtb__31; Frontend_dLexer.f_PTok_ptokPos = dtb__32 } -> (match dtb__31 with
   | Frontend_dLexer.C_Tok_TEof -> { f_PState_fileOf = dtb__24; f_PState_toksOf = dtb__25; f_PState_lastPos = dtb__26; f_PState_toksLeft = dtb__27; f_PState_pmodeOf = dtb__28 }
   | _ -> { f_PState_fileOf = dtb__24; f_PState_toksOf = dtb__30; f_PState_lastPos = (dtb__29).Frontend_dLexer.f_PTok_ptokPos; f_PState_toksLeft = (if (dtb__27 > 0) then (dtb__27 - 1) else 0); f_PState_pmodeOf = dtb__28 }
 )
   | _ -> failwith "DT: impossible branch"
-)) dtb__29)
+))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 104 "Vuna/Compiler/Frontend/Parser/Support.vuna"
-let v_isEof = (fun (st : t_PState) -> ((fun nd_uscrut1 -> (match nd_uscrut1 with
+let v_isEof = (fun (st : t_PState) -> (let nd_uscrut1 = (v_peekTok st) in (match nd_uscrut1 with
   | { Frontend_dLexer.f_PTok_ptokTok = dtb__33; Frontend_dLexer.f_PTok_ptokPos = dtb__34 } -> (match dtb__33 with
   | Frontend_dLexer.C_Tok_TEof -> true
   | _ -> false
 )
   | _ -> failwith "DT: impossible branch"
-)) (v_peekTok st)))
+)))
 
 # 133 "Vuna/Compiler/Frontend/Parser/Support.vuna"
 let v_stateFuel = (fun (st : t_PState) -> ((128 * (st).f_PState_toksLeft) + 1024))
@@ -89,13 +89,13 @@ let v_sameLineState = (fun (st : t_PState) -> (match (v_peekPos st) with
 ))
 
 # 141 "Vuna/Compiler/Frontend/Parser/Support.vuna"
-let v_atSym = (fun (st : t_PState) (s : string) -> ((fun nd_uscrut2 -> (match nd_uscrut2 with
+let v_atSym = (fun (st : t_PState) (s : string) -> (let nd_uscrut2 = (v_peekTok st) in (match nd_uscrut2 with
   | { Frontend_dLexer.f_PTok_ptokTok = dtb__39; Frontend_dLexer.f_PTok_ptokPos = dtb__40 } -> (match dtb__39 with
   | Frontend_dLexer.C_Tok_TSym (dtb__41) -> (dtb__41 = s)
   | _ -> false
 )
   | _ -> failwith "DT: impossible branch"
-)) (v_peekTok st)))
+)))
 
 # 148 "Vuna/Compiler/Frontend/Parser/Support.vuna"
 let rec v_nthTok = (fun (mc0 : Frontend_dLexer.t_PTok B_dData_dList.t_List) (mc1 : int) -> (match mc0 with
@@ -116,20 +116,20 @@ let v_tokTail = (fun (mc0 : Frontend_dLexer.t_PTok B_dData_dList.t_List) -> (mat
 
 # 175 "Vuna/Compiler/Frontend/Parser/Support.vuna"
 let rec v_binderNameTail = (fun (mc0 : Frontend_dLexer.t_PTok B_dData_dList.t_List) (mc1 : string B_dData_dList.t_List) -> (match mc0 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__46, dtb__47) -> ((fun nd_uscrut5 -> (match nd_uscrut5 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__46, dtb__47) -> (let nd_uscrut5 = dtb__46 in (match nd_uscrut5 with
   | { Frontend_dLexer.f_PTok_ptokTok = dtb__48; Frontend_dLexer.f_PTok_ptokPos = dtb__49 } -> (match dtb__48 with
   | Frontend_dLexer.C_Tok_TSym (dtb__50) -> (if (dtb__50 = ":") then (B_dData_dMaybe.C_Maybe_Just ((B_dData_dList.v_reverse mc1))) else B_dData_dMaybe.C_Maybe_Nothing)
   | Frontend_dLexer.C_Tok_TIdent (dtb__51) -> ((v_binderNameTail dtb__47) (B_dData_dList.C_List__x58__x58_ (dtb__51, mc1)))
   | _ -> B_dData_dMaybe.C_Maybe_Nothing
 )
   | _ -> failwith "DT: impossible branch"
-)) dtb__46)
+))
   | B_dData_dList.C_List_Nil -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 183 "Vuna/Compiler/Frontend/Parser/Support.vuna"
-let v_quantifiedHead = (fun (st : t_PState) (q : Frontend_dAst.t_Qty) -> ((fun nd_uscrut2 -> (match nd_uscrut2 with
+let v_quantifiedHead = (fun (st : t_PState) (q : Frontend_dAst.t_Qty) -> (let nd_uscrut2 = ((v_peekTokAt st) 1) in (match nd_uscrut2 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__52) -> (match dtb__52 with
   | { Frontend_dLexer.f_PTok_ptokTok = dtb__53; Frontend_dLexer.f_PTok_ptokPos = dtb__54 } -> (match dtb__53 with
   | Frontend_dLexer.C_Tok_TIdent (dtb__55) -> (match ((v_binderNameTail (v_tokTail (v_tokTail (st).f_PState_toksOf))) B_dData_dList.C_List_Nil) with
@@ -142,10 +142,10 @@ let v_quantifiedHead = (fun (st : t_PState) (q : Frontend_dAst.t_Qty) -> ((fun n
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> B_dData_dMaybe.C_Maybe_Nothing
-)) ((v_peekTokAt st) 1)))
+)))
 
 # 158 "Vuna/Compiler/Frontend/Parser/Support.vuna"
-let v_binderHead = (fun (st : t_PState) -> ((fun nd_uscrut1 -> (match nd_uscrut1 with
+let v_binderHead = (fun (st : t_PState) -> (let nd_uscrut1 = (v_peekTok st) in (match nd_uscrut1 with
   | { Frontend_dLexer.f_PTok_ptokTok = dtb__57; Frontend_dLexer.f_PTok_ptokPos = dtb__58 } -> (match dtb__57 with
   | Frontend_dLexer.C_Tok_TInt (dtb__59) -> (if (dtb__59 = 0) then ((v_quantifiedHead st) Frontend_dAst.C_Qty_Q0) else (if (dtb__59 = 1) then ((v_quantifiedHead st) Frontend_dAst.C_Qty_Q1) else B_dData_dMaybe.C_Maybe_Nothing))
   | Frontend_dLexer.C_Tok_TIdent (dtb__60) -> (match ((v_binderNameTail (v_tokTail (st).f_PState_toksOf)) B_dData_dList.C_List_Nil) with
@@ -156,7 +156,7 @@ let v_binderHead = (fun (st : t_PState) -> ((fun nd_uscrut1 -> (match nd_uscrut1
   | _ -> B_dData_dMaybe.C_Maybe_Nothing
 )
   | _ -> failwith "DT: impossible branch"
-)) (v_peekTok st)))
+)))
 
 # 205 "Vuna/Compiler/Frontend/Parser/Support.vuna"
 let v_arrowAt = (fun (mc0 : Frontend_dLexer.t_PTok B_dData_dList.t_List) -> (match mc0 with
@@ -187,13 +187,13 @@ let rec v_piArrowAheadGo = (fun (mc0 : int) (mc1 : Frontend_dLexer.t_PTok B_dDat
 let v_piArrowAhead = (fun (st : t_PState) -> ((v_piArrowAheadGo 1) (st).f_PState_toksOf))
 
 # 209 "Vuna/Compiler/Frontend/Parser/Support.vuna"
-let v_atKw = (fun (st : t_PState) (k : string) -> ((fun nd_uscrut2 -> (match nd_uscrut2 with
+let v_atKw = (fun (st : t_PState) (k : string) -> (let nd_uscrut2 = (v_peekTok st) in (match nd_uscrut2 with
   | { Frontend_dLexer.f_PTok_ptokTok = dtb__72; Frontend_dLexer.f_PTok_ptokPos = dtb__73 } -> (match dtb__72 with
   | Frontend_dLexer.C_Tok_TKw (dtb__74) -> (dtb__74 = k)
   | _ -> false
 )
   | _ -> failwith "DT: impossible branch"
-)) (v_peekTok st)))
+)))
 
 # 215 "Vuna/Compiler/Frontend/Parser/Support.vuna"
 let v_canContinue = (fun (st : t_PState) (blockCol : int) -> (match (v_peekPos st) with
@@ -205,31 +205,31 @@ let v_canContinue = (fun (st : t_PState) (blockCol : int) -> (match (v_peekPos s
 ))
 
 # 224 "Vuna/Compiler/Frontend/Parser/Support.vuna"
-let v_expectSym = (fun (st : t_PState) (s : string) -> ((fun nd_uscrut2 -> (match nd_uscrut2 with
+let v_expectSym = (fun (st : t_PState) (s : string) -> (let nd_uscrut2 = (v_peekTok st) in (match nd_uscrut2 with
   | { Frontend_dLexer.f_PTok_ptokTok = dtb__83; Frontend_dLexer.f_PTok_ptokPos = dtb__84 } -> (match dtb__83 with
   | Frontend_dLexer.C_Tok_TSym (dtb__85) -> (if (dtb__85 = s) then (Base_dDiag.C_Check_OkC ((v_advance st))) else (((Base_dDiagnostics_dFrontend.v_psErr1At (v_tokSpan st)) (Base_dDiagnostics_dFrontend.C_PsDiag_ExpectedToken (s))) s))
   | _ -> (((Base_dDiagnostics_dFrontend.v_psErr1At (v_tokSpan st)) (Base_dDiagnostics_dFrontend.C_PsDiag_ExpectedToken (s))) s)
 )
   | _ -> failwith "DT: impossible branch"
-)) (v_peekTok st)))
+)))
 
 # 231 "Vuna/Compiler/Frontend/Parser/Support.vuna"
-let v_expectKw = (fun (st : t_PState) (k : string) -> ((fun nd_uscrut2 -> (match nd_uscrut2 with
+let v_expectKw = (fun (st : t_PState) (k : string) -> (let nd_uscrut2 = (v_peekTok st) in (match nd_uscrut2 with
   | { Frontend_dLexer.f_PTok_ptokTok = dtb__86; Frontend_dLexer.f_PTok_ptokPos = dtb__87 } -> (match dtb__86 with
   | Frontend_dLexer.C_Tok_TKw (dtb__88) -> (if (dtb__88 = k) then (Base_dDiag.C_Check_OkC ((v_advance st))) else (((Base_dDiagnostics_dFrontend.v_psErr1At (v_tokSpan st)) (Base_dDiagnostics_dFrontend.C_PsDiag_ExpectedToken (k))) k))
   | _ -> (((Base_dDiagnostics_dFrontend.v_psErr1At (v_tokSpan st)) (Base_dDiagnostics_dFrontend.C_PsDiag_ExpectedToken (k))) k)
 )
   | _ -> failwith "DT: impossible branch"
-)) (v_peekTok st)))
+)))
 
 # 237 "Vuna/Compiler/Frontend/Parser/Support.vuna"
-let v_expectIdent = (fun (st : t_PState) -> ((fun nd_uscrut1 -> (match nd_uscrut1 with
+let v_expectIdent = (fun (st : t_PState) -> (let nd_uscrut1 = (v_peekTok st) in (match nd_uscrut1 with
   | { Frontend_dLexer.f_PTok_ptokTok = dtb__89; Frontend_dLexer.f_PTok_ptokPos = dtb__90 } -> (match dtb__89 with
   | Frontend_dLexer.C_Tok_TIdent (dtb__91) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = dtb__91; B_dData_dPair.f_Pair_second = (v_advance st) }))
   | _ -> ((Base_dDiagnostics_dFrontend.v_psErr0At (v_tokSpan st)) Base_dDiagnostics_dFrontend.C_PsDiag_ExpectedIdentifier)
 )
   | _ -> failwith "DT: impossible branch"
-)) (v_peekTok st)))
+)))
 
 # 260 "Vuna/Compiler/Frontend/Parser/Support.vuna"
 let v_upperFirst = (fun (s : string) -> (match (B_dData_dList.dtp_unpack s) with
@@ -253,9 +253,9 @@ let v_underscoreCtorName = (fun (s : string) -> (match (B_dData_dList.dtp_unpack
 let v_ctorPatternStart = (fun (name : string) -> (if (v_upperFirst name) then true else (v_underscoreCtorName name)))
 
 # 303 "Vuna/Compiler/Frontend/Parser/Support.vuna"
-let v_holeAtomAt = (fun (st : t_PState) -> ((fun nd_uscrut1 -> (match nd_uscrut1 with
+let v_holeAtomAt = (fun (st : t_PState) -> (let nd_uscrut1 = (v_peekTok st) in (match nd_uscrut1 with
   | { Frontend_dLexer.f_PTok_ptokTok = dtb__98; Frontend_dLexer.f_PTok_ptokPos = dtb__99 } -> (match dtb__98 with
-  | Frontend_dLexer.C_Tok_TSym (dtb__100) -> (if (dtb__100 = "?") then ((fun nd_uscrut5 -> (match nd_uscrut5 with
+  | Frontend_dLexer.C_Tok_TSym (dtb__100) -> (if (dtb__100 = "?") then (let nd_uscrut5 = ((v_peekTokAt st) 1) in (match nd_uscrut5 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__101) -> (match dtb__101 with
   | { Frontend_dLexer.f_PTok_ptokTok = dtb__102; Frontend_dLexer.f_PTok_ptokPos = dtb__103 } -> (match dtb__102 with
   | Frontend_dLexer.C_Tok_TIdent (dtb__104) -> (if (if ((Base_dSource.v_posLine dtb__103) = (Base_dSource.v_posLine dtb__99)) then ((Base_dSource.v_posCol dtb__103) = ((Base_dSource.v_posCol dtb__99) + 1)) else false) then (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = ("?" ^ dtb__104); B_dData_dPair.f_Pair_second = { Base_dSource.f_Span_spanFile = (v_fileOf st); Base_dSource.f_Span_spanStartLine = (Base_dSource.v_posLine dtb__99); Base_dSource.f_Span_spanStartCol = (Base_dSource.v_posCol dtb__99); Base_dSource.f_Span_spanEndLine = (Base_dSource.v_posLine dtb__103); Base_dSource.f_Span_spanEndCol = ((Base_dSource.v_posCol dtb__103) + (bi_strLength dtb__104)); Base_dSource.f_Span_spanStartOffset = (Base_dSource.v_posOffset dtb__99); Base_dSource.f_Span_spanEndOffset = ((Base_dSource.v_posOffset dtb__103) + (bi_strLength dtb__104)) } })) else B_dData_dMaybe.C_Maybe_Nothing)
@@ -264,14 +264,14 @@ let v_holeAtomAt = (fun (st : t_PState) -> ((fun nd_uscrut1 -> (match nd_uscrut1
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> B_dData_dMaybe.C_Maybe_Nothing
-)) ((v_peekTokAt st) 1)) else B_dData_dMaybe.C_Maybe_Nothing)
+)) else B_dData_dMaybe.C_Maybe_Nothing)
   | _ -> B_dData_dMaybe.C_Maybe_Nothing
 )
   | _ -> failwith "DT: impossible branch"
-)) (v_peekTok st)))
+)))
 
 # 283 "Vuna/Compiler/Frontend/Parser/Support.vuna"
-let v_startsAtom = (fun (st : t_PState) -> ((fun nd_uscrut1 -> (match nd_uscrut1 with
+let v_startsAtom = (fun (st : t_PState) -> (let nd_uscrut1 = (v_peekTok st) in (match nd_uscrut1 with
   | { Frontend_dLexer.f_PTok_ptokTok = dtb__105; Frontend_dLexer.f_PTok_ptokPos = dtb__106 } -> (match dtb__105 with
   | Frontend_dLexer.C_Tok_TSym (dtb__107) -> (if (dtb__107 = "(") then true else (if (dtb__107 = "[") then true else (if (dtb__107 = "?") then (match (v_holeAtomAt st) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__108) -> true
@@ -287,10 +287,10 @@ let v_startsAtom = (fun (st : t_PState) -> ((fun nd_uscrut1 -> (match nd_uscrut1
   | _ -> false
 )
   | _ -> failwith "DT: impossible branch"
-)) (v_peekTok st)))
+)))
 
 # 317 "Vuna/Compiler/Frontend/Parser/Support.vuna"
-let v_startsPatternAtom = (fun (st : t_PState) -> ((fun nd_uscrut1 -> (match nd_uscrut1 with
+let v_startsPatternAtom = (fun (st : t_PState) -> (let nd_uscrut1 = (v_peekTok st) in (match nd_uscrut1 with
   | { Frontend_dLexer.f_PTok_ptokTok = dtb__117; Frontend_dLexer.f_PTok_ptokPos = dtb__118 } -> (match dtb__117 with
   | Frontend_dLexer.C_Tok_TSym (dtb__119) -> (if (dtb__119 = "(") then true else (if (dtb__119 = "[") then true else false))
   | Frontend_dLexer.C_Tok_TTmpl (dtb__120, dtb__121, dtb__122) -> true
@@ -300,7 +300,7 @@ let v_startsPatternAtom = (fun (st : t_PState) -> ((fun nd_uscrut1 -> (match nd_
   | _ -> false
 )
   | _ -> failwith "DT: impossible branch"
-)) (v_peekTok st)))
+)))
 
 # 330 "Vuna/Compiler/Frontend/Parser/Support.vuna"
 let v_isSyntaxSym = (fun (op : string) -> (if (op = "=") then true else (if (op = ":") then true else (if (op = ",") then true else (if (op = ";") then true else (if (op = "|") then true else (if (op = "=>") then true else (if (op = "<-") then true else (if (op = "\\") then true else (if (op = ".") then true else (if (op = "..") then true else (if (op = "@") then true else (if (op = "(") then true else (if (op = ")") then true else (if (op = "[") then true else (if (op = "]") then true else (if (op = "{") then true else (if (op = "}") then true else false))))))))))))))))))
@@ -309,17 +309,17 @@ let v_isSyntaxSym = (fun (op : string) -> (if (op = "=") then true else (if (op 
 let v_isReservedValueName = (fun (name : string) -> (if (if (v_isSyntaxSym name) then true else (name = "->")) then true else (name = "`")))
 
 # 245 "Vuna/Compiler/Frontend/Parser/Support.vuna"
-let v_expectValueName = (fun (st : t_PState) -> ((fun nd_uscrut1 -> (match nd_uscrut1 with
+let v_expectValueName = (fun (st : t_PState) -> (let nd_uscrut1 = (v_peekTok st) in (match nd_uscrut1 with
   | { Frontend_dLexer.f_PTok_ptokTok = dtb__126; Frontend_dLexer.f_PTok_ptokPos = dtb__127 } -> (match dtb__126 with
   | Frontend_dLexer.C_Tok_TSym (dtb__128) -> (if (v_isReservedValueName dtb__128) then (((Base_dDiagnostics_dFrontend.v_psErr1At (v_tokSpan st)) (Base_dDiagnostics_dFrontend.C_PsDiag_ExpectedToken ("value name"))) "value name") else (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = dtb__128; B_dData_dPair.f_Pair_second = (v_advance st) })))
   | Frontend_dLexer.C_Tok_TIdent (dtb__129) -> (if (v_isReservedValueName dtb__129) then (((Base_dDiagnostics_dFrontend.v_psErr1At (v_tokSpan st)) (Base_dDiagnostics_dFrontend.C_PsDiag_ExpectedToken ("value name"))) "value name") else (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = dtb__129; B_dData_dPair.f_Pair_second = (v_advance st) })))
   | _ -> ((Base_dDiagnostics_dFrontend.v_psErr0At (v_tokSpan st)) Base_dDiagnostics_dFrontend.C_PsDiag_ExpectedIdentifier)
 )
   | _ -> failwith "DT: impossible branch"
-)) (v_peekTok st)))
+)))
 
 # 362 "Vuna/Compiler/Frontend/Parser/Support.vuna"
-let v_closeParenNext = (fun (st : t_PState) -> ((fun nd_uscrut1 -> (match nd_uscrut1 with
+let v_closeParenNext = (fun (st : t_PState) -> (let nd_uscrut1 = ((v_peekTokAt st) 1) in (match nd_uscrut1 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__130) -> (match dtb__130 with
   | { Frontend_dLexer.f_PTok_ptokTok = dtb__131; Frontend_dLexer.f_PTok_ptokPos = dtb__132 } -> (match dtb__131 with
   | Frontend_dLexer.C_Tok_TSym (dtb__133) -> (if (dtb__133 = ")") then true else false)
@@ -328,10 +328,10 @@ let v_closeParenNext = (fun (st : t_PState) -> ((fun nd_uscrut1 -> (match nd_usc
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> false
-)) ((v_peekTokAt st) 1)))
+)))
 
 # 385 "Vuna/Compiler/Frontend/Parser/Support.vuna"
-let v_minusLiteralAt = (fun (p : Base_dSource.t_Pos) (st : t_PState) -> ((fun nd_uscrut2 -> (match nd_uscrut2 with
+let v_minusLiteralAt = (fun (p : Base_dSource.t_Pos) (st : t_PState) -> (let nd_uscrut2 = ((v_peekTokAt st) 2) in (match nd_uscrut2 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__134) -> (match dtb__134 with
   | { Frontend_dLexer.f_PTok_ptokTok = dtb__135; Frontend_dLexer.f_PTok_ptokPos = dtb__136 } -> (match dtb__135 with
   | Frontend_dLexer.C_Tok_TFloat (dtb__137) -> (if ((Base_dSource.v_posLine dtb__136) = (Base_dSource.v_posLine p)) then ((Base_dSource.v_posCol dtb__136) = ((Base_dSource.v_posCol p) + 1)) else false)
@@ -341,10 +341,10 @@ let v_minusLiteralAt = (fun (p : Base_dSource.t_Pos) (st : t_PState) -> ((fun nd
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> false
-)) ((v_peekTokAt st) 2)))
+)))
 
 # 371 "Vuna/Compiler/Frontend/Parser/Support.vuna"
-let v_sectionOpAt = (fun (st : t_PState) -> ((fun nd_uscrut1 -> (match nd_uscrut1 with
+let v_sectionOpAt = (fun (st : t_PState) -> (let nd_uscrut1 = ((v_peekTokAt st) 1) in (match nd_uscrut1 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__139) -> (match dtb__139 with
   | { Frontend_dLexer.f_PTok_ptokTok = dtb__140; Frontend_dLexer.f_PTok_ptokPos = dtb__141 } -> (match dtb__140 with
   | Frontend_dLexer.C_Tok_TSym (dtb__142) -> (if (v_isReservedValueName dtb__142) then B_dData_dMaybe.C_Maybe_Nothing else (if (dtb__142 = "?") then (match (v_holeAtomAt (v_advance st)) with
@@ -357,7 +357,7 @@ let v_sectionOpAt = (fun (st : t_PState) -> ((fun nd_uscrut1 -> (match nd_uscrut
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> B_dData_dMaybe.C_Maybe_Nothing
-)) ((v_peekTokAt st) 1)))
+)))
 
 # 392 "Vuna/Compiler/Frontend/Parser/Support.vuna"
 let rec v_countArrows = (fun (mc0 : Frontend_dAst.t_Expr) -> (match mc0 with

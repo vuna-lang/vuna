@@ -85,7 +85,7 @@ let v_sequenceMaybe = (fun ms -> (match (((B_dData_dList.v_foldl v_step) (B_dDat
 ))
 
 # 26 "Base/Data/Base64.vuna"
-let v_base64Decode = (fun (s : string) -> ((fun bs -> ((fun n -> ((fun pads -> (if (n = 0) then (B_dData_dMaybe.C_Maybe_Just (B_dData_dList.C_List_Nil)) else (if (if ((n - ((if 4 = 0 then failwith "division by zero" else n / 4) * 4)) = 0) then (pads <= 2) else false) then (match (v_sequenceMaybe ((B_dData_dList.v_map v_decodeDigit) ((B_dData_dList.v_take (n - pads)) bs))) with
+let v_base64Decode = (fun (s : string) -> (let bs = (B_dData_dList.dtp_unpack s) in (let n = (bi_strLength s) in (let pads = ((v_paddingCount bs) n) in (if (n = 0) then (B_dData_dMaybe.C_Maybe_Just (B_dData_dList.C_List_Nil)) else (if (if ((n - ((if 4 = 0 then failwith "division by zero" else n / 4) * 4)) = 0) then (pads <= 2) else false) then (match (v_sequenceMaybe ((B_dData_dList.v_map v_decodeDigit) ((B_dData_dList.v_take (n - pads)) bs))) with
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
   | B_dData_dMaybe.C_Maybe_Just (dtb__19) -> (match (v_sequenceMaybe ((B_dData_dList.v_map v_decodeGroup) ((v_groups 4) ((B_dData_dList.v_append dtb__19) (v_zeroBytes pads))))) with
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
@@ -93,4 +93,4 @@ let v_base64Decode = (fun (s : string) -> ((fun bs -> ((fun n -> ((fun pads -> (
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
-) else B_dData_dMaybe.C_Maybe_Nothing))) ((v_paddingCount bs) n))) (bi_strLength s))) (B_dData_dList.dtp_unpack s)))
+) else B_dData_dMaybe.C_Maybe_Nothing))))))

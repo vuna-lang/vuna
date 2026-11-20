@@ -52,7 +52,7 @@ and v_siteCollectStmts = (fun (mc0 : int) (mc1 : string B_dData_dList.t_List) (m
 and v_siteWalkC = (fun (fuel : int) (comp : string B_dData_dList.t_List) (ctors : string B_dData_dList.t_List) (projs : (string, int B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) (caller : string) (facts : (string, int B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) (sizes : (string, (int, (int, int B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (region : string B_dData_dList.t_List) (e : Frontend_dRast.t_Expr) (acc : t_Site B_dData_dList.t_List) -> (if (fuel <= 0) then ((B_dData_dList.v_append ((((v_blindSitesOf comp) caller) sizes) region)) acc) else (match e with
   | Frontend_dRast.C_Expr_EApp (dtb__21, dtb__22, dtb__23) -> (((((((((((v_siteWalkEApp (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) dtb__21) dtb__22) acc)
   | Frontend_dRast.C_Expr_ECase (dtb__24, dtb__25, dtb__26) -> (((((((((((v_siteCollectAlts (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) dtb__24) dtb__25) ((((((((((v_siteWalkC (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) dtb__24) acc))
-  | Frontend_dRast.C_Expr_EIf (dtb__27, dtb__28, dtb__29, dtb__30) -> ((fun acc1 -> ((fun acc2 -> ((((((((((v_siteWalkC (fuel - 1)) comp) ctors) projs) caller) facts) sizes) ((B_dData_dList.v_append (Elab_dTermination_dMeasure.v_guardElsePosVars dtb__27)) region)) dtb__29) acc2)) ((((((((((v_siteWalkC (fuel - 1)) comp) ctors) projs) caller) facts) sizes) ((B_dData_dList.v_append (Elab_dTermination_dMeasure.v_guardThenPosVars dtb__27)) region)) dtb__28) acc1))) ((((((((((v_siteWalkC (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) dtb__27) acc))
+  | Frontend_dRast.C_Expr_EIf (dtb__27, dtb__28, dtb__29, dtb__30) -> (let acc1 = ((((((((((v_siteWalkC (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) dtb__27) acc) in (let acc2 = ((((((((((v_siteWalkC (fuel - 1)) comp) ctors) projs) caller) facts) sizes) ((B_dData_dList.v_append (Elab_dTermination_dMeasure.v_guardThenPosVars dtb__27)) region)) dtb__28) acc1) in ((((((((((v_siteWalkC (fuel - 1)) comp) ctors) projs) caller) facts) sizes) ((B_dData_dList.v_append (Elab_dTermination_dMeasure.v_guardElsePosVars dtb__27)) region)) dtb__29) acc2)))
   | Frontend_dRast.C_Expr_ELam (dtb__31, dtb__32, dtb__33) -> ((((((((((v_siteWalkC (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) dtb__32) acc)
   | Frontend_dRast.C_Expr_ELet (dtb__34, dtb__35, dtb__36, dtb__37) -> ((((((((((v_siteWalkC (fuel - 1)) comp) ctors) projs) caller) facts) ((Elab_dTermination_dMeasure.v_extendByBinds dtb__34) sizes)) region) dtb__35) ((((((((((v_siteCollectBinds (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) dtb__34) acc))
   | Frontend_dRast.C_Expr_EPi (dtb__38, dtb__39, dtb__40, dtb__41, dtb__42, dtb__43) -> ((((((((((v_siteWalkC (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) dtb__42) ((((((((((v_siteWalkC (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) dtb__41) acc))
@@ -71,7 +71,7 @@ and v_siteWalkEApp = (fun (fuel : int) (comp : string B_dData_dList.t_List) (cto
   | B_dData_dMaybe.C_Maybe_Nothing -> (match fn with
   | Frontend_dRast.C_Expr_EVar (dtb__63, dtb__64) -> (match (Elab_dTermination_dMeasure.v_hofSpecOf dtb__63) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__65) -> (match ((Elab_dTermination_dMeasure.v_hofLambdaCall dtb__65) args) with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__66) -> ((fun acc1 -> ((fun sizes2 -> ((((((((((v_siteWalkC (fuel - 1)) comp) ctors) projs) caller) facts) sizes2) region) (dtb__66).Elab_dTermination_dMeasure.f_HofCall_hofBody) acc1)) (((Elab_dTermination_dMeasure.v_extendElemSizes sizes) (dtb__66).Elab_dTermination_dMeasure.f_HofCall_hofListExpr) (dtb__66).Elab_dTermination_dMeasure.f_HofCall_hofElemBinder))) ((((((((((v_siteCollectList (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) (dtb__66).Elab_dTermination_dMeasure.f_HofCall_hofSideArgs) acc))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__66) -> (let acc1 = ((((((((((v_siteCollectList (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) (dtb__66).Elab_dTermination_dMeasure.f_HofCall_hofSideArgs) acc) in (let sizes2 = (((Elab_dTermination_dMeasure.v_extendElemSizes sizes) (dtb__66).Elab_dTermination_dMeasure.f_HofCall_hofListExpr) (dtb__66).Elab_dTermination_dMeasure.f_HofCall_hofElemBinder) in ((((((((((v_siteWalkC (fuel - 1)) comp) ctors) projs) caller) facts) sizes2) region) (dtb__66).Elab_dTermination_dMeasure.f_HofCall_hofBody) acc1)))
   | B_dData_dMaybe.C_Maybe_Nothing -> (if ((dtb__65).Elab_dTermination_dMeasure.f_HofSpec_hofLambdaArity = 1) then (((((((((((v_siteWalkEAppMap (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) fn) args) acc) else ((((((((((v_siteCollectList (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) args) ((((((((((v_siteWalkC (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) fn) acc)))
   | _ -> failwith "DT: impossible branch"
 )
@@ -83,25 +83,25 @@ and v_siteWalkEApp = (fun (fuel : int) (comp : string B_dData_dList.t_List) (cto
   | _ -> failwith "DT: impossible branch"
 )))
 # 170 "Vuna/Compiler/Elab/Termination/Scc.vuna"
-and v_siteWalkEAppMap = (fun (fuel : int) (comp : string B_dData_dList.t_List) (ctors : string B_dData_dList.t_List) (projs : (string, int B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) (caller : string) (facts : (string, int B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) (sizes : (string, (int, (int, int B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (region : string B_dData_dList.t_List) (fn : Frontend_dRast.t_Expr) (args : Frontend_dRast.t_Expr B_dData_dList.t_List) (acc : t_Site B_dData_dList.t_List) -> (if (fuel <= 0) then ((B_dData_dList.v_append ((((v_blindSitesOf comp) caller) sizes) region)) acc) else ((fun nd_uscrut11 -> (match nd_uscrut11 with
+and v_siteWalkEAppMap = (fun (fuel : int) (comp : string B_dData_dList.t_List) (ctors : string B_dData_dList.t_List) (projs : (string, int B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) (caller : string) (facts : (string, int B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) (sizes : (string, (int, (int, int B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (region : string B_dData_dList.t_List) (fn : Frontend_dRast.t_Expr) (args : Frontend_dRast.t_Expr B_dData_dList.t_List) (acc : t_Site B_dData_dList.t_List) -> (if (fuel <= 0) then ((B_dData_dList.v_append ((((v_blindSitesOf comp) caller) sizes) region)) acc) else (let nd_uscrut11 = args in (match nd_uscrut11 with
   | B_dData_dList.C_List__x58__x58_ (dtb__67, dtb__68) -> (match dtb__68 with
   | B_dData_dList.C_List__x58__x58_ (dtb__69, dtb__70) -> (match dtb__70 with
-  | B_dData_dList.C_List_Nil -> ((fun nd_uscrut19 -> (match nd_uscrut19 with
+  | B_dData_dList.C_List_Nil -> (let nd_uscrut19 = dtb__67 in (match nd_uscrut19 with
   | Frontend_dRast.C_Expr_EVar (dtb__71, dtb__72) -> (if ((B_dData_dList.v_memName (Frontend_dRast_dName.v_rnameKey dtb__71)) comp) then (((((((((((((v_siteWalkMapPartialInline (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) (Frontend_dRast_dName.v_rnameKey dtb__71)) B_dData_dList.C_List_Nil) dtb__69) dtb__72) acc) else ((((((((((v_siteCollectList (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) args) acc))
   | Frontend_dRast.C_Expr_EApp (dtb__73, dtb__74, dtb__75) -> (match dtb__73 with
   | Frontend_dRast.C_Expr_EVar (dtb__76, dtb__77) -> (if ((B_dData_dList.v_memName (Frontend_dRast_dName.v_rnameKey dtb__76)) comp) then (((((((((((((v_siteWalkMapPartialInline (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) (Frontend_dRast_dName.v_rnameKey dtb__76)) dtb__74) dtb__69) dtb__75) acc) else ((((((((((v_siteCollectList (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) args) acc))
   | _ -> ((((((((((v_siteCollectList (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) args) acc)
 )
   | _ -> ((((((((((v_siteCollectList (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) args) acc)
-)) dtb__67)
+))
   | _ -> ((((((((((v_siteCollectList (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) args) acc)
 )
   | _ -> ((((((((((v_siteCollectList (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) args) acc)
 )
   | _ -> ((((((((((v_siteCollectList (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) args) acc)
-)) args)))
+))))
 # 183 "Vuna/Compiler/Elab/Termination/Scc.vuna"
-and v_siteWalkMapPartialInline = (fun (fuel : int) (comp : string B_dData_dList.t_List) (ctors : string B_dData_dList.t_List) (projs : (string, int B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) (caller : string) (facts : (string, int B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) (sizes : (string, (int, (int, int B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (region : string B_dData_dList.t_List) (g : string) (pargs : Frontend_dRast.t_Expr B_dData_dList.t_List) (lst : Frontend_dRast.t_Expr) (cbsp : Base_dSource.t_Span) (acc : t_Site B_dData_dList.t_List) -> (if (fuel <= 0) then ((B_dData_dList.v_append ((((v_blindSitesOf comp) caller) sizes) region)) acc) else ((fun acc1 -> ((fun elems -> ((fun fullArgs -> ((fun acc2 -> (B_dData_dList.C_List__x58__x58_ ({ f_Site_siteCaller = caller; f_Site_siteCallee = g; f_Site_siteArgs = fullArgs; f_Site_siteSizes = elems; f_Site_siteRegion = region; f_Site_siteBlind = false }, acc2))) ((((((((((v_siteCollectList (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) pargs) acc1))) ((B_dData_dList.v_append pargs) (B_dData_dList.C_List__x58__x58_ ((Frontend_dRast.C_Expr_EVar ((Frontend_dRast_dName.v_classifyName "$elem"), cbsp)), B_dData_dList.C_List_Nil))))) (((Elab_dTermination_dMeasure.v_extendElemSizes sizes) lst) "$elem"))) ((((((((((v_siteWalkC (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) lst) acc))))
+and v_siteWalkMapPartialInline = (fun (fuel : int) (comp : string B_dData_dList.t_List) (ctors : string B_dData_dList.t_List) (projs : (string, int B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) (caller : string) (facts : (string, int B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) (sizes : (string, (int, (int, int B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (region : string B_dData_dList.t_List) (g : string) (pargs : Frontend_dRast.t_Expr B_dData_dList.t_List) (lst : Frontend_dRast.t_Expr) (cbsp : Base_dSource.t_Span) (acc : t_Site B_dData_dList.t_List) -> (if (fuel <= 0) then ((B_dData_dList.v_append ((((v_blindSitesOf comp) caller) sizes) region)) acc) else (let acc1 = ((((((((((v_siteWalkC (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) lst) acc) in (let elems = (((Elab_dTermination_dMeasure.v_extendElemSizes sizes) lst) "$elem") in (let fullArgs = ((B_dData_dList.v_append pargs) (B_dData_dList.C_List__x58__x58_ ((Frontend_dRast.C_Expr_EVar ((Frontend_dRast_dName.v_classifyName "$elem"), cbsp)), B_dData_dList.C_List_Nil))) in (let acc2 = ((((((((((v_siteCollectList (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) pargs) acc1) in (B_dData_dList.C_List__x58__x58_ ({ f_Site_siteCaller = caller; f_Site_siteCallee = g; f_Site_siteArgs = fullArgs; f_Site_siteSizes = elems; f_Site_siteRegion = region; f_Site_siteBlind = false }, acc2))))))))
 
 # 199 "Vuna/Compiler/Elab/Termination/Scc.vuna"
 let v_aliasNameOf = (fun (p : (string, string) B_dData_dPair.t_Pair) -> (B_dData_dPair.v_firstOf p))
@@ -289,10 +289,10 @@ let v_tableAdd = (fun (f : string) (g : string) (edges : t_ScEdge B_dData_dList.
 
 # 463 "Vuna/Compiler/Elab/Termination/Scc.vuna"
 let rec v_closureStepHs = (fun (mc0 : string) (mc1 : string) (mc2 : t_ScEdge B_dData_dList.t_List) (mc3 : t_ScEdge B_dData_dList.t_List B_dData_dList.t_List) (mc4 : ((string, string) B_dData_dPair.t_Pair, t_ScEdge B_dData_dList.t_List B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc3 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__135, dtb__136) -> ((fun nd_uscrut8 -> (match nd_uscrut8 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__135, dtb__136) -> (let nd_uscrut8 = ((((v_tableAdd mc0) mc1) ((v_composeEdges mc2) dtb__135)) mc4) in (match nd_uscrut8 with
   | { B_dData_dPair.f_Pair_first = dtb__137; B_dData_dPair.f_Pair_second = dtb__138 } -> (if dtb__138 then (((((v_closureStepHs mc0) mc1) mc2) dtb__136) dtb__137) else { B_dData_dPair.f_Pair_first = dtb__137; B_dData_dPair.f_Pair_second = false })
   | _ -> failwith "DT: impossible branch"
-)) ((((v_tableAdd mc0) mc1) ((v_composeEdges mc2) dtb__135)) mc4))
+))
   | B_dData_dList.C_List_Nil -> { B_dData_dPair.f_Pair_first = mc4; B_dData_dPair.f_Pair_second = true }
   | _ -> failwith "DT: impossible branch"
 ))
@@ -301,10 +301,10 @@ let rec v_closureStepHs = (fun (mc0 : string) (mc1 : string) (mc2 : t_ScEdge B_d
 let rec v_closureStepOneGo = (fun (mc0 : string) (mc1 : string) (mc2 : t_ScEdge B_dData_dList.t_List) (mc3 : ((string, string) B_dData_dPair.t_Pair, t_ScEdge B_dData_dList.t_List B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc4 : ((string, string) B_dData_dPair.t_Pair, t_ScEdge B_dData_dList.t_List B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc5 : bool) -> (match mc3 with
   | B_dData_dList.C_List__x58__x58_ (dtb__139, dtb__140) -> (match dtb__139 with
   | { B_dData_dPair.f_Pair_first = dtb__141; B_dData_dPair.f_Pair_second = dtb__142 } -> (match dtb__141 with
-  | { B_dData_dPair.f_Pair_first = dtb__143; B_dData_dPair.f_Pair_second = dtb__144 } -> (if (dtb__143 = mc1) then ((fun nd_uscrut17 -> (match nd_uscrut17 with
+  | { B_dData_dPair.f_Pair_first = dtb__143; B_dData_dPair.f_Pair_second = dtb__144 } -> (if (dtb__143 = mc1) then (let nd_uscrut17 = (((((v_closureStepHs mc0) dtb__144) mc2) dtb__142) mc4) in (match nd_uscrut17 with
   | { B_dData_dPair.f_Pair_first = dtb__145; B_dData_dPair.f_Pair_second = dtb__146 } -> (if dtb__146 then ((((((v_closureStepOneGo mc0) mc1) mc2) dtb__140) dtb__145) dtb__146) else { B_dData_dPair.f_Pair_first = dtb__145; B_dData_dPair.f_Pair_second = false })
   | _ -> failwith "DT: impossible branch"
-)) (((((v_closureStepHs mc0) dtb__144) mc2) dtb__142) mc4)) else ((((((v_closureStepOneGo mc0) mc1) mc2) dtb__140) mc4) mc5))
+)) else ((((((v_closureStepOneGo mc0) mc1) mc2) dtb__140) mc4) mc5))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
@@ -318,10 +318,10 @@ let v_closureStepOne = (fun (f : string) (g : string) (a : t_ScEdge B_dData_dLis
 
 # 483 "Vuna/Compiler/Elab/Termination/Scc.vuna"
 let rec v_closureStepGraphs = (fun (mc0 : string) (mc1 : string) (mc2 : t_ScEdge B_dData_dList.t_List B_dData_dList.t_List) (mc3 : ((string, string) B_dData_dPair.t_Pair, t_ScEdge B_dData_dList.t_List B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc4 : ((string, string) B_dData_dPair.t_Pair, t_ScEdge B_dData_dList.t_List B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc2 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__147, dtb__148) -> ((fun nd_uscrut8 -> (match nd_uscrut8 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__147, dtb__148) -> (let nd_uscrut8 = (((((v_closureStepOne mc0) mc1) dtb__147) mc3) mc4) in (match nd_uscrut8 with
   | { B_dData_dPair.f_Pair_first = dtb__149; B_dData_dPair.f_Pair_second = dtb__150 } -> (if dtb__150 then (((((v_closureStepGraphs mc0) mc1) dtb__148) mc3) dtb__149) else { B_dData_dPair.f_Pair_first = dtb__149; B_dData_dPair.f_Pair_second = false })
   | _ -> failwith "DT: impossible branch"
-)) (((((v_closureStepOne mc0) mc1) dtb__147) mc3) mc4))
+))
   | B_dData_dList.C_List_Nil -> { B_dData_dPair.f_Pair_first = mc4; B_dData_dPair.f_Pair_second = true }
   | _ -> failwith "DT: impossible branch"
 ))
@@ -330,10 +330,10 @@ let rec v_closureStepGraphs = (fun (mc0 : string) (mc1 : string) (mc2 : t_ScEdge
 let rec v_closureStepGo = (fun (mc0 : ((string, string) B_dData_dPair.t_Pair, t_ScEdge B_dData_dList.t_List B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc1 : ((string, string) B_dData_dPair.t_Pair, t_ScEdge B_dData_dList.t_List B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc2 : ((string, string) B_dData_dPair.t_Pair, t_ScEdge B_dData_dList.t_List B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__151, dtb__152) -> (match dtb__151 with
   | { B_dData_dPair.f_Pair_first = dtb__153; B_dData_dPair.f_Pair_second = dtb__154 } -> (match dtb__153 with
-  | { B_dData_dPair.f_Pair_first = dtb__155; B_dData_dPair.f_Pair_second = dtb__156 } -> ((fun nd_uscrut14 -> (match nd_uscrut14 with
+  | { B_dData_dPair.f_Pair_first = dtb__155; B_dData_dPair.f_Pair_second = dtb__156 } -> (let nd_uscrut14 = (((((v_closureStepGraphs dtb__155) dtb__156) dtb__154) mc1) mc2) in (match nd_uscrut14 with
   | { B_dData_dPair.f_Pair_first = dtb__157; B_dData_dPair.f_Pair_second = dtb__158 } -> (if dtb__158 then (((v_closureStepGo dtb__152) mc1) dtb__157) else { B_dData_dPair.f_Pair_first = dtb__157; B_dData_dPair.f_Pair_second = false })
   | _ -> failwith "DT: impossible branch"
-)) (((((v_closureStepGraphs dtb__155) dtb__156) dtb__154) mc1) mc2))
+))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
@@ -363,10 +363,10 @@ let rec v_tableSubset = (fun (mc0 : ((string, string) B_dData_dPair.t_Pair, t_Sc
 let v_tableSame = (fun (a : ((string, string) B_dData_dPair.t_Pair, t_ScEdge B_dData_dList.t_List B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) (b : ((string, string) B_dData_dPair.t_Pair, t_ScEdge B_dData_dList.t_List B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (if ((B_dData_dList.v_length a) = (B_dData_dList.v_length b)) then ((v_tableSubset a) b) else false))
 
 # 510 "Vuna/Compiler/Elab/Termination/Scc.vuna"
-let rec v_closureLoop = (fun (table : ((string, string) B_dData_dPair.t_Pair, t_ScEdge B_dData_dList.t_List B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) (fuel : int) -> (if (fuel <= 0) then { B_dData_dPair.f_Pair_first = table; B_dData_dPair.f_Pair_second = { B_dData_dPair.f_Pair_first = false; B_dData_dPair.f_Pair_second = fuel } } else ((fun nd_uscrut2 -> (match nd_uscrut2 with
+let rec v_closureLoop = (fun (table : ((string, string) B_dData_dPair.t_Pair, t_ScEdge B_dData_dList.t_List B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) (fuel : int) -> (if (fuel <= 0) then { B_dData_dPair.f_Pair_first = table; B_dData_dPair.f_Pair_second = { B_dData_dPair.f_Pair_first = false; B_dData_dPair.f_Pair_second = fuel } } else (let nd_uscrut2 = (v_closureStep table) in (match nd_uscrut2 with
   | { B_dData_dPair.f_Pair_first = dtb__164; B_dData_dPair.f_Pair_second = dtb__165 } -> (if dtb__165 then (if ((v_tableSame table) dtb__164) then { B_dData_dPair.f_Pair_first = dtb__164; B_dData_dPair.f_Pair_second = { B_dData_dPair.f_Pair_first = true; B_dData_dPair.f_Pair_second = fuel } } else ((v_closureLoop dtb__164) (fuel - 1))) else { B_dData_dPair.f_Pair_first = dtb__164; B_dData_dPair.f_Pair_second = { B_dData_dPair.f_Pair_first = false; B_dData_dPair.f_Pair_second = fuel } })
   | _ -> failwith "DT: impossible branch"
-)) (v_closureStep table))))
+))))
 
 # 528 "Vuna/Compiler/Elab/Termination/Scc.vuna"
 let rec v_basesUpToGo = (fun (i : int) (acc : int B_dData_dList.t_List) -> (if (i <= 0) then (B_dData_dList.C_List__x58__x58_ (0, acc)) else ((v_basesUpToGo (i - 1)) (B_dData_dList.C_List__x58__x58_ (i, acc)))))
@@ -440,11 +440,11 @@ and v_inlParts = (fun (mc0 : string B_dData_dList.t_List) (mc1 : (string, string
 # 232 "Vuna/Compiler/Elab/Termination/Scc.vuna"
 and v_inlBinds = (fun (mc0 : string B_dData_dList.t_List) (mc1 : (string, string) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc2 : (Frontend_dRast.t_Pat, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc2 with
   | B_dData_dList.C_List__x58__x58_ (dtb__197, dtb__198) -> (match dtb__197 with
-  | { B_dData_dPair.f_Pair_first = dtb__199; B_dData_dPair.f_Pair_second = dtb__200 } -> ((fun rhs -> (match ((v_aliasOf mc0) { B_dData_dPair.f_Pair_first = dtb__199; B_dData_dPair.f_Pair_second = rhs }) with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__201) -> ((fun restP -> { B_dData_dPair.f_Pair_first = (B_dData_dPair.v_firstOf restP); B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf restP) }) (((v_inlBinds mc0) (B_dData_dList.C_List__x58__x58_ (dtb__201, mc1))) dtb__198))
-  | B_dData_dMaybe.C_Maybe_Nothing -> ((fun restP -> { B_dData_dPair.f_Pair_first = (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = dtb__199; B_dData_dPair.f_Pair_second = rhs }, (B_dData_dPair.v_firstOf restP))); B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf restP) }) (((v_inlBinds mc0) ((v_dropAliases (v_patNamesOf dtb__199)) mc1)) dtb__198))
+  | { B_dData_dPair.f_Pair_first = dtb__199; B_dData_dPair.f_Pair_second = dtb__200 } -> (let rhs = (((v_inlGo mc0) mc1) dtb__200) in (match ((v_aliasOf mc0) { B_dData_dPair.f_Pair_first = dtb__199; B_dData_dPair.f_Pair_second = rhs }) with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__201) -> (let restP = (((v_inlBinds mc0) (B_dData_dList.C_List__x58__x58_ (dtb__201, mc1))) dtb__198) in { B_dData_dPair.f_Pair_first = (B_dData_dPair.v_firstOf restP); B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf restP) })
+  | B_dData_dMaybe.C_Maybe_Nothing -> (let restP = (((v_inlBinds mc0) ((v_dropAliases (v_patNamesOf dtb__199)) mc1)) dtb__198) in { B_dData_dPair.f_Pair_first = (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = dtb__199; B_dData_dPair.f_Pair_second = rhs }, (B_dData_dPair.v_firstOf restP))); B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf restP) })
   | _ -> failwith "DT: impossible branch"
-)) (((v_inlGo mc0) mc1) dtb__200))
+))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dList.C_List_Nil -> { B_dData_dPair.f_Pair_first = B_dData_dList.C_List_Nil; B_dData_dPair.f_Pair_second = mc1 }
@@ -494,7 +494,7 @@ and v_inlGo = (fun (mc0 : string B_dData_dList.t_List) (mc1 : (string, string) B
   | Frontend_dRast.C_Expr_EIf (dtb__250, dtb__251, dtb__252, dtb__253) -> (Frontend_dRast.C_Expr_EIf ((((v_inlGo mc0) mc1) dtb__250), (((v_inlGo mc0) mc1) dtb__251), (((v_inlGo mc0) mc1) dtb__252), dtb__253))
   | Frontend_dRast.C_Expr_ECase (dtb__254, dtb__255, dtb__256) -> (Frontend_dRast.C_Expr_ECase ((((v_inlGo mc0) mc1) dtb__254), (((v_inlAlts mc0) mc1) dtb__255), dtb__256))
   | Frontend_dRast.C_Expr_ELocalFun (dtb__257, dtb__258) -> (Frontend_dRast.C_Expr_ELocalFun ((((v_inlClauses mc0) mc1) dtb__257), dtb__258))
-  | Frontend_dRast.C_Expr_ELet (dtb__259, dtb__260, dtb__261, dtb__262) -> ((fun p -> (Frontend_dRast.C_Expr_ELet ((B_dData_dPair.v_firstOf p), (((v_inlGo mc0) (B_dData_dPair.v_secondOf p)) dtb__260), dtb__261, dtb__262))) (((v_inlBinds mc0) mc1) dtb__259))
+  | Frontend_dRast.C_Expr_ELet (dtb__259, dtb__260, dtb__261, dtb__262) -> (let p = (((v_inlBinds mc0) mc1) dtb__259) in (Frontend_dRast.C_Expr_ELet ((B_dData_dPair.v_firstOf p), (((v_inlGo mc0) (B_dData_dPair.v_secondOf p)) dtb__260), dtb__261, dtb__262)))
   | Frontend_dRast.C_Expr_EPi (dtb__263, dtb__264, dtb__265, dtb__266, dtb__267, dtb__268) -> (Frontend_dRast.C_Expr_EPi (dtb__263, dtb__264, dtb__265, (((v_inlGo mc0) mc1) dtb__266), (((v_inlGo mc0) ((v_dropAliases (B_dData_dList.C_List__x58__x58_ (dtb__263, B_dData_dList.C_List_Nil))) mc1)) dtb__267), dtb__268))
   | Frontend_dRast.C_Expr_EApp (dtb__269, dtb__270, dtb__271) -> (Frontend_dRast.C_Expr_EApp ((((v_inlGo mc0) mc1) dtb__269), (((v_inlArgs mc0) mc1) dtb__270), dtb__271))
   | Frontend_dRast.C_Expr_ELam (dtb__272, dtb__273, dtb__274) -> (Frontend_dRast.C_Expr_ELam (dtb__272, (((v_inlGo mc0) ((v_dropAliases ((B_dData_dList.v_map B_dData_dPair.v_firstOf) dtb__272)) mc1)) dtb__273), dtb__274))
@@ -511,7 +511,7 @@ let v_inlineAliases = (fun (comp : string B_dData_dList.t_List) (e : Frontend_dR
 
 # 300 "Vuna/Compiler/Elab/Termination/Scc.vuna"
 let rec v_siteCollectClauses = (fun (mc0 : string B_dData_dList.t_List) (mc1 : string B_dData_dList.t_List) (mc2 : (string, int B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc3 : (string, int B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) (mc4 : string) (mc5 : (Frontend_dRast.t_Pat B_dData_dList.t_List, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc6 : t_Site B_dData_dList.t_List) -> (match mc5 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__278, dtb__279) -> ((fun body -> (((((((v_siteCollectClauses mc0) mc1) mc2) mc3) mc4) dtb__279) ((((((((((v_siteWalkC ((Frontend_dRast.v_exprBudget 32) body)) mc0) mc1) mc2) mc4) mc3) (Elab_dTermination_dMeasure.v_strSizeEntries (B_dData_dPair.v_firstOf dtb__278))) B_dData_dList.C_List_Nil) body) mc6))) ((v_inlineAliases mc0) (B_dData_dPair.v_secondOf dtb__278)))
+  | B_dData_dList.C_List__x58__x58_ (dtb__278, dtb__279) -> (let body = ((v_inlineAliases mc0) (B_dData_dPair.v_secondOf dtb__278)) in (((((((v_siteCollectClauses mc0) mc1) mc2) mc3) mc4) dtb__279) ((((((((((v_siteWalkC ((Frontend_dRast.v_exprBudget 32) body)) mc0) mc1) mc2) mc4) mc3) (Elab_dTermination_dMeasure.v_strSizeEntries (B_dData_dPair.v_firstOf dtb__278))) B_dData_dList.C_List_Nil) body) mc6)))
   | B_dData_dList.C_List_Nil -> mc6
   | _ -> failwith "DT: impossible branch"
 ))
@@ -556,14 +556,14 @@ let rec v_argBasesGo = (fun (mc0 : (string, (int, (int, int B_dData_dList.t_List
   | Frontend_dRast.C_Expr_EPi (dtb__332, dtb__333, dtb__334, dtb__335, dtb__336, dtb__337) -> ((B_dData_dList.v_append (((v_argBasesGo mc0) mc1) dtb__335)) (((v_argBasesGo mc0) mc1) dtb__336))
   | Frontend_dRast.C_Expr_EApp (dtb__338, dtb__339, dtb__340) -> ((B_dData_dList.v_append (((v_argBasesGo mc0) mc1) dtb__338)) (((v_argBasesArgs mc0) mc1) dtb__339))
   | Frontend_dRast.C_Expr_ELam (dtb__341, dtb__342, dtb__343) -> (((v_argBasesGo mc0) ((B_dData_dList.v_append ((B_dData_dList.v_map B_dData_dPair.v_firstOf) dtb__341)) mc1)) dtb__342)
-  | Frontend_dRast.C_Expr_EVar (dtb__344, dtb__345) -> ((fun name -> ((fun nd_uscrut6 -> (match nd_uscrut6 with
+  | Frontend_dRast.C_Expr_EVar (dtb__344, dtb__345) -> (let name = (Frontend_dRast_dName.v_rnameKey dtb__344) in (let nd_uscrut6 = ((Elab_dTermination_dMeasure.v_sizeOfVarStrict name) mc0) in (match nd_uscrut6 with
   | B_dData_dMaybe.C_Maybe_Nothing -> (if ((B_dData_dList.v_memName name) mc1) then (v_basesUpTo (v_maxBaseOf mc0)) else B_dData_dList.C_List_Nil)
   | B_dData_dMaybe.C_Maybe_Just (dtb__346) -> (match dtb__346 with
   | { B_dData_dPair.f_Pair_first = dtb__347; B_dData_dPair.f_Pair_second = dtb__348 } -> (B_dData_dList.C_List__x58__x58_ (dtb__347, B_dData_dList.C_List_Nil))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
-)) ((Elab_dTermination_dMeasure.v_sizeOfVarStrict name) mc0))) (Frontend_dRast_dName.v_rnameKey dtb__344))
+)))
   | _ -> B_dData_dList.C_List_Nil
 ))
 # 601 "Vuna/Compiler/Elab/Termination/Scc.vuna"
@@ -782,16 +782,16 @@ let rec v_countGraphs = (fun (mc0 : ((string, string) B_dData_dPair.t_Pair, t_Sc
 ))
 
 # 785 "Vuna/Compiler/Elab/Termination/Scc.vuna"
-let v_sctCheckGo = (fun (comp : string B_dData_dList.t_List) (defTbl : (string, (Frontend_dRast.t_Pat B_dData_dList.t_List, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) (ctors : string B_dData_dList.t_List) (projs : (string, int B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) (facts : (string, int B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) (msg : Base_dDiag.t_Diagnostic) -> ((fun sites -> ((fun note -> ((fun _u -> ((fun _u -> (match (((((v_initialTable defTbl) sites) ctors) projs) facts) with
-  | { B_dData_dPair.f_Pair_first = dtb__415; B_dData_dPair.f_Pair_second = dtb__416 } -> (if dtb__416 then ((fun _u -> ((fun nd_uscrut12 -> (match nd_uscrut12 with
+let v_sctCheckGo = (fun (comp : string B_dData_dList.t_List) (defTbl : (string, (Frontend_dRast.t_Pat B_dData_dList.t_List, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) (ctors : string B_dData_dList.t_List) (projs : (string, int B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) (facts : (string, int B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) (msg : Base_dDiag.t_Diagnostic) -> (let sites = (((((v_siteCollect comp) ctors) projs) defTbl) facts) in (let note = (v_sctBlindNote sites) in (let _u = ((B_dData_dObs.v_obsCounter "vuna.counter.term.scc_size") (B_dData_dList.v_length comp)) in (let _u = ((B_dData_dObs.v_obsCounter "vuna.counter.term.sites") (B_dData_dList.v_length sites)) in (match (((((v_initialTable defTbl) sites) ctors) projs) facts) with
+  | { B_dData_dPair.f_Pair_first = dtb__415; B_dData_dPair.f_Pair_second = dtb__416 } -> (if dtb__416 then (let _u = ((B_dData_dObs.v_obsCounter "vuna.counter.term.graphs") (v_countGraphs dtb__415)) in (let nd_uscrut12 = ((v_closureLoop dtb__415) v_sctClosureFuel) in (match nd_uscrut12 with
   | { B_dData_dPair.f_Pair_first = dtb__417; B_dData_dPair.f_Pair_second = dtb__418 } -> (match dtb__418 with
-  | { B_dData_dPair.f_Pair_first = dtb__419; B_dData_dPair.f_Pair_second = dtb__420 } -> ((fun _u -> ((fun _u -> (if dtb__419 then (if (v_sctCheckTable dtb__417) then (Base_dDiag.C_Check_OkC (0)) else (Base_dDiag.C_Check_ErrC (((Base_dDiag.v_appendMessage note) ((Base_dDiag.v_appendMessage (String.concat "" [" [SCT \230\151\160\228\184\139\233\153\141\231\142\175\239\188\154"; (v_sctDiag dtb__417); "]"])) msg))))) else (Base_dDiag.C_Check_ErrC (((Base_dDiag.v_appendMessage note) ((Base_dDiag.v_appendMessage (String.concat "" [" [SCT \230\148\190\229\188\131\239\188\154size-change \229\155\190\233\151\173\229\140\133\230\156\170\230\148\182\230\149\155\239\188\136\230\175\143\229\175\185\229\135\189\230\149\176\228\184\138\233\153\144 "; (bi_strFromInt v_tableGraphCap); " \229\188\160\229\155\190\239\188\140"; (bi_strFromInt v_sctClosureFuel); " \232\189\174\239\188\137]"])) msg)))))) ((B_dData_dObs.v_obsCounter "vuna.counter.term.graphs_final") (v_countGraphs dtb__417)))) ((B_dData_dObs.v_obsCounter "vuna.counter.term.closure_rounds") (v_sctClosureFuel - dtb__420)))
+  | { B_dData_dPair.f_Pair_first = dtb__419; B_dData_dPair.f_Pair_second = dtb__420 } -> (let _u = ((B_dData_dObs.v_obsCounter "vuna.counter.term.closure_rounds") (v_sctClosureFuel - dtb__420)) in (let _u = ((B_dData_dObs.v_obsCounter "vuna.counter.term.graphs_final") (v_countGraphs dtb__417)) in (if dtb__419 then (if (v_sctCheckTable dtb__417) then (Base_dDiag.C_Check_OkC (0)) else (Base_dDiag.C_Check_ErrC (((Base_dDiag.v_appendMessage note) ((Base_dDiag.v_appendMessage (String.concat "" [" [SCT \230\151\160\228\184\139\233\153\141\231\142\175\239\188\154"; (v_sctDiag dtb__417); "]"])) msg))))) else (Base_dDiag.C_Check_ErrC (((Base_dDiag.v_appendMessage note) ((Base_dDiag.v_appendMessage (String.concat "" [" [SCT \230\148\190\229\188\131\239\188\154size-change \229\155\190\233\151\173\229\140\133\230\156\170\230\148\182\230\149\155\239\188\136\230\175\143\229\175\185\229\135\189\230\149\176\228\184\138\233\153\144 "; (bi_strFromInt v_tableGraphCap); " \229\188\160\229\155\190\239\188\140"; (bi_strFromInt v_sctClosureFuel); " \232\189\174\239\188\137]"])) msg)))))))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
-)) ((v_closureLoop dtb__415) v_sctClosureFuel))) ((B_dData_dObs.v_obsCounter "vuna.counter.term.graphs") (v_countGraphs dtb__415))) else (Base_dDiag.C_Check_ErrC (((Base_dDiag.v_appendMessage note) ((Base_dDiag.v_appendMessage (String.concat "" [" [SCT \230\148\190\229\188\131\239\188\154size-change \229\155\190\233\151\173\229\140\133\230\156\170\230\148\182\230\149\155\239\188\136\230\175\143\229\175\185\229\135\189\230\149\176\228\184\138\233\153\144 "; (bi_strFromInt v_tableGraphCap); " \229\188\160\229\155\190\239\188\140"; (bi_strFromInt v_sctClosureFuel); " \232\189\174\239\188\137]"])) msg)))))
+))) else (Base_dDiag.C_Check_ErrC (((Base_dDiag.v_appendMessage note) ((Base_dDiag.v_appendMessage (String.concat "" [" [SCT \230\148\190\229\188\131\239\188\154size-change \229\155\190\233\151\173\229\140\133\230\156\170\230\148\182\230\149\155\239\188\136\230\175\143\229\175\185\229\135\189\230\149\176\228\184\138\233\153\144 "; (bi_strFromInt v_tableGraphCap); " \229\188\160\229\155\190\239\188\140"; (bi_strFromInt v_sctClosureFuel); " \232\189\174\239\188\137]"])) msg)))))
   | _ -> failwith "DT: impossible branch"
-)) ((B_dData_dObs.v_obsCounter "vuna.counter.term.sites") (B_dData_dList.v_length sites)))) ((B_dData_dObs.v_obsCounter "vuna.counter.term.scc_size") (B_dData_dList.v_length comp)))) (v_sctBlindNote sites))) (((((v_siteCollect comp) ctors) projs) defTbl) facts)))
+))))))
 
 # 776 "Vuna/Compiler/Elab/Termination/Scc.vuna"
 let v_sctCheck = (fun (comp : string B_dData_dList.t_List) (defTbl : (string, (Frontend_dRast.t_Pat B_dData_dList.t_List, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) (ctors : string B_dData_dList.t_List) (projs : (string, int B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) (facts : (string, int B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) (msg : Base_dDiag.t_Diagnostic) -> ((Base_dObs.v_obsCheck "vuna.term.sct") (fun (_u : int) -> ((((((v_sctCheckGo comp) defTbl) ctors) projs) facts) msg))))
@@ -843,7 +843,7 @@ let v_fuelParamNameOf = (fun (name : string) (defTbl : (string, (Frontend_dRast.
 # 847 "Vuna/Compiler/Elab/Termination/Scc.vuna"
 let v_fuelParamIndexOf = (fun (callee : string) (callerFuel : string) (defTbl : (string, (Frontend_dRast.t_Pat B_dData_dList.t_List, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) -> (match ((Elab_dTermination_dMeasure.v_clausesOfDefTbl callee) defTbl) with
   | B_dData_dList.C_List_Nil -> (B_dData_dMaybe.C_Maybe_Just (0))
-  | B_dData_dList.C_List__x58__x58_ (dtb__438, dtb__439) -> ((fun pats -> (match ((v_fuelParamNameOf callee) defTbl) with
+  | B_dData_dList.C_List__x58__x58_ (dtb__438, dtb__439) -> (let pats = (B_dData_dPair.v_firstOf dtb__438) in (match ((v_fuelParamNameOf callee) defTbl) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__440) -> (((v_paramIndexGo pats) dtb__440) 0)
   | B_dData_dMaybe.C_Maybe_Nothing -> (match (((v_paramIndexGo pats) callerFuel) 0) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__441) -> (B_dData_dMaybe.C_Maybe_Just (dtb__441))
@@ -851,7 +851,7 @@ let v_fuelParamIndexOf = (fun (callee : string) (callerFuel : string) (defTbl : 
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
-)) (B_dData_dPair.v_firstOf dtb__438))
+))
   | _ -> failwith "DT: impossible branch"
 ))
 
@@ -882,9 +882,9 @@ let v_siteFuelStrict = (fun (mc0 : string B_dData_dList.t_List) (mc1 : string B_
   | B_dData_dMaybe.C_Maybe_Just (dtb__449) -> (match ((Elab_dTermination_dMeasure.v_nthExpr (mc3).f_Site_siteArgs) dtb__449) with
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
   | B_dData_dMaybe.C_Maybe_Just (dtb__450) -> (match mc1 with
-  | B_dData_dMaybe.C_Maybe_Nothing -> ((fun nd_uscrut9 -> (match nd_uscrut9 with
+  | B_dData_dMaybe.C_Maybe_Nothing -> (let nd_uscrut9 = dtb__450 in (match nd_uscrut9 with
   | Frontend_dRast.C_Expr_EApp (dtb__451, dtb__452, dtb__453) -> (match dtb__451 with
-  | Frontend_dRast.C_Expr_EVar (dtb__454, dtb__455) -> (if (Elab_dTermination_dMeasure.v_isSubOpName (Frontend_dRast_dName.v_rnameKey dtb__454)) then ((fun nd_uscrut15 -> (match nd_uscrut15 with
+  | Frontend_dRast.C_Expr_EVar (dtb__454, dtb__455) -> (if (Elab_dTermination_dMeasure.v_isSubOpName (Frontend_dRast_dName.v_rnameKey dtb__454)) then (let nd_uscrut15 = dtb__452 in (match nd_uscrut15 with
   | B_dData_dList.C_List__x58__x58_ (dtb__456, dtb__457) -> (match dtb__456 with
   | Frontend_dRast.C_Expr_EVar (dtb__458, dtb__459) -> (match dtb__457 with
   | B_dData_dList.C_List__x58__x58_ (dtb__460, dtb__461) -> (match dtb__460 with
@@ -899,14 +899,14 @@ let v_siteFuelStrict = (fun (mc0 : string B_dData_dList.t_List) (mc1 : string B_
   | _ -> (B_dData_dMaybe.C_Maybe_Just (false))
 )
   | _ -> (B_dData_dMaybe.C_Maybe_Just (false))
-)) dtb__452) else (B_dData_dMaybe.C_Maybe_Just (false)))
+)) else (B_dData_dMaybe.C_Maybe_Just (false)))
   | _ -> (B_dData_dMaybe.C_Maybe_Just (false))
 )
   | _ -> (B_dData_dMaybe.C_Maybe_Just (false))
-)) dtb__450)
-  | B_dData_dMaybe.C_Maybe_Just (dtb__464) -> ((fun nd_uscrut10 -> (match nd_uscrut10 with
+))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__464) -> (let nd_uscrut10 = dtb__450 in (match nd_uscrut10 with
   | Frontend_dRast.C_Expr_EApp (dtb__465, dtb__466, dtb__467) -> (match dtb__465 with
-  | Frontend_dRast.C_Expr_EVar (dtb__468, dtb__469) -> (if (Elab_dTermination_dMeasure.v_isSubOpName (Frontend_dRast_dName.v_rnameKey dtb__468)) then ((fun nd_uscrut16 -> (match nd_uscrut16 with
+  | Frontend_dRast.C_Expr_EVar (dtb__468, dtb__469) -> (if (Elab_dTermination_dMeasure.v_isSubOpName (Frontend_dRast_dName.v_rnameKey dtb__468)) then (let nd_uscrut16 = dtb__466 in (match nd_uscrut16 with
   | B_dData_dList.C_List__x58__x58_ (dtb__470, dtb__471) -> (match dtb__470 with
   | Frontend_dRast.C_Expr_EVar (dtb__472, dtb__473) -> (match dtb__471 with
   | B_dData_dList.C_List__x58__x58_ (dtb__474, dtb__475) -> (match dtb__474 with
@@ -921,12 +921,12 @@ let v_siteFuelStrict = (fun (mc0 : string B_dData_dList.t_List) (mc1 : string B_
   | _ -> B_dData_dMaybe.C_Maybe_Nothing
 )
   | _ -> B_dData_dMaybe.C_Maybe_Nothing
-)) dtb__466) else B_dData_dMaybe.C_Maybe_Nothing)
+)) else B_dData_dMaybe.C_Maybe_Nothing)
   | _ -> B_dData_dMaybe.C_Maybe_Nothing
 )
   | Frontend_dRast.C_Expr_EVar (dtb__478, dtb__479) -> (if ((Frontend_dRast_dName.v_rnameKey dtb__478) = dtb__464) then (B_dData_dMaybe.C_Maybe_Just (false)) else B_dData_dMaybe.C_Maybe_Nothing)
   | _ -> B_dData_dMaybe.C_Maybe_Nothing
-)) dtb__450)
+))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
@@ -937,11 +937,11 @@ let v_siteFuelStrict = (fun (mc0 : string B_dData_dList.t_List) (mc1 : string B_
 
 # 916 "Vuna/Compiler/Elab/Termination/Scc.vuna"
 let rec v_fuelEdgesGo = (fun (mc0 : string B_dData_dList.t_List) (mc1 : (string, (Frontend_dRast.t_Pat B_dData_dList.t_List, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) (mc2 : t_Site B_dData_dList.t_List) (mc3 : (((string, string) B_dData_dPair.t_Pair, int) B_dData_dPair.t_Pair, Base_dSource.t_Span) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc2 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__480, dtb__481) -> ((fun inGroup -> ((fun mode -> ((fun acc2 -> ((((v_fuelEdgesGo mc0) mc1) dtb__481) acc2)) (if inGroup then (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = { B_dData_dPair.f_Pair_first = { B_dData_dPair.f_Pair_first = (dtb__480).f_Site_siteCaller; B_dData_dPair.f_Pair_second = (dtb__480).f_Site_siteCallee }; B_dData_dPair.f_Pair_second = mode }; B_dData_dPair.f_Pair_second = { Base_dSource.f_Span_spanFile = ""; Base_dSource.f_Span_spanStartLine = 0; Base_dSource.f_Span_spanStartCol = 0; Base_dSource.f_Span_spanEndLine = 0; Base_dSource.f_Span_spanEndCol = 0; Base_dSource.f_Span_spanStartOffset = 0; Base_dSource.f_Span_spanEndOffset = 0 } }, mc3)) else mc3))) ((fun nd_uscrut8 -> (match nd_uscrut8 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__480, dtb__481) -> (let inGroup = ((B_dData_dList.v_memName (dtb__480).f_Site_siteCallee) mc0) in (let mode = (let nd_uscrut8 = ((((v_siteFuelStrict ((v_paramsOf (dtb__480).f_Site_siteCaller) mc1)) ((v_fuelParamNameOf (dtb__480).f_Site_siteCaller) mc1)) (((v_fuelParamIndexOf (dtb__480).f_Site_siteCallee) ((v_callerFuelName (dtb__480).f_Site_siteCaller) mc1)) mc1)) dtb__480) in (match nd_uscrut8 with
   | B_dData_dMaybe.C_Maybe_Nothing -> 0
   | B_dData_dMaybe.C_Maybe_Just (dtb__482) -> (if dtb__482 then 1 else 0)
   | _ -> failwith "DT: impossible branch"
-)) ((((v_siteFuelStrict ((v_paramsOf (dtb__480).f_Site_siteCaller) mc1)) ((v_fuelParamNameOf (dtb__480).f_Site_siteCaller) mc1)) (((v_fuelParamIndexOf (dtb__480).f_Site_siteCallee) ((v_callerFuelName (dtb__480).f_Site_siteCaller) mc1)) mc1)) dtb__480)))) ((B_dData_dList.v_memName (dtb__480).f_Site_siteCallee) mc0))
+)) in (let acc2 = (if inGroup then (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = { B_dData_dPair.f_Pair_first = { B_dData_dPair.f_Pair_first = (dtb__480).f_Site_siteCaller; B_dData_dPair.f_Pair_second = (dtb__480).f_Site_siteCallee }; B_dData_dPair.f_Pair_second = mode }; B_dData_dPair.f_Pair_second = { Base_dSource.f_Span_spanFile = ""; Base_dSource.f_Span_spanStartLine = 0; Base_dSource.f_Span_spanStartCol = 0; Base_dSource.f_Span_spanEndLine = 0; Base_dSource.f_Span_spanEndCol = 0; Base_dSource.f_Span_spanStartOffset = 0; Base_dSource.f_Span_spanEndOffset = 0 } }, mc3)) else mc3) in ((((v_fuelEdgesGo mc0) mc1) dtb__481) acc2))))
   | B_dData_dList.C_List_Nil -> mc3
   | _ -> failwith "DT: impossible branch"
 ))
@@ -1017,4 +1017,4 @@ let v_edgeModeOf = (fun (mc0 : (((string, string) B_dData_dPair.t_Pair, int) B_d
 ))
 
 # 976 "Vuna/Compiler/Elab/Termination/Scc.vuna"
-let v_tryFuelThread = (fun (comp : string B_dData_dList.t_List) (defTbl : (string, (Frontend_dRast.t_Pat B_dData_dList.t_List, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) (ctors : string B_dData_dList.t_List) (projs : (string, int B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) (facts : (string, int B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) (msg : Base_dDiag.t_Diagnostic) -> ((fun sites -> ((fun edges -> ((fun strictCount -> (if (if (if (strictCount > 0) then (((v_fuelAcceptable comp) defTbl) edges) else false) then (B_dData_dBool.v_not ((Elab_dTermination_dMeasure.v_hasWeakCycle comp) edges)) else false) then (Base_dDiag.C_Check_OkC (0)) else (Base_dDiag.C_Check_ErrC (msg)))) (B_dData_dList.v_length (Elab_dTermination_dMeasure.v_filterModes ((B_dData_dList.v_map v_edgeModeOf) edges))))) (((v_fuelEdgesOf comp) defTbl) sites))) (((((v_siteCollect comp) ctors) projs) defTbl) facts)))
+let v_tryFuelThread = (fun (comp : string B_dData_dList.t_List) (defTbl : (string, (Frontend_dRast.t_Pat B_dData_dList.t_List, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) (ctors : string B_dData_dList.t_List) (projs : (string, int B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) (facts : (string, int B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) (msg : Base_dDiag.t_Diagnostic) -> (let sites = (((((v_siteCollect comp) ctors) projs) defTbl) facts) in (let edges = (((v_fuelEdgesOf comp) defTbl) sites) in (let strictCount = (B_dData_dList.v_length (Elab_dTermination_dMeasure.v_filterModes ((B_dData_dList.v_map v_edgeModeOf) edges))) in (if (if (if (strictCount > 0) then (((v_fuelAcceptable comp) defTbl) edges) else false) then (B_dData_dBool.v_not ((Elab_dTermination_dMeasure.v_hasWeakCycle comp) edges)) else false) then (Base_dDiag.C_Check_OkC (0)) else (Base_dDiag.C_Check_ErrC (msg)))))))

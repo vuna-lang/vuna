@@ -22,11 +22,11 @@ let v_firstUnorderedDep = (fun (nameTbl : (string, bool) B_dContainer_dHashMap.t
 
 # 36 "Vuna/Ir/Validate.vuna"
 let rec v_checkGroupOrderGo = (fun (mc0 : Vuna_dIr_dModel.t_IrGroup B_dData_dList.t_List) (mc1 : (string, bool) B_dContainer_dHashMap.t_HashMap) (mc2 : (string, bool) B_dContainer_dHashMap.t_HashMap) -> (match mc0 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__5, dtb__6) -> ((fun members -> ((fun visible -> (match (((v_firstUnorderedDep mc2) visible) members) with
+  | B_dData_dList.C_List__x58__x58_ (dtb__5, dtb__6) -> (let members = (Vuna_dIr_dModel.v_irGroupDefs dtb__5) in (let visible = (((B_dData_dList.v_foldl (fun (acc : (string, bool) B_dContainer_dHashMap.t_HashMap) (d : Vuna_dIr_dModel.t_IrDef) -> (((((B_dContainer_dHashMap.v_insert B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) (Vuna_dIr_dModel.v_irDefName d)) true) acc))) mc1) members) in (match (((v_firstUnorderedDep mc2) visible) members) with
   | B_dData_dMaybe.C_Maybe_Nothing -> (((v_checkGroupOrderGo dtb__6) visible) mc2)
   | B_dData_dMaybe.C_Maybe_Just (dtb__7) -> (Base_dDiag.v_icInternal (String.concat "" ["IR group order is inconsistent: `"; (B_dData_dPair.v_secondOf dtb__7); "` referenced before it is defined (group of `"; (B_dData_dPair.v_firstOf dtb__7); "`)"]))
   | _ -> failwith "DT: impossible branch"
-)) (((B_dData_dList.v_foldl (fun (acc : (string, bool) B_dContainer_dHashMap.t_HashMap) (d : Vuna_dIr_dModel.t_IrDef) -> (((((B_dContainer_dHashMap.v_insert B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) (Vuna_dIr_dModel.v_irDefName d)) true) acc))) mc1) members))) (Vuna_dIr_dModel.v_irGroupDefs dtb__5))
+)))
   | B_dData_dList.C_List_Nil -> (Base_dDiag.C_Check_OkC (0))
   | _ -> failwith "DT: impossible branch"
 ))
@@ -60,7 +60,7 @@ let v_checkDefArityVsSig = (fun (d : Vuna_dIr_dModel.t_IrDef) -> (match (Vuna_dI
   | B_dData_dMaybe.C_Maybe_Just (dtb__14) -> (Base_dDiag.C_Check_OkC (0))
   | B_dData_dMaybe.C_Maybe_Nothing -> (match (Vuna_dIr_dModel.v_irDefTy d) with
   | B_dData_dMaybe.C_Maybe_Nothing -> (Base_dDiag.C_Check_OkC (0))
-  | B_dData_dMaybe.C_Maybe_Just (dtb__15) -> ((fun arrows -> (if (if ((Vuna_dIr_dModel.v_irDefArity d) = 0) then true else (arrows = 0)) then (Base_dDiag.C_Check_OkC (0)) else (if ((Vuna_dIr_dModel.v_irDefArity d) <= arrows) then (Base_dDiag.C_Check_OkC (0)) else (Base_dDiag.v_icInternal (String.concat "" ["definition `"; (Vuna_dIr_dModel.v_irDefName d); "` has "; (bi_strFromInt (Vuna_dIr_dModel.v_irDefArity d)); " runtime parameters but its signature has "; (bi_strFromInt arrows)]))))) (v_irTyArrowArity dtb__15))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__15) -> (let arrows = (v_irTyArrowArity dtb__15) in (if (if ((Vuna_dIr_dModel.v_irDefArity d) = 0) then true else (arrows = 0)) then (Base_dDiag.C_Check_OkC (0)) else (if ((Vuna_dIr_dModel.v_irDefArity d) <= arrows) then (Base_dDiag.C_Check_OkC (0)) else (Base_dDiag.v_icInternal (String.concat "" ["definition `"; (Vuna_dIr_dModel.v_irDefName d); "` has "; (bi_strFromInt (Vuna_dIr_dModel.v_irDefArity d)); " runtime parameters but its signature has "; (bi_strFromInt arrows)])))))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
@@ -74,14 +74,14 @@ let rec v_countKeptFlags = (fun (mc0 : bool B_dData_dList.t_List) -> (match mc0 
 ))
 
 # 211 "Vuna/Ir/Validate.vuna"
-let v_checkCtorArity = (fun (shared : Vuna_dIr_dModel.t_IrShared) (family : string) (ctor : string) (nargs : int) -> ((fun nd_uscrut4 -> (match nd_uscrut4 with
+let v_checkCtorArity = (fun (shared : Vuna_dIr_dModel.t_IrShared) (family : string) (ctor : string) (nargs : int) -> (let nd_uscrut4 = ((Vuna_dIr_dModel.v_irSharedCtorShapeOf ctor) (shared).Vuna_dIr_dModel.f_IrShared_irSharedCtorShapes) in (match nd_uscrut4 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__18) -> (match dtb__18 with
-  | { B_dData_dPair.f_Pair_first = dtb__19; B_dData_dPair.f_Pair_second = dtb__20 } -> (if (dtb__19 = family) then ((fun n -> (if (nargs = n) then (Base_dDiag.C_Check_OkC (0)) else (Base_dDiag.v_icInternal (String.concat "" ["constructor `"; ctor; "` has "; (bi_strFromInt nargs); " runtime arguments, expected "; (bi_strFromInt n)])))) (v_countKeptFlags dtb__20)) else (Base_dDiag.v_icInternal (String.concat "" ["constructor `"; ctor; "` belongs to family `"; dtb__19; "`, not `"; family; "`"])))
+  | { B_dData_dPair.f_Pair_first = dtb__19; B_dData_dPair.f_Pair_second = dtb__20 } -> (if (dtb__19 = family) then (let n = (v_countKeptFlags dtb__20) in (if (nargs = n) then (Base_dDiag.C_Check_OkC (0)) else (Base_dDiag.v_icInternal (String.concat "" ["constructor `"; ctor; "` has "; (bi_strFromInt nargs); " runtime arguments, expected "; (bi_strFromInt n)])))) else (Base_dDiag.v_icInternal (String.concat "" ["constructor `"; ctor; "` belongs to family `"; dtb__19; "`, not `"; family; "`"])))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> (Base_dDiag.v_icInternal (String.concat "" ["IR references an undeclared constructor: `"; ctor; "`"]))
   | _ -> failwith "DT: impossible branch"
-)) ((Vuna_dIr_dModel.v_irSharedCtorShapeOf ctor) (shared).Vuna_dIr_dModel.f_IrShared_irSharedCtorShapes)))
+)))
 
 # 318 "Vuna/Ir/Validate.vuna"
 let rec v_tyDeclArityOf = (fun (mc0 : Vuna_dIr_dModel.t_IrTyDecl B_dData_dList.t_List) (mc1 : string) -> (match mc0 with
@@ -199,7 +199,7 @@ let v_checkTyArityListM = (fun (mc0 : Vuna_dIr_dModel.t_IrTyDecl B_dData_dList.t
 ))
 
 # 190 "Vuna/Ir/Validate.vuna"
-let v_checkCtorTys = (fun (shared : Vuna_dIr_dModel.t_IrShared) (decls : Vuna_dIr_dModel.t_IrTyDecl B_dData_dList.t_List) (family : string) (ctor : string) (tys : Vuna_dIr_dModel.t_IrTy B_dData_dList.t_List B_dData_dMaybe.t_Maybe) (nargs : int) -> ((Base_dCommon.v_bind ((v_checkTyArityListM decls) tys)) (fun (_u : int) -> ((fun typeArityOk -> (if typeArityOk then ((((v_checkCtorArity shared) family) ctor) nargs) else (Base_dDiag.v_icInternal (String.concat "" ["constructor application has the wrong runtime type argument count for `"; family; "`"])))) (match ((v_tyDeclArityOf decls) family) with
+let v_checkCtorTys = (fun (shared : Vuna_dIr_dModel.t_IrShared) (decls : Vuna_dIr_dModel.t_IrTyDecl B_dData_dList.t_List) (family : string) (ctor : string) (tys : Vuna_dIr_dModel.t_IrTy B_dData_dList.t_List B_dData_dMaybe.t_Maybe) (nargs : int) -> ((Base_dCommon.v_bind ((v_checkTyArityListM decls) tys)) (fun (_u : int) -> (let typeArityOk = (match ((v_tyDeclArityOf decls) family) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__59) -> (match tys with
   | B_dData_dMaybe.C_Maybe_Just (dtb__60) -> ((v_listLength dtb__60) = dtb__59)
   | B_dData_dMaybe.C_Maybe_Nothing -> true
@@ -207,7 +207,7 @@ let v_checkCtorTys = (fun (shared : Vuna_dIr_dModel.t_IrShared) (decls : Vuna_dI
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> true
   | _ -> failwith "DT: impossible branch"
-)))))
+) in (if typeArityOk then ((((v_checkCtorArity shared) family) ctor) nargs) else (Base_dDiag.v_icInternal (String.concat "" ["constructor application has the wrong runtime type argument count for `"; family; "`"])))))))
 
 # 160 "Vuna/Ir/Validate.vuna"
 let rec v_checkNodeBinderTys = (fun (mc0 : Vuna_dIr_dModel.t_IrShared) (mc1 : Vuna_dIr_dModel.t_IrTyDecl B_dData_dList.t_List) (mc2 : Vuna_dIr_dModel.t_Ir) -> (match mc2 with
@@ -340,7 +340,7 @@ let rec v_memBinder = (fun (mc0 : Vuna_dIr_dModel.t_IrBinder) (mc1 : Vuna_dIr_dM
 ))
 
 # 356 "Vuna/Ir/Validate.vuna"
-let rec v_checkScopedWork = (fun (fuel : int) (work : (Vuna_dIr_dModel.t_IrBinder B_dData_dList.t_List, Vuna_dIr_dModel.t_Ir) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (if (fuel <= 0) then (Base_dDiag.v_icFuel "ir-scope") else ((fun nd_uscrut2 -> (match nd_uscrut2 with
+let rec v_checkScopedWork = (fun (fuel : int) (work : (Vuna_dIr_dModel.t_IrBinder B_dData_dList.t_List, Vuna_dIr_dModel.t_Ir) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (if (fuel <= 0) then (Base_dDiag.v_icFuel "ir-scope") else (let nd_uscrut2 = work in (match nd_uscrut2 with
   | B_dData_dList.C_List__x58__x58_ (dtb__178, dtb__179) -> (match dtb__178 with
   | { B_dData_dPair.f_Pair_first = dtb__180; B_dData_dPair.f_Pair_second = dtb__181 } -> (match dtb__181 with
   | Vuna_dIr_dModel.C_Ir_IrVar (dtb__182) -> (if (dtb__182).Vuna_dIr_dModel.f_IrBinder_irBinderErased then (Base_dDiag.v_icInternal "erased binder reached runtime IR") else (if ((v_memBinder dtb__182) dtb__180) then ((v_checkScopedWork (fuel - 1)) dtb__179) else (Base_dDiag.v_icInternal "IR variable references a binder outside its scope")))
@@ -350,7 +350,7 @@ let rec v_checkScopedWork = (fun (fuel : int) (work : (Vuna_dIr_dModel.t_IrBinde
 )
   | B_dData_dList.C_List_Nil -> (Base_dDiag.C_Check_OkC (0))
   | _ -> failwith "DT: impossible branch"
-)) work)))
+))))
 
 # 343 "Vuna/Ir/Validate.vuna"
 let rec v_checkScopedDefs = (fun (mc0 : Vuna_dIr_dModel.t_IrDef B_dData_dList.t_List) -> (match mc0 with
@@ -367,11 +367,11 @@ let rec v_checkScopedDefs = (fun (mc0 : Vuna_dIr_dModel.t_IrDef B_dData_dList.t_
 let v_checkScopedUnit = (fun (u : Vuna_dIr_dModel.t_IrUnit) -> (v_checkScopedDefs ((B_dData_dList.v_concatMap Vuna_dIr_dModel.v_irGroupDefs) (u).Vuna_dIr_dModel.f_IrUnit_irUnitGroups)))
 
 # 23 "Vuna/Ir/Validate.vuna"
-let v_validateUnit = (fun (shared : Vuna_dIr_dModel.t_IrShared) (u : Vuna_dIr_dModel.t_IrUnit) -> ((fun defs -> ((fun nameTbl -> ((Base_dCommon.v_bind (Vuna_dIr_dAnalysis.v_checkUniqueDefNames defs)) (fun (_u : int) -> ((Base_dCommon.v_bind ((v_checkGroupOrder (u).Vuna_dIr_dModel.f_IrUnit_irUnitGroups) nameTbl)) (fun (_u : int) -> ((Base_dCommon.v_bind (v_checkSymbolRefs (Vuna_dIr_dRuntime.v_irSymbolsOfUnit u))) (fun (_u : int) -> ((Base_dCommon.v_bind (v_checkScopedUnit u)) (fun (_u : int) -> ((Base_dCommon.v_bind (v_validateTyDecls (u).Vuna_dIr_dModel.f_IrUnit_irUnitTyDecls)) (fun (_u : int) -> (((v_checkBinderTys shared) (u).Vuna_dIr_dModel.f_IrUnit_irUnitTyDecls) defs)))))))))))) (B_dContainer_dHashMap.v_ofNames ((B_dData_dList.v_map Vuna_dIr_dModel.v_irDefName) defs)))) ((B_dData_dList.v_concatMap Vuna_dIr_dModel.v_irGroupDefs) (u).Vuna_dIr_dModel.f_IrUnit_irUnitGroups)))
+let v_validateUnit = (fun (shared : Vuna_dIr_dModel.t_IrShared) (u : Vuna_dIr_dModel.t_IrUnit) -> (let defs = ((B_dData_dList.v_concatMap Vuna_dIr_dModel.v_irGroupDefs) (u).Vuna_dIr_dModel.f_IrUnit_irUnitGroups) in (let nameTbl = (B_dContainer_dHashMap.v_ofNames ((B_dData_dList.v_map Vuna_dIr_dModel.v_irDefName) defs)) in ((Base_dCommon.v_bind (Vuna_dIr_dAnalysis.v_checkUniqueDefNames defs)) (fun (_u : int) -> ((Base_dCommon.v_bind ((v_checkGroupOrder (u).Vuna_dIr_dModel.f_IrUnit_irUnitGroups) nameTbl)) (fun (_u : int) -> ((Base_dCommon.v_bind (v_checkSymbolRefs (Vuna_dIr_dRuntime.v_irSymbolsOfUnit u))) (fun (_u : int) -> ((Base_dCommon.v_bind (v_checkScopedUnit u)) (fun (_u : int) -> ((Base_dCommon.v_bind (v_validateTyDecls (u).Vuna_dIr_dModel.f_IrUnit_irUnitTyDecls)) (fun (_u : int) -> (((v_checkBinderTys shared) (u).Vuna_dIr_dModel.f_IrUnit_irUnitTyDecls) defs))))))))))))))
 
 # 87 "Vuna/Ir/Validate.vuna"
-let v_validateProgram = (fun (p : Vuna_dIr_dModel.t_IrProgram) -> ((fun u -> ((fun shared -> ((fun defs -> (match (u).Vuna_dIr_dModel.f_IrUnit_irUnitEntry with
+let v_validateProgram = (fun (p : Vuna_dIr_dModel.t_IrProgram) -> (let u = (p).Vuna_dIr_dModel.f_IrProgram_irProgUnit in (let shared = (p).Vuna_dIr_dModel.f_IrProgram_irProgShared in (let defs = ((B_dData_dList.v_concatMap Vuna_dIr_dModel.v_irGroupDefs) (u).Vuna_dIr_dModel.f_IrUnit_irUnitGroups) in (match (u).Vuna_dIr_dModel.f_IrUnit_irUnitEntry with
   | B_dData_dMaybe.C_Maybe_Nothing -> ((v_validateUnit shared) u)
   | B_dData_dMaybe.C_Maybe_Just (dtb__186) -> (if ((B_dData_dList.v_memName (dtb__186).Vuna_dIr_dModel.f_IrEntry_irEntryMain) ((B_dData_dList.v_map Vuna_dIr_dModel.v_irDefName) defs)) then ((v_validateUnit shared) u) else (Base_dDiag.v_icInternal (String.concat "" ["IR entry references an undefined main: `"; (dtb__186).Vuna_dIr_dModel.f_IrEntry_irEntryMain; "`"])))
   | _ -> failwith "DT: impossible branch"
-)) ((B_dData_dList.v_concatMap Vuna_dIr_dModel.v_irGroupDefs) (u).Vuna_dIr_dModel.f_IrUnit_irUnitGroups))) (p).Vuna_dIr_dModel.f_IrProgram_irProgShared)) (p).Vuna_dIr_dModel.f_IrProgram_irProgUnit))
+)))))

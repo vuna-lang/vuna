@@ -286,14 +286,14 @@ let v_ctxSlot = (fun mc0 -> (match mc0 with
 ))
 
 # 483 "Base/Effect/Core.vuna"
-let rec v_usedEpochSmall = (fun (fuel : int) (slot : int) (epoch : int) (xs : (int, int) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (if (fuel <= 0) then false else ((fun nd_uscrut4 -> (match nd_uscrut4 with
+let rec v_usedEpochSmall = (fun (fuel : int) (slot : int) (epoch : int) (xs : (int, int) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (if (fuel <= 0) then false else (let nd_uscrut4 = xs in (match nd_uscrut4 with
   | B_dData_dList.C_List__x58__x58_ (dtb__117, dtb__118) -> (match dtb__117 with
   | { B_dData_dPair.f_Pair_first = dtb__119; B_dData_dPair.f_Pair_second = dtb__120 } -> (if (dtb__119 = slot) then (epoch <= dtb__120) else ((((v_usedEpochSmall (fuel - 1)) slot) epoch) dtb__118))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dList.C_List_Nil -> false
   | _ -> failwith "DT: impossible branch"
-)) xs)))
+))))
 
 # 471 "Base/Effect/Core.vuna"
 let v_usedEpoch = (fun (fuel : int) (slot : int) (epoch : int) (used : t_Used) -> (if (fuel <= 0) then false else (match used with
@@ -310,14 +310,14 @@ let v_usedEpoch = (fun (fuel : int) (slot : int) (epoch : int) (used : t_Used) -
 let v_tailSlot = -1
 
 # 509 "Base/Effect/Core.vuna"
-let rec v_markUsedSmall = (fun (fuel : int) (slot : int) (epoch : int) (xs : (int, int) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (if (fuel <= 0) then (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = slot; B_dData_dPair.f_Pair_second = epoch }, B_dData_dList.C_List_Nil)) else ((fun nd_uscrut4 -> (match nd_uscrut4 with
+let rec v_markUsedSmall = (fun (fuel : int) (slot : int) (epoch : int) (xs : (int, int) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (if (fuel <= 0) then (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = slot; B_dData_dPair.f_Pair_second = epoch }, B_dData_dList.C_List_Nil)) else (let nd_uscrut4 = xs in (match nd_uscrut4 with
   | B_dData_dList.C_List__x58__x58_ (dtb__124, dtb__125) -> (match dtb__124 with
   | { B_dData_dPair.f_Pair_first = dtb__126; B_dData_dPair.f_Pair_second = dtb__127 } -> (if (dtb__126 = slot) then (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = slot; B_dData_dPair.f_Pair_second = epoch }, dtb__125)) else (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = dtb__126; B_dData_dPair.f_Pair_second = dtb__127 }, ((((v_markUsedSmall (fuel - 1)) slot) epoch) dtb__125))))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dList.C_List_Nil -> (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = slot; B_dData_dPair.f_Pair_second = epoch }, B_dData_dList.C_List_Nil))
   | _ -> failwith "DT: impossible branch"
-)) xs)))
+))))
 
 # 518 "Base/Effect/Core.vuna"
 let rec v_usedLen = (fun (fuel : int) (xs : (int, int) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (if (fuel <= 0) then 0 else (match xs with
@@ -328,7 +328,7 @@ let rec v_usedLen = (fun (fuel : int) (xs : (int, int) B_dData_dPair.t_Pair B_dD
 
 # 497 "Base/Effect/Core.vuna"
 let v_markUsed = (fun (fuel : int) (slot : int) (epoch : int) (used : t_Used) -> (if (fuel <= 0) then (C_Used_MkUsedSmall ((B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = slot; B_dData_dPair.f_Pair_second = epoch }, B_dData_dList.C_List_Nil)))) else (match used with
-  | C_Used_MkUsedSmall (dtb__130) -> ((fun xs1 -> (if (((v_usedLen (fuel - 1)) xs1) > v_usedSmallLimit) then (C_Used_MkUsedBig ((((B_dContainer_dHashMap.v_fromList B_dData_dInt.v_Hashable_uInt) B_dData_dInt.v_Eq_uInt) xs1))) else (C_Used_MkUsedSmall (xs1)))) ((((v_markUsedSmall (fuel - 1)) slot) epoch) dtb__130))
+  | C_Used_MkUsedSmall (dtb__130) -> (let xs1 = ((((v_markUsedSmall (fuel - 1)) slot) epoch) dtb__130) in (if (((v_usedLen (fuel - 1)) xs1) > v_usedSmallLimit) then (C_Used_MkUsedBig ((((B_dContainer_dHashMap.v_fromList B_dData_dInt.v_Hashable_uInt) B_dData_dInt.v_Eq_uInt) xs1))) else (C_Used_MkUsedSmall (xs1))))
   | C_Used_MkUsedBig (dtb__131) -> (C_Used_MkUsedBig ((((((B_dContainer_dHashMap.v_insert B_dData_dInt.v_Hashable_uInt) B_dData_dInt.v_Eq_uInt) slot) epoch) dtb__131)))
   | _ -> failwith "DT: impossible branch"
 )))
@@ -388,7 +388,7 @@ let v_cleanupRun = (fun (mc0 : t_Cleanup) -> (match mc0 with
 # 727 "Base/Effect/Core.vuna"
 let rec v_dropCleanups = (fun (fuel : int) (depth : int) (cs : t_Cleanup B_dData_dList.t_List) (d : int) -> (if (fuel <= 0) then { B_dData_dPair.f_Pair_first = cs; B_dData_dPair.f_Pair_second = d } else (if (d <= depth) then { B_dData_dPair.f_Pair_first = cs; B_dData_dPair.f_Pair_second = d } else (match cs with
   | B_dData_dList.C_List_Nil -> { B_dData_dPair.f_Pair_first = cs; B_dData_dPair.f_Pair_second = d }
-  | B_dData_dList.C_List__x58__x58_ (dtb__155, dtb__156) -> ((fun _u -> ((((v_dropCleanups (fuel - 1)) depth) dtb__156) (d - 1))) (v_cleanupRun dtb__155))
+  | B_dData_dList.C_List__x58__x58_ (dtb__155, dtb__156) -> (let _u = (v_cleanupRun dtb__155) in ((((v_dropCleanups (fuel - 1)) depth) dtb__156) (d - 1)))
   | _ -> failwith "DT: impossible branch"
 ))))
 
@@ -407,7 +407,7 @@ let v_unwind = (fun (fuel : int) st frame r -> (match ((Obj.magic st)).f_MSt_msC
 
 # 573 "Base/Effect/Core.vuna"
 let rec v_machineScoped = (fun (mc0 : int) mc1 mc2 mc3 -> (match (Obj.magic mc3) with
-  | C_Scoped_MkScoped (dtb__160) -> (Obj.magic ((fun frame -> (((v_runGo (mc0 - 1)) { f_MSt_msFrames = (B_dData_dMaybe.C_Maybe_Just (frame)); f_MSt_msCtx = B_dData_dMaybe.C_Maybe_Nothing; f_MSt_msUsed = ((Obj.magic mc1)).f_MSt_msUsed; f_MSt_msNext = (((Obj.magic mc1)).f_MSt_msNext + 1); f_MSt_msFree = ((Obj.magic mc1)).f_MSt_msFree; f_MSt_msEpoch = ((Obj.magic mc1)).f_MSt_msEpoch; f_MSt_msCleanups = ((Obj.magic mc1)).f_MSt_msCleanups; f_MSt_msCleanDepth = ((Obj.magic mc1)).f_MSt_msCleanDepth }) ((dtb__160 0) (fun x -> (C_Control_MkReturn (frame, (Obj.magic x))))))) (C_Frame_MkFrame ((v_frameKey (Obj.magic mc2)), (v_frameName (Obj.magic mc2)), (v_frameRet (Obj.magic mc2)), (v_frameOpH (Obj.magic mc2)), (fun _u -> (dtb__160 0)), (fun x -> (C_Control_MkDone ((Obj.magic x)))), (B_dData_dMaybe.C_Maybe_Just ((Obj.magic mc2))), ((Obj.magic mc1)).f_MSt_msCleanDepth, ((Obj.magic mc1)).f_MSt_msNext))))
+  | C_Scoped_MkScoped (dtb__160) -> (Obj.magic (let frame = (C_Frame_MkFrame ((v_frameKey (Obj.magic mc2)), (v_frameName (Obj.magic mc2)), (v_frameRet (Obj.magic mc2)), (v_frameOpH (Obj.magic mc2)), (fun _u -> (dtb__160 0)), (fun x -> (C_Control_MkDone ((Obj.magic x)))), (B_dData_dMaybe.C_Maybe_Just ((Obj.magic mc2))), ((Obj.magic mc1)).f_MSt_msCleanDepth, ((Obj.magic mc1)).f_MSt_msNext)) in (((v_runGo (mc0 - 1)) { f_MSt_msFrames = (B_dData_dMaybe.C_Maybe_Just (frame)); f_MSt_msCtx = B_dData_dMaybe.C_Maybe_Nothing; f_MSt_msUsed = ((Obj.magic mc1)).f_MSt_msUsed; f_MSt_msNext = (((Obj.magic mc1)).f_MSt_msNext + 1); f_MSt_msFree = ((Obj.magic mc1)).f_MSt_msFree; f_MSt_msEpoch = ((Obj.magic mc1)).f_MSt_msEpoch; f_MSt_msCleanups = ((Obj.magic mc1)).f_MSt_msCleanups; f_MSt_msCleanDepth = ((Obj.magic mc1)).f_MSt_msCleanDepth }) ((dtb__160 0) (fun x -> (C_Control_MkReturn (frame, (Obj.magic x))))))))
   | _ -> failwith "DT: impossible branch"
 ))
 # 595 "Base/Effect/Core.vuna"
@@ -420,27 +420,27 @@ and v_runGo = (fun (fuel : int) st c -> (if (fuel <= 0) then ((fun msg -> failwi
 )))
 # 606 "Base/Effect/Core.vuna"
 and v_step = (fun (mc0 : int) mc1 mc2 -> (match (Obj.magic mc2) with
-  | C_Control_MkHandle (dtb__164, dtb__165, dtb__166, dtb__167, dtb__168, dtb__169) -> (Obj.magic ((fun frame -> { B_dData_dPair.f_Pair_first = { f_MSt_msFrames = (B_dData_dMaybe.C_Maybe_Just (frame)); f_MSt_msCtx = ((Obj.magic mc1)).f_MSt_msCtx; f_MSt_msUsed = ((Obj.magic mc1)).f_MSt_msUsed; f_MSt_msNext = (((Obj.magic mc1)).f_MSt_msNext + 1); f_MSt_msFree = ((Obj.magic mc1)).f_MSt_msFree; f_MSt_msEpoch = ((Obj.magic mc1)).f_MSt_msEpoch; f_MSt_msCleanups = ((Obj.magic mc1)).f_MSt_msCleanups; f_MSt_msCleanDepth = ((Obj.magic mc1)).f_MSt_msCleanDepth }; B_dData_dPair.f_Pair_second = ((dtb__168 (v_toObj 0)) (fun x -> (C_Control_MkReturn (frame, (Obj.magic x))))) }) (C_Frame_MkFrame (dtb__164, dtb__165, dtb__166, dtb__167, dtb__168, dtb__169, ((Obj.magic mc1)).f_MSt_msFrames, ((Obj.magic mc1)).f_MSt_msCleanDepth, ((Obj.magic mc1)).f_MSt_msNext))))
+  | C_Control_MkHandle (dtb__164, dtb__165, dtb__166, dtb__167, dtb__168, dtb__169) -> (Obj.magic (let frame = (C_Frame_MkFrame (dtb__164, dtb__165, dtb__166, dtb__167, dtb__168, dtb__169, ((Obj.magic mc1)).f_MSt_msFrames, ((Obj.magic mc1)).f_MSt_msCleanDepth, ((Obj.magic mc1)).f_MSt_msNext)) in { B_dData_dPair.f_Pair_first = { f_MSt_msFrames = (B_dData_dMaybe.C_Maybe_Just (frame)); f_MSt_msCtx = ((Obj.magic mc1)).f_MSt_msCtx; f_MSt_msUsed = ((Obj.magic mc1)).f_MSt_msUsed; f_MSt_msNext = (((Obj.magic mc1)).f_MSt_msNext + 1); f_MSt_msFree = ((Obj.magic mc1)).f_MSt_msFree; f_MSt_msEpoch = ((Obj.magic mc1)).f_MSt_msEpoch; f_MSt_msCleanups = ((Obj.magic mc1)).f_MSt_msCleanups; f_MSt_msCleanDepth = ((Obj.magic mc1)).f_MSt_msCleanDepth }; B_dData_dPair.f_Pair_second = ((dtb__168 (v_toObj 0)) (fun x -> (C_Control_MkReturn (frame, (Obj.magic x))))) }))
   | C_Control_MkSelf (dtb__170, dtb__171) -> (Obj.magic (match ((Obj.magic mc1)).f_MSt_msFrames with
   | B_dData_dMaybe.C_Maybe_Nothing -> (Obj.magic ((fun msg -> failwith msg) "handleScoped outside handler"))
-  | B_dData_dMaybe.C_Maybe_Just (dtb__172) -> (Obj.magic ((fun frame -> { B_dData_dPair.f_Pair_first = { f_MSt_msFrames = (B_dData_dMaybe.C_Maybe_Just (frame)); f_MSt_msCtx = ((Obj.magic mc1)).f_MSt_msCtx; f_MSt_msUsed = ((Obj.magic mc1)).f_MSt_msUsed; f_MSt_msNext = (((Obj.magic mc1)).f_MSt_msNext + 1); f_MSt_msFree = ((Obj.magic mc1)).f_MSt_msFree; f_MSt_msEpoch = ((Obj.magic mc1)).f_MSt_msEpoch; f_MSt_msCleanups = ((Obj.magic mc1)).f_MSt_msCleanups; f_MSt_msCleanDepth = ((Obj.magic mc1)).f_MSt_msCleanDepth }; B_dData_dPair.f_Pair_second = ((dtb__170 (v_toObj 0)) (fun x -> (C_Control_MkReturn (frame, (Obj.magic x))))) }) (C_Frame_MkFrame ((v_frameKey dtb__172), (v_frameName dtb__172), (v_frameRet dtb__172), (v_frameOpH dtb__172), dtb__170, dtb__171, ((Obj.magic mc1)).f_MSt_msFrames, ((Obj.magic mc1)).f_MSt_msCleanDepth, ((Obj.magic mc1)).f_MSt_msNext))))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__172) -> (Obj.magic (let frame = (C_Frame_MkFrame ((v_frameKey dtb__172), (v_frameName dtb__172), (v_frameRet dtb__172), (v_frameOpH dtb__172), dtb__170, dtb__171, ((Obj.magic mc1)).f_MSt_msFrames, ((Obj.magic mc1)).f_MSt_msCleanDepth, ((Obj.magic mc1)).f_MSt_msNext)) in { B_dData_dPair.f_Pair_first = { f_MSt_msFrames = (B_dData_dMaybe.C_Maybe_Just (frame)); f_MSt_msCtx = ((Obj.magic mc1)).f_MSt_msCtx; f_MSt_msUsed = ((Obj.magic mc1)).f_MSt_msUsed; f_MSt_msNext = (((Obj.magic mc1)).f_MSt_msNext + 1); f_MSt_msFree = ((Obj.magic mc1)).f_MSt_msFree; f_MSt_msEpoch = ((Obj.magic mc1)).f_MSt_msEpoch; f_MSt_msCleanups = ((Obj.magic mc1)).f_MSt_msCleanups; f_MSt_msCleanDepth = ((Obj.magic mc1)).f_MSt_msCleanDepth }; B_dData_dPair.f_Pair_second = ((dtb__170 (v_toObj 0)) (fun x -> (C_Control_MkReturn (frame, (Obj.magic x))))) }))
   | _ -> failwith "DT: impossible branch"
 ))
   | C_Control_MkPerform (dtb__173, dtb__174, dtb__175, dtb__176) -> (Obj.magic (match ((((v_findFrame (mc0 - 1)) dtb__173) dtb__174) ((Obj.magic mc1)).f_MSt_msFrames) with
   | B_dData_dMaybe.C_Maybe_Nothing -> (Obj.magic ((fun msg -> failwith msg) "unhandled effect"))
-  | B_dData_dMaybe.C_Maybe_Just (dtb__177) -> (Obj.magic ((fun slot -> ((fun free -> ((fun next -> ((fun epoch -> { B_dData_dPair.f_Pair_first = { f_MSt_msFrames = ((Obj.magic mc1)).f_MSt_msFrames; f_MSt_msCtx = ((Obj.magic mc1)).f_MSt_msCtx; f_MSt_msUsed = ((Obj.magic mc1)).f_MSt_msUsed; f_MSt_msNext = next; f_MSt_msFree = free; f_MSt_msEpoch = epoch; f_MSt_msCleanups = ((Obj.magic mc1)).f_MSt_msCleanups; f_MSt_msCleanDepth = ((Obj.magic mc1)).f_MSt_msCleanDepth }; B_dData_dPair.f_Pair_second = (((((v_frameOpH dtb__177) dtb__175) (fun v rest -> (C_Control_MkResume (dtb__177, dtb__176, slot, epoch, (Obj.magic v), rest)))) (fun r -> (C_Control_MkKDone (dtb__177, (Obj.magic r))))) (fun th -> ((((v_machineScoped (mc0 - 1)) (Obj.magic mc1)) dtb__177) th))) }) (((Obj.magic mc1)).f_MSt_msEpoch + 1))) (match ((Obj.magic mc1)).f_MSt_msFree with
-  | B_dData_dList.C_List__x58__x58_ (dtb__178, dtb__179) -> ((Obj.magic mc1)).f_MSt_msNext
-  | B_dData_dList.C_List_Nil -> (((Obj.magic mc1)).f_MSt_msNext + 1)
-  | _ -> failwith "DT: impossible branch"
-))) (match ((Obj.magic mc1)).f_MSt_msFree with
-  | B_dData_dList.C_List__x58__x58_ (dtb__180, dtb__181) -> dtb__181
-  | B_dData_dList.C_List_Nil -> ((Obj.magic mc1)).f_MSt_msFree
-  | _ -> failwith "DT: impossible branch"
-))) (match ((Obj.magic mc1)).f_MSt_msFree with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__177) -> (Obj.magic (let slot = (match ((Obj.magic mc1)).f_MSt_msFree with
   | B_dData_dList.C_List__x58__x58_ (dtb__182, dtb__183) -> dtb__182
   | B_dData_dList.C_List_Nil -> ((Obj.magic mc1)).f_MSt_msNext
   | _ -> failwith "DT: impossible branch"
-)))
+) in (let free = (match ((Obj.magic mc1)).f_MSt_msFree with
+  | B_dData_dList.C_List__x58__x58_ (dtb__180, dtb__181) -> dtb__181
+  | B_dData_dList.C_List_Nil -> ((Obj.magic mc1)).f_MSt_msFree
+  | _ -> failwith "DT: impossible branch"
+) in (let next = (match ((Obj.magic mc1)).f_MSt_msFree with
+  | B_dData_dList.C_List__x58__x58_ (dtb__178, dtb__179) -> ((Obj.magic mc1)).f_MSt_msNext
+  | B_dData_dList.C_List_Nil -> (((Obj.magic mc1)).f_MSt_msNext + 1)
+  | _ -> failwith "DT: impossible branch"
+) in (let epoch = (((Obj.magic mc1)).f_MSt_msEpoch + 1) in { B_dData_dPair.f_Pair_first = { f_MSt_msFrames = ((Obj.magic mc1)).f_MSt_msFrames; f_MSt_msCtx = ((Obj.magic mc1)).f_MSt_msCtx; f_MSt_msUsed = ((Obj.magic mc1)).f_MSt_msUsed; f_MSt_msNext = next; f_MSt_msFree = free; f_MSt_msEpoch = epoch; f_MSt_msCleanups = ((Obj.magic mc1)).f_MSt_msCleanups; f_MSt_msCleanDepth = ((Obj.magic mc1)).f_MSt_msCleanDepth }; B_dData_dPair.f_Pair_second = (((((v_frameOpH dtb__177) dtb__175) (fun v rest -> (C_Control_MkResume (dtb__177, dtb__176, slot, epoch, (Obj.magic v), rest)))) (fun r -> (C_Control_MkKDone (dtb__177, (Obj.magic r))))) (fun th -> ((((v_machineScoped (mc0 - 1)) (Obj.magic mc1)) dtb__177) th))) })))))
   | _ -> failwith "DT: impossible branch"
 ))
   | C_Control_MkResume (dtb__184, dtb__185, dtb__186, dtb__187, dtb__188, dtb__189) -> (Obj.magic (match dtb__189 with

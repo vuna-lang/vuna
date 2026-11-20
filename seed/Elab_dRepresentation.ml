@@ -88,17 +88,17 @@ let v_substFamArgs = (fun (i : int) (args : Core_dTerm.t_Term B_dData_dList.t_Li
 # 109 "Vuna/Compiler/Elab/Representation.vuna"
 let rec v_termIsFunctionFuel = (fun (fuel : int) (datas : Elab_dTypes.t_DtData B_dData_dList.t_List) (seen : string B_dData_dList.t_List) (t : Core_dTerm.t_Term) -> (if (fuel <= 0) then true else (match t with
   | Core_dTerm.C_Term_TPi (dtb__39, dtb__40, dtb__41, dtb__42, dtb__43) -> true
-  | _ -> ((fun p -> (match (B_dData_dPair.v_firstOf p) with
+  | _ -> (let p = (Core_dTerm.v_flattenTermApp t) in (match (B_dData_dPair.v_firstOf p) with
   | Core_dTerm.C_Term_TGlobal (dtb__44) -> (((((v_termIsFunctionHead fuel) datas) seen) dtb__44) ((B_dData_dList.v_map B_dData_dPair.v_firstOf) (B_dData_dPair.v_secondOf p)))
   | _ -> false
-)) (Core_dTerm.v_flattenTermApp t))
+))
 )))
 # 123 "Vuna/Compiler/Elab/Representation.vuna"
 and v_termIsFunctionHead = (fun (fuel : int) (datas : Elab_dTypes.t_DtData B_dData_dList.t_List) (seen : string B_dData_dList.t_List) (g : string) (args : Core_dTerm.t_Term B_dData_dList.t_List) -> (if ((B_dData_dList.v_memName g) seen) then false else (match ((v_findDtData g) datas) with
   | B_dData_dMaybe.C_Maybe_Nothing -> false
-  | B_dData_dMaybe.C_Maybe_Just (dtb__45) -> ((fun nd_uscrut7 -> (match nd_uscrut7 with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__45) -> (let nd_uscrut7 = (Elab_dTypes.v_dtDataCtors dtb__45) in (match nd_uscrut7 with
   | B_dData_dList.C_List__x58__x58_ (dtb__46, dtb__47) -> (match dtb__47 with
-  | B_dData_dList.C_List_Nil -> ((fun nd_uscrut12 -> (match nd_uscrut12 with
+  | B_dData_dList.C_List_Nil -> (let nd_uscrut12 = (v_keptIndices (v_ctorKeepFlags dtb__46)) in (match nd_uscrut12 with
   | B_dData_dList.C_List__x58__x58_ (dtb__48, dtb__49) -> (match dtb__49 with
   | B_dData_dList.C_List_Nil -> (if (dtb__48 < (B_dData_dList.v_length (dtb__45).Elab_dTypes.f_DtData_dtDataParams)) then false else (if ((B_dData_dList.v_length args) <> (B_dData_dList.v_length (dtb__45).Elab_dTypes.f_DtData_dtDataParams)) then true else (match ((v_ctorFieldDomainTerm dtb__46) dtb__48) with
   | B_dData_dMaybe.C_Maybe_Nothing -> true
@@ -108,11 +108,11 @@ and v_termIsFunctionHead = (fun (fuel : int) (datas : Elab_dTypes.t_DtData B_dDa
   | _ -> false
 )
   | _ -> false
-)) (v_keptIndices (v_ctorKeepFlags dtb__46)))
+))
   | _ -> false
 )
   | _ -> false
-)) (Elab_dTypes.v_dtDataCtors dtb__45))
+))
   | _ -> failwith "DT: impossible branch"
 )))
 
@@ -179,7 +179,7 @@ and v_anyReachBack = (fun (mc0 : int) (mc1 : (string, string B_dData_dList.t_Lis
 ))
 
 # 246 "Vuna/Compiler/Elab/Representation.vuna"
-let v_unboxedInfoOf = (fun (datas : Elab_dTypes.t_DtData B_dData_dList.t_List) -> ((fun cands -> ((fun names -> ((fun edges -> ((fun fuel -> ((B_dData_dList.v_map (fun (cand : t_UnboxedCand) -> { B_dData_dPair.f_Pair_first = (v_unboxedCandName cand); B_dData_dPair.f_Pair_second = { B_dData_dPair.f_Pair_first = (v_unboxedCandCtor cand); B_dData_dPair.f_Pair_second = (v_unboxedCandIndex cand) } })) ((B_dData_dList.v_filter (fun (cand : t_UnboxedCand) -> (B_dData_dBool.v_not (((((v_reachesBackTo fuel) edges) (B_dData_dList.C_List__x58__x58_ ((v_unboxedCandName cand), B_dData_dList.C_List_Nil))) (v_unboxedCandName cand)) (v_unboxedCandName cand))))) cands))) (bi_natAdd (B_dData_dList.v_length names) 2))) (((v_candidateEdges datas) names) cands))) (v_candidateNames cands))) (v_unboxedCandidates datas)))
+let v_unboxedInfoOf = (fun (datas : Elab_dTypes.t_DtData B_dData_dList.t_List) -> (let cands = (v_unboxedCandidates datas) in (let names = (v_candidateNames cands) in (let edges = (((v_candidateEdges datas) names) cands) in (let fuel = (bi_natAdd (B_dData_dList.v_length names) 2) in ((B_dData_dList.v_map (fun (cand : t_UnboxedCand) -> { B_dData_dPair.f_Pair_first = (v_unboxedCandName cand); B_dData_dPair.f_Pair_second = { B_dData_dPair.f_Pair_first = (v_unboxedCandCtor cand); B_dData_dPair.f_Pair_second = (v_unboxedCandIndex cand) } })) ((B_dData_dList.v_filter (fun (cand : t_UnboxedCand) -> (B_dData_dBool.v_not (((((v_reachesBackTo fuel) edges) (B_dData_dList.C_List__x58__x58_ ((v_unboxedCandName cand), B_dData_dList.C_List_Nil))) (v_unboxedCandName cand)) (v_unboxedCandName cand))))) cands)))))))
 
 # 258 "Vuna/Compiler/Elab/Representation.vuna"
 let v_unboxedFamilySet = (fun (datas : Elab_dTypes.t_DtData B_dData_dList.t_List) -> ((B_dData_dList.v_map B_dData_dPair.v_firstOf) (v_unboxedInfoOf datas)))

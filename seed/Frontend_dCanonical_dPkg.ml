@@ -34,89 +34,89 @@ let v_encIdentity = (fun (pi : t_PackageIdentity) (acc : string B_dData_dList.t_
 let v_encPackageIdentity = (fun (pi : t_PackageIdentity) -> ((Base_dBytes.v_encTop v_encIdentity) pi))
 
 # 81 "Vuna/Compiler/Frontend/Canonical/Pkg.vuna"
-let v_decFile = (fun (fuel : int) (c : Base_dBytes.t_Cur) -> ((fun nd_uscrut2 -> (match nd_uscrut2 with
+let v_decFile = (fun (fuel : int) (c : Base_dBytes.t_Cur) -> (let nd_uscrut2 = ((Base_dBytes.v_decStr fuel) c) in (match nd_uscrut2 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__0) -> (match dtb__0 with
-  | { B_dData_dPair.f_Pair_first = dtb__1; B_dData_dPair.f_Pair_second = dtb__2 } -> ((fun nd_uscrut9 -> (match nd_uscrut9 with
+  | { B_dData_dPair.f_Pair_first = dtb__1; B_dData_dPair.f_Pair_second = dtb__2 } -> (let nd_uscrut9 = ((Base_dBytes.v_decStr fuel) dtb__2) in (match nd_uscrut9 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__3) -> (match dtb__3 with
   | { B_dData_dPair.f_Pair_first = dtb__4; B_dData_dPair.f_Pair_second = dtb__5 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = { f_PackageFile_pfPath = dtb__1; f_PackageFile_pfContent = dtb__4 }; B_dData_dPair.f_Pair_second = dtb__5 }))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
-)) ((Base_dBytes.v_decStr fuel) dtb__2))
+))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
-)) ((Base_dBytes.v_decStr fuel) c)))
+)))
 
 # 90 "Vuna/Compiler/Frontend/Canonical/Pkg.vuna"
-let v_decContentAt = (fun (fuel : int) (c : Base_dBytes.t_Cur) -> ((fun nd_uscrut2 -> (match nd_uscrut2 with
+let v_decContentAt = (fun (fuel : int) (c : Base_dBytes.t_Cur) -> (let nd_uscrut2 = ((Base_dBytes.v_decTag fuel) c) in (match nd_uscrut2 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__6) -> (match dtb__6 with
   | { B_dData_dPair.f_Pair_first = dtb__7; B_dData_dPair.f_Pair_second = dtb__8 } -> (if (dtb__7 = v_contentTag) then (((Base_dBytes.v_decList v_decFile) fuel) dtb__8) else B_dData_dMaybe.C_Maybe_Nothing)
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
-)) ((Base_dBytes.v_decTag fuel) c)))
+)))
 
 # 97 "Vuna/Compiler/Frontend/Canonical/Pkg.vuna"
-let v_decPackageContent = (fun (raw : string) -> ((fun nd_uscrut1 -> (match nd_uscrut1 with
+let v_decPackageContent = (fun (raw : string) -> (let nd_uscrut1 = ((v_decContentAt ((2 * (bi_strLength raw)) + 16)) (Base_dBytes.v_curOf raw)) in (match nd_uscrut1 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__9) -> (match dtb__9 with
   | { B_dData_dPair.f_Pair_first = dtb__10; B_dData_dPair.f_Pair_second = dtb__11 } -> (if (Base_dBytes.v_curAtEnd dtb__11) then (B_dData_dMaybe.C_Maybe_Just (dtb__10)) else B_dData_dMaybe.C_Maybe_Nothing)
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
-)) ((v_decContentAt ((2 * (bi_strLength raw)) + 16)) (Base_dBytes.v_curOf raw))))
+)))
 
 # 103 "Vuna/Compiler/Frontend/Canonical/Pkg.vuna"
 let v_decStrPair = (fun (fuel : int) (c : Base_dBytes.t_Cur) -> ((((Base_dBytes.v_decPair Base_dBytes.v_decStr) Base_dBytes.v_decStr) fuel) c))
 
 # 106 "Vuna/Compiler/Frontend/Canonical/Pkg.vuna"
-let v_decIdentityAt = (fun (fuel : int) (c : Base_dBytes.t_Cur) -> ((fun nd_uscrut2 -> (match nd_uscrut2 with
+let v_decIdentityAt = (fun (fuel : int) (c : Base_dBytes.t_Cur) -> (let nd_uscrut2 = ((Base_dBytes.v_decTag fuel) c) in (match nd_uscrut2 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__12) -> (match dtb__12 with
-  | { B_dData_dPair.f_Pair_first = dtb__13; B_dData_dPair.f_Pair_second = dtb__14 } -> (if (dtb__13 = v_identityTag) then ((fun nd_uscrut9 -> (match nd_uscrut9 with
+  | { B_dData_dPair.f_Pair_first = dtb__13; B_dData_dPair.f_Pair_second = dtb__14 } -> (if (dtb__13 = v_identityTag) then (let nd_uscrut9 = ((Base_dBytes.v_decStr fuel) dtb__14) in (match nd_uscrut9 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__15) -> (match dtb__15 with
-  | { B_dData_dPair.f_Pair_first = dtb__16; B_dData_dPair.f_Pair_second = dtb__17 } -> ((fun nd_uscrut16 -> (match nd_uscrut16 with
+  | { B_dData_dPair.f_Pair_first = dtb__16; B_dData_dPair.f_Pair_second = dtb__17 } -> (let nd_uscrut16 = (((Base_dBytes.v_decList Base_dBytes.v_decStr) fuel) dtb__17) in (match nd_uscrut16 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__18) -> (match dtb__18 with
-  | { B_dData_dPair.f_Pair_first = dtb__19; B_dData_dPair.f_Pair_second = dtb__20 } -> ((fun nd_uscrut23 -> (match nd_uscrut23 with
+  | { B_dData_dPair.f_Pair_first = dtb__19; B_dData_dPair.f_Pair_second = dtb__20 } -> (let nd_uscrut23 = (((Base_dBytes.v_decList v_decStrPair) fuel) dtb__20) in (match nd_uscrut23 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__21) -> (match dtb__21 with
-  | { B_dData_dPair.f_Pair_first = dtb__22; B_dData_dPair.f_Pair_second = dtb__23 } -> ((fun nd_uscrut30 -> (match nd_uscrut30 with
+  | { B_dData_dPair.f_Pair_first = dtb__22; B_dData_dPair.f_Pair_second = dtb__23 } -> (let nd_uscrut30 = (((Base_dBytes.v_decList v_decStrPair) fuel) dtb__23) in (match nd_uscrut30 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__24) -> (match dtb__24 with
   | { B_dData_dPair.f_Pair_first = dtb__25; B_dData_dPair.f_Pair_second = dtb__26 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = { f_PackageIdentity_piName = dtb__16; f_PackageIdentity_piExports = dtb__19; f_PackageIdentity_piDeps = dtb__22; f_PackageIdentity_piFiles = dtb__25 }; B_dData_dPair.f_Pair_second = dtb__26 }))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
-)) (((Base_dBytes.v_decList v_decStrPair) fuel) dtb__23))
+))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
-)) (((Base_dBytes.v_decList v_decStrPair) fuel) dtb__20))
+))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
-)) (((Base_dBytes.v_decList Base_dBytes.v_decStr) fuel) dtb__17))
+))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
-)) ((Base_dBytes.v_decStr fuel) dtb__14)) else B_dData_dMaybe.C_Maybe_Nothing)
+)) else B_dData_dMaybe.C_Maybe_Nothing)
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
-)) ((Base_dBytes.v_decTag fuel) c)))
+)))
 
 # 128 "Vuna/Compiler/Frontend/Canonical/Pkg.vuna"
-let v_decPackageIdentity = (fun (raw : string) -> ((fun nd_uscrut1 -> (match nd_uscrut1 with
+let v_decPackageIdentity = (fun (raw : string) -> (let nd_uscrut1 = ((v_decIdentityAt ((2 * (bi_strLength raw)) + 16)) (Base_dBytes.v_curOf raw)) in (match nd_uscrut1 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__27) -> (match dtb__27 with
   | { B_dData_dPair.f_Pair_first = dtb__28; B_dData_dPair.f_Pair_second = dtb__29 } -> (if (Base_dBytes.v_curAtEnd dtb__29) then (B_dData_dMaybe.C_Maybe_Just (dtb__28)) else B_dData_dMaybe.C_Maybe_Nothing)
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
-)) ((v_decIdentityAt ((2 * (bi_strLength raw)) + 16)) (Base_dBytes.v_curOf raw))))
+)))

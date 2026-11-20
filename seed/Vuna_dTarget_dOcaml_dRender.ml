@@ -16,13 +16,13 @@ let v_joinWith = (fun (sep : string) (xs : string B_dData_dList.t_List) -> (B_dD
 let v_typeParamName = (fun (i : int) -> ("'a" ^ (bi_strFromInt i)))
 
 # 24 "Vuna/Target/Ocaml/Render.vuna"
-let v_typeParamDecl = (fun (mc0 : int) -> (if (mc0 = 0) then "" else ((fun nd_uscrut1 -> (match nd_uscrut1 with
+let v_typeParamDecl = (fun (mc0 : int) -> (if (mc0 = 0) then "" else (let nd_uscrut1 = ((B_dData_dList.v_map v_typeParamName) ((B_dData_dList.v_range 0) mc0)) in (match nd_uscrut1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__2, dtb__3) -> (match dtb__3 with
   | B_dData_dList.C_List_Nil -> (dtb__2 ^ " ")
   | _ -> (String.concat "" ["("; ((v_joinWith ", ") nd_uscrut1); ") "])
 )
   | _ -> (String.concat "" ["("; ((v_joinWith ", ") nd_uscrut1); ") "])
-)) ((B_dData_dList.v_map v_typeParamName) ((B_dData_dList.v_range 0) mc0)))))
+))))
 
 # 31 "Vuna/Target/Ocaml/Render.vuna"
 let v_familyTy = (fun (mc0 : string) (mc1 : string B_dData_dList.t_List) -> (match mc1 with
@@ -50,14 +50,14 @@ let rec v_renderTy = (fun (mc0 : (string) -> string) (mc1 : Vuna_dTarget_dOcaml_
 ))
 
 # 49 "Vuna/Target/Ocaml/Render.vuna"
-let v_ctorDecl = (fun (qual : (string) -> string) (c : Vuna_dTarget_dOcaml_dModel.t_OCtor) -> ((fun nd_uscrut2 -> (match nd_uscrut2 with
+let v_ctorDecl = (fun (qual : (string) -> string) (c : Vuna_dTarget_dOcaml_dModel.t_OCtor) -> (let nd_uscrut2 = (c).Vuna_dTarget_dOcaml_dModel.f_OCtor_ocFields in (match nd_uscrut2 with
   | B_dData_dList.C_List__x58__x58_ (dtb__13, dtb__14) -> (match dtb__14 with
   | B_dData_dList.C_List_Nil -> (String.concat "" [(c).Vuna_dTarget_dOcaml_dModel.f_OCtor_ocName; " of ("; ((v_renderTy qual) dtb__13); ")"])
   | _ -> (String.concat "" [(c).Vuna_dTarget_dOcaml_dModel.f_OCtor_ocName; " of "; ((v_joinWith " * ") ((B_dData_dList.v_map (fun (t : Vuna_dTarget_dOcaml_dModel.t_OTy) -> (String.concat "" ["("; ((v_renderTy qual) t); ")"]))) nd_uscrut2))])
 )
   | B_dData_dList.C_List_Nil -> (c).Vuna_dTarget_dOcaml_dModel.f_OCtor_ocName
   | _ -> failwith "DT: impossible branch"
-)) (c).Vuna_dTarget_dOcaml_dModel.f_OCtor_ocFields))
+)))
 
 # 65 "Vuna/Target/Ocaml/Render.vuna"
 let v_fieldDecl = (fun (mc0 : (string) -> string) (mc1 : (string, Vuna_dTarget_dOcaml_dModel.t_OTy) B_dData_dPair.t_Pair) -> (match mc1 with
@@ -125,7 +125,7 @@ let rec v_renderTerm = (fun (mc0 : Vuna_dTarget_dOcaml_dModel.t_OTerm) -> (match
   | B_dData_dList.C_List_Nil -> dtb__44
   | _ -> (String.concat "" ["("; dtb__44; " ("; ((v_joinWith ", ") ((B_dData_dList.v_map v_renderTerm) dtb__45)); "))"])
 )
-  | Vuna_dTarget_dOcaml_dModel.C_OTerm_OMatch (dtb__48, dtb__49, dtb__50) -> ((fun body -> ((fun fb -> (String.concat "" ["(match "; (v_renderTerm dtb__48); " with\n"; body; fb; ")"])) (if dtb__50 then "" else "  | _ -> failwith \"DT: impossible branch\"\n"))) ((v_joinWith "") ((B_dData_dList.v_map v_renderArm) dtb__49)))
+  | Vuna_dTarget_dOcaml_dModel.C_OTerm_OMatch (dtb__48, dtb__49, dtb__50) -> (let body = ((v_joinWith "") ((B_dData_dList.v_map v_renderArm) dtb__49)) in (let fb = (if dtb__50 then "" else "  | _ -> failwith \"DT: impossible branch\"\n") in (String.concat "" ["(match "; (v_renderTerm dtb__48); " with\n"; body; fb; ")"])))
   | Vuna_dTarget_dOcaml_dModel.C_OTerm_OIf (dtb__51, dtb__52, dtb__53) -> (String.concat "" ["(if "; (v_renderTerm dtb__51); " then "; (v_renderTerm dtb__52); " else "; (v_renderTerm dtb__53); ")"])
   | Vuna_dTarget_dOcaml_dModel.C_OTerm_OLet (dtb__54, dtb__55, dtb__56) -> (String.concat "" ["(let "; (v_renderPat dtb__54); " = "; (v_renderTerm dtb__55); " in "; (v_renderTerm dtb__56); ")"])
   | Vuna_dTarget_dOcaml_dModel.C_OTerm_OLam (dtb__57, dtb__58) -> (match dtb__57 with

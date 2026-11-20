@@ -65,7 +65,7 @@ let rec v_lastDotAt = (fun (mc0 : int) (mc1 : int B_dData_dList.t_List) (mc2 : i
 ))
 
 # 94 "Vuna/Compiler/Frontend/Rast/Name.vuna"
-let v_splitGlobalKey = (fun (name : string) -> ((fun cs -> ((fun at -> (if (at < 0) then B_dData_dMaybe.C_Maybe_Nothing else (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (B_dData_dList.dtp_pack ((B_dData_dList.v_take at) cs)); B_dData_dPair.f_Pair_second = (B_dData_dList.dtp_pack ((B_dData_dList.v_drop (at + 1)) cs)) })))) (((v_lastDotAt 0) cs) (0 - 1)))) (B_dData_dList.dtp_unpack name)))
+let v_splitGlobalKey = (fun (name : string) -> (let cs = (B_dData_dList.dtp_unpack name) in (let at = (((v_lastDotAt 0) cs) (0 - 1)) in (if (at < 0) then B_dData_dMaybe.C_Maybe_Nothing else (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (B_dData_dList.dtp_pack ((B_dData_dList.v_take at) cs)); B_dData_dPair.f_Pair_second = (B_dData_dList.dtp_pack ((B_dData_dList.v_drop (at + 1)) cs)) }))))))
 
 # 107 "Vuna/Compiler/Frontend/Rast/Name.vuna"
 let v_isPreludeName = (fun (name : string) -> ((B_dData_dList.v_memName name) ((B_dData_dList.v_append (B_dData_dList.C_List__x58__x58_ ("Type", (B_dData_dList.C_List__x58__x58_ ("->", (B_dData_dList.C_List__x58__x58_ ("_", B_dData_dList.C_List_Nil))))))) ((B_dData_dList.v_append Base_dIntrinsics.v_preludeTypeNames) Base_dIntrinsics.v_preludeValueNames))))

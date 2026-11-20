@@ -54,7 +54,7 @@ let rec v_uDrop = (fun (n : int) (us : Core_dTerm.t_Rig B_dData_dList.t_List) ->
 let v_resolvedBinderSpan = (fun (binderSp : Base_dSource.t_Span) (fallback : Base_dSource.t_Span) -> (if (Base_dSource.v_isSpanEmpty binderSp) then fallback else binderSp))
 
 # 106 "Vuna/Compiler/Elab/Usage.vuna"
-let v_binderEditSpan = (fun (name : string) (binderSp : Base_dSource.t_Span) -> ((fun width -> (if (if (Base_dSource.v_isSpanEmpty binderSp) then true else (width <> (bi_strLength name))) then B_dData_dMaybe.C_Maybe_Nothing else (B_dData_dMaybe.C_Maybe_Just (binderSp)))) ((Base_dSource.v_spanEndOffset binderSp) - (Base_dSource.v_spanStartOffset binderSp))))
+let v_binderEditSpan = (fun (name : string) (binderSp : Base_dSource.t_Span) -> (let width = ((Base_dSource.v_spanEndOffset binderSp) - (Base_dSource.v_spanStartOffset binderSp)) in (if (if (Base_dSource.v_isSpanEmpty binderSp) then true else (width <> (bi_strLength name))) then B_dData_dMaybe.C_Maybe_Nothing else (B_dData_dMaybe.C_Maybe_Just (binderSp)))))
 
 # 269 "Vuna/Compiler/Elab/Usage.vuna"
 let v_isRigZero = (fun (mc0 : Core_dTerm.t_Rig) -> (match mc0 with
@@ -76,7 +76,7 @@ let rec v_shadowedByRuntime = (fun (mc0 : string) (mc1 : (string, Core_dTerm.t_R
 let v_capCheckFuelMax = 1000000
 
 # 304 "Vuna/Compiler/Elab/Usage.vuna"
-let v_capCheckFuelFor = (fun (t : Core_dTerm.t_Term) -> ((fun scaled -> (if (scaled > v_capCheckFuelMax) then v_capCheckFuelMax else scaled)) (1024 + (4 * (Core_dTerm.v_termSize t)))))
+let v_capCheckFuelFor = (fun (t : Core_dTerm.t_Term) -> (let scaled = (1024 + (4 * (Core_dTerm.v_termSize t))) in (if (scaled > v_capCheckFuelMax) then v_capCheckFuelMax else scaled)))
 
 # 359 "Vuna/Compiler/Elab/Usage.vuna"
 let v_ctorFamilyLinear = (fun (ec : Elab_dTypes.t_Ec) (c : string) -> (match ((Elab_dMeta.v_dtCtorLookupEc ec) c) with
@@ -116,7 +116,7 @@ and v_capArgsFuel = (fun (fuel : int) (ec : Elab_dTypes.t_Ec) (sp : Base_dSource
 # 342 "Vuna/Compiler/Elab/Usage.vuna"
 and v_capArgsGo = (fun (mc0 : int) (mc1 : Elab_dTypes.t_Ec) (mc2 : Base_dSource.t_Span) (mc3 : bool) (mc4 : (Core_dTerm.t_Term, Core_dTerm.t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc4 with
   | B_dData_dList.C_List__x58__x58_ (dtb__66, dtb__67) -> (match dtb__66 with
-  | { B_dData_dPair.f_Pair_first = dtb__68; B_dData_dPair.f_Pair_second = dtb__69 } -> ((fun allowed -> ((Base_dCommon.v_bind (((((v_capCheckFuel (mc0 - 1)) mc1) mc2) dtb__68) allowed)) (fun (_u : int) -> (((((v_capArgsGo (mc0 - 1)) mc1) mc2) mc3) dtb__67)))) (if mc3 then (Core_dTerm.v_rigIsLinear dtb__69) else false))
+  | { B_dData_dPair.f_Pair_first = dtb__68; B_dData_dPair.f_Pair_second = dtb__69 } -> (let allowed = (if mc3 then (Core_dTerm.v_rigIsLinear dtb__69) else false) in ((Base_dCommon.v_bind (((((v_capCheckFuel (mc0 - 1)) mc1) mc2) dtb__68) allowed)) (fun (_u : int) -> (((((v_capArgsGo (mc0 - 1)) mc1) mc2) mc3) dtb__67))))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dList.C_List_Nil -> (Base_dDiag.C_Check_OkC (0))
@@ -204,24 +204,24 @@ let v_warnUnusedBinder = (fun (ec : Elab_dTypes.t_Ec) (sp : Base_dSource.t_Span)
 
 # 114 "Vuna/Compiler/Elab/Usage.vuna"
 let v_checkLamBinder = (fun (mc0 : Elab_dTypes.t_Ec) (mc1 : Base_dSource.t_Span) (mc2 : Base_dSource.t_Span B_dData_dMaybe.t_Maybe) (mc3 : string) (mc4 : Core_dTerm.t_Rig) (mc5 : Core_dTerm.t_Rig B_dData_dList.t_List) -> (match mc5 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__79, dtb__80) -> ((fun ec1 -> ((Base_dCommon.v_bind (((((v_checkBinderRig ec1) mc1) mc3) mc4) dtb__79)) (fun (_u : int) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = dtb__80; B_dData_dPair.f_Pair_second = ec1 }))))) (if (if (v_isRigZero dtb__79) then (B_dData_dBool.v_not ((B_dData_dString.v_startsWith "_") mc3)) else false) then (match mc4 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__79, dtb__80) -> (let ec1 = (if (if (v_isRigZero dtb__79) then (B_dData_dBool.v_not ((B_dData_dString.v_startsWith "_") mc3)) else false) then (match mc4 with
   | Core_dTerm.C_Rig_RigOmega -> ((((v_warnUnusedBinder mc0) mc1) mc2) mc3)
   | _ -> mc0
-) else mc0))
+) else mc0) in ((Base_dCommon.v_bind (((((v_checkBinderRig ec1) mc1) mc3) mc4) dtb__79)) (fun (_u : int) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = dtb__80; B_dData_dPair.f_Pair_second = ec1 })))))
   | B_dData_dList.C_List_Nil -> (Base_dDiag.v_icInternal "usage vector lost lambda binder")
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 145 "Vuna/Compiler/Elab/Usage.vuna"
 let rec v_checkAltBindersGo = (fun (mc0 : Elab_dTypes.t_Ec) (mc1 : Base_dSource.t_Span) (mc2 : Core_dTerm.t_Binder B_dData_dList.t_List) (mc3 : Core_dTerm.t_Rig B_dData_dList.t_List) -> (match mc2 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__81, dtb__82) -> ((fun name -> ((fun rig -> ((fun bsp -> ((fun mEdit -> ((fun restRuntime -> (match mc3 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__81, dtb__82) -> (let name = (Core_dTerm.v_binderNameOf dtb__81) in (let rig = (Core_dTerm.v_binderRigOf dtb__81) in (let bsp = ((v_resolvedBinderSpan (Core_dTerm.v_binderSpanOf dtb__81)) mc1) in (let mEdit = ((v_binderEditSpan name) (Core_dTerm.v_binderSpanOf dtb__81)) in (let restRuntime = (Core_dTerm.v_binderPairs dtb__82) in (match mc3 with
   | B_dData_dList.C_List_Nil -> (Base_dDiag.v_icInternal "usage vector lost case binder")
-  | B_dData_dList.C_List__x58__x58_ (dtb__83, dtb__84) -> ((fun ec1 -> ((fun ec2 -> ((Base_dCommon.v_bind (((((v_checkBinderRig ec2) bsp) name) rig) dtb__83)) (fun (_u : int) -> ((((v_checkAltBindersGo ec2) mc1) dtb__82) dtb__84)))) (if (if (v_isRigZero dtb__83) then (B_dData_dBool.v_not ((B_dData_dString.v_startsWith "_") name)) else false) then (match rig with
+  | B_dData_dList.C_List__x58__x58_ (dtb__83, dtb__84) -> (let ec1 = (if (if (name <> "_") then ((v_shadowedByRuntime name) restRuntime) else false) then ((((v_warnAt1 mc0) bsp) (Base_dDiagnostics_dWarning.C_WarnErr_ShadowedBinder (name))) name) else mc0) in (let ec2 = (if (if (v_isRigZero dtb__83) then (B_dData_dBool.v_not ((B_dData_dString.v_startsWith "_") name)) else false) then (match rig with
   | Core_dTerm.C_Rig_RigOmega -> ((((v_warnUnusedBinder ec1) bsp) mEdit) name)
   | _ -> ec1
-) else ec1))) (if (if (name <> "_") then ((v_shadowedByRuntime name) restRuntime) else false) then ((((v_warnAt1 mc0) bsp) (Base_dDiagnostics_dWarning.C_WarnErr_ShadowedBinder (name))) name) else mc0))
+) else ec1) in ((Base_dCommon.v_bind (((((v_checkBinderRig ec2) bsp) name) rig) dtb__83)) (fun (_u : int) -> ((((v_checkAltBindersGo ec2) mc1) dtb__82) dtb__84)))))
   | _ -> failwith "DT: impossible branch"
-)) (Core_dTerm.v_binderPairs dtb__82))) ((v_binderEditSpan name) (Core_dTerm.v_binderSpanOf dtb__81)))) ((v_resolvedBinderSpan (Core_dTerm.v_binderSpanOf dtb__81)) mc1))) (Core_dTerm.v_binderRigOf dtb__81))) (Core_dTerm.v_binderNameOf dtb__81))
+))))))
   | B_dData_dList.C_List_Nil -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = mc3; B_dData_dPair.f_Pair_second = mc0 }))
   | _ -> failwith "DT: impossible branch"
 ))
@@ -231,12 +231,12 @@ let v_checkAltBinders = (fun (ec : Elab_dTypes.t_Ec) (sp : Base_dSource.t_Span) 
 
 # 177 "Vuna/Compiler/Elab/Usage.vuna"
 let rec v_checkTerm = (fun (ec : Elab_dTypes.t_Ec) (sp : Base_dSource.t_Span) (env : (string, Core_dTerm.t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) (t : Core_dTerm.t_Term) -> (match t with
-  | Core_dTerm.C_Term_TVar (dtb__85, dtb__86, dtb__87) -> ((fun ec2 -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = ((v_uVarAt (B_dData_dList.v_length env)) dtb__86); B_dData_dPair.f_Pair_second = ec2 }))) (if ((dtb__87).Base_dSource.f_Span_spanStartLine = 0) then ec else (((v_recordUseSpan ec) dtb__85) dtb__87)))
+  | Core_dTerm.C_Term_TVar (dtb__85, dtb__86, dtb__87) -> (let ec2 = (if ((dtb__87).Base_dSource.f_Span_spanStartLine = 0) then ec else (((v_recordUseSpan ec) dtb__85) dtb__87)) in (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = ((v_uVarAt (B_dData_dList.v_length env)) dtb__86); B_dData_dPair.f_Pair_second = ec2 })))
   | Core_dTerm.C_Term_TMeta (dtb__88) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (v_uZeroOf (B_dData_dList.v_length env)); B_dData_dPair.f_Pair_second = ec }))
   | Core_dTerm.C_Term_TGlobal (dtb__89) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (v_uZeroOf (B_dData_dList.v_length env)); B_dData_dPair.f_Pair_second = ec }))
   | Core_dTerm.C_Term_TType (dtb__90) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (v_uZeroOf (B_dData_dList.v_length env)); B_dData_dPair.f_Pair_second = ec }))
   | Core_dTerm.C_Term_TPi (dtb__91, dtb__92, dtb__93, dtb__94, dtb__95) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (v_uZeroOf (B_dData_dList.v_length env)); B_dData_dPair.f_Pair_second = ec }))
-  | Core_dTerm.C_Term_TLam (dtb__96, dtb__97, dtb__98, dtb__99, dtb__100) -> ((fun bsp -> ((fun mEdit -> ((fun ecW -> ((fun env2 -> ((Base_dCommon.v_step ((((v_checkTerm ecW) sp) env2) dtb__100)) (fun (u : Core_dTerm.t_Rig B_dData_dList.t_List) (ec2 : Elab_dTypes.t_Ec) -> ((Base_dCommon.v_step ((((((v_checkLamBinder ec2) bsp) mEdit) dtb__96) dtb__97) u)) (fun (rest : Core_dTerm.t_Rig B_dData_dList.t_List) (ec3 : Elab_dTypes.t_Ec) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = rest; B_dData_dPair.f_Pair_second = ec3 }))))))) (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = dtb__96; B_dData_dPair.f_Pair_second = dtb__97 }, env)))) (if (if (dtb__96 <> "_") then ((v_shadowedByRuntime dtb__96) env) else false) then ((((v_warnAt1 ec) bsp) (Base_dDiagnostics_dWarning.C_WarnErr_ShadowedBinder (dtb__96))) dtb__96) else ec))) ((v_binderEditSpan dtb__96) dtb__99))) ((v_resolvedBinderSpan dtb__99) sp))
+  | Core_dTerm.C_Term_TLam (dtb__96, dtb__97, dtb__98, dtb__99, dtb__100) -> (let bsp = ((v_resolvedBinderSpan dtb__99) sp) in (let mEdit = ((v_binderEditSpan dtb__96) dtb__99) in (let ecW = (if (if (dtb__96 <> "_") then ((v_shadowedByRuntime dtb__96) env) else false) then ((((v_warnAt1 ec) bsp) (Base_dDiagnostics_dWarning.C_WarnErr_ShadowedBinder (dtb__96))) dtb__96) else ec) in (let env2 = (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = dtb__96; B_dData_dPair.f_Pair_second = dtb__97 }, env)) in ((Base_dCommon.v_step ((((v_checkTerm ecW) sp) env2) dtb__100)) (fun (u : Core_dTerm.t_Rig B_dData_dList.t_List) (ec2 : Elab_dTypes.t_Ec) -> ((Base_dCommon.v_step ((((((v_checkLamBinder ec2) bsp) mEdit) dtb__96) dtb__97) u)) (fun (rest : Core_dTerm.t_Rig B_dData_dList.t_List) (ec3 : Elab_dTypes.t_Ec) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = rest; B_dData_dPair.f_Pair_second = ec3 }))))))))))
   | Core_dTerm.C_Term_TApp (dtb__101, dtb__102, dtb__103) -> ((Base_dCommon.v_step ((((v_checkTerm ec) sp) env) dtb__101)) (fun (uf : Core_dTerm.t_Rig B_dData_dList.t_List) (ec1 : Elab_dTypes.t_Ec) -> (if (v_isRigZero dtb__103) then (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = uf; B_dData_dPair.f_Pair_second = ec1 })) else ((Base_dCommon.v_step ((((v_checkTerm ec1) sp) env) dtb__102)) (fun (ua : Core_dTerm.t_Rig B_dData_dList.t_List) (ec2 : Elab_dTypes.t_Ec) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = ((v_uAdd uf) ((v_uScale dtb__103) ua)); B_dData_dPair.f_Pair_second = ec2 })))))))
   | Core_dTerm.C_Term_TCon (dtb__104, dtb__105) -> ((((v_checkArgs ec) sp) env) dtb__105)
   | Core_dTerm.C_Term_TMk (dtb__106, dtb__107) -> ((((v_checkArgs ec) sp) env) dtb__107)
@@ -267,11 +267,11 @@ and v_checkAlts = (fun (ec : Elab_dTypes.t_Ec) (sp : Base_dSource.t_Span) (env :
 # 243 "Vuna/Compiler/Elab/Usage.vuna"
 and v_checkAltsGo = (fun (mc0 : Elab_dTypes.t_Ec) (mc1 : Base_dSource.t_Span) (mc2 : (string, Core_dTerm.t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc3 : Core_dTerm.t_CaseAlt B_dData_dList.t_List) (mc4 : Core_dTerm.t_Rig B_dData_dList.t_List B_dData_dMaybe.t_Maybe) -> (match mc3 with
   | B_dData_dList.C_List__x58__x58_ (dtb__133, dtb__134) -> (match dtb__133 with
-  | { Core_dTerm.f_CaseAlt_caseAltName = dtb__135; Core_dTerm.f_CaseAlt_caseAltBinders = dtb__136; Core_dTerm.f_CaseAlt_caseAltBody = dtb__137 } -> ((fun env2 -> ((fun k -> ((Base_dCommon.v_step ((((v_checkTerm mc0) mc1) env2) dtb__137)) (fun (u : Core_dTerm.t_Rig B_dData_dList.t_List) (ec1 : Elab_dTypes.t_Ec) -> ((Base_dCommon.v_step ((((v_checkAltBinders ec1) mc1) dtb__136) u)) (fun (outer : Core_dTerm.t_Rig B_dData_dList.t_List) (ec2 : Elab_dTypes.t_Ec) -> (((((v_checkAltsGo ec2) mc1) mc2) dtb__134) (B_dData_dMaybe.C_Maybe_Just ((match mc4 with
+  | { Core_dTerm.f_CaseAlt_caseAltName = dtb__135; Core_dTerm.f_CaseAlt_caseAltBinders = dtb__136; Core_dTerm.f_CaseAlt_caseAltBody = dtb__137 } -> (let env2 = ((B_dData_dList.v_append (B_dData_dList.v_reverse (Core_dTerm.v_binderPairs dtb__136))) mc2) in (let k = (B_dData_dList.v_length dtb__136) in ((Base_dCommon.v_step ((((v_checkTerm mc0) mc1) env2) dtb__137)) (fun (u : Core_dTerm.t_Rig B_dData_dList.t_List) (ec1 : Elab_dTypes.t_Ec) -> ((Base_dCommon.v_step ((((v_checkAltBinders ec1) mc1) dtb__136) u)) (fun (outer : Core_dTerm.t_Rig B_dData_dList.t_List) (ec2 : Elab_dTypes.t_Ec) -> (((((v_checkAltsGo ec2) mc1) mc2) dtb__134) (B_dData_dMaybe.C_Maybe_Just ((match mc4 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__138) -> ((v_uJoin dtb__138) outer)
   | B_dData_dMaybe.C_Maybe_Nothing -> outer
   | _ -> failwith "DT: impossible branch"
-))))))))) (B_dData_dList.v_length dtb__136))) ((B_dData_dList.v_append (B_dData_dList.v_reverse (Core_dTerm.v_binderPairs dtb__136))) mc2))
+))))))))))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dList.C_List_Nil -> (match mc4 with
@@ -283,11 +283,11 @@ and v_checkAltsGo = (fun (mc0 : Elab_dTypes.t_Ec) (mc1 : Base_dSource.t_Span) (m
 ))
 
 # 275 "Vuna/Compiler/Elab/Usage.vuna"
-let v_checkDefUsage = (fun (ec : Elab_dTypes.t_Ec) (msp : Base_dSource.t_Span B_dData_dMaybe.t_Maybe) (name : string) (body : Core_dTerm.t_Term) -> ((fun sp -> ((fun ec0 -> ((Base_dCommon.v_step ((((v_checkTerm ec0) sp) B_dData_dList.C_List_Nil) body)) (fun (_urest : Core_dTerm.t_Rig B_dData_dList.t_List) (ec1 : Elab_dTypes.t_Ec) -> (Base_dDiag.C_Check_OkC (ec1))))) (v_resetUseSpans ec))) (match msp with
+let v_checkDefUsage = (fun (ec : Elab_dTypes.t_Ec) (msp : Base_dSource.t_Span B_dData_dMaybe.t_Maybe) (name : string) (body : Core_dTerm.t_Term) -> (let sp = (match msp with
   | B_dData_dMaybe.C_Maybe_Just (dtb__140) -> dtb__140
   | B_dData_dMaybe.C_Maybe_Nothing -> { Base_dSource.f_Span_spanFile = ""; Base_dSource.f_Span_spanStartLine = 0; Base_dSource.f_Span_spanStartCol = 0; Base_dSource.f_Span_spanEndLine = 0; Base_dSource.f_Span_spanEndCol = 0; Base_dSource.f_Span_spanStartOffset = 0; Base_dSource.f_Span_spanEndOffset = 0 }
   | _ -> failwith "DT: impossible branch"
-)))
+) in (let ec0 = (v_resetUseSpans ec) in ((Base_dCommon.v_step ((((v_checkTerm ec0) sp) B_dData_dList.C_List_Nil) body)) (fun (_urest : Core_dTerm.t_Rig B_dData_dList.t_List) (ec1 : Elab_dTypes.t_Ec) -> (Base_dDiag.C_Check_OkC (ec1)))))))
 
 # 381 "Vuna/Compiler/Elab/Usage.vuna"
 let rec v_checkProgramUsageGo = (fun (mc0 : Elab_dTypes.t_Ec) (mc1 : Elab_dTypes.t_DtDef B_dData_dList.t_List) -> (match mc1 with

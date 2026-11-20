@@ -30,11 +30,11 @@ let v_diagKey = (fun (d : Base_dDiag.t_Diagnostic) -> (String.concat "" [(v_seve
 
 # 52 "Vuna/Compiler/Base/Diagnostics/Sink.vuna"
 let rec v_dedupeGo = (fun (mc0 : Base_dDiag.t_Diagnostic B_dData_dList.t_List) (mc1 : (string, bool) B_dContainer_dHashMap.t_HashMap) (mc2 : Base_dDiag.t_Diagnostic B_dData_dList.t_List) -> (match mc0 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__3, dtb__4) -> ((fun key -> (match ((((B_dContainer_dHashMap.v_lookup B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) key) mc1) with
+  | B_dData_dList.C_List__x58__x58_ (dtb__3, dtb__4) -> (let key = (v_diagKey dtb__3) in (match ((((B_dContainer_dHashMap.v_lookup B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) key) mc1) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__5) -> (((v_dedupeGo dtb__4) mc1) mc2)
   | B_dData_dMaybe.C_Maybe_Nothing -> (((v_dedupeGo dtb__4) (((((B_dContainer_dHashMap.v_insert B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) key) true) mc1)) (B_dData_dList.C_List__x58__x58_ (dtb__3, mc2)))
   | _ -> failwith "DT: impossible branch"
-)) (v_diagKey dtb__3))
+))
   | B_dData_dList.C_List_Nil -> (B_dData_dList.v_reverse mc2)
   | _ -> failwith "DT: impossible branch"
 ))

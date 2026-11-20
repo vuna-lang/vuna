@@ -58,20 +58,20 @@ let v_listBridgeFor = (fun (shared : Vuna_dIr_dModel.t_IrShared) (unitIr : Vuna_
 
 # 118 "Vuna/Target/Ocaml/Assembly.vuna"
 let rec v_typeRefDeps = (fun (mc0 : Vuna_dTarget_dOcaml_dDecl.t_QualCtx) (mc1 : string B_dData_dList.t_List) -> (match mc1 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__14, dtb__15) -> ((fun owner -> (if (if (owner = "") then true else (owner = (mc0).Vuna_dTarget_dOcaml_dDecl.f_QualCtx_qcUnit)) then ((v_typeRefDeps mc0) dtb__15) else (if ((B_dData_dList.v_memName owner) ((v_typeRefDeps mc0) dtb__15)) then ((v_typeRefDeps mc0) dtb__15) else (B_dData_dList.C_List__x58__x58_ (owner, ((v_typeRefDeps mc0) dtb__15)))))) ((Vuna_dTarget_dOcaml_dDecl.v_unitOfTbl (mc0).Vuna_dTarget_dOcaml_dDecl.f_QualCtx_qcDatas) dtb__14))
+  | B_dData_dList.C_List__x58__x58_ (dtb__14, dtb__15) -> (let owner = ((Vuna_dTarget_dOcaml_dDecl.v_unitOfTbl (mc0).Vuna_dTarget_dOcaml_dDecl.f_QualCtx_qcDatas) dtb__14) in (if (if (owner = "") then true else (owner = (mc0).Vuna_dTarget_dOcaml_dDecl.f_QualCtx_qcUnit)) then ((v_typeRefDeps mc0) dtb__15) else (if ((B_dData_dList.v_memName owner) ((v_typeRefDeps mc0) dtb__15)) then ((v_typeRefDeps mc0) dtb__15) else (B_dData_dList.C_List__x58__x58_ (owner, ((v_typeRefDeps mc0) dtb__15))))))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 49 "Vuna/Target/Ocaml/Assembly.vuna"
-let v_genUnitPartsWith = (fun (norm : (string) -> string) (qc : Vuna_dTarget_dOcaml_dDecl.t_QualCtx) (shared : Vuna_dIr_dModel.t_IrShared) (unitIr : Vuna_dIr_dModel.t_IrUnit) -> ((Base_dCommon.v_bind ((v_genTypePart qc) unitIr)) (fun (typeText : string) -> ((fun _u -> ((fun nd_uscrut5 -> (match nd_uscrut5 with
+let v_genUnitPartsWith = (fun (norm : (string) -> string) (qc : Vuna_dTarget_dOcaml_dDecl.t_QualCtx) (shared : Vuna_dIr_dModel.t_IrShared) (unitIr : Vuna_dIr_dModel.t_IrUnit) -> ((Base_dCommon.v_bind ((v_genTypePart qc) unitIr)) (fun (typeText : string) -> (let _u = (if (dtp_debug_on 0) then (dtp_debug_line "cg-typedecls-done") else 0) in (let nd_uscrut5 = ((Vuna_dTarget_dOcaml_dTerm.v_genGroups (((Vuna_dTarget_dOcaml_dTerm.v_mkGenStWith norm) qc) shared)) (unitIr).Vuna_dIr_dModel.f_IrUnit_irUnitGroups) in (match nd_uscrut5 with
   | Base_dDiag.C_Check_OkC (dtb__16) -> (match dtb__16 with
-  | { B_dData_dPair.f_Pair_first = dtb__17; B_dData_dPair.f_Pair_second = dtb__18 } -> ((fun _u -> ((fun deps -> (Base_dDiag.C_Check_OkC ({ f_UnitParts_unitPartsFragments = (B_dData_dList.C_List__x58__x58_ ((v_openHeader qc), (B_dData_dList.C_List__x58__x58_ (typeText, (B_dData_dList.C_List__x58__x58_ (((v_listBridgeFor shared) unitIr), B_dData_dList.C_List_Nil)))))); f_UnitParts_unitPartsBodies = dtb__17; f_UnitParts_unitPartsState = dtb__18; f_UnitParts_unitPartsDeps = deps }))) (v_uniqueDeps ((B_dData_dList.v_append ((B_dData_dList.v_append (B_dData_dList.C_List__x58__x58_ (v_runtimeUnit, B_dData_dList.C_List_Nil))) ((v_typeRefDeps qc) (unitIr).Vuna_dIr_dModel.f_IrUnit_irUnitTypeRefs))) (dtb__18).Vuna_dTarget_dOcaml_dTerm.f_GenSt_gsDeps)))) (if (dtp_debug_on 0) then (dtp_debug_line "cg-genGroups-done") else 0))
+  | { B_dData_dPair.f_Pair_first = dtb__17; B_dData_dPair.f_Pair_second = dtb__18 } -> (let _u = (if (dtp_debug_on 0) then (dtp_debug_line "cg-genGroups-done") else 0) in (let deps = (v_uniqueDeps ((B_dData_dList.v_append ((B_dData_dList.v_append (B_dData_dList.C_List__x58__x58_ (v_runtimeUnit, B_dData_dList.C_List_Nil))) ((v_typeRefDeps qc) (unitIr).Vuna_dIr_dModel.f_IrUnit_irUnitTypeRefs))) (dtb__18).Vuna_dTarget_dOcaml_dTerm.f_GenSt_gsDeps)) in (Base_dDiag.C_Check_OkC ({ f_UnitParts_unitPartsFragments = (B_dData_dList.C_List__x58__x58_ ((v_openHeader qc), (B_dData_dList.C_List__x58__x58_ (typeText, (B_dData_dList.C_List__x58__x58_ (((v_listBridgeFor shared) unitIr), B_dData_dList.C_List_Nil)))))); f_UnitParts_unitPartsBodies = dtb__17; f_UnitParts_unitPartsState = dtb__18; f_UnitParts_unitPartsDeps = deps }))))
   | _ -> failwith "DT: impossible branch"
 )
   | Base_dDiag.C_Check_ErrC (dtb__19) -> (Base_dDiag.C_Check_ErrC (dtb__19))
   | _ -> failwith "DT: impossible branch"
-)) ((Vuna_dTarget_dOcaml_dTerm.v_genGroups (((Vuna_dTarget_dOcaml_dTerm.v_mkGenStWith norm) qc) shared)) (unitIr).Vuna_dIr_dModel.f_IrUnit_irUnitGroups))) (if (dtp_debug_on 0) then (dtp_debug_line "cg-typedecls-done") else 0)))))
+))))))
 
 # 46 "Vuna/Target/Ocaml/Assembly.vuna"
 let v_genUnitParts = (fun (qc : Vuna_dTarget_dOcaml_dDecl.t_QualCtx) (shared : Vuna_dIr_dModel.t_IrShared) (unitIr : Vuna_dIr_dModel.t_IrUnit) -> ((((v_genUnitPartsWith (fun (p : string) -> p)) qc) shared) unitIr))

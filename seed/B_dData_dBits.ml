@@ -33,7 +33,7 @@ let v_shr32 = (fun (x : int) (n : int) -> ((v_shr (v_mask32 x)) n))
 let v_add32 = (fun (a : int) (b : int) -> (v_mask32 (a + b)))
 
 # 53 "Base/Data/Bits.vuna"
-let v_rotr32 = (fun (x : int) (n : int) -> ((fun m -> ((fun low -> ((v_bor ((v_shr32 x) m)) ((v_shl low) (32 - m)))) ((v_band x) (((v_shl 1) m) - 1)))) (n - ((if 32 = 0 then failwith "division by zero" else n / 32) * 32))))
+let v_rotr32 = (fun (x : int) (n : int) -> (let m = (n - ((if 32 = 0 then failwith "division by zero" else n / 32) * 32)) in (let low = ((v_band x) (((v_shl 1) m) - 1)) in ((v_bor ((v_shr32 x) m)) ((v_shl low) (32 - m))))))
 
 # 61 "Base/Data/Bits.vuna"
-let v_rol32 = (fun (x : int) (n : int) -> ((fun m -> ((fun low -> ((fun high -> ((v_bor low) high)) ((v_shr32 x) (32 - m)))) ((v_shl32 x) m))) (n - ((if 32 = 0 then failwith "division by zero" else n / 32) * 32))))
+let v_rol32 = (fun (x : int) (n : int) -> (let m = (n - ((if 32 = 0 then failwith "division by zero" else n / 32) * 32)) in (let low = ((v_shl32 x) m) in (let high = ((v_shr32 x) (32 - m)) in ((v_bor low) high)))))

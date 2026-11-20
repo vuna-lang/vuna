@@ -164,7 +164,7 @@ let rec v_joinArrows = (fun (mc0 : string B_dData_dList.t_List) -> (match mc0 wi
 # 222 "Vuna/Compiler/Base/Source.vuna"
 let rec v_splitPathChars = (fun (mc0 : int B_dData_dList.t_List) (mc1 : int B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__86, dtb__87) -> (if (dtb__86 = 47) then { B_dData_dPair.f_Pair_first = (B_dData_dList.dtp_pack (B_dData_dList.v_reverse mc1)); B_dData_dPair.f_Pair_second = (B_dData_dList.dtp_pack dtb__87) } else ((v_splitPathChars dtb__87) (B_dData_dList.C_List__x58__x58_ (dtb__86, mc1))))
-  | B_dData_dList.C_List_Nil -> ((fun chars -> { B_dData_dPair.f_Pair_first = ""; B_dData_dPair.f_Pair_second = (B_dData_dList.dtp_pack chars) }) (B_dData_dList.v_reverse mc1))
+  | B_dData_dList.C_List_Nil -> (let chars = (B_dData_dList.v_reverse mc1) in { B_dData_dPair.f_Pair_first = ""; B_dData_dPair.f_Pair_second = (B_dData_dList.dtp_pack chars) })
   | _ -> failwith "DT: impossible branch"
 ))
 
@@ -182,7 +182,7 @@ let rec v_dropPastSlash = (fun (mc0 : int B_dData_dList.t_List) -> (match mc0 wi
 ))
 
 # 236 "Vuna/Compiler/Base/Source.vuna"
-let v_parentOfPath = (fun (path : string) -> ((fun chars -> ((fun rev -> ((fun after -> (if ((B_dData_dList.v_length after) = (B_dData_dList.v_length rev)) then "." else ((fun parent -> (if (parent = "") then (if ((B_dData_dString.v_startsWith "/") path) then "/" else ".") else (if (if ((B_dData_dString.v_startsWith "/") path) then (B_dData_dBool.v_not ((B_dData_dString.v_startsWith "/") parent)) else false) then ("/" ^ parent) else parent))) (B_dData_dList.dtp_pack (B_dData_dList.v_reverse after))))) (v_dropPastSlash rev))) (B_dData_dList.v_reverse chars))) (B_dData_dList.dtp_unpack path)))
+let v_parentOfPath = (fun (path : string) -> (let chars = (B_dData_dList.dtp_unpack path) in (let rev = (B_dData_dList.v_reverse chars) in (let after = (v_dropPastSlash rev) in (if ((B_dData_dList.v_length after) = (B_dData_dList.v_length rev)) then "." else (let parent = (B_dData_dList.dtp_pack (B_dData_dList.v_reverse after)) in (if (parent = "") then (if ((B_dData_dString.v_startsWith "/") path) then "/" else ".") else (if (if ((B_dData_dString.v_startsWith "/") path) then (B_dData_dBool.v_not ((B_dData_dString.v_startsWith "/") parent)) else false) then ("/" ^ parent) else parent))))))))
 
 # 277 "Vuna/Compiler/Base/Source.vuna"
 let rec v_prefixLen2 = (fun (mc0 : int B_dData_dList.t_List) (mc1 : int B_dData_dList.t_List) -> (match mc0 with
@@ -199,7 +199,7 @@ let rec v_prefixLen2 = (fun (mc0 : int B_dData_dList.t_List) (mc1 : int B_dData_
 let v_lengthDiffLE = (fun (la : int) (lb : int) (n : int) -> (if (la >= lb) then ((la - lb) <= n) else ((lb - la) <= n)))
 
 # 261 "Vuna/Compiler/Base/Source.vuna"
-let v__usimilarName = (fun (a : string) (b : string) -> (if (a = b) then false else (if ((B_dData_dString.v_startsWith a) b) then true else (if ((B_dData_dString.v_startsWith b) a) then true else ((fun la -> ((fun lb -> (if (((v_lengthDiffLE (B_dData_dList.v_length la)) (B_dData_dList.v_length lb)) 2) then (((v_prefixLen2 la) lb) >= 2) else false)) (B_dData_dList.dtp_unpack b))) (B_dData_dList.dtp_unpack a))))))
+let v__usimilarName = (fun (a : string) (b : string) -> (if (a = b) then false else (if ((B_dData_dString.v_startsWith a) b) then true else (if ((B_dData_dString.v_startsWith b) a) then true else (let la = (B_dData_dList.dtp_unpack a) in (let lb = (B_dData_dList.dtp_unpack b) in (if (((v_lengthDiffLE (B_dData_dList.v_length la)) (B_dData_dList.v_length lb)) 2) then (((v_prefixLen2 la) lb) >= 2) else false)))))))
 
 # 254 "Vuna/Compiler/Base/Source.vuna"
 let rec v_suggest = (fun (mc0 : string) (mc1 : string B_dData_dList.t_List) -> (match mc1 with

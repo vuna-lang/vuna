@@ -206,7 +206,7 @@ let rec v_natChainGo = (fun (fuel : int) (t : t_Term) -> (if (fuel <= 0) then B_
 and v_natChainArgs = (fun (fuel : int) (c : string) (args : (t_Term, t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (if (c = Base_dIntrinsics.v_natZeroCtor) then (match args with
   | B_dData_dList.C_List_Nil -> (B_dData_dMaybe.C_Maybe_Just (0))
   | _ -> B_dData_dMaybe.C_Maybe_Nothing
-) else (if (c = Base_dIntrinsics.v_natSuccCtor) then ((fun nd_uscrut3 -> (match nd_uscrut3 with
+) else (if (c = Base_dIntrinsics.v_natSuccCtor) then (let nd_uscrut3 = args in (match nd_uscrut3 with
   | B_dData_dList.C_List__x58__x58_ (dtb__38, dtb__39) -> (match dtb__38 with
   | { B_dData_dPair.f_Pair_first = dtb__40; B_dData_dPair.f_Pair_second = dtb__41 } -> (match dtb__39 with
   | B_dData_dList.C_List_Nil -> (match ((v_natChainGo fuel) dtb__40) with
@@ -219,7 +219,7 @@ and v_natChainArgs = (fun (fuel : int) (c : string) (args : (t_Term, t_Rig) B_dD
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> B_dData_dMaybe.C_Maybe_Nothing
-)) args) else B_dData_dMaybe.C_Maybe_Nothing)))
+)) else B_dData_dMaybe.C_Maybe_Nothing)))
 
 # 260 "Vuna/Compiler/Core/Term.vuna"
 let v_natChainValue = (fun (t : t_Term) -> ((v_natChainGo 1000000) t))
@@ -354,14 +354,14 @@ let rec v_termHasUnsolvedMeta = (fun (mc0 : t_Sols) (mc1 : t_Term) -> (match mc1
   | C_Term_TMk (dtb__136, dtb__137) -> ((v_termHasUnsolvedMetaArgs mc0) dtb__137)
   | C_Term_TCon (dtb__138, dtb__139) -> ((v_termHasUnsolvedMetaArgs mc0) dtb__139)
   | C_Term_TApp (dtb__140, dtb__141, dtb__142) -> (if ((v_termHasUnsolvedMeta mc0) dtb__140) then true else ((v_termHasUnsolvedMeta mc0) dtb__141))
-  | C_Term_TLam (dtb__143, dtb__144, dtb__145, dtb__146, dtb__147) -> ((fun tys -> (if tys then true else ((v_termHasUnsolvedMeta mc0) dtb__147))) ((fun nd_uscrut7 -> (match nd_uscrut7 with
+  | C_Term_TLam (dtb__143, dtb__144, dtb__145, dtb__146, dtb__147) -> (let tys = (let nd_uscrut7 = dtb__145 in (match nd_uscrut7 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__148) -> (match dtb__148 with
   | { B_dData_dPair.f_Pair_first = dtb__149; B_dData_dPair.f_Pair_second = dtb__150 } -> (if ((v_termHasUnsolvedMetaMaybe mc0) dtb__149) then true else ((v_termHasUnsolvedMetaMaybe mc0) dtb__150))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> false
   | _ -> failwith "DT: impossible branch"
-)) dtb__145))
+)) in (if tys then true else ((v_termHasUnsolvedMeta mc0) dtb__147)))
   | C_Term_TPi (dtb__151, dtb__152, dtb__153, dtb__154, dtb__155) -> (if ((v_termHasUnsolvedMeta mc0) dtb__154) then true else ((v_termHasUnsolvedMeta mc0) dtb__155))
   | C_Term_TType (dtb__156) -> false
   | C_Term_TGlobal (dtb__157) -> false
@@ -473,14 +473,14 @@ let rec v_hasFreeVar = (fun (mc0 : int) (mc1 : t_Term) -> (match mc1 with
   | C_Term_TMk (dtb__285, dtb__286) -> ((v_hasFreeVarArgs mc0) dtb__286)
   | C_Term_TCon (dtb__287, dtb__288) -> ((v_hasFreeVarArgs mc0) dtb__288)
   | C_Term_TApp (dtb__289, dtb__290, dtb__291) -> (if ((v_hasFreeVar mc0) dtb__289) then true else ((v_hasFreeVar mc0) dtb__290))
-  | C_Term_TLam (dtb__292, dtb__293, dtb__294, dtb__295, dtb__296) -> ((fun tys -> (if tys then true else ((v_hasFreeVar (mc0 + 1)) dtb__296))) ((fun nd_uscrut7 -> (match nd_uscrut7 with
+  | C_Term_TLam (dtb__292, dtb__293, dtb__294, dtb__295, dtb__296) -> (let tys = (let nd_uscrut7 = dtb__294 in (match nd_uscrut7 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__297) -> (match dtb__297 with
   | { B_dData_dPair.f_Pair_first = dtb__298; B_dData_dPair.f_Pair_second = dtb__299 } -> (if ((v_hasFreeVarMaybe mc0) dtb__298) then true else ((v_hasFreeVarMaybe (mc0 + 1)) dtb__299))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> false
   | _ -> failwith "DT: impossible branch"
-)) dtb__294))
+)) in (if tys then true else ((v_hasFreeVar (mc0 + 1)) dtb__296)))
   | C_Term_TPi (dtb__300, dtb__301, dtb__302, dtb__303, dtb__304) -> (if ((v_hasFreeVar mc0) dtb__303) then true else ((v_hasFreeVar (mc0 + 1)) dtb__304))
   | C_Term_TType (dtb__305) -> false
   | C_Term_TGlobal (dtb__306) -> false
@@ -524,14 +524,14 @@ let rec v_hasMeta = (fun (mc0 : int) (mc1 : int) (mc2 : t_Term) -> (match mc2 wi
   | C_Term_TMk (dtb__339, dtb__340) -> (((v_hasMetaArgs mc0) mc1) dtb__340)
   | C_Term_TCon (dtb__341, dtb__342) -> (((v_hasMetaArgs mc0) mc1) dtb__342)
   | C_Term_TApp (dtb__343, dtb__344, dtb__345) -> (if (((v_hasMeta mc0) mc1) dtb__343) then true else (((v_hasMeta mc0) mc1) dtb__344))
-  | C_Term_TLam (dtb__346, dtb__347, dtb__348, dtb__349, dtb__350) -> ((fun tys -> (if tys then true else (((v_hasMeta mc0) (mc1 + 1)) dtb__350))) ((fun nd_uscrut8 -> (match nd_uscrut8 with
+  | C_Term_TLam (dtb__346, dtb__347, dtb__348, dtb__349, dtb__350) -> (let tys = (let nd_uscrut8 = dtb__348 in (match nd_uscrut8 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__351) -> (match dtb__351 with
   | { B_dData_dPair.f_Pair_first = dtb__352; B_dData_dPair.f_Pair_second = dtb__353 } -> (if (((v_hasMetaMaybe mc0) mc1) dtb__352) then true else (((v_hasMetaMaybe mc0) (mc1 + 1)) dtb__353))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> false
   | _ -> failwith "DT: impossible branch"
-)) dtb__348))
+)) in (if tys then true else (((v_hasMeta mc0) (mc1 + 1)) dtb__350)))
   | C_Term_TPi (dtb__354, dtb__355, dtb__356, dtb__357, dtb__358) -> (if (((v_hasMeta mc0) mc1) dtb__357) then true else (((v_hasMeta mc0) (mc1 + 1)) dtb__358))
   | C_Term_TType (dtb__359) -> false
   | C_Term_TGlobal (dtb__360) -> false
@@ -618,7 +618,7 @@ let rec v_shift = (fun (mc0 : int) (mc1 : int) (mc2 : t_Term) -> (match mc2 with
   | C_Term_TMk (dtb__397, dtb__398) -> (C_Term_TMk (dtb__397, (((v_shiftArgs mc0) mc1) dtb__398)))
   | C_Term_TCon (dtb__399, dtb__400) -> (C_Term_TCon (dtb__399, (((v_shiftArgs mc0) mc1) dtb__400)))
   | C_Term_TApp (dtb__401, dtb__402, dtb__403) -> (C_Term_TApp ((((v_shift mc0) mc1) dtb__401), (((v_shift mc0) mc1) dtb__402), dtb__403))
-  | C_Term_TLam (dtb__404, dtb__405, dtb__406, dtb__407, dtb__408) -> ((fun slot2 -> (C_Term_TLam (dtb__404, dtb__405, slot2, dtb__407, (((v_shift (mc0 + 1)) mc1) dtb__408)))) ((fun nd_uscrut8 -> (match nd_uscrut8 with
+  | C_Term_TLam (dtb__404, dtb__405, dtb__406, dtb__407, dtb__408) -> (let slot2 = (let nd_uscrut8 = dtb__406 in (match nd_uscrut8 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__409) -> (match dtb__409 with
   | { B_dData_dPair.f_Pair_first = dtb__410; B_dData_dPair.f_Pair_second = dtb__411 } -> ((v_lamTyOf (match dtb__410 with
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
@@ -633,7 +633,7 @@ let rec v_shift = (fun (mc0 : int) (mc1 : int) (mc2 : t_Term) -> (match mc2 with
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
-)) dtb__406))
+)) in (C_Term_TLam (dtb__404, dtb__405, slot2, dtb__407, (((v_shift (mc0 + 1)) mc1) dtb__408))))
   | C_Term_TPi (dtb__414, dtb__415, dtb__416, dtb__417, dtb__418) -> (C_Term_TPi (dtb__414, dtb__415, dtb__416, (((v_shift mc0) mc1) dtb__417), (((v_shift (mc0 + 1)) mc1) dtb__418)))
   | C_Term_TType (dtb__419) -> mc2
   | C_Term_TGlobal (dtb__420) -> mc2
@@ -676,7 +676,7 @@ let rec v_substVarAt = (fun (mc0 : int) (mc1 : t_Term) (mc2 : t_Term) -> (match 
   | C_Term_TMk (dtb__455, dtb__456) -> (C_Term_TMk (dtb__455, ((B_dData_dList.v_map (fun (p : (t_Term, t_Rig) B_dData_dPair.t_Pair) -> { B_dData_dPair.f_Pair_first = (((v_substVarAt mc0) mc1) (B_dData_dPair.v_firstOf p)); B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf p) })) dtb__456)))
   | C_Term_TCon (dtb__457, dtb__458) -> (C_Term_TCon (dtb__457, ((B_dData_dList.v_map (fun (p : (t_Term, t_Rig) B_dData_dPair.t_Pair) -> { B_dData_dPair.f_Pair_first = (((v_substVarAt mc0) mc1) (B_dData_dPair.v_firstOf p)); B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf p) })) dtb__458)))
   | C_Term_TApp (dtb__459, dtb__460, dtb__461) -> (C_Term_TApp ((((v_substVarAt mc0) mc1) dtb__459), (((v_substVarAt mc0) mc1) dtb__460), dtb__461))
-  | C_Term_TLam (dtb__462, dtb__463, dtb__464, dtb__465, dtb__466) -> ((fun slot2 -> (C_Term_TLam (dtb__462, dtb__463, slot2, dtb__465, (((v_substVarAt (mc0 + 1)) mc1) dtb__466)))) ((fun nd_uscrut8 -> (match nd_uscrut8 with
+  | C_Term_TLam (dtb__462, dtb__463, dtb__464, dtb__465, dtb__466) -> (let slot2 = (let nd_uscrut8 = dtb__464 in (match nd_uscrut8 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__467) -> (match dtb__467 with
   | { B_dData_dPair.f_Pair_first = dtb__468; B_dData_dPair.f_Pair_second = dtb__469 } -> ((v_lamTyOf (match dtb__468 with
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
@@ -691,7 +691,7 @@ let rec v_substVarAt = (fun (mc0 : int) (mc1 : t_Term) (mc2 : t_Term) -> (match 
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
-)) dtb__464))
+)) in (C_Term_TLam (dtb__462, dtb__463, slot2, dtb__465, (((v_substVarAt (mc0 + 1)) mc1) dtb__466))))
   | C_Term_TPi (dtb__472, dtb__473, dtb__474, dtb__475, dtb__476) -> (C_Term_TPi (dtb__472, dtb__473, dtb__474, (((v_substVarAt mc0) mc1) dtb__475), (((v_substVarAt (mc0 + 1)) mc1) dtb__476)))
   | C_Term_TType (dtb__477) -> mc2
   | C_Term_TGlobal (dtb__478) -> mc2
@@ -711,7 +711,7 @@ let rec v_substMetaVarGo = (fun (mc0 : int) (mc1 : string) (mc2 : int) (mc3 : in
   | C_Term_TMk (dtb__495, dtb__496) -> (C_Term_TMk (dtb__495, ((B_dData_dList.v_map (fun (p : (t_Term, t_Rig) B_dData_dPair.t_Pair) -> { B_dData_dPair.f_Pair_first = (((((v_substMetaVarGo mc0) mc1) mc2) mc3) (B_dData_dPair.v_firstOf p)); B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf p) })) dtb__496)))
   | C_Term_TCon (dtb__497, dtb__498) -> (C_Term_TCon (dtb__497, ((B_dData_dList.v_map (fun (p : (t_Term, t_Rig) B_dData_dPair.t_Pair) -> { B_dData_dPair.f_Pair_first = (((((v_substMetaVarGo mc0) mc1) mc2) mc3) (B_dData_dPair.v_firstOf p)); B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf p) })) dtb__498)))
   | C_Term_TApp (dtb__499, dtb__500, dtb__501) -> (C_Term_TApp ((((((v_substMetaVarGo mc0) mc1) mc2) mc3) dtb__499), (((((v_substMetaVarGo mc0) mc1) mc2) mc3) dtb__500), dtb__501))
-  | C_Term_TLam (dtb__502, dtb__503, dtb__504, dtb__505, dtb__506) -> ((fun slot2 -> (C_Term_TLam (dtb__502, dtb__503, slot2, dtb__505, (((((v_substMetaVarGo mc0) mc1) mc2) (mc3 + 1)) dtb__506)))) ((fun nd_uscrut10 -> (match nd_uscrut10 with
+  | C_Term_TLam (dtb__502, dtb__503, dtb__504, dtb__505, dtb__506) -> (let slot2 = (let nd_uscrut10 = dtb__504 in (match nd_uscrut10 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__507) -> (match dtb__507 with
   | { B_dData_dPair.f_Pair_first = dtb__508; B_dData_dPair.f_Pair_second = dtb__509 } -> ((v_lamTyOf (match dtb__508 with
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
@@ -726,7 +726,7 @@ let rec v_substMetaVarGo = (fun (mc0 : int) (mc1 : string) (mc2 : int) (mc3 : in
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
-)) dtb__504))
+)) in (C_Term_TLam (dtb__502, dtb__503, slot2, dtb__505, (((((v_substMetaVarGo mc0) mc1) mc2) (mc3 + 1)) dtb__506))))
   | C_Term_TPi (dtb__512, dtb__513, dtb__514, dtb__515, dtb__516) -> (C_Term_TPi (dtb__512, dtb__513, dtb__514, (((((v_substMetaVarGo mc0) mc1) mc2) mc3) dtb__515), (((((v_substMetaVarGo mc0) mc1) mc2) (mc3 + 1)) dtb__516)))
   | C_Term_TMeta (dtb__517) -> (if (dtb__517 = mc0) then (C_Term_TVar (mc1, (mc3 - mc2), { Base_dSource.f_Span_spanFile = ""; Base_dSource.f_Span_spanStartLine = 0; Base_dSource.f_Span_spanStartCol = 0; Base_dSource.f_Span_spanEndLine = 0; Base_dSource.f_Span_spanEndCol = 0; Base_dSource.f_Span_spanStartOffset = 0; Base_dSource.f_Span_spanEndOffset = 0 })) else mc4)
   | _ -> mc4
@@ -792,14 +792,14 @@ let rec v_hasFreeTermVar = (fun (mc0 : int) (mc1 : t_Term) -> (match mc1 with
   | C_Term_TMk (dtb__563, dtb__564) -> ((v_anyPairFree mc0) dtb__564)
   | C_Term_TCon (dtb__565, dtb__566) -> ((v_anyPairFree mc0) dtb__566)
   | C_Term_TApp (dtb__567, dtb__568, dtb__569) -> (if ((v_hasFreeTermVar mc0) dtb__567) then true else ((v_hasFreeTermVar mc0) dtb__568))
-  | C_Term_TLam (dtb__570, dtb__571, dtb__572, dtb__573, dtb__574) -> ((fun tys -> (if tys then true else ((v_hasFreeTermVar (mc0 + 1)) dtb__574))) ((fun nd_uscrut7 -> (match nd_uscrut7 with
+  | C_Term_TLam (dtb__570, dtb__571, dtb__572, dtb__573, dtb__574) -> (let tys = (let nd_uscrut7 = dtb__572 in (match nd_uscrut7 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__575) -> (match dtb__575 with
   | { B_dData_dPair.f_Pair_first = dtb__576; B_dData_dPair.f_Pair_second = dtb__577 } -> (if ((v_hasFreeTermVarMaybe mc0) dtb__576) then true else ((v_hasFreeTermVarMaybe (mc0 + 1)) dtb__577))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> false
   | _ -> failwith "DT: impossible branch"
-)) dtb__572))
+)) in (if tys then true else ((v_hasFreeTermVar (mc0 + 1)) dtb__574)))
   | C_Term_TPi (dtb__578, dtb__579, dtb__580, dtb__581, dtb__582) -> (if ((v_hasFreeTermVar mc0) dtb__581) then true else ((v_hasFreeTermVar (mc0 + 1)) dtb__582))
   | C_Term_TVar (dtb__583, dtb__584, dtb__585) -> (dtb__584 >= mc0)
   | _ -> false
@@ -839,14 +839,14 @@ let rec v_hasNegativeVar = (fun (mc0 : t_Term) -> (match mc0 with
   | C_Term_TMk (dtb__613, dtb__614) -> (v_anyNegativeVarArgs dtb__614)
   | C_Term_TCon (dtb__615, dtb__616) -> (v_anyNegativeVarArgs dtb__616)
   | C_Term_TApp (dtb__617, dtb__618, dtb__619) -> (if (v_hasNegativeVar dtb__617) then true else (v_hasNegativeVar dtb__618))
-  | C_Term_TLam (dtb__620, dtb__621, dtb__622, dtb__623, dtb__624) -> ((fun tys -> (if tys then true else (v_hasNegativeVar dtb__624))) ((fun nd_uscrut6 -> (match nd_uscrut6 with
+  | C_Term_TLam (dtb__620, dtb__621, dtb__622, dtb__623, dtb__624) -> (let tys = (let nd_uscrut6 = dtb__622 in (match nd_uscrut6 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__625) -> (match dtb__625 with
   | { B_dData_dPair.f_Pair_first = dtb__626; B_dData_dPair.f_Pair_second = dtb__627 } -> (if (v_hasNegativeVarMaybe dtb__626) then true else (v_hasNegativeVarMaybe dtb__627))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> false
   | _ -> failwith "DT: impossible branch"
-)) dtb__622))
+)) in (if tys then true else (v_hasNegativeVar dtb__624)))
   | C_Term_TPi (dtb__628, dtb__629, dtb__630, dtb__631, dtb__632) -> (if (v_hasNegativeVar dtb__631) then true else (v_hasNegativeVar dtb__632))
   | C_Term_TVar (dtb__633, dtb__634, dtb__635) -> (dtb__634 < 0)
   | _ -> false

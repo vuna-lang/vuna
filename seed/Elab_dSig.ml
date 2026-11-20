@@ -37,7 +37,7 @@ let v_classParamKind = (fun (pname : string) (methods : (string, Frontend_dRast.
 
 # 65 "Vuna/Compiler/Elab/Sig.vuna"
 let rec v_methodArgRigsOfGo = (fun (mc0 : (bool) -> (Core_dTerm.t_Value) -> Core_dTerm.t_Rig) (mc1 : Core_dTerm.t_Term) (mc2 : Core_dTerm.t_Value B_dData_dList.t_List) -> (match mc1 with
-  | Core_dTerm.C_Term_TPi (dtb__36, dtb__37, dtb__38, dtb__39, dtb__40) -> ((fun domVal -> ((fun v -> (B_dData_dList.C_List__x58__x58_ (dtb__38, (((v_methodArgRigsOfGo mc0) dtb__40) (B_dData_dList.C_List__x58__x58_ (v, mc2)))))) (Core_dTerm.C_Value_VNeutral ((Core_dTerm.C_Neutral_NVar (dtb__36, (B_dData_dList.v_length mc2), B_dData_dList.C_List_Nil)))))) ((Core_dEval.v_eval mc2) dtb__39))
+  | Core_dTerm.C_Term_TPi (dtb__36, dtb__37, dtb__38, dtb__39, dtb__40) -> (let domVal = ((Core_dEval.v_eval mc2) dtb__39) in (let v = (Core_dTerm.C_Value_VNeutral ((Core_dTerm.C_Neutral_NVar (dtb__36, (B_dData_dList.v_length mc2), B_dData_dList.C_List_Nil)))) in (B_dData_dList.C_List__x58__x58_ (dtb__38, (((v_methodArgRigsOfGo mc0) dtb__40) (B_dData_dList.C_List__x58__x58_ (v, mc2)))))))
   | _ -> B_dData_dList.C_List_Nil
 ))
 
@@ -65,13 +65,13 @@ let v_memberDomainOverridesOne = (fun (mc0 : Frontend_dRast.t_Expr) -> (match mc
   | B_dData_dList.C_List__x58__x58_ (dtb__50, dtb__51) -> (match dtb__51 with
   | B_dData_dList.C_List__x58__x58_ (dtb__52, dtb__53) -> (match dtb__53 with
   | B_dData_dList.C_List__x58__x58_ (dtb__54, dtb__55) -> (match dtb__55 with
-  | B_dData_dList.C_List_Nil -> (if ((Frontend_dRast_dName.v_rnameKey dtb__48) = Base_dIntrinsics.v_effMemberFamilyName) then ((fun nPart -> ((fun rPart -> ((B_dData_dList.v_append nPart) rPart)) (match dtb__54 with
-  | Frontend_dRast.C_Expr_EVar (dtb__56, dtb__57) -> (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = (Frontend_dRast_dName.v_rnameKey dtb__56); B_dData_dPair.f_Pair_second = (Frontend_dRast.C_Expr_EVar ((Frontend_dRast_dName.v_classifyName Base_dIntrinsics.v_effRowFamilyName), dtb__57)) }, B_dData_dList.C_List_Nil))
-  | _ -> B_dData_dList.C_List_Nil
-))) (match dtb__50 with
+  | B_dData_dList.C_List_Nil -> (if ((Frontend_dRast_dName.v_rnameKey dtb__48) = Base_dIntrinsics.v_effMemberFamilyName) then (let nPart = (match dtb__50 with
   | Frontend_dRast.C_Expr_EVar (dtb__58, dtb__59) -> (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = (Frontend_dRast_dName.v_rnameKey dtb__58); B_dData_dPair.f_Pair_second = (Frontend_dRast.C_Expr_EVar ((Frontend_dRast_dName.v_classifyName Base_dIntrinsics.v_strTypeName), dtb__59)) }, B_dData_dList.C_List_Nil))
   | _ -> B_dData_dList.C_List_Nil
-)) else B_dData_dList.C_List_Nil)
+) in (let rPart = (match dtb__54 with
+  | Frontend_dRast.C_Expr_EVar (dtb__56, dtb__57) -> (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = (Frontend_dRast_dName.v_rnameKey dtb__56); B_dData_dPair.f_Pair_second = (Frontend_dRast.C_Expr_EVar ((Frontend_dRast_dName.v_classifyName Base_dIntrinsics.v_effRowFamilyName), dtb__57)) }, B_dData_dList.C_List_Nil))
+  | _ -> B_dData_dList.C_List_Nil
+) in ((B_dData_dList.v_append nPart) rPart))) else B_dData_dList.C_List_Nil)
   | _ -> B_dData_dList.C_List_Nil
 )
   | _ -> B_dData_dList.C_List_Nil
@@ -114,11 +114,11 @@ let rec v_quantifyTopKinds = (fun (mc0 : string B_dData_dList.t_List) (mc1 : Fro
 
 # 111 "Vuna/Compiler/Elab/Sig.vuna"
 let rec v_quantifyTopKindsWith = (fun (mc0 : (string) -> Frontend_dRast.t_Expr B_dData_dMaybe.t_Maybe) (mc1 : string B_dData_dList.t_List) (mc2 : Frontend_dRast.t_Expr) (mc3 : Frontend_dRast.t_Expr) (mc4 : Base_dSource.t_Span) -> (match mc1 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__68, dtb__69) -> ((fun dom -> (Frontend_dRast.C_Expr_EPi (dtb__68, true, B_dData_dMaybe.C_Maybe_Nothing, dom, (((((v_quantifyTopKindsWith mc0) dtb__69) mc2) mc3) mc4), mc4))) (match (mc0 dtb__68) with
+  | B_dData_dList.C_List__x58__x58_ (dtb__68, dtb__69) -> (let dom = (match (mc0 dtb__68) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__70) -> dtb__70
   | B_dData_dMaybe.C_Maybe_Nothing -> ((v_kindArrowExpr ((v_exprMaxAppArity dtb__68) mc2)) mc4)
   | _ -> failwith "DT: impossible branch"
-))
+) in (Frontend_dRast.C_Expr_EPi (dtb__68, true, B_dData_dMaybe.C_Maybe_Nothing, dom, (((((v_quantifyTopKindsWith mc0) dtb__69) mc2) mc3) mc4), mc4)))
   | B_dData_dList.C_List_Nil -> mc3
   | _ -> failwith "DT: impossible branch"
 ))
@@ -176,19 +176,19 @@ let v_quantifyTraitSig = (fun (inScope : (string) -> bool) (ty : Frontend_dRast.
 
 # 210 "Vuna/Compiler/Elab/Sig.vuna"
 let rec v_kindDomains = (fun (mc0 : Frontend_dRast.t_Expr) -> (match mc0 with
-  | Frontend_dRast.C_Expr_EApp (dtb__117, dtb__118, dtb__119) -> ((fun nd_uscrut4 -> (match nd_uscrut4 with
+  | Frontend_dRast.C_Expr_EApp (dtb__117, dtb__118, dtb__119) -> (let nd_uscrut4 = dtb__117 in (match nd_uscrut4 with
   | Frontend_dRast.C_Expr_EVar (dtb__120, dtb__121) -> (match dtb__120 with
-  | Frontend_dRast_dName.C_RName_RIntrinsic (dtb__122) -> (if (dtb__122 = "->") then ((fun nd_uscrut8 -> (match nd_uscrut8 with
+  | Frontend_dRast_dName.C_RName_RIntrinsic (dtb__122) -> (if (dtb__122 = "->") then (let nd_uscrut8 = dtb__118 in (match nd_uscrut8 with
   | B_dData_dList.C_List__x58__x58_ (dtb__123, dtb__124) -> (match dtb__124 with
   | B_dData_dList.C_List__x58__x58_ (dtb__125, dtb__126) -> (B_dData_dList.C_List__x58__x58_ (dtb__123, (v_kindDomains dtb__125)))
   | _ -> B_dData_dList.C_List_Nil
 )
   | _ -> B_dData_dList.C_List_Nil
-)) dtb__118) else B_dData_dList.C_List_Nil)
+)) else B_dData_dList.C_List_Nil)
   | _ -> B_dData_dList.C_List_Nil
 )
   | _ -> B_dData_dList.C_List_Nil
-)) dtb__117)
+))
   | Frontend_dRast.C_Expr_EPi (dtb__127, dtb__128, dtb__129, dtb__130, dtb__131, dtb__132) -> (B_dData_dList.C_List__x58__x58_ (dtb__130, (v_kindDomains dtb__131)))
   | _ -> B_dData_dList.C_List_Nil
 ))
@@ -299,10 +299,10 @@ let rec v_keepOutQualified = (fun (mc0 : string) (mc1 : (string, bool) B_dContai
 let v_quantifyTopSigCached = (fun (prefix : string) (banned : (string, bool) B_dContainer_dHashMap.t_HashMap) (preludeBanned : (string, bool) B_dContainer_dHashMap.t_HashMap) (ty : Frontend_dRast.t_Expr) (sp : Base_dSource.t_Span) -> ((((v_quantifyTopKinds ((((v_keepOutQualified prefix) banned) preludeBanned) ((v_freeNames (fun (n : string) -> false)) ty))) ty) ty) sp))
 
 # 314 "Vuna/Compiler/Elab/Sig.vuna"
-let v_quantifyTopSigCtxCached = (fun (prefix : string) (banned : (string, bool) B_dContainer_dHashMap.t_HashMap) (preludeBanned : (string, bool) B_dContainer_dHashMap.t_HashMap) (ctx : Frontend_dRast.t_Expr B_dData_dList.t_List) (ty : Frontend_dRast.t_Expr) (sp : Base_dSource.t_Span) -> ((fun combined -> ((fun lower -> ((fun names -> ((fun overrides -> (((((v_quantifyTopKindsWith (v_memberDomainOf overrides)) names) combined) ty) sp)) (v_memberDomainOverrides ctx))) ((((v_keepOutQualified prefix) banned) preludeBanned) ((v_dropPiBound lower) (v_piBoundNames ty))))) (B_dData_dList.v_nubNames ((B_dData_dList.v_append ((B_dData_dList.v_concatMap v_exprLowerVars) ctx)) (v_exprLowerVars ty))))) (Frontend_dRast.C_Expr_EApp ((Frontend_dRast.C_Expr_EVar ((Frontend_dRast_dName.v_classifyName "#sig"), sp)), ((B_dData_dList.v_append ctx) (B_dData_dList.C_List__x58__x58_ (ty, B_dData_dList.C_List_Nil))), sp))))
+let v_quantifyTopSigCtxCached = (fun (prefix : string) (banned : (string, bool) B_dContainer_dHashMap.t_HashMap) (preludeBanned : (string, bool) B_dContainer_dHashMap.t_HashMap) (ctx : Frontend_dRast.t_Expr B_dData_dList.t_List) (ty : Frontend_dRast.t_Expr) (sp : Base_dSource.t_Span) -> (let combined = (Frontend_dRast.C_Expr_EApp ((Frontend_dRast.C_Expr_EVar ((Frontend_dRast_dName.v_classifyName "#sig"), sp)), ((B_dData_dList.v_append ctx) (B_dData_dList.C_List__x58__x58_ (ty, B_dData_dList.C_List_Nil))), sp)) in (let lower = (B_dData_dList.v_nubNames ((B_dData_dList.v_append ((B_dData_dList.v_concatMap v_exprLowerVars) ctx)) (v_exprLowerVars ty))) in (let names = ((((v_keepOutQualified prefix) banned) preludeBanned) ((v_dropPiBound lower) (v_piBoundNames ty))) in (let overrides = (v_memberDomainOverrides ctx) in (((((v_quantifyTopKindsWith (v_memberDomainOf overrides)) names) combined) ty) sp))))))
 
 # 329 "Vuna/Compiler/Elab/Sig.vuna"
-let v_quantifyTopSigCtxCachedKinds = (fun (prefix : string) (banned : (string, bool) B_dContainer_dHashMap.t_HashMap) (preludeBanned : (string, bool) B_dContainer_dHashMap.t_HashMap) (paramKinds : (string, Frontend_dRast.t_Expr B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) (ctx : Frontend_dRast.t_Expr B_dData_dList.t_List) (ty : Frontend_dRast.t_Expr) (sp : Base_dSource.t_Span) -> ((fun combined -> ((fun lower -> ((fun names -> ((fun memberOverrides -> ((fun argOverrides -> (((((v_quantifyTopKindsWith ((v_kindOverrideOf memberOverrides) argOverrides)) names) combined) ty) sp)) ((v_argParamKinds paramKinds) combined))) (v_memberDomainOverrides ctx))) ((((v_keepOutQualified prefix) banned) preludeBanned) ((v_dropPiBound lower) (v_piBoundNames ty))))) (B_dData_dList.v_nubNames ((B_dData_dList.v_append ((B_dData_dList.v_concatMap v_exprLowerVars) ctx)) (v_exprLowerVars ty))))) (Frontend_dRast.C_Expr_EApp ((Frontend_dRast.C_Expr_EVar ((Frontend_dRast_dName.v_classifyName "#sig"), sp)), ((B_dData_dList.v_append ctx) (B_dData_dList.C_List__x58__x58_ (ty, B_dData_dList.C_List_Nil))), sp))))
+let v_quantifyTopSigCtxCachedKinds = (fun (prefix : string) (banned : (string, bool) B_dContainer_dHashMap.t_HashMap) (preludeBanned : (string, bool) B_dContainer_dHashMap.t_HashMap) (paramKinds : (string, Frontend_dRast.t_Expr B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) (ctx : Frontend_dRast.t_Expr B_dData_dList.t_List) (ty : Frontend_dRast.t_Expr) (sp : Base_dSource.t_Span) -> (let combined = (Frontend_dRast.C_Expr_EApp ((Frontend_dRast.C_Expr_EVar ((Frontend_dRast_dName.v_classifyName "#sig"), sp)), ((B_dData_dList.v_append ctx) (B_dData_dList.C_List__x58__x58_ (ty, B_dData_dList.C_List_Nil))), sp)) in (let lower = (B_dData_dList.v_nubNames ((B_dData_dList.v_append ((B_dData_dList.v_concatMap v_exprLowerVars) ctx)) (v_exprLowerVars ty))) in (let names = ((((v_keepOutQualified prefix) banned) preludeBanned) ((v_dropPiBound lower) (v_piBoundNames ty))) in (let memberOverrides = (v_memberDomainOverrides ctx) in (let argOverrides = ((v_argParamKinds paramKinds) combined) in (((((v_quantifyTopKindsWith ((v_kindOverrideOf memberOverrides) argOverrides)) names) combined) ty) sp)))))))
 
 # 360 "Vuna/Compiler/Elab/Sig.vuna"
 let rec v_keepOutTbl = (fun (mc0 : (string, bool) B_dContainer_dHashMap.t_HashMap) (mc1 : string B_dData_dList.t_List) -> (match mc1 with

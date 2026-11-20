@@ -28,7 +28,7 @@ let rec v_readFirstBuildId = (fun (nFs : string) (mc0 : string B_dData_dList.t_L
 ))
 
 # 113 "Vuna/Compiler/Loader/Fingerprint.vuna"
-let v_readNamedNear = (fun (nFs : string) (exe : string) (name : string) -> ((fun binDir -> ((fun outDir -> ((v_readFirstBuildId nFs) (B_dData_dList.C_List__x58__x58_ ((String.concat "" [outDir; "/"; name]), (B_dData_dList.C_List__x58__x58_ ((String.concat "" [binDir; "/"; name]), B_dData_dList.C_List_Nil)))))) (Base_dSource.v_parentOfPath binDir))) (Base_dSource.v_parentOfPath exe)))
+let v_readNamedNear = (fun (nFs : string) (exe : string) (name : string) -> (let binDir = (Base_dSource.v_parentOfPath exe) in (let outDir = (Base_dSource.v_parentOfPath binDir) in ((v_readFirstBuildId nFs) (B_dData_dList.C_List__x58__x58_ ((String.concat "" [outDir; "/"; name]), (B_dData_dList.C_List__x58__x58_ ((String.concat "" [binDir; "/"; name]), B_dData_dList.C_List_Nil))))))))
 
 # 109 "Vuna/Compiler/Loader/Fingerprint.vuna"
 let v_readBuildIdNear = (fun (nFs : string) (exe : string) -> (((v_readNamedNear nFs) exe) v_buildIdFileName))

@@ -32,11 +32,11 @@ let v_teleGlobalEnv = (fun (n : int) -> ((v_teleGlobalEnvGo n) 0))
 
 # 100 "Vuna/Compiler/Elab/InstCoherence.vuna"
 let v_headsOverlapOne = (fun (ec : Elab_dTypes.t_Ec) (teleA : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List) (hA : Core_dTerm.t_Term) (teleB : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List) (hB : Core_dTerm.t_Term) -> (match ((((Elab_dDict.v_allocTeleMetas B_dData_dMaybe.C_Maybe_Nothing) Elab_dTypes.v_emptyCtx) ec) teleA) with
-  | { B_dData_dPair.f_Pair_first = dtb__4; B_dData_dPair.f_Pair_second = dtb__5 } -> ((fun envA -> ((fun envB -> (match (((((Core_dConv.v_conv (Elab_dTypes.v_ecDefTbl dtb__5)) (Elab_dTypes.v_ecSolsP dtb__5)) 0) ((Core_dEval.v_eval envA) hA)) ((Core_dEval.v_eval envB) hB)) with
+  | { B_dData_dPair.f_Pair_first = dtb__4; B_dData_dPair.f_Pair_second = dtb__5 } -> (let envA = ((B_dData_dList.v_map (fun (m : int) -> (Core_dTerm.C_Value_VMeta (m, B_dData_dList.C_List_Nil)))) dtb__4) in (let envB = (v_teleGlobalEnv (B_dData_dList.v_length teleB)) in (match (((((Core_dConv.v_conv (Elab_dTypes.v_ecDefTbl dtb__5)) (Elab_dTypes.v_ecSolsP dtb__5)) 0) ((Core_dEval.v_eval envA) hA)) ((Core_dEval.v_eval envB) hB)) with
   | Base_dDiag.C_Check_OkC (dtb__6) -> { B_dData_dPair.f_Pair_first = true; B_dData_dPair.f_Pair_second = ((Elab_dTypes.v_ecPutSols dtb__5) (Core_dTerm.v_solsList dtb__6)) }
   | Base_dDiag.C_Check_ErrC (dtb__7) -> { B_dData_dPair.f_Pair_first = false; B_dData_dPair.f_Pair_second = dtb__5 }
   | _ -> failwith "DT: impossible branch"
-)) (v_teleGlobalEnv (B_dData_dList.v_length teleB)))) ((B_dData_dList.v_map (fun (m : int) -> (Core_dTerm.C_Value_VMeta (m, B_dData_dList.C_List_Nil)))) dtb__4))
+)))
   | _ -> failwith "DT: impossible branch"
 ))
 
@@ -52,18 +52,18 @@ let v_headsOverlap = (fun (ec : Elab_dTypes.t_Ec) (tele1 : (string, Core_dTerm.t
 # 54 "Vuna/Compiler/Elab/InstCoherence.vuna"
 let rec v_anyInstanceOverlap = (fun (mc0 : Elab_dTypes.t_Ec) (mc1 : bool) (mc2 : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc3 : Core_dTerm.t_Term) (mc4 : Elab_dTypes.t_DtInst B_dData_dList.t_List) -> (match mc2 with
   | B_dData_dList.C_List__x58__x58_ (dtb__8, dtb__9) -> (match mc4 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__10, dtb__11) -> (if ((((v_instanceExactQuiet mc0) (B_dData_dList.v_length mc2)) mc3) dtb__10) then (((((v_anyInstanceOverlap mc0) mc1) mc2) mc3) dtb__11) else (if (if mc1 then true else ((Elab_dMeta.v_isBlanketInstHead (B_dData_dList.v_length (dtb__10).Elab_dTypes.f_DtInst_dtInstTele)) (dtb__10).Elab_dTypes.f_DtInst_dtInstHead)) then (((((v_anyInstanceOverlap mc0) mc1) mc2) mc3) dtb__11) else ((fun nd_uscrut11 -> (match nd_uscrut11 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__10, dtb__11) -> (if ((((v_instanceExactQuiet mc0) (B_dData_dList.v_length mc2)) mc3) dtb__10) then (((((v_anyInstanceOverlap mc0) mc1) mc2) mc3) dtb__11) else (if (if mc1 then true else ((Elab_dMeta.v_isBlanketInstHead (B_dData_dList.v_length (dtb__10).Elab_dTypes.f_DtInst_dtInstTele)) (dtb__10).Elab_dTypes.f_DtInst_dtInstHead)) then (((((v_anyInstanceOverlap mc0) mc1) mc2) mc3) dtb__11) else (let nd_uscrut11 = (((((v_headsOverlap mc0) mc2) mc3) (dtb__10).Elab_dTypes.f_DtInst_dtInstTele) (dtb__10).Elab_dTypes.f_DtInst_dtInstHead) in (match nd_uscrut11 with
   | { B_dData_dPair.f_Pair_first = dtb__12; B_dData_dPair.f_Pair_second = dtb__13 } -> (if dtb__12 then { B_dData_dPair.f_Pair_first = (B_dData_dMaybe.C_Maybe_Just (C_InstClash_ClashOverlap)); B_dData_dPair.f_Pair_second = dtb__13 } else (((((v_anyInstanceOverlap mc0) mc1) mc2) mc3) dtb__11))
   | _ -> failwith "DT: impossible branch"
-)) (((((v_headsOverlap mc0) mc2) mc3) (dtb__10).Elab_dTypes.f_DtInst_dtInstTele) (dtb__10).Elab_dTypes.f_DtInst_dtInstHead))))
+))))
   | B_dData_dList.C_List_Nil -> { B_dData_dPair.f_Pair_first = B_dData_dMaybe.C_Maybe_Nothing; B_dData_dPair.f_Pair_second = mc0 }
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dList.C_List_Nil -> (match mc4 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__14, dtb__15) -> (if ((((v_instanceExactQuiet mc0) (B_dData_dList.v_length mc2)) mc3) dtb__14) then (((((v_anyInstanceOverlap mc0) mc1) mc2) mc3) dtb__15) else (if (if mc1 then true else ((Elab_dMeta.v_isBlanketInstHead (B_dData_dList.v_length (dtb__14).Elab_dTypes.f_DtInst_dtInstTele)) (dtb__14).Elab_dTypes.f_DtInst_dtInstHead)) then (((((v_anyInstanceOverlap mc0) mc1) mc2) mc3) dtb__15) else ((fun nd_uscrut9 -> (match nd_uscrut9 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__14, dtb__15) -> (if ((((v_instanceExactQuiet mc0) (B_dData_dList.v_length mc2)) mc3) dtb__14) then (((((v_anyInstanceOverlap mc0) mc1) mc2) mc3) dtb__15) else (if (if mc1 then true else ((Elab_dMeta.v_isBlanketInstHead (B_dData_dList.v_length (dtb__14).Elab_dTypes.f_DtInst_dtInstTele)) (dtb__14).Elab_dTypes.f_DtInst_dtInstHead)) then (((((v_anyInstanceOverlap mc0) mc1) mc2) mc3) dtb__15) else (let nd_uscrut9 = (((((v_headsOverlap mc0) mc2) mc3) (dtb__14).Elab_dTypes.f_DtInst_dtInstTele) (dtb__14).Elab_dTypes.f_DtInst_dtInstHead) in (match nd_uscrut9 with
   | { B_dData_dPair.f_Pair_first = dtb__16; B_dData_dPair.f_Pair_second = dtb__17 } -> (if dtb__16 then { B_dData_dPair.f_Pair_first = (B_dData_dMaybe.C_Maybe_Just (C_InstClash_ClashOverlap)); B_dData_dPair.f_Pair_second = dtb__17 } else (((((v_anyInstanceOverlap mc0) mc1) mc2) mc3) dtb__15))
   | _ -> failwith "DT: impossible branch"
-)) (((((v_headsOverlap mc0) mc2) mc3) (dtb__14).Elab_dTypes.f_DtInst_dtInstTele) (dtb__14).Elab_dTypes.f_DtInst_dtInstHead))))
+))))
   | B_dData_dList.C_List_Nil -> { B_dData_dPair.f_Pair_first = B_dData_dMaybe.C_Maybe_Nothing; B_dData_dPair.f_Pair_second = mc0 }
   | _ -> failwith "DT: impossible branch"
 )

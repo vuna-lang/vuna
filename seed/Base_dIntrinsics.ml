@@ -369,23 +369,23 @@ let v_canonicalReprOf = (fun (name : string) -> (match (v_findCanonicalFamily na
 ))
 
 # 725 "Vuna/Compiler/Base/Intrinsics.vuna"
-let v_isUnboxedCanonical = (fun (name : string) -> ((fun nd_uscrut1 -> (match nd_uscrut1 with
+let v_isUnboxedCanonical = (fun (name : string) -> (let nd_uscrut1 = (v_canonicalReprOf name) in (match nd_uscrut1 with
   | B_dData_dMaybe.C_Maybe_Nothing -> false
   | B_dData_dMaybe.C_Maybe_Just (dtb__62) -> (match dtb__62 with
   | C_FamilyRepr_FamReprBoxed -> false
   | _ -> true
 )
   | _ -> failwith "DT: impossible branch"
-)) (v_canonicalReprOf name)))
+)))
 
 # 733 "Vuna/Compiler/Base/Intrinsics.vuna"
-let v_isBoolCanonical = (fun (name : string) -> ((fun nd_uscrut1 -> (match nd_uscrut1 with
+let v_isBoolCanonical = (fun (name : string) -> (let nd_uscrut1 = (v_canonicalReprOf name) in (match nd_uscrut1 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__63) -> (match dtb__63 with
   | C_FamilyRepr_FamReprBool -> true
   | _ -> false
 )
   | _ -> false
-)) (v_canonicalReprOf name)))
+)))
 
 # 740 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_cmpSpecializedTyNames = (B_dData_dList.C_List__x58__x58_ (v_intTypeName, (B_dData_dList.C_List__x58__x58_ (v_strTypeName, (B_dData_dList.C_List__x58__x58_ (v_floatTypeName, (B_dData_dList.C_List__x58__x58_ (v_boolTypeName, B_dData_dList.C_List_Nil))))))))
