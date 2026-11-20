@@ -969,7 +969,10 @@ unusedImportWarnings modules imports decls sourceDecls reexports =
       else
         filter (\n => n /= interpMethodName) names0
     nameSet = HashMap.ofNames names
-  in unusedImportWarningsGo modules nameSet reexports imports
+    -- 源码里出现过的名字（rename 前）：fixity 声明不进 `Decl`，某个 import 提供的 fixity
+    -- 是否真的被用到只能看源码里是否写了那个运算符。
+    sourceNames = HashMap.ofNames (concatMap declRefNames sourceDecls)
+  in unusedImportWarningsGo modules nameSet sourceNames imports decls reexports imports
 
 -- | 源码里是否显式提到 `interp` / `Base.Trait.Interp.interp`（未解析 AST 的名字扫描）。
 interpReferencedInSource : List Decl -> Bool
@@ -978,15 +981,125 @@ interpReferencedInSource decls =
     names = concatMap declRefNames decls
   in memName "interp" names || memName interpMethodName names
 
-unusedImportWarningsGo : List Module -> HashMap String Bool -> List String -> List Import -> Check (List Diagnostic)
-unusedImportWarningsGo modules nameSet reexports [] = OkC []
-unusedImportWarningsGo modules nameSet reexports (imp :: rest) =
+unusedImportWarningsGo : List Module -> HashMap String Bool -> HashMap String Bool -> List Import -> List Decl -> List String -> List Import -> Check (List Diagnostic)
+unusedImportWarningsGo modules nameSet sourceNames imports decls reexports [] = OkC []
+unusedImportWarningsGo modules nameSet sourceNames imports decls reexports (imp :: rest) =
   Vuna.Compiler.Base.Common.bind (exportsOf modules (importName imp)) (
       \es =>
         let
-          used = memName (importName imp) reexports || anyTargetIn nameSet (map exportTargetOf es)
-        in Vuna.Compiler.Base.Common.bind (unusedImportWarningsGo modules nameSet reexports rest) (\more => OkC (if used then more else (::) (warnDiagAtMod (\d => withSuggestion (Suggestion "remove unused import ${imp.importName}" MachineApplicable [DiagEdit (importRemovalSpan imp.importSpan) ""]) d) imp.importSpan (UnusedImport imp.importName) [imp.importName]) more))
+          used = memName (importName imp) reexports || anyTargetIn nameSet (map exportTargetOf es) || importProvidesUsedFixity sourceNames modules imp || importProvidesDeclaredFixity decls modules imp || moduleDeclaresInstance modules imp
+        in Vuna.Compiler.Base.Common.bind (unusedImportWarningsGo modules nameSet sourceNames imports decls reexports rest) (\more => OkC (if used then more else (::) (unusedImportDiag imports decls imp) more))
     )
+
+-- unused import 诊断：能安全整行删除时才附 machine-applicable 编辑（空编辑列表的
+-- suggestion 会被下游误当成「已可应用」）。
+unusedImportDiag : List Import -> List Decl -> Import -> Diagnostic
+unusedImportDiag imports decls imp =
+  let
+    d = warnDiagAt imp.importSpan (UnusedImport imp.importName) [imp.importName]
+  in case importRemovalEdits imports decls imp of
+    [] => d
+    edits =>
+      withSuggestion (Suggestion "remove unused import ${imp.importName}" MachineApplicable edits) d
+
+-- | 该 import 的模块声明的 fixity 里，是否有运算符真的写进了源码。
+--
+-- fixity 表是全程序的（`Module` 只存本模块声明），`import` 是让声明生效的唯一手段；
+-- 而 fixity 声明不进 `Decl`，rename 结果里看不到引用，只能拿源码名比对。
+importProvidesUsedFixity : HashMap String Bool -> List Module -> Import -> Bool
+importProvidesUsedFixity sourceNames modules imp =
+  case findModule modules (importName imp) of
+    Nothing => False
+    Just m => anyNameIn sourceNames (fixityOpsOf (moduleFixitiesOf m))
+
+fixityOpsOf : List FixityDecl -> List String
+fixityOpsOf [] = []
+fixityOpsOf (d :: rest) = d.fixityOp :: fixityOpsOf rest
+
+-- | 本模块自己声明了运算符（trait 方法 / 顶层定义），而它的 fixity 由该 import 提供：
+-- 这个 import 是给**下游**用的（fixity 表随 import 闭包传播），不能算 unused。
+importProvidesDeclaredFixity : List Decl -> List Module -> Import -> Bool
+importProvidesDeclaredFixity decls modules imp =
+  case findModule modules (importName imp) of
+    Nothing => False
+    Just m => anyOpDeclared (fixityOpsOf (moduleFixitiesOf m)) (definedNamesOf decls)
+
+anyOpDeclared : List String -> List String -> Bool
+anyOpDeclared [] _ = False
+anyOpDeclared (op :: rest) names =
+  if anyNameSuffixIn op names then True else anyOpDeclared rest names
+
+anyNameSuffixIn : String -> List String -> Bool
+anyNameSuffixIn _ [] = False
+anyNameSuffixIn suffix (n :: rest) =
+  if n == suffix || endsWith ("." ++ suffix) n then True else anyNameSuffixIn suffix rest
+
+-- | 声明引入的名字（定义 / 签名 / axiom / extern / data / record / trait 方法）。
+definedNamesOf : List Decl -> List String
+definedNamesOf [] = []
+definedNamesOf (d :: rest) = append (definedNamesOfDecl d) (definedNamesOf rest)
+
+definedNamesOfDecl : Decl -> List String
+definedNamesOfDecl (DData dname params kind ctors derivings viaField repr lin sp) = (::) dname []
+definedNamesOfDecl (DRecord dname params fields derivings viaField repr lin sp) = (::) dname []
+definedNamesOfDecl (DTrait tname params supers methods sp) = tname :: traitMethodNames methods
+definedNamesOfDecl (DInstance ctxE head methods sp) = []
+definedNamesOfDecl (DSig name ctx ty sp) = (::) name []
+definedNamesOfDecl (DAxiom name ty sp) = (::) name []
+definedNamesOfDecl (DExtern name cName ty sp) = (::) name []
+definedNamesOfDecl (DFun name pats body sp) = (::) name []
+
+traitMethodNames : List TraitMethod -> List String
+traitMethodNames [] = []
+traitMethodNames (m :: rest) = m.traitMethodName :: traitMethodNames rest
+
+anyNameIn : HashMap String Bool -> List String -> Bool
+anyNameIn _ [] = False
+anyNameIn s (n :: rest) = if HashMap.member n s then True else anyNameIn s rest
+
+-- | 模块是否声明了实例。实例搜索与字典选择发生在 Elab（loader 之后），名字扫描看不到
+-- 「加载这些实例」这件事；声明了实例的模块被 import 就是可见副作用，不算 unused。
+moduleDeclaresInstance : List Module -> Import -> Bool
+moduleDeclaresInstance modules imp =
+  case findModule modules (importName imp) of
+    Nothing => False
+    Just m => anyInstanceDecl (moduleDeclsOf m)
+
+anyInstanceDecl : List Decl -> Bool
+anyInstanceDecl [] = False
+anyInstanceDecl ((DInstance _ _ _ _) :: _) = True
+anyInstanceDecl (_ :: rest) = anyInstanceDecl rest
+
+-- | unused import 的 machine-applicable 编辑：整行删除只在 import **独占该行**时成立。
+-- 同行的另一条 import、同行起头的声明都会被一起删掉，此时不给编辑（诊断照报）。
+importRemovalEdits : List Import -> List Decl -> Import -> List DiagEdit
+importRemovalEdits imports decls imp =
+  if importOwnsLine imports decls imp then [DiagEdit (importRemovalSpan imp.importSpan) ""] else []
+
+-- | `import` 关键字在行首（名字列 = `import` + 可选 `qualified` 的长度），且该行没有
+-- 其它 import / 声明。模块头与 import 同一行时名字列更大，同样被排除。
+importOwnsLine : List Import -> List Decl -> Import -> Bool
+importOwnsLine imports decls imp =
+  importStartsLine imp
+    && not (anyImportOnLine imports imp) && not (anyDeclOnLine decls (spanStartLine imp.importSpan))
+
+importStartsLine : Import -> Bool
+importStartsLine imp = spanStartCol imp.importSpan == (if imp.importIsQualified then 18 else 8)
+
+anyImportOnLine : List Import -> Import -> Bool
+anyImportOnLine [] imp = False
+anyImportOnLine (other :: rest) imp =
+  if spanStartOffset other.importSpan == spanStartOffset imp.importSpan then
+    anyImportOnLine rest imp
+  else if spanStartLine other.importSpan == spanStartLine imp.importSpan then
+    True
+  else
+    anyImportOnLine rest imp
+
+anyDeclOnLine : List Decl -> Int -> Bool
+anyDeclOnLine [] line = False
+anyDeclOnLine (d :: rest) line =
+  if spanStartLine (declSpan d) == line then True else anyDeclOnLine rest line
 
 -- 整行删除 import 的编辑 span：从行首到下一行行首（含换行）。
 importRemovalSpan : Span -> Span

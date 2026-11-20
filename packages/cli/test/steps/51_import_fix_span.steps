@@ -1,0 +1,12 @@
+# 51) unused import 的删除编辑只在 import 独占一行时给出：同一行还有别的 import（或声明）
+#     时，整行删除会连带删掉它们，因此只报诊断、不给 machine-applicable 编辑。
+run: sh -c 'd="$TMPDIR/m51-two-imports"; rm -rf "$d"; mkdir -p "$d/app"; printf "[package]\nname = \"m51-two-imports\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Data.Bits import Base.Data.Sha1\n\nmain : Int\nmain = 0\n" > "$d/app/Main.vuna"'
+run: "$VUNA" check -W --json "$TMPDIR/m51-two-imports" 2>&1
+out-contains: UN_UnusedImport
+out-not-contains: machine-applicable
+# 独占一行的未使用 import 仍给出整行删除编辑（从行首到下一行行首）。
+run: sh -c 'd="$TMPDIR/m51-one-import"; rm -rf "$d"; mkdir -p "$d/app"; printf "[package]\nname = \"m51-one-import\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Data.Bits\n\nmain : Int\nmain = 0\n" > "$d/app/Main.vuna"'
+run: "$VUNA" check -W --json "$TMPDIR/m51-one-import" 2>&1
+out-contains: UN_UnusedImport
+out-contains: machine-applicable
+out-contains: "newText":""

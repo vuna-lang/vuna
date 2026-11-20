@@ -28,7 +28,8 @@ ID 是稳定引用（`层前缀-序号`）：条目关闭即删除该行（历�
 
 | ID | 位置 | 类 | 现象 → 后果 | 状态 |
 | --- | --- | --- | --- | --- |
-| LD-07 | `Flatten.vuna` 的 unused-import 判定 | C | 判据只认导出 target，漏「只为 fixity 而 import」；删除 span 假设独占一行 | 开放 |
+| LD-07 | `Flatten.vuna` 的 unused-import 判定 | C | 判据只认导出 target，漏「只为 fixity 而 import」；删除 span 假设独占一行 | 已清（判据加 fixity / 本模块声明的运算符 / 实例模块 / `export import` 前缀条目；删除编辑只在 import 独占一行时给出；`check -W packages/base` 从 20 条降到 0；夹具 `warn_err/03`、`cli/steps/51`） |
+
 | LD-10 | `Resolve.vuna` 的解析特判 | C | `Nil/Cons/::` 特判、`>>=`→`bind` 双名回落、`Type` 头不解析实参、隐式 binder 只认 String 域 | 开放 |
 | LD-11 | `Resolve.vuna` 的内部名旁路 | B | `@vuna@…` 与「属于编译器包」直接放行 | 开放 |
 | LD-12 | `Fixity.vuna` 的 `reorderDecl` | C | 实例体里非 `DSig`/`DFun` 声明原样放行 → 延后成 internal error | 开放 |

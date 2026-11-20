@@ -94,9 +94,15 @@ Diagnostic = { id, severity, phase, category, code, message, labels, fields, tra
 实例的 `\a => \b =>` 不误报；显式 `0 x` binder 与它们同等对待。`UN_UnusedDefinition`
 只在入口路径检查（库包导出面未知，避免误报）。编译器生成的内部 binder（do 忽略 binder
 命名 `_`、trait 字典字段 `_f<n>`）同样不参与 `UN_UnusedBinder` / `UN_ShadowedBinder`。
-`UN_UnusedImport` 按「解析结果里实际引用的 canonical target（含重载构造子候选、do 链的
-bind 目标）+ 模块头 `module X` 重导出」判定（alias 归一到 import 名；模板字符串降级合成的
-`Base.Trait.Interp.interp` 不算使用）；warning 不写进 iface；check 结果缓存会带上 warning，但「干净模块复用」的运行可能不完整，
+`UN_UnusedImport` 的判据是「这个 import 对本次检查单元有可见贡献」，任一条成立即算使用：
+解析结果里实际引用的 canonical target（含重载构造子候选、do 链的 bind 目标）、重导出
+（模块头 `module X` / `export module`，以及 `export import B (x, T(..))` 这类带 `B.` 前缀的
+条目）、**fixity**（该模块声明的运算符在本模块源码里出现，或本模块自己声明了这个运算符——
+fixity 表随 import 闭包传播，要留给下游）、以及**实例**（实例搜索发生在 Elab，loader 的
+名字扫描看不到「加载实例」这件事，声明了实例的模块一律算已使用）。alias 归一到 import 名；
+模板字符串降级合成的 `Base.Trait.Interp.interp` 不算使用。删除建议只在 import 独占一行时
+给出 machine-applicable 编辑（同行还有别的 import / 声明时整行删除会连带删掉它们）。
+warning 不写进 iface；check 结果缓存会带上 warning，但「干净模块复用」的运行可能不完整，
 `-W` / `--deny-warnings` 因此强制本包模块重新精化以避免漏报（见
 [tooling.md](tooling.md) 退出码一节）。
 

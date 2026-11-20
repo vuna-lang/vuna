@@ -7,7 +7,6 @@ import Base.Trait.Hashable
 import Base.Data.List
 import Base.Trait.Foldable
 import Base.Trait.Monad
-import Base.Trait.Monoid
 import Base.Trait.Traversable
 import Base.Data.Pair
 -- 容器 `Show` 实例（`Interp` 由 Base.Trait.Interp 的 blanket 实例免费获得）。

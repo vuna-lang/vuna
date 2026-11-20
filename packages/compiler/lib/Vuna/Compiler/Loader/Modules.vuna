@@ -272,7 +272,33 @@ reexportedImportNamesGo imports ((XNamespace name _ _) :: rest) acc =
         reexportedImportNamesGo imports rest acc
       else
         reexportedImportNamesGo imports rest ((::) m acc)
-reexportedImportNamesGo imports (_ :: rest) acc = reexportedImportNamesGo imports rest acc
+-- `export import B (x, T(..))` 的条目带 `B.`（或 alias）前缀：条目由 flatten 解析，本身就
+-- 构成对该 import 的使用（与 `export module B` 同义）。
+reexportedImportNamesGo imports (item :: rest) acc =
+  case qualifiedItemImport imports item of
+    Nothing => reexportedImportNamesGo imports rest acc
+    Just m =>
+      if memName m acc then
+        reexportedImportNamesGo imports rest acc
+      else
+        reexportedImportNamesGo imports rest ((::) m acc)
+
+-- 条目名前缀命中的 import 模块名（`XBare "B.x"` → 名为 `B` 的 import）。
+qualifiedItemImport : List Import -> ExportItem -> Maybe String
+qualifiedItemImport imports (XBare name _) = importByPrefix imports name
+qualifiedItemImport imports (XTypeAll name _) = importByPrefix imports name
+qualifiedItemImport imports (XTypeSome name _ _) = importByPrefix imports name
+qualifiedItemImport imports _ = Nothing
+
+importByPrefix : List Import -> String -> Maybe String
+importByPrefix [] name = Nothing
+importByPrefix (imp :: rest) name =
+  let
+    prefix =
+      case imp.importAlias of
+        Just alias => alias
+        Nothing => imp.importName
+  in if startsWith "${prefix}." name then Just (importName imp) else importByPrefix rest name
 
 -- | 有显式导出列表时才算重导出；无 module 头 / 隐式导出 = []。
 export reexportedImportNamesOfHeader : List Import -> Maybe ModDecl -> List String

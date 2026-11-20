@@ -1,0 +1,7 @@
+-- `Base.Internal.Operator` 只声明 fixity、没有导出：`+` 的名字来自 Base.Trait.Num，
+-- 但这个 import 让 `+` 的 fixity 生效，不能算 unused。
+import Base.Internal.Operator
+import Base.Trait.Num
+
+main : Int
+main = 1 + 2
