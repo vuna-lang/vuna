@@ -33,6 +33,7 @@ export devArgs : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock C
 devArgs ("suite" :: more) = suiteArgs more
 devArgs ("obs" :: more) = runObs more
 devArgs ("ir" :: "dump" :: more) = irDumpArgs more
+devArgs ("ir" :: "decode" :: more) = irDecodeArgs more
 devArgs ("errors" :: "gen" :: genArgs) = genErrorsArgs genArgs
 devArgs (["errors"]) = usageErrorForIn DevSpec.commands ["dev", "errors"]
 devArgs ("errors" :: bad :: _) = unknownSubcommand ["dev", "errors"] bad ["gen"]
@@ -42,6 +43,15 @@ devArgs (bad :: _) = unknownSubcommand ["dev"] bad ["suite", "obs", "errors", "i
 -- | `vuna dev ir dump [--out FILE] DIR`：检查 + lowering 后打印确定性 IR。
 irDumpArgs : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => List String -> Eff r Int
 irDumpArgs rest = dumpGo Nothing "raw" [] rest
+
+-- | `vuna dev ir decode FILE`：解码后端插件的 IR 载荷并打印（对齐 dump 与后端输入）。
+irDecodeArgs : Member nFs FsOp r, Member nConsole ConsoleOp r => List String -> Eff r Int
+irDecodeArgs (path :: _) =
+  do
+    text <- decodeIrFile path
+    _ <- consolePrint (text ++ "\n")
+    pure 0
+irDecodeArgs [] = usageErrorForIn DevSpec.commands ["dev", "ir", "decode"]
 
 dumpGo : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Maybe String -> String -> List String -> List String -> Eff r Int
 dumpGo out after dirs rest =

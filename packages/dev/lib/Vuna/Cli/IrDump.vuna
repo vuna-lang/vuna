@@ -11,6 +11,7 @@ import Vuna.Target.Ocaml.Term
 import Vuna.Compiler.Driver.Dt
 import Vuna.Compiler.Frontend.Packages.Pkg
 import Vuna.Ir.Anf
+import Vuna.Ir.Codec
 import Vuna.Ir.Cps
 import Vuna.Ir.Model
 import Vuna.Cli.IrRender
@@ -32,6 +33,18 @@ dumpIr after ctx entry =
             in case lowerProgramOf pkg.checkedProgram.dtProgDatas pkg.checkedProgram.dtProgDefs pkg.checkedProgram.dtProgGlobals of
               ErrC e => ErrC e
               OkC program => dumpAfter after program
+      )
+
+-- | `vuna dev ir decode FILE`：把后端插件收到的 IR 载荷（`Ir.Codec` 文本）解回渲染形式。
+-- 用于把「dump 看到的 IR」与「插件实际拿到的 IR」对齐：载荷里的 def 集是后端可达子集。
+export decodeIrFile : Member nFs FsOp r => String -> Eff r String
+decodeIrFile path =
+  do
+    text <- EffFs.fsReadFile path
+    pure (
+        case decodeProgram (strLength text + 1) text of
+          Nothing => "decode failed: ${path}"
+          Just program => renderDefs (concatMap irGroupDefs (irProgUnitOf program).irUnitGroups)
       )
 
 dumpAfter : String -> IrProgram -> Check String
