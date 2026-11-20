@@ -1196,8 +1196,8 @@ missingTargets decls existing =
     (\n => not (memName n (sigNamesOf decls)) && not (memName n existing))
     (dedupStrs (funNamesOf decls))
 
--- | 内部：对缺签名的定义跑自动推断，把签名插到块首后复查；推断或复查失败都回到 `stOrig`
--- 并提示手写签名。
+-- | 内部：对缺签名的定义跑自动推断，把签名插到**对应定义**之前后复查；推断或复查失败都
+-- 回到 `stOrig` 并提示手写签名。
 inferAndAppend : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => ReplState -> ReplState -> String -> List String -> Eff r ReplOutcome
 inferAndAppend stOrig stRemoved text targets =
   let
@@ -1212,7 +1212,7 @@ inferAndAppend stOrig stRemoved text targets =
           pure (ReplContinue stOrig)
       OkC sigs =>
         let
-          text2 = join "" (map sigLine sigs) ++ text
+          text2 = insertSigLines sigs text
         in do
           checkR <- checkProgram ctx "${bufferProgram stRemoved}\n${text2}\n"
           case checkR of
@@ -1225,6 +1225,31 @@ inferAndAppend stOrig stRemoved text targets =
 -- | 内部：把 `(名字, 类型)` 渲染成一行签名源码。
 sigLine : Pair String String -> String
 sigLine p = "${firstOf p} : ${secondOf p}\n"
+
+-- | 内部：把推断出的签名插到各定义自己的首行**之前**。一个 `:{ ... :}` 块可以有多个定义，
+--   全部签名前置会把同名子句挤出各自的定义块（`PS_ClauseNotAdjacent`）。
+insertSigLines : List (Pair String String) -> String -> String
+insertSigLines sigs text = join "\n" (insertSigLinesGo sigs (lines text))
+
+insertSigLinesGo : List (Pair String String) -> List String -> List String
+insertSigLinesGo sigs [] = []
+insertSigLinesGo sigs (l :: rest) =
+  case sigForLine sigs (trim l) of
+    Just s => trimRight (sigLine s) :: l :: insertSigLinesGo (dropSigName (firstOf s) sigs) rest
+    Nothing => l :: insertSigLinesGo sigs rest
+
+-- | 内部：该行是否是一个待补签名定义的首行（名字后紧跟空格或 `=`）。
+sigForLine : List (Pair String String) -> String -> Maybe (Pair String String)
+sigForLine [] line = Nothing
+sigForLine (s :: rest) line =
+  let
+    n = firstOf s
+  in if startsWith "${n} " line || startsWith "${n}=" line then Just s else sigForLine rest line
+
+-- | 内部：同一个定义只用一次签名（后续子句行也以同名字开头）。
+dropSigName : String -> List (Pair String String) -> List (Pair String String)
+dropSigName n [] = []
+dropSigName n (s :: rest) = if firstOf s == n then rest else s :: dropSigName n rest
 
 -- ---------------------------------------------------------------
 -- 工具接口会话
