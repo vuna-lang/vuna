@@ -18,6 +18,10 @@ import Base.Trait.Ord
 export data Cursor : Row -> Type -> Type where
   MkCursor : {r : Row} -> {a : Type} -> (Unit -> Eff r (Maybe a)) -> Cursor r a
 
+-- | 用一步函数建游标（`stdinReadLine`、按块读文件的 `fsFileCursor` 都走这里）。
+export cursorOfStep : (Unit -> Eff r (Maybe a)) -> Cursor r a
+cursorOfStep f = MkCursor f
+
 -- | 前进一格；源结束时给 `Nothing`。
 export next : Cursor r a -> Eff r (Maybe a)
 next (MkCursor f) = f MkUnit

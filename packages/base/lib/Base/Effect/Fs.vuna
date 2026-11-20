@@ -7,10 +7,13 @@
 module Base.Effect.Fs where
 
 import Base.Effect.Core
+import Base.Effect.Cursor
+import Base.Effect.Pure.IORef
 import Base.Trait.Eq
 import Base.Data.Maybe
 import Base.Data.Nat
 import Base.Trait.Monad
+import Base.Trait.Num
 import Base.Trait.Ord
 import Base.Data.Bool
 import Base.Data.List
@@ -22,6 +25,8 @@ import Base.Data.String
 export data FsOp(..) : Type -> Type where
   -- | 读整个文件。
   ReadFile : String -> FsOp String
+  -- | 按偏移读片段：从 `offset` 起读至多 `length` 字节；越过 EOF 给空串。
+  ReadFileRange : String -> Int -> Int -> FsOp String
   -- | 把整串写入文件。
   WriteFile : String -> String -> FsOp Nat
   -- | 原子写：写临时文件后 rename。
@@ -115,6 +120,31 @@ fsReadFile p =
   do
     sendCore (Named n FsOp) "fs" n (ReadFile p)
 
+-- | 通过命名实例按偏移读片段（`offset` 为负按 0；`length <= 0` 或越过 EOF 得空串）。
+export fsReadFileRange : Member n FsOp r => String -> Int -> Int -> Eff r String
+fsReadFileRange p offset length =
+  do
+    sendCore (Named n FsOp) "fs" n (ReadFileRange p offset length)
+
+-- | 按块读文件的游标：每次 `next` 读至多 `chunk` 字节（`chunk <= 0` 按 64 KiB），
+--   EOF 给 `Nothing`。消费方用 `Cursor.takeC` / `Cursor.foldC` 按上界收口。
+export fsFileCursor : Member n FsOp r => String -> Int -> Eff r (Cursor r String)
+fsFileCursor path chunk =
+  do
+    cell <- newRef 0
+    pure (cursorOfStep (\_ => fileChunkAt cell path (if chunk <= 0 then 65536 else chunk)))
+
+fileChunkAt : Member n FsOp r => IORef Int -> String -> Int -> Eff r (Maybe String)
+fileChunkAt cell path chunk =
+  readRef cell
+    >>= \off =>
+      fsReadFileRange path off chunk
+        >>= \s =>
+          if strLength s <= 0 then
+            pure Nothing
+          else
+            writeRef cell (off + strLength s) >>= \_ => pure (Just s)
+
 -- | 通过命名实例把整串写入文件，返回写入字节数（`Nat`）。
 export fsWriteFile : Member n FsOp r => String -> String -> Eff r Nat
 fsWriteFile p s =
@@ -203,6 +233,11 @@ fsOpHIOHost i op k =
         s <- raise (@vuna@host@tryReadFile p)
         ok <- fsHostStatus
         if ok /= 0 then fsFailAt (fsErrorOfCode "readFile ${p}" ok) else k s
+    ReadFileRange p offset length =>
+      do
+        s <- raise (@vuna@host@tryReadFileRange p offset length)
+        ok <- fsHostStatus
+        if ok /= 0 then fsFailAt (fsErrorOfCode "readFileRange ${p}" ok) else k s
     WriteFile p s =>
       do
         _ <- raise (@vuna@host@tryWriteFile p s)
