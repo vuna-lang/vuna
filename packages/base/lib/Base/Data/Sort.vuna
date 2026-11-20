@@ -29,10 +29,8 @@ sortedBy le (x :: y :: rest) = le x y && sortedBy le (y :: rest)
 
 -- | 内部：长度是否不超过 `k`（最多走 `k` 步；走满仍未到表尾即 `False`）。
 shortList : Int -> List a -> Bool
-shortList k xs =
-  case xs of
-    [] => True
-    _ :: rest => if k <= 0 then False else shortList (k - 1) rest
+shortList k [] = True
+shortList k (_ :: rest) = if k <= 0 then False else shortList (k - 1) rest
 
 -- | 内部：把 `y` 插到已排序列表的第一个「不小于它」的位置之前，保持稳定。
 insertBy : (a -> a -> Bool) -> a -> List a -> List a
@@ -51,13 +49,11 @@ revOnto (x :: xs) acc = revOnto xs (x :: acc)
 
 -- | 内部：两两拆半（尾递归），`left` / `right` 保持原相对顺序。
 splitHalves : List a -> List a -> List a -> Pair (List a) (List a)
-splitHalves left right xs =
-  case xs of
-    [] => Pair left right
-    x :: rest =>
-      case rest of
-        [] => Pair (x :: left) right
-        y :: more => splitHalves (x :: left) (y :: right) more
+splitHalves left right [] = Pair left right
+splitHalves left right (x :: rest) =
+  case rest of
+    [] => Pair (x :: left) right
+    y :: more => splitHalves (x :: left) (y :: right) more
 
 -- | 内部：两路归并（尾递归，结果经 `revOnto` 还原顺序）；相等时取左侧，保持稳定。
 mergeOnto : (a -> a -> Bool) -> List a -> List a -> List a -> List a

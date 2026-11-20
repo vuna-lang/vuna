@@ -334,11 +334,9 @@ annotHeadTy fuel dflt env binders g args =
 -- | 运行时项的类型：`TVar` 用**运行时下标**解析（擦除后 Core 的运行时位置）。
 -- 其余形状（数据族 / 构造子 / 全局头）里的类型实参仍走原始上下文的 `annotTyOf`。
 export annotRunTyOf : LwEnv -> List IrBinder -> Term -> Maybe IrTy
-annotRunTyOf env binders t =
-  case t of
-    TVar _ i _ => binderTyAtRuntime i binders
-    TIf _ a _ => annotRunTyOf env binders a
-    _ => annotTyOf env binders t
+annotRunTyOf env binders (TVar _ i _) = binderTyAtRuntime i binders
+annotRunTyOf env binders (TIf _ a _) = annotRunTyOf env binders a
+annotRunTyOf env binders t = annotTyOf env binders t
 
 -- 运行时下标 → binder 类型（跳过擦除占位）。
 binderTyAtRuntime : Int -> List IrBinder -> Maybe IrTy

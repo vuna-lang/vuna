@@ -936,10 +936,8 @@ recordFieldEntries (d :: rest) =
     _ => prev
 
 reprAlias : ReprTier -> Bool
-reprAlias t =
-  case t of
-    ReprAlias => True
-    _ => False
+reprAlias ReprAlias = True
+reprAlias _ = False
 
 fieldIndexOfEntries : String -> List (Pair String Int) -> Maybe Int
 fieldIndexOfEntries name entries =

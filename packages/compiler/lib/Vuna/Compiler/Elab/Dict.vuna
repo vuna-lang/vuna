@@ -476,16 +476,14 @@ export data MemberLookup(..) : Type where
 -- `VNeutral (NGlobal 族 …)`，`quote` 一遍再匹配头部在热路径（每个隐式实参、每轮 pending
 -- 目标）上是纯浪费。
 export isMemberDomain : Ec -> Value -> Bool
-isMemberDomain _ec dom =
-  case dom of
-    VNeutral (NGlobal g sp) =>
-      if g == memberDomName then
-        case sp of
-          [_, _] => True
-          _ => False
-      else
-        False
-    _ => False
+isMemberDomain _ec (VNeutral (NGlobal g sp)) =
+  if g == memberDomName then
+    case sp of
+      [_, _] => True
+      _ => False
+  else
+    False
+isMemberDomain _ec _ = False
 
 memberSpine : Value -> Maybe (Pair Value Value)
 memberSpine (VNeutral (NGlobal g sp)) =

@@ -35,14 +35,12 @@ makeHeap x a b =
 
 -- | 内部：合并两个堆；较小根胜出，递归合并其右子树与另一堆。
 meld : Ord a => Heap a -> Heap a -> Heap a
-meld h1 h2 =
-  case h1 of
-    HEmpty => h2
-    HNode _ x1 l1 r1 =>
-      case h2 of
-        HEmpty => h1
-        HNode _ x2 l2 r2 =>
-          if x1 <= x2 then makeHeap x1 l1 (meld r1 h2) else makeHeap x2 l2 (meld h1 r2)
+meld HEmpty h2 = h2
+meld (h1@(HNode _ x1 l1 r1)) h2 =
+  case h2 of
+    HEmpty => h1
+    HNode _ x2 l2 r2 =>
+      if x1 <= x2 then makeHeap x1 l1 (meld r1 h2) else makeHeap x2 l2 (meld h1 r2)
 
 -- | 优先队列：左偏堆 + 元素计数；构造器不导出。
 export record PriorityQueue a where
@@ -61,17 +59,13 @@ push x (PriorityQueue h n) = PriorityQueue (meld (HNode 1 x HEmpty HEmpty) h) (n
 
 -- | 只读最小元素（O(1)）。
 export peek : PriorityQueue a -> Maybe a
-peek (PriorityQueue h _) =
-  case h of
-    HEmpty => Nothing
-    HNode _ x _ _ => Just x
+peek (PriorityQueue HEmpty _) = Nothing
+peek (PriorityQueue (HNode _ x _ _) _) = Just x
 
 -- | 出队最小元素并返回剩余队列（O(log n)）。
 export pop : PriorityQueue a -> Maybe (Pair a (PriorityQueue a))
-pop (PriorityQueue h n) =
-  case h of
-    HEmpty => Nothing
-    HNode _ x l r => Just (Pair x (PriorityQueue (meld l r) (n - 1)))
+pop (PriorityQueue HEmpty n) = Nothing
+pop (PriorityQueue (HNode _ x l r) n) = Just (Pair x (PriorityQueue (meld l r) (n - 1)))
 
 -- | 元素个数（`Nat`，O(1)）。
 export size : PriorityQueue a -> Nat

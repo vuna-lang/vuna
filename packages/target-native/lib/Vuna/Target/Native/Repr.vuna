@@ -86,15 +86,13 @@ nAddCounts a b =
     (a.ncSymbol + b.ncSymbol)
 
 nBump : NCls -> NCounts -> NCounts
-nBump cls c =
-  case cls of
-    NClsPtr => { c | ncPtr = c.ncPtr + 1 }
-    NClsStatic => { c | ncStatic = c.ncStatic + 1 }
-    NClsScalar => { c | ncScalar = c.ncScalar + 1 }
-    NClsVar => { c | ncVar = c.ncVar + 1 }
-    NClsOpaque => { c | ncOpaque = c.ncOpaque + 1 }
-    NClsMissing => { c | ncMissing = c.ncMissing + 1 }
-    NClsSymbol => { c | ncSymbol = c.ncSymbol + 1 }
+nBump NClsPtr c = { c | ncPtr = c.ncPtr + 1 }
+nBump NClsStatic c = { c | ncStatic = c.ncStatic + 1 }
+nBump NClsScalar c = { c | ncScalar = c.ncScalar + 1 }
+nBump NClsVar c = { c | ncVar = c.ncVar + 1 }
+nBump NClsOpaque c = { c | ncOpaque = c.ncOpaque + 1 }
+nBump NClsMissing c = { c | ncMissing = c.ncMissing + 1 }
+nBump NClsSymbol c = { c | ncSymbol = c.ncSymbol + 1 }
 
 nTotal : NCounts -> Int
 nTotal c = c.ncPtr + c.ncStatic + c.ncScalar + c.ncVar + c.ncOpaque + c.ncMissing + c.ncSymbol
@@ -188,144 +186,138 @@ nRtCls sym =
   else if nRtPtr sym then NClsPtr else if nRtUnknown sym then NClsVar else NClsSymbol
 
 nRtScalar : String -> Bool
-nRtScalar sym =
-  case sym of
-    "+" => True
-    "-" => True
-    "*" => True
-    "/" => True
-    "&&" => True
-    "||" => True
-    "bitAnd" => True
-    "bitOr" => True
-    "bitXor" => True
-    "bitNot" => True
-    "bitShl" => True
-    "bitShr" => True
-    "assert" => True
-    "bi_eq_int" => True
-    "bi_neq_int" => True
-    "bi_lt_int" => True
-    "bi_le_int" => True
-    "bi_gt_int" => True
-    "bi_ge_int" => True
-    "bi_eq_str" => True
-    "bi_neq_str" => True
-    "bi_lt_str" => True
-    "bi_le_str" => True
-    "bi_gt_str" => True
-    "bi_ge_str" => True
-    "bi_lt_bool" => True
-    "bi_le_bool" => True
-    "bi_gt_bool" => True
-    "bi_ge_bool" => True
-    "bi_eq_float" => True
-    "bi_neq_float" => True
-    "bi_lt_float" => True
-    "bi_le_float" => True
-    "bi_gt_float" => True
-    "bi_ge_float" => True
-    "natAdd" => True
-    "natSub" => True
-    "natMul" => True
-    "natDiv" => True
-    "natToInt" => True
-    "natFromInt" => True
-    "@ir@natSucc" => True
-    "strLength" => True
-    "strAt" => True
-    "strHash" => True
-    "effectId" => True
-    "effTimeUs" => True
-    "effTimeUs_host" => True
-    "intFromFloat" => True
-    "arrayLength" => True
-    "prim_eff_print" => True
-    "prim_eff_eprint" => True
-    "prim_eff_exit" => True
-    "prim_eff_sleep" => True
-    "prim_eff_writeRef" => True
-    "prim_eff_fileMtime" => True
-    "prim_eff_fileSize" => True
-    "prim_eff_isDirectory" => True
-    "prim_eff_fileExists" => True
-    "prim_eff_runIn" => True
-    "prim_eff_spawn" => True
-    "prim_eff_wait" => True
-    "@vuna@debug@on" => True
-    "@vuna@debug@line" => True
-    "@vuna@obs@level" => True
-    "@vuna@obs@log" => True
-    "@vuna@obs@counter" => True
-    "@vuna@obs@mark" => True
-    "@vuna@obs@spanBegin" => True
-    "@vuna@obs@spanEnd" => True
-    "@vuna@obs@sampleStart" => True
-    "@vuna@obs@sampleStop" => True
-    _ => False
+nRtScalar "+" = True
+nRtScalar "-" = True
+nRtScalar "*" = True
+nRtScalar "/" = True
+nRtScalar "&&" = True
+nRtScalar "||" = True
+nRtScalar "bitAnd" = True
+nRtScalar "bitOr" = True
+nRtScalar "bitXor" = True
+nRtScalar "bitNot" = True
+nRtScalar "bitShl" = True
+nRtScalar "bitShr" = True
+nRtScalar "assert" = True
+nRtScalar "bi_eq_int" = True
+nRtScalar "bi_neq_int" = True
+nRtScalar "bi_lt_int" = True
+nRtScalar "bi_le_int" = True
+nRtScalar "bi_gt_int" = True
+nRtScalar "bi_ge_int" = True
+nRtScalar "bi_eq_str" = True
+nRtScalar "bi_neq_str" = True
+nRtScalar "bi_lt_str" = True
+nRtScalar "bi_le_str" = True
+nRtScalar "bi_gt_str" = True
+nRtScalar "bi_ge_str" = True
+nRtScalar "bi_lt_bool" = True
+nRtScalar "bi_le_bool" = True
+nRtScalar "bi_gt_bool" = True
+nRtScalar "bi_ge_bool" = True
+nRtScalar "bi_eq_float" = True
+nRtScalar "bi_neq_float" = True
+nRtScalar "bi_lt_float" = True
+nRtScalar "bi_le_float" = True
+nRtScalar "bi_gt_float" = True
+nRtScalar "bi_ge_float" = True
+nRtScalar "natAdd" = True
+nRtScalar "natSub" = True
+nRtScalar "natMul" = True
+nRtScalar "natDiv" = True
+nRtScalar "natToInt" = True
+nRtScalar "natFromInt" = True
+nRtScalar "@ir@natSucc" = True
+nRtScalar "strLength" = True
+nRtScalar "strAt" = True
+nRtScalar "strHash" = True
+nRtScalar "effectId" = True
+nRtScalar "effTimeUs" = True
+nRtScalar "effTimeUs_host" = True
+nRtScalar "intFromFloat" = True
+nRtScalar "arrayLength" = True
+nRtScalar "prim_eff_print" = True
+nRtScalar "prim_eff_eprint" = True
+nRtScalar "prim_eff_exit" = True
+nRtScalar "prim_eff_sleep" = True
+nRtScalar "prim_eff_writeRef" = True
+nRtScalar "prim_eff_fileMtime" = True
+nRtScalar "prim_eff_fileSize" = True
+nRtScalar "prim_eff_isDirectory" = True
+nRtScalar "prim_eff_fileExists" = True
+nRtScalar "prim_eff_runIn" = True
+nRtScalar "prim_eff_spawn" = True
+nRtScalar "prim_eff_wait" = True
+nRtScalar "@vuna@debug@on" = True
+nRtScalar "@vuna@debug@line" = True
+nRtScalar "@vuna@obs@level" = True
+nRtScalar "@vuna@obs@log" = True
+nRtScalar "@vuna@obs@counter" = True
+nRtScalar "@vuna@obs@mark" = True
+nRtScalar "@vuna@obs@spanBegin" = True
+nRtScalar "@vuna@obs@spanEnd" = True
+nRtScalar "@vuna@obs@sampleStart" = True
+nRtScalar "@vuna@obs@sampleStop" = True
+nRtScalar _ = False
 
 nRtPtr : String -> Bool
-nRtPtr sym =
-  case sym of
-    "++" => True
-    "strFromInt" => True
-    "strFromFloat" => True
-    "strSubstring" => True
-    "strShow" => True
-    "strConcatMany" => True
-    "strPack" => True
-    "strSubstTemplate" => True
-    "strUnpack" => True
-    "@ir@showBool" => True
-    "@ir@showFloat" => True
-    "arrayEmpty" => True
-    "arrayMake" => True
-    "arraySet" => True
-    "arrayFromList" => True
-    "arrayToList" => True
-    "floatFromInt" => True
-    "floatAbs" => True
-    "floatSqrt" => True
-    "bi_add_float" => True
-    "bi_sub_float" => True
-    "bi_mul_float" => True
-    "bi_div_float" => True
-    "prim_eff_newRef" => True
-    "prim_eff_getenv" => True
-    "prim_eff_getcwd" => True
-    "prim_eff_execPath" => True
-    "prim_eff_getArgs" => True
-    "prim_eff_readFile" => True
-    "prim_eff_readFileRange" => True
-    "prim_eff_readDir" => True
-    "prim_eff_readLine" => True
-    "prim_eff_readBytes" => True
-    "@vuna@host@getenv" => True
-    "@vuna@host@getcwd" => True
-    "@vuna@host@execPath" => True
-    "@vuna@host@getArgs" => True
-    "@vuna@host@readDir" => True
-    "@vuna@host@readFile" => True
-    "@vuna@host@readFileRange" => True
-    "@vuna@host@readLine" => True
-    "@vuna@host@readBytes" => True
-    "@ir@m@runEff" => True
-    _ => False
+nRtPtr "++" = True
+nRtPtr "strFromInt" = True
+nRtPtr "strFromFloat" = True
+nRtPtr "strSubstring" = True
+nRtPtr "strShow" = True
+nRtPtr "strConcatMany" = True
+nRtPtr "strPack" = True
+nRtPtr "strSubstTemplate" = True
+nRtPtr "strUnpack" = True
+nRtPtr "@ir@showBool" = True
+nRtPtr "@ir@showFloat" = True
+nRtPtr "arrayEmpty" = True
+nRtPtr "arrayMake" = True
+nRtPtr "arraySet" = True
+nRtPtr "arrayFromList" = True
+nRtPtr "arrayToList" = True
+nRtPtr "floatFromInt" = True
+nRtPtr "floatAbs" = True
+nRtPtr "floatSqrt" = True
+nRtPtr "bi_add_float" = True
+nRtPtr "bi_sub_float" = True
+nRtPtr "bi_mul_float" = True
+nRtPtr "bi_div_float" = True
+nRtPtr "prim_eff_newRef" = True
+nRtPtr "prim_eff_getenv" = True
+nRtPtr "prim_eff_getcwd" = True
+nRtPtr "prim_eff_execPath" = True
+nRtPtr "prim_eff_getArgs" = True
+nRtPtr "prim_eff_readFile" = True
+nRtPtr "prim_eff_readFileRange" = True
+nRtPtr "prim_eff_readDir" = True
+nRtPtr "prim_eff_readLine" = True
+nRtPtr "prim_eff_readBytes" = True
+nRtPtr "@vuna@host@getenv" = True
+nRtPtr "@vuna@host@getcwd" = True
+nRtPtr "@vuna@host@execPath" = True
+nRtPtr "@vuna@host@getArgs" = True
+nRtPtr "@vuna@host@readDir" = True
+nRtPtr "@vuna@host@readFile" = True
+nRtPtr "@vuna@host@readFileRange" = True
+nRtPtr "@vuna@host@readLine" = True
+nRtPtr "@vuna@host@readBytes" = True
+nRtPtr "@ir@m@runEff" = True
+nRtPtr _ = False
 
 -- 结果取决于实参/元素类型的符号：归到「类型层面本就不可判定」。
 nRtUnknown : String -> Bool
-nRtUnknown sym =
-  case sym of
-    "prim_erase" => True
-    "@vuna@prim@toObj" => True
-    "@vuna@prim@fromObj" => True
-    "arrayGet" => True
-    "prim_eff_readRef" => True
-    "@vuna@prim@readRef" => True
-    "@vuna@prim@readRef_host" => True
-    "@vuna@obs@span" => True
-    "@vuna@obs@spanLab" => True
-    _ => False
+nRtUnknown "prim_erase" = True
+nRtUnknown "@vuna@prim@toObj" = True
+nRtUnknown "@vuna@prim@fromObj" = True
+nRtUnknown "arrayGet" = True
+nRtUnknown "prim_eff_readRef" = True
+nRtUnknown "@vuna@prim@readRef" = True
+nRtUnknown "@vuna@prim@readRef_host" = True
+nRtUnknown "@vuna@obs@span" = True
+nRtUnknown "@vuna@obs@spanLab" = True
+nRtUnknown _ = False
 
 -- ---------------------------------------------------------------
 -- 绑定环境（推断）
@@ -355,10 +347,8 @@ nBinderCls decls fallback b =
         Nothing => NClsMissing
 
 nIsMissing : NCls -> Bool
-nIsMissing cls =
-  case cls of
-    NClsMissing => True
-    _ => False
+nIsMissing NClsMissing = True
+nIsMissing _ = False
 
 -- | 把一组 binder 加进环境；返回新环境、这些 binder 的计数（擦除占位不计）
 --   与其中缺 kind 的个数。
@@ -393,40 +383,38 @@ nDefTyIn name (d :: rest) =
 
 -- | 一个值位置的分类；控制构造（`let` / `if` / 尾标记）不产出独立的值，返回 `Nothing`。
 export nValueCls : List IrTyDecl -> List IrDef -> List (Pair IrBinder NCls) -> Ir -> Maybe NCls
-nValueCls decls defs env ir =
-  case ir of
-    IrVar b =>
-      case b.irBinderTy of
-        Just ty => Just (nKindOfTy decls (Just ty))
-        Nothing =>
-          case nLookupEnv b env of
-            Just cls => Just cls
-            Nothing => Just NClsMissing
-    IrGlobal name => Just (nKindOfTy decls (nDefTyIn name defs))
-    IrCtor _ _ _ _ => Just NClsPtr
-    IrRecord _ resTy _ => Just (nKindOfTy decls resTy)
-    IrRecUpd _ _ _ _ => Just NClsPtr
-    IrProj _ _ _ resTy => Just (nKindOfTy decls resTy)
-    IrRt _ => Just NClsStatic
-    IrRtApp sym _ => Just (nRtCls sym)
-    IrCast _ to _ => Just (nKindOfTy decls to)
-    IrInt _ => Just NClsScalar
-    IrStr _ => Just NClsPtr
-    IrBool _ => Just NClsScalar
-    IrFloatLit _ => Just NClsPtr
-    IrLam _ _ _ => Just NClsPtr
-    IrApp appTy _ _ =>
-      case appTy of
-        Just p => Just (nKindOfTy decls (Just (secondOf p)))
+nValueCls decls defs env (IrVar b) =
+  case b.irBinderTy of
+    Just ty => Just (nKindOfTy decls (Just ty))
+    Nothing =>
+      case nLookupEnv b env of
+        Just cls => Just cls
         Nothing => Just NClsMissing
-    IrCase _ resTy _ _ => Just (nKindOfTy decls resTy)
-    IrNatCase _ _ _ _ _ => Just NClsScalar
-    IrConcatMany _ => Just NClsPtr
-    IrEffThunk _ _ _ _ _ => Just NClsPtr
-    IrEffBind _ _ _ => Just NClsPtr
-    IrLet _ _ _ => Nothing
-    IrTail _ => Nothing
-    IrIf _ _ _ => Nothing
+nValueCls decls defs env (IrGlobal name) = Just (nKindOfTy decls (nDefTyIn name defs))
+nValueCls decls defs env (IrCtor _ _ _ _) = Just NClsPtr
+nValueCls decls defs env (IrRecord _ resTy _) = Just (nKindOfTy decls resTy)
+nValueCls decls defs env (IrRecUpd _ _ _ _) = Just NClsPtr
+nValueCls decls defs env (IrProj _ _ _ resTy) = Just (nKindOfTy decls resTy)
+nValueCls decls defs env (IrRt _) = Just NClsStatic
+nValueCls decls defs env (IrRtApp sym _) = Just (nRtCls sym)
+nValueCls decls defs env (IrCast _ to _) = Just (nKindOfTy decls to)
+nValueCls decls defs env (IrInt _) = Just NClsScalar
+nValueCls decls defs env (IrStr _) = Just NClsPtr
+nValueCls decls defs env (IrBool _) = Just NClsScalar
+nValueCls decls defs env (IrFloatLit _) = Just NClsPtr
+nValueCls decls defs env (IrLam _ _ _) = Just NClsPtr
+nValueCls decls defs env (IrApp appTy _ _) =
+  case appTy of
+    Just p => Just (nKindOfTy decls (Just (secondOf p)))
+    Nothing => Just NClsMissing
+nValueCls decls defs env (IrCase _ resTy _ _) = Just (nKindOfTy decls resTy)
+nValueCls decls defs env (IrNatCase _ _ _ _ _) = Just NClsScalar
+nValueCls decls defs env (IrConcatMany _) = Just NClsPtr
+nValueCls decls defs env (IrEffThunk _ _ _ _ _) = Just NClsPtr
+nValueCls decls defs env (IrEffBind _ _ _) = Just NClsPtr
+nValueCls decls defs env (IrLet _ _ _) = Nothing
+nValueCls decls defs env (IrTail _) = Nothing
+nValueCls decls defs env (IrIf _ _ _) = Nothing
 
 -- ---------------------------------------------------------------
 -- case 分支 binder：按构造子字段类型推断
@@ -452,17 +440,14 @@ nCtorFieldTysGo ctor (p :: rest) =
 -- | 分支 binder 的 fallback：有构造子就按字段类型（代入 scrutinee 的类型实参），
 --   否则用 scrutinee 自己的 kind。
 nAltBinderFallback : List IrTyDecl -> Maybe IrTy -> Maybe (Pair String String) -> Int -> Maybe NCls
-nAltBinderFallback decls caseTy mctor idx =
-  case mctor of
-    Just p =>
-      case nDeclOf (firstOf p) decls of
-        Just _ =>
-          case irTyAt (nCtorFieldTys (firstOf p) (secondOf p) decls) idx of
-            Just fieldTy =>
-              Just (nKindOfTy decls (Just (irTySubstVars (nCaseArgsOf caseTy) fieldTy)))
-            Nothing => Just (nKindOfTy decls caseTy)
+nAltBinderFallback decls caseTy (Just p) idx =
+  case nDeclOf (firstOf p) decls of
+    Just _ =>
+      case irTyAt (nCtorFieldTys (firstOf p) (secondOf p) decls) idx of
+        Just fieldTy => Just (nKindOfTy decls (Just (irTySubstVars (nCaseArgsOf caseTy) fieldTy)))
         Nothing => Just (nKindOfTy decls caseTy)
     Nothing => Just (nKindOfTy decls caseTy)
+nAltBinderFallback decls caseTy Nothing idx = Just (nKindOfTy decls caseTy)
 
 nAltEnvGo : List IrTyDecl -> Maybe IrTy -> Maybe (Pair String String) -> List IrBinder -> Int -> NBind -> NBind
 nAltEnvGo decls caseTy mctor [] _ acc = acc
@@ -548,11 +533,9 @@ nWalkNatAlt decls defs env (Just alt) =
 
 -- | 缺 kind 的值位置：按节点形状记账，决定下一步补哪一类推断。
 nMissingValueWalk : Ir -> NWalk
-nMissingValueWalk ir =
-  case ir of
-    IrVar _ => NWalk nZeroCounts (nBump NClsMissing nZeroCounts) 0 0 0 1 0 0
-    IrApp _ _ _ => NWalk nZeroCounts (nBump NClsMissing nZeroCounts) 0 0 0 0 1 0
-    _ => NWalk nZeroCounts (nBump NClsMissing nZeroCounts) 0 0 0 0 0 1
+nMissingValueWalk (IrVar _) = NWalk nZeroCounts (nBump NClsMissing nZeroCounts) 0 0 0 1 0 0
+nMissingValueWalk (IrApp _ _ _) = NWalk nZeroCounts (nBump NClsMissing nZeroCounts) 0 0 0 0 1 0
+nMissingValueWalk _ = NWalk nZeroCounts (nBump NClsMissing nZeroCounts) 0 0 0 0 0 1
 
 nWalk : List IrTyDecl -> List IrDef -> List (Pair IrBinder NCls) -> Ir -> NWalk
 nWalk decls defs env ir =
@@ -580,54 +563,48 @@ nWalk decls defs env ir =
   in nAddWalk (nAddWalk ownB ownV) kids
 
 nKids : List IrTyDecl -> List IrDef -> List (Pair IrBinder NCls) -> Ir -> NWalk
-nKids decls defs env ir =
-  case ir of
-    IrVar _ => nEmptyWalk
-    IrGlobal _ => nEmptyWalk
-    IrCtor _ _ _ args => nWalkList decls defs env args
-    IrRecord _ _ fields => nWalkFields decls defs env fields
-    IrProj base _ _ _ => nWalk decls defs env base
-    IrRecUpd base _ fields _ =>
-      nAddWalk (nWalk decls defs env base) (nWalkFields decls defs env fields)
-    IrRt _ => nEmptyWalk
-    IrRtApp _ args => nWalkList decls defs env args
-    IrCast _ _ inner => nWalk decls defs env inner
-    IrInt _ => nEmptyWalk
-    IrStr _ => nEmptyWalk
-    IrBool _ => nEmptyWalk
-    IrFloatLit _ => nEmptyWalk
-    IrLet bs scrut body =>
-      let
-        bound = nBindAll decls bs (nValueCls decls defs env scrut) env
-      in nAddWalk (nWalk decls defs env scrut) (nWalk decls defs bound.nbEnv body)
-    IrLam bs _ body =>
-      let
-        bound = nBindAll decls bs Nothing env
-      in nWalk decls defs bound.nbEnv body
-    IrApp _ f a => nAddWalk (nWalk decls defs env f) (nWalk decls defs env a)
-    IrTail inner => nWalk decls defs env inner
-    IrIf c th el =>
-      nAddWalk
-        (nWalk decls defs env c)
-        (nAddWalk (nWalk decls defs env th) (nWalk decls defs env el))
-    IrCase caseTy _ scrut alts =>
-      nAddWalk (nWalk decls defs env scrut) (nWalkAlts decls defs env caseTy alts)
-    IrNatCase scrut _ z s c =>
-      nAddWalk
-        (nWalk decls defs env scrut)
-        (nAddWalk (nWalkNatAlt decls defs env z) (nAddWalk (nWalkNatAlt decls defs env s) (nWalkNatAlt decls defs env c)))
-    IrConcatMany parts => nWalkList decls defs env parts
-    IrEffThunk _ _ _ _ prim => nWalk decls defs env prim
-    IrEffBind _ _ _ => nEmptyWalk
+nKids decls defs env (IrVar _) = nEmptyWalk
+nKids decls defs env (IrGlobal _) = nEmptyWalk
+nKids decls defs env (IrCtor _ _ _ args) = nWalkList decls defs env args
+nKids decls defs env (IrRecord _ _ fields) = nWalkFields decls defs env fields
+nKids decls defs env (IrProj base _ _ _) = nWalk decls defs env base
+nKids decls defs env (IrRecUpd base _ fields _) =
+  nAddWalk (nWalk decls defs env base) (nWalkFields decls defs env fields)
+nKids decls defs env (IrRt _) = nEmptyWalk
+nKids decls defs env (IrRtApp _ args) = nWalkList decls defs env args
+nKids decls defs env (IrCast _ _ inner) = nWalk decls defs env inner
+nKids decls defs env (IrInt _) = nEmptyWalk
+nKids decls defs env (IrStr _) = nEmptyWalk
+nKids decls defs env (IrBool _) = nEmptyWalk
+nKids decls defs env (IrFloatLit _) = nEmptyWalk
+nKids decls defs env (IrLet bs scrut body) =
+  let
+    bound = nBindAll decls bs (nValueCls decls defs env scrut) env
+  in nAddWalk (nWalk decls defs env scrut) (nWalk decls defs bound.nbEnv body)
+nKids decls defs env (IrLam bs _ body) =
+  let
+    bound = nBindAll decls bs Nothing env
+  in nWalk decls defs bound.nbEnv body
+nKids decls defs env (IrApp _ f a) = nAddWalk (nWalk decls defs env f) (nWalk decls defs env a)
+nKids decls defs env (IrTail inner) = nWalk decls defs env inner
+nKids decls defs env (IrIf c th el) =
+  nAddWalk (nWalk decls defs env c) (nAddWalk (nWalk decls defs env th) (nWalk decls defs env el))
+nKids decls defs env (IrCase caseTy _ scrut alts) =
+  nAddWalk (nWalk decls defs env scrut) (nWalkAlts decls defs env caseTy alts)
+nKids decls defs env (IrNatCase scrut _ z s c) =
+  nAddWalk
+    (nWalk decls defs env scrut)
+    (nAddWalk (nWalkNatAlt decls defs env z) (nAddWalk (nWalkNatAlt decls defs env s) (nWalkNatAlt decls defs env c)))
+nKids decls defs env (IrConcatMany parts) = nWalkList decls defs env parts
+nKids decls defs env (IrEffThunk _ _ _ _ prim) = nWalk decls defs env prim
+nKids decls defs env (IrEffBind _ _ _) = nEmptyWalk
 
 nWalkDefs : List IrTyDecl -> List IrDef -> List IrDef -> NWalk
-nWalkDefs decls defs defs0 =
-  case defs0 of
-    [] => nEmptyWalk
-    d :: rest =>
-      case d of
-        IrDef _ _ _ _ body _ _ _ => nAddWalk (nWalk decls defs [] body) (nWalkDefs decls defs rest)
-        IrExternDef _ _ _ _ => nWalkDefs decls defs rest
+nWalkDefs decls defs [] = nEmptyWalk
+nWalkDefs decls defs (d :: rest) =
+  case d of
+    IrDef _ _ _ _ body _ _ _ => nAddWalk (nWalk decls defs [] body) (nWalkDefs decls defs rest)
+    IrExternDef _ _ _ _ => nWalkDefs decls defs rest
 
 -- | binder（槽）与值位置的 kind 分布。缺类型的 binder 按绑定点推断。
 export nReprCounts : List IrTyDecl -> List IrDef -> NWalk

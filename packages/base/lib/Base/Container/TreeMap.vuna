@@ -37,17 +37,13 @@ mkTree key val l r = Node (1 + maxInt (heightTree l) (heightTree r)) key val l r
 
 -- | 内部：右旋（左子树过高时）。
 rotateRight : k -> v -> Tree k v -> Tree k v -> Tree k v
-rotateRight key val l r =
-  case l of
-    Node _ lk lv ll lr => mkTree lk lv ll (mkTree key val lr r)
-    Leaf => mkTree key val l r
+rotateRight key val (Node _ lk lv ll lr) r = mkTree lk lv ll (mkTree key val lr r)
+rotateRight key val (l@Leaf) r = mkTree key val l r
 
 -- | 内部：左旋（右子树过高时）。
 rotateLeft : k -> v -> Tree k v -> Tree k v -> Tree k v
-rotateLeft key val l r =
-  case r of
-    Node _ rk rv rl rr => mkTree rk rv (mkTree key val l rl) rr
-    Leaf => mkTree key val l r
+rotateLeft key val l (Node _ rk rv rl rr) = mkTree rk rv (mkTree key val l rl) rr
+rotateLeft key val l (r@Leaf) = mkTree key val l r
 
 -- | 内部：按两子树高度差恢复 AVL 平衡；单旋与双旋由内侧子树高度决定。
 rebalance : k -> v -> Tree k v -> Tree k v -> Tree k v
