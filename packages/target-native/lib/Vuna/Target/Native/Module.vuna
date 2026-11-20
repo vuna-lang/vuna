@@ -793,7 +793,7 @@ genScalarOp st pool (ScalarCmp cc) args =
                   inB = firstOf (secondOf pb)
                   rest = secondOf (secondOf pb)
                   res = scalarInstrs (ScalarCmp cc) rA rB
-                in Just (Pair (firstOf res) (Pair (append inA (append inB (secondOf res))) (rA :: rB :: Rax :: rest)))
+                in Just (Pair (firstOf res) (Pair (append inA (append inB (secondOf res))) (rA :: rB :: rest)))
               Nothing => Nothing
           Nothing => Nothing
       _ => Nothing
@@ -809,7 +809,7 @@ genScalarOp st pool ScalarNatFromInt args =
                   let
                     res = scalarInstrs ScalarNatFromInt (firstOf pa) s
                   in Just
-                    (Pair (firstOf res) (Pair (append (firstOf (secondOf pa)) (secondOf res)) (firstOf pa :: s :: rest2)))
+                    (Pair (firstOf res) (Pair (append (firstOf (secondOf pa)) (secondOf res)) (s :: rest2)))
                 [] => Nothing
             Nothing => Nothing
         [] => Nothing
@@ -831,7 +831,7 @@ genScalarOp st pool op args =
               let
                 res = scalarInstrs op (firstOf pa) (firstOf pa)
               in Just
-                (Pair (firstOf res) (Pair (append (firstOf (secondOf pa)) (secondOf res)) (firstOf pa :: secondOf (secondOf pa))))
+                (Pair (firstOf res) (Pair (append (firstOf (secondOf pa)) (secondOf res)) (secondOf (secondOf pa))))
             Nothing => Nothing
         [] => Nothing
     [a, b] =>
@@ -849,7 +849,7 @@ genScalarOp st pool op args =
                     restB = secondOf (secondOf pb)
                     res = scalarInstrs op rA rB
                   in Just
-                    (Pair (firstOf res) (Pair (append inA (append inB (secondOf res))) (rA :: rB :: restB)))
+                    (Pair (firstOf res) (Pair (append inA (append inB (secondOf res))) (rB :: restB)))
                 Nothing => Nothing
             Nothing => Nothing
         [] => Nothing

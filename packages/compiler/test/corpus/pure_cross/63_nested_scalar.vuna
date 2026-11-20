@@ -1,0 +1,16 @@
+-- 嵌套标量表达式：内层结果不能被外层实参的寄存器覆盖。
+paddedLen : Int -> Int
+paddedLen n =
+  let
+    r = n + 1 - (n + 1) / 64 * 64
+    z = if r <= 56 then 56 - r else 120 - r
+  in n + 1 + z + 8
+
+main : String
+main =
+  strFromInt (paddedLen 0)
+    ++ "|"
+    ++ strFromInt (paddedLen 1)
+    ++ "|"
+    ++ strFromInt (paddedLen 56)
+    ++ "|" ++ strFromInt (paddedLen 63) ++ "|" ++ strFromInt (paddedLen 64)
