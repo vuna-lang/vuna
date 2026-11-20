@@ -48,6 +48,7 @@ modules = [
   "Base.Effect.Exit",
   "Base.Effect.Exn",
   "Base.Effect.Fs",
+  "Base.Effect.Lazy",
   "Base.Effect.Net",
   "Base.Effect.Process",
   "Base.Effect.Pure",
