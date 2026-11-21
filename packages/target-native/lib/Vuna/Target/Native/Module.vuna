@@ -49,6 +49,17 @@ data AliasTarget : Type where
   AliasRt : String -> AliasTarget
   AliasGlobal : String -> AliasTarget
 
+-- | 调用点静态已知的被调用者。`KDirect` 走标准 ABI 直调（不需要闭包值）；
+--   `KClosure` 只知道闭包 arity，调用点仍从槽里取闭包，但可以跳过运行时 arity 检查
+--   与 `rt_apply` 回退。
+export data KnownCallee(..) : Type where
+  KDirect : String -> Int -> KnownCallee
+  KClosure : Int -> KnownCallee
+
+export calleeArity : KnownCallee -> Int
+calleeArity (KDirect _ n) = n
+calleeArity (KClosure n) = n
+
 nbind : NRes a -> (a -> NRes b) -> NRes b
 nbind (NOk x) k = k x
 nbind (NFail e) _ = NFail e
@@ -106,6 +117,9 @@ record FGen where
   fgSelfParams : List Int
   -- | 本次生成收集到的静态闭包对象（无捕获的函数值）。
   fgStatics : List NativeClosure
+  -- | binder id -> 调用点静态已知的被调用者（见 `KnownCallee`）。binder 身份在
+  --   整个 lowering 产物里唯一，所以表只增不减；跨闭包边界时按捕获集合筛一遍。
+  fgKnown : List (Pair Int KnownCallee)
 
 freshSlot : FGen -> Pair Int FGen
 freshSlot st =
@@ -578,6 +592,119 @@ aliasTargetOf fuel defs name =
                 _ => Nothing
             Nothing => Nothing
 
+-- | 调用点静态已知的被调用者。
+--
+--   来源只有「构造点可知」的形态：顶层函数 / 运行时叶子 / 立即 lambda / 绑定点上能
+--   解析到这些的 binder，以及它们的部分应用（`rt_apply` 的 shim 把 arity 减掉）。
+--   函数参数、case 字段与投影一律未知：运行时 arity 可以小于静态类型的箭头数
+--   （η-收缩定义当值时，wrapper 的 arity 是定义参数个数），所以不能只凭类型推 arity。
+export knownCalleeOf : List IrDef -> List (Pair Int KnownCallee) -> Ir -> Maybe KnownCallee
+knownCalleeOf defs known ir = knownCalleeFuel 256 defs known ir
+
+knownCalleeFuel : Int -> List IrDef -> List (Pair Int KnownCallee) -> Ir -> Maybe KnownCallee
+knownCalleeFuel fuel defs known ir =
+  if fuel <= 0 then
+    Nothing
+  else
+    case ir of
+      IrGlobal name => globalCallee (fuel - 1) defs name
+      IrRt sym => rtLeafCallee sym
+      IrLam bs _ _ =>
+        let
+          n = length (runtimeBinders bs)
+        in if n > 0 then Just (KClosure n) else Nothing
+      IrVar b => lookupKnown b.irBinderId known
+      IrCast _ _ inner => knownCalleeFuel (fuel - 1) defs known inner
+      IrTail inner => knownCalleeFuel (fuel - 1) defs known inner
+      IrApp _ _ _ =>
+        case flattenApp ir of
+          Pair head args => partialCallee (knownCalleeFuel (fuel - 1) defs known head) (length args)
+      _ => Nothing
+
+lookupKnown : Int -> List (Pair Int KnownCallee) -> Maybe KnownCallee
+lookupKnown _ [] = Nothing
+lookupKnown id (p :: rest) = if firstOf p == id then Just (secondOf p) else lookupKnown id rest
+
+rtLeafCallee : String -> Maybe KnownCallee
+rtLeafCallee sym =
+  case nativeRtTarget sym of
+    Nothing => Nothing
+    Just label =>
+      let
+        a = rtValueArityOf sym
+      in if a > 0 then Just (KDirect label a) else Nothing
+
+globalCallee : Int -> List IrDef -> String -> Maybe KnownCallee
+globalCallee fuel defs name =
+  if fuel <= 0 then
+    Nothing
+  else
+    case findDef name defs of
+      Nothing => Nothing
+      Just d =>
+        let
+          arity = irDefArity d
+        in if arity > 0 then
+          Just (KDirect (nativeFuncLabel name) arity)
+        else
+          case irDefBody d of
+            Nothing => Nothing
+            Just b =>
+              case stripTail b of
+                IrRt sym => rtLeafCallee sym
+                IrGlobal g => if g == name then Nothing else globalCallee (fuel - 1) defs g
+                IrLam bs _ _ =>
+                  let
+                    n = length (runtimeBinders bs)
+                  in if n > 0 then Just (KClosure n) else Nothing
+                IrApp _ _ _ =>
+                  case flattenApp (stripTail b) of
+                    Pair h args => partialCallee (knownCalleeFuel (fuel - 1) defs [] h) (length args)
+                _ => Nothing
+
+-- | 已知闭包被部分应用后的剩余 arity（与 `rt_apply` 的 shim 同口径）；不是部分应用时未知。
+partialCallee : Maybe KnownCallee -> Int -> Maybe KnownCallee
+partialCallee Nothing _ = Nothing
+partialCallee (Just kc) k =
+  let
+    a = calleeArity kc
+  in if k < a then Just (KClosure (a - k)) else Nothing
+
+-- | 闭包体只看得到自己的捕获值：已知表按捕获集合筛一遍。
+filterKnown : List (Pair IrBinder Int) -> List (Pair Int KnownCallee) -> List (Pair Int KnownCallee)
+filterKnown caps known = filter (knownKept caps) known
+
+knownKept : List (Pair IrBinder Int) -> Pair Int KnownCallee -> Bool
+knownKept caps (Pair id _) = anyCap id caps
+
+anyCap : Int -> List (Pair IrBinder Int) -> Bool
+anyCap _ [] = False
+anyCap id ((Pair b _) :: rest) = if b.irBinderId == id then True else anyCap id rest
+
+-- | 饱和的已知调用：`KDirect` 不生成闭包值，直接标准 ABI 调用；`KClosure` 仍从槽取
+--   闭包（`rdi`），但跳过运行时 arity 检查与 `rt_apply` 回退。
+genKnownApply : Int -> FGen -> Bool -> Ir -> List Ir -> KnownCallee -> NRes (Pair (List Instr) FGen)
+genKnownApply fuel st isTail head args kc =
+  if fuel <= 0 then
+    internal "native codegen fuel exhausted"
+  else
+    case kc of
+      KDirect label arity => if isTail && tailCallFits st (nativeStackArgCount arity nativeMaxArgs) then genTailCall (fuel - 1) st label args else genSaturatedCall (fuel - 1) st label args
+      KClosure arity =>
+        nbind (genExpr (fuel - 1) st head) (
+            \p =>
+              let
+                cloP = freshSlot (secondOf p)
+                clo = firstOf cloP
+              in nbind (genArgs (fuel - 1) (secondOf cloP) args) (
+                  \q =>
+                    let
+                      slots = firstOf (secondOf q)
+                      callIns = if isTail && tailCallFits st (nativeStackArgCount arity (length closureArgRegs)) then closureTailCallSlotsInstrs clo slots else closureCallSlotsInstrs clo slots
+                    in NOk (Pair (cat [firstOf p, storeSlot clo, firstOf q, callIns]) (secondOf (secondOf q)))
+                )
+          )
+
 -- | 全局应用。`irDefArity` 为 0 的定义是 η-收缩后的别名（body 本身就是函数值）：
 --   别名链解析到运行时叶子或目标定义时直接调用（饱和则内联标量叶子），否则
 --   取它的值再应用实参（与 wasm 侧 `genGlobalRef` 同口径）。
@@ -599,7 +726,10 @@ genGlobalCall fuel st isTail name args =
           case aliasTargetOf (length st.fgDefs) st.fgDefs name of
             Just (AliasRt sym) => genRtValueCall (fuel - 1) st isTail sym args
             Just (AliasGlobal g) => if g == name then genApplyHead (fuel - 1) st isTail (IrGlobal name) args else genGlobalCall (fuel - 1) st isTail g args
-            Nothing => genApplyHead (fuel - 1) st isTail (IrGlobal name) args
+            Nothing =>
+              case knownCalleeOf st.fgDefs st.fgKnown (IrGlobal name) of
+                Just kc => if length args == calleeArity kc then genKnownApply (fuel - 1) st isTail (IrGlobal name) args kc else genApplyHead (fuel - 1) st isTail (IrGlobal name) args
+                Nothing => genApplyHead (fuel - 1) st isTail (IrGlobal name) args
         else
           genApplyHead (fuel - 1) st isTail (IrGlobal name) args
 
@@ -986,7 +1116,8 @@ genExprAt fuel st isTail ir =
                     slotP = freshSlot st1
                     slot = firstOf slotP
                     st2 = secondOf slotP
-                  in nbind (genExprAt (fuel - 1) (pushBinderCls b slot (binderCls st1 (Just (valueCls st1 scrut)) b) st2) isTail body) (\q => NOk (Pair (append (firstOf p) (append (storeSlot slot) (firstOf q))) (restoreBinderScope (secondOf q) st1.fgSlots)))
+                    st3 = rememberCallee b scrut st2
+                  in nbind (genExprAt (fuel - 1) (pushBinderCls b slot (binderCls st1 (Just (valueCls st1 scrut)) b) st3) isTail body) (\q => NOk (Pair (append (firstOf p) (append (storeSlot slot) (firstOf q))) (restoreBinderScope (secondOf q) st1.fgSlots)))
                 _ => unsupported "native target: let with more than one runtime binder is not supported yet"
           )
       IrIf c t e =>
@@ -1060,19 +1191,35 @@ genBoolChain fuel st args isAnd =
 -- | 立即应用的 lambda：参数求值到槽后把体就地内联。体内残留的 `IrTail` 是「函数体
 --   结果位置」的注解，内联后已不在尾位置，必须用 `IrTail.stripTail` 去掉（只保留嵌套
 --   lambda 体里的标记，那是它们自己的函数体）；内联点的尾位置由调用方的 `isTail` 决定。
-genLamApp : Int -> FGen -> Bool -> IrBinder -> Ir -> Ir -> NRes (Pair (List Instr) FGen)
-genLamApp fuel st isTail b arg body =
+genLamApp : Int -> FGen -> Bool -> List IrBinder -> List Ir -> Ir -> NRes (Pair (List Instr) FGen)
+genLamApp fuel st isTail bs args body =
   if fuel <= 0 then
     internal "native codegen fuel exhausted"
   else
-    nbind (genExpr (fuel - 1) st arg) (
+    nbind (genArgs (fuel - 1) st args) (
         \p =>
           let
-            slotP = freshSlot (secondOf p)
-            slot = firstOf slotP
-            st1 = secondOf slotP
-          in nbind (genExprAt (fuel - 1) (pushBinderCls b slot (binderCls st1 (Just (valueCls st arg)) b) st1) isTail (stripTail body)) (\q => NOk (Pair (append (firstOf p) (append (storeSlot slot) (firstOf q))) (restoreBinderScope (secondOf q) st.fgSlots)))
+            st1 = bindLamArgs (secondOf (secondOf p)) bs args (firstOf (secondOf p))
+          in nbind (genExprAt (fuel - 1) st1 isTail (stripTail body)) (\q => NOk (Pair (append (firstOf p) (firstOf q)) (restoreBinderScope (secondOf q) st.fgSlots)))
       )
+
+-- | 把已求值到槽的形参绑定进作用域：槽 kind 与「已知被调用者」都跟过来。
+bindLamArgs : FGen -> List IrBinder -> List Ir -> List Int -> FGen
+bindLamArgs st [] args slots = st
+bindLamArgs st (b :: brest) [] slots = st
+bindLamArgs st (b :: brest) (a :: arest) [] = st
+bindLamArgs st (b :: brest) (a :: arest) (s :: srest) =
+  let
+    st1 = pushBinderCls b s (binderCls st (Just (valueCls st a)) b) st
+    st2 = rememberCallee b a st1
+  in bindLamArgs st2 brest arest srest
+
+-- | 记下 binder 的静态已知被调用者（如果有）。
+rememberCallee : IrBinder -> Ir -> FGen -> FGen
+rememberCallee b value st =
+  case knownCalleeOf st.fgDefs st.fgKnown value of
+    Just kc => { st | fgKnown = Pair b.irBinderId kc :: st.fgKnown }
+    Nothing => st
 
 genApp : Int -> FGen -> Bool -> Ir -> NRes (Pair (List Instr) FGen)
 genApp fuel st isTail ir =
@@ -1084,12 +1231,9 @@ genApp fuel st isTail ir =
         case head of
           IrGlobal name => genGlobalCall (fuel - 1) st isTail name args
           IrLam bs _ body =>
-            case runtimeBinders bs of
-              [b] =>
-                case args of
-                  [a] => genLamApp (fuel - 1) st isTail b a body
-                  _ => genApplyHead (fuel - 1) st isTail head args
-              _ => genApplyHead (fuel - 1) st isTail head args
+            let
+              rbs = runtimeBinders bs
+            in if length args > 0 && length rbs == length args then genLamApp (fuel - 1) st isTail rbs args body else genApplyHead (fuel - 1) st isTail head args
           IrRt s =>
             if s == irRtNatSucc then
               case args of
@@ -1101,18 +1245,80 @@ genApp fuel st isTail ir =
                 x :: rest => genExprAt (fuel - 1) st isTail (applyAllIr x rest)
             else
               genRtValueCall (fuel - 1) st isTail s args
-          -- 动态 head：求值成闭包后交给 `rt_apply`（饱和 / 部分 / 过度统一处理）。
-          _ => genApplyHead (fuel - 1) st isTail head args
+          -- 动态 head：构造点已知（lambda / 顶层函数 / 运行时叶子 / 它们的部分应用）时
+          -- 直接调用；其余求值成闭包后交给 `rt_apply`（饱和 / 部分 / 过度统一处理）。
+          _ =>
+            case knownCalleeOf st.fgDefs st.fgKnown head of
+              Just kc => if length args == calleeArity kc then genKnownApply (fuel - 1) st isTail head args kc else genApplyHead (fuel - 1) st isTail head args
+              Nothing => genApplyHead (fuel - 1) st isTail head args
 
 -- ---------------------------------------------------------------
 -- 闭包
 -- ---------------------------------------------------------------
 -- 表示（与 wasm 侧同一决策）：闭包 = 堆对象 `[code ptr][captured...]`。
 -- 调用约定：`rdi` = 闭包自身（env 基址），实参从 `rsi` 起（第 6 个起压栈）。
--- 捕获策略：创建时把**当前作用域里的全部 binder** 拷进闭包；函数入口再拷回本帧的槽。
--- 这样不需要单独的 free-variable 分析，语义正确；代价是闭包体积随作用域大小增长。
+-- 捕获策略：只把 body 真正引用到的（含嵌套 lambda 递归可见的）binder 拷进闭包；
+-- 没有捕获时闭包是只读常量（`vuna_static_*`），不分配。
 closureArgRegs : List Reg
 closureArgRegs = [Rsi, Rdx, Rcx, R8, R9]
+
+-- | 表达式引用到的 binder id（含嵌套 lambda 的体：外层闭包必须把内层闭包要用的值
+--   一并留在自己的帧里）。只收集身份，不区分绑定层级。
+export binderRefsOf : Ir -> List Int
+binderRefsOf (IrVar b) = [b.irBinderId]
+binderRefsOf (IrTail inner) = binderRefsOf inner
+binderRefsOf ir = binderRefsChildren ir
+
+binderRefsChildren : Ir -> List Int
+binderRefsChildren (IrCtor _ _ _ args) = binderRefsList args
+binderRefsChildren (IrRecord _ _ fields) = binderRefsFields fields
+binderRefsChildren (IrProj base _ _ _) = binderRefsOf base
+binderRefsChildren (IrRecUpd base _ fields _) = append (binderRefsOf base) (binderRefsFields fields)
+binderRefsChildren (IrRtApp _ args) = binderRefsList args
+binderRefsChildren (IrCast _ _ inner) = binderRefsOf inner
+binderRefsChildren (IrLet _ scrut body) = append (binderRefsOf scrut) (binderRefsOf body)
+binderRefsChildren (IrLam _ _ body) = binderRefsOf body
+binderRefsChildren (IrApp _ f a) = append (binderRefsOf f) (binderRefsOf a)
+binderRefsChildren (IrIf c t e) = append (binderRefsOf c) (append (binderRefsOf t) (binderRefsOf e))
+binderRefsChildren (IrCase _ _ scrut alts) = append (binderRefsOf scrut) (binderRefsAlts alts)
+binderRefsChildren (IrNatCase scrut _ zero succ catch) =
+  append
+    (binderRefsOf scrut)
+    (append (binderRefsAlt zero) (append (binderRefsAlt succ) (binderRefsAlt catch)))
+binderRefsChildren (IrConcatMany parts) = binderRefsList parts
+binderRefsChildren (IrEffThunk _ _ _ _ prim) = binderRefsOf prim
+binderRefsChildren _ = []
+
+binderRefsList : List Ir -> List Int
+binderRefsList [] = []
+binderRefsList (ir :: rest) = append (binderRefsOf ir) (binderRefsList rest)
+
+binderRefsFields : List (Pair String Ir) -> List Int
+binderRefsFields [] = []
+binderRefsFields (p :: rest) = append (binderRefsOf (secondOf p)) (binderRefsFields rest)
+
+binderRefsAlts : List IrAlt -> List Int
+binderRefsAlts [] = []
+binderRefsAlts (alt :: rest) = append (binderRefsOf (irAltBodyOf alt)) (binderRefsAlts rest)
+
+binderRefsAlt : Maybe IrAlt -> List Int
+binderRefsAlt Nothing = []
+binderRefsAlt (Just alt) = binderRefsOf (irAltBodyOf alt)
+
+-- | 当前作用域里真正被 `body` 引用（含嵌套 lambda）的 binder；顺序与入参一致。
+--   闭包只捕获这些值：无捕获时闭包是只读常量，不需要分配。
+export captureList : List (Pair IrBinder Int) -> Ir -> List (Pair IrBinder Int)
+captureList caps body =
+  let
+    refs = binderRefsOf body
+  in filter (capUsed refs) caps
+
+capUsed : List Int -> Pair IrBinder Int -> Bool
+capUsed refs (Pair b _) = memBinderId b.irBinderId refs
+
+memBinderId : Int -> List Int -> Bool
+memBinderId _ [] = False
+memBinderId id (x :: rest) = if id == x then True else memBinderId id rest
 
 -- | 闭包函数入口：把捕获值从 `[rdi + 8 + 8*i]` 拷进本帧槽并绑定 binder。
 --   `parentCls` 是创建处（父帧）的槽 kind 表：捕获值搬过来，kind 也跟过来。
@@ -1143,6 +1349,7 @@ storeCapsAt obj i (p :: rest) =
   append (setObjFromSlot obj (16 + 8 * i) (secondOf p)) (storeCapsAt obj (i + 1) rest)
 
 -- | `IrLam` 作为值：生成闭包函数体并构造闭包对象。body 的尾位置由 `IrTail` 标记。
+--   只捕获 body 真正引用的 binder：无捕获时闭包是只读常量（`vuna_static_*`），不分配。
 genLamValue : Int -> FGen -> List IrBinder -> Ir -> NRes (Pair (List Instr) FGen)
 genLamValue fuel st bs body =
   if fuel <= 0 then
@@ -1153,14 +1360,15 @@ genLamValue fuel st bs body =
     let
       rbs = runtimeBinders bs
       -- 同 wasm：env 按「最外层 → 最内层」排，入口 pushBinder 后最内层同名 binder 在表头。
-      caps = reverse st.fgSlots
+      caps = captureList (reverse st.fgSlots) body
       ncap = length caps
+      arity = length rbs
       idx = st.fgNextLabel
       lamName = "vuna_${nativeName st.fgOwner}_lam${strFromInt idx}"
       st1 = { st | fgNextLabel = idx + 1 }
       -- 闭包体自己的来参区由闭包 ABI 决定（`rdi` 是闭包自身，实参从 `rsi` 起）。
-      lamRoom = nativeTailRoomBytes (nativeStackArgCount (length rbs) (length closureArgRegs))
-      stBody = FGen st1.fgDefs st1.fgPool [] [] st1.fgFams 0 st1.fgNextLabel [] lamRoom st1.fgModule st1.fgOwner "" "" [] []
+      lamRoom = nativeTailRoomBytes (nativeStackArgCount arity (length closureArgRegs))
+      stBody = FGen st1.fgDefs st1.fgPool [] [] st1.fgFams 0 st1.fgNextLabel [] lamRoom st1.fgModule st1.fgOwner "" "" [] [] (filterKnown caps st.fgKnown)
     in nbind (bindCaptures stBody st.fgSlotCls caps 0) (
         \cp =>
           nbind (bindArgsGo rbs 1 (secondOf cp)) (
@@ -1172,15 +1380,23 @@ genLamValue fuel st bs body =
                         frame = nativeFrameBytes stF.fgNextSlot
                         lamBody = append (firstOf cp) (append (firstOf bp) (firstOf q))
                         lamFunc = NativeFunc lamName frame (append (nativePrologue frame) (append (peephole lamBody) nativeEpilogue)) st.fgModule
-                        allocP = genAlloc st1 (2 + ncap)
-                        obj = firstOf (secondOf allocP)
-                        st2 = secondOf (secondOf allocP)
-                        bodyIns = append (firstOf allocP) (append (storeCloCode obj lamName) (append (storeCloArity obj (length rbs)) (append (storeCapsAt obj 0 caps) (getLocal obj))))
                         lams = append st1.fgLams (append stF.fgLams [lamFunc])
-                        st3 = { st2 | fgLams = lams, fgStatics = append st2.fgStatics stF.fgStatics }
-                        -- 闭包函数体里用掉的内部 label 必须回写：否则父函数继续编号会撞名。
-                        st4 = { st3 | fgNextLabel = stF.fgNextLabel }
-                      in NOk (Pair bodyIns st4)
+                      in if ncap == 0 then
+                        let
+                          staticLabel = nativeStaticClosureLabel lamName arity
+                          st2 = { st1 | fgLams = lams, fgStatics = append st1.fgStatics (append stF.fgStatics [NativeClosure staticLabel lamName arity]) }
+                          st3 = { st2 | fgNextLabel = stF.fgNextLabel }
+                        in NOk (Pair [ILea Rax staticLabel] st3)
+                      else
+                        let
+                          allocP = genAlloc st1 (2 + ncap)
+                          obj = firstOf (secondOf allocP)
+                          st2 = secondOf (secondOf allocP)
+                          bodyIns = append (firstOf allocP) (append (storeCloCode obj lamName) (append (storeCloArity obj arity) (append (storeCapsAt obj 0 caps) (getLocal obj))))
+                          st3 = { st2 | fgLams = lams, fgStatics = append st2.fgStatics stF.fgStatics }
+                          -- 闭包函数体里用掉的内部 label 必须回写：否则父函数继续编号会撞名。
+                          st4 = { st3 | fgNextLabel = stF.fgNextLabel }
+                        in NOk (Pair bodyIns st4)
                   )
             )
       )
@@ -1667,7 +1883,7 @@ genDefFunc defs pools fams nextLabel (IrDef name arity _ _ body _ _ _) =
     room = nativeTailRoomBytes (nativeStackArgCount arity nativeMaxArgs)
     modPath = modulePathOf name
     pool = modulePoolOf (moduleKeyOf name) pools
-    st0 = FGen defs pool [] [] fams 0 nextLabel [] room modPath name "" "" [] []
+    st0 = FGen defs pool [] [] fams 0 nextLabel [] room modPath name "" "" [] [] []
   in if arity == 0 then
     nbind (genExpr (nativeFuelOfBody body) st0 body) (
         \p =>

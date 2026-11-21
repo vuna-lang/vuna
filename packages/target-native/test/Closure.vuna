@@ -1,0 +1,167 @@
+-- 闭包捕获与调用点去虚拟化的单测。
+--
+-- 锁三件事：`binderRefsOf` 穿透嵌套 lambda / case 臂收集引用（外层闭包必须把内层
+-- 闭包要用的值留在帧里）；`captureList` 只保留真正被引用的 binder 且保持原顺序
+-- （无捕获的闭包由此静态化，不分配）；`knownCalleeOf` 只从构造点可知的形态推目标
+-- （顶层函数 / 运行时叶子 / lambda / 部分应用），函数参数与未知 binder 必须放弃。
+import Base
+import Base.Data.List as List
+import Base.Data.Pair as Pair
+import Base.Effect.Core
+import Vuna.Ir.Model
+import Vuna.Target.Native.Abi
+import Vuna.Target.Native.Module
+
+main : Eff [] String
+main =
+  case problems of
+    [] => pure ""
+    ps =>
+      do
+        _ <- prim_eff_print ("native closure capture drifted:\n" ++ join "\n" ps ++ "\n")
+        _ <- prim_eff_exit 1
+        pure ""
+
+outer : IrBinder
+outer = mkIrBinderTyped 1 "outer" IrTyInt
+
+inner : IrBinder
+inner = mkIrBinderTyped 2 "inner" IrTyInt
+
+unused : IrBinder
+unused = mkIrBinderTyped 3 "unused" IrTyInt
+
+problems : List String
+problems =
+  append
+    (append (append varProblems appProblems) nestedProblems)
+    (append caseProblems (append captureProblems (append orderProblems calleeProblems)))
+
+varProblems : List String
+varProblems =
+  if sameInts (binderRefsOf (IrVar outer)) [1] then
+    []
+  else
+    ["var refs: " ++ showInts (binderRefsOf (IrVar outer))]
+
+appProblems : List String
+appProblems =
+  let
+    refs = binderRefsOf (IrApp Nothing (IrVar outer) (IrVar inner))
+  in if sameInts refs [1, 2] then [] else ["app refs: " ++ showInts refs]
+
+nestedProblems : List String
+nestedProblems =
+  let
+    refs = binderRefsOf (IrLam [] Nothing (IrApp Nothing (IrVar outer) (IrVar inner)))
+  in if sameInts refs [1, 2] then [] else ["nested lambda refs: " ++ showInts refs]
+
+caseProblems : List String
+caseProblems =
+  let
+    alts = [IrAlt Nothing [] (IrVar inner)]
+    refs = binderRefsOf (IrCase Nothing Nothing (IrVar outer) alts)
+  in if sameInts refs [1, 2] then [] else ["case refs: " ++ showInts refs]
+
+captureProblems : List String
+captureProblems =
+  let
+    caps = [Pair outer 0, Pair unused 1, Pair inner 2]
+    kept =
+      map (\p => nameOf (firstOf p)) (captureList caps (IrApp Nothing (IrVar outer) (IrVar inner)))
+  in if sameStrings kept ["outer", "inner"] then [] else ["capture list: " ++ join "," kept]
+
+orderProblems : List String
+orderProblems =
+  let
+    caps = [Pair inner 0, Pair outer 1]
+    kept =
+      map (\p => nameOf (firstOf p)) (captureList caps (IrApp Nothing (IrVar outer) (IrVar inner)))
+  in if sameStrings kept ["inner", "outer"] then [] else ["capture order: " ++ join "," kept]
+
+calleeDefs : List IrDef
+calleeDefs =
+  [
+    IrDef "f" 2 [] Nothing (IrLam [] Nothing (IrInt 0)) False False Nothing,
+    IrDef "aliasRt" 0 [] Nothing (IrTail (IrRt "natAdd")) False False Nothing,
+    IrDef "aliasG" 0 [] Nothing (IrGlobal "f") False False Nothing,
+    IrDef "cafLam" 0 [] Nothing (IrLam [inner] Nothing (IrInt 0)) False False Nothing,
+    IrDef "cafPartial" 0 [] Nothing (IrApp Nothing (IrGlobal "f") (IrInt 1)) False False Nothing
+  ]
+
+calleeProblems : List String
+calleeProblems =
+  append
+    (append (append directProblems (append aliasRtProblems aliasGProblems)) lamProblems)
+    (append partialProblems (append cafLamProblems (append cafPartialProblems (append knownProblems unknownProblems))))
+
+expectCallee : String -> Maybe KnownCallee -> List String
+expectCallee want got =
+  let
+    text = describeCallee got
+  in if text == want then [] else [want ++ " != " ++ text]
+
+describeCallee : Maybe KnownCallee -> String
+describeCallee Nothing = "none"
+describeCallee (Just kc) =
+  case kc of
+    KDirect label n => "direct " ++ label ++ "/" ++ strFromInt n
+    KClosure n => "closure/" ++ strFromInt n
+
+directProblems : List String
+directProblems =
+  expectCallee
+    ("direct " ++ nativeFuncLabel "f" ++ "/2")
+    (knownCalleeOf calleeDefs [] (IrGlobal "f"))
+
+aliasRtProblems : List String
+aliasRtProblems =
+  expectCallee
+    ("direct " ++ nativeRtLabel "nat_add" ++ "/2")
+    (knownCalleeOf calleeDefs [] (IrGlobal "aliasRt"))
+
+aliasGProblems : List String
+aliasGProblems =
+  expectCallee
+    ("direct " ++ nativeFuncLabel "f" ++ "/2")
+    (knownCalleeOf calleeDefs [] (IrGlobal "aliasG"))
+
+lamProblems : List String
+lamProblems =
+  expectCallee "closure/1" (knownCalleeOf calleeDefs [] (IrLam [inner] Nothing (IrInt 0)))
+
+partialProblems : List String
+partialProblems =
+  expectCallee "closure/1" (knownCalleeOf calleeDefs [] (IrApp Nothing (IrGlobal "f") (IrInt 1)))
+
+cafLamProblems : List String
+cafLamProblems = expectCallee "closure/1" (knownCalleeOf calleeDefs [] (IrGlobal "cafLam"))
+
+cafPartialProblems : List String
+cafPartialProblems = expectCallee "closure/1" (knownCalleeOf calleeDefs [] (IrGlobal "cafPartial"))
+
+knownProblems : List String
+knownProblems =
+  expectCallee "closure/3" (knownCalleeOf calleeDefs [(7, KClosure 3)] (IrVar (mkIrBinder 7 "g")))
+
+unknownProblems : List String
+unknownProblems = expectCallee "none" (knownCalleeOf calleeDefs [] (IrVar (mkIrBinder 9 "z")))
+
+nameOf : IrBinder -> String
+nameOf b =
+  case b.irBinderName of
+    IrBUser n => n
+    _ => "?"
+
+sameInts : List Int -> List Int -> Bool
+sameInts [] [] = True
+sameInts (x :: xs) (y :: ys) = if x == y then sameInts xs ys else False
+sameInts _ _ = False
+
+sameStrings : List String -> List String -> Bool
+sameStrings [] [] = True
+sameStrings (x :: xs) (y :: ys) = if x == y then sameStrings xs ys else False
+sameStrings _ _ = False
+
+showInts : List Int -> String
+showInts xs = join "," (map (\x => strFromInt x) xs)
