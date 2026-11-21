@@ -95,8 +95,8 @@ native 的纯程序不再带机器（D110 已关闭）：`minimal` 2 个 `.s` / 
 读法：
 
 - `minimal` 是**绝对地板**（最小可执行程序，纯 Int）：runtime + 最小 base 闭包，
-  ocaml 33 个 `.ml` / 185 KB、native 2 个 `.s` / 121 KB、wasm 382 KB
-  （WAT；二进制列在重标后是 `-O3` 输出，比汇编后小一个量级）。
+  ocaml 33 个 `.ml` / 185 KB、native 2 个 `.s` / 121 KB、wasm 382 KB（WAT；`.wasm` 是
+  `-O3` 输出，485 B）。
 - `hello` 是**最小效应程序**（一次 Console 打印）：多一层 `Base.Effect.Core` 的 handler 面
   （`Fs`/`Net`/`Process`/`Clock` …）⇒ ocaml 34 个 `.ml` / 189 KB、10 个 `.s` / 297 KB、
   wasm 397 KB（WAT，优化后 2,698 B）——比 `minimal` 多 8 个 `.s` / 176 KB 而源码只多 6 行：
