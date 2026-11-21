@@ -1,0 +1,21 @@
+-- 字符串比较的前缀边界：短串是长串前缀时，前缀只能比较短串的长度（min(len)），
+-- 不能读短串块外的字节。`pad` 只用于把 native 字面量池排成 probe→pad→other。
+main : String
+main =
+  let
+    other = strSubstring 0 2 "abq"
+    pad = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    probe = "a"
+  in
+    (if probe < other then "1" else "0")
+      ++ (if other < probe then "1" else "0")
+      ++ (if probe <= other then "1" else "0")
+      ++ (if other <= probe then "1" else "0")
+      ++ (if probe > other then "1" else "0")
+      ++ (if other > probe then "1" else "0")
+      ++ (if probe >= other then "1" else "0")
+      ++ (if other >= probe then "1" else "0")
+      ++ (if "abc" == "abcd" then "1" else "0")
+      ++ (if "ab" < "abz" then "1" else "0")
+      ++ (if "abz" < "ab" then "1" else "0")
+      ++ (if strLength pad == 120 then "1" else "0")

@@ -475,13 +475,14 @@ bytesCmpFn =
     [ILabel ".Lrt_bcmp_loop", ICmp (OpReg Rcx) (OpImm 8), IJcc "jb" ".Lrt_bcmp_tail", IMov (OpReg R9) (OpMem Rdi 0), IMov (OpReg R10) (OpMem Rsi 0), ICmp (OpReg R9) (OpReg R10), IJcc "jne" ".Lrt_bcmp_tail", IBinReg "add" Rdi (OpImm 8), IBinReg "add" Rsi (OpImm 8), IBinReg "sub" Rcx (OpImm 8), IJmp ".Lrt_bcmp_loop", ILabel ".Lrt_bcmp_tail", ITest Rcx Rcx, IJcc "jz" ".Lrt_bcmp_eq", IMovzx R9 (OpMem Rdi 0), IMovzx R10 (OpMem Rsi 0), ICmp (OpReg R9) (OpReg R10), IJcc "jb" ".Lrt_bcmp_less", IJcc "ja" ".Lrt_bcmp_greater", IBinReg "add" Rdi (OpImm 1), IBinReg "add" Rsi (OpImm 1), IBinReg "sub" Rcx (OpImm 1), IJmp ".Lrt_bcmp_tail", ILabel ".Lrt_bcmp_eq", IMov (OpReg Rax) (OpImm 0), IRet, ILabel ".Lrt_bcmp_less", IMov (OpReg Rax) (OpImm (0 - 1)), IRet, ILabel ".Lrt_bcmp_greater", IMov (OpReg Rax) (OpImm 1)]
 
 -- | `str_compare`：rdi/rsi = 两个字符串 -> rax = -1 / 0 / 1。
---   语义与 OCaml `compare` 的字符串分支一致：逐字节无符号比较，公共前缀相同则比长度。
+--   语义与 OCaml `compare` 的字符串分支一致：先按 `min(len)` 逐字节无符号比较，
+--   公共前缀相同则比长度。前缀比较的长度必须取 min，否则会读短串块外的字节。
 strCompareFn : NativeFunc
 strCompareFn =
   rtFunc
     "str_compare"
     16
-    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IMov (OpMem Rbp (nativeSlotOff 1)) (OpReg Rsi), IMov (OpReg Rax) (OpMem Rdi 0), IMov (OpReg Rcx) (OpMem Rsi 0), ICmp (OpReg Rax) (OpReg Rcx), IJcc "jle" ".Lrt_sc_min", IMov (OpReg Rcx) (OpMem Rdi 0), ILabel ".Lrt_sc_min", ILeaMem Rdi Rdi 8, ILeaMem Rsi Rsi 8, ICall (nativeRtLabel "bytes_cmp"), ICmp (OpReg Rax) (OpImm 0), IJcc "jne" ".Lrt_sc_done", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 0)), IMov (OpReg Rsi) (OpMem Rbp (nativeSlotOff 1)), IMov (OpReg Rax) (OpMem Rdi 0), ICmp (OpReg Rax) (OpMem Rsi 0), IJcc "jl" ".Lrt_sc_less", IJcc "jg" ".Lrt_sc_greater", IMov (OpReg Rax) (OpImm 0), IJmp ".Lrt_sc_done", ILabel ".Lrt_sc_less", IMov (OpReg Rax) (OpImm (0 - 1)), IJmp ".Lrt_sc_done", ILabel ".Lrt_sc_greater", IMov (OpReg Rax) (OpImm 1), ILabel ".Lrt_sc_done"]
+    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IMov (OpMem Rbp (nativeSlotOff 1)) (OpReg Rsi), IMov (OpReg Rax) (OpMem Rdi 0), IMov (OpReg Rcx) (OpMem Rsi 0), ICmp (OpReg Rax) (OpReg Rcx), ICmov "cmovle" Rcx (OpReg Rax), ILeaMem Rdi Rdi 8, ILeaMem Rsi Rsi 8, ICall (nativeRtLabel "bytes_cmp"), ICmp (OpReg Rax) (OpImm 0), IJcc "jne" ".Lrt_sc_done", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 0)), IMov (OpReg Rsi) (OpMem Rbp (nativeSlotOff 1)), IMov (OpReg Rax) (OpMem Rdi 0), ICmp (OpReg Rax) (OpMem Rsi 0), IJcc "jl" ".Lrt_sc_less", IJcc "jg" ".Lrt_sc_greater", IMov (OpReg Rax) (OpImm 0), IJmp ".Lrt_sc_done", ILabel ".Lrt_sc_less", IMov (OpReg Rax) (OpImm (0 - 1)), IJmp ".Lrt_sc_done", ILabel ".Lrt_sc_greater", IMov (OpReg Rax) (OpImm 1), ILabel ".Lrt_sc_done"]
 
 -- | `str_compare` 的结果映射成 Bool（0/1）。
 strCompareFnOf : String -> String -> NativeFunc
