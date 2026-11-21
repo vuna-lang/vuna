@@ -416,7 +416,7 @@ valueWrapperFunc modPath label arity target =
   in NativeFunc
     label
     frame
-    (append (nativePrologue frame) (append stackGuardInstrs (append loads (tailCallSlotsInstrs target slots))))
+    (append (nativePrologue frame) (append loads (tailCallSlotsInstrs target slots)))
     modPath
 
 nativeStaticClosureLabel : String -> Int -> String
@@ -1171,7 +1171,7 @@ genLamValue fuel st bs body =
                         stF = secondOf q
                         frame = nativeFrameBytes stF.fgNextSlot
                         lamBody = append (firstOf cp) (append (firstOf bp) (firstOf q))
-                        lamFunc = NativeFunc lamName frame (append (nativePrologue frame) (append stackGuardInstrs (append (peephole lamBody) nativeEpilogue))) st.fgModule
+                        lamFunc = NativeFunc lamName frame (append (nativePrologue frame) (append (peephole lamBody) nativeEpilogue)) st.fgModule
                         allocP = genAlloc st1 (2 + ncap)
                         obj = firstOf (secondOf allocP)
                         st2 = secondOf (secondOf allocP)
@@ -1675,7 +1675,7 @@ genDefFunc defs pools fams nextLabel (IrDef name arity _ _ body _ _ _) =
             st1 = secondOf p
             frame = nativeFrameBytes st1.fgNextSlot
             instrs = append (peephole (firstOf p)) nativeEpilogue
-            mainF = NativeFunc (nativeFuncLabel name) frame (append (nativePrologue frame) (append stackGuardInstrs instrs)) modPath
+            mainF = NativeFunc (nativeFuncLabel name) frame (append (nativePrologue frame) instrs) modPath
           in NOk (Pair (append st1.fgLams [mainF]) (Pair st1.fgNextLabel st1.fgStatics))
       )
   else
@@ -1700,7 +1700,7 @@ genDefFunc defs pools fams nextLabel (IrDef name arity _ _ body _ _ _) =
                         frame = nativeFrameBytes st1.fgNextSlot
                         body0 = append (firstOf bp) (append [ILabel loopLabel] (firstOf q))
                         instrs = append (peephole body0) nativeEpilogue
-                        mainF = NativeFunc (nativeFuncLabel name) frame (append (nativePrologue frame) (append stackGuardInstrs instrs)) modPath
+                        mainF = NativeFunc (nativeFuncLabel name) frame (append (nativePrologue frame) instrs) modPath
                       in NOk (Pair (append st1.fgLams [mainF]) (Pair st1.fgNextLabel st1.fgStatics))
                   )
             )
@@ -1883,7 +1883,7 @@ bridgeFn name slots body =
   in NativeFunc
     (nativeRtLabel name)
     frame
-    (append (nativePrologue frame) (append stackGuardInstrs (append body nativeEpilogue)))
+    (append (nativePrologue frame) (append body nativeEpilogue))
     nativeRuntimeModule
 
 nlistCellBytes : NListDesc -> Int

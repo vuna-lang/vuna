@@ -259,8 +259,8 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
   `read` 循环，单次 `length` 截到 8 MiB 读缓冲上界；失败写 `rt_host_status`（errno → 码表与 `dtp_hostCode` 一致：
   ENOENT=1、EACCES/EPERM=2、ENOSPC=3、ENOTDIR=4、EISDIR=5、EEXIST=6、其它=9）。
   `tryReadDir` 返回**字典序** `List String`；`tryRemoveTree` 递归删除时每层用自己的
-  8 KiB `getdents64` 缓冲，并在分配帧后检查栈下界（主栈取 `rt_stack_top - 4 MiB`，
-  迁移栈取 `rt_stack_limit`）——越界 trap `directory tree too deep` 而不是 SIGSEGV；
+  8 KiB `getdents64` 缓冲，并在分配帧后检查栈下界（`rt_stack_top - 4 MiB`）——越界 trap
+  `directory tree too deep` 而不是 SIGSEGV；
   路径拷贝按容量上界检查，超出 trap `path too long`；`tryWriteFileAtomic` 写
   `<path>.<pid>.tmp` 再 `rename`。
 - **非 try 符号的失败显式可见**：`prim_eff_readFile` / `readFileRange` / `writeFile` / `writeFileAtomic` /

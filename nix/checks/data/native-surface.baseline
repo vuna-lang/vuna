@@ -36,7 +36,6 @@ trapMemLimitFn                   "write" "exit"
 trapOomFn                        "write" "exit"
 trapPathLongFn                   "write" "exit"
 trapRmtreeDeepFn                 "write" "exit"
-trapStackOverflowFn              "write" "exit"
 tryMakeDirExclusiveFn            "mkdirat"
 tryMakeDirFn                     "mkdirat"
 tryReadFileFn                    "openat" "read" "close" "close"
@@ -76,7 +75,6 @@ shArgvLabel 32
 sigalrmSetLabel 8
 spawnArgvLabel 2048
 spawnBufLabel 65536
-stackLimitLabel 8
 stackTopLabel 8
 timeoutArmedLabel 8
 # 内核路径 / env 键

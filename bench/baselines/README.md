@@ -28,7 +28,8 @@ sh bench/update-baselines.sh --only programs
 - `artifacts.json` 是**尺寸基线**：生成物不含绝对路径/时间戳、工具链由 flake 固定，
   所以文本/二进制大小跨机器可比（默认 5% WARN / 20% FAIL，FAIL 退出 1）；构建耗时只与
   同机同 arch 的基线比，且是软判定（默认看 `*_cpu_ms`，20% / 50%，只报告）。
-- `native.json` / `compiler.txt` 只比绝对值，要求同机器、同编译器。
+- `native.json` / `compiler.txt` 只比绝对值，要求同机器、同编译器；`native.json` 的
+  `meta.compiler_sha256` 指向被测二进制，换编译器后先重标。
 - `--check` 默认软告警；`--strict` 把 WARN 变 exit 1，`--fail-threshold`（默认 50%）直接失败。
 - 基线是回归参照，不是跨机器排行榜：换机器或换编译器后应重新生成，而不是改阈值。
 - 重标一律走 nix 包装（`nix run .#vuna-artifacts` / `.#vuna-bench`）：它们把仓库构建的
