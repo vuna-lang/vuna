@@ -314,6 +314,7 @@ declare -A MED NET RSS RATIO NET_RATIO RSS_RATIO DEFAULT_STACK SKIP \
   GC_MINOR_WORDS GC_MAJOR_WORDS GC_MINOR_COLLECTIONS GC_MAJOR_COLLECTIONS GC_TOP_HEAP \
   NATIVE_GC_NATIVE_LIVE NATIVE_GC_NATIVE_ALLOC NATIVE_GC_NATIVE_COLLECTIONS \
   WASM_MEMORY_BYTES ART_BYTES ART_LINES WASM_BYTES SAMPLE_LOG \
+  WASM_READ_MS WASM_COMPILE_MS WASM_INSTANTIATE_MS WASM_START_MS \
   ART_FILES ART_MAX_PATH ART_MAX_BYTES ART_MAX_LINES BIN_BYTES BUILD_CG_MS BUILD_TC_MS \
   BUILD_CG_CPU_MS BUILD_TC_CPU_MS BUILD_POST_MS BUILD_POST_CPU_MS
 ORDER=()
@@ -448,6 +449,10 @@ gc_measure() { # name target
       line=$(grep '^VN_PERF_WASM ' "$log" | tail -n 1 || true)
       [ -n "$line" ] || return 0
       WASM_MEMORY_BYTES[$name]=$(printf '%s' "$line" | sed -n 's/.*memory_bytes=\([0-9][0-9]*\).*/\1/p')
+      WASM_READ_MS[$name]=$(printf '%s' "$line" | sed -n 's/.*read_ms=\([0-9.]*\).*/\1/p')
+      WASM_COMPILE_MS[$name]=$(printf '%s' "$line" | sed -n 's/.*compile_ms=\([0-9.]*\).*/\1/p')
+      WASM_INSTANTIATE_MS[$name]=$(printf '%s' "$line" | sed -n 's/.*instantiate_ms=\([0-9.]*\).*/\1/p')
+      WASM_START_MS[$name]=$(printf '%s' "$line" | sed -n 's/.*start_ms=\([0-9.]*\).*/\1/p')
       ;;
   esac
 }
@@ -594,6 +599,9 @@ run_bench() { # name
   fi
   if [ -n "${WASM_MEMORY_BYTES[$name]:-}" ]; then
     note "  memory wasm_bytes=${WASM_MEMORY_BYTES[$name]}"
+    if [ -n "${WASM_START_MS[$name]:-}" ]; then
+      note "  startup read=${WASM_READ_MS[$name]:-?}ms compile=${WASM_COMPILE_MS[$name]:-?}ms instantiate=${WASM_INSTANTIATE_MS[$name]:-?}ms start=${WASM_START_MS[$name]:-?}ms"
+    fi
   fi
 }
 
@@ -660,6 +668,11 @@ emit_backend() {
   fi
   if [ "$target" = wasm ] && [ -n "${WASM_MEMORY_BYTES[$name]:-}" ]; then
     printf ', "memory_bytes": %s' "${WASM_MEMORY_BYTES[$name]}"
+    if [ -n "${WASM_START_MS[$name]:-}" ]; then
+      printf ', "startup": { "read_ms": %s, "compile_ms": %s, "instantiate_ms": %s, "start_ms": %s }' \
+        "${WASM_READ_MS[$name]:-null}" "${WASM_COMPILE_MS[$name]:-null}" \
+        "${WASM_INSTANTIATE_MS[$name]:-null}" "${WASM_START_MS[$name]:-null}"
+    fi
   fi
   printf ' }'
 }

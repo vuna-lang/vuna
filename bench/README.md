@@ -147,6 +147,9 @@ nix run .#vuna-artifacts -- --json bench/baselines/artifacts.json   # 重标
 
 wasm 列的 `skipped` 是 V8 的 wasm 栈上限（非尾深递归），浏览器路径同样如此；wasm 的
 绝对 ms、宿主启动地板与 RSS 口径见 [benchmarks.md §1.3](../docs/reference/benchmarks.md)。
+wasm 侧 `VN_PERF_STATS=1` 另报线性内存大小与启动四段（`read_ms` / `compile_ms` /
+`instantiate_ms` / `start_ms`），JSON 记在每个 benchmark 的 `startup` 字段里——
+`net_median_ms` 只减掉了 node 空启动，不区分这几段。
 OCaml 后端全部基准在 ~2× 手写 OCaml 内（最高的 `records` 约 2.1×）；native 的绝对值、峰值内存
 与 `default_stack_ok` 见 [benchmarks.md](../docs/reference/benchmarks.md)。分配 / GC 统计由
 OCaml 后端生成 runtime 的 `VN_PERF_STATS=1` 输出，`bench/run.sh` 采集进 JSON 的 `gc` 字段；

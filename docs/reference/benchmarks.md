@@ -193,8 +193,9 @@ wasm 产物由仓库自带的宿主执行（`wasm-host/run.mjs`，Node/V8；与�
 
 口径（读数前先看）：
 
-- **宿主启动地板**：每项都含 node 启动 + 模块实例化，JSON `meta.node_startup_ms`
-  （本机 ~22 ms）。小项先减地板再看：`tco_mutual` 39 − 22 ≈ 17 ms、`string_ops` ≈ 9 ms。
+- `net_median_ms` 只减掉 node 空启动，**不含**模块读/编译/实例化：`VN_PERF_STATS=1`
+  另报 `read_ms` / `compile_ms` / `instantiate_ms` / `start_ms`（JSON 的 `startup` 字段），
+  `start_ms` 是程序本体（`_start` 到退出），其余是固定成本。
 - **V8 的 wasm 栈约 1 MB 且没有开关**（`node --stack-size` 不改变 wasm 栈，开大直接
   SIGSEGV）：上表八个非尾深递归程序以 `Maximum call stack size exceeded` 收口，JSON 记
   `"run_ok": false, "skip_reason": "run"`。`wasm-opt` 不改变这一点——优化后这 8 项仍然 trap

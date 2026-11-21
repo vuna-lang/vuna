@@ -54,9 +54,19 @@ const host = createHost({
 });
 
 let instance;
+let readMs = 0;
+let compileMs = 0;
+let instantiateMs = 0;
 try {
-  const module = new WebAssembly.Module(fs.readFileSync(wasmPath));
+  const t0 = performance.now();
+  const bytes = fs.readFileSync(wasmPath);
+  readMs = performance.now() - t0;
+  const t1 = performance.now();
+  const module = new WebAssembly.Module(bytes);
+  compileMs = performance.now() - t1;
+  const t2 = performance.now();
   instance = new WebAssembly.Instance(module, host.imports);
+  instantiateMs = performance.now() - t2;
 } catch (e) {
   process.stderr.write(`error: wasm instantiate: ${e.message}\n`);
   process.exit(2);
@@ -64,6 +74,7 @@ try {
 
 host.attach(instance.exports.memory);
 
+const startT0 = performance.now();
 try {
   instance.exports._start();
 } catch (e) {
@@ -73,10 +84,16 @@ try {
     process.exitCode = 2;
   }
 }
+const startMs = performance.now() - startT0;
 
-// bench 用：退出时报告线性内存大小（与 OCaml/native 的峰值口径分开记录）。
+// bench 用：退出时报告线性内存大小与启动四段耗时（与 OCaml/native 的峰值口径分开记录）。
+// 四段之和约等于 `_start` 之外的固定成本：读文件（含 OS 缓存）/ 模块编译 / 实例化 / 程序本体。
 if (process.env.VN_PERF_STATS === "1") {
   const mem = instance.exports.memory;
   const bytes = mem && mem.buffer ? mem.buffer.byteLength : 0;
-  process.stderr.write(`VN_PERF_WASM memory_bytes=${bytes}\n`);
+  const ms = (v) => v.toFixed(3);
+  process.stderr.write(
+    `VN_PERF_WASM memory_bytes=${bytes} read_ms=${ms(readMs)} compile_ms=${ms(compileMs)} ` +
+      `instantiate_ms=${ms(instantiateMs)} start_ms=${ms(startMs)}\n`,
+  );
 }
