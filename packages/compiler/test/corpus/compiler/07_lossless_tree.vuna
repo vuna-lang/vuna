@@ -5,6 +5,7 @@
 import Prelude
 import Base.Data.List as List
 import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Cst
 import Vuna.Compiler.Frontend.Parser
 
@@ -86,6 +87,26 @@ kindTagsAt fuel n =
 kindTags : List CstToken -> CstNode -> List String
 kindTags toks tree = kindTagsAt (List.length toks) tree
 
+-- | 顶层 `decl` 节点（源码顺序）。
+declNodes : List CstNode -> List CstNode
+declNodes [] = []
+declNodes (n :: rest) = if nodeKindTag n == "decl" then n :: declNodes rest else declNodes rest
+
+-- | 树里的顶层声明节点与 AST 的声明一一对应：同样多、同样顺序、同一行起。
+-- 这是迁移期的漂移锁：树多建 / 少建 / 起点挪位都会在这里炸。
+declsAlign : List CstNode -> List Decl -> Bool
+declsAlign nodes decls =
+  case nodes of
+    [] =>
+      case decls of
+        [] => True
+        _ => False
+    n :: rest =>
+      case decls of
+        [] => False
+        d :: dRest =>
+          spanStartLine (nodeSpan n) == spanStartLine (declSpan d) && declsAlign rest dRest
+
 -- | 每种结构都得真的建出来了：只靠「根是 file」会放过把 token 全平铺在根上的实现。
 hasKinds : List String -> Bool
 hasKinds tags =
@@ -104,4 +125,8 @@ main =
         tree = nestToTree toks p.parsedEvents
       in (if renderCstTree tree == sample then 1 else 0)
         + (if List.length (collectLeaves tree) == List.length toks then 2 else 0)
-        + (if nestedOk tree then 4 else 0) + (if hasKinds (kindTags toks tree) then 8 else 0)
+        + (if nestedOk tree then 4 else 0)
+        + (if hasKinds (kindTags toks tree) then 8 else 0)
+        + (
+          if declsAlign (declNodes (nodeChildren tree)) p.parsedFile.sourceFileDecls then 16 else 0
+        )

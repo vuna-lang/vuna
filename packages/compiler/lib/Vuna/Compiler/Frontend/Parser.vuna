@@ -550,7 +550,10 @@ opacityStart st =
 
 -- | 逐定义导出：`export [opaque|transparent] <decl>`。
 parseExportDecl : PState -> Int -> Check (Pair ParsedDecl PState)
-parseExportDecl st blockCol =
+parseExportDecl st blockCol = withExtent CstDeclKind st (\st0 => parseExportDeclBody st0 blockCol)
+
+parseExportDeclBody : PState -> Int -> Check (Pair ParsedDecl PState)
+parseExportDeclBody st blockCol =
   Vuna.Compiler.Base.Common.step
     (expectIdent st)
     (\_, st1 => if atKw st1 "opaque" && not (tierFollows st1) then Vuna.Compiler.Base.Common.bind (expectKw st1 "opaque") (\st2 => parseExportedValue (Just OpacityOpaque) st2 blockCol) else if atKw st1 "transparent" && not (tierFollows st1) then Vuna.Compiler.Base.Common.bind (expectKw st1 "transparent") (\st2 => parseExportedValue (Just OpacityTransparent) st2 blockCol) else if atIdentName st1 "abstract" then Vuna.Compiler.Base.Common.step (expectIdent st1) (\_, st2 => parseExportedValue (Just OpacityAbstract) st2 blockCol) else parseExportedPlain Nothing st1 blockCol)
@@ -675,7 +678,10 @@ parseLinearExport st blockCol kwPos =
 
 -- | 归约修饰符：`opaque f : T` / `transparent f : T`（值定义；不导出）。
 parseOpacityDecl : PState -> Int -> Check (Pair ParsedDecl PState)
-parseOpacityDecl st blockCol =
+parseOpacityDecl st blockCol = withExtent CstDeclKind st (\st0 => parseOpacityDeclBody st0 blockCol)
+
+parseOpacityDeclBody : PState -> Int -> Check (Pair ParsedDecl PState)
+parseOpacityDeclBody st blockCol =
   case peekTok st of
     PTok (TKw "opaque") p =>
       Vuna.Compiler.Base.Common.bind
