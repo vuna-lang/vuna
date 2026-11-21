@@ -57,8 +57,9 @@ export rnameBase : RName -> String
 rnameBase (RGlobal _ base) = base
 rnameBase _ = ""
 
--- | 当前模块的包前缀是否属于编译器 / 标准库（这些包可以使用 `@vuna@...` 内部名）。
--- 源码层写不出这些名字；放行判定按**模块前缀**，不是按名字前缀。
+-- | 当前模块的包前缀是否属于编译器 / 标准库（这些包可以引用 `@vuna@...` 内部名）。
+-- 判定按**模块前缀**，不是按名字前缀；普通包引用内部名会被 Resolve 拒绝
+-- （`RN_UnknownVariable`）。
 export isCompilerModulePrefix : String -> Bool
 isCompilerModulePrefix prefix =
   startsWith "Base." prefix

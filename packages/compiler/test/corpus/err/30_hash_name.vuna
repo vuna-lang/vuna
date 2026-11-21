@@ -1,0 +1,3 @@
+-- `#` 不是标识符字符：源码写不出编译器合成的 `#section` / `#dict…` / `#eta…` 名字。
+main : Int
+main = #section

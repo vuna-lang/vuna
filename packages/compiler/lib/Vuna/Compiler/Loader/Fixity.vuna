@@ -209,11 +209,11 @@ reorderNonChain t (ESectOp op sp) = if renameMode t then OkC (EVar op sp) else O
 reorderNonChain t (ESectL op e sp) =
   Vuna.Compiler.Base.Common.bind
     (reorderExpr t e)
-    (\e2 => if renameMode t then OkC (ELam [Pair "#section" sp] (EApp (EVar op sp) [EVar "#section" sp, e2] sp) sp) else OkC (ESectL op e2 sp))
+    (\e2 => if renameMode t then OkC (ELam [Pair sectionBinderName sp] (EApp (EVar op sp) [EVar sectionBinderName sp, e2] sp) sp) else OkC (ESectL op e2 sp))
 reorderNonChain t (ESectR e op sp) =
   Vuna.Compiler.Base.Common.bind
     (reorderExpr t e)
-    (\e2 => if renameMode t then OkC (ELam [Pair "#section" sp] (EApp (EVar op sp) [e2, EVar "#section" sp] sp) sp) else OkC (ESectR e2 op sp))
+    (\e2 => if renameMode t then OkC (ELam [Pair sectionBinderName sp] (EApp (EVar op sp) [e2, EVar sectionBinderName sp] sp) sp) else OkC (ESectR e2 op sp))
 reorderNonChain t (EParen inner sp) = reorderExpr t inner
 reorderNonChain t (ELam names body sp) =
   Vuna.Compiler.Base.Common.bind (reorderExpr t body) (\b => OkC (ELam names b sp))

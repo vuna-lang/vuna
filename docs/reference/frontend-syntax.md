@@ -23,7 +23,8 @@
 - 部分糖**不新增 AST 构造子**，而用保留名编码（`@vuna@list@*` / `@vuna@handle` /
   `@vuna@macro@*` / `@vuna@tuple@*` / `@vuna@ascribe` / `@vuna@do@*` / `?hole`）：列表字面量、
   `perform` / `handle`、`f@name`、行条目、元组 / unit、类型标注、do 链、洞、内置宏都走这条路。
-  新增形式优先考虑这条路径（§10）。
+  新增形式优先考虑这条路径（§10）。所有前缀常量与编解码都在 `Frontend.Reserved`
+  （唯一真源，`Frontend.Ast` / `Frontend.Rast` 只重导出）。
 - **工具面看的是 `Frontend.Ast` 原形**：`Fmt` 按源码顺序打印、`Index`/`Lsp` 扫 binder 与引用、
   `Lint` 做归一化建议。任何表面形式都必须在这三处有明确处理，否则工具会漂移。
 
@@ -40,7 +41,7 @@
 | 块注释 | `{- ... -}`，可嵌套 | `Frontend.Lexer` |
 | 标识符 | `[A-Za-z_][A-Za-z0-9_']*`，允许尾随 `'` | `Frontend.Lexer` |
 | 点号并 token | `.` 后接标识符时并入同一个 token（`p.x`、`A.B.c` 都是单 token）；Loader 再拆成字段链 / 模块路径。代价：限定运算符 `A.+` 不可达 | `Frontend.Lexer`、`Loader.Resolve` |
-| 内部名 | `@vuna@...` 只由 parser / loader 合成，源码写不出 | `Frontend.Lexer`、`Loader.Resolve` |
+| 内部名 | `@vuna@...`：parser / loader 合成的标记；`Base.*` / `Vuna.*` 源码也可显式引用，其它包被 `Loader.Resolve` 拒绝。`#...` 是编译器合成名，源码写不出（`#` 不是标识符字符） | `Frontend.Reserved`、`Frontend.Lexer`、`Loader.Resolve` |
 | 整数 | 纯十进制，上限 63-bit | `Frontend.Lexer` |
 | 浮点 | 只有 `digits.digits`；无指数、无 `1.`、无前导 `.` | `Frontend.Lexer`、[floats.md](floats.md) |
 | 负号 | 不是字面量的一部分：`-1` 由 parser 折成负字面量，`-e` 展开成 `negate e` | `Frontend.Parser` |

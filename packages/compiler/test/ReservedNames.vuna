@@ -1,0 +1,65 @@
+-- 名字编码的卫生性：`@vuna@` 是保留命名空间，`#` 合成名源码根本写不出。
+--
+-- 两个前缀都不能作为标识符起始字符：`#…` 在词法期直接报错；`@` 只有紧跟 `vuna@`
+-- 时才并入同一个标识符（`@foo` 仍是运算符 + 名字）。这两条是「编译器合成的名字不会
+-- 与用户名字撞车」的唯一依据，改词法时先看这里。
+import Base
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Frontend.Lexer
+import Vuna.Compiler.Frontend.Reserved
+
+main : Eff [] String
+main =
+  case filter (\p => not (secondOf p)) results of
+    [] => pure ""
+    bad =>
+      do
+        _ <- prim_eff_print ("reserved names failed: " ++ join "; " (map firstOf bad) ++ "\n")
+        _ <- prim_eff_exit 1
+        pure ""
+
+results : List (Pair String Bool)
+results =
+  [
+    Pair "synth-prefix" (synthNamePrefix == "#"),
+    Pair "synth-ctors-are-synth" (allTrue (map isSynthName synthSamples)),
+    Pair "user-name-not-synth" (not (isSynthName "section")),
+    Pair "synth-not-internal" (not (isInternalSyntaxName sectionBinderName)),
+    Pair "internal-not-synth" (not (isSynthName (macroSyntaxName "dbg"))),
+    Pair "hash-not-ident-start" (not (isIdentStart 35)),
+    Pair "hash-not-ident-char" (not (isIdentChar 35)),
+    Pair "at-not-ident-start" (not (isIdentStart 64)),
+    Pair "at-not-ident-char" (not (isIdentChar 64)),
+    Pair "lex-hash-name-rejected" (lexRejected "#section"),
+    Pair "lex-user-name-accepted" (lexAccepted "section"),
+    Pair "lex-internal-name-one-token" (lexAccepted "@vuna@prim_eff_print"),
+    Pair "lex-at-op-accepted" (lexAccepted "x@y")
+  ]
+
+synthSamples : List String
+synthSamples =
+  [
+    sectionBinderName,
+    dictBinderName 0,
+    dictBinderName 12,
+    etaBinderName 1,
+    teleProbeBinderName,
+    ovProbeName 2
+  ]
+
+allTrue : List Bool -> Bool
+allTrue [] = True
+allTrue (b :: rest) = b && allTrue rest
+
+lexAccepted : String -> Bool
+lexAccepted src =
+  case lexSource src of
+    OkC _ => True
+    ErrC _ => False
+
+-- `#` 既不是标识符字符也不是运算符字符：词法期就报 `LX_UnexpectedCharacter`。
+lexRejected : String -> Bool
+lexRejected src =
+  case lexSource src of
+    OkC _ => False
+    ErrC d => d.diagCode == "LX_UnexpectedCharacter"

@@ -34,7 +34,7 @@ isAsciiAlphaNum : Int -> Bool
 isAsciiAlphaNum c = c >= 65 && c <= 90 || c >= 97 && c <= 122 || c >= 48 && c <= 57
 
 sanitizeChar : Int -> List Int
--- `#` 出现在 Loader 生成的匿名实例名里（`#default`、`#fancy`），OCaml 标识符不允许。
+-- `#` 出现在编译器合成的名字里（`#section` / `#dict…` / `#eta…`），OCaml 标识符不允许。
 sanitizeChar 46 = [95, 100]
 sanitizeChar 95 = [95, 117]
 sanitizeChar 39 = [95, 112]

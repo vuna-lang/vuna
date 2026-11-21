@@ -1366,7 +1366,7 @@ etaCtorLa : String -> Int -> List (Pair String Rig) -> List (Pair Term Rig) -> T
 etaCtorLa name i [] args = TCon name args
 etaCtorLa name i ((Pair _ rig) :: rest) args =
   let
-    binder = "#eta${i}"
+    binder = etaBinderName i
   in TLam
     binder
     rig
