@@ -43,15 +43,16 @@ nativeMaxArgs = 6
 export nativeStackArgOff : Int -> Int
 nativeStackArgOff i = 16 + 8 * (i - nativeMaxArgs)
 
--- | GC 描述符槽：帧头固定 `[rbp-8]`，存当前 GC 点的栈图地址（0 = 没有精确图）。
+-- | 帧头保留槽：固定 `[rbp-8]`，prologue 写 0。GC 逐帧保守扫，不读它；保留它是为了
+--   槽偏移与帧布局稳定。
 export nativeDescriptorOff : Int
 nativeDescriptorOff = 0 - 8
 
--- | slot 序号（从 0 起）-> rbp 偏移（负数）；`[rbp-8]` 是 GC 描述符槽。
+-- | slot 序号（从 0 起）-> rbp 偏移（负数）；`[rbp-8]` 是帧头保留槽。
 export nativeSlotOff : Int -> Int
 nativeSlotOff slot = 0 - 8 * (slot + 2)
 
--- | 栈帧字节数：一个描述符槽 + `slots` 个槽，上取整到 16。
+-- | 栈帧字节数：一个保留槽 + `slots` 个槽，上取整到 16。
 export nativeFrameBytes : Int -> Int
 nativeFrameBytes slots =
   let
@@ -230,8 +231,8 @@ nativeCafCellLabel name = "rt_caf_${nativeName name}"
 -- ---------------------------------------------------------------
 -- 函数框架
 -- ---------------------------------------------------------------
--- | 固定 prologue：push rbp; mov rbp, rsp; sub rsp, frame; 描述符槽置 0（保守孤岛）。
---   `frame=0` 只可能出现在不带描述符槽的哨兵函数上（入口 `_start`）。
+-- | 固定 prologue：push rbp; mov rbp, rsp; sub rsp, frame; 帧头保留槽置 0。
+--   `frame=0` 只可能出现在不带保留槽的哨兵函数上（入口 `_start`）。
 export nativePrologue : Int -> List Instr
 nativePrologue frame =
   append
@@ -260,18 +261,17 @@ export rtFunc : String -> Int -> List Instr -> NativeFunc
 rtFunc name frame body =
   let
     endLabel = "${nativeRtLabel name}_end"
-    -- 槽偏移从 `[rbp-16]` 起（`[rbp-8]` 是 GC 描述符槽），帧多一个机器字。
+    -- 槽偏移从 `[rbp-16]` 起（`[rbp-8]` 是帧头保留槽），帧多一个机器字。
     actual = frame + 8
   in NativeFunc
     (nativeRtLabel name)
     actual
     (append (nativePrologue actual) (append stackGuardInstrs (append (mapRetTo endLabel body) (append [ILabel endLabel] nativeEpilogue))))
     nativeRuntimeModule
-    []
 
 -- | 直接以 ret/exit 结束、无 prologue 的入口/陷阱。
 export rtRawFunc : String -> List Instr -> NativeFunc
-rtRawFunc name body = NativeFunc (nativeRtLabel name) 0 body nativeRuntimeModule []
+rtRawFunc name body = NativeFunc (nativeRtLabel name) 0 body nativeRuntimeModule
 
 -- ---------------------------------------------------------------
 -- 稳定命名
@@ -310,10 +310,6 @@ nativeEntryLabel = "_start"
 -- **文件局部**符号：不同模块文件可以重号，标签重编号也不会跨文件扩散。
 export nativeJumpLabel : Int -> String
 nativeJumpLabel n = ".L${strFromInt n}"
-
--- | GC 栈图标签（文件局部，和 `.L` 标签共用模块内计数）。
-export nativeMapLabel : Int -> String
-nativeMapLabel n = ".Lgc_${strFromInt n}"
 
 -- | 只读数据标签（运行时常量）。
 export nativeDataLabel : String -> String

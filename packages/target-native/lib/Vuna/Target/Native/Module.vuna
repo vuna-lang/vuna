@@ -83,7 +83,7 @@ record FGen where
   fgDefs : List IrDef
   fgPool : List (Pair String String)
   fgSlots : List (Pair IrBinder Int)
-  -- | 槽序号 → 运行时 kind（标量槽不进 GC 栈图，见 `nativeAnnotateCalls`）。
+  -- | 槽序号 → 运行时 kind（捕获槽继承父帧的 kind；GC 不用它）。
   --   槽不复用，所以这张表只增不减。
   fgSlotCls : List (Pair Int NCls)
   fgFams : List IrTyDecl
@@ -194,10 +194,6 @@ valueCls st ir =
     Just cls => cls
     Nothing => NClsMissing
 
--- | 本函数的标量槽：栈图不列它们（标量不可能是堆指针）。
-scalarSlotsOf : FGen -> List Int
-scalarSlotsOf st = map (\p => firstOf p) (filter (\p => isScalarCls (secondOf p)) st.fgSlotCls)
-
 isErasedBinder : IrBinder -> Bool
 isErasedBinder b = b.irBinderErased
 
@@ -207,152 +203,6 @@ restoreBinderScope st slots = { st | fgSlots = slots }
 
 runtimeBinders : List IrBinder -> List IrBinder
 runtimeBinders bs = filter (\b => not (isErasedBinder b)) bs
-
--- ---------------------------------------------------------------
--- 活槽清理：函数体里最后一次读之后把槽清零
--- ---------------------------------------------------------------
--- | 槽读：`[rbp+off]` 且 `off < 0`。生成的函数体没有回边，所以「文本上最后一次读」
---   就是该槽的最后一次使用；清零让保守 GC 不把活帧里已消费的临时值当根。
-slotReadOff : Operand -> List Int
-slotReadOff (OpMem Rbp off) = if off < 0 then [off] else []
-slotReadOff _ = []
-
-baseSlotRead : Reg -> Int -> List Int
-baseSlotRead Rbp off = if off < 0 then [off] else []
-baseSlotRead _ _ = []
-
-instrSlotReads : Instr -> List Int
-instrSlotReads (IMov _ src) = slotReadOff src
-instrSlotReads (IMovByteOp _ _) = []
-instrSlotReads (IMovByteRegOp _ _) = []
-instrSlotReads (IMovzx _ op) = slotReadOff op
-instrSlotReads IMovzxAl = []
-instrSlotReads (ILea _ _) = []
-instrSlotReads (ILeaMem _ base off) = baseSlotRead base off
-instrSlotReads (IBin _ op) = slotReadOff op
-instrSlotReads (IBinReg _ _ op) = slotReadOff op
-instrSlotReads (ICmp a b) = append (slotReadOff a) (slotReadOff b)
-instrSlotReads (ICmov _ _ op) = slotReadOff op
-instrSlotReads (ITest _ _) = []
-instrSlotReads (ISetcc _ _) = []
-instrSlotReads (INeg _) = []
-instrSlotReads ICqo = []
-instrSlotReads (IDiv _) = []
-instrSlotReads (IDivUnsigned _) = []
-instrSlotReads IRepMovsb = []
-instrSlotReads IRepeCmpsb = []
-instrSlotReads (ILabel _) = []
-instrSlotReads (IJmp _) = []
-instrSlotReads (IJmpReg _) = []
-instrSlotReads (IJcc _ _) = []
-instrSlotReads (ICall _) = []
-instrSlotReads (ICallReg _) = []
-instrSlotReads (IXmmLoad _ op) = slotReadOff op
-instrSlotReads (IXmmStore _ _) = []
-instrSlotReads (IXmmFromInt _ _) = []
-instrSlotReads (IXmmToInt _ _) = []
-instrSlotReads (IXmmBin _ _ _) = []
-instrSlotReads (IXmmUnop _ _) = []
-instrSlotReads (IXmmCmp _ _) = []
-instrSlotReads (IXmmToReg _ _) = []
-instrSlotReads (IXmmFromReg _ _) = []
-instrSlotReads IRet = []
-instrSlotReads ISyscall = []
-instrSlotReads (IPush _) = []
-instrSlotReads (IPop _) = []
-instrSlotReads INop = []
-
-slotWriteOf : Instr -> Maybe Int
-slotWriteOf (IMov (OpMem Rbp off) _) = Just off
-slotWriteOf _ = Nothing
-
-isCallInstr : Instr -> Bool
-isCallInstr (ICall _) = True
-isCallInstr (ICallReg _) = True
-isCallInstr _ = False
-
--- | 最后一次 `call` 的下标（没有 call 时是 -1）。只有 call 能进入会触发 GC 的运行时。
--- | 最后一次 `call` 的下标（没有 call 时是 -1）。只有 call 能进入会触发 GC 的运行时。
-memInt : Int -> List Int -> Bool
-memInt _ [] = False
-memInt n (x :: rest) = n == x || memInt n rest
-
--- ---------------------------------------------------------------
--- GC 点的槽活跃集合（精确栈图的输入）
--- ---------------------------------------------------------------
--- | 每个 call 点上仍然活着的槽偏移：该槽在此点之后的下一个事件是「读」。
---   文本序与死槽清零用同一近似（生成体除自递归回跳外没有回边；分支按文本序
---   过近似，只会多留槽，不会漏根）。
-export nativeLiveSlotsAtCalls : List Instr -> List (Pair Int (List Int))
-nativeLiveSlotsAtCalls instrs =
-  let
-    events = slotEvents 0 instrs
-  in map (\c => Pair c (liveSlotsAfter c events [])) (callIndexes 0 instrs)
-
-slotEvents : Int -> List Instr -> List (Pair Int (Pair Int Bool))
-slotEvents _ [] = []
-slotEvents idx (i :: rest) =
-  append
-    (map (\off => Pair idx (Pair off True)) (instrSlotReads i))
-    (append (map (\off => Pair idx (Pair off False)) (instrSlotWrites i)) (slotEvents (idx + 1) rest))
-
-instrSlotWrites : Instr -> List Int
-instrSlotWrites i =
-  case slotWriteOf i of
-    Just off => [off]
-    Nothing => []
-
-liveSlotsAfter : Int -> List (Pair Int (Pair Int Bool)) -> List Int -> List Int
-liveSlotsAfter _ [] _ = []
-liveSlotsAfter c (e :: rest) decided =
-  if firstOf e <= c then
-    liveSlotsAfter c rest decided
-  else
-    let
-      off = firstOf (secondOf e)
-      isRead = secondOf (secondOf e)
-    in if memInt off decided then liveSlotsAfter c rest decided else if isRead then off :: liveSlotsAfter c rest (off :: decided) else liveSlotsAfter c rest (off :: decided)
-
-callIndexes : Int -> List Instr -> List Int
-callIndexes _ [] = []
-callIndexes idx (i :: rest) =
-  if isCallInstr i then idx :: callIndexes (idx + 1) rest else callIndexes (idx + 1) rest
-
--- ---------------------------------------------------------------
--- 在每个 call 前写栈图指针（`[rbp-8]`），并收集本函数的栈图表
--- ---------------------------------------------------------------
--- | 槽偏移 -> 槽序号（`[rbp-8]` 是描述符槽，值槽从 `[rbp-16]` 起）。
-slotIndexOf : Int -> Int
-slotIndexOf off = (0 - off) / 8 - 2
-
--- | 在每个 call 指令前插 `lea r10, [rip + map]; mov [rbp-8], r10`，返回新指令体、
---   之后的模块内 label 计数与本函数的栈图表（按 call 顺序）。
---   栈图只列活槽里可能指向堆的那些（`scalarSlots` 是标量槽，见 `scalarSlotsOf`）：
---   标量槽不可能指向堆，进图只会让 GC 白读一次。
-export nativeAnnotateCalls : List Int -> Int -> List Instr -> Pair (List Instr) (Pair Int (List NativeMap))
-nativeAnnotateCalls scalarSlots nextLabel instrs =
-  annotateGo scalarSlots nextLabel (nativeLiveSlotsAtCalls instrs) 0 instrs
-
-annotateGo : List Int -> Int -> List (Pair Int (List Int)) -> Int -> List Instr -> Pair (List Instr) (Pair Int (List NativeMap))
-annotateGo _ nextLabel _ _ [] = Pair [] (Pair nextLabel [])
-annotateGo scalarSlots nextLabel calls idx (i :: rest) =
-  case calls of
-    (Pair c lives) :: more =>
-      if c == idx then
-        let
-          label = nativeMapLabel nextLabel
-          inner = annotateGo scalarSlots (nextLabel + 1) more (idx + 1) rest
-          store = [ILea R10 label, IMov (OpMem Rbp nativeDescriptorOff) (OpReg R10)]
-          mp = NativeMap label (map slotIndexOf (filter (\off => not (memInt (slotIndexOf off) scalarSlots)) lives))
-        in Pair (append store (i :: firstOf inner)) (Pair (firstOf (secondOf inner)) (mp :: secondOf (secondOf inner)))
-      else
-        let
-          inner = annotateGo scalarSlots nextLabel calls (idx + 1) rest
-        in Pair (i :: firstOf inner) (secondOf inner)
-    [] =>
-      let
-        inner = annotateGo scalarSlots nextLabel [] (idx + 1) rest
-      in Pair (i :: firstOf inner) (secondOf inner)
 
 -- ---------------------------------------------------------------
 -- 定义查找 / 可达性
@@ -568,7 +418,6 @@ valueWrapperFunc modPath label arity target =
     frame
     (append (nativePrologue frame) (append stackGuardInstrs (append loads (tailCallSlotsInstrs target slots))))
     modPath
-    []
 
 nativeStaticClosureLabel : String -> Int -> String
 nativeStaticClosureLabel label arity = "vuna_static_${nativeName label}_${strFromInt arity}"
@@ -1298,8 +1147,7 @@ genLamValue fuel st bs body =
                         stF = secondOf q
                         frame = nativeFrameBytes stF.fgNextSlot
                         lamBody = append (firstOf cp) (append (firstOf bp) (firstOf q))
-                        lamAn = nativeAnnotateCalls (scalarSlotsOf stF) stF.fgNextLabel (peephole lamBody)
-                        lamFunc = NativeFunc lamName frame (append (nativePrologue frame) (append stackGuardInstrs (append (firstOf lamAn) nativeEpilogue))) st.fgModule (secondOf (secondOf lamAn))
+                        lamFunc = NativeFunc lamName frame (append (nativePrologue frame) (append stackGuardInstrs (append (peephole lamBody) nativeEpilogue))) st.fgModule
                         allocP = genAlloc st1 (2 + ncap)
                         obj = firstOf (secondOf allocP)
                         st2 = secondOf (secondOf allocP)
@@ -1307,7 +1155,7 @@ genLamValue fuel st bs body =
                         lams = append st1.fgLams (append stF.fgLams [lamFunc])
                         st3 = { st2 | fgLams = lams, fgStatics = append st2.fgStatics stF.fgStatics }
                         -- 闭包函数体里用掉的内部 label 必须回写：否则父函数继续编号会撞名。
-                        st4 = { st3 | fgNextLabel = firstOf (secondOf lamAn) }
+                        st4 = { st3 | fgNextLabel = stF.fgNextLabel }
                       in NOk (Pair bodyIns st4)
                   )
             )
@@ -1802,10 +1650,9 @@ genDefFunc defs pools fams nextLabel (IrDef name arity _ _ body _ _ _) =
           let
             st1 = secondOf p
             frame = nativeFrameBytes st1.fgNextSlot
-            an = nativeAnnotateCalls (scalarSlotsOf st1) st1.fgNextLabel (peephole (firstOf p))
-            instrs = append (firstOf an) nativeEpilogue
-            mainF = NativeFunc (nativeFuncLabel name) frame (append (nativePrologue frame) (append stackGuardInstrs instrs)) modPath (secondOf (secondOf an))
-          in NOk (Pair (append st1.fgLams [mainF]) (Pair (firstOf (secondOf an)) st1.fgStatics))
+            instrs = append (peephole (firstOf p)) nativeEpilogue
+            mainF = NativeFunc (nativeFuncLabel name) frame (append (nativePrologue frame) (append stackGuardInstrs instrs)) modPath
+          in NOk (Pair (append st1.fgLams [mainF]) (Pair st1.fgNextLabel st1.fgStatics))
       )
   else
     case body of
@@ -1828,10 +1675,9 @@ genDefFunc defs pools fams nextLabel (IrDef name arity _ _ body _ _ _) =
                         st1 = secondOf q
                         frame = nativeFrameBytes st1.fgNextSlot
                         body0 = append (firstOf bp) (append [ILabel loopLabel] (firstOf q))
-                        an = nativeAnnotateCalls (scalarSlotsOf st1) st1.fgNextLabel (peephole body0)
-                        instrs = append (firstOf an) nativeEpilogue
-                        mainF = NativeFunc (nativeFuncLabel name) frame (append (nativePrologue frame) (append stackGuardInstrs instrs)) modPath (secondOf (secondOf an))
-                      in NOk (Pair (append st1.fgLams [mainF]) (Pair (firstOf (secondOf an)) st1.fgStatics))
+                        instrs = append (peephole body0) nativeEpilogue
+                        mainF = NativeFunc (nativeFuncLabel name) frame (append (nativePrologue frame) (append stackGuardInstrs instrs)) modPath
+                      in NOk (Pair (append st1.fgLams [mainF]) (Pair st1.fgNextLabel st1.fgStatics))
                   )
             )
       _ => internal "function body is not a lambda: ${name}"
@@ -1965,7 +1811,6 @@ startFunc printResult kind mainName runMainM handlers cafs =
     0
     (append [IBinReg "xor" Rbp (OpReg Rbp)] (append captureArgs (append initHeap (append initLimits (append callMain (append printer exitInstrs))))))
     (modulePathOf mainName)
-    []
 
 -- ---------------------------------------------------------------
 -- List 桥接：strUnpack / strPack / strConcatMany / strSubstTemplate
@@ -2016,7 +1861,6 @@ bridgeFn name slots body =
     frame
     (append (nativePrologue frame) (append stackGuardInstrs (append body nativeEpilogue)))
     nativeRuntimeModule
-    []
 
 nlistCellBytes : NListDesc -> Int
 nlistCellBytes d = 8 * (1 + d.nlMaxArity)

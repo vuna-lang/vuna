@@ -154,8 +154,8 @@ native 的 TCO / GC 验证项。**GC 与 TCO 均已落地**；下表「前」列
   可逐次看 `live` / `gen`。两代回收里年轻代只扫根集与脏卡片、整堆回收按计数轮换（见
   [native.md](native.md) §5.2），墙钟从整堆版（`--target native` 同机 288 ms）降到
   242 ms；阈值取 `max(GC_MIN, live/8, 栈跨度)`（年轻代）与
-  `max(GC_MIN, 2 × live, 栈跨度)`（整堆）摊销扫栈成本；活槽由每个 GC 点的栈图给出，
-  死槽不扫描。`gc_pressure` 峰值 RSS 44.9 MB（整堆版基线 54.8 MB）。
+  `max(GC_MIN, 2 × live, 栈跨度)`（整堆）摊销扫栈成本；栈帧整段保守扫。
+  `gc_pressure` 峰值 RSS 44.9 MB（整堆版基线 54.8 MB）。
 - 重标基线时 `default_stack_ok` 是布尔快照：直调、自递归、饱和闭包、wrapper 与 runtime
   符号的尾位置都应为 true；非尾深递归项（如 `list_recursion` 的拆半递归）仍为 false，
   那不是 TCO 漏覆盖——窄调宽与 `rt_apply` 慢路径仍回退普通调用。

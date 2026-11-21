@@ -661,12 +661,10 @@ nix run .#backend-check -- --compiler native --scope selfhost
 读数（16 核）：parity 53×3 在 native 编译器上按 `--jobs` 并行；corpus 686 条断言
 8 路并行。CI 里 native 任务仍是 `continue-on-error`（边界见 [native.md](native.md) §8）。
 
-**当前状态**：native 自举编译器能构建、`version` / 帮助可用，文本 `check .` 的成员包 spawn
-已按 argv 边界传参（105 的 9u5）；冷 store 下整仓检查仍会被年轻代回收随机打断（模式绑定处
-报 `RN_UnknownVariable` / `TC_UnknownName`，`GC_STRESS` 下稳定落到 `impossible branch`），
-预算抬到不触发回收时同一轮通过；`packages/toolchain` / `packages/dev` 还需要
-`ulimit -s unlimited`。因此 `selfhost` / `parity` / `corpus` 尚未稳定通过。证据与复现见
-[debt.md](debt.md) D122。
+**当前状态**：native 自举编译器能构建、`version` / 帮助可用；成员包 spawn 的 argv 边界
+（105 的 9u5）与 GC 根集（逐帧保守扫）已修，空 store 整仓 `check .` 在
+`ulimit -s unlimited` 下通过。默认 8 MiB 栈下 `packages/toolchain` / `packages/dev` 的
+非尾递归仍会 SIGSEGV；`parity` / `corpus` 本轮未复测。证据与复现见 [debt.md](debt.md) D122。
 
 **口径约束**：编译器必须与被测源码同一棵树构建——Nix 派生天然满足；手工跑时先
 `nix build .#vuna-native`，不要拿旧二进制去跑新源码（诊断会指向编译器的能力差异，而不是

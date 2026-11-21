@@ -7,7 +7,7 @@
 > `@vuna@debug@on` / `@vuna@debug@line`、**栈传参**（arity > 6）+ 用户 `data`（变体 tag
 > 分派）、record 构造/投影/更新与通用 `case` + List 桥接（`strUnpack` / `strPack` /
 > `strConcatMany` / `strSubstTemplate`）+ 闭包与高阶应用 + Float（算术/比较/转换/展示）。
-> 堆是段链表 + 尺寸类复用 + **两代标记-清扫 GC**（非移动；年轻代按栈图精确扫根，
+> 堆是段链表 + 尺寸类复用 + **两代标记-清扫 GC**（非移动；沿 `rbp` 链逐帧保守扫根，
 > 老代靠写屏障标记的卡片）；对象布局见 §2，回收契约见 §5.2。
 > `main : Eff r a`（含带行的宿主效应，
 > 入口自动预装 `runXHost`）与 `IORef` 可用；`perform` / `handle` 走**库机器**
@@ -75,21 +75,18 @@
   push rbp
   mov rbp, rsp
   sub rsp, <frame>      ; frame = align16(8 * (slots + 1))
-  mov qword ptr [rbp-8], 0   ; GC 栈图槽（0 = 没有精确图）
+  mov qword ptr [rbp-8], 0   ; 帧头保留槽（GC 不用；保留布局）
   <body>                ; 结果在 rax
   mov rsp, rbp
   pop rbp
   ret
   ```
-- **不做寄存器分配**：binder 和中间值都分配 `[rbp - 8*(slot+2)]` 栈槽（`[rbp-8]` 留给
-  GC 栈图槽）；临时槽不回收，frame 取该函数的最大使用量。求值顺序因此显式、稳定。
-- **GC 栈图**：每个 `call` 点前写 `lea r10, [rip + .Lgc_<n>]; mov [rbp-8], r10`，
-  指向本模块 `.rodata` 的一张栈图表（`[count][slot…]`，槽序号升序；`Native.Map`）。
-  这是**指针位图**：只列活槽里可能指向堆的那些——槽的运行时 kind 由 `Native.Repr`
-  分类（binder 声明类型优先，缺类型时用绑定点的值），标量槽（Int / Nat / Bool /
-  去装箱标量）不可能指向堆，codegen 不列进来；判不准的槽按「可能是指针」照列。
-  标签是文件局部 `.L` 符号，所以编号按模块累加，不跨模块扩散。GC 按这张表只扫列出的槽
-  （见 §5.2）。
+- **不做寄存器分配**：binder 和中间值都分配 `[rbp - 8*(slot+2)]` 栈槽（`[rbp-8]` 是
+  帧头保留槽）；临时槽不回收，frame 取该函数的最大使用量。求值顺序因此显式、稳定。
+- **栈帧与根**：GC 沿 `rbp` 链逐帧保守扫 `[上一帧 rbp + 16, rbp + 16)`，帧内每个机器字
+  都按候选指针判断。不生成逐 call 的栈图，也不按活跃性或运行时 kind 过滤槽：漏一个根会
+  收掉仍在用的对象，多扫一个字只多留一点垃圾。调用的动态实参数组（`rt_apply` 慢路径）
+  在调用方帧的实参槽里有同一份值，随整帧扫描保活。
 - 调用点：按 CBV 从左到右把实参求值到槽；前 6 个装入参数寄存器，其余**逆序压栈**
   （最后一个实参先压，第 7 个最终在 `[rbp+16]`）。栈参数个数为奇数时先 `sub rsp, 8`
   补空洞，保证 `call` 时 `rsp` 16 字节对齐（prologue 的 `push rbp` + 16 倍数 frame 是
@@ -141,7 +138,7 @@ native 与 wasm 跑同一份**库机器**（`Base.Effect.Core.Control` 循环，
   消费），续延链不占宿主栈；顺序 perform 的深度不随次数增长。
 - **one-shot**：续延槽 → epoch 表（`MSt.msUsed`）拒绝重放；尾 resume 复用 `tailSlot`。
 - 宿主 handler 与用户 handler 走同一套 `MkHandle`，没有「宿主直连」旁路。
-- GC 沿帧栈图扫根（§5.2）；handler 帧与续延都在堆上，随栈槽与 cleanup 链可达。
+- GC 沿帧保守扫根（§5.2）；handler 帧与续延都在堆上，随栈槽与 cleanup 链可达。
 
 延迟 answer（`opH` 返回函数、`resume` 发生在 `MkHandle` 返回之后）仍不支持，见
 [debt.md](debt.md) D101。
@@ -328,7 +325,7 @@ env，**不进 codegen**（同一 IR 的产物逐字节确定）。解析失败�
 - 口径边界：核数限制**不是 CPU 配额**（不限制单核跑多久，要限速用超时）；cgroup 只读 v2
   挂载根的 `cpu.max`（v1 或读不到时退化为 `sched_getaffinity` 计数）；超时是启动快照。
 
-### 5.2 GC（两代、精确栈图 + 保守孤岛，非移动）
+### 5.2 GC（两代、逐帧保守扫根，非移动）
 
 实现在 `Native.Gc`，由 `Native.Runtime.alloc` 在预算或阈值处调用 `rt_gc_collect`。
 
@@ -343,13 +340,10 @@ env，**不进 codegen**（同一 IR 的产物逐字节确定）。解析失败�
 - **尺寸类**：块大小向上取整到 2 的幂（16 B … 64 MiB），清扫把死块挂回对应类的链表，
   分配先弹表再 bump。大于 64 MiB 的块单独占一个段，死块进 `rt_huge_free` 首次适配链。
 - **根集**：
-  1. **精确栈图（指针位图）**：沿 `rbp` 链逐帧走。生成函数的帧头 `[rbp-8]` 指向本模块
-     `.rodata` 的栈图（`[count][slot…]`，槽序号升序，见 §3），GC 只扫列出的槽；标量槽
-     不在图里，剩下的是可能指向堆的槽。
-  2. **保守孤岛**：描述符为 0 的帧（`rtFunc` 的运行时函数、`bridgeFn` 的桥接函数、入口）
-     按 `[上一帧 rbp + 16, rbp + 16)` 整段保守扫。GC 自己的帧也是孤岛，入口先把通用
-     寄存器（含 `r15`）溢进自己的帧。
-  3. `.bss`：cleanup 链头 `rt_cleanups` 与 CAF 求值区 `[rt_caf_begin, rt_caf_end)`。
+  1. **栈帧**：沿 `rbp` 链逐帧扫 `[上一帧 rbp + 16, rbp + 16)`，帧内每个机器字都按
+     候选指针保守判断；入口 `rbp = 0` 终止。GC 自己的帧也按整帧扫，入口先把通用寄存器
+     （含 `r15`）溢进自己的帧。
+  2. `.bss`：cleanup 链头 `rt_cleanups` 与 CAF 求值区 `[rt_caf_begin, rt_caf_end)`。
   handler 帧与续延是 `Base.Effect.Core` 的普通堆对象，随上面的根可达。
   `alloc` 的调用方寄存器快照（`rt_alloc_save_*`）只用于跨 `gc_collect` 保活寄存器，
   不是根：仍会被读取的值在调用方的栈槽里。
@@ -385,10 +379,8 @@ env，**不进 codegen**（同一 IR 的产物逐字节确定）。解析失败�
   可变点只有 `prim_eff_writeRef` 与 `insert_sorted` / `sort_list` 的原地改接；
   构造器 / 闭包字段只在对象刚分配（年轻代）时写，数组是 COW、record 不可变，都不需要
   屏障。
-- **活槽**：`Native.Module` 在指令体上算每个 `call` 点的活槽——该槽在这个 call 之后的
-  下一个文本事件是「读」才算活（分支按文本序过近似，只多留、不漏根；自递归尾调用只重写
-  形参槽）。死槽不扫描，也不需要在调用点清零。活槽再按 kind 过滤一次：标量槽不进栈图
-  （§3 的指针位图），其余按机器字保守判断。
+- **动态实参**：`rt_apply` 慢路径把实参压成调用栈数组交给运行时；数组本身不在任何帧的
+  槽位里，但同一批值在调用方的实参槽里各有一份，整帧保守扫会把它们留住。
 - **标记栈**：首次 GC 时 `mmap` 1 MiB，溢出翻倍并拷贝；GC 内部只用 `mmap`，不走 `alloc`。
 
 **可观测性**（规范见 [observability.md](observability.md)）：`@vuna@obs@level` /
@@ -407,8 +399,8 @@ env，**不进 codegen**（同一 IR 的产物逐字节确定）。解析失败�
   `O_*`、权限位、`AT_SYMLINK_NOFOLLOW`、`TCGETS`）、内核结构布局（`stat` 字段偏移、
   `PATH_MAX`、`cpu_set_t` / `timespec` / `termios`）、errno 码表。与 `Abi` 的分界：
   Abi 是架构（换架构要改），Pal 是内核接口（换内核 ABI 只改这里）。
-- `Native.Gc`：两代标记-清扫 GC——块头判据、段索引（二分定位）、根集扫描（精确栈图 /
-  保守孤岛 / 脏卡片）、写屏障与卡片表、年轻代 / 整堆回收的决定、标记栈（倍增 mmap）、
+- `Native.Gc`：两代标记-清扫 GC——块头判据、段索引（二分定位）、根集扫描（逐帧保守 /
+  脏卡片）、写屏障与卡片表、年轻代 / 整堆回收的决定、标记栈（倍增 mmap）、
   清扫与尺寸类回收、`GC_LOG` 诊断行；`alloc` 在预算/阈值处调 `rt_gc_collect`。
 - `Native.Runtime`：`rt_*` 汇编模板、只读数据、`.bss` 布局、IR 符号 → 运行时标签白名单
   与值形态 arity。
@@ -452,7 +444,7 @@ env，**不进 codegen**（同一 IR 的产物逐字节确定）。解析失败�
 - 宿主层（fs 写读/原子写/目录排序/stat/rename/symlink/递归删除、argv/env/cwd/execPath、
   clock/tty、bracket、runIn/spawn/wait）由 105 的 9o–9s 覆盖；宿主进程的超时收尾由
   9u–9u3（单组 / 不改 pgid）与 9u4（并发 spawn 的两组）覆盖；spawn 的多实参 argv 边界
-  由 9u5 覆盖。
+  由 9u5 覆盖；部分应用的实参根（`rt_apply` 慢路径）由 9u6 覆盖。
 - 共享语义（算术 / 字符串 / data / record / List 桥接 / 闭包 / 高阶 API）由
   suite 的 `pure-cross` 分类（`packages/compiler/test/corpus/pure_cross/`）对拍三端，OCaml 是语义 oracle。
 - 指令选择与窥孔：`packages/target-native/test/Select.vuna` 锁序列形状与边界
@@ -472,21 +464,17 @@ env，**不进 codegen**（同一 IR 的产物逐字节确定）。解析失败�
   （[debt.md](debt.md) D101）。
 - FFI / extern；stdin 的 `readLine` / `readBytes` 与 net。
 - **自举运行**：`vuna build packages/compiler --target native` 产出可链接的 `bin/vuna-compiler`
-  （`version` / 帮助可用）；整仓 `check .` 的成员包 `processSpawn` 按 argv 边界逐项传参
-  （105 的 9u5 锁定），文本格式不再报 `unknown command`。冷 store 下整仓检查仍会被年轻代
-  回收打断：随机在模式绑定处报 `RN_UnknownVariable` / `TC_UnknownName`，`GC_STRESS` 下稳定
-  落到 `impossible branch`；把预算抬到工作集不触发回收时同一轮通过。`packages/toolchain` /
-  `packages/dev` 还需要 `ulimit -s unlimited`（非尾递归吃宿主栈）。缺口与复现记在
-  [debt.md](debt.md) D122。
+  （`version` / 帮助可用）；成员包 `processSpawn` 按 argv 边界逐项传参（105 的 9u5），GC 逐帧
+  保守扫根。空 store 下整仓 `check .` 在 `ulimit -s unlimited` 下通过；默认 8 MiB 栈下
+  `packages/toolchain` / `packages/dev` 的非尾递归会 SIGSEGV（非尾递归吃宿主栈）。
+  缺口与复现记在 [debt.md](debt.md) D122。
   整仓 selfhost 的现状见 [testing.md](testing.md)「后端自举 conformance」：尾调用（§3）只覆盖
   **直接饱和直调**，非尾递归、被闭包包住的递归仍按帧吃宿主栈；效应侧另有延迟 answer 的
   handler 缺口（[debt.md](debt.md) D101）。
   CI 的 `nix run .#backend-check -- --compiler native` 因此仍是非阻塞任务（口径见
   [testing.md](testing.md)「后端自举 conformance」）。
-- **GC 的边界**：精确到「哪些槽活着、哪些是标量」，但图里剩下的槽仍按机器字保守判断；
-  两代、非移动、不压缩。因此
-  1. 标量槽不进图，但图上其他槽里的偶然形似指针的字（`.rodata` 字面量、复用过的临时值）
-     会多留对象；死槽不扫描（不需要清零）。孤岛帧整段保守扫，其中已消费的临时值会多留；
+- **GC 的边界**：栈帧与卡片都按机器字保守判断；两代、非移动、不压缩。因此
+  1. 帧内偶然形似指针的字（`.rodata` 字面量、复用过的临时值、已消费的参数）会多留对象；
   2. 老代引用靠写屏障：`writeRef` 与两处列表改接之外的写入路径（宿主缓冲、`prim_*`）
      不经过屏障，漏登记的引用在年轻代回收里会被当成死块；卡片粒度 512 字节，一个脏
      卡片整段重扫（见 [debt.md](debt.md)）；

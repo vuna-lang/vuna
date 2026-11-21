@@ -303,6 +303,17 @@ out-contains: child-argv-ok
 out-contains: spawn-argv-ok
 out-not-contains: spawn-argv-fail
 
+# 9u6) 部分应用的实参根：`rt_apply` 慢路径把实参压成调用栈数组，`apply` 里分配
+#      （部分闭包）会触发回收；调用方帧里的实参槽必须在根集里，否则被收掉。
+run: sh -c 'd="$TMPDIR/applyroots"; mkdir -p "$d/app"; printf "[package]\nname = \"applyroots\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Data.Int as Int\nimport Base.Data.String as String\n\nf : String -> String -> String\nf a b = a ++ b\n\nmain : Int\nmain =\n  let s = \"keep\" ++ \"-\" ++ \"me\" in\n  let g = f s in\n  strLength (g \"!\")\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/applyroots-out" "$d"'
+exit: 0
+run: "$TMPDIR/applyroots-out/bin/applyroots" 2>&1
+exit: 0
+out-equals: 8
+run: sh -c 'VUNA_NATIVE_GC_STRESS=1 "$TMPDIR/applyroots-out/bin/applyroots" 2>&1'
+exit: 0
+out-equals: 8
+
 # 9v) 核数：`VUNA_NATIVE_CPUS=1` 把进程钉到一个可用核上（`Cpus_allowed_list` 单项）。
 run: sh -c 'VUNA_NATIVE_CPUS=1 "$TMPDIR/sleepy-out/bin/sleepy" >/dev/null & p=$!; sleep 0.3; taskset -pc $p | sed "s/.*: //" | awk -F, "{print NF}"; wait'
 out-equals: 1

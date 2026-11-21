@@ -2,7 +2,7 @@ module Vuna.Target.Native.Repr where
 
 -- 槽与值的运行时 kind 统计（只读分析，不生成代码）。
 --
--- 精确栈图与「按 kind 定向清零」都要先知道三件事：这条槽/值是不是堆指针、
+-- kind 统计（`vuna dev ir dump` 的输入）：这条槽/值是不是堆指针、
 -- 是不是只读指针（`.rodata` 静态闭包）、还是未装箱标量。本模块把 binder 与值位置
 -- 归到 `Ptr` / `Static` / `Scalar` / `Unknown`，并把 `Unknown` 的来源分开统计
 -- （类型变量、`IrTyOpaque`、缺类型、未分类的运行时符号），作为换根集模型的决策输入。
