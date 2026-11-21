@@ -103,6 +103,7 @@ fixture 与 steps 的相对路径以**所属包的 `test/`** 为根（见 `[fami
   （WASI preopen），native 直接跑静态产物，三者都以 case 私有目录为 cwd，FS 用例不污染源码树。
 - 期望文件按目标覆盖：`<base>.<backend>.out` 优先，否则共享 `<base>.out`——共享期望即三端
   差分。没有 `--backend` 时只跑 ocaml；`effect-*` 分类即使只跑 ocaml 也走私有包目录。
+- `vuna-base` 的 `stdlib` family 也声明 `pure-cross`：40 个标准库夹具在三个后端上对拍。
 - 机制断言（trap 文本、WAT / ELF 形状、import 缺失、ABI）留在 steps 的单后端用例，不进差分。
 
 ### 声明式步进用例（`*.steps`）
@@ -658,7 +659,7 @@ nix run .#backend-check -- --compiler native --scope all --jobs 8
 nix run .#backend-check -- --compiler native --scope selfhost
 ```
 
-读数（16 核）：parity 53×3 在 native 编译器上按 `--jobs` 并行；corpus 686 条断言
+读数（16 核）：parity 82×3 在 native 编译器上按 `--jobs` 并行；corpus 686 条断言
 8 路并行。CI 里 native 任务仍是 `continue-on-error`（边界见 [native.md](native.md) §8）。
 
 **当前状态**：native 自举编译器能构建、`version` / 帮助可用；成员包 spawn 的 argv 边界
