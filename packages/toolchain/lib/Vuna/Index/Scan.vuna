@@ -527,29 +527,33 @@ indexOneExisting : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess Proce
 indexOneExisting env dir pkgName path =
   do
     source <- fsReadFile path
-    looked <- fixitiesForFile env path source
     let
       bytes = strLength source
-      env2 = firstOf looked
-    in case secondOf looked of
-      ErrC e => pure (Pair env2 (err "${path}: cannot load package fixity context: ${diagText e}"))
-      OkC programFixities =>
-        case parseSourceWithComments path source of
-          ErrC e => pure (Pair env2 (err "${path}: ${diagText e}"))
-          -- 必须按**程序级** fixity 重排（本文件声明 ++ import 闭包，
-          -- 本地优先）。只用本地声明会让用到 `+`/`==`/`::` 的文件报 unknown fixity，
-          -- 然后被当错误跳过 → `vuna map` 静默漏模块。
-          OkC (Pair (SourceFile srcHdr imports fx decls0 _ _ _) comments) =>
-            case reorderProgram (tableOfKeepOps (append programFixities fx)) decls0 of
-              ErrC e => pure (Pair env2 (err "${path}: ${diagText e}"))
-              OkC decls =>
-                let
-                  sMod = moduleNameOf dir path srcHdr
-                  table = docTableOf srcHdr decls comments
-                  info = ModuleInfo sMod pkgName path bytes (length decls) (docTableModuleDoc table)
-                  syms = symbolsOfModule sMod decls table
-                  refs = refsInDecls sMod decls
-                in pure (Pair env2 (OkC (Built [info] syms refs)))
+    in case parseSourceDetailed path source of
+      ErrC e => pure (Pair env (err "${path}: ${diagText e}"))
+      OkC parsed =>
+        do
+          looked <- fixitiesForParsed env path parsed.parsedFile
+          let
+            env2 = firstOf looked
+          in case secondOf looked of
+            ErrC e => pure (Pair env2 (err "${path}: cannot load package fixity context: ${diagText e}"))
+            OkC programFixities =>
+              case parsed.parsedFile of
+                -- 必须按**程序级** fixity 重排（本文件声明 ++ import 闭包，
+                -- 本地优先）。只用本地声明会让用到 `+`/`==`/`::` 的文件报 unknown fixity，
+                -- 然后被当错误跳过 → `vuna map` 静默漏模块。
+                SourceFile srcHdr imports fx decls0 _ _ _ =>
+                  case reorderProgram (tableOfKeepOps (append programFixities fx)) decls0 of
+                    ErrC e => pure (Pair env2 (err "${path}: ${diagText e}"))
+                    OkC decls =>
+                      let
+                        sMod = moduleNameOf dir path srcHdr
+                        table = docTableOf srcHdr decls parsed.parsedComments
+                        info = ModuleInfo sMod pkgName path bytes (length decls) (docTableModuleDoc table)
+                        syms = symbolsOfModule sMod decls table
+                        refs = refsInDecls sMod decls
+                      in pure (Pair env2 (OkC (Built [info] syms refs)))
 
 -- | 跨文件的累积器：模块表、符号表、引用表都倒序累积，最后统一 `reverse`。
 record Acc where

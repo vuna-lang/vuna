@@ -136,25 +136,28 @@ buildModule env pkg path =
     case textR of
       ErrC e => pure (Pair env (ErrC e))
       OkC source =>
-        do
-          looked <- fixitiesForFile env path source
-          pure (buildModuleWith pkg path source looked)
+        case parseSourceDetailed path source of
+          ErrC e => pure (Pair env (err "${path}: ${diagText e}"))
+          OkC parsed =>
+            do
+              looked <- fixitiesForParsed env path parsed.parsedFile
+              pure (buildModuleWith pkg path source parsed looked)
 
--- | 内部：解析已读入的源码并转成 `DocModule`；fixity 重排失败与解析失败都带路径进 `ErrC`。
-buildModuleWith : String -> String -> String -> Pair FixityEnv (Check (List FixityDecl)) -> Pair FixityEnv (Check DocModule)
-buildModuleWith pkg path source looked =
+-- | 内部：把已解析的源码转成 `DocModule`；fixity 重排失败带路径进 `ErrC`。
+buildModuleWith : String -> String -> String -> ParsedSource -> Pair FixityEnv (Check (List FixityDecl)) -> Pair FixityEnv (Check DocModule)
+buildModuleWith pkg path source parsed looked =
   let
     env2 = firstOf looked
   in case secondOf looked of
     ErrC e => Pair env2 (err "${path}: cannot load package fixity context: ${diagText e}")
     OkC programFixities =>
-      case parseSourceWithComments path source of
-        ErrC e => Pair env2 (err "${path}: ${diagText e}")
-        OkC (Pair (SourceFile hdr imports fx decls0 _ _ _) comments) =>
+      case parsed.parsedFile of
+        SourceFile hdr imports fx decls0 _ _ _ =>
           case reorderProgram (tableOfKeepOps (append programFixities fx)) decls0 of
             ErrC e => Pair env2 (err "${path}: ${diagText e}")
             OkC decls =>
               let
+                comments = parsed.parsedComments
                 table = docTableOf hdr decls comments
               in Pair
                 env2
