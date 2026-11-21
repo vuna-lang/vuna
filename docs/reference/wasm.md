@@ -57,6 +57,10 @@
   剥掉所有 custom section。
 - `--wasm-opt N`（0..3，默认 3）：`0` 只汇编不优化；`build` 的用法文本
   （`compilerUsageLines`）与 CLI 的 flag 表同源。
+- **额外 pass 没有可测收益**：`--gufa`、`--closed-world`、`--type-ssa --type-refining-gufa`
+  与单独 `-O3` 的读数在噪声内（12 个 benchmark × 5 次，差异 ≤3 ms，而 node 启动地板
+  ~20 ms），所以默认集合就是 `-O3`，不再叠加。后处理本身的成本也很小：arith 的 383 KB WAT
+  `wasm-tools parse` ≈9 ms、`wasm-opt -O3` ≈9 ms（同机）。
 - **`-O3` 对定义数大的模块很慢**：binaryen 在 `-O3` 上多轮 `precompute-propagate` /
   `optimize-instructions` / `inline`，`defs-1000`（1000 个顶层零参定义）实测约 7 s
   （`bench/baselines/artifacts.json` 的 `postprocess_cpu_ms` = 7,870），占满整个
