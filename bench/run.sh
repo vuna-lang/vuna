@@ -223,9 +223,9 @@ case " $TARGETS " in
     _t1=$(date +%s%N)
     NODE_STARTUP_MS=$(( (_t1 - _t0 + 2500000) / 5000000 ))
     if [ "$STACK_POLICY" = n/a ]; then
-      STACK_POLICY="node (V8 wasm stack, no knob)"
+      STACK_POLICY="node (V8 wasm stack ~1 MB default; --stack-size scales, browsers fixed)"
     else
-      STACK_POLICY="$STACK_POLICY; node (V8 wasm stack, no knob)"
+      STACK_POLICY="$STACK_POLICY; node (V8 wasm stack ~1 MB default; --stack-size scales, browsers fixed)"
     fi
     ;;
 esac

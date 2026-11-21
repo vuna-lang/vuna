@@ -295,7 +295,9 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
   `RuntimeTable` 测试登记为缺口。
 - 浮点：`float_from_int` / `int_from_float`（截断）/ `float_abs` / `float_sqrt`、
   `float_add/sub/mul/div`、`float_eq/neq/lt/le/gt/ge`；展示不是运行时符号，
-  走 `Base.Data.Float.floatRender`（Vuna 实现，三端共用）。
+  走 `Base.Data.Float.floatRender`（Vuna 实现，三端共用）。浮点**字面量**由 `genFloatLit`
+  把十进制数字塞进 `OpImm`、再经 `float_from_int` / `float_div` 合成，有效数字超过 19 位
+  会被 63 位整型截断（[debt.md](debt.md) D131；wasm 侧已直接发 `f64.const`）。
 - 数组：`array_length` / `array_get` / `array_set`（COW）/ `array_make`，以及
   `array_from_list` / `array_to_list`（走 canonical `List` 族，与 List 桥接同一批生成）。
 - 只读数据：`True` / `False` / 换行 / 除零信息 / OOM 信息 / 错误报告前缀（`vuna: runtime

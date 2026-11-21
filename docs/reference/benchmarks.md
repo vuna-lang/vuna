@@ -172,10 +172,14 @@ wasm 产物由仓库自带的宿主执行（`wasm-host/run.mjs`，Node/V8；与�
 `WebAssembly` API 和 host 层）。`--target wasm`（或 `--target all`）跑同一批程序
 （另有 8 个效应基准与 `startup` / `traits` 见 §1.4）。
 
-> **口径**：本节读数是在 `wasm-opt` 阶段之前采集的，wasm 行**已过期**，须重测后才能当当前值。
-> 该阶段（`wasm-opt -O3`，见 [wasm.md](wasm.md) §1.1）的实测变化：arith −45%、hashmap −25%、
-> nat_bits −20%、treemap −18%、eff_tick −18%、records −5%、queue ~0%，string_ops / traits /
-> eff_deep / eff_bracket 0..−8%，float_math / tco_mutual 中性到更差；这就是重测后的预期范围。
+> **口径**：本节读数在 `wasm-opt` 阶段之前采集，wasm 行**已过期**，须重测后才能当当前值。
+> 之后落地了三个后端侧改动，读数都是 `--wasm-opt 0` 对照下的后端自身收益：
+> `wasm-opt -O3` 默认接入（arith −45%、hashmap −25%、nat_bits −20%、treemap −18%、
+> eff_tick −18%，见 [wasm.md](wasm.md) §1.1）、自递归标量函数换 `i64` ABI（arith 78→44 ms、
+> nat_bits 38→30 ms，其余持平，[wasm.md](wasm.md) §2.1）、浮点字面量直接发 `f64.const`
+> （float_math 49→35 ms，[wasm.md](wasm.md) §5）。`-O3` 下 ABI 仍有 arith 45→31 ms、
+> nat_bits 33→28 ms——binaryen 不改函数签名，所以这一项在默认管线下也成立；另外两项的部分
+> 收益会被 `-O3` 的内联与常量折叠掩盖。
 
 本机一档（`--target all --runs 5 --warmup 2`，同窗口；绝对 ms / RSS 只作同机对比）：
 
@@ -196,11 +200,11 @@ wasm 产物由仓库自带的宿主执行（`wasm-host/run.mjs`，Node/V8；与�
 - `net_median_ms` 只减掉 node 空启动，**不含**模块读/编译/实例化：`VN_PERF_STATS=1`
   另报 `read_ms` / `compile_ms` / `instantiate_ms` / `start_ms`（JSON 的 `startup` 字段），
   `start_ms` 是程序本体（`_start` 到退出），其余是固定成本。
-- **V8 的 wasm 栈约 1 MB 且没有开关**（`node --stack-size` 不改变 wasm 栈，开大直接
-  SIGSEGV）：上表八个非尾深递归程序以 `Maximum call stack size exceeded` 收口，JSON 记
+- **V8 默认的 wasm 栈约 1 MB**：Node 下 `--stack-size` 会按比例放大这个上限（`sorting` 在
+  默认栈 trap，`--stack-size=5000` 跑过），但浏览器没有对应开关，所以基线按默认上限采集。
+  上表八个非尾深递归程序以 `Maximum call stack size exceeded` 收口，JSON 记
   `"run_ok": false, "skip_reason": "run"`。`wasm-opt` 不改变这一点——优化后这 8 项仍然 trap
-  （栈深问题，不是性能问题）。浏览器同此——这是浏览器路径的实际执行边界，
-  不是测量设施的限制。
+  （栈深问题，不是性能问题）。这是浏览器路径的实际执行边界，不是测量设施的限制。
 - **RSS 不可比**：wasm 列是 node 进程量级（~55 MB 起），内存只增不减的是 wasm 线性内存；
   与 native「栈页 + live 堆」、OCaml「GC 高水位」不是一个口径。
 - **引擎/宿主版本是一阶变量**：基线只与 `meta.node` + `meta.wasm_host_runner` 同版本
@@ -212,15 +216,10 @@ wasm 产物由仓库自带的宿主执行（`wasm-host/run.mjs`，Node/V8；与�
 既有缺口一致：native 无寄存器分配、每个算术/比较都是一次运行时调用，而 V8 有优化编译器；
 native 赢在「调用少、字符串/栈传参多」的形状（[performance.md](performance.md) §3）。
 
-**wasm 侧的已知回退（D128）**：`70d7817` 这一版的 wasm 读数整体比上一版差，且
-`gc_low_live` / `gc_array_churn` 从能跑变成栈溢出（叠在上面的非尾深递归组之外）。
-原因是擦除后 Core 把顶层函数压成零参定义 + 闭包，wasm 调用点从直调变成
-`call $rt_apply`：多一层帧、每帧更大，`nat_bits` 也从 41–42 ms 涨到 69–73 ms。
-修复（恢复直调或保留 arity）后再重标本表。
-
-`wasm-opt -O3` 的内联会**掩盖**这部分成本：binaryen 把闭包调用链内联掉后，
-`call $rt_apply` 的开销不再直接体现在读数里。D128 的 +70% 读数与它的修复效果都必须
-在关闭内联的对照下测（`--wasm-opt 0`，或 `-O3` + 关内联），否则测到的是 binaryen 的收益。
+`wasm-opt -O3` 的内联会**掩盖**后端 codegen 的成本：binaryen 把闭包调用链与装箱/拆箱
+内联掉后，`call $rt_apply`、`struct.new $int` 这些开销不再直接体现在读数里。所以量后端
+自身的表示 / 调用形状（零参别名直调、[wasm.md](wasm.md) §2.1 的标量 ABI、浮点字面量）
+必须用 `--wasm-opt 0`（或 `-O3` + 关内联）做对照，否则测到的是 binaryen 的收益。
 
 ### 1.4 效应机器（CPS）
 

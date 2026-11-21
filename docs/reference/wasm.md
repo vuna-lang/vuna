@@ -28,10 +28,11 @@
   引擎即可直接运行。handler 运行时由显式效应机器的一个循环派发续延；尾位置 resume 不压
   `msCtx`，200k 次顺序 perform 在默认栈上运行（见 [effect-machine.md](effect-machine.md) §9.2.7），
   非尾 resume 的嵌套深度仍按语义保留。
-- **栈上限由引擎决定**：V8 的 wasm 栈约 1 MB 且没有开关（`node --stack-size` 不改变
-  wasm 栈）。长列表上的**非尾递归**辅助函数（`map` / `append` / `Bytes.lenOf` 这类
-  `1 + f rest` 形状）让栈深与输入规模成正比，超出后以 `Maximum call stack size exceeded`
-  收口；这是浏览器路径的实际边界，不能靠 flag 调整。词法主循环（`Lexer.lexChars` /
+- **栈上限由引擎决定**：V8 默认的 wasm 栈约 1 MB。Node 下 `--stack-size` 会按比例放大
+  这个上限（`sorting` 在默认栈 trap，`--stack-size=4000` 仍 trap、`5000` 跑过）；浏览器
+  没有对应开关，所以浏览器路径的边界就是默认值。长列表上的**非尾递归**辅助函数
+  （`map` / `append` / `Bytes.lenOf` 这类 `1 + f rest` 形状）让栈深与输入规模成正比，
+  超出后以 `Maximum call stack size exceeded` 收口。词法主循环（`Lexer.lexChars` /
   `lexCharsWith`）是尾递归（逆序累积 + 一次 reverse），不按 token 数吃栈；effect 次数
   也不吃栈，剩余上限由被处理计算自身的递归深度决定。
 - 产物把预打开目录的 **fd 3** 当作唯一 preopen 根（见 §5）：Node 宿主用 `--dir <root>`
@@ -89,7 +90,8 @@
 增益几乎全来自内联 + DCE，不是指令选择：关掉 binaryen 内联
 （`--always-inline-max-function-size 0 --one-caller-inline-max-function-size 0`）后 arith 只剩
 −4%，`float_math` +45%、`tco_mutual` +36%（更差）。因此**量后端自身的优化（表示相关的工作）
-要用 `--wasm-opt 0` 或关内联的变体作对照**，否则 binaryen 会掩盖效果（D128）。
+要用 `--wasm-opt 0` 或关内联的变体作对照**，否则 binaryen 会掩盖效果（零参别名直调与
+§2.1 的标量 ABI 都是这样量的）。
 
 ## 2. 数据表示（WasmGC）
 
@@ -321,9 +323,11 @@ Node 与浏览器共用，§8.6）。不引入 preview2-shim / `jco`：它们是
 Component Model 的运行链路，而产物是核心模块，且测试宿主需要确定性（固定时钟、临时目录、
 严格 trap 文本）。
 
-**执行边界（性能口径同源）**：V8 的 wasm 栈约 1 MB 且没有开关（`node --stack-size` 不改变
-wasm 栈），所以非尾深递归的生成程序在浏览器路径上会以 `Maximum call stack size exceeded`
-收口；尾调用（`return_call`）的形状不受影响。这个上限**不受 `wasm-opt` 影响**：`array` /
+**执行边界（性能口径同源）**：V8 默认的 wasm 栈约 1 MB；Node 下 `--stack-size` 会按比例
+放大这个上限（`sorting` 在默认栈 trap，`--stack-size=4000` 仍 trap、`5000` 跑过），浏览器
+没有对应开关，所以非尾深递归的生成程序在浏览器路径上按默认值以
+`Maximum call stack size exceeded` 收口；尾调用（`return_call`）的形状不受影响。这个上限
+**不受 `wasm-opt` 影响**：`array` /
 `closures` / `list_recursion` / `sorting` / `text_scan` / `gc_pressure` / `gc_array_churn` /
 `gc_low_live` 这 8 个非尾深程序在优化后仍然 trap——那是栈深问题，不是性能问题，
 优化器不修它。生成程序在浏览器路径上的读数与判定见 [benchmarks.md](benchmarks.md) §1.3。

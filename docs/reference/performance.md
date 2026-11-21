@@ -136,8 +136,8 @@ OCaml 二进制里的调试信息记录的是**相对**源码名（`build.sh` �
 **口径提醒**：增益几乎全来自 binaryen 的内联 + DCE，不是指令选择。关掉内联
 （`--always-inline-max-function-size 0 --one-caller-inline-max-function-size 0`）后 arith
 只剩 −4%，`float_math` +45%、`tco_mutual` +36%。所以本页的「后端表示 / codegen 优化」类
-改动（如 D128 的直调恢复）必须以 `--wasm-opt 0` 或关内联的变体作对照测量，否则 binaryen
-会掩盖后端自身的效果。
+改动（如零参别名直调、[wasm.md](wasm.md) §2.1 的标量 ABI）必须以 `--wasm-opt 0` 或关内联
+的变体作对照测量，否则 binaryen 会掩盖后端自身的效果。
 
 上面报的是 `build.sh` 的**直接产物**（带 `-g`）。装进 store 的插件二进制在 nix 打包时
 `strip`（去掉 `.symtab` / `.debug_*`，单文件小 ~25%，`vuna` 输出目录 102 MB → 77 MB）：
