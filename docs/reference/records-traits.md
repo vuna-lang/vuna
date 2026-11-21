@@ -294,6 +294,9 @@ main = pretty Red ++ "/" ++ show Red
   `TC_SuperclassNotSatisfied`。泛型 body 使用父类方法时，刚性字典目标走既有提升规则，
   变成额外隐式字典参数，调用点按实例搜索填充（`Monad m =>` 因而不必手写三段约束）。
   父类必须是在当前声明之前可见的 trait（同模块按源顺序），因此父子关系天然无环。
+- **实例方法名支持运算符与标识符两种写法**（`==` / `eq`、`<` / `lt` …），按规范短名
+  归一后匹配类方法；同一方法在一份实例里只能声明一次，两种写法同时出现报
+  `[TC_InstanceDuplicateMethod]`（同名重复仍按多 clause 处理）。
 - **实例按 head 全局唯一**：同一 head 的重复 / 重叠实例报 `duplicate instance` /
   `overlapping instance`（含 `deriving` 生成的实例）。**没有命名实例**：不存在
   `instance C T as name` 或 `@name` 选择，相干性只靠「同一 head 唯一」。

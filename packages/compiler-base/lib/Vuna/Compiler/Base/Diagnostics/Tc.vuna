@@ -78,6 +78,7 @@ export data TcErr(..) : Nat -> Type where
   FfiTypeUnsupported : String -> TcErr (Succ Zero)
   EqRequiresEvidence : String -> TcErr (Succ Zero)
   InstanceUnknownMethod : String -> TcErr (Succ Zero)
+  InstanceDuplicateMethod : String -> TcErr (Succ Zero)
   NeedsTwoArgs : String -> TcErr (Succ Zero)
   NoInstanceFound : String -> TcErr (Succ Zero)
   -- 模板字符串插值（`${e}` → `Base.Trait.Interp.interp e`）找不到 `Interp`/`Show` 实例。
@@ -218,6 +219,7 @@ tcCode (ExpectedType _) = "TC_ExpectedType"
 tcCode (FfiTypeUnsupported _) = "TC_FfiTypeUnsupported"
 tcCode (EqRequiresEvidence _) = "TC_EqRequiresEvidence"
 tcCode (InstanceUnknownMethod _) = "TC_InstanceUnknownMethod"
+tcCode (InstanceDuplicateMethod _) = "TC_InstanceDuplicateMethod"
 tcCode (NeedsTwoArgs _) = "TC_NeedsTwoArgs"
 tcCode (NoInstanceFound _) = "TC_NoInstanceFound"
 tcCode (InterpNoInstance _) = "TC_InterpNoInstance"
@@ -328,6 +330,8 @@ tcTemplate (FfiTypeUnsupported _) = "extern type is outside the supported FFI su
 tcTemplate (EqRequiresEvidence _) =
   "cannot use == or /= on values of type <0> without an Eq instance (derive Eq or bring the Eq trait into scope)"
 tcTemplate (InstanceUnknownMethod _) = "instance has unknown method <0>"
+tcTemplate (InstanceDuplicateMethod _) =
+  "instance declares method <0> more than once (same method, two spellings)"
 tcTemplate (NeedsTwoArgs _) = "<0> needs exactly two arguments"
 tcTemplate (NoInstanceFound _) = "no instance found for <0>"
 tcTemplate (InterpNoInstance _) =
@@ -623,6 +627,10 @@ tcChunk7 =
       (tcCode (InstanceUnknownMethod ""))
       (tcTemplate (InstanceUnknownMethod ""))
       "instance 含未知的接口方法",
+    TcEntry
+      (tcCode (InstanceDuplicateMethod ""))
+      (tcTemplate (InstanceDuplicateMethod ""))
+      "instance 重复声明同一接口方法（两种写法）",
     TcEntry (tcCode (NeedsTwoArgs "")) (tcTemplate (NeedsTwoArgs "")) "需要恰好两个实参",
     TcEntry (tcCode (NoInstanceFound "")) (tcTemplate (NoInstanceFound "")) "找不到实例",
     TcEntry

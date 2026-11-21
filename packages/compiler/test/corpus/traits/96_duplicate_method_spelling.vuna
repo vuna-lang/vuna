@@ -1,0 +1,14 @@
+-- `eq` / `==` 是同一方法的两种写法：同一实例里只能声明一次。
+-- 以前 `methodClausesNamed` 按规范短名把两组子句并成一组，会悄悄丢掉一份实现。
+import Prelude
+
+data Color : Type where
+  Red : Color
+
+instance Eq Color where
+  eq Red Red = True
+  (==) Red Red = True
+  (/=) x y = False
+
+main : Bool
+main = Red == Red

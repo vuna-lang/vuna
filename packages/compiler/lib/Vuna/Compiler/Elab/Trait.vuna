@@ -347,6 +347,12 @@ checkSuperClasses globals ctx nCtx instName sp args (s :: rest) ec =
 -- 实例落点通过后的正常实例精化（方法检查 + 字典项构造）。
 elabInstanceWithClass : List (Pair String Term) -> List (Pair Decl Span) -> DtClass -> InstSigInfo -> Ec -> Expr -> List Decl -> Span -> Check (Pair (List (Pair String Term)) Ec)
 elabInstanceWithClass globals allDecls cls info ec0 headExpr methods msp =
+  case firstDuplicateInstanceMethod cls methods of
+    Just (Pair name dsp) => tcErr1 dsp (InstanceDuplicateMethod name) name
+    Nothing => elabInstanceWithClassGo globals allDecls cls info ec0 headExpr methods msp
+
+elabInstanceWithClassGo : List (Pair String Term) -> List (Pair Decl Span) -> DtClass -> InstSigInfo -> Ec -> Expr -> List Decl -> Span -> Check (Pair (List (Pair String Term)) Ec)
+elabInstanceWithClassGo globals allDecls cls info ec0 headExpr methods msp =
   case firstUnknownInstanceMethod cls methods of
     Just n => tcErr1 msp (InstanceUnknownMethod n) n
     Nothing =>
@@ -800,6 +806,30 @@ firstUnknownInstanceMethodGo known (d :: rest) =
     DFun n pats body sp =>
       if anySameMethod (baseNameOf n) known then firstUnknownInstanceMethodGo known rest else Just n
     _ => firstUnknownInstanceMethodGo known rest
+
+-- 同一实例里同一类方法只能声明一次。`eq` / `==` 是同一方法的两种写法：同时出现时
+-- 按重复方法报错，而不是把两组子句并成一组（后者会悄悄丢掉一份实现）。
+-- 同名重复是合法的多 clause（`fmp g (MkBox2 x) = ...` 后接 `fmp g y = ...`）。
+export firstDuplicateInstanceMethod : DtClass -> List Decl -> Maybe (Pair String Span)
+firstDuplicateInstanceMethod cls methods =
+  firstDuplicateInstanceMethodGo (map (\m => baseNameOf (firstOf m)) cls.dtClassMethods) methods []
+
+firstDuplicateInstanceMethodGo : List String -> List Decl -> List (Pair String String) -> Maybe (Pair String Span)
+firstDuplicateInstanceMethodGo known [] seen = Nothing
+firstDuplicateInstanceMethodGo known (d :: rest) seen =
+  case d of
+    DFun n pats body sp =>
+      let
+        short = baseNameOf n
+      in if anySameMethod short known then
+        let
+          canon = canonicalMethodShort short
+        in case lookupPair canon seen of
+          Just prev => if prev == short then firstDuplicateInstanceMethodGo known rest seen else Just (Pair canon sp)
+          Nothing => firstDuplicateInstanceMethodGo known rest (Pair canon short :: seen)
+      else
+        firstDuplicateInstanceMethodGo known rest seen
+    _ => firstDuplicateInstanceMethodGo known rest seen
 
 -- 缺方法要在**精化方法体之前**判定：方法体本身可能还有类型错误（例如跨模块 trait
 -- 的泛型方法参数被写错类型），先报体错误会把「缺实现」这个更根本的诊断盖掉。

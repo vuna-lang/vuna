@@ -107,7 +107,6 @@ ID 是稳定引用（`层前缀-序号`）：条目关闭即删除该行，ID �
 | EC-16 · D | `Impl.vuna` 的效果协议名字：字面串绕过 `Intrinsics` 的单一真源（`performCore`/`sigFn`/`raise`/`weaken`/`Int`/`String`） | `Elab/Term/Impl.vuna` | 后续 |
 | EC-20 · D | `Meta.vuna` 的 `ctorRefTerm*`：Ec 版与全局版两份实现 | `Elab/Meta.vuna` | 后续 |
 | EC-21 · A | `Trait.vuna` 的 `instArgAt`：实参取尽时伪造 `TGlobal "Int"`（不可达兜底） | `Elab/Trait.vuna` | 后续 |
-| EC-23 · C | 同一实例里同一方法的两种写法（`eq` / `==`）不会被判重复：`methodClausesNamed` 按规范短名把两组子句并成一组，`firstUnknownInstanceMethod` 也只看集合归属 | `Elab/Trait.vuna`（`methodClausesNamed` / `firstUnknownInstanceMethodGo`） | 后续（按类方法投影去重） |
 | EC-28 · C | `Elab/Driver.vuna` 的 `resolveDictGoalsFix`：字典收敛固定 8 轮（三处调用点） | `Elab/Driver.vuna` | 后续 |
 | EC-29 · D | `Elab/Driver.vuna` 的实例索引自检：只在 `--debug-perf` 下跑 | `Elab/Driver.vuna` | 后续 |
 | EC-30 · A | `Impl.vuna` 的 check 位 `if`：分支检查失败后整体重推断（位置 / 期望类型信息丢失，回退用原 `ec`） | `Elab/Term/Impl.vuna` | 后续 |
