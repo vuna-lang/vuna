@@ -21,7 +21,8 @@
 #   * 跨机器比较只看 `ratio = <backend>_median / ocaml_median` 与
 #     `rss_ratio`；wasm 另给 `net_*`（减掉 node 启动地板）；
 #   * 每个后端另记产物指标：中间文本 `files/bytes/lines/max_file`、最终二进制
-#     `binary_bytes`（wasm 是 `wasm_bytes`）、构建耗时 `build{codegen_ms,toolchain_ms}`
+#     `binary_bytes`（wasm 是 `wasm_bytes`）、构建耗时 `build{codegen_ms,toolchain_ms,
+#     postprocess_ms}`（wasm 的 `.wasm` 由 `wasm-tools parse` 汇编后再经 `wasm-opt` 优化）
 #     与对应的 `*_cpu_ms`（user+sys；文本与二进制由 flake 固定工具链生成，大小跨机器
 #     可比；耗时只同机可比，负载波动时看 CPU）；
 #   * 基线只有一份 `bench/baselines/programs.json`（全部 target）；`--check` 只比本次
@@ -195,6 +196,9 @@ command -v "$VUNA_BIN" >/dev/null 2>&1 || die "vuna not found: $VUNA_BIN"
 command -v "$OCAMLOPT_BIN" >/dev/null 2>&1 || die "ocamlopt not found: $OCAMLOPT_BIN"
 # wasm 的执行宿主是仓库自带的 Node/V8 宿主：与浏览器同一套 WebAssembly API 和 host 层。
 WASM_RUNNER=${WASM_RUNNER:-$REPO/wasm-host/run.mjs}
+WASM_OPT_BIN=${WASM_OPT_BIN:-wasm-opt}
+WASM_OPT_FLAGS="--enable-gc --enable-bulk-memory --enable-tail-call --enable-reference-types"
+WASM_OPT_LEVEL=${WASM_OPT_LEVEL:-3}
 NODE_BIN=${NODE:-node}
 NODE_VERSION=n/a
 NODE_STARTUP_MS=n/a
@@ -210,6 +214,7 @@ case " $TARGETS " in
   *" wasm "*)
     command -v "$NODE_BIN" >/dev/null 2>&1 || die "node not found（wasm 基准用 JS 宿主执行）"
     command -v wasm-tools >/dev/null 2>&1 || die "wasm-tools not found（wasm 产物需要 wasm-tools parse）"
+    command -v "$WASM_OPT_BIN" >/dev/null 2>&1 || die "wasm-opt not found（wasm 产物需要 binaryen）"
     [ -f "$WASM_RUNNER" ] || die "wasm JS host runner not found: $WASM_RUNNER"
     NODE_VERSION=$("$NODE_BIN" --version 2>/dev/null || printf 'unknown')
     # 宿主启动地板：每项测量都包含 node 启动 + 模块实例化，这里单独记一个只含 node 启动的数。
@@ -249,6 +254,7 @@ NPROC=$(getconf _NPROCESSORS_ONLN 2>/dev/null || printf 'unknown')
 LOADAVG=$(cut -d' ' -f1 /proc/loadavg 2>/dev/null || printf 'unknown')
 OCAMLOPT_VERSION=$("$OCAMLOPT_BIN" -version 2>/dev/null || printf 'unknown')
 VUNA_VERSION=$("$VUNA_BIN" --version 2>/dev/null || printf 'unknown')
+WASM_OPT_VERSION=$("$WASM_OPT_BIN" --version 2>/dev/null | head -n 1 || printf 'unknown')
 GIT_HEAD=unknown
 GIT_DIRTY=false
 if command -v git >/dev/null 2>&1 && git rev-parse --git-dir >/dev/null 2>&1; then
@@ -309,7 +315,7 @@ declare -A MED NET RSS RATIO NET_RATIO RSS_RATIO DEFAULT_STACK SKIP \
   NATIVE_GC_NATIVE_LIVE NATIVE_GC_NATIVE_ALLOC NATIVE_GC_NATIVE_COLLECTIONS \
   WASM_MEMORY_BYTES ART_BYTES ART_LINES WASM_BYTES SAMPLE_LOG \
   ART_FILES ART_MAX_PATH ART_MAX_BYTES ART_MAX_LINES BIN_BYTES BUILD_CG_MS BUILD_TC_MS \
-  BUILD_CG_CPU_MS BUILD_TC_CPU_MS
+  BUILD_CG_CPU_MS BUILD_TC_CPU_MS BUILD_POST_MS BUILD_POST_CPU_MS
 ORDER=()
 
 sum_bytes() { awk '{ s += $1 } END { print s + 0 }'; }
@@ -355,6 +361,8 @@ build_target() { # name target dir
   BUILD_TC_MS["$name:$target"]=$LAST_TOOLCHAIN_MS
   BUILD_CG_CPU_MS["$name:$target"]=$LAST_CODEGEN_CPU_MS
   BUILD_TC_CPU_MS["$name:$target"]=$LAST_TOOLCHAIN_CPU_MS
+  BUILD_POST_MS["$name:$target"]=$LAST_POST_MS
+  BUILD_POST_CPU_MS["$name:$target"]=$LAST_POST_CPU_MS
 }
 
 # 校验产物输出与 golden 一致；返回 1 = 不一致或运行失败（调用方决定 die 还是记 skip）。
@@ -631,9 +639,10 @@ emit_backend() {
     fi
   fi
   if [ -n "${BUILD_CG_MS["$name:$target"]:-}" ]; then
-    printf ', "build": { "codegen_ms": %s, "codegen_cpu_ms": %s, "toolchain_ms": %s, "toolchain_cpu_ms": %s }' \
+    printf ', "build": { "codegen_ms": %s, "codegen_cpu_ms": %s, "toolchain_ms": %s, "toolchain_cpu_ms": %s, "postprocess_ms": %s, "postprocess_cpu_ms": %s }' \
       "${BUILD_CG_MS["$name:$target"]}" "${BUILD_CG_CPU_MS["$name:$target"]:-null}" \
-      "${BUILD_TC_MS["$name:$target"]:-0}" "${BUILD_TC_CPU_MS["$name:$target"]:-null}"
+      "${BUILD_TC_MS["$name:$target"]:-0}" "${BUILD_TC_CPU_MS["$name:$target"]:-null}" \
+      "${BUILD_POST_MS["$name:$target"]:-0}" "${BUILD_POST_CPU_MS["$name:$target"]:-null}"
   fi
   if [ "$target" = vuna_ocaml ] && [ -n "${GC_MINOR_WORDS[$name]:-}" ]; then
     printf ', "gc": { "minor_words": %s, "major_words": %s, "minor_collections": %s, "major_collections": %s, "top_heap_words": %s }' \
@@ -673,6 +682,7 @@ emit_json() {
   printf '    "target": "%s",\n' "$TARGET"
   printf '    "stack_policy": "%s",\n' "$(json_escape "$STACK_POLICY")"
   printf '    "wasm_host_runner": "%s",\n' "$(json_escape "$WASM_RUNNER")"
+  printf '    "wasm_opt": "%s",\n' "$(json_escape "$WASM_OPT_VERSION")"
   printf '    "node": "%s",\n' "$(json_escape "$NODE_VERSION")"
   printf '    "node_startup_ms": %s,\n' "$(case $NODE_STARTUP_MS in ''|*[!0-9]*) printf 'null' ;; *) printf '%s' "$NODE_STARTUP_MS" ;; esac)"
   printf '    "rss_samples": %s,\n' "$RSS_PASSES"
@@ -747,17 +757,17 @@ print_table() {
 # 产物表：中间文本文件数与最大文件、最终二进制大小、codegen/工具链耗时。
 print_artifact_table() {
   note ""
-  printf '  %-16s %-11s %7s %11s %11s %11s %10s %11s %10s %10s\n' \
-    benchmark backend files text_bytes max_file bin_bytes codegen_ms toolchain_ms cg_cpu tc_cpu
+  printf '  %-16s %-11s %7s %11s %11s %11s %10s %11s %10s %10s %10s %10s\n' \
+    benchmark backend files text_bytes max_file bin_bytes codegen_ms toolchain_ms opt_ms cg_cpu tc_cpu opt_cpu
   local name t
   for name in "${ORDER[@]}"; do
     for t in $TARGETS; do
       [ -n "${SKIP["$name:$t"]:-}" ] && continue
-      printf '  %-16s %-11s %7s %11s %11s %11s %10s %11s %10s %10s\n' "$name" "$t" \
+      printf '  %-16s %-11s %7s %11s %11s %11s %10s %11s %10s %10s %10s %10s\n' "$name" "$t" \
         "${ART_FILES["$name:$t"]:-0}" "${ART_BYTES["$name:$t"]:-0}" \
         "${ART_MAX_BYTES["$name:$t"]:-0}" "${BIN_BYTES["$name:$t"]:-0}" \
-        "${BUILD_CG_MS["$name:$t"]:-0}" "${BUILD_TC_MS["$name:$t"]:-0}" \
-        "${BUILD_CG_CPU_MS["$name:$t"]:-n/a}" "${BUILD_TC_CPU_MS["$name:$t"]:-n/a}"
+        "${BUILD_CG_MS["$name:$t"]:-0}" "${BUILD_TC_MS["$name:$t"]:-0}" "${BUILD_POST_MS["$name:$t"]:-0}" \
+        "${BUILD_CG_CPU_MS["$name:$t"]:-n/a}" "${BUILD_TC_CPU_MS["$name:$t"]:-n/a}" "${BUILD_POST_CPU_MS["$name:$t"]:-n/a}"
     done
   done
 }

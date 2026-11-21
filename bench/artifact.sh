@@ -141,6 +141,10 @@ REPO=$PWD
 
 . "$REPO/bench/lib/targets.sh"
 
+WASM_OPT_BIN=${WASM_OPT_BIN:-wasm-opt}
+WASM_OPT_FLAGS="--enable-gc --enable-bulk-memory --enable-tail-call --enable-reference-types"
+WASM_OPT_LEVEL=${WASM_OPT_LEVEL:-3}
+
 # ---------------------------------------------------------------- 工具与临时目录
 command -v "$VUNA_BIN" >/dev/null 2>&1 || die "vuna not found: $VUNA_BIN"
 command -v "$OCAMLOPT_BIN" >/dev/null 2>&1 || die "ocamlopt not found: $OCAMLOPT_BIN"
@@ -150,6 +154,7 @@ NODE_BIN=${NODE:-node}
 case " $TARGETS " in
   *" wasm "*)
     command -v wasm-tools >/dev/null 2>&1 || die "wasm-tools not found（wasm 产物需要 wasm-tools parse）"
+    command -v "$WASM_OPT_BIN" >/dev/null 2>&1 || die "wasm-opt not found（wasm 产物需要 binaryen）"
     command -v "$NODE_BIN" >/dev/null 2>&1 || die "node not found（wasm 产物用 JS 宿主执行）"
     [ -f "$WASM_RUNNER" ] || die "wasm JS host runner not found: $WASM_RUNNER"
     ;;
@@ -174,6 +179,7 @@ LOADAVG=$(cut -d' ' -f1 /proc/loadavg 2>/dev/null || printf 'unknown')
 OCAMLOPT_VERSION=$("$OCAMLOPT_BIN" -version 2>/dev/null || printf 'unknown')
 CC_VERSION=$("$CC_BIN" --version 2>/dev/null | head -n 1 || printf 'unknown')
 WASM_TOOLS_VERSION=$(wasm-tools --version 2>/dev/null || printf 'unknown')
+WASM_OPT_VERSION=$("$WASM_OPT_BIN" --version 2>/dev/null | head -n 1 || printf 'unknown')
 VUNA_VERSION=$("$VUNA_BIN" --version 2>/dev/null || printf 'unknown')
 GIT_HEAD=unknown
 GIT_DIRTY=false
@@ -319,7 +325,7 @@ source_lines() {
 # ---------------------------------------------------------------- 测量
 declare -A SRC_BYTES SRC_LINES SRC_KIND \
   ART_FILES ART_BYTES ART_LINES MAX_PATH MAX_BYTES MAX_LINES \
-  BIN_PATH BIN_BYTES CG_MS CG_CPU TC_MS TC_CPU TCW_MS TCW_CPU RUN_OK SKIP
+  BIN_PATH BIN_BYTES CG_MS CG_CPU TC_MS TC_CPU TCW_MS TCW_CPU POST_MS POST_CPU RUN_OK SKIP
 ORDER=()
 
 if [ "$LIST" = 1 ]; then
@@ -368,8 +374,10 @@ for c in $CASES; do
     if ! target_requested "$c" "$t"; then continue; fi
     cg_list=""
     tc_list=""
+    post_list=""
     cg_cpu_list=""
     tc_cpu_list=""
+    post_cpu_list=""
     for ((r = 1; r <= RUNS; r++)); do
       dir=$WORK/out/$c/$t/last
       if [ "$r" -lt "$RUNS" ]; then dir=$WORK/out/$c/$t/r$r; fi
@@ -382,15 +390,19 @@ for c in $CASES; do
       fi
       cg_list="$cg_list $LAST_CODEGEN_MS"
       tc_list="$tc_list $LAST_TOOLCHAIN_MS"
+      post_list="$post_list $LAST_POST_MS"
       [ -n "$LAST_CODEGEN_CPU_MS" ] && cg_cpu_list="$cg_cpu_list $LAST_CODEGEN_CPU_MS"
       [ -n "$LAST_TOOLCHAIN_CPU_MS" ] && tc_cpu_list="$tc_cpu_list $LAST_TOOLCHAIN_CPU_MS"
+      [ -n "$LAST_POST_CPU_MS" ] && post_cpu_list="$post_cpu_list $LAST_POST_CPU_MS"
     done
     # 尺寸只在最后一次构建上收集（同一输入应逐字节一致）。
     collect_target "$c" "$t"
     CG_MS["$c:$t"]=$(vuna_median $cg_list)
     TC_MS["$c:$t"]=$(vuna_median $tc_list)
+    POST_MS["$c:$t"]=$(vuna_median $post_list)
     CG_CPU["$c:$t"]=$(vuna_median $cg_cpu_list)
     TC_CPU["$c:$t"]=$(vuna_median $tc_cpu_list)
+    POST_CPU["$c:$t"]=$(vuna_median $post_cpu_list)
     if ! vuna_toolchain_warm "$t" "$dir"; then die "warm toolchain failed: $c ($t)"; fi
     TCW_MS["$c:$t"]=$LAST_WARM_MS
     TCW_CPU["$c:$t"]=$LAST_WARM_CPU_MS
@@ -406,10 +418,10 @@ for c in $CASES; do
       RUN_OK["$c:$t"]=skipped
     fi
 
-    note "  $(printf '%-7s files=%-4s text=%-9s lines=%-7s max=%-9s binary=%-8s cg=%-6s tc=%-6s warm=%-6s cpu(cg/tc)=%s/%s' \
+    note "  $(printf '%-7s files=%-4s text=%-9s lines=%-7s max=%-9s binary=%-8s cg=%-6s tc=%-6s opt=%-6s warm=%-6s cpu(cg/tc/opt)=%s/%s/%s' \
       "$t" "${ART_FILES["$c:$t"]}" "${ART_BYTES["$c:$t"]}" "${ART_LINES["$c:$t"]}" \
-      "${MAX_BYTES["$c:$t"]}" "${BIN_BYTES["$c:$t"]}" "${CG_MS["$c:$t"]}" "${TC_MS["$c:$t"]}" "${TCW_MS["$c:$t"]}" \
-      "${CG_CPU["$c:$t"]:-n/a}" "${TC_CPU["$c:$t"]:-n/a}")"
+      "${MAX_BYTES["$c:$t"]}" "${BIN_BYTES["$c:$t"]}" "${CG_MS["$c:$t"]}" "${TC_MS["$c:$t"]}" "${POST_MS["$c:$t"]}" "${TCW_MS["$c:$t"]}" \
+      "${CG_CPU["$c:$t"]:-n/a}" "${TC_CPU["$c:$t"]:-n/a}" "${POST_CPU["$c:$t"]:-n/a}")"
   done
   if [ "$c" = self ]; then
     case " $TARGETS " in
@@ -439,9 +451,10 @@ emit_backend_json() { # case target
   printf '] },\n'
   printf '%s  "binary": { "path": "%s", "bytes": %s },\n' \
     "$indent" "${BIN_PATH["$c:$t"]}" "${BIN_BYTES["$c:$t"]}"
-  printf '%s  "build": { "codegen_ms": %s, "codegen_cpu_ms": %s, "toolchain_ms": %s, "toolchain_cpu_ms": %s, "toolchain_warm_ms": %s, "toolchain_warm_cpu_ms": %s },\n' \
+  printf '%s  "build": { "codegen_ms": %s, "codegen_cpu_ms": %s, "toolchain_ms": %s, "toolchain_cpu_ms": %s, "postprocess_ms": %s, "postprocess_cpu_ms": %s, "toolchain_warm_ms": %s, "toolchain_warm_cpu_ms": %s },\n' \
     "$indent" "${CG_MS["$c:$t"]}" "${CG_CPU["$c:$t"]:-null}" \
     "${TC_MS["$c:$t"]}" "${TC_CPU["$c:$t"]:-null}" \
+    "${POST_MS["$c:$t"]}" "${POST_CPU["$c:$t"]:-null}" \
     "${TCW_MS["$c:$t"]}" "${TCW_CPU["$c:$t"]:-null}"
   if [ "${RUN_OK["$c:$t"]}" = skipped ]; then
     printf '%s  "run": { "ok": "skipped" }\n' "$indent"
@@ -462,6 +475,7 @@ emit_json() {
   printf '    "ocamlopt": "%s",\n' "$(json_escape "$OCAMLOPT_VERSION")"
   printf '    "cc": "%s",\n' "$(json_escape "$CC_VERSION")"
   printf '    "wasm_tools": "%s",\n' "$(json_escape "$WASM_TOOLS_VERSION")"
+  printf '    "wasm_opt": "%s",\n' "$(json_escape "$WASM_OPT_VERSION")"
   printf '    "arch": "%s",\n' "$(json_escape "$ARCH")"
   printf '    "nproc": %s,\n' "$(case $NPROC in ''|*[!0-9]*) printf 'null' ;; *) printf '%s' "$NPROC" ;; esac)"
   printf '    "loadavg": "%s",\n' "$(json_escape "$LOADAVG")"
@@ -562,10 +576,11 @@ compare_baseline() {
         case $verdict in WARN) size_warn=$((size_warn + 1)) ;; FAIL) size_fail=$((size_fail + 1)) ;; new) news=$((news + 1)) ;; *) ok=$((ok + 1)) ;; esac
         printf '  %-10s %-11s %-20s %12s %12s %8s%%  %s\n' "$c" "$t" "$key" "$cur" "$basev" "$delta" "$verdict"
       done
-      for suffix in codegen toolchain toolchain_warm; do
+      for suffix in codegen toolchain postprocess toolchain_warm; do
         case $suffix in
           codegen) cur_c=${CG_CPU["$c:$t"]:-}; cur_w=${CG_MS["$c:$t"]:-} ;;
           toolchain) cur_c=${TC_CPU["$c:$t"]:-}; cur_w=${TC_MS["$c:$t"]:-} ;;
+          postprocess) cur_c=${POST_CPU["$c:$t"]:-}; cur_w=${POST_MS["$c:$t"]:-} ;;
           toolchain_warm) cur_c=${TCW_CPU["$c:$t"]:-}; cur_w=${TCW_MS["$c:$t"]:-} ;;
         esac
         cpu_key="build.${suffix}_cpu_ms"

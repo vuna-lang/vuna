@@ -19,7 +19,10 @@
   同时测 OCaml 后端与 native，`all` 再加上 wasm，用来给出跨后端的比值。
 - wasm 产物由仓库自带的宿主执行（`wasm-host/run.mjs`，Node/V8，与浏览器同一套
   `WebAssembly` API 与 host 层）。`meta` 记录 `node` / `node_startup_ms` /
-  `wasm_host_runner`。
+  `wasm_host_runner` / `wasm_opt`。
+- wasm 的 `.wasm` 有两段外部工具：`wasm-tools parse` 汇编，然后 `wasm-opt -O3` 优化。
+  `--target wasm` 的构建时间分三段记录（`toolchain` / `postprocess` / `toolchain_warm`）。
+  产物大小与运行时间都按优化后的 `.wasm` 口径；`main.wat` 仍是 canonical 文本。
 - V8 的 wasm 栈约 1 MB 且无开关：非尾深递归的程序会以 `Maximum call stack size exceeded`
   收口，JSON 记 `"run_ok": false`（浏览器路径的真实边界，不是测量设施的限制）。
   wasm 的 RSS 是 node 进程量级（~55 MB 起），只作量级参考，不与 native/OCaml 的峰值口径比较。
@@ -106,9 +109,10 @@ nix run .#vuna-artifacts -- --json bench/baselines/artifacts.json   # 重标
 
 - 中间文本：`.ml`（ocaml）/ `.s`（native）/ `main.wat`（wasm）的文件树、文件数、字节、行数；
 - 最终二进制：`prog`（ocaml / native）与 `main.wasm`；
-- 构建：`codegen_ms`（`vuna compile`）与 `toolchain_ms`（ocamlopt / cc / wasm-tools），
-  各带 `*_cpu_ms`（user+sys），另有 `toolchain_warm_ms`（ocaml 走 build.sh 内容哈希、
-  native 为重链、wasm 为重新汇编）；每次构建用独立空 `VUNA_STORE`（`<dir>.store`），
+- 构建：`codegen_ms`（`vuna compile`）、`toolchain_ms`（ocamlopt / cc / `wasm-tools parse`）
+  与 `postprocess_ms`（`wasm-opt`；非 wasm 目标为 0），各带 `*_cpu_ms`（user+sys），
+  另有 `toolchain_warm_ms`（ocaml 走 build.sh 内容哈希、native 为重链、wasm 为
+  `build.sh` 的编译+优化两段）；每次构建用独立空 `VUNA_STORE`（`<dir>.store`），
   codegen 冷热不随宿主缓存漂移；
 - 生成物不含绝对路径/时间戳，工具链由 flake 固定，所以**尺寸与二进制大小跨机器可比**
   （默认 5% WARN / 20% FAIL，FAIL 退出 1）；**时间只同机可比**，负载波动时看 CPU 口径

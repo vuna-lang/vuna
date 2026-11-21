@@ -39,4 +39,8 @@ sh bench/update-baselines.sh --only programs
 已知口径边界：
 
 - `programs.json` 的 `meta.git_head` / `git_dirty` 记录生成时的源码状态；`--check` 不读这两个字段。
+- `programs.json` / `artifacts.json` 的 wasm 条目记 `meta.wasm_tools` 与 `meta.wasm_opt`：
+  `.wasm` 字节由这两个工具版本共同决定，两者任一变化都要整批重标。
+  wasm 的构建耗时现在分 `toolchain`（`wasm-tools parse`）与 `postprocess`（`wasm-opt`）两段，
+  二进制大小与运行时间都按优化后的产物口径。
 - `bootstrap.json` 由构建链自己测量（stage0/stage1/product），与 `compiler.txt` 的 CLI 命令不是同一负载，不要混用成一个信号。
