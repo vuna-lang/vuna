@@ -35,7 +35,8 @@
   sh build.sh                      # native-build: compiled 0 of 143（只链接）
   ```
   依赖 `cc` / `as` / `ld`（Nix devShell 与测试环境的 `ocamlTools` 已提供）。它们是
-  **构建期外部工具，不进 TCB、不进 seed**，与 wasm 侧 `wasm-tools parse` 同构。
+  **构建期外部工具，不进 TCB、不进 seed**，与 wasm 侧的 `wasm-tools parse` / `wasm-opt`
+  同构。
 - ELF 字节依赖链接工具版本，只保证**行为**；`.s` 文件集保证字节确定。
 - 不接对象库：每次重新生成 `.s` 文件集，只有 `cc` 层按内容哈希增量。
 

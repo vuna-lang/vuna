@@ -124,7 +124,7 @@
 | D15 | 单一 store 根、两类生命周期：缓存族（派生、可删）与包对象族（取源、显式获取、跨项目存活）；获取显式、构建离线 | 缓存可删可重建，包对象必须跨会话/跨项目存活；一个根才有单一 framing/地址与 GC 口径 | 仍是同一棵树：clean/gc 必须按族作用域（包对象在 `objects/pkg/`），且无引用计数 GC（roots 只追加） |
 | D6 | client/server 由框架切分；边界用类型表达；切分在构建图里做 | 胶水与平台演进不该进编译器 | 切分正确性靠构建图检查与测试，不再由编译器保证 |
 | D7 | 自举锚点**当前**是 OCaml（`seed/`，同时是语义 oracle）；方向是 native 自举成熟后用 native 产物（`.s` 文件集）当锚点，OCaml 后端可在那之后退役并归档；wasm 不做自举、不设 wasm seed | native 产物只需要 `cc`/`as`/`ld` 且字节确定；wasm 仍只能跑浏览器 / 边缘能力子集，不能承担自举所需的宿主面 | 自举链平台锁定 x86-64 Linux（其它平台用发布二进制）；OCaml 退役后固定点从「独立实现互证」降级为「同一 codegen 自洽」，跨后端差分 oracle 需由 suite + wasm 交叉承担（[bootstrap.md](reference/bootstrap.md)「锚点演进」） |
-| D16 | wasm 产物以 WAT 为 canonical；`.wasm` 由 `wasm-tools parse` 生成；WAT 暂不进 Git | 文本可审查、布局稳定可 diff；二进制交给成熟工具 | `.wasm` 字节依赖工具版本；WAT 布局不承诺跨版本稳定 |
+| D16 | wasm 产物以 WAT 为 canonical；`.wasm` 由两段外部工具生成——`wasm-tools parse` 汇编、`wasm-opt`（binaryen）优化；WAT 仍不进 Git | 文本可审查、布局稳定可 diff；二进制交给成熟工具 | `.wasm` 字节依赖 `wasm-tools` 与 `wasm-opt` 两个由 Nix 固定的版本；WAT 布局不承诺跨版本稳定 |
 | D8 | interp 保留"纯求值"，退役"第二执行语义"；`vuna interp` 命令已删除，纯求值只在 `vuna test` / REPL 内部使用 | 保留 normalization，去掉 CLI 语义分叉 | 第二执行语义（`runEffectProgram` 临时包）仍待清理；REPL / test 需改接对象库与后端 |
 | D9 | 单一输入寻址对象库是横切基础设施，所有消费者是客户端 | 消灭多套缓存与多个入口 | 目录视图与 roots 需要并发/GC 规则 |
 | D10 | vuna-web 是生态层、是核心的验收测试，永不进 TCB | 框架不得倒灌核心 | 每个 web 需求都必须先翻译成通用语言特性 |

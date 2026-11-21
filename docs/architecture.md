@@ -170,7 +170,8 @@ data（`Base.Data.Bool.Bool` / `Base.Data.List.List` / `Base.Data.Nat.Nat`），
 ABI、值表示、运行时符号与边界见 [native.md](reference/native.md)。
 
 **wasm 后端**：`IR --Wasm.Module.build--> WasmModule --Wasm.Render.renderModule-->
-main.wat`，再由 CLI 的 `build` 分支调 `wasm-tools parse` 汇编成 `main.wasm`；驱动入口
+main.wat`，再由 CLI 的 `build` 分支跑 `build.sh`：`wasm-tools parse` 汇编成 `main.wasm`，
+再经 `wasm-opt`（binaryen）优化（`--wasm-opt N`，0..3，默认 3）；驱动入口
 `Vuna.Compiler.Driver.Wasm.compileWasm`。支持 Int/Nat/String/Bool 纯值、`let`/`if`、
 顶层饱和调用、Nat 结构递归与 `++` 链；WasmGC 表示、WAT 稳定布局与运行时符号覆盖见
 [wasm.md](reference/wasm.md)。

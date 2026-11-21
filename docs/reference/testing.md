@@ -492,7 +492,9 @@ pkg_err/packages/test-m30 → `packages/cli`；web → `packages/web-cli`；其�
   handler / return 改类型 / 宿主 console / 深递归；`105_native_backend.steps` 只保留 native 机制
   （产物形状、label 唯一性、确定性、trap 文本、arena、栈传参、拒绝面、`--no-compile`）；
   `106_wasm_backend.steps` 只保留 wasm 机制（WAT 产物形状、`elem declare`、WAT 确定性 +
-  行宽、trap、拒绝面、`--target` 校验、2000 次 perform 与能力拒绝面）；
+  行宽、trap、拒绝面、`--target` 校验、2000 次 perform 与能力拒绝面）；它同时探
+  `wasm-opt` 是否存在，并锁 `--wasm-opt 0`（`build.sh` 不含 `wasm-opt`）与默认 `-O3`
+  （含 `wasm-opt`）两种产物的尺寸关系；
   wasm 不自举（浏览器能力矩阵见 [wasm.md](wasm.md) §8）。`corpus/dt_err/*` 是对应负例
   （kind / 宇宙、冗余 / 不可达分支、axiom 运行时、命名空间、隐式参数、泛型 Σ、无 Eq 证据
   等）。`corpus/dt_base/`、`corpus/pure_cross/`、`corpus/effect/*`、`corpus/dt_pkg/`、`corpus/dt_ad_hoc/` 是 DT
@@ -568,9 +570,10 @@ CI 把它拆成三个 job（`.github/workflows/ci.yml`）：`flake-check` 跑除
 - `vuna-static`：结构守卫（诊断码 / IR 边界 / 进程绑定岛 / 隐藏效果 / **suite 清单**）——
   `test/suite.toml` 的 driver 清单必须覆盖所有 `packages/*/test/suite.toml`，且每个 suite
   带 `owner` 与正的 `min_cases`。
-- `vuna-wasm-browser`：产物在**默认 wasm 特性**下必须 validate 通过——所有效应形态都走
-  显式效应机器，不含 `cont` / `$eff`，不依赖任何提案特性。默认不跑浏览器（保持
-  `nix flake check` 秒级）。
+- `vuna-wasm-browser`：产物在**默认 wasm 特性**下必须 validate 通过——纯程序、内建宿主效应、
+  宿主效应 + 用户 handler 三种形态都走显式效应机器，不含 `cont` / `$eff`，**都不需要 stack
+  switching**（门禁按 `--features=-stack-switching` validate 三份产物）。Chromium 实跑那一档
+  也跑 `mixed` 产物并期望 `done4`。默认不跑浏览器（保持 `nix flake check` 秒级）。
 - `vuna-wasm-browser-smoke`（**package，不在 `nix flake check` 里**）：用 Playwright 驱动
   `pkgs.playwright-driver` 的 chromium（revision 与 `pkgs.playwright` 对齐，约 356 MB）做
   headless 实跑，跑法与本地一致：

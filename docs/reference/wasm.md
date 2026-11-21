@@ -12,12 +12,15 @@
 
 ## 1. 产物与工具链
 
-- **canonical 产物是 WAT 文本**（`main.wat`）；`.wasm` 不手写、不进 Git，由
-  `wasm-tools parse main.wat -o main.wasm` 生成（版本由 Nix 固定）。
+- **canonical 产物是 WAT 文本**（`main.wat`）；`.wasm` 不手写、不进 Git，由两段外部工具生成：
+  `wasm-tools parse main.wat -o main.wasm` 汇编，再由 `wasm-opt`（binaryen）优化
+  （两个工具的版本都由 Nix 固定）。
 - `vuna compile <ENTRY|PKG-DIR> <OUT> --target wasm` → `<OUT>/main.wat`。
 - `vuna build <PKG-DIR> --target wasm --out <OUT>`：写 `<OUT>/main.wat` + `<OUT>/build.sh`，
-  并直接调用 `wasm-tools parse` 产出 `<OUT>/main.wasm`（工具缺失/失败即 exit 1，
-  不静默留半成品）；`--no-compile` 只写 WAT + `build.sh`。
+  并跑 `build.sh`（`wasm-tools parse` 汇编 → `wasm-opt` 优化）产出 `<OUT>/main.wasm`
+  （工具缺失/失败即 exit 1，不静默留半成品）；`--no-compile` 只写 WAT + `build.sh`
+  （脚本本身仍包含汇编与优化两步，需自己去跑）。
+- `--wasm-opt N` 选 binaryen 优化级别（`N` 取 0..3，默认 3；`0` = 只汇编、不优化）。
 - `--target` 取值校验在 CLI 解析层（`ocaml|wasm|native`），未知目标是用法错误（exit 2），
   不回落到 OCaml。
 - 执行宿主是仓库自带的 Node/V8 宿主（`wasm-host/run.mjs`，宿主层 `wasm-host/host.mjs`，
@@ -35,8 +38,56 @@
   （缺省进程 cwd），浏览器下由宿主注入 preopen/adapter。路径按 fd 3 解析而**不按 `PWD`**；
   绝对路径会去掉开头的 `/` 再按根解析。多个 preopen 时只使用 fd 3，不做多根映射。
 - 工具链是**构建期/测试期外部工具**，不进 TCB、不进 seed（与 native 侧 `cc` 同构）：
-  `nix/build/common.nix` 的 `wasmTools`（`wasm-tools`，devShell / `vuna-run-tests` /
+  `nix/build/common.nix` 的 `wasmTools`（`wasm-tools` + `binaryen`；devShell / `vuna-run-tests` /
   `vuna-tests-*` 的 PATH）；执行用的 Node 在 `e2eTools` 里。
+
+### 1.1 优化阶段（wasm-opt）
+
+`build.sh` 的两段固定顺序：先
+`wasm-tools parse main.wat -o main.wasm`，再
+`wasm-opt <flags> -g -O<N> main.wasm -o main.wasm.tmp && mv main.wasm.tmp main.wasm`。
+**只作用于 `.wasm`**：`main.wat` 仍是 canonical 产物，也是 artifact 树（`bench` 统计的文本
+产物）的唯一文件——文本字节/行数不受影响；`.wasm` 字节随优化级别变化。
+
+- 特性开关固定为 `--enable-gc --enable-bulk-memory --enable-tail-call --enable-reference-types`。
+  **`--enable-bulk-memory` 必需**：模块用被动数据段（`array.new_data`），缺它时 binaryen 校验
+  直接失败（`Data segment operations require bulk memory`）。
+- `-g` 保留 name section，`node --cpu-prof` 仍能解析 `$f_*` 符号；去掉 `-g` 会让 binaryen
+  剥掉所有 custom section。
+- `--wasm-opt N`（0..3，默认 3）：`0` 只汇编不优化；`build` 的用法文本
+  （`compilerUsageLines`）与 CLI 的 flag 表同源。
+- **`-O3` 对定义数大的模块很慢**：binaryen 在 `-O3` 上多轮 `precompute-propagate` /
+  `optimize-instructions` / `inline`，`bench/artifacts/cases` 的 `defs-1000`（1000 个顶层
+  定义）上实测约 6.7–7.2 s（`-O2` 只有约 0.12 s），占满整个 `postprocess` 阶段。这是
+  用例形状（单个巨型 `_start` + 上千个零参 CAF）叠加 binaryen 的 O(n²) 倾向，不是常量。
+- **在驱动层执行，不在插件内**：`wasm-opt` 由驱动层调 `build.sh` 跑，`vuna-target-wasm`
+  插件不碰它——`target-out` 缓存键里没有外部工具版本，在插件内优化会把旧 `.wasm` 静默缓存。
+- `-O3` 会重写控制流：尾调用折叠后 `tco_mutual` 的 `return_call` 从 66 个降到 1 个。断言产物
+  形状时不能假设固定的 `return_call` 计数。
+- 默认内联改变栈深：`hashmap` 在 binaryen 默认 `-O2` 内联下 trap（`Maximum call stack size
+  exceeded`），`-O3` 与「`-O3` + 关内联」都能正常跑。flag 集合因此固定，`hashmap` 是栈敏感性
+  回归用例。
+
+13 个可跑 wasm benchmark（Node 24，7 次取中位数，产物逐字节与基线一致，
+`wasm-tools validate --features=gc,bulk-memory,tail-call,reference-types,multi-value` 全部通过）
+的运行时变化：
+
+| benchmark | 变化 | 产物（优化前 → `-O3`） |
+| --- | --- | --- |
+| arith | −45% | 47.1 → 0.55 KB |
+| hashmap | −25% | 48.3 → 3.7 KB |
+| nat_bits | −20% | 48.3 → 1.1 KB |
+| treemap | −18% | — |
+| eff_tick | −18% | 55.3 → 15.3 KB |
+| records | −5% | — |
+| queue | ~0% | — |
+| string_ops / traits / eff_deep / eff_bracket | 0..−8% | — |
+| float_math / tco_mutual | 中性到更差 | — |
+
+增益几乎全来自内联 + DCE，不是指令选择：关掉 binaryen 内联
+（`--always-inline-max-function-size 0 --one-caller-inline-max-function-size 0`）后 arith 只剩
+−4%，`float_math` +45%、`tco_mutual` +36%（更差）。因此**量后端自身的优化（表示相关的工作）
+要用 `--wasm-opt 0` 或关内联的变体作对照**，否则 binaryen 会掩盖效果（D128）。
 
 ## 2. 数据表示（WasmGC）
 
@@ -68,7 +119,8 @@ binder 全量拷进 `$env` 数组（与 native 同策略），闭包应用经 `$
   `$rt_effThunk` / `$rt_effResumeClo`（两者都被 `ref.func` 引用）。
 - 缩进固定 2 空格、一条指令一行；行宽上限 100 列，超长字符串按 24 字节分块
   为相邻字面量。
-- 同一 IR 的 WAT 字节确定；`.wasm` 只保证行为（字节依赖工具版本，由 Nix 固定）。
+- 同一 IR 的 WAT 字节确定；`.wasm` 只保证行为（字节依赖 `wasm-tools` 与 `wasm-opt` 的版本，
+  两者都由 Nix 固定）。
 - 局部变量编号只在**函数内**递增（`$l<n>`）；每个函数生成前局部表清零
   （`beginFuncScope`），结束后恢复外层状态。参数是 `$p<n>`，`case` 的 scrutinee
   槽是 `$sc0`。
@@ -204,9 +256,10 @@ stdout/stderr 大输出不受线性内存大小限制）；读按 `filestat` 的
   wasm 机制——WAT 产物形状、顶层函数 `$f_<name>`、闭包函数进 `(elem declare func ...)`、
   WAT 确定性 + 每行 ≤100 列、除零 / 数组越界 / `assert` / `prim_fail` / `todo` 的错误
   文本、`--no-compile`、拒绝面、`--target` 取值校验；另有 2000 次 perform（引擎默认栈）
-  与重复 resume 的 one-shot trap（`continuation already resumed`）。浏览器能力裁剪由同一
-  文件锁住：`path_symlink` 不出现在 import、symlink/sleep 运行期 trap、mtime 得
-  `Nothing`、cwd 恒 `/`、stdin 能力告警。
+  与重复 resume 的 one-shot trap（`continuation already resumed`）。同一文件还探 `wasm-opt`
+  是否存在，并锁 `--wasm-opt 0`（`build.sh` 不含 `wasm-opt`）与默认 `-O3`（含 `wasm-opt`）
+  两种产物的尺寸关系。浏览器能力裁剪由同一文件锁住：`path_symlink` 不出现在 import、
+  symlink/sleep 运行期 trap、mtime 得 `Nothing`、cwd 恒 `/`、stdin 能力告警。
 - 共享语义（含 handler / 续延 / abort / 嵌套 / 宿主 console / 高阶 API）由
   suite 的 `pure-cross` 分类对拍三端（OCaml 是语义 oracle）；
   新增共享能力先加 `packages/compiler/test/corpus/pure_cross/` 夹具，再实现两个后端。生成器的两臂顺序约束由
@@ -238,8 +291,10 @@ Component Model 的运行链路，而产物是核心模块，且测试宿主需�
 
 **执行边界（性能口径同源）**：V8 的 wasm 栈约 1 MB 且没有开关（`node --stack-size` 不改变
 wasm 栈），所以非尾深递归的生成程序在浏览器路径上会以 `Maximum call stack size exceeded`
-收口；尾调用（`return_call`）的形状不受影响。生成程序在浏览器路径上的读数与判定见
-[benchmarks.md](benchmarks.md) §1.3。
+收口；尾调用（`return_call`）的形状不受影响。这个上限**不受 `wasm-opt` 影响**：`array` /
+`closures` / `list_recursion` / `sorting` / `text_scan` / `gc_pressure` / `gc_array_churn` /
+`gc_low_live` 这 8 个非尾深程序在优化后仍然 trap——那是栈深问题，不是性能问题，
+优化器不修它。生成程序在浏览器路径上的读数与判定见 [benchmarks.md](benchmarks.md) §1.3。
 
 ### 8.1 浏览器 wasm 能力矩阵
 
@@ -352,7 +407,7 @@ WASI preview1，宿主侧逐函数实现。下表的「允许」指浏览器平�
   规则 trap。
 - 栈：V8 的 wasm 栈约 1 MB 且没有开关；长列表上的非尾辅助函数（`append` 之类
   `1 + f rest`）栈深与列表长度成正比，超出后以 `Maximum call stack size exceeded` 收口
-  （§8 执行边界）。
+  （§8 执行边界）；`wasm-opt` 优化后仍然如此（8 个非尾深基准照旧 trap）。
 - 线性内存只有固定 scratch（4 页），没有 bump 堆；GC 堆由引擎管理。
 - 多单元链接、WAT 缓存、wasm seed（不做，见
   [architecture-target](../architecture-target.md) D7）、Component Model / WASI 0.2/0.3
@@ -396,6 +451,8 @@ WASI preview1，宿主侧逐函数实现。下表的「允许」指浏览器平�
 - 所有效应形态的产物都不含 `cont` / `$eff`，**浏览器默认配置即可运行**；
 - 栈深由引擎决定（V8 的 wasm 栈约 1 MB、无开关）：2000 次顺序 perform 约需 192 KiB，
   `106` 已按默认栈验收；
+- 优化后的产物用**同一套引擎特性**（gc / bulk-memory / tail-call / reference-types）：`-O3`
+  可能重写控制流（尾调用折叠），所以形状断言不能数 `return_call` 出现次数；
 - 执行器只有仓库自带的 Node/V8 宿主（Node 与 Chrome 同引擎）；非 V8 引擎（Firefox /
   Safari）不在当前验证面内。
 

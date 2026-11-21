@@ -114,6 +114,7 @@ family / tier / matrix 词汇、`VUNA_OBS` 自采样、错误码枚举文档生�
 | `--timeout SECS` | 单个 case 超时（`dev suite`；覆盖 family / suite 配置） |
 | `--filter` / `--select` / `--ignore` / `--only` / `--tier` / `--matrix` / `--backend` | 可重复筛选（按命令声明） |
 | `--release` | 发布构建；只对构建类命令合法 |
+| `--wasm-opt 0..3` | wasm 产物的 binaryen 优化级别（只对 `build` 合法；默认 3，`0` = 只汇编不优化） |
 | `--debug-perf` | 隐藏：由 runtime 读原始 argv，不进帮助、不参与分发 |
 
 **没有第二条全局旗标通路**：每条命令在命令表里声明自己接受的 flag；不属于该命令的

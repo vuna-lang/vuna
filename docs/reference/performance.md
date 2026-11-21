@@ -54,29 +54,39 @@
 
 - 中间文本：`.ml`（ocaml）/ `.s`（native）/ `main.wat`（wasm）的**文件树**、文件数、字节、行数；
 - 最终二进制：`prog`（ocaml / native）与 `main.wasm` 的字节；
-- 构建：`codegen` = `vuna compile`，`toolchain` = `ocamlopt` / `cc` / `wasm-tools`，括号里是
-  user+sys CPU 毫秒（墙钟另记在 JSON，宿主负载波动时只看 CPU）。
+- 构建：`codegen` = `vuna compile`，`toolchain` = `ocamlopt` / `cc` / `wasm-tools parse`，
+  `postprocess` = `wasm-opt`（非 wasm 目标为 0），`toolchain_warm` = `build.sh` 的实际顺序
+  （wasm 是汇编 + 优化两段），括号里是 user+sys CPU 毫秒（墙钟另记在 JSON，宿主负载波动时
+  只看 CPU）。JSON 里 wasm 条目另记 `build.postprocess_ms` / `build.postprocess_cpu_ms`，
+  meta 记 `wasm_opt`（汇编工具版本在 `wasm_tools`）。
 
 生成物不含绝对路径/时间戳，工具链由 flake 固定，所以**尺寸与二进制大小跨机器可比**
 （5% WARN / 20% FAIL，FAIL 退出 1）；**时间只同机可比**（20% / 50%，软判定：只报告，
 基线 <100ms 的行不判定）。下表是同机一次读数（16 核，`--runs 1`，基线 meta 的 loadavg = 5；全量矩阵见 JSON）：
 
-| 用例 | 后端 | 文件数 | 文本字节 | 行数 | 二进制字节 | CPU ms（codegen/toolchain） |
+| 用例 | 后端 | 文件数 | 文本字节 | 行数 | 二进制字节 | CPU ms（codegen/toolchain/postprocess） |
 | --- | --- | --- | --- | --- | --- | --- |
-| minimal | ocaml | 33 | 184,791 | 3,259 | 2,804,048 | 260 / 1,460 |
-| minimal | native | 2 | 124,009 | 6,740 | 49,640 | 227 / 54 |
-| minimal | wasm | 1 | 382,446 | 15,176 | 46,939 | 238 / 10 |
-| hello | ocaml | 34 | 188,638 | 3,297 | 2,826,816 | 251 / 1,502 |
-| hello | native | 10 | 303,755 | 14,710 | 92,800 | 248 / 82 |
-| hello | wasm | 1 | 406,037 | 16,129 | 50,393 | 243 / 9 |
-| defs-1000 | ocaml | 33 | 338,147 | 7,259 | 3,817,280 | 226 / 1,739 |
-| defs-1000 | native | 2 | 517,253 | 28,736 | 197,248 | 402 / 82 |
-| defs-1000 | wasm | 1 | 592,523 | 24,167 | 86,913 | 358 / 13 |
-| mods-100 | ocaml | 133 | 199,287 | 3,659 | 3,049,032 | 425 / 4,628 |
-| mods-100 | native | 102 | 183,652 | 9,236 | 68,616 | 238 / 274 |
-| mods-100 | wasm | 1 | 408,617 | 16,067 | 52,138 | 338 / 12 |
-| self | ocaml | 162 | 6,025,505 | 57,051 | 19,323,400 | 5,422 / 19,604 |
-| self | native | 139 | 21,895,712 | 915,629 | 5,261,384 | 9,844 / 1,724 |
+| minimal | ocaml | 33 | 184,791 | 3,259 | 2,804,048 | 258 / 1,526 / 0 |
+| minimal | native | 2 | 124,738 | 6,771 | 49,808 | 223 / 63 / 0 |
+| minimal | wasm | 1 | 382,446 | 15,176 | 485 | 244 / 10 / 39 |
+| hello | ocaml | 34 | 188,638 | 3,297 | 2,826,816 | 257 / 1,536 / 0 |
+| hello | native | 10 | 304,484 | 14,741 | 92,968 | 240 / 90 / 0 |
+| hello | wasm | 1 | 406,037 | 16,129 | 2,698 | 244 / 9 / 58 |
+| defs-1000 | ocaml | 33 | 338,147 | 7,259 | 3,817,280 | 216 / 1,682 / 0 |
+| defs-1000 | native | 2 | 517,982 | 28,767 | 197,416 | 388 / 81 / 0 |
+| defs-1000 | wasm | 1 | 592,523 | 24,167 | 37,930 | 345 / 13 / 7,870 |
+| mods-100 | ocaml | 133 | 199,287 | 3,659 | 3,049,032 | 431 / 4,614 / 0 |
+| mods-100 | native | 102 | 184,381 | 9,267 | 68,784 | 218 / 260 / 0 |
+| mods-100 | wasm | 1 | 408,617 | 16,067 | 5,807 | 237 / 9 / 364 |
+| self | ocaml | 162 | 6,028,075 | 57,071 | 19,331,352 | 5,314 / 18,252 / 0 |
+| self | native | 139 | 21,906,723 | 916,076 | 5,262,176 | 9,052 / 1,588 / 0 |
+
+wasm 的 `.wasm` 是两段工具的产物（`wasm-tools parse` → `wasm-opt -O3`），所以比汇编后小一个
+数量级：`minimal` 46,939 → 485 B、`hello` 50,393 → 2,698 B、`mods-100` 52,138 → 5,807 B；
+`main.wat` 文本列不受优化影响。`postprocess` 一列是 `wasm-opt` 的耗时：常见形状是 25–40 ms，
+但 `defs-1000`（1000 个顶层零参定义 + 单个巨型 `_start`）要 **7.9 s**——`-O3` 在这里多轮跑
+`precompute-propagate` / `optimize-instructions` / 内联。需要绕开时用 `--wasm-opt 2`
+（同一模块 0.14 s，产物 28,973 B；`-O3` 是 37,930 B）。
 
 native 的纯程序不再带机器（D110 已关闭）：`minimal` 2 个 `.s` / 121 KB、`defs-1000`
 2 个 / 505 KB、`mods-100` 102 个 / 179 KB；`hello`（最小效应程序，带 Console handler）
@@ -85,10 +95,12 @@ native 的纯程序不再带机器（D110 已关闭）：`minimal` 2 个 `.s` / 
 读法：
 
 - `minimal` 是**绝对地板**（最小可执行程序，纯 Int）：runtime + 最小 base 闭包，
-  ocaml 33 个 `.ml` / 185 KB、native 2 个 `.s` / 121 KB、wasm 382 KB（汇编后 47 KB）。
+  ocaml 33 个 `.ml` / 185 KB、native 2 个 `.s` / 121 KB、wasm 382 KB
+  （WAT；二进制列在重标后是 `-O3` 输出，比汇编后小一个量级）。
 - `hello` 是**最小效应程序**（一次 Console 打印）：多一层 `Base.Effect.Core` 的 handler 面
   （`Fs`/`Net`/`Process`/`Clock` …）⇒ ocaml 34 个 `.ml` / 189 KB、10 个 `.s` / 297 KB、
-  wasm 397 KB ——比 `minimal` 多 8 个 `.s` / 176 KB 而源码只多 6 行：产物大小由闭包决定。
+  wasm 397 KB（WAT，优化后 2,698 B）——比 `minimal` 多 8 个 `.s` / 176 KB 而源码只多 6 行：
+  产物大小由闭包决定。
 - `defs-*` / `mods-*` 分别加顶层定义与包内模块：ocaml 文件数 33（定义不变）、43→133（模块），
   文本随规模线性（defs 186→199→338 KB，native 128→175→505 KB）；wasm 始终单文件。
 - `self` 是真实最大负载：ocaml 162 个 `.ml` / 6.0 MB / 5.7 万行 → 19.3 MB 可执行
@@ -104,6 +116,24 @@ native 的纯程序不再带机器（D110 已关闭）：`minimal` 2 个 `.s` / 
 OCaml 二进制里的调试信息记录的是**相对**源码名（`build.sh` 先 `cd` 到产物目录、用相对模块名
 编译、输出名固定），因此二进制字节不随构建目录漂移；native ELF 依赖链接工具版本，但
 `cc`/`ld` 由 flake 固定，同 arch 内可比。
+
+### wasm：`wasm-opt -O3` 前后的运行时间
+
+13 个可跑 wasm benchmark 的运行时变化（Node 24，7 次取中位数，产物输出与基线逐字节一致，
+`wasm-tools validate --features=gc,bulk-memory,tail-call,reference-types,multi-value` 全部通过；
+明细表见 [wasm.md](wasm.md) §1.1）：
+
+- **有增益**：arith −45%、hashmap −25%、nat_bits −20%、treemap −18%、eff_tick −18%、
+  records −5%、queue ~0%、string_ops / traits / eff_deep / eff_bracket 0..−8%；
+- **中性到更差**：`float_math` 与 `tco_mutual`；
+- **产物**：arith 47.1 → 0.55 KB、nat_bits 48.3 → 1.1 KB、hashmap 48.3 → 3.7 KB、
+  eff_tick 55.3 → 15.3 KB（`.wasm`，`-O3` 后）。
+
+**口径提醒**：增益几乎全来自 binaryen 的内联 + DCE，不是指令选择。关掉内联
+（`--always-inline-max-function-size 0 --one-caller-inline-max-function-size 0`）后 arith
+只剩 −4%，`float_math` +45%、`tco_mutual` +36%。所以本页的「后端表示 / codegen 优化」类
+改动（如 D128 的直调恢复）必须以 `--wasm-opt 0` 或关内联的变体作对照测量，否则 binaryen
+会掩盖后端自身的效果。
 
 上面报的是 `build.sh` 的**直接产物**（带 `-g`）。装进 store 的插件二进制在 nix 打包时
 `strip`（去掉 `.symtab` / `.debug_*`，单文件小 ~25%，`vuna` 输出目录 102 MB → 77 MB）：

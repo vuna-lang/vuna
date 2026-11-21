@@ -172,6 +172,11 @@ wasm 产物由仓库自带的宿主执行（`wasm-host/run.mjs`，Node/V8；与�
 `WebAssembly` API 和 host 层）。`--target wasm`（或 `--target all`）跑同一批程序
 （另有 8 个效应基准与 `startup` / `traits` 见 §1.4）。
 
+> **口径**：本节读数是在 `wasm-opt` 阶段之前采集的，wasm 行**已过期**，须重测后才能当当前值。
+> 该阶段（`wasm-opt -O3`，见 [wasm.md](wasm.md) §1.1）的实测变化：arith −45%、hashmap −25%、
+> nat_bits −20%、treemap −18%、eff_tick −18%、records −5%、queue ~0%，string_ops / traits /
+> eff_deep / eff_bracket 0..−8%，float_math / tco_mutual 中性到更差；这就是重测后的预期范围。
+
 本机一档（`--target all --runs 5 --warmup 2`，同窗口；绝对 ms / RSS 只作同机对比）：
 
 | benchmark | wasm ms | native ms | OCaml 后端 ms | 手写 ms | wasm/手写 | native/手写 |
@@ -192,7 +197,8 @@ wasm 产物由仓库自带的宿主执行（`wasm-host/run.mjs`，Node/V8；与�
   （本机 ~22 ms）。小项先减地板再看：`tco_mutual` 39 − 22 ≈ 17 ms、`string_ops` ≈ 9 ms。
 - **V8 的 wasm 栈约 1 MB 且没有开关**（`node --stack-size` 不改变 wasm 栈，开大直接
   SIGSEGV）：上表八个非尾深递归程序以 `Maximum call stack size exceeded` 收口，JSON 记
-  `"run_ok": false, "skip_reason": "run"`。浏览器同此——这是浏览器路径的实际执行边界，
+  `"run_ok": false, "skip_reason": "run"`。`wasm-opt` 不改变这一点——优化后这 8 项仍然 trap
+  （栈深问题，不是性能问题）。浏览器同此——这是浏览器路径的实际执行边界，
   不是测量设施的限制。
 - **RSS 不可比**：wasm 列是 node 进程量级（~55 MB 起），内存只增不减的是 wasm 线性内存；
   与 native「栈页 + live 堆」、OCaml「GC 高水位」不是一个口径。
@@ -210,6 +216,10 @@ native 赢在「调用少、字符串/栈传参多」的形状（[performance.md
 原因是擦除后 Core 把顶层函数压成零参定义 + 闭包，wasm 调用点从直调变成
 `call $rt_apply`：多一层帧、每帧更大，`nat_bits` 也从 41–42 ms 涨到 69–73 ms。
 修复（恢复直调或保留 arity）后再重标本表。
+
+`wasm-opt -O3` 的内联会**掩盖**这部分成本：binaryen 把闭包调用链内联掉后，
+`call $rt_apply` 的开销不再直接体现在读数里。D128 的 +70% 读数与它的修复效果都必须
+在关闭内联的对照下测（`--wasm-opt 0`，或 `-O3` + 关内联），否则测到的是 binaryen 的收益。
 
 ### 1.4 效应机器（CPS）
 
@@ -236,6 +246,10 @@ native 赢在「调用少、字符串/栈传参多」的形状（[performance.md
 
 三端同窗口（HEAD，`--target all --runs 5 --warmup 2`，loadavg ≈2.5；
 ratio 相对手写 OCaml；wasm 括号里是减掉 `meta.node_startup_ms` = 22 ms 的 net）：
+
+> **口径**：本表的 wasm 列（含下面的复测 / W3 / 续延槽段）都在 `wasm-opt` 阶段之前采集，
+> 已过期。按 [wasm.md](wasm.md) §1.1 的实测，`eff_tick` 应低约 18%，`eff_deep` /
+> `eff_bracket` / `traits` 低 0..8%；重测前不要把这里的 wasm 数字当当前值。
 
 | benchmark | 手写 ms | OCaml 后端 | native | wasm |
 | --- | --- | --- | --- | --- |
@@ -349,7 +363,8 @@ native 在 40k 之后出现台阶：`VUNA_NATIVE_GC_MIN=2G` 下同一 80k 档只
   `>>=` / `pure` 的 CPS 展开。修正为尾递归后当前读数是 native 35 ms / 4.2 MB、
   wasm 64 ms / 63 MB（见上方三端表）。
 
-**产物**（`compile`，空 store；native 列是全部 `.s` 的合计）：
+**产物**（`compile`，空 store；native 列是全部 `.s` 的合计；wasm 列是 `main.wat` 文本，
+不含 `wasm-opt` 之后的 `.wasm` 字节）：
 
 | 程序 | wasm 前 | wasm 后 | native 前 | native 后 |
 | --- | --- | --- | --- | --- |
@@ -379,6 +394,9 @@ wasm 删掉 wat 机器后连纯程序也小了 ~4%。上表 native 两列是「�
 
 同机一档（HEAD，`--target all --runs 5 --warmup 2`，loadavg ≈3.6；wasm 括号内是减掉
 `meta.node_startup_ms` = 23 ms 的 net）：
+
+> **口径**：wasm 列在 `wasm-opt` 阶段之前采集，已过期（`treemap` −18%、`queue` ~0%，
+> 见 [wasm.md](wasm.md) §1.1）；重测前只作历史读数。
 
 | benchmark | 规模 | 手写 ms | OCaml 后端 | native | wasm（net） |
 | --- | --- | --- | --- | --- | --- |
