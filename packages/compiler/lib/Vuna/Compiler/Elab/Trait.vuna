@@ -1202,6 +1202,120 @@ solveLiftedMeta ec name level m =
     OkC sols2 => ecPutSols ec (solsList sols2)
     ErrC e => ec
 
+-- 同域的其余目标都解到同一只字典 binder（去重）。
+solveLiftedMetas : Ec -> String -> Int -> List Int -> Ec
+solveLiftedMetas ec dName level [] = ec
+solveLiftedMetas ec dName level (m :: rest) =
+  solveLiftedMetas (solveLiftedMeta ec dName level m) dName level rest
+
+-- ---------------------------------------------------------------
+-- 字典 binder 布局
+-- ---------------------------------------------------------------
+-- 一只待插入的字典 binder。布局是唯一真源：签名插入、λ 插入、元变量解、自调用点补
+-- 实参都从 `dpLevel` 读位置，不再各自手推索引。
+record DictPlan where
+  -- | binder 名（`#dict<组序号>`，见 `Frontend.Reserved.dictBinderName`）。
+  dpName : String
+  -- | 最终签名里的 0-based level（从最外层数）。
+  dpLevel : Int
+  -- | binder 域，已按 `dpLevel` 处的上下文 quote。
+  dpDom : Term
+  -- | 这只 binder 替代的全部元变量（组代表 + 同域其余目标）。
+  dpMetas : List Int
+
+-- 字典 binder 的锚点：插在前导隐式 binder 之后。没有任何隐式 binder 时退回 1
+-- （插在第一个 binder 之后），与提升前的行为一致。
+dictAnchor : Term -> Int
+dictAnchor ty = maxInt 1 (leadingImplicitCount ty)
+
+-- 第 k 组（约束顺序）最终落在 `anchor + (nGroups - 1 - k)`：第 0 组最靠内，
+-- 与自调用点补实参的顺序一致（新插的在外侧）。返回原始组序；按结构顺序使用时
+-- 调用方 `reverse`。每算完一组的域就解掉该组的元变量，下一组看到的解与逐组提升一致。
+planDictBinders : Int -> Ec -> List DictGoalGroup -> Pair (List DictPlan) Ec
+planDictBinders anchor ec groups = planDictBindersGo anchor ec groups 0 (length groups)
+
+planDictBindersGo : Int -> Ec -> List DictGoalGroup -> Int -> Int -> Pair (List DictPlan) Ec
+planDictBindersGo anchor ec [] k n = Pair [] ec
+planDictBindersGo anchor ec ((DictGoalGroup m dom extras) :: rest) k n =
+  let
+    level = anchor + (n - 1 - k)
+    dName = dictBinderName k
+    dp =
+      DictPlan
+        dName
+        level
+        (substSolvedMetasAtTbl (ecSolTbl ec) level (quote level dom))
+        (m :: extras)
+    next = planDictBindersGo anchor (solveLiftedMetas ec dName level (m :: extras)) rest (k + 1) n
+  in Pair (dp :: firstOf next) (secondOf next)
+
+-- 在 Pi 链的锚点处插入字典 binder：剥掉 `anchor` 个原有 binder，按结构顺序
+-- （最外层在前）把剩余部分整体包进新 binder。每个新 binder 的域已按最终层级 quote，
+-- 不再依赖「插入后 shift 把已插入的域推深」这种顺序推断。
+insertDictPis : Int -> List DictPlan -> Term -> Term
+insertDictPis anchor plans ty = insertPisAfter anchor (map dictPlanPi plans) ty
+
+dictPlanPi : DictPlan -> Pair String Term
+dictPlanPi (DictPlan name level dom metas) = Pair name dom
+
+dictPlanName : DictPlan -> String
+dictPlanName (DictPlan name level dom metas) = name
+
+insertPisAfter : Int -> List (Pair String Term) -> Term -> Term
+insertPisAfter n dicts t =
+  if n <= 0 then
+    wrapDictPis dicts t
+  else
+    case t of
+      TPi name i r d c => TPi name i r d (insertPisAfter (n - 1) dicts c)
+      _ => wrapDictPis dicts t
+
+-- 每个域已按自己的最终层级 quote，包进外层 binder **不再**移动它；只有原来的 codomain
+-- 要整体移进 m 只新 binder 里。
+wrapDictPis : List (Pair String Term) -> Term -> Term
+wrapDictPis dicts t = wrapDictPisGo dicts (shift 0 (length dicts) t)
+
+wrapDictPisGo : List (Pair String Term) -> Term -> Term
+wrapDictPisGo [] t = t
+wrapDictPisGo ((Pair name dom) :: rest) t = TPi name True RigOmega dom (wrapDictPisGo rest t)
+
+-- λ 链同构：字典 binder 是 `RigOmega`（运行时保留，方法投影体要 case 它取字段）。
+insertDictLams : Int -> List DictPlan -> Term -> Term
+insertDictLams anchor plans body = insertLamsAfter anchor (map dictPlanName plans) body
+
+insertLamsAfter : Int -> List String -> Term -> Term
+insertLamsAfter n names t =
+  if n <= 0 then
+    wrapDictLams names t
+  else
+    case t of
+      TLam name r slot sp b => TLam name r slot sp (insertLamsAfter (n - 1) names b)
+      _ => wrapDictLams names t
+
+wrapDictLams : List String -> Term -> Term
+wrapDictLams names t = wrapDictLamsGo names (shift 0 (length names) t)
+
+wrapDictLamsGo : List String -> Term -> Term
+wrapDictLamsGo [] t = t
+wrapDictLamsGo (name :: rest) t = TLam name RigOmega Nothing spanEmpty (wrapDictLamsGo rest t)
+
+-- 体里被提升的元变量换成对应字典变量；`Core.Term.substMetaVar` 的 q 是 binder level + 1。
+substPlannedMetas : List DictPlan -> Term -> Term
+substPlannedMetas [] t = t
+substPlannedMetas ((DictPlan name level dom metas) :: rest) t =
+  substPlannedMetas rest (substMetaVarList name (level + 1) metas t)
+
+substMetaVarList : String -> Int -> List Int -> Term -> Term
+substMetaVarList dName q [] t = t
+substMetaVarList dName q (m :: rest) t = substMetaVarList dName q rest (substMetaVar m dName q t)
+
+-- 自调用点补字典实参（实参位置 = binder level）：按结构顺序插入（先外层），
+-- 已插好的位置不会被后续插入推动。
+insertPlannedCalls : String -> List DictPlan -> Term -> Term
+insertPlannedCalls defName [] t = t
+insertPlannedCalls defName ((DictPlan name level dom metas) :: rest) t =
+  insertPlannedCalls defName rest (insertDictCalls defName name level t)
+
 export liftFreeDictGoals : String -> Int -> Ec -> Term -> Term -> Pair Term (Pair Term Ec)
 -- 冷路径：没有延迟字典目标时整段是恒等（省掉扫目标表与求隐式前缀长）。
 liftFreeDictGoals defName minCid ec ty body =
@@ -1209,57 +1323,16 @@ liftFreeDictGoals defName minCid ec ty body =
     [] => Pair ty (Pair body ec)
     _ =>
       let
-        groups = freeDictGoals minCid ec
-        nGroups = length groups
-        -- 字典 binder 插在**原始签名**的最后一个隐式 binder 之后。
-        -- `insertDictBinder`/`insertLamBinder` 的 idx 语义是「插在第 idx 个 binder 之后」，
-        -- 所以基准是 `隐式前缀长 - 1`，且**只在循环外算一次**：插入后 ty 的隐式前缀会变长，
-        -- 再读 `leadingImplicitCount ty` 会把已插入的字典重复计入（否则第 2、3 只字典被推到
-        -- 显式参数之后，`ma` 的引用因此错位）。
-        baseIdx = maxInt 0 (leadingImplicitCount ty - 1)
-      in liftFreeDictGoalsGo defName ec ty body baseIdx nGroups 0 groups
-
-export liftFreeDictGoalsGo : String -> Ec -> Term -> Term -> Int -> Int -> Int -> List DictGoalGroup -> Pair Term (Pair Term Ec)
-liftFreeDictGoalsGo defName ec ty body baseIdx nGroups k groups =
-  case groups of
-    -- 字典 binder 插在**所有隐式 binder 之后**（即第一个显式参数之前）。
-    [] => Pair ty (Pair body ec)
-    (DictGoalGroup m dom extras) :: rest =>
-      let
-        -- 不可由源码写出的名字（`#` 不是标识符字符），不会与用户局部 `d12` 撞名。
-        -- 用组序号（不是元变量 id）：名字只依赖本定义的结构，旁边新增/删除定义
-        -- 不会改变它，也不会把元变量编号写进 Core 摘要。
-        dName = dictBinderName k
-        -- 第 k 组（0-based）的**最终** binder 位置：之后每插入一只更新的字典都把它推深 1
-        -- （同位置反复插入 ⇒ 新字典在旧字典外侧）。
-        finalPos = baseIdx + 1 + (nGroups - 1 - k)
-        -- 域按最终位置 quote：域里的刚性类参数 level l 落在 index `finalPos - l - 1`。
-        dictDom = substSolvedMetasAtTbl (ecSolTbl ec) (baseIdx + 1) (quote (baseIdx + 1) dom)
-        ty2 = insertDictBinder dName baseIdx dictDom ty
-        -- 先插 binder（会把插入点之后的引用整体移位），**再**把孤儿元变量替换成字典变量：
-        -- 顺序反过来时被替换出来的 TVar 也会被 shift 再挪一次，索引会偏。
-        -- 插入瞬间该字典 binder 恰在 `baseIdx + 1`（q = baseIdx + 2）；之后只在它**外侧**
-        -- 插新字典，已替换出来的内侧 index 不变。
-        body2 = substMetaVar m dName (baseIdx + 2) (insertLamBinder dName baseIdx body)
-        -- 体是按**提升前签名**（无字典 binder）精化的，自递归调用点少一个字典实参；
-        -- 提升后按应用位置补上。字典 binder 的最终位置是 `finalPos`，但插入顺序是
-        -- 「新的在外」，所以每次都在第 `baseIdx + 1` 个应用实参处插入（与 binder 同序）。
-        body3 = insertDictCalls defName dName (baseIdx + 1) body2
-        body4 = substExtraDictMetas dName (baseIdx + 2) extras body3
-        ec2 = solveLiftedMeta ec dName finalPos m
-        ec3 = solveLiftedMetas ec2 dName finalPos extras
-      in liftFreeDictGoalsGo defName ec3 ty2 body4 baseIdx nGroups (k + 1) rest
-
--- 同域的其余目标都解到同一只字典 binder（去重）。
-substExtraDictMetas : String -> Int -> List Int -> Term -> Term
-substExtraDictMetas dName q [] t = t
-substExtraDictMetas dName q (m :: rest) t =
-  substExtraDictMetas dName q rest (substMetaVar m dName q t)
-
-solveLiftedMetas : Ec -> String -> Int -> List Int -> Ec
-solveLiftedMetas ec dName level [] = ec
-solveLiftedMetas ec dName level (m :: rest) =
-  solveLiftedMetas (solveLiftedMeta ec dName level m) dName level rest
+        anchor = dictAnchor ty
+        planned = planDictBinders anchor ec (freeDictGoals minCid ec)
+        plans = firstOf planned
+        -- 结构顺序（最外层在前）：签名 / λ / 自调用实参都按它插。
+        outerFirst = reverse plans
+        ty2 = insertDictPis anchor outerFirst ty
+        body1 = insertDictLams anchor outerFirst body
+        body2 = substPlannedMetas plans body1
+        body3 = insertPlannedCalls defName outerFirst body2
+      in Pair ty2 (Pair body3 (secondOf planned))
 
 -- ---------------------------------------------------------------
 -- 遍历项时跟踪 binder 深度（从最外层数），遇到「头是目标全局」的应用脊时在固定位置

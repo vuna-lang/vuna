@@ -114,7 +114,6 @@ ID 是稳定引用（`层前缀-序号`）：条目关闭即删除该行，ID �
 | EC-32 · D | `ConstraintStore` 一个记录兼任 5 种无关状态：待处理队列、id 分配、重试表、解表计数、**构造子索引是否完整**；`ecPutCtorTbl` 也会改它 | `Elab/Types.vuna`、`Elab/Meta.vuna` | 后续 |
 | EC-34 · ⚠️C | 实例搜索把「递归深度」和「候选 / via 预算」压进同一个固定 `16`（`searchInstanceIn`），耗尽报 `TC_NoInstanceFound`：合法的深 ctx / via 链被报成「缺实例」 | `Elab/Dict.vuna`（`searchInstFuel` / `tryViaDict`） | 后续 |
 | EC-35 · C | 行标签的**诊断展示**用 `showValueAt 6`（深度 6 截断）：匹配本身走 `conv`，但歧义 / 缺实例的候选列表可能显示相同文本，难以区分 | `Elab/Dict.vuna`（`labelCandText` / `labelScan`） | 后续（展示层） |
-| EC-38 · ⚠️D | 字典注入 `liftFreeDictGoals`：binder 位置靠手推索引算术（注释自述插入顺序反过来索引会偏）。生成名已是按定义结构派生的 `#dict<组序号>`（不随无关定义的元变量编号漂移），不再把元变量 id 写进 Core 摘要。注入预算已按项规模派生，`injectDictGoFuel` / `rewriteTaggedSpineFuel` 的耗尽分支不可达 | `Elab/Trait.vuna`（`liftFreeDictGoals` / `injectBudgetFor` / `altBudgetFor` / `spineSize`） | 后续（索引算术改为结构化定位） |
 | EC-39 · ⚠️D | 「类型层 / 擦除」有五份判据且会互相矛盾：`Usage.isTypeForming`（只沿 cod）认为 `Int -> Type` 是类型层，`Meta.isTypeLayerValue`（每个域都须是类型层）认为不是；另有 `isTypeDomain` / `isKindWithCtx` / `isFamilyKindValue` / `rigIsErased` 重复实现 | `Elab/Usage.vuna`、`Elab/Meta.vuna`、`Elab/Term/Impl.vuna` | 后续 |
 | EC-40 · C | `Elab/Types.vuna` 的 `refineValue` 不下钻 `VCase` 分支体、不处理 `VProj`（`_ => v`）⇒ 索引精化在卡住的 case / 投影里静默丢失 | `Elab/Types.vuna` | 后续 |
 
@@ -213,7 +212,7 @@ ID 是稳定引用（`层前缀-序号`）：条目关闭即删除该行，ID �
    `bindShapeOf` 的索引模式匹配、`__anf`/`__cps` 编号借 fuel、`showTerm`/`showValueAt 6` 当相等判据
    （仅剩诊断展示 EC-35），以及把元数据编进名字（只剩 `@vuna@…` 标记仍靠字符串编解码；
    `#…` 合成名已集中到 `Frontend.Reserved`，编号只用于定义内去重、不承担身份，也不再
-   拿名字当列表容器）与按短名分组的方法（EC-12 / EC-23）。
+   拿名字当列表容器）。
 2. **fuel 仍是主要的终止性证书**：多数路径已改成「预算按输入规模派生 + 耗尽 `icFuel`」，
    残留「把固定容量上限当成语义结论」（EL-23、CO-07 的 conv 预算）、
    「只有 SCT 测度、从不检查的 fuel」（FE-09）、「派生预算不可达仅靠注释论证的静默兜底」

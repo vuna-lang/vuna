@@ -1,0 +1,16 @@
+-- 同一函数体里两个不同的刚性字典目标（`Eq` + `Show`）一起提升：binder 顺序与
+-- 自调用点的字典实参必须一起对齐（字典提升的结构化布局）。
+import Prelude
+
+describeAll : a -> a -> List a -> String
+describeAll x y xs =
+  case xs of
+    [] => if x == y then "same" else show x ++ "/" ++ show y
+    z :: rest =>
+      if x == z then
+        describeAll x y rest
+      else
+        show z ++ ":" ++ describeAll x y rest
+
+main : String
+main = describeAll 1 2 [1, 2, 3]

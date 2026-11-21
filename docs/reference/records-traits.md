@@ -377,6 +377,9 @@ describe x y = if x == y then show x else show x ++ "/" ++ show y
   `{_ctx0 : Dict_C a}`（`Rig` 为 `RigOmega`，运行时保留），插在类型参数之后、显式参数之前。
 - body 的方法调用优先命中声明的假设；签名没覆盖的刚性需求提升成额外隐式
   参数（与不写约束的签名同一条推断路径，`mem : a -> L a -> Bool` 因此不变）。
+  提升的 binder 紧跟在隐式前缀之后，组按约束顺序**逆序**排列（第 0 组最靠内），
+  名字是 `#dict<组序号>`；位置由 `Elab.Trait` 的 `DictPlan` 一处给出，签名、λ 链与
+  自调用点的字典实参不再各自推算索引。
 - 调用点没有新语法：类型实参由统一解出，字典实参按实例搜索填充。
 - 只支持顶层签名：`where` / `let`、`axiom`、trait 方法、构造子 / 记录字段写 `=>` 报
   `[PS_ConstraintUnsupportedHere]`（方法级约束未实现；父类约束写在 trait 头）。未声明接口头报

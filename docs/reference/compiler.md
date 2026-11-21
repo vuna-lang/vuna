@@ -94,7 +94,7 @@
 | `Elab.Term` | 项的双向检查（与 case 规则互递归的核心）：`inferE`/`checkE`/应用/隐式插入/类型检查 | `inferE`、`checkE`、`checkApp`、`checkType` |
 | `Elab.Data` | `data` 声明与构造子精化：`elabCtor`、`elabDataHead(s)`、`elabDataBodies`；校验 kind 结果层级与构造子字段 sort | `elabDatas`、`checkCtorFieldSorts` |
 | `Elab.Representation` | 运行时表示判定：去装箱族候选（`unboxedInfoOf`）、构造子字段形状、字段可表示性 | `unboxedInfoOf`、`ctorKeepFlags`、`unboxedFamilySet` |
-| `Elab.Trait` | trait/instance 声明与实例体：类参数 kind、方法投影、实例头检查（重复/相干性；无命名实例、支持约束实例 ctx）、方法体精化；实例 ctx 与顶层签名 ctx 共用 `elabConstraintDomains`（含类参数 kind 校验），隐式字典 binder 按 RigΩ 绑定（运行时保留、可多次使用）；方法签名带 span，实例名=单类前缀+完整 head 名 | `checkInstanceHeads`、`elabInstanceBodies`、`elabConstraintDomains`、`instanceName` |
+| `Elab.Trait` | trait/instance 声明与实例体：类参数 kind、方法投影、实例头检查（重复/相干性；无命名实例、支持约束实例 ctx）、方法体精化；实例 ctx 与顶层签名 ctx 共用 `elabConstraintDomains`（含类参数 kind 校验），隐式字典 binder 按 RigΩ 绑定（运行时保留、可多次使用）；方法签名带 span，实例名=单类前缀+完整 head 名；刚性字典目标提升（`liftFreeDictGoals`）由 `DictPlan` 统一给出布局（binder 名 `#dict<组序号>`、最终 level、域、替代的元变量），签名/λ/自调用实参都从同一处读位置 | `checkInstanceHeads`、`elabInstanceBodies`、`elabConstraintDomains`、`liftFreeDictGoals`、`instanceName` |
 | `Elab.InstName` | 实例名生成规则（单类前缀 + 完整 head 名）的唯一实现 | `instanceName` |
 | `Elab.InstCoherence` | 实例相干性检查（重叠头判据） | `findInstanceClash`、`headsOverlap` |
 | `Elab.Driver` | 精化入口与程序组装：签名（约束 ctx → 隐式字典 binder）→ data/trait/instance → 定义体（声明的字典目标先解到 ctx binder，剩余才提升）→ zonk/终止性检查 → `DtProgram`；洞目标（含洞名）。`goalsOfProgramTolerant` 与严格收尾拆开：只读 core 的 goals，未解洞也能给目标+上下文（供 `vuna goal` / LSP）。接口摘要路径用 `elabProgramFullWithAux`（起始 Ec 由依赖摘要注入；termAux 只喂 record 头与终止性的依赖上下文） | `elabProgramFull`、`elabProgramFullWithAux`、`goalsOfProgram`、`goalsOfProgramTolerant`、`dtEvalExprIn` |
