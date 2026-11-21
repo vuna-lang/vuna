@@ -131,18 +131,6 @@ gcMinorRunsLimit = 8
 export allocReqLabel : String
 allocReqLabel = "rt_alloc_req"
 
-export allocSaveRdiLabel : String
-allocSaveRdiLabel = "rt_alloc_save_rdi"
-
-export allocSaveRsiLabel : String
-allocSaveRsiLabel = "rt_alloc_save_rsi"
-
-export allocSaveR8Label : String
-allocSaveR8Label = "rt_alloc_save_r8"
-
-export allocSaveR9Label : String
-allocSaveR9Label = "rt_alloc_save_r9"
-
 gcBufLabel : String
 gcBufLabel = "rt_gc_buf"
 
@@ -177,10 +165,6 @@ nativeGcBss =
     NativeBss segIdxLabel (16 * segIdxCapacity) 8,
     NativeBss gcPromotedLabel 8 8,
     NativeBss allocReqLabel 8 8,
-    NativeBss allocSaveRdiLabel 8 8,
-    NativeBss allocSaveRsiLabel 8 8,
-    NativeBss allocSaveR8Label 8 8,
-    NativeBss allocSaveR9Label 8 8,
     NativeBss gcBufLabel 128 8
   ]
 
