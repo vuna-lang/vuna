@@ -9,6 +9,7 @@
 #     OCaml 等价实现，同算法；个别库基准用标准库上限，见各文件注释），`.out` 是 golden；
 #   * 可选 `<name>.bench` sidecar（`key=value`）：
 #       repeat=N      每次计时采样内重复运行 N 次（默认 1；小项 / 启动成本用）
+#       ops=N         该程序一次运行的代表性操作数（默认 0 = 不报 ns/op）
 #       targets=a,b   只在这些 target 上跑（ocaml / native / wasm；默认全部）
 #       c=path        额外参与链接的 C 源（FFI；相对 bench/programs）
 #       skip=1        不参与默认集合
@@ -180,8 +181,10 @@ if [ "$LIST" = 1 ]; then
     t=$(bench_meta "$name" targets "ocaml,native,wasm")
     r=$(bench_meta "$name" repeat 1)
     c=$(bench_meta "$name" c "")
+    o=$(bench_meta "$name" ops 0)
     extra=""
     [ -n "$c" ] && extra="c=$c"
+    [ "$o" != 0 ] && extra="$extra ops=$o"
     printf '  %-16s %-16s %-6s %s\n' "$name" "$t" "$r" "$extra"
   done
   exit 0
@@ -602,6 +605,12 @@ emit_backend() {
   fi
   printf '%s"%s": { "run_ok": true, "median_ms": %s, "rss_kb": %s' \
     "$indent" "$target" "${MED["$name:$target"]}" "${RSS["$name:$target"]:-0}"
+  local ops nsop
+  ops=$(bench_meta "$name" ops 0)
+  if [ "$ops" -gt 0 ] 2>/dev/null; then
+    nsop=$(awk -v ms="${MED["$name:$target"]}" -v n="$ops" 'BEGIN { printf "%.3f", ms * 1000000 / n }')
+    printf ', "ops": %s, "ns_per_op": %s' "$ops" "$nsop"
+  fi
   if [ "$target" = wasm ] && [ -n "${NET["$name:$target"]:-}" ]; then
     printf ', "net_median_ms": %s' "${NET["$name:$target"]}"
   fi
@@ -708,20 +717,30 @@ emit_json() {
   printf '\n  }\n}\n'
 }
 
+ns_per_op() { # name target
+  local ops
+  ops=$(bench_meta "$1" ops 0)
+  if [ "$ops" -gt 0 ] 2>/dev/null; then
+    awk -v ms="${MED["$1:$2"]:-0}" -v n="$ops" 'BEGIN { printf "%.2f", ms * 1000000 / n }'
+  else
+    printf '-'
+  fi
+}
+
 print_table() {
   note ""
-  printf '  %-16s %-11s %10s %8s %12s %10s\n' benchmark backend ms ratio rss_kb rss_ratio
+  printf '  %-16s %-11s %10s %8s %12s %10s %10s\n' benchmark backend ms ratio rss_kb rss_ratio ns/op
   local name t
   for name in "${ORDER[@]}"; do
-    printf '  %-16s %-11s %10s %8s %12s %10s\n' "$name" ocaml_ref \
-      "${MED["$name:ocaml_ref"]}" "1.00x" "${RSS["$name:ocaml_ref"]:-0}" "1.00x"
+    printf '  %-16s %-11s %10s %8s %12s %10s %10s\n' "$name" ocaml_ref \
+      "${MED["$name:ocaml_ref"]}" "1.00x" "${RSS["$name:ocaml_ref"]:-0}" "1.00x" "$(ns_per_op "$name" ocaml_ref)"
     for t in $TARGETS; do
       if [ -n "${SKIP["$name:$t"]:-}" ]; then
-        printf '  %-16s %-11s %10s %8s %12s %10s\n' "$name" "$t" "-" "skipped" "-" "-"
+        printf '  %-16s %-11s %10s %8s %12s %10s %10s\n' "$name" "$t" "-" "skipped" "-" "-" "-"
         continue
       fi
-      printf '  %-16s %-11s %10s %8s %12s %10s\n' "$name" "$t" \
-        "${MED["$name:$t"]}" "${RATIO["$name:$t"]}x" "${RSS["$name:$t"]:-0}" "${RSS_RATIO["$name:$t"]}x"
+      printf '  %-16s %-11s %10s %8s %12s %10s %10s\n' "$name" "$t" \
+        "${MED["$name:$t"]}" "${RATIO["$name:$t"]}x" "${RSS["$name:$t"]:-0}" "${RSS_RATIO["$name:$t"]}x" "$(ns_per_op "$name" "$t")"
     done
   done
 }

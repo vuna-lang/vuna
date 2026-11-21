@@ -1,0 +1,7 @@
+-- 两段短串拼接：每次 `++` 都分配新串，循环里重新求值（不 hoist）。
+-- 手写 OCaml 对照见 micro_concat.ml（同算法）。
+loop : String -> Int -> Int -> Int
+loop s n acc = if n <= 0 then acc else loop s (n - 1) (acc + strLength (s ++ "0123456789"))
+
+main : Int
+main = loop "abcdefghij" 1000000 0

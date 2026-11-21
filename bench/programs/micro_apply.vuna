@@ -1,0 +1,10 @@
+-- 饱和闭包调用：函数作为值传入循环，每次迭代一次直接应用。
+-- 手写 OCaml 对照见 micro_apply.ml（同算法）。
+f : Int -> Int
+f x = x + 1
+
+loop : (Int -> Int) -> Int -> Int -> Int
+loop g n acc = if n <= 0 then acc else loop g (n - 1) (g acc)
+
+main : Int
+main = loop f 5000000 0

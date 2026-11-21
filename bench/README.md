@@ -25,6 +25,11 @@
   wasm 的 RSS 是 node 进程量级（~55 MB 起），只作量级参考，不与 native/OCaml 的峰值口径比较。
 - `programs/<name>.out` 是 golden：**每个被测产物与手写 OCaml 都必须输出它**，脚本会在计时
   前各校验一次，输出不一致直接失败（不会拿错误程序刷基线）。
+- `programs/<name>.bench` 的 `ops=N` 声明该程序一次运行的**代表性操作数**（算术步、字节、
+  分配、`perform` 等，单位写在程序头注释里）。声明后表格与 JSON 都给出
+  `ns_per_op = median_ms * 1e6 / N`，同一项在不同后端、不同规模之间就有了可比的单位；
+  没有声明则显示 `-`。当前声明了 `ops` 的有 `arith`、`text_scan`、`array`、`hashmap`、
+  `gc_low_live`、`eff_tick`、`micro_apply`、`micro_concat`。
 - 每项先 `--warmup` 次预热，再跑 `--runs` 次取**中位数**；峰值内存用 GNU time 的 max RSS，
   计时结束后单独跑 `--rss-passes` 次取**最大值**（不参与计时）。
 - native 只有**直接饱和尾调用**复用栈帧（[native.md](../docs/reference/native.md) §3），
@@ -54,6 +59,7 @@ nix run .#vuna-perf -- --target native                 # 只测 native 后端
 nix run .#vuna-perf -- --target wasm                   # 只测 wasm（JS 宿主 / Node）
 nix run .#vuna-perf -- --target all --check            # 与 baselines/programs.json 比
 nix run .#vuna-perf -- --only eff_tick --only eff_deep --only eff_bracket --check  # 效应子集
+nix run .#vuna-perf -- --only micro_apply --only micro_concat --target both --runs 5  # 原语级（ns/op）
 nix run .#vuna-perf -- --check --strict                # WARN 也 exit 1
 nix run .#vuna-perf -- --target all --runs 5 --warmup 2 \
   --json bench/baselines/programs.json                 # 重新生成唯一一份程序基线
