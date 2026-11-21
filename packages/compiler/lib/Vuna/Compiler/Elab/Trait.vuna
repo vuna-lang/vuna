@@ -500,7 +500,8 @@ elabInstanceConstrained classes globals defined ec0 sp cls argExprs ctxParts =
   let
     ctxArgs = concatMap (\p => secondOf p) ctxParts
     banned = topQuantBanned defined
-    combined = EApp (EVar (classifyName "#inst") sp) (append argExprs ctxArgs) sp
+    -- kind 回退（按应用次数）的扫描目标：头实参 + ctx 实参。是一组表达式，不是伪应用。
+    scanExprs = append argExprs ctxArgs
     kindMaybe = dictArgKinds ec0 (VNeutral (NGlobal (dictTypeName (dtClassName cls)) []))
   in case kindMaybe of
     Nothing => tcErr0 sp InstanceHeadNotApp
@@ -510,7 +511,7 @@ elabInstanceConstrained classes globals defined ec0 sp cls argExprs ctxParts =
       else
         let
           seeds = append (bareTeleSeeds argExprs kindVals) (ctxBareTeleSeeds classes ec0 ctxParts)
-          init = instanceTeleMetas banned combined (append argExprs ctxArgs) seeds ec0
+          init = instanceTeleMetas banned scanExprs seeds ec0
           tele0 = firstOf init
           ec1 = secondOf init
           teleCtx0 = instanceTeleCtx tele0
@@ -523,7 +524,7 @@ elabInstanceConstrained classes globals defined ec0 sp cls argExprs ctxParts =
                         case r of
                           Pair ctxTys ec3 =>
                             let
-                              tele = resolveTeleKinds combined tele0 ec3
+                              tele = resolveTeleKinds scanExprs tele0 ec3
                             in OkC (Pair (InstSigInfo (dtClassName cls) tele ctxTys argTerms (ctorResultType cls argTerms)) ec3)
                     )
           )
@@ -593,8 +594,8 @@ isLowerStart n =
 
 -- 实例 tele：裸变量位置先按类参数 kind 定位（seed），其余变量绑 kind 元变量等实参精化解出。
 -- tele 顺序是自由小写名按出现顺序去重，保留最后一次出现的位置。
-instanceTeleMetas : HashMap String Bool -> Expr -> List Expr -> List (Pair String Term) -> Ec -> Pair (List (Pair String Term)) Ec
-instanceTeleMetas banned combined exprs seeds ec =
+instanceTeleMetas : HashMap String Bool -> List Expr -> List (Pair String Term) -> Ec -> Pair (List (Pair String Term)) Ec
+instanceTeleMetas banned exprs seeds ec =
   teleMetasInit (nubNames (keepOutBanned banned (concatMap exprFreeLower exprs))) seeds ec
 
 teleMetasInit : List String -> List (Pair String Term) -> Ec -> Pair (List (Pair String Term)) Ec
@@ -644,24 +645,25 @@ ctxBareTeleSeeds classes ec ((Pair cname argExprs) :: rest) =
         Just kinds => append (bareTeleSeeds argExprs kinds) (ctxBareTeleSeeds classes ec rest)
 
 -- 实参精化完后收束 tele 的 kind：已解的元变量换成解（必须闭），未解的回退应用次数启发式。
-resolveTeleKinds : Expr -> List (Pair String Term) -> Ec -> List (Pair String Term)
-resolveTeleKinds combined [] ec = []
-resolveTeleKinds combined ((Pair v k) :: rest) ec =
-  Pair v (resolveTeleKind combined v k ec) :: resolveTeleKinds combined rest ec
+resolveTeleKinds : List Expr -> List (Pair String Term) -> Ec -> List (Pair String Term)
+resolveTeleKinds scanExprs [] ec = []
+resolveTeleKinds scanExprs ((Pair v k) :: rest) ec =
+  Pair v (resolveTeleKind scanExprs v k ec) :: resolveTeleKinds scanExprs rest ec
 
-resolveTeleKind : Expr -> String -> Term -> Ec -> Term
-resolveTeleKind combined v (TMeta m) ec =
+resolveTeleKind : List Expr -> String -> Term -> Ec -> Term
+resolveTeleKind scanExprs v (TMeta m) ec =
   case solsLookup m (ecSolsP ec) of
     Just val =>
       let
         q = quote 0 val
-      in if hasFreeTermVar 0 q then fallbackTeleKind combined v else q
-    Nothing => fallbackTeleKind combined v
-resolveTeleKind combined v k ec = k
+      in if hasFreeTermVar 0 q then fallbackTeleKind scanExprs v else q
+    Nothing => fallbackTeleKind scanExprs v
+resolveTeleKind scanExprs v k ec = k
 
--- 应用次数启发式（单参数 trait 的兜底）：变量被应用 k 次就 `Type -> ... -> Type`，否则 `Type`。
-fallbackTeleKind : Expr -> String -> Term
-fallbackTeleKind combined v = arityFun (exprMaxAppArity v combined) (TType levelZero)
+-- 应用次数启发式（单参数 trait 的兜底）：变量在实参里被应用 k 次就
+-- `Type -> ... -> Type`，否则 `Type`。
+fallbackTeleKind : List Expr -> String -> Term
+fallbackTeleKind scanExprs v = arityFun (exprMaxAppArityIn v scanExprs) (TType levelZero)
 
 exprFreeLower : Expr -> List String
 exprFreeLower (EVar n sp) = if isLowerStart (rnameKey n) then [rnameKey n] else []

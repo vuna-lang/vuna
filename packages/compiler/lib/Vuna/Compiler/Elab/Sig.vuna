@@ -33,6 +33,10 @@ maxIntList : List Int -> Int
 maxIntList [] = 0
 maxIntList (x :: rest) = if x >= maxIntList rest then x else maxIntList rest
 
+-- | 名字在一组表达式里的最大应用次数。
+export exprMaxAppArityIn : String -> List Expr -> Int
+exprMaxAppArityIn pname exprs = maxIntList (map (exprMaxAppArity pname) exprs)
+
 export exprMaxAppArity : String -> Expr -> Int
 exprMaxAppArity pname (EApp (EVar f fsp) args sp) =
   if rnameKey f == pname then
@@ -95,27 +99,22 @@ quantify (n :: rest) e sp =
 -- 报 "too many arguments (not a function)"。规则与 trait 类参数（`Elab.Sig.classParamKind`）
 -- 同一套，只是作用在任意自由名上。
 quantifyTopKinds : List String -> Expr -> Expr -> Span -> Expr
-quantifyTopKinds [] sigExpr e sp = e
-quantifyTopKinds (n :: rest) sigExpr e sp =
-  EPi
-    n
-    True
-    Nothing
-    (kindArrowExpr (exprMaxAppArity n sigExpr) sp)
-    (quantifyTopKinds rest sigExpr e sp)
-    sp
+quantifyTopKinds names sigExpr e sp = quantifyTopKindsWith (\_ => Nothing) names [sigExpr] e sp
 
 -- 带域覆盖的量化：`Member n e r => ...` 里的 n 是 String、r 是 Row（不是按应用次数
--- 推出的 Type）。其余名字仍按 `quantifyTopKinds` 的 kind 规则。
-quantifyTopKindsWith : (String -> Maybe Expr) -> List String -> Expr -> Expr -> Span -> Expr
-quantifyTopKindsWith domOf [] sigExpr e sp = e
-quantifyTopKindsWith domOf (n :: rest) sigExpr e sp =
+-- 推出的 Type）。其余名字仍按「在 `scanExprs` 里的最大应用次数」定 kind。
+--
+-- 扫描目标是**一组表达式**（签名 ctx ++ 返回类型）：扫描函数直接收列表，不构造伪应用
+-- 把列表塞进单个 `Expr`。
+quantifyTopKindsWith : (String -> Maybe Expr) -> List String -> List Expr -> Expr -> Span -> Expr
+quantifyTopKindsWith domOf [] scanExprs e sp = e
+quantifyTopKindsWith domOf (n :: rest) scanExprs e sp =
   let
     dom =
       case domOf n of
         Just d => d
-        Nothing => kindArrowExpr (exprMaxAppArity n sigExpr) sp
-  in EPi n True Nothing dom (quantifyTopKindsWith domOf rest sigExpr e sp) sp
+        Nothing => kindArrowExpr (exprMaxAppArityIn n scanExprs) sp
+  in EPi n True Nothing dom (quantifyTopKindsWith domOf rest scanExprs e sp) sp
 
 -- 签名约束里的 `Member n e r`：收集 n/r 的域覆盖（String/Row），供量化使用。
 -- 只有顶层签名 ctx 走这里；`Member` 本身仍是 Base.Effect.Core 的 data family，不是 trait。
@@ -220,6 +219,10 @@ kindDomains _ = []
 -- 签名里「自由名作为某个族的第 i 个实参」出现的位置 ⇒ 该位置的参数 kind。
 -- 只收集直接写出的 `T x1 … xk`（`EVar T` 应用）里的裸变量实参；实参本身是应用时
 -- 交给「按应用次数」的规则。
+-- | `argParamKinds` 的一组表达式版本（签名 ctx ++ 返回类型）。
+export argParamKindsIn : List (Pair String (List Expr)) -> List Expr -> List (Pair String Expr)
+argParamKindsIn tbl exprs = concatMap (argParamKinds tbl) exprs
+
 export argParamKinds : List (Pair String (List Expr)) -> Expr -> List (Pair String Expr)
 argParamKinds tbl (EApp (EVar t _) args sp) =
   append (zipArgKinds (lookupParamKinds tbl (rnameKey t)) args) (concatMap (argParamKinds tbl) args)
@@ -313,27 +316,27 @@ quantifyTopSigCached prefix banned preludeBanned ty sp =
 export quantifyTopSigCtxCached : String -> HashMap String Bool -> HashMap String Bool -> List Expr -> Expr -> Span -> Expr
 quantifyTopSigCtxCached prefix banned preludeBanned ctx ty sp =
   let
-    combined = EApp (EVar (classifyName "#sig") sp) (append ctx [ty]) sp
-    -- 约束实参与返回类型一起参与自由名扫描；但 `#sig` 把 ty 包进了 EApp，
-    -- `piBoundNames`（只看顶层 EPi 链）看不到 ty 的 binder，必须手动扣除，
-    -- 否则显式 `{a : Type} -> a -> a` 里的 a 会被当成自由名再量化一次
+    -- 约束实参与返回类型一起参与自由名/应用次数扫描；`piBoundNames`（只看顶层 EPi 链）
+    -- 看不到 ctx 里的 binder，ty 自己的 binder 必须手动扣除，否则显式
+    -- `{a : Type} -> a -> a` 里的 a 会被当成自由名再量化一次
     -- （签名变成 `{a : Type} -> {a : Type} -> a -> a`，推断位置留下无主元变量）。
+    scanExprs = append ctx [ty]
     lower = nubNames (append (concatMap exprLowerVars ctx) (exprLowerVars ty))
     names = keepOutQualified prefix banned preludeBanned (dropPiBound lower (piBoundNames ty))
     overrides = memberDomainOverrides ctx
-  in quantifyTopKindsWith (memberDomainOf overrides) names combined ty sp
+  in quantifyTopKindsWith (memberDomainOf overrides) names scanExprs ty sp
 
 -- 与 `quantifyTopSigCtxCached` 同义，额外用 data 声明的参数 kind 给「作为类型构造子
 -- 实参的自由名」定 kind（优先级：`Member` 域覆盖 > 参数位置 kind > 按应用次数）。
 export quantifyTopSigCtxCachedKinds : String -> HashMap String Bool -> HashMap String Bool -> List (Pair String (List Expr)) -> List Expr -> Expr -> Span -> Expr
 quantifyTopSigCtxCachedKinds prefix banned preludeBanned paramKinds ctx ty sp =
   let
-    combined = EApp (EVar (classifyName "#sig") sp) (append ctx [ty]) sp
+    scanExprs = append ctx [ty]
     lower = nubNames (append (concatMap exprLowerVars ctx) (exprLowerVars ty))
     names = keepOutQualified prefix banned preludeBanned (dropPiBound lower (piBoundNames ty))
     memberOverrides = memberDomainOverrides ctx
-    argOverrides = argParamKinds paramKinds combined
-  in quantifyTopKindsWith (kindOverrideOf memberOverrides argOverrides) names combined ty sp
+    argOverrides = argParamKindsIn paramKinds scanExprs
+  in quantifyTopKindsWith (kindOverrideOf memberOverrides argOverrides) names scanExprs ty sp
 
 -- kind 来源优先级：`Member` 域覆盖 > 参数位置 kind > 按应用次数（后者由调用点兜底）。
 kindOverrideOf : List (Pair String Expr) -> List (Pair String Expr) -> String -> Maybe Expr
