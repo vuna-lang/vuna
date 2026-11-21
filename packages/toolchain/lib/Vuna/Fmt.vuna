@@ -27,19 +27,16 @@ import Vuna.Fmt.Doc
 import Vuna.Fmt.Util
 import Base.Data.String as String
 
--- | 格式化一段源码：解析、从 CST trivia 取注释、重写模块头，最后组装成一份 `Doc` 渲染。
--- 任何一步失败都是 `Err`，调用方据此拒绝写盘。
+-- | 格式化一段源码：解析（一次词法同时给出注释与 trivia token）、重写模块头，最后组装
+-- 成一份 `Doc` 渲染。任何一步失败都是 `Err`，调用方据此拒绝写盘。
 export formatSourceWith : String -> Check String
 formatSourceWith source =
-  case parseSourceWithComments "<fmt>" source of
+  case parseSourceDetailed "<fmt>" source of
     ErrC e => ErrC e
-    OkC (Pair (SourceFile hdr imports fx decls exports reexports opacity) __) =>
+    OkC (ParsedSource (SourceFile hdr imports fx decls exports reexports opacity) comments rawToks) =>
       let
-        toksM = lexCst source
-        plan =
-          case toksM of
-            Nothing => Pair emptyTrivia []
-            Just toks => triviaCtxOf (anchorSpans hdr imports fx decls) toks
+        toks = lexTokensOf source rawToks comments
+        plan = triviaCtxOf (anchorSpans hdr imports fx decls) toks
         ctx = firstOf plan
         eofComments = secondOf plan
         hdr2 =

@@ -712,9 +712,16 @@ defs / globals / sols 三张索引表。要继续压，先看 bodies（逐定义
 **注释只扫一遍**：`Frontend.Lexer` 现在有两条入口——token 路径（`lexChars`，不分配注释）
 与注释路径（`lexSourceWithComments`，一次扫描同时给出 token 与注释）。旧实现另有
 `scanComments` 并行扫描器（自己再实现「字符串里不算注释」），fmt / index / doc / LSP 都要
-`parse` + `lexComments` 两遍；现在走 `parseSourceWithComments`，只付一次词法（上表
+`parse` + `lexComments` 两遍；现在走 `parseSourceDetailed`，只付一次词法（上表
 `fmt --check` 的 ~8% 即来自这里）。token 路径保持零分配：把注释收集并进 token 路径（每个
 token 一次 `Pair`）的初版实测让 `vuna.parse.lex` 慢 ~20%，已放弃。
+
+**工具不等二遍词法**：lint / doc / index 曾为按 token 边界切原文再 `lexSource` 一遍。
+`parseSourceDetailed` 把注释表与词法 token 流一起交回，切原文直接用那份 token；fmt 的
+trivia 流由 `Cst.lexTokensOf` 纯组装（trivia 组装成本只由需要它的 fmt / LSP 付）。
+本机热 store（workspace + examples，7 轮取最小）：`fmt --check` 966 → 766 ms、
+`lint`（workspace）2778 → 2691 ms；单文件（`Elab/Term/Impl.vuna`）`fmt` 143 → 127 ms、
+`lint` 234 → 204 ms。
 
 ## 7. 测量规程
 

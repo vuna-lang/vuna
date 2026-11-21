@@ -3,7 +3,8 @@
 --
 -- `lintSourceWith` 先 parseSource 得到 AST，规则判定全部走 AST；需要源码原文（字面量、模式、
 -- 分支体）时用 span 加 token 边界从源码切片，不重新渲染字符串字面量。产出的编辑用行范围表示
--- （起始行、结束行、替换行），由 [Vuna.Lint.Fix] 应用。
+-- （起始行、结束行、替换行），由 [Vuna.Lint.Fix] 应用。源码原文与 token 边界来自同一次词法
+-- （`parseSourceDetailed`），不再为切片单独词法。
 --
 -- 改写目标统一为「把 dispatch 提升进外层模式」。`literal-if-chain` 处理 if 分派（`x == 字面量`
 -- 链，或 Bool 变量的 if/else-if）：scrutinee 是外层 clause/alt 的模式变量时提升成多条 clause
@@ -2318,26 +2319,23 @@ markerOf text =
 -- 按默认优先级重排。
 export lintSourceWithConfig : LintConfig -> List FixityDecl -> String -> Check (List Finding)
 lintSourceWithConfig cfg programFixities source =
-  case parseSourceWithComments "<lint>" source of
+  case parseSourceDetailed "<lint>" source of
     ErrC e => ErrC e
-    OkC (Pair (SourceFile _ _ fx decls0 _ _ _) comments) =>
+    OkC (ParsedSource (SourceFile _ _ fx decls0 _ _ _) comments rawToks) =>
       case parseSuppression comments of
         ErrC e => ErrC e
         OkC suppression =>
           case reorderProgram (tableOfKeepOps (append programFixities fx)) decls0 of
             ErrC e => ErrC e
             OkC decls =>
-              case lexSource source of
-                ErrC e => ErrC e
-                OkC toks =>
-                  let
-                    src = mkLintSrc source toks
-                    raw =
-                      append
-                        (dedupFindings (sortFindings (scanDecls src decls decls)))
-                        (todoFindings comments)
-                    filtered = filterFindings cfg suppression raw
-                  in OkC filtered
+              let
+                src = mkLintSrc source rawToks
+                raw =
+                  append
+                    (dedupFindings (sortFindings (scanDecls src decls decls)))
+                    (todoFindings comments)
+                filtered = filterFindings cfg suppression raw
+              in OkC filtered
 
 -- | 内部：按配置严重度与源码抑制过滤 finding。
 filterFindings : LintConfig -> Suppression -> List Finding -> List Finding

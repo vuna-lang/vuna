@@ -23,16 +23,37 @@ ps1 st e a0 = psErr1At (tokSpan st) e a0
 psAt : PState -> {n : Nat} -> PsDiag n -> Vec n String -> Check a
 psAt st e args = psErrAt (tokSpan st) e args
 
--- 单次词法同时给出注释表：fmt / index / doc / LSP 都要注释，但不必为此再扫一遍源码
--- （`lexComments` 现在是一次完整词法，投影出注释）。
-export parseSourceWithComments : String -> String -> Check (Pair SourceFile (List Comment))
-parseSourceWithComments file source =
+-- | 一次词法的全部产物：AST + 注释表 + 词法 token 流。
+--
+-- trivia token 流（`CstToken`）不在这里组装：只有需要注释归属/原文的工具（fmt / LSP）
+-- 才付那份成本，纯切片消费者（lint / index / doc）不该为它分配。fmt 用
+-- `Cst.lexTokensOf` 从 `parsedRawToks` + `parsedComments` 组装。
+export record ParsedSource(..) where
+  -- | 语法树。
+  parsedFile : SourceFile
+  -- | 注释表（源码顺序；抑制指令与 docstring 用）。
+  parsedComments : List Comment
+  -- | 词法 token 流（token 形态与字节偏移）；按 token 边界切原文的消费者用它。
+  parsedRawToks : List PTok
+
+-- | 工具路径的唯一入口：**一次**词法同时给出注释表与 token 流，再做语法分析。
+-- 需要注释 / 原文切片 / 保留括号的工具（fmt / lint / index / doc / LSP）用它，
+-- 不必为注释或原文切片再扫一遍源码。
+export parseSourceDetailed : String -> String -> Check ParsedSource
+parseSourceDetailed file source =
   case lexSourceWithComments source of
     ErrC e => ErrC e
     OkC (Pair toks comments) =>
       case parseSourceFile False (mkState file toks PmTool) of
         ErrC e => ErrC e
-        OkC p => OkC (Pair (firstOf (firstOf p)) comments)
+        OkC p => OkC (ParsedSource (firstOf (firstOf p)) comments toks)
+
+-- | 只要 AST 与注释表的入口（复用 `parseSourceDetailed` 同一次词法）。
+export parseSourceWithComments : String -> String -> Check (Pair SourceFile (List Comment))
+parseSourceWithComments file source =
+  case parseSourceDetailed file source of
+    ErrC e => ErrC e
+    OkC p => OkC (Pair p.parsedFile p.parsedComments)
 
 export parseSource : String -> String -> Check SourceFile
 parseSource file source =

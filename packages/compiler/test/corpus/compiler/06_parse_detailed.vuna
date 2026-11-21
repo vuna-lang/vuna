@@ -1,0 +1,33 @@
+-- 工具级解析（`parseSourceDetailed`）：**一次**词法同时给出 AST、注释表与 token 流；
+-- 由这三份重组出的 trivia 流仍逐字节还原源码（注释与空白不丢）。
+import Prelude
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.Cst
+import Vuna.Compiler.Frontend.Lexer
+import Vuna.Compiler.Frontend.Parser
+
+sample : String
+sample = "-- leading\nmodule M where\n\nf : Int\nf = 1 -- trailing\n"
+
+commentCount : List Comment -> Int
+commentCount [] = 0
+commentCount (_ :: rest) = 1 + commentCount rest
+
+roundTrips : ParsedSource -> Bool
+roundTrips p = renderCst (lexTokensOf sample p.parsedRawToks p.parsedComments) == sample
+
+moduleName : ParsedSource -> String
+moduleName p =
+  case p.parsedFile.sourceFileModDecl of
+    Nothing => ""
+    Just m => m.modDeclName
+
+main : Int
+main =
+  case parseSourceDetailed "<probe>" sample of
+    ErrC _ => 0
+    OkC p =>
+      (if roundTrips p then 1 else 0)
+        + (if commentCount p.parsedComments == 2 then 2 else 0)
+        + (if moduleName p == "M" then 4 else 0)

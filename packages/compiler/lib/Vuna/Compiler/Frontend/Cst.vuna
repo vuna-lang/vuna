@@ -297,20 +297,25 @@ buildTokens src comments cur prevEnd (t :: rest) =
   in firstOf node
     :: buildTokens src (secondOf before) curEnd (Pair curEnd.lcOff (curPos curEnd)) rest
 
+-- | 由**已完成的一次词法**（token 流 + 注释表）组装无损 token 流。
+--
+-- 工具路径（parser 的 `parseSourceDetailed`）用这一份：它已经为语法分析付过一次词法，
+-- 不应为了 trivia 再扫一遍源码。纯组装，不再触发词法。
+export lexTokensOf : String -> List PTok -> List Comment -> List CstToken
+lexTokensOf source toks comments =
+  let
+    fuel = strLength source + 1
+    tcs = toTrivComments fuel source lineCurStart comments
+  in buildTokens source (firstOf tcs) lineCurStart (Pair 0 (Pos 1 1 0 0)) toks
+
 -- | 把源码切成无损 token 流（每个 token 带前置 trivia）；编译器 lexer 拒绝源码
 -- （词法错误）时返回 `Nothing`。
 export lexCst : String -> Maybe (List CstToken)
-lexCst source = obsSpan "vuna.parse.cst" "vuna.phase" (\_ => lexCstGo source)
-
-lexCstGo : String -> Maybe (List CstToken)
-lexCstGo source =
+lexCst source =
   case lexSourceWithComments source of
     ErrC _ => Nothing
     OkC (Pair toks comments) =>
-      let
-        fuel = strLength source + 1
-        tcs = toTrivComments fuel source lineCurStart comments
-      in Just (buildTokens source (firstOf tcs) lineCurStart (Pair 0 (Pos 1 1 0 0)) toks)
+      Just (obsSpan "vuna.parse.cst" "vuna.phase" (\_ => lexTokensOf source toks comments))
 
 -- | 取 trivia 的原文（`renderCst` 用；具名函数而非 lambda，字段投影需要已知的记录类型）。
 triviaTextOf : Trivia -> String
