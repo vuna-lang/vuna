@@ -37,6 +37,7 @@ import Vuna.Ir.FloatLit
 import Vuna.Target.Native.Abi
 import Vuna.Target.Native.Audit
 import Vuna.Target.Native.Model
+import Vuna.Target.Native.Live
 import Vuna.Target.Native.Repr
 import Vuna.Target.Native.Runtime
 import Vuna.Target.Native.Select
@@ -126,6 +127,8 @@ record FGen where
   -- | binder id -> 调用点静态已知的被调用者（见 `KnownCallee`）。binder 身份在
   --   整个 lowering 产物里唯一，所以表只增不减；跨闭包边界时按捕获集合筛一遍。
   fgKnown : List (Pair Int KnownCallee)
+  -- | 当前定义在递归 SCC 里（非尾递归的帧会被层层压着，死槽清零才值得付产物成本）。
+  fgReenter : Bool
 
 freshSlot : FGen -> Pair Int FGen
 freshSlot st =
@@ -1326,7 +1329,7 @@ genLamValue fuel st bs body =
       st1 = { st | fgNextLabel = idx + 1 }
       -- 闭包体自己的来参区由闭包 ABI 决定（`rdi` 是闭包自身，实参从 `rsi` 起）。
       lamRoom = nativeTailRoomBytes (nativeStackArgCount arity (length closureArgRegs))
-      stBody = FGen st1.fgDefs st1.fgPool st1.fgFloats [] [] st1.fgFams 0 st1.fgNextLabel [] lamRoom st1.fgModule st1.fgOwner "" "" [] [] (filterKnown caps st.fgKnown)
+      stBody = FGen st1.fgDefs st1.fgPool st1.fgFloats [] [] st1.fgFams 0 st1.fgNextLabel [] lamRoom st1.fgModule st1.fgOwner "" "" [] [] (filterKnown caps st.fgKnown) st1.fgReenter
     in nbind (bindCaptures stBody st.fgSlotCls caps 0) (
         \cp =>
           nbind (bindArgsGo rbs 1 (secondOf cp)) (
@@ -1337,7 +1340,7 @@ genLamValue fuel st bs body =
                         stF = secondOf q
                         frame = nativeFrameBytes stF.fgNextSlot
                         lamBody = append (firstOf cp) (append (firstOf bp) (firstOf q))
-                        lamFunc = NativeFunc lamName frame (append (nativePrologue frame) (append (peephole lamBody) nativeEpilogue)) st.fgModule
+                        lamFunc = NativeFunc lamName frame (append (nativePrologue frame) (append (clearDeadSlots stF.fgReenter stF.fgSlotCls (peephole lamBody)) nativeEpilogue)) st.fgModule
                         lams = append st1.fgLams (append stF.fgLams [lamFunc])
                       in if ncap == 0 then
                         let
@@ -1623,9 +1626,6 @@ genArm fuel st isTail sc alt =
         in nbind (genExprAt (fuel - 1) (pushBinderCls b slot (slotClsAt sc st.fgSlotCls) (secondOf slotP)) isTail (irAltBodyOf alt)) (\q => NOk (Pair (cat [getLocal sc, setLocal slot, firstOf q]) (restoreBinderScope (secondOf q) st.fgSlots)))
       _ => internal "case arm has more than one runtime binder"
 
-tagOfScrut : Int -> List Instr
-tagOfScrut sc = cat [getLocal sc, [IMov (OpReg Rdx) (OpReg Rax), IMov (OpReg Rax) (OpMem Rdx 0)]]
-
 -- | 变体分支链：跳过 catch-all（它只作默认臂），其余按 tag 线性比较。
 --   `all` 是原始分支表：链尾必须回到它，才能让 catch-all 兜底（否则嵌套 pattern
 --   的兜底分支会被丢掉，运行时掉进 `trap_impossible`）。
@@ -1651,7 +1651,7 @@ genVariantAltsGo fuel st isTail sc ctors alts all =
                   lNext = firstOf lNextP
                   lEndP = freshLabel (secondOf lNextP)
                   lEnd = firstOf lEndP
-                in nbind (genVariantArm (fuel - 1) (secondOf lEndP) isTail sc alt) (\a => nbind (genVariantAltsGo (fuel - 1) (secondOf a) isTail sc ctors rest all) (\r => NOk (Pair (cat [tagOfScrut sc, [ICmp (OpReg Rax) (OpImm tag), IJcc "jne" lNext], firstOf a, [IJmp lEnd, ILabel lNext], firstOf r, [ILabel lEnd]]) (secondOf r))))
+                in nbind (genVariantArm (fuel - 1) (secondOf lEndP) isTail sc alt) (\a => nbind (genVariantAltsGo (fuel - 1) (secondOf a) isTail sc ctors rest all) (\r => NOk (Pair (cat [[ICmp (OpMem Rbp (nativeSlotOff sc)) (OpImm tag), IJcc "jne" lNext], firstOf a, [IJmp lEnd, ILabel lNext], firstOf r, [ILabel lEnd]]) (secondOf r))))
 
 -- | 变体分支：按 keep 形状绑定字段（tag 占 index 0），再求值分支体。
 genVariantArm : Int -> FGen -> Bool -> Int -> IrAlt -> NRes (Pair (List Instr) FGen)
@@ -1795,24 +1795,43 @@ bindArgsGo (b :: rest) i st =
 
 -- | 生成一个定义；返回函数与该定义之后**模块内** label/slot 计数（`.L` 是文件局部
 --   符号，计数按模块保存；重编号不会跨模块扩散）。
-genDefFunc : List IrDef -> List (Pair String (List (Pair String String))) -> List (Pair String (List (Pair String String))) -> List IrTyDecl -> Int -> IrDef -> NRes (Pair (List NativeFunc) (Pair Int (List NativeClosure)))
-genDefFunc _defs _pools _floats _fams _nextLabel (IrExternDef name _ _ _) =
+genDefFunc : List IrDef -> List (Pair String (List (Pair String String))) -> List (Pair String (List (Pair String String))) -> List String -> List IrTyDecl -> Int -> IrDef -> NRes (Pair (List NativeFunc) (Pair Int (List NativeClosure)))
+genDefFunc _defs _pools _floats _recNames _fams _nextLabel (IrExternDef name _ _ _) =
   unsupported "native target: extern definition `${name}` is not supported yet"
-genDefFunc defs pools floats fams nextLabel (IrDef name arity _ _ body _ _ _) =
+genDefFunc defs pools floats recNames fams nextLabel (IrDef name arity _ _ body _ _ _) =
   let
     -- 本函数来参区：零参定义没有调用者压的栈实参，其余按标准 ABI 推算。
     room = nativeTailRoomBytes (nativeStackArgCount arity nativeMaxArgs)
     modPath = modulePathOf name
     pool = modulePoolOf (moduleKeyOf name) pools
     fpool = modulePoolOf (moduleKeyOf name) floats
-    st0 = FGen defs pool fpool [] [] fams 0 nextLabel [] room modPath name "" "" [] [] []
+    st0 =
+      FGen
+        defs
+        pool
+        fpool
+        []
+        []
+        fams
+        0
+        nextLabel
+        []
+        room
+        modPath
+        name
+        ""
+        ""
+        []
+        []
+        []
+        (memStr name recNames)
   in if arity == 0 then
     nbind (genExpr (nativeFuelOfBody body) st0 body) (
         \p =>
           let
             st1 = secondOf p
             frame = nativeFrameBytes st1.fgNextSlot
-            instrs = append (peephole (firstOf p)) nativeEpilogue
+            instrs = append (clearDeadSlots st1.fgReenter st1.fgSlotCls (peephole (firstOf p))) nativeEpilogue
             mainF = NativeFunc (nativeFuncLabel name) frame (append (nativePrologue frame) instrs) modPath
           in NOk (Pair (append st1.fgLams [mainF]) (Pair st1.fgNextLabel st1.fgStatics))
       )
@@ -1837,7 +1856,7 @@ genDefFunc defs pools floats fams nextLabel (IrDef name arity _ _ body _ _ _) =
                         st1 = secondOf q
                         frame = nativeFrameBytes st1.fgNextSlot
                         body0 = append (firstOf bp) (append [ILabel loopLabel] (firstOf q))
-                        instrs = append (peephole body0) nativeEpilogue
+                        instrs = append (clearDeadSlots st1.fgReenter st1.fgSlotCls (peephole body0)) nativeEpilogue
                         mainF = NativeFunc (nativeFuncLabel name) frame (append (nativePrologue frame) instrs) modPath
                       in NOk (Pair (append st1.fgLams [mainF]) (Pair st1.fgNextLabel st1.fgStatics))
                   )
@@ -1855,20 +1874,26 @@ putLabelCount key n [] = [Pair key n]
 putLabelCount key n (p :: rest) =
   if firstOf p == key then Pair key n :: rest else p :: putLabelCount key n rest
 
-genDefs : List IrDef -> List (Pair String (List (Pair String String))) -> List (Pair String (List (Pair String String))) -> List IrTyDecl -> List (Pair String Int) -> List IrDef -> List (List NativeFunc) -> List NativeClosure -> NRes (Pair (List NativeFunc) (Pair Int (List NativeClosure)))
-genDefs _all _pools _floats _fams _labels [] acc statAcc =
+genDefs : List IrDef -> List (Pair String (List (Pair String String))) -> List (Pair String (List (Pair String String))) -> List String -> List IrTyDecl -> List (Pair String Int) -> List IrDef -> List (List NativeFunc) -> List NativeClosure -> NRes (Pair (List NativeFunc) (Pair Int (List NativeClosure)))
+genDefs _all _pools _floats _recNames _fams _labels [] acc statAcc =
   NOk (Pair (concatMap (\x => x) (reverse acc)) (Pair 0 statAcc))
-genDefs all pools floats fams labels (d :: rest) acc statAcc =
+genDefs all pools floats recNames fams labels (d :: rest) acc statAcc =
   let
     key = moduleKeyOf (irDefName d)
     start = labelCountOf key labels
-  in nbind (genDefFunc all pools floats fams start d) (
+  in nbind (genDefFunc all pools floats recNames fams start d) (
       \p =>
         let
           next = firstOf (secondOf p)
           statics = secondOf (secondOf p)
-        in genDefs all pools floats fams (putLabelCount key next labels) rest (firstOf p :: acc) (append statics statAcc)
+        in genDefs all pools floats recNames fams (putLabelCount key next labels) rest (firstOf p :: acc) (append statics statAcc)
     )
+
+-- | 递归 SCC 里的定义名（`unit` 的分组由 Lowering 的 SCC 给出）。死槽清零只在
+--   这类帧上付产物成本：非尾递归时每层帧都活着，死槽会一路钉住对象。
+recursiveDefNames : IrUnit -> List String
+recursiveDefNames unit =
+  concatMap (\g => if irGroupIsRec g then map irDefName (irGroupDefs g) else []) unit.irUnitGroups
 
 -- | 按标签去重（函数值 wrapper 可能被多个定义分别登记；同标签体相同）。
 dedupeFuncs : List NativeFunc -> List NativeFunc
@@ -2276,7 +2301,7 @@ build program printResult =
                     let
                       pools = modulePools cpsOrdered
                       fpools = moduleFloatPools cpsOrdered
-                    in case genDefs cpsOrdered pools fpools unit.irUnitTyDecls [] cpsOrdered [] [] of
+                    in case genDefs cpsOrdered pools fpools (recursiveDefNames unit) unit.irUnitTyDecls [] cpsOrdered [] [] of
                       NFail err => NativeRejected (nativeAuditEnrich err cpsOrdered)
                       NOk pair =>
                         let

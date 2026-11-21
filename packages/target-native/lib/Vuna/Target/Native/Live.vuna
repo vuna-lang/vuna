@@ -1,0 +1,358 @@
+module Vuna.Target.Native.Live where
+
+-- 帧内死槽清零（逐帧保守扫根的补充）。
+--
+-- GC 沿 `rbp` 链整帧保守扫根，所以帧里**已经死掉**的指针槽仍会被当成根：`gc_low_live`
+-- 的 `churn` 每帧用完 `xs` / `s` 之后递归，指针还留在槽里，下一层递归期间 GC 就把这些
+-- 已死对象全部留住（`live` 逐轮翻倍，见 debt D132）。这里在槽的**最后一次读**之后写 0，
+-- 让死对象当轮就能回收。
+--
+-- 判据必须是「证明不再被读」而不是「文本上后面没有读」：分支与回边下后者会清掉活值。
+-- 所以按基本块做后向活跃性不动点：
+--   live_in(B)  = use(B) ∪ (live_out(B) \ def(B))
+--   live_out(B) = ∪ live_in(后继)
+-- `use` / `def` 取整块并集（只会**高估**活跃性），因此漏清最多是多留垃圾，不会清错；
+-- 不动点没收敛时整函数退回不清（同样只会少清）。
+--
+-- 只清可能保存堆指针的槽（`NClsPtr` 与所有未知分类）；标量与 `.rodata` 静态指针
+-- （`NClsStatic`：静态闭包 / 浮点字面量）不清。紧跟拆帧（`mov rsp, rbp`）、`ret` 或
+-- 下一条指令就重写该槽时不清：前者帧已经没了，后者会被覆盖。
+--
+-- 产物成本有预算：清零只在**帧会被再次进入**时才发——函数在递归 SCC 里
+-- （`mayReenter`，非尾递归时每层帧都活着），或者函数内有回边（尾递归 / 普通循环，
+-- 同一帧跨迭代复用）。其余函数的帧随调用返回立刻消失，死槽上的指针只多活一次调用。
+-- 死存储（写了但整函数不读的槽）与这条无关，总是删掉。
+--
+-- 边界：只 import Base 与 `Native.{Abi,Model,Repr}`；不 import IR。
+import Base.Container.HashMap as HashMap
+import Base.Data.Bool as Bool
+import Base.Data.Int as Int
+import Base.Data.List as List
+import Base.Data.Maybe as Maybe
+import Base.Data.Pair as Pair
+import Vuna.Target.Native.Abi
+import Vuna.Target.Native.Model
+import Vuna.Target.Native.Repr
+
+-- ---------------------------------------------------------------
+-- 槽偏移
+-- ---------------------------------------------------------------
+-- | 一个操作数读到的帧槽偏移（`[rbp - off]`）；不是帧槽就返回 `Nothing`。
+operandSlotOff : Operand -> Maybe Int
+operandSlotOff (OpMem Rbp off) = Just off
+operandSlotOff _ = Nothing
+
+maybeToList : Maybe a -> List a
+maybeToList Nothing = []
+maybeToList (Just x) = [x]
+
+withDefault : Maybe a -> a -> a
+withDefault Nothing d = d
+withDefault (Just x) _ = x
+
+-- | 指令读到的帧槽偏移（升序）。
+instrSlotReads : Instr -> List Int
+instrSlotReads (IMov _ src) = oneSorted (operandSlotOff src)
+instrSlotReads (IMovByteOp op _) = oneSorted (operandSlotOff op)
+instrSlotReads (IMovByteRegOp op _) = oneSorted (operandSlotOff op)
+instrSlotReads (IMovzx _ src) = oneSorted (operandSlotOff src)
+instrSlotReads (IBin _ src) = oneSorted (operandSlotOff src)
+instrSlotReads (IBinReg _ _ src) = oneSorted (operandSlotOff src)
+instrSlotReads (ICmp a b) = twoSorted (operandSlotOff a) (operandSlotOff b)
+instrSlotReads (ICmov _ _ src) = oneSorted (operandSlotOff src)
+instrSlotReads (IXmmLoad _ src) = oneSorted (operandSlotOff src)
+instrSlotReads (IXmmStore op _) = oneSorted (operandSlotOff op)
+instrSlotReads _ = []
+
+-- | 指令写到的帧槽偏移（升序）。
+instrSlotWrites : Instr -> List Int
+instrSlotWrites (IMov dst _) = oneSorted (operandSlotOff dst)
+instrSlotWrites (IMovByteOp op _) = oneSorted (operandSlotOff op)
+instrSlotWrites (IMovByteRegOp op _) = oneSorted (operandSlotOff op)
+instrSlotWrites (IXmmStore op _) = oneSorted (operandSlotOff op)
+instrSlotWrites _ = []
+
+oneSorted : Maybe Int -> List Int
+oneSorted Nothing = []
+oneSorted (Just x) = [x]
+
+twoSorted : Maybe Int -> Maybe Int -> List Int
+twoSorted Nothing mb = oneSorted mb
+twoSorted ma Nothing = oneSorted ma
+twoSorted (Just a) (Just b) = if a <= b then [a, b] else [b, a]
+
+-- ---------------------------------------------------------------
+-- 槽集合（**升序** Int 列表；并 / 差都是线性归并）
+-- ---------------------------------------------------------------
+insertSorted : Int -> List Int -> List Int
+insertSorted x [] = [x]
+insertSorted x (y :: rest) =
+  if x == y then y :: rest else if x < y then x :: y :: rest else y :: insertSorted x rest
+
+memInt : Int -> List Int -> Bool
+memInt _ [] = False
+memInt x (y :: rest) = if x == y then True else if x < y then False else memInt x rest
+
+mergeUnion : List Int -> List Int -> List Int
+mergeUnion [] ys = ys
+mergeUnion xs [] = xs
+mergeUnion (x :: xs) (y :: ys) =
+  if x == y then
+    x :: mergeUnion xs ys
+  else if x < y then x :: mergeUnion xs (y :: ys) else y :: mergeUnion (x :: xs) ys
+
+mergeDiff : List Int -> List Int -> List Int
+mergeDiff [] _ = []
+mergeDiff xs [] = xs
+mergeDiff (x :: xs) (y :: ys) =
+  if x == y then
+    mergeDiff xs ys
+  else if x < y then x :: mergeDiff xs (y :: ys) else mergeDiff (x :: xs) ys
+
+-- ---------------------------------------------------------------
+-- 基本块
+-- ---------------------------------------------------------------
+-- | 一个基本块：第一项可以是 `ILabel`（块边界同时按标签切），最后一项是终止指令
+--   （或落到下一个块的尾部）。
+record Block where
+  blkInstrs : List Instr
+
+isTerminator : Instr -> Bool
+isTerminator (IJmp _) = True
+isTerminator (IJmpReg _) = True
+isTerminator (IJcc _ _) = True
+isTerminator IRet = True
+isTerminator _ = False
+
+-- | 切块：终止指令独占块尾；每个标签独占块首。
+blocksOf : List Instr -> List Block
+blocksOf [] = []
+blocksOf (i :: rest) =
+  if isTerminator i then
+    Block [i] :: blocksOf rest
+  else
+    case i of
+      ILabel _ => Block [i] :: blocksOf rest
+      _ => blockFrom [i] rest
+
+blockFrom : List Instr -> List Instr -> List Block
+blockFrom acc [] = [Block (reverse acc)]
+blockFrom acc (i :: rest) =
+  if isTerminator i then
+    Block (reverse (i :: acc)) :: blocksOf rest
+  else
+    case i of
+      ILabel _ => Block (reverse acc) :: blocksOf (i :: rest)
+      _ => blockFrom (i :: acc) rest
+
+blockLast : Block -> Maybe Instr
+blockLast b = lastOf b.blkInstrs
+
+lastOf : List a -> Maybe a
+lastOf [] = Nothing
+lastOf ([x]) = Just x
+lastOf (_ :: rest) = lastOf rest
+
+atIdx : Int -> List a -> Maybe a
+atIdx _ [] = Nothing
+atIdx i (x :: rest) = if i <= 0 then Just x else atIdx (i - 1) rest
+
+zipIdxFrom : Int -> List a -> List (Pair Int a)
+zipIdxFrom _ [] = []
+zipIdxFrom i (x :: rest) = Pair i x :: zipIdxFrom (i + 1) rest
+
+-- | 标签 -> 块序号（只认块首是标签的块）。
+labelMapOf : List Block -> HashMap String Int
+labelMapOf blocks = HashMap.fromList (concatMap labelIndexOf (zipIdxFrom 0 blocks))
+
+labelIndexOf : Pair Int Block -> List (Pair String Int)
+labelIndexOf p =
+  let
+    b = secondOf p
+  in case b.blkInstrs of
+    (ILabel l) :: _ => [Pair l (firstOf p)]
+    _ => []
+
+-- | 块的后继序号。
+succIndices : HashMap String Int -> Int -> Block -> List Int
+succIndices labels i b =
+  case blockLast b of
+    Just (IJmp l) => maybeToList (HashMap.lookup l labels)
+    Just (IJmpReg _) => []
+    Just IRet => []
+    Just (IJcc _ l) => append (maybeToList (HashMap.lookup l labels)) [i + 1]
+    _ => [i + 1]
+
+-- | 有没有回边（尾递归循环 / 普通循环）：同一帧会被再次使用。
+hasBackwardEdge : List Block -> HashMap String Int -> Bool
+hasBackwardEdge blocks labels =
+  foldl (
+      \acc, p =>
+        let
+          i = firstOf p
+          b = secondOf p
+        in if acc then True else foldl (\hit, j => if hit || j <= i then True else hit) False (succIndices labels i b)
+    ) False (zipIdxFrom 0 blocks)
+
+-- ---------------------------------------------------------------
+-- 活跃性
+-- ---------------------------------------------------------------
+blockUses : Block -> List Int
+blockUses b = foldl (\acc, i => mergeUnion acc (instrSlotReads i)) [] b.blkInstrs
+
+blockDefs : Block -> List Int
+blockDefs b = foldl (\acc, i => mergeUnion acc (instrSlotWrites i)) [] b.blkInstrs
+
+succLive : HashMap String Int -> HashMap Int (List Int) -> Int -> Block -> List Int
+succLive labels live i b =
+  foldl (
+      \acc, j =>
+        case HashMap.lookup j live of
+          Just s => mergeUnion acc s
+          Nothing => acc
+    ) [] (succIndices labels i b)
+
+-- | 一轮：**逆块序**重算 live_in（后向数据流逆序传播时直链一轮到底，只有回边要重扫）。
+liveStep : HashMap String Int -> List Block -> List (List Int) -> List (List Int) -> HashMap Int (List Int) -> Pair (HashMap Int (List Int)) Bool
+liveStep labels blocks uses defs live =
+  foldl (
+      \accP, p =>
+        let
+          i = firstOf p
+          b = secondOf p
+          cur = firstOf accP
+          newIn = mergeUnion (withDefault (atIdx i uses) []) (mergeDiff (succLive labels cur i b) (withDefault (atIdx i defs) []))
+          oldIn = withDefault (HashMap.lookup i cur) []
+        in if newIn == oldIn then accP else Pair (HashMap.insert i newIn cur) True
+    ) (Pair live False) (reverse (zipIdxFrom 0 blocks))
+
+liveFix : Int -> HashMap String Int -> List Block -> List (List Int) -> List (List Int) -> HashMap Int (List Int) -> Maybe (HashMap Int (List Int))
+liveFix fuel labels blocks uses defs live =
+  if fuel <= 0 then
+    Nothing
+  else
+    let
+      p = liveStep labels blocks uses defs live
+    in if secondOf p then liveFix (fuel - 1) labels blocks uses defs (firstOf p) else Just (firstOf p)
+
+-- ---------------------------------------------------------------
+-- 重写：在最后一次读之后清零
+-- ---------------------------------------------------------------
+ptrMapOf : List (Pair Int NCls) -> HashMap Int Bool
+ptrMapOf slotCls =
+  HashMap.fromList (map (\p => Pair (nativeSlotOff (firstOf p)) (isPtrCls (secondOf p))) slotCls)
+
+isPtrCls : NCls -> Bool
+isPtrCls NClsScalar = False
+isPtrCls NClsStatic = False
+isPtrCls _ = True
+
+clearSlot : Int -> Instr
+clearSlot off = IMov (OpMem Rbp off) (OpImm 0)
+
+teardownOrRet : Instr -> Bool
+teardownOrRet IRet = True
+teardownOrRet (IMov (OpReg Rsp) (OpReg Rbp)) = True
+teardownOrRet _ = False
+
+-- | 会读「调用方槽里的实参」的运行时入口：`rt_apply` 慢路径把实参压成栈上的
+--   数组交给运行时，数组本身不在任何帧的槽位里，未饱和 / 部分应用时 `apply_shim`
+--   会在**分配 shim 之前**触发 GC——那批实参的根就是调用方的实参槽。所以含这类调用的
+--   基本块整块不清零（保守：只可能少清）。
+isApplyCall : Instr -> Bool
+isApplyCall (ICall l) =
+  l == nativeRtLabel "apply" || l == nativeRtLabel "apply_exact" || l == nativeRtLabel "apply_shim"
+isApplyCall _ = False
+
+blockHasApply : Block -> Bool
+blockHasApply b = foldl (\acc, i => if isApplyCall i then True else acc) False b.blkInstrs
+
+-- | 从块的**末尾**往回走（`instrs` 已经 reverse），`live` 是「该指令之后活着的槽」；
+--   返回正向顺序的 `(指令, 该指令之后就死了的槽)`（逐项前插）。
+dyingPoints : HashMap Int Bool -> List Int -> List Instr -> List (Pair Instr (List Int)) -> List (Pair Instr (List Int))
+dyingPoints ptr live [] acc = acc
+dyingPoints ptr live (i :: rest) acc =
+  let
+    after = live
+    before = mergeUnion (instrSlotReads i) (mergeDiff after (instrSlotWrites i))
+    died = filter (\o => withDefault (HashMap.lookup o ptr) True && not (memInt o after)) before
+  in dyingPoints ptr before rest (Pair i died :: acc)
+
+-- | 插入清零：跳过紧跟拆帧 / `ret` 的点，也跳过下一条指令就重写该槽的点。
+emitClears : List (Pair Instr (List Int)) -> List Instr
+emitClears [] = []
+emitClears ((Pair i died) :: rest) =
+  let
+    next =
+      case rest of
+        (Pair n _) :: _ => Just n
+        [] => Nothing
+    staticSkip =
+      case next of
+        Just n => teardownOrRet n
+        Nothing => True
+    nextWrites =
+      case next of
+        Just n => instrSlotWrites n
+        Nothing => []
+    keep = filter (\o => not (memInt o nextWrites)) died
+    clears = if staticSkip then [] else map clearSlot keep
+  in i :: append clears (emitClears rest)
+
+emitBlock : HashMap Int Bool -> HashMap String Int -> HashMap Int (List Int) -> Pair Int Block -> List Instr
+emitBlock ptr labels live p =
+  let
+    i = firstOf p
+    b = secondOf p
+  in if blockHasApply b then
+    b.blkInstrs
+  else
+    let
+      out = succLive labels live i b
+    in emitClears (dyingPoints ptr out (reverse b.blkInstrs) [])
+
+-- ---------------------------------------------------------------
+-- 死存储（写了但整函数都不读的槽）
+-- ---------------------------------------------------------------
+-- | 整个函数从不被读的槽偏移。写这类槽的 `mov` 是纯浪费，而且会把对象钉在帧里
+--   （保守扫根不区分「没人读」），所以直接删掉。
+neverReadOffs : List Instr -> List Int
+neverReadOffs instrs =
+  let
+    writes = foldl (\acc, i => mergeUnion acc (instrSlotWrites i)) [] instrs
+    reads = foldl (\acc, i => mergeUnion acc (instrSlotReads i)) [] instrs
+  in mergeDiff writes reads
+
+isDeadStore : List Int -> Instr -> Bool
+isDeadStore dead (IMov (OpMem Rbp off) _) = memInt off dead
+isDeadStore _ _ = False
+
+dropDeadStores : Int -> List Instr -> List Instr
+dropDeadStores fuel instrs =
+  if fuel <= 0 then
+    instrs
+  else
+    let
+      dead = neverReadOffs instrs
+      kept = filter (\i => not (isDeadStore dead i)) instrs
+    in if length kept == length instrs then kept else dropDeadStores (fuel - 1) kept
+
+-- | 帧内死槽处理：删掉死存储，然后在槽的最后一次读之后写 0（只对可能保存指针的槽，
+--   且只在帧会被再次进入的函数里）。
+export clearDeadSlots : Bool -> List (Pair Int NCls) -> List Instr -> List Instr
+clearDeadSlots mayReenter slotCls instrs0 =
+  let
+    instrs = dropDeadStores 4 instrs0
+    blocks = blocksOf instrs
+    labels = labelMapOf blocks
+  in if not (mayReenter || hasBackwardEdge blocks labels) then
+    instrs
+  else
+    let
+      uses = map blockUses blocks
+      defs = map blockDefs blocks
+      init = HashMap.fromList (map (\p => Pair (firstOf p) []) (zipIdxFrom 0 blocks))
+      ptr = ptrMapOf slotCls
+    in case liveFix 64 labels blocks uses defs init of
+      Nothing => instrs
+      Just live => concatMap (emitBlock ptr labels live) (zipIdxFrom 0 blocks)

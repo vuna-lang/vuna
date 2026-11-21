@@ -166,9 +166,11 @@ CPS 后缺 kind 的 binder 按位置是 `lam=4,824 / let=0 / alt=33`：几乎全
 的 binder unknown 是 55%（lam=1,690）。
 
 读法：GC 沿 `rbp` 链整帧保守扫根（[native.md](native.md) §5.2），不按这里的 kind 过滤，
-也不按活跃性裁剪：未装箱标量、实参临时槽、case scrutinee 与已死槽都会被扫一遍。
-这份分类现在只由 `vuna dev ir dump` 报告，供移动/压缩（需要区分「确定指针」与
-「保守候选」）评估；两代回收的边界由块头的老代位与写屏障决定，不依赖槽 kind。
+也不按活跃性裁剪：未装箱标量、实参临时槽、case scrutinee 都会被扫一遍。「已死槽」是例外：
+`Native.Live` 在递归 / 带回边的函数里对**指针 kind** 的槽在最后一次读之后写 0（[native.md](native.md) §3），
+所以死对象不再钉到帧返回；这份 kind 分类仍只由 `vuna dev ir dump` 报告，供移动/压缩
+（需要区分「确定指针」与「保守候选」）评估；两代回收的边界由块头的老代位与写屏障决定，
+不依赖槽 kind。
 `IrTyVar` 在这两个程序里都是 0；CPS 合成的 lambda 形参（没有源码类型可必填）与 opaque
 是 kind 不确定的主要来源。表的「需要清零」是历史统计，保留作 kind 分布的读数。
 

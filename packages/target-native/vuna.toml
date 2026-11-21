@@ -14,6 +14,7 @@ modules = [
   "Vuna.Target.Native.Abi",
   "Vuna.Target.Native.Audit",
   "Vuna.Target.Native.Gc",
+  "Vuna.Target.Native.Live",
   "Vuna.Target.Native.Model",
   "Vuna.Target.Native.Module",
   "Vuna.Target.Native.Pal",

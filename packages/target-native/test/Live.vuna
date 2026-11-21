@@ -1,0 +1,99 @@
+-- `Native.Live` 的单元测试：帧内死槽清零与死存储删除。
+--
+-- 锁住四件事：
+--   * 槽在最后一次读之后写 0（保守 GC 不再把已死对象钉在帧里）；
+--   * 回边上的读让槽保持活跃（不能清）；
+--   * 帧不会被再次进入的函数（非递归、无回边）不付产物成本；
+--   * 含 `rt_apply` 调用的基本块整块不清（实参的根就是调用方槽）。
+import Base
+import Base.Data.Int as Int
+import Base.Data.List as List
+import Base.Data.String as String
+import Base.Effect.Core
+import Vuna.Target.Native.Abi
+import Vuna.Target.Native.Live
+import Vuna.Target.Native.Model
+import Vuna.Target.Native.Repr
+
+main : Eff [] String
+main =
+  case problems of
+    [] => pure ""
+    ps =>
+      do
+        _ <- prim_eff_print ("native live pass drifted:\n" ++ join "\n" ps ++ "\n")
+        _ <- prim_eff_exit 1
+        pure ""
+
+slot0 : Int
+slot0 = nativeSlotOff 0
+
+slot1 : Int
+slot1 = nativeSlotOff 1
+
+cls0 : List (Pair Int NCls)
+cls0 = [Pair 0 NClsPtr]
+
+clear0 : Instr
+clear0 = IMov (OpMem Rbp slot0) (OpImm 0)
+
+-- | 写一次、读一次、之后一个普通调用：读位置之后就死。
+straight : List Instr
+straight = [IMov (OpMem Rbp slot0) (OpReg Rax), IMov (OpReg Rdi) (OpMem Rbp slot0), ICall "f"]
+
+-- | 槽在循环体里被读：回边上仍然活跃，不能清。
+loopBody : List Instr
+loopBody = [ILabel ".L0", IMov (OpReg Rdi) (OpMem Rbp slot0), ICall "f", IJmp ".L0"]
+
+-- | 含 `rt_apply` 的块：整块不清（实参可能只在调用方槽里）。
+applyBody : List Instr
+applyBody =
+  [
+    IMov (OpMem Rbp slot0) (OpReg Rax),
+    IMov (OpReg Rdi) (OpMem Rbp slot0),
+    ICall (nativeRtLabel "apply")
+  ]
+
+-- | 写进槽 1，但整段都不读：死存储。
+writtenOnly : List Instr
+writtenOnly = [IMov (OpMem Rbp slot1) (OpReg Rax), IMov (OpReg Rax) (OpImm 5)]
+
+problems : List String
+problems =
+  filter
+    (\s => s /= "")
+    [check "straight (reenter)" True (hasClear 0 (clearDeadSlots True cls0 straight)), check "straight (no reenter)" False (hasClear 0 (clearDeadSlots False cls0 straight)), check "loop body keeps slot" False (hasClear 0 (clearDeadSlots True cls0 loopBody)), check "apply block untouched" False (hasClear 0 (clearDeadSlots True cls0 applyBody)), checkN "dead store dropped" 1 (length (clearDeadSlots False cls0 writtenOnly)), check "scalar slot not cleared" False (hasClear 0 (clearDeadSlots True [Pair 0 NClsScalar] straight))]
+
+hasClear : Int -> List Instr -> Bool
+hasClear slot instrs = memInstr (IMov (OpMem Rbp (nativeSlotOff slot)) (OpImm 0)) instrs
+
+memInstr : Instr -> List Instr -> Bool
+memInstr _ [] = False
+memInstr i (x :: rest) = if sameInstr i x then True else memInstr i rest
+
+-- | 指令身份：模型没有 `Eq Instr`，按渲染文本比较。
+sameInstr : Instr -> Instr -> Bool
+sameInstr a b = instrKey a == instrKey b
+
+instrKey : Instr -> String
+instrKey (IMov dst src) = "mov ${opKey dst} ${opKey src}"
+instrKey (ICall l) = "call ${l}"
+instrKey (IJmp l) = "jmp ${l}"
+instrKey (ILabel l) = "label ${l}"
+instrKey (IBinReg op r src) = "${op} ${regText r} ${opKey src}"
+instrKey (IBin op src) = "${op} ${opKey src}"
+instrKey _ = "other"
+
+opKey : Operand -> String
+opKey (OpReg r) = regText r
+opKey (OpImm n) = strFromInt n
+opKey (OpMem base off) = "[${regText base}${strFromInt off}]"
+opKey (OpMemX base idx off) = "[${regText base}+${regText idx}${strFromInt off}]"
+opKey (OpRip l) = "[rip+${l}]"
+
+check : String -> Bool -> Bool -> String
+check label want got = if want == got then "" else label ++ ": drifted"
+
+checkN : String -> Int -> Int -> String
+checkN label want got =
+  if want == got then "" else label ++ ": want " ++ strFromInt want ++ ", got " ++ strFromInt got
