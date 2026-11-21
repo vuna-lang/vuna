@@ -90,7 +90,7 @@
 | `Elab.Meta` | 共享工具层：值/构造子引用、`convEc`、元变量创建深度与统一 `zonkTerm`、擦除判据（`isTypeDomain`/`binderRig`）、命名空间查询（`typeLookup`/`valueLookup`）、canonical Bool 的 `TBool` 表示 | `convEc`、`zonkTerm`、`binderRig`、`typeLookup`、`dictTypeName` |
 | `Elab.MetaSpans` | 元变量 / 洞的创建点 span 登记（诊断与 LSP 洞目标用） | `recordMetaSpan`、`metaSpanOf`、`newHoleMeta` |
 | `Elab.Case` | case 规范形：索引合一（`unifyIdx`）、scrutinee 反射、单一可达性判据（`BranchVerdict`/`allCtorsUnsatisfiable`）、空族与冗余/不可达诊断 | `unifyIdx`、`reflectScrutinee`、`checkCoverage`、`isEmptyFamilyValue` |
-| `Elab.Dict` | 字典编码的表示与实例搜索：字典类型/实例头识别、`conv` 头匹配、实例搜索（递归解 ctx / 约束实例）、`==`/比较运算符特化（Int/String 内建或 Eq/Ord 字典；无泛型结构比较兜底） | `searchInstance`、`dictFamilyNameOf`、`cmpRuntimeName`、`deferEqDict` |
+| `Elab.Dict` | 字典编码的表示与实例搜索：字典类型/实例头识别、`conv` 头匹配、实例搜索（递归解 ctx / 约束实例）、`==`/比较运算符特化（Int/String 内建或 Eq/Ord 字典；无泛型结构比较兜底）；Eq / Ord / Num 的方法判定与 runtime 名都查同一张 `BuiltinOp` 表 | `searchInstance`、`dictFamilyNameOf`、`builtinOpOf`、`numMethodOpName`、`deferEqDict` |
 | `Elab.Term` | 项的双向检查（与 case 规则互递归的核心）：`inferE`/`checkE`/应用/隐式插入/类型检查 | `inferE`、`checkE`、`checkApp`、`checkType` |
 | `Elab.Data` | `data` 声明与构造子精化：`elabCtor`、`elabDataHead(s)`、`elabDataBodies`；校验 kind 结果层级与构造子字段 sort | `elabDatas`、`checkCtorFieldSorts` |
 | `Elab.Representation` | 运行时表示判定：去装箱族候选（`unboxedInfoOf`）、构造子字段形状、字段可表示性 | `unboxedInfoOf`、`ctorKeepFlags`、`unboxedFamilySet` |

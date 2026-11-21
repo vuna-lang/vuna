@@ -101,7 +101,6 @@ ID 是稳定引用（`层前缀-序号`）：条目关闭即删除该行，ID �
 | EC-03 · C | `Core/Conv.vuna` 的 `metaCreatedDepth`：未登记时回退当前深度 | `Core/Conv.vuna` | 后续 |
 | EC-09 · C | `Dict.vuna` 的 `matchInstances`：上一候选的解表污染下一候选（无候选快照） | `Elab/Dict.vuna` | 后续 |
 | EC-11 · C | `Dict.vuna` 的刚性快路径：`rigidSearchFast` 按族 vs `allInstancesMono` 按全表，两份判据 | `Elab/Dict.vuna` | 后续 |
-| EC-12 · D | `Dict.vuna` 的方法判定：`isEqMethod` / `isCmpMethod` / `numMethodOpName` / `cmpRuntimeName` 四处手写短名分支 | `Elab/Dict.vuna` | 后续 |
 | EC-13 · D | `Impl.vuna` 的 `bindShapeOf`：do 块语义靠对 `bind` 签名项做硬编码 de Bruijn 索引匹配（`imD/imE/imM/imR` 与两套 `iaE/iaL/ibL/ibR`） | `Elab/Term/Impl.vuna` | 后续 |
 | EC-14 · A | `Impl.vuna` 的 `perform`/`handle`：三候选试错（`handleWithAt` → `…Hole` → `handleWith`），顺序由「是不是裸变量」决定，最后一个失败时抛第一个错误 | `Elab/Term/Impl.vuna` | 后续 |
 | EC-15 · A | `Impl.vuna` 的 `specializeInterpPrimApp`：`Interp` 实例语义硬编码进编译器（与 base 实例双真源） | `Elab/Term/Impl.vuna` | 后续 |

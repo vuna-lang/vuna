@@ -1056,59 +1056,93 @@ findOrdClass name ec =
     Just c => Just c
     Nothing => findClass ordClassName (ecClasses ec)
 
--- 投影名/符号名的最后一段（`Base.Trait.Eq.==` → `==`）。
-opShortOf : String -> String
-opShortOf name = lastSeg name
-
-export isEqMethod : Ec -> String -> Bool
--- `Elab.Derive`（deriving 展开）与 `Elab.Match`（字面量模式）直接构造 `EVar "=="` /
--- `EVar "/="`；用户源码写的 `==` 解析后也是同名方法投影。
-isEqMethod ec name =
-  opShortOf name
-    == "=="
-    || opShortOf name
-    == "/="
-    || classHasProjection eqClassName "==" name ec || classHasProjection eqClassName "/=" name ec
-
-export isCmpMethod : Ec -> String -> Bool
-isCmpMethod ec name =
-  baseNameOf name
-    == "<"
-    || baseNameOf name
-    == "<="
-    || baseNameOf name
-    == ">"
-    || baseNameOf name
-    == ">="
-    || classHasProjection ordClassName "<" name ec
-    || classHasProjection ordClassName "<=" name ec
-    || classHasProjection ordClassName ">" name ec || classHasProjection ordClassName ">=" name ec
-
--- `Base.Trait.Num` 四则方法（`(+)` / `(-)` / `(*)` / `(/)`）的投影判定。
--- 与 `isEqMethod` / `isCmpMethod` 同一套「从类表取投影名」判定，不硬编码模块前缀。
--- 返回规范运算符名：精化器的算术特化靠它把方法投影映射回内建原语名；泛型 `Num a =>`
--- 代码在具体类型未知时由调用方回落到普通 trait 应用。
--- | 把 `Base.Trait.Num` 的方法投影映射回规范运算符名（`+` / `-` / `*` / `/`）；不是 Num 方法时返回 `Nothing`。
-export numMethodOpName : Ec -> String -> Maybe String
-numMethodOpName ec name =
-  if baseNameOf name == "+" || classHasProjection numClassName "+" name ec then
-    Just "+"
-  else if classHasProjection numClassName "-" name ec then
-    Just "-"
-  else if classHasProjection numClassName "*" name ec then
-    Just "*"
-  else if classHasProjection numClassName "/" name ec then Just "/" else Nothing
-
--- 方法投影的**短名**（`Base.Trait.Eq.==` → `==`）：特化只按短名选 runtime 函数。
+-- 方法投影的**短名**（`Base.Trait.Eq.==` → `==`）：内建族判定与 runtime 名选择都只按它。
 methodShortOf : String -> String
 methodShortOf name = secondOf (splitLastDot (splitOnDot name))
 
--- 方法短名直接取名字最后一段。
-eqMethodShortOf : String -> String
-eqMethodShortOf name = methodShortOf name
+-- ---------------------------------------------------------------
+-- 内建方法族：Eq / Ord / Num 的唯一方法表
+-- ---------------------------------------------------------------
+-- 三个内建族在精化期特化成 runtime 原语。每族一张表：源码写法（短名）→ 规范运算符名
+-- → runtime 名中缀。`isEqMethod` / `isCmpMethod` / `numMethodOpName` / `cmpRuntimeName`
+-- 都查这里，不再各写一份短名分支。
+record BuiltinOp where
+  boShort : String
+  boOp : String
+  boRuntime : String
 
-cmpMethodShortOf : String -> String
-cmpMethodShortOf name = methodShortOf name
+builtinOpShort : BuiltinOp -> String
+builtinOpShort (BuiltinOp short op runtime) = short
+
+builtinOpName : BuiltinOp -> String
+builtinOpName (BuiltinOp short op runtime) = op
+
+builtinOpRuntime : BuiltinOp -> String
+builtinOpRuntime (BuiltinOp short op runtime) = runtime
+
+eqMethodOps : List BuiltinOp
+eqMethodOps = [BuiltinOp "==" "==" "eq", BuiltinOp "/=" "/=" "neq"]
+
+ordMethodOps : List BuiltinOp
+ordMethodOps =
+  [
+    BuiltinOp "<" "<" "lt",
+    BuiltinOp "<=" "<=" "le",
+    BuiltinOp ">" ">" "gt",
+    BuiltinOp ">=" ">=" "ge"
+  ]
+
+numMethodOps : List BuiltinOp
+numMethodOps =
+  [
+    BuiltinOp "+" "+" "add",
+    BuiltinOp "-" "-" "sub",
+    BuiltinOp "*" "*" "mul",
+    BuiltinOp "/" "/" "div"
+  ]
+
+-- 名字命中族方法：短名一致（`Base.Trait.Eq.==` / `Foo.==` / Derive 直接构造的裸 `==`
+-- 都算），或全名正好是该族类里那个方法的投影（类方法用非运算符写法声明时，
+-- 投影名由类表决定）。
+builtinOpOf : Ec -> String -> String -> List BuiltinOp -> Maybe BuiltinOp
+builtinOpOf ec className name ops =
+  case lookupBuiltinOpShort (methodShortOf name) ops of
+    Just op => Just op
+    Nothing => lookupBuiltinOpProjection ec className name ops
+
+lookupBuiltinOpShort : String -> List BuiltinOp -> Maybe BuiltinOp
+lookupBuiltinOpShort short [] = Nothing
+lookupBuiltinOpShort short (op :: rest) =
+  if builtinOpShort op == short then Just op else lookupBuiltinOpShort short rest
+
+lookupBuiltinOpProjection : Ec -> String -> String -> List BuiltinOp -> Maybe BuiltinOp
+lookupBuiltinOpProjection ec className name [] = Nothing
+lookupBuiltinOpProjection ec className name (op :: rest) =
+  if classHasProjection className (builtinOpShort op) name ec then
+    Just op
+  else
+    lookupBuiltinOpProjection ec className name rest
+
+-- `Elab.Derive`（deriving 展开）与 `Elab.Match`（字面量模式）直接构造 `EVar "=="` /
+-- `EVar "/="`；用户源码写的 `==` 解析后也是同名方法投影。
+export isEqMethod : Ec -> String -> Bool
+isEqMethod ec name =
+  case builtinOpOf ec eqClassName name eqMethodOps of
+    Just _ => True
+    Nothing => False
+
+export isCmpMethod : Ec -> String -> Bool
+isCmpMethod ec name =
+  case builtinOpOf ec ordClassName name ordMethodOps of
+    Just _ => True
+    Nothing => False
+
+-- | 把 `Base.Trait.Num` 的方法投影映射回规范运算符名（`+` / `-` / `*` / `/`）；不是 Num 方法时返回 `Nothing`。
+export numMethodOpName : Ec -> String -> Maybe String
+numMethodOpName ec name =
+  case builtinOpOf ec numClassName name numMethodOps of
+    Just op => Just (builtinOpName op)
+    Nothing => Nothing
 
 -- 类方法投影名：按同名找；找不到时回落短名（类里没有该方法）。
 projectionFor : DtClass -> String -> String
@@ -1129,7 +1163,7 @@ specializeEqTy globals ctx name aTerm bTerm sp aTy ec =
   case builtinEqTyName (forceVal ec aTy) of
     Just tyName =>
       Vuna.Compiler.Base.Common.bind
-        (eqRuntimeName (eqMethodShortOf name) tyName)
+        (eqRuntimeName (methodShortOf name) tyName)
         (\rt => OkC (Just (Pair (TApp (TApp (TGlobal rt) aTerm Rig1) bTerm Rig1) (Pair boolTyValue ec))))
     Nothing =>
       case findEqClass name ec of
@@ -1140,10 +1174,7 @@ specializeEqTy globals ctx name aTerm bTerm sp aTy ec =
         Just cls =>
           let
             mname =
-              if name == "==" || name == "/=" then
-                projectionFor cls (eqMethodShortOf name)
-              else
-                name
+              if name == "==" || name == "/=" then projectionFor cls (methodShortOf name) else name
             -- 类型项必须按**当前上下文深度** quote：`quote 0` 会把刚性变量拍成 level 0，
             -- 字典的类参数就会指向错误的 binder（两个以上类型参数时提到别的参数上）。
             tyTerm = quote (ctxDepth ctx) aTy
@@ -1174,44 +1205,23 @@ deferEqDict globals ctx mname tyTerm aTerm bTerm sp dictTy ec =
 -- `{d : Dict_Ord a}`。
 -- 每个类型一个符号族：`String` 是指针、`Bool` 是 0/1 裸字，共享一个「泛型比较」符号时
 -- 后端在运行时无法区分（native 的值没有类型标签）。
--- `name` 是方法投影完整名（`Base.Trait.Ord.<` 等），特化只按短名选 runtime 名。
+-- 内建比较的 runtime 类型标签（`bi_<op>_<tag>`）：String 用 `str`（历史名字），
+-- Bool 按 canonical 族判定。
+cmpTypeTag : String -> Maybe String
+cmpTypeTag "Int" = Just "int"
+cmpTypeTag "String" = Just "str"
+cmpTypeTag "Float" = Just "float"
+cmpTypeTag tyName = if isBoolCanonical tyName then Just "bool" else Nothing
+
+-- `method` 是方法投影短名（`Base.Trait.Ord.<` → `<`），runtime 名从 Ord 方法表取中缀。
 cmpRuntimeName : Span -> String -> String -> Check String
-cmpRuntimeName sp method "Int" =
-  if isLtShort method then
-    OkC "bi_lt_int"
-  else if isLeShort method then
-    OkC "bi_le_int"
-  else if isGtShort method then OkC "bi_gt_int" else OkC "bi_ge_int"
-cmpRuntimeName sp method "String" =
-  if isLtShort method then
-    OkC "bi_lt_str"
-  else if isLeShort method then
-    OkC "bi_le_str"
-  else if isGtShort method then OkC "bi_gt_str" else OkC "bi_ge_str"
-cmpRuntimeName sp method "Float" =
-  if isLtShort method then
-    OkC "bi_lt_float"
-  else if isLeShort method then
-    OkC "bi_le_float"
-  else if isGtShort method then OkC "bi_gt_float" else OkC "bi_ge_float"
 cmpRuntimeName sp method tyName =
-  if isBoolCanonical tyName then
-    if isLtShort method then
-      OkC "bi_lt_bool"
-    else if isLeShort method then
-      OkC "bi_le_bool"
-    else if isGtShort method then OkC "bi_gt_bool" else OkC "bi_ge_bool"
-  else
-    tcErr2 sp (OpNotDefinedFor method tyName) method tyName
-
-isLtShort : String -> Bool
-isLtShort m = m == "<"
-
-isLeShort : String -> Bool
-isLeShort m = m == "<="
-
-isGtShort : String -> Bool
-isGtShort m = m == ">"
+  case lookupBuiltinOpShort (methodShortOf method) ordMethodOps of
+    Just op =>
+      case cmpTypeTag tyName of
+        Just tag => OkC ("bi_" ++ builtinOpRuntime op ++ "_" ++ tag)
+        Nothing => tcErr2 sp (OpNotDefinedFor method tyName) method tyName
+    Nothing => tcErr2 sp (OpNotDefinedFor method tyName) method tyName
 
 -- 字典的类参数还有未解元变量时**不做实例搜索**：否则会像 `srt (\x,y => x <= y) xs`
 -- 那样被第一个内建实例（Ord Int）提前定死，随后与 `List a` 统一时报 occurs check。
@@ -1237,19 +1247,19 @@ specializeCmpTy globals ctx name aTerm bTerm sp aTy ec =
   case cmpBuiltinTyName (forceVal ec aTy) of
     Just tyName =>
       Vuna.Compiler.Base.Common.bind
-        (cmpRuntimeName sp (cmpMethodShortOf name) tyName)
+        (cmpRuntimeName sp (methodShortOf name) tyName)
         (\rt => OkC (Just (Pair (TApp (TApp (TGlobal rt) aTerm Rig1) bTerm Rig1) (Pair boolTyValue ec))))
     Nothing =>
       case findOrdClass name ec of
         Nothing =>
           let
             st = showValue (forceVal ec aTy)
-          in tcErr2 sp (OpNotDefinedFor (cmpMethodShortOf name) st) (cmpMethodShortOf name) st
+          in tcErr2 sp (OpNotDefinedFor (methodShortOf name) st) (methodShortOf name) st
         Just cls =>
           let
             mname =
               if name == "<" || name == "<=" || name == ">" || name == ">=" then
-                projectionFor cls (cmpMethodShortOf name)
+                projectionFor cls (methodShortOf name)
               else
                 name
             tyTerm = quote (ctxDepth ctx) aTy
