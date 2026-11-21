@@ -40,9 +40,9 @@ let dtp_substTemplate tmpl xs =
     end else (Buffer.add_char buf tmpl.[i]; go (i + 1))
   in go 0; Buffer.contents buf
 # 200 "Base/Data/List.vuna"
-let rec v_Eq_uBase_uData_uList_uList_ua = (fun _uctx0 -> (B_dTrait_dEq.C_Eq_Eq ((fun mc0 mc1 -> (match mc0 with
+let rec v_Eq_u018fc178ff3df1b4_uBase_x36_46_x36_Data_x36_46_x36_List_x36_46_x36_List_ua = (fun _uctx0 -> (B_dTrait_dEq.C_Eq_Eq ((fun mc0 mc1 -> (match mc0 with
   | C_List__x58__x58_ (dtb__0, dtb__1) -> (match mc1 with
-  | C_List__x58__x58_ (dtb__2, dtb__3) -> (if (((B_dTrait_dEq.v__x61__x61_ _uctx0) dtb__0) dtb__2) then (((B_dTrait_dEq.v__x61__x61_ (v_Eq_uBase_uData_uList_uList_ua _uctx0)) dtb__1) dtb__3) else false)
+  | C_List__x58__x58_ (dtb__2, dtb__3) -> (if (((B_dTrait_dEq.v__x61__x61_ _uctx0) dtb__0) dtb__2) then (((B_dTrait_dEq.v__x61__x61_ (v_Eq_u018fc178ff3df1b4_uBase_x36_46_x36_Data_x36_46_x36_List_x36_46_x36_List_ua _uctx0)) dtb__1) dtb__3) else false)
   | _ -> false
 )
   | C_List_Nil -> (match mc1 with
@@ -50,12 +50,12 @@ let rec v_Eq_uBase_uData_uList_uList_ua = (fun _uctx0 -> (B_dTrait_dEq.C_Eq_Eq (
   | _ -> false
 )
   | _ -> failwith "DT: impossible branch"
-)), (fun xs ys -> (if (((B_dTrait_dEq.v__x61__x61_ (v_Eq_uBase_uData_uList_uList_ua _uctx0)) xs) ys) then false else true)))))
+)), (fun xs ys -> (if (((B_dTrait_dEq.v__x61__x61_ (v_Eq_u018fc178ff3df1b4_uBase_x36_46_x36_Data_x36_46_x36_List_x36_46_x36_List_ua _uctx0)) xs) ys) then false else true)))))
 
 # 207 "Base/Data/List.vuna"
-let rec v_Ord_uBase_uData_uList_uList_ua = (fun _uctx0 -> (B_dTrait_dOrd.C_Ord_Ord ((fun mc0 mc1 -> (match mc0 with
+let rec v_Ord_u5afb3bbeddafcb50_uBase_x36_46_x36_Data_x36_46_x36_List_x36_46_x36_List_ua = (fun _uctx0 -> (B_dTrait_dOrd.C_Ord_Ord ((fun mc0 mc1 -> (match mc0 with
   | C_List__x58__x58_ (dtb__4, dtb__5) -> (match mc1 with
-  | C_List__x58__x58_ (dtb__6, dtb__7) -> (if (((B_dTrait_dOrd.v__x60_ _uctx0) dtb__4) dtb__6) then true else (if (((B_dTrait_dOrd.v__x60_ _uctx0) dtb__6) dtb__4) then false else (((B_dTrait_dOrd.v__x60_ (v_Ord_uBase_uData_uList_uList_ua _uctx0)) dtb__5) dtb__7)))
+  | C_List__x58__x58_ (dtb__6, dtb__7) -> (if (((B_dTrait_dOrd.v__x60_ _uctx0) dtb__4) dtb__6) then true else (if (((B_dTrait_dOrd.v__x60_ _uctx0) dtb__6) dtb__4) then false else (((B_dTrait_dOrd.v__x60_ (v_Ord_u5afb3bbeddafcb50_uBase_x36_46_x36_Data_x36_46_x36_List_x36_46_x36_List_ua _uctx0)) dtb__5) dtb__7)))
   | C_List_Nil -> false
   | _ -> failwith "DT: impossible branch"
 )
@@ -65,22 +65,22 @@ let rec v_Ord_uBase_uData_uList_uList_ua = (fun _uctx0 -> (B_dTrait_dOrd.C_Ord_O
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
-)), (fun xs ys -> (if (((B_dTrait_dOrd.v__x60_ (v_Ord_uBase_uData_uList_uList_ua _uctx0)) xs) ys) then true else (B_dData_dBool.v_not (((B_dTrait_dOrd.v__x60_ (v_Ord_uBase_uData_uList_uList_ua _uctx0)) ys) xs)))), (fun xs ys -> (((B_dTrait_dOrd.v__x60_ (v_Ord_uBase_uData_uList_uList_ua _uctx0)) ys) xs)), (fun xs ys -> (((B_dTrait_dOrd.v__x60__x61_ (v_Ord_uBase_uData_uList_uList_ua _uctx0)) ys) xs)))))
+)), (fun xs ys -> (if (((B_dTrait_dOrd.v__x60_ (v_Ord_u5afb3bbeddafcb50_uBase_x36_46_x36_Data_x36_46_x36_List_x36_46_x36_List_ua _uctx0)) xs) ys) then true else (B_dData_dBool.v_not (((B_dTrait_dOrd.v__x60_ (v_Ord_u5afb3bbeddafcb50_uBase_x36_46_x36_Data_x36_46_x36_List_x36_46_x36_List_ua _uctx0)) ys) xs)))), (fun xs ys -> (((B_dTrait_dOrd.v__x60_ (v_Ord_u5afb3bbeddafcb50_uBase_x36_46_x36_Data_x36_46_x36_List_x36_46_x36_List_ua _uctx0)) ys) xs)), (fun xs ys -> (((B_dTrait_dOrd.v__x60__x61_ (v_Ord_u5afb3bbeddafcb50_uBase_x36_46_x36_Data_x36_46_x36_List_x36_46_x36_List_ua _uctx0)) ys) xs)))))
 
 # 217 "Base/Data/List.vuna"
-let rec v_Hashable_uBase_uData_uList_uList_ua = (fun _uctx0 -> (B_dTrait_dHashable.C_Hashable_Hashable ((fun xs -> (match xs with
+let rec v_Hashable_ue4b0f10b020a5e82_uBase_x36_46_x36_Data_x36_46_x36_List_x36_46_x36_List_ua = (fun _uctx0 -> (B_dTrait_dHashable.C_Hashable_Hashable ((fun xs -> (match xs with
   | C_List_Nil -> 0
-  | C_List__x58__x58_ (dtb__10, dtb__11) -> ((B_dTrait_dHashable.v_hashCombine ((B_dTrait_dHashable.v_hash _uctx0) dtb__10)) ((B_dTrait_dHashable.v_hash (v_Hashable_uBase_uData_uList_uList_ua _uctx0)) dtb__11))
+  | C_List__x58__x58_ (dtb__10, dtb__11) -> ((B_dTrait_dHashable.v_hashCombine ((B_dTrait_dHashable.v_hash _uctx0) dtb__10)) ((B_dTrait_dHashable.v_hash (v_Hashable_ue4b0f10b020a5e82_uBase_x36_46_x36_Data_x36_46_x36_List_x36_46_x36_List_ua _uctx0)) dtb__11))
   | _ -> failwith "DT: impossible branch"
 )))))
 
 # 227 "Base/Data/List.vuna"
-let v_Monoid_uBase_uData_uList_uList_ua = (B_dTrait_dMonoid.C_Monoid_Monoid (C_List_Nil))
+let v_Monoid_u4f2563914c7fbae1_uBase_x36_46_x36_Data_x36_46_x36_List_x36_46_x36_List_ua = (B_dTrait_dMonoid.C_Monoid_Monoid (C_List_Nil))
 
 # 234 "Base/Data/List.vuna"
-let rec v_Traversable_uBase_uData_uList_uList_uf = (fun _uctx0 -> (B_dTrait_dTraversable.C_Traversable_Traversable (((Obj.magic (fun fun_ xs -> (match xs with
+let rec v_Traversable_u3e5fb3267308d1c3_uBase_x36_46_x36_Data_x36_46_x36_List_x36_46_x36_List_uf = (fun _uctx0 -> (B_dTrait_dTraversable.C_Traversable_Traversable (((Obj.magic (fun fun_ xs -> (match xs with
   | C_List_Nil -> ((B_dTrait_dApplicative.v_pure _uctx0) C_List_Nil)
-  | C_List__x58__x58_ (dtb__12, dtb__13) -> ((((B_dTrait_dApplicative.v_liftA2 _uctx0) (fun y ys -> (C_List__x58__x58_ (y, ys)))) (fun_ dtb__12)) (((B_dTrait_dTraversable.v_mapM (v_Traversable_uBase_uData_uList_uList_uf _uctx0)) fun_) dtb__13))
+  | C_List__x58__x58_ (dtb__12, dtb__13) -> ((((B_dTrait_dApplicative.v_liftA2 _uctx0) (fun y ys -> (C_List__x58__x58_ (y, ys)))) (fun_ dtb__12)) (((B_dTrait_dTraversable.v_mapM (v_Traversable_u3e5fb3267308d1c3_uBase_x36_46_x36_Data_x36_46_x36_List_x36_46_x36_List_uf _uctx0)) fun_) dtb__13))
   | _ -> failwith "DT: impossible branch"
 ))) : Obj.t))))
 
@@ -92,7 +92,7 @@ let rec v_append = (fun mc0 mc1 -> (match mc0 with
 ))
 
 # 224 "Base/Data/List.vuna"
-let v_Semigroup_uBase_uData_uList_uList_ua = (B_dTrait_dMonoid.C_Semigroup_Semigroup (v_append))
+let v_Semigroup_ueb264836545b3665_uBase_x36_46_x36_Data_x36_46_x36_List_x36_46_x36_List_ua = (B_dTrait_dMonoid.C_Semigroup_Semigroup (v_append))
 
 # 37 "Base/Data/List.vuna"
 let rec v_reverseOnto = (fun mc0 mc1 -> (match mc0 with
@@ -122,7 +122,7 @@ let rec v_map = (fun mc0 mc1 -> (match mc1 with
 ))
 
 # 173 "Base/Data/List.vuna"
-let v_Functor_uBase_uData_uList_uList = (B_dTrait_dFunctor.C_Functor_Functor (((Obj.magic (fun f xs -> ((v_map f) xs))) : Obj.t)))
+let v_Functor_ua5312def40ac3976_uBase_x36_46_x36_Data_x36_46_x36_List_x36_46_x36_List = (B_dTrait_dFunctor.C_Functor_Functor (((Obj.magic (fun f xs -> ((v_map f) xs))) : Obj.t)))
 
 # 61 "Base/Data/List.vuna"
 let rec v_filter = (fun mc0 mc1 -> (match mc1 with
@@ -146,7 +146,7 @@ let rec v_foldr = (fun mc0 mc1 mc2 -> (match mc2 with
 ))
 
 # 231 "Base/Data/List.vuna"
-let v_Foldable_uBase_uData_uList_uList = (B_dTrait_dFoldable.C_Foldable_Foldable (((Obj.magic (fun f z xs -> (((v_foldr f) z) xs))) : Obj.t)))
+let v_Foldable_u2c890964dd357757_uBase_x36_46_x36_Data_x36_46_x36_List_x36_46_x36_List = (B_dTrait_dFoldable.C_Foldable_Foldable (((Obj.magic (fun f z xs -> (((v_foldr f) z) xs))) : Obj.t)))
 
 # 81 "Base/Data/List.vuna"
 let rec v_concatMapGo = (fun mc0 mc1 mc2 -> (match mc1 with
@@ -159,10 +159,10 @@ let rec v_concatMapGo = (fun mc0 mc1 mc2 -> (match mc1 with
 let v_concatMap = (fun f xs -> (((v_concatMapGo f) xs) C_List_Nil))
 
 # 176 "Base/Data/List.vuna"
-let v_Monad_uBase_uData_uList_uList = (B_dTrait_dMonad.C_Monad_Monad (((Obj.magic (fun xs f -> ((v_concatMap f) xs))) : Obj.t)))
+let v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Data_x36_46_x36_List_x36_46_x36_List = (B_dTrait_dMonad.C_Monad_Monad (((Obj.magic (fun xs f -> ((v_concatMap f) xs))) : Obj.t)))
 
 # 179 "Base/Data/List.vuna"
-let v_Applicative_uBase_uData_uList_uList = (B_dTrait_dApplicative.C_Applicative_Applicative (((Obj.magic (fun x -> (C_List__x58__x58_ (x, C_List_Nil)))) : Obj.t), ((Obj.magic (fun mf mx -> ((v_concatMap (fun g -> ((v_map g) mx))) mf))) : Obj.t), ((Obj.magic (fun f xs ys -> ((v_concatMap (fun a -> ((v_map (fun b -> ((f a) b))) ys))) xs))) : Obj.t)))
+let v_Applicative_u19070277251d295b_uBase_x36_46_x36_Data_x36_46_x36_List_x36_46_x36_List = (B_dTrait_dApplicative.C_Applicative_Applicative (((Obj.magic (fun x -> (C_List__x58__x58_ (x, C_List_Nil)))) : Obj.t), ((Obj.magic (fun mf mx -> ((v_concatMap (fun g -> ((v_map g) mx))) mf))) : Obj.t), ((Obj.magic (fun f xs ys -> ((v_concatMap (fun a -> ((v_map (fun b -> ((f a) b))) ys))) xs))) : Obj.t)))
 
 # 86 "Base/Data/List.vuna"
 let rec v_mem = (fun _uctx0 mc0 mc1 -> (match mc1 with
@@ -265,13 +265,13 @@ let rec v_firstJust = (fun mc0 -> (match mc0 with
 ))
 
 # 164 "Base/Data/List.vuna"
-let rec v_firstSuccess = (fun _uctx0 d101 mc0 -> (match mc0 with
+let rec v_firstSuccess = (fun _uctx0 _hdict0 mc0 -> (match mc0 with
   | C_List__x58__x58_ (dtb__58, dtb__59) -> (((B_dTrait_dMonad.v__x62__x62__x61_ _uctx0) dtb__58) (fun v -> (match v with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__60) -> ((B_dTrait_dApplicative.v_pure d101) (B_dData_dMaybe.C_Maybe_Just (dtb__60)))
-  | B_dData_dMaybe.C_Maybe_Nothing -> (((v_firstSuccess _uctx0) d101) dtb__59)
+  | B_dData_dMaybe.C_Maybe_Just (dtb__60) -> ((B_dTrait_dApplicative.v_pure _hdict0) (B_dData_dMaybe.C_Maybe_Just (dtb__60)))
+  | B_dData_dMaybe.C_Maybe_Nothing -> (((v_firstSuccess _uctx0) _hdict0) dtb__59)
   | _ -> failwith "DT: impossible branch"
 )))
-  | C_List_Nil -> ((B_dTrait_dApplicative.v_pure d101) B_dData_dMaybe.C_Maybe_Nothing)
+  | C_List_Nil -> ((B_dTrait_dApplicative.v_pure _hdict0) B_dData_dMaybe.C_Maybe_Nothing)
   | _ -> failwith "DT: impossible branch"
 ))
 
@@ -290,4 +290,4 @@ let v_showElems = (fun (mc0 : string t_List) -> (match mc0 with
 ))
 
 # 196 "Base/Data/List.vuna"
-let v_Show_uBase_uData_uList_uList_ua = (fun _uctx0 -> (B_dTrait_dShow.C_Show_Show ((fun xs -> (String.concat "" ["["; (v_showElems ((v_map (fun x -> ((B_dTrait_dShow.v_show _uctx0) x))) xs)); "]"])))))
+let v_Show_u0077d73cf424e521_uBase_x36_46_x36_Data_x36_46_x36_List_x36_46_x36_List_ua = (fun _uctx0 -> (B_dTrait_dShow.C_Show_Show ((fun xs -> (String.concat "" ["["; (v_showElems ((v_map (fun x -> ((B_dTrait_dShow.v_show _uctx0) x))) xs)); "]"])))))

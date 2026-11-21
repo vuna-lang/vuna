@@ -16,13 +16,13 @@ and t_Used = C_Used_MkUsedSmall of ((int, int) B_dData_dPair.t_Pair B_dData_dLis
 and 'a0 t_MSt = { f_MSt_msFrames : 'a0 t_Frame B_dData_dMaybe.t_Maybe; f_MSt_msCtx : 'a0 t_Ctx B_dData_dMaybe.t_Maybe; f_MSt_msUsed : t_Used; f_MSt_msNext : int; f_MSt_msFree : int B_dData_dList.t_List; f_MSt_msEpoch : int; f_MSt_msCleanups : t_Cleanup B_dData_dList.t_List; f_MSt_msCleanDepth : int }
 
 # 71 "Base/Effect/Core.vuna"
-let v_Functor_uBase_uEffect_uCore_uEff_ur = (B_dTrait_dFunctor.C_Functor_Functor (((Obj.magic (fun f e -> (C_Eff_MkEff ((fun (u : t_EffUnit) -> (match e with
+let v_Functor_ua5312def40ac3976_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur = (B_dTrait_dFunctor.C_Functor_Functor (((Obj.magic (fun f e -> (C_Eff_MkEff ((fun (u : t_EffUnit) -> (match e with
   | C_Eff_MkEff (dtb__0) -> (f (dtb__0 u))
   | _ -> failwith "DT: impossible branch"
 )))))) : Obj.t)))
 
 # 79 "Base/Effect/Core.vuna"
-let v_Monad_uBase_uEffect_uCore_uEff_ur = (B_dTrait_dMonad.C_Monad_Monad (((Obj.magic (fun e k -> (C_Eff_MkEff ((fun (u : t_EffUnit) -> (match e with
+let v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur = (B_dTrait_dMonad.C_Monad_Monad (((Obj.magic (fun e k -> (C_Eff_MkEff ((fun (u : t_EffUnit) -> (match e with
   | C_Eff_MkEff (dtb__1) -> (match (k (dtb__1 u)) with
   | C_Eff_MkEff (dtb__2) -> (dtb__2 u)
   | _ -> failwith "DT: impossible branch"
@@ -31,7 +31,7 @@ let v_Monad_uBase_uEffect_uCore_uEff_ur = (B_dTrait_dMonad.C_Monad_Monad (((Obj.
 )))))) : Obj.t)))
 
 # 89 "Base/Effect/Core.vuna"
-let v_Applicative_uBase_uEffect_uCore_uEff_ur = (B_dTrait_dApplicative.C_Applicative_Applicative (((Obj.magic (fun x -> (C_Eff_MkEff ((fun (_u : t_EffUnit) -> x))))) : Obj.t), ((Obj.magic (fun mf mx -> (C_Eff_MkEff ((fun (u : t_EffUnit) -> (match mf with
+let v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur = (B_dTrait_dApplicative.C_Applicative_Applicative (((Obj.magic (fun x -> (C_Eff_MkEff ((fun (_u : t_EffUnit) -> x))))) : Obj.t), ((Obj.magic (fun mf mx -> (C_Eff_MkEff ((fun (u : t_EffUnit) -> (match mf with
   | C_Eff_MkEff (dtb__3) -> (match mx with
   | C_Eff_MkEff (dtb__4) -> ((dtb__3 u) (dtb__4 u))
   | _ -> failwith "DT: impossible branch"
@@ -196,10 +196,10 @@ let v_pushCleanup = (fun (th : (int) -> int) -> (v_effPrim (fun (_u : int) -> (d
 let v_popCleanup = (v_effPrim (fun (_u : int) -> (dtp_cleanup_pop 0)))
 
 # 357 "Base/Effect/Core.vuna"
-let v_bracket = (fun acquire release use -> (((B_dTrait_dMonad.v__x62__x62__x61_ v_Monad_uBase_uEffect_uCore_uEff_ur) acquire) (fun res -> (((B_dTrait_dMonad.v__x62__x62__x61_ v_Monad_uBase_uEffect_uCore_uEff_ur) (v_pushCleanup (fun (_u : int) -> (v_runEff (release res))))) (fun _u -> (((B_dTrait_dMonad.v__x62__x62__x61_ v_Monad_uBase_uEffect_uCore_uEff_ur) (use res)) (fun a -> (((B_dTrait_dMonad.v__x62__x62__x61_ v_Monad_uBase_uEffect_uCore_uEff_ur) v_popCleanup) (fun _u -> (((B_dTrait_dMonad.v__x62__x62__x61_ v_Monad_uBase_uEffect_uCore_uEff_ur) (release res)) (fun _u -> ((B_dTrait_dApplicative.v_pure v_Applicative_uBase_uEffect_uCore_uEff_ur) a))))))))))))
+let v_bracket = (fun acquire release use -> (((B_dTrait_dMonad.v__x62__x62__x61_ v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) acquire) (fun res -> (((B_dTrait_dMonad.v__x62__x62__x61_ v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (v_pushCleanup (fun (_u : int) -> (v_runEff (release res))))) (fun _u -> (((B_dTrait_dMonad.v__x62__x62__x61_ v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (use res)) (fun a -> (((B_dTrait_dMonad.v__x62__x62__x61_ v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) v_popCleanup) (fun _u -> (((B_dTrait_dMonad.v__x62__x62__x61_ v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (release res)) (fun _u -> ((B_dTrait_dApplicative.v_pure v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) a))))))))))))
 
 # 368 "Base/Effect/Core.vuna"
-let v_finally = (fun comp (cleanup : int t_Eff) -> (((v_bracket ((B_dTrait_dApplicative.v_pure v_Applicative_uBase_uEffect_uCore_uEff_ur) 0)) (fun (_u : int) -> cleanup)) (fun (_u : int) -> comp)))
+let v_finally = (fun comp (cleanup : int t_Eff) -> (((v_bracket ((B_dTrait_dApplicative.v_pure v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) 0)) (fun (_u : int) -> cleanup)) (fun (_u : int) -> comp)))
 
 # 411 "Base/Effect/Core.vuna"
 let v_usedSmallLimit = 8
@@ -298,7 +298,7 @@ let rec v_usedEpochSmall = (fun (fuel : int) (slot : int) (epoch : int) (xs : (i
 # 471 "Base/Effect/Core.vuna"
 let v_usedEpoch = (fun (fuel : int) (slot : int) (epoch : int) (used : t_Used) -> (if (fuel <= 0) then false else (match used with
   | C_Used_MkUsedSmall (dtb__121) -> ((((v_usedEpochSmall (fuel - 1)) slot) epoch) dtb__121)
-  | C_Used_MkUsedBig (dtb__122) -> (match ((((B_dContainer_dHashMap.v_lookup B_dData_dInt.v_Hashable_uInt) B_dData_dInt.v_Eq_uInt) slot) dtb__122) with
+  | C_Used_MkUsedBig (dtb__122) -> (match ((((B_dContainer_dHashMap.v_lookup B_dData_dInt.v_Hashable_ue4b0f10b020a5e82_uInt) B_dData_dInt.v_Eq_u018fc178ff3df1b4_uInt) slot) dtb__122) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__123) -> (epoch <= dtb__123)
   | B_dData_dMaybe.C_Maybe_Nothing -> false
   | _ -> failwith "DT: impossible branch"
@@ -307,7 +307,7 @@ let v_usedEpoch = (fun (fuel : int) (slot : int) (epoch : int) (used : t_Used) -
 )))
 
 # 493 "Base/Effect/Core.vuna"
-let v_tailSlot = -1
+let v_tailSlot = (-1)
 
 # 509 "Base/Effect/Core.vuna"
 let rec v_markUsedSmall = (fun (fuel : int) (slot : int) (epoch : int) (xs : (int, int) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (if (fuel <= 0) then (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = slot; B_dData_dPair.f_Pair_second = epoch }, B_dData_dList.C_List_Nil)) else (let nd_uscrut4 = xs in (match nd_uscrut4 with
@@ -328,8 +328,8 @@ let rec v_usedLen = (fun (fuel : int) (xs : (int, int) B_dData_dPair.t_Pair B_dD
 
 # 497 "Base/Effect/Core.vuna"
 let v_markUsed = (fun (fuel : int) (slot : int) (epoch : int) (used : t_Used) -> (if (fuel <= 0) then (C_Used_MkUsedSmall ((B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = slot; B_dData_dPair.f_Pair_second = epoch }, B_dData_dList.C_List_Nil)))) else (match used with
-  | C_Used_MkUsedSmall (dtb__130) -> (let xs1 = ((((v_markUsedSmall (fuel - 1)) slot) epoch) dtb__130) in (if (((v_usedLen (fuel - 1)) xs1) > v_usedSmallLimit) then (C_Used_MkUsedBig ((((B_dContainer_dHashMap.v_fromList B_dData_dInt.v_Hashable_uInt) B_dData_dInt.v_Eq_uInt) xs1))) else (C_Used_MkUsedSmall (xs1))))
-  | C_Used_MkUsedBig (dtb__131) -> (C_Used_MkUsedBig ((((((B_dContainer_dHashMap.v_insert B_dData_dInt.v_Hashable_uInt) B_dData_dInt.v_Eq_uInt) slot) epoch) dtb__131)))
+  | C_Used_MkUsedSmall (dtb__130) -> (let xs1 = ((((v_markUsedSmall (fuel - 1)) slot) epoch) dtb__130) in (if (((v_usedLen (fuel - 1)) xs1) > v_usedSmallLimit) then (C_Used_MkUsedBig ((((B_dContainer_dHashMap.v_fromList B_dData_dInt.v_Hashable_ue4b0f10b020a5e82_uInt) B_dData_dInt.v_Eq_u018fc178ff3df1b4_uInt) xs1))) else (C_Used_MkUsedSmall (xs1))))
+  | C_Used_MkUsedBig (dtb__131) -> (C_Used_MkUsedBig ((((((B_dContainer_dHashMap.v_insert B_dData_dInt.v_Hashable_ue4b0f10b020a5e82_uInt) B_dData_dInt.v_Eq_u018fc178ff3df1b4_uInt) slot) epoch) dtb__131)))
   | _ -> failwith "DT: impossible branch"
 )))
 

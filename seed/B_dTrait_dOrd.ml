@@ -3,10 +3,10 @@ type t_Ordering = C_Ordering_LT | C_Ordering_EQ | C_Ordering_GT
 and 'a0 t_Ord = C_Ord_Ord of (('a0) -> ('a0) -> bool) * (('a0) -> ('a0) -> bool) * (('a0) -> ('a0) -> bool) * (('a0) -> ('a0) -> bool)
 
 # 26 "Base/Trait/Ord.vuna"
-let v_Ord_uBase_uData_uBool_uBool = (C_Ord_Ord ((fun (mc0 : bool) (mc1 : bool) -> (if mc0 then false else (if mc1 then true else false))), (fun (mc0 : bool) (mc1 : bool) -> (if mc0 then mc1 else true)), (fun (mc0 : bool) (mc1 : bool) -> (if mc0 then (if mc1 then false else true) else false)), (fun (mc0 : bool) (mc1 : bool) -> (if mc0 then true else mc1))))
+let v_Ord_u5afb3bbeddafcb50_uBase_x36_46_x36_Data_x36_46_x36_Bool_x36_46_x36_Bool = (C_Ord_Ord ((fun (mc0 : bool) (mc1 : bool) -> (if mc0 then false else (if mc1 then true else false))), (fun (mc0 : bool) (mc1 : bool) -> (if mc0 then mc1 else true)), (fun (mc0 : bool) (mc1 : bool) -> (if mc0 then (if mc1 then false else true) else false)), (fun (mc0 : bool) (mc1 : bool) -> (if mc0 then true else mc1))))
 
 # 45 "Base/Trait/Ord.vuna"
-let rec v_Eq_uBase_uTrait_uOrd_uOrdering = (B_dTrait_dEq.C_Eq_Eq ((fun (mc0 : t_Ordering) (mc1 : t_Ordering) -> (match mc0 with
+let rec v_Eq_u018fc178ff3df1b4_uBase_x36_46_x36_Trait_x36_46_x36_Ord_x36_46_x36_Ordering = (B_dTrait_dEq.C_Eq_Eq ((fun (mc0 : t_Ordering) (mc1 : t_Ordering) -> (match mc0 with
   | C_Ordering_GT -> (match mc1 with
   | C_Ordering_GT -> true
   | _ -> false
@@ -20,10 +20,10 @@ let rec v_Eq_uBase_uTrait_uOrd_uOrdering = (B_dTrait_dEq.C_Eq_Eq ((fun (mc0 : t_
   | _ -> false
 )
   | _ -> failwith "DT: impossible branch"
-)), (fun a b -> (if (((B_dTrait_dEq.v__x61__x61_ v_Eq_uBase_uTrait_uOrd_uOrdering) a) b) then false else true))))
+)), (fun a b -> (if (((B_dTrait_dEq.v__x61__x61_ v_Eq_u018fc178ff3df1b4_uBase_x36_46_x36_Trait_x36_46_x36_Ord_x36_46_x36_Ordering) a) b) then false else true))))
 
 # 70 "Base/Trait/Ord.vuna"
-let v_Show_uBase_uTrait_uOrd_uOrdering = (B_dTrait_dShow.C_Show_Show ((fun o -> (match o with
+let v_Show_u0077d73cf424e521_uBase_x36_46_x36_Trait_x36_46_x36_Ord_x36_46_x36_Ordering = (B_dTrait_dShow.C_Show_Show ((fun o -> (match o with
   | C_Ordering_LT -> "LT"
   | C_Ordering_EQ -> "EQ"
   | C_Ordering_GT -> "GT"
@@ -31,7 +31,7 @@ let v_Show_uBase_uTrait_uOrd_uOrdering = (B_dTrait_dShow.C_Show_Show ((fun o -> 
 ))))
 
 # 89 "Base/Trait/Ord.vuna"
-let v_Hashable_uBase_uTrait_uOrd_uOrdering = (B_dTrait_dHashable.C_Hashable_Hashable ((fun o -> (match o with
+let v_Hashable_ue4b0f10b020a5e82_uBase_x36_46_x36_Trait_x36_46_x36_Ord_x36_46_x36_Ordering = (B_dTrait_dHashable.C_Hashable_Hashable ((fun o -> (match o with
   | C_Ordering_LT -> 0
   | C_Ordering_EQ -> 1
   | C_Ordering_GT -> 2
@@ -51,7 +51,7 @@ let v__x60__x61_ = (fun _ud x0 x1 -> (match _ud with
 ))
 
 # 52 "Base/Trait/Ord.vuna"
-let rec v_Ord_uBase_uTrait_uOrd_uOrdering = (C_Ord_Ord ((fun a b -> (match a with
+let rec v_Ord_u5afb3bbeddafcb50_uBase_x36_46_x36_Trait_x36_46_x36_Ord_x36_46_x36_Ordering = (C_Ord_Ord ((fun a b -> (match a with
   | C_Ordering_LT -> (match b with
   | C_Ordering_LT -> false
   | C_Ordering_EQ -> true
@@ -66,7 +66,7 @@ let rec v_Ord_uBase_uTrait_uOrd_uOrdering = (C_Ord_Ord ((fun a b -> (match a wit
 )
   | C_Ordering_GT -> false
   | _ -> failwith "DT: impossible branch"
-)), (fun a b -> (if (((v__x60_ v_Ord_uBase_uTrait_uOrd_uOrdering) a) b) then true else (B_dData_dBool.v_not (((v__x60_ v_Ord_uBase_uTrait_uOrd_uOrdering) b) a)))), (fun a b -> (((v__x60_ v_Ord_uBase_uTrait_uOrd_uOrdering) b) a)), (fun a b -> (((v__x60__x61_ v_Ord_uBase_uTrait_uOrd_uOrdering) b) a))))
+)), (fun a b -> (if (((v__x60_ v_Ord_u5afb3bbeddafcb50_uBase_x36_46_x36_Trait_x36_46_x36_Ord_x36_46_x36_Ordering) a) b) then true else (B_dData_dBool.v_not (((v__x60_ v_Ord_u5afb3bbeddafcb50_uBase_x36_46_x36_Trait_x36_46_x36_Ord_x36_46_x36_Ordering) b) a)))), (fun a b -> (((v__x60_ v_Ord_u5afb3bbeddafcb50_uBase_x36_46_x36_Trait_x36_46_x36_Ord_x36_46_x36_Ordering) b) a)), (fun a b -> (((v__x60__x61_ v_Ord_u5afb3bbeddafcb50_uBase_x36_46_x36_Trait_x36_46_x36_Ord_x36_46_x36_Ordering) b) a))))
 
 # 21 "Base/Trait/Ord.vuna"
 let v__x62_ = (fun _ud x0 x1 -> (match _ud with

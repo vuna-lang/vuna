@@ -5,7 +5,7 @@ type t_Digest = int B_dData_dList.t_List
 let v_digestLanes = (fun (mc0 : t_Digest) -> (let dtb__0 = mc0 in dtb__0))
 
 # 49 "Vuna/Compiler/Base/Hash.vuna"
-let v_digestInt = (fun (mc0 : t_Digest) -> (let dtb__1 = mc0 in ((B_dData_dBits.v_band (((B_dData_dList.v_foldl (fun (h : int) (lane : int) -> (((B_dTrait_dNum.v__x43_ B_dData_dInt.v_Num_uInt) (((B_dTrait_dNum.v__x42_ B_dData_dInt.v_Num_uInt) h) 1000003)) lane))) 0) dtb__1)) 4611686018427387903)))
+let v_digestInt = (fun (mc0 : t_Digest) -> (let dtb__1 = mc0 in ((B_dData_dBits.v_band (((B_dData_dList.v_foldl (fun (h : int) (lane : int) -> (((B_dTrait_dNum.v__x43_ B_dData_dInt.v_Num_ub27c21f837ed69cc_uInt) (((B_dTrait_dNum.v__x42_ B_dData_dInt.v_Num_ub27c21f837ed69cc_uInt) h) 1000003)) lane))) 0) dtb__1)) 4611686018427387903)))
 
 # 74 "Vuna/Compiler/Base/Hash.vuna"
 let v_shaInit = (B_dData_dList.C_List__x58__x58_ (1779033703, (B_dData_dList.C_List__x58__x58_ (3144134277, (B_dData_dList.C_List__x58__x58_ (1013904242, (B_dData_dList.C_List__x58__x58_ (2773480762, (B_dData_dList.C_List__x58__x58_ (1359893119, (B_dData_dList.C_List__x58__x58_ (2600822924, (B_dData_dList.C_List__x58__x58_ (528734635, (B_dData_dList.C_List__x58__x58_ (1541459225, B_dData_dList.C_List_Nil))))))))))))))))

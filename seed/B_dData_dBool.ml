@@ -1,9 +1,9 @@
 open Vuna_runtime
 # 43 "Base/Data/Bool.vuna"
-let v_Show_uBase_uData_uBool_uBool = (B_dTrait_dShow.C_Show_Show ((fun b -> (if b then "True" else "False"))))
+let v_Show_u0077d73cf424e521_uBase_x36_46_x36_Data_x36_46_x36_Bool_x36_46_x36_Bool = (B_dTrait_dShow.C_Show_Show ((fun b -> (if b then "True" else "False"))))
 
 # 47 "Base/Data/Bool.vuna"
-let v_Hashable_uBase_uData_uBool_uBool = (B_dTrait_dHashable.C_Hashable_Hashable ((fun b -> (if b then 1 else 0))))
+let v_Hashable_ue4b0f10b020a5e82_uBase_x36_46_x36_Data_x36_46_x36_Bool_x36_46_x36_Bool = (B_dTrait_dHashable.C_Hashable_Hashable ((fun b -> (if b then 1 else 0))))
 
 # 19 "Base/Data/Bool.vuna"
 let v_not = (fun (mc0 : bool) -> (if mc0 then false else true))

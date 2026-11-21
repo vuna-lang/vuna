@@ -196,10 +196,10 @@ let v_dtFieldsOfRecord = (fun (records : Elab_dRecords.t_RecordMeta B_dData_dLis
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 304 "Vuna/Compiler/Elab/Data.vuna"
+# 308 "Vuna/Compiler/Elab/Data.vuna"
 let v_sameCtorSet = (fun (expected : string B_dData_dList.t_List) (actual : string B_dData_dList.t_List) -> (let norm = (B_dData_dList.v_map Base_dIntrinsics.v_ctorSpellingKey) in (if ((B_dData_dList.v_length expected) = (B_dData_dList.v_length actual)) then ((B_dData_dList.v_allMem (norm expected)) (norm actual)) else false)))
 
-# 232 "Vuna/Compiler/Elab/Data.vuna"
+# 236 "Vuna/Compiler/Elab/Data.vuna"
 let rec v_elabDataBodies = (fun (decls : (Frontend_dRast.t_Decl, Base_dSource.t_Span) B_dData_dPair.t_Pair B_dData_dList.t_List) (heads : Elab_dMeta.t_DataHead B_dData_dList.t_List) (globals : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List) (ec : Elab_dTypes.t_Ec) (acc : Elab_dTypes.t_DtData B_dData_dList.t_List) (records : Elab_dRecords.t_RecordMeta B_dData_dList.t_List) -> (match decls with
   | B_dData_dList.C_List_Nil -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (B_dData_dList.v_reverse acc); B_dData_dPair.f_Pair_second = { B_dData_dPair.f_Pair_first = globals; B_dData_dPair.f_Pair_second = ec } }))
   | B_dData_dList.C_List__x58__x58_ (dtb__120, dtb__121) -> (match dtb__120 with
@@ -249,13 +249,13 @@ let rec v_elabDataBodies = (fun (decls : (Frontend_dRast.t_Decl, Base_dSource.t_
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 351 "Vuna/Compiler/Elab/Data.vuna"
+# 355 "Vuna/Compiler/Elab/Data.vuna"
 let v_reprIsAlias = (fun (mc0 : Frontend_dAst.t_ReprTier) -> (match mc0 with
   | Frontend_dAst.C_ReprTier_ReprAlias -> true
   | _ -> false
 ))
 
-# 361 "Vuna/Compiler/Elab/Data.vuna"
+# 365 "Vuna/Compiler/Elab/Data.vuna"
 let v_viaShapeOkWith = (fun (dname : string) (datas : Elab_dTypes.t_DtData B_dData_dList.t_List) (fams : string B_dData_dList.t_List) (info : (string, (Elab_dTypes.t_DtCtor, int) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (if ((B_dData_dList.v_memName dname) fams) then (let nd_uscrut4 = ((Elab_dRepresentation.v_lookupUnboxedInfo dname) info) in (match nd_uscrut4 with
   | B_dData_dMaybe.C_Maybe_Nothing -> false
   | B_dData_dMaybe.C_Maybe_Just (dtb__155) -> (match dtb__155 with
@@ -269,7 +269,7 @@ let v_viaShapeOkWith = (fun (dname : string) (datas : Elab_dTypes.t_DtData B_dDa
   | _ -> failwith "DT: impossible branch"
 )) else false))
 
-# 345 "Vuna/Compiler/Elab/Data.vuna"
+# 349 "Vuna/Compiler/Elab/Data.vuna"
 let v_viaFieldOk = (fun (mc0 : Frontend_dAst.t_ReprTier) (mc1 : string) (mc2 : Elab_dTypes.t_DtData B_dData_dList.t_List) (mc3 : string B_dData_dList.t_List) (mc4 : (string, (Elab_dTypes.t_DtCtor, int) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc0 with
   | Frontend_dAst.C_ReprTier_ReprBoxed -> false
   | Frontend_dAst.C_ReprTier_ReprAuto -> ((((v_viaShapeOkWith mc1) mc2) mc3) mc4)
@@ -277,7 +277,7 @@ let v_viaFieldOk = (fun (mc0 : Frontend_dAst.t_ReprTier) (mc1 : string) (mc2 : E
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 318 "Vuna/Compiler/Elab/Data.vuna"
+# 322 "Vuna/Compiler/Elab/Data.vuna"
 let rec v_checkViaDataDeclsGo = (fun (mc0 : (Frontend_dRast.t_Decl, Base_dSource.t_Span) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc1 : Elab_dTypes.t_DtData B_dData_dList.t_List) (mc2 : string B_dData_dList.t_List) (mc3 : (string, (Elab_dTypes.t_DtCtor, int) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__159, dtb__160) -> (match dtb__159 with
   | { B_dData_dPair.f_Pair_first = dtb__161; B_dData_dPair.f_Pair_second = dtb__162 } -> (match dtb__161 with
@@ -291,13 +291,13 @@ let rec v_checkViaDataDeclsGo = (fun (mc0 : (Frontend_dRast.t_Decl, Base_dSource
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 314 "Vuna/Compiler/Elab/Data.vuna"
+# 318 "Vuna/Compiler/Elab/Data.vuna"
 let v_checkViaDataDecls = (fun (decls : (Frontend_dRast.t_Decl, Base_dSource.t_Span) B_dData_dPair.t_Pair B_dData_dList.t_List) (datas : Elab_dTypes.t_DtData B_dData_dList.t_List) -> ((((v_checkViaDataDeclsGo decls) datas) (Elab_dRepresentation.v_unboxedFamilySet datas)) (Elab_dRepresentation.v_unboxedInfoOf datas)))
 
-# 358 "Vuna/Compiler/Elab/Data.vuna"
+# 362 "Vuna/Compiler/Elab/Data.vuna"
 let v_viaShapeOk = (fun (dname : string) (datas : Elab_dTypes.t_DtData B_dData_dList.t_List) -> ((((v_viaShapeOkWith dname) datas) (Elab_dRepresentation.v_unboxedFamilySet datas)) (Elab_dRepresentation.v_unboxedInfoOf datas)))
 
-# 375 "Vuna/Compiler/Elab/Data.vuna"
+# 379 "Vuna/Compiler/Elab/Data.vuna"
 let v_elabDatas = (fun (decls : (Frontend_dRast.t_Decl, Base_dSource.t_Span) B_dData_dPair.t_Pair B_dData_dList.t_List) (records : Elab_dRecords.t_RecordMeta B_dData_dList.t_List) (globals : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List) (ec : Elab_dTypes.t_Ec) -> ((Base_dCommon.v_bind ((((v_elabDataHeads decls) globals) ec) B_dData_dList.C_List_Nil)) (fun (p : (Elab_dMeta.t_DataHead B_dData_dList.t_List, ((string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List, Elab_dTypes.t_Ec) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair) -> (let nd_uscrut5 = p in (match nd_uscrut5 with
   | { B_dData_dPair.f_Pair_first = dtb__180; B_dData_dPair.f_Pair_second = dtb__181 } -> (match dtb__181 with
   | { B_dData_dPair.f_Pair_first = dtb__182; B_dData_dPair.f_Pair_second = dtb__183 } -> ((Base_dCommon.v_bind ((((((v_elabDataBodies decls) dtb__180) dtb__182) dtb__183) B_dData_dList.C_List_Nil) records)) (fun (q : (Elab_dTypes.t_DtData B_dData_dList.t_List, ((string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List, Elab_dTypes.t_Ec) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair) -> (match q with

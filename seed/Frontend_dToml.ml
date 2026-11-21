@@ -945,7 +945,7 @@ let rec v_samePath = (fun _uctx0 mc0 mc1 -> (match mc0 with
 # 1015 "Vuna/Compiler/Frontend/Toml.vuna"
 let rec v_lookupEntry = (fun (mc0 : string B_dData_dList.t_List) (mc1 : string) (mc2 : t_TomlEntry B_dData_dList.t_List) -> (match mc2 with
   | B_dData_dList.C_List__x58__x58_ (dtb__375, dtb__376) -> (match dtb__375 with
-  | { f_TomlEntry_tomlEntrySection = dtb__377; f_TomlEntry_tomlEntryKey = dtb__378; f_TomlEntry_tomlEntryValue = dtb__379; f_TomlEntry_tomlEntryLine = dtb__380 } -> (if (if (((v_samePath B_dData_dString.v_Eq_uString) mc0) dtb__377) then (dtb__378 = mc1) else false) then (B_dData_dMaybe.C_Maybe_Just (dtb__379)) else (((v_lookupEntry mc0) mc1) dtb__376))
+  | { f_TomlEntry_tomlEntrySection = dtb__377; f_TomlEntry_tomlEntryKey = dtb__378; f_TomlEntry_tomlEntryValue = dtb__379; f_TomlEntry_tomlEntryLine = dtb__380 } -> (if (if (((v_samePath B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) mc0) dtb__377) then (dtb__378 = mc1) else false) then (B_dData_dMaybe.C_Maybe_Just (dtb__379)) else (((v_lookupEntry mc0) mc1) dtb__376))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dList.C_List_Nil -> B_dData_dMaybe.C_Maybe_Nothing
@@ -955,7 +955,7 @@ let rec v_lookupEntry = (fun (mc0 : string B_dData_dList.t_List) (mc1 : string) 
 # 1020 "Vuna/Compiler/Frontend/Toml.vuna"
 let rec v_lookupEntryLine = (fun (mc0 : string B_dData_dList.t_List) (mc1 : string) (mc2 : t_TomlEntry B_dData_dList.t_List) -> (match mc2 with
   | B_dData_dList.C_List__x58__x58_ (dtb__381, dtb__382) -> (match dtb__381 with
-  | { f_TomlEntry_tomlEntrySection = dtb__383; f_TomlEntry_tomlEntryKey = dtb__384; f_TomlEntry_tomlEntryValue = dtb__385; f_TomlEntry_tomlEntryLine = dtb__386 } -> (if (if (((v_samePath B_dData_dString.v_Eq_uString) mc0) dtb__383) then (dtb__384 = mc1) else false) then (B_dData_dMaybe.C_Maybe_Just (dtb__386)) else (((v_lookupEntryLine mc0) mc1) dtb__382))
+  | { f_TomlEntry_tomlEntrySection = dtb__383; f_TomlEntry_tomlEntryKey = dtb__384; f_TomlEntry_tomlEntryValue = dtb__385; f_TomlEntry_tomlEntryLine = dtb__386 } -> (if (if (((v_samePath B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) mc0) dtb__383) then (dtb__384 = mc1) else false) then (B_dData_dMaybe.C_Maybe_Just (dtb__386)) else (((v_lookupEntryLine mc0) mc1) dtb__382))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dList.C_List_Nil -> B_dData_dMaybe.C_Maybe_Nothing
@@ -965,7 +965,7 @@ let rec v_lookupEntryLine = (fun (mc0 : string B_dData_dList.t_List) (mc1 : stri
 # 1043 "Vuna/Compiler/Frontend/Toml.vuna"
 let v_childSectionOf = (fun (prefix : string B_dData_dList.t_List) (section : string B_dData_dList.t_List) -> (let nd_uscrut2 = ((v_splitAtList (v_lenInt prefix)) section) in (match nd_uscrut2 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__387) -> (match dtb__387 with
-  | { B_dData_dPair.f_Pair_first = dtb__388; B_dData_dPair.f_Pair_second = dtb__389 } -> (if (((v_samePath B_dData_dString.v_Eq_uString) dtb__388) prefix) then (let nd_uscrut9 = dtb__389 in (match nd_uscrut9 with
+  | { B_dData_dPair.f_Pair_first = dtb__388; B_dData_dPair.f_Pair_second = dtb__389 } -> (if (((v_samePath B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) dtb__388) prefix) then (let nd_uscrut9 = dtb__389 in (match nd_uscrut9 with
   | B_dData_dList.C_List__x58__x58_ (dtb__390, dtb__391) -> (match dtb__391 with
   | B_dData_dList.C_List_Nil -> (B_dData_dMaybe.C_Maybe_Just (dtb__390))
   | _ -> B_dData_dMaybe.C_Maybe_Nothing

@@ -8,7 +8,7 @@ let v_groups = (fun (k : int) (xs : int B_dData_dList.t_List) -> ((B_dData_dList
 # 60 "Base/Data/Base64.vuna"
 let v_at = (fun (xs : int B_dData_dList.t_List) (i : int) -> (match ((B_dData_dList.v_drop i) xs) with
   | B_dData_dList.C_List__x58__x58_ (dtb__0, dtb__1) -> dtb__0
-  | B_dData_dList.C_List_Nil -> -1
+  | B_dData_dList.C_List_Nil -> (-1)
   | _ -> failwith "DT: impossible branch"
 ))
 

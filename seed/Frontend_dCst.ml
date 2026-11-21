@@ -117,64 +117,64 @@ let rec v_buildTokens = (fun (mc0 : string) (mc1 : t_TrivComment B_dData_dList.t
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 306 "Vuna/Compiler/Frontend/Cst.vuna"
-let v_lexCstGo = (fun (source : string) -> (let nd_uscrut1 = (Frontend_dLexer.v_lexSourceWithComments source) in (match nd_uscrut1 with
+# 305 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_lexTokensOf = (fun (source : string) (toks : Frontend_dLexer.t_PTok B_dData_dList.t_List) (comments : Frontend_dLexer.t_Comment B_dData_dList.t_List) -> (let fuel = ((bi_strLength source) + 1) in (let tcs = ((((v_toTrivComments fuel) source) v_lineCurStart) comments) in (((((v_buildTokens source) (B_dData_dPair.v_firstOf tcs)) v_lineCurStart) { B_dData_dPair.f_Pair_first = 0; B_dData_dPair.f_Pair_second = { Base_dSource.f_Pos_posLine = 1; Base_dSource.f_Pos_posCol = 1; Base_dSource.f_Pos_posOffset = 0; Base_dSource.f_Pos_posEndOffset = 0 } }) toks))))
+
+# 314 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_lexCst = (fun (source : string) -> (let nd_uscrut1 = (Frontend_dLexer.v_lexSourceWithComments source) in (match nd_uscrut1 with
   | Base_dDiag.C_Check_OkC (dtb__29) -> (match dtb__29 with
-  | { B_dData_dPair.f_Pair_first = dtb__30; B_dData_dPair.f_Pair_second = dtb__31 } -> (let fuel = ((bi_strLength source) + 1) in (let tcs = ((((v_toTrivComments fuel) source) v_lineCurStart) dtb__31) in (B_dData_dMaybe.C_Maybe_Just ((((((v_buildTokens source) (B_dData_dPair.v_firstOf tcs)) v_lineCurStart) { B_dData_dPair.f_Pair_first = 0; B_dData_dPair.f_Pair_second = { Base_dSource.f_Pos_posLine = 1; Base_dSource.f_Pos_posCol = 1; Base_dSource.f_Pos_posOffset = 0; Base_dSource.f_Pos_posEndOffset = 0 } }) dtb__30)))))
+  | { B_dData_dPair.f_Pair_first = dtb__30; B_dData_dPair.f_Pair_second = dtb__31 } -> (B_dData_dMaybe.C_Maybe_Just ((((B_dData_dObs_dSpan.v_obsSpan "vuna.parse.cst") "vuna.phase") (fun (_u : int) -> (((v_lexTokensOf source) dtb__30) dtb__31)))))
   | _ -> failwith "DT: impossible branch"
 )
   | Base_dDiag.C_Check_ErrC (dtb__32) -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
 )))
 
-# 303 "Vuna/Compiler/Frontend/Cst.vuna"
-let v_lexCst = (fun (source : string) -> (((B_dData_dObs_dSpan.v_obsSpan "vuna.parse.cst") "vuna.phase") (fun (_u : int) -> (v_lexCstGo source))))
-
-# 317 "Vuna/Compiler/Frontend/Cst.vuna"
+# 322 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_triviaTextOf = (fun (tr : t_Trivia) -> (tr).f_Trivia_triviaText)
 
-# 321 "Vuna/Compiler/Frontend/Cst.vuna"
+# 326 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_renderParts = (fun (t : t_CstToken) -> ((B_dData_dList.v_append ((B_dData_dList.v_map v_triviaTextOf) (t).f_CstToken_cstLeading)) (B_dData_dList.C_List__x58__x58_ ((t).f_CstToken_cstText, B_dData_dList.C_List_Nil))))
 
-# 325 "Vuna/Compiler/Frontend/Cst.vuna"
+# 330 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_renderCst = (fun (toks : t_CstToken B_dData_dList.t_List) -> (B_dData_dList.dtp_concatMany ((B_dData_dList.v_concatMap v_renderParts) toks)))
 
-# 329 "Vuna/Compiler/Frontend/Cst.vuna"
+# 334 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_roundtripOk = (fun (s : string) -> (match (v_lexCst s) with
   | B_dData_dMaybe.C_Maybe_Nothing -> false
   | B_dData_dMaybe.C_Maybe_Just (dtb__33) -> ((v_renderCst dtb__33) = s)
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 357 "Vuna/Compiler/Frontend/Cst.vuna"
+# 362 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_nodeSpan = (fun (mc0 : t_CstNode) -> (match mc0 with
   | C_CstNode_CstBranch (dtb__34, dtb__35, dtb__36) -> dtb__35
   | C_CstNode_CstLeaf (dtb__37) -> (dtb__37).f_CstToken_cstSpan
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 362 "Vuna/Compiler/Frontend/Cst.vuna"
+# 367 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_nodeKind = (fun (mc0 : t_CstNode) -> (match mc0 with
   | C_CstNode_CstBranch (dtb__38, dtb__39, dtb__40) -> (B_dData_dMaybe.C_Maybe_Just (dtb__38))
   | C_CstNode_CstLeaf (dtb__41) -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 367 "Vuna/Compiler/Frontend/Cst.vuna"
+# 372 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_nodeChildren = (fun (mc0 : t_CstNode) -> (match mc0 with
   | C_CstNode_CstBranch (dtb__42, dtb__43, dtb__44) -> dtb__44
   | C_CstNode_CstLeaf (dtb__45) -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 372 "Vuna/Compiler/Frontend/Cst.vuna"
+# 377 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_nodeToken = (fun (mc0 : t_CstNode) -> (match mc0 with
   | C_CstNode_CstBranch (dtb__46, dtb__47, dtb__48) -> B_dData_dMaybe.C_Maybe_Nothing
   | C_CstNode_CstLeaf (dtb__49) -> (B_dData_dMaybe.C_Maybe_Just (dtb__49))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 382 "Vuna/Compiler/Frontend/Cst.vuna"
+# 387 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_cstKindTag = (fun (mc0 : t_CstKind) -> (match mc0 with
   | C_CstKind_CstGroupKind -> "group"
   | C_CstKind_CstBlockKind -> "block"
@@ -183,30 +183,30 @@ let v_cstKindTag = (fun (mc0 : t_CstKind) -> (match mc0 with
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 378 "Vuna/Compiler/Frontend/Cst.vuna"
+# 383 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_nodeKindTag = (fun (mc0 : t_CstNode) -> (match mc0 with
   | C_CstNode_CstBranch (dtb__50, dtb__51, dtb__52) -> (v_cstKindTag dtb__50)
   | C_CstNode_CstLeaf (dtb__53) -> "leaf"
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 402 "Vuna/Compiler/Frontend/Cst.vuna"
+# 407 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_attachLeaf = (fun (t : t_CstToken) (f : t_Frame) -> (let sp = (t).f_CstToken_cstSpan in (let start = { Base_dSource.f_Pos_posLine = (Base_dSource.v_spanStartLine sp); Base_dSource.f_Pos_posCol = (Base_dSource.v_spanStartCol sp); Base_dSource.f_Pos_posOffset = (Base_dSource.v_spanStartOffset sp); Base_dSource.f_Pos_posEndOffset = (Base_dSource.v_spanStartOffset sp) } in (let end_ = { Base_dSource.f_Pos_posLine = (Base_dSource.v_spanEndLine sp); Base_dSource.f_Pos_posCol = (Base_dSource.v_spanEndCol sp); Base_dSource.f_Pos_posOffset = (Base_dSource.v_spanEndOffset sp); Base_dSource.f_Pos_posEndOffset = (Base_dSource.v_spanEndOffset sp) } in { f_Frame_frameKind = (f).f_Frame_frameKind; f_Frame_frameCol = (f).f_Frame_frameCol; f_Frame_frameStart = (if (f).f_Frame_frameStarted then (f).f_Frame_frameStart else start); f_Frame_frameEnd = end_; f_Frame_frameKids = (B_dData_dList.C_List__x58__x58_ ((C_CstNode_CstLeaf (t)), (f).f_Frame_frameKids)); f_Frame_frameStarted = true; f_Frame_frameClose = (f).f_Frame_frameClose }))))
 
-# 418 "Vuna/Compiler/Frontend/Cst.vuna"
+# 423 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_attachLeafTop = (fun (mc0 : t_CstToken) (mc1 : t_Frame B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | B_dData_dList.C_List__x58__x58_ (dtb__54, dtb__55) -> (B_dData_dList.C_List__x58__x58_ (((v_attachLeaf mc0) dtb__54), dtb__55))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 423 "Vuna/Compiler/Frontend/Cst.vuna"
+# 428 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_closeFrame = (fun (f : t_Frame) -> (C_CstNode_CstBranch ((f).f_Frame_frameKind, { Base_dSource.f_Span_spanFile = ""; Base_dSource.f_Span_spanStartLine = (Base_dSource.v_posLine (f).f_Frame_frameStart); Base_dSource.f_Span_spanStartCol = (Base_dSource.v_posCol (f).f_Frame_frameStart); Base_dSource.f_Span_spanEndLine = (Base_dSource.v_posLine (f).f_Frame_frameEnd); Base_dSource.f_Span_spanEndCol = (Base_dSource.v_posCol (f).f_Frame_frameEnd); Base_dSource.f_Span_spanStartOffset = (Base_dSource.v_posOffset (f).f_Frame_frameStart); Base_dSource.f_Span_spanEndOffset = (Base_dSource.v_posOffset (f).f_Frame_frameEnd) }, (B_dData_dList.v_reverse (f).f_Frame_frameKids))))
 
-# 431 "Vuna/Compiler/Frontend/Cst.vuna"
+# 436 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_attachNode = (fun (node : t_CstNode) (f : t_Frame) -> (let sp = (v_nodeSpan node) in (let start = { Base_dSource.f_Pos_posLine = (Base_dSource.v_spanStartLine sp); Base_dSource.f_Pos_posCol = (Base_dSource.v_spanStartCol sp); Base_dSource.f_Pos_posOffset = (Base_dSource.v_spanStartOffset sp); Base_dSource.f_Pos_posEndOffset = (Base_dSource.v_spanStartOffset sp) } in (let end_ = { Base_dSource.f_Pos_posLine = (Base_dSource.v_spanEndLine sp); Base_dSource.f_Pos_posCol = (Base_dSource.v_spanEndCol sp); Base_dSource.f_Pos_posOffset = (Base_dSource.v_spanEndOffset sp); Base_dSource.f_Pos_posEndOffset = (Base_dSource.v_spanEndOffset sp) } in { f_Frame_frameKind = (f).f_Frame_frameKind; f_Frame_frameCol = (f).f_Frame_frameCol; f_Frame_frameStart = (if (f).f_Frame_frameStarted then (f).f_Frame_frameStart else start); f_Frame_frameEnd = end_; f_Frame_frameKids = (B_dData_dList.C_List__x58__x58_ (node, (f).f_Frame_frameKids)); f_Frame_frameStarted = true; f_Frame_frameClose = (f).f_Frame_frameClose }))))
 
-# 447 "Vuna/Compiler/Frontend/Cst.vuna"
+# 452 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_closeTop = (fun (mc0 : t_Frame B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__56, dtb__57) -> (match dtb__57 with
   | B_dData_dList.C_List__x58__x58_ (dtb__58, dtb__59) -> (B_dData_dList.C_List__x58__x58_ (((v_attachNode (v_closeFrame dtb__56)) dtb__58), dtb__59))
@@ -215,13 +215,13 @@ let v_closeTop = (fun (mc0 : t_Frame B_dData_dList.t_List) -> (match mc0 with
   | _ -> mc0
 ))
 
-# 471 "Vuna/Compiler/Frontend/Cst.vuna"
+# 476 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_kindIsBlock = (fun (mc0 : t_CstKind) -> (match mc0 with
   | C_CstKind_CstBlockKind -> true
   | _ -> false
 ))
 
-# 452 "Vuna/Compiler/Frontend/Cst.vuna"
+# 457 "Vuna/Compiler/Frontend/Cst.vuna"
 let rec v_closeBlocks = (fun (fuel : int) (col : int) (frames : t_Frame B_dData_dList.t_List) -> (if (fuel <= 0) then frames else (let nd_uscrut3 = frames in (match nd_uscrut3 with
   | B_dData_dList.C_List__x58__x58_ (dtb__60, dtb__61) -> (match dtb__61 with
   | B_dData_dList.C_List__x58__x58_ (dtb__62, dtb__63) -> (if (if (v_kindIsBlock (dtb__60).f_Frame_frameKind) then (col < (dtb__60).f_Frame_frameCol) else false) then (((v_closeBlocks (fuel - 1)) col) (B_dData_dList.C_List__x58__x58_ (((v_attachNode (v_closeFrame dtb__60)) dtb__62), dtb__63))) else frames)
@@ -230,13 +230,13 @@ let rec v_closeBlocks = (fun (fuel : int) (col : int) (frames : t_Frame B_dData_
   | _ -> frames
 ))))
 
-# 475 "Vuna/Compiler/Frontend/Cst.vuna"
+# 480 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_kindIsDecl = (fun (mc0 : t_CstKind) -> (match mc0 with
   | C_CstKind_CstDeclKind -> true
   | _ -> false
 ))
 
-# 462 "Vuna/Compiler/Frontend/Cst.vuna"
+# 467 "Vuna/Compiler/Frontend/Cst.vuna"
 let rec v_closeDecls = (fun (fuel : int) (col : int) (frames : t_Frame B_dData_dList.t_List) -> (if (fuel <= 0) then frames else (let nd_uscrut3 = frames in (match nd_uscrut3 with
   | B_dData_dList.C_List__x58__x58_ (dtb__64, dtb__65) -> (match dtb__65 with
   | B_dData_dList.C_List__x58__x58_ (dtb__66, dtb__67) -> (if (if (v_kindIsDecl (dtb__64).f_Frame_frameKind) then (col <= (dtb__64).f_Frame_frameCol) else false) then (((v_closeDecls (fuel - 1)) col) (B_dData_dList.C_List__x58__x58_ (((v_attachNode (v_closeFrame dtb__64)) dtb__66), dtb__67))) else frames)
@@ -245,42 +245,42 @@ let rec v_closeDecls = (fun (fuel : int) (col : int) (frames : t_Frame B_dData_d
   | _ -> frames
 ))))
 
-# 479 "Vuna/Compiler/Frontend/Cst.vuna"
+# 484 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_kindIsGroup = (fun (mc0 : t_CstKind) -> (match mc0 with
   | C_CstKind_CstGroupKind -> true
   | _ -> false
 ))
 
-# 483 "Vuna/Compiler/Frontend/Cst.vuna"
+# 488 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_kindIsFile = (fun (mc0 : t_CstKind) -> (match mc0 with
   | C_CstKind_CstFileKind -> true
   | _ -> false
 ))
 
-# 488 "Vuna/Compiler/Frontend/Cst.vuna"
+# 493 "Vuna/Compiler/Frontend/Cst.vuna"
 let rec v_frameCount = (fun (mc0 : t_Frame B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__68, dtb__69) -> (1 + (v_frameCount dtb__69))
   | B_dData_dList.C_List_Nil -> 0
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 494 "Vuna/Compiler/Frontend/Cst.vuna"
+# 499 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_layoutStep = (fun (col : int) (frames : t_Frame B_dData_dList.t_List) -> (let f1 = (((v_closeBlocks (v_frameCount frames)) col) frames) in (let f2 = (((v_closeDecls (v_frameCount f1)) col) f1) in (match f2 with
   | B_dData_dList.C_List__x58__x58_ (dtb__70, dtb__71) -> (if (v_kindIsGroup (dtb__70).f_Frame_frameKind) then f2 else (if (v_kindIsFile (dtb__70).f_Frame_frameKind) then (B_dData_dList.C_List__x58__x58_ ({ f_Frame_frameKind = C_CstKind_CstDeclKind; f_Frame_frameCol = col; f_Frame_frameStart = { Base_dSource.f_Pos_posLine = 1; Base_dSource.f_Pos_posCol = 1; Base_dSource.f_Pos_posOffset = 0; Base_dSource.f_Pos_posEndOffset = 0 }; f_Frame_frameEnd = { Base_dSource.f_Pos_posLine = 1; Base_dSource.f_Pos_posCol = 1; Base_dSource.f_Pos_posOffset = 0; Base_dSource.f_Pos_posEndOffset = 0 }; f_Frame_frameKids = B_dData_dList.C_List_Nil; f_Frame_frameStarted = false; f_Frame_frameClose = "" }, f2)) else (if (col > (dtb__70).f_Frame_frameCol) then (B_dData_dList.C_List__x58__x58_ ({ f_Frame_frameKind = C_CstKind_CstBlockKind; f_Frame_frameCol = col; f_Frame_frameStart = { Base_dSource.f_Pos_posLine = 1; Base_dSource.f_Pos_posCol = 1; Base_dSource.f_Pos_posOffset = 0; Base_dSource.f_Pos_posEndOffset = 0 }; f_Frame_frameEnd = { Base_dSource.f_Pos_posLine = 1; Base_dSource.f_Pos_posCol = 1; Base_dSource.f_Pos_posOffset = 0; Base_dSource.f_Pos_posEndOffset = 0 }; f_Frame_frameKids = B_dData_dList.C_List_Nil; f_Frame_frameStarted = false; f_Frame_frameClose = "" }, f2)) else f2)))
   | B_dData_dList.C_List_Nil -> f2
   | _ -> failwith "DT: impossible branch"
 ))))
 
-# 512 "Vuna/Compiler/Frontend/Cst.vuna"
+# 517 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_groupCloseOf = (fun (mc0 : string) -> (if (mc0 = "(") then (B_dData_dMaybe.C_Maybe_Just (")")) else (if (mc0 = "[") then (B_dData_dMaybe.C_Maybe_Just ("]")) else (if (mc0 = "{") then (B_dData_dMaybe.C_Maybe_Just ("}")) else B_dData_dMaybe.C_Maybe_Nothing))))
 
-# 519 "Vuna/Compiler/Frontend/Cst.vuna"
+# 524 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_isSymText = (fun (s : string) (t : t_CstToken) -> ((t).f_CstToken_cstText = s))
 
-# 523 "Vuna/Compiler/Frontend/Cst.vuna"
+# 528 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_isLineStart = (fun (prevLine : int) (t : t_CstToken) -> ((Base_dSource.v_spanStartLine (t).f_CstToken_cstSpan) > prevLine))
 
-# 527 "Vuna/Compiler/Frontend/Cst.vuna"
+# 532 "Vuna/Compiler/Frontend/Cst.vuna"
 let rec v_buildFrames = (fun (fuel : int) (frames : t_Frame B_dData_dList.t_List) (prevLine : int) (toks : t_CstToken B_dData_dList.t_List) -> (if (fuel <= 0) then frames else (match toks with
   | B_dData_dList.C_List_Nil -> frames
   | B_dData_dList.C_List__x58__x58_ (dtb__72, dtb__73) -> (match frames with
@@ -295,7 +295,7 @@ let rec v_buildFrames = (fun (fuel : int) (frames : t_Frame B_dData_dList.t_List
   | _ -> failwith "DT: impossible branch"
 )))
 
-# 549 "Vuna/Compiler/Frontend/Cst.vuna"
+# 554 "Vuna/Compiler/Frontend/Cst.vuna"
 let rec v_closeAll = (fun (fuel : int) (frames : t_Frame B_dData_dList.t_List) -> (if (fuel <= 0) then frames else (let nd_uscrut2 = frames in (match nd_uscrut2 with
   | B_dData_dList.C_List__x58__x58_ (dtb__77, dtb__78) -> (match dtb__78 with
   | B_dData_dList.C_List_Nil -> (B_dData_dList.C_List__x58__x58_ (dtb__77, B_dData_dList.C_List_Nil))
@@ -304,28 +304,28 @@ let rec v_closeAll = (fun (fuel : int) (frames : t_Frame B_dData_dList.t_List) -
   | _ -> ((v_closeAll (fuel - 1)) (v_closeTop frames))
 ))))
 
-# 571 "Vuna/Compiler/Frontend/Cst.vuna"
+# 576 "Vuna/Compiler/Frontend/Cst.vuna"
 let rec v_cstTokCount = (fun (mc0 : t_CstToken B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__79, dtb__80) -> (1 + (v_cstTokCount dtb__80))
   | B_dData_dList.C_List_Nil -> 0
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 559 "Vuna/Compiler/Frontend/Cst.vuna"
+# 564 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_buildCst = (fun (toks : t_CstToken B_dData_dList.t_List) -> (let root = { f_Frame_frameKind = C_CstKind_CstFileKind; f_Frame_frameCol = 1; f_Frame_frameStart = { Base_dSource.f_Pos_posLine = 1; Base_dSource.f_Pos_posCol = 1; Base_dSource.f_Pos_posOffset = 0; Base_dSource.f_Pos_posEndOffset = 0 }; f_Frame_frameEnd = { Base_dSource.f_Pos_posLine = 1; Base_dSource.f_Pos_posCol = 1; Base_dSource.f_Pos_posOffset = 0; Base_dSource.f_Pos_posEndOffset = 0 }; f_Frame_frameKids = B_dData_dList.C_List_Nil; f_Frame_frameStarted = false; f_Frame_frameClose = "" } in (let frames0 = ((((v_buildFrames ((v_cstTokCount toks) + 1)) (B_dData_dList.C_List__x58__x58_ (root, B_dData_dList.C_List_Nil))) 0) toks) in (let frames = ((v_closeAll (v_frameCount frames0)) frames0) in (match frames with
   | B_dData_dList.C_List__x58__x58_ (dtb__81, dtb__82) -> (v_closeFrame dtb__81)
   | B_dData_dList.C_List_Nil -> (C_CstNode_CstBranch (C_CstKind_CstFileKind, { Base_dSource.f_Span_spanFile = ""; Base_dSource.f_Span_spanStartLine = 1; Base_dSource.f_Span_spanStartCol = 1; Base_dSource.f_Span_spanEndLine = 1; Base_dSource.f_Span_spanEndCol = 1; Base_dSource.f_Span_spanStartOffset = 0; Base_dSource.f_Span_spanEndOffset = 0 }, B_dData_dList.C_List_Nil))
   | _ -> failwith "DT: impossible branch"
 )))))
 
-# 576 "Vuna/Compiler/Frontend/Cst.vuna"
+# 581 "Vuna/Compiler/Frontend/Cst.vuna"
 let rec v_renderCstTree = (fun (mc0 : t_CstNode) -> (match mc0 with
   | C_CstNode_CstBranch (dtb__83, dtb__84, dtb__85) -> (B_dData_dList.dtp_concatMany ((B_dData_dList.v_map v_renderCstTree) dtb__85))
   | C_CstNode_CstLeaf (dtb__86) -> (B_dData_dList.dtp_concatMany (v_renderParts dtb__86))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 581 "Vuna/Compiler/Frontend/Cst.vuna"
+# 586 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_treeRoundtripOk = (fun (s : string) -> (match (v_lexCst s) with
   | B_dData_dMaybe.C_Maybe_Nothing -> false
   | B_dData_dMaybe.C_Maybe_Just (dtb__87) -> ((v_renderCstTree (v_buildCst dtb__87)) = s)

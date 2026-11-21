@@ -19,21 +19,21 @@ and t_Diagnostic = { f_Diagnostic_diagId : int; f_Diagnostic_diagSeverity : t_Se
 and 'a0 t_Check = C_Check_OkC of ('a0) | C_Check_ErrC of (t_Diagnostic)
 
 # 523 "Vuna/Compiler/Base/Diag.vuna"
-let v_Functor_uVuna_uCompiler_uBase_uDiag_uCheck = (B_dTrait_dFunctor.C_Functor_Functor (((Obj.magic (fun mc0 mc1 -> (match mc1 with
+let v_Functor_ua5312def40ac3976_uVuna_x36_46_x36_Compiler_x36_46_x36_Base_x36_46_x36_Diag_x36_46_x36_Check = (B_dTrait_dFunctor.C_Functor_Functor (((Obj.magic (fun mc0 mc1 -> (match mc1 with
   | C_Check_ErrC (dtb__0) -> (C_Check_ErrC (dtb__0))
   | C_Check_OkC (dtb__1) -> (C_Check_OkC ((mc0 dtb__1)))
   | _ -> failwith "DT: impossible branch"
 ))) : Obj.t)))
 
 # 527 "Vuna/Compiler/Base/Diag.vuna"
-let v_Monad_uVuna_uCompiler_uBase_uDiag_uCheck = (B_dTrait_dMonad.C_Monad_Monad (((Obj.magic (fun mc0 mc1 -> (match mc0 with
+let v_Monad_ucc99eea03f4e7df1_uVuna_x36_46_x36_Compiler_x36_46_x36_Base_x36_46_x36_Diag_x36_46_x36_Check = (B_dTrait_dMonad.C_Monad_Monad (((Obj.magic (fun mc0 mc1 -> (match mc0 with
   | C_Check_ErrC (dtb__2) -> (C_Check_ErrC (dtb__2))
   | C_Check_OkC (dtb__3) -> (mc1 dtb__3)
   | _ -> failwith "DT: impossible branch"
 ))) : Obj.t)))
 
 # 531 "Vuna/Compiler/Base/Diag.vuna"
-let v_Applicative_uVuna_uCompiler_uBase_uDiag_uCheck = (B_dTrait_dApplicative.C_Applicative_Applicative (((Obj.magic (fun _heta0 -> (C_Check_OkC (_heta0)))) : Obj.t), ((Obj.magic (fun mf mx -> (match mf with
+let v_Applicative_u19070277251d295b_uVuna_x36_46_x36_Compiler_x36_46_x36_Base_x36_46_x36_Diag_x36_46_x36_Check = (B_dTrait_dApplicative.C_Applicative_Applicative (((Obj.magic (fun _heta0 -> (C_Check_OkC (_heta0)))) : Obj.t), ((Obj.magic (fun mf mx -> (match mf with
   | C_Check_OkC (dtb__4) -> (match mx with
   | C_Check_OkC (dtb__5) -> (C_Check_OkC ((dtb__4 dtb__5)))
   | C_Check_ErrC (dtb__6) -> (C_Check_ErrC (dtb__6))
@@ -289,4 +289,4 @@ let rec v_labelSpanOf = (fun (mc0 : t_Label B_dData_dList.t_List) -> (match mc0 
 ))
 
 # 678 "Vuna/Compiler/Base/Diag.vuna"
-let v_sameDiag = (fun (a : t_Diagnostic) (b : t_Diagnostic) -> (if (if (if ((a).f_Diagnostic_diagCode = (b).f_Diagnostic_diagCode) then ((a).f_Diagnostic_diagMessage = (b).f_Diagnostic_diagMessage) else false) then ((v_sameSeverity (a).f_Diagnostic_diagSeverity) (b).f_Diagnostic_diagSeverity) else false) then (((B_dTrait_dEq.v__x61__x61_ (B_dData_dList.v_Eq_uBase_uData_uList_uList_ua ((B_dData_dPair.v_Eq_uBase_uData_uPair_uPair_ua_ub B_dData_dString.v_Eq_uString) ((B_dData_dPair.v_Eq_uBase_uData_uPair_uPair_ua_ub B_dData_dInt.v_Eq_uInt) ((B_dData_dPair.v_Eq_uBase_uData_uPair_uPair_ua_ub B_dData_dInt.v_Eq_uInt) B_dData_dInt.v_Eq_uInt))))) (v_labelSpanOf (a).f_Diagnostic_diagLabels)) (v_labelSpanOf (b).f_Diagnostic_diagLabels)) else false))
+let v_sameDiag = (fun (a : t_Diagnostic) (b : t_Diagnostic) -> (if (if (if ((a).f_Diagnostic_diagCode = (b).f_Diagnostic_diagCode) then ((a).f_Diagnostic_diagMessage = (b).f_Diagnostic_diagMessage) else false) then ((v_sameSeverity (a).f_Diagnostic_diagSeverity) (b).f_Diagnostic_diagSeverity) else false) then (((B_dTrait_dEq.v__x61__x61_ (B_dData_dList.v_Eq_u018fc178ff3df1b4_uBase_x36_46_x36_Data_x36_46_x36_List_x36_46_x36_List_ua ((B_dData_dPair.v_Eq_u018fc178ff3df1b4_uBase_x36_46_x36_Data_x36_46_x36_Pair_x36_46_x36_Pair_ua_ub B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) ((B_dData_dPair.v_Eq_u018fc178ff3df1b4_uBase_x36_46_x36_Data_x36_46_x36_Pair_x36_46_x36_Pair_ua_ub B_dData_dInt.v_Eq_u018fc178ff3df1b4_uInt) ((B_dData_dPair.v_Eq_u018fc178ff3df1b4_uBase_x36_46_x36_Data_x36_46_x36_Pair_x36_46_x36_Pair_ua_ub B_dData_dInt.v_Eq_u018fc178ff3df1b4_uInt) B_dData_dInt.v_Eq_u018fc178ff3df1b4_uInt))))) (v_labelSpanOf (a).f_Diagnostic_diagLabels)) (v_labelSpanOf (b).f_Diagnostic_diagLabels)) else false))

@@ -92,7 +92,7 @@ let rec v_fromList = (fun _uctx0 _uctx1 mc0 -> (match mc0 with
 ))
 
 # 129 "Base/Container/HashMap.vuna"
-let v_ofNames = (fun (xs : string B_dData_dList.t_List) -> ((((v_insertAll B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) ((B_dData_dList.v_map (fun (n : string) -> { B_dData_dPair.f_Pair_first = n; B_dData_dPair.f_Pair_second = true })) xs)) (((v_fromList B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) B_dData_dList.C_List_Nil)))
+let v_ofNames = (fun (xs : string B_dData_dList.t_List) -> ((((v_insertAll B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) ((B_dData_dList.v_map (fun (n : string) -> { B_dData_dPair.f_Pair_first = n; B_dData_dPair.f_Pair_second = true })) xs)) (((v_fromList B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) B_dData_dList.C_List_Nil)))
 
 # 133 "Base/Container/HashMap.vuna"
 let v_toList = (fun mc0 -> (match mc0 with
@@ -101,7 +101,7 @@ let v_toList = (fun mc0 -> (match mc0 with
 ))
 
 # 143 "Base/Container/HashMap.vuna"
-let v_Show_uBase_uContainer_uHashMap_uHashMap_uk_uv = (fun _uctx0 _uctx1 -> (B_dTrait_dShow.C_Show_Show ((fun m -> ("fromList " ^ ((B_dTrait_dShow.v_show (B_dData_dList.v_Show_uBase_uData_uList_uList_ua ((B_dData_dPair.v_Show_uBase_uData_uPair_uPair_ua_ub _uctx0) _uctx1))) (v_toList m)))))))
+let v_Show_u0077d73cf424e521_uBase_x36_46_x36_Container_x36_46_x36_HashMap_x36_46_x36_HashMap_uk_uv = (fun _uctx0 _uctx1 -> (B_dTrait_dShow.C_Show_Show ((fun m -> ("fromList " ^ ((B_dTrait_dShow.v_show (B_dData_dList.v_Show_u0077d73cf424e521_uBase_x36_46_x36_Data_x36_46_x36_List_x36_46_x36_List_ua ((B_dData_dPair.v_Show_u0077d73cf424e521_uBase_x36_46_x36_Data_x36_46_x36_Pair_x36_46_x36_Pair_ua_ub _uctx0) _uctx1))) (v_toList m)))))))
 
 # 140 "Base/Container/HashMap.vuna"
 let v_size = (fun mc0 -> (match mc0 with

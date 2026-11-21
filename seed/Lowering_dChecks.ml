@@ -60,7 +60,7 @@ let rec v_partitionDefsGo = (fun (mc0 : (string, Core_dTerm.t_Term) B_dContainer
 ))
 
 # 81 "Vuna/Compiler/Lowering/Checks.vuna"
-let v_partitionDefs = (fun (table : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List) (defs : Elab_dTypes.t_DtDef B_dData_dList.t_List) -> ((((v_partitionDefsGo (((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) table)) defs) B_dData_dList.C_List_Nil) B_dData_dList.C_List_Nil))
+let v_partitionDefs = (fun (table : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List) (defs : Elab_dTypes.t_DtDef B_dData_dList.t_List) -> ((((v_partitionDefsGo (((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) table)) defs) B_dData_dList.C_List_Nil) B_dData_dList.C_List_Nil))
 
 # 97 "Vuna/Compiler/Lowering/Checks.vuna"
 let v_defLocDiag = (fun (d : Elab_dTypes.t_DtDef) (e : Base_dDiag.t_Diagnostic) -> (((Base_dDiag.v_withContext (Elab_dTypes.v_dtDefSpan d)) (Elab_dTypes.v_dtDefName d)) e))
@@ -142,7 +142,7 @@ let rec v_addName = (fun (mc0 : string) (mc1 : string B_dData_dList.t_List) -> (
 
 # 205 "Vuna/Compiler/Lowering/Checks.vuna"
 let rec v_termDepsIntoFuel = (fun (fuel : int) (runtimeNames : (string, bool) B_dContainer_dHashMap.t_HashMap) (acc : string B_dData_dList.t_List) (t : Core_dTerm.t_Term) -> (if (fuel <= 0) then acc else (match t with
-  | Core_dTerm.C_Term_TGlobal (dtb__79) -> (if ((((B_dContainer_dHashMap.v_member B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) dtb__79) runtimeNames) then ((v_addName dtb__79) acc) else acc)
+  | Core_dTerm.C_Term_TGlobal (dtb__79) -> (if ((((B_dContainer_dHashMap.v_member B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) dtb__79) runtimeNames) then ((v_addName dtb__79) acc) else acc)
   | Core_dTerm.C_Term_TVar (dtb__80, dtb__81, dtb__82) -> acc
   | Core_dTerm.C_Term_TMeta (dtb__83) -> acc
   | Core_dTerm.C_Term_TType (dtb__84) -> acc
@@ -195,7 +195,7 @@ let v_orUseFlags = (fun (a : t_UseFlags) (b : t_UseFlags) -> { f_UseFlags_useFla
 let v_useBudgetFor = (fun (size : int) -> (512 + (4 * size)))
 
 # 297 "Vuna/Compiler/Lowering/Checks.vuna"
-let v_addRuntimeDep = (fun (names : (string, bool) B_dContainer_dHashMap.t_HashMap) (live : bool) (n : string) (u : t_TermUse) -> (if (if live then ((((B_dContainer_dHashMap.v_member B_dData_dString.v_Hashable_uString) B_dData_dString.v_Eq_uString) n) names) else false) then { f_TermUse_termUseDeps = ((v_addName n) (u).f_TermUse_termUseDeps); f_TermUse_termUseFlags = (u).f_TermUse_termUseFlags; f_TermUse_termUseFloatLit = (u).f_TermUse_termUseFloatLit } else u))
+let v_addRuntimeDep = (fun (names : (string, bool) B_dContainer_dHashMap.t_HashMap) (live : bool) (n : string) (u : t_TermUse) -> (if (if live then ((((B_dContainer_dHashMap.v_member B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) n) names) else false) then { f_TermUse_termUseDeps = ((v_addName n) (u).f_TermUse_termUseDeps); f_TermUse_termUseFlags = (u).f_TermUse_termUseFlags; f_TermUse_termUseFloatLit = (u).f_TermUse_termUseFloatLit } else u))
 
 # 304 "Vuna/Compiler/Lowering/Checks.vuna"
 let v_withFlags = (fun (f : t_UseFlags) (u : t_TermUse) -> { f_TermUse_termUseDeps = (u).f_TermUse_termUseDeps; f_TermUse_termUseFlags = ((v_orUseFlags (u).f_TermUse_termUseFlags) f); f_TermUse_termUseFloatLit = (u).f_TermUse_termUseFloatLit })
@@ -277,8 +277,8 @@ and v_checkTermScopesMaybe = (fun (mc0 : int) (mc1 : Core_dTerm.t_Term B_dData_d
   | _ -> failwith "DT: impossible branch"
 ))
 # 411 "Vuna/Compiler/Lowering/Checks.vuna"
-and v_checkTermScopesSlot = (fun (mc0 : int) (mc1 : (Core_dTerm.t_Term B_dData_dMaybe.t_Maybe, Core_dTerm.t_Term B_dData_dMaybe.t_Maybe) B_dData_dPair.t_Pair B_dData_dMaybe.t_Maybe) -> (match mc1 with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__229) -> ((Base_dCommon.v_bind ((v_checkTermScopesMaybe mc0) (B_dData_dPair.v_firstOf dtb__229))) (fun (_u : int) -> ((v_checkTermScopesMaybe (mc0 + 1)) (B_dData_dPair.v_secondOf dtb__229))))
+and v_checkTermScopesSlot = (fun (mc0 : int) (mc1 : (Core_dTerm.t_LamMark, (Core_dTerm.t_Term B_dData_dMaybe.t_Maybe, Core_dTerm.t_Term B_dData_dMaybe.t_Maybe) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dMaybe.t_Maybe) -> (match mc1 with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__229) -> ((Base_dCommon.v_bind ((v_checkTermScopesMaybe mc0) (B_dData_dPair.v_firstOf (B_dData_dPair.v_secondOf dtb__229)))) (fun (_u : int) -> ((v_checkTermScopesMaybe (mc0 + 1)) (B_dData_dPair.v_secondOf (B_dData_dPair.v_secondOf dtb__229)))))
   | B_dData_dMaybe.C_Maybe_Nothing -> (Base_dDiag.C_Check_OkC (0))
   | _ -> failwith "DT: impossible branch"
 ))

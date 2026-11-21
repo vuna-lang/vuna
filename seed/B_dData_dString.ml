@@ -1,18 +1,18 @@
 open Vuna_runtime
 # 151 "Base/Data/String.vuna"
-let v_Eq_uString = (B_dTrait_dEq.C_Eq_Eq ((fun x y -> (x = y)), (fun x y -> (x <> y))))
+let v_Eq_u018fc178ff3df1b4_uString = (B_dTrait_dEq.C_Eq_Eq ((fun x y -> (x = y)), (fun x y -> (x <> y))))
 
 # 155 "Base/Data/String.vuna"
-let v_Ord_uString = (B_dTrait_dOrd.C_Ord_Ord ((fun x y -> (x < y)), (fun x y -> (x <= y)), (fun x y -> (x > y)), (fun x y -> (x >= y))))
+let v_Ord_u5afb3bbeddafcb50_uString = (B_dTrait_dOrd.C_Ord_Ord ((fun x y -> (x < y)), (fun x y -> (x <= y)), (fun x y -> (x > y)), (fun x y -> (x >= y))))
 
 # 162 "Base/Data/String.vuna"
-let v_Hashable_uString = (B_dTrait_dHashable.C_Hashable_Hashable ((fun s -> (B_dTrait_dHashable.v_hashStr s))))
+let v_Hashable_ue4b0f10b020a5e82_uString = (B_dTrait_dHashable.C_Hashable_Hashable ((fun s -> (B_dTrait_dHashable.v_hashStr s))))
 
 # 165 "Base/Data/String.vuna"
-let v_Semigroup_uString = (B_dTrait_dMonoid.C_Semigroup_Semigroup ((fun x y -> (x ^ y))))
+let v_Semigroup_ueb264836545b3665_uString = (B_dTrait_dMonoid.C_Semigroup_Semigroup ((fun x y -> (x ^ y))))
 
 # 168 "Base/Data/String.vuna"
-let v_Monoid_uString = (B_dTrait_dMonoid.C_Monoid_Monoid (""))
+let v_Monoid_u4f2563914c7fbae1_uString = (B_dTrait_dMonoid.C_Monoid_Monoid (""))
 
 # 21 "Base/Data/String.vuna"
 let v_byteLength = (fun (s : string) -> (bi_natFromInt (bi_strLength s)))
@@ -33,7 +33,7 @@ let v_join = (fun (sep : string) (xs : string B_dData_dList.t_List) -> (B_dData_
 # 69 "Base/Data/String.vuna"
 let v_unlines = (fun (mc0 : string B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List_Nil -> ""
-  | _ -> (B_dData_dList.dtp_concatMany ((B_dData_dList.v_map (fun (x : string) -> (((B_dTrait_dInterp.v_interp B_dTrait_dInterp.v_Interp_uString) x) ^ "\n"))) mc0))
+  | _ -> (B_dData_dList.dtp_concatMany ((B_dData_dList.v_map (fun (x : string) -> (((B_dTrait_dInterp.v_interp B_dTrait_dInterp.v_Interp_uc9feaa570847b590_uString) x) ^ "\n"))) mc0))
 ))
 
 # 105 "Base/Data/String.vuna"

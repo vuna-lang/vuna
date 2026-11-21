@@ -2,19 +2,19 @@ open Vuna_runtime
 type 'a0 t_FromFloat = C_FromFloat_FromFloat of ((float) -> 'a0)
 
 # 22 "Base/Data/Float.vuna"
-let v_FromFloat_uFloat = (C_FromFloat_FromFloat ((fun x -> x)))
+let v_FromFloat_u70c61bb9501ecaf2_uFloat = (C_FromFloat_FromFloat ((fun x -> x)))
 
 # 25 "Base/Data/Float.vuna"
-let v_Eq_uFloat = (B_dTrait_dEq.C_Eq_Eq ((fun x y -> (x = y)), (fun x y -> (x <> y))))
+let v_Eq_u018fc178ff3df1b4_uFloat = (B_dTrait_dEq.C_Eq_Eq ((fun x y -> (x = y)), (fun x y -> (x <> y))))
 
 # 29 "Base/Data/Float.vuna"
-let v_Ord_uFloat = (B_dTrait_dOrd.C_Ord_Ord ((fun x y -> (x < y)), (fun x y -> (x <= y)), (fun x y -> (x > y)), (fun x y -> (x >= y))))
+let v_Ord_u5afb3bbeddafcb50_uFloat = (B_dTrait_dOrd.C_Ord_Ord ((fun x y -> (x < y)), (fun x y -> (x <= y)), (fun x y -> (x > y)), (fun x y -> (x >= y))))
 
 # 36 "Base/Data/Float.vuna"
-let v_Num_uFloat = (B_dTrait_dNum.C_Num_Num ((fun x y -> (x +. y)), (fun x y -> (x -. y)), (fun x y -> (x *. y)), (fun x y -> (x /. y))))
+let v_Num_ub27c21f837ed69cc_uFloat = (B_dTrait_dNum.C_Num_Num ((fun x y -> (x +. y)), (fun x y -> (x -. y)), (fun x y -> (x *. y)), (fun x y -> (x /. y))))
 
 # 43 "Base/Data/Float.vuna"
-let v_Neg_uFloat = (B_dTrait_dNeg.C_Neg_Neg ((fun x -> (0.0 -. x))))
+let v_Neg_uc22890dadc3767a7_uFloat = (B_dTrait_dNeg.C_Neg_Neg ((fun x -> (0.0 -. x))))
 
 # 19 "Base/Data/Float.vuna"
 let v_fromFloat = (fun _ud (x0 : float) -> (match _ud with
@@ -101,4 +101,4 @@ let v_floatRender = (fun (x : float) -> (if (x <> x) then "nan" else (let inf = 
 ) else { B_dData_dPair.f_Pair_first = e0; B_dData_dPair.f_Pair_second = (v_trimZeros raw) }) in (let e = (B_dData_dPair.v_firstOf ed) in (let ds = (B_dData_dPair.v_secondOf ed) in (let body = (if (if (e < (0 - 4)) then true else (e >= 12)) then ((v_expForm e) ds) else ((v_fixedForm e) ds)) in (if neg then ("-" ^ body) else body)))))))))))))))))))
 
 # 46 "Base/Data/Float.vuna"
-let v_Show_uFloat = (B_dTrait_dShow.C_Show_Show ((fun x -> (v_floatRender x))))
+let v_Show_u0077d73cf424e521_uFloat = (B_dTrait_dShow.C_Show_Show ((fun x -> (v_floatRender x))))

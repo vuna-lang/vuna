@@ -1,5 +1,5 @@
 open Vuna_runtime
-# 63 "Vuna/Compiler/Frontend/Rast/Bridge.vuna"
+# 67 "Vuna/Compiler/Frontend/Rast/Bridge.vuna"
 let rec v_toAstPat = (fun (mc0 : Frontend_dRast.t_Pat) -> (match mc0 with
   | Frontend_dRast.C_Pat_PRecord (dtb__0, dtb__1, dtb__2) -> (Frontend_dAst.C_Pat_PRecord ((Frontend_dRast_dName.v_rnameKey dtb__0), ((B_dData_dList.v_map v_toAstPatField) dtb__1), dtb__2))
   | Frontend_dRast.C_Pat_PStr (dtb__3, dtb__4) -> (Frontend_dAst.C_Pat_PStr (dtb__3, dtb__4))
@@ -10,7 +10,7 @@ let rec v_toAstPat = (fun (mc0 : Frontend_dRast.t_Pat) -> (match mc0 with
   | Frontend_dRast.C_Pat_PVar (dtb__14, dtb__15) -> (Frontend_dAst.C_Pat_PVar (dtb__14, dtb__15))
   | _ -> failwith "DT: impossible branch"
 ))
-# 73 "Vuna/Compiler/Frontend/Rast/Bridge.vuna"
+# 77 "Vuna/Compiler/Frontend/Rast/Bridge.vuna"
 and v_toAstPatField = (fun (mc0 : (string, Frontend_dRast.t_Pat) B_dData_dPair.t_Pair) -> (match mc0 with
   | { B_dData_dPair.f_Pair_first = dtb__16; B_dData_dPair.f_Pair_second = dtb__17 } -> { B_dData_dPair.f_Pair_first = dtb__16; B_dData_dPair.f_Pair_second = (v_toAstPat dtb__17) }
   | _ -> failwith "DT: impossible branch"
@@ -71,80 +71,86 @@ and v_toAstFieldValue = (fun (mc0 : (string, Frontend_dRast.t_Expr) B_dData_dPai
 ))
 # 59 "Vuna/Compiler/Frontend/Rast/Bridge.vuna"
 and v_toAstStmt = (fun (mc0 : Frontend_dRast.t_DoStmt) -> (match mc0 with
-  | Frontend_dRast.C_DoStmt_DExpr (dtb__96, dtb__97) -> (Frontend_dAst.C_DoStmt_DExpr ((v_toAstExpr dtb__96), dtb__97))
-  | Frontend_dRast.C_DoStmt_DBind (dtb__98, dtb__99, dtb__100) -> (Frontend_dAst.C_DoStmt_DBind ((v_toAstPat dtb__98), (v_toAstExpr dtb__99), dtb__100))
+  | Frontend_dRast.C_DoStmt_DLet (dtb__96, dtb__97) -> (Frontend_dAst.C_DoStmt_DLet (((B_dData_dList.v_map v_toAstBind) dtb__96), dtb__97))
+  | Frontend_dRast.C_DoStmt_DExpr (dtb__98, dtb__99) -> (Frontend_dAst.C_DoStmt_DExpr ((v_toAstExpr dtb__98), dtb__99))
+  | Frontend_dRast.C_DoStmt_DBind (dtb__100, dtb__101, dtb__102) -> (Frontend_dAst.C_DoStmt_DBind ((v_toAstPat dtb__100), (v_toAstExpr dtb__101), dtb__102))
   | _ -> failwith "DT: impossible branch"
 ))
-
-# 77 "Vuna/Compiler/Frontend/Rast/Bridge.vuna"
-let v_toRastExpr = (fun (e : Frontend_dAst.t_Expr) -> ((Frontend_dRast.v_ofExpr B_dData_dList.C_List_Nil) e))
+# 64 "Vuna/Compiler/Frontend/Rast/Bridge.vuna"
+and v_toAstBind = (fun (mc0 : (Frontend_dRast.t_Pat, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair) -> (match mc0 with
+  | { B_dData_dPair.f_Pair_first = dtb__103; B_dData_dPair.f_Pair_second = dtb__104 } -> { B_dData_dPair.f_Pair_first = (v_toAstPat dtb__103); B_dData_dPair.f_Pair_second = (v_toAstExpr dtb__104) }
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 81 "Vuna/Compiler/Frontend/Rast/Bridge.vuna"
-let v_toRastDecls = (fun (decls : Frontend_dAst.t_Decl B_dData_dList.t_List) -> (Frontend_dRast.v_ofDecls decls))
+let v_toRastExpr = (fun (e : Frontend_dAst.t_Expr) -> ((Frontend_dRast.v_ofExpr B_dData_dList.C_List_Nil) e))
 
 # 85 "Vuna/Compiler/Frontend/Rast/Bridge.vuna"
+let v_toRastDecls = (fun (decls : Frontend_dAst.t_Decl B_dData_dList.t_List) -> (Frontend_dRast.v_ofDecls decls))
+
+# 89 "Vuna/Compiler/Frontend/Rast/Bridge.vuna"
 let v_toRastDecl = (fun (d : Frontend_dAst.t_Decl) -> ((Frontend_dRast.v_ofDecl B_dData_dList.C_List_Nil) d))
 
-# 111 "Vuna/Compiler/Frontend/Rast/Bridge.vuna"
+# 115 "Vuna/Compiler/Frontend/Rast/Bridge.vuna"
 let v_toAstCtor = (fun (mc0 : Frontend_dRast.t_Ctor) -> (match mc0 with
-  | { Frontend_dRast.f_Ctor_ctorName = dtb__101; Frontend_dRast.f_Ctor_ctorType = dtb__102; Frontend_dRast.f_Ctor_ctorArity = dtb__103; Frontend_dRast.f_Ctor_ctorSpan = dtb__104 } -> { Frontend_dAst.f_Ctor_ctorName = dtb__101; Frontend_dAst.f_Ctor_ctorType = (v_toAstExpr dtb__102); Frontend_dAst.f_Ctor_ctorArity = dtb__103; Frontend_dAst.f_Ctor_ctorSpan = dtb__104 }
+  | { Frontend_dRast.f_Ctor_ctorName = dtb__105; Frontend_dRast.f_Ctor_ctorType = dtb__106; Frontend_dRast.f_Ctor_ctorArity = dtb__107; Frontend_dRast.f_Ctor_ctorSpan = dtb__108 } -> { Frontend_dAst.f_Ctor_ctorName = dtb__105; Frontend_dAst.f_Ctor_ctorType = (v_toAstExpr dtb__106); Frontend_dAst.f_Ctor_ctorArity = dtb__107; Frontend_dAst.f_Ctor_ctorSpan = dtb__108 }
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 114 "Vuna/Compiler/Frontend/Rast/Bridge.vuna"
+# 118 "Vuna/Compiler/Frontend/Rast/Bridge.vuna"
 let v_toAstField = (fun (mc0 : Frontend_dRast.t_Field) -> (match mc0 with
-  | { Frontend_dRast.f_Field_fieldName = dtb__105; Frontend_dRast.f_Field_fieldType = dtb__106; Frontend_dRast.f_Field_fieldSpan = dtb__107 } -> { Frontend_dAst.f_Field_fieldName = dtb__105; Frontend_dAst.f_Field_fieldType = (v_toAstExpr dtb__106); Frontend_dAst.f_Field_fieldSpan = dtb__107 }
+  | { Frontend_dRast.f_Field_fieldName = dtb__109; Frontend_dRast.f_Field_fieldType = dtb__110; Frontend_dRast.f_Field_fieldSpan = dtb__111 } -> { Frontend_dAst.f_Field_fieldName = dtb__109; Frontend_dAst.f_Field_fieldType = (v_toAstExpr dtb__110); Frontend_dAst.f_Field_fieldSpan = dtb__111 }
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 120 "Vuna/Compiler/Frontend/Rast/Bridge.vuna"
+# 124 "Vuna/Compiler/Frontend/Rast/Bridge.vuna"
 let v_toAstTraitMethod = (fun (mc0 : Frontend_dRast.t_TraitMethod) -> (match mc0 with
-  | { Frontend_dRast.f_TraitMethod_traitMethodName = dtb__108; Frontend_dRast.f_TraitMethod_traitMethodType = dtb__109; Frontend_dRast.f_TraitMethod_traitMethodSpan = dtb__110 } -> { Frontend_dAst.f_TraitMethod_traitMethodName = dtb__108; Frontend_dAst.f_TraitMethod_traitMethodType = (v_toAstExpr dtb__109); Frontend_dAst.f_TraitMethod_traitMethodSpan = dtb__110 }
+  | { Frontend_dRast.f_TraitMethod_traitMethodName = dtb__112; Frontend_dRast.f_TraitMethod_traitMethodType = dtb__113; Frontend_dRast.f_TraitMethod_traitMethodSpan = dtb__114 } -> { Frontend_dAst.f_TraitMethod_traitMethodName = dtb__112; Frontend_dAst.f_TraitMethod_traitMethodType = (v_toAstExpr dtb__113); Frontend_dAst.f_TraitMethod_traitMethodSpan = dtb__114 }
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 123 "Vuna/Compiler/Frontend/Rast/Bridge.vuna"
+# 127 "Vuna/Compiler/Frontend/Rast/Bridge.vuna"
 let v_maybeMap = (fun mc0 mc1 -> (match mc1 with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__111) -> (B_dData_dMaybe.C_Maybe_Just ((mc0 dtb__111)))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__115) -> (B_dData_dMaybe.C_Maybe_Just ((mc0 dtb__115)))
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 117 "Vuna/Compiler/Frontend/Rast/Bridge.vuna"
+# 121 "Vuna/Compiler/Frontend/Rast/Bridge.vuna"
 let v_toAstTraitParam = (fun (mc0 : Frontend_dRast.t_TraitParam) -> (match mc0 with
-  | { Frontend_dRast.f_TraitParam_traitParamName = dtb__112; Frontend_dRast.f_TraitParam_traitParamKind = dtb__113 } -> { Frontend_dAst.f_TraitParam_traitParamName = dtb__112; Frontend_dAst.f_TraitParam_traitParamKind = ((v_maybeMap v_toAstExpr) dtb__113) }
+  | { Frontend_dRast.f_TraitParam_traitParamName = dtb__116; Frontend_dRast.f_TraitParam_traitParamKind = dtb__117 } -> { Frontend_dAst.f_TraitParam_traitParamName = dtb__116; Frontend_dAst.f_TraitParam_traitParamKind = ((v_maybeMap v_toAstExpr) dtb__117) }
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 92 "Vuna/Compiler/Frontend/Rast/Bridge.vuna"
+# 96 "Vuna/Compiler/Frontend/Rast/Bridge.vuna"
 let rec v_toAstDecl = (fun (mc0 : Frontend_dRast.t_Decl) -> (match mc0 with
-  | Frontend_dRast.C_Decl_DInstance (dtb__114, dtb__115, dtb__116, dtb__117) -> (Frontend_dAst.C_Decl_DInstance (((B_dData_dList.v_map v_toAstExpr) dtb__114), (v_toAstExpr dtb__115), ((B_dData_dList.v_map v_toAstDecl) dtb__116), dtb__117))
-  | Frontend_dRast.C_Decl_DTrait (dtb__118, dtb__119, dtb__120, dtb__121, dtb__122) -> (Frontend_dAst.C_Decl_DTrait (dtb__118, ((B_dData_dList.v_map v_toAstTraitParam) dtb__119), ((B_dData_dList.v_map v_toAstExpr) dtb__120), ((B_dData_dList.v_map v_toAstTraitMethod) dtb__121), dtb__122))
-  | Frontend_dRast.C_Decl_DRecord (dtb__123, dtb__124, dtb__125, dtb__126, dtb__127, dtb__128, dtb__129, dtb__130) -> (Frontend_dAst.C_Decl_DRecord (dtb__123, dtb__124, ((B_dData_dList.v_map v_toAstField) dtb__125), dtb__126, dtb__127, dtb__128, dtb__129, dtb__130))
-  | Frontend_dRast.C_Decl_DFun (dtb__131, dtb__132, dtb__133, dtb__134) -> (Frontend_dAst.C_Decl_DFun (dtb__131, ((B_dData_dList.v_map v_toAstPat) dtb__132), (v_toAstExpr dtb__133), dtb__134))
-  | Frontend_dRast.C_Decl_DSig (dtb__135, dtb__136, dtb__137, dtb__138) -> (Frontend_dAst.C_Decl_DSig (dtb__135, ((B_dData_dList.v_map v_toAstExpr) dtb__136), (v_toAstExpr dtb__137), dtb__138))
-  | Frontend_dRast.C_Decl_DExtern (dtb__139, dtb__140, dtb__141, dtb__142) -> (Frontend_dAst.C_Decl_DExtern (dtb__139, dtb__140, (v_toAstExpr dtb__141), dtb__142))
-  | Frontend_dRast.C_Decl_DAxiom (dtb__143, dtb__144, dtb__145) -> (Frontend_dAst.C_Decl_DAxiom (dtb__143, (v_toAstExpr dtb__144), dtb__145))
-  | Frontend_dRast.C_Decl_DData (dtb__146, dtb__147, dtb__148, dtb__149, dtb__150, dtb__151, dtb__152, dtb__153, dtb__154) -> (Frontend_dAst.C_Decl_DData (dtb__146, dtb__147, (v_toAstExpr dtb__148), ((B_dData_dList.v_map v_toAstCtor) dtb__149), dtb__150, dtb__151, dtb__152, dtb__153, dtb__154))
+  | Frontend_dRast.C_Decl_DInstance (dtb__118, dtb__119, dtb__120, dtb__121) -> (Frontend_dAst.C_Decl_DInstance (((B_dData_dList.v_map v_toAstExpr) dtb__118), (v_toAstExpr dtb__119), ((B_dData_dList.v_map v_toAstDecl) dtb__120), dtb__121))
+  | Frontend_dRast.C_Decl_DTrait (dtb__122, dtb__123, dtb__124, dtb__125, dtb__126) -> (Frontend_dAst.C_Decl_DTrait (dtb__122, ((B_dData_dList.v_map v_toAstTraitParam) dtb__123), ((B_dData_dList.v_map v_toAstExpr) dtb__124), ((B_dData_dList.v_map v_toAstTraitMethod) dtb__125), dtb__126))
+  | Frontend_dRast.C_Decl_DRecord (dtb__127, dtb__128, dtb__129, dtb__130, dtb__131, dtb__132, dtb__133, dtb__134) -> (Frontend_dAst.C_Decl_DRecord (dtb__127, dtb__128, ((B_dData_dList.v_map v_toAstField) dtb__129), dtb__130, dtb__131, dtb__132, dtb__133, dtb__134))
+  | Frontend_dRast.C_Decl_DFun (dtb__135, dtb__136, dtb__137, dtb__138) -> (Frontend_dAst.C_Decl_DFun (dtb__135, ((B_dData_dList.v_map v_toAstPat) dtb__136), (v_toAstExpr dtb__137), dtb__138))
+  | Frontend_dRast.C_Decl_DSig (dtb__139, dtb__140, dtb__141, dtb__142) -> (Frontend_dAst.C_Decl_DSig (dtb__139, ((B_dData_dList.v_map v_toAstExpr) dtb__140), (v_toAstExpr dtb__141), dtb__142))
+  | Frontend_dRast.C_Decl_DExtern (dtb__143, dtb__144, dtb__145, dtb__146) -> (Frontend_dAst.C_Decl_DExtern (dtb__143, dtb__144, (v_toAstExpr dtb__145), dtb__146))
+  | Frontend_dRast.C_Decl_DAxiom (dtb__147, dtb__148, dtb__149) -> (Frontend_dAst.C_Decl_DAxiom (dtb__147, (v_toAstExpr dtb__148), dtb__149))
+  | Frontend_dRast.C_Decl_DData (dtb__150, dtb__151, dtb__152, dtb__153, dtb__154, dtb__155, dtb__156, dtb__157, dtb__158) -> (Frontend_dAst.C_Decl_DData (dtb__150, dtb__151, (v_toAstExpr dtb__152), ((B_dData_dList.v_map v_toAstCtor) dtb__153), dtb__154, dtb__155, dtb__156, dtb__157, dtb__158))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 89 "Vuna/Compiler/Frontend/Rast/Bridge.vuna"
+# 93 "Vuna/Compiler/Frontend/Rast/Bridge.vuna"
 let v_toAstDecls = (fun (decls : Frontend_dRast.t_Decl B_dData_dList.t_List) -> ((B_dData_dList.v_map v_toAstDecl) decls))
 
-# 128 "Vuna/Compiler/Frontend/Rast/Bridge.vuna"
+# 132 "Vuna/Compiler/Frontend/Rast/Bridge.vuna"
 let rec v_toRastPat = (fun (mc0 : Frontend_dAst.t_Pat) -> (match mc0 with
-  | Frontend_dAst.C_Pat_PRecord (dtb__155, dtb__156, dtb__157) -> (Frontend_dRast.C_Pat_PRecord ((Frontend_dRast_dName.v_classifyName dtb__155), ((B_dData_dList.v_map v_toRastPatField) dtb__156), dtb__157))
-  | Frontend_dAst.C_Pat_PStr (dtb__158, dtb__159) -> (Frontend_dRast.C_Pat_PStr (dtb__158, dtb__159))
-  | Frontend_dAst.C_Pat_PInt (dtb__160, dtb__161) -> (Frontend_dRast.C_Pat_PInt (dtb__160, dtb__161))
-  | Frontend_dAst.C_Pat_PCon (dtb__162, dtb__163, dtb__164) -> (Frontend_dRast.C_Pat_PCon ((Frontend_dRast_dName.v_classifyName dtb__162), ((B_dData_dList.v_map v_toRastPat) dtb__163), dtb__164))
-  | Frontend_dAst.C_Pat_PWild (dtb__165) -> (Frontend_dRast.C_Pat_PWild (dtb__165))
-  | Frontend_dAst.C_Pat_PAs (dtb__166, dtb__167, dtb__168) -> (Frontend_dRast.C_Pat_PAs (dtb__166, (v_toRastPat dtb__167), dtb__168))
-  | Frontend_dAst.C_Pat_PVar (dtb__169, dtb__170) -> (Frontend_dRast.C_Pat_PVar (dtb__169, dtb__170))
+  | Frontend_dAst.C_Pat_PRecord (dtb__159, dtb__160, dtb__161) -> (Frontend_dRast.C_Pat_PRecord ((Frontend_dRast_dName.v_classifyName dtb__159), ((B_dData_dList.v_map v_toRastPatField) dtb__160), dtb__161))
+  | Frontend_dAst.C_Pat_PStr (dtb__162, dtb__163) -> (Frontend_dRast.C_Pat_PStr (dtb__162, dtb__163))
+  | Frontend_dAst.C_Pat_PInt (dtb__164, dtb__165) -> (Frontend_dRast.C_Pat_PInt (dtb__164, dtb__165))
+  | Frontend_dAst.C_Pat_PCon (dtb__166, dtb__167, dtb__168) -> (Frontend_dRast.C_Pat_PCon ((Frontend_dRast_dName.v_classifyName dtb__166), ((B_dData_dList.v_map v_toRastPat) dtb__167), dtb__168))
+  | Frontend_dAst.C_Pat_PWild (dtb__169) -> (Frontend_dRast.C_Pat_PWild (dtb__169))
+  | Frontend_dAst.C_Pat_PAs (dtb__170, dtb__171, dtb__172) -> (Frontend_dRast.C_Pat_PAs (dtb__170, (v_toRastPat dtb__171), dtb__172))
+  | Frontend_dAst.C_Pat_PVar (dtb__173, dtb__174) -> (Frontend_dRast.C_Pat_PVar (dtb__173, dtb__174))
   | _ -> failwith "DT: impossible branch"
 ))
-# 138 "Vuna/Compiler/Frontend/Rast/Bridge.vuna"
+# 142 "Vuna/Compiler/Frontend/Rast/Bridge.vuna"
 and v_toRastPatField = (fun (mc0 : (string, Frontend_dAst.t_Pat) B_dData_dPair.t_Pair) -> (match mc0 with
-  | { B_dData_dPair.f_Pair_first = dtb__171; B_dData_dPair.f_Pair_second = dtb__172 } -> { B_dData_dPair.f_Pair_first = dtb__171; B_dData_dPair.f_Pair_second = (v_toRastPat dtb__172) }
+  | { B_dData_dPair.f_Pair_first = dtb__175; B_dData_dPair.f_Pair_second = dtb__176 } -> { B_dData_dPair.f_Pair_first = dtb__175; B_dData_dPair.f_Pair_second = (v_toRastPat dtb__176) }
   | _ -> failwith "DT: impossible branch"
 ))

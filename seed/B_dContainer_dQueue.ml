@@ -40,51 +40,51 @@ let rec v_pushAll = (fun mc0 mc1 -> (match mc0 with
 # 59 "Base/Container/Queue.vuna"
 let v_pop = (fun mc0 -> (match mc0 with
   | { f_Queue_queueFront = dtb__9; f_Queue_queueBack = dtb__10; f_Queue_queueCount = dtb__11 } -> (match dtb__9 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__12, dtb__13) -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = dtb__12; B_dData_dPair.f_Pair_second = { f_Queue_queueFront = dtb__13; f_Queue_queueBack = dtb__10; f_Queue_queueCount = (dtb__11 - 1) } }))
   | B_dData_dList.C_List_Nil -> (match (B_dData_dList.v_reverse dtb__10) with
   | B_dData_dList.C_List_Nil -> B_dData_dMaybe.C_Maybe_Nothing
-  | B_dData_dList.C_List__x58__x58_ (dtb__14, dtb__15) -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = dtb__14; B_dData_dPair.f_Pair_second = { f_Queue_queueFront = dtb__15; f_Queue_queueBack = B_dData_dList.C_List_Nil; f_Queue_queueCount = (dtb__11 - 1) } }))
+  | B_dData_dList.C_List__x58__x58_ (dtb__12, dtb__13) -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = dtb__12; B_dData_dPair.f_Pair_second = { f_Queue_queueFront = dtb__13; f_Queue_queueBack = B_dData_dList.C_List_Nil; f_Queue_queueCount = (dtb__11 - 1) } }))
   | _ -> failwith "DT: impossible branch"
 )
+  | B_dData_dList.C_List__x58__x58_ (dtb__14, dtb__15) -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = dtb__14; B_dData_dPair.f_Pair_second = { f_Queue_queueFront = dtb__15; f_Queue_queueBack = dtb__10; f_Queue_queueCount = (dtb__11 - 1) } }))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 69 "Base/Container/Queue.vuna"
+# 67 "Base/Container/Queue.vuna"
 let v_peek = (fun mc0 -> (match mc0 with
   | { f_Queue_queueFront = dtb__16; f_Queue_queueBack = dtb__17; f_Queue_queueCount = dtb__18 } -> (match dtb__16 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__19, dtb__20) -> (B_dData_dMaybe.C_Maybe_Just (dtb__19))
   | B_dData_dList.C_List_Nil -> (match (B_dData_dList.v_reverse dtb__17) with
   | B_dData_dList.C_List_Nil -> B_dData_dMaybe.C_Maybe_Nothing
+  | B_dData_dList.C_List__x58__x58_ (dtb__19, dtb__20) -> (B_dData_dMaybe.C_Maybe_Just (dtb__19))
+  | _ -> failwith "DT: impossible branch"
+)
   | B_dData_dList.C_List__x58__x58_ (dtb__21, dtb__22) -> (B_dData_dMaybe.C_Maybe_Just (dtb__21))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
-)
-  | _ -> failwith "DT: impossible branch"
 ))
 
-# 79 "Base/Container/Queue.vuna"
+# 75 "Base/Container/Queue.vuna"
 let v_isEmpty = (fun mc0 -> (match mc0 with
   | { f_Queue_queueFront = dtb__23; f_Queue_queueBack = dtb__24; f_Queue_queueCount = dtb__25 } -> (dtb__25 = 0)
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 83 "Base/Container/Queue.vuna"
+# 79 "Base/Container/Queue.vuna"
 let v_size = (fun mc0 -> (match mc0 with
   | { f_Queue_queueFront = dtb__26; f_Queue_queueBack = dtb__27; f_Queue_queueCount = dtb__28 } -> (bi_natFromInt dtb__28)
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 87 "Base/Container/Queue.vuna"
+# 83 "Base/Container/Queue.vuna"
 let v_fromList = (fun xs -> { f_Queue_queueFront = xs; f_Queue_queueBack = B_dData_dList.C_List_Nil; f_Queue_queueCount = (v_lenInt xs) })
 
-# 91 "Base/Container/Queue.vuna"
+# 87 "Base/Container/Queue.vuna"
 let v_toList = (fun mc0 -> (match mc0 with
   | { f_Queue_queueFront = dtb__29; f_Queue_queueBack = dtb__30; f_Queue_queueCount = dtb__31 } -> ((v_appendLists dtb__29) (B_dData_dList.v_reverse dtb__30))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 94 "Base/Container/Queue.vuna"
-let v_Show_uBase_uContainer_uQueue_uQueue_ua = (fun _uctx0 -> (B_dTrait_dShow.C_Show_Show ((fun q -> ("fromList " ^ ((B_dTrait_dShow.v_show (B_dData_dList.v_Show_uBase_uData_uList_uList_ua _uctx0)) (v_toList q)))))))
+# 90 "Base/Container/Queue.vuna"
+let v_Show_u0077d73cf424e521_uBase_x36_46_x36_Container_x36_46_x36_Queue_x36_46_x36_Queue_ua = (fun _uctx0 -> (B_dTrait_dShow.C_Show_Show ((fun q -> ("fromList " ^ ((B_dTrait_dShow.v_show (B_dData_dList.v_Show_u0077d73cf424e521_uBase_x36_46_x36_Data_x36_46_x36_List_x36_46_x36_List_ua _uctx0)) (v_toList q)))))))

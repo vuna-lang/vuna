@@ -184,7 +184,7 @@ and v_unifyIdx = (fun (ec : Elab_dTypes.t_Ec) (acc : (int, Core_dTerm.t_Value) B
 # 215 "Vuna/Compiler/Elab/Case.vuna"
 and v_unifyIdxRigid = (fun (ec : Elab_dTypes.t_Ec) (acc : (int, Core_dTerm.t_Value) B_dData_dPair.t_Pair B_dData_dList.t_List) (depth : int) (fuel : int) (a : Core_dTerm.t_Value) (b : Core_dTerm.t_Value) -> (if (fuel <= 0) then v_unifyErr else (let nd_uscrut6 = a in (match nd_uscrut6 with
   | Core_dTerm.C_Value_VBool (dtb__98) -> (match b with
-  | Core_dTerm.C_Value_VBool (dtb__99) -> (if (((B_dTrait_dEq.v__x61__x61_ B_dTrait_dEq.v_Eq_uBase_uData_uBool_uBool) dtb__98) dtb__99) then (Base_dDiag.C_Check_OkC (acc)) else v_unifyErr)
+  | Core_dTerm.C_Value_VBool (dtb__99) -> (if (((B_dTrait_dEq.v__x61__x61_ B_dTrait_dEq.v_Eq_u018fc178ff3df1b4_uBase_x36_46_x36_Data_x36_46_x36_Bool_x36_46_x36_Bool) dtb__98) dtb__99) then (Base_dDiag.C_Check_OkC (acc)) else v_unifyErr)
   | _ -> v_unifyErr
 )
   | Core_dTerm.C_Value_VFloat (dtb__100) -> (match b with

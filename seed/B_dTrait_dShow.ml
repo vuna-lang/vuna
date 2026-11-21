@@ -3,7 +3,7 @@ type 'a0 t_Show = C_Show_Show of (('a0) -> string)
 and 'a0 t_DebugShow = C_DebugShow_DebugShow of (('a0) -> string)
 
 # 14 "Base/Trait/Show.vuna"
-let v_Show_uString = (C_Show_Show ((fun s -> (dt_show_string s))))
+let v_Show_u0077d73cf424e521_uString = (C_Show_Show ((fun s -> (dt_show_string s))))
 
 # 11 "Base/Trait/Show.vuna"
 let v_show = (fun _ud x0 -> (match _ud with
@@ -12,7 +12,7 @@ let v_show = (fun _ud x0 -> (match _ud with
 ))
 
 # 24 "Base/Trait/Show.vuna"
-let v_DebugShow_ua = (fun _uctx0 -> (C_DebugShow_DebugShow ((fun x -> ((v_show _uctx0) x)))))
+let v_DebugShow_ub9614133c0738231_ua = (fun _uctx0 -> (C_DebugShow_DebugShow ((fun x -> ((v_show _uctx0) x)))))
 
 # 21 "Base/Trait/Show.vuna"
 let v_debugShow = (fun _ud x0 -> (match _ud with
