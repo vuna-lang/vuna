@@ -494,6 +494,20 @@ run: sh -c 'VUNA_NATIVE_GC_STRESS=1 "$TMPDIR/tcostatic-out/bin/tcostatic" 2>&1'
 exit: 0
 out-equals: 0
 
+# 9am) 零参别名直调：`Nat.plus` / `Nat.mult` / `Nat.toInt` 这类 η-收缩定义在调用点
+# 解析到运行时叶子，不再把 CAF 闭包交给 `rt_apply`；饱和叶子直调（或标量内联）。
+run: sh -c 'd="$TMPDIR/alias"; mkdir -p "$d/app"; printf "[package]\nname = \"alias\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Data.Nat as Nat\n\nmain : Int\nmain =\n  let\n    a = Nat.fromInt 800000\n  in Nat.toInt (Nat.plus (Nat.fromInt 1) (Nat.mult a (Nat.fromInt 2)))\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/alias-out" "$d"'
+exit: 0
+run: "$TMPDIR/alias-out/bin/alias" 2>&1
+exit: 0
+out-equals: 1600001
+run: sh -c 'grep -q "call rt_nat_add" "$TMPDIR/alias-out/Main.s"'
+exit: 0
+run: sh -c 'grep -q "rt_nat_to_int" "$TMPDIR/alias-out/Main.s"'
+exit: 0
+run: sh -c '! grep -q "call rt_apply" "$TMPDIR/alias-out/Main.s"'
+exit: 0
+
 # 11) 文件集按模块切分：改一个模块只重写该模块的 `.s`，其它模块与 runtime 逐字节不变。
 run: sh -c 'd="$TMPDIR/loc"; mkdir -p "$d/app" "$d/lib"; printf "[package]\nname = \"loc\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "module Util where\n\nexport answer : Int\nanswer = 41\n" > "$d/lib/Util.vuna"; printf "import Util\n\nmain : Int\nmain = answer + 1\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --no-compile --out "$TMPDIR/loc-a" "$d"'
 exit: 0
