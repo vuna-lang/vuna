@@ -186,6 +186,33 @@ id 只需沿作用域链唯一，不同定义 / 单元可复用。Pass 里的合
 类型声明侧仍在 `Lowering.Ty`（字段类型与 arity 需要 Elab 的 telescope 信息），
 因此这一步只动项、不碰声明；产物与 pass 之前逐字节一致。
 
+## 运行时 kind（`Vuna.Ir.Kinds`）
+
+IR 的类型槽是选择性填充的，因此「这条 binder / 这个值位置落在哪种机器表示」需要一层
+显式判据。`Ir.Kinds` 是**唯一**的一份：
+
+| 判据 | 入口 | 说明 |
+| --- | --- | --- |
+| 运行时类型 → kind | `irKindOfTy` | 走 `IrTy`；`IrTyData` 落在去装箱族时按保留字段继续递归 |
+| 运行时符号 → 结果 kind | `irRtKind` / `irRtKindToValue` | 符号名只说「调什么」，这张表补「回什么」（契约缺的那一列） |
+| 值位置 → kind | `irKindOfValue` | 读节点自带类型槽；`IrVar` 缺类型时回落到 binder 环境 |
+| binder → kind | `irBinderKind` | 声明类型优先，缺类型时用绑定点的推断值 |
+| case 分支 binder → kind | `irAltBinderKindFallback` | 按构造子字段类型（代入 scrutinee 的运行时类型实参） |
+
+kind 是**目标中立**的：`KInt` / `KFloat` / `KBool` / `KStr` / `KRef`，加四个互不合并的
+未知类——`KOpaque`（`IrTyOpaque`）、`KMissing`（类型槽缺失且推不出来）、`KVar`（类型参数
+或结果随实参而定的符号）、`KSymbol`（符号没登记结果 kind）。合并它们会把「缺类型」误记成
+「不可命名」，而 native 的换根集评估正需要这个区分。
+
+`irKindIsScalar` 只认 `KInt` / `KBool`：**Float 不在其中**——native 把 Float 装箱在堆上，
+wasm 用原始 `f64`，这是各后端的表示决策，不写进共享判据。native 侧由
+`Target.Native.Repr` 的 `nClsOfKind` 把 kind 映成自己的槽分类（`KFloat` → `Ptr`），并把
+「`IrRt sym` 作为值是 `.rodata` 静态闭包」这条 native 独有的事实留在 `nValueCls`。
+
+消费方：native 的槽 kind 表（GC 栈图输入）、wasm 的 local 值类型选择、以及
+`vuna dev ir dump --after repr|repr-cps` 的槽 kind 统计（[performance.md](performance.md)
+「槽 kind 分布」）。
+
 
 ## 尾位置标记（`Vuna.Ir.Tail`）
 

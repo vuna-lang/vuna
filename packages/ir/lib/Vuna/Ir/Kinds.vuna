@@ -1,0 +1,431 @@
+module Vuna.Ir.Kinds where
+
+-- Vuna.Ir.Kinds：IR 值的**运行时 kind**（表示层分类的唯一真源）。
+--
+-- 为什么在这里：擦除后 IR 只保证「运行时类型槽可能缺失」，而「这个 binder / 这个值位置
+-- 落在哪种机器表示」是三个后端都要回答的问题：
+--   * native 给 GC 栈图登记槽 kind（`Target.Native.Repr` 原本自带一份同名表）；
+--   * wasm 按 kind 选 local 的值类型（`i64` / `i31` / `anyref`）；
+--   * `vuna dev ir dump --after repr|repr-cps` 报槽 kind 分布（D125 的输入）。
+-- 三份各写一份必然漂移（跨层根因「多真源手工同步」），所以判据只留这里一份。
+--
+-- kind 是**目标中立**的：它只说「这是整数 / 浮点 / 布尔 / 字符串 / 堆引用」，
+-- 不说「放寄存器还是 i64 槽」。各后端把 kind 映到自己的表示；`Ir.Represent` 仍只管
+-- 族级擦除（三端共享），标量去箱化属各后端 codegen。
+--
+-- 四个「不知道」互相独立，不能合并（合并会把「缺类型」误记成「不可命名」）：
+--   * `KOpaque`：类型是 `IrTyOpaque`——擦除后运行时不值可命名；
+--   * `KMissing`：类型槽缺失，绑定点也推不出来；
+--   * `KVar`：类型参数槽，或结果 kind 随实参 / 元素而定的运行时符号；
+--   * `KSymbol`：运行时符号的结果 kind 没有登记（契约缺一条表示字段）。
+--
+-- 边界：本模块只 import `Ir.Model` 与 `Ir.Layout`；不 import Core / Elab / Intrinsics，
+-- 也不 import 任何后端。纯函数、确定性、无 fuel 预算外的截断。
+import Base.Data.Bool as Bool
+import Base.Data.List as List
+import Base.Data.Maybe as Maybe
+import Base.Data.Pair as Pair
+import Vuna.Ir.Model
+import Vuna.Ir.Layout as Layout
+
+-- ---------------------------------------------------------------
+-- 值的 kind
+-- ---------------------------------------------------------------
+-- | 一个值 / 一个 binder 槽的运行时 kind。
+export data IrKind(..) : Type where
+  -- | 未装箱整数（Int 与 Nat 同表示，含 63 位语义）。
+  KInt : IrKind
+  -- | 原始浮点（不是堆上的 Float 叶子；native 仍装箱，wasm 用 `f64`）。
+  KFloat : IrKind
+  -- | 未装箱布尔。
+  KBool : IrKind
+  -- | 字符串（堆值）。
+  KStr : IrKind
+  -- | 其它堆引用：data / record / array / IORef / 闭包。
+  KRef : IrKind
+  -- | `IrTyOpaque`：擦除后不可命名的值。
+  KOpaque : IrKind
+  -- | 类型槽缺失，且绑定点也推不出来。
+  KMissing : IrKind
+  -- | 类型参数槽，或结果 kind 随实参 / 元素而定的符号。
+  KVar : IrKind
+  -- | 运行时符号的结果 kind 没有登记。
+  KSymbol : IrKind
+
+export irKindText : IrKind -> String
+irKindText KInt = "int"
+irKindText KFloat = "float"
+irKindText KBool = "bool"
+irKindText KStr = "str"
+irKindText KRef = "ref"
+irKindText KOpaque = "unknown:opaque"
+irKindText KMissing = "unknown:missing"
+irKindText KVar = "unknown:var"
+irKindText KSymbol = "unknown:symbol"
+
+-- | 所有后端都按未装箱标量表示、不进堆的 kind（`KInt` / `KBool`）。
+--   `KFloat` 不在这里：native 目前把 Float 装箱在堆上，wasm 用原始 `f64`——是各后端
+--   自己的表示决策，不能写进共享判据。
+export irKindIsScalar : IrKind -> Bool
+irKindIsScalar KInt = True
+irKindIsScalar KBool = True
+irKindIsScalar _ = False
+
+-- | 数值族（整数 / 浮点 / 布尔）：语义上可参与算术与比较。
+export irKindIsNumeric : IrKind -> Bool
+irKindIsNumeric KInt = True
+irKindIsNumeric KFloat = True
+irKindIsNumeric KBool = True
+irKindIsNumeric _ = False
+
+-- | 是否是**确定**的 kind（不是四个未知类）。
+export irKindIsKnown : IrKind -> Bool
+irKindIsKnown KInt = True
+irKindIsKnown KFloat = True
+irKindIsKnown KBool = True
+irKindIsKnown KStr = True
+irKindIsKnown KRef = True
+irKindIsKnown _ = False
+
+-- | 是否一定是堆值（两端同表示：字符串与引用）。
+export irKindIsHeap : IrKind -> Bool
+irKindIsHeap KStr = True
+irKindIsHeap KRef = True
+irKindIsHeap _ = False
+
+export irKindIsMissing : IrKind -> Bool
+irKindIsMissing KMissing = True
+irKindIsMissing _ = False
+
+-- ---------------------------------------------------------------
+-- 类型 → kind
+-- ---------------------------------------------------------------
+-- | 运行时类型 → kind。`Nothing`（未记录）落 `KMissing`；超深类型按 fuel 收口到
+--   `KMissing`（不是伪造一个确定 kind）。
+export irKindOfTy : List IrTyDecl -> Maybe IrTy -> IrKind
+irKindOfTy decls mty = irKindOfTyFuel 64 decls mty
+
+irKindOfTyFuel : Int -> List IrTyDecl -> Maybe IrTy -> IrKind
+irKindOfTyFuel fuel decls mty =
+  if fuel <= 0 then
+    KMissing
+  else
+    case mty of
+      Nothing => KMissing
+      Just ty => irKindOfTyGo (fuel - 1) decls ty
+
+irKindOfTyGo : Int -> List IrTyDecl -> IrTy -> IrKind
+irKindOfTyGo fuel decls ty =
+  if fuel <= 0 then
+    KMissing
+  else
+    case ty of
+      IrTyInt => KInt
+      IrTyBool => KBool
+      IrTyStr => KStr
+      IrTyFloat => KFloat
+      IrTyArray _ => KRef
+      IrTyRef _ => KRef
+      IrTyFun _ _ => KRef
+      IrTyVar _ => KVar
+      IrTyOpaque => KOpaque
+      -- 去装箱族：运行时就是它唯一保留字段的表示，按字段类型继续判。
+      IrTyData fam args =>
+        case Layout.irDeclOf fam decls of
+          Just (IrUnboxedDecl _ _ fieldTy) => irKindOfTyGo (fuel - 1) decls (irTySubstVars args fieldTy)
+          _ => KRef
+
+-- ---------------------------------------------------------------
+-- 运行时符号 → kind
+-- ---------------------------------------------------------------
+-- | 运行时符号的结果 kind：符号名只说了「调什么」，没说「回什么」，这张表补后半句。
+--
+-- `RtKUnit` 与 `RtKInt` 在表示上同档（都不分配），但分开记录：效应原语的状态返回
+-- 在 Vuna 侧是 unit / Nat 状态，不是参与算术的 Int；合并会让「这个值能不能进整数
+-- 运算」的判断失去依据。
+export data IrRtKind(..) : Type where
+  -- | 未装箱整数（含 Nat）。
+  RtKInt : IrRtKind
+  -- | 效应原语的状态 / unit 返回（表示上与 `RtKInt` 同档）。
+  RtKUnit : IrRtKind
+  -- | 未装箱布尔（比较类内建的 0/1）。
+  RtKBool : IrRtKind
+  -- | 原始浮点。
+  RtKFloat : IrRtKind
+  -- | 堆引用（字符串 / 数组 / 引用 / 动作 / 闭包）。
+  RtKRef : IrRtKind
+  -- | 结果 kind 取决于实参或元素类型（泛型读取 / 擦除包装 / 观测）。
+  RtKDependent : IrRtKind
+  -- | 没有登记结果 kind。
+  RtKUnknown : IrRtKind
+
+export irRtKindText : IrRtKind -> String
+irRtKindText RtKInt = "int"
+irRtKindText RtKUnit = "unit"
+irRtKindText RtKBool = "bool"
+irRtKindText RtKFloat = "float"
+irRtKindText RtKRef = "ref"
+irRtKindText RtKDependent = "unknown:var"
+irRtKindText RtKUnknown = "unknown:symbol"
+
+-- | 运行时符号的结果 kind → 值 kind（后端按统一口径选表示用）。
+export irRtKindToValue : IrRtKind -> IrKind
+irRtKindToValue RtKInt = KInt
+irRtKindToValue RtKUnit = KInt
+irRtKindToValue RtKBool = KBool
+irRtKindToValue RtKFloat = KFloat
+irRtKindToValue RtKRef = KRef
+irRtKindToValue RtKDependent = KVar
+irRtKindToValue RtKUnknown = KSymbol
+
+-- | 符号名 → 结果 kind。未登记的名字落 `RtKUnknown`（契约表要补那一列）。
+export irRtKind : String -> IrRtKind
+irRtKind sym =
+  if rtKindIsInt sym then
+    RtKInt
+  else if rtKindIsBool sym then
+    RtKBool
+  else if rtKindIsFloat sym then
+    RtKFloat
+  else if rtKindIsUnit sym then
+    RtKUnit
+  else if rtKindIsRef sym then
+    RtKRef
+  else if rtKindIsDependent sym then RtKDependent else RtKUnknown
+
+-- 结果是整数（含 Nat 与可观测性计数）。
+rtKindIsInt : String -> Bool
+rtKindIsInt "+" = True
+rtKindIsInt "-" = True
+rtKindIsInt "*" = True
+rtKindIsInt "/" = True
+rtKindIsInt "bitAnd" = True
+rtKindIsInt "bitOr" = True
+rtKindIsInt "bitXor" = True
+rtKindIsInt "bitNot" = True
+rtKindIsInt "bitShl" = True
+rtKindIsInt "bitShr" = True
+rtKindIsInt "strLength" = True
+rtKindIsInt "strAt" = True
+rtKindIsInt "strHash" = True
+rtKindIsInt "effectId" = True
+rtKindIsInt "effTimeUs" = True
+rtKindIsInt "effTimeUs_host" = True
+rtKindIsInt "intFromFloat" = True
+rtKindIsInt "arrayLength" = True
+rtKindIsInt "natAdd" = True
+rtKindIsInt "natSub" = True
+rtKindIsInt "natMul" = True
+rtKindIsInt "natDiv" = True
+rtKindIsInt "natToInt" = True
+rtKindIsInt "natFromInt" = True
+rtKindIsInt "@ir@natSucc" = True
+rtKindIsInt "@vuna@debug@line" = True
+rtKindIsInt "@vuna@obs@level" = True
+rtKindIsInt "@vuna@obs@log" = True
+rtKindIsInt "@vuna@obs@counter" = True
+rtKindIsInt "@vuna@obs@mark" = True
+rtKindIsInt "@vuna@obs@spanBegin" = True
+rtKindIsInt "@vuna@obs@spanEnd" = True
+rtKindIsInt "@vuna@obs@sampleStart" = True
+rtKindIsInt "@vuna@obs@sampleStop" = True
+rtKindIsInt _ = False
+
+-- 比较类内建：返回布尔（宿主表示是 0/1）。
+rtKindIsBool : String -> Bool
+rtKindIsBool "bi_eq_int" = True
+rtKindIsBool "bi_neq_int" = True
+rtKindIsBool "bi_lt_int" = True
+rtKindIsBool "bi_le_int" = True
+rtKindIsBool "bi_gt_int" = True
+rtKindIsBool "bi_ge_int" = True
+rtKindIsBool "bi_eq_str" = True
+rtKindIsBool "bi_neq_str" = True
+rtKindIsBool "bi_lt_str" = True
+rtKindIsBool "bi_le_str" = True
+rtKindIsBool "bi_gt_str" = True
+rtKindIsBool "bi_ge_str" = True
+rtKindIsBool "bi_lt_bool" = True
+rtKindIsBool "bi_le_bool" = True
+rtKindIsBool "bi_gt_bool" = True
+rtKindIsBool "bi_ge_bool" = True
+rtKindIsBool "bi_eq_float" = True
+rtKindIsBool "bi_neq_float" = True
+rtKindIsBool "bi_lt_float" = True
+rtKindIsBool "bi_le_float" = True
+rtKindIsBool "bi_gt_float" = True
+rtKindIsBool "bi_ge_float" = True
+rtKindIsBool "&&" = True
+rtKindIsBool "||" = True
+rtKindIsBool "@vuna@debug@on" = True
+rtKindIsBool _ = False
+
+-- 结果是原始浮点（不是堆上的 Float 叶子）。
+rtKindIsFloat : String -> Bool
+rtKindIsFloat "floatFromInt" = True
+rtKindIsFloat "floatAbs" = True
+rtKindIsFloat "floatSqrt" = True
+rtKindIsFloat "bi_add_float" = True
+rtKindIsFloat "bi_sub_float" = True
+rtKindIsFloat "bi_mul_float" = True
+rtKindIsFloat "bi_div_float" = True
+rtKindIsFloat _ = False
+
+-- 效应原语的状态 / unit 返回。
+rtKindIsUnit : String -> Bool
+rtKindIsUnit "prim_eff_print" = True
+rtKindIsUnit "prim_eff_eprint" = True
+rtKindIsUnit "prim_eff_exit" = True
+rtKindIsUnit "prim_eff_sleep" = True
+rtKindIsUnit "prim_eff_writeRef" = True
+rtKindIsUnit "prim_eff_fileMtime" = True
+rtKindIsUnit "prim_eff_fileSize" = True
+rtKindIsUnit "prim_eff_isDirectory" = True
+rtKindIsUnit "prim_eff_fileExists" = True
+rtKindIsUnit "prim_eff_runIn" = True
+rtKindIsUnit "prim_eff_spawn" = True
+rtKindIsUnit "prim_eff_wait" = True
+rtKindIsUnit _ = False
+
+-- 结果是堆值。
+rtKindIsRef : String -> Bool
+rtKindIsRef "++" = True
+rtKindIsRef "strFromInt" = True
+rtKindIsRef "strFromFloat" = True
+rtKindIsRef "strSubstring" = True
+rtKindIsRef "strShow" = True
+rtKindIsRef "strConcatMany" = True
+rtKindIsRef "strPack" = True
+rtKindIsRef "strSubstTemplate" = True
+rtKindIsRef "strUnpack" = True
+rtKindIsRef "@ir@showBool" = True
+rtKindIsRef "@ir@showFloat" = True
+rtKindIsRef "arrayEmpty" = True
+rtKindIsRef "arrayMake" = True
+rtKindIsRef "arraySet" = True
+rtKindIsRef "arrayFromList" = True
+rtKindIsRef "arrayToList" = True
+rtKindIsRef "prim_eff_newRef" = True
+rtKindIsRef "prim_eff_getenv" = True
+rtKindIsRef "prim_eff_getcwd" = True
+rtKindIsRef "prim_eff_execPath" = True
+rtKindIsRef "prim_eff_getArgs" = True
+rtKindIsRef "prim_eff_readFile" = True
+rtKindIsRef "prim_eff_readFileRange" = True
+rtKindIsRef "prim_eff_readDir" = True
+rtKindIsRef "prim_eff_readLine" = True
+rtKindIsRef "prim_eff_readBytes" = True
+rtKindIsRef "@vuna@host@getenv" = True
+rtKindIsRef "@vuna@host@getcwd" = True
+rtKindIsRef "@vuna@host@execPath" = True
+rtKindIsRef "@vuna@host@getArgs" = True
+rtKindIsRef "@vuna@host@readDir" = True
+rtKindIsRef "@vuna@host@readFile" = True
+rtKindIsRef "@vuna@host@readFileRange" = True
+rtKindIsRef "@vuna@host@readLine" = True
+rtKindIsRef "@vuna@host@readBytes" = True
+rtKindIsRef "@ir@m@runEff" = True
+rtKindIsRef _ = False
+
+-- 结果 kind 随实参 / 元素类型而定。
+rtKindIsDependent : String -> Bool
+rtKindIsDependent "assert" = True
+rtKindIsDependent "todo" = True
+rtKindIsDependent "prim_fail" = True
+rtKindIsDependent "prim_erase" = True
+rtKindIsDependent "@vuna@prim@toObj" = True
+rtKindIsDependent "@vuna@prim@fromObj" = True
+rtKindIsDependent "arrayGet" = True
+rtKindIsDependent "prim_eff_readRef" = True
+rtKindIsDependent "@vuna@prim@readRef" = True
+rtKindIsDependent "@vuna@prim@readRef_host" = True
+rtKindIsDependent "@vuna@obs@span" = True
+rtKindIsDependent "@vuna@obs@spanLab" = True
+rtKindIsDependent _ = False
+
+-- ---------------------------------------------------------------
+-- binder / 值位置的 kind
+-- ---------------------------------------------------------------
+-- | binder 的 kind：声明类型优先；缺类型时用绑定点的推断值。
+export irBinderKind : List IrTyDecl -> Maybe IrKind -> IrBinder -> IrKind
+irBinderKind decls fallback b =
+  case irKindOfTy decls b.irBinderTy of
+    KMissing =>
+      case fallback of
+        Just k => k
+        Nothing => KMissing
+    k => k
+
+-- | 按 binder 身份（稳定 id）查环境；名字只是渲染，不承担身份。
+export irKindEnvLookup : Int -> List (Pair Int IrKind) -> Maybe IrKind
+irKindEnvLookup _ [] = Nothing
+irKindEnvLookup id (p :: rest) =
+  if firstOf p == id then Just (secondOf p) else irKindEnvLookup id rest
+
+-- | 一个值位置的 kind。控制构造（`let` / `if` / 尾标记）不产出独立的值，返回 `Nothing`。
+--
+-- `env` 是当前作用域的 binder kind 表；找不到的 binder 落 `KMissing`，不当错误——
+-- CPS 合成的 Lam 形参可能真的没有类型可推（D125）。
+export irKindOfValue : List IrTyDecl -> List IrDef -> List (Pair Int IrKind) -> Ir -> Maybe IrKind
+irKindOfValue decls defs env (IrVar b) =
+  case irKindOfTy decls b.irBinderTy of
+    KMissing =>
+      case irKindEnvLookup b.irBinderId env of
+        Just k => Just k
+        Nothing => Just KMissing
+    k => Just k
+irKindOfValue decls defs env (IrGlobal name) = Just (irKindOfTy decls (irDefTyNamed name defs))
+irKindOfValue decls defs env (IrCtor _ _ _ _) = Just KRef
+irKindOfValue decls defs env (IrRecord _ resTy _) = Just (irKindOfTy decls resTy)
+irKindOfValue decls defs env (IrRecUpd _ _ _ _) = Just KRef
+irKindOfValue decls defs env (IrProj _ _ _ resTy) = Just (irKindOfTy decls resTy)
+-- 运行时符号作为值（`IrRt sym`）是函数值 / 动作值，与它返回什么无关。
+irKindOfValue decls defs env (IrRt _) = Just KRef
+irKindOfValue decls defs env (IrRtApp sym _) = Just (irRtKindToValue (irRtKind sym))
+irKindOfValue decls defs env (IrCast _ to _) = Just (irKindOfTy decls to)
+irKindOfValue decls defs env (IrInt _) = Just KInt
+irKindOfValue decls defs env (IrStr _) = Just KStr
+irKindOfValue decls defs env (IrBool _) = Just KBool
+irKindOfValue decls defs env (IrFloatLit _) = Just KFloat
+irKindOfValue decls defs env (IrLam _ _ _) = Just KRef
+irKindOfValue decls defs env (IrApp appTy _ _) =
+  case appTy of
+    Just p => Just (irKindOfTy decls (Just (secondOf p)))
+    Nothing => Just KMissing
+irKindOfValue decls defs env (IrCase _ resTy _ _) = Just (irKindOfTy decls resTy)
+irKindOfValue decls defs env (IrNatCase _ _ _ _ _) = Just KInt
+irKindOfValue decls defs env (IrConcatMany _) = Just KStr
+irKindOfValue decls defs env (IrEffThunk _ _ _ _ _) = Just KRef
+irKindOfValue decls defs env (IrEffBind _ _ _) = Just KRef
+irKindOfValue decls defs env (IrLet _ _ _) = Nothing
+irKindOfValue decls defs env (IrTail _) = Nothing
+irKindOfValue decls defs env (IrIf _ _ _) = Nothing
+
+irDefTyNamed : String -> List IrDef -> Maybe IrTy
+irDefTyNamed _ [] = Nothing
+irDefTyNamed name (d :: rest) = if irDefName d == name then irDefTy d else irDefTyNamed name rest
+
+-- ---------------------------------------------------------------
+-- case 分支 binder：按构造子字段类型推断
+-- ---------------------------------------------------------------
+-- | 分支 binder 的 kind fallback：有构造子就按字段类型（代入 scrutinee 的运行时类型
+--   实参），否则用 scrutinee 自己的 kind。`idx` 是运行时字段序号（跳过擦除位）。
+export irAltBinderKindFallback : List IrTyDecl -> Maybe IrTy -> Maybe (Pair String String) -> Int -> Maybe IrKind
+irAltBinderKindFallback decls caseTy (Just (Pair fam ctor)) idx =
+  case Layout.irDeclOf fam decls of
+    Just d =>
+      case irTyAt (ctorFieldTysOf d ctor) idx of
+        Just fieldTy =>
+          Just (irKindOfTy decls (Just (irTySubstVars (irTyDataArgsOf caseTy) fieldTy)))
+        Nothing => Just (irKindOfTy decls caseTy)
+    Nothing => Just (irKindOfTy decls caseTy)
+irAltBinderKindFallback decls caseTy Nothing idx = Just (irKindOfTy decls caseTy)
+
+ctorFieldTysOf : IrTyDecl -> String -> List IrTy
+ctorFieldTysOf (IrVariantDecl _ _ ctors) ctor = ctorFieldsIn ctor ctors
+ctorFieldTysOf (IrRecordDecl _ _ _ fields) ctor = fields
+ctorFieldTysOf (IrUnboxedDecl _ _ _) ctor = []
+
+ctorFieldsIn : String -> List (Pair String (List IrTy)) -> List IrTy
+ctorFieldsIn _ [] = []
+ctorFieldsIn ctor (p :: rest) = if firstOf p == ctor then secondOf p else ctorFieldsIn ctor rest

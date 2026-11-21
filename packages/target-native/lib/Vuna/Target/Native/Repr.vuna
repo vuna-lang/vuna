@@ -2,10 +2,14 @@ module Vuna.Target.Native.Repr where
 
 -- 槽与值的运行时 kind 统计（只读分析，不生成代码）。
 --
--- kind 统计（`vuna dev ir dump` 的输入）：这条槽/值是不是堆指针、
--- 是不是只读指针（`.rodata` 静态闭包）、还是未装箱标量。本模块把 binder 与值位置
--- 归到 `Ptr` / `Static` / `Scalar` / `Unknown`，并把 `Unknown` 的来源分开统计
--- （类型变量、`IrTyOpaque`、缺类型、未分类的运行时符号），作为换根集模型的决策输入。
+-- kind 判据（类型 → kind、运行时符号 → 结果 kind、值位置 → kind）在 `Ir.Kinds`：
+-- 同一套判据 wasm 与 `vuna dev ir dump` 也在用，各写一份必然漂移。本模块只做
+-- **native 自己的那一层**：
+--   * 把 `IrKind` 映到本后端的槽分类 `NCls`（native 把 Float 装箱在堆上，所以
+--     `KFloat` 记 `Ptr`；`IrRt sym` 作为值是 `.rodata` 静态闭包，记 `Static`——
+--     这是 native 独有的表示，不写进共享判据）；
+--   * 遍历 IR 统计 binder 槽与值位置，并分开记 `Unknown` 的来源
+--     （类型变量 / `IrTyOpaque` / 缺类型 / 未登记符号），作为换根集模型的决策输入。
 --
 -- 分类先读 binder 自带的类型槽；`Nothing` 时按绑定点的值 kind 推断（`let` 的
 -- scrutinee、`case` 分支 binder 的构造子字段类型、Nat 分支的标量），因此 CPS 合成的
@@ -21,6 +25,7 @@ import Base.Data.Maybe as Maybe
 import Base.Data.Pair as Pair
 import Base.Data.String as String
 import Vuna.Ir.Model
+import Vuna.Ir.Kinds as Kinds
 
 -- ---------------------------------------------------------------
 -- 分类
@@ -130,194 +135,36 @@ nCountsText c =
     ++ ")" ++ " need-clear=" ++ strFromInt (nPct (nNeedClear c) (nTotal c)) ++ "%"
 
 -- ---------------------------------------------------------------
--- 类型 → kind
+-- IrKind → 槽分类（native 的表示差异）
 -- ---------------------------------------------------------------
-nDeclOf : String -> List IrTyDecl -> Maybe IrTyDecl
-nDeclOf _ [] = Nothing
-nDeclOf name (d :: rest) = if nDeclNameOf d == name then Just d else nDeclOf name rest
+-- | `IrKind` → 本后端的槽分类。
+--
+--   * Float 在 native 是堆上的 leaf 对象 → `Ptr`；
+--   * 四个未知类各自保留来源，不能合并（合并会把「缺类型」误记成「不可命名」）。
+nClsOfKind : Kinds.IrKind -> NCls
+nClsOfKind Kinds.KInt = NClsScalar
+nClsOfKind Kinds.KBool = NClsScalar
+nClsOfKind Kinds.KFloat = NClsPtr
+nClsOfKind Kinds.KStr = NClsPtr
+nClsOfKind Kinds.KRef = NClsPtr
+nClsOfKind Kinds.KOpaque = NClsOpaque
+nClsOfKind Kinds.KMissing = NClsMissing
+nClsOfKind Kinds.KVar = NClsVar
+nClsOfKind Kinds.KSymbol = NClsSymbol
 
-nDeclNameOf : IrTyDecl -> String
-nDeclNameOf (IrVariantDecl fam _ _) = fam
-nDeclNameOf (IrRecordDecl fam _ _ _) = fam
-nDeclNameOf (IrUnboxedDecl fam _ _) = fam
-
--- | 运行时类型 → 分类。`Nothing`（未记录）与走不到的深类型都落 `unknown:missing`。
+-- | 运行时类型 → 分类。判据在 `Ir.Kinds`；这里只负责 native 的那一层映射。
 export nKindOfTy : List IrTyDecl -> Maybe IrTy -> NCls
-nKindOfTy decls mty = nKindOfTyFuel 64 decls mty
-
-nKindOfTyFuel : Int -> List IrTyDecl -> Maybe IrTy -> NCls
-nKindOfTyFuel fuel decls mty =
-  if fuel <= 0 then
-    NClsMissing
-  else
-    case mty of
-      Nothing => NClsMissing
-      Just ty => nKindOfTyGo (fuel - 1) decls ty
-
-nKindOfTyGo : Int -> List IrTyDecl -> IrTy -> NCls
-nKindOfTyGo fuel decls ty =
-  if fuel <= 0 then
-    NClsMissing
-  else
-    case ty of
-      IrTyInt => NClsScalar
-      IrTyBool => NClsScalar
-      IrTyStr => NClsPtr
-      IrTyFloat => NClsPtr
-      IrTyArray _ => NClsPtr
-      IrTyRef _ => NClsPtr
-      IrTyFun _ _ => NClsPtr
-      IrTyVar _ => NClsVar
-      IrTyOpaque => NClsOpaque
-      IrTyData fam args =>
-        case nDeclOf fam decls of
-          Just (IrUnboxedDecl _ _ fieldTy) => nKindOfTyGo (fuel - 1) decls (irTySubstVars args fieldTy)
-          _ => NClsPtr
+nKindOfTy decls mty = nClsOfKind (Kinds.irKindOfTy decls mty)
 
 -- ---------------------------------------------------------------
--- 运行时符号 → kind
+-- 运行时符号 → 分类
 -- ---------------------------------------------------------------
--- 只覆盖契约里结果 kind 明确的符号；其余记 `unknown:symbol`——这张表正是
--- `IrRtSym` 缺少的表示契约字段。
+-- | 符号名 → 槽分类。判据在 `Ir.Kinds`（`irRtKind`）；未登记的名字落 `unknown:symbol`。
+--
+--   符号的结果 kind 只说「回什么」，没有说「是不是静态闭包」——`IrRt sym` 作为**值**
+--   是 `.rodata` 里的静态闭包，这一点由 `nValueCls` 直接给 `Static`，不经过这里。
 export nRtCls : String -> NCls
-nRtCls sym =
-  if nRtScalar sym then
-    NClsScalar
-  else if nRtPtr sym then NClsPtr else if nRtUnknown sym then NClsVar else NClsSymbol
-
-nRtScalar : String -> Bool
-nRtScalar "+" = True
-nRtScalar "-" = True
-nRtScalar "*" = True
-nRtScalar "/" = True
-nRtScalar "&&" = True
-nRtScalar "||" = True
-nRtScalar "bitAnd" = True
-nRtScalar "bitOr" = True
-nRtScalar "bitXor" = True
-nRtScalar "bitNot" = True
-nRtScalar "bitShl" = True
-nRtScalar "bitShr" = True
-nRtScalar "assert" = True
-nRtScalar "bi_eq_int" = True
-nRtScalar "bi_neq_int" = True
-nRtScalar "bi_lt_int" = True
-nRtScalar "bi_le_int" = True
-nRtScalar "bi_gt_int" = True
-nRtScalar "bi_ge_int" = True
-nRtScalar "bi_eq_str" = True
-nRtScalar "bi_neq_str" = True
-nRtScalar "bi_lt_str" = True
-nRtScalar "bi_le_str" = True
-nRtScalar "bi_gt_str" = True
-nRtScalar "bi_ge_str" = True
-nRtScalar "bi_lt_bool" = True
-nRtScalar "bi_le_bool" = True
-nRtScalar "bi_gt_bool" = True
-nRtScalar "bi_ge_bool" = True
-nRtScalar "bi_eq_float" = True
-nRtScalar "bi_neq_float" = True
-nRtScalar "bi_lt_float" = True
-nRtScalar "bi_le_float" = True
-nRtScalar "bi_gt_float" = True
-nRtScalar "bi_ge_float" = True
-nRtScalar "natAdd" = True
-nRtScalar "natSub" = True
-nRtScalar "natMul" = True
-nRtScalar "natDiv" = True
-nRtScalar "natToInt" = True
-nRtScalar "natFromInt" = True
-nRtScalar "@ir@natSucc" = True
-nRtScalar "strLength" = True
-nRtScalar "strAt" = True
-nRtScalar "strHash" = True
-nRtScalar "effectId" = True
-nRtScalar "effTimeUs" = True
-nRtScalar "effTimeUs_host" = True
-nRtScalar "intFromFloat" = True
-nRtScalar "arrayLength" = True
-nRtScalar "prim_eff_print" = True
-nRtScalar "prim_eff_eprint" = True
-nRtScalar "prim_eff_exit" = True
-nRtScalar "prim_eff_sleep" = True
-nRtScalar "prim_eff_writeRef" = True
-nRtScalar "prim_eff_fileMtime" = True
-nRtScalar "prim_eff_fileSize" = True
-nRtScalar "prim_eff_isDirectory" = True
-nRtScalar "prim_eff_fileExists" = True
-nRtScalar "prim_eff_runIn" = True
-nRtScalar "prim_eff_spawn" = True
-nRtScalar "prim_eff_wait" = True
-nRtScalar "@vuna@debug@on" = True
-nRtScalar "@vuna@debug@line" = True
-nRtScalar "@vuna@obs@level" = True
-nRtScalar "@vuna@obs@log" = True
-nRtScalar "@vuna@obs@counter" = True
-nRtScalar "@vuna@obs@mark" = True
-nRtScalar "@vuna@obs@spanBegin" = True
-nRtScalar "@vuna@obs@spanEnd" = True
-nRtScalar "@vuna@obs@sampleStart" = True
-nRtScalar "@vuna@obs@sampleStop" = True
-nRtScalar _ = False
-
-nRtPtr : String -> Bool
-nRtPtr "++" = True
-nRtPtr "strFromInt" = True
-nRtPtr "strFromFloat" = True
-nRtPtr "strSubstring" = True
-nRtPtr "strShow" = True
-nRtPtr "strConcatMany" = True
-nRtPtr "strPack" = True
-nRtPtr "strSubstTemplate" = True
-nRtPtr "strUnpack" = True
-nRtPtr "@ir@showBool" = True
-nRtPtr "@ir@showFloat" = True
-nRtPtr "arrayEmpty" = True
-nRtPtr "arrayMake" = True
-nRtPtr "arraySet" = True
-nRtPtr "arrayFromList" = True
-nRtPtr "arrayToList" = True
-nRtPtr "floatFromInt" = True
-nRtPtr "floatAbs" = True
-nRtPtr "floatSqrt" = True
-nRtPtr "bi_add_float" = True
-nRtPtr "bi_sub_float" = True
-nRtPtr "bi_mul_float" = True
-nRtPtr "bi_div_float" = True
-nRtPtr "prim_eff_newRef" = True
-nRtPtr "prim_eff_getenv" = True
-nRtPtr "prim_eff_getcwd" = True
-nRtPtr "prim_eff_execPath" = True
-nRtPtr "prim_eff_getArgs" = True
-nRtPtr "prim_eff_readFile" = True
-nRtPtr "prim_eff_readFileRange" = True
-nRtPtr "prim_eff_readDir" = True
-nRtPtr "prim_eff_readLine" = True
-nRtPtr "prim_eff_readBytes" = True
-nRtPtr "@vuna@host@getenv" = True
-nRtPtr "@vuna@host@getcwd" = True
-nRtPtr "@vuna@host@execPath" = True
-nRtPtr "@vuna@host@getArgs" = True
-nRtPtr "@vuna@host@readDir" = True
-nRtPtr "@vuna@host@readFile" = True
-nRtPtr "@vuna@host@readFileRange" = True
-nRtPtr "@vuna@host@readLine" = True
-nRtPtr "@vuna@host@readBytes" = True
-nRtPtr "@ir@m@runEff" = True
-nRtPtr _ = False
-
--- 结果取决于实参/元素类型的符号：归到「类型层面本就不可判定」。
-nRtUnknown : String -> Bool
-nRtUnknown "prim_erase" = True
-nRtUnknown "@vuna@prim@toObj" = True
-nRtUnknown "@vuna@prim@fromObj" = True
-nRtUnknown "arrayGet" = True
-nRtUnknown "prim_eff_readRef" = True
-nRtUnknown "@vuna@prim@readRef" = True
-nRtUnknown "@vuna@prim@readRef_host" = True
-nRtUnknown "@vuna@obs@span" = True
-nRtUnknown "@vuna@obs@spanLab" = True
-nRtUnknown _ = False
+nRtCls sym = nClsOfKind (Kinds.irRtKindToValue (Kinds.irRtKind sym))
 
 -- ---------------------------------------------------------------
 -- 绑定环境（推断）
@@ -343,6 +190,18 @@ nIsMissing : NCls -> Bool
 nIsMissing NClsMissing = True
 nIsMissing _ = False
 
+-- | 分支 binder 按构造子字段类型入环境（字段下标在运行时字段序上按非擦除位推进）。
+nAltEnvGo : List IrTyDecl -> Maybe IrTy -> Maybe (Pair String String) -> List IrBinder -> Int -> NBind -> NBind
+nAltEnvGo decls _ _ [] _ acc = acc
+nAltEnvGo decls caseTy mctor (b :: rest) idx acc =
+  if b.irBinderErased then
+    nAltEnvGo decls caseTy mctor rest idx acc
+  else
+    let
+      cls = nBinderCls decls (nAltBinderFallback decls caseTy mctor idx) b
+      miss = if nIsMissing cls then acc.nbMissing + 1 else acc.nbMissing
+    in nAltEnvGo decls caseTy mctor rest (idx + 1) (NBind (Pair b cls :: acc.nbEnv) (nBump cls acc.nbCounts) miss)
+
 -- | 把一组 binder 加进环境；返回新环境、这些 binder 的计数（擦除占位不计）
 --   与其中缺 kind 的个数。
 export record NBind(..) where
@@ -367,14 +226,14 @@ nBindAllGo decls (b :: rest) fallback acc =
 -- ---------------------------------------------------------------
 -- 值位置 → 分类
 -- ---------------------------------------------------------------
-nDefTyIn : String -> List IrDef -> Maybe IrTy
-nDefTyIn _ [] = Nothing
-nDefTyIn name (d :: rest) =
-  case d of
-    IrDef nm _ _ ty _ _ _ _ => if nm == name then ty else nDefTyIn name rest
-    IrExternDef nm ty _ _ => if nm == name then Just ty else nDefTyIn name rest
-
 -- | 一个值位置的分类；控制构造（`let` / `if` / 尾标记）不产出独立的值，返回 `Nothing`。
+--
+--   只有两处是 native 独有、不能交给共享判据：
+--   * `IrVar`：作用域环境的哪一条是 `Static`（`.rodata` 静态闭包）只有本后端知道，
+--     且 binder 声明类型优先于环境；
+--   * `IrRt`：运行时符号**作为值**是静态闭包（作为调用目标时它的结果 kind 才走
+--     `nRtCls`）。
+--   其余形状一律以 `Ir.Kinds` 为准（`env` 不传给共享判据：`IrVar` 已被上面拦截）。
 export nValueCls : List IrTyDecl -> List IrDef -> List (Pair IrBinder NCls) -> Ir -> Maybe NCls
 nValueCls decls defs env (IrVar b) =
   case b.irBinderTy of
@@ -383,75 +242,22 @@ nValueCls decls defs env (IrVar b) =
       case nLookupEnv b env of
         Just cls => Just cls
         Nothing => Just NClsMissing
-nValueCls decls defs env (IrGlobal name) = Just (nKindOfTy decls (nDefTyIn name defs))
-nValueCls decls defs env (IrCtor _ _ _ _) = Just NClsPtr
-nValueCls decls defs env (IrRecord _ resTy _) = Just (nKindOfTy decls resTy)
-nValueCls decls defs env (IrRecUpd _ _ _ _) = Just NClsPtr
-nValueCls decls defs env (IrProj _ _ _ resTy) = Just (nKindOfTy decls resTy)
 nValueCls decls defs env (IrRt _) = Just NClsStatic
-nValueCls decls defs env (IrRtApp sym _) = Just (nRtCls sym)
-nValueCls decls defs env (IrCast _ to _) = Just (nKindOfTy decls to)
-nValueCls decls defs env (IrInt _) = Just NClsScalar
-nValueCls decls defs env (IrStr _) = Just NClsPtr
-nValueCls decls defs env (IrBool _) = Just NClsScalar
-nValueCls decls defs env (IrFloatLit _) = Just NClsPtr
-nValueCls decls defs env (IrLam _ _ _) = Just NClsPtr
-nValueCls decls defs env (IrApp appTy _ _) =
-  case appTy of
-    Just p => Just (nKindOfTy decls (Just (secondOf p)))
-    Nothing => Just NClsMissing
-nValueCls decls defs env (IrCase _ resTy _ _) = Just (nKindOfTy decls resTy)
-nValueCls decls defs env (IrNatCase _ _ _ _ _) = Just NClsScalar
-nValueCls decls defs env (IrConcatMany _) = Just NClsPtr
-nValueCls decls defs env (IrEffThunk _ _ _ _ _) = Just NClsPtr
-nValueCls decls defs env (IrEffBind _ _ _) = Just NClsPtr
-nValueCls decls defs env (IrLet _ _ _) = Nothing
-nValueCls decls defs env (IrTail _) = Nothing
-nValueCls decls defs env (IrIf _ _ _) = Nothing
+nValueCls decls defs env ir =
+  case Kinds.irKindOfValue decls defs [] ir of
+    Just k => Just (nClsOfKind k)
+    Nothing => Nothing
 
 -- ---------------------------------------------------------------
 -- case 分支 binder：按构造子字段类型推断
 -- ---------------------------------------------------------------
-nCaseArgsOf : Maybe IrTy -> List IrTy
-nCaseArgsOf (Just (IrTyData _ args)) = args
-nCaseArgsOf _ = []
-
-nCtorFieldTys : String -> String -> List IrTyDecl -> List IrTy
-nCtorFieldTys _ _ [] = []
-nCtorFieldTys fam ctor (d :: rest) =
-  case d of
-    IrVariantDecl f _ ctors =>
-      if f == fam then nCtorFieldTysGo ctor ctors else nCtorFieldTys fam ctor rest
-    IrRecordDecl f _ _ fields => if f == fam then fields else nCtorFieldTys fam ctor rest
-    IrUnboxedDecl _ _ _ => nCtorFieldTys fam ctor rest
-
-nCtorFieldTysGo : String -> List (Pair String (List IrTy)) -> List IrTy
-nCtorFieldTysGo _ [] = []
-nCtorFieldTysGo ctor (p :: rest) =
-  if firstOf p == ctor then secondOf p else nCtorFieldTysGo ctor rest
-
--- | 分支 binder 的 fallback：有构造子就按字段类型（代入 scrutinee 的类型实参），
---   否则用 scrutinee 自己的 kind。
+-- | 分支 binder 的 fallback：字段类型代入 scrutinee 的运行时类型实参（判据在
+--   `Ir.Kinds`；这里只换成 native 的槽分类）。
 nAltBinderFallback : List IrTyDecl -> Maybe IrTy -> Maybe (Pair String String) -> Int -> Maybe NCls
-nAltBinderFallback decls caseTy (Just p) idx =
-  case nDeclOf (firstOf p) decls of
-    Just _ =>
-      case irTyAt (nCtorFieldTys (firstOf p) (secondOf p) decls) idx of
-        Just fieldTy => Just (nKindOfTy decls (Just (irTySubstVars (nCaseArgsOf caseTy) fieldTy)))
-        Nothing => Just (nKindOfTy decls caseTy)
-    Nothing => Just (nKindOfTy decls caseTy)
-nAltBinderFallback decls caseTy Nothing idx = Just (nKindOfTy decls caseTy)
-
-nAltEnvGo : List IrTyDecl -> Maybe IrTy -> Maybe (Pair String String) -> List IrBinder -> Int -> NBind -> NBind
-nAltEnvGo decls caseTy mctor [] _ acc = acc
-nAltEnvGo decls caseTy mctor (b :: rest) idx acc =
-  if b.irBinderErased then
-    nAltEnvGo decls caseTy mctor rest idx acc
-  else
-    let
-      cls = nBinderCls decls (nAltBinderFallback decls caseTy mctor idx) b
-      miss = if nIsMissing cls then acc.nbMissing + 1 else acc.nbMissing
-    in nAltEnvGo decls caseTy mctor rest (idx + 1) (NBind (Pair b cls :: acc.nbEnv) (nBump cls acc.nbCounts) miss)
+nAltBinderFallback decls caseTy mctor idx =
+  case Kinds.irAltBinderKindFallback decls caseTy mctor idx of
+    Just k => Just (nClsOfKind k)
+    Nothing => Nothing
 
 -- ---------------------------------------------------------------
 -- 遍历

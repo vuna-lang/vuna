@@ -1,0 +1,197 @@
+-- Ir.Kinds 的单元测试：kind 判据是共享真源，native / wasm / `ir dump` 都消费它。
+--
+-- 锁住四件事：运行时类型 → kind 的映射（含去装箱族递归与四个未知类的区隔）、
+-- 运行时符号的结果 kind、值位置的 kind（含 binder 环境与绑定点的推断）、
+-- 以及「标量 / 堆 / 已知」三组判据的边界。
+import Base
+import Base.Data.Int as Int
+import Base.Data.List as List
+import Base.Data.String as String
+import Base.Effect.Core
+import Vuna.Ir.Kinds
+import Vuna.Ir.Model
+
+main : Eff [] String
+main =
+  case problems of
+    [] => pure ""
+    ps =>
+      do
+        _ <- prim_eff_print ("ir kinds drifted:\n" ++ join "\n" ps ++ "\n")
+        _ <- prim_eff_exit 1
+        pure ""
+
+problems : List String
+problems =
+  filter
+    (\s => s /= "")
+    (append tyChecks (append rtChecks (append valueChecks (append binderChecks predicateChecks))))
+
+checkKind : String -> IrKind -> Maybe IrKind -> String
+checkKind label want got =
+  case got of
+    Nothing => label ++ ": no kind"
+    Just k =>
+      if irKindText k == irKindText want then
+        ""
+      else
+        label ++ ": want " ++ irKindText want ++ ", got " ++ irKindText k
+
+checkEq : String -> Int -> Int -> String
+checkEq label want got =
+  if want == got then "" else label ++ ": want " ++ strFromInt want ++ ", got " ++ strFromInt got
+
+checkBool : String -> Bool -> Bool -> String
+checkBool label want got =
+  if want == got then "" else label ++ ": want " ++ show want ++ ", got " ++ show got
+
+tyDecls : List IrTyDecl
+tyDecls =
+  [
+    IrUnboxedDecl "BoxInt" 0 IrTyInt,
+    IrUnboxedDecl "BoxFloat" 0 IrTyFloat,
+    IrUnboxedDecl "BoxBox" 1 (IrTyData "BoxInt" []),
+    IrVariantDecl "Option" 1 [Pair "Some" [IrTyVar 0], Pair "None" []],
+    IrRecordDecl "Point" 0 [Pair 0 "x", Pair 1 "y"] [IrTyInt, IrTyInt]
+  ]
+
+tyChecks : List String
+-- 去装箱族套去装箱族：按字段继续递归，不是「看到 IrTyData 就 KRef」。
+tyChecks =
+  [
+    checkKind "int" KInt (Just (irKindOfTy [] (Just IrTyInt))),
+    checkKind "bool" KBool (Just (irKindOfTy [] (Just IrTyBool))),
+    checkKind "str" KStr (Just (irKindOfTy [] (Just IrTyStr))),
+    checkKind "float" KFloat (Just (irKindOfTy [] (Just IrTyFloat))),
+    checkKind "array" KRef (Just (irKindOfTy [] (Just (IrTyArray IrTyInt)))),
+    checkKind "ref" KRef (Just (irKindOfTy [] (Just (IrTyRef IrTyInt)))),
+    checkKind "fun" KRef (Just (irKindOfTy [] (Just (IrTyFun IrTyInt IrTyInt)))),
+    checkKind "tyvar" KVar (Just (irKindOfTy [] (Just (IrTyVar 0)))),
+    checkKind "opaque" KOpaque (Just (irKindOfTy [] (Just IrTyOpaque))),
+    checkKind "missing" KMissing (Just (irKindOfTy [] Nothing)),
+    checkKind "data" KRef (Just (irKindOfTy [] (Just (IrTyData "List" [])))),
+    checkKind "unboxed-int" KInt (Just (irKindOfTy tyDecls (Just (IrTyData "BoxInt" [])))),
+    checkKind "unboxed-float" KFloat (Just (irKindOfTy tyDecls (Just (IrTyData "BoxFloat" [])))),
+    checkKind "unboxed-nested" KInt (Just (irKindOfTy tyDecls (Just (IrTyData "BoxBox" []))))
+  ]
+
+rtChecks : List String
+-- `assert` 返回它第三个实参、`todo` / `prim_fail` 从不返回：结果随实参而定。
+-- 函数值 / 动作值本身是堆引用，与它返回什么无关。
+rtChecks =
+  [
+    checkKind "rt +" KInt (Just (irRtKindToValue (irRtKind "+"))),
+    checkKind "rt &&" KBool (Just (irRtKindToValue (irRtKind "&&"))),
+    checkKind "rt bi_eq_int" KBool (Just (irRtKindToValue (irRtKind "bi_eq_int"))),
+    checkKind "rt natAdd" KInt (Just (irRtKindToValue (irRtKind "natAdd"))),
+    checkKind "rt bi_add_float" KFloat (Just (irRtKindToValue (irRtKind "bi_add_float"))),
+    checkKind "rt floatAbs" KFloat (Just (irRtKindToValue (irRtKind "floatAbs"))),
+    checkKind "rt ++" KRef (Just (irRtKindToValue (irRtKind "++"))),
+    checkKind "rt assert dependent" KVar (Just (irRtKindToValue (irRtKind "assert"))),
+    checkKind "rt arrayGet" KVar (Just (irRtKindToValue (irRtKind "arrayGet"))),
+    checkKind "rt prim_eff_print" KInt (Just (irRtKindToValue (irRtKind "prim_eff_print"))),
+    checkKind "rt unknown" KSymbol (Just (irRtKindToValue (irRtKind "no_such_symbol"))),
+    checkKind "rt value is ref" KRef (irKindOfValue [] [] [] (IrRt "natAdd"))
+  ]
+
+valueChecks : List String
+-- 声明类型优先于环境：typed binder 即使不在 env 里也有 kind。
+-- 控制构造不产出值。
+valueChecks =
+  let
+    env = [Pair 7 KInt, Pair 8 KRef]
+    b7 = mkIrBinder 7 "n"
+    b8 = mkIrBinder 8 "s"
+    defs =
+      [
+        IrDef
+          "f"
+          0
+          []
+          (Just (IrTyFun IrTyInt IrTyInt))
+          (IrLam [] Nothing (IrInt 1))
+          False
+          False
+          Nothing
+      ]
+  in [
+    checkKind "value var from env" KInt (irKindOfValue [] [] env (IrVar b7)),
+    checkKind "value var env ref" KRef (irKindOfValue [] [] env (IrVar b8)),
+    checkKind "value var unknown" KMissing (irKindOfValue [] [] env (IrVar (mkIrBinder 9 "x"))),
+    checkKind
+      "value typed binder"
+      KBool
+      (irKindOfValue [] [] env (IrVar (mkIrBinderTyped 10 "b" IrTyBool))),
+    checkKind "value global" KRef (irKindOfValue [] defs [] (IrGlobal "f")),
+    checkKind "value ctor" KRef (irKindOfValue [] [] [] (IrCtor "Option" "Some" Nothing [])),
+    checkKind "value int lit" KInt (irKindOfValue [] [] [] (IrInt 3)),
+    checkKind "value float lit" KFloat (irKindOfValue [] [] [] (IrFloatLit "1.5")),
+    checkKind "value concat" KStr (irKindOfValue [] [] [] (IrConcatMany [IrStr "a", IrStr "b"])),
+    checkKind
+      "value nat case"
+      KInt
+      (irKindOfValue [] [] [] (IrNatCase (IrInt 0) 1 Nothing Nothing Nothing)),
+    checkKind
+      "value app"
+      KBool
+      (irKindOfValue [] [] [] (IrApp (Just (Pair (IrTyInt) (IrTyBool))) (IrInt 1) (IrInt 2))),
+    checkKindMissing
+      "no value for let"
+      (irKindOfValue [] [] [] (IrLet [mkIrBinder 1 "x"] (IrInt 0) (IrInt 1)))
+  ]
+
+checkKindMissing : String -> Maybe IrKind -> String
+checkKindMissing label got =
+  case got of
+    Nothing => ""
+    Just k => label ++ ": want no value, got " ++ irKindText k
+
+binderChecks : List String
+-- 声明类型优先。
+-- 缺类型时用绑定点。
+-- case 分支：Some 字段 0 的字段类型是 `IrTyVar 0`，代入 scrutinee 的 `IrTyStr` 后是 KStr。
+-- 越界字段序号：回落到 scrutinee 自己的 kind。
+binderChecks =
+  let
+    untyped = mkIrBinder 3 "u"
+    optDecls = tyDecls
+    caseTy = Just (IrTyData "Option" [IrTyStr])
+  in [
+    checkKind
+      "binder declared"
+      KBool
+      (Just (irBinderKind [] (Just KRef) (mkIrBinderTyped 1 "b" IrTyBool))),
+    checkKind "binder fallback" KInt (Just (irBinderKind [] (Just KInt) untyped)),
+    checkKind "binder no fallback" KMissing (Just (irBinderKind [] Nothing untyped)),
+    checkKind
+      "alt field kind"
+      KStr
+      (irAltBinderKindFallback optDecls caseTy (Just (Pair "Option" "Some")) 0),
+    checkKind
+      "alt field oob"
+      KRef
+      (irAltBinderKindFallback optDecls caseTy (Just (Pair "Option" "Some")) 5),
+    checkKind "alt catch-all" KRef (irAltBinderKindFallback optDecls caseTy Nothing 0)
+  ]
+
+predicateChecks : List String
+-- Float 不在共享标量判据里：native 装箱、wasm 用 f64，是后端各自的决策。
+predicateChecks =
+  [
+    checkBool "scalar int" True (irKindIsScalar KInt),
+    checkBool "scalar bool" True (irKindIsScalar KBool),
+    checkBool "float not shared scalar" False (irKindIsScalar KFloat),
+    checkBool "numeric float" True (irKindIsNumeric KFloat),
+    checkBool "str not scalar" False (irKindIsScalar KStr),
+    checkBool "ref not known scalar" False (irKindIsScalar KRef),
+    checkBool "known str" True (irKindIsKnown KStr),
+    checkBool "unknown opaque" False (irKindIsKnown KOpaque),
+    checkBool "unknown missing" False (irKindIsKnown KMissing),
+    checkBool "unknown var" False (irKindIsKnown KVar),
+    checkBool "unknown symbol" False (irKindIsKnown KSymbol),
+    checkBool "heap str" True (irKindIsHeap KStr),
+    checkBool "heap ref" True (irKindIsHeap KRef),
+    checkBool "heap float false" False (irKindIsHeap KFloat),
+    checkBool "missing flag" True (irKindIsMissing KMissing),
+    checkBool "int not missing" False (irKindIsMissing KInt)
+  ]
