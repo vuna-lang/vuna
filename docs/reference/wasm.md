@@ -57,9 +57,11 @@
 - `--wasm-opt N`（0..3，默认 3）：`0` 只汇编不优化；`build` 的用法文本
   （`compilerUsageLines`）与 CLI 的 flag 表同源。
 - **`-O3` 对定义数大的模块很慢**：binaryen 在 `-O3` 上多轮 `precompute-propagate` /
-  `optimize-instructions` / `inline`，`bench/artifacts/cases` 的 `defs-1000`（1000 个顶层
-  定义）上实测约 6.7–7.2 s（`-O2` 只有约 0.12 s），占满整个 `postprocess` 阶段。这是
+  `optimize-instructions` / `inline`，`defs-1000`（1000 个顶层零参定义）实测约 7 s
+  （`bench/baselines/artifacts.json` 的 `postprocess_cpu_ms` = 7,870），占满整个
+  `postprocess` 阶段；`-O2` 只要约 0.14 s，产物 28,973 B（`-O3` 是 37,930 B）。这是
   用例形状（单个巨型 `_start` + 上千个零参 CAF）叠加 binaryen 的 O(n²) 倾向，不是常量。
+  需要绕开时用 `--wasm-opt 2`。
 - **在驱动层执行，不在插件内**：`wasm-opt` 由驱动层调 `build.sh` 跑，`vuna-target-wasm`
   插件不碰它——`target-out` 缓存键里没有外部工具版本，在插件内优化会把旧 `.wasm` 静默缓存。
 - `-O3` 会重写控制流：尾调用折叠后 `tco_mutual` 的 `return_call` 从 66 个降到 1 个。断言产物

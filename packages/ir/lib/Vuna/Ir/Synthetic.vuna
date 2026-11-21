@@ -1,0 +1,50 @@
+module Vuna.Ir.Synthetic where
+
+-- Vuna.Ir.Synthetic：后端在降级期合成的 IR 片段（助记符 + 保留 binder 区间）。
+--
+-- 为什么在这里：native 与 wasm 都要把 `IrEffThunk` 展开成
+-- `MkEff (\_ => prim args)`，并把零参定义 eta 展开成 `\p… => f p…`。两端的这段
+-- 构造曾经各写一份（`applyAllIr` / `backendBinderId` / `effUnitBinder` / `effArgBinders`），
+-- 逐字相同，只有错误文本与 `IrApp` 的类型槽不同。IR 形状不属于目标，所以放在 IR 层。
+--
+-- `IrApp` 的类型槽：本模块一律用 `Nothing`（两端原本就是 `IrApp Nothing`）。需要类型槽的
+-- 调用方自己拼 `IrApp (Just …)`，CPS 的 `applyAll` 就是那种情形，不复用这里的版本。
+--
+-- 边界：本模块只 import `Ir.Model`；不 import Core/Elab/Intrinsics 与任何后端。
+import Vuna.Ir.Model
+
+-- | 左折叠应用：`f a b c` 展开成 `((f a) b) c`。
+export applyAllIr : Ir -> List Ir -> Ir
+applyAllIr f [] = f
+applyAllIr f (a :: rest) = applyAllIr (IrApp Nothing f a) rest
+
+-- | 后端合成 binder 的保留 id 区间：负值且远离 Lowering / CPS / ANF 的编号。
+export backendBinderId : Int -> Int
+backendBinderId n = 0 - (200000000000000000 + n)
+
+-- | 效应 thunk 的丢弃 binder（`\_ => …`）。
+export effUnitBinder : IrBinder
+effUnitBinder = IrBinder (backendBinderId 1) (IrBUser "effUnitArg") False Nothing
+
+-- | 效应 thunk 的原语实参 binder（`\a0 a1 … => …`）。
+export effArgBinders : Int -> List IrBinder
+effArgBinders n =
+  map
+    (\i => IrBinder (backendBinderId (100 + i)) (IrBUser ("effArg" ++ strFromInt i)) False Nothing)
+    (range 0 n)
+
+-- | eta 展开用的 binder（`\p0 p1 … =>`）。
+export etaBinders : Int -> List IrBinder
+etaBinders n =
+  map
+    (\i => IrBinder (backendBinderId (200 + i)) (IrBUser ("__eta" ++ strFromInt i)) False Nothing)
+    (range 0 n)
+
+-- | 效应原语包装成 `MkEff (\_ => prim args)`；arity > 0 时再包一层参数 lambda。
+export effThunkIr : String -> String -> Int -> Ir -> Ir
+effThunkIr family ctor arity prim =
+  let
+    bs = effArgBinders arity
+    applied = applyAllIr prim (map (\b => IrVar b) bs)
+    mkEff = IrCtor family ctor Nothing [IrLam [effUnitBinder] Nothing applied]
+  in if arity <= 0 then mkEff else IrLam bs Nothing mkEff

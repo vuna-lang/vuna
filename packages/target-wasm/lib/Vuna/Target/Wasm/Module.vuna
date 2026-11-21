@@ -25,6 +25,7 @@ import Vuna.Ir.Cps
 import Vuna.Ir.Anf
 import Vuna.Ir.Runtime
 import Vuna.Ir.Tail
+import Vuna.Ir.Synthetic as Synthetic
 import Vuna.Target.Wasm.Instr
 import Vuna.Target.Wasm.Model
 import Vuna.Target.Wasm.Runtime
@@ -231,30 +232,14 @@ genFloatLit st raw =
 -- ---------------------------------------------------------------
 -- Eff thunk（效应原语包装成 `MkEff (fun _ => prim args)`）
 -- ---------------------------------------------------------------
-applyAllIr : Ir -> List Ir -> Ir
-applyAllIr f [] = f
-applyAllIr f (a :: rest) = applyAllIr (IrApp Nothing f a) rest
 
-effUnitBinder : IrBinder
-effUnitBinder = IrBinder (backendBinderId 1) (IrBUser "effUnitArg") False Nothing
-
-effArgBinders : Int -> List IrBinder
-effArgBinders n =
-  map
-    (\i => IrBinder (backendBinderId (100 + i)) (IrBUser ("effArg" ++ strFromInt i)) False Nothing)
-    (range 0 n)
-
+-- | 效应原语包装成 `MkEff (\_ => prim args)`（构造细节在 `Ir.Synthetic`）。
 genEffThunk : Int -> GenState -> String -> String -> Int -> Ir -> Result (Pair (List Instr) GenState)
 genEffThunk fuel st family ctor arity prim =
   if fuel <= 0 then
     Err "wasm codegen fuel exhausted"
   else
-    let
-      bs = effArgBinders arity
-      applied = applyAllIr prim (map (\b => IrVar b) bs)
-      mkEff = IrCtor family ctor Nothing [IrLam [effUnitBinder] Nothing applied]
-      outer = if arity <= 0 then mkEff else IrLam bs Nothing mkEff
-    in genExpr (fuel - 1) st outer
+    genExpr (fuel - 1) st (Synthetic.effThunkIr family ctor arity prim)
 
 genExpr : Int -> GenState -> Ir -> Result (Pair (List Instr) GenState)
 genExpr fuel st ir =
@@ -307,8 +292,8 @@ genGlobalRef fuel st name =
           Ok (Pair [IGlobalGet (watGlobalNameOf name)] st)
         else
           let
-            bs = etaBinders (irDefArity d)
-            bodyIr = applyAllIr (IrGlobal name) (map (\b => IrVar b) bs)
+            bs = Synthetic.etaBinders (irDefArity d)
+            bodyIr = Synthetic.applyAllIr (IrGlobal name) (map (\b => IrVar b) bs)
           in genLamValue (fuel - 1) st bs Nothing bodyIr
       Nothing => Err "unknown top-level definition in wasm codegen: `${name}`"
 
@@ -323,19 +308,9 @@ genRtValue fuel st sym =
       RtUnsupported => Err "wasm target: runtime symbol `${sym}` is not supported yet"
       RtFunc n _ =>
         let
-          bs = etaBinders n
+          bs = Synthetic.etaBinders n
           bodyIr = IrRtApp sym (map (\b => IrVar b) bs)
         in genLamValue (fuel - 1) st bs Nothing bodyIr
-
--- | 后端合成 binder 的保留 id 区间（与 Lowering / CPS / ANF 不相交）。
-backendBinderId : Int -> Int
-backendBinderId n = 0 - (200000000000000000 + n)
-
-etaBinders : Int -> List IrBinder
-etaBinders n =
-  map
-    (\i => IrBinder (backendBinderId (200 + i)) (IrBUser ("__eta" ++ strFromInt i)) False Nothing)
-    (range 0 n)
 
 splitAt : Int -> List a -> Pair (List a) (List a)
 splitAt n xs =
@@ -445,7 +420,7 @@ genApp fuel st ir =
             if s == "prim_erase" then
               case args of
                 [] => Err "prim_erase needs an argument"
-                x :: rest => genExpr (fuel - 1) st (applyAllIr x rest)
+                x :: rest => genExpr (fuel - 1) st (Synthetic.applyAllIr x rest)
             else
               genRtApp (fuel - 1) st s args
           _ => genApplyValue (fuel - 1) st head args
@@ -640,7 +615,7 @@ genRtApp fuel st sym args =
       -- 擦除包装是恒等：直接生成被包住的表达式，才能保留尾位置（否则会被当成
       -- 实参用 noTail 生成，机器自递归/续延转移就退化成普通调用）。
       [] => Err "prim_erase needs an argument"
-      x :: rest => genExpr (fuel - 1) st (applyAllIr x rest)
+      x :: rest => genExpr (fuel - 1) st (Synthetic.applyAllIr x rest)
   else
     case rtImplOf sym of
       RtUnsupported => Err "wasm target: runtime symbol `${sym}` is not supported yet"
@@ -1838,7 +1813,7 @@ opFieldOf ir = ir
 directSend : String -> String -> Ir -> Ir
 directSend runName opHName op =
   let
-    u = mkIrBinder (backendBinderId 300) "hostUnit"
+    u = mkIrBinder (Synthetic.backendBinderId 300) "hostUnit"
     applied = IrApp Nothing (IrApp Nothing (IrGlobal opHName) op) (IrGlobal hcPureK)
     ran = IrApp Nothing (IrGlobal runName) applied
   in IrCtor irEffTypeName irEffMkCtor Nothing [IrLam [u] Nothing ran]
@@ -1847,8 +1822,8 @@ directSend runName opHName op =
 abortSend : String -> Ir -> Ir
 abortSend textName op =
   let
-    u = mkIrBinder (backendBinderId 300) "hostUnit"
-    dead = mkIrBinder (backendBinderId 301) "hostDead"
+    u = mkIrBinder (Synthetic.backendBinderId 300) "hostUnit"
+    dead = mkIrBinder (Synthetic.backendBinderId 301) "hostDead"
     msg =
       IrConcatMany [IrStr "vuna: ", IrApp Nothing (IrGlobal textName) (opFieldOf op), IrStr "\n"]
     eprinted = IrRtApp "@vuna@prim_eff_eprint" [msg]
@@ -1952,8 +1927,8 @@ rwDef n d =
 pureKDef : IrDef
 pureKDef =
   let
-    r = mkIrBinder (backendBinderId 302) "pureKR"
-    u = mkIrBinder (backendBinderId 303) "pureKU"
+    r = mkIrBinder (Synthetic.backendBinderId 302) "pureKR"
+    u = mkIrBinder (Synthetic.backendBinderId 303) "pureKU"
   in IrDef
     hcPureK
     1

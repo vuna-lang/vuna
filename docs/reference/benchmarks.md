@@ -365,7 +365,7 @@ native 在 40k 之后出现台阶：`VUNA_NATIVE_GC_MIN=2G` 下同一 80k 档只
   wasm 64 ms / 63 MB（见上方三端表）。
 
 **产物**（`compile`，空 store；native 列是全部 `.s` 的合计；wasm 列是 `main.wat` 文本，
-不含 `wasm-opt` 之后的 `.wasm` 字节）：
+它不受 `wasm-opt` 影响）：
 
 | 程序 | wasm 前 | wasm 后 | native 前 | native 后 |
 | --- | --- | --- | --- | --- |

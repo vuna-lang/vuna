@@ -55,9 +55,11 @@
 - 中间文本：`.ml`（ocaml）/ `.s`（native）/ `main.wat`（wasm）的**文件树**、文件数、字节、行数；
 - 最终二进制：`prog`（ocaml / native）与 `main.wasm` 的字节；
 - 构建：`codegen` = `vuna compile`，`toolchain` = `ocamlopt` / `cc` / `wasm-tools parse`，
-  `postprocess` = `wasm-opt`（非 wasm 目标为 0），`toolchain_warm` = `build.sh` 的实际顺序
-  （wasm 是汇编 + 优化两段），括号里是 user+sys CPU 毫秒（墙钟另记在 JSON，宿主负载波动时
-  只看 CPU）。JSON 里 wasm 条目另记 `build.postprocess_ms` / `build.postprocess_cpu_ms`，
+  `postprocess` = `wasm-opt`（非 wasm 目标为 0），`toolchain_warm` = `build.sh` 的实际顺序；
+  括号里的三段依次是 `codegen_ms` / `toolchain_cpu_ms` / `postprocess_cpu_ms`（user+sys
+  CPU 毫秒，墙钟另记在 JSON，宿主负载波动时只看 CPU）。wasm 的两段外部工具是
+  `wasm-tools parse`（汇编）+ `wasm-opt`（binaryen 优化）；JSON 里另记
+  `build.postprocess_ms` / `build.postprocess_cpu_ms` 与 `build.toolchain_warm_*`，
   meta 记 `wasm_opt`（汇编工具版本在 `wasm_tools`）。
 
 生成物不含绝对路径/时间戳，工具链由 flake 固定，所以**尺寸与二进制大小跨机器可比**
@@ -81,10 +83,12 @@
 | self | ocaml | 162 | 6,028,075 | 57,071 | 19,331,352 | 5,314 / 18,252 / 0 |
 | self | native | 139 | 21,906,723 | 916,076 | 5,262,176 | 9,052 / 1,588 / 0 |
 
-wasm 的 `.wasm` 是两段工具的产物（`wasm-tools parse` → `wasm-opt -O3`），所以比汇编后小一个
-数量级：`minimal` 46,939 → 485 B、`hello` 50,393 → 2,698 B、`mods-100` 52,138 → 5,807 B；
-`main.wat` 文本列不受优化影响。`postprocess` 一列是 `wasm-opt` 的耗时：常见形状是 25–40 ms，
-但 `defs-1000`（1000 个顶层零参定义 + 单个巨型 `_start`）要 **7.9 s**——`-O3` 在这里多轮跑
+wasm 的 `.wasm` 是两段工具的产物（`wasm-tools parse` → `wasm-opt -O3`），多数形状比汇编后小
+一个数量级（`minimal` 46,939 → 485 B、`hello` 50,393 → 2,698 B、`mods-100` 52,138 → 5,807 B），
+但 `defs-1000` 只从 86,913 降到 37,930 B——单个巨型 `_start` 的收益小得多。`main.wat` 文本列
+不受优化影响。`postprocess` 一列是 `wasm-opt` 的 CPU 耗时：`minimal` 39 ms、`hello` 58 ms、
+`defs-10` 40 ms、`mods-10` 42 ms；`defs-100` 360 ms、`mods-100` 364 ms；`defs-1000`
+（1000 个顶层零参定义 + 单个巨型 `_start`）要 **7.87 s**——`-O3` 在这里多轮跑
 `precompute-propagate` / `optimize-instructions` / 内联。需要绕开时用 `--wasm-opt 2`
 （同一模块 0.14 s，产物 28,973 B；`-O3` 是 37,930 B）。
 
@@ -102,8 +106,7 @@ native 的纯程序不再带机器（D110 已关闭）：`minimal` 2 个 `.s` / 
   wasm 397 KB（WAT，优化后 2,698 B）——比 `minimal` 多 8 个 `.s` / 176 KB 而源码只多 6 行：
   产物大小由闭包决定。
 - `defs-*` / `mods-*` 分别加顶层定义与包内模块：ocaml 文件数 33（定义不变）、43→133（模块），
-  文本随规模线性（defs 186→199→338 KB，native 128→175→505 KB）；wasm 始终单文件。
-- `self` 是真实最大负载：ocaml 162 个 `.ml` / 6.0 MB / 5.7 万行 → 19.3 MB 可执行
+  文本随规模线性（defs 186→199→338 KB，native 128→175→505 KB）；wasm 始终单文件。- `self` 是真实最大负载：ocaml 162 个 `.ml` / 6.0 MB / 5.7 万行 → 19.3 MB 可执行
   （`-g`，含调试信息）；native 139 个 `.s` / 21.9 MB / 91.6 万行 → 5.0 MB 静态 ELF。
   逐帧保守扫根替掉逐 call 栈图后产物减半；闭包面的改动在同一基线上再把文本 23.9 → 21.9 MB
   （`call rt_apply` 604 → 484、静态闭包 495 → 942）。

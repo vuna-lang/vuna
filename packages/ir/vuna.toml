@@ -20,6 +20,7 @@ modules = [
   "Vuna.Ir.Model",
   "Vuna.Ir.Represent",
   "Vuna.Ir.Runtime",
+  "Vuna.Ir.Synthetic",
   "Vuna.Ir.Tail",
   "Vuna.Ir.Validate",
 ]
