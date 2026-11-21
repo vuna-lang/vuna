@@ -92,6 +92,7 @@ ID 是稳定引用（`层前缀-序号`）：条目关闭即删除该行，ID �
 | EL-22 · D | 终止性有三份几乎同构的手写遍历（`posWalk` / `strWalk` / `siteWalkC`），工作在「分析表达式」层（由 `Termination.ElabInput` 从精化产物翻译；实例身份已按字典分组，类型信息仍在翻译时丢弃），HOF 识别是 `Base.Data.List.{map,filter,concatMap,mapMaybe,foldl,foldr}` / `Result.traverse` / `Common.traverse` 的 canonical 模块名白名单；三处对 `EInfix`/`ESect`/`EInterp` 的覆盖各不相同 | `Elab/Termination.vuna`、`Elab/Termination/{Measure,Scc}.vuna` | 后续 |
 | EL-23 · C | 终止性判据的容量兜底把「放弃」渲染成「证明失败」：`tableGraphCap = 512`、`sctClosureFuel = 240`、正性不动点 1024、弱可达 100000 耗尽一律判失败；`blindSitesOf` 把「没分析到」落成全弱边，错误码与真正的非终止相同 | `Elab/Termination/Scc.vuna`、`Elab/Termination.vuna`、`Elab/Termination/Measure.vuna` | 后续 |
 | EL-24 · ⚠️C | 覆盖率 / 可达性有五处口径：`Case.BranchVerdict`、`Coverage.clauseCover`、`Match.familyCovered`、`Coverage.familyCtors`、`Impl` 的 Bool/Nat/Int/String 专用路径；索引族与未知族一律按「已覆盖」静默放行 | `Elab/{Case,Coverage,Match}.vuna`、`Elab/Term/Impl.vuna` | 后续 |
+| EL-26 · B | **没有严格正性检查**：`Elab.Data.elabCtor` 只校验构造子结果头是本族、索引个数与字段宇宙层级，构造子字段可以出现「本族在 Pi 定义域」这类非严格正的出现 ⇒ 能构造空类型的居民（`data Void` + `data D` / `MkD : (D -> Void) -> D` 被接受）。Idris 2 / Yaffle 都有 `Core.Termination.Positivity` 且在所有模式下检查 | `Elab/Data.vuna`（`elabCtor` / `checkCtorFieldSorts`）；探针与先例对照见 [prior-art-elaboration.md](prior-art-elaboration.md) §9 | 后续 |
 | EL-25 · D | `Sig.vuna` 里四份手写 AST 遍历（`exprMaxAppArity` / `exprLowerVars` / `memberDomainOverridesOne` / `Trait.exprFreeLower`）覆盖的构造子集合各不相同且都不完整；`methodArgRigsOf` 的 `rigOf` 参数从未被调用，却对每个域白做一次 `eval` | `Elab/Sig.vuna`、`Elab/Trait.vuna` | 后续 |
 
 ## Elab：状态 / 项 / 元变量 / 字典 / trait

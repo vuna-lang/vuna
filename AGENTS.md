@@ -170,6 +170,8 @@ seed 工具（`seed/`）+ 开发工具（`tools/`）；`docs/` = 分层文档。
 - AI 规则与技能：[`.agents/README.md`](.agents/README.md)（规则 `rules/`、技能 `skills/`）
 - 债务 / 已知缺口：[debt.md](docs/reference/debt.md)（唯一清单：只含开放项、带证据，
   同时收录编译器分层实现债并保留其 ID）
+- 外部先例与精化器对照：[`prior-art-elaboration.md`](docs/reference/prior-art-elaboration.md)
+  （Idris 2 / Yaffle 的流水线、可推迟的合一、case tree、分层契约；vuna 的差距与候选调整）
 
 > 文档分层规则：`README.md` 只保留定位/上手/目录/硬约束/导航；细节在 `docs/reference/`；
 > AI 规则与场景技能在 `.agents/`；已完成阶段 / 已落地决策 / 历史在 git 历史。

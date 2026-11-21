@@ -196,6 +196,7 @@ dune/OCaml 项目，只用 `ocamlopt` 编译生成的种子和程序。
 | [docs/reference/testing.md](docs/reference/testing.md) | 测试体系、corpus 分类、nix checks 清单、性能基准 |
 | [docs/reference/test-architecture.md](docs/reference/test-architecture.md) | 测试体系设计：共享对象库、store-isolated、verdict 对象、tier 与预算 |
 | [docs/reference/lint.md](docs/reference/lint.md) | lint 规则、`vuna.toml [lint]` 配置、源码抑制与门禁 |
+| [docs/reference/prior-art-elaboration.md](docs/reference/prior-art-elaboration.md) | 外部先例（Idris 2 / Yaffle）的流水线与精化器对照：可推迟的合一、case tree、擦除与分层契约、vuna 的差距与候选调整 |
 | [docs/reference/debt.md](docs/reference/debt.md) | 唯一债务清单：未关闭的缺陷、能力缺口与编译器分层实现债（按 ID，带证据） |
 
 文档分层规则：README 只保留定位/上手/目录/硬约束/导航；细节在 `docs/reference/`；
