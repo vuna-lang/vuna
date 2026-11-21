@@ -19,6 +19,7 @@ import Base.Data.String as String
 import Vuna.Ir.Model
 import Vuna.Ir.Analysis
 import Vuna.Ir.Runtime
+import Vuna.Ir.Layout
 import Vuna.Target.Wasm.Model
 
 -- | 族的运行时形状。
@@ -162,22 +163,11 @@ export record WasmListFam(..) where
   wasmListConsTag : Int
   wasmListConsFields : Int
 
-export wasmListFamFromFams : Maybe IrListFam -> List WasmFam -> Maybe WasmListFam
-wasmListFamFromFams Nothing _ = Nothing
-wasmListFamFromFams (Just lf) fams =
-  let
-    family = irListFamilyOf lf
-    nilName = irListNilOf lf
-    consName = irListConsOf lf
-  in case wasmFamLookup fams family of
-    Nothing => Nothing
-    Just fam =>
-      case wasmCtorTagOf fam nilName of
-        Nothing => Nothing
-        Just nilTag =>
-          case wasmCtorTagOf fam consName of
-            Nothing => Nothing
-            Just consTag =>
-              case wasmCtorFieldCountOf fam consName of
-                Nothing => Nothing
-                Just consN => Just (WasmListFam family nilTag consTag consN)
+-- | 从 `Ir.Layout` 提取的族形状转成 wasm 侧描述（只换个记录类型）。
+export wasmListFamOfShape : IrListShape -> WasmListFam
+wasmListFamOfShape sh =
+  WasmListFam
+    sh.irListShapeFamily
+    sh.irListShapeNilTag
+    sh.irListShapeConsTag
+    sh.irListShapeConsFields

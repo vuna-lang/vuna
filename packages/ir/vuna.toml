@@ -17,6 +17,7 @@ modules = [
   "Vuna.Ir.Codec",
   "Vuna.Ir.Cps",
   "Vuna.Ir.Dispatch",
+  "Vuna.Ir.Layout",
   "Vuna.Ir.Model",
   "Vuna.Ir.Represent",
   "Vuna.Ir.Runtime",

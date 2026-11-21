@@ -31,6 +31,7 @@ import Vuna.Ir.Analysis
 import Vuna.Ir.Runtime
 import Vuna.Ir.Tail
 import Vuna.Ir.Synthetic as Synthetic
+import Vuna.Ir.Layout as Layout
 import Vuna.Target.Native.Abi
 import Vuna.Target.Native.Audit
 import Vuna.Target.Native.Model
@@ -1437,43 +1438,6 @@ genAlloc st slots =
       ]
   in Pair instrs (Pair obj st1)
 
-declOf : String -> List IrTyDecl -> Maybe IrTyDecl
-declOf _ [] = Nothing
-declOf family (d :: rest) = if declName d == family then Just d else declOf family rest
-
-declName : IrTyDecl -> String
-declName (IrVariantDecl name _ _) = name
-declName (IrRecordDecl name _ _ _) = name
-declName (IrUnboxedDecl name _ _) = name
-
-ctorTagIn : List (Pair String (List IrTy)) -> String -> Maybe Int
-ctorTagIn ctors ctor = ctorTagGo ctors ctor 0
-
-ctorTagGo : List (Pair String (List IrTy)) -> String -> Int -> Maybe Int
-ctorTagGo [] _ _ = Nothing
-ctorTagGo (p :: rest) name i = if firstOf p == name then Just i else ctorTagGo rest name (i + 1)
-
-ctorArityIn : List (Pair String (List IrTy)) -> String -> Maybe Int
-ctorArityIn [] _ = Nothing
-ctorArityIn (p :: rest) name =
-  if firstOf p == name then Just (listLengthI (secondOf p)) else ctorArityIn rest name
-
-maxArityIn : List (Pair String (List IrTy)) -> Int
-maxArityIn [] = 0
-maxArityIn (p :: rest) =
-  let
-    n = listLengthI (secondOf p)
-    m = maxArityIn rest
-  in if n > m then n else m
-
-recordPosOf : List (Pair Int String) -> String -> Maybe Int
-recordPosOf fields name = recordPosGo fields name 0
-
-recordPosGo : List (Pair Int String) -> String -> Int -> Maybe Int
-recordPosGo [] _ _ = Nothing
-recordPosGo (p :: rest) name i =
-  if secondOf p == name then Just i else recordPosGo rest name (i + 1)
-
 storeSlotFields : Int -> Int -> List Int -> List Instr
 storeSlotFields obj idx [] = []
 storeSlotFields obj idx (s :: rest) =
@@ -1488,7 +1452,7 @@ genCtor fuel st family ctor args =
   if fuel <= 0 then
     internal "native codegen fuel exhausted"
   else
-    case declOf family st.fgFams of
+    case Layout.irDeclOf family st.fgFams of
       Nothing => internal "unknown data family in native codegen: ${family}"
       Just (IrVariantDecl _ _ ctors) => genCtorGo fuel st ctors ctor args
       _ => internal "constructor `${ctor}` does not belong to a variant family: ${family}"
@@ -1498,10 +1462,10 @@ genCtorGo fuel st ctors ctor args =
   if fuel <= 0 then
     internal "native codegen fuel exhausted"
   else
-    case ctorTagIn ctors ctor of
+    case Layout.irCtorTagIn ctors ctor of
       Nothing => internal "unknown constructor in native codegen: ${ctor}"
       Just tag =>
-        case ctorArityIn ctors ctor of
+        case Layout.irCtorArityIn ctors ctor of
           Nothing => internal "unknown constructor in native codegen: ${ctor}"
           Just n => if listLengthI args /= n then internal "constructor `${ctor}` applied to the wrong number of arguments" else nbind (genArgs (fuel - 1) st args) (\p => genCtorFinish n tag p ctors)
 
@@ -1510,7 +1474,7 @@ genCtorFinish : Int -> Int -> Pair (List Instr) (Pair (List Int) FGen) -> List (
 genCtorFinish n tag p ctors =
   let
     st = secondOf (secondOf p)
-    maxF = maxArityIn ctors
+    maxF = Layout.irMaxArityIn ctors
     allocP = genAlloc st (1 + maxF)
     obj = firstOf (secondOf allocP)
     body =
@@ -1524,7 +1488,7 @@ genRecord fuel st family fields =
   if fuel <= 0 then
     internal "native codegen fuel exhausted"
   else
-    case declOf family st.fgFams of
+    case Layout.irDeclOf family st.fgFams of
       Nothing => internal "unknown record family in native codegen: ${family}"
       Just (IrRecordDecl _ _ flds _) => if listLengthI fields /= listLengthI flds then internal "record `${family}` constructed with the wrong number of fields" else nbind (genArgs (fuel - 1) st (map (\p => secondOf p) fields)) (\p => genRecordFinish p flds)
       _ => internal "family `${family}` is not a record"
@@ -1544,10 +1508,10 @@ genProj fuel st base family field =
   if fuel <= 0 then
     internal "native codegen fuel exhausted"
   else
-    case declOf family st.fgFams of
+    case Layout.irDeclOf family st.fgFams of
       Nothing => internal "unknown record family in native codegen: ${family}"
       Just (IrRecordDecl _ _ flds _) =>
-        case recordPosOf flds field of
+        case Layout.irRecordPosOf flds field of
           Nothing => internal "unknown record field in native codegen: `${family}.${field}`"
           Just idx => nbind (genExpr (fuel - 1) st base) (\p => genProjFinish p idx)
       _ => internal "family `${family}` is not a record"
@@ -1566,7 +1530,7 @@ genRecUpd fuel st base family fields =
   if fuel <= 0 then
     internal "native codegen fuel exhausted"
   else
-    case declOf family st.fgFams of
+    case Layout.irDeclOf family st.fgFams of
       Nothing => internal "unknown record family in native codegen: ${family}"
       Just (IrRecordDecl _ _ flds _) => nbind (genExpr (fuel - 1) st base) (\p => genRecUpdStart fuel (firstOf p) (secondOf p) flds fields)
       _ => internal "family `${family}` is not a record"
@@ -1636,7 +1600,7 @@ genCaseAlts fuel st isTail caseTy sc alts =
     case caseFamilyOf caseTy alts of
       Nothing => genDefault fuel st isTail sc alts
       Just family =>
-        case declOf family st.fgFams of
+        case Layout.irDeclOf family st.fgFams of
           Nothing => internal "unknown data family in native codegen: ${family}"
           Just (IrVariantDecl _ _ ctors) => genVariantAlts fuel st isTail sc ctors alts
           Just (IrRecordDecl _ _ _ _) => genRecordAlts fuel st isTail sc alts
@@ -1706,7 +1670,7 @@ genVariantAltsGo fuel st isTail sc ctors alts all =
         case irAltCtorOf alt of
           Nothing => genVariantAltsGo (fuel - 1) st isTail sc ctors rest all
           Just (Pair _ ctor) =>
-            case ctorTagIn ctors ctor of
+            case Layout.irCtorTagIn ctors ctor of
               Nothing => internal "unknown constructor in native codegen: ${ctor}"
               Just tag =>
                 let
@@ -2054,20 +2018,20 @@ record NListDesc where
   nlMaxArity : Int
 
 nlistDescOf : Maybe IrListFam -> List IrTyDecl -> Maybe NListDesc
-nlistDescOf Nothing _ = Nothing
-nlistDescOf (Just lf) fams =
-  case declOf (irListFamilyOf lf) fams of
-    Just (IrVariantDecl _ _ ctors) =>
-      case ctorTagIn ctors (irListNilOf lf) of
-        Nothing => Nothing
-        Just nilTag =>
-          case ctorTagIn ctors (irListConsOf lf) of
-            Nothing => Nothing
-            Just consTag =>
-              case ctorArityIn ctors (irListConsOf lf) of
-                Nothing => Nothing
-                Just consN => Just (NListDesc nilTag consTag consN (maxArityIn ctors))
-    _ => Nothing
+nlistDescOf lfM fams =
+  case Layout.irListShapeOf lfM fams of
+    Nothing => Nothing
+    Just sh =>
+      Just
+        (NListDesc sh.irListShapeNilTag sh.irListShapeConsTag sh.irListShapeConsFields (nlistMaxArityOf lfM fams))
+
+-- | 该族的最大构造子 arity（对象补齐用）。
+nlistMaxArityOf : Maybe IrListFam -> List IrTyDecl -> Int
+nlistMaxArityOf Nothing _ = 0
+nlistMaxArityOf (Just lf) fams =
+  case Layout.irDeclOf (irListFamilyOf lf) fams of
+    Just d => Layout.irMaxArityIn (Layout.irDeclCtorsOf d)
+    Nothing => 0
 
 -- | 一个桥接运行时函数：固定 prologue/epilogue（结果在 rax，体内不写 `ret`）。
 -- | 同 `bridgeFn`，但把体内 `IRet` 改写成跳到尾部（单出口，与 `Native.Runtime.rtFunc` 同语义）。

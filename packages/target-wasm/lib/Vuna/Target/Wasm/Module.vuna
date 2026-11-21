@@ -26,6 +26,7 @@ import Vuna.Ir.Anf
 import Vuna.Ir.Runtime
 import Vuna.Ir.Tail
 import Vuna.Ir.Synthetic as Synthetic
+import Vuna.Ir.Layout as Layout
 import Vuna.Target.Wasm.Instr
 import Vuna.Target.Wasm.Model
 import Vuna.Target.Wasm.Runtime
@@ -2012,7 +2013,9 @@ build program printResult =
               reachableDefs
                 (append ["Base.Effect.Core.machineRun"] (append [irEntryMainOf e] (append runSeeds handlerSeeds)))
                 defs
-        listFamM = wasmListFamFromFams (irProgSharedOf program).irSharedListFam fams
+        listShapeM =
+          Layout.irListShapeOf (irProgSharedOf program).irSharedListFam unit.irUnitTyDecls
+        listFamM = fmap wasmListFamOfShape listShapeM
         handlerClasses = mapMaybe hostClassOf handlerSeeds
         runName =
           case irEntryRunMainOf e of

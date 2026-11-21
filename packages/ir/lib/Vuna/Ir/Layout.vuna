@@ -1,0 +1,98 @@
+module Vuna.Ir.Layout where
+
+-- Vuna.Ir.Layout：数据族的声明序派生量（构造子 tag / 字段数 / record 字段序号）。
+--
+-- 为什么在这里：构造子 tag 是**声明序**，record 字段位置是**IR 字段表顺序**——这两个是
+-- 表示契约的一部分（Lowering 定的族形状），不是目标代码。native 与 wasm 各自查过一遍
+-- （`ctorTagIn` / `ctorArityIn` / `maxArityIn` / `recordPosOf` / `declOf`），并且都用来
+-- 提取桥接 helper 需要的 List 族形状。
+--
+-- 边界：本模块只 import `Ir.Model`；不 import Core/Elab/Intrinsics 与任何后端。
+import Base.Data.List as List
+import Vuna.Ir.Model
+
+-- | 列表长度（本模块不依赖 Compiler 的局部 helper）。
+lenOf : List a -> Int
+lenOf [] = 0
+lenOf (_ :: rest) = 1 + lenOf rest
+
+-- | 按族名查类型声明（程序顺序）。
+export irDeclOf : String -> List IrTyDecl -> Maybe IrTyDecl
+irDeclOf _ [] = Nothing
+irDeclOf family (d :: rest) = if irDeclName d == family then Just d else irDeclOf family rest
+
+-- | 声明的族名。
+export irDeclName : IrTyDecl -> String
+irDeclName (IrVariantDecl name _ _) = name
+irDeclName (IrRecordDecl name _ _ _) = name
+irDeclName (IrUnboxedDecl name _ _) = name
+
+-- | 变体族的构造子表（其它形状为空）。
+export irDeclCtorsOf : IrTyDecl -> List (Pair String (List IrTy))
+irDeclCtorsOf (IrVariantDecl _ _ ctors) = ctors
+irDeclCtorsOf _ = []
+
+-- | record 族的字段表 `(序号, 源码名)`（其它形状为空）。
+export irDeclRecordFieldsOf : IrTyDecl -> List (Pair Int String)
+irDeclRecordFieldsOf (IrRecordDecl _ _ fields _) = fields
+irDeclRecordFieldsOf _ = []
+
+-- | 构造子在族内的声明序 tag（不在表里返回 `Nothing`）。
+export irCtorTagIn : List (Pair String (List IrTy)) -> String -> Maybe Int
+irCtorTagIn ctors ctor = irCtorTagGo ctors ctor 0
+
+irCtorTagGo : List (Pair String (List IrTy)) -> String -> Int -> Maybe Int
+irCtorTagGo [] _ _ = Nothing
+irCtorTagGo (p :: rest) name i = if firstOf p == name then Just i else irCtorTagGo rest name (i + 1)
+
+-- | 构造子的运行时字段个数。
+export irCtorArityIn : List (Pair String (List IrTy)) -> String -> Maybe Int
+irCtorArityIn [] _ = Nothing
+irCtorArityIn (p :: rest) name =
+  if firstOf p == name then Just (lenOf (secondOf p)) else irCtorArityIn rest name
+
+-- | 族内最大构造子 arity（补齐字段用）。
+export irMaxArityIn : List (Pair String (List IrTy)) -> Int
+irMaxArityIn [] = 0
+irMaxArityIn (p :: rest) =
+  let
+    n = lenOf (secondOf p)
+    m = irMaxArityIn rest
+  in if n > m then n else m
+
+-- | record 字段在族里的位置。
+export irRecordPosOf : List (Pair Int String) -> String -> Maybe Int
+irRecordPosOf fields name = irRecordPosGo fields name 0
+
+irRecordPosGo : List (Pair Int String) -> String -> Int -> Maybe Int
+irRecordPosGo [] _ _ = Nothing
+irRecordPosGo (p :: rest) name i =
+  if secondOf p == name then Just i else irRecordPosGo rest name (i + 1)
+
+-- | canonical List 族的形状：族名 / nil 与 cons 的 tag / cons 的字段数。
+export record IrListShape(..) where
+  irListShapeFamily : String
+  irListShapeNilTag : Int
+  irListShapeConsTag : Int
+  irListShapeConsFields : Int
+
+-- | 从 `IrListFam` + 类型声明提取 List 形状（程序没声明该族时返回 `Nothing`）。
+export irListShapeOf : Maybe IrListFam -> List IrTyDecl -> Maybe IrListShape
+irListShapeOf Nothing _ = Nothing
+irListShapeOf (Just lf) decls =
+  let
+    family = irListFamilyOf lf
+    nilName = irListNilOf lf
+    consName = irListConsOf lf
+  in case irDeclOf family decls of
+    Nothing => Nothing
+    Just d =>
+      case irCtorTagIn (irDeclCtorsOf d) nilName of
+        Nothing => Nothing
+        Just nilTag =>
+          case irCtorTagIn (irDeclCtorsOf d) consName of
+            Nothing => Nothing
+            Just consTag =>
+              case irCtorArityIn (irDeclCtorsOf d) consName of
+                Nothing => Nothing
+                Just consN => Just (IrListShape family nilTag consTag consN)
