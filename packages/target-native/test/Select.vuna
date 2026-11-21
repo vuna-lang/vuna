@@ -25,7 +25,7 @@ problems : List String
 problems =
   append
     (append (append wrapProblems cmpProblems) (append natProblems constProblems))
-    (append planProblems peepholeProblems)
+    (append planProblems (append peepholeProblems (append divProblems branchProblems)))
 
 wrapProblems : List String
 wrapProblems =
@@ -165,3 +165,41 @@ selfFoldProblems =
   case peephole [IMov (OpReg R11) (OpImm 3), IBinReg "add" R11 (OpReg R11)] of
     [IMov (OpReg R11) (OpImm 3), IBinReg "add" R11 (OpReg R11)] => []
     is => ["self fold: " ++ strFromInt (length is) ++ " instrs"]
+
+-- | 常数除法的展开判据：2 的幂走符号修正移位，其余走 `cqo`+`idiv`；
+--   `0` / `-1` / 负数留给运行时（除零 trap、`min_int / -1` 语义）。
+divProblems : List String
+divProblems =
+  filter
+    (\s => s /= "")
+    [divCase "2" 2 (Just (DivShift 1)), divCase "8" 8 (Just (DivShift 3)), divCase "1000" 1000 (Just (DivIdiv 1000)), divCase "0" 0 Nothing, divCase "-1" (0 - 1) Nothing, divCase "-1000" (0 - 1000) Nothing]
+
+divCase : String -> Int -> Maybe DivPlan -> String
+divCase label d want =
+  if planKey want == planKey (divPlanOf d) then
+    ""
+  else
+    label ++ ": want " ++ planKey want ++ ", got " ++ planKey (divPlanOf d)
+
+planKey : Maybe DivPlan -> String
+planKey Nothing = "runtime"
+planKey (Just (DivShift k)) = "shift " ++ strFromInt k
+planKey (Just (DivIdiv c)) = "idiv " ++ strFromInt c
+
+-- | `IrIf` 的条件直接发 `cmp` + 反向 `jcc`。
+branchProblems : List String
+branchProblems =
+  filter
+    (\s => s /= "")
+    [branchCase "le" "bi_le_int" (Just "jg"), branchCase "lt" "bi_lt_int" (Just "jge"), branchCase "eq" "bi_eq_int" (Just "jne"), branchCase "ge bool" "bi_ge_bool" (Just "jl"), branchCase "non-cmp" "+" Nothing]
+
+branchCase : String -> String -> Maybe String -> String
+branchCase label sym want =
+  if branchKey want == branchKey (branchInverse sym) then
+    ""
+  else
+    label ++ ": want " ++ branchKey want ++ ", got " ++ branchKey (branchInverse sym)
+
+branchKey : Maybe String -> String
+branchKey Nothing = "none"
+branchKey (Just s) = s

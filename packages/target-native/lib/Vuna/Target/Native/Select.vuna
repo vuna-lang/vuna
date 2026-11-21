@@ -92,6 +92,56 @@ scalarInstrs ScalarNatToInt a _ = Pair a []
 scalarInstrs (ScalarConst n) a _ = Pair a [IMov (OpReg a) (OpImm n)]
 
 -- ---------------------------------------------------------------
+-- 除以编译期常量
+-- ---------------------------------------------------------------
+-- | 常量除法的展开计划。`d = 0` / `d = -1` 不内联：除零要 trap、`min_int / -1` 在
+--   运行时返回 `min_int`（不触发 x86 `#DE`），这两条语义留给 `rt_div`。
+export data DivPlan(..) : Type where
+  -- | `d = 2^k`：符号修正移位 `(x + (x >> 63 & (d-1))) >> k`（向零截断）。
+  DivShift : Int -> DivPlan
+  -- | 其它常量：`cqo` + `idiv`（除数装进 scratch 寄存器）。
+  DivIdiv : Int -> DivPlan
+
+-- | 常数除数 → 展开计划；不是正 2 的幂且不在 `idiv` 的可用范围时返回 `Nothing`。
+export divPlanOf : Int -> Maybe DivPlan
+divPlanOf d =
+  if d == 0 || d == 0 - 1 then
+    Nothing
+  else if d < 0 then
+    Nothing
+  else if d > 2147483647 then
+    Nothing
+  else
+    case pow2Shift 64 d 0 of
+      -- 负数常量除数也能展开，但收益只在这些热点上出现；留给运行时，避免符号修正写错。
+      Just k => Just (DivShift k)
+      Nothing => Just (DivIdiv d)
+
+pow2Shift : Int -> Int -> Int -> Maybe Int
+pow2Shift fuel d k =
+  if fuel <= 0 then
+    Nothing
+  else if d == 1 then
+    Just k
+  else if d - d / 2 * 2 == 0 then pow2Shift (fuel - 1) (d / 2) (k + 1) else Nothing
+
+-- | 标量比较的反向跳转条件（`IrIf` 的条件直接发 `cmp` + `jcc`，不再物化 0/1）。
+export branchInverse : String -> Maybe String
+branchInverse "bi_eq_int" = Just "jne"
+branchInverse "bi_neq_int" = Just "je"
+branchInverse "bi_lt_int" = Just "jge"
+branchInverse "bi_le_int" = Just "jg"
+branchInverse "bi_gt_int" = Just "jle"
+branchInverse "bi_ge_int" = Just "jl"
+branchInverse "bi_eq_bool" = Just "jne"
+branchInverse "bi_neq_bool" = Just "je"
+branchInverse "bi_lt_bool" = Just "jge"
+branchInverse "bi_le_bool" = Just "jg"
+branchInverse "bi_gt_bool" = Just "jle"
+branchInverse "bi_ge_bool" = Just "jl"
+branchInverse _ = Nothing
+
+-- ---------------------------------------------------------------
 -- 窥孔：只做局部、可证明安全的合并
 -- ---------------------------------------------------------------
 -- | 槽写完又立刻读回（rax 里的值没变）时删掉读。

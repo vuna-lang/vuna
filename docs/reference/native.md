@@ -227,6 +227,14 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
   它与 `nativeRtTarget` 指向同一实现。
   - 63-bit wrap 仍是 `shl 1 / sar 1`；Nat 饱和 / 夹取用 `cmov`；比较结果固定在 `rax`
     （`setcc` + `movzx`）。除零、移位计数越界、`natMul` / `natDiv` 仍走运行时。
+  - **除以编译期常量**（`Select.divPlanOf`）在调用点展开：`d` 是 2 的幂时用符号修正
+    移位 `(x + (x >> 63 & (d-1))) >> k`（向零截断，与 OCaml `/` 一致）；其余常量走
+    `cqo` + `idiv`（除数装 scratch）。`d = 0` / `d = -1` 仍走 `rt_div`——除零 trap 与
+    `min_int / -1` 的语义留在运行时。需要 `rax` 的 `idiv` 形状会被挑到「实参顺序」上：
+    第二个实参要 `rax` 时，第一个实参先拿非 `rax` 的寄存器。
+  - **条件直发分支**（`Select.branchInverse`）：`IrIf` 的条件是标量比较时，直接发
+    `cmp` + 反向 `jcc`，不再物化 0/1 再 `test`；比较的左侧可以是任意可内联的标量树，
+    右侧是字面量或槽变量。
   - 实参只接受**原子标量**（字面量、槽变量、标量 cast）；任何非标量子树整体回退
     `call rt_*`，不重排求值。寄存器池是 `rax` / `r11` / `r10` / `r8` / `r9`；序列内
     没有 `call`，因此不产生新的 GC 点。
@@ -485,7 +493,8 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
 - 共享语义（算术 / 字符串 / data / record / List 桥接 / 闭包 / 高阶 API）由
   suite 的 `pure-cross` 分类（`packages/compiler/test/corpus/pure_cross/`）对拍三端，OCaml 是语义 oracle。
 - 指令选择与窥孔：`packages/target-native/test/Select.vuna` 锁序列形状与边界
-  （63-bit wrap、Nat 饱和、`cmov`、立即数折叠的保留条件）；`RuntimeTable` 锁内联计划与
+  （63-bit wrap、Nat 饱和、`cmov`、立即数折叠的保留条件、常数除法的展开判据与
+  `IrIf` 的反向条件）；`RuntimeTable` 锁内联计划与
   `nativeRtTarget` 的标签一致；`pure_cross` 的 `62_nat_sat` / `63_nested_scalar` /
   `96_str_prefix` 覆盖饱和语义、嵌套标量表达式的寄存器分配与字符串前缀比较
   （公共前缀只比较 `min(len)`）。
@@ -497,6 +506,8 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
 ## 8. 已知边界
 
 - 变体分支的**嵌套深匹配**：case 只按 tag 做一次线性分派，不做多模式矩阵。
+  tag 在链外读一次进标量槽，链上每个分支只发 `cmp qword ptr [tag-slot], imm`（臂体
+  会改写所有 caller-saved 寄存器，不能把 tag 留在寄存器里）。
 - 续延是**一次性**（one-shot）：resume 两次被 epoch 表拒绝；multi-shot 不做。顺序 effect
   的栈深是常量（trampoline），不随 perform 次数增长；延迟 answer 的 handler 仍不支持
   （[debt.md](debt.md) D101）。
