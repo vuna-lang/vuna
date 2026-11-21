@@ -99,14 +99,15 @@ native 的纯程序不再带机器（D110 已关闭）：`minimal` 2 个 `.s` / 
 读法：
 
 - `minimal` 是**绝对地板**（最小可执行程序，纯 Int）：runtime + 最小 base 闭包，
-  ocaml 33 个 `.ml` / 185 KB、native 2 个 `.s` / 121 KB、wasm 382 KB（WAT；`.wasm` 是
+  ocaml 33 个 `.ml` / 185 KB、native 2 个 `.s` / 121 KB、wasm 382 KB WAT（`.wasm` 是
   `-O3` 输出，485 B）。
 - `hello` 是**最小效应程序**（一次 Console 打印）：多一层 `Base.Effect.Core` 的 handler 面
   （`Fs`/`Net`/`Process`/`Clock` …）⇒ ocaml 34 个 `.ml` / 189 KB、10 个 `.s` / 297 KB、
   wasm 397 KB（WAT，优化后 2,698 B）——比 `minimal` 多 8 个 `.s` / 176 KB 而源码只多 6 行：
   产物大小由闭包决定。
 - `defs-*` / `mods-*` 分别加顶层定义与包内模块：ocaml 文件数 33（定义不变）、43→133（模块），
-  文本随规模线性（defs 186→199→338 KB，native 128→175→505 KB）；wasm 始终单文件。- `self` 是真实最大负载：ocaml 162 个 `.ml` / 6.0 MB / 5.7 万行 → 19.3 MB 可执行
+  文本随规模线性（defs 186→199→338 KB，native 128→175→505 KB）；wasm 始终单文件。
+- `self` 是真实最大负载：ocaml 162 个 `.ml` / 6.0 MB / 5.7 万行 → 19.3 MB 可执行
   （`-g`，含调试信息）；native 139 个 `.s` / 21.9 MB / 91.6 万行 → 5.0 MB 静态 ELF。
   逐帧保守扫根替掉逐 call 栈图后产物减半；闭包面的改动在同一基线上再把文本 23.9 → 21.9 MB
   （`call rt_apply` 604 → 484、静态闭包 495 → 942）。

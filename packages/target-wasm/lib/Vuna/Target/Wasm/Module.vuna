@@ -1661,10 +1661,6 @@ concatMapType (f :: rest) =
     Nothing => concatMapType rest
     Just t => t :: concatMapType rest
 
--- | 需要续延的运行时符号。
-effSymbols : List String
-effSymbols = ["prim_effectPerformId", "prim_effectHandleId", "prim_effectSelf"]
-
 -- | 扫描预算：超过即按「需要」处理（保守）。
 effScanFuel : Int
 effScanFuel = 100000
@@ -1905,7 +1901,7 @@ rwDef n d =
     Just b =>
       let
         body2 = rw n b
-        globals = irGlobalsOf body2
+        globals = Analysis.irGlobalsOf body2
         -- 改写会把 `sendCore(Id)` 调用换成 `runMain (opH op pureK)`；静态 deps 里那条
         -- 引用要一起删，否则可达集里永远「还有 send」，直连判据恒为假。body 里仍有
         -- 该全局时（未改写的族）保留原 dep。
@@ -1939,39 +1935,6 @@ pureKDef =
     False
     Nothing
 
--- | 表达式里引用的顶层定义名（按体计算，改写后用它重算可达集）。
-irGlobalsOf : Ir -> List String
-irGlobalsOf (IrGlobal n) = [n]
-irGlobalsOf (IrCtor _ _ _ args) = concatMap irGlobalsOf args
-irGlobalsOf (IrRecord _ _ fields) = concatMap globalsOfField fields
-irGlobalsOf (IrProj b _ _ _) = irGlobalsOf b
-irGlobalsOf (IrRecUpd b _ fields _) = append (irGlobalsOf b) (concatMap globalsOfField fields)
-irGlobalsOf (IrRtApp _ args) = concatMap irGlobalsOf args
-irGlobalsOf (IrCast _ _ e) = irGlobalsOf e
-irGlobalsOf (IrLet _ v body) = append (irGlobalsOf v) (irGlobalsOf body)
-irGlobalsOf (IrLam _ _ body) = irGlobalsOf body
-irGlobalsOf (IrApp _ f a) = append (irGlobalsOf f) (irGlobalsOf a)
-irGlobalsOf (IrIf c t e) = append (irGlobalsOf c) (append (irGlobalsOf t) (irGlobalsOf e))
-irGlobalsOf (IrCase caseTy _ sc alts) = append (irGlobalsOf sc) (concatMap globalsOfAlt alts)
-irGlobalsOf (IrNatCase sc _ z su c) =
-  append
-    (irGlobalsOf sc)
-    (append (globalsOfAltMaybe z) (append (globalsOfAltMaybe su) (globalsOfAltMaybe c)))
-irGlobalsOf (IrConcatMany xs) = concatMap irGlobalsOf xs
-irGlobalsOf (IrEffThunk _ _ _ _ p) = irGlobalsOf p
-irGlobalsOf (IrTail inner) = irGlobalsOf inner
-irGlobalsOf _ = []
-
-globalsOfField : Pair String Ir -> List String
-globalsOfField p = irGlobalsOf (secondOf p)
-
-globalsOfAlt : IrAlt -> List String
-globalsOfAlt a = irGlobalsOf (irAltBodyOf a)
-
-globalsOfAltMaybe : Maybe IrAlt -> List String
-globalsOfAltMaybe Nothing = []
-globalsOfAltMaybe (Just a) = globalsOfAlt a
-
 -- | 依赖表里的名字是否还该跟：目标是不含续延原语的定义才跟——依赖表包含字典实例等
 -- 只在 Core 侧可见的隐式引用，纯按体扫描会漏掉它们；而 `sendCore` 这类会被改写掉的定义
 -- 必须在这里断开，否则它会把续延运行时拽回来。
@@ -1980,57 +1943,6 @@ depKeeps tbl n =
   case HashMap.lookup n tbl of
     Nothing => True
     Just t => not (defUsesSyms performSyms t)
-
-refsOf : IrDef -> HashMap String IrDef -> List String
-refsOf d tbl =
-  case irDefBody d of
-    Nothing => []
-    Just b => append (irGlobalsOf b) (filter (depKeeps tbl) (irDefDeps d))
-
-closeRefs : Int -> HashMap String IrDef -> List String -> List String -> List String
-closeRefs fuel tbl work acc =
-  if fuel <= 0 then
-    acc
-  else
-    case work of
-      [] => acc
-      name :: rest =>
-        if memName name acc then
-          closeRefs (fuel - 1) tbl rest acc
-        else
-          case HashMap.lookup name tbl of
-            Nothing => closeRefs (fuel - 1) tbl rest (name :: acc)
-            Just d => closeRefs (fuel - 1) tbl (append (refsOf d tbl) rest) (name :: acc)
-
--- | 同上的“全依赖”版本：不剪依赖表（用于最终保留集，避免丢字典实例这类隐式定义）。
-refsAllOf : IrDef -> List String
-refsAllOf d =
-  case irDefBody d of
-    Nothing => []
-    Just b => append (irGlobalsOf b) (irDefDeps d)
-
-closeRefsAll : Int -> HashMap String IrDef -> List String -> List String -> List String
-closeRefsAll fuel tbl work acc =
-  if fuel <= 0 then
-    acc
-  else
-    case work of
-      [] => acc
-      name :: rest =>
-        if memName name acc then
-          closeRefsAll (fuel - 1) tbl rest acc
-        else
-          case HashMap.lookup name tbl of
-            Nothing => closeRefsAll (fuel - 1) tbl rest (name :: acc)
-            Just d => closeRefsAll (fuel - 1) tbl (append (refsAllOf d) rest) (name :: acc)
-
--- | 按「体引用」重算可达集（保留原顺序）。
-reachableByRefs : Int -> List String -> List IrDef -> List IrDef
-reachableByRefs fuel roots defs =
-  let
-    tbl = HashMap.fromList (map (\d => Pair (irDefName d) d) defs)
-    names = closeRefs fuel tbl roots []
-  in filter (\d => memName (irDefName d) names) defs
 
 -- ---------------------------------------------------------------
 -- 入口
@@ -2108,21 +2020,9 @@ build program printResult =
             Nothing => ""
         roots = append ["Base.Effect.Core.machineRun", irEntryMainOf e] runSeeds
         rewrittenAll = map (rwDef runName) defs
-        rewritten = reachableByRefs 100000 roots rewrittenAll
-        live = rewritten
         tblAll = HashMap.fromList (map (\d => Pair (irDefName d) d) rewrittenAll)
-        namesAll = closeRefsAll 100000 tblAll roots []
-        dropNames =
-          [
-            effSendCoreName,
-            "Base.Effect.Core.handleCore",
-            "Base.Effect.Core.handleCoreAt",
-            "Base.Effect.Core.handleCoreLin",
-            "Base.Effect.Core.performCore",
-            "Base.Effect.Core.handleScoped",
-            "Base.Effect.Core.handleSelf"
-          ]
-        kept = filter (\d => not (defUsesSyms performSyms d)) rewrittenAll
+        rewritten = Analysis.reachableDefsByRefs (depKeeps tblAll) 100000 roots rewrittenAll
+        live = rewritten
         directable =
           if listNull handlerSeeds then
             False

@@ -429,6 +429,79 @@ flattenApp (IrApp _ f a) =
   in Pair (firstOf p) (append (secondOf p) [a])
 flattenApp x = Pair x []
 
+-- | 一个 IR 项引用的顶层定义名（`IrGlobal`），按出现顺序；`IrTail` 同内层。
+export irGlobalsOf : Ir -> List String
+irGlobalsOf (IrGlobal n) = [n]
+irGlobalsOf (IrCtor _ _ _ args) = concatMap irGlobalsOf args
+irGlobalsOf (IrRecord _ _ fields) = concatMap globalsOfField fields
+irGlobalsOf (IrProj b _ _ _) = irGlobalsOf b
+irGlobalsOf (IrRecUpd b _ fields _) = append (irGlobalsOf b) (concatMap globalsOfField fields)
+irGlobalsOf (IrRtApp _ args) = concatMap irGlobalsOf args
+irGlobalsOf (IrCast _ _ e) = irGlobalsOf e
+irGlobalsOf (IrLet _ v body) = append (irGlobalsOf v) (irGlobalsOf body)
+irGlobalsOf (IrLam _ _ body) = irGlobalsOf body
+irGlobalsOf (IrApp _ f a) = append (irGlobalsOf f) (irGlobalsOf a)
+irGlobalsOf (IrIf c t e) = append (irGlobalsOf c) (append (irGlobalsOf t) (irGlobalsOf e))
+irGlobalsOf (IrCase _ _ sc alts) = append (irGlobalsOf sc) (concatMap globalsOfAlt alts)
+irGlobalsOf (IrNatCase sc _ z su c) =
+  append
+    (irGlobalsOf sc)
+    (append (globalsOfAltMaybe z) (append (globalsOfAltMaybe su) (globalsOfAltMaybe c)))
+irGlobalsOf (IrConcatMany xs) = concatMap irGlobalsOf xs
+irGlobalsOf (IrEffThunk _ _ _ _ p) = irGlobalsOf p
+irGlobalsOf (IrTail inner) = irGlobalsOf inner
+irGlobalsOf _ = []
+
+globalsOfField : Pair String Ir -> List String
+globalsOfField p = irGlobalsOf (secondOf p)
+
+globalsOfAlt : IrAlt -> List String
+globalsOfAlt a = irGlobalsOf (irAltBodyOf a)
+
+globalsOfAltMaybe : Maybe IrAlt -> List String
+globalsOfAltMaybe Nothing = []
+globalsOfAltMaybe (Just a) = globalsOfAlt a
+
+-- | 按「定义体引用 + 依赖表」求可达闭包。`keepDep` 过滤依赖表里的名字
+-- （wasm 的宿主直连改写要用它剪掉被替换掉的定义），其余调用方传恒真。
+-- 名字表一次建好；预算 = 种子数 + 依赖边数 + 体引用的扫描成本上界。
+export reachableDefsByRefs : (String -> Bool) -> Int -> List String -> List IrDef -> List IrDef
+reachableDefsByRefs keepDep fuel roots defs =
+  let
+    tbl = HashMap.fromList (map (\d => Pair (irDefName d) d) defs)
+    budget = 8 + fuel + refEdgeCount defs
+    names = closeRefsByRefs budget tbl keepDep roots []
+  in filter (\d => memName (irDefName d) names) defs
+
+refEdgeCount : List IrDef -> Int
+refEdgeCount defs =
+  foldl (\acc, d => acc + bodyRefCount (irDefBody d) + countList (irDefDeps d)) 0 defs
+
+bodyRefCount : Maybe Ir -> Int
+bodyRefCount Nothing = 0
+bodyRefCount (Just b) = countList (irGlobalsOf b)
+
+refsOfDef : (String -> Bool) -> IrDef -> List String
+refsOfDef keepDep d =
+  case irDefBody d of
+    Nothing => filter keepDep (irDefDeps d)
+    Just b => append (irGlobalsOf b) (filter keepDep (irDefDeps d))
+
+closeRefsByRefs : Int -> HashMap String IrDef -> (String -> Bool) -> List String -> List String -> List String
+closeRefsByRefs fuel tbl keepDep work acc =
+  if fuel <= 0 then
+    acc
+  else
+    case work of
+      [] => acc
+      name :: rest =>
+        if memName name acc then
+          closeRefsByRefs (fuel - 1) tbl keepDep rest acc
+        else
+          case HashMap.lookup name tbl of
+            Nothing => closeRefsByRefs (fuel - 1) tbl keepDep rest (name :: acc)
+            Just d => closeRefsByRefs (fuel - 1) tbl keepDep (append (refsOfDef keepDep d) rest) (name :: acc)
+
 -- | 一个运行时定义体的字符串字面量（extern / 无体定义为空）。
 export irStringsOfDef : IrDef -> List String
 irStringsOfDef d =
