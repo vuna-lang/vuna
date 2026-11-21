@@ -22,6 +22,7 @@ import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Base.Hash
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Packages.Pkg
+import Vuna.Compiler.Frontend.Parser
 import Vuna.Cli.Args
 import Vuna.Plugin.Command
 import Vuna.Plugin.Args
@@ -278,23 +279,28 @@ lintText opts env displayPath configPath source =
               pure (Pair env (FileOutcome displayPath [] 0 Nothing))
             else
               do
-                looked <- fixitiesForFile env configPath source
-                env2 <- pure (firstOf looked)
-                case secondOf looked of
-                  ErrC e => pure (Pair env2 (FileOutcome displayPath [] 0 (Just (diagText e))))
-                  OkC programFixities =>
+                parsedR <- pure (parseSourceDetailed configPath source)
+                case parsedR of
+                  ErrC e => pure (Pair env (FileOutcome displayPath [] 0 (Just (diagText e))))
+                  OkC parsed =>
                     do
-                      linted <- pure (lintSourceWithConfig cfg programFixities source)
-                      case linted of
+                      looked <- fixitiesForParsed env configPath parsed.parsedFile
+                      env2 <- pure (firstOf looked)
+                      case secondOf looked of
                         ErrC e => pure (Pair env2 (FileOutcome displayPath [] 0 (Just (diagText e))))
-                        OkC findings =>
+                        OkC programFixities =>
                           do
-                            fixedR <- if opts.lintOptFix then fixFileWith opts cfg displayPath programFixities source findings else pure (OkC (Pair findings 0))
-                            pure (
-                                case fixedR of
-                                  ErrC e => Pair env2 (FileOutcome displayPath [] 0 (Just (diagText e)))
-                                  OkC (Pair remaining fixed) => Pair env2 (FileOutcome displayPath remaining fixed Nothing)
-                              )
+                            linted <- pure (lintParsedWithConfig cfg programFixities source parsed)
+                            case linted of
+                              ErrC e => pure (Pair env2 (FileOutcome displayPath [] 0 (Just (diagText e))))
+                              OkC findings =>
+                                do
+                                  fixedR <- if opts.lintOptFix then fixFileWith opts cfg displayPath programFixities source findings else pure (OkC (Pair findings 0))
+                                  pure (
+                                      case fixedR of
+                                        ErrC e => Pair env2 (FileOutcome displayPath [] 0 (Just (diagText e)))
+                                        OkC (Pair remaining fixed) => Pair env2 (FileOutcome displayPath remaining fixed Nothing)
+                                    )
 
 -- | 内部：lint 单个目标（文件或 `-` stdin），错误也作为结果。
 lintOne : Member nConsole ConsoleOp r, Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nStdin StdinOp r => LintOpts -> FixityEnv -> String -> Eff r (Pair FixityEnv FileOutcome)

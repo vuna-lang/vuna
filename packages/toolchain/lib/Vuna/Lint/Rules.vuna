@@ -2321,8 +2321,17 @@ export lintSourceWithConfig : LintConfig -> List FixityDecl -> String -> Check (
 lintSourceWithConfig cfg programFixities source =
   case parseSourceDetailed "<lint>" source of
     ErrC e => ErrC e
-    OkC (ParsedSource (SourceFile _ _ fx decls0 _ _ _) comments rawToks) =>
-      case parseSuppression comments of
+    OkC p => lintParsedWithConfig cfg programFixities source p
+
+-- | 同 `lintSourceWithConfig`，但源码**已经**解析过（调用方要和 fixity 上下文共用同一次词法）。
+export lintParsedWithConfig : LintConfig -> List FixityDecl -> String -> ParsedSource -> Check (List Finding)
+lintParsedWithConfig cfg programFixities source parsed =
+  case parsed.parsedFile of
+    SourceFile _ _ fx decls0 _ _ _ =>
+      let
+        comments = parsed.parsedComments
+        rawToks = parsed.parsedRawToks
+      in case parseSuppression comments of
         ErrC e => ErrC e
         OkC suppression =>
           case reorderProgram (tableOfKeepOps (append programFixities fx)) decls0 of

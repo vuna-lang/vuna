@@ -873,44 +873,51 @@ fixitiesForSourceIn ctx modules0 label source =
     parsed <- parseFileWithPathMode PmTool label source
     case parsed of
       ErrC e => pure (ErrC e)
-      OkC (SourceFile hdr imports0 fixities decls exports reexports opacity) =>
-        let
-          imports1 = imports0
-          modules1 = modules0
-          imports = namespaceImportsOf imports1 reexports
-        in case hdr of
-          Nothing =>
-            case validateImports label imports of
+      OkC sf => fixitiesFromParsed ctx modules0 label sf
+
+-- | 同 `fixitiesForSourceIn`，但源码**已经**解析过（工具路径一次词法的产物）。
+--
+-- 工具（lint / index / doc）本来就要为规则或 docstring 解析一遍；再为 fixity 解析一遍是
+-- 同一份源码的第二次完整语法分析。这里只做「加载 import 闭包的模块图 + 拼接声明表」。
+export fixitiesFromParsed : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> List Module -> String -> SourceFile -> Eff r (Check (Pair (List Module) (List FixityDecl)))
+fixitiesFromParsed ctx modules0 label (SourceFile hdr imports0 fixities decls exports reexports opacity) =
+  let
+    imports1 = imports0
+    modules1 = modules0
+    imports = namespaceImportsOf imports1 reexports
+  in case hdr of
+    Nothing =>
+      case validateImports label imports of
+        ErrC e => pure (ErrC e)
+        OkC _ =>
+          do
+            implicitR <- implicitPrelude (contextRoots ctx) (contextPackageName ctx) "" imports
+            case implicitR of
               ErrC e => pure (ErrC e)
-              OkC _ =>
+              OkC implicit =>
                 do
-                  implicitR <- implicitPrelude (contextRoots ctx) (contextPackageName ctx) "" imports
-                  case implicitR of
-                    ErrC e => pure (ErrC e)
-                    OkC implicit =>
-                      do
-                        modulesR <- loadAll 1048576 (contextRoots ctx) (contextPackageName ctx) modules1 [] (append imports implicit)
-                        pure (
-                            case modulesR of
-                              ErrC e => ErrC e
-                              OkC modules => OkC (Pair modules (dedupeFixitiesOf modules fixities))
-                          )
-          Just (ModDecl name hasList items _ _ _ sp) =>
-            case validateImports name imports of
+                  modulesR <- loadAll 1048576 (contextRoots ctx) (contextPackageName ctx) modules1 [] (append imports implicit)
+                  pure (
+                      case modulesR of
+                        ErrC e => ErrC e
+                        OkC modules => OkC (Pair modules (dedupeFixitiesOf modules fixities))
+                    )
+    Just (ModDecl name hasList items _ _ _ sp) =>
+      case validateImports name imports of
+        ErrC e => pure (ErrC e)
+        OkC _ =>
+          do
+            implicitR <- implicitPrelude (contextRoots ctx) (contextPackageName ctx) name imports
+            case implicitR of
               ErrC e => pure (ErrC e)
-              OkC _ =>
+              OkC implicit =>
                 do
-                  implicitR <- implicitPrelude (contextRoots ctx) (contextPackageName ctx) name imports
-                  case implicitR of
-                    ErrC e => pure (ErrC e)
-                    OkC implicit =>
-                      do
-                        modulesR <- loadAll 1048576 (contextRoots ctx) (contextPackageName ctx) modules1 [] (append imports implicit)
-                        pure (
-                            case modulesR of
-                              ErrC e => ErrC e
-                              OkC modules => OkC (Pair modules (dedupeFixitiesOf modules fixities))
-                          )
+                  modulesR <- loadAll 1048576 (contextRoots ctx) (contextPackageName ctx) modules1 [] (append imports implicit)
+                  pure (
+                      case modulesR of
+                        ErrC e => ErrC e
+                        OkC modules => OkC (Pair modules (dedupeFixitiesOf modules fixities))
+                    )
 
 -- 单文件便捷入口（LSP formatting / fmt 探针）：不跨调用复用模块表。
 export fixitiesForSource : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> String -> Eff r (Check (List FixityDecl))
