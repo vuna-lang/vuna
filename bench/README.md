@@ -127,23 +127,23 @@ nix run .#vuna-artifacts -- --json bench/baselines/artifacts.json   # 重标
 
 | benchmark | 场景 | OCaml 后端 ratio | native ratio | wasm ratio |
 | --- | --- | --- | --- | --- |
-| arith | Int 算术 + 尾递归 | ~1.2x | ~9.4x（尾调用后；见 §8.2） | 17.6x |
-| string_ops | 字符串拼接 / repeat / substring | ~1.3x | ~1.7x | 8.7x |
-| hashmap | 持久哈希表 + 字典派发 | ~2.0x | ~3.3x | 12.0x |
-| list_recursion | List 非尾递归 / fold / append | ~0.8x | ~5.9x | skipped |
-| gc_pressure | 分配压力（字符串 churn） | ~1.2x | ~3.3x | skipped |
-| array | 不可变 Array | ~0.9x | ~2.5x | skipped |
-| records | record 更新 + variant 分派 | ~2.1x | ~7.4x（尾调用后；见 §8.2） | 9.6x |
-| closures | 高阶函数 / 每次迭代新建闭包 | ~1.4x | ~11.4x | skipped |
-| sorting | 归并排序（List + Pair 拆半） | ~1.5x | ~2.7x | skipped |
-| float_math | Float 算术 / sqrt / abs | ~1.9x | ~36.6x | 6.9x |
-| text_scan | 逐字节 `strAt` 扫描 | ~1.5x | ~13.0x | skipped |
-| nat_bits | Nat 饱和算术 + 位运算 | ~1.3x | ~15.5x | 10.0x |
-| tco_mutual | 互递归尾调用 | ~1.0x | ~6.7x（尾调用复用栈帧） | 6.8x |
-| tco_wide | 9 参数尾递归 | ~1.3x | ~10x（尾调用 + 栈实参重写） | 15.3x |
-| gc_low_live | 低存活集、大累计分配 | ~0.8x | ~0.95x（RSS 0.02x；GC 主判据） | 2.5x |
-| gc_array_churn | 大对象 churn（Array COW） | ~1.7x | ~12.6x（RSS 2.7x；COW 复制是主成本） | 3.6x |
-| gc_retain | 高存活集（live ~19 MB）+ 等量 churn | ~1.9x | ~5.0x（整堆重扫存活集；触发策略的测量项） | 6.7x |
+| arith | Int 算术 + 尾递归 | ~1.2x | ~1.4x | ~6.6x |
+| string_ops | 字符串拼接 / repeat / substring | ~1.3x | ~1.0x | ~10.0x |
+| hashmap | 持久哈希表 + 字典派发 | ~1.8x | ~2.0x | ~10.0x |
+| list_recursion | List 非尾递归 / fold / append | ~0.8x | ~1.8x | skipped |
+| gc_pressure | 分配压力（字符串 churn） | ~1.2x | ~1.6x | skipped |
+| array | 不可变 Array | ~0.9x | ~1.3x | skipped |
+| records | record 更新 + variant 分派 | ~2.0x | ~2.9x | ~9.6x |
+| closures | 高阶函数 / 每次迭代新建闭包 | ~1.2x | ~2.7x | skipped |
+| sorting | 归并排序（List + Pair 拆半） | ~1.2x | ~2.1x | skipped |
+| float_math | Float 算术 / sqrt / abs | ~1.9x | ~5.1x | ~5.3x |
+| text_scan | 逐字节 `strAt` 扫描 | ~1.5x | ~1.5x | skipped |
+| nat_bits | Nat 饱和算术 + 位运算 | ~1.2x | ~1.8x | ~7.8x |
+| tco_mutual | 互递归尾调用 | ~1.5x | ~2.2x | ~9.8x |
+| tco_wide | 9 参数尾递归 | ~1.0x | ~1.8x | ~8.2x |
+| gc_low_live | 低存活集、大累计分配 | ~0.9x | ~0.6x | skipped |
+| gc_array_churn | 大对象 churn（Array COW） | ~1.6x | ~1.2x | skipped |
+| gc_retain | 高存活集（live ~19 MB）+ 等量 churn | ~1.9x | ~4.2x | ~7.7x |
 
 wasm 列的 `skipped` 是 V8 的 wasm 栈上限（非尾深递归），浏览器路径同样如此；wasm 的
 绝对 ms、宿主启动地板与 RSS 口径见 [benchmarks.md §1.3](../docs/reference/benchmarks.md)。
