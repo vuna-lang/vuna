@@ -28,6 +28,10 @@ sample =
     ++ "  x : Int\n"
     ++ "  y : Int\n"
     ++ "\n"
+    ++ "-- trait 与方法签名\n"
+    ++ "trait Show a where\n"
+    ++ "  show : a -> String\n"
+    ++ "\n"
     ++ "f : Int -> Int\n"
     ++ "f n = n + 1\n"
     ++ "\n"
@@ -111,9 +115,15 @@ declsAlign nodes decls =
 hasKinds : List String -> Bool
 hasKinds tags =
   memName "modhead" tags
+    && memName "exportItem" tags
     && memName "import" tags
     && memName "fixity" tags
-    && memName "decl" tags && memName "expr" tags && memName "pat" tags && memName "doStmt" tags
+    && memName "decl" tags
+    && memName "ctor" tags
+    && memName "field" tags
+    && memName "method" tags
+    && memName "binding" tags
+    && memName "alt" tags && memName "doStmt" tags && memName "expr" tags && memName "pat" tags
 
 main : Int
 main =

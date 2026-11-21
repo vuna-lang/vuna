@@ -353,8 +353,20 @@ export data CstKind(..) : Type where
   CstImportKind : CstKind
   -- | `infixl` / `infixr` / `infix` 声明。
   CstFixityKind : CstKind
-  -- | 一条顶层声明。
+  -- | 模块头导出列表里的一项。
+  CstExportItemKind : CstKind
+  -- | 一条顶层声明（含 `export` / `opaque` 前缀；instance 方法各自成节点）。
   CstDeclKind : CstKind
+  -- | `data` 的一个构造器。
+  CstCtorKind : CstKind
+  -- | `record` 的一个字段。
+  CstFieldKind : CstKind
+  -- | `trait` 的一条方法签名。
+  CstMethodKind : CstKind
+  -- | `let` / `where` / `do let` 的一条绑定（签名行或子句各算一条）。
+  CstBindingKind : CstKind
+  -- | `case` 的一个分支。
+  CstAltKind : CstKind
   -- | 一个表达式。
   CstExprKind : CstKind
   -- | 一个模式。
@@ -400,7 +412,13 @@ cstKindTag CstFileKind = "file"
 cstKindTag CstModHeadKind = "modhead"
 cstKindTag CstImportKind = "import"
 cstKindTag CstFixityKind = "fixity"
+cstKindTag CstExportItemKind = "exportItem"
 cstKindTag CstDeclKind = "decl"
+cstKindTag CstCtorKind = "ctor"
+cstKindTag CstFieldKind = "field"
+cstKindTag CstMethodKind = "method"
+cstKindTag CstBindingKind = "binding"
+cstKindTag CstAltKind = "alt"
 cstKindTag CstExprKind = "expr"
 cstKindTag CstPatKind = "pat"
 cstKindTag CstDoStmtKind = "doStmt"

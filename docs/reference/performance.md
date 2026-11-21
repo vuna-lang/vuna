@@ -792,10 +792,10 @@ index / LSP）都按需建树，纯 AST 消费者不受影响。
 （`NodeId`）或先把 AST 的 span 起点改到构造的第一个 token——前者是一次 `ifaceHash`
 churn，后者是给所有 `export` / `opaque` 声明前缀补 span 起点。
 
-单独把条目节点种类（构造器 / 字段 / trait 方法 / case 分支 / 绑定 / 导出项）补进树、
-但仍由 AST 给锚点时：`fmt --check .` +1.2%、`check .` +2.7%、`check packages/compiler`
-+14%（后三者在 0.1 s 量级、含缓存命中，绝对值 13 ms）。也就是说树的结构本身不贵，
-贵的是**同一份信息存在两份**。
+条目节点种类（构造器 / 字段 / trait 方法 / case 分支 / 绑定 / 导出项）补进树本身在噪声内：
+同机交替 11–15 轮取中位数，`fmt --check .` 0.775 / 0.777、`check .` 0.502 / 0.498、
+`check packages/compiler` 0.121 / 0.121、`check packages/base` 0.048 / 0.047（前 / 后）。
+树的结构不贵，贵的是**同一份信息存在两份**。
 
 因此树的收益只能来自**替换**而不是叠加：把 AST 的表层构造子（括号 / 浮点原文 / 模板标记 /
 `name!` / `[]` / `()` / 元组列表折叠 / 中缀与 section / `EAnn` / `ELocalFun`）交给树，
