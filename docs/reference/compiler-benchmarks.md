@@ -29,8 +29,8 @@
 
 **编译器自身编到 native**（`sh bench/native.sh`，基线 `bench/baselines/native.json`，只做同机
 对比）：`325ca0b` 的 `check packages/base` 冷（空 store）**2.4 s**、热 **38 ms**，二进制
-11,370,816 B；指令选择与窥孔落地后同机（loadavg ≈6、`--runs 3`）冷 **2.39 s**、热 **31 ms**，
-二进制 **10,983,504 B**。冷读数从 24–25 s 降到 2.4 s：段索引把 GC 的段定位从线性走链表改成
+11,370,816 B；指令选择与窥孔落地后同机（loadavg ≈5–6、`--runs 3`）冷 **2.4–2.6 s**、热 **29–31 ms**，
+二进制 ≈**10.98 MB**；零参别名直调主要改善生成程序（`nat_bits` 5.7x → 2.25x），对自举这条路径影响很小。冷读数从 24–25 s 降到 2.4 s：段索引把 GC 的段定位从线性走链表改成
 二分（[native.md](native.md) §5.2），缺省内存预算也不再在 live 见顶后死锁。与 OCaml
 产物同命令（~0.4 s）的剩余差距主要来自零参定义 / 静态闭包经由 `rt_apply` 的调用面与
 年轻代 GC（D129 / D122），标量算术已在 `Native.Select` 内联。`check packages/compiler`

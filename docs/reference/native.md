@@ -162,7 +162,7 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
 | `IrStr` | 支持 | `.rodata` 里 `{.quad len; .ascii bytes}`，求值成 `lea`（内容去重，首现顺序编号） |
 | `IrGlobal` | 支持 | 零参定义是 **CAF**：`_start` 求值一次写进 `.bss` 缓存槽，引用只读槽（`rt_caf_<name>`）；作为函数值传递时生成闭包（wrapper） |
 | `IrLet` | 支持（≤1 运行时 binder） | 多运行时 binder（boxed case 降级）拒绝；body 按结果位置生成 |
-| `IrApp` | 支持 | 饱和顶层直调；结果位置且来参区够用时走尾调用（§3）；部分 / 过度应用、动态 head 与运行时目标走 `rt_apply` |
+| `IrApp` | 支持 | 饱和顶层直调；结果位置且来参区够用时走尾调用（§3）。零参别名（`Nat.plus = natAdd` 这类 η-收缩定义）沿 `IrRt` / `IrGlobal` 链解析到目标后直调（标量叶子内联）；部分 / 过度应用、动态 head 与无法解析的闭包走 `rt_apply` |
 | `IrIf` | 支持 | 条件按 0/1 判 |
 | `IrRtApp` | 支持白名单 | 参数左→右；`&&`/`||` 短路 |
 | `IrConcatMany` | 支持 | 左→右两两 `++`（Lowering 对 ≥3 项的 `++` 链发此节点） |
@@ -214,7 +214,8 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
 - **零参顶层定义**是 CAF：`_start` 按 SCC 序（被依赖者在前）求值一次，结果写进连续的
   `.bss` 缓存槽 `rt_caf_<name>`；引用只读槽。槽区间 `[rt_caf_begin, rt_caf_end)` 由 GC
   当根扫描（GC 非移动，值一次写入后稳定）。零参定义仍必须是纯值：程序启动即求值，
-  带副作用的值要走 `Eff` 动作。
+  带副作用的值要走 `Eff` 动作。body 是 `IrRt` / `IrGlobal` 的零参别名在调用点直接解析
+  到目标（不进 `rt_apply`）；CAF 槽仍按启动序求值一次，作用只剩「函数值」引用。
 - 入口 `main` 必须是零参值；`main : Eff r a` 支持：入口先按 `irEntryHandlersOf` 预装宿主
   handler（`runConsoleHost` / `runExitHost` / …），再用 `runMain` 执行，最后按 `a` 展示。
   入口 show 只接受 `@ir@showInt` /
