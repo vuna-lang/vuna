@@ -23,8 +23,8 @@ export record Pos(..) where
 -- | 源码 span：文件、起始行列、结束行列与字节偏移。文件在解析时由调用方注入，
 -- 供跨模块 flatten 后仍能追溯每个表达式来自哪个源文件。
 --
--- 偏移是 `[start, end)` 的字节区间：`spanEndOffset` 沿用与 `spanEndLine` / `spanEndCol`
--- 相同的「最后一个 token 起点」约定，需要完整 token 文本的调用方用下一个 token 起点收束。
+-- 偏移是 `[start, end)` 的字节区间，`spanEndOffset` / `spanEndLine` / `spanEndCol`
+-- 指向**最后一个成员 token 之后**：span 覆盖的就是这段源码原文，可直接按偏移切片。
 export record Span(..) where
   -- | 该 span 所在的源文件路径。
   spanFile : String
@@ -38,7 +38,7 @@ export record Span(..) where
   spanEndCol : Int
   -- | 起始字节偏移（从 0 开始）。
   spanStartOffset : Int
-  -- | 结束字节偏移（从 0 开始；最后一个 token 的起点）。
+  -- | 结束字节偏移（从 0 开始；开区间，指向最后一个成员 token 之后）。
   spanEndOffset : Int
 
 -- | 取源码位置的行号。
@@ -77,7 +77,7 @@ spanEndCol (Span f sl sc el ec so eo) = ec
 export spanStartOffset : Span -> Int
 spanStartOffset (Span f sl sc el ec so eo) = so
 
--- | 取 span 的结束字节偏移（最后一个 token 的起点）。
+-- | 取 span 的结束字节偏移（开区间）。
 export spanEndOffset : Span -> Int
 spanEndOffset (Span f sl sc el ec so eo) = eo
 
@@ -97,17 +97,14 @@ spanEmpty = Span "" 0 0 0 0 0 0
 export isSpanEmpty : Span -> Bool
 isSpanEmpty sp = spanStartLine sp == 0
 
--- | 把「只有起点」的位置扩成覆盖 `name` 的 span（单行；列按 UTF-8 字节）。
--- 解析器给出的标识符 span 只记起点（见 `Parser/Support.spanOf`），binder 诊断与改名编辑
--- 需要覆盖名字本身。不是起点位（合成节点借用了外层 span）或 `spanEmpty` 时返回 `spanEmpty`
--- ——调用方回落到外层位置，也不会给出可能毁掉源码的替换编辑。
+-- | binder 名的 span：接受**恰好覆盖该名字**的 span，也接受「只有起点」的合成 span
+-- （按名字长度展开，列按 UTF-8 字节）。其它形状（借用外层节点的合成 span、或宽度与名字
+-- 不符）返回 `spanEmpty`——调用方回落到外层位置，也不会给出可能毁掉源码的替换编辑。
 export spanAtName : String -> Span -> Span
 spanAtName name sp =
   if isSpanEmpty sp then
     sp
-  else if spanStartOffset sp /= spanEndOffset sp then
-    spanEmpty
-  else
+  else if spanStartOffset sp == spanEndOffset sp then
     Span
       (spanFile sp)
       (spanStartLine sp)
@@ -116,6 +113,7 @@ spanAtName name sp =
       (spanStartCol sp + strLength name)
       (spanStartOffset sp)
       (spanStartOffset sp + strLength name)
+  else if spanEndOffset sp - spanStartOffset sp == strLength name then sp else spanEmpty
 
 -- | 字符（字节码）是否在列表里；线性扫描，用于小字符集判断。
 memChar : Int -> List Int -> Bool

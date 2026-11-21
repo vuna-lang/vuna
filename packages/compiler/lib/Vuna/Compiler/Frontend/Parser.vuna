@@ -759,7 +759,7 @@ parseDataExport lin st blockCol kwPos =
                                                         case dv of
                                                           Pair derivings via =>
                                                             let
-                                                              decl = DData name params ty ctors derivings via ReprAuto lin (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st8)) (posCol (lastPos st8)) (posOffset kwPos) (posOffset (lastPos st8)))
+                                                              decl = DData name params ty ctors derivings via ReprAuto lin (spanFromStart (fileOf st) kwPos st8)
                                                             in OkC (Pair (ParsedDecl Nothing (Just decl) (Just (ESType name members (declSpan decl))) Nothing) st8)
                                                     )
                                               )
@@ -790,7 +790,7 @@ parseRecordExport lin tier st blockCol kwPos =
                                             case dv of
                                               Pair derivings via =>
                                                 let
-                                                  decl = DRecord name params fields derivings via tier lin (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st6)) (posCol (lastPos st6)) (posOffset kwPos) (posOffset (lastPos st6)))
+                                                  decl = DRecord name params fields derivings via tier lin (spanFromStart (fileOf st) kwPos st6)
                                                 in OkC (Pair (ParsedDecl Nothing (Just decl) (Just (ESType name members (declSpan decl))) Nothing) st6)
                                         )
                                   )
@@ -813,7 +813,7 @@ parseTraitExport st blockCol kwPos =
                           Vuna.Compiler.Base.Common.step (parseMethodSigs st4 blockCol) (
                               \methods, st5 =>
                                 let
-                                  decl = DTrait h.traitHeadName h.traitHeadParams h.traitHeadSupers methods (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st5)) (posCol (lastPos st5)) (posOffset kwPos) (posOffset (lastPos st5)))
+                                  decl = DTrait h.traitHeadName h.traitHeadParams h.traitHeadSupers methods (spanFromStart (fileOf st) kwPos st5)
                                 in OkC (Pair (ParsedDecl Nothing (Just decl) (Just (ESType h.traitHeadName members (declSpan decl))) Nothing) st5)
                             )
                       )
@@ -905,7 +905,7 @@ parseFixityDeclBody : PState -> Int -> Int -> Pos -> Check (Pair FixityDecl PSta
 parseFixityDeclBody st blockCol assoc kwPos =
   Vuna.Compiler.Base.Common.step
     (expectFixityLevel (advance st))
-    (\level, st1 => Vuna.Compiler.Base.Common.step (expectOpName st1) (\op, st2 => OkC (Pair (FixityDecl op level assoc (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st2)) (posCol (lastPos st2)) (posOffset kwPos) (posOffset (lastPos st2)))) st2)))
+    (\level, st1 => Vuna.Compiler.Base.Common.step (expectOpName st1) (\op, st2 => OkC (Pair (FixityDecl op level assoc (spanFromStart (fileOf st) kwPos st2)) st2)))
 
 -- 声明位的名字：标识符 / `(sym)` / 裸符号。trait 方法、instance 方法、data 构造子
 -- 与导出成员列表共用，允许运算符与标识符同等使用。保留符号不是可定义名。
@@ -1002,7 +1002,7 @@ parseAxiom : PState -> Int -> Pos -> Check (Pair Decl PState)
 parseAxiom st blockCol kwPos =
   Vuna.Compiler.Base.Common.bind
     (expectKw st "axiom")
-    (\st1 => Vuna.Compiler.Base.Common.step (expectIdent st1) (\name, st2 => Vuna.Compiler.Base.Common.bind (expectSym st2 ":") (\st3 => Vuna.Compiler.Base.Common.step (parseExpr (stateFuel st3) st3 blockCol) (\ty, st4 => Vuna.Compiler.Base.Common.bind (rejectCtxSuffix st4) (\st5 => OkC (Pair (DAxiom name ty (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st5)) (posCol (lastPos st5)) (posOffset kwPos) (posOffset (lastPos st5)))) st5))))))
+    (\st1 => Vuna.Compiler.Base.Common.step (expectIdent st1) (\name, st2 => Vuna.Compiler.Base.Common.bind (expectSym st2 ":") (\st3 => Vuna.Compiler.Base.Common.step (parseExpr (stateFuel st3) st3 blockCol) (\ty, st4 => Vuna.Compiler.Base.Common.bind (rejectCtxSuffix st4) (\st5 => OkC (Pair (DAxiom name ty (spanFromStart (fileOf st) kwPos st5)) st5))))))
 
 -- 受限 FFI 声明 `extern name "c_name" : Ty`（无体）。类型只允许基本类型，
 -- 由 Elab 检查；运行时由包根 `ffi/*.c` 提供，codegen 生成 OCaml `external`。
@@ -1013,7 +1013,7 @@ parseExtern st blockCol kwPos =
         Vuna.Compiler.Base.Common.step (expectIdent st1) (
             \name, st2 =>
               case peekTok st2 of
-                PTok (TStr cName) cp => Vuna.Compiler.Base.Common.step (OkC (Pair cName (advance st2))) (\cName2, st3 => Vuna.Compiler.Base.Common.bind (expectSym st3 ":") (\st4 => Vuna.Compiler.Base.Common.step (parseExpr (stateFuel st4) st4 blockCol) (\ty, st5 => Vuna.Compiler.Base.Common.bind (rejectCtxSuffix st5) (\st6 => OkC (Pair (DExtern name cName2 ty (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st6)) (posCol (lastPos st6)) (posOffset kwPos) (posOffset (lastPos st6)))) st6)))))
+                PTok (TStr cName) cp => Vuna.Compiler.Base.Common.step (OkC (Pair cName (advance st2))) (\cName2, st3 => Vuna.Compiler.Base.Common.bind (expectSym st3 ":") (\st4 => Vuna.Compiler.Base.Common.step (parseExpr (stateFuel st4) st4 blockCol) (\ty, st5 => Vuna.Compiler.Base.Common.bind (rejectCtxSuffix st5) (\st6 => OkC (Pair (DExtern name cName2 ty (spanFromStart (fileOf st) kwPos st6)) st6)))))
                 _ => ps1 st2 (ExpectedToken "string") "string"
           )
     )
@@ -1035,8 +1035,8 @@ parseSignature st blockCol allowCtx name namePos =
               case hc of
                 Pair ctx ty =>
                   case ctx of
-                    [] => OkC (Pair (DSig name [] ty (Span (fileOf st) (posLine namePos) (posCol namePos) (posLine (lastPos st2)) (posCol (lastPos st2)) (posOffset namePos) (posOffset (lastPos st2)))) st2)
-                    _ => if allowCtx then OkC (Pair (DSig name ctx ty (Span (fileOf st) (posLine namePos) (posCol namePos) (posLine (lastPos st2)) (posCol (lastPos st2)) (posOffset namePos) (posOffset (lastPos st2)))) st2) else ps0 st1 ConstraintUnsupportedHere
+                    [] => OkC (Pair (DSig name [] ty (spanFromStart (fileOf st) namePos st2)) st2)
+                    _ => if allowCtx then OkC (Pair (DSig name ctx ty (spanFromStart (fileOf st) namePos st2)) st2) else ps0 st1 ConstraintUnsupportedHere
           )
     )
 
@@ -1057,7 +1057,7 @@ parseClause st blockCol name namePos =
                                     case wheres of
                                       [] => body
                                       _ :: _ => ELet wheres body True (spanOf st st4)
-                                in OkC (Pair (DFun name pats body2 (Span (fileOf st) (posLine namePos) (posCol namePos) (posLine (lastPos st4)) (posCol (lastPos st4)) (posOffset namePos) (posOffset (lastPos st4)))) st4)
+                                in OkC (Pair (DFun name pats body2 (spanFromStart (fileOf st) namePos st4)) st4)
                             )
                       )
                 )
@@ -1296,7 +1296,7 @@ parseData lin st blockCol kwPos =
                                             Vuna.Compiler.Base.Common.step (parseDeriving st7) (
                                                 \dv, st8 =>
                                                   case dv of
-                                                    Pair derivings via => OkC (Pair (DData name params ty ctors derivings via ReprAuto lin (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st8)) (posCol (lastPos st8)) (posOffset kwPos) (posOffset (lastPos st8)))) st8)
+                                                    Pair derivings via => OkC (Pair (DData name params ty ctors derivings via ReprAuto lin (spanFromStart (fileOf st) kwPos st8)) st8)
                                               )
                                         )
                                   )
@@ -1323,7 +1323,7 @@ parseRecord lin tier st blockCol kwPos =
                                 Vuna.Compiler.Base.Common.step (parseDeriving st5) (
                                     \dv, st6 =>
                                       case dv of
-                                        Pair derivings via => OkC (Pair (DRecord name params fields derivings via tier lin (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st6)) (posCol (lastPos st6)) (posOffset kwPos) (posOffset (lastPos st6)))) st6)
+                                        Pair derivings via => OkC (Pair (DRecord name params fields derivings via tier lin (spanFromStart (fileOf st) kwPos st6)) st6)
                                   )
                             )
                       )
@@ -1407,7 +1407,7 @@ parseTrait st blockCol kwPos =
                     Vuna.Compiler.Base.Common.step (parseMethodSigs st3 blockCol) (
                         \methods, st4 =>
                           let
-                            decl = DTrait h.traitHeadName h.traitHeadParams h.traitHeadSupers methods (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st4)) (posCol (lastPos st4)) (posOffset kwPos) (posOffset (lastPos st4)))
+                            decl = DTrait h.traitHeadName h.traitHeadParams h.traitHeadSupers methods (spanFromStart (fileOf st) kwPos st4)
                           in OkC (Pair decl st4)
                       )
                 )
@@ -1471,7 +1471,7 @@ parseInstanceTail : List Expr -> Expr -> PState -> Int -> Pos -> PState -> Check
 parseInstanceTail ctxE head st blockCol kwPos st2 =
   Vuna.Compiler.Base.Common.bind
     (expectKw st2 "where")
-    (\st3 => Vuna.Compiler.Base.Common.step (parseInstanceBody st3 blockCol) (\methods, st4 => OkC (Pair (DInstance ctxE head methods (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st4)) (posCol (lastPos st4)) (posOffset kwPos) (posOffset (lastPos st4)))) st4)))
+    (\st3 => Vuna.Compiler.Base.Common.step (parseInstanceBody st3 blockCol) (\methods, st4 => OkC (Pair (DInstance ctxE head methods (spanFromStart (fileOf st) kwPos st4)) st4)))
 
 parseCtxThenExpr : Int -> PState -> Int -> Check (Pair (Pair (List Expr) Expr) PState)
 parseCtxThenExpr fuel st blockCol =
@@ -1693,14 +1693,15 @@ spanFromExpr : Expr -> PState -> Span
 spanFromExpr e st2 =
   let
     sp = exprSpan e
+    p1 = lastPos st2
   in Span
     sp.spanFile
     (spanStartLine sp)
     (spanStartCol sp)
-    (posLine (lastPos st2))
-    (posCol (lastPos st2))
+    (posLine p1)
+    (lastEndCol p1)
     (spanStartOffset sp)
-    (posOffset (lastPos st2))
+    (posEndOffset p1)
 
 parseArgs : Int -> PState -> Int -> Check (Pair (List Expr) PState)
 parseArgs fuel st blockCol =

@@ -447,13 +447,6 @@ nextTokAfter (t :: rest) line col =
     Just t
   else if tokLine t == line && tokCol t > col then Just t else nextTokAfter rest line col
 
--- | 内部：行列路径的表达式结束列（偏移不可用时的回落）。
-exprEndColAfter : List PTok -> Int -> Int -> Maybe Int
-exprEndColAfter toks line col =
-  case tokenAt toks line col of
-    Nothing => Nothing
-    Just tok => Just (col + tokLen tok)
-
 -- | 内部：span 的单行源码原文；右边界取 span 末 token 之后的下一个 token（或行尾），跨行
 -- 时返回空串。
 spanText : LintSrc -> Span -> String
@@ -1897,15 +1890,13 @@ exprEdit src e replacement =
   else if not (linesCleanRange src.lintSrcLines (exprStartLine e) (spanEndLine (exprSpan e))) then
     Nothing
   else
-    case exprEndColAfter src.lintSrcToks (spanEndLine (exprSpan e)) (exprSpan e).spanEndCol of
-      Nothing => Nothing
-      Just endCol =>
-        let
-          line = lineAt src.lintSrcLines (exprStartLine e)
-          prefix = prefixBeforeCol line (exprStartCol e)
-          suffix = tailFromCol line endCol
-          stripped = stripParens (strLength line + 1) prefix suffix
-        in Just (Edit (exprStartLine e) (exprStartLine e) [firstOf stripped ++ replacement ++ secondOf stripped])
+    let
+      endCol = (exprSpan e).spanEndCol
+      line = lineAt src.lintSrcLines (exprStartLine e)
+      prefix = prefixBeforeCol line (exprStartCol e)
+      suffix = tailFromCol line endCol
+      stripped = stripParens (strLength line + 1) prefix suffix
+    in Just (Edit (exprStartLine e) (exprStartLine e) [firstOf stripped ++ replacement ++ secondOf stripped])
 
 -- | 内部：识别 `::` / `Cons` 应用，返回头与尾。
 consHeadOf : Expr -> Maybe (Pair Expr Expr)

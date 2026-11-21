@@ -76,17 +76,40 @@ closedAt st = { st | pendEvents = EvClose st.tokIndex :: st.pendEvents }
 export withLastPos : Pos -> PState -> PState
 withLastPos p st = { st | lastPos = p }
 
--- 从起始状态 st 到结束状态 st2 的 span：起点=当前 token，终点=最后消费的 token。
+-- | 最后一个已消费 token 的**尾后**行列偏移：单行 token 的列 = 起点列 + 字节长度
+-- （多行 token 自带的 `posEndOffset` 已指向其结束位置，列不再相加）。
+export lastEndCol : Pos -> Int
+lastEndCol p = posCol p + (posEndOffset p - posOffset p)
+
+-- | 从起始状态 st 到结束状态 st2 的 span：起点 = 当前 token 起点，
+-- 终点 = 最后消费 token 的**末尾**（开区间）。叶子与分支用同一套约定，
+-- 所以「span 的 end」就是该构造覆盖的源码末尾，不再是最后一个 token 的起点。
 export spanOf : PState -> PState -> Span
 spanOf st st2 =
-  Span
+  let
+    p1 = lastPos st2
+  in Span
     (fileOf st)
     (posLine (peekPos st))
     (posCol (peekPos st))
-    (posLine (lastPos st2))
-    (posCol (lastPos st2))
+    (posLine p1)
+    (lastEndCol p1)
     (posOffset (peekPos st))
-    (posOffset (lastPos st2))
+    (posEndOffset p1)
+
+-- | 用显式起点（关键字 / 名字位置）到最后一个已消费 token 末尾的 span。
+export spanFromStart : String -> Pos -> PState -> Span
+spanFromStart file start st =
+  let
+    p1 = lastPos st
+  in Span
+    file
+    (posLine start)
+    (posCol start)
+    (posLine p1)
+    (lastEndCol p1)
+    (posOffset start)
+    (posEndOffset p1)
 
 -- | 当前 token 的完整 span（起点到 token 结束字节）。只用于单行 token（标识符 / 符号）：
 -- 列按 UTF-8 字节，所以结束列 = 起始列 + token 字节长度。
