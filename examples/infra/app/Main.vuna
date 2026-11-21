@@ -14,6 +14,7 @@ import Vuna.Compiler.Core.Term
 import Vuna.Compiler.Elab.Types
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Cst
+import Vuna.Compiler.Frontend.Parser
 import RastCheck
 import Vuna.Compiler.Frontend.Rast.Name
 import Vuna.Compiler.Frontend.Toml
@@ -55,7 +56,7 @@ main =
     _ <- prim_eff_print (("canon-int-42 " ++ encConcat (encInt 42 [])) ++ "\n")
     _ <- prim_eff_print (("canon-str-abc " ++ encConcat (encStr "abc" [])) ++ "\n")
     _ <- prim_eff_print (("cst-sample " ++ verdict (roundtripOk sample)) ++ "\n")
-    _ <- prim_eff_print (("cst-tree " ++ verdict (treeRoundtripOk sample)) ++ "\n")
+    _ <- prim_eff_print (("cst-tree " ++ verdict (treeOk sample)) ++ "\n")
     _ <- prim_eff_print (("cst-tree-shape " ++ verdict treeShapeSample) ++ "\n")
     src <- prim_eff_getenv "INFRA_SRC"
     pathOk <- prim_eff_fileExists src
@@ -65,7 +66,7 @@ main =
         (("cst-file " ++ (if pathOk then verdict (roundtripOk raw) else "skip")) ++ "\n")
     _ <-
       prim_eff_print
-        (("cst-tree-file " ++ (if pathOk then verdict (treeRoundtripOk raw) else "skip")) ++ "\n")
+        (("cst-tree-file " ++ (if pathOk then verdict (treeOk raw) else "skip")) ++ "\n")
     _ <- prim_eff_print (("name-identity " ++ verdict nameIdentityOk) ++ "\n")
     _ <- prim_eff_print (("rast-convert " ++ verdict rastConvertOk) ++ "\n")
     _ <- prim_eff_print (("canon-term-rt " ++ verdict termFixturesRT) ++ "\n")
@@ -126,15 +127,30 @@ verdict : Bool -> String
 verdict True = "ok"
 verdict False = "fail"
 
--- | 节点树结构：样例的顶层节点是文件根，children 是 7 个顶层声明。
+-- | 解析后的无损树：区间来自 parser 的递归点（`NodeEvent`），trivia 流来自同一次词法。
+parsedTree : String -> Maybe CstNode
+parsedTree src =
+  case parseSourceDetailed "<infra-tree>" src of
+    ErrC _ => Nothing
+    OkC p => Just (nestToTree (lexTokensOf src p.parsedRawToks p.parsedComments) p.parsedEvents)
+
+-- | 建树后逐字节还原源码。
+treeOk : String -> Bool
+treeOk src =
+  case parseSourceDetailed "<infra-tree>" src of
+    ErrC _ => False
+    OkC p => treeRoundtripOk p.parsedEvents src
+
+-- | 节点树结构：根是文件，模块头 + 每条顶层声明各成一个节点（样例 6 条声明）。
 treeShapeSample : Bool
 treeShapeSample =
-  case lexCst sample of
+  case parsedTree sample of
     Nothing => False
-    Just toks =>
-      let
-        tree = buildCst toks
-      in nodeKindTag tree == "file" && listLen (nodeChildren tree) == 7
+    Just tree =>
+      nodeKindTag tree
+        == "file"
+        && listLen (filter (\n => nodeKindTag n == "decl") (nodeChildren tree))
+        == 6 && listLen (filter (\n => nodeKindTag n == "modhead") (nodeChildren tree)) == 1
 
 -- ---------------------------------------------------------------
 -- TOML 断言辅助

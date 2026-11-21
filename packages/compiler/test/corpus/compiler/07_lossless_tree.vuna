@@ -1,0 +1,107 @@
+-- parser 发射的无损树：叶序列 == token 序列、逐字节还原、嵌套区间互不交叉。
+--
+-- 这是 D18「parser 发射无损树」的第一条等价证据：树的区间来自 parser 的递归点
+-- （`NodeEvent`），而不是从缩进或括号反推；AST 与 canonical 编码在这一步不变。
+import Prelude
+import Base.Data.List as List
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Frontend.Cst
+import Vuna.Compiler.Frontend.Parser
+
+sample : String
+sample =
+  "-- 模块头 + import + 各类声明\n"
+    ++ "module M (f, T(..)) where\n"
+    ++ "\n"
+    ++ "import Base.Data.List as List\n"
+    ++ "import Base.Data.Pair\n"
+    ++ "\n"
+    ++ "infixl 6 <+>\n"
+    ++ "\n"
+    ++ "-- data 与构造子\n"
+    ++ "data T : Type where\n"
+    ++ "  MkT : Int -> T\n"
+    ++ "  MkU : T\n"
+    ++ "\n"
+    ++ "record P where\n"
+    ++ "  x : Int\n"
+    ++ "  y : Int\n"
+    ++ "\n"
+    ++ "f : Int -> Int\n"
+    ++ "f n = n + 1\n"
+    ++ "\n"
+    ++ "g : Int\n"
+    ++ "g =\n"
+    ++ "  let\n"
+    ++ "    h : Int\n"
+    ++ "    h = 2\n"
+    ++ "  in case f h of\n"
+    ++ "       0 => 0\n"
+    ++ "       _ => if h > 1 then 3 else 4\n"
+    ++ "\n"
+    ++ "-- do 块里的语句（供 `doStmt` 节点）\n"
+    ++ "k : Int\n"
+    ++ "k =\n" ++ "  do\n" ++ "    x <- pure 1\n" ++ "    let y = x + 1\n" ++ "    pure y\n"
+
+-- | 相邻兄弟按源码顺序：前一个的终点不晚于后一个的起点。
+orderedKids : List CstNode -> Bool
+orderedKids [] = True
+orderedKids (a :: rest) = orderedKidsFrom (nodeSpan a) rest
+
+-- | `orderedKids` 的续段：逐个比对相邻兄弟（结构递归）。
+orderedKidsFrom : Span -> List CstNode -> Bool
+orderedKidsFrom prev [] = True
+orderedKidsFrom prev (b :: rest) =
+  spanEndOffset prev <= spanStartOffset (nodeSpan b) && orderedKidsFrom (nodeSpan b) rest
+
+-- | children 全部落在分支的字节区间内。
+kidsInside : Span -> List CstNode -> Bool
+kidsInside sp [] = True
+kidsInside sp (k :: rest) =
+  spanStartOffset (nodeSpan k)
+    >= spanStartOffset sp && spanEndOffset (nodeSpan k) <= spanEndOffset sp && kidsInside sp rest
+
+-- | 递归：每个分支的 children 有序、都在自己的区间里，且自身也被父层检查过。
+nestedOk : CstNode -> Bool
+nestedOk (CstLeaf _) = True
+nestedOk (CstBranch _ sp kids) =
+  orderedKids kids && kidsInside sp kids && List.length kids > 0 && nestedAll kids
+
+nestedAll : List CstNode -> Bool
+nestedAll [] = True
+nestedAll (k :: rest) = nestedOk k && nestedAll rest
+
+-- | 树上出现过的节点种类（前序）。fuel 界是树高（结构递归经 `concatMap` 时 SCT
+-- 看不到下降，显式给界）。
+kindTagsAt : Int -> CstNode -> List String
+kindTagsAt fuel n =
+  if fuel <= 0 then
+    []
+  else
+    case n of
+      CstLeaf _ => []
+      CstBranch _ _ kids => nodeKindTag n :: concatMap (kindTagsAt (fuel - 1)) kids
+
+-- | 每层至少 1 个 token，所以 token 数是树高的安全上界。
+kindTags : List CstToken -> CstNode -> List String
+kindTags toks tree = kindTagsAt (List.length toks) tree
+
+-- | 每种结构都得真的建出来了：只靠「根是 file」会放过把 token 全平铺在根上的实现。
+hasKinds : List String -> Bool
+hasKinds tags =
+  memName "modhead" tags
+    && memName "import" tags
+    && memName "fixity" tags
+    && memName "decl" tags && memName "expr" tags && memName "pat" tags && memName "doStmt" tags
+
+main : Int
+main =
+  case parseSourceDetailed "<tree>" sample of
+    ErrC _ => 0
+    OkC p =>
+      let
+        toks = lexTokensOf sample p.parsedRawToks p.parsedComments
+        tree = nestToTree toks p.parsedEvents
+      in (if renderCstTree tree == sample then 1 else 0)
+        + (if List.length (collectLeaves tree) == List.length toks then 2 else 0)
+        + (if nestedOk tree then 4 else 0) + (if hasKinds (kindTags toks tree) then 8 else 0)

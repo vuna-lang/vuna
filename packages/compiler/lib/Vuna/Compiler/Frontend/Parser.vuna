@@ -6,6 +6,7 @@ import Base.Data.Nat as Nat
 import Base.Container.HashMap as HashMap
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.Cst
 import Vuna.Compiler.Base.Diagnostics.Frontend
 import Vuna.Compiler.Frontend.Lexer
 import Vuna.Compiler.Frontend.Parser.Support
@@ -35,6 +36,9 @@ export record ParsedSource(..) where
   parsedComments : List Comment
   -- | 词法 token 流（token 形态与字节偏移）；按 token 边界切原文的消费者用它。
   parsedRawToks : List PTok
+  -- | 建树事件（按发生顺序）：配合 `parsedRawToks` → `Cst.lexTokensOf` 的 trivia 流，
+  -- 用 `Cst.nestToTree` 得到无损节点树（`fmt` / LSP / 重构的注释归属与 span 来源）。
+  parsedEvents : List NodeEvent
 
 -- | 工具路径的唯一入口：**一次**词法同时给出注释表与 token 流，再做语法分析。
 -- 需要注释 / 原文切片 / 保留括号的工具（fmt / lint / index / doc / LSP）用它，
@@ -44,9 +48,13 @@ parseSourceDetailed file source =
   case lexSourceWithComments source of
     ErrC e => ErrC e
     OkC (Pair toks comments) =>
-      case parseSourceFile False (mkState file toks PmTool) of
+      let
+        st0 = mkState file toks PmTool
+      in case parseSourceFile False st0 of
         ErrC e => ErrC e
-        OkC p => OkC (ParsedSource (firstOf (firstOf p)) comments toks)
+        OkC p =>
+          OkC
+            (ParsedSource (firstOf (firstOf p)) comments toks (eventsOf st0 (secondOf (firstOf p))))
 
 -- | 只要 AST 与注释表的入口（复用 `parseSourceDetailed` 同一次词法）。
 export parseSourceWithComments : String -> String -> Check (Pair SourceFile (List Comment))
@@ -114,6 +122,13 @@ parseSourceFile recover st =
 
 parseModDecl : PState -> Check (Pair (Maybe ModDecl) PState)
 parseModDecl st =
+  if atKw st "module" then
+    withExtent CstModHeadKind st (\st0 => parseModDeclBody st0)
+  else
+    OkC (Pair Nothing st)
+
+parseModDeclBody : PState -> Check (Pair (Maybe ModDecl) PState)
+parseModDeclBody st =
   if atKw st "module" then
     Vuna.Compiler.Base.Common.bind
       (expectKw st "module")
@@ -184,7 +199,10 @@ exportItemOf name (EMOnly members) sp = XTypeSome name members sp
 -- | `export import [qualified] B [as L] [(x, T(..), T(A, B))]`。
 -- 返回普通 `Import`（与 `import` 同语义）+ 重导出项。
 parseExportImport : PState -> Check (Pair (Pair Import (List ExportItem)) PState)
-parseExportImport st =
+parseExportImport st = withExtent CstImportKind st (\st0 => parseExportImportBody st0)
+
+parseExportImportBody : PState -> Check (Pair (Pair Import (List ExportItem)) PState)
+parseExportImportBody st =
   Vuna.Compiler.Base.Common.step
     (expectIdent st)
     (\_, st1 => if atKw st1 "import" then Vuna.Compiler.Base.Common.bind (expectKw st1 "import") (\st2 => Vuna.Compiler.Base.Common.step (parseImportAfterKeyword st2) (\imp, st3 => parseReexportTail imp st3)) else ps0 st1 ExpectedTopLevelDecl)
@@ -192,7 +210,10 @@ parseExportImport st =
 -- | `export module C [as X]`：整模块重导出；带 alias 时导出命名空间路径。
 -- 不带 Import：加载期按需合成/复用 `import C [as X]`。
 parseExportNamespace : PState -> Check (Pair ExportItem PState)
-parseExportNamespace st =
+parseExportNamespace st = withExtent CstImportKind st (\st0 => parseExportNamespaceBody st0)
+
+parseExportNamespaceBody : PState -> Check (Pair ExportItem PState)
+parseExportNamespaceBody st =
   Vuna.Compiler.Base.Common.step
     (expectIdent st)
     (\_, st1 => Vuna.Compiler.Base.Common.bind (expectKw st1 "module") (\st2 => Vuna.Compiler.Base.Common.step (expectIdent st2) (\name, st3 => if atKw st3 "as" then Vuna.Compiler.Base.Common.bind (expectKw st3 "as") (\st4 => Vuna.Compiler.Base.Common.step (expectIdent st4) (\alias, st5 => OkC (Pair (XNamespace name (Just alias) (spanOf st st5)) st5))) else OkC (Pair (XNamespace name Nothing (spanOf st st3)) st3))))
@@ -229,7 +250,10 @@ qualifyExportItem prefix (XModule name sp) = XModule name sp
 qualifyExportItem prefix (XNamespace name alias sp) = XNamespace name alias sp
 
 parseImportSpec : PState -> Check (Pair Import PState)
-parseImportSpec st =
+parseImportSpec st = withExtent CstImportKind st (\st0 => parseImportSpecBody st0)
+
+parseImportSpecBody : PState -> Check (Pair Import PState)
+parseImportSpecBody st =
   Vuna.Compiler.Base.Common.bind
     (expectKw st "import")
     (\st1 => if atKw st1 "qualified" then Vuna.Compiler.Base.Common.bind (expectKw st1 "qualified") (\st2 => parseImportAlias st2 True) else parseImportAlias st1 False)
@@ -443,10 +467,11 @@ reverseDeclAcc (DeclAcc fixities decls exports opacity) =
 
 -- 解析恢复：跳过一个坏声明，停在下一个「与块首同列」的 token（无则到 EOF）。
 recoverDecl : PState -> Int -> PState
-recoverDecl (PState file toks last count mode) blockCol =
+recoverDecl st blockCol =
   let
-    rest = skipToDeclLine toks blockCol
-  in PState file rest last (length rest) mode
+    rest = skipToDeclLine st.toksOf blockCol
+    skipped = length st.toksOf - length rest
+  in { st | toksOf = rest, toksLeft = length rest, tokIndex = st.tokIndex + skipped }
 
 skipToDeclLine : List PTok -> Int -> List PTok
 skipToDeclLine [] blockCol = []
@@ -859,8 +884,13 @@ parseOptionalMembers : PState -> Check (Pair ExportMembers PState)
 parseOptionalMembers st = if atSym st "(" then parseExportMembers st else OkC (Pair EMNone st)
 
 -- `infixl 6 +` / `infixr 5 ::` / `infix 4 ==`。
+-- | 一条 `infix*` 声明的建树节点。
 parseFixityDecl : PState -> Int -> Int -> Pos -> Check (Pair FixityDecl PState)
 parseFixityDecl st blockCol assoc kwPos =
+  withExtent CstFixityKind st (\st0 => parseFixityDeclBody st0 blockCol assoc kwPos)
+
+parseFixityDeclBody : PState -> Int -> Int -> Pos -> Check (Pair FixityDecl PState)
+parseFixityDeclBody st blockCol assoc kwPos =
   Vuna.Compiler.Base.Common.step
     (expectFixityLevel (advance st))
     (\level, st1 => Vuna.Compiler.Base.Common.step (expectOpName st1) (\op, st2 => OkC (Pair (FixityDecl op level assoc (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st2)) (posCol (lastPos st2)) (posOffset kwPos) (posOffset (lastPos st2)))) st2)))
@@ -912,8 +942,12 @@ expectOpName st =
         OkC (Pair name (advance st))
     _ => ps1 st (ExpectedToken "operator") "operator"
 
+-- | 一条声明的建树节点（区间从入口 token 到出口 token）。
 parseDecl : PState -> Int -> Check (Pair Decl PState)
-parseDecl st blockCol =
+parseDecl st blockCol = withExtent CstDeclKind st (\st0 => parseDeclBody st0 blockCol)
+
+parseDeclBody : PState -> Int -> Check (Pair Decl PState)
+parseDeclBody st blockCol =
   case peekTok st of
     PTok (TKw "data") p => parseData False st blockCol p
     PTok (TKw "linear") p => parseLinearDecl st blockCol p
@@ -1508,8 +1542,12 @@ parseCtorList fuel st ctorCol =
     case peekPos st of
       Pos line col _ _ => if col == ctorCol then Vuna.Compiler.Base.Common.step (expectDeclName st) (\name, st1 => Vuna.Compiler.Base.Common.bind (expectSym st1 ":") (\st2 => Vuna.Compiler.Base.Common.step (parseExpr (stateFuel st2) st2 ctorCol) (\ty, st3 => Vuna.Compiler.Base.Common.bind (rejectCtxSuffix st3) (\st3b => Vuna.Compiler.Base.Common.step (parseCtorList (fuel - 1) st3b ctorCol) (\rest, st4 => OkC (Pair ((::) (Ctor name ty (countArrows ty) (spanOf st st3)) rest) st4)))))) else if col > ctorCol then ps0 st UnexpectedIndentInData else OkC (Pair [] st)
 
+-- | 一个表达式的建树节点（嵌套表达式各自成节点，区间由递归配对）。
 parseExpr : Int -> PState -> Int -> Check (Pair Expr PState)
-parseExpr fuel st blockCol =
+parseExpr fuel st blockCol = withExtent CstExprKind st (\st0 => parseExprBody fuel st0 blockCol)
+
+parseExprBody : Int -> PState -> Int -> Check (Pair Expr PState)
+parseExprBody fuel st blockCol =
   if fuel <= 0 then
     icFuel "parser"
   else if isEof st then
@@ -1702,7 +1740,7 @@ parseTemplateAtom fuel st multi parts endP =
         \ps =>
           let
             advanced = advance st
-            st2 = mkStateAt (fileOf st) advanced.toksOf endP advanced.toksLeft (pmodeOf st)
+            st2 = withLastPos endP advanced
           in OkC (Pair (EInterp multi ps (spanOf st st2)) st2)
       )
 
@@ -2264,8 +2302,12 @@ parseDoStmts fuel st stmtCol acc =
                   Pos line2 col2 _ _ => if isEof st1 then OkC (Pair (reverse (stmt :: acc)) st1) else if col2 < stmtCol then OkC (Pair (reverse (stmt :: acc)) st1) else if col2 > stmtCol then ps0 st1 UnexpectedIndentInDo else parseDoStmts (fuel - 1) st1 stmtCol (stmt :: acc)
             )
 
+-- | 一条 do 语句的建树节点。
 parseDoStmt : Int -> PState -> Int -> Check (Pair DoStmt PState)
-parseDoStmt fuel st stmtCol =
+parseDoStmt fuel st stmtCol = withExtent CstDoStmtKind st (\st0 => parseDoStmtBody fuel st0 stmtCol)
+
+parseDoStmtBody : Int -> PState -> Int -> Check (Pair DoStmt PState)
+parseDoStmtBody fuel st stmtCol =
   if fuel <= 0 then
     icFuel "parser"
   else if atKw st "let" then
@@ -2347,8 +2389,13 @@ checkNoRepeatedBinders pats =
       ErrC
         (withLabel (Label (Just sp) "" LabelPrimary Nothing) (appendMessage " (repeated name: `${name}`)" (psMsg RepeatedPatternBinder [])))
 
+-- | 一个模式的建树节点。
 parsePatternSingle : Int -> PState -> Int -> Check (Pair Pat PState)
 parsePatternSingle fuel st blockCol =
+  withExtent CstPatKind st (\st0 => parsePatternSingleBody fuel st0 blockCol)
+
+parsePatternSingleBody : Int -> PState -> Int -> Check (Pair Pat PState)
+parsePatternSingleBody fuel st blockCol =
   if fuel <= 0 then icFuel "parser" else parsePatternCons (fuel - 1) st blockCol
 
 parsePatternCons : Int -> PState -> Int -> Check (Pair Pat PState)
@@ -2474,7 +2521,7 @@ parsePatternAtomBase fuel st blockCol =
           Just s =>
             let
               advanced = advance st
-              st2 = mkStateAt (fileOf st) advanced.toksOf endP advanced.toksLeft (pmodeOf st)
+              st2 = withLastPos endP advanced
             in OkC (Pair (PStr s (spanOf st st2)) st2)
           Nothing => ps0 st TemplateInPattern
       PTok (TSym "(") p =>

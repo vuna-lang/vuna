@@ -5,6 +5,7 @@ module Vuna.Compiler.Frontend.Parser.Support where
 -- `Parser.vuna`；拆出本模块是为满足 `nix/checks/data/context.budget` 的 max_module_lines。
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.Cst
 import Vuna.Compiler.Frontend.Lexer
 import Vuna.Compiler.Base.Diagnostics.Frontend
 
@@ -17,31 +18,63 @@ export data ParseMode(..) : Type where
   PmStrict : ParseMode
   PmTool : ParseMode
 
+-- 末尾 `toksLeft` 是余下 token 数（O(1) 维护）：`stateFuel` 在每个声明/表达式循环
+-- 入口都被调用，若每次都遍历剩余 token 列表，大文件解析就退化成 O(n²)。
+-- `tokIndex` 是当前 head token 的**绝对**下标（`advance` 与 `recoverDecl` 各前进一步，
+-- 都是 O(1)），建树事件的区间用它表达。
+-- `pendEvents` 是逆序累积的建树事件：parser 在自己的递归点 open / close，
+-- 区间由它的栈配对，所以事件流天然真嵌套（见 [Vuna.Compiler.Frontend.Cst.nestToTree]）。
 export record PState(..) where
   fileOf : String
   toksOf : List PTok
   lastPos : Pos
   toksLeft : Int
   pmodeOf : ParseMode
+  tokIndex : Int
+  pendEvents : List NodeEvent
 
--- 末尾 `toksLeft` 是余下 token 数（O(1) 维护）：`stateFuel` 在每个声明/表达式循环
--- 入口都被调用，若每次都遍历剩余 token 列表，大文件解析就退化成 O(n²)。
+-- ---------------------------------------------------------------
 -- vuna 源码 parser（offside layout）
 -- ---------------------------------------------------------------
 export fileOf : PState -> String
-fileOf (PState file toks last count mode) = file
+fileOf st = st.fileOf
 
 -- | 解析模式（`PmStrict` / `PmTool`），见 `ParseMode`。
 export pmodeOf : PState -> ParseMode
-pmodeOf (PState file toks last count mode) = mode
+pmodeOf st = st.pmodeOf
 
 -- | 从文件头开一个状态（`lastPos` 的 `Pos 1 0` 是「尚未消费 token」的哨兵）。
 export mkState : String -> List PTok -> ParseMode -> PState
-mkState file toks mode = PState file toks (Pos 1 0 0 0) (length toks) mode
+mkState file toks mode = PState file toks (Pos 1 0 0 0) (length toks) mode 0 []
 
 -- | 指定 `lastPos` / 剩余数（模板洞、同一行的裸表达式等场景）。
+-- 建树事件在模板洞内单独收集（洞内 token 的绝对下标从 0 起，与外层不相交）。
 export mkStateAt : String -> List PTok -> Pos -> Int -> ParseMode -> PState
-mkStateAt file toks last count mode = PState file toks last count mode
+mkStateAt file toks last count mode = PState file toks last count mode 0 []
+
+-- | 从起始状态到结束状态的建树事件（按发生顺序；每次事件一次 cons）。
+export eventsOf : PState -> PState -> List NodeEvent
+eventsOf st st2 = reverse (st2.pendEvents)
+
+-- | 在一个节点区间里跑一段解析：入口发 open、成功回流后发 close（区间由调用点的
+-- 递归配对，所以事件流天然真嵌套）。
+--
+-- 失败分支不补 close 是安全的：parser 的失败路径会整段丢弃状态（`do` 语句回退、
+-- `recoverDecl` 从入口状态重来、模板洞另起状态），未配对的 open 因此不会进入最终事件流。
+export withExtent : {a : Type} -> CstKind -> PState -> (PState -> Check (Pair a PState)) -> Check (Pair a PState)
+withExtent kind st k =
+  let
+    opened = { st | pendEvents = EvOpen kind st.tokIndex :: st.pendEvents }
+  in Vuna.Compiler.Base.Common.step (k opened) (\v, st1 => OkC (Pair v (closedAt st1)))
+
+-- | 关闭最近打开的节点：终点是当前 token 下标（半开区间）。
+closedAt : PState -> PState
+closedAt st = { st | pendEvents = EvClose st.tokIndex :: st.pendEvents }
+
+-- | 只覆盖 `lastPos`：模板字面量等「一个 token 占多行」的场景在 advance 之后
+-- 把结束位置补到字面量末尾，token 下标与事件栈保持不变。
+export withLastPos : Pos -> PState -> PState
+withLastPos p st = { st | lastPos = p }
 
 -- 从起始状态 st 到结束状态 st2 的 span：起点=当前 token，终点=最后消费的 token。
 export spanOf : PState -> PState -> Span
@@ -72,8 +105,10 @@ tokenSpan st =
     (posEndOffset p)
 
 export peekTok : PState -> PTok
-peekTok (PState file (t :: rest) last count mode) = t
-peekTok (PState file [] last count mode) = PTok TEof (Pos 1 1 0 0)
+peekTok st =
+  case st.toksOf of
+    t :: _ => t
+    [] => PTok TEof (Pos 1 1 0 0)
 
 export peekPos : PState -> Pos
 peekPos st = (peekTok st).ptokPos
@@ -91,14 +126,22 @@ tokSpan st =
       Span (fileOf st) (posLine p) (posCol p) (posLine p) (posCol p) (posOffset p) (posOffset p)
 
 export lastPos : PState -> Pos
-lastPos (PState file toks last count mode) = last
+lastPos st = st.lastPos
 
 export advance : PState -> PState
-advance (PState file (toks@(t :: rest)) last count mode) =
-  case t of
-    PTok TEof p => PState file toks last count mode
-    _ => PState file rest t.ptokPos (if count > 0 then count - 1 else 0) mode
-advance (PState file (toks@[]) last count mode) = PState file toks last count mode
+advance st =
+  case st.toksOf of
+    t :: rest =>
+      case t of
+        PTok TEof p => st
+        _ =>
+          { st
+            | toksOf = rest,
+            lastPos = t.ptokPos,
+            toksLeft = if st.toksLeft > 0 then st.toksLeft - 1 else 0,
+            tokIndex = st.tokIndex + 1
+          }
+    [] => st
 
 export isEof : PState -> Bool
 isEof st =
@@ -135,7 +178,7 @@ stateFuel st = 128 * st.toksLeft + 1024
 export sameLineState : PState -> PState
 sameLineState st =
   case peekPos st of
-    Pos line col _ _ => PState (fileOf st) st.toksOf (Pos line 0 0 0) st.toksLeft (pmodeOf st)
+    Pos line col _ _ => { st | lastPos = Pos line 0 0 0 }
 
 export atSym : PState -> String -> Bool
 atSym st s =
