@@ -122,7 +122,10 @@ gc_retain}.vuna`。
 - `tco_mutual` / `tco_wide` 曾经几乎全是**栈帧成本**（RSS 与墙钟随递归深度线性增长、
   `default_stack_ok=false`）；TCO 后 23 / 23 ms、3.6 MiB、`true`（§1.2）。
 - 零参别名直调（`Nat.plus` / `Nat.mult` / `Nat.toInt` …）后，`nat_bits` 的 native / 手写 OCaml
-  从 5.7x 降到 2.25x、`closures` 从 9.1x 降到 3.6x（同机 `--runs 3`，loadavg ≈5）；
+  从 5.7x 降到 2.25x、`closures` 从 9.1x 降到 3.6x（同机 `--runs 3`，loadavg ≈5）。
+  闭包只捕获自由变量、无捕获闭包静态化与调用点去虚拟化后（同一基线、同机 `--runs 3`）：
+  `closures` 的 native 时间 30 → 28 ms（同窗口手写 OCaml 9 ms），`arith` 18 → 17 ms、
+  `nat_bits` 9 ms；剩余差距是函数参数这种只能在运行时按 arity 分派的调用面。
   上面的表是更早窗口的读数，当前回归以 `--target native --check` 为准。
 - **GC 的主判据已达成**：`gc_low_live`（低存活集、大累计分配）231 ms / 3.6 MiB，手写侧
   332 ms / 244 MiB——墙钟更快、RSS 降到 0.01x；`gc_pressure` 的 RSS 也从 59 MiB 降到

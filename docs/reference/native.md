@@ -93,13 +93,23 @@
   另一处保证）；返回后一次性 `add rsp, 8*k + pad` 回收。
 - **闭包**：布局 `[0]`=code、`[8]`=arity（运行时 binder 数）、`[16..]`=捕获值。
   调用时 `rdi` = 闭包自身，实参从 `rsi` 起（`rsi/rdx/rcx/r8/r9`，第 6 个实参起压栈）。
-  闭包函数入口先把捕获值拷进本帧槽，再按常规绑定形参。
+  闭包函数入口先把捕获值拷进本帧槽，再按常规绑定形参。捕获只包含 body 真正引用到的
+  binder（含嵌套 lambda 递归可见的那些），按作用域顺序排列；**没有捕获时闭包是只读
+  常量** `vuna_static_<lam>_<arity>`（`.rodata` 里的 `[code][arity]`），创建点是 `lea`，
+  不进堆、不参与 GC。
 - **动态应用**：生成代码不直接 `call [rdi]`，统一走运行时 `rt_apply(闭包, n, 实参数组)`
   （实参数组升序，arg i 在 `[argp+8i]`）：饱和 → `rt_apply_exact` 按闭包 ABI 装寄存器 /
   压栈后调用；不足 → 分配部分应用闭包（`rt_apply_shim` 在真正饱和时把「已捕获 + 收到」
   拼成实参数组）；过多 → 先吃掉前 arity 个实参，再把返回值当闭包继续应用剩余实参。
   顶层函数 / 运行时符号**当值**时生成静态 wrapper（闭包 ABI → 标准 ABI）作为 code，
   arity 取定义参数个数 / `nativeRtValueArity` / `irInlineArity`。
+- **调用点去虚拟化**：head 的被调用者能从构造点静态确定时（经 `IrGlobal` / `IrRt` /
+  立即 lambda / 部分应用解析，含 let 绑定与跨闭包捕获的传递），饱和调用不再发
+  `rt_apply`：已知标准 ABI 目标（顶层函数、运行时叶子）直接 `call`/尾 `jmp`，连闭包值
+  都不用构造；已知 arity 的闭包（lambda、CAF lambda、部分应用 shim）直接从槽取闭包
+  走闭包 ABI，跳过 `[clo+8]` 的 arity 检查与回退分支。解析不出的 head（函数参数、
+  case / 投影字段、未知 binder）仍走上面的统一动态应用。arity 不能从静态类型的箭头数
+  推：η-收缩定义当值时 wrapper 的 arity 是定义参数个数，可以小于类型的箭头数。
 - 生成代码只使用 caller-saved 寄存器（`rax, rdi, rsi, rdx, rcx, r8-r11`）与帧指针
   `rbp`，不碰 `rbx/r12-r15`，因此无需保存 callee-saved（生成代码与运行时都不使用它们）。
 - **单出口**：带栈帧的运行时函数体内出现的 `IRet` 由 `Native.Runtime.rtFunc` 统一改写
@@ -120,7 +130,8 @@
   4. **函数值 wrapper**：wrapper 把闭包实参搬进本帧槽后直接 `jmp` 目标；函数值递归不会
      每轮累积 wrapper 帧；
   5. **runtime 符号**：饱和 `IrRtApp` / `IrRt` / `genRtValueCall` / `nat_succ` 发 `jmp rt_*`。
-  源级 `let` 的立即 lambda 在 native codegen 内联成 `IrLet` 形态，不再分配闭包；`let`
+  源级 `let` 的立即 lambda 在 native codegen 内联成 `IrLet` 形态（单/多 binder 一致），
+  值位置的无捕获 lambda 直接静态化，两者都不再分配闭包；`let`
   循环走普通直调尾跳（或上面的自递归 loop）。仍不回退为尾调用的情况：窄调宽、`rt_apply`
   慢路径、非尾递归。
 
@@ -159,12 +170,12 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
 | `IrStr` | 支持 | `.rodata` 里 `{.quad len; .ascii bytes}`，求值成 `lea`（内容去重，首现顺序编号） |
 | `IrGlobal` | 支持 | 零参定义是 **CAF**：`_start` 求值一次写进 `.bss` 缓存槽，引用只读槽（`rt_caf_<name>`）；作为函数值传递时生成闭包（wrapper） |
 | `IrLet` | 支持（≤1 运行时 binder） | 多运行时 binder（boxed case 降级）拒绝；body 按结果位置生成 |
-| `IrApp` | 支持 | 饱和顶层直调；结果位置且来参区够用时走尾调用（§3）。零参别名（`Nat.plus = natAdd` 这类 η-收缩定义）沿 `IrRt` / `IrGlobal` 链解析到目标后直调（标量叶子内联）；部分 / 过度应用、动态 head 与无法解析的闭包走 `rt_apply` |
+| `IrApp` | 支持 | 饱和顶层直调；结果位置且来参区够用时走尾调用（§3）。零参别名（`Nat.plus = natAdd` 这类 η-收缩定义）沿 `IrRt` / `IrGlobal` 链解析到目标后直调（标量叶子内联）；**构造点已知**的 head（let 绑定、跨捕获传递、部分应用）饱和时直调或走已知 arity 的闭包调用，不发 `rt_apply`；部分 / 过度应用与解析不出的动态 head 仍走 `rt_apply` |
 | `IrIf` | 支持 | 条件按 0/1 判 |
 | `IrRtApp` | 支持白名单 | 参数左→右；`&&`/`||` 短路 |
 | `IrConcatMany` | 支持 | 左→右两两 `++`（Lowering 对 ≥3 项的 `++` 链发此节点） |
 | `IrNatCase` | 支持 | `if sc == 0 then zero else succ`；succ binder = `sc-1`，catch binder = `sc` |
-| `IrLam` | 支持 | 作为值 → 闭包对象 `[code][arity][捕获...]`；应用统一走 `rt_apply` |
+| `IrLam` | 支持 | 作为值 → 闭包对象 `[code][arity][自由变量...]`（无自由变量时静态化，不分配）；立即应用的 lambda 内联成体；其余应用按调用点已知 arity 直调或走 `rt_apply` |
 | `IrCtor` / `IrRecord` / `IrProj` / `IrRecUpd` / `IrCase` | 支持 | 对象头 + 字段；§5 的「对象表示」 |
 | `IrEffThunk` | 支持 | 生成 `MkEff (fun _ => prim args)`；效应原语作为值出现时用 |
 | `IrEffBind` | 拒绝 | 只服务 `prim_eff_bind1`，base 不用 |
@@ -206,8 +217,8 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
     `call rt_*`，不重排求值。寄存器池是 `rax` / `r11` / `r10` / `r8` / `r9`；序列内
     没有 `call`，因此不产生新的 GC 点。
   - 生成的函数体在 annotation 之前跑 `Native.Select.peephole`：写槽后立刻读回、
-    `jmp` 到下一条标签、scratch 立即数只被下一条二元 / 比较消费时合并；GC 栈图仍按
-    改写后的 call 序重算，槽编号与帧不变。手写运行时 / 桥接体不参与窥孔。
+    `jmp` 到下一条标签、scratch 立即数只被下一条二元 / 比较消费时合并；窥孔不改槽编号
+    与帧大小（GC 逐帧保守扫根，不依赖逐 call 的栈图）。手写运行时 / 桥接体不参与窥孔。
 - **零参顶层定义**是 CAF：`_start` 按 SCC 序（被依赖者在前）求值一次，结果写进连续的
   `.bss` 缓存槽 `rt_caf_<name>`；引用只读槽。槽区间 `[rt_caf_begin, rt_caf_end)` 由 GC
   当根扫描（GC 非移动，值一次写入后稳定）。零参定义仍必须是纯值：程序启动即求值，
