@@ -57,7 +57,7 @@ ID 是稳定引用（`层前缀-序号`）：条目关闭即删除该行，ID �
 | FE-22 · A | `do` 里第二处「吞掉真错、按表达式重解」：`parseLetBindings` 失败后从原始状态把同一段 token 再解析成表达式，`let` 块内的缩进 / 签名错误被替换成无关诊断 | `Frontend/Parser.vuna`（`doLetOrExpr`） | 后续 |
 | FE-23 · C | `case` 之后的缩进判定靠 5 个 token 的白名单（`)`/`]`/`,`/`else`/`in`/`then`）：case 结果上的后缀 / 深层 `where` 被误杀，新语法不改表就误判 | `Frontend/Parser/Support.vuna`（`terminatesExpression` / `badCaseIndent`） | 后续 |
 | FE-24 · D | offside 布局没有 layout 栈：`canContinue` 只有「同行 or 列 > 调用方手里的 blockCol」，括号内部不重置；`blockCol = 0` 当「关掉布局」的哨兵；`sameLineState` 伪造 `Pos line 0 0 0` | `Frontend/Parser/Support.vuna`、`Frontend/Parser.vuna` | 后续 |
-| FE-25 · C | 无损树的**区间**已由 parser 发射（`NodeEvent` + `Cst.nestToTree`，`buildCst` 的缩进猜测已删），但树还没有生产消费者：`Fmt.Comment` 的注释归属仍走 554 行扁平 span 启发式（`anchorSpans` / `innermostEnclosing` / `bestNextAnchor`），`Lsp.Semantic` 只用 token 流。迁移期没有「树视图 == 旧 AST」的断言锁 | `Frontend/Cst.vuna`（`nestToTree` / `collectLeaves`）、`Vuna/Fmt/Comment.vuna`；夹具 `compiler/07_lossless_tree` | 后续（D18 第 3 步） |
+| FE-25 · C | 无损树的**区间**已由 parser 发射（`NodeEvent` + `Cst.nestToTree`），但树还不是注释归属的权威来源：`Fmt.Comment` 仍从 AST 取锚点（`anchorSpans`），「最内层容器」用扁平 span 包含启发式。实测（1530 文件 / 33 050 条注释）两种判据的**最终归属完全一致**，但把树接进 fmt 目前是 +16%（`fmt --check .` 0.72 → 0.84 s）：树每文件建一次，只省掉一次扁平扫描。回本的前提是锚点集合也由树派生（构造器 / 字段 / trait 方法节点），而不是只借它的嵌套 | `Frontend/Cst.vuna`（`nestToTree`）、`Vuna/Fmt/Comment.vuna`（`anchorSpans` / `innermostEnclosing`）；读数见 [performance.md](performance.md) §6.2；夹具 `compiler/07_lossless_tree` | 后续（D18 第 3 步，与锚点搬移一起做） |
 | FE-26 · D | token 宽度 / 原文有四个来源（lexer 末尾偏移、Cst 贪心重扫、`tokenSpan` 的 endOffset、`?`/`-`/`!` 的列相邻判定）；列的単位未定义（一律 UTF-8 字节，LSP 需要 UTF-16 由消费方换算） | `Frontend/Lexer.vuna`、`Frontend/Cst.vuna`、`Frontend/Parser/Support.vuna`、`Vuna.Lsp.Semantic` | 后续 |
 | FE-27 · C | `.` 一个语法被切在 lexer / parser / loader 三层：`a.b` 先合成单 token，parser 的字段后缀只处理独立点，loader 再拆；字段访问没有单一产生点，两条路径的 span / 诊断不同 | `Frontend/Lexer.vuna`（`collectIdent`）、`Frontend/Parser.vuna`（`parseFieldSuffix`）、`Loader/Resolve.vuna` | 后续 |
 | FE-28 · D | `Rast` 是 `Ast` 的整份复制：约 250 行名字分类 / 访问器工具各两份，`ExportItem`/`Import`/`FixityDecl` 又直接 re-export `Ast`；同模块里共享类型与影子类型混用，改一份不会让另一份编译失败 | `Frontend/Rast.vuna`、`Frontend/Ast.vuna` | 后续 |
@@ -219,7 +219,7 @@ ID 是稳定引用（`层前缀-序号`）：条目关闭即删除该行，ID �
    （`Ir/Anf` / `Ir/Cps` 的半变换）、以及把容量上限当成语义结论（EL-23）。
 3. **多真源手工同步**：内建名字（`Intrinsics` vs `Impl` 字面串，EC-16）、prelude 名单（LD-21）、
    运算符别名（`Fixity` / `Dict` / `Prelude`）、能力矩阵（D96）、覆盖率五套口径（EL-24）、
-   类型层 / 擦除五套判据（EC-39）、两套 layout（FE-24；FE-25 的区间已收口，注释归属仍待搬）、四份 AST 遍历（LD-20）、
+   类型层 / 擦除五套判据（EC-39）、两套 layout（FE-24；FE-25 的区间已收口，锚点仍来自 AST）、四份 AST 遍历（LD-20）、
    五份结构知识（FE-16 / FE-17 / FE-28 / FE-29）、三份解表真源（EC-31）、两份不透明判据（CO-06）。
 4. **类型信息在 pass 之间丢失或只是注解**：`TLam` 的 `Maybe` 类型槽、`quote` 丢 rig（CO-03）、
    IR 类型槽选择性填充（D109）、CPS 机器级类型只有 `IrTyOpaque`（不再清空）。
