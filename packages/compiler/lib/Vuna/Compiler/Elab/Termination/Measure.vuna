@@ -434,7 +434,7 @@ export guardPosVar : Expr -> Maybe String
 guardPosVar e =
   case e of
     EApp (EVar op osp) args sp =>
-      case opBaseName (rnameKey op) of
+      case cmpOpOf (opBaseName (rnameKey op)) of
         -- `<=` / `>=` / `<` 在 Loader 被解析成 `le` / `ge` / `lt` 方法调用，
         -- 终止性守卫按方法短名识别；裸运算符名保留（Loader 之前的内部生成物）。
         "le" => guardLE args
@@ -446,34 +446,68 @@ guardPosVar e =
         _ => Nothing
     _ => Nothing
 
+-- Core 的 Int 比较是内建原语（`bi_le_int` …），语义与 `le`/`ge`/`lt`/`gt` 相同：
+-- 守卫识别归一到短名，只维护一份口径（两类来源都认）。
+export cmpOpOf : String -> String
+cmpOpOf "bi_le_int" = "le"
+cmpOpOf "bi_ge_int" = "ge"
+cmpOpOf "bi_lt_int" = "lt"
+cmpOpOf "bi_gt_int" = "gt"
+cmpOpOf op = op
+
 -- 名字按点取最后一段（`Base.Trait.Ord.le` → `le`）；裸名原样返回。
 opBaseName : String -> String
 opBaseName name = secondOf (splitLastDot (splitOnDot name))
 
+-- 比较运算的最后两个**语义**实参：方法投影带类型 / 字典实参时（`le t d n 0`）前面还有
+-- 隐式位，但比较的左右操作数始终是最后两个。
+export lastTwo : List Expr -> Maybe (Pair Expr Expr)
+lastTwo (a :: b :: rest) = Just (lastTwoGo a b rest)
+lastTwo _ = Nothing
+
+lastTwoGo : Expr -> Expr -> List Expr -> Pair Expr Expr
+lastTwoGo a b [] = Pair a b
+lastTwoGo a b (c :: rest) = lastTwoGo b c rest
+
 export guardLE : List Expr -> Maybe String
-guardLE ([lhs, rhs]) =
-  case rhs of
-    EInt k ksp => if k == 0 then varOfExpr lhs else Nothing
-    _ => Nothing
-guardLE _ = Nothing
+guardLE args =
+  case lastTwo args of
+    Just (Pair lhs rhs) =>
+      case rhs of
+        EInt k ksp => if k == 0 then varOfExpr lhs else Nothing
+        _ => Nothing
+    Nothing => Nothing
 
 export guardGE : List Expr -> Maybe String
-guardGE ([lhs, rhs]) =
-  case lhs of
-    EInt k ksp => if k == 0 then varOfExpr rhs else Nothing
-    _ => Nothing
-guardGE _ = Nothing
+guardGE args =
+  case lastTwo args of
+    Just (Pair lhs rhs) =>
+      case lhs of
+        EInt k ksp => if k == 0 then varOfExpr rhs else Nothing
+        _ => Nothing
+    Nothing => Nothing
 
 export guardLT : List Expr -> Maybe String
-guardLT ([lhs, rhs]) =
-  case rhs of
-    EInt k ksp => if k == 1 then varOfExpr lhs else Nothing
-    _ => Nothing
-guardLT _ = Nothing
+guardLT args =
+  case lastTwo args of
+    Just (Pair lhs rhs) =>
+      case rhs of
+        EInt k ksp => if k == 1 then varOfExpr lhs else Nothing
+        _ => Nothing
+    Nothing => Nothing
 
 export varOfExpr : Expr -> Maybe String
 varOfExpr (EVar n sp) = Just (rnameKey n)
+-- Nat → Int 的转换是恒等（只换表示）：守卫变量仍按原变量名识别。
+varOfExpr (EApp (EVar c csp) ([x]) sp) =
+  if isNatCoerceName (rnameKey c) then varOfExpr x else Nothing
 varOfExpr _ = Nothing
+
+isNatCoerceName : String -> Bool
+isNatCoerceName name =
+  let
+    b = opBaseName name
+  in b == "natToInt" || b == "natFromInt" || b == "toInt"
 
 -- | 局部函数子句 → 只保留体的“绑定”视图（模式不影响正性/尺寸事实）。
 --   树的三种遍历共用这一份，避免各自实现漂移。
@@ -493,51 +527,64 @@ guardInter (x :: rest) b = if memName x b then x :: guardInter rest b else guard
 
 -- | 单个比较为真时成立的「正性」：`x > k`（k ≥ 0）/ `x ≥ k`（k ≥ 1）及其字面量在左的写法。
 guardThenPosAtom : String -> List Expr -> Maybe String
-guardThenPosAtom op ([lhs, rhs]) =
-  case rhs of
-    EInt k ksp =>
-      if op == "gt" || op == ">" then
-        if k >= 0 then varOfExpr lhs else Nothing
-      else if op == "ge" || op == ">=" then if k >= 1 then varOfExpr lhs else Nothing else Nothing
-    _ =>
-      case lhs of
+guardThenPosAtom op args =
+  case lastTwo args of
+    Just (Pair lhs rhs) =>
+      case rhs of
         EInt k ksp =>
-          if op == "lt" || op == "<" then
-            if k >= 0 then varOfExpr rhs else Nothing
-          else if op == "le" || op == "<=" then
-            if k >= 1 then varOfExpr rhs else Nothing
+          if op == "gt" || op == ">" then
+            if k >= 0 then varOfExpr lhs else Nothing
+          else if op == "ge" || op == ">=" then
+            if k >= 1 then varOfExpr lhs else Nothing
           else
             Nothing
-        _ => Nothing
-guardThenPosAtom op _ = Nothing
+        _ =>
+          case lhs of
+            EInt k ksp =>
+              if op == "lt" || op == "<" then
+                if k >= 0 then varOfExpr rhs else Nothing
+              else if op == "le" || op == "<=" then
+                if k >= 1 then varOfExpr rhs else Nothing
+              else
+                Nothing
+            _ => Nothing
+    Nothing => Nothing
 
 -- | 单个比较为假时成立的「正性」：`x <= k`（k ≥ 0）为假 ⇒ `x > 0`；
 -- `x < k`（k ≥ 1）为假 ⇒ `x ≥ 1 > 0`。字面量在左的写法按同一口径镜像。
 guardElsePosAtom : String -> List Expr -> Maybe String
-guardElsePosAtom op ([lhs, rhs]) =
-  case rhs of
-    EInt k ksp =>
-      if op == "le" || op == "<=" then
-        if k >= 0 then varOfExpr lhs else Nothing
-      else if op == "lt" || op == "<" then if k >= 1 then varOfExpr lhs else Nothing else Nothing
-    _ =>
-      case lhs of
+guardElsePosAtom op args =
+  case lastTwo args of
+    Just (Pair lhs rhs) =>
+      case rhs of
         EInt k ksp =>
-          if op == "ge" || op == ">=" then
-            if k >= 0 then varOfExpr rhs else Nothing
-          else if op == "gt" || op == ">" then
-            if k >= 1 then varOfExpr rhs else Nothing
+          if op == "le" || op == "<=" then
+            if k >= 0 then varOfExpr lhs else Nothing
+          else if op == "lt" || op == "<" then
+            if k >= 1 then varOfExpr lhs else Nothing
           else
             Nothing
-        _ => Nothing
-guardElsePosAtom op _ = Nothing
+        _ =>
+          case lhs of
+            EInt k ksp =>
+              if op == "ge" || op == ">=" then
+                if k >= 0 then varOfExpr rhs else Nothing
+              else if op == "gt" || op == ">" then
+                if k >= 1 then varOfExpr rhs else Nothing
+              else
+                Nothing
+            _ => Nothing
+    Nothing => Nothing
 
 -- | 条件为真时成立的全部正性事实。`a && b` 取并；`a || b` 只有两侧都为真才成立的
 --   事实才可用（取交），否则会把「至少一侧为正」误当成两侧都为正。
 export guardThenPosVars : Expr -> List String
+-- `a && b` 在 Core 里是 `if a then b else False`：真分支两侧都成立。
+guardThenPosVars (EIf c t el sp) =
+  if isFalseLit el then guardUnion (guardThenPosVars c) (guardThenPosVars t) else []
 guardThenPosVars (EApp (EVar op osp) args sp) =
   let
-    opn = opBaseName (rnameKey op)
+    opn = cmpOpOf (opBaseName (rnameKey op))
   in if opn == "&&" then
     case args of
       [a, b] => guardUnion (guardThenPosVars a) (guardThenPosVars b)
@@ -555,9 +602,12 @@ guardThenPosVars _ = []
 -- | 条件为假时成立的全部正性事实：`a || b` 为假 ⇒ 两侧都假（取并）；
 --   `a && b` 为假只说明至少一侧为假（取交）。
 export guardElsePosVars : Expr -> List String
+-- `a || b` 在 Core 里是 `if a then True else b`：假分支两侧都成立。
+guardElsePosVars (EIf c t el sp) =
+  if isTrueLit t then guardUnion (guardElsePosVars c) (guardElsePosVars el) else []
 guardElsePosVars (EApp (EVar op osp) args sp) =
   let
-    opn = opBaseName (rnameKey op)
+    opn = cmpOpOf (opBaseName (rnameKey op))
   in if opn == "&&" then
     case args of
       [a, b] => guardInter (guardElsePosVars a) (guardElsePosVars b)
@@ -571,6 +621,14 @@ guardElsePosVars (EApp (EVar op osp) args sp) =
       Just v => [v]
       Nothing => []
 guardElsePosVars _ = []
+
+isTrueLit : Expr -> Bool
+isTrueLit (EInt k sp) = k /= 0
+isTrueLit _ = False
+
+isFalseLit : Expr -> Bool
+isFalseLit (EInt k sp) = k == 0
+isFalseLit _ = False
 
 -- 一个实参是否「已知为正」：字面量 >0，或变量处于守卫区 / 调用方同位置形参已有正事实。
 export argPositive : List Expr -> Int -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> HashMap String (List Int) -> List String -> Bool
@@ -639,17 +697,24 @@ posWalkFields namesTbl caller sizes facts region ((Pair fn fe) :: rest) st =
     rest
     (posWalk namesTbl caller sizes facts region fe st)
 
-export posWalkAlts : HashMap String Bool -> String -> List (Pair String (Pair Int (Pair Int (List Int)))) -> HashMap String (List Int) -> List String -> List (Pair Pat Expr) -> Pair (List (Pair String Int)) (List (Pair String Int)) -> Pair (List (Pair String Int)) (List (Pair String Int))
-posWalkAlts namesTbl caller sizes facts region [] st = st
-posWalkAlts namesTbl caller sizes facts region ((Pair pat body) :: rest) st =
+export posWalkAlts : HashMap String Bool -> String -> List (Pair String (Pair Int (Pair Int (List Int)))) -> HashMap String (List Int) -> List String -> Expr -> List (Pair Pat Expr) -> Pair (List (Pair String Int)) (List (Pair String Int)) -> Pair (List (Pair String Int)) (List (Pair String Int))
+posWalkAlts namesTbl caller sizes facts region scrut [] st = st
+posWalkAlts namesTbl caller sizes facts region scrut ((Pair pat body) :: rest) st =
   posWalkAlts
     namesTbl
     caller
     sizes
     facts
     region
+    scrut
     rest
-    (posWalk namesTbl caller sizes facts region body st)
+    (posWalk namesTbl caller (extendSizesVarOnly sizes scrut pat) facts region body st)
+
+-- `posWalk` 不携带投影表：只有变量 scrutinee 能扩尺寸（`case r.field of …` 的下降由
+-- `strWalkAlts` / `siteCollectAlts` 的完整版本负责）。
+extendSizesVarOnly : List (Pair String (Pair Int (Pair Int (List Int)))) -> Expr -> Pat -> List (Pair String (Pair Int (Pair Int (List Int))))
+extendSizesVarOnly sizes (scrut@(EVar _ _)) pat = extendSizesStrict [] sizes scrut pat
+extendSizesVarOnly sizes _ pat = sizes
 
 -- 局部函数的 clause 列表：与 `posWalkAlts` 同形，沿子项结构下降（不走 fuel）。
 export posWalkClauses : HashMap String Bool -> String -> List (Pair String (Pair Int (Pair Int (List Int)))) -> HashMap String (List Int) -> List String -> List (Pair (List Pat) Expr) -> Pair (List (Pair String Int)) (List (Pair String Int)) -> Pair (List (Pair String Int)) (List (Pair String Int))
@@ -751,6 +816,7 @@ posWalk namesTbl caller sizes facts region (ECase scrut alts sp) st =
     sizes
     facts
     region
+    scrut
     alts
     (posWalk namesTbl caller sizes facts region scrut st)
 posWalk namesTbl caller sizes facts region (ELam ns b sp) st =
@@ -890,6 +956,19 @@ projectionOfDef d =
               case pathInPat (rnameKey v) pat [] of
                 Just path => if notEmpty path then Just (Pair (firstOf d) path) else Nothing
                 Nothing => Nothing
+            -- 精化后的单构造子投影：`\p => case p of C .. v .. => v`。
+            -- 与源码层的 `f (C .. v ..) = v` 是同一个定义，字段下标取**运行时位置**
+            -- （擦除 binder 已在翻译时剔除）。
+            ECase scrut alts csp =>
+              case (pat, scrut, alts) of
+                (PVar pn psp, EVar sn ssp, [Pair altPat (EVar v vsp2)]) =>
+                  if pn == rnameKey sn then
+                    case pathInPat (rnameKey v) altPat [] of
+                      Just path => if notEmpty path then Just (Pair (firstOf d) path) else Nothing
+                      Nothing => Nothing
+                  else
+                    Nothing
+                _ => Nothing
             _ => Nothing
         _ => Nothing
     _ => Nothing
@@ -1057,16 +1136,39 @@ arithRel p _ sizes caller facts region = Nothing
 -- 终止性检查里「fuel 递减」只看减法语义，因此两种写法都认。
 -- | `-` 的两种写法：内建运算符名与 `Base.Trait.Num.sub` 方法投影（别名替换后）。
 export isSubOpName : String -> Bool
-isSubOpName op = op == "-" || op == "Base.Trait.Num.sub" || op == "Base.Trait.Num.-"
+isSubOpName op =
+  op == "-" || op == "Base.Trait.Num.sub" || op == "Base.Trait.Num.-" || opBaseName op == "natSub"
 
 -- | `+` 的两种写法：升序计数器不构成下降证据，但失败诊断要能指出来。
 export isAddOpName : String -> Bool
 isAddOpName op = op == "+" || op == "Base.Trait.Num.add" || op == "Base.Trait.Num.+"
 
 export arithMinus : Int -> List Expr -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> HashMap String (List Int) -> List String -> Maybe Int
-arithMinus p ([base, EInt k ksp]) sizes caller facts region =
-  if k > 0 then arithMinusBase p base k sizes caller facts region else Nothing
-arithMinus p _ sizes caller facts region = Nothing
+arithMinus p args sizes caller facts region =
+  case lastTwo args of
+    Just (Pair base rhs) =>
+      case natLitOf rhs of
+        Just k => if k > 0 then arithMinusBase p base k sizes caller facts region else Nothing
+        Nothing => Nothing
+    Nothing => Nothing
+
+-- 自然数字面量：`0` / `Z` / `Zero` 与 `Succ …` / `S …` 链（Core 里是构造子应用）。
+natLitOf : Expr -> Maybe Int
+natLitOf (EInt k sp) = if k >= 0 then Just k else Nothing
+natLitOf (EVar n sp) =
+  let
+    b = opBaseName (rnameKey n)
+  in if b == "Z" || b == "Zero" then Just 0 else Nothing
+natLitOf (EApp (EVar c csp) ([x]) sp) =
+  let
+    b = opBaseName (rnameKey c)
+  in if b == "S" || b == "Succ" then
+    case natLitOf x of
+      Just k => Just (k + 1)
+      Nothing => Nothing
+  else
+    Nothing
+natLitOf _ = Nothing
 
 export arithMinusBase : Int -> Expr -> Int -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> HashMap String (List Int) -> List String -> Maybe Int
 arithMinusBase p (EVar x xsp) k sizes caller facts region =
@@ -1086,16 +1188,25 @@ arithMinusBase p _ k sizes caller facts region = Nothing
 
 -- 投影调用 `proj v`：v 是 p 位置形参（或其次子项）时，结果是严格子项 ⇒ 直接下降。
 export projRel : Int -> List Expr -> List (Pair String (Pair Int (Pair Int (List Int)))) -> Maybe Int
-projRel p ([v]) sizes =
-  case v of
-    EVar x xsp =>
-      case sizeOfVarStrict (rnameKey x) sizes of
-        Just sz =>
-          case sz of
-            Pair base (Pair depth path) => if base == p then Just 1 else Nothing
-        Nothing => Nothing
-    _ => Nothing
-projRel p _ sizes = Nothing
+projRel p args sizes =
+  case lastOf args of
+    Just v =>
+      case v of
+        EVar x xsp =>
+          case sizeOfVarStrict (rnameKey x) sizes of
+            Just sz =>
+              case sz of
+                Pair base (Pair depth path) => if base == p then Just 1 else Nothing
+            Nothing => Nothing
+        _ => Nothing
+    Nothing => Nothing
+
+lastOf : List a -> Maybe a
+lastOf [] = Nothing
+lastOf (x :: rest) =
+  case rest of
+    [] => Just x
+    _ => lastOf rest
 
 export relOfArg : Int -> Expr -> List (Pair String (Pair Int (Pair Int (List Int)))) -> List String -> List (Pair String (List Int)) -> String -> HashMap String (List Int) -> List String -> Maybe Int
 relOfArg p (EVar n sp) sizes ctors projs caller facts region =

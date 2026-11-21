@@ -1,0 +1,4 @@
+import Loop
+
+main : Int
+main = Loop.count Loop.MkBox

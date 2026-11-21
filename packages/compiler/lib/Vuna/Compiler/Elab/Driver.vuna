@@ -20,6 +20,7 @@ import Vuna.Compiler.Elab.Records
 import Vuna.Compiler.Elab.Term
 import Vuna.Compiler.Elab.Term.Impl
 import Vuna.Compiler.Elab.Termination
+import Vuna.Compiler.Elab.Termination.ElabInput
 import Vuna.Compiler.Elab.Trait
 import Vuna.Compiler.Elab.Usage
 import Vuna.Compiler.Elab.Types
@@ -1324,7 +1325,7 @@ finishCore termAux decls core =
                             _ = dbg! "extradefs-done"
                           in Vuna.Compiler.Base.Common.bind (obsCheck "vuna.elab.usage" (\_ => checkProgramUsage ec4 allDefs)) (
                               \ec5 =>
-                                Vuna.Compiler.Base.Common.bind (obsCheck "vuna.term" (\_ => checkTerminationDeclsWith (declFunNames decls) (append termAux decls))) (
+                                Vuna.Compiler.Base.Common.bind (obsCheck "vuna.term" (\_ => checkTerminationGroups (firstOf (elabTermInput datas1 (ecClasses ec5) allDefs)) (secondOf (elabTermInput datas1 (ecClasses ec5) allDefs)) termAux decls)) (
                                     \_ =>
                                       let
                                         -- 用量检查就地发射的 warning 经 checkProgramUsage 返回的新 Ec 线程到出口；

@@ -832,12 +832,29 @@ paramIndexGo (p :: rest) name i =
     PVar n sp => if n == name then Just i else paramIndexGo rest name (i + 1)
     _ => paramIndexGo rest name (i + 1)
 
+-- | `p0` 是否在体里被某个 `if p0 <= 0` 守卫。
+--
+-- 精化后多子句函数的体先是一层 `case`（子句模式），守卫在各分支里；源码层每个 clause
+-- 的体顶层就是 `if`。两层都看，判定口径保持「这个形参是 fuel」。
 hasFuelGuard : String -> Expr -> Bool
 hasFuelGuard p0 (EIf c t el sp) =
   case guardPosVar c of
     Just v => v == p0
-    Nothing => False
+    Nothing => hasFuelGuard p0 t || hasFuelGuard p0 el
+hasFuelGuard p0 (ECase scrut alts sp) = anyAltFuelGuard p0 alts
+hasFuelGuard p0 (ELet binds body rec_ sp) = hasFuelGuard p0 body || anyBindFuelGuard p0 binds
+hasFuelGuard p0 (ELam ns b sp) = hasFuelGuard p0 b
 hasFuelGuard p0 _ = False
+
+anyAltFuelGuard : String -> List (Pair Pat Expr) -> Bool
+anyAltFuelGuard p0 [] = False
+anyAltFuelGuard p0 ((Pair pat body) :: rest) =
+  if hasFuelGuard p0 body then True else anyAltFuelGuard p0 rest
+
+anyBindFuelGuard : String -> List (Pair Pat Expr) -> Bool
+anyBindFuelGuard p0 [] = False
+anyBindFuelGuard p0 ((Pair pat val) :: rest) =
+  if hasFuelGuard p0 val then True else anyBindFuelGuard p0 rest
 
 guardParamGo : List String -> Expr -> Maybe String
 guardParamGo [] body = Nothing

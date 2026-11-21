@@ -325,6 +325,11 @@ main = pretty Red ++ "/" ++ show Red
         MkBox b => a == b
   ```
 
+- **实例方法体参与终止性检查**：分析输入取自精化产物（`Elab.Termination.ElabInput`），
+  实例字典按字段拆成 `<字典符号>#<方法短名>` 一组，方法体里的 `proj dict x` 只有
+  `dict` 是本包实例（`TGlobal <字典符号>`）时才连到该组；字典是 ctx 参数（泛型函数里的
+  约束）时不连边。跨实例的同名方法（如 `Applicative.pure` 调 `Eff` 的 `pure`）因此
+  不会被当成本实例的自递归。
 - **参数化 `deriving (Show, Eq, Ord, Hashable)`**：按 data 的每个类型参数生成 ctx（形态是约束
   实例 `instance Eq a => Eq (F a)`）；`Show` 要求字段可 show。`mem (Box 1) [...]`
   这类需要 `Dict_Eq (Box Int)` 的用法因此可用。

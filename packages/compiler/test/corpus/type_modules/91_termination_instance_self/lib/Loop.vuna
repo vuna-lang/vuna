@@ -1,0 +1,13 @@
+module Loop where
+
+-- 实例方法体的自调用必须进入终止性检查（D124）。这个模块有前缀（`Loop.`），
+-- 以前 Loader 把方法投影改名成 `Loop.count`、实例里的声明仍是 `count`，
+-- 分析按名字连不上边，`count b = count b` 会静默通过。
+export trait Count a(..) where
+  count : a -> Int
+
+export data Box(..) : Type where
+  MkBox : Box
+
+instance Count Box where
+  count b = count b

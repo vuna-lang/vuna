@@ -39,7 +39,6 @@ ID 是稳定引用（`层前缀-序号`）：条目关闭即删除该行，ID �
 | D113 · C | 转发器已按定义性归约参与判据；剩余：回调实参不是纯形参（`k (g x)`）、转发器被部分应用后再调用、跨实例字典派发（需要类型信息） | `Elab/Termination/Measure.vuna`（`forwardersOf` / `expandForwarders`）；夹具 `term/20_forwarder.vuna`、`term_err/23_forwarder_equal.vuna` | 后续 |
 | D115 · C | 宏展开只有调用点 span：展开出的节点共享 `name!` 的 span，没有 per-展开节点的 source map；LSP 不能 goto 宏定义 / 展开视图，fmt / lint / index 只按调用形式处理 | `Loader/Expand.vuna` 的 span 约定；`Vuna.Fmt.Expr`、`Vuna.Index.Scan` | 后续（与 D65 一起做） |
 | D120 · C | 未选中的 `if` 分支在纯求值器里也被弱头求值：`TIf` 落成 `evalIf (eval c) (eval th) (eval el)`，`VIf` 只存 `Value`；`normalize` / codegen 只处理选中支 | `Core/Eval.vuna`（`TIf`、`evalIf`、`normalizeIfFuel`）；[language.md](language.md)「`&&`/`\|\|` 短路」 | 后续（把 `VIf` 两支改成 `Closure`） |
-| D124 · ⚠️B | **包上下文的实例方法体仍逃过终止性分析**：Loader 把 trait 方法投影 mangle 成 `<模块前缀>.<方法短名>`，实例里的方法声明保留短名，调用点按名字连边时对不上 | `Elab/Termination/Measure.vuna`（`funDeclsOf` 的 `DInstance` 分支）；复现：包内 `instance T Int where f x = f x` 通过 `check`。**Rast 名字层补前缀不可行**：`instance Applicative EffCheck where pure x = EffCheck (pure x)` 的 `pure` 是跨实例字典派发（`Eff` 的实例），补前缀后会变成自递归误报；修它必须用精化后的字典信息区分「本实例方法」与「上下文字典投影」 | 后续（需要精化后的字典/类型信息，不在 Rast 名字层做） |
 
 ## 前端（Frontend）
 
@@ -90,8 +89,7 @@ ID 是稳定引用（`层前缀-序号`）：条目关闭即删除该行，ID �
 
 | ID · 类 | 仍未成立的事实 | 证据 | 归属 |
 | --- | --- | --- | --- |
-| EL-20 · ⚠️B | `Termination/Measure.vuna` 的 `funDeclsOf`：只收顶层 `DFun` 时实例方法体完全不进终止性分析（已部分修）；包上下文的 trait 投影改名仍未对齐（D124） | `Elab/Termination/Measure.vuna` | 后续 |
-| EL-22 · D | 终止性有三份几乎同构的手写遍历（`posWalk` / `strWalk` / `siteWalkC`），全部工作在 Rast 语法层（没有类型 / 实例信息），HOF 识别是 `Base.Data.List.{map,filter,concatMap,mapMaybe,foldl,foldr}` / `Result.traverse` / `Common.traverse` 的 canonical 模块名白名单；三处对 `EInfix`/`ESect`/`EInterp` 的覆盖各不相同 | `Elab/Termination.vuna`、`Elab/Termination/{Measure,Scc}.vuna` | 后续 |
+| EL-22 · D | 终止性有三份几乎同构的手写遍历（`posWalk` / `strWalk` / `siteWalkC`），工作在「分析表达式」层（由 `Termination.ElabInput` 从精化产物翻译；实例身份已按字典分组，类型信息仍在翻译时丢弃），HOF 识别是 `Base.Data.List.{map,filter,concatMap,mapMaybe,foldl,foldr}` / `Result.traverse` / `Common.traverse` 的 canonical 模块名白名单；三处对 `EInfix`/`ESect`/`EInterp` 的覆盖各不相同 | `Elab/Termination.vuna`、`Elab/Termination/{Measure,Scc}.vuna` | 后续 |
 | EL-23 · C | 终止性判据的容量兜底把「放弃」渲染成「证明失败」：`tableGraphCap = 512`、`sctClosureFuel = 240`、正性不动点 1024、弱可达 100000 耗尽一律判失败；`blindSitesOf` 把「没分析到」落成全弱边，错误码与真正的非终止相同 | `Elab/Termination/Scc.vuna`、`Elab/Termination.vuna`、`Elab/Termination/Measure.vuna` | 后续 |
 | EL-24 · ⚠️C | 覆盖率 / 可达性有五处口径：`Case.BranchVerdict`、`Coverage.clauseCover`、`Match.familyCovered`、`Coverage.familyCtors`、`Impl` 的 Bool/Nat/Int/String 专用路径；索引族与未知族一律按「已覆盖」静默放行 | `Elab/{Case,Coverage,Match}.vuna`、`Elab/Term/Impl.vuna` | 后续 |
 | EL-25 · D | `Sig.vuna` 里四份手写 AST 遍历（`exprMaxAppArity` / `exprLowerVars` / `memberDomainOverridesOne` / `Trait.exprFreeLower`）覆盖的构造子集合各不相同且都不完整；`methodArgRigsOf` 的 `rigOf` 参数从未被调用，却对每个域白做一次 `eval` | `Elab/Sig.vuna`、`Elab/Trait.vuna` | 后续 |
@@ -150,7 +148,7 @@ ID 是稳定引用（`层前缀-序号`）：条目关闭即删除该行，ID �
 | DR-13 · D | `CompilerCli.vuna` 的 `build`：五条实现路径，缓存 / 告警 / 清理各不相同 | `Driver/CompilerCli.vuna` | 后续 |
 | DR-14 · C | `Compile.vuna` 的哈希折叠：`acc*1000003+h`、63-bit 相加与 SHA 口径并存 | `Driver/Compile.vuna` | 后续 |
 | DR-15 · C | `Compile.vuna` 的 `toolchainIdEff`：取不到就回落常量 `"none"` | `Driver/Compile.vuna` | 后续 |
-| DR-16 · D | 模块接口必须携带 `miDecls`（已 Loader-resolved 的源码 AST）：record 语法降级与终止性 SCT 都工作在源码层，依赖方要这两类上下文；接口无法瘦身，增量边界被语法耦合 | `Driver/Iface.vuna`、`Driver/Dt.vuna`（`termAux`）、`Elab/{Records,Termination}` | 后续 |
+| DR-16 · D | 模块接口必须携带 `miDecls`（已 Loader-resolved 的源码 AST）：record 语法降级仍工作在源码层，依赖方要这份上下文；接口无法瘦身，增量边界被语法耦合（终止性已改读精化产物，不再需要 `miDecls`） | `Driver/Iface.vuna`、`Driver/Cache.vuna`、`Elab/Records` | 后续 |
 | A06 · ⚠️D | split 的 cache key 编入 `mode=s/f`：摘要路径与全量路径产出不同字节，产物是「输入 + store 热度」的函数 | 同 DR-01；`Driver/Compile.vuna` | 后续（需设计） |
 
 ## 工具、构建与验证
@@ -217,7 +215,7 @@ ID 是稳定引用（`层前缀-序号`）：条目关闭即删除该行，ID �
    `bindShapeOf` 的索引模式匹配、`__anf`/`__cps` 编号借 fuel、`showTerm`/`showValueAt 6` 当相等判据
    （仅剩诊断展示 EC-35），以及把元数据编进名字（只剩 `@vuna@…` 标记仍靠字符串编解码；
    `#…` 合成名已集中到 `Frontend.Reserved`，编号只用于定义内去重、不承担身份，也不再
-   拿名字当列表容器）与按短名分组的方法 / 实例（EC-12 / EC-23 / D124）。
+   拿名字当列表容器）与按短名分组的方法（EC-12 / EC-23）。
 2. **fuel 仍是主要的终止性证书**：多数路径已改成「预算按输入规模派生 + 耗尽 `icFuel`」，
    残留「把固定容量上限当成语义结论」（EL-23、CO-07 的 conv 预算）、
    「只有 SCT 测度、从不检查的 fuel」（FE-09）、「派生预算不可达仅靠注释论证的静默兜底」

@@ -1,0 +1,24 @@
+-- 实例方法调用**另一个类**的同名方法不是自递归（D124 的另一半）：
+-- 分析按字典值把实例方法分组，`RunA` 的实例体调用 `RunB` 的字典，两者不同组。
+import Prelude
+
+trait RunA a where
+  runA : a -> Int
+
+trait RunB a where
+  runB : a -> Int
+
+data X : Type where
+  MkX : X
+
+data Y : Type where
+  MkY : Y
+
+instance RunB Y where
+  runB y = 0
+
+instance RunA X where
+  runA x = runB MkY
+
+main : Int
+main = runA MkX

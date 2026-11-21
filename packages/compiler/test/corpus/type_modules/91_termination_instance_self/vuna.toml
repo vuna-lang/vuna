@@ -1,0 +1,5 @@
+[package]
+name = "fix-91-termination-instance-self"
+
+[dependencies]
+vuna-base = "../../../../../../packages/base"

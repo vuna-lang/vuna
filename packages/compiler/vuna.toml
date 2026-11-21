@@ -48,6 +48,7 @@ modules = [
   "Vuna.Compiler.Elab.Term.Impl",
   "Vuna.Compiler.Elab.Term.Support",
   "Vuna.Compiler.Elab.Termination",
+  "Vuna.Compiler.Elab.Termination.ElabInput",
   "Vuna.Compiler.Elab.Termination.Measure",
   "Vuna.Compiler.Elab.Termination.Scc",
   "Vuna.Compiler.Elab.Trait",

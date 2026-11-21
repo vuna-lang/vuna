@@ -97,8 +97,9 @@
 | `Elab.Trait` | trait/instance 声明与实例体：类参数 kind、方法投影、实例头检查（重复/相干性；无命名实例、支持约束实例 ctx）、方法体精化；实例 ctx 与顶层签名 ctx 共用 `elabConstraintDomains`（含类参数 kind 校验），隐式字典 binder 按 RigΩ 绑定（运行时保留、可多次使用）；方法签名带 span，实例名=单类前缀+完整 head 名 | `checkInstanceHeads`、`elabInstanceBodies`、`elabConstraintDomains`、`instanceName` |
 | `Elab.InstName` | 实例名生成规则（单类前缀 + 完整 head 名）的唯一实现 | `instanceName` |
 | `Elab.InstCoherence` | 实例相干性检查（重叠头判据） | `findInstanceClash`、`headsOverlap` |
-| `Elab.Driver` | 精化入口与程序组装：签名（约束 ctx → 隐式字典 binder）→ data/trait/instance → 定义体（声明的字典目标先解到 ctx binder，剩余才提升）→ zonk/终止性检查 → `DtProgram`；洞目标（含洞名）。`goalsOfProgramTolerant` 与严格收尾拆开：只读 core 的 goals，未解洞也能给目标+上下文（供 `vuna goal` / LSP）。接口摘要路径用 `elabProgramFullWithAux`（起始 Ec 由依赖摘要注入；termAux 只喂终止性分析） | `elabProgramFull`、`elabProgramFullWithAux`、`goalsOfProgram`、`goalsOfProgramTolerant`、`dtEvalExprIn` |
-| `Elab.Termination` | 终止性检查：调用图 + SCC，结构下降/守卫 Int 判据（无包级豁免）。`checkTerminationDeclsWith` 允许把依赖包声明只作为 SCT 上下文、只报告本包函数的失败 | `checkTerminationDecls`、`checkTerminationDeclsWith` |
+| `Elab.Driver` | 精化入口与程序组装：签名（约束 ctx → 隐式字典 binder）→ data/trait/instance → 定义体（声明的字典目标先解到 ctx binder，剩余才提升）→ zonk/终止性检查 → `DtProgram`；洞目标（含洞名）。`goalsOfProgramTolerant` 与严格收尾拆开：只读 core 的 goals，未解洞也能给目标+上下文（供 `vuna goal` / LSP）。接口摘要路径用 `elabProgramFullWithAux`（起始 Ec 由依赖摘要注入；termAux 只喂 record 头与终止性的依赖上下文） | `elabProgramFull`、`elabProgramFullWithAux`、`goalsOfProgram`、`goalsOfProgramTolerant`、`dtEvalExprIn` |
+| `Elab.Termination` | 终止性检查：调用图 + SCC，结构下降/守卫 Int 判据（无包级豁免）。输入是**精化后**的定义组（见 `Elab.Termination.ElabInput`）；`checkTerminationGroups` 只报告本包组名的失败，依赖包声明只作 SCT 上下文 | `checkTerminationGroups`、`checkTerminationDecls` |
+| `Elab.Termination.ElabInput` | 从 `DtProgram` 构造分析组：普通定义一组；实例字典按字段拆成 `<字典符号>#<方法>` 一组；`Term` → 分析表达式（丢弃擦除实参、`case` 分支转构造子模式）；「投影 + 已知字典值」的调用点改写成语义分组名，跨实例同名方法因此不会误报自递归 | `elabTermInput`、`dictGroupKey` |
 | `Elab.Prelude` | 把 `Base.Intrinsics` 表翻译成 DT prelude globals（签名）；没有第二份名字/签名表 | `preludeGlobals`、`builtinTyName`、`cmpBuiltinTyName` |
 | `Elab.Match` | 多 clause 模式矩阵降级：构造子列 → `case`、字面量列 → `if` 链（纯 Ast→Ast）；降级前先做子句可达性检查（`TC_ClauseUnreachable`） | `multiToExpr`、`checkReachable`、`buildColumnExpr` |
 | `Elab.Records` | `record` 的语法与结构化元数据：收集 `RecordMeta`、把 record 表达式/模式降级成**合成位置构造子**的引用（不降级成 `DData`）；`prepareDecls*` 返回的 decls 保留 `DRecord` | `desugarRecords`、`recordsOfDecls`、`prepareDecls` |
@@ -239,7 +240,7 @@ check / build pkg
 
 摘要字段（每包只存**自己的声明**，依赖闭包由读方逐包合并）：`datas`（kind + 构造子类型）、
 `defs`（type + body）、`globals`（签名面）、`insts`（tele / 约束 / 头）、`classes`（投影 /
-字段类型）、`miDecls`（已解析源码声明，供 record 精化与终止性 SCT 使用）、exports /
+字段类型）、`miDecls`（已解析源码声明，供 record 精化使用；终止性分析已改读精化产物）、exports /
 fixities / imports、`miSource`、`miIfaceHash`、`miDepHashes`。
 
 ### 硬不变量
