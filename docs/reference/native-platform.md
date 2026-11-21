@@ -31,7 +31,7 @@
 | `memcpy` / `memcmp` | `rep movsb` / `repe cmpsb` |
 | `abort()` | 分类 trap：`vuna: runtime error: ...` + exit 2 |
 
-所以它不是「重写 libc」，而是**一个 nolibc 级的垫片**：33 个 syscall + 一个分配器 +
+所以它不是「重写 libc」，而是**一个 nolibc 级的垫片**：34 个 syscall + 一个分配器 +
 几个字符串例程。缺的 libc 面很大（`printf` 格式引擎、locale/宽字符、浮点格式化、完整
 math、`dlopen`、pthread/TLS、`getaddrinfo`），而且**不需要**——Vuna 的值表示由 codegen
 定义，格式化在 `Base.Data.*` 库里。

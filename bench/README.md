@@ -33,13 +33,13 @@
 - 每项先 `--warmup` 次预热，再跑 `--runs` 次取**中位数**；峰值内存用 GNU time 的 max RSS，
   计时结束后单独跑 `--rss-passes` 次取**最大值**（不参与计时）。
 - native 只有**直接饱和尾调用**复用栈帧（[native.md](../docs/reference/native.md) §3），
-  非尾深递归仍会耗尽默认栈。native 进程统一在 `ulimit -s unlimited` 下运行，JSON
-  `meta.stack_policy` 记录该口径；栈页计入峰值 RSS。
+  非尾深递归吃入口自带栈：`_start` 默认 mmap 512 MiB 虚拟栈（`VUNA_NATIVE_STACK_MB`），
+  与 `ulimit -s` 无关，JSON `meta.stack_policy` 记为 `self-managed`；栈页计入峰值 RSS
+  （未触碰的虚拟部分不提交、不计 RSS）。
 - wasm 的计时包含 node 启动 + 模块实例化（`meta.node_startup_ms`，本机 ~18 ms）；
   小项先减地板再看。
 - native 每个 benchmark 另记 `default_stack_ok`：固定 8 MiB soft limit 跑一次、记录能否正常
-  退出（探针不参与计时）。直接饱和尾调用的项（`tco_mutual` / `tco_wide` / `arith` /
-  `records`）应为 true，非尾深递归项仍为 false。
+  退出（探针不参与计时）。自带栈生效时这项应恒为 true；false 说明栈初始化回落到了进程栈。
 - 跨机器只比较 `ratio = <backend>_median / ocaml_median` 与
   `rss_ratio = <backend>_max_rss / ocaml_max_rss`；绝对 ms/KB 不可比。`--check` 默认读
   对应基线，对超过 `--threshold`（默认 20%）的项打 `PERF-CHECK-WARN`（软告警、退出 0），

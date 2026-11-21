@@ -314,6 +314,14 @@ run: sh -c 'VUNA_NATIVE_GC_STRESS=1 "$TMPDIR/applyroots-out/bin/applyroots" 2>&1
 exit: 0
 out-equals: 8
 
+# 9u7) 自带栈：40 万层非尾递归在 `ulimit -s 8192`（默认 8 MiB）下仍能跑完。
+#      生成的二进制启动时 mmap 自己的栈（512 MiB 虚拟，按需提交），不依赖宿主栈上限。
+run: sh -c 'd="$TMPDIR/deepstack"; mkdir -p "$d/app"; printf "[package]\nname = \"deepstack\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Data.Int as Int\n\nsumTo : Int -> Int\nsumTo n = if n <= 0 then 0 else n + sumTo (n - 1)\n\nmain : Int\nmain = sumTo 400000\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/deepstack-out" "$d"'
+exit: 0
+run: sh -c 'ulimit -s 8192 && exec "$TMPDIR/deepstack-out/bin/deepstack"'
+exit: 0
+out-equals: 80000200000
+
 # 9v) 核数：`VUNA_NATIVE_CPUS=1` 把进程钉到一个可用核上（`Cpus_allowed_list` 单项）。
 run: sh -c 'VUNA_NATIVE_CPUS=1 "$TMPDIR/sleepy-out/bin/sleepy" >/dev/null & p=$!; sleep 0.3; taskset -pc $p | sed "s/.*: //" | awk -F, "{print NF}"; wait'
 out-equals: 1
@@ -328,7 +336,7 @@ run: sh -c 'VUNA_NATIVE_MEM_LIMIT=12345 VUNA_NATIVE_INHERIT=1 "$TMPDIR/envinh-ou
 out-equals: 0
 
 # 9x) 限制只在启动时读 env：设与不设生成的文件集逐字节一致。
-run: sh -c '"$VUNA" compile "$TMPDIR/memlim/app/Main.vuna" "$TMPDIR/detlim-a" --target native; VUNA_NATIVE_MEM_LIMIT=1 VUNA_NATIVE_CPUS=1 "$VUNA" compile "$TMPDIR/memlim/app/Main.vuna" "$TMPDIR/detlim-b" --target native; diff -r "$TMPDIR/detlim-a" "$TMPDIR/detlim-b"'
+run: sh -c '"$VUNA" compile "$TMPDIR/memlim/app/Main.vuna" "$TMPDIR/detlim-a" --target native; VUNA_NATIVE_MEM_LIMIT=1 VUNA_NATIVE_CPUS=1 VUNA_NATIVE_STACK_MB=64 "$VUNA" compile "$TMPDIR/memlim/app/Main.vuna" "$TMPDIR/detlim-b" --target native; diff -r "$TMPDIR/detlim-a" "$TMPDIR/detlim-b"'
 exit: 0
 
 # 9y) GC 回收：高 churn、低存活集的程序在 1 MiB live 预算下跑完（累计分配约 3.8 MB），

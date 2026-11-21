@@ -81,6 +81,11 @@
   pop rbp
   ret
   ```
+- **入口栈**：`_start` 先从初始栈取 `argc` / `argv` / `envp`，再调 `init_stack` mmap 一块
+  512 MiB 的私有匿名栈（`MAP_NORESERVE`，按需提交；底部一页 `PROT_NONE` 作溢出护栏）并
+  切换 `rsp`。深非尾递归因此不依赖进程栈上限（`RLIMIT_STACK`，常见 8 MiB），只受自带栈
+  容量约束；`VUNA_NATIVE_STACK_MB` 覆盖容量，`0` = 沿用进程栈（§5.1）。初始栈保留：
+  argv/envp 字符串仍在那里，`getArgs` / `env_lookup` 继续读。
 - **不做寄存器分配**：binder 和中间值都分配 `[rbp - 8*(slot+2)]` 栈槽（`[rbp-8]` 是
   帧头保留槽）；临时槽不回收，frame 取该函数的最大使用量。求值顺序因此显式、稳定。
 - **栈帧与根**：GC 沿 `rbp` 链逐帧保守扫 `[上一帧 rbp + 16, rbp + 16)`，帧内每个机器字
@@ -300,13 +305,14 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
   `packages/target-native/test/RuntimeTable.vuna` 冻结（CI 的 `vuna test` 会跑）；关闭缺口
   时同步删掉登记项，否则测试报「listed as a gap but implemented」。
 
-### 5.1 资源限制（内存 / 核数 / 超时）
+### 5.1 资源限制（栈 / 内存 / 核数 / 超时）
 
-`_start` 在 `vuna_main` 之前调用 `init_mem` / `init_gc` / `init_cpus` / `init_timeout`；配置全部来自
-env，**不进 codegen**（同一 IR 的产物逐字节确定）。解析失败一律回落缺省，不阻断启动。
+`_start` 在 `vuna_main` 之前调用 `init_stack` / `init_mem` / `init_gc` / `init_cpus` / `init_timeout`；
+配置全部来自 env，**不进 codegen**（同一 IR 的产物逐字节确定）。解析失败一律回落缺省，不阻断启动。
 
 | env | 缺省 | 语义 |
 | --- | --- | --- |
+| `VUNA_NATIVE_STACK_MB` | `512` | 自带栈容量（MiB）：启动时 mmap 的私有匿名区，与进程栈的 `RLIMIT_STACK` 无关；`MAP_NORESERVE`，RSS 只随实际递归深度增长。`0` = 不切换、沿用进程栈；mmap 失败也回落进程栈 |
 | `VUNA_NATIVE_MEM_LIMIT` | 自动：`max(1 GiB, 2 × live + 256 MiB)`，每次回收后按 live 抬高 | **live 堆**上限：分配的预留超过它时先做一次整堆回收，GC 后 `live + 本次` 仍超限才 `memory limit exceeded` + exit 2。缺省只升不降——固定的 1 GiB 在 live 见顶后会让每次分配都触发一次整堆回收（死锁）；显式设置时是硬上限，`0` = 不限 |
 | `VUNA_NATIVE_GC_MIN` | `1048576`（1 MiB） | 回收阈值的下限（也是新堆段的最小尺寸）：年轻代回收后阈值 = `max(GC_MIN, live/8, 上次扫到的栈字节数)`，整堆回收后 = `max(GC_MIN, 2 × live, 上次扫到的栈字节数)` |
 | `VUNA_NATIVE_GC_LOG` | 关 | 存在即向 stderr 打诊断行 `gc n=<次数> live=<字节> alloc=<自上次 GC 起的分配字节> cards=<本次扫过的脏卡片数> gen=<minor 或 full>` |
@@ -476,11 +482,10 @@ env，**不进 codegen**（同一 IR 的产物逐字节确定）。解析失败�
 - FFI / extern；stdin 的 `readLine` / `readBytes` 与 net。
 - **自举运行**：`vuna build packages/compiler --target native` 产出可链接的 `bin/vuna-compiler`
   （`version` / 帮助可用）；成员包 `processSpawn` 按 argv 边界逐项传参（105 的 9u5），GC 逐帧
-  保守扫根。空 store 下整仓 `check .` 在 `ulimit -s unlimited` 下通过；默认 8 MiB 栈下
-  `packages/toolchain` / `packages/dev` 的非尾递归会 SIGSEGV（非尾递归吃宿主栈）。
-  缺口与复现记在 [debt.md](debt.md) D122。
+  保守扫根，入口自带栈（105 的 9u7）。空 store 下整仓 `check .` 在默认 `ulimit -s 8192`
+  下通过，不再需要抬高进程栈；40 万层非尾递归由 9u7 锁定。
   整仓 selfhost 的现状见 [testing.md](testing.md)「后端自举 conformance」：尾调用（§3）只覆盖
-  **直接饱和直调**，非尾递归、被闭包包住的递归仍按帧吃宿主栈；效应侧另有延迟 answer 的
+  **直接饱和直调**，非尾递归、被闭包包住的递归仍按帧吃自带栈；效应侧另有延迟 answer 的
   handler 缺口（[debt.md](debt.md) D101）。
   CI 的 `nix run .#backend-check -- --compiler native` 因此仍是非阻塞任务（口径见
   [testing.md](testing.md)「后端自举 conformance」）。
@@ -501,11 +506,11 @@ env，**不进 codegen**（同一 IR 的产物逐字节确定）。解析失败�
   - `Int` 除法 `min_int / -1` 返回 `min_int`（与 OCaml / wasm 一致，不触发 x86 `#DE`）。
 - **运行期性能与内存**：`nix run .#vuna-perf -- --target native`（或 `--target both`）
   在 16 个生成程序基准上测 native 产物；基线 `bench/baselines/programs.json`，读数与口径见
-[benchmarks.md](benchmarks.md) §1.1。非尾深递归在默认 8 MiB 栈下仍会崩溃（exit 139），
-  基准因此在 `ulimit -s unlimited` 下运行，JSON 的 `meta.stack_policy` 记录该口径、每项另有
-  `default_stack_ok` 探针；峰值 RSS = 栈页 + live 堆，需与墙钟一起读。TCO 由 `IrTail`
-  标记驱动，覆盖直调、饱和闭包、函数值 wrapper、runtime 符号与自递归 loop；窄调宽、
-  `rt_apply` 慢路径与非尾递归仍吃帧。`tco_mutual` / `tco_wide` / `arith` / `records`
+[benchmarks.md](benchmarks.md) §1.1。非尾深递归吃入口自带栈（512 MiB 虚拟，独立于
+  `ulimit -s`），JSON 的 `meta.stack_policy` 记为 `self-managed`、每项另有
+  `default_stack_ok` 探针；峰值 RSS = 已触碰的栈页 + live 堆，需与墙钟一起读。TCO 由
+  `IrTail` 标记驱动，覆盖直调、饱和闭包、函数值 wrapper、runtime 符号与自递归 loop；
+  窄调宽、`rt_apply` 慢路径与非尾递归仍吃帧。`tco_mutual` / `tco_wide` / `arith` / `records`
   的判定与实测读数见 [benchmarks.md](benchmarks.md) §1.2；§1.1 的 native 列是 TCO 前快照。
 - 核数限制是**亲和性**，不是 CPU 配额：单核跑多久不管，长时间占用用
   `VUNA_NATIVE_TIMEOUT_MS`；cgroup 只读 v2 挂载根的 `cpu.max`。

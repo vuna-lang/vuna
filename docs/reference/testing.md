@@ -663,9 +663,9 @@ nix run .#backend-check -- --compiler native --scope selfhost
 8 路并行。CI 里 native 任务仍是 `continue-on-error`（边界见 [native.md](native.md) §8）。
 
 **当前状态**：native 自举编译器能构建、`version` / 帮助可用；成员包 spawn 的 argv 边界
-（105 的 9u5）与 GC 根集（逐帧保守扫）已修，空 store 整仓 `check .` 在
-`ulimit -s unlimited` 下通过。默认 8 MiB 栈下 `packages/toolchain` / `packages/dev` 的
-非尾递归仍会 SIGSEGV；`parity` / `corpus` 本轮未复测。证据与复现见 [debt.md](debt.md) D122。
+（105 的 9u5）、GC 根集（逐帧保守扫）与入口自带栈（105 的 9u7）已修，空 store 整仓
+`check .` 在默认 `ulimit -s 8192` 下通过，不再需要抬高进程栈。`parity` / `corpus` 本轮
+未复测。
 
 **口径约束**：编译器必须与被测源码同一棵树构建——Nix 派生天然满足；手工跑时先
 `nix build .#vuna-native`，不要拿旧二进制去跑新源码（诊断会指向编译器的能力差异，而不是

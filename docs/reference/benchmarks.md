@@ -77,11 +77,12 @@ gc_retain}.vuna`。
 并测量；基线 `bench/baselines/programs.json`（同一份含三端）。口径：
 
 - 同一份源码、同一 N；native、OCaml 后端与手写 OCaml 在同一窗口交替测量；
-- native 不做尾调用：16 个基准里 11 个在默认 8 MiB 栈上 exit 139（只有 `string_ops` /
-  `hashmap` / `sorting` / `gc_low_live` / `gc_array_churn` 能过），所以所有 native 进程统一在
-  `ulimit -s unlimited` 下运行（JSON `meta.stack_policy` 记录该口径）；每个 native 项另记
-  `default_stack_ok`（8 MiB soft limit 下能否正常退出，探针不参与计时）；
-- native 有**两代标记-清扫 GC**（[native.md](native.md) §5.2），峰值 RSS = 栈页 + live 堆；
+- native 只有**直接饱和尾调用**复用栈帧；非尾深递归吃入口自带栈（`_start` 默认 mmap
+  512 MiB 虚拟栈，`VUNA_NATIVE_STACK_MB` 覆盖，与 `ulimit -s` 无关），JSON
+  `meta.stack_policy` 记为 `self-managed`。每个 native 项另记 `default_stack_ok`
+  （8 MiB soft limit 下能否正常退出，探针不参与计时；自带栈生效时应恒为 true）；
+- native 有**两代标记-清扫 GC**（[native.md](native.md) §5.2），峰值 RSS = 已触碰的栈页 + live 堆
+  （自带栈未触碰的虚拟页不提交）；
   `--rss-passes 3` 取最大值，与墙钟分开采样；
 - `--runs 5 --warmup 2` 取中位数；基线记录生成时的 `meta.loadavg`，跨机器只比 ratio。
 
@@ -159,9 +160,9 @@ native 的 TCO / GC 验证项。**GC 与 TCO 均已落地**；下表「前」列
   242 ms；阈值取 `max(GC_MIN, live/8, 栈跨度)`（年轻代）与
   `max(GC_MIN, 2 × live, 栈跨度)`（整堆）摊销扫栈成本；栈帧整段保守扫。
   `gc_pressure` 峰值 RSS 44.9 MB（整堆版基线 54.8 MB）。
-- 重标基线时 `default_stack_ok` 是布尔快照：直调、自递归、饱和闭包、wrapper 与 runtime
-  符号的尾位置都应为 true；非尾深递归项（如 `list_recursion` 的拆半递归）仍为 false，
-  那不是 TCO 漏覆盖——窄调宽与 `rt_apply` 慢路径仍回退普通调用。
+- 重标基线时 `default_stack_ok` 是布尔快照：自带栈生效时所有项都应为 true（包括非尾深
+  递归）；false 说明 `init_stack` 回落到了进程栈。非尾深递归的栈帧成本仍体现在 RSS 与
+  墙钟上——窄调宽与 `rt_apply` 慢路径仍回退普通调用。
 
 ### 1.3 wasm 后端（浏览器路径：JS 宿主 / V8）
 

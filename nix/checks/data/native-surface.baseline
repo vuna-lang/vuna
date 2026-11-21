@@ -12,6 +12,7 @@ execPathFn                       "readlink"
 exitWithFn                       "exit"
 getcwdFn                         "getcwd"
 initCpusFn                       "sched_getaffinity" "sched_setaffinity"
+initStackFn                      "mmap" "mprotect"
 initTimeoutFn                    "rt_sigaction" "setitimer"
 isTtyFn                          "ioctl"
 lstatPathFn                      "newfstatat"
@@ -85,4 +86,5 @@ VUNA_NATIVE_
 VUNA_NATIVE_CPUS
 VUNA_NATIVE_INHERIT
 VUNA_NATIVE_MEM_LIMIT
+VUNA_NATIVE_STACK_MB
 VUNA_NATIVE_TIMEOUT_MS

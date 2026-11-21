@@ -24,6 +24,7 @@ sysNr "write" = 1
 sysNr "close" = 3
 sysNr "lseek" = 8
 sysNr "mmap" = 9
+sysNr "mprotect" = 10
 sysNr "rt_sigaction" = 13
 sysNr "rt_sigprocmask" = 14
 sysNr "rt_sigreturn" = 15
@@ -68,6 +69,18 @@ openWriteCreateTrunc = 577
 -- | `lseek` 的 whence：绝对偏移（`SEEK_SET`）。
 export seekSet : Int
 seekSet = 0
+
+-- | `mmap` 保护位：可读 + 可写（`PROT_READ|PROT_WRITE`）。
+export mmapProtReadWrite : Int
+mmapProtReadWrite = 3
+
+-- | `mmap` flags：私有匿名 + 不预留（`MAP_PRIVATE|MAP_ANONYMOUS|MAP_NORESERVE`）。
+export mmapFlagsAnonNoReserve : Int
+mmapFlagsAnonNoReserve = 16418
+
+-- | `mprotect` 保护位：不可访问（溢出护栏页）。
+export protNone : Int
+protNone = 0
 
 -- | 新建普通文件 / 目录的权限位（`0666` / `0755`；受 umask 约束）。
 export modeFileDefault : Int

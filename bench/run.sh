@@ -16,7 +16,8 @@
 #   * `--target` 选择被测后端：ocaml（默认）/ native / wasm / both / all；
 #   * 每项先 warmup 再跑 --runs 次取**中位数**；峰值内存与 GC 采样在计时样本上做
 #     （`--rss-passes`，默认 1，0 = 不采样），不再单独跑一轮；
-#   * native 进程统一在 `ulimit -s unlimited` 下运行；`stack_policy` 记进 JSON；
+#   * native 进程由入口自带栈运行（默认 512 MiB 虚拟，独立于 `ulimit -s`）；
+#     `stack_policy` 记进 JSON；
 #   * 跨机器比较只看 `ratio = <backend>_median / ocaml_median` 与
 #     `rss_ratio`；wasm 另给 `net_*`（减掉 node 启动地板）；
 #   * 每个后端另记产物指标：中间文本 `files/bytes/lines/max_file`、最终二进制
@@ -201,9 +202,7 @@ WASM_ENGINE_VERSION=n/a
 case " $TARGETS " in
   *" native "*)
     command -v "$CC_BIN" >/dev/null 2>&1 || die "cc not found: $CC_BIN (native 链接需要)"
-    bash -c 'ulimit -s unlimited' 2>/dev/null ||
-      die "native 基准需要 ulimit -s unlimited（当前栈硬上限不足）"
-    STACK_POLICY=unlimited
+    STACK_POLICY=self-managed
     ;;
   *) STACK_POLICY=n/a ;;
 esac
@@ -288,7 +287,7 @@ ratio_of() {
 TIME_BIN=$(type -P time || true)
 if [ -n "$TIME_BIN" ] && ! "$TIME_BIN" -f '%M' true >/dev/null 2>&1; then TIME_BIN=""; fi
 
-# native 产物在 unlimited 栈下运行；wasm 产物由 JS 宿主执行。
+# native 产物由入口自带栈运行；wasm 产物由 JS 宿主执行。
 run_target() { vuna_run_target "$1" "$2"; }
 
 # native 默认栈探针：固定 8 MiB soft limit，记录程序能否正常退出（信息性）。
@@ -396,7 +395,7 @@ sample_target() { # name target program
   case $target in
     ocaml_ref) cmd=("$prog") ;;
     vuna_ocaml) envs+=(VN_PERF_STATS=1); cmd=("$prog") ;;
-    native) envs+=(VUNA_NATIVE_GC_LOG=1); cmd=(bash -c 'ulimit -s unlimited; exec "$1"' _ "$prog") ;;
+    native) envs+=(VUNA_NATIVE_GC_LOG=1); cmd=("$prog") ;;
     wasm) envs+=(VN_PERF_STATS=1); cmd=("$NODE_BIN" "$WASM_RUNNER" "$prog") ;;
   esac
   if [ -n "$TIME_BIN" ]; then

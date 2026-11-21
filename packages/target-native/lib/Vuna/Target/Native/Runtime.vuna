@@ -50,9 +50,18 @@ timeoutMessage = "vuna: runtime error: timeout exceeded\n"
 export nativeMemDefaultBytes : Int
 nativeMemDefaultBytes = 1073741824
 
+-- | 自带栈的默认容量（MiB）。进程栈由 `RLIMIT_STACK` 决定（常见 8 MiB），
+--   自举编译器的深非尾递归远超这个量；启动时 mmap 一块独立栈（`VUNA_NATIVE_STACK_MB`
+--   可覆盖，0 = 沿用进程栈），与 `ulimit -s` 无关。
+export nativeStackDefaultMb : Int
+nativeStackDefaultMb = 512
+
 -- | 限制相关的 env 键与路径（NUL 结尾；启动时直接在 `envp` 上扫描，不经过分配器）。
 memLimitKey : String
 memLimitKey = "VUNA_NATIVE_MEM_LIMIT" ++ strPack [0]
+
+stackKey : String
+stackKey = "VUNA_NATIVE_STACK_MB" ++ strPack [0]
 
 timeoutKey : String
 timeoutKey = "VUNA_NATIVE_TIMEOUT_MS" ++ strPack [0]
@@ -170,7 +179,7 @@ rmtreeDeepMessage = "vuna: runtime error: directory tree too deep\n"
 export nativeRodata : List NativeRodata
 nativeRodata =
   append
-    [NativeRodata (nativeDataLabel "true") "True", NativeRodata (nativeDataLabel "false") "False", NativeRodata (nativeDataLabel "nl") "\n", NativeRodata (nativeDataLabel "divzero") divZeroMessage, NativeRodata (nativeDataLabel "oom") oomMessage, NativeRodata (nativeDataLabel "mem_limit") memLimitMessage, NativeRodata (nativeDataLabel "timeout") timeoutMessage, NativeRodata (nativeDataLabel "err_prefix") errPrefix, NativeRodata (nativeDataLabel "assert_prefix") assertPrefix, NativeRodata (nativeDataLabel "todo_prefix") todoPrefix, NativeRodata (nativeDataLabel "impossible") impossibleMessage, NativeRodata (nativeDataLabel "array_oob") arrayOobMessage, NativeRodata (nativeDataLabel "path_long") pathTooLongMessage, NativeRodata (nativeDataLabel "rmtree_deep") rmtreeDeepMessage, NativeRodata (nativeDataLabel "proc_self_exe") ("/proc/self/exe" ++ strPack [0]), NativeRodata (nativeDataLabel "tmp_suffix") (".tmp" ++ strPack [0]), NativeRodata (nativeDataLabel "sh_path") ("/bin/sh" ++ strPack [0]), NativeRodata (nativeDataLabel "sh_dash_c") ("-c" ++ strPack [0]), NativeRodata (nativeDataLabel "env_mem_limit") memLimitKey, NativeRodata (nativeDataLabel "env_timeout") timeoutKey, NativeRodata (nativeDataLabel "env_cpus") cpusKey, NativeRodata (nativeDataLabel "env_inherit") inheritKey, NativeRodata (nativeDataLabel "env_prefix") nativeEnvPrefix, NativeRodata (nativeDataLabel "cg_cpu_max") cgroupCpuMaxPath]
+    [NativeRodata (nativeDataLabel "true") "True", NativeRodata (nativeDataLabel "false") "False", NativeRodata (nativeDataLabel "nl") "\n", NativeRodata (nativeDataLabel "divzero") divZeroMessage, NativeRodata (nativeDataLabel "oom") oomMessage, NativeRodata (nativeDataLabel "mem_limit") memLimitMessage, NativeRodata (nativeDataLabel "timeout") timeoutMessage, NativeRodata (nativeDataLabel "err_prefix") errPrefix, NativeRodata (nativeDataLabel "assert_prefix") assertPrefix, NativeRodata (nativeDataLabel "todo_prefix") todoPrefix, NativeRodata (nativeDataLabel "impossible") impossibleMessage, NativeRodata (nativeDataLabel "array_oob") arrayOobMessage, NativeRodata (nativeDataLabel "path_long") pathTooLongMessage, NativeRodata (nativeDataLabel "rmtree_deep") rmtreeDeepMessage, NativeRodata (nativeDataLabel "proc_self_exe") ("/proc/self/exe" ++ strPack [0]), NativeRodata (nativeDataLabel "tmp_suffix") (".tmp" ++ strPack [0]), NativeRodata (nativeDataLabel "sh_path") ("/bin/sh" ++ strPack [0]), NativeRodata (nativeDataLabel "sh_dash_c") ("-c" ++ strPack [0]), NativeRodata (nativeDataLabel "env_mem_limit") memLimitKey, NativeRodata (nativeDataLabel "env_stack") stackKey, NativeRodata (nativeDataLabel "env_timeout") timeoutKey, NativeRodata (nativeDataLabel "env_cpus") cpusKey, NativeRodata (nativeDataLabel "env_inherit") inheritKey, NativeRodata (nativeDataLabel "env_prefix") nativeEnvPrefix, NativeRodata (nativeDataLabel "cg_cpu_max") cgroupCpuMaxPath]
     (append hostReasonRodata nativeGcRodata)
 
 -- | `_start` 从初始栈拷下来的进程入参（`argc` / `argv` / `envp`）。
@@ -1440,11 +1449,12 @@ exitWithFn : NativeFunc
 exitWithFn = rtFunc "exit_with" 0 [IMov (OpReg Rax) (OpImm (sysNr "exit")), ISyscall]
 
 -- ---------------------------------------------------------------
--- 资源限制：内存预算 / 核数（亲和性）/ 总超时
+-- 运行时初始化：自带栈 / 内存预算 / 核数（亲和性）/ 总超时
 -- ---------------------------------------------------------------
--- `_start` 在 `vuna_main` 之前调用三个 `init_*`（见 `Native.Module.startFunc`）。
+-- `_start` 在 `vuna_main` 之前调用这些 `init_*`（见 `Native.Module.startFunc`）。
 -- 配置全部来自 env，不进 codegen：同一 IR 的产物逐字节确定。
 --
+--   * `VUNA_NATIVE_STACK_MB`（MiB，0 = 沿用进程栈，缺省 512）
 --   * `VUNA_NATIVE_MEM_LIMIT`（字节，0 = 不限，缺省 1 GiB）
 --   * `VUNA_NATIVE_CPUS`（`auto` 缺省 / `0` 不限 / N）
 --   * `VUNA_NATIVE_TIMEOUT_MS`（毫秒，0 = 不限，缺省不限）
@@ -1467,6 +1477,16 @@ parseU64Fn =
   rtRawFunc
     "parse_u64"
     [IBinReg "xor" Rax (OpReg Rax), IBinReg "xor" R9 (OpReg R9), IBinReg "xor" R8 (OpReg R8), ILabel ".Lrt_pu_loop", IMovzx Rdx (OpMemX Rdi R8 0), ICmp (OpReg Rdx) (OpImm 48), IJcc "jb" ".Lrt_pu_done", ICmp (OpReg Rdx) (OpImm 57), IJcc "ja" ".Lrt_pu_done", ICmp (OpReg R8) (OpImm 18), IJcc "jae" ".Lrt_pu_done", IBinReg "imul" Rax (OpImm 10), IBinReg "sub" Rdx (OpImm 48), IBinReg "add" Rax (OpReg Rdx), IMov (OpReg R9) (OpImm 1), IBinReg "add" R8 (OpImm 1), IJmp ".Lrt_pu_loop", ILabel ".Lrt_pu_done", IMov (OpReg Rdx) (OpReg R9), IRet]
+
+-- | `VUNA_NATIVE_STACK_MB` → 自带栈顶（`rax`）；`0` = 沿用进程栈。
+--   进程栈受 `RLIMIT_STACK` 约束（常见 8 MiB），深非尾递归的自举编译器不够用；
+--   自带栈是 mmap 的私有匿名区（`MAP_NORESERVE`，按需提交），与 `ulimit -s` 无关。
+--   底部一页 `PROT_NONE` 作溢出护栏；mmap 失败时回落进程栈。
+initStackFn : NativeFunc
+initStackFn =
+  rtRawFunc
+    "init_stack"
+    [ILea Rdi (nativeDataLabel "env_stack"), ICall (nativeRtLabel "env_lookup"), ITest Rax Rax, IJcc "jz" ".Lrt_is_default", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "parse_u64"), ITest Rdx Rdx, IJcc "jz" ".Lrt_is_default", ITest Rax Rax, IJcc "jz" ".Lrt_is_none", IBinReg "shl" Rax (OpImm 20), IJmp ".Lrt_is_alloc", ILabel ".Lrt_is_default", IMov (OpReg Rax) (OpImm (nativeStackDefaultMb * 1048576)), ILabel ".Lrt_is_alloc", IBinReg "xor" Rdi (OpReg Rdi), IMov (OpReg Rsi) (OpReg Rax), IMov (OpReg Rdx) (OpImm mmapProtReadWrite), IMov (OpReg R10) (OpImm mmapFlagsAnonNoReserve), IMov (OpReg R8) (OpImm (0 - 1)), IBinReg "xor" R9 (OpReg R9), IMov (OpReg Rax) (OpImm (sysNr "mmap")), ISyscall, ITest Rax Rax, IJcc "jl" ".Lrt_is_none", IMov (OpReg R10) (OpReg Rax), IBinReg "add" R10 (OpReg Rsi), IBinReg "and" R10 (OpImm (0 - 16)), IMov (OpReg Rdi) (OpReg Rax), IMov (OpReg Rsi) (OpImm 4096), IMov (OpReg Rdx) (OpImm protNone), IMov (OpReg Rax) (OpImm (sysNr "mprotect")), ISyscall, IMov (OpReg Rax) (OpReg R10), IRet, ILabel ".Lrt_is_none", IBinReg "xor" Rax (OpReg Rax), IRet]
 
 -- | `VUNA_NATIVE_MEM_LIMIT` → `rt_mem_limit`（缺省 1 GiB；`0` = 不限）。
 initMemFn : NativeFunc
@@ -1541,7 +1561,7 @@ envFilterFn =
 export nativeRtFuncs : List NativeFunc
 nativeRtFuncs =
   append
-    [intBinary "add" "add", intBinary "sub" "sub", intBinary "mul" "imul", divFn, intBinary "bit_and" "and", intBinary "bit_or" "or", intBinary "bit_xor" "xor", bitNotFn, bitShlFn, bitShrFn, intCompare "eq_int" "sete", intCompare "neq_int" "setne", intCompare "lt_int" "setl", intCompare "le_int" "setle", intCompare "gt_int" "setg", intCompare "ge_int" "setge", natAddFn, natSubFn, natMulFn, natDivFn, natToIntFn, natFromIntFn, natSuccFn, obsZeroFn "obs_level", obsZeroFn "obs_log", obsZero2Fn "obs_counter", obsZeroFn "obs_mark", obsZero2Fn "obs_span_begin", obsZeroFn "obs_span_end", obsZero2Fn "obs_sample_start", obsZeroFn "obs_sample_stop", obsSpanFn, obsSpanLabFn, debugOnFn, debugLineFn, strAllocFn, strLengthFn, strConcatFn, bytesEqFn, bytesCmpFn, strEqFn, strNeqFn, strCompareFn, strCompareFnOf "str_lt" "setl", strCompareFnOf "str_le" "setle", strCompareFnOf "str_gt" "setg", strCompareFnOf "str_ge" "setge", strFromIntFn, strAtFn, strSubstringFn, strHashFn, effectIdFn, strShowFn, printIntFn, printBoolFn, printStrFn, assertFn, primFailFn, todoFn, trapMsgFn, trapAssertFn, trapTodoFn, allocFn, allocLeafFn, applyFn, applyExactFn, applyShimFn, strFromBytesFn, strFromCFn, strOneCharFn, strEmptyFn, getenvFn, getcwdFn, execPathFn, nowUsFn, sleepUsFn, isTtyFn, hostStatusFn, cleanupPushFn, cleanupPopFn, fsFailFn, strictFailFn, strictReadFileFn, strictReadFileRangeFn, strictWriteFileFn, strictWriteFileAtomicFn, strictReadDirFn, strictIsDirFn, strictMakeDirFn, strictRemoveFileFn, strToCFn, strToC2Fn, strCopyIntoFn, cStrCpyFn, u64ToDecFn, statPathFn, lstatPathFn, fileExistsFn, fileMtimeFn, fileSizeFn, tryIsDirFn, tryReadFileFn, tryReadFileRangeFn, tryWriteFileFn, tryWriteFileAtomicFn, tryMakeDirFn, tryMakeDirExclusiveFn, tryRemoveFileFn, tryRenameFn, trySymlinkFn, removeTreeFn, tryRemoveTreeFn, dirOpenFn, dirNamesFn, dirCloseFn, childPushFn, childDropFn, sigBlockFn, sigUnblockFn, cmdRunShFn, spawnExecFn, waitPidFn, exitWithFn, trapImpossibleFn, trapDivZeroFn, trapArrayOobFn, trapOomFn, trapPathLongFn, trapMemLimitFn, initMemFn, initCpusFn, initTimeoutFn, envLookupFn, parseU64Fn, cgroupCpusFn, envFilterFn, sigreturnStubFn, sigalrmFn, arrayEmptyFn, arrayLengthFn, arrayGetFn, arraySetFn, arrayMakeFn, trapRmtreeDeepFn, mRunEffFn, pow2CeilFn, eraseFn, effNewRefFn, effReadRefFn, effWriteRefFn, effPrintFn "prim_eff_print" 1, effPrintFn "prim_eff_eprint" 2, effExitFn, floatFromIntFn, intFromFloatFn, floatBinFn "float_add" "add", floatBinFn "float_sub" "sub", floatBinFn "float_mul" "mul", floatBinFn "float_div" "div", floatCmpFn "float_eq" (floatCmpOrdered "sete"), floatCmpFn "float_neq" floatCmpNeq, floatCmpFn "float_lt" (floatCmpOrdered "setb"), floatCmpFn "float_le" (floatCmpOrdered "setbe"), floatCmpFn "float_gt" (floatCmpOrdered "seta"), floatCmpFn "float_ge" (floatCmpOrdered "setae"), floatAbsFn, floatSqrtFn]
+    [intBinary "add" "add", intBinary "sub" "sub", intBinary "mul" "imul", divFn, intBinary "bit_and" "and", intBinary "bit_or" "or", intBinary "bit_xor" "xor", bitNotFn, bitShlFn, bitShrFn, intCompare "eq_int" "sete", intCompare "neq_int" "setne", intCompare "lt_int" "setl", intCompare "le_int" "setle", intCompare "gt_int" "setg", intCompare "ge_int" "setge", natAddFn, natSubFn, natMulFn, natDivFn, natToIntFn, natFromIntFn, natSuccFn, obsZeroFn "obs_level", obsZeroFn "obs_log", obsZero2Fn "obs_counter", obsZeroFn "obs_mark", obsZero2Fn "obs_span_begin", obsZeroFn "obs_span_end", obsZero2Fn "obs_sample_start", obsZeroFn "obs_sample_stop", obsSpanFn, obsSpanLabFn, debugOnFn, debugLineFn, strAllocFn, strLengthFn, strConcatFn, bytesEqFn, bytesCmpFn, strEqFn, strNeqFn, strCompareFn, strCompareFnOf "str_lt" "setl", strCompareFnOf "str_le" "setle", strCompareFnOf "str_gt" "setg", strCompareFnOf "str_ge" "setge", strFromIntFn, strAtFn, strSubstringFn, strHashFn, effectIdFn, strShowFn, printIntFn, printBoolFn, printStrFn, assertFn, primFailFn, todoFn, trapMsgFn, trapAssertFn, trapTodoFn, allocFn, allocLeafFn, applyFn, applyExactFn, applyShimFn, strFromBytesFn, strFromCFn, strOneCharFn, strEmptyFn, getenvFn, getcwdFn, execPathFn, nowUsFn, sleepUsFn, isTtyFn, hostStatusFn, cleanupPushFn, cleanupPopFn, fsFailFn, strictFailFn, strictReadFileFn, strictReadFileRangeFn, strictWriteFileFn, strictWriteFileAtomicFn, strictReadDirFn, strictIsDirFn, strictMakeDirFn, strictRemoveFileFn, strToCFn, strToC2Fn, strCopyIntoFn, cStrCpyFn, u64ToDecFn, statPathFn, lstatPathFn, fileExistsFn, fileMtimeFn, fileSizeFn, tryIsDirFn, tryReadFileFn, tryReadFileRangeFn, tryWriteFileFn, tryWriteFileAtomicFn, tryMakeDirFn, tryMakeDirExclusiveFn, tryRemoveFileFn, tryRenameFn, trySymlinkFn, removeTreeFn, tryRemoveTreeFn, dirOpenFn, dirNamesFn, dirCloseFn, childPushFn, childDropFn, sigBlockFn, sigUnblockFn, cmdRunShFn, spawnExecFn, waitPidFn, exitWithFn, trapImpossibleFn, trapDivZeroFn, trapArrayOobFn, trapOomFn, trapPathLongFn, trapMemLimitFn, initStackFn, initMemFn, initCpusFn, initTimeoutFn, envLookupFn, parseU64Fn, cgroupCpusFn, envFilterFn, sigreturnStubFn, sigalrmFn, arrayEmptyFn, arrayLengthFn, arrayGetFn, arraySetFn, arrayMakeFn, trapRmtreeDeepFn, mRunEffFn, pow2CeilFn, eraseFn, effNewRefFn, effReadRefFn, effWriteRefFn, effPrintFn "prim_eff_print" 1, effPrintFn "prim_eff_eprint" 2, effExitFn, floatFromIntFn, intFromFloatFn, floatBinFn "float_add" "add", floatBinFn "float_sub" "sub", floatBinFn "float_mul" "mul", floatBinFn "float_div" "div", floatCmpFn "float_eq" (floatCmpOrdered "sete"), floatCmpFn "float_neq" floatCmpNeq, floatCmpFn "float_lt" (floatCmpOrdered "setb"), floatCmpFn "float_le" (floatCmpOrdered "setbe"), floatCmpFn "float_gt" (floatCmpOrdered "seta"), floatCmpFn "float_ge" (floatCmpOrdered "setae"), floatAbsFn, floatSqrtFn]
     nativeGcFuncs
 
 -- | IR 符号 -> 运行时函数标签。白名单之外返回 Nothing（Module 报 NativeUnsupported）。

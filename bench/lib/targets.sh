@@ -197,7 +197,6 @@ vuna_binary_path() { # target dir
 
 vuna_run_target() { # target program
   case $1 in
-    native) bash -c 'ulimit -s unlimited; exec "$1"' _ "$2" ;;
     wasm) "$NODE_BIN" "$WASM_RUNNER" "$2" ;;
     *) "$2" ;;
   esac

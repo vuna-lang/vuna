@@ -148,11 +148,6 @@ command -v "$CC_BIN" >/dev/null 2>&1 || die "cc not found: $CC_BIN"
 WASM_RUNNER=${WASM_RUNNER:-$REPO/wasm-host/run.mjs}
 NODE_BIN=${NODE:-node}
 case " $TARGETS " in
-  *" native "*)
-    bash -c 'ulimit -s unlimited' 2>/dev/null || die "native 产物需要 ulimit -s unlimited"
-    ;;
-esac
-case " $TARGETS " in
   *" wasm "*)
     command -v wasm-tools >/dev/null 2>&1 || die "wasm-tools not found（wasm 产物需要 wasm-tools parse）"
     command -v "$NODE_BIN" >/dev/null 2>&1 || die "node not found（wasm 产物用 JS 宿主执行）"
