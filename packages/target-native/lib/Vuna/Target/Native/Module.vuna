@@ -32,6 +32,7 @@ import Vuna.Ir.Runtime
 import Vuna.Ir.Tail
 import Vuna.Ir.Synthetic as Synthetic
 import Vuna.Ir.Layout as Layout
+import Vuna.Ir.Alias as Alias
 import Vuna.Target.Native.Abi
 import Vuna.Target.Native.Audit
 import Vuna.Target.Native.Model
@@ -573,26 +574,24 @@ genSelfTailCall fuel st args =
           in if length argSlots == length st.fgSelfParams then NOk (Pair (append (firstOf p) (append (selfSlotMoves argSlots st.fgSelfParams) [IJmp st.fgSelfLoop])) (secondOf (secondOf p))) else internal "self tail call arity mismatch"
       )
 
--- | 沿零参定义解析别名链（`f = rt:add` / `f = g`）。`fuel` 防环；不是别名的零参
---   CAF（真实计算/分配）返回 Nothing，调用方回退 `rt_apply`。
+-- | 沿零参定义解析别名链（`f = rt:add` / `f = g`）：判据与链解析在 `Ir.Alias`。
+--   不是别名的零参 CAF（真实计算/分配）返回 Nothing，调用方回退 `rt_apply`。
 aliasTargetOf : Int -> List IrDef -> String -> Maybe AliasTarget
 aliasTargetOf fuel defs name =
-  if fuel <= 0 then
-    Nothing
-  else
-    case findDef name defs of
-      Nothing => Nothing
-      Just d =>
-        if irDefArity d /= 0 then
-          Just (AliasGlobal name)
-        else
-          case irDefBody d of
-            Just b =>
-              case stripTail b of
-                IrRt sym => Just (AliasRt sym)
-                IrGlobal g => aliasTargetOf (fuel - 1) defs g
-                _ => Nothing
-            Nothing => Nothing
+  case irFindDefLocal name defs of
+    Nothing => Nothing
+    Just d =>
+      if irDefArity d /= 0 then
+        Just (AliasGlobal name)
+      else
+        case Alias.irAliasTargetOf fuel defs name of
+          Just (Alias.IrAliasRt sym) => Just (AliasRt sym)
+          Just (Alias.IrAliasGlobal g) => Just (AliasGlobal g)
+          Nothing => Nothing
+
+-- | 本地便捷：按名字查定义（与 `Alias.irFindDef` 同语义，避免重复限定名）。
+irFindDefLocal : String -> List IrDef -> Maybe IrDef
+irFindDefLocal = Alias.irFindDef
 
 -- | 调用点静态已知的被调用者。
 --

@@ -12,6 +12,7 @@ vuna-compiler-base = "../compiler-base"
 # 见 `packages/toolchain`。
 [export]
 modules = [
+  "Vuna.Ir.Alias",
   "Vuna.Ir.Analysis",
   "Vuna.Ir.Anf",
   "Vuna.Ir.Codec",

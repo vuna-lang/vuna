@@ -27,6 +27,7 @@ import Vuna.Ir.Runtime
 import Vuna.Ir.Tail
 import Vuna.Ir.Synthetic as Synthetic
 import Vuna.Ir.Layout as Layout
+import Vuna.Ir.Alias as Alias
 import Vuna.Target.Wasm.Instr
 import Vuna.Target.Wasm.Model
 import Vuna.Target.Wasm.Runtime
@@ -426,6 +427,26 @@ genApp fuel st ir =
               genRtApp (fuel - 1) st s args
           _ => genApplyValue (fuel - 1) st head args
 
+-- | 别名叶子作为调用目标时的运行时 arity 与 WAT 函数名（非 `RtFunc` 时为 `Nothing` / 0）。
+aliasLeafArity : String -> Int
+aliasLeafArity sym =
+  case rtImplOf sym of
+    RtFunc n _ => n
+    _ => 0
+
+aliasLeafName : String -> String
+aliasLeafName sym =
+  case rtImplOf sym of
+    RtFunc _ name => name
+    _ => ""
+
+-- | 别名解析不成立时的回退：按原路径把零参定义求值成闭包再逐参应用。
+fallbackGlobalRef : Int -> GenState -> String -> List Ir -> Result (Pair (List Instr) GenState)
+fallbackGlobalRef fuel st name args =
+  case genGlobalRef (fuel - 1) st name of
+    Err e => Err e
+    Ok p => genApplyArgs (fuel - 1) st.gsTail (secondOf p) (firstOf p) args
+
 genGlobalCall : Int -> GenState -> String -> List Ir -> Result (Pair (List Instr) GenState)
 genGlobalCall fuel st name args =
   if fuel <= 0 then
@@ -438,9 +459,12 @@ genGlobalCall fuel st name args =
           arity = irDefArity d
           argc = listLengthB args
         in if arity == 0 then
-          case genGlobalRef (fuel - 1) st name of
-            Err e => Err e
-            Ok p => genApplyArgs (fuel - 1) st.gsTail (secondOf p) (firstOf p) args
+          case Alias.irAliasTargetOf (listLengthB st.gsDefs) st.gsDefs name of
+            -- 零参定义多半是 η-收缩后的别名（`plus = natAdd`）：沿别名链解析到运行时叶子
+            -- 或有参定义，直接调用，不要走「读全局 + 逐参 rt_apply」。
+            Just (Alias.IrAliasGlobal g) => genGlobalCall (fuel - 1) st g args
+            Just (Alias.IrAliasRt sym) => if aliasLeafArity sym == argc then genArgsThen (fuel - 1) st args (if st.gsTail then IReturnCall (aliasLeafName sym) else ICall (aliasLeafName sym)) else fallbackGlobalRef (fuel - 1) st name args
+            Nothing => fallbackGlobalRef (fuel - 1) st name args
         else if argc == arity then
           genArgsThen (fuel - 1) st args (if st.gsTail then IReturnCall (watFuncNameOf name) else ICall (watFuncNameOf name))
         else if argc < arity then

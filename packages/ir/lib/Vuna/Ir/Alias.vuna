@@ -1,0 +1,65 @@
+module Vuna.Ir.Alias where
+
+-- Vuna.Ir.Alias：零参定义作为「别名」的判据与解析。
+--
+-- 为什么在这里：擦除后 Core 会把 `plus = natAdd`、`foo = bar` 这类 η-收缩定义压成
+-- **零参定义**，体本身就是一个函数值（`IrRt sym` 或 `IrGlobal g`）。谁是别名、别名链
+-- 最终指向哪里，是 IR 的形状事实，不是目标代码；解析出来之后怎么调属于后端
+-- （native 直调或内联标量叶子，wasm 直调）。真正的计算型零参定义（CAF）不是别名，
+-- 必须在入口期求值一次再读全局。
+--
+-- 边界：本模块只 import `Ir.Model` 与 `Ir.Tail`；不 import Core/Elab/Intrinsics 与任何后端。
+import Vuna.Ir.Model
+import Vuna.Ir.Tail
+
+-- | 别名目标：运行时叶子，或另一个**有参**顶层定义（可以直接按 ABI 调用）。
+export data IrRtAlias(..) : Type where
+  IrAliasRt : String -> IrRtAlias
+  IrAliasGlobal : String -> IrRtAlias
+
+-- | 按名字查定义（程序顺序）。
+export irFindDef : String -> List IrDef -> Maybe IrDef
+irFindDef _ [] = Nothing
+irFindDef name (d :: rest) = if irDefName d == name then Just d else irFindDef name rest
+
+-- | 零参定义体的**直接**别名目标（不看目标是否为零参）：
+--   体（去尾标记后）是 `IrRt sym` → `IrAliasRt sym`；
+--   是 `IrGlobal g` → `IrAliasGlobal g`；
+--   其它（CAF、有参定义、无体）→ `Nothing`。
+export irDefAliasStep : IrDef -> Maybe IrRtAlias
+irDefAliasStep d =
+  if irDefArity d /= 0 then
+    Nothing
+  else
+    case irDefBody d of
+      Nothing => Nothing
+      Just b =>
+        case stripTail b of
+          IrRt sym => Just (IrAliasRt sym)
+          IrGlobal g => Just (IrAliasGlobal g)
+          _ => Nothing
+
+-- | 沿零参别名链解析到终点：`IrAliasRt`（运行时叶子），或 `IrAliasGlobal` 指向一个
+-- **有参**定义。链上任何一跳不是别名（CAF）就返回 `Nothing`，调用方回退「求值成
+-- 闭包再应用」。`fuel` 防环，命中自身环同样返回 `Nothing`。
+export irAliasTargetOf : Int -> List IrDef -> String -> Maybe IrRtAlias
+irAliasTargetOf fuel defs name = irAliasGo fuel defs name name
+
+irAliasGo : Int -> List IrDef -> String -> String -> Maybe IrRtAlias
+irAliasGo fuel defs name origin =
+  if fuel <= 0 then
+    Nothing
+  else
+    case irFindDef name defs of
+      Nothing => Nothing
+      Just d =>
+        case irDefAliasStep d of
+          Nothing => Nothing
+          Just (IrAliasRt sym) => Just (IrAliasRt sym)
+          Just (IrAliasGlobal g) =>
+            if g == origin then
+              Nothing
+            else
+              case irFindDef g defs of
+                Just gd => if irDefArity gd /= 0 then Just (IrAliasGlobal g) else irAliasGo (fuel - 1) defs g origin
+                Nothing => Nothing
