@@ -148,13 +148,13 @@
 
 - `Base.Trait.Show` 的 `String` 实例委托给它：`show s = strShow s`，因此 `show` 与
   `main : String` 的展示一致。
-- `main` 展示钩子（`Lowering.Entry.Internal` 的 `mainShowRtIr` + `Target.Ocaml.Term.genEntryHook`）：`Int` / `Nat` → `string_of_int`、
+- `main` 展示钩子（`Lowering.Entry` 的 `mainShowRtIr` + `Target.Ocaml.Term.genEntryHook`）：`Int` / `Nat` → `string_of_int`、
   `String` → `dt_show_string`（即 `strShow`）、`Bool` → `dt_show_bool`（输出 `True` /
   `False`）、`Float` → `string_of_float`。
 - **其它类型走 `Show` 实例**：精化收尾（`Elab.Driver.finishCore`）对非内建的结果
   类型（`main : Eff [] a` 先剥掉动作层取 `a`）搜索 `Dict_Show a`，合成
   `@vuna@main_show : a -> String`（body 是方法投影 `\x -> show {a} {dict} x`）。
-  入口 lowering 的 `mainShowRtIr` 对它回退到这条定义名；核心求值（`Driver.Dt.evalDtMainCore`）对 main 值应用
+  入口 lowering（`Lowering.Entry`）的 `mainShowRtIr` 对它回退到这条定义名；核心求值（`Driver.Dt.evalDtMainCore`）对 main 值应用
   同一份定义后打印。找不到实例在**精化期**报
   `[TC_NoInstanceFound] no instance found for <T>`；`@vuna@main_show` 在 split 归属里固定
   归入口单元 `Main`。
