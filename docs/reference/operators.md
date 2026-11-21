@@ -150,7 +150,7 @@ import 之后、第一个声明之前（fmt 的规范位置），每条一行。
 - Float 的特化到 IEEE 语义（除零不失败，见 [floats.md](floats.md)），与 Int 的除零检查不同。
 
 实现入口：`Elab/Dict.numMethodOpName` + `Elab/Term/Impl.specializeArith*`（与 `==`/比较
-特化同一层）；Codegen 对 Int 路径继续用内联运算符，对 Nat 路径用 `bi_nat*` helper。
+特化同一层）；OCaml 后端（`Target.Ocaml.Term`）对 Int 路径用内联运算符，对 Nat 路径用 `bi_nat*` helper。
 
 ## 系统边界
 

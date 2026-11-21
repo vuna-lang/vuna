@@ -295,7 +295,7 @@ intBinary name op =
 intCompare : String -> String -> NativeFunc
 intCompare name cond = rtFunc name 0 [ICmp (OpReg Rdi) (OpReg Rsi), ISetcc cond Rax, IMovzxAl]
 
--- | 位运算：63-bit 二进制补码（`Codegen.Term.bi_bit*` 的汇编实现）。
+-- | 位运算：63-bit 二进制补码（`Target.Ocaml.Term.bi_bit*` 的汇编实现）。
 --   `and/or/xor` 复用 `intBinary` 的 wrap；`bitNot` 是 `xor -1` 再 wrap。
 bitNotFn : NativeFunc
 bitNotFn =
@@ -1031,7 +1031,7 @@ cleanupPopFn =
 -- ---------------------------------------------------------------
 -- 宿主层：文件系统（syscalls + errno → 状态码）
 -- ---------------------------------------------------------------
--- 语义参考 `Codegen.Term.dtp_try*`：失败不抛，写 `rt_host_status` 后返回默认值。
+-- 语义参考 `Target.Ocaml.Term.dtp_try*`：失败不抛，写 `rt_host_status` 后返回默认值。
 -- errno → 码表与 `dtp_hostCode` 一致（ENOENT=1、EACCES/EPERM=2、ENOSPC=3、
 -- ENOTDIR=4、EISDIR=5、EEXIST=6、其它=9）。
 -- | 临时诊断：SIGSEGV 处理（把 RIP/RSP/RBP 原样写到 stderr 后 exit 70）。

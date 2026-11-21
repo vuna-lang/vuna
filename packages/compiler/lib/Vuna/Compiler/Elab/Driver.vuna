@@ -1165,7 +1165,7 @@ mainEntryRowCheck ec bodies sp (TApp (TApp fn row _) _ _) =
     _ => OkC 0
 mainEntryRowCheck ec bodies sp _ = OkC 0
 
--- main 结果类型是否是内建展示类型（与 Codegen.Lower.mainShowRtIr 的集合一致）。
+-- main 结果类型是否是内建展示类型（与 Lowering.Env.mainShowRtIr 的集合一致）。
 mainShowBuiltinTy : Value -> Bool
 mainShowBuiltinTy (VNeutral n) =
   case n of

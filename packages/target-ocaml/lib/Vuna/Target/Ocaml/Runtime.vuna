@@ -10,7 +10,7 @@ module Vuna.Target.Ocaml.Runtime where
 --     check/build 上断言。
 --
 -- 生成代码里出现的名字（`bi_*` / `dtp_*` / `Obj.magic` / `Effect.*`）只在本模块与
--- `Codegen.Term` 的运行时模板里；`Ir.*` / `Lowering` 不得出现（`checks.ir-boundary`）。
+-- `Target.Ocaml.Term` 的运行时模板里；`Ir.*` / `Lowering` 不得出现（`checks.ir-boundary`）。
 --
 -- 改表规则：新增内建必须同时改 `Intrinsics`（语义）与 `Ir.Runtime`（契约，名字）与本表
 -- （OCaml 文本）；漏一处会在 check 路径上直接报内部错，不会静默生成坏代码。

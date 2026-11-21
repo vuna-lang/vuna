@@ -3,7 +3,7 @@
 本文是 vuna **原语语义的唯一权威**：值域与宽度、字符串编码、错误行为、核心求值归约边界、
 效果原语与宿主层模型、生成 runtime 的契约。内建声明面只有一份真源
 `Vuna.Compiler.Base.Intrinsics`（`allIntrinsics` / `IntrinsicOp`），消费方是
-`Loader.Resolve`（解析）、`Elab.Prelude`（签名）、`Codegen.Term`（runtime
+`Loader.Resolve`（解析）、`Elab.Prelude`（签名）、`Target.Ocaml.Term`（runtime
 映射）、`Core.Eval`（核心求值归约）。语法见 [language.md](language.md)，类型规则见
 [type-system.md](type-system.md)，库的边界见 [stdlib.md](stdlib.md)，开放债务见
 [debt.md](debt.md)。
@@ -54,7 +54,7 @@
 
 
 - `True` / `False` 精化为核心 `TBool`，codegen 的运行时表示是 OCaml `bool`：canonical Bool
-  族**不生成变体声明**（`Codegen.Lower.rtDatasOf` 按 canonical 族表剔除 `FamReprBool` /
+  族**不生成变体声明**（`Lowering.Env.rtDatasOf` 按 canonical 族表剔除 `FamReprBool` /
   `FamReprNat`）。
 - **没有短名 / `lastName` 判定，也没有「全局构造子放行」**：`True` / `False` / `Cons` /
   `Nil` 与其他构造子一样经 import 的导出表解析（`Prelude` 自动注入 `Base.Data.Bool` /
@@ -144,17 +144,17 @@
 
 `strShow : String -> String`（intrinsic，runtime `dt_show_string`）是**唯一**的字符串展示
 实现：加双引号，并转义 `"` → `\"`、`\` → `\\`、LF → `\n`、TAB → `\t`、CR → `\r`；
-其余字节原样输出（不走 OCaml 源码发射时的 `\ddd` 转义——那是 `Codegen.Decl` 的内部细节）。
+其余字节原样输出（不走 OCaml 源码发射时的 `\ddd` 转义——那是 `Target.Ocaml.Decl` 的内部细节）。
 
 - `Base.Trait.Show` 的 `String` 实例委托给它：`show s = strShow s`，因此 `show` 与
   `main : String` 的展示一致。
-- `main` 展示钩子（`Codegen.Term.mainShow`）：`Int` / `Nat` → `string_of_int`、
+- `main` 展示钩子（`Lowering.Entry.Internal` 的 `mainShowRtIr` + `Target.Ocaml.Term.genEntryHook`）：`Int` / `Nat` → `string_of_int`、
   `String` → `dt_show_string`（即 `strShow`）、`Bool` → `dt_show_bool`（输出 `True` /
   `False`）、`Float` → `string_of_float`。
 - **其它类型走 `Show` 实例**：精化收尾（`Elab.Driver.finishCore`）对非内建的结果
   类型（`main : Eff [] a` 先剥掉动作层取 `a`）搜索 `Dict_Show a`，合成
   `@vuna@main_show : a -> String`（body 是方法投影 `\x -> show {a} {dict} x`）。
-  `mainShow` 对它回退到这条定义名；核心求值（`Driver.Dt.evalDtMainCore`）对 main 值应用
+  入口 lowering 的 `mainShowRtIr` 对它回退到这条定义名；核心求值（`Driver.Dt.evalDtMainCore`）对 main 值应用
   同一份定义后打印。找不到实例在**精化期**报
   `[TC_NoInstanceFound] no instance found for <T>`；`@vuna@main_show` 在 split 归属里固定
   归入口单元 `Main`。
@@ -187,7 +187,7 @@
 ## 6.1 容器与可变数据原语
 
 **内建类型构造子**（名字恒可见，与 `Int` / `String` 一样不能被用户重定义；参数个数唯一
-真源是 `Base.Intrinsics.typeIntrinsicArities`，OCaml 表示的渲染在 `Codegen.Decl`）：
+真源是 `Base.Intrinsics.typeIntrinsicArities`，OCaml 表示的渲染在 `Target.Ocaml.Decl`）：
 
 | 类型 | kind | OCaml 表示 |
 | --- | --- | --- |
@@ -217,7 +217,7 @@
 - 效果原语的 runtime 表达仍是「立即算完的 OCaml 表达式」，由 `effThunkText` 按 arity
   包成 `MkEff` thunk（`fun args -> fun (_ : int) -> rt args`；零参 `fun (_ : int) -> rt`）。
 - `arrayFromList` / `arrayToList` 依赖 canonical `Base.Data.List.List` 桥接（契约里
-  `irRtBridgesList = True`，实现见 `Codegen.Runtime`）；完整的桥接清单与缺失时的诊断见 §9。
+  `irRtBridgesList = True`，实现见 `Target.Ocaml.Runtime`）；完整的桥接清单与缺失时的诊断见 §9。
 - **核心求值不归约**全部容器原语（`OpNone`）：夹具关闭 interp 阶段，只 compile + 运行。
 - 越界行为：`arrayGet` 越界是宿主 `Invalid_argument`（不是 `strAt` 的
   -1 哨兵，也没有语言层诊断）；`Array.set` 先 `Array.copy`，原数组不变。
@@ -339,7 +339,7 @@
 
 ## 8. 生成 runtime 的契约
 
-产物固定包含一个 `Vuna_runtime.ml`（`Codegen.Term.dtRuntime`），**无条件**内嵌 Unix：
+产物固定包含一个 `Vuna_runtime.ml`（`Target.Ocaml.Term.dtRuntime`），**无条件**内嵌 Unix：
 
 - `Unix.stat`（`prim_eff_fileMtime` / `prim_eff_fileSize`）、`Unix.gettimeofday`（`effTimeUs`）、
   `Unix.sleepf`（`prim_eff_sleep`）、
@@ -381,7 +381,7 @@
 | `prim_eff_netConnect` | 客户端 `Unix.connect`（`tcp:`/`unix:` 同一套地址语法） |
 
 效果原语的 runtime 表（`dtp_*`）仍是**立即执行**的 OCaml 函数；生成器
-（`Codegen.Term.effPrimText`）按 `Intrinsic` 的 arity 把它们包成 `MkEff` 动作值，例如
+（`Target.Ocaml.Term.effThunkText`）按 `Intrinsic` 的 arity 把它们包成 `MkEff` 动作值，例如
 `prim_eff_getcwd` → `(MkEff (fun (_ : EffUnit) -> dtp_getcwd ()))`、`prim_eff_print` →
 `(fun s -> MkEff (fun (_ : EffUnit) -> dtp_print s))`。`prim_eff_bind1`（线性绑定）由
 `effLinearBindText` 单独生成（装箱 `MkEff` 的 match）。因此零参原语（`prim_eff_getArgs` /

@@ -9,15 +9,17 @@
 `packages/compiler/` 是编译器包（seed 的唯一来源）。入口 `packages/compiler/app/Main.vuna` 的 import 闭包
 就是 `seed/` 的内容（规模以 `seed/` 与 `nix/seed/files.txt` 为准）；工具链
 （fmt/lint/repl/doc/test/lsp）在 `packages/cli/lib/`，不在闭包里。
-代码按**目录即层**组织：`Base → Frontend → Loader → Core → Elab → Ir`，`Codegen` /
-`Lowering` / `Native` / `Wasm` 各自独立成层，`Driver` 在最上；依赖方向由
+代码按**目录即层**组织：`Frontend → Loader → Core → Elab → Lowering → Driver`；
+OCaml / native / wasm 三个后端是独立包（`packages/target-{ocaml,native,wasm}`），
+只消费 `vuna-ir`。依赖方向由
 `packages/compiler/vuna.toml` 的 `[layers]` 声明、由 loader 强制（语义见
-[packages.md](packages.md)「层约束」）。全包 **115 个模块，全部在 `[export]` 里**——
-没有内部模块，纯门面模块（原 `Core.vuna` / `Elab.vuna` / `Loader.vuna` / `Codegen.vuna`；
-`Ir` 的校验入口拆到 `Ir.Validate`）已删除，
+[packages.md](packages.md)「层约束」）。全包 **72 个模块，全部在 `[export]` 里**——
+没有内部模块，纯门面模块已删除（`Core` / `Elab` / `Loader` 的 `*.vuna` 门面，以及随 OCaml 后端
+迁到 `packages/target-ocaml` 的 `Codegen` 门面；`Ir` 的校验入口拆到 `Ir.Validate`），
 消费方直接 import 具体子模块；`Elab` 的选择性重导出也一并消失，子模块即公开面
-（见 [debt.md](debt.md) 的封装债务）。目标每模块 ≤~800 行（`Elab.Trait` / `Codegen.Term` /
-`Lowering.Program` / `Driver.Dt` 等已超目标，约 1.1–1.5k 行）。
+（见 [debt.md](debt.md) 的封装债务）。目标每模块 ≤~800 行，实际已有明显超标的模块：
+`Driver/Compile.vuna` / `Frontend/Parser.vuna` / `Driver/Dt.vuna` 约 2.1–2.7k 行，
+`Elab/Trait.vuna` / `Elab/Term/Impl.vuna` 约 1.7k / 3.8k 行。
 
 ### Base（位置、诊断、编码、摘要、落盘）
 
@@ -38,7 +40,7 @@
 | `Base.Version` | 版本号唯一真源；产品 CLI / `vuna-compiler` / build meta / VSCode 探测共用 | `vunaVersion` |
 | `Base.Store` | **唯一**缓存载荷落盘层：`vuna-cache-frame 2\|<tag>\|<codec>\|<len>\|<内容地址>\n<payload>` 的编解码（纯）、读侧三层校验（framing → 头内内容地址 → 调用方语义自证）、原子写、去抖写、缓存根探测、对象族读写（`objects/<kind>/`）、roots 与视图锁 | `storeEncode`、`storeDecode`、`storeReadEff`、`storeReadAsEff`、`storeWriteEff`、`storeWriteIfChangedEff`、`storeObjectWriteEff`、`storeRootAppendEff`、`storeCacheBaseEff` |
 | `Base.Data.Obs` | 观测插桩适配层（`obsCheck` / `obsDefCheck` / `obsMarkEff`；规范见 [observability.md](observability.md)） | `obsCheck`、`obsDefCheck`、`obsMarkEff` |
-| `Base.Intrinsics` | **内建语义唯一真源**：名字/签名形状（`IType`）/arity/归约标签（`IntrinsicOp`）/用户可见性（没有 `Capability` 能力位）；运行时文本不在本模块（`Ir.Runtime` 契约 + `Codegen.Runtime` 实现）；内置身份按声明 symbol（`Base.Data.Bool.Bool` / `Base.Data.List.List` / `Base.Data.Nat.Nat`） | `findIntrinsic`、`intrinsicName`、`intrinsicArity` |
+| `Base.Intrinsics` | **内建语义唯一真源**：名字/签名形状（`IType`）/arity/归约标签（`IntrinsicOp`）/用户可见性（没有 `Capability` 能力位）；运行时文本不在本模块（`Ir.Runtime` 契约 + `Target.Ocaml.Runtime` 实现）；内置身份按声明 symbol（`Base.Data.Bool.Bool` / `Base.Data.List.List` / `Base.Data.Nat.Nat`） | `findIntrinsic`、`intrinsicName`、`intrinsicArity` |
 
 ### Frontend（词法、语法、manifest、包图、规范编码）
 
@@ -115,10 +117,17 @@
 | `Ir.Model` | IR 数据模型（纯数据，无 `Term`/`Value`/`DtDef`）：节点、binder、分支、类型声明、定义/分组、入口形态、共享元数据、内联 arity 表 | `Ir`、`IrBinder`、`IrTy`、`IrTyDecl`、`IrDef`、`IrShared`、`IrUnit`、`IrEntry` |
 | `Ir.Analysis` | SCC 分组（Kosaraju、依赖就绪排序、递归值形状护栏、覆盖自证）+ 入口可达性（native / wasm 共用） | `assembleGroups`、`assembleGroupNames`、`groupNames`、`reachableDefs` |
 | `Ir.Represent` | 表示选择 pass：按 `IrShared.irSharedUnboxed` / `irSharedCtorShapes` 把去装箱族的构造子应用改写为直接返回字段、单构造子 `IrCase` 改写为 `IrLet`；Lowering 对去装箱族只生成装箱形态，类型声明侧仍在 `Lowering.Ty` | `representUnit` |
+| `Ir.Dispatch` | lowering 之后把 `sendCore` / `performCore` 等派发点改写成语义 id（native / wasm 共用） | 见 [ir.md](ir.md)「派发 id」 |
+| `Ir.Anf` | ANF 规范化（wasm 前置）：每条非简单表达式绑定到 `IrLet`，binder 名用单调 next 计数 | `anfProgramDefs` |
+| `Ir.Cps` | 效应 thunk 的 CPS lowering（native / wasm）：`MkEff` / `MkScoped` 的 lambda 加 continuation，`prim_effect*` 换成 `@ir@cps@*` 符号；纯代码保持直接风格 | `cpsDefsMachine` |
+| `Ir.Tail` | 尾位置标记 pass（CPS 之后）：只加 `IrTail` 注解，native / wasm 各自发射尾调用指令 | `annotateDefs` |
+| `Ir.Kinds` | IR 值的**运行时 kind** 单一真源：native 的 GC 槽 kind、wasm 的 local 值类型、`vuna dev ir dump` 的槽分布都读同一份判据 | `irKindOf*` |
+| `Ir.Layout` / `Ir.Alias` / `Ir.Synthetic` | 表示布局、类型别名、合成符号（`@ir@*`）的共享约定 | 见 [ir.md](ir.md) |
+| `Ir.Codec` | 跨进程边界的规范编码（编译器 → 后端插件），`encode` / `decode` 必须往返 | `encodeProgram`、`decodeProgram` |
 | `Ir.Runtime` | **IR ↔ 运行时契约**（唯一真源）：符号清单（普通内建名/桥接内建名/`@ir@*` 合成符号）+ 桥接标记 + `Ir` 项符号遍历；IR 节点里没有目标文本 | `irRtContract`、`irRtNames`、`irRtLookup`、`irRtBridgesList`、`irSymbolsOfUnit` |
 | `Ir.Validate` | 单元 / 程序级校验：定义名唯一、分组自洽、入口 `main` 存在、符号已声明且 arity 一致、每个 `IrVar` 在作用域内且不引用擦除占位 | `validateUnit`、`validateProgram`、`checkScopedUnit` |
 
-### Codegen / Lowering / 两个后端
+### Lowering / 三个后端（`packages/target-*`）
 
 | 模块 | 职责 | 关键入口 |
 | --- | --- | --- |
@@ -128,14 +137,14 @@
 | `Lowering.Entry` | 入口形态：动作行 / 值入口分类、展示函数、宿主 handler 序列 | `lowerEntryOf`、`entryShapeOf` |
 | `Lowering.Erased` | **擦除后 Core 的 typed view**：运行时 `TVar` 下标归一化 + 校验；类型面（binder 槽 / 类型实参 / telescope）保留 | `eraseTerm`、`validateErased` |
 | `Lowering.Checks` | Core 侧检查（不产生 IR）：擦除检查、axiom 运行时使用检查、de Bruijn 作用域护栏、定义体事实（`termUseInto`：运行时依赖 + float/tracing/obs 旗标，一次遍历） | `checkAllErasure`、`checkAllDefScopes`、`checkNoAxiomRuntime`、`termUseInto`、`partitionDefs` |
-| `Codegen.Decl` | 名字编码（sanitize/前缀/保留字）+ 跨单元引用限定（`Unit.name`）+ IR 类型/声明 → 后端模型 | `irTyText`、`irTypeDeclsText`、`ctorOcamlName`、`qualValueText` |
-| `Codegen.Ocaml.Model` | OCaml 后端模型：类型面 `OTy` / `OCtor` / `ODecl`，项面 `OPat` / `OTerm` / `ODef`。**不含目标文本**（运行时模板与内联内建展开是显式的 `ORaw`）；名字编码、限定与括号在渲染侧 | `OTy`、`OTerm`、`OPat`、`ODef` |
-| `Codegen.Ocaml.Render` | 后端模型的文本渲染：参数槽、构造子/字段布局、`type ... and ...` 块、模式的 `C (p1, p2)` 形态、表达式的括号策略 | `renderTy`、`renderDecls`、`renderTerm`、`renderPat` |
-| `Codegen.Term` | IR → 后端模型（`OTerm` / `ODef`）+ DT 运行时模板（`bi_*`、`dtp_*`、宿主原语桥接）+ 定义位置表/异常报告器 + main 钩子模板；`IrRt` 的文本从 `Codegen.Runtime` 查表；**不感知 Core** | `dtRuntime`、`dtRuntimeWith`、`dtObsRuntime`、`dtDefLocTable`、`genIr`、`genGroups`、`genEntryHook`、`lineDirectiveOf`（`#line` 注入） |
-| `Codegen.Runtime` | **契约的 OCaml 实现**：符号 → OCaml 运行时表达式（`ocamlRtText`）+ List 桥接 helper 名单；对 `Ir.Runtime` 契约双向全覆盖（gaps/extras），由 `Lowering.Program.checkRuntimeContract` 在 check 路径上断言 | `ocamlRtText`、`ocamlRtHelperNames`、`rtTextGaps`、`rtTextExtras` |
-| `Codegen.Assembly` | `IrUnit` 装配：open 头 + 类型声明 + List 桥接 + 分组正文 + 直接依赖表 | `genUnitParts`、`genUnitText`、`unitPartsDeps` |
-| `Native.{Abi,Model,Module,Render,Runtime}` | native 后端：`IrProgram` → `NativeProgram` → x86-64 汇编文本（支持面、ABI、运行时见 [native.md](native.md)） | `Native.Module.build`、`Native.Render.renderModule`、`Native.Runtime.*` |
-| `Wasm.{Instr,Model,Module,Render,Runtime,Types}` | wasm 后端：`IrProgram` → `WasmModule` → WAT（WasmGC 表示与运行时见 [wasm.md](wasm.md)） | `Wasm.Module.build`、`Wasm.Render.renderModule`、`Wasm.Runtime.*` |
+| `Target.Ocaml.Decl` | 名字编码（sanitize/前缀/保留字）+ 跨单元引用限定（`Unit.name`）+ IR 类型/声明 → 后端模型 | `irTyText`、`irTypeDeclsText`、`ctorOcamlName`、`qualValueText` |
+| `Target.Ocaml.Model` | OCaml 后端模型：类型面 `OTy` / `OCtor` / `ODecl`，项面 `OPat` / `OTerm` / `ODef`。**不含目标文本**（运行时模板与内联内建展开是显式的 `ORaw`）；名字编码、限定与括号在渲染侧 | `OTy`、`OTerm`、`OPat`、`ODef` |
+| `Target.Ocaml.Render` | 后端模型的文本渲染：参数槽、构造子/字段布局、`type ... and ...` 块、模式的 `C (p1, p2)` 形态、表达式的括号策略 | `renderTy`、`renderDecls`、`renderTerm`、`renderPat` |
+| `Target.Ocaml.Term` | IR → 后端模型（`OTerm` / `ODef`）+ DT 运行时模板（`bi_*`、`dtp_*`、宿主原语桥接）+ 定义位置表/异常报告器 + main 钩子模板；`IrRt` 的文本从 `Target.Ocaml.Runtime` 查表；**不感知 Core** | `dtRuntime`、`dtRuntimeWith`、`dtObsRuntime`、`dtDefLocTable`、`genIr`、`genGroups`、`genEntryHook`、`lineDirectiveOf`（`#line` 注入） |
+| `Target.Ocaml.Runtime` | **契约的 OCaml 实现**：符号 → OCaml 运行时表达式（`ocamlRtText`）+ List 桥接 helper 名单；对 `Ir.Runtime` 契约双向全覆盖（gaps/extras），由 `Lowering.Program.checkRuntimeContract` 在 check 路径上断言 | `ocamlRtText`、`ocamlRtHelperNames`、`rtTextGaps`、`rtTextExtras` |
+| `Target.Ocaml.Assembly` | `IrUnit` 装配：open 头 + 类型声明 + List 桥接 + 分组正文 + 直接依赖表 | `genUnitParts`、`genUnitText`、`unitPartsDeps` |
+| `Target.Native.*`（独立包 `vuna-target-native`） | native 插件：`IrProgram` → `NativeProgram` → x86-64 汇编文本；入口 `Plugin.runPlugin`，支持面 / ABI / GC 见 [native.md](native.md) | `Module.build`、`Render.renderModule` |
+| `Target.Wasm.*`（独立包 `vuna-target-wasm`） | wasm 插件：`IrProgram` → `WasmModule` → WAT；入口 `Plugin.runPlugin`，WasmGC 表示 / 布局 / 能力上限见 [wasm.md](wasm.md) | `Module.build`、`Render.renderModule` |
 
 ### Driver（输出模型、facade、后端驱动、CLI）
 
@@ -151,9 +160,11 @@
 | `Driver.PerfCache` | codegen 单元缓存（按单元 key 复用生成的 `SplitFile`） | `unitCacheRead`、`unitCacheWrite`、`unitCacheCodec` |
 | `Driver.ToolPayload` | 工具会话载荷编码：`ToolContext` → 规范字节（codec `tool-context 1`），落在 `objects/tool-context/<addr>`；字段顺序 = record 声明顺序，解码要求恰好消费完 | `encToolContext`、`decToolContext`、`toolContextSchema`、`toolContextCodec` |
 | `Driver.CompilerCli` | 编译器自己的 CLI（`vuna-compiler`）；含受限进程执行入口 `runIn`；workspace check/build 单元、`build --package`、`version` | `runCompilerCli`、`compilerUsageLines`、`runIn` |
-| `Driver.Native` / `Driver.Wasm` | 后端驱动：检查 + lowering + 写 `.s` 文件集 / `main.wat`；不 import Core/Elab/Intrinsics | `compileNative`、`compileWasm` |
+| `Driver.Target` | 非 OCaml 目标的后端驱动：检查 + lowering，把 `IrProgram` 编码后交独立进程 `vuna-target-<t>`（`--ir` / `--out` / `--print` / `--diag`），产物缓存见 `Driver.TargetCache`；不 import 任何后端实现 | `compileBackend`、`dispatch` |
+| `Driver.TargetCache` | 后端插件产物缓存：键 = IR 文本摘要 + 目标 + 后端版本，读侧回放产物与诊断 | `irHashOf`、`outputsKeyOf`、`readOutputsEff`、`writeOutputsEff`、`materializeEff` |
 
-`packages/compiler/vuna.toml` 的 `[export]` 列出全部 115 个模块（模块即公开面，没有内部模块）；
+`packages/compiler/vuna.toml` 的 `[export]` 列出全部 72 个模块（模块即公开面，没有内部模块；
+`seed/` 闭包另含 `vuna-ir` / `vuna-compiler-base` / `vuna-target-ocaml`）；
 编译器直接使用 `prim_*`（无 manifest 能力/特权声明）。工具链模块不在此包。
 
 ## 产品 CLI 工具链模块（`packages/cli/lib/`，不进 seed）
@@ -178,7 +189,7 @@
 
 ## 编译链
 
-只有一条链：`Loader → Elab → Lowering.Program（Core → IR）→ Codegen.{Decl,Term,Assembly}`，
+只有一条链：`Loader → Elab → Lowering.Program（Core → IR）→ Target.Ocaml.{Decl,Term,Assembly}`，
 由 `Vuna.Compiler.Driver.Compile` 的 `checkPackage` / `compileToDir` 组合：
 
 - `Pkg.contextForFile` / `contextForDir` 给出唯一 `PackageContext`（最近 manifest + 依赖
@@ -193,8 +204,9 @@
   `DtProgram`（datas / defs / classes / insts）；
 - `Lowering.Program` 把本次程序的 datas/defs 降成 `Ir`（`checkProgramOf` 跑程序级检查，
   `lowerUnitOf` 出 `IrUnit`，`lowerEntryOf` 出 `IrEntry`）——它是 **Core 的唯一消费者**；
-- `Codegen.Assembly.genUnitParts` 把 `IrUnit` 装配成「open 头 + 类型 + 桥接 + 正文」；
-  `Codegen.Term.genEntryHook` 渲染 main 钩子；
+- `Target.Ocaml.Assembly.genUnitParts` 把 `IrUnit` 装配成「open 头 + 类型 + 桥接 + 正文」；
+  `Target.Ocaml.Term.genEntryHook` 渲染 main 钩子；native / wasm 走 `Driver.Target.compileBackend`
+  （IR 编码后交 `vuna-target-<t>` 插件进程）；
 - `Driver.SplitGen.generateDtSplitProgram` 按 loader 模块序与声明归属切成逐模块 `SplitFile`
   （每单元经 `Lowering.Program` 出 `IrUnit`；含直接依赖；**唯一输出模型**；`compile` 与 `build` 都走它）。
 
@@ -292,11 +304,11 @@ fixities / imports、`miSource`、`miIfaceHash`、`miDepHashes`。
 位置的 binder 使用由精化器插隐藏 cast `prim_erase`（求值期恒等消去）。见
 [effects.md](effects.md) §5。`Elab.Usage` 另做整程序用量检查（QTT 0/1/ω，见
 [qtt.md](qtt.md)），不依赖 multiplicity。运行时前导代码（`bi_*`、`dtp_*`、宿主原语桥接等）在
-`Codegen.Term.dtRuntime` / `dtRuntimeWith`，无条件依赖 Unix（`Unix.stat` / `gettimeofday` /
+`Target.Ocaml.Term.dtRuntime` / `dtRuntimeWith`，无条件依赖 Unix（`Unix.stat` / `gettimeofday` /
 `readlink`）——原语语义见 [primitives.md](primitives.md)。`dtRuntimeWith` 按程序级旗标
-（`Ir.Shared` 的 `irSharedUsesFloat` / `irSharedUsesTrace` / `irSharedUsesObs`）**按需追加**
+（`IrShared`（`Ir.Model`）的 `irSharedUsesFloat` / `irSharedUsesTrace` / `irSharedUsesObs`）**按需追加**
 运行时段：不引用浮点 / tracing / 观测的程序，产物里根本没有那些代码（因此关闭口径下
-产物逐字节不变）。观测段（`Codegen.Term.dtObsRuntime`，约 390 行 OCaml）提供 `dtp_obs_*`：
+产物逐字节不变）。观测段（`Target.Ocaml.Term.dtObsRuntime`，约 390 行 OCaml）提供 `dtp_obs_*`：
 级别读取、span、计数、日志、CPU 采样（`ITIMER_PROF` + `SIGPROF`）、内存采样
 （`Gc.Memprof`）与 `at_exit` flush；规范见 [observability.md](observability.md) §3/§6。
 
@@ -327,7 +339,7 @@ fixities / imports、`miSource`、`miIfaceHash`、`miDepHashes`。
 = 文件名 + 文本 + **直接依赖单元列表**（含 `Vuna_runtime`、不含自身；runtime 单元依赖为空，
 其余依赖只记实际引用到的单元，不是「所有前序单元」）：
 
-1. `Vuna_runtime.ml`：`dtRuntimeWith`（`Codegen.Term`）= 运行时常量 + `dt_def_locs`
+1. `Vuna_runtime.ml`：`dtRuntimeWith`（`Target.Ocaml.Term`）= 运行时常量 + `dt_def_locs`
    定义位置表（mangled 值名 → `定义名 (相对路径:行)`，路径来自 `IrShared.irSharedDefLocs`
    + 增量路径的 `extraDefLocs`，已按模块根/包目录归一，落盘前排序保证确定性）
    + `dt_report_exn` 未捕获异常报告器（见 [debugging.md](debugging.md)）；

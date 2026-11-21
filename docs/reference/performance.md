@@ -536,8 +536,9 @@ pending 队列规模分桶（`elab.dict.pending.b*`，走 `--debug-perf` 的 `co
 据此落地的两条改动：
 - 局部 binder 的引用不再走运算符特化链（`+` / `==` / `Base.Trait.Num.*` 只可能是全局名）：
   `EVar` 自用时间 4.6 s → 3.6 s；
-- check 路径用 `Codegen.Assembly.checkUnitParts` 只校验「运行时定义有体」，不拼产物文本
-  （文本生成是纯渲染，`Codegen.Term` 唯一的 `ErrC` 已保留）：`codegen.check` 1.7 s → 1.4 s。
+- check 路径用 `Target.Ocaml.Assembly.checkUnitParts` 只校验「运行时定义有体」，不拼产物文本
+  （文本生成是纯渲染，`Target.Ocaml.Term` 唯一的 `ErrC` 已保留）：`codegen.check` 1.7 s → 1.4 s；
+  当前冷 `check packages/compiler` 的 `vuna.codegen.check` 约 0.91 s，其中 `.gen` 已 <1 ms。
 - `isDataOrRecordCtorTarget` 先按 canonical 的「数据前缀」筛族、再比构造子短名（不再为每个
   构造子拼一次 `${mname}.${dname}.${cname}`）；`ConstraintStore.csTried` 从关联表改成
   `HashMap Int Int`（否则尝试记录变长后每次 `ecTriedAt` 线性扫描）。

@@ -99,7 +99,7 @@ recordFieldLabel family field = "f_${sanitizeName (localName family)}_${sanitize
 -- `Unit.name`；同单元引用仍是裸名（`let rec` 组与类型声明内部不写自限定）。
 -- `Unit` = `Driver.SplitGen` 给出的单元名（模块路径的包内部分，同时是文件名），
 -- 必须已编译 —— 每单元只依赖**实际引用**
--- 到的单元（见 `typeDepsOf` 与 `Codegen.Term` 的 dep 累积），依赖图因此是精确
+-- 到的单元（见 `typeDepsOf` 与 `Target.Ocaml.Term` 的 dep 累积），依赖图因此是精确
 -- DAG 而不是「所有前序单元」的全序。
 --
 -- `QualCtx` 只承载「名字 → 归属单元」这两张表与当前单元；`noQual` 是 check 路径

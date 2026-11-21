@@ -11,7 +11,7 @@ module Vuna.Compiler.Driver.Iface where
 --     `Elab.Termination.checkTerminationDeclsWith`），依赖模块要提供这两类上下文；
 --     Idris2 存的是编译后的 case tree，vuna 的等价物就是 resolved 子句。**这是与 TTC
 --     字段集的唯一实质差异**：多了 decls、少了编译后端产物（codegen 在 vuna 侧由
---     `Codegen.*` 从 DtProgram 现生成）。
+--     `Target.Ocaml.*` / `Driver.Split` 从 DtProgram 现生成）。
 --   - `miExports` / `miFixities` / imports：加载器把依赖模块「当已加载模块」
 --     复用时需要的模块图数据（不读源码）。
 --   - `miSource` / `miIfaceHash` / `miImplHash`：失效判定。`miIfaceHash` 覆盖**下游可见

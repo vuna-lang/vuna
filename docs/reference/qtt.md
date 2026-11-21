@@ -46,8 +46,10 @@ linear data Token : Type where
 
 ## 3. binder quantity 判定
 
-在 `Elab/Meta` 集中实现：`rigOfQty` 是「源码 quantity → `Rig`」的唯一映射，`binderRig`
-是未带标注时的默认入口（隐式 / 类型层域 ⇒ 0，显式未标注 ⇒ ω）。所有 binder 构造点
+在 `Elab/Meta` 集中实现：`rigOfQty` 是「源码 quantity → `Rig`」的唯一映射；`binderRig`
+是未带标注时的默认入口（隐式 / 类型层域 ⇒ 0，显式未标注 ⇒ ω）；线性类型域另有
+`rigForLinearDomain`（强制 1）、`rigOfLinearValue`（值类型线性 ⇒ 1）与
+`implicitBinderRig`（隐式 `String` 实例名 ⇒ ω）。所有 binder 构造点
 （`inferPi`、`checkLam`、`checkBinders`、`inferArgsGo`、`TCon` 构造、case 分支、
 记录投影、eta、`let`）都走同一入口：
 

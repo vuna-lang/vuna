@@ -35,7 +35,7 @@ export data ODecl(..) : Type where
 -- 项面
 -- ---------------------------------------------------------------
 -- `OName` 是已渲染好的名字/字面量（变量、构造子、整数、字符串、浮点字面量）；
--- `ORaw` 是运行时模板或内联内建展开的整段表达式（`Codegen.Runtime` / `inlineText`）：
+-- `ORaw` 是运行时模板或内联内建展开的整段表达式（`Target.Ocaml.Runtime` / `inlineText`）：
 -- 这两处本来就是目标文本，模型只负责把它们放回结构位置。
 -- | 模式。
 export data OPat(..) : Type where

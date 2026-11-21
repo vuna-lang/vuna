@@ -205,7 +205,7 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
   `Native.Runtime.nativeRtValueArity` 给出 arity；饱和直调，部分/过度应用与作为值都
   生成 wrapper 闭包。
 - 位运算是 `IrRtApp`（`irInlineArity` 用内建名 `bitAnd`…，与 `+` 同一形态决策）；63-bit
-  语义与 `Codegen.Term.bi_bit*` 一致（`bitShr` 是保留 bit 62 的逻辑右移）。
+  语义与 `Target.Ocaml.Term.bi_bit*` 一致（`bitShr` 是保留 bit 62 的逻辑右移）。
 - 运行时错误报告统一为 `vuna: runtime error: <msg>\n`（stderr，exit 2），与 OCaml
   报告器 `dt_report_exn` 的第一行一致；`assert` / `todo` 分别加 `assertion failed: ` /
   `TODO: ` 前缀。
@@ -444,8 +444,8 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
 可以重号，改动一个模块不会让其它模块的标签重编号。跨文件引用的函数/数据标签一律
 `.globl`。
 
-依赖方向：IR 是独立包 `vuna-ir`（`Native.*` 跨包 import 它），`packages/compiler/vuna.toml` 的 `[layers]` 不再约束 Native：`Native.*` 不得 import
-`Core` / `Elab` / `Intrinsics` / `Codegen` / `Wasm`。`checks.ir-boundary` 保留形状与正向断言
+依赖方向：IR 是独立包 `vuna-ir`（`Native.*` 跨包 import 它），`packages/compiler/vuna.toml` 的 `[layers]` 不再约束 Native：`Target.Native.*` 不得 import
+`Core` / `Elab` / `Intrinsics` / `Target.Wasm` / `Target.Ocaml`。`checks.ir-boundary` 保留形状与正向断言
 （`Native.Module` 必须 import `Ir`）。
 
 ## 7. 验证

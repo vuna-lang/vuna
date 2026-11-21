@@ -10,7 +10,7 @@ module Vuna.Compiler.Lowering.Program where
 --   * 入口分类（动作 / 值）、展示函数、动作行的宿主 handler 序列。
 --
 -- 输出 `Ir`（只有确定性纯数据，不含 `Term` / `Value` / `DtDef`）。后端
--- （`Codegen.{Decl,Term,Assembly,Split}`）此后只消费 IR，边界由 `checks.ir-boundary`
+-- （`Target.Ocaml.{Decl,Term,Assembly}` + `Driver.Split`）此后只消费 IR，边界由 `checks.ir-boundary`
 -- 守护；`Core` / `Elab` / `Intrinsics` 只允许出现在本模块。
 --
 -- 门禁：产物逐字节确定（[architecture-target.md] 的 IR 门禁）。因此本模块的遍历顺序、

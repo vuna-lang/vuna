@@ -4,7 +4,7 @@ module Vuna.Ir.Runtime where
 --
 -- 定位：`Core --Lower--> IR --后端--> 目标文本`。IR 节点里只有**符号**，没有目标文本：
 -- `IrRt sym` / `IrRtApp sym args` 的 `sym` 必须在本模块的契约里声明，后端（当前是
--- `Codegen.Runtime` 的 OCaml 表）对契约**全覆盖**才能渲染。
+-- `Target.Ocaml.Runtime` 的 OCaml 表）对契约**全覆盖**才能渲染。
 --
 -- 为什么需要这一层：迁移后的 IR 仍携带 `Intrinsics.intrinsicRuntime` 的 OCaml 表达式
 -- （`bi_add`、`(fun key name v -> Effect.perform ...)` 之类），第二个后端拿不到可实现的

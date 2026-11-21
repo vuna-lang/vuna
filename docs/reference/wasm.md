@@ -8,7 +8,7 @@
 > WASI preview1 宿主层（fs / env / args / clock），能力上限是浏览器 WASI 可提供的子集。
 > 未实现的宿主操作在运行期显式失败（不伪造结果）；符号表外的原语（extern、网络等）
 > 在引用点拒绝。实现入口：`Vuna.Target.Wasm.{Model,Instr,Types,Runtime,Module,Render}`，
-> 驱动 `Vuna.Compiler.Driver.Wasm`。
+> 插件入口 `Vuna.Target.Wasm.Plugin.runPlugin`；编译器侧驱动是 `Vuna.Compiler.Driver.Target`。
 
 ## 1. 产物与工具链
 
@@ -272,8 +272,8 @@ stdout/stderr 大输出不受线性内存大小限制）；读按 `filestat` 的
   `packages/compiler/vuna.toml` 的 `[layers]` 不再约束 Wasm）；驱动只经
   `Driver.Dt.dtCheckWithProgramParts` + `Lowering.Program.lowerProgramOf`，不 import
   Core/Elab/Intrinsics（`checks.ir-boundary` 只留形状与正向断言）。
-- `Module.build` 是纯函数；`Driver.Wasm.compileWasm` 负责写文件，签名只要求
-  `Member nFs FsOp r` / `nEnv EnvOp r` / `nProcess ProcessOp r`，不用全集行。
+- `Module.build` 是纯函数；写文件与命令行解析在 `Target.Wasm.Plugin`（插件进程内），
+  编译器只经 `Driver.Target` 编码 IR 并起进程，不 import 任何后端实现。
 - 生成器带 fuel（`genExpr` 等），越界返回 `wasm codegen fuel exhausted`（内部错），不 panic。
 - 错误分类：`wasm target:` 前缀 = 能力限制（`WasmUnsupported`）；其余 = 生成器内部错
   （`WasmInternal`，前缀 `internal wasm backend error`）。

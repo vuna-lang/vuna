@@ -110,7 +110,7 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
 | 位置 | 表示 | 机制 |
 | --- | --- | --- |
 | data 构造子字段（声明位置） | `Obj.t` | 字段类型里出现「不可命名的运行时类型」时，整个字段渲染成不透明值 |
-| 构造子实参 | `(Obj.magic arg)` | `Codegen.Term` 按 `ctorOpaqueFlagsOf` 的 kept 位置插入 |
+| 构造子实参 | `(Obj.magic arg)` | `Lowering.Program` 在 kept 位置插 `IrCast`，`Target.Ocaml.Render` 渲染成 `Obj.magic` |
 | binder 使用（表达式位置） | `prim_erase`（隐藏 intrinsic，运行时 `%identity`） | 精化器在每个使用点包 cast；求值期 `OpIdentity` / `applyValueFuel` 直接消去 |
 
 **判据（elab 与 codegen 同源，`Elab.Meta.valueOpaqueScoped`）**：运行时类型不可命名 ⇔
@@ -157,7 +157,7 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
    `unsafe` 能力位或 `[trust]` 定义级清单（[debt.md](debt.md) D62）。
 5. **效应组合显式**：transformer 的 handler 必须显式调用；没有自动 lift 到任意深度。
 6. **不透明擦除值的表示与 cast 由同一份判据驱动**：`Elab.Meta.valueOpaqueScoped` 与
-   `Codegen.Decl` 的 `isTypeHeadOpaqueDatas` / `ctorOpaqueFlagsOf` 必须同步；
+   `Lowering.Env` 的 `isTypeHeadOpaqueDatas` / `ctorOpaqueFlagsOf` 必须同步；
    `Obj.t` 字段 ↔ `prim_erase` / `Obj.magic` 两侧缺一就会在 `ocamlopt` 处错配。
 7. **cast 对语义透明**：`prim_erase` 求值期归约为实参本身（`OpIdentity` +
    `applyValueFuel` 的恒等消去），对定义性相等 / 正规化 / 核心求值不可见；用量检查里

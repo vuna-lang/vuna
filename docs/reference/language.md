@@ -270,7 +270,7 @@ vuna/base/compiler 三包源码统一按当前语言能力书写，新增/修改
   `f (dbg! x)`（宏调用先吞掉自己的原子实参）；块实参用括号。
 - **只出现在表达式位置**：模式位置不解析 `!`；宏也不能当函数值传递。
 - **展开时机**：`Loader` 在 fixity 重排之后、名字解析之前做 AST→AST 展开（`Loader.Expand`），
-  Elab / Codegen / 接口缓存都只会看到普通表达式；parser 用保留名
+  Elab / 后端 / 接口缓存都只会看到普通表达式；parser 用保留名
   `@vuna@macro@<name>` 编码调用，Fmt 反向渲染回 `name!`，Index 不把标记当引用。
 - **卫生性**：展开结果只引用隐藏 runtime 原语（`@vuna@debug@*`，见
   [primitives.md](primitives.md)），不依赖库模块、不捕获调用方局部名字；宏名不能被局部

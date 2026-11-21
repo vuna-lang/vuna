@@ -942,10 +942,10 @@ rigOfQty implicit isTypeDom qty =
 -- ---------------------------------------------------------------
 --
 -- 运行时类型里出现「卡住的类型族应用」（如 `res op`）时，OCaml 侧无法命名它：
---   * 声明位置（data 字段）→ `Codegen.Decl` 渲染成不透明运行时值（`Obj.t`）；
+--   * 声明位置（data 字段）→ `Target.Ocaml.Decl` 渲染成不透明运行时值（`Obj.t`）；
 --   * 表达式位置（binder）→ 每个使用点包 `prim_erase`（运行时 `%identity`，求值期
 --     归约成实参本身，对定义性相等透明）。
--- 判据与 `Codegen.Decl` 同源：`valueOpaqueScoped` + 同一「可表示类型头」表。
+-- 判据与 `Target.Ocaml.Decl` 同源：`valueOpaqueScoped` + 同一「可表示类型头」表。
 -- 类型族有两种来源：全局类型头不可表示（类型族定义 / axiom），或**类型族参数**
 -- （kind 的 Pi 链里出现非宇宙域，如 `res : f -> Type`）。普通类型构造子参数
 -- （`m : Type -> Type`）仍然可表示，字典方法字段 / base 泛型代码不受影响。

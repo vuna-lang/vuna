@@ -100,8 +100,8 @@ ${dtPrimRuntime}"""
 
 -- effectful 内建（`prim_*`）的 DT 运行时实现。
 -- 签名在 `Vuna.Compiler.Base.Intrinsics`（唯一真源），这里补 OCaml 侧实现（对应
--- `Codegen.Runtime` 的符号表）；`argsGetArgs` / `stdinReadLine` 是零参**值**，
--- 所以在引用点展开成 `dtp_*(()`，与 Codegen 的既有处理一致（每次求值都重新读）。
+-- `Target.Ocaml.Runtime` 的符号表）；`argsGetArgs` / `stdinReadLine` 是零参**值**，
+-- 所以在引用点展开成 `dtp_*(()`，与 OCaml 运行时的既有处理一致（每次求值都重新读）。
 -- `stdinReadBytes` 是**函数**（`Int -> String`）：最多读 n 字节、有数据就立即返回
 -- （可能少于 n），EOF 返回 `""`——LSP 的帧循环靠它精确读 Content-Length 字节。
 dtPrimRuntime : String
@@ -1780,7 +1780,7 @@ mkGenSt qc shared = mkGenStWith (\p => p) qc shared
 export mkGenStWith : (String -> String) -> QualCtx -> IrShared -> GenSt
 mkGenStWith norm qc shared = GenSt shared qc [] norm
 
--- | 累积依赖单元（前插，`Codegen.Assembly` 再按首现顺序去重归一）。
+-- | 累积依赖单元（前插，`Target.Ocaml.Assembly` 再按首现顺序去重归一）。
 export gsAddDep : GenSt -> String -> GenSt
 gsAddDep st unit =
   if unit == "" || memName unit st.gsDeps then
@@ -1816,7 +1816,7 @@ recordLabelOf st family label =
   in if unit == "" || unit == st.gsQual.qcUnit then label else "${unit}.${label}"
 
 -- List 桥接 helper 在**声明 List 族**的单元里；其它单元引用时按该单元限定。
--- helper 名单是契约的一部分，由 `Codegen.Runtime.ocamlRtHelperNames` 提供（单一来源）。
+-- helper 名单是契约的一部分，由 `Target.Ocaml.Runtime.ocamlRtHelperNames` 提供（单一来源）。
 bridgeUnitOf : GenSt -> String
 bridgeUnitOf st =
   case st.gsShared.irSharedListFam of

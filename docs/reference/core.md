@@ -36,7 +36,8 @@ data Term where
 - `Rig` 是三值格子（`Rig0` / `Rig1` / `RigOmega`），三值都由精化器产生（显式未标注
   binder 默认 ω）；组合走 `Core.Term` 的 `rigAdd` / `rigScale` / `rigJoin`（唯一实现，
   规则见 [qtt.md](qtt.md) §2）。**读取判据只有 `rigIsErased`**，默认构造入口是
-  `rigOfBinder`（带源码 quantity 的路径走精化器的 `rigForPi`），`Core` 之外不得模式匹配
+  `Core.Term.rigOfBinder`，带源码 quantity 的路径走 `Elab.Meta.rigOfQty`；另有
+  `Elab.Meta.{binderRig,rigForLinearDomain,rigOfLinearValue,implicitBinderRig}` 四个同族入口，`Core` 之外不得模式匹配
   `Rig`。
 - `Level` 不透明：内部是 `Level Int`（字段 `levelToInt`），外部只能经 `levelZero` / `levelSucc` /
   `levelMax` / `levelToInt` / `levelEq` / `levelLt` 访问，不得自行做 Int 算术。
@@ -150,7 +151,7 @@ data Term where
 ## 7. codegen 侧不变量
 
 Track A 第一步（Core → IR → OCaml）之后这些不变量分两层：**决策**在 `Lowering`
-（产出 `Ir`），**渲染**在 `Codegen.{Decl,Term}`（只消费 `Ir`）。
+（产出 `Ir`），**渲染**在 `Target.Ocaml.{Decl,Term}`（只消费 `Ir`）。
 
 - **构造子字段形状单一真源**：`Elab.Representation.ctorKeepFlags` 从构造子 telescope 的 rig
   算出 keep flags；Lowering 用它把实参归一成运行时实参表、决定 case binder 形状，后端只
@@ -182,7 +183,7 @@ Track A 第一步（Core → IR → OCaml）之后这些不变量分两层：**�
 | Core | `Core.Eval.eval` / `force` / `normalize` / `quote`；`Core.Conv.conv` / `solveMeta` |
 | Elab | `Elab.Driver.elabProgramFull` / `goalsOfProgram`；`Elab.Term.inferE` / `checkE`；`Elab.Case` / `Elab.Match` / `Elab.Data` / `Elab.Trait` / `Elab.Termination` |
 | IR | `Lowering.Program.lowerTerm` / `lowerUnitOf` / `lowerProgramOf`；`Ir.Model`（数据）/ `Ir.Analysis`（SCC）/ `Ir.Validate`（校验） |
-| Codegen | `Lowering.Program.checkProgramOf`（程序级检查）；`Codegen.Assembly.genUnitParts`；`Codegen.Term.genIr` / `genEntryHook`；`Driver.SplitGen.generateDtSplitProgram`；`Lowering.Checks.*` |
+| 后端 | `Lowering.Program.checkProgramOf`（程序级检查）；`Target.Ocaml.Assembly.genUnitParts` / `checkUnitParts`；`Target.Ocaml.Term.genIr` / `genEntryHook`；`Driver.SplitGen.generateDtSplitProgram`；`Lowering.Checks.*`；`Driver.Target.compileBackend`（native / wasm） |
 
 数据流与改动定位见 [architecture.md](../architecture.md)；测试标签见
 [testing.md](testing.md)。

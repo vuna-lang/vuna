@@ -44,7 +44,7 @@ golden 一致，再 warmup + 多次取中位数；`--target ocaml|native|both` �
 sorting,float_math,text_scan,nat_bits,tco_mutual,tco_wide,gc_low_live,gc_array_churn,
 gc_retain}.vuna`。
 
-关键设计决策与改动（`Codegen/Term.vuna`、`Base.Intrinsics` / `Elab.Prelude` / `Codegen.Decl` 与
+关键设计决策与改动（`packages/target-ocaml/lib/Vuna/Target/Ocaml/Term.vuna`、`Base.Intrinsics` / `Elab.Prelude` / `Target.Ocaml.Decl` 与
 `packages/base/`）：
 
 1. **codegen / 运行时改进**：

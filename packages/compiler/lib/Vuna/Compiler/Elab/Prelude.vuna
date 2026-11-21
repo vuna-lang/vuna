@@ -9,7 +9,7 @@ module Vuna.Compiler.Elab.Prelude where
 --     固定为 canonical，不按短名挑选）；
 --   - 效果原语只有 `prim_*` 名，签名与能力位都在 Intrinsics 表里。
 --
--- 名字解析（arity/放行/能力）在 `Loader.Resolve`，runtime 映射在 `Codegen.Term`，
+-- 名字解析（arity/放行/能力）在 `Loader.Resolve`，runtime 映射在 `Target.Ocaml.Term`，
 -- interp 归约在 `Core.Eval`——三处都消费同一张表。
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Core.Term

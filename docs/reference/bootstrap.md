@@ -194,7 +194,7 @@ Base_dCommon ... Base_dIntrinsics ...              （编译器内置层）
 Main
 ```
 
-- `Vuna_runtime`：`Codegen.Term.dtRuntime`（`bi_*` / `dtp_*` 等运行时）。
+- `Vuna_runtime`：`Target.Ocaml.Term.dtRuntime`（`bi_*` / `dtp_*` 等运行时）。
 - 每个源码模块一个 `<Unit>.ml`（依赖序；OCaml 编译单元名 = 模块路径去掉包前缀后点转 `_d`，
   如 `Vuna.Compiler.Base.Intrinsics` → `Base_dIntrinsics.ml`、`Base.Data.List` →
   `B_dData_dList.ml`），文件头

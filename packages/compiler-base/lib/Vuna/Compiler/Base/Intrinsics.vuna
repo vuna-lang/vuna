@@ -5,7 +5,7 @@ module Vuna.Compiler.Base.Intrinsics where
 --
 -- 这里只有目标中立的纯数据：内建/原语的名字、签名形状（IType）、interp 归约标签
 -- （IntrinsicOp）、是否对用户源码可见。运行时文本属于后端，见 `Ir.Runtime`（契约）
--- 与 `Codegen.Runtime`（OCaml 实现）。
+-- 与 `Target.Ocaml.Runtime`（OCaml 实现）。
 -- 消费方：
 --   - `Loader.Resolve`：名字解析（arity）、DT prelude 放行；
 --   - `Elab.Prelude`：构造 prelude globals（签名）；
@@ -62,8 +62,8 @@ arityOfType _ = 0
 -- 内建类型构造子
 -- ---------------------------------------------------------------
 -- 与 `Int` / `String` 两个 primitive 类型名不同，这些是**带参数的**类型构造子：
--- 名字恒可见（prelude 类型层），codegen 按固定 OCaml 类型渲染（见 Codegen.Decl）。
--- 参数个数的唯一真源在此；Elab.Prelude 据此生成 kind，Codegen.Decl 据此渲染。
+-- 名字恒可见（prelude 类型层），codegen 按固定 OCaml 类型渲染（见 Target.Ocaml.Decl）。
+-- 参数个数的唯一真源在此；Elab.Prelude 据此生成 kind，Target.Ocaml.Decl 据此渲染。
 -- | 内建类型构造子：带参数的类型构造子，名字恒可见，参数个数在此定。
 export record TypeIntrinsic(..) where
   -- | 构造子的源码名字（`Array` / `IORef`）。
@@ -79,7 +79,7 @@ typeIntrinsicCtorName (TypeIntrinsic name arity) = name
 export typeIntrinsicCtorArity : TypeIntrinsic -> Int
 typeIntrinsicCtorArity (TypeIntrinsic name arity) = arity
 
--- | 全部内建类型构造子及其 arity（Elab.Prelude 生成 kind、Codegen.Decl 渲染的唯一真源）。
+-- | 全部内建类型构造子及其 arity（Elab.Prelude 生成 kind、Target.Ocaml.Decl 渲染的唯一真源）。
 export typeIntrinsicArities : List TypeIntrinsic
 typeIntrinsicArities = [TypeIntrinsic "Array" 1, TypeIntrinsic "IORef" 1]
 
@@ -303,7 +303,7 @@ effMainRunName = "Base.Effect.Core.runMain"
 -- 编译器 tracing（内置宏 `dbg!` 的隐藏后端）
 -- ---------------------------------------------------------------
 -- 这两个名字只由 `Loader.Expand` 展开 `dbg!` 时引用：它们以 `@vuna@` 开头，
--- `Loader.Resolve` 作为内部名直通，`Elab.Prelude` 提供签名，`Codegen.Term` 映射到
+-- `Loader.Resolve` 作为内部名直通，`Elab.Prelude` 提供签名，`Target.Ocaml.Term` 映射到
 -- 生成的 `Vuna_runtime`；`visible = False`，源码写不出来。
 -- 用哑 `Int` 实参承载开关查询，避免在源码层出现「纯 Bool 值读取进程配置」的形态。
 -- | `dbg!` 的开关查询原语（`--debug-perf` / `VUNA_DEBUG_PERF=1`）。
@@ -319,7 +319,7 @@ debugLineIntrinsicName = "@vuna@debug@line"
 -- ---------------------------------------------------------------
 -- 规范见 `docs/reference/observability.md`。与 `dbg!` 同一策略：`@vuna@` 前缀 ⇒
 -- `Loader.Resolve` 直通、`Elab.Prelude` 只补签名（用户源码写不出来）、`Core.Eval`
--- 归约成 no-op、`Ir.Runtime` 契约 + `Codegen.Runtime` 表 + `Codegen.Term` 运行时文本
+-- 归约成 no-op、`Ir.Runtime` 契约 + `Target.Ocaml.Runtime` 表 + `Target.Ocaml.Term` 运行时文本
 -- 三处对齐（漏一处 `checkRuntimeContract` 直接报内部错）。
 --
 -- **所有原语返回 `Int`**（信息量靠 `0` 承载）：这样纯核心的深部探针不需要把签名
@@ -526,7 +526,7 @@ export data IntrinsicOp(..) : Type where
 --
 -- 字段：名字、签名形状、interp 归约标签、是否对用户源码可见。
 -- 运行时文本（OCaml 表达式）不在本模块：它是后端的实现细节，住在
--- `Codegen.Runtime`；本模块只声明目标中立的语义（名字/签名/arity/归约/可见性）。
+-- `Target.Ocaml.Runtime`；本模块只声明目标中立的语义（名字/签名/arity/归约/可见性）。
 -- | 内建声明：名字、签名形状、interp 归约标签、可见性。
 export record Intrinsic where
   -- | 内建的源码名字（如 `+`、`strFromInt`、`prim_eff_print`）。
@@ -605,7 +605,7 @@ export boolFalseCtor : String
 boolFalseCtor = "Base.Data.Bool.Bool.False"
 
 -- | Nat 的完整符号身份（`Base.Data.Nat.Nat`）；运行时表示固定为 OCaml `int`
--- （Zero=0、Succ n=n+1 饱和），所以**不生成**变体类型（见 Codegen.Decl）。
+-- （Zero=0、Succ n=n+1 饱和），所以**不生成**变体类型（见 Target.Ocaml.Decl）。
 export natTypeName : String
 natTypeName = "Base.Data.Nat.Nat"
 

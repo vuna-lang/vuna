@@ -154,7 +154,7 @@ span / 计数 / 日志 / 采样栈写成 **Chrome Trace Event JSONL**；关闭�
 
 ## 4. 语言层 API
 
-### 4.1 隐藏原语（`Base.Intrinsics` / `Ir.Runtime` / `Codegen.Runtime` 三处对齐）
+### 4.1 隐藏原语（`Base.Intrinsics` / `Ir.Runtime` / `Target.Ocaml.Runtime` 三处对齐）
 
 | 名字 | 签名 | 语义（OCaml 运行时） |
 | --- | --- | --- |
@@ -197,7 +197,7 @@ obsSampleStop  : Int -> Int
 
 ## 5. `#line` 注入与 DWARF
 
-- `Codegen.Term.genGroup` 在每个 `let` / `let rec` 绑定、每个 `and` 绑定、每个单定义 `let`
+- `Target.Ocaml.Term.genGroup` 在每个 `let` / `let rec` 绑定、每个 `and` 绑定、每个单定义 `let`
   前写一行 `# <起始行> "<包相对路径>"`（单行内不插指令，避免破坏布局）。
 - 路径由 `Driver.SplitGen.splitLocPath roots contextDir` 归一（与 `dt_def_locs` 位置表同一函数），
   因此产物**只含包相对路径**（O7）。check 路径（`noQual`）归一为恒等，但文本被丢弃。

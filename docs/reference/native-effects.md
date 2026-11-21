@@ -179,7 +179,7 @@ handle comp {
 | `Base.Effect.Core`（在 seed 闭包里） | `defaultInstance = "default"`、`Named`、`Row.Nil`/`Row.(::)`、`Member` 2 参、`EffSig`/`sigFn`/`sigOf`/`resIdx`、`performCore`/`handleWith`/`handleWithAt`（`sig` 擦除量、`{w : Member (Named n (sigOf sig)) r}` 移到 comp 之后先解名字；行首条目版把条目放在 comp 的行首、结果行即剩余行）；12 个效应模块用「结果类型索引」的 op 族 |
 
 不改：`Eff` 本体、`runPure`/`joinEff`、`prim_effectPerformId`/`prim_effectHandleId` 语义、
-`Codegen/Term.dtPrimRuntime` 的运行时块、`Eff` 的私有 `MkEff` 表示。
+`Target.Ocaml.Term.dtPrimRuntime` 的运行时块、`Eff` 的私有 `MkEff` 表示。
 
 ### 3.4 bootstrap 要求
 

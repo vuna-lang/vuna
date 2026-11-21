@@ -18,27 +18,30 @@ packages/compiler-base/lib/Vuna/Compiler/Base/   （独立包 vuna-compiler-base
 │               Diagnostics.vuna Diagnostics/{Common,Ic,Cg,Pkg,Rn,Sink,Warning,Tc,Frontend,Loader}
 │                             位置/诊断模型、编码原语、摘要与身份、落盘层、内建真源
 packages/ir/lib/Vuna/Ir/              （独立包 vuna-ir：擦除后的中间表示，后端插件的唯一输入面）
-├─ Model Analysis Runtime Validate Represent Anf Cps Dispatch Tail Codec
-│                             形状 / SCC / 运行时契约 / 校验 / 表示选择 / 变换 / 跨进程编码
+├─ Model Analysis Runtime Validate Represent Anf Cps Dispatch Tail Kinds Layout
+│  Alias Synthetic Codec     形状 / SCC / 运行时契约 / 校验 / 表示选择 / 变换 /
+│                             kind 与布局 / 跨进程编码
 packages/target-ocaml/lib/Vuna/Target/Ocaml/  （独立包 vuna-target-ocaml：OCaml 后端，仍在种子闭包内）
 ├─ Decl Term Assembly Model Render Runtime   IR→OCaml 文本（不 import Core / Elab / Intrinsics）
 packages/target-native/lib/Vuna/Target/Native/  （独立包 vuna-target-native 插件：native 后端，不在种子内）
-├─ Abi Gc Model Module Render Runtime Audit Plugin   IR→x86-64 汇编文本（不 import Core / Elab）
+├─ Abi Gc Model Module Render Runtime Audit Pal Repr Select Plugin   IR→x86-64 汇编文本
+│                            （不 import Core / Elab）
 packages/target-wasm/lib/Vuna/Target/Wasm/      （独立包 vuna-target-wasm 插件：wasm 后端，不在种子内）
-├─ Instr Model Module Render Runtime Types Plugin     IR→WAT 文本
+├─ Instr Model Module Render Runtime Types Plugin    IR→WAT 文本
 packages/compiler/lib/Vuna/Compiler/   （目录即层：层名 = 模块前缀；依赖方向由 packages/compiler/vuna.toml
                                 的 [layers] 执行，见 reference/packages.md「层约束」）
-├─ Frontend/    Ast Lexer Cst Parser Parser/Support Toml Manifest
-│               Canonical/{Ast,Lex,Pkg} Packages/{Pkg,Source}
+├─ Frontend/    Ast Lexer Cst Parser Parser/Support Toml Manifest Reserved
+│               Canonical/{Ast,Pkg} Packages/{Pkg,Source} Rast{,.Bridge,.Name}
 │                             词法（含无损 CST）/ 语法 / vuna.toml / 规范编码 / 包图
 ├─ Loader/      Modules Resolve Flatten Expand Fixity Addr Fingerprint Layers
 │                             模块图 / 名字解析 / flatten / fixity / 地址与身份 / 层约束
 ├─ Core/        Term Eval Conv Canonical      Core TT / NbE / 定义性相等 / 规范编码
-├─ Elab/        Sig Types Meta Case Dict Term Data Trait InstName Driver Termination
-│               Prelude Match Records Derive Canonical        双向精化
+├─ Elab/        Sig Types Meta MetaSpans Case Dict Term{,.Impl,.Support} Data Trait
+│               InstName InstCoherence Driver Termination{,.ElabInput,.Measure,.Scc}
+│               Prelude Match Records Derive Coverage Representation Usage Canonical   双向精化
 ├─ Lowering/    Program Env Ty Entry Erased Checks    Core→IR 唯一入口（程序级表/类型表面/入口形态）+ 擦除视图 + Core 侧检查
 └─ Driver/      Dt Compile Cache Iface Owner PerfCache ToolPayload CompilerCli
-                Split SplitGen Target                              输出模型 / facade / 后端插件驱动 / CLI
+                Split SplitGen Target TargetCache                   输出模型 / facade / 后端驱动 / CLI
 产品 CLI 包 vuna（模块根 packages/cli/lib/，入口 packages/cli/app/Main.vuna）：Cli（+子模块 Spec/Help/Args/
   Err/Suggest/Test/Fmt/Index/Repl/Suite/Dev，命令表与分发，见 [reference/cli.md](reference/cli.md)）、
   Interp/Fmt/Lint/Index（门面+子模块）、
@@ -62,10 +65,13 @@ packages/compiler/lib/Vuna/Compiler/   （目录即层：层名 = 模块前缀�
 `[layers]` 声明哪些层只允许直接依赖哪些层，由 loader 在 import 时强制（见
 [packages.md](reference/packages.md) 的「层约束」）；`checks.ir-boundary` 只留
 「必须 import 某模块」的正向断言与 IR 形状断言。未声明层的包不受约束。
-`Core` / `Elab` / `Loader` / `Codegen` 的纯门面已删除，消费方直接 import 具体子模块
+`Core` / `Elab` / `Loader` 的纯门面已删除（OCaml 后端的 `Codegen` 门面随包迁到
+`packages/target-ocaml`），消费方直接 import 具体子模块
 （如 `Core.Term` / `Core.Eval` / `Core.Conv`、`Loader.Flatten` / `Loader.Modules`、
-`Codegen.Assembly`、`Elab.*`）；`Ir` 的校验入口在 `Ir.Validate`。数据定义只在叶子
-（`Core.Term`、`Elab.Types` 等）。目标每模块 ≤~800 行（当前最大 `Elab/Trait.vuna`，约 1.2k）。
+`Target.Ocaml.Assembly`、`Elab.*`）；`Ir` 的校验入口在 `Ir.Validate`。数据定义只在叶子
+（`Core.Term`、`Elab.Types` 等）。目标每模块 ≤~800 行；实际超标的集中在
+`Frontend/Parser.vuna`（2.6k）、`Driver/Compile.vuna`（2.7k）、`Driver/Dt.vuna`（2.2k）、
+`Elab/Trait.vuna`（1.7k）、`Elab/Term/Impl.vuna`（3.8k）。
 `packages/compiler/` 的入口闭包是 seed 唯一来源（`packages/compiler/app/Main.vuna` 的 import 闭包，跨 `vuna-ir` / `vuna-compiler-base` / `vuna-target-ocaml`；数量以 `seed/` 与
 `nix/seed/files.txt` 与 `nix/seed/rotation.txt` 为准）；`packages/cli/` 工具链与 `vuna-target-native` / `vuna-target-wasm` 在 TCB 之外；`packages/base/` 模块名即 API。
 
@@ -83,7 +89,7 @@ packages/compiler/lib/Vuna/Compiler/   （目录即层：层名 = 模块前缀�
  → Elab.Driver.elabProgramFull   （只读 RAst；Records/Derive 展开 → 精化）
  → Lowering.Erased                （运行时 TVar 下标归一化 + 校验；类型面保留）
  → Lowering.Program               （Core → Ir：表示/形态/入口分类，程序级检查）
- → Codegen.Assembly              （IrUnit 的装配：open 头/类型/桥接/正文/依赖表）
+ → Target.Ocaml.Assembly              （IrUnit 的装配：open 头/类型/桥接/正文/依赖表）
  → Driver.SplitGen.generateDtSplitProgram  （唯一生成器：runtime + 各模块 + Main，带直接依赖）
  → sh build.sh                   （Driver.Split：层内并行；ocamlopt 链接）
 ```
@@ -96,10 +102,10 @@ packages/compiler/lib/Vuna/Compiler/   （目录即层：层名 = 模块前缀�
 `Ir.Cps.cpsDefsMachine`（效应机器）→ `Ir.Tail`（尾位置标记）→ `Native.Module` / `Wasm.Module`。
 `Ir.Tail` 是两端共享的判定；发射仍是各自后端（native `jmp`，wasm `return_call`）。
 
-**运行时错误报告**：`Vuna_runtime.ml` 由 `Codegen.Term.dtRuntimeWith` 生成 =
+**运行时错误报告**：`Vuna_runtime.ml` 由 `Target.Ocaml.Term.dtRuntimeWith` 生成 =
 运行时常量 + `dt_def_locs`（定义位置表：mangled 值名 → `定义名 (相对路径:行)`，路径按
 `PackageContext` 的模块根/包目录归一）+ `dt_report_exn`（未捕获异常报告器）。
-`Codegen.Term.genEntryHook` 的 main 钩子在入口动作外包 `try`；入口零参 `main` 的初始化期
+`Target.Ocaml.Term.genEntryHook` 的 main 钩子在入口动作外包 `try`；入口零参 `main` 的初始化期
 绑定也套同一报告器（Lowering 在 `IrDef` 上标 `irDefInitGuard`），`Main.ml` 首行开
 `Printexc.record_backtrace`。详见
 [debugging.md](reference/debugging.md)。
@@ -138,7 +144,7 @@ Elab/codegen 看不到模板）。fmt/lint/index/doc 只 parse，仍按 `EInterp
 **内建语义单一真源**：`Vuna.Compiler.Base.Intrinsics` 是名字 / 签名 / arity / 归约 /
 可见性的唯一真源；`Loader.Resolve`（arity、放行）、`Elab.Prelude`（签名）、
 `Core.Eval`（归约）、`Lowering.Program`（名字 → IR 符号）都消费它；OCaml 运行时文本在
-`Codegen.Runtime`（契约 `Ir.Runtime` 的唯一 OCaml 实现）。内置身份按声明 symbol 判定：`Bool` / `List` / `Nat` 是 base 普通
+`Target.Ocaml.Runtime`（契约 `Ir.Runtime` 的唯一 OCaml 实现）。内置身份按声明 symbol 判定：`Bool` / `List` / `Nat` 是 base 普通
 data（`Base.Data.Bool.Bool` / `Base.Data.List.List` / `Base.Data.Nat.Nat`），不按短名。
 
 擦除检查由 `Lowering.Program.checkProgramOf` 负责（判据 `Core.rigIsErased`）；不透明字段的
@@ -151,7 +157,7 @@ data（`Base.Data.Bool.Bool` / `Base.Data.List.List` / `Base.Data.Nat.Nat`），
 `dtEvalExpr`；`Loader.Flatten.loadProject*` / `resolveProject`；`Elab.Driver.elabProgramFull`
 （洞目标 `goalsOfProgram`）、`Elab.Termination.checkTerminationDecls`、`Elab.Match.multiToExpr`、
 `Core.Eval` / `Core.Conv`；`Base.Intrinsics.findIntrinsic`；
-`Lowering.Program.*`（Core→IR）、`Codegen.Assembly.*`、`Codegen.Term.*`；
+`Lowering.Program.*`（Core→IR）、`Target.Ocaml.Assembly.*`、`Target.Ocaml.Term.*`；
 `Driver.SplitGen.generateDtSplitProgram`；
 `Driver.Split.SplitFile` / `buildScript`；CLI 经 `Driver.Compile.*` 接 `Driver.CompilerCli`。
 
@@ -163,16 +169,17 @@ data（`Base.Data.Bool.Bool` / `Base.Data.List.List` / `Base.Data.Nat.Nat`），
 （见 [testing.md](reference/testing.md)）；包构建 / split 见第 28/29/33/34 段；上下文回归见第 39 段。
 
 **native 后端**：`IR --Native.Module.build--> NativeProgram --Native.Render--> runtime.s + <Module/Path>.s`
-再由 CLI 的 `build` 分支调 `cc` 链接成静态 ELF；驱动入口
-`Vuna.Compiler.Driver.Native.compileNative`。覆盖 Int/Nat/Bool 纯值 + String
+再由 `vuna-target-native` 插件落盘、CLI 的 `build` 分支调 `cc` 链接成静态 ELF；
+编译器侧驱动是 `Vuna.Compiler.Driver.Target.compileBackend`（编码 IR → 起
+`vuna-target-<t>` 子进程）。覆盖 Int/Nat/Bool 纯值 + String
 （字面量 / `++` / `strFromInt` / `strLength` / `strAt` / `strSubstring` / `strHash` /
 `strShow` / 字符串相等 / String 入口）与堆段 + 尺寸类复用 + 两代标记-清扫 GC；支持面、
 ABI、值表示、运行时符号与边界见 [native.md](reference/native.md)。
 
 **wasm 后端**：`IR --Wasm.Module.build--> WasmModule --Wasm.Render.renderModule-->
 main.wat`，再由 CLI 的 `build` 分支跑 `build.sh`：`wasm-tools parse` 汇编成 `main.wasm`，
-再经 `wasm-opt`（binaryen）优化（`--wasm-opt N`，0..3，默认 3）；驱动入口
-`Vuna.Compiler.Driver.Wasm.compileWasm`。支持 Int/Nat/String/Bool 纯值、`let`/`if`、
+再经 `wasm-opt`（binaryen）优化（`--wasm-opt N`，0..3，默认 3）；编译器侧驱动同样是
+`Vuna.Compiler.Driver.Target.compileBackend`，落盘在 `vuna-target-wasm` 插件里。支持 Int/Nat/String/Bool 纯值、`let`/`if`、
 顶层饱和调用、Nat 结构递归与 `++` 链；WasmGC 表示、WAT 稳定布局与运行时符号覆盖见
 [wasm.md](reference/wasm.md)。
 
@@ -296,7 +303,7 @@ stage1 == stage2；seed 只含 compiler 包入口闭包。
 | `packages/base/` 的效应 monad / 调试构造（`dbg!`/`dbgShow`/`assert`） | 第 27 段 + `dt` / `dt_base` / `dt_err` 夹具 + `vuna check .`（见 [effects.md](reference/effects.md)、[debugging.md](reference/debugging.md)） |
 | `packages/compiler/`（语法 / 类型 / 精化 / 擦除） | 全量测试 + `flake check`（至少 seed-selfhost） |
 | codegen 运行时 / main 钩子 / 位置表 | 第 6、13、38 段 + 第 45–46 段 + seed rotation（[debugging.md](reference/debugging.md)） |
-| 观测（`Codegen/Term.dtObsRuntime` / `#line` 注入 / `Base.Data.Obs` / `vuna dev obs`） | 第 107 段 + `checks.vuna-obs-schema` / `vuna-obs-dwarf` / `vuna-obs-overhead` + `vuna check .`（[observability.md](reference/observability.md)） |
+| 观测（`Target.Ocaml.Term.dtObsRuntime` / `#line` 注入 / `Base.Data.Obs` / `vuna dev obs`） | 第 107 段 + `checks.vuna-obs-schema` / `vuna-obs-dwarf` / `vuna-obs-overhead` + `vuna check .`（[observability.md](reference/observability.md)） |
 | CLI 工具（`run` / `test` 选项 / REPL / LSP） | 第 40、42、47–49 段 + `corpus/lsp/smoke.sh` + `vuna check .` |
 | split 输出 / `vuna.toml` | 第 28–29、33–34、38–39 段 |
 | Nix | `nix flake check` + `nix build .#vuna` |

@@ -1480,7 +1480,7 @@ rtNatSucc =
   in rtFunc "$rt_natSucc" params [WvAnyRef] locals body
 
 -- ---------------------------------------------------------------
--- Nat 原语（饱和语义，参考 `Codegen.Term` 的 `bi_nat*`）
+-- Nat 原语（饱和语义，参考 `Target.Ocaml.Term` 的 `bi_nat*`）
 -- ---------------------------------------------------------------
 maxInt63 : Int
 maxInt63 = 4611686018427387903
@@ -1553,7 +1553,7 @@ rtNatFromInt =
   in rtFunc "$rt_natFromInt" params [WvAnyRef] locals body
 
 -- ---------------------------------------------------------------
--- String 原语（参考 `Codegen.Term` 的 `bi_strLength` / `dtp_str*`）
+-- String 原语（参考 `Target.Ocaml.Term` 的 `bi_strLength` / `dtp_str*`）
 -- ---------------------------------------------------------------
 rtStrLength : WatFunc
 rtStrLength =

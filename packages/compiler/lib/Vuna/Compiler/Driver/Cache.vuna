@@ -497,7 +497,7 @@ shiftCachedProgram off (CachedProgram datas defs globals insts classes _) =
 -- 与 `Canonical.Elab` 的 iface 哈希输入同格式：`DtData`/`DtDef`/`DtInst`/`DtClass`
 -- 逐个走 `Canonical.Elab` 的编码器（span 丢弃），`globals` 用 `(名字, 项)` 对。
 -- 读侧用同一批解码器还原；span 只能还原成 `Nothing`（不影响消费方：codegen 的位置表
--- 由 `Codegen.Term.dtDefLocTable` 从 span 生成，这里只服务缓存命中判定与
+-- 由 `Target.Ocaml.Term.dtDefLocTable` 从 span 生成，这里只服务缓存命中判定与
 -- 增量精化的起点，不产出用户可见位置）。
 --
 -- | `CachedProgram` 的规范编码。

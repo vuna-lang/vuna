@@ -3,11 +3,11 @@ module Vuna.Compiler.Driver.SplitGen where
 -- 逐模块 split 生成（`compile` / `build` / `seed` 的唯一输出模型）。
 --
 -- 把同一份精化结果按「声明归属」切到各模块文件。每个单元只 `open Vuna_runtime`，
--- 跨单元引用（值 / 构造子 / 类型）由 `Codegen.Decl` / `Codegen.Term` 生成
+-- 跨单元引用（值 / 构造子 / 类型）由 `Target.Ocaml.Decl` / `Target.Ocaml.Term` 生成
 -- `Unit.name` 全限定名；每个 `SplitFile` 因此带一张**直接依赖单元**表（实际引用到的
--- 单元，由 `Codegen.Assembly.UnitParts` 累积），文件顺序仍是拓扑序但编译不再依赖
+-- 单元，由 `Target.Ocaml.Assembly.UnitParts` 累积），文件顺序仍是拓扑序但编译不再依赖
 -- open 链 —— 依赖图是精确 DAG，可分层/并行编译。
--- 装配（prepare / 类型 / 桥接 / 正文 / main 钩子）全部由 `Codegen.Assembly` 提供，
+-- 装配（prepare / 类型 / 桥接 / 正文 / main 钩子）全部由 `Target.Ocaml.Assembly` 提供，
 -- 本模块只做「归属表 + 按归属过滤 + 分文件 + 依赖序校验」。
 --
 -- 归属表**只从 Loader-resolved 的声明结构派生**（声明名、实例名、派生实例名、trait
