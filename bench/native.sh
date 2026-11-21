@@ -101,7 +101,13 @@ GIT_HEAD=unknown
 GIT_DIRTY=false
 if command -v git >/dev/null 2>&1 && git rev-parse --git-dir >/dev/null 2>&1; then
   GIT_HEAD=$(git rev-parse HEAD 2>/dev/null || printf 'unknown')
-  [ -n "$(git status --porcelain 2>/dev/null || true)" ] && GIT_DIRTY=true
+  # 基线文件本身是本次输出，不计入 dirty（否则重标每次都记 git_dirty=true）。
+  STATUS=$(git status --porcelain 2>/dev/null || true)
+  if [ -n "$JSON_OUT" ] && [ "$JSON_OUT" != "-" ]; then
+    REL=$(realpath --relative-to="$ROOT" "$JSON_OUT" 2>/dev/null || printf '%s' "$JSON_OUT")
+    STATUS=$(printf '%s\n' "$STATUS" | grep -v -F -- "$REL" || true)
+  fi
+  [ -n "$STATUS" ] && GIT_DIRTY=true
 fi
 SIZE_BYTES=$(wc -c <"$VUNA_NATIVE" | tr -d ' ')
 COMPILER_SHA=$(sha256sum "$VUNA_NATIVE" | cut -d' ' -f1)
