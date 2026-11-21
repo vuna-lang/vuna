@@ -26,6 +26,10 @@ export data Instr(..) : Type where
   IConstI32 : Int -> Instr
   -- | i64 字面量。
   IConstI64 : Int -> Instr
+  -- | f64 字面量：直接发源码里的十进制文本（`f64.const 1.5`）。
+  --   只在文本能精确表达且落在 f64 范围内时使用；后端自己决定何时回退到
+  --   「整数装盒 + 除」的构造路径。操作数是原始文本，不是 WAT 转义后的形式。
+  IConstF64 : String -> Instr
   -- | 无操作数指令，如 `i32.eqz` / `i64.add` / `f64.sqrt`。
   IPlain : String -> Instr
   -- | 一元/二元指令拼写辅助（仍走 `IPlain`）。

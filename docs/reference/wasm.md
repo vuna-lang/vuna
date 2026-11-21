@@ -192,6 +192,12 @@ binder 全量拷进 `$env` 数组（与 native 同策略），闭包应用经 `$
   `strFromFloat` 改写成该定义，入口 `@ir@showFloat` 也直接调到它。
 - 浮点：`$rt_floatFromInt` / `$rt_intFromFloat`（`i64.trunc_f64_s`）/ `$rt_floatAbs` /
   `$rt_floatSqrt`，`$rt_floatAdd/Sub/Mul/Div` 与 `$rt_floatEq/Neq/Lt/Le/Gt/Ge`（`f64.*`）。
+- **浮点字面量**直接发 `f64.const <源码文本>`（`Wasm.Instr` 的 `IConstF64`）：十进制 →
+  double 的舍入由汇编器按 IEEE 完成，与 OCaml / 宿主的解析同一结果，`-0.0` 直接得到负零，
+  不再走「整数装盒 → `rt_floatFromInt` → `rt_floatDiv`」（那条路径只在分子分母都 < 2^53
+  时精确，更长的字面量会先按 63 位 `Int` 截断）。值超出 double 范围时 WAT 会拒绝该字面量，
+  因此整数部分位数 ≥ 310、或恰为 309 位且不小于 `2^1024 - 2^970` 时改发
+  `f64.const inf` / `-inf`——与 OCaml 把同样的字面量读成 `inf` 一致。
 - 值形态（`IrApp (IrRt sym) args`）覆盖 `strAt` / `strSubstring` / `assert` / `todo` /
   `prim_fail` / `arrayLength` / `arrayGet` / `arraySet` / `arrayMake`，以及需要 canonical
   `List` 族的 `arrayFromList` / `arrayToList` / `strUnpack` / `strPack` /

@@ -202,3 +202,25 @@ exit: 0
 run: sh -c 'cd "$TMPDIR/direct-out" && node "$VUNA_SUITE_ROOT/wasm-host/run.mjs" main.wasm 2>&1'
 exit: 0
 out-equals: 7
+
+# 25) 浮点字面量直接发 `f64.const`：源码文本进 WAT，不再走「整数装盒 + 浮点除法」。
+#     小数与负零两条都要，负零必须是 IEEE 负零（`-0.` 展示）。
+run: sh -c 'd="$TMPDIR/flit"; mkdir -p "$d/app"; printf "[package]\nname = \"flit\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Data.Float as Float\nimport Base.Data.String as String\n\nmain : String\nmain = show (1.5 + (0.0 - 0.25)) ++ \" \" ++ show (0.0 - 0.0)\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --wasm-opt 0 --out "$TMPDIR/flit-out" "$d"'
+exit: 0
+file-contains: $TMPDIR/flit-out/main.wat f64.const 0.25
+file-contains: $TMPDIR/flit-out/main.wat f64.const 1.5
+# 旧路径对字面量一个 `f64.const` 都不会发（走的是整数装盒 + 浮点除法），
+# 因此上面两条 `file-contains` 足以锁住「字面量直接成为常量」这个形状。
+run: sh -c 'grep -c "f64.const 0.25" "$TMPDIR/flit-out/main.wat" | tr -d " " | grep -q "^1$"'
+exit: 0
+run: sh -c 'cd "$TMPDIR/flit-out" && node "$VUNA_SUITE_ROOT/wasm-host/run.mjs" main.wasm 2>&1'
+exit: 0
+out-equals: "1.25 0."
+
+# 26) 超出 double 范围的字面量：WAT 不接受这样的十进制常量，后端改发 `inf`（与 OCaml 一致）。
+run: sh -c 'd="$TMPDIR/flitinf"; mkdir -p "$d/app"; printf "[package]\nname = \"flitinf\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base\nimport Base.Data.Float as Float\nimport Base.Data.String as String\n\nmain : String\nmain = show %s.0\n" "$(printf "9%.0s" $(seq 1 400))" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --wasm-opt 0 --out "$TMPDIR/flitinf-out" "$d"'
+exit: 0
+file-contains: $TMPDIR/flitinf-out/main.wat f64.const inf
+run: sh -c 'cd "$TMPDIR/flitinf-out" && node "$VUNA_SUITE_ROOT/wasm-host/run.mjs" main.wasm 2>&1'
+exit: 0
+out-equals: "inf"

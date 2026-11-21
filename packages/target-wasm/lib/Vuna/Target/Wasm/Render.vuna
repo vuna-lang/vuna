@@ -104,6 +104,7 @@ renderInstrFlat (IGlobalGet n) = "global.get ${n}"
 renderInstrFlat (IGlobalSet n) = "global.set ${n}"
 renderInstrFlat (IConstI32 n) = "i32.const ${strFromInt n}"
 renderInstrFlat (IConstI64 n) = "i64.const ${strFromInt n}"
+renderInstrFlat (IConstF64 raw) = "f64.const ${raw}"
 renderInstrFlat (IPlain s) = s
 renderInstrFlat (IUnop s) = s
 renderInstrFlat (IBinop s) = s
