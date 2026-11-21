@@ -613,3 +613,29 @@ exit: 0
 run: sh -c 'ok=0; for op in readFileRange writeFile writeFileAtomic readDir isDirectory makeDir removeFile; do "$TMPDIR/strict7-n/bin/strict7" "$op" > /dev/null 2> "$TMPDIR/s7n-$op.err"; [ $? -eq 2 ] || ok=1; "$TMPDIR/strict7-o/bin/strict7" "$op" > /dev/null 2> "$TMPDIR/s7o-$op.err"; [ $? -eq 2 ] || ok=1; if [ "$op" != writeFileAtomic ]; then head -1 "$TMPDIR/s7n-$op.err" > "$TMPDIR/s7n-$op.line"; head -1 "$TMPDIR/s7o-$op.err" > "$TMPDIR/s7o-$op.line"; cmp -s "$TMPDIR/s7n-$op.line" "$TMPDIR/s7o-$op.line" || ok=2; fi; done; echo $ok'
 exit: 0
 out-equals: 0
+
+# 9ao) 浮点字面量是 `.rodata` 里的 `.double` 常量：使用点只发一条 `lea`，
+#     不再走「整数装盒 + `float_from_int` + `float_div`」。
+#     长字面量与 `-0.0` 与 OCaml 后端逐字一致（十进制 → double 的舍入由汇编器做）。
+run: sh -c 'd="$TMPDIR/flitn"; mkdir -p "$d/app"; printf "[package]\nname = \"flitn\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base\nimport Base.Data.Float as Float\nimport Base.Data.String as String\n\nmain : String\nmain = show (1.5 + (0.0 - 0.25)) ++ \" \" ++ show (0.0 - 0.0) ++ \" \" ++ show 1.2345678901234567890123456789\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/flitn-n" "$d"'
+exit: 0
+run: sh -c '"$TMPDIR/flitn-n/bin/flitn"'
+out-equals: "1.25 0. 1.23456789012"
+file-contains: $TMPDIR/flitn-n/Main.s .double 1.5
+file-contains: $TMPDIR/flitn-n/Main.s .double 1.2345678901234567890123456789
+run: sh -c 'd="$TMPDIR/flitn"; "$VUNA" build --out "$TMPDIR/flitn-o" "$d"'
+exit: 0
+run: sh -c '"$TMPDIR/flitn-o/bin/flitn"'
+out-equals: "1.25 0. 1.23456789012"
+
+# 9ao2) 超出 double 范围的字面量：gas 不接受溢出的十进制常量，后端改发 `inf`
+#      （与 OCaml 把同样的字面量读成 `inf` 一致）。
+run: sh -c 'd="$TMPDIR/flitinf"; mkdir -p "$d/app"; printf "[package]\nname = \"flitinf\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base\nimport Base.Data.Float as Float\nimport Base.Data.String as String\n\nmain : String\nmain = show %s.0\n" "$(printf "9%.0s" $(seq 1 400))" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/flitinf-n" "$d"'
+exit: 0
+run: sh -c '"$TMPDIR/flitinf-n/bin/flitinf"'
+out-equals: "inf"
+file-contains: $TMPDIR/flitinf-n/Main.s .double inf
+run: sh -c 'd="$TMPDIR/flitinf"; "$VUNA" build --out "$TMPDIR/flitinf-o" "$d"'
+exit: 0
+run: sh -c '"$TMPDIR/flitinf-o/bin/flitinf"'
+out-equals: "inf"

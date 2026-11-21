@@ -28,6 +28,7 @@ import Vuna.Ir.Tail
 import Vuna.Ir.Synthetic as Synthetic
 import Vuna.Ir.Layout as Layout
 import Vuna.Ir.Alias as Alias
+import Vuna.Ir.FloatLit
 import Vuna.Ir.Kinds as Kinds
 import Vuna.Target.Wasm.Instr
 import Vuna.Target.Wasm.Model
@@ -253,73 +254,13 @@ emptyStr = [IConstI32 0, IArrayNewDefault "$str"]
 -- ---------------------------------------------------------------
 -- 浮点字面量
 -- ---------------------------------------------------------------
--- 源码字面量是数字、一个小数点与可选的前导 `-`，直接作为 WAT 的 `f64.const` 操作数
--- 发出：十进制 → double 的舍入由汇编器按 IEEE 完成，与 OCaml / 宿主的解析同一结果，
--- `-0.0` 也直接得到负零。这比「整数装盒 → `rt_floatFromInt` → `rt_floatDiv`」少了
--- 三条调用，且不会在长字面量上先按 63 位 `Int` 截断。
---
--- 边界是 WAT 的**接受范围**：十进制字面量的值超出 double 范围时汇编器直接拒绝
--- （`constant out of range`），而 OCaml 把它读成 `inf`。这里按同一个口径发出
--- `f64.const inf` / `-inf`，三端结果一致。
---
--- 判据：整数部分（去符号、去前导零）位数 ≥ 310 时必然溢出（10^309 > max double）；
--- = 309 时与 `2^1024 - 2^970`（double 的溢出中点，恰好是整数）逐位比较，不小于它
--- 就按溢出处理；≤ 308 位必然落在 double 范围内，无需比较。
-floatLitNegative : String -> Bool
-floatLitNegative s = strAt s 0 == 45
-
--- | 有效的整数部分数字（去符号、去前导零）。
-floatIntDigitsOf : String -> String
-floatIntDigitsOf raw =
-  let
-    body = if floatLitNegative raw then strDropFirst raw else raw
-  in case String.split "." body of
-    [ip, _] => stripLeadingZeros ip
-    _ => stripLeadingZeros body
-
-strDropFirst : String -> String
-strDropFirst s = strPack (dropFirstChar (strUnpack s))
-
-dropFirstChar : List Int -> List Int
-dropFirstChar [] = []
-dropFirstChar (_ :: rest) = rest
-
-stripLeadingZeros : String -> String
-stripLeadingZeros s = strPack (stripZerosGo (strUnpack s))
-
-stripZerosGo : List Int -> List Int
-stripZerosGo [] = []
-stripZerosGo (c :: rest) = if c == 48 then stripZerosGo rest else c :: rest
-
--- | `a >= b`（两个等长数字串按字典序；长度不同则更长者更大）。
-digitsGe : String -> String -> Bool
-digitsGe a b =
-  if strLength a /= strLength b then
-    strLength a > strLength b
-  else
-    digitGeGo (strUnpack a) (strUnpack b)
-
-digitGeGo : List Int -> List Int -> Bool
-digitGeGo [] [] = True
-digitGeGo (x :: xs) (y :: ys) = if x /= y then x > y else digitGeGo xs ys
-digitGeGo [] (_ :: _) = False
-digitGeGo (_ :: _) [] = True
-
--- | double 的溢出中点 `2^1024 - 2^970`（十进制，恰好是整数）：值不小于它时按 IEEE
---   舍入到 `inf`。只有整数部分恰好 309 位时才需要逐位比较。
-floatOverflowMidDigits : String
-floatOverflowMidDigits =
-  "179769313486231580793728971405303415079934132710037826936173778980444968292764750946649017977587207096330286416692887910946555547851940402630657488671505820681908902000708383676273854845817711531764475730270069855571366959622842914819860834936475292719074168444365510704342711559699508093042880177904174497792"
-
--- | 字面量是否超出 double 范围（按 IEEE 舍入得到 `inf`）。
-floatLitOverflows : String -> Bool
-floatLitOverflows raw = digitsGe (floatIntDigitsOf raw) floatOverflowMidDigits
-
+-- 源码字面量原文直接作为 WAT 的 `f64.const` 操作数发出：十进制 → double 的舍入由
+-- 汇编器按 IEEE 完成，与 OCaml / 宿主的解析同一结果，`-0.0` 也直接得到负零。这比
+-- 「整数装盒 → `rt_floatFromInt` → `rt_floatDiv`」少了三条调用，且不会在长字面量上先按
+-- 63 位 `Int` 截断。超出 double 范围的字面量由 `Ir.FloatLit` 改写成 `inf` / `-inf`
+-- （WAT 不接受会溢出的十进制常量，OCaml 读成 `inf`）。
 genFloatLit : GenState -> String -> Result (Pair (List Instr) GenState)
-genFloatLit st raw =
-  let
-    text = if floatLitOverflows raw then if floatLitNegative raw then "-inf" else "inf" else raw
-  in Ok (Pair [IConstF64 text, IStructNew "$float"] st)
+genFloatLit st raw = Ok (Pair [IConstF64 (irFloatLitText raw), IStructNew "$float"] st)
 
 -- ---------------------------------------------------------------
 -- Eff thunk（效应原语包装成 `MkEff (fun _ => prim args)`）

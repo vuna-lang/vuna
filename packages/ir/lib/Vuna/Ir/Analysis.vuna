@@ -421,6 +421,41 @@ irStringsOfAltMaybe : Maybe IrAlt -> List String
 irStringsOfAltMaybe Nothing = []
 irStringsOfAltMaybe (Just alt) = irStringsOfAlt alt
 
+-- | 一个 IR 项里的全部浮点字面量原文（含 `IrConcatMany` 的叶子），按出现顺序。
+-- native 的浮点常量池吃这一份；wasm 直接内联 `f64.const`，不用池。
+export irFloatLitsOf : Ir -> List String
+irFloatLitsOf (IrFloatLit raw) = [raw]
+irFloatLitsOf (IrCtor _ _ _ args) = concatMap irFloatLitsOf args
+irFloatLitsOf (IrRecord _ _ fields) = concatMap floatsOfField fields
+irFloatLitsOf (IrProj base _ _ _) = irFloatLitsOf base
+irFloatLitsOf (IrRecUpd base _ fields _) =
+  append (irFloatLitsOf base) (concatMap floatsOfField fields)
+irFloatLitsOf (IrRtApp _ args) = concatMap irFloatLitsOf args
+irFloatLitsOf (IrCast _ _ inner) = irFloatLitsOf inner
+irFloatLitsOf (IrLet _ scrut body) = append (irFloatLitsOf scrut) (irFloatLitsOf body)
+irFloatLitsOf (IrLam _ _ body) = irFloatLitsOf body
+irFloatLitsOf (IrApp _ f a) = append (irFloatLitsOf f) (irFloatLitsOf a)
+irFloatLitsOf (IrTail inner) = irFloatLitsOf inner
+irFloatLitsOf (IrIf c t e) = append (irFloatLitsOf c) (append (irFloatLitsOf t) (irFloatLitsOf e))
+irFloatLitsOf (IrCase _ _ scrut alts) = append (irFloatLitsOf scrut) (concatMap floatsOfAlt alts)
+irFloatLitsOf (IrNatCase scrut _ z s c) =
+  append
+    (irFloatLitsOf scrut)
+    (append (floatsOfAltMaybe z) (append (floatsOfAltMaybe s) (floatsOfAltMaybe c)))
+irFloatLitsOf (IrConcatMany parts) = concatMap irFloatLitsOf parts
+irFloatLitsOf (IrEffThunk _ _ _ _ prim) = irFloatLitsOf prim
+irFloatLitsOf _ = []
+
+floatsOfField : Pair String Ir -> List String
+floatsOfField p = irFloatLitsOf (secondOf p)
+
+floatsOfAlt : IrAlt -> List String
+floatsOfAlt alt = irFloatLitsOf (irAltBodyOf alt)
+
+floatsOfAltMaybe : Maybe IrAlt -> List String
+floatsOfAltMaybe Nothing = []
+floatsOfAltMaybe (Just alt) = floatsOfAlt alt
+
 -- | 应用的左脊：拆出 head 与按序实参。`IrTail` 不属于脊，调用方先处理标记。
 export flattenApp : Ir -> Pair Ir (List Ir)
 flattenApp (IrApp _ f a) =
@@ -508,6 +543,13 @@ irStringsOfDef d =
   case irDefBody d of
     Nothing => []
     Just body => irStringsOf body
+
+-- | 一个定义体里的全部浮点字面量原文，按出现顺序。
+export irFloatLitsOfDef : IrDef -> List String
+irFloatLitsOfDef d =
+  case irDefBody d of
+    Nothing => []
+    Just body => irFloatLitsOf body
 
 -- | 单元内定义名不得重复（迁移前在 OCaml 名字层校验；IR 层先按源码名去重，
 -- 后端再按渲染名去重）。

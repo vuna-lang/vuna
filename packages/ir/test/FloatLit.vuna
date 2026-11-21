@@ -1,0 +1,48 @@
+-- `Ir.FloatLit` 的单元测试：浮点字面量的汇编文本是共享判据（native `.double` 与
+-- wasm `f64.const` 都吃它），锁住三件事：
+--   * 原文直通（十进制 → double 的舍入交给汇编器）；
+--   * 超出 double 范围时改写成 `inf` / `-inf`（汇编器会拒绝溢出的十进制常量，
+--     而 OCaml 把它读成 `inf`）；
+--   * 309 位边界：`2^1024 - 2^970` 是溢出中点，不小于它才溢出；max double 自身不溢出。
+import Base
+import Base.Data.Int as Int
+import Base.Data.List as List
+import Base.Data.String as String
+import Base.Effect.Core
+import Vuna.Ir.FloatLit
+
+main : Eff [] String
+main =
+  case problems of
+    [] => pure ""
+    ps =>
+      do
+        _ <- prim_eff_print ("ir float literal text drifted:\n" ++ join "\n" ps ++ "\n")
+        _ <- prim_eff_exit 1
+        pure ""
+
+-- | double 的溢出中点 `2^1024 - 2^970`（309 位）。
+overflowMid : String
+overflowMid =
+  "179769313486231580793728971405303415079934132710037826936173778980444968292764750946649017977587207096330286416692887910946555547851940402630657488671505820681908902000708383676273854845817711531764475730270069855571366959622842914819860834936475292719074168444365510704342711559699508093042880177904174497792"
+
+-- | max double 的十进制展开（309 位，小于溢出中点）。
+maxDouble : String
+maxDouble =
+  "179769313486231570814527423731704356798070567525844996598917476803157260780028538760589558632766878171540458953514382464234321326889464182768467546703537516986049910576551282076245490090389328944075868508455133942304583236903222948165808559332123348274797826204144723168738177180919299881250404026184124858368"
+
+-- | 400 个 9 的整数部分。
+huge : String
+huge = strPack (map (\_ => 57) (range 0 400))
+
+problems : List String
+problems =
+  filter
+    (\s => s /= "")
+    [check "short" "1.5" (irFloatLitText "1.5"), check "negative" "-0.25" (irFloatLitText "-0.25"), check "negative zero" "-0.0" (irFloatLitText "-0.0"), check "long in range" "1.2345678901234567890123456789" (irFloatLitText "1.2345678901234567890123456789"), check "max double stays" maxDouble (irFloatLitText maxDouble), check "overflow midpoint" "inf" (irFloatLitText overflowMid), check "overflow midpoint negative" "-inf" (irFloatLitText ("-" ++ overflowMid)), check "huge" "inf" (irFloatLitText (huge ++ ".0")), check "huge negative" "-inf" (irFloatLitText ("-" ++ huge ++ ".0")), checkBool "negative literal" True (irFloatLitNegative "-1.0"), checkBool "positive literal" False (irFloatLitNegative "1.0")]
+
+check : String -> String -> String -> String
+check label want got = if want == got then "" else label ++ ": want `${want}`, got `${got}`"
+
+checkBool : String -> Bool -> Bool -> String
+checkBool label want got = if want == got then "" else label ++ ": drifted"

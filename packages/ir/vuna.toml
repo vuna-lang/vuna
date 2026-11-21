@@ -18,6 +18,7 @@ modules = [
   "Vuna.Ir.Codec",
   "Vuna.Ir.Cps",
   "Vuna.Ir.Dispatch",
+  "Vuna.Ir.FloatLit",
   "Vuna.Ir.Kinds",
   "Vuna.Ir.Layout",
   "Vuna.Ir.Model",

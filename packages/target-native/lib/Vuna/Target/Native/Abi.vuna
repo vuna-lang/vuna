@@ -313,3 +313,7 @@ nativeDataLabel name = "rt_data_${nativeName name}"
 -- | 字符串字面量标签（带长度头）。字面量池按模块切分，标签是文件局部的 `.Llit_<n>`。
 export nativeStrLitLabel : Int -> String
 nativeStrLitLabel n = ".Llit_${strFromInt n}"
+
+-- | 浮点字面量标签（`.double` 数据）。同样按模块切分，文件局部 `.Lflt_<n>`。
+export nativeFloatLitLabel : Int -> String
+nativeFloatLitLabel n = ".Lflt_${strFromInt n}"

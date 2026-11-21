@@ -1,0 +1,75 @@
+module Vuna.Ir.FloatLit where
+
+-- Vuna.Ir.FloatLit：浮点字面量的**汇编文本**（WAT `f64.const` 与 GNU as `.double` 共用）。
+--
+-- 擦除后 IR 只带源码字面量原文（数字 + 一个小数点 + 可选前导 `-`）。十进制 → double
+-- 的舍入交给汇编器：IEEE 正确舍入，与 OCaml / 宿主的十进制解析同一结果，`-0.0` 也
+-- 直接得到负零。后端只负责一件汇编器**不接受**的事：超出 double 范围的字面量要改写成
+-- `inf` / `-inf`（WAT 报 `constant out of range`，gas 报 `cannot create floating-point
+-- number`），而 OCaml 把它读成 `inf`。
+--
+-- 判据：整数部分（去符号、去前导零）位数 ≥ 310 时必然溢出（10^309 > max double）；
+-- = 309 时与 `2^1024 - 2^970`（double 的溢出中点，恰好是整数）逐位比较，不小于它
+-- 就按溢出处理；≤ 308 位必然落在 double 范围内，无需比较。
+--
+-- 边界：只 import Base（字符串 / 列表）；不 import 任何后端，也不读 IR 节点。
+import Base.Data.Bool as Bool
+import Base.Data.Int as Int
+import Base.Data.List as List
+import Base.Data.String as String
+
+-- | 源码字面量原文 → 汇编器接受的文本：原文直通，超范围时 `inf` / `-inf`。
+export irFloatLitText : String -> String
+irFloatLitText raw =
+  if irFloatLitOverflows raw then if irFloatLitNegative raw then "-inf" else "inf" else raw
+
+-- | 是否带前导负号。
+export irFloatLitNegative : String -> Bool
+irFloatLitNegative s = strAt s 0 == 45
+
+-- | 有效的整数部分数字（去符号、去前导零）。
+irFloatIntDigitsOf : String -> String
+irFloatIntDigitsOf raw =
+  let
+    body = if irFloatLitNegative raw then irStrDropFirst raw else raw
+  in case String.split "." body of
+    [ip, _] => irStripLeadingZeros ip
+    _ => irStripLeadingZeros body
+
+irStrDropFirst : String -> String
+irStrDropFirst s = strPack (irDropFirstChar (strUnpack s))
+
+irDropFirstChar : List Int -> List Int
+irDropFirstChar [] = []
+irDropFirstChar (_ :: rest) = rest
+
+irStripLeadingZeros : String -> String
+irStripLeadingZeros s = strPack (irStripZerosGo (strUnpack s))
+
+irStripZerosGo : List Int -> List Int
+irStripZerosGo [] = []
+irStripZerosGo (c :: rest) = if c == 48 then irStripZerosGo rest else c :: rest
+
+-- | `a >= b`（两个数字串；更长者更大，等长按字典序）。
+irDigitsGe : String -> String -> Bool
+irDigitsGe a b =
+  if strLength a /= strLength b then
+    strLength a > strLength b
+  else
+    irDigitGeGo (strUnpack a) (strUnpack b)
+
+irDigitGeGo : List Int -> List Int -> Bool
+irDigitGeGo [] [] = True
+irDigitGeGo (x :: xs) (y :: ys) = if x /= y then x > y else irDigitGeGo xs ys
+irDigitGeGo [] (_ :: _) = False
+irDigitGeGo (_ :: _) [] = True
+
+-- | double 的溢出中点 `2^1024 - 2^970`（十进制，恰好是整数）：值不小于它时按 IEEE
+--   舍入到 `inf`。只有整数部分恰好 309 位时才需要逐位比较。
+irFloatOverflowMidDigits : String
+irFloatOverflowMidDigits =
+  "179769313486231580793728971405303415079934132710037826936173778980444968292764750946649017977587207096330286416692887910946555547851940402630657488671505820681908902000708383676273854845817711531764475730270069855571366959622842914819860834936475292719074168444365510704342711559699508093042880177904174497792"
+
+-- | 字面量是否超出 double 范围（按 IEEE 舍入得到 `inf`）。
+irFloatLitOverflows : String -> Bool
+irFloatLitOverflows raw = irDigitsGe (irFloatIntDigitsOf raw) irFloatOverflowMidDigits

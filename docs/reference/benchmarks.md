@@ -99,7 +99,7 @@ gc_retain}.vuna`。
 | records | 32 | 15 | 8 | 4.00x | 2.13x | 1.0 MiB | 4.7 MiB | 0.21x |
 | closures | 25 | 11 | 8 | 3.12x | 2.27x | 24.4 MiB | 8.7 MiB | 2.81x |
 | sorting | 40 | 22 | 18 | 2.22x | 1.82x | 21.9 MiB | 9.4 MiB | 2.32x |
-| float_math | 66 | 13 | 7 | 9.43x | 5.08x | 1.0 MiB | 4.6 MiB | 0.22x |
+| float_math | 34 | 13 | 7 | 4.86x | 2.62x | 1.0 MiB | 4.7 MiB | 0.21x |
 | text_scan | 7 | 6 | 5 | 1.40x | 1.17x | 3.1 MiB | 3.4 MiB | 0.91x |
 | nat_bits | 7 | 5 | 4 | 1.75x | 1.40x | 0.4 MiB | 2.5 MiB | 0.15x |
 | tco_mutual | 8 | 6 | 4 | 2.00x | 1.33x | 0.4 MiB | 2.6 MiB | 0.15x |

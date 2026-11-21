@@ -60,7 +60,11 @@
   `show`（`strShow` 带引号 + 转义）再打印，全部与 OCaml 入口钩子的
   `print_endline (show main)` 逐字一致。
 - `Float`：IEEE-754 double，堆对象 `[f64]`；运算在 `xmm` 上做，比较按 OCaml 语义
-  （NaN 参与时有序比较为 false、`!=` 为 true）。
+  （NaN 参与时有序比较为 false、`!=` 为 true）。**字面量不进运行期运算**：每个模块一份
+  `.rodata` 的 `.double <源码文本>` 常量池（`.Lflt_<n>`），使用点只发一条 `lea`；
+  十进制 → double 的舍入由汇编器按 IEEE 完成，`-0.0` 直接得到负零，超出 double 范围的
+  字面量由 `Ir.FloatLit` 改写成 `inf`（与 OCaml 的读数一致）。常量与堆上装箱叶子同一形状
+  （都是指向 8 字节 double 的指针），消费方不区分来源。
 - `Array`：**不可变数组**，堆对象布局 = `[0]` 长度（i64）+ `[8]` 起元素，每个元素一个
   机器字（Int 未装箱；String / 对象 / 闭包是指针）。`arraySet` copy-on-write：复制整块
   再写，原数组不变。越界（读 / 写）trap `Invalid_argument("index out of bounds")` + exit 2。
@@ -186,7 +190,7 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
 | `IrEffThunk` | 支持 | 生成 `MkEff (fun _ => prim args)`；效应原语作为值出现时用 |
 | `IrEffBind` | 拒绝 | 只服务 `prim_eff_bind1`，base 不用 |
 | `IrRt` | 支持白名单值形态 | `@ir@natSucc`（调用 head）与入口 show 由 Module 特化；作为值同样生成 wrapper 闭包 |
-| Float | 支持 | 堆对象 `[f64]`；比较按 OCaml 语义；展示走 `Base.Data.Float.floatRender` |
+| Float | 支持 | 堆对象 `[f64]`；字面量是 `.rodata` 的 `.double` 常量（`lea`）；比较按 OCaml 语义；展示走 `Base.Data.Float.floatRender` |
 | Effect handler | 支持 | `perform` / `handle` 的一次性续延；§3.4 |
 | extern / 其余宿主原语 | 拒绝 | `native target: ... not supported yet` |
 
@@ -295,15 +299,15 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
   `RuntimeTable` 测试登记为缺口。
 - 浮点：`float_from_int` / `int_from_float`（截断）/ `float_abs` / `float_sqrt`、
   `float_add/sub/mul/div`、`float_eq/neq/lt/le/gt/ge`；展示不是运行时符号，
-  走 `Base.Data.Float.floatRender`（Vuna 实现，三端共用）。浮点**字面量**由 `genFloatLit`
-  把十进制数字塞进 `OpImm`、再经 `float_from_int` / `float_div` 合成，有效数字超过 19 位
-  会被 63 位整型截断（[debt.md](debt.md) D131；wasm 侧已直接发 `f64.const`）。
+  走 `Base.Data.Float.floatRender`（Vuna 实现，三端共用）。浮点**字面量**不进运行期运算：
+  每个模块一份 `.rodata` 的 `.double <源码文本>` 常量池（与 wasm 的 `f64.const` 同一判据，
+  见 `Ir.FloatLit`），使用点是 `lea`（§2）。
 - 数组：`array_length` / `array_get` / `array_set`（COW）/ `array_make`，以及
   `array_from_list` / `array_to_list`（走 canonical `List` 族，与 List 桥接同一批生成）。
 - 只读数据：`True` / `False` / 换行 / 除零信息 / OOM 信息 / 错误报告前缀（`vuna: runtime
   error: `、`assertion failed: `、`TODO: `、`vuna: runtime error: impossible branch`）；由
-  `Native.Runtime.nativeRodata` 提供。字符串字面量由 `Native.Module` 收集成
-  `NativeStrLit`（`npStrLits`）。
+  `Native.Runtime.nativeRodata` 提供。字符串 / 浮点字面量由 `Native.Module` 按模块收集成
+  `NativeStrLit`（`npModuleLits`）/ `NativeFloatLit`（`npModuleFloats`）。
 - 契约一致性：`irInlineArity` 声明的 arity 与未实现符号清理由
   `packages/target-native/test/RuntimeTable.vuna` 冻结（CI 的 `vuna test` 会跑）；关闭缺口
   时同步删掉登记项，否则测试报「listed as a gap but implemented」。
@@ -466,6 +470,8 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
   clock/tty、bracket、runIn/spawn/wait）由 105 的 9o–9s 覆盖；宿主进程的超时收尾由
   9u–9u3（单组 / 不改 pgid）与 9u4（并发 spawn 的两组）覆盖；spawn 的多实参 argv 边界
   由 9u5 覆盖；部分应用的实参根（`rt_apply` 慢路径）由 9u6 覆盖。
+- 浮点字面量：9ao 断言产物里有 `.double` 常量且三端读数一致（长字面量 + `-0.0`）；
+  9ao2 断言超出 double 范围的整数部分改写成 `.double inf` 并打印 `inf`。
 - 共享语义（算术 / 字符串 / data / record / List 桥接 / 闭包 / 高阶 API）由
   suite 的 `pure-cross` 分类（`packages/compiler/test/corpus/pure_cross/`）对拍三端，OCaml 是语义 oracle。
 - 指令选择与窥孔：`packages/target-native/test/Select.vuna` 锁序列形状与边界

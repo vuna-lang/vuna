@@ -227,7 +227,8 @@ binder 全量拷进 `$env` 数组（与 native 同策略），闭包应用经 `$
   不再走「整数装盒 → `rt_floatFromInt` → `rt_floatDiv`」（那条路径只在分子分母都 < 2^53
   时精确，更长的字面量会先按 63 位 `Int` 截断）。值超出 double 范围时 WAT 会拒绝该字面量，
   因此整数部分位数 ≥ 310、或恰为 309 位且不小于 `2^1024 - 2^970` 时改发
-  `f64.const inf` / `-inf`——与 OCaml 把同样的字面量读成 `inf` 一致。
+  `f64.const inf` / `-inf`——与 OCaml 把同样的字面量读成 `inf` 一致。这条改写判据在
+  `Ir.FloatLit`（native 的 `.rodata` `.double` 常量池共用同一份）。
 - 值形态（`IrApp (IrRt sym) args`）覆盖 `strAt` / `strSubstring` / `assert` / `todo` /
   `prim_fail` / `arrayLength` / `arrayGet` / `arraySet` / `arrayMake`，以及需要 canonical
   `List` 族的 `arrayFromList` / `arrayToList` / `strUnpack` / `strPack` /

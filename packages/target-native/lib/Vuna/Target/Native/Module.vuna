@@ -33,6 +33,7 @@ import Vuna.Ir.Tail
 import Vuna.Ir.Synthetic as Synthetic
 import Vuna.Ir.Layout as Layout
 import Vuna.Ir.Alias as Alias
+import Vuna.Ir.FloatLit
 import Vuna.Target.Native.Abi
 import Vuna.Target.Native.Audit
 import Vuna.Target.Native.Model
@@ -96,6 +97,8 @@ dropLast (x :: rest) = x :: dropLast rest
 record FGen where
   fgDefs : List IrDef
   fgPool : List (Pair String String)
+  -- | 本模块的浮点字面量池（原文 → `.Lflt_<n>`）；与 `fgPool` 同一切分口径。
+  fgFloats : List (Pair String String)
   fgSlots : List (Pair IrBinder Int)
   -- | 槽序号 → 运行时 kind（捕获槽继承父帧的 kind；GC 不用它）。
   --   槽不复用，所以这张表只增不减。
@@ -235,30 +238,37 @@ memStr s (x :: rest) = s == x || memStr s rest
 -- ---------------------------------------------------------------
 -- 字符串字面量池
 -- -----------------------------------------------------------
-addLit : List (Pair String String) -> String -> List (Pair String String)
-addLit pool s =
+addLit : List (Pair String String) -> (Int -> String) -> String -> List (Pair String String)
+addLit pool labelOf s =
   if memStr s (map (\p => firstOf p) pool) then
     pool
   else
-    append pool [Pair s (nativeStrLitLabel (length pool))]
+    append pool [Pair s (labelOf (length pool))]
 
 poolOfDefs : List IrDef -> List (Pair String String)
-poolOfDefs defs = foldl addLit [] (concatMap irStringsOfDef defs)
+poolOfDefs defs =
+  foldl (\pool, s => addLit pool nativeStrLitLabel s) [] (concatMap irStringsOfDef defs)
 
 -- | 模块 key（用 `.` 连接路径段；`modulePathOf` 的逆）。
 moduleKeyOf : String -> String
 moduleKeyOf name = join "." (modulePathOf name)
 
--- | 每个模块一份字面量池（模块按首现顺序；池内首现顺序固定）。`.Llit_<n>` 是文件局部
---   标签，所以字面量池按模块切分，新增字面量不会重编号其它模块。
+-- | 每个模块一份字面量池（模块按首现顺序；池内首现顺序固定）。`.Llit_<n>` / `.Lflt_<n>`
+--   是文件局部标签，所以字面量池按模块切分，新增字面量不会重编号其它模块。
 modulePools : List IrDef -> List (Pair String (List (Pair String String)))
-modulePools defs = foldl addDefToPools [] defs
+modulePools defs = modulePoolsOf irStringsOfDef nativeStrLitLabel defs
 
-addDefToPools : List (Pair String (List (Pair String String))) -> IrDef -> List (Pair String (List (Pair String String)))
-addDefToPools pools d =
+moduleFloatPools : List IrDef -> List (Pair String (List (Pair String String)))
+moduleFloatPools defs = modulePoolsOf irFloatLitsOfDef nativeFloatLitLabel defs
+
+modulePoolsOf : (IrDef -> List String) -> (Int -> String) -> List IrDef -> List (Pair String (List (Pair String String)))
+modulePoolsOf litsOf labelOf defs = foldl (addDefToPools litsOf labelOf) [] defs
+
+addDefToPools : (IrDef -> List String) -> (Int -> String) -> List (Pair String (List (Pair String String))) -> IrDef -> List (Pair String (List (Pair String String)))
+addDefToPools litsOf labelOf pools d =
   let
     k = moduleKeyOf (irDefName d)
-    pool = foldl addLit (modulePoolOf k pools) (irStringsOfDef d)
+    pool = foldl (\p0, s => addLit p0 labelOf s) (modulePoolOf k pools) (litsOf d)
   in putPool k pool pools
 
 putPool : String -> List (Pair String String) -> List (Pair String (List (Pair String String))) -> List (Pair String (List (Pair String String)))
@@ -277,6 +287,11 @@ poolLabelOf s (p :: rest) = if firstOf p == s then Just (secondOf p) else poolLa
 poolItems : List (Pair String String) -> List NativeStrLit
 poolItems [] = []
 poolItems ((Pair text label) :: rest) = NativeStrLit label text :: poolItems rest
+
+floatPoolItems : List (Pair String String) -> List NativeFloatLit
+floatPoolItems [] = []
+floatPoolItems ((Pair raw label) :: rest) =
+  NativeFloatLit label (irFloatLitText raw) :: floatPoolItems rest
 
 -- ---------------------------------------------------------------
 -- 参数
@@ -978,60 +993,19 @@ floatRenderName = "Base.Data.Float.floatRender"
 -- ---------------------------------------------------------------
 -- 浮点字面量
 -- ---------------------------------------------------------------
--- 字面量原文是数字、一个小数点与可选的前导 `-`。用 `int / 10^k` 在运行期算成
--- double：分子分母都 < 2^53 时与宿主解析同一舍入结果；更长的字面量按 Int 精度截断。
--- 符号单独折成 `-1.0 * mag`，`-0.0` 才能得到 IEEE 负零。
-floatDigitsOf : String -> Int
-floatDigitsOf s = floatDigitsGo (strUnpack s) 0
-
-floatDigitsGo : List Int -> Int -> Int
-floatDigitsGo [] acc = acc
-floatDigitsGo (c :: rest) acc =
-  if c >= 48 && c <= 57 then floatDigitsGo rest (acc * 10 + (c - 48)) else floatDigitsGo rest acc
-
-floatPow10 : Int -> Int
-floatPow10 n = if n <= 0 then 1 else 10 * floatPow10 (n - 1)
-
-floatLitNegative : String -> Bool
-floatLitNegative s = strAt s 0 == 45
-
-negateFloatInstrs : Int -> List Instr
-negateFloatInstrs slot =
-  [
-    IMov (OpMem Rbp (nativeSlotOff slot)) (OpReg Rax),
-    IMov (OpReg Rdi) (OpImm (-1)),
-    ICall (nativeRtLabel "float_from_int"),
-    IMov (OpReg Rsi) (OpReg Rax),
-    IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff slot)),
-    ICall (nativeRtLabel "float_mul")
-  ]
-
-finishFloatLit : Bool -> FGen -> List Instr -> NRes (Pair (List Instr) FGen)
-finishFloatLit False st is = NOk (Pair is st)
-finishFloatLit True st is =
-  let
-    slotP = freshSlot st
-  in NOk (Pair (append is (negateFloatInstrs (firstOf slotP))) (secondOf slotP))
-
+-- 字面量原文是数字、一个小数点与可选的前导 `-`。它不是运行期算出来的：`.rodata` 里
+-- 每个模块一份 `.double <文本>` 常量池（`Ir.FloatLit` 负责超范围时的 `inf` 改写），
+-- 使用点只发一条 `lea`。十进制 → double 的舍入由汇编器按 IEEE 完成，与 OCaml 的
+-- 十进制解析同一结果，`-0.0` 也直接得到负零。
+--
+-- 值的形状与堆上装箱的 Float 叶子（`[f64]`）一致：都是指向 8 字节 double 的指针，
+-- 所以消费方（`float_add` / `show` / 亲自 `movsd` 的内联序列）不需要区分来源；
+-- `.rodata` 不在堆段内，GC 的候选指针判据天然忽略它。
 genFloatLit : FGen -> String -> NRes (Pair (List Instr) FGen)
 genFloatLit st raw =
-  case String.split "." raw of
-    [ip, fp] =>
-      let
-        num = floatDigitsOf (ip ++ fp)
-        den = floatPow10 (strLength fp)
-      in if den == 1 then
-        finishFloatLit (floatLitNegative raw) st [IMov (OpReg Rdi) (OpImm num), ICall (nativeRtLabel "float_from_int")]
-      else
-        let
-          slotP = freshSlot st
-          slot = firstOf slotP
-        in finishFloatLit (floatLitNegative raw) (secondOf slotP) [IMov (OpReg Rdi) (OpImm num), ICall (nativeRtLabel "float_from_int"), IMov (OpMem Rbp (nativeSlotOff slot)) (OpReg Rax), IMov (OpReg Rdi) (OpImm den), ICall (nativeRtLabel "float_from_int"), IMov (OpReg Rsi) (OpReg Rax), IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff slot)), ICall (nativeRtLabel "float_div")]
-    _ =>
-      finishFloatLit
-        (floatLitNegative raw)
-        st
-        [IMov (OpReg Rdi) (OpImm (floatDigitsOf raw)), ICall (nativeRtLabel "float_from_int")]
+  case poolLabelOf raw st.fgFloats of
+    Just label => NOk (Pair [ILea Rax label] st)
+    Nothing => internal "float literal missing from native pool: ${raw}"
 
 -- ---------------------------------------------------------------
 -- Eff thunk（效应原语包装成 `MkEff (fun _ => prim args)`）
@@ -1352,7 +1326,7 @@ genLamValue fuel st bs body =
       st1 = { st | fgNextLabel = idx + 1 }
       -- 闭包体自己的来参区由闭包 ABI 决定（`rdi` 是闭包自身，实参从 `rsi` 起）。
       lamRoom = nativeTailRoomBytes (nativeStackArgCount arity (length closureArgRegs))
-      stBody = FGen st1.fgDefs st1.fgPool [] [] st1.fgFams 0 st1.fgNextLabel [] lamRoom st1.fgModule st1.fgOwner "" "" [] [] (filterKnown caps st.fgKnown)
+      stBody = FGen st1.fgDefs st1.fgPool st1.fgFloats [] [] st1.fgFams 0 st1.fgNextLabel [] lamRoom st1.fgModule st1.fgOwner "" "" [] [] (filterKnown caps st.fgKnown)
     in nbind (bindCaptures stBody st.fgSlotCls caps 0) (
         \cp =>
           nbind (bindArgsGo rbs 1 (secondOf cp)) (
@@ -1821,16 +1795,17 @@ bindArgsGo (b :: rest) i st =
 
 -- | 生成一个定义；返回函数与该定义之后**模块内** label/slot 计数（`.L` 是文件局部
 --   符号，计数按模块保存；重编号不会跨模块扩散）。
-genDefFunc : List IrDef -> List (Pair String (List (Pair String String))) -> List IrTyDecl -> Int -> IrDef -> NRes (Pair (List NativeFunc) (Pair Int (List NativeClosure)))
-genDefFunc _defs _pools _fams _nextLabel (IrExternDef name _ _ _) =
+genDefFunc : List IrDef -> List (Pair String (List (Pair String String))) -> List (Pair String (List (Pair String String))) -> List IrTyDecl -> Int -> IrDef -> NRes (Pair (List NativeFunc) (Pair Int (List NativeClosure)))
+genDefFunc _defs _pools _floats _fams _nextLabel (IrExternDef name _ _ _) =
   unsupported "native target: extern definition `${name}` is not supported yet"
-genDefFunc defs pools fams nextLabel (IrDef name arity _ _ body _ _ _) =
+genDefFunc defs pools floats fams nextLabel (IrDef name arity _ _ body _ _ _) =
   let
     -- 本函数来参区：零参定义没有调用者压的栈实参，其余按标准 ABI 推算。
     room = nativeTailRoomBytes (nativeStackArgCount arity nativeMaxArgs)
     modPath = modulePathOf name
     pool = modulePoolOf (moduleKeyOf name) pools
-    st0 = FGen defs pool [] [] fams 0 nextLabel [] room modPath name "" "" [] [] []
+    fpool = modulePoolOf (moduleKeyOf name) floats
+    st0 = FGen defs pool fpool [] [] fams 0 nextLabel [] room modPath name "" "" [] [] []
   in if arity == 0 then
     nbind (genExpr (nativeFuelOfBody body) st0 body) (
         \p =>
@@ -1880,19 +1855,19 @@ putLabelCount key n [] = [Pair key n]
 putLabelCount key n (p :: rest) =
   if firstOf p == key then Pair key n :: rest else p :: putLabelCount key n rest
 
-genDefs : List IrDef -> List (Pair String (List (Pair String String))) -> List IrTyDecl -> List (Pair String Int) -> List IrDef -> List (List NativeFunc) -> List NativeClosure -> NRes (Pair (List NativeFunc) (Pair Int (List NativeClosure)))
-genDefs _all _pools _fams _labels [] acc statAcc =
+genDefs : List IrDef -> List (Pair String (List (Pair String String))) -> List (Pair String (List (Pair String String))) -> List IrTyDecl -> List (Pair String Int) -> List IrDef -> List (List NativeFunc) -> List NativeClosure -> NRes (Pair (List NativeFunc) (Pair Int (List NativeClosure)))
+genDefs _all _pools _floats _fams _labels [] acc statAcc =
   NOk (Pair (concatMap (\x => x) (reverse acc)) (Pair 0 statAcc))
-genDefs all pools fams labels (d :: rest) acc statAcc =
+genDefs all pools floats fams labels (d :: rest) acc statAcc =
   let
     key = moduleKeyOf (irDefName d)
     start = labelCountOf key labels
-  in nbind (genDefFunc all pools fams start d) (
+  in nbind (genDefFunc all pools floats fams start d) (
       \p =>
         let
           next = firstOf (secondOf p)
           statics = secondOf (secondOf p)
-        in genDefs all pools fams (putLabelCount key next labels) rest (firstOf p :: acc) (append statics statAcc)
+        in genDefs all pools floats fams (putLabelCount key next labels) rest (firstOf p :: acc) (append statics statAcc)
     )
 
 -- | 按标签去重（函数值 wrapper 可能被多个定义分别登记；同标签体相同）。
@@ -2300,11 +2275,13 @@ build program printResult =
                   Ok cpsOrdered =>
                     let
                       pools = modulePools cpsOrdered
-                    in case genDefs cpsOrdered pools unit.irUnitTyDecls [] cpsOrdered [] [] of
+                      fpools = moduleFloatPools cpsOrdered
+                    in case genDefs cpsOrdered pools fpools unit.irUnitTyDecls [] cpsOrdered [] [] of
                       NFail err => NativeRejected (nativeAuditEnrich err cpsOrdered)
                       NOk pair =>
                         let
                           start = startFunc printResult kind mainName runMainM (irEntryHandlersOf e) (cafNamesOf mainName cpsOrdered)
                           moduleLits = map (\p => Pair (split "." (firstOf p)) (poolItems (secondOf p))) pools
+                          moduleFloats = map (\p => Pair (split "." (firstOf p)) (floatPoolItems (secondOf p))) fpools
                           statics = dedupeClosures (secondOf (secondOf pair))
-                        in NativeOk (NativeProgram nativeRodata (append nativeBss (cafBssOf cpsOrdered)) statics (dedupeFuncs (append (nativeBridgeFuncs (irProgSharedOf program).irSharedListFam unit.irUnitTyDecls) (append nativeRtFuncs (append (firstOf pair) [start])))) moduleLits)
+                        in NativeOk (NativeProgram nativeRodata (append nativeBss (cafBssOf cpsOrdered)) statics (dedupeFuncs (append (nativeBridgeFuncs (irProgSharedOf program).irSharedListFam unit.irUnitTyDecls) (append nativeRtFuncs (append (firstOf pair) [start])))) moduleLits moduleFloats)

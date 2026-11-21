@@ -153,6 +153,10 @@ renderStrLit l =
     indent ".ascii \"${asmString l.nsText}\""
   ]
 
+-- | 浮点字面量：`.align 8` + `.double <文本>`（8 字节只读数据；运行时值是指向它的指针）。
+renderFloatLit : NativeFloatLit -> List String
+renderFloatLit f = [".align 8", "${f.nflLabel}:", indent ".double ${f.nflText}"]
+
 renderBss : NativeBss -> List String
 renderBss b =
   let
@@ -192,9 +196,14 @@ moduleKeyOfFunc f = join "." f.nfModule
 pushModuleKey : List String -> String -> List String
 pushModuleKey keys k = if memString k keys then keys else append keys [k]
 
--- | 模块按首次出现顺序；runtime 函数的 `nfModule` 是 `["runtime"]`，所以 `runtime.s` 排第一。
-moduleKeysOf : List NativeFunc -> List String
-moduleKeysOf fs = foldl pushModuleKey [] (map moduleKeyOfFunc fs)
+-- | 模块按首次出现顺序（函数 → 字符串池 → 浮点池）；runtime 函数的 `nfModule` 是
+--   `["runtime"]`，所以 `runtime.s` 排第一。
+moduleKeysOf : NativeProgram -> List String
+moduleKeysOf p =
+  let
+    withFuncs = foldl pushModuleKey [] (map moduleKeyOfFunc p.npFuncs)
+    withLits = foldl pushModuleKey withFuncs (map (\q => join "." (firstOf q)) p.npModuleLits)
+  in foldl pushModuleKey withLits (map (\q => join "." (firstOf q)) p.npModuleFloats)
 
 funcsOfKey : String -> List NativeFunc -> List NativeFunc
 funcsOfKey key = filter (\f => moduleKeyOfFunc f == key)
@@ -202,6 +211,11 @@ funcsOfKey key = filter (\f => moduleKeyOfFunc f == key)
 litsOfKey : String -> List (Pair (List String) (List NativeStrLit)) -> List NativeStrLit
 litsOfKey _ [] = []
 litsOfKey key (p :: rest) = if join "." (firstOf p) == key then secondOf p else litsOfKey key rest
+
+floatsOfKey : String -> List (Pair (List String) (List NativeFloatLit)) -> List NativeFloatLit
+floatsOfKey _ [] = []
+floatsOfKey key (p :: rest) =
+  if join "." (firstOf p) == key then secondOf p else floatsOfKey key rest
 
 -- | 模块 key -> 相对文件路径：`runtime` -> `runtime.s`，`A.B` -> `A/B.s`。
 fileOfKey : String -> String
@@ -213,9 +227,10 @@ renderProgramFile p key =
     isRuntime = key == "runtime"
     funcs = funcsOfKey key p.npFuncs
     rodataLits = concatMap renderStrLit (litsOfKey key p.npModuleLits)
+    rodataFloats = concatMap renderFloatLit (floatsOfKey key p.npModuleFloats)
     rodataConsts = if isRuntime then concatMap renderRodata p.npRodata else []
     rodataClosures = if isRuntime then concatMap renderClosure p.npClosures else []
-    rodataPart = append rodataConsts (append rodataClosures rodataLits)
+    rodataPart = append rodataConsts (append rodataClosures (append rodataLits rodataFloats))
     rodataSection = if isEmpty rodataPart then [] else ".section .rodata" :: rodataPart
     bssPart = if isRuntime then concatMap renderBss p.npBss else []
     bssSection = if isEmpty bssPart then [] else ".section .bss" :: bssPart
@@ -226,4 +241,4 @@ renderProgramFile p key =
 -- | 程序 -> 文件集（相对路径, 文本）。`runtime.s` 携带 `.rodata` 常量、`.bss` 与
 --   运行时函数；每个模块文件携带自己的字面量池与函数。同一 IR 的输出逐字节确定。
 export renderFiles : NativeProgram -> List (Pair String String)
-renderFiles p = map (\k => Pair (fileOfKey k) (renderProgramFile p k)) (moduleKeysOf p.npFuncs)
+renderFiles p = map (\k => Pair (fileOfKey k) (renderProgramFile p k)) (moduleKeysOf p)
