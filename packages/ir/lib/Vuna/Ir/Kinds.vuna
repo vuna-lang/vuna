@@ -100,6 +100,22 @@ irKindIsMissing _ = False
 -- ---------------------------------------------------------------
 -- 类型 → kind
 -- ---------------------------------------------------------------
+-- | 剥掉 `n` 层 `IrTyFun`，返回 `(定义域表, 余域)`；形状不是恰好 `n` 元函数时
+--   `Nothing`（调用方据此保守处理，而不是猜）。
+export irTyFunSplit : Int -> Maybe IrTy -> Maybe (Pair (List IrTy) IrTy)
+irTyFunSplit n mty = irTyFunSplitGo n mty []
+
+irTyFunSplitGo : Int -> Maybe IrTy -> List IrTy -> Maybe (Pair (List IrTy) IrTy)
+irTyFunSplitGo n mty acc =
+  if n <= 0 then
+    case mty of
+      Just cod => Just (Pair (reverse acc) cod)
+      Nothing => Nothing
+  else
+    case mty of
+      Just (IrTyFun dom cod) => irTyFunSplitGo (n - 1) (Just cod) (dom :: acc)
+      _ => Nothing
+
 -- | 运行时类型 → kind。`Nothing`（未记录）落 `KMissing`；超深类型按 fuel 收口到
 --   `KMissing`（不是伪造一个确定 kind）。
 export irKindOfTy : List IrTyDecl -> Maybe IrTy -> IrKind

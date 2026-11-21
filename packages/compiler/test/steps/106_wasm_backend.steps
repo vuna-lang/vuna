@@ -224,3 +224,19 @@ file-contains: $TMPDIR/flitinf-out/main.wat f64.const inf
 run: sh -c 'cd "$TMPDIR/flitinf-out" && node "$VUNA_SUITE_ROOT/wasm-host/run.mjs" main.wasm 2>&1'
 exit: 0
 out-equals: "inf"
+
+# 27) 标量函数 ABI：自递归、签名全 Int 的定义用 `(param i64) (result i64)`，
+#     函数体内仍是装箱形态（入口装箱、结果拆箱），跨 ABI 的调用点自己拆/装。
+#     自递归保持 `return_call`（否则尾递归会吃栈）。
+run: sh -c 'd="$TMPDIR/abi"; mkdir -p "$d/app"; printf "[package]\nname = \"abi\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "loop : Int -> Int -> Int\nloop acc n = if n <= 0 then acc else loop (acc + n) (n - 1)\n\nmain : Int\nmain = loop 0 5\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --wasm-opt 0 --out "$TMPDIR/abi-out" "$d"'
+exit: 0
+file-contains: $TMPDIR/abi-out/main.wat (func $f_loop (param $p0 i64) (param $p1 i64) (result i64)
+file-contains: $TMPDIR/abi-out/main.wat return_call $f_loop
+file-contains: $TMPDIR/abi-out/main.wat struct.new $int
+# 非自递归的同类签名函数不特化：仍然是 anyref 参数与结果。
+run: sh -c 'd="$TMPDIR/abi-leaf"; mkdir -p "$d/app"; printf "[package]\nname = \"abileaf\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "inc : Int -> Int\ninc x = x + 1\n\nmain : Int\nmain = inc 41\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --wasm-opt 0 --out "$TMPDIR/abi-leaf-out" "$d"'
+exit: 0
+file-contains: $TMPDIR/abi-leaf-out/main.wat (func $f_inc (param $p0 anyref) (result anyref)
+run: sh -c 'cd "$TMPDIR/abi-out" && node "$VUNA_SUITE_ROOT/wasm-host/run.mjs" main.wasm 2>&1'
+exit: 0
+out-equals: 15

@@ -93,7 +93,8 @@
 
 ## 2. 数据表示（WasmGC）
 
-统一值类型 `anyref`，不做类型特化：
+**局部与表达式**统一是 `anyref`（装箱形态）；**自递归的标量函数**在 ABI 层特化
+（见下），函数体内部仍按装箱生成。取值类型：
 
 | Vuna | wasm |
 | --- | --- |
@@ -106,6 +107,29 @@
 
 零参 `IrLam []` 不构造闭包：直接在该引用点内联求值。捕获是创建时把当前作用域里的
 binder 全量拷进 `$env` 数组（与 native 同策略），闭包应用经 `$rt_apply` 逐个实参进行。
+
+### 2.1 标量函数 ABI
+
+`defIntAbiArity` 判定：**自递归**、且运行时签名是「arity 个 `IrTyInt` 参数 + `IrTyInt`
+结果」的定义，用 `(param i64 ...) (result i64)` 发函数。参数在入口装箱成 anyref 局部，
+结果位置按未装箱整数生成、直接落在 `i64` 上；装箱/拆箱因此都发生在**本帧内**，调用
+边界上只有 `i64`。判据来自 `Ir.Kinds` 的类型 → kind 映射（`irTyFunSplit` + `irKindOfTy`）。
+
+非自递归的叶子函数**不**特化：换 ABI 只是把装箱/拆箱从调用边界挪进函数体，而被 `$rt_*`
+消费的装箱一个也消不掉（`records` 的 `bound` 因此实测回到持平）。
+
+装箱调用方调标量函数时，调用点逐实参拆箱、返回值装箱，**不发** `return_call`（两边结果
+类型不同），所以跨 ABI 的尾调用会退化成普通 `call`。同一 ABI 内的自递归仍是
+`return_call`（`arith` / `nat_bits` 的热循环因此保持常量栈）。
+
+读数（同一夹具 WAT 汇编，9 次中位数）：
+
+| benchmark | 不优化 | `-O3` |
+| --- | --- | --- |
+| arith | 78 → 44 ms（−44%） | 45 → 31 ms（−31%） |
+| nat_bits | 38 → 30 ms（−21%） | 33 → 28 ms（−15%） |
+| float_math / traits / string_ops / hashmap / micro_concat / eff_tick | 持平 | 持平 |
+| treemap | 持平 | 持平 |
 
 ## 3. 模块布局（稳定 diff）
 

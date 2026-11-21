@@ -28,6 +28,7 @@ import Vuna.Ir.Tail
 import Vuna.Ir.Synthetic as Synthetic
 import Vuna.Ir.Layout as Layout
 import Vuna.Ir.Alias as Alias
+import Vuna.Ir.Kinds as Kinds
 import Vuna.Target.Wasm.Instr
 import Vuna.Target.Wasm.Model
 import Vuna.Target.Wasm.Runtime
@@ -54,6 +55,9 @@ record GenState where
   gsElems : List String
   -- | 当前表达式是否在函数体的尾位置（用于发 `return_call`，避免尾递归吃栈）。
   gsTail : Bool
+  -- | 当前值是否必须用**未装箱整数**（`i64`）表示：标量 ABI 的函数体结果位置
+  --   与它的实参位置。为 `False` 时一律是 anyref（装箱形态）。
+  gsI64 : Bool
   -- | 下一个闭包函数编号。
   gsNextLam : Int
 
@@ -94,13 +98,23 @@ beginFuncScope : GenState -> GenState
 beginFuncScope st =
   let
     st1 = { st | gsLocals = [] }
-  in { st1 | gsNextLocal = 0, gsScope = [], gsTail = False }
+  in { st1 | gsNextLocal = 0, gsScope = [], gsTail = False, gsI64 = False }
 
+-- | 值位置（实参 / 字段 / scrutinee / 条件）：既不在尾位置，也不在未装箱结果位置。
 noTail : GenState -> GenState
-noTail st = { st | gsTail = False }
+noTail st = { st | gsTail = False, gsI64 = False }
 
 withTail : Bool -> GenState -> GenState
 withTail b st = { st | gsTail = b }
+
+-- | 把子表达式生成后的状态还原到外层的「位置属性」（尾位置 / 值表示）。
+--   子表达式自己的 `noTail` 只作用于它内部，不能改到父表达式的位置属性。
+withRepr : GenState -> GenState -> GenState
+withRepr outer inner = { inner | gsTail = outer.gsTail, gsI64 = outer.gsI64 }
+
+-- | 标量 ABI 函数体的结果位置：尾位置 + 未装箱整数表示。
+scalarResult : GenState -> GenState
+scalarResult st = { st | gsTail = True, gsI64 = True }
 
 -- | 函数生成结束：把外层作用域与局部表还原（函数自己的局部表已取走）。
 endFuncScope : GenState -> List (Pair String WatValTy) -> Int -> List (Pair IrBinder String) -> GenState
@@ -147,6 +161,57 @@ zipIdx i (b :: rest) = Pair b ("$p" ++ strFromInt i) :: zipIdx (i + 1) rest
 
 funcParams : Int -> List (Pair String WatValTy)
 funcParams n = map (\i => Pair ("$p" ++ strFromInt i) WvAnyRef) (range 0 n)
+
+funcParamsI64 : Int -> List (Pair String WatValTy)
+funcParamsI64 n = map (\i => Pair ("$p" ++ strFromInt i) WvI64) (range 0 n)
+
+-- ---------------------------------------------------------------
+-- 标量 ABI（参数与结果都是 Int 的定义直接用 `i64` 传递）
+-- ---------------------------------------------------------------
+-- | 定义的标量 ABI arity：运行时签名是「arity 个 Int 参数 + Int 结果」时给出 arity。
+--
+--   判据只看 `irDefTy`（Lowering 填的运行时签名）：形状必须恰好是 arity 层
+--   `IrTyFun`，每层定义域与最终余域都是 `IrTyInt`。查不出形状就退回装箱 ABI，
+--   不猜。
+--
+--   为什么值得特化：装箱形态下每次调用都要在**调用方**分配 `$int`、在被调用方
+--   `struct.get` 拆开，两侧都跨了函数边界，优化器无法消掉。ABI 改成 `i64` 之后
+--   装箱/拆箱退化成函数体内的一对局部操作，可以消掉。实测（arith 的热循环）
+--   `-O3` 之后 45 ms → 33 ms；函数体内的表达式仍然全部装箱。
+defIntAbiArity : IrDef -> Maybe Int
+defIntAbiArity d =
+  let
+    arity = irDefArity d
+  in if arity <= 0 then
+    Nothing
+  else if not (selfRecursive d) then
+    Nothing
+  else
+    case Kinds.irTyFunSplit arity (irDefTy d) of
+      Nothing => Nothing
+      Just (Pair doms cod) => if allIntTy doms && isIntTy cod then Just arity else Nothing
+
+-- | 自递归定义：热循环的形状。只有这种定义值得换 ABI——非递归的叶子函数换完
+--   只是把装箱/拆箱从调用边界挪进函数体内，被 `$rt_*` 消费的装箱一个也消不掉。
+selfRecursive : IrDef -> Bool
+selfRecursive d = memStr (irDefName d) (irDefDeps d)
+
+isIntTy : IrTy -> Bool
+isIntTy t =
+  case Kinds.irKindOfTy [] (Just t) of
+    Kinds.KInt => True
+    _ => False
+
+allIntTy : List IrTy -> Bool
+allIntTy [] = True
+allIntTy (t :: rest) = if isIntTy t then allIntTy rest else False
+
+-- | 名字 → 是否走标量 ABI（生成期只查表）。
+defIntAbiOf : GenState -> String -> Maybe Int
+defIntAbiOf st name =
+  case HashMap.lookup name st.gsDefTbl of
+    Nothing => Nothing
+    Just d => defIntAbiArity d
 
 -- ---------------------------------------------------------------
 -- 字符串池
@@ -268,8 +333,115 @@ genEffThunk fuel st family ctor arity prim =
   else
     genExpr (fuel - 1) st (Synthetic.effThunkIr family ctor arity prim)
 
+-- | 值位置的生成入口：由 `st.gsI64` 决定这个值用未装箱 `i64` 还是装箱 anyref。
+--
+--   只有「标量 ABI 定义的函数体结果位置」及其尾位置子树会带 `gsI64 = True`；
+--   其余位置（实参 / 字段 / scrutinee / 条件）一律先经 `noTail` 清掉。
 genExpr : Int -> GenState -> Ir -> Result (Pair (List Instr) GenState)
 genExpr fuel st ir =
+  if fuel <= 0 then
+    Err "wasm codegen fuel exhausted"
+  else if st.gsI64 then genI64 fuel st ir else genAnyref fuel st ir
+
+-- | 未装箱整数表示（`i64`）的值生成。
+--
+-- 结构构造（`let` / `if` / `case` / `natcase`）直接以 `i64` 结果类型往下传；
+-- 其它形状先按装箱生成，再统一拆箱——语义由 IR 的类型槽保证是 Int。
+genI64 : Int -> GenState -> Ir -> Result (Pair (List Instr) GenState)
+genI64 fuel st ir =
+  if fuel <= 0 then
+    Err "wasm codegen fuel exhausted"
+  else
+    case ir of
+      IrInt n => Ok (Pair [IConstI64 n] st)
+      IrVar b =>
+        case genVar st b of
+          Err e => Err e
+          Ok p => Ok (Pair (append (firstOf p) unboxInt) (secondOf p))
+      IrTail inner => genExpr (fuel - 1) (withTail True st) inner
+      IrIf c th el => genIf (fuel - 1) st c th el
+      IrLet bs scrut body => genLet (fuel - 1) st bs scrut body
+      IrCase caseTy resTy scrut alts => genCase (fuel - 1) st caseTy scrut alts
+      IrNatCase scrut fresh z s c => genNatCase (fuel - 1) st scrut z s c
+      IrApp _ _ _ => genAppI64 (fuel - 1) st ir
+      IrGlobal _ => genAppI64 (fuel - 1) st ir
+      _ => unboxGenerated (genAnyrefFuel fuel st ir)
+
+genAnyrefFuel : Int -> GenState -> Ir -> Result (Pair (List Instr) GenState)
+genAnyrefFuel fuel st ir = genAnyref (fuel - 1) (noTail st) ir
+
+unboxGenerated : Result (Pair (List Instr) GenState) -> Result (Pair (List Instr) GenState)
+unboxGenerated (Err e) = Err e
+unboxGenerated (Ok p) = Ok (Pair (append (firstOf p) unboxInt) (secondOf p))
+
+-- | 拆箱：anyref 的 `$int` → `i64`（不作类型检查，越界由 `ref.cast` 兜底）。
+unboxInt : List Instr
+unboxInt = [IRefCast "$int", IStructGet "$int" 0]
+
+-- | 装箱：`i64` → anyref 的 `$int`。
+boxInt : Instr
+boxInt = IStructNew "$int"
+
+-- | `if` / `case` 的结果类型文本：继承调用方的值表示。
+resultTyText : GenState -> String
+resultTyText st = if st.gsI64 then "i64" else "anyref"
+
+-- | 标量 ABI 调用：实参按未装箱整数求值，调用点自带拆箱/装箱。
+genAppI64 : Int -> GenState -> Ir -> Result (Pair (List Instr) GenState)
+genAppI64 fuel st ir =
+  if fuel <= 0 then
+    Err "wasm codegen fuel exhausted"
+  else
+    case flattenApp ir of
+      Pair head args =>
+        case head of
+          IrGlobal name =>
+            case defIntAbiOf st name of
+              Just arity =>
+                if listLengthB args == arity then
+                  case genArgsI64 (fuel - 1) st args of
+                    Err e => Err e
+                    Ok p => Ok (Pair (append (firstOf p) [if st.gsTail then IReturnCall (watFuncNameOf name) else ICall (watFuncNameOf name)]) (secondOf p))
+                else
+                  unboxGenerated (genAnyrefFuel fuel st ir)
+              Nothing => unboxGenerated (genAnyrefFuel fuel st ir)
+          _ => unboxGenerated (genAnyrefFuel fuel st ir)
+
+-- | 同 `genArgsThen`，但实参按未装箱整数求值（标量 ABI 的调用点）。
+genArgsThenI64 : Int -> GenState -> List Ir -> Instr -> Result (Pair (List Instr) GenState)
+genArgsThenI64 _ st [] k = Ok (Pair [k] st)
+genArgsThenI64 fuel st (a :: rest) k =
+  if fuel <= 0 then
+    Err "wasm codegen fuel exhausted"
+  else
+    case genI64 (fuel - 1) (argI64 st) a of
+      Err e => Err e
+      Ok p =>
+        case genArgsThenI64 (fuel - 1) (withRepr st (secondOf p)) rest k of
+          Err e => Err e
+          Ok q => Ok (Pair (append (firstOf p) (firstOf q)) (secondOf q))
+
+-- | 按未装箱整数求值一串实参（留在栈上，按序）。
+genArgsI64 : Int -> GenState -> List Ir -> Result (Pair (List Instr) GenState)
+genArgsI64 _ st [] = Ok (Pair [] st)
+genArgsI64 fuel st (a :: rest) =
+  if fuel <= 0 then
+    Err "wasm codegen fuel exhausted"
+  else
+    case genI64 (fuel - 1) (argI64 st) a of
+      Err e => Err e
+      Ok p =>
+        case genArgsI64 (fuel - 1) (withRepr st (secondOf p)) rest of
+          Err e => Err e
+          Ok q => Ok (Pair (append (firstOf p) (firstOf q)) (secondOf q))
+
+-- | 实参位置：未装箱表示 + 不在尾位置。
+argI64 : GenState -> GenState
+argI64 st = { st | gsTail = False, gsI64 = True }
+
+-- | 装箱表示的值生成（原来的 `genExpr` 主体）。
+genAnyref : Int -> GenState -> Ir -> Result (Pair (List Instr) GenState)
+genAnyref fuel st ir =
   if fuel <= 0 then
     Err "wasm codegen fuel exhausted"
   else
@@ -298,7 +470,7 @@ genExpr fuel st ir =
       IrTail inner =>
         case genExpr (fuel - 1) (withTail True st) inner of
           Err e => Err e
-          Ok p => Ok (Pair (firstOf p) (withTail st.gsTail (secondOf p)))
+          Ok p => Ok (Pair (firstOf p) (withRepr st (secondOf p)))
       IrRt sym => genRtValue (fuel - 1) st sym
 
 genVar : GenState -> IrBinder -> Result (Pair (List Instr) GenState)
@@ -376,16 +548,16 @@ genIf fuel st c th el =
       Err e => Err e
       Ok pc =>
         let
-          base = withTail st.gsTail (secondOf pc)
+          base = withRepr st (secondOf pc)
         in case genExpr (fuel - 1) base th of
           Err e => Err e
           Ok pt =>
-            case genExpr (fuel - 1) (withTail st.gsTail (resumeArm base (secondOf pt))) el of
+            case genExpr (fuel - 1) (withRepr st (resumeArm base (secondOf pt))) el of
               Err e => Err e
               Ok pe =>
                 let
-                  merged = withTail st.gsTail (mergeArmState (secondOf pt) (secondOf pe))
-                in Ok (Pair (append (firstOf pc) [IRefCast "i31", II31GetU, IIf "anyref" (firstOf pt) (firstOf pe)]) merged)
+                  merged = withRepr st (mergeArmState (secondOf pt) (secondOf pe))
+                in Ok (Pair (append (firstOf pc) [IRefCast "i31", II31GetU, IIf (resultTyText st) (firstOf pt) (firstOf pe)]) merged)
 
 -- | `let`：单运行时 binder；装箱 case 降级的多 binder 走 `genLetBound` 的逐项分支。
 genLet : Int -> GenState -> List IrBinder -> Ir -> Ir -> Result (Pair (List Instr) GenState)
@@ -398,7 +570,7 @@ genLet fuel st bs scrut body =
       savedScope = st.gsScope
     in case genExpr (fuel - 1) (noTail st) scrut of
       Err e => Err e
-      Ok ps => genLetBound (fuel - 1) (withTail st.gsTail (secondOf ps)) runtimeBs (firstOf ps) body savedScope
+      Ok ps => genLetBound (fuel - 1) (withRepr st (secondOf ps)) runtimeBs (firstOf ps) body savedScope
 
 genLetBound : Int -> GenState -> List IrBinder -> List Instr -> Ir -> List (Pair IrBinder String) -> Result (Pair (List Instr) GenState)
 genLetBound fuel st [] scrutInstrs body savedScope =
@@ -491,7 +663,15 @@ genGlobalCall fuel st name args =
             Just (Alias.IrAliasRt sym) => if aliasLeafArity sym == argc then genArgsThen (fuel - 1) st args (if st.gsTail then IReturnCall (aliasLeafName sym) else ICall (aliasLeafName sym)) else fallbackGlobalRef (fuel - 1) st name args
             Nothing => fallbackGlobalRef (fuel - 1) st name args
         else if argc == arity then
-          genArgsThen (fuel - 1) st args (if st.gsTail then IReturnCall (watFuncNameOf name) else ICall (watFuncNameOf name))
+          case defIntAbiOf st name of
+            -- 标量 ABI 的被调用方：实参拆箱后按 `i64` 传，返回值装回 anyref
+            -- （装箱调用方看不到 `i64`）。尾位置也走普通 `call`：`return_call`
+            -- 要求两边结果类型一致，装箱调用方的结果类型是 anyref。
+            Just _ =>
+              case genArgsThenI64 (fuel - 1) st args (ICall (watFuncNameOf name)) of
+                Err e => Err e
+                Ok p => Ok (Pair (append (firstOf p) [boxInt]) (secondOf p))
+            Nothing => genArgsThen (fuel - 1) st args (if st.gsTail then IReturnCall (watFuncNameOf name) else ICall (watFuncNameOf name))
         else if argc < arity then
           genApplyValue (fuel - 1) st (IrGlobal name) args
         else
@@ -591,7 +771,7 @@ genApplyValue fuel st head args =
   else
     case genExpr (fuel - 1) (noTail st) head of
       Err e => Err e
-      Ok p => genApplyArgs (fuel - 1) st.gsTail (withTail st.gsTail (secondOf p)) (firstOf p) args
+      Ok p => genApplyArgs (fuel - 1) st.gsTail (withRepr st (secondOf p)) (firstOf p) args
 
 -- | 闭包应用；`tail` 决定最后一次应用是否用 `return_call`（续延转移不占调用者帧，
 -- 顺序 perform 的 CPS 链因此保持常量栈深度）。
@@ -609,7 +789,7 @@ genApplyArgs fuel tail st acc (a :: rest) =
             case rest of
               [] => if tail then IReturnCall "$rt_apply" else ICall "$rt_apply"
               _ => ICall "$rt_apply"
-        in genApplyArgs (fuel - 1) tail (withTail st.gsTail (secondOf p)) (append acc (append (firstOf p) [callInstr])) rest
+        in genApplyArgs (fuel - 1) tail (withRepr st (secondOf p)) (append acc (append (firstOf p) [callInstr])) rest
 
 -- | 立即 lambda 应用：运行时 binder 必须恰好一个、实参恰好一个（`let` 的降级形态）。
 --   体内残留的 `IrTail` 是「函数体结果位置」的注解，内联后已不成立，先 `stripTail` 再按
@@ -634,7 +814,7 @@ genLamApp fuel st bs body args =
             Ok pa =>
               case rbs of
                 [b] =>
-                  case freshLocal (withTail st.gsTail (secondOf pa)) WvAnyRef of
+                  case freshLocal (withRepr st (secondOf pa)) WvAnyRef of
                     Pair local st1 =>
                       case genExpr (fuel - 1) (pushBinder b local (withTail st.gsTail st1)) (stripTail body) of
                         Err e => Err e
@@ -652,7 +832,7 @@ genArgsThen fuel st (a :: rest) k =
     case genExpr (fuel - 1) (noTail st) a of
       Err e => Err e
       Ok p =>
-        case genArgsThen (fuel - 1) (withTail st.gsTail (secondOf p)) rest k of
+        case genArgsThen (fuel - 1) (withRepr st (secondOf p)) rest k of
           Err e => Err e
           Ok q => Ok (Pair (append (firstOf p) (firstOf q)) (secondOf q))
 
@@ -730,7 +910,7 @@ genNatCase fuel st scrut zero succ catch =
     case genExpr (fuel - 1) (noTail st) scrut of
       Err e => Err e
       Ok ps =>
-        case freshLocal (withTail st.gsTail (secondOf ps)) WvAnyRef of
+        case freshLocal (withRepr st (secondOf ps)) WvAnyRef of
           Pair scLocal st1 =>
             let
               zeroAlt =
@@ -747,13 +927,13 @@ genNatCase fuel st scrut zero succ catch =
             in case genNatArm (fuel - 1) st1 zeroAlt zeroValue of
               Err e => Err e
               Ok pz =>
-                case genNatArm (fuel - 1) (withTail st1.gsTail (resumeArm st1 (secondOf pz))) succAlt succBoxed of
+                case genNatArm (fuel - 1) (withRepr st1 (resumeArm st1 (secondOf pz))) succAlt succBoxed of
                   Err e => Err e
                   Ok psu =>
                     let
-                      merged = withTail st.gsTail (mergeArmState (secondOf pz) (secondOf psu))
+                      merged = withRepr st (mergeArmState (secondOf pz) (secondOf psu))
                       cond = append (unboxLocalInt scLocal) [IConstI64 0, IBinop "i64.eq"]
-                    in Ok (Pair (append (firstOf ps) (append [ILocalSet scLocal] (append cond [IIf "anyref" (firstOf pz) (firstOf psu)]))) merged)
+                    in Ok (Pair (append (firstOf ps) (append [ILocalSet scLocal] (append cond [IIf (resultTyText st) (firstOf pz) (firstOf psu)]))) merged)
 
 genConcatMany : Int -> GenState -> List Ir -> Result (Pair (List Instr) GenState)
 genConcatMany fuel st parts =
@@ -780,7 +960,7 @@ genConcatRest fuel st (b :: rest) =
     case genExpr (fuel - 1) (noTail st) b of
       Err e => Err e
       Ok p =>
-        case genConcatRest (fuel - 1) (withTail st.gsTail (secondOf p)) rest of
+        case genConcatRest (fuel - 1) (withRepr st (secondOf p)) rest of
           Err e => Err e
           Ok q => Ok (Pair (append (firstOf p) (append [ICall "$rt_strConcat"] (firstOf q))) (secondOf q))
 
@@ -805,7 +985,7 @@ genExprs fuel st (a :: rest) =
     case genExpr (fuel - 1) (noTail st) a of
       Err e => Err e
       Ok p =>
-        case genExprs (fuel - 1) (withTail st.gsTail (secondOf p)) rest of
+        case genExprs (fuel - 1) (withRepr st (secondOf p)) rest of
           Err e => Err e
           Ok q => Ok (Pair (append (firstOf p) (firstOf q)) (secondOf q))
 
@@ -864,7 +1044,7 @@ genProj fuel st base family field =
           Just idx =>
             case genExpr (fuel - 1) (noTail st) base of
               Err e => Err e
-              Ok p => Ok (Pair (append (firstOf p) [IRefCast (watFamName family), IStructGet (watFamName family) idx]) (withTail st.gsTail (secondOf p)))
+              Ok p => Ok (Pair (append (firstOf p) [IRefCast (watFamName family), IStructGet (watFamName family) idx]) (withRepr st (secondOf p)))
 
 -- | 更新：按字段表顺序重建一个 struct；被改字段用新值，其余从旧对象 `struct.get`。
 genRecUpd : Int -> GenState -> Ir -> String -> List (Pair String Ir) -> Result (Pair (List Instr) GenState)
@@ -878,7 +1058,7 @@ genRecUpd fuel st base family fields =
         case genExpr (fuel - 1) (noTail st) base of
           Err e => Err e
           Ok p =>
-            case freshLocal (withTail st.gsTail (secondOf p)) WvAnyRef of
+            case freshLocal (withRepr st (secondOf p)) WvAnyRef of
               Pair bLocal st1 =>
                 case genUpdFields (fuel - 1) st1 bLocal (watFamName family) fam.wasmFamRecordFields fields of
                   Err e => Err e
@@ -895,7 +1075,7 @@ genUpdFields fuel st bLocal ty ((Pair idx name) :: rest) fields =
         case genExpr (fuel - 1) (noTail st) ir of
           Err e => Err e
           Ok p =>
-            case genUpdFields (fuel - 1) (withTail st.gsTail (secondOf p)) bLocal ty rest fields of
+            case genUpdFields (fuel - 1) (withRepr st (secondOf p)) bLocal ty rest fields of
               Err e => Err e
               Ok q => Ok (Pair (append (firstOf p) (firstOf q)) (secondOf q))
       Nothing =>
@@ -919,7 +1099,7 @@ genCase fuel st caseTy scrut alts =
       Err e => Err e
       Ok p =>
         let
-          st1 = ensureLocal scrutSlot WvAnyRef (withTail st.gsTail (secondOf p))
+          st1 = ensureLocal scrutSlot WvAnyRef (withRepr st (secondOf p))
         in case caseFamilyOf caseTy alts of
           Nothing => prepend (scrutInstrs p) (restoreTail st (genCatchAllOnly (fuel - 1) st1 scrutSlot alts))
           Just family =>
@@ -954,7 +1134,7 @@ prepend ins (Ok q) = Ok (Pair (append ins (firstOf q)) (secondOf q))
 
 restoreTail : GenState -> Result (Pair (List Instr) GenState) -> Result (Pair (List Instr) GenState)
 restoreTail _ (Err e) = Err e
-restoreTail st (Ok q) = Ok (Pair (firstOf q) (withTail st.gsTail (secondOf q)))
+restoreTail st (Ok q) = Ok (Pair (firstOf q) (withRepr st (secondOf q)))
 
 caseFamilyOf : Maybe IrTy -> List IrAlt -> Maybe String
 caseFamilyOf (Just (IrTyData family _)) _ = Just family
@@ -1012,9 +1192,9 @@ genVariantCase fuel st scLocal family fam alts =
                 case genAltBody (fuel - 1) st scLocal family fam alt of
                   Err e => Err e
                   Ok armP =>
-                    case genVariantCase (fuel - 1) (withTail st.gsTail (secondOf armP)) scLocal family fam rest of
+                    case genVariantCase (fuel - 1) (withRepr st (secondOf armP)) scLocal family fam rest of
                       Err e => Err e
-                      Ok restP => Ok (Pair (append [ILocalGet scLocal, IRefCast (watFamName family), IStructGet (watFamName family) 0, IConstI32 tag, IBinop "i32.eq"] [IIf "anyref" (firstOf armP) (firstOf restP)]) (secondOf restP))
+                      Ok restP => Ok (Pair (append [ILocalGet scLocal, IRefCast (watFamName family), IStructGet (watFamName family) 0, IConstI32 tag, IBinop "i32.eq"] [IIf (resultTyText st) (firstOf armP) (firstOf restP)]) (secondOf restP))
 
 -- 变体分支：catch-all 绑 scrutinee；构造子分支按 keep 形状绑字段（tag 占 index 0）。
 genAltBody : Int -> GenState -> String -> String -> WasmFam -> IrAlt -> Result (Pair (List Instr) GenState)
@@ -1513,6 +1693,17 @@ genDefFuncBody fuel st name arity body =
 
 genDefFuncGo : Int -> GenState -> String -> Int -> Ir -> List (Pair IrBinder String) -> List (Pair String WatValTy) -> Int -> List (Pair IrBinder String) -> Result (Pair (List WatFunc) GenState)
 genDefFuncGo fuel st name arity inner paramScope savedLocals savedNext savedScope =
+  case defIntAbiOf st name of
+    Just abi =>
+      if abi == arity then
+        genDefFuncScalar fuel st name arity inner paramScope savedLocals savedNext savedScope
+      else
+        genDefFuncBoxed fuel st name arity inner paramScope savedLocals savedNext savedScope
+    Nothing => genDefFuncBoxed fuel st name arity inner paramScope savedLocals savedNext savedScope
+
+-- | 装箱 ABI：`(param anyref ...) (result anyref)`。
+genDefFuncBoxed : Int -> GenState -> String -> Int -> Ir -> List (Pair IrBinder String) -> List (Pair String WatValTy) -> Int -> List (Pair IrBinder String) -> Result (Pair (List WatFunc) GenState)
+genDefFuncBoxed fuel st name arity inner paramScope savedLocals savedNext savedScope =
   let
     st1 = { st | gsScope = paramScope, gsTail = True }
   in case genExpr (fuel - 1) st1 inner of
@@ -1530,6 +1721,53 @@ genDefFuncGo fuel st name arity inner paramScope savedLocals savedNext savedScop
             (firstOf p)
         st2 = endFuncScope bodyState savedLocals savedNext savedScope
       in Ok (Pair [func] (withTail False st2))
+
+-- | 标量 ABI：`(param i64 ...) (result i64)`。
+--
+--   参数在入口装箱成 anyref 局部（函数体照旧按装箱生成），结果位置用 `gsI64` 打开
+--   未装箱表示，最后自然落在 `i64` 上。装箱/拆箱因此都发生在**本帧内**，调用边界
+--   上只有 `i64`；这正是优化器能消掉的那一半。
+genDefFuncScalar : Int -> GenState -> String -> Int -> Ir -> List (Pair IrBinder String) -> List (Pair String WatValTy) -> Int -> List (Pair IrBinder String) -> Result (Pair (List WatFunc) GenState)
+genDefFuncScalar fuel st name arity inner paramScope savedLocals savedNext savedScope =
+  case boxParamScope st paramScope of
+    Err e => Err e
+    Ok bp =>
+      let
+        entryInstrs = firstOf bp
+        st0 = secondOf bp
+        st1 = scalarResult st0
+      in case genExpr (fuel - 1) st1 inner of
+        Err e => Err e
+        Ok p =>
+          let
+            bodyState = secondOf p
+            func =
+              WatFunc
+                (watFuncNameOf name)
+                ""
+                (funcParamsI64 arity)
+                [WvI64]
+                bodyState.gsLocals
+                (append entryInstrs (firstOf p))
+            st2 = endFuncScope bodyState savedLocals savedNext savedScope
+          in Ok (Pair [func] (withTail False st2))
+
+-- | 把 `(param i64)` 逐个装箱成 anyref 局部，并把 binder 绑到那个局部。
+--   返回入口指令与「binder 表已就位」的状态。
+boxParamScope : GenState -> List (Pair IrBinder String) -> Result (Pair (List Instr) GenState)
+boxParamScope st ps = boxParamGo st ps []
+
+boxParamGo : GenState -> List (Pair IrBinder String) -> List Instr -> Result (Pair (List Instr) GenState)
+boxParamGo st [] acc = Ok (Pair acc st)
+boxParamGo st ((Pair b param) :: rest) acc =
+  let
+    lp = freshLocal st WvAnyRef
+    l = firstOf lp
+    st1 = pushBinder b l (secondOf lp)
+    ins = [ILocalGet param, IStructNew "$int", ILocalSet l]
+  in case boxParamGo st1 rest (append acc ins) of
+    Err e => Err e
+    Ok q => Ok q
 
 genDefFuncs : Int -> GenState -> List IrDef -> Result (Pair (List WatFunc) GenState)
 genDefFuncs fuel st [] = Ok (Pair [] st)
@@ -2029,7 +2267,7 @@ build program printResult =
     mkSt ds =
       let
         dt = HashMap.fromList (map (\d => Pair (irDefName d) d) ds)
-      in GenState fams famTbl ds dt offsets poolTbl [] [] 0 [] consts [] False 0
+      in GenState fams famTbl ds dt offsets poolTbl [] [] 0 [] consts [] False False 0
     st0 = mkSt defsAll
     buildAnf : List IrDef -> Maybe IrEntry -> Maybe WasmListFam -> WasmOutcome
     buildAnf ds entry0 lf =
