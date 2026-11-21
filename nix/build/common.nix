@@ -16,11 +16,12 @@ let
     pkgs.gcc
   ];
 
-  # wasm 目标的外部工具：`wasm-tools parse` 汇编 WAT；`.wasm` 由 Node/V8 宿主执行
-  # （`wasm-host/run.mjs`，nodejs 在 e2eTools 里）。两者都是**构建期/测试期工具**，
-  # 不进 TCB、不进 seed（与 native 侧的 cc 同构）。
+  # wasm 目标的外部工具：`wasm-tools parse` 汇编 WAT，`wasm-opt`（binaryen）对 `.wasm`
+  # 做指令级优化；`.wasm` 由 Node/V8 宿主执行（`wasm-host/run.mjs`，nodejs 在 e2eTools
+  # 里）。两者都是**构建期/测试期工具**，不进 TCB、不进 seed（与 native 侧的 cc 同构）。
   wasmTools = pkgs: [
     pkgs.wasm-tools
+    pkgs.binaryen
   ];
 
   # CI e2e / 本地 `nix run .#vuna-run-tests` 的 PATH：两个后端的外部工具

@@ -40,9 +40,10 @@ export compilerUsageLines : String -> String
 compilerUsageLines prog = """  ${prog} compile [--no-print] [--release] [--target ocaml|wasm|native] (<entry.vuna> | <package-dir>) <out-dir>
   ${prog} check [--release] [--continue-on-error] (<file.vuna> | <package-dir>)
   <file.vuna>            带 module 头时按库模块检查（包上下文），否则按入口文件
-  ${prog} build [--release] [--no-compile] [--out DIR] [--package NAME] [--target ocaml|wasm|native] [DIR]
+  ${prog} build [--release] [--no-compile] [--out DIR] [--package NAME] [--target ocaml|wasm|native] [--wasm-opt N] [DIR]
   --no-print             编译生成的程序不打印 main 结果（默认打印）
   --release              发布构建：拒绝 assert / todo 等调试专用构造
+  --wasm-opt N           wasm 产物的 binaryen 优化级别（0–3，默认 3；0 = 不优化）
   --continue-on-error    多错误：逐个定义收集（失败定义回滚后跳过；仅入口文件或库包）
   ${prog} version, --version  显示版本
   ${prog} help, -h
@@ -82,6 +83,7 @@ record CliOpts where
   optWithSources : Bool
   optFailFast : Bool
   optTarget : String
+  optWasmOpt : Int
 
 defaultCliOpts : CliOpts
 defaultCliOpts =
@@ -102,10 +104,15 @@ defaultCliOpts =
     False
     False
     "ocaml"
+    3
 
 -- | 在已有 opts 上打开 release 模式（`--release`）。
 markRelease : CliOpts -> CliOpts
 markRelease o = { o | optRelease = True }
+
+-- | 设置 wasm 产物的 binaryen 优化级别（`--wasm-opt N`，0 表示不优化）。
+markWasmOpt : Int -> CliOpts -> CliOpts
+markWasmOpt n o = { o | optWasmOpt = n }
 
 -- | 选择后端目标：ocaml | wasm | native。
 markTarget : String -> CliOpts -> CliOpts
@@ -127,6 +134,7 @@ markTarget t o =
     o.optWithSources
     o.optFailFast
     t
+    o.optWasmOpt
 
 -- | 强制「格式由命令行显式给出」（机器格式的单文档契约用；成员 manifest 不得改格式）。
 -- 位构造而非记录更新：记录更新在该位置触发当前精化器的 erased binder 问题。
@@ -149,6 +157,7 @@ markFormatExplicit o =
     o.optWithSources
     o.optFailFast
     o.optTarget
+    o.optWasmOpt
 
 -- 显式 state 辅助：把不改 opts 的动作结果带回（退出码 + 当前 CliOpts）。
 withOpts : {r : Row} -> CliOpts -> Eff r Int -> Eff r (Pair Int CliOpts)
@@ -251,6 +260,7 @@ applyManifestOpts (Just pkg) o =
     o.optWithSources
     o.optFailFast
     o.optTarget
+    o.optWasmOpt
 
 -- --fail-fast：只显示首条诊断（与 --max-errors 取较小者语义）。
 maxErrorsOf : CliOpts -> Int
@@ -507,7 +517,7 @@ runCompilerCliFor prog args =
         case secondOf stripped of
           Just f => f
           Nothing => if detectedLang == "en" then if tty then "human" else "short" else "human"
-      opts = CliOpts fmt detectedLang (hasLangFlag args) (hasDenyWarnings args) (hasDenyWarnings args || hasShowWarnings args) (hasFormatFlag args) (hasDenyWarnings args || hasShowWarnings args) (hasDenyWarnings args) (secondOf strippedMax) (secondOf strippedContinue) [] (envRel == "1") (hasShowCascade args) (hasWithSources args) (hasFailFast args) "ocaml"
+      opts = CliOpts fmt detectedLang (hasLangFlag args) (hasDenyWarnings args) (hasDenyWarnings args || hasShowWarnings args) (hasFormatFlag args) (hasDenyWarnings args || hasShowWarnings args) (hasDenyWarnings args) (secondOf strippedMax) (secondOf strippedContinue) [] (envRel == "1") (hasShowCascade args) (hasWithSources args) (hasFailFast args) "ocaml" 3
     in if anyHelp (firstOf strippedContinue) then
       helpFor prog
     else
@@ -527,6 +537,13 @@ parseIntChars (c :: cs) acc count fallback =
   if c >= 48 && c <= 57 then
     parseIntChars cs (acc * 10 + (c - 48)) (count + 1) fallback
   else if count == 0 then fallback else acc
+
+-- | `--wasm-opt N`：只接受 0–3（binaryen 的 -O0..-O3）。
+parseWasmOptLevel : String -> Maybe Int
+parseWasmOptLevel s =
+  let
+    n = parseIntOr s (0 - 1)
+  in if n >= 0 && n <= 3 then Just n else Nothing
 
 -- | 剥离并解析 --max-errors（写入全局上限）。
 stripMaxErrors : List String -> Pair (List String) Int
@@ -1145,6 +1162,16 @@ buildParse prog noCompile out dir pkg args o =
     [] => buildRun noCompile (defaultDir dir) out pkg o
     "--no-compile" :: rest => buildParse prog True out dir pkg rest o
     "--release" :: rest => buildParse prog noCompile out dir pkg rest (markRelease o)
+    "--wasm-opt" :: rest =>
+      case rest of
+        level :: more =>
+          if startsWith "-" level then
+            withOpts o (removedFlag prog level)
+          else
+            case parseWasmOptLevel level of
+              Just n => buildParse prog noCompile out dir pkg more (markWasmOpt n o)
+              Nothing => withOpts o (usageErr prog)
+        [] => withOpts o (usageErr prog)
     "--target" :: t :: rest =>
       if isKnownTarget t then
         buildParse prog noCompile out dir pkg rest (markTarget t o)
@@ -1291,7 +1318,8 @@ nativeBuildScript name files =
     total = strFromInt (length files)
   in "#!/bin/sh\nset -eu\ncd \"$(dirname \"$0\")\"\nmkdir -p bin\nSOURCES=\"${sources}\"\nOBJECTS=\"\"\nCOMPILED=0\nTOTAL=${total}\nfor src in $SOURCES; do\n  obj=\"build/$src.o\"\n  hf=\"build/$src.hash\"\n  h=$(cksum < \"$src\")\n  old=\"\"\n  if [ -f \"$hf\" ]; then old=$(cat \"$hf\"); fi\n  if [ -f \"$obj\" ] && [ \"$old\" = \"$h\" ]; then :; else\n    mkdir -p \"$(dirname \"$obj\")\"\n    cc -c -o \"$obj\" \"$src\"\n    printf '%s\\n' \"$h\" > \"$hf\"\n    COMPILED=$((COMPILED + 1))\n  fi\n  OBJECTS=\"$OBJECTS $obj\"\ndone\necho \"native-build: compiled $COMPILED of $TOTAL\"\ncc -static -nostdlib -no-pie -Wl,--build-id=none -o \"bin/${name}\" $OBJECTS\n"
 
--- | wasm 目标的 build：产 main.wat（+ build.sh）；非 `--no-compile` 时调 `wasm-tools` 汇编。
+-- | wasm 目标的 build：产 main.wat（+ build.sh）；非 `--no-compile` 时跑 `build.sh`
+-- （`wasm-tools parse` 汇编，`--wasm-opt N` > 0 时再经 `wasm-opt -ON`）。
 -- 与 native 分支同构：外部工具是构建期依赖，缺失即明确失败（不静默产半成品）。
 buildWasmOne : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Bool -> Maybe String -> Package -> CliOpts -> Eff r (Pair Int CliOpts)
 buildWasmOne noCompile outM pkg o =
@@ -1302,9 +1330,7 @@ buildWasmOne noCompile outM pkg o =
         Nothing => "${packageDir pkg}/.output"
     watPath = "${outDir}/main.wat"
     wasmPath = "${outDir}/main.wasm"
-    script =
-      "#!/bin/sh\nset -eu\ncd \"$(dirname \"$0\")\"\nwasm-tools parse main.wat -o main.wasm\n"
-    args = ["wasm-tools", "parse", "main.wat", "-o", "main.wasm"]
+    script = wasmBuildScript o.optWasmOpt
   in do
     r <-
       compileBackend
@@ -1325,16 +1351,34 @@ buildWasmOne noCompile outM pkg o =
                 pure 0
             else
               do
-                c <- processRunIn outDir args
+                c <- processRunIn outDir ["sh", "build.sh"]
                 if c == 0 then
                   do
                     _ <- consolePrint "wrote ${wasmPath}\n"
                     pure 0
                 else
                   do
-                    _ <- consolePrint "wasm assembly failed: wasm-tools exited ${strFromInt c}\n"
+                    _ <- consolePrint "wasm assembly failed: build.sh exited ${strFromInt c}\n"
                     pure 1
           if code == 0 then finishWarningsDir (secondOf p) o outDir 0 else pure (Pair 1 o)
+
+-- | wasm 产物的 `build.sh`：`wasm-tools parse` 汇编；`optLevel > 0` 时再跑
+-- `wasm-opt -ON`（binaryen 的必需特性开关见 docs/reference/wasm.md §1）。
+-- 优化只作用于 `.wasm`，`main.wat` 仍是 canonical 产物。binaryen 对 name section 的
+-- label 子节（`wasm-tools` 会写）只发警告，因此它的 stderr 先落临时日志、仅在失败时
+-- 回显，避免正常构建往 stdout/stderr 掺噪声。
+wasmBuildScript : Int -> String
+wasmBuildScript optLevel =
+  let
+    assemble = "wasm-tools parse main.wat -o main.wasm\n"
+  in if optLevel <= 0 then
+    "#!/bin/sh\nset -eu\ncd \"$(dirname \"$0\")\"\n${assemble}"
+  else
+    let
+      features = "--enable-gc --enable-bulk-memory --enable-tail-call --enable-reference-types"
+      level = strFromInt optLevel
+      optimize = "if ! wasm-opt ${features} -g -O${level} main.wasm -o main.wasm.tmp 2>opt.log; then\n  cat opt.log >&2\n  rm -f opt.log main.wasm.tmp\n  exit 1\nfi\nrm -f opt.log\nmv main.wasm.tmp main.wasm\n"
+    in "#!/bin/sh\nset -eu\ncd \"$(dirname \"$0\")\"\n${assemble}${optimize}"
 
 buildOne : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Bool -> Bool -> Maybe String -> Package -> CliOpts -> Eff r (Pair Int CliOpts)
 buildOne noCompile multiOut outM pkg o =

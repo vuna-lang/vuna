@@ -9,6 +9,8 @@
 # 0) 工具链探针：缺工具时明确失败，而不是让后续步报 127。
 run: command -v wasm-tools
 exit: 0
+run: command -v wasm-opt
+exit: 0
 run: command -v node
 exit: 0
 
@@ -24,6 +26,18 @@ file-contains: $TMPDIR/min-out/main.wat wasi_snapshot_preview1
 run: sh -c 'cd "$TMPDIR/min-out" && node "$VUNA_SUITE_ROOT/wasm-host/run.mjs" main.wasm 2>&1'
 exit: 0
 out-equals: 42
+
+# 1b) `--wasm-opt 0` 只汇编不优化：产物仍可运行，且比默认（-O3）的大。
+run: sh -c 'd="$TMPDIR/o0"; mkdir -p "$d/app"; printf "[package]\nname = \"o0\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Int\nmain = 42\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --wasm-opt 0 --out "$TMPDIR/o0-out" "$d"'
+exit: 0
+run: sh -c 'cd "$TMPDIR/o0-out" && node "$VUNA_SUITE_ROOT/wasm-host/run.mjs" main.wasm 2>&1'
+out-equals: 42
+run: sh -c 'a=$(wc -c <"$TMPDIR/min-out/main.wasm"); b=$(wc -c <"$TMPDIR/o0-out/main.wasm"); test "$b" -gt "$a"'
+exit: 0
+file-contains: $TMPDIR/min-out/build.sh wasm-opt
+file-contains: $TMPDIR/o0-out/build.sh wasm-tools parse
+run: sh -c 'grep -c wasm-opt "$TMPDIR/o0-out/build.sh" | tr -d " " | grep -q "^0$"'
+exit: 0
 
 # 2) 顶层函数落成 `$f_<name>`；闭包函数必须进 `(elem declare func ...)`（`ref.func`
 #    的前置条件，缺了引擎在实例化时拒绝模块）。

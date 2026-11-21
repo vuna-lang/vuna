@@ -198,6 +198,9 @@ parity_one() {
         run_limited wasm-tools parse "$outdir/w/main.wat" -o "$outdir/w/main.wasm" >>"$outdir/build.log" 2>&1 || status=$?
       fi
       if [ "$status" = 0 ]; then
+        run_limited wasm-opt --enable-gc --enable-bulk-memory --enable-tail-call --enable-reference-types -g -O3 "$outdir/w/main.wasm" -o "$outdir/w/main.opt.wasm" >>"$outdir/build.log" 2>&1 && mv "$outdir/w/main.opt.wasm" "$outdir/w/main.wasm" || status=$?
+      fi
+      if [ "$status" = 0 ]; then
         got=$( ( cd "$outdir/w" && run_limited node "$repo/wasm-host/run.mjs" main.wasm ) 2>&1 ) || status=$?
       fi
       ;;

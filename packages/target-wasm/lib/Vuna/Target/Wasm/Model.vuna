@@ -2,8 +2,8 @@ module Vuna.Target.Wasm.Model where
 
 -- Vuna.Target.Wasm.Model：wasm 后端的 WAT 模块数据模型。
 --
--- 产物只有 WAT（D16）；`.wasm` 由 `wasm-tools parse` 汇编。本模块只描述模块结构，
--- 渲染在 `Wasm.Render`，IR -> 模块在 `Wasm.Module`。
+-- 产物只有 WAT（D16）；`.wasm` 由 `wasm-tools parse` 汇编，再由 `wasm-opt`（binaryen）优化。
+-- 本模块只描述模块结构，渲染在 `Wasm.Render`，IR -> 模块在 `Wasm.Module`。
 --
 -- 边界：本模块只 import Base 与 `Wasm.Instr`；不 import Core/Elab/Intrinsics。
 import Base.Data.Bool as Bool
