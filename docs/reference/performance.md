@@ -716,11 +716,12 @@ defs / globals / sols 三张索引表。要继续压，先看 bodies（逐定义
 `fmt --check` 的 ~8% 即来自这里）。token 路径保持零分配：把注释收集并进 token 路径（每个
 token 一次 `Pair`）的初版实测让 `vuna.parse.lex` 慢 ~20%，已放弃。
 
-**工具不等二遍词法**：lint / doc / index 曾为按 token 边界切原文再 `lexSource` 一遍。
-`parseSourceDetailed` 把注释表与词法 token 流一起交回，切原文直接用那份 token；fmt 的
-trivia 流由 `Cst.lexTokensOf` 纯组装（trivia 组装成本只由需要它的 fmt / LSP 付）。
-本机热 store（workspace + examples，7 轮取最小）：`fmt --check` 966 → 766 ms、
-`lint`（workspace）2778 → 2691 ms；单文件（`Elab/Term/Impl.vuna`）`fmt` 143 → 127 ms、
+**工具不等二遍词法**：lint / doc / index 曾为取 fixity 或按 token 边界切原文把同一份源码
+再解析 / 再词法一遍。`parseSourceDetailed` 一次交出注释表与词法 token 流，
+`Flatten.fixitiesFromParsed` / `FixityEnv.fixitiesForParsed` / `Lint.Rules.lintParsedWithConfig`
+都吃这份产物；fmt 的 trivia 流由 `Cst.lexTokensOf` 纯组装（组装成本只由需要它的 fmt / LSP 付）。
+本机热 store（workspace + examples，7 轮取最小）：`fmt --check` 966 → 704 ms、
+`lint`（workspace）2778 → 2419 ms；单文件（`Elab/Term/Impl.vuna`）`fmt` 143 → 127 ms、
 `lint` 234 → 204 ms。
 
 ## 7. 测量规程
