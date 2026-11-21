@@ -127,6 +127,8 @@ gc_retain}.vuna`。
   闭包只捕获自由变量、无捕获闭包静态化与调用点去虚拟化后（同一基线、同机 `--runs 3`）：
   `closures` 的 native 时间 30 → 28 ms（同窗口手写 OCaml 9 ms），`arith` 18 → 17 ms、
   `nat_bits` 9 ms；剩余差距是函数参数这种只能在运行时按 arity 分派的调用面。
+  分配入口去掉旧精确栈图时代的 12 条寄存器快照后，分配密集微基准（2000 万个小变体）
+  198 → 180 ms、`records` 35 → 33 ms；`gc_pressure` / `list_recursion` 不变。
   上面的表是更早窗口的读数，当前回归以 `--target native --check` 为准。
 - **GC 的主判据已达成**：`gc_low_live`（低存活集、大累计分配）231 ms / 3.6 MiB，手写侧
   332 ms / 244 MiB——墙钟更快、RSS 降到 0.01x；`gc_pressure` 的 RSS 也从 59 MiB 降到

@@ -362,8 +362,8 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
      （含 `r15`）溢进自己的帧。
   2. `.bss`：cleanup 链头 `rt_cleanups` 与 CAF 求值区 `[rt_caf_begin, rt_caf_end)`。
   handler 帧与续延是 `Base.Effect.Core` 的普通堆对象，随上面的根可达。
-  `alloc` 的调用方寄存器快照（`rt_alloc_save_*`）只用于跨 `gc_collect` 保活寄存器，
-  不是根：仍会被读取的值在调用方的栈槽里。
+  寄存器不是根：跨调用的活值都在调用方的栈槽里（`alloc` 也按同一约定，不保存调用方
+  的 caller-saved 寄存器）。
 - **候选判据**：字必须指向某个已注册堆段内、块头 16 对齐且合法、非空闲的 payload 起点
   （块头 + 8）。`Int` / 字节型偶然形似指针只会多留对象（非移动，不会失效）；`.rodata`
   字面量不进堆，天然忽略。
