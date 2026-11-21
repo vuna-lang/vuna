@@ -724,6 +724,13 @@ token 一次 `Pair`）的初版实测让 `vuna.parse.lex` 慢 ~20%，已放弃�
 `lint`（workspace）2778 → 2419 ms；单文件（`Elab/Term/Impl.vuna`）`fmt` 143 → 127 ms、
 `lint` 234 → 204 ms。
 
+**建树事件的价格**：`parseSourceDetailed` 现在同时带回建树事件（`PState.tokIndex` +
+`pendEvents`，每个解析点两处 cons）。同一口径对照（新 / 旧二进制，9 轮取最小）：
+`fmt --check .` 0.696 → 0.728 s、`fmt --check packages/compiler` 0.345 → 0.355 s、
+单文件 fmt 0.113 → 0.115 s，`check packages/compiler` 不变（0.10 s，严格路径不读事件）。
+约 1–4%，代价只在 `PmTool` 的解析里；`parseSourceDetailed` 的调用方（fmt / lint / doc /
+index / LSP）都按需建树，纯 AST 消费者不受影响。
+
 ## 7. 测量规程
 
 - **探针必须隔离**：每个探针包一套自己的 `vuna.toml` + `lib/...`。常见事故：两个并行脚本
