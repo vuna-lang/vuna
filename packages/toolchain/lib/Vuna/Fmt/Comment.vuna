@@ -11,6 +11,7 @@
 -- 渲染时按条目 span 直接查 `TriviaCtx`。
 module Vuna.Fmt.Comment where
 
+import Base.Container.HashMap as HashMap
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Cst
@@ -155,41 +156,41 @@ enclosingFold best (sp :: rest) csp =
   else
     enclosingFold best rest csp
 
--- | 内部：两个 (行, 列) 键是否相等。
-sameKey : Pair Int Int -> Pair Int Int -> Bool
-sameKey (Pair l c) (Pair l2 c2) = l == l2 && c == c2
-
--- | 内部：按条目起点 (行, 列) 查附件槽；槽 = (前置注释, 行尾注释)。
-lookupSlot : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Int -> Maybe (Pair (List Comment) (List Comment))
-lookupSlot [] line col = Nothing
-lookupSlot ((Pair key slot) :: rest) line col =
-  if sameKey key (Pair line col) then Just slot else lookupSlot rest line col
+-- | 内部：按条目起点偏移查附件槽。
+lookupSlot : HashMap Int (Pair (List Comment) (List Comment)) -> Int -> Maybe (Pair (List Comment) (List Comment))
+lookupSlot at off = HashMap.lookup off at
 
 -- | 内部：条目的前置注释列表（无槽时为空）。
-leadOf : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Int -> List Comment
-leadOf at line col =
-  case lookupSlot at line col of
+leadOf : HashMap Int (Pair (List Comment) (List Comment)) -> Int -> List Comment
+leadOf at off =
+  case lookupSlot at off of
     Nothing => []
     Just slot => firstOf slot
 
 -- | 内部：条目的行尾注释列表（无槽时为空）。
-trailOf : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Int -> List Comment
-trailOf at line col =
-  case lookupSlot at line col of
+trailOf : HashMap Int (Pair (List Comment) (List Comment)) -> Int -> List Comment
+trailOf at off =
+  case lookupSlot at off of
     Nothing => []
     Just slot => secondOf slot
 
 -- | 内部：把注释追加到该条目的前置或行尾列表；无槽时新建。
-addToSlot : Pair Int Int -> Bool -> Comment -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment)))
-addToSlot key isTrail comment [] =
-  if isTrail then [Pair key (Pair [] [comment])] else [Pair key (Pair [comment] [])]
-addToSlot key isTrail comment ((Pair k slot) :: rest) =
-  if sameKey k key then
-    let
-      newSlot = if isTrail then Pair (firstOf slot) (append (secondOf slot) [comment]) else Pair (append (firstOf slot) [comment]) (secondOf slot)
-    in Pair key newSlot :: rest
-  else
-    Pair k slot :: addToSlot key isTrail comment rest
+addToSlot : Int -> Bool -> Comment -> HashMap Int (Pair (List Comment) (List Comment)) -> HashMap Int (Pair (List Comment) (List Comment))
+addToSlot off isTrail comment at =
+  case HashMap.lookup off at of
+    Nothing =>
+      if isTrail then
+        HashMap.insert off (Pair [] [comment]) at
+      else
+        HashMap.insert off (Pair [comment] []) at
+    Just slot =>
+      let
+        newSlot =
+          if isTrail then
+            Pair (firstOf slot) (append (secondOf slot) [comment])
+          else
+            Pair (append (firstOf slot) [comment]) (secondOf slot)
+      in HashMap.insert off newSlot at
 
 -- | 内部：能否作为行尾锚点：与注释同行且结束于注释起点之前。
 trailCandidate : Span -> Span -> Bool
@@ -249,7 +250,7 @@ nextFold best (sp :: rest) csp =
 
 -- | 把注释分配到条目附件表：单行注释优先挂行尾锚点，否则走前置路径；
 -- 返回 (附件表, 文件末尾注释)。
-assignComments : List Span -> List Comment -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> List Comment -> Pair (List (Pair (Pair Int Int) (Pair (List Comment) (List Comment)))) (List Comment)
+assignComments : List Span -> List Comment -> HashMap Int (Pair (List Comment) (List Comment)) -> List Comment -> Pair (HashMap Int (Pair (List Comment) (List Comment))) (List Comment)
 assignComments anchors [] at eof = Pair at eof
 assignComments anchors (c :: rest) at eof =
   let
@@ -258,21 +259,16 @@ assignComments anchors (c :: rest) at eof =
     assignNextComment anchors c rest at eof
   else if isSingleLineComment c then
     case bestTrailAnchor anchors csp of
-      Just sp => assignComments anchors rest (addToSlot (Pair (spanStartLine sp) (spanStartCol sp)) True c at) eof
+      Just sp => assignComments anchors rest (addToSlot (spanStartOffset sp) True c at) eof
       Nothing => assignNextComment anchors c rest at eof
   else
     assignNextComment anchors c rest at eof
 
 -- | 内部：前置路径：挂到下一条目；没有下一条目就落到文件末尾注释。
-assignNextComment : List Span -> Comment -> List Comment -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> List Comment -> Pair (List (Pair (Pair Int Int) (Pair (List Comment) (List Comment)))) (List Comment)
+assignNextComment : List Span -> Comment -> List Comment -> HashMap Int (Pair (List Comment) (List Comment)) -> List Comment -> Pair (HashMap Int (Pair (List Comment) (List Comment))) (List Comment)
 assignNextComment anchors c rest at eof =
   case nextAnchorWithFallback anchors (commentSpan c) of
-    Just sp =>
-      assignComments
-        anchors
-        rest
-        (addToSlot (Pair (spanStartLine sp) (spanStartCol sp)) False c at)
-        eof
+    Just sp => assignComments anchors rest (addToSlot (spanStartOffset sp) False c at) eof
     Nothing => assignComments anchors rest at (append eof [c])
 
 -- | 内部：下一条目；若下一条目跳出最内层包含条目，则改用该包含条目
@@ -404,34 +400,34 @@ anchorSpans hdr imports fixities decls =
     (append (map importAnchor imports) (append (map fixitySpan fixities) (concatMap declAnchors decls)))
 
 -- | 内部：条目的前置注释文档（无注释时为空）。
-leadingDoc : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Span -> Doc
+leadingDoc : HashMap Int (Pair (List Comment) (List Comment)) -> Span -> Doc
 leadingDoc at sp =
   let
-    cs = leadOf at (spanStartLine sp) (spanStartCol sp)
+    cs = leadOf at (spanStartOffset sp)
   in if isNilList cs then empty else vsep (map commentLeadDoc cs) `appendDoc` hard
 
 -- | 内部：把行尾注释逐个追加到条目最后一行末尾。
-trailingDoc : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Span -> Doc -> Doc
+trailingDoc : HashMap Int (Pair (List Comment) (List Comment)) -> Span -> Doc -> Doc
 trailingDoc at sp doc =
-  case trailOf at (spanStartLine sp) (spanStartCol sp) of
+  case trailOf at (spanStartOffset sp) of
     [] => doc
     cs => foldl (\acc, c => acc `appendDoc` (text " ${inlineCommentText c}")) doc cs
 
 -- | 把条目的注释贴到渲染结果上：前置注释在上，行尾注释追加到最后一行。
-attachAtTable : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Span -> Doc -> Doc
+attachAtTable : HashMap Int (Pair (List Comment) (List Comment)) -> Span -> Doc -> Doc
 attachAtTable at sp doc = trailingDoc at sp (leadingDoc at sp `appendDoc` doc)
 
 -- | 内部：导出项是否挂了注释（前置或行尾）。
-itemHasComments : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> ExportItem -> Bool
+itemHasComments : HashMap Int (Pair (List Comment) (List Comment)) -> ExportItem -> Bool
 itemHasComments at item =
   let
     sp = exportItemSpan item
-  in case lookupSlot at (spanStartLine sp) (spanStartCol sp) of
+  in case lookupSlot at (spanStartOffset sp) of
     Nothing => False
     Just slot => not (isNilList (firstOf slot)) || not (isNilList (secondOf slot))
 
 -- | 任一导出项挂了注释：有则导出列表强制多行，避免单行把后续项注释掉。
-anyItemHasCommentsTable : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> List ExportItem -> Bool
+anyItemHasCommentsTable : HashMap Int (Pair (List Comment) (List Comment)) -> List ExportItem -> Bool
 anyItemHasCommentsTable at [] = False
 anyItemHasCommentsTable at (item :: rest) =
   itemHasComments at item || anyItemHasCommentsTable at rest
@@ -446,11 +442,15 @@ stripLeadingBlanks (c :: rest) = if isBlankMarker c then stripLeadingBlanks rest
 -- ---------------------------------------------------------------
 -- | 注释计划：附件表（与条目起点对齐）+ 文件末尾注释。渲染时按条目 span 查表。
 export record TriviaCtx where
-  ctxAt : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment)))
+  ctxAt : HashMap Int (Pair (List Comment) (List Comment))
+
+-- | 内部：空附件表。
+emptySlotTable : HashMap Int (Pair (List Comment) (List Comment))
+emptySlotTable = HashMap.fromList []
 
 -- | 空计划（模板洞等没有源码位置的位置）。
 export emptyTrivia : TriviaCtx
-emptyTrivia = TriviaCtx []
+emptyTrivia = TriviaCtx emptySlotTable
 
 -- | 去掉注释原文的定界符（`--` / `{- -}`），得到旧注释模型的正文。
 stripLineDelim : String -> String
@@ -518,7 +518,7 @@ countNewlinesChars (c :: rest) = (if c == 10 then 1 else 0) + countNewlinesChars
 export triviaCtxOf : List Span -> List CstToken -> Pair TriviaCtx (List Comment)
 triviaCtxOf anchors toks =
   let
-    assigned = assignComments anchors (concatMap tokComments toks) [] []
+    assigned = assignComments anchors (concatMap tokComments toks) emptySlotTable []
   in Pair (TriviaCtx (firstOf assigned)) (stripLeadingBlanks (secondOf assigned))
 
 -- | 把条目的注释贴到渲染结果上。
@@ -528,7 +528,7 @@ attachAt ctx sp doc = attachAtTable ctx.ctxAt sp doc
 -- | 该条目是否挂了注释（前置或行尾）；导出列表据此强制多行。
 export spanHasComments : TriviaCtx -> Span -> Bool
 spanHasComments ctx sp =
-  case lookupSlot ctx.ctxAt (spanStartLine sp) (spanStartCol sp) of
+  case lookupSlot ctx.ctxAt (spanStartOffset sp) of
     Nothing => False
     Just slot =>
       not (isNilList (stripLeadingBlanks (firstOf slot))) || not (isNilList (secondOf slot))
@@ -549,6 +549,6 @@ tokComments t = triviaComments t.cstLeading
 export attachAtTop : TriviaCtx -> Span -> Doc -> Doc
 attachAtTop ctx sp doc =
   let
-    cs = stripLeadingBlanks (leadOf ctx.ctxAt (spanStartLine sp) (spanStartCol sp))
+    cs = stripLeadingBlanks (leadOf ctx.ctxAt (spanStartOffset sp))
     lead = if isNilList cs then empty else vsep (map commentLeadDoc cs) `appendDoc` hard
   in trailingDoc ctx.ctxAt sp (lead `appendDoc` doc)
