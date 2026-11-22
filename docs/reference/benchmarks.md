@@ -446,3 +446,23 @@ wasm 删掉 wat 机器后连纯程序也小了 ~4%。上表 native 两列是「�
 - **OCaml 后端在标量环上比 native 快 4 倍**（`scalar_xor` 12.9 vs 51.7 ms）：
   ocamlopt 把环变量放进寄存器，native 不做寄存器分配。这一列是 native 后端的直接对照。
 - 结论按 tier 切断：T0 达标；T1 的 2.9x 全部来自表示与寄存器分配，与 GC、闭包、效应无关。
+
+#### 1.6.1 入口初始化裁剪
+
+T0 达标之后，`_start` 不再无条件初始化全部子系统：只按程序实际用到的部分发调用，
+并按 `_start` 的标签可达性裁剪运行时函数（规则见 [native.md](native.md) §5.1）。
+同一 IR 的产物仍然逐字节确定。
+
+| 用例 | `_start` 的 init 调用 | 产物 bytes | 进程启动墙钟（交替 A/B） |
+| --- | --- | --- | --- |
+| entry_pure | stack / mem / gc / cpus / timeout → **timeout** | 49,640 → **15,576** | 211 → **190 µs**（n=2000 对的中位数） |
+| arith | 同上 → **timeout** | 49,680 → **15,608** | 5.20 → 5.17 ms（计算占比 >99%，落在噪声内） |
+| scalar_xor | 同上 → **timeout** | 49,736 → **15,672** | 49.0 → 49.0 ms（同上） |
+
+A/B 用 C harness 直接 `fork`/`exec` 交替采样（绕开 bench 自身的 bash fork 与 `date` 采样）。
+`entry_pure` 的 -21 µs 就是 init 的全部成本：`init_stack`（512 MiB mmap + 保护页 mprotect）
+约 4 µs、`init_cpus`（亲和性 + cgroup 读取）约 4 µs、堆 / GC / 超时约 1 µs，其余是页错误。
+
+**结论**：`bench/run.sh` 里 T0 的 0.58–0.67 ms 由 bench 自身的 bash fork（~400 µs）与
+exec（~200 µs）主导，init 只剩 10–20 µs。裁剪的收益在产物（-69% 字节、`text` 约 2 KiB）
+与「不为未用子系统付启动账」，不是 T0 的时间读数。

@@ -87,11 +87,12 @@
   pop rbp
   ret
   ```
-- **入口栈**：`_start` 先从初始栈取 `argc` / `argv` / `envp`，再调 `init_stack` mmap 一块
-  512 MiB 的私有匿名栈（`MAP_NORESERVE`，按需提交；底部一页 `PROT_NONE` 作溢出护栏）并
-  切换 `rsp`。深非尾递归因此不依赖进程栈上限（`RLIMIT_STACK`，常见 8 MiB），只受自带栈
-  容量约束；`VUNA_NATIVE_STACK_MB` 覆盖容量，`0` = 沿用进程栈（§5.1）。初始栈保留：
-  argv/envp 字符串仍在那里，`getArgs` / `env_lookup` 继续读。
+- **入口栈**：`_start` 先从初始栈取 `argc` / `argv` / `envp`；程序含真递归（或间接调用）
+  时才调 `init_stack` mmap 一块 512 MiB 的私有匿名栈（`MAP_NORESERVE`，按需提交；底部一页
+  `PROT_NONE` 作溢出护栏）并切换 `rsp`。深非尾递归因此不依赖进程栈上限
+  （`RLIMIT_STACK`，常见 8 MiB），只受自带栈容量约束；`VUNA_NATIVE_STACK_MB` 覆盖容量，
+  `0` = 沿用进程栈（§5.1）。初始栈保留：argv/envp 字符串仍在那里，`getArgs` /
+  `env_lookup` 继续读。
 - **不做寄存器分配**：binder 和中间值都分配 `[rbp - 8*(slot+2)]` 栈槽（`[rbp-8]` 是
   帧头保留槽）；临时槽不回收，frame 取该函数的最大使用量。求值顺序因此显式、稳定。
 - **死槽清零**（`Native.Live`）：帧会被再次进入的函数（递归 SCC，或函数内有回边）在
@@ -369,8 +370,21 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
 
 ### 5.1 资源限制（栈 / 内存 / 核数 / 超时）
 
-`_start` 在 `vuna_main` 之前调用 `init_stack` / `init_mem` / `init_gc` / `init_cpus` / `init_timeout`；
-配置全部来自 env，**不进 codegen**（同一 IR 的产物逐字节确定）。解析失败一律回落缺省，不阻断启动。
+`_start` 在 `vuna_main` 之前按程序用到的子系统发初始化调用；配置全部来自 env，
+**不进 codegen**（同一 IR 的产物逐字节确定）。判定只看已发射的指令：
+
+| 初始化 | 何时发 |
+| --- | --- |
+| `init_stack`（自带栈） | 可达函数图里有**真递归**（`call` 边上的环）或间接调用/跳转（闭包调用、续延恢复）。尾调用是 `jmp`，不涨栈，不触发 |
+| 堆起点 + `init_mem` + `init_gc` | 可达代码引用 `alloc` / `alloc_leaf`，或直接读写堆指针（内联 bump） |
+| `init_cpus` | 可达代码引用子进程原语（`spawn` / `runIn` / `wait`）；子进程继承亲和性 |
+| `init_timeout` | 总是发：`VUNA_NATIVE_TIMEOUT_MS` 对任何程序都成立 |
+
+未用到的运行时函数同样不进产物（从 `_start` 做标签可达性裁剪）：纯算术程序的
+`runtime.s` 只剩入口用到的打印 / 退出叶子，`text` 段约 2 KiB。因此
+`VUNA_NATIVE_STACK_MB` 与 `VUNA_NATIVE_CPUS` 只在对应初始化发出时生效——不含递归 /
+间接调用的程序沿用进程栈（`RLIMIT_STACK` 决定），不含子进程原语的程序不设亲和性。
+解析失败一律回落缺省，不阻断启动。
 
 | env | 缺省 | 语义 |
 | --- | --- | --- |

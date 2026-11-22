@@ -230,7 +230,9 @@ run: "$TMPDIR/fsdir-out/bin/fsdir" 2>&1
 out-equals: "abc"
 run: sh -c 'VUNA_NATIVE_GC_STRESS=1 "$TMPDIR/fsdir-out/bin/fsdir" 2>&1'
 out-equals: "abc"
-run: sh -c 'test "$(grep -c "call rt_write_barrier" "$TMPDIR/fsdir-out/runtime.s")" -ge 4'
+run: sh -c 'test "$(grep -c "call rt_write_barrier" "$TMPDIR/fsdir-out/runtime.s")" -ge 3'
+# 3 = `sort_list` 一处 + `insert_sorted` 两处（fsReadDir → 排序路径）；IORef 的写屏障
+# 只在用到效果引用时才会进产物（运行时函数按 `_start` 可达性裁剪）。
 exit: 0
 
 # 9s) fs 失败路径：读不存在的文件 -> typed error 收口（诊断 + exit 1），不伪造内容。

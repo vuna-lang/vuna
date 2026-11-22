@@ -2440,6 +2440,138 @@ dedupeClosures (c :: rest) =
   if hasNativeClosure c.ncLabel rest then dedupeClosures rest else c :: dedupeClosures rest
 
 -- ---------------------------------------------------------------
+-- 入口初始化裁剪
+-- ---------------------------------------------------------------
+-- `_start` 只为程序用得到的子系统发初始化调用：
+--
+--   * 堆 / GC / 内存预算：可达代码里出现分配器（`alloc` / `alloc_leaf`）或直接
+--     碰堆指针时才有；
+--   * 自带栈：可达函数图里有**真递归**（`call` 边上的环）或间接调用/跳转
+--     （闭包调用、续延恢复）时才有——尾调用是 `jmp`，不涨栈，不算；
+--   * 核数（亲和性）：可达代码里出现子进程原语时才有（子进程继承亲和性）。
+--
+-- `init_timeout` 总是发：`VUNA_NATIVE_TIMEOUT_MS` 是对任何程序的兜底。
+-- 判定只看已发射的指令：运行时函数若新增分配 / spawn 调用，会被自动算进来。
+-- 同一 IR 的产物仍然逐字节确定（判定不读 env）。
+export record InitNeeds(..) where
+  inHeap : Bool
+  inStack : Bool
+  inCpus : Bool
+
+-- | 操作数里的标签引用（`[rip + label]`）。
+operandLabelRefs : Operand -> List String
+operandLabelRefs (OpRip l) = [l]
+operandLabelRefs _ = []
+
+-- | 指令里的标签引用。`ILabel` 是定义不是引用；间接调用 / 跳转没有标签。
+instrLabelRefs : Instr -> List String
+instrLabelRefs (IMov dst src) = append (operandLabelRefs dst) (operandLabelRefs src)
+instrLabelRefs (IMovByteOp op _) = operandLabelRefs op
+instrLabelRefs (IMovByteRegOp op _) = operandLabelRefs op
+instrLabelRefs (IMovzx _ src) = operandLabelRefs src
+instrLabelRefs IMovzxAl = []
+instrLabelRefs (ILea _ l) = [l]
+instrLabelRefs (ILeaMem _ _ _) = []
+instrLabelRefs (IBin _ src) = operandLabelRefs src
+instrLabelRefs (IBinReg _ _ src) = operandLabelRefs src
+instrLabelRefs (ICmp a b) = append (operandLabelRefs a) (operandLabelRefs b)
+instrLabelRefs (ICmov _ _ src) = operandLabelRefs src
+instrLabelRefs (ITest _ _) = []
+instrLabelRefs (ISetcc _ _) = []
+instrLabelRefs (INeg _) = []
+instrLabelRefs ICqo = []
+instrLabelRefs (IDiv _) = []
+instrLabelRefs (IDivUnsigned _) = []
+instrLabelRefs IRepMovsb = []
+instrLabelRefs IRepeCmpsb = []
+instrLabelRefs (ILabel _) = []
+instrLabelRefs (IJmp l) = [l]
+instrLabelRefs (IJmpReg _) = []
+instrLabelRefs (IJcc _ l) = [l]
+instrLabelRefs (ICall l) = [l]
+instrLabelRefs (ICallReg _) = []
+instrLabelRefs (IXmmLoad _ op) = operandLabelRefs op
+instrLabelRefs (IXmmStore op _) = operandLabelRefs op
+instrLabelRefs (IXmmFromInt _ _) = []
+instrLabelRefs (IXmmToInt _ _) = []
+instrLabelRefs (IXmmBin _ _ _) = []
+instrLabelRefs (IXmmUnop _ _) = []
+instrLabelRefs (IXmmCmp _ _) = []
+instrLabelRefs (IXmmToReg _ _) = []
+instrLabelRefs (IXmmFromReg _ _) = []
+instrLabelRefs IRet = []
+instrLabelRefs ISyscall = []
+instrLabelRefs (IPush _) = []
+instrLabelRefs (IPop _) = []
+instrLabelRefs INop = []
+
+-- | 指令里的 `call` 边（尾调用是 `jmp`，不涨栈，不算）。
+instrCallRefs : Instr -> List String
+instrCallRefs (ICall l) = [l]
+instrCallRefs _ = []
+
+-- | 间接调用 / 跳转（闭包调用、续延恢复）：帧深度无法静态界定。
+instrIndirect : Instr -> Bool
+instrIndirect (ICallReg _) = True
+instrIndirect (IJmpReg _) = True
+instrIndirect _ = False
+
+funcLabelRefs : NativeFunc -> List String
+funcLabelRefs f = concatMap instrLabelRefs f.nfBody
+
+funcCallRefs : NativeFunc -> List String
+funcCallRefs f = concatMap instrCallRefs f.nfBody
+
+funcHasIndirect : NativeFunc -> Bool
+funcHasIndirect f = foldl (\acc, i => acc || instrIndirect i) False f.nfBody
+
+funcsWithLabelIn : List NativeFunc -> List String -> List NativeFunc
+funcsWithLabelIn funcs known = filter (\f => memName (nativeFuncLabelOf f) known) funcs
+
+-- | 从种子标签出发，沿指令里的标签引用做不动点；每轮至少多一个函数标签，
+-- 因此轮数以函数个数为界（`fuel` 再留一格）。
+reachFuncLabelsFuel : Int -> List NativeFunc -> List String -> List String
+reachFuncLabelsFuel fuel funcs known =
+  if fuel <= 0 then
+    known
+  else
+    let
+      refs = concatMap funcLabelRefs (funcsWithLabelIn funcs known)
+      next = nubNames (append known refs)
+    in if length next == length known then known else reachFuncLabelsFuel (fuel - 1) funcs next
+
+export reachFuncLabels : List NativeFunc -> List String -> List String
+reachFuncLabels funcs seeds = reachFuncLabelsFuel (length funcs + 2) funcs (nubNames seeds)
+
+-- | `l` 能否沿 `call` 边（再沿普通引用展开）回到自己。
+reachesItself : List NativeFunc -> String -> Bool
+reachesItself funcs l =
+  let
+    seeds = concatMap funcCallRefs (funcsWithLabelIn funcs [l])
+  in memName l (reachFuncLabels funcs seeds)
+
+hasCallCycle : List NativeFunc -> List String -> Bool
+hasCallCycle funcs labels = foldl (\acc, l => acc || reachesItself funcs l) False labels
+
+-- | 直接碰堆指针（内联 bump）也算分配。
+touchesHeapPtr : NativeFunc -> Bool
+touchesHeapPtr f = anyMem ["rt_heap_ptr", "rt_arena_end"] (funcLabelRefs f)
+
+anyFuncIndirect : List NativeFunc -> Bool
+anyFuncIndirect funcs = foldl (\acc, f => acc || funcHasIndirect f) False funcs
+
+-- | 由可达集合推初始化需求。分配器 / 子进程原语用标签判定；堆指针的**直接**
+-- 读写（内联 bump）也按分配算，防止绕过分配器。
+export initNeeds : List NativeFunc -> List String -> InitNeeds
+initNeeds funcs live =
+  let
+    liveFuncs = funcsWithLabelIn funcs live
+  in InitNeeds
+    (anyMem ["rt_alloc", "rt_alloc_leaf"] live || foldl (\acc, f => acc || touchesHeapPtr f) False liveFuncs)
+    (hasCallCycle funcs live || anyFuncIndirect liveFuncs)
+    (anyMem ["rt_spawn_exec", "rt_cmd_run_sh", "rt_wait_pid", "rt_child_push", "rt_child_drop", "rt_env_filter"] live)
+
+-- ---------------------------------------------------------------
 -- 入口
 -- -----------------------------------------------------------
 entryShowKind : Ir -> Maybe String
@@ -2453,8 +2585,8 @@ entryShowKind (IrRt s) =
     _ => Nothing
 entryShowKind _ = Nothing
 
-startFunc : Bool -> String -> String -> Maybe String -> List String -> List String -> NativeFunc
-startFunc printResult kind mainName runMainM handlers cafs =
+startFunc : Bool -> String -> String -> Maybe String -> List String -> List String -> InitNeeds -> NativeFunc
+startFunc printResult kind mainName runMainM handlers cafs needs =
   let
     -- 初始栈：`[rsp]=argc`、`[rsp+8]=argv[0]…`、`argv+8*(argc+1)=envp[0]…`。
     -- 必须在 `and rsp,-16` 之前取。
@@ -2470,39 +2602,52 @@ startFunc printResult kind mainName runMainM handlers cafs =
         IMov (OpRip envpLabel) (OpReg Rcx)
       ]
     initHeap =
-      [
-        ILea Rax nativeHeapSegLabel,
-        ILea Rdx nativeHeapLabel,
-        IMov (OpReg Rcx) (OpImm 0),
-        IMov (OpMem Rax 0) (OpReg Rcx),
-        IMov (OpMem Rax 24) (OpReg Rcx),
-        ILea Rcx nativeHeapCardsLabel,
-        IMov (OpMem Rax 32) (OpReg Rcx),
-        IMov (OpRip nativeSegsLabel) (OpReg Rax),
-        IMov (OpRip nativeCurSegLabel) (OpReg Rax),
-        IMov (OpReg Rcx) (OpReg Rdx),
-        IBinReg "add" Rcx (OpImm nativeHeapBytes),
-        IMov (OpMem Rax 8) (OpReg Rcx),
-        IMov (OpMem Rax 16) (OpReg Rdx),
-        IMov (OpRip nativeArenaEndLabel) (OpReg Rcx),
-        IMov (OpRip nativeHeapPtrLabel) (OpReg Rdx),
-        ICall (nativeRtLabel "seg_index_init")
-      ]
+      if not needs.inHeap then
+        []
+      else
+        [
+          ILea Rax nativeHeapSegLabel,
+          ILea Rdx nativeHeapLabel,
+          IMov (OpReg Rcx) (OpImm 0),
+          IMov (OpMem Rax 0) (OpReg Rcx),
+          IMov (OpMem Rax 24) (OpReg Rcx),
+          ILea Rcx nativeHeapCardsLabel,
+          IMov (OpMem Rax 32) (OpReg Rcx),
+          IMov (OpRip nativeSegsLabel) (OpReg Rax),
+          IMov (OpRip nativeCurSegLabel) (OpReg Rax),
+          IMov (OpReg Rcx) (OpReg Rdx),
+          IBinReg "add" Rcx (OpImm nativeHeapBytes),
+          IMov (OpMem Rax 8) (OpReg Rcx),
+          IMov (OpMem Rax 16) (OpReg Rdx),
+          IMov (OpRip nativeArenaEndLabel) (OpReg Rcx),
+          IMov (OpRip nativeHeapPtrLabel) (OpReg Rdx),
+          ICall (nativeRtLabel "seg_index_init")
+        ]
     -- 运行时初始化：自带栈（默认 512 MiB 虚拟，独立于 `ulimit -s`）、内存预算 /
-    -- auto 核数 / 超时（其余全部来自 env，不进 codegen）。
+    -- auto 核数 / 超时（其余全部来自 env，不进 codegen）。只发程序用得到的部分；
+    -- 超时是任何程序都适用的兜底，总是发。
+    initStackInstrs =
+      if not needs.inStack then
+        []
+      else
+        [
+          IBinReg "and" Rsp (OpImm (0 - 16)),
+          ICall (nativeRtLabel "init_stack"),
+          ITest Rax Rax,
+          IJcc "jz" ".Lstart_keep_stack",
+          IMov (OpReg Rsp) (OpReg Rax),
+          ILabel ".Lstart_keep_stack"
+        ]
+    initMemGc =
+      if not needs.inHeap then
+        []
+      else
+        [ICall (nativeRtLabel "init_mem"), ICall (nativeRtLabel "init_gc")]
+    initCpusInstrs = if not needs.inCpus then [] else [ICall (nativeRtLabel "init_cpus")]
     initLimits =
-      [
-        IBinReg "and" Rsp (OpImm (0 - 16)),
-        ICall (nativeRtLabel "init_stack"),
-        ITest Rax Rax,
-        IJcc "jz" ".Lstart_keep_stack",
-        IMov (OpReg Rsp) (OpReg Rax),
-        ILabel ".Lstart_keep_stack",
-        ICall (nativeRtLabel "init_mem"),
-        ICall (nativeRtLabel "init_gc"),
-        ICall (nativeRtLabel "init_cpus"),
-        ICall (nativeRtLabel "init_timeout")
-      ]
+      append
+        initStackInstrs
+        (append initMemGc (append initCpusInstrs [ICall (nativeRtLabel "init_timeout")]))
     runPart =
       case runMainM of
         Just rm => [IMov (OpReg Rdi) (OpReg Rax), ICall (nativeFuncLabel rm)]
@@ -2851,8 +2996,24 @@ build program printResult =
                       NFail err => NativeRejected (nativeAuditEnrich err cpsOrdered)
                       NOk pair =>
                         let
-                          start = startFunc printResult kind mainName runMainM (irEntryHandlersOf e) (cafNamesOf mainName cpsOrdered)
+                          progFuncs = firstOf pair
+                          statics = dedupeClosures (secondOf (secondOf pair))
+                          bridgeFuncs = nativeBridgeFuncs (irProgSharedOf program).irSharedListFam unit.irUnitTyDecls
+                          baseFuncs = dedupeFuncs (append bridgeFuncs (append nativeRtFuncs progFuncs))
+                          -- 入口打印用到的运行时函数（float 的 render 是程序定义，已在 progFuncs 里）。
+                          printerSeeds =
+                            case kind of
+                              "bool" => ["rt_print_bool"]
+                              "str" => ["rt_show_str", "rt_print_str"]
+                              "float" => ["rt_print_str"]
+                              _ => ["rt_print_int"]
+                          renderSeeds = append (map nativeFuncLabelOf progFuncs) printerSeeds
+                          needs = initNeeds baseFuncs (reachFuncLabels baseFuncs renderSeeds)
+                          start = startFunc printResult kind mainName runMainM (irEntryHandlersOf e) (cafNamesOf mainName cpsOrdered) needs
+                          -- 产物只保留 `_start` 与程序代码可达的运行时函数：未用的
+                          -- init_* / env 解析 / 文件 / spawn 等不再进二进制。
+                          liveFinal = reachFuncLabels baseFuncs (append renderSeeds (funcLabelRefs start))
+                          keptFuncs = filter (\f => memName (nativeFuncLabelOf f) liveFinal) baseFuncs
                           moduleLits = map (\p => Pair (split "." (firstOf p)) (poolItems (secondOf p))) pools
                           moduleFloats = map (\p => Pair (split "." (firstOf p)) (floatPoolItems (secondOf p))) fpools
-                          statics = dedupeClosures (secondOf (secondOf pair))
-                        in NativeOk (NativeProgram nativeRodata (append nativeBss (cafBssOf cpsOrdered)) statics (dedupeFuncs (append (nativeBridgeFuncs (irProgSharedOf program).irSharedListFam unit.irUnitTyDecls) (append nativeRtFuncs (append (firstOf pair) [start])))) moduleLits moduleFloats)
+                        in NativeOk (NativeProgram nativeRodata (append nativeBss (cafBssOf cpsOrdered)) statics (append keptFuncs [start]) moduleLits moduleFloats)
