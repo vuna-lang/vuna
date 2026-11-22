@@ -601,7 +601,7 @@ startStmt fuel stmt =
     case stmt of
       DBind pat e sp => startExpr (fuel - 1) e
       DExpr e sp => startExpr (fuel - 1) e
-      DLet binds sp => minPair (startFromSpan sp) (startBinds (fuel - 1) binds)
+      DLet binds r => minPair (startFromSpan (nodeRefSpan r)) (startBinds (fuel - 1) binds)
 
 -- | 内部：表达式的真实起始行。
 exprStartLine : Expr -> Int

@@ -270,7 +270,7 @@ export decFixity : Int -> Cur -> Maybe (Pair FixityDecl Cur)
 decFixity fuel bytes =
   thenPair
     (decStr (fuel - 1) bytes)
-    (\op, b1 => thenPair (decInt (fuel - 1) b1) (\level, b2 => thenPair (decInt (fuel - 1) b2) (\assoc, b3 => Just (Pair (FixityDecl op level assoc (Span "" 0 0 0 0 0 0)) b3))))
+    (\op, b1 => thenPair (decInt (fuel - 1) b1) (\level, b2 => thenPair (decInt (fuel - 1) b2) (\assoc, b3 => Just (Pair (FixityDecl op level assoc noNodeRef) b3))))
 
 -- | 解析 fixity 表。
 export decFixities : Int -> Cur -> Maybe (Pair (List FixityDecl) Cur)
@@ -281,7 +281,7 @@ export decImport : Int -> Cur -> Maybe (Pair Import Cur)
 decImport fuel bytes =
   thenPair
     (decStr (fuel - 1) bytes)
-    (\name, b1 => thenPair (decBool (fuel - 1) b1) (\q, b2 => thenPair (decMaybe decStr (fuel - 1) b2) (\alias, b3 => Just (Pair (Import name q alias (Span "" 0 0 0 0 0 0)) b3))))
+    (\name, b1 => thenPair (decBool (fuel - 1) b1) (\q, b2 => thenPair (decMaybe decStr (fuel - 1) b2) (\alias, b3 => Just (Pair (Import name q alias noNodeRef) b3))))
 
 -- | 解析 import 表。
 export decImports : Int -> Cur -> Maybe (Pair (List Import) Cur)

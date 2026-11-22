@@ -88,7 +88,7 @@ layersOfRoot (r :: rest) pkg = if rootName r == pkg then rootLayers r else layer
 
 withImportSpan : Import -> Diagnostic -> Diagnostic
 withImportSpan imp e =
-  if spanFile imp.importSpan == "" then e else withFallbackSpan imp.importSpan e
+  if spanFile (importSpan imp) == "" then e else withFallbackSpan (importSpan imp) e
 
 checkImports : List Layer -> List Layer -> String -> String -> String -> List Module -> List Import -> Check Int
 checkImports allRules matched srcName srcPkg checkedPkg modules [] = OkC 0

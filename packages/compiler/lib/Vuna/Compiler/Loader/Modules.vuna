@@ -226,7 +226,7 @@ checkImportAliasSyntax (imp :: rest) =
       if validSegment alias then
         checkImportAliasSyntax rest
       else
-        onErrDiag (withImportSite imp.importSpan) (rnNoLoc1 (InvalidModuleAlias alias) alias)
+        onErrDiag (withImportSite (importSpan imp)) (rnNoLoc1 (InvalidModuleAlias alias) alias)
 
 openModuleNames : List Import -> List String
 openModuleNames imports = nubNames (openModuleNamesAll imports)

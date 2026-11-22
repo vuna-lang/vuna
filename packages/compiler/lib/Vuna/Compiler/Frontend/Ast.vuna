@@ -7,18 +7,47 @@ export module Vuna.Compiler.Frontend.Reserved
 -- 保留 / 合成名的编码（`?hole` / `@vuna@...` / `#...`）在 `Frontend.Reserved`；
 -- 这里只重导出，`Frontend.Ast.*` 的调用面保持不变。
 
+-- | 语法节点的身份 + 源码区间。
+--
+-- id 由 parser 的 `withExtent` 分配（与建树事件携带的 id 相同），span 是同一区间的
+-- 视图。身份不随 span 改写而变（宏展开、编辑）；没有解析身份的路径
+-- （接口解码 / Rast 桥）用 `noNodeRef` / `detachedNodeRef`。
+export record NodeRef where
+  nodeRefId : Int
+  nodeRefSpan : Span
+
+export nodeRefId : NodeRef -> Int
+nodeRefId r = r.nodeRefId
+
+export nodeRefSpan : NodeRef -> Span
+nodeRefSpan r = r.nodeRefSpan
+
+-- | 没有节点身份的占位（接口解码：结构可还原，位置不可）。
+export noNodeRef : NodeRef
+noNodeRef = NodeRef (0 - 1) spanEmpty
+
+-- | 保留区间、丢掉身份（Rast 桥与宏展开的过渡路径）。
+export detachedNodeRef : Span -> NodeRef
+detachedNodeRef sp = NodeRef (0 - 1) sp
+
 -- 记录字段：字段名 + 类型表达式 + span。
 export record Field(..) where
   fieldName : String
   fieldType : Expr
-  fieldSpan : Span
+  fieldRef : NodeRef
+
+export fieldSpan : Field -> Span
+fieldSpan f = nodeRefSpan f.fieldRef
 
 -- trait 方法签名：方法名 + 类型表达式 + span（span 覆盖「方法名到类型结束」，
 -- 让方法级诊断/符号/注释锚点能落到方法行，而不是整条 trait 声明行）。
 export record TraitMethod(..) where
   traitMethodName : String
   traitMethodType : Expr
-  traitMethodSpan : Span
+  traitMethodRef : NodeRef
+
+export traitMethodSpan : TraitMethod -> Span
+traitMethodSpan m = nodeRefSpan m.traitMethodRef
 
 -- 多参数 trait 的显式 kind 参数：`trait C (a : Type) (r : Row)`；裸参数 kind = Nothing。
 export record TraitParam(..) where
@@ -117,46 +146,26 @@ export record FixityDecl(..) where
   fixityOp : String
   fixityLevel : Int
   fixityAssoc : Int
-  fixitySpan : Span
+  fixityRef : NodeRef
 
 export fixitySpan : FixityDecl -> Span
-fixitySpan (FixityDecl op level assoc sp) = sp
+fixitySpan d = nodeRefSpan d.fixityRef
 
 -- do 语句：`pat <- expr` 或裸表达式；最后一条必须是裸表达式。
 export data DoStmt(..) : Type where
-  DBind : Pat -> Expr -> Span -> DoStmt
-  DExpr : Expr -> Span -> DoStmt
+  DBind : Pat -> Expr -> NodeRef -> DoStmt
+  DExpr : Expr -> NodeRef -> DoStmt
   -- `let pat = e`（同组可多条，含签名行与局部函数组）：纯绑定，只对块内后续语句可见。
-  DLet : List (Pair Pat Expr) -> Span -> DoStmt
+  DLet : List (Pair Pat Expr) -> NodeRef -> DoStmt
 
 export record Ctor(..) where
   ctorName : String
   ctorType : Expr
   ctorArity : Int
-  ctorSpan : Span
+  ctorRef : NodeRef
 
--- | 语法节点的身份 + 源码区间。
---
--- id 由 parser 的 `withExtent` 分配（与建树事件携带的 id 相同），span 是同一区间的
--- 视图。身份不随 span 改写而变（宏展开、编辑）；没有解析身份的路径
--- （接口解码 / Rast 桥）用 `noNodeRef` / `detachedNodeRef`。
-export record NodeRef where
-  nodeRefId : Int
-  nodeRefSpan : Span
-
-export nodeRefId : NodeRef -> Int
-nodeRefId r = r.nodeRefId
-
-export nodeRefSpan : NodeRef -> Span
-nodeRefSpan r = r.nodeRefSpan
-
--- | 没有节点身份的占位（接口解码：结构可还原，位置不可）。
-export noNodeRef : NodeRef
-noNodeRef = NodeRef (0 - 1) spanEmpty
-
--- | 保留区间、丢掉身份（Rast 桥与宏展开的过渡路径）。
-export detachedNodeRef : Span -> NodeRef
-detachedNodeRef sp = NodeRef (0 - 1) sp
+export ctorSpan : Ctor -> Span
+ctorSpan c = nodeRefSpan c.ctorRef
 
 export data Decl(..) : Type where
   -- `data Name params : kind where`；kind 是索引族的类型表达式（只接受 `Type`）。
@@ -328,9 +337,9 @@ exprSpan (EAnn inner ty sp) = sp
 exprSpan (EInterp multi parts sp) = sp
 
 export doStmtSpan : DoStmt -> Span
-doStmtSpan (DBind pat expr sp) = sp
-doStmtSpan (DExpr expr sp) = sp
-doStmtSpan (DLet binds sp) = sp
+doStmtSpan (DBind pat expr r) = nodeRefSpan r
+doStmtSpan (DExpr expr r) = nodeRefSpan r
+doStmtSpan (DLet binds r) = nodeRefSpan r
 
 -- | 声明的节点身份 + 区间。
 export declRef : Decl -> NodeRef
@@ -346,12 +355,6 @@ declRef (DInstance ctxE head methods r) = r
 export declSpan : Decl -> Span
 declSpan d = nodeRefSpan (declRef d)
 
-export ctorSpan : Ctor -> Span
-ctorSpan (Ctor name ty arity sp) = sp
-
-export fieldSpan : Field -> Span
-fieldSpan (Field name ty sp) = sp
-
 export fieldName : Field -> String
 fieldName (Field name ty sp) = name
 
@@ -361,14 +364,14 @@ fieldType (Field name ty sp) = ty
 export traitMethodName : TraitMethod -> String
 traitMethodName (TraitMethod name ty sp) = name
 
-export traitMethodSpan : TraitMethod -> Span
-traitMethodSpan (TraitMethod name ty sp) = sp
-
 export record Import(..) where
   importName : String
   importIsQualified : Bool
   importAlias : Maybe String
-  importSpan : Span
+  importRef : NodeRef
+
+export importSpan : Import -> Span
+importSpan i = nodeRefSpan i.importRef
 
 export exportItemSpan : ExportItem -> Span
 exportItemSpan (XBare name sp) = sp

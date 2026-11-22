@@ -295,7 +295,7 @@ traitMethodAnchor m = traitMethodSpan m
 
 -- | 内部：import 的锚点。
 importAnchor : Import -> Span
-importAnchor imp = imp.importSpan
+importAnchor imp = (importSpan imp)
 
 -- | 内部：模块头与其导出项的锚点。
 headerAnchors : Maybe ModDecl -> List Span
@@ -341,10 +341,10 @@ fieldExprAnchors (Pair fname value) = exprAnchors value
 
 -- | 内部：do 语句的锚点（语句 span + 值里的表达式锚点）。
 doStmtAnchors : DoStmt -> List Span
-doStmtAnchors (DBind pat value sp) = sp :: exprAnchors value
-doStmtAnchors (DExpr value sp) = sp :: exprAnchors value
-doStmtAnchors (DLet binds sp) =
-  sp :: append (map bindingAnchor binds) (concatMap bindingValueAnchors binds)
+doStmtAnchors (DBind pat value r) = nodeRefSpan r :: exprAnchors value
+doStmtAnchors (DExpr value r) = nodeRefSpan r :: exprAnchors value
+doStmtAnchors (DLet binds r) =
+  nodeRefSpan r :: append (map bindingAnchor binds) (concatMap bindingValueAnchors binds)
 
 -- | 内部：表达式里可挂注释的条目（let 绑定、case 分支、do 语句、签名行、局部函数
 -- clause 等），按源码顺序。

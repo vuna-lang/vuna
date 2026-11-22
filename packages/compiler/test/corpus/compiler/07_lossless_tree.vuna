@@ -145,6 +145,65 @@ declsAlign (n :: nodes) (d :: decls) =
     == Just (nodeRefId (declRef d))
     && sameSpan (nodeSpan n) (nodeRefSpan (declRef d)) && declsAlign nodes decls
 
+-- | 一个 `NodeRef` 在树索引里指回 kind 与区间都一致的节点。
+refOk : HashMap Int CstNode -> String -> NodeRef -> Bool
+refOk index tag r =
+  case HashMap.lookup (nodeRefId r) index of
+    Nothing => False
+    Just n => nodeKindTag n == tag && sameSpan (nodeSpan n) (nodeRefSpan r)
+
+refsOk : HashMap Int CstNode -> String -> List NodeRef -> Bool
+refsOk index tag [] = True
+refsOk index tag (r :: rest) = refOk index tag r && refsOk index tag rest
+
+ctorRefOf : Ctor -> NodeRef
+ctorRefOf c = c.ctorRef
+
+fieldRefOf : Field -> NodeRef
+fieldRefOf f = f.fieldRef
+
+traitMethodRefOf : TraitMethod -> NodeRef
+traitMethodRefOf m = m.traitMethodRef
+
+fixityRefOf : FixityDecl -> NodeRef
+fixityRefOf d = d.fixityRef
+
+-- | 成员（构造子 / 字段 / trait 方法）的 id 在树里各自指回同 kind 的节点。
+declMembersOk : HashMap Int CstNode -> Decl -> Bool
+declMembersOk index (DData _ _ _ ctors _ _ _ _ _) = refsOk index "ctor" (map ctorRefOf ctors)
+declMembersOk index (DRecord _ _ fields _ _ _ _ _) = refsOk index "field" (map fieldRefOf fields)
+declMembersOk index (DTrait _ _ _ methods _) = refsOk index "method" (map traitMethodRefOf methods)
+declMembersOk index _ = True
+
+declsMembersOk : HashMap Int CstNode -> List Decl -> Bool
+declsMembersOk index [] = True
+declsMembersOk index (d :: rest) = declMembersOk index d && declsMembersOk index rest
+
+-- | fixity 声明 id 指回 fixity 节点。
+fixitiesOk : HashMap Int CstNode -> List FixityDecl -> Bool
+fixitiesOk index fx = refsOk index "fixity" (map fixityRefOf fx)
+
+-- | do 语句 id 指回 doStmt 节点（专用小样例，取 EDo 的直接语句表）。
+doStmtRef : DoStmt -> NodeRef
+doStmtRef (DBind _ _ r) = r
+doStmtRef (DExpr _ r) = r
+doStmtRef (DLet _ r) = r
+
+doSample : String
+doSample = "f =\n  do\n    x <- pure 1\n    pure x\n"
+
+doStmtsOk : Bool
+doStmtsOk =
+  case parseSourceDetailed "<do>" doSample of
+    ErrC _ => False
+    OkC p =>
+      let
+        toks = lexTokensOf doSample p.parsedRawToks p.parsedComments
+        index = nodeIndex (nestToTree toks p.parsedEvents)
+      in case p.parsedFile.sourceFileDecls of
+        [DFun _ _ (EDo stmts _) _] => refsOk index "doStmt" (map doStmtRef stmts)
+        _ => False
+
 -- | 反向：声明 id 在树索引里指回同一个节点（身份 → 节点，而不是只有节点 → 身份）。
 declRefsInIndex : HashMap Int CstNode -> List Decl -> Bool
 declRefsInIndex index [] = True
@@ -161,7 +220,9 @@ importsAlign [] [] = True
 importsAlign [] (_ :: _) = False
 importsAlign (_ :: _) [] = False
 importsAlign (n :: nodes) (i :: imports) =
-  sameStart (nodeSpan n) i.importSpan && importsAlign nodes imports
+  nodeId n
+    == Just (nodeRefId i.importRef)
+    && sameStart (nodeSpan n) (importSpan i) && importsAlign nodes imports
 
 -- | 先序的分支 id 序列（含文件根）。
 nodeIds : CstNode -> List Int
@@ -197,12 +258,12 @@ declIdsOk offsets index (d :: rest) = declIdOk offsets index d && declIdsOk offs
 -- | import 的起点偏移解析到 import 节点（重导出尾在 `importSpan` 之外，只比起点）。
 importIdOk : HashMap Int Int -> HashMap Int CstNode -> Import -> Bool
 importIdOk offsets index i =
-  case HashMap.lookup (spanStartOffset i.importSpan) offsets of
+  case HashMap.lookup (spanStartOffset (importSpan i)) offsets of
     Nothing => False
     Just nid =>
       case HashMap.lookup nid index of
         Nothing => False
-        Just n => nodeKindTag n == "import" && sameStart (nodeSpan n) i.importSpan
+        Just n => nodeKindTag n == "import" && sameStart (nodeSpan n) (importSpan i)
 
 importIdsOk : HashMap Int Int -> HashMap Int CstNode -> List Import -> Bool
 importIdsOk offsets index [] = True
@@ -275,3 +336,6 @@ main =
         )
         + (if noHeaderDeclIds then 512 else 0)
         + (if declRefsInIndex (nodeIndex tree) p.parsedFile.sourceFileDecls then 2048 else 0)
+        + (if fixitiesOk (nodeIndex tree) p.parsedFile.sourceFileFixities then 4096 else 0)
+        + (if declsMembersOk (nodeIndex tree) p.parsedFile.sourceFileDecls then 8192 else 0)
+        + (if doStmtsOk then 16384 else 0)

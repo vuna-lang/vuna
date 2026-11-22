@@ -476,13 +476,13 @@ ofDecl scope (Ast.DInstance ctx head methods r) =
     (nodeRefSpan r)
 
 ofCtor : List String -> Ast.Ctor -> Ctor
-ofCtor scope (Ast.Ctor name ty arity sp) = Ctor name (ofExpr scope ty) arity sp
+ofCtor scope (Ast.Ctor name ty arity r) = Ctor name (ofExpr scope ty) arity (nodeRefSpan r)
 
 ofField : List String -> Ast.Field -> Field
-ofField scope (Ast.Field name ty sp) = Field name (ofExpr scope ty) sp
+ofField scope (Ast.Field name ty r) = Field name (ofExpr scope ty) (nodeRefSpan r)
 
 ofTraitMethod : List String -> Ast.TraitMethod -> TraitMethod
-ofTraitMethod scope (Ast.TraitMethod name ty sp) = TraitMethod name (ofExpr scope ty) sp
+ofTraitMethod scope (Ast.TraitMethod name ty r) = TraitMethod name (ofExpr scope ty) (nodeRefSpan r)
 
 -- | 模式：引用名（构造子 / 记录）换成 RName；binder 名保持短名。
 ofPat : List String -> Ast.Pat -> Pat
@@ -570,14 +570,14 @@ ofStmts : List String -> List Ast.DoStmt -> List DoStmt
 ofStmts scope [] = []
 ofStmts scope (stmt :: rest) =
   case stmt of
-    Ast.DBind pat value sp =>
-      DBind (ofPat scope pat) (ofExpr scope value) sp
+    Ast.DBind pat value r =>
+      DBind (ofPat scope pat) (ofExpr scope value) (nodeRefSpan r)
         :: ofStmts (append (patBinders pat) scope) rest
-    Ast.DLet binds sp =>
+    Ast.DLet binds r =>
       let
         bound = append (concatMap bindingBinders binds) scope
-      in DLet (map (ofBinding bound scope) binds) sp :: ofStmts bound rest
-    Ast.DExpr value sp => DExpr (ofExpr scope value) sp :: ofStmts scope rest
+      in DLet (map (ofBinding bound scope) binds) (nodeRefSpan r) :: ofStmts bound rest
+    Ast.DExpr value r => DExpr (ofExpr scope value) (nodeRefSpan r) :: ofStmts scope rest
 
 patFieldBinders : Pair String Ast.Pat -> List String
 patFieldBinders (Pair fname pat) = patBinders pat

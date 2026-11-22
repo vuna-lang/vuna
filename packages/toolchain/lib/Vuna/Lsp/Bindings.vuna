@@ -421,10 +421,10 @@ importMatch : Member nFs FsOp r, Member nEnv EnvOp r => List (Pair String String
 importMatch buffers uri line text sf tokStart token imp =
   let
     lines = split "\n" text
-  in if not (spanContainsPos imp.importSpan line tokStart) then
+  in if not (spanContainsPos (importSpan imp) line tokStart) then
     pure Nothing
   else
-    case findNamePos lines imp.importSpan imp.importName of
+    case findNamePos lines (importSpan imp) imp.importName of
       Just (Pair nl nc) =>
         if nl == line && nc == tokStart && token == imp.importName then
           do
@@ -434,7 +434,7 @@ importMatch buffers uri line text sf tokStart token imp =
           case imp.importAlias of
             Nothing => pure Nothing
             Just alias =>
-              case findWordFromPos lines nl (nc + strLength imp.importName) (spanEndLine imp.importSpan) alias of
+              case findWordFromPos lines nl (nc + strLength imp.importName) (spanEndLine (importSpan imp)) alias of
                 Just (Pair al ac) =>
                   if al == line && ac == tokStart && token == alias then
                     do

@@ -342,7 +342,7 @@ declFixtures =
       "Color"
       []
       (EVar "Type" spA)
-      [Ctor "Red" (EVar "Color" spA) 0 spA, Ctor "Green" (EVar "Color" spA) 0 spB]
+      [Ctor "Red" (EVar "Color" spA) 0 (detachedNodeRef spA), Ctor "Green" (EVar "Color" spA) 0 (detachedNodeRef spB)]
       []
       False
       ReprAuto
@@ -351,7 +351,7 @@ declFixtures =
     DRecord
       "Point"
       []
-      [Field "x" (EVar "Int" spA) spA, Field "y" (EVar "Int" spB) spB]
+      [Field "x" (EVar "Int" spA) (detachedNodeRef spA), Field "y" (EVar "Int" spB) (detachedNodeRef spB)]
       []
       False
       ReprAuto
@@ -361,7 +361,7 @@ declFixtures =
       "Show"
       [TraitParam "a" Nothing]
       []
-      [TraitMethod "show" (EVar "a" spA) spA]
+      [TraitMethod "show" (EVar "a" spA) (detachedNodeRef spA)]
       (detachedNodeRef spB),
     DInstance
       []
@@ -378,7 +378,7 @@ exprFixture : Expr
 exprFixture =
   ELet
     [Pair (PVar "x" spA) (EInt 1 spA), Pair (PAs "y" (PCon "Just" [PInt 2 spB] spB) spB) (EFloat "1.5" spA)]
-    (EDo [DBind (PVar "z" spA) (EField (EVar "r" spA) "field" spA) spA, DBind (PRecord "Point" [Pair "x" (PVar "px" spA)] spA) (ERecord "Point" [Pair "x" (EInt 3 spA)] spA) spA, DExpr (EIf (EVar "True" spA) (ECase (EVar "z" spA) [Pair (PStr "s" spA) (EInt 0 spA)] spA) (EBacktick "add" (EInt 1 spA) (EInt 2 spA) spA) spA) spA, DExpr (ESectL "+" (EInt 4 spA) spA) spA] spA)
+    (EDo [DBind (PVar "z" spA) (EField (EVar "r" spA) "field" spA) (detachedNodeRef spA), DBind (PRecord "Point" [Pair "x" (PVar "px" spA)] spA) (ERecord "Point" [Pair "x" (EInt 3 spA)] spA) (detachedNodeRef spA), DExpr (EIf (EVar "True" spA) (ECase (EVar "z" spA) [Pair (PStr "s" spA) (EInt 0 spA)] spA) (EBacktick "add" (EInt 1 spA) (EInt 2 spA) spA) spA) (detachedNodeRef spA), DExpr (ESectL "+" (EInt 4 spA) spA) (detachedNodeRef spA)] spA)
     False
     spA
 

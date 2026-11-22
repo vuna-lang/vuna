@@ -56,9 +56,10 @@ toAstFieldValue : Pair String Rast.Expr -> Pair String Ast.Expr
 toAstFieldValue (Pair fname value) = Pair fname (toAstExpr value)
 
 toAstStmt : Rast.DoStmt -> Ast.DoStmt
-toAstStmt (Rast.DBind pat value sp) = Ast.DBind (toAstPat pat) (toAstExpr value) sp
-toAstStmt (Rast.DExpr value sp) = Ast.DExpr (toAstExpr value) sp
-toAstStmt (Rast.DLet binds sp) = Ast.DLet (map toAstBind binds) sp
+toAstStmt (Rast.DBind pat value sp) =
+  Ast.DBind (toAstPat pat) (toAstExpr value) (Ast.detachedNodeRef sp)
+toAstStmt (Rast.DExpr value sp) = Ast.DExpr (toAstExpr value) (Ast.detachedNodeRef sp)
+toAstStmt (Rast.DLet binds sp) = Ast.DLet (map toAstBind binds) (Ast.detachedNodeRef sp)
 
 toAstBind : Pair Rast.Pat Rast.Expr -> Pair Ast.Pat Ast.Expr
 toAstBind (Pair pat value) = Pair (toAstPat pat) (toAstExpr value)
@@ -124,16 +125,17 @@ toAstDecl (Rast.DInstance ctx head methods sp) =
   Ast.DInstance (map toAstExpr ctx) (toAstExpr head) (map toAstDecl methods) (detachedNodeRef sp)
 
 toAstCtor : Rast.Ctor -> Ast.Ctor
-toAstCtor (Rast.Ctor name ty arity sp) = Ast.Ctor name (toAstExpr ty) arity sp
+toAstCtor (Rast.Ctor name ty arity sp) = Ast.Ctor name (toAstExpr ty) arity (Ast.detachedNodeRef sp)
 
 toAstField : Rast.Field -> Ast.Field
-toAstField (Rast.Field name ty sp) = Ast.Field name (toAstExpr ty) sp
+toAstField (Rast.Field name ty sp) = Ast.Field name (toAstExpr ty) (Ast.detachedNodeRef sp)
 
 toAstTraitParam : Rast.TraitParam -> Ast.TraitParam
 toAstTraitParam (Rast.TraitParam name kind) = Ast.TraitParam name (maybeMap toAstExpr kind)
 
 toAstTraitMethod : Rast.TraitMethod -> Ast.TraitMethod
-toAstTraitMethod (Rast.TraitMethod name ty sp) = Ast.TraitMethod name (toAstExpr ty) sp
+toAstTraitMethod (Rast.TraitMethod name ty sp) =
+  Ast.TraitMethod name (toAstExpr ty) (Ast.detachedNodeRef sp)
 
 maybeMap : (a -> b) -> Maybe a -> Maybe b
 maybeMap f Nothing = Nothing

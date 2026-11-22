@@ -53,7 +53,7 @@ emptyIndex : HashMap String (List ExportEntry)
 emptyIndex = HashMap.fromList []
 
 mkImport : String -> Import
-mkImport name = Import name False Nothing (Span "" 0 0 0 0 0 0)
+mkImport name = Import name False Nothing noNodeRef
 
 mkProject : List String -> Project
 mkProject imports =

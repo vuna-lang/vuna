@@ -186,8 +186,8 @@ isNameStart c = c >= 65 && c <= 90 || c >= 97 && c <= 122 || c == 95
 
 -- | 内部：构造器行 `Ctor : Ty`（缩进 2）并贴上其注释。
 renderCtorDecl : List FixityDecl -> TriviaCtx -> Ctor -> Doc
-renderCtorDecl env at (Ctor cname ty arity sp) =
-  attachAt at sp (text "${declNameText cname} : ${renderTypeExpr env at ty}")
+renderCtorDecl env at (Ctor cname ty arity r) =
+  attachAt at (nodeRefSpan r) (text "${declNameText cname} : ${renderTypeExpr env at ty}")
 
 -- | 内部：`deriving (...)` / `deriving via field (...)` 行（无派生项时为空）。
 renderDerivings : Bool -> List String -> List Doc
@@ -387,7 +387,7 @@ renderHeader at (Just m) =
 
 -- | 内部：单条 import 行（贴上该 import 的注释）。
 renderImportLine : TriviaCtx -> Import -> Doc
-renderImportLine at imp = attachAtTop at imp.importSpan (text (renderImport imp))
+renderImportLine at imp = attachAtTop at (importSpan imp) (text (renderImport imp))
 
 -- | 内部：模块头里的 `export import` 重导出项（`export import` 行由它派生）。
 headerReexports : Maybe ModDecl -> List ExportItem
@@ -485,7 +485,7 @@ renderImportLines at hdr imports =
           \imp =>
             case itemsForImport imp (headerReexports hdr) of
               [] => renderImportLine at imp
-              items => attachAtTop at imp.importSpan (text (renderReexportLine imp items))
+              items => attachAtTop at (importSpan imp) (text (renderReexportLine imp items))
         ) imports
     nsDocs =
       map

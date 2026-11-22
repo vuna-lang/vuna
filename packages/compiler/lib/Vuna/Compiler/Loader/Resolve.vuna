@@ -1092,22 +1092,22 @@ resolveDoChain fuel modules label prefix ns imports scope bindName stmts blockSp
     case stmts of
       [] => psErr0At blockSpan DoBlockNeedsStatement
       [DExpr e sp] => resolveExpr (fuel - 1) modules label prefix ns imports scope e
-      (DExpr e sp) :: rest => Vuna.Compiler.Base.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope e) (\e2 => Vuna.Compiler.Base.Common.bind (resolveDoChain (fuel - 1) modules label prefix ns imports scope bindName rest blockSpan) (\tail => OkC (EApp (EVar (doIgnoreSyntaxName bindName) sp) [e2, ELam [Pair "_" spanEmpty] tail sp] sp)))
-      (DBind (PVar name psp) e sp) :: rest => Vuna.Compiler.Base.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope e) (\e2 => Vuna.Compiler.Base.Common.bind (resolveDoChain (fuel - 1) modules label prefix ns imports (name :: scope) bindName rest blockSpan) (\tail => OkC (EApp (EVar (doBindSyntaxName bindName) sp) [e2, ELam [Pair name (spanAtName name psp)] tail sp] sp)))
-      (DBind (PWild psp) e sp) :: rest => Vuna.Compiler.Base.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope e) (\e2 => Vuna.Compiler.Base.Common.bind (resolveDoChain (fuel - 1) modules label prefix ns imports scope bindName rest blockSpan) (\tail => OkC (EApp (EVar (doIgnoreSyntaxName bindName) sp) [e2, ELam [Pair "_" spanEmpty] tail sp] sp)))
-      (DLet binds sp) :: rest =>
+      (DExpr e r) :: rest => Vuna.Compiler.Base.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope e) (\e2 => Vuna.Compiler.Base.Common.bind (resolveDoChain (fuel - 1) modules label prefix ns imports scope bindName rest blockSpan) (\tail => OkC (EApp (EVar (doIgnoreSyntaxName bindName) (nodeRefSpan r)) [e2, ELam [Pair "_" spanEmpty] tail (nodeRefSpan r)] (nodeRefSpan r))))
+      (DBind (PVar name psp) e r) :: rest => Vuna.Compiler.Base.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope e) (\e2 => Vuna.Compiler.Base.Common.bind (resolveDoChain (fuel - 1) modules label prefix ns imports (name :: scope) bindName rest blockSpan) (\tail => OkC (EApp (EVar (doBindSyntaxName bindName) (nodeRefSpan r)) [e2, ELam [Pair name (spanAtName name psp)] tail (nodeRefSpan r)] (nodeRefSpan r))))
+      (DBind (PWild psp) e r) :: rest => Vuna.Compiler.Base.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope e) (\e2 => Vuna.Compiler.Base.Common.bind (resolveDoChain (fuel - 1) modules label prefix ns imports scope bindName rest blockSpan) (\tail => OkC (EApp (EVar (doIgnoreSyntaxName bindName) (nodeRefSpan r)) [e2, ELam [Pair "_" spanEmpty] tail (nodeRefSpan r)] (nodeRefSpan r))))
+      (DLet binds dr) :: rest =>
         Vuna.Compiler.Base.Common.bind (resolveDoLet (fuel - 1) modules label prefix ns imports scope binds) (
             \r =>
               case r of
-                Pair binds2 names => Vuna.Compiler.Base.Common.bind (resolveDoChain (fuel - 1) modules label prefix ns imports (append names scope) bindName rest blockSpan) (\tail => OkC (ELet binds2 tail False sp))
+                Pair binds2 names => Vuna.Compiler.Base.Common.bind (resolveDoChain (fuel - 1) modules label prefix ns imports (append names scope) bindName rest blockSpan) (\tail => OkC (ELet binds2 tail False (nodeRefSpan dr)))
           )
       -- 一般模式绑定：降级成 `bind e (\v -> case v of pat => 后续语句)`。模式拆解借普通
       -- `case`，因此可反驳模式在精化期报穷尽性错误（没有 `MonadFail` 等价物）。
-      (DBind pat e sp) :: rest =>
+      (DBind pat e r) :: rest =>
         Vuna.Compiler.Base.Common.bind (resolvePattern resolveFuelBound modules label prefix ns imports pat) (
             \rp =>
               case rp of
-                Pair pat2 names => Vuna.Compiler.Base.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope e) (\e2 => Vuna.Compiler.Base.Common.bind (resolveDoChain (fuel - 1) modules label prefix ns imports (append names scope) bindName rest blockSpan) (\tail => OkC (EApp (EVar (doBindSyntaxName bindName) sp) [e2, ELam [Pair doPatternBinderName spanEmpty] (ECase (EVar doPatternBinderName spanEmpty) [Pair pat2 tail] sp) sp] sp)))
+                Pair pat2 names => Vuna.Compiler.Base.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope e) (\e2 => Vuna.Compiler.Base.Common.bind (resolveDoChain (fuel - 1) modules label prefix ns imports (append names scope) bindName rest blockSpan) (\tail => OkC (EApp (EVar (doBindSyntaxName bindName) (nodeRefSpan r)) [e2, ELam [Pair doPatternBinderName spanEmpty] (ECase (EVar doPatternBinderName spanEmpty) [Pair pat2 tail] (nodeRefSpan r)) (nodeRefSpan r)] (nodeRefSpan r))))
           )
 
 -- do 块里的 `let` 语句：绑定按出现顺序解析（与 `let ... in` 同一条顺序作用域规则），
@@ -1338,10 +1338,10 @@ resolveTypeTopName label prefix name =
 
 -- | 解析构造子声明：构造子名与类型表达式都做名字解析。
 resolveCtorSpec : List Module -> String -> String -> Namespaces -> List Import -> String -> Ctor -> Check Ctor
-resolveCtorSpec modules label prefix ns imports dname (Ctor ctor ty arity sp) =
+resolveCtorSpec modules label prefix ns imports dname (Ctor ctor ty arity r) =
   Vuna.Compiler.Base.Common.bind
-    (onErrDiag (withFallbackSpan sp) (resolveCtorDecl label prefix dname ctor))
-    (\c2 => Vuna.Compiler.Base.Common.bind (resolveTypeExpr resolveFuelBound modules label prefix ns imports ty) (\ty2 => OkC (Ctor c2 ty2 arity sp)))
+    (onErrDiag (withFallbackSpan (nodeRefSpan r)) (resolveCtorDecl label prefix dname ctor))
+    (\c2 => Vuna.Compiler.Base.Common.bind (resolveTypeExpr resolveFuelBound modules label prefix ns imports ty) (\ty2 => OkC (Ctor c2 ty2 arity r)))
 
 resolveDecl : List Module -> String -> String -> Namespaces -> List Import -> Decl -> Check Decl
 resolveDecl modules label prefix ns imports d =
@@ -1381,16 +1381,16 @@ resolveDecl modules label prefix ns imports d =
         (\n => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (resolvePattern resolveFuelBound modules label prefix ns imports) pats) (\parts => Vuna.Compiler.Base.Common.bind (resolveExpr resolveFuelBound modules label prefix ns imports (concatMap secondOf parts) body) (\b => OkC (DFun n (map firstOf parts) b sp))))
 
 resolveRecordField : List Module -> String -> String -> Namespaces -> List Import -> Field -> Check Field
-resolveRecordField modules label prefix ns imports (Field fname ty sp) =
+resolveRecordField modules label prefix ns imports (Field fname ty r) =
   Vuna.Compiler.Base.Common.bind
-    (onErrDiag (withFallbackSpan sp) (checkBinder label fname))
-    (\_ => Vuna.Compiler.Base.Common.bind (resolveTypeExpr resolveFuelBound modules label prefix ns imports ty) (\ty2 => OkC (Field fname ty2 sp)))
+    (onErrDiag (withFallbackSpan (nodeRefSpan r)) (checkBinder label fname))
+    (\_ => Vuna.Compiler.Base.Common.bind (resolveTypeExpr resolveFuelBound modules label prefix ns imports ty) (\ty2 => OkC (Field fname ty2 r)))
 
 resolveTraitMethod : List Module -> String -> String -> Namespaces -> List Import -> TraitMethod -> Check TraitMethod
-resolveTraitMethod modules label prefix ns imports (TraitMethod mname ty sp) =
+resolveTraitMethod modules label prefix ns imports (TraitMethod mname ty r) =
   Vuna.Compiler.Base.Common.bind
-    (onErrDiag (withFallbackSpan sp) (resolveTopName label prefix mname))
-    (\n => Vuna.Compiler.Base.Common.bind (resolveTypeExpr resolveFuelBound modules label prefix ns imports ty) (\ty2 => OkC (TraitMethod n ty2 sp)))
+    (onErrDiag (withFallbackSpan (nodeRefSpan r)) (resolveTopName label prefix mname))
+    (\n => Vuna.Compiler.Base.Common.bind (resolveTypeExpr resolveFuelBound modules label prefix ns imports ty) (\ty2 => OkC (TraitMethod n ty2 r)))
 
 resolveInstanceMethod : List Module -> String -> String -> Namespaces -> List Import -> Decl -> Check Decl
 resolveInstanceMethod modules label prefix ns imports (DSig name ctx ty sp) =

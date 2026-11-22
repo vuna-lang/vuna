@@ -38,11 +38,7 @@ renameMode (FixityTable r ds) = r
 -- 用户声明会命中 `BuiltinFixity`。
 export builtinFixityDecls : List FixityDecl
 builtinFixityDecls =
-  [
-    FixityDecl "->" 1 2 (Span "" 0 0 0 0 0 0),
-    FixityDecl "&&" 3 1 (Span "" 0 0 0 0 0 0),
-    FixityDecl "||" 2 1 (Span "" 0 0 0 0 0 0)
-  ]
+  [FixityDecl "->" 1 2 noNodeRef, FixityDecl "&&" 3 1 noNodeRef, FixityDecl "||" 2 1 noNodeRef]
 
 export builtinFixityOps : List String
 builtinFixityOps = map fixityOpOf builtinFixityDecls
@@ -59,7 +55,7 @@ checkUniqueFixitiesGo : List FixityDecl -> HashMap String Int -> Check (List Fix
 checkUniqueFixitiesGo [] opSeen = OkC []
 checkUniqueFixitiesGo (d :: rest) opSeen =
   let
-    sp = d.fixitySpan
+    sp = fixitySpan d
   in if memName d.fixityOp builtinFixityOps then
     onErrDiag (withFixitySpan sp) (rnNoLoc1 (BuiltinFixity d.fixityOp) d.fixityOp)
   else

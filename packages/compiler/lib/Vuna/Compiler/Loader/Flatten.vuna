@@ -93,7 +93,7 @@ dedupeFixitiesGo (p :: rest) seen acc =
 fixityDeclKey : FixityDecl -> String
 fixityDeclKey d =
   let
-    sp = d.fixitySpan
+    sp = fixitySpan d
   in "${d.fixityOp}|${strFromInt d.fixityLevel}|${strFromInt d.fixityAssoc}|${spanFile sp}:${spanStartLine sp}:${spanStartCol sp}"
 
 -- ---------------------------------------------------------------
@@ -419,7 +419,7 @@ namespaceImportsGo imports ((XNamespace target alias sp) :: rest) acc =
   if hasImportOf imports target || hasImportOf acc target then
     namespaceImportsGo imports rest acc
   else
-    namespaceImportsGo imports rest ((::) (Import target False alias sp) acc)
+    namespaceImportsGo imports rest ((::) (Import target False alias (detachedNodeRef sp)) acc)
 namespaceImportsGo imports (_ :: rest) acc = namespaceImportsGo imports rest acc
 
 hasImportOf : List Import -> String -> Bool
@@ -582,7 +582,7 @@ implicitPreludeFrom roots importerPkg =
 
 implicitPreludeDeps : String -> List (Pair String Root) -> Check (List Import)
 implicitPreludeDeps importerPkg [] = OkC []
-implicitPreludeDeps importerPkg ([_]) = OkC [Import "Prelude" False Nothing (Span "" 0 0 0 0 0 0)]
+implicitPreludeDeps importerPkg ([_]) = OkC [Import "Prelude" False Nothing noNodeRef]
 implicitPreludeDeps importerPkg deps =
   onErrDiag
     (withAbsent NsPackageGraph)
@@ -596,7 +596,7 @@ withLayerCheck roots project =
 
 withImportSpan : Import -> Diagnostic -> Diagnostic
 withImportSpan imp e =
-  if spanFile imp.importSpan == "" then e else withFallbackSpan imp.importSpan e
+  if spanFile (importSpan imp) == "" then e else withFallbackSpan (importSpan imp) e
 
 loadAll : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Int -> List Root -> String -> List Module -> List String -> List Import -> Eff r (Check (List Module))
 loadAll fuel roots importerPkg modules stack imports =
@@ -643,7 +643,7 @@ loadModule fuel roots importerPkg modules stack imp =
           pure (onErrDiag (withImportSpan imp) (ldErr1 (ImportCycle (showCycle name stack)) (showCycle name stack)))
         else if validModuleName name then
           do
-            foundR <- findModuleFile roots name importerPkg imp.importSpan
+            foundR <- findModuleFile roots name importerPkg (importSpan imp)
             case foundR of
               ErrC e =>
                 case imp.importAlias of
@@ -655,7 +655,7 @@ loadModule fuel roots importerPkg modules stack imp =
                         Nothing => pure (ErrC e)
                         Just (Pair prefix n) =>
                           do
-                            modsR <- loadModule (fuel - 1) roots importerPkg modules stack (Import prefix False Nothing imp.importSpan)
+                            modsR <- loadModule (fuel - 1) roots importerPkg modules stack (Import prefix False Nothing (detachedNodeRef (importSpan imp)))
                             case modsR of
                               ErrC e2 => pure (ErrC e2)
                               OkC modules1 =>
@@ -664,7 +664,7 @@ loadModule fuel roots importerPkg modules stack imp =
                                   Just provider =>
                                     case walkNamespaceIndex modules1 prefix (nsDropLocal n (splitOnDot name)) of
                                       Nothing => pure (ErrC e)
-                                      Just target => loadModule (fuel - 1) roots importerPkg modules1 stack (Import target True Nothing imp.importSpan)
+                                      Just target => loadModule (fuel - 1) roots importerPkg modules1 stack (Import target True Nothing (detachedNodeRef (importSpan imp)))
               OkC found =>
                 let
                   path = firstOf found
@@ -764,7 +764,7 @@ loadProjectModules ctx names = loadProjectModulesWithPreloaded ctx names []
 export loadProjectModulesWithPreloaded : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> List String -> List Module -> Eff r (Check Project)
 loadProjectModulesWithPreloaded ctx names preloaded =
   let
-    entryImports = map (\n => Import n False Nothing (Span "" 0 0 0 0 0 0)) names
+    entryImports = map (\n => Import n False Nothing noNodeRef) names
   in do
     modulesR <-
       loadAll 1048576 (contextRoots ctx) (contextPackageName ctx) preloaded [] entryImports
@@ -1033,7 +1033,7 @@ unusedImportWarningsGo modules nameSet sourceNames imports decls reexports (imp 
 unusedImportDiag : List Import -> List Decl -> Import -> Diagnostic
 unusedImportDiag imports decls imp =
   let
-    d = warnDiagAt imp.importSpan (UnusedImport imp.importName) [imp.importName]
+    d = warnDiagAt (importSpan imp) (UnusedImport imp.importName) [imp.importName]
   in case importRemovalEdits imports decls imp of
     [] => d
     edits =>
@@ -1111,23 +1111,27 @@ anyInstanceDecl (_ :: rest) = anyInstanceDecl rest
 -- 同行的另一条 import、同行起头的声明都会被一起删掉，此时不给编辑（诊断照报）。
 importRemovalEdits : List Import -> List Decl -> Import -> List DiagEdit
 importRemovalEdits imports decls imp =
-  if importOwnsLine imports decls imp then [DiagEdit (importRemovalSpan imp.importSpan) ""] else []
+  if importOwnsLine imports decls imp then
+    [DiagEdit (importRemovalSpan (importSpan imp)) ""]
+  else
+    []
 
 -- | `import` 关键字在行首（span 起点列 = 1），且该行没有其它 import / 声明。
 importOwnsLine : List Import -> List Decl -> Import -> Bool
 importOwnsLine imports decls imp =
   importStartsLine imp
-    && not (anyImportOnLine imports imp) && not (anyDeclOnLine decls (spanStartLine imp.importSpan))
+    && not (anyImportOnLine imports imp)
+    && not (anyDeclOnLine decls (spanStartLine (importSpan imp)))
 
 importStartsLine : Import -> Bool
-importStartsLine imp = spanStartCol imp.importSpan == 1
+importStartsLine imp = spanStartCol (importSpan imp) == 1
 
 anyImportOnLine : List Import -> Import -> Bool
 anyImportOnLine [] imp = False
 anyImportOnLine (other :: rest) imp =
-  if spanStartOffset other.importSpan == spanStartOffset imp.importSpan then
+  if spanStartOffset (importSpan other) == spanStartOffset (importSpan imp) then
     anyImportOnLine rest imp
-  else if spanStartLine other.importSpan == spanStartLine imp.importSpan then
+  else if spanStartLine (importSpan other) == spanStartLine (importSpan imp) then
     True
   else
     anyImportOnLine rest imp

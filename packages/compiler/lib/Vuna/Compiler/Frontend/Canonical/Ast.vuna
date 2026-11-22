@@ -408,15 +408,15 @@ decDoStmt fuel bytes =
               Just (Pair v1 b2) =>
                 case decExpr (fuel - 1) b2 of
                   Nothing => Nothing
-                  Just (Pair v2 b3) => Just (Pair (DBind v1 v2 noSpan) b3)
+                  Just (Pair v2 b3) => Just (Pair (DBind v1 v2 noNodeRef) b3)
           1 =>
             case decExpr (fuel - 1) b1 of
               Nothing => Nothing
-              Just (Pair v1 b2) => Just (Pair (DExpr v1 noSpan) b2)
+              Just (Pair v1 b2) => Just (Pair (DExpr v1 noNodeRef) b2)
           2 =>
             case decList decPatExpr (fuel - 1) b1 of
               Nothing => Nothing
-              Just (Pair v1 b2) => Just (Pair (DLet v1 noSpan) b2)
+              Just (Pair v1 b2) => Just (Pair (DLet v1 noNodeRef) b2)
           _ => Nothing
 
 -- | 解析 `Expr`：tag 必须与 `encExpr` 一致。
@@ -608,7 +608,7 @@ decCtor fuel bytes =
                   Just (Pair v2 b3) =>
                     case decInt (fuel - 1) b3 of
                       Nothing => Nothing
-                      Just (Pair v3 b4) => Just (Pair (Ctor v1 v2 v3 noSpan) b4)
+                      Just (Pair v3 b4) => Just (Pair (Ctor v1 v2 v3 noNodeRef) b4)
           _ => Nothing
 
 -- | 解析 `Field`：tag 必须与 `encField` 一致。
@@ -627,7 +627,7 @@ decField fuel bytes =
               Just (Pair v1 b2) =>
                 case decExpr (fuel - 1) b2 of
                   Nothing => Nothing
-                  Just (Pair v2 b3) => Just (Pair (Field v1 v2 noSpan) b3)
+                  Just (Pair v2 b3) => Just (Pair (Field v1 v2 noNodeRef) b3)
           _ => Nothing
 
 -- | 解析 `TraitParam`：tag 必须与 `encTraitParam` 一致。
@@ -665,7 +665,7 @@ decTraitMethod fuel bytes =
               Just (Pair v1 b2) =>
                 case decExpr (fuel - 1) b2 of
                   Nothing => Nothing
-                  Just (Pair v2 b3) => Just (Pair (TraitMethod v1 v2 noSpan) b3)
+                  Just (Pair v2 b3) => Just (Pair (TraitMethod v1 v2 noNodeRef) b3)
           _ => Nothing
 
 -- | 解析 `Decl`：tag 必须与 `encDecl` 一致。
@@ -1147,13 +1147,13 @@ decImportLike : Int -> Cur -> Maybe (Pair Import Cur)
 decImportLike fuel c =
   thenPair
     (decStr (fuel - 1) c)
-    (\name, b1 => thenPair (decBool (fuel - 1) b1) (\qual, b2 => thenPair (decMaybe decStr (fuel - 1) b2) (\alias, b3 => Just (Pair (Import name qual alias noSpan) b3))))
+    (\name, b1 => thenPair (decBool (fuel - 1) b1) (\qual, b2 => thenPair (decMaybe decStr (fuel - 1) b2) (\alias, b3 => Just (Pair (Import name qual alias noNodeRef) b3))))
 
 decFixityLike : Int -> Cur -> Maybe (Pair FixityDecl Cur)
 decFixityLike fuel c =
   thenPair
     (decStr (fuel - 1) c)
-    (\op, b1 => thenPair (decInt (fuel - 1) b1) (\level, b2 => thenPair (decInt (fuel - 1) b2) (\assoc, b3 => Just (Pair (FixityDecl op level assoc noSpan) b3))))
+    (\op, b1 => thenPair (decInt (fuel - 1) b1) (\level, b2 => thenPair (decInt (fuel - 1) b2) (\assoc, b3 => Just (Pair (FixityDecl op level assoc noNodeRef) b3))))
 
 -- | 整串解析 `SourceFile`（AST 缓存载荷入口）：要求恰好消费完。
 export decSourceFileComplete : String -> Maybe SourceFile

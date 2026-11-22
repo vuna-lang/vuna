@@ -1196,14 +1196,14 @@ stmtDoc fuel env at stmt =
     empty
   else
     case stmt of
-      DBind pat value sp =>
+      DBind pat value r =>
         let
           headD = text (renderPatGo formatFuelBound pat ++ " <-")
           valueD = exprDoc (fuel - 1) env at value
-        in attachAt at sp (if multilineExpr value then appendDoc headD (nest 2 (appendDoc hard valueD)) else group (appendDoc headD (nest 2 (appendDoc line valueD))))
-      DExpr value sp => attachAt at sp (group (exprDoc (fuel - 1) env at value))
-      DLet binds sp =>
-        attachAt at sp (
+        in attachAt at (nodeRefSpan r) (if multilineExpr value then appendDoc headD (nest 2 (appendDoc hard valueD)) else group (appendDoc headD (nest 2 (appendDoc line valueD))))
+      DExpr value r => attachAt at (nodeRefSpan r) (group (exprDoc (fuel - 1) env at value))
+      DLet binds r =>
+        attachAt at (nodeRefSpan r) (
             case binds of
               [b] => if inlineLetBind b then appendDoc (text "let ") (bindingDoc (fuel - 1) env at b) else letBlockDoc (fuel - 1) env at binds
               _ => letBlockDoc (fuel - 1) env at binds
