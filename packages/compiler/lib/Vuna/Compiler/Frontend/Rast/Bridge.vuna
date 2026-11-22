@@ -94,22 +94,34 @@ toAstDecls decls = map toAstDecl decls
 
 export toAstDecl : Rast.Decl -> Ast.Decl
 toAstDecl (Rast.DData name params kind ctors derivings via repr lin sp) =
-  Ast.DData name params (toAstExpr kind) (map toAstCtor ctors) derivings via repr lin sp
-toAstDecl (Rast.DAxiom name ty sp) = Ast.DAxiom name (toAstExpr ty) sp
-toAstDecl (Rast.DExtern name cName ty sp) = Ast.DExtern name cName (toAstExpr ty) sp
-toAstDecl (Rast.DSig name ctx ty sp) = Ast.DSig name (map toAstExpr ctx) (toAstExpr ty) sp
-toAstDecl (Rast.DFun name pats body sp) = Ast.DFun name (map toAstPat pats) (toAstExpr body) sp
+  Ast.DData
+    name
+    params
+    (toAstExpr kind)
+    (map toAstCtor ctors)
+    derivings
+    via
+    repr
+    lin
+    (detachedNodeRef sp)
+toAstDecl (Rast.DAxiom name ty sp) = Ast.DAxiom name (toAstExpr ty) (detachedNodeRef sp)
+toAstDecl (Rast.DExtern name cName ty sp) =
+  Ast.DExtern name cName (toAstExpr ty) (detachedNodeRef sp)
+toAstDecl (Rast.DSig name ctx ty sp) =
+  Ast.DSig name (map toAstExpr ctx) (toAstExpr ty) (detachedNodeRef sp)
+toAstDecl (Rast.DFun name pats body sp) =
+  Ast.DFun name (map toAstPat pats) (toAstExpr body) (detachedNodeRef sp)
 toAstDecl (Rast.DRecord name params fields derivings via repr lin sp) =
-  Ast.DRecord name params (map toAstField fields) derivings via repr lin sp
+  Ast.DRecord name params (map toAstField fields) derivings via repr lin (detachedNodeRef sp)
 toAstDecl (Rast.DTrait name params supers methods sp) =
   Ast.DTrait
     name
     (map toAstTraitParam params)
     (map toAstExpr supers)
     (map toAstTraitMethod methods)
-    sp
+    (detachedNodeRef sp)
 toAstDecl (Rast.DInstance ctx head methods sp) =
-  Ast.DInstance (map toAstExpr ctx) (toAstExpr head) (map toAstDecl methods) sp
+  Ast.DInstance (map toAstExpr ctx) (toAstExpr head) (map toAstDecl methods) (detachedNodeRef sp)
 
 toAstCtor : Rast.Ctor -> Ast.Ctor
 toAstCtor (Rast.Ctor name ty arity sp) = Ast.Ctor name (toAstExpr ty) arity sp

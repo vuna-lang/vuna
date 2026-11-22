@@ -194,7 +194,7 @@ itemsOfDecl table decls (DSig name ctx ty sp) =
         "fun"
         "${name} : ${renderTypeInCtx ctx ty}"
         (docForDecl table name)
-        (spanStartLine sp)
+        (spanStartLine (nodeRefSpan sp))
         []
     ]
 itemsOfDecl table decls (DFun name pats body sp) =
@@ -205,9 +205,9 @@ itemsOfDecl table decls (DFun name pats body sp) =
       DocItem
         name
         "fun"
-        "${name} : ${renderType (EVar name sp)}"
+        "${name} : ${renderType (EVar name (nodeRefSpan sp))}"
         (docForDecl table name)
-        (spanStartLine sp)
+        (spanStartLine (nodeRefSpan sp))
         []
     ]
 itemsOfDecl table decls (DData name params kind ctors derivings viaField repr lin sp) =
@@ -220,7 +220,7 @@ itemsOfDecl table decls (DData name params kind ctors derivings viaField repr li
         "data"
         (dataSignature name params kind ctors derivings)
         (docForDecl table name)
-        (spanStartLine sp)
+        (spanStartLine (nodeRefSpan sp))
         (ctorItems table name ctors)
     ]
 itemsOfDecl table decls (DRecord name params fields derivings viaField repr lin sp) =
@@ -233,7 +233,7 @@ itemsOfDecl table decls (DRecord name params fields derivings viaField repr lin 
         "record"
         (recordSignature name params fields derivings)
         (docForDecl table name)
-        (spanStartLine sp)
+        (spanStartLine (nodeRefSpan sp))
         (fieldItems table name fields)
     ]
 itemsOfDecl table decls (DTrait name params supers methods sp) =
@@ -246,7 +246,7 @@ itemsOfDecl table decls (DTrait name params supers methods sp) =
         "trait"
         (traitSignature name params supers methods)
         (docForDecl table name)
-        (spanStartLine sp)
+        (spanStartLine (nodeRefSpan sp))
         (methodItems table name methods)
     ]
 itemsOfDecl table decls (DAxiom name ty sp) =
@@ -259,7 +259,7 @@ itemsOfDecl table decls (DAxiom name ty sp) =
         "axiom"
         "axiom ${name} : ${renderType ty}"
         (docForDecl table name)
-        (spanStartLine sp)
+        (spanStartLine (nodeRefSpan sp))
         []
     ]
 itemsOfDecl table decls (DExtern name cName ty sp) =
@@ -272,7 +272,7 @@ itemsOfDecl table decls (DExtern name cName ty sp) =
         "extern"
         "extern ${name} : ${renderType ty}"
         (docForDecl table name)
-        (spanStartLine sp)
+        (spanStartLine (nodeRefSpan sp))
         []
     ]
 itemsOfDecl table decls (DInstance ctxE head methods sp) = []

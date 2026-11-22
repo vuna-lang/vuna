@@ -336,8 +336,8 @@ termFixturesRT = foldl (\acc, t => acc && termRT t) True termFixtures
 declFixtures : List Decl
 declFixtures =
   [
-    DSig "f" [] (EApp (EVar "->" spA) [EVar "Int" spA, EVar "Int" spA] spA) spA,
-    DFun "f" [PVar "x" spB] (EApp (EVar "g" spA) [EVar "x" spA] spA) spA,
+    DSig "f" [] (EApp (EVar "->" spA) [EVar "Int" spA, EVar "Int" spA] spA) (detachedNodeRef spA),
+    DFun "f" [PVar "x" spB] (EApp (EVar "g" spA) [EVar "x" spA] spA) (detachedNodeRef spA),
     DData
       "Color"
       []
@@ -347,7 +347,7 @@ declFixtures =
       False
       ReprAuto
       False
-      spA,
+      (detachedNodeRef spA),
     DRecord
       "Point"
       []
@@ -356,16 +356,21 @@ declFixtures =
       False
       ReprAuto
       False
-      spA,
-    DTrait "Show" [TraitParam "a" Nothing] [] [TraitMethod "show" (EVar "a" spA) spA] spB,
+      (detachedNodeRef spA),
+    DTrait
+      "Show"
+      [TraitParam "a" Nothing]
+      []
+      [TraitMethod "show" (EVar "a" spA) spA]
+      (detachedNodeRef spB),
     DInstance
       []
       (EApp (EVar "Dict_Show" spA) [EVar "Color" spA] spA)
-      [DFun "show" [PWild spA] (EStr "c" spA) spA]
-      spA,
-    DAxiom "ax" (EVar "Int" spA) spA,
-    DExtern "ext" "c_ext" (EVar "Int" spA) spA,
-    DFun "exprs" [] exprFixture spA
+      [DFun "show" [PWild spA] (EStr "c" spA) (detachedNodeRef spA)]
+      (detachedNodeRef spA),
+    DAxiom "ax" (EVar "Int" spA) (detachedNodeRef spA),
+    DExtern "ext" "c_ext" (EVar "Int" spA) (detachedNodeRef spA),
+    DFun "exprs" [] exprFixture (detachedNodeRef spA)
   ]
 
 -- | 一个把 `Expr` 构造子尽量铺开的函数体（不与 `Decl` 夹具重复计数）。

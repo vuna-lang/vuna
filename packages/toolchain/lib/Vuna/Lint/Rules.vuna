@@ -2149,8 +2149,9 @@ traitParamKinds ((TraitParam name kind) :: rest) =
 -- | 内部：单条声明的 finding：函数子句做 clause 拆分与直接体扫描（隐式 Pi 签名跳过 clause 级
 -- 改写），签名、axiom、extern、data、record、trait、instance 的类型位置走 list-literal。
 declFindings : LintSrc -> List Decl -> Decl -> List Decl -> List Finding
-declFindings src allDecls (DFun name pats body sp) rest =
+declFindings src allDecls (DFun name pats body r) rest =
   let
+    line = spanStartLine (nodeRefSpan r)
     lifted =
       if hasImplicitSig name allDecls then
         []
@@ -2158,8 +2159,8 @@ declFindings src allDecls (DFun name pats body sp) rest =
         let
           lastForName = not (laterHasFun name rest)
           singleClause = countFunClauses name allDecls == 1
-          lane = LClause (spanStartLine sp) pats lastForName singleClause
-        in append (caseToClauses src (spanStartLine sp) name pats body singleClause) (scanBodyPos lintFuel src (Just lane) body)
+          lane = LClause line pats lastForName singleClause
+        in append (caseToClauses src line name pats body singleClause) (scanBodyPos lintFuel src (Just lane) body)
   in lifted
 declFindings src allDecls (DSig name ctx ty sp) rest =
   append (walkListLiteralExprs lintFuel src ctx) (walkListLiteral lintFuel src ty)

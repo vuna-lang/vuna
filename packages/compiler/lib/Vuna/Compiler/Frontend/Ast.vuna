@@ -135,29 +135,52 @@ export record Ctor(..) where
   ctorArity : Int
   ctorSpan : Span
 
+-- | 语法节点的身份 + 源码区间。
+--
+-- id 由 parser 的 `withExtent` 分配（与建树事件携带的 id 相同），span 是同一区间的
+-- 视图。身份不随 span 改写而变（宏展开、编辑）；没有解析身份的路径
+-- （接口解码 / Rast 桥）用 `noNodeRef` / `detachedNodeRef`。
+export record NodeRef where
+  nodeRefId : Int
+  nodeRefSpan : Span
+
+export nodeRefId : NodeRef -> Int
+nodeRefId r = r.nodeRefId
+
+export nodeRefSpan : NodeRef -> Span
+nodeRefSpan r = r.nodeRefSpan
+
+-- | 没有节点身份的占位（接口解码：结构可还原，位置不可）。
+export noNodeRef : NodeRef
+noNodeRef = NodeRef (0 - 1) spanEmpty
+
+-- | 保留区间、丢掉身份（Rast 桥与宏展开的过渡路径）。
+export detachedNodeRef : Span -> NodeRef
+detachedNodeRef sp = NodeRef (0 - 1) sp
+
 export data Decl(..) : Type where
   -- `data Name params : kind where`；kind 是索引族的类型表达式（只接受 `Type`）。
   -- 末位 `Bool` 是 `lin data` 标记。
   -- `derivings` 后的 `Bool` 是 `deriving via field` 标记（仅 record 允许）。
   -- `viaField` 后的 `ReprTier` 是表示档位（data 恒为 `ReprAuto`，record 由
   -- `alias`/`boxed` 前缀给出）；降级与 DtData 都要携带它。
-  DData : String -> List String -> Expr -> List Ctor -> List String -> Bool -> ReprTier -> Bool -> Span -> Decl
+  DData : String -> List String -> Expr -> List Ctor -> List String -> Bool -> ReprTier -> Bool -> NodeRef -> Decl
   -- `axiom name : Ty` —— 无体的可擦除/不透明顶层（D10）。
   -- 它是**类型层**定义：类型层引用合法，运行时使用由擦除检查报错。
-  DAxiom : String -> Expr -> Span -> Decl
+  DAxiom : String -> Expr -> NodeRef -> Decl
   -- 受限 FFI：`extern "c_name" : Ty`（无体；运行时由 C 链接提供）。
-  DExtern : String -> String -> Expr -> Span -> Decl
+  DExtern : String -> String -> Expr -> NodeRef -> Decl
   -- 顶层签名可带 trait 约束上下文（`f : Eq a, Show b => τ`）；ctx 是约束表达式
   -- （每个形如 `C arg`，都是单参数 trait 应用）。空 ctx = 无显式约束。
-  DSig : String -> List Expr -> Expr -> Span -> Decl
-  DFun : String -> List Pat -> Expr -> Span -> Decl
+  DSig : String -> List Expr -> Expr -> NodeRef -> Decl
+  DFun : String -> List Pat -> Expr -> NodeRef -> Decl
   -- 末位 `Bool` 是 `lin record` 标记（降级成 DData 时透传）。
   -- `derivings` 后的 `Bool` 是 `deriving via field` 标记。
   -- `viaField` 后的 `ReprTier` 是表示档位（`alias`/`boxed` 前缀，缺省 `ReprAuto`）。
-  DRecord : String -> List String -> List Field -> List String -> Bool -> ReprTier -> Bool -> Span -> Decl
+  DRecord : String -> List String -> List Field -> List String -> Bool -> ReprTier -> Bool -> NodeRef -> Decl
   -- `supers` 是父类约束（`Functor f => Applicative f` 的前缀），放在参数与方法之间。
-  DTrait : String -> List TraitParam -> List Expr -> List TraitMethod -> Span -> Decl
-  DInstance : List Expr -> Expr -> List Decl -> Span -> Decl
+  DTrait : String -> List TraitParam -> List Expr -> List TraitMethod -> NodeRef -> Decl
+  DInstance : List Expr -> Expr -> List Decl -> NodeRef -> Decl
 
 -- 模块头与导出项。
 -- XBare 是裸名导出，XTypeAll 是 `T(..)`，XModule 是 `module B` 整模块重导出。
@@ -309,15 +332,19 @@ doStmtSpan (DBind pat expr sp) = sp
 doStmtSpan (DExpr expr sp) = sp
 doStmtSpan (DLet binds sp) = sp
 
+-- | 声明的节点身份 + 区间。
+export declRef : Decl -> NodeRef
+declRef (DData name params kind ctors derivings viaField repr lin r) = r
+declRef (DAxiom name ty r) = r
+declRef (DExtern name cName ty r) = r
+declRef (DSig name ctx ty r) = r
+declRef (DFun name pats body r) = r
+declRef (DRecord name params fields derivings viaField repr lin r) = r
+declRef (DTrait name params supers methods r) = r
+declRef (DInstance ctxE head methods r) = r
+
 export declSpan : Decl -> Span
-declSpan (DData name params kind ctors derivings viaField repr lin sp) = sp
-declSpan (DAxiom name ty sp) = sp
-declSpan (DExtern name cName ty sp) = sp
-declSpan (DSig name ctx ty sp) = sp
-declSpan (DFun name pats body sp) = sp
-declSpan (DRecord name params fields derivings viaField repr lin sp) = sp
-declSpan (DTrait name params supers methods sp) = sp
-declSpan (DInstance ctxE head methods sp) = sp
+declSpan d = nodeRefSpan (declRef d)
 
 export ctorSpan : Ctor -> Span
 ctorSpan (Ctor name ty arity sp) = sp

@@ -32,6 +32,12 @@ export record PState(..) where
   pmodeOf : ParseMode
   tokIndex : Int
   pendEvents : List NodeEvent
+  -- | 下一个语法节点 id。parser 在 `withExtent` 处分配（文件根 0，节点从 1 起），
+  -- 建树事件与 AST 的 `NodeRef` 用同一个值。
+  nextNodeId : Int
+  -- | 最近一次 `withExtent` 打开的节点 id。wrapper 在 body 入口读它，把 id 交给
+  -- 声明构造；嵌套的 `withExtent` 会覆盖，但只在入口读一次，不会串。
+  openNodeId : Int
 
 -- ---------------------------------------------------------------
 -- vuna 源码 parser（offside layout）
@@ -45,12 +51,12 @@ pmodeOf st = st.pmodeOf
 
 -- | 从文件头开一个状态（`lastPos` 的 `Pos 1 0` 是「尚未消费 token」的哨兵）。
 export mkState : String -> List PTok -> ParseMode -> PState
-mkState file toks mode = PState file toks (Pos 1 0 0 0) (length toks) mode 0 []
+mkState file toks mode = PState file toks (Pos 1 0 0 0) (length toks) mode 0 [] 1 0
 
 -- | 指定 `lastPos` / 剩余数（模板洞、同一行的裸表达式等场景）。
 -- 建树事件在模板洞内单独收集（洞内 token 的绝对下标从 0 起，与外层不相交）。
 export mkStateAt : String -> List PTok -> Pos -> Int -> ParseMode -> PState
-mkStateAt file toks last count mode = PState file toks last count mode 0 []
+mkStateAt file toks last count mode = PState file toks last count mode 0 [] 1 0
 
 -- | 从起始状态到结束状态的建树事件（按发生顺序；每次事件一次 cons）。
 export eventsOf : PState -> PState -> List NodeEvent
@@ -64,7 +70,13 @@ eventsOf st st2 = reverse (st2.pendEvents)
 export withExtent : {a : Type} -> CstKind -> PState -> (PState -> Check (Pair a PState)) -> Check (Pair a PState)
 withExtent kind st k =
   let
-    opened = { st | pendEvents = EvOpen kind st.tokIndex :: st.pendEvents }
+    nid = st.nextNodeId
+    opened =
+      { st
+        | pendEvents = EvOpen kind st.tokIndex nid :: st.pendEvents,
+        nextNodeId = nid + 1,
+        openNodeId = nid
+      }
   in Vuna.Compiler.Base.Common.step (k opened) (\v, st1 => OkC (Pair v (closedAt st1)))
 
 -- | 关闭最近打开的节点：终点是当前 token 下标（半开区间）。

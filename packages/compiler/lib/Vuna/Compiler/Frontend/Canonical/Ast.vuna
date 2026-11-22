@@ -702,14 +702,14 @@ decDecl fuel bytes =
                                       Just (Pair v7 b8) =>
                                         case decBool (fuel - 1) b8 of
                                           Nothing => Nothing
-                                          Just (Pair v8 b9) => Just (Pair (DData v1 v2 v3 v4 v5 v6 v7 v8 noSpan) b9)
+                                          Just (Pair v8 b9) => Just (Pair (DData v1 v2 v3 v4 v5 v6 v7 v8 noNodeRef) b9)
           1 =>
             case decStr (fuel - 1) b1 of
               Nothing => Nothing
               Just (Pair v1 b2) =>
                 case decExpr (fuel - 1) b2 of
                   Nothing => Nothing
-                  Just (Pair v2 b3) => Just (Pair (DAxiom v1 v2 noSpan) b3)
+                  Just (Pair v2 b3) => Just (Pair (DAxiom v1 v2 noNodeRef) b3)
           2 =>
             case decStr (fuel - 1) b1 of
               Nothing => Nothing
@@ -719,7 +719,7 @@ decDecl fuel bytes =
                   Just (Pair v2 b3) =>
                     case decExpr (fuel - 1) b3 of
                       Nothing => Nothing
-                      Just (Pair v3 b4) => Just (Pair (DExtern v1 v2 v3 noSpan) b4)
+                      Just (Pair v3 b4) => Just (Pair (DExtern v1 v2 v3 noNodeRef) b4)
           3 =>
             case decStr (fuel - 1) b1 of
               Nothing => Nothing
@@ -729,7 +729,7 @@ decDecl fuel bytes =
                   Just (Pair v2 b3) =>
                     case decExpr (fuel - 1) b3 of
                       Nothing => Nothing
-                      Just (Pair v3 b4) => Just (Pair (DSig v1 v2 v3 noSpan) b4)
+                      Just (Pair v3 b4) => Just (Pair (DSig v1 v2 v3 noNodeRef) b4)
           4 =>
             case decStr (fuel - 1) b1 of
               Nothing => Nothing
@@ -739,7 +739,7 @@ decDecl fuel bytes =
                   Just (Pair v2 b3) =>
                     case decExpr (fuel - 1) b3 of
                       Nothing => Nothing
-                      Just (Pair v3 b4) => Just (Pair (DFun v1 v2 v3 noSpan) b4)
+                      Just (Pair v3 b4) => Just (Pair (DFun v1 v2 v3 noNodeRef) b4)
           5 =>
             case decStr (fuel - 1) b1 of
               Nothing => Nothing
@@ -761,7 +761,7 @@ decDecl fuel bytes =
                                   Just (Pair v6 b7) =>
                                     case decBool (fuel - 1) b7 of
                                       Nothing => Nothing
-                                      Just (Pair v7 b8) => Just (Pair (DRecord v1 v2 v3 v4 v5 v6 v7 noSpan) b8)
+                                      Just (Pair v7 b8) => Just (Pair (DRecord v1 v2 v3 v4 v5 v6 v7 noNodeRef) b8)
           6 =>
             case decStr (fuel - 1) b1 of
               Nothing => Nothing
@@ -774,7 +774,7 @@ decDecl fuel bytes =
                       Just (Pair vsup bsup) =>
                         case decList decTraitMethod (fuel - 1) bsup of
                           Nothing => Nothing
-                          Just (Pair v3 b4) => Just (Pair (DTrait v1 v2 vsup v3 noSpan) b4)
+                          Just (Pair v3 b4) => Just (Pair (DTrait v1 v2 vsup v3 noNodeRef) b4)
           7 =>
             case decExprList (fuel - 1) b1 of
               Nothing => Nothing
@@ -784,7 +784,7 @@ decDecl fuel bytes =
                   Just (Pair v2 b3) =>
                     case decDecls (fuel - 1) b3 of
                       Nothing => Nothing
-                      Just (Pair v3 b4) => Just (Pair (DInstance v1 v2 v3 noSpan) b4)
+                      Just (Pair v3 b4) => Just (Pair (DInstance v1 v2 v3 noNodeRef) b4)
           _ => Nothing
 
 -- | 解析 `(模式, 表达式)`（`ELet` 绑定 / `ECase` 分支的元素）。

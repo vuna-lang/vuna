@@ -15,7 +15,7 @@ fixture =
     "f"
     [Ast.PCon "Base.Data.Maybe.Just" [Ast.PVar "x" sp] sp]
     (Ast.EApp (Ast.EVar "Base.Data.Int.add" sp) [Ast.EVar "x" sp] sp)
-    sp
+    (Ast.detachedNodeRef sp)
 
 -- | 转换后：全局引用变 `RGlobal module name`，binder 保持 `RLocal`。
 export rastConvertOk : Bool

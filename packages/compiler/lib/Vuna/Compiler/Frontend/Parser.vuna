@@ -95,6 +95,15 @@ record ParsedDecl where
 emptyParsedDecl : ParsedDecl
 emptyParsedDecl = ParsedDecl Nothing Nothing Nothing Nothing
 
+-- | 一个声明构造的起点：节点 id（与建树事件同一个）+ 首 token 位置。
+record DeclStart where
+  declStartId : Int
+  declStartPos : Pos
+
+-- | 声明节点的 `NodeRef`：id 来自 `withExtent`，span = 起点到最后一个已消费 token。
+declRefAt : PState -> DeclStart -> PState -> NodeRef
+declRefAt st ds end = NodeRef ds.declStartId (spanFromStart (fileOf st) ds.declStartPos end)
+
 -- 把逐定义导出/重导出/归约修饰符挂到模块头上；入口文件没有模块头（这些信息也无下游）。
 -- 可选模块头：`module M (导出项, ...) where`；列表省略 = 导出全部。
 parseSourceFile : Bool -> PState -> Check (Pair (Pair SourceFile PState) (List Diagnostic))
@@ -399,8 +408,10 @@ blockStep : DeclBlock -> ParsedDecl -> Pair (Maybe Diagnostic) DeclBlock
 blockStep b (ParsedDecl (Just _) _ _ _) = Pair Nothing (dbClose b)
 blockStep b (ParsedDecl Nothing _ (Just _) _) = Pair Nothing (dbClose b)
 blockStep b (ParsedDecl Nothing _ Nothing (Just _)) = Pair Nothing (dbClose b)
-blockStep b (ParsedDecl Nothing (Just (DFun n pats _ sp)) Nothing Nothing) = blockFun b n pats sp
-blockStep b (ParsedDecl Nothing (Just (DSig n _ _ sp)) Nothing Nothing) = blockSig b n sp
+blockStep b (ParsedDecl Nothing (Just (DFun n pats _ r)) Nothing Nothing) =
+  blockFun b n pats (nodeRefSpan r)
+blockStep b (ParsedDecl Nothing (Just (DSig n _ _ r)) Nothing Nothing) =
+  blockSig b n (nodeRefSpan r)
 blockStep b (ParsedDecl Nothing (Just _) Nothing Nothing) = Pair Nothing (dbClose b)
 blockStep b (ParsedDecl Nothing Nothing Nothing Nothing) = Pair Nothing b
 
@@ -557,51 +568,54 @@ opacityStart st =
     PTok (TIdent "abstract") _ => True
     _ => False
 
--- | 逐定义导出：`export [opaque|transparent] <decl>`。`start` 是 `export` 的位置：
+-- | 逐定义导出：`export [opaque|transparent] <decl>`。`ds` 的起点是 `export` 的位置：
 -- 修饰符属于该声明的 span（与建树节点一致）。
 parseExportDecl : PState -> Int -> Check (Pair ParsedDecl PState)
 parseExportDecl st blockCol =
-  withExtent CstDeclKind st (\st0 => parseExportDeclBody st0 blockCol (peekPos st0))
+  withExtent
+    CstDeclKind
+    st
+    (\st0 => parseExportDeclBody st0 blockCol (DeclStart st0.openNodeId (peekPos st0)))
 
-parseExportDeclBody : PState -> Int -> Pos -> Check (Pair ParsedDecl PState)
-parseExportDeclBody st blockCol start =
+parseExportDeclBody : PState -> Int -> DeclStart -> Check (Pair ParsedDecl PState)
+parseExportDeclBody st blockCol ds =
   Vuna.Compiler.Base.Common.step
     (expectIdent st)
-    (\_, st1 => if atKw st1 "opaque" && not (tierFollows st1) then Vuna.Compiler.Base.Common.bind (expectKw st1 "opaque") (\st2 => parseExportedValue (Just OpacityOpaque) st2 blockCol start) else if atKw st1 "transparent" && not (tierFollows st1) then Vuna.Compiler.Base.Common.bind (expectKw st1 "transparent") (\st2 => parseExportedValue (Just OpacityTransparent) st2 blockCol start) else if atIdentName st1 "abstract" then Vuna.Compiler.Base.Common.step (expectIdent st1) (\_, st2 => parseExportedValue (Just OpacityAbstract) st2 blockCol start) else parseExportedPlain Nothing st1 blockCol start)
+    (\_, st1 => if atKw st1 "opaque" && not (tierFollows st1) then Vuna.Compiler.Base.Common.bind (expectKw st1 "opaque") (\st2 => parseExportedValue (Just OpacityOpaque) st2 blockCol ds) else if atKw st1 "transparent" && not (tierFollows st1) then Vuna.Compiler.Base.Common.bind (expectKw st1 "transparent") (\st2 => parseExportedValue (Just OpacityTransparent) st2 blockCol ds) else if atIdentName st1 "abstract" then Vuna.Compiler.Base.Common.step (expectIdent st1) (\_, st2 => parseExportedValue (Just OpacityAbstract) st2 blockCol ds) else parseExportedPlain Nothing st1 blockCol ds)
 
-parseExportedPlain : Maybe Opacity -> PState -> Int -> Pos -> Check (Pair ParsedDecl PState)
-parseExportedPlain op st blockCol start =
+parseExportedPlain : Maybe Opacity -> PState -> Int -> DeclStart -> Check (Pair ParsedDecl PState)
+parseExportedPlain op st blockCol ds =
   case peekTok st of
     PTok (TKw "data") _ =>
       if opacityGiven op then
         ps1 st (ExpectedToken "value signature") "value signature"
       else
-        parseDataExport False st blockCol start
+        parseDataExport False st blockCol ds
     PTok (TKw "linear") _ =>
       if opacityGiven op then
         ps1 st (ExpectedToken "value signature") "value signature"
       else
-        parseLinearExport st blockCol start
+        parseLinearExport st blockCol ds
     PTok (TKw "record") _ =>
       if opacityGiven op then
         ps1 st (ExpectedToken "value signature") "value signature"
       else
-        parseRecordExport False ReprAuto st blockCol start
+        parseRecordExport False ReprAuto st blockCol ds
     PTok (TKw "trait") _ =>
       if opacityGiven op then
         ps1 st (ExpectedToken "value signature") "value signature"
       else
-        parseTraitExport st blockCol start
-    PTok (TKw "axiom") _ => parseAxiomExport op st blockCol start
-    PTok (TKw "extern") _ => parseExternExport op st blockCol start
+        parseTraitExport st blockCol ds
+    PTok (TKw "axiom") _ => parseAxiomExport op st blockCol ds
+    PTok (TKw "extern") _ => parseExternExport op st blockCol ds
     PTok (TKw "transparent") _ =>
       if tierFollows st then
-        parseTieredExport ReprAlias st blockCol start
+        parseTieredExport ReprAlias st blockCol ds
       else
         ps1 st (ExpectedToken "value signature") "value signature"
     PTok (TKw "opaque") _ =>
       if tierFollows st then
-        parseTieredExport ReprBoxed st blockCol start
+        parseTieredExport ReprBoxed st blockCol ds
       else
         ps1 st (ExpectedToken "value signature") "value signature"
     PTok (TIdent name) _ =>
@@ -609,10 +623,10 @@ parseExportedPlain op st blockCol start =
         if opacityGiven op then
           ps1 st (ExpectedToken "value signature") "value signature"
         else
-          parseTieredExport (if name == "alias" then ReprAlias else ReprBoxed) st blockCol start
+          parseTieredExport (if name == "alias" then ReprAlias else ReprBoxed) st blockCol ds
       else
-        parseExportedValue op st blockCol start
-    PTok (TSym _) _ => parseExportedValue op st blockCol start
+        parseExportedValue op st blockCol ds
+    PTok (TSym _) _ => parseExportedValue op st blockCol ds
     _ => ps0 st ExpectedTopLevelDecl
 
 opacityGiven : Maybe Opacity -> Bool
@@ -624,101 +638,104 @@ opacitySpecOf Nothing name sp = Nothing
 opacitySpecOf (Just kind) name sp = Just (OpacitySpec name kind sp)
 
 -- | `export [opaque|transparent] f : T`（也接受无签名的子句，交给 Elab 报既有诊断）。
-parseExportedValue : Maybe Opacity -> PState -> Int -> Pos -> Check (Pair ParsedDecl PState)
-parseExportedValue op st blockCol start =
+parseExportedValue : Maybe Opacity -> PState -> Int -> DeclStart -> Check (Pair ParsedDecl PState)
+parseExportedValue op st blockCol ds =
   case peekTok st of
     PTok (TIdent name) _ =>
       let
         st1 = advance st
       in if atSym st1 ":" then
         Vuna.Compiler.Base.Common.step
-          (parseSignature st1 blockCol True name start)
-          (\decl, st2 => OkC (Pair (ParsedDecl Nothing (Just decl) (Just (ESValue name (spanFromStart (fileOf st) start st2))) (opacitySpecOf op name (spanFromStart (fileOf st) start st2))) st2))
+          (parseSignature st1 blockCol True name ds)
+          (\decl, st2 => OkC (Pair (ParsedDecl Nothing (Just decl) (Just (ESValue name (spanFromStart (fileOf st) ds.declStartPos st2))) (opacitySpecOf op name (spanFromStart (fileOf st) ds.declStartPos st2))) st2))
       else
         Vuna.Compiler.Base.Common.step
-          (parseClause st1 blockCol name start)
-          (\decl, st2 => OkC (Pair (ParsedDecl Nothing (Just decl) (Just (ESValue name (spanFromStart (fileOf st) start st2))) (opacitySpecOf op name (spanFromStart (fileOf st) start st2))) st2))
+          (parseClause st1 blockCol name ds)
+          (\decl, st2 => OkC (Pair (ParsedDecl Nothing (Just decl) (Just (ESValue name (spanFromStart (fileOf st) ds.declStartPos st2))) (opacitySpecOf op name (spanFromStart (fileOf st) ds.declStartPos st2))) st2))
     -- 声明位带括号的符号名：`export (==) : ...` / `export (<+>) x y = ...`。
     PTok (TSym "(") _ =>
       Vuna.Compiler.Base.Common.step
         (expectDeclName st)
-        (\name, st1 => if atSym st1 ":" then Vuna.Compiler.Base.Common.step (parseSignature st1 blockCol True name start) (\decl, st2 => OkC (Pair (ParsedDecl Nothing (Just decl) (Just (ESValue name (spanFromStart (fileOf st) start st2))) (opacitySpecOf op name (spanFromStart (fileOf st) start st2))) st2)) else Vuna.Compiler.Base.Common.step (parseClause st1 blockCol name start) (\decl, st2 => OkC (Pair (ParsedDecl Nothing (Just decl) (Just (ESValue name (spanFromStart (fileOf st) start st2))) (opacitySpecOf op name (spanFromStart (fileOf st) start st2))) st2)))
+        (\name, st1 => if atSym st1 ":" then Vuna.Compiler.Base.Common.step (parseSignature st1 blockCol True name ds) (\decl, st2 => OkC (Pair (ParsedDecl Nothing (Just decl) (Just (ESValue name (spanFromStart (fileOf st) ds.declStartPos st2))) (opacitySpecOf op name (spanFromStart (fileOf st) ds.declStartPos st2))) st2)) else Vuna.Compiler.Base.Common.step (parseClause st1 blockCol name ds) (\decl, st2 => OkC (Pair (ParsedDecl Nothing (Just decl) (Just (ESValue name (spanFromStart (fileOf st) ds.declStartPos st2))) (opacitySpecOf op name (spanFromStart (fileOf st) ds.declStartPos st2))) st2)))
     PTok (TSym sym) _ =>
       if isReservedValueName sym then
         ps1 st (ExpectedToken "value name") "value name"
       else
         let
           st1 = advance st
-        in if atSym st1 ":" then Vuna.Compiler.Base.Common.step (parseSignature st1 blockCol True sym start) (\decl, st2 => OkC (Pair (ParsedDecl Nothing (Just decl) (Just (ESValue sym (spanFromStart (fileOf st) start st2))) (opacitySpecOf op sym (spanFromStart (fileOf st) start st2))) st2)) else Vuna.Compiler.Base.Common.step (parseClause st1 blockCol sym start) (\decl, st2 => OkC (Pair (ParsedDecl Nothing (Just decl) (Just (ESValue sym (spanFromStart (fileOf st) start st2))) (opacitySpecOf op sym (spanFromStart (fileOf st) start st2))) st2))
+        in if atSym st1 ":" then Vuna.Compiler.Base.Common.step (parseSignature st1 blockCol True sym ds) (\decl, st2 => OkC (Pair (ParsedDecl Nothing (Just decl) (Just (ESValue sym (spanFromStart (fileOf st) ds.declStartPos st2))) (opacitySpecOf op sym (spanFromStart (fileOf st) ds.declStartPos st2))) st2)) else Vuna.Compiler.Base.Common.step (parseClause st1 blockCol sym ds) (\decl, st2 => OkC (Pair (ParsedDecl Nothing (Just decl) (Just (ESValue sym (spanFromStart (fileOf st) ds.declStartPos st2))) (opacitySpecOf op sym (spanFromStart (fileOf st) ds.declStartPos st2))) st2))
     _ => ps1 st (ExpectedToken "value name") "value name"
 
-parseAxiomExport : Maybe Opacity -> PState -> Int -> Pos -> Check (Pair ParsedDecl PState)
-parseAxiomExport op st blockCol start =
+parseAxiomExport : Maybe Opacity -> PState -> Int -> DeclStart -> Check (Pair ParsedDecl PState)
+parseAxiomExport op st blockCol ds =
   if opacityGiven op then
     ps1 st (ExpectedToken "value signature") "value signature"
   else
-    Vuna.Compiler.Base.Common.step (parseAxiom st blockCol start) (
+    Vuna.Compiler.Base.Common.step (parseAxiom st blockCol ds) (
         \decl, st1 =>
           case decl of
-            DAxiom name _ sp => OkC (Pair (ParsedDecl Nothing (Just decl) (Just (ESValue name sp)) Nothing) st1)
+            DAxiom name _ r => OkC (Pair (ParsedDecl Nothing (Just decl) (Just (ESValue name (nodeRefSpan r))) Nothing) st1)
             _ => icInternal "parseAxiomExport: not an axiom"
       )
 
-parseExternExport : Maybe Opacity -> PState -> Int -> Pos -> Check (Pair ParsedDecl PState)
-parseExternExport op st blockCol start =
+parseExternExport : Maybe Opacity -> PState -> Int -> DeclStart -> Check (Pair ParsedDecl PState)
+parseExternExport op st blockCol ds =
   if opacityGiven op then
     ps1 st (ExpectedToken "value signature") "value signature"
   else
-    Vuna.Compiler.Base.Common.step (parseExtern st blockCol start) (
+    Vuna.Compiler.Base.Common.step (parseExtern st blockCol ds) (
         \decl, st1 =>
           case decl of
-            DExtern name _ _ sp => OkC (Pair (ParsedDecl Nothing (Just decl) (Just (ESValue name sp)) Nothing) st1)
+            DExtern name _ _ r => OkC (Pair (ParsedDecl Nothing (Just decl) (Just (ESValue name (nodeRefSpan r))) Nothing) st1)
             _ => icInternal "parseExternExport: not an extern"
       )
 
 -- | `export linear data/record ...`。
-parseLinearExport : PState -> Int -> Pos -> Check (Pair ParsedDecl PState)
-parseLinearExport st blockCol start =
+parseLinearExport : PState -> Int -> DeclStart -> Check (Pair ParsedDecl PState)
+parseLinearExport st blockCol ds =
   Vuna.Compiler.Base.Common.bind (expectKw st "linear") (
       \st1 =>
         case peekTok st1 of
-          PTok (TKw "data") _ => parseDataExport True st1 blockCol start
-          PTok (TKw "record") _ => parseRecordExport True ReprAuto st1 blockCol start
+          PTok (TKw "data") _ => parseDataExport True st1 blockCol ds
+          PTok (TKw "record") _ => parseRecordExport True ReprAuto st1 blockCol ds
           _ => ps1 st1 (ExpectedToken "data/record") "data/record"
     )
 
 -- | 归约修饰符：`opaque f : T` / `transparent f : T`（值定义；不导出）。
 parseOpacityDecl : PState -> Int -> Check (Pair ParsedDecl PState)
 parseOpacityDecl st blockCol =
-  withExtent CstDeclKind st (\st0 => parseOpacityDeclBody st0 blockCol (peekPos st0))
+  withExtent
+    CstDeclKind
+    st
+    (\st0 => parseOpacityDeclBody st0 blockCol (DeclStart st0.openNodeId (peekPos st0)))
 
-parseOpacityDeclBody : PState -> Int -> Pos -> Check (Pair ParsedDecl PState)
-parseOpacityDeclBody st blockCol start =
+parseOpacityDeclBody : PState -> Int -> DeclStart -> Check (Pair ParsedDecl PState)
+parseOpacityDeclBody st blockCol ds =
   case peekTok st of
     PTok (TKw "opaque") _ =>
       Vuna.Compiler.Base.Common.bind
         (expectKw st "opaque")
-        (\st1 => parseOpacityValue OpacityOpaque st1 blockCol start)
+        (\st1 => parseOpacityValue OpacityOpaque st1 blockCol ds)
     PTok (TKw "transparent") _ =>
       Vuna.Compiler.Base.Common.bind
         (expectKw st "transparent")
-        (\st1 => parseOpacityValue OpacityTransparent st1 blockCol start)
+        (\st1 => parseOpacityValue OpacityTransparent st1 blockCol ds)
     PTok (TIdent "abstract") _ =>
       Vuna.Compiler.Base.Common.step
         (expectIdent st)
-        (\_, st1 => parseOpacityValue OpacityAbstract st1 blockCol start)
+        (\_, st1 => parseOpacityValue OpacityAbstract st1 blockCol ds)
     _ => ps0 st ExpectedTopLevelDecl
 
-parseOpacityValue : Opacity -> PState -> Int -> Pos -> Check (Pair ParsedDecl PState)
-parseOpacityValue kind st blockCol start =
+parseOpacityValue : Opacity -> PState -> Int -> DeclStart -> Check (Pair ParsedDecl PState)
+parseOpacityValue kind st blockCol ds =
   case peekTok st of
     PTok (TIdent name) _ =>
       let
         st1 = advance st
       in if atSym st1 ":" then
         Vuna.Compiler.Base.Common.step
-          (parseSignature st1 blockCol True name start)
-          (\decl, st2 => OkC (Pair (ParsedDecl Nothing (Just decl) Nothing (Just (OpacitySpec name kind (spanFromStart (fileOf st) start st2)))) st2))
+          (parseSignature st1 blockCol True name ds)
+          (\decl, st2 => OkC (Pair (ParsedDecl Nothing (Just decl) Nothing (Just (OpacitySpec name kind (spanFromStart (fileOf st) ds.declStartPos st2)))) st2))
       else
         ps1 st (ExpectedToken "value signature") "value signature"
     PTok (TSym sym) _ =>
@@ -727,23 +744,23 @@ parseOpacityValue kind st blockCol start =
       else
         let
           st1 = advance st
-        in if atSym st1 ":" then Vuna.Compiler.Base.Common.step (parseSignature st1 blockCol True sym start) (\decl, st2 => OkC (Pair (ParsedDecl Nothing (Just decl) Nothing (Just (OpacitySpec sym kind (spanFromStart (fileOf st) start st2)))) st2)) else ps1 st (ExpectedToken "value signature") "value signature"
+        in if atSym st1 ":" then Vuna.Compiler.Base.Common.step (parseSignature st1 blockCol True sym ds) (\decl, st2 => OkC (Pair (ParsedDecl Nothing (Just decl) Nothing (Just (OpacitySpec sym kind (spanFromStart (fileOf st) ds.declStartPos st2)))) st2)) else ps1 st (ExpectedToken "value signature") "value signature"
     _ => ps1 st (ExpectedToken "value signature") "value signature"
 
 -- | `export alias record` / `export boxed record`。
-parseTieredExport : ReprTier -> PState -> Int -> Pos -> Check (Pair ParsedDecl PState)
-parseTieredExport tier st blockCol start =
+parseTieredExport : ReprTier -> PState -> Int -> DeclStart -> Check (Pair ParsedDecl PState)
+parseTieredExport tier st blockCol ds =
   case peekTok (advance st) of
     PTok (TKw "linear") _ =>
       case peekTok (advance (advance st)) of
-        PTok (TKw "record") _ => parseRecordExport True tier (advance (advance st)) blockCol start
+        PTok (TKw "record") _ => parseRecordExport True tier (advance (advance st)) blockCol ds
         _ => ps1 (advance st) (ExpectedToken "record") "record"
-    PTok (TKw "record") _ => parseRecordExport False tier (advance st) blockCol start
+    PTok (TKw "record") _ => parseRecordExport False tier (advance st) blockCol ds
     _ => ps1 (advance st) (ExpectedToken "record") "record"
 
 -- | 导出 `data`：名字/参数后允许成员列表 `(..)` / `(A, B)` / `()`。
-parseDataExport : Bool -> PState -> Int -> Pos -> Check (Pair ParsedDecl PState)
-parseDataExport lin st blockCol start =
+parseDataExport : Bool -> PState -> Int -> DeclStart -> Check (Pair ParsedDecl PState)
+parseDataExport lin st blockCol ds =
   Vuna.Compiler.Base.Common.bind (expectKw st "data") (
       \st1 =>
         Vuna.Compiler.Base.Common.step (expectIdent st1) (
@@ -765,7 +782,7 @@ parseDataExport lin st blockCol start =
                                                         case dv of
                                                           Pair derivings via =>
                                                             let
-                                                              decl = DData name params ty ctors derivings via ReprAuto lin (spanFromStart (fileOf st) start st8)
+                                                              decl = DData name params ty ctors derivings via ReprAuto lin (declRefAt st ds st8)
                                                             in OkC (Pair (ParsedDecl Nothing (Just decl) (Just (ESType name members (declSpan decl))) Nothing) st8)
                                                     )
                                               )
@@ -777,8 +794,8 @@ parseDataExport lin st blockCol start =
           )
     )
 
-parseRecordExport : Bool -> ReprTier -> PState -> Int -> Pos -> Check (Pair ParsedDecl PState)
-parseRecordExport lin tier st blockCol start =
+parseRecordExport : Bool -> ReprTier -> PState -> Int -> DeclStart -> Check (Pair ParsedDecl PState)
+parseRecordExport lin tier st blockCol ds =
   Vuna.Compiler.Base.Common.bind (expectKw st "record") (
       \st1 =>
         Vuna.Compiler.Base.Common.step (expectIdent st1) (
@@ -796,7 +813,7 @@ parseRecordExport lin tier st blockCol start =
                                             case dv of
                                               Pair derivings via =>
                                                 let
-                                                  decl = DRecord name params fields derivings via tier lin (spanFromStart (fileOf st) start st6)
+                                                  decl = DRecord name params fields derivings via tier lin (declRefAt st ds st6)
                                                 in OkC (Pair (ParsedDecl Nothing (Just decl) (Just (ESType name members (declSpan decl))) Nothing) st6)
                                         )
                                   )
@@ -806,8 +823,8 @@ parseRecordExport lin tier st blockCol start =
           )
     )
 
-parseTraitExport : PState -> Int -> Pos -> Check (Pair ParsedDecl PState)
-parseTraitExport st blockCol start =
+parseTraitExport : PState -> Int -> DeclStart -> Check (Pair ParsedDecl PState)
+parseTraitExport st blockCol ds =
   Vuna.Compiler.Base.Common.bind (expectKw st "trait") (
       \st1 =>
         Vuna.Compiler.Base.Common.step (parseTraitHead st1) (
@@ -819,7 +836,7 @@ parseTraitExport st blockCol start =
                           Vuna.Compiler.Base.Common.step (parseMethodSigs st4 blockCol) (
                               \methods, st5 =>
                                 let
-                                  decl = DTrait h.traitHeadName h.traitHeadParams h.traitHeadSupers methods (spanFromStart (fileOf st) start st5)
+                                  decl = DTrait h.traitHeadName h.traitHeadParams h.traitHeadSupers methods (declRefAt st ds st5)
                                 in OkC (Pair (ParsedDecl Nothing (Just decl) (Just (ESType h.traitHeadName members (declSpan decl))) Nothing) st5)
                             )
                       )
@@ -962,64 +979,68 @@ expectOpName st =
 
 -- | 一条声明的建树节点（区间从入口 token 到出口 token）。
 parseDecl : PState -> Int -> Check (Pair Decl PState)
-parseDecl st blockCol = withExtent CstDeclKind st (\st0 => parseDeclBody st0 blockCol)
+parseDecl st blockCol =
+  withExtent
+    CstDeclKind
+    st
+    (\st0 => parseDeclBody st0 blockCol (DeclStart st0.openNodeId (peekPos st0)))
 
-parseDeclBody : PState -> Int -> Check (Pair Decl PState)
-parseDeclBody st blockCol =
+parseDeclBody : PState -> Int -> DeclStart -> Check (Pair Decl PState)
+parseDeclBody st blockCol ds =
   case peekTok st of
-    PTok (TKw "data") p => parseData False st blockCol p
-    PTok (TKw "linear") p => parseLinearDecl st blockCol p
+    PTok (TKw "data") _ => parseData False st blockCol ds
+    PTok (TKw "linear") _ => parseLinearDecl st blockCol ds
     -- 表示档位前缀只允许 record（data 收归位置/求和类型）。
     -- `alias` / `boxed` 是软关键字（只在紧跟 record/linear record 时生效）。
-    PTok (TKw "axiom") p => parseAxiom st blockCol p
-    PTok (TKw "extern") p => parseExtern st blockCol p
-    PTok (TKw "record") p => parseRecord False ReprAuto st blockCol p
-    PTok (TKw "trait") p => parseTrait st blockCol p
-    PTok (TKw "instance") p => parseInstance st blockCol p
+    PTok (TKw "axiom") _ => parseAxiom st blockCol ds
+    PTok (TKw "extern") _ => parseExtern st blockCol ds
+    PTok (TKw "record") _ => parseRecord False ReprAuto st blockCol ds
+    PTok (TKw "trait") _ => parseTrait st blockCol ds
+    PTok (TKw "instance") _ => parseInstance st blockCol ds
     -- 声明位的运算符名：`(==) : ...` / `(<+>) x y = ...`（与 trait 方法 / instance 方法 /
     -- 构造子一致）。裸符号写法（`<+> x y = ...`）同样接受。
-    PTok (TSym "(") p =>
+    PTok (TSym "(") _ =>
       Vuna.Compiler.Base.Common.step
         (expectDeclName st)
-        (\name, st1 => if atSym st1 ":" then parseSignature st1 blockCol True name p else parseClause st1 blockCol name p)
-    PTok (TIdent name) p =>
+        (\name, st1 => if atSym st1 ":" then parseSignature st1 blockCol True name ds else parseClause st1 blockCol name ds)
+    PTok (TIdent name) _ =>
       if name == "alias" && tierFollows st then
-        parseTieredDecl ReprAlias st blockCol p
+        parseTieredDecl ReprAlias st blockCol ds
       else if name == "boxed" && tierFollows st then
-        parseTieredDecl ReprBoxed st blockCol p
+        parseTieredDecl ReprBoxed st blockCol ds
       else
         let
           st1 = advance st
-        in if atSym st1 ":" then parseSignature st1 blockCol True name p else parseClause st1 blockCol name p
+        in if atSym st1 ":" then parseSignature st1 blockCol True name ds else parseClause st1 blockCol name ds
     -- 用户符号名函数（`<+> a b = a + b`）与签名（`<+> : ...`）。
     -- 保留符号（`->` / 反引号 / 语法符号）不是可定义名。
-    PTok (TSym op) p =>
+    PTok (TSym op) _ =>
       if isReservedValueName op then
         ps0 st ExpectedTopLevelDecl
       else
         let
           st1 = advance st
-        in if atSym st1 ":" then parseSignature st1 blockCol True op p else parseClause st1 blockCol op p
+        in if atSym st1 ":" then parseSignature st1 blockCol True op ds else parseClause st1 blockCol op ds
     _ => ps0 st ExpectedTopLevelDecl
 
 -- axiom 声明（D10）：`axiom name : Ty`，无 `=` 体。
 -- 它是无体的可擦除顶层，只在类型层可用（运行时使用由擦除检查拒绝）。
-parseAxiom : PState -> Int -> Pos -> Check (Pair Decl PState)
-parseAxiom st blockCol declStart =
+parseAxiom : PState -> Int -> DeclStart -> Check (Pair Decl PState)
+parseAxiom st blockCol ds =
   Vuna.Compiler.Base.Common.bind
     (expectKw st "axiom")
-    (\st1 => Vuna.Compiler.Base.Common.step (expectIdent st1) (\name, st2 => Vuna.Compiler.Base.Common.bind (expectSym st2 ":") (\st3 => Vuna.Compiler.Base.Common.step (parseExpr (stateFuel st3) st3 blockCol) (\ty, st4 => Vuna.Compiler.Base.Common.bind (rejectCtxSuffix st4) (\st5 => OkC (Pair (DAxiom name ty (spanFromStart (fileOf st) declStart st5)) st5))))))
+    (\st1 => Vuna.Compiler.Base.Common.step (expectIdent st1) (\name, st2 => Vuna.Compiler.Base.Common.bind (expectSym st2 ":") (\st3 => Vuna.Compiler.Base.Common.step (parseExpr (stateFuel st3) st3 blockCol) (\ty, st4 => Vuna.Compiler.Base.Common.bind (rejectCtxSuffix st4) (\st5 => OkC (Pair (DAxiom name ty (declRefAt st ds st5)) st5))))))
 
 -- 受限 FFI 声明 `extern name "c_name" : Ty`（无体）。类型只允许基本类型，
 -- 由 Elab 检查；运行时由包根 `ffi/*.c` 提供，codegen 生成 OCaml `external`。
-parseExtern : PState -> Int -> Pos -> Check (Pair Decl PState)
-parseExtern st blockCol declStart =
+parseExtern : PState -> Int -> DeclStart -> Check (Pair Decl PState)
+parseExtern st blockCol ds =
   Vuna.Compiler.Base.Common.bind (expectKw st "extern") (
       \st1 =>
         Vuna.Compiler.Base.Common.step (expectIdent st1) (
             \name, st2 =>
               case peekTok st2 of
-                PTok (TStr cName) cp => Vuna.Compiler.Base.Common.step (OkC (Pair cName (advance st2))) (\cName2, st3 => Vuna.Compiler.Base.Common.bind (expectSym st3 ":") (\st4 => Vuna.Compiler.Base.Common.step (parseExpr (stateFuel st4) st4 blockCol) (\ty, st5 => Vuna.Compiler.Base.Common.bind (rejectCtxSuffix st5) (\st6 => OkC (Pair (DExtern name cName2 ty (spanFromStart (fileOf st) declStart st6)) st6)))))
+                PTok (TStr cName) cp => Vuna.Compiler.Base.Common.step (OkC (Pair cName (advance st2))) (\cName2, st3 => Vuna.Compiler.Base.Common.bind (expectSym st3 ":") (\st4 => Vuna.Compiler.Base.Common.step (parseExpr (stateFuel st4) st4 blockCol) (\ty, st5 => Vuna.Compiler.Base.Common.bind (rejectCtxSuffix st5) (\st6 => OkC (Pair (DExtern name cName2 ty (declRefAt st ds st6)) st6)))))
                 _ => ps1 st2 (ExpectedToken "string") "string"
           )
     )
@@ -1032,8 +1053,8 @@ rejectCtxSuffix st = if atSym st "=>" then ps0 st ConstraintUnsupportedHere else
 
 -- 顶层签名：`name : [C1 a, C2 b =>] τ`。`allowCtx=False` 供 instance 方法签名复用同一
 -- 解析入口（instance 方法的约束由实例 ctx 提供，签名上写 `=>` 报明确诊断）。
-parseSignature : PState -> Int -> Bool -> String -> Pos -> Check (Pair Decl PState)
-parseSignature st blockCol allowCtx name declStart =
+parseSignature : PState -> Int -> Bool -> String -> DeclStart -> Check (Pair Decl PState)
+parseSignature st blockCol allowCtx name ds =
   Vuna.Compiler.Base.Common.bind (expectSym st ":") (
       \st1 =>
         Vuna.Compiler.Base.Common.step (parseCtxThenExpr (stateFuel st1) st1 blockCol) (
@@ -1041,13 +1062,13 @@ parseSignature st blockCol allowCtx name declStart =
               case hc of
                 Pair ctx ty =>
                   case ctx of
-                    [] => OkC (Pair (DSig name [] ty (spanFromStart (fileOf st) declStart st2)) st2)
-                    _ => if allowCtx then OkC (Pair (DSig name ctx ty (spanFromStart (fileOf st) declStart st2)) st2) else ps0 st1 ConstraintUnsupportedHere
+                    [] => OkC (Pair (DSig name [] ty (declRefAt st ds st2)) st2)
+                    _ => if allowCtx then OkC (Pair (DSig name ctx ty (declRefAt st ds st2)) st2) else ps0 st1 ConstraintUnsupportedHere
           )
     )
 
-parseClause : PState -> Int -> String -> Pos -> Check (Pair Decl PState)
-parseClause st blockCol name declStart =
+parseClause : PState -> Int -> String -> DeclStart -> Check (Pair Decl PState)
+parseClause st blockCol name ds =
   Vuna.Compiler.Base.Common.step (parseClausePatterns (stateFuel st) st blockCol) (
       \pats, st1 =>
         Vuna.Compiler.Base.Common.bind (checkBindersAt st pats) (
@@ -1063,7 +1084,7 @@ parseClause st blockCol name declStart =
                                     case wheres of
                                       [] => body
                                       _ :: _ => ELet wheres body True (spanOf st st4)
-                                in OkC (Pair (DFun name pats body2 (spanFromStart (fileOf st) declStart st4)) st4)
+                                in OkC (Pair (DFun name pats body2 (declRefAt st ds st4)) st4)
                             )
                       )
                 )
@@ -1246,14 +1267,14 @@ parseClausePatterns fuel st blockCol =
   else
     OkC (Pair [] st)
 
--- `lin data ...` / `lin record ...`。`linear` 的位置作为 `declStart`，声明 span 从这里开始。
-parseLinearDecl : PState -> Int -> Pos -> Check (Pair Decl PState)
-parseLinearDecl st blockCol declStart =
+-- `lin data ...` / `lin record ...`。`linear` 的位置作为 `ds`，声明 span 从这里开始。
+parseLinearDecl : PState -> Int -> DeclStart -> Check (Pair Decl PState)
+parseLinearDecl st blockCol ds =
   Vuna.Compiler.Base.Common.bind (expectKw st "linear") (
       \st1 =>
         case peekTok st1 of
-          PTok (TKw "data") _ => parseData True st1 blockCol declStart
-          PTok (TKw "record") _ => parseRecord True ReprAuto st1 blockCol declStart
+          PTok (TKw "data") _ => parseData True st1 blockCol ds
+          PTok (TKw "record") _ => parseRecord True ReprAuto st1 blockCol ds
           _ => ps1 st1 (ExpectedToken "data/record") "data/record"
     )
 
@@ -1270,21 +1291,21 @@ tierFollows st =
     _ => False
 
 -- | `alias record ...` / `boxed record ...`（可再带 `lin`）。
--- 档位前缀的位置作为 `declStart`，声明 span 从这里开始；档位只对 record 有意义（对 data 报错）。
-parseTieredDecl : ReprTier -> PState -> Int -> Pos -> Check (Pair Decl PState)
-parseTieredDecl tier st blockCol declStart =
+-- 档位前缀的位置作为 `ds`，声明 span 从这里开始；档位只对 record 有意义（对 data 报错）。
+parseTieredDecl : ReprTier -> PState -> Int -> DeclStart -> Check (Pair Decl PState)
+parseTieredDecl tier st blockCol ds =
   case peekTok (advance st) of
     PTok (TKw "linear") _ =>
       let
         st1 = advance (advance st)
       in case peekTok st1 of
-        PTok (TKw "record") _ => parseRecord True tier st1 blockCol declStart
+        PTok (TKw "record") _ => parseRecord True tier st1 blockCol ds
         _ => ps1 st1 (ExpectedToken "record") "record"
-    PTok (TKw "record") _ => parseRecord False tier (advance st) blockCol declStart
+    PTok (TKw "record") _ => parseRecord False tier (advance st) blockCol ds
     _ => ps1 (advance st) (ExpectedToken "record") "record"
 
-parseData : Bool -> PState -> Int -> Pos -> Check (Pair Decl PState)
-parseData lin st blockCol declStart =
+parseData : Bool -> PState -> Int -> DeclStart -> Check (Pair Decl PState)
+parseData lin st blockCol ds =
   Vuna.Compiler.Base.Common.bind (expectKw st "data") (
       \st1 =>
         Vuna.Compiler.Base.Common.step (expectIdent st1) (
@@ -1302,7 +1323,7 @@ parseData lin st blockCol declStart =
                                             Vuna.Compiler.Base.Common.step (parseDeriving st7) (
                                                 \dv, st8 =>
                                                   case dv of
-                                                    Pair derivings via => OkC (Pair (DData name params ty ctors derivings via ReprAuto lin (spanFromStart (fileOf st) declStart st8)) st8)
+                                                    Pair derivings via => OkC (Pair (DData name params ty ctors derivings via ReprAuto lin (declRefAt st ds st8)) st8)
                                               )
                                         )
                                   )
@@ -1314,8 +1335,8 @@ parseData lin st blockCol declStart =
 
 -- 记录声明：`record Name params where` + 缩进字段 `f : Ty`，可跟 deriving。
 -- 第二参数是表示档位（`alias`/`boxed` 前缀给出，缺省 `ReprAuto`）。
-parseRecord : Bool -> ReprTier -> PState -> Int -> Pos -> Check (Pair Decl PState)
-parseRecord lin tier st blockCol declStart =
+parseRecord : Bool -> ReprTier -> PState -> Int -> DeclStart -> Check (Pair Decl PState)
+parseRecord lin tier st blockCol ds =
   Vuna.Compiler.Base.Common.bind (expectKw st "record") (
       \st1 =>
         Vuna.Compiler.Base.Common.step (expectIdent st1) (
@@ -1329,7 +1350,7 @@ parseRecord lin tier st blockCol declStart =
                                 Vuna.Compiler.Base.Common.step (parseDeriving st5) (
                                     \dv, st6 =>
                                       case dv of
-                                        Pair derivings via => OkC (Pair (DRecord name params fields derivings via tier lin (spanFromStart (fileOf st) declStart st6)) st6)
+                                        Pair derivings via => OkC (Pair (DRecord name params fields derivings via tier lin (declRefAt st ds st6)) st6)
                                   )
                             )
                       )
@@ -1402,8 +1423,8 @@ parseDerivingNames fuel st =
 
 -- trait 声明：`trait [supers =>] Name params where` + 缩进方法签名 `m : Ty`。
 -- 多参数 trait 参数可带显式 kind：`trait C (a : Type) (r : Row)`（裸参数仍支持）。
-parseTrait : PState -> Int -> Pos -> Check (Pair Decl PState)
-parseTrait st blockCol declStart =
+parseTrait : PState -> Int -> DeclStart -> Check (Pair Decl PState)
+parseTrait st blockCol ds =
   Vuna.Compiler.Base.Common.bind (expectKw st "trait") (
       \st1 =>
         Vuna.Compiler.Base.Common.step (parseTraitHead st1) (
@@ -1413,7 +1434,7 @@ parseTrait st blockCol declStart =
                     Vuna.Compiler.Base.Common.step (parseMethodSigs st3 blockCol) (
                         \methods, st4 =>
                           let
-                            decl = DTrait h.traitHeadName h.traitHeadParams h.traitHeadSupers methods (spanFromStart (fileOf st) declStart st4)
+                            decl = DTrait h.traitHeadName h.traitHeadParams h.traitHeadSupers methods (declRefAt st ds st4)
                           in OkC (Pair decl st4)
                       )
                 )
@@ -1462,22 +1483,22 @@ parseMethodSigBody st methodCol =
 -- instance 声明：`instance [<ctx> ,... =>] Head where` + 缩进方法定义。
 -- ctx 是逗号分隔的字典约束（每个形如 `C arg`；只支持单参数 trait）。
 -- 实例头与顶层签名共用「[ctx , ... =>] expr」解析（ctx 为空 = 无约束）。
-parseInstance : PState -> Int -> Pos -> Check (Pair Decl PState)
-parseInstance st blockCol declStart =
+parseInstance : PState -> Int -> DeclStart -> Check (Pair Decl PState)
+parseInstance st blockCol ds =
   Vuna.Compiler.Base.Common.bind (expectKw st "instance") (
       \st1 =>
         Vuna.Compiler.Base.Common.step (parseCtxThenExpr (stateFuel st1) st1 blockCol) (
             \hc, st2 =>
               case hc of
-                Pair ctxE head => parseInstanceTail ctxE head st blockCol declStart st2
+                Pair ctxE head => parseInstanceTail ctxE head st blockCol ds st2
           )
     )
 
-parseInstanceTail : List Expr -> Expr -> PState -> Int -> Pos -> PState -> Check (Pair Decl PState)
-parseInstanceTail ctxE head st blockCol declStart st2 =
+parseInstanceTail : List Expr -> Expr -> PState -> Int -> DeclStart -> PState -> Check (Pair Decl PState)
+parseInstanceTail ctxE head st blockCol ds st2 =
   Vuna.Compiler.Base.Common.bind
     (expectKw st2 "where")
-    (\st3 => Vuna.Compiler.Base.Common.step (parseInstanceBody st3 blockCol) (\methods, st4 => OkC (Pair (DInstance ctxE head methods (spanFromStart (fileOf st) declStart st4)) st4)))
+    (\st3 => Vuna.Compiler.Base.Common.step (parseInstanceBody st3 blockCol) (\methods, st4 => OkC (Pair (DInstance ctxE head methods (declRefAt st ds st4)) st4)))
 
 parseCtxThenExpr : Int -> PState -> Int -> Check (Pair (Pair (List Expr) Expr) PState)
 parseCtxThenExpr fuel st blockCol =
@@ -1539,16 +1560,19 @@ parseInstanceDeclList fuel st declCol =
 parseInstanceDecl : PState -> Int -> Check (Pair Decl PState)
 parseInstanceDecl st blockCol =
   if instanceMethodStart st then
-    withExtent CstDeclKind st (\st0 => parseInstanceDeclBody st0 blockCol)
+    withExtent
+      CstDeclKind
+      st
+      (\st0 => parseInstanceDeclBody st0 blockCol (DeclStart st0.openNodeId (peekPos st0)))
   else
     ps0 st ExpectedInstanceMethod
 
-parseInstanceDeclBody : PState -> Int -> Check (Pair Decl PState)
-parseInstanceDeclBody st blockCol =
+parseInstanceDeclBody : PState -> Int -> DeclStart -> Check (Pair Decl PState)
+parseInstanceDeclBody st blockCol ds =
   if instanceMethodStart st then
     Vuna.Compiler.Base.Common.step
       (expectDeclName st)
-      (\name, st1 => if atSym st1 ":" then parseSignature st1 blockCol False name (peekPos st) else parseClause st1 blockCol name (peekPos st))
+      (\name, st1 => if atSym st1 ":" then parseSignature st1 blockCol False name ds else parseClause st1 blockCol name ds)
   else
     ps0 st ExpectedInstanceMethod
 

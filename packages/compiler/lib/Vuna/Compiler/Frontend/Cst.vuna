@@ -443,8 +443,9 @@ cstKindTag CstDoStmtKind = "doStmt"
 -- 就是第二套布局语义，会静默漂移。所以区间由 parser 的递归栈配对发出，
 -- 本模块只做一遍线性组装。
 export data NodeEvent(..) : Type where
-  -- | 在 token 下标 `at` 打开节点：起点是第 `at` 个 token 的起点。
-  EvOpen : CstKind -> Int -> NodeEvent
+  -- | 在 token 下标 `at` 打开节点 `nid`：起点是第 `at` 个 token 的起点。
+  -- `nid` 由 parser 分配（文件根 0，其余按 `withExtent` 打开顺序递增），AST 侧存的是同一个值。
+  EvOpen : CstKind -> Int -> Int -> NodeEvent
   -- | 关闭最近一个打开的节点：终点是 token 下标（半开，`at` = 最后一个成员之后）。
   EvClose : Int -> NodeEvent
 
@@ -531,32 +532,27 @@ closeAllFrames fuel frames =
 
 -- | 事件携带的 token 下标。
 eventIndex : NodeEvent -> Int
-eventIndex (EvOpen _ at) = at
+eventIndex (EvOpen _ at _) = at
 eventIndex (EvClose at) = at
 
--- | 遍历事件流：`live` 是尚未并入树的 token，`cursor` 是已并入的个数，`nextId` 是
--- 下一个分支节点的先序 id；事件里的下标是**绝对** token 下标，所以每个事件先并入
--- `at - cursor` 个叶，再把 `live` / `cursor` 前推，最后开 / 关帧。`frames` 的栈底恒为
--- 文件根，未被任何区间覆盖的 token（解析恢复跳过的区段、文件末尾 trivia）因此留在根上，
--- 不丢字节。区间由 parser 的递归栈配对，事件流天然真嵌套；本函数不做合法性修补。
-nestEvents : List CstToken -> Int -> Int -> List NestFrame -> List NodeEvent -> List NestFrame
-nestEvents live cursor nextId frames [] =
+-- | 遍历事件流：`live` 是尚未并入树的 token，`cursor` 是已并入的个数；事件里的下标是
+-- **绝对** token 下标，所以每个事件先并入 `at - cursor` 个叶，再把 `live` / `cursor` 前推，
+-- 最后开 / 关帧。`frames` 的栈底恒为文件根，未被任何区间覆盖的 token（解析恢复跳过的
+-- 区段、文件末尾 trivia）因此留在根上，不丢字节。区间与节点 id 都由 parser 的递归栈给出，
+-- 事件流天然真嵌套；本函数不做合法性修补。
+nestEvents : List CstToken -> Int -> List NestFrame -> List NodeEvent -> List NestFrame
+nestEvents live cursor frames [] =
   closeAllFrames (nestFrameCount frames + 1) (pushLeaves (map (\t => CstLeaf t) live) frames)
-nestEvents live cursor nextId frames (ev :: rest) =
+nestEvents live cursor frames (ev :: rest) =
   let
     at = eventIndex ev
     n = at - cursor
     live2 = drop n live
     frames1 = pushLeaves (map (\t => CstLeaf t) (take n live)) frames
   in case ev of
-    EvOpen kind _ =>
-      nestEvents
-        live2
-        at
-        (nextId + 1)
-        (NestFrame kind nextId (headSpan degenerateSpan live2) [] :: frames1)
-        rest
-    EvClose _ => nestEvents live2 at nextId (closeTopFrame frames1) rest
+    EvOpen kind _ nid =>
+      nestEvents live2 at (NestFrame kind nid (headSpan degenerateSpan live2) [] :: frames1) rest
+    EvClose _ => nestEvents live2 at (closeTopFrame frames1) rest
 
 -- | 根帧收尾：children 反转成源码顺序，span 用整份 token 流。
 finishRoot : Span -> List NestFrame -> CstNode
@@ -580,7 +576,7 @@ export nestToTree : List CstToken -> List NodeEvent -> CstNode
 nestToTree toks events =
   let
     root = NestFrame CstFileKind 0 (headSpan degenerateSpan toks) []
-    frames = nestEvents toks 0 1 [root] events
+    frames = nestEvents toks 0 [root] events
     sp = tokensSpan toks
   in finishRoot sp frames
 

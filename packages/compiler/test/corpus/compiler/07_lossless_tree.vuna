@@ -59,7 +59,13 @@ sample =
     ++ "hidden = 7\n"
     ++ "export opaque sealed : Int\n"
     ++ "sealed = 8\n"
-    ++ "opaque blind : Int\n" ++ "blind = 9\n" ++ "export data E : Type where\n" ++ "  MkE : E\n"
+    ++ "opaque blind : Int\n"
+    ++ "blind = 9\n"
+    ++ "export data E : Type where\n"
+    ++ "  MkE : E\n"
+    ++ "\n"
+    ++ "-- instance 体的方法也是 decl 节点（自己的 id）\n"
+    ++ "instance Show Int where\n" ++ "  show n = show n\n"
 
 -- | 相邻兄弟按源码顺序：前一个的终点不晚于后一个的起点。
 orderedKids : List CstNode -> Bool
@@ -134,7 +140,20 @@ declsAlign : List CstNode -> List Decl -> Bool
 declsAlign [] [] = True
 declsAlign [] (_ :: _) = False
 declsAlign (_ :: _) [] = False
-declsAlign (n :: nodes) (d :: decls) = sameSpan (nodeSpan n) (declSpan d) && declsAlign nodes decls
+declsAlign (n :: nodes) (d :: decls) =
+  nodeId n
+    == Just (nodeRefId (declRef d))
+    && sameSpan (nodeSpan n) (nodeRefSpan (declRef d)) && declsAlign nodes decls
+
+-- | 反向：声明 id 在树索引里指回同一个节点（身份 → 节点，而不是只有节点 → 身份）。
+declRefsInIndex : HashMap Int CstNode -> List Decl -> Bool
+declRefsInIndex index [] = True
+declRefsInIndex index (d :: rest) =
+  case HashMap.lookup (nodeRefId (declRef d)) index of
+    Nothing => False
+    Just n =>
+      nodeKindTag n
+        == "decl" && sameSpan (nodeSpan n) (nodeRefSpan (declRef d)) && declRefsInIndex index rest
 
 -- | 树里的顶层 `import` 节点与 AST 的 import 一一对应：同样多、同样顺序、同一起点。
 importsAlign : List CstNode -> List Import -> Bool
@@ -253,4 +272,6 @@ main =
             256
           else
             0
-        ) + (if noHeaderDeclIds then 512 else 0)
+        )
+        + (if noHeaderDeclIds then 512 else 0)
+        + (if declRefsInIndex (nodeIndex tree) p.parsedFile.sourceFileDecls then 2048 else 0)

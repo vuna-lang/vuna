@@ -395,24 +395,24 @@ methodPositions lines kind name m =
 declPositions : List String -> String -> String -> Decl -> List (Pair Int Int)
 declPositions lines kind name (DData n params k ctors derivings viaField repr lin sp) =
   append
-    (if kindMatches kind "data" && n == name then firstInSpanOf lines sp name else [])
+    (if kindMatches kind "data" && n == name then firstInSpanOf lines (nodeRefSpan sp) name else [])
     (concatMap (ctorPositions lines kind name) ctors)
 declPositions lines kind name (DRecord n params fields derivings viaField repr lin sp) =
   append
-    (if kindMatches kind "record" && n == name then firstInSpanOf lines sp name else [])
+    (if kindMatches kind "record" && n == name then firstInSpanOf lines (nodeRefSpan sp) name else [])
     (concatMap (fieldPositions lines kind name) fields)
 declPositions lines kind name (DTrait n params supers methods sp) =
   append
-    (if kindMatches kind "trait" && n == name then firstInSpanOf lines sp name else [])
+    (if kindMatches kind "trait" && n == name then firstInSpanOf lines (nodeRefSpan sp) name else [])
     (concatMap (methodPositions lines kind name) methods)
 declPositions lines kind name (DSig n ctx ty sp) =
-  if kindMatches kind "fun" && n == name then firstInSpanOf lines sp name else []
+  if kindMatches kind "fun" && n == name then firstInSpanOf lines (nodeRefSpan sp) name else []
 declPositions lines kind name (DFun n pats body sp) =
-  if kindMatches kind "fun" && n == name then firstInSpanOf lines sp name else []
+  if kindMatches kind "fun" && n == name then firstInSpanOf lines (nodeRefSpan sp) name else []
 declPositions lines kind name (DAxiom n ty sp) =
-  if kindMatches kind "axiom" && n == name then firstInSpanOf lines sp name else []
+  if kindMatches kind "axiom" && n == name then firstInSpanOf lines (nodeRefSpan sp) name else []
 declPositions lines kind name (DExtern n cName ty sp) =
-  if kindMatches kind "extern" && n == name then firstInSpanOf lines sp name else []
+  if kindMatches kind "extern" && n == name then firstInSpanOf lines (nodeRefSpan sp) name else []
 declPositions lines kind name (DInstance ctxE head methods sp) = []
 
 -- | 内部：该种类能否出现在导出列表里（构造子 / 字段 / 方法不单独导出）。

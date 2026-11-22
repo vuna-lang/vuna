@@ -72,15 +72,17 @@ targetsOfDecls (d :: rest) = append (targetsOfDecl d) (targetsOfDecls rest)
 -- | 一个声明的目标：`data` / `record` / `trait` 连同成员，其余声明一个顶层目标，`instance` 不产生目标。
 targetsOfDecl : Decl -> List DocTarget
 targetsOfDecl (DData name params kind ctors derivings viaField repr lin sp) =
-  DocTarget (spanStartLine sp) 1 "decl" name "" :: ctorTargets name ctors
+  DocTarget (spanStartLine (nodeRefSpan sp)) 1 "decl" name "" :: ctorTargets name ctors
 targetsOfDecl (DRecord name params fields derivings viaField repr lin sp) =
-  DocTarget (spanStartLine sp) 1 "decl" name "" :: fieldTargets name fields
+  DocTarget (spanStartLine (nodeRefSpan sp)) 1 "decl" name "" :: fieldTargets name fields
 targetsOfDecl (DTrait name params supers methods sp) =
-  DocTarget (spanStartLine sp) 1 "decl" name "" :: methodTargets name methods
-targetsOfDecl (DSig name ctx ty sp) = [DocTarget (spanStartLine sp) 1 "decl" name ""]
-targetsOfDecl (DFun name pats body sp) = [DocTarget (spanStartLine sp) 1 "decl" name ""]
-targetsOfDecl (DAxiom name ty sp) = [DocTarget (spanStartLine sp) 1 "decl" name ""]
-targetsOfDecl (DExtern name cName ty sp) = [DocTarget (spanStartLine sp) 1 "decl" name ""]
+  DocTarget (spanStartLine (nodeRefSpan sp)) 1 "decl" name "" :: methodTargets name methods
+targetsOfDecl (DSig name ctx ty sp) = [DocTarget (spanStartLine (nodeRefSpan sp)) 1 "decl" name ""]
+targetsOfDecl (DFun name pats body sp) =
+  [DocTarget (spanStartLine (nodeRefSpan sp)) 1 "decl" name ""]
+targetsOfDecl (DAxiom name ty sp) = [DocTarget (spanStartLine (nodeRefSpan sp)) 1 "decl" name ""]
+targetsOfDecl (DExtern name cName ty sp) =
+  [DocTarget (spanStartLine (nodeRefSpan sp)) 1 "decl" name ""]
 targetsOfDecl (DInstance ctxE head methods sp) = []
 
 -- | 内部：把 `data` 的构造子展开成成员目标。

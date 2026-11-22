@@ -13,7 +13,7 @@ deepTokens i n = if n <= 0 then [] else tokenAtLine i :: deepTokens (i + 1) (n -
 
 -- 每行开一层 block，最后一层在最后一行关闭：深度 = 4100。
 deepEvents : Int -> Int -> List NodeEvent
-deepEvents i n = if n <= 0 then [] else EvOpen CstDeclKind (i - 1) :: deepEvents (i + 1) (n - 1)
+deepEvents i n = if n <= 0 then [] else EvOpen CstDeclKind (i - 1) i :: deepEvents (i + 1) (n - 1)
 
 closingEvents : Int -> List NodeEvent
 closingEvents n = if n <= 0 then [] else EvClose 4100 :: closingEvents (n - 1)

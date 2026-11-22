@@ -430,7 +430,7 @@ ofDecls decls = map (ofDecl []) decls
 
 -- | 单条声明。
 export ofDecl : List String -> Ast.Decl -> Decl
-ofDecl scope (Ast.DData name params kind ctors derivings via repr lin sp) =
+ofDecl scope (Ast.DData name params kind ctors derivings via repr lin r) =
   DData
     name
     params
@@ -440,17 +440,26 @@ ofDecl scope (Ast.DData name params kind ctors derivings via repr lin sp) =
     via
     repr
     lin
-    sp
-ofDecl scope (Ast.DAxiom name ty sp) = DAxiom name (ofExpr scope ty) sp
-ofDecl scope (Ast.DExtern name cName ty sp) = DExtern name cName (ofExpr scope ty) sp
-ofDecl scope (Ast.DSig name ctx ty sp) = DSig name (map (ofExpr scope) ctx) (ofExpr scope ty) sp
-ofDecl scope (Ast.DFun name pats body sp) =
+    (nodeRefSpan r)
+ofDecl scope (Ast.DAxiom name ty r) = DAxiom name (ofExpr scope ty) (nodeRefSpan r)
+ofDecl scope (Ast.DExtern name cName ty r) = DExtern name cName (ofExpr scope ty) (nodeRefSpan r)
+ofDecl scope (Ast.DSig name ctx ty r) =
+  DSig name (map (ofExpr scope) ctx) (ofExpr scope ty) (nodeRefSpan r)
+ofDecl scope (Ast.DFun name pats body r) =
   let
     bound = append (bindersOfPats pats) scope
-  in DFun name (map (ofPat scope) pats) (ofExpr bound body) sp
-ofDecl scope (Ast.DRecord name params fields derivings via repr lin sp) =
-  DRecord name params (map (ofField (append params scope)) fields) derivings via repr lin sp
-ofDecl scope (Ast.DTrait name params supers methods sp) =
+  in DFun name (map (ofPat scope) pats) (ofExpr bound body) (nodeRefSpan r)
+ofDecl scope (Ast.DRecord name params fields derivings via repr lin r) =
+  DRecord
+    name
+    params
+    (map (ofField (append params scope)) fields)
+    derivings
+    via
+    repr
+    lin
+    (nodeRefSpan r)
+ofDecl scope (Ast.DTrait name params supers methods r) =
   let
     bound = append (map astTraitParamName params) scope
   in DTrait
@@ -458,9 +467,13 @@ ofDecl scope (Ast.DTrait name params supers methods sp) =
     (map (ofTraitParam bound) params)
     (map (ofExpr bound) supers)
     (map (ofTraitMethod bound) methods)
-    sp
-ofDecl scope (Ast.DInstance ctx head methods sp) =
-  DInstance (map (ofExpr scope) ctx) (ofExpr scope head) (map (ofDecl scope) methods) sp
+    (nodeRefSpan r)
+ofDecl scope (Ast.DInstance ctx head methods r) =
+  DInstance
+    (map (ofExpr scope) ctx)
+    (ofExpr scope head)
+    (map (ofDecl scope) methods)
+    (nodeRefSpan r)
 
 ofCtor : List String -> Ast.Ctor -> Ctor
 ofCtor scope (Ast.Ctor name ty arity sp) = Ctor name (ofExpr scope ty) arity sp
