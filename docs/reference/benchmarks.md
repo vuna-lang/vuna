@@ -410,3 +410,39 @@ wasm 删掉 wat 机器后连纯程序也小了 ~4%。上表 native 两列是「�
 重标：`VUNA=$PWD/result/bin/vuna ./bench/run.sh --target all --runs 5 --warmup 2 --json bench/baselines/programs.json`。
 复杂度契约见 [stdlib.md](stdlib.md)「容器复杂度契约」；增长形状由
 `checks.vuna-container-growth` 在 CI 里守（每翻倍 ≤3.0×）。
+
+### 1.6 机制分层（T0–T9）
+
+用例按机制归到 `bench/programs/t<N>/`，清单与新增规则见
+[`bench/programs/TIERS.md`](../../bench/programs/TIERS.md)。tier 是累积的：诊断从 T0 往上走，
+**第一个不达标的 tier 就是问题所在**。三端同窗口：`vuna`（native）、`vuna_ocaml`
+（vuna 源码走 OCaml 后端）、`ml`（手写 OCaml）、`c`（手写 C，同形；N 从 argv 读）。
+
+本机一档（`--target both --tier t0 --tier t1 --runs 5 --warmup 2`，loadavg 1.21；
+`ns/op` 是 `median_ms × 1e6 / ops`，绝对 ms 只同机可比）：
+
+| 用例 | tier | native ms | native ns/op | native vs c | native vs ml | vuna_ocaml vs c | vuna_ocaml vs ml |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| entry_pure | t0 | 0.66 | - | 0.36x | 0.25x | 1.03x | 0.73x |
+| entry_effect | t0 | 0.62 | - | - | 0.22x | - | 0.65x |
+| startup | t0 | 0.69 | - | - | 0.23x | - | 0.65x |
+| arith | t1 | 7.02 | 2.34 | 1.12x | 1.34x | 0.91x | 1.10x |
+| float_math | t1 | 9.15 | - | - | 1.29x | - | 1.87x |
+| nat_bits | t1 | 6.66 | - | - | 2.48x | - | 1.85x |
+| scalar_xor | t1 | 51.74 | 2.59 | 4.99x | 4.27x | 1.24x | 1.06x |
+| scalar_muladd | t1 | 58.19 | 2.91 | 2.63x | 2.42x | 1.11x | 1.02x |
+| scalar_divconst | t1 | 52.41 | 2.62 | 5.11x | 3.32x | 1.64x | 1.06x |
+
+几何平均：**t0 native 0.36x c / 0.23x ml；t1 native 2.94x c / 2.30x ml；t1 vuna_ocaml 1.20x c / 1.28x ml**。
+新增用例的条目在 `programs.json` 下一次重标时写入；在那之前 `--check` 会把它们报成 `new`。
+
+读法：
+
+- **地板不是问题**：T0 上 native 比手写 OCaml 快 4 倍、比裸 syscall 的 C 还快（`entry_pure` 0.36x）。
+  入口初始化与产物尺寸不在差距里。
+- **T1 的差距是每轮固定成本，不是算术量**：`scalar_xor`（2e7 轮）与 `arith`（3e6 轮、每轮多两次
+  乘除）的 native `ns/op` 都在 2.3–2.6，说明每轮约 2 ns 被固定开销吃掉——63-bit wrap
+  （`op; shl; sar`）与每个 binder 一个栈槽。C 的同一项是 0.5 ns。
+- **OCaml 后端在标量环上比 native 快 4 倍**（`scalar_xor` 12.9 vs 51.7 ms）：
+  ocamlopt 把环变量放进寄存器，native 不做寄存器分配。这一列是 native 后端的直接对照。
+- 结论按 tier 切断：T0 达标；T1 的 2.9x 全部来自表示与寄存器分配，与 GC、闭包、效应无关。
