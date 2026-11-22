@@ -3,6 +3,7 @@
 -- 这是 D18「parser 发射无损树」的第一条等价证据：树的区间来自 parser 的递归点
 -- （`NodeEvent`），而不是从缩进或括号反推；AST 与 canonical 编码在这一步不变。
 import Prelude
+import Base.Container.HashMap as HashMap
 import Base.Data.List as List
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Ast
@@ -81,7 +82,7 @@ kidsInside sp (k :: rest) =
 -- | 递归：每个分支的 children 有序、都在自己的区间里，且自身也被父层检查过。
 nestedOk : CstNode -> Bool
 nestedOk (CstLeaf _) = True
-nestedOk (CstBranch _ sp kids) =
+nestedOk (CstBranch _ _ sp kids) =
   orderedKids kids && kidsInside sp kids && List.length kids > 0 && nestedAll kids
 
 nestedAll : List CstNode -> Bool
@@ -97,7 +98,7 @@ kindTagsAt fuel n =
   else
     case n of
       CstLeaf _ => []
-      CstBranch _ _ kids => nodeKindTag n :: concatMap (kindTagsAt (fuel - 1)) kids
+      CstBranch _ _ _ kids => nodeKindTag n :: concatMap (kindTagsAt (fuel - 1)) kids
 
 -- | 每层至少 1 个 token，所以 token 数是树高的安全上界。
 kindTags : List CstToken -> CstNode -> List String
@@ -143,6 +144,65 @@ importsAlign (_ :: _) [] = False
 importsAlign (n :: nodes) (i :: imports) =
   sameStart (nodeSpan n) i.importSpan && importsAlign nodes imports
 
+-- | 先序的分支 id 序列（含文件根）。
+nodeIds : CstNode -> List Int
+nodeIds (CstLeaf _) = []
+nodeIds (CstBranch _ nid _ kids) = nid :: concatMap nodeIds kids
+
+-- | `from` 起的连续序列。
+idsFrom : Int -> List Int -> Bool
+idsFrom n [] = True
+idsFrom n (x :: rest) = x == n && idsFrom (n + 1) rest
+
+-- | id 恰好是 0..n-1：先序分配、没有洞也没有重复。
+idsContiguous : CstNode -> Bool
+idsContiguous tree =
+  case nodeIds tree of
+    [] => False
+    x :: rest => x == 0 && idsFrom 1 rest
+
+-- | 声明的起点偏移解析到唯一 id，且该节点的 kind / 区间与 AST 一致。
+declIdOk : HashMap Int Int -> HashMap Int CstNode -> Decl -> Bool
+declIdOk offsets index d =
+  case HashMap.lookup (spanStartOffset (declSpan d)) offsets of
+    Nothing => False
+    Just nid =>
+      case HashMap.lookup nid index of
+        Nothing => False
+        Just n => nodeKindTag n == "decl" && sameSpan (nodeSpan n) (declSpan d)
+
+declIdsOk : HashMap Int Int -> HashMap Int CstNode -> List Decl -> Bool
+declIdsOk offsets index [] = True
+declIdsOk offsets index (d :: rest) = declIdOk offsets index d && declIdsOk offsets index rest
+
+-- | import 的起点偏移解析到 import 节点（重导出尾在 `importSpan` 之外，只比起点）。
+importIdOk : HashMap Int Int -> HashMap Int CstNode -> Import -> Bool
+importIdOk offsets index i =
+  case HashMap.lookup (spanStartOffset i.importSpan) offsets of
+    Nothing => False
+    Just nid =>
+      case HashMap.lookup nid index of
+        Nothing => False
+        Just n => nodeKindTag n == "import" && sameStart (nodeSpan n) i.importSpan
+
+importIdsOk : HashMap Int Int -> HashMap Int CstNode -> List Import -> Bool
+importIdsOk offsets index [] = True
+importIdsOk offsets index (i :: rest) = importIdOk offsets index i && importIdsOk offsets index rest
+
+-- 没有模块头时首个声明从字节 0 开始：身份索引必须跳过文件根，否则偏移 0 会被根占住。
+noHeader : String
+noHeader = "f : Int\nf = 1\n"
+
+noHeaderDeclIds : Bool
+noHeaderDeclIds =
+  case parseSourceDetailed "<noheader>" noHeader of
+    ErrC _ => False
+    OkC p =>
+      let
+        toks = lexTokensOf noHeader p.parsedRawToks p.parsedComments
+        tree = nestToTree toks p.parsedEvents
+      in declIdsOk (nodeIdAtOffset tree) (nodeIndex tree) p.parsedFile.sourceFileDecls
+
 -- | 每种结构都得真的建出来了：只靠「根是 file」会放过把 token 全平铺在根上的实现。
 hasKinds : List String -> Bool
 hasKinds tags =
@@ -181,3 +241,16 @@ main =
           else
             0
         )
+        + (if idsContiguous tree then 64 else 0)
+        + (
+          if declIdsOk (nodeIdAtOffset tree) (nodeIndex tree) p.parsedFile.sourceFileDecls then
+            128
+          else
+            0
+        )
+        + (
+          if importIdsOk (nodeIdAtOffset tree) (nodeIndex tree) p.parsedFile.sourceFileImports then
+            256
+          else
+            0
+        ) + (if noHeaderDeclIds then 512 else 0)

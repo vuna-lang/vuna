@@ -35,6 +35,7 @@ module Vuna.Compiler.Frontend.Cst where
 --
 -- 位置约定与 lexer 一致：行、列从 1 开始，列 = UTF-8 字节（`strUnpack` 给字节）。
 -- 本模块的 span 文件字段统一为 `""`，由调用方在需要时注入真实路径。
+import Base.Container.HashMap as HashMap
 import Base.Data.Bool as Bool
 import Base.Data.List as List
 import Base.Data.Maybe as Maybe
@@ -374,38 +375,47 @@ export data CstKind(..) : Type where
   -- | `do` 块里的一条语句。
   CstDoStmtKind : CstKind
 
--- | 节点：叶是 token，分支是 kind + span + 有序 children。
+-- | 节点：叶是 token，分支是 kind + id + span + 有序 children。
+--
+-- 分支的 id 是**先序序号**（文件根 = 0，按 parser 的 `withExtent` 打开顺序递增），
+-- 它是节点的身份：span 可以被改写（宏展开、编辑），id 在一次解析内不变。叶节点
+-- 没有身份（它们的位置由所属分支与 token 流给出）。
 export data CstNode(..) : Type where
   -- | 叶：一个 token（含其前置 trivia）。
   CstLeaf : CstToken -> CstNode
-  -- | 分支：kind / span / 按源码顺序排列的 children。
-  CstBranch : CstKind -> Span -> List CstNode -> CstNode
+  -- | 分支：kind / 节点 id / span / 按源码顺序排列的 children。
+  CstBranch : CstKind -> Int -> Span -> List CstNode -> CstNode
 
 -- | 节点的 span（叶取 token span）。
 export nodeSpan : CstNode -> Span
 nodeSpan (CstLeaf t) = t.cstSpan
-nodeSpan (CstBranch _ sp _) = sp
+nodeSpan (CstBranch _ _ sp _) = sp
+
+-- | 分支节点的 id；叶节点没有身份。
+export nodeId : CstNode -> Maybe Int
+nodeId (CstLeaf _) = Nothing
+nodeId (CstBranch _ nid _ _) = Just nid
 
 -- | 节点的 kind；叶节点给 `Nothing`。
 export nodeKind : CstNode -> Maybe CstKind
 nodeKind (CstLeaf _) = Nothing
-nodeKind (CstBranch k _ _) = Just k
+nodeKind (CstBranch k _ _ _) = Just k
 
 -- | 节点的 children；叶节点为空列表。
 export nodeChildren : CstNode -> List CstNode
 nodeChildren (CstLeaf _) = []
-nodeChildren (CstBranch _ _ kids) = kids
+nodeChildren (CstBranch _ _ _ kids) = kids
 
 -- | 叶 token；分支给 `Nothing`。
 export nodeToken : CstNode -> Maybe CstToken
 nodeToken (CstLeaf t) = Just t
-nodeToken (CstBranch _ _ _) = Nothing
+nodeToken (CstBranch _ _ _ _) = Nothing
 
 -- | 节点种类的短名（叶为 `"leaf"`）；工具侧做结构断言与 dump 时不需要对
 -- `CstKind` 自建相等。
 export nodeKindTag : CstNode -> String
 nodeKindTag (CstLeaf _) = "leaf"
-nodeKindTag (CstBranch k _ _) = cstKindTag k
+nodeKindTag (CstBranch k _ _ _) = cstKindTag k
 
 export cstKindTag : CstKind -> String
 cstKindTag CstFileKind = "file"
@@ -438,9 +448,10 @@ export data NodeEvent(..) : Type where
   -- | 关闭最近一个打开的节点：终点是 token 下标（半开，`at` = 最后一个成员之后）。
   EvClose : Int -> NodeEvent
 
--- | 建树时的打开帧：kind + 起点 span + children（逆序累积）。
+-- | 建树时的打开帧：kind + id + 起点 span + children（逆序累积）。
 record NestFrame where
   nfKind : CstKind
+  nfId : Int
   nfStart : Span
   nfKids : List CstNode
 
@@ -480,17 +491,17 @@ finishFrame f =
   let
     kids = reverse f.nfKids
     endSp = lastSpanOf f.nfStart kids
-  in CstBranch f.nfKind (spanFrom f.nfStart endSp) kids
+  in CstBranch f.nfKind f.nfId (spanFrom f.nfStart endSp) kids
 
 -- | 叶节点并进栈顶帧（栈为空时丢弃：框架外的事件由收尾统一处理）。
 pushLeaves : List CstNode -> List NestFrame -> List NestFrame
 pushLeaves nodes [] = []
 pushLeaves nodes (f :: rest) =
-  NestFrame f.nfKind f.nfStart (append (reverse nodes) f.nfKids) :: rest
+  NestFrame f.nfKind f.nfId f.nfStart (append (reverse nodes) f.nfKids) :: rest
 
 -- | 子节点并进单个帧。
 pushInto : CstNode -> NestFrame -> NestFrame
-pushInto node f = NestFrame f.nfKind f.nfStart (node :: f.nfKids)
+pushInto node f = NestFrame f.nfKind f.nfId f.nfStart (node :: f.nfKids)
 
 -- | 子节点并进栈顶帧。
 pushNode : CstNode -> List NestFrame -> List NestFrame
@@ -523,15 +534,15 @@ eventIndex : NodeEvent -> Int
 eventIndex (EvOpen _ at) = at
 eventIndex (EvClose at) = at
 
--- | 遍历事件流：`live` 是尚未并入树的 token，`cursor` 是已并入的个数；事件里的下标是
--- **绝对** token 下标，所以每个事件先并入 `at - cursor` 个叶，再把 `live` / `cursor` 前推，
--- 最后开 / 关帧。`frames` 的栈底恒为文件根，未被任何区间覆盖的 token（解析恢复跳过的
--- 区段、文件末尾 trivia）因此留在根上，不丢字节。区间由 parser 的递归栈配对，
--- 事件流天然真嵌套；本函数不做合法性修补。
-nestEvents : List CstToken -> Int -> List NestFrame -> List NodeEvent -> List NestFrame
-nestEvents live cursor frames [] =
+-- | 遍历事件流：`live` 是尚未并入树的 token，`cursor` 是已并入的个数，`nextId` 是
+-- 下一个分支节点的先序 id；事件里的下标是**绝对** token 下标，所以每个事件先并入
+-- `at - cursor` 个叶，再把 `live` / `cursor` 前推，最后开 / 关帧。`frames` 的栈底恒为
+-- 文件根，未被任何区间覆盖的 token（解析恢复跳过的区段、文件末尾 trivia）因此留在根上，
+-- 不丢字节。区间由 parser 的递归栈配对，事件流天然真嵌套；本函数不做合法性修补。
+nestEvents : List CstToken -> Int -> Int -> List NestFrame -> List NodeEvent -> List NestFrame
+nestEvents live cursor nextId frames [] =
   closeAllFrames (nestFrameCount frames + 1) (pushLeaves (map (\t => CstLeaf t) live) frames)
-nestEvents live cursor frames (ev :: rest) =
+nestEvents live cursor nextId frames (ev :: rest) =
   let
     at = eventIndex ev
     n = at - cursor
@@ -539,13 +550,18 @@ nestEvents live cursor frames (ev :: rest) =
     frames1 = pushLeaves (map (\t => CstLeaf t) (take n live)) frames
   in case ev of
     EvOpen kind _ =>
-      nestEvents live2 at (NestFrame kind (headSpan degenerateSpan live2) [] :: frames1) rest
-    EvClose _ => nestEvents live2 at (closeTopFrame frames1) rest
+      nestEvents
+        live2
+        at
+        (nextId + 1)
+        (NestFrame kind nextId (headSpan degenerateSpan live2) [] :: frames1)
+        rest
+    EvClose _ => nestEvents live2 at nextId (closeTopFrame frames1) rest
 
 -- | 根帧收尾：children 反转成源码顺序，span 用整份 token 流。
 finishRoot : Span -> List NestFrame -> CstNode
-finishRoot sp (f :: _) = CstBranch CstFileKind sp (reverse f.nfKids)
-finishRoot sp [] = CstBranch CstFileKind sp []
+finishRoot sp (f :: _) = CstBranch CstFileKind f.nfId sp (reverse f.nfKids)
+finishRoot sp [] = CstBranch CstFileKind 0 sp []
 
 -- | 单个 token 的 span（字段投影写成具名 helper，`map` 里需要已知类型）。
 tokenSpanOf : CstToken -> Span
@@ -563,20 +579,42 @@ tokensSpan (t :: rest) = spanFrom t.cstSpan (lastSpanOfList t.cstSpan (map token
 export nestToTree : List CstToken -> List NodeEvent -> CstNode
 nestToTree toks events =
   let
-    root = NestFrame CstFileKind (headSpan degenerateSpan toks) []
-    frames = nestEvents toks 0 [root] events
+    root = NestFrame CstFileKind 0 (headSpan degenerateSpan toks) []
+    frames = nestEvents toks 0 1 [root] events
     sp = tokensSpan toks
   in finishRoot sp frames
 
 -- | 树的叶序列（源码顺序）。无损断言用它对齐 token 流。
 export collectLeaves : CstNode -> List CstToken
 collectLeaves (CstLeaf t) = [t]
-collectLeaves (CstBranch _ _ kids) = concatMap collectLeaves kids
+collectLeaves (CstBranch _ _ _ kids) = concatMap collectLeaves kids
+
+-- | 先序的分支节点表（id → 节点）。
+nodeTable : CstNode -> List (Pair Int CstNode)
+nodeTable (CstLeaf _) = []
+nodeTable (n@(CstBranch _ nid _ kids)) = Pair nid n :: concatMap nodeTable kids
+
+-- | 起点字节偏移 → 节点 id（先序表）。文件根不是源码构造（它的起点与首个 token
+-- 重合），不进索引——否则没有模块头的文件里，第一个声明会被根遮住。
+offsetTable : CstNode -> List (Pair Int Int)
+offsetTable (CstLeaf _) = []
+offsetTable (CstBranch CstFileKind _ _ kids) = concatMap offsetTable kids
+offsetTable (CstBranch _ nid sp kids) = Pair (spanStartOffset sp) nid :: concatMap offsetTable kids
+
+-- | 整棵树的「id → 节点」索引。节点身份只此一处：span、kind、children 都从这里取，
+-- 而不是再按区间比较。
+export nodeIndex : CstNode -> HashMap Int CstNode
+nodeIndex tree = HashMap.fromList (nodeTable tree)
+
+-- | 「起点字节偏移 → 节点 id」索引：`withExtent` 先开外层，同一偏移取**最外层**
+-- （`HashMap.fromList` 前条目优先）。AST 侧把 span 换成节点 id 时走这条桥。
+export nodeIdAtOffset : CstNode -> HashMap Int Int
+nodeIdAtOffset tree = HashMap.fromList (offsetTable tree)
 
 -- | 节点树逐字节还原源码（叶按源码顺序输出前置 trivia + token 原文）。
 export renderCstTree : CstNode -> String
 renderCstTree (CstLeaf t) = strConcatMany (renderParts t)
-renderCstTree (CstBranch _ _ kids) = strConcatMany (map renderCstTree kids)
+renderCstTree (CstBranch _ _ _ kids) = strConcatMany (map renderCstTree kids)
 
 -- | `renderCstTree (nestToTree (lexCst s) events) == s`；词法失败时为 `False`。
 export treeRoundtripOk : List NodeEvent -> String -> Bool
