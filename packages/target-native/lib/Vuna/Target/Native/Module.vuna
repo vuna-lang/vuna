@@ -42,6 +42,7 @@ import Vuna.Target.Native.Repr
 import Vuna.Target.Native.Runtime
 import Vuna.Target.Native.Select
 import Vuna.Target.Native.Specialize
+import Vuna.Target.Native.Inline
 
 -- ---------------------------------------------------------------
 -- 结果类型：区分「目标不支持」与「生成器不变式破坏」
@@ -452,7 +453,8 @@ valueWrapperFunc modPath label arity target =
       slots = range 0 arity
       loads = concatMap (\i => append (closureArgLoad i) [IMov (OpMem Rbp (nativeSlotOff i)) (OpReg Rax)]) slots
       frame = nativeFrameBytes arity
-    in NativeFunc label frame (append (nativePrologue frame) (append loads (tailCallSlotsInstrs target slots))) modPath
+      body = append loads (tailCallSlotsInstrs target slots)
+    in NativeFunc label frame (append (nativePrologueOf frame (unwrittenSlots frame body)) body) modPath
 
 -- | 闭包 ABI → 标准 ABI 的实参搬运（`arity <= 5` 时全在寄存器里）。
 wrapperShifts : Int -> List Instr
@@ -1733,7 +1735,8 @@ genLamValue fuel st bs body =
                         stF = secondOf q
                         frame = nativeFrameBytes stF.fgNextSlot
                         lamBody = append (firstOf cp) (append (firstOf bp) (firstOf q))
-                        lamFunc = NativeFunc lamName frame (append (nativePrologue frame) (append (clearDeadSlots stF.fgReenter stF.fgSlotCls (peephole lamBody)) nativeEpilogue)) st.fgModule
+                        lamInstrs = append (clearDeadSlots stF.fgReenter stF.fgSlotCls (peephole lamBody)) nativeEpilogue
+                        lamFunc = NativeFunc lamName frame (append (nativePrologueOf frame (unwrittenSlots frame lamInstrs)) lamInstrs) st.fgModule
                         lams = append st1.fgLams (append stF.fgLams [lamFunc])
                       in if ncap == 0 then
                         let
@@ -2200,10 +2203,10 @@ bindArgsGo (b :: rest) i st =
 
 -- | 生成一个定义；返回函数与该定义之后**模块内** label/slot 计数（`.L` 是文件局部
 --   符号，计数按模块保存；重编号不会跨模块扩散）。
-genDefFunc : List IrDef -> List (Pair String (List (Pair String String))) -> List (Pair String (List (Pair String String))) -> List String -> List IrTyDecl -> Int -> IrDef -> NRes (Pair (List NativeFunc) (Pair Int (List NativeClosure)))
-genDefFunc _defs _pools _floats _recNames _fams _nextLabel (IrExternDef name _ _ _) =
+genDefFunc : List IrDef -> List (Pair String (List (Pair String String))) -> List (Pair String (List (Pair String String))) -> List String -> List String -> List IrTyDecl -> Int -> IrDef -> NRes (Pair (List NativeFunc) (Pair Int (List NativeClosure)))
+genDefFunc _defs _pools _floats _recNames _allocs _fams _nextLabel (IrExternDef name _ _ _) =
   unsupported "native target: extern definition `${name}` is not supported yet"
-genDefFunc defs pools floats recNames fams nextLabel (IrDef name arity _ _ body _ _ _) =
+genDefFunc defs pools floats recNames allocs fams nextLabel (IrDef name arity _ _ body _ _ _) =
   let
     -- 本函数来参区：零参定义没有调用者压的栈实参，其余按标准 ABI 推算。
     room = nativeTailRoomBytes (nativeStackArgCount arity nativeMaxArgs)
@@ -2237,7 +2240,8 @@ genDefFunc defs pools floats recNames fams nextLabel (IrDef name arity _ _ body 
             st1 = secondOf p
             frame = nativeFrameBytes st1.fgNextSlot
             instrs = append (clearDeadSlots st1.fgReenter st1.fgSlotCls (peephole (firstOf p))) nativeEpilogue
-            mainF = NativeFunc (nativeFuncLabel name) frame (append (nativePrologue frame) instrs) modPath
+            holes = if memStr name allocs && frameReused st1.fgReenter instrs then unwrittenSlots frame instrs else []
+            mainF = NativeFunc (nativeFuncLabel name) frame (append (nativePrologueOf frame holes) instrs) modPath
           in NOk (Pair (append st1.fgLams [mainF]) (Pair st1.fgNextLabel st1.fgStatics))
       )
   else
@@ -2262,7 +2266,8 @@ genDefFunc defs pools floats recNames fams nextLabel (IrDef name arity _ _ body 
                         frame = nativeFrameBytes st1.fgNextSlot
                         body0 = append (firstOf bp) (append [ILabel loopLabel] (firstOf q))
                         instrs = append (clearDeadSlots st1.fgReenter st1.fgSlotCls (peephole body0)) nativeEpilogue
-                        mainF = NativeFunc (nativeFuncLabel name) frame (append (nativePrologue frame) instrs) modPath
+                        holes = if memStr name allocs && frameReused st1.fgReenter instrs then unwrittenSlots frame instrs else []
+                        mainF = NativeFunc (nativeFuncLabel name) frame (append (nativePrologueOf frame holes) instrs) modPath
                       in NOk (Pair (append st1.fgLams [mainF]) (Pair st1.fgNextLabel st1.fgStatics))
                   )
             )
@@ -2279,20 +2284,143 @@ putLabelCount key n [] = [Pair key n]
 putLabelCount key n (p :: rest) =
   if firstOf p == key then Pair key n :: rest else p :: putLabelCount key n rest
 
-genDefs : List IrDef -> List (Pair String (List (Pair String String))) -> List (Pair String (List (Pair String String))) -> List String -> List IrTyDecl -> List (Pair String Int) -> List IrDef -> List (List NativeFunc) -> List NativeClosure -> NRes (Pair (List NativeFunc) (Pair Int (List NativeClosure)))
-genDefs _all _pools _floats _recNames _fams _labels [] acc statAcc =
+genDefs : List IrDef -> List (Pair String (List (Pair String String))) -> List (Pair String (List (Pair String String))) -> List String -> List String -> List IrTyDecl -> List (Pair String Int) -> List IrDef -> List (List NativeFunc) -> List NativeClosure -> NRes (Pair (List NativeFunc) (Pair Int (List NativeClosure)))
+genDefs _all _pools _floats _recNames _allocs _fams _labels [] acc statAcc =
   NOk (Pair (concatMap (\x => x) (reverse acc)) (Pair 0 statAcc))
-genDefs all pools floats recNames fams labels (d :: rest) acc statAcc =
+genDefs all pools floats recNames allocs fams labels (d :: rest) acc statAcc =
   let
     key = moduleKeyOf (irDefName d)
     start = labelCountOf key labels
-  in nbind (genDefFunc all pools floats recNames fams start d) (
+  in nbind (genDefFunc all pools floats recNames allocs fams start d) (
       \p =>
         let
           next = firstOf (secondOf p)
           statics = secondOf (secondOf p)
-        in genDefs all pools floats recNames fams (putLabelCount key next labels) rest (firstOf p :: acc) (append statics statAcc)
+        in genDefs all pools floats recNames allocs fams (putLabelCount key next labels) rest (firstOf p :: acc) (append statics statAcc)
     )
+
+-- | 不会分配堆的运行时符号（整数 / 位运算 / 比较 / 字符串只读 / obs / 打印 / 陷阱）。
+--   名单之外的符号一律按「可能分配」处理：`Native.Live.unwrittenSlots` 的清零只在
+--   **传递闭包里可能分配**的函数上发，判错方向是多清零（只多花几条 store），不会漏。
+pureRtLabels : List String
+pureRtLabels =
+  [
+    nativeRtLabel "add",
+    nativeRtLabel "sub",
+    nativeRtLabel "mul",
+    nativeRtLabel "div",
+    nativeRtLabel "bit_and",
+    nativeRtLabel "bit_or",
+    nativeRtLabel "bit_xor",
+    nativeRtLabel "bit_not",
+    nativeRtLabel "bit_shl",
+    nativeRtLabel "bit_shr",
+    nativeRtLabel "eq_int",
+    nativeRtLabel "neq_int",
+    nativeRtLabel "lt_int",
+    nativeRtLabel "le_int",
+    nativeRtLabel "gt_int",
+    nativeRtLabel "ge_int",
+    nativeRtLabel "nat_add",
+    nativeRtLabel "nat_sub",
+    nativeRtLabel "nat_mul",
+    nativeRtLabel "nat_div",
+    nativeRtLabel "nat_from_int",
+    nativeRtLabel "str_length",
+    nativeRtLabel "str_at",
+    nativeRtLabel "str_hash",
+    nativeRtLabel "str_eq",
+    nativeRtLabel "str_neq",
+    nativeRtLabel "str_lt",
+    nativeRtLabel "str_le",
+    nativeRtLabel "str_gt",
+    nativeRtLabel "str_ge",
+    nativeRtLabel "obs_level",
+    nativeRtLabel "obs_log",
+    nativeRtLabel "obs_counter",
+    nativeRtLabel "obs_mark",
+    nativeRtLabel "obs_span_begin",
+    nativeRtLabel "obs_span_end",
+    nativeRtLabel "obs_sample_start",
+    nativeRtLabel "obs_sample_stop",
+    nativeRtLabel "debug_on",
+    nativeRtLabel "debug_line",
+    nativeRtLabel "effect_id",
+    nativeRtLabel "print_int",
+    nativeRtLabel "print_bool",
+    nativeRtLabel "print_str",
+    nativeRtLabel "assert",
+    nativeRtLabel "prim_fail",
+    nativeRtLabel "todo",
+    nativeRtLabel "trap_msg",
+    nativeRtLabel "trap_assert",
+    nativeRtLabel "trap_todo",
+    nativeRtLabel "trap_divzero",
+    nativeRtLabel "trap_array_oob",
+    nativeRtLabel "trap_impossible",
+    nativeRtLabel "trap_oom",
+    nativeRtLabel "trap_mem_limit"
+  ]
+
+rtMayAllocate : String -> Bool
+rtMayAllocate sym =
+  case nativeRtTargetBase sym of
+    Just label => not (memStr label pureRtLabels)
+    Nothing => True
+
+-- | 一个 IR 项是否会分配（`IrGlobal` 的传递性交给依赖闭包补，这里只看本项）。
+irMayAllocate : Ir -> Bool
+irMayAllocate (IrCtor _ _ _ _) = True
+irMayAllocate (IrRecord _ _ _) = True
+irMayAllocate (IrRecUpd _ _ _ _) = True
+irMayAllocate (IrConcatMany _) = True
+irMayAllocate (IrEffThunk _ _ _ _ _) = True
+irMayAllocate (IrEffBind _ _ _) = True
+irMayAllocate (IrLam _ _ _) = True
+irMayAllocate (IrRt sym) = rtMayAllocate sym
+irMayAllocate (IrRtApp sym args) = rtMayAllocate sym || anyMayAllocate args
+irMayAllocate (IrApp _ head arg) = appMayAllocate head || irMayAllocate arg
+irMayAllocate (IrLet _ scrut body) = irMayAllocate scrut || irMayAllocate body
+irMayAllocate (IrIf c t e) = irMayAllocate c || irMayAllocate t || irMayAllocate e
+irMayAllocate (IrCase _ _ scrut alts) = irMayAllocate scrut || anyMayAllocateAlts alts
+irMayAllocate (IrNatCase scrut _ z s c) =
+  irMayAllocate scrut || mayAllocateAltM z || mayAllocateAltM s || mayAllocateAltM c
+irMayAllocate (IrProj base _ _ _) = irMayAllocate base
+irMayAllocate (IrCast _ _ inner) = irMayAllocate inner
+irMayAllocate (IrTail inner) = irMayAllocate inner
+irMayAllocate _ = False
+
+appMayAllocate : Ir -> Bool
+appMayAllocate (IrGlobal _) = False
+appMayAllocate (IrRt sym) = rtMayAllocate sym
+appMayAllocate _ = True
+
+anyMayAllocate : List Ir -> Bool
+anyMayAllocate [] = False
+anyMayAllocate (x :: rest) = if irMayAllocate x then True else anyMayAllocate rest
+
+anyMayAllocateAlts : List IrAlt -> Bool
+anyMayAllocateAlts [] = False
+anyMayAllocateAlts (a :: rest) = if irMayAllocate a.irAltBody then True else anyMayAllocateAlts rest
+
+mayAllocateAltM : Maybe IrAlt -> Bool
+mayAllocateAltM Nothing = False
+mayAllocateAltM (Just a) = irMayAllocate a.irAltBody
+
+defMayAllocateDirectly : IrDef -> Bool
+defMayAllocateDirectly d =
+  case irDefBody d of
+    Nothing => False
+    Just (IrLam _ _ inner) => irMayAllocate inner
+    Just other => irMayAllocate other
+
+-- | 传递闭包里可能分配的定义名。帧里的「从不写的槽」只有这类函数需要在 prologue
+--   清 0：GC 只在分配点发生，闭包里不分配的函数其帧永远不会被扫到。
+allocatingDefNames : List IrDef -> List String
+allocatingDefNames defs =
+  map
+    irDefName
+    (reachableDefsByRefs (\_ => True) 0 (map irDefName (filter defMayAllocateDirectly defs)) defs)
 
 -- | 递归 SCC 里的定义名（`unit` 的分组由 Lowering 的 SCC 给出）。死槽清零只在
 --   这类帧上付产物成本：非尾递归时每层帧都活着，死槽会一路钉住对象。
@@ -2454,10 +2582,11 @@ bridgeFn : String -> Int -> List Instr -> NativeFunc
 bridgeFn name slots body =
   let
     frame = nativeFrameBytes slots
+    instrs = append body nativeEpilogue
   in NativeFunc
     (nativeRtLabel name)
     frame
-    (append (nativePrologue frame) (append body nativeEpilogue))
+    (append (nativePrologueOf frame (unwrittenSlots frame instrs)) instrs)
     nativeRuntimeModule
 
 nlistCellBytes : NListDesc -> Int
@@ -2706,11 +2835,19 @@ build program printResult =
                     let
                       -- 高阶参数特化：已知的闭合函数实参把被调定义的形参替换成直调，
                       -- 克隆按（被调名、形参序号、实参指纹）去重。
-                      cpsOrdered = Specialize.specializeDefs cps0
+                      cpsSpecialized = Specialize.specializeDefs cps0
+                      recNames = Specialize.recursiveNamesWithClones (recursiveDefNames unit) cpsSpecialized
+                      -- 小函数内联：体够小、非递归、实参平凡的调用点直接代进去。
+                      inlined = Inline.inlineDefs recNames cpsSpecialized
+                      cps1 = firstOf inlined
+                      -- 内联后会留下一批没人引用的定义：按「体里真正出现的 `IrGlobal`」重算
+                      -- 可达性再丢掉（不跟 `irDefDeps`：那是源码级 term-use 依赖，含已擦除
+                      -- 的引用，会把刚内联掉的被调重新钉住）。
+                      cpsOrdered = if secondOf inlined then reachableDefsByRefs (\_ => False) 0 seeds cps1 else cps1
                       pools = modulePools cpsOrdered
                       fpools = moduleFloatPools cpsOrdered
-                      recNames = Specialize.recursiveNamesWithClones (recursiveDefNames unit) cpsOrdered
-                    in case genDefs cpsOrdered pools fpools recNames unit.irUnitTyDecls [] cpsOrdered [] [] of
+                      allocs = allocatingDefNames cpsOrdered
+                    in case genDefs cpsOrdered pools fpools recNames allocs unit.irUnitTyDecls [] cpsOrdered [] [] of
                       NFail err => NativeRejected (nativeAuditEnrich err cpsOrdered)
                       NOk pair =>
                         let

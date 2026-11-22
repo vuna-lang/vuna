@@ -1,0 +1,187 @@
+-- `Native.Inline` 的单元测试：已知小函数调用点内联的边界。
+--
+-- 锁五件事：小体 + 平凡实参 → 代进去且丢掉 `IrTail`；递归定义不内联；非平凡实参不内联；
+-- 体超预算不内联；没有可内联点时定义表原样返回（changed=false）。
+import Base
+import Base.Data.Int as Int
+import Base.Data.List as List
+import Base.Data.Pair as Pair
+import Base.Data.String as String
+import Base.Effect.Core
+import Vuna.Ir.Model
+import Vuna.Target.Native.Inline
+
+main : Eff [] String
+main =
+  case problems of
+    [] => pure ""
+    ps =>
+      do
+        _ <- prim_eff_print ("native inline drifted:\n" ++ join "\n" ps ++ "\n")
+        _ <- prim_eff_exit 1
+        pure ""
+
+xBinder : IrBinder
+xBinder = mkIrBinderTyped 10 "x" IrTyInt
+
+nBinder : IrBinder
+nBinder = mkIrBinderTyped 11 "n" IrTyInt
+
+-- inc x = x + 1
+incDef : IrDef
+incDef =
+  IrDef
+    "inc"
+    1
+    []
+    (Just (IrTyFun IrTyInt IrTyInt))
+    (IrLam [xBinder] Nothing (IrTail (IrRtApp "+" (IrVar xBinder :: IrInt 1 :: []))))
+    True
+    False
+    Nothing
+
+-- | 调用点：`useInc v = 0 + inc v`（实参是变量 → 平凡；调用点在非尾位置）。
+useIncDef : IrDef
+useIncDef =
+  IrDef
+    "useInc"
+    1
+    []
+    Nothing
+    (IrLam [nBinder] Nothing (IrTail (IrRtApp "+" (IrApp Nothing (IrGlobal "inc") (IrVar nBinder) :: IrInt 0 :: []))))
+    True
+    False
+    Nothing
+
+smallDefs : List IrDef
+smallDefs = [incDef, useIncDef]
+
+-- 递归定义：body 里自调用。
+loopDef : IrDef
+loopDef =
+  IrDef
+    "loop"
+    2
+    []
+    Nothing
+    (IrLam [nBinder, xBinder] Nothing (IrIf (IrRtApp "bi_le_int" (IrVar nBinder :: IrInt 0 :: [])) (IrVar xBinder) (IrTail (IrApp Nothing (IrApp Nothing (IrGlobal "loop") (IrRtApp "-" (IrVar nBinder :: IrInt 1 :: []))) (IrVar xBinder)))))
+    True
+    False
+    Nothing
+
+useLoopDef : IrDef
+useLoopDef =
+  IrDef
+    "useLoop"
+    1
+    []
+    Nothing
+    (IrLam [nBinder] Nothing (IrTail (IrApp Nothing (IrApp Nothing (IrGlobal "loop") (IrVar nBinder)) (IrInt 0))))
+    True
+    False
+    Nothing
+
+recDefs : List IrDef
+recDefs = [loopDef, useLoopDef]
+
+-- 非平凡实参：`useHard = inc (1 + 2)`。
+hardArgDef : IrDef
+hardArgDef =
+  IrDef
+    "useHard"
+    0
+    []
+    Nothing
+    (IrTail (IrApp Nothing (IrGlobal "inc") (IrRtApp "+" (IrInt 1 :: IrInt 2 :: []))))
+    True
+    False
+    Nothing
+
+hardDefs : List IrDef
+hardDefs = [incDef, hardArgDef]
+
+-- 体超预算：18 个节点的拼接链。
+bigBinder : IrBinder
+bigBinder = mkIrBinderTyped 40 "x" IrTyInt
+
+bigInner : Ir
+bigInner =
+  IrConcatMany
+    (IrStr "a" :: IrStr "b" :: IrStr "c" :: IrStr "d" :: IrStr "e" :: IrStr "f" :: IrStr "g" :: IrStr "h" :: IrStr "i" :: IrStr "j" :: IrStr "k" :: IrStr "l" :: IrStr "m" :: IrStr "n" :: IrStr "o" :: IrStr "p" :: IrStr "q" :: [])
+
+bigDef : IrDef
+bigDef = IrDef "big" 1 [] Nothing (IrLam [bigBinder] Nothing (IrTail bigInner)) True False Nothing
+
+useBigDef : IrDef
+useBigDef =
+  IrDef "useBig" 0 [] Nothing (IrTail (IrApp Nothing (IrGlobal "big") (IrInt 1))) True False Nothing
+
+bigDefs : List IrDef
+bigDefs = [bigDef, useBigDef]
+
+nonInlinable : List IrDef
+nonInlinable = [incDef]
+
+smallOut : Pair (List IrDef) Bool
+smallOut = inlineDefs [] smallDefs
+
+recOut : Pair (List IrDef) Bool
+recOut = inlineDefs ["loop"] recDefs
+
+hardOut : Pair (List IrDef) Bool
+hardOut = inlineDefs [] hardDefs
+
+bigOut : Pair (List IrDef) Bool
+bigOut = inlineDefs [] bigDefs
+
+sameOut : Pair (List IrDef) Bool
+sameOut = inlineDefs [] nonInlinable
+
+problems : List String
+problems =
+  filter
+    (\s => s /= "")
+    [check "small call inlined" False (mentionsGlobal "inc" (bodyOf "useInc" (firstOf smallOut))), check "inlined tail stripped" False (hasTail (belowRoot (lamInner (bodyOf "useInc" (firstOf smallOut))))), check "changed flag" True (secondOf smallOut), check "recursive call kept" True (mentionsGlobal "loop" (bodyOf "useLoop" (firstOf recOut))), check "recursive changed flag" False (secondOf recOut), check "non-trivial arg kept" True (mentionsGlobal "inc" (bodyOf "useHard" (firstOf hardOut))), check "big body kept" True (mentionsGlobal "big" (bodyOf "useBig" (firstOf bigOut))), check "no inline point unchanged" False (secondOf sameOut)]
+
+bodyOf : String -> List IrDef -> Ir
+bodyOf _ [] = IrInt 0
+bodyOf n (d :: rest) =
+  if irDefName d == n then
+    case d of
+      IrDef _ _ _ _ body _ _ _ => body
+      _ => IrInt 0
+  else
+    bodyOf n rest
+
+mentionsGlobal : String -> Ir -> Bool
+mentionsGlobal n ir =
+  case ir of
+    IrGlobal m => m == n
+    IrApp _ f a => mentionsGlobal n f || mentionsGlobal n a
+    IrTail inner => mentionsGlobal n inner
+    IrLet _ s b => mentionsGlobal n s || mentionsGlobal n b
+    IrIf c t e => mentionsGlobal n c || mentionsGlobal n t || mentionsGlobal n e
+    IrLam _ _ b => mentionsGlobal n b
+    _ => False
+
+lamInner : Ir -> Ir
+lamInner ir =
+  case ir of
+    IrLam _ _ b => b
+    _ => ir
+
+belowRoot : Ir -> Ir
+belowRoot ir =
+  case ir of
+    IrTail inner => inner
+    _ => ir
+
+hasTail : Ir -> Bool
+hasTail ir =
+  case ir of
+    IrTail _ => True
+    IrLam _ _ b => hasTail b
+    _ => False
+
+check : String -> Bool -> Bool -> String
+check label want got = if want == got then "" else label ++ ": drifted"

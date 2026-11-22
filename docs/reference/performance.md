@@ -114,8 +114,8 @@ native 的纯程序不再带机器（D110 已关闭）：`minimal` 2 个 `.s` / 
   tree-shaking 已由 `Ir.Analysis.reachableDefs` 做完（编译器自身只有 13 个函数 / 240 行未被引用）；
   标量算术的指令选择与窥孔已落地（`Native.Select`），零参别名已在调用点直调，闭包只捕获
   自由变量且调用点能静态解析的不再走 `rt_apply`；闭合函数值实参已做高阶参数特化
-  （[native.md](native.md) §3.5），剩余体积/墙钟空间在带捕获的高阶参数与分配
-  （[debt.md](debt.md) D129）。产物作为自举锚点的取舍见
+  （[native.md](native.md) §3.5），已知小函数的调用点已内联（§3.6），剩余体积/墙钟
+  空间在带捕获的高阶参数与分配（[debt.md](debt.md) D129）。产物作为自举锚点的取舍见
   [bootstrap.md](bootstrap.md)「锚点演进」。
 
 OCaml 二进制里的调试信息记录的是**相对**源码名（`build.sh` 先 `cd` 到产物目录、用相对模块名

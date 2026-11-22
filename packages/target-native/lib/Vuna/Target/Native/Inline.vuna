@@ -1,0 +1,352 @@
+module Vuna.Target.Native.Inline where
+
+-- 已知小函数的调用点内联：特化把函数值形参换成了直调，但直调仍是一次 `call`；
+-- 这里把「体足够小、非递归、实参平凡」的顶层函数直接代进调用点，连调用都省掉。
+--
+-- 判据（都成立才内联）：
+--   * 被调是非递归的顶层定义（不在递归名单里），没有 init guard；
+--   * 体是 lambda，运行时 binder 数与实参个数相同，体节点数 ≤ `inlineSize`；
+--   * 所有实参都是可重复求值的平凡值（变量 / 字面量 / 运行时叶子 / 顶层函数）——
+--     代入不会重复求值，也不会改变求值顺序；
+--   * 整程序内联次数没超预算。
+--
+-- 代入按 binder 身份做（身份全局唯一，不会捕获），随后丢掉体的结果位置标记：
+-- `IrTail` 只对原定义成立，带进非尾位置会让 codegen 提前跳走。
+--
+-- 边界：只 import Base 与 `Vuna.Ir.*`；不改 ABI、运行时与栈帧布局。
+import Base.Data.Bool as Bool
+import Base.Data.Int as Int
+import Base.Data.List as List
+import Base.Data.Maybe as Maybe
+import Base.Data.Pair as Pair
+import Vuna.Ir.Analysis as Analysis
+import Vuna.Ir.Model
+import Vuna.Ir.Synthetic as Synthetic
+import Vuna.Ir.Tail as Tail
+
+-- | 单次内联允许的体节点数（只收直线小函数）。
+inlineSize : Int
+inlineSize = 16
+
+-- | 整程序内联次数上限（防止代码膨胀）。
+inlineBudget : Int
+inlineBudget = 400
+
+record Inl where
+  inlUsed : Int
+  inlCount : Int
+  inlRec : List String
+  inlOut : List IrDef
+
+-- | 程序级内联：返回（可能去掉死定义前的）定义表与「是否发生过内联」。
+export inlineDefs : List String -> List IrDef -> Pair (List IrDef) Bool
+inlineDefs recNames defs =
+  let
+    st = foldl (\s, d => inlineOne defs s d) (Inl 0 0 recNames []) defs
+  in Pair (reverse st.inlOut) (st.inlCount > 0)
+
+inlineOne : List IrDef -> Inl -> IrDef -> Inl
+inlineOne _ st (IrExternDef name ty sym span) =
+  { st | inlOut = IrExternDef name ty sym span :: st.inlOut }
+inlineOne defs st (IrDef nm ar deps ty body recOk guard span) =
+  let
+    p = rw (rwFuelOf body) defs body st
+    st2 = secondOf p
+    d2 = IrDef nm ar deps ty (firstOf p) recOk guard span
+  in { st2 | inlOut = d2 :: st2.inlOut }
+
+rwFuelOf : Ir -> Int
+rwFuelOf body = 32 + 4 * irSize body
+
+-- ---------------------------------------------------------------
+-- 重写（按调用点）
+-- ---------------------------------------------------------------
+rw : Int -> List IrDef -> Ir -> Inl -> Pair Ir Inl
+rw fuel defs ir st =
+  if fuel <= 0 then
+    Pair ir st
+  else
+    case ir of
+      IrApp _ _ _ =>
+        let
+          p = Analysis.flattenApp ir
+          head = firstOf p
+          args = secondOf p
+        in case head of
+          IrGlobal name =>
+            case tryInline defs name args st of
+              Just hit => hit
+              Nothing => rwApp (fuel - 1) defs head args st
+          _ => rwApp (fuel - 1) defs head args st
+      IrCtor fam ctor ty args => mapList (fuel - 1) (IrCtor fam ctor ty) defs args st
+      IrRecord fam ty fields => mapFields (fuel - 1) (IrRecord fam ty) defs fields st
+      IrProj base fam field ty =>
+        let
+          p = rw (fuel - 1) defs base st
+        in Pair (IrProj (firstOf p) fam field ty) (secondOf p)
+      IrRecUpd base fam fields ty =>
+        let
+          b = rw (fuel - 1) defs base st
+          f = mapFieldsKeep (fuel - 1) defs fields (secondOf b)
+        in Pair (IrRecUpd (firstOf b) fam (firstOf f) ty) (secondOf f)
+      IrRtApp sym args => mapList (fuel - 1) (IrRtApp sym) defs args st
+      IrCast from to inner =>
+        let
+          p = rw (fuel - 1) defs inner st
+        in Pair (IrCast from to (firstOf p)) (secondOf p)
+      IrTail inner =>
+        let
+          p = rw (fuel - 1) defs inner st
+        in Pair (IrTail (firstOf p)) (secondOf p)
+      IrLet bs scrut body =>
+        let
+          s = rw (fuel - 1) defs scrut st
+          b = rw (fuel - 1) defs body (secondOf s)
+        in Pair (IrLet bs (firstOf s) (firstOf b)) (secondOf b)
+      IrLam bs rt body =>
+        let
+          p = rw (fuel - 1) defs body st
+        in Pair (IrLam bs rt (firstOf p)) (secondOf p)
+      IrIf c t e =>
+        let
+          pc = rw (fuel - 1) defs c st
+          pt = rw (fuel - 1) defs t (secondOf pc)
+          pe = rw (fuel - 1) defs e (secondOf pt)
+        in Pair (IrIf (firstOf pc) (firstOf pt) (firstOf pe)) (secondOf pe)
+      IrCase ty k scrut alts =>
+        let
+          ps = rw (fuel - 1) defs scrut st
+          pa = mapAlts (fuel - 1) defs alts (secondOf ps)
+        in Pair (IrCase ty k (firstOf ps) (firstOf pa)) (secondOf pa)
+      IrNatCase scrut f z s c =>
+        let
+          ps = rw (fuel - 1) defs scrut st
+          pz = mapAltMaybe (fuel - 1) defs z (secondOf ps)
+          psm = mapAltMaybe (fuel - 1) defs s (secondOf pz)
+          pc = mapAltMaybe (fuel - 1) defs c (secondOf psm)
+        in Pair (IrNatCase (firstOf ps) f (firstOf pz) (firstOf psm) (firstOf pc)) (secondOf pc)
+      IrConcatMany parts => mapList (fuel - 1) IrConcatMany defs parts st
+      IrEffThunk fam ctor ty arity prim =>
+        let
+          p = rw (fuel - 1) defs prim st
+        in Pair (IrEffThunk fam ctor ty arity (firstOf p)) (secondOf p)
+      _ => Pair ir st
+
+rwApp : Int -> List IrDef -> Ir -> List Ir -> Inl -> Pair Ir Inl
+rwApp fuel defs head args st =
+  let
+    h = rw (fuel - 1) defs head st
+    a = mapIrs (fuel - 1) defs args (secondOf h)
+  in Pair (Synthetic.applyAllIr (firstOf h) (firstOf a)) (secondOf a)
+
+mapList : Int -> (List Ir -> Ir) -> List IrDef -> List Ir -> Inl -> Pair Ir Inl
+mapList fuel build defs xs st =
+  let
+    p = mapIrs fuel defs xs st
+  in Pair (build (firstOf p)) (secondOf p)
+
+mapIrs : Int -> List IrDef -> List Ir -> Inl -> Pair (List Ir) Inl
+mapIrs _ _ [] st = Pair [] st
+mapIrs fuel defs (x :: rest) st =
+  if fuel <= 0 then
+    Pair (x :: rest) st
+  else
+    let
+      px = rw (fuel - 1) defs x st
+      pr = mapIrs (fuel - 1) defs rest (secondOf px)
+    in Pair (firstOf px :: firstOf pr) (secondOf pr)
+
+mapFields : Int -> (List (Pair String Ir) -> Ir) -> List IrDef -> List (Pair String Ir) -> Inl -> Pair Ir Inl
+mapFields fuel build defs fields st =
+  let
+    p = mapFieldsKeep fuel defs fields st
+  in Pair (build (firstOf p)) (secondOf p)
+
+mapFieldsKeep : Int -> List IrDef -> List (Pair String Ir) -> Inl -> Pair (List (Pair String Ir)) Inl
+mapFieldsKeep _ _ [] st = Pair [] st
+mapFieldsKeep fuel defs (p :: rest) st =
+  if fuel <= 0 then
+    Pair (p :: rest) st
+  else
+    let
+      pv = rw (fuel - 1) defs (secondOf p) st
+      pr = mapFieldsKeep (fuel - 1) defs rest (secondOf pv)
+    in Pair (Pair (firstOf p) (firstOf pv) :: firstOf pr) (secondOf pr)
+
+mapAlt : Int -> List IrDef -> IrAlt -> Inl -> Pair IrAlt Inl
+mapAlt fuel defs alt st =
+  let
+    p = rw (fuel - 1) defs alt.irAltBody st
+  in Pair (IrAlt alt.irAltCtor alt.irAltBinders (firstOf p)) (secondOf p)
+
+mapAltMaybe : Int -> List IrDef -> Maybe IrAlt -> Inl -> Pair (Maybe IrAlt) Inl
+mapAltMaybe _ _ Nothing st = Pair Nothing st
+mapAltMaybe fuel defs (Just alt) st =
+  let
+    p = mapAlt fuel defs alt st
+  in Pair (Just (firstOf p)) (secondOf p)
+
+mapAlts : Int -> List IrDef -> List IrAlt -> Inl -> Pair (List IrAlt) Inl
+mapAlts _ _ [] st = Pair [] st
+mapAlts fuel defs (a :: rest) st =
+  if fuel <= 0 then
+    Pair (a :: rest) st
+  else
+    let
+      pa = mapAlt fuel defs a st
+      pr = mapAlts (fuel - 1) defs rest (secondOf pa)
+    in Pair (firstOf pa :: firstOf pr) (secondOf pr)
+
+-- ---------------------------------------------------------------
+-- 内联判定
+-- ---------------------------------------------------------------
+tryInline : List IrDef -> String -> List Ir -> Inl -> Maybe (Pair Ir Inl)
+tryInline defs name args st =
+  if memStr name st.inlRec then
+    Nothing
+  else if st.inlUsed >= inlineBudget then
+    Nothing
+  else
+    case findDef name defs of
+      Nothing => Nothing
+      Just d =>
+        case d of
+          IrExternDef _ _ _ _ => Nothing
+          IrDef _ _ _ _ body _ guard _ =>
+            if guard then
+              Nothing
+            else
+              case body of
+                IrLam bs _ inner =>
+                  let
+                    rbs = runtimeBindersOf bs
+                  in if length rbs /= length args then
+                    Nothing
+                  else if not (allTrivial args) then
+                    Nothing
+                  else if irSize inner > inlineSize then
+                    Nothing
+                  else if hasLam inner then
+                    Nothing
+                  else
+                    let
+                      body2 = Tail.stripTail (inlineBody (pairBinders rbs args) inner)
+                      st2 = { st | inlUsed = st.inlUsed + 1, inlCount = st.inlCount + 1 }
+                    in Just (Pair body2 st2)
+                _ => Nothing
+
+-- | 体里带 lambda 的定义不内联：把闭包体拖进调用者，既复制代码也放大调用者的帧
+--   （保守 GC 的阈值跟栈跨度走，帧变大会推迟回收）。
+hasLam : Ir -> Bool
+hasLam (IrLam _ _ _) = True
+hasLam (IrCtor _ _ _ args) = anyHasLam args
+hasLam (IrRecord _ _ fields) = anyHasLamFields fields
+hasLam (IrProj base _ _ _) = hasLam base
+hasLam (IrRecUpd base _ fields _) = hasLam base || anyHasLamFields fields
+hasLam (IrRtApp _ args) = anyHasLam args
+hasLam (IrCast _ _ inner) = hasLam inner
+hasLam (IrLet _ s b) = hasLam s || hasLam b
+hasLam (IrApp _ f a) = hasLam f || hasLam a
+hasLam (IrTail inner) = hasLam inner
+hasLam (IrIf c t e) = hasLam c || hasLam t || hasLam e
+hasLam (IrCase _ _ s alts) = hasLam s || anyHasLamAlts alts
+hasLam (IrNatCase s _ z a b) = hasLam s || anyHasLamAltM z || anyHasLamAltM a || anyHasLamAltM b
+hasLam (IrConcatMany parts) = anyHasLam parts
+hasLam (IrEffThunk _ _ _ _ prim) = hasLam prim
+hasLam _ = False
+
+anyHasLam : List Ir -> Bool
+anyHasLam [] = False
+anyHasLam (x :: rest) = if hasLam x then True else anyHasLam rest
+
+anyHasLamFields : List (Pair String Ir) -> Bool
+anyHasLamFields [] = False
+anyHasLamFields (p :: rest) = if hasLam (secondOf p) then True else anyHasLamFields rest
+
+anyHasLamAlts : List IrAlt -> Bool
+anyHasLamAlts [] = False
+anyHasLamAlts (a :: rest) = if hasLam a.irAltBody then True else anyHasLamAlts rest
+
+anyHasLamAltM : Maybe IrAlt -> Bool
+anyHasLamAltM Nothing = False
+anyHasLamAltM (Just a) = hasLam a.irAltBody
+
+allTrivial : List Ir -> Bool
+allTrivial [] = True
+allTrivial (a :: rest) = if trivialArg a then allTrivial rest else False
+
+trivialArg : Ir -> Bool
+trivialArg (IrVar _) = True
+trivialArg (IrGlobal _) = True
+trivialArg (IrRt _) = True
+trivialArg (IrInt _) = True
+trivialArg (IrStr _) = True
+trivialArg (IrBool _) = True
+trivialArg (IrFloatLit _) = True
+trivialArg _ = False
+
+pairBinders : List IrBinder -> List Ir -> List (Pair Int Ir)
+pairBinders [] _ = []
+pairBinders _ [] = []
+pairBinders (b :: brest) (a :: arest) = Pair b.irBinderId a :: pairBinders brest arest
+
+-- ---------------------------------------------------------------
+-- 代入（按 binder 身份）
+-- ---------------------------------------------------------------
+inlineBody : List (Pair Int Ir) -> Ir -> Ir
+inlineBody reps (IrVar b) =
+  case lookupId b.irBinderId reps of
+    Just r => r
+    Nothing => IrVar b
+inlineBody reps (IrLam bs rt body) = IrLam bs rt (inlineBody reps body)
+inlineBody reps (IrLet bs scrut body) = IrLet bs (inlineBody reps scrut) (inlineBody reps body)
+inlineBody reps (IrApp ty f a) = IrApp ty (inlineBody reps f) (inlineBody reps a)
+inlineBody reps (IrIf c t e) = IrIf (inlineBody reps c) (inlineBody reps t) (inlineBody reps e)
+inlineBody reps (IrCase ty k scrut alts) =
+  IrCase ty k (inlineBody reps scrut) (map (inlineAlt reps) alts)
+inlineBody reps (IrNatCase scrut f z s c) =
+  IrNatCase (inlineBody reps scrut) f (inlineAltM reps z) (inlineAltM reps s) (inlineAltM reps c)
+inlineBody reps (IrCtor fam ctor ty args) = IrCtor fam ctor ty (map (inlineBody reps) args)
+inlineBody reps (IrRecord fam ty fields) =
+  IrRecord fam ty (map (\p => Pair (firstOf p) (inlineBody reps (secondOf p))) fields)
+inlineBody reps (IrProj base fam field ty) = IrProj (inlineBody reps base) fam field ty
+inlineBody reps (IrRecUpd base fam fields ty) =
+  IrRecUpd
+    (inlineBody reps base)
+    fam
+    (map (\p => Pair (firstOf p) (inlineBody reps (secondOf p))) fields)
+    ty
+inlineBody reps (IrRtApp sym args) = IrRtApp sym (map (inlineBody reps) args)
+inlineBody reps (IrCast from to inner) = IrCast from to (inlineBody reps inner)
+inlineBody reps (IrTail inner) = IrTail (inlineBody reps inner)
+inlineBody reps (IrConcatMany parts) = IrConcatMany (map (inlineBody reps) parts)
+inlineBody reps (IrEffThunk fam ctor ty arity prim) =
+  IrEffThunk fam ctor ty arity (inlineBody reps prim)
+inlineBody _ ir = ir
+
+inlineAlt : List (Pair Int Ir) -> IrAlt -> IrAlt
+inlineAlt reps alt = IrAlt alt.irAltCtor alt.irAltBinders (inlineBody reps alt.irAltBody)
+
+inlineAltM : List (Pair Int Ir) -> Maybe IrAlt -> Maybe IrAlt
+inlineAltM _ Nothing = Nothing
+inlineAltM reps (Just alt) = Just (inlineAlt reps alt)
+
+lookupId : Int -> List (Pair Int Ir) -> Maybe Ir
+lookupId _ [] = Nothing
+lookupId id (p :: rest) = if firstOf p == id then Just (secondOf p) else lookupId id rest
+
+-- ---------------------------------------------------------------
+-- 小工具
+-- ---------------------------------------------------------------
+runtimeBindersOf : List IrBinder -> List IrBinder
+runtimeBindersOf [] = []
+runtimeBindersOf (b :: rest) =
+  if b.irBinderErased then runtimeBindersOf rest else b :: runtimeBindersOf rest
+
+findDef : String -> List IrDef -> Maybe IrDef
+findDef _ [] = Nothing
+findDef n (d :: rest) = if irDefName d == n then Just d else findDef n rest
+
+memStr : String -> List String -> Bool
+memStr _ [] = False
+memStr s (x :: rest) = if s == x then True else memStr s rest

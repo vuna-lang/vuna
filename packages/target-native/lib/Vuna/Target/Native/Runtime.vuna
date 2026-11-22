@@ -1567,7 +1567,7 @@ nativeRtFuncs =
 
 -- | IR 符号 -> 运行时函数标签。白名单之外返回 Nothing（Module 报 NativeUnsupported）。
 --   `&&` / `||` 由 Module 生成短路控制流；`@ir@natSucc` 与入口 show 由 Module 特化。
-nativeRtTargetBase : String -> Maybe String
+export nativeRtTargetBase : String -> Maybe String
 nativeRtTargetBase "+" = Just (nativeRtLabel "add")
 nativeRtTargetBase "-" = Just (nativeRtLabel "sub")
 nativeRtTargetBase "*" = Just (nativeRtLabel "mul")

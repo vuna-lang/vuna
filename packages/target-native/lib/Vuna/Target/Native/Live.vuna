@@ -337,6 +337,35 @@ dropDeadStores fuel instrs =
       kept = filter (\i => not (isDeadStore dead i)) instrs
     in if length kept == length instrs then kept else dropDeadStores (fuel - 1) kept
 
+-- | 帧是否会被再次进入（递归 SCC，或函数内有回边）：只有这种帧会跨过更深的分配点，
+--   洞里的陈旧指针会被反复扫到。其余函数的帧随返回消失，最多多留一次调用。
+export frameReused : Bool -> List Instr -> Bool
+frameReused mayReenter instrs =
+  let
+    blocks = blocksOf instrs
+  in mayReenter || hasBackwardEdge blocks (labelMapOf blocks)
+
+-- | 函数体**从不写**的帧槽（正偏移，8 的倍数，不含帧头 `8`）。死存储删除会留下这种洞；
+--   保守扫根会把洞里的陈旧值当成指针，所以 prologue 要把它们清 0。
+export unwrittenSlots : Int -> List Instr -> List Int
+unwrittenSlots frame instrs =
+  let
+    written = foldl (\acc, i => mergeUnion acc (absOffsets (instrSlotWrites i))) [] instrs
+  in holesDown (frame / 8) written
+
+absOffsets : List Int -> List Int
+absOffsets [] = []
+absOffsets (o :: rest) = (if o < 0 then 0 - o else o) :: absOffsets rest
+
+holesDown : Int -> List Int -> List Int
+holesDown n written =
+  if n <= 1 then
+    []
+  else
+    let
+      off = 8 * n
+    in if memInt off written then holesDown (n - 1) written else off :: holesDown (n - 1) written
+
 -- | 帧内死槽处理：删掉死存储，然后在槽的最后一次读之后写 0（只对可能保存指针的槽，
 --   且只在帧会被再次进入的函数里）。
 export clearDeadSlots : Bool -> List (Pair Int NCls) -> List Instr -> List Instr

@@ -234,10 +234,15 @@ nativeCafCellLabel name = "rt_caf_${nativeName name}"
 -- | 固定 prologue：push rbp; mov rbp, rsp; sub rsp, frame; 帧头保留槽置 0。
 --   `frame=0` 只可能出现在不带保留槽的哨兵函数上（入口 `_start`）。
 export nativePrologue : Int -> List Instr
-nativePrologue frame =
+nativePrologue frame = nativePrologueOf frame []
+
+-- | prologue + 把**从不写**的帧槽（正偏移）也清 0：死存储删除留下的洞会残留旧值，
+--   逐帧保守扫根会把它当指针。见 `Native.Live.unwrittenSlots`。
+export nativePrologueOf : Int -> List Int -> List Instr
+nativePrologueOf frame holes =
   append
     [IPush Rbp, IMov (OpReg Rbp) (OpReg Rsp)]
-    (append (if frame == 0 then [] else [IBinReg "sub" Rsp (OpImm frame)]) (if frame == 0 then [] else [IMov (OpMem Rbp nativeDescriptorOff) (OpImm 0)]))
+    (append (if frame == 0 then [] else [IBinReg "sub" Rsp (OpImm frame)]) (if frame == 0 then [] else IMov (OpMem Rbp nativeDescriptorOff) (OpImm 0) :: map (\off => IMov (OpMem Rbp (0 - off)) (OpImm 0)) holes))
 
 -- | 固定 epilogue：mov rsp, rbp; pop rbp; ret。
 export nativeEpilogue : List Instr

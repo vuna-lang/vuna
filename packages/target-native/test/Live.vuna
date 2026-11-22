@@ -4,7 +4,8 @@
 --   * 槽在最后一次读之后写 0（保守 GC 不再把已死对象钉在帧里）；
 --   * 回边上的读让槽保持活跃（不能清）；
 --   * 帧不会被再次进入的函数（非递归、无回边）不付产物成本；
---   * 含 `rt_apply` 调用的基本块整块不清（实参的根就是调用方槽）。
+--   * 含 `rt_apply` 调用的基本块整块不清（实参的根就是调用方槽）；
+--   * 从不写的槽（死存储删掉后留下的洞）能被找出来，且只在「帧会再次进入」时清。
 import Base
 import Base.Data.Int as Int
 import Base.Data.List as List
@@ -58,11 +59,19 @@ applyBody =
 writtenOnly : List Instr
 writtenOnly = [IMov (OpMem Rbp slot1) (OpReg Rax), IMov (OpReg Rax) (OpImm 5)]
 
+-- | 帧 32 字节：只写 slot 0（偏移 -16），偏移 -24 / -32 是从不写的洞。
+holesBody : List Instr
+holesBody = [IMov (OpMem Rbp slot0) (OpReg Rax), IMov (OpReg Rax) (OpMem Rbp slot0)]
+
 problems : List String
 problems =
   filter
     (\s => s /= "")
-    [check "straight (reenter)" True (hasClear 0 (clearDeadSlots True cls0 straight)), check "straight (no reenter)" False (hasClear 0 (clearDeadSlots False cls0 straight)), check "loop body keeps slot" False (hasClear 0 (clearDeadSlots True cls0 loopBody)), check "apply block untouched" False (hasClear 0 (clearDeadSlots True cls0 applyBody)), checkN "dead store dropped" 1 (length (clearDeadSlots False cls0 writtenOnly)), check "scalar slot not cleared" False (hasClear 0 (clearDeadSlots True [Pair 0 NClsScalar] straight))]
+    [check "straight (reenter)" True (hasClear 0 (clearDeadSlots True cls0 straight)), check "straight (no reenter)" False (hasClear 0 (clearDeadSlots False cls0 straight)), check "loop body keeps slot" False (hasClear 0 (clearDeadSlots True cls0 loopBody)), check "apply block untouched" False (hasClear 0 (clearDeadSlots True cls0 applyBody)), checkN "dead store dropped" 1 (length (clearDeadSlots False cls0 writtenOnly)), check "scalar slot not cleared" False (hasClear 0 (clearDeadSlots True [Pair 0 NClsScalar] straight)), checkN "unwritten slots" 2 (length (unwrittenSlots 32 holesBody)), check "written slot not a hole" False (memIntT 16 (unwrittenSlots 32 holesBody)), check "frame reused (recursive)" True (frameReused True holesBody), check "frame not reused (straight line)" False (frameReused False holesBody)]
+
+memIntT : Int -> List Int -> Bool
+memIntT _ [] = False
+memIntT x (y :: rest) = if x == y then True else memIntT x rest
 
 hasClear : Int -> List Instr -> Bool
 hasClear slot instrs = memInstr (IMov (OpMem Rbp (nativeSlotOff slot)) (OpImm 0)) instrs
