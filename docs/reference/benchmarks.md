@@ -86,51 +86,53 @@ gc_retain}.vuna`。
   `--rss-passes 3` 取最大值，与墙钟分开采样；
 - `--runs 5 --warmup 2` 取中位数；基线记录生成时的 `meta.loadavg`，跨机器只比 ratio。
 
-本机一档（16 核，`a792cd8`，生成时 `loadavg ≈ 1.53`，同一窗口）：
+本机一档（16 核，`746772f`，生成时 `loadavg ≈ 1.56`，同一窗口）：
 
 | benchmark | native ms | OCaml 后端 ms | 手写 OCaml ms | native/手写 | native/OCaml 后端 | native RSS | 手写 RSS | RSS 比 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| arith | 7 | 6 | 5 | 1.40x | 1.17x | 0.4 MiB | 2.6 MiB | 0.15x |
-| string_ops | 3 | 4 | 3 | 1.00x | 0.75x | 0.8 MiB | 3.2 MiB | 0.23x |
-| hashmap | 8 | 7 | 4 | 2.00x | 1.14x | 4.0 MiB | 3.9 MiB | 1.02x |
-| list_recursion | 24 | 11 | 13 | 1.85x | 2.18x | 19.6 MiB | 11.3 MiB | 1.74x |
-| gc_pressure | 38 | 29 | 24 | 1.58x | 1.31x | 32.8 MiB | 11.2 MiB | 2.93x |
-| array | 21 | 14 | 16 | 1.31x | 1.50x | 27.5 MiB | 15.4 MiB | 1.79x |
-| records | 20 | 14 | 7 | 2.86x | 1.43x | 0.9 MiB | 4.7 MiB | 0.19x |
-| closures | 24 | 11 | 9 | 2.67x | 2.18x | 24.4 MiB | 8.8 MiB | 2.78x |
-| sorting | 36 | 21 | 17 | 2.12x | 1.71x | 16.0 MiB | 9.4 MiB | 1.69x |
-| float_math | 36 | 13 | 7 | 5.14x | 2.77x | 1.0 MiB | 4.6 MiB | 0.22x |
-| text_scan | 6 | 6 | 4 | 1.50x | 1.00x | 3.2 MiB | 3.6 MiB | 0.91x |
-| nat_bits | 7 | 5 | 4 | 1.75x | 1.40x | 0.4 MiB | 2.7 MiB | 0.14x |
-| tco_mutual | 9 | 6 | 4 | 2.25x | 1.50x | 0.4 MiB | 2.6 MiB | 0.15x |
-| tco_wide | 7 | 4 | 4 | 1.75x | 1.75x | 0.4 MiB | 2.6 MiB | 0.14x |
-| gc_low_live | 211 | 286 | 334 | 0.63x | 0.74x | 2.9 MiB | 244.1 MiB | 0.01x |
-| gc_array_churn | 142 | 182 | 114 | 1.25x | 0.78x | 3.1 MiB | 82.3 MiB | 0.04x |
-| gc_retain | 161 | 74 | 38 | 4.24x | 2.18x | 55.2 MiB | 19.5 MiB | 2.83x |
+| arith | 8 | 6 | 5 | 1.60x | 1.33x | 0.4 MiB | 2.6 MiB | 0.15x |
+| string_ops | 3 | 4 | 3 | 1.00x | 0.75x | 0.8 MiB | 3.1 MiB | 0.24x |
+| hashmap | 9 | 8 | 3 | 3.00x | 1.12x | 3.8 MiB | 4.0 MiB | 0.94x |
+| list_recursion | 24 | 11 | 13 | 1.85x | 2.18x | 19.8 MiB | 11.3 MiB | 1.75x |
+| gc_pressure | 40 | 29 | 27 | 1.48x | 1.38x | 32.6 MiB | 11.3 MiB | 2.89x |
+| array | 20 | 15 | 15 | 1.33x | 1.33x | 27.4 MiB | 15.5 MiB | 1.77x |
+| records | 19 | 14 | 7 | 2.71x | 1.36x | 1.0 MiB | 4.6 MiB | 0.22x |
+| closures | 24 | 11 | 9 | 2.67x | 2.18x | 24.4 MiB | 8.7 MiB | 2.81x |
+| sorting | 37 | 21 | 18 | 2.06x | 1.76x | 16.1 MiB | 9.6 MiB | 1.68x |
+| float_math | 8 | 13 | 7 | 1.14x | 0.62x | 1.0 MiB | 4.5 MiB | 0.22x |
+| text_scan | 5 | 6 | 4 | 1.25x | 0.83x | 3.4 MiB | 3.4 MiB | 0.99x |
+| nat_bits | 8 | 5 | 4 | 2.00x | 1.60x | 0.4 MiB | 2.6 MiB | 0.15x |
+| tco_mutual | 8 | 5 | 5 | 1.60x | 1.60x | 0.4 MiB | 2.6 MiB | 0.14x |
+| tco_wide | 6 | 4 | 4 | 1.50x | 1.50x | 0.4 MiB | 2.7 MiB | 0.14x |
+| gc_low_live | 219 | 287 | 335 | 0.65x | 0.76x | 2.5 MiB | 244.5 MiB | 0.01x |
+| gc_array_churn | 139 | 183 | 112 | 1.24x | 0.76x | 3.0 MiB | 82.3 MiB | 0.04x |
+| gc_retain | 162 | 74 | 38 | 4.26x | 2.19x | 55.1 MiB | 19.4 MiB | 2.84x |
 
 读法：
 
 - **arith 曾是 67.6x / 412 MiB**：300 万层递归帧不回收，时间花在栈页 fault 而不是指令质量。
-  它的递归主体是**直接饱和尾调用**，TCO 后为 16 ms / 0.4 MiB（3.20x，§1.2）。
-- **native/OCaml 后端 1.0–2.4x 的一档**：`string_ops` / `hashmap` / `array` / `sorting` /
-  `gc_pressure` / `list_recursion`；`closures`（2.27x）与 `records`（2.13x）的差距来自
-  闭包/对象表示、非尾递归与「所有中间值占栈槽」的朴素 codegen（闭包调用不在尾调用
-  覆盖面内，见 [native.md](native.md) §3）。
-- **相对手写对照 4x 以上的一档各有明确的单一来源**：`float_math` 是每次浮点运算的装箱对象
-  （9.43x）；`records` 曾是 80 万层尾递归帧 + 每步 record 分配 + 闭包-per-`let`（TCO 后
-  20 ms / 1.0 MiB，2.86x）；`gc_array_churn` / `gc_retain` 在 GC 侧（见下）。
+  它的递归主体是**直接饱和尾调用**；标量内联、常数除法展开与条件直发分支把循环体压成
+  `cmp` / `jg` + 全内联算术：当前 8 ms / 0.4 MiB（手写 5 ms，1.60x；§1.2）。
+- **native/OCaml 后端 1.0–2.5x 的一档**：`string_ops` / `hashmap` / `list_recursion` / `gc_pressure` / `array` / `records` / `closures` / `sorting` / `text_scan` / `nat_bits`；`closures`（2.18x）与 `records`
+  （1.36x）的差距来自闭包/对象表示、非尾递归与「所有中间值占栈槽」的朴素 codegen
+  （闭包调用不在尾调用覆盖面内，见 [native.md](native.md) §3）。
+- **相对手写对照 2.5x 以上的一档各有明确的单一来源**：`records` 曾是 80 万层尾递归帧 +
+  每步 record 分配 + 闭包-per-`let`（TCO 后 19 ms / 1.0 MiB，2.71x）；`closures`
+  24 ms（2.67x）是函数参数只能在运行时按 arity 分派；`gc_retain` 在 GC 侧（整堆重扫
+  存活集，见下）。浮点曾是每次运算的装箱对象（11.43x）：字面量常量化 + 表达式树在
+  `xmm` 上算完、根只装盒一次之后 8 ms（1.14x）。
 - `tco_mutual` / `tco_wide` 曾经几乎全是**栈帧成本**（RSS 与墙钟随递归深度线性增长、
   `default_stack_ok=false`）；TCO 后 8 / 6 ms、0.4 MiB、`true`（§1.2）。
 - 零参别名直调（`Nat.plus` / `Nat.mult` / `Nat.toInt` …）、闭包只捕获自由变量与调用点
-  去虚拟化之后，`nat_bits` 的 native / 手写 OCaml 是 1.75x、`closures` 3.12x；剩余差距是
-  函数参数这种只能在运行时按 arity 分派的调用面。
+  去虚拟化之后，`nat_bits` 的 native / 手写 OCaml 是 2.00x；剩余差距是函数参数这种
+  只能在运行时按 arity 分派的调用面。
 - **GC 的主判据已成立**：逐帧保守扫根会把帧内**已死**的指针槽当成根（`gc_low_live` 的
   `churn` 每帧用完 `xs` / `s` 之后递归），`Native.Live` 在递归 / 带回边的函数里对指针槽
   在最后一次读之后写 0（[native.md](native.md) §3），死对象当轮即可回收：
-  `gc_low_live` 211 ms / 2.9 MiB、`gc_array_churn` 142 ms / 3.1 MiB（手写侧 244.1 / 82.2 MiB）；
+  `gc_low_live` 219 ms / 2.5 MiB、`gc_array_churn` 139 ms / 3.0 MiB（手写侧 244.1 / 82.2 MiB）；
   对照「按精确槽集扫描」时期的 231 / 3.6 与 138 / 3.9 MiB，墙钟只差一点、RSS 落回存活集量级。
-  `gc_pressure` 32.8 MiB 与 `gc_retain` 55.2 MiB（live 单调上升到 ~19 MB）仍符合预期，是
-  `VUNA_NATIVE_GC_LOG` 里 `gen=` 分布的测量项（[native.md](native.md) §5.2）。
+  `gc_pressure` 32.6 MiB 与 `gc_retain` 55.1 MiB（live 单调上升到 ~19 MB）仍符合预期，
+  是 `VUNA_NATIVE_GC_LOG` 里 `gen=` 分布的测量项（[native.md](native.md) §5.2）。
 - 峰值 RSS 的语义：OCaml 侧是 GC 后高水位，native 侧是栈页 + live 堆；两者只作量级参考。
 - 这组数不是 CI 门槛：跨机器、跨负载不可比；回归判断用 `--target native --check` 对
   `bench/baselines/programs.json` 的 ratio、rss_ratio、artifact 与 `default_stack_ok` 变化做提示。
@@ -144,14 +146,14 @@ native 的 TCO / GC 验证项。**GC 与 TCO 均已落地**；下表「前」列
 | --- | --- | --- | --- |
 | `tco_mutual` | 189 ms / 244 MiB / `default_stack_ok=false` | 8 ms / 0.4 MiB / `true` | wall, rss, stack |
 | `tco_wide` | 343 ms / 442 MiB / `false` | 6 ms / 0.4 MiB / `true` | wall, rss, stack |
-| `arith` | 338 ms / 412 MiB / `false` | 16 ms / 0.4 MiB / `true` | wall, rss, stack |
-| `records` | 151 ms / 151 MiB / `false` | 32 ms / 1.0 MiB / `true` | wall, rss, stack |
+| `arith` | 338 ms / 412 MiB / `false` | 8 ms / 0.4 MiB / `true` | wall, rss, stack |
+| `records` | 151 ms / 151 MiB / `false` | 19 ms / 1.0 MiB / `true` | wall, rss, stack |
 
 - **TCO**：判据是 `default_stack_ok` 由 false 翻为 true，且 RSS 从百 MB 降到进程基线
   （~0.4 MiB）；上表四项都满足。`arith` / `records` 也翻真，说明它们的递归主体同样是
   **直接饱和尾调用**；`tco_wide` 覆盖 9 参（3 个栈实参）的自递归。
-- **GC**：主判据是 RSS 落在存活集量级，四项都满足——`gc_low_live` 211 ms / 2.9 MiB、
-  `gc_array_churn` 142 ms / 3.1 MiB、`gc_pressure` 32.8 MiB、`gc_retain` 55.2 MiB。
+- **GC**：主判据是 RSS 落在存活集量级，四项都满足——`gc_low_live` 219 ms / 2.5 MiB、
+  `gc_array_churn` 139 ms / 3.0 MiB、`gc_pressure` 32.6 MiB、`gc_retain` 55.1 MiB。
   `gc_low_live` / `gc_array_churn` 此前的不满足来自逐帧保守扫根把陈旧栈槽里的死对象一并留住；
   `Native.Live` 的死槽清零（[native.md](native.md) §3）把两项拉回存活集量级。
   `VUNA_NATIVE_GC_LOG=1` 可逐次看 `live` / `gen`。两代回收里年轻代只扫根集与脏卡片、
