@@ -810,6 +810,228 @@ needsRax (IrCast _ _ inner) = needsRax inner
 needsRax (IrTail inner) = needsRax inner
 needsRax _ = False
 
+-- | 把一个原子实参装进寄存器：槽变量 / 整数字面量 / 字符串字面量（`.rodata` 地址）。
+atomToReg : FGen -> Reg -> Ir -> Maybe (List Instr)
+atomToReg st r (IrVar b) =
+  case lookupBinder b st.fgSlots of
+    Just slot => Just [IMov (OpReg r) (OpMem Rbp (nativeSlotOff slot))]
+    Nothing => Nothing
+atomToReg _ r (IrInt n) = Just [IMov (OpReg r) (OpImm n)]
+atomToReg st r (IrStr s) =
+  case poolLabelOf s st.fgPool of
+    Just label => Just [ILea r label]
+    Nothing => Nothing
+atomToReg _ _ _ = Nothing
+
+-- | 字符串叶子的调用点内联（无分配、无 GC 点）：
+--   * `strLength s`：长度头就是 `[s]`；
+--   * `strAt s i`：`i < 0` 或 `i >= len` 返回 -1，否则读一个字节（与 `rt_str_at` 同义）。
+--   实参不是原子时返回 `Nothing`（回退到运行时调用）。
+strInline : FGen -> String -> List Ir -> Maybe (Pair (List Instr) FGen)
+strInline st sym args =
+  if sym == "strLength" then
+    case args of
+      [a] =>
+        case atomToReg st Rax a of
+          Just load => Just (Pair (append load [IMov (OpReg Rax) (OpMem Rax 0)]) st)
+          Nothing => Nothing
+      _ => Nothing
+  else if sym == "strAt" then
+    case args of
+      [sa, ia] =>
+        case Pair (atomToReg st Rax sa) (atomToReg st R11 ia) of
+          Pair (Just loadS) (Just loadI) =>
+            let
+              slowP = freshLabel st
+              slow = firstOf slowP
+              doneP = freshLabel (secondOf slowP)
+              done = firstOf doneP
+              body = append loadS (append loadI [IMov (OpReg R10) (OpMem Rax 0), ICmp (OpReg R11) (OpImm 0), IJcc "jl" slow, ICmp (OpReg R11) (OpReg R10), IJcc "jge" slow, IMovzx Rax (OpMemX Rax R11 8), IJmp done, ILabel slow, IMov (OpReg Rax) (OpImm (0 - 1)), ILabel done])
+            in Just (Pair body (secondOf doneP))
+          _ => Nothing
+      _ => Nothing
+  else
+    Nothing
+
+-- | 浮点叶子的调用点内联：仍是一次 `alloc_leaf`（Float 是堆上的 leaf 对象），但省掉
+--   运行时函数的帧与实参槽往返。装盒先做（此时实参指针都在槽里，`alloc` 触发的 GC 安全），
+--   然后新对象只留在 `r10` 里；**之后不再有 call**，所以 `xmm` / `r10` 不需要是根。
+-- | 浮点调用的树内联入口：`IrRtApp` 的二元算子与 `IrApp (IrRt …)` 的一元算子都先试整树。
+floatTreeOf : FGen -> String -> List Ir -> Maybe (List Instr)
+floatTreeOf st sym args =
+  if isFloatBin sym then
+    floatTreeInline st (IrRtApp sym args)
+  else if sym == "floatSqrt" || sym == "floatAbs" || sym == "floatFromInt" then
+    case args of
+      [a] => floatTreeInline st (IrApp Nothing (IrRt sym) a)
+      _ => Nothing
+  else
+    Nothing
+
+-- | 浮点表达式**树**：整棵树在 `xmm0..3` 上算完，只有根装盒一次。
+--   中间结果不装箱，所以 `acc + sqrt(abs (intToFloat n)) * 0.25 - 0.5` 这种形状从
+--   每个运算一次 `alloc_leaf` + 一次运行时调用，降到一次 `alloc_leaf`。
+--   叶子只接受：槽里的装箱 Float（`movsd` 解引用）、浮点字面量（`.rodata`）、
+--   `floatFromInt` 的整数原子。任何别的形态（调用 / 高阶 / 记录字段）返回 `Nothing`，
+--   调用方回退到逐运算内联。
+--
+--   装盒在**树计算之前**：`alloc_leaf` 可能触发 GC，此时实参指针仍只在槽里（保守根）；
+--   之后树内不再有 `call`，所以 `xmm` 与装盒对象的寄存器都不需要是根。
+floatBinOf : String -> String
+floatBinOf "bi_add_float" = "add"
+floatBinOf "bi_sub_float" = "sub"
+floatBinOf "bi_mul_float" = "mul"
+floatBinOf _ = "div"
+
+floatTree : FGen -> List Int -> Ir -> Maybe (Pair Int (Pair (List Instr) (List Int)))
+floatTree st [] ir = Nothing
+floatTree st (x :: rest) ir =
+  case ir of
+    IrCast _ _ inner => floatTree st (x :: rest) inner
+    IrVar b =>
+      case lookupBinder b st.fgSlots of
+        Just slot =>
+          Just
+            (Pair x (Pair [IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff slot)), IXmmLoad x (OpMem Rax 0)] rest))
+        Nothing => Nothing
+    IrFloatLit raw =>
+      case poolLabelOf raw st.fgFloats of
+        Just label => Just (Pair x (Pair [IXmmLoad x (OpRip label)] rest))
+        Nothing => Nothing
+    IrRtApp sym args => if isFloatBin sym then floatTreeBin st (x :: rest) sym args else Nothing
+    IrApp _ f a => floatTreeApp st (x :: rest) f a
+    _ => Nothing
+
+floatTreeBin : FGen -> List Int -> String -> List Ir -> Maybe (Pair Int (Pair (List Instr) (List Int)))
+floatTreeBin st pool sym ([a, b]) =
+  case floatTree st pool a of
+    Just pa =>
+      case floatTree st (secondOf (secondOf pa)) b of
+        Just pb =>
+          let
+            da = firstOf pa
+            ia = firstOf (secondOf pa)
+            db = firstOf pb
+            ib = firstOf (secondOf pb)
+            rest = secondOf (secondOf pb)
+          in Just
+            (Pair da (Pair (append ia (append ib [IXmmBin (floatBinOf sym) da db])) (db :: rest)))
+        Nothing => Nothing
+    Nothing => Nothing
+floatTreeBin _ _ _ _ = Nothing
+
+floatTreeApp : FGen -> List Int -> Ir -> Ir -> Maybe (Pair Int (Pair (List Instr) (List Int)))
+floatTreeApp st pool f a =
+  case f of
+    IrRt sym => floatTreeLeafApp st pool sym a
+    -- `sqrt` / `abs` / `intToFloat` 是 η-收缩的零参别名（`sqrt = rt:floatSqrt`），
+    -- 调用点上解析到运行时叶子后再按一元叶子展开。
+    IrGlobal name =>
+      case aliasTargetOf 8 st.fgDefs name of
+        Just (AliasRt sym) => floatTreeLeafApp st pool sym a
+        _ => Nothing
+    _ => Nothing
+
+floatTreeLeafApp : FGen -> List Int -> String -> Ir -> Maybe (Pair Int (Pair (List Instr) (List Int)))
+floatTreeLeafApp st (x :: rest) sym a =
+  if sym == "floatSqrt" then
+    floatTreeUn st (x :: rest) "sqrt" a
+  else if sym == "floatAbs" then
+    floatTreeUn st (x :: rest) "abs" a
+  else if sym == "floatFromInt" then
+    case atomToReg st Rax a of
+      Just load => Just (Pair x (Pair (append load [IXmmFromInt x Rax]) rest))
+      Nothing => Nothing
+  else
+    Nothing
+floatTreeLeafApp _ [] _ _ = Nothing
+
+floatTreeUn : FGen -> List Int -> String -> Ir -> Maybe (Pair Int (Pair (List Instr) (List Int)))
+-- abs：按位清符号位（与 `rt_float_abs` 同一手法），不引入 `andpd`。
+floatTreeUn st pool mode a =
+  case floatTree st pool a of
+    Nothing => Nothing
+    Just pa =>
+      let
+        d = firstOf pa
+        ins = firstOf (secondOf pa)
+        rest = secondOf (secondOf pa)
+      in if mode == "sqrt" then
+        Just (Pair d (Pair (append ins [IXmmUnop "sqrt" d]) rest))
+      else
+        Just
+          (Pair d (Pair (append ins [IXmmToReg Rax d, IBinReg "shl" Rax (OpImm 1), IBinReg "shr" Rax (OpImm 1), IXmmFromReg d Rax]) rest))
+
+allocLeafToR11 : List Instr
+allocLeafToR11 =
+  [IMov (OpReg Rdi) (OpImm 8), ICall (nativeRtLabel "alloc_leaf"), IMov (OpReg R11) (OpReg Rax)]
+
+floatTreeInline : FGen -> Ir -> Maybe (List Instr)
+floatTreeInline st ir =
+  case floatTree st [0, 1, 2, 3] ir of
+    Just pa =>
+      let
+        d = firstOf pa
+        ins = firstOf (secondOf pa)
+      in Just
+        (catInstrs [allocLeafToR11, ins, [IXmmStore (OpMem R11 0) d, IMov (OpReg Rax) (OpReg R11)]])
+    Nothing => Nothing
+
+isFloatBin : String -> Bool
+isFloatBin sym =
+  sym == "bi_add_float" || sym == "bi_sub_float" || sym == "bi_mul_float" || sym == "bi_div_float"
+
+floatInline : FGen -> String -> List Ir -> Maybe (List Instr)
+floatInline st sym args =
+  if isFloatBin sym then
+    floatBinInline st sym args
+  else if sym == "floatSqrt" then
+    case args of
+      [a] =>
+        case atomToReg st Rax a of
+          Just la => Just (catInstrs [allocLeafToR10, la, [IXmmLoad 0 (OpMem Rax 0), IXmmUnop "sqrt" 0, IXmmStore (OpMem R10 0) 0, IMov (OpReg Rax) (OpReg R10)]])
+          Nothing => Nothing
+      _ => Nothing
+  else if sym == "floatAbs" then
+    case args of
+      [a] =>
+        case atomToReg st Rax a of
+          Just la => Just (catInstrs [allocLeafToR10, la, [IMov (OpReg Rax) (OpMem Rax 0), IBinReg "shl" Rax (OpImm 1), IBinReg "shr" Rax (OpImm 1), IMov (OpMem R10 0) (OpReg Rax), IMov (OpReg Rax) (OpReg R10)]])
+          Nothing => Nothing
+      _ => Nothing
+  else if sym == "floatFromInt" then
+    case args of
+      [a] =>
+        case atomToReg st Rax a of
+          Just la => Just (catInstrs [allocLeafToR10, la, [IXmmFromInt 0 Rax, IXmmStore (OpMem R10 0) 0, IMov (OpReg Rax) (OpReg R10)]])
+          Nothing => Nothing
+      _ => Nothing
+  else if sym == "intFromFloat" then
+    case args of
+      [a] =>
+        case atomToReg st Rax a of
+          Just la => Just (catInstrs [la, [IXmmLoad 0 (OpMem Rax 0), IXmmToInt Rax 0]])
+          Nothing => Nothing
+      _ => Nothing
+  else
+    Nothing
+
+floatBinInline : FGen -> String -> List Ir -> Maybe (List Instr)
+floatBinInline st sym ([a, b]) =
+  case Pair (atomToReg st Rax a) (atomToReg st R11 b) of
+    Pair (Just la) (Just lb) =>
+      Just
+        (catInstrs [allocLeafToR10, la, [IXmmLoad 0 (OpMem Rax 0)], lb, [IXmmLoad 1 (OpMem R11 0), IXmmBin (floatBinOf sym) 0 1, IXmmStore (OpMem R10 0) 0, IMov (OpReg Rax) (OpReg R10)]])
+    _ => Nothing
+floatBinInline _ _ _ = Nothing
+
+catInstrs : List (List Instr) -> List Instr
+catInstrs xs = concatMap (\x => x) xs
+
+allocLeafToR10 : List Instr
+allocLeafToR10 =
+  [IMov (OpReg Rdi) (OpImm 8), ICall (nativeRtLabel "alloc_leaf"), IMov (OpReg R10) (OpReg Rax)]
+
 -- | 常数除法：先选被除数，再从剩余池里取 scratch。
 genDivInto : FGen -> List Reg -> Ir -> DivPlan -> Maybe (Pair Reg (Pair (List Instr) (List Reg)))
 genDivInto st pool a (DivShift k) =
@@ -1014,12 +1236,21 @@ genRtApp fuel st isTail sym args =
       "&&" => genBoolChain (fuel - 1) st args True
       "||" => genBoolChain (fuel - 1) st args False
       _ =>
-        case genInlineRt st sym args of
+        case floatTreeOf st sym args of
           Just instrs => NOk (Pair instrs st)
           Nothing =>
-            case nativeRtTarget sym of
-              Nothing => unsupported "native target: runtime symbol `${sym}` is not supported yet"
-              Just label => if length args /= irInlineArity sym then internal "runtime symbol arity mismatch: ${sym}" else if isTail then genTailCall (fuel - 1) st label args else genSaturatedCall (fuel - 1) st label args
+            case floatInline st sym args of
+              Just instrs => NOk (Pair instrs st)
+              Nothing =>
+                case strInline st sym args of
+                  Just p => NOk p
+                  Nothing =>
+                    case genInlineRt st sym args of
+                      Just instrs => NOk (Pair instrs st)
+                      Nothing =>
+                        case nativeRtTarget sym of
+                          Nothing => unsupported "native target: runtime symbol `${sym}` is not supported yet"
+                          Just label => if length args /= irInlineArity sym then internal "runtime symbol arity mismatch: ${sym}" else if isTail then genTailCall (fuel - 1) st label args else genSaturatedCall (fuel - 1) st label args
 
 -- | `IrApp (IrRt sym) args`：运行时常量函数值的应用（`irInlineArity = 0` 的那些）。
 --   标量叶子先走内联选择；其余饱和走直调，部分/过度应用先求值成闭包再交给 `rt_apply`。
@@ -1027,20 +1258,36 @@ genRtValueCall : Int -> FGen -> Bool -> String -> List Ir -> NRes (Pair (List In
 genRtValueCall fuel st isTail sym args =
   if fuel <= 0 then
     internal "native codegen fuel exhausted"
+  else if length args /= rtValueArityOf sym then
+    genApplyHead (fuel - 1) st isTail (IrRt sym) args
   else
-    case genInlineRt st sym args of
+    case floatTreeOf st sym args of
+      -- 部分 / 过度应用：统一走闭包 + `rt_apply`（内联要求饱和）。
       Just instrs => NOk (Pair instrs st)
       Nothing =>
-        let
-          arity = rtValueArityOf sym
-        in if arity <= 0 then
-          unsupported "native target: runtime function values are not supported yet"
-        else if length args == arity then
-          case nativeRtTarget sym of
-            Nothing => unsupported "native target: runtime symbol `${sym}` is not supported yet"
-            Just label => if isTail then genTailCall (fuel - 1) st label args else genSaturatedCall (fuel - 1) st label args
-        else
-          genApplyHead (fuel - 1) st isTail (IrRt sym) args
+        case floatInline st sym args of
+          Just instrs => NOk (Pair instrs st)
+          Nothing =>
+            case strInline st sym args of
+              Just p => NOk p
+              Nothing => genRtValueCallFallback (fuel - 1) st isTail sym args
+
+-- | 值形态的剩余路径：标量选择 → 直调 → 部分 / 过度应用。
+genRtValueCallFallback : Int -> FGen -> Bool -> String -> List Ir -> NRes (Pair (List Instr) FGen)
+genRtValueCallFallback fuel st isTail sym args =
+  case genInlineRt st sym args of
+    Just instrs => NOk (Pair instrs st)
+    Nothing =>
+      let
+        arity = rtValueArityOf sym
+      in if arity <= 0 then
+        unsupported "native target: runtime function values are not supported yet"
+      else if length args == arity then
+        case nativeRtTarget sym of
+          Nothing => unsupported "native target: runtime symbol `${sym}` is not supported yet"
+          Just label => if isTail then genTailCall fuel st label args else genSaturatedCall fuel st label args
+      else
+        genApplyHead fuel st isTail (IrRt sym) args
 
 -- | `IrConcatMany`：左→右两两拼接（与 OCaml 的 `String.concat ""` 语义一致）。
 --   `parts` 至少 3 项（Lowering 的门槛），空/单元素的兜底只防空指针。

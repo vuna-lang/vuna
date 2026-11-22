@@ -639,3 +639,17 @@ run: sh -c 'd="$TMPDIR/flitinf"; "$VUNA" build --out "$TMPDIR/flitinf-o" "$d"'
 exit: 0
 run: sh -c '"$TMPDIR/flitinf-o/bin/flitinf"'
 out-equals: "inf"
+
+# 9ao3) 浮点表达式树整棵在 `xmm` 上算完，只有根装盒一次：产物里没有逐运算的
+#      `call rt_float_*`，`sqrt` / `abs` 也展开成 `sqrtsd` 与按位清符号位。
+run: sh -c 'd="$TMPDIR/ftree"; mkdir -p "$d/app"; printf "[package]\nname = \"ftree\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base\nimport Base.Data.Float as Float\nimport Base.Data.String as String\n\nmain : String\nmain = show (1.5 + sqrt (abs (0.0 - 4.0)) * 0.25 - 0.5)\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/ftree-n" "$d"'
+exit: 0
+run: sh -c '"$TMPDIR/ftree-n/bin/ftree"'
+out-equals: "1.5"
+file-contains: $TMPDIR/ftree-n/Main.s sqrtsd
+run: sh -c 'grep -c "call rt_float_" "$TMPDIR/ftree-n/Main.s" | tr -d " " | grep -q "^0$"'
+exit: 0
+run: sh -c 'd="$TMPDIR/ftree"; "$VUNA" build --out "$TMPDIR/ftree-o" "$d"'
+exit: 0
+run: sh -c '"$TMPDIR/ftree-o/bin/ftree"'
+out-equals: "1.5"
