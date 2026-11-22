@@ -13,7 +13,7 @@ run: printf 'module Facade where\n\nexport module App as A\n' > "$TMPDIR/warn-re
 run: printf 'module Direct where\n\nexport module App\n' > "$TMPDIR/warn-reexp/lib/Direct.vuna"
 run: printf 'module Other where\n\nimport Base.Data.Bits as Bits\nexport module App\n\nother : Int\nother = 1\n' > "$TMPDIR/warn-reexp/lib/Other.vuna"
 run: "$VUNA" check -W "$TMPDIR/warn-reexp" 2>&1
-out-contains: lib/Other.vuna:3:8
+out-contains: lib/Other.vuna:3:1
 out-contains: [UN_UnusedImport]
 out-not-contains: lib/Facade.vuna
 out-not-contains: lib/Direct.vuna

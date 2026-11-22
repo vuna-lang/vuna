@@ -16,6 +16,7 @@ sample =
     ++ "\n"
     ++ "import Base.Data.List as List\n"
     ++ "import Base.Data.Pair\n"
+    ++ "export import Base.Data.Pair (fst)\n"
     ++ "\n"
     ++ "infixl 6 <+>\n"
     ++ "\n"
@@ -46,7 +47,18 @@ sample =
     ++ "\n"
     ++ "-- do 块里的语句（供 `doStmt` 节点）\n"
     ++ "k : Int\n"
-    ++ "k =\n" ++ "  do\n" ++ "    x <- pure 1\n" ++ "    let y = x + 1\n" ++ "    pure y\n"
+    ++ "k =\n"
+    ++ "  do\n"
+    ++ "    x <- pure 1\n"
+    ++ "    let y = x + 1\n"
+    ++ "    pure y\n"
+    ++ "\n"
+    ++ "-- 修饰符前缀属于声明自己的区间（与建树节点同一区间）\n"
+    ++ "export hidden : Int\n"
+    ++ "hidden = 7\n"
+    ++ "export opaque sealed : Int\n"
+    ++ "sealed = 8\n"
+    ++ "opaque blind : Int\n" ++ "blind = 9\n" ++ "export data E : Type where\n" ++ "  MkE : E\n"
 
 -- | 相邻兄弟按源码顺序：前一个的终点不晚于后一个的起点。
 orderedKids : List CstNode -> Bool
@@ -91,25 +103,45 @@ kindTagsAt fuel n =
 kindTags : List CstToken -> CstNode -> List String
 kindTags toks tree = kindTagsAt (List.length toks) tree
 
--- | 顶层 `decl` 节点（源码顺序）。
-declNodes : List CstNode -> List CstNode
-declNodes [] = []
-declNodes (n :: rest) = if nodeKindTag n == "decl" then n :: declNodes rest else declNodes rest
+-- | 顶层指定 kind 的节点（源码顺序）。
+nodesOfKind : String -> List CstNode -> List CstNode
+nodesOfKind tag [] = []
+nodesOfKind tag (n :: rest) =
+  if nodeKindTag n == tag then n :: nodesOfKind tag rest else nodesOfKind tag rest
 
--- | 树里的顶层声明节点与 AST 的声明一一对应：同样多、同样顺序、同一行起。
--- 这是迁移期的漂移锁：树多建 / 少建 / 起点挪位都会在这里炸。
+-- | 两段 span 的顺序与字节区间完全一致（同一构造只能有一个区间来源）。
+sameSpan : Span -> Span -> Bool
+sameSpan a b =
+  spanStartLine a
+    == spanStartLine b
+    && spanStartCol a
+    == spanStartCol b
+    && spanStartOffset a
+    == spanStartOffset b
+    && spanEndLine a
+    == spanEndLine b && spanEndCol a == spanEndCol b && spanEndOffset a == spanEndOffset b
+
+-- | 两段 span 起点一致（重导出把成员列表放在 `importSpan` 之外，终点可以不同）。
+sameStart : Span -> Span -> Bool
+sameStart a b =
+  spanStartLine a
+    == spanStartLine b && spanStartCol a == spanStartCol b && spanStartOffset a == spanStartOffset b
+
+-- | 树里的顶层声明节点与 AST 的声明一一对应：同样多、同样顺序、同一区间。
+-- 这是迁移期的漂移锁：树多建 / 少建 / 起点或终点挪位都会在这里炸。
 declsAlign : List CstNode -> List Decl -> Bool
-declsAlign nodes decls =
-  case nodes of
-    [] =>
-      case decls of
-        [] => True
-        _ => False
-    n :: rest =>
-      case decls of
-        [] => False
-        d :: dRest =>
-          spanStartLine (nodeSpan n) == spanStartLine (declSpan d) && declsAlign rest dRest
+declsAlign [] [] = True
+declsAlign [] (_ :: _) = False
+declsAlign (_ :: _) [] = False
+declsAlign (n :: nodes) (d :: decls) = sameSpan (nodeSpan n) (declSpan d) && declsAlign nodes decls
+
+-- | 树里的顶层 `import` 节点与 AST 的 import 一一对应：同样多、同样顺序、同一起点。
+importsAlign : List CstNode -> List Import -> Bool
+importsAlign [] [] = True
+importsAlign [] (_ :: _) = False
+importsAlign (_ :: _) [] = False
+importsAlign (n :: nodes) (i :: imports) =
+  sameStart (nodeSpan n) i.importSpan && importsAlign nodes imports
 
 -- | 每种结构都得真的建出来了：只靠「根是 file」会放过把 token 全平铺在根上的实现。
 hasKinds : List String -> Bool
@@ -138,5 +170,14 @@ main =
         + (if nestedOk tree then 4 else 0)
         + (if hasKinds (kindTags toks tree) then 8 else 0)
         + (
-          if declsAlign (declNodes (nodeChildren tree)) p.parsedFile.sourceFileDecls then 16 else 0
+          if declsAlign (nodesOfKind "decl" (nodeChildren tree)) p.parsedFile.sourceFileDecls then
+            16
+          else
+            0
+        )
+        + (
+          if importsAlign (nodesOfKind "import" (nodeChildren tree)) p.parsedFile.sourceFileImports then
+            32
+          else
+            0
         )

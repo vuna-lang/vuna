@@ -1113,15 +1113,14 @@ importRemovalEdits : List Import -> List Decl -> Import -> List DiagEdit
 importRemovalEdits imports decls imp =
   if importOwnsLine imports decls imp then [DiagEdit (importRemovalSpan imp.importSpan) ""] else []
 
--- | `import` 关键字在行首（名字列 = `import` + 可选 `qualified` 的长度），且该行没有
--- 其它 import / 声明。模块头与 import 同一行时名字列更大，同样被排除。
+-- | `import` 关键字在行首（span 起点列 = 1），且该行没有其它 import / 声明。
 importOwnsLine : List Import -> List Decl -> Import -> Bool
 importOwnsLine imports decls imp =
   importStartsLine imp
     && not (anyImportOnLine imports imp) && not (anyDeclOnLine decls (spanStartLine imp.importSpan))
 
 importStartsLine : Import -> Bool
-importStartsLine imp = spanStartCol imp.importSpan == (if imp.importIsQualified then 18 else 8)
+importStartsLine imp = spanStartCol imp.importSpan == 1
 
 anyImportOnLine : List Import -> Import -> Bool
 anyImportOnLine [] imp = False
