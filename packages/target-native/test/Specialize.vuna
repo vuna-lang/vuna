@@ -1,0 +1,248 @@
+-- `Native.Specialize` 的单元测试：高阶参数特化的形状。
+--
+-- 锁三件事：函数类型形参 + 闭合函数实参 → 生成克隆并改写调用点；带自由变量的 lambda
+-- 不特化（会丢捕获）；不是函数类型的位置不特化。
+import Base
+import Base.Data.Int as Int
+import Base.Data.List as List
+import Base.Data.Pair as Pair
+import Base.Data.String as String
+import Base.Effect.Core
+import Vuna.Ir.Model
+import Vuna.Target.Native.Specialize
+
+main : Eff [] String
+main =
+  case problems of
+    [] => pure ""
+    ps =>
+      do
+        _ <- prim_eff_print ("native specialize drifted:\n" ++ join "\n" ps ++ "\n")
+        _ <- prim_eff_exit 1
+        pure ""
+
+-- 形参：f : Int -> Int, x : Int
+fnBinder : IrBinder
+fnBinder = mkIrBinderTyped 10 "f" (IrTyFun IrTyInt IrTyInt)
+
+xBinder : IrBinder
+xBinder = mkIrBinderTyped 11 "x" IrTyInt
+
+-- | 柯里化应用（IR 的 `IrApp` 一次一个实参）。
+app2 : Ir -> Ir -> Ir -> Ir
+app2 f a b = IrApp Nothing (IrApp Nothing f a) b
+
+yBinder : IrBinder
+yBinder = mkIrBinderTyped 31 "y" IrTyInt
+
+dblBody : Ir
+dblBody = IrRtApp "+" (IrVar dblBinder :: IrVar dblBinder :: [])
+
+openLamBody : Ir
+openLamBody = IrRtApp "+" (IrVar yBinder :: IrVar zBinder :: [])
+
+closedLamBody : Ir
+closedLamBody = IrRtApp "+" (IrVar yBinder :: IrVar yBinder :: [])
+
+-- twice f x = f (f x)
+twiceDef : IrDef
+twiceDef =
+  IrDef
+    "twice"
+    2
+    []
+    (Just (IrTyFun (IrTyFun IrTyInt IrTyInt) (IrTyFun IrTyInt IrTyInt)))
+    (IrLam [fnBinder, xBinder] Nothing (IrTail (IrApp Nothing (IrVar fnBinder) (IrApp Nothing (IrVar fnBinder) (IrVar xBinder)))))
+    True
+    False
+    Nothing
+
+-- dbl y = y + y（顶层函数，作为已知函数值）
+dblBinder : IrBinder
+dblBinder = mkIrBinderTyped 20 "y" IrTyInt
+
+dblDef : IrDef
+dblDef =
+  IrDef
+    "dbl"
+    1
+    []
+    (Just (IrTyFun IrTyInt IrTyInt))
+    (IrLam [dblBinder] Nothing dblBody)
+    True
+    False
+    Nothing
+
+-- main = twice dbl 3
+mainDef : IrDef
+mainDef =
+  IrDef
+    "main"
+    0
+    []
+    (Just IrTyInt)
+    (IrTail (app2 (IrGlobal "twice") (IrGlobal "dbl") (IrInt 3)))
+    True
+    False
+    Nothing
+
+-- 闭合 lambda 实参：`main2 = twice (\y => y + y) 3`
+main2Def : IrDef
+main2Def =
+  IrDef
+    "main2"
+    0
+    []
+    (Just IrTyInt)
+    (IrTail (app2 (IrGlobal "twice") (IrLam [yBinder] Nothing closedLamBody) (IrInt 3)))
+    True
+    False
+    Nothing
+
+-- 带自由变量的 lambda：`\y => y + z`，z 在外层 binder 里
+zBinder : IrBinder
+zBinder = mkIrBinderTyped 30 "z" IrTyInt
+
+openLamDef : IrDef
+openLamDef =
+  IrDef
+    "useOpen"
+    1
+    []
+    (Just (IrTyFun IrTyInt IrTyInt))
+    (IrLam [zBinder] Nothing (IrTail (app2 (IrGlobal "twice") (IrLam [yBinder] Nothing openLamBody) (IrVar zBinder))))
+    True
+    False
+    Nothing
+
+outDefs : List IrDef
+outDefs = specializeDefs [twiceDef, dblDef, mainDef, openLamDef]
+
+closedLamDefs : List IrDef
+closedLamDefs = specializeDefs [twiceDef, main2Def]
+
+-- applyN g n x = if n <= 0 then x else applyN g (n - 1) (g x)（自调用里传同一个函数）
+nBinder : IrBinder
+nBinder = mkIrBinderTyped 40 "n" IrTyInt
+
+applyNBinder : IrBinder
+applyNBinder = mkIrBinderTyped 41 "g" (IrTyFun IrTyInt IrTyInt)
+
+applyNDef : IrDef
+applyNDef =
+  IrDef
+    "applyN"
+    3
+    []
+    Nothing
+    (IrLam [applyNBinder, nBinder, xBinder] Nothing (IrIf (IrRtApp "bi_le_int" (IrVar nBinder :: IrInt 0 :: [])) (IrVar xBinder) (IrTail (IrApp Nothing (IrApp Nothing (IrApp Nothing (IrGlobal "applyN") (IrVar applyNBinder)) (IrRtApp "-" (IrVar nBinder :: IrInt 1 :: []))) (IrApp Nothing (IrVar applyNBinder) (IrVar xBinder))))))
+    True
+    False
+    Nothing
+
+applyMainDef : IrDef
+applyMainDef =
+  IrDef
+    "applyMain"
+    0
+    []
+    (Just IrTyInt)
+    (IrTail (IrApp Nothing (IrApp Nothing (IrApp Nothing (IrGlobal "applyN") (IrGlobal "dbl")) (IrInt 3)) (IrInt 0)))
+    True
+    False
+    Nothing
+
+applyNDefs : List IrDef
+applyNDefs = specializeDefs [applyNDef, dblDef, applyMainDef]
+
+outNames : List String
+outNames = map defNameOf outDefs
+
+problems : List String
+problems =
+  filter
+    (\s => s /= "")
+    [check "clone created" True (anyStarts "twice$s" outNames), check "main rewritten" True (mentionsGlobal (cloneNameOf outNames) (bodyOf "main" outDefs)), check "closed lambda specialized" True (anyStarts "twice$s" (map defNameOf closedLamDefs)), checkInt "clone drops specialized parameter" 1 (cloneArityOf outDefs), check "clone body has no formal reference" False (mentionsBinder "twice$s" fnBinder.irBinderId outDefs), check "self call rewritten to clone" True (selfCallsClone applyNDefs), check "no self call left to original" False (mentionsGlobal "applyN" (bodyOf (cloneNameIn "applyN$s" applyNDefs) applyNDefs)), checkMaybeStr "origin of nested clone" (Just "msort") (originOf "msort$s4$s7"), checkMaybeStr "origin of plain name" Nothing (originOf "msort"), check "recursive names follow clones" True (memStr "msort$s4" (recursiveNamesWithClones ["msort"] [applyNCloneStub])), check "open lambda not specialized" False (anyStarts "twice$s" (map defNameOf (specializeDefs [twiceDef, dblDef, openLamDef])))]
+
+applyNCloneStub : IrDef
+applyNCloneStub = IrDef "msort$s4" 1 [] Nothing (IrInt 0) True False Nothing
+
+cloneArityOf : List IrDef -> Int
+cloneArityOf defs = arityOfName (cloneNameOf outNames) defs 0
+
+arityOfName : String -> List IrDef -> Int -> Int
+arityOfName _ [] acc = acc
+arityOfName n (d :: rest) acc = if defNameOf d == n then irDefArity d else arityOfName n rest acc
+
+mentionsBinder : String -> Int -> List IrDef -> Bool
+mentionsBinder name id defs = mentionsBinderIn id (bodyOf name defs)
+
+mentionsBinderIn : Int -> Ir -> Bool
+mentionsBinderIn id ir =
+  case ir of
+    IrVar b => b.irBinderId == id
+    IrApp _ f a => mentionsBinderIn id f || mentionsBinderIn id a
+    IrTail inner => mentionsBinderIn id inner
+    IrLet _ s b => mentionsBinderIn id s || mentionsBinderIn id b
+    IrIf c t e => mentionsBinderIn id c || mentionsBinderIn id t || mentionsBinderIn id e
+    IrLam _ _ b => mentionsBinderIn id b
+    _ => False
+
+selfCallsClone : List IrDef -> Bool
+selfCallsClone defs =
+  mentionsGlobal (cloneNameIn "applyN$s" defs) (bodyOf (cloneNameIn "applyN$s" defs) defs)
+
+cloneNameIn : String -> List IrDef -> String
+cloneNameIn p defs = anyStartsName p (map defNameOf defs)
+
+anyStartsName : String -> List String -> String
+anyStartsName _ [] = ""
+anyStartsName p (x :: rest) = if starts p x then x else anyStartsName p rest
+
+memStr : String -> List String -> Bool
+memStr _ [] = False
+memStr s (x :: rest) = if s == x then True else memStr s rest
+
+cloneNameOf : List String -> String
+cloneNameOf [] = ""
+cloneNameOf (x :: rest) = if starts "twice$s" x then x else cloneNameOf rest
+
+anyStarts : String -> List String -> Bool
+anyStarts _ [] = False
+anyStarts p (x :: rest) = if starts p x then True else anyStarts p rest
+
+starts : String -> String -> Bool
+starts p s = strLength s >= strLength p && strSubstring 0 (strLength p) s == p
+
+defNameOf : IrDef -> String
+defNameOf d = irDefName d
+
+bodyOf : String -> List IrDef -> Ir
+bodyOf _ [] = IrInt 0
+bodyOf n (d :: rest) =
+  if irDefName d == n then
+    case d of
+      IrDef _ _ _ _ body _ _ _ => body
+      _ => IrInt 0
+  else
+    bodyOf n rest
+
+mentionsGlobal : String -> Ir -> Bool
+mentionsGlobal n ir =
+  case ir of
+    IrGlobal m => m == n
+    IrApp _ f a => mentionsGlobal n f || mentionsGlobal n a
+    IrTail inner => mentionsGlobal n inner
+    IrLet _ s b => mentionsGlobal n s || mentionsGlobal n b
+    IrIf c t e => mentionsGlobal n c || mentionsGlobal n t || mentionsGlobal n e
+    IrLam _ _ b => mentionsGlobal n b
+    _ => False
+
+check : String -> Bool -> Bool -> String
+check label want got = if want == got then "" else label ++ ": drifted"
+
+checkInt : String -> Int -> Int -> String
+checkInt label want got = if want == got then "" else label ++ ": drifted"
+
+checkMaybeStr : String -> Maybe String -> Maybe String -> String
+checkMaybeStr label want got = if want == got then "" else label ++ ": drifted"

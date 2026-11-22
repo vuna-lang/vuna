@@ -1,0 +1,537 @@
+module Vuna.Target.Native.Specialize where
+
+-- 高阶参数特化：整程序 IR 在手里，调用点上函数实参**静态已知**（无自由变量的 lambda /
+-- 顶层函数 / 运行时叶子）时，克隆被调定义并把那个形参替换成已知函数值，于是
+-- `twice f x = f (f x)` / `foldl f` 里的 `f` 变成直调（不再每次按闭包 arity 分派）。
+--
+-- 只替换**闭合**的函数值（自由变量为空）：把带自由变量的 lambda 搬进被调函数体会丢捕获。
+-- 克隆按（被调名、形参序号、实参指纹）去重；每个原始定义最多 8 个克隆、整程序最多 64 个，
+-- 超出的调用点保持原样（语义不变，只丢优化）。克隆仍接收原来的全部形参（那个函数形参
+-- 变成未使用），调用点因此不用改实参——代价只是一次静态闭包的 `lea`。
+--
+-- 边界：只 import Base 与 `Ir.Model` / `Ir.Analysis`；不 import 编译器阶段与任何后端。
+import Base.Data.Bool as Bool
+import Base.Data.Int as Int
+import Base.Data.List as List
+import Base.Data.Maybe as Maybe
+import Base.Data.Pair as Pair
+import Base.Data.String as String
+import Vuna.Ir.Analysis as Analysis
+import Vuna.Ir.Model
+import Vuna.Ir.Synthetic as Synthetic
+
+-- ---------------------------------------------------------------
+-- 自由变量（判断函数值是否闭合）
+-- ---------------------------------------------------------------
+idsOf : List IrBinder -> List Int
+idsOf [] = []
+idsOf (b :: rest) = b.irBinderId :: idsOf rest
+
+freeVarsOf : Ir -> List Int
+freeVarsOf ir = freeVarsIn [] ir
+
+freeVarsIn : List Int -> Ir -> List Int
+freeVarsIn env (IrVar b) = if memInt b.irBinderId env then [] else [b.irBinderId]
+freeVarsIn env (IrLam bs _ body) = freeVarsIn (append (idsOf bs) env) body
+freeVarsIn env (IrLet bs scrut body) =
+  append (freeVarsIn env scrut) (freeVarsIn (append (idsOf bs) env) body)
+freeVarsIn env (IrApp _ f a) = append (freeVarsIn env f) (freeVarsIn env a)
+freeVarsIn env (IrCase _ _ scrut alts) =
+  append (freeVarsIn env scrut) (concatMap (freeVarsAlt env) alts)
+freeVarsIn env (IrNatCase scrut _ z s c) =
+  append
+    (freeVarsIn env scrut)
+    (append (freeVarsAltMaybe env z) (append (freeVarsAltMaybe env s) (freeVarsAltMaybe env c)))
+freeVarsIn env (IrEffThunk _ _ _ _ prim) = freeVarsIn env prim
+freeVarsIn env (IrCtor _ _ _ args) = concatMap (freeVarsIn env) args
+freeVarsIn env (IrRecord _ _ fields) = concatMap (freeVarsField env) fields
+freeVarsIn env (IrProj base _ _ _) = freeVarsIn env base
+freeVarsIn env (IrRecUpd base _ fields _) =
+  append (freeVarsIn env base) (concatMap (freeVarsField env) fields)
+freeVarsIn env (IrRtApp _ args) = concatMap (freeVarsIn env) args
+freeVarsIn env (IrCast _ _ inner) = freeVarsIn env inner
+freeVarsIn env (IrTail inner) = freeVarsIn env inner
+freeVarsIn env (IrIf c t e) =
+  append (freeVarsIn env c) (append (freeVarsIn env t) (freeVarsIn env e))
+freeVarsIn env (IrConcatMany parts) = concatMap (freeVarsIn env) parts
+freeVarsIn _ _ = []
+
+freeVarsField : List Int -> Pair String Ir -> List Int
+freeVarsField env p = freeVarsIn env (secondOf p)
+
+freeVarsAlt : List Int -> IrAlt -> List Int
+freeVarsAlt env alt = freeVarsIn (append (idsOf alt.irAltBinders) env) alt.irAltBody
+
+freeVarsAltMaybe : List Int -> Maybe IrAlt -> List Int
+freeVarsAltMaybe _ Nothing = []
+freeVarsAltMaybe env (Just alt) = freeVarsAlt env alt
+
+-- ---------------------------------------------------------------
+-- 已知的闭合函数值
+-- ---------------------------------------------------------------
+-- | 一个实参是不是「静态已知的闭合函数值」，是则返回它的指纹（克隆去重用）。
+--   指纹只由 binder 身份与名字构成：同一个 lambda 节点（含克隆里被复制的同一份）指纹相同，
+--   不同 site 的两个 lambda 指纹不同（各自克隆，互不干扰）。
+fnKeyOf : List IrDef -> Ir -> Maybe String
+fnKeyOf defs ir =
+  case ir of
+    IrGlobal n => if existsDef n defs then Just ("g:" ++ n) else Nothing
+    IrRt s => Just ("r:" ++ s)
+    IrLam bs _ body =>
+      if isEmptyList (freeVarsIn (idsOf bs) body) then
+        Just ("l:" ++ join "," (map strFromInt (idsOf bs)))
+      else
+        Nothing
+    -- lambda 自己的形参是绑定的：自由变量要看体里引用了**外层**哪些 binder。
+    _ => Nothing
+
+-- | 只保留运行时 binder（擦除占位不占参数位）。
+runtimeBindersOf : List IrBinder -> List IrBinder
+runtimeBindersOf [] = []
+runtimeBindersOf (b :: rest) =
+  if b.irBinderErased then runtimeBindersOf rest else b :: runtimeBindersOf rest
+
+existsDef : String -> List IrDef -> Bool
+existsDef _ [] = False
+existsDef n (d :: rest) = if irDefName d == n then True else existsDef n rest
+
+findDef : String -> List IrDef -> Maybe IrDef
+findDef _ [] = Nothing
+findDef n (d :: rest) = if irDefName d == n then Just d else findDef n rest
+
+-- ---------------------------------------------------------------
+-- 形参：函数类型 + 在体里被当 head 应用
+-- ---------------------------------------------------------------
+isFunTy : Maybe IrTy -> Bool
+isFunTy (Just (IrTyFun _ _)) = True
+isFunTy _ = False
+
+-- ---------------------------------------------------------------
+-- 替换（按 binder 身份）
+-- ---------------------------------------------------------------
+substIr : Int -> Ir -> Ir -> Ir
+substIr id repl (IrVar b) = if b.irBinderId == id then repl else IrVar b
+substIr id repl (IrLam bs rt body) = IrLam bs rt (substIr id repl body)
+substIr id repl (IrLet bs scrut body) = IrLet bs (substIr id repl scrut) (substIr id repl body)
+substIr id repl (IrApp ty f a) = IrApp ty (substIr id repl f) (substIr id repl a)
+substIr id repl (IrIf c t e) = IrIf (substIr id repl c) (substIr id repl t) (substIr id repl e)
+substIr id repl (IrCase ty k scrut alts) =
+  IrCase ty k (substIr id repl scrut) (map (\a => substAlt id repl a) alts)
+substIr id repl (IrNatCase scrut f z s c) =
+  IrNatCase
+    (substIr id repl scrut)
+    f
+    (substAltMaybe id repl z)
+    (substAltMaybe id repl s)
+    (substAltMaybe id repl c)
+substIr id repl (IrCtor fam ctor ty args) = IrCtor fam ctor ty (map (\x => substIr id repl x) args)
+substIr id repl (IrRecord fam ty fields) =
+  IrRecord fam ty (map (\p => Pair (firstOf p) (substIr id repl (secondOf p))) fields)
+substIr id repl (IrProj base fam field ty) = IrProj (substIr id repl base) fam field ty
+substIr id repl (IrRecUpd base fam fields ty) =
+  IrRecUpd
+    (substIr id repl base)
+    fam
+    (map (\p => Pair (firstOf p) (substIr id repl (secondOf p))) fields)
+    ty
+substIr id repl (IrRtApp sym args) = IrRtApp sym (map (\x => substIr id repl x) args)
+substIr id repl (IrCast from to inner) = IrCast from to (substIr id repl inner)
+substIr id repl (IrTail inner) = IrTail (substIr id repl inner)
+substIr id repl (IrConcatMany parts) = IrConcatMany (map (\x => substIr id repl x) parts)
+substIr id repl (IrEffThunk fam ctor ty arity prim) =
+  IrEffThunk fam ctor ty arity (substIr id repl prim)
+substIr _ _ other = other
+
+substAlt : Int -> Ir -> IrAlt -> IrAlt
+substAlt id repl alt = IrAlt alt.irAltCtor alt.irAltBinders (substIr id repl alt.irAltBody)
+
+substAltMaybe : Int -> Ir -> Maybe IrAlt -> Maybe IrAlt
+substAltMaybe _ _ Nothing = Nothing
+substAltMaybe id repl (Just alt) = Just (substAlt id repl alt)
+
+-- ---------------------------------------------------------------
+-- 克隆体里的自递归：同一指纹的调用改指克隆
+-- ---------------------------------------------------------------
+rewriteSelf : Int -> String -> String -> Int -> String -> Ir -> Ir
+rewriteSelf fuel orig clone pos key ir =
+  if fuel <= 0 then
+    ir
+  else
+    case ir of
+      IrApp _ _ _ =>
+        let
+          p = Analysis.flattenApp ir
+          head = firstOf p
+          args = secondOf p
+          args2 = map (\a => rewriteSelf (fuel - 1) orig clone pos key a) args
+        in case head of
+          IrGlobal n => if n == orig && callKeyAt pos args2 == Just key then Synthetic.applyAllIr (IrGlobal clone) (dropAt pos args2) else Synthetic.applyAllIr (IrGlobal n) args2
+          _ => Synthetic.applyAllIr (rewriteSelf (fuel - 1) orig clone pos key head) args2
+      IrLam bs rt body => IrLam bs rt (rewriteSelf (fuel - 1) orig clone pos key body)
+      IrLet bs scrut body => IrLet bs (rewriteSelf (fuel - 1) orig clone pos key scrut) (rewriteSelf (fuel - 1) orig clone pos key body)
+      IrIf c t e => IrIf (rewriteSelf (fuel - 1) orig clone pos key c) (rewriteSelf (fuel - 1) orig clone pos key t) (rewriteSelf (fuel - 1) orig clone pos key e)
+      IrCase ty k scrut alts => IrCase ty k (rewriteSelf (fuel - 1) orig clone pos key scrut) (map (rewriteAlt (fuel - 1) orig clone pos key) alts)
+      IrNatCase scrut f z s c => IrNatCase (rewriteSelf (fuel - 1) orig clone pos key scrut) f (rewriteAltM (fuel - 1) orig clone pos key z) (rewriteAltM (fuel - 1) orig clone pos key s) (rewriteAltM (fuel - 1) orig clone pos key c)
+      IrCtor fam ctor ty args => IrCtor fam ctor ty (map (\x => rewriteSelf (fuel - 1) orig clone pos key x) args)
+      IrRecord fam ty fields => IrRecord fam ty (map (\p => Pair (firstOf p) (rewriteSelf (fuel - 1) orig clone pos key (secondOf p))) fields)
+      IrProj base fam field ty => IrProj (rewriteSelf (fuel - 1) orig clone pos key base) fam field ty
+      IrRecUpd base fam fields ty => IrRecUpd (rewriteSelf (fuel - 1) orig clone pos key base) fam (map (\p => Pair (firstOf p) (rewriteSelf (fuel - 1) orig clone pos key (secondOf p))) fields) ty
+      IrRtApp sym args => IrRtApp sym (map (\x => rewriteSelf (fuel - 1) orig clone pos key x) args)
+      IrCast from to inner => IrCast from to (rewriteSelf (fuel - 1) orig clone pos key inner)
+      IrTail inner => IrTail (rewriteSelf (fuel - 1) orig clone pos key inner)
+      IrConcatMany parts => IrConcatMany (map (\x => rewriteSelf (fuel - 1) orig clone pos key x) parts)
+      IrEffThunk fam ctor ty arity prim => IrEffThunk fam ctor ty arity (rewriteSelf (fuel - 1) orig clone pos key prim)
+      _ => ir
+
+rewriteAlt : Int -> String -> String -> Int -> String -> IrAlt -> IrAlt
+rewriteAlt fuel orig clone pos key alt =
+  IrAlt alt.irAltCtor alt.irAltBinders (rewriteSelf (fuel - 1) orig clone pos key alt.irAltBody)
+
+rewriteAltM : Int -> String -> String -> Int -> String -> Maybe IrAlt -> Maybe IrAlt
+rewriteAltM _ _ _ _ _ Nothing = Nothing
+rewriteAltM fuel orig clone pos key (Just alt) = Just (rewriteAlt (fuel - 1) orig clone pos key alt)
+
+dropAt : Int -> List a -> List a
+dropAt n xs = if n <= 0 then dropOne xs else dropOneAt n xs
+
+dropOne : List a -> List a
+dropOne [] = []
+dropOne (_ :: rest) = rest
+
+dropOneAt : Int -> List a -> List a
+dropOneAt _ [] = []
+dropOneAt n (x :: rest) = if n <= 0 then rest else x :: dropOneAt (n - 1) rest
+
+-- | 从含擦除占位的 binder 表里去掉第 `pos` 个**运行时** binder。
+dropRuntimeBinderAt : Int -> List IrBinder -> List IrBinder
+dropRuntimeBinderAt pos bs = dropRuntimeGo pos bs
+
+dropRuntimeGo : Int -> List IrBinder -> List IrBinder
+dropRuntimeGo _ [] = []
+dropRuntimeGo pos (b :: rest) =
+  if b.irBinderErased then
+    b :: dropRuntimeGo pos rest
+  else if pos <= 0 then rest else b :: dropRuntimeGo (pos - 1) rest
+
+callKeyAt : Int -> List Ir -> Maybe String
+callKeyAt _ [] = Nothing
+callKeyAt pos (a :: rest) = if pos <= 0 then Just (argKey a) else callKeyAt (pos - 1) rest
+
+-- | 自递归改写用的实参指纹（与实际去重键同口径）。
+argKey : Ir -> String
+argKey (IrGlobal n) = "g:" ++ n
+argKey (IrRt s) = "r:" ++ s
+argKey (IrLam bs _ _) = "l:" ++ join "," (map strFromInt (idsOf bs))
+argKey _ = "?"
+
+isEmptyList : List a -> Bool
+isEmptyList [] = True
+isEmptyList _ = False
+
+memInt : Int -> List Int -> Bool
+memInt _ [] = False
+memInt x (y :: rest) = if x == y then True else memInt x rest
+
+memStr : String -> List String -> Bool
+memStr _ [] = False
+memStr x (y :: rest) = if x == y then True else memStr x rest
+
+-- ---------------------------------------------------------------
+-- 状态与主流程
+-- ---------------------------------------------------------------
+record Sp where
+  spDefs : List IrDef
+  -- | (被调名 @ 形参序号 @ 实参指纹) -> 克隆名。
+  spClones : List (Pair String String)
+  spNext : Int
+  spCount : Int
+  -- | 每个原始定义已建克隆数（防爆炸）。
+  spPerDef : List (Pair String Int)
+
+perDefOf : String -> List (Pair String Int) -> Int
+perDefOf _ [] = 0
+perDefOf n (p :: rest) = if firstOf p == n then secondOf p else perDefOf n rest
+
+bumpPerDef : String -> List (Pair String Int) -> List (Pair String Int)
+bumpPerDef n [] = [Pair n 1]
+bumpPerDef n (p :: rest) =
+  if firstOf p == n then Pair n (secondOf p + 1) :: rest else p :: bumpPerDef n rest
+
+cloneBudget : Int
+cloneBudget = 64
+
+perDefBudget : Int
+perDefBudget = 8
+
+-- | 在实参里找第一个「函数类型形参 + 闭合函数实参 + 体里当 head 应用」的位置。
+firstSpecializable : List IrDef -> List IrBinder -> Ir -> List Ir -> Maybe (Pair Int (Pair Int Ir))
+firstSpecializable defs rbs inner args =
+  case firstSpecGo defs rbs inner args of
+    Just (Pair b a) => Just (Pair (indexOfBinder b rbs) (Pair b.irBinderId a))
+    Nothing => Nothing
+
+firstSpecGo : List IrDef -> List IrBinder -> Ir -> List Ir -> Maybe (Pair IrBinder Ir)
+firstSpecGo _ [] _ _ = Nothing
+firstSpecGo _ _ _ [] = Nothing
+firstSpecGo defs (b :: brest) inner (a :: arest) =
+  case fnKeyOf defs a of
+    Just _ => if isFunTy b.irBinderTy then Just (Pair b a) else firstSpecGo defs brest inner arest
+    Nothing => firstSpecGo defs brest inner arest
+
+indexOfBinder : IrBinder -> List IrBinder -> Int
+indexOfBinder b bs = indexOfId b bs 0
+
+indexOfId : IrBinder -> List IrBinder -> Int -> Int
+indexOfId _ [] acc = acc
+indexOfId b (x :: rest) acc =
+  if x.irBinderId == b.irBinderId then acc else indexOfId b rest (acc + 1)
+
+-- | 处理一个调用点：能特化就返回克隆名与新状态。
+specializeCall : Sp -> String -> List Ir -> Maybe (Pair String (Pair Int Sp))
+specializeCall st name args =
+  case findDef name st.spDefs of
+    Nothing => Nothing
+    Just d =>
+      case d of
+        IrExternDef _ _ _ _ => Nothing
+        IrDef _ arity _ _ body _ _ _ =>
+          case body of
+            IrLam bs lamTy inner =>
+              let
+                rbs = runtimeBindersOf bs
+              in if length rbs /= length args then
+                Nothing
+              else
+                case firstSpecializable st.spDefs rbs inner args of
+                  Nothing => Nothing
+                  Just hit =>
+                    let
+                      pos = firstOf hit
+                      sub = secondOf hit
+                      bId = firstOf sub
+                      arg = secondOf sub
+                      key = name ++ "@" ++ strFromInt pos ++ "@" ++ argKey arg
+                    in case lookupClone key st.spClones of
+                      Just cn => Just (Pair cn (Pair pos st))
+                      Nothing =>
+                        if st.spCount >= cloneBudget || perDefOf name st.spPerDef >= perDefBudget then
+                          Nothing
+                        else
+                          let
+                            cn = name ++ "$s" ++ strFromInt st.spNext
+                            body1 = substIr bId arg inner
+                            body2 = rewriteSelf (64 + 8 * irSize body1) name cn pos (argKey arg) body1
+                            -- 被特化的形参已经替换进体里：克隆**不再接收**它，
+                            -- 调用点也把那个实参丢掉（它是静态函数值，求值无副作用）。
+                            cloneBs = dropRuntimeBinderAt pos bs
+                            cloneArity = length (runtimeBindersOf bs) - 1
+                            clone = IrDef cn cloneArity (irDefDeps d) (irDefTy d) (IrLam cloneBs lamTy body2) (irDefRecValueOk d) (irDefInitGuard d) (irDefSpan d)
+                            st1 = Sp (append st.spDefs [clone]) (Pair key cn :: st.spClones) (st.spNext + 1) (st.spCount + 1) (bumpPerDef name st.spPerDef)
+                          in Just (Pair cn (Pair pos st1))
+            _ => Nothing
+
+lookupClone : String -> List (Pair String String) -> Maybe String
+lookupClone _ [] = Nothing
+lookupClone k (p :: rest) = if firstOf p == k then Just (secondOf p) else lookupClone k rest
+
+-- ---------------------------------------------------------------
+-- 重写一个定义体
+-- ---------------------------------------------------------------
+rwIr : Int -> Sp -> Ir -> Pair Ir Sp
+rwIr fuel st ir =
+  if fuel <= 0 then
+    Pair ir st
+  else
+    case ir of
+      IrApp _ _ _ =>
+        let
+          p = Analysis.flattenApp ir
+          head = firstOf p
+          args = secondOf p
+        in case head of
+          IrGlobal name =>
+            case specializeCall st name args of
+              Just hit =>
+                let
+                  cn = firstOf hit
+                  pos = firstOf (secondOf hit)
+                  st1 = secondOf (secondOf hit)
+                  argsP = rwList (fuel - 1) st1 args
+                in Pair (Synthetic.applyAllIr (IrGlobal cn) (dropAt pos (firstOf argsP))) (secondOf argsP)
+              Nothing =>
+                let
+                  hP = rwIr (fuel - 1) st head
+                  aP = rwList (fuel - 1) (secondOf hP) args
+                in Pair (Synthetic.applyAllIr (firstOf hP) (firstOf aP)) (secondOf aP)
+          _ =>
+            let
+              hP = rwIr (fuel - 1) st head
+              aP = rwList (fuel - 1) (secondOf hP) args
+            in Pair (Synthetic.applyAllIr (firstOf hP) (firstOf aP)) (secondOf aP)
+      IrLam bs rt body =>
+        let
+          p = rwIr (fuel - 1) st body
+        in Pair (IrLam bs rt (firstOf p)) (secondOf p)
+      IrLet bs scrut body =>
+        let
+          s = rwIr (fuel - 1) st scrut
+          b = rwIr (fuel - 1) (secondOf s) body
+        in Pair (IrLet bs (firstOf s) (firstOf b)) (secondOf b)
+      IrIf c t e =>
+        let
+          pc = rwIr (fuel - 1) st c
+          pt = rwIr (fuel - 1) (secondOf pc) t
+          pe = rwIr (fuel - 1) (secondOf pt) e
+        in Pair (IrIf (firstOf pc) (firstOf pt) (firstOf pe)) (secondOf pe)
+      IrCase ty k scrut alts =>
+        let
+          ps = rwIr (fuel - 1) st scrut
+          pa = rwAlts (fuel - 1) (secondOf ps) alts
+        in Pair (IrCase ty k (firstOf ps) (firstOf pa)) (secondOf pa)
+      IrNatCase scrut f z s c =>
+        let
+          ps = rwIr (fuel - 1) st scrut
+          pz = rwAltM (fuel - 1) (secondOf ps) z
+          psm = rwAltM (fuel - 1) (secondOf pz) s
+          pc = rwAltM (fuel - 1) (secondOf psm) c
+        in Pair (IrNatCase (firstOf ps) f (firstOf pz) (firstOf psm) (firstOf pc)) (secondOf pc)
+      IrCtor fam ctor ty args =>
+        let
+          p = rwList (fuel - 1) st args
+        in Pair (IrCtor fam ctor ty (firstOf p)) (secondOf p)
+      IrRecord fam ty fields =>
+        let
+          p = rwFields (fuel - 1) st fields
+        in Pair (IrRecord fam ty (firstOf p)) (secondOf p)
+      IrProj base fam field ty =>
+        let
+          p = rwIr (fuel - 1) st base
+        in Pair (IrProj (firstOf p) fam field ty) (secondOf p)
+      IrRecUpd base fam fields ty =>
+        let
+          b = rwIr (fuel - 1) st base
+          f = rwFields (fuel - 1) (secondOf b) fields
+        in Pair (IrRecUpd (firstOf b) fam (firstOf f) ty) (secondOf f)
+      IrRtApp sym args =>
+        let
+          p = rwList (fuel - 1) st args
+        in Pair (IrRtApp sym (firstOf p)) (secondOf p)
+      IrCast from to inner =>
+        let
+          p = rwIr (fuel - 1) st inner
+        in Pair (IrCast from to (firstOf p)) (secondOf p)
+      IrTail inner =>
+        let
+          p = rwIr (fuel - 1) st inner
+        in Pair (IrTail (firstOf p)) (secondOf p)
+      IrConcatMany parts =>
+        let
+          p = rwList (fuel - 1) st parts
+        in Pair (IrConcatMany (firstOf p)) (secondOf p)
+      IrEffThunk fam ctor ty arity prim =>
+        let
+          p = rwIr (fuel - 1) st prim
+        in Pair (IrEffThunk fam ctor ty arity (firstOf p)) (secondOf p)
+      _ => Pair ir st
+
+rwList : Int -> Sp -> List Ir -> Pair (List Ir) Sp
+rwList _ st [] = Pair [] st
+rwList fuel st (x :: rest) =
+  if fuel <= 0 then
+    Pair (x :: rest) st
+  else
+    let
+      px = rwIr (fuel - 1) st x
+      pr = rwList (fuel - 1) (secondOf px) rest
+    in Pair (firstOf px :: firstOf pr) (secondOf pr)
+
+rwFields : Int -> Sp -> List (Pair String Ir) -> Pair (List (Pair String Ir)) Sp
+rwFields _ st [] = Pair [] st
+rwFields fuel st (p :: rest) =
+  if fuel <= 0 then
+    Pair (p :: rest) st
+  else
+    let
+      pv = rwIr (fuel - 1) st (secondOf p)
+      pr = rwFields (fuel - 1) (secondOf pv) rest
+    in Pair (Pair (firstOf p) (firstOf pv) :: firstOf pr) (secondOf pr)
+
+rwAlt : Int -> Sp -> IrAlt -> Pair IrAlt Sp
+rwAlt fuel st alt =
+  let
+    p = rwIr (fuel - 1) st alt.irAltBody
+  in Pair (IrAlt alt.irAltCtor alt.irAltBinders (firstOf p)) (secondOf p)
+
+rwAltM : Int -> Sp -> Maybe IrAlt -> Pair (Maybe IrAlt) Sp
+rwAltM _ st Nothing = Pair Nothing st
+rwAltM fuel st (Just alt) =
+  let
+    p = rwAlt fuel st alt
+  in Pair (Just (firstOf p)) (secondOf p)
+
+rwAlts : Int -> Sp -> List IrAlt -> Pair (List IrAlt) Sp
+rwAlts _ st [] = Pair [] st
+rwAlts fuel st (a :: rest) =
+  if fuel <= 0 then
+    Pair (a :: rest) st
+  else
+    let
+      pa = rwAlt (fuel - 1) st a
+      pr = rwAlts (fuel - 1) (secondOf pa) rest
+    in Pair (firstOf pa :: firstOf pr) (secondOf pr)
+
+-- | 逐定义重写；新克隆追加到 `spDefs` 末尾，并在同一轮里继续处理。
+drain : Int -> Sp -> List IrDef -> Sp
+drain fuel st [] = st
+drain fuel st (d :: rest) =
+  if fuel <= 0 then
+    st
+  else
+    case d of
+      IrExternDef _ _ _ _ => drain (fuel - 1) st rest
+      IrDef _ _ _ _ body _ _ _ =>
+        let
+          before = length st.spDefs
+          p = rwIr (64 + 8 * irSize body) st body
+          st1 = secondOf p
+          st2 = { st1 | spDefs = replaceDefBody (irDefName d) (firstOf p) st1.spDefs }
+        in drain (fuel - 1) st2 (append rest (drop before st2.spDefs))
+
+replaceDefBody : String -> Ir -> List IrDef -> List IrDef
+replaceDefBody n body ds =
+  map (
+      \d =>
+        if irDefName d == n then
+          case d of
+            IrDef nm ar deps ty _ recOk guard span => IrDef nm ar deps ty body recOk guard span
+            _ => d
+        else
+          d
+    ) ds
+
+-- | 程序级特化：返回（可能变长的）定义表。
+export specializeDefs : List IrDef -> List IrDef
+specializeDefs defs = (drain (length defs + cloneBudget + 16) (Sp defs [] 0 0 []) defs).spDefs
+
+-- | 克隆名 `<原定义>$s<n>`（嵌套克隆 `a$s1$s2` 的原定义是 `a`）。
+export originOf : String -> Maybe String
+originOf name =
+  case split "$s" name of
+    first :: _ :: _ => Just first
+    _ => Nothing
+
+-- | 把「克隆的递归性与原定义一致」并进递归名单：克隆体是原体的复制，递归帧的
+--   死槽清零也必须覆盖它们，否则每层残留槽都会钉住对象。
+export recursiveNamesWithClones : List String -> List IrDef -> List String
+recursiveNamesWithClones recNames defs =
+  foldl (
+      \acc, d =>
+        let
+          name = irDefName d
+        in case originOf name of
+          Just orig => if memStr orig recNames then putIfNew name acc else acc
+          Nothing => acc
+    ) recNames defs
+
+putIfNew : String -> List String -> List String
+putIfNew s xs = if memStr s xs then xs else s :: xs

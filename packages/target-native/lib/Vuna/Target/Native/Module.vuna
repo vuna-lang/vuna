@@ -41,6 +41,7 @@ import Vuna.Target.Native.Live
 import Vuna.Target.Native.Repr
 import Vuna.Target.Native.Runtime
 import Vuna.Target.Native.Select
+import Vuna.Target.Native.Specialize
 
 -- ---------------------------------------------------------------
 -- 结果类型：区分「目标不支持」与「生成器不变式破坏」
@@ -2701,11 +2702,15 @@ build program printResult =
                   ordered = if usesMachineLoop reach0 then reachableDefs seeds defs else reach0
                 in case cpsDefsMachine ordered of
                   Err msg => NativeRejected (NativeUnsupported msg)
-                  Ok cpsOrdered =>
+                  Ok cps0 =>
                     let
+                      -- 高阶参数特化：已知的闭合函数实参把被调定义的形参替换成直调，
+                      -- 克隆按（被调名、形参序号、实参指纹）去重。
+                      cpsOrdered = Specialize.specializeDefs cps0
                       pools = modulePools cpsOrdered
                       fpools = moduleFloatPools cpsOrdered
-                    in case genDefs cpsOrdered pools fpools (recursiveDefNames unit) unit.irUnitTyDecls [] cpsOrdered [] [] of
+                      recNames = Specialize.recursiveNamesWithClones (recursiveDefNames unit) cpsOrdered
+                    in case genDefs cpsOrdered pools fpools recNames unit.irUnitTyDecls [] cpsOrdered [] [] of
                       NFail err => NativeRejected (nativeAuditEnrich err cpsOrdered)
                       NOk pair =>
                         let

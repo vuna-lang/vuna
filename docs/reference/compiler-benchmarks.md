@@ -40,9 +40,9 @@
 `gc_pressure` / `list_recursion` 与编译器冷路径（≈2.5–2.7 s）在噪声内。
 冷读数从 24–25 s 降到 2 s 量级：段索引把 GC 的段定位从线性走链表改成
 二分（[native.md](native.md) §5.2），缺省内存预算也不再在 live 见顶后死锁。与 OCaml
-产物同命令（~0.4 s）的剩余差距主要来自高阶函数参数（只能在运行时按闭包 arity 分派）、
+产物同命令（~0.4 s）的剩余差距主要来自带捕获的高阶函数参数（仍按闭包 arity 分派）、
 部分应用 shim 与年轻代 GC（D129），标量算术已在 `Native.Select` 内联，能静态解析的
-闭包调用已不再发 `rt_apply`。`check packages/compiler`
+闭包调用已不再发 `rt_apply`，闭合函数值实参已做高阶参数特化（[native.md](native.md) §3.5）。`check packages/compiler`
 现在跑得完（live 1.1 GB，同机 40–100 s），但重复读数散布大，基线仍只含 base 一档
 （`"full": false`）。
 
