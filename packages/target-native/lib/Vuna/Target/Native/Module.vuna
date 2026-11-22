@@ -441,18 +441,27 @@ closureArgLoad i =
 --   每个（函数 / 运行时符号）只生成一次，标签由 `Native.Abi` 的命名派生。
 valueWrapperFunc : List String -> String -> Int -> String -> NativeFunc
 valueWrapperFunc modPath label arity target =
-  let
-    slots = range 0 arity
-    loads =
-      concatMap
-        (\i => append (closureArgLoad i) [IMov (OpMem Rbp (nativeSlotOff i)) (OpReg Rax)])
-        slots
-    frame = nativeFrameBytes arity
-  in NativeFunc
-    label
-    frame
-    (append (nativePrologue frame) (append loads (tailCallSlotsInstrs target slots)))
-    modPath
+  if arity <= length closureArgRegs then
+    NativeFunc label 0 (append (wrapperShifts arity) [IJmp target]) modPath
+  else
+    let
+      -- 无栈帧 wrapper：闭包 ABI 的实参寄存器（`rsi..r9`）整体下移一格就是标准 ABI
+      -- （`rdi..r8`）——按小到大搬，目标寄存器总是更靠前，不会踩掉后面的源。
+      -- 少掉 `push rbp` + 槽往返，HOF 的每次间接调用只剩「搬实参 + `jmp`」。
+      slots = range 0 arity
+      loads = concatMap (\i => append (closureArgLoad i) [IMov (OpMem Rbp (nativeSlotOff i)) (OpReg Rax)]) slots
+      frame = nativeFrameBytes arity
+    in NativeFunc label frame (append (nativePrologue frame) (append loads (tailCallSlotsInstrs target slots))) modPath
+
+-- | 闭包 ABI → 标准 ABI 的实参搬运（`arity <= 5` 时全在寄存器里）。
+wrapperShifts : Int -> List Instr
+wrapperShifts arity =
+  concatMap (
+      \i =>
+        case Pair (argRegAt i) (argRegAt (i + 1)) of
+          Pair (Just dst) (Just src) => [IMov (OpReg dst) (OpReg src)]
+          _ => []
+    ) (range 0 arity)
 
 nativeStaticClosureLabel : String -> Int -> String
 nativeStaticClosureLabel label arity = "vuna_static_${nativeName label}_${strFromInt arity}"
