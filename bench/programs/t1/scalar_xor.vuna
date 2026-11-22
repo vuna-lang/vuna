@@ -1,0 +1,8 @@
+-- T1 micro：单次异或 + 环依赖。隔离 63-bit wrap 与每轮槽访问的成本。
+import Base.Data.Bits as Bits
+
+loop : Int -> Int -> Int
+loop acc n = if n <= 0 then acc else loop (bxor acc n) (n - 1)
+
+main : Int
+main = loop 0 20000000

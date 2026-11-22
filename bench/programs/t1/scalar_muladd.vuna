@@ -1,0 +1,8 @@
+-- T1 micro：乘 + 加 + 掩码的环依赖（32-bit LCG）。隔离 imul 与多次 wrap。
+import Base.Data.Bits as Bits
+
+loop : Int -> Int -> Int
+loop acc n = if n <= 0 then acc else loop (band (acc * 1103515245 + 12345) 4294967295) (n - 1)
+
+main : Int
+main = loop 0 20000000

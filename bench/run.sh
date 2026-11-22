@@ -5,13 +5,18 @@
 # **生成程序运行时**（vuna 产物 vs 手写 OCaml 等价实现）。
 #
 # 口径：
-#   * 每个 benchmark 一份 `bench/programs/<name>.vuna`（vuna）与 `<name>.ml`（手写
-#     OCaml 等价实现，同算法；个别库基准用标准库上限，见各文件注释），`.out` 是 golden；
+#   * 每个 benchmark 是 `bench/programs/t<N>/<name>.vuna`（vuna）与同目录的
+#     `<name>.ml`（手写 OCaml 等价实现，同算法；个别库基准用标准库上限，见各文件
+#     注释），`.out` 是 golden；`t<N>` 是机制分层（见 `bench/programs/TIERS.md`）；
 #   * 可选 `<name>.bench` sidecar（`key=value`）：
 #       repeat=N      每次计时采样内重复运行 N 次（默认 1；小项 / 启动成本用）
 #       ops=N         该程序一次运行的代表性操作数（默认 0 = 不报 ns/op）
 #       targets=a,b   只在这些 target 上跑（ocaml / native / wasm；默认全部）
-#       c=path        额外参与链接的 C 源（FFI；相对 bench/programs）
+#       c=path        额外参与链接的 C 源（FFI；相对 case 所在目录）
+#       n=N           C 对照的 argv（有 <name>.c 时用）
+#       cc_flags=...  C 对照的额外 cc 参数
+#       timeout_x=N   运行超时 = N × 参照耗时（缺省按 tier）
+#       timeout_ms=N  绝对运行超时
 #       skip=1        不参与默认集合
 #   * `--target` 选择被测后端：ocaml（默认）/ native / wasm / both / all；
 #   * 每项先 warmup 再跑 --runs 次取**中位数**；峰值内存与 GC 采样在计时样本上做
@@ -41,7 +46,16 @@ JSON_OUT=""
 BASELINE=""
 CHECK=0
 ONLY=""
+TIER_FILTER=""
+C_REF=auto
 TARGET=ocaml
+# 运行超时：每个 case 用参照实现（手写 C / OCaml 里更快的那个）的实测时间推导，
+# 0 = 不限。`timeout_x` 的缺省按 tier 给（见 tier_timeout_x）。
+RUN_TIMEOUT_MS=0
+PROBE_TIMEOUT_MS=10000
+TIMEOUT_X=0
+TIMEOUT_MIN_MS=1000
+TIMEOUT_MAX_MS=30000
 VUNA_BIN=${VUNA:-vuna}
 OCAMLOPT_BIN=${OCAMLOPT:-ocamlopt}
 CC_BIN=${CC:-cc}
@@ -59,6 +73,12 @@ options:
   --rss-passes N         RSS / GC 采样数（默认 1；从计时的样本里取，0 = 不采样）
   --target T             被测后端：ocaml / native / wasm / both / all（默认 ocaml）
   --only NAME            只跑一个基准（可重复）
+  --tier T               只跑某个机制层（如 t1；可重复）
+  --c-ref MODE           手写 C 对照：auto（有 <name>.c 就跑，默认）/ on / off
+  --timeout-x N          golden 校验超时 = N × 参照实现耗时（默认按 tier：t5/t6 为 5，其余 3）
+  --timeout-min-ms N     超时下限（默认 1000）
+  --timeout-max-ms N     超时上限（默认 30000）
+  --probe-timeout-ms N   参照实现自身的探测超时（默认 10000）
   --list                 列出自动发现的基准与 sidecar 元数据，不测量
   --compiler PATH        被测 vuna（默认 PATH 里的 vuna / $VUNA）
   --cc PATH              native 链接器（默认 PATH 里的 cc / $CC）
@@ -99,6 +119,19 @@ while [ $# -gt 0 ]; do
     --target=*) TARGET=${1#*=}; shift ;;
     --only) [ $# -ge 2 ] || die "--only needs a value"; ONLY="$ONLY $2"; shift 2 ;;
     --only=*) ONLY="$ONLY ${1#*=}"; shift ;;
+    --tier) [ $# -ge 2 ] || die "--tier needs a value"; TIER_FILTER="$TIER_FILTER $2"; shift 2 ;;
+    --tier=*) TIER_FILTER="$TIER_FILTER ${1#*=}"; shift ;;
+    --c-ref) [ $# -ge 2 ] || die "--c-ref needs a value"; C_REF=$2; shift 2 ;;
+    --c-ref=*) C_REF=${1#*=}; shift ;;
+    --no-c-ref) C_REF=off; shift ;;
+    --timeout-x) [ $# -ge 2 ] || die "--timeout-x needs a value"; TIMEOUT_X=$2; shift 2 ;;
+    --timeout-x=*) TIMEOUT_X=${1#*=}; shift ;;
+    --timeout-min-ms) [ $# -ge 2 ] || die "--timeout-min-ms needs a value"; TIMEOUT_MIN_MS=$2; shift 2 ;;
+    --timeout-min-ms=*) TIMEOUT_MIN_MS=${1#*=}; shift ;;
+    --timeout-max-ms) [ $# -ge 2 ] || die "--timeout-max-ms needs a value"; TIMEOUT_MAX_MS=$2; shift 2 ;;
+    --timeout-max-ms=*) TIMEOUT_MAX_MS=${1#*=}; shift ;;
+    --probe-timeout-ms) [ $# -ge 2 ] || die "--probe-timeout-ms needs a value"; PROBE_TIMEOUT_MS=$2; shift 2 ;;
+    --probe-timeout-ms=*) PROBE_TIMEOUT_MS=${1#*=}; shift ;;
     --list) LIST=1; shift ;;
     --compiler) [ $# -ge 2 ] || die "--compiler needs a value"; VUNA_BIN=$2; shift 2 ;;
     --compiler=*) VUNA_BIN=${1#*=}; shift ;;
@@ -127,6 +160,10 @@ case $RSS_PASSES in *[!0-9]*) die "--rss-passes must be a non-negative integer" 
 case $THRESHOLD in ''|*[!0-9]*|0) die "--threshold must be a positive integer (percent)" ;; esac
 case $FAIL_THRESHOLD in ''|*[!0-9]*|0) die "--fail-threshold must be a positive integer (percent)" ;; esac
 case $ARTIFACT_THRESHOLD in *[!0-9]*) die "--artifact-threshold must be a non-negative integer (percent)" ;; esac
+case $TIMEOUT_X in *[!0-9]*) die "--timeout-x must be a non-negative integer" ;; esac
+case $TIMEOUT_MIN_MS in ''|*[!0-9]*) die "--timeout-min-ms must be a non-negative integer" ;; esac
+case $TIMEOUT_MAX_MS in ''|*[!0-9]*) die "--timeout-max-ms must be a non-negative integer" ;; esac
+case $PROBE_TIMEOUT_MS in ''|*[!0-9]*) die "--probe-timeout-ms must be a non-negative integer" ;; esac
 [ "$FAIL_THRESHOLD" -ge "$THRESHOLD" ] || die "--fail-threshold must be >= --threshold"
 # RSS/GC 采样从计时样本里取，至少留一个纯计时样本。
 if [ "$RSS_PASSES" -ge "$RUNS" ]; then RSS_PASSES=$((RUNS - 1)); fi
@@ -147,8 +184,16 @@ REPO=$PWD
 . "$REPO/bench/lib/targets.sh"
 
 # ---------------------------------------------------------------- 发现与 sidecar
+# 用例按机制分层放在 `bench/programs/t<N>/`：目录名就是 tier，基线 JSON 的键是
+# basename。同名用例出现在两个 tier 下会撞键，发现阶段直接报错。
+declare -A BENCH_DIR=()
+declare -A BENCH_TIER=()
+BENCHES=""
+
 bench_meta() { # name key default
-  local f=$REPO/bench/programs/$1.bench
+  local dir=${BENCH_DIR[$1]:-}
+  [ -n "$dir" ] || { printf '%s' "$3"; return; }
+  local f=$dir/$1.bench
   [ -f "$f" ] || { printf '%s' "$3"; return; }
   local v
   v=$(sed -n "s/^$2=//p" "$f" | tail -n 1)
@@ -156,13 +201,23 @@ bench_meta() { # name key default
 }
 
 discover_benchmarks() {
-  local f n
-  for f in "$REPO"/bench/programs/*.vuna; do
+  local f n d
+  BENCHES=""
+  for f in "$REPO"/bench/programs/t*/*.vuna; do
     [ -f "$f" ] || continue
     n=$(basename "$f" .vuna)
+    d=$(dirname "$f")
+    if [ -n "${BENCH_DIR[$n]:-}" ]; then
+      printf 'vuna-perf: duplicate benchmark name %s (%s and %s)\n' \
+        "$n" "${BENCH_DIR[$n]}" "$d" >&2
+      exit 2
+    fi
+    BENCH_DIR[$n]=$d
+    BENCH_TIER[$n]=$(basename "$d")
     [ "$(bench_meta "$n" skip 0)" = 1 ] && continue
-    printf '%s\n' "$n"
-  done | sort
+    BENCHES+="$n"$'\n'
+  done
+  BENCHES=$(printf '%s' "$BENCHES" | sort)
 }
 
 target_allowed() { # target allowed_csv
@@ -174,11 +229,24 @@ target_allowed() { # target allowed_csv
 
 target_name() { case $1 in vuna_ocaml) printf 'ocaml' ;; *) printf '%s' "$1" ;; esac; }
 
-BENCHES=$(discover_benchmarks)
-[ -n "$BENCHES" ] || die "no benchmarks found under bench/programs"
+discover_benchmarks
+[ -n "$BENCHES" ] || die "no benchmarks found under bench/programs/t*"
+
+case $C_REF in auto|on|off) ;; *) die "--c-ref must be auto, on or off" ;; esac
+
+if [ -n "$TIER_FILTER" ]; then
+  filtered=""
+  for name in $BENCHES; do
+    case " $TIER_FILTER " in
+      *" ${BENCH_TIER[$name]} "*) filtered+="$name"$'\n' ;;
+    esac
+  done
+  BENCHES=$(printf '%s' "$filtered" | sort)
+  [ -n "$BENCHES" ] || die "no benchmark in tier(s):$TIER_FILTER"
+fi
 
 if [ "$LIST" = 1 ]; then
-  printf '  %-16s %-16s %-6s %s\n' benchmark targets repeat notes
+  printf '  %-16s %-6s %-16s %-6s %s\n' benchmark tier targets repeat notes
   for name in $BENCHES; do
     t=$(bench_meta "$name" targets "ocaml,native,wasm")
     r=$(bench_meta "$name" repeat 1)
@@ -187,7 +255,7 @@ if [ "$LIST" = 1 ]; then
     extra=""
     [ -n "$c" ] && extra="c=$c"
     [ "$o" != 0 ] && extra="$extra ops=$o"
-    printf '  %-16s %-16s %-6s %s\n' "$name" "$t" "$r" "$extra"
+    printf '  %-16s %-6s %-16s %-6s %s\n' "$name" "${BENCH_TIER[$name]}" "$t" "$r" "$extra"
   done
   exit 0
 fi
@@ -279,9 +347,9 @@ json_escape() {
 
 now_ns() { date +%s%N; }
 
-# 中位数：参数是若干整数（每行一个）。
+# 中位数：参数是若干数字（每行一个）。保留小数：小项（T0）的每轮耗时可能 <1 ms。
 median_of() {
-  printf '%s\n' "$@" | sort -n | awk '{ a[NR] = $1 } END { if (NR % 2) print a[(NR + 1) / 2]; else print int((a[NR / 2] + a[NR / 2 + 1]) / 2) }'
+  printf '%s\n' "$@" | sort -n | awk '{ a[NR] = $1 } END { if (NR % 2) printf "%.3f\n", a[(NR + 1) / 2]; else printf "%.3f\n", (a[NR / 2] + a[NR / 2 + 1]) / 2 }'
 }
 
 # 比率：$1/$2，两位小数；分母 <= 0 时给 0。
@@ -296,12 +364,84 @@ if [ -n "$TIME_BIN" ] && ! "$TIME_BIN" -f '%M' true >/dev/null 2>&1; then TIME_B
 # native 产物由入口自带栈运行；wasm 产物由 JS 宿主执行。
 run_target() { vuna_run_target "$1" "$2"; }
 
-# native 默认栈探针：固定 8 MiB soft limit，记录程序能否正常退出（信息性）。
-default_stack_run() { # program
-  bash -c 'ulimit -s 8192 2>/dev/null; exec "$1"' _ "$1"
+# 运行超时：按 ms 包一层 coreutils timeout（三端统一；退出码 124 = 超时）。
+# 只用在 golden 校验与参照探测上——同一二进制、同一 N 已经证明会返回之后，计时与
+# 采样直接跑裸程序：wrapper 的 fork 成本会污染小项，`timeout` 进程还会污染 RSS。
+timeout_secs() { awk -v m="$1" 'BEGIN { printf "%.3f", m / 1000 }'; }
+
+run_timed() { # target prog timeout_ms
+  local target=$1 prog=$2 ms=$3
+  if [ "$ms" -le 0 ] 2>/dev/null || ! command -v timeout >/dev/null 2>&1; then
+    run_target "$target" "$prog"
+    return $?
+  fi
+  local secs
+  secs=$(timeout_secs "$ms")
+  case $target in
+    wasm) timeout -s TERM -k 2 "$secs" "$NODE_BIN" "$WASM_RUNNER" "$prog" ;;
+    *) timeout -s TERM -k 2 "$secs" "$prog" ;;
+  esac
 }
 
-capture_target() { vuna_capture_target "$1" "$2"; }
+# native 默认栈探针：固定 8 MiB soft limit，记录程序能否正常退出（信息性）。
+default_stack_run() { # program [timeout_ms]
+  local ms=${2:-$RUN_TIMEOUT_MS} secs=""
+  if [ "$ms" -gt 0 ] 2>/dev/null; then secs=$(timeout_secs "$ms"); fi
+  if [ -n "$secs" ] && command -v timeout >/dev/null 2>&1; then
+    bash -c 'ulimit -s 8192 2>/dev/null; exec timeout -s TERM -k 2 "$1" "$2"' _ "$secs" "$1"
+  else
+    bash -c 'ulimit -s 8192 2>/dev/null; exec "$1"' _ "$1"
+  fi
+}
+
+capture_target() { run_target "$1" "$2" 2>&1; }
+
+# 校验 golden：0 = ok，2 = 超时，1 = 输出不符 / 崩溃 / 非零退出。
+check_target() { # target prog golden
+  local out rc=0
+  out=$(run_timed "$1" "$2" "$RUN_TIMEOUT_MS" 2>&1) || rc=$?
+  [ "$rc" -eq 124 ] && return 2
+  [ "$rc" -eq 0 ] || return 1
+  [ "$out" = "$3" ] && return 0
+  return 1
+}
+
+# 参照实现的探测：校验 golden 并返回实测毫秒（超时用 PROBE_TIMEOUT_MS 兜住）。
+probe_ref() { # label target prog golden
+  local t0 t1 out rc=0
+  t0=$(now_ns)
+  out=$(run_timed "$2" "$3" "$PROBE_TIMEOUT_MS" 2>&1) || rc=$?
+  t1=$(now_ns)
+  if [ "$rc" -eq 124 ]; then
+    die "$1: timeout after ${PROBE_TIMEOUT_MS}ms（缩小 N 或放宽 --probe-timeout-ms）"
+  fi
+  [ "$rc" -eq 0 ] || die "$1: program failed (exit $rc)"
+  if [ "$out" != "$4" ]; then
+    die "$1: output mismatch
+  expected: $4
+  actual:   $out"
+  fi
+  printf '%s' $(( (t1 - t0 + 500000) / 1000000 ))
+}
+
+# 超时倍数：缺省按 tier 的目标比给（目标的 2 倍），sidecar 的 timeout_x 覆盖。
+tier_timeout_x() { # tier
+  case $1 in
+    t5|t6) printf '5' ;;
+    *) printf '3' ;;
+  esac
+}
+
+compute_timeout() { # name t_ref_ms
+  local name=$1 t_ref=$2 x ms
+  ms=$(bench_meta "$name" timeout_ms "")
+  if [ -n "$ms" ]; then printf '%s' "$ms"; return 0; fi
+  x=$(bench_meta "$name" timeout_x "")
+  [ -n "$x" ] || x=$TIMEOUT_X
+  [ "$x" -gt 0 ] 2>/dev/null || x=$(tier_timeout_x "${BENCH_TIER[$name]}")
+  awk -v x="$x" -v t="$t_ref" -v lo="$TIMEOUT_MIN_MS" -v hi="$TIMEOUT_MAX_MS" \
+    'BEGIN { v = x * t + 200; if (v < lo) v = lo; if (v > hi) v = hi; printf "%d", v }'
+}
 
 selected() {
   case " $ONLY " in
@@ -310,7 +450,7 @@ selected() {
   esac
 }
 
-declare -A MED NET RSS RATIO NET_RATIO RSS_RATIO DEFAULT_STACK SKIP \
+declare -A MED NET RSS RATIO NET_RATIO RSS_RATIO C_RATIO DEFAULT_STACK SKIP CASE_TIMEOUT \
   GC_MINOR_WORDS GC_MAJOR_WORDS GC_MINOR_COLLECTIONS GC_MAJOR_COLLECTIONS GC_TOP_HEAP \
   NATIVE_GC_NATIVE_LIVE NATIVE_GC_NATIVE_ALLOC NATIVE_GC_NATIVE_COLLECTIONS \
   WASM_MEMORY_BYTES ART_BYTES ART_LINES WASM_BYTES SAMPLE_LOG \
@@ -356,8 +496,8 @@ build_target() { # name target dir
   local csrc
   csrc=$(bench_meta "$name" c "")
   local -a csrcs=()
-  [ -n "$csrc" ] && csrcs=("$REPO/bench/programs/$csrc")
-  vuna_build_target "$REPO/bench/programs/$name.vuna" "$target" "$dir" "${csrcs[@]}" || return 1
+  [ -n "$csrc" ] && csrcs=("${BENCH_DIR[$name]}/$csrc")
+  vuna_build_target "${BENCH_DIR[$name]}/$name.vuna" "$target" "$dir" "${csrcs[@]}" || return 1
   BUILD_CG_MS["$name:$target"]=$LAST_CODEGEN_MS
   BUILD_TC_MS["$name:$target"]=$LAST_TOOLCHAIN_MS
   BUILD_CG_CPU_MS["$name:$target"]=$LAST_CODEGEN_CPU_MS
@@ -366,31 +506,19 @@ build_target() { # name target dir
   BUILD_POST_CPU_MS["$name:$target"]=$LAST_POST_CPU_MS
 }
 
-# 校验产物输出与 golden 一致；返回 1 = 不一致或运行失败（调用方决定 die 还是记 skip）。
-out_ok() { # target program golden
-  local actual
-  actual=$(capture_target "$1" "$2") || return 1
-  [ "$actual" = "$3" ] || return 1
-  return 0
-}
-
-expect_out() { # label target program golden
-  local label=$1 target=$2 program=$3 golden=$4 actual
-  actual=$(capture_target "$target" "$program") || die "$label: program failed: $program"
-  if [ "$actual" != "$golden" ]; then
-    die "$label: output mismatch
-  expected: $golden
-  actual:   $actual"
-  fi
-}
-
 # 计时：把一个采样内的 k 次运行合在一起，再除以 k（小项 / 启动成本用）。
+# 任一次超时返回 2，其它非零返回 1（调用方决定记 skip 还是中止）。
 measure_runs() { # target program k
-  local t0 t1 j
+  local t0 t1 j rc
   t0=$(now_ns)
-  for ((j = 0; j < $3; j++)); do run_target "$1" "$2" >/dev/null 2>&1 || true; done
+  for ((j = 0; j < $3; j++)); do
+    rc=0
+    run_target "$1" "$2" >/dev/null 2>&1 || rc=$?
+    [ "$rc" -eq 124 ] && return 2
+    [ "$rc" -eq 0 ] || return 1
+  done
   t1=$(now_ns)
-  awk -v a=$((t1 - t0)) -v k="$3" 'BEGIN { printf "%.0f", (a / 1000000) / k }'
+  awk -v a=$((t1 - t0)) -v k="$3" 'BEGIN { printf "%.3f", (a / 1000000) / k }'
 }
 
 # 采样一次：GNU time 取 maxRSS；按 target 打开 GC / 内存统计。不参与墙钟。
@@ -403,10 +531,12 @@ sample_target() { # name target program
   local -a cmd=()
   case $target in
     ocaml_ref) cmd=("$prog") ;;
+    c_ref) cmd=("$prog") ;;
     vuna_ocaml) envs+=(VN_PERF_STATS=1); cmd=("$prog") ;;
     native) envs+=(VUNA_NATIVE_GC_LOG=1); cmd=("$prog") ;;
     wasm) envs+=(VN_PERF_STATS=1); cmd=("$NODE_BIN" "$WASM_RUNNER" "$prog") ;;
   esac
+  local rss
   if [ -n "$TIME_BIN" ]; then
     env "${envs[@]}" "$TIME_BIN" -f '%M' -o "$rf" ${cmd[@]+"${cmd[@]}"} >/dev/null 2>"$log" || true
   else
@@ -459,13 +589,14 @@ gc_measure() { # name target
 
 run_bench() { # name
   local name=$1
-  local src=$REPO/bench/programs/$name.vuna
-  local ml=$REPO/bench/programs/$name.ml
+  local bdir=${BENCH_DIR[$name]}
+  local src=$bdir/$name.vuna
+  local ml=$bdir/$name.ml
   local golden repeat allowed csrc
   [ -f "$src" ] || die "missing benchmark: $src"
   [ -f "$ml" ] || die "missing OCaml reference: $ml"
-  [ -f "$REPO/bench/programs/$name.out" ] || die "missing golden: $name.out"
-  golden=$(cat "$REPO/bench/programs/$name.out")
+  [ -f "$bdir/$name.out" ] || die "missing golden: $name.out"
+  golden=$(cat "$bdir/$name.out")
   repeat=$(bench_meta "$name" repeat 1)
   allowed=$(bench_meta "$name" targets "")
   csrc=$(bench_meta "$name" c "")
@@ -477,9 +608,39 @@ run_bench() { # name
   mkdir -p "$mldir"
   local oprog=$mldir/prog
   local -a mlargs=("$ml")
-  [ -n "$csrc" ] && mlargs+=("$REPO/bench/programs/$csrc")
+  [ -n "$csrc" ] && mlargs+=("$bdir/$csrc")
   if ! ( cd "$mldir" && "$OCAMLOPT_BIN" -o "$oprog" "${mlargs[@]}" ) >"$WORK/$name.ocamlopt.log" 2>&1; then
     die "$name: ocamlopt failed for $ml"
+  fi
+
+  # 手写 C 对照（可选）：sidecar 的 `n=` 作为 argv 传给 C 程序。C 侧用动态链接的
+  # `-O2`（devShell 没有静态 libc）；比值只看同一窗口内的相对值，启动地板在长基准上
+  # 可忽略，T0 另用 `-nostdlib` 版本比地板。
+  local cprog="" creal="" cn
+  local csrc_ref=$bdir/$name.c
+  cn=$(bench_meta "$name" n "")
+  if [ "$C_REF" = on ] && [ ! -f "$csrc_ref" ]; then
+    die "$name: --c-ref on but $name.c is missing"
+  fi
+  if [ -f "$csrc_ref" ] && [ "$C_REF" != off ]; then
+    local cdir=$WORK/$name-c
+    mkdir -p "$cdir"
+    creal=$cdir/prog
+    local cflags
+    cflags=$(bench_meta "$name" cc_flags "")
+    # 词分割是有意的：cc_flags 是给 cc 的额外参数串（例如 T0 的 -nostdlib）。
+    # shellcheck disable=SC2086
+    if ! "$CC_BIN" -O2 $cflags -o "$creal" "$csrc_ref" >"$WORK/$name.cc.log" 2>&1; then
+      die "$name: cc failed for $csrc_ref (see $WORK/$name.cc.log)"
+    fi
+    # 有 `n=` 才包 shim：C 对照从 argv 读 N，vuna / OCaml 侧用字面量。
+    if [ -n "$cn" ]; then
+      printf '#!/bin/sh\nexec "%s" "%s"\n' "$creal" "$cn" >"$cdir/run"
+      chmod +x "$cdir/run"
+      cprog=$cdir/run
+    else
+      cprog=$creal
+    fi
   fi
 
   local -A PROGS=()
@@ -504,20 +665,42 @@ run_bench() { # name
     artifact_measure "$name" "$t" "$dir"
   done
 
-  # golden 校验；成功的那次同时算作一次 warmup（WARMUP=0 时也仍然校验）。
-  expect_out "$name (ocaml)" ocaml_ref "$oprog" "$golden"
+  # 参照实现探测：校验 golden，并用它的实测耗时推导本轮运行超时（取更快的参照）。
+  local t_ref t_ocaml t_c
+  t_ocaml=$(probe_ref "$name (ocaml)" ocaml_ref "$oprog" "$golden")
+  t_ref=$t_ocaml
+  if [ -n "$cprog" ]; then
+    t_c=$(probe_ref "$name (c)" c_ref "$cprog" "$golden")
+    [ "$t_c" -lt "$t_ref" ] && t_ref=$t_c
+  fi
+  RUN_TIMEOUT_MS=$(compute_timeout "$name" "$t_ref")
+  CASE_TIMEOUT[$name]=$RUN_TIMEOUT_MS
+  note "  timeout ${RUN_TIMEOUT_MS} ms (ref ${t_ref} ms)"
+
+  # 被测后端的 golden 校验；超时记 skip，其余不符仍是硬失败。
+  local rc actual
   for t in $active; do
     [ -n "${SKIP["$name:$t"]:-}" ] && continue
-    if ! out_ok "$t" "${PROGS[$t]}" "$golden"; then
-      # wasm 在浏览器路径上可能超出 V8 的 wasm 栈（非尾深递归），记跳过而不是中断整轮。
-      if [ "$t" = wasm ]; then SKIP["$name:$t"]=run; continue; fi
-      expect_out "$name ($t)" "$t" "${PROGS[$t]}" "$golden"
+    rc=0
+    check_target "$t" "${PROGS[$t]}" "$golden" || rc=$?
+    [ "$rc" -eq 0 ] && continue
+    if [ "$rc" -eq 2 ]; then
+      SKIP["$name:$t"]=timeout
+      note "  $t timeout after ${RUN_TIMEOUT_MS}ms"
+      continue
     fi
+    # wasm 在浏览器路径上可能超出 V8 的 wasm 栈（非尾深递归），记跳过而不是中断整轮。
+    if [ "$t" = wasm ]; then SKIP["$name:$t"]=run; continue; fi
+    actual=$(capture_target "$t" "${PROGS[$t]}" 2>&1 || true)
+    die "$name ($t): output mismatch or crash
+  expected: $golden
+  actual:   $actual"
   done
 
   local i
   for ((i = 1; i < WARMUP; i++)); do
     run_target ocaml_ref "$oprog" >/dev/null 2>&1 || true
+    [ -n "$cprog" ] && { run_target c_ref "$cprog" >/dev/null 2>&1 || true; }
     for t in $active; do
       [ -n "${SKIP["$name:$t"]:-}" ] && continue
       run_target "$t" "${PROGS[$t]}" >/dev/null 2>&1 || true
@@ -525,26 +708,48 @@ run_bench() { # name
   done
 
   # 计时样本：前 (RUNS - RSS_PASSES) 个是纯墙钟，后 RSS_PASSES 个同时采 RSS/GC。
+  # 超时是硬失败（记 timeout），不是慢：它说明实现已经越过该层允许的倍数。
   local -A VALS=()
   local plain_runs=$((RUNS - RSS_PASSES))
   local ms
   for ((i = 0; i < plain_runs; i++)); do
     ms=$(measure_runs ocaml_ref "$oprog" 1)
     VALS[ocaml_ref]+=" $ms"
+    if [ -n "$cprog" ]; then
+      ms=$(measure_runs c_ref "$cprog" 1)
+      VALS[c_ref]+=" $ms"
+    fi
     for t in $active; do
       [ -n "${SKIP["$name:$t"]:-}" ] && continue
-      ms=$(measure_runs "$t" "${PROGS[$t]}" "$repeat")
+      rc=0
+      ms=$(measure_runs "$t" "${PROGS[$t]}" "$repeat") || rc=$?
+      if [ "$rc" -eq 2 ]; then
+        SKIP["$name:$t"]=timeout
+        note "  $t timeout after ${RUN_TIMEOUT_MS}ms"
+        continue
+      fi
+      [ "$rc" -eq 0 ] || die "$name ($t): timed run failed (exit $rc)"
       VALS[$t]+=" $ms"
     done
   done
   for ((i = 0; i < RSS_PASSES; i++)); do
     sample_target "$name" ocaml_ref "$oprog"
+    [ -n "$cprog" ] && sample_target "$name" c_ref "$cprog"
     for t in $active; do
       [ -n "${SKIP["$name:$t"]:-}" ] && continue
       sample_target "$name" "$t" "${PROGS[$t]}"
     done
   done
   MED["$name:ocaml_ref"]=$(median_of ${VALS[ocaml_ref]})
+  [ -n "${RSS["$name:ocaml_ref"]:-}" ] || RSS["$name:ocaml_ref"]=0
+  if [ -n "$cprog" ]; then
+    MED["$name:c_ref"]=$(median_of ${VALS[c_ref]})
+    [ -n "${RSS["$name:c_ref"]:-}" ] || RSS["$name:c_ref"]=0
+    BIN_BYTES["$name:c_ref"]=$(wc -c <"$creal" | tr -d ' ')
+    ART_BYTES["$name:c_ref"]=$(wc -c <"$csrc_ref" | tr -d ' ')
+    ART_LINES["$name:c_ref"]=$(wc -l <"$csrc_ref" | tr -d ' ')
+    ART_FILES["$name:c_ref"]=1
+  fi
   for t in $TARGETS; do
     [ -n "${SKIP["$name:$t"]:-}" ] && continue
     MED["$name:$t"]=$(median_of ${VALS[$t]})
@@ -557,7 +762,7 @@ run_bench() { # name
   [ -n "${RSS["$name:ocaml_ref"]:-}" ] || RSS["$name:ocaml_ref"]=0
 
   # native 默认栈探针：只在计时之外记录，崩溃不中断基线。
-  if [ -n "${PROGS[native]:-}" ]; then
+  if [ -n "${PROGS[native]:-}" ] && [ -z "${SKIP["$name:native"]:-}" ]; then
     if default_stack_run "${PROGS[native]}" >/dev/null 2>&1; then
       DEFAULT_STACK["$name:native"]=true
     else
@@ -573,19 +778,27 @@ run_bench() { # name
     if [ "$t" = wasm ]; then
       NET_RATIO["$name:$t"]=$(ratio_of "${NET["$name:$t"]}" "${MED["$name:ocaml_ref"]}")
     fi
+    if [ -n "${MED["$name:c_ref"]:-}" ]; then
+      C_RATIO["$name:$t"]=$(ratio_of "${MED["$name:$t"]}" "${MED["$name:c_ref"]}")
+    fi
   done
   ORDER+=("$name")
 
   note "  ocaml_ref ${MED["$name:ocaml_ref"]} ms  ${RSS["$name:ocaml_ref"]:-0} KB"
+  if [ -n "$cprog" ]; then
+    note "  c_ref     ${MED["$name:c_ref"]} ms  ${RSS["$name:c_ref"]:-0} KB"
+  fi
   for t in $TARGETS; do
     if [ -n "${SKIP["$name:$t"]:-}" ]; then
       note "  $t skipped (${SKIP["$name:$t"]})"
       continue
     fi
+    local csuffix=""
+    [ -n "${C_RATIO["$name:$t"]:-}" ] && csuffix="  vs_c ${C_RATIO["$name:$t"]}x"
     if [ "$t" = wasm ]; then
-      note "  $t ${MED["$name:$t"]} ms (net ${NET["$name:$t"]})  ${RSS["$name:$t"]:-0} KB  ratio ${RATIO["$name:$t"]}x net ${NET_RATIO["$name:$t"]}x  rss ${RSS_RATIO["$name:$t"]}x"
+      note "  $t ${MED["$name:$t"]} ms (net ${NET["$name:$t"]})  ${RSS["$name:$t"]:-0} KB  ratio ${RATIO["$name:$t"]}x net ${NET_RATIO["$name:$t"]}x  rss ${RSS_RATIO["$name:$t"]}x$csuffix"
     else
-      note "  $t ${MED["$name:$t"]} ms  ${RSS["$name:$t"]:-0} KB  ratio ${RATIO["$name:$t"]}x  rss ${RSS_RATIO["$name:$t"]}x"
+      note "  $t ${MED["$name:$t"]} ms  ${RSS["$name:$t"]:-0} KB  ratio ${RATIO["$name:$t"]}x  rss ${RSS_RATIO["$name:$t"]}x$csuffix"
     fi
   done
   if [ -n "${DEFAULT_STACK["$name:native"]:-}" ]; then
@@ -629,7 +842,10 @@ emit_backend() {
   if [ "$target" = wasm ] && [ -n "${NET["$name:$target"]:-}" ]; then
     printf ', "net_median_ms": %s' "${NET["$name:$target"]}"
   fi
-  if [ -n "${ART_BYTES["$name:$target"]:-}" ]; then
+  if [ "$target" = c_ref ]; then
+    printf ', "artifact": { "source_bytes": %s, "source_lines": %s, "binary_bytes": %s }' \
+      "${ART_BYTES["$name:$target"]}" "${ART_LINES["$name:$target"]}" "${BIN_BYTES["$name:$target"]:-0}"
+  elif [ -n "${ART_BYTES["$name:$target"]:-}" ]; then
     local files max_path max_bytes max_lines
     files=${ART_FILES["$name:$target"]:-0}
     max_path=${ART_MAX_PATH["$name:$target"]:-}
@@ -680,7 +896,7 @@ emit_backend() {
 emit_json() {
   local first=1 name t first_t
   printf '{\n'
-  printf '  "schema": 3,\n'
+  printf '  "schema": 4,\n'
   printf '  "meta": {\n'
   printf '    "timestamp": "%s",\n' "$(json_escape "$TIMESTAMP")"
   printf '    "git_head": "%s",\n' "$(json_escape "$GIT_HEAD")"
@@ -706,8 +922,14 @@ emit_json() {
     [ "$first" = 1 ] || printf ',\n'
     first=0
     printf '    "%s": {\n' "$name"
+    printf '      "tier": "%s",\n' "${BENCH_TIER[$name]}"
+    printf '      "timeout_ms": %s,\n' "${CASE_TIMEOUT[$name]:-0}"
     emit_backend "$name" ocaml_ref '      '
     printf ',\n'
+    if [ -n "${MED["$name:c_ref"]:-}" ]; then
+      emit_backend "$name" c_ref '      '
+      printf ',\n'
+    fi
     for t in $TARGETS; do
       emit_backend "$name" "$t" '      '
       printf ',\n'
@@ -726,6 +948,9 @@ emit_json() {
       if [ "$t" = wasm ] && [ -n "${NET_RATIO["$name:$t"]:-}" ]; then
         printf ', "net_vs_handwritten": %s' "${NET_RATIO["$name:$t"]}"
       fi
+      if [ -n "${C_RATIO["$name:$t"]:-}" ]; then
+        printf ', "vs_c": %s' "${C_RATIO["$name:$t"]}"
+      fi
       if [ "$t" != vuna_ocaml ] && [ -n "${MED["$name:vuna_ocaml"]:-}" ]; then
         printf ', "vs_ocaml_backend": %s, "rss_vs_ocaml_backend": %s' \
           "$(ratio_of "${MED["$name:$t"]}" "${MED["$name:vuna_ocaml"]}")" \
@@ -733,7 +958,11 @@ emit_json() {
       fi
       printf ' }'
     done
-    printf ' }\n'
+    printf ' }'
+    if [ -n "${MED["$name:c_ref"]:-}" ]; then
+      printf ', "ocaml_vs_c": %s' "$(ratio_of "${MED["$name:ocaml_ref"]}" "${MED["$name:c_ref"]}")"
+    fi
+    printf '\n'
     printf '    }'
   done
   printf '\n  }\n}\n'
@@ -751,18 +980,61 @@ ns_per_op() { # name target
 
 print_table() {
   note ""
-  printf '  %-16s %-11s %10s %8s %12s %10s %10s\n' benchmark backend ms ratio rss_kb rss_ratio ns/op
-  local name t
+  printf '  %-16s %-6s %-10s %10s %8s %12s %10s %10s %8s\n' benchmark tier backend ms ratio rss_kb rss_ratio ns/op vs_c
+  local name t tier vs_c
   for name in "${ORDER[@]}"; do
-    printf '  %-16s %-11s %10s %8s %12s %10s %10s\n' "$name" ocaml_ref \
-      "${MED["$name:ocaml_ref"]}" "1.00x" "${RSS["$name:ocaml_ref"]:-0}" "1.00x" "$(ns_per_op "$name" ocaml_ref)"
+    tier=${BENCH_TIER[$name]}
+    printf '  %-16s %-6s %-10s %10s %8s %12s %10s %10s %8s\n' "$name" "$tier" ocaml_ref \
+      "${MED["$name:ocaml_ref"]}" "1.00x" "${RSS["$name:ocaml_ref"]:-0}" "1.00x" "$(ns_per_op "$name" ocaml_ref)" "-"
+    if [ -n "${MED["$name:c_ref"]:-}" ]; then
+      printf '  %-16s %-6s %-10s %10s %8s %12s %10s %10s %8s\n' "$name" "$tier" c_ref \
+        "${MED["$name:c_ref"]}" "$(ratio_of "${MED["$name:ocaml_ref"]}" "${MED["$name:c_ref"]}")x" \
+        "${RSS["$name:c_ref"]:-0}" "$(ratio_of "${RSS["$name:c_ref"]:-0}" "${RSS["$name:ocaml_ref"]:-0}")x" \
+        "$(ns_per_op "$name" c_ref)" "1.00x"
+    fi
     for t in $TARGETS; do
       if [ -n "${SKIP["$name:$t"]:-}" ]; then
-        printf '  %-16s %-11s %10s %8s %12s %10s %10s\n' "$name" "$t" "-" "skipped" "-" "-" "-"
+        printf '  %-16s %-6s %-10s %10s %8s %12s %10s %10s %8s\n' "$name" "$tier" "$t" "-" "skipped" "-" "-" "-" "-"
         continue
       fi
-      printf '  %-16s %-11s %10s %8s %12s %10s %10s\n' "$name" "$t" \
-        "${MED["$name:$t"]}" "${RATIO["$name:$t"]}x" "${RSS["$name:$t"]:-0}" "${RSS_RATIO["$name:$t"]}x" "$(ns_per_op "$name" "$t")"
+      vs_c=${C_RATIO["$name:$t"]:-}
+      printf '  %-16s %-6s %-10s %10s %8s %12s %10s %10s %8s\n' "$name" "$tier" "$t" \
+        "${MED["$name:$t"]}" "${RATIO["$name:$t"]}x" "${RSS["$name:$t"]:-0}" "${RSS_RATIO["$name:$t"]}x" \
+        "$(ns_per_op "$name" "$t")" "${vs_c:+${vs_c}x}"
+    done
+  done
+}
+
+# 分层汇总：每个 tier × 后端一行。几何平均压住单点噪声，max 暴露尾部。
+geomean_of() { # 每行一个数
+  awk 'BEGIN { n = 0; s = 0 }
+       $1 + 0 > 0 { n++; s += log($1 + 0) }
+       END { if (n == 0) print "-"; else printf "%.2f", exp(s / n) }'
+}
+
+print_tier_table() {
+  note ""
+  printf '  %-6s %-10s %10s %10s %10s %6s\n' tier backend 'vs_c(geo)' 'vs_ocaml(geo)' max_vs_c cases
+  local tiers tier t name n vals_c vals_o max_c gc go
+  tiers=$(for name in "${ORDER[@]}"; do printf '%s\n' "${BENCH_TIER[$name]}"; done | sort -u)
+  for tier in $tiers; do
+    for t in $TARGETS; do
+      n=0; vals_c=""; vals_o=""; max_c=0
+      for name in "${ORDER[@]}"; do
+        [ "${BENCH_TIER[$name]}" = "$tier" ] || continue
+        [ -n "${SKIP["$name:$t"]:-}" ] && continue
+        n=$((n + 1))
+        vals_o+="${RATIO["$name:$t"]}"$'\n'
+        if [ -n "${C_RATIO["$name:$t"]:-}" ]; then
+          vals_c+="${C_RATIO["$name:$t"]}"$'\n'
+          max_c=$(awk -v a="$max_c" -v b="${C_RATIO["$name:$t"]}" 'BEGIN { print (b + 0 > a + 0) ? b : a }')
+        fi
+      done
+      [ "$n" -gt 0 ] || continue
+      gc=$(printf '%s' "$vals_c" | geomean_of)
+      go=$(printf '%s' "$vals_o" | geomean_of)
+      printf '  %-6s %-10s %10s %10s %10s %6s\n' "$tier" "$t" "${gc}x" "${go}x" \
+        "$( [ -n "$vals_c" ] && printf '%sx' "$max_c" || printf '-' )" "$n"
     done
   done
 }
@@ -947,6 +1219,7 @@ if [ "$JSON_OUT" = "-" ]; then
   exit $rc
 else
   print_table
+  print_tier_table
   print_artifact_table
   if [ -n "$JSON_OUT" ]; then
     if [ "$GIT_DIRTY" = true ]; then

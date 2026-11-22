@@ -1,0 +1,8 @@
+-- T1 micro：常数除法 + 异或。隔离 div-by-constant 的展开与环依赖。
+import Base.Data.Bits as Bits
+
+loop : Int -> Int -> Int
+loop acc n = if n <= 0 then acc else loop (bxor acc (n / 2)) (n - 1)
+
+main : Int
+main = loop 0 20000000

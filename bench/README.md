@@ -12,11 +12,19 @@
 
 ## 口径
 
-- 每个 benchmark 是一对**同算法**实现：`programs/<name>.vuna`（vuna 源码）与
-  `programs/<name>.ml`（手写 OCaml 对照）。库基准（如 `hashmap`）的对照用标准库上限，
-  文件头注释会说明；这测的是「vuna 库/表示与手写最优实现的差距」。
-- `--target ocaml|native|wasm|both|all` 选择被测后端（默认 `ocaml`）。`both` 在同一窗口内
-  同时测 OCaml 后端与 native，`all` 再加上 wasm，用来给出跨后端的比值。
+- 每个 benchmark 是一组**同算法**实现：`programs/t<N>/<name>.vuna`（vuna 源码）、同目录
+  `<name>.ml`（手写 OCaml 对照）与可选的 `<name>.c`（手写 C 对照）；`t<N>` 是机制分层，
+  见 [`programs/TIERS.md`](programs/TIERS.md)。库基准（如 `hashmap`）的 OCaml 对照用标准库
+  上限，文件头注释会说明；这测的是「vuna 库/表示与手写最优实现的差距」。
+- C 对照用 `-O2` 编译，N 从 argv 读（sidecar 的 `n=`），避免 GCC 把常量循环折成闭式；
+  vuna / OCaml 侧用字面量 N。`<name>.best.c` 之类的最佳变体按需通过 `cc_flags=` 选择。
+- `--target ocaml|native|wasm|both|all` 选择被测后端（默认 `ocaml`）；`<name>.c` 存在时
+  同时测 `c_ref`，比值里给 `vs_c` 与 `vs_handwritten` 两列，`--no-c-ref` 关闭。
+- 超时用于**首次 golden 校验**：`timeout_x × t_ref + 200ms`，夹在 `--timeout-min-ms`
+  （1000）与 `--timeout-max-ms`（30000）之间；`timeout_x` 缺省按 tier（t5/t6 为 5，其余 3），
+  sidecar 的 `timeout_x=` / `timeout_ms=` 覆盖。超时记 `skip_reason=timeout`，是硬失败而不是慢。
+  同一二进制、同一 N 通过校验之后，计时与采样跑裸程序（wrapper 的 fork 会污染小项与 RSS）。
+- `--tier t1` 只跑某一层（可重复）；`--list` 的输出带 tier 列。
 - wasm 产物由仓库自带的宿主执行（`wasm-host/run.mjs`，Node/V8，与浏览器同一套
   `WebAssembly` API 与 host 层）。`meta` 记录 `node` / `node_startup_ms` /
   `wasm_host_runner` / `wasm_opt`。

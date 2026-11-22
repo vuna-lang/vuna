@@ -7,8 +7,9 @@
 ## 1. `vuna-perf` 读数
 
 `nix run .#vuna-perf`（逻辑在 `bench/run.sh`）测**生成程序运行时**：每个 benchmark 是一对
-同算法实现（`bench/programs/<name>.vuna` vs `<name>.ml` 手写 OCaml），先校验两侧输出与
-golden 一致，再 warmup + 多次取中位数；`--target ocaml|native|both` 选择被测后端，峰值内存
+同算法实现（`bench/programs/t<N>/<name>.vuna` vs 同目录 `<name>.ml` 手写 OCaml），
+`t<N>` 是机制分层（见 [`bench/programs/TIERS.md`](../../bench/programs/TIERS.md)）；先校验
+两侧输出与 golden 一致，再 warmup + 多次取中位数；`--target ocaml|native|both` 选择被测后端，峰值内存
 用 GNU time 的 max RSS。跨机器只比 `ratio = <backend>/ocaml` 与 `rss_ratio`
 （绝对 ms / KB 不可比）。
 
@@ -40,9 +41,8 @@ golden 一致，再 warmup + 多次取中位数；`--target ocaml|native|both` �
 | gc_retain | 高存活集（live ~19 MB）+ 等量 churn | ~1.9x | 整堆回收要重扫整个存活集；整堆触发策略的测量项 |
 
 场景覆盖：数值 / 字符串 / 容器 / 分配 / 数组 / 记录与变体 / 高阶函数 / 算法 / 浮点 /
-逐字节文本 / Nat 与位运算 / TCO / GC。新增场景对应 `bench/programs/{records,closures,
-sorting,float_math,text_scan,nat_bits,tco_mutual,tco_wide,gc_low_live,gc_array_churn,
-gc_retain}.vuna`。
+逐字节文本 / Nat 与位运算 / TCO / GC。新增场景按机制归入 `bench/programs/t<N>/`，
+清单见 [`bench/programs/TIERS.md`](../../bench/programs/TIERS.md)。
 
 关键设计决策与改动（`packages/target-ocaml/lib/Vuna/Target/Ocaml/Term.vuna`、`Base.Intrinsics` / `Elab.Prelude` / `Target.Ocaml.Decl` 与
 `packages/base/`）：
