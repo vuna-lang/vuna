@@ -330,8 +330,7 @@ vunaEventVocabulary =
     "vuna.counter.heap.words",
     "vuna.counter.steps",
     "vuna.sample.cpu",
-    "vuna.sample.mem",
-    "vuna.log"
+    "vuna.sample.mem"
   ]
 
 -- | 名字是否是 §3.3 的已知 `vuna.*` 事件。前缀放行：`vuna.mark.*`（动态标记）与

@@ -4,8 +4,8 @@
 -- `args.schema == "vuna-obs 1"`，`M` 出现在其它位置是 error；每个非 `M` 事件必须有整数
 -- `ts`；同一 `pid` / `tid` 内 `ts` 单调不减（嵌套 span 除外）；`ph:"X"` 必须有 `dur >= 0`
 -- 且 `args.allocWords`（若有）必须是整数；`ph:"C"` 必须有整数
--- `args.value`；采样事件必须有字符串数组 `args.stack`、`vuna.log` 必须有字符串
--- `args.text`；`vuna.*` 名字必须在词汇表内（`vuna.mark.*` 前缀放行），非 `vuna.` 前缀一律
+-- `args.value`；采样事件必须有字符串数组 `args.stack`；`vuna.*` 名字必须在词汇表内
+-- （`vuna.mark.*` 前缀放行），非 `vuna.` 前缀一律
 -- 放行；文件截断的 warning 由 [Vuna.Obs.Read] 产出，这里只转发、不升级为 error。
 --
 -- `cat` 只作信息字段不校验；时间戳单调只看同一 `pid` / `tid`，跨进程不比较；span 嵌套是否
@@ -178,7 +178,7 @@ counterValueIssue line (Just _) = []
 counterValueIssue line Nothing =
   [errorAt line "counter (ph:\"C\") is missing integer field `args.value`"]
 
--- | 内部：采样事件必须有 `args.stack`，`vuna.log` 必须有 `args.text`。
+-- | 内部：采样事件必须有 `args.stack`。
 instantArgsIssues : Int -> ObsEvent -> List ValidateIssue
 instantArgsIssues line ev =
   let
@@ -187,10 +187,6 @@ instantArgsIssues line ev =
     case argStack ev of
       Just _ => []
       Nothing => [errorAt line "sample `${name}` is missing string-array field `args.stack`"]
-  else if name == "vuna.log" then
-    case argStr "text" ev of
-      Just _ => []
-      Nothing => [errorAt line "log event `vuna.log` is missing string field `args.text`"]
   else
     []
 
@@ -318,7 +314,6 @@ verifySummary report =
 -- `bad-counter.jsonl`（C 缺 args.value）：1 error `counter ... missing integer field args.value`。
 -- `bad-dur.jsonl`（X 缺 dur）：1 error `span (ph:"X") is missing integer field dur`。
 -- `bad-stack.jsonl`（采样 args 改为 {}）：1 error `sample ... missing string-array field args.stack`。
--- `bad-log.jsonl`（vuna.log args 改为 {}）：1 error `log event ... missing string field args.text`。
 -- `bad-nometa.jsonl`（删掉首行）：1 error `first event must be metadata ...`。
 -- `bad-meta-order.jsonl`（首行前插一条 i 事件）：1 error 首行不是 M + 1 error `metadata event ... may only appear as the first line`。
 -- ---------------------------------------------------------------
