@@ -792,15 +792,15 @@ resolveAlt fuel modules label prefix ns imports scope (pat, body) =
       )
 
 -- 局部函数的一个 clause（参数模式列表 + body）；参数绑定累加到 body 的作用域。
-resolveLocalClause : Int -> List Module -> String -> String -> Namespaces -> List Import -> List String -> (List Pat, Expr) -> Check (List Pat, Expr)
-resolveLocalClause fuel modules label prefix ns imports scope (pats, body) =
+resolveLocalClause : Int -> List Module -> String -> String -> Namespaces -> List Import -> List String -> LocalClause -> Check LocalClause
+resolveLocalClause fuel modules label prefix ns imports scope clause =
   if fuel <= 0 then
     icFuel "resolver"
   else
-    Vuna.Compiler.Base.Common.bind (resolveLocalPats (fuel - 1) modules label prefix ns imports pats) (
+    Vuna.Compiler.Base.Common.bind (resolveLocalPats (fuel - 1) modules label prefix ns imports clause.lcPats) (
         \p =>
           case p of
-            (pats2, bound) => Vuna.Compiler.Base.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports (append bound scope) body) (\body2 => OkC (pats2, body2))
+            (pats2, bound) => Vuna.Compiler.Base.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports (append bound scope) clause.lcBody) (\body2 => OkC (LocalClause pats2 body2 clause.lcRef clause.lcHead))
       )
 
 resolveLocalPats : Int -> List Module -> String -> String -> Namespaces -> List Import -> List Pat -> Check (List Pat, List String)

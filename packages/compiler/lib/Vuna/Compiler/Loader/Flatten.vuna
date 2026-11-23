@@ -1278,10 +1278,10 @@ bindRefNamesListGo [] acc = acc
 bindRefNamesListGo (b :: rest) acc = bindRefNamesListGo rest (bindRefNamesGo b acc)
 
 -- | 局部函数 clause（参数模式 + body）里的引用名。
-clauseRefNamesGo : (List Pat, Expr) -> List String -> List String
-clauseRefNamesGo p acc = patRefNamesListGo (firstOf p) (exprRefNamesGo (secondOf p) acc)
+clauseRefNamesGo : LocalClause -> List String -> List String
+clauseRefNamesGo clause acc = patRefNamesListGo clause.lcPats (exprRefNamesGo clause.lcBody acc)
 
-clauseRefNamesListGo : List (List Pat, Expr) -> List String -> List String
+clauseRefNamesListGo : List LocalClause -> List String -> List String
 clauseRefNamesListGo [] acc = acc
 clauseRefNamesListGo (c :: rest) acc = clauseRefNamesListGo rest (clauseRefNamesGo c acc)
 

@@ -46,6 +46,15 @@ sample =
     ++ "       0 => 0\n"
     ++ "       _ => if h > 1 then 3 else 4\n"
     ++ "\n"
+    ++ "-- 局部函数子句（每个 clause 记自己的 binding 节点）\n"
+    ++ "j : Int -> Int\n"
+    ++ "j x =\n"
+    ++ "  let\n"
+    ++ "    k : Int -> Int\n"
+    ++ "    k 0 = 1\n"
+    ++ "    k n = n + 1\n"
+    ++ "  in k x\n"
+    ++ "\n"
     ++ "-- do 块里的语句（供 `doStmt` 节点）\n"
     ++ "k : Int\n"
     ++ "k =\n"
@@ -188,13 +197,19 @@ fixitiesOk index fx = refsOk index "fixity" (map fixityRefOf fx)
 -- 只有这些「区间根」带 id（更内层的构造子是同一区间的多个视图，没有独立节点）。
 -- where/let 签名行（`EAnn`）投影的是该签名行的 `binding` 节点，不是 `expr` 节点。
 -- ---------------------------------------------------------------
--- | AST 节点 → 它投影的树节点：(期望 kind 标签, 引用)。
+-- | AST 节点 → 它投影的树节点：(期望 kind 标签, 统计角色, 引用)。
+-- 角色 `expr` 只要求「终点相同 + 区间落在节点内」；`sig`（签名行）与 `clause`（局部函数
+-- 子句）都投影 `binding` 节点，要求区间完全相同。
 record Site where
   siteTag : String
+  siteRole : String
   siteRef : NodeRef
 
 siteTagOf : Site -> String
 siteTagOf sg = sg.siteTag
+
+siteRoleOf : Site -> String
+siteRoleOf sg = sg.siteRole
 
 siteRefOf : Site -> NodeRef
 siteRefOf sg = sg.siteRef
@@ -233,8 +248,8 @@ exprSitesAt fuel e =
           ESectR inner op r => exprSitesAt (fuel - 1) inner
     in case e of
       -- 签名行投影的是签名行的 `binding` 节点，不是 `expr` 节点。
-      EAnn inner ty r => Site "binding" r :: rest
-      _ => Site "expr" (exprRef e) :: rest
+      EAnn inner ty r => Site "binding" "sig" r :: rest
+      _ => Site "expr" "expr" (exprRef e) :: rest
 
 interpSites : Int -> InterpPart -> List Site
 interpSites fuel part =
@@ -248,8 +263,12 @@ interpSites fuel part =
 bindingSites : Int -> Pair Pat Expr -> List Site
 bindingSites fuel (Pair pat value) = if fuel <= 0 then [] else exprSitesAt (fuel - 1) value
 
-localClauseSites : Int -> Pair (List Pat) Expr -> List Site
-localClauseSites fuel (Pair pats body) = if fuel <= 0 then [] else exprSitesAt (fuel - 1) body
+localClauseSites : Int -> LocalClause -> List Site
+localClauseSites fuel clause =
+  if fuel <= 0 then
+    []
+  else
+    Site "binding" "clause" clause.lcRef :: exprSitesAt (fuel - 1) clause.lcBody
 
 altSites : Int -> Pair Pat Expr -> List Site
 altSites fuel (Pair pat body) = if fuel <= 0 then [] else exprSitesAt (fuel - 1) body
@@ -306,11 +325,8 @@ traitParamSites fuel param =
 allExprSites : List Decl -> List Site
 allExprSites decls = concatMap (declExprSites 64) decls
 
-siteRefsOfTag : String -> List Site -> List NodeRef
-siteRefsOfTag tag sites = map siteRefOf (filter (\sg => siteTagOf sg == tag) sites)
-
-countSitesOfTag : String -> List Site -> Int
-countSitesOfTag tag sites = List.length (filter (\sg => siteTagOf sg == tag) sites)
+siteRefsOfRole : String -> List Site -> List NodeRef
+siteRefsOfRole role sites = map siteRefOf (filter (\sg => siteRoleOf sg == role) sites)
 
 -- | 表达式区间根：id 指回 `expr` 节点，**终点相同、AST 区间落在节点区间内**
 -- （`EInfix` / `EBacktick` 的 span 从运算符起，比树节点窄）。签名行要求 kind 与区间
@@ -325,8 +341,8 @@ siteOk index site =
         && spanEndOffset (nodeSpan n)
         == spanEndOffset (nodeRefSpan (siteRefOf site))
         && (
-          siteTagOf site
-            == "binding"
+          siteRoleOf site
+            == "expr"
             || spanStartOffset (nodeSpan n) <= spanStartOffset (nodeRefSpan (siteRefOf site))
         ) && spanEndOffset (nodeRefSpan (siteRefOf site)) <= spanEndOffset (nodeSpan n)
 
@@ -365,12 +381,12 @@ exprIdsOk : HashMap Int CstNode -> CstNode -> List Decl -> Bool
 exprIdsOk index tree decls =
   let
     sites = allExprSites decls
-    exprRefs = siteRefsOfTag "expr" sites
-    annRefs = siteRefsOfTag "binding" sites
+    exprRefs = siteRefsOfRole "expr" sites
+    sigRefs = siteRefsOfRole "sig" sites
   in sitesOk index sites
     && countIdentified exprRefs
     == countTagged "expr" (nodeChildren tree)
-    && countIdentified annRefs == countSigBindings (nodeChildren tree)
+    && countIdentified sigRefs == countSigBindings (nodeChildren tree)
 
 -- | 带身份的引用（id >= 0）必须指回同 kind、同区间的树节点。
 refsInIndexOk : HashMap Int CstNode -> String -> List NodeRef -> Bool
@@ -408,7 +424,7 @@ bodyPatRefs e =
     ERecUpdate base fields _ =>
       append (bodyPatRefs base) (concatMap (\fv => bodyPatRefs (secondOf fv)) fields)
     EDo stmts _ => concatMap stmtPatRefs stmts
-    ELocalFun clauses _ => concatMap (\c => bodyPatRefs (secondOf c)) clauses
+    ELocalFun clauses _ => concatMap clausePatRefs clauses
     EAnn v t _ => append (bodyPatRefs v) (bodyPatRefs t)
     EFloat raw _ => []
     EInt n _ => []
@@ -421,6 +437,9 @@ bodyPatRefs e =
     EInfix op l r _ => append (bodyPatRefs l) (bodyPatRefs r)
     EParen inner _ => bodyPatRefs inner
     EInterp multi parts _ => []
+
+clausePatRefs : LocalClause -> List NodeRef
+clausePatRefs clause = clause.lcHead :: bodyPatRefs clause.lcBody
 
 stmtPatRefs : DoStmt -> List NodeRef
 stmtPatRefs stmt =
@@ -437,7 +456,18 @@ patIdsOk : HashMap Int CstNode -> CstNode -> List Decl -> Bool
 patIdsOk index tree decls =
   let
     refs = allPatRefs decls
-  in refsInIndexOk index "pat" refs && countIdentified refs == countTagged "pat" (nodeChildren tree)
+  in refsInIndexOk index "pat" refs
+    && countIdentified (distinctIds refs) == countTagged "pat" (nodeChildren tree)
+
+-- | 按 id 去重（局部函数首条子句的头模式与绑定自身的模式是同一个 `pat` 节点）。
+distinctIds : List NodeRef -> List NodeRef
+distinctIds [] = []
+distinctIds (r :: rest) =
+  if memId (nodeRefId r) rest then distinctIds rest else (::) r (distinctIds rest)
+
+memId : Int -> List NodeRef -> Bool
+memId n [] = False
+memId n (x :: rest) = nodeRefId x == n || memId n rest
 
 -- | do 语句 id 指回 doStmt 节点（专用小样例，取 EDo 的直接语句表）。
 doStmtRef : DoStmt -> NodeRef

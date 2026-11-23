@@ -554,9 +554,11 @@ ofBinding bound scope (pat, value) =
     valueScope = append (patBinders pat) bound
   in (ofPat scope pat, ofExpr valueScope value)
 
-ofLocalClause : List String -> (List Ast.Pat, Ast.Expr) -> (List Pat, Expr)
-ofLocalClause scope (pats, body) =
-  (map (ofPat scope) pats, ofExpr (append (bindersOfPats pats) scope) body)
+ofLocalClause : List String -> Ast.LocalClause -> (List Pat, Expr)
+ofLocalClause scope clause =
+  let
+    pats = clause.lcPats
+  in (map (ofPat scope) pats, ofExpr (append (bindersOfPats pats) scope) clause.lcBody)
 
 ofAlt : List String -> (Ast.Pat, Ast.Expr) -> (Pat, Expr)
 ofAlt scope (pat, body) = (ofPat scope pat, ofExpr (append (patBinders pat) scope) body)

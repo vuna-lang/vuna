@@ -414,10 +414,10 @@ refsInBinds sMod [] acc = acc
 refsInBinds sMod ((p, x) :: rest) acc = refsInBinds sMod rest (refsInExprGo sMod x acc)
 
 -- | 内部：`where` / `let` 多子句局部函数的引用，只看各 clause 的 body（与绑定一致，不看模式）。
-refsInLocalClauses : String -> List (List Pat, Expr) -> List Ref -> List Ref
+refsInLocalClauses : String -> List LocalClause -> List Ref -> List Ref
 refsInLocalClauses sMod [] acc = acc
-refsInLocalClauses sMod ((pats, body) :: rest) acc =
-  refsInLocalClauses sMod rest (refsInExprGo sMod body acc)
+refsInLocalClauses sMod (clause :: rest) acc =
+  refsInLocalClauses sMod rest (refsInExprGo sMod clause.lcBody acc)
 
 -- | 内部：应用实参里的引用。
 refsInArgs : String -> List Expr -> List Ref -> List Ref

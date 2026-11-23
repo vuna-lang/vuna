@@ -93,6 +93,15 @@ reprPrefix ReprAuto = ""
 reprPrefix ReprAlias = "alias "
 reprPrefix ReprBoxed = "boxed "
 
+-- | 局部函数子句：参数模式 + 体 + 该子句对应的 `binding` 树节点 + 子句头的函数名
+-- `pat` 节点。子句本身不是表达式节点；`lcRef` 只用于身份与注释挂载（与 `EAnn` 存
+-- 签名行同源），`lcHead` 让每条子句都能指回自己的名字节点（首条与绑定的模式同源）。
+export record LocalClause(..) where
+  lcPats : List Pat
+  lcBody : Expr
+  lcRef : NodeRef
+  lcHead : NodeRef
+
 export data Expr(..) : Type where
   EVar : String -> NodeRef -> Expr
   EInt : Int -> NodeRef -> Expr
@@ -106,9 +115,10 @@ export data Expr(..) : Type where
   EPi : String -> Bool -> Maybe Qty -> Expr -> Expr -> NodeRef -> Expr
   ELet : List (Pat, Expr) -> Expr -> Bool -> NodeRef -> Expr
   -- 局部函数组（where/let 内的多 clause 函数）。
-  -- 只作为 `ELet` 绑定值出现：每个 clause 是「参数模式列表 + body」。
-  -- 由 Elab 用 `Elab.Match.multiToExpr` 降级成 lambda + 模式矩阵（与顶层 DFun 同一路径）。
-  ELocalFun : List (List Pat, Expr) -> NodeRef -> Expr
+  -- 只作为 `ELet` 绑定值出现：每个 clause 是「参数模式列表 + body + 该子句的 `binding`
+  -- 节点」。由 Elab 用 `Elab.Match.multiToExpr` 降级成 lambda + 模式矩阵（与顶层 DFun
+  -- 同一路径）。
+  ELocalFun : List LocalClause -> NodeRef -> Expr
   ECase : Expr -> List (Pat, Expr) -> NodeRef -> Expr
   EIf : Expr -> Expr -> Expr -> NodeRef -> Expr
   EField : Expr -> String -> NodeRef -> Expr

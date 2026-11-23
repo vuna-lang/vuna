@@ -1242,7 +1242,7 @@ bindingBodyDoc fuel env at pat value =
   else
     case value of
       ELocalFun clauses _ => localFunDoc (fuel - 1) env at (renderPatGo formatFuelBound pat) clauses
-      ELam ps inner _ => localFunDoc (fuel - 1) env at (renderPatGo formatFuelBound pat) [(map (\p => PVar (firstOf p) (detachedNodeRef (secondOf p))) ps, inner)]
+      ELam ps inner _ => localFunDoc (fuel - 1) env at (renderPatGo formatFuelBound pat) [LocalClause (map (\p => PVar (firstOf p) (detachedNodeRef (secondOf p))) ps) inner noNodeRef noNodeRef]
       _ => bindingValueDoc (fuel - 1) env at (renderPatGo formatFuelBound pat) value
 
 -- | 内部：`lhs = value`（能一行就一行，否则值缩进 2）。
@@ -1257,17 +1257,20 @@ bindingValueDoc fuel env at lhs value =
     in if multilineExpr value then appendDoc headD (nest 2 (appendDoc hard valueD)) else group (appendDoc headD (nest 2 (appendDoc line valueD)))
 
 -- | 内部：where / let 的多 clause 局部函数。
-localFunDoc : Int -> List FixityDecl -> TriviaCtx -> String -> List (List Pat, Expr) -> Doc
+localFunDoc : Int -> List FixityDecl -> TriviaCtx -> String -> List LocalClause -> Doc
 localFunDoc fuel env at headText clauses =
   if fuel <= 0 then empty else vsep (map (localClauseDoc (fuel - 1) env at headText) clauses)
 
--- | 内部：单条局部函数 clause。
-localClauseDoc : Int -> List FixityDecl -> TriviaCtx -> String -> (List Pat, Expr) -> Doc
-localClauseDoc fuel env at headText (pats, body) =
+-- | 内部：单条局部函数 clause（注释挂在该子句的 `binding` 节点上）。
+localClauseDoc : Int -> List FixityDecl -> TriviaCtx -> String -> LocalClause -> Doc
+localClauseDoc fuel env at headText clause =
   if fuel <= 0 then
     empty
   else
-    bindingValueDoc (fuel - 1) env at (headText ++ joinSpace (map renderPatAtom pats)) body
+    attachAt
+      at
+      clause.lcRef
+      (bindingValueDoc (fuel - 1) env at (headText ++ joinSpace (map renderPatAtom clause.lcPats)) clause.lcBody)
 
 -- | 内部：`handle comp { ... }`。
 handleDoc : Int -> List FixityDecl -> TriviaCtx -> Expr -> Expr -> Expr -> Doc

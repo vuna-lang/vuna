@@ -111,13 +111,14 @@ encPatExprListGo [] acc = acc
 encPatExprListGo ((p, e) :: rest) acc = encPat p (encExpr e (encPatExprListGo rest acc))
 
 -- | 局部函数子句表（每项 = 参数模式表 + body）。
-encClauses : List (List Pat, Expr) -> List String -> List String
+encClauses : List LocalClause -> List String -> List String
 encClauses xs acc = "[${strFromInt (lenOf xs)}:" :: encClausesGo xs acc
 
 -- | 局部函数子句表的递归主体（计数头由 `encClauses` 写）。
-encClausesGo : List (List Pat, Expr) -> List String -> List String
+encClausesGo : List LocalClause -> List String -> List String
 encClausesGo [] acc = acc
-encClausesGo ((ps, body) :: rest) acc = encPatList ps (encExpr body (encClausesGo rest acc))
+encClausesGo (clause :: rest) acc =
+  encPatList clause.lcPats (encExpr clause.lcBody (encClausesGo rest acc))
 
 -- | do 语句表。
 encStmtList : List DoStmt -> List String -> List String
@@ -801,7 +802,7 @@ decPatExpr fuel bytes =
           Just (e, b2) => Just ((p, e), b2)
 
 -- | 解析局部函数子句（参数模式表 + body）。
-decClause : Int -> Cur -> Maybe ((List Pat, Expr), Cur)
+decClause : Int -> Cur -> Maybe (LocalClause, Cur)
 decClause fuel bytes =
   if fuel <= 0 then
     Nothing
@@ -811,7 +812,7 @@ decClause fuel bytes =
       Just (ps, b1) =>
         case decExpr (fuel - 1) b1 of
           Nothing => Nothing
-          Just (body, b2) => Just ((ps, body), b2)
+          Just (body, b2) => Just ((LocalClause ps body noNodeRef noNodeRef), b2)
 
 -- | 解析 `(字段名, 表达式)`。
 decStrExpr : Int -> Cur -> Maybe ((String, Expr), Cur)

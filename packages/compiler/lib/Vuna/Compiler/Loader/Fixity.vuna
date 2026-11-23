@@ -321,10 +321,10 @@ reorderField : FixityTable -> (String, Expr) -> Check (String, Expr)
 reorderField t (fname, value) =
   Vuna.Compiler.Base.Common.bind (reorderExpr t value) (\v2 => OkC (fname, v2))
 
-reorderClauses : FixityTable -> List (List Pat, Expr) -> Check (List (List Pat, Expr))
+reorderClauses : FixityTable -> List LocalClause -> Check (List LocalClause)
 reorderClauses t clauses = Vuna.Compiler.Base.Common.traverse (\v => reorderClause t v) clauses
 
--- `case ... of` 的分支是 `Pair Pat Expr`（局部函数 clause 才是 `Pair (List Pat) Expr`）。
+-- `case ... of` 的分支是 `(Pat, Expr)`（局部函数 clause 是 `LocalClause`）。
 reorderAlts : FixityTable -> List (Pat, Expr) -> Check (List (Pat, Expr))
 reorderAlts t alts = Vuna.Compiler.Base.Common.traverse (\a => reorderAlt t a) alts
 
@@ -334,11 +334,11 @@ reorderAlt t (pat, body) =
     (reorderPattern t pat)
     (\p2 => Vuna.Compiler.Base.Common.bind (reorderExpr t body) (\b2 => OkC (p2, b2)))
 
-reorderClause : FixityTable -> (List Pat, Expr) -> Check (List Pat, Expr)
-reorderClause t (pats, body) =
+reorderClause : FixityTable -> LocalClause -> Check LocalClause
+reorderClause t clause =
   Vuna.Compiler.Base.Common.bind
-    (Vuna.Compiler.Base.Common.traverse (\pat => reorderPattern t pat) pats)
-    (\pats2 => Vuna.Compiler.Base.Common.bind (reorderExpr t body) (\b2 => OkC (pats2, b2)))
+    (Vuna.Compiler.Base.Common.traverse (\pat => reorderPattern t pat) clause.lcPats)
+    (\pats2 => Vuna.Compiler.Base.Common.bind (reorderExpr t clause.lcBody) (\b2 => OkC (LocalClause pats2 b2 clause.lcRef clause.lcHead)))
 
 reorderDoStmt : FixityTable -> DoStmt -> Check DoStmt
 reorderDoStmt t (DBind pat expr sp) =

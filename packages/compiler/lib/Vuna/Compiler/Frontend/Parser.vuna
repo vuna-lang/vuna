@@ -1178,7 +1178,7 @@ parseBindingDef fuel stStart st bindCol pat =
     icFuel "parser"
   else
     case pat of
-      PVar name _ => if startsPatternAtom st && canContinue st bindCol then Vuna.Compiler.Base.Common.step (parseClausePatterns (stateFuel st) st bindCol) (\pats, st2 => Vuna.Compiler.Base.Common.bind (checkBindersAt st pats) (\_ => Vuna.Compiler.Base.Common.bind (expectSym st2 "=") (\st3 => Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st3 bindCol) (\value, st4 => OkC (BIBind (PVar name (patRef pat), ELocalFun [(pats, value)] (detachedNodeRef (spanOf stStart st4))), st4))))) else Vuna.Compiler.Base.Common.step (parseBindingValue (fuel - 1) st pat bindCol) (\b, st2 => OkC (BIBind b, st2))
+      PVar name _ => if startsPatternAtom st && canContinue st bindCol then Vuna.Compiler.Base.Common.step (parseClausePatterns (stateFuel st) st bindCol) (\pats, st2 => Vuna.Compiler.Base.Common.bind (checkBindersAt st pats) (\_ => Vuna.Compiler.Base.Common.bind (expectSym st2 "=") (\st3 => Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st3 bindCol) (\value, st4 => OkC (BIBind (PVar name (patRef pat), ELocalFun [LocalClause pats value (NodeRef stStart.openNodeId (spanOf stStart st4)) (patRef pat)] (detachedNodeRef (spanOf stStart st4))), st4))))) else Vuna.Compiler.Base.Common.step (parseBindingValue (fuel - 1) st pat bindCol) (\b, st2 => OkC (BIBind b, st2))
       _ => Vuna.Compiler.Base.Common.step (parseBindingValue (fuel - 1) st pat bindCol) (\b, st2 => OkC (BIBind b, st2))
 
 parseBindingValue : Int -> PState -> Pat -> Int -> Check ((Pat, Expr), PState)

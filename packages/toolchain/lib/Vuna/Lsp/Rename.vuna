@@ -529,12 +529,14 @@ altUses fuel ctx (pat, body) =
   if fuel <= 0 then [] else append (patUses (fuel - 1) ctx pat) (usesInExpr (fuel - 1) ctx body)
 
 -- | 内部：局部函数一个 clause（模式列表 + 体）里的使用位置。
-clauseUses : Int -> UseCtx -> (List Pat, Expr) -> List (Int, Int)
-clauseUses fuel ctx (pats, body) =
+clauseUses : Int -> UseCtx -> LocalClause -> List (Int, Int)
+clauseUses fuel ctx clause =
   if fuel <= 0 then
     []
   else
-    append (concatMap (patUses (fuel - 1) ctx) pats) (usesInExpr (fuel - 1) ctx body)
+    append
+      (concatMap (patUses (fuel - 1) ctx) clause.lcPats)
+      (usesInExpr (fuel - 1) ctx clause.lcBody)
 
 -- | 内部：`let` 绑定的模式与值里的使用位置。
 bindUses : Int -> UseCtx -> (Pat, Expr) -> List (Int, Int)

@@ -401,9 +401,9 @@ interpPartAnchors : InterpPart -> List NodeRef
 interpPartAnchors (IPText s) = []
 interpPartAnchors (IPHole e) = exprAnchors e
 
--- | 内部：局部函数 clause 体的锚点。
-localClauseAnchors : (List Pat, Expr) -> List NodeRef
-localClauseAnchors (pats, body) = exprAnchors body
+-- | 内部：局部函数 clause 的锚点（子句节点 + 体里的表达式锚点）。
+localClauseAnchors : LocalClause -> List NodeRef
+localClauseAnchors clause = (::) clause.lcRef (exprAnchors clause.lcBody)
 
 -- | 收集整个文件的注释锚点（源码顺序的节点身份）：模块头 / 导出项 / import /
 -- `infix*` 声明 / 声明及其内部条目。锚点集合就是渲染器的挂载点；渲染时用同一个

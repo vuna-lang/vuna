@@ -573,14 +573,14 @@ startAlts fuel alts =
       (pat, e) :: rest => minPair (startExpr (fuel - 1) e) (startAlts (fuel - 1) rest)
 
 -- | 内部：局部函数 clause 体的最小起始位置。
-startLocalClauses : Int -> List (List Pat, Expr) -> (Int, Int)
+startLocalClauses : Int -> List LocalClause -> (Int, Int)
 startLocalClauses fuel clauses =
   if fuel <= 0 then
     lintFuelExhausted "expression position"
   else
     case clauses of
       [] => (1000000000, 1000000000)
-      (pats, e) :: rest => minPair (startExpr (fuel - 1) e) (startLocalClauses (fuel - 1) rest)
+      clause :: rest => minPair (startExpr (fuel - 1) clause.lcBody) (startLocalClauses (fuel - 1) rest)
 
 -- | 内部：do 语句的最小起始位置。
 startStmts : Int -> List DoStmt -> (Int, Int)
@@ -1037,14 +1037,14 @@ mentionsAlts fuel name alts =
       (pat, e) :: rest => mentionsExpr (fuel - 1) name e || mentionsAlts (fuel - 1) name rest
 
 -- | 内部：任一局部函数 clause 体是否引用该名字。
-mentionsClauses : Int -> String -> List (List Pat, Expr) -> Bool
+mentionsClauses : Int -> String -> List LocalClause -> Bool
 mentionsClauses fuel name clauses =
   if fuel <= 0 then
     lintFuelExhausted "mention scan"
   else
     case clauses of
       [] => False
-      (pats, e) :: rest => mentionsExpr (fuel - 1) name e || mentionsClauses (fuel - 1) name rest
+      clause :: rest => mentionsExpr (fuel - 1) name clause.lcBody || mentionsClauses (fuel - 1) name rest
 
 -- | 内部：任一 do 语句是否引用该名字。
 mentionsStmts : Int -> String -> List DoStmt -> Bool
@@ -1840,14 +1840,14 @@ walkAlts allow fuel src alts =
         in append (walkPairPat allow (fuel - 1) src pat) (append (scanBodyPos (fuel - 1) src (Just lane) body) (walkAlts allow (fuel - 1) src rest))
 
 -- | 内部：遍历局部函数 clause 的模式与体（不提供 lane，因此不做 clause 级提升）。
-walkLocalClauses : Bool -> Int -> LintSrc -> List (List Pat, Expr) -> List Finding
+walkLocalClauses : Bool -> Int -> LintSrc -> List LocalClause -> List Finding
 walkLocalClauses allow fuel src clauses =
   if fuel <= 0 then
     lintFuelExhausted "traversal"
   else
     case clauses of
       [] => []
-      (pats, body) :: rest => append (walkPairPats allow (fuel - 1) src pats) (append (walkExprGo allow (fuel - 1) src body) (walkLocalClauses allow (fuel - 1) src rest))
+      clause :: rest => append (walkPairPats allow (fuel - 1) src clause.lcPats) (append (walkExprGo allow (fuel - 1) src clause.lcBody) (walkLocalClauses allow (fuel - 1) src rest))
 
 -- | 内部：遍历 do 语句列表。
 walkStmts : Bool -> Int -> LintSrc -> List DoStmt -> List Finding
@@ -2291,14 +2291,14 @@ walkTypeSyntaxAlts fuel src alts =
       (pat, body) :: rest => append (walkTypeSyntax (fuel - 1) src body) (walkTypeSyntaxAlts (fuel - 1) src rest)
 
 -- | 内部：遍历局部函数 clause 体的类型位置语法归一。
-walkTypeSyntaxLocalClauses : Int -> LintSrc -> List (List Pat, Expr) -> List Finding
+walkTypeSyntaxLocalClauses : Int -> LintSrc -> List LocalClause -> List Finding
 walkTypeSyntaxLocalClauses fuel src clauses =
   if fuel <= 0 then
     lintFuelExhausted "type syntax traversal"
   else
     case clauses of
       [] => []
-      (pats, body) :: rest => append (walkTypeSyntax (fuel - 1) src body) (walkTypeSyntaxLocalClauses (fuel - 1) src rest)
+      clause :: rest => append (walkTypeSyntax (fuel - 1) src clause.lcBody) (walkTypeSyntaxLocalClauses (fuel - 1) src rest)
 
 -- | 内部：遍历 do 语句的类型位置语法归一。
 walkTypeSyntaxStmts : Int -> LintSrc -> List DoStmt -> List Finding

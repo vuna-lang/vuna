@@ -157,14 +157,14 @@ expandPatExprs fuel pairs =
       [] => OkC []
       (pat, value) :: rest => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) value) (\value2 => Vuna.Compiler.Base.Common.bind (expandPatExprs (fuel - 1) rest) (\rest2 => OkC ((::) (pat, value2) rest2)))
 
-expandClauses : Int -> List (List Pat, Expr) -> Check (List (List Pat, Expr))
+expandClauses : Int -> List LocalClause -> Check (List LocalClause)
 expandClauses fuel clauses =
   if fuel <= 0 then
     icFuel "macro expansion"
   else
     case clauses of
       [] => OkC []
-      (pats, body) :: rest => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) body) (\body2 => Vuna.Compiler.Base.Common.bind (expandClauses (fuel - 1) rest) (\rest2 => OkC ((::) (pats, body2) rest2)))
+      clause :: rest => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) clause.lcBody) (\body2 => Vuna.Compiler.Base.Common.bind (expandClauses (fuel - 1) rest) (\rest2 => OkC ((::) (LocalClause clause.lcPats body2 clause.lcRef clause.lcHead) rest2)))
 
 expandFieldExprs : Int -> List (String, Expr) -> Check (List (String, Expr))
 expandFieldExprs fuel fields =
