@@ -171,17 +171,17 @@ findCmdIn path [] = Nothing
 findCmdIn path (c :: rest) = if c.cmdPath == path then Just c else findCmdIn path rest
 
 -- | 从 argv 前缀匹配最长的已登记命令路径，返回命令与剩余参数。
-export matchCommand : List String -> Maybe (Pair Cmd (List String))
+export matchCommand : List String -> Maybe (Cmd, List String)
 matchCommand args = matchDepth 3 args
 
 -- | 内部：按深度从 3 到 1 尝试精确路径匹配（最长优先）。
-matchDepth : Int -> List String -> Maybe (Pair Cmd (List String))
+matchDepth : Int -> List String -> Maybe (Cmd, List String)
 matchDepth n args =
   if n <= 0 then
     Nothing
   else
     case findCmd (take n args) of
-      Just c => Just (Pair c (drop n args))
+      Just c => Just (c, drop n args)
       Nothing => matchDepth (n - 1) args
 
 -- | 一条命令允许的 flag 形态。

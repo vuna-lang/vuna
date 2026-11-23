@@ -170,16 +170,16 @@ errnoEnospc = 28
 
 -- | errno → 宿主状态码（`dtp_hostCode` 的口径：ENOENT=1、EACCES/EPERM=2、ENOSPC=3、
 --   ENOTDIR=4、EISDIR=5、EEXIST=6，其它=9）。顺序即 `fs_fail` 的比较链顺序。
-export hostCodeOfErrno : List (Pair Int Int)
+export hostCodeOfErrno : List (Int, Int)
 hostCodeOfErrno =
   [
-    Pair errnoEnoent 1,
-    Pair errnoEperm 2,
-    Pair errnoEacces 2,
-    Pair errnoEnospc 3,
-    Pair errnoEnotdir 4,
-    Pair errnoEisdir 5,
-    Pair errnoEexist 6
+    (errnoEnoent, 1),
+    (errnoEperm, 2),
+    (errnoEacces, 2),
+    (errnoEnospc, 3),
+    (errnoEnotdir, 4),
+    (errnoEisdir, 5),
+    (errnoEexist, 6)
   ]
 
 export hostCodeOther : Int

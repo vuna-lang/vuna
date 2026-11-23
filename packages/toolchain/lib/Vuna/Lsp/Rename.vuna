@@ -130,8 +130,8 @@ distinctStep : List String -> String -> List String
 distinctStep acc x = if memName x acc then acc else append acc [x]
 
 -- | 内部：span 的起点（行, 列，1-based）。
-spanStart : Span -> Pair Int Int
-spanStart sp = Pair (spanStartLine sp) (spanStartCol sp)
+spanStart : Span -> (Int, Int)
+spanStart sp = (spanStartLine sp, spanStartCol sp)
 
 -- | 内部：一行内 `word` 的全部整词起始列（1-based，升序）；名字不跨行，按行扫即可。
 wordColsInLine : String -> String -> List Int
@@ -148,12 +148,12 @@ wordColsGo (c :: rest) needle prev idx acc =
     wordColsGo rest needle c (idx + 1) acc
 
 -- | 内部：行范围 `[start, end)` 内第一次出现的整词位置（1-based 行 / 列）。
-firstWordInRange : List String -> Int -> Int -> Int -> Int -> String -> Maybe (Pair Int Int)
+firstWordInRange : List String -> Int -> Int -> Int -> Int -> String -> Maybe (Int, Int)
 firstWordInRange lines startLine startCol endLine endCol word =
   firstWordGo (drop (startLine - 1) lines) startLine startLine startCol endLine endCol word
 
 -- | 内部：`firstWordInRange` 的逐行扫描（`remaining` 已对齐到 `lineNo`）。
-firstWordGo : List String -> Int -> Int -> Int -> Int -> Int -> String -> Maybe (Pair Int Int)
+firstWordGo : List String -> Int -> Int -> Int -> Int -> Int -> String -> Maybe (Int, Int)
 firstWordGo remaining lineNo startLine startCol endLine endCol word =
   if lineNo > endLine then
     Nothing
@@ -172,16 +172,16 @@ firstWordGo remaining lineNo startLine startCol endLine endCol word =
           let
             part = substring (natFromInt from) (natFromInt count) ln
           in case wordColsInLine part word of
-            c :: _ => Just (Pair lineNo (c + from))
+            c :: _ => Just (lineNo, c + from)
             [] => firstWordGo rest (lineNo + 1) startLine startCol endLine endCol word
 
 -- | 内部：行范围 `[start, end)` 内最后一次出现的整词位置（1-based 行 / 列）。
-lastWordBefore : List String -> Int -> Int -> Int -> Int -> String -> Maybe (Pair Int Int)
+lastWordBefore : List String -> Int -> Int -> Int -> Int -> String -> Maybe (Int, Int)
 lastWordBefore lines startLine startCol endLine endCol word =
   lastWordGo (drop (startLine - 1) lines) startLine startLine startCol endLine endCol word Nothing
 
 -- | 内部：`lastWordBefore` 的逐行扫描（`best` 是目前找到的最后位置）。
-lastWordGo : List String -> Int -> Int -> Int -> Int -> Int -> String -> Maybe (Pair Int Int) -> Maybe (Pair Int Int)
+lastWordGo : List String -> Int -> Int -> Int -> Int -> Int -> String -> Maybe (Int, Int) -> Maybe (Int, Int)
 lastWordGo remaining lineNo startLine startCol endLine endCol word best =
   if lineNo > endLine then
     best
@@ -202,11 +202,11 @@ lastWordGo remaining lineNo startLine startCol endLine endCol word best =
             best2 =
               case lastElem (wordColsInLine part word) of
                 Nothing => best
-                Just c => Just (Pair lineNo (c + from))
+                Just c => Just (lineNo, c + from)
           in lastWordGo rest (lineNo + 1) startLine startCol endLine endCol word best2
 
 -- | 内部：span 内第一个整词位置，作为「声明名字在哪」的统一入口；找不到时为空表。
-firstInSpan : List String -> Span -> String -> List (Pair Int Int)
+firstInSpan : List String -> Span -> String -> List (Int, Int)
 firstInSpan lines sp name =
   case firstWordInRange lines (spanStartLine sp) (spanStartCol sp) (spanEndLine sp) sp.spanEndCol name of
     Nothing => []
@@ -300,13 +300,13 @@ pickIndexSymbol curModule idx syms =
 
 -- | 内部：取目标模块的源码——目标在当前缓冲里就直接用 buffer，否则读磁盘该模块并解析；
 -- 模块无路径 / 文件不存在 / 解析失败时 `Nothing`。
-loadIndexTarget : Member nFs FsOp r => String -> String -> SourceFile -> Index -> Sym -> Pair Int String -> Eff r (Maybe (Pair RenameTarget (Pair Int String)))
+loadIndexTarget : Member nFs FsOp r => String -> String -> SourceFile -> Index -> Sym -> (Int, String) -> Eff r (Maybe (RenameTarget, Int, String))
 loadIndexTarget uri bufText bufSf idx sym tokInfo =
   case moduleInfoOf idx (symModule sym) of
     Nothing => pure Nothing
     Just mi =>
       if symModule sym == currentModuleNameOf bufSf then
-        pure (Just (Pair (RenameTarget (symName sym) (symKind sym) (symModule sym) uri bufText bufSf) tokInfo))
+        pure (Just (RenameTarget (symName sym) (symKind sym) (symModule sym) uri bufText bufSf, tokInfo))
       else if modPath mi == "" then
         pure Nothing
       else
@@ -317,21 +317,21 @@ loadIndexTarget uri bufText bufSf idx sym tokInfo =
               source <- fsReadFile (modPath mi)
               case parseSource (modPath mi) source of
                 ErrC e => pure Nothing
-                OkC sf2 => pure (Just (Pair (RenameTarget (symName sym) (symKind sym) (symModule sym) (pathToUri (modPath mi)) source sf2) tokInfo))
+                OkC sf2 => pure (Just (RenameTarget (symName sym) (symKind sym) (symModule sym) (pathToUri (modPath mi)) source sf2, tokInfo))
           else
             pure Nothing
 
 -- | 光标位置 → rename 目标 + 光标 token 的名字区间信息（`nameStart`, `name`）。
 -- 顺序：局部绑定 → 当前缓冲顶层声明 → Index 符号（拒绝 base 标准库）。解析失败、无 token、
 -- 光标在命名洞上、或找不到符号时返回 `Nothing`。
-resolveTarget : Member nFs FsOp r => String -> Int -> Int -> String -> Maybe Index -> Eff r (Maybe (Pair RenameTarget (Pair Int String)))
+resolveTarget : Member nFs FsOp r => String -> Int -> Int -> String -> Maybe Index -> Eff r (Maybe (RenameTarget, Int, String))
 resolveTarget uri line col text midx =
   case parseSource "<lsp>" text of
     ErrC e => pure Nothing
     OkC sf =>
       case tokenAtCursor text line col of
         Nothing => pure Nothing
-        Just (Pair tokStart token) =>
+        Just (tokStart, token) =>
           if namedHoleBefore text line tokStart then
             pure Nothing
           else
@@ -339,12 +339,12 @@ resolveTarget uri line col text midx =
               name = lastSegment token
               nameStart = tokStart + (strLength token - strLength name)
               curModule = currentModuleNameOf sf
-              tokInfo = Pair nameStart name
+              tokInfo = (nameStart, name)
             in case localBindingAtSf sf text line col of
-              Just binder => pure (Just (Pair (RenameTarget name "local" curModule uri text sf) tokInfo))
+              Just binder => pure (Just (RenameTarget name "local" curModule uri text sf, tokInfo))
               Nothing =>
                 case bufferTargetKind name sf.sourceFileDecls of
-                  Just kind => pure (Just (Pair (RenameTarget name kind curModule uri text sf) tokInfo))
+                  Just kind => pure (Just (RenameTarget name kind curModule uri text sf, tokInfo))
                   Nothing =>
                     case midx of
                       Nothing => pure Nothing
@@ -364,11 +364,11 @@ kindMatches : String -> String -> Bool
 kindMatches targetKind candKind = targetKind == "" || targetKind == candKind
 
 -- | 内部：`firstInSpan` 的同义入口（保持声明位置处的调用形态统一）。
-firstInSpanOf : List String -> Span -> String -> List (Pair Int Int)
+firstInSpanOf : List String -> Span -> String -> List (Int, Int)
 firstInSpanOf lines sp name = firstInSpan lines sp name
 
 -- | 内部：构造子的声明位置（种类与名字都匹配时）。
-ctorPositions : List String -> String -> String -> Ctor -> List (Pair Int Int)
+ctorPositions : List String -> String -> String -> Ctor -> List (Int, Int)
 ctorPositions lines kind name c =
   if kindMatches kind "ctor" && ctorName c == name then
     firstInSpanOf lines (ctorSpan c) name
@@ -376,7 +376,7 @@ ctorPositions lines kind name c =
     []
 
 -- | 内部：记录字段的声明位置（种类与名字都匹配时）。
-fieldPositions : List String -> String -> String -> Field -> List (Pair Int Int)
+fieldPositions : List String -> String -> String -> Field -> List (Int, Int)
 fieldPositions lines kind name f =
   if kindMatches kind "field" && fieldName f == name then
     firstInSpanOf lines (fieldSpan f) name
@@ -384,7 +384,7 @@ fieldPositions lines kind name f =
     []
 
 -- | 内部：trait 方法的声明位置（种类与名字都匹配时）。
-methodPositions : List String -> String -> String -> TraitMethod -> List (Pair Int Int)
+methodPositions : List String -> String -> String -> TraitMethod -> List (Int, Int)
 methodPositions lines kind name m =
   if kindMatches kind "method" && traitMethodName m == name then
     firstInSpanOf lines (traitMethodSpan m) name
@@ -392,7 +392,7 @@ methodPositions lines kind name m =
     []
 
 -- | 内部：一条声明里目标名字的声明位置（类型名本身 + 其构造子 / 字段 / 方法）。
-declPositions : List String -> String -> String -> Decl -> List (Pair Int Int)
+declPositions : List String -> String -> String -> Decl -> List (Int, Int)
 declPositions lines kind name (DData n params k ctors derivings viaField repr lin sp) =
   append
     (if kindMatches kind "data" && n == name then firstInSpanOf lines (nodeRefSpan sp) name else [])
@@ -425,12 +425,12 @@ exportableKind kind =
     || kind == "data" || kind == "record" || kind == "trait" || kind == "axiom" || kind == "extern"
 
 -- | 内部：导出列表（`module M (name)` / `module M (Type(..))`）里目标名字的位置。
-exportPositions : List String -> String -> String -> List ExportItem -> List (Pair Int Int)
+exportPositions : List String -> String -> String -> List ExportItem -> List (Int, Int)
 exportPositions lines kind name items =
   if not (exportableKind kind) then [] else concatMap (exportPosition lines name) items
 
 -- | 内部：单个导出项里目标名字的位置；`XModule` 项不产出。
-exportPosition : List String -> String -> ExportItem -> List (Pair Int Int)
+exportPosition : List String -> String -> ExportItem -> List (Int, Int)
 exportPosition lines name (XBare n r) =
   if n == name then firstInSpanOf lines (nodeRefSpan r) name else []
 exportPosition lines name (XTypeAll n r) =
@@ -473,11 +473,11 @@ useFieldKind : UseCtx -> Bool
 useFieldKind ctx = ctx.ucKind == "field"
 
 -- | 内部：一组声明里的使用位置（`fuel` 递减守卫）。
-usesInDecls : Int -> UseCtx -> List Decl -> List (Pair Int Int)
+usesInDecls : Int -> UseCtx -> List Decl -> List (Int, Int)
 usesInDecls fuel ctx decls = if fuel <= 0 then [] else concatMap (usesInDecl (fuel - 1) ctx) decls
 
 -- | 内部：一条声明里的使用位置——值 / 签名 / 构造子 / 字段 / trait 方法 / 实例 / axiom / extern。
-usesInDecl : Int -> UseCtx -> Decl -> List (Pair Int Int)
+usesInDecl : Int -> UseCtx -> Decl -> List (Int, Int)
 usesInDecl fuel ctx d =
   if fuel <= 0 then
     []
@@ -493,15 +493,15 @@ usesInDecl fuel ctx d =
       DExtern n cName ty sp => usesInExpr (fuel - 1) ctx ty
 
 -- | 内部：构造子类型里的使用位置。
-ctorUses : Int -> UseCtx -> Ctor -> List (Pair Int Int)
+ctorUses : Int -> UseCtx -> Ctor -> List (Int, Int)
 ctorUses fuel ctx c = if fuel <= 0 then [] else usesInExpr (fuel - 1) ctx (ctorType c)
 
 -- | 内部：记录字段类型里的使用位置。
-fieldUses : Int -> UseCtx -> Field -> List (Pair Int Int)
+fieldUses : Int -> UseCtx -> Field -> List (Int, Int)
 fieldUses fuel ctx f = if fuel <= 0 then [] else usesInExpr (fuel - 1) ctx (fieldType f)
 
 -- | 内部：trait 方法签名里的使用位置。
-methodUses : Int -> UseCtx -> TraitMethod -> List (Pair Int Int)
+methodUses : Int -> UseCtx -> TraitMethod -> List (Int, Int)
 methodUses fuel ctx m =
   if fuel <= 0 then
     []
@@ -510,7 +510,7 @@ methodUses fuel ctx m =
       TraitMethod name ty sp => usesInExpr (fuel - 1) ctx ty
 
 -- | 内部：字符串插值里的使用位置（`IPText` 不产位置）。
-interpUses : Int -> UseCtx -> InterpPart -> List (Pair Int Int)
+interpUses : Int -> UseCtx -> InterpPart -> List (Int, Int)
 interpUses fuel ctx part =
   if fuel <= 0 then
     []
@@ -520,30 +520,29 @@ interpUses fuel ctx part =
       IPHole e => usesInExpr (fuel - 1) ctx e
 
 -- | 内部：记录字段值里的使用位置（标签本身由 `recordLabelUses` 处理）。
-fieldValueUses : Int -> UseCtx -> Pair String Expr -> List (Pair Int Int)
-fieldValueUses fuel ctx (Pair fname value) =
-  if fuel <= 0 then [] else usesInExpr (fuel - 1) ctx value
+fieldValueUses : Int -> UseCtx -> (String, Expr) -> List (Int, Int)
+fieldValueUses fuel ctx (fname, value) = if fuel <= 0 then [] else usesInExpr (fuel - 1) ctx value
 
 -- | 内部：`case` 分支（模式 + 体）里的使用位置。
-altUses : Int -> UseCtx -> Pair Pat Expr -> List (Pair Int Int)
-altUses fuel ctx (Pair pat body) =
+altUses : Int -> UseCtx -> (Pat, Expr) -> List (Int, Int)
+altUses fuel ctx (pat, body) =
   if fuel <= 0 then [] else append (patUses (fuel - 1) ctx pat) (usesInExpr (fuel - 1) ctx body)
 
 -- | 内部：局部函数一个 clause（模式列表 + 体）里的使用位置。
-clauseUses : Int -> UseCtx -> Pair (List Pat) Expr -> List (Pair Int Int)
-clauseUses fuel ctx (Pair pats body) =
+clauseUses : Int -> UseCtx -> (List Pat, Expr) -> List (Int, Int)
+clauseUses fuel ctx (pats, body) =
   if fuel <= 0 then
     []
   else
     append (concatMap (patUses (fuel - 1) ctx) pats) (usesInExpr (fuel - 1) ctx body)
 
 -- | 内部：`let` 绑定的模式与值里的使用位置。
-bindUses : Int -> UseCtx -> Pair Pat Expr -> List (Pair Int Int)
-bindUses fuel ctx (Pair pat value) =
+bindUses : Int -> UseCtx -> (Pat, Expr) -> List (Int, Int)
+bindUses fuel ctx (pat, value) =
   if fuel <= 0 then [] else append (patUses (fuel - 1) ctx pat) (usesInExpr (fuel - 1) ctx value)
 
 -- | 内部：`do` 语句（绑定或表达式）里的使用位置。
-stmtUses : Int -> UseCtx -> DoStmt -> List (Pair Int Int)
+stmtUses : Int -> UseCtx -> DoStmt -> List (Int, Int)
 stmtUses fuel ctx stmt =
   if fuel <= 0 then
     []
@@ -555,12 +554,12 @@ stmtUses fuel ctx stmt =
 
 -- | 内部：记录字面量 / 更新（`R { f = v }` / `{ r | f = v }`）里的字段标签位置——标签是
 -- value 之前**最近**一次整词出现。
-recordLabelUses : UseCtx -> Pair Int Int -> List (Pair String Expr) -> List (Pair Int Int)
+recordLabelUses : UseCtx -> (Int, Int) -> List (String, Expr) -> List (Int, Int)
 recordLabelUses ctx startPos fields = concatMap (recordLabelUse ctx startPos) fields
 
 -- | 内部：单个字段的标签位置（名字不符时为空表）。
-recordLabelUse : UseCtx -> Pair Int Int -> Pair String Expr -> List (Pair Int Int)
-recordLabelUse ctx startPos (Pair fname value) =
+recordLabelUse : UseCtx -> (Int, Int) -> (String, Expr) -> List (Int, Int)
+recordLabelUse ctx startPos (fname, value) =
   if fname /= ctx.ucName then
     []
   else
@@ -571,12 +570,12 @@ recordLabelUse ctx startPos (Pair fname value) =
       Just pos => [pos]
 
 -- | 内部：记录模式（`R { f = p }`）里的字段标签位置。
-patLabelUses : UseCtx -> Pair Int Int -> List (Pair String Pat) -> List (Pair Int Int)
+patLabelUses : UseCtx -> (Int, Int) -> List (String, Pat) -> List (Int, Int)
 patLabelUses ctx startPos fields = concatMap (patLabelUse ctx startPos) fields
 
 -- | 内部：单个模式字段的标签位置（名字不符时为空表）。
-patLabelUse : UseCtx -> Pair Int Int -> Pair String Pat -> List (Pair Int Int)
-patLabelUse ctx startPos (Pair fname p) =
+patLabelUse : UseCtx -> (Int, Int) -> (String, Pat) -> List (Int, Int)
+patLabelUse ctx startPos (fname, p) =
   if fname /= ctx.ucName then
     []
   else
@@ -596,7 +595,7 @@ moduleLike _ = False
 -- | 内部：`x.fname` 里 `fname` 的位置（目标为记录字段、或 `base` 像模块前缀时才取值）——
 -- EField 的 span end 落在最后一个 token（`fname`）的起点，按名字长度放宽后再取区间内最后一次
 -- 整词出现，兼容 end 落在名字前 / 后的两种实现。
-efieldNamePos : UseCtx -> Expr -> Span -> String -> List (Pair Int Int)
+efieldNamePos : UseCtx -> Expr -> Span -> String -> List (Int, Int)
 efieldNamePos ctx base sp fname =
   if not (useFieldKind ctx) && not (moduleLike base) then
     []
@@ -608,9 +607,8 @@ efieldNamePos ctx base sp fname =
 -- lexer 把 `p.px` / `Dep.name` 合成单个标识符（含点），parser 因此给出 `EVar "p.px"`；
 -- 改名只替换最后一段。
 -- | 内部：限定名里最后一段的起始位置（行号不变，列右移整名与末段的长度差）。
-lastSegmentPos : Pair Int Int -> String -> String -> Pair Int Int
-lastSegmentPos start full last =
-  Pair (firstOf start) (secondOf start + strLength full - strLength last)
+lastSegmentPos : (Int, Int) -> String -> String -> (Int, Int)
+lastSegmentPos start full last = (firstOf start, secondOf start + strLength full - strLength last)
 
 -- | 内部：限定名首段大写 ⇒ 模块限定（`Dep.name`）；小写 ⇒ 字段访问（`p.f`）。
 moduleQualified : String -> Bool
@@ -622,7 +620,7 @@ moduleQualified n =
 -- | 内部：表达式里的使用位置。名字不等于目标时为空；目标为记录字段时只取 `x.f` 的 `f` 段
 -- （裸字段名由标签扫描负责）；目标为普通名字时，裸名取起点，带点的只在首段大写（模块限定）时
 -- 取最后一段——小写字段访问 `p.f` 不算该名字的使用。
-usesInExpr : Int -> UseCtx -> Expr -> List (Pair Int Int)
+usesInExpr : Int -> UseCtx -> Expr -> List (Int, Int)
 usesInExpr fuel ctx e =
   if fuel <= 0 then
     []
@@ -667,7 +665,7 @@ usesInExpr fuel ctx e =
 
 -- | 内部：模式里的使用位置——`PCon` 取构造子名，`PRecord` 取类型名与字段标签，
 -- `PVar` / 通配 / 字面量不产位置。
-patUses : Int -> UseCtx -> Pat -> List (Pair Int Int)
+patUses : Int -> UseCtx -> Pat -> List (Int, Int)
 patUses fuel ctx pat =
   if fuel <= 0 then
     []
@@ -687,7 +685,7 @@ patUses fuel ctx pat =
         in append labelUses (append rnUses (concatMap (patUses (fuel - 1) ctx) (map secondOf fields)))
 
 -- | 内部：该位置不是同名局部绑定的使用（用来过滤被遮蔽的位置）。
-notLocalUse : SourceFile -> String -> Pair Int Int -> Bool
+notLocalUse : SourceFile -> String -> (Int, Int) -> Bool
 notLocalUse sf text pos =
   case localBindingAtSf sf text (firstOf pos) (secondOf pos) of
     Nothing => True
@@ -785,34 +783,32 @@ dedupeStep : List EditRef -> EditRef -> List EditRef
 dedupeStep acc e = if anyTrue (map (\x => sameEdit x e) acc) then acc else append acc [e]
 
 -- | 内部：按 URI 分组，组内保持加入顺序。
-groupEdits : List EditRef -> List (Pair String (List (Pair Int Int)))
+groupEdits : List EditRef -> List (String, List (Int, Int))
 groupEdits edits = foldl groupStep [] edits
 
 -- | 内部：分组折叠的一步（已有该 URI 就追加，否则新建一组）。
-groupStep : List (Pair String (List (Pair Int Int))) -> EditRef -> List (Pair String (List (Pair Int Int)))
+groupStep : List (String, List (Int, Int)) -> EditRef -> List (String, List (Int, Int))
 groupStep acc e =
   if anyTrue (map (\g => firstOf g == e.erUri) acc) then
     map
-      (\g => if firstOf g == e.erUri then Pair e.erUri (append (secondOf g) [Pair e.erLine e.erCol]) else g)
+      (\g => if firstOf g == e.erUri then (e.erUri, append (secondOf g) [(e.erLine, e.erCol)]) else g)
       acc
   else
-    append acc [Pair e.erUri [Pair e.erLine e.erCol]]
+    append acc [(e.erUri, [(e.erLine, e.erCol)])]
 
 -- | 内部：一条 `TextEdit`——range 宽度由旧名长度决定，`newText` 是新名。
-editJson : String -> String -> Pair Int Int -> Json
-editJson oldName newName (Pair line col) =
-  JObj
-    [Pair "range" (lspRange line col line (col + strLength oldName)), Pair "newText" (JStr newName)]
+editJson : String -> String -> (Int, Int) -> Json
+editJson oldName newName (line, col) =
+  JObj [("range", lspRange line col line (col + strLength oldName)), ("newText", JStr newName)]
 
 -- | 内部：一个 URI 的编辑数组 → `changes` 的一项。
-groupJson : String -> String -> Pair String (List (Pair Int Int)) -> Pair String Json
-groupJson oldName newName (Pair uri positions) =
-  Pair uri (JArr (map (editJson oldName newName) positions))
+groupJson : String -> String -> (String, List (Int, Int)) -> (String, Json)
+groupJson oldName newName (uri, positions) = (uri, JArr (map (editJson oldName newName) positions))
 
 -- | 内部：编辑列表 → `WorkspaceEdit` JSON（`changes: {uri: [TextEdit...]}`，按 URI 分组）。
 workspaceEdit : List EditRef -> String -> String -> Json
 workspaceEdit edits oldName newName =
-  JObj [Pair "changes" (JObj (map (groupJson oldName newName) (groupEdits edits)))]
+  JObj [("changes", JObj (map (groupJson oldName newName) (groupEdits edits)))]
 
 -- ---------------------------------------------------------------
 -- 新名字校验
@@ -875,11 +871,11 @@ prepareRenameAt uri line col text midx =
     targetM <- resolveTarget uri line col text midx
     case targetM of
       Nothing => pure JNull
-      Just (Pair target tokInfo) =>
+      Just (target, tokInfo) =>
         let
           name = secondOf tokInfo
           nameStart = firstOf tokInfo
-        in pure (JObj [Pair "range" (lspRange line nameStart line (nameStart + strLength name)), Pair "placeholder" (JStr name)])
+        in pure (JObj [("range", lspRange line nameStart line (nameStart + strLength name)), ("placeholder", JStr name)])
 
 -- | rename：局部绑定只改当前文档；顶层符号改当前文档 + 目标模块 + 跨文件候选模块。
 -- 非法新名、新名与旧名相同、找不到目标、或没有任何编辑时回 `null`（不报错）；编辑数超过
@@ -893,7 +889,7 @@ renameAt uri line col text newName midx =
       targetM <- resolveTarget uri line col text midx
       case targetM of
         Nothing => pure JNull
-        Just (Pair target tokInfo) =>
+        Just (target, tokInfo) =>
           if newName == target.rtName then
             pure JNull
           else

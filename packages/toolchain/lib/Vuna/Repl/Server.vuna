@@ -56,17 +56,16 @@ serverLog m st =
     pure st
 
 -- | 内部：传输告警——写 stderr 日志，并回 `-32700` 错误帧让客户端不会空等。
-replWarn : Member nConsole ConsoleOp r => String -> ReplState -> Eff r (Pair ReplState (List Json))
+replWarn : Member nConsole ConsoleOp r => String -> ReplState -> Eff r (ReplState, List Json)
 replWarn m st =
   do
     st2 <- serverLog m st
-    pure (Pair st2 [responseErr JNull errParse "parse error / bad frame: ${m}"])
+    pure (st2, [responseErr JNull errParse "parse error / bad frame: ${m}"])
 
 -- | 内部：JSON-RPC result 载荷（`status` / `ok` / `output` / `error`；前后端共同契约）。
 replResult : String -> Bool -> String -> String -> Json
 replResult status ok output err =
-  JObj
-    [Pair "status" (JStr status), Pair "ok" (JBool ok), Pair "output" (JStr output), Pair "error" (JStr err)]
+  JObj [("status", JStr status), ("ok", JBool ok), ("output", JStr output), ("error", JStr err)]
 
 -- | 内部：把多行 code 切成行——末尾换行不额外产生空行（`"x\n"` ≡ `"x"`），其余空行保留
 -- （交给 `inputStep` 的交互语义：提交待续输入 / 块内空行）。
@@ -95,12 +94,11 @@ feedLines st (line :: rest) =
 
 -- | 内部：处理 `eval`——code（必需，字符串）+ close（可选，默认 true）。返回
 -- (是否结束进程, (新状态, 响应帧))；`status` 为 `ok` / `incomplete` / `exit`。
-evalRequest : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Json -> ReplState -> Eff r (Pair Bool (Pair ReplState (List Json)))
+evalRequest : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Json -> ReplState -> Eff r (Bool, ReplState, List Json)
 evalRequest msg st =
   case jsonGetIn ["params", "code"] msg >>= jsonAsStr of
     Nothing =>
-      pure
-        (Pair False (Pair st [responseErr (idOf msg) errInvalidParams "missing params.code (string)"]))
+      pure (False, st, [responseErr (idOf msg) errInvalidParams "missing params.code (string)"])
     Just code =>
       let
         close = fromMaybe True (jsonGetIn ["params", "close"] msg >>= jsonAsBool)
@@ -110,7 +108,7 @@ evalRequest msg st =
           FeedExit =>
             do
               drained <- replOutputDrain st
-              pure (Pair True (Pair st [responseOk (idOf msg) (replResult "exit" True (firstOf drained) (secondOf drained))]))
+              pure (True, st, [responseOk (idOf msg) (replResult "exit" True (firstOf drained) (secondOf drained))])
           FeedContinue st2 =>
             do
               finished <- if close then finishInput st2 else pure (ReplContinue st2)
@@ -118,37 +116,33 @@ evalRequest msg st =
                 ReplExit _ =>
                   do
                     drained <- replOutputDrain st2
-                    pure (Pair True (Pair st2 [responseOk (idOf msg) (replResult "exit" True (firstOf drained) (secondOf drained))]))
+                    pure (True, st2, [responseOk (idOf msg) (replResult "exit" True (firstOf drained) (secondOf drained))])
                 ReplContinue st3 =>
                   do
                     drained <- replOutputDrain st3
-                    pure (Pair False (Pair st3 [responseOk (idOf msg) (replResult (if replPendingOpen st3 then "incomplete" else "ok") (secondOf drained == "") (firstOf drained) (secondOf drained))]))
+                    pure (False, st3, [responseOk (idOf msg) (replResult (if replPendingOpen st3 then "incomplete" else "ok") (secondOf drained == "") (firstOf drained) (secondOf drained))])
 
 -- | 内部：处理 `ping`——返回版本与包名（`base-only` 表示没有包上下文），不改状态。
-pingRequest : Json -> ReplState -> Pair Bool (Pair ReplState (List Json))
+pingRequest : Json -> ReplState -> (Bool, ReplState, List Json)
 pingRequest msg st =
   let
     pkg = contextPackageName st.stateCtx
     label = if pkg == "" then "base-only" else pkg
     text = "vuna ${vunaVersion}\n包: ${label}\n"
-  in Pair False (Pair st [responseOk (idOf msg) (replResult "ok" True text "")])
+  in (False, st, [responseOk (idOf msg) (replResult "ok" True text "")])
 
 -- | 内部：请求分发——`eval` / `ping` / `shutdown`；未知方法回 `-32601`（不结束进程），
 -- 缺 `method` 回 `-32600`。
-handleRequest : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Json -> ReplState -> Eff r (Pair Bool (Pair ReplState (List Json)))
+handleRequest : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Json -> ReplState -> Eff r (Bool, ReplState, List Json)
 handleRequest msg st =
   case methodOf msg of
-    Nothing =>
-      pure (Pair False (Pair st [responseErr (idOf msg) errInvalidRequest "missing method"]))
+    Nothing => pure (False, st, [responseErr (idOf msg) errInvalidRequest "missing method"])
     Just m =>
       case m of
         "eval" => evalRequest msg st
         "ping" => pure (pingRequest msg st)
-        "shutdown" =>
-          pure (Pair True (Pair st [responseOk (idOf msg) (replResult "ok" True "" "")]))
-        _ =>
-          pure
-            (Pair False (Pair st [responseErr (idOf msg) errMethodNotFound "method not found: ${m}"]))
+        "shutdown" => pure (True, st, [responseOk (idOf msg) (replResult "ok" True "" "")])
+        _ => pure (False, st, [responseErr (idOf msg) errMethodNotFound "method not found: ${m}"])
 
 -- | 内部：就绪行里显示的地址——`tcp:...:0` 换成实际绑定的临时端口。
 listeningText : Member nNet NetOp r => String -> Int -> Eff r String
@@ -174,7 +168,7 @@ runReplServer ctx start addr =
           do
             _ <- consoleEprint "[vuna-repl-server] ${diagText e}\n"
             pure 2
-        OkC (Pair st0 _) =>
+        OkC (st0, _) =>
           do
             h <- netListen addr
             ready <- listeningText addr h

@@ -31,11 +31,11 @@ export data Json(..) : Type where
   -- | 数组。
   JArr : List Json -> Json
   -- | 对象：成员按出现顺序保存，重复键原样保留（读取时命中第一个）。
-  JObj : List (Pair String Json) -> Json
+  JObj : List (String, Json) -> Json
 
 -- | 构造单键对象（构造响应时常用）。
 export jsonObjSingle : String -> Json -> Json
-jsonObjSingle k v = JObj [Pair k v]
+jsonObjSingle k v = JObj [(k, v)]
 
 -- ---------------------------------------------------------------
 -- 访问器
@@ -46,9 +46,9 @@ jsonGet key (JObj kvs) = lookupKV key kvs
 jsonGet key _ = Nothing
 
 -- | 内部：在成员表里线性查找第一个匹配键。
-lookupKV : String -> List (Pair String Json) -> Maybe Json
+lookupKV : String -> List (String, Json) -> Maybe Json
 lookupKV key [] = Nothing
-lookupKV key ((Pair k x) :: rest) = if k == key then Just x else lookupKV key rest
+lookupKV key ((k, x) :: rest) = if k == key then Just x else lookupKV key rest
 
 -- | 按路径逐层取值，例如 `jsonGetIn ["params", "textDocument", "uri"] v`；空路径返回原值。
 export jsonGetIn : List String -> Json -> Maybe Json
@@ -79,7 +79,7 @@ jsonAsArr (JArr xs) = Just xs
 jsonAsArr _ = Nothing
 
 -- | 取对象成员表；不是对象给 `Nothing`。
-export jsonAsObj : Json -> Maybe (List (Pair String Json))
+export jsonAsObj : Json -> Maybe (List (String, Json))
 jsonAsObj (JObj kvs) = Just kvs
 jsonAsObj _ = Nothing
 
@@ -111,7 +111,7 @@ renderJson (JArr xs) = "[${join "," (map renderJson xs)}]"
 renderJson (JObj kvs) = "{${join "," (map renderMember kvs)}}"
 
 -- | 内部：渲染一个 `键:值` 成员。
-renderMember : Pair String Json -> String
+renderMember : (String, Json) -> String
 renderMember kv = "${renderJsonString (firstOf kv)}:${renderJson (secondOf kv)}"
 
 -- | 内部：渲染带引号与转义的字符串字面量。
@@ -160,7 +160,7 @@ parseJson source =
     chars = skipJsonWs (strUnpack source)
   in case parseValue (jsonFuel chars) chars of
     ErrC e => err "json: ${diagText e}"
-    OkC (Pair v rest) =>
+    OkC (v, rest) =>
       if length (skipJsonWs rest) == 0 then OkC v else err "json: trailing characters"
 
 -- | 内部：跳过 JSON 允许的空白（空格 / 制表 / 换行 / 回车）。
@@ -170,7 +170,7 @@ skipJsonWs (c :: rest) =
   if c == 32 || c == 9 || c == 10 || c == 13 then skipJsonWs rest else c :: rest
 
 -- | 内部：按首字符分派到对象 / 数组 / 字符串 / 字面量 / 数字，返回（值, 剩余输入）。
-parseValue : Int -> List Int -> Check (Pair Json (List Int))
+parseValue : Int -> List Int -> Check (Json, List Int)
 parseValue fuel chars =
   if fuel <= 0 then
     err "json: parser fuel exhausted (internal)"
@@ -192,25 +192,24 @@ isDigitChar : Int -> Bool
 isDigitChar c = c >= 48 && c <= 57
 
 -- | 内部：匹配固定字面量（`true` / `false` / `null`）并返回对应值。
-parseLiteral : String -> Json -> List Int -> Check (Pair Json (List Int))
+parseLiteral : String -> Json -> List Int -> Check (Json, List Int)
 parseLiteral want value chars =
   case splitAtCharCount (strLength want) chars of
     Nothing => err "expected ${want}"
-    Just (Pair got rest) =>
-      if strPack got == want then OkC (Pair value rest) else err "expected ${want}"
+    Just (got, rest) => if strPack got == want then OkC (value, rest) else err "expected ${want}"
 
 -- | 内部：解析对象，把成员表包成 `JObj`。
-parseObject : Int -> List Int -> Check (Pair Json (List Int))
+parseObject : Int -> List Int -> Check (Json, List Int)
 parseObject fuel chars =
   if fuel <= 0 then
     err "json: parser fuel exhausted (internal)"
   else
     case parseObjectMembers (fuel - 1) chars [] of
       ErrC e => ErrC e
-      OkC (Pair kvs rest) => OkC (Pair (JObj kvs) rest)
+      OkC (kvs, rest) => OkC (JObj kvs, rest)
 
 -- | 内部：解析对象成员序列（逆序累积），`}` 结束。
-parseObjectMembers : Int -> List Int -> List (Pair String Json) -> Check (Pair (List (Pair String Json)) (List Int))
+parseObjectMembers : Int -> List Int -> List (String, Json) -> Check (List (String, Json), List Int)
 parseObjectMembers fuel chars acc =
   if fuel <= 0 then
     err "json: parser fuel exhausted (internal)"
@@ -219,79 +218,79 @@ parseObjectMembers fuel chars acc =
       [] => err "unterminated object"
       c :: rest =>
         case c of
-          125 => OkC (Pair (reverse acc) rest)
+          125 => OkC (reverse acc, rest)
           34 => parseObjectPair (fuel - 1) rest acc
           _ => err "expected a string key in object"
 
 -- | 内部：解析一个键（字符串）与其后的 `:`。
-parseObjectPair : Int -> List Int -> List (Pair String Json) -> Check (Pair (List (Pair String Json)) (List Int))
+parseObjectPair : Int -> List Int -> List (String, Json) -> Check (List (String, Json), List Int)
 parseObjectPair fuel chars acc =
   if fuel <= 0 then
     err "json: parser fuel exhausted (internal)"
   else
     case parseStringBody (fuel - 1) chars [] of
       ErrC e => ErrC e
-      OkC (Pair keyJson rest) =>
+      OkC (keyJson, rest) =>
         case skipJsonWs rest of
           [] => err "unterminated object"
           c :: rest2 => if c == 58 then parseObjectValue (fuel - 1) (jsonStrOr "" keyJson) (skipJsonWs rest2) acc else err "expected : in object"
 
 -- | 内部：解析 `:` 之后的值，再按 `,` / `}` 决定继续或结束。
-parseObjectValue : Int -> String -> List Int -> List (Pair String Json) -> Check (Pair (List (Pair String Json)) (List Int))
+parseObjectValue : Int -> String -> List Int -> List (String, Json) -> Check (List (String, Json), List Int)
 parseObjectValue fuel key chars acc =
   if fuel <= 0 then
     err "json: parser fuel exhausted (internal)"
   else
     case parseValue (fuel - 1) chars of
       ErrC e => ErrC e
-      OkC (Pair v rest) =>
+      OkC (v, rest) =>
         case skipJsonWs rest of
           [] => err "unterminated object"
           c :: rest2 =>
             case c of
-              44 => parseObjectMembers (fuel - 1) rest2 (Pair key v :: acc)
-              125 => OkC (Pair (reverse (Pair key v :: acc)) rest2)
+              44 => parseObjectMembers (fuel - 1) rest2 ((key, v) :: acc)
+              125 => OkC (reverse ((key, v) :: acc), rest2)
               _ => err "expected , or } in object"
 
 -- | 内部：解析数组，把元素表包成 `JArr`。
-parseArray : Int -> List Int -> Check (Pair Json (List Int))
+parseArray : Int -> List Int -> Check (Json, List Int)
 parseArray fuel chars =
   if fuel <= 0 then
     err "json: parser fuel exhausted (internal)"
   else
     case parseArrayItems (fuel - 1) chars [] of
       ErrC e => ErrC e
-      OkC (Pair items rest) => OkC (Pair (JArr items) rest)
+      OkC (items, rest) => OkC (JArr items, rest)
 
 -- | 内部：解析数组元素序列（逆序累积），`]` 结束。
-parseArrayItems : Int -> List Int -> List Json -> Check (Pair (List Json) (List Int))
+parseArrayItems : Int -> List Int -> List Json -> Check (List Json, List Int)
 parseArrayItems fuel chars acc =
   if fuel <= 0 then
     err "json: parser fuel exhausted (internal)"
   else
     case skipJsonWs chars of
       [] => err "unterminated array"
-      c :: rest => if c == 93 then OkC (Pair (reverse acc) rest) else parseArrayValue (fuel - 1) (c :: rest) acc
+      c :: rest => if c == 93 then OkC (reverse acc, rest) else parseArrayValue (fuel - 1) (c :: rest) acc
 
 -- | 内部：解析一个数组元素，再按 `,` / `]` 决定继续或结束。
-parseArrayValue : Int -> List Int -> List Json -> Check (Pair (List Json) (List Int))
+parseArrayValue : Int -> List Int -> List Json -> Check (List Json, List Int)
 parseArrayValue fuel chars acc =
   if fuel <= 0 then
     err "json: parser fuel exhausted (internal)"
   else
     case parseValue (fuel - 1) chars of
       ErrC e => ErrC e
-      OkC (Pair v rest) =>
+      OkC (v, rest) =>
         case skipJsonWs rest of
           [] => err "unterminated array"
           c :: rest2 =>
             case c of
               44 => parseArrayItems (fuel - 1) rest2 (v :: acc)
-              93 => OkC (Pair (reverse (v :: acc)) rest2)
+              93 => OkC (reverse (v :: acc), rest2)
               _ => err "expected , or ] in array"
 
 -- | 内部：解析字符串体（起始引号已被消费；`acc` 是逆序字符）。
-parseStringBody : Int -> List Int -> List Int -> Check (Pair Json (List Int))
+parseStringBody : Int -> List Int -> List Int -> Check (Json, List Int)
 parseStringBody fuel chars acc =
   if fuel <= 0 then
     err "json: parser fuel exhausted (internal)"
@@ -300,12 +299,12 @@ parseStringBody fuel chars acc =
       [] => err "unterminated string"
       c :: rest =>
         case c of
-          34 => OkC (Pair (JStr (strPack (reverse acc))) rest)
+          34 => OkC (JStr (strPack (reverse acc)), rest)
           92 => parseEscape (fuel - 1) rest acc
           _ => parseStringBody (fuel - 1) rest (c :: acc)
 
 -- | 内部：解析一个转义序列，把解码后的字符（或 UTF-8 字节）压回 `acc`。
-parseEscape : Int -> List Int -> List Int -> Check (Pair Json (List Int))
+parseEscape : Int -> List Int -> List Int -> Check (Json, List Int)
 parseEscape fuel chars acc =
   if fuel <= 0 then
     err "json: parser fuel exhausted (internal)"
@@ -326,14 +325,14 @@ parseEscape fuel chars acc =
           _ => err "invalid escape \\${strPack [c]}"
 
 -- | 内部：解析 `\uXXXX`，把码点按 UTF-8 编码后压回 `acc`（代理对不合并）。
-parseUnicodeEscape : Int -> List Int -> List Int -> Check (Pair Json (List Int))
+parseUnicodeEscape : Int -> List Int -> List Int -> Check (Json, List Int)
 parseUnicodeEscape fuel chars acc =
   if fuel <= 0 then
     err "json: parser fuel exhausted (internal)"
   else
     case splitAtCharCount 4 chars of
       Nothing => err "invalid \\u escape"
-      Just (Pair digits rest) =>
+      Just (digits, rest) =>
         case parseHex4 digits of
           Nothing => err "invalid \\u escape"
           Just code => parseStringBody (fuel - 1) rest (append (reverse (encodeUtf8 code)) acc)
@@ -370,47 +369,47 @@ encodeUtf8 code =
     [224 + code / 4096, 128 + code / 64 - code / 4096 * 64, 128 + code - code / 64 * 64]
 
 -- | 内部：解析数字（可选负号 + 整数部分 + 可选小数 / 指数）。
-parseNumber : List Int -> Check (Pair Json (List Int))
+parseNumber : List Int -> Check (Json, List Int)
 parseNumber chars =
   case signOf chars of
-    Pair negative rest1 =>
+    (negative, rest1) =>
       case parseIntDigits rest1 0 0 of
-        Pair value (Pair count rest2) =>
+        (value, count, rest2) =>
           if count == 0 then
             err "invalid number"
           else
             let
               signed = if negative then 0 - value else value
             in case skipNumberTail rest2 of
-              Pair rest3 True => OkC (Pair (JNum signed) rest3)
-              Pair rest3 False => err "invalid number"
+              (rest3, True) => OkC (JNum signed, rest3)
+              (rest3, False) => err "invalid number"
 
 -- | 内部：剥掉可选的负号，返回（是否为负, 剩余输入）。
-signOf : List Int -> Pair Bool (List Int)
-signOf (chars@(c :: rest)) = if c == 45 then Pair True rest else Pair False chars
-signOf [] = Pair False []
+signOf : List Int -> (Bool, List Int)
+signOf (chars@(c :: rest)) = if c == 45 then (True, rest) else (False, chars)
+signOf [] = (False, [])
 
 -- | 内部：累加十进制整数，返回（数值, (位数, 余下输入)）。
-parseIntDigits : List Int -> Int -> Int -> Pair Int (Pair Int (List Int))
+parseIntDigits : List Int -> Int -> Int -> (Int, Int, List Int)
 parseIntDigits (c :: rest) acc count =
   if isDigitChar c then
     parseIntDigits rest (acc * 10 + (c - 48)) (count + 1)
   else
-    Pair acc (Pair count (c :: rest))
-parseIntDigits [] acc count = Pair acc (Pair count [])
+    (acc, count, c :: rest)
+parseIntDigits [] acc count = (acc, count, [])
 
 -- | 内部：校验并丢弃小数与指数部分（值保持整数），返回（余下输入, 语法是否合法）。
-skipNumberTail : List Int -> Pair (List Int) Bool
+skipNumberTail : List Int -> (List Int, Bool)
 skipNumberTail (chars@(c :: rest)) =
   if c == 46 then
     case parseIntDigits rest 0 0 of
-      Pair value (Pair count rest2) => if count == 0 then Pair chars False else skipExponent rest2
+      (value, count, rest2) => if count == 0 then (chars, False) else skipExponent rest2
   else
     skipExponent chars
-skipNumberTail [] = Pair [] True
+skipNumberTail [] = ([], True)
 
 -- | 内部：校验并丢弃指数部分（`e` / `E` + 可选符号 + 至少一位数字）。
-skipExponent : List Int -> Pair (List Int) Bool
+skipExponent : List Int -> (List Int, Bool)
 skipExponent (chars@(c :: rest)) =
   if c == 101 || c == 69 then
     let
@@ -419,20 +418,20 @@ skipExponent (chars@(c :: rest)) =
           s :: rest2 => if s == 43 || s == 45 then rest2 else rest
           [] => []
     in case parseIntDigits afterSign 0 0 of
-      Pair value (Pair count rest3) => if count == 0 then Pair chars False else Pair rest3 True
+      (value, count, rest3) => if count == 0 then (chars, False) else (rest3, True)
   else
-    Pair chars True
-skipExponent [] = Pair [] True
+    (chars, True)
+skipExponent [] = ([], True)
 
 -- | 内部：取前 `n` 个字符；不足 `n` 个给 `Nothing`。
-splitAtCharCount : Int -> List Int -> Maybe (Pair (List Int) (List Int))
+splitAtCharCount : Int -> List Int -> Maybe (List Int, List Int)
 splitAtCharCount n chars = takeCount chars n []
 
 -- | 内部：`splitAtCharCount` 的累加实现（`acc` 是逆序前缀）。
-takeCount : List Int -> Int -> List Int -> Maybe (Pair (List Int) (List Int))
+takeCount : List Int -> Int -> List Int -> Maybe (List Int, List Int)
 takeCount chars n acc =
   if n <= 0 then
-    Just (Pair (reverse acc) chars)
+    Just (reverse acc, chars)
   else
     case chars of
       [] => Nothing

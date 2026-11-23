@@ -44,7 +44,7 @@ interpretFile ctx entry =
 -- `AuxCache`。类型文本形如 `((Base.Effect.Core.Eff Base.Effect.Core.Row.Nil) Int)`（canonical 全名）；
 -- REPL 据此决定是否走效果执行。缓存复用依赖包 decls 的 record / deriving 预处理结果，
 -- key 由接口哈希决定（依赖接口不变时一直命中），失败路径不缓存。
-export evalExprInfoWithAux : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => PackageContext -> String -> String -> Maybe AuxCache -> Eff r (Check (Pair (Pair String String) (Maybe AuxCache)))
+export evalExprInfoWithAux : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => PackageContext -> String -> String -> Maybe AuxCache -> Eff r (Check ((String, String), Maybe AuxCache))
 evalExprInfoWithAux ctx program expr aux =
   do
     ifaces <- depIfacesForToolProgram ctx program
@@ -56,7 +56,7 @@ evalExprInfoWithAux ctx program expr aux =
           pure (
               case info of
                 ErrC e => ErrC e
-                OkC i => OkC (Pair i aux)
+                OkC i => OkC (i, aux)
             )
 
 -- ---------------------------------------------------------------
@@ -64,11 +64,11 @@ evalExprInfoWithAux ctx program expr aux =
 -- ---------------------------------------------------------------
 -- | 为缺签名的顶层 DFun 推断可回读的签名；`targets` 由 REPL 选出（块内无签名、且缓冲里
 -- 也没有只含签名的块）。失败返回可读错误，由 REPL 加提示后保持会话状态不变。
-export inferDefTypes : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> List String -> String -> Eff r (Check (List (Pair String String)))
+export inferDefTypes : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> List String -> String -> Eff r (Check (List (String, String)))
 inferDefTypes ctx program targets defSource = dtInferDefTypes ctx program targets defSource
 
 -- | `program` 里每个顶层定义的名字 + zonk 后类型文本（`:defs` / `:info` 用）。
-export bindingTypes : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Eff r (Check (List (Pair String String)))
+export bindingTypes : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Eff r (Check (List (String, String)))
 bindingTypes ctx program = dtBindingTypes ctx program
 
 -- | 内存 `program` 的整程序检查（自动签名写回后的复查；也用于 `:load` 模块的立即校验）。
@@ -127,7 +127,7 @@ pickTempDir base (n :: rest) =
 -- | 内部：上下文依赖根 → 临时包的 `[dependencies]` 条目（包名 → 包目录）。
 -- base-only 上下文（包名为空）只有 base 一个根，必须全部带上；普通上下文跳过第一个
 -- 根（它是当前包自己的 lib：临时包不能依赖「自己」，否则触发依赖环）。
-effectDeps : Member nEnv EnvOp r => PackageContext -> Eff r (List (Pair String String))
+effectDeps : Member nEnv EnvOp r => PackageContext -> Eff r (List (String, String))
 effectDeps ctx =
   case contextRoots ctx of
     [] => pure []
@@ -138,11 +138,11 @@ effectDeps ctx =
         mapEff effectDep (drop 1 roots)
 
 -- | 内部：单个依赖根 → `(包名, 绝对包目录)`。
-effectDep : Member nEnv EnvOp r => Root -> Eff r (Pair String String)
+effectDep : Member nEnv EnvOp r => Root -> Eff r (String, String)
 effectDep root =
   do
     dir <- absoluteDir (rootPackageDir (rootDir root))
-    pure (Pair (rootName root) dir)
+    pure (rootName root, dir)
 
 -- | 内部：模块根固定是 `<包目录>/lib`；去掉后缀得到包目录（manifest 的 `[dependencies]`
 -- 吃包目录）。
@@ -174,11 +174,11 @@ tomlChar c = strPack [c]
 
 -- | 内部：依赖行：key 用裸名（vuna 的 TOML 解析器不支持 quoted key；包名已被 manifest
 -- 校验限制为 a-z / 0-9 / `-`，是合法 bare key）；路径值用双引号字符串。
-depLine : Pair String String -> String
+depLine : (String, String) -> String
 depLine dep = "${firstOf dep} = ${tomlQuote (secondOf dep)}\n"
 
 -- | 内部：`[dependencies]` 段文本（没有依赖时为空串）。
-depsSection : List (Pair String String) -> String
+depsSection : List (String, String) -> String
 depsSection [] = ""
 depsSection deps = """
 

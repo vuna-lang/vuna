@@ -42,7 +42,7 @@ export record WasmFam(..) where
   wasmFamMaxFields : Int
   wasmFamCtors : List WasmCtor
   -- | record 字段表 `(序号, 源码名)`（变体为空）。
-  wasmFamRecordFields : List (Pair Int String)
+  wasmFamRecordFields : List (Int, String)
 
 -- ---------------------------------------------------------------
 -- 稳定命名
@@ -76,10 +76,10 @@ watDataNameOf n = "$d_${strFromInt n}"
 -- ---------------------------------------------------------------
 -- 族表
 -- ---------------------------------------------------------------
-ctorEntriesOf : List (Pair String (List IrTy)) -> List WasmCtor
+ctorEntriesOf : List (String, List IrTy) -> List WasmCtor
 ctorEntriesOf ctors = ctorEntriesOfGo ctors 0
 
-ctorEntriesOfGo : List (Pair String (List IrTy)) -> Int -> List WasmCtor
+ctorEntriesOfGo : List (String, List IrTy) -> Int -> List WasmCtor
 ctorEntriesOfGo [] _ = []
 ctorEntriesOfGo (p :: rest) tag =
   WasmCtor (firstOf p) tag (length (secondOf p)) :: ctorEntriesOfGo rest (tag + 1)
@@ -126,7 +126,7 @@ wasmCtorFieldGo name (c :: rest) =
 export wasmRecordFieldIndex : WasmFam -> String -> Maybe Int
 wasmRecordFieldIndex fam field = wasmRecordFieldGo field fam.wasmFamRecordFields
 
-wasmRecordFieldGo : String -> List (Pair Int String) -> Maybe Int
+wasmRecordFieldGo : String -> List (Int, String) -> Maybe Int
 wasmRecordFieldGo _ [] = Nothing
 wasmRecordFieldGo name (p :: rest) =
   if secondOf p == name then Just (firstOf p) else wasmRecordFieldGo name rest

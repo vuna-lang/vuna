@@ -34,7 +34,7 @@ export record FoldedRow(..) where
 
 -- | 严格取 CPU 采样：任何 CPU 采样缺 `ts` = `ErrC`（调用方映射退出码 1）。非 CPU 采样、
 -- `args.stack` 缺失/非法、空栈的采样直接跳过。
-export cpuSamplesOf : List (Pair Int ObsEvent) -> Check (List CpuSample)
+export cpuSamplesOf : List (Int, ObsEvent) -> Check (List CpuSample)
 cpuSamplesOf rows =
   if hasCpuSampleMissingTs rows then
     err "cpu sample event is missing integer field `ts` (run `vuna dev obs validate` on the trace)"
@@ -42,9 +42,9 @@ cpuSamplesOf rows =
     OkC (mapMaybe cpuSampleOf rows)
 
 -- | 内部：是否存在缺 `ts` 的 CPU 采样（严格模式据此整份报错）。
-hasCpuSampleMissingTs : List (Pair Int ObsEvent) -> Bool
+hasCpuSampleMissingTs : List (Int, ObsEvent) -> Bool
 hasCpuSampleMissingTs [] = False
-hasCpuSampleMissingTs ((Pair _ ev) :: rest) =
+hasCpuSampleMissingTs ((_, ev) :: rest) =
   if isCpuSampleWithoutTs ev then True else hasCpuSampleMissingTs rest
 
 -- | 内部：该事件是 CPU 采样且缺 `ts`。
@@ -55,12 +55,12 @@ isCpuSampleWithoutTs ev =
     Nothing => False
 
 -- | 供 render 用的宽松版本：缺 `ts` / 空栈的采样直接跳过（不报错）。
-export cpuSamplesLenient : List (Pair Int ObsEvent) -> List CpuSample
+export cpuSamplesLenient : List (Int, ObsEvent) -> List CpuSample
 cpuSamplesLenient rows = mapMaybe cpuSampleOf rows
 
 -- | 内部：单个事件 -> CPU 采样；非 CPU 采样、缺 `ts`、空栈都是 `Nothing`。
-cpuSampleOf : Pair Int ObsEvent -> Maybe CpuSample
-cpuSampleOf (Pair _ ev) =
+cpuSampleOf : (Int, ObsEvent) -> Maybe CpuSample
+cpuSampleOf (_, ev) =
   case sampleOf ev of
     Just s =>
       if sampleKindOfName s.sampleName == "cpu" then

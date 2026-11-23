@@ -137,37 +137,36 @@ record NormState where
   -- | 下一个可分配的变量编号。
   normNext : Int
   -- | 名字到变量编号的绑定表（新绑定在前）。
-  normEnv : List (Pair String Int)
+  normEnv : List (String, Int)
 
 -- | 下一个可分配的变量编号。
 normNext : NormState -> Int
 normNext (NormState n env) = n
 
 -- | 名字到变量编号的绑定表。
-normEnv : NormState -> List (Pair String Int)
+normEnv : NormState -> List (String, Int)
 normEnv (NormState n env) = env
 
 -- | 内部：查名字当前绑定的变量编号。
-lookupVar : String -> List (Pair String Int) -> Maybe Int
+lookupVar : String -> List (String, Int) -> Maybe Int
 lookupVar name [] = Nothing
-lookupVar name ((Pair k v) :: rest) = if k == name then Just v else lookupVar name rest
+lookupVar name ((k, v) :: rest) = if k == name then Just v else lookupVar name rest
 
 -- | 内部：给名字分配新编号并绑定；返回（新状态, 编号）。
-allocNamed : String -> NormState -> Pair NormState Int
-allocNamed name st =
-  Pair (NormState (normNext st + 1) (Pair name (normNext st) :: normEnv st)) (normNext st)
+allocNamed : String -> NormState -> (NormState, Int)
+allocNamed name st = (NormState (normNext st + 1) ((name, normNext st) :: normEnv st), normNext st)
 
 -- | 内部：把名字绑定到已有编号（不推进计数器，用于显式 binder 的作用域）。
 bindVar : String -> Int -> NormState -> NormState
-bindVar name id st = NormState (normNext st) (Pair name id :: normEnv st)
+bindVar name id st = NormState (normNext st) ((name, id) :: normEnv st)
 
 -- | 类型名表：裸类型名到 `模块.裸名` 的映射。只收录在 data / record / trait 符号中
 -- **恰好出现一次**的裸名，避免同名歧义把签名里的名字映射错。
-export typeNameMap : Index -> List (Pair String String)
+export typeNameMap : Index -> List (String, String)
 typeNameMap index =
   let
     types = filter isTypeSym index.indexSymbols
-    entries = map (\s => Pair (symName s) "${symModule s}.${symName s}") types
+    entries = map (\s => (symName s, "${symModule s}.${symName s}")) types
   in filter (\p => countShort (firstOf p) entries == 1) entries
 
 -- | 内部：索引符号是否为类型声明（`data` / `record` / `trait`）。
@@ -175,20 +174,20 @@ isTypeSym : Sym -> Bool
 isTypeSym s = symKind s == "data" || symKind s == "record" || symKind s == "trait"
 
 -- | 内部：条目表里裸名为 `name` 的条数。
-countShort : String -> List (Pair String String) -> Int
+countShort : String -> List (String, String) -> Int
 countShort name entries = toInt (length (filter (\p => firstOf p == name) entries))
 
 -- | 内部：把裸名规范成 `模块.裸名`；表里没有就原样返回。
-canonName : List (Pair String String) -> String -> String
+canonName : List (String, String) -> String -> String
 canonName names name =
   case lookupName name names of
     Just full => full
     Nothing => name
 
 -- | 内部：在（裸名, 全名）表里查第一个匹配。
-lookupName : String -> List (Pair String String) -> Maybe String
+lookupName : String -> List (String, String) -> Maybe String
 lookupName name [] = Nothing
-lookupName name ((Pair k v) :: rest) = if k == name then Just v else lookupName name rest
+lookupName name ((k, v) :: rest) = if k == name then Just v else lookupName name rest
 
 -- | 内部：首字符是小写字母的名字按类型变量处理（其余按构造子名处理）。
 isVarName : String -> Bool
@@ -199,45 +198,45 @@ isVarName name =
 
 -- | 内部：把 parse 出的表达式归一化成 `Ty`，同时累积变量编号状态；
 -- 不认识的形状返回 `Nothing`（整条签名因此不参与类型检索）。
-normExpr : List (Pair String String) -> NormState -> Expr -> Pair NormState (Maybe Ty)
+normExpr : List (String, String) -> NormState -> Expr -> (NormState, Maybe Ty)
 normExpr names st (EVar name _) =
   if name == "_" then
-    Pair st (Just TWild)
+    (st, Just TWild)
   else
     case lookupVar name (normEnv st) of
-      Just id => Pair st (Just (TVar id))
+      Just id => (st, Just (TVar id))
       Nothing =>
         if isVarName name then
           let
             paired = allocNamed name st
-          in Pair (firstOf paired) (Just (TVar (secondOf paired)))
+          in (firstOf paired, Just (TVar (secondOf paired)))
         else
-          Pair st (Just (TCon (canonName names name)))
+          (st, Just (TCon (canonName names name)))
 normExpr names st (EParen inner _) = normExpr names st inner
 normExpr names st (EApp f args _) =
   let
     pf = normExpr names st f
   in case secondOf pf of
-    Nothing => Pair (firstOf pf) Nothing
+    Nothing => (firstOf pf, Nothing)
     Just tf =>
       let
         pargs = normExprs names (firstOf pf) args
       in case secondOf pargs of
-        Nothing => Pair (firstOf pargs) Nothing
+        Nothing => (firstOf pargs, Nothing)
         Just targs =>
           if tfIsArrow tf && length targs == 2 then
             case targs of
-              [ta, tb] => Pair (firstOf pargs) (Just (TArr ta tb))
-              _ => Pair (firstOf pargs) (Just (TApp tf targs))
+              [ta, tb] => (firstOf pargs, Just (TArr ta tb))
+              _ => (firstOf pargs, Just (TApp tf targs))
           else
-            Pair (firstOf pargs) (Just (TApp tf targs))
+            (firstOf pargs, Just (TApp tf targs))
 normExpr names st (EPi name implicit _ dom cod _) =
   if implicit then
     let
       id = normNext st
       st2 = bindVar name id st
       pc = normExpr names st2 cod
-    in Pair (firstOf pc) (secondOf pc)
+    in (firstOf pc, secondOf pc)
   else
     let
       pd = normExpr names st dom
@@ -245,46 +244,46 @@ normExpr names st (EPi name implicit _ dom cod _) =
       st2 = bindVar name id (firstOf pd)
       pc = normExpr names st2 cod
     in case secondOf pd of
-      Nothing => Pair (firstOf pc) Nothing
+      Nothing => (firstOf pc, Nothing)
       Just td =>
         case secondOf pc of
-          Nothing => Pair (firstOf pc) Nothing
-          Just tc => Pair (firstOf pc) (Just (TArr td tc))
+          Nothing => (firstOf pc, Nothing)
+          Just tc => (firstOf pc, Just (TArr td tc))
 normExpr names st (EInfix op l r _) =
   if op == "->" then
     let
       pl = normExpr names st l
       pr = normExpr names (firstOf pl) r
     in case secondOf pl of
-      Nothing => Pair (firstOf pr) Nothing
+      Nothing => (firstOf pr, Nothing)
       Just tl =>
         case secondOf pr of
-          Nothing => Pair (firstOf pr) Nothing
-          Just tr => Pair (firstOf pr) (Just (TArr tl tr))
+          Nothing => (firstOf pr, Nothing)
+          Just tr => (firstOf pr, Just (TArr tl tr))
   else
     let
       pl = normExpr names st l
       pr = normExpr names (firstOf pl) r
     in case secondOf pl of
-      Nothing => Pair (firstOf pr) Nothing
+      Nothing => (firstOf pr, Nothing)
       Just tl =>
         case secondOf pr of
-          Nothing => Pair (firstOf pr) Nothing
-          Just tr => Pair (firstOf pr) (Just (TApp (TCon op) [tl, tr]))
+          Nothing => (firstOf pr, Nothing)
+          Just tr => (firstOf pr, Just (TApp (TCon op) [tl, tr]))
 normExpr names st (EBacktick nm l r _) =
   let
     pl = normExpr names st l
     pr = normExpr names (firstOf pl) r
   in case secondOf pl of
-    Nothing => Pair (firstOf pr) Nothing
+    Nothing => (firstOf pr, Nothing)
     Just tl =>
       case secondOf pr of
-        Nothing => Pair (firstOf pr) Nothing
-        Just tr => Pair (firstOf pr) (Just (TApp (TCon nm) [tl, tr]))
-normExpr names st (EInt n _) = Pair st (Just (TCon (strFromInt n)))
-normExpr names st (EStr s _) = Pair st (Just (TCon s))
-normExpr names st (EFloat raw _) = Pair st (Just (TCon raw))
-normExpr names st _ = Pair st Nothing
+        Nothing => (firstOf pr, Nothing)
+        Just tr => (firstOf pr, Just (TApp (TCon nm) [tl, tr]))
+normExpr names st (EInt n _) = (st, Just (TCon (strFromInt n)))
+normExpr names st (EStr s _) = (st, Just (TCon s))
+normExpr names st (EFloat raw _) = (st, Just (TCon raw))
+normExpr names st _ = (st, Nothing)
 
 -- | 内部：头是不是箭头构造子（`EApp` 形如 `(->) a b` 时折叠成 `TArr`）。
 tfIsArrow : Ty -> Bool
@@ -292,22 +291,22 @@ tfIsArrow (TCon "->") = True
 tfIsArrow _ = False
 
 -- | 内部：逐项归一化参数列表；任一项失败则整体 `Nothing`。
-normExprs : List (Pair String String) -> NormState -> List Expr -> Pair NormState (Maybe (List Ty))
-normExprs names st [] = Pair st (Just [])
+normExprs : List (String, String) -> NormState -> List Expr -> (NormState, Maybe (List Ty))
+normExprs names st [] = (st, Just [])
 normExprs names st (e :: rest) =
   let
     pe = normExpr names st e
   in case secondOf pe of
-    Nothing => Pair (firstOf pe) Nothing
+    Nothing => (firstOf pe, Nothing)
     Just te =>
       let
         pr = normExprs names (firstOf pe) rest
       in case secondOf pr of
-        Nothing => Pair (firstOf pr) Nothing
-        Just ts => Pair (firstOf pr) (Just (te :: ts))
+        Nothing => (firstOf pr, Nothing)
+        Just ts => (firstOf pr, Just (te :: ts))
 
 -- | 内部：从空状态归一化一个类型表达式。
-schemeOf : List (Pair String String) -> Expr -> Maybe Ty
+schemeOf : List (String, String) -> Expr -> Maybe Ty
 schemeOf names e = secondOf (normExpr names (NormState 0 []) e)
 
 -- ---------------------------------------------------------------
@@ -316,30 +315,30 @@ schemeOf names e = secondOf (normExpr names (NormState 0 []) e)
 -- | 单方向匹配的替换表：变量编号到已匹配类型的映射（不做 occurs check）。
 record Subst where
   -- | 已绑定的变量编号与类型（新绑定在前）。
-  substList : List (Pair Int Ty)
+  substList : List (Int, Ty)
 
 -- | 已绑定的变量编号与类型。
-substList : Subst -> List (Pair Int Ty)
+substList : Subst -> List (Int, Ty)
 substList (Subst xs) = xs
 
 -- | 内部：查变量已绑定的类型。
-lookupSubst : Int -> List (Pair Int Ty) -> Maybe Ty
+lookupSubst : Int -> List (Int, Ty) -> Maybe Ty
 lookupSubst id [] = Nothing
-lookupSubst id ((Pair k v) :: rest) = if k == id then Just v else lookupSubst id rest
+lookupSubst id ((k, v) :: rest) = if k == id then Just v else lookupSubst id rest
 
 -- | 内部：追加一条变量绑定（不检查冲突）。
 bindSubst : Int -> Ty -> Subst -> Subst
-bindSubst id ty (Subst xs) = Subst (Pair id ty :: xs)
+bindSubst id ty (Subst xs) = Subst ((id, ty) :: xs)
 
 -- | alpha 等价比较用的状态：变量编号到出现序号的映射 + 下一个序号。
 record AlphaState where
   -- | 变量编号到出现序号的映射。
-  alphaEnv : List (Pair Int Int)
+  alphaEnv : List (Int, Int)
   -- | 下一个可用的出现序号。
   alphaNext : Int
 
 -- | 变量编号到出现序号的映射。
-alphaEnv : AlphaState -> List (Pair Int Int)
+alphaEnv : AlphaState -> List (Int, Int)
 alphaEnv (AlphaState env next) = env
 
 -- | 下一个可用的出现序号。
@@ -347,9 +346,9 @@ alphaNext : AlphaState -> Int
 alphaNext (AlphaState env next) = next
 
 -- | 内部：查变量已被分配的出现序号。
-lookupInt : Int -> List (Pair Int Int) -> Maybe Int
+lookupInt : Int -> List (Int, Int) -> Maybe Int
 lookupInt id [] = Nothing
-lookupInt id ((Pair k v) :: rest) = if k == id then Just v else lookupInt id rest
+lookupInt id ((k, v) :: rest) = if k == id then Just v else lookupInt id rest
 
 -- | 内部：类型的 alpha 规范文本；变量按首次出现顺序编号（`$0`、`$1`…），
 -- 因此 alpha 等价的两个类型文本相同。
@@ -357,35 +356,33 @@ alphaKey : Ty -> String
 alphaKey ty = firstOf (alphaGo ty (AlphaState [] 0))
 
 -- | 内部：边渲染边把变量编号换成出现序号，返回（规范文本, 新状态）。
-alphaGo : Ty -> AlphaState -> Pair String AlphaState
+alphaGo : Ty -> AlphaState -> (String, AlphaState)
 alphaGo (TVar id) st =
   case lookupInt id (alphaEnv st) of
-    Just idx => Pair "$${idx}" st
+    Just idx => ("$${idx}", st)
     Nothing =>
-      Pair
-        "$${alphaNext st}"
-        (AlphaState (Pair id (alphaNext st) :: alphaEnv st) (alphaNext st + 1))
-alphaGo TWild st = Pair "_" st
-alphaGo (TCon name) st = Pair name st
+      ("$${alphaNext st}", AlphaState ((id, alphaNext st) :: alphaEnv st) (alphaNext st + 1))
+alphaGo TWild st = ("_", st)
+alphaGo (TCon name) st = (name, st)
 alphaGo (TApp f args) st =
   let
     pf = alphaGo f st
     pArgs = alphaArgs args (secondOf pf)
-  in Pair "(${firstOf pf} ${firstOf pArgs})" (secondOf pArgs)
+  in ("(${firstOf pf} ${firstOf pArgs})", secondOf pArgs)
 alphaGo (TArr a b) st =
   let
     pa = alphaGo a st
     pb = alphaGo b (secondOf pa)
-  in Pair "(${firstOf pa}->${firstOf pb})" (secondOf pb)
+  in ("(${firstOf pa}->${firstOf pb})", secondOf pb)
 
 -- | 内部：把参数列表渲染成空格分隔的文本（前面带一个空格，空列表为空串）。
-alphaArgs : List Ty -> AlphaState -> Pair String AlphaState
-alphaArgs [] st = Pair "" st
+alphaArgs : List Ty -> AlphaState -> (String, AlphaState)
+alphaArgs [] st = ("", st)
 alphaArgs (x :: rest) st =
   let
     px = alphaGo x st
     pr = alphaArgs rest (secondOf px)
-  in Pair " ${firstOf px}${firstOf pr}" (secondOf pr)
+  in (" ${firstOf px}${firstOf pr}", secondOf pr)
 
 -- | 内部：两个类型是否 alpha 等价（变量改名不影响结果）。
 alphaEqual : Ty -> Ty -> Bool
@@ -398,14 +395,14 @@ resultType ty = ty
 
 -- | 内部：类型的头与元数：`TApp` 取构造子头与参数个数，箭头记作 `("->", 2)`，
 -- 其他（变量 / 通配 / 非构造子头）记作 `("?", 0)`。
-headKey : Ty -> Pair String Int
-headKey (TCon name) = Pair name 0
+headKey : Ty -> (String, Int)
+headKey (TCon name) = (name, 0)
 headKey (TApp f args) =
   case f of
-    TCon name => Pair name (toInt (length args))
-    _ => Pair "?" 0
-headKey (TArr a b) = Pair "->" 2
-headKey _ = Pair "?" 0
+    TCon name => (name, toInt (length args))
+    _ => ("?", 0)
+headKey (TArr a b) = ("->", 2)
+headKey _ = ("?", 0)
 
 -- | 内部：两个类型的头与元数是否相同（粗粒度重叠判断）。
 overlap : Ty -> Ty -> Bool
@@ -418,20 +415,20 @@ overlap a b =
 -- | 内部：类型得分与标签。依次尝试 alpha 等价（90 `alpha`）、查询匹配签名（80 `general`）、
 -- 签名匹配查询（70 `specific`）、查询匹配结果类型（50 `result`）、头部重叠（20 `overlap`），
 -- 都不成立给（0, ""）。
-typeScore : Ty -> Ty -> Pair Int String
+typeScore : Ty -> Ty -> (Int, String)
 typeScore query sig =
   if alphaEqual query sig then
-    Pair 90 "alpha"
+    (90, "alpha")
   else
     case unifyFlex 100 (Subst []) query sig of
-      Just _ => Pair 80 "general"
+      Just _ => (80, "general")
       Nothing =>
         case unifyFlex 100 (Subst []) sig query of
-          Just _ => Pair 70 "specific"
+          Just _ => (70, "specific")
           Nothing =>
             case unifyFlex 100 (Subst []) query (resultType sig) of
-              Just _ => Pair 50 "result"
-              Nothing => if overlap query (resultType sig) then Pair 20 "overlap" else Pair 0 ""
+              Just _ => (50, "result")
+              Nothing => if overlap query (resultType sig) then (20, "overlap") else (0, "")
 
 -- ---------------------------------------------------------------
 -- 类型检索
@@ -447,7 +444,7 @@ parseQuery query =
         _ => err "type query is not a signature"
 
 -- | 内部：把符号的 `symType` 文本解析并归一化；解析失败给 `Nothing`。
-parseSymType : List (Pair String String) -> Sym -> Maybe Ty
+parseSymType : List (String, String) -> Sym -> Maybe Ty
 parseSymType names s =
   case parseExpressionSource (symType s) of
     ErrC e => Nothing
@@ -471,7 +468,7 @@ searchType index query =
           in OkC (sortHits (filter (\h => hitScore h > 0) hits))
 
 -- | 内部：给单个符号算类型分；签名无法解析时得 0 分，`symType` 文本与查询逐字相同时再加 100。
-typeHit : List (Pair String String) -> String -> Ty -> Sym -> SearchHit
+typeHit : List (String, String) -> String -> Ty -> Sym -> SearchHit
 typeHit names query queryTy s =
   case parseSymType names s of
     Nothing =>

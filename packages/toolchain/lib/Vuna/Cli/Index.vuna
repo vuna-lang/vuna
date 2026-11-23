@@ -205,9 +205,9 @@ goalLabel i =
   if i.dtGoalInfoName == "" then i.dtGoalInfoGoal else "${i.dtGoalInfoName} : ${i.dtGoalInfoGoal}"
 
 -- | 内部：渲染洞的上下文（每条 `  <变量> : <类型>` 一行，保持给定顺序）。
-renderGoalCtx : List (Pair String String) -> String
+renderGoalCtx : List (String, String) -> String
 renderGoalCtx [] = ""
-renderGoalCtx ((Pair n ty) :: rest) = "  ${n} : ${ty}\n${renderGoalCtx rest}"
+renderGoalCtx ((n, ty) :: rest) = "  ${n} : ${ty}\n${renderGoalCtx rest}"
 
 -- | 内部：没有洞时的提示行（有洞时返回空串，由 `renderGoals` 逐条输出）。
 goalHeader : String -> Int -> String

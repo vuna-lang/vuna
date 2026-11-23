@@ -23,7 +23,7 @@ import Vuna.Lint.Diagnostics
 -- | 已合并的 lint 配置。`lintCfgRules` 覆盖全部规则（off 也显式列出，避免默认值漂移）。
 export record LintConfig(..) where
   -- | 规则 → 严重度。
-  lintCfgRules : List (Pair LintRule LintSeverity)
+  lintCfgRules : List (LintRule, LintSeverity)
   -- | `max-warnings`；`Nothing` = 沿用上层/默认（默认 0：warning 也失败）。
   lintCfgMaxWarnings : Maybe Int
   -- | 排除路径模式（相对 manifest 目录；CLI 目标展开时使用）。
@@ -35,16 +35,16 @@ export record LintConfig(..) where
 export defaultLintConfig : LintConfig
 defaultLintConfig =
   LintConfig
-    (map (\r => Pair r (if lintRecommended r then lintDefaultSeverity r else LintOff)) lintAllRules)
+    (map (\r => (r, if lintRecommended r then lintDefaultSeverity r else LintOff)) lintAllRules)
     (Just 0)
     []
     ""
 
 -- | 某种预设下的规则表。
-presetRules : String -> List (Pair LintRule LintSeverity)
+presetRules : String -> List (LintRule, LintSeverity)
 presetRules preset =
   map
-    (\r => Pair r (if preset == "all" then lintDefaultSeverity r else if preset == "none" then LintOff else if preset == "recommended" && lintRecommended r then lintDefaultSeverity r else LintOff))
+    (\r => (r, if preset == "all" then lintDefaultSeverity r else if preset == "none" then LintOff else if preset == "recommended" && lintRecommended r then lintDefaultSeverity r else LintOff))
     lintAllRules
 
 -- | 配置里某规则的严重度；配置表覆盖全部规则，缺失时回落默认值。
@@ -55,9 +55,9 @@ lintRuleSeverity cfg rule =
     Nothing => lintDefaultSeverity rule
 
 -- | 内部：在规则表里查规则。
-lookupRule : LintRule -> List (Pair LintRule LintSeverity) -> Maybe LintSeverity
+lookupRule : LintRule -> List (LintRule, LintSeverity) -> Maybe LintSeverity
 lookupRule rule [] = Nothing
-lookupRule rule ((Pair r sev) :: rest) = if sameRule r rule then Just sev else lookupRule rule rest
+lookupRule rule ((r, sev) :: rest) = if sameRule r rule then Just sev else lookupRule rule rest
 
 -- | 内部：规则相等（枚举比较；单独具名便于以后扩展）。
 sameRule : LintRule -> LintRule -> Bool
@@ -137,7 +137,7 @@ export selectRules : List String -> LintConfig -> Check LintConfig
 selectRules names cfg =
   case resolveRules names [] of
     ErrC e => ErrC e
-    OkC selected => OkC (applySelection (map (\r => Pair r LintOff) lintAllRules) selected cfg)
+    OkC selected => OkC (applySelection (map (\r => (r, LintOff)) lintAllRules) selected cfg)
 
 -- | 命令行 `--ignore`：关闭给定规则。
 export ignoreRules : List String -> LintConfig -> Check LintConfig
@@ -159,7 +159,7 @@ resolveRules (name :: rest) acc =
     Just rule => resolveRules rest (rule :: acc)
 
 -- | 内部：按选中规则生成规则表（选中项取默认严重度）。
-applySelection : List (Pair LintRule LintSeverity) -> List LintRule -> LintConfig -> LintConfig
+applySelection : List (LintRule, LintSeverity) -> List LintRule -> LintConfig -> LintConfig
 applySelection base selected cfg =
   { cfg
     | lintCfgRules =
@@ -208,7 +208,7 @@ record LintAcc where
   lintAccPreset : String
   lintAccMaxWarnings : Maybe Int
   lintAccExclude : List String
-  lintAccRules : List (Pair LintRule LintSeverity)
+  lintAccRules : List (LintRule, LintSeverity)
 
 initAcc : LintAcc
 initAcc = LintAcc "recommended" Nothing [] []
@@ -276,10 +276,10 @@ lintAcc path (e :: rest) acc =
     _ => cfgErr path line "unknown [lint] section: ${join "." section}"
 
 -- | 内部：设置规则严重度（保留首次出现的位置）。
-setRule : List (Pair LintRule LintSeverity) -> LintRule -> LintSeverity -> List (Pair LintRule LintSeverity)
-setRule [] rule sev = [Pair rule sev]
-setRule ((Pair r old) :: rest) rule sev =
-  if sameRule r rule then Pair r sev :: rest else Pair r old :: setRule rest rule sev
+setRule : List (LintRule, LintSeverity) -> LintRule -> LintSeverity -> List (LintRule, LintSeverity)
+setRule [] rule sev = [(rule, sev)]
+setRule ((r, old) :: rest) rule sev =
+  if sameRule r rule then (r, sev) :: rest else (r, old) :: setRule rest rule sev
 
 -- | 内部：预设 + 覆盖 → 最终配置。
 finishAcc : String -> LintAcc -> LintConfig

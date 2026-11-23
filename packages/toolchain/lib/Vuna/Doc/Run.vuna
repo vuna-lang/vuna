@@ -83,7 +83,7 @@ docRun dir out check pkgFilter =
                   OkC files => docWithFiles out check scopes files
 
 -- | 内部：没有源文件时报错；`--check` 走缺失检查，否则渲染并写出。
-docWithFiles : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Bool -> List DocScope -> List (Pair DocScope (List String)) -> Eff r Int
+docWithFiles : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Bool -> List DocScope -> List (DocScope, List String) -> Eff r Int
 docWithFiles out check scopes files =
   if length (filesOf files) == 0 then
     docError "no vuna sources found under the given directory; pass a package or source directory"
@@ -115,16 +115,16 @@ writeDocFile out content =
     pure 0
 
 -- | 内部：为每个 scope 收集源文件，结果与 scope 一一对应且顺序稳定。
-filesForScopes : Member nFs FsOp r => List DocScope -> Eff r (Check (List (Pair DocScope (List String))))
+filesForScopes : Member nFs FsOp r => List DocScope -> Eff r (Check (List (DocScope, List String)))
 filesForScopes scopes = traverseScopes scopes []
 
 -- | 内部：`filesForScopes` 的遍历实现。
-traverseScopes : Member nFs FsOp r => List DocScope -> List (Pair DocScope (List String)) -> Eff r (Check (List (Pair DocScope (List String))))
+traverseScopes : Member nFs FsOp r => List DocScope -> List (DocScope, List String) -> Eff r (Check (List (DocScope, List String)))
 traverseScopes [] acc = pure (OkC (reverse acc))
 traverseScopes (s :: rest) acc =
   do
     files <- scopeSourceFiles s
-    traverseScopes rest (Pair s files :: acc)
+    traverseScopes rest ((s, files) :: acc)
 
 -- | 内部：scope 的源文件：优先 `DIR/lib`，没有再退回 `DIR` 本身，都不存在时为空表。
 scopeSourceFiles : Member nFs FsOp r => DocScope -> Eff r (List String)
@@ -141,15 +141,15 @@ scopeSourceFiles s =
         if hasDir then collectVunaFiles (scopeDir s) else pure []
 
 -- | 内部：汇总所有 scope 的源文件，只用于空输入检查（构建仍按 scope 分组）。
-filesOf : List (Pair DocScope (List String)) -> List String
+filesOf : List (DocScope, List String) -> List String
 filesOf pairs = concatMap secondOf pairs
 
 -- | 内部：按 scope 构建模块并应用 `[export]` 过滤，最后组装成 `DocBook`。
-buildBook : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => List DocScope -> List (Pair DocScope (List String)) -> Eff r (Check DocBook)
+buildBook : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => List DocScope -> List (DocScope, List String) -> Eff r (Check DocBook)
 buildBook scopes files = buildBookGo scopes files []
 
 -- | 内部：逐 scope 构建；没有文件表的 scope 跳过，首个错误即返回。
-buildBookGo : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => List DocScope -> List (Pair DocScope (List String)) -> List DocModule -> Eff r (Check DocBook)
+buildBookGo : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => List DocScope -> List (DocScope, List String) -> List DocModule -> Eff r (Check DocBook)
 buildBookGo [] files acc = pure (OkC (DocBook (reverse acc)))
 buildBookGo (scope :: restScopes) files acc =
   case lookupScopeFiles scope files of
@@ -165,9 +165,9 @@ buildBookGo (scope :: restScopes) files acc =
               OkC modules1 => buildBookGo restScopes files (append modules1 acc)
 
 -- | 内部：按 scope 身份（名字 + 目录）查源文件表。
-lookupScopeFiles : DocScope -> List (Pair DocScope (List String)) -> Maybe (List String)
+lookupScopeFiles : DocScope -> List (DocScope, List String) -> Maybe (List String)
 lookupScopeFiles scope [] = Nothing
-lookupScopeFiles scope ((Pair s paths) :: rest) =
+lookupScopeFiles scope ((s, paths) :: rest) =
   if scopeName s == scopeName scope && scopeDir s == scopeDir scope then
     Just paths
   else

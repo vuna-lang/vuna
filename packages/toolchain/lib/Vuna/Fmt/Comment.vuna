@@ -134,39 +134,39 @@ posBefore : Int -> Int -> Int -> Int -> Bool
 posBefore l1 c1 l2 c2 = l1 < l2 || l1 == l2 && c1 < c2
 
 -- | 内部：按条目节点 id 查附件槽。
-lookupSlot : HashMap Int (Pair (List Comment) (List Comment)) -> Int -> Maybe (Pair (List Comment) (List Comment))
+lookupSlot : HashMap Int (List Comment, List Comment) -> Int -> Maybe (List Comment, List Comment)
 lookupSlot at nid = HashMap.lookup nid at
 
 -- | 内部：条目的前置注释列表（无槽时为空）。
-leadOf : HashMap Int (Pair (List Comment) (List Comment)) -> Int -> List Comment
+leadOf : HashMap Int (List Comment, List Comment) -> Int -> List Comment
 leadOf at nid =
   case lookupSlot at nid of
     Nothing => []
     Just slot => firstOf slot
 
 -- | 内部：条目的行尾注释列表（无槽时为空）。
-trailOf : HashMap Int (Pair (List Comment) (List Comment)) -> Int -> List Comment
+trailOf : HashMap Int (List Comment, List Comment) -> Int -> List Comment
 trailOf at nid =
   case lookupSlot at nid of
     Nothing => []
     Just slot => secondOf slot
 
 -- | 内部：把注释追加到该条目的前置或行尾列表；无槽时新建。
-addToSlot : Int -> Bool -> Comment -> HashMap Int (Pair (List Comment) (List Comment)) -> HashMap Int (Pair (List Comment) (List Comment))
+addToSlot : Int -> Bool -> Comment -> HashMap Int (List Comment, List Comment) -> HashMap Int (List Comment, List Comment)
 addToSlot nid isTrail comment at =
   case HashMap.lookup nid at of
     Nothing =>
       if isTrail then
-        HashMap.insert nid (Pair [] [comment]) at
+        HashMap.insert nid ([], [comment]) at
       else
-        HashMap.insert nid (Pair [comment] []) at
+        HashMap.insert nid ([comment], []) at
     Just slot =>
       let
         newSlot =
           if isTrail then
-            Pair (firstOf slot) (append (secondOf slot) [comment])
+            (firstOf slot, append (secondOf slot) [comment])
           else
-            Pair (append (firstOf slot) [comment]) (secondOf slot)
+            (append (firstOf slot) [comment], secondOf slot)
       in HashMap.insert nid newSlot at
 
 -- | 内部：锚点按起点偏移升序（稳定排序：同起点的锚点保持收集顺序）。
@@ -221,25 +221,25 @@ trailPick best (r :: rest) col =
     trailPick best rest col
 
 -- | 内部：打开起点不晚于 `off` 的锚点；返回 (剩余锚点, 打开的栈)。
-openUpTo : List NodeRef -> List NodeRef -> Int -> Pair (List NodeRef) (List NodeRef)
-openUpTo [] open _ = Pair [] open
+openUpTo : List NodeRef -> List NodeRef -> Int -> (List NodeRef, List NodeRef)
+openUpTo [] open _ = ([], open)
 openUpTo (r :: rest) open off =
   if spanStartOffset (nodeRefSpan r) <= off then
     openUpTo rest (r :: open) off
   else
-    Pair (r :: rest) open
+    (r :: rest, open)
 
 -- | 内部：弹掉已结束的锚点；返回 (剩余栈, 本行结束的锚点)。
-closeBefore : List NodeRef -> Int -> Int -> Pair (List NodeRef) (List NodeRef)
-closeBefore [] line off = Pair [] []
+closeBefore : List NodeRef -> Int -> Int -> (List NodeRef, List NodeRef)
+closeBefore [] line off = ([], [])
 closeBefore (r :: rest) line off =
   if spanEndOffset (nodeRefSpan r) < off then
     let
       p = closeBefore rest line off
       ended = if spanEndLine (nodeRefSpan r) == line then [r] else []
-    in Pair (firstOf p) (append ended (secondOf p))
+    in (firstOf p, append ended (secondOf p))
   else
-    Pair (r :: rest) []
+    (r :: rest, [])
 
 -- | 内部：前置注释的归属：下一条目；下一条目跳出最内层包含条目时改用包含条目
 -- （函数体末尾的注释回到该函数上方，而不是下一位函数上方）。
@@ -268,12 +268,12 @@ leadTarget future open csp =
 -- | 注释归属（单趟）：锚点按起点排序、注释按源码顺序前进；`open` 是已打开锚点的栈
 -- （头为最内层），`pool` 收集本行已结束的锚点（行尾候选）。每条注释只付栈操作与
 -- 「同行已结束的锚点」的线性扫，不再对全部锚点做前后扫描。
-assignComments : List NodeRef -> List Comment -> HashMap Int (Pair (List Comment) (List Comment)) -> List Comment -> Pair (HashMap Int (Pair (List Comment) (List Comment))) (List Comment)
+assignComments : List NodeRef -> List Comment -> HashMap Int (List Comment, List Comment) -> List Comment -> (HashMap Int (List Comment, List Comment), List Comment)
 assignComments anchors comments at eof =
   assignGo (sortAnchors anchors) [] emptyTrailPool comments at eof
 
-assignGo : List NodeRef -> List NodeRef -> TrailPool -> List Comment -> HashMap Int (Pair (List Comment) (List Comment)) -> List Comment -> Pair (HashMap Int (Pair (List Comment) (List Comment))) (List Comment)
-assignGo future open pool [] at eof = Pair at eof
+assignGo : List NodeRef -> List NodeRef -> TrailPool -> List Comment -> HashMap Int (List Comment, List Comment) -> List Comment -> (HashMap Int (List Comment, List Comment), List Comment)
+assignGo future open pool [] at eof = (at, eof)
 assignGo future open pool (c :: rest) at eof =
   let
     csp = commentSpan c
@@ -332,24 +332,24 @@ declAnchors (DTrait name params supers methods r) = r :: map methodAnchor method
 declAnchors (DInstance ctxE head methods r) = (::) r (concatMap declAnchors methods)
 
 -- | 内部：let / where 绑定的锚点（模式节点）。
-bindingAnchor : Pair Pat Expr -> NodeRef
-bindingAnchor (Pair pat value) = patRef pat
+bindingAnchor : (Pat, Expr) -> NodeRef
+bindingAnchor (pat, value) = patRef pat
 
 -- | 内部：let 绑定值里的表达式锚点。
-bindingValueAnchors : Pair Pat Expr -> List NodeRef
-bindingValueAnchors (Pair pat value) = exprAnchors value
+bindingValueAnchors : (Pat, Expr) -> List NodeRef
+bindingValueAnchors (pat, value) = exprAnchors value
 
 -- | 内部：case 分支的锚点（模式节点）。
-altAnchor : Pair Pat Expr -> NodeRef
-altAnchor (Pair pat body) = patRef pat
+altAnchor : (Pat, Expr) -> NodeRef
+altAnchor (pat, body) = patRef pat
 
 -- | 内部：case 分支体内的表达式锚点。
-altBodyAnchors : Pair Pat Expr -> List NodeRef
-altBodyAnchors (Pair pat body) = exprAnchors body
+altBodyAnchors : (Pat, Expr) -> List NodeRef
+altBodyAnchors (pat, body) = exprAnchors body
 
 -- | 内部：记录字段值的表达式锚点。
-fieldExprAnchors : Pair String Expr -> List NodeRef
-fieldExprAnchors (Pair fname value) = exprAnchors value
+fieldExprAnchors : (String, Expr) -> List NodeRef
+fieldExprAnchors (fname, value) = exprAnchors value
 
 -- | 内部：do 语句的锚点（语句节点 + 值里的表达式锚点）。
 doStmtAnchors : DoStmt -> List NodeRef
@@ -402,8 +402,8 @@ interpPartAnchors (IPText s) = []
 interpPartAnchors (IPHole e) = exprAnchors e
 
 -- | 内部：局部函数 clause 体的锚点。
-localClauseAnchors : Pair (List Pat) Expr -> List NodeRef
-localClauseAnchors (Pair pats body) = exprAnchors body
+localClauseAnchors : (List Pat, Expr) -> List NodeRef
+localClauseAnchors (pats, body) = exprAnchors body
 
 -- | 收集整个文件的注释锚点（源码顺序的节点身份）：模块头 / 导出项 / import /
 -- `infix*` 声明 / 声明及其内部条目。锚点集合就是渲染器的挂载点；渲染时用同一个
@@ -415,32 +415,32 @@ anchorRefs hdr imports fixities decls =
     (append (map importAnchor imports) (append (map fixityAnchor fixities) (concatMap declAnchors decls)))
 
 -- | 内部：条目的前置注释文档（无注释时为空）。
-leadingDoc : HashMap Int (Pair (List Comment) (List Comment)) -> NodeRef -> Doc
+leadingDoc : HashMap Int (List Comment, List Comment) -> NodeRef -> Doc
 leadingDoc at r =
   let
     cs = leadOf at (nodeRefId r)
   in if isNilList cs then empty else vsep (map commentLeadDoc cs) `appendDoc` hard
 
 -- | 内部：把行尾注释逐个追加到条目最后一行末尾。
-trailingDoc : HashMap Int (Pair (List Comment) (List Comment)) -> NodeRef -> Doc -> Doc
+trailingDoc : HashMap Int (List Comment, List Comment) -> NodeRef -> Doc -> Doc
 trailingDoc at r doc =
   case trailOf at (nodeRefId r) of
     [] => doc
     cs => foldl (\acc, c => acc `appendDoc` (text " ${inlineCommentText c}")) doc cs
 
 -- | 把条目的注释贴到渲染结果上：前置注释在上，行尾注释追加到最后一行。
-attachAtTable : HashMap Int (Pair (List Comment) (List Comment)) -> NodeRef -> Doc -> Doc
+attachAtTable : HashMap Int (List Comment, List Comment) -> NodeRef -> Doc -> Doc
 attachAtTable at r doc = trailingDoc at r (leadingDoc at r `appendDoc` doc)
 
 -- | 内部：导出项是否挂了注释（前置或行尾）。
-itemHasComments : HashMap Int (Pair (List Comment) (List Comment)) -> ExportItem -> Bool
+itemHasComments : HashMap Int (List Comment, List Comment) -> ExportItem -> Bool
 itemHasComments at item =
   case lookupSlot at (nodeRefId (exportItemRef item)) of
     Nothing => False
     Just slot => not (isNilList (firstOf slot)) || not (isNilList (secondOf slot))
 
 -- | 任一导出项挂了注释：有则导出列表强制多行，避免单行把后续项注释掉。
-anyItemHasCommentsTable : HashMap Int (Pair (List Comment) (List Comment)) -> List ExportItem -> Bool
+anyItemHasCommentsTable : HashMap Int (List Comment, List Comment) -> List ExportItem -> Bool
 anyItemHasCommentsTable at [] = False
 anyItemHasCommentsTable at (item :: rest) =
   itemHasComments at item || anyItemHasCommentsTable at rest
@@ -455,10 +455,10 @@ stripLeadingBlanks (c :: rest) = if isBlankMarker c then stripLeadingBlanks rest
 -- ---------------------------------------------------------------
 -- | 注释计划：附件表（节点 id → 前置 / 行尾注释）+ 文件末尾注释。
 export record TriviaCtx where
-  ctxAt : HashMap Int (Pair (List Comment) (List Comment))
+  ctxAt : HashMap Int (List Comment, List Comment)
 
 -- | 内部：空附件表。
-emptySlotTable : HashMap Int (Pair (List Comment) (List Comment))
+emptySlotTable : HashMap Int (List Comment, List Comment)
 emptySlotTable = HashMap.fromList []
 
 -- | 空计划（模板洞等没有源码位置的位置）。
@@ -529,11 +529,11 @@ countNewlinesChars (c :: rest) = (if c == 10 then 1 else 0) + countNewlinesChars
 
 -- | 从 CST trivia 建注释计划：先按锚点分配（行尾优先、否则下一条目），再返回附件表与
 -- 文件末尾注释。
-export triviaCtxOf : List NodeRef -> List CstToken -> Pair TriviaCtx (List Comment)
+export triviaCtxOf : List NodeRef -> List CstToken -> (TriviaCtx, List Comment)
 triviaCtxOf anchors toks =
   let
     assigned = assignComments anchors (concatMap tokComments toks) emptySlotTable []
-  in Pair (TriviaCtx (firstOf assigned)) (stripLeadingBlanks (secondOf assigned))
+  in (TriviaCtx (firstOf assigned), stripLeadingBlanks (secondOf assigned))
 
 -- | 把条目的注释贴到渲染结果上（按节点 id 查槽）。
 export attachAt : TriviaCtx -> NodeRef -> Doc -> Doc

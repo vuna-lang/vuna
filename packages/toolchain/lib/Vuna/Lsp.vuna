@@ -126,20 +126,20 @@ record LspState where
   -- | 内存累积的日志行（退出时一次写出）。
   stateLogs : List String
   -- | 诊断帧 / pull 报告缓存：key = uri + 内容哈希，上限 32 条。
-  stateDiagCache : List (Pair Int Json)
+  stateDiagCache : List (Int, Json)
   -- | 诊断链的会话对象（跨请求复用）。
   stateDiagSession : Maybe DiagCache
   -- | 单文件分析结果缓存：key = uri + 内容哈希（文本一变即失效），上限 8 条。
-  stateDocCache : List (Pair Int DocCache)
+  stateDocCache : List (Int, DocCache)
   -- | 已收到 `$/cancelRequest` 的请求 id：串行循环里取消只意味着「不再开始」。
   stateCanceled : List Int
 
 -- | 同一份 buffer 内容的分析结果（惰性填充：没算过的项是 `Nothing`）。
 record DocCache where
   -- | 洞目标；`Bool` = 依赖是否完整（只精化当前 buffer 的结果不能直接用于 case split）。
-  dcGoals : Maybe (Pair Bool (List DtGoalInfo))
+  dcGoals : Maybe (Bool, List DtGoalInfo)
   -- | 诊断 suggestion：`(0-based 起行, 止行)` → quickfix 动作列表。
-  dcSuggestions : Maybe (List (Pair (Pair Int Int) (List Json)))
+  dcSuggestions : Maybe (List ((Int, Int), List Json))
   -- | semanticTokens/full 的结果对象（`{data:[...]}`），避免每次请求重跑词法 + parse。
   dcTokens : Maybe Json
 
@@ -176,7 +176,7 @@ setRootHintIfEmpty hint (LspState docs s pull idx tried Nothing logs dc dsess gs
   LspState docs s pull idx tried (Just hint) logs dc dsess gs canc
 
 -- | 内部：替换诊断帧缓存。
-setDiagCache : List (Pair Int Json) -> LspState -> LspState
+setDiagCache : List (Int, Json) -> LspState -> LspState
 setDiagCache dc (LspState docs s pull idx tried hint logs _ dsess gs canc) =
   LspState docs s pull idx tried hint logs dc dsess gs canc
 
@@ -186,7 +186,7 @@ setDiagSession dsess (LspState docs s pull idx tried hint logs dc _ gs canc) =
   LspState docs s pull idx tried hint logs dc dsess gs canc
 
 -- | 内部：替换单文件分析缓存。
-setDocCache : List (Pair Int DocCache) -> LspState -> LspState
+setDocCache : List (Int, DocCache) -> LspState -> LspState
 setDocCache gs (LspState docs s pull idx tried hint logs dc dsess _ canc) =
   LspState docs s pull idx tried hint logs dc dsess gs canc
 
@@ -198,23 +198,23 @@ setCanceled canc (LspState docs s pull idx tried hint logs dc dsess gs _) =
 -- | 内部：前插一条诊断帧（上限 32 条）。
 pushDiag : Int -> Json -> LspState -> LspState
 pushDiag key frame (LspState docs s pull idx tried hint logs dc dsess gs canc) =
-  LspState docs s pull idx tried hint logs (truncateCache 32 (Pair key frame :: dc)) dsess gs canc
+  LspState docs s pull idx tried hint logs (truncateCache 32 ((key, frame) :: dc)) dsess gs canc
 
 -- | 内部：缓存 key，uri 与文本内容的哈希组合（诊断帧与洞目标共用同一口径）。
 contentKeyOf : String -> String -> Int
 contentKeyOf uri text = strHash uri * 1000003 + strHash text
 
 -- | 内部：按内容 key 查单文件分析结果。
-lookupDocCache : Int -> List (Pair Int DocCache) -> Maybe DocCache
+lookupDocCache : Int -> List (Int, DocCache) -> Maybe DocCache
 lookupDocCache k [] = Nothing
-lookupDocCache k ((Pair k2 v) :: rest) = if k == k2 then Just v else lookupDocCache k rest
+lookupDocCache k ((k2, v) :: rest) = if k == k2 then Just v else lookupDocCache k rest
 
 -- | 内部：替换同 key 条目（其余条目的字段保留），否则前插；上限 8 条。
 upsertDocCache : Int -> DocCache -> LspState -> LspState
 upsertDocCache key entry st =
   let
     rest = filter (\kv => firstOf kv /= key) st.stateDocCache
-  in setDocCache (truncateCache 8 (Pair key entry :: rest)) st
+  in setDocCache (truncateCache 8 ((key, entry) :: rest)) st
 
 -- | 内部：取已有条目，缺失给空缓存。
 cacheEntryOf : Int -> LspState -> DocCache
@@ -260,13 +260,13 @@ flushLogs : Member nConsole ConsoleOp r => LspState -> Eff r Int
 flushLogs st = flushLogLines st.stateLogs
 
 -- | 内部：首次需要索引时构建；失败一次后不再重试（避免每个请求都全量扫描磁盘）。
-ensureIndex : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> LspState -> Eff r (Pair LspState (Maybe Index))
+ensureIndex : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> LspState -> Eff r (LspState, Maybe Index)
 ensureIndex uri st =
   case st.stateIndex of
-    Just idx => pure (Pair st (Just idx))
+    Just idx => pure (st, Just idx)
     Nothing =>
       if st.stateIndexTried then
-        pure (Pair st Nothing)
+        pure (st, Nothing)
       else
         do
           root <- workspaceRoot uri
@@ -275,11 +275,11 @@ ensureIndex uri st =
             OkC idx =>
               let
                 st1 = logTo "index ready: ${root}" (setIndexTried True (setIndex (Just idx) st))
-              in pure (Pair st1 (Just idx))
+              in pure (st1, Just idx)
             ErrC e =>
               let
                 st1 = logTo "index unavailable: ${diagText e}" (setIndexTried True st)
-              in pure (Pair st1 Nothing)
+              in pure (st1, Nothing)
 
 -- | 内部：打开的文档文本（未打开 → ""）。
 textForUri : String -> LspState -> String
@@ -290,12 +290,12 @@ textForUri uri st =
 
 -- | 内部：打开中的文档 → (路径, 文本)。模块 hover / definition 用它判断模块的最新文本，避免同一
 -- 模块的 docstring 在它自己的文件与引用它的文件里显示成不同版本。
-bufferTexts : LspState -> List (Pair String String)
+bufferTexts : LspState -> List (String, String)
 bufferTexts st = map docToPair st.stateDocs
 
 -- | 内部：`Doc` → (解码后的路径, 文本)。
-docToPair : Doc -> Pair String String
-docToPair d = Pair (decodeUri d.docUri) d.docText
+docToPair : Doc -> (String, String)
+docToPair d = (decodeUri d.docUri, d.docText)
 
 -- ---------------------------------------------------------------
 -- capabilities（全套；含 refactor.rewrite 与 executeCommand）
@@ -306,9 +306,9 @@ serverCapabilities =
   let
     legend =
       JObj
-        [Pair "tokenTypes" (JArr (map JStr semanticTokenTypes)), Pair "tokenModifiers" (JArr (map JStr semanticTokenModifiers))]
+        [("tokenTypes", JArr (map JStr semanticTokenTypes)), ("tokenModifiers", JArr (map JStr semanticTokenModifiers))]
   in JObj
-    [Pair "textDocumentSync" (JObj [Pair "openClose" (JBool True), Pair "change" (JNum syncKindFull)]), Pair "completionProvider" (JObj [Pair "triggerCharacters" (JArr [JStr "."]), Pair "resolveProvider" (JBool False)]), Pair "definitionProvider" (JBool True), Pair "referencesProvider" (JBool True), Pair "renameProvider" (JObj [Pair "prepareProvider" (JBool True)]), Pair "documentSymbolProvider" (JBool True), Pair "documentFormattingProvider" (JBool True), Pair "documentHighlightProvider" (JBool True), Pair "foldingRangeProvider" (JBool True), Pair "semanticTokensProvider" (JObj [Pair "legend" legend, Pair "full" (JBool True)]), Pair "workspaceSymbolProvider" (JBool True), Pair "hoverProvider" (JBool True), Pair "codeActionProvider" (JObj [Pair "codeActionKinds" (JArr [JStr "quickfix", JStr "refactor.rewrite"])]), Pair "executeCommandProvider" (JObj [Pair "commands" (JArr [JStr fixAllLintCommand])]), Pair "diagnosticProvider" (JObj [Pair "interleaved" (JBool False), Pair "workspaceDiagnostics" (JBool False)])]
+    [("textDocumentSync", JObj [("openClose", JBool True), ("change", JNum syncKindFull)]), ("completionProvider", JObj [("triggerCharacters", JArr [JStr "."]), ("resolveProvider", JBool False)]), ("definitionProvider", JBool True), ("referencesProvider", JBool True), ("renameProvider", JObj [("prepareProvider", JBool True)]), ("documentSymbolProvider", JBool True), ("documentFormattingProvider", JBool True), ("documentHighlightProvider", JBool True), ("foldingRangeProvider", JBool True), ("semanticTokensProvider", JObj [("legend", legend), ("full", JBool True)]), ("workspaceSymbolProvider", JBool True), ("hoverProvider", JBool True), ("codeActionProvider", JObj [("codeActionKinds", JArr [JStr "quickfix", JStr "refactor.rewrite"])]), ("executeCommandProvider", JObj [("commands", JArr [JStr fixAllLintCommand])]), ("diagnosticProvider", JObj [("interleaved", JBool False), ("workspaceDiagnostics", JBool False)])]
 
 -- ---------------------------------------------------------------
 -- 请求分发
@@ -356,7 +356,7 @@ initializeResult : Json -> Json
 initializeResult msg =
   responseOk
     (idOf msg)
-    (JObj [Pair "capabilities" serverCapabilities, Pair "serverInfo" (JObj [Pair "name" (JStr lspServerName), Pair "version" (JStr lspServerVersion)])])
+    (JObj [("capabilities", serverCapabilities), ("serverInfo", JObj [("name", JStr lspServerName), ("version", JStr lspServerVersion)])])
 
 -- | 内部：客户端是否在 `initialize` 声明了 pull 诊断能力（`textDocument.diagnostic` 是能力对象）。
 -- 声明了 ⇒ 只走 pull（服务器不再 push，避免同一诊断显示两份）；没声明 ⇒ push。
@@ -367,7 +367,7 @@ clientSupportsPull msg =
     _ => False
 
 -- | didOpen：登记文档并推诊断（同 uri + 内容命中缓存则不重跑精化）；pull 客户端只登记。
-handleDidOpen : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Json -> LspState -> Eff r (Pair Bool (Pair LspState (List Json)))
+handleDidOpen : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Json -> LspState -> Eff r (Bool, LspState, List Json)
 handleDidOpen msg state =
   let
     params = paramsOf msg
@@ -376,14 +376,14 @@ handleDidOpen msg state =
     text = textOfParams params
     docs = docSet (Doc uri version text) state.stateDocs
   in if state.stateClientPull then
-    pure (Pair False (Pair (setRootHintIfEmpty uri (setDocs docs state)) []))
+    pure (False, setRootHintIfEmpty uri (setDocs docs state), [])
   else
     do
       pair <- diagnoseCached uri version text state
-      pure (Pair False (Pair (setRootHintIfEmpty uri (setDocs docs (firstOf pair))) [secondOf pair]))
+      pure (False, setRootHintIfEmpty uri (setDocs docs (firstOf pair)), [secondOf pair])
 
 -- | didChange（Full 同步）：覆盖全文并重推诊断；pull 客户端只更新文档表。
-handleDidChange : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Json -> LspState -> Eff r (Pair Bool (Pair LspState (List Json)))
+handleDidChange : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Json -> LspState -> Eff r (Bool, LspState, List Json)
 handleDidChange msg state =
   let
     params = paramsOf msg
@@ -399,46 +399,46 @@ handleDidChange msg state =
     text = changedText params
     docs = docSet (Doc uri version text) state.stateDocs
   in if state.stateClientPull then
-    pure (Pair False (Pair (setDocs docs state) []))
+    pure (False, setDocs docs state, [])
   else
     do
       pair <- diagnoseCached uri version text state
-      pure (Pair False (Pair (setDocs docs (firstOf pair)) [secondOf pair]))
+      pure (False, setDocs docs (firstOf pair), [secondOf pair])
 
 -- | 内部：按 (uri, 内容哈希) 取诊断帧；未命中才跑完整精化并写缓存。
-diagnoseCached : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => String -> Int -> String -> LspState -> Eff r (Pair LspState Json)
+diagnoseCached : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => String -> Int -> String -> LspState -> Eff r (LspState, Json)
 diagnoseCached uri version text state =
   let
     key = contentKeyOf uri text
   in case lookupDiag key state.stateDiagCache of
-    Just frame => pure (Pair state frame)
+    Just frame => pure (state, frame)
     Nothing =>
       do
         result <- publishDiagnosticsCached state.stateDiagSession uri version text
         let
           frame = secondOf result
           state1 = pushDiag key frame (setDiagSession (firstOf result) state)
-        in pure (Pair state1 frame)
+        in pure (state1, frame)
 
 -- | 内部：按 key 查诊断帧。
-lookupDiag : Int -> List (Pair Int Json) -> Maybe Json
+lookupDiag : Int -> List (Int, Json) -> Maybe Json
 lookupDiag key [] = Nothing
-lookupDiag key ((Pair k v) :: rest) = if k == key then Just v else lookupDiag key rest
+lookupDiag key ((k, v) :: rest) = if k == key then Just v else lookupDiag key rest
 
 -- | didClose：移除文档；push 模式清空诊断（pull 客户端由客户端侧自行清理）。
-handleDidClose : Json -> LspState -> Pair Bool (Pair LspState (List Json))
+handleDidClose : Json -> LspState -> (Bool, LspState, List Json)
 handleDidClose msg state =
   let
     params = paramsOf msg
     uri = uriOfParams params
     docs = docRemove uri state.stateDocs
   in if state.stateClientPull then
-    Pair False (Pair (setDocs docs state) [])
+    (False, setDocs docs state, [])
   else
-    Pair False (Pair (setDocs docs state) [publishDiagnosticsEmpty uri 0])
+    (False, setDocs docs state, [publishDiagnosticsEmpty uri 0])
 
 -- | pull diagnostics（LSP 3.17）：与 push 同一条诊断链，返回完整报告，不额外发布通知。
-handlePullDiagnostics : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Json -> LspState -> Eff r (Pair Bool (Pair LspState (List Json)))
+handlePullDiagnostics : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Json -> LspState -> Eff r (Bool, LspState, List Json)
 handlePullDiagnostics msg state =
   let
     params = paramsOf msg
@@ -448,7 +448,7 @@ handlePullDiagnostics msg state =
     -- 通知帧不能当成 pull 报告返回。
     key = contentKeyOf uri ("pull|" ++ text)
   in case lookupDiag key state.stateDiagCache of
-    Just report => pure (Pair False (Pair state [responseOk (idOf msg) report]))
+    Just report => pure (False, state, [responseOk (idOf msg) report])
     Nothing =>
       do
         result <- diagnosticsForCached state.stateDiagSession uri text
@@ -456,50 +456,50 @@ handlePullDiagnostics msg state =
           labeled = secondOf result
           report = diagReportJson uri text (secondOf labeled)
           state1 = pushDiag key report (setDiagSession (firstOf result) state)
-        in pure (Pair False (Pair state1 [responseOk (idOf msg) report]))
+        in pure (False, state1, [responseOk (idOf msg) report])
 
 -- | 内部：按 (uri, 内容) 记忆化的洞目标；`allowFull` 为真时只复用依赖完整的结果，
 -- 否则重算。
-goalsCached : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Bool -> Bool -> LspState -> String -> String -> Eff r (Pair LspState (List DtGoalInfo))
+goalsCached : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Bool -> Bool -> LspState -> String -> String -> Eff r (LspState, List DtGoalInfo)
 goalsCached allowFull allowBuild state uri text =
   let
     key = contentKeyOf uri text
     entry = cacheEntryOf key state
   in case entry.dcGoals of
-    Just (Pair complete gs) =>
+    Just (complete, gs) =>
       if not allowFull || complete then
-        pure (Pair state gs)
+        pure (state, gs)
       else
         goalsCompute allowFull allowBuild state uri text key entry
     Nothing => goalsCompute allowFull allowBuild state uri text key entry
 
 -- | 内部：跑一次洞精化并写回缓存（保留已有的 suggestion / token 项）。
-goalsCompute : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Bool -> Bool -> LspState -> String -> String -> Int -> DocCache -> Eff r (Pair LspState (List DtGoalInfo))
+goalsCompute : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Bool -> Bool -> LspState -> String -> String -> Int -> DocCache -> Eff r (LspState, List DtGoalInfo)
 goalsCompute allowFull allowBuild state uri text key entry =
   do
     pair <- goalsForDoc allowFull allowBuild state.stateDiagSession uri text
     let
       state1 = upsertDocCache key (DocCache (Just (secondOf pair)) entry.dcSuggestions entry.dcTokens) (setDiagSession (firstOf pair) state)
-    in pure (Pair state1 (secondOf (secondOf pair)))
+    in pure (state1, secondOf (secondOf pair))
 
 -- | 内部：诊断 suggestion（codeAction 的 quickfix 来源）按 (uri, 内容) 记忆化；同内容只跑
 -- 一次诊断。
-suggestionsCached : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => LspState -> String -> String -> Eff r (Pair LspState (List (Pair (Pair Int Int) (List Json))))
+suggestionsCached : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => LspState -> String -> String -> Eff r (LspState, List ((Int, Int), List Json))
 suggestionsCached state uri text =
   let
     key = contentKeyOf uri text
     entry = cacheEntryOf key state
   in case entry.dcSuggestions of
-    Just sug => pure (Pair state sug)
+    Just sug => pure (state, sug)
     Nothing =>
       do
         pair <- suggestionsForDoc state.stateDiagSession uri text
         let
           state1 = upsertDocCache key (DocCache entry.dcGoals (Just (secondOf pair)) entry.dcTokens) (setDiagSession (firstOf pair) state)
-        in pure (Pair state1 (secondOf pair))
+        in pure (state1, secondOf pair)
 
 -- | hover：洞目标（包上下文）→ 模块引用 / 局部绑定（parse 级）→ Index 符号的签名与注释。
-handleHover : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Json -> LspState -> Eff r (Pair Bool (Pair LspState (List Json)))
+handleHover : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Json -> LspState -> Eff r (Bool, LspState, List Json)
 handleHover msg state =
   let
     params = paramsOf msg
@@ -512,31 +512,31 @@ handleHover msg state =
       if lineHasHole text line then
         do
           gp <- goalsCached False False state uri text
-          pure (Pair (firstOf gp) (holeHoverFrom line col (secondOf gp)))
+          pure (firstOf gp, holeHoverFrom line col (secondOf gp))
       else
-        pure (Pair state Nothing)
+        pure (state, Nothing)
     case secondOf holePair of
-      Just hover => pure (Pair False (Pair (firstOf holePair) [responseOk (idOf msg) hover]))
+      Just hover => pure (False, firstOf holePair, [responseOk (idOf msg) hover])
       Nothing => handleHoverFallback msg (firstOf holePair) uri line col text
 
 -- | 内部：hover 的第二段，模块引用 / 局部绑定（parse 级），未命中再看 Index 符号。
-handleHoverFallback : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Json -> LspState -> String -> Int -> Int -> String -> Eff r (Pair Bool (Pair LspState (List Json)))
+handleHoverFallback : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Json -> LspState -> String -> Int -> Int -> String -> Eff r (Bool, LspState, List Json)
 handleHoverFallback msg state uri line col text =
   do
     bindHover <- bindingHoverAt (bufferTexts state) uri line col text
     case bindHover of
-      Just hover => pure (Pair False (Pair state [responseOk (idOf msg) hover]))
+      Just hover => pure (False, state, [responseOk (idOf msg) hover])
       Nothing =>
         do
           indexPair <- ensureIndex uri state
           let
             state1 = firstOf indexPair
             midx = secondOf indexPair
-          in pure (Pair False (Pair state1 [responseOk (idOf msg) (symbolHoverResult (bufferTexts state) uri line col text midx)]))
+          in pure (False, state1, [responseOk (idOf msg) (symbolHoverResult (bufferTexts state) uri line col text midx)])
 
 -- | formatting：`formatSourceWith` 成功且内容有变化 ⇒ 全文 `TextEdit`，否则空数组；
 -- 格式化不需要 fixity 闭包（中缀按源码顺序打印），失败时返回空 edits。
-handleFormatting : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Json -> LspState -> Eff r (Pair Bool (Pair LspState (List Json)))
+handleFormatting : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Json -> LspState -> Eff r (Bool, LspState, List Json)
 handleFormatting msg state =
   let
     params = paramsOf msg
@@ -544,7 +544,7 @@ handleFormatting msg state =
     text = textForUri uri state
   in do
     edits <- formattingEdits uri text
-    pure (Pair False (Pair state [responseOk (idOf msg) (JArr edits)]))
+    pure (False, state, [responseOk (idOf msg) (JArr edits)])
 
 -- ---------------------------------------------------------------
 -- codeAction（lint quick fix；洞 case split + fix all 的 Command 形式）
@@ -566,7 +566,7 @@ onlyKindsOf params =
 
 -- | codeAction：当前缓冲 → lint quick fix / fix all command / 洞 case split（纯查询）。洞目标与
 -- 诊断 suggestion 都按 (uri, 内容) 缓存，客户端光标移动时反复请求也只有第一次付出计算成本。
-handleCodeAction : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Json -> LspState -> Eff r (Pair Bool (Pair LspState (List Json)))
+handleCodeAction : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Json -> LspState -> Eff r (Bool, LspState, List Json)
 handleCodeAction msg state =
   let
     params = paramsOf msg
@@ -582,18 +582,18 @@ handleCodeAction msg state =
       if caseSplitWanted text startLine startCol endLine endCol only then
         do
           gp <- goalsCached True True state uri text
-          pure (Pair (firstOf gp) (Just (secondOf gp)))
+          pure (firstOf gp, Just (secondOf gp))
       else
-        pure (Pair state Nothing)
+        pure (state, Nothing)
     let
       state0 = firstOf goalPair
     in do
-      suggPair <- if quickfixWanted only then suggestionsCached state0 uri text else pure (Pair state0 [])
+      suggPair <- if quickfixWanted only then suggestionsCached state0 uri text else pure (state0, [])
       let
         state1 = firstOf suggPair
       in do
         actions <- codeActionsFor (secondOf goalPair) (secondOf suggPair) uri text startLine startCol endLine endCol only
-        pure (Pair False (Pair state1 [responseOk (idOf msg) (JArr actions)]))
+        pure (False, state1, [responseOk (idOf msg) (JArr actions)])
 
 -- ---------------------------------------------------------------
 -- workspace/executeCommand（fix all 的 command 形式）
@@ -607,7 +607,7 @@ applyEditRequestId uri text = "vuna-apply-${strFromInt (strHash (uri ++ text))}"
 applyEditFrame : String -> Json -> Json
 applyEditFrame reqId edit =
   JObj
-    [Pair "jsonrpc" (JStr "2.0"), Pair "id" (JStr reqId), Pair "method" (JStr "workspace/applyEdit"), Pair "params" (JObj [Pair "edit" edit])]
+    [("jsonrpc", JStr "2.0"), ("id", JStr reqId), ("method", JStr "workspace/applyEdit"), ("params", JObj [("edit", edit)])]
 
 -- | 内部：`arguments[0]` 的字符串值（缺失给 ""）。
 firstCommandArg : List Json -> String
@@ -617,7 +617,7 @@ firstCommandArg (arg :: rest) = fromMaybe "" (jsonAsStr arg)
 -- | `workspace/executeCommand`：`vuna.fixAllLint`（arguments = [文档 uri]）重算整文档修正并经
 -- `workspace/applyEdit` 推给客户端（executeCommand 的结果不会被自动应用）；未知 command
 -- → -32602。
-handleExecuteCommand : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Json -> LspState -> Eff r (Pair Bool (Pair LspState (List Json)))
+handleExecuteCommand : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Json -> LspState -> Eff r (Bool, LspState, List Json)
 handleExecuteCommand msg state =
   let
     params = paramsOf msg
@@ -629,13 +629,13 @@ handleExecuteCommand msg state =
     do
       editR <- fixAllLintWorkspaceEdit uri text
       case editR of
-        Nothing => pure (Pair False (Pair state [responseOk (idOf msg) JNull]))
-        Just edit => pure (Pair False (Pair state [applyEditFrame (applyEditRequestId uri text) edit, responseOk (idOf msg) JNull]))
+        Nothing => pure (False, state, [responseOk (idOf msg) JNull])
+        Just edit => pure (False, state, [applyEditFrame (applyEditRequestId uri text) edit, responseOk (idOf msg) JNull])
   else
-    pure (Pair False (Pair state [responseErr (idOf msg) errInvalidParams "unknown command: ${command}"]))
+    pure (False, state, [responseErr (idOf msg) errInvalidParams "unknown command: ${command}"])
 
 -- | documentSymbol：当前缓冲的 AST 声明树（不要求文件已在磁盘上）。
-handleDocumentSymbol : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Json -> LspState -> Eff r (Pair Bool (Pair LspState (List Json)))
+handleDocumentSymbol : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Json -> LspState -> Eff r (Bool, LspState, List Json)
 handleDocumentSymbol msg state =
   let
     params = paramsOf msg
@@ -643,11 +643,11 @@ handleDocumentSymbol msg state =
     text = textForUri uri state
   in do
     symbols <- documentSymbols uri text
-    pure (Pair False (Pair state [responseOk (idOf msg) (JArr symbols)]))
+    pure (False, state, [responseOk (idOf msg) (JArr symbols)])
 
 -- | semanticTokens/full：CST 词法流 + 声明表（[Vuna.Lsp.Semantic]）；结果按 (uri, 内容) 缓存，
 -- 重复请求不再重跑词法 + parse。
-handleSemanticTokens : {r : Row} -> Json -> LspState -> Eff r (Pair Bool (Pair LspState (List Json)))
+handleSemanticTokens : {r : Row} -> Json -> LspState -> Eff r (Bool, LspState, List Json)
 handleSemanticTokens msg state =
   let
     params = paramsOf msg
@@ -656,15 +656,15 @@ handleSemanticTokens msg state =
     key = contentKeyOf uri text
     entry = cacheEntryOf key state
   in case entry.dcTokens of
-    Just cached => pure (Pair False (Pair state [responseOk (idOf msg) cached]))
+    Just cached => pure (False, state, [responseOk (idOf msg) cached])
     Nothing =>
       let
         tokens = semanticTokensJson text
         state1 = upsertDocCache key (DocCache entry.dcGoals entry.dcSuggestions (Just tokens)) state
-      in pure (Pair False (Pair state1 [responseOk (idOf msg) tokens]))
+      in pure (False, state1, [responseOk (idOf msg) tokens])
 
 -- | documentHighlight：局部绑定走作用域解析，顶层符号用当前文件的同名 ident token。
-handleDocumentHighlight : {r : Row} -> Json -> LspState -> Eff r (Pair Bool (Pair LspState (List Json)))
+handleDocumentHighlight : {r : Row} -> Json -> LspState -> Eff r (Bool, LspState, List Json)
 handleDocumentHighlight msg state =
   let
     params = paramsOf msg
@@ -672,20 +672,19 @@ handleDocumentHighlight msg state =
     line = lineOfParams params + 1
     col = colOfParams params + 1
     text = textForUri uri state
-  in pure
-    (Pair False (Pair state [responseOk (idOf msg) (JArr (documentHighlights line col text))]))
+  in pure (False, state, [responseOk (idOf msg) (JArr (documentHighlights line col text))])
 
 -- | foldingRange：按行首缩进的 offside 块（[Vuna.Lsp.Folding]）。
-handleFoldingRange : {r : Row} -> Json -> LspState -> Eff r (Pair Bool (Pair LspState (List Json)))
+handleFoldingRange : {r : Row} -> Json -> LspState -> Eff r (Bool, LspState, List Json)
 handleFoldingRange msg state =
   let
     params = paramsOf msg
     uri = uriOfParams params
     text = textForUri uri state
-  in pure (Pair False (Pair state [responseOk (idOf msg) (JArr (foldingRangesJson text))]))
+  in pure (False, state, [responseOk (idOf msg) (JArr (foldingRangesJson text))])
 
 -- | definition：模块引用 / 局部绑定（parse 级）→ Index 符号 → 同文件缓冲兜底。
-handleDefinition : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Json -> LspState -> Eff r (Pair Bool (Pair LspState (List Json)))
+handleDefinition : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Json -> LspState -> Eff r (Bool, LspState, List Json)
 handleDefinition msg state =
   let
     params = paramsOf msg
@@ -696,17 +695,17 @@ handleDefinition msg state =
   in do
     bindLoc <- bindingDefinitionAt (bufferTexts state) uri line col text
     case bindLoc of
-      Just loc => pure (Pair False (Pair state [responseOk (idOf msg) loc]))
+      Just loc => pure (False, state, [responseOk (idOf msg) loc])
       Nothing =>
         do
           indexPair <- ensureIndex uri state
           let
             state1 = firstOf indexPair
             midx = secondOf indexPair
-          in pure (Pair False (Pair state1 [responseOk (idOf msg) (definitionResult uri line col text midx)]))
+          in pure (False, state1, [responseOk (idOf msg) (definitionResult uri line col text midx)])
 
 -- | references：定义位置 + Index 记录的出现位置。
-handleReferences : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Json -> LspState -> Eff r (Pair Bool (Pair LspState (List Json)))
+handleReferences : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Json -> LspState -> Eff r (Bool, LspState, List Json)
 handleReferences msg state =
   let
     params = paramsOf msg
@@ -719,10 +718,10 @@ handleReferences msg state =
     let
       state1 = firstOf indexPair
       midx = secondOf indexPair
-    in pure (Pair False (Pair state1 [responseOk (idOf msg) (JArr (referencesResult uri line col text midx))]))
+    in pure (False, state1, [responseOk (idOf msg) (JArr (referencesResult uri line col text midx))])
 
 -- | prepareRename：光标 token 的范围 + 占位名（无法改名 → null）。
-handlePrepareRename : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Json -> LspState -> Eff r (Pair Bool (Pair LspState (List Json)))
+handlePrepareRename : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Json -> LspState -> Eff r (Bool, LspState, List Json)
 handlePrepareRename msg state =
   let
     params = paramsOf msg
@@ -737,10 +736,10 @@ handlePrepareRename msg state =
       midx = secondOf indexPair
     in do
       json <- prepareRenameAt uri line col text midx
-      pure (Pair False (Pair state1 [responseOk (idOf msg) json]))
+      pure (False, state1, [responseOk (idOf msg) json])
 
 -- | rename：局部绑定只改当前文档；顶层符号额外改目标模块与 import 它的模块。
-handleRename : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Json -> LspState -> Eff r (Pair Bool (Pair LspState (List Json)))
+handleRename : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Json -> LspState -> Eff r (Bool, LspState, List Json)
 handleRename msg state =
   let
     params = paramsOf msg
@@ -756,10 +755,10 @@ handleRename msg state =
       midx = secondOf indexPair
     in do
       json <- renameAt uri line col text newName midx
-      pure (Pair False (Pair state1 [responseOk (idOf msg) json]))
+      pure (False, state1, [responseOk (idOf msg) json])
 
 -- | completion：关键字 + 当前缓冲顶层名 + Index 符号；`.` 后按模块过滤。
-handleCompletion : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Json -> LspState -> Eff r (Pair Bool (Pair LspState (List Json)))
+handleCompletion : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Json -> LspState -> Eff r (Bool, LspState, List Json)
 handleCompletion msg state =
   let
     params = paramsOf msg
@@ -772,10 +771,10 @@ handleCompletion msg state =
     let
       state1 = firstOf indexPair
       midx = secondOf indexPair
-    in pure (Pair False (Pair state1 [responseOk (idOf msg) (JArr (completionItems (bufferTexts state) text line col midx))]))
+    in pure (False, state1, [responseOk (idOf msg) (JArr (completionItems (bufferTexts state) text line col midx))])
 
 -- | workspace/symbol：Index 过滤（空 query = 全部，上限 200）。
-handleWorkspaceSymbol : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Json -> LspState -> Eff r (Pair Bool (Pair LspState (List Json)))
+handleWorkspaceSymbol : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Json -> LspState -> Eff r (Bool, LspState, List Json)
 handleWorkspaceSymbol msg state =
   let
     params = paramsOf msg
@@ -786,19 +785,19 @@ handleWorkspaceSymbol msg state =
     let
       state1 = firstOf indexPair
       midx = secondOf indexPair
-    in pure (Pair False (Pair state1 [responseOk (idOf msg) (JArr (workspaceSymbols midx query))]))
+    in pure (False, state1, [responseOk (idOf msg) (JArr (workspaceSymbols midx query))])
 
 -- | 处理一帧，返回 (是否退出, 新状态, 待发送帧)。
 --
 -- 取消：主循环串行且读 stdin 是阻塞的，运行中的计算无法打断，能做的是「不再开始」——
 -- `$/cancelRequest` 先记账，派发前发现该 id 已取消就直接回 RequestCancelled。
-handleFrame : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Json -> LspState -> Eff r (Pair Bool (Pair LspState (List Json)))
+handleFrame : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Json -> LspState -> Eff r (Bool, LspState, List Json)
 handleFrame msg state =
   case jsonGet "method" msg of
-    Nothing => pure (Pair False (Pair state [])) -- 客户端对我们请求的响应：忽略
+    Nothing => pure (False, state, []) -- 客户端对我们请求的响应：忽略
     Just m =>
       case jsonAsStr m of
-        Nothing => pure (Pair False (Pair state []))
+        Nothing => pure (False, state, [])
         Just methodName =>
           if methodName == "$/cancelRequest" then
             handleCancel msg state
@@ -806,7 +805,7 @@ handleFrame msg state =
             let
               reqId = idIntOf msg
             in if reqId /= 0 && isCanceled reqId state then
-              pure (Pair False (Pair (forgetCancel reqId state) [responseErr (idOf msg) errRequestCancelled "cancelled"]))
+              pure (False, forgetCancel reqId state, [responseErr (idOf msg) errRequestCancelled "cancelled"])
             else
               do
                 tok <- pure (obsSpanBegin "lsp.${methodName}" "vuna.lsp")
@@ -819,21 +818,20 @@ idIntOf : Json -> Int
 idIntOf msg = fromMaybe 0 (jsonGet "id" msg >>= jsonAsInt)
 
 -- | 记下 `$/cancelRequest` 的 id（id 不可读时忽略）。
-handleCancel : {r : Row} -> Json -> LspState -> Eff r (Pair Bool (Pair LspState (List Json)))
+handleCancel : {r : Row} -> Json -> LspState -> Eff r (Bool, LspState, List Json)
 handleCancel msg state =
   let
     canceled = fromMaybe 0 (jsonGetIn ["params", "id"] msg >>= jsonAsInt)
     state1 = if canceled == 0 then state else rememberCancel canceled state
-  in pure (Pair False (Pair state1 []))
+  in pure (False, state1, [])
 
 -- | method 名 → handler；未知 method 回 `MethodNotFound`（`$/` 前缀的通知静默忽略）。
-dispatch : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => String -> Json -> LspState -> Eff r (Pair Bool (Pair LspState (List Json)))
+dispatch : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => String -> Json -> LspState -> Eff r (Bool, LspState, List Json)
 dispatch "initialize" msg state =
-  pure (Pair False (Pair (setClientPull (clientSupportsPull msg) state) [initializeResult msg]))
-dispatch "initialized" msg state = pure (Pair False (Pair state []))
-dispatch "shutdown" msg state =
-  pure (Pair False (Pair (setShutdown True state) [responseOk (idOf msg) JNull]))
-dispatch "exit" msg state = pure (Pair True (Pair state []))
+  pure (False, setClientPull (clientSupportsPull msg) state, [initializeResult msg])
+dispatch "initialized" msg state = pure (False, state, [])
+dispatch "shutdown" msg state = pure (False, setShutdown True state, [responseOk (idOf msg) JNull])
+dispatch "exit" msg state = pure (True, state, [])
 dispatch "textDocument/didOpen" msg state = handleDidOpen msg state
 dispatch "textDocument/didChange" msg state = handleDidChange msg state
 dispatch "textDocument/didClose" msg state = pure (handleDidClose msg state)
@@ -853,17 +851,16 @@ dispatch "textDocument/codeAction" msg state = handleCodeAction msg state
 dispatch "workspace/executeCommand" msg state = handleExecuteCommand msg state
 dispatch "workspace/symbol" msg state = handleWorkspaceSymbol msg state
 -- 客户端能力注册（fileEvents 等）服务器不消费，但必须回成功，否则客户端会把注册失败刷成错误。
-dispatch "client/registerCapability" msg state =
-  pure (Pair False (Pair state [responseOk (idOf msg) JNull]))
+dispatch "client/registerCapability" msg state = pure (False, state, [responseOk (idOf msg) JNull])
 dispatch "client/unregisterCapability" msg state =
-  pure (Pair False (Pair state [responseOk (idOf msg) JNull]))
-dispatch "$/cancelRequest" msg state = pure (Pair False (Pair state []))
+  pure (False, state, [responseOk (idOf msg) JNull])
+dispatch "$/cancelRequest" msg state = pure (False, state, [])
 dispatch methodName msg state =
   if startsWith "$/" methodName then
-    pure (Pair False (Pair state []))
+    pure (False, state, [])
   else
     pure
-      (Pair False (Pair state [responseErr (idOf msg) errMethodNotFound "method not found: ${methodName}"]))
+      (False, state, [responseErr (idOf msg) errMethodNotFound "method not found: ${methodName}"])
 
 -- ---------------------------------------------------------------
 -- 主循环
@@ -873,8 +870,8 @@ writeStdout : Member nConsole ConsoleOp r => String -> Eff r Int
 writeStdout s = fmap natToInt (consolePrint s)
 
 -- | 内部：传输告警，丢帧 + 写日志（不回错误帧）。
-lspWarn : String -> LspState -> Pair LspState (List Json)
-lspWarn m st = Pair (logTo m st) []
+lspWarn : String -> LspState -> (LspState, List Json)
+lspWarn m st = (logTo m st, [])
 
 -- | 内部：正常退出，flush 日志，收到过 shutdown 则退 0、否则退 1。
 exitCodeOf : Member nConsole ConsoleOp r => LspState -> Eff r Int

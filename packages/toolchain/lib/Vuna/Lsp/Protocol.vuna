@@ -179,11 +179,11 @@ parentDir path =
 -- | 1-based 行 / 列 → LSP `Position`（0-based，夹到非负）。
 export lspPosition : Int -> Int -> Json
 lspPosition line col =
-  JObj [Pair "line" (JNum (maxInt 0 (line - 1))), Pair "character" (JNum (maxInt 0 (col - 1)))]
+  JObj [("line", JNum (maxInt 0 (line - 1))), ("character", JNum (maxInt 0 (col - 1)))]
 
 -- | 1-based 起止行列 → LSP `Range`。
 export lspRange : Int -> Int -> Int -> Int -> Json
-lspRange sl sc el ec = JObj [Pair "start" (lspPosition sl sc), Pair "end" (lspPosition el ec)]
+lspRange sl sc el ec = JObj [("start", lspPosition sl sc), ("end", lspPosition el ec)]
 
 -- | `Span`（1-based，含端点）→ LSP `Range`。
 export spanRange : Span -> Json
@@ -203,7 +203,7 @@ lineAt1 (x :: rest) n = if n <= 1 then x else lineAt1 rest (n - 1)
 
 -- | 光标（1-based 行 / 列）处的名字：允许限定名（`Base.Data.List.map`）并去掉尾部 `.`；
 -- 返回 (起始列, 名字)，不在名字上给 `Nothing`。
-export tokenAtCursor : String -> Int -> Int -> Maybe (Pair Int String)
+export tokenAtCursor : String -> Int -> Int -> Maybe (Int, String)
 tokenAtCursor text line col =
   let
     ln = lineText text line
@@ -218,7 +218,7 @@ tokenAtCursor text line col =
   else
     let
       token = stripTrailingDots (substring (natFromInt startP) (natFromInt (endP - startP)) ln)
-    in if token == "" then Nothing else Just (Pair (startP + 1) token)
+    in if token == "" then Nothing else Just (startP + 1, token)
 
 -- ---------------------------------------------------------------
 -- span / 文本定位小工具（Bindings / Query 共用）
@@ -250,7 +250,7 @@ isPrefixChars _ [] = False
 isPrefixChars (x :: xs) (y :: ys) = x == y && isPrefixChars xs ys
 
 -- | 在 span 覆盖的行范围里找名字的起始位置（1-based line / col）。
-export findNamePos : List String -> Span -> String -> Maybe (Pair Int Int)
+export findNamePos : List String -> Span -> String -> Maybe (Int, Int)
 findNamePos lines sp name =
   scanNameLines
     (spanStartLine sp)
@@ -261,7 +261,7 @@ findNamePos lines sp name =
     name
 
 -- | 逐行扫描名字；首行从 `spanStartCol` 起找，之后每行从行首起找。
-export scanNameLines : Int -> Bool -> Int -> Int -> List String -> String -> Maybe (Pair Int Int)
+export scanNameLines : Int -> Bool -> Int -> Int -> List String -> String -> Maybe (Int, Int)
 scanNameLines lineNo isFirst firstCol lastLine remaining name =
   if lineNo > lastLine then
     Nothing
@@ -273,7 +273,7 @@ scanNameLines lineNo isFirst firstCol lastLine remaining name =
           from0 = clampInt 0 (if isFirst then firstCol - 1 else 0) (strLength ln)
           tailPart = substring (natFromInt from0) (natFromInt (strLength ln - from0)) ln
         in case findSubstring name tailPart of
-          hit => if hit >= 0 then Just (Pair lineNo (hit + from0 + 1)) else scanNameLines (lineNo + 1) False firstCol lastLine rest name
+          hit => if hit >= 0 then Just (lineNo, hit + from0 + 1) else scanNameLines (lineNo + 1) False firstCol lastLine rest name
 
 -- 逐行写 stderr 会拆成多次系统调用，所以内存累积、退出时 join 一次。
 -- | 日志行前缀（`[vuna-lsp] ...`）。

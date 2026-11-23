@@ -11,7 +11,7 @@ export record Response(..) where
   -- | 原因短语（渲染时使用；解析时保留原样）。
   reason : String
   -- | 头部（顺序即发送顺序）。
-  headers : List (Pair String String)
+  headers : List (String, String)
   -- | 消息体。
   body : String
 

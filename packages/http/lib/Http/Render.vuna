@@ -44,9 +44,9 @@ statusHasBody code =
       _ => True
 
 -- | 缺 `Content-Length` 时按体字节数补一个（保序追加在末尾）。
-export withLength : List (Pair String String) -> String -> List (Pair String String)
+export withLength : List (String, String) -> String -> List (String, String)
 withLength hs body =
   if Header.hasHeader "content-length" hs then
     hs
   else
-    append hs [Pair "Content-Length" (strFromInt (strLength body))]
+    append hs [("Content-Length", strFromInt (strLength body))]

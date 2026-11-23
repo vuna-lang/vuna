@@ -140,24 +140,24 @@ hostErrnoLabel = "rt_host_errno"
 
 -- | errno → `strerror` 文本（含 `": "` 分隔与结尾换行）。与 OCaml `Sys_error` 在 C locale
 --   下的首行一致；不在表里的 errno 走 `strictReasonUnknown`。
-hostReasonTexts : List (Pair Int String)
+hostReasonTexts : List (Int, String)
 hostReasonTexts =
   [
-    Pair errnoEnoent ": No such file or directory\n",
-    Pair errnoEacces ": Permission denied\n",
-    Pair errnoEperm ": Operation not permitted\n",
-    Pair errnoEexist ": File exists\n",
-    Pair errnoEnotdir ": Not a directory\n",
-    Pair errnoEisdir ": Is a directory\n",
-    Pair errnoEnospc ": No space left on device\n",
-    Pair 5 ": Input/output error\n",
-    Pair 12 ": Cannot allocate memory\n",
-    Pair 22 ": Invalid argument\n",
-    Pair 23 ": Too many open files in system\n",
-    Pair 24 ": Too many open files\n",
-    Pair 30 ": Read-only file system\n",
-    Pair 36 ": File name too long\n",
-    Pair 40 ": Too many levels of symbolic links\n"
+    (errnoEnoent, ": No such file or directory\n"),
+    (errnoEacces, ": Permission denied\n"),
+    (errnoEperm, ": Operation not permitted\n"),
+    (errnoEexist, ": File exists\n"),
+    (errnoEnotdir, ": Not a directory\n"),
+    (errnoEisdir, ": Is a directory\n"),
+    (errnoEnospc, ": No space left on device\n"),
+    (5, ": Input/output error\n"),
+    (12, ": Cannot allocate memory\n"),
+    (22, ": Invalid argument\n"),
+    (23, ": Too many open files in system\n"),
+    (24, ": Too many open files\n"),
+    (30, ": Read-only file system\n"),
+    (36, ": File name too long\n"),
+    (40, ": Too many levels of symbolic links\n")
   ]
 
 strictReasonUnknown : String
@@ -1039,7 +1039,7 @@ fsCodeSeen : Int -> List Int -> Bool
 fsCodeSeen _ [] = False
 fsCodeSeen code (c :: rest) = if c == code then True else fsCodeSeen code rest
 
-fsCodesOf : List (Pair Int Int) -> List Int
+fsCodesOf : List (Int, Int) -> List Int
 fsCodesOf pairs =
   List.foldl
     (\acc, p => if fsCodeSeen (secondOf p) acc then acc else append acc [secondOf p])
@@ -1643,103 +1643,216 @@ nativeRtTargetBase "@vuna@debug@line" = Just (nativeRtLabel "debug_line")
 nativeRtTargetBase _ = Nothing
 
 -- | 宿主叶子：一个实现标签 + 它在内建 / IR 里的全部名字（同一实现按名字去重）。
-hostLeafGroups : List (Pair String (List String))
+hostLeafGroups : List (String, List String)
 hostLeafGroups =
   [
-    Pair "cleanup_pop" ["prim_cleanupPop"],
-    Pair "cleanup_push" ["prim_cleanupPush"],
-    Pair
-      "exec_path"
-      ["prim_eff_execPath", "@vuna@prim_eff_execPath", "prim_eff_execPath_host", "@vuna@prim_eff_execPath_host", "@vuna@host@execPath"],
-    Pair "exit_with" ["prim_eff_exit_process_host", "@vuna@prim_eff_exit_process_host"],
-    Pair
-      "file_exists"
-      ["@vuna@host@fileExists", "prim_eff_fileExists", "@vuna@prim_eff_fileExists", "prim_eff_fileExists_host", "@vuna@prim_eff_fileExists_host"],
-    Pair
-      "file_mtime"
-      ["@vuna@host@fileMtime", "prim_eff_fileMtime", "@vuna@prim_eff_fileMtime", "prim_eff_fileMtime_host", "@vuna@prim_eff_fileMtime_host"],
-    Pair
-      "file_size"
-      ["@vuna@host@fileSize", "prim_eff_fileSize", "@vuna@prim_eff_fileSize", "prim_eff_fileSize_host", "@vuna@prim_eff_fileSize_host"],
-    Pair
-      "getArgs"
-      ["prim_eff_getArgs", "@vuna@prim_eff_getArgs", "prim_eff_getArgs_host", "@vuna@prim_eff_getArgs_host", "@vuna@host@getArgs", "prim_eff_getArgs_process_host", "@vuna@prim_eff_getArgs_process_host"],
-    Pair
-      "getcwd"
-      ["prim_eff_getcwd", "@vuna@prim_eff_getcwd", "prim_eff_getcwd_host", "@vuna@prim_eff_getcwd_host", "@vuna@host@getcwd"],
-    Pair
-      "getenv"
-      ["prim_eff_getenv", "@vuna@prim_eff_getenv", "prim_eff_getenv_host", "@vuna@prim_eff_getenv_host", "@vuna@host@getenv"],
-    Pair "host_status_get" ["@vuna@prim_eff_hostStatus"],
-    Pair "is_tty" ["@vuna@host@isTty"],
-    Pair "now_us" ["effTimeUs", "effTimeUs_host"],
-    Pair "prim_eff_eprint" ["prim_eff_eprint", "@vuna@prim_eff_eprint"],
-    Pair
-      "prim_eff_exit"
-      ["@vuna@host@exitOp", "prim_eff_exitOp_host", "@vuna@prim_eff_exitOp_host", "prim_eff_exit", "@vuna@prim_eff_exit"],
-    Pair
-      "prim_eff_new_ref"
-      ["@vuna@host@newRef", "prim_eff_newRef_host", "@vuna@prim_eff_newRef_host", "prim_eff_newRef", "@vuna@prim_eff_newRef"],
-    Pair
-      "prim_eff_print"
-      ["@vuna@host@print", "prim_eff_print_host", "@vuna@prim_eff_print_host", "prim_eff_print", "@vuna@prim_eff_print"],
-    Pair
-      "prim_eff_read_ref"
-      ["@vuna@host@readRef", "prim_eff_readRef_host", "@vuna@prim_eff_readRef_host", "prim_eff_readRef", "@vuna@prim_eff_readRef"],
-    Pair
-      "prim_eff_write_ref"
-      ["@vuna@host@writeRef", "prim_eff_writeRef_host", "@vuna@prim_eff_writeRef_host", "prim_eff_writeRef", "@vuna@prim_eff_writeRef"],
-    Pair
-      "sleep_us"
-      ["prim_eff_sleep", "@vuna@prim_eff_sleep", "prim_eff_sleep_host", "@vuna@prim_eff_sleep_host", "@vuna@host@sleep"],
-    Pair "spawn_self" ["prim_eff_spawn", "@vuna@prim_eff_spawn"],
-    Pair
-      "strict_is_dir"
-      ["prim_eff_isDirectory", "@vuna@prim_eff_isDirectory", "prim_eff_isDirectory_host", "@vuna@prim_eff_isDirectory_host", "@vuna@host@isDirectory"],
-    Pair
-      "strict_make_dir"
-      ["prim_eff_makeDir", "@vuna@prim_eff_makeDir", "prim_eff_makeDir_host", "@vuna@prim_eff_makeDir_host", "@vuna@host@makeDir"],
-    Pair
-      "strict_read_dir"
-      ["prim_eff_readDir", "@vuna@prim_eff_readDir", "prim_eff_readDir_host", "@vuna@prim_eff_readDir_host", "@vuna@host@readDir"],
-    Pair
-      "strict_read_file"
-      ["prim_eff_readFile", "@vuna@prim_eff_readFile", "prim_eff_readFile_host", "@vuna@prim_eff_readFile_host", "@vuna@host@readFile"],
-    Pair
-      "strict_read_file_range"
-      ["prim_eff_readFileRange", "@vuna@prim_eff_readFileRange", "prim_eff_readFileRange_host", "@vuna@prim_eff_readFileRange_host", "@vuna@host@readFileRange"],
-    Pair
-      "strict_remove_file"
-      ["prim_eff_removeFile", "@vuna@prim_eff_removeFile", "prim_eff_removeFile_host", "@vuna@prim_eff_removeFile_host", "@vuna@host@removeFile"],
-    Pair
-      "strict_write_file"
-      ["prim_eff_writeFile", "@vuna@prim_eff_writeFile", "prim_eff_writeFile_host", "@vuna@prim_eff_writeFile_host", "@vuna@host@writeFile"],
-    Pair
-      "strict_write_file_atomic"
-      ["prim_eff_writeFileAtomic", "@vuna@prim_eff_writeFileAtomic", "prim_eff_writeFileAtomic_host", "@vuna@prim_eff_writeFileAtomic_host", "@vuna@host@writeFileAtomic"],
-    Pair "tryReadDir" ["@vuna@host@tryReadDir"],
-    Pair
-      "tryRunIn"
-      ["@vuna@host@tryRunIn", "prim_eff_runIn", "@vuna@prim_eff_runIn", "prim_eff_runIn_host", "@vuna@prim_eff_runIn_host", "@vuna@host@runIn"],
-    Pair "try_is_dir" ["@vuna@host@tryIsDirectory"],
-    Pair "try_make_dir" ["@vuna@host@tryMakeDir"],
-    Pair "try_make_dir_excl" ["@vuna@host@tryMakeDirExclusive"],
-    Pair "try_read_file" ["@vuna@host@tryReadFile"],
-    Pair "try_read_file_range" ["@vuna@host@tryReadFileRange"],
-    Pair "try_remove_file" ["@vuna@host@tryRemoveFile"],
-    Pair "try_remove_tree" ["@vuna@host@tryRemoveTree"],
-    Pair "try_rename" ["@vuna@host@tryRename"],
-    Pair "try_symlink" ["@vuna@host@trySymlink"],
-    Pair "try_write_file" ["@vuna@host@tryWriteFile"],
-    Pair "try_write_file_atomic" ["@vuna@host@tryWriteFileAtomic"],
-    Pair "wait_pid" ["prim_eff_wait", "@vuna@prim_eff_wait"]
+    ("cleanup_pop", ["prim_cleanupPop"]),
+    ("cleanup_push", ["prim_cleanupPush"]),
+    ("exec_path",
+      [
+        "prim_eff_execPath",
+        "@vuna@prim_eff_execPath",
+        "prim_eff_execPath_host",
+        "@vuna@prim_eff_execPath_host",
+        "@vuna@host@execPath"
+      ]),
+    ("exit_with", ["prim_eff_exit_process_host", "@vuna@prim_eff_exit_process_host"]),
+    ("file_exists",
+      [
+        "@vuna@host@fileExists",
+        "prim_eff_fileExists",
+        "@vuna@prim_eff_fileExists",
+        "prim_eff_fileExists_host",
+        "@vuna@prim_eff_fileExists_host"
+      ]),
+    ("file_mtime",
+      [
+        "@vuna@host@fileMtime",
+        "prim_eff_fileMtime",
+        "@vuna@prim_eff_fileMtime",
+        "prim_eff_fileMtime_host",
+        "@vuna@prim_eff_fileMtime_host"
+      ]),
+    ("file_size",
+      [
+        "@vuna@host@fileSize",
+        "prim_eff_fileSize",
+        "@vuna@prim_eff_fileSize",
+        "prim_eff_fileSize_host",
+        "@vuna@prim_eff_fileSize_host"
+      ]),
+    ("getArgs",
+      [
+        "prim_eff_getArgs",
+        "@vuna@prim_eff_getArgs",
+        "prim_eff_getArgs_host",
+        "@vuna@prim_eff_getArgs_host",
+        "@vuna@host@getArgs",
+        "prim_eff_getArgs_process_host",
+        "@vuna@prim_eff_getArgs_process_host"
+      ]),
+    ("getcwd",
+      [
+        "prim_eff_getcwd",
+        "@vuna@prim_eff_getcwd",
+        "prim_eff_getcwd_host",
+        "@vuna@prim_eff_getcwd_host",
+        "@vuna@host@getcwd"
+      ]),
+    ("getenv",
+      [
+        "prim_eff_getenv",
+        "@vuna@prim_eff_getenv",
+        "prim_eff_getenv_host",
+        "@vuna@prim_eff_getenv_host",
+        "@vuna@host@getenv"
+      ]),
+    ("host_status_get", ["@vuna@prim_eff_hostStatus"]),
+    ("is_tty", ["@vuna@host@isTty"]),
+    ("now_us", ["effTimeUs", "effTimeUs_host"]),
+    ("prim_eff_eprint", ["prim_eff_eprint", "@vuna@prim_eff_eprint"]),
+    ("prim_eff_exit",
+      [
+        "@vuna@host@exitOp",
+        "prim_eff_exitOp_host",
+        "@vuna@prim_eff_exitOp_host",
+        "prim_eff_exit",
+        "@vuna@prim_eff_exit"
+      ]),
+    ("prim_eff_new_ref",
+      [
+        "@vuna@host@newRef",
+        "prim_eff_newRef_host",
+        "@vuna@prim_eff_newRef_host",
+        "prim_eff_newRef",
+        "@vuna@prim_eff_newRef"
+      ]),
+    ("prim_eff_print",
+      [
+        "@vuna@host@print",
+        "prim_eff_print_host",
+        "@vuna@prim_eff_print_host",
+        "prim_eff_print",
+        "@vuna@prim_eff_print"
+      ]),
+    ("prim_eff_read_ref",
+      [
+        "@vuna@host@readRef",
+        "prim_eff_readRef_host",
+        "@vuna@prim_eff_readRef_host",
+        "prim_eff_readRef",
+        "@vuna@prim_eff_readRef"
+      ]),
+    ("prim_eff_write_ref",
+      [
+        "@vuna@host@writeRef",
+        "prim_eff_writeRef_host",
+        "@vuna@prim_eff_writeRef_host",
+        "prim_eff_writeRef",
+        "@vuna@prim_eff_writeRef"
+      ]),
+    ("sleep_us",
+      [
+        "prim_eff_sleep",
+        "@vuna@prim_eff_sleep",
+        "prim_eff_sleep_host",
+        "@vuna@prim_eff_sleep_host",
+        "@vuna@host@sleep"
+      ]),
+    ("spawn_self", ["prim_eff_spawn", "@vuna@prim_eff_spawn"]),
+    ("strict_is_dir",
+      [
+        "prim_eff_isDirectory",
+        "@vuna@prim_eff_isDirectory",
+        "prim_eff_isDirectory_host",
+        "@vuna@prim_eff_isDirectory_host",
+        "@vuna@host@isDirectory"
+      ]),
+    ("strict_make_dir",
+      [
+        "prim_eff_makeDir",
+        "@vuna@prim_eff_makeDir",
+        "prim_eff_makeDir_host",
+        "@vuna@prim_eff_makeDir_host",
+        "@vuna@host@makeDir"
+      ]),
+    ("strict_read_dir",
+      [
+        "prim_eff_readDir",
+        "@vuna@prim_eff_readDir",
+        "prim_eff_readDir_host",
+        "@vuna@prim_eff_readDir_host",
+        "@vuna@host@readDir"
+      ]),
+    ("strict_read_file",
+      [
+        "prim_eff_readFile",
+        "@vuna@prim_eff_readFile",
+        "prim_eff_readFile_host",
+        "@vuna@prim_eff_readFile_host",
+        "@vuna@host@readFile"
+      ]),
+    ("strict_read_file_range",
+      [
+        "prim_eff_readFileRange",
+        "@vuna@prim_eff_readFileRange",
+        "prim_eff_readFileRange_host",
+        "@vuna@prim_eff_readFileRange_host",
+        "@vuna@host@readFileRange"
+      ]),
+    ("strict_remove_file",
+      [
+        "prim_eff_removeFile",
+        "@vuna@prim_eff_removeFile",
+        "prim_eff_removeFile_host",
+        "@vuna@prim_eff_removeFile_host",
+        "@vuna@host@removeFile"
+      ]),
+    ("strict_write_file",
+      [
+        "prim_eff_writeFile",
+        "@vuna@prim_eff_writeFile",
+        "prim_eff_writeFile_host",
+        "@vuna@prim_eff_writeFile_host",
+        "@vuna@host@writeFile"
+      ]),
+    ("strict_write_file_atomic",
+      [
+        "prim_eff_writeFileAtomic",
+        "@vuna@prim_eff_writeFileAtomic",
+        "prim_eff_writeFileAtomic_host",
+        "@vuna@prim_eff_writeFileAtomic_host",
+        "@vuna@host@writeFileAtomic"
+      ]),
+    ("tryReadDir", ["@vuna@host@tryReadDir"]),
+    ("tryRunIn",
+      [
+        "@vuna@host@tryRunIn",
+        "prim_eff_runIn",
+        "@vuna@prim_eff_runIn",
+        "prim_eff_runIn_host",
+        "@vuna@prim_eff_runIn_host",
+        "@vuna@host@runIn"
+      ]),
+    ("try_is_dir", ["@vuna@host@tryIsDirectory"]),
+    ("try_make_dir", ["@vuna@host@tryMakeDir"]),
+    ("try_make_dir_excl", ["@vuna@host@tryMakeDirExclusive"]),
+    ("try_read_file", ["@vuna@host@tryReadFile"]),
+    ("try_read_file_range", ["@vuna@host@tryReadFileRange"]),
+    ("try_remove_file", ["@vuna@host@tryRemoveFile"]),
+    ("try_remove_tree", ["@vuna@host@tryRemoveTree"]),
+    ("try_rename", ["@vuna@host@tryRename"]),
+    ("try_symlink", ["@vuna@host@trySymlink"]),
+    ("try_write_file", ["@vuna@host@tryWriteFile"]),
+    ("try_write_file_atomic", ["@vuna@host@tryWriteFileAtomic"]),
+    ("wait_pid", ["prim_eff_wait", "@vuna@prim_eff_wait"])
   ]
 
 nameInGroup : String -> List String -> Bool
 nameInGroup _ [] = False
 nameInGroup name (n :: rest) = if n == name then True else nameInGroup name rest
 
-hostLeafTarget : List (Pair String (List String)) -> String -> Maybe String
+hostLeafTarget : List (String, List String) -> String -> Maybe String
 hostLeafTarget [] _ = Nothing
 hostLeafTarget (g :: rest) sym =
   if nameInGroup sym (secondOf g) then Just (nativeRtLabel (firstOf g)) else hostLeafTarget rest sym

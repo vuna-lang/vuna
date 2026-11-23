@@ -91,9 +91,9 @@ export record WatTag(..) where
 export record WatFunc(..) where
   watFuncName : String
   watFuncType : String
-  watFuncParams : List (Pair String WatValTy)
+  watFuncParams : List (String, WatValTy)
   watFuncResults : List WatValTy
-  watFuncLocals : List (Pair String WatValTy)
+  watFuncLocals : List (String, WatValTy)
   watFuncBody : List Instr
 
 -- | 全局变量（所有 Vuna 顶层定义各一个）。

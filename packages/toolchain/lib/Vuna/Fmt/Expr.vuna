@@ -43,9 +43,9 @@ anyMultiline [] = False
 anyMultiline (e :: rest) = multilineExpr e || anyMultiline rest
 
 -- | 内部：记录字段里是否有必须多行的值。
-anyMultilineFields : List (Pair String Expr) -> Bool
+anyMultilineFields : List (String, Expr) -> Bool
 anyMultilineFields [] = False
-anyMultilineFields ((Pair name value) :: rest) = multilineExpr value || anyMultilineFields rest
+anyMultilineFields ((name, value) :: rest) = multilineExpr value || anyMultilineFields rest
 
 -- ---------------------------------------------------------------
 -- 字符串字面量：按 lexer 支持的转义重新编码
@@ -205,7 +205,7 @@ renderPatAtomsSpacedGo fuel pats =
       p :: rest => " ${renderPatAtomGo (fuel - 1) p}${renderPatAtomsSpacedGo (fuel - 1) rest}"
 
 -- | 内部：记录模式字段逗号连接。
-renderRecPatFieldsGo : Int -> List (Pair String Pat) -> String
+renderRecPatFieldsGo : Int -> List (String, Pat) -> String
 renderRecPatFieldsGo fuel fields =
   if fuel <= 0 then
     ""
@@ -294,7 +294,7 @@ renderPatAtomGo fuel pat =
       PRecord name fields _ => "(${renderRecPatGo (fuel - 1) name fields})"
 
 -- | 内部：记录模式 `Name { f = p }`（无字段时 `Name { }`）。
-renderRecPatGo : Int -> String -> List (Pair String Pat) -> String
+renderRecPatGo : Int -> String -> List (String, Pat) -> String
 renderRecPatGo fuel name fields =
   if fuel <= 0 then
     ""
@@ -304,8 +304,8 @@ renderRecPatGo fuel name fields =
     "${name} { ${renderRecPatFieldsGo (fuel - 1) fields} }"
 
 -- | 内部：记录模式字段 `f = p`（模式就是同名变量时只写名字）。
-renderRecPatFieldGo : Int -> Pair String Pat -> String
-renderRecPatFieldGo fuel (Pair fname pat) =
+renderRecPatFieldGo : Int -> (String, Pat) -> String
+renderRecPatFieldGo fuel (fname, pat) =
   if fuel <= 0 then
     ""
   else
@@ -364,18 +364,18 @@ opDeclOf : List FixityDecl -> String -> Maybe FixityDecl
 opDeclOf env op = lookupFixityDecl (tableOfKeepOps env) op
 
 -- | 内部：中缀打印用的 (优先级, 结合性)：1 = 右，0 = 左/未知。
-infixPrecOf : List FixityDecl -> String -> Maybe (Pair Int Int)
+infixPrecOf : List FixityDecl -> String -> Maybe (Int, Int)
 infixPrecOf env op =
   case opDeclOf env op of
-    Just d => Just (Pair d.fixityLevel (if d.fixityAssoc == 2 then 1 else 0))
-    Nothing => if isSymbolName op then Just (Pair 9 0) else Nothing
+    Just d => Just (d.fixityLevel, if d.fixityAssoc == 2 then 1 else 0)
+    Nothing => if isSymbolName op then Just (9, 0) else Nothing
 
 -- | 内部：打印侧优先级查询（只用于应用位置的符号名兜底；中缀链不走这里）。
-infixPrec : List FixityDecl -> String -> Pair Int Int
+infixPrec : List FixityDecl -> String -> (Int, Int)
 infixPrec env op =
   case infixPrecOf env op of
     Just fx => fx
-    Nothing => Pair 9 0
+    Nothing => (9, 0)
 
 -- | 内部：反引号中缀的运算符标签 `` `name` ``。
 backtickLabel : String -> String
@@ -414,22 +414,22 @@ identNameOkDot [] = False
 identNameOkDot (c :: rest) = if isIdentStart c then identNameOkGo rest else False
 
 -- | 内部：行字面量 `X@name` 的 (类型, 实例名)（不是该形态则为 `Nothing`）。
-rowAtParts : Expr -> Maybe (Pair Expr Expr)
-rowAtParts (EApp (EVar name _) ([e, n]) _) = if isRowAtSyntax name then Just (Pair e n) else Nothing
+rowAtParts : Expr -> Maybe (Expr, Expr)
+rowAtParts (EApp (EVar name _) ([e, n]) _) = if isRowAtSyntax name then Just (e, n) else Nothing
 rowAtParts _ = Nothing
 
 -- | 内部：实例名调用糖 `f@name args` 的 (函数, (实例名, 实参列表))；
 -- 编码见 `Frontend/Ast.appAtSyntax`。
-appAtParts : Expr -> Maybe (Pair Expr (Pair Expr (List Expr)))
+appAtParts : Expr -> Maybe (Expr, Expr, List Expr)
 appAtParts (EApp (EVar name _) (f :: nm :: rest) _) =
-  if isAppAtSyntax name then Just (Pair f (Pair nm rest)) else Nothing
+  if isAppAtSyntax name then Just (f, nm, rest) else Nothing
 appAtParts _ = Nothing
 
 -- | 内部：`handle` 标记的 (comp, (ret, op handler))。编码见 `Frontend/Ast.handleSyntax`：
 -- `EApp (EVar "@vuna@handle") [comp, ret, opH]`；ret 缺失时是哨兵。
-handleParts : Expr -> Maybe (Pair Expr (Pair Expr Expr))
+handleParts : Expr -> Maybe (Expr, Expr, Expr)
 handleParts (EApp (EVar name _) ([comp, ret, opH]) _) =
-  if isHandleSyntax name then Just (Pair comp (Pair ret opH)) else Nothing
+  if isHandleSyntax name then Just (comp, ret, opH) else Nothing
 handleParts _ = Nothing
 
 -- | 内部：handle 子句模式的逐项渲染（无前导空格）。合成形态把结果索引与续延 binder 拆成了
@@ -472,9 +472,8 @@ tupleExprElems (EApp (EVar name _) ([a, b]) _) =
 tupleExprElems _ = Nothing
 
 -- 类型标注 `(e : T)` 的保留名展开。
-ascribeParts : Expr -> Maybe (Pair Expr Expr)
-ascribeParts (EApp (EVar name _) ([v, t]) _) =
-  if isAscribeSyntax name then Just (Pair v t) else Nothing
+ascribeParts : Expr -> Maybe (Expr, Expr)
+ascribeParts (EApp (EVar name _) ([v, t]) _) = if isAscribeSyntax name then Just (v, t) else Nothing
 ascribeParts _ = Nothing
 
 -- 元组模式（parser 保留名）右嵌套展开成元素表。
@@ -529,7 +528,7 @@ inlinePrecGo fuel env minPrec e =
           Just b => Just (wrapPrec (minPrec > 0) "\\${joinComma (map firstOf ps)} => ${b}")
       EApp fn args sp =>
         case appAtParts (EApp fn args sp) of
-          Just (Pair f (Pair nm rest)) =>
+          Just (f, nm, rest) =>
             case inlineExprGo (fuel - 1) env f of
               Nothing => Nothing
               Just fs =>
@@ -561,7 +560,7 @@ inlinePrecGo fuel env minPrec e =
               Just _ => Nothing
               Nothing =>
                 case rowAtParts (EApp fn args sp) of
-                  Just (Pair lbl nm) =>
+                  Just (lbl, nm) =>
                     case inlineExprGo (fuel - 1) env lbl of
                       Nothing => Nothing
                       Just ls =>
@@ -588,7 +587,7 @@ inlinePrecGo fuel env minPrec e =
                                   Just ss => Just "(${joinComma ss})"
                               Nothing =>
                                 case ascribeParts (EApp fn args sp) of
-                                  Just (Pair v t) =>
+                                  Just (v, t) =>
                                     case inlineExprGo (fuel - 1) env v of
                                       Nothing => Nothing
                                       Just vs =>
@@ -665,14 +664,14 @@ wrapPrec True s = "(${s})"
 wrapPrec False s = s
 
 -- | 内部：记录字段 `f = e` 的单行列表（任一字段渲不出则为 `Nothing`）。
-inlineFieldsGo : Int -> List FixityDecl -> List (Pair String Expr) -> Maybe (List String)
+inlineFieldsGo : Int -> List FixityDecl -> List (String, Expr) -> Maybe (List String)
 inlineFieldsGo fuel env fields =
   if fuel <= 0 then
     Nothing
   else
     case fields of
       [] => Just []
-      (Pair fname value) :: rest =>
+      (fname, value) :: rest =>
         case inlinePrecGo (fuel - 1) env 0 value of
           Nothing => Nothing
           Just v =>
@@ -908,7 +907,7 @@ exprDoc fuel env at e =
           Just elems => group (appendDoc (text "(") (appendDoc (nest 2 (commaDocs (map (\x => exprDoc (fuel - 1) env at x) elems))) (text ")")))
           Nothing =>
             case ascribeParts (EApp fn args sp) of
-              Just (Pair v t) => group (appendDoc (text "(") (appendDoc (nest 2 (appendDoc (exprDoc (fuel - 1) env at v) (appendDoc (text " : ") (exprDoc (fuel - 1) env at t)))) (text ")")))
+              Just (v, t) => group (appendDoc (text "(") (appendDoc (nest 2 (appendDoc (exprDoc (fuel - 1) env at v) (appendDoc (text " : ") (exprDoc (fuel - 1) env at t)))) (text ")")))
               Nothing => appDoc (fuel - 1) env at (EApp fn args sp) fn args
       EPi name implicit qty dom cod _ => piDoc (fuel - 1) env at qty implicit name dom cod
       ELam ps body _ => group (appendDoc (text ("\\" ++ joinComma (map firstOf ps) ++ " =>")) (nest 2 (appendDoc (bodySep body) (exprDoc (fuel - 1) env at body))))
@@ -936,12 +935,12 @@ exprDoc fuel env at e =
       _ => flatDoc env e
 
 -- | 内部：`case` 分支序列。
-altsDoc : Int -> List FixityDecl -> TriviaCtx -> List (Pair Pat Expr) -> Doc
+altsDoc : Int -> List FixityDecl -> TriviaCtx -> List (Pat, Expr) -> Doc
 altsDoc fuel env at alts = if fuel <= 0 then empty else vsep (map (altDoc (fuel - 1) env at) alts)
 
 -- | 内部：单个 case 分支 `pat => body`。
-altDoc : Int -> List FixityDecl -> TriviaCtx -> Pair Pat Expr -> Doc
-altDoc fuel env at (Pair pat body) =
+altDoc : Int -> List FixityDecl -> TriviaCtx -> (Pat, Expr) -> Doc
+altDoc fuel env at (pat, body) =
   if fuel <= 0 then
     empty
   else
@@ -951,7 +950,7 @@ altDoc fuel env at (Pair pat body) =
     in attachAt at (patRef pat) (if multilineExpr body then appendDoc headD (nest 2 (appendDoc hard bodyD)) else group (appendDoc headD (nest 2 (appendDoc line bodyD))))
 
 -- | 内部：`let` 绑定块 + `in`。
-letDoc : Int -> List FixityDecl -> TriviaCtx -> List (Pair Pat Expr) -> Expr -> Doc
+letDoc : Int -> List FixityDecl -> TriviaCtx -> List (Pat, Expr) -> Expr -> Doc
 letDoc fuel env at binds body =
   if fuel <= 0 then
     empty
@@ -989,13 +988,13 @@ appDoc fuel env at whole fn args =
     empty
   else
     case appAtParts whole of
-      Just (Pair f (Pair nm rest)) => appAtDoc (fuel - 1) env at whole f nm rest
+      Just (f, nm, rest) => appAtDoc (fuel - 1) env at whole f nm rest
       Nothing =>
         case handleParts whole of
-          Just (Pair comp (Pair ret opH)) => handleDoc (fuel - 1) env at comp ret opH
+          Just (comp, ret, opH) => handleDoc (fuel - 1) env at comp ret opH
           Nothing =>
             case rowAtParts whole of
-              Just (Pair lbl nm) => flatDoc env whole
+              Just (lbl, nm) => flatDoc env whole
               Nothing =>
                 case performOperand whole of
                   Just op => group (appendDoc (text "perform ") (atomDoc (fuel - 1) env at op))
@@ -1033,20 +1032,19 @@ applyDoc fuel env at fn args =
       (appendDoc (atomDoc (fuel - 1) env at fn) (nest 2 (hcat (map (\a => appendDoc line (atomDoc (fuel - 1) env at a)) args))))
 
 -- | 内部：把中缀 / 反引号链按源码顺序摊平成「操作数表 + 运算符表」。
-sourceInfixParts : Expr -> Pair (List Expr) (List String)
+sourceInfixParts : Expr -> (List Expr, List String)
 sourceInfixParts (EInfix op l r _) =
   let
     lp = sourceInfixParts l
     rp = sourceInfixParts r
-  in Pair (append (firstOf lp) (firstOf rp)) (append (secondOf lp) (append [op] (secondOf rp)))
+  in (append (firstOf lp) (firstOf rp), append (secondOf lp) (append [op] (secondOf rp)))
 sourceInfixParts (EBacktick name l r _) =
   let
     lp = sourceInfixParts l
     rp = sourceInfixParts r
-  in Pair
-    (append (firstOf lp) (firstOf rp))
-    (append (secondOf lp) (append ["`" ++ name ++ "`"] (secondOf rp)))
-sourceInfixParts e = Pair [e] []
+  in (append (firstOf lp) (firstOf rp),
+    append (secondOf lp) (append ["`" ++ name ++ "`"] (secondOf rp)))
+sourceInfixParts e = ([e], [])
 
 -- | 内部：中缀链的单行渲染（操作数之间 ` op `）。
 inlineInfixChain : Int -> List FixityDecl -> Expr -> Maybe String
@@ -1055,8 +1053,8 @@ inlineInfixChain fuel env e =
     Nothing
   else
     case sourceInfixParts e of
-      Pair [] ops => Just ""
-      Pair (first :: rest) ops =>
+      ([], ops) => Just ""
+      (first :: rest, ops) =>
         case inlinePrecGo (fuel - 1) env 0 first of
           Nothing => Nothing
           Just s =>
@@ -1090,8 +1088,8 @@ sourceInfixDoc fuel env at e =
     empty
   else
     case sourceInfixParts e of
-      Pair [] ops => empty
-      Pair (first :: rest) ops => group (appendDoc (exprDoc (fuel - 1) env at first) (nest 2 (sourceInfixTailDoc (fuel - 1) env at ops rest)))
+      ([], ops) => empty
+      (first :: rest, ops) => group (appendDoc (exprDoc (fuel - 1) env at first) (nest 2 (sourceInfixTailDoc (fuel - 1) env at ops rest)))
 
 -- | 内部：中缀链余项的文档（每个运算符另起一行，缩进 2）。
 sourceInfixTailDoc : Int -> List FixityDecl -> TriviaCtx -> List String -> List Expr -> Doc
@@ -1151,7 +1149,7 @@ listDoc fuel env at elems =
       _ => group (appendDoc (text "[") (appendDoc (nest 2 (appendDoc soft (commaDocs (map (exprDoc (fuel - 1) env at) elems)))) (appendDoc soft (text "]"))))
 
 -- | 内部：记录字面量 `Name { f = e, ... }`。
-recordDoc : Int -> List FixityDecl -> TriviaCtx -> String -> List (Pair String Expr) -> Doc
+recordDoc : Int -> List FixityDecl -> TriviaCtx -> String -> List (String, Expr) -> Doc
 recordDoc fuel env at name fields =
   if fuel <= 0 then
     empty
@@ -1161,13 +1159,13 @@ recordDoc fuel env at name fields =
       _ => group (appendDoc (text "${name} {") (appendDoc (nest 2 (appendDoc line (fieldDocs (fuel - 1) env at fields))) (appendDoc line (text "}"))))
 
 -- | 内部：记录字段 `f = e`（逗号分隔）。
-fieldDocs : Int -> List FixityDecl -> TriviaCtx -> List (Pair String Expr) -> Doc
+fieldDocs : Int -> List FixityDecl -> TriviaCtx -> List (String, Expr) -> Doc
 fieldDocs fuel env at fields =
   if fuel <= 0 then empty else commaDocs (map (fieldDoc (fuel - 1) env at) fields)
 
 -- | 内部：单个记录字段。
-fieldDoc : Int -> List FixityDecl -> TriviaCtx -> Pair String Expr -> Doc
-fieldDoc fuel env at (Pair fname value) =
+fieldDoc : Int -> List FixityDecl -> TriviaCtx -> (String, Expr) -> Doc
+fieldDoc fuel env at (fname, value) =
   if fuel <= 0 then
     empty
   else
@@ -1175,7 +1173,7 @@ fieldDoc fuel env at (Pair fname value) =
       (appendDoc (text "${fname} =") (nest 2 (appendDoc line (exprDoc (fuel - 1) env at value))))
 
 -- | 内部：记录更新 `{ base | f = e, ... }`。
-recUpdateDoc : Int -> List FixityDecl -> TriviaCtx -> Expr -> List (Pair String Expr) -> Doc
+recUpdateDoc : Int -> List FixityDecl -> TriviaCtx -> Expr -> List (String, Expr) -> Doc
 recUpdateDoc fuel env at base fields =
   if fuel <= 0 then
     empty
@@ -1210,21 +1208,21 @@ stmtDoc fuel env at stmt =
           )
 
 -- | 内部：`do` 里的 `let` 绑定块（`let` + 缩进 2 的绑定表）。
-letBlockDoc : Int -> List FixityDecl -> TriviaCtx -> List (Pair Pat Expr) -> Doc
+letBlockDoc : Int -> List FixityDecl -> TriviaCtx -> List (Pat, Expr) -> Doc
 letBlockDoc fuel env at binds =
   appendDoc (text "let") (nest 2 (appendDoc hard (vsep (map (bindingDoc (fuel - 1) env at) binds))))
 
 -- 单条绑定能否写成 `let pat = value`：签名行、局部函数组与块结构值必须走绑定块，
 -- 因为它们的后续行要与绑定列对齐。
 -- | 内部：单条 `let` 绑定是否可以内联成 `let pat = value`。
-inlineLetBind : Pair Pat Expr -> Bool
-inlineLetBind (Pair _ (EAnn _ _ _)) = False
-inlineLetBind (Pair _ (ELocalFun _ _)) = False
-inlineLetBind (Pair _ value) = not (multilineExpr value)
+inlineLetBind : (Pat, Expr) -> Bool
+inlineLetBind (_, EAnn _ _ _) = False
+inlineLetBind (_, ELocalFun _ _) = False
+inlineLetBind (_, value) = not (multilineExpr value)
 
 -- | 内部：绑定（`name = value`，可带签名行 / 局部函数 clause）。
-bindingDoc : Int -> List FixityDecl -> TriviaCtx -> Pair Pat Expr -> Doc
-bindingDoc fuel env at (Pair pat value) =
+bindingDoc : Int -> List FixityDecl -> TriviaCtx -> (Pat, Expr) -> Doc
+bindingDoc fuel env at (pat, value) =
   if fuel <= 0 then
     empty
   else
@@ -1244,7 +1242,7 @@ bindingBodyDoc fuel env at pat value =
   else
     case value of
       ELocalFun clauses _ => localFunDoc (fuel - 1) env at (renderPatGo formatFuelBound pat) clauses
-      ELam ps inner _ => localFunDoc (fuel - 1) env at (renderPatGo formatFuelBound pat) [Pair (map (\p => PVar (firstOf p) (detachedNodeRef (secondOf p))) ps) inner]
+      ELam ps inner _ => localFunDoc (fuel - 1) env at (renderPatGo formatFuelBound pat) [(map (\p => PVar (firstOf p) (detachedNodeRef (secondOf p))) ps, inner)]
       _ => bindingValueDoc (fuel - 1) env at (renderPatGo formatFuelBound pat) value
 
 -- | 内部：`lhs = value`（能一行就一行，否则值缩进 2）。
@@ -1259,13 +1257,13 @@ bindingValueDoc fuel env at lhs value =
     in if multilineExpr value then appendDoc headD (nest 2 (appendDoc hard valueD)) else group (appendDoc headD (nest 2 (appendDoc line valueD)))
 
 -- | 内部：where / let 的多 clause 局部函数。
-localFunDoc : Int -> List FixityDecl -> TriviaCtx -> String -> List (Pair (List Pat) Expr) -> Doc
+localFunDoc : Int -> List FixityDecl -> TriviaCtx -> String -> List (List Pat, Expr) -> Doc
 localFunDoc fuel env at headText clauses =
   if fuel <= 0 then empty else vsep (map (localClauseDoc (fuel - 1) env at headText) clauses)
 
 -- | 内部：单条局部函数 clause。
-localClauseDoc : Int -> List FixityDecl -> TriviaCtx -> String -> Pair (List Pat) Expr -> Doc
-localClauseDoc fuel env at headText (Pair pats body) =
+localClauseDoc : Int -> List FixityDecl -> TriviaCtx -> String -> (List Pat, Expr) -> Doc
+localClauseDoc fuel env at headText (pats, body) =
   if fuel <= 0 then
     empty
   else
@@ -1281,11 +1279,11 @@ handleDoc fuel env at comp ret op =
       headD = appendDoc (text "handle ") (appendDoc (handleCompDoc (fuel - 1) env at comp) (text " {"))
       retDs =
         case ret of
-          ELam ([Pair x _]) body _ => [handleRetDoc (fuel - 1) env at x body]
+          ELam ([(x, _)]) body _ => [handleRetDoc (fuel - 1) env at x body]
           _ => []
       opDs =
         case op of
-          ELam (_ :: _ :: (Pair k _) :: _) (ECase _ alts _) _ => map (handleAltDoc (fuel - 1) env at k) alts
+          ELam (_ :: _ :: (k, _) :: _) (ECase _ alts _) _ => map (handleAltDoc (fuel - 1) env at k) alts
           _ => []
       clauses = append retDs opDs
     in appendDoc headD (appendDoc (nest 2 (appendDoc hard (vsep clauses))) (appendDoc hard (text "}")))
@@ -1314,16 +1312,16 @@ handleRetDoc fuel env at x body =
       (appendDoc (text ("return " ++ x ++ " ->")) (nest 2 (appendDoc line (exprDoc (fuel - 1) env at body))))
 
 -- | 内部：operator handler 子句 `Op p1 p2 k -> body`。
-handleAltDoc : Int -> List FixityDecl -> TriviaCtx -> String -> Pair Pat Expr -> Doc
-handleAltDoc fuel env at k (Pair pat body) =
+handleAltDoc : Int -> List FixityDecl -> TriviaCtx -> String -> (Pat, Expr) -> Doc
+handleAltDoc fuel env at k (pat, body) =
   if fuel <= 0 then
     empty
   else
     let
       parts =
         case pat of
-          PCon c ps _ => Pair c (renderHandlePats formatFuelBound ps)
-          _ => Pair "_" ""
+          PCon c ps _ => (c, renderHandlePats formatFuelBound ps)
+          _ => ("_", "")
       cname = firstOf parts
       patsTxt = secondOf parts
       headText = if patsTxt == "" then "${cname} ${k} ->" else "${cname} ${patsTxt} ${k} ->"
@@ -1408,7 +1406,7 @@ export renderPatAtom : Pat -> String
 renderPatAtom pat = renderPatAtomGo formatFuelBound pat
 
 -- | 渲染 let / where 绑定（带签名行时先输出签名，局部函数展开成多 clause）。
-export renderBinding : List FixityDecl -> TriviaCtx -> Pair Pat Expr -> Doc
+export renderBinding : List FixityDecl -> TriviaCtx -> (Pat, Expr) -> Doc
 renderBinding env at binding = bindingDoc formatFuelBound env at binding
 
 -- | 内部：section 自带括号，外层 `EParen` 不再重复加。

@@ -40,11 +40,11 @@ record Inl where
   inlOut : List IrDef
 
 -- | 程序级内联：返回（可能去掉死定义前的）定义表与「是否发生过内联」。
-export inlineDefs : List String -> List IrDef -> Pair (List IrDef) Bool
+export inlineDefs : List String -> List IrDef -> (List IrDef, Bool)
 inlineDefs recNames defs =
   let
     st = foldl (\s, d => inlineOne defs s d) (Inl 0 0 recNames []) defs
-  in Pair (reverse st.inlOut) (st.inlCount > 0)
+  in (reverse st.inlOut, st.inlCount > 0)
 
 inlineOne : List IrDef -> Inl -> IrDef -> Inl
 inlineOne _ st (IrExternDef name ty sym span) =
@@ -62,10 +62,10 @@ rwFuelOf body = 32 + 4 * irSize body
 -- ---------------------------------------------------------------
 -- 重写（按调用点）
 -- ---------------------------------------------------------------
-rw : Int -> List IrDef -> Ir -> Inl -> Pair Ir Inl
+rw : Int -> List IrDef -> Ir -> Inl -> (Ir, Inl)
 rw fuel defs ir st =
   if fuel <= 0 then
-    Pair ir st
+    (ir, st)
   else
     case ir of
       IrApp _ _ _ =>
@@ -84,124 +84,124 @@ rw fuel defs ir st =
       IrProj base fam field ty =>
         let
           p = rw (fuel - 1) defs base st
-        in Pair (IrProj (firstOf p) fam field ty) (secondOf p)
+        in (IrProj (firstOf p) fam field ty, secondOf p)
       IrRecUpd base fam fields ty =>
         let
           b = rw (fuel - 1) defs base st
           f = mapFieldsKeep (fuel - 1) defs fields (secondOf b)
-        in Pair (IrRecUpd (firstOf b) fam (firstOf f) ty) (secondOf f)
+        in (IrRecUpd (firstOf b) fam (firstOf f) ty, secondOf f)
       IrRtApp sym args => mapList (fuel - 1) (IrRtApp sym) defs args st
       IrCast from to inner =>
         let
           p = rw (fuel - 1) defs inner st
-        in Pair (IrCast from to (firstOf p)) (secondOf p)
+        in (IrCast from to (firstOf p), secondOf p)
       IrTail inner =>
         let
           p = rw (fuel - 1) defs inner st
-        in Pair (IrTail (firstOf p)) (secondOf p)
+        in (IrTail (firstOf p), secondOf p)
       IrLet bs scrut body =>
         let
           s = rw (fuel - 1) defs scrut st
           b = rw (fuel - 1) defs body (secondOf s)
-        in Pair (IrLet bs (firstOf s) (firstOf b)) (secondOf b)
+        in (IrLet bs (firstOf s) (firstOf b), secondOf b)
       IrLam bs rt body =>
         let
           p = rw (fuel - 1) defs body st
-        in Pair (IrLam bs rt (firstOf p)) (secondOf p)
+        in (IrLam bs rt (firstOf p), secondOf p)
       IrIf c t e =>
         let
           pc = rw (fuel - 1) defs c st
           pt = rw (fuel - 1) defs t (secondOf pc)
           pe = rw (fuel - 1) defs e (secondOf pt)
-        in Pair (IrIf (firstOf pc) (firstOf pt) (firstOf pe)) (secondOf pe)
+        in (IrIf (firstOf pc) (firstOf pt) (firstOf pe), secondOf pe)
       IrCase ty k scrut alts =>
         let
           ps = rw (fuel - 1) defs scrut st
           pa = mapAlts (fuel - 1) defs alts (secondOf ps)
-        in Pair (IrCase ty k (firstOf ps) (firstOf pa)) (secondOf pa)
+        in (IrCase ty k (firstOf ps) (firstOf pa), secondOf pa)
       IrNatCase scrut f z s c =>
         let
           ps = rw (fuel - 1) defs scrut st
           pz = mapAltMaybe (fuel - 1) defs z (secondOf ps)
           psm = mapAltMaybe (fuel - 1) defs s (secondOf pz)
           pc = mapAltMaybe (fuel - 1) defs c (secondOf psm)
-        in Pair (IrNatCase (firstOf ps) f (firstOf pz) (firstOf psm) (firstOf pc)) (secondOf pc)
+        in (IrNatCase (firstOf ps) f (firstOf pz) (firstOf psm) (firstOf pc), secondOf pc)
       IrConcatMany parts => mapList (fuel - 1) IrConcatMany defs parts st
       IrEffThunk fam ctor ty arity prim =>
         let
           p = rw (fuel - 1) defs prim st
-        in Pair (IrEffThunk fam ctor ty arity (firstOf p)) (secondOf p)
-      _ => Pair ir st
+        in (IrEffThunk fam ctor ty arity (firstOf p), secondOf p)
+      _ => (ir, st)
 
-rwApp : Int -> List IrDef -> Ir -> List Ir -> Inl -> Pair Ir Inl
+rwApp : Int -> List IrDef -> Ir -> List Ir -> Inl -> (Ir, Inl)
 rwApp fuel defs head args st =
   let
     h = rw (fuel - 1) defs head st
     a = mapIrs (fuel - 1) defs args (secondOf h)
-  in Pair (Synthetic.applyAllIr (firstOf h) (firstOf a)) (secondOf a)
+  in (Synthetic.applyAllIr (firstOf h) (firstOf a), secondOf a)
 
-mapList : Int -> (List Ir -> Ir) -> List IrDef -> List Ir -> Inl -> Pair Ir Inl
+mapList : Int -> (List Ir -> Ir) -> List IrDef -> List Ir -> Inl -> (Ir, Inl)
 mapList fuel build defs xs st =
   let
     p = mapIrs fuel defs xs st
-  in Pair (build (firstOf p)) (secondOf p)
+  in (build (firstOf p), secondOf p)
 
-mapIrs : Int -> List IrDef -> List Ir -> Inl -> Pair (List Ir) Inl
-mapIrs _ _ [] st = Pair [] st
+mapIrs : Int -> List IrDef -> List Ir -> Inl -> (List Ir, Inl)
+mapIrs _ _ [] st = ([], st)
 mapIrs fuel defs (x :: rest) st =
   if fuel <= 0 then
-    Pair (x :: rest) st
+    (x :: rest, st)
   else
     let
       px = rw (fuel - 1) defs x st
       pr = mapIrs (fuel - 1) defs rest (secondOf px)
-    in Pair (firstOf px :: firstOf pr) (secondOf pr)
+    in (firstOf px :: firstOf pr, secondOf pr)
 
-mapFields : Int -> (List (Pair String Ir) -> Ir) -> List IrDef -> List (Pair String Ir) -> Inl -> Pair Ir Inl
+mapFields : Int -> (List (String, Ir) -> Ir) -> List IrDef -> List (String, Ir) -> Inl -> (Ir, Inl)
 mapFields fuel build defs fields st =
   let
     p = mapFieldsKeep fuel defs fields st
-  in Pair (build (firstOf p)) (secondOf p)
+  in (build (firstOf p), secondOf p)
 
-mapFieldsKeep : Int -> List IrDef -> List (Pair String Ir) -> Inl -> Pair (List (Pair String Ir)) Inl
-mapFieldsKeep _ _ [] st = Pair [] st
+mapFieldsKeep : Int -> List IrDef -> List (String, Ir) -> Inl -> (List (String, Ir), Inl)
+mapFieldsKeep _ _ [] st = ([], st)
 mapFieldsKeep fuel defs (p :: rest) st =
   if fuel <= 0 then
-    Pair (p :: rest) st
+    (p :: rest, st)
   else
     let
       pv = rw (fuel - 1) defs (secondOf p) st
       pr = mapFieldsKeep (fuel - 1) defs rest (secondOf pv)
-    in Pair (Pair (firstOf p) (firstOf pv) :: firstOf pr) (secondOf pr)
+    in ((firstOf p, firstOf pv) :: firstOf pr, secondOf pr)
 
-mapAlt : Int -> List IrDef -> IrAlt -> Inl -> Pair IrAlt Inl
+mapAlt : Int -> List IrDef -> IrAlt -> Inl -> (IrAlt, Inl)
 mapAlt fuel defs alt st =
   let
     p = rw (fuel - 1) defs alt.irAltBody st
-  in Pair (IrAlt alt.irAltCtor alt.irAltBinders (firstOf p)) (secondOf p)
+  in (IrAlt alt.irAltCtor alt.irAltBinders (firstOf p), secondOf p)
 
-mapAltMaybe : Int -> List IrDef -> Maybe IrAlt -> Inl -> Pair (Maybe IrAlt) Inl
-mapAltMaybe _ _ Nothing st = Pair Nothing st
+mapAltMaybe : Int -> List IrDef -> Maybe IrAlt -> Inl -> (Maybe IrAlt, Inl)
+mapAltMaybe _ _ Nothing st = (Nothing, st)
 mapAltMaybe fuel defs (Just alt) st =
   let
     p = mapAlt fuel defs alt st
-  in Pair (Just (firstOf p)) (secondOf p)
+  in (Just (firstOf p), secondOf p)
 
-mapAlts : Int -> List IrDef -> List IrAlt -> Inl -> Pair (List IrAlt) Inl
-mapAlts _ _ [] st = Pair [] st
+mapAlts : Int -> List IrDef -> List IrAlt -> Inl -> (List IrAlt, Inl)
+mapAlts _ _ [] st = ([], st)
 mapAlts fuel defs (a :: rest) st =
   if fuel <= 0 then
-    Pair (a :: rest) st
+    (a :: rest, st)
   else
     let
       pa = mapAlt fuel defs a st
       pr = mapAlts (fuel - 1) defs rest (secondOf pa)
-    in Pair (firstOf pa :: firstOf pr) (secondOf pr)
+    in (firstOf pa :: firstOf pr, secondOf pr)
 
 -- ---------------------------------------------------------------
 -- 内联判定
 -- ---------------------------------------------------------------
-tryInline : List IrDef -> String -> List Ir -> Inl -> Maybe (Pair Ir Inl)
+tryInline : List IrDef -> String -> List Ir -> Inl -> Maybe (Ir, Inl)
 tryInline defs name args st =
   if memStr name st.inlRec then
     Nothing
@@ -233,7 +233,7 @@ tryInline defs name args st =
                     let
                       body2 = Tail.stripTail (inlineBody (pairBinders rbs args) inner)
                       st2 = { st | inlUsed = st.inlUsed + 1, inlCount = st.inlCount + 1 }
-                    in Just (Pair body2 st2)
+                    in Just (body2, st2)
                 _ => Nothing
 
 -- | 体里带 lambda 的定义不内联：把闭包体拖进调用者，既复制代码也放大调用者的帧
@@ -260,7 +260,7 @@ anyHasLam : List Ir -> Bool
 anyHasLam [] = False
 anyHasLam (x :: rest) = if hasLam x then True else anyHasLam rest
 
-anyHasLamFields : List (Pair String Ir) -> Bool
+anyHasLamFields : List (String, Ir) -> Bool
 anyHasLamFields [] = False
 anyHasLamFields (p :: rest) = if hasLam (secondOf p) then True else anyHasLamFields rest
 
@@ -337,15 +337,15 @@ trivialArg (IrBool _) = True
 trivialArg (IrFloatLit _) = True
 trivialArg _ = False
 
-pairBinders : List IrBinder -> List Ir -> List (Pair Int Ir)
+pairBinders : List IrBinder -> List Ir -> List (Int, Ir)
 pairBinders [] _ = []
 pairBinders _ [] = []
-pairBinders (b :: brest) (a :: arest) = Pair b.irBinderId a :: pairBinders brest arest
+pairBinders (b :: brest) (a :: arest) = (b.irBinderId, a) :: pairBinders brest arest
 
 -- ---------------------------------------------------------------
 -- 代入（按 binder 身份）
 -- ---------------------------------------------------------------
-inlineBody : List (Pair Int Ir) -> Ir -> Ir
+inlineBody : List (Int, Ir) -> Ir -> Ir
 inlineBody reps (IrVar b) =
   case lookupId b.irBinderId reps of
     Just r => r
@@ -360,13 +360,13 @@ inlineBody reps (IrNatCase scrut f z s c) =
   IrNatCase (inlineBody reps scrut) f (inlineAltM reps z) (inlineAltM reps s) (inlineAltM reps c)
 inlineBody reps (IrCtor fam ctor ty args) = IrCtor fam ctor ty (map (inlineBody reps) args)
 inlineBody reps (IrRecord fam ty fields) =
-  IrRecord fam ty (map (\p => Pair (firstOf p) (inlineBody reps (secondOf p))) fields)
+  IrRecord fam ty (map (\p => (firstOf p, inlineBody reps (secondOf p))) fields)
 inlineBody reps (IrProj base fam field ty) = IrProj (inlineBody reps base) fam field ty
 inlineBody reps (IrRecUpd base fam fields ty) =
   IrRecUpd
     (inlineBody reps base)
     fam
-    (map (\p => Pair (firstOf p) (inlineBody reps (secondOf p))) fields)
+    (map (\p => (firstOf p, inlineBody reps (secondOf p))) fields)
     ty
 inlineBody reps (IrRtApp sym args) = IrRtApp sym (map (inlineBody reps) args)
 inlineBody reps (IrCast from to inner) = IrCast from to (inlineBody reps inner)
@@ -376,14 +376,14 @@ inlineBody reps (IrEffThunk fam ctor ty arity prim) =
   IrEffThunk fam ctor ty arity (inlineBody reps prim)
 inlineBody _ ir = ir
 
-inlineAlt : List (Pair Int Ir) -> IrAlt -> IrAlt
+inlineAlt : List (Int, Ir) -> IrAlt -> IrAlt
 inlineAlt reps alt = IrAlt alt.irAltCtor alt.irAltBinders (inlineBody reps alt.irAltBody)
 
-inlineAltM : List (Pair Int Ir) -> Maybe IrAlt -> Maybe IrAlt
+inlineAltM : List (Int, Ir) -> Maybe IrAlt -> Maybe IrAlt
 inlineAltM _ Nothing = Nothing
 inlineAltM reps (Just alt) = Just (inlineAlt reps alt)
 
-lookupId : Int -> List (Pair Int Ir) -> Maybe Ir
+lookupId : Int -> List (Int, Ir) -> Maybe Ir
 lookupId _ [] = Nothing
 lookupId id (p :: rest) = if firstOf p == id then Just (secondOf p) else lookupId id rest
 

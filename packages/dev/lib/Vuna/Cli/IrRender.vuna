@@ -28,7 +28,7 @@ binderText b =
 binderList : List IrBinder -> String
 binderList bs = String.join " " (map binderText bs)
 
-ctorText : Maybe (Pair String String) -> String
+ctorText : Maybe (String, String) -> String
 ctorText Nothing = "*"
 ctorText (Just p) = firstOf p ++ "." ++ secondOf p
 
@@ -52,7 +52,7 @@ tyListText : Maybe (List IrTy) -> String
 tyListText Nothing = "?"
 tyListText (Just tys) = "[" ++ String.join "," (map tyText tys) ++ "]"
 
-appTyText : Maybe (Pair IrTy IrTy) -> String
+appTyText : Maybe (IrTy, IrTy) -> String
 appTyText Nothing = "?"
 appTyText (Just p) = tyText (firstOf p) ++ "->" ++ tyText (secondOf p)
 
@@ -84,7 +84,7 @@ renderList fuel xs =
       [x] => renderIr (fuel - 1) x
       x :: rest => renderIr (fuel - 1) x ++ " " ++ renderList (fuel - 1) rest
 
-renderFields : Int -> List (Pair String Ir) -> String
+renderFields : Int -> List (String, Ir) -> String
 renderFields fuel fs =
   if fuel <= 0 then
     "..."
@@ -93,17 +93,17 @@ renderFields fuel fs =
       [] => ""
       p :: rest => firstOf p ++ "=" ++ renderIr (fuel - 1) (secondOf p) ++ " " ++ renderFields (fuel - 1) rest
 
-renderApp : Int -> Ir -> Pair String String
+renderApp : Int -> Ir -> (String, String)
 renderApp fuel e =
   if fuel <= 0 then
-    Pair "..." ""
+    ("...", "")
   else
     case e of
       IrApp _ f a =>
         let
           p = renderApp (fuel - 1) f
-        in Pair (firstOf p) (secondOf p ++ " " ++ renderIr (fuel - 1) a)
-      _ => Pair (renderIr (fuel - 1) e) ""
+        in (firstOf p, secondOf p ++ " " ++ renderIr (fuel - 1) a)
+      _ => (renderIr (fuel - 1) e, "")
 
 renderIr : Int -> Ir -> String
 renderIr fuel e =

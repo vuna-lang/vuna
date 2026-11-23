@@ -118,11 +118,11 @@ parentOf path =
 parentText : String -> String
 parentText path =
   case splitLastSlash (strUnpack path) [] [] of
-    Pair parent _ => parent
+    (parent, _) => parent
 
 -- | 内部：在最后一个 `/` 处把路径拆成 `Pair 父 名`，两段都按原字节还原。
-splitLastSlash : List Int -> List Int -> List String -> Pair String String
-splitLastSlash [] current parts = Pair (joinSlashParts parts) (strPack (reverse current))
+splitLastSlash : List Int -> List Int -> List String -> (String, String)
+splitLastSlash [] current parts = (joinSlashParts parts, strPack (reverse current))
 splitLastSlash (c :: rest) current parts =
   if c == 47 then
     splitLastSlash rest [] (strPack (reverse current) :: parts)

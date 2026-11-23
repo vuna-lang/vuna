@@ -80,11 +80,11 @@ parseSpec text =
         _ => Nothing
 
 -- | 解析 describe 文本（只要域与命令表）。
-export parse : String -> Maybe (Pair String (List Cmd))
+export parse : String -> Maybe (String, List Cmd)
 parse text =
   case parseSpec text of
     Nothing => Nothing
-    Just spec => Just (Pair spec.specDomain spec.specCommands)
+    Just spec => Just (spec.specDomain, spec.specCommands)
 
 -- | 内部：全部 `req` 行。
 reqsOfLines : List String -> List String

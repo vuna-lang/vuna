@@ -142,41 +142,41 @@ labelRelatedJson label lines (Label (Just s) text _ _) =
   else
     [
       JObj
-        [Pair "location" (JObj [Pair "uri" (JStr (pathToUri label)), Pair "range" (labelRangeJson lines s)]), Pair "message" (JStr text)]
+        [("location", JObj [("uri", JStr (pathToUri label)), ("range", labelRangeJson lines s)]), ("message", JStr text)]
     ]
 
 -- | 内部：一个结构化诊断字段 → `data` 数组项（机器消费，不解析散文）。
 fieldJson : DiagField -> Json
-fieldJson (FieldExpected s) = JObj [Pair "kind" (JStr "expected"), Pair "value" (JStr s)]
-fieldJson (FieldFound s) = JObj [Pair "kind" (JStr "found"), Pair "value" (JStr s)]
-fieldJson (FieldName s) = JObj [Pair "kind" (JStr "name"), Pair "value" (JStr s)]
+fieldJson (FieldExpected s) = JObj [("kind", JStr "expected"), ("value", JStr s)]
+fieldJson (FieldFound s) = JObj [("kind", JStr "found"), ("value", JStr s)]
+fieldJson (FieldName s) = JObj [("kind", JStr "name"), ("value", JStr s)]
 fieldJson (FieldCandidates cs) =
-  JObj [Pair "kind" (JStr "candidates"), Pair "value" (JArr (map candidateJson cs))]
+  JObj [("kind", JStr "candidates"), ("value", JArr (map candidateJson cs))]
 fieldJson (FieldCall c) =
   JObj
-    [Pair "kind" (JStr "call"), Pair "value" (JObj [Pair "callee" (JStr c.callCallee), Pair "arg" (JStr c.callArg), Pair "relation" (JStr c.callRelation)])]
+    [("kind", JStr "call"), ("value", JObj [("callee", JStr c.callCallee), ("arg", JStr c.callArg), ("relation", JStr c.callRelation)])]
 fieldJson (FieldQuantity name declared observed) =
   JObj
-    [Pair "kind" (JStr "quantity"), Pair "value" (JObj [Pair "name" (JStr name), Pair "declared" (JNum declared), Pair "observed" (JNum observed)])]
-fieldJson (FieldEffect s) = JObj [Pair "kind" (JStr "effect"), Pair "value" (JStr s)]
-fieldJson (FieldModule s) = JObj [Pair "kind" (JStr "module"), Pair "value" (JStr s)]
+    [("kind", JStr "quantity"), ("value", JObj [("name", JStr name), ("declared", JNum declared), ("observed", JNum observed)])]
+fieldJson (FieldEffect s) = JObj [("kind", JStr "effect"), ("value", JStr s)]
+fieldJson (FieldModule s) = JObj [("kind", JStr "module"), ("value", JStr s)]
 fieldJson (FieldSpan name sp) =
   JObj
-    [Pair "kind" (JStr "span"), Pair "name" (JStr name), Pair "value" (JObj [Pair "file" (JStr sp.spanFile), Pair "line" (JNum sp.spanStartLine), Pair "column" (JNum sp.spanStartCol)])]
-fieldJson (FieldNote s) = JObj [Pair "kind" (JStr "note"), Pair "value" (JStr s)]
+    [("kind", JStr "span"), ("name", JStr name), ("value", JObj [("file", JStr sp.spanFile), ("line", JNum sp.spanStartLine), ("column", JNum sp.spanStartCol)])]
+fieldJson (FieldNote s) = JObj [("kind", JStr "note"), ("value", JStr s)]
 
 -- | 内部：候选修复 → `data` 里的一项；`span` 与 `reason` 仅在存在时出现。
 candidateJson : Candidate -> Json
 candidateJson c =
   JObj (
-      append [Pair "text" (JStr c.candidateText)] (
+      append [("text", JStr c.candidateText)] (
           append (
               case c.candidateSpan of
-                Just sp => [Pair "span" (spanRange sp)]
+                Just sp => [("span", spanRange sp)]
                 Nothing => []
             ) (
               case c.candidateReason of
-                Just r => [Pair "reason" (JStr r)]
+                Just r => [("reason", JStr r)]
                 Nothing => []
             )
         )
@@ -207,38 +207,35 @@ diagnosticJson label lines d =
     fieldData = append (append (map fieldJson d.diagFields) (originFields d)) (catalogFields d)
     base =
       [
-        Pair "range" range,
-        Pair "severity" (JNum (lspSeverityOf d.diagSeverity)),
-        Pair "source" (JStr "vuna"),
-        Pair "message" (JStr (messageWithExtras d))
+        ("range", range),
+        ("severity", JNum (lspSeverityOf d.diagSeverity)),
+        ("source", JStr "vuna"),
+        ("message", JStr (messageWithExtras d))
       ]
-    withCode = if d.diagCode == "" then base else append base [Pair "code" (JStr d.diagCode)]
+    withCode = if d.diagCode == "" then base else append base [("code", JStr d.diagCode)]
     withDescription =
       if startsWith "LN_" d.diagCode then
         append
           withCode
-          [Pair "codeDescription" (JObj [Pair "href" (JStr "https://github.com/vuna-lang/vuna/blob/main/docs/reference/lint.md")])]
+          [("codeDescription", JObj [("href", JStr "https://github.com/vuna-lang/vuna/blob/main/docs/reference/lint.md")])]
       else
         withCode
     tags = lspTagsOf d.diagCode
     withTags =
-      if length tags == 0 then withDescription else append withDescription [Pair "tags" (JArr tags)]
+      if length tags == 0 then withDescription else append withDescription [("tags", JArr tags)]
     withRelated =
       if length related == 0 then
         withTags
       else
-        append withTags [Pair "relatedInformation" (JArr related)]
+        append withTags [("relatedInformation", JArr related)]
     withData =
-      if length fieldData == 0 then
-        withRelated
-      else
-        append withRelated [Pair "data" (JArr fieldData)]
+      if length fieldData == 0 then withRelated else append withRelated [("data", JArr fieldData)]
   in JObj withData
 
 -- | 文档 URI → 包上下文。返回的 `String` 是判归属用的路径标签：URI 能解码出路径时是解码后的
 -- 路径（即使磁盘上不存在），解码不出时为空串；找不到文件或非 file URI 时退化到 cwd 的
 -- `contextForDir "."`，失败（`ErrC`）由调用方转成 0:0 的 `pkg: ...` 诊断。
-export contextForDoc : Member nFs FsOp r, Member nEnv EnvOp r => String -> Eff r (Check (Pair String PackageContext))
+export contextForDoc : Member nFs FsOp r, Member nEnv EnvOp r => String -> Eff r (Check (String, PackageContext))
 contextForDoc uri =
   let
     path = decodeUri uri
@@ -248,7 +245,7 @@ contextForDoc uri =
       pure (
           case ctxR of
             ErrC e => ErrC e
-            OkC ctx => OkC (Pair "" ctx)
+            OkC ctx => OkC ("", ctx)
         )
   else
     do
@@ -259,7 +256,7 @@ contextForDoc uri =
           pure (
               case ctxR of
                 ErrC e => ErrC e
-                OkC ctx => OkC (Pair path ctx)
+                OkC ctx => OkC (path, ctx)
             )
       else
         do
@@ -267,7 +264,7 @@ contextForDoc uri =
           pure (
               case ctxR of
                 ErrC e => ErrC e
-                OkC ctx => OkC (Pair path ctx)
+                OkC ctx => OkC (path, ctx)
             )
 
 -- ---------------------------------------------------------------
@@ -511,7 +508,7 @@ entryHashMatches (Just h) x = h == x
 
 -- | 内部：单文件增量精化（会话可用）——依赖接口 + 本包干净模块预置，只精化当前 buffer；
 -- `applied = False` 表示安全阀判定不适用，调用方应回退全量。
-incrementalCheckedOf : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => DiagCache -> ToolContext -> String -> String -> Maybe String -> List Import -> Bool -> Eff r (Check (Pair Bool (Pair (List Diagnostic) (Pair (Maybe CheckedPackage) (Maybe AuxCache)))))
+incrementalCheckedOf : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => DiagCache -> ToolContext -> String -> String -> Maybe String -> List Import -> Bool -> Eff r (Check (Bool, List Diagnostic, Maybe CheckedPackage, Maybe AuxCache))
 incrementalCheckedOf session tool label text modName imports needPkg =
   let
     cleanNeeded = cleanNeededOf session tool imports
@@ -526,10 +523,10 @@ incrementalCheckedOf session tool label text modName imports needPkg =
 
 -- | 内部：增量精化入口。返回（新会话,（错误, 警告））；会话为 `Nothing` 表示增量不适用、
 -- 调用方应回退全量。成功时把本次 termAux 缓存进会话，并在 buffer == 磁盘时写回模块接口。
-checkIncremental : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => DiagCache -> String -> String -> Maybe String -> List Import -> Eff r (Pair (Maybe DiagCache) (Pair (List Diagnostic) (List Diagnostic)))
+checkIncremental : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => DiagCache -> String -> String -> Maybe String -> List Import -> Eff r (Maybe DiagCache, List Diagnostic, List Diagnostic)
 checkIncremental session label text modName imports =
   case session.dcTool of
-    Nothing => pure (Pair Nothing (Pair [] []))
+    Nothing => pure (Nothing, [], [])
     Just tool =>
       do
         needPkg <-
@@ -538,19 +535,19 @@ checkIncremental session label text modName imports =
             Nothing => pure False
         checkedR <- incrementalCheckedOf session tool label text modName imports needPkg
         case checkedR of
-          ErrC e => pure (Pair (Just session) (Pair (diagsOfCheck label (ErrC e)) []))
-          OkC (Pair applied (Pair warns (Pair maybePkg maybeAux))) =>
+          ErrC e => pure (Just session, diagsOfCheck label (ErrC e), [])
+          OkC (applied, warns, maybePkg, maybeAux) =>
             if applied then
               let
                 session2 = DiagCache session.dcLabel session.dcKey session.dcCtx session.dcDb session.dcTool session.dcClean session.dcBuiltSec session.dcStats maybeAux session.dcFix
               in case maybePkg of
-                Nothing => pure (Pair (Just session2) (Pair [] warns))
+                Nothing => pure (Just session2, [], warns)
                 Just checkedPkg =>
                   do
                     session3 <- writeBackModule session2 label text checkedPkg modName
-                    pure (Pair (Just session3) (Pair [] warns))
+                    pure (Just session3, [], warns)
             else
-              pure (Pair Nothing (Pair [] []))
+              pure (Nothing, [], [])
 
 -- | 内部：全量精化后的会话——命中既有缓存就沿用，否则按当前时间戳建一个无工具接口的会话。
 sessionForFull : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r => Maybe DiagCache -> PackageContext -> String -> Eff r DiagCache
@@ -564,13 +561,13 @@ sessionForFull Nothing ctx label =
 
 -- | 内部：全量精化的精简入口（`dtCheckSourceChecked` 需要包上下文），成功后写回当前模块接口。
 -- 返回（会话,（错误, 警告））；原来没有缓存时仍返回 `Nothing`，避免把无接口会话带进后续请求。
-checkFullWith : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Maybe DiagCache -> PackageContext -> String -> String -> Maybe String -> Eff r (Pair (Maybe DiagCache) (Pair (List Diagnostic) (List Diagnostic)))
+checkFullWith : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Maybe DiagCache -> PackageContext -> String -> String -> Maybe String -> Eff r (Maybe DiagCache, List Diagnostic, List Diagnostic)
 checkFullWith cache ctx label text modName =
   do
     checkedR <- dtCheckSourceChecked ctx label text
     case checkedR of
-      ErrC e => pure (Pair cache (Pair (diagsOfCheck label (ErrC e)) []))
-      OkC (Pair warns checkedPkg) =>
+      ErrC e => pure (cache, diagsOfCheck label (ErrC e), [])
+      OkC (warns, checkedPkg) =>
         do
           session <- sessionForFull cache ctx label
           session2 <- writeBackModule session label text checkedPkg modName
@@ -579,14 +576,14 @@ checkFullWith cache ctx label text modName =
               case cache of
                 Just _ => Just session2
                 Nothing => Nothing
-          in pure (Pair keep (Pair [] warns))
+          in pure (keep, [], warns)
 
 -- ---------------------------------------------------------------
 -- lint（会话复用 fixity 模块图；外部文件变化会随会话重建清空）
 -- ---------------------------------------------------------------
 -- | 内部：对一份源码跑语法级 lint，返回（更新后的 fixity 环境, finding 转成的诊断）。
 -- fixity 解析失败或 lint 失败时退化为空 finding；外部文件变化会随会话重建清空。
-lintWithEnv : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => FixityEnv -> String -> String -> Eff r (Pair FixityEnv (List Diagnostic))
+lintWithEnv : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => FixityEnv -> String -> String -> Eff r (FixityEnv, List Diagnostic)
 lintWithEnv env label text =
   do
     cfgR <- loadLintConfigForFile label
@@ -598,16 +595,14 @@ lintWithEnv env label text =
         )
     looked <- fixitiesForFile env label text
     case looked of
-      Pair env2 (ErrC _) => pure (Pair env2 [])
-      Pair env2 (OkC fx) =>
+      (env2, ErrC _) => pure (env2, [])
+      (env2, OkC fx) =>
         do
           linted <- pure (lintSourceWithConfig cfg fx text)
           pure (
-              Pair env2 (
-                  case linted of
-                    ErrC _ => []
-                    OkC findings => map findingToDiagnostic findings
-                )
+              (env2, case linted of
+                  ErrC _ => []
+                  OkC findings => map findingToDiagnostic findings)
             )
 
 -- | 内部：lint 严重度映射到编译器严重度。
@@ -639,13 +634,13 @@ findingDiagJson f =
         LintWarn => 2
         LintOff => 2
   in JObj
-    (append [Pair "range" (lspRange f.findingLine f.findingCol f.findingEndLine f.findingEndCol), Pair "severity" (JNum sev), Pair "source" (JStr "vuna")] (append (if f.findingCode == "" then [] else [Pair "code" (JStr f.findingCode)]) (append [Pair "message" (JStr f.findingMessage)] (if f.findingCode == "" then [] else [Pair "codeDescription" (JObj [Pair "href" (JStr "https://github.com/vuna-lang/vuna/blob/main/docs/reference/lint.md")])]))))
+    (append [("range", lspRange f.findingLine f.findingCol f.findingEndLine f.findingEndCol), ("severity", JNum sev), ("source", JStr "vuna")] (append (if f.findingCode == "" then [] else [("code", JStr f.findingCode)]) (append [("message", JStr f.findingMessage)] (if f.findingCode == "" then [] else [("codeDescription", JObj [("href", JStr "https://github.com/vuna-lang/vuna/blob/main/docs/reference/lint.md")])]))))
 
 -- ---------------------------------------------------------------
 -- 一次请求的完整诊断链
 -- ---------------------------------------------------------------
 -- | 内部：DT 诊断——会话可用时走单文件增量精化，否则回退全量（诊断语义不变）。
-checkDiagnostics : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Maybe DiagCache -> String -> PackageContext -> String -> Maybe String -> List Import -> Eff r (Pair (Maybe DiagCache) (Pair (List Diagnostic) (List Diagnostic)))
+checkDiagnostics : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Maybe DiagCache -> String -> PackageContext -> String -> Maybe String -> List Import -> Eff r (Maybe DiagCache, List Diagnostic, List Diagnostic)
 checkDiagnostics cache label ctx text modName imports =
   do
     session <- usableSession cache ctx label text modName imports
@@ -655,31 +650,31 @@ checkDiagnostics cache label ctx text modName imports =
         do
           inc <- checkIncremental s label text modName imports
           case firstOf inc of
-            Just s2 => pure (Pair (Just s2) (secondOf inc))
+            Just s2 => pure (Just s2, secondOf inc)
             Nothing => checkFullWith (Just s) ctx label text modName
 
 -- | 一次诊断请求：URI + buffer 文本 → （新缓存,（路径标签, 诊断列表））。发布链路，
 -- 不包含 `UN_UnusedImport`（见 `lspWarnable`）。
-export diagnosticsForCached : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Maybe DiagCache -> String -> String -> Eff r (Pair (Maybe DiagCache) (Pair String (List Diagnostic)))
+export diagnosticsForCached : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Maybe DiagCache -> String -> String -> Eff r (Maybe DiagCache, String, List Diagnostic)
 diagnosticsForCached = diagnosticsForCachedWith False
 
 -- | 代码动作路径：与 `diagnosticsForCached` 同一条链，但保留 `UN_UnusedImport`（编辑器侧虽
 -- 不回放其诊断，仍可据此给出删除 import 的修复）。
-export diagnosticsForSuggestions : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Maybe DiagCache -> String -> String -> Eff r (Pair (Maybe DiagCache) (Pair String (List Diagnostic)))
+export diagnosticsForSuggestions : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Maybe DiagCache -> String -> String -> Eff r (Maybe DiagCache, String, List Diagnostic)
 diagnosticsForSuggestions = diagnosticsForCachedWith True
 
 -- | 内部：诊断链的实现。URI → 包上下文 → 解析（失败即返该诊断）→ DT 精化 → lint，最后合并
 -- DT 错误 + lint finding + 经 `dedupeWarnings` 与归属过滤的告警。返回（新缓存,（路径标签, 诊断））；
 -- `includeUnused` 决定是否保留 `UN_UnusedImport`。
-diagnosticsForCachedWith : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Bool -> Maybe DiagCache -> String -> String -> Eff r (Pair (Maybe DiagCache) (Pair String (List Diagnostic)))
+diagnosticsForCachedWith : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Bool -> Maybe DiagCache -> String -> String -> Eff r (Maybe DiagCache, String, List Diagnostic)
 diagnosticsForCachedWith includeUnused cache uri text =
   do
     ctxR <- contextForDoc uri
     case ctxR of
-      ErrC e => pure (Pair cache (Pair "" [e]))
-      OkC (Pair label ctx) =>
+      ErrC e => pure (cache, "", [e])
+      OkC (label, ctx) =>
         case parseSource label text of
-          ErrC e => pure (Pair cache (Pair label [e]))
+          ErrC e => pure (cache, label, [e])
           OkC (SourceFile hdr imports fixities decls _ _ _) =>
             let
               modName =
@@ -700,7 +695,7 @@ diagnosticsForCachedWith includeUnused cache uri text =
                     case cache2 of
                       Just c => Just (DiagCache c.dcLabel c.dcKey c.dcCtx c.dcDb c.dcTool c.dcClean c.dcBuiltSec c.dcStats c.dcAux (firstOf linted))
                       Nothing => Nothing
-                in pure (Pair cache3 (Pair label (append (firstOf (secondOf checked)) (append (secondOf linted) (filter (diagOwns label) (filter (warnAllowed includeUnused) (dedupeWarnings (secondOf (secondOf checked)))))))))
+                in pure (cache3, label, append (firstOf (secondOf checked)) (append (secondOf linted) (filter (diagOwns label) (filter (warnAllowed includeUnused) (dedupeWarnings (secondOf (secondOf checked)))))))
 
 -- | 洞目标（hover / case split）：URI + buffer 文本 → （新缓存,（是否依赖完整, 目标列表））。
 -- 三级来源：1) 增量装配（依赖包接口 + 本包干净模块预置，import 闭包不再逐个从磁盘 parse +
@@ -709,15 +704,15 @@ diagnosticsForCachedWith includeUnused cache uri text =
 -- 从源码加载 + 容错精化（语义最完整，但大文件上是秒级），只给需要洞上下文的 case split 用。
 -- 「依赖是否完整」= 走了 1 或 3；服务器按这个标记决定缓存能否复用给 case split。
 -- `allowBuild` 为 `False` 且没有既有缓存时跳过建会话（建会话要算接口闭包，是秒级固定开销）。
-export goalsForDoc : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Bool -> Bool -> Maybe DiagCache -> String -> String -> Eff r (Pair (Maybe DiagCache) (Pair Bool (List DtGoalInfo)))
+export goalsForDoc : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Bool -> Bool -> Maybe DiagCache -> String -> String -> Eff r (Maybe DiagCache, Bool, List DtGoalInfo)
 goalsForDoc allowFull allowBuild cache uri text =
   do
     ctxR <- contextForDoc uri
     case ctxR of
-      ErrC e => pure (Pair cache (Pair False []))
-      OkC (Pair label ctx) =>
+      ErrC e => pure (cache, False, [])
+      OkC (label, ctx) =>
         case parseSource label text of
-          ErrC e => pure (Pair cache (Pair False []))
+          ErrC e => pure (cache, False, [])
           OkC (SourceFile hdr imports fixities decls _ _ _) =>
             let
               modName =
@@ -740,11 +735,11 @@ goalsForDoc allowFull allowBuild cache uri text =
                         gsR <- goalsIncrementalOf c tool label text modName imports
                         case gsR of
                           ErrC e => goalsLocalOrFull allowFull cache ctx label text
-                          OkC (Pair applied (Pair gs aux)) =>
+                          OkC (applied, gs, aux) =>
                             if applied then
                               let
                                 _ = obsMark "vuna.lsp.goals.incremental"
-                              in pure (Pair (Just (setAuxCache c aux)) (Pair True gs))
+                              in pure (Just (setAuxCache c aux), True, gs)
                             else
                               goalsLocalOrFull allowFull (Just c) ctx label text
                     Nothing => goalsLocalOrFull allowFull (Just c) ctx label text
@@ -755,7 +750,7 @@ goalsForDoc allowFull allowBuild cache uri text =
 
 -- | 内部：增量装配路径下的洞目标（依赖接口 + 本包干净模块预置）；`applied = False` 表示
 -- 安全阀判定不适用，调用方应退到本地 / 全量路径。
-goalsIncrementalOf : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => DiagCache -> ToolContext -> String -> String -> Maybe String -> List Import -> Eff r (Check (Pair Bool (Pair (List DtGoalInfo) (Maybe AuxCache))))
+goalsIncrementalOf : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => DiagCache -> ToolContext -> String -> String -> Maybe String -> List Import -> Eff r (Check (Bool, List DtGoalInfo, Maybe AuxCache))
 goalsIncrementalOf c tool label text modName imports =
   let
     cleanNeeded = cleanNeededOf c tool imports
@@ -777,7 +772,7 @@ setAuxCache c aux =
 -- 比整包从源码重读重精化快一个量级。`allowFull` 时（case split 需要完整洞上下文）再退回整包
 -- 从源码加载。返回的「依赖是否完整」标记：`allowFull` 时恒为 `True`（已尝试整包加载，失败则
 -- 退回本地目标），否则为 `False`。
-goalsLocalOrFull : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Bool -> Maybe DiagCache -> PackageContext -> String -> String -> Eff r (Pair (Maybe DiagCache) (Pair Bool (List DtGoalInfo)))
+goalsLocalOrFull : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Bool -> Maybe DiagCache -> PackageContext -> String -> String -> Eff r (Maybe DiagCache, Bool, List DtGoalInfo)
 goalsLocalOrFull allowFull cache ctx label text =
   do
     _ <- pure (obsMark "vuna.lsp.goals.local")
@@ -801,14 +796,12 @@ goalsLocalOrFull allowFull cache ctx label text =
         _ <- pure (obsMark "vuna.lsp.goals.full")
         gsR <- dtGoalsSourceTolerant ctx label text
         pure (
-            Pair cache (
-                case gsR of
-                  ErrC e => Pair True localGoals
-                  OkC gs => Pair True gs
-              )
+            (cache, case gsR of
+                ErrC e => (True, localGoals)
+                OkC gs => (True, gs))
           )
     else
-      pure (Pair cache (Pair False localGoals))
+      pure (cache, False, localGoals)
 
 -- | 内部：把诊断列表渲染成 `textDocument/publishDiagnostics` 通知（带 version）。
 publishDiagnostics : String -> Int -> String -> List Diagnostic -> Json
@@ -818,16 +811,16 @@ publishDiagnostics uri version text diags =
     jsonDiags = map (diagnosticJson uri lines0) diags
   in notify
     "textDocument/publishDiagnostics"
-    (JObj [Pair "uri" (JStr uri), Pair "version" (JNum version), Pair "diagnostics" (JArr jsonDiags)])
+    (JObj [("uri", JStr uri), ("version", JNum version), ("diagnostics", JArr jsonDiags)])
 
 -- | 一次请求的完整发布帧 + 更新后的会话缓存（LSP 门面持有缓存，跨请求复用）。
-export publishDiagnosticsCached : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Maybe DiagCache -> String -> Int -> String -> Eff r (Pair (Maybe DiagCache) Json)
+export publishDiagnosticsCached : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Maybe DiagCache -> String -> Int -> String -> Eff r (Maybe DiagCache, Json)
 publishDiagnosticsCached cache uri version text =
   do
     result <- diagnosticsForCached cache uri text
     let
       labeled = secondOf result
-    in pure (Pair (firstOf result) (publishDiagnostics uri version text (secondOf labeled)))
+    in pure (firstOf result, publishDiagnostics uri version text (secondOf labeled))
 
 -- | didClose：直接发空诊断（不跑检查链）。
 export publishDiagnosticsEmpty : String -> Int -> Json
@@ -882,7 +875,7 @@ export diagReportJson : String -> String -> List Diagnostic -> Json
 diagReportJson uri text diags =
   let
     lines0 = lines text
-  in JObj [Pair "kind" (JStr "full"), Pair "items" (JArr (map (diagnosticJson uri lines0) diags))]
+  in JObj [("kind", JStr "full"), ("items", JArr (map (diagnosticJson uri lines0) diags))]
 
 -- | 内部：诊断 code → LSP tags：未使用 / 冗余 / catch-all 之后不可达 → `1`（Unnecessary）。
 lspTagsOf : String -> List Json
@@ -908,7 +901,7 @@ originFields : Diagnostic -> List Json
 originFields d =
   case d.diagOrigin of
     OriginDirect => []
-    OriginCascade _ => [JObj [Pair "kind" (JStr "origin"), Pair "value" (JStr "cascade")]]
+    OriginCascade _ => [JObj [("kind", JStr "origin"), ("value", JStr "cascade")]]
 
 -- | 内部：有 code 时附一条 `catalog` 指引（`vuna errors explain <code>`），供客户端跳文档。
 catalogFields : Diagnostic -> List Json
@@ -916,4 +909,4 @@ catalogFields d =
   if d.diagCode == "" then
     []
   else
-    [JObj [Pair "kind" (JStr "catalog"), Pair "value" (JStr "vuna errors explain ${d.diagCode}")]]
+    [JObj [("kind", JStr "catalog"), ("value", JStr "vuna errors explain ${d.diagCode}")]]

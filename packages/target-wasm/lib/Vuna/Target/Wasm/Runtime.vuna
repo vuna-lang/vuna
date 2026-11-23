@@ -72,14 +72,14 @@ cat xs = concatMap (\x => x) xs
 localP : Int -> String
 localP i = "$p${strFromInt i}"
 
-rtFunc : String -> List (Pair String WatValTy) -> List WatValTy -> List (Pair String WatValTy) -> List Instr -> WatFunc
+rtFunc : String -> List (String, WatValTy) -> List WatValTy -> List (String, WatValTy) -> List Instr -> WatFunc
 rtFunc name params results locals body = WatFunc name "" params results locals body
 
 rtApply : WatFunc
 rtApply =
   let
-    params = [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef]
-    locals = [Pair "$code" (WvRef "$ft"), Pair "$env" WvAnyRef]
+    params = [("$p0", WvAnyRef), ("$p1", WvAnyRef)]
+    locals = [("$code", WvRef "$ft"), ("$env", WvAnyRef)]
     body =
       [
         ILocalGet "$p0",
@@ -103,7 +103,7 @@ rtMRunEff : WatFunc
 rtMRunEff =
   rtFunc
     "$rt_mRunEff"
-    [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef]
+    [("$p0", WvAnyRef), ("$p1", WvAnyRef)]
     [WvAnyRef]
     []
     [ILocalGet "$p0", IRefNull, ICall "$rt_apply", ILocalGet "$p1", ICall "$rt_apply"]
@@ -123,21 +123,21 @@ wrap63 = [IConstI64 1, IBinop "i64.shl", IConstI64 1, IBinop "i64.shr_s"]
 binInt : String -> String -> WatFunc
 binInt name op =
   let
-    params = [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef]
+    params = [("$p0", WvAnyRef), ("$p1", WvAnyRef)]
     body = cat [unboxInt 0, unboxInt 1, [IBinop op], wrap63, boxInt]
   in rtFunc name params [WvAnyRef] [] body
 
 cmpInt : String -> String -> WatFunc
 cmpInt name op =
   let
-    params = [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef]
+    params = [("$p0", WvAnyRef), ("$p1", WvAnyRef)]
     body = cat [unboxInt 0, unboxInt 1, [IBinop op, II31New]]
   in rtFunc name params [WvAnyRef] [] body
 
 binBool : String -> String -> WatFunc
 binBool name op =
   let
-    params = [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef]
+    params = [("$p0", WvAnyRef), ("$p1", WvAnyRef)]
     body =
       [
         ILocalGet "$p0",
@@ -215,15 +215,8 @@ boxI64 = [IStructNew "$int"]
 rtPathCopyRel : WatFunc
 rtPathCopyRel =
   let
-    params = [Pair "$s" WvAnyRef, Pair "$dst" WvI32]
-    locals =
-      [
-        Pair "$sa" (WvRef "$str"),
-        Pair "$n" WvI32,
-        Pair "$i" WvI32,
-        Pair "$j" WvI32,
-        Pair "$cap" WvI32
-      ]
+    params = [("$s", WvAnyRef), ("$dst", WvI32)]
+    locals = [("$sa", WvRef "$str"), ("$n", WvI32), ("$i", WvI32), ("$j", WvI32), ("$cap", WvI32)]
     body =
       [
         ILocalGet "$dst",
@@ -260,8 +253,8 @@ rtPathCopyRel =
 rtMemToStr : WatFunc
 rtMemToStr =
   let
-    params = [Pair "$ptr" WvI32, Pair "$len" WvI32]
-    locals = [Pair "$out" (WvRef "$str"), Pair "$i" WvI32]
+    params = [("$ptr", WvI32), ("$len", WvI32)]
+    locals = [("$out", WvRef "$str"), ("$i", WvI32)]
     body =
       [
         ILocalGet "$len",
@@ -284,7 +277,7 @@ errnoEq n thenB elseB = [ILocalGet "$e", IConstI32 n, IBinop "i32.eq", IIf "i32"
 rtErrno : WatFunc
 rtErrno =
   let
-    params = [Pair "$e" WvI32]
+    params = [("$e", WvI32)]
     body =
       errnoEq
         44
@@ -296,16 +289,16 @@ rtErrno =
 rtWriteChunked : WatFunc
 rtWriteChunked =
   let
-    params = [Pair "$fd" WvI32, Pair "$s" WvAnyRef, Pair "$nl" WvI32]
+    params = [("$fd", WvI32), ("$s", WvAnyRef), ("$nl", WvI32)]
     locals =
       [
-        Pair "$sa" (WvRef "$str"),
-        Pair "$total" WvI32,
-        Pair "$off" WvI32,
-        Pair "$chunk" WvI32,
-        Pair "$i" WvI32,
-        Pair "$err" WvI32,
-        Pair "$nw" WvI32
+        ("$sa", WvRef "$str"),
+        ("$total", WvI32),
+        ("$off", WvI32),
+        ("$chunk", WvI32),
+        ("$i", WvI32),
+        ("$err", WvI32),
+        ("$nw", WvI32)
       ]
     copyChunk =
       [
@@ -378,7 +371,7 @@ rtWriteChunked =
 rtWrite : WatFunc
 rtWrite =
   let
-    params = [Pair "$fd" WvI32, Pair "$s" WvAnyRef, Pair "$nl" WvI32]
+    params = [("$fd", WvI32), ("$s", WvAnyRef), ("$nl", WvI32)]
     body = [ILocalGet "$fd", ILocalGet "$s", ILocalGet "$nl", ICall "$rt_writeChunked", IDrop]
   in rtFunc "$rt_write" params [] [] body
 
@@ -389,8 +382,8 @@ rtWrite =
 rtPathLen : WatFunc
 rtPathLen =
   let
-    params = [Pair "$s" WvAnyRef]
-    locals = [Pair "$sa" (WvRef "$str"), Pair "$n" WvI32]
+    params = [("$s", WvAnyRef)]
+    locals = [("$sa", WvRef "$str"), ("$n", WvI32)]
     body =
       [
         ILocalGet "$s",
@@ -413,8 +406,8 @@ rtPathLen =
 rtPathOpen : WatFunc
 rtPathOpen =
   let
-    params = [Pair "$s" WvAnyRef, Pair "$oflags" WvI32, Pair "$rights" WvI64]
-    locals = [Pair "$len" WvI32, Pair "$err" WvI32]
+    params = [("$s", WvAnyRef), ("$oflags", WvI32), ("$rights", WvI64)]
+    locals = [("$len", WvI32), ("$err", WvI32)]
     body =
       [
         ILocalGet "$s",
@@ -449,16 +442,16 @@ rtPathOpen =
 rtFdReadAll : WatFunc
 rtFdReadAll =
   let
-    params = [Pair "$fd" WvI32, Pair "$size" WvI32]
+    params = [("$fd", WvI32), ("$size", WvI32)]
     locals =
       [
-        Pair "$out" (WvRef "$str"),
-        Pair "$off" WvI32,
-        Pair "$rem" WvI32,
-        Pair "$chunk" WvI32,
-        Pair "$err" WvI32,
-        Pair "$n" WvI32,
-        Pair "$i" WvI32
+        ("$out", WvRef "$str"),
+        ("$off", WvI32),
+        ("$rem", WvI32),
+        ("$chunk", WvI32),
+        ("$err", WvI32),
+        ("$n", WvI32),
+        ("$i", WvI32)
       ]
     body =
       [
@@ -482,8 +475,8 @@ rtEmptyStr = rtFunc "$rt_emptyStr" [] [WvAnyRef] [] emptyStrInstrs
 rtStatErr : WatFunc
 rtStatErr =
   let
-    params = [Pair "$s" WvAnyRef]
-    locals = [Pair "$len" WvI32]
+    params = [("$s", WvAnyRef)]
+    locals = [("$len", WvI32)]
     body =
       [
         ILocalGet "$s",
@@ -502,8 +495,8 @@ rtStatErr =
 rtTryReadFile : WatFunc
 rtTryReadFile =
   let
-    params = [Pair "$s" WvAnyRef]
-    locals = [Pair "$err" WvI32, Pair "$size" WvI32, Pair "$fd" WvI32, Pair "$out" WvAnyRef]
+    params = [("$s", WvAnyRef)]
+    locals = [("$err", WvI32), ("$size", WvI32), ("$fd", WvI32), ("$out", WvAnyRef)]
     body =
       [
         IConstI32 0,
@@ -544,8 +537,8 @@ rtTryReadFile =
 rtTryWriteFile : WatFunc
 rtTryWriteFile =
   let
-    params = [Pair "$s" WvAnyRef, Pair "$contents" WvAnyRef]
-    locals = [Pair "$fd" WvI32, Pair "$n" WvI32]
+    params = [("$s", WvAnyRef), ("$contents", WvAnyRef)]
+    locals = [("$fd", WvI32), ("$n", WvI32)]
     body =
       [
         IConstI32 0,
@@ -580,15 +573,15 @@ rtTryWriteFile =
 rtTryWriteFileAtomic : RtConsts -> WatFunc
 rtTryWriteFileAtomic c =
   let
-    params = [Pair "$s" WvAnyRef, Pair "$contents" WvAnyRef]
+    params = [("$s", WvAnyRef), ("$contents", WvAnyRef)]
     locals =
       [
-        Pair "$tmp" WvAnyRef,
-        Pair "$lenP" WvI32,
-        Pair "$lenT" WvI32,
-        Pair "$fd" WvI32,
-        Pair "$n" WvI32,
-        Pair "$err" WvI32
+        ("$tmp", WvAnyRef),
+        ("$lenP", WvI32),
+        ("$lenT", WvI32),
+        ("$fd", WvI32),
+        ("$n", WvI32),
+        ("$err", WvI32)
       ]
     body =
       cat
@@ -598,8 +591,8 @@ rtTryWriteFileAtomic c =
 rtTryIsDirectory : WatFunc
 rtTryIsDirectory =
   let
-    params = [Pair "$s" WvAnyRef]
-    locals = [Pair "$err" WvI32]
+    params = [("$s", WvAnyRef)]
+    locals = [("$err", WvI32)]
     body =
       [
         IConstI32 0,
@@ -625,8 +618,8 @@ rtTryIsDirectory =
 rtFileExists : WatFunc
 rtFileExists =
   let
-    params = [Pair "$s" WvAnyRef]
-    locals = [Pair "$err" WvI32]
+    params = [("$s", WvAnyRef)]
+    locals = [("$err", WvI32)]
     body =
       [
         ILocalGet "$s",
@@ -643,15 +636,15 @@ rtFileExists =
 rtFileMtime : WatFunc
 rtFileMtime =
   let
-    params = [Pair "$s" WvAnyRef]
+    params = [("$s", WvAnyRef)]
     body = [IConstI32 1, IGlobalSet "$g_hostStatus", IConstI64 0, IStructNew "$int"]
   in rtFunc "$rt_fileMtime" params [WvAnyRef] [] body
 
 rtFileSize : WatFunc
 rtFileSize =
   let
-    params = [Pair "$s" WvAnyRef]
-    locals = [Pair "$err" WvI32]
+    params = [("$s", WvAnyRef)]
+    locals = [("$err", WvI32)]
     body =
       [
         IConstI32 0,
@@ -675,8 +668,8 @@ rtFileSize =
 rtTryMakeDir : WatFunc
 rtTryMakeDir =
   let
-    params = [Pair "$s" WvAnyRef]
-    locals = [Pair "$len" WvI32, Pair "$err" WvI32]
+    params = [("$s", WvAnyRef)]
+    locals = [("$len", WvI32), ("$err", WvI32)]
     body =
       [
         IConstI32 0,
@@ -709,8 +702,8 @@ rtTryMakeDir =
 rtTryMakeDirExclusive : WatFunc
 rtTryMakeDirExclusive =
   let
-    params = [Pair "$s" WvAnyRef]
-    locals = [Pair "$len" WvI32, Pair "$err" WvI32]
+    params = [("$s", WvAnyRef)]
+    locals = [("$len", WvI32), ("$err", WvI32)]
     body =
       [
         IConstI32 0,
@@ -744,8 +737,8 @@ rtTryMakeDirExclusive =
 rtTryRemoveFile : WatFunc
 rtTryRemoveFile =
   let
-    params = [Pair "$s" WvAnyRef]
-    locals = [Pair "$len" WvI32, Pair "$err" WvI32]
+    params = [("$s", WvAnyRef)]
+    locals = [("$len", WvI32), ("$err", WvI32)]
     body =
       [
         IConstI32 0,
@@ -785,19 +778,19 @@ rtRemoveTreeMaxDepth = 512
 rtRemoveTreeGo : WatFunc
 rtRemoveTreeGo =
   let
-    params = [Pair "$s" WvAnyRef, Pair "$depth" WvI32]
+    params = [("$s", WvAnyRef), ("$depth", WvI32)]
     locals =
       [
-        Pair "$fd" WvI32,
-        Pair "$err" WvI32,
-        Pair "$len" WvI32,
-        Pair "$cookie" WvI64,
-        Pair "$used" WvI32,
-        Pair "$namlen" WvI32,
-        Pair "$name" WvAnyRef,
-        Pair "$child" WvAnyRef,
-        Pair "$sep" (WvRef "$str"),
-        Pair "$st" WvI32
+        ("$fd", WvI32),
+        ("$err", WvI32),
+        ("$len", WvI32),
+        ("$cookie", WvI64),
+        ("$used", WvI32),
+        ("$namlen", WvI32),
+        ("$name", WvAnyRef),
+        ("$child", WvAnyRef),
+        ("$sep", WvRef "$str"),
+        ("$st", WvI32)
       ]
     body =
       [
@@ -881,7 +874,7 @@ rtRemoveTreeGo =
 rtTryRemoveTree : WatFunc
 rtTryRemoveTree =
   let
-    params = [Pair "$s" WvAnyRef]
+    params = [("$s", WvAnyRef)]
     body =
       [
         IConstI32 0,
@@ -898,8 +891,8 @@ rtTryRemoveTree =
 rtTryRename : WatFunc
 rtTryRename =
   let
-    params = [Pair "$src" WvAnyRef, Pair "$dst" WvAnyRef]
-    locals = [Pair "$len1" WvI32, Pair "$len2" WvI32, Pair "$err" WvI32]
+    params = [("$src", WvAnyRef), ("$dst", WvAnyRef)]
+    locals = [("$len1", WvI32), ("$len2", WvI32), ("$err", WvI32)]
     body =
       [
         IConstI32 0,
@@ -947,21 +940,21 @@ rtHostStatus =
 rtGetEnv : WatFunc
 rtGetEnv =
   let
-    params = [Pair "$key" WvAnyRef]
+    params = [("$key", WvAnyRef)]
     locals =
       [
-        Pair "$sa" (WvRef "$str"),
-        Pair "$keyLen" WvI32,
-        Pair "$count" WvI32,
-        Pair "$size" WvI32,
-        Pair "$ptrArr" WvI32,
-        Pair "$buf" WvI32,
-        Pair "$i" WvI32,
-        Pair "$p" WvI32,
-        Pair "$j" WvI32,
-        Pair "$ok" WvI32,
-        Pair "$k" WvI32,
-        Pair "$err" WvI32
+        ("$sa", WvRef "$str"),
+        ("$keyLen", WvI32),
+        ("$count", WvI32),
+        ("$size", WvI32),
+        ("$ptrArr", WvI32),
+        ("$buf", WvI32),
+        ("$i", WvI32),
+        ("$p", WvI32),
+        ("$j", WvI32),
+        ("$ok", WvI32),
+        ("$k", WvI32),
+        ("$err", WvI32)
       ]
     body =
       [
@@ -1025,7 +1018,7 @@ rtExecPath = rtFunc "$rt_execPath" [] [WvAnyRef] [] emptyStrInstrs
 rtTimeUs : WatFunc
 rtTimeUs =
   let
-    locals = [Pair "$err" WvI32]
+    locals = [("$err", WvI32)]
     body =
       [
         IConstI32 0,
@@ -1048,7 +1041,7 @@ rtTimeUs =
 rtPrintln : WatFunc
 rtPrintln =
   let
-    params = [Pair "$p0" WvAnyRef]
+    params = [("$p0", WvAnyRef)]
     body = [IConstI32 1, ILocalGet "$p0", IConstI32 1, ICall "$rt_write"]
   in rtFunc "$rt_println" params [] [] body
 
@@ -1057,8 +1050,8 @@ rtFailStr : RtConsts -> WatFunc
 -- 写 stderr（rt_write 的 nl=1 补换行）
 rtFailStr c =
   let
-    params = [Pair "$p0" WvAnyRef]
-    locals = [Pair "$m" WvAnyRef]
+    params = [("$p0", WvAnyRef)]
+    locals = [("$m", WvAnyRef)]
     body =
       cat
         [mkString c.rtcErrOff c.rtcErrLen, [ILocalGet "$p0", ICall "$rt_strConcat", ILocalSet "$m"], [IConstI32 2, ILocalGet "$m", IConstI32 1, ICall "$rt_write"], [IConstI32 2, ICall "$proc_exit", IUnreachable]]
@@ -1084,16 +1077,16 @@ rtEffNewRef : WatFunc
 rtEffNewRef =
   rtFunc
     "$rt_newRef"
-    [Pair "$p0" WvAnyRef]
+    [("$p0", WvAnyRef)]
     [WvAnyRef]
-    [Pair "$out" (WvRef "$arr")]
+    [("$out", WvRef "$arr")]
     [IConstI32 1, IArrayNewDefault "$arr", ILocalSet "$out", ILocalGet "$out", IConstI32 0, ILocalGet "$p0", IArraySet "$arr", ILocalGet "$out"]
 
 rtEffReadRef : WatFunc
 rtEffReadRef =
   rtFunc
     "$rt_readRef"
-    [Pair "$p0" WvAnyRef]
+    [("$p0", WvAnyRef)]
     [WvAnyRef]
     []
     [ILocalGet "$p0", IRefCast "$arr", IConstI32 0, IArrayGet "$arr"]
@@ -1102,7 +1095,7 @@ rtEffWriteRef : WatFunc
 rtEffWriteRef =
   rtFunc
     "$rt_writeRef"
-    [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef]
+    [("$p0", WvAnyRef), ("$p1", WvAnyRef)]
     [WvAnyRef]
     []
     [ILocalGet "$p0", IRefCast "$arr", IConstI32 0, ILocalGet "$p1", IArraySet "$arr", IConstI64 0, IStructNew "$int"]
@@ -1112,16 +1105,16 @@ rtEffPrint : String -> Int -> WatFunc
 rtEffPrint name fd =
   rtFunc
     name
-    [Pair "$p0" WvAnyRef]
+    [("$p0", WvAnyRef)]
     [WvAnyRef]
-    [Pair "$n" WvI32]
+    [("$n", WvI32)]
     [IConstI32 fd, ILocalGet "$p0", IConstI32 0, ICall "$rt_write", ILocalGet "$p0", IRefCast "$str", IArrayLen, ILocalSet "$n", ILocalGet "$n", IPlain "i64.extend_i32_u", IStructNew "$int"]
 
 rtEffExit : WatFunc
 rtEffExit =
   rtFunc
     "$rt_effExit"
-    [Pair "$p0" WvAnyRef]
+    [("$p0", WvAnyRef)]
     [WvAnyRef]
     []
     [ILocalGet "$p0", IRefCast "$int", IStructGet "$int" 0, IPlain "i32.wrap_i64", ICall "$proc_exit", IUnreachable]
@@ -1134,7 +1127,7 @@ rtFloatFromInt : WatFunc
 rtFloatFromInt =
   rtFunc
     "$rt_floatFromInt"
-    [Pair "$p0" WvAnyRef]
+    [("$p0", WvAnyRef)]
     [WvAnyRef]
     []
     [ILocalGet "$p0", IRefCast "$int", IStructGet "$int" 0, IPlain "f64.convert_i64_s", IStructNew "$float"]
@@ -1143,7 +1136,7 @@ rtIntFromFloat : WatFunc
 rtIntFromFloat =
   rtFunc
     "$rt_intFromFloat"
-    [Pair "$p0" WvAnyRef]
+    [("$p0", WvAnyRef)]
     [WvAnyRef]
     []
     [ILocalGet "$p0", IRefCast "$float", IStructGet "$float" 0, IPlain "i64.trunc_f64_s", IStructNew "$int"]
@@ -1152,7 +1145,7 @@ rtFloatBin : String -> String -> WatFunc
 rtFloatBin name op =
   rtFunc
     name
-    [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef]
+    [("$p0", WvAnyRef), ("$p1", WvAnyRef)]
     [WvAnyRef]
     []
     [ILocalGet "$p0", IRefCast "$float", IStructGet "$float" 0, ILocalGet "$p1", IRefCast "$float", IStructGet "$float" 0, IPlain op, IStructNew "$float"]
@@ -1161,7 +1154,7 @@ rtFloatCmp : String -> String -> WatFunc
 rtFloatCmp name op =
   rtFunc
     name
-    [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef]
+    [("$p0", WvAnyRef), ("$p1", WvAnyRef)]
     [WvAnyRef]
     []
     [ILocalGet "$p0", IRefCast "$float", IStructGet "$float" 0, ILocalGet "$p1", IRefCast "$float", IStructGet "$float" 0, IPlain op, II31New]
@@ -1170,7 +1163,7 @@ rtFloatAbs : WatFunc
 rtFloatAbs =
   rtFunc
     "$rt_floatAbs"
-    [Pair "$p0" WvAnyRef]
+    [("$p0", WvAnyRef)]
     [WvAnyRef]
     []
     [ILocalGet "$p0", IRefCast "$float", IStructGet "$float" 0, IPlain "f64.abs", IStructNew "$float"]
@@ -1179,7 +1172,7 @@ rtFloatSqrt : WatFunc
 rtFloatSqrt =
   rtFunc
     "$rt_floatSqrt"
-    [Pair "$p0" WvAnyRef]
+    [("$p0", WvAnyRef)]
     [WvAnyRef]
     []
     [ILocalGet "$p0", IRefCast "$float", IStructGet "$float" 0, IPlain "f64.sqrt", IStructNew "$float"]
@@ -1193,7 +1186,7 @@ rtArrayLength : WatFunc
 rtArrayLength =
   rtFunc
     "$rt_arrayLength"
-    [Pair "$p0" WvAnyRef]
+    [("$p0", WvAnyRef)]
     [WvAnyRef]
     []
     [ILocalGet "$p0", IRefCast "$arr", IArrayLen, IPlain "i64.extend_i32_u", IStructNew "$int"]
@@ -1201,24 +1194,24 @@ rtArrayLength =
 rtArrayGet : WatFunc
 rtArrayGet =
   let
-    locals = [Pair "$ix" WvI32]
+    locals = [("$ix", WvI32)]
     oob = [ICall "$rt_arrayOob", IUnreachable]
     body =
       cat
         [[ILocalGet "$p0", IRefCast "$arr", IArrayLen, ILocalSet "$ix"], unboxInt 1, [IPlain "i32.wrap_i64", ILocalSet "$ix"], [ILocalGet "$ix", IConstI32 0, IBinop "i32.lt_s", IIf "" oob [], ILocalGet "$ix", ILocalGet "$p0", IRefCast "$arr", IArrayLen, IBinop "i32.ge_s", IIf "" oob [], ILocalGet "$p0", IRefCast "$arr", ILocalGet "$ix", IArrayGet "$arr"]]
-  in rtFunc "$rt_arrayGet" [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef] [WvAnyRef] locals body
+  in rtFunc "$rt_arrayGet" [("$p0", WvAnyRef), ("$p1", WvAnyRef)] [WvAnyRef] locals body
 
 rtArraySet : WatFunc
 rtArraySet =
   let
-    locals = [Pair "$ix" WvI32, Pair "$n" WvI32, Pair "$new" (WvRef "$arr")]
+    locals = [("$ix", WvI32), ("$n", WvI32), ("$new", WvRef "$arr")]
     oob = [ICall "$rt_arrayOob", IUnreachable]
     body =
       cat
         [[ILocalGet "$p0", IRefCast "$arr", IArrayLen, ILocalSet "$n"], unboxInt 1, [IPlain "i32.wrap_i64", ILocalSet "$ix"], [ILocalGet "$ix", IConstI32 0, IBinop "i32.lt_s", IIf "" oob [], ILocalGet "$ix", ILocalGet "$n", IBinop "i32.ge_s", IIf "" oob [], ILocalGet "$n", IArrayNewDefault "$arr", ILocalSet "$new", ILocalGet "$new", IConstI32 0, ILocalGet "$p0", IRefCast "$arr", IConstI32 0, ILocalGet "$n", IArrayCopy "$arr" "$arr", ILocalGet "$new", ILocalGet "$ix", ILocalGet "$p2", IArraySet "$arr", ILocalGet "$new"]]
   in rtFunc
     "$rt_arraySet"
-    [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef, Pair "$p2" WvAnyRef]
+    [("$p0", WvAnyRef), ("$p1", WvAnyRef), ("$p2", WvAnyRef)]
     [WvAnyRef]
     locals
     body
@@ -1226,28 +1219,28 @@ rtArraySet =
 rtArrayMake : WatFunc
 rtArrayMake =
   let
-    locals = [Pair "$n" WvI32, Pair "$out" (WvRef "$arr"), Pair "$i" WvI32]
+    locals = [("$n", WvI32), ("$out", WvRef "$arr"), ("$i", WvI32)]
     body =
       cat
         [unboxInt 0, [IPlain "i32.wrap_i64", ILocalSet "$n", ILocalGet "$n", IArrayNewDefault "$arr", ILocalSet "$out", IConstI32 0, ILocalSet "$i"], [IBlock "$am_done" "" [ILoop "$am_l" "" [ILocalGet "$i", ILocalGet "$n", IBinop "i32.ge_s", IBrIf "$am_done", ILocalGet "$out", ILocalGet "$i", ILocalGet "$p1", IArraySet "$arr", ILocalGet "$i", IConstI32 1, IBinop "i32.add", ILocalSet "$i", IBr "$am_l"]]], [ILocalGet "$out"]]
-  in rtFunc "$rt_arrayMake" [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef] [WvAnyRef] locals body
+  in rtFunc "$rt_arrayMake" [("$p0", WvAnyRef), ("$p1", WvAnyRef)] [WvAnyRef] locals body
 
 -- | `strFromInt` / `showInt` / `showNat`。
 rtStrFromInt : WatFunc
 rtStrFromInt =
   let
-    params = [Pair "$p0" WvAnyRef]
+    params = [("$p0", WvAnyRef)]
     locals =
       [
-        Pair "$n" WvI64,
-        Pair "$neg" WvI32,
-        Pair "$m" WvI64,
-        Pair "$tmp" WvI64,
-        Pair "$digits" WvI32,
-        Pair "$len" WvI32,
-        Pair "$out" (WvRef "$str"),
-        Pair "$i" WvI32,
-        Pair "$d" WvI64
+        ("$n", WvI64),
+        ("$neg", WvI32),
+        ("$m", WvI64),
+        ("$tmp", WvI64),
+        ("$digits", WvI32),
+        ("$len", WvI32),
+        ("$out", WvRef "$str"),
+        ("$i", WvI32),
+        ("$d", WvI64)
       ]
     signPart =
       [
@@ -1304,7 +1297,7 @@ rtShowInt = rtStrFromInt
 rtShowBool : RtConsts -> WatFunc
 rtShowBool c =
   let
-    params = [Pair "$p0" WvAnyRef]
+    params = [("$p0", WvAnyRef)]
     body =
       [
         ILocalGet "$p0",
@@ -1335,17 +1328,17 @@ escapeStepAll =
 rtShowStr : WatFunc
 rtShowStr =
   let
-    params = [Pair "$p0" WvAnyRef]
+    params = [("$p0", WvAnyRef)]
     locals =
       [
-        Pair "$src" (WvRef "$str"),
-        Pair "$n" WvI32,
-        Pair "$len" WvI32,
-        Pair "$i" WvI32,
-        Pair "$o" WvI32,
-        Pair "$c" WvI32,
-        Pair "$esc" WvI32,
-        Pair "$out" (WvRef "$str")
+        ("$src", WvRef "$str"),
+        ("$n", WvI32),
+        ("$len", WvI32),
+        ("$i", WvI32),
+        ("$o", WvI32),
+        ("$c", WvI32),
+        ("$esc", WvI32),
+        ("$out", WvRef "$str")
       ]
     loadChar = [ILocalGet "$src", ILocalGet "$i", IArrayGetU "$str", ILocalSet "$c"]
     bumpLen =
@@ -1383,8 +1376,8 @@ failWithConst off len = cat [mkString off len, [ICall "$rt_failStr", IUnreachabl
 rtDiv : RtConsts -> WatFunc
 rtDiv c =
   let
-    params = [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef]
-    locals = [Pair "$a" WvI64, Pair "$b" WvI64]
+    params = [("$p0", WvAnyRef), ("$p1", WvAnyRef)]
+    locals = [("$a", WvI64), ("$b", WvI64)]
     body =
       cat
         [unboxInt 0, [ILocalSet "$a"], unboxInt 1, [ILocalSet "$b"], [ILocalGet "$b", IConstI64 0, IBinop "i64.eq", IIf "i64" (failWithConst c.rtcDivOff c.rtcDivLen) [ILocalGet "$a", IConstI64 (0 - 4611686018427387903 - 1), IBinop "i64.eq", ILocalGet "$b", IConstI64 (0 - 1), IBinop "i64.eq", IBinop "i32.and", IIf "i64" [IConstI64 (0 - 4611686018427387903 - 1)] [ILocalGet "$a", ILocalGet "$b", IBinop "i64.div_s"]]], boxInt]
@@ -1393,8 +1386,8 @@ rtDiv c =
 rtAssert : RtConsts -> WatFunc
 rtAssert c =
   let
-    params = [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef, Pair "$p2" WvAnyRef]
-    locals = [Pair "$m" WvAnyRef]
+    params = [("$p0", WvAnyRef), ("$p1", WvAnyRef), ("$p2", WvAnyRef)]
+    locals = [("$m", WvAnyRef)]
     body =
       cat
         [[ILocalGet "$p0", IRefCast "i31", II31GetU], [IIf "anyref" [ILocalGet "$p2"] (cat [mkString c.rtcAssertOff c.rtcAssertLen, [ILocalGet "$p1", ICall "$rt_strConcat", ILocalSet "$m"], [ILocalGet "$m", ICall "$rt_failStr", IUnreachable]])]]
@@ -1403,14 +1396,14 @@ rtAssert c =
 rtPrimFail : WatFunc
 rtPrimFail =
   let
-    params = [Pair "$p0" WvAnyRef]
+    params = [("$p0", WvAnyRef)]
     body = [ILocalGet "$p0", ICall "$rt_failStr", IUnreachable]
   in rtFunc "$rt_primFail" params [WvAnyRef] [] body
 
 rtTodo : RtConsts -> WatFunc
 rtTodo c =
   let
-    params = [Pair "$p0" WvAnyRef]
+    params = [("$p0", WvAnyRef)]
     body =
       cat
         [mkString c.rtcTodoOff c.rtcTodoLen, [ILocalGet "$p0"], [ICall "$rt_strConcat"], [ICall "$rt_failStr", IUnreachable]]
@@ -1419,20 +1412,20 @@ rtTodo c =
 rtErase : WatFunc
 rtErase =
   let
-    params = [Pair "$p0" WvAnyRef]
+    params = [("$p0", WvAnyRef)]
   in rtFunc "$rt_erase" params [WvAnyRef] [] [ILocalGet "$p0"]
 
 rtStrConcat : WatFunc
 rtStrConcat =
   let
-    params = [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef]
+    params = [("$p0", WvAnyRef), ("$p1", WvAnyRef)]
     locals =
       [
-        Pair "$a" (WvRef "$str"),
-        Pair "$b" (WvRef "$str"),
-        Pair "$na" WvI32,
-        Pair "$nb" WvI32,
-        Pair "$out" (WvRef "$str")
+        ("$a", WvRef "$str"),
+        ("$b", WvRef "$str"),
+        ("$na", WvI32),
+        ("$nb", WvI32),
+        ("$out", WvRef "$str")
       ]
     body =
       [
@@ -1472,8 +1465,8 @@ rtStrConcat =
 rtNatSucc : WatFunc
 rtNatSucc =
   let
-    params = [Pair "$p0" WvAnyRef]
-    locals = [Pair "$n" WvI64]
+    params = [("$p0", WvAnyRef)]
+    locals = [("$n", WvI64)]
     body =
       cat
         [unboxInt 0, [ILocalSet "$n"], [ILocalGet "$n", IConstI64 4611686018427387903, IBinop "i64.ge_s", IIf "i64" [IConstI64 4611686018427387903] [ILocalGet "$n", IConstI64 1, IBinop "i64.add"]], boxInt]
@@ -1488,8 +1481,8 @@ maxInt63 = 4611686018427387903
 rtNatAdd : WatFunc
 rtNatAdd =
   let
-    params = [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef]
-    locals = [Pair "$a" WvI64, Pair "$b" WvI64]
+    params = [("$p0", WvAnyRef), ("$p1", WvAnyRef)]
+    locals = [("$a", WvI64), ("$b", WvI64)]
     body =
       cat
         [unboxInt 0, [ILocalSet "$a"], unboxInt 1, [ILocalSet "$b"], [ILocalGet "$a", IConstI64 maxInt63, ILocalGet "$b", IBinop "i64.sub", IBinop "i64.gt_s", IIf "i64" [IConstI64 maxInt63] [ILocalGet "$a", ILocalGet "$b", IBinop "i64.add"]], boxInt]
@@ -1498,8 +1491,8 @@ rtNatAdd =
 rtNatSub : WatFunc
 rtNatSub =
   let
-    params = [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef]
-    locals = [Pair "$a" WvI64, Pair "$b" WvI64]
+    params = [("$p0", WvAnyRef), ("$p1", WvAnyRef)]
+    locals = [("$a", WvI64), ("$b", WvI64)]
     body =
       cat
         [unboxInt 0, [ILocalSet "$a"], unboxInt 1, [ILocalSet "$b"], [ILocalGet "$a", ILocalGet "$b", IBinop "i64.le_s", IIf "i64" [IConstI64 0] [ILocalGet "$a", ILocalGet "$b", IBinop "i64.sub"]], boxInt]
@@ -1508,8 +1501,8 @@ rtNatSub =
 rtNatMul : WatFunc
 rtNatMul =
   let
-    params = [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef]
-    locals = [Pair "$a" WvI64, Pair "$b" WvI64]
+    params = [("$p0", WvAnyRef), ("$p1", WvAnyRef)]
+    locals = [("$a", WvI64), ("$b", WvI64)]
     inner =
       [
         ILocalGet "$a",
@@ -1527,8 +1520,8 @@ rtNatMul =
 rtNatDiv : RtConsts -> WatFunc
 rtNatDiv c =
   let
-    params = [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef]
-    locals = [Pair "$a" WvI64, Pair "$b" WvI64]
+    params = [("$p0", WvAnyRef), ("$p1", WvAnyRef)]
+    locals = [("$a", WvI64), ("$b", WvI64)]
     body =
       cat
         [unboxInt 0, [ILocalSet "$a"], unboxInt 1, [ILocalSet "$b"], [ILocalGet "$b", IConstI64 0, IBinop "i64.eq", IIf "i64" (failWithConst c.rtcDivOff c.rtcDivLen) [ILocalGet "$a", ILocalGet "$b", IBinop "i64.div_s"]], boxInt]
@@ -1538,15 +1531,15 @@ rtNatDiv c =
 rtNatToInt : WatFunc
 rtNatToInt =
   let
-    params = [Pair "$p0" WvAnyRef]
+    params = [("$p0", WvAnyRef)]
   in rtFunc "$rt_natToInt" params [WvAnyRef] [] [ILocalGet "$p0"]
 
 -- | `natFromInt`：有损，负数钳成 0。
 rtNatFromInt : WatFunc
 rtNatFromInt =
   let
-    params = [Pair "$p0" WvAnyRef]
-    locals = [Pair "$n" WvI64]
+    params = [("$p0", WvAnyRef)]
+    locals = [("$n", WvI64)]
     body =
       cat
         [unboxInt 0, [ILocalSet "$n"], [ILocalGet "$n", IConstI64 0, IBinop "i64.le_s", IIf "i64" [IConstI64 0] [ILocalGet "$n"]], boxInt]
@@ -1558,7 +1551,7 @@ rtNatFromInt =
 rtStrLength : WatFunc
 rtStrLength =
   let
-    params = [Pair "$p0" WvAnyRef]
+    params = [("$p0", WvAnyRef)]
     body =
       [ILocalGet "$p0", IRefCast "$str", IArrayLen, IPlain "i64.extend_i32_s", IStructNew "$int"]
   in rtFunc "$rt_strLength" params [WvAnyRef] [] body
@@ -1567,8 +1560,8 @@ rtStrLength =
 rtStrAt : WatFunc
 rtStrAt =
   let
-    params = [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef]
-    locals = [Pair "$s" (WvRef "$str"), Pair "$n" WvI32, Pair "$i" WvI64]
+    params = [("$p0", WvAnyRef), ("$p1", WvAnyRef)]
+    locals = [("$s", WvRef "$str"), ("$n", WvI32), ("$i", WvI64)]
     outOfRange =
       [
         ILocalGet "$i",
@@ -1597,16 +1590,16 @@ rtStrAt =
 rtSubstring : WatFunc
 rtSubstring =
   let
-    params = [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef, Pair "$p2" WvAnyRef]
+    params = [("$p0", WvAnyRef), ("$p1", WvAnyRef), ("$p2", WvAnyRef)]
     locals =
       [
-        Pair "$s" (WvRef "$str"),
-        Pair "$n" WvI32,
-        Pair "$st" WvI32,
-        Pair "$ln" WvI32,
-        Pair "$start" WvI64,
-        Pair "$len" WvI64,
-        Pair "$out" (WvRef "$str")
+        ("$s", WvRef "$str"),
+        ("$n", WvI32),
+        ("$st", WvI32),
+        ("$ln", WvI32),
+        ("$start", WvI64),
+        ("$len", WvI64),
+        ("$out", WvRef "$str")
       ]
     clampStart =
       [
@@ -1637,8 +1630,8 @@ rtSubstring =
 rtStrHash : WatFunc
 rtStrHash =
   let
-    params = [Pair "$p0" WvAnyRef]
-    locals = [Pair "$s" (WvRef "$str"), Pair "$n" WvI32, Pair "$i" WvI32, Pair "$h" WvI64]
+    params = [("$p0", WvAnyRef)]
+    locals = [("$s", WvRef "$str"), ("$n", WvI32), ("$i", WvI32), ("$h", WvI64)]
     loop =
       [
         IBlock
@@ -1656,8 +1649,8 @@ rtStrHash =
 rtEffectId : WatFunc
 rtEffectId =
   let
-    params = [Pair "$p0" WvAnyRef]
-    locals = [Pair "$s" (WvRef "$str"), Pair "$n" WvI32, Pair "$i" WvI32, Pair "$h" WvI64]
+    params = [("$p0", WvAnyRef)]
+    locals = [("$s", WvRef "$str"), ("$n", WvI32), ("$i", WvI32), ("$h", WvI64)]
     loop =
       [
         IBlock
@@ -1674,15 +1667,15 @@ rtEffectId =
 rtEqStr : WatFunc
 rtEqStr =
   let
-    params = [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef]
+    params = [("$p0", WvAnyRef), ("$p1", WvAnyRef)]
     locals =
       [
-        Pair "$a" (WvRef "$str"),
-        Pair "$b" (WvRef "$str"),
-        Pair "$na" WvI32,
-        Pair "$nb" WvI32,
-        Pair "$i" WvI32,
-        Pair "$eq" WvI32
+        ("$a", WvRef "$str"),
+        ("$b", WvRef "$str"),
+        ("$na", WvI32),
+        ("$nb", WvI32),
+        ("$i", WvI32),
+        ("$eq", WvI32)
       ]
     loop =
       [
@@ -1707,7 +1700,7 @@ rtEqStr =
 rtNeqStr : WatFunc
 rtNeqStr =
   let
-    params = [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef]
+    params = [("$p0", WvAnyRef), ("$p1", WvAnyRef)]
     body =
       [
         ILocalGet "$p0",
@@ -1724,14 +1717,14 @@ rtNeqStr =
 rtBoxZero : WatFunc
 rtBoxZero =
   let
-    params = [Pair "$p0" WvAnyRef]
+    params = [("$p0", WvAnyRef)]
   in rtFunc "$rt_boxZero" params [WvAnyRef] [] [IConstI64 0, IStructNew "$int"]
 
 -- | `@vuna@debug@on`：1 元常量 False（`dbg!` 的开关在 wasm 上恒关）。
 rtConstFalse1 : WatFunc
 rtConstFalse1 =
   let
-    params = [Pair "$p0" WvAnyRef]
+    params = [("$p0", WvAnyRef)]
   in rtFunc "$rt_constFalse1" params [WvAnyRef] [] (boolValue False)
 
 -- | 三向比较基元（-1 / 0 / 1）；`$rt_compare` 与字符串/数组比较共用。
@@ -1739,7 +1732,7 @@ rtConstFalse1 =
 rtCmpI32 : WatFunc
 rtCmpI32 =
   let
-    params = [Pair "$x" WvI32, Pair "$y" WvI32]
+    params = [("$x", WvI32), ("$y", WvI32)]
     body =
       [
         ILocalGet "$x",
@@ -1755,7 +1748,7 @@ rtCmpI32 =
 rtCmpI64 : WatFunc
 rtCmpI64 =
   let
-    params = [Pair "$x" WvI64, Pair "$y" WvI64]
+    params = [("$x", WvI64), ("$y", WvI64)]
     body =
       [
         ILocalGet "$x",
@@ -1771,7 +1764,7 @@ rtCmpI64 =
 rtCmpF64 : WatFunc
 rtCmpF64 =
   let
-    params = [Pair "$x" WvF64, Pair "$y" WvF64]
+    params = [("$x", WvF64), ("$y", WvF64)]
     body =
       [
         ILocalGet "$x",
@@ -1788,21 +1781,21 @@ rtCmpF64 =
 rtGenericCmp : String -> String -> WatFunc
 rtGenericCmp name op =
   let
-    params = [Pair "$a" WvAnyRef, Pair "$b" WvAnyRef]
+    params = [("$a", WvAnyRef), ("$b", WvAnyRef)]
     body = [ILocalGet "$a", ILocalGet "$b", ICall "$rt_compare", IConstI32 0, IBinop op, II31New]
   in rtFunc name params [WvAnyRef] [] body
 
 rtBoxZero2 : WatFunc
 rtBoxZero2 =
   let
-    params = [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef]
+    params = [("$p0", WvAnyRef), ("$p1", WvAnyRef)]
   in rtFunc "$rt_boxZero2" params [WvAnyRef] [] [IConstI64 0, IStructNew "$int"]
 
 -- | 未实现的宿主操作：按 arity 生成显式失败函数（不伪造结果）。
 rtHostTrap : RtConsts -> Int -> WatFunc
 rtHostTrap c n =
   let
-    params = map (\i => Pair ("$p" ++ strFromInt i) WvAnyRef) (range 0 n)
+    params = map (\i => ("$p" ++ strFromInt i, WvAnyRef)) (range 0 n)
   in rtFunc
     "$rt_hostTrap${strFromInt n}"
     params
@@ -1816,7 +1809,7 @@ rtHostTrap c n =
 rtCleanupPush : WatFunc
 rtCleanupPush =
   let
-    params = [Pair "$p0" WvAnyRef]
+    params = [("$p0", WvAnyRef)]
     body =
       [
         ILocalGet "$p0",
@@ -1835,7 +1828,7 @@ rtCleanupPush =
 rtCleanupPop : WatFunc
 rtCleanupPop =
   let
-    params = [Pair "$p0" WvAnyRef]
+    params = [("$p0", WvAnyRef)]
     body =
       [
         IGlobalGet "$g_cleanups",
@@ -1853,7 +1846,7 @@ rtCleanupPop =
 rtObsSpan : WatFunc
 rtObsSpan =
   let
-    params = [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef, Pair "$p2" WvAnyRef]
+    params = [("$p0", WvAnyRef), ("$p1", WvAnyRef), ("$p2", WvAnyRef)]
     body = [ILocalGet "$p2", IConstI64 0, IStructNew "$int", IReturnCall "$rt_apply"]
   in rtFunc "$rt_obsSpan" params [WvAnyRef] [] body
 
@@ -1861,14 +1854,14 @@ rtObsSpan =
 rtObsSpanLab : WatFunc
 rtObsSpanLab =
   let
-    params = [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef, Pair "$p2" WvAnyRef, Pair "$p3" WvAnyRef]
+    params = [("$p0", WvAnyRef), ("$p1", WvAnyRef), ("$p2", WvAnyRef), ("$p3", WvAnyRef)]
     body = [ILocalGet "$p3", IConstI64 0, IStructNew "$int", IReturnCall "$rt_apply"]
   in rtFunc "$rt_obsSpanLab" params [WvAnyRef] [] body
 
 rtBitNot : WatFunc
 rtBitNot =
   let
-    params = [Pair "$p0" WvAnyRef]
+    params = [("$p0", WvAnyRef)]
     body = cat [unboxInt 0, [IConstI64 (0 - 1), IBinop "i64.xor"], wrap63, boxInt]
   in rtFunc "$rt_bitNot" params [WvAnyRef] [] body
 
@@ -1887,8 +1880,8 @@ shiftCountOk =
 rtBitShl : WatFunc
 rtBitShl =
   let
-    params = [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef]
-    locals = [Pair "$a" WvI64, Pair "$n" WvI64]
+    params = [("$p0", WvAnyRef), ("$p1", WvAnyRef)]
+    locals = [("$a", WvI64), ("$n", WvI64)]
     body =
       cat
         [unboxInt 0, [ILocalSet "$a"], unboxInt 1, [ILocalSet "$n"], shiftCountOk, [IIf "i64" [IConstI64 0] (cat [[ILocalGet "$a", ILocalGet "$n", IBinop "i64.shl"], wrap63])], boxInt]
@@ -1897,8 +1890,8 @@ rtBitShl =
 rtBitShr : WatFunc
 rtBitShr =
   let
-    params = [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef]
-    locals = [Pair "$a" WvI64, Pair "$n" WvI64]
+    params = [("$p0", WvAnyRef), ("$p1", WvAnyRef)]
+    locals = [("$a", WvI64), ("$n", WvI64)]
     body =
       cat
         [unboxInt 0, [ILocalSet "$a"], unboxInt 1, [ILocalSet "$n"], shiftCountOk, [IIf "i64" [IConstI64 0] [ILocalGet "$a", IConstI64 1, IBinop "i64.shl", IConstI64 1, IBinop "i64.shr_u", ILocalGet "$n", IBinop "i64.shr_u"]], boxInt]
@@ -1911,8 +1904,8 @@ rtBitShr =
 rtResumeTwice : RtConsts -> WatFunc
 rtResumeTwice c = rtFunc "$rt_resumeTwice" [] [] [] (failWithConst c.rtcResumedOff c.rtcResumedLen)
 
-cpsParams : Int -> List (Pair String WatValTy)
-cpsParams n = map (\i => Pair ("$p" ++ strFromInt i) WvAnyRef) (range 0 n)
+cpsParams : Int -> List (String, WatValTy)
+cpsParams n = map (\i => ("$p" ++ strFromInt i, WvAnyRef)) (range 0 n)
 
 -- | 没有匹配 handler 的 perform。
 rtCpsUnhandled : RtConsts -> WatFunc
@@ -1923,8 +1916,8 @@ rtCpsUnhandled c =
 rtCpsUnhandled2 : RtConsts -> WatFunc
 rtCpsUnhandled2 c =
   let
-    params = [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef]
-    locals = [Pair "$m" WvAnyRef]
+    params = [("$p0", WvAnyRef), ("$p1", WvAnyRef)]
+    locals = [("$m", WvAnyRef)]
     body =
       cat
         [mkString c.rtcUnhandledOff c.rtcUnhandledLen, [ILocalGet "$p0", ICall "$rt_strConcat"], [ILocalGet "$p1", ICall "$rt_strConcat"], [ILocalSet "$m"], [ILocalGet "$m", ICall "$rt_failStr", IUnreachable]]

@@ -278,8 +278,8 @@ jsonQuote : String -> String
 jsonQuote s = "\"" ++ join "" (map jsonEscapeChar (strUnpack s)) ++ "\""
 
 -- | 内部：需要特殊处理的字符码及其 JSON 转义文本。
-jsonEscapes : List (Pair Int String)
-jsonEscapes = [Pair 34 "\\\"", Pair 92 "\\\\", Pair 10 "\\n", Pair 13 "\\r", Pair 9 "\\t"]
+jsonEscapes : List (Int, String)
+jsonEscapes = [(34, "\\\""), (92, "\\\\"), (10, "\\n"), (13, "\\r"), (9, "\\t")]
 
 -- | 内部：单个字符码的 JSON 转义（其余控制字符走 `\u00XX`，普通字符原样）。
 jsonEscapeChar : Int -> String
@@ -289,9 +289,9 @@ jsonEscapeChar c =
     Nothing => if c < 32 then "\\u00" ++ hexPair c else strPack [c]
 
 -- | 内部：在转义表里查字符码。
-lookupEscape : Int -> List (Pair Int String) -> Maybe String
+lookupEscape : Int -> List (Int, String) -> Maybe String
 lookupEscape c [] = Nothing
-lookupEscape c ((Pair k v) :: rest) = if c == k then Just v else lookupEscape c rest
+lookupEscape c ((k, v) :: rest) = if c == k then Just v else lookupEscape c rest
 
 -- | 内部：字节值的两位十六进制文本（小写）。
 hexPair : Int -> String

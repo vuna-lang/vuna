@@ -231,7 +231,7 @@ pkgIdentityDeps : Bool
 pkgIdentityDeps =
   let
     a = PackageSource "p" [] [] pkgFilesSample
-    b = PackageSource "p" [] [Pair "dep" "abc"] pkgFilesSample
+    b = PackageSource "p" [] [("dep", "abc")] pkgFilesSample
   in contentHashOf a == contentHashOf b && not (identityHashOf a == identityHashOf b)
 
 -- | 跨机器稳定性的金标：规范编码 + SHA-256 的固定输入必须得到固定摘要。
@@ -307,19 +307,19 @@ termFixtures =
     TType (levelOfInt 2),
     TPi "a" True RigOmega (TType (levelOfInt 0)) (TLam "x" Rig1 Nothing spB (TVar "x" 0 spB)),
     TApp (TGlobal "f") (TInt 7) Rig1,
-    TCon "Cons" [Pair (TInt 1) RigOmega, Pair (TStr "s") Rig1],
-    TMk "Point" [Pair (TInt 1) RigOmega],
+    TCon "Cons" [(TInt 1, RigOmega), (TStr "s", Rig1)],
+    TMk "Point" [(TInt 1, RigOmega)],
     TCase
       (TGlobal "n")
-      [CaseAlt "Zero" [] (TInt 0), CaseAlt "Succ" [binderOfPair (Pair "k" Rig1)] (TVar "k" 0 sp0)],
-    TProj (TGlobal "p") "Point" [Pair "x" RigOmega] 0 2,
-    TRecUpd (TGlobal "p") "Point" [Pair "x" RigOmega] [0] (TInt 9),
+      [CaseAlt "Zero" [] (TInt 0), CaseAlt "Succ" [binderOfPair ("k", Rig1)] (TVar "k" 0 sp0)],
+    TProj (TGlobal "p") "Point" [("x", RigOmega)] 0 2,
+    TRecUpd (TGlobal "p") "Point" [("x", RigOmega)] [0] (TInt 9),
     TInt 42,
     TStr "hello",
     TBool True,
     TIf (TBool False) (TInt 1) (TInt 2),
     TFloat "1.5",
-    TRecord "Point" [Pair (TInt 1) RigOmega]
+    TRecord "Point" [(TInt 1, RigOmega)]
   ]
 
 -- | 一次「编码 → 解码 → 重编码」是否逐字节一致（span 被有意丢弃，所以比较编码而非原值）。
@@ -385,8 +385,8 @@ declFixtures =
 exprFixture : Expr
 exprFixture =
   ELet
-    [Pair (PVar "x" (detachedNodeRef spA)) (EInt 1 (detachedNodeRef spA)), Pair (PAs "y" (PCon "Just" [PInt 2 (detachedNodeRef spB)] (detachedNodeRef spB)) (detachedNodeRef spB)) (EFloat "1.5" (detachedNodeRef spA))]
-    (EDo [DBind (PVar "z" (detachedNodeRef spA)) (EField (EVar "r" (detachedNodeRef spA)) "field" (detachedNodeRef spA)) (detachedNodeRef spA), DBind (PRecord "Point" [Pair "x" (PVar "px" (detachedNodeRef spA))] (detachedNodeRef spA)) (ERecord "Point" [Pair "x" (EInt 3 (detachedNodeRef spA))] (detachedNodeRef spA)) (detachedNodeRef spA), DExpr (EIf (EVar "True" (detachedNodeRef spA)) (ECase (EVar "z" (detachedNodeRef spA)) [Pair (PStr "s" (detachedNodeRef spA)) (EInt 0 (detachedNodeRef spA))] (detachedNodeRef spA)) (EBacktick "add" (EInt 1 (detachedNodeRef spA)) (EInt 2 (detachedNodeRef spA)) (detachedNodeRef spA)) (detachedNodeRef spA)) (detachedNodeRef spA), DExpr (ESectL "+" (EInt 4 (detachedNodeRef spA)) (detachedNodeRef spA)) (detachedNodeRef spA)] (detachedNodeRef spA))
+    [(PVar "x" (detachedNodeRef spA), EInt 1 (detachedNodeRef spA)), (PAs "y" (PCon "Just" [PInt 2 (detachedNodeRef spB)] (detachedNodeRef spB)) (detachedNodeRef spB), EFloat "1.5" (detachedNodeRef spA))]
+    (EDo [DBind (PVar "z" (detachedNodeRef spA)) (EField (EVar "r" (detachedNodeRef spA)) "field" (detachedNodeRef spA)) (detachedNodeRef spA), DBind (PRecord "Point" [("x", PVar "px" (detachedNodeRef spA))] (detachedNodeRef spA)) (ERecord "Point" [("x", EInt 3 (detachedNodeRef spA))] (detachedNodeRef spA)) (detachedNodeRef spA), DExpr (EIf (EVar "True" (detachedNodeRef spA)) (ECase (EVar "z" (detachedNodeRef spA)) [(PStr "s" (detachedNodeRef spA), EInt 0 (detachedNodeRef spA))] (detachedNodeRef spA)) (EBacktick "add" (EInt 1 (detachedNodeRef spA)) (EInt 2 (detachedNodeRef spA)) (detachedNodeRef spA)) (detachedNodeRef spA)) (detachedNodeRef spA), DExpr (ESectL "+" (EInt 4 (detachedNodeRef spA)) (detachedNodeRef spA)) (detachedNodeRef spA)] (detachedNodeRef spA))
     False
     (detachedNodeRef spA)
 

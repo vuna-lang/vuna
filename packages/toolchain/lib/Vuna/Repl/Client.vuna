@@ -45,7 +45,7 @@ readOneFrame conn buf fuel =
     pure Nothing
   else
     case splitHeaderBlock buf of
-      Just (Pair header rest) =>
+      Just (header, rest) =>
         case contentLengthOf header of
           Just len =>
             if strLength rest >= len then

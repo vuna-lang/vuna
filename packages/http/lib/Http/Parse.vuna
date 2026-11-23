@@ -93,7 +93,7 @@ splitHead msg =
     [] => Incomplete
 
 -- | 逐行解析头部；折叠行（以空格或制表符开头）非法。
-parseHeaders : List String -> Maybe (List (Pair String String))
+parseHeaders : List String -> Maybe (List (String, String))
 parseHeaders [] = Just []
 parseHeaders (line :: rest) =
   if startsWith " " line || startsWith "\t" line then
@@ -107,7 +107,7 @@ parseHeaders (line :: rest) =
           Just hs => Just (h :: hs)
 
 -- | 按头部决定体框架：分块、`Content-Length` 或空体。
-parseBody : List (Pair String String) -> String -> Parsed String
+parseBody : List (String, String) -> String -> Parsed String
 parseBody hs rest =
   let
     teCount = Header.countHeader "transfer-encoding" hs

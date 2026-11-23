@@ -719,7 +719,7 @@ record GoldenRun where
   -- | check 结果（未请求时是 `OkC []`）。
   grCheck : Check (List Diagnostic)
   -- | compile 结果：退出码 + codegen 诊断。
-  grCompile : Check (Pair Int (List Diagnostic))
+  grCompile : Check (Int, List Diagnostic)
   -- | compile 是否成功（cache sync / build / run 断言的门）。
   grCompileOk : Bool
   -- | 同步共享构建目录的退出码（未同步时为 0）。
@@ -930,7 +930,7 @@ record ErrorRun where
   -- | interp 结果（未请求时是占位诊断）。
   erInterp : Check String
   -- | compile 结果（未请求时是占位诊断）。
-  erCompile : Check (Pair Int (List Diagnostic))
+  erCompile : Check (Int, List Diagnostic)
   -- | 「compile 不产出输出目录」断言（未请求时是恒真占位）。
   erAbsent : Assertion
   -- | 耗时（毫秒）。
@@ -1035,11 +1035,11 @@ diagsOfCheck (OkC ds) = ds
 diagsOfCheck (ErrC e) = flattenErr e
 
 -- | 内部：清空输出目录后进程内 compile。
-compileFresh : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> Eff r (Check (Pair Int (List Diagnostic)))
+compileFresh : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> Eff r (Check (Int, List Diagnostic))
 compileFresh source outdir = compileFreshResult source outdir
 
 -- | 内部：`rm -rf` 输出目录后进程内 compile，保证「决不产出」断言不被上次残留污染。
-compileFreshResult : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> Eff r (Check (Pair Int (List Diagnostic)))
+compileFreshResult : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> Eff r (Check (Int, List Diagnostic))
 compileFreshResult source outdir =
   do
     _ <- removeTree outdir
@@ -1047,9 +1047,9 @@ compileFreshResult source outdir =
 
 -- | 内部：compile 结果 → 诊断列表：`CG_NoMain` 一类 codegen 门禁的诊断藏在 `OkC` 的第二
 -- 分量里，非空时转成 `ErrC`。
-compileDiags : Check (Pair Int (List Diagnostic)) -> Check (List Diagnostic)
+compileDiags : Check (Int, List Diagnostic) -> Check (List Diagnostic)
 compileDiags (ErrC e) = ErrC e
-compileDiags (OkC (Pair _ ds)) = if listLength ds == 0 then OkC [] else ErrC (firstDiagOf ds)
+compileDiags (OkC (_, ds)) = if listLength ds == 0 then OkC [] else ErrC (firstDiagOf ds)
 
 -- | 内部：取第一条诊断；空列表给占位诊断。
 firstDiagOf : List Diagnostic -> Diagnostic
@@ -1302,14 +1302,14 @@ fixCase env c source expected =
     in finishCase c.caseId start [timeoutAssert c ((end - start) / 1000), fixA, idemA]
 
 -- | 内部：跑一次进程内 `lint --fix`，返回 `(新源码, 错误文本)`；无改动时新源码与输入相同。
-fixPass : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> Eff r (Pair String String)
+fixPass : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> Eff r (String, String)
 fixPass source text =
   do
     fixed <- fixFile source text
     pure (
         case fixed of
-          ErrC e => Pair text (diagText e)
-          OkC (Pair _ newSource) => Pair newSource ""
+          ErrC e => (text, diagText e)
+          OkC (_, newSource) => (newSource, "")
       )
 
 -- | 执行一个产物运行期 case：进程内 compile 并同步共享构建桶，子进程跑 `build.sh` 与产物，
@@ -1382,7 +1382,7 @@ record Step where
   -- | `file-absent:` 必须不存在的文件。
   stAbsent : List String
   -- | `file-contains:` 必须含指定片段的文件，逐项为 `(路径, 片段)`。
-  stFileContains : List (Pair String String)
+  stFileContains : List (String, String)
 
 -- | 内部：全空的步骤模板。
 emptyStep : Step
@@ -1445,17 +1445,16 @@ firstSpaceIndex [] i = 0 - 1
 firstSpaceIndex (c :: rest) i = if c == 32 then i else firstSpaceIndex rest (i + 1)
 
 -- | 内部：按第一个空格切成 `(前段, 去空白的后段)`；没有空格时后段为空串。
-splitFirstSpace : String -> Pair String String
+splitFirstSpace : String -> (String, String)
 splitFirstSpace text =
   let
     i = firstSpaceIndex (strUnpack text) 0
     n = natToInt (byteLength text)
   in if i < 0 then
-    Pair text ""
+    (text, "")
   else
-    Pair
-      (substring 0 (natFromInt i) text)
-      (trim (substring (natFromInt (i + 1)) (natFromInt (n - i - 1)) text))
+    (substring 0 (natFromInt i) text,
+      trim (substring (natFromInt (i + 1)) (natFromInt (n - i - 1)) text))
 
 -- | 内部：给步骤设置 `exit:` 规格。
 stepWithExit : Step -> String -> Step
@@ -1563,7 +1562,7 @@ stepWithAbsent st x =
     st.stFileContains
 
 -- | 内部：给步骤追加一条 `file-contains:`（`(路径, 片段)`）。
-stepWithFileContains : Step -> Pair String String -> Step
+stepWithFileContains : Step -> (String, String) -> Step
 stepWithFileContains st x =
   Step
     st.stRun
@@ -1734,9 +1733,8 @@ substText item name text =
   replaceAll "{item}" item (replaceAll "{name}" name (replaceAll "{stem}" (stemOf item) text))
 
 -- | 内部：对 `(路径, 片段)` 的两侧都做占位替换。
-substFileContains : String -> String -> Pair String String -> Pair String String
-substFileContains item name (Pair path frag) =
-  Pair (substText item name path) (substText item name frag)
+substFileContains : String -> String -> (String, String) -> (String, String)
+substFileContains item name (path, frag) = (substText item name path, substText item name frag)
 
 -- | 内部：步骤所有字段的占位替换。
 substStep : String -> String -> Step -> Step
@@ -1809,8 +1807,8 @@ truncateTail n s =
     "…${substring (natFromInt (byteLength s - n)) (natFromInt n) s}"
 
 -- | 内部：断言文件含指定片段（文件不存在时按空文本比对，必然失败）。
-fileContainsAssert : Member nFs FsOp r => Env -> String -> Pair String String -> Eff r Assertion
-fileContainsAssert env caseTmp (Pair path frag) =
+fileContainsAssert : Member nFs FsOp r => Env -> String -> (String, String) -> Eff r Assertion
+fileContainsAssert env caseTmp (path, frag) =
   do
     text <- readMaybeFile (stepPath env caseTmp path)
     pure
@@ -2178,15 +2176,15 @@ writeResultFile dir index r =
   in fmap natToInt (fsWriteFile path line)
 
 -- | 顺序执行一组带全局下标的 case（每跑完一个就写 TSV），返回按传入顺序排列的结果。
-runCasesIndexed : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Env -> Bool -> Bool -> Bool -> String -> List (Pair Int Case) -> Eff r (List CaseResult)
+runCasesIndexed : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Env -> Bool -> Bool -> Bool -> String -> List (Int, Case) -> Eff r (List CaseResult)
 runCasesIndexed env verbose failFast quiet resultsDir indexed =
   runCasesIndexedGo env verbose failFast quiet resultsDir indexed [] False
 
 -- | 内部：顺序执行的递归体。`stopped`（`--fail-fast` 且已出现失败）之后每个 case 都记
 -- `skip` 并照样写 TSV，保证父进程能按序收齐。
-runCasesIndexedGo : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Env -> Bool -> Bool -> Bool -> String -> List (Pair Int Case) -> List CaseResult -> Bool -> Eff r (List CaseResult)
+runCasesIndexedGo : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Env -> Bool -> Bool -> Bool -> String -> List (Int, Case) -> List CaseResult -> Bool -> Eff r (List CaseResult)
 runCasesIndexedGo env verbose failFast quiet resultsDir [] acc stopped = pure (reverse acc)
-runCasesIndexedGo env verbose failFast quiet resultsDir ((Pair index c) :: rest) acc stopped =
+runCasesIndexedGo env verbose failFast quiet resultsDir ((index, c) :: rest) acc stopped =
   if stopped then
     do
       skip <- pure (CaseResult c.caseId "skip" 0 0 0 0 [])
@@ -2216,7 +2214,7 @@ costsPath : Env -> String
 costsPath env = "${env.envRoot}/.local/test-suite/costs.tsv"
 
 -- | 内部：读耗时表；文件不存在时给空列表。
-loadCosts : Member nFs FsOp r => Env -> Eff r (List (Pair String Int))
+loadCosts : Member nFs FsOp r => Env -> Eff r (List (String, Int))
 loadCosts env =
   do
     exists <- pathExistsFile (costsPath env)
@@ -2228,14 +2226,14 @@ loadCosts env =
         pure (mapMaybe parseCostLine (lines text))
 
 -- | 内部：`id<TAB><ms>` → `(id, ms)`；没有第二个字段时跳过（`Nothing`），第二个字段不是数字时按 100。
-parseCostLine : String -> Maybe (Pair String Int)
+parseCostLine : String -> Maybe (String, Int)
 parseCostLine line =
   case split "\t" line of
-    id :: ms :: _ => Just (Pair id (fromMaybe 100 (parseLeadingInt ms)))
+    id :: ms :: _ => Just (id, fromMaybe 100 (parseLeadingInt ms))
     _ => Nothing
 
 -- | 内部：case 的调度权重：耗时表里有正数就用实测值，否则用 `defaultCost`。
-caseCost : List (Pair String Int) -> Case -> Int
+caseCost : List (String, Int) -> Case -> Int
 caseCost costs c =
   case lookupPair c.caseId costs of
     Just ms => if ms > 0 then ms else defaultCost c
@@ -2261,38 +2259,38 @@ useLpt opts =
     tiers => not (memName "e2e" tiers)
 
 -- | 内部：空桶：用例列表为空、负载 0。
-emptyBin : Pair (List (Pair Int Case)) Int
-emptyBin = Pair [] 0
+emptyBin : (List (Int, Case), Int)
+emptyBin = ([], 0)
 
 -- | 内部：`n` 份同一初值。
-repeatN : Int -> Pair (List (Pair Int Case)) Int -> List (Pair (List (Pair Int Case)) Int)
+repeatN : Int -> (List (Int, Case), Int) -> List (List (Int, Case), Int)
 repeatN n x = if n <= 0 then [] else x :: repeatN (n - 1) x
 
 -- | 内部：按权重降序排序（插入排序）。
-sortWeighted : List (Pair Int (Pair Int Case)) -> List (Pair Int (Pair Int Case))
+sortWeighted : List (Int, Int, Case) -> List (Int, Int, Case)
 sortWeighted [] = []
 sortWeighted (x :: rest) = insertWeighted x (sortWeighted rest)
 
 -- | 内部：把一个带权项插进已按权重降序排好的列表。
-insertWeighted : Pair Int (Pair Int Case) -> List (Pair Int (Pair Int Case)) -> List (Pair Int (Pair Int Case))
+insertWeighted : (Int, Int, Case) -> List (Int, Int, Case) -> List (Int, Int, Case)
 insertWeighted x [] = [x]
-insertWeighted x ((Pair w p) :: rest) =
-  if firstOf x >= w then x :: Pair w p :: rest else Pair w p :: insertWeighted x rest
+insertWeighted x ((w, p) :: rest) =
+  if firstOf x >= w then x :: (w, p) :: rest else (w, p) :: insertWeighted x rest
 
 -- | 内部：按实测耗时把 case 分进 `jobs` 个桶（重 case 优先给当前最轻的桶）；`addAtBinGo`
 -- 前插，桶内按权重升序（最轻的在表头）。
-lptBins : Member nFs FsOp r => Env -> Int -> List (Pair Int Case) -> Eff r (List (List (Pair Int Case)))
+lptBins : Member nFs FsOp r => Env -> Int -> List (Int, Case) -> Eff r (List (List (Int, Case)))
 lptBins env jobs indexed =
   do
     costs <- loadCosts env
     let
-      weighted = map (\p => Pair (caseCost costs (secondOf p)) p) indexed
+      weighted = map (\p => (caseCost costs (secondOf p), p)) indexed
       sorted = sortWeighted weighted
       bins = assignAll sorted (repeatN jobs emptyBin)
     in pure (map (\b => firstOf b) bins)
 
 -- | 内部：逐个把带权项放进当前最轻的桶。
-assignAll : List (Pair Int (Pair Int Case)) -> List (Pair (List (Pair Int Case)) Int) -> List (Pair (List (Pair Int Case)) Int)
+assignAll : List (Int, Int, Case) -> List (List (Int, Case), Int) -> List (List (Int, Case), Int)
 assignAll [] bins = bins
 assignAll (w :: rest) bins =
   let
@@ -2312,20 +2310,20 @@ lightestGo (n :: rest) i best bestLoad =
   if n < bestLoad then lightestGo rest (i + 1) i n else lightestGo rest (i + 1) best bestLoad
 
 -- | 内部：把项加到第 `idx` 个桶。
-addAtBin : Int -> Pair Int (Pair Int Case) -> List (Pair (List (Pair Int Case)) Int) -> List (Pair (List (Pair Int Case)) Int)
+addAtBin : Int -> (Int, Int, Case) -> List (List (Int, Case), Int) -> List (List (Int, Case), Int)
 addAtBin idx w bins = addAtBinGo idx 0 w bins
 
 -- | 内部：`addAtBin` 的递归体（按计数走到第 `idx` 个桶后追加并累加负载）。
-addAtBinGo : Int -> Int -> Pair Int (Pair Int Case) -> List (Pair (List (Pair Int Case)) Int) -> List (Pair (List (Pair Int Case)) Int)
+addAtBinGo : Int -> Int -> (Int, Int, Case) -> List (List (Int, Case), Int) -> List (List (Int, Case), Int)
 addAtBinGo _ _ _ [] = []
-addAtBinGo idx i w ((Pair items load) :: rest) =
+addAtBinGo idx i w ((items, load) :: rest) =
   if i == idx then
-    Pair (secondOf w :: items) (load + firstOf w) :: rest
+    (secondOf w :: items, load + firstOf w) :: rest
   else
-    Pair items load :: addAtBinGo idx (i + 1) w rest
+    (items, load) :: addAtBinGo idx (i + 1) w rest
 
 -- | 内部：取第 `n` 个桶；越界给空桶。
-nthBin : Int -> List (List (Pair Int Case)) -> List (Pair Int Case)
+nthBin : Int -> List (List (Int, Case)) -> List (Int, Case)
 nthBin _ [] = []
 nthBin n (b :: rest) = if n <= 0 then b else nthBin (n - 1) rest
 
@@ -2460,18 +2458,18 @@ readResultFile dir index =
           )
 
 -- | 内部：按全局下标顺序收集 worker 结果，缺失的补一条失败（见 `caseIdAt`）。
-collectResults : Member nFs FsOp r => String -> Int -> List (Pair Int Case) -> Eff r (List CaseResult)
+collectResults : Member nFs FsOp r => String -> Int -> List (Int, Case) -> Eff r (List CaseResult)
 collectResults dir count indexed = collectResultsGo (count + 1) dir count 0 indexed []
 
 -- 缺结果文件 ⇒ worker 没跑完 / 被杀（崩溃、OOM、被外层超时杀掉），不是 case 断言失败；
 -- 用全局下标还原真实用例名，否则线上失败无法定位。
 -- | 内部：全局下标 → case id；找不到时给 `unknown-<index>`。
-caseIdAt : Int -> List (Pair Int Case) -> String
+caseIdAt : Int -> List (Int, Case) -> String
 caseIdAt i [] = "unknown-${strOfInt i}"
-caseIdAt i ((Pair j c) :: rest) = if j == i then c.caseId else caseIdAt i rest
+caseIdAt i ((j, c) :: rest) = if j == i then c.caseId else caseIdAt i rest
 
 -- | 内部：`collectResults` 的递归体（`fuel` 上限防跑飞）。
-collectResultsGo : Member nFs FsOp r => Int -> String -> Int -> Int -> List (Pair Int Case) -> List CaseResult -> Eff r (List CaseResult)
+collectResultsGo : Member nFs FsOp r => Int -> String -> Int -> Int -> List (Int, Case) -> List CaseResult -> Eff r (List CaseResult)
 collectResultsGo fuel dir count index indexed acc =
   if fuel <= 0 then
     pure (reverse acc)
@@ -2491,14 +2489,14 @@ printJSON results =
     cases = map resultJson results
     doc =
       JObj
-        [Pair "suite" (JStr "vuna"), Pair "total" (JNum (listLength results)), Pair "failed" (JNum (listLength (filter isFailed results))), Pair "checks" (JNum (sumInts (map resChecksOf results))), Pair "cases" (JArr cases)]
+        [("suite", JStr "vuna"), ("total", JNum (listLength results)), ("failed", JNum (listLength (filter isFailed results))), ("checks", JNum (sumInts (map resChecksOf results))), ("cases", JArr cases)]
   in printLine (renderJson doc)
 
 -- | 内部：单条结果 → JSON 对象。
 resultJson : CaseResult -> Json
 resultJson r =
   JObj
-    [Pair "id" (JStr r.resId), Pair "status" (JStr r.resStatus), Pair "pass" (JNum r.resPass), Pair "fail" (JNum r.resFail), Pair "checks" (JNum r.resChecks), Pair "ms" (JNum r.resMs)]
+    [("id", JStr r.resId), ("status", JStr r.resStatus), ("pass", JNum r.resPass), ("fail", JNum r.resFail), ("checks", JNum r.resChecks), ("ms", JNum r.resMs)]
 
 -- | 收尾：写耗时表与上次失败列表，按需打印 timings / JSON / 汇总，返回退出码
 -- （`--strict-skips` 时 `skip` 也算失败）。
@@ -2621,9 +2619,9 @@ runParent env opts suite cases =
           finishResults env opts results
 
 -- | 内部：给 case 配全局下标（从 0 起，保持发现顺序）。
-indexAll : List Case -> Int -> List (Pair Int Case) -> List (Pair Int Case)
+indexAll : List Case -> Int -> List (Int, Case) -> List (Int, Case)
 indexAll [] i acc = reverse acc
-indexAll (c :: rest) i acc = indexAll rest (i + 1) (Pair i c :: acc)
+indexAll (c :: rest) i acc = indexAll rest (i + 1) ((i, c) :: acc)
 
 -- ---------------------------------------------------------------
 -- list
@@ -2814,7 +2812,7 @@ rootOfPath path =
     path
 
 -- | 内部：收集 steps 文件的文本（用于审计的文本认领）。
-claimTextPairs : Member nFs FsOp r => List Case -> Eff r (List (Pair String String))
+claimTextPairs : Member nFs FsOp r => List Case -> Eff r (List (String, String))
 claimTextPairs [] = pure []
 claimTextPairs (c :: rest) =
   case c.caseKind of
@@ -2822,17 +2820,17 @@ claimTextPairs (c :: rest) =
       do
         text <- fsReadFile path
         more <- claimTextPairs rest
-        pure (Pair path text :: more)
+        pure ((path, text) :: more)
     _ => claimTextPairs rest
 
 -- | 内部：是否有 steps 文本提到该路径（test 根相对全路径或其 corpus 目录）。
-anyText : List (Pair String String) -> String -> Bool
+anyText : List (String, String) -> String -> Bool
 anyText [] rel = False
-anyText ((Pair _ text) :: rest) rel =
+anyText ((_, text) :: rest) rel =
   if contains rel text || contains (corpusDirPrefix rel) text then True else anyText rest rel
 
 -- | 内部：该路径被某个 case 的目录根覆盖，或被 steps 文本提到。
-auditClaimed : String -> List Case -> List (Pair String String) -> String -> Bool
+auditClaimed : String -> List Case -> List (String, String) -> String -> Bool
 auditClaimed testRoot cases texts path =
   any (\c => any (\root => root == path || startsWith root path) (caseRootsAbs c)) cases
     || anyText texts (relativeTo testRoot path)
@@ -2905,7 +2903,7 @@ familyFixtures root family =
           Nothing => pure (concatMap (fixtureTopOf family.familyDir) (filter isFixtureFile names))
 
 -- | 内部：精确审计用的空 steps 文本表（不做文本认领）。
-noSectionTexts : List (Pair String String)
+noSectionTexts : List (String, String)
 noSectionTexts = []
 
 -- | 内部：该夹具在精确审计下是孤儿（只有目录认领算数）。
@@ -3022,7 +3020,7 @@ runSuiteOnce opts suite =
     testRoot = suite.suiteRoot
     tag =
       case opts.suiteWorker of
-        Just (Pair i _) => "suite-w${strOfInt i}"
+        Just (i, _) => "suite-w${strOfInt i}"
         Nothing => "suite"
     cacheDir =
       case opts.suiteCacheDir of
@@ -3030,7 +3028,7 @@ runSuiteOnce opts suite =
         Nothing => "${root}/.local/test-cache"
     scope =
       case opts.suiteWorker of
-        Just (Pair i _) => "w${strOfInt i}"
+        Just (i, _) => "w${strOfInt i}"
         Nothing => "single"
     workerMode =
       case opts.suiteWorker of
@@ -3087,7 +3085,7 @@ runSuiteOnce opts suite =
           listSuite env cases
         else
           case opts.suiteWorker of
-            Just (Pair index count) => runWorker env opts cases index count
+            Just (index, count) => runWorker env opts cases index count
             Nothing => runParent env opts suite cases
       _ <- processRunIn "/" ["rm", "-rf", tmp]
       pure result
@@ -3097,13 +3095,13 @@ rangeUp : Int -> Int -> List Int
 rangeUp fuel start = if fuel <= 0 then [] else start :: rangeUp (fuel - 1) (start + 1)
 
 -- | 内部：静态分片：带上全局下标后按 `matchesIndex` 过滤出该 worker 的 case。
-indexedCases : List Case -> Int -> Int -> List (Pair Int Case)
+indexedCases : List Case -> Int -> Int -> List (Int, Case)
 indexedCases cases index count =
   filter (matchesIndex index count) (zip (rangeUp (listLength cases) 0) cases)
 
 -- | 内部：全局下标 `i` 属于第 `index` 个 worker（`i mod count == index`）。
-matchesIndex : Int -> Int -> Pair Int Case -> Bool
-matchesIndex index count (Pair i _) = if count <= 0 then False else i - i / count * count == index
+matchesIndex : Int -> Int -> (Int, Case) -> Bool
+matchesIndex index count (i, _) = if count <= 0 then False else i - i / count * count == index
 
 -- | 内部：把绝对源码路径转成相对 `base` 的路径（`.diag.json` 不写机器相关前缀）。
 relativeTo : String -> String -> String

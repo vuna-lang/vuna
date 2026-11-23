@@ -110,7 +110,7 @@ helpCommand : List Plugin -> List Cmd -> List String -> Eff [FsOp, ConsoleOp, Cl
 helpCommand plugins cmds [] = helpOut plugins cmds []
 helpCommand plugins cmds rest =
   case matchCommandIn 3 rest cmds of
-    Just (Pair c _) => helpOut plugins cmds c.cmdPath
+    Just (c, _) => helpOut plugins cmds c.cmdPath
     Nothing => unknownCommand cmds (join " " rest)
 
 -- | 内部：打印某路径的帮助。`[]` 是总览；delegated 命令转交插件（它才知道编译器 flag）。

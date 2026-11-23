@@ -56,7 +56,7 @@ export record ObsBase(..) where
   -- | 事件分类标签（可缺省 = ""）。
   baseCat : String
   -- | 原始 `args` 扁平对象（键序即文件顺序）。
-  baseArgs : List (Pair String Json)
+  baseArgs : List (String, Json)
 
 -- | 一个 trace 事件：元数据 `M` / 跨度 `X`（自带 `dur`）/ 计数 `C` / 瞬时 `i`。
 export data ObsEvent(..) : Type where
@@ -112,7 +112,7 @@ eventCat (ObsCounterEvent b _) = b.baseCat
 eventCat (ObsInstantEvent b) = b.baseCat
 
 -- | 事件的 `args` 原始扁平对象（缺省 = 空表）。
-export eventArgs : ObsEvent -> List (Pair String Json)
+export eventArgs : ObsEvent -> List (String, Json)
 eventArgs (ObsMetaEvent _) = []
 eventArgs (ObsSpanEvent b _) = b.baseArgs
 eventArgs (ObsCounterEvent b _) = b.baseArgs
@@ -136,10 +136,10 @@ eventValue (ObsCounterEvent _ value) = value
 eventValue _ = Nothing
 
 -- | `X` 的 `[ts, ts + dur]` 区间；`ts` 或 `dur` 缺失、或 `dur` 为负 = `Nothing`。
-export spanInterval : ObsEvent -> Maybe (Pair Int Int)
+export spanInterval : ObsEvent -> Maybe (Int, Int)
 spanInterval (ObsSpanEvent b (Just dur)) =
   case b.baseTs of
-    Just ts => if dur < 0 then Nothing else Just (Pair ts (ts + dur))
+    Just ts => if dur < 0 then Nothing else Just (ts, ts + dur)
     Nothing => Nothing
 spanInterval _ = Nothing
 
@@ -399,7 +399,7 @@ optionalInt line key json =
     Just _ => parseErr line "field `${key}` must be an integer"
 
 -- | 内部：取 `args` 对象的键值对；缺失或不是对象 = 空表。
-argsOfJson : Json -> List (Pair String Json)
+argsOfJson : Json -> List (String, Json)
 argsOfJson json =
   case fieldJson "args" json of
     Just (JObj kvs) => kvs
@@ -498,48 +498,48 @@ parseInstant line json =
 export eventToJson : ObsEvent -> Json
 
 -- | 内部：元数据事件的 `args` 对象；`t0` 缺失时不写出该键。
-metaArgsJson : ObsMetaData -> List (Pair String Json)
+metaArgsJson : ObsMetaData -> List (String, Json)
 metaArgsJson m =
   append
-    [Pair "schema" (JStr m.metaSchema), Pair "version" (JStr m.metaVersion), Pair "level" (JNum m.metaLevel), Pair "exec" (JStr m.metaExec), Pair "argv" (JArr (map JStr m.metaArgv))]
+    [("schema", JStr m.metaSchema), ("version", JStr m.metaVersion), ("level", JNum m.metaLevel), ("exec", JStr m.metaExec), ("argv", JArr (map JStr m.metaArgv))]
     (
       case m.metaT0 of
-        Just t0 => [Pair "t0" (JNum t0)]
+        Just t0 => [("t0", JNum t0)]
         Nothing => []
     )
 
 eventToJson (ObsMetaEvent m) =
   JObj
-    (append [Pair "ph" (JStr "M"), Pair "name" (JStr m.metaName), Pair "pid" (JNum m.metaPid), Pair "tid" (JNum m.metaTid)] [Pair "args" (JObj (metaArgsJson m))])
+    (append [("ph", JStr "M"), ("name", JStr m.metaName), ("pid", JNum m.metaPid), ("tid", JNum m.metaTid)] [("args", JObj (metaArgsJson m))])
 eventToJson (ObsSpanEvent base dur) =
   JObj
-    (append (append [Pair "ph" (JStr "X"), Pair "pid" (JNum base.basePid), Pair "tid" (JNum base.baseTid), Pair "name" (JStr base.baseName)] (append (tsPair base) (catPairs base))) (append (durPairs dur) (argsPairs base)))
+    (append (append [("ph", JStr "X"), ("pid", JNum base.basePid), ("tid", JNum base.baseTid), ("name", JStr base.baseName)] (append (tsPair base) (catPairs base))) (append (durPairs dur) (argsPairs base)))
 eventToJson (ObsCounterEvent base value) =
   JObj
-    (append (append [Pair "ph" (JStr "C"), Pair "pid" (JNum base.basePid), Pair "tid" (JNum base.baseTid), Pair "name" (JStr base.baseName)] (append (tsPair base) (catPairs base))) [Pair "args" (JObj (append [Pair "value" (JNum (fromMaybe 0 value))] base.baseArgs))])
+    (append (append [("ph", JStr "C"), ("pid", JNum base.basePid), ("tid", JNum base.baseTid), ("name", JStr base.baseName)] (append (tsPair base) (catPairs base))) [("args", JObj (append [("value", JNum (fromMaybe 0 value))] base.baseArgs))])
 eventToJson (ObsInstantEvent base) =
   JObj
-    (append (append [Pair "ph" (JStr "i"), Pair "pid" (JNum base.basePid), Pair "tid" (JNum base.baseTid), Pair "name" (JStr base.baseName)] (append (tsPair base) (catPairs base))) (argsPairs base))
+    (append (append [("ph", JStr "i"), ("pid", JNum base.basePid), ("tid", JNum base.baseTid), ("name", JStr base.baseName)] (append (tsPair base) (catPairs base))) (argsPairs base))
 
 -- | 内部：`ts` 键；缺失时返回空表（不写出该键）。
-tsPair : ObsBase -> List (Pair String Json)
+tsPair : ObsBase -> List (String, Json)
 tsPair base =
   case base.baseTs of
-    Just ts => [Pair "ts" (JNum ts)]
+    Just ts => [("ts", JNum ts)]
     Nothing => []
 
 -- | 内部：`cat` 键；空分类不写出。
-catPairs : ObsBase -> List (Pair String Json)
-catPairs base = if base.baseCat == "" then [] else [Pair "cat" (JStr base.baseCat)]
+catPairs : ObsBase -> List (String, Json)
+catPairs base = if base.baseCat == "" then [] else [("cat", JStr base.baseCat)]
 
 -- | 内部：`dur` 键；缺失时返回空表。
-durPairs : Maybe Int -> List (Pair String Json)
-durPairs (Just d) = [Pair "dur" (JNum d)]
+durPairs : Maybe Int -> List (String, Json)
+durPairs (Just d) = [("dur", JNum d)]
 durPairs Nothing = []
 
 -- | 内部：`args` 键；空 args 不写出。
-argsPairs : ObsBase -> List (Pair String Json)
-argsPairs base = if length base.baseArgs == 0 then [] else [Pair "args" (JObj base.baseArgs)]
+argsPairs : ObsBase -> List (String, Json)
+argsPairs base = if length base.baseArgs == 0 then [] else [("args", JObj base.baseArgs)]
 
 -- | 事件 -> 单行 JSON（`renderJson` 的输出无换行，可直接写 JSONL）。
 export renderEventLine : ObsEvent -> String

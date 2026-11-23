@@ -201,7 +201,7 @@ interpFile path =
 -- | `vuna compile <file> <outDir>` 的进程内形态：目录 codegen（含 `build.sh` 与 ffi
 -- 复制），返回模块数与诊断。`printResult = True` 与 CLI 默认一致（影响 codegen 的
 -- 入口展示，进输入摘要）。
-export compileFile : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r => String -> String -> Eff r (Check (Pair Int (List Diagnostic)))
+export compileFile : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r => String -> String -> Eff r (Check (Int, List Diagnostic))
 compileFile path outDir =
   do
     ctxR <- contextForFile path
@@ -211,7 +211,7 @@ compileFile path outDir =
 
 -- | 包目录 compile（`vuna compile <dir> <outDir>`）：先要求可执行包（入口文件存在），
 -- 再编入口。
-export compilePackageAt : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r => String -> String -> Eff r (Check (Pair Int (List Diagnostic)))
+export compilePackageAt : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r => String -> String -> Eff r (Check (Int, List Diagnostic))
 compilePackageAt dir outDir =
   do
     pkgR <- loadPackage dir
@@ -243,7 +243,7 @@ lintFile path =
 --
 -- 必须先取程序级 fixity（`fixitiesForFile`）：`fixLoop` 每轮都用 fixities 重新 lint
 -- 结果源码，空表会让已知运算符退化成 unknown fixity，第二轮起直接放弃修复。
-export fixFile : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> Eff r (Check (Pair Int String))
+export fixFile : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> Eff r (Check (Int, String))
 fixFile path text =
   do
     looked <- fixitiesForFile emptyFixityEnv path text

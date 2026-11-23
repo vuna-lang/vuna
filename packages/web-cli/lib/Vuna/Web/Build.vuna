@@ -67,7 +67,7 @@ failWith code msg =
 
 -- | 取应用依赖闭包里的 `vuna-web` 与 `vuna-base` 包目录（`Pair webDir baseDir`）。
 -- | 用应用自己那一份实例，避免同一张图里出现重名包；`VUNA_WEB` 可覆盖框架目录。
-depDirsOf : Member nEnv EnvOp r => Pkg.PackageContext -> Eff r (Check (Pair String String))
+depDirsOf : Member nEnv EnvOp r => Pkg.PackageContext -> Eff r (Check (String, String))
 depDirsOf ctx =
   do
     override <- envGetEnv "VUNA_WEB"
@@ -76,7 +76,7 @@ depDirsOf ctx =
       Just base =>
         case webChoice override ctx of
           Nothing => pure (err "application must depend on vuna-web")
-          Just web => pure (OkC (Pair web base))
+          Just web => pure (OkC (web, base))
 
 -- | `VUNA_WEB` 优先，否则取依赖闭包里的 `vuna-web`。
 webChoice : String -> Pkg.PackageContext -> Maybe String

@@ -48,26 +48,25 @@ memberAnchor modName parent member =
 -- | 交叉引用表：只放全名（`[Module.name]` 形式）。
 --
 -- 短名在消歧前不自动加，避免把 `[map]` 链到错误模块。
-linkMap : DocBook -> List (Pair String String)
+linkMap : DocBook -> List (String, String)
 linkMap book = concatMap moduleLinks (bookModules book)
 
 -- | 内部：一个模块及其条目 / 成员的链接项。
-moduleLinks : DocModule -> List (Pair String String)
+moduleLinks : DocModule -> List (String, String)
 moduleLinks m =
-  Pair (moduleName m) (moduleAnchor m) :: concatMap (itemLinks (moduleName m)) (moduleItems m)
+  (moduleName m, moduleAnchor m) :: concatMap (itemLinks (moduleName m)) (moduleItems m)
 
 -- | 内部：一个条目及其成员的链接项。
-itemLinks : String -> DocItem -> List (Pair String String)
+itemLinks : String -> DocItem -> List (String, String)
 itemLinks modName item =
-  Pair (concat2 modName (concat2 "." (itemName item))) (itemAnchor modName item)
+  (concat2 modName (concat2 "." (itemName item)), itemAnchor modName item)
     :: map (memberLink modName (itemName item)) (itemMembers item)
 
 -- | 内部：一个成员的链接项。
-memberLink : String -> String -> DocItem -> Pair String String
+memberLink : String -> String -> DocItem -> (String, String)
 memberLink modName parent member =
-  Pair
-    (concat2 modName (concat2 "." (concat2 parent (concat2 "." (itemName member)))))
-    (memberAnchor modName parent member)
+  (concat2 modName (concat2 "." (concat2 parent (concat2 "." (itemName member)))),
+    memberAnchor modName parent member)
 
 -- ---------------------------------------------------------------
 -- 页面
@@ -118,19 +117,19 @@ moduleTocItem m =
   strConcatMany ["<li><a href='#", moduleAnchor m, "'>", htmlEscape (moduleName m), "</a></li>\n"]
 
 -- | 内部：一个模块的整节（模块 docstring + 条目）。
-renderModule : List (Pair String String) -> DocModule -> String
+renderModule : List (String, String) -> DocModule -> String
 renderModule links m =
   strConcatMany
     ["<section class='module' id='", moduleAnchor m, "'>\n<h2>", htmlEscape (moduleName m), "<span class='pkg'>", htmlEscape (displayPackage (modulePackage m)), "</span></h2>\n", renderDoc links (moduleDoc m), strConcatMany (map (renderItem links (moduleName m)) (moduleItems m)), "</section>\n"]
 
 -- | 内部：一个条目的整块（标题、签名、docstring、成员）。
-renderItem : List (Pair String String) -> String -> DocItem -> String
+renderItem : List (String, String) -> String -> DocItem -> String
 renderItem links modName item =
   strConcatMany
     ["<article class='item' id='", itemAnchor modName item, "'>\n<h3>", htmlEscape (itemName item), " <span class='kind'>", htmlEscape (itemKind item), "</span> <span class='loc'>line ", strFromInt (itemLine item), "</span></h3>\n", renderSignature (itemSignature item), renderDoc links (itemDoc item), strConcatMany (map (renderMember links modName (itemName item)) (itemMembers item)), "</article>\n"]
 
 -- | 内部：一个成员块（标题、签名、docstring）。
-renderMember : List (Pair String String) -> String -> String -> DocItem -> String
+renderMember : List (String, String) -> String -> String -> DocItem -> String
 renderMember links modName parent member =
   strConcatMany
     ["<div class='member' id='", memberAnchor modName parent member, "'>\n<h4>", htmlEscape (itemName member), " <span class='kind'>", htmlEscape (itemKind member), "</span></h4>\n", renderSignature (itemSignature member), renderDoc links (itemDoc member), "</div>\n"]
@@ -144,7 +143,7 @@ renderSignature sig =
     strConcatMany ["<pre class='sig'><code>", htmlEscape sig, "</code></pre>\n"]
 
 -- | 内部：docstring 块；空 docstring 不输出。
-renderDoc : List (Pair String String) -> String -> String
+renderDoc : List (String, String) -> String -> String
 renderDoc links doc =
   if doc == "" then "" else strConcatMany ["<div class='doc'>", renderProse links doc, "</div>\n"]
 
@@ -195,7 +194,7 @@ memberEntry m parent member =
 entryJson : String -> String -> String -> String -> String -> String -> String -> Json
 entryJson name modName pkg kind sig doc anchor =
   JObj
-    [Pair "n" (JStr name), Pair "m" (JStr modName), Pair "p" (JStr pkg), Pair "k" (JStr kind), Pair "s" (JStr sig), Pair "d" (JStr doc), Pair "a" (JStr anchor)]
+    [("n", JStr name), ("m", JStr modName), ("p", JStr pkg), ("k", JStr kind), ("s", JStr sig), ("d", JStr doc), ("a", JStr anchor)]
 
 -- | 内部：把 `<` 转成 `\u003c`，避免 JSON 里出现 `</script` 提前闭合。
 scriptSafe : String -> String

@@ -107,7 +107,7 @@ dispatch [] =
     pure 2
 dispatch (args@(arg :: _)) =
   case matchHandler args of
-    Just (Pair h rest) => h.handlerRun rest
+    Just (h, rest) => h.handlerRun rest
     Nothing => printText (unknownCommandText arg)
 
 -- | 内部：打印文本并返回 0。
@@ -125,17 +125,17 @@ unknownCommandText arg =
     Nothing => "error: unknown command `${arg}`\nrun `vuna help`\n"
 
 -- | 按最长前缀匹配一条命令（最多 3 段），返回实现与剩余参数。
-export matchHandler : List String -> Maybe (Pair Handler (List String))
+export matchHandler : List String -> Maybe (Handler, List String)
 matchHandler args = matchDepth 3 args
 
 -- | 内部：按深度从 3 到 1 尝试精确路径匹配（最长优先）。
-matchDepth : Int -> List String -> Maybe (Pair Handler (List String))
+matchDepth : Int -> List String -> Maybe (Handler, List String)
 matchDepth n args =
   if n <= 0 then
     Nothing
   else
     case findHandler (take n args) of
-      Just h => Just (Pair h (drop n args))
+      Just h => Just (h, drop n args)
       Nothing => matchDepth (n - 1) args
 
 -- | 内部：按路径精确查找实现。

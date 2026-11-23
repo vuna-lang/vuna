@@ -46,22 +46,22 @@ writeFrames writeS (f :: rest) =
 -- （`(消息, 状态) → (新状态, 待发帧)`，各 server 决定坏帧要不要回错误帧），`dispatch` 是分发
 -- （`(消息, 状态) → (是否退出, (新状态, 待发帧))`），`state` 是初始状态。返回
 -- `(结束原因, 最终状态)`；退出码由调用方映射。
-export serveConnection : {r : Row} -> (Int -> Eff r (Maybe String)) -> (String -> Eff r Int) -> (String -> s -> Eff r (Pair s (List Json))) -> (Json -> s -> Eff r (Pair Bool (Pair s (List Json)))) -> s -> Eff r (Pair ServerExit s)
+export serveConnection : {r : Row} -> (Int -> Eff r (Maybe String)) -> (String -> Eff r Int) -> (String -> s -> Eff r (s, List Json)) -> (Json -> s -> Eff r (Bool, s, List Json)) -> s -> Eff r (ServerExit, s)
 serveConnection readN writeS warn dispatch state =
   connLoop serverFuelBound "" readN writeS warn dispatch state
 
 -- | 内部：主循环；`pending` 是还没切出完整帧的缓冲。
-connLoop : {r : Row} -> Int -> String -> (Int -> Eff r (Maybe String)) -> (String -> Eff r Int) -> (String -> s -> Eff r (Pair s (List Json))) -> (Json -> s -> Eff r (Pair Bool (Pair s (List Json)))) -> s -> Eff r (Pair ServerExit s)
+connLoop : {r : Row} -> Int -> String -> (Int -> Eff r (Maybe String)) -> (String -> Eff r Int) -> (String -> s -> Eff r (s, List Json)) -> (Json -> s -> Eff r (Bool, s, List Json)) -> s -> Eff r (ServerExit, s)
 connLoop fuel pending readN writeS warn dispatch state =
   if fuel <= 0 then
-    pure (Pair (ExitFatal "frame fuel exhausted (internal)") state)
+    pure (ExitFatal "frame fuel exhausted (internal)", state)
   else if strLength pending > maxFrameBytes then
-    pure (Pair (ExitFatal "frame buffer exceeded limit") state)
+    pure (ExitFatal "frame buffer exceeded limit", state)
   else
     case splitHeaderBlock pending of
       -- 还没有完整 header：继续读。
       Nothing => feedMore fuel pending readN writeS warn dispatch state
-      Just (Pair headerBlock afterHeaders) =>
+      Just (headerBlock, afterHeaders) =>
         case contentLengthOf headerBlock of
           -- header 里没有可用的 Content-Length：丢掉这段 header，避免无限等待。
           Nothing =>
@@ -72,17 +72,17 @@ connLoop fuel pending readN writeS warn dispatch state =
           Just len => frameBody fuel pending afterHeaders len readN writeS warn dispatch state
 
 -- | 内部：header 有效后等 body；body 不够就再读，够了就解码一帧。
-frameBody : {r : Row} -> Int -> String -> String -> Int -> (Int -> Eff r (Maybe String)) -> (String -> Eff r Int) -> (String -> s -> Eff r (Pair s (List Json))) -> (Json -> s -> Eff r (Pair Bool (Pair s (List Json)))) -> s -> Eff r (Pair ServerExit s)
+frameBody : {r : Row} -> Int -> String -> String -> Int -> (Int -> Eff r (Maybe String)) -> (String -> Eff r Int) -> (String -> s -> Eff r (s, List Json)) -> (Json -> s -> Eff r (Bool, s, List Json)) -> s -> Eff r (ServerExit, s)
 frameBody fuel pending afterHeaders len readN writeS warn dispatch state =
   if len > maxFrameBytes then
-    pure (Pair (ExitFatal "frame too large") state)
+    pure (ExitFatal "frame too large", state)
   else if strLength afterHeaders < len then
     feedMore fuel pending readN writeS warn dispatch state
   else
     decodeFrame fuel len afterHeaders readN writeS warn dispatch state
 
 -- | 内部：切出 `len` 字节的 body（body 后没有换行），解析、分发并继续下一帧。
-decodeFrame : {r : Row} -> Int -> Int -> String -> (Int -> Eff r (Maybe String)) -> (String -> Eff r Int) -> (String -> s -> Eff r (Pair s (List Json))) -> (Json -> s -> Eff r (Pair Bool (Pair s (List Json)))) -> s -> Eff r (Pair ServerExit s)
+decodeFrame : {r : Row} -> Int -> Int -> String -> (Int -> Eff r (Maybe String)) -> (String -> Eff r Int) -> (String -> s -> Eff r (s, List Json)) -> (Json -> s -> Eff r (Bool, s, List Json)) -> s -> Eff r (ServerExit, s)
 decodeFrame fuel len afterHeaders readN writeS warn dispatch state =
   let
     body = substring 0 (natFromInt len) afterHeaders
@@ -103,13 +103,13 @@ decodeFrame fuel len afterHeaders readN writeS warn dispatch state =
           frames = secondOf after
         in do
           _ <- writeFrames writeS frames
-          if shouldExit then pure (Pair ExitRequested state2) else connLoop (fuel - 1) rest readN writeS warn dispatch state2
+          if shouldExit then pure (ExitRequested, state2) else connLoop (fuel - 1) rest readN writeS warn dispatch state2
 
 -- | 内部：缓冲里还没有完整的一帧就再读一块（可能只到几个字节）；`Nothing` 表示对端关闭。
-feedMore : {r : Row} -> Int -> String -> (Int -> Eff r (Maybe String)) -> (String -> Eff r Int) -> (String -> s -> Eff r (Pair s (List Json))) -> (Json -> s -> Eff r (Pair Bool (Pair s (List Json)))) -> s -> Eff r (Pair ServerExit s)
+feedMore : {r : Row} -> Int -> String -> (Int -> Eff r (Maybe String)) -> (String -> Eff r Int) -> (String -> s -> Eff r (s, List Json)) -> (Json -> s -> Eff r (Bool, s, List Json)) -> s -> Eff r (ServerExit, s)
 feedMore fuel pending readN writeS warn dispatch state =
   do
     chunk <- readN frameChunkSize
     case chunk of
-      Nothing => pure (Pair ExitClosed state)
+      Nothing => pure (ExitClosed, state)
       Just bytes => connLoop (fuel - 1) (pending ++ bytes) readN writeS warn dispatch state

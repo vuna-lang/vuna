@@ -133,7 +133,7 @@ sessionCheckSample ref baseDir source =
 
 -- | 内部：把增量 check 结果写回会话并包装成样本；`applied = False` 视为会话不可用
 -- （`Nothing`）。
-applyCheckResult : {r : Row} -> IORef Session -> Session -> String -> List ModuleIface -> Check (Pair Bool (Pair (List Diagnostic) (Pair (Maybe CheckedPackage) (Maybe AuxCache)))) -> Eff r (Maybe CheckSample)
+applyCheckResult : {r : Row} -> IORef Session -> Session -> String -> List ModuleIface -> Check (Bool, List Diagnostic, Maybe CheckedPackage, Maybe AuxCache) -> Eff r (Maybe CheckSample)
 applyCheckResult ref s baseDir ifaces result =
   case result of
     ErrC e => pure (Just (CheckSample (Just e) []))
@@ -166,7 +166,7 @@ sessionEvalSample ref baseDir source =
 
 -- | 内部：把增量求值结果写回会话并包装成样本；`applied = False` 视为会话不可用
 -- （`Nothing`）。
-applyEvalResult : {r : Row} -> IORef Session -> Session -> String -> List ModuleIface -> Check (Pair Bool (Pair String (Maybe AuxCache))) -> Eff r (Maybe EvalSample)
+applyEvalResult : {r : Row} -> IORef Session -> Session -> String -> List ModuleIface -> Check (Bool, String, Maybe AuxCache) -> Eff r (Maybe EvalSample)
 applyEvalResult ref s baseDir ifaces result =
   case result of
     ErrC e => pure (Just (EvalSample (Just e) ""))

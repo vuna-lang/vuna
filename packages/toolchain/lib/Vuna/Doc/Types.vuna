@@ -41,20 +41,20 @@ export record DocTable(..) where
   -- | 模块头 docstring；空串表示没有。
   docTableModuleDoc : String
   -- | 顶层名 -> docstring；没有 doc 的名字不出现。
-  docTableDecls : List (Pair String String)
+  docTableDecls : List (String, String)
   -- | `父名<TAB>成员名` -> docstring；没有 doc 的成员不出现。
-  docTableMembers : List (Pair String String)
+  docTableMembers : List (String, String)
 
 -- | 模块头 docstring。
 export docTableModuleDoc : DocTable -> String
 docTableModuleDoc (DocTable mdoc decls members0) = mdoc
 
 -- | 顶层名 -> docstring 表。
-export docTableDecls : DocTable -> List (Pair String String)
+export docTableDecls : DocTable -> List (String, String)
 docTableDecls (DocTable mdoc decls members0) = decls
 
 -- | 成员 docstring 表。
-export docTableMembers : DocTable -> List (Pair String String)
+export docTableMembers : DocTable -> List (String, String)
 docTableMembers (DocTable mdoc decls members0) = members0
 
 -- | 查顶层声明的 docstring；没有 doc 时返回空串（调用方按空串跳过渲染）。
@@ -66,6 +66,6 @@ export docForMember : DocTable -> String -> String -> String
 docForMember table parent name = lookupPair "${parent}\t${name}" (docTableMembers table)
 
 -- | 内部：在 `(键, 值)` 表里取第一个匹配键的值；没有匹配时为空串。
-lookupPair : String -> List (Pair String String) -> String
+lookupPair : String -> List (String, String) -> String
 lookupPair key [] = ""
-lookupPair key ((Pair k v) :: rest) = if k == key then v else lookupPair key rest
+lookupPair key ((k, v) :: rest) = if k == key then v else lookupPair key rest

@@ -16,7 +16,7 @@ export record Parsed(..) where
   -- | 出现过的开关名（不含 `--`）。
   flagNames : List String
   -- | 取值 flag 的 `(name, value)`，按出现顺序。
-  valuesOf : List (Pair String String)
+  valuesOf : List (String, String)
   -- | 位置参数，保持用户给的出现顺序。
   positionals : List String
 
@@ -49,19 +49,18 @@ export flagValues : Parsed -> String -> List String
 flagValues parsed name = lookupValues name parsed.valuesOf
 
 -- | 内部：收集某个取值 flag 的全部值（保持出现顺序）。
-lookupValues : String -> List (Pair String String) -> List String
+lookupValues : String -> List (String, String) -> List String
 lookupValues name [] = []
-lookupValues name ((Pair key value) :: rest) =
+lookupValues name ((key, value) :: rest) =
   if key == name then value :: lookupValues name rest else lookupValues name rest
 
 -- | 内部：取某个取值 flag 的第一个值。
-lookupValue : String -> List (Pair String String) -> Maybe String
+lookupValue : String -> List (String, String) -> Maybe String
 lookupValue name [] = Nothing
-lookupValue name ((Pair key value) :: rest) =
-  if key == name then Just value else lookupValue name rest
+lookupValue name ((key, value) :: rest) = if key == name then Just value else lookupValue name rest
 
 -- | 内部：该键是否已取值（判重复用）。
-hasValue : String -> List (Pair String String) -> Bool
+hasValue : String -> List (String, String) -> Bool
 hasValue name values =
   case lookupValue name values of
     Just _ => True
@@ -82,7 +81,7 @@ specOf name (spec :: rest) = if specName spec == name then Just spec else specOf
 
 -- | 内部：参数扫描主体。`literal` 为真时后续一切都当位置参数（`--` 之后）；累积器都是倒序，
 -- 结束时统一 reverse。
-parseGo : Bool -> List ArgSpec -> List String -> List String -> List (Pair String String) -> List String -> ParseOut
+parseGo : Bool -> List ArgSpec -> List String -> List String -> List (String, String) -> List String -> ParseOut
 parseGo literal specs args flags values items =
   case args of
     [] => POk (Parsed (reverse flags) (reverse values) (reverse items))
@@ -110,7 +109,7 @@ flagNameOf arg =
 
 -- | 内部：按 flag 形态消费参数——`BoolFlag` 只记名字（重复即错），`ValueFlag` 取一个值（重复
 -- 或紧跟另一个 flag 即错），`MultiValueFlag` 可重复但同样要求有值。
-parseFlag : List ArgSpec -> String -> List String -> List String -> List (Pair String String) -> List String -> ParseOut
+parseFlag : List ArgSpec -> String -> List String -> List String -> List (String, String) -> List String -> ParseOut
 parseFlag specs raw rest flags values items =
   let
     name = flagNameOf raw
@@ -129,7 +128,7 @@ parseFlag specs raw rest flags values items =
           else
             case rest of
               [] => PErr (MissingValue raw)
-              value :: more => if isFlagLike value then PErr (MissingValue raw) else parseGo False specs more flags (Pair name value :: values) items
+              value :: more => if isFlagLike value then PErr (MissingValue raw) else parseGo False specs more flags ((name, value) :: values) items
         MultiValueFlag _ =>
           case rest of
             [] => PErr (MissingValue raw)
@@ -137,7 +136,7 @@ parseFlag specs raw rest flags values items =
               if isFlagLike value then
                 PErr (MissingValue raw)
               else
-                parseGo False specs more flags (Pair name value :: values) items
+                parseGo False specs more flags ((name, value) :: values) items
 
 -- | 渲染参数错误（不带已删提示）。
 export argErrText : String -> ArgErr -> String

@@ -9,24 +9,24 @@ export maxHeaderBytes : Int
 maxHeaderBytes = 16384
 
 -- | 大小写不敏感的取值：返回第一个同名头部的值。
-export headerValue : String -> List (Pair String String) -> Maybe String
+export headerValue : String -> List (String, String) -> Maybe String
 headerValue name hs =
   firstJust (map (\h => if isNamed name h then Just (valueOf h) else Nothing) hs)
 
 -- | 头部名字是否等价（大小写不敏感）。
-isNamed : String -> Pair String String -> Bool
+isNamed : String -> (String, String) -> Bool
 isNamed name h = sameName h.first name
 
 -- | 头部的值。
-valueOf : Pair String String -> String
+valueOf : (String, String) -> String
 valueOf h = h.second
 
 -- | 是否存在同名头部（大小写不敏感）。
-export hasHeader : String -> List (Pair String String) -> Bool
+export hasHeader : String -> List (String, String) -> Bool
 hasHeader name hs = isJust (headerValue name hs)
 
 -- | 同名头部的个数（大小写不敏感）。
-export countHeader : String -> List (Pair String String) -> Int
+export countHeader : String -> List (String, String) -> Int
 countHeader name hs = natToInt (length (filter (isNamed name) hs))
 
 -- | 头部值是否可安全渲染（不含 CR / LF / NUL）。
@@ -39,28 +39,28 @@ isSafeByte c = c /= 13 && c /= 10 && c /= 0
 
 -- | 过滤掉无法安全渲染的头部：名字不是 token、或值含 CR / LF / NUL。
 -- | 渲染一律经这里，避免用 CRLF 在响应里注入额外头部或体。
-export safeHeaders : List (Pair String String) -> List (Pair String String)
+export safeHeaders : List (String, String) -> List (String, String)
 safeHeaders hs = filter isSafeHeader hs
 
 -- | 单个头部是否可安全渲染。
-isSafeHeader : Pair String String -> Bool
+isSafeHeader : (String, String) -> Bool
 isSafeHeader h = isToken h.first && isSafeValue h.second
 
 -- | 渲染头部块：每个头一行 `name: value\r\n`，不含结尾空行。
 -- | 调用方应先经 [safeHeaders] 过滤（`Http.Render` 的两个入口都这么做）。
-export renderHeaders : List (Pair String String) -> String
+export renderHeaders : List (String, String) -> String
 renderHeaders hs = strConcatMany (map renderHeader hs)
 
 -- | 渲染一个头部行。
-renderHeader : Pair String String -> String
+renderHeader : (String, String) -> String
 renderHeader h = h.first ++ ": " ++ h.second ++ "\r\n"
 
 -- | 解析一行 `name: value`。名字必须是 RFC 7230 token；冒号后的首尾 OWS 被裁掉。
-export parseHeaderLine : String -> Maybe (Pair String String)
+export parseHeaderLine : String -> Maybe (String, String)
 parseHeaderLine line =
   case split ":" line of
     name :: rest =>
-      if isToken name && rest /= [] then Just (Pair name (trim (join ":" rest))) else Nothing
+      if isToken name && rest /= [] then Just (name, trim (join ":" rest)) else Nothing
     [] => Nothing
 
 -- | RFC 7230 token：非空，且只含可见字符中除去分隔符的那些。

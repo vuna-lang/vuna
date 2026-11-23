@@ -209,11 +209,11 @@ moduleKeysOf p =
 funcsOfKey : String -> List NativeFunc -> List NativeFunc
 funcsOfKey key = filter (\f => moduleKeyOfFunc f == key)
 
-litsOfKey : String -> List (Pair (List String) (List NativeStrLit)) -> List NativeStrLit
+litsOfKey : String -> List (List String, List NativeStrLit) -> List NativeStrLit
 litsOfKey _ [] = []
 litsOfKey key (p :: rest) = if join "." (firstOf p) == key then secondOf p else litsOfKey key rest
 
-floatsOfKey : String -> List (Pair (List String) (List NativeFloatLit)) -> List NativeFloatLit
+floatsOfKey : String -> List (List String, List NativeFloatLit) -> List NativeFloatLit
 floatsOfKey _ [] = []
 floatsOfKey key (p :: rest) =
   if join "." (firstOf p) == key then secondOf p else floatsOfKey key rest
@@ -241,5 +241,5 @@ renderProgramFile p key =
 
 -- | 程序 -> 文件集（相对路径, 文本）。`runtime.s` 携带 `.rodata` 常量、`.bss` 与
 --   运行时函数；每个模块文件携带自己的字面量池与函数。同一 IR 的输出逐字节确定。
-export renderFiles : NativeProgram -> List (Pair String String)
-renderFiles p = map (\k => Pair (fileOfKey k) (renderProgramFile p k)) (moduleKeysOf p)
+export renderFiles : NativeProgram -> List (String, String)
+renderFiles p = map (\k => (fileOfKey k, renderProgramFile p k)) (moduleKeysOf p)

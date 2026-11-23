@@ -265,49 +265,49 @@ readStdinGo fuel acc =
 -- 单文件
 -- ---------------------------------------------------------------
 -- | 内部：对一份已知源码做 lint（配置/fixity 上下文按 configPath 解析）。
-lintText : Member nConsole ConsoleOp r, Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => LintOpts -> FixityEnv -> String -> String -> String -> Eff r (Pair FixityEnv FileOutcome)
+lintText : Member nConsole ConsoleOp r, Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => LintOpts -> FixityEnv -> String -> String -> String -> Eff r (FixityEnv, FileOutcome)
 lintText opts env displayPath configPath source =
   do
     cfgR <- configForFile opts configPath
     case cfgR of
-      ErrC e => pure (Pair env (FileOutcome displayPath [] 0 (Just (diagText e))))
+      ErrC e => pure (env, FileOutcome displayPath [] 0 (Just (diagText e)))
       OkC cfg0 =>
         case applyOpts opts cfg0 of
-          ErrC e => pure (Pair env (FileOutcome displayPath [] 0 (Just (diagText e))))
+          ErrC e => pure (env, FileOutcome displayPath [] 0 (Just (diagText e)))
           OkC cfg =>
             if lintExcluded displayPath cfg then
-              pure (Pair env (FileOutcome displayPath [] 0 Nothing))
+              pure (env, FileOutcome displayPath [] 0 Nothing)
             else
               do
                 parsedR <- pure (parseSourceDetailed configPath source)
                 case parsedR of
-                  ErrC e => pure (Pair env (FileOutcome displayPath [] 0 (Just (diagText e))))
+                  ErrC e => pure (env, FileOutcome displayPath [] 0 (Just (diagText e)))
                   OkC parsed =>
                     do
                       looked <- fixitiesForParsed env configPath parsed.parsedFile
                       env2 <- pure (firstOf looked)
                       case secondOf looked of
-                        ErrC e => pure (Pair env2 (FileOutcome displayPath [] 0 (Just (diagText e))))
+                        ErrC e => pure (env2, FileOutcome displayPath [] 0 (Just (diagText e)))
                         OkC programFixities =>
                           do
                             linted <- pure (lintParsedWithConfig cfg programFixities source parsed)
                             case linted of
-                              ErrC e => pure (Pair env2 (FileOutcome displayPath [] 0 (Just (diagText e))))
+                              ErrC e => pure (env2, FileOutcome displayPath [] 0 (Just (diagText e)))
                               OkC findings =>
                                 do
-                                  fixedR <- if opts.lintOptFix then fixFileWith opts cfg displayPath programFixities source findings else pure (OkC (Pair findings 0))
+                                  fixedR <- if opts.lintOptFix then fixFileWith opts cfg displayPath programFixities source findings else pure (OkC (findings, 0))
                                   pure (
                                       case fixedR of
-                                        ErrC e => Pair env2 (FileOutcome displayPath [] 0 (Just (diagText e)))
-                                        OkC (Pair remaining fixed) => Pair env2 (FileOutcome displayPath remaining fixed Nothing)
+                                        ErrC e => (env2, FileOutcome displayPath [] 0 (Just (diagText e)))
+                                        OkC (remaining, fixed) => (env2, FileOutcome displayPath remaining fixed Nothing)
                                     )
 
 -- | 内部：lint 单个目标（文件或 `-` stdin），错误也作为结果。
-lintOne : Member nConsole ConsoleOp r, Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nStdin StdinOp r => LintOpts -> FixityEnv -> String -> Eff r (Pair FixityEnv FileOutcome)
+lintOne : Member nConsole ConsoleOp r, Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nStdin StdinOp r => LintOpts -> FixityEnv -> String -> Eff r (FixityEnv, FileOutcome)
 lintOne opts env path =
   if path == "-" then
     if opts.lintOptFix then
-      pure (Pair env (FileOutcome "<stdin>" [] 0 (Just "--fix does not support stdin")))
+      pure (env, FileOutcome "<stdin>" [] 0 (Just "--fix does not support stdin"))
     else
       do
         source <- readStdinAll
@@ -316,7 +316,7 @@ lintOne opts env path =
     do
       textR <- readText path
       case textR of
-        ErrC e => pure (Pair env (FileOutcome path [] 0 (Just (diagText e))))
+        ErrC e => pure (env, FileOutcome path [] 0 (Just (diagText e)))
         OkC source => lintText opts env path path source
 
 -- | 内部：打印 `--diff`（外部 `diff -u`；只用于人读，不影响退出码）。
@@ -343,34 +343,34 @@ printDiff path oldSource newSource =
     pure 0
 
 -- | 内部：fix 单文件（把 dry-run / 原子写 / 重新 lint 聚在一处）。
-fixFileWith : Member nConsole ConsoleOp r, Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => LintOpts -> LintConfig -> String -> List FixityDecl -> String -> List Finding -> Eff r (Check (Pair (List Finding) Int))
+fixFileWith : Member nConsole ConsoleOp r, Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => LintOpts -> LintConfig -> String -> List FixityDecl -> String -> List Finding -> Eff r (Check (List Finding, Int))
 fixFileWith opts cfg path programFixities source findings =
   case fixLoop cfg programFixities source findings opts.lintOptMaxPasses 0 of
     ErrC e => pure (ErrC e)
-    OkC (Pair count newSource) =>
+    OkC (count, newSource) =>
       if count == 0 then
-        pure (OkC (Pair findings 0))
+        pure (OkC (findings, 0))
       else if opts.lintOptDiff then
         do
           _ <- printDiff path source newSource
-          pure (OkC (Pair findings count))
+          pure (OkC (findings, count))
       else if opts.lintOptDry then
-        pure (OkC (Pair findings count))
+        pure (OkC (findings, count))
       else
         do
           _ <- fsWriteFileAtomic path newSource
           pure (
               case lintSourceWithConfig cfg programFixities newSource of
                 ErrC e => ErrC e
-                OkC remaining => OkC (Pair remaining count)
+                OkC remaining => OkC (remaining, count)
             )
 
 -- ---------------------------------------------------------------
 -- 多文件 / 输出
 -- ---------------------------------------------------------------
 -- | 内部：逐文件 lint，返回全部结果（错误文件也保留）。
-lintFiles : Member nConsole ConsoleOp r, Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nStdin StdinOp r => LintOpts -> FixityEnv -> List String -> List FileOutcome -> Eff r (Pair FixityEnv (List FileOutcome))
-lintFiles opts env [] acc = pure (Pair env (reverse acc))
+lintFiles : Member nConsole ConsoleOp r, Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nStdin StdinOp r => LintOpts -> FixityEnv -> List String -> List FileOutcome -> Eff r (FixityEnv, List FileOutcome)
+lintFiles opts env [] acc = pure (env, reverse acc)
 lintFiles opts env (path :: rest) acc =
   do
     stepped <- lintOne opts env path
@@ -454,12 +454,12 @@ printSarifOutcomes opts outcomes =
 sarifJson : LintOpts -> List FileOutcome -> Json
 sarifJson opts outcomes =
   JObj
-    [Pair "version" (JStr "2.1.0"), Pair "$schema" (JStr "https://json.schemastore.org/sarif-2.1.0.json"), Pair "runs" (JArr [JObj [Pair "tool" (JObj [Pair "driver" (JObj [Pair "name" (JStr "vuna-lint"), Pair "rules" (JArr (map sarifRule lintAll))])]), Pair "results" (JArr (concatMap (sarifResults opts) outcomes))]])]
+    [("version", JStr "2.1.0"), ("$schema", JStr "https://json.schemastore.org/sarif-2.1.0.json"), ("runs", JArr [JObj [("tool", JObj [("driver", JObj [("name", JStr "vuna-lint"), ("rules", JArr (map sarifRule lintAll))])]), ("results", JArr (concatMap (sarifResults opts) outcomes))]])]
 
 sarifRule : LintEntry -> Json
 sarifRule e =
   JObj
-    [Pair "id" (JStr e.lintEntryCode), Pair "name" (JStr e.lintEntryRule), Pair "shortDescription" (JObj [Pair "text" (JStr e.lintEntryDesc)]), Pair "properties" (JObj [Pair "fixable" (JBool e.lintEntryFixable)])]
+    [("id", JStr e.lintEntryCode), ("name", JStr e.lintEntryRule), ("shortDescription", JObj [("text", JStr e.lintEntryDesc)]), ("properties", JObj [("fixable", JBool e.lintEntryFixable)])]
 
 sarifResults : LintOpts -> FileOutcome -> List Json
 sarifResults opts o =
@@ -470,13 +470,13 @@ sarifResults opts o =
 sarifFinding : String -> Finding -> Json
 sarifFinding path f =
   JObj
-    [Pair "ruleId" (JStr f.findingCode), Pair "level" (JStr (if f.findingSeverity == LintError then "error" else "warning")), Pair "message" (JObj [Pair "text" (JStr "${f.findingRule}: ${f.findingMessage}")]), Pair "locations" (JArr [JObj [Pair "physicalLocation" (JObj [Pair "artifactLocation" (JObj [Pair "uri" (JStr path)]), Pair "region" (JObj [Pair "startLine" (JNum f.findingLine), Pair "startColumn" (JNum f.findingCol), Pair "endLine" (JNum f.findingEndLine), Pair "endColumn" (JNum f.findingEndCol)])])]])]
+    [("ruleId", JStr f.findingCode), ("level", JStr (if f.findingSeverity == LintError then "error" else "warning")), ("message", JObj [("text", JStr "${f.findingRule}: ${f.findingMessage}")]), ("locations", JArr [JObj [("physicalLocation", JObj [("artifactLocation", JObj [("uri", JStr path)]), ("region", JObj [("startLine", JNum f.findingLine), ("startColumn", JNum f.findingCol), ("endLine", JNum f.findingEndLine), ("endColumn", JNum f.findingEndCol)])])]])]
 
 -- | 内部：JSON 对象。
 outcomeJson : LintOpts -> List FileOutcome -> Json
 outcomeJson opts outcomes =
   JObj
-    [Pair "version" (JNum 1), Pair "findings" (JArr (concatMap (outcomeFindingsJson opts) outcomes)), Pair "errors" (JArr (mapMaybe outcomeErrorJson outcomes)), Pair "summary" (JObj [Pair "files" (JNum (length outcomes)), Pair "errors" (JNum (countErrors outcomes)), Pair "warnings" (JNum (countWarnings outcomes)), Pair "fixable" (JNum (countFixable outcomes)), Pair "fixed" (JNum (countFixed outcomes))])]
+    [("version", JNum 1), ("findings", JArr (concatMap (outcomeFindingsJson opts) outcomes)), ("errors", JArr (mapMaybe outcomeErrorJson outcomes)), ("summary", JObj [("files", JNum (length outcomes)), ("errors", JNum (countErrors outcomes)), ("warnings", JNum (countWarnings outcomes)), ("fixable", JNum (countFixable outcomes)), ("fixed", JNum (countFixed outcomes))])]
 
 outcomeFindingsJson : LintOpts -> FileOutcome -> List Json
 outcomeFindingsJson opts o =
@@ -488,12 +488,12 @@ outcomeErrorJson : FileOutcome -> Maybe Json
 outcomeErrorJson o =
   case o.fileOutcomeError of
     Nothing => Nothing
-    Just msg => Just (JObj [Pair "path" (JStr o.fileOutcomePath), Pair "message" (JStr msg)])
+    Just msg => Just (JObj [("path", JStr o.fileOutcomePath), ("message", JStr msg)])
 
 findingJson : String -> Finding -> Json
 findingJson path f =
   JObj
-    [Pair "path" (JStr path), Pair "line" (JNum f.findingLine), Pair "column" (JNum f.findingCol), Pair "endLine" (JNum f.findingEndLine), Pair "endColumn" (JNum f.findingEndCol), Pair "code" (JStr f.findingCode), Pair "rule" (JStr f.findingRule), Pair "severity" (JStr (if f.findingSeverity == LintError then "error" else "warning")), Pair "message" (JStr f.findingMessage), Pair "fixable" (JBool (isJust f.findingEdit))]
+    [("path", JStr path), ("line", JNum f.findingLine), ("column", JNum f.findingCol), ("endLine", JNum f.findingEndLine), ("endColumn", JNum f.findingEndCol), ("code", JStr f.findingCode), ("rule", JStr f.findingRule), ("severity", JStr (if f.findingSeverity == LintError then "error" else "warning")), ("message", JStr f.findingMessage), ("fixable", JBool (isJust f.findingEdit))]
 
 -- | 内部：可修复 finding 数。
 countFixable : List FileOutcome -> Int

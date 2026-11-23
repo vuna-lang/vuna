@@ -44,17 +44,14 @@ runAdd args =
 
 -- | 内部：解析 `name[@version]` —— `greet@1.2.0` → (`greet`, `Just "1.2.0"`)，无 `@` 时版本
 -- 为 `Nothing`。
-splitSpec : String -> Pair String (Maybe String)
+splitSpec : String -> (String, Maybe String)
 splitSpec spec = splitSpecGo (strUnpack spec) []
 
 -- | 内部：逐字符扫描 `spec`，遇到 `@`（码 64）就在此处切开。
-splitSpecGo : List Int -> List Int -> Pair String (Maybe String)
-splitSpecGo [] acc = Pair (strPack (reverse acc)) Nothing
+splitSpecGo : List Int -> List Int -> (String, Maybe String)
+splitSpecGo [] acc = (strPack (reverse acc), Nothing)
 splitSpecGo (c :: rest) acc =
-  if c == 64 then
-    Pair (strPack (reverse acc)) (Just (strPack rest))
-  else
-    splitSpecGo rest (c :: acc)
+  if c == 64 then (strPack (reverse acc), Just (strPack rest)) else splitSpecGo rest (c :: acc)
 
 -- | 内部：在 `dir` 的 manifest 里加上 `spec` 声明的依赖：先按 `[registry].index` 查条目与发布，
 -- 再交给 [Vuna.Add.writeAndFetch] 写回并（可选）取包。缺 manifest / 缺索引 / 索引里没有

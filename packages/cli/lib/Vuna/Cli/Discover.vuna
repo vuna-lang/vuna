@@ -83,7 +83,7 @@ joinPathSlash [] = "/"
 joinPathSlash parts = join "/" parts
 
 -- | 内部：逐个目录收集候选 `(domain, 可执行文件路径)`。
-collectCandidates : List String -> Eff [EnvOp, FsOp, ProcessOp, ClockOp] (List (Pair String String))
+collectCandidates : List String -> Eff [EnvOp, FsOp, ProcessOp, ClockOp] (List (String, String))
 collectCandidates [] = pure []
 collectCandidates (dir :: rest) =
   do
@@ -92,7 +92,7 @@ collectCandidates (dir :: rest) =
     pure (append here more)
 
 -- | 内部：一个目录里的 `vuna-*` 候选。
-scanDir : String -> Eff [EnvOp, FsOp, ProcessOp, ClockOp] (List (Pair String String))
+scanDir : String -> Eff [EnvOp, FsOp, ProcessOp, ClockOp] (List (String, String))
 scanDir dir =
   do
     exists <- fsFileExists dir
@@ -109,9 +109,9 @@ scanDir dir =
       pure []
 
 -- | 内部：文件名 → 候选；只认 `vuna-<domain>`（无点、不是 `vuna` 自身）。
-candidateOf : String -> String -> Maybe (Pair String String)
+candidateOf : String -> String -> Maybe (String, String)
 candidateOf dir name =
-  if pluginName name then Just (Pair (domainOf name) (appendPath dir name)) else Nothing
+  if pluginName name then Just (domainOf name, appendPath dir name) else Nothing
 
 -- | 内部：是否是插件可执行文件名。
 pluginName : String -> Bool
@@ -128,19 +128,19 @@ appendPath "." name = "./${name}"
 appendPath dir name = "${dir}/${name}"
 
 -- | 内部：按域去重（先出现的目录优先）。
-dedupByDomain : List (Pair String String) -> List (Pair String String)
+dedupByDomain : List (String, String) -> List (String, String)
 dedupByDomain pairs = dedupGo [] pairs
 
 -- | 内部：`dedupByDomain` 的扫描（`seen` 是已出现的域）。
-dedupGo : List String -> List (Pair String String) -> List (Pair String String)
+dedupGo : List String -> List (String, String) -> List (String, String)
 dedupGo seen [] = []
-dedupGo seen ((Pair d bin) :: rest) =
-  if memName d seen then dedupGo seen rest else Pair d bin :: dedupGo (d :: seen) rest
+dedupGo seen ((d, bin) :: rest) =
+  if memName d seen then dedupGo seen rest else (d, bin) :: dedupGo (d :: seen) rest
 
 -- | 内部：逐个候选取回命令表；拿不到就跳过。
-describeAll : List (Pair String String) -> Eff [EnvOp, FsOp, ProcessOp, ClockOp] (List Plugin)
+describeAll : List (String, String) -> Eff [EnvOp, FsOp, ProcessOp, ClockOp] (List Plugin)
 describeAll [] = pure []
-describeAll ((Pair domain bin) :: rest) =
+describeAll ((domain, bin) :: rest) =
   do
     found <- describeOne domain bin
     more <- describeAll rest

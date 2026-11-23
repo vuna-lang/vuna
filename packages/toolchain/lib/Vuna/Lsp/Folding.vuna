@@ -16,7 +16,7 @@ foldingRangesJson text =
   in map foldRangeJson ranges
 
 -- | 内部：逐行维护缩进栈（每层缩进 + 起始行，均 1-based），`lastContent` 是上一条非空行的行号。
-foldLines : List String -> Int -> Int -> List (Pair Int Int) -> List (Pair Int Int) -> List (Pair Int Int)
+foldLines : List String -> Int -> Int -> List (Int, Int) -> List (Int, Int) -> List (Int, Int)
 foldLines [] _ lastContent stack acc = popAll stack lastContent acc
 foldLines (ln :: rest) lineNo lastContent stack acc =
   if isBlankLine ln then
@@ -25,32 +25,32 @@ foldLines (ln :: rest) lineNo lastContent stack acc =
     let
       indent = indentOf ln
       popped = popBlocks indent lastContent stack acc
-    in foldLines rest (lineNo + 1) lineNo (Pair indent lineNo :: firstOf popped) (secondOf popped)
+    in foldLines rest (lineNo + 1) lineNo ((indent, lineNo) :: firstOf popped) (secondOf popped)
 
 -- | 内部：关闭缩进 ≥ 当前行的块（同级兄弟不折叠）。
-popBlocks : Int -> Int -> List (Pair Int Int) -> List (Pair Int Int) -> Pair (List (Pair Int Int)) (List (Pair Int Int))
-popBlocks indent end [] acc = Pair [] acc
+popBlocks : Int -> Int -> List (Int, Int) -> List (Int, Int) -> (List (Int, Int), List (Int, Int))
+popBlocks indent end [] acc = ([], acc)
 popBlocks indent end (entry :: rest) acc =
   if firstOf entry >= indent then
     popBlocks indent end rest (closeBlock (secondOf entry) end acc)
   else
-    Pair (entry :: rest) acc
+    (entry :: rest, acc)
 
 -- | 内部：文件结束时关闭栈里所有块（止行取最后一条非空行）。
-popAll : List (Pair Int Int) -> Int -> List (Pair Int Int) -> List (Pair Int Int)
+popAll : List (Int, Int) -> Int -> List (Int, Int) -> List (Int, Int)
 popAll [] lastContent acc = acc
 popAll (entry :: rest) lastContent acc =
   popAll rest lastContent (closeBlock (secondOf entry) lastContent acc)
 
 -- | 内部：至少两行才记一个块（单行块不折叠）。
-closeBlock : Int -> Int -> List (Pair Int Int) -> List (Pair Int Int)
-closeBlock start end acc = if end > start then Pair start end :: acc else acc
+closeBlock : Int -> Int -> List (Int, Int) -> List (Int, Int)
+closeBlock start end acc = if end > start then (start, end) :: acc else acc
 
 -- | 内部：(起行, 止行) 1-based → 0-based 的 `region` 折叠对象。
-foldRangeJson : Pair Int Int -> Json
+foldRangeJson : (Int, Int) -> Json
 foldRangeJson range =
   JObj
-    [Pair "startLine" (JNum (firstOf range - 1)), Pair "endLine" (JNum (secondOf range - 1)), Pair "kind" (JStr "region")]
+    [("startLine", JNum (firstOf range - 1)), ("endLine", JNum (secondOf range - 1)), ("kind", JStr "region")]
 
 -- | 该行是否只含空白。
 isBlankLine : String -> Bool

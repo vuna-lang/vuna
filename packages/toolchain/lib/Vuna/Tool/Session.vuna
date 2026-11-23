@@ -61,14 +61,14 @@ toolCommitValue ts key deps =
     pure ts
 
 -- | 写载荷对象（同一输入同一地址；内容未变则不写盘），返回地址。
-export toolStorePayload : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => ToolSession -> String -> List String -> String -> String -> Eff r (Pair ToolSession String)
+export toolStorePayload : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => ToolSession -> String -> List String -> String -> String -> Eff r (ToolSession, String)
 toolStorePayload ts key deps codec payload =
   do
     let
       addr = toolSessionAddrOf ts key deps
     in do
       _ <- storeObjectWriteEff "tool-context" codec addr payload
-      pure (Pair ts addr)
+      pure (ts, addr)
 
 -- | 读载荷（codec 不符 / 坏字节 ⇒ `Nothing` ⇒ 调用方重算）。
 export toolLoadPayload : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> Eff r (Maybe String)

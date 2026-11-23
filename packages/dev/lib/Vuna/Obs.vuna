@@ -238,7 +238,7 @@ emitDeltaGo parsed threshold summary path deltas =
 summaryWithBaselineJson : ObsSummary -> List StageDelta -> Json
 summaryWithBaselineJson summary deltas =
   case summaryJson summary of
-    JObj kvs => JObj (append kvs [Pair "baseline" (deltasJson deltas)])
+    JObj kvs => JObj (append kvs [("baseline", deltasJson deltas)])
     other => other
 
 -- | 内部：逐行打印（每行补一个换行）。

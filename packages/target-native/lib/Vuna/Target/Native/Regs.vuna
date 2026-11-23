@@ -87,18 +87,15 @@ pickTop k candidates instrs =
           score = secondOf p
         in if score <= 0 then [] else slot :: pickTop (k - 1) (withoutInt slot candidates) instrs
 
-bestOf : List Int -> List Instr -> Maybe (Pair Int Int) -> Maybe (Pair Int Int)
+bestOf : List Int -> List Instr -> Maybe (Int, Int) -> Maybe (Int, Int)
 bestOf [] _ best = best
 bestOf (s :: rest) instrs best =
   let
     score = slotScore instrs s
   in case best of
-    Nothing => bestOf rest instrs (Just (Pair s score))
+    Nothing => bestOf rest instrs (Just (s, score))
     Just b =>
-      if score > secondOf b then
-        bestOf rest instrs (Just (Pair s score))
-      else
-        bestOf rest instrs best
+      if score > secondOf b then bestOf rest instrs (Just (s, score)) else bestOf rest instrs best
 
 withoutInt : Int -> List Int -> List Int
 withoutInt _ [] = []
@@ -107,11 +104,11 @@ withoutInt x (y :: rest) = if x == y then rest else y :: withoutInt x rest
 -- ---------------------------------------------------------------
 -- 重写
 -- ---------------------------------------------------------------
-lookupSlot : Int -> List (Pair Int Reg) -> Maybe Reg
+lookupSlot : Int -> List (Int, Reg) -> Maybe Reg
 lookupSlot _ [] = Nothing
 lookupSlot off (p :: rest) = if firstOf p == off then Just (secondOf p) else lookupSlot off rest
 
-substOperand : List (Pair Int Reg) -> Operand -> Operand
+substOperand : List (Int, Reg) -> Operand -> Operand
 substOperand reps op =
   case slotOffOf op of
     Nothing => op
@@ -304,7 +301,7 @@ odd n = n - n / 2 * 2 == 1
 -- 入口
 -- ---------------------------------------------------------------
 -- | 有回边的函数里，把最热的标量槽换成 callee-saved 寄存器。
-export promoteLoops : List (Pair Int NCls) -> List Instr -> RegPlan
+export promoteLoops : List (Int, NCls) -> List Instr -> RegPlan
 promoteLoops slotCls instrs =
   if not (frameReused False instrs) || hasStackArgs instrs then
     RegPlan instrs []

@@ -51,8 +51,8 @@ replaceRange start stop newLines lines =
 
 -- | 内部：按已排序顺序逐个应用编辑；只有结束行严格早于上一个已应用编辑起点的编辑才应用
 -- （避免重叠编辑互相破坏），返回应用条数与新行列表。
-applyEditList : List Edit -> List String -> Int -> Int -> Pair Int (List String)
-applyEditList [] lines limit count = Pair count lines
+applyEditList : List Edit -> List String -> Int -> Int -> (Int, List String)
+applyEditList [] lines limit count = (count, lines)
 applyEditList (e :: rest) lines limit count =
   if e.editEnd < limit then
     applyEditList
@@ -65,36 +65,36 @@ applyEditList (e :: rest) lines limit count =
 
 -- | 内部：收集并应用全部编辑；没有可用编辑时原样返回，应用后用 `parseSource` 复验，失败即
 -- `ErrC`。返回（修复条数, 新源码）。
-applyFixes : String -> List Finding -> Check (Pair Int String)
+applyFixes : String -> List Finding -> Check (Int, String)
 applyFixes source findings =
   let
     edits = sortEdits (collectEdits findings [])
   in case applyEditList edits (splitLines source) (length (splitLines source) + 1) 0 of
-    Pair count newLines =>
+    (count, newLines) =>
       if count == 0 then
-        OkC (Pair 0 source)
+        OkC (0, source)
       else
         let
           newSource = joinLines newLines
         in case parseSource "<lint>" newSource of
           ErrC e => err "parse failed after fix: ${diagText e}"
-          OkC ignored => OkC (Pair count newSource)
+          OkC ignored => OkC (count, newSource)
 
 -- | 最多跑 `passes` 轮修复：每轮应用编辑、重新 lint，直到没有可应用的编辑或轮数用尽；任一
 -- 环节解析失败即整体报错。返回累计修复条数与最终源码。
 --
 -- 每轮复验沿用首轮的程序级 fixity：修复只做格式与结构改写、不改 imports，换一份 fixity
 -- 重排会退化成 unknown fixity。
-export fixLoop : LintConfig -> List FixityDecl -> String -> List Finding -> Int -> Int -> Check (Pair Int String)
+export fixLoop : LintConfig -> List FixityDecl -> String -> List Finding -> Int -> Int -> Check (Int, String)
 fixLoop cfg programFixities source findings passes total =
   if passes <= 0 then
-    OkC (Pair total source)
+    OkC (total, source)
   else
     case applyFixes source findings of
       ErrC e => ErrC e
-      OkC (Pair count newSource) =>
+      OkC (count, newSource) =>
         if count == 0 then
-          OkC (Pair total source)
+          OkC (total, source)
         else
           case lintSourceWithConfig cfg programFixities newSource of
             ErrC e => ErrC e

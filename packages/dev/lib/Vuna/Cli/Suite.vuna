@@ -81,7 +81,7 @@ suiteRun parsed suitePath =
                   OkC suite => runSuite (suiteOptsOf parsed jobs timeout worker suitePath) suite
 
 -- | 内部：把解析结果摊平成 suite 运行选项。
-suiteOptsOf : Parsed -> Int -> Int -> Maybe (Pair Int Int) -> String -> SuiteOpts
+suiteOptsOf : Parsed -> Int -> Int -> Maybe (Int, Int) -> String -> SuiteOpts
 suiteOptsOf parsed jobs timeout worker suitePath =
   SuiteOpts
     suitePath
@@ -132,7 +132,7 @@ suiteTimeoutOf parsed =
         Just n => OkC n
 
 -- | 内部：`--worker i/N`（`i` 从 0 开始且必须小于 `N`）。
-suiteWorkerOf : Parsed -> Check (Maybe (Pair Int Int))
+suiteWorkerOf : Parsed -> Check (Maybe (Int, Int))
 suiteWorkerOf parsed =
   case flagValue parsed "worker" of
     Nothing => OkC Nothing
@@ -144,5 +144,5 @@ suiteWorkerOf parsed =
             Just i =>
               case parsePositiveInt nText of
                 Nothing => err "--worker requires i/N with non-negative integers, got `${text}`"
-                Just n => if i < n then OkC (Just (Pair i n)) else err "--worker index must be < N"
+                Just n => if i < n then OkC (Just (i, n)) else err "--worker index must be < N"
         _ => err "--worker requires i/N, got `${text}`"

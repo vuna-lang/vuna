@@ -31,9 +31,9 @@ import Base.Effect.Process as EffProcess
 -- [Vuna.FixityEnv.fixitiesForFile] 能构造与推进它。
 export record FixityEnv where
   -- | 文件所在目录 -> 该目录最近 manifest 的包上下文。
-  fixityEnvCtxCache : List (Pair String PackageContext)
+  fixityEnvCtxCache : List (String, PackageContext)
   -- | 包目录（`contextDir`）-> 已加载的模块图。
-  fixityEnvModCache : List (Pair String (List Module))
+  fixityEnvModCache : List (String, List Module)
 
 -- | 空缓存。
 export emptyFixityEnv : FixityEnv
@@ -48,35 +48,35 @@ dirKey : String -> String
 dirKey path = parentOf path
 
 -- | 内部：按键查缓存（同名键取最近写入的一条）。
-cacheLookup : String -> List (Pair String a) -> Maybe a
+cacheLookup : String -> List (String, a) -> Maybe a
 cacheLookup key [] = Nothing
-cacheLookup key ((Pair k v) :: rest) = if k == key then Just v else cacheLookup key rest
+cacheLookup key ((k, v) :: rest) = if k == key then Just v else cacheLookup key rest
 
 -- | 内部：删掉某个键的全部条目（写入前先清重复，保证一键一条）。
-cacheForget : String -> List (Pair String a) -> List (Pair String a)
+cacheForget : String -> List (String, a) -> List (String, a)
 cacheForget key [] = []
-cacheForget key ((Pair k v) :: rest) =
-  if k == key then cacheForget key rest else Pair k v :: cacheForget key rest
+cacheForget key ((k, v) :: rest) =
+  if k == key then cacheForget key rest else (k, v) :: cacheForget key rest
 
 -- | 内部：写入缓存，同名键只保留最新一条（新条目置顶）。
-cachePut : String -> a -> List (Pair String a) -> List (Pair String a)
-cachePut key value entries = Pair key value :: cacheForget key entries
+cachePut : String -> a -> List (String, a) -> List (String, a)
+cachePut key value entries = (key, value) :: cacheForget key entries
 
 -- | 取一个文件的程序级 fixity：`Pair env' (Check (List FixityDecl))`。
 --
 -- `env'` 带回推进后的缓存（即使本次失败，已成功的上下文缓存仍可复用）。上下文解析与模块图
 -- 加载是宿主动作，显式在 `Eff r` 里；缓存推进仍是纯数据。
-export fixitiesForFile : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => FixityEnv -> String -> String -> Eff r (Pair FixityEnv (Check (List FixityDecl)))
+export fixitiesForFile : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => FixityEnv -> String -> String -> Eff r (FixityEnv, Check (List FixityDecl))
 fixitiesForFile env path source =
   case parseSourceWithComments path source of
-    ErrC e => pure (Pair env (ErrC e))
-    OkC (Pair sf _) => fixitiesForParsed env path sf
+    ErrC e => pure (env, ErrC e)
+    OkC (sf, _) => fixitiesForParsed env path sf
 
 -- | 同 `fixitiesForFile`，但源码**已经**解析过：不重复语法分析，只加载模块图并拼声明表。
 --
 -- 工具（lint / index / doc）本来就要为规则或 docstring 解析一遍；再为 fixity 解析一遍是
 -- 同一份源码的第二次完整语法分析。
-export fixitiesForParsed : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => FixityEnv -> String -> SourceFile -> Eff r (Pair FixityEnv (Check (List FixityDecl)))
+export fixitiesForParsed : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => FixityEnv -> String -> SourceFile -> Eff r (FixityEnv, Check (List FixityDecl))
 fixitiesForParsed (FixityEnv ctxCache modCache) path sf =
   let
     dir = dirKey path
@@ -86,7 +86,7 @@ fixitiesForParsed (FixityEnv ctxCache modCache) path sf =
         Just ctx => pure (OkC ctx)
         Nothing => contextForFile path
     case ctxRes of
-      ErrC e => pure (Pair (FixityEnv ctxCache modCache) (ErrC e))
+      ErrC e => pure (FixityEnv ctxCache modCache, ErrC e)
       OkC ctx =>
         let
           ctxCache2 = cachePut dir ctx ctxCache
@@ -99,6 +99,6 @@ fixitiesForParsed (FixityEnv ctxCache modCache) path sf =
           fxR <- fixitiesFromParsed ctx mods path sf
           pure (
               case fxR of
-                ErrC e => Pair (FixityEnv ctxCache2 modCache) (ErrC e)
-                OkC (Pair mods2 fx) => Pair (FixityEnv ctxCache2 (cachePut modKey mods2 modCache)) (OkC fx)
+                ErrC e => (FixityEnv ctxCache2 modCache, ErrC e)
+                OkC (mods2, fx) => (FixityEnv ctxCache2 (cachePut modKey mods2 modCache), OkC fx)
             )

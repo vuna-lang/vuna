@@ -147,7 +147,7 @@ convertContent fmt trace =
 
 -- | trace 事件 -> CDP Profile（`convert --to cpuprofile` 与 `obs serve --cdp` 的唯一构造点）。
 -- 空 CPU 采样 = 内容性错误（`ErrC`，调用方映射退出码 1 / JSON-RPC content 错误）。
-export cpuProfileOf : List (Pair Int ObsEvent) -> Check Json
+export cpuProfileOf : List (Int, ObsEvent) -> Check Json
 cpuProfileOf rows =
   case cpuSamplesOf rows of
     ErrC e => ErrC e
@@ -172,7 +172,7 @@ jsonlText trace =
   in if length lines0 == 0 then "" else join "\n" lines0 ++ "\n"
 
 -- | 内部：事件行渲染（丢弃行号）。
-renderRowLine : Pair Int ObsEvent -> String
+renderRowLine : (Int, ObsEvent) -> String
 renderRowLine row = renderEventLine (secondOf row)
 
 -- ---------------------------------------------------------------
@@ -192,44 +192,41 @@ frameLocOf : String -> FrameLoc
 frameLocOf frame =
   case splitFirstAt frame of
     Nothing => FrameLoc frame "" (0 - 1)
-    Just (Pair name rest) =>
+    Just (name, rest) =>
       case splitLastColon rest of
         Nothing => FrameLoc name "" (0 - 1)
-        Just (Pair url lineText) =>
+        Just (url, lineText) =>
           case nonNegIntOf lineText of
             Just line => FrameLoc name url (line - 1)
             Nothing => FrameLoc name "" (0 - 1)
 
 -- | 内部：在第一个 `@` 处切成两段。
-splitFirstAt : String -> Maybe (Pair String String)
+splitFirstAt : String -> Maybe (String, String)
 splitFirstAt s = splitFirstAtChars (strUnpack s) []
 
 -- | 内部：`splitFirstAt` 的逐字符实现（反向累积前半段）。
-splitFirstAtChars : List Int -> List Int -> Maybe (Pair String String)
+splitFirstAtChars : List Int -> List Int -> Maybe (String, String)
 splitFirstAtChars [] _ = Nothing
 splitFirstAtChars (c :: rest) acc =
-  if c == 64 then
-    Just (Pair (strPack (reverse acc)) (strPack rest))
-  else
-    splitFirstAtChars rest (c :: acc)
+  if c == 64 then Just (strPack (reverse acc), strPack rest) else splitFirstAtChars rest (c :: acc)
 
 -- | 内部：在最后一个 `:` 处切成两段（反转后找第一个 `:` 再反转回来）。
-splitLastColon : String -> Maybe (Pair String String)
+splitLastColon : String -> Maybe (String, String)
 splitLastColon s =
   case splitFirstColon (reverseString s) of
     Nothing => Nothing
-    Just (Pair revLine revUrl) => Just (Pair (reverseString revUrl) (reverseString revLine))
+    Just (revLine, revUrl) => Just (reverseString revUrl, reverseString revLine)
 
 -- | 内部：在第一个 `:` 处切成两段。
-splitFirstColon : String -> Maybe (Pair String String)
+splitFirstColon : String -> Maybe (String, String)
 splitFirstColon s = splitFirstColonChars (strUnpack s) []
 
 -- | 内部：`splitFirstColon` 的逐字符实现（反向累积前半段）。
-splitFirstColonChars : List Int -> List Int -> Maybe (Pair String String)
+splitFirstColonChars : List Int -> List Int -> Maybe (String, String)
 splitFirstColonChars [] _ = Nothing
 splitFirstColonChars (c :: rest) acc =
   if c == 58 then
-    Just (Pair (strPack (reverse acc)) (strPack rest))
+    Just (strPack (reverse acc), strPack rest)
   else
     splitFirstColonChars rest (c :: acc)
 
@@ -287,12 +284,12 @@ cdpInitial = CdpBuild (CdpTable 2 [CdpNode 1 "(root)" "" 0 0 []]) []
 addConvertSample : CdpBuild -> CpuSample -> CdpBuild
 addConvertSample build sample =
   case insertFramePath (reverse sample.cpuSampleFrames) 1 build.cdpTable of
-    Pair table leaf => CdpBuild table (leaf :: build.cdpLeavesRev)
+    (table, leaf) => CdpBuild table (leaf :: build.cdpLeavesRev)
 
 -- | 内部：按 root-first 的帧序列建父链；节点按首次出现顺序编号（2 起，1 = root），返回
 -- 新建/命中的叶节点 id。栈在输入里是叶在前，调用方先反转。
-insertFramePath : List String -> Int -> CdpTable -> Pair CdpTable Int
-insertFramePath [] parent table = Pair table parent
+insertFramePath : List String -> Int -> CdpTable -> (CdpTable, Int)
+insertFramePath [] parent table = (table, parent)
 insertFramePath (frame :: rest) parent table =
   let
     loc = frameLocOf frame
@@ -354,7 +351,7 @@ cpuProfileJson samples =
         [] => 0
     leaves = reverse build.cdpLeavesRev
   in JObj
-    [Pair "nodes" (JArr (map cdpNodeJson build.cdpTable.cdpNodes)), Pair "startTime" (JNum start), Pair "endTime" (JNum end), Pair "samples" (JArr (map JNum leaves)), Pair "timeDeltas" (JArr (map JNum (deltasOf start samples)))]
+    [("nodes", JArr (map cdpNodeJson build.cdpTable.cdpNodes)), ("startTime", JNum start), ("endTime", JNum end), ("samples", JArr (map JNum leaves)), ("timeDeltas", JArr (map JNum (deltasOf start samples)))]
 
 -- | 内部：相邻采样 `ts` 的差值序列（首个相对给定的 `prev`）。
 deltasOf : Int -> List CpuSample -> List Int
@@ -366,7 +363,7 @@ deltasOf prev (s :: rest) = s.cpuSampleTs - prev :: deltasOf s.cpuSampleTs rest
 cdpNodeJson : CdpNode -> Json
 cdpNodeJson n =
   JObj
-    [Pair "id" (JNum n.cdpId), Pair "callFrame" (JObj [Pair "functionName" (JStr n.cdpName), Pair "scriptId" (JStr "0"), Pair "url" (JStr n.cdpUrl), Pair "lineNumber" (JNum n.cdpLine), Pair "columnNumber" (JNum (0 - 1))]), Pair "children" (JArr (map JNum (reverse n.cdpChildrenRev)))]
+    [("id", JNum n.cdpId), ("callFrame", JObj [("functionName", JStr n.cdpName), ("scriptId", JStr "0"), ("url", JStr n.cdpUrl), ("lineNumber", JNum n.cdpLine), ("columnNumber", JNum (0 - 1))]), ("children", JArr (map JNum (reverse n.cdpChildrenRev)))]
 
 -- ---------------------------------------------------------------
 -- speedscope（evented profile；每个采样一个 O 事件，帧表按首次出现去重）
@@ -390,14 +387,13 @@ speedscopeJson samples =
         [] => 0
     profile =
       JObj
-        [Pair "type" (JStr "evented"), Pair "name" (JStr "vuna"), Pair "unit" (JStr "microseconds"), Pair "startValue" (JNum start), Pair "endValue" (JNum end), Pair "events" (JArr (map (speedscopeEvent frames) samples))]
-    shared = JObj [Pair "frames" (JArr (map frameJson frames))]
-  in JObj
-    [Pair "$schema" (JStr speedscopeSchema), Pair "shared" shared, Pair "profiles" (JArr [profile])]
+        [("type", JStr "evented"), ("name", JStr "vuna"), ("unit", JStr "microseconds"), ("startValue", JNum start), ("endValue", JNum end), ("events", JArr (map (speedscopeEvent frames) samples))]
+    shared = JObj [("frames", JArr (map frameJson frames))]
+  in JObj [("$schema", JStr speedscopeSchema), ("shared", shared), ("profiles", JArr [profile])]
 
 -- | 内部：speedscope 的一帧（只带 `name`）。
 frameJson : String -> Json
-frameJson frame = JObj [Pair "name" (JStr frame)]
+frameJson frame = JObj [("name", JStr frame)]
 
 -- | 内部：帧表（按采样文件顺序第一次出现的次序去重，结果确定）。
 distinctFramesOf : List CpuSample -> List String
@@ -416,9 +412,8 @@ addFrame acc frame = if memName frame acc then acc else frame :: acc
 speedscopeEvent : List String -> CpuSample -> Json
 speedscopeEvent frames sample =
   case sample.cpuSampleFrames of
-    leaf :: _ =>
-      JObj [Pair "at" (JNum sample.cpuSampleTs), Pair "frame" (JNum (frameIndexOf leaf frames))]
-    [] => JObj [Pair "at" (JNum sample.cpuSampleTs), Pair "frame" (JNum 0)]
+    leaf :: _ => JObj [("at", JNum sample.cpuSampleTs), ("frame", JNum (frameIndexOf leaf frames))]
+    [] => JObj [("at", JNum sample.cpuSampleTs), ("frame", JNum 0)]
 
 -- | 内部：帧在帧表里的下标（未命中给 0）。
 frameIndexOf : String -> List String -> Int

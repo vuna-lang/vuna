@@ -169,7 +169,7 @@ firstDocLine doc =
 hitsJson : SearchMode -> String -> List SearchHit -> Json
 hitsJson mode query hits =
   JObj
-    [Pair "schema" (JStr "vuna-search/1"), Pair "query" (JStr query), Pair "mode" (JStr (modeName mode)), Pair "hits" (JArr (map hitJson hits))]
+    [("schema", JStr "vuna-search/1"), ("query", JStr query), ("mode", JStr (modeName mode)), ("hits", JArr (map hitJson hits))]
 
 -- | 内部：模式的输出名（`type` / `name` / `doc` / `name+doc`）。
 modeName : SearchMode -> String
@@ -181,7 +181,7 @@ modeName (NameDocMode nameOnly docOnly) =
 hitJson : SearchHit -> Json
 hitJson h =
   JObj
-    [Pair "module" (JStr (hitModule h)), Pair "name" (JStr (hitName h)), Pair "kind" (JStr (hitKind h)), Pair "signature" (JStr (hitSignature h)), Pair "doc" (JStr (hitDoc h)), Pair "line" (JNum (hitLine h)), Pair "score" (JNum (hitScore h)), Pair "match" (JStr (hitMatch h))]
+    [("module", JStr (hitModule h)), ("name", JStr (hitName h)), ("kind", JStr (hitKind h)), ("signature", JStr (hitSignature h)), ("doc", JStr (hitDoc h)), ("line", JNum (hitLine h)), ("score", JNum (hitScore h)), ("match", JStr (hitMatch h))]
 
 -- | 内部：把错误打印成 `error: ...` 并返回退出码 2。
 toolError : Member nConsole ConsoleOp r => String -> Eff r Int

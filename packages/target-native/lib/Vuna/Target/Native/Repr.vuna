@@ -172,7 +172,7 @@ nRtCls sym = nClsOfKind (Kinds.irRtKindToValue (Kinds.irRtKind sym))
 nBinderEq : IrBinder -> IrBinder -> Bool
 nBinderEq a b = sameBinderId a b
 
-nLookupEnv : IrBinder -> List (Pair IrBinder NCls) -> Maybe NCls
+nLookupEnv : IrBinder -> List (IrBinder, NCls) -> Maybe NCls
 nLookupEnv _ [] = Nothing
 nLookupEnv b (p :: rest) = if nBinderEq b (firstOf p) then Just (secondOf p) else nLookupEnv b rest
 
@@ -191,7 +191,7 @@ nIsMissing NClsMissing = True
 nIsMissing _ = False
 
 -- | 分支 binder 按构造子字段类型入环境（字段下标在运行时字段序上按非擦除位推进）。
-nAltEnvGo : List IrTyDecl -> Maybe IrTy -> Maybe (Pair String String) -> List IrBinder -> Int -> NBind -> NBind
+nAltEnvGo : List IrTyDecl -> Maybe IrTy -> Maybe (String, String) -> List IrBinder -> Int -> NBind -> NBind
 nAltEnvGo decls _ _ [] _ acc = acc
 nAltEnvGo decls caseTy mctor (b :: rest) idx acc =
   if b.irBinderErased then
@@ -200,16 +200,16 @@ nAltEnvGo decls caseTy mctor (b :: rest) idx acc =
     let
       cls = nBinderCls decls (nAltBinderFallback decls caseTy mctor idx) b
       miss = if nIsMissing cls then acc.nbMissing + 1 else acc.nbMissing
-    in nAltEnvGo decls caseTy mctor rest (idx + 1) (NBind (Pair b cls :: acc.nbEnv) (nBump cls acc.nbCounts) miss)
+    in nAltEnvGo decls caseTy mctor rest (idx + 1) (NBind ((b, cls) :: acc.nbEnv) (nBump cls acc.nbCounts) miss)
 
 -- | 把一组 binder 加进环境；返回新环境、这些 binder 的计数（擦除占位不计）
 --   与其中缺 kind 的个数。
 export record NBind(..) where
-  nbEnv : List (Pair IrBinder NCls)
+  nbEnv : List (IrBinder, NCls)
   nbCounts : NCounts
   nbMissing : Int
 
-nBindAll : List IrTyDecl -> List IrBinder -> Maybe NCls -> List (Pair IrBinder NCls) -> NBind
+nBindAll : List IrTyDecl -> List IrBinder -> Maybe NCls -> List (IrBinder, NCls) -> NBind
 nBindAll decls bs fallback env = nBindAllGo decls bs fallback (NBind env nZeroCounts 0)
 
 nBindAllGo : List IrTyDecl -> List IrBinder -> Maybe NCls -> NBind -> NBind
@@ -221,7 +221,7 @@ nBindAllGo decls (b :: rest) fallback acc =
     let
       cls = nBinderCls decls fallback b
       miss = if nIsMissing cls then acc.nbMissing + 1 else acc.nbMissing
-    in nBindAllGo decls rest fallback (NBind (Pair b cls :: acc.nbEnv) (nBump cls acc.nbCounts) miss)
+    in nBindAllGo decls rest fallback (NBind ((b, cls) :: acc.nbEnv) (nBump cls acc.nbCounts) miss)
 
 -- ---------------------------------------------------------------
 -- 值位置 → 分类
@@ -234,7 +234,7 @@ nBindAllGo decls (b :: rest) fallback acc =
 --   * `IrRt`：运行时符号**作为值**是静态闭包（作为调用目标时它的结果 kind 才走
 --     `nRtCls`）。
 --   其余形状一律以 `Ir.Kinds` 为准（`env` 不传给共享判据：`IrVar` 已被上面拦截）。
-export nValueCls : List IrTyDecl -> List IrDef -> List (Pair IrBinder NCls) -> Ir -> Maybe NCls
+export nValueCls : List IrTyDecl -> List IrDef -> List (IrBinder, NCls) -> Ir -> Maybe NCls
 nValueCls decls defs env (IrVar b) =
   case b.irBinderTy of
     Just ty => Just (nKindOfTy decls (Just ty))
@@ -253,7 +253,7 @@ nValueCls decls defs env ir =
 -- ---------------------------------------------------------------
 -- | 分支 binder 的 fallback：字段类型代入 scrutinee 的运行时类型实参（判据在
 --   `Ir.Kinds`；这里只换成 native 的槽分类）。
-nAltBinderFallback : List IrTyDecl -> Maybe IrTy -> Maybe (Pair String String) -> Int -> Maybe NCls
+nAltBinderFallback : List IrTyDecl -> Maybe IrTy -> Maybe (String, String) -> Int -> Maybe NCls
 nAltBinderFallback decls caseTy mctor idx =
   case Kinds.irAltBinderKindFallback decls caseTy mctor idx of
     Just k => Just (nClsOfKind k)
@@ -289,23 +289,23 @@ nAddWalk a b =
     (a.nwMissApp + b.nwMissApp)
     (a.nwMissOther + b.nwMissOther)
 
-nWalkList : List IrTyDecl -> List IrDef -> List (Pair IrBinder NCls) -> List Ir -> NWalk
+nWalkList : List IrTyDecl -> List IrDef -> List (IrBinder, NCls) -> List Ir -> NWalk
 nWalkList decls defs env xs = nWalkListGo decls defs env xs nEmptyWalk
 
-nWalkListGo : List IrTyDecl -> List IrDef -> List (Pair IrBinder NCls) -> List Ir -> NWalk -> NWalk
+nWalkListGo : List IrTyDecl -> List IrDef -> List (IrBinder, NCls) -> List Ir -> NWalk -> NWalk
 nWalkListGo decls defs env [] acc = acc
 nWalkListGo decls defs env (x :: rest) acc =
   nWalkListGo decls defs env rest (nAddWalk (nWalk decls defs env x) acc)
 
-nWalkFields : List IrTyDecl -> List IrDef -> List (Pair IrBinder NCls) -> List (Pair String Ir) -> NWalk
+nWalkFields : List IrTyDecl -> List IrDef -> List (IrBinder, NCls) -> List (String, Ir) -> NWalk
 nWalkFields decls defs env fields = nWalkFieldsGo decls defs env fields nEmptyWalk
 
-nWalkFieldsGo : List IrTyDecl -> List IrDef -> List (Pair IrBinder NCls) -> List (Pair String Ir) -> NWalk -> NWalk
+nWalkFieldsGo : List IrTyDecl -> List IrDef -> List (IrBinder, NCls) -> List (String, Ir) -> NWalk -> NWalk
 nWalkFieldsGo decls defs env [] acc = acc
 nWalkFieldsGo decls defs env (p :: rest) acc =
   nWalkFieldsGo decls defs env rest (nAddWalk (nWalk decls defs env (secondOf p)) acc)
 
-nWalkAlt : List IrTyDecl -> List IrDef -> List (Pair IrBinder NCls) -> Maybe IrTy -> Maybe IrAlt -> NWalk
+nWalkAlt : List IrTyDecl -> List IrDef -> List (IrBinder, NCls) -> Maybe IrTy -> Maybe IrAlt -> NWalk
 nWalkAlt decls defs env caseTy Nothing = nEmptyWalk
 nWalkAlt decls defs env caseTy (Just alt) =
   let
@@ -313,16 +313,16 @@ nWalkAlt decls defs env caseTy (Just alt) =
     bodyWalk = nWalk decls defs bound.nbEnv alt.irAltBody
   in nAddWalk (NWalk bound.nbCounts nZeroCounts 0 0 bound.nbMissing 0 0 0) bodyWalk
 
-nWalkAlts : List IrTyDecl -> List IrDef -> List (Pair IrBinder NCls) -> Maybe IrTy -> List IrAlt -> NWalk
+nWalkAlts : List IrTyDecl -> List IrDef -> List (IrBinder, NCls) -> Maybe IrTy -> List IrAlt -> NWalk
 nWalkAlts decls defs env caseTy alts = nWalkAltsGo decls defs env caseTy alts nEmptyWalk
 
-nWalkAltsGo : List IrTyDecl -> List IrDef -> List (Pair IrBinder NCls) -> Maybe IrTy -> List IrAlt -> NWalk -> NWalk
+nWalkAltsGo : List IrTyDecl -> List IrDef -> List (IrBinder, NCls) -> Maybe IrTy -> List IrAlt -> NWalk -> NWalk
 nWalkAltsGo decls defs env caseTy [] acc = acc
 nWalkAltsGo decls defs env caseTy (a :: rest) acc =
   nWalkAltsGo decls defs env caseTy rest (nAddWalk (nWalkAlt decls defs env caseTy (Just a)) acc)
 
 -- | Nat 分支的 binder（前驱 / 兜底）都是 Nat 标量。
-nWalkNatAlt : List IrTyDecl -> List IrDef -> List (Pair IrBinder NCls) -> Maybe IrAlt -> NWalk
+nWalkNatAlt : List IrTyDecl -> List IrDef -> List (IrBinder, NCls) -> Maybe IrAlt -> NWalk
 nWalkNatAlt decls defs env Nothing = nEmptyWalk
 nWalkNatAlt decls defs env (Just alt) =
   let
@@ -336,7 +336,7 @@ nMissingValueWalk (IrVar _) = NWalk nZeroCounts (nBump NClsMissing nZeroCounts) 
 nMissingValueWalk (IrApp _ _ _) = NWalk nZeroCounts (nBump NClsMissing nZeroCounts) 0 0 0 0 1 0
 nMissingValueWalk _ = NWalk nZeroCounts (nBump NClsMissing nZeroCounts) 0 0 0 0 0 1
 
-nWalk : List IrTyDecl -> List IrDef -> List (Pair IrBinder NCls) -> Ir -> NWalk
+nWalk : List IrTyDecl -> List IrDef -> List (IrBinder, NCls) -> Ir -> NWalk
 nWalk decls defs env ir =
   let
     kids = nKids decls defs env ir
@@ -361,7 +361,7 @@ nWalk decls defs env ir =
         Nothing => nEmptyWalk
   in nAddWalk (nAddWalk ownB ownV) kids
 
-nKids : List IrTyDecl -> List IrDef -> List (Pair IrBinder NCls) -> Ir -> NWalk
+nKids : List IrTyDecl -> List IrDef -> List (IrBinder, NCls) -> Ir -> NWalk
 nKids decls defs env (IrVar _) = nEmptyWalk
 nKids decls defs env (IrGlobal _) = nEmptyWalk
 nKids decls defs env (IrCtor _ _ _ args) = nWalkList decls defs env args

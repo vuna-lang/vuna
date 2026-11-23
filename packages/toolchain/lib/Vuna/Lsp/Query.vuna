@@ -92,17 +92,17 @@ nameSelRange lines sp name =
         (spanStartCol sp)
         (spanStartLine sp)
         (spanStartCol sp + strLength name)
-    Just (Pair l c) => lspRange l c l (c + strLength name)
+    Just (l, c) => lspRange l c l (c + strLength name)
 
 -- ---------------------------------------------------------------
 -- hover：DT 洞目标 + 标识符签名
 -- ---------------------------------------------------------------
 -- | 内部：洞上下文里的一条条目（`- \`名字\` : 类型` + 换行）。
-ctxLine : Pair String String -> String
+ctxLine : (String, String) -> String
 ctxLine kv = "- `${firstOf kv}` : ${secondOf kv}\n"
 
 -- | 内部：洞目标的「Context:」段落；上下文为空时返回 ""。
-contextBlock : List (Pair String String) -> String
+contextBlock : List (String, String) -> String
 contextBlock [] = ""
 contextBlock ctx = """
 
@@ -120,7 +120,7 @@ goalContents g =
       else
         "${g.dtGoalInfoName} : ${g.dtGoalInfoGoal}"
   in JObj
-    [Pair "kind" (JStr "markdown"), Pair "value" (JStr "```vuna\n${label}\n```\n${contextBlock g.dtGoalInfoCtx}")]
+    [("kind", JStr "markdown"), ("value", JStr "```vuna\n${label}\n```\n${contextBlock g.dtGoalInfoCtx}")]
 
 -- | 内部：光标（1-based 行 / 列）是否落在洞的 span 内（含端点）。
 holeContains : Int -> Int -> DtGoalInfo -> Bool
@@ -144,7 +144,7 @@ holeHoverJson g =
   let
     sp = g.dtGoalInfoSpan
   in JObj
-    [Pair "contents" (goalContents g), Pair "range" (lspRange (spanStartLine sp) (spanStartCol sp) (spanEndLine sp) sp.spanEndCol)]
+    [("contents", goalContents g), ("range", lspRange (spanStartLine sp) (spanStartCol sp) (spanEndLine sp) sp.spanEndCol)]
 
 -- | 内部：符号 hover 的 markdown 正文：函数写 `全名 : 签名`，其余符号有签名时只写签名、无签名时
 -- 写全名；有 docstring 时追加在后面。
@@ -166,7 +166,7 @@ ${body}
 symbolHoverJson : Sym -> Int -> Int -> String -> Json
 symbolHoverJson s line startCol token =
   JObj
-    [Pair "contents" (JObj [Pair "kind" (JStr "markdown"), Pair "value" (JStr (symbolHoverBody s))]), Pair "range" (lspRange line startCol line (startCol + strLength token))]
+    [("contents", JObj [("kind", JStr "markdown"), ("value", JStr (symbolHoverBody s))]), ("range", lspRange line startCol line (startCol + strLength token))]
 
 -- | 内部：解析源文本取当前模块名；解析失败或无 `module` 头时为 ""。
 currentModuleNameOf : String -> String
@@ -232,19 +232,19 @@ hasHole text = holeScan (strUnpack text) (0 - 1)
 -- | hover 的第二段：光标标识符的签名 / 注释（Index；不可用或未命中 → `JNull`）。
 -- `buffers` 覆盖 Index 的 docstring：Index 是磁盘快照，打开着的文件以缓冲为准，否则同一个符号
 -- 在模块 hover 与符号 hover 两处会显示成不同版本。
-export symbolHoverResult : List (Pair String String) -> String -> Int -> Int -> String -> Maybe Index -> Json
+export symbolHoverResult : List (String, String) -> String -> Int -> Int -> String -> Maybe Index -> Json
 symbolHoverResult buffers uri line col text Nothing = JNull
 symbolHoverResult buffers uri line col text (Just idx) =
   case tokenAtCursor text line col of
     Nothing => JNull
-    Just (Pair startCol token) =>
+    Just (startCol, token) =>
       case bestSymbol idx (currentModuleNameOf text) token of
         Nothing => JNull
         Just sym => symbolHoverJson (bufferDocOf buffers idx sym) line startCol token
 
 -- | 内部：把符号的 docstring 换成打开中的缓冲里的版本（未打开或缓冲里没有这个名字时保留
 -- Index 的）。
-bufferDocOf : List (Pair String String) -> Index -> Sym -> Sym
+bufferDocOf : List (String, String) -> Index -> Sym -> Sym
 bufferDocOf buffers idx s =
   case modulePathOf idx (symModule s) of
     Nothing => s
@@ -269,7 +269,7 @@ definitionResult uri line col text Nothing =
 definitionResult uri line col text (Just idx) =
   case tokenAtCursor text line col of
     Nothing => JNull
-    Just (Pair startCol token) =>
+    Just (startCol, token) =>
       case bestSymbol idx (currentModuleNameOf text) token of
         Nothing => bufferDefinition uri text token
         Just sym =>
@@ -290,7 +290,7 @@ referencesResult uri line col text midx =
     [] =>
       case tokenAtCursor text line col of
         Nothing => []
-        Just (Pair startCol token) =>
+        Just (startCol, token) =>
           case midx of
             Nothing => []
             Just idx => referencesFor idx (currentModuleNameOf text) token
@@ -312,8 +312,8 @@ localRefLocation uri text line col =
     width =
       case tokenAtCursor text line col of
         Nothing => 0
-        Just (Pair _ token) => strLength token
-  in JObj [Pair "uri" (JStr uri), Pair "range" (lspRange line col line (col + width))]
+        Just (_, token) => strLength token
+  in JObj [("uri", JStr uri), ("range", lspRange line col line (col + width))]
 
 -- | formatting：`formatSourceWith` 成功且内容有变化 ⇒ 全文 TextEdit；否则 []。
 -- 格式化按源码顺序打印中缀与括号，不需要 fixity 闭包；解析失败 ⇒ 返回空 edits，
@@ -323,7 +323,7 @@ formattingEdits uri text =
   pure (
       case formatSourceWith text of
         ErrC e => []
-        OkC formatted => if formatted == text then [] else [JObj [Pair "range" (fullRange text), Pair "newText" (JStr formatted)]]
+        OkC formatted => if formatted == text then [] else [JObj [("range", fullRange text), ("newText", JStr formatted)]]
     )
 
 -- | 内部：按文档 uri 求程序级 fixity 表；uri 解不出路径或加载失败时返回错误。
@@ -351,17 +351,17 @@ formattingFixities uri text =
 --
 -- `context.only`（`Nothing` = 客户端不限制、`Just []` = 明确不要任何 kind）：quickfix 动作只在
 -- 未限制或含 `quickfix` 时给；case split 只在未限制或含 `refactor` / `refactor.rewrite` 时给。
-export codeActionsFor : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Maybe (List DtGoalInfo) -> List (Pair (Pair Int Int) (List Json)) -> String -> String -> Int -> Int -> Int -> Int -> Maybe (List String) -> Eff r (List Json)
+export codeActionsFor : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Maybe (List DtGoalInfo) -> List ((Int, Int), List Json) -> String -> String -> Int -> Int -> Int -> Int -> Maybe (List String) -> Eff r (List Json)
 codeActionsFor mgoals suggestions uri text reqStart reqStartCol reqEnd reqEndCol only =
   do
     ctxR <- contextForDoc uri
     case ctxR of
       ErrC e => pure []
-      OkC (Pair label ctx) => codeActionsForCtx mgoals suggestions uri label ctx text reqStart reqStartCol reqEnd reqEndCol only
+      OkC (label, ctx) => codeActionsForCtx mgoals suggestions uri label ctx text reqStart reqStartCol reqEnd reqEndCol only
 
 -- | 内部：已拿到包上下文的 codeAction 实现（`label` 是包标签，供 fixity 缓存）。
 -- 组装顺序：case split、quick fix、fix all、诊断自带 suggestion；总数不超过 `maxCodeActions`。
-codeActionsForCtx : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Maybe (List DtGoalInfo) -> List (Pair (Pair Int Int) (List Json)) -> String -> String -> PackageContext -> String -> Int -> Int -> Int -> Int -> Maybe (List String) -> Eff r (List Json)
+codeActionsForCtx : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Maybe (List DtGoalInfo) -> List ((Int, Int), List Json) -> String -> String -> PackageContext -> String -> Int -> Int -> Int -> Int -> Maybe (List String) -> Eff r (List Json)
 codeActionsForCtx mgoals suggestions uri label ctx text reqStart reqStartCol reqEnd reqEndCol only =
   do
     cfgR <- loadLintConfigForFile label
@@ -395,9 +395,9 @@ codeActionsForCtx mgoals suggestions uri label ctx text reqStart reqStartCol req
               in pure (append splits (append singles2 (append fixAll2 diagActions2)))
 
 -- | 内部：缓存条目形如 (0-based 起止行, actions)，只取与请求 range 相交的那些。
-suggestionsInRange : Int -> Int -> List (Pair (Pair Int Int) (List Json)) -> List Json
+suggestionsInRange : Int -> Int -> List ((Int, Int), List Json) -> List Json
 suggestionsInRange reqStart reqEnd [] = []
-suggestionsInRange reqStart reqEnd ((Pair (Pair sl el) acts) :: rest) =
+suggestionsInRange reqStart reqEnd (((sl, el), acts) :: rest) =
   if sl <= reqEnd && el >= reqStart then
     append acts (suggestionsInRange reqStart reqEnd rest)
   else
@@ -438,7 +438,7 @@ editLspRange e = lspRange e.editStart 1 (e.editEnd + 1) 1
 
 -- | 内部：`{range, newText}` 形式的 TextEdit。
 textEditJson : Json -> String -> Json
-textEditJson range newText = JObj [Pair "range" range, Pair "newText" (JStr newText)]
+textEditJson range newText = JObj [("range", range), ("newText", JStr newText)]
 
 -- | 内部：单条 quick fix。title 带规则短名；`diagnostics` 复用 `Vuna.Lsp.Diagnostics` 的
 -- finding → diagnostic 转换（与 publishDiagnostics 同一条 JSON），客户端可按 code 关联到已有
@@ -449,7 +449,7 @@ findingQuickFix uri f =
     Nothing => Nothing
     Just e =>
       Just
-        (JObj [Pair "title" (JStr "fix: ${f.findingRule}"), Pair "kind" (JStr "quickfix"), Pair "diagnostics" (JArr [findingDiagJson f]), Pair "edit" (JObj [Pair "changes" (JObj [Pair uri (JArr [textEditJson (editLspRange e) (joinLines e.editLines)])])])])
+        (JObj [("title", JStr "fix: ${f.findingRule}"), ("kind", JStr "quickfix"), ("diagnostics", JArr [findingDiagJson f]), ("edit", JObj [("changes", JObj [(uri, JArr [textEditJson (editLspRange e) (joinLines e.editLines)])])])])
 
 -- | fix all 的命令名（initialize capabilities 的 executeCommandProvider 与动作共用）。
 export fixAllLintCommand : String
@@ -461,7 +461,7 @@ fixAllLintCommand = "vuna.fixAllLint"
 fixAllActionJson : String -> Json
 fixAllActionJson uri =
   JObj
-    [Pair "title" (JStr "fix all lint findings"), Pair "kind" (JStr "quickfix"), Pair "command" (JObj [Pair "title" (JStr "fix all lint findings"), Pair "command" (JStr fixAllLintCommand), Pair "arguments" (JArr [JStr uri])])]
+    [("title", JStr "fix all lint findings"), ("kind", JStr "quickfix"), ("command", JObj [("title", JStr "fix all lint findings"), ("command", JStr fixAllLintCommand), ("arguments", JArr [JStr uri])])]
 
 -- | 内部：`fixLoop` 把全部可修复 finding 迭代应用（最多 8 轮，与 CLI `--fix` 一致）；
 -- 无改动时返回 `Nothing`。
@@ -469,7 +469,7 @@ fixAllLintEdit : LintConfig -> List FixityDecl -> String -> List Finding -> Mayb
 fixAllLintEdit cfg programFixities text findings =
   case fixLoop cfg programFixities text findings 8 0 of
     ErrC e => Nothing
-    OkC (Pair count newText) => if count == 0 || newText == text then Nothing else Just newText
+    OkC (count, newText) => if count == 0 || newText == text then Nothing else Just newText
 
 -- | 内部：fix all 的 codeAction；只有确实有改动时才产生动作。
 fixAllActions : String -> LintConfig -> List FixityDecl -> String -> List Finding -> List Json
@@ -486,7 +486,7 @@ fixAllLintWorkspaceEdit uri text =
     ctxR <- contextForDoc uri
     case ctxR of
       ErrC e => pure Nothing
-      OkC (Pair label ctx) =>
+      OkC (label, ctx) =>
         do
           cfgR <- loadLintConfigForFile label
           cfg <-
@@ -505,7 +505,7 @@ fixAllLintWorkspaceEdit uri text =
                     OkC findings =>
                       case fixAllLintEdit cfg programFixities text findings of
                         Nothing => Nothing
-                        Just newText => Just (JObj [Pair "changes" (JObj [Pair uri (JArr [textEditJson (fullRange text) newText])])])
+                        Just newText => Just (JObj [("changes", JObj [(uri, JArr [textEditJson (fullRange text) newText])])])
             )
 
 -- ---------------------------------------------------------------
@@ -523,7 +523,7 @@ rangeTouchesHole : String -> Int -> Int -> Int -> Int -> Bool
 rangeTouchesHole text sl sc el ec = hasHole (join "\n" (map (lineText text) (range sl (el + 1))))
 
 -- | 内部：(行, 列) 位置比较（1-based）。
-posBeforeOrEq : Pair Int Int -> Pair Int Int -> Bool
+posBeforeOrEq : (Int, Int) -> (Int, Int) -> Bool
 posBeforeOrEq a b = firstOf a < firstOf b || firstOf a == firstOf b && secondOf a <= secondOf b
 
 -- | 内部：洞是否与请求 range 相交。洞 span 对 `_` 是零宽（end = start），末列至少放宽到
@@ -532,10 +532,10 @@ goalTouchesRange : Int -> Int -> Int -> Int -> DtGoalInfo -> Bool
 goalTouchesRange sl sc el ec g =
   let
     sp = g.dtGoalInfoSpan
-    h1 = Pair (spanStartLine sp) (spanStartCol sp)
-    h2 = Pair (spanEndLine sp) (maxOf sp.spanEndCol (spanStartCol sp + 1))
-    p1 = Pair sl sc
-    p2 = Pair el ec
+    h1 = (spanStartLine sp, spanStartCol sp)
+    h2 = (spanEndLine sp, maxOf sp.spanEndCol (spanStartCol sp + 1))
+    p1 = (sl, sc)
+    p2 = (el, ec)
   in posBeforeOrEq p1 h2 && posBeforeOrEq h1 p2
 
 -- | 内部：列表里第一个与请求 range 相交的洞目标。
@@ -667,33 +667,33 @@ importedSplit roots tyName imports = firstMaybeEff (map (importSplit roots tyNam
 
 -- | 内部：未限定类型名的解析顺序：本模块 → Prelude 的整模块重导出 → 各 import 的模块。返回
 -- (模块名, 可 split 的声明)，模块名 "" 表示写短名。
-resolveUnqualifiedSplit : Member nFs FsOp r => SourceFile -> List Root -> String -> Eff r (Maybe (Pair String SplitTy))
+resolveUnqualifiedSplit : Member nFs FsOp r => SourceFile -> List Root -> String -> Eff r (Maybe (String, SplitTy))
 resolveUnqualifiedSplit sf roots tyName =
   case findSplitIn sf.sourceFileDecls tyName of
-    Just split => pure (Just (Pair "" split))
+    Just split => pure (Just ("", split))
     Nothing =>
       do
         prelude <- preludeSplit roots tyName
         case prelude of
-          Just split => pure (Just (Pair "" split))
+          Just split => pure (Just ("", split))
           Nothing =>
             do
               imported <- importedSplit roots tyName sf.sourceFileImports
               pure (
                   case imported of
-                    Just split => Just (Pair "" split)
+                    Just split => Just ("", split)
                     Nothing => Nothing
                 )
 
 -- | 内部：给解析结果附上类型所在模块名；`Nothing` 原样透传。
-tagSplit : String -> Maybe SplitTy -> Maybe (Pair String SplitTy)
-tagSplit modName (Just cs) = Just (Pair modName cs)
+tagSplit : String -> Maybe SplitTy -> Maybe (String, SplitTy)
+tagSplit modName (Just cs) = Just (modName, cs)
 tagSplit modName Nothing = Nothing
 
 -- | 内部：把洞上下文里的类型文本解析成类型表达式，再按头名（可带模块前缀）解析到可 split 的
 -- 声明；任一步失败时为 `Nothing`。类型文本是精化器 show 出来的规范全名（`Dep.Point` /
 -- `B.Local`），所以 `import ... as` 的模块别名不会出现，也没有类型别名声明可展开。
-resolveTypeSplit : Member nFs FsOp r => SourceFile -> List Root -> String -> String -> Eff r (Maybe (Pair String SplitTy))
+resolveTypeSplit : Member nFs FsOp r => SourceFile -> List Root -> String -> String -> Eff r (Maybe (String, SplitTy))
 resolveTypeSplit sf roots curMod tyText =
   case parseExpressionSource tyText of
     ErrC e => pure Nothing
@@ -822,17 +822,17 @@ spacesOf n = join "" (map (\_ => " ") (range 0 n))
 splitActionJson : String -> Int -> Int -> Int -> String -> String -> Json
 splitActionJson uri line startCol endCol title newText =
   JObj
-    [Pair "title" (JStr title), Pair "kind" (JStr "refactor.rewrite"), Pair "edit" (JObj [Pair "changes" (JObj [Pair uri (JArr [textEditJson (lspRange line startCol line endCol) newText])])])]
+    [("title", JStr title), ("kind", JStr "refactor.rewrite"), ("edit", JObj [("changes", JObj [(uri, JArr [textEditJson (lspRange line startCol line endCol) newText])])])]
 
 -- | 内部：一个上下文 binder → 最多一条 action（类型解析不到、构造子名不在作用域时 0 条）。
-binderSplitAction : Member nFs FsOp r => String -> String -> SourceFile -> List Root -> List String -> DtGoalInfo -> Pair String String -> Eff r (List Json)
-binderSplitAction uri text sf roots preludeModules g (Pair name tyText) =
+binderSplitAction : Member nFs FsOp r => String -> String -> SourceFile -> List Root -> List String -> DtGoalInfo -> (String, String) -> Eff r (List Json)
+binderSplitAction uri text sf roots preludeModules g (name, tyText) =
   do
     resolved <-
       resolveTypeSplit sf roots (currentModuleName sf.sourceFileDecls sf.sourceFileModDecl) tyText
     case resolved of
       Nothing => pure []
-      Just (Pair modName split) =>
+      Just (modName, split) =>
         let
           sp = g.dtGoalInfoSpan
           line = spanStartLine sp
@@ -925,7 +925,7 @@ symLocation idx s =
     Nothing => Nothing
     Just path =>
       Just
-        (JObj [Pair "uri" (JStr (pathToUri path)), Pair "range" (lspRange (symLine s) (symCol s) (symLine s) (symCol s + strLength (symName s)))])
+        (JObj [("uri", JStr (pathToUri path)), ("range", lspRange (symLine s) (symCol s) (symLine s) (symCol s + strLength (symName s)))])
 
 -- | 内部：光标名字的最佳符号：优先当前模块，否则取第一个候选。
 pickBestSymbol : String -> List Sym -> Maybe Sym
@@ -1001,7 +1001,7 @@ declSymbolKind (DInstance ctxE head methods sp) = 12
 symbolJson : String -> Int -> String -> Json -> Json -> List Json -> Json
 symbolJson name kind detail range sel children =
   JObj
-    (append (append [Pair "name" (JStr name), Pair "kind" (JNum kind)] (if detail == "" then [] else [Pair "detail" (JStr detail)])) (append [Pair "range" range, Pair "selectionRange" sel] (if isEmptyList children then [] else [Pair "children" (JArr children)])))
+    (append (append [("name", JStr name), ("kind", JNum kind)] (if detail == "" then [] else [("detail", JStr detail)])) (append [("range", range), ("selectionRange", sel)] (if isEmptyList children then [] else [("children", JArr children)])))
 
 -- | 内部：构造子子节点（EnumMember，detail 是构造子签名）。
 ctorSymbolJson : List String -> Ctor -> Json
@@ -1098,7 +1098,7 @@ bufferDefinition uri text token =
         Nothing => JNull
         Just d =>
           JArr
-            [JObj [Pair "uri" (JStr uri), Pair "range" (nameSelRange (split "\n" text) (declSpan d) (lastSegment token))]]
+            [JObj [("uri", JStr uri), ("range", nameSelRange (split "\n" text) (declSpan d) (lastSegment token))]]
 
 -- ---------------------------------------------------------------
 -- references：Index refs（带出现位置）+ 定义位置
@@ -1110,7 +1110,7 @@ refLocation idx r =
     Nothing => Nothing
     Just path =>
       Just
-        (JObj [Pair "uri" (JStr (pathToUri path)), Pair "range" (lspRange r.refLine r.refCol r.refLine (r.refCol + strLength (refName r)))])
+        (JObj [("uri", JStr (pathToUri path)), ("range", lspRange r.refLine r.refCol r.refLine (r.refCol + strLength (refName r)))])
 
 -- | 内部：Index 路径的 references：定义位置在前，随后是 `findReferences` 的出现位置
 -- （最多 `maxReferences` 条）；未命中符号时为 []。
@@ -1185,7 +1185,7 @@ symSymbolKind s =
 complJson : Compl -> Json
 complJson c =
   JObj
-    (append (append [Pair "label" (JStr (complLabel c)), Pair "kind" (JNum c.complKind)] (if c.complDetail == "" then [] else [Pair "detail" (JStr c.complDetail)])) (if complDoc c == "" then [] else [Pair "documentation" (JObj [Pair "kind" (JStr "markdown"), Pair "value" (JStr (complDoc c))])]))
+    (append (append [("label", JStr (complLabel c)), ("kind", JNum c.complKind)] (if c.complDetail == "" then [] else [("detail", JStr c.complDetail)])) (if complDoc c == "" then [] else [("documentation", JObj [("kind", JStr "markdown"), ("value", JStr (complDoc c))])]))
 
 -- | 内部：按 label 去重（保留首次出现）。
 dedupeCompls : List Compl -> List Compl
@@ -1236,7 +1236,7 @@ keywordCompls : List Compl
 keywordCompls = map (\n => Compl n 14 "" "") lspKeywords
 
 -- | 内部：Index 里的全部符号作为补全候选（docstring 以缓冲为准）。
-indexCompls : List (Pair String String) -> Maybe Index -> List Compl
+indexCompls : List (String, String) -> Maybe Index -> List Compl
 indexCompls buffers Nothing = []
 indexCompls buffers (Just idx) =
   map
@@ -1253,7 +1253,7 @@ finishCompls items = map complJson (take maxCompletions (dedupeCompls items))
 
 -- | 内部：`.` 之后的限定补全：从 `.` 往前取出模块名，按 `<module>.` 过滤符号全名，再按光标
 -- 前缀过滤裸名。
-qualifiedCompletions : List (Pair String String) -> String -> List Int -> Int -> String -> Maybe Index -> List Json
+qualifiedCompletions : List (String, String) -> String -> List Int -> Int -> String -> Maybe Index -> List Json
 qualifiedCompletions buffers ln chars prefixStart prefix Nothing = []
 qualifiedCompletions buffers ln chars prefixStart prefix (Just idx) =
   let
@@ -1271,7 +1271,7 @@ qualifiedCompletions buffers ln chars prefixStart prefix (Just idx) =
 
 -- | completion 入口：`line0` / `col0` 是 LSP 的 0-based 位置。取光标左侧的标识符前缀；
 -- `.` 后走 `qualifiedCompletions`，否则按前缀过滤「Index 符号 + 缓冲顶层名 + 关键字」。
-export completionItems : List (Pair String String) -> String -> Int -> Int -> Maybe Index -> List Json
+export completionItems : List (String, String) -> String -> Int -> Int -> Maybe Index -> List Json
 completionItems buffers text line0 col0 midx =
   let
     ln = lineText text (line0 + 1)
@@ -1307,7 +1307,7 @@ symbolInfoJson idx s =
     Nothing => Nothing
     Just loc =>
       Just
-        (JObj (append [Pair "name" (JStr (symName s)), Pair "kind" (JNum (symSymbolKind s)), Pair "location" loc] (if symModule s == "" then [] else [Pair "containerName" (JStr (symModule s))])))
+        (JObj (append [("name", JStr (symName s)), ("kind", JNum (symSymbolKind s)), ("location", loc)] (if symModule s == "" then [] else [("containerName", JStr (symModule s))])))
 
 -- | workspace/symbol：空查询返回全部符号，否则按查询过滤；最多 `maxWorkspaceSymbols` 条。
 -- Index 不可用或无匹配时为 []。
@@ -1323,17 +1323,17 @@ workspaceSymbols (Just idx) query =
 -- ---------------------------------------------------------------
 -- | 一次返回该 buffer 的全部 suggestion（0-based 起止行 + actions），由服务器按内容缓存、调用方
 -- 按请求 range 过滤；同时回传 `DiagCache` 供下一帧复用。
-export suggestionsForDoc : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Maybe DiagCache -> String -> String -> Eff r (Pair (Maybe DiagCache) (List (Pair (Pair Int Int) (List Json))))
+export suggestionsForDoc : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Maybe DiagCache -> String -> String -> Eff r (Maybe DiagCache, List ((Int, Int), List Json))
 suggestionsForDoc session uri text =
   do
     result <- diagnosticsForSuggestions session uri text
     let
       diags = secondOf (secondOf result)
-    in pure (Pair (firstOf result) (mapMaybe (suggestionEntry uri) diags))
+    in pure (firstOf result, mapMaybe (suggestionEntry uri) diags)
 
 -- | 内部：一条诊断 → (0-based 起止行, 该诊断的全部 suggestion 动作)；没有 primary span 或没有
 -- suggestion 时为 `Nothing`。
-suggestionEntry : String -> Diagnostic -> Maybe (Pair (Pair Int Int) (List Json))
+suggestionEntry : String -> Diagnostic -> Maybe ((Int, Int), List Json)
 suggestionEntry uri d =
   case primarySpanQ d.diagLabels of
     Nothing => Nothing
@@ -1342,13 +1342,13 @@ suggestionEntry uri d =
         Nothing
       else
         Just
-          (Pair (Pair (spanStartLine sp - 1) (spanEndLine sp - 1)) (map (suggestionActionJson uri) d.diagSuggestions))
+          ((spanStartLine sp - 1, spanEndLine sp - 1), map (suggestionActionJson uri) d.diagSuggestions)
 
 -- | 内部：一条 suggestion → quickfix CodeAction（title 取 suggestion 自带标题）。
 suggestionActionJson : String -> Suggestion -> Json
 suggestionActionJson uri s =
   JObj
-    [Pair "title" (JStr s.suggestionTitle), Pair "kind" (JStr "quickfix"), Pair "edit" (JObj [Pair "changes" (JObj [Pair uri (JArr (map suggestionEditJson s.suggestionEdits))])])]
+    [("title", JStr s.suggestionTitle), ("kind", JStr "quickfix"), ("edit", JObj [("changes", JObj [(uri, JArr (map suggestionEditJson s.suggestionEdits))])])]
 
 -- | 内部：一条诊断编辑 → TextEdit。
 suggestionEditJson : DiagEdit -> Json

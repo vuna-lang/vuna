@@ -29,7 +29,7 @@ export argKindOf : List Int -> Int -> Int
 argKindOf buf cur =
   let
     text = trimLeft (strPack (take cur buf))
-    Pair word rest = splitFirstWord text
+    (word, rest) = splitFirstWord text
   in if byteLength text <= byteLength word then
     0
   else
@@ -41,15 +41,15 @@ argKindOf buf cur =
       _ => 0
 
 -- | 内部：把字符串拆成第一个词与其余文本（词按空格 / 制表分隔，其余文本已去掉前导空白）。
-splitFirstWord : String -> Pair String String
+splitFirstWord : String -> (String, String)
 splitFirstWord s = splitFirstWordChars (strUnpack s) []
 
 -- | 内部：`splitFirstWord` 的逐字节实现（`acc` 是逆序的第一个词）。
-splitFirstWordChars : List Int -> List Int -> Pair String String
-splitFirstWordChars [] acc = Pair (strPack (reverse acc)) ""
+splitFirstWordChars : List Int -> List Int -> (String, String)
+splitFirstWordChars [] acc = (strPack (reverse acc), "")
 splitFirstWordChars (c :: rest) acc =
   if c == 32 || c == 9 then
-    Pair (strPack (reverse acc)) (strPack rest)
+    (strPack (reverse acc), strPack rest)
   else
     splitFirstWordChars rest (c :: acc)
 
@@ -186,7 +186,7 @@ dirExists path =
 pathCompletions : Member nFs FsOp r => String -> Eff r (List String)
 pathCompletions token =
   let
-    Pair dirText base = splitLastSlash token
+    (dirText, base) = splitLastSlash token
     dir = if dirText == "" then "." else dirText
   in do
     entries <- safeReadDir dir
@@ -204,14 +204,14 @@ pathCandidate dirText dir name =
     pure (if isDir then "${shown}/" else shown)
 
 -- | 按最后一个 `/` 拆成（目录, 末段）；没有 `/` 时目录为空串。纯函数，可直接单测。
-export splitLastSlash : String -> Pair String String
+export splitLastSlash : String -> (String, String)
 splitLastSlash s = splitLastSlashRev (reverse (strUnpack s)) []
 
 -- | 内部：`splitLastSlash` 的逆序逐字节实现（`acc` 是逆序的末段）。
-splitLastSlashRev : List Int -> List Int -> Pair String String
-splitLastSlashRev [] acc = Pair "" (strPack acc)
+splitLastSlashRev : List Int -> List Int -> (String, String)
+splitLastSlashRev [] acc = ("", strPack acc)
 splitLastSlashRev (c :: rest) acc =
-  if c == 47 then Pair (strPack (reverse rest)) (strPack acc) else splitLastSlashRev rest (c :: acc)
+  if c == 47 then (strPack (reverse rest), strPack acc) else splitLastSlashRev rest (c :: acc)
 
 -- ---------------------------------------------------------------
 -- 去重（保序；候选规模很小）

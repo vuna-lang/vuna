@@ -331,7 +331,7 @@ runTestFilesParallel opts pkgDir dir files =
 
 -- | 内部：并行调度主体——窗口未满就 spawn 下一个，满了就 wait 队首；`fuel` 用完、
 -- `pending` 为空或 fail-fast 已触发（`stopped`）时收尾。
-runParallel : Member nConsole ConsoleOp r, Member nProcess ProcessOp r => Int -> TestOpts -> String -> String -> List String -> List (Pair Int String) -> Int -> Int -> Bool -> Eff r Tally
+runParallel : Member nConsole ConsoleOp r, Member nProcess ProcessOp r => Int -> TestOpts -> String -> String -> List String -> List (Int, String) -> Int -> Int -> Bool -> Eff r Tally
 runParallel fuel opts pkgDir dir pending running pass fail stopped =
   if fuel <= 0 then
     finishRunning opts running pass fail stopped
@@ -344,22 +344,22 @@ runParallel fuel opts pkgDir dir pending running pass fail stopped =
         else if length running < opts.testJobs then
           do
             pid <- processSpawn (spawnTestArgs opts pkgDir name)
-            runParallel (fuel - 1) opts pkgDir dir rest (append running [Pair pid name]) pass fail False
+            runParallel (fuel - 1) opts pkgDir dir rest (append running [(pid, name)]) pass fail False
         else
           case running of
             [] => finishRunning opts [] pass fail stopped
-            (Pair pid _) :: more =>
+            (pid, _) :: more =>
               do
                 code <- processWait pid
                 runParallel (fuel - 1) opts pkgDir dir pending more (if code == 0 then pass + 1 else pass) (if code == 0 then fail else fail + 1) (opts.testFailFast && code /= 0)
 
 -- | 内部：等完所有在跑子进程并打印与串行一致的汇总行（fail-fast 触发时也走这里）。
-finishRunning : Member nConsole ConsoleOp r, Member nProcess ProcessOp r => TestOpts -> List (Pair Int String) -> Int -> Int -> Bool -> Eff r Tally
+finishRunning : Member nConsole ConsoleOp r, Member nProcess ProcessOp r => TestOpts -> List (Int, String) -> Int -> Int -> Bool -> Eff r Tally
 finishRunning opts [] pass fail stopped =
   do
     _ <- consolePrint "\n${pass} passed, ${fail} failed\n"
     pure (Tally pass fail stopped)
-finishRunning opts ((Pair pid _) :: rest) pass fail stopped =
+finishRunning opts ((pid, _) :: rest) pass fail stopped =
   do
     code <- processWait pid
     finishRunning

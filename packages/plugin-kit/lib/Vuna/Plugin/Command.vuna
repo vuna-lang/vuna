@@ -142,13 +142,13 @@ findCmdIn path [] = Nothing
 findCmdIn path (c :: rest) = if c.cmdPath == path then Just c else findCmdIn path rest
 
 -- | 表查询：最长前缀匹配（最多 `depth` 段），返回命令与剩余参数。
-export matchCommandIn : Int -> List String -> List Cmd -> Maybe (Pair Cmd (List String))
+export matchCommandIn : Int -> List String -> List Cmd -> Maybe (Cmd, List String)
 matchCommandIn depth args cmds =
   if depth <= 0 then
     Nothing
   else
     case findCmdIn (take depth args) cmds of
-      Just c => Just (Pair c (drop depth args))
+      Just c => Just (c, drop depth args)
       Nothing => matchCommandIn (depth - 1) args cmds
 
 -- | 一条命令允许的 flag 形态（保持声明顺序）。

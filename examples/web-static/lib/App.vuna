@@ -16,28 +16,28 @@ app =
   WebApp.app
     [Route.route "GET" "/" home, Route.route "GET" "/about" about, Route.route "GET" "/users/:id" userPage, Route.route "POST" "/users/:id" createUser, Route.route "GET" "/echo/:msg" echo, Route.route "GET" "/env" envPage, Route.route "GET" "/time" timePage]
 
-home : List (Pair String String) -> Eff [FsOp, EnvOp, ClockOp, NetOp, ConsoleOp] View.View
+home : List (String, String) -> Eff [FsOp, EnvOp, ClockOp, NetOp, ConsoleOp] View.View
 home _ =
   pure
     (page "Home" [View.Element "h1" [] [View.Text "Home"], View.Element "p" [] [View.Text "静态页面 + 路由"]])
 
-about : List (Pair String String) -> Eff [FsOp, EnvOp, ClockOp, NetOp, ConsoleOp] View.View
+about : List (String, String) -> Eff [FsOp, EnvOp, ClockOp, NetOp, ConsoleOp] View.View
 about _ = pure (page "About" [View.Element "h1" [] [View.Text "About"]])
 
-userPage : List (Pair String String) -> Eff [FsOp, EnvOp, ClockOp, NetOp, ConsoleOp] View.View
+userPage : List (String, String) -> Eff [FsOp, EnvOp, ClockOp, NetOp, ConsoleOp] View.View
 userPage params =
   pure (page "User" [View.Element "h1" [] [View.Text ("user " ++ paramOf "id" params)]])
 
-createUser : List (Pair String String) -> Eff [FsOp, EnvOp, ClockOp, NetOp, ConsoleOp] View.View
+createUser : List (String, String) -> Eff [FsOp, EnvOp, ClockOp, NetOp, ConsoleOp] View.View
 createUser params =
   pure (page "Created" [View.Element "h1" [] [View.Text ("created " ++ paramOf "id" params)]])
 
 -- | 回显路径参数（验证百分号解码 + 文本转义）。
-echo : List (Pair String String) -> Eff [FsOp, EnvOp, ClockOp, NetOp, ConsoleOp] View.View
+echo : List (String, String) -> Eff [FsOp, EnvOp, ClockOp, NetOp, ConsoleOp] View.View
 echo params = pure (View.Text (paramOf "msg" params))
 
 -- | 每次请求读一次环境变量 `VUNA_WEB_DEMO`（SSR：不是启动时算好的）。
-envPage : List (Pair String String) -> Eff [FsOp, EnvOp, ClockOp, NetOp, ConsoleOp] View.View
+envPage : List (String, String) -> Eff [FsOp, EnvOp, ClockOp, NetOp, ConsoleOp] View.View
 envPage _ =
   do
     v <- envGetEnv "VUNA_WEB_DEMO"
@@ -45,7 +45,7 @@ envPage _ =
       (page "Env" [View.Element "h1" [] [View.Text "Env"], View.Element "p" [] [View.Text ("env=" ++ v)]])
 
 -- | 每次请求读一次时钟（SSR：每请求重新执行 handler）。
-timePage : List (Pair String String) -> Eff [FsOp, EnvOp, ClockOp, NetOp, ConsoleOp] View.View
+timePage : List (String, String) -> Eff [FsOp, EnvOp, ClockOp, NetOp, ConsoleOp] View.View
 timePage _ =
   do
     t <- clockNow
@@ -53,7 +53,7 @@ timePage _ =
       (page "Time" [View.Element "h1" [] [View.Text "Time"], View.Element "p" [] [View.Text ("t=" ++ strFromInt t)]])
 
 -- | 取命名参数的值；缺参数时为空串。
-paramOf : String -> List (Pair String String) -> String
+paramOf : String -> List (String, String) -> String
 paramOf name params =
   case params of
     p :: rest => if p.first == name then p.second else paramOf name rest

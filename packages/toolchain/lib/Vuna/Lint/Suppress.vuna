@@ -43,7 +43,7 @@ export record Suppression(..) where
   -- | `disable` / `enable` 事件。
   suppressionEvents : List SuppressEvent
   -- | 单行抑制（`disable-line` / `disable-next-line`）。
-  suppressionLines : List (Pair Int SuppressTarget)
+  suppressionLines : List (Int, SuppressTarget)
 
 -- | 空抑制表。
 export emptySuppression : Suppression
@@ -67,7 +67,7 @@ parseComments (c :: rest) supp =
       body = trim (substring 10 (byteLength text - 10) text)
     in case directiveOf body of
       Nothing => err "${line}: unknown vuna-lint directive: ${body}"
-      Just (Pair name arg) =>
+      Just (name, arg) =>
         case name of
           "ignore-file" =>
             let
@@ -78,14 +78,14 @@ parseComments (c :: rest) supp =
               ErrC e => ErrC e
               OkC target =>
                 let
-                  supp2 = { supp | suppressionLines = append supp.suppressionLines [Pair (line + 1) target] }
+                  supp2 = { supp | suppressionLines = append supp.suppressionLines [(line + 1, target)] }
                 in parseComments rest supp2
           "disable-line" =>
             case parseTarget arg line of
               ErrC e => ErrC e
               OkC target =>
                 let
-                  supp2 = { supp | suppressionLines = append supp.suppressionLines [Pair line target] }
+                  supp2 = { supp | suppressionLines = append supp.suppressionLines [(line, target)] }
                 in parseComments rest supp2
           "disable" =>
             case parseTarget arg line of
@@ -104,21 +104,21 @@ parseComments (c :: rest) supp =
           _ => err "${line}: unknown vuna-lint directive: ${name}"
 
 -- | 内部：拆出指令名与参数（以第一个空格/制表符为界）。
-directiveOf : String -> Maybe (Pair String String)
+directiveOf : String -> Maybe (String, String)
 directiveOf body =
   case firstSpace (strUnpack body) [] of
-    Nothing => Just (Pair (trim body) "")
-    Just (Pair name restChars) =>
+    Nothing => Just (trim body, "")
+    Just (name, restChars) =>
       let
         nameText = strPack (reverse name)
         restText = trim (strPack restChars)
-      in Just (Pair nameText restText)
+      in Just (nameText, restText)
 
 -- | 内部：找第一个空格/制表符；返回（倒序指令名, 参数原文）。
-firstSpace : List Int -> List Int -> Maybe (Pair (List Int) (List Int))
+firstSpace : List Int -> List Int -> Maybe (List Int, List Int)
 firstSpace [] acc = Nothing
 firstSpace (c :: rest) acc =
-  if c == 32 || c == 9 then Just (Pair acc rest) else firstSpace rest (c :: acc)
+  if c == 32 || c == 9 then Just (acc, rest) else firstSpace rest (c :: acc)
 
 -- | 内部：解析规则目标；空或 `all` = 全部。
 parseTarget : String -> Int -> Check SuppressTarget
@@ -153,9 +153,9 @@ isSuppressed supp line rule =
     eventSuppressed supp.suppressionEvents line rule
 
 -- | 内部：单行抑制是否命中。
-anyLineStop : List (Pair Int SuppressTarget) -> Int -> LintRule -> Bool
+anyLineStop : List (Int, SuppressTarget) -> Int -> LintRule -> Bool
 anyLineStop [] line rule = False
-anyLineStop ((Pair l target) :: rest) line rule =
+anyLineStop ((l, target) :: rest) line rule =
   l == line && targetHas target rule || anyLineStop rest line rule
 
 -- | 内部：从后往前找第一条作用于该行的区间指令。

@@ -49,19 +49,19 @@ identAt (t :: rest) line col =
     identAt rest line col
 
 -- | 内部：所有同名 ident token 的 (行, 列)。
-identHits : List CstToken -> String -> List (Pair Int Int)
+identHits : List CstToken -> String -> List (Int, Int)
 identHits toks name = mapMaybe (tokPosIfName name) toks
 
 -- | 内部：token 是 ident 且同名时返回其起始位置。
-tokPosIfName : String -> CstToken -> Maybe (Pair Int Int)
+tokPosIfName : String -> CstToken -> Maybe (Int, Int)
 tokPosIfName name t =
   if t.cstTag == "ident" && t.cstText == name then
-    Just (Pair (spanStartLine t.cstSpan) (spanStartCol t.cstSpan))
+    Just (spanStartLine t.cstSpan, spanStartCol t.cstSpan)
   else
     Nothing
 
 -- | 内部：(行, 列) + 名字 → 起止列按 UTF-16 换算的 `DocumentHighlight`（kind = 1，Text）。
-positionHighlight : List String -> String -> Pair Int Int -> Json
+positionHighlight : List String -> String -> (Int, Int) -> Json
 positionHighlight lines name pos =
   let
     line = firstOf pos
@@ -69,4 +69,4 @@ positionHighlight lines name pos =
     ln = lineAt1 lines line
     endCol = col + strLength name
   in JObj
-    [Pair "range" (lspRange line (utf16ColOf ln col) line (utf16ColOf ln endCol)), Pair "kind" (JNum 1)]
+    [("range", lspRange line (utf16ColOf ln col) line (utf16ColOf ln endCol)), ("kind", JNum 1)]

@@ -135,19 +135,19 @@ packageSources dir =
 --
 -- 有 manifest 时取 workspace 的包；找不到 manifest 或不是 workspace 时，把找到的 manifest
 -- 目录（没有 manifest 时用入参 `repo`）当作匿名包（包名为空串）。
-packageDirs : Member nFs FsOp r, Member nEnv EnvOp r => String -> Eff r (List (Pair String String))
+packageDirs : Member nFs FsOp r, Member nEnv EnvOp r => String -> Eff r (List (String, String))
 packageDirs repo =
   do
     found <- findManifestDir repo
     case found of
-      ErrC e => pure [Pair repo ""]
+      ErrC e => pure [(repo, "")]
       OkC dir =>
         do
           pkgsR <- workspacePackages dir
           pure (
               case pkgsR of
-                ErrC e => [Pair dir ""]
-                OkC pkgs => map (\p => Pair (packageDir p) (packageName p)) pkgs
+                ErrC e => [(dir, "")]
+                OkC pkgs => map (\p => (packageDir p, packageName p)) pkgs
             )
 
 -- ---------------------------------------------------------------
@@ -403,20 +403,20 @@ refsInFieldTypes sMod (f :: rest) acc =
   refsInFieldTypes sMod rest (refsInExprGo sMod (fieldType f) acc)
 
 -- | 内部：record 字面量/更新里的字段值（名字, 表达式）中的引用。
-refsInFields : String -> List (Pair String Expr) -> List Ref -> List Ref
+refsInFields : String -> List (String, Expr) -> List Ref -> List Ref
 refsInFields sMod [] acc = acc
-refsInFields sMod ((Pair fname value) :: rest) acc =
+refsInFields sMod ((fname, value) :: rest) acc =
   refsInFields sMod rest (refsInExprGo sMod value acc)
 
 -- | 内部：绑定里的引用（`let` 绑定与 `case` 分支的「模式, 表达式」），只看值表达式。
-refsInBinds : String -> List (Pair Pat Expr) -> List Ref -> List Ref
+refsInBinds : String -> List (Pat, Expr) -> List Ref -> List Ref
 refsInBinds sMod [] acc = acc
-refsInBinds sMod ((Pair p x) :: rest) acc = refsInBinds sMod rest (refsInExprGo sMod x acc)
+refsInBinds sMod ((p, x) :: rest) acc = refsInBinds sMod rest (refsInExprGo sMod x acc)
 
 -- | 内部：`where` / `let` 多子句局部函数的引用，只看各 clause 的 body（与绑定一致，不看模式）。
-refsInLocalClauses : String -> List (Pair (List Pat) Expr) -> List Ref -> List Ref
+refsInLocalClauses : String -> List (List Pat, Expr) -> List Ref -> List Ref
 refsInLocalClauses sMod [] acc = acc
-refsInLocalClauses sMod ((Pair pats body) :: rest) acc =
+refsInLocalClauses sMod ((pats, body) :: rest) acc =
   refsInLocalClauses sMod rest (refsInExprGo sMod body acc)
 
 -- | 内部：应用实参里的引用。
@@ -519,32 +519,32 @@ record Built where
 --
 -- parse/fixity 失败返回 `ErrC`（调用方转成 warning），不中断整体；返回值带推进后的
 -- `FixityEnv`——按目录复用包上下文与已加载模块图（见 [Vuna.FixityEnv]）。
-indexOne : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => FixityEnv -> String -> String -> String -> Eff r (Pair FixityEnv (Check Built))
+indexOne : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => FixityEnv -> String -> String -> String -> Eff r (FixityEnv, Check Built)
 indexOne env dir pkgName path =
   do
     exists <- fsFileExists path
     if exists then
       indexOneExisting env dir pkgName path
     else
-      pure (Pair env (err "${path}: no such file"))
+      pure (env, err "${path}: no such file")
 
 -- | 内部：`indexOne` 的文件存在分支——读源码、取包 fixity 上下文、按程序级 fixity 重排，
 -- 再抽模块名、模块 doc、符号与引用。
-indexOneExisting : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => FixityEnv -> String -> String -> String -> Eff r (Pair FixityEnv (Check Built))
+indexOneExisting : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => FixityEnv -> String -> String -> String -> Eff r (FixityEnv, Check Built)
 indexOneExisting env dir pkgName path =
   do
     source <- fsReadFile path
     let
       bytes = strLength source
     in case parseSourceDetailed path source of
-      ErrC e => pure (Pair env (err "${path}: ${diagText e}"))
+      ErrC e => pure (env, err "${path}: ${diagText e}")
       OkC parsed =>
         do
           looked <- fixitiesForParsed env path parsed.parsedFile
           let
             env2 = firstOf looked
           in case secondOf looked of
-            ErrC e => pure (Pair env2 (err "${path}: cannot load package fixity context: ${diagText e}"))
+            ErrC e => pure (env2, err "${path}: cannot load package fixity context: ${diagText e}")
             OkC programFixities =>
               case parsed.parsedFile of
                 -- 必须按**程序级** fixity 重排（本文件声明 ++ import 闭包，
@@ -552,7 +552,7 @@ indexOneExisting env dir pkgName path =
                 -- 然后被当错误跳过 → `vuna map` 静默漏模块。
                 SourceFile srcHdr imports fx decls0 _ _ _ =>
                   case reorderProgram (tableOfKeepOps (append programFixities fx)) decls0 of
-                    ErrC e => pure (Pair env2 (err "${path}: ${diagText e}"))
+                    ErrC e => pure (env2, err "${path}: ${diagText e}")
                     OkC decls =>
                       let
                         sMod = moduleNameOf dir path srcHdr
@@ -560,7 +560,7 @@ indexOneExisting env dir pkgName path =
                         info = ModuleInfo sMod pkgName path bytes (length decls) (docTableModuleDoc table)
                         syms = symbolsOfModule sMod decls table
                         refs = refsInDecls sMod decls
-                      in pure (Pair env2 (OkC (Built [info] syms refs)))
+                      in pure (env2, OkC (Built [info] syms refs))
 
 -- | 跨文件的累积器：模块表、符号表、引用表都倒序累积，最后统一 `reverse`。
 record Acc where
@@ -580,29 +580,29 @@ prependRev [] ys = ys
 prependRev (x :: rest) ys = prependRev rest (x :: ys)
 
 -- | 内部：按文件顺序索引一个包，返回推进后的 `FixityEnv` 与累积器。
-indexPackage : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => FixityEnv -> String -> String -> List String -> Acc -> Eff r (Pair FixityEnv Acc)
+indexPackage : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => FixityEnv -> String -> String -> List String -> Acc -> Eff r (FixityEnv, Acc)
 indexPackage env dir pkgName files acc = foldFiles env dir pkgName files acc
 
 -- | 内部：逐文件索引的折叠——`FixityEnv` 与累积器在文件之间传递。
-foldFiles : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => FixityEnv -> String -> String -> List String -> Acc -> Eff r (Pair FixityEnv Acc)
-foldFiles env dir pkgName [] acc = pure (Pair env acc)
+foldFiles : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => FixityEnv -> String -> String -> List String -> Acc -> Eff r (FixityEnv, Acc)
+foldFiles env dir pkgName [] acc = pure (env, acc)
 foldFiles env dir pkgName (path :: rest) acc =
   do
     stepped <- indexFileInto env dir pkgName path acc
     foldFiles (firstOf stepped) dir pkgName rest (secondOf stepped)
 
 -- | 内部：索引单个文件并把结果并入累积器；失败时只追加一条警告。
-indexFileInto : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => FixityEnv -> String -> String -> String -> Acc -> Eff r (Pair FixityEnv Acc)
+indexFileInto : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => FixityEnv -> String -> String -> String -> Acc -> Eff r (FixityEnv, Acc)
 indexFileInto env dir pkgName path acc =
   do
     stepped <- indexOne env dir pkgName path
     case secondOf stepped of
-      ErrC e => pure (Pair (firstOf stepped) (Acc acc.accModules acc.accSymbols acc.accRefs (e :: acc.accWarns)))
-      OkC b => pure (Pair (firstOf stepped) (Acc (prependRev b.builtModules acc.accModules) (prependRev b.builtSymbols acc.accSymbols) (prependRev b.builtRefs acc.accRefs) acc.accWarns))
+      ErrC e => pure (firstOf stepped, Acc acc.accModules acc.accSymbols acc.accRefs (e :: acc.accWarns))
+      OkC b => pure (firstOf stepped, Acc (prependRev b.builtModules acc.accModules) (prependRev b.builtSymbols acc.accSymbols) (prependRev b.builtRefs acc.accRefs) acc.accWarns)
 
 -- | 内部：遍历所有 `(目录, 包名)`，包内先展开源码文件再依次索引。
-collectAll : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => FixityEnv -> List (Pair String String) -> Acc -> Eff r (Pair FixityEnv Acc)
-collectAll env [] acc = pure (Pair env acc)
+collectAll : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => FixityEnv -> List (String, String) -> Acc -> Eff r (FixityEnv, Acc)
+collectAll env [] acc = pure (env, acc)
 collectAll env (root :: rest) acc =
   do
     let

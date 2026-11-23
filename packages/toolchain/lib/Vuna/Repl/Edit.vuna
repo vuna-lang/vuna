@@ -79,7 +79,7 @@ record EditState where
   -- | 反向搜索的查询字节。
   esQuery : List Int
   -- | 当前匹配：(历史序号, 条目)；`Nothing` = 无匹配。
-  esMatch : Maybe (Pair Int String)
+  esMatch : Maybe (Int, String)
 
 -- | 主循环的一步结果。
 data EditResult : Type where
@@ -367,7 +367,7 @@ applySearchKey cfg KBackspace st = pure (EContinue (searchQueryBackspace cfg st)
 applySearchKey cfg KCtrR st = pure (EContinue (searchContinue cfg st))
 applySearchKey cfg KEnter st =
   case st.esMatch of
-    Just (Pair idx entry) => pure (EContinue (acceptSearch st idx entry))
+    Just (idx, entry) => pure (EContinue (acceptSearch st idx entry))
     Nothing => pure (EContinue (acceptSearchText st (strOf st.esQuery)))
 applySearchKey cfg KEsc st = pure (EContinue (exitSearch st))
 applySearchKey cfg KCtrC st = pure (EContinue (exitSearch st))
@@ -653,7 +653,7 @@ searchContinue cfg st =
   let
     start =
       case st.esMatch of
-        Just (Pair idx entry) => idx + 1
+        Just (idx, entry) => idx + 1
         Nothing => 1
   in EditState
     st.esBuf
@@ -666,15 +666,15 @@ searchContinue cfg st =
 
 -- | 内部：从历史列表第 `start` 条（按旧→新编号）开始向新找包含查询的条目（查询为空时取第一
 -- 条）；找不到给 `Nothing`。
-searchFrom : List String -> Int -> List Int -> Maybe (Pair Int String)
+searchFrom : List String -> Int -> List Int -> Maybe (Int, String)
 searchFrom history start query = searchFromGo (drop (imax 0 (start - 1)) history) start query
 
 -- | 内部：`searchFrom` 的递归实现——`idx` 是当前条目在历史列表里按旧→新的序号。
-searchFromGo : List String -> Int -> List Int -> Maybe (Pair Int String)
+searchFromGo : List String -> Int -> List Int -> Maybe (Int, String)
 searchFromGo [] idx query = Nothing
 searchFromGo (entry :: rest) idx query =
   if lenInt query == 0 || contains (strOf query) entry then
-    Just (Pair idx entry)
+    Just (idx, entry)
   else
     searchFromGo rest (idx + 1) query
 
@@ -725,7 +725,7 @@ redrawSearch cfg st =
     queryText = strOf st.esQuery
     matchText =
       case st.esMatch of
-        Just (Pair idx entry) => entry
+        Just (idx, entry) => entry
         Nothing => ""
     promptText = "(reverse-i-search)`${queryText}': "
     styled = if cfg.editColorOn then ansi "36" promptText ++ matchText else promptText ++ matchText

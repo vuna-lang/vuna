@@ -49,15 +49,15 @@ paramsOf msg = fromMaybe (JObj []) (jsonGet "params" msg)
 
 -- | 成功响应信封：`{jsonrpc, id, result}`。
 export responseOk : Json -> Json -> Json
-responseOk id body = JObj [Pair "jsonrpc" (JStr "2.0"), Pair "id" id, Pair "result" body]
+responseOk id body = JObj [("jsonrpc", JStr "2.0"), ("id", id), ("result", body)]
 
 -- | 错误响应信封：`{jsonrpc, id, error: {code, message}}`。
 export responseErr : Json -> Int -> String -> Json
 responseErr id code message =
   JObj
-    [Pair "jsonrpc" (JStr "2.0"), Pair "id" id, Pair "error" (JObj [Pair "code" (JNum code), Pair "message" (JStr message)])]
+    [("jsonrpc", JStr "2.0"), ("id", id), ("error", JObj [("code", JNum code), ("message", JStr message)])]
 
 -- | 通知信封（无 `id`）：`{jsonrpc, method, params}`。
 export notify : String -> Json -> Json
 notify methodName params =
-  JObj [Pair "jsonrpc" (JStr "2.0"), Pair "method" (JStr methodName), Pair "params" params]
+  JObj [("jsonrpc", JStr "2.0"), ("method", JStr methodName), ("params", params)]

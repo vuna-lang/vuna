@@ -70,11 +70,11 @@ validateTrace trace =
     (countPh "i" evs)
 
 -- | 内部：数某个 `ph` 的事件条数。
-countPh : String -> List (Pair Int ObsEvent) -> Int
+countPh : String -> List (Int, ObsEvent) -> Int
 countPh ph rows = length (filter (hasPh ph) rows)
 
 -- | 内部：事件行的 `ph` 是否等于给定标签。
-hasPh : String -> Pair Int ObsEvent -> Bool
+hasPh : String -> (Int, ObsEvent) -> Bool
 hasPh ph row = eventPh (secondOf row) == ph
 
 -- | 内部：按级别与行号构造一条问题。
@@ -98,14 +98,14 @@ truncationWarnings (w :: rest) = warningAt 0 w :: truncationWarnings rest
 -- 1) 元数据首行
 -- ---------------------------------------------------------------
 -- | 内部：首事件必须是元数据，且 schema / 名字正确；`M` 出现在其它位置是 error。
-checkSchema : List (Pair Int ObsEvent) -> List ValidateIssue
+checkSchema : List (Int, ObsEvent) -> List ValidateIssue
 checkSchema [] =
   [
     errorAt
       0
       "empty trace: expected a metadata event (ph:\"M\", args.schema=\"vuna-obs 1\") as the first line"
   ]
-checkSchema ((Pair line ev) :: rest) =
+checkSchema ((line, ev) :: rest) =
   case ev of
     ObsMetaEvent m => append (schemaOf m line) (strayMeta rest)
     _ =>
@@ -120,9 +120,9 @@ schemaOf m line =
     (if m.metaName == "vuna.obs.schema" then [] else [errorAt line "metadata name must be `vuna.obs.schema`, got `${m.metaName}`"])
 
 -- | 内部：除首行外不允许再出现元数据事件。
-strayMeta : List (Pair Int ObsEvent) -> List ValidateIssue
+strayMeta : List (Int, ObsEvent) -> List ValidateIssue
 strayMeta [] = []
-strayMeta ((Pair line ev) :: rest) =
+strayMeta ((line, ev) :: rest) =
   append (
       case ev of
         ObsMetaEvent _ => [errorAt line "metadata event (ph:\"M\") may only appear as the first line"]
@@ -133,9 +133,9 @@ strayMeta ((Pair line ev) :: rest) =
 -- 2) ~ 6) 字段与时序
 -- ---------------------------------------------------------------
 -- | 内部：逐事件收集字段问题。
-checkFields : List (Pair Int ObsEvent) -> List ValidateIssue
+checkFields : List (Int, ObsEvent) -> List ValidateIssue
 checkFields [] = []
-checkFields ((Pair line ev) :: rest) = append (fieldIssuesOf line ev) (checkFields rest)
+checkFields ((line, ev) :: rest) = append (fieldIssuesOf line ev) (checkFields rest)
 
 -- | 内部：单个事件的字段问题（按 `ph` 分派；元数据事件没有字段要求）。
 fieldIssuesOf : Int -> ObsEvent -> List ValidateIssue
@@ -195,56 +195,55 @@ instantArgsIssues line ev =
     []
 
 -- | 内部：同一 `pid` / `tid` 内 `ts` 单调不减（嵌套 span 除外）。
-checkOrder : List (Pair Int ObsEvent) -> List ValidateIssue
+checkOrder : List (Int, ObsEvent) -> List ValidateIssue
 checkOrder evs = checkOrderGo evs []
 
 -- | 内部：逐事件检查时序。每个 `(pid,tid)` 记录上一条事件的 `(ts, end)`（`end` 对 span 是
 -- `ts + dur`）。span 按完成序写出，内层 span 的 `ts` 因此可以早于前一条；此时只要求新 span
 -- 的区间落在上一条 span 的区间内（`end` 不回退），否则仍是倒挂。
-checkOrderGo : List (Pair Int ObsEvent) -> List (Pair (Pair Int Int) (Pair Int Int)) -> List ValidateIssue
+checkOrderGo : List (Int, ObsEvent) -> List ((Int, Int), Int, Int) -> List ValidateIssue
 checkOrderGo [] _ = []
-checkOrderGo ((Pair line ev) :: rest) seen =
+checkOrderGo ((line, ev) :: rest) seen =
   case eventTs ev of
     Nothing => checkOrderGo rest seen
     Just ts =>
       let
-        key = Pair (eventPid ev) (eventTid ev)
+        key = (eventPid ev, eventTid ev)
         endTs =
           case eventDur ev of
             Just d => ts + d
             Nothing => ts
       in case lookupPairOf key seen of
-        Nothing => checkOrderGo rest (Pair key (Pair ts endTs) :: seen)
-        Just (Pair prevTs prevEnd) =>
+        Nothing => checkOrderGo rest ((key, ts, endTs) :: seen)
+        Just (prevTs, prevEnd) =>
           let
             nested = ts < prevTs && endTs >= prevEnd
             backwards = ts < prevTs && not nested
           in append
             (if backwards then [errorAt line "timestamp goes backwards for pid ${strFromInt (eventPid ev)} / tid ${strFromInt (eventTid ev)}: ts=${strFromInt ts} < ${strFromInt prevTs} and the event does not nest inside the previous span"] else [])
-            (checkOrderGo rest (Pair key (Pair ts endTs) :: removePairOf key seen))
+            (checkOrderGo rest ((key, ts, endTs) :: removePairOf key seen))
 
 -- | 内部：按 `(pid,tid)` 查已记录的最后一条事件区间。
-lookupPairOf : Pair Int Int -> List (Pair (Pair Int Int) (Pair Int Int)) -> Maybe (Pair Int Int)
+lookupPairOf : (Int, Int) -> List ((Int, Int), Int, Int) -> Maybe (Int, Int)
 lookupPairOf key [] = Nothing
-lookupPairOf key ((Pair k v) :: rest) = if sameKey key k then Just v else lookupPairOf key rest
+lookupPairOf key ((k, v) :: rest) = if sameKey key k then Just v else lookupPairOf key rest
 
 -- | 内部：两个 `(pid,tid)` 键是否相同。
-sameKey : Pair Int Int -> Pair Int Int -> Bool
-sameKey (Pair p1 t1) (Pair p2 t2) = p1 == p2 && t1 == t2
+sameKey : (Int, Int) -> (Int, Int) -> Bool
+sameKey (p1, t1) (p2, t2) = p1 == p2 && t1 == t2
 
 -- | 内部：从记录表里删掉某个 `(pid,tid)` 键（用新值覆盖旧值）。
-removePairOf : Pair Int Int -> List (Pair (Pair Int Int) (Pair Int Int)) -> List (Pair (Pair Int Int) (Pair Int Int))
+removePairOf : (Int, Int) -> List ((Int, Int), Int, Int) -> List ((Int, Int), Int, Int)
 removePairOf key [] = []
-removePairOf key ((Pair k v) :: rest) =
-  if sameKey key k then rest else Pair k v :: removePairOf key rest
+removePairOf key ((k, v) :: rest) = if sameKey key k then rest else (k, v) :: removePairOf key rest
 
 -- ---------------------------------------------------------------
 -- 7) 词汇表
 -- ---------------------------------------------------------------
 -- | 内部：`vuna.*` 事件名必须在词汇表内（`vuna.mark.*` / `vuna.tool.iface.miss.*` 前缀放行）。
-checkNames : List (Pair Int ObsEvent) -> List ValidateIssue
+checkNames : List (Int, ObsEvent) -> List ValidateIssue
 checkNames [] = []
-checkNames ((Pair line ev) :: rest) =
+checkNames ((line, ev) :: rest) =
   let
     name = eventName ev
   in append

@@ -119,7 +119,7 @@ writeDiagnostics f diags =
       _ <- fsWriteFile f.flagDiag (encDiagnostics diags)
       pure 0
 
-writeFiles : String -> List (Pair String String) -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, ArgsOp] Int
+writeFiles : String -> List (String, String) -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, ArgsOp] Int
 writeFiles _ [] = pure 0
 writeFiles outDir (f :: rest) =
   do

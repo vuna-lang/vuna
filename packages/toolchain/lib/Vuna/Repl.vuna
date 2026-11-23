@@ -601,7 +601,7 @@ printOk st msg =
 -- | 起一个 session：非 tty 设置（无颜色 / 无行编辑）、历史文件为空（不读不写盘，内存历史与
 -- `:history` / `:again` 仍可用）、不打印 banner；`applyStart` 的提示消息随 `OkC` 返回，由
 -- 调用方决定是否放进协议响应。
-export startReplSession : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> ReplStart -> ReplSink -> Eff r (Check (Pair ReplState String))
+export startReplSession : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> ReplStart -> ReplSink -> Eff r (Check (ReplState, String))
 startReplSession ctx start sink =
   do
     settings <- defaultSettings False
@@ -610,17 +610,17 @@ startReplSession ctx start sink =
     in applyStart st0 start
 
 -- | 读出并清空两个 capture 通道（普通输出, 错误输出）；stdout 汇返回两个空串。
-export replOutputDrain : {r : Row} -> ReplState -> Eff r (Pair String String)
+export replOutputDrain : {r : Row} -> ReplState -> Eff r (String, String)
 replOutputDrain st =
   case st.stateSink of
-    SinkStdout => pure (Pair "" "")
+    SinkStdout => pure ("", "")
     SinkCapture outRef errRef =>
       do
         out <- readRef outRef
         err <- readRef errRef
         _ <- writeRef outRef ""
         _ <- writeRef errRef ""
-        pure (Pair out err)
+        pure (out, err)
 
 -- | 是否还有未完成的输入（待续 pending 或 `:{` 块未闭合）。
 export replPendingOpen : ReplState -> Bool
@@ -921,7 +921,7 @@ runRepl ctx start =
           do
             _ <- printDiag st0 e
             pure 2
-        OkC (Pair st1 msg) =>
+        OkC (st1, msg) =>
           do
             _ <- replEmit st1 "${msg}\n"
             replLoop replFuelBound st1
@@ -946,16 +946,16 @@ packageNameLabel st =
 
 -- | 按启动目标预加载：无目标与目录只返回提示消息，文件 / 模块分别走 `doLoadFile` /
 -- `doLoadModule`；返回新状态与要打印的提示。
-applyStart : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => ReplState -> ReplStart -> Eff r (Check (Pair ReplState String))
-applyStart st StartNone = pure (OkC (Pair st ""))
-applyStart st (StartDir dir) = pure (OkC (Pair st "包上下文: ${packageNameLabel st}"))
+applyStart : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => ReplState -> ReplStart -> Eff r (Check (ReplState, String))
+applyStart st StartNone = pure (OkC (st, ""))
+applyStart st (StartDir dir) = pure (OkC (st, "包上下文: ${packageNameLabel st}"))
 applyStart st (StartFile path) =
   do
     loaded <- doLoadFile st path
     pure (
         case loaded of
           ErrC e => ErrC e
-          OkC p => OkC (Pair (secondOf p) "已加载 ${path}（${firstOf p} 个定义）")
+          OkC p => OkC (secondOf p, "已加载 ${path}（${firstOf p} 个定义）")
       )
 applyStart st (StartModule m) =
   do
@@ -963,7 +963,7 @@ applyStart st (StartModule m) =
     pure (
         case loaded of
           ErrC e => ErrC e
-          OkC s => OkC (Pair s "已导入模块 ${m}")
+          OkC s => OkC (s, "已导入模块 ${m}")
       )
 
 -- | 内部：主循环（每次读入消耗一格 fuel）；EOF 走 `finishAtEof`，Ctrl-C 清空待续与块输入，
@@ -1223,15 +1223,15 @@ inferAndAppend stOrig stRemoved text targets =
             OkC _ => pure (ReplContinue (withDefs stRemoved (appendLast stRemoved.stateDefs (mkBlock text2 False))))
 
 -- | 内部：把 `(名字, 类型)` 渲染成一行签名源码。
-sigLine : Pair String String -> String
+sigLine : (String, String) -> String
 sigLine p = "${firstOf p} : ${secondOf p}\n"
 
 -- | 内部：把推断出的签名插到各定义自己的首行**之前**。一个 `:{ ... :}` 块可以有多个定义，
 --   全部签名前置会把同名子句挤出各自的定义块（`PS_ClauseNotAdjacent`）。
-insertSigLines : List (Pair String String) -> String -> String
+insertSigLines : List (String, String) -> String -> String
 insertSigLines sigs text = join "\n" (insertSigLinesGo sigs (lines text))
 
-insertSigLinesGo : List (Pair String String) -> List String -> List String
+insertSigLinesGo : List (String, String) -> List String -> List String
 insertSigLinesGo sigs [] = []
 insertSigLinesGo sigs (l :: rest) =
   case sigForLine sigs (trim l) of
@@ -1239,7 +1239,7 @@ insertSigLinesGo sigs (l :: rest) =
     Nothing => l :: insertSigLinesGo sigs rest
 
 -- | 内部：该行是否是一个待补签名定义的首行（名字后紧跟空格或 `=`）。
-sigForLine : List (Pair String String) -> String -> Maybe (Pair String String)
+sigForLine : List (String, String) -> String -> Maybe (String, String)
 sigForLine [] line = Nothing
 sigForLine (s :: rest) line =
   let
@@ -1247,7 +1247,7 @@ sigForLine (s :: rest) line =
   in if startsWith "${n} " line || startsWith "${n}=" line then Just s else sigForLine rest line
 
 -- | 内部：同一个定义只用一次签名（后续子句行也以同名字开头）。
-dropSigName : String -> List (Pair String String) -> List (Pair String String)
+dropSigName : String -> List (String, String) -> List (String, String)
 dropSigName n [] = []
 dropSigName n (s :: rest) = if firstOf s == n then rest else s :: dropSigName n rest
 
@@ -1328,7 +1328,7 @@ sessionUsable st program =
 
 -- | 优先复用可用会话，否则重建；返回值带上本次实际使用的会话（由调用方写回状态），依赖接口
 -- 不全时不记会话。
-evalExprInfoWithSession : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => ReplState -> String -> String -> Eff r (Pair (Maybe ReplToolSession) (Check (Pair (Pair String String) (Maybe AuxCache))))
+evalExprInfoWithSession : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => ReplState -> String -> String -> Eff r (Maybe ReplToolSession, Check ((String, String), Maybe AuxCache))
 evalExprInfoWithSession st program expr =
   case st.stateToolSession of
     Just session =>
@@ -1337,13 +1337,13 @@ evalExprInfoWithSession st program expr =
         if usable then
           do
             result <- dtEvalExprInfoWithAuxCache st.stateCtx program expr session.sessionTool.tcDepIfaces st.stateAuxCache
-            pure (Pair (Just session) result)
+            pure (Just session, result)
         else
           evalExprInfoRebuild st program expr
     Nothing => evalExprInfoRebuild st program expr
 
 -- | 内部：重建会话后求值；依赖接口不全时退回不带 iface 的 `evalExprInfoWithAux`，且不记住会话。
-evalExprInfoRebuild : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => ReplState -> String -> String -> Eff r (Pair (Maybe ReplToolSession) (Check (Pair (Pair String String) (Maybe AuxCache))))
+evalExprInfoRebuild : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => ReplState -> String -> String -> Eff r (Maybe ReplToolSession, Check ((String, String), Maybe AuxCache))
 evalExprInfoRebuild st program expr =
   do
     session <- replToolSession st.stateCtx program
@@ -1351,11 +1351,11 @@ evalExprInfoRebuild st program expr =
       Nothing =>
         do
           result <- evalExprInfoWithAux st.stateCtx program expr st.stateAuxCache
-          pure (Pair Nothing result)
+          pure (Nothing, result)
       Just session2 =>
         do
           result <- dtEvalExprInfoWithAuxCache st.stateCtx program expr session2.sessionTool.tcDepIfaces st.stateAuxCache
-          pure (Pair (Just session2) result)
+          pure (Just session2, result)
 
 -- ---------------------------------------------------------------
 -- 表达式求值
@@ -1375,13 +1375,13 @@ evalText st text =
         do
           pair <- evalExprInfoWithSession st (bufferProgram st) text
           case pair of
-            Pair session res =>
+            (session, res) =>
               case res of
                 ErrC e =>
                   do
                     _ <- printDiag st e
                     pure (ReplContinue (withToolSession (withPending st "") session))
-                OkC (Pair info aux2) =>
+                OkC (info, aux2) =>
                   let
                     tyText = secondOf info
                     st2 = withToolSession (withAuxCache st aux2) session
@@ -1534,13 +1534,13 @@ typeIdentChar char =
     >= 65 && char <= 90 || char >= 97 && char <= 122 || char == 95 || char == 46 || char == 39
 
 -- | 内部：从字符流头部取一个类型标识符，返回（token, 剩余字符）。
-takeTypeIdent : List Int -> List Int -> Pair String (List Int)
-takeTypeIdent [] acc = Pair (strPack (reverse acc)) []
+takeTypeIdent : List Int -> List Int -> (String, List Int)
+takeTypeIdent [] acc = (strPack (reverse acc), [])
 takeTypeIdent (char :: rest) acc =
   if typeIdentChar char then
     takeTypeIdent rest (char :: acc)
   else
-    Pair (strPack (reverse acc)) (char :: rest)
+    (strPack (reverse acc), char :: rest)
 
 -- | 内部：按 token 分类着色——`Type` 洋红、大写 / 带点的全局名（`Base.Data.List.List`、`Int`）
 -- 青色、其余（小写类型变量）黄色。
@@ -1566,7 +1566,7 @@ colorTypeTokens fuel st chars =
       char :: rest =>
         if typeIdentChar char then
           let
-            Pair tok rest2 = takeTypeIdent (char :: rest) []
+            (tok, rest2) = takeTypeIdent (char :: rest) []
           in classifyTypeIdent st tok :: colorTypeTokens (fuel - 1) st rest2
         else if char == 45 then
           case rest of
@@ -1606,14 +1606,14 @@ isImplicitSegment : String -> Bool
 isImplicitSegment seg = startsWith "{" seg && endsWith "}" seg
 
 -- | 把隐式 binder 从类型文本里拆出来：返回（隐式段列表, 只含显式段的类型文本）。
-splitImplicitParts : String -> Pair (List String) String
+splitImplicitParts : String -> (List String, String)
 splitImplicitParts ty =
   let
     segs = filter (\s => s /= "") (splitTopArrows ty)
     implicits = filter isImplicitSegment segs
     explicit = filter (\s => not (isImplicitSegment s)) segs
     explicitTy = if lenInt explicit == 0 then ty else join " -> " explicit
-  in Pair implicits explicitTy
+  in (implicits, explicitTy)
 
 -- | 内部：可作为运算符的字符（可打印 ASCII，排除标识符字符、括号 / 分隔符与引号）。
 isOpChar : Int -> Bool
@@ -1722,7 +1722,7 @@ printTypeDoc st text =
             ensured <- ensureIndex st
             case ensured of
               ErrC _ => pure st
-              OkC (Pair idx st2) =>
+              OkC (idx, st2) =>
                 case findSymbol idx name of
                   ErrC _ => pure st2
                   OkC syms =>
@@ -1790,14 +1790,14 @@ typeStep st exprText =
         do
           pair <- evalExprInfoWithSession st (bufferProgram st) expr
           case pair of
-            Pair session res =>
+            (session, res) =>
               case res of
                 ErrC e =>
                   do
                     _ <- printDiag st e
                     _ <- printTypeOpHint st exprText
                     pure (ReplContinue (withToolSession st session))
-                OkC (Pair info aux2) =>
+                OkC (info, aux2) =>
                   do
                     _ <- replEmit st "${exprText} : ${colorTypeText st (trim (secondOf info))}\n"
                     pure (ReplContinue (withToolSession (withAuxCache st aux2) session))
@@ -1821,17 +1821,17 @@ typeInfoStep st exprText =
         do
           pair <- evalExprInfoWithSession st (bufferProgram st) expr
           case pair of
-            Pair session res =>
+            (session, res) =>
               case res of
                 ErrC e =>
                   do
                     _ <- printDiag st e
                     _ <- printTypeOpHint st exprText
                     pure (ReplContinue (withToolSession st session))
-                OkC (Pair info aux2) =>
+                OkC (info, aux2) =>
                   let
                     st2 = withToolSession (withAuxCache st aux2) session
-                    Pair implicits explicitTy = splitImplicitParts (trim (secondOf info))
+                    (implicits, explicitTy) = splitImplicitParts (trim (secondOf info))
                   in do
                     _ <- replEmit st2 "${exprText} : ${colorTypeText st2 explicitTy}\n"
                     _ <- printImplicitParts st2 implicits
@@ -1857,7 +1857,7 @@ commandStepFuel fuel st cmd =
       shellStep st (trim (substring 2 (byteLength cmd2 - 2) cmd2))
     else
       let
-        Pair name restRaw = splitFirst cmd2
+        (name, restRaw) = splitFirst cmd2
       in if name == ":help" then
         helpStep st (trim restRaw)
       else if name == ":quit" then
@@ -1903,7 +1903,7 @@ commandStepFuel fuel st cmd =
 unknownCommand : Member nConsole ConsoleOp r => ReplState -> String -> Eff r ReplOutcome
 unknownCommand st cmd =
   let
-    Pair name rest = splitFirst cmd
+    (name, rest) = splitFirst cmd
     hint = suggestCommand name
   in do
     _ <- printError st "未知命令 `${cmd}`（输入 :help 查看可用命令）${hint}"
@@ -1950,20 +1950,20 @@ commandNames =
   ]
 
 -- | 命令到用法行的对照表。
-usageTable : List (Pair String String)
+usageTable : List (String, String)
 usageTable =
   [
-    Pair ":help" ":help [命令]",
-    Pair ":type" ":type <表达式|类型>",
-    Pair ":typeinfo" ":typeinfo <表达式|类型>（= :ti）",
-    Pair ":info" ":info <名字>",
-    Pair ":search" ":search [--type|--name|--doc] <查询>",
-    Pair ":browse" ":browse [模块名]",
-    Pair ":load" ":load <文件> | <目录> | <模块名>",
-    Pair ":reload" ":reload",
-    Pair ":delete" ":delete <名字>",
-    Pair ":set" ":set [+t|-t|+s|-s|editing auto|on|off|color auto|on|off|prompt 文本]",
-    Pair ":again" ":again <历史编号>"
+    (":help", ":help [命令]"),
+    (":type", ":type <表达式|类型>"),
+    (":typeinfo", ":typeinfo <表达式|类型>（= :ti）"),
+    (":info", ":info <名字>"),
+    (":search", ":search [--type|--name|--doc] <查询>"),
+    (":browse", ":browse [模块名]"),
+    (":load", ":load <文件> | <目录> | <模块名>"),
+    (":reload", ":reload"),
+    (":delete", ":delete <名字>"),
+    (":set", ":set [+t|-t|+s|-s|editing auto|on|off|color auto|on|off|prompt 文本]"),
+    (":again", ":again <历史编号>")
   ]
 
 -- | 内部：查某命令的用法行；表里没有时给 `<name> …`。
@@ -2095,13 +2095,13 @@ loadFileStep st verb path =
         do
           _ <- printDiag st e
           pure (ReplContinue st)
-      OkC (Pair n st2) =>
+      OkC (n, st2) =>
         do
           _ <- replEmit st2 "${verb} ${path}（${n} 个定义）\n"
           pure (ReplContinue st2)
 
 -- | 内部：读文件并整段替换缓冲；拒绝带 `module ... where` 头的模块文件。返回（定义数, 新状态）。
-doLoadFile : Member nFs FsOp r => ReplState -> String -> Eff r (Check (Pair Int ReplState))
+doLoadFile : Member nFs FsOp r => ReplState -> String -> Eff r (Check (Int, ReplState))
 doLoadFile st path =
   do
     textR <- readText path
@@ -2112,7 +2112,7 @@ doLoadFile st path =
             case parseSource path source of
               ErrC e => ErrC e
               OkC (SourceFile (Just _) _ _ _ _ _ _) => err "${path} 是模块文件（含 `module ... where` 头）；用 :load <模块名> 导入，或用 :browse <模块名> 查看接口"
-              OkC (SourceFile Nothing _ _ decls _ _ _) => OkC (Pair (lenInt decls) (loadedFileState st path source))
+              OkC (SourceFile Nothing _ _ decls _ _ _) => OkC (lenInt decls, loadedFileState st path source)
       )
 
 -- | 内部：导入模块并打印 `<verb> <模块名>`；失败只打印诊断。
@@ -2207,10 +2207,10 @@ isWordChar c = c >= 48 && c <= 57 || c >= 65 && c <= 90 || c >= 97 && c <= 122 |
 -- ---------------------------------------------------------------
 -- | `:browse` / `:info` / `:search` 的索引来源：优先复用会话缓存；否则经 `loadOrBuildCheap`
 -- 构建（索引节点命中就从 blob 解码、未命中才扫描重建并写回），不在任何 vuna workspace 内时报错。
-ensureIndex : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => ReplState -> Eff r (Check (Pair Index ReplState))
+ensureIndex : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => ReplState -> Eff r (Check (Index, ReplState))
 ensureIndex st =
   case st.stateBrowseIndex of
-    Just idx => pure (OkC (Pair idx st))
+    Just idx => pure (OkC (idx, st))
     Nothing =>
       let
         dir = contextDir st.stateCtx
@@ -2224,7 +2224,7 @@ ensureIndex st =
               built <- loadOrBuildCheap dir
               case built of
                 ErrC e => pure (ErrC e)
-                OkC idx => pure (OkC (Pair idx (withBrowseIndex st idx)))
+                OkC idx => pure (OkC (idx, withBrowseIndex st idx))
 
 -- | `:browse`：不带参数列出模块，带参数打印该模块的接口。
 browseStep : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => ReplState -> String -> Eff r ReplOutcome
@@ -2236,7 +2236,7 @@ browseStep st arg =
         do
           _ <- printDiag st e
           pure (ReplContinue st)
-      OkC (Pair idx st2) =>
+      OkC (idx, st2) =>
         if arg == "" then
           printOk st2 (renderModules idx)
         else
@@ -2275,7 +2275,7 @@ infoFromIndex st name =
         do
           _ <- printDiag st e
           pure (ReplContinue st)
-      OkC (Pair idx st2) =>
+      OkC (idx, st2) =>
         case findSymbol idx name of
           ErrC e =>
             do
@@ -2325,9 +2325,9 @@ searchStep st arg =
           do
             _ <- printDiag st e
             pure (ReplContinue st)
-        OkC (Pair idx st2) =>
+        OkC (idx, st2) =>
           let
-            Pair mode query = searchModeOf arg
+            (mode, query) = searchModeOf arg
           in case runSearchHits idx mode query of
             ErrC e =>
               do
@@ -2342,16 +2342,16 @@ searchStep st arg =
                     pure (ReplContinue st2)
 
 -- | 内部：解析 `--type` / `--name` / `--doc` 前缀，返回（模式码, 查询串）。
-searchModeOf : String -> Pair Int String
+searchModeOf : String -> (Int, String)
 searchModeOf arg =
   if startsWith "--type " arg then
-    Pair 1 (trim (substring 7 (byteLength arg - 7) arg))
+    (1, trim (substring 7 (byteLength arg - 7) arg))
   else if startsWith "--name " arg then
-    Pair 2 (trim (substring 7 (byteLength arg - 7) arg))
+    (2, trim (substring 7 (byteLength arg - 7) arg))
   else if startsWith "--doc " arg then
-    Pair 3 (trim (substring 6 (byteLength arg - 6) arg))
+    (3, trim (substring 6 (byteLength arg - 6) arg))
   else
-    Pair 0 (trim arg)
+    (0, trim arg)
 
 -- | 内部：按模式码检索——1 类型、2 名字、3 文档；默认模式遇 `->` / `=>` 自动走类型检索。
 runSearchHits : Index -> Int -> String -> Check (List SearchHit)
@@ -2402,7 +2402,7 @@ defsStep st =
             pure (ReplContinue st)
 
 -- | 内部：逐个定义块打印名字，返回打印总数（0 表示缓冲为空）。
-printBlockNames : Member nConsole ConsoleOp r => ReplState -> List (Pair String String) -> List ReplBlock -> Eff r Int
+printBlockNames : Member nConsole ConsoleOp r => ReplState -> List (String, String) -> List ReplBlock -> Eff r Int
 printBlockNames st types [] = pure 0
 printBlockNames st types (b :: rest) =
   let
@@ -2413,7 +2413,7 @@ printBlockNames st types (b :: rest) =
     pure (n1 + n2)
 
 -- | 内部：打印一个块内的一批名字（查不到类型给 `?`，文件块标 `(文件)`），返回条数。
-printNames : Member nConsole ConsoleOp r => ReplState -> List (Pair String String) -> ReplBlock -> List String -> Eff r Int
+printNames : Member nConsole ConsoleOp r => ReplState -> List (String, String) -> ReplBlock -> List String -> Eff r Int
 printNames st types b [] = pure 0
 printNames st types b (name :: rest) =
   let
@@ -2507,7 +2507,7 @@ setStep st argRaw =
     setTiming st False
   else
     let
-      Pair opt restRaw = splitFirst arg
+      (opt, restRaw) = splitFirst arg
     in if opt == "color" then
       setColorOpt st (trim restRaw)
     else if opt == "editing" then
@@ -2704,22 +2704,19 @@ shellStep st cmd =
 -- 小工具
 -- ---------------------------------------------------------------
 -- | 内部：按键查字符串对照表，找不到给 `Nothing`。
-lookupPair : String -> List (Pair String String) -> Maybe String
+lookupPair : String -> List (String, String) -> Maybe String
 lookupPair key [] = Nothing
 lookupPair key (p :: rest) = if firstOf p == key then Just (secondOf p) else lookupPair key rest
 
 -- | 内部：在第一个空格 / 制表符处切成（前段, 其余段）。
-splitFirst : String -> Pair String String
+splitFirst : String -> (String, String)
 splitFirst s = splitFirstGo (strUnpack s) []
 
 -- | 内部：`splitFirst` 的扫描体。
-splitFirstGo : List Int -> List Int -> Pair String String
-splitFirstGo [] acc = Pair (strPack (reverse acc)) ""
+splitFirstGo : List Int -> List Int -> (String, String)
+splitFirstGo [] acc = (strPack (reverse acc), "")
 splitFirstGo (c :: rest) acc =
-  if c == 32 || c == 9 then
-    Pair (strPack (reverse acc)) (strPack rest)
-  else
-    splitFirstGo rest (c :: acc)
+  if c == 32 || c == 9 then (strPack (reverse acc), strPack rest) else splitFirstGo rest (c :: acc)
 
 -- | 内部：去掉行首空格与制表符。
 trimLeftSpaces : String -> String
@@ -2731,26 +2728,26 @@ dropLeadingSpace [] = []
 dropLeadingSpace (c :: rest) = if c == 32 || c == 9 then dropLeadingSpace rest else c :: rest
 
 -- | 命令别名到全名的对照表（`:h` → `:help` 等）。
-aliasTable : List (Pair String String)
+aliasTable : List (String, String)
 aliasTable =
   [
-    Pair ":h" ":help",
-    Pair ":t" ":type",
-    Pair ":ti" ":typeinfo",
-    Pair ":i" ":info",
-    Pair ":s" ":search",
-    Pair ":b" ":browse",
-    Pair ":r" ":reload",
-    Pair ":d" ":delete",
-    Pair ":q" ":quit",
-    Pair ":se" ":set"
+    (":h", ":help"),
+    (":t", ":type"),
+    (":ti", ":typeinfo"),
+    (":i", ":info"),
+    (":s", ":search"),
+    (":b", ":browse"),
+    (":r", ":reload"),
+    (":d", ":delete"),
+    (":q", ":quit"),
+    (":se", ":set")
   ]
 
 -- | 内部：把命令首 token 按 `aliasTable` 展开成全名，其余参数原样接回。
 expandAlias : String -> String
 expandAlias cmd =
   let
-    Pair name rest = splitFirst cmd
+    (name, rest) = splitFirst cmd
   in case lookupPair name aliasTable of
     Nothing => cmd
     Just full => if trim rest == "" then full else "${full} ${rest}"

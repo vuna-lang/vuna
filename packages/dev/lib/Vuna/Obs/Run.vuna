@@ -144,18 +144,18 @@ runChild opts argv =
 
 -- | 内部：输出目标是 `Pair (Maybe 精确文件) 目录`——`--out` 时第一项是绝对文件路径、目录为空；
 -- 否则第一项是 `Nothing`、第二项是本次运行的临时目录。
-targetOf : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => RunOpts -> String -> Eff r (Pair (Maybe String) String)
+targetOf : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => RunOpts -> String -> Eff r (Maybe String, String)
 targetOf opts cwd =
   case opts.runOptsOut of
     Just out =>
       do
         path <- absoluteOut out cwd
         _ <- ensureDirPath (parentOf path)
-        pure (Pair (Just path) "")
+        pure (Just path, "")
     Nothing =>
       do
         dir <- freshRunDir
-        pure (Pair Nothing dir)
+        pure (Nothing, dir)
 
 -- | 内部：`--out` 相对化——相对路径按调用方 cwd 拼成绝对路径（`runIn` 会先 chdir）。
 absoluteOut : {r : Row} -> String -> String -> Eff r String
@@ -186,49 +186,48 @@ runDirPath tmp stamp =
   in pure "${base}/vuna-obs-run-${strFromInt stamp}"
 
 -- | 内部：前置 `env VAR=VAL ...` 参数（`processRunIn` 经 shell 执行，子进程继承）。
-envArgsOf : {r : Row} -> RunOpts -> String -> Pair (Maybe String) String -> Eff r (List String)
+envArgsOf : {r : Row} -> RunOpts -> String -> (Maybe String, String) -> Eff r (List String)
 envArgsOf opts cwd target =
   do
     vars <- envVarsOf opts target
     pure (append ["env"] (map envPairText vars))
 
 -- | 内部：变量集 = 级别 + 输出位置（`--out` 给 `VUNA_OBS_FILE`，否则给 `VUNA_OBS_DIR`）+ 采样。
-envVarsOf : {r : Row} -> RunOpts -> Pair (Maybe String) String -> Eff r (List (Pair String String))
+envVarsOf : {r : Row} -> RunOpts -> (Maybe String, String) -> Eff r (List (String, String))
 envVarsOf opts target =
   let
     levelText = if opts.runOptsLevel <= 0 then "0" else strFromInt opts.runOptsLevel
     vars =
       append
-        [Pair "VUNA_OBS" levelText]
+        [("VUNA_OBS", levelText)]
         (append (sinkVars target) (append (sampleVar opts) (intervalVar opts)))
   in pure vars
 
 -- | 内部：输出位置对应的 env（精确文件 `VUNA_OBS_FILE` / 目录 `VUNA_OBS_DIR`，二选一）。
-sinkVars : Pair (Maybe String) String -> List (Pair String String)
+sinkVars : (Maybe String, String) -> List (String, String)
 sinkVars target =
   case firstOf target of
-    Just path => [Pair "VUNA_OBS_FILE" path]
-    Nothing => [Pair "VUNA_OBS_DIR" (secondOf target)]
+    Just path => [("VUNA_OBS_FILE", path)]
+    Nothing => [("VUNA_OBS_DIR", secondOf target)]
 
 -- | 内部：`VUNA_OBS_SAMPLE`；未指定采样种类时不设置。
-sampleVar : RunOpts -> List (Pair String String)
-sampleVar opts =
-  if opts.runOptsSample == "" then [] else [Pair "VUNA_OBS_SAMPLE" opts.runOptsSample]
+sampleVar : RunOpts -> List (String, String)
+sampleVar opts = if opts.runOptsSample == "" then [] else [("VUNA_OBS_SAMPLE", opts.runOptsSample)]
 
 -- | 内部：`VUNA_OBS_INTERVAL`；未指定间隔时不设置。
-intervalVar : RunOpts -> List (Pair String String)
+intervalVar : RunOpts -> List (String, String)
 intervalVar opts =
   case opts.runOptsInterval of
-    Just us => [Pair "VUNA_OBS_INTERVAL" (strFromInt us)]
+    Just us => [("VUNA_OBS_INTERVAL", strFromInt us)]
     Nothing => []
 
 -- | 内部：`VAR=VAL` 文本（`env` 命令的参数形态）。
-envPairText : Pair String String -> String
+envPairText : (String, String) -> String
 envPairText kv = "${firstOf kv}=${secondOf kv}"
 
 -- | 内部：跑完打印 trace 路径——`--out` 直接给出文件；否则列临时目录里的 `vuna-*.jsonl`
 -- （多进程 = 多个文件，目录序即字典序，输出确定）。
-printTracePaths : Member nFs FsOp r, Member nConsole ConsoleOp r => Pair (Maybe String) String -> Eff r Int
+printTracePaths : Member nFs FsOp r, Member nConsole ConsoleOp r => (Maybe String, String) -> Eff r Int
 printTracePaths target =
   case firstOf target of
     Just out => printOutTrace out

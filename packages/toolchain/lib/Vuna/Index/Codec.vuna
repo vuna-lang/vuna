@@ -58,84 +58,83 @@ export decIndexComplete : String -> Maybe Index
 decIndexComplete s =
   case decIndexPayload (strLength s) (curOf s) of
     Nothing => Nothing
-    Just (Pair idx rest) => if curAtEnd rest then Just idx else Nothing
+    Just (idx, rest) => if curAtEnd rest then Just idx else Nothing
 
 -- | 内部：解码三张表（模块 → 符号 → 引用），任一表失败即 `Nothing`。
-decIndexPayload : Int -> Cur -> Maybe (Pair Index Cur)
+decIndexPayload : Int -> Cur -> Maybe (Index, Cur)
 decIndexPayload fuel c =
   case decList decModuleInfo (fuel - 1) c of
     Nothing => Nothing
-    Just (Pair ms b1) =>
+    Just (ms, b1) =>
       case decList decSym (fuel - 1) b1 of
         Nothing => Nothing
-        Just (Pair syms b2) =>
+        Just (syms, b2) =>
           case decList decRef (fuel - 1) b2 of
             Nothing => Nothing
-            Just (Pair refs b3) => Just (Pair (Index ms syms refs) b3)
+            Just (refs, b3) => Just (Index ms syms refs, b3)
 
 -- | 内部：解码一个 `ModuleInfo`，字段顺序同编码侧。
-decModuleInfo : Int -> Cur -> Maybe (Pair ModuleInfo Cur)
+decModuleInfo : Int -> Cur -> Maybe (ModuleInfo, Cur)
 decModuleInfo fuel c =
   case decStr (fuel - 1) c of
     Nothing => Nothing
-    Just (Pair name b1) =>
+    Just (name, b1) =>
       case decStr (fuel - 1) b1 of
         Nothing => Nothing
-        Just (Pair pkg b2) =>
+        Just (pkg, b2) =>
           case decStr (fuel - 1) b2 of
             Nothing => Nothing
-            Just (Pair path b3) =>
+            Just (path, b3) =>
               case decInt (fuel - 1) b3 of
                 Nothing => Nothing
-                Just (Pair bytes b4) =>
+                Just (bytes, b4) =>
                   case decInt (fuel - 1) b4 of
                     Nothing => Nothing
-                    Just (Pair decls b5) =>
+                    Just (decls, b5) =>
                       case decStr (fuel - 1) b5 of
                         Nothing => Nothing
-                        Just (Pair doc b6) =>
-                          Just (Pair (ModuleInfo name pkg path bytes decls doc) b6)
+                        Just (doc, b6) => Just (ModuleInfo name pkg path bytes decls doc, b6)
 
 -- | 内部：解码一个 `Sym`，字段顺序同编码侧。
-decSym : Int -> Cur -> Maybe (Pair Sym Cur)
+decSym : Int -> Cur -> Maybe (Sym, Cur)
 decSym fuel c =
   case decStr (fuel - 1) c of
     Nothing => Nothing
-    Just (Pair m b1) =>
+    Just (m, b1) =>
       case decStr (fuel - 1) b1 of
         Nothing => Nothing
-        Just (Pair n b2) =>
+        Just (n, b2) =>
           case decStr (fuel - 1) b2 of
             Nothing => Nothing
-            Just (Pair k b3) =>
+            Just (k, b3) =>
               case decStr (fuel - 1) b3 of
                 Nothing => Nothing
-                Just (Pair sig b4) =>
+                Just (sig, b4) =>
                   case decStr (fuel - 1) b4 of
                     Nothing => Nothing
-                    Just (Pair ty b5) =>
+                    Just (ty, b5) =>
                       case decStr (fuel - 1) b5 of
                         Nothing => Nothing
-                        Just (Pair doc b6) =>
+                        Just (doc, b6) =>
                           case decInt (fuel - 1) b6 of
                             Nothing => Nothing
-                            Just (Pair line b7) =>
+                            Just (line, b7) =>
                               case decInt (fuel - 1) b7 of
                                 Nothing => Nothing
-                                Just (Pair col b8) => Just (Pair (Sym m n k sig ty doc line col) b8)
+                                Just (col, b8) => Just (Sym m n k sig ty doc line col, b8)
 
 -- | 内部：解码一条 `Ref`，字段顺序同编码侧。
-decRef : Int -> Cur -> Maybe (Pair Ref Cur)
+decRef : Int -> Cur -> Maybe (Ref, Cur)
 decRef fuel c =
   case decStr (fuel - 1) c of
     Nothing => Nothing
-    Just (Pair m b1) =>
+    Just (m, b1) =>
       case decStr (fuel - 1) b1 of
         Nothing => Nothing
-        Just (Pair n b2) =>
+        Just (n, b2) =>
           case decInt (fuel - 1) b2 of
             Nothing => Nothing
-            Just (Pair line b3) =>
+            Just (line, b3) =>
               case decInt (fuel - 1) b3 of
                 Nothing => Nothing
-                Just (Pair col b4) => Just (Pair (Ref m n line col) b4)
+                Just (col, b4) => Just (Ref m n line col, b4)

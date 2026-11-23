@@ -236,8 +236,8 @@ export record NativeProgram(..) where
   npBss : List NativeBss
   npClosures : List NativeClosure
   npFuncs : List NativeFunc
-  npModuleLits : List (Pair (List String) (List NativeStrLit))
-  npModuleFloats : List (Pair (List String) (List NativeFloatLit))
+  npModuleLits : List (List String, List NativeStrLit)
+  npModuleFloats : List (List String, List NativeFloatLit)
 
 export data NativeOutcome(..) : Type where
   NativeOk : NativeProgram -> NativeOutcome

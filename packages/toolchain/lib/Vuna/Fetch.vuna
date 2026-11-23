@@ -567,7 +567,7 @@ collectPins root baseDir (dep :: rest) acc =
 
 -- | 内部：clone 到 `tmp/pin-<别名>`、checkout rev、读 manifest 求内容摘要与身份，并写
 -- 对象 + 物化。clone / checkout / manifest 失败时打印原因并返回 `Nothing`。
-resolveGitDigest : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nProcess ProcessOp r => String -> String -> String -> String -> Eff r (Maybe (Pair String String))
+resolveGitDigest : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nProcess ProcessOp r => String -> String -> String -> String -> Eff r (Maybe (String, String))
 resolveGitDigest root alias url rev =
   let
     tmp = "${root}/tmp/pin-${alias}"
@@ -618,7 +618,7 @@ resolveGitDigest root alias url rev =
                             in do
                               _ <- writeObjectEff root actual ps.psFiles
                               _ <- materializeEff root actual ps.psFiles
-                              pure (Just (Pair actual (identityHashOf ps)))
+                              pure (Just (actual, identityHashOf ps))
 
 -- | 内部：文本写回：只替换 `[dependencies.<alias>]` 段内已有的 `hash = ...` 行，并在其后写
 -- `identity = ...`。没有 hash 行（内联表 / 字符串简写 / 尚未写摘要）时不动该段：

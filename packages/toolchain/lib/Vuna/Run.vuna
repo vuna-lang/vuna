@@ -38,12 +38,12 @@ import Base.Effect.Exit as EffExit
 import Base.Effect.Args as EffArgs
 
 -- | 内部：按第一个 `--` 切分：前段是自身参数，后段原样透传。
-splitPassthrough : List String -> Pair (List String) (List String)
-splitPassthrough [] = Pair [] []
-splitPassthrough ("--" :: rest) = Pair [] rest
+splitPassthrough : List String -> (List String, List String)
+splitPassthrough [] = ([], [])
+splitPassthrough ("--" :: rest) = ([], rest)
 splitPassthrough (arg :: rest) =
   case splitPassthrough rest of
-    Pair own pass => Pair (arg :: own) pass
+    (own, pass) => (arg :: own, pass)
 
 -- | `vuna run` 的入口：先按 `--` 切分透传参数，再解析自身 flag 与可选目录。
 -- 参数个数或用法错误打印 `error: ...` 并返回 2；被运行程序的退出码原样返回。

@@ -113,31 +113,28 @@ summarizeTrace trace =
 -- 分组 / 折叠
 -- ---------------------------------------------------------------
 -- | 按 `(pid,tid)` 分组，保持首次出现顺序（文件顺序 ⇒ 确定性）。
-export groupByThread : List (Pair Int ObsEvent) -> List (Pair (Pair Int Int) (List (Pair Int ObsEvent)))
+export groupByThread : List (Int, ObsEvent) -> List ((Int, Int), List (Int, ObsEvent))
 groupByThread evs = foldl insertGroup [] evs
 
 -- | 内部：把一行事件按 `(pid,tid)` 追加到分组表。
-insertGroup : List (Pair (Pair Int Int) (List (Pair Int ObsEvent))) -> Pair Int ObsEvent -> List (Pair (Pair Int Int) (List (Pair Int ObsEvent)))
+insertGroup : List ((Int, Int), List (Int, ObsEvent)) -> (Int, ObsEvent) -> List ((Int, Int), List (Int, ObsEvent))
 insertGroup groups row =
   let
-    key = Pair (eventPid (secondOf row)) (eventTid (secondOf row))
+    key = (eventPid (secondOf row), eventTid (secondOf row))
   in addToGroup groups key row
 
 -- | 内部：把一行事件追加到它所属的线程组（组不存在则新建）。
 -- 用**前插**累积（`item :: items`），顺序在 `groupStageStats` 里一次 `reverse` 还原：
 -- 逐行 `append items [item]` 在单线程大 trace 上是 O(n²)（67 MB trace 实测 14 分钟）。
-addToGroup : List (Pair (Pair Int Int) (List (Pair Int ObsEvent))) -> Pair Int Int -> Pair Int ObsEvent -> List (Pair (Pair Int Int) (List (Pair Int ObsEvent)))
-addToGroup [] key item = [Pair key [item]]
-addToGroup ((Pair k items) :: rest) key item =
-  if sameThread key k then
-    Pair k (item :: items) :: rest
-  else
-    Pair k items :: addToGroup rest key item
+addToGroup : List ((Int, Int), List (Int, ObsEvent)) -> (Int, Int) -> (Int, ObsEvent) -> List ((Int, Int), List (Int, ObsEvent))
+addToGroup [] key item = [(key, [item])]
+addToGroup ((k, items) :: rest) key item =
+  if sameThread key k then (k, item :: items) :: rest else (k, items) :: addToGroup rest key item
 
 -- 分组只保留事件本身：行号无需保留（validate 已经报过位置）。
 -- | 内部：两个 `(pid,tid)` 键是否相同。
-sameThread : Pair Int Int -> Pair Int Int -> Bool
-sameThread (Pair p1 t1) (Pair p2 t2) = p1 == p2 && t1 == t2
+sameThread : (Int, Int) -> (Int, Int) -> Bool
+sameThread (p1, t1) (p2, t2) = p1 == p2 && t1 == t2
 
 -- | 内部：事件是否是跨度（`ph:"X"`）。
 isSpan : ObsEvent -> Bool
@@ -145,16 +142,16 @@ isSpan ev = eventPh ev == "X"
 
 -- | 内部：一个线程组 -> 阶段样本列表（只取 span，按 `ts` 排序后折叠）。
 -- `reverse` 还原 `addToGroup` 前插累积的文件顺序（`ts` 相同的 span 要按文件顺序排）。
-groupStageStats : Pair (Pair Int Int) (List (Pair Int ObsEvent)) -> List SpanSample
-groupStageStats (Pair _ items) =
+groupStageStats : ((Int, Int), List (Int, ObsEvent)) -> List SpanSample
+groupStageStats (_, items) =
   let
     spans = sortBySpanTs (map secondOf (filterSpanRows (List.reverse items)))
   in (foldSpans spans (FoldState [] [])).foldSamples
 
 -- | 内部：过滤出 span 行（保留行号）。
-filterSpanRows : List (Pair Int ObsEvent) -> List (Pair Int ObsEvent)
+filterSpanRows : List (Int, ObsEvent) -> List (Int, ObsEvent)
 filterSpanRows [] = []
-filterSpanRows ((row@(Pair _ ev)) :: rest) =
+filterSpanRows ((row@(_, ev)) :: rest) =
   if isSpan ev then row :: filterSpanRows rest else filterSpanRows rest
 
 -- | 折叠时的「已打开 span」：名字、区间起点、时长、直接子用时之和。
@@ -203,7 +200,7 @@ foldSpans [] st = drainSpans st
 foldSpans (ev :: rest) st =
   case spanInterval ev of
     Nothing => foldSpans rest st
-    Just (Pair ts end) => foldSpans rest (attachSpan ev ts end st)
+    Just (ts, end) => foldSpans rest (attachSpan ev ts end st)
 
 -- | 内部：先按父规则弹出，再把新 span 压入栈顶。
 attachSpan : ObsEvent -> Int -> Int -> FoldState -> FoldState
@@ -320,13 +317,13 @@ isCounter : ObsEvent -> Bool
 isCounter ev = eventPh ev == "C"
 
 -- | 内部：把计数器事件按名字聚合成计数表。
-aggregateCounters : List (Pair Int ObsEvent) -> List CounterStat
+aggregateCounters : List (Int, ObsEvent) -> List CounterStat
 aggregateCounters evs = foldl addCounter [] (map secondOf (filterCounterRows evs))
 
 -- | 内部：过滤出计数器行。
-filterCounterRows : List (Pair Int ObsEvent) -> List (Pair Int ObsEvent)
+filterCounterRows : List (Int, ObsEvent) -> List (Int, ObsEvent)
 filterCounterRows [] = []
-filterCounterRows ((row@(Pair _ ev)) :: rest) =
+filterCounterRows ((row@(_, ev)) :: rest) =
   if isCounter ev then row :: filterCounterRows rest else filterCounterRows rest
 
 -- | 内部：累加一条计数器事件（`args.value` 缺失按 0）。
@@ -354,18 +351,18 @@ counterLt a b = a.counterName <= b.counterName
 -- 采样热点
 -- ---------------------------------------------------------------
 -- | 内部：`cpu` / `mem` 两张热点表（无采样时条目为空）。
-sampleTablesOf : List (Pair Int ObsEvent) -> List SampleTable
+sampleTablesOf : List (Int, ObsEvent) -> List SampleTable
 sampleTablesOf evs =
   [SampleTable "cpu" (hotEntries "cpu" evs), SampleTable "mem" (hotEntries "mem" evs)]
 
 -- | 内部：某个种类取 top 20 热点（命中次数降序、帧名升序）。
-hotEntries : String -> List (Pair Int ObsEvent) -> List SampleEntry
+hotEntries : String -> List (Int, ObsEvent) -> List SampleEntry
 hotEntries kind evs = take 20 (sortBy hotLt (foldl addHot [] (filterSamples kind evs)))
 
 -- | 内部：过滤出某个种类的采样行。
-filterSamples : String -> List (Pair Int ObsEvent) -> List (Pair Int ObsEvent)
+filterSamples : String -> List (Int, ObsEvent) -> List (Int, ObsEvent)
 filterSamples kind [] = []
-filterSamples kind ((row@(Pair _ ev)) :: rest) =
+filterSamples kind ((row@(_, ev)) :: rest) =
   if isKindSample kind ev then row :: filterSamples kind rest else filterSamples kind rest
 
 -- | 内部：事件是否是某个种类的采样。
@@ -376,8 +373,8 @@ isKindSample kind ev =
     Just s => sampleKindOfName s.sampleName == kind
 
 -- | 内部：把一条采样的栈首帧计入热点表（空栈采样忽略）。
-addHot : List SampleEntry -> Pair Int ObsEvent -> List SampleEntry
-addHot entries (Pair _ ev) =
+addHot : List SampleEntry -> (Int, ObsEvent) -> List SampleEntry
+addHot entries (_, ev) =
   case sampleOf ev of
     Nothing => entries
     Just s =>
@@ -413,7 +410,7 @@ sampleTableLt : SampleTable -> SampleTable -> Bool
 sampleTableLt a b = a.sampleTableKind <= b.sampleTableKind
 
 -- | 内部：墙钟跨度 = 最晚结束 − 最早开始；没有事件 = 0。
-wallUsOf : List (Pair Int ObsEvent) -> Int
+wallUsOf : List (Int, ObsEvent) -> Int
 wallUsOf evs =
   let
     starts = filterMapEvents eventTs evs
@@ -426,9 +423,9 @@ wallUsOf evs =
         e :: _ => max 0 (foldl max e ends - foldl min first starts)
 
 -- | 内部：按给定投影取事件的时间值。
-filterMapEvents : (ObsEvent -> Maybe Int) -> List (Pair Int ObsEvent) -> List Int
+filterMapEvents : (ObsEvent -> Maybe Int) -> List (Int, ObsEvent) -> List Int
 filterMapEvents f [] = []
-filterMapEvents f ((Pair _ ev) :: rest) =
+filterMapEvents f ((_, ev) :: rest) =
   case f ev of
     Just n => n :: filterMapEvents f rest
     Nothing => filterMapEvents f rest
@@ -437,7 +434,7 @@ filterMapEvents f ((Pair _ ev) :: rest) =
 eventEnd : ObsEvent -> Maybe Int
 eventEnd ev =
   case spanInterval ev of
-    Just (Pair _ end) => Just end
+    Just (_, end) => Just end
     Nothing => eventTs ev
 
 -- ---------------------------------------------------------------
@@ -554,25 +551,25 @@ signed n = if n > 0 then "+${strFromInt n}" else strFromInt n
 export summaryJson : ObsSummary -> Json
 summaryJson s =
   JObj
-    [Pair "schema" (JStr obsSummarySchema), Pair "wallUs" (JNum s.summaryWallUs), Pair "spans" (JArr (map stageJson s.summaryStages)), Pair "counters" (JArr (map counterJson s.summaryCounters)), Pair "samples" (samplesJson s.summarySamples)]
+    [("schema", JStr obsSummarySchema), ("wallUs", JNum s.summaryWallUs), ("spans", JArr (map stageJson s.summaryStages)), ("counters", JArr (map counterJson s.summaryCounters)), ("samples", samplesJson s.summarySamples)]
 
 -- | 内部：阶段表一行的 JSON 对象（含 `selfPct`）。
 stageJson : StageStat -> Json
 stageJson st =
   JObj
-    [Pair "name" (JStr st.stageName), Pair "count" (JNum st.stageCount), Pair "totalUs" (JNum st.stageTotalUs), Pair "selfUs" (JNum st.stageSelfUs), Pair "selfPct" (JNum (pctOf st.stageSelfUs st.stageTotalUs))]
+    [("name", JStr st.stageName), ("count", JNum st.stageCount), ("totalUs", JNum st.stageTotalUs), ("selfUs", JNum st.stageSelfUs), ("selfPct", JNum (pctOf st.stageSelfUs st.stageTotalUs))]
 
 -- | 内部：计数表一行的 JSON 对象。
 counterJson : CounterStat -> Json
 counterJson c =
   JObj
-    [Pair "name" (JStr c.counterName), Pair "count" (JNum c.counterCount), Pair "sum" (JNum c.counterSum), Pair "last" (JNum c.counterLast)]
+    [("name", JStr c.counterName), ("count", JNum c.counterCount), ("sum", JNum c.counterSum), ("last", JNum c.counterLast)]
 
 -- | 内部：采样热点——`cpu` / `mem` 两个数组。
 samplesJson : List SampleTable -> Json
 samplesJson tables =
   JObj
-    [Pair "cpu" (JArr (map sampleEntryJson (entriesOf "cpu" tables))), Pair "mem" (JArr (map sampleEntryJson (entriesOf "mem" tables)))]
+    [("cpu", JArr (map sampleEntryJson (entriesOf "cpu" tables))), ("mem", JArr (map sampleEntryJson (entriesOf "mem" tables)))]
 
 -- | 内部：按种类取热点表的条目；没有该种类 = 空表。
 entriesOf : String -> List SampleTable -> List SampleEntry
@@ -582,19 +579,18 @@ entriesOf kind (t :: rest) =
 
 -- | 内部：一条热点的 JSON 对象。
 sampleEntryJson : SampleEntry -> Json
-sampleEntryJson e =
-  JObj [Pair "frame" (JStr e.sampleEntryFrame), Pair "count" (JNum e.sampleEntryCount)]
+sampleEntryJson e = JObj [("frame", JStr e.sampleEntryFrame), ("count", JNum e.sampleEntryCount)]
 
 -- | baseline 差值 JSON 片段（嵌在 `--json` 的 `baseline` 字段里）。
 export deltasJson : List StageDelta -> Json
 deltasJson deltas =
-  JObj [Pair "spans" (JArr (map deltaJson deltas)), Pair "maxAbsPct" (JNum (maxAbsDeltaPct deltas))]
+  JObj [("spans", JArr (map deltaJson deltas)), ("maxAbsPct", JNum (maxAbsDeltaPct deltas))]
 
 -- | 内部：一条差值的 JSON 对象。
 deltaJson : StageDelta -> Json
 deltaJson d =
   JObj
-    [Pair "name" (JStr d.deltaName), Pair "baseUs" (JNum d.deltaBaseTotalUs), Pair "nowUs" (JNum d.deltaNewTotalUs), Pair "deltaUs" (JNum d.deltaUs), Pair "deltaPct" (JNum d.deltaPct)]
+    [("name", JStr d.deltaName), ("baseUs", JNum d.deltaBaseTotalUs), ("nowUs", JNum d.deltaNewTotalUs), ("deltaUs", JNum d.deltaUs), ("deltaPct", JNum d.deltaPct)]
 
 -- ---------------------------------------------------------------
 -- 小工具

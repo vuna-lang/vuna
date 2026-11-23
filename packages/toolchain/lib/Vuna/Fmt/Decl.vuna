@@ -36,9 +36,9 @@ declPrefix tier lin = reprPrefix tier ++ linearPrefix lin
 -- | 模块头带来的逐定义渲染修饰：`export` / opacity 前缀与导出成员规格，均按声明名索引。
 record FmtDeclMods where
   -- | 声明名 → 渲染前缀（`export ` / `export opaque ` 等；无前缀的声明不在表里）。
-  fdmPrefix : List (Pair String String)
+  fdmPrefix : List (String, String)
   -- | 声明名 → 导出成员规格（`(..)` / `(a, b)`）；缺省表示不带成员后缀。
-  fdmMembers : List (Pair String ExportMembers)
+  fdmMembers : List (String, ExportMembers)
 
 -- | 空修饰表（无模块头或模块头没有导出声明的透明情况）。
 emptyFmtDeclMods : FmtDeclMods
@@ -51,15 +51,14 @@ opacityWord OpacityTransparent = "transparent "
 opacityWord OpacityAbstract = "abstract "
 
 -- | 内部：按名字查前缀文本（查不到为空串）。
-lookupText : String -> List (Pair String String) -> String
+lookupText : String -> List (String, String) -> String
 lookupText name [] = ""
-lookupText name ((Pair n p) :: rest) = if n == name then p else lookupText name rest
+lookupText name ((n, p) :: rest) = if n == name then p else lookupText name rest
 
 -- | 内部：按名字查导出成员规格。
-lookupMembersText : String -> List (Pair String ExportMembers) -> Maybe ExportMembers
+lookupMembersText : String -> List (String, ExportMembers) -> Maybe ExportMembers
 lookupMembersText name [] = Nothing
-lookupMembersText name ((Pair n m) :: rest) =
-  if n == name then Just m else lookupMembersText name rest
+lookupMembersText name ((n, m) :: rest) = if n == name then Just m else lookupMembersText name rest
 
 -- | 内部：按名字查 opacity 关键字（没有该名字的 opacity 声明时为空串）。
 lookupOpacityByName : String -> List OpacitySpec -> String
@@ -73,18 +72,18 @@ anyExportOf name [] = False
 anyExportOf name (e :: rest) = exportSpecName e == name || anyExportOf name rest
 
 -- | 内部：导出项的渲染前缀：`export ` + 该名字的 opacity 关键字。
-exportPrefixOf : List OpacitySpec -> ExportSpec -> Pair String String
+exportPrefixOf : List OpacitySpec -> ExportSpec -> (String, String)
 exportPrefixOf opacity e =
-  Pair (exportSpecName e) ("export " ++ lookupOpacityByName (exportSpecName e) opacity)
+  (exportSpecName e, "export " ++ lookupOpacityByName (exportSpecName e) opacity)
 
 -- | 内部：只声明了 opacity、没有出现在导出列表里的名字（这些声明也要加前缀）。
-opacityOnlyOf : List ExportSpec -> OpacitySpec -> List (Pair String String)
+opacityOnlyOf : List ExportSpec -> OpacitySpec -> List (String, String)
 opacityOnlyOf exports o =
-  if anyExportOf o.opacityName exports then [] else [Pair o.opacityName (opacityWord o.opacityKind)]
+  if anyExportOf o.opacityName exports then [] else [(o.opacityName, opacityWord o.opacityKind)]
 
 -- | 内部：`type T(..)` 这类导出项的成员规格（其它导出项没有成员）。
-membersOfSpec : ExportSpec -> List (Pair String ExportMembers)
-membersOfSpec (ESType name m sp) = [Pair name m]
+membersOfSpec : ExportSpec -> List (String, ExportMembers)
+membersOfSpec (ESType name m sp) = [(name, m)]
 membersOfSpec _ = []
 
 -- | 内部：从模块头建立前缀 / 成员表（没有模块头时为空表）。

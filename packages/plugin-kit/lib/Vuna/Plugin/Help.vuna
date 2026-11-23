@@ -56,7 +56,7 @@ helpPathIn depth cmds args =
     Nothing => Nothing
     Just tokens =>
       case matchCommandIn depth tokens cmds of
-        Just (Pair c _) => Just c.cmdPath
+        Just (c, _) => Just c.cmdPath
         Nothing => Just []
 
 -- | 某命令路径的帮助正文；`delegated` 决定 flag 正文由谁提供。

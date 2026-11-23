@@ -35,7 +35,7 @@ respond routes req =
       Nothing =>
         case Route.allowedMethods routes req.target of
           [] => pure (htmlResponse 404 [] notFoundPage)
-          methods => pure (htmlResponse 405 [Pair "Allow" (join ", " methods)] notFoundPage)
+          methods => pure (htmlResponse 405 [("Allow", join ", " methods)] notFoundPage)
 
 -- | `HEAD`：按 `GET` 匹配，正文丢弃但保留 `Content-Length`。
 headOf : List Route.Route -> Req.Request -> Eff [FsOp, EnvOp, ClockOp, NetOp, ConsoleOp] Res.Response
@@ -53,16 +53,16 @@ headResponse body =
   Res.Response
     200
     "OK"
-    [Pair "Content-Type" "text/html; charset=utf-8", Pair "Content-Length" (strFromInt (strLength body))]
+    [("Content-Type", "text/html; charset=utf-8"), ("Content-Length", strFromInt (strLength body))]
     ""
 
 -- | 构造 HTML 响应（额外头部在前，`Content-Type` 在后）。
-htmlResponse : Int -> List (Pair String String) -> View.View -> Res.Response
+htmlResponse : Int -> List (String, String) -> View.View -> Res.Response
 htmlResponse code extra page =
   Res.Response
     code
     (Res.statusText code)
-    (append extra [Pair "Content-Type" "text/html; charset=utf-8"])
+    (append extra [("Content-Type", "text/html; charset=utf-8")])
     (View.renderView page)
 
 -- | 默认 404 页面。

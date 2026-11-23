@@ -42,72 +42,81 @@ export data ScalarOp(..) : Type where
   ScalarConst : Int -> ScalarOp
 
 -- | IR 符号 -> 内联计划 + 对应运行时标签（后者只用于一致性测试）。
-export scalarPlanOf : String -> Maybe (Pair ScalarOp String)
-scalarPlanOf "+" = Just (Pair (ScalarWrap "add") (nativeRtLabel "add"))
-scalarPlanOf "-" = Just (Pair (ScalarWrap "sub") (nativeRtLabel "sub"))
-scalarPlanOf "*" = Just (Pair (ScalarWrap "imul") (nativeRtLabel "mul"))
-scalarPlanOf "bitAnd" = Just (Pair (ScalarBitOp "and") (nativeRtLabel "bit_and"))
-scalarPlanOf "bitOr" = Just (Pair (ScalarBitOp "or") (nativeRtLabel "bit_or"))
-scalarPlanOf "bitXor" = Just (Pair (ScalarBitOp "xor") (nativeRtLabel "bit_xor"))
-scalarPlanOf "bitNot" = Just (Pair ScalarBitNot (nativeRtLabel "bit_not"))
-scalarPlanOf "bi_eq_int" = Just (Pair (ScalarCmp "sete") (nativeRtLabel "eq_int"))
-scalarPlanOf "bi_neq_int" = Just (Pair (ScalarCmp "setne") (nativeRtLabel "neq_int"))
-scalarPlanOf "bi_lt_int" = Just (Pair (ScalarCmp "setl") (nativeRtLabel "lt_int"))
-scalarPlanOf "bi_le_int" = Just (Pair (ScalarCmp "setle") (nativeRtLabel "le_int"))
-scalarPlanOf "bi_gt_int" = Just (Pair (ScalarCmp "setg") (nativeRtLabel "gt_int"))
-scalarPlanOf "bi_ge_int" = Just (Pair (ScalarCmp "setge") (nativeRtLabel "ge_int"))
-scalarPlanOf "bi_lt_bool" = Just (Pair (ScalarCmp "setl") (nativeRtLabel "lt_int"))
-scalarPlanOf "bi_le_bool" = Just (Pair (ScalarCmp "setle") (nativeRtLabel "le_int"))
-scalarPlanOf "bi_gt_bool" = Just (Pair (ScalarCmp "setg") (nativeRtLabel "gt_int"))
-scalarPlanOf "bi_ge_bool" = Just (Pair (ScalarCmp "setge") (nativeRtLabel "ge_int"))
-scalarPlanOf "natToInt" = Just (Pair ScalarNatToInt (nativeRtLabel "nat_to_int"))
-scalarPlanOf "natFromInt" = Just (Pair ScalarNatFromInt (nativeRtLabel "nat_from_int"))
-scalarPlanOf "natAdd" = Just (Pair ScalarNatAdd (nativeRtLabel "nat_add"))
-scalarPlanOf "natMul" = Just (Pair ScalarNatMul (nativeRtLabel "nat_mul"))
-scalarPlanOf "natSub" = Just (Pair ScalarNatSub (nativeRtLabel "nat_sub"))
-scalarPlanOf "@vuna@debug@on" = Just (Pair (ScalarConst 0) (nativeRtLabel "debug_on"))
-scalarPlanOf "@vuna@debug@line" = Just (Pair (ScalarConst 0) (nativeRtLabel "debug_line"))
-scalarPlanOf "@vuna@obs@level" = Just (Pair (ScalarConst 0) (nativeRtLabel "obs_level"))
-scalarPlanOf "@vuna@obs@log" = Just (Pair (ScalarConst 0) (nativeRtLabel "obs_log"))
-scalarPlanOf "@vuna@obs@counter" = Just (Pair (ScalarConst 0) (nativeRtLabel "obs_counter"))
-scalarPlanOf "@vuna@obs@mark" = Just (Pair (ScalarConst 0) (nativeRtLabel "obs_mark"))
-scalarPlanOf "@vuna@obs@spanBegin" = Just (Pair (ScalarConst 0) (nativeRtLabel "obs_span_begin"))
-scalarPlanOf "@vuna@obs@spanEnd" = Just (Pair (ScalarConst 0) (nativeRtLabel "obs_span_end"))
-scalarPlanOf "@vuna@obs@sampleStart" =
-  Just (Pair (ScalarConst 0) (nativeRtLabel "obs_sample_start"))
-scalarPlanOf "@vuna@obs@sampleStop" = Just (Pair (ScalarConst 0) (nativeRtLabel "obs_sample_stop"))
+export scalarPlanOf : String -> Maybe (ScalarOp, String)
+scalarPlanOf "+" = Just (ScalarWrap "add", nativeRtLabel "add")
+scalarPlanOf "-" = Just (ScalarWrap "sub", nativeRtLabel "sub")
+scalarPlanOf "*" = Just (ScalarWrap "imul", nativeRtLabel "mul")
+scalarPlanOf "bitAnd" = Just (ScalarBitOp "and", nativeRtLabel "bit_and")
+scalarPlanOf "bitOr" = Just (ScalarBitOp "or", nativeRtLabel "bit_or")
+scalarPlanOf "bitXor" = Just (ScalarBitOp "xor", nativeRtLabel "bit_xor")
+scalarPlanOf "bitNot" = Just (ScalarBitNot, nativeRtLabel "bit_not")
+scalarPlanOf "bi_eq_int" = Just (ScalarCmp "sete", nativeRtLabel "eq_int")
+scalarPlanOf "bi_neq_int" = Just (ScalarCmp "setne", nativeRtLabel "neq_int")
+scalarPlanOf "bi_lt_int" = Just (ScalarCmp "setl", nativeRtLabel "lt_int")
+scalarPlanOf "bi_le_int" = Just (ScalarCmp "setle", nativeRtLabel "le_int")
+scalarPlanOf "bi_gt_int" = Just (ScalarCmp "setg", nativeRtLabel "gt_int")
+scalarPlanOf "bi_ge_int" = Just (ScalarCmp "setge", nativeRtLabel "ge_int")
+scalarPlanOf "bi_lt_bool" = Just (ScalarCmp "setl", nativeRtLabel "lt_int")
+scalarPlanOf "bi_le_bool" = Just (ScalarCmp "setle", nativeRtLabel "le_int")
+scalarPlanOf "bi_gt_bool" = Just (ScalarCmp "setg", nativeRtLabel "gt_int")
+scalarPlanOf "bi_ge_bool" = Just (ScalarCmp "setge", nativeRtLabel "ge_int")
+scalarPlanOf "natToInt" = Just (ScalarNatToInt, nativeRtLabel "nat_to_int")
+scalarPlanOf "natFromInt" = Just (ScalarNatFromInt, nativeRtLabel "nat_from_int")
+scalarPlanOf "natAdd" = Just (ScalarNatAdd, nativeRtLabel "nat_add")
+scalarPlanOf "natMul" = Just (ScalarNatMul, nativeRtLabel "nat_mul")
+scalarPlanOf "natSub" = Just (ScalarNatSub, nativeRtLabel "nat_sub")
+scalarPlanOf "@vuna@debug@on" = Just (ScalarConst 0, nativeRtLabel "debug_on")
+scalarPlanOf "@vuna@debug@line" = Just (ScalarConst 0, nativeRtLabel "debug_line")
+scalarPlanOf "@vuna@obs@level" = Just (ScalarConst 0, nativeRtLabel "obs_level")
+scalarPlanOf "@vuna@obs@log" = Just (ScalarConst 0, nativeRtLabel "obs_log")
+scalarPlanOf "@vuna@obs@counter" = Just (ScalarConst 0, nativeRtLabel "obs_counter")
+scalarPlanOf "@vuna@obs@mark" = Just (ScalarConst 0, nativeRtLabel "obs_mark")
+scalarPlanOf "@vuna@obs@spanBegin" = Just (ScalarConst 0, nativeRtLabel "obs_span_begin")
+scalarPlanOf "@vuna@obs@spanEnd" = Just (ScalarConst 0, nativeRtLabel "obs_span_end")
+scalarPlanOf "@vuna@obs@sampleStart" = Just (ScalarConst 0, nativeRtLabel "obs_sample_start")
+scalarPlanOf "@vuna@obs@sampleStop" = Just (ScalarConst 0, nativeRtLabel "obs_sample_stop")
 scalarPlanOf _ = Nothing
 
 -- | 展开序列：`a` / `b` 是实参寄存器（一元 / 零元的 `b` 只作 scratch），返回结果
 --   寄存器与指令。可能改写两个实参寄存器，调用方把两者都当临时寄存器回收。
-export scalarInstrs : ScalarOp -> Reg -> Reg -> Pair Reg (List Instr)
+export scalarInstrs : ScalarOp -> Reg -> Reg -> (Reg, List Instr)
 scalarInstrs (ScalarWrap op) a b =
-  Pair a [IBinReg op a (OpReg b), IBinReg "shl" a (OpImm 1), IBinReg "sar" a (OpImm 1)]
+  (a, [IBinReg op a (OpReg b), IBinReg "shl" a (OpImm 1), IBinReg "sar" a (OpImm 1)])
 -- | 两个操作数都是规范化（63-bit 符号扩展）值时，按位结果也规范化。
-scalarInstrs (ScalarBitOp op) a b = Pair a [IBinReg op a (OpReg b)]
-scalarInstrs (ScalarCmp cond) a b = Pair Rax [ICmp (OpReg a) (OpReg b), ISetcc cond Rax, IMovzxAl]
-scalarInstrs ScalarBitNot a _ = Pair a [IBinReg "xor" a (OpImm (0 - 1))]
+scalarInstrs (ScalarBitOp op) a b = (a, [IBinReg op a (OpReg b)])
+scalarInstrs (ScalarCmp cond) a b = (Rax, [ICmp (OpReg a) (OpReg b), ISetcc cond Rax, IMovzxAl])
+scalarInstrs ScalarBitNot a _ = (a, [IBinReg "xor" a (OpImm (0 - 1))])
 scalarInstrs ScalarNatAdd a b =
-  Pair
-    a
-    [IBinReg "add" a (OpReg b), IMov (OpReg b) (OpImm nativeMaxInt), ICmp (OpReg a) (OpReg b), ICmov "cmovg" a (OpReg b)]
+  (a,
+    [
+      IBinReg "add" a (OpReg b),
+      IMov (OpReg b) (OpImm nativeMaxInt),
+      ICmp (OpReg a) (OpReg b),
+      ICmov "cmovg" a (OpReg b)
+    ])
 -- | 饱和乘法：`imul` 的 OF 抓 64-bit 溢出，再用 `cmp` 夹到 63-bit max。
 scalarInstrs ScalarNatMul a b =
-  Pair
-    a
-    [IBinReg "imul" a (OpReg b), IMov (OpReg b) (OpImm nativeMaxInt), ICmov "cmovno" b (OpReg a), IMov (OpReg a) (OpImm nativeMaxInt), ICmp (OpReg b) (OpReg a), ICmov "cmovle" a (OpReg b)]
+  (a,
+    [
+      IBinReg "imul" a (OpReg b),
+      IMov (OpReg b) (OpImm nativeMaxInt),
+      ICmov "cmovno" b (OpReg a),
+      IMov (OpReg a) (OpImm nativeMaxInt),
+      ICmp (OpReg b) (OpReg a),
+      ICmov "cmovle" a (OpReg b)
+    ])
 scalarInstrs ScalarNatSub a b =
-  Pair a [IBinReg "sub" a (OpReg b), IMov (OpReg b) (OpImm 0), ICmov "cmovl" a (OpReg b)]
+  (a, [IBinReg "sub" a (OpReg b), IMov (OpReg b) (OpImm 0), ICmov "cmovl" a (OpReg b)])
 scalarInstrs ScalarNatFromInt a b =
-  Pair a [IMov (OpReg b) (OpImm 0), ICmp (OpReg a) (OpReg b), ICmov "cmovl" a (OpReg b)]
-scalarInstrs ScalarNatToInt a _ = Pair a []
-scalarInstrs (ScalarConst n) a _ = Pair a [IMov (OpReg a) (OpImm n)]
+  (a, [IMov (OpReg b) (OpImm 0), ICmp (OpReg a) (OpReg b), ICmov "cmovl" a (OpReg b)])
+scalarInstrs ScalarNatToInt a _ = (a, [])
+scalarInstrs (ScalarConst n) a _ = (a, [IMov (OpReg a) (OpImm n)])
 
 -- | 与 [scalarInstrs] 相同，但省掉算术的 63-bit wrap。只在这个值**随后只被 mod 2^63
 --   语义的操作（加减乘）或清高位的掩码消费**时可用：两层 wrap 之间其它的运算只影响
 --   高位，最终结果不变。
-export scalarInstrsNoWrap : ScalarOp -> Reg -> Reg -> Pair Reg (List Instr)
-scalarInstrsNoWrap (ScalarWrap op) a b = Pair a [IBinReg op a (OpReg b)]
+export scalarInstrsNoWrap : ScalarOp -> Reg -> Reg -> (Reg, List Instr)
+scalarInstrsNoWrap (ScalarWrap op) a b = (a, [IBinReg op a (OpReg b)])
 scalarInstrsNoWrap op a b = scalarInstrs op a b
 
 -- ---------------------------------------------------------------

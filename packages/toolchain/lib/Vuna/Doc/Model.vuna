@@ -117,51 +117,51 @@ buildModules pkg files =
     pure (secondOf built)
 
 -- | 内部：逐个文件构建模块并串接 fixity 环境；首个错误即返回。
-buildModulesGo : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => FixityEnv -> String -> List String -> List DocModule -> Eff r (Pair FixityEnv (Check (List DocModule)))
-buildModulesGo env pkg [] acc = pure (Pair env (OkC (reverse acc)))
+buildModulesGo : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => FixityEnv -> String -> List String -> List DocModule -> Eff r (FixityEnv, Check (List DocModule))
+buildModulesGo env pkg [] acc = pure (env, OkC (reverse acc))
 buildModulesGo env pkg (path :: rest) acc =
   do
     stepped <- buildModule env pkg path
     case stepped of
-      Pair env2 result =>
+      (env2, result) =>
         case result of
-          ErrC e => pure (Pair env2 (ErrC e))
+          ErrC e => pure (env2, ErrC e)
           OkC module0 => buildModulesGo env2 pkg rest (module0 :: acc)
 
 -- | 内部：读一个源文件，算出它的 fixity 上下文后构建模块。
-buildModule : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => FixityEnv -> String -> String -> Eff r (Pair FixityEnv (Check DocModule))
+buildModule : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => FixityEnv -> String -> String -> Eff r (FixityEnv, Check DocModule)
 buildModule env pkg path =
   do
     textR <- readText path
     case textR of
-      ErrC e => pure (Pair env (ErrC e))
+      ErrC e => pure (env, ErrC e)
       OkC source =>
         case parseSourceDetailed path source of
-          ErrC e => pure (Pair env (err "${path}: ${diagText e}"))
+          ErrC e => pure (env, err "${path}: ${diagText e}")
           OkC parsed =>
             do
               looked <- fixitiesForParsed env path parsed.parsedFile
               pure (buildModuleWith pkg path source parsed looked)
 
 -- | 内部：把已解析的源码转成 `DocModule`；fixity 重排失败带路径进 `ErrC`。
-buildModuleWith : String -> String -> String -> ParsedSource -> Pair FixityEnv (Check (List FixityDecl)) -> Pair FixityEnv (Check DocModule)
+buildModuleWith : String -> String -> String -> ParsedSource -> (FixityEnv, Check (List FixityDecl)) -> (FixityEnv, Check DocModule)
 buildModuleWith pkg path source parsed looked =
   let
     env2 = firstOf looked
   in case secondOf looked of
-    ErrC e => Pair env2 (err "${path}: cannot load package fixity context: ${diagText e}")
+    ErrC e => (env2, err "${path}: cannot load package fixity context: ${diagText e}")
     OkC programFixities =>
       case parsed.parsedFile of
         SourceFile hdr imports fx decls0 _ _ _ =>
           case reorderProgram (tableOfKeepOps (append programFixities fx)) decls0 of
-            ErrC e => Pair env2 (err "${path}: ${diagText e}")
+            ErrC e => (env2, err "${path}: ${diagText e}")
             OkC decls =>
               let
                 comments = parsed.parsedComments
                 table = docTableOf hdr decls comments
-              in Pair
-                env2
-                (OkC (DocModule pkg (moduleNameOfPath path hdr) path (docTableModuleDoc table) (itemsOfDecls table decls)))
+              in (env2,
+                OkC
+                  (DocModule pkg (moduleNameOfPath path hdr) path (docTableModuleDoc table) (itemsOfDecls table decls)))
 
 -- | 内部：优先取 `module X where` 的名字；没有模块头时用文件名去掉 `.vuna`。
 moduleNameOfPath : String -> Maybe ModDecl -> String

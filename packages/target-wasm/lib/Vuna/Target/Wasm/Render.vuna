@@ -204,7 +204,7 @@ renderTryTable indent label tag body normal =
 -- ---------------------------------------------------------------
 -- 类型
 -- ---------------------------------------------------------------
-renderParam : Pair String WatValTy -> String
+renderParam : (String, WatValTy) -> String
 renderParam p = "(param ${firstOf p} ${watValTyText (secondOf p)})"
 
 renderResult : WatValTy -> String

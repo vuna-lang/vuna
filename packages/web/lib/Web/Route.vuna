@@ -19,10 +19,10 @@ export record Route(..) where
   -- | 段模式。
   segments : List String
   -- | 命中后的页面（在服务端行里运行）。
-  handler : List (Pair String String) -> Eff [FsOp, EnvOp, ClockOp, NetOp, ConsoleOp] View.View
+  handler : List (String, String) -> Eff [FsOp, EnvOp, ClockOp, NetOp, ConsoleOp] View.View
 
 -- | 构造一条路由（路径在这里切成段）。
-export route : String -> String -> (List (Pair String String) -> Eff [FsOp, EnvOp, ClockOp, NetOp, ConsoleOp] View.View) -> Route
+export route : String -> String -> (List (String, String) -> Eff [FsOp, EnvOp, ClockOp, NetOp, ConsoleOp] View.View) -> Route
 route method path handler = Route method (splitPath path) handler
 
 -- | 路径 → 段：去查询串、丢弃空段、逐段百分号解码。
@@ -80,7 +80,7 @@ paramName : String -> String
 paramName p = substring (natFromInt 1) (natFromInt (strLength p - 1)) p
 
 -- | 段模式匹配；成功时返回捕获的参数（按出现顺序）。
-export matchSegments : List String -> List String -> Maybe (List (Pair String String))
+export matchSegments : List String -> List String -> Maybe (List (String, String))
 matchSegments [] actual = if actual == [] then Just [] else Nothing
 matchSegments (p :: ps) actual =
   case actual of
@@ -89,20 +89,20 @@ matchSegments (p :: ps) actual =
       if isParam p then
         case matchSegments ps ar of
           Nothing => Nothing
-          Just rest => Just (Pair (paramName p) a :: rest)
+          Just rest => Just ((paramName p, a) :: rest)
       else if p == a then matchSegments ps ar else Nothing
 
 -- | 按方法 + 路径匹配路由（方法大小写不敏感）。
-export matchRoute : List Route -> String -> String -> Maybe (Pair Route (List (Pair String String)))
+export matchRoute : List Route -> String -> String -> Maybe (Route, List (String, String))
 matchRoute routes method path = matchGo routes method (splitPath path)
 
 -- | `matchRoute` 的线性扫描。
-matchGo : List Route -> String -> List String -> Maybe (Pair Route (List (Pair String String)))
+matchGo : List Route -> String -> List String -> Maybe (Route, List (String, String))
 matchGo [] method segs = Nothing
 matchGo (r :: rest) method segs =
   if sameMethod r.method method then
     case matchSegments r.segments segs of
-      Just params => Just (Pair r params)
+      Just params => Just (r, params)
       Nothing => matchGo rest method segs
   else
     matchGo rest method segs

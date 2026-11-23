@@ -141,15 +141,15 @@ shouldClose req resp =
   else if req.version == "HTTP/1.0" then not (hasKeepAlive req.headers) else False
 
 -- | 头部里是否声明 `Connection: close`。
-hasClose : List (Pair String String) -> Bool
+hasClose : List (String, String) -> Bool
 hasClose hs = isConnectionValue "close" hs
 
 -- | 头部里是否声明 `Connection: keep-alive`。
-hasKeepAlive : List (Pair String String) -> Bool
+hasKeepAlive : List (String, String) -> Bool
 hasKeepAlive hs = isConnectionValue "keep-alive" hs
 
 -- | `Connection` 头是否等于给定值（大小写不敏感）。
-isConnectionValue : String -> List (Pair String String) -> Bool
+isConnectionValue : String -> List (String, String) -> Bool
 isConnectionValue v hs =
   case Hdr.headerValue "connection" hs of
     Just got => Hdr.lowerString got == v

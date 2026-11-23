@@ -9,7 +9,7 @@ export data View(..) : Type where
   -- | 文本节点（渲染时转义 `& < > " '`）。
   Text : String -> View
   -- | 元素：名字（小写）+ 属性（按给定顺序渲染）+ 子节点。
-  Element : String -> List (Pair String String) -> List View -> View
+  Element : String -> List (String, String) -> List View -> View
   -- | 没有自身标签的片段（多个节点的串联）。
   Fragment : List View -> View
   -- | 原样片段：调用方自证已转义。
@@ -27,25 +27,25 @@ renderView (Element name attrs children) =
 export document : String -> List View -> View
 document title children =
   Fragment
-    [Raw "<!doctype html>\n", Element "html" [] [Element "head" [] [Element "meta" [Pair "charset" "utf-8"] [], Element "title" [] [Text title]], Element "body" [] children]]
+    [Raw "<!doctype html>\n", Element "html" [] [Element "head" [] [Element "meta" [("charset", "utf-8")] [], Element "title" [] [Text title]], Element "body" [] children]]
 
 -- | 渲染子节点列表。
 renderChildren : List View -> String
 renderChildren vs = strConcatMany (map renderView vs)
 
 -- | 属性部分（含前导空格）。
-renderAttrsPart : List (Pair String String) -> String
+renderAttrsPart : List (String, String) -> String
 renderAttrsPart attrs =
   case safeAttrs attrs of
     [] => ""
     hs => " " ++ join " " (map renderAttr hs)
 
 -- | 丢弃名字不合法的属性（只允许字母、数字、`-`、`_`）。
-safeAttrs : List (Pair String String) -> List (Pair String String)
+safeAttrs : List (String, String) -> List (String, String)
 safeAttrs attrs = filter isSafeAttr attrs
 
 -- | 单个属性名是否可渲染。
-isSafeAttr : Pair String String -> Bool
+isSafeAttr : (String, String) -> Bool
 isSafeAttr a = strLength a.first > 0 && allNameBytes (strUnpack a.first)
 
 -- | 全部字节都满足元素 / 属性名规则。
@@ -58,7 +58,7 @@ isNameByte : Int -> Bool
 isNameByte c = c >= 97 && c <= 122 || c >= 65 && c <= 90 || c >= 48 && c <= 57 || c == 45 || c == 95
 
 -- | 一个属性：`name="值"`（值转义）。
-renderAttr : Pair String String -> String
+renderAttr : (String, String) -> String
 renderAttr a = a.first ++ "=\"" ++ escapeHtml a.second ++ "\""
 
 -- | 闭合标签；void 元素没有。

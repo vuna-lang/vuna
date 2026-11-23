@@ -27,7 +27,7 @@ import Base.Effect.Fs as EffFs
 -- | 一份读入的 trace：按文件顺序的 `(行号, 事件)` + 读入阶段产生的 warning（截断恢复等）。
 export record ObsTrace(..) where
   -- | 按文件顺序的 `(1-based 行号, 事件)`。
-  traceEvents : List (Pair Int ObsEvent)
+  traceEvents : List (Int, ObsEvent)
   -- | 读入阶段的 warning（截断丢弃/补全），按出现顺序。
   traceWarnings : List String
 
@@ -43,24 +43,24 @@ readTraceFull path =
       OkC text => pure (parseTraceText text)
 
 -- | 读 trace 的事件部分（行号 + 事件）；warning 丢弃（需要 warning 时用 `readTraceFull`）。
-export readTrace : Member nFs FsOp r => String -> Eff r (Check (List (Pair Int ObsEvent)))
+export readTrace : Member nFs FsOp r => String -> Eff r (Check (List (Int, ObsEvent)))
 readTrace path =
   do
     traceR <- readTraceFull path
     pure (fmap traceEventRows traceR)
 
 -- | 内部：取事件表（`readTrace` 的收尾）。
-traceEventRows : ObsTrace -> List (Pair Int ObsEvent)
+traceEventRows : ObsTrace -> List (Int, ObsEvent)
 traceEventRows t = t.traceEvents
 
 -- ---------------------------------------------------------------
 -- 纯解析
 -- ---------------------------------------------------------------
 -- | 行号收集：空行跳过，其余保留原始 1-based 行号。
-export collectLines : Int -> List String -> List (Pair Int String)
+export collectLines : Int -> List String -> List (Int, String)
 collectLines n [] = []
 collectLines n (line :: rest) =
-  if trim line == "" then collectLines (n + 1) rest else Pair n line :: collectLines (n + 1) rest
+  if trim line == "" then collectLines (n + 1) rest else (n, line) :: collectLines (n + 1) rest
 
 -- | trace 文本 -> `ObsTrace`（纯）。中间行 JSON 坏是 error；末行 JSON 坏按截断处理（补全后
 -- 再过 `parseEvent`，仍不行就丢弃并 warning）。
@@ -68,9 +68,9 @@ export parseTraceText : String -> Check ObsTrace
 parseTraceText text = readLines (collectLines 1 (lines text)) [] []
 
 -- | 内部：逐行解析并累积事件与 warning；末行坏走截断恢复，中间行坏直接报错。
-readLines : List (Pair Int String) -> List (Pair Int ObsEvent) -> List String -> Check ObsTrace
+readLines : List (Int, String) -> List (Int, ObsEvent) -> List String -> Check ObsTrace
 readLines [] events warnings = OkC (ObsTrace (reverse events) (reverse warnings))
-readLines ((Pair line raw) :: rest) events warnings =
+readLines ((line, raw) :: rest) events warnings =
   case parseJson raw of
     ErrC e =>
       if length rest == 0 then
@@ -82,18 +82,18 @@ readLines ((Pair line raw) :: rest) events warnings =
     OkC json =>
       case parseEvent line json of
         ErrC e => ErrC e
-        OkC ev => readLines rest (Pair line ev :: events) warnings
+        OkC ev => readLines rest ((line, ev) :: events) warnings
 
 -- | 内部：末行无法恢复：丢弃该行并记 warning，直接收尾（末行已是最后一行，不再回调
 -- `readLines`，避免互递归）。
-tailWarning : Int -> List (Pair Int ObsEvent) -> List String -> Check ObsTrace
+tailWarning : Int -> List (Int, ObsEvent) -> List String -> Check ObsTrace
 tailWarning line events warnings =
   OkC (ObsTrace (reverse events) (reverse (dropWarning line :: warnings)))
 
 -- | 内部：末行补全成功：保留事件并记 warning。
-tailRepaired : Int -> ObsEvent -> List (Pair Int ObsEvent) -> List String -> Check ObsTrace
+tailRepaired : Int -> ObsEvent -> List (Int, ObsEvent) -> List String -> Check ObsTrace
 tailRepaired line ev events warnings =
-  OkC (ObsTrace (reverse (Pair line ev :: events)) (reverse (repairWarning line :: warnings)))
+  OkC (ObsTrace (reverse ((line, ev) :: events)) (reverse (repairWarning line :: warnings)))
 
 -- | 内部：末行恢复尝试：返回 `Just 事件`（补全并解析成功）或 `Nothing`（按截断丢弃）。
 tryTailEvent : Int -> String -> Maybe ObsEvent

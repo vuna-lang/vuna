@@ -162,14 +162,14 @@ walkMemberDirs fuel queue seen =
             info <- manifestInfoEff (joinPath d "vuna.toml")
             case info of
               Nothing => walkMemberDirs (fuel - 1) rest (d :: seen)
-              Just (Pair hashes members) =>
+              Just (hashes, members) =>
                 do
                   more <- walkMemberDirs (fuel - 1) (append (map (\rel => joinPath d rel) members) rest) (d :: seen)
                   pure (append hashes more)
 
 -- | 内部：读并校验 manifest，返回 `(依赖摘要, members 相对路径)`；文件缺失或
 -- parse / 校验失败时返回 `Nothing`（调用方当作无信息跳过）。
-manifestInfoEff : Member nFs FsOp r => String -> Eff r (Maybe (Pair (List String) (List String)))
+manifestInfoEff : Member nFs FsOp r => String -> Eff r (Maybe (List String, List String))
 manifestInfoEff path =
   do
     exists <- fsFileExists path
@@ -181,7 +181,7 @@ manifestInfoEff path =
           OkC manifest =>
             case validateManifest manifest of
               ErrC _ => pure Nothing
-              OkC valid => pure (Just (Pair (depHashesOf valid.manifestDependencies) valid.manifestMembers))
+              OkC valid => pure (Just (depHashesOf valid.manifestDependencies, valid.manifestMembers))
     else
       pure Nothing
 
@@ -466,7 +466,7 @@ dirSizeOf path =
 -- | 内部：视图候选：整目录按 roots 名保护、按目录 mtime 判旧，给出
 -- `(mtime, (字节数, 路径))`。视图只能整目录删：`.complete` 还在时删单个文件会让读侧
 -- 把半截视图当完整的。
-gcViewCandidates : Member nFs FsOp r => Int -> List String -> Int -> List String -> Eff r (List (Pair Int (Pair Int String)))
+gcViewCandidates : Member nFs FsOp r => Int -> List String -> Int -> List String -> Eff r (List (Int, Int, String))
 gcViewCandidates _ _ _ [] = pure []
 gcViewCandidates now keep grace (d :: rest) =
   do
@@ -479,7 +479,7 @@ gcViewCandidates now keep grace (d :: rest) =
         if mtime + grace < now then
           do
             size <- dirSizeOf d
-            pure (Pair mtime (Pair size d) :: more)
+            pure ((mtime, size, d) :: more)
         else
           pure more
 
@@ -491,7 +491,7 @@ fileNameOf path =
     x :: _ => x
 
 -- | 内部：文件候选：名字（对象摘要）不在 roots 里，且 mtime 早于宽限窗口；带 size 便于容量判定。
-gcCandidates : Member nFs FsOp r => Int -> List String -> Int -> List String -> Eff r (List (Pair Int (Pair Int String)))
+gcCandidates : Member nFs FsOp r => Int -> List String -> Int -> List String -> Eff r (List (Int, Int, String))
 gcCandidates _ _ _ [] = pure []
 gcCandidates now keep grace (p :: rest) =
   do
@@ -504,24 +504,24 @@ gcCandidates now keep grace (p :: rest) =
         if mtime + grace < now then
           do
             size <- fmap (\o => natToInt (fromMaybe Zero o)) (fsFileSize p)
-            pure (Pair mtime (Pair size p) :: more)
+            pure ((mtime, size, p) :: more)
         else
           pure more
 
 -- | 内部：按 mtime（外层 `Int`）升序排序，最旧的在前。
-sortByAge : List (Pair Int (Pair Int String)) -> List (Pair Int (Pair Int String))
+sortByAge : List (Int, Int, String) -> List (Int, Int, String)
 sortByAge [] = []
 sortByAge (x :: rest) = insertByAge x (sortByAge rest)
 
 -- | 内部：插入排序的一步（按 mtime 升序）。
-insertByAge : Pair Int (Pair Int String) -> List (Pair Int (Pair Int String)) -> List (Pair Int (Pair Int String))
+insertByAge : (Int, Int, String) -> List (Int, Int, String) -> List (Int, Int, String)
 insertByAge x [] = [x]
-insertByAge x ((Pair k v) :: rest) =
-  if firstOf x <= k then (::) x ((::) (Pair k v) rest) else (::) (Pair k v) (insertByAge x rest)
+insertByAge x ((k, v) :: rest) =
+  if firstOf x <= k then (::) x ((::) (k, v) rest) else (::) (k, v) (insertByAge x rest)
 
 -- | 内部：容量压力下的挑选：候选已按最旧在前排序，从旧的开始删直到总量落到上限以下。
 -- 上限 0 = 不限容量，候选全删。
-pickGo : Int -> Int -> List (Pair Int (Pair Int String)) -> List (Pair Int (Pair Int String)) -> List (Pair Int (Pair Int String))
+pickGo : Int -> Int -> List (Int, Int, String) -> List (Int, Int, String) -> List (Int, Int, String)
 pickGo _ _ [] acc = reverse acc
 pickGo total maxBytes (r :: rest) acc =
   if total <= maxBytes then
@@ -530,18 +530,18 @@ pickGo total maxBytes (r :: rest) acc =
     pickGo (total - firstOf (secondOf r)) maxBytes rest (r :: acc)
 
 -- | 内部：`(路径, 字节数)` 列表的字节数求和。
-sumSizes : List (Pair String Int) -> Int
+sumSizes : List (String, Int) -> Int
 sumSizes [] = 0
 sumSizes (p :: rest) = secondOf p + sumSizes rest
 
 -- | 内部：逐个查询文件大小，返回 `(路径, 字节数)`（查不到按 0 计）。
-sizesOf : Member nFs FsOp r => List String -> Eff r (List (Pair String Int))
+sizesOf : Member nFs FsOp r => List String -> Eff r (List (String, Int))
 sizesOf [] = pure []
 sizesOf (p :: rest) =
   do
     more <- sizesOf rest
     size <- fmap (\o => natToInt (fromMaybe Zero o)) (fsFileSize p)
-    pure (Pair p size :: more)
+    pure ((p, size) :: more)
 
 -- | 内部：一轮淘汰：文件与视图目录各自求候选（roots 名保护 + 宽限窗口），合并后按年龄挑出
 -- 要删的目标（容量上限用），`dry` 时只报告。

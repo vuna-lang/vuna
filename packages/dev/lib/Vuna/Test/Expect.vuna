@@ -247,7 +247,7 @@ compareKeys name expected actual =
   in (::) headA (append pairA (append missingA extraA))
 
 -- | 内部：公共前缀逐项比对（序号从 `idx` 起）。
-comparePairs : String -> Int -> List (Pair String String) -> List ExpectDiff
+comparePairs : String -> Int -> List (String, String) -> List ExpectDiff
 comparePairs name _ [] = []
 comparePairs name idx (p :: rest) =
   let

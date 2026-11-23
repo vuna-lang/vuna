@@ -157,20 +157,20 @@ atIdx : Int -> List a -> Maybe a
 atIdx _ [] = Nothing
 atIdx i (x :: rest) = if i <= 0 then Just x else atIdx (i - 1) rest
 
-zipIdxFrom : Int -> List a -> List (Pair Int a)
+zipIdxFrom : Int -> List a -> List (Int, a)
 zipIdxFrom _ [] = []
-zipIdxFrom i (x :: rest) = Pair i x :: zipIdxFrom (i + 1) rest
+zipIdxFrom i (x :: rest) = (i, x) :: zipIdxFrom (i + 1) rest
 
 -- | 标签 -> 块序号（只认块首是标签的块）。
 labelMapOf : List Block -> HashMap String Int
 labelMapOf blocks = HashMap.fromList (concatMap labelIndexOf (zipIdxFrom 0 blocks))
 
-labelIndexOf : Pair Int Block -> List (Pair String Int)
+labelIndexOf : (Int, Block) -> List (String, Int)
 labelIndexOf p =
   let
     b = secondOf p
   in case b.blkInstrs of
-    (ILabel l) :: _ => [Pair l (firstOf p)]
+    (ILabel l) :: _ => [(l, firstOf p)]
     _ => []
 
 -- | 块的后继序号。
@@ -213,7 +213,7 @@ succLive labels live i b =
     ) [] (succIndices labels i b)
 
 -- | 一轮：**逆块序**重算 live_in（后向数据流逆序传播时直链一轮到底，只有回边要重扫）。
-liveStep : HashMap String Int -> List Block -> List (List Int) -> List (List Int) -> HashMap Int (List Int) -> Pair (HashMap Int (List Int)) Bool
+liveStep : HashMap String Int -> List Block -> List (List Int) -> List (List Int) -> HashMap Int (List Int) -> (HashMap Int (List Int), Bool)
 liveStep labels blocks uses defs live =
   foldl (
       \accP, p =>
@@ -223,8 +223,8 @@ liveStep labels blocks uses defs live =
           cur = firstOf accP
           newIn = mergeUnion (withDefault (atIdx i uses) []) (mergeDiff (succLive labels cur i b) (withDefault (atIdx i defs) []))
           oldIn = withDefault (HashMap.lookup i cur) []
-        in if newIn == oldIn then accP else Pair (HashMap.insert i newIn cur) True
-    ) (Pair live False) (reverse (zipIdxFrom 0 blocks))
+        in if newIn == oldIn then accP else (HashMap.insert i newIn cur, True)
+    ) (live, False) (reverse (zipIdxFrom 0 blocks))
 
 liveFix : Int -> HashMap String Int -> List Block -> List (List Int) -> List (List Int) -> HashMap Int (List Int) -> Maybe (HashMap Int (List Int))
 liveFix fuel labels blocks uses defs live =
@@ -260,7 +260,7 @@ loopCarriedSlots instrs =
     labels = labelMapOf blocks
     uses = map blockUsesBeforeDef blocks
     defs = map blockDefs blocks
-    init = HashMap.fromList (map (\p => Pair (firstOf p) []) (zipIdxFrom 0 blocks))
+    init = HashMap.fromList (map (\p => (firstOf p, [])) (zipIdxFrom 0 blocks))
     headers = loopHeaders blocks labels
   in case liveFix 64 labels blocks uses defs init of
     Nothing => []
@@ -281,9 +281,9 @@ nubInts (x :: rest) = if memInt x rest then nubInts rest else x :: nubInts rest
 -- ---------------------------------------------------------------
 -- 重写：在最后一次读之后清零
 -- ---------------------------------------------------------------
-ptrMapOf : List (Pair Int NCls) -> HashMap Int Bool
+ptrMapOf : List (Int, NCls) -> HashMap Int Bool
 ptrMapOf slotCls =
-  HashMap.fromList (map (\p => Pair (nativeSlotOff (firstOf p)) (isPtrCls (secondOf p))) slotCls)
+  HashMap.fromList (map (\p => (nativeSlotOff (firstOf p), isPtrCls (secondOf p))) slotCls)
 
 isPtrCls : NCls -> Bool
 isPtrCls NClsScalar = False
@@ -312,23 +312,23 @@ blockHasApply b = foldl (\acc, i => if isApplyCall i then True else acc) False b
 
 -- | 从块的**末尾**往回走（`instrs` 已经 reverse），`live` 是「该指令之后活着的槽」；
 --   返回正向顺序的 `(指令, 该指令之后就死了的槽)`（逐项前插）。
-dyingPoints : HashMap Int Bool -> List Int -> List Instr -> List (Pair Instr (List Int)) -> List (Pair Instr (List Int))
+dyingPoints : HashMap Int Bool -> List Int -> List Instr -> List (Instr, List Int) -> List (Instr, List Int)
 dyingPoints ptr live [] acc = acc
 dyingPoints ptr live (i :: rest) acc =
   let
     after = live
     before = mergeUnion (instrSlotReads i) (mergeDiff after (instrSlotWrites i))
     died = filter (\o => withDefault (HashMap.lookup o ptr) True && not (memInt o after)) before
-  in dyingPoints ptr before rest (Pair i died :: acc)
+  in dyingPoints ptr before rest ((i, died) :: acc)
 
 -- | 插入清零：跳过紧跟拆帧 / `ret` 的点，也跳过下一条指令就重写该槽的点。
-emitClears : List (Pair Instr (List Int)) -> List Instr
+emitClears : List (Instr, List Int) -> List Instr
 emitClears [] = []
-emitClears ((Pair i died) :: rest) =
+emitClears ((i, died) :: rest) =
   let
     next =
       case rest of
-        (Pair n _) :: _ => Just n
+        (n, _) :: _ => Just n
         [] => Nothing
     staticSkip =
       case next of
@@ -342,7 +342,7 @@ emitClears ((Pair i died) :: rest) =
     clears = if staticSkip then [] else map clearSlot keep
   in i :: append clears (emitClears rest)
 
-emitBlock : HashMap Int Bool -> HashMap String Int -> HashMap Int (List Int) -> Pair Int Block -> List Instr
+emitBlock : HashMap Int Bool -> HashMap String Int -> HashMap Int (List Int) -> (Int, Block) -> List Instr
 emitBlock ptr labels live p =
   let
     i = firstOf p
@@ -411,7 +411,7 @@ holesDown n written =
 
 -- | 帧内死槽处理：删掉死存储，然后在槽的最后一次读之后写 0（只对可能保存指针的槽，
 --   且只在帧会被再次进入的函数里）。
-export clearDeadSlots : Bool -> List (Pair Int NCls) -> List Instr -> List Instr
+export clearDeadSlots : Bool -> List (Int, NCls) -> List Instr -> List Instr
 clearDeadSlots mayReenter slotCls instrs0 =
   let
     instrs = dropDeadStores 4 instrs0
@@ -423,7 +423,7 @@ clearDeadSlots mayReenter slotCls instrs0 =
     let
       uses = map blockUses blocks
       defs = map blockDefs blocks
-      init = HashMap.fromList (map (\p => Pair (firstOf p) []) (zipIdxFrom 0 blocks))
+      init = HashMap.fromList (map (\p => (firstOf p, [])) (zipIdxFrom 0 blocks))
       ptr = ptrMapOf slotCls
     in case liveFix 64 labels blocks uses defs init of
       Nothing => instrs

@@ -127,32 +127,32 @@ renderDataJson trace =
     flameRows = foldedRowsOf samples
     argv =
       case trace.traceEvents of
-        (Pair _ (ObsMetaEvent m)) :: _ => m.metaArgv
+        (_, ObsMetaEvent m) :: _ => m.metaArgv
         _ => []
     level =
       case trace.traceEvents of
-        (Pair _ (ObsMetaEvent m)) :: _ => m.metaLevel
+        (_, ObsMetaEvent m) :: _ => m.metaLevel
         _ => 0
   in JObj
-    [Pair "schema" (JStr "vuna-obs-render 1"), Pair "wallUs" (JNum summary.summaryWallUs), Pair "level" (JNum level), Pair "argv" (JArr (map JStr argv)), Pair "spans" (JArr (map spanRowJson (spanRowsOf trace.traceEvents))), Pair "counters" (JArr (map counterRowJson summary.summaryCounters)), Pair "samples" (samplesJsonOf summary.summarySamples), Pair "flame" (JArr (map flameRowJson flameRows))]
+    [("schema", JStr "vuna-obs-render 1"), ("wallUs", JNum summary.summaryWallUs), ("level", JNum level), ("argv", JArr (map JStr argv)), ("spans", JArr (map spanRowJson (spanRowsOf trace.traceEvents))), ("counters", JArr (map counterRowJson summary.summaryCounters)), ("samples", samplesJsonOf summary.summarySamples), ("flame", JArr (map flameRowJson flameRows))]
 
 -- | 内部：瀑布里的一行 span 的 JSON 对象。
 spanRowJson : SpanRow -> Json
 spanRowJson r =
   JObj
-    [Pair "name" (JStr r.spanRowName), Pair "cat" (JStr r.spanRowCat), Pair "pid" (JNum r.spanRowPid), Pair "tid" (JNum r.spanRowTid), Pair "ts" (JNum r.spanRowTs), Pair "dur" (JNum r.spanRowDur), Pair "depth" (JNum r.spanRowDepth)]
+    [("name", JStr r.spanRowName), ("cat", JStr r.spanRowCat), ("pid", JNum r.spanRowPid), ("tid", JNum r.spanRowTid), ("ts", JNum r.spanRowTs), ("dur", JNum r.spanRowDur), ("depth", JNum r.spanRowDepth)]
 
 -- | 内部：计数器表一行的 JSON 对象。
 counterRowJson : CounterStat -> Json
 counterRowJson c =
   JObj
-    [Pair "name" (JStr c.counterName), Pair "count" (JNum c.counterCount), Pair "sum" (JNum c.counterSum), Pair "last" (JNum c.counterLast)]
+    [("name", JStr c.counterName), ("count", JNum c.counterCount), ("sum", JNum c.counterSum), ("last", JNum c.counterLast)]
 
 -- | 内部：采样热点表——`cpu` / `mem` 两个数组（各自按命中次数降序）。
 samplesJsonOf : List SampleTable -> Json
 samplesJsonOf tables =
   JObj
-    [Pair "cpu" (JArr (map sampleEntryJsonOf (entriesOf "cpu" tables))), Pair "mem" (JArr (map sampleEntryJsonOf (entriesOf "mem" tables)))]
+    [("cpu", JArr (map sampleEntryJsonOf (entriesOf "cpu" tables))), ("mem", JArr (map sampleEntryJsonOf (entriesOf "mem" tables)))]
 
 -- | 内部：按种类取采样表的条目；没有该种类 = 空表。
 entriesOf : String -> List SampleTable -> List SampleEntry
@@ -162,14 +162,12 @@ entriesOf kind (t :: rest) =
 
 -- | 内部：一条采样热点的 JSON 对象。
 sampleEntryJsonOf : SampleEntry -> Json
-sampleEntryJsonOf e =
-  JObj [Pair "frame" (JStr e.sampleEntryFrame), Pair "count" (JNum e.sampleEntryCount)]
+sampleEntryJsonOf e = JObj [("frame", JStr e.sampleEntryFrame), ("count", JNum e.sampleEntryCount)]
 
 -- | 内部：火焰图一行的 JSON 对象（折叠栈按 `;` 拆成帧数组）。
 flameRowJson : FoldedRow -> Json
 flameRowJson row =
-  JObj
-    [Pair "frames" (JArr (map JStr (split ";" row.foldedStack))), Pair "count" (JNum row.foldedCount)]
+  JObj [("frames", JArr (map JStr (split ";" row.foldedStack))), ("count", JNum row.foldedCount)]
 
 -- ---------------------------------------------------------------
 -- span 行（分组 + 嵌套深度）
@@ -184,20 +182,20 @@ record DepthFrame where
   depthFrameDepth : Int
 
 -- | 内部：事件表 -> 瀑布行（按 `pid` / `tid` 首现顺序分组，组内按 `ts` 升序）。
-spanRowsOf : List (Pair Int ObsEvent) -> List SpanRow
+spanRowsOf : List (Int, ObsEvent) -> List SpanRow
 spanRowsOf rows = concatMap spansOfThread (groupByThread rows)
 
 -- | 内部：一个线程组 -> 该组的瀑布行（只取 `X` 事件，算好嵌套深度）。
-spansOfThread : Pair (Pair Int Int) (List (Pair Int ObsEvent)) -> List SpanRow
-spansOfThread (Pair (Pair pid tid) items) =
+spansOfThread : ((Int, Int), List (Int, ObsEvent)) -> List SpanRow
+spansOfThread ((pid, tid), items) =
   let
     spans = sortBySpanTs (mapMustSpan items)
   in map (spanRowOf pid tid) (assignDepths spans)
 
 -- | 内部：过滤出 `ph:"X"` 事件。
-mapMustSpan : List (Pair Int ObsEvent) -> List ObsEvent
+mapMustSpan : List (Int, ObsEvent) -> List ObsEvent
 mapMustSpan [] = []
-mapMustSpan ((Pair _ ev) :: rest) =
+mapMustSpan ((_, ev) :: rest) =
   if eventPh ev == "X" then ev :: mapMustSpan rest else mapMustSpan rest
 
 -- | 内部：按 `ts` 升序排序 span（`ts` 缺失按 0 处理，稳定）。
@@ -213,8 +211,8 @@ tsOrZero : ObsEvent -> Int
 tsOrZero ev = fromMaybe 0 (eventTs ev)
 
 -- | 内部：把 `(事件, 深度)` 组装成瀑布行（`dur` 缺失按 0）。
-spanRowOf : Int -> Int -> Pair ObsEvent Int -> SpanRow
-spanRowOf pid tid (Pair ev depth) =
+spanRowOf : Int -> Int -> (ObsEvent, Int) -> SpanRow
+spanRowOf pid tid (ev, depth) =
   let
     ts = tsOrZero ev
     dur = fromMaybe 0 (eventDur ev)
@@ -222,23 +220,23 @@ spanRowOf pid tid (Pair ev depth) =
 
 -- | 内部：给有序 span 分配嵌套深度——新 span 落在栈顶区间内则深度 = 栈顶 + 1，否则逐层弹出到
 -- 包含它的那层（都不包含则回到 0）。弹出循环对 DT 不是结构递归，因此用显式 fuel（栈深 + 1）。
-assignDepths : List ObsEvent -> List (Pair ObsEvent Int)
+assignDepths : List ObsEvent -> List (ObsEvent, Int)
 assignDepths spans = reverse (assignGo spans [] [])
 
 -- | 内部：`assignDepths` 的扫描循环；`stack` 是当前打开的 span 栈（头 = 最内层）。
-assignGo : List ObsEvent -> List DepthFrame -> List (Pair ObsEvent Int) -> List (Pair ObsEvent Int)
+assignGo : List ObsEvent -> List DepthFrame -> List (ObsEvent, Int) -> List (ObsEvent, Int)
 assignGo [] _ acc = acc
 assignGo (ev :: rest) stack acc =
   case spanInterval ev of
     Nothing => assignGo rest stack acc
-    Just (Pair ts end) =>
+    Just (ts, end) =>
       let
         popped = popUntilContained (length stack + 1) ts end stack
         depth =
           case popped of
             top :: _ => top.depthFrameDepth + 1
             [] => 0
-      in assignGo rest (DepthFrame ts end depth :: popped) (Pair ev depth :: acc)
+      in assignGo rest (DepthFrame ts end depth :: popped) ((ev, depth) :: acc)
 
 -- | 内部：逐层弹出栈顶，直到栈顶区间包含 `[ts, end]`（或栈空）；`fuel` 是栈深 + 1。
 popUntilContained : Int -> Int -> Int -> List DepthFrame -> List DepthFrame

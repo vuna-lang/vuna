@@ -32,12 +32,12 @@ htmlEscapeChar c = strPack [c]
 -- 入口
 -- ---------------------------------------------------------------
 -- | 入口：docstring 文本 -> HTML 片段；按围栏切成代码块与正文，代码块整段转义，正文按空行分段。
-export renderProse : List (Pair String String) -> String -> String
+export renderProse : List (String, String) -> String -> String
 renderProse links text =
   join "\n" (filterNonEmpty (renderFenceParts links (split "```" text) False))
 
 -- | 内部：交替处理正文段与代码段；`isCode` 标记当前段是否落在围栏内。
-renderFenceParts : List (Pair String String) -> List String -> Bool -> List String
+renderFenceParts : List (String, String) -> List String -> Bool -> List String
 renderFenceParts links [] isCode = []
 renderFenceParts links (part :: rest) isCode =
   if isCode then
@@ -63,7 +63,7 @@ isLanguageTag : String -> Bool
 isLanguageTag s = not (contains " " s) && strLength s <= 16
 
 -- | 内部：正文 -> `<p>` 列表；段内换行渲染成 `<br>`。
-renderParagraphs : List (Pair String String) -> String -> List String
+renderParagraphs : List (String, String) -> String -> List String
 renderParagraphs links text =
   map (\para => "<p>${join "<br>" (map (renderInline links) para)}</p>") (paragraphs (lines text))
 
@@ -94,11 +94,11 @@ filterNonEmpty (s :: rest) = if s == "" then filterNonEmpty rest else s :: filte
 -- 行内（fuel 递减，保证终止性可证）
 -- ---------------------------------------------------------------
 -- | 内部：行内渲染（代码、链接、交叉引用）；fuel 取字符数 + 1，保证扫描终止。
-renderInline : List (Pair String String) -> String -> String
+renderInline : List (String, String) -> String -> String
 renderInline links s = renderInlineGo (strLength s + 1) links (strUnpack s) ""
 
 -- | 内部：`renderInline` 的扫描实现；fuel 耗尽时返回已累积的输出，剩余文本丢弃。
-renderInlineGo : Int -> List (Pair String String) -> List Int -> String -> String
+renderInlineGo : Int -> List (String, String) -> List Int -> String -> String
 renderInlineGo fuel links [] acc = acc
 renderInlineGo fuel links (c :: rest) acc =
   if fuel <= 0 then
@@ -106,16 +106,16 @@ renderInlineGo fuel links (c :: rest) acc =
   else if c == 96 then
     case takeUntil 96 rest [] of
       Nothing => renderInlineGo (fuel - 1) links rest "${acc}&#96;"
-      Just (Pair code rest2) => renderInlineGo (fuel - 1) links rest2 "${acc}<code>${htmlEscape (strPack code)}</code>"
+      Just (code, rest2) => renderInlineGo (fuel - 1) links rest2 "${acc}<code>${htmlEscape (strPack code)}</code>"
   else if c == 91 then
     case takeUntil 93 rest [] of
       Nothing => renderInlineGo (fuel - 1) links rest "${acc}&#91;"
-      Just (Pair label rest2) =>
+      Just (label, rest2) =>
         case rest2 of
           40 :: rest3 =>
             case takeUntil 41 rest3 [] of
               Nothing => renderInlineGo (fuel - 1) links rest "${acc}&#91;"
-              Just (Pair url rest4) =>
+              Just (url, rest4) =>
                 let
                   labelText = strPack label
                   urlText = strPack url
@@ -128,16 +128,15 @@ renderInlineGo fuel links (c :: rest) acc =
     renderInlineGo (fuel - 1) links rest (acc ++ htmlEscapeChar c)
 
 -- | 内部：取到分隔符为止的内容与剩余；找不到分隔符返回 `Nothing`。
-takeUntil : Int -> List Int -> List Int -> Maybe (Pair (List Int) (List Int))
+takeUntil : Int -> List Int -> List Int -> Maybe (List Int, List Int)
 takeUntil sep [] acc = Nothing
 takeUntil sep (c :: rest) acc =
-  if c == sep then Just (Pair (reverse acc) rest) else takeUntil sep rest (c :: acc)
+  if c == sep then Just (reverse acc, rest) else takeUntil sep rest (c :: acc)
 
 -- | 内部：按全名在交叉引用表里查锚点。
-lookupLink : List (Pair String String) -> String -> Maybe String
+lookupLink : List (String, String) -> String -> Maybe String
 lookupLink [] name = Nothing
-lookupLink ((Pair key anchor) :: rest) name =
-  if key == name then Just anchor else lookupLink rest name
+lookupLink ((key, anchor) :: rest) name = if key == name then Just anchor else lookupLink rest name
 
 -- | 内部：链接协议白名单：`http://`、`https://`、`#` 与不含冒号的相对路径。
 safeUrl : String -> Bool

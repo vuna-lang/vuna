@@ -85,7 +85,7 @@ dumpOcaml program =
     types = irTypeDeclsText noQual unit.irUnitTyDecls
   in case genGroups st unit.irUnitGroups of
     ErrC e => OkC ("OCAML ERROR: " ++ diagText e)
-    OkC (Pair bodies _) => OkC (types ++ joinWith "\n\n" bodies)
+    OkC (bodies, _) => OkC (types ++ joinWith "\n\n" bodies)
 
 dumpMachine : IrProgram -> Check String
 dumpMachine program =

@@ -56,7 +56,7 @@ freeVarsIn env (IrIf c t e) =
 freeVarsIn env (IrConcatMany parts) = concatMap (freeVarsIn env) parts
 freeVarsIn _ _ = []
 
-freeVarsField : List Int -> Pair String Ir -> List Int
+freeVarsField : List Int -> (String, Ir) -> List Int
 freeVarsField env p = freeVarsIn env (secondOf p)
 
 freeVarsAlt : List Int -> IrAlt -> List Int
@@ -126,13 +126,13 @@ substIr id repl (IrNatCase scrut f z s c) =
     (substAltMaybe id repl c)
 substIr id repl (IrCtor fam ctor ty args) = IrCtor fam ctor ty (map (\x => substIr id repl x) args)
 substIr id repl (IrRecord fam ty fields) =
-  IrRecord fam ty (map (\p => Pair (firstOf p) (substIr id repl (secondOf p))) fields)
+  IrRecord fam ty (map (\p => (firstOf p, substIr id repl (secondOf p))) fields)
 substIr id repl (IrProj base fam field ty) = IrProj (substIr id repl base) fam field ty
 substIr id repl (IrRecUpd base fam fields ty) =
   IrRecUpd
     (substIr id repl base)
     fam
-    (map (\p => Pair (firstOf p) (substIr id repl (secondOf p))) fields)
+    (map (\p => (firstOf p, substIr id repl (secondOf p))) fields)
     ty
 substIr id repl (IrRtApp sym args) = IrRtApp sym (map (\x => substIr id repl x) args)
 substIr id repl (IrCast from to inner) = IrCast from to (substIr id repl inner)
@@ -173,9 +173,9 @@ rewriteSelf fuel orig clone pos key ir =
       IrCase ty k scrut alts => IrCase ty k (rewriteSelf (fuel - 1) orig clone pos key scrut) (map (rewriteAlt (fuel - 1) orig clone pos key) alts)
       IrNatCase scrut f z s c => IrNatCase (rewriteSelf (fuel - 1) orig clone pos key scrut) f (rewriteAltM (fuel - 1) orig clone pos key z) (rewriteAltM (fuel - 1) orig clone pos key s) (rewriteAltM (fuel - 1) orig clone pos key c)
       IrCtor fam ctor ty args => IrCtor fam ctor ty (map (\x => rewriteSelf (fuel - 1) orig clone pos key x) args)
-      IrRecord fam ty fields => IrRecord fam ty (map (\p => Pair (firstOf p) (rewriteSelf (fuel - 1) orig clone pos key (secondOf p))) fields)
+      IrRecord fam ty fields => IrRecord fam ty (map (\p => (firstOf p, rewriteSelf (fuel - 1) orig clone pos key (secondOf p))) fields)
       IrProj base fam field ty => IrProj (rewriteSelf (fuel - 1) orig clone pos key base) fam field ty
-      IrRecUpd base fam fields ty => IrRecUpd (rewriteSelf (fuel - 1) orig clone pos key base) fam (map (\p => Pair (firstOf p) (rewriteSelf (fuel - 1) orig clone pos key (secondOf p))) fields) ty
+      IrRecUpd base fam fields ty => IrRecUpd (rewriteSelf (fuel - 1) orig clone pos key base) fam (map (\p => (firstOf p, rewriteSelf (fuel - 1) orig clone pos key (secondOf p))) fields) ty
       IrRtApp sym args => IrRtApp sym (map (\x => rewriteSelf (fuel - 1) orig clone pos key x) args)
       IrCast from to inner => IrCast from to (rewriteSelf (fuel - 1) orig clone pos key inner)
       IrTail inner => IrTail (rewriteSelf (fuel - 1) orig clone pos key inner)
@@ -242,20 +242,20 @@ memStr x (y :: rest) = if x == y then True else memStr x rest
 record Sp where
   spDefs : List IrDef
   -- | (被调名 @ 形参序号 @ 实参指纹) -> 克隆名。
-  spClones : List (Pair String String)
+  spClones : List (String, String)
   spNext : Int
   spCount : Int
   -- | 每个原始定义已建克隆数（防爆炸）。
-  spPerDef : List (Pair String Int)
+  spPerDef : List (String, Int)
 
-perDefOf : String -> List (Pair String Int) -> Int
+perDefOf : String -> List (String, Int) -> Int
 perDefOf _ [] = 0
 perDefOf n (p :: rest) = if firstOf p == n then secondOf p else perDefOf n rest
 
-bumpPerDef : String -> List (Pair String Int) -> List (Pair String Int)
-bumpPerDef n [] = [Pair n 1]
+bumpPerDef : String -> List (String, Int) -> List (String, Int)
+bumpPerDef n [] = [(n, 1)]
 bumpPerDef n (p :: rest) =
-  if firstOf p == n then Pair n (secondOf p + 1) :: rest else p :: bumpPerDef n rest
+  if firstOf p == n then (n, secondOf p + 1) :: rest else p :: bumpPerDef n rest
 
 cloneBudget : Int
 cloneBudget = 64
@@ -264,18 +264,18 @@ perDefBudget : Int
 perDefBudget = 8
 
 -- | 在实参里找第一个「函数类型形参 + 闭合函数实参 + 体里当 head 应用」的位置。
-firstSpecializable : List IrDef -> List IrBinder -> Ir -> List Ir -> Maybe (Pair Int (Pair Int Ir))
+firstSpecializable : List IrDef -> List IrBinder -> Ir -> List Ir -> Maybe (Int, Int, Ir)
 firstSpecializable defs rbs inner args =
   case firstSpecGo defs rbs inner args of
-    Just (Pair b a) => Just (Pair (indexOfBinder b rbs) (Pair b.irBinderId a))
+    Just (b, a) => Just (indexOfBinder b rbs, b.irBinderId, a)
     Nothing => Nothing
 
-firstSpecGo : List IrDef -> List IrBinder -> Ir -> List Ir -> Maybe (Pair IrBinder Ir)
+firstSpecGo : List IrDef -> List IrBinder -> Ir -> List Ir -> Maybe (IrBinder, Ir)
 firstSpecGo _ [] _ _ = Nothing
 firstSpecGo _ _ _ [] = Nothing
 firstSpecGo defs (b :: brest) inner (a :: arest) =
   case fnKeyOf defs a of
-    Just _ => if isFunTy b.irBinderTy then Just (Pair b a) else firstSpecGo defs brest inner arest
+    Just _ => if isFunTy b.irBinderTy then Just (b, a) else firstSpecGo defs brest inner arest
     Nothing => firstSpecGo defs brest inner arest
 
 indexOfBinder : IrBinder -> List IrBinder -> Int
@@ -287,7 +287,7 @@ indexOfId b (x :: rest) acc =
   if x.irBinderId == b.irBinderId then acc else indexOfId b rest (acc + 1)
 
 -- | 处理一个调用点：能特化就返回克隆名与新状态。
-specializeCall : Sp -> String -> List Ir -> Maybe (Pair String (Pair Int Sp))
+specializeCall : Sp -> String -> List Ir -> Maybe (String, Int, Sp)
 specializeCall st name args =
   case findDef name st.spDefs of
     Nothing => Nothing
@@ -312,7 +312,7 @@ specializeCall st name args =
                       arg = secondOf sub
                       key = name ++ "@" ++ strFromInt pos ++ "@" ++ argKey arg
                     in case lookupClone key st.spClones of
-                      Just cn => Just (Pair cn (Pair pos st))
+                      Just cn => Just (cn, pos, st)
                       Nothing =>
                         if st.spCount >= cloneBudget || perDefOf name st.spPerDef >= perDefBudget then
                           Nothing
@@ -326,21 +326,21 @@ specializeCall st name args =
                             cloneBs = dropRuntimeBinderAt pos bs
                             cloneArity = length (runtimeBindersOf bs) - 1
                             clone = IrDef cn cloneArity (irDefDeps d) (irDefTy d) (IrLam cloneBs lamTy body2) (irDefRecValueOk d) (irDefInitGuard d) (irDefSpan d)
-                            st1 = Sp (append st.spDefs [clone]) (Pair key cn :: st.spClones) (st.spNext + 1) (st.spCount + 1) (bumpPerDef name st.spPerDef)
-                          in Just (Pair cn (Pair pos st1))
+                            st1 = Sp (append st.spDefs [clone]) ((key, cn) :: st.spClones) (st.spNext + 1) (st.spCount + 1) (bumpPerDef name st.spPerDef)
+                          in Just (cn, pos, st1)
             _ => Nothing
 
-lookupClone : String -> List (Pair String String) -> Maybe String
+lookupClone : String -> List (String, String) -> Maybe String
 lookupClone _ [] = Nothing
 lookupClone k (p :: rest) = if firstOf p == k then Just (secondOf p) else lookupClone k rest
 
 -- ---------------------------------------------------------------
 -- 重写一个定义体
 -- ---------------------------------------------------------------
-rwIr : Int -> Sp -> Ir -> Pair Ir Sp
+rwIr : Int -> Sp -> Ir -> (Ir, Sp)
 rwIr fuel st ir =
   if fuel <= 0 then
-    Pair ir st
+    (ir, st)
   else
     case ir of
       IrApp _ _ _ =>
@@ -357,128 +357,128 @@ rwIr fuel st ir =
                   pos = firstOf (secondOf hit)
                   st1 = secondOf (secondOf hit)
                   argsP = rwList (fuel - 1) st1 args
-                in Pair (Synthetic.applyAllIr (IrGlobal cn) (dropAt pos (firstOf argsP))) (secondOf argsP)
+                in (Synthetic.applyAllIr (IrGlobal cn) (dropAt pos (firstOf argsP)), secondOf argsP)
               Nothing =>
                 let
                   hP = rwIr (fuel - 1) st head
                   aP = rwList (fuel - 1) (secondOf hP) args
-                in Pair (Synthetic.applyAllIr (firstOf hP) (firstOf aP)) (secondOf aP)
+                in (Synthetic.applyAllIr (firstOf hP) (firstOf aP), secondOf aP)
           _ =>
             let
               hP = rwIr (fuel - 1) st head
               aP = rwList (fuel - 1) (secondOf hP) args
-            in Pair (Synthetic.applyAllIr (firstOf hP) (firstOf aP)) (secondOf aP)
+            in (Synthetic.applyAllIr (firstOf hP) (firstOf aP), secondOf aP)
       IrLam bs rt body =>
         let
           p = rwIr (fuel - 1) st body
-        in Pair (IrLam bs rt (firstOf p)) (secondOf p)
+        in (IrLam bs rt (firstOf p), secondOf p)
       IrLet bs scrut body =>
         let
           s = rwIr (fuel - 1) st scrut
           b = rwIr (fuel - 1) (secondOf s) body
-        in Pair (IrLet bs (firstOf s) (firstOf b)) (secondOf b)
+        in (IrLet bs (firstOf s) (firstOf b), secondOf b)
       IrIf c t e =>
         let
           pc = rwIr (fuel - 1) st c
           pt = rwIr (fuel - 1) (secondOf pc) t
           pe = rwIr (fuel - 1) (secondOf pt) e
-        in Pair (IrIf (firstOf pc) (firstOf pt) (firstOf pe)) (secondOf pe)
+        in (IrIf (firstOf pc) (firstOf pt) (firstOf pe), secondOf pe)
       IrCase ty k scrut alts =>
         let
           ps = rwIr (fuel - 1) st scrut
           pa = rwAlts (fuel - 1) (secondOf ps) alts
-        in Pair (IrCase ty k (firstOf ps) (firstOf pa)) (secondOf pa)
+        in (IrCase ty k (firstOf ps) (firstOf pa), secondOf pa)
       IrNatCase scrut f z s c =>
         let
           ps = rwIr (fuel - 1) st scrut
           pz = rwAltM (fuel - 1) (secondOf ps) z
           psm = rwAltM (fuel - 1) (secondOf pz) s
           pc = rwAltM (fuel - 1) (secondOf psm) c
-        in Pair (IrNatCase (firstOf ps) f (firstOf pz) (firstOf psm) (firstOf pc)) (secondOf pc)
+        in (IrNatCase (firstOf ps) f (firstOf pz) (firstOf psm) (firstOf pc), secondOf pc)
       IrCtor fam ctor ty args =>
         let
           p = rwList (fuel - 1) st args
-        in Pair (IrCtor fam ctor ty (firstOf p)) (secondOf p)
+        in (IrCtor fam ctor ty (firstOf p), secondOf p)
       IrRecord fam ty fields =>
         let
           p = rwFields (fuel - 1) st fields
-        in Pair (IrRecord fam ty (firstOf p)) (secondOf p)
+        in (IrRecord fam ty (firstOf p), secondOf p)
       IrProj base fam field ty =>
         let
           p = rwIr (fuel - 1) st base
-        in Pair (IrProj (firstOf p) fam field ty) (secondOf p)
+        in (IrProj (firstOf p) fam field ty, secondOf p)
       IrRecUpd base fam fields ty =>
         let
           b = rwIr (fuel - 1) st base
           f = rwFields (fuel - 1) (secondOf b) fields
-        in Pair (IrRecUpd (firstOf b) fam (firstOf f) ty) (secondOf f)
+        in (IrRecUpd (firstOf b) fam (firstOf f) ty, secondOf f)
       IrRtApp sym args =>
         let
           p = rwList (fuel - 1) st args
-        in Pair (IrRtApp sym (firstOf p)) (secondOf p)
+        in (IrRtApp sym (firstOf p), secondOf p)
       IrCast from to inner =>
         let
           p = rwIr (fuel - 1) st inner
-        in Pair (IrCast from to (firstOf p)) (secondOf p)
+        in (IrCast from to (firstOf p), secondOf p)
       IrTail inner =>
         let
           p = rwIr (fuel - 1) st inner
-        in Pair (IrTail (firstOf p)) (secondOf p)
+        in (IrTail (firstOf p), secondOf p)
       IrConcatMany parts =>
         let
           p = rwList (fuel - 1) st parts
-        in Pair (IrConcatMany (firstOf p)) (secondOf p)
+        in (IrConcatMany (firstOf p), secondOf p)
       IrEffThunk fam ctor ty arity prim =>
         let
           p = rwIr (fuel - 1) st prim
-        in Pair (IrEffThunk fam ctor ty arity (firstOf p)) (secondOf p)
-      _ => Pair ir st
+        in (IrEffThunk fam ctor ty arity (firstOf p), secondOf p)
+      _ => (ir, st)
 
-rwList : Int -> Sp -> List Ir -> Pair (List Ir) Sp
-rwList _ st [] = Pair [] st
+rwList : Int -> Sp -> List Ir -> (List Ir, Sp)
+rwList _ st [] = ([], st)
 rwList fuel st (x :: rest) =
   if fuel <= 0 then
-    Pair (x :: rest) st
+    (x :: rest, st)
   else
     let
       px = rwIr (fuel - 1) st x
       pr = rwList (fuel - 1) (secondOf px) rest
-    in Pair (firstOf px :: firstOf pr) (secondOf pr)
+    in (firstOf px :: firstOf pr, secondOf pr)
 
-rwFields : Int -> Sp -> List (Pair String Ir) -> Pair (List (Pair String Ir)) Sp
-rwFields _ st [] = Pair [] st
+rwFields : Int -> Sp -> List (String, Ir) -> (List (String, Ir), Sp)
+rwFields _ st [] = ([], st)
 rwFields fuel st (p :: rest) =
   if fuel <= 0 then
-    Pair (p :: rest) st
+    (p :: rest, st)
   else
     let
       pv = rwIr (fuel - 1) st (secondOf p)
       pr = rwFields (fuel - 1) (secondOf pv) rest
-    in Pair (Pair (firstOf p) (firstOf pv) :: firstOf pr) (secondOf pr)
+    in ((firstOf p, firstOf pv) :: firstOf pr, secondOf pr)
 
-rwAlt : Int -> Sp -> IrAlt -> Pair IrAlt Sp
+rwAlt : Int -> Sp -> IrAlt -> (IrAlt, Sp)
 rwAlt fuel st alt =
   let
     p = rwIr (fuel - 1) st alt.irAltBody
-  in Pair (IrAlt alt.irAltCtor alt.irAltBinders (firstOf p)) (secondOf p)
+  in (IrAlt alt.irAltCtor alt.irAltBinders (firstOf p), secondOf p)
 
-rwAltM : Int -> Sp -> Maybe IrAlt -> Pair (Maybe IrAlt) Sp
-rwAltM _ st Nothing = Pair Nothing st
+rwAltM : Int -> Sp -> Maybe IrAlt -> (Maybe IrAlt, Sp)
+rwAltM _ st Nothing = (Nothing, st)
 rwAltM fuel st (Just alt) =
   let
     p = rwAlt fuel st alt
-  in Pair (Just (firstOf p)) (secondOf p)
+  in (Just (firstOf p), secondOf p)
 
-rwAlts : Int -> Sp -> List IrAlt -> Pair (List IrAlt) Sp
-rwAlts _ st [] = Pair [] st
+rwAlts : Int -> Sp -> List IrAlt -> (List IrAlt, Sp)
+rwAlts _ st [] = ([], st)
 rwAlts fuel st (a :: rest) =
   if fuel <= 0 then
-    Pair (a :: rest) st
+    (a :: rest, st)
   else
     let
       pa = rwAlt (fuel - 1) st a
       pr = rwAlts (fuel - 1) (secondOf pa) rest
-    in Pair (firstOf pa :: firstOf pr) (secondOf pr)
+    in (firstOf pa :: firstOf pr, secondOf pr)
 
 -- | 逐定义重写；新克隆追加到 `spDefs` 末尾，并在同一轮里继续处理。
 drain : Int -> Sp -> List IrDef -> Sp

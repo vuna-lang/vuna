@@ -205,8 +205,8 @@ patNames (PRecord _ fields _) = concatMap patPairNames fields
 patNames _ = []
 
 -- | 内部：`(字段, 模式)` 里模式绑定的名字。
-patPairNames : Pair String Pat -> List String
-patPairNames (Pair _ pat) = patNames pat
+patPairNames : (String, Pat) -> List String
+patPairNames (_, pat) = patNames pat
 
 -- ---------------------------------------------------------------
 -- 分类
@@ -228,17 +228,17 @@ upperStart name =
     c :: _ => c >= 65 && c <= 90
 
 -- | 内部：token → `(tokenType, modifier)`；不分类的 token 给 `Nothing`。
-kindOf : DeclTable -> Maybe CstToken -> CstToken -> List CstToken -> Maybe (Pair Int Int)
+kindOf : DeclTable -> Maybe CstToken -> CstToken -> List CstToken -> Maybe (Int, Int)
 kindOf table prevTok t rest =
   if t.cstTag == "kw" then
-    Just (Pair tkKeyword 0)
+    Just (tkKeyword, 0)
   else if t.cstTag == "int" || t.cstTag == "float" then
-    Just (Pair tkNumber 0)
+    Just (tkNumber, 0)
   else if t.cstTag == "ident" then identKindOf table prevTok t rest else Nothing
 
 -- | 内部：标识符按形态与声明表归类（洞 → variable+hole，`name!` → macro，大写开头兜底
 -- type，其余 variable）。
-identKindOf : DeclTable -> Maybe CstToken -> CstToken -> List CstToken -> Maybe (Pair Int Int)
+identKindOf : DeclTable -> Maybe CstToken -> CstToken -> List CstToken -> Maybe (Int, Int)
 identKindOf table prevTok t rest =
   let
     name = t.cstText
@@ -247,24 +247,24 @@ identKindOf table prevTok t rest =
   else if startsWith "@" name then
     Nothing
   else if isHoleTok prevTok t then
-    Just (Pair tkVariable modHole)
+    Just (tkVariable, modHole)
   else if followedByBang t rest then
-    Just (Pair tkMacro 0)
+    Just (tkMacro, 0)
   else if memName name table.dtCtors then
-    Just (Pair tkEnumMember 0)
+    Just (tkEnumMember, 0)
   else if memName name table.dtTypes then
-    Just (Pair tkType 0)
+    Just (tkType, 0)
   else if memName name table.dtMethods then
-    Just (Pair tkMethod 0)
+    Just (tkMethod, 0)
   else if memName name table.dtFields then
-    Just (Pair tkProperty 0)
+    Just (tkProperty, 0)
   else if memName name table.dtParams then
-    Just (Pair tkParameter 0)
+    Just (tkParameter, 0)
   else if memName name table.dtFuns then
-    Just (Pair tkFunction 0)
+    Just (tkFunction, 0)
   else if memName name table.dtNamespaces then
-    Just (Pair tkNamespace 0)
-  else if upperStart name then Just (Pair tkType 0) else Just (Pair tkVariable 0)
+    Just (tkNamespace, 0)
+  else if upperStart name then Just (tkType, 0) else Just (tkVariable, 0)
 
 -- | 内部：`?name` 的名字 token（`?` 与名字紧邻，lexer 把它们切成两个 token）。
 isHoleTok : Maybe CstToken -> CstToken -> Bool
@@ -293,7 +293,7 @@ followedByBang t (next :: _) =
 -- ---------------------------------------------------------------
 -- | 源码文本 → semanticTokens/full 的结果对象 `{"data": [...]}`。
 export semanticTokensJson : String -> Json
-semanticTokensJson text = JObj [Pair "data" (JArr (map JNum (semanticTokenData text)))]
+semanticTokensJson text = JObj [("data", JArr (map JNum (semanticTokenData text)))]
 
 -- | 内部：按 token 顺序展开的 delta 编码整数流；词法失败给空。
 semanticTokenData : String -> List Int
@@ -317,7 +317,7 @@ rowsGo lines table prevLine prevStart prevTok (t :: rest) =
 
 -- | 内部：单个 token 的 `[deltaLine, deltaStart, length, tokenType, modifiers]`（列按 UTF-16）；
 -- 宽度为 0 或相对坐标倒退给 `Nothing`（跳过该 token）。
-tokenRow : List String -> DeclTable -> Int -> Int -> Maybe CstToken -> CstToken -> List CstToken -> Maybe (Pair (List Int) (Pair Int Int))
+tokenRow : List String -> DeclTable -> Int -> Int -> Maybe CstToken -> CstToken -> List CstToken -> Maybe (List Int, Int, Int)
 tokenRow lines table prevLine prevStart prevTok t rest =
   case kindOf table prevTok t rest of
     Nothing => Nothing
@@ -339,4 +339,4 @@ tokenRow lines table prevLine prevStart prevTok t rest =
       else if deltaLine == 0 && deltaStart < 0 then
         Nothing
       else
-        Just (Pair [deltaLine, deltaStart, width, firstOf kind, secondOf kind] (Pair line0 startU))
+        Just ([deltaLine, deltaStart, width, firstOf kind, secondOf kind], line0, startU)
