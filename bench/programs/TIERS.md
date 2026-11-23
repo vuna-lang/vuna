@@ -21,7 +21,7 @@ bench/programs/
 | t2 | 控制流与尾调用 | 手写 OCaml / C | `micro_tco` `tco_mutual` `tco_wide` `tco_args` `tco_unrotated` `tco_arity6` `tco_narrow_wide` `tco_nat` `state_machine` |
 | t3 | 调用约定与闭包 | 手写 OCaml / C | `closures` `micro_apply` `micro_apply_dyn` `micro_capture` `micro_partial` `micro_overapply` `micro_args8` `micro_closure8` `micro_record_dispatch` `closure_pipeline` |
 | t4 | 数据表示（record / variant / array / Vec） | 手写 OCaml / C | `records` `array` `micro_alias_record` `micro_boxed_record` `variants_payload` `micro_variant_wide` `micro_vec` |
-| t5 | 分配与 GC（年轻代 / 晋升 / 大对象 / 存活集） | 手写 OCaml / C | `gc_low_live` `gc_pressure` `gc_retain` `gc_array_churn` `gc_promote` `gc_large_obj` |
+| t5 | 分配与 GC（年轻代 / 晋升 / 大对象 / 存活集） | 手写 OCaml / C | `gc_low_live` `gc_pressure` `gc_retain` `gc_array_churn` `gc_promote` `gc_large_obj` `gc_large_live` |
 | t6 | 容器与算法 | 手写 OCaml / C | `list_recursion` `list_hof` `hashmap` `hashmap_remove` `hashmap_collide` `hashset` `treemap` `treeset` `map_assoc` `queue` `priority_queue` `stream` `sorting` `sort_lib` `graph_bfs` |
 | t7 | 文本（扫描 / 切分 / 解析 / 编码 / 插值） | 手写 OCaml / C | `micro_concat` `string_ops` `text_scan` `text_split` `text_parse` `text_base64` `micro_interp` |
 | t8 | 效应机器 | 手写 OCaml / C | `eff_tick` `eff_deep` `eff_deepseq` `eff_bracket` `eff_nested` `eff_host` `eff_abort` `eff_install` `eff_entry_host` `eff_linear` `eff_exn` `eff_named` `eff_payload` |

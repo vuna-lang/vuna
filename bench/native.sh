@@ -9,6 +9,7 @@
 # 用法（仓库根目录）：
 #   sh bench/native.sh                                  # check packages/base 冷/热
 #   sh bench/native.sh --full                           # 再加 check packages/compiler
+#   sh bench/native.sh --growth                         # check 增长率 + GC live/次数
 #   sh bench/native.sh --json bench/baselines/native.json
 #   sh bench/native.sh --check                          # 与基线比绝对值
 set -euo pipefail
@@ -18,6 +19,7 @@ cd "$ROOT"
 
 RUNS=1
 FULL=0
+GROWTH=0
 JSON_OUT=""
 BASELINE=""
 CHECK=0
@@ -33,6 +35,7 @@ options:
   --compiler PATH   native 编译器（默认 $VUNA_NATIVE 或 ./result-native/bin/vuna-native）
   --runs N          每档冷/热重复次数（默认 1）
   --full            额外测 check packages/compiler
+  --growth          测 check 增长率（500/1000/2000/4000 个定义）与 GC 计数
   --json FILE|-     写出 JSON 报告
   --baseline FILE   基线 JSON（默认 bench/baselines/native.json）
   --check           与基线比绝对值（同机器）
@@ -56,6 +59,7 @@ while [ $# -gt 0 ]; do
     --runs) [ $# -ge 2 ] || die "--runs needs a value"; RUNS=$2; shift 2 ;;
     --runs=*) RUNS=${1#*=}; shift ;;
     --full) FULL=1; shift ;;
+    --growth) GROWTH=1; shift ;;
     --json) [ $# -ge 2 ] || die "--json needs a value"; JSON_OUT=$2; shift 2 ;;
     --json=*) JSON_OUT=${1#*=}; shift ;;
     --baseline) [ $# -ge 2 ] || die "--baseline needs a value"; BASELINE=$2; shift 2 ;;
@@ -139,10 +143,66 @@ measure_pkg() { # key pkg
   note "  $key cold ${MED["$key-cold"]} ms  warm ${MED["$key-warm"]} ms"
 }
 
+GROWTH_NS="500 1000 2000 4000"
+declare -A GROWTH_MS GROWTH_LIVE GROWTH_FULL GROWTH_MINOR
+
+gen_growth_probe() { # n file
+  local n=$1 file=$2 i=1
+  : >"$file"
+  while [ "$i" -le "$n" ]; do
+    printf 'f%s : Int\nf%s = %s\n' "$i" "$i" "$i" >>"$file"
+    i=$((i + 1))
+  done
+}
+
+# 每次检查后从 `VUNA_NATIVE_GC_LOG` 的行里取 live / full / minor：
+#   gc n=<n> live=<b> alloc=<b> cards=<n> gen=<minor|full>
+gc_stats() { # log -> "full minor live"
+  awk '
+    /gen=full/ { full++ }
+    /gen=minor/ { minor++ }
+    match($0, /live=[0-9]+/) { live = substr($0, RSTART + 5, RLENGTH - 5) + 0 }
+    END { printf "%d %d %d\n", full + 0, minor + 0, live + 0 }
+  ' "$1"
+}
+
+# check 的增长率：单文件 N 个定义，独立空 store；每档 RUNS 次取中位数。
+# 读数只用于同机对比，绝对值随负载漂；GC 计数取最后一档（N=4000）的一次运行。
+measure_growth() {
+  local n file i d s e ms log full minor live mslist
+  mkdir -p "$WORK/growth"
+  for n in $GROWTH_NS; do
+    file="$WORK/growth/p$n.vuna"
+    gen_growth_probe "$n" "$file"
+    mslist=""
+    for ((i = 0; i < RUNS; i++)); do
+      d=$(mktemp -d "$WORK/store.XXXXXX")
+      log="$WORK/growth.$n.$i.log"
+      s=$(now_ns)
+      VUNA_NATIVE_GC_LOG=1 VUNA_BASE="$ROOT/packages/base" VUNA_STORE="$d/store" TMPDIR="$d" \
+        "$VUNA_NATIVE" check "$file" >/dev/null 2>"$log" || die "growth check failed: N=$n"
+      e=$(now_ns)
+      ms=$(((e - s + 500000) / 1000000))
+      mslist+=" $ms"
+      if [ "$n" = "4000" ] && [ "$i" -eq 0 ]; then
+        read -r full minor live < <(gc_stats "$log")
+      fi
+      rm -rf "$d"
+    done
+    GROWTH_MS["$n"]=$(median_of ${mslist})
+    note "  growth n=$n ${GROWTH_MS["$n"]} ms"
+  done
+  GROWTH_FULL[4000]=${full:-0}
+  GROWTH_MINOR[4000]=${minor:-0}
+  GROWTH_LIVE[4000]=${live:-0}
+  note "  growth n=4000 live=${GROWTH_LIVE[4000]} B  full=${GROWTH_FULL[4000]} minor=${GROWTH_MINOR[4000]}"
+}
+
 note "== vuna-native =="
 note "  compiler $VUNA_NATIVE ($SIZE_BYTES bytes)"
 measure_pkg check-base packages/base
 if [ "$FULL" = 1 ]; then measure_pkg check-compiler packages/compiler; fi
+if [ "$GROWTH" = 1 ]; then measure_growth; fi
 
 emit_json() {
   printf '{\n  "schema": 1,\n  "meta": {\n'
@@ -161,12 +221,19 @@ emit_json() {
   printf '    "check_base_cold_ms": %s,\n' "${MED["check-base-cold"]}"
   printf '    "check_base_warm_ms": %s' "${MED["check-base-warm"]}"
   if [ "$FULL" = 1 ]; then
-    printf ',\n    "check_compiler_cold_ms": %s,\n' "${MED["check-compiler-cold"]}"
-    printf '    "check_compiler_warm_ms": %s\n' "${MED["check-compiler-warm"]}"
-  else
-    printf '\n'
+    printf ',\n    "check_compiler_cold_ms": %s' "${MED["check-compiler-cold"]}"
+    printf ',\n    "check_compiler_warm_ms": %s' "${MED["check-compiler-warm"]}"
   fi
-  printf '  }\n}\n'
+  if [ "$GROWTH" = 1 ]; then
+    local n
+    for n in $GROWTH_NS; do
+      printf ',\n    "check_growth_%s_ms": %s' "$n" "${GROWTH_MS["$n"]}"
+    done
+    printf ',\n    "check_growth_live_bytes": %s' "${GROWTH_LIVE[4000]}"
+    printf ',\n    "check_growth_full_gcs": %s' "${GROWTH_FULL[4000]}"
+    printf ',\n    "check_growth_minor_gcs": %s' "${GROWTH_MINOR[4000]}"
+  fi
+  printf '\n  }\n}\n'
 }
 
 check_baseline() {
@@ -182,7 +249,7 @@ check_baseline() {
     return 0
   fi
   local key
-  for key in size_bytes check_base_cold_ms check_base_warm_ms check_compiler_cold_ms check_compiler_warm_ms; do
+  for key in size_bytes check_base_cold_ms check_base_warm_ms check_compiler_cold_ms check_compiler_warm_ms check_growth_500_ms check_growth_1000_ms check_growth_2000_ms check_growth_4000_ms check_growth_live_bytes check_growth_full_gcs check_growth_minor_gcs; do
     cur=""
     case $key in
       size_bytes) cur=$SIZE_BYTES ;;
@@ -190,6 +257,13 @@ check_baseline() {
       check_base_warm_ms) cur=${MED["check-base-warm"]:-} ;;
       check_compiler_cold_ms) cur=${MED["check-compiler-cold"]:-} ;;
       check_compiler_warm_ms) cur=${MED["check-compiler-warm"]:-} ;;
+      check_growth_500_ms) cur=${GROWTH_MS[500]:-} ;;
+      check_growth_1000_ms) cur=${GROWTH_MS[1000]:-} ;;
+      check_growth_2000_ms) cur=${GROWTH_MS[2000]:-} ;;
+      check_growth_4000_ms) cur=${GROWTH_MS[4000]:-} ;;
+      check_growth_live_bytes) cur=${GROWTH_LIVE[4000]:-} ;;
+      check_growth_full_gcs) cur=${GROWTH_FULL[4000]:-} ;;
+      check_growth_minor_gcs) cur=${GROWTH_MINOR[4000]:-} ;;
     esac
     [ -n "$cur" ] || continue
     basev=$(jq -r --arg k "$key" '.metrics[$k] // empty' "$BASELINE")

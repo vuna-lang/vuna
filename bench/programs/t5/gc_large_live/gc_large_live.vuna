@@ -1,0 +1,24 @@
+-- 大 live 集下的年轻代 churn：先保留 2000 个千元素列表（约 2M 个 cons cell），
+-- 再分配并丢弃 4000 个同尺寸临时列表。整堆/年轻代清扫若按总堆而不是年轻代收费，
+-- 这一档的增量会明显放大（对照 gc_retain 的小 live 版本）。
+count : List Int -> Int
+count [] = 0
+count (_ :: rest) = 1 + count rest
+
+build : Int -> List (List Int) -> List (List Int)
+build n acc = if n <= 0 then acc else build (n - 1) (range 0 1000 :: acc)
+
+sumAll : List (List Int) -> Int
+sumAll [] = 0
+sumAll (ys :: rest) = count ys + sumAll rest
+
+churn : Int -> Int -> Int
+churn n acc = if n <= 0 then acc else churn (n - 1) (acc + count (range 0 1000))
+
+main : Int
+main =
+  let
+    live = build 2000 []
+  in let
+    n = churn 4000 0
+  in sumAll live + n
