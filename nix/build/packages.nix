@@ -206,7 +206,7 @@ let
   #
   # 产物与产品 CLI 同构：`bin/` 里是自举出的 `vuna-native` 加上它编译非 OCaml 目标时
   # 需要的后端插件（`vuna-target-native` / `vuna-target-wasm`，插件按 `<exeDir>` 发现）；
-  # `build-id` 是编译器源码闭包身份（自举产物自己写下），`cache-tag` 是二进制摘要
+  # `build-id` 是编译器源码闭包身份（沿用同源码 stage 1 的身份），`cache-tag` 是二进制摘要
   # （Loader.Fingerprint 分别读它们）。
   vuna-native = mkStage {
     name = "vuna-native-${version}";
