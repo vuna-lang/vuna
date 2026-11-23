@@ -598,6 +598,55 @@ export renderCstTree : CstNode -> String
 renderCstTree (CstLeaf t) = strConcatMany (renderParts t)
 renderCstTree (CstBranch _ _ _ kids) = strConcatMany (map renderCstTree kids)
 
+-- ---------------------------------------------------------------
+-- 事件流上的条目锚点（不建树）
+-- ---------------------------------------------------------------
+-- | 建树帧的轻量版：只留「是否产出 + 节点 id + 起点」，不收集 children。
+record AnchorFrame where
+  afKeep : Bool
+  afId : Int
+  afStart : Span
+
+-- | 从建树事件直接取部分节点的 `NodeRef`（区间口径与 `nestToTree` 一致：起点 = 开区间
+-- 处下一个 token 的起点，终点 = 该区间最后一个已消费 token 的末尾）。`keep` 决定哪些
+-- 种类产出锚点；每个区间在 close 时产出，顺序是关闭顺序（调用方按起点排序）。
+export anchorRefsOf : (CstKind -> Bool) -> List CstToken -> List NodeEvent -> List (Int, Span)
+anchorRefsOf keep toks events = reverse (anchorWalk keep toks 0 degenerateSpan [] [] events)
+
+-- | 消费 `n` 个 token，返回 (最后一个 token 的 span, 剩余 token)；不分配中间列表。
+consumeTokens : Span -> Int -> List CstToken -> (Span, List CstToken)
+consumeTokens last 0 toks = (last, toks)
+consumeTokens last n toks =
+  case toks of
+    [] => (last, [])
+    t :: rest => consumeTokens t.cstSpan (n - 1) rest
+
+anchorWalk : (CstKind -> Bool) -> List CstToken -> Int -> Span -> List (Int, Span) -> List AnchorFrame -> List NodeEvent -> List (Int, Span)
+anchorWalk keep toks cursor lastEnd acc frames [] = acc
+anchorWalk keep toks cursor lastEnd acc frames (ev :: rest) =
+  let
+    at = eventIndex ev
+    consumed = consumeTokens lastEnd (at - cursor) toks
+    lastEnd2 = firstOf consumed
+    live = secondOf consumed
+  in case ev of
+    EvOpen kind _ nid =>
+      anchorWalk
+        keep
+        live
+        at
+        lastEnd2
+        acc
+        (AnchorFrame (keep kind) nid (headSpan degenerateSpan live) :: frames)
+        rest
+    EvClose _ =>
+      case frames of
+        [] => anchorWalk keep live at lastEnd2 acc [] rest
+        f :: outer =>
+          let
+            acc2 = if f.afKeep then (::) (f.afId, spanFrom f.afStart lastEnd2) acc else acc
+          in anchorWalk keep live at lastEnd2 acc2 outer rest
+
 -- | `renderCstTree (nestToTree (lexCst s) events) == s`；词法失败时为 `False`。
 export treeRoundtripOk : List NodeEvent -> String -> Bool
 treeRoundtripOk events s =

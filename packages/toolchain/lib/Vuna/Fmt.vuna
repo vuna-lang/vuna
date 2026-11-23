@@ -33,10 +33,10 @@ export formatSourceWith : String -> Check String
 formatSourceWith source =
   case parseSourceDetailed "<fmt>" source of
     ErrC e => ErrC e
-    OkC (ParsedSource (SourceFile hdr imports fx decls exports reexports opacity) comments rawToks _events) =>
+    OkC (ParsedSource (SourceFile hdr imports fx decls exports reexports opacity) comments rawToks events) =>
       let
         toks = lexTokensOf source rawToks comments
-        plan = triviaCtxOf (anchorRefs hdr imports fx decls) toks
+        plan = triviaCtxOf (anchorRefs toks events) toks
         ctx = firstOf plan
         eofComments = secondOf plan
         hdr2 =

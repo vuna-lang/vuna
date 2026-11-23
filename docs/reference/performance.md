@@ -837,6 +837,19 @@ golden）逐字节不变。
 约为整趟的 **-6% ~ -9%**；`fmt --check .` / `examples` / 120 条 golden 仍逐字节不变，
 说明「取真最内层」在全部真实语料上与旧判据给出的归属一致。
 
+最后把锚点集合本身也换成**树口径**。两条路都测了（`fmt --check .`，同机交替）：
+
+| 接法 | 配对差中位 |
+| --- | --- |
+| 建整棵树（`nestToTree`）再取条目节点 | **+75 ms（+11%）** |
+| 直接在事件流上取条目区间（`Cst.anchorRefsOf`，不建树） | **+5 ms（≈噪声）** |
+
+选后者：它按区间 close 事件配 span（与 `nestToTree` 同口径），只产出条目类节点
+（模组头 / 导出项 / import / fixity / 声明 / 构造器 / 字段 / 方法 / do 语句 / 绑定 / 分支），
+不收集 children、不建叶子。这样 `Fmt.Comment` 里那套遍历整个 AST 的锚点收集
+（`exprAnchors` / `declAnchors` / …，约 170 行）被删除，注释归属不再依赖 AST；129 条
+fmt golden 与全量 `fmt --check` 逐字节不变。
+
 条目节点种类（构造器 / 字段 / trait 方法 / case 分支 / 绑定 / 导出项）补进树本身在噪声内：
 同机交替 11–15 轮取中位数，`fmt --check .` 0.775 / 0.777、`check .` 0.502 / 0.498、
 `check packages/compiler` 0.121 / 0.121、`check packages/base` 0.048 / 0.047（前 / 后）。

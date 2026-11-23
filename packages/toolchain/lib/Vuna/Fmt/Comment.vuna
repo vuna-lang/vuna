@@ -8,8 +8,9 @@
 -- （没有则前移到下一条目；文件末尾的注释保留在文件末尾）。
 --
 -- 注释列表在 `formatSourceWith` 里按 `anchorRefs` 单趟归属（行尾优先、否则下一条目）：
--- 锚点按起点排序，注释按源码顺序前进，维护已打开锚点的栈（最内层容器）与本行已结束
--- 锚点的候选池。渲染时用条目的 `NodeRef` 直接查 `TriviaCtx`（键是节点 id，不是 span 起点）。
+-- 锚点直接来自 parser 的事件流（条目类树节点，不遍历 AST、不建整棵树），按起点排序；
+-- 注释按源码顺序前进，维护已打开锚点的栈（最内层容器）与本行已结束锚点的候选池。
+-- 渲染时用条目的 `NodeRef` 直接查 `TriviaCtx`（键是节点 id，不是 span 起点）。
 module Vuna.Fmt.Comment where
 
 import Base.Container.HashMap as HashMap
@@ -295,141 +296,33 @@ assignGo future open pool (c :: rest) at eof =
         Just r => assignGo future2 open2 pool2 rest (addToSlot (nodeRefId r) False c at) eof
         Nothing => assignGo future2 open2 pool2 rest at (append eof [c])
 
--- | 内部：import 的锚点。
-importAnchor : Import -> NodeRef
-importAnchor imp = imp.importRef
+-- ---------------------------------------------------------------
+-- 锚点：从建树事件取条目节点
+-- ---------------------------------------------------------------
+-- | 可挂注释的树节点种类：模块头 / 导出项 / import / `infix*` / 声明 / 构造器 / 字段 /
+-- trait 方法 / do 语句 / 绑定 / 分支。表达式与模式不是挂载点（注释前移到最近的条目）。
+isAnchorKind : CstKind -> Bool
+isAnchorKind CstModHeadKind = True
+isAnchorKind CstExportItemKind = True
+isAnchorKind CstImportKind = True
+isAnchorKind CstFixityKind = True
+isAnchorKind CstDeclKind = True
+isAnchorKind CstCtorKind = True
+isAnchorKind CstFieldKind = True
+isAnchorKind CstMethodKind = True
+isAnchorKind CstDoStmtKind = True
+isAnchorKind CstBindingKind = True
+isAnchorKind CstAltKind = True
+isAnchorKind _ = False
 
--- | 内部：模块头与其导出项的锚点。
-headerAnchors : Maybe ModDecl -> List NodeRef
-headerAnchors Nothing = []
-headerAnchors (Just m) = m.modDeclRef :: map exportItemRef m.modDeclExportItems
+-- | 整份文件的注释锚点（源码顺序的节点身份）：parser 的事件流里按种类取出区间，不建
+-- 整棵树。锚点集合就是渲染器的挂载点；渲染时用同一个 id 查槽。
+export anchorRefs : List CstToken -> List NodeEvent -> List NodeRef
+anchorRefs toks events = map toNodeRef (Cst.anchorRefsOf isAnchorKind toks events)
 
--- | 内部：构造器的锚点。
-ctorAnchor : Ctor -> NodeRef
-ctorAnchor (Ctor name ty arity r) = r
-
--- | 内部：记录字段的锚点。
-fieldAnchor : Field -> NodeRef
-fieldAnchor (Field name ty r) = r
-
--- | 内部：`infix*` 声明的锚点。
-fixityAnchor : FixityDecl -> NodeRef
-fixityAnchor (FixityDecl op level assoc r) = r
-
--- | 内部：trait 方法签名行的锚点（方法名到类型结束）。
-methodAnchor : TraitMethod -> NodeRef
-methodAnchor m = m.traitMethodRef
-
--- | 内部：一个声明自身的锚点 + 其内部条目（构造器 / 记录字段 / trait 方法 / 子表达式）。
-declAnchors : Decl -> List NodeRef
-declAnchors (DData name params kind ctors derivings viaField repr lin r) = r :: map ctorAnchor ctors
-declAnchors (DAxiom name ty r) = [r]
-declAnchors (DExtern name cName ty r) = [r]
-declAnchors (DSig name ctx ty r) = [r]
-declAnchors (DFun name pats body r) = r :: exprAnchors body
-declAnchors (DRecord name params fields derivings viaField repr lin r) = r :: map fieldAnchor fields
-declAnchors (DTrait name params supers methods r) = r :: map methodAnchor methods
-declAnchors (DInstance ctxE head methods r) = (::) r (concatMap declAnchors methods)
-
--- | 内部：一条绑定的锚点（定义行节点 + 值里的条目）。局部函数组的首条子句节点与
--- 绑定自身同源，由子句自带，不重复收。
-bindingAnchors : Binding -> List NodeRef
-bindingAnchors b =
-  case b.bindValue of
-    ELocalFun _ _ => exprAnchors b.bindValue
-    EAnn (ELocalFun _ _) _ _ => exprAnchors b.bindValue
-    _ => (::) b.bindRef (exprAnchors b.bindValue)
-
--- | 内部：case 分支的锚点（分支的 `alt` 节点）。
-altAnchor : Alt -> NodeRef
-altAnchor alt = alt.altRef
-
--- | 内部：case 分支体内的表达式锚点。
-altBodyAnchors : Alt -> List NodeRef
-altBodyAnchors alt = exprAnchors alt.altBody
-
--- | 内部：记录字段值的表达式锚点。
-fieldExprAnchors : (String, Expr) -> List NodeRef
-fieldExprAnchors (fname, value) = exprAnchors value
-
--- | 内部：do 语句的锚点（语句节点 + 值里的表达式锚点）。
-doStmtAnchors : DoStmt -> List NodeRef
-doStmtAnchors (DBind pat value r) = r :: exprAnchors value
-doStmtAnchors (DExpr value r) = r :: exprAnchors value
-doStmtAnchors (DLet binds r) = r :: concatMap bindingAnchors binds
-
--- | 内部：handle 块 `return` 子句的锚点（没有 return 子句时是哨兵 `EVar`）。
-retClauseAnchor : Expr -> List NodeRef
-retClauseAnchor (ELam _ _ r) = [r]
-retClauseAnchor _ = []
-
--- | 内部：应用头若 `handle` 合成标记，取其 `return` 子句的锚点。
-appHandleRetAnchors : Expr -> List Expr -> List NodeRef
-appHandleRetAnchors (EVar name _) args =
-  if isHandleSyntax name then
-    case args of
-      [_, ret, _] => retClauseAnchor ret
-      _ => []
-  else
-    []
-appHandleRetAnchors _ args = []
-
--- | 内部：表达式里可挂注释的条目（let 绑定、case 分支、do 语句、签名行、局部函数子句、
--- handle 子句等），按源码顺序。
-exprAnchors : Expr -> List NodeRef
-exprAnchors e =
-  case e of
-    EVar name _ => []
-    EInt n _ => []
-    EStr s _ => []
-    EFloat raw _ => []
-    ELam ps body _ => exprAnchors body
-    -- `handle` 块是 parser 合成结构：`return` 子句的 λ 携带子句节点（额外锚点），
-    -- op 子句的模式是合成 `case` 的 alt 模式；其余照常递归。
-    EApp fn args _ =>
-      append (appHandleRetAnchors fn args) (append (exprAnchors fn) (concatMap exprAnchors args))
-    EPi name implicit _ dom cod _ => append (exprAnchors dom) (exprAnchors cod)
-    ELet binds body rec_ _ => append (concatMap bindingAnchors binds) (exprAnchors body)
-    ECase scrut alts _ =>
-      append (exprAnchors scrut) (append (map altAnchor alts) (concatMap altBodyAnchors alts))
-    EIf c t el _ => append (exprAnchors c) (append (exprAnchors t) (exprAnchors el))
-    EField base f _ => exprAnchors base
-    ERecord name fields _ => concatMap fieldExprAnchors fields
-    ERecUpdate base fields _ => append (exprAnchors base) (concatMap fieldExprAnchors fields)
-    EDo stmts _ => concatMap doStmtAnchors stmts
-    -- where 绑定签名行（`g : Int -> Int`）本身是注释锚点（前置/行尾注释挂签名行）；
-    -- 身份是签名行对应的 `binding` 树节点。
-    EAnn value ty r => (::) r (exprAnchors value)
-    -- where/let 多 clause 局部函数：每个 clause body 的表达式锚点。
-    ELocalFun clauses _ => concatMap localClauseAnchors clauses
-    EInfix op l r _ => append (exprAnchors l) (exprAnchors r)
-    EParen inner _ => exprAnchors inner
-    -- 反引号中缀 / section 是 parse 后中间产物；子表达式里的注释仍要前移。
-    EBacktick name l r _ => append (exprAnchors l) (exprAnchors r)
-    ESectOp op _ => []
-    ESectL op inner _ => exprAnchors inner
-    ESectR inner op _ => exprAnchors inner
-    -- 模板字面量：洞内表达式的注释锚点照常收集（注释仍在字面量内，但会被提升到
-    -- 外层条目——注释在 `${...}` 里不进 AST，见 Lexer 的说明）。
-    EInterp multi parts _ => concatMap interpPartAnchors parts
-
--- | 内部：模板片段里洞表达式的锚点（文本块没有锚点）。
-interpPartAnchors : InterpPart -> List NodeRef
-interpPartAnchors (IPText s) = []
-interpPartAnchors (IPHole e) = exprAnchors e
-
--- | 内部：局部函数 clause 的锚点（子句节点 + 体里的表达式锚点）。
-localClauseAnchors : LocalClause -> List NodeRef
-localClauseAnchors (LocalClause pats body r head) = (::) r (exprAnchors body)
-
--- | 收集整个文件的注释锚点（源码顺序的节点身份）：模块头 / 导出项 / import /
--- `infix*` 声明 / 声明及其内部条目。锚点集合就是渲染器的挂载点；渲染时用同一个
--- `NodeRef` 查槽，不再按 span 起点做二次匹配。
-export anchorRefs : Maybe ModDecl -> List Import -> List FixityDecl -> List Decl -> List NodeRef
-anchorRefs hdr imports fixities decls =
-  append
-    (headerAnchors hdr)
-    (append (map importAnchor imports) (append (map fixityAnchor fixities) (concatMap declAnchors decls)))
+-- | 内部：`(id, span)` → `NodeRef`。
+toNodeRef : (Int, Span) -> NodeRef
+toNodeRef (nid, sp) = NodeRef nid sp
 
 -- | 内部：条目的前置注释文档（无注释时为空）。
 leadingDoc : HashMap Int (List Comment, List Comment) -> NodeRef -> Doc
