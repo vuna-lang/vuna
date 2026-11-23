@@ -418,37 +418,36 @@ wasm 删掉 wat 机器后连纯程序也小了 ~4%。上表 native 两列是「�
 **第一个不达标的 tier 就是问题所在**。三端同窗口：`vuna`（native）、`vuna_ocaml`
 （vuna 源码走 OCaml 后端）、`ml`（手写 OCaml）、`c`（手写 C，同形；N 从 argv 读）。
 
-本机一档（`--target both --tier t1 --runs 7 --warmup 3`，loadavg 1.57；
+本机一档（`--target both --tier t1 --runs 7 --warmup 3`，loadavg 0.88；
 `ns/op` 是 `median_ms × 1e6 / ops`，绝对 ms 只同机可比）：
 
 | 用例 | tier | native ms | native ns/op | native vs c | native vs ml | vuna_ocaml vs c | vuna_ocaml vs ml |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| arith | t1 | 6.90 | 2.30 | 1.02x | 1.39x | 0.77x | 1.06x |
-| float_math | t1 | 8.35 | - | - | 1.15x | - | 1.86x |
-| nat_bits | t1 | 5.81 | - | - | 1.48x | - | 1.29x |
-| scalar_xor | t1 | 15.16 | 0.76 | 1.71x | 1.33x | 1.41x | 1.10x |
-| scalar_muladd | t1 | 24.01 | 1.20 | 1.14x | 1.00x | 1.15x | 1.01x |
-| scalar_divconst | t1 | 18.16 | 0.91 | 1.77x | 1.07x | 1.70x | 1.03x |
+| arith | t1 | 4.39 | 1.46 | 0.74x | 0.90x | 0.83x | 1.01x |
+| float_math | t1 | 8.25 | - | - | 1.11x | - | 1.83x |
+| nat_bits | t1 | 5.74 | - | - | 1.62x | - | 1.44x |
+| scalar_xor | t1 | 10.97 | 0.55 | 1.26x | 0.93x | 1.39x | 1.03x |
+| scalar_muladd | t1 | 23.64 | 1.18 | 1.08x | 1.00x | 1.11x | 1.03x |
+| scalar_divconst | t1 | 11.27 | 0.56 | 1.14x | 0.71x | 1.60x | 1.00x |
 
-几何平均：**t1 native 1.37x c / 1.22x ml；t1 vuna_ocaml 1.21x c / 1.19x ml**。
+几何平均：**t1 native 1.04x c / 1.01x ml；t1 vuna_ocaml 1.20x c / 1.19x ml**。
 T0 仍是 0.36x c / 0.23x ml（§1.6.2 的裁剪不改变地板读数）。
 
 读法：
 
 - **地板不是问题**：T0 上 native 比手写 OCaml 快 4 倍、比裸 syscall 的 C 还快（`entry_pure` 0.36x）。
   入口初始化与产物尺寸不在差距里。
-- **标量环的固定成本已经压到 C 附近**（`scalar_muladd` 1.14x、`arith` 1.02x）：这一档的
-  native 每轮 1.2–2.3 ns，与 C 的 1.06–2.26 ns 同一量级。
-- **剩下的差距集中在「循环计数器」的 63-bit wrap 与有符号除法**（`scalar_xor` 1.71x、
-  `scalar_divconst` 1.77x）：每轮 `n - 1` 仍带 `shl; sar`，`n / 2` 仍走符号修正移位
-  （`sar r,63; and; add; sar`）。C 的同一项是一条 `dec` / `shr`。
-- **OCaml 后端在标量环上也已经接近 C**（1.21x c）；native 与它的差距只剩上面两项。
-- 结论按 tier 切断：T0 达标；T1 的剩余差距是**范围信息**（知道循环计数器非负 / 不溢出），
-  与 GC、闭包、效应无关。
+- **T1 已与 C 同档**：`arith` 0.74x、`scalar_muladd` 1.08x、`scalar_divconst` 1.14x、
+  `scalar_xor` 1.26x；几何平均 1.04x C / 1.01x 手写 OCaml。
+- **剩下的差距是「每轮多几条搬运」而不是表示**：`scalar_xor` 的环现在是
+  `mov/cmp/jg` + `xor` + `mov` + `sub` + `mov`（C 是 `xor; dec; jg`）；
+  `arith` 的 `n * 3` 仍是 `imul`（C 用 `lea`）。这两项对应后续的复制合并与 `lea` 选择。
+- `nat_bits`（1.62x ml）走的是 `Nat` 结构递归 + `natAdd`/`natMul` 运行时调用，不在本轮范围内。
+- 结论按 tier 切断：T0 达标；T1 的表示与寄存器差距已在 C 的量级，剩余是搬运与指令选择。
 
 #### 1.6.1 T1 优化（2026-11-23）
 
-三处改动（细节见 [native.md](native.md) §3.6–§3.9）：
+三轮改动（细节见 [native.md](native.md) §3.6–§3.10）：
 
 1. **调用点内联放宽**：实参可以是可重复求值的小标量表达式（加减乘 / 位运算 / 非零常量
    除法），`bxor acc (n / 2)`、`band (acc * C + c) mask` 这类调用不再留下 `call`；
@@ -456,26 +455,32 @@ T0 仍是 0.36x c / 0.23x ml（§1.6.2 的裁剪不改变地板读数）。
    都不 wrap（掩码只看低位）；`band` / `bor` / `bxor` / `bnot` 自身对规范化封闭，不再跟
    `shl; sar`；
 3. **标量槽提升**：有回边的函数把循环携带的标量槽提到 `rbx` / `r12`–`r14`（只提升
-   `NClsScalar`，指针槽留给保守扫根），自递归尾调用的实参在安全时直写形参槽。
+   `NClsScalar`，指针槽留给保守扫根），自递归尾调用的实参在安全时直写形参槽；
+4. **范围信息**：`IrIf` 的守卫推出区间事实，证明了的 `+ - *` 不再 wrap、非负常量除法
+   只发一条 `shr`（`Native.Range`，§3.10）。
 
-同一台机器上的前后对照（`native ms`，前 = 主分支原状）：
+同一台机器上的三轮对照（`native ms`）：
 
-| 用例 | 前 | 后 | C |
-| --- | --- | --- | --- |
-| arith | 7.19 | 6.90 | 6.79 |
-| float_math | 8.86 | 8.35 | - |
-| nat_bits | 8.05 | 5.81 | - |
-| scalar_xor | 19.52 | 15.16 | 8.87 |
-| scalar_muladd | 56.94 | 24.01 | 21.14 |
-| scalar_divconst | 52.98 | 18.16 | 10.28 |
-| **几何平均（vs c）** | **2.39x** | **1.37x** | 1.00x |
+| 用例 | 主分支原状 | 第一轮（1–3） | 第二轮（4） | C |
+| --- | --- | --- | --- | --- |
+| arith | 7.19 | 6.90 | **4.39** | 5.93 |
+| float_math | 8.86 | 8.35 | **8.25** | - |
+| nat_bits | 8.05 | 5.81 | **5.74** | - |
+| scalar_xor | 19.52 | 15.16 | **10.97** | 8.71 |
+| scalar_muladd | 56.94 | 24.01 | **23.64** | 21.93 |
+| scalar_divconst | 52.98 | 18.16 | **11.27** | 9.87 |
+| **几何平均（vs c）** | **2.39x** | **1.37x** | **1.04x** | 1.00x |
+
+三轮的读数在不同 loadavg（1.12 / 1.57 / 0.88）下取得，C / OCaml 对照本身也有 ±10% 的
+漂移，所以绝对 ms 只作方向参考；比值列在同一次运行内自洽。
 
 下一步的顺序（都有明确的读数目标）：
 
-- **范围信息**：`if n <= 0 then … else …` 的真分支里 `n ≥ 1`，可以省掉 `n - 1` 的 wrap；
-  `n / 2` 在非负时用一条 `shr`。这直接对应 `scalar_xor` / `scalar_divconst` 的剩余差距。
-- **32-bit 窄化**：`band (acc * C + c) 0xFFFFFFFF` 用 `imul/add` 的 32-bit 形式，
-  把 `scalar_muladd` 的每轮 4 条压到 2 条。
+- **复制合并**：`mov rax, rA; op rax, rB; mov rA, rax` 合成 `op rA, rB`，删掉
+  `mov rax, rX; cmp rax, 0` 这类装载——对应 `scalar_xor` 的剩余 1.26x；
+- **`lea` 取小常量乘**：`x * 3 / 5 / 9` 用 `lea`（1 周期）替 `imul`（3 周期）；
+- **32-bit 窄化**：`band (acc * C + c) 0xFFFFFFFF` 用 32-bit 形式，`scalar_muladd` 再压两条；
+- **`IrNatCase` 的 0 / 后继事实**：给 `nat_bits` 这类结构递归补范围；
 - **未引用 `.bss` 缓冲**：可达性裁剪只裁了函数，8 MiB 的 `rt_read_buf` 等仍进产物。
 
 #### 1.6.2 入口初始化裁剪

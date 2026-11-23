@@ -467,6 +467,39 @@ out-equals: 36
 run: sh -c 'grep -c "jmp vuna_wide10" "$TMPDIR/tcolam-out/Main.s"'
 out-equals: 1
 
+# 9aj) 范围信息：守卫支配的计数器递减不再 wrap，非负常量除法走一条 `shr`。
+run: sh -c 'd="$TMPDIR/rangeloop"; mkdir -p "$d/app"; printf "[package]\nname = \"rangeloop\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Data.Bits as Bits\n\nloop : Int -> Int -> Int\nloop acc n = if n <= 0 then acc else loop (bxor acc (n / 2)) (n - 1)\n\nmain : Int\nmain = loop 0 20000000\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/rangeloop-out" "$d"'
+exit: 0
+run: "$TMPDIR/rangeloop-out/bin/rangeloop" 2>&1
+exit: 0
+out-equals: 10000000
+run: sh -c 'grep -q "shr " "$TMPDIR/rangeloop-out/Main.s"'
+exit: 0
+run: sh -c '! grep -q "sar r10, 63" "$TMPDIR/rangeloop-out/Main.s"'
+exit: 0
+run: sh -c '! grep -q "shl rax, 1" "$TMPDIR/rangeloop-out/Main.s"'
+exit: 0
+
+# 9ak) 没有守卫时仍要付 63-bit 的账：wrap 与符号修正都在。
+run: sh -c 'd="$TMPDIR/rangenguard"; mkdir -p "$d/app"; printf "[package]\nname = \"rangenguard\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Data.String as String\n\nf : Int -> Int\nf n = (n - 1) + (n / 2)\n\nmain : Int\nmain = f (strLength \"abc\")\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/rangenguard-out" "$d"'
+exit: 0
+run: "$TMPDIR/rangenguard-out/bin/rangenguard" 2>&1
+exit: 0
+out-equals: 3
+run: sh -c 'grep -q "sar r10, 63" "$TMPDIR/rangenguard-out/Main.s"'
+exit: 0
+run: sh -c 'grep -q "shl rax, 1" "$TMPDIR/rangenguard-out/Main.s"'
+exit: 0
+
+# 9al) then 分支的事实不得漏到 else：两个分支各自保留一次 wrap。
+run: sh -c 'd="$TMPDIR/rangleak"; mkdir -p "$d/app"; printf "[package]\nname = \"rangleak\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Data.String as String\n\nf : Int -> Int\nf n = if n <= 0 then n - 1 else n + 1\n\nmain : Int\nmain = f (strLength \"abc\")\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/rangleak-out" "$d"'
+exit: 0
+run: "$TMPDIR/rangleak-out/bin/rangleak" 2>&1
+exit: 0
+out-equals: 4
+run: sh -c 'test "$(grep -c "shl rax, 1" "$TMPDIR/rangleak-out/Main.s")" -eq 2'
+exit: 0
+
 # 9ai) 源级 let 的立即 lambda 内联：循环体不再分配闭包、不再走 `call r11`。
 run: sh -c 'd="$TMPDIR/tcolet"; mkdir -p "$d/app"; printf "[package]\nname = \"tcolet\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Data.Nat as Nat\n\nloop : Nat -> Int\nloop n = case n of\n  Zero => 0\n  Succ k => let x = 1 in loop k\n\nmain : Int\nmain = loop (natFromInt 1000)\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/tcolet-out" "$d"'
 exit: 0

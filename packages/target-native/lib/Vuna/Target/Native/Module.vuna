@@ -38,6 +38,7 @@ import Vuna.Target.Native.Abi
 import Vuna.Target.Native.Audit
 import Vuna.Target.Native.Model
 import Vuna.Target.Native.Live
+import Vuna.Target.Native.Range
 import Vuna.Target.Native.Regs
 import Vuna.Target.Native.Repr
 import Vuna.Target.Native.Runtime
@@ -127,6 +128,8 @@ record FGen where
   fgSelfParams : List Int
   -- | 形参 binder（与 `fgSelfParams` 同序）：判断实参求值是否还会读某个形参槽。
   fgSelfBinds : List IrBinder
+  -- | binder id -> 已知的整数区间（分支守卫推导；只在被该守卫支配的子树里有效）。
+  fgRanges : List (Pair Int (Pair Int Int))
   -- | 本次生成收集到的静态闭包对象（无捕获的函数值）。
   fgStatics : List NativeClosure
   -- | binder id -> 调用点静态已知的被调用者（见 `KnownCallee`）。binder 身份在
@@ -1090,10 +1093,17 @@ genDivInto st pool a (DivShift k) =
         s :: rest =>
           let
             r = firstOf pa
+            -- 非负被除数：`x / 2^k` 就是逻辑右移一条（算术右移结果相同，`shr` 更直白）。
+            -- 负数仍走符号修正，保证向零截断。
             instrs =
-              append
-                (firstOf (secondOf pa))
-                [IMov (OpReg s) (OpReg r), IBinReg "sar" s (OpImm 63), IBinReg "and" s (OpImm (ipow2 k - 1)), IBinReg "add" r (OpReg s), IBinReg "sar" r (OpImm k)]
+              if k == 0 then
+                firstOf (secondOf pa)
+              else if nonNegative (rangeOf st.fgRanges a) then
+                append (firstOf (secondOf pa)) [IBinReg "shr" r (OpImm k)]
+              else
+                append
+                  (firstOf (secondOf pa))
+                  [IMov (OpReg s) (OpReg r), IBinReg "sar" s (OpImm 63), IBinReg "and" s (OpImm (ipow2 k - 1)), IBinReg "add" r (OpReg s), IBinReg "sar" r (OpImm k)]
           in Just (Pair r (Pair instrs (s :: rest)))
         [] => Nothing
 genDivInto st pool a (DivIdiv c) =
@@ -1251,7 +1261,7 @@ genScalarOpGeneric wrap st pool op ([a, b]) =
             rB = firstOf pb
             inB = firstOf (secondOf pb)
             restB = secondOf (secondOf pb)
-            res = resOf wrap op rA rB
+            res = resOf (wrap && not (rangeSkips st op a b)) op rA rB
           in Just (Pair (firstOf res) (Pair (append inA (append inB (secondOf res))) (rB :: restB)))
         Nothing => Nothing
     Nothing => Nothing
@@ -1266,6 +1276,29 @@ childWrap _ = True
 resOf : Bool -> ScalarOp -> Reg -> Reg -> Pair Reg (List Instr)
 resOf True op a b = scalarInstrs op a b
 resOf False op a b = scalarInstrsNoWrap op a b
+
+-- | 可证明结果落在 `Int` 域内时，63-bit wrap 是 no-op（值仍然规范化，任何消费者都安全）。
+rangeSkips : FGen -> ScalarOp -> Ir -> Ir -> Bool
+rangeSkips st (ScalarWrap name) a b =
+  case wrapSym name of
+    Just sym => overflowFree sym (rangeOf st.fgRanges a) (rangeOf st.fgRanges b)
+    Nothing => False
+rangeSkips _ _ _ _ = False
+
+wrapSym : String -> Maybe String
+wrapSym "add" = Just "+"
+wrapSym "sub" = Just "-"
+wrapSym "imul" = Just "*"
+wrapSym _ = Nothing
+
+-- | 守卫为真的分支：事实只对这个子树有效。
+withThen : FGen -> Ir -> FGen
+withThen st c = { st | fgRanges = append (factsThen st.fgRanges c) st.fgRanges }
+
+-- | 守卫为假的分支：事实从**外层**环境派生（不能继承 then 分支的事实）。
+withElse : FGen -> FGen -> Ir -> FGen
+withElse stAfter outer c =
+  { stAfter | fgRanges = append (factsElse outer.fgRanges c) outer.fgRanges }
 
 -- | 二元算子的求值：两个操作数按各自的口径求值，指令拼在一起。
 genScalarBinInto : Bool -> Bool -> FGen -> List Reg -> Ir -> Ir -> (Reg -> Reg -> Pair Reg (List Instr)) -> Maybe (Pair Reg (Pair (List Instr) (List Reg)))
@@ -1555,13 +1588,16 @@ genExprAt fuel st isTail ir =
               lEndP = freshLabel st1
               lEnd = firstOf lEndP
               st2 = secondOf lEndP
-            in nbind (genExprAt (fuel - 1) st2 isTail t) (
+              -- 两个分支各自带上守卫推导出的区间事实；分支结束恢复到外层。
+              thenSt = withThen st2 c
+            in nbind (genExprAt (fuel - 1) thenSt isTail t) (
                 \pt =>
-                  nbind (genExprAt (fuel - 1) (secondOf pt) isTail e) (
+                  nbind (genExprAt (fuel - 1) (withElse (secondOf pt) st c) isTail e) (
                       \pe =>
                         let
                           body = append (firstOf cb) (append [IJcc (secondOf cb) lElse] (append (firstOf pt) (append [IJmp lEnd, ILabel lElse] (append (firstOf pe) [ILabel lEnd]))))
-                        in NOk (Pair body (secondOf pe))
+                          outSt = { (secondOf pe) | fgRanges = st.fgRanges }
+                        in NOk (Pair body outSt)
                     )
               )
           Nothing =>
@@ -1812,7 +1848,7 @@ genLamValue fuel st bs body =
       st1 = { st | fgNextLabel = idx + 1 }
       -- 闭包体自己的来参区由闭包 ABI 决定（`rdi` 是闭包自身，实参从 `rsi` 起）。
       lamRoom = nativeTailRoomBytes (nativeStackArgCount arity (length closureArgRegs))
-      stBody = FGen st1.fgDefs st1.fgPool st1.fgFloats [] [] st1.fgFams 0 st1.fgNextLabel [] lamRoom st1.fgModule st1.fgOwner "" "" [] [] [] (filterKnown caps st.fgKnown) st1.fgReenter
+      stBody = FGen st1.fgDefs st1.fgPool st1.fgFloats [] [] st1.fgFams 0 st1.fgNextLabel [] lamRoom st1.fgModule st1.fgOwner "" "" [] [] [] [] (filterKnown caps st.fgKnown) st1.fgReenter
     in nbind (bindCaptures stBody st.fgSlotCls caps 0) (
         \cp =>
           nbind (bindArgsGo rbs 1 (secondOf cp)) (
@@ -2318,6 +2354,7 @@ genDefFunc defs pools floats recNames allocs fams nextLabel (IrDef name arity _ 
         name
         ""
         ""
+        []
         []
         []
         []
