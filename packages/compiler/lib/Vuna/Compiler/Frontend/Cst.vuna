@@ -590,22 +590,10 @@ nodeTable : CstNode -> List (Pair Int CstNode)
 nodeTable (CstLeaf _) = []
 nodeTable (n@(CstBranch _ nid _ kids)) = Pair nid n :: concatMap nodeTable kids
 
--- | 起点字节偏移 → 节点 id（先序表）。文件根不是源码构造（它的起点与首个 token
--- 重合），不进索引——否则没有模块头的文件里，第一个声明会被根遮住。
-offsetTable : CstNode -> List (Pair Int Int)
-offsetTable (CstLeaf _) = []
-offsetTable (CstBranch CstFileKind _ _ kids) = concatMap offsetTable kids
-offsetTable (CstBranch _ nid sp kids) = Pair (spanStartOffset sp) nid :: concatMap offsetTable kids
-
 -- | 整棵树的「id → 节点」索引。节点身份只此一处：span、kind、children 都从这里取，
 -- 而不是再按区间比较。
 export nodeIndex : CstNode -> HashMap Int CstNode
 nodeIndex tree = HashMap.fromList (nodeTable tree)
-
--- | 「起点字节偏移 → 节点 id」索引：`withExtent` 先开外层，同一偏移取**最外层**
--- （`HashMap.fromList` 前条目优先）。AST 侧把 span 换成节点 id 时走这条桥。
-export nodeIdAtOffset : CstNode -> HashMap Int Int
-nodeIdAtOffset tree = HashMap.fromList (offsetTable tree)
 
 -- | 节点树逐字节还原源码（叶按源码顺序输出前置 trivia + token 原文）。
 export renderCstTree : CstNode -> String

@@ -497,48 +497,6 @@ idsContiguous tree =
     [] => False
     x :: rest => x == 0 && idsFrom 1 rest
 
--- | 声明的起点偏移解析到唯一 id，且该节点的 kind / 区间与 AST 一致。
-declIdOk : HashMap Int Int -> HashMap Int CstNode -> Decl -> Bool
-declIdOk offsets index d =
-  case HashMap.lookup (spanStartOffset (declSpan d)) offsets of
-    Nothing => False
-    Just nid =>
-      case HashMap.lookup nid index of
-        Nothing => False
-        Just n => nodeKindTag n == "decl" && sameSpan (nodeSpan n) (declSpan d)
-
-declIdsOk : HashMap Int Int -> HashMap Int CstNode -> List Decl -> Bool
-declIdsOk offsets index [] = True
-declIdsOk offsets index (d :: rest) = declIdOk offsets index d && declIdsOk offsets index rest
-
--- | import 的起点偏移解析到 import 节点（重导出尾在 `importSpan` 之外，只比起点）。
-importIdOk : HashMap Int Int -> HashMap Int CstNode -> Import -> Bool
-importIdOk offsets index i =
-  case HashMap.lookup (spanStartOffset (importSpan i)) offsets of
-    Nothing => False
-    Just nid =>
-      case HashMap.lookup nid index of
-        Nothing => False
-        Just n => nodeKindTag n == "import" && sameStart (nodeSpan n) (importSpan i)
-
-importIdsOk : HashMap Int Int -> HashMap Int CstNode -> List Import -> Bool
-importIdsOk offsets index [] = True
-importIdsOk offsets index (i :: rest) = importIdOk offsets index i && importIdsOk offsets index rest
-
--- 没有模块头时首个声明从字节 0 开始：身份索引必须跳过文件根，否则偏移 0 会被根占住。
-noHeader : String
-noHeader = "f : Int\nf = 1\n"
-
-noHeaderDeclIds : Bool
-noHeaderDeclIds =
-  case parseSourceDetailed "<noheader>" noHeader of
-    ErrC _ => False
-    OkC p =>
-      let
-        toks = lexTokensOf noHeader p.parsedRawToks p.parsedComments
-        tree = nestToTree toks p.parsedEvents
-      in declIdsOk (nodeIdAtOffset tree) (nodeIndex tree) p.parsedFile.sourceFileDecls
-
 -- | 模块头与导出项：id 指回同 kind、同区间的树节点。
 headerIdsOk : HashMap Int CstNode -> Maybe ModDecl -> Bool
 headerIdsOk index Nothing = False
@@ -591,19 +549,6 @@ main =
             0
         )
         + (if idsContiguous tree then 64 else 0)
-        + (
-          if declIdsOk (nodeIdAtOffset tree) (nodeIndex tree) p.parsedFile.sourceFileDecls then
-            128
-          else
-            0
-        )
-        + (
-          if importIdsOk (nodeIdAtOffset tree) (nodeIndex tree) p.parsedFile.sourceFileImports then
-            256
-          else
-            0
-        )
-        + (if noHeaderDeclIds then 512 else 0)
         + (if declRefsInIndex (nodeIndex tree) p.parsedFile.sourceFileDecls then 2048 else 0)
         + (if fixitiesOk (nodeIndex tree) p.parsedFile.sourceFileFixities then 4096 else 0)
         + (if declsMembersOk (nodeIndex tree) p.parsedFile.sourceFileDecls then 8192 else 0)
