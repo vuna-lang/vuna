@@ -26,7 +26,7 @@ lookupSum k t acc =
       Nothing => lookupSum (k - 1) t acc
       Just v => lookupSum (k - 1) t (acc * 31 + v)
 
-ascSum : List (Pair Int Int) -> Int
+ascSum : List (Int, Int) -> Int
 ascSum xs = List.foldl (\acc, p => acc * 31 + firstOf p) 0 xs
 
 main : Int

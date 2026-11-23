@@ -17,7 +17,7 @@ popSum k q acc =
   else
     case Queue.pop q of
       Nothing => acc
-      Just (Pair x rest) => popSum (k - 1) rest (acc * 31 + x)
+      Just (x, rest) => popSum (k - 1) rest (acc * 31 + x)
 
 main : Int
 main =
