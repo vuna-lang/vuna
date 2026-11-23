@@ -5,7 +5,7 @@
 # **生成程序运行时**（vuna 产物 vs 手写 OCaml 等价实现）。
 #
 # 口径：
-#   * 每个 benchmark 是 `bench/programs/t<N>/<name>.vuna`（vuna）与同目录的
+#   * 每个 benchmark 是 `bench/programs/t<N>/<name>/<name>.vuna`（vuna）与同目录的
 #     `<name>.ml`（手写 OCaml 等价实现，同算法；个别库基准用标准库上限，见各文件
 #     注释），`.out` 是 golden；`t<N>` 是机制分层（见 `bench/programs/TIERS.md`）；
 #   * 可选 `<name>.bench` sidecar（`key=value`）：
@@ -184,8 +184,9 @@ REPO=$PWD
 . "$REPO/bench/lib/targets.sh"
 
 # ---------------------------------------------------------------- 发现与 sidecar
-# 用例按机制分层放在 `bench/programs/t<N>/`：目录名就是 tier，基线 JSON 的键是
-# basename。同名用例出现在两个 tier 下会撞键，发现阶段直接报错。
+# 用例按机制分层：`bench/programs/t<N>/<name>/` 是单个用例目录，目录名同时是用例名
+# （基线 JSON 的键）与入口文件 stem。目录里没有同名 `.vuna` 时不参与发现（可放辅助
+# 文件）。`tier` 取用例目录的父目录名；同名用例出现在两个 tier 下会撞键，发现阶段直接报错。
 declare -A BENCH_DIR=()
 declare -A BENCH_TIER=()
 BENCHES=""
@@ -201,19 +202,21 @@ bench_meta() { # name key default
 }
 
 discover_benchmarks() {
-  local f n d
+  local d n f
   BENCHES=""
-  for f in "$REPO"/bench/programs/t*/*.vuna; do
+  for d in "$REPO"/bench/programs/t*/*/; do
+    [ -d "$d" ] || continue
+    d=${d%/}
+    n=$(basename "$d")
+    f=$d/$n.vuna
     [ -f "$f" ] || continue
-    n=$(basename "$f" .vuna)
-    d=$(dirname "$f")
     if [ -n "${BENCH_DIR[$n]:-}" ]; then
       printf 'vuna-perf: duplicate benchmark name %s (%s and %s)\n' \
         "$n" "${BENCH_DIR[$n]}" "$d" >&2
       exit 2
     fi
     BENCH_DIR[$n]=$d
-    BENCH_TIER[$n]=$(basename "$d")
+    BENCH_TIER[$n]=$(basename "$(dirname "$d")")
     [ "$(bench_meta "$n" skip 0)" = 1 ] && continue
     BENCHES+="$n"$'\n'
   done
@@ -230,7 +233,7 @@ target_allowed() { # target allowed_csv
 target_name() { case $1 in vuna_ocaml) printf 'ocaml' ;; *) printf '%s' "$1" ;; esac; }
 
 discover_benchmarks
-[ -n "$BENCHES" ] || die "no benchmarks found under bench/programs/t*"
+[ -n "$BENCHES" ] || die "no benchmarks found under bench/programs/t*/*"
 
 case $C_REF in auto|on|off) ;; *) die "--c-ref must be auto, on or off" ;; esac
 

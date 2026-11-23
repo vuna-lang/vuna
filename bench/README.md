@@ -12,8 +12,8 @@
 
 ## 口径
 
-- 每个 benchmark 是一组**同算法**实现：`programs/t<N>/<name>.vuna`（vuna 源码）、同目录
-  `<name>.ml`（手写 OCaml 对照）与可选的 `<name>.c`（手写 C 对照）；`t<N>` 是机制分层，
+- 每个 benchmark 是一组**同算法**实现：`programs/t<N>/<name>/<name>.vuna`（vuna 源码）、
+  同目录 `<name>.ml`（手写 OCaml 对照）与可选的 `<name>.c`（手写 C 对照）；`t<N>` 是机制分层，
   见 [`programs/TIERS.md`](programs/TIERS.md)。库基准（如 `hashmap`）的 OCaml 对照用标准库
   上限，文件头注释会说明；这测的是「vuna 库/表示与手写最优实现的差距」。
 - C 对照用 `-O2` 编译，N 从 argv 读（sidecar 的 `n=`），避免 GCC 把常量循环折成闭式；

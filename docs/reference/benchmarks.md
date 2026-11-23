@@ -7,7 +7,7 @@
 ## 1. `vuna-perf` 读数
 
 `nix run .#vuna-perf`（逻辑在 `bench/run.sh`）测**生成程序运行时**：每个 benchmark 是一对
-同算法实现（`bench/programs/t<N>/<name>.vuna` vs 同目录 `<name>.ml` 手写 OCaml），
+同算法实现（`bench/programs/t<N>/<name>/<name>.vuna` vs 同目录 `<name>.ml` 手写 OCaml），
 `t<N>` 是机制分层（见 [`bench/programs/TIERS.md`](../../bench/programs/TIERS.md)）；先校验
 两侧输出与 golden 一致，再 warmup + 多次取中位数；`--target ocaml|native|both` 选择被测后端，峰值内存
 用 GNU time 的 max RSS。跨机器只比 `ratio = <backend>/ocaml` 与 `rss_ratio`
