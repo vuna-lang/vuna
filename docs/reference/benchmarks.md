@@ -418,45 +418,49 @@ wasm 删掉 wat 机器后连纯程序也小了 ~4%。上表 native 两列是「�
 **第一个不达标的 tier 就是问题所在**。三端同窗口：`vuna`（native）、`vuna_ocaml`
 （vuna 源码走 OCaml 后端）、`ml`（手写 OCaml）、`c`（手写 C，同形；N 从 argv 读）。
 
-本机一档（`--target both --tier t1 --runs 7 --warmup 3`，loadavg ≈7.1；
+本机一档（`--target both --tier t1 --runs 7 --warmup 3`，loadavg ≈3.3；
 `ns/op` 是 `median_ms × 1e6 / ops`，绝对 ms 只同机可比）：
 
 | 用例 | tier | native ms | native ns/op | native vs c | native vs ml | vuna_ocaml vs c | vuna_ocaml vs ml |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| arith | t1 | 6.19 | 2.06 | 0.79x | 0.91x | 0.87x | 1.00x |
-| float_math | t1 | 14.44 | - | 1.64x | 1.65x | 1.64x | 1.65x |
-| nat_bits | t1 | 4.02 | - | 0.66x | 0.92x | 1.02x | 1.41x |
-| scalar_xor | t1 | 12.13 | 0.61 | 1.23x | 0.95x | 1.42x | 1.10x |
-| scalar_muladd | t1 | 24.97 | 1.25 | 1.08x | 0.99x | 1.12x | 1.03x |
-| scalar_divconst | t1 | 11.94 | 0.60 | 1.13x | 0.74x | 1.63x | 1.07x |
-| scalar_idiv | t1 | 14.78 | 1.48 | 1.50x | 1.37x | 1.12x | 1.03x |
-| scalar_divsigned | t1 | 20.33 | 2.03 | 1.46x | 0.98x | 1.53x | 1.03x |
-| scalar_cmp | t1 | 9.57 | 0.80 | 1.35x | 1.04x | 1.33x | 1.03x |
-| scalar_bit | t1 | 26.15 | 1.31 | 1.94x | 1.32x | 2.09x | 1.42x |
-| scalar_ilp | t1 | 14.19 | 1.42 | 1.13x | 0.83x | 1.38x | 1.01x |
+| arith | t1 | 5.55 | 1.85 | 0.87x | 1.08x | 0.93x | 1.14x |
+| float_math | t1 | 13.43 | - | 1.69x | 1.68x | 1.67x | 1.65x |
+| nat_bits | t1 | 4.05 | - | 0.79x | 1.03x | 0.98x | 1.28x |
+| scalar_xor | t1 | 11.85 | 0.59 | 1.13x | 0.94x | 1.30x | 1.08x |
+| scalar_muladd | t1 | 24.75 | 1.24 | 1.06x | 0.97x | 1.12x | 1.03x |
+| scalar_divconst | t1 | 11.70 | 0.59 | 1.18x | 0.69x | 1.73x | 1.01x |
+| scalar_idiv | t1 | 15.01 | 1.50 | 1.39x | 1.25x | 1.17x | 1.05x |
+| scalar_divsigned | t1 | 20.03 | 2.00 | 1.39x | 0.98x | 1.48x | 1.05x |
+| scalar_cmp | t1 | 9.38 | 0.78 | 1.29x | 1.06x | 1.37x | 1.13x |
+| scalar_bit | t1 | 15.79 | 0.79 | 1.44x | 0.84x | 1.74x | 1.02x |
+| scalar_ilp | t1 | 15.28 | 1.53 | 1.29x | 0.91x | 1.51x | 1.06x |
 
-几何平均：**t1 native 1.21x c / 1.04x ml；t1 vuna_ocaml 1.34x c / 1.14x ml**。
+几何平均：**t1 native 1.20x c / 1.01x ml；t1 vuna_ocaml 1.33x c / 1.12x ml**。
 T0 仍是 0.36x c / 0.23x ml（§1.6.2 的裁剪不改变地板读数）。
 
 读法：
 
 - **地板不是问题**：T0 上 native 比手写 OCaml 快 4 倍、比裸 syscall 的 C 还快（`startup` 0.36x）。
   入口初始化与产物尺寸不在差距里。
+- **循环结构**：自递归循环体旋转后，入口跳到条件检查、回边就是条件分支本身，每轮只有
+  一次分支；槽提升后又把 `mov rax, rS; ...; mov rD, rax` 合并成直接操作 `rD`，并把
+  `r10/r11` 的中转拷贝折掉。`scalar_bit` 从 1.94x C 降到 1.44x C，循环体只剩
+  `add / shl / sar / mov / xor / or / sub`。
 - **物化比较与浮点比较已收口**：
-  - `scalar_cmp`（六种比较物化）native 1.35x c / 1.04x ml：`if b then 1 else 0` 直接
+  - `scalar_cmp`（六种比较物化）native 1.29x c / 1.06x ml：`if b then 1 else 0` 直接
     复用 0/1 槽（`if b then 0 else 1` 只发 `xor 1`），比较只发 `setcc` + `movzx`，
     累加回到内联 `add`。
-  - `float_math` native 1.64x c：浮点比较在 `floatTree` 里用 `ucomisd` + `cmov` 选分支
+  - `float_math` native 1.69x c：浮点比较在 `floatTree` 里用 `ucomisd` + `cmov` 选分支
     指针，整棵树仍只装箱一次；剩余差距在 `sqrt` 与装盒 / 搬运。
 - **常量除法与 Nat 库调用已收口**：
-  - `scalar_idiv` native 1.50x c：非 2 幂常量除法改走 magic 乘法（`imul` 高半）+
+  - `scalar_idiv` native 1.39x c：非 2 幂常量除法改走 magic 乘法（`imul` 高半）+
     符号修正，不再 `cqo` + `idiv`；`d = 3` / 负常量仍回退 `idiv` / 运行时。
-  - `nat_bits` native 0.66x c / 0.92x ml：`Nat.plus` / `Nat.mult` / `Nat.fromInt` 的零参
+  - `nat_bits` native 0.79x c / 1.03x ml：`Nat.plus` / `Nat.mult` / `Nat.fromInt` 的零参
     别名在调用点展开成 `IrRtApp`，饱和乘法用 `imul` + `cmov` 内联，热点循环里没有
     `call rt_nat_*`。
-- **剩余固定成本**：`scalar_bit` 1.94x c（63-bit wrap 与搬运；5 个循环标量已全部提升到
-  `rbx` / `r12`–`r15`），`scalar_divsigned` 1.46x c（符号修正移位）。
-- 结论按 tier 切断：T0 达标；T1 的标量算术已到 C 的量级，剩余是位运算的 wrap / 搬运。
+- **剩余固定成本**：`scalar_bit` 1.44x C（63-bit wrap 与剩余搬运）、
+  `scalar_divsigned` 1.39x C（符号修正移位）。
+- 结论按 tier 切断：T0 达标；T1 的标量算术已到 C 的量级，剩余是位运算的 wrap 与少量搬运。
 
 #### 1.6.1 T1 优化（2026-11-23）
 

@@ -11,6 +11,7 @@ import Vuna.Target.Native.Abi
 import Vuna.Target.Native.Model
 import Vuna.Target.Native.Regs
 import Vuna.Target.Native.Repr
+import Vuna.Target.Native.Select
 
 main : Eff [] String
 main =
@@ -116,11 +117,27 @@ fiveCls =
 fivePlan : RegPlan
 fivePlan = promoteLoops fiveCls fiveBody
 
+-- | 槽提升后的 `mov rax, rS; <scratch 中转>; mov rS, rax` 应合并成直接操作 rS。
+patternBody : List Instr
+patternBody =
+  [
+    ILabel ".L",
+    IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 0)),
+    IMov (OpReg R11) (OpMem Rbp (nativeSlotOff 1)),
+    IBinReg "shr" R11 (OpImm 1),
+    IBinReg "xor" Rax (OpReg R11),
+    IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rax),
+    IJmp ".L"
+  ]
+
+patternPlan : RegPlan
+patternPlan = promoteLoops [Pair 0 NClsScalar, Pair 1 NClsScalar] patternBody
+
 problems : List String
 problems =
   concatMap
     (\s => if s == "" then [] else [s])
-    [check "loop keeps two registers" True (length loopPlan.rpSaved == 2), check "first register is rbx" True (firstSavedIsRbx loopPlan.rpSaved), check "scalar slots promoted" False (mentionsOff (nativeSlotOff 0) loopPlan.rpBody), check "second scalar promoted" False (mentionsOff (nativeSlotOff 1) loopPlan.rpBody), check "pointer slot stays" True (mentionsOff (nativeSlotOff 2) loopPlan.rpBody), check "temp slot stays" True (mentionsOff (nativeSlotOff 3) loopPlan.rpBody), check "tail call restores" True (tailRestored loopPlan.rpBody), check "straight line untouched" True (mentionsOff (nativeSlotOff 0) straightPlan.rpBody), check "straight line saves nothing" True (length straightPlan.rpSaved == 0), check "odd count pads" True (hasPad (prologueOf slimPlan.rpSaved)), check "odd count unpads" True (hasUnpad (epilogueOf slimPlan.rpSaved)), check "even count no pad" False (hasPad (prologueOf loopPlan.rpSaved)), check "epilogue pops both" True (epiloguePops loopPlan.rpSaved), check "five slots promoted" True (length fivePlan.rpSaved == 5), check "r15 used" True (savedHasR15 fivePlan.rpSaved), check "five slots leave frame" True (allSlotsGone fivePlan.rpBody)]
+    [check "loop keeps two registers" True (length loopPlan.rpSaved == 2), check "first register is rbx" True (firstSavedIsRbx loopPlan.rpSaved), check "scalar slots promoted" False (mentionsOff (nativeSlotOff 0) loopPlan.rpBody), check "second scalar promoted" False (mentionsOff (nativeSlotOff 1) loopPlan.rpBody), check "pointer slot stays" True (mentionsOff (nativeSlotOff 2) loopPlan.rpBody), check "temp slot stays" True (mentionsOff (nativeSlotOff 3) loopPlan.rpBody), check "tail call restores" True (tailRestored loopPlan.rpBody), check "straight line untouched" True (mentionsOff (nativeSlotOff 0) straightPlan.rpBody), check "straight line saves nothing" True (length straightPlan.rpSaved == 0), check "odd count pads" True (hasPad (prologueOf slimPlan.rpSaved)), check "odd count unpads" True (hasUnpad (epilogueOf slimPlan.rpSaved)), check "even count no pad" False (hasPad (prologueOf loopPlan.rpSaved)), check "epilogue pops both" True (epiloguePops loopPlan.rpSaved), check "five slots promoted" True (length fivePlan.rpSaved == 5), check "r15 used" True (savedHasR15 fivePlan.rpSaved), check "five slots leave frame" True (allSlotsGone fivePlan.rpBody), check "rax chain coalesced" False (usesRax patternPlan.rpBody)]
 
 check : String -> Bool -> Bool -> String
 check label want got = if want == got then "" else label ++ ": drifted"
@@ -139,6 +156,9 @@ allSlotsGone body =
     (\acc, off => acc && not (mentionsOff off body))
     True
     [nativeSlotOff 0, nativeSlotOff 1, nativeSlotOff 2, nativeSlotOff 3, nativeSlotOff 4]
+
+usesRax : List Instr -> Bool
+usesRax instrs = foldl (\acc, i => acc || instrReadsReg Rax i || instrWritesReg Rax i) False instrs
 
 hasPad : List Instr -> Bool
 hasPad instructions = foldl (\acc, i => acc || isPad i) False instructions

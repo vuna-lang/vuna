@@ -2473,38 +2473,58 @@ resolveDefAliases defs (IrDef nm ar deps ty body recOk guard span) =
 resolveDefAliases _ d = d
 
 resolveAliasIn : Int -> List IrDef -> Ir -> Ir
-resolveAliasIn fuel defs ir =
-  if fuel <= 0 then
-    ir
-  else
-    case ir of
-      IrApp _ _ _ =>
-        let
-          p = flattenApp ir
-          head = resolveAliasIn (fuel - 1) defs (firstOf p)
-          args = map (resolveAliasIn (fuel - 1) defs) (secondOf p)
-        in case head of
-          IrGlobal name =>
-            case Alias.irAliasTargetOf 8 defs name of
-              Just (Alias.IrAliasRt sym) => if length args == irInlineArity sym then IrRtApp sym args else Synthetic.applyAllIr head args
-              _ => Synthetic.applyAllIr head args
-          _ => Synthetic.applyAllIr head args
-      IrCtor f c ty args => IrCtor f c ty (map (resolveAliasIn (fuel - 1) defs) args)
-      IrRecord f ty fields => IrRecord f ty (map (\p => Pair (firstOf p) (resolveAliasIn (fuel - 1) defs (secondOf p))) fields)
-      IrProj base f fld ty => IrProj (resolveAliasIn (fuel - 1) defs base) f fld ty
-      IrRecUpd base f fields ty => IrRecUpd (resolveAliasIn (fuel - 1) defs base) f (map (\p => Pair (firstOf p) (resolveAliasIn (fuel - 1) defs (secondOf p))) fields) ty
-      IrRtApp sym args => IrRtApp sym (map (resolveAliasIn (fuel - 1) defs) args)
-      IrCast a b inner => IrCast a b (resolveAliasIn (fuel - 1) defs inner)
-      IrLet bs s b => IrLet bs (resolveAliasIn (fuel - 1) defs s) (resolveAliasIn (fuel - 1) defs b)
-      IrLam bs ty b => IrLam bs ty (resolveAliasIn (fuel - 1) defs b)
-      IrTail inner => IrTail (resolveAliasIn (fuel - 1) defs inner)
-      IrIf c t e => IrIf (resolveAliasIn (fuel - 1) defs c) (resolveAliasIn (fuel - 1) defs t) (resolveAliasIn (fuel - 1) defs e)
-      IrCase ty rty scrut alts => IrCase ty rty (resolveAliasIn (fuel - 1) defs scrut) (map (resolveAlt (fuel - 1) defs) alts)
-      IrNatCase scrut fresh z s c => IrNatCase (resolveAliasIn (fuel - 1) defs scrut) fresh (resolveAltM (fuel - 1) defs z) (resolveAltM (fuel - 1) defs s) (resolveAltM (fuel - 1) defs c)
-      IrConcatMany parts => IrConcatMany (map (resolveAliasIn (fuel - 1) defs) parts)
-      IrEffThunk f c ty ar prim => IrEffThunk f c ty ar (resolveAliasIn (fuel - 1) defs prim)
-      IrEffBind f c ty => IrEffBind f c ty
-      _ => ir
+resolveAliasIn fuel defs ir = if fuel <= 0 then ir else resolveAliasStep (fuel - 1) defs ir
+
+resolveAliasStep : Int -> List IrDef -> Ir -> Ir
+resolveAliasStep fuel defs (ir@(IrApp _ _ _)) =
+  let
+    p = flattenApp ir
+    head = resolveAliasIn fuel defs (firstOf p)
+    args = map (resolveAliasIn fuel defs) (secondOf p)
+  in case head of
+    IrGlobal name =>
+      case Alias.irAliasTargetOf 8 defs name of
+        Just (Alias.IrAliasRt sym) =>
+          if length args == irInlineArity sym then
+            IrRtApp sym args
+          else
+            Synthetic.applyAllIr head args
+        _ => Synthetic.applyAllIr head args
+    _ => Synthetic.applyAllIr head args
+resolveAliasStep fuel defs (IrCtor f c ty args) =
+  IrCtor f c ty (map (resolveAliasIn fuel defs) args)
+resolveAliasStep fuel defs (IrRecord f ty fields) =
+  IrRecord f ty (map (\p => Pair (firstOf p) (resolveAliasIn fuel defs (secondOf p))) fields)
+resolveAliasStep fuel defs (IrProj base f fld ty) = IrProj (resolveAliasIn fuel defs base) f fld ty
+resolveAliasStep fuel defs (IrRecUpd base f fields ty) =
+  IrRecUpd
+    (resolveAliasIn fuel defs base)
+    f
+    (map (\p => Pair (firstOf p) (resolveAliasIn fuel defs (secondOf p))) fields)
+    ty
+resolveAliasStep fuel defs (IrRtApp sym args) = IrRtApp sym (map (resolveAliasIn fuel defs) args)
+resolveAliasStep fuel defs (IrCast a b inner) = IrCast a b (resolveAliasIn fuel defs inner)
+resolveAliasStep fuel defs (IrLet bs s0 b) =
+  IrLet bs (resolveAliasIn fuel defs s0) (resolveAliasIn fuel defs b)
+resolveAliasStep fuel defs (IrLam bs ty b) = IrLam bs ty (resolveAliasIn fuel defs b)
+resolveAliasStep fuel defs (IrTail inner) = IrTail (resolveAliasIn fuel defs inner)
+resolveAliasStep fuel defs (IrIf c t e) =
+  IrIf (resolveAliasIn fuel defs c) (resolveAliasIn fuel defs t) (resolveAliasIn fuel defs e)
+resolveAliasStep fuel defs (IrCase ty rty scrut alts) =
+  IrCase ty rty (resolveAliasIn fuel defs scrut) (map (resolveAlt fuel defs) alts)
+resolveAliasStep fuel defs (IrNatCase scrut fresh z s0 c) =
+  IrNatCase
+    (resolveAliasIn fuel defs scrut)
+    fresh
+    (resolveAltM fuel defs z)
+    (resolveAltM fuel defs s0)
+    (resolveAltM fuel defs c)
+resolveAliasStep fuel defs (IrConcatMany parts) =
+  IrConcatMany (map (resolveAliasIn fuel defs) parts)
+resolveAliasStep fuel defs (IrEffThunk f c ty ar prim) =
+  IrEffThunk f c ty ar (resolveAliasIn fuel defs prim)
+resolveAliasStep _ _ (IrEffBind f c ty) = IrEffBind f c ty
+resolveAliasStep _ _ ir = ir
 
 resolveAlt : Int -> List IrDef -> IrAlt -> IrAlt
 resolveAlt fuel defs alt =
@@ -2513,6 +2533,78 @@ resolveAlt fuel defs alt =
 resolveAltM : Int -> List IrDef -> Maybe IrAlt -> Maybe IrAlt
 resolveAltM _ _ Nothing = Nothing
 resolveAltM fuel defs (Just a) = Just (resolveAlt fuel defs a)
+
+-- ---------------------------------------------------------------
+-- 自递归循环体旋转
+-- ---------------------------------------------------------------
+-- `if cond then exit else self-call` 的朴素布局每轮在末尾 `jmp` 回循环头，再在头部
+-- 做条件分支（两次跳转）。旋转后：入口跳到条件检查，循环体落在条件检查之前，回边是
+-- 条件分支本身——每轮只剩一次分支。
+record LoopRot where
+  lrCond : Ir
+  lrBody : Ir
+  lrExit : Ir
+  lrBodyIsElse : Bool
+
+selfTailOf : String -> Ir -> Bool
+selfTailOf name ir =
+  case flattenApp (stripTail ir) of
+    Pair (IrGlobal n) _ => n == name
+    _ => False
+
+loopRotateOf : String -> Ir -> Maybe LoopRot
+loopRotateOf name (IrIf c t e) =
+  if selfTailOf name e && not (selfTailOf name t) then
+    Just (LoopRot c e t True)
+  else if selfTailOf name t && not (selfTailOf name e) then Just (LoopRot c t e False) else Nothing
+loopRotateOf _ _ = Nothing
+
+dropLastSelfJump : String -> List Instr -> Maybe (List Instr)
+dropLastSelfJump _ [] = Nothing
+dropLastSelfJump label (i :: rest) =
+  case rest of
+    [] =>
+      case i of
+        IJmp l => if l == label then Just [] else Nothing
+        _ => Nothing
+    _ =>
+      case dropLastSelfJump label rest of
+        Just r => Just (i :: r)
+        Nothing => Nothing
+
+genLoopBody : Int -> FGen -> Ir -> String -> String -> NRes (Pair (List Instr) FGen)
+genLoopBody fuel st inner name loopLabel =
+  case loopRotateOf name inner of
+    Nothing => genExpr fuel st inner
+    Just rot =>
+      case condBranch st rot.lrCond of
+        Nothing => genExpr fuel st inner
+        Just cb =>
+          let
+            lbP = freshLabel st
+            lb = firstOf lbP
+            st1 = secondOf lbP
+            lcP = freshLabel st1
+            lc = firstOf lcP
+            st2 = secondOf lcP
+            bodySt =
+              if rot.lrBodyIsElse then withElse st2 st rot.lrCond else withThen st2 rot.lrCond
+          in nbind (genExprAt (fuel - 1) bodySt True rot.lrBody) (
+              \pb =>
+                let
+                  bodyInstrs =
+                    case dropLastSelfJump loopLabel (firstOf pb) of
+                      Just is => is
+                      Nothing => firstOf pb
+                  exitBase = { (secondOf pb) | fgRanges = st.fgRanges }
+                  exitSt = if rot.lrBodyIsElse then withThen exitBase rot.lrCond else withElse exitBase st rot.lrCond
+                in nbind (genExprAt (fuel - 1) exitSt True rot.lrExit) (
+                    \pe =>
+                      let
+                        body = append [IJmp lc, ILabel lb] (append bodyInstrs (append [ILabel lc] (append (firstOf cb) (append [IJcc (secondOf cb) lb] (firstOf pe)))))
+                      in NOk (Pair body ({ (secondOf pe) | fgRanges = st.fgRanges }))
+                  )
+            )
 
 -- | 生成一个定义；返回函数与该定义之后**模块内** label/slot 计数（`.L` 是文件局部
 --   符号，计数按模块保存；重编号不会跨模块扩散）。
@@ -2575,7 +2667,7 @@ genDefFunc defs pools floats recNames allocs fams nextLabel (IrDef name arity _ 
                   loopP = freshLabel stB
                   loopLabel = firstOf loopP
                   stLoop = { (secondOf loopP) | fgSelfLabel = nativeFuncLabel name, fgSelfLoop = loopLabel, fgSelfParams = slotsOfBinders rbs stB.fgSlots, fgSelfBinds = rbs }
-                in nbind (genExpr (nativeFuelOfBody inner) stLoop inner) (
+                in nbind (genLoopBody (nativeFuelOfBody inner) stLoop inner name loopLabel) (
                     \q =>
                       let
                         st1 = secondOf q

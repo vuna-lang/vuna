@@ -31,6 +31,7 @@ import Vuna.Target.Native.Abi
 import Vuna.Target.Native.Live
 import Vuna.Target.Native.Model
 import Vuna.Target.Native.Repr
+import Vuna.Target.Native.Select
 
 -- | 一个函数最多提升几个槽（寄存器池大小）。
 maxPromoted : Int
@@ -131,6 +132,135 @@ mapValueOperands f (IXmmStore op n) = IXmmStore (f op) n
 mapValueOperands _ i = i
 
 -- ---------------------------------------------------------------
+-- 寄存器合并（槽提升之后）
+-- ---------------------------------------------------------------
+-- 槽提升把 `mov rax, [slot]; ...; mov [slot], rax` 变成 `mov rax, rS; ...; mov rD, rax`。
+-- 这里在直线段内做两种局部合并：
+--   1. `mov r10/r11, rX` 只被下一条指令读一次 → 折掉中转寄存器；
+--   2. `mov rax, rS; <只操作 rax 的链>; mov rD, rax` → 链直接以 rD 为目标
+--      （rS == rD 时连首条 mov 一起删）。
+-- 两种改写都不跨标签 / 跳转 / 调用，也不动 flags 之外的语义（指令本身不变）。
+isScratchReg : Reg -> Bool
+isScratchReg r = sameReg r R10 || sameReg r R11
+
+isPromotedReg : Reg -> Bool
+isPromotedReg r = sameReg r Rbx || sameReg r R12 || sameReg r R13 || sameReg r R14 || sameReg r R15
+
+blockBoundary : Instr -> Bool
+blockBoundary (ILabel _) = True
+blockBoundary (IJmp _) = True
+blockBoundary (IJmpReg _) = True
+blockBoundary (IJcc _ _) = True
+blockBoundary IRet = True
+blockBoundary (ICall _) = True
+blockBoundary (ICallReg _) = True
+blockBoundary _ = False
+
+operandUsesReg : Reg -> Operand -> Bool
+operandUsesReg r (OpReg x) = sameReg r x
+operandUsesReg r (OpMem base _) = sameReg r base
+operandUsesReg r (OpMemX base idx _) = sameReg r base || sameReg r idx
+operandUsesReg _ _ = False
+
+replaceOperandReg : Reg -> Reg -> Operand -> Operand
+replaceOperandReg s src (OpReg x) = if sameReg s x then OpReg src else OpReg x
+replaceOperandReg s src (OpMem base off) = if sameReg s base then OpMem src off else OpMem base off
+replaceOperandReg s src (OpMemX base idx off) =
+  if sameReg s base then
+    OpMemX src idx off
+  else if sameReg s idx then OpMemX base src off else OpMemX base idx off
+replaceOperandReg _ _ op = op
+
+replaceInstrReg : Reg -> Reg -> Instr -> Instr
+replaceInstrReg s src (IMov a b) = IMov (replaceOperandReg s src a) (replaceOperandReg s src b)
+replaceInstrReg s src (IMovzx d o) = IMovzx d (replaceOperandReg s src o)
+replaceInstrReg s src (ILeaMem d base off) = ILeaMem d (if sameReg s base then src else base) off
+replaceInstrReg s src (IBin op o) = IBin op (replaceOperandReg s src o)
+replaceInstrReg s src (IBinReg op d o) = IBinReg op d (replaceOperandReg s src o)
+replaceInstrReg s src (ICmp a b) = ICmp (replaceOperandReg s src a) (replaceOperandReg s src b)
+replaceInstrReg s src (ICmov c d o) = ICmov c d (replaceOperandReg s src o)
+replaceInstrReg s src (IXmmLoad n o) = IXmmLoad n (replaceOperandReg s src o)
+replaceInstrReg s src (IXmmStore o n) = IXmmStore (replaceOperandReg s src o) n
+replaceInstrReg _ _ i = i
+
+scratchFreeAfter : Reg -> List Instr -> Bool
+scratchFreeAfter _ [] = True
+scratchFreeAfter r (i :: rest) =
+  if instrReadsReg r i then
+    False
+  else if instrWritesReg r i then
+    True
+  else if blockBoundary i then True else scratchFreeAfter r rest
+
+scratchFoldPass : List Instr -> List Instr
+scratchFoldPass [] = []
+scratchFoldPass (i :: rest) =
+  case i of
+    IMov (OpReg s) (OpReg src) =>
+      case rest of
+        next :: more =>
+          if isScratchReg s && not (sameReg s src) && instrReadsReg s next && not (instrWritesReg s next) && scratchFreeAfter s more then
+            replaceInstrReg s src next :: scratchFoldPass more
+          else
+            i :: scratchFoldPass rest
+        [] => [i]
+    _ => i :: scratchFoldPass rest
+
+isRaxMiddle : Instr -> Bool
+isRaxMiddle (IBinReg _ Rax _) = True
+isRaxMiddle (IBin _ _) = True
+isRaxMiddle (IMov (OpReg r) _) = isScratchReg r
+isRaxMiddle (IBinReg _ r _) = isScratchReg r
+isRaxMiddle _ = False
+
+middleOperandUses : Reg -> Instr -> Bool
+middleOperandUses r (IBinReg _ _ o) = operandUsesReg r o
+middleOperandUses r (IBin _ o) = operandUsesReg r o
+middleOperandUses r (IMov _ o) = operandUsesReg r o
+middleOperandUses _ _ = True
+
+retargetRax : Reg -> Instr -> Instr
+retargetRax d (IBinReg op Rax o) = IBinReg op d o
+retargetRax d (IBin op o) = IBinReg op d o
+retargetRax _ i = i
+
+takeRaxChain : Int -> List Instr -> List Instr -> Maybe (Pair Reg (Pair (List Instr) (List Instr)))
+takeRaxChain fuel acc [] = Nothing
+takeRaxChain fuel acc (i :: rest) =
+  if fuel <= 0 then
+    Nothing
+  else
+    case i of
+      IMov (OpReg d) (OpReg Rax) => if isPromotedReg d && not (anyMiddleTouches d acc) && not (anyMiddleTouches Rax acc) then Just (Pair d (Pair (reverse acc) rest)) else Nothing
+      _ => if isRaxMiddle i then takeRaxChain (fuel - 1) (i :: acc) rest else Nothing
+
+anyMiddleTouches : Reg -> List Instr -> Bool
+anyMiddleTouches _ [] = False
+anyMiddleTouches r (i :: rest) = if middleOperandUses r i then True else anyMiddleTouches r rest
+
+raxChainPass : List Instr -> List Instr
+raxChainPass instrs = raxChainFuel (length instrs + 1) instrs
+
+raxChainFuel : Int -> List Instr -> List Instr
+raxChainFuel fuel [] = []
+raxChainFuel fuel (i :: rest) =
+  if fuel <= 0 then
+    i :: rest
+  else
+    case i of
+      IMov (OpReg Rax) (OpReg src) =>
+        case takeRaxChain 16 [] rest of
+          Just p =>
+            let
+              d = firstOf p
+              middle = firstOf (secondOf p)
+              rest1 = secondOf (secondOf p)
+              init = if sameReg src d then [] else [IMov (OpReg d) (OpReg src)]
+            in append init (append (map (retargetRax d) middle) (raxChainFuel (fuel - 1) rest1))
+          Nothing => i :: raxChainFuel (fuel - 1) rest
+      _ => i :: raxChainFuel (fuel - 1) rest
+
+-- ---------------------------------------------------------------
 -- 保存 / 恢复
 -- ---------------------------------------------------------------
 -- | prologue 里追加在 `push rbp` 之前的部分：保存用到的寄存器。用到的个数为奇数时
@@ -186,7 +316,8 @@ promoteLoops slotCls instrs =
       top = pickTop maxPromoted candidates instrs
       reps = List.zip top promotableRegs
       saved = map secondOf reps
-      body = map (\i => mapValueOperands (substOperand reps) i) instrs
+      body0 = map (\i => mapValueOperands (substOperand reps) i) instrs
+      body = raxChainPass (scratchFoldPass body0)
     in RegPlan (restoreTailJumps saved body) saved
 
 -- | 有栈实参（`[rbp + 正偏移]`）：prologue 多压的寄存器会移动来参区，见文件头。

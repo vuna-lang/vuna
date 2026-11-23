@@ -293,7 +293,7 @@ operandReadsReg r (OpMemX base idx _) = sameReg r base || sameReg r idx
 operandReadsReg _ (OpImm _) = False
 operandReadsReg _ (OpRip _) = False
 
-instrReadsReg : Reg -> Instr -> Bool
+export instrReadsReg : Reg -> Instr -> Bool
 instrReadsReg r (IMov _ src) = operandReadsReg r src
 instrReadsReg r (IMovByteRegOp _ src) = sameReg r src
 instrReadsReg r (IMovzx _ src) = operandReadsReg r src
@@ -316,7 +316,7 @@ instrReadsReg r (IXmmFromInt _ x) = sameReg r x
 instrReadsReg r (IXmmFromReg _ x) = sameReg r x
 instrReadsReg _ _ = False
 
-instrWritesReg : Reg -> Instr -> Bool
+export instrWritesReg : Reg -> Instr -> Bool
 instrWritesReg r (IMov (OpReg dst) _) = sameReg r dst
 instrWritesReg r (IMovzx dst _) = sameReg r dst
 instrWritesReg r (IBinReg _ dst _) = sameReg r dst
