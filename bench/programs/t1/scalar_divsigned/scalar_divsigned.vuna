@@ -1,0 +1,8 @@
+-- T1 micro：被除数可能为负的常量除法，触发符号修正移位
+-- （`sar 63; and d-1; add; sar k`）。除法的结果作为尾调用实参传给下一轮。
+-- 手写 OCaml 对照见 scalar_divsigned.ml（同算法）。
+loop : Int -> Int -> Int -> Int
+loop sum acc n = if n <= 0 then sum else loop (sum + acc) ((acc - n) / 8) (n - 1)
+
+main : Int
+main = loop 0 0 10000000

@@ -1,0 +1,13 @@
+-- T1 micro：4 个独立累加器 + 循环计数，压寄存器分配 / 槽提升与 ILP。
+-- 手写 OCaml 对照见 scalar_ilp.ml（同算法）。
+import Base.Data.Bits as Bits
+
+loop : Int -> Int -> Int -> Int -> Int -> Int
+loop a b c d n =
+  if n <= 0 then
+    a + b + c + d
+  else
+    loop (a + n * 3) (bxor b n) (c + n / 8) (band (d * 5 + 7) 65535) (n - 1)
+
+main : Int
+main = loop 0 0 0 0 10000000

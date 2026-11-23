@@ -1,0 +1,7 @@
+-- T1 micro：非 2 幂常量除法（`cqo` + `idiv`），被除数含负数（向零截断）。
+-- 手写 OCaml 对照见 scalar_idiv.ml（同算法）。
+loop : Int -> Int -> Int
+loop acc n = if n <= 0 then acc else loop (acc + (n - 5000000) / 1000) (n - 1)
+
+main : Int
+main = loop 0 10000000

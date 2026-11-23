@@ -418,32 +418,44 @@ wasm 删掉 wat 机器后连纯程序也小了 ~4%。上表 native 两列是「�
 **第一个不达标的 tier 就是问题所在**。三端同窗口：`vuna`（native）、`vuna_ocaml`
 （vuna 源码走 OCaml 后端）、`ml`（手写 OCaml）、`c`（手写 C，同形；N 从 argv 读）。
 
-本机一档（`--target both --tier t1 --runs 7 --warmup 3`，loadavg 0.88；
+本机一档（`--target both --tier t1 --runs 7 --warmup 3`，loadavg ≈2.3；
 `ns/op` 是 `median_ms × 1e6 / ops`，绝对 ms 只同机可比）：
 
 | 用例 | tier | native ms | native ns/op | native vs c | native vs ml | vuna_ocaml vs c | vuna_ocaml vs ml |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| arith | t1 | 4.39 | 1.46 | 0.74x | 0.90x | 0.83x | 1.01x |
-| float_math | t1 | 8.25 | - | - | 1.11x | - | 1.83x |
-| nat_bits | t1 | 5.74 | - | - | 1.62x | - | 1.44x |
-| scalar_xor | t1 | 10.97 | 0.55 | 1.26x | 0.93x | 1.39x | 1.03x |
-| scalar_muladd | t1 | 23.64 | 1.18 | 1.08x | 1.00x | 1.11x | 1.03x |
-| scalar_divconst | t1 | 11.27 | 0.56 | 1.14x | 0.71x | 1.60x | 1.00x |
+| arith | t1 | 5.38 | 1.79 | 0.85x | 1.08x | 0.92x | 1.17x |
+| float_math | t1 | 19.75 | - | 2.36x | 2.57x | 1.58x | 1.72x |
+| nat_bits | t1 | 6.01 | - | 1.69x | 1.20x | 1.10x | 1.55x |
+| scalar_xor | t1 | 11.47 | 0.57 | 1.24x | 0.94x | 1.33x | 1.02x |
+| scalar_muladd | t1 | 24.44 | 1.22 | 1.07x | 0.99x | 1.09x | 1.01x |
+| scalar_divconst | t1 | 11.55 | 0.58 | 1.09x | 0.68x | 1.62x | 1.01x |
+| scalar_idiv | t1 | 18.42 | 1.84 | 1.81x | 1.73x | 1.13x | 1.08x |
+| scalar_divsigned | t1 | 19.92 | 1.99 | 1.42x | 0.97x | 1.58x | 1.08x |
+| scalar_cmp | t1 | 25.43 | 2.12 | 3.54x | 2.80x | 1.33x | 1.05x |
+| scalar_bit | t1 | 19.95 | 1.00 | 1.88x | 1.08x | 1.78x | 1.02x |
+| scalar_ilp | t1 | 13.51 | 1.35 | 1.09x | 0.80x | 1.38x | 1.01x |
 
-几何平均：**t1 native 1.04x c / 1.01x ml；t1 vuna_ocaml 1.20x c / 1.19x ml**。
+几何平均：**t1 native 1.46x c / 1.25x ml；t1 vuna_ocaml 1.32x c / 1.14x ml**。
 T0 仍是 0.36x c / 0.23x ml（§1.6.2 的裁剪不改变地板读数）。
 
 读法：
 
 - **地板不是问题**：T0 上 native 比手写 OCaml 快 4 倍、比裸 syscall 的 C 还快（`startup` 0.36x）。
   入口初始化与产物尺寸不在差距里。
-- **T1 已与 C 同档**：`arith` 0.74x、`scalar_muladd` 1.08x、`scalar_divconst` 1.14x、
-  `scalar_xor` 1.26x；几何平均 1.04x C / 1.01x 手写 OCaml。
-- **剩下的差距是「每轮多几条搬运」而不是表示**：`scalar_xor` 的环现在是
-  `mov/cmp/jg` + `xor` + `mov` + `sub` + `mov`（C 是 `xor; dec; jg`）；
-  `arith` 的 `n * 3` 仍是 `imul`（C 用 `lea`）。这两项对应后续的复制合并与 `lea` 选择。
-- `nat_bits`（1.62x ml）走的是 `Nat` 结构递归 + `natAdd`/`natMul` 运行时调用，不在本轮范围内。
-- 结论按 tier 切断：T0 达标；T1 的表示与寄存器差距已在 C 的量级，剩余是搬运与指令选择。
+- **原有 T1 用例仍在 C 的量级**：`arith` 0.85x、`scalar_muladd` 1.07x、`scalar_divconst` 1.09x、
+  `scalar_xor` 1.24x；`scalar_ilp`（4 个独立累加器）1.09x，寄存器压力不是瓶颈。
+- **新 micro 把之前没测到的固定成本暴露出来**：
+  - `scalar_cmp`（物化比较）native 3.54x c / 2.80x ml：每条比较是 `setcc` + `movzx`，
+    随后 `if b then 1 else 0` 又发一次 `test/je`，累加仍走 `rt_add`；下一步是让 0/1 槽的
+    选择无分支（复用 0/1 值或 `cmov`）并让累加回到内联 `add`。
+  - `scalar_idiv`（非 2 幂常量除法）1.81x c：`cqo` + `idiv` 的固定延迟；
+    `scalar_divsigned`（被除数为负的符号修正移位）1.42x c。
+  - `scalar_bit`（`or` / `xor -1` / 立即数异或）native 1.08x ml、但 1.88x c：
+    位运算本身已内联，差距在每轮的 63-bit wrap 与搬运。
+  - `float_math`（浮点除法 + 比较）2.36x c：除法已内联成 `divsd`，但浮点比较仍走
+    `rt_float_lt`、比较前的值还要装箱；下一步是把浮点比较并进 `floatTree`。
+- 结论按 tier 切断：T0 达标；T1 的标量算术已到 C 的量级，剩余是物化比较、
+  常量 / 浮点除法与位运算的 wrap / 搬运。
 
 #### 1.6.1 T1 优化（2026-11-23）
 

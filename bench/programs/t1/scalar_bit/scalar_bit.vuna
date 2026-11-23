@@ -1,0 +1,11 @@
+-- T1 micro：位或 / 按位取反 / 立即数异或。上一轮的结果在循环变量间传递，
+-- 不引入 `let`；实参是原子槽，命中调用点内联，wasm 尾调用也能发 `return_call`。
+-- 手写 OCaml 对照见 scalar_bit.ml（同算法）。
+import Base.Data.Bits as Bits
+
+loop : Int -> Int -> Int -> Int -> Int -> Int
+loop acc inv orv x n =
+  if n <= 0 then acc else loop (acc + inv) (bnot orv) (bor x n) (bxor x 12345) (n - 1)
+
+main : Int
+main = loop 0 0 0 1 20000000

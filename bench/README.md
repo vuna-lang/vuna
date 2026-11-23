@@ -39,8 +39,10 @@
 - `programs/<name>.bench` 的 `ops=N` 声明该程序一次运行的**代表性操作数**（算术步、字节、
   分配、`perform` 等，单位写在程序头注释里）。声明后表格与 JSON 都给出
   `ns_per_op = median_ms * 1e6 / N`，同一项在不同后端、不同规模之间就有了可比的单位；
-  没有声明则显示 `-`。当前声明了 `ops` 的有 `arith`、`text_scan`、`array`、`hashmap`、
-  `gc_low_live`、`eff_tick`、`micro_apply`、`micro_concat`。
+  没有声明则显示 `-`。当前声明了 `ops` 的有 `arith`、`scalar_xor`、`scalar_muladd`、
+  `scalar_divconst`、`scalar_idiv`、`scalar_divsigned`、`scalar_cmp`、`scalar_bit`、
+  `scalar_ilp`、`text_scan`、`array`、`hashmap`、`gc_low_live`、`eff_tick`、
+  `micro_apply`、`micro_concat`。
 - 每项先 `--warmup` 次预热，再跑 `--runs` 次取**中位数**；峰值内存用 GNU time 的 max RSS，
   计时结束后单独跑 `--rss-passes` 次取**最大值**（不参与计时）。
 - native 只有**直接饱和尾调用**复用栈帧（[native.md](../docs/reference/native.md) §3），

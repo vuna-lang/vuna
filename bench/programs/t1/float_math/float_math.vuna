@@ -1,7 +1,13 @@
--- 浮点：sqrt / abs / 转换与 Float 算术的紧循环（堆上装箱 Float）。
+-- 浮点：sqrt / abs / 除法 / 比较 / 转换与 Float 算术的紧循环（堆上装箱 Float）。
 -- 手写 OCaml 对照见 float_math.ml（同算法）。
 loop : Float -> Int -> Float
-loop acc n = if n <= 0 then acc else loop (acc + sqrt (abs (intToFloat n)) * 0.25 - 0.5) (n - 1)
+loop acc n =
+  if n <= 0 then
+    acc
+  else
+    let
+      step = sqrt (abs (intToFloat n)) * 0.25 - 0.5
+    in loop (acc + step / 3.0 + (if acc < 50000000.0 then 1.0 else 0.0)) (n - 1)
 
 main : Int
 main = floatToInt (loop 0.0 1000000)
