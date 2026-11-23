@@ -891,7 +891,7 @@ and v_primReduce = (fun (defs : (string, Core_dTerm.t_Term) B_dContainer_dHashMa
   | Base_dIntrinsics.C_IntrinsicOp_OpBitShr -> ((v_intPrim2 sp) (fun (a : int) (n : int) -> (Core_dTerm.C_Value_VInt ((if n < 0 || n >= 63 then 0 else a lsr n)))))
   | Base_dIntrinsics.C_IntrinsicOp_OpNone -> (match ((v_obsReduce g) sp) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__317) -> (B_dData_dMaybe.C_Maybe_Just (dtb__317))
-  | B_dData_dMaybe.C_Maybe_Nothing -> (if (g = Base_dIntrinsics.v_debugOnIntrinsicName) then (B_dData_dMaybe.C_Maybe_Just ((Core_dTerm.C_Value_VBool (false)))) else (if (g = Base_dIntrinsics.v_debugLineIntrinsicName) then (B_dData_dMaybe.C_Maybe_Just ((Core_dTerm.C_Value_VInt (0)))) else B_dData_dMaybe.C_Maybe_Nothing))
+  | B_dData_dMaybe.C_Maybe_Nothing -> (if (g = Base_dIntrinsics.v_logOnIntrinsicName) then (B_dData_dMaybe.C_Maybe_Just ((Core_dTerm.C_Value_VBool (false)))) else (if (g = Base_dIntrinsics.v_logEmitIntrinsicName) then (B_dData_dMaybe.C_Maybe_Just ((Core_dTerm.C_Value_VInt (0)))) else (if (g = Base_dIntrinsics.v_debugOnIntrinsicName) then (B_dData_dMaybe.C_Maybe_Just ((Core_dTerm.C_Value_VBool (false)))) else (if (g = Base_dIntrinsics.v_debugLineIntrinsicName) then (B_dData_dMaybe.C_Maybe_Just ((Core_dTerm.C_Value_VInt (0)))) else B_dData_dMaybe.C_Maybe_Nothing))))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"

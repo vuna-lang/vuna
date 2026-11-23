@@ -8,6 +8,7 @@ and t_CstKind = C_CstKind_CstFileKind | C_CstKind_CstModHeadKind | C_CstKind_Cst
 and t_CstNode = C_CstNode_CstLeaf of (t_CstToken) | C_CstNode_CstBranch of (t_CstKind) * (int) * (Base_dSource.t_Span) * (t_CstNode B_dData_dList.t_List)
 and t_NodeEvent = C_NodeEvent_EvOpen of (t_CstKind) * (int) * (int) | C_NodeEvent_EvClose of (int)
 and t_NestFrame = { f_NestFrame_nfKind : t_CstKind; f_NestFrame_nfId : int; f_NestFrame_nfStart : Base_dSource.t_Span; f_NestFrame_nfKids : t_CstNode B_dData_dList.t_List }
+and t_AnchorFrame = { f_AnchorFrame_afKeep : bool; f_AnchorFrame_afId : int; f_AnchorFrame_afStart : Base_dSource.t_Span }
 
 # 89 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_lineCurStart = { f_LineCur_lcOff = 0; f_LineCur_lcLine = 1; f_LineCur_lcCol = 1; f_LineCur_lcOffset = 0 }
@@ -340,9 +341,34 @@ let rec v_renderCstTree = (fun (mc0 : t_CstNode) -> (match mc0 with
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 603 "Vuna/Compiler/Frontend/Cst.vuna"
+# 618 "Vuna/Compiler/Frontend/Cst.vuna"
+let rec v_consumeTokens = (fun (mc0 : Base_dSource.t_Span) (mc1 : int) (mc2 : t_CstToken B_dData_dList.t_List) -> (if (mc1 = 0) then { B_dData_dPair.f_Pair_first = mc0; B_dData_dPair.f_Pair_second = mc2 } else (match mc2 with
+  | B_dData_dList.C_List_Nil -> { B_dData_dPair.f_Pair_first = mc0; B_dData_dPair.f_Pair_second = B_dData_dList.C_List_Nil }
+  | B_dData_dList.C_List__x58__x58_ (dtb__111, dtb__112) -> (((v_consumeTokens (dtb__111).f_CstToken_cstSpan) (mc1 - 1)) dtb__112)
+  | _ -> failwith "DT: impossible branch"
+)))
+
+# 625 "Vuna/Compiler/Frontend/Cst.vuna"
+let rec v_anchorWalk = (fun (mc0 : (t_CstKind) -> bool) (mc1 : t_CstToken B_dData_dList.t_List) (mc2 : int) (mc3 : Base_dSource.t_Span) (mc4 : (int, Base_dSource.t_Span) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc5 : t_AnchorFrame B_dData_dList.t_List) (mc6 : t_NodeEvent B_dData_dList.t_List) -> (match mc6 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__113, dtb__114) -> (let at = (v_eventIndex dtb__113) in (let consumed = (((v_consumeTokens mc3) (at - mc2)) mc1) in (let lastEnd2 = (B_dData_dPair.v_firstOf consumed) in (let live = (B_dData_dPair.v_secondOf consumed) in (match dtb__113 with
+  | C_NodeEvent_EvOpen (dtb__115, dtb__116, dtb__117) -> (((((((v_anchorWalk mc0) live) at) lastEnd2) mc4) (B_dData_dList.C_List__x58__x58_ ({ f_AnchorFrame_afKeep = (mc0 dtb__115); f_AnchorFrame_afId = dtb__117; f_AnchorFrame_afStart = ((v_headSpan v_degenerateSpan) live) }, mc5))) dtb__114)
+  | C_NodeEvent_EvClose (dtb__118) -> (match mc5 with
+  | B_dData_dList.C_List_Nil -> (((((((v_anchorWalk mc0) live) at) lastEnd2) mc4) B_dData_dList.C_List_Nil) dtb__114)
+  | B_dData_dList.C_List__x58__x58_ (dtb__119, dtb__120) -> (let acc2 = (if (dtb__119).f_AnchorFrame_afKeep then (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = (dtb__119).f_AnchorFrame_afId; B_dData_dPair.f_Pair_second = ((v_spanFrom (dtb__119).f_AnchorFrame_afStart) lastEnd2) }, mc4)) else mc4) in (((((((v_anchorWalk mc0) live) at) lastEnd2) acc2) dtb__120) dtb__114))
+  | _ -> failwith "DT: impossible branch"
+)
+  | _ -> failwith "DT: impossible branch"
+)))))
+  | B_dData_dList.C_List_Nil -> mc4
+  | _ -> failwith "DT: impossible branch"
+))
+
+# 614 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_anchorRefsOf = (fun (keep : (t_CstKind) -> bool) (toks : t_CstToken B_dData_dList.t_List) (events : t_NodeEvent B_dData_dList.t_List) -> (B_dData_dList.v_reverse (((((((v_anchorWalk keep) toks) 0) v_degenerateSpan) B_dData_dList.C_List_Nil) B_dData_dList.C_List_Nil) events)))
+
+# 652 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_treeRoundtripOk = (fun (events : t_NodeEvent B_dData_dList.t_List) (s : string) -> (match (v_lexCst s) with
   | B_dData_dMaybe.C_Maybe_Nothing -> false
-  | B_dData_dMaybe.C_Maybe_Just (dtb__111) -> ((v_renderCstTree ((v_nestToTree dtb__111) events)) = s)
+  | B_dData_dMaybe.C_Maybe_Just (dtb__121) -> ((v_renderCstTree ((v_nestToTree dtb__121) events)) = s)
   | _ -> failwith "DT: impossible branch"
 ))

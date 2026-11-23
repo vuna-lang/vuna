@@ -95,7 +95,7 @@ let rec v_foldApps = (fun (mc0 : Frontend_dAst.t_Expr) (mc1 : Frontend_dAst.t_Ex
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 354 "Vuna/Compiler/Loader/Fixity.vuna"
+# 362 "Vuna/Compiler/Loader/Fixity.vuna"
 let rec v_reorderPattern = (fun (t : t_FixityTable) (pat : Frontend_dAst.t_Pat) -> (match pat with
   | Frontend_dAst.C_Pat_PVar (dtb__18, dtb__19) -> (Base_dDiag.C_Check_OkC ((Frontend_dAst.C_Pat_PVar (dtb__18, dtb__19))))
   | Frontend_dAst.C_Pat_PWild (dtb__20) -> (Base_dDiag.C_Check_OkC ((Frontend_dAst.C_Pat_PWild (dtb__20))))
@@ -106,7 +106,7 @@ let rec v_reorderPattern = (fun (t : t_FixityTable) (pat : Frontend_dAst.t_Pat) 
   | Frontend_dAst.C_Pat_PRecord (dtb__31, dtb__32, dtb__33) -> ((Base_dCommon.v_bind ((Base_dCommon.v_traverse (fun (p : (string, Frontend_dAst.t_Pat) B_dData_dPair.t_Pair) -> ((v_reorderRecPatField t) p))) dtb__32)) (fun (fs : (string, Frontend_dAst.t_Pat) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC ((Frontend_dAst.C_Pat_PRecord (dtb__31, fs, dtb__33))))))
   | _ -> failwith "DT: impossible branch"
 ))
-# 373 "Vuna/Compiler/Loader/Fixity.vuna"
+# 381 "Vuna/Compiler/Loader/Fixity.vuna"
 and v_reorderRecPatField = (fun (mc0 : t_FixityTable) (mc1 : (string, Frontend_dAst.t_Pat) B_dData_dPair.t_Pair) -> (match mc1 with
   | { B_dData_dPair.f_Pair_first = dtb__34; B_dData_dPair.f_Pair_second = dtb__35 } -> ((Base_dCommon.v_bind ((v_reorderPattern mc0) dtb__35)) (fun (p2 : Frontend_dAst.t_Pat) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = dtb__34; B_dData_dPair.f_Pair_second = p2 }))))
   | _ -> failwith "DT: impossible branch"
@@ -141,9 +141,9 @@ and v_reorderNonChain = (fun (mc0 : t_FixityTable) (mc1 : Frontend_dAst.t_Expr) 
   | Frontend_dAst.C_Expr_ERecord (dtb__63, dtb__64, dtb__65) -> ((Base_dCommon.v_bind ((v_reorderFields mc0) dtb__64)) (fun (fs : (string, Frontend_dAst.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC ((Frontend_dAst.C_Expr_ERecord (dtb__63, fs, dtb__65))))))
   | Frontend_dAst.C_Expr_EField (dtb__66, dtb__67, dtb__68) -> ((Base_dCommon.v_bind ((v_reorderExpr mc0) dtb__66)) (fun (b : Frontend_dAst.t_Expr) -> (Base_dDiag.C_Check_OkC ((Frontend_dAst.C_Expr_EField (b, dtb__67, dtb__68))))))
   | Frontend_dAst.C_Expr_EIf (dtb__69, dtb__70, dtb__71, dtb__72) -> ((Base_dCommon.v_bind ((v_reorderExpr mc0) dtb__69)) (fun (c2 : Frontend_dAst.t_Expr) -> ((Base_dCommon.v_bind ((v_reorderExpr mc0) dtb__70)) (fun (th2 : Frontend_dAst.t_Expr) -> ((Base_dCommon.v_bind ((v_reorderExpr mc0) dtb__71)) (fun (el2 : Frontend_dAst.t_Expr) -> (Base_dDiag.C_Check_OkC ((Frontend_dAst.C_Expr_EIf (c2, th2, el2, dtb__72))))))))))
-  | Frontend_dAst.C_Expr_ECase (dtb__73, dtb__74, dtb__75) -> ((Base_dCommon.v_bind ((v_reorderExpr mc0) dtb__73)) (fun (scrut2 : Frontend_dAst.t_Expr) -> ((Base_dCommon.v_bind ((v_reorderAlts mc0) dtb__74)) (fun (alts2 : (Frontend_dAst.t_Pat, Frontend_dAst.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC ((Frontend_dAst.C_Expr_ECase (scrut2, alts2, dtb__75))))))))
-  | Frontend_dAst.C_Expr_ELocalFun (dtb__76, dtb__77) -> ((Base_dCommon.v_bind ((v_reorderClauses mc0) dtb__76)) (fun (cs : (Frontend_dAst.t_Pat B_dData_dList.t_List, Frontend_dAst.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC ((Frontend_dAst.C_Expr_ELocalFun (cs, dtb__77))))))
-  | Frontend_dAst.C_Expr_ELet (dtb__78, dtb__79, dtb__80, dtb__81) -> ((Base_dCommon.v_bind ((v_reorderBinds mc0) dtb__78)) (fun (binds2 : (Frontend_dAst.t_Pat, Frontend_dAst.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) -> ((Base_dCommon.v_bind ((v_reorderExpr mc0) dtb__79)) (fun (body2 : Frontend_dAst.t_Expr) -> (Base_dDiag.C_Check_OkC ((Frontend_dAst.C_Expr_ELet (binds2, body2, dtb__80, dtb__81))))))))
+  | Frontend_dAst.C_Expr_ECase (dtb__73, dtb__74, dtb__75) -> ((Base_dCommon.v_bind ((v_reorderExpr mc0) dtb__73)) (fun (scrut2 : Frontend_dAst.t_Expr) -> ((Base_dCommon.v_bind ((v_reorderAlts mc0) dtb__74)) (fun (alts2 : Frontend_dAst.t_Alt B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC ((Frontend_dAst.C_Expr_ECase (scrut2, alts2, dtb__75))))))))
+  | Frontend_dAst.C_Expr_ELocalFun (dtb__76, dtb__77) -> ((Base_dCommon.v_bind ((v_reorderClauses mc0) dtb__76)) (fun (cs : Frontend_dAst.t_LocalClause B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC ((Frontend_dAst.C_Expr_ELocalFun (cs, dtb__77))))))
+  | Frontend_dAst.C_Expr_ELet (dtb__78, dtb__79, dtb__80, dtb__81) -> ((Base_dCommon.v_bind ((v_reorderBinds mc0) dtb__78)) (fun (binds2 : Frontend_dAst.t_Binding B_dData_dList.t_List) -> ((Base_dCommon.v_bind ((v_reorderExpr mc0) dtb__79)) (fun (body2 : Frontend_dAst.t_Expr) -> (Base_dDiag.C_Check_OkC ((Frontend_dAst.C_Expr_ELet (binds2, body2, dtb__80, dtb__81))))))))
   | Frontend_dAst.C_Expr_EPi (dtb__82, dtb__83, dtb__84, dtb__85, dtb__86, dtb__87) -> ((Base_dCommon.v_bind ((v_reorderExpr mc0) dtb__85)) (fun (dom2 : Frontend_dAst.t_Expr) -> ((Base_dCommon.v_bind ((v_reorderExpr mc0) dtb__86)) (fun (cod2 : Frontend_dAst.t_Expr) -> (Base_dDiag.C_Check_OkC ((Frontend_dAst.C_Expr_EPi (dtb__82, dtb__83, dtb__84, dom2, cod2, dtb__87))))))))
   | Frontend_dAst.C_Expr_EApp (dtb__88, dtb__89, dtb__90) -> (match dtb__88 with
   | Frontend_dAst.C_Expr_EParen (dtb__91, dtb__92) -> (match dtb__91 with
@@ -199,85 +199,82 @@ and v_reorderInterpParts = (fun (mc0 : t_FixityTable) (mc1 : Frontend_dAst.t_Int
   | _ -> failwith "DT: impossible branch"
 ))
 # 309 "Vuna/Compiler/Loader/Fixity.vuna"
-and v_reorderBinds = (fun (t : t_FixityTable) (binds : (Frontend_dAst.t_Pat, Frontend_dAst.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) -> ((Base_dCommon.v_traverse (fun (v : (Frontend_dAst.t_Pat, Frontend_dAst.t_Expr) B_dData_dPair.t_Pair) -> ((v_reorderBind t) v))) binds))
+and v_reorderBinds = (fun (t : t_FixityTable) (binds : Frontend_dAst.t_Binding B_dData_dList.t_List) -> ((Base_dCommon.v_traverse (fun (v : Frontend_dAst.t_Binding) -> ((v_reorderBind t) v))) binds))
 # 312 "Vuna/Compiler/Loader/Fixity.vuna"
-and v_reorderBind = (fun (mc0 : t_FixityTable) (mc1 : (Frontend_dAst.t_Pat, Frontend_dAst.t_Expr) B_dData_dPair.t_Pair) -> (match mc1 with
-  | { B_dData_dPair.f_Pair_first = dtb__146; B_dData_dPair.f_Pair_second = dtb__147 } -> ((Base_dCommon.v_bind ((v_reorderPattern mc0) dtb__146)) (fun (p2 : Frontend_dAst.t_Pat) -> ((Base_dCommon.v_bind ((v_reorderExpr mc0) dtb__147)) (fun (v2 : Frontend_dAst.t_Expr) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = p2; B_dData_dPair.f_Pair_second = v2 }))))))
+and v_reorderBind = (fun (t : t_FixityTable) (binding : Frontend_dAst.t_Binding) -> ((Base_dCommon.v_bind ((v_reorderPattern t) (binding).Frontend_dAst.f_Binding_bindPat)) (fun (p2 : Frontend_dAst.t_Pat) -> ((Base_dCommon.v_bind ((v_reorderBindingSig t) (binding).Frontend_dAst.f_Binding_bindSig)) (fun (sig2 : Frontend_dAst.t_BindingSig B_dData_dMaybe.t_Maybe) -> ((Base_dCommon.v_bind ((v_reorderExpr t) (binding).Frontend_dAst.f_Binding_bindValue)) (fun (v2 : Frontend_dAst.t_Expr) -> (Base_dDiag.C_Check_OkC ({ Frontend_dAst.f_Binding_bindPat = p2; Frontend_dAst.f_Binding_bindValue = v2; Frontend_dAst.f_Binding_bindSig = sig2; Frontend_dAst.f_Binding_bindRef = (binding).Frontend_dAst.f_Binding_bindRef })))))))))
+# 319 "Vuna/Compiler/Loader/Fixity.vuna"
+and v_reorderBindingSig = (fun (mc0 : t_FixityTable) (mc1 : Frontend_dAst.t_BindingSig B_dData_dMaybe.t_Maybe) -> (match mc1 with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__146) -> ((Base_dCommon.v_bind ((v_reorderExpr mc0) (dtb__146).Frontend_dAst.f_BindingSig_sigType)) (fun (ty2 : Frontend_dAst.t_Expr) -> (Base_dDiag.C_Check_OkC ((B_dData_dMaybe.C_Maybe_Just ({ Frontend_dAst.f_BindingSig_sigType = ty2; Frontend_dAst.f_BindingSig_sigRef = (dtb__146).Frontend_dAst.f_BindingSig_sigRef }))))))
+  | B_dData_dMaybe.C_Maybe_Nothing -> (Base_dDiag.C_Check_OkC (B_dData_dMaybe.C_Maybe_Nothing))
   | _ -> failwith "DT: impossible branch"
 ))
-# 318 "Vuna/Compiler/Loader/Fixity.vuna"
+# 326 "Vuna/Compiler/Loader/Fixity.vuna"
 and v_reorderFields = (fun (t : t_FixityTable) (fields : (string, Frontend_dAst.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) -> ((Base_dCommon.v_traverse (fun (v : (string, Frontend_dAst.t_Expr) B_dData_dPair.t_Pair) -> ((v_reorderField t) v))) fields))
-# 321 "Vuna/Compiler/Loader/Fixity.vuna"
-and v_reorderField = (fun (mc0 : t_FixityTable) (mc1 : (string, Frontend_dAst.t_Expr) B_dData_dPair.t_Pair) -> (match mc1 with
-  | { B_dData_dPair.f_Pair_first = dtb__148; B_dData_dPair.f_Pair_second = dtb__149 } -> ((Base_dCommon.v_bind ((v_reorderExpr mc0) dtb__149)) (fun (v2 : Frontend_dAst.t_Expr) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = dtb__148; B_dData_dPair.f_Pair_second = v2 }))))
-  | _ -> failwith "DT: impossible branch"
-))
-# 325 "Vuna/Compiler/Loader/Fixity.vuna"
-and v_reorderClauses = (fun (t : t_FixityTable) (clauses : (Frontend_dAst.t_Pat B_dData_dList.t_List, Frontend_dAst.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) -> ((Base_dCommon.v_traverse (fun (v : (Frontend_dAst.t_Pat B_dData_dList.t_List, Frontend_dAst.t_Expr) B_dData_dPair.t_Pair) -> ((v_reorderClause t) v))) clauses))
 # 329 "Vuna/Compiler/Loader/Fixity.vuna"
-and v_reorderAlts = (fun (t : t_FixityTable) (alts : (Frontend_dAst.t_Pat, Frontend_dAst.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) -> ((Base_dCommon.v_traverse (fun (a : (Frontend_dAst.t_Pat, Frontend_dAst.t_Expr) B_dData_dPair.t_Pair) -> ((v_reorderAlt t) a))) alts))
-# 332 "Vuna/Compiler/Loader/Fixity.vuna"
-and v_reorderAlt = (fun (mc0 : t_FixityTable) (mc1 : (Frontend_dAst.t_Pat, Frontend_dAst.t_Expr) B_dData_dPair.t_Pair) -> (match mc1 with
-  | { B_dData_dPair.f_Pair_first = dtb__150; B_dData_dPair.f_Pair_second = dtb__151 } -> ((Base_dCommon.v_bind ((v_reorderPattern mc0) dtb__150)) (fun (p2 : Frontend_dAst.t_Pat) -> ((Base_dCommon.v_bind ((v_reorderExpr mc0) dtb__151)) (fun (b2 : Frontend_dAst.t_Expr) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = p2; B_dData_dPair.f_Pair_second = b2 }))))))
+and v_reorderField = (fun (mc0 : t_FixityTable) (mc1 : (string, Frontend_dAst.t_Expr) B_dData_dPair.t_Pair) -> (match mc1 with
+  | { B_dData_dPair.f_Pair_first = dtb__147; B_dData_dPair.f_Pair_second = dtb__148 } -> ((Base_dCommon.v_bind ((v_reorderExpr mc0) dtb__148)) (fun (v2 : Frontend_dAst.t_Expr) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = dtb__147; B_dData_dPair.f_Pair_second = v2 }))))
   | _ -> failwith "DT: impossible branch"
 ))
-# 338 "Vuna/Compiler/Loader/Fixity.vuna"
-and v_reorderClause = (fun (mc0 : t_FixityTable) (mc1 : (Frontend_dAst.t_Pat B_dData_dList.t_List, Frontend_dAst.t_Expr) B_dData_dPair.t_Pair) -> (match mc1 with
-  | { B_dData_dPair.f_Pair_first = dtb__152; B_dData_dPair.f_Pair_second = dtb__153 } -> ((Base_dCommon.v_bind ((Base_dCommon.v_traverse (fun (pat : Frontend_dAst.t_Pat) -> ((v_reorderPattern mc0) pat))) dtb__152)) (fun (pats2 : Frontend_dAst.t_Pat B_dData_dList.t_List) -> ((Base_dCommon.v_bind ((v_reorderExpr mc0) dtb__153)) (fun (b2 : Frontend_dAst.t_Expr) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = pats2; B_dData_dPair.f_Pair_second = b2 }))))))
-  | _ -> failwith "DT: impossible branch"
-))
-# 344 "Vuna/Compiler/Loader/Fixity.vuna"
+# 333 "Vuna/Compiler/Loader/Fixity.vuna"
+and v_reorderClauses = (fun (t : t_FixityTable) (clauses : Frontend_dAst.t_LocalClause B_dData_dList.t_List) -> ((Base_dCommon.v_traverse (fun (v : Frontend_dAst.t_LocalClause) -> ((v_reorderClause t) v))) clauses))
+# 337 "Vuna/Compiler/Loader/Fixity.vuna"
+and v_reorderAlts = (fun (t : t_FixityTable) (alts : Frontend_dAst.t_Alt B_dData_dList.t_List) -> ((Base_dCommon.v_traverse (fun (a : Frontend_dAst.t_Alt) -> ((v_reorderAlt t) a))) alts))
+# 340 "Vuna/Compiler/Loader/Fixity.vuna"
+and v_reorderAlt = (fun (t : t_FixityTable) (alt : Frontend_dAst.t_Alt) -> ((Base_dCommon.v_bind ((v_reorderPattern t) (alt).Frontend_dAst.f_Alt_altPat)) (fun (p2 : Frontend_dAst.t_Pat) -> ((Base_dCommon.v_bind ((v_reorderExpr t) (alt).Frontend_dAst.f_Alt_altBody)) (fun (b2 : Frontend_dAst.t_Expr) -> (Base_dDiag.C_Check_OkC ({ Frontend_dAst.f_Alt_altPat = p2; Frontend_dAst.f_Alt_altBody = b2; Frontend_dAst.f_Alt_altRef = (alt).Frontend_dAst.f_Alt_altRef })))))))
+# 346 "Vuna/Compiler/Loader/Fixity.vuna"
+and v_reorderClause = (fun (t : t_FixityTable) (clause : Frontend_dAst.t_LocalClause) -> ((Base_dCommon.v_bind ((Base_dCommon.v_traverse (fun (pat : Frontend_dAst.t_Pat) -> ((v_reorderPattern t) pat))) (clause).Frontend_dAst.f_LocalClause_lcPats)) (fun (pats2 : Frontend_dAst.t_Pat B_dData_dList.t_List) -> ((Base_dCommon.v_bind ((v_reorderExpr t) (clause).Frontend_dAst.f_LocalClause_lcBody)) (fun (b2 : Frontend_dAst.t_Expr) -> (Base_dDiag.C_Check_OkC ({ Frontend_dAst.f_LocalClause_lcPats = pats2; Frontend_dAst.f_LocalClause_lcBody = b2; Frontend_dAst.f_LocalClause_lcRef = (clause).Frontend_dAst.f_LocalClause_lcRef; Frontend_dAst.f_LocalClause_lcHead = (clause).Frontend_dAst.f_LocalClause_lcHead })))))))
+# 352 "Vuna/Compiler/Loader/Fixity.vuna"
 and v_reorderDoStmt = (fun (mc0 : t_FixityTable) (mc1 : Frontend_dAst.t_DoStmt) -> (match mc1 with
-  | Frontend_dAst.C_DoStmt_DLet (dtb__154, dtb__155) -> ((Base_dCommon.v_bind ((v_reorderBinds mc0) dtb__154)) (fun (b2 : (Frontend_dAst.t_Pat, Frontend_dAst.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC ((Frontend_dAst.C_DoStmt_DLet (b2, dtb__155))))))
-  | Frontend_dAst.C_DoStmt_DExpr (dtb__156, dtb__157) -> ((Base_dCommon.v_bind ((v_reorderExpr mc0) dtb__156)) (fun (e2 : Frontend_dAst.t_Expr) -> (Base_dDiag.C_Check_OkC ((Frontend_dAst.C_DoStmt_DExpr (e2, dtb__157))))))
-  | Frontend_dAst.C_DoStmt_DBind (dtb__158, dtb__159, dtb__160) -> ((Base_dCommon.v_bind ((v_reorderPattern mc0) dtb__158)) (fun (p2 : Frontend_dAst.t_Pat) -> ((Base_dCommon.v_bind ((v_reorderExpr mc0) dtb__159)) (fun (e2 : Frontend_dAst.t_Expr) -> (Base_dDiag.C_Check_OkC ((Frontend_dAst.C_DoStmt_DBind (p2, e2, dtb__160))))))))
+  | Frontend_dAst.C_DoStmt_DLet (dtb__149, dtb__150) -> ((Base_dCommon.v_bind ((v_reorderBinds mc0) dtb__149)) (fun (b2 : Frontend_dAst.t_Binding B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC ((Frontend_dAst.C_DoStmt_DLet (b2, dtb__150))))))
+  | Frontend_dAst.C_DoStmt_DExpr (dtb__151, dtb__152) -> ((Base_dCommon.v_bind ((v_reorderExpr mc0) dtb__151)) (fun (e2 : Frontend_dAst.t_Expr) -> (Base_dDiag.C_Check_OkC ((Frontend_dAst.C_DoStmt_DExpr (e2, dtb__152))))))
+  | Frontend_dAst.C_DoStmt_DBind (dtb__153, dtb__154, dtb__155) -> ((Base_dCommon.v_bind ((v_reorderPattern mc0) dtb__153)) (fun (p2 : Frontend_dAst.t_Pat) -> ((Base_dCommon.v_bind ((v_reorderExpr mc0) dtb__154)) (fun (e2 : Frontend_dAst.t_Expr) -> (Base_dDiag.C_Check_OkC ((Frontend_dAst.C_DoStmt_DBind (p2, e2, dtb__155))))))))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 409 "Vuna/Compiler/Loader/Fixity.vuna"
+# 417 "Vuna/Compiler/Loader/Fixity.vuna"
 let v_reorderTraitParam = (fun (t : t_FixityTable) (p : Frontend_dAst.t_TraitParam) -> (match (p).Frontend_dAst.f_TraitParam_traitParamKind with
   | B_dData_dMaybe.C_Maybe_Nothing -> (Base_dDiag.C_Check_OkC (p))
-  | B_dData_dMaybe.C_Maybe_Just (dtb__161) -> ((Base_dCommon.v_bind ((v_reorderExpr t) dtb__161)) (fun (k2 : Frontend_dAst.t_Expr) -> (Base_dDiag.C_Check_OkC ({ Frontend_dAst.f_TraitParam_traitParamName = (p).Frontend_dAst.f_TraitParam_traitParamName; Frontend_dAst.f_TraitParam_traitParamKind = (B_dData_dMaybe.C_Maybe_Just (k2)) }))))
-  | _ -> failwith "DT: impossible branch"
-))
-
-# 418 "Vuna/Compiler/Loader/Fixity.vuna"
-let v_reorderCtor = (fun (mc0 : t_FixityTable) (mc1 : Frontend_dAst.t_Ctor) -> (match mc1 with
-  | { Frontend_dAst.f_Ctor_ctorName = dtb__162; Frontend_dAst.f_Ctor_ctorType = dtb__163; Frontend_dAst.f_Ctor_ctorArity = dtb__164; Frontend_dAst.f_Ctor_ctorRef = dtb__165 } -> ((Base_dCommon.v_bind ((v_reorderExpr mc0) dtb__163)) (fun (ty2 : Frontend_dAst.t_Expr) -> (Base_dDiag.C_Check_OkC ({ Frontend_dAst.f_Ctor_ctorName = dtb__162; Frontend_dAst.f_Ctor_ctorType = ty2; Frontend_dAst.f_Ctor_ctorArity = dtb__164; Frontend_dAst.f_Ctor_ctorRef = dtb__165 }))))
-  | _ -> failwith "DT: impossible branch"
-))
-
-# 422 "Vuna/Compiler/Loader/Fixity.vuna"
-let v_reorderRecordField = (fun (mc0 : t_FixityTable) (mc1 : Frontend_dAst.t_Field) -> (match mc1 with
-  | { Frontend_dAst.f_Field_fieldName = dtb__166; Frontend_dAst.f_Field_fieldType = dtb__167; Frontend_dAst.f_Field_fieldRef = dtb__168 } -> ((Base_dCommon.v_bind ((v_reorderExpr mc0) dtb__167)) (fun (ty2 : Frontend_dAst.t_Expr) -> (Base_dDiag.C_Check_OkC ({ Frontend_dAst.f_Field_fieldName = dtb__166; Frontend_dAst.f_Field_fieldType = ty2; Frontend_dAst.f_Field_fieldRef = dtb__168 }))))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__156) -> ((Base_dCommon.v_bind ((v_reorderExpr t) dtb__156)) (fun (k2 : Frontend_dAst.t_Expr) -> (Base_dDiag.C_Check_OkC ({ Frontend_dAst.f_TraitParam_traitParamName = (p).Frontend_dAst.f_TraitParam_traitParamName; Frontend_dAst.f_TraitParam_traitParamKind = (B_dData_dMaybe.C_Maybe_Just (k2)) }))))
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 426 "Vuna/Compiler/Loader/Fixity.vuna"
-let v_reorderTraitMethod = (fun (mc0 : t_FixityTable) (mc1 : Frontend_dAst.t_TraitMethod) -> (match mc1 with
-  | { Frontend_dAst.f_TraitMethod_traitMethodName = dtb__169; Frontend_dAst.f_TraitMethod_traitMethodType = dtb__170; Frontend_dAst.f_TraitMethod_traitMethodRef = dtb__171 } -> ((Base_dCommon.v_bind ((v_reorderExpr mc0) dtb__170)) (fun (ty2 : Frontend_dAst.t_Expr) -> (Base_dDiag.C_Check_OkC ({ Frontend_dAst.f_TraitMethod_traitMethodName = dtb__169; Frontend_dAst.f_TraitMethod_traitMethodType = ty2; Frontend_dAst.f_TraitMethod_traitMethodRef = dtb__171 }))))
+let v_reorderCtor = (fun (mc0 : t_FixityTable) (mc1 : Frontend_dAst.t_Ctor) -> (match mc1 with
+  | { Frontend_dAst.f_Ctor_ctorName = dtb__157; Frontend_dAst.f_Ctor_ctorType = dtb__158; Frontend_dAst.f_Ctor_ctorArity = dtb__159; Frontend_dAst.f_Ctor_ctorRef = dtb__160 } -> ((Base_dCommon.v_bind ((v_reorderExpr mc0) dtb__158)) (fun (ty2 : Frontend_dAst.t_Expr) -> (Base_dDiag.C_Check_OkC ({ Frontend_dAst.f_Ctor_ctorName = dtb__157; Frontend_dAst.f_Ctor_ctorType = ty2; Frontend_dAst.f_Ctor_ctorArity = dtb__159; Frontend_dAst.f_Ctor_ctorRef = dtb__160 }))))
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 430 "Vuna/Compiler/Loader/Fixity.vuna"
-let v_reorderInstanceMethodDecl = (fun (mc0 : t_FixityTable) (mc1 : Frontend_dAst.t_Decl) -> (match mc1 with
-  | Frontend_dAst.C_Decl_DFun (dtb__172, dtb__173, dtb__174, dtb__175) -> ((Base_dCommon.v_bind ((Base_dCommon.v_traverse (fun (p : Frontend_dAst.t_Pat) -> ((v_reorderPattern mc0) p))) dtb__173)) (fun (pats2 : Frontend_dAst.t_Pat B_dData_dList.t_List) -> ((Base_dCommon.v_bind ((v_reorderExpr mc0) dtb__174)) (fun (b2 : Frontend_dAst.t_Expr) -> (Base_dDiag.C_Check_OkC ((Frontend_dAst.C_Decl_DFun (dtb__172, pats2, b2, dtb__175))))))))
-  | Frontend_dAst.C_Decl_DSig (dtb__176, dtb__177, dtb__178, dtb__179) -> ((Base_dCommon.v_bind ((Base_dCommon.v_traverse (fun (e : Frontend_dAst.t_Expr) -> ((v_reorderExpr mc0) e))) dtb__177)) (fun (ctx2 : Frontend_dAst.t_Expr B_dData_dList.t_List) -> ((Base_dCommon.v_bind ((v_reorderExpr mc0) dtb__178)) (fun (ty2 : Frontend_dAst.t_Expr) -> (Base_dDiag.C_Check_OkC ((Frontend_dAst.C_Decl_DSig (dtb__176, ctx2, ty2, dtb__179))))))))
-  | _ -> (Base_dDiag.C_Check_OkC (mc1))
-))
-
-# 378 "Vuna/Compiler/Loader/Fixity.vuna"
-let v_reorderDecl = (fun (mc0 : t_FixityTable) (mc1 : Frontend_dAst.t_Decl) -> (match mc1 with
-  | Frontend_dAst.C_Decl_DInstance (dtb__180, dtb__181, dtb__182, dtb__183) -> ((Base_dCommon.v_bind ((Base_dCommon.v_traverse (fun (e : Frontend_dAst.t_Expr) -> ((v_reorderExpr mc0) e))) dtb__180)) (fun (ctx2 : Frontend_dAst.t_Expr B_dData_dList.t_List) -> ((Base_dCommon.v_bind ((v_reorderExpr mc0) dtb__181)) (fun (head2 : Frontend_dAst.t_Expr) -> ((Base_dCommon.v_bind ((Base_dCommon.v_traverse (fun (v : Frontend_dAst.t_Decl) -> ((v_reorderInstanceMethodDecl mc0) v))) dtb__182)) (fun (ms : Frontend_dAst.t_Decl B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC ((Frontend_dAst.C_Decl_DInstance (ctx2, head2, ms, dtb__183))))))))))
-  | Frontend_dAst.C_Decl_DTrait (dtb__184, dtb__185, dtb__186, dtb__187, dtb__188) -> ((Base_dCommon.v_bind ((Base_dCommon.v_traverse (fun (p : Frontend_dAst.t_TraitParam) -> ((v_reorderTraitParam mc0) p))) dtb__185)) (fun (ps : Frontend_dAst.t_TraitParam B_dData_dList.t_List) -> ((Base_dCommon.v_bind ((Base_dCommon.v_traverse (fun (e : Frontend_dAst.t_Expr) -> ((v_reorderExpr mc0) e))) dtb__186)) (fun (ss : Frontend_dAst.t_Expr B_dData_dList.t_List) -> ((Base_dCommon.v_bind ((Base_dCommon.v_traverse (fun (v : Frontend_dAst.t_TraitMethod) -> ((v_reorderTraitMethod mc0) v))) dtb__187)) (fun (ms : Frontend_dAst.t_TraitMethod B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC ((Frontend_dAst.C_Decl_DTrait (dtb__184, ps, ss, ms, dtb__188))))))))))
-  | Frontend_dAst.C_Decl_DRecord (dtb__189, dtb__190, dtb__191, dtb__192, dtb__193, dtb__194, dtb__195, dtb__196) -> ((Base_dCommon.v_bind ((Base_dCommon.v_traverse (fun (v : Frontend_dAst.t_Field) -> ((v_reorderRecordField mc0) v))) dtb__191)) (fun (fs : Frontend_dAst.t_Field B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC ((Frontend_dAst.C_Decl_DRecord (dtb__189, dtb__190, fs, dtb__192, dtb__193, dtb__194, dtb__195, dtb__196))))))
-  | Frontend_dAst.C_Decl_DFun (dtb__197, dtb__198, dtb__199, dtb__200) -> ((Base_dCommon.v_bind ((Base_dCommon.v_traverse (fun (p : Frontend_dAst.t_Pat) -> ((v_reorderPattern mc0) p))) dtb__198)) (fun (pats2 : Frontend_dAst.t_Pat B_dData_dList.t_List) -> ((Base_dCommon.v_bind ((v_reorderExpr mc0) dtb__199)) (fun (b2 : Frontend_dAst.t_Expr) -> (Base_dDiag.C_Check_OkC ((Frontend_dAst.C_Decl_DFun (dtb__197, pats2, b2, dtb__200))))))))
-  | Frontend_dAst.C_Decl_DSig (dtb__201, dtb__202, dtb__203, dtb__204) -> ((Base_dCommon.v_bind ((Base_dCommon.v_traverse (fun (e : Frontend_dAst.t_Expr) -> ((v_reorderExpr mc0) e))) dtb__202)) (fun (ctx2 : Frontend_dAst.t_Expr B_dData_dList.t_List) -> ((Base_dCommon.v_bind ((v_reorderExpr mc0) dtb__203)) (fun (ty2 : Frontend_dAst.t_Expr) -> (Base_dDiag.C_Check_OkC ((Frontend_dAst.C_Decl_DSig (dtb__201, ctx2, ty2, dtb__204))))))))
-  | Frontend_dAst.C_Decl_DExtern (dtb__205, dtb__206, dtb__207, dtb__208) -> ((Base_dCommon.v_bind ((v_reorderExpr mc0) dtb__207)) (fun (ty2 : Frontend_dAst.t_Expr) -> (Base_dDiag.C_Check_OkC ((Frontend_dAst.C_Decl_DExtern (dtb__205, dtb__206, ty2, dtb__208))))))
-  | Frontend_dAst.C_Decl_DAxiom (dtb__209, dtb__210, dtb__211) -> ((Base_dCommon.v_bind ((v_reorderExpr mc0) dtb__210)) (fun (ty2 : Frontend_dAst.t_Expr) -> (Base_dDiag.C_Check_OkC ((Frontend_dAst.C_Decl_DAxiom (dtb__209, ty2, dtb__211))))))
-  | Frontend_dAst.C_Decl_DData (dtb__212, dtb__213, dtb__214, dtb__215, dtb__216, dtb__217, dtb__218, dtb__219, dtb__220) -> ((Base_dCommon.v_bind ((v_reorderExpr mc0) dtb__214)) (fun (k2 : Frontend_dAst.t_Expr) -> ((Base_dCommon.v_bind ((Base_dCommon.v_traverse (fun (c : Frontend_dAst.t_Ctor) -> ((v_reorderCtor mc0) c))) dtb__215)) (fun (cs : Frontend_dAst.t_Ctor B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC ((Frontend_dAst.C_Decl_DData (dtb__212, dtb__213, k2, cs, dtb__216, dtb__217, dtb__218, dtb__219, dtb__220))))))))
+let v_reorderRecordField = (fun (mc0 : t_FixityTable) (mc1 : Frontend_dAst.t_Field) -> (match mc1 with
+  | { Frontend_dAst.f_Field_fieldName = dtb__161; Frontend_dAst.f_Field_fieldType = dtb__162; Frontend_dAst.f_Field_fieldRef = dtb__163 } -> ((Base_dCommon.v_bind ((v_reorderExpr mc0) dtb__162)) (fun (ty2 : Frontend_dAst.t_Expr) -> (Base_dDiag.C_Check_OkC ({ Frontend_dAst.f_Field_fieldName = dtb__161; Frontend_dAst.f_Field_fieldType = ty2; Frontend_dAst.f_Field_fieldRef = dtb__163 }))))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 441 "Vuna/Compiler/Loader/Fixity.vuna"
+# 434 "Vuna/Compiler/Loader/Fixity.vuna"
+let v_reorderTraitMethod = (fun (mc0 : t_FixityTable) (mc1 : Frontend_dAst.t_TraitMethod) -> (match mc1 with
+  | { Frontend_dAst.f_TraitMethod_traitMethodName = dtb__164; Frontend_dAst.f_TraitMethod_traitMethodType = dtb__165; Frontend_dAst.f_TraitMethod_traitMethodRef = dtb__166 } -> ((Base_dCommon.v_bind ((v_reorderExpr mc0) dtb__165)) (fun (ty2 : Frontend_dAst.t_Expr) -> (Base_dDiag.C_Check_OkC ({ Frontend_dAst.f_TraitMethod_traitMethodName = dtb__164; Frontend_dAst.f_TraitMethod_traitMethodType = ty2; Frontend_dAst.f_TraitMethod_traitMethodRef = dtb__166 }))))
+  | _ -> failwith "DT: impossible branch"
+))
+
+# 438 "Vuna/Compiler/Loader/Fixity.vuna"
+let v_reorderInstanceMethodDecl = (fun (mc0 : t_FixityTable) (mc1 : Frontend_dAst.t_Decl) -> (match mc1 with
+  | Frontend_dAst.C_Decl_DFun (dtb__167, dtb__168, dtb__169, dtb__170) -> ((Base_dCommon.v_bind ((Base_dCommon.v_traverse (fun (p : Frontend_dAst.t_Pat) -> ((v_reorderPattern mc0) p))) dtb__168)) (fun (pats2 : Frontend_dAst.t_Pat B_dData_dList.t_List) -> ((Base_dCommon.v_bind ((v_reorderExpr mc0) dtb__169)) (fun (b2 : Frontend_dAst.t_Expr) -> (Base_dDiag.C_Check_OkC ((Frontend_dAst.C_Decl_DFun (dtb__167, pats2, b2, dtb__170))))))))
+  | Frontend_dAst.C_Decl_DSig (dtb__171, dtb__172, dtb__173, dtb__174) -> ((Base_dCommon.v_bind ((Base_dCommon.v_traverse (fun (e : Frontend_dAst.t_Expr) -> ((v_reorderExpr mc0) e))) dtb__172)) (fun (ctx2 : Frontend_dAst.t_Expr B_dData_dList.t_List) -> ((Base_dCommon.v_bind ((v_reorderExpr mc0) dtb__173)) (fun (ty2 : Frontend_dAst.t_Expr) -> (Base_dDiag.C_Check_OkC ((Frontend_dAst.C_Decl_DSig (dtb__171, ctx2, ty2, dtb__174))))))))
+  | _ -> (Base_dDiag.C_Check_OkC (mc1))
+))
+
+# 386 "Vuna/Compiler/Loader/Fixity.vuna"
+let v_reorderDecl = (fun (mc0 : t_FixityTable) (mc1 : Frontend_dAst.t_Decl) -> (match mc1 with
+  | Frontend_dAst.C_Decl_DInstance (dtb__175, dtb__176, dtb__177, dtb__178) -> ((Base_dCommon.v_bind ((Base_dCommon.v_traverse (fun (e : Frontend_dAst.t_Expr) -> ((v_reorderExpr mc0) e))) dtb__175)) (fun (ctx2 : Frontend_dAst.t_Expr B_dData_dList.t_List) -> ((Base_dCommon.v_bind ((v_reorderExpr mc0) dtb__176)) (fun (head2 : Frontend_dAst.t_Expr) -> ((Base_dCommon.v_bind ((Base_dCommon.v_traverse (fun (v : Frontend_dAst.t_Decl) -> ((v_reorderInstanceMethodDecl mc0) v))) dtb__177)) (fun (ms : Frontend_dAst.t_Decl B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC ((Frontend_dAst.C_Decl_DInstance (ctx2, head2, ms, dtb__178))))))))))
+  | Frontend_dAst.C_Decl_DTrait (dtb__179, dtb__180, dtb__181, dtb__182, dtb__183) -> ((Base_dCommon.v_bind ((Base_dCommon.v_traverse (fun (p : Frontend_dAst.t_TraitParam) -> ((v_reorderTraitParam mc0) p))) dtb__180)) (fun (ps : Frontend_dAst.t_TraitParam B_dData_dList.t_List) -> ((Base_dCommon.v_bind ((Base_dCommon.v_traverse (fun (e : Frontend_dAst.t_Expr) -> ((v_reorderExpr mc0) e))) dtb__181)) (fun (ss : Frontend_dAst.t_Expr B_dData_dList.t_List) -> ((Base_dCommon.v_bind ((Base_dCommon.v_traverse (fun (v : Frontend_dAst.t_TraitMethod) -> ((v_reorderTraitMethod mc0) v))) dtb__182)) (fun (ms : Frontend_dAst.t_TraitMethod B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC ((Frontend_dAst.C_Decl_DTrait (dtb__179, ps, ss, ms, dtb__183))))))))))
+  | Frontend_dAst.C_Decl_DRecord (dtb__184, dtb__185, dtb__186, dtb__187, dtb__188, dtb__189, dtb__190, dtb__191) -> ((Base_dCommon.v_bind ((Base_dCommon.v_traverse (fun (v : Frontend_dAst.t_Field) -> ((v_reorderRecordField mc0) v))) dtb__186)) (fun (fs : Frontend_dAst.t_Field B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC ((Frontend_dAst.C_Decl_DRecord (dtb__184, dtb__185, fs, dtb__187, dtb__188, dtb__189, dtb__190, dtb__191))))))
+  | Frontend_dAst.C_Decl_DFun (dtb__192, dtb__193, dtb__194, dtb__195) -> ((Base_dCommon.v_bind ((Base_dCommon.v_traverse (fun (p : Frontend_dAst.t_Pat) -> ((v_reorderPattern mc0) p))) dtb__193)) (fun (pats2 : Frontend_dAst.t_Pat B_dData_dList.t_List) -> ((Base_dCommon.v_bind ((v_reorderExpr mc0) dtb__194)) (fun (b2 : Frontend_dAst.t_Expr) -> (Base_dDiag.C_Check_OkC ((Frontend_dAst.C_Decl_DFun (dtb__192, pats2, b2, dtb__195))))))))
+  | Frontend_dAst.C_Decl_DSig (dtb__196, dtb__197, dtb__198, dtb__199) -> ((Base_dCommon.v_bind ((Base_dCommon.v_traverse (fun (e : Frontend_dAst.t_Expr) -> ((v_reorderExpr mc0) e))) dtb__197)) (fun (ctx2 : Frontend_dAst.t_Expr B_dData_dList.t_List) -> ((Base_dCommon.v_bind ((v_reorderExpr mc0) dtb__198)) (fun (ty2 : Frontend_dAst.t_Expr) -> (Base_dDiag.C_Check_OkC ((Frontend_dAst.C_Decl_DSig (dtb__196, ctx2, ty2, dtb__199))))))))
+  | Frontend_dAst.C_Decl_DExtern (dtb__200, dtb__201, dtb__202, dtb__203) -> ((Base_dCommon.v_bind ((v_reorderExpr mc0) dtb__202)) (fun (ty2 : Frontend_dAst.t_Expr) -> (Base_dDiag.C_Check_OkC ((Frontend_dAst.C_Decl_DExtern (dtb__200, dtb__201, ty2, dtb__203))))))
+  | Frontend_dAst.C_Decl_DAxiom (dtb__204, dtb__205, dtb__206) -> ((Base_dCommon.v_bind ((v_reorderExpr mc0) dtb__205)) (fun (ty2 : Frontend_dAst.t_Expr) -> (Base_dDiag.C_Check_OkC ((Frontend_dAst.C_Decl_DAxiom (dtb__204, ty2, dtb__206))))))
+  | Frontend_dAst.C_Decl_DData (dtb__207, dtb__208, dtb__209, dtb__210, dtb__211, dtb__212, dtb__213, dtb__214, dtb__215) -> ((Base_dCommon.v_bind ((v_reorderExpr mc0) dtb__209)) (fun (k2 : Frontend_dAst.t_Expr) -> ((Base_dCommon.v_bind ((Base_dCommon.v_traverse (fun (c : Frontend_dAst.t_Ctor) -> ((v_reorderCtor mc0) c))) dtb__210)) (fun (cs : Frontend_dAst.t_Ctor B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC ((Frontend_dAst.C_Decl_DData (dtb__207, dtb__208, k2, cs, dtb__211, dtb__212, dtb__213, dtb__214, dtb__215))))))))
+  | _ -> failwith "DT: impossible branch"
+))
+
+# 449 "Vuna/Compiler/Loader/Fixity.vuna"
 let v_reorderProgram = (fun (t : t_FixityTable) (decls : Frontend_dAst.t_Decl B_dData_dList.t_List) -> ((Base_dCommon.v_traverse (fun (v : Frontend_dAst.t_Decl) -> ((v_reorderDecl t) v))) decls))

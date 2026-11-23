@@ -122,89 +122,89 @@ let v_performSyntax = "@vuna@perform"
 # 187 "Vuna/Compiler/Frontend/Reserved.vuna"
 let v_isPerformSyntax = (fun (name : string) -> (name = v_performSyntax))
 
-# 199 "Vuna/Compiler/Frontend/Reserved.vuna"
+# 200 "Vuna/Compiler/Frontend/Reserved.vuna"
 let v_handleSyntax = "@vuna@handle"
 
-# 203 "Vuna/Compiler/Frontend/Reserved.vuna"
+# 204 "Vuna/Compiler/Frontend/Reserved.vuna"
 let v_isHandleSyntax = (fun (name : string) -> (name = v_handleSyntax))
 
-# 207 "Vuna/Compiler/Frontend/Reserved.vuna"
+# 208 "Vuna/Compiler/Frontend/Reserved.vuna"
 let v_handleNoRetSyntax = "@vuna@handle@noret"
 
-# 211 "Vuna/Compiler/Frontend/Reserved.vuna"
+# 212 "Vuna/Compiler/Frontend/Reserved.vuna"
 let v_isHandleNoRetSyntax = (fun (name : string) -> (name = v_handleNoRetSyntax))
 
-# 217 "Vuna/Compiler/Frontend/Reserved.vuna"
+# 218 "Vuna/Compiler/Frontend/Reserved.vuna"
 let v_rowAtSyntax = "@vuna@row@at"
 
-# 221 "Vuna/Compiler/Frontend/Reserved.vuna"
+# 222 "Vuna/Compiler/Frontend/Reserved.vuna"
 let v_isRowAtSyntax = (fun (name : string) -> (name = v_rowAtSyntax))
 
-# 228 "Vuna/Compiler/Frontend/Reserved.vuna"
+# 229 "Vuna/Compiler/Frontend/Reserved.vuna"
 let v_appAtSyntax = "@vuna@app@at"
 
-# 232 "Vuna/Compiler/Frontend/Reserved.vuna"
+# 233 "Vuna/Compiler/Frontend/Reserved.vuna"
 let v_isAppAtSyntax = (fun (name : string) -> (name = v_appAtSyntax))
 
-# 237 "Vuna/Compiler/Frontend/Reserved.vuna"
+# 238 "Vuna/Compiler/Frontend/Reserved.vuna"
 let v_instArgSyntax = "@vuna@inst@arg"
 
-# 241 "Vuna/Compiler/Frontend/Reserved.vuna"
+# 242 "Vuna/Compiler/Frontend/Reserved.vuna"
 let v_isInstArgSyntax = (fun (name : string) -> (name = v_instArgSyntax))
 
-# 253 "Vuna/Compiler/Frontend/Reserved.vuna"
+# 254 "Vuna/Compiler/Frontend/Reserved.vuna"
 let v_macroSyntaxPrefix = "@vuna@macro@"
 
-# 257 "Vuna/Compiler/Frontend/Reserved.vuna"
+# 258 "Vuna/Compiler/Frontend/Reserved.vuna"
 let v_macroSyntaxName = (fun (name : string) -> (v_macroSyntaxPrefix ^ name))
 
-# 261 "Vuna/Compiler/Frontend/Reserved.vuna"
+# 262 "Vuna/Compiler/Frontend/Reserved.vuna"
 let v_isMacroSyntaxName = (fun (name : string) -> ((B_dData_dString.v_startsWith v_macroSyntaxPrefix) name))
 
-# 265 "Vuna/Compiler/Frontend/Reserved.vuna"
+# 266 "Vuna/Compiler/Frontend/Reserved.vuna"
 let v_macroNameOf = (fun (name : string) -> (if (v_isMacroSyntaxName name) then (B_dData_dMaybe.C_Maybe_Just (((v_dropNamePrefix v_macroSyntaxPrefix) name))) else B_dData_dMaybe.C_Maybe_Nothing))
 
-# 270 "Vuna/Compiler/Frontend/Reserved.vuna"
+# 271 "Vuna/Compiler/Frontend/Reserved.vuna"
 let v_doBindSyntaxPrefix = "@vuna@do@bind@"
 
-# 274 "Vuna/Compiler/Frontend/Reserved.vuna"
+# 275 "Vuna/Compiler/Frontend/Reserved.vuna"
 let v_doIgnoreSyntaxPrefix = "@vuna@do@ignore@"
 
-# 278 "Vuna/Compiler/Frontend/Reserved.vuna"
+# 279 "Vuna/Compiler/Frontend/Reserved.vuna"
 let v_doBindSyntaxName = (fun (canonical : string) -> (v_doBindSyntaxPrefix ^ canonical))
 
-# 282 "Vuna/Compiler/Frontend/Reserved.vuna"
+# 283 "Vuna/Compiler/Frontend/Reserved.vuna"
 let v_doIgnoreSyntaxName = (fun (canonical : string) -> (v_doIgnoreSyntaxPrefix ^ canonical))
 
-# 286 "Vuna/Compiler/Frontend/Reserved.vuna"
+# 287 "Vuna/Compiler/Frontend/Reserved.vuna"
 let v_isDoBindSyntaxName = (fun (name : string) -> ((B_dData_dString.v_startsWith v_doBindSyntaxPrefix) name))
 
-# 290 "Vuna/Compiler/Frontend/Reserved.vuna"
+# 291 "Vuna/Compiler/Frontend/Reserved.vuna"
 let v_isDoIgnoreSyntaxName = (fun (name : string) -> ((B_dData_dString.v_startsWith v_doIgnoreSyntaxPrefix) name))
 
-# 295 "Vuna/Compiler/Frontend/Reserved.vuna"
+# 296 "Vuna/Compiler/Frontend/Reserved.vuna"
 let v_doSyntaxCanonical = (fun (name : string) -> (if (v_isDoBindSyntaxName name) then (B_dData_dMaybe.C_Maybe_Just (((v_dropNamePrefix v_doBindSyntaxPrefix) name))) else (if (v_isDoIgnoreSyntaxName name) then (B_dData_dMaybe.C_Maybe_Just (((v_dropNamePrefix v_doIgnoreSyntaxPrefix) name))) else B_dData_dMaybe.C_Maybe_Nothing)))
 
-# 308 "Vuna/Compiler/Frontend/Reserved.vuna"
+# 309 "Vuna/Compiler/Frontend/Reserved.vuna"
 let v_doPatternBinderName = "@vuna@do@pat"
 
-# 320 "Vuna/Compiler/Frontend/Reserved.vuna"
+# 321 "Vuna/Compiler/Frontend/Reserved.vuna"
 let v_synthNamePrefix = "#"
 
-# 324 "Vuna/Compiler/Frontend/Reserved.vuna"
+# 325 "Vuna/Compiler/Frontend/Reserved.vuna"
 let v_isSynthName = (fun (name : string) -> ((B_dData_dString.v_startsWith v_synthNamePrefix) name))
 
-# 328 "Vuna/Compiler/Frontend/Reserved.vuna"
+# 329 "Vuna/Compiler/Frontend/Reserved.vuna"
 let v_sectionBinderName = "#section"
 
-# 332 "Vuna/Compiler/Frontend/Reserved.vuna"
+# 333 "Vuna/Compiler/Frontend/Reserved.vuna"
 let v_dictBinderName = (fun (k : int) -> ("#dict" ^ (bi_strFromInt k)))
 
-# 336 "Vuna/Compiler/Frontend/Reserved.vuna"
+# 337 "Vuna/Compiler/Frontend/Reserved.vuna"
 let v_etaBinderName = (fun (i : int) -> ("#eta" ^ (bi_strFromInt i)))
 
-# 340 "Vuna/Compiler/Frontend/Reserved.vuna"
+# 341 "Vuna/Compiler/Frontend/Reserved.vuna"
 let v_teleProbeBinderName = "#tele"
 
-# 344 "Vuna/Compiler/Frontend/Reserved.vuna"
+# 345 "Vuna/Compiler/Frontend/Reserved.vuna"
 let v_ovProbeName = (fun (i : int) -> ("#ov" ^ (bi_strFromInt i)))
