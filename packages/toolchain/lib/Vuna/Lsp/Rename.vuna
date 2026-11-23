@@ -586,9 +586,9 @@ patLabelUse ctx startPos (Pair fname p) =
 
 -- | 内部：表达式是否是可作模块前缀的限定名（`Dep.name` / `A.B.name`，首段大写）。
 moduleLike : Expr -> Bool
-moduleLike (EVar n sp) = upperStart n
-moduleLike (EField base fname sp) = moduleLike base
-moduleLike (EParen inner sp) = moduleLike inner
+moduleLike (EVar n _) = upperStart n
+moduleLike (EField base fname _) = moduleLike base
+moduleLike (EParen inner _) = moduleLike inner
 moduleLike _ = False
 
 -- | 内部：`x.fname` 里 `fname` 的位置（目标为记录字段、或 `base` 像模块前缀时才取值）——
@@ -626,42 +626,42 @@ usesInExpr fuel ctx e =
     []
   else
     case e of
-      EVar n sp =>
+      EVar n _ =>
         let
           last = lastSegment n
           start = spanStart (exprSpan e)
         in if last /= ctx.ucName then [] else if useFieldKind ctx then if containsDot n then [lastSegmentPos start n last] else [] else if containsDot n then if moduleQualified n then [lastSegmentPos start n last] else [] else [start]
-      EInt n sp => []
-      EStr s sp => []
-      EFloat raw sp => []
-      EInterp multi parts sp => concatMap (interpUses (fuel - 1) ctx) parts
-      ELam ps body sp => usesInExpr (fuel - 1) ctx body
-      EApp f args sp => append (usesInExpr (fuel - 1) ctx f) (concatMap (usesInExpr (fuel - 1) ctx) args)
-      EPi n implicit qty dom cod sp => append (usesInExpr (fuel - 1) ctx dom) (usesInExpr (fuel - 1) ctx cod)
-      ELet binds body isRec sp => append (concatMap (bindUses (fuel - 1) ctx) binds) (usesInExpr (fuel - 1) ctx body)
-      ELocalFun clauses sp => concatMap (clauseUses (fuel - 1) ctx) clauses
-      ECase scrut alts sp => append (usesInExpr (fuel - 1) ctx scrut) (concatMap (altUses (fuel - 1) ctx) alts)
-      EIf c t f sp => append (usesInExpr (fuel - 1) ctx c) (append (usesInExpr (fuel - 1) ctx t) (usesInExpr (fuel - 1) ctx f))
-      EField base fname sp => append (efieldNamePos ctx base sp fname) (usesInExpr (fuel - 1) ctx base)
-      ERecord rname fields sp =>
+      EInt n _ => []
+      EStr s _ => []
+      EFloat raw _ => []
+      EInterp multi parts _ => concatMap (interpUses (fuel - 1) ctx) parts
+      ELam ps body _ => usesInExpr (fuel - 1) ctx body
+      EApp f args _ => append (usesInExpr (fuel - 1) ctx f) (concatMap (usesInExpr (fuel - 1) ctx) args)
+      EPi n implicit qty dom cod _ => append (usesInExpr (fuel - 1) ctx dom) (usesInExpr (fuel - 1) ctx cod)
+      ELet binds body isRec _ => append (concatMap (bindUses (fuel - 1) ctx) binds) (usesInExpr (fuel - 1) ctx body)
+      ELocalFun clauses _ => concatMap (clauseUses (fuel - 1) ctx) clauses
+      ECase scrut alts _ => append (usesInExpr (fuel - 1) ctx scrut) (concatMap (altUses (fuel - 1) ctx) alts)
+      EIf c t f _ => append (usesInExpr (fuel - 1) ctx c) (append (usesInExpr (fuel - 1) ctx t) (usesInExpr (fuel - 1) ctx f))
+      EField base fname sp => append (efieldNamePos ctx base (nodeRefSpan sp) fname) (usesInExpr (fuel - 1) ctx base)
+      ERecord rname fields _ =>
         let
           start = spanStart (exprSpan e)
           rnUses = if not (useFieldKind ctx) && rname == ctx.ucName then [start] else []
           labelUses = if useFieldKind ctx then recordLabelUses ctx start fields else []
         in append labelUses (append rnUses (concatMap (fieldValueUses (fuel - 1) ctx) fields))
-      ERecUpdate base fields sp =>
+      ERecUpdate base fields _ =>
         let
           start = spanStart (exprSpan e)
           labelUses = if useFieldKind ctx then recordLabelUses ctx start fields else []
         in append labelUses (append (usesInExpr (fuel - 1) ctx base) (concatMap (fieldValueUses (fuel - 1) ctx) fields))
-      EDo stmts sp => concatMap (stmtUses (fuel - 1) ctx) stmts
-      EAnn value ty sp => append (usesInExpr (fuel - 1) ctx value) (usesInExpr (fuel - 1) ctx ty)
-      EBacktick nm lhs rhs sp => append (usesInExpr (fuel - 1) ctx lhs) (usesInExpr (fuel - 1) ctx rhs)
-      ESectOp op sp => []
-      ESectL op inner sp => usesInExpr (fuel - 1) ctx inner
-      ESectR inner op sp => usesInExpr (fuel - 1) ctx inner
-      EInfix op lhs rhs sp => append (usesInExpr (fuel - 1) ctx lhs) (usesInExpr (fuel - 1) ctx rhs)
-      EParen inner sp => usesInExpr (fuel - 1) ctx inner
+      EDo stmts _ => concatMap (stmtUses (fuel - 1) ctx) stmts
+      EAnn value ty _ => append (usesInExpr (fuel - 1) ctx value) (usesInExpr (fuel - 1) ctx ty)
+      EBacktick nm lhs rhs _ => append (usesInExpr (fuel - 1) ctx lhs) (usesInExpr (fuel - 1) ctx rhs)
+      ESectOp op _ => []
+      ESectL op inner _ => usesInExpr (fuel - 1) ctx inner
+      ESectR inner op _ => usesInExpr (fuel - 1) ctx inner
+      EInfix op lhs rhs _ => append (usesInExpr (fuel - 1) ctx lhs) (usesInExpr (fuel - 1) ctx rhs)
+      EParen inner _ => usesInExpr (fuel - 1) ctx inner
 
 -- | 内部：模式里的使用位置——`PCon` 取构造子名，`PRecord` 取类型名与字段标签，
 -- `PVar` / 通配 / 字面量不产位置。
@@ -671,13 +671,13 @@ patUses fuel ctx pat =
     []
   else
     case pat of
-      PVar n sp => []
-      PAs n inner sp => patUses (fuel - 1) ctx inner
-      PWild sp => []
-      PCon n args sp => append (if not (useFieldKind ctx) && n == ctx.ucName then [spanStart (patSpan pat)] else []) (concatMap (patUses (fuel - 1) ctx) args)
-      PInt n sp => []
-      PStr s sp => []
-      PRecord rname fields sp =>
+      PVar n _ => []
+      PAs n inner _ => patUses (fuel - 1) ctx inner
+      PWild _ => []
+      PCon n args _ => append (if not (useFieldKind ctx) && n == ctx.ucName then [spanStart (patSpan pat)] else []) (concatMap (patUses (fuel - 1) ctx) args)
+      PInt n _ => []
+      PStr s _ => []
+      PRecord rname fields _ =>
         let
           start = spanStart (patSpan pat)
           rnUses = if not (useFieldKind ctx) && rname == ctx.ucName then [start] else []

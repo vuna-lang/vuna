@@ -230,7 +230,7 @@ sealDeclOf decls name =
     ty =
       case opaqueSigType name decls of
         Just t => t
-        Nothing => EVar "Type" sealSpan
+        Nothing => EVar "Type" (detachedNodeRef sealSpan)
   in DAxiom ("vuna_seal_" ++ name) ty (detachedNodeRef sealSpan)
 
 sealSpan : Span

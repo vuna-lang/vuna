@@ -200,7 +200,7 @@ isVarName name =
 -- | 内部：把 parse 出的表达式归一化成 `Ty`，同时累积变量编号状态；
 -- 不认识的形状返回 `Nothing`（整条签名因此不参与类型检索）。
 normExpr : List (Pair String String) -> NormState -> Expr -> Pair NormState (Maybe Ty)
-normExpr names st (EVar name sp) =
+normExpr names st (EVar name _) =
   if name == "_" then
     Pair st (Just TWild)
   else
@@ -213,8 +213,8 @@ normExpr names st (EVar name sp) =
           in Pair (firstOf paired) (Just (TVar (secondOf paired)))
         else
           Pair st (Just (TCon (canonName names name)))
-normExpr names st (EParen inner sp) = normExpr names st inner
-normExpr names st (EApp f args sp) =
+normExpr names st (EParen inner _) = normExpr names st inner
+normExpr names st (EApp f args _) =
   let
     pf = normExpr names st f
   in case secondOf pf of
@@ -231,7 +231,7 @@ normExpr names st (EApp f args sp) =
               _ => Pair (firstOf pargs) (Just (TApp tf targs))
           else
             Pair (firstOf pargs) (Just (TApp tf targs))
-normExpr names st (EPi name implicit _ dom cod sp) =
+normExpr names st (EPi name implicit _ dom cod _) =
   if implicit then
     let
       id = normNext st
@@ -250,7 +250,7 @@ normExpr names st (EPi name implicit _ dom cod sp) =
         case secondOf pc of
           Nothing => Pair (firstOf pc) Nothing
           Just tc => Pair (firstOf pc) (Just (TArr td tc))
-normExpr names st (EInfix op l r sp) =
+normExpr names st (EInfix op l r _) =
   if op == "->" then
     let
       pl = normExpr names st l
@@ -271,7 +271,7 @@ normExpr names st (EInfix op l r sp) =
         case secondOf pr of
           Nothing => Pair (firstOf pr) Nothing
           Just tr => Pair (firstOf pr) (Just (TApp (TCon op) [tl, tr]))
-normExpr names st (EBacktick nm l r sp) =
+normExpr names st (EBacktick nm l r _) =
   let
     pl = normExpr names st l
     pr = normExpr names (firstOf pl) r
@@ -281,9 +281,9 @@ normExpr names st (EBacktick nm l r sp) =
       case secondOf pr of
         Nothing => Pair (firstOf pr) Nothing
         Just tr => Pair (firstOf pr) (Just (TApp (TCon nm) [tl, tr]))
-normExpr names st (EInt n sp) = Pair st (Just (TCon (strFromInt n)))
-normExpr names st (EStr s sp) = Pair st (Just (TCon s))
-normExpr names st (EFloat raw sp) = Pair st (Just (TCon raw))
+normExpr names st (EInt n _) = Pair st (Just (TCon (strFromInt n)))
+normExpr names st (EStr s _) = Pair st (Just (TCon s))
+normExpr names st (EFloat raw _) = Pair st (Just (TCon raw))
 normExpr names st _ = Pair st Nothing
 
 -- | 内部：头是不是箭头构造子（`EApp` 形如 `(->) a b` 时折叠成 `TArr`）。

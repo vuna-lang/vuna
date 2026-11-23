@@ -154,7 +154,7 @@ patSpan (PRecord name fields sp) = sp
 export exprSpan : Expr -> Span
 exprSpan (EVar name sp) = sp
 exprSpan (EInfix op lhs rhs sp) = sp
-exprSpan (EParen inner sp) = exprSpan inner
+exprSpan (EParen inner _) = exprSpan inner
 exprSpan (EBacktick name lhs rhs sp) = sp
 exprSpan (ESectOp op sp) = sp
 exprSpan (ESectL op rhs sp) = sp
@@ -486,27 +486,28 @@ ofTraitMethod scope (Ast.TraitMethod name ty r) = TraitMethod name (ofExpr scope
 
 -- | 模式：引用名（构造子 / 记录）换成 RName；binder 名保持短名。
 ofPat : List String -> Ast.Pat -> Pat
-ofPat scope (Ast.PVar name sp) = PVar name sp
-ofPat scope (Ast.PAs name inner sp) = PAs name (ofPat scope inner) sp
-ofPat scope (Ast.PWild sp) = PWild sp
-ofPat scope (Ast.PCon name pats sp) = PCon (nameOf scope name) (map (ofPat scope) pats) sp
-ofPat scope (Ast.PInt n sp) = PInt n sp
-ofPat scope (Ast.PStr s sp) = PStr s sp
-ofPat scope (Ast.PRecord name fields sp) =
-  PRecord (nameOf scope name) (map (ofPatField scope) fields) sp
+ofPat scope (Ast.PVar name r) = PVar name (Ast.nodeRefSpan r)
+ofPat scope (Ast.PAs name inner r) = PAs name (ofPat scope inner) (Ast.nodeRefSpan r)
+ofPat scope (Ast.PWild r) = PWild (Ast.nodeRefSpan r)
+ofPat scope (Ast.PCon name pats r) =
+  PCon (nameOf scope name) (map (ofPat scope) pats) (Ast.nodeRefSpan r)
+ofPat scope (Ast.PInt n r) = PInt n (Ast.nodeRefSpan r)
+ofPat scope (Ast.PStr s r) = PStr s (Ast.nodeRefSpan r)
+ofPat scope (Ast.PRecord name fields r) =
+  PRecord (nameOf scope name) (map (ofPatField scope) fields) (Ast.nodeRefSpan r)
 
 ofPatField : List String -> Pair String Ast.Pat -> Pair String Pat
 ofPatField scope (Pair fname pat) = Pair fname (ofPat scope pat)
 
 -- | 模式引入的 binder 名。
 patBinders : Ast.Pat -> List String
-patBinders (Ast.PVar name sp) = [name]
-patBinders (Ast.PAs name inner sp) = name :: patBinders inner
-patBinders (Ast.PWild sp) = []
-patBinders (Ast.PCon name pats sp) = concatMap patBinders pats
-patBinders (Ast.PInt n sp) = []
-patBinders (Ast.PStr s sp) = []
-patBinders (Ast.PRecord name fields sp) = concatMap patFieldBinders fields
+patBinders (Ast.PVar name _) = [name]
+patBinders (Ast.PAs name inner _) = name :: patBinders inner
+patBinders (Ast.PWild _) = []
+patBinders (Ast.PCon name pats _) = concatMap patBinders pats
+patBinders (Ast.PInt n _) = []
+patBinders (Ast.PStr s _) = []
+patBinders (Ast.PRecord name fields _) = concatMap patFieldBinders fields
 
 bindersOfPats : List Ast.Pat -> List String
 bindersOfPats pats = concatMap patBinders pats
@@ -515,36 +516,41 @@ bindersOfPats pats = concatMap patBinders pats
 export ofExpr : List String -> Ast.Expr -> Expr
 ofExpr scope e =
   case e of
-    Ast.EVar name sp => EVar (nameOf scope name) sp
-    Ast.EInt n sp => EInt n sp
-    Ast.EStr s sp => EStr s sp
-    Ast.EFloat raw sp => EFloat raw sp
-    Ast.EInterp multi parts sp => EInterp multi (map (ofInterpPart scope) parts) sp
-    Ast.ELam params body sp => ELam params (ofExpr (append (map firstOf params) scope) body) sp
-    Ast.EApp fn args sp => EApp (ofExpr scope fn) (map (ofExpr scope) args) sp
+    Ast.EVar name sp => EVar (nameOf scope name) (Ast.nodeRefSpan sp)
+    Ast.EInt n sp => EInt n (Ast.nodeRefSpan sp)
+    Ast.EStr s sp => EStr s (Ast.nodeRefSpan sp)
+    Ast.EFloat raw sp => EFloat raw (Ast.nodeRefSpan sp)
+    Ast.EInterp multi parts sp =>
+      EInterp multi (map (ofInterpPart scope) parts) (Ast.nodeRefSpan sp)
+    Ast.ELam params body sp =>
+      ELam params (ofExpr (append (map firstOf params) scope) body) (Ast.nodeRefSpan sp)
+    Ast.EApp fn args sp => EApp (ofExpr scope fn) (map (ofExpr scope) args) (Ast.nodeRefSpan sp)
     Ast.EPi name implicit qty dom cod sp =>
-      EPi name implicit qty (ofExpr scope dom) (ofExpr (name :: scope) cod) sp
+      EPi name implicit qty (ofExpr scope dom) (ofExpr (name :: scope) cod) (Ast.nodeRefSpan sp)
     Ast.ELet binds body rec_ sp =>
       let
         bound = append (concatMap bindingBinders binds) scope
-      in ELet (map (ofBinding bound scope) binds) (ofExpr bound body) rec_ sp
-    Ast.ELocalFun clauses sp => ELocalFun (map (ofLocalClause scope) clauses) sp
-    Ast.ECase scrut alts sp => ECase (ofExpr scope scrut) (map (ofAlt scope) alts) sp
-    Ast.EIf c t f sp => EIf (ofExpr scope c) (ofExpr scope t) (ofExpr scope f) sp
-    Ast.EField base fname sp => EField (ofExpr scope base) fname sp
-    Ast.ERecord name fields sp => ERecord (nameOf scope name) (map (ofFieldValue scope) fields) sp
+      in ELet (map (ofBinding bound scope) binds) (ofExpr bound body) rec_ (Ast.nodeRefSpan sp)
+    Ast.ELocalFun clauses sp => ELocalFun (map (ofLocalClause scope) clauses) (Ast.nodeRefSpan sp)
+    Ast.ECase scrut alts sp =>
+      ECase (ofExpr scope scrut) (map (ofAlt scope) alts) (Ast.nodeRefSpan sp)
+    Ast.EIf c t f sp => EIf (ofExpr scope c) (ofExpr scope t) (ofExpr scope f) (Ast.nodeRefSpan sp)
+    Ast.EField base fname sp => EField (ofExpr scope base) fname (Ast.nodeRefSpan sp)
+    Ast.ERecord name fields sp =>
+      ERecord (nameOf scope name) (map (ofFieldValue scope) fields) (Ast.nodeRefSpan sp)
     Ast.ERecUpdate base fields sp =>
-      ERecUpdate (ofExpr scope base) (map (ofFieldValue scope) fields) sp
-    Ast.EDo stmts sp => EDo (ofStmts scope stmts) sp
+      ERecUpdate (ofExpr scope base) (map (ofFieldValue scope) fields) (Ast.nodeRefSpan sp)
+    Ast.EDo stmts sp => EDo (ofStmts scope stmts) (Ast.nodeRefSpan sp)
     -- 中缀 / 括号 / 反引号 / section 在 Resolve 之后不应出现；保留同形转换以免转换层
     -- 自身成为失败点（出现即由下游的 internal error 诊断）。
-    Ast.EInfix op l r sp => EInfix op (ofExpr scope l) (ofExpr scope r) sp
-    Ast.EParen inner sp => EParen (ofExpr scope inner) sp
-    Ast.EBacktick name l r sp => EBacktick name (ofExpr scope l) (ofExpr scope r) sp
-    Ast.ESectOp op sp => ESectOp op sp
-    Ast.ESectL op r sp => ESectL op (ofExpr scope r) sp
-    Ast.ESectR l op sp => ESectR (ofExpr scope l) op sp
-    Ast.EAnn value ty sp => EAnn (ofExpr scope value) (ofExpr scope ty) sp
+    Ast.EInfix op l r sp => EInfix op (ofExpr scope l) (ofExpr scope r) (Ast.nodeRefSpan sp)
+    Ast.EParen inner sp => EParen (ofExpr scope inner) (Ast.nodeRefSpan sp)
+    Ast.EBacktick name l r sp =>
+      EBacktick name (ofExpr scope l) (ofExpr scope r) (Ast.nodeRefSpan sp)
+    Ast.ESectOp op sp => ESectOp op (Ast.nodeRefSpan sp)
+    Ast.ESectL op r sp => ESectL op (ofExpr scope r) (Ast.nodeRefSpan sp)
+    Ast.ESectR l op sp => ESectR (ofExpr scope l) op (Ast.nodeRefSpan sp)
+    Ast.EAnn value ty sp => EAnn (ofExpr scope value) (ofExpr scope ty) (Ast.nodeRefSpan sp)
 
 ofBinding : List String -> List String -> Pair Ast.Pat Ast.Expr -> Pair Pat Expr
 ofBinding bound scope (Pair pat value) =

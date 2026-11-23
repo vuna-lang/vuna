@@ -20,21 +20,21 @@ bodySep value = if multilineExpr value then hard else line
 
 -- | 内部：表达式是否必须多行（块结构，或包含块结构的包装形式）。
 multilineExpr : Expr -> Bool
-multilineExpr (ELet binds body recFlag sp) = True
-multilineExpr (ECase scrut alts sp) = True
-multilineExpr (EDo stmts sp) = True
-multilineExpr (EIf c t el sp) = multilineExpr t || multilineExpr el
-multilineExpr (ELam ps body sp) = multilineExpr body
-multilineExpr (EApp fn args sp) = multilineExpr fn || anyMultiline args
-multilineExpr (EInfix op l r sp) = multilineExpr l || multilineExpr r
-multilineExpr (EBacktick name l r sp) = multilineExpr l || multilineExpr r
-multilineExpr (EParen inner sp) = multilineExpr inner
-multilineExpr (EField base f sp) = multilineExpr base
-multilineExpr (EAnn value ty sp) = multilineExpr value
-multilineExpr (ERecord name fields sp) = anyMultilineFields fields
-multilineExpr (ERecUpdate base fields sp) = multilineExpr base || anyMultilineFields fields
-multilineExpr (ESectL op inner sp) = multilineExpr inner
-multilineExpr (ESectR inner op sp) = multilineExpr inner
+multilineExpr (ELet binds body recFlag _) = True
+multilineExpr (ECase scrut alts _) = True
+multilineExpr (EDo stmts _) = True
+multilineExpr (EIf c t el _) = multilineExpr t || multilineExpr el
+multilineExpr (ELam ps body _) = multilineExpr body
+multilineExpr (EApp fn args _) = multilineExpr fn || anyMultiline args
+multilineExpr (EInfix op l r _) = multilineExpr l || multilineExpr r
+multilineExpr (EBacktick name l r _) = multilineExpr l || multilineExpr r
+multilineExpr (EParen inner _) = multilineExpr inner
+multilineExpr (EField base f _) = multilineExpr base
+multilineExpr (EAnn value ty _) = multilineExpr value
+multilineExpr (ERecord name fields _) = anyMultilineFields fields
+multilineExpr (ERecUpdate base fields _) = multilineExpr base || anyMultilineFields fields
+multilineExpr (ESectL op inner _) = multilineExpr inner
+multilineExpr (ESectR inner op _) = multilineExpr inner
 multilineExpr _ = False
 
 -- | 内部：列表里是否有必须多行的表达式。
@@ -179,7 +179,7 @@ patListElemsOf name pats =
 
 -- | 内部：模式若是列表形式则展开成元素列表。
 patListElems : Pat -> Maybe (List Pat)
-patListElems (PCon name pats sp) = patListElemsOf name pats
+patListElems (PCon name pats _) = patListElemsOf name pats
 patListElems _ = Nothing
 
 -- 显式结构递归：`map renderPatGo` 的 λ 没有 size 关系，SCT 会判成无下降环。
@@ -222,13 +222,13 @@ renderPatGo fuel pat =
     ""
   else
     case pat of
-      PVar name sp => name
-      PAs name inner sp => "${name}@${renderPatAtomGo (fuel - 1) inner}"
-      PWild sp => "_"
-      PInt n sp => strFromInt n
-      PStr s sp => renderStr s
-      PCon name pats sp => renderConPatGo (fuel - 1) name pats
-      PRecord name fields sp => renderRecPatGo (fuel - 1) name fields
+      PVar name _ => name
+      PAs name inner _ => "${name}@${renderPatAtomGo (fuel - 1) inner}"
+      PWild _ => "_"
+      PInt n _ => strFromInt n
+      PStr s _ => renderStr s
+      PCon name pats _ => renderConPatGo (fuel - 1) name pats
+      PRecord name fields _ => renderRecPatGo (fuel - 1) name fields
 
 -- | 内部：构造子模式（`[a, b]` 列表形式 / `(a, b)` 元组形式 / 中缀 cons / 前缀应用）。
 renderConPatGo : Int -> String -> List Pat -> String
@@ -262,7 +262,7 @@ renderPatConsTailGo fuel pat =
     ""
   else
     case pat of
-      PCon name pats sp =>
+      PCon name pats _ =>
         if consPatName name then
           case pats of
             [a, b] => "${renderPatAtomGo (fuel - 1) a} :: ${renderPatConsTailGo (fuel - 1) b}"
@@ -278,20 +278,20 @@ renderPatAtomGo fuel pat =
     ""
   else
     case pat of
-      PVar name sp => name
-      PAs name inner sp => "(${name}@${renderPatAtomGo (fuel - 1) inner})"
-      PWild sp => "_"
-      PInt n sp => strFromInt n
-      PStr s sp => renderStr s
-      PCon name [] sp => if isTupleUnitSyntax name then "()" else if name == "Nil" || isListNilSyntax name then "[]" else name
-      PCon name pats sp =>
+      PVar name _ => name
+      PAs name inner _ => "(${name}@${renderPatAtomGo (fuel - 1) inner})"
+      PWild _ => "_"
+      PInt n _ => strFromInt n
+      PStr s _ => renderStr s
+      PCon name [] _ => if isTupleUnitSyntax name then "()" else if name == "Nil" || isListNilSyntax name then "[]" else name
+      PCon name pats _ =>
         if isTupleUnitSyntax name then
           "()"
         else
           case tuplePatElemsOf name pats of
             Just elems => "(${renderPatElemsGo (fuel - 1) elems})"
             Nothing => "(${renderConPatGo (fuel - 1) name pats})"
-      PRecord name fields sp => "(${renderRecPatGo (fuel - 1) name fields})"
+      PRecord name fields _ => "(${renderRecPatGo (fuel - 1) name fields})"
 
 -- | 内部：记录模式 `Name { f = p }`（无字段时 `Name { }`）。
 renderRecPatGo : Int -> String -> List (Pair String Pat) -> String
@@ -310,7 +310,7 @@ renderRecPatFieldGo fuel (Pair fname pat) =
     ""
   else
     case pat of
-      PVar n sp => if n == fname then fname else "${fname} = ${renderPatGo (fuel - 1) pat}"
+      PVar n _ => if n == fname then fname else "${fname} = ${renderPatGo (fuel - 1) pat}"
       _ => "${fname} = ${renderPatGo (fuel - 1) pat}"
 
 -- ---------------------------------------------------------------
@@ -448,8 +448,8 @@ renderHandlePatsTail fuel [] = ""
 renderHandlePatsTail fuel (p :: rest) = " ${renderPatGo fuel p}${renderHandlePatsTail fuel rest}"
 
 listExprElems : Expr -> Maybe (List Expr)
-listExprElems (EVar name sp) = if name == "Nil" || isListNilSyntax name then Just [] else Nothing
-listExprElems (EApp (EVar name csp) ([a, rest]) sp) =
+listExprElems (EVar name _) = if name == "Nil" || isListNilSyntax name then Just [] else Nothing
+listExprElems (EApp (EVar name _) ([a, rest]) _) =
   if isListConsSyntax name then listExprCons a rest else Nothing
 listExprElems _ = Nothing
 
@@ -462,7 +462,7 @@ listExprCons a rest =
 
 -- 元组语法（parser 保留名）右嵌套展开成元素表；`Nothing` = 不是元组语法。
 tupleExprElems : Expr -> Maybe (List Expr)
-tupleExprElems (EApp (EVar name _) ([a, b]) sp) =
+tupleExprElems (EApp (EVar name _) ([a, b]) _) =
   if isTuplePairSyntax name then
     case tupleExprElems b of
       Just rest => Just (a :: rest)
@@ -473,7 +473,7 @@ tupleExprElems _ = Nothing
 
 -- 类型标注 `(e : T)` 的保留名展开。
 ascribeParts : Expr -> Maybe (Pair Expr Expr)
-ascribeParts (EApp (EVar name _) ([v, t]) sp) =
+ascribeParts (EApp (EVar name _) ([v, t]) _) =
   if isAscribeSyntax name then Just (Pair v t) else Nothing
 ascribeParts _ = Nothing
 
@@ -491,7 +491,7 @@ tuplePatElemsOf name pats =
     Nothing
 
 tuplePatElems : Pat -> Maybe (List Pat)
-tuplePatElems (PCon name pats sp) = tuplePatElemsOf name pats
+tuplePatElems (PCon name pats _) = tuplePatElemsOf name pats
 tuplePatElems _ = Nothing
 
 -- | 内部：单行渲染入口：能单行就给 `Just`，含块结构或 fuel 用尽给 `Nothing`。
@@ -506,16 +506,16 @@ inlinePrecGo fuel env minPrec e =
     Nothing
   else
     case e of
-      EVar name sp =>
+      EVar name _ =>
         case macroNameOf name of
           -- 内置宏标记回渲染成 `name!`（编码见 `Frontend/Ast.macroSyntaxName`）。
           Just macroName => Just "${macroName}!"
           Nothing => if isTupleUnitSyntax name then Just "()" else if name == "Nil" || isListNilSyntax name then Just "[]" else if isSymbolName name then Just "(${name})" else Just name
-      EInt n sp => Just (strFromInt n)
-      EStr s sp => Just (renderStr s)
-      EFloat raw sp => Just raw
+      EInt n _ => Just (strFromInt n)
+      EStr s _ => Just (renderStr s)
+      EFloat raw _ => Just raw
       -- 模板字面量。文本块转义；洞优先单行内联，洞需要块布局时放弃（交给块渲染）。
-      EInterp multi parts sp =>
+      EInterp multi parts _ =>
         case interpPiecesInline (fuel - 1) env multi parts of
           Nothing => Nothing
           Just pieces =>
@@ -523,7 +523,7 @@ inlinePrecGo fuel env minPrec e =
               body = concatStrings pieces
               text = interpOpen multi parts ++ body ++ interpClose multi
             in if textHasNewline text then Nothing else Just text
-      ELam ps body sp =>
+      ELam ps body _ =>
         case inlinePrecGo (fuel - 1) env 0 body of
           Nothing => Nothing
           Just b => Just (wrapPrec (minPrec > 0) "\\${joinComma (map firstOf ps)} => ${b}")
@@ -596,10 +596,10 @@ inlinePrecGo fuel env minPrec e =
                                           Nothing => Nothing
                                           Just ts => Just "(${vs} : ${ts})"
                                   Nothing => inlineAppGo (fuel - 1) env minPrec fn args
-      EPi name implicit qty dom cod sp => inlinePiGo (fuel - 1) env minPrec qty name implicit dom cod
-      ELet binds body rec_ sp => Nothing
-      ECase scrut alts sp => Nothing
-      EIf c t el sp =>
+      EPi name implicit qty dom cod _ => inlinePiGo (fuel - 1) env minPrec qty name implicit dom cod
+      ELet binds body rec_ _ => Nothing
+      ECase scrut alts _ => Nothing
+      EIf c t el _ =>
         case inlinePrecGo (fuel - 1) env 0 c of
           Nothing => Nothing
           Just cs =>
@@ -609,18 +609,18 @@ inlinePrecGo fuel env minPrec e =
                 case inlinePrecGo (fuel - 1) env 0 el of
                   Nothing => Nothing
                   Just es => Just (wrapPrec (minPrec > 0) "if ${cs} then ${ts} else ${es}")
-      EField base f sp =>
+      EField base f _ =>
         case inlineAtomGo (fuel - 1) env base of
           Nothing => Nothing
           Just b => Just "${b}.${f}"
-      ERecord name fields sp =>
+      ERecord name fields _ =>
         case inlineFieldsGo (fuel - 1) env fields of
           Nothing => Nothing
           Just ss =>
             case fields of
               [] => Just "${name} { }"
               _ => Just "${name} { ${joinComma ss} }"
-      ERecUpdate base fields sp =>
+      ERecUpdate base fields _ =>
         case inlinePrecGo (fuel - 1) env 0 base of
           Nothing => Nothing
           Just b =>
@@ -630,30 +630,30 @@ inlinePrecGo fuel env minPrec e =
                 case fields of
                   [] => Just "{ ${b} }"
                   _ => Just "{ ${b} | ${joinComma ss} }"
-      EDo stmts sp => Nothing
+      EDo stmts _ => Nothing
       -- 局部函数组只作为 let/where 绑定值出现，由 `renderLetBindingGo` 展开成多子句。
-      ELocalFun clauses sp => Nothing
+      ELocalFun clauses _ => Nothing
       -- 非 where 位置（例如 `let` 绑定值）的 `EAnn` 透明渲染内部表达式：
       -- 表达式位置没有 `: Ty` 语法，输出标注会让 fmt 产物无法重新 parse。
-      EAnn value ty sp => inlinePrecGo (fuel - 1) env minPrec value
+      EAnn value ty _ => inlinePrecGo (fuel - 1) env minPrec value
       -- 反引号中缀 / 中缀链 / 括号按源码顺序与括号边界打印（不重排、不补括号）。
       EBacktick name l r sp => inlineInfixChain (fuel - 1) env (EBacktick name l r sp)
       EInfix op l r sp => inlineInfixChain (fuel - 1) env (EInfix op l r sp)
-      EParen inner sp =>
+      EParen inner _ =>
         if isSection inner then
           inlinePrecGo (fuel - 1) env 0 inner
         else
           case inlinePrecGo (fuel - 1) env 0 inner of
             Nothing => Nothing
             Just s => Just "(${s})"
-      ESectOp op sp => Just "(${op})"
-      ESectL op inner sp =>
+      ESectOp op _ => Just "(${op})"
+      ESectL op inner _ =>
         case inlinePrecGo (fuel - 1) env 0 inner of
           Nothing => Nothing
           Just s => Just "(${op} ${s})"
       -- 右 section 的 inner 必须按**原子**打印：`((a + b) +)` 才能重新 parse 成
       -- `ESectR (a + b) +`（否则最后一个 `+` 会被解析成更内层的右 section）。
-      ESectR inner op sp =>
+      ESectR inner op _ =>
         case inlineAtomGo (fuel - 1) env inner of
           Nothing => Nothing
           Just s => Just "(${s} ${op})"
@@ -712,7 +712,7 @@ inlineAppGo fuel env minPrec fn args =
     case fn of
       -- 符号名当作中缀运算符：两参应用还原成 `a op b`（哪怕无声明也按 9 左打印）。
       -- 普通标识符保持应用形式。
-      EVar op sp =>
+      EVar op _ =>
         if isSymbolName op then
           case args of
             [a, b] =>
@@ -774,15 +774,15 @@ inlineAtomGo fuel env e =
 
 -- | 内部：该表达式本身是否已是原子形式（原子位置无需再加括号）。
 atomForm : Expr -> Bool
-atomForm (EVar name sp) = True
-atomForm (EInt n sp) = True
-atomForm (EStr s sp) = True
-atomForm (EFloat raw sp) = True
-atomForm (EInterp multi parts sp) = True
-atomForm (EField base f sp) = True
-atomForm (ERecord name fields sp) = True
-atomForm (ERecUpdate base fields sp) = True
-atomForm (EParen inner sp) = True
+atomForm (EVar name _) = True
+atomForm (EInt n _) = True
+atomForm (EStr s _) = True
+atomForm (EFloat raw _) = True
+atomForm (EInterp multi parts _) = True
+atomForm (EField base f _) = True
+atomForm (ERecord name fields _) = True
+atomForm (ERecUpdate base fields _) = True
+atomForm (EParen inner _) = True
 atomForm (EApp fn args sp) =
   case listExprElems (EApp fn args sp) of
     Just elems => True
@@ -794,9 +794,9 @@ atomForm (EApp fn args sp) =
             Just _ => True
             Nothing => False
 -- section 自带括号，永远是原子；反引号中缀是运算符形式（最低优先级）。
-atomForm (ESectOp op sp) = True
-atomForm (ESectL op inner sp) = True
-atomForm (ESectR inner op sp) = True
+atomForm (ESectOp op _) = True
+atomForm (ESectL op inner _) = True
+atomForm (ESectR inner op _) = True
 atomForm _ = False
 
 -- ---------------------------------------------------------------
@@ -842,7 +842,7 @@ blockWrapDoc fuel env at e =
     empty
   else
     case e of
-      EParen inner sp => exprDoc (fuel - 1) env at e
+      EParen inner _ => exprDoc (fuel - 1) env at e
       _ => blockParenDoc (exprDoc (fuel - 1) env at e)
 
 -- | 内部：原子位置的文档（需要时加括号）。
@@ -900,9 +900,9 @@ exprDoc fuel env at e =
     empty
   else
     case e of
-      ECase scrut alts sp => appendDoc (text "case ") (appendDoc (scrutDoc (fuel - 1) env at scrut) (appendDoc (text " of") (nest 2 (appendDoc hard (altsDoc (fuel - 1) env at alts)))))
-      ELet binds body recFlag sp => letDoc (fuel - 1) env at binds body
-      EIf c t el sp => ifDoc (fuel - 1) env at c t el
+      ECase scrut alts _ => appendDoc (text "case ") (appendDoc (scrutDoc (fuel - 1) env at scrut) (appendDoc (text " of") (nest 2 (appendDoc hard (altsDoc (fuel - 1) env at alts)))))
+      ELet binds body recFlag _ => letDoc (fuel - 1) env at binds body
+      EIf c t el _ => ifDoc (fuel - 1) env at c t el
       EApp fn args sp =>
         case tupleExprElems (EApp fn args sp) of
           Just elems => group (appendDoc (text "(") (appendDoc (nest 2 (commaDocs (map (\x => exprDoc (fuel - 1) env at x) elems))) (text ")")))
@@ -910,29 +910,29 @@ exprDoc fuel env at e =
             case ascribeParts (EApp fn args sp) of
               Just (Pair v t) => group (appendDoc (text "(") (appendDoc (nest 2 (appendDoc (exprDoc (fuel - 1) env at v) (appendDoc (text " : ") (exprDoc (fuel - 1) env at t)))) (text ")")))
               Nothing => appDoc (fuel - 1) env at (EApp fn args sp) fn args
-      EPi name implicit qty dom cod sp => piDoc (fuel - 1) env at qty implicit name dom cod
-      ELam ps body sp => group (appendDoc (text ("\\" ++ joinComma (map firstOf ps) ++ " =>")) (nest 2 (appendDoc (bodySep body) (exprDoc (fuel - 1) env at body))))
-      EField base f sp => appendDoc (atomDoc (fuel - 1) env at base) (text ".${f}")
-      ERecord name fields sp => recordDoc (fuel - 1) env at name fields
-      ERecUpdate base fields sp => recUpdateDoc (fuel - 1) env at base fields
-      EDo stmts sp => appendDoc (text "do") (nest 2 (appendDoc hard (stmtsDoc (fuel - 1) env at stmts)))
+      EPi name implicit qty dom cod _ => piDoc (fuel - 1) env at qty implicit name dom cod
+      ELam ps body _ => group (appendDoc (text ("\\" ++ joinComma (map firstOf ps) ++ " =>")) (nest 2 (appendDoc (bodySep body) (exprDoc (fuel - 1) env at body))))
+      EField base f _ => appendDoc (atomDoc (fuel - 1) env at base) (text ".${f}")
+      ERecord name fields _ => recordDoc (fuel - 1) env at name fields
+      ERecUpdate base fields _ => recUpdateDoc (fuel - 1) env at base fields
+      EDo stmts _ => appendDoc (text "do") (nest 2 (appendDoc hard (stmtsDoc (fuel - 1) env at stmts)))
       -- 局部函数组只作为 let / where 绑定值出现，由 `bindingBodyDoc` 展开成多子句。
-      ELocalFun clauses sp => empty
+      ELocalFun clauses _ => empty
       -- 表达式位置的 `EAnn` 没有 `: Ty` 语法，透明渲染内部表达式。
-      EAnn value ty sp => exprDoc (fuel - 1) env at value
+      EAnn value ty _ => exprDoc (fuel - 1) env at value
       EBacktick name l r sp => sourceInfixDoc (fuel - 1) env at (EBacktick name l r sp)
       EInfix op l r sp => sourceInfixDoc (fuel - 1) env at (EInfix op l r sp)
-      EParen inner sp =>
+      EParen inner _ =>
         if isSection inner then
           exprDoc (fuel - 1) env at inner
         else
           let
             innerD = exprDoc (fuel - 1) env at inner
           in if multilineExpr inner then blockParenDoc innerD else parenDoc innerD
-      ESectOp op sp => text "(${op})"
-      ESectL op inner sp => group (appendDoc (text "(${op} ") (appendDoc (exprDoc (fuel - 1) env at inner) (text ")")))
-      ESectR inner op sp => group (appendDoc (text "(") (appendDoc (exprDoc (fuel - 1) env at inner) (text " ${op})")))
-      EInterp multi parts sp => verbatim (interpText (fuel - 1) env multi parts)
+      ESectOp op _ => text "(${op})"
+      ESectL op inner _ => group (appendDoc (text "(${op} ") (appendDoc (exprDoc (fuel - 1) env at inner) (text ")")))
+      ESectR inner op _ => group (appendDoc (text "(") (appendDoc (exprDoc (fuel - 1) env at inner) (text " ${op})")))
+      EInterp multi parts _ => verbatim (interpText (fuel - 1) env multi parts)
       _ => flatDoc env e
 
 -- | 内部：`case` 分支序列。
@@ -979,7 +979,7 @@ elsePartDoc blocky fuel env at el =
     empty
   else
     case el of
-      EIf c t el2 sp => appendDoc (text "else ") (exprDoc (fuel - 1) env at el)
+      EIf c t el2 _ => appendDoc (text "else ") (exprDoc (fuel - 1) env at el)
       _ => appendDoc (text "else") (nest 2 (appendDoc (if blocky then hard else bodySep el) (exprDoc (fuel - 1) env at el)))
 
 -- | 内部：应用 / 语法糖 / 中缀的分发。
@@ -1011,7 +1011,7 @@ infixOrApply fuel env at fn args =
     empty
   else
     case fn of
-      EVar op sp =>
+      EVar op _ =>
         if isSymbolName op then
           case args of
             [a, b] =>
@@ -1034,12 +1034,12 @@ applyDoc fuel env at fn args =
 
 -- | 内部：把中缀 / 反引号链按源码顺序摊平成「操作数表 + 运算符表」。
 sourceInfixParts : Expr -> Pair (List Expr) (List String)
-sourceInfixParts (EInfix op l r sp) =
+sourceInfixParts (EInfix op l r _) =
   let
     lp = sourceInfixParts l
     rp = sourceInfixParts r
   in Pair (append (firstOf lp) (firstOf rp)) (append (secondOf lp) (append [op] (secondOf rp)))
-sourceInfixParts (EBacktick name l r sp) =
+sourceInfixParts (EBacktick name l r _) =
   let
     lp = sourceInfixParts l
     rp = sourceInfixParts r
@@ -1119,12 +1119,12 @@ infixDoc fuel env at p assoc label a b =
 
 -- | 内部：实例名调用的后缀（`@name` / `@(expr)`）。
 instanceSuffix : List FixityDecl -> Expr -> Maybe String
-instanceSuffix env (EStr s sp) = Just ("@" ++ instanceNameText s)
-instanceSuffix env (EParen e sp) =
+instanceSuffix env (EStr s _) = Just ("@" ++ instanceNameText s)
+instanceSuffix env (EParen e _) =
   case inlineExprGo formatFuelBound env e of
     Just ps => Just ("@(" ++ ps ++ ")")
     Nothing => Nothing
-instanceSuffix env (EVar vn sp) = Just ("@(" ++ vn ++ ")")
+instanceSuffix env (EVar vn _) = Just ("@(" ++ vn ++ ")")
 instanceSuffix env nm =
   case inlineExprGo formatFuelBound env nm of
     Just ns => Just ("@(" ++ ns ++ ")")
@@ -1231,7 +1231,7 @@ bindingDoc fuel env at (Pair pat value) =
     case value of
       EAnn inner ty annSp =>
         let
-          sigD = attachAt at annSp (text (renderPatGo formatFuelBound pat ++ " : " ++ typeText (fuel - 1) env at ty))
+          sigD = attachAt at (nodeRefSpan annSp) (text (renderPatGo formatFuelBound pat ++ " : " ++ typeText (fuel - 1) env at ty))
           defD = attachAt at (patSpan pat) (bindingBodyDoc (fuel - 1) env at pat inner)
         in vsep [sigD, defD]
       _ => attachAt at (patSpan pat) (bindingBodyDoc (fuel - 1) env at pat value)
@@ -1243,8 +1243,8 @@ bindingBodyDoc fuel env at pat value =
     empty
   else
     case value of
-      ELocalFun clauses lsp => localFunDoc (fuel - 1) env at (renderPatGo formatFuelBound pat) clauses
-      ELam ps inner lsp => localFunDoc (fuel - 1) env at (renderPatGo formatFuelBound pat) [Pair (map (\p => PVar (firstOf p) (secondOf p)) ps) inner]
+      ELocalFun clauses _ => localFunDoc (fuel - 1) env at (renderPatGo formatFuelBound pat) clauses
+      ELam ps inner _ => localFunDoc (fuel - 1) env at (renderPatGo formatFuelBound pat) [Pair (map (\p => PVar (firstOf p) (detachedNodeRef (secondOf p))) ps) inner]
       _ => bindingValueDoc (fuel - 1) env at (renderPatGo formatFuelBound pat) value
 
 -- | 内部：`lhs = value`（能一行就一行，否则值缩进 2）。
@@ -1281,11 +1281,11 @@ handleDoc fuel env at comp ret op =
       headD = appendDoc (text "handle ") (appendDoc (handleCompDoc (fuel - 1) env at comp) (text " {"))
       retDs =
         case ret of
-          ELam ([Pair x _]) body sp => [handleRetDoc (fuel - 1) env at x body]
+          ELam ([Pair x _]) body _ => [handleRetDoc (fuel - 1) env at x body]
           _ => []
       opDs =
         case op of
-          ELam (_ :: _ :: (Pair k _) :: _) (ECase _ alts _) sp => map (handleAltDoc (fuel - 1) env at k) alts
+          ELam (_ :: _ :: (Pair k _) :: _) (ECase _ alts _) _ => map (handleAltDoc (fuel - 1) env at k) alts
           _ => []
       clauses = append retDs opDs
     in appendDoc headD (appendDoc (nest 2 (appendDoc hard (vsep clauses))) (appendDoc hard (text "}")))
@@ -1297,11 +1297,11 @@ handleCompDoc fuel env at comp =
     empty
   else
     case comp of
-      EVar name sp => verbatim name
-      EInt n sp => verbatim (strFromInt n)
-      EStr s sp => verbatim (renderStr s)
-      EFloat raw sp => verbatim raw
-      EParen e sp => parenInlineOrBlock (fuel - 1) env at e
+      EVar name _ => verbatim name
+      EInt n _ => verbatim (strFromInt n)
+      EStr s _ => verbatim (renderStr s)
+      EFloat raw _ => verbatim raw
+      EParen e _ => parenInlineOrBlock (fuel - 1) env at e
       _ => parenInlineOrBlock (fuel - 1) env at comp
 
 -- | 内部：`return x -> body` 子句。
@@ -1322,7 +1322,7 @@ handleAltDoc fuel env at k (Pair pat body) =
     let
       parts =
         case pat of
-          PCon c ps sp => Pair c (renderHandlePats formatFuelBound ps)
+          PCon c ps _ => Pair c (renderHandlePats formatFuelBound ps)
           _ => Pair "_" ""
       cname = firstOf parts
       patsTxt = secondOf parts
@@ -1413,9 +1413,9 @@ renderBinding env at binding = bindingDoc formatFuelBound env at binding
 
 -- | 内部：section 自带括号，外层 `EParen` 不再重复加。
 isSection : Expr -> Bool
-isSection (ESectOp op sp) = True
-isSection (ESectL op inner sp) = True
-isSection (ESectR inner op sp) = True
+isSection (ESectOp op _) = True
+isSection (ESectL op inner _) = True
+isSection (ESectR inner op _) = True
 isSection _ = False
 
 -- | 内部：字符串是否含换行。

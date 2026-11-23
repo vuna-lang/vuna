@@ -414,7 +414,10 @@ hashDecls ds = payloadDigest (encTop encDecls ds)
 -- 体必须不可见：把体替换成固定占位再编码，只保留签名与模式形状。
 stripOpaqueDeclBodies : List String -> Decl -> Decl
 stripOpaqueDeclBodies names (DFun n pats body sp) =
-  if memName n names then DFun n pats (EVar "@opaque@" (nodeRefSpan sp)) sp else DFun n pats body sp
+  if memName n names then
+    DFun n pats (EVar "@opaque@" (detachedNodeRef (nodeRefSpan sp))) sp
+  else
+    DFun n pats body sp
 stripOpaqueDeclBodies _ d = d
 
 hashDeclsForIface : List String -> List Decl -> String

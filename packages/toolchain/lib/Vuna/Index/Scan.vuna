@@ -449,25 +449,25 @@ refsInExprGo sMod e acc =
       if isHoleName n || isMacroSyntaxName n || isInternalSyntaxName n then
         acc
       else
-        Ref sMod n (spanStartLine sp) (spanStartCol sp) :: acc
-    EInt n sp => acc
-    EStr s sp => acc
-    EFloat raw sp => acc
+        Ref sMod n (spanStartLine (nodeRefSpan sp)) (spanStartCol (nodeRefSpan sp)) :: acc
+    EInt n _ => acc
+    EStr s _ => acc
+    EFloat raw _ => acc
     -- 模板字面量：洞内表达式的引用照常收集（find-references 需要）。
-    EInterp multi parts sp => refsInInterpParts sMod parts acc
-    ELam ps body sp => refsInExprGo sMod body acc
-    EApp f args sp => refsInArgs sMod args (refsInExprGo sMod f acc)
-    EPi n i _ dom cod sp => refsInExprGo sMod cod (refsInExprGo sMod dom acc)
-    ELet binds body isRec sp => refsInBinds sMod binds (refsInExprGo sMod body acc)
-    ECase scrut alts sp => refsInBinds sMod alts (refsInExprGo sMod scrut acc)
+    EInterp multi parts _ => refsInInterpParts sMod parts acc
+    ELam ps body _ => refsInExprGo sMod body acc
+    EApp f args _ => refsInArgs sMod args (refsInExprGo sMod f acc)
+    EPi n i _ dom cod _ => refsInExprGo sMod cod (refsInExprGo sMod dom acc)
+    ELet binds body isRec _ => refsInBinds sMod binds (refsInExprGo sMod body acc)
+    ECase scrut alts _ => refsInBinds sMod alts (refsInExprGo sMod scrut acc)
     -- where/let 多 clause 局部函数：只看各 clause 的 body（与 refsInBind 一致，不看模式）。
-    ELocalFun clauses sp => refsInLocalClauses sMod clauses acc
-    EIf c t e2 sp => refsInExprGo sMod c (refsInExprGo sMod t (refsInExprGo sMod e2 acc))
-    EField r fname sp => refsInExprGo sMod r acc
-    ERecord tn fields sp => refsInFields sMod fields acc
-    ERecUpdate r fields sp => refsInExprGo sMod r (refsInFields sMod fields acc)
-    EDo stmts sp => refsInDoStmts sMod stmts acc
-    EAnn value ty sp => refsInExprGo sMod value (refsInExprGo sMod ty acc)
+    ELocalFun clauses _ => refsInLocalClauses sMod clauses acc
+    EIf c t e2 _ => refsInExprGo sMod c (refsInExprGo sMod t (refsInExprGo sMod e2 acc))
+    EField r fname _ => refsInExprGo sMod r acc
+    ERecord tn fields _ => refsInFields sMod fields acc
+    ERecUpdate r fields _ => refsInExprGo sMod r (refsInFields sMod fields acc)
+    EDo stmts _ => refsInDoStmts sMod stmts acc
+    EAnn value ty _ => refsInExprGo sMod value (refsInExprGo sMod ty acc)
     -- keep 模式（index/fmt）下反引号中缀与 section **保留原形**（不像 EParen/EInfix
     -- 会被重排消掉），所以这里必须显式处理：反引号里的名字本身也是引用，操作数继续递归，
     -- 不能静默丢整棵子树。
@@ -475,19 +475,26 @@ refsInExprGo sMod e acc =
       refsInExprGo
         sMod
         l
-        (refsInExprGo sMod r (Ref sMod nm (spanStartLine sp) (spanStartCol sp) :: acc))
-    ESectOp op sp => Ref sMod op (spanStartLine sp) (spanStartCol sp) :: acc
+        (refsInExprGo sMod r (Ref sMod nm (spanStartLine (nodeRefSpan sp)) (spanStartCol (nodeRefSpan sp)) :: acc))
+    ESectOp op sp =>
+      Ref sMod op (spanStartLine (nodeRefSpan sp)) (spanStartCol (nodeRefSpan sp)) :: acc
     ESectL op inner sp =>
-      refsInExprGo sMod inner (Ref sMod op (spanStartLine sp) (spanStartCol sp) :: acc)
+      refsInExprGo
+        sMod
+        inner
+        (Ref sMod op (spanStartLine (nodeRefSpan sp)) (spanStartCol (nodeRefSpan sp)) :: acc)
     ESectR inner op sp =>
-      refsInExprGo sMod inner (Ref sMod op (spanStartLine sp) (spanStartCol sp) :: acc)
+      refsInExprGo
+        sMod
+        inner
+        (Ref sMod op (spanStartLine (nodeRefSpan sp)) (spanStartCol (nodeRefSpan sp)) :: acc)
     -- 中缀链与括号是 parser 中间产物：op 记一条引用，操作数按同一累积器顺序递归。
     EInfix op l r sp =>
       refsInExprGo
         sMod
         l
-        (refsInExprGo sMod r (Ref sMod op (spanStartLine sp) (spanStartCol sp) :: acc))
-    EParen inner sp => refsInExprGo sMod inner acc
+        (refsInExprGo sMod r (Ref sMod op (spanStartLine (nodeRefSpan sp)) (spanStartCol (nodeRefSpan sp)) :: acc))
+    EParen inner _ => refsInExprGo sMod inner acc
 
 -- | 内部：模板字面量各片段里的引用——洞内表达式递归，文本块没有引用。
 refsInInterpParts : String -> List InterpPart -> List Ref -> List Ref

@@ -13,8 +13,8 @@ fixture : Ast.Decl
 fixture =
   Ast.DFun
     "f"
-    [Ast.PCon "Base.Data.Maybe.Just" [Ast.PVar "x" sp] sp]
-    (Ast.EApp (Ast.EVar "Base.Data.Int.add" sp) [Ast.EVar "x" sp] sp)
+    [Ast.PCon "Base.Data.Maybe.Just" [Ast.PVar "x" (detachedNodeRef sp)] (detachedNodeRef sp)]
+    (Ast.EApp (Ast.EVar "Base.Data.Int.add" (detachedNodeRef sp)) [Ast.EVar "x" (detachedNodeRef sp)] (detachedNodeRef sp))
     (Ast.detachedNodeRef sp)
 
 -- | 转换后：全局引用变 `RGlobal module name`，binder 保持 `RLocal`。

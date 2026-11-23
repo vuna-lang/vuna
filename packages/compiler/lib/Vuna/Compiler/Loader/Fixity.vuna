@@ -90,7 +90,7 @@ record ChainOp where
   chainOp : String
   chainIsBacktick : Bool
   chainRhs : Expr
-  chainSpan : Span
+  chainRef : NodeRef
 
 -- 未知运算符的诊断（严格表）：不静默默认优先级。
 unknownFixityMsg : String -> Diagnostic
@@ -106,11 +106,11 @@ fixityOf t c =
       if c.chainIsBacktick then
         OkC (Pair 9 1)
       else
-        onErrDiag (withFallbackSpan c.chainSpan) (ErrC (unknownFixityMsg c.chainOp))
+        onErrDiag (withFallbackSpan (nodeRefSpan c.chainRef)) (ErrC (unknownFixityMsg c.chainOp))
 
 -- rename 模式产出普通应用（别名已替换，`>>` 也走别名到库函数）；keep 模式保留反引号原形
 -- 供 fmt 打印（普通运算符仍是 `EApp (EVar op)`，fmt 按 fixity 打回中缀）。
-infixTerm : FixityTable -> ChainOp -> Expr -> Expr -> Span -> Expr
+infixTerm : FixityTable -> ChainOp -> Expr -> Expr -> NodeRef -> Expr
 infixTerm t c lhs rhs sp =
   if renameMode t then
     if c.chainOp == ">>" then
@@ -148,7 +148,7 @@ collectChain t e = Vuna.Compiler.Base.Common.bind (reorderNonChain t e) (\e2 => 
 -- precedence climbing：`rest` 里同级/更高级的运算符继续被消费。
 -- 显式 fuel 计步（`more` 是列表模式变量，SCT 对「tuple 列表」的递减度量
 -- 不闭合；按「守卫 Int」判据给上界，每次递归消费一个运算符）。
-climb : Int -> FixityTable -> Int -> Expr -> List ChainOp -> Span -> Check (Pair Expr (List ChainOp))
+climb : Int -> FixityTable -> Int -> Expr -> List ChainOp -> NodeRef -> Check (Pair Expr (List ChainOp))
 climb fuel t minPrec lhs rest sp =
   if fuel <= 0 then
     icInternal "infix reorder fuel exhausted"
@@ -180,7 +180,7 @@ reorderChain t e =
       \p =>
         case p of
           Pair first rest =>
-            Vuna.Compiler.Base.Common.bind (climb (2 * length rest + 2) t 0 first rest (exprSpan e)) (
+            Vuna.Compiler.Base.Common.bind (climb (2 * length rest + 2) t 0 first rest (exprRef e)) (
                 \q =>
                   case q of
                     Pair out leftover => if length leftover == 0 then OkC out else icInternal "infix reorder left an operator"
@@ -189,7 +189,7 @@ reorderChain t e =
 
 -- section 出现在函数位置且被直接应用时按定义展开（`(+ e) a` ⇒ `a + e`），不生成
 -- lambda——否则 `(+ 1) 2` 会撞上「lambda 缺签名」。section 当值用（无期望类型）仍走 lambda。
-foldApps : Expr -> List Expr -> Span -> Expr
+foldApps : Expr -> List Expr -> NodeRef -> Expr
 foldApps base [] sp = base
 foldApps base (a :: rest) sp = foldApps (EApp base [a] sp) rest sp
 
@@ -205,12 +205,12 @@ reorderNonChain t (ESectOp op sp) = if renameMode t then OkC (EVar op sp) else O
 reorderNonChain t (ESectL op e sp) =
   Vuna.Compiler.Base.Common.bind
     (reorderExpr t e)
-    (\e2 => if renameMode t then OkC (ELam [Pair sectionBinderName sp] (EApp (EVar op sp) [EVar sectionBinderName sp, e2] sp) sp) else OkC (ESectL op e2 sp))
+    (\e2 => if renameMode t then OkC (ELam [Pair sectionBinderName (nodeRefSpan sp)] (EApp (EVar op sp) [EVar sectionBinderName sp, e2] sp) sp) else OkC (ESectL op e2 sp))
 reorderNonChain t (ESectR e op sp) =
   Vuna.Compiler.Base.Common.bind
     (reorderExpr t e)
-    (\e2 => if renameMode t then OkC (ELam [Pair sectionBinderName sp] (EApp (EVar op sp) [e2, EVar sectionBinderName sp] sp) sp) else OkC (ESectR e2 op sp))
-reorderNonChain t (EParen inner sp) = reorderExpr t inner
+    (\e2 => if renameMode t then OkC (ELam [Pair sectionBinderName (nodeRefSpan sp)] (EApp (EVar op sp) [e2, EVar sectionBinderName sp] sp) sp) else OkC (ESectR e2 op sp))
+reorderNonChain t (EParen inner _) = reorderExpr t inner
 reorderNonChain t (ELam names body sp) =
   Vuna.Compiler.Base.Common.bind (reorderExpr t body) (\b => OkC (ELam names b sp))
 -- section 出现在函数位置且被直接应用：`(+ e) a` ⇒ `a + e`，不生成 lambda

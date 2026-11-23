@@ -336,13 +336,21 @@ termFixturesRT = foldl (\acc, t => acc && termRT t) True termFixtures
 declFixtures : List Decl
 declFixtures =
   [
-    DSig "f" [] (EApp (EVar "->" spA) [EVar "Int" spA, EVar "Int" spA] spA) (detachedNodeRef spA),
-    DFun "f" [PVar "x" spB] (EApp (EVar "g" spA) [EVar "x" spA] spA) (detachedNodeRef spA),
+    DSig
+      "f"
+      []
+      (EApp (EVar "->" (detachedNodeRef spA)) [EVar "Int" (detachedNodeRef spA), EVar "Int" (detachedNodeRef spA)] (detachedNodeRef spA))
+      (detachedNodeRef spA),
+    DFun
+      "f"
+      [PVar "x" (detachedNodeRef spB)]
+      (EApp (EVar "g" (detachedNodeRef spA)) [EVar "x" (detachedNodeRef spA)] (detachedNodeRef spA))
+      (detachedNodeRef spA),
     DData
       "Color"
       []
-      (EVar "Type" spA)
-      [Ctor "Red" (EVar "Color" spA) 0 (detachedNodeRef spA), Ctor "Green" (EVar "Color" spA) 0 (detachedNodeRef spB)]
+      (EVar "Type" (detachedNodeRef spA))
+      [Ctor "Red" (EVar "Color" (detachedNodeRef spA)) 0 (detachedNodeRef spA), Ctor "Green" (EVar "Color" (detachedNodeRef spA)) 0 (detachedNodeRef spB)]
       []
       False
       ReprAuto
@@ -351,7 +359,7 @@ declFixtures =
     DRecord
       "Point"
       []
-      [Field "x" (EVar "Int" spA) (detachedNodeRef spA), Field "y" (EVar "Int" spB) (detachedNodeRef spB)]
+      [Field "x" (EVar "Int" (detachedNodeRef spA)) (detachedNodeRef spA), Field "y" (EVar "Int" (detachedNodeRef spB)) (detachedNodeRef spB)]
       []
       False
       ReprAuto
@@ -361,15 +369,15 @@ declFixtures =
       "Show"
       [TraitParam "a" Nothing]
       []
-      [TraitMethod "show" (EVar "a" spA) (detachedNodeRef spA)]
+      [TraitMethod "show" (EVar "a" (detachedNodeRef spA)) (detachedNodeRef spA)]
       (detachedNodeRef spB),
     DInstance
       []
-      (EApp (EVar "Dict_Show" spA) [EVar "Color" spA] spA)
-      [DFun "show" [PWild spA] (EStr "c" spA) (detachedNodeRef spA)]
+      (EApp (EVar "Dict_Show" (detachedNodeRef spA)) [EVar "Color" (detachedNodeRef spA)] (detachedNodeRef spA))
+      [DFun "show" [PWild (detachedNodeRef spA)] (EStr "c" (detachedNodeRef spA)) (detachedNodeRef spA)]
       (detachedNodeRef spA),
-    DAxiom "ax" (EVar "Int" spA) (detachedNodeRef spA),
-    DExtern "ext" "c_ext" (EVar "Int" spA) (detachedNodeRef spA),
+    DAxiom "ax" (EVar "Int" (detachedNodeRef spA)) (detachedNodeRef spA),
+    DExtern "ext" "c_ext" (EVar "Int" (detachedNodeRef spA)) (detachedNodeRef spA),
     DFun "exprs" [] exprFixture (detachedNodeRef spA)
   ]
 
@@ -377,10 +385,10 @@ declFixtures =
 exprFixture : Expr
 exprFixture =
   ELet
-    [Pair (PVar "x" spA) (EInt 1 spA), Pair (PAs "y" (PCon "Just" [PInt 2 spB] spB) spB) (EFloat "1.5" spA)]
-    (EDo [DBind (PVar "z" spA) (EField (EVar "r" spA) "field" spA) (detachedNodeRef spA), DBind (PRecord "Point" [Pair "x" (PVar "px" spA)] spA) (ERecord "Point" [Pair "x" (EInt 3 spA)] spA) (detachedNodeRef spA), DExpr (EIf (EVar "True" spA) (ECase (EVar "z" spA) [Pair (PStr "s" spA) (EInt 0 spA)] spA) (EBacktick "add" (EInt 1 spA) (EInt 2 spA) spA) spA) (detachedNodeRef spA), DExpr (ESectL "+" (EInt 4 spA) spA) (detachedNodeRef spA)] spA)
+    [Pair (PVar "x" (detachedNodeRef spA)) (EInt 1 (detachedNodeRef spA)), Pair (PAs "y" (PCon "Just" [PInt 2 (detachedNodeRef spB)] (detachedNodeRef spB)) (detachedNodeRef spB)) (EFloat "1.5" (detachedNodeRef spA))]
+    (EDo [DBind (PVar "z" (detachedNodeRef spA)) (EField (EVar "r" (detachedNodeRef spA)) "field" (detachedNodeRef spA)) (detachedNodeRef spA), DBind (PRecord "Point" [Pair "x" (PVar "px" (detachedNodeRef spA))] (detachedNodeRef spA)) (ERecord "Point" [Pair "x" (EInt 3 (detachedNodeRef spA))] (detachedNodeRef spA)) (detachedNodeRef spA), DExpr (EIf (EVar "True" (detachedNodeRef spA)) (ECase (EVar "z" (detachedNodeRef spA)) [Pair (PStr "s" (detachedNodeRef spA)) (EInt 0 (detachedNodeRef spA))] (detachedNodeRef spA)) (EBacktick "add" (EInt 1 (detachedNodeRef spA)) (EInt 2 (detachedNodeRef spA)) (detachedNodeRef spA)) (detachedNodeRef spA)) (detachedNodeRef spA), DExpr (ESectL "+" (EInt 4 (detachedNodeRef spA)) (detachedNodeRef spA)) (detachedNodeRef spA)] (detachedNodeRef spA))
     False
-    spA
+    (detachedNodeRef spA)
 
 declsRT : List Decl -> Bool
 declsRT ds =

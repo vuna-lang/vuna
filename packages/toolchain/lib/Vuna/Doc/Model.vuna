@@ -205,7 +205,7 @@ itemsOfDecl table decls (DFun name pats body sp) =
       DocItem
         name
         "fun"
-        "${name} : ${renderType (EVar name (nodeRefSpan sp))}"
+        "${name} : ${renderType (EVar name (detachedNodeRef (nodeRefSpan sp)))}"
         (docForDecl table name)
         (spanStartLine (nodeRefSpan sp))
         []

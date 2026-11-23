@@ -359,37 +359,37 @@ decPat fuel bytes =
           0 =>
             case decStr (fuel - 1) b1 of
               Nothing => Nothing
-              Just (Pair v1 b2) => Just (Pair (PVar v1 noSpan) b2)
+              Just (Pair v1 b2) => Just (Pair (PVar v1 (detachedNodeRef noSpan)) b2)
           1 =>
             case decStr (fuel - 1) b1 of
               Nothing => Nothing
               Just (Pair v1 b2) =>
                 case decPat (fuel - 1) b2 of
                   Nothing => Nothing
-                  Just (Pair v2 b3) => Just (Pair (PAs v1 v2 noSpan) b3)
-          2 => Just (Pair (PWild noSpan) b1)
+                  Just (Pair v2 b3) => Just (Pair (PAs v1 v2 (detachedNodeRef noSpan)) b3)
+          2 => Just (Pair (PWild (detachedNodeRef noSpan)) b1)
           3 =>
             case decStr (fuel - 1) b1 of
               Nothing => Nothing
               Just (Pair v1 b2) =>
                 case decPatList (fuel - 1) b2 of
                   Nothing => Nothing
-                  Just (Pair v2 b3) => Just (Pair (PCon v1 v2 noSpan) b3)
+                  Just (Pair v2 b3) => Just (Pair (PCon v1 v2 (detachedNodeRef noSpan)) b3)
           4 =>
             case decInt (fuel - 1) b1 of
               Nothing => Nothing
-              Just (Pair v1 b2) => Just (Pair (PInt v1 noSpan) b2)
+              Just (Pair v1 b2) => Just (Pair (PInt v1 (detachedNodeRef noSpan)) b2)
           5 =>
             case decStr (fuel - 1) b1 of
               Nothing => Nothing
-              Just (Pair v1 b2) => Just (Pair (PStr v1 noSpan) b2)
+              Just (Pair v1 b2) => Just (Pair (PStr v1 (detachedNodeRef noSpan)) b2)
           6 =>
             case decStr (fuel - 1) b1 of
               Nothing => Nothing
               Just (Pair v1 b2) =>
                 case decList decStrPat (fuel - 1) b2 of
                   Nothing => Nothing
-                  Just (Pair v2 b3) => Just (Pair (PRecord v1 v2 noSpan) b3)
+                  Just (Pair v2 b3) => Just (Pair (PRecord v1 v2 (detachedNodeRef noSpan)) b3)
           _ => Nothing
 
 -- | 解析 `DoStmt`：tag 必须与 `encDoStmt` 一致。
@@ -432,29 +432,29 @@ decExpr fuel bytes =
           0 =>
             case decStr (fuel - 1) b1 of
               Nothing => Nothing
-              Just (Pair v1 b2) => Just (Pair (EVar v1 noSpan) b2)
+              Just (Pair v1 b2) => Just (Pair (EVar v1 (detachedNodeRef noSpan)) b2)
           1 =>
             case decInt (fuel - 1) b1 of
               Nothing => Nothing
-              Just (Pair v1 b2) => Just (Pair (EInt v1 noSpan) b2)
+              Just (Pair v1 b2) => Just (Pair (EInt v1 (detachedNodeRef noSpan)) b2)
           2 =>
             case decStr (fuel - 1) b1 of
               Nothing => Nothing
-              Just (Pair v1 b2) => Just (Pair (EStr v1 noSpan) b2)
+              Just (Pair v1 b2) => Just (Pair (EStr v1 (detachedNodeRef noSpan)) b2)
           3 =>
             case decList decStr (fuel - 1) b1 of
               Nothing => Nothing
               Just (Pair v1 b2) =>
                 case decExpr (fuel - 1) b2 of
                   Nothing => Nothing
-                  Just (Pair v2 b3) => Just (Pair (ELam (map (\n => Pair n noSpan) v1) v2 noSpan) b3)
+                  Just (Pair v2 b3) => Just (Pair (ELam (map (\n => Pair n noSpan) v1) v2 (detachedNodeRef noSpan)) b3)
           4 =>
             case decExpr (fuel - 1) b1 of
               Nothing => Nothing
               Just (Pair v1 b2) =>
                 case decExprList (fuel - 1) b2 of
                   Nothing => Nothing
-                  Just (Pair v2 b3) => Just (Pair (EApp v1 v2 noSpan) b3)
+                  Just (Pair v2 b3) => Just (Pair (EApp v1 v2 (detachedNodeRef noSpan)) b3)
           5 =>
             case decStr (fuel - 1) b1 of
               Nothing => Nothing
@@ -470,7 +470,7 @@ decExpr fuel bytes =
                           Just (Pair v4 b5) =>
                             case decExpr (fuel - 1) b5 of
                               Nothing => Nothing
-                              Just (Pair v5 b6) => Just (Pair (EPi v1 v2 v3 v4 v5 noSpan) b6)
+                              Just (Pair v5 b6) => Just (Pair (EPi v1 v2 v3 v4 v5 (detachedNodeRef noSpan)) b6)
           6 =>
             case decList decPatExpr (fuel - 1) b1 of
               Nothing => Nothing
@@ -480,18 +480,18 @@ decExpr fuel bytes =
                   Just (Pair v2 b3) =>
                     case decBool (fuel - 1) b3 of
                       Nothing => Nothing
-                      Just (Pair v3 b4) => Just (Pair (ELet v1 v2 v3 noSpan) b4)
+                      Just (Pair v3 b4) => Just (Pair (ELet v1 v2 v3 (detachedNodeRef noSpan)) b4)
           7 =>
             case decList decClause (fuel - 1) b1 of
               Nothing => Nothing
-              Just (Pair v1 b2) => Just (Pair (ELocalFun v1 noSpan) b2)
+              Just (Pair v1 b2) => Just (Pair (ELocalFun v1 (detachedNodeRef noSpan)) b2)
           8 =>
             case decExpr (fuel - 1) b1 of
               Nothing => Nothing
               Just (Pair v1 b2) =>
                 case decList decPatExpr (fuel - 1) b2 of
                   Nothing => Nothing
-                  Just (Pair v2 b3) => Just (Pair (ECase v1 v2 noSpan) b3)
+                  Just (Pair v2 b3) => Just (Pair (ECase v1 v2 (detachedNodeRef noSpan)) b3)
           9 =>
             case decExpr (fuel - 1) b1 of
               Nothing => Nothing
@@ -501,32 +501,32 @@ decExpr fuel bytes =
                   Just (Pair v2 b3) =>
                     case decExpr (fuel - 1) b3 of
                       Nothing => Nothing
-                      Just (Pair v3 b4) => Just (Pair (EIf v1 v2 v3 noSpan) b4)
+                      Just (Pair v3 b4) => Just (Pair (EIf v1 v2 v3 (detachedNodeRef noSpan)) b4)
           10 =>
             case decExpr (fuel - 1) b1 of
               Nothing => Nothing
               Just (Pair v1 b2) =>
                 case decStr (fuel - 1) b2 of
                   Nothing => Nothing
-                  Just (Pair v2 b3) => Just (Pair (EField v1 v2 noSpan) b3)
+                  Just (Pair v2 b3) => Just (Pair (EField v1 v2 (detachedNodeRef noSpan)) b3)
           11 =>
             case decStr (fuel - 1) b1 of
               Nothing => Nothing
               Just (Pair v1 b2) =>
                 case decList decStrExpr (fuel - 1) b2 of
                   Nothing => Nothing
-                  Just (Pair v2 b3) => Just (Pair (ERecord v1 v2 noSpan) b3)
+                  Just (Pair v2 b3) => Just (Pair (ERecord v1 v2 (detachedNodeRef noSpan)) b3)
           12 =>
             case decExpr (fuel - 1) b1 of
               Nothing => Nothing
               Just (Pair v1 b2) =>
                 case decList decStrExpr (fuel - 1) b2 of
                   Nothing => Nothing
-                  Just (Pair v2 b3) => Just (Pair (ERecUpdate v1 v2 noSpan) b3)
+                  Just (Pair v2 b3) => Just (Pair (ERecUpdate v1 v2 (detachedNodeRef noSpan)) b3)
           13 =>
             case decList decDoStmt (fuel - 1) b1 of
               Nothing => Nothing
-              Just (Pair v1 b2) => Just (Pair (EDo v1 noSpan) b2)
+              Just (Pair v1 b2) => Just (Pair (EDo v1 (detachedNodeRef noSpan)) b2)
           14 =>
             case decStr (fuel - 1) b1 of
               Nothing => Nothing
@@ -536,11 +536,11 @@ decExpr fuel bytes =
                   Just (Pair v2 b3) =>
                     case decExpr (fuel - 1) b3 of
                       Nothing => Nothing
-                      Just (Pair v3 b4) => Just (Pair (EInfix v1 v2 v3 noSpan) b4)
+                      Just (Pair v3 b4) => Just (Pair (EInfix v1 v2 v3 (detachedNodeRef noSpan)) b4)
           15 =>
             case decExpr (fuel - 1) b1 of
               Nothing => Nothing
-              Just (Pair v1 b2) => Just (Pair (EParen v1 noSpan) b2)
+              Just (Pair v1 b2) => Just (Pair (EParen v1 (detachedNodeRef noSpan)) b2)
           16 =>
             case decStr (fuel - 1) b1 of
               Nothing => Nothing
@@ -550,43 +550,43 @@ decExpr fuel bytes =
                   Just (Pair v2 b3) =>
                     case decExpr (fuel - 1) b3 of
                       Nothing => Nothing
-                      Just (Pair v3 b4) => Just (Pair (EBacktick v1 v2 v3 noSpan) b4)
+                      Just (Pair v3 b4) => Just (Pair (EBacktick v1 v2 v3 (detachedNodeRef noSpan)) b4)
           17 =>
             case decStr (fuel - 1) b1 of
               Nothing => Nothing
-              Just (Pair v1 b2) => Just (Pair (ESectOp v1 noSpan) b2)
+              Just (Pair v1 b2) => Just (Pair (ESectOp v1 (detachedNodeRef noSpan)) b2)
           18 =>
             case decStr (fuel - 1) b1 of
               Nothing => Nothing
               Just (Pair v1 b2) =>
                 case decExpr (fuel - 1) b2 of
                   Nothing => Nothing
-                  Just (Pair v2 b3) => Just (Pair (ESectL v1 v2 noSpan) b3)
+                  Just (Pair v2 b3) => Just (Pair (ESectL v1 v2 (detachedNodeRef noSpan)) b3)
           19 =>
             case decExpr (fuel - 1) b1 of
               Nothing => Nothing
               Just (Pair v1 b2) =>
                 case decStr (fuel - 1) b2 of
                   Nothing => Nothing
-                  Just (Pair v2 b3) => Just (Pair (ESectR v1 v2 noSpan) b3)
+                  Just (Pair v2 b3) => Just (Pair (ESectR v1 v2 (detachedNodeRef noSpan)) b3)
           20 =>
             case decExpr (fuel - 1) b1 of
               Nothing => Nothing
               Just (Pair v1 b2) =>
                 case decExpr (fuel - 1) b2 of
                   Nothing => Nothing
-                  Just (Pair v2 b3) => Just (Pair (EAnn v1 v2 noSpan) b3)
+                  Just (Pair v2 b3) => Just (Pair (EAnn v1 v2 (detachedNodeRef noSpan)) b3)
           21 =>
             case decBool (fuel - 1) b1 of
               Nothing => Nothing
               Just (Pair v1 b2) =>
                 case decList decInterpPart (fuel - 1) b2 of
                   Nothing => Nothing
-                  Just (Pair v2 b3) => Just (Pair (EInterp v1 v2 noSpan) b3)
+                  Just (Pair v2 b3) => Just (Pair (EInterp v1 v2 (detachedNodeRef noSpan)) b3)
           22 =>
             case decStr (fuel - 1) b1 of
               Nothing => Nothing
-              Just (Pair v1 b2) => Just (Pair (EFloat v1 noSpan) b2)
+              Just (Pair v1 b2) => Just (Pair (EFloat v1 (detachedNodeRef noSpan)) b2)
           _ => Nothing
 
 -- | 解析 `Ctor`：tag 必须与 `encCtor` 一致。

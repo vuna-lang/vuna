@@ -241,7 +241,7 @@ renderClause env at name pats body =
   let
     header = "${declNameText name}${joinSpace (map renderPatAtom pats)}"
   in case body of
-    ELet binds inner recFlag sp =>
+    ELet binds inner recFlag _ =>
       if recFlag && not (isNilList binds) then
         let
           bodyD = group (appendDoc (text (header ++ " =")) (nest 2 (appendDoc (if multilineExpr inner then hard else line) (renderExpr env at inner))))
@@ -515,8 +515,8 @@ sectionsDocGo (d :: rest) = appendDoc d (appendDoc hard (appendDoc hard (section
 
 -- | 内部：表达式是否以块结构开头（绑定值要另起一行，缩进才稳定）。
 multilineExpr : Expr -> Bool
-multilineExpr (ELet binds body recFlag sp) = True
-multilineExpr (ECase scrut alts sp) = True
-multilineExpr (EDo stmts sp) = True
-multilineExpr (EIf c t el sp) = multilineExpr t || multilineExpr el
+multilineExpr (ELet binds body recFlag _) = True
+multilineExpr (ECase scrut alts _) = True
+multilineExpr (EDo stmts _) = True
+multilineExpr (EIf c t el _) = multilineExpr t || multilineExpr el
 multilineExpr _ = False

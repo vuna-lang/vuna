@@ -351,38 +351,38 @@ doStmtAnchors (DLet binds r) =
 exprAnchors : Expr -> List Span
 exprAnchors e =
   case e of
-    EVar name sp => []
-    EInt n sp => []
-    EStr s sp => []
-    EFloat raw sp => []
-    ELam ps body sp => exprAnchors body
-    EApp fn args sp => append (exprAnchors fn) (concatMap exprAnchors args)
-    EPi name implicit _ dom cod sp => append (exprAnchors dom) (exprAnchors cod)
-    ELet binds body rec_ sp =>
+    EVar name _ => []
+    EInt n _ => []
+    EStr s _ => []
+    EFloat raw _ => []
+    ELam ps body _ => exprAnchors body
+    EApp fn args _ => append (exprAnchors fn) (concatMap exprAnchors args)
+    EPi name implicit _ dom cod _ => append (exprAnchors dom) (exprAnchors cod)
+    ELet binds body rec_ _ =>
       append
         (append (map bindingAnchor binds) (concatMap bindingValueAnchors binds))
         (exprAnchors body)
-    ECase scrut alts sp =>
+    ECase scrut alts _ =>
       append (exprAnchors scrut) (append (map altAnchor alts) (concatMap altBodyAnchors alts))
-    EIf c t el sp => append (exprAnchors c) (append (exprAnchors t) (exprAnchors el))
-    EField base f sp => exprAnchors base
-    ERecord name fields sp => concatMap fieldExprAnchors fields
-    ERecUpdate base fields sp => append (exprAnchors base) (concatMap fieldExprAnchors fields)
-    EDo stmts sp => concatMap doStmtAnchors stmts
+    EIf c t el _ => append (exprAnchors c) (append (exprAnchors t) (exprAnchors el))
+    EField base f _ => exprAnchors base
+    ERecord name fields _ => concatMap fieldExprAnchors fields
+    ERecUpdate base fields _ => append (exprAnchors base) (concatMap fieldExprAnchors fields)
+    EDo stmts _ => concatMap doStmtAnchors stmts
     -- where 绑定签名行（`g : Int -> Int`）本身是注释锚点（前置/行尾注释挂签名行）。
-    EAnn value ty sp => sp :: exprAnchors value
+    EAnn value ty sp => (nodeRefSpan sp) :: exprAnchors value
     -- where/let 多 clause 局部函数：每个 clause body 的表达式锚点。
-    ELocalFun clauses sp => concatMap localClauseAnchors clauses
-    EInfix op l r sp => append (exprAnchors l) (exprAnchors r)
-    EParen inner sp => exprAnchors inner
+    ELocalFun clauses _ => concatMap localClauseAnchors clauses
+    EInfix op l r _ => append (exprAnchors l) (exprAnchors r)
+    EParen inner _ => exprAnchors inner
     -- 反引号中缀 / section 是 parse 后中间产物；子表达式里的注释仍要前移。
-    EBacktick name l r sp => append (exprAnchors l) (exprAnchors r)
-    ESectOp op sp => []
-    ESectL op inner sp => exprAnchors inner
-    ESectR inner op sp => exprAnchors inner
+    EBacktick name l r _ => append (exprAnchors l) (exprAnchors r)
+    ESectOp op _ => []
+    ESectL op inner _ => exprAnchors inner
+    ESectR inner op _ => exprAnchors inner
     -- 模板字面量：洞内表达式的注释锚点照常收集（注释仍在字面量内，但会被提升到
     -- 外层条目——注释在 `${...}` 里不进 AST，见 Lexer 的说明）。
-    EInterp multi parts sp => concatMap interpPartAnchors parts
+    EInterp multi parts _ => concatMap interpPartAnchors parts
 
 -- | 内部：模板片段里洞表达式的锚点（文本块没有锚点）。
 interpPartAnchors : InterpPart -> List Span

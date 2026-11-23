@@ -11,33 +11,41 @@ import Vuna.Compiler.Frontend.Rast.Name as RastName
 
 -- | RAst 表达式 → Ast 表达式（名字还原为解析后的字符串）。
 export toAstExpr : Rast.Expr -> Ast.Expr
-toAstExpr (Rast.EVar n sp) = Ast.EVar (RastName.rnameKey n) sp
-toAstExpr (Rast.EInt n sp) = Ast.EInt n sp
-toAstExpr (Rast.EStr s sp) = Ast.EStr s sp
-toAstExpr (Rast.EFloat raw sp) = Ast.EFloat raw sp
-toAstExpr (Rast.EInterp multi parts sp) = Ast.EInterp multi (map toAstInterpPart parts) sp
-toAstExpr (Rast.ELam params body sp) = Ast.ELam params (toAstExpr body) sp
-toAstExpr (Rast.EApp fn args sp) = Ast.EApp (toAstExpr fn) (map toAstExpr args) sp
+toAstExpr (Rast.EVar n sp) = Ast.EVar (RastName.rnameKey n) (Ast.detachedNodeRef sp)
+toAstExpr (Rast.EInt n sp) = Ast.EInt n (Ast.detachedNodeRef sp)
+toAstExpr (Rast.EStr s sp) = Ast.EStr s (Ast.detachedNodeRef sp)
+toAstExpr (Rast.EFloat raw sp) = Ast.EFloat raw (Ast.detachedNodeRef sp)
+toAstExpr (Rast.EInterp multi parts sp) =
+  Ast.EInterp multi (map toAstInterpPart parts) (Ast.detachedNodeRef sp)
+toAstExpr (Rast.ELam params body sp) = Ast.ELam params (toAstExpr body) (Ast.detachedNodeRef sp)
+toAstExpr (Rast.EApp fn args sp) =
+  Ast.EApp (toAstExpr fn) (map toAstExpr args) (Ast.detachedNodeRef sp)
 toAstExpr (Rast.EPi name implicit qty dom cod sp) =
-  Ast.EPi name implicit qty (toAstExpr dom) (toAstExpr cod) sp
+  Ast.EPi name implicit qty (toAstExpr dom) (toAstExpr cod) (Ast.detachedNodeRef sp)
 toAstExpr (Rast.ELet binds body rec_ sp) =
-  Ast.ELet (map toAstBinding binds) (toAstExpr body) rec_ sp
-toAstExpr (Rast.ELocalFun clauses sp) = Ast.ELocalFun (map toAstLocalClause clauses) sp
-toAstExpr (Rast.ECase scrut alts sp) = Ast.ECase (toAstExpr scrut) (map toAstAlt alts) sp
-toAstExpr (Rast.EIf c t f sp) = Ast.EIf (toAstExpr c) (toAstExpr t) (toAstExpr f) sp
-toAstExpr (Rast.EField base fname sp) = Ast.EField (toAstExpr base) fname sp
+  Ast.ELet (map toAstBinding binds) (toAstExpr body) rec_ (Ast.detachedNodeRef sp)
+toAstExpr (Rast.ELocalFun clauses sp) =
+  Ast.ELocalFun (map toAstLocalClause clauses) (Ast.detachedNodeRef sp)
+toAstExpr (Rast.ECase scrut alts sp) =
+  Ast.ECase (toAstExpr scrut) (map toAstAlt alts) (Ast.detachedNodeRef sp)
+toAstExpr (Rast.EIf c t f sp) =
+  Ast.EIf (toAstExpr c) (toAstExpr t) (toAstExpr f) (Ast.detachedNodeRef sp)
+toAstExpr (Rast.EField base fname sp) = Ast.EField (toAstExpr base) fname (Ast.detachedNodeRef sp)
 toAstExpr (Rast.ERecord name fields sp) =
-  Ast.ERecord (RastName.rnameKey name) (map toAstFieldValue fields) sp
+  Ast.ERecord (RastName.rnameKey name) (map toAstFieldValue fields) (Ast.detachedNodeRef sp)
 toAstExpr (Rast.ERecUpdate base fields sp) =
-  Ast.ERecUpdate (toAstExpr base) (map toAstFieldValue fields) sp
-toAstExpr (Rast.EDo stmts sp) = Ast.EDo (map toAstStmt stmts) sp
-toAstExpr (Rast.EInfix op l r sp) = Ast.EInfix op (toAstExpr l) (toAstExpr r) sp
-toAstExpr (Rast.EParen inner sp) = Ast.EParen (toAstExpr inner) sp
-toAstExpr (Rast.EBacktick name l r sp) = Ast.EBacktick name (toAstExpr l) (toAstExpr r) sp
-toAstExpr (Rast.ESectOp op sp) = Ast.ESectOp op sp
-toAstExpr (Rast.ESectL op r sp) = Ast.ESectL op (toAstExpr r) sp
-toAstExpr (Rast.ESectR l op sp) = Ast.ESectR (toAstExpr l) op sp
-toAstExpr (Rast.EAnn value ty sp) = Ast.EAnn (toAstExpr value) (toAstExpr ty) sp
+  Ast.ERecUpdate (toAstExpr base) (map toAstFieldValue fields) (Ast.detachedNodeRef sp)
+toAstExpr (Rast.EDo stmts sp) = Ast.EDo (map toAstStmt stmts) (Ast.detachedNodeRef sp)
+toAstExpr (Rast.EInfix op l r sp) =
+  Ast.EInfix op (toAstExpr l) (toAstExpr r) (Ast.detachedNodeRef sp)
+toAstExpr (Rast.EParen inner sp) = Ast.EParen (toAstExpr inner) (Ast.detachedNodeRef sp)
+toAstExpr (Rast.EBacktick name l r sp) =
+  Ast.EBacktick name (toAstExpr l) (toAstExpr r) (Ast.detachedNodeRef sp)
+toAstExpr (Rast.ESectOp op sp) = Ast.ESectOp op (Ast.detachedNodeRef sp)
+toAstExpr (Rast.ESectL op r sp) = Ast.ESectL op (toAstExpr r) (Ast.detachedNodeRef sp)
+toAstExpr (Rast.ESectR l op sp) = Ast.ESectR (toAstExpr l) op (Ast.detachedNodeRef sp)
+toAstExpr (Rast.EAnn value ty sp) =
+  Ast.EAnn (toAstExpr value) (toAstExpr ty) (Ast.detachedNodeRef sp)
 
 toAstInterpPart : Rast.InterpPart -> Ast.InterpPart
 toAstInterpPart (Rast.IPText s) = Ast.IPText s
@@ -65,14 +73,15 @@ toAstBind : Pair Rast.Pat Rast.Expr -> Pair Ast.Pat Ast.Expr
 toAstBind (Pair pat value) = Pair (toAstPat pat) (toAstExpr value)
 
 toAstPat : Rast.Pat -> Ast.Pat
-toAstPat (Rast.PVar name sp) = Ast.PVar name sp
-toAstPat (Rast.PAs name inner sp) = Ast.PAs name (toAstPat inner) sp
-toAstPat (Rast.PWild sp) = Ast.PWild sp
-toAstPat (Rast.PCon name pats sp) = Ast.PCon (RastName.rnameKey name) (map toAstPat pats) sp
-toAstPat (Rast.PInt n sp) = Ast.PInt n sp
-toAstPat (Rast.PStr s sp) = Ast.PStr s sp
+toAstPat (Rast.PVar name sp) = Ast.PVar name (Ast.detachedNodeRef sp)
+toAstPat (Rast.PAs name inner sp) = Ast.PAs name (toAstPat inner) (Ast.detachedNodeRef sp)
+toAstPat (Rast.PWild sp) = Ast.PWild (Ast.detachedNodeRef sp)
+toAstPat (Rast.PCon name pats sp) =
+  Ast.PCon (RastName.rnameKey name) (map toAstPat pats) (Ast.detachedNodeRef sp)
+toAstPat (Rast.PInt n sp) = Ast.PInt n (Ast.detachedNodeRef sp)
+toAstPat (Rast.PStr s sp) = Ast.PStr s (Ast.detachedNodeRef sp)
 toAstPat (Rast.PRecord name fields sp) =
-  Ast.PRecord (RastName.rnameKey name) (map toAstPatField fields) sp
+  Ast.PRecord (RastName.rnameKey name) (map toAstPatField fields) (Ast.detachedNodeRef sp)
 
 toAstPatField : Pair String Rast.Pat -> Pair String Ast.Pat
 toAstPatField (Pair fname pat) = Pair fname (toAstPat pat)
@@ -143,14 +152,15 @@ maybeMap f (Just x) = Just (f x)
 
 -- | Ast 模式 → RAst。
 export toRastPat : Ast.Pat -> Rast.Pat
-toRastPat (Ast.PVar name sp) = Rast.PVar name sp
-toRastPat (Ast.PAs name inner sp) = Rast.PAs name (toRastPat inner) sp
-toRastPat (Ast.PWild sp) = Rast.PWild sp
-toRastPat (Ast.PCon name pats sp) = Rast.PCon (RastName.classifyName name) (map toRastPat pats) sp
-toRastPat (Ast.PInt n sp) = Rast.PInt n sp
-toRastPat (Ast.PStr s sp) = Rast.PStr s sp
-toRastPat (Ast.PRecord name fields sp) =
-  Rast.PRecord (RastName.classifyName name) (map toRastPatField fields) sp
+toRastPat (Ast.PVar name r) = Rast.PVar name (Ast.nodeRefSpan r)
+toRastPat (Ast.PAs name inner r) = Rast.PAs name (toRastPat inner) (Ast.nodeRefSpan r)
+toRastPat (Ast.PWild r) = Rast.PWild (Ast.nodeRefSpan r)
+toRastPat (Ast.PCon name pats r) =
+  Rast.PCon (RastName.classifyName name) (map toRastPat pats) (Ast.nodeRefSpan r)
+toRastPat (Ast.PInt n r) = Rast.PInt n (Ast.nodeRefSpan r)
+toRastPat (Ast.PStr s r) = Rast.PStr s (Ast.nodeRefSpan r)
+toRastPat (Ast.PRecord name fields r) =
+  Rast.PRecord (RastName.classifyName name) (map toRastPatField fields) (Ast.nodeRefSpan r)
 
 toRastPatField : Pair String Ast.Pat -> Pair String Rast.Pat
 toRastPatField (Pair fname pat) = Pair fname (toRastPat pat)

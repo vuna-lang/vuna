@@ -1213,13 +1213,13 @@ patRefNames : Pat -> List String
 patRefNames p = patRefNamesGo p []
 
 patRefNamesGo : Pat -> List String -> List String
-patRefNamesGo (PVar name sp) acc = acc
-patRefNamesGo (PAs name inner sp) acc = patRefNamesGo inner acc
-patRefNamesGo (PWild sp) acc = acc
-patRefNamesGo (PCon name pats sp) acc = patRefNamesListGo pats ((::) name acc)
-patRefNamesGo (PInt n sp) acc = acc
-patRefNamesGo (PStr s sp) acc = acc
-patRefNamesGo (PRecord name fields sp) acc = fieldPatsGo fields ((::) name acc)
+patRefNamesGo (PVar name _) acc = acc
+patRefNamesGo (PAs name inner _) acc = patRefNamesGo inner acc
+patRefNamesGo (PWild _) acc = acc
+patRefNamesGo (PCon name pats _) acc = patRefNamesListGo pats ((::) name acc)
+patRefNamesGo (PInt n _) acc = acc
+patRefNamesGo (PStr s _) acc = acc
+patRefNamesGo (PRecord name fields _) acc = fieldPatsGo fields ((::) name acc)
 
 patRefNamesListGo : List Pat -> List String -> List String
 patRefNamesListGo [] acc = acc
@@ -1237,29 +1237,29 @@ exprRefNames : Expr -> List String
 exprRefNames e = exprRefNamesGo e []
 
 exprRefNamesGo : Expr -> List String -> List String
-exprRefNamesGo (EVar n sp) acc = (::) n acc
-exprRefNamesGo (EInt n sp) acc = acc
-exprRefNamesGo (EStr s sp) acc = acc
-exprRefNamesGo (EFloat raw sp) acc = acc
-exprRefNamesGo (ELam ps body sp) acc = exprRefNamesGo body acc
-exprRefNamesGo (EApp fn args sp) acc = exprRefNamesGo fn (exprRefNamesListGo args acc)
-exprRefNamesGo (EPi name implicit qty dom cod sp) acc = exprRefNamesGo dom (exprRefNamesGo cod acc)
-exprRefNamesGo (ELet binds body rec_ sp) acc = exprRefNamesGo body (bindRefNamesListGo binds acc)
-exprRefNamesGo (ELocalFun clauses sp) acc = clauseRefNamesListGo clauses acc
-exprRefNamesGo (ECase scrut alts sp) acc = exprRefNamesGo scrut (bindRefNamesListGo alts acc)
-exprRefNamesGo (EIf c t el sp) acc = exprRefNamesGo c (exprRefNamesGo t (exprRefNamesGo el acc))
-exprRefNamesGo (EField base fname sp) acc = exprRefNamesGo base acc
-exprRefNamesGo (ERecord name fields sp) acc = fieldExprsGo fields ((::) name acc)
-exprRefNamesGo (ERecUpdate base fields sp) acc = exprRefNamesGo base (fieldExprsGo fields acc)
-exprRefNamesGo (EDo stmts sp) acc = doStmtRefNamesListGo stmts acc
-exprRefNamesGo (EInfix op lhs rhs sp) acc = exprRefNamesGo lhs (exprRefNamesGo rhs ((::) op acc))
-exprRefNamesGo (EParen inner sp) acc = exprRefNamesGo inner acc
-exprRefNamesGo (EBacktick op lhs rhs sp) acc = exprRefNamesGo lhs (exprRefNamesGo rhs ((::) op acc))
-exprRefNamesGo (ESectOp op sp) acc = (::) op acc
-exprRefNamesGo (ESectL op rhs sp) acc = (::) op (exprRefNamesGo rhs acc)
-exprRefNamesGo (ESectR lhs op sp) acc = (::) op (exprRefNamesGo lhs acc)
-exprRefNamesGo (EAnn value ty sp) acc = exprRefNamesGo value (exprRefNamesGo ty acc)
-exprRefNamesGo (EInterp multi parts sp) acc = interpPartRefNamesListGo parts acc
+exprRefNamesGo (EVar n _) acc = (::) n acc
+exprRefNamesGo (EInt n _) acc = acc
+exprRefNamesGo (EStr s _) acc = acc
+exprRefNamesGo (EFloat raw _) acc = acc
+exprRefNamesGo (ELam ps body _) acc = exprRefNamesGo body acc
+exprRefNamesGo (EApp fn args _) acc = exprRefNamesGo fn (exprRefNamesListGo args acc)
+exprRefNamesGo (EPi name implicit qty dom cod _) acc = exprRefNamesGo dom (exprRefNamesGo cod acc)
+exprRefNamesGo (ELet binds body rec_ _) acc = exprRefNamesGo body (bindRefNamesListGo binds acc)
+exprRefNamesGo (ELocalFun clauses _) acc = clauseRefNamesListGo clauses acc
+exprRefNamesGo (ECase scrut alts _) acc = exprRefNamesGo scrut (bindRefNamesListGo alts acc)
+exprRefNamesGo (EIf c t el _) acc = exprRefNamesGo c (exprRefNamesGo t (exprRefNamesGo el acc))
+exprRefNamesGo (EField base fname _) acc = exprRefNamesGo base acc
+exprRefNamesGo (ERecord name fields _) acc = fieldExprsGo fields ((::) name acc)
+exprRefNamesGo (ERecUpdate base fields _) acc = exprRefNamesGo base (fieldExprsGo fields acc)
+exprRefNamesGo (EDo stmts _) acc = doStmtRefNamesListGo stmts acc
+exprRefNamesGo (EInfix op lhs rhs _) acc = exprRefNamesGo lhs (exprRefNamesGo rhs ((::) op acc))
+exprRefNamesGo (EParen inner _) acc = exprRefNamesGo inner acc
+exprRefNamesGo (EBacktick op lhs rhs _) acc = exprRefNamesGo lhs (exprRefNamesGo rhs ((::) op acc))
+exprRefNamesGo (ESectOp op _) acc = (::) op acc
+exprRefNamesGo (ESectL op rhs _) acc = (::) op (exprRefNamesGo rhs acc)
+exprRefNamesGo (ESectR lhs op _) acc = (::) op (exprRefNamesGo lhs acc)
+exprRefNamesGo (EAnn value ty _) acc = exprRefNamesGo value (exprRefNamesGo ty acc)
+exprRefNamesGo (EInterp multi parts _) acc = interpPartRefNamesListGo parts acc
 
 exprRefNamesListGo : List Expr -> List String -> List String
 exprRefNamesListGo [] acc = acc

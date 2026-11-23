@@ -546,8 +546,8 @@ goalAtRange sl sc el ec (g :: rest) =
 
 -- | 内部：非索引 data 的 kind 只能是 `Type`（索引族写成 `... -> Type`，不枚举）。
 dataKindIsType : Expr -> Bool
-dataKindIsType (EVar "Type" sp) = True
-dataKindIsType (EParen inner sp) = dataKindIsType inner
+dataKindIsType (EVar "Type" _) = True
+dataKindIsType (EParen inner _) = dataKindIsType inner
 dataKindIsType _ = False
 
 -- | 可 split 的类型：非索引 data（多分支）或 record（单构造器，构造器名 = 类型名）。
@@ -577,9 +577,9 @@ findSplitIn (_ :: rest) name = findSplitIn rest name
 -- 箭头 `A -> B` 若编码成 `EApp (EVar "->") [A, B]`，头名是 `->`，后续解析不到声明即降级；
 -- `EInfix` / `EPi` / 其它形状返回 `Nothing`。
 typeHeadName : Expr -> Maybe String
-typeHeadName (EVar n sp) = Just n
-typeHeadName (EApp f args sp2) = typeHeadName f
-typeHeadName (EParen inner sp) = typeHeadName inner
+typeHeadName (EVar n _) = Just n
+typeHeadName (EApp f args _) = typeHeadName f
+typeHeadName (EParen inner _) = typeHeadName inner
 typeHeadName _ = Nothing
 
 -- | 内部：`Maybe` 列表里第一个 `Just`。
@@ -717,9 +717,9 @@ resolveTypeSplit sf roots curMod tyText =
 -- | 内部：构造子的模式参数个数：显式 `->` / `(a : Type) ->`（EPi implicit = False）才占通配；
 -- 隐式 `{a : Type} ->`（EPi implicit = True）由调用点推断，不进模式。
 ctorPatArity : Expr -> Int
-ctorPatArity (EInfix "->" lhs rhs sp) = 1 + ctorPatArity rhs
-ctorPatArity (EApp (EVar "->" sp1) ([x, rest]) sp2) = 1 + ctorPatArity rest
-ctorPatArity (EPi n implicit qty dom cod sp) = (if implicit then 0 else 1) + ctorPatArity cod
+ctorPatArity (EInfix "->" lhs rhs _) = 1 + ctorPatArity rhs
+ctorPatArity (EApp (EVar "->" _) ([x, rest]) _) = 1 + ctorPatArity rest
+ctorPatArity (EPi n implicit qty dom cod _) = (if implicit then 0 else 1) + ctorPatArity cod
 ctorPatArity ty = 0
 
 -- | 内部：`n` 个通配参数的模式文本（`" _ _ _"`）。

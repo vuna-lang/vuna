@@ -1083,7 +1083,7 @@ parseClause st blockCol name ds =
                                   body2 =
                                     case wheres of
                                       [] => body
-                                      _ :: _ => ELet wheres body True (spanOf st st4)
+                                      _ :: _ => ELet wheres body True (detachedNodeRef (spanOf st st4))
                                 in OkC (Pair (DFun name pats body2 (declRefAt st ds st4)) st4)
                             )
                       )
@@ -1123,7 +1123,7 @@ parseWhereBindings st whereCol =
 
 -- 绑定块的条目：签名行或一条绑定（`pat = expr` / `name pats = expr`）。
 data BindingItem : Type where
-  BISig : String -> Expr -> Span -> BindingItem
+  BISig : String -> Expr -> NodeRef -> BindingItem
   BIBind : Pair Pat Expr -> BindingItem
 
 parseBindingItemsAt : Int -> PState -> Int -> Check (Pair (List BindingItem) PState)
@@ -1150,12 +1150,24 @@ parseBindingItemBody fuel st bindCol =
   if fuel <= 0 then
     icFuel "parser"
   else
-    Vuna.Compiler.Base.Common.step (parsePatternSingle (stateFuel st) st bindCol) (
-        \pat, st1 =>
-          case pat of
-            PVar name psp => if atSym st1 ":" then Vuna.Compiler.Base.Common.bind (expectSym st1 ":") (\st2 => Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st2 bindCol) (\ty, st3 => Vuna.Compiler.Base.Common.bind (rejectCtxSuffix st3) (\st4 => OkC (Pair (BISig name ty (spanOf st st4)) st4)))) else parseBindingDef (fuel - 1) st st1 bindCol pat
-            _ => parseBindingDef (fuel - 1) st st1 bindCol pat
-      )
+    case peekTok st of
+      -- `name : Ty` 是签名行，**不是**模式：名字按 binder 直接读，不建 `pat` 节点
+      -- （签名行在树里只有 `binding` 节点；模式节点留给定义行 / case 分支等真模式）。
+      PTok (TIdent name) _ =>
+        if name == "_" then
+          parseBindingPattern fuel st bindCol
+        else
+          case peekTokAt st 1 of
+            Just (PTok (TSym ":") _) => Vuna.Compiler.Base.Common.bind (expectSym (advance st) ":") (\st1 => Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st1 bindCol) (\ty, st2 => Vuna.Compiler.Base.Common.bind (rejectCtxSuffix st2) (\st3 => OkC (Pair (BISig name ty (detachedNodeRef (spanOf st st3))) st3))))
+            _ => parseBindingPattern fuel st bindCol
+      _ => parseBindingPattern fuel st bindCol
+
+-- 绑定项里的模式（`pat = expr` / `name pats = expr`）。
+parseBindingPattern : Int -> PState -> Int -> Check (Pair BindingItem PState)
+parseBindingPattern fuel st bindCol =
+  Vuna.Compiler.Base.Common.step
+    (parsePatternSingle (stateFuel st) st bindCol)
+    (\pat, st1 => parseBindingDef (fuel - 1) st st1 bindCol pat)
 
 -- 单条绑定：`pat = expr` 或函数子句 `name pats = expr`（desugar 成 λ）。
 parseBindingDef : Int -> PState -> PState -> Int -> Pat -> Check (Pair BindingItem PState)
@@ -1164,7 +1176,7 @@ parseBindingDef fuel stStart st bindCol pat =
     icFuel "parser"
   else
     case pat of
-      PVar name _ => if startsPatternAtom st && canContinue st bindCol then Vuna.Compiler.Base.Common.step (parseClausePatterns (stateFuel st) st bindCol) (\pats, st2 => Vuna.Compiler.Base.Common.bind (checkBindersAt st pats) (\_ => Vuna.Compiler.Base.Common.bind (expectSym st2 "=") (\st3 => Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st3 bindCol) (\value, st4 => OkC (Pair (BIBind (Pair (PVar name (patSpan pat)) (ELocalFun [Pair pats value] (spanOf stStart st4)))) st4))))) else Vuna.Compiler.Base.Common.step (parseBindingValue (fuel - 1) st pat bindCol) (\b, st2 => OkC (Pair (BIBind b) st2))
+      PVar name _ => if startsPatternAtom st && canContinue st bindCol then Vuna.Compiler.Base.Common.step (parseClausePatterns (stateFuel st) st bindCol) (\pats, st2 => Vuna.Compiler.Base.Common.bind (checkBindersAt st pats) (\_ => Vuna.Compiler.Base.Common.bind (expectSym st2 "=") (\st3 => Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st3 bindCol) (\value, st4 => OkC (Pair (BIBind (Pair (PVar name (patRef pat)) (ELocalFun [Pair pats value] (detachedNodeRef (spanOf stStart st4))))) st4))))) else Vuna.Compiler.Base.Common.step (parseBindingValue (fuel - 1) st pat bindCol) (\b, st2 => OkC (Pair (BIBind b) st2))
       _ => Vuna.Compiler.Base.Common.step (parseBindingValue (fuel - 1) st pat bindCol) (\b, st2 => OkC (Pair (BIBind b) st2))
 
 parseBindingValue : Int -> PState -> Pat -> Int -> Check (Pair (Pair Pat Expr) PState)
@@ -1181,21 +1193,22 @@ parseBindingValue fuel st pat blockCol =
 bindingItemsToBinds : List BindingItem -> Check (List (Pair Pat Expr))
 bindingItemsToBinds items = bindingBindsGo items [] [] []
 
-bindingBindsGo : List BindingItem -> List (Pair String (Pair Expr Span)) -> List String -> List (Pair Pat Expr) -> Check (List (Pair Pat Expr))
+bindingBindsGo : List BindingItem -> List (Pair String (Pair Expr NodeRef)) -> List String -> List (Pair Pat Expr) -> Check (List (Pair Pat Expr))
 bindingBindsGo [] sigs bound acc =
   case firstDanglingSig (reverse sigs) bound of
     Nothing => OkC (reverse acc)
     Just (Pair name sp) =>
-      ErrC (withLabel (Label (Just sp) "" LabelPrimary Nothing) (psMsg (WhereSigNoDef name) [name]))
+      ErrC
+        (withLabel (Label (Just (nodeRefSpan sp)) "" LabelPrimary Nothing) (psMsg (WhereSigNoDef name) [name]))
 bindingBindsGo (item :: rest) sigs bound acc =
   case item of
     BISig name ty sp =>
       if memName name bound then
         ErrC
-          (withLabel (Label (Just sp) "" LabelPrimary Nothing) (psMsg (WhereSigBeforeClause name) [name]))
+          (withLabel (Label (Just (nodeRefSpan sp)) "" LabelPrimary Nothing) (psMsg (WhereSigBeforeClause name) [name]))
       else if hasBindingSig name sigs then
         ErrC
-          (withLabel (Label (Just sp) "" LabelPrimary Nothing) (psMsg (WhereSigDuplicate name) [name]))
+          (withLabel (Label (Just (nodeRefSpan sp)) "" LabelPrimary Nothing) (psMsg (WhereSigDuplicate name) [name]))
       else
         bindingBindsGo rest (Pair name (Pair ty sp) :: sigs) bound acc
     BIBind (Pair pat value) =>
@@ -1206,7 +1219,7 @@ bindingBindsGo (item :: rest) sigs bound acc =
             Just (Pair ty sp) =>
               if memName (patBoundName pat) bound then
                 ErrC
-                  (withLabel (Label (Just sp) "" LabelPrimary Nothing) (psMsg (WhereSigMultiClause (patBoundName pat)) [patBoundName pat]))
+                  (withLabel (Label (Just (nodeRefSpan sp)) "" LabelPrimary Nothing) (psMsg (WhereSigMultiClause (patBoundName pat)) [patBoundName pat]))
               else
                 bindingBindsGo
                   rest
@@ -1222,14 +1235,14 @@ localFunMerge : String -> Expr -> List (Pair Pat Expr) -> Maybe (List (Pair Pat 
 localFunMerge name value ((Pair (PVar n nsp) (ELocalFun cs0 sp0)) :: rest) =
   if n == name then
     case value of
-      ELocalFun cs1 sp1 => Just ((::) (Pair (PVar n nsp) (ELocalFun (append cs0 cs1) sp0)) rest)
+      ELocalFun cs1 _ => Just ((::) (Pair (PVar n nsp) (ELocalFun (append cs0 cs1) sp0)) rest)
       _ => Nothing
   else
     Nothing
 localFunMerge name value ((Pair (PVar n nsp) (EAnn (ELocalFun cs0 sp0) ty annSp)) :: rest) =
   if n == name then
     case value of
-      ELocalFun cs1 sp1 => Just ((::) (Pair (PVar n nsp) (EAnn (ELocalFun (append cs0 cs1) sp0) ty annSp)) rest)
+      ELocalFun cs1 _ => Just ((::) (Pair (PVar n nsp) (EAnn (ELocalFun (append cs0 cs1) sp0) ty annSp)) rest)
       _ => Nothing
   else
     Nothing
@@ -1237,20 +1250,20 @@ localFunMerge name value _ = Nothing
 
 -- 绑定名（非简单变量绑定返回空串，永远匹配不到签名）。
 patBoundName : Pat -> String
-patBoundName (PVar name sp) = name
+patBoundName (PVar name _) = name
 patBoundName _ = ""
 
-bindingSigOf : String -> List (Pair String (Pair Expr Span)) -> Maybe (Pair Expr Span)
+bindingSigOf : String -> List (Pair String (Pair Expr NodeRef)) -> Maybe (Pair Expr NodeRef)
 bindingSigOf name [] = Nothing
 bindingSigOf name ((Pair n v) :: rest) = if n == name then Just v else bindingSigOf name rest
 
-hasBindingSig : String -> List (Pair String (Pair Expr Span)) -> Bool
+hasBindingSig : String -> List (Pair String (Pair Expr NodeRef)) -> Bool
 hasBindingSig name sigs =
   case bindingSigOf name sigs of
     Just _ => True
     Nothing => False
 
-firstDanglingSig : List (Pair String (Pair Expr Span)) -> List String -> Maybe (Pair String Span)
+firstDanglingSig : List (Pair String (Pair Expr NodeRef)) -> List String -> Maybe (Pair String NodeRef)
 firstDanglingSig [] bound = Nothing
 firstDanglingSig ((Pair name (Pair ty sp)) :: rest) bound =
   if memName name bound then firstDanglingSig rest bound else Just (Pair name sp)
@@ -1520,7 +1533,7 @@ ctxThenSplit (EPi n i q d c sp) hd =
 ctxThenSplit e1 hd = Pair [e1] hd
 
 innermostPiCod : Expr -> Expr
-innermostPiCod (EPi n i q d c sp) = innermostPiCod c
+innermostPiCod (EPi n i q d c _) = innermostPiCod c
 innermostPiCod e = e
 
 replacePiCod : Expr -> Expr -> Expr
@@ -1632,7 +1645,11 @@ parseCtorBody st ctorCol nid =
 
 -- | 一个表达式的建树节点（嵌套表达式各自成节点，区间由递归配对）。
 parseExpr : Int -> PState -> Int -> Check (Pair Expr PState)
-parseExpr fuel st blockCol = withExtent CstExprKind st (\st0 => parseExprBody fuel st0 blockCol)
+parseExpr fuel st blockCol =
+  withExtent
+    CstExprKind
+    st
+    (\st0 => Vuna.Compiler.Base.Common.step (parseExprBody fuel st0 blockCol) (\e, st1 => OkC (Pair (withExprId st0.openNodeId e) st1)))
 
 parseExprBody : Int -> PState -> Int -> Check (Pair Expr PState)
 parseExprBody fuel st blockCol =
@@ -1657,8 +1674,8 @@ parseInfix fuel st blockCol lhs =
     case peekTok st of
       -- 反引号中缀 `` a `f` b ``。名字是普通值名或符号名（expectValueName）；
       -- rhs 用 parseExpr（与普通中缀一致，会继续吞后续中缀），形成右嵌套链交给 Loader 重排。
-      PTok (TSym "`") p => if canContinue st blockCol then Vuna.Compiler.Base.Common.step (expectValueName (advance st)) (\name, st1 => Vuna.Compiler.Base.Common.bind (expectSym st1 "`") (\st2 => Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st2 blockCol) (\rhs, st3 => parseInfix (fuel - 1) st3 blockCol (EBacktick name lhs rhs (spanOf st st3))))) else OkC (Pair lhs st)
-      PTok (TSym op) p => if canContinue st blockCol && not (isSyntaxSym op) then if closeParenNext st then OkC (Pair (ESectR lhs op (spanOf st (advance st))) (advance st)) else Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) (advance st) blockCol) (\rhs, st2 => parseInfix (fuel - 1) st2 blockCol (EInfix op lhs rhs (spanOf st st2))) else OkC (Pair lhs st)
+      PTok (TSym "`") p => if canContinue st blockCol then Vuna.Compiler.Base.Common.step (expectValueName (advance st)) (\name, st1 => Vuna.Compiler.Base.Common.bind (expectSym st1 "`") (\st2 => Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st2 blockCol) (\rhs, st3 => parseInfix (fuel - 1) st3 blockCol (EBacktick name lhs rhs (detachedNodeRef (spanOf st st3)))))) else OkC (Pair lhs st)
+      PTok (TSym op) p => if canContinue st blockCol && not (isSyntaxSym op) then if closeParenNext st then OkC (Pair (ESectR lhs op (detachedNodeRef (spanOf st (advance st)))) (advance st)) else Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) (advance st) blockCol) (\rhs, st2 => parseInfix (fuel - 1) st2 blockCol (EInfix op lhs rhs (detachedNodeRef (spanOf st st2)))) else OkC (Pair lhs st)
       -- 右 section `(e op)`。只消费 op；`)` 由外层 `(` 分支消费。
       _ => OkC (Pair lhs st)
 
@@ -1686,9 +1703,9 @@ parseNegation fuel st blockCol =
     icFuel "parser"
   else
     case peekTokAt st 1 of
-      Just (PTok (TInt n) _) => OkC (Pair (EInt (0 - n) (spanOf st (advance (advance st)))) (advance (advance st)))
-      Just (PTok (TFloat raw) _) => OkC (Pair (EFloat ("-" ++ raw) (spanOf st (advance (advance st)))) (advance (advance st)))
-      _ => Vuna.Compiler.Base.Common.step (parseApplication (fuel - 1) (advance st) blockCol) (\e, st1 => OkC (Pair (EApp (EVar "negate" (spanOf st (advance st))) [e] (spanOf st st1)) st1))
+      Just (PTok (TInt n) _) => OkC (Pair (EInt (0 - n) (detachedNodeRef (spanOf st (advance (advance st))))) (advance (advance st)))
+      Just (PTok (TFloat raw) _) => OkC (Pair (EFloat ("-" ++ raw) (detachedNodeRef (spanOf st (advance (advance st))))) (advance (advance st)))
+      _ => Vuna.Compiler.Base.Common.step (parseApplication (fuel - 1) (advance st) blockCol) (\e, st1 => OkC (Pair (EApp (EVar "negate" (detachedNodeRef (spanOf st (advance st)))) [e] (detachedNodeRef (spanOf st st1))) st1))
 
 parseApplication : Int -> PState -> Int -> Check (Pair Expr PState)
 parseApplication fuel st blockCol =
@@ -1698,7 +1715,7 @@ parseApplication fuel st blockCol =
     Vuna.Compiler.Base.Common.step (parseAtom (fuel - 1) st blockCol) (
         \first, st1 =>
           if atSym st1 "@" then
-            Vuna.Compiler.Base.Common.step (parseAtPayload (fuel - 1) (advance st1) blockCol) (\payload, st2 => Vuna.Compiler.Base.Common.step (parseArgs (fuel - 1) st2 blockCol) (\args, st3 => OkC (Pair (EApp (EVar appAtSyntax (spanOf st st3)) (first :: payload :: args) (spanOf st st3)) st3)))
+            Vuna.Compiler.Base.Common.step (parseAtPayload (fuel - 1) (advance st1) blockCol) (\payload, st2 => Vuna.Compiler.Base.Common.step (parseArgs (fuel - 1) st2 blockCol) (\args, st3 => OkC (Pair (EApp (EVar appAtSyntax (detachedNodeRef (spanOf st st3))) (first :: payload :: args) (detachedNodeRef (spanOf st st3))) st3)))
           else
             Vuna.Compiler.Base.Common.step (parseArgs (fuel - 1) st1 blockCol) (
                 \args, st2 =>
@@ -1706,8 +1723,8 @@ parseApplication fuel st blockCol =
                     [] => OkC (Pair first st2)
                     _ =>
                       let
-                        app = EApp first args (spanOf st st2)
-                      in if atSym st2 "@" then Vuna.Compiler.Base.Common.step (parseAtPayload (fuel - 1) (advance st2) blockCol) (\payload, st3 => OkC (Pair (EApp (EVar rowAtSyntax (spanOf st st3)) [app, payload] (spanOf st st3)) st3)) else OkC (Pair app st2)
+                        app = EApp first args (detachedNodeRef (spanOf st st2))
+                      in if atSym st2 "@" then Vuna.Compiler.Base.Common.step (parseAtPayload (fuel - 1) (advance st2) blockCol) (\payload, st3 => OkC (Pair (EApp (EVar rowAtSyntax (detachedNodeRef (spanOf st st3))) [app, payload] (detachedNodeRef (spanOf st st3))) st3)) else OkC (Pair app st2)
               )
       )
 
@@ -1763,7 +1780,7 @@ parseFieldSuffix fuel st blockCol base =
   else if atSym st "." then
     Vuna.Compiler.Base.Common.bind
       (expectSym st ".")
-      (\st1 => Vuna.Compiler.Base.Common.step (expectIdent st1) (\fname, st2 => parseFieldSuffix (fuel - 1) st2 blockCol (EField base fname (spanFromExpr base st2))))
+      (\st1 => Vuna.Compiler.Base.Common.step (expectIdent st1) (\fname, st2 => parseFieldSuffix (fuel - 1) st2 blockCol (EField base fname (detachedNodeRef (spanFromExpr base st2)))))
   else
     OkC (Pair base st)
 
@@ -1778,8 +1795,9 @@ macroBangAt st start name =
 
 -- | 宏原子：无实参时是裸标记 `EVar`（交给展开期报 arity），有实参时是标记应用。
 macroAtom : String -> List Expr -> Span -> Span -> Expr
-macroAtom name [] appSp headSp = EVar (macroSyntaxName name) headSp
-macroAtom name args appSp headSp = EApp (EVar (macroSyntaxName name) headSp) args appSp
+macroAtom name [] appSp headSp = EVar (macroSyntaxName name) (detachedNodeRef headSp)
+macroAtom name args appSp headSp =
+  EApp (EVar (macroSyntaxName name) (detachedNodeRef headSp)) args (detachedNodeRef appSp)
 
 parseAtomBase : Int -> PState -> Int -> Check (Pair Expr PState)
 parseAtomBase fuel st blockCol =
@@ -1790,12 +1808,12 @@ parseAtomBase fuel st blockCol =
       PTok (TIdent name) p =>
         let
           st1 = advance st
-        in if atSym st1 "{" then Vuna.Compiler.Base.Common.bind (expectSym st1 "{") (\st1b => Vuna.Compiler.Base.Common.step (parseRecordAssignments (fuel - 1) st1b blockCol) (\fields, st2 => OkC (Pair (ERecord name fields (spanOf st st2)) st2))) else if macroBangAt st1 p name then Vuna.Compiler.Base.Common.bind (expectSym st1 "!") (\st1b => Vuna.Compiler.Base.Common.step (parseArgs (fuel - 1) st1b blockCol) (\args, st2 => OkC (Pair (macroAtom name args (spanOf st st2) (spanOf st st1b)) st2))) else OkC (Pair (EVar name (spanOf st st1)) st1)
-      PTok (TInt n) p => OkC (Pair (EInt n (spanOf st (advance st))) (advance st))
-      PTok (TFloat raw) p => OkC (Pair (EFloat raw (spanOf st (advance st))) (advance st))
-      PTok (TStr s) p => OkC (Pair (EStr s (spanOf st (advance st))) (advance st))
+        in if atSym st1 "{" then Vuna.Compiler.Base.Common.bind (expectSym st1 "{") (\st1b => Vuna.Compiler.Base.Common.step (parseRecordAssignments (fuel - 1) st1b blockCol) (\fields, st2 => OkC (Pair (ERecord name fields (detachedNodeRef (spanOf st st2))) st2))) else if macroBangAt st1 p name then Vuna.Compiler.Base.Common.bind (expectSym st1 "!") (\st1b => Vuna.Compiler.Base.Common.step (parseArgs (fuel - 1) st1b blockCol) (\args, st2 => OkC (Pair (macroAtom name args (spanOf st st2) (spanOf st st1b)) st2))) else OkC (Pair (EVar name (detachedNodeRef (spanOf st st1))) st1)
+      PTok (TInt n) p => OkC (Pair (EInt n (detachedNodeRef (spanOf st (advance st)))) (advance st))
+      PTok (TFloat raw) p => OkC (Pair (EFloat raw (detachedNodeRef (spanOf st (advance st)))) (advance st))
+      PTok (TStr s) p => OkC (Pair (EStr s (detachedNodeRef (spanOf st (advance st)))) (advance st))
       PTok (TTmpl multi parts endP) p => parseTemplateAtom (fuel - 1) st multi parts endP
-      PTok (TKw "Type") p => OkC (Pair (EVar "Type" (spanOf st (advance st))) (advance st))
+      PTok (TKw "Type") p => OkC (Pair (EVar "Type" (detachedNodeRef (spanOf st (advance st)))) (advance st))
       PTok (TSym "(") p =>
         case binderHead (advance st) of
           Just qn => if piArrowAhead (advance st) then parsePiBinder (fuel - 1) st blockCol (firstOf qn) (secondOf qn) False "(" ")" else parseParenAtom (fuel - 1) st blockCol
@@ -1809,12 +1827,12 @@ parseAtomBase fuel st blockCol =
       -- span 覆盖整个 `?name`；精化器据 `isHoleName` 把它当洞。
       PTok (TSym "?") p =>
         case holeAtomAt st of
-          Just h => OkC (Pair (EVar (firstOf h) (secondOf h)) (advance (advance st)))
+          Just h => OkC (Pair (EVar (firstOf h) (detachedNodeRef (secondOf h))) (advance (advance st)))
           Nothing => ps0 st ExpectedExpression
       PTok (TSym "{") p =>
         case binderHead (advance st) of
           Just qn => parsePiBinder (fuel - 1) st blockCol (firstOf qn) (secondOf qn) True "{" "}"
-          Nothing => Vuna.Compiler.Base.Common.bind (expectSym st "{") (\st1 => Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st1 blockCol) (\base, st2 => Vuna.Compiler.Base.Common.bind (expectSym st2 "|") (\st3 => Vuna.Compiler.Base.Common.step (parseRecordAssignments (fuel - 1) st3 blockCol) (\fields, st4 => OkC (Pair (ERecUpdate base fields (spanOf st st4)) st4)))))
+          Nothing => Vuna.Compiler.Base.Common.bind (expectSym st "{") (\st1 => Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st1 blockCol) (\base, st2 => Vuna.Compiler.Base.Common.bind (expectSym st2 "|") (\st3 => Vuna.Compiler.Base.Common.step (parseRecordAssignments (fuel - 1) st3 blockCol) (\fields, st4 => OkC (Pair (ERecUpdate base fields (detachedNodeRef (spanOf st st4))) st4)))))
       _ => ps0 st ExpectedExpression
 
 -- 模板字符串原子。文本块直接成为 `IPText`；插值洞用**洞内 token** 现场解析
@@ -1830,7 +1848,7 @@ parseTemplateAtom fuel st multi parts endP =
           let
             advanced = advance st
             st2 = withLastPos endP advanced
-          in OkC (Pair (EInterp multi ps (spanOf st st2)) st2)
+          in OkC (Pair (EInterp multi ps (detachedNodeRef (spanOf st st2))) st2)
       )
 
 parseTemplateParts : Int -> String -> ParseMode -> Span -> List TmplPart -> Check (List InterpPart)
@@ -1888,9 +1906,9 @@ parseParenAtom fuel st blockCol =
           if atSym st1 ")" then
             let
               st2 = advance st1
-            in OkC (Pair (EVar tupleUnitSyntax (spanOf st st2)) st2)
+            in OkC (Pair (EVar tupleUnitSyntax (detachedNodeRef (spanOf st st2))) st2)
           else
-            Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st1 blockCol) (\first, st2 => if atSym st2 "," then Vuna.Compiler.Base.Common.step (parseParenTupleRest (fuel - 1) (advance st2) blockCol [first]) (\elems, st3 => OkC (Pair (foldPairExprs (spanOf st st3) elems) st3)) else if atSym st2 ":" then Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) (advance st2) blockCol) (\ty, st3 => Vuna.Compiler.Base.Common.bind (expectSym st3 ")") (\st4 => OkC (Pair (EApp (EVar ascribeSyntax (spanOf st st2)) [first, ty] (spanOf st st4)) st4))) else Vuna.Compiler.Base.Common.bind (expectSym st2 ")") (\st3 => OkC (Pair (EParen first (spanOf st st3)) st3)))
+            Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st1 blockCol) (\first, st2 => if atSym st2 "," then Vuna.Compiler.Base.Common.step (parseParenTupleRest (fuel - 1) (advance st2) blockCol [first]) (\elems, st3 => OkC (Pair (foldPairExprs (detachedNodeRef (spanOf st st3)) elems) st3)) else if atSym st2 ":" then Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) (advance st2) blockCol) (\ty, st3 => Vuna.Compiler.Base.Common.bind (expectSym st3 ")") (\st4 => OkC (Pair (EApp (EVar ascribeSyntax (detachedNodeRef (spanOf st st2))) [first, ty] (detachedNodeRef (spanOf st st4))) st4))) else Vuna.Compiler.Base.Common.bind (expectSym st2 ")") (\st3 => OkC (Pair (EParen first (detachedNodeRef (spanOf st st3))) st3)))
       )
 
 -- 元组剩余元素：进入时已消费逗号；收齐后要求 `)`。
@@ -1904,7 +1922,7 @@ parseParenTupleRest fuel st blockCol acc =
       (\e, st1 => if atSym st1 "," then parseParenTupleRest (fuel - 1) (advance st1) blockCol (e :: acc) else Vuna.Compiler.Base.Common.bind (expectSym st1 ")") (\st2 => OkC (Pair (reverse (e :: acc)) st2)))
 
 -- 元组右嵌套：`(a, b, c)` ≡ pair(a, pair(b, c))。
-foldPairExprs : Span -> List Expr -> Expr
+foldPairExprs : NodeRef -> List Expr -> Expr
 foldPairExprs sp [] = EVar tupleUnitSyntax sp
 foldPairExprs sp ([e]) = e
 foldPairExprs sp (a :: rest) = EApp (EVar tuplePairSyntax sp) [a, foldPairExprs sp rest] sp
@@ -1918,7 +1936,7 @@ parseSectionAtom fuel st blockCol op =
   else
     Vuna.Compiler.Base.Common.bind
       (expectSym st "(")
-      (\st1 => Vuna.Compiler.Base.Common.bind (expectSym st1 op) (\st2 => if atSym st2 ")" then OkC (Pair (ESectOp op (spanOf st (advance st2))) (advance st2)) else Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st2 blockCol) (\rhs, st3 => Vuna.Compiler.Base.Common.bind (expectSym st3 ")") (\st4 => OkC (Pair (ESectL op rhs (spanOf st st4)) st4)))))
+      (\st1 => Vuna.Compiler.Base.Common.bind (expectSym st1 op) (\st2 => if atSym st2 ")" then OkC (Pair (ESectOp op (detachedNodeRef (spanOf st (advance st2)))) (advance st2)) else Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st2 blockCol) (\rhs, st3 => Vuna.Compiler.Base.Common.bind (expectSym st3 ")") (\st4 => OkC (Pair (ESectL op rhs (detachedNodeRef (spanOf st st4))) st4)))))
 
 -- Pi binder：`(x : A) -> B`、`{x : A} -> B`，以及带 quantity 的 `(0 x : A)` / `(1 x : A)`。
 -- 多参数 trait 探针的 `{a b : Type} -> ...` 支持同一 binder 组写多个名字（展开成嵌套 EPi）。
@@ -1932,7 +1950,7 @@ parsePiBinder fuel st blockCol qty names implicit openSym closeSym =
   else
     Vuna.Compiler.Base.Common.bind
       (expectSym st openSym)
-      (\st1 => Vuna.Compiler.Base.Common.bind (consumeQty st1 qty) (\st2 => Vuna.Compiler.Base.Common.step (parsePiNames (fuel - 1) st2) (\names2, st3 => Vuna.Compiler.Base.Common.bind (expectSym st3 ":") (\st4 => Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st4 blockCol) (\dom, st5 => Vuna.Compiler.Base.Common.bind (expectSym st5 closeSym) (\st6 => Vuna.Compiler.Base.Common.bind (expectSym st6 "->") (\st7 => Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st7 blockCol) (\cod, st8 => OkC (Pair (foldPiNames names2 implicit qty dom cod (spanOf st st8)) st8)))))))))
+      (\st1 => Vuna.Compiler.Base.Common.bind (consumeQty st1 qty) (\st2 => Vuna.Compiler.Base.Common.step (parsePiNames (fuel - 1) st2) (\names2, st3 => Vuna.Compiler.Base.Common.bind (expectSym st3 ":") (\st4 => Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st4 blockCol) (\dom, st5 => Vuna.Compiler.Base.Common.bind (expectSym st5 closeSym) (\st6 => Vuna.Compiler.Base.Common.bind (expectSym st6 "->") (\st7 => Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st7 blockCol) (\cod, st8 => OkC (Pair (foldPiNames names2 implicit qty dom cod (detachedNodeRef (spanOf st st8))) st8)))))))))
 
 -- 连续的标识符（lookahead 已确认它们后面紧跟 `:`）。
 parsePiNames : Int -> PState -> Check (Pair (List String) PState)
@@ -1954,7 +1972,7 @@ parsePiNamesRest fuel st acc =
       _ => OkC (Pair (reverse acc) st)
 
 -- 同名 binder 组展开成嵌套 EPi（外到内 = 源码顺序）。
-foldPiNames : List String -> Bool -> Maybe Qty -> Expr -> Expr -> Span -> Expr
+foldPiNames : List String -> Bool -> Maybe Qty -> Expr -> Expr -> NodeRef -> Expr
 foldPiNames [] implicit qty dom cod sp = cod
 foldPiNames (n :: rest) implicit qty dom cod sp =
   EPi n implicit qty dom (foldPiNames rest implicit qty dom cod sp) sp
@@ -2000,7 +2018,7 @@ parseListExpr fuel st blockCol =
   else
     Vuna.Compiler.Base.Common.bind
       (expectSym st "[")
-      (\st1 => if atSym st1 "]" then OkC (Pair (EVar listNilSyntax (spanOf st (advance st1))) (advance st1)) else Vuna.Compiler.Base.Common.step (parseListExprElems (fuel - 1) st1 blockCol) (\elems, st2 => OkC (Pair (foldCons (spanOf st st2) elems) st2)))
+      (\st1 => if atSym st1 "]" then OkC (Pair (EVar listNilSyntax (detachedNodeRef (spanOf st (advance st1)))) (advance st1)) else Vuna.Compiler.Base.Common.step (parseListExprElems (fuel - 1) st1 blockCol) (\elems, st2 => OkC (Pair (foldCons (detachedNodeRef (spanOf st st2)) elems) st2)))
 
 parseListExprElems : Int -> PState -> Int -> Check (Pair (List Expr) PState)
 parseListExprElems fuel st blockCol =
@@ -2020,12 +2038,12 @@ parseListElemAt fuel e st =
   else if atSym st "@" then
     Vuna.Compiler.Base.Common.bind
       (expectSym st "@")
-      (\st1 => Vuna.Compiler.Base.Common.step (parseAtom (fuel - 1) st1 0) (\nm, st2 => OkC (Pair (EApp (EVar rowAtSyntax (spanFromExpr e st2)) [e, rowAtNameExpr nm] (spanFromExpr e st2)) st2)))
+      (\st1 => Vuna.Compiler.Base.Common.step (parseAtom (fuel - 1) st1 0) (\nm, st2 => OkC (Pair (EApp (EVar rowAtSyntax (detachedNodeRef (spanFromExpr e st2))) [e, rowAtNameExpr nm] (detachedNodeRef (spanFromExpr e st2))) st2)))
   else
     OkC (Pair e st)
 
 -- | 把元素列表折叠成 `cons` 保留名的右嵌套链（空表是 `nil` 保留名）。
-foldCons : Span -> List Expr -> Expr
+foldCons : NodeRef -> List Expr -> Expr
 foldCons sp [] = EVar listNilSyntax sp
 foldCons sp (e :: rest) = EApp (EVar listConsSyntax sp) [e, foldCons sp rest] sp
 
@@ -2036,7 +2054,7 @@ parseLambda fuel st blockCol =
   else
     Vuna.Compiler.Base.Common.bind
       (expectSym st "\\")
-      (\st1 => Vuna.Compiler.Base.Common.step (parseLambdaParam st1) (\first, st2 => Vuna.Compiler.Base.Common.step (parseLambdaParams (stateFuel st2) st2 [first]) (\params, st3 => Vuna.Compiler.Base.Common.bind (expectSym st3 "=>") (\st4 => Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st4 blockCol) (\body, st5 => OkC (Pair (ELam params body (spanOf st st5)) st5))))))
+      (\st1 => Vuna.Compiler.Base.Common.step (parseLambdaParam st1) (\first, st2 => Vuna.Compiler.Base.Common.step (parseLambdaParams (stateFuel st2) st2 [first]) (\params, st3 => Vuna.Compiler.Base.Common.bind (expectSym st3 "=>") (\st4 => Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st4 blockCol) (\body, st5 => OkC (Pair (ELam params body (detachedNodeRef (spanOf st st5))) st5))))))
 
 -- | 一个 λ 参数：名字 + 名字自身的 span（单 token）。
 parseLambdaParam : PState -> Check (Pair (Pair String Span) PState)
@@ -2063,7 +2081,7 @@ parseLet fuel st blockCol =
   else
     Vuna.Compiler.Base.Common.bind
       (expectKw st "let")
-      (\st1 => Vuna.Compiler.Base.Common.step (parseLetBindings (fuel - 1) st1 blockCol) (\binds, st2 => Vuna.Compiler.Base.Common.bind (expectKw st2 "in") (\st3 => Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st3 blockCol) (\body, st4 => OkC (Pair (ELet binds body False (spanOf st st4)) st4)))))
+      (\st1 => Vuna.Compiler.Base.Common.step (parseLetBindings (fuel - 1) st1 blockCol) (\binds, st2 => Vuna.Compiler.Base.Common.bind (expectKw st2 "in") (\st3 => Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st3 blockCol) (\body, st4 => OkC (Pair (ELet binds body False (detachedNodeRef (spanOf st st4))) st4)))))
 
 -- `let` 绑定块：与 `where` 共用 `parseBindingItemsAt` / `bindingItemsToBinds`
 -- （签名行可选；函数子句降级成 λ）。块结束于缩进回退或 `in`。
@@ -2086,7 +2104,7 @@ parseCase fuel st blockCol =
   else
     Vuna.Compiler.Base.Common.bind
       (expectKw st "case")
-      (\st1 => Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st1 blockCol) (\scrut, st2 => Vuna.Compiler.Base.Common.bind (expectKw st2 "of") (\st3 => Vuna.Compiler.Base.Common.step (parseCaseAlts (fuel - 1) st3 blockCol) (\alts, st4 => OkC (Pair (ECase scrut alts (spanOf st st4)) st4)))))
+      (\st1 => Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st1 blockCol) (\scrut, st2 => Vuna.Compiler.Base.Common.bind (expectKw st2 "of") (\st3 => Vuna.Compiler.Base.Common.step (parseCaseAlts (fuel - 1) st3 blockCol) (\alts, st4 => OkC (Pair (ECase scrut alts (detachedNodeRef (spanOf st st4))) st4)))))
 
 parseCaseAlts : Int -> PState -> Int -> Check (Pair (List (Pair Pat Expr)) PState)
 parseCaseAlts fuel st blockCol =
@@ -2144,7 +2162,7 @@ parsePerform fuel st blockCol =
   else
     Vuna.Compiler.Base.Common.bind
       (expectKw st "perform")
-      (\st1 => Vuna.Compiler.Base.Common.step (parseApplication (fuel - 1) st1 blockCol) (\operand, st2 => OkC (Pair (EApp (EVar performSyntax (spanOf st st2)) [operand] (spanOf st st2)) st2)))
+      (\st1 => Vuna.Compiler.Base.Common.step (parseApplication (fuel - 1) st1 blockCol) (\operand, st2 => OkC (Pair (EApp (EVar performSyntax (detachedNodeRef (spanOf st st2))) [operand] (detachedNodeRef (spanOf st st2))) st2)))
 
 -- ---------------------------------------------------------------
 -- `handle <comp> { ... }`
@@ -2159,7 +2177,7 @@ parsePerform fuel st blockCol =
 --     是 λ 的第三个参数，第二个是结果索引 binder）；op 族、实例名、效应签名全部由 Elab 从 clause 构造子推导。
 -- | 一个 `handle` op 子句：构造子名、实参模式、子句 span、续延 binder 名、子句体。
 data HandleOp : Type where
-  HandleOp : String -> List Pat -> Span -> String -> Expr -> HandleOp
+  HandleOp : String -> List Pat -> NodeRef -> String -> Expr -> HandleOp
 
 -- | `handle` 块：可选 return 子句（binder 名 + 体 + span）与 op 子句列表。
 data HandleBlock : Type where
@@ -2187,7 +2205,7 @@ parseHandle fuel st blockCol =
                     \st3 =>
                       Vuna.Compiler.Base.Common.step (parseHandleBody (fuel - 1) st3 blockCol) (
                           \blk, st4 =>
-                            case handleExpr comp blk (spanOf st st4) of
+                            case handleExpr comp blk (detachedNodeRef (spanOf st st4)) of
                               ErrC e => ErrC e
                               OkC expr => OkC (Pair expr st4)
                         )
@@ -2204,7 +2222,7 @@ parseHandleComp fuel st blockCol =
     case peekTok st of
       PTok (TIdent name) p =>
         case peekTokAt st 1 of
-          Just (PTok (TSym "{") _) => OkC (Pair (EVar name (spanOf st (advance st))) (advance st))
+          Just (PTok (TSym "{") _) => OkC (Pair (EVar name (detachedNodeRef (spanOf st (advance st)))) (advance st))
           _ => parseExpr (fuel - 1) st blockCol
       _ => parseExpr (fuel - 1) st blockCol
 
@@ -2287,18 +2305,18 @@ parseHandleOpClause fuel st clauseCol =
                 case pat of
                   PCon cname args psp =>
                     case reverse args of
-                      [] => psErr0At psp HandleClauseNeedsCtor
+                      [] => psErr0At (nodeRefSpan psp) HandleClauseNeedsCtor
                       last :: revRest =>
                         case last of
                           PVar kname _ => handleOpTail (fuel - 1) st1 clauseCol cname (reverse revRest) psp kname
                           PWild _ => handleOpTail (fuel - 1) st1 clauseCol cname (reverse revRest) psp "_"
-                          _ => psErr0At psp HandleClauseNeedsCtor
+                          _ => psErr0At (nodeRefSpan psp) HandleClauseNeedsCtor
                   _ => ps0 st HandleClauseNeedsCtor
             )
       )
 
 -- | op 子句的 `-> body` 尾段。
-handleOpTail : Int -> PState -> Int -> String -> List Pat -> Span -> String -> Check (Pair HandleOp PState)
+handleOpTail : Int -> PState -> Int -> String -> List Pat -> NodeRef -> String -> Check (Pair HandleOp PState)
 handleOpTail fuel st clauseCol cname pats psp kname =
   if fuel <= 0 then
     icFuel "parser"
@@ -2324,12 +2342,12 @@ handleAlt : HandleOp -> Pair Pat Expr
 handleAlt (HandleOp cname pats psp _ body) = Pair (PCon cname pats psp) body
 
 -- | ret 实参表达式（缺 return 子句时用哨兵）。
-handleRetExpr : Maybe (Pair String (Pair Expr Span)) -> Span -> Expr
+handleRetExpr : Maybe (Pair String (Pair Expr Span)) -> NodeRef -> Expr
 handleRetExpr Nothing sp = EVar handleNoRetSyntax sp
-handleRetExpr (Just (Pair x (Pair body rsp))) sp = ELam [Pair x rsp] body rsp
+handleRetExpr (Just (Pair x (Pair body rsp))) sp = ELam [Pair x rsp] body sp
 
 -- | 合成 op λ：`\o, k => case o of alts`。
-handleOpLam : List HandleOp -> String -> Span -> Expr
+handleOpLam : List HandleOp -> String -> NodeRef -> Expr
 handleOpLam ops kname sp =
   ELam
     [Pair handleOpIndexBinder spanEmpty, Pair handleOpBinder spanEmpty, Pair kname spanEmpty]
@@ -2337,15 +2355,18 @@ handleOpLam ops kname sp =
     sp
 
 -- | 校验子句并合成 `EApp (EVar "@vuna@handle") [comp, ret, opH]`。
-handleExpr : Expr -> HandleBlock -> Span -> Check Expr
-handleExpr comp (HandleBlock retOpt []) sp = psErr0At sp HandleNeedsOpClause
+handleExpr : Expr -> HandleBlock -> NodeRef -> Check Expr
+handleExpr comp (HandleBlock retOpt []) sp = psErr0At (nodeRefSpan sp) HandleNeedsOpClause
 handleExpr comp (HandleBlock retOpt (first :: rest)) sp =
   case firstOtherKName rest (handleOpKName first) of
     Nothing =>
       OkC
         (EApp (EVar handleSyntax sp) [comp, handleRetExpr retOpt sp, handleOpLam (first :: rest) (handleOpKName first) sp] sp)
     Just k1 =>
-      psErrAt sp (HandleContinuationNameMismatch (handleOpKName first) k1) [handleOpKName first, k1]
+      psErrAt
+        (nodeRefSpan sp)
+        (HandleContinuationNameMismatch (handleOpKName first) k1)
+        [handleOpKName first, k1]
 
 parseIf : Int -> PState -> Int -> Check (Pair Expr PState)
 parseIf fuel st blockCol =
@@ -2354,7 +2375,7 @@ parseIf fuel st blockCol =
   else
     Vuna.Compiler.Base.Common.bind
       (expectKw st "if")
-      (\st1 => Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st1 blockCol) (\cond, st2 => Vuna.Compiler.Base.Common.bind (expectKw st2 "then") (\st3 => Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st3 blockCol) (\yes, st4 => Vuna.Compiler.Base.Common.bind (expectKw st4 "else") (\st5 => Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st5 blockCol) (\no, st6 => OkC (Pair (EIf cond yes no (spanOf st st6)) st6)))))))
+      (\st1 => Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st1 blockCol) (\cond, st2 => Vuna.Compiler.Base.Common.bind (expectKw st2 "then") (\st3 => Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st3 blockCol) (\yes, st4 => Vuna.Compiler.Base.Common.bind (expectKw st4 "else") (\st5 => Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st5 blockCol) (\no, st6 => OkC (Pair (EIf cond yes no (detachedNodeRef (spanOf st st6))) st6)))))))
 
 -- do 块：`do` + 缩进对齐的语句，语句是 `let pat = e`、`pat <- expr` 或裸表达式；
 -- 最后一条必须是裸表达式（do 本身不引入 pure，最后表达式即块结果）。
@@ -2376,7 +2397,7 @@ parseDo fuel st blockCol =
                   Vuna.Compiler.Base.Common.step (parseDoStmts (fuel - 1) st1 col []) (
                       \stmts, st2 =>
                         case reverse stmts of
-                          (DExpr lastExpr lastSp) :: rest => OkC (Pair (EDo stmts (spanOf st st2)) st2)
+                          (DExpr lastExpr lastSp) :: rest => OkC (Pair (EDo stmts (detachedNodeRef (spanOf st st2))) st2)
                           _ => ps0 st2 DoBlockMustEndWithExpr
                     )
       )
@@ -2452,14 +2473,13 @@ parseDoExprStmt fuel st stmtCol nid =
 -- | 模式里按从左到右出现顺序的 (绑定名, span)：PVar 与 as 名算绑定，构造子 / 记录
 -- 模式递归，通配与字面量不绑定。
 patBinderBindings : Pat -> List (Pair String Span)
-patBinderBindings (PVar name sp) = [Pair name sp]
-patBinderBindings (PAs name inner sp) = (::) (Pair name sp) (patBinderBindings inner)
-patBinderBindings (PCon cname pats sp) = concatMap patBinderBindings pats
-patBinderBindings (PRecord rname fields sp) =
-  concatMap (\f => patBinderBindings (secondOf f)) fields
-patBinderBindings (PWild sp) = []
-patBinderBindings (PInt n sp) = []
-patBinderBindings (PStr s sp) = []
+patBinderBindings (PVar name sp) = [Pair name (nodeRefSpan sp)]
+patBinderBindings (PAs name inner sp) = (::) (Pair name (nodeRefSpan sp)) (patBinderBindings inner)
+patBinderBindings (PCon cname pats _) = concatMap patBinderBindings pats
+patBinderBindings (PRecord rname fields _) = concatMap (\f => patBinderBindings (secondOf f)) fields
+patBinderBindings (PWild _) = []
+patBinderBindings (PInt n _) = []
+patBinderBindings (PStr s _) = []
 
 -- | 从左到右第一个重复绑定：返回第二次出现的 (名字, span)；没有重复返回 Nothing。
 firstRepeatedBinding : List (Pair String Span) -> Maybe (Pair String Span)
@@ -2492,7 +2512,10 @@ checkNoRepeatedBinders pats =
 -- | 一个模式的建树节点。
 parsePatternSingle : Int -> PState -> Int -> Check (Pair Pat PState)
 parsePatternSingle fuel st blockCol =
-  withExtent CstPatKind st (\st0 => parsePatternSingleBody fuel st0 blockCol)
+  withExtent
+    CstPatKind
+    st
+    (\st0 => Vuna.Compiler.Base.Common.step (parsePatternSingleBody fuel st0 blockCol) (\p, st1 => OkC (Pair (withPatId st0.openNodeId p) st1)))
 
 parsePatternSingleBody : Int -> PState -> Int -> Check (Pair Pat PState)
 parsePatternSingleBody fuel st blockCol =
@@ -2506,7 +2529,7 @@ parsePatternCons fuel st blockCol =
   else
     Vuna.Compiler.Base.Common.step
       (parsePatternHead (fuel - 1) st blockCol)
-      (\lhs, st1 => if atSym st1 "::" && canContinue st1 blockCol then Vuna.Compiler.Base.Common.step (parsePatternCons (fuel - 1) (advance st1) blockCol) (\rhs, st2 => OkC (Pair (PCon "::" [lhs, rhs] (spanOf st st2)) st2)) else OkC (Pair lhs st1))
+      (\lhs, st1 => if atSym st1 "::" && canContinue st1 blockCol then Vuna.Compiler.Base.Common.step (parsePatternCons (fuel - 1) (advance st1) blockCol) (\rhs, st2 => OkC (Pair (PCon "::" [lhs, rhs] (detachedNodeRef (spanOf st st2))) st2)) else OkC (Pair lhs st1))
 
 parsePatternHead : Int -> PState -> Int -> Check (Pair Pat PState)
 parsePatternHead fuel st blockCol =
@@ -2517,7 +2540,7 @@ parsePatternHead fuel st blockCol =
       PTok (TIdent name) p =>
         let
           st1 = advance st
-        in if ctorPatternStart name && atSym st1 "{" then Vuna.Compiler.Base.Common.step (parseRecordPatternFields (fuel - 1) st1 blockCol) (\fields, st2 => OkC (Pair (PRecord name fields (spanOf st st2)) st2)) else if ctorPatternStart name then Vuna.Compiler.Base.Common.step (parsePatternAtoms (fuel - 1) st1 blockCol) (\args, st2 => OkC (Pair (PCon name args (spanOf st st2)) st2)) else parsePatternAtom (fuel - 1) st blockCol
+        in if ctorPatternStart name && atSym st1 "{" then Vuna.Compiler.Base.Common.step (parseRecordPatternFields (fuel - 1) st1 blockCol) (\fields, st2 => OkC (Pair (PRecord name fields (detachedNodeRef (spanOf st st2))) st2)) else if ctorPatternStart name then Vuna.Compiler.Base.Common.step (parsePatternAtoms (fuel - 1) st1 blockCol) (\args, st2 => OkC (Pair (PCon name args (detachedNodeRef (spanOf st st2))) st2)) else parsePatternAtom (fuel - 1) st blockCol
       -- 符号构造子：`(sym) p1 p2`（无参时 `(sym)` 本身是空构造子模式）。
       PTok (TSym "(") _ =>
         case peekTokAt st 1 of
@@ -2526,7 +2549,7 @@ parsePatternHead fuel st blockCol =
               parsePatternAtom (fuel - 1) st blockCol
             else
               case peekTokAt st 2 of
-                Just (PTok (TSym ")") _) => Vuna.Compiler.Base.Common.step (parsePatternAtoms (fuel - 1) (advance (advance (advance st))) blockCol) (\args, st2 => OkC (Pair (PCon sym args (spanOf st st2)) st2))
+                Just (PTok (TSym ")") _) => Vuna.Compiler.Base.Common.step (parsePatternAtoms (fuel - 1) (advance (advance (advance st))) blockCol) (\args, st2 => OkC (Pair (PCon sym args (detachedNodeRef (spanOf st st2))) st2))
                 _ => parsePatternAtom (fuel - 1) st blockCol
           _ => parsePatternAtom (fuel - 1) st blockCol
       _ => parsePatternAtom (fuel - 1) st blockCol
@@ -2560,7 +2583,7 @@ parseRecordPatternField fuel st blockCol =
       PTok (TIdent fname) p =>
         let
           st1 = advance st
-        in if atSym st1 "=" then Vuna.Compiler.Base.Common.bind (expectSym st1 "=") (\st2 => Vuna.Compiler.Base.Common.step (parsePatternSingle (fuel - 1) st2 blockCol) (\pat, st3 => OkC (Pair (Pair fname pat) st3))) else OkC (Pair (Pair fname (PVar fname (Span (fileOf st) (posLine p) (posCol p) (posLine p) (posCol p) (posOffset p) (posOffset p)))) st1)
+        in if atSym st1 "=" then Vuna.Compiler.Base.Common.bind (expectSym st1 "=") (\st2 => Vuna.Compiler.Base.Common.step (parsePatternSingle (fuel - 1) st2 blockCol) (\pat, st3 => OkC (Pair (Pair fname pat) st3))) else OkC (Pair (Pair fname (PVar fname (detachedNodeRef (Span (fileOf st) (posLine p) (posCol p) (posLine p) (posCol p) (posOffset p) (posOffset p))))) st1)
       _ => ps0 st ExpectedRecordFieldPattern
 
 parsePatternAtoms : Int -> PState -> Int -> Check (Pair (List Pat) PState)
@@ -2590,9 +2613,9 @@ finishAsPattern fuel st base st1 blockCol =
     icFuel "parser"
   else if atSym st1 "@" && canContinue st1 blockCol then
     case base of
-      PVar "_" psp => Vuna.Compiler.Base.Common.step (parseAsName (fuel - 1) (advance st1)) (\name, st2 => OkC (Pair (PAs name (PWild psp) (spanOf st st2)) st2))
-      PVar name psp => Vuna.Compiler.Base.Common.step (parsePatternAtom (fuel - 1) (advance st1) blockCol) (\rhs, st2 => OkC (Pair (PAs name rhs (spanOf st st2)) st2))
-      _ => Vuna.Compiler.Base.Common.step (parseAsName (fuel - 1) (advance st1)) (\name, st2 => OkC (Pair (PAs name base (spanOf st st2)) st2))
+      PVar "_" psp => Vuna.Compiler.Base.Common.step (parseAsName (fuel - 1) (advance st1)) (\name, st2 => OkC (Pair (PAs name (PWild psp) (detachedNodeRef (spanOf st st2))) st2))
+      PVar name _ => Vuna.Compiler.Base.Common.step (parsePatternAtom (fuel - 1) (advance st1) blockCol) (\rhs, st2 => OkC (Pair (PAs name rhs (detachedNodeRef (spanOf st st2))) st2))
+      _ => Vuna.Compiler.Base.Common.step (parseAsName (fuel - 1) (advance st1)) (\name, st2 => OkC (Pair (PAs name base (detachedNodeRef (spanOf st st2))) st2))
   else
     OkC (Pair base st1)
 
@@ -2611,10 +2634,10 @@ parsePatternAtomBase fuel st blockCol =
     icFuel "parser"
   else
     case peekTok st of
-      PTok (TIdent "_") p => OkC (Pair (PWild (spanOf st (advance st))) (advance st))
-      PTok (TIdent name) p => if ctorPatternStart name then OkC (Pair (PCon name [] (spanOf st (advance st))) (advance st)) else OkC (Pair (PVar name (spanOf st (advance st))) (advance st))
-      PTok (TInt n) p => OkC (Pair (PInt n (spanOf st (advance st))) (advance st))
-      PTok (TStr s) p => OkC (Pair (PStr s (spanOf st (advance st))) (advance st))
+      PTok (TIdent "_") p => OkC (Pair (PWild (detachedNodeRef (spanOf st (advance st)))) (advance st))
+      PTok (TIdent name) p => if ctorPatternStart name then OkC (Pair (PCon name [] (detachedNodeRef (spanOf st (advance st)))) (advance st)) else OkC (Pair (PVar name (detachedNodeRef (spanOf st (advance st)))) (advance st))
+      PTok (TInt n) p => OkC (Pair (PInt n (detachedNodeRef (spanOf st (advance st)))) (advance st))
+      PTok (TStr s) p => OkC (Pair (PStr s (detachedNodeRef (spanOf st (advance st)))) (advance st))
       -- 多行字面量模式只允许**无洞**（等价于普通字符串字面量模式）；带洞不支持。
       PTok (TTmpl multi parts endP) p =>
         case textPartsOf parts of
@@ -2622,15 +2645,15 @@ parsePatternAtomBase fuel st blockCol =
             let
               advanced = advance st
               st2 = withLastPos endP advanced
-            in OkC (Pair (PStr s (spanOf st st2)) st2)
+            in OkC (Pair (PStr s (detachedNodeRef (spanOf st st2))) st2)
           Nothing => ps0 st TemplateInPattern
       PTok (TSym "(") p =>
         if atSym (advance st) ")" then
           let
             st2 = advance (advance st)
-          in OkC (Pair (PCon tupleUnitSyntax [] (spanOf st st2)) st2)
+          in OkC (Pair (PCon tupleUnitSyntax [] (detachedNodeRef (spanOf st st2))) st2)
         else
-          Vuna.Compiler.Base.Common.step (parsePatternSingle (fuel - 1) (advance st) blockCol) (\first, st1 => if atSym st1 "," then Vuna.Compiler.Base.Common.step (parsePatternTupleRest (fuel - 1) (advance st1) blockCol [first]) (\pats, st2 => OkC (Pair (foldPairPats (spanOf st st2) pats) st2)) else Vuna.Compiler.Base.Common.bind (expectSym st1 ")") (\st2 => OkC (Pair first st2)))
+          Vuna.Compiler.Base.Common.step (parsePatternSingle (fuel - 1) (advance st) blockCol) (\first, st1 => if atSym st1 "," then Vuna.Compiler.Base.Common.step (parsePatternTupleRest (fuel - 1) (advance st1) blockCol [first]) (\pats, st2 => OkC (Pair (foldPairPats (detachedNodeRef (spanOf st st2)) pats) st2)) else Vuna.Compiler.Base.Common.bind (expectSym st1 ")") (\st2 => OkC (Pair first st2)))
       PTok (TSym "[") p => parseListPattern (fuel - 1) st blockCol
       _ => ps0 st ExpectedPattern
 
@@ -2641,7 +2664,7 @@ parseListPattern fuel st blockCol =
   else
     Vuna.Compiler.Base.Common.bind
       (expectSym st "[")
-      (\st1 => if atSym st1 "]" then OkC (Pair (PCon listNilSyntax [] (spanOf st (advance st1))) (advance st1)) else Vuna.Compiler.Base.Common.step (parseListPatternElems (fuel - 1) st1 blockCol) (\pats, st2 => OkC (Pair (foldPCon (spanOf st st2) pats) st2)))
+      (\st1 => if atSym st1 "]" then OkC (Pair (PCon listNilSyntax [] (detachedNodeRef (spanOf st (advance st1)))) (advance st1)) else Vuna.Compiler.Base.Common.step (parseListPatternElems (fuel - 1) st1 blockCol) (\pats, st2 => OkC (Pair (foldPCon (detachedNodeRef (spanOf st st2)) pats) st2)))
 
 parseListPatternElems : Int -> PState -> Int -> Check (Pair (List Pat) PState)
 parseListPatternElems fuel st blockCol =
@@ -2653,7 +2676,7 @@ parseListPatternElems fuel st blockCol =
       (\pat, st1 => if atSym st1 "," then Vuna.Compiler.Base.Common.step (parseListPatternElems (fuel - 1) (advance st1) blockCol) (\rest, st2 => OkC (Pair ((::) pat rest) st2)) else if atSym st1 "]" then OkC (Pair [pat] (advance st1)) else ps0 st1 ExpectedCommaOrBracket)
 
 -- | 把模式列表折叠成 `cons` 保留名的右嵌套链（空表是 `nil` 保留名）。
-foldPCon : Span -> List Pat -> Pat
+foldPCon : NodeRef -> List Pat -> Pat
 foldPCon sp [] = PCon listNilSyntax [] sp
 foldPCon sp (p :: rest) = PCon listConsSyntax [p, foldPCon sp rest] sp
 
@@ -2668,7 +2691,7 @@ parsePatternTupleRest fuel st blockCol acc =
       (\p, st1 => if atSym st1 "," then parsePatternTupleRest (fuel - 1) (advance st1) blockCol (p :: acc) else Vuna.Compiler.Base.Common.bind (expectSym st1 ")") (\st2 => OkC (Pair (reverse (p :: acc)) st2)))
 
 -- 元组模式右嵌套：`(a, b, c)` ≡ pair(a, pair(b, c))。
-foldPairPats : Span -> List Pat -> Pat
+foldPairPats : NodeRef -> List Pat -> Pat
 foldPairPats sp [] = PCon tupleUnitSyntax [] sp
 foldPairPats sp ([p]) = p
 foldPairPats sp (p :: rest) = PCon tuplePairSyntax [p, foldPairPats sp rest] sp

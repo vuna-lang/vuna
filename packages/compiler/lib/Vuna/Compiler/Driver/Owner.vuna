@@ -56,11 +56,11 @@ splitDataNames (d :: rest) =
     _ => splitDataNames rest
 
 headClassName : Expr -> Maybe String
-headClassName (EApp fn args sp) =
+headClassName (EApp fn args _) =
   case fn of
-    EVar n fsp => Just n
+    EVar n _ => Just n
     _ => Nothing
-headClassName (EVar n sp) = Just n
+headClassName (EVar n _) = Just n
 headClassName _ = Nothing
 
 -- 实例符号与派生实例符号用 Elab 的同一实现（`Elab.instanceSymbol` / `Elab.instHead`），
@@ -79,21 +79,28 @@ splitInstanceOwnerOf owner (DRecord dname params fields derivings viaField repr 
 splitInstanceOwnerOf owner _ = []
 
 hasFieldRecordTypeExpr : String -> List String -> Expr
-hasFieldRecordTypeExpr dname [] = EVar dname splitNoSpan
+hasFieldRecordTypeExpr dname [] = EVar dname (detachedNodeRef splitNoSpan)
 hasFieldRecordTypeExpr dname params =
-  EApp (EVar dname splitNoSpan) (map (\p => EVar p splitNoSpan) params) splitNoSpan
+  EApp
+    (EVar dname (detachedNodeRef splitNoSpan))
+    (map (\p => EVar p (detachedNodeRef splitNoSpan)) params)
+    (detachedNodeRef splitNoSpan)
 
 hasFieldOwnerOf : String -> String -> List String -> Field -> Pair String String
 hasFieldOwnerOf owner dname params f =
   let
     fname = fieldName f
     fty = fieldType f
-    label = EApp (EVar hasFieldLabelName splitNoSpan) [EStr fname splitNoSpan] splitNoSpan
+    label =
+      EApp
+        (EVar hasFieldLabelName (detachedNodeRef splitNoSpan))
+        [EStr fname (detachedNodeRef splitNoSpan)]
+        (detachedNodeRef splitNoSpan)
     head =
       EApp
-        (EVar hasFieldTraitName splitNoSpan)
+        (EVar hasFieldTraitName (detachedNodeRef splitNoSpan))
         [label, hasFieldRecordTypeExpr dname params, fty]
-        splitNoSpan
+        (detachedNodeRef splitNoSpan)
   in Pair (instanceSymbol hasFieldTraitName (toRastExpr head)) owner
 
 splitHasFieldOwners : String -> String -> List String -> List Field -> List (Pair String String)
