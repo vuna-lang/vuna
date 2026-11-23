@@ -19,6 +19,7 @@
 | 技能 | 何时用 |
 | --- | --- |
 | [repo-navigation](skills/repo-navigation/SKILL.md) | 动手前摸仓库：要改的模块整篇读，只引用的查 `vuna map` / `vuna api` |
+| [lint-rule](skills/lint-rule/SKILL.md) | 新增/修改 `vuna lint` 规则（含自动修复），或把规则提升进 recommended 并迁移仓库 |
 | [perf-debug](skills/perf-debug/SKILL.md) | 命令/阶段变慢、超时、怀疑复杂度回退 |
 | [vuna-worktree-dev](skills/vuna-worktree-dev/SKILL.md) | 在副 worktree 里开发（构建产物、测试、seed、提交的隔离） |
 | [vuna-worktree-finish](skills/vuna-worktree-finish/SKILL.md) | 副 worktree 收尾：commit → cherry-pick 回主仓 → 校验 → remove |
