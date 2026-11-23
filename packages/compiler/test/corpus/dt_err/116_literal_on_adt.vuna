@@ -1,0 +1,13 @@
+-- 负例：非 Nat / Int / String 的家族上写字面量模式。
+data Color : Type where
+  Red : Color
+  Green : Color
+
+f : Color -> Int
+f c =
+  case c of
+    0 => 1
+    _ => 0
+
+main : Int
+main = f Red

@@ -289,9 +289,9 @@ tcTemplate OrphanInstance = "orphan instance: declare it in the trait or head ty
 tcTemplate InterfaceNoParam = "interfaces must have at least one parameter"
 tcTemplate NoInstParam = "the @ override requires an implicit String instance parameter"
 tcTemplate IntStringCaseNeedsFallback =
-  "case on Int / String / Nat needs a variable or wildcard fallback branch"
+  "case on Int / String needs a variable or wildcard fallback branch"
 tcTemplate IntStringCaseRestriction =
-  "case on Int / String / Nat accepts only literal or variable patterns"
+  "case on Int / String accepts only literal or variable patterns"
 tcTemplate InvalidArrowType = "invalid arrow type"
 tcTemplate LambdaNoSignature = "cannot infer the type of a lambda without a signature"
 tcTemplate LambdaTooManyParams = "lambda has more parameters than the expected function type"

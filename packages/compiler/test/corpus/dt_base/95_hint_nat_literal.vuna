@@ -1,0 +1,25 @@
+-- 期望结果类型定向：多态函数的隐式类型参数先由期望结果解出，实参字面量再按 Nat 检查。
+import Base.Data.Nat as Nat
+import Base.Data.Maybe as Maybe
+
+size : Maybe Nat
+size = Just 3
+
+missing : Maybe Nat
+missing = Nothing
+
+idPoly : a -> a
+idPoly x = x
+
+fromMaybeNat : Nat
+fromMaybeNat = Maybe.fromMaybe 0 size
+
+literalNat : Nat
+literalNat = idPoly 2
+
+intFromNat : Int
+intFromNat = idPoly Zero
+
+main : Int
+main =
+  Nat.toInt fromMaybeNat + Nat.toInt literalNat + intFromNat + Nat.toInt (Maybe.fromMaybe 1 missing)

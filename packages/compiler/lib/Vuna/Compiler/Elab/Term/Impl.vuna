@@ -157,11 +157,19 @@ checkCaseFuel fuel globals ctx ec scrut alts expected sp =
         \ps =>
           case ps of
             (scrutTerm, scrutTy, ec1) =>
-              Vuna.Compiler.Base.Common.bind (resolveOverAlts ec1 ctx scrutTy alts) (
-                  \q =>
-                    case q of
-                      (alts2, ec2) => Vuna.Compiler.Base.Common.step (checkCaseAltsFlat ec2 alts2) (\_, ec3 => if needsMatrixCase alts2 then checkCaseMatrixFuel (fuel - 1) globals ctx ec3 scrut alts2 expected sp else checkCaseFamFuel (fuel - 1) globals ctx ec3 scrutTerm scrutTy alts2 expected sp)
-                )
+              if natLitCaseFast ec1 scrutTy alts then
+                Vuna.Compiler.Base.Common.step (checkCaseAltsFlat ec1 alts) (\_, ec3 => checkNatLitCaseFuel (fuel - 1) globals ctx ec3 (natToIntTerm scrutTerm) scrutTerm natTyValue alts expected sp)
+              else
+                Vuna.Compiler.Base.Common.bind (resolveOverAlts ec1 ctx scrutTy alts) (
+                    \q =>
+                      case q of
+                        (alts2, ec2) =>
+                          let
+                            -- Nat 字面量模式在 resolveOverAlts 里展开成深层构造子链；后续降级/矩阵的
+                            -- 燃料按**展开后**的模式规模给，避免长字面量（`300` / `1000`）撞固定预算。
+                            caseFuel = max (fuel - 1) (coverageFuelFor (map (\alt => [firstOf alt]) alts2))
+                          in Vuna.Compiler.Base.Common.step (checkCaseAltsFlat ec2 alts2) (\_, ec3 => if needsMatrixCase alts2 then checkCaseMatrixFuel caseFuel globals ctx ec3 scrut alts2 expected sp else checkCaseFamFuel caseFuel globals ctx ec3 scrutTerm scrutTy alts2 expected sp)
+                  )
       )
 
 -- 哪些分支形态需要矩阵：嵌套模式（精化器不再自己折叠），以及校验后仍同名的构造子
@@ -194,8 +202,6 @@ checkCaseFamFuel fuel globals ctx ec scrutTerm scrutTy alts expected sp =
       VNeutral (NGlobal fam idxs) =>
         if isBoolCanonical fam && length idxs == 0 then
           checkBoolCaseFuel (fuel - 1) globals ctx ec scrutTerm alts expected sp
-        else if fam == natTypeName then
-          if natLitCaseAlts alts then checkNatLitCaseFuel (fuel - 1) globals ctx ec (natToIntTerm scrutTerm) scrutTerm natTyValue alts expected sp else checkCaseOfFuel (fuel - 1) globals ctx ec scrutTerm scrutTy fam idxs alts expected sp
         else
           case fam of
             "Int" => checkLitCaseFuel (fuel - 1) globals ctx ec scrutTerm "Int" alts expected sp
@@ -346,10 +352,13 @@ checkLitBoundVarFuel fuel globals ctx ec scrutTerm tyName name body expected bin
             (bodyTerm, ec2) => OkC (TApp (TLam name rig Nothing binderSp bodyTerm) scrutTerm Rig1, ec2)
       )
 
--- Nat 字面量模式（`case n of 0 => ...; 1 => ...; _ => ...`）。
--- Nat 运行时是 OCaml int，字面量列直接降成 `bi_eq_int (natToInt n) k` 的 if 链；
--- 变量兜底绑回**原始 Nat 项**。仅当全部模式都是 字面量/变量/通配 时走此路径，
--- 与构造子模式（`Zero` / `Succ k`）混用仍由构造子路径报限制。
+-- Nat 字面量 case 的快速路径：模式全是字面量/变量/通配且带兜底时降成 `bi_eq_int` if 链，
+-- 长字面量（`300` / `1000`）不必展开成深层构造子链；字面量与构造子混用、或没有兜底时走
+-- 模式矩阵（`resolveOverPatFuel` 把字面量展开成 `Zero` / `Succ`，穷尽性由矩阵判定）。
+natLitCaseFast : Ec -> Value -> List (Pat, Expr) -> Bool
+natLitCaseFast ec scrutTy alts =
+  isNatTy ec scrutTy && natLitCaseAlts alts && natLitCaseHasCatchAll alts
+
 natLitCaseAlts : List (Pat, Expr) -> Bool
 natLitCaseAlts [] = True
 natLitCaseAlts ((pat, body) :: rest) =
@@ -358,6 +367,14 @@ natLitCaseAlts ((pat, body) :: rest) =
     PVar n sp => natLitCaseAlts rest
     PWild sp => natLitCaseAlts rest
     _ => False
+
+natLitCaseHasCatchAll : List (Pat, Expr) -> Bool
+natLitCaseHasCatchAll [] = False
+natLitCaseHasCatchAll ((pat, body) :: rest) =
+  case pat of
+    PVar n sp => True
+    PWild sp => True
+    _ => natLitCaseHasCatchAll rest
 
 checkNatLitCaseFuel : Int -> List (String, Term) -> Ctx -> Ec -> Term -> Term -> Value -> List (Pat, Expr) -> Value -> Span -> Check (Term, Ec)
 checkNatLitCaseFuel fuel globals ctx ec cmpTerm bindTerm binderTy alts expected sp =
@@ -1187,12 +1204,12 @@ skipArithSpecForExpected ec name expected =
     Nothing => False
 
 -- | `hint` 版本的跳过判据（hint 里带期望结果类型）。
-skipArithSpecForHint : Ec -> String -> Maybe (Int, Value) -> Bool
+skipArithSpecForHint : Ec -> String -> Maybe Value -> Bool
 skipArithSpecForHint ec name Nothing = False
-skipArithSpecForHint ec name (Just p) = skipArithSpecForExpected ec name (secondOf p)
+skipArithSpecForHint ec name (Just expected) = skipArithSpecForExpected ec name expected
 
 -- 应用：逐个消费显式实参，遇到隐式 Pi 先插入元变量。
-export inferAppFuel : Int -> List (String, Term) -> Ctx -> Ec -> Expr -> List Expr -> Span -> Maybe (Int, Value) -> Check (Term, Value, Ec)
+export inferAppFuel : Int -> List (String, Term) -> Ctx -> Ec -> Expr -> List Expr -> Span -> Maybe Value -> Check (Term, Value, Ec)
 inferAppFuel fuel globals ctx ec fn args sp hint =
   if fuel <= 0 then
     icFuel "inference"
@@ -1262,7 +1279,7 @@ inferAppFuel fuel globals ctx ec fn args sp hint =
                             )
           _ => inferAppGeneralFuel (fuel - 1) globals ctx ec fn args sp hint
 
-export inferAppGeneralFuel : Int -> List (String, Term) -> Ctx -> Ec -> Expr -> List Expr -> Span -> Maybe (Int, Value) -> Check (Term, Value, Ec)
+export inferAppGeneralFuel : Int -> List (String, Term) -> Ctx -> Ec -> Expr -> List Expr -> Span -> Maybe Value -> Check (Term, Value, Ec)
 inferAppGeneralFuel fuel globals ctx ec fn args sp hint =
   if fuel <= 0 then
     icFuel "inference"
@@ -1277,7 +1294,7 @@ inferAppGeneralFuel fuel globals ctx ec fn args sp hint =
           )
       _ => inferAppGeneralGoFuel (fuel - 1) globals ctx ec fn args sp hint
 
-export inferAppGeneralGoFuel : Int -> List (String, Term) -> Ctx -> Ec -> Expr -> List Expr -> Span -> Maybe (Int, Value) -> Check (Term, Value, Ec)
+export inferAppGeneralGoFuel : Int -> List (String, Term) -> Ctx -> Ec -> Expr -> List Expr -> Span -> Maybe Value -> Check (Term, Value, Ec)
 inferAppGeneralGoFuel fuel globals ctx ec fn args sp hint =
   if fuel <= 0 then
     icFuel "inference"
@@ -1293,7 +1310,7 @@ inferAppGeneralGoFuel fuel globals ctx ec fn args sp hint =
                 )
       )
 
-export inferArgsFuel : Int -> List (String, Term) -> Ctx -> Ec -> Value -> List Expr -> Span -> Maybe (Int, Value) -> Check (List (Term, Rig), Value, Ec)
+export inferArgsFuel : Int -> List (String, Term) -> Ctx -> Ec -> Value -> List Expr -> Span -> Maybe Value -> Check (List (Term, Rig), Value, Ec)
 inferArgsFuel fuel globals ctx ec ty args sp hint =
   if fuel <= 0 then icFuel "inference" else inferArgsGo 64 globals ctx ec ty args sp hint
 
@@ -1448,7 +1465,7 @@ expandArgListLit ec dom a =
     Just elems => expandListLit ec (listLitFamily ec (forceVal ec dom)) elems (exprSpan a)
     Nothing => OkC a
 
-export inferArgsGo : Int -> List (String, Term) -> Ctx -> Ec -> Value -> List Expr -> Span -> Maybe (Int, Value) -> Check (List (Term, Rig), Value, Ec)
+export inferArgsGo : Int -> List (String, Term) -> Ctx -> Ec -> Value -> List Expr -> Span -> Maybe Value -> Check (List (Term, Rig), Value, Ec)
 inferArgsGo fuel globals ctx ec ty args sp hint =
   if fuel <= 0 then
     icFuel "inference"
@@ -1560,10 +1577,13 @@ inferArgsGo fuel globals ctx ec ty args sp hint =
                 ec0 =
                   case hint of
                     Nothing => ec
-                    Just (goals0, expected) =>
-                      case tryUseHint goals0 ctx expected ec forced of
-                        Nothing => ec
-                        Just ec1 => ec1
+                    Just expected =>
+                      if remainingExplicitPis 64 ctx ec forced == length args then
+                        case tryUseHint ctx expected ec forced of
+                          Nothing => ec
+                          Just ec1 => ec1
+                      else
+                        ec
               in Vuna.Compiler.Base.Common.bind (rigForLinearDomain ec0 sp name rig dom) (
                   \argRig =>
                     Vuna.Compiler.Base.Common.bind (expandArgListLit ec0 dom a) (
@@ -1585,7 +1605,7 @@ inferArgsGo fuel globals ctx ec ty args sp hint =
           [] => OkC ([], forced, ec)
           a :: rest => tcErr0 (exprSpan a) TooManyArgs
 
-export deferDictBinderFuel : Int -> List (String, Term) -> Ctx -> Ec -> Value -> Closure -> List Expr -> Span -> Maybe (Int, Value) -> Check (List (Term, Rig), Value, Ec)
+export deferDictBinderFuel : Int -> List (String, Term) -> Ctx -> Ec -> Value -> Closure -> List Expr -> Span -> Maybe Value -> Check (List (Term, Rig), Value, Ec)
 deferDictBinderFuel fuel globals ctx ec dom clo args sp hint =
   if fuel <= 0 then
     icFuel "inference"
@@ -2411,30 +2431,43 @@ isRigidHeadValue ec v =
     VCon _ _ => True
     _ => False
 
--- 只在“前导隐式前缀新增了延迟约束 + 残余结果 meta 头 + 期望刚性头”时，先把剩余显式
--- binder 用**新鲜 meta** 实例化取残余结果，再 conv 期望类型；成功就把这次 early solve
--- 带回（`?m`/`?b` 同时解出），失败丢弃整份快照，调用方照常检查实参。
--- | 用期望结果类型提前解出延迟的字典约束：需要时用新鲜 meta 实例化剩余显式 binder，
--- 只有 conv 成功才带回解，失败返回 Nothing。
-tryUseHint : Int -> Ctx -> Value -> Ec -> Value -> Maybe Ec
-tryUseHint goals0 ctx expected ec piTy =
-  if ecPendingCount ec <= goals0 then
-    Nothing
+-- | 剩余显式 Pi 的个数（隐式 binder 跳过；遇到非 Pi 停止）。hint 只在「剩余实参正好覆盖
+-- 这条 Pi 链」时可用：否则 strip 后的残余是中间结果的元变量，而期望类型对应的是整个应用
+-- 的最终类型（`runPure x 3` 的第一实参处 `runPure` 的结果是 `Int -> b`，不是 `b`）。
+remainingExplicitPis : Int -> Ctx -> Ec -> Value -> Int
+remainingExplicitPis fuel ctx ec v =
+  if fuel <= 0 then
+    0
   else
-    case stripPisWithMetas 64 ctx ec piTy of
-      ErrC _ => Nothing
-      OkC (res, ec1) =>
+    case forceVal ec v of
+      VPi name implicit _ _ clo =>
         let
-          forcedRes = forceVal ec1 res
-        in if isMetaHeadedValue ec1 forcedRes then
-          if isRigidHeadValue ec1 expected then
-            case convEc ec1 (ctxDepth ctx) expected forcedRes of
-              ErrC _ => Nothing
-              OkC ec2 => Just ec2
-          else
-            Nothing
+          v2 = VNeutral (NVar name (ctxDepth ctx) [])
+          rest = remainingExplicitPis (fuel - 1) ctx ec (applyClosure clo v2)
+        in if implicit then rest else rest + 1
+      _ => 0
+
+-- 残余结果 meta 头 + 期望刚性头时，先把剩余显式 binder 用**新鲜 meta** 实例化取残余
+-- 结果，再 conv 期望类型；成功就把这次 early solve 带回（`?m`/`?b` 同时解出），失败丢弃
+-- 整份快照，调用方照常检查实参。
+-- | 用期望结果类型提前解出隐式前缀的元变量：需要时用新鲜 meta 实例化剩余显式 binder，
+-- 只有 conv 成功才带回解，失败返回 Nothing。
+tryUseHint : Ctx -> Value -> Ec -> Value -> Maybe Ec
+tryUseHint ctx expected ec piTy =
+  case stripPisWithMetas 64 ctx ec piTy of
+    ErrC _ => Nothing
+    OkC (res, ec1) =>
+      let
+        forcedRes = forceVal ec1 res
+      in if isMetaHeadedValue ec1 forcedRes then
+        if isRigidHeadValue ec1 expected then
+          case convEc ec1 (ctxDepth ctx) expected forcedRes of
+            ErrC _ => Nothing
+            OkC ec2 => Just ec2
         else
           Nothing
+      else
+        Nothing
 
 -- 与 inferEFuel 同形，只对 EApp 把期望结果类型传进 inferAppFuel（其余形状走常规推断）。
 -- 不复制 inferAppFuel 的 ctor/over-ctor/运算符分派，避免绕过分派导致的燃料问题。
@@ -2456,7 +2489,7 @@ inferEFuelHint fuel globals ctx ec expr expected =
               Just _ => Vuna.Compiler.Base.Common.bind (appAtCallExpr expr) (\callExpr => inferEFuel (fuel - 1) globals ctx ec callExpr)
               Nothing =>
                 case expr of
-                  EApp fn args sp => inferAppFuel (fuel - 1) globals ctx ec fn args sp (Just (ecPendingCount ec, expected))
+                  EApp fn args sp => inferAppFuel (fuel - 1) globals ctx ec fn args sp (Just expected)
                   _ => inferEFuel fuel globals ctx ec expr
 
 -- ---------------------------------------------------------------
@@ -3270,6 +3303,18 @@ ctorFamilyArgsGo ec ty (v :: vs) (r :: rs) depth acc =
 -- ---------------------------------------------------------------
 -- 把 `PCon` 头里的候选集（Loader 的 @vuna@ctor@... 编码）按期望类型/scrutinee 族
 -- 解析成 canonical 构造子，并递归解析嵌套模式（用 ctorFamilyArgs 实例化字段类型）。
+-- | Nat 字面量模式展开成 `Zero` / `Succ` 构造子链（与 `natLitTerm` 同形）。
+natPatOf : Int -> Span -> Check Pat
+natPatOf n sp = if n < 0 then tcErr0 sp NatLiteralOutOfRange else OkC (natPatGo n sp)
+
+-- | `natPatOf` 的链构造。
+natPatGo : Int -> Span -> Pat
+natPatGo n sp =
+  if n <= 0 then
+    PCon (classifyName natZeroCtor) [] sp
+  else
+    PCon (classifyName natSuccCtor) [natPatGo (n - 1) sp] sp
+
 -- | 按期望类型/scrutinee 族解析模式头里的重载构造子与列表字面量，并递归解析嵌套模式。
 resolveOverPatFuel : Nat -> Ec -> Ctx -> Value -> Pat -> Check (Pat, Ec)
 resolveOverPatFuel Zero ec ctx expected pat = icFuel "pattern resolve"
@@ -3285,6 +3330,19 @@ resolveOverPatFuel (Succ k) ec ctx expected pat =
           Just c => resolveCtorPatFuel k ec ctx expected (dtCtorName c) args sp
           Nothing => OkC (PCon (classifyName "__list_literal__") args sp, ec)
       else if isOverCtorName (rnameKey name) then Vuna.Compiler.Base.Common.bind (resolveOverCtor ec sp (Just expected) (overCtorShort (rnameKey name)) (overCtorTargets (rnameKey name))) (\target => resolveCtorPatFuel k ec ctx expected target args sp) else resolveCtorPatFuel k ec ctx expected (rnameKey name) args sp
+    PInt n sp =>
+      if isNatTy ec expected then
+        Vuna.Compiler.Base.Common.bind (natPatOf n sp) (\p => OkC (p, ec))
+      else
+        OkC (pat, ec)
+    PAs name inner sp =>
+      case inner of
+        PInt n isp =>
+          if isNatTy ec expected then
+            Vuna.Compiler.Base.Common.bind (natPatOf n isp) (\p => OkC (PAs name p sp, ec))
+          else
+            OkC (pat, ec)
+        _ => OkC (pat, ec)
     PRecord name fields sp => OkC (pat, ec)
     _ => OkC (pat, ec)
 

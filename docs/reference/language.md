@@ -292,7 +292,8 @@ vuna/base/compiler 三包源码统一按当前语言能力书写，新增/修改
 [frontend-syntax.md](frontend-syntax.md) §3；本节写匹配语义与穷尽性。
 
 `case e of` 的每个分支左端是模式：构造子模式（可嵌套，如 `x :: (y :: ys)`）、
-`Int` / `String` 字面量模式、变量或通配。分支按书写顺序匹配，因此：
+`Int` / `String` 字面量模式、Nat 字面量模式（按 `Zero` / `Succ` 构造子展开）、变量或通配。
+分支按书写顺序匹配，因此：
 
 - **as-pattern**：`x@pat` 匹配 `pat` 并把整个匹配值绑定到 `x`（Idris2 风格；`_@x` 等价于
   `x@_`）。可用于顶层 / 局部函数子句的参数与嵌套模式位置，如
@@ -308,7 +309,8 @@ vuna/base/compiler 三包源码统一按当前语言能力书写，新增/修改
 - 变量 / 通配兜底只能放**最后一个**分支，否则报 `TC_CatchAllNotLast`；
 - `Bool` 的 `case` 只认 `True` / `False` / 变量 / 通配（`TC_BoolCaseRestriction`）；
 - `Int` / `String` 的 `case` 必须有一个变量 / 通配兜底（`TC_IntStringCaseNeedsFallback`），
-  字面量分支降级成嵌套 `if` 链；
+  字面量分支降级成嵌套 `if` 链；Nat 字面量模式按 `Zero` / `Succ` 构造子模式参与矩阵，
+  可与构造子模式混用，穷尽性由矩阵判定（`case n of 0 => a; Succ k => b` 即穷尽）；
 - 不可达分支是**错误**：重复构造子分支、重复字面量、兜底之后的分支分别报
   `TC_RedundantCtorBranch` / `TC_RedundantLiteralBranch` / `TC_BranchAfterCatchAll`；
   被索引排除的分支与分支上下文含空归纳族的分支可以**省略**，写出来报

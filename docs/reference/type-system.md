@@ -50,6 +50,9 @@ quantity / 线性规则见 [qtt.md](qtt.md)（quantity 与擦除口径以该页�
 - 构造子应用要写全**显式**族参数 / 索引（`Cons Zero Int 1 (Nil Int)`）；隐式索引
   （`{n : Nat}`）由调用点或期望类型反推。推断仍是一阶的：没有期望类型、又需要解出
   带局部变量的解时可能报 `TC_UnsolvedMetavar`。
+- **期望结果类型定向求解**：check 模式下应用会先用期望结果类型收敛残余元变量
+  （`inferEFuelHint` / `tryUseHint`），再检查实参；因此 `fromMaybe 0 (o : Maybe Nat)` 里
+  `fromMaybe` 的 `a` 先解成 `Nat`，`0` 再按 Nat 展开。没有期望类型的推断位置字面量仍默认 `Int`。
 - **类型表达式里的字面量**：`Loader.Resolve` 只放行 `Int` 与 `String` 字面量，其余字面量
   报 `invalid type expression`。所以 `Vec 3 a`（Int 索引）与用户 data 的 String 索引
   （如 `Box "books"`）都可用；字面量按值参与索引相等（`Core/Eval.valueEqFuel` 的 `VStr`
@@ -82,9 +85,11 @@ quantity / 线性规则见 [qtt.md](qtt.md)（quantity 与擦除口径以该页�
   - 索引含中性项时无法证明空族，判据保守判「可能非空」：分支必须写出且会被接受。
 - `case` 的**唯一规范形**：先做家族无关的源级校验（兜底位置、重复构造子、重复字面量），
   需要嵌套模式 / 同构造子多分支时经模式矩阵降级（每构造子一个分支 + 变量子模式），
-  再按 scrutinee 家族降低（`Bool` → `if`，`Int` / `String` 字面量 → `if` 链，归纳族 →
-  `TCase`）。多 clause 函数与源级 `case` 共用这套模式矩阵。
-- **字面量 case 必须有变量 / 通配兜底**（`TC_IntStringCaseNeedsFallback`）；
+  再按 scrutinee 家族降低（`Bool` → `if`，`Int` / `String` 字面量 → `if` 链，Nat 字面量
+  先展开成 `Zero` / `Succ` 构造子模式再走归纳族矩阵，归纳族 → `TCase`）。多 clause 函数与
+  源级 `case` 共用这套模式矩阵。
+- **`Int` / `String` 字面量 case 必须有变量 / 通配兜底**（`TC_IntStringCaseNeedsFallback`）；
+  Nat 字面量模式是构造子模式的一部分，不要求兜底。
   `Bool` 的 `case` 只认 `True` / `False` / 变量 / 通配（`TC_BoolCaseRestriction`）。
 - **诊断**：重复构造子分支、重复字面量、兜底之后的分支分别是
   `TC_RedundantCtorBranch` / `TC_RedundantLiteralBranch` / `TC_BranchAfterCatchAll`；

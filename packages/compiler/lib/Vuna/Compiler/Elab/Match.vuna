@@ -52,7 +52,7 @@ multiToExpr table clauses =
             \_ =>
               let
                 names = paramNames n
-              in Vuna.Compiler.Base.Common.bind (buildColumnExpr table clauses names (firstPatSpan clauses) 200) (\body => OkC (wrapLambdas names body))
+              in Vuna.Compiler.Base.Common.bind (buildColumnExpr table clauses names (firstPatSpan clauses) (coverageFuelFor (matrixOf clauses))) (\body => OkC (wrapLambdas names body))
           )
 
 -- | 每个子句必须匹配到前面子句没覆盖的值。
@@ -93,7 +93,12 @@ multiToCaseExpr table clauses name =
       if clauseArityTooMany n clauses then
         tcErr0 (firstPatSpan clauses) ClauseTooManyPatterns
       else
-        buildColumnExpr table clauses [name] (firstPatSpan clauses) 200
+        buildColumnExpr
+          table
+          clauses
+          [name]
+          (firstPatSpan clauses)
+          (coverageFuelFor (matrixOf clauses))
 
 -- 源矩阵（剥掉 as-pattern）：覆盖性见证用。
 export matrixOf : List (List Pat, Expr) -> List (List Pat)

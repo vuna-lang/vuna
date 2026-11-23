@@ -1,16 +1,42 @@
--- D24：Nat 字面量模式降成 Int 比较的 if 链；变量兜底绑定原始 Nat。
+-- D24：Nat 字面量模式按构造子模式参与模式矩阵。
+--
+-- 字面量（`0` / `1`）与 `Succ` / `Zero` 混用合法；穷尽性由矩阵判定，不要求兜底。
 import Base.Data.Nat as Nat
 
 f : Nat -> Int
-f n = case n of
-  0 => 10
-  1 => 20
-  _ => 30
+f n =
+  case n of
+    0 => 10
+    1 => 20
+    _ => 30
 
 g : Nat -> Int
-g n = case n of
-  0 => 1
-  k => toInt k
+g n =
+  case n of
+    0 => 1
+    k => toInt k
+
+mixed : Nat -> Int
+mixed n =
+  case n of
+    0 => 100
+    Succ k => 200
+
+exhaustive : Nat -> Int
+exhaustive n =
+  case n of
+    1 => 1
+    0 => 0
+    Succ (Succ k) => 2
+
+clause : Nat -> Int
+clause 1 = 1
+clause _ = 0
 
 main : Int
-main = f 0 + f 1 + f 2 + g 0 + g 3
+main =
+  f 0
+    + f 1
+    + f 2
+    + g 0
+    + g 3 + mixed 0 + mixed 5 + exhaustive 0 + exhaustive 1 + exhaustive 7 + clause 1 + clause 9

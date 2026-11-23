@@ -102,9 +102,10 @@
   `Succ n = min(n + 1, max_int)`，**不生成变体类型**。
 - **字面量**：期望类型为 Nat 时 `3` 展开成 `Succ (Succ (Succ Zero))`（类型层可合一），
   codegen 折回整数字面量；推断位置仍默认 `Int`。超出 63 位可表示范围的字面量在词法期
-  报 `LX_IntLiteralOutOfRange`（不再回绕；`TC_NatLiteralOutOfRange` 仅作内部防御）；Nat 字面量模式支持 `case n of 0 =>`：模式只含字面量/变量/通配时降成 Int 比较的
-  if 链（`case n of 0 => a; k => b` 的 `k` 绑回原始 Nat）；与构造子模式混用仍报 `TC_OnlyCtorPatterns`，
-  混用时改用 `Zero` / `Succ` 或 `isZero`。
+  报 `LX_IntLiteralOutOfRange`（不再回绕；`TC_NatLiteralOutOfRange` 仅作内部防御）。Nat 字面量
+  模式（`case n of 0 => ...; 1 => ...`）在模式解析时展开成 `Zero` / `Succ` 构造子模式，与
+  构造子模式混用合法，穷尽性由模式矩阵判定（`0` + `Succ k` 即穷尽），不要求兜底；`Int` / `String`
+  字面量模式仍降成 `if` 链并要求兜底。
 - **纯 intrinsic**：`natAdd` / `natSub` / `natMul` / `natDiv`（饱和、减截断到 0、除零与 Int
   同文案）、`natToInt`（恒等）、`natFromInt`（负数 clamp 0）。核心求值与产物同语义；
   `+ - * /` 在 Nat 上下文由精化器特化到这些名字（见 [operators.md](operators.md)）。

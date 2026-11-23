@@ -95,7 +95,7 @@
 | --- | --- | --- | --- |
 | 构造子 | `C p q`、`x :: xs`、`Just y` | 同名构造子按期望族 / scrutinee 族定向解析 | `Elab.Match`、[language.md](language.md) |
 | 符号构造子 | `(<+>) p q`、`(::)` | 声明位带括号，使用位裸写 | `Frontend.Parser` |
-| 字面量 | `42` / `"s"` | `Int` / `String` 分支；必须带变量 / `_` 兜底 | `Elab.Match` |
+| 字面量 | `42` / `"s"` | Nat 按 `Zero` / `Succ` 构造子模式展开（可与构造子混用）；`Int` / `String` 走字面量分支，必须带变量 / `_` 兜底 | `Elab.Match` |
 | 变量 / 通配 | `x` / `_` | 兜底只能放最后一个分支 | `Elab.Match` |
 | as-pattern | `x@pat` / `_@x` | 整个值绑定到 `x`；case 分支里降成 `let` | `Elab.Match`、`Elab.Records` |
 | 记录模式 | `R { x = p, y }` | 可省略字段（= 通配）；`{ y }` 是 pun | `Elab.Records` |
