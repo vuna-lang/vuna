@@ -135,8 +135,8 @@ import 链的传递单元 key + `pr0|pr1`。闭包扫描已经算好 `cmAddr`，
 `build-id` 寻址，就可能把旧二进制写的结果当成本二进制的。
 
 因此缓存键另有一层**二进制身份** `cache-tag`：`nix/build/packages.nix` 在构建
-`vuna-seed` / `vuna-compiler` 后写入 `$out/cache-tag`（= 产物二进制的 sha256），产品安装时
-复制同一个文件。运行时读取顺序：`VUNA_CACHE_TAG`（排障/测试）→ `$out/cache-tag` →
+`vuna-seed` / `vuna-compiler` / `vuna-native` 后写入 `$out/cache-tag`（= 产物二进制的 sha256），
+产品安装时复制同一个文件。运行时读取顺序：`VUNA_CACHE_TAG`（排障/测试）→ `$out/cache-tag` →
 回退 `build-id`（开发构建与旧安装）。
 
 它只参与缓存 key，不写进产物、不参与 rotation 的 fixed point（`seed/build-id` 仍是源码身份）。

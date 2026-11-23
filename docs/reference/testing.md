@@ -637,7 +637,7 @@ dispatch 与带 `backend` 标签的 PR**——整轮成本高、且 native 后�
 
 | 包 | 产物 | 说明 |
 | --- | --- | --- |
-| `vuna-native` | `bin/vuna-native` + `bin/vuna-target-{native,wasm}` + `packages/base/` | 原生可执行文件 + 它编非 OCaml 目标要用的后端插件（与产品 CLI 同构，插件按 `<exeDir>` 发现）；编译器身份写 `$out/build-id` |
+| `vuna-native` | `bin/vuna-native` + `bin/vuna-target-{native,wasm}` + `base/` | 原生可执行文件 + 它编非 OCaml 目标要用的后端插件（与产品 CLI 同构，插件按 `<exeDir>` 发现）；`build-id` = 编译器源码闭包身份，`cache-tag` = 二进制摘要 |
 
 runner 是 `nix run .#backend-check -- --compiler native`，三个 scope：
 

@@ -1,6 +1,8 @@
-# 自举链的三级构建产物与两个开发 runner：
+# 自举链的构建产物与按需 / 开发用包装：
 #   seed/ → vuna-seed（stage 0）→ vuna-compiler（stage 1）→ vuna（产品 CLI）
-#   vuna-run-tests / vuna-bench / vuna-perf / vuna-artifacts 是开发用包装
+#   vuna-native = stage 1 把编译器源码编到 native 的自举产物（后端 conformance 用）
+#   vuna-web-cli / vuna-wasm-browser-smoke 按需构建；vuna-run-tests / vuna-bench /
+#   vuna-perf / vuna-artifacts / backend-check 是开发用包装
 #   （nix run .#vuna-run-tests / .#vuna-bench / .#vuna-perf / .#vuna-artifacts）。
 {
   pkgs,
@@ -204,37 +206,36 @@ let
   #
   # 产物与产品 CLI 同构：`bin/` 里是自举出的 `vuna-native` 加上它编译非 OCaml 目标时
   # 需要的后端插件（`vuna-target-native` / `vuna-target-wasm`，插件按 `<exeDir>` 发现）；
-  # 身份写 `$out/build-id`（Loader.Fingerprint 读它）。
-  vuna-native =
-    pkgs.runCommand "vuna-native-${version}"
-      {
-        nativeBuildInputs = ocamlTools ++ [ vuna-compiler ];
-        allowSubstitutes = false;
-        meta = {
-          description = "vuna compiler built for x86-64 native (self-host checks)";
-          mainProgram = "vuna-native";
-          license = lib.licenses.mit;
-        };
-      }
-      ''
-        mkdir -p "$out/bin"
-        cp -r ${../../packages} packages
-        cp ${../../vuna.toml} vuna.toml
-        chmod -R u+w .
-        export VUNA_STORE="$TMPDIR/store"
-        # 后端插件先用 stage 1 编译器建好：parity / corpus 用 `vuna-native` 编到
-        # native 与 wasm，插件必须与它同目录（`<exeDir>` 优先于 `$VUNA_EXEC_PATH`）。
-        ${vuna-compiler}/bin/vuna-compiler build --package vuna-target-native .
-        cp packages/target-native/.output/bin/vuna-target-native "$out/bin/vuna-target-native"
-        ${vuna-compiler}/bin/vuna-compiler build --package vuna-target-wasm .
-        cp packages/target-wasm/.output/bin/vuna-target-wasm "$out/bin/vuna-target-wasm"
-        # 自举这一步本身就经插件边界：把刚建好的插件目录交给 stage 1 编译器。
-        export VUNA_EXEC_PATH="$out/bin"
-        ${vuna-compiler}/bin/vuna-compiler build packages/compiler --target native --out "$TMPDIR/native"
-        cp "$TMPDIR/native/bin/vuna-compiler" "$out/bin/vuna-native"
-        cp -r packages/base "$out/base"
-        printf '%s' "vuna-native-$(sha256sum "$out/bin/vuna-native" | cut -d' ' -f1)" > "$out/build-id"
-      '';
+  # `build-id` 是编译器源码闭包身份（自举产物自己写下），`cache-tag` 是二进制摘要
+  # （Loader.Fingerprint 分别读它们）。
+  vuna-native = mkStage {
+    name = "vuna-native-${version}";
+    description = "vuna compiler built for x86-64 native (self-host checks)";
+    mainProgram = "vuna-native";
+    build = ''
+      mkdir -p "$out/bin"
+      cp -r ${../../packages} packages
+      cp ${../../vuna.toml} vuna.toml
+      chmod -R u+w .
+      export VUNA_STORE="$TMPDIR/vuna-store"
+      # 后端插件先用 stage 1 编译器建好：parity / corpus 用 `vuna-native` 编到
+      # native 与 wasm，插件必须与它同目录（`<exeDir>` 优先于 `$VUNA_EXEC_PATH`）。
+      ${vuna-compiler}/bin/vuna-compiler build --package vuna-target-native .
+      cp packages/target-native/.output/bin/vuna-target-native "$out/bin/vuna-target-native"
+      ${vuna-compiler}/bin/vuna-compiler build --package vuna-target-wasm .
+      cp packages/target-wasm/.output/bin/vuna-target-wasm "$out/bin/vuna-target-wasm"
+      # 自举这一步本身就经插件边界：把刚建好的插件目录交给 stage 1 编译器。
+      export VUNA_EXEC_PATH="$out/bin"
+      ${vuna-compiler}/bin/vuna-compiler build packages/compiler --target native --out "$TMPDIR/native"
+      cp "$TMPDIR/native/bin/vuna-compiler" "$out/bin/vuna-native"
+      # 身份分工与其它 stage 一致：`build-id` = 编译器源码闭包（与 stage 1 同一个
+      # `packages/compiler` 闭包，目标后端不参与身份），`cache-tag` = 二进制摘要
+      # （同一闭包由不同 seed 编出的二进制不共享缓存）。
+      cp ${vuna-compiler}/build-id "$out/build-id"
+      sha256sum "$out/bin/vuna-native" | cut -d' ' -f1 > "$out/cache-tag"
+      cp -r packages/base "$out/base"
+    '';
+  };
 
   # 浏览器可跑面冒烟（e2e / 按需；**不进 `nix flake check`**）：Playwright 驱动
   # `pkgs.playwright-driver` 的 chromium（revision 与 `pkgs.playwright` 对齐），
