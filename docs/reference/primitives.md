@@ -266,13 +266,14 @@
 
 - `assert : Bool -> String -> a -> a`（debug-only）：失败抛 `Failure`；
 - `todo : String -> a`（debug-only）：以 `TODO: <msg>` 抛 `Failure`；
-- `@vuna@debug@on : Int -> Bool` / `@vuna@debug@line : String -> Int`：编译器 tracing 的
-  **隐藏 runtime 原语**（`visible = False`，源码不可写；只由 `dbg!` 展开引用；
-  核心求值归约为 no-op）；
-- 观测原语 7 条（同样是隐藏 runtime 原语，`visible = False`；只由 `obs!` / `mark!` 或
+- 文本日志原语 2 条（隐藏 runtime 原语，`visible = False`，源码不可写；只由 `log!` 展开或
+  `Base.Data.Log` 引用；核心求值归约为静默；规范见 [logging.md](logging.md)）：
+  `@vuna@log@on : Int -> String -> Bool`（级别 + scope 是否输出）、
+  `@vuna@log@emit : Int -> String -> String -> Int`（写一行，返回 `0`）；
+- 观测原语 6 条（同样是隐藏 runtime 原语，`visible = False`；只由 `mark!` 或
   `Base.Data.Obs` / `Base.Data.Obs.Span` 引用；核心求值归约为 no-op，wasm/native 是 no-op 桩）：
-  `@vuna@obs@level`（读当前级别，`Int -> Int`）、`@vuna@obs@log`（结构化日志 →
-  `vuna.log`）、`@vuna@obs@counter`（计数事件 `ph:"C"`，`String -> Int -> Int`）、
+  `@vuna@obs@level`（读当前级别，`Int -> Int`）、
+  `@vuna@obs@counter`（计数事件 `ph:"C"`，`String -> Int -> Int`）、
   `@vuna@obs@mark`（瞬时标记 `ph:"i"`）、`@vuna@obs@span`（`String -> String ->
   (Int -> a) -> a`，唯一高阶原语）、`@vuna@obs@sampleStart`（`String -> Int -> Int`）、
   `@vuna@obs@sampleStop`。命令面与语义见 [observability.md](observability.md)；
@@ -282,7 +283,7 @@
 
 `assert` / `todo` 在 release 构建（CLI 显式解析 `--release` / `VUNA_RELEASE=1` 得到 `Bool`，
 包括 workspace 成员子进程）里由 `Loader.Resolve` 拒绝（`TC_DebugConstructInRelease`）；
-`dbg!` 作为调试输出在两种构建都可用（受 `--debug-perf` 门控）。
+`log!` 作为调试输出在两种构建都可用（受 `VUNA_LOG` 门控）。
 
 `net` 原语 7 条 socket（工具链 server 与测试用；任何包都可直调）。用户面走
 `Base.Effect.Net` 的 `NetOp` 效应（可 mock；entry 自动预装真实 handler）；宿主失败由

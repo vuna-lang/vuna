@@ -166,7 +166,8 @@ seed 工具（`seed/`）+ 开发工具（`tools/`）；`docs/` = 分层文档。
 - 编译器实现：compiler、core、ir、diagnostics、wasm、native、cache（同在 `docs/reference/`）
 - 工具链 / 测试 / 自举：tooling、testing、test-architecture、bootstrap（同在 `docs/reference/`）
 - 性能与观测：[performance.md](docs/reference/performance.md)（量什么/读数）、
-  [observability.md](docs/reference/observability.md)（`VUNA_OBS` 分级 / `Base.Data.Obs` / `vuna dev obs` / `#line` → DWARF）
+  [observability.md](docs/reference/observability.md)（`VUNA_OBS` 分级 / `Base.Data.Obs` / `vuna dev obs` / `#line` → DWARF）、
+  [logging.md](docs/reference/logging.md)（`log!` / `VUNA_LOG` / scope 过滤 / text·jsonl 输出）
 - AI 规则与技能：[`.agents/README.md`](.agents/README.md)（规则 `rules/`、技能 `skills/`）
 - 债务 / 已知缺口：[debt.md](docs/reference/debt.md)（唯一清单：只含开放项、带证据，
   同时收录编译器分层实现债并保留其 ID）

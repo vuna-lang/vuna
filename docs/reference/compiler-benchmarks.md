@@ -51,7 +51,7 @@
 build-compiler / build-all 要为每个模块把缓存载荷**显式规范编码 + `Base.Store` framing（含 SHA-256
 内容地址）**并算摘要——逐项写字节，而不是 `Obj.magic` 级拷贝。
 
-**build-warm 的归因：`canonicalTopo` + `splitGraph`**。同机 `VUNA_DEBUG_PERF=1` 分段实测
+**build-warm 的归因：`canonicalTopo` + `splitGraph`**。同机 `VUNA_LOG=debug` 分段实测
 （`compiler` 包、119 单元、4.4 MB blob），拓扑序未进载荷时各段构成：
 
 | 阶段 | 用时 |

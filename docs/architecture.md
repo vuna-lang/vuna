@@ -300,10 +300,11 @@ stage1 == stage2；seed 只含 compiler 包入口闭包。
 | `packages/http/` | `vuna test packages/http` + `vuna check .`（[http.md](reference/http.md)） |
 | `packages/web/` | `vuna test packages/web` + 第 109 段 steps + `vuna check .`（[web.md](reference/web.md)） |
 | `packages/web-cli/` | `vuna-web-cli build examples/web-static` + 第 109 段 steps + `vuna check .`（[web.md](reference/web.md) §7） |
-| `packages/base/` 的效应 monad / 调试构造（`dbg!`/`dbgShow`/`assert`） | 第 27 段 + `dt` / `dt_base` / `dt_err` 夹具 + `vuna check .`（见 [effects.md](reference/effects.md)、[debugging.md](reference/debugging.md)） |
+| `packages/base/` 的效应 monad / 调试构造（`log!`/`dbgShow`/`assert`） | 第 27 段 + `dt` / `dt_base` / `dt_err` 夹具 + `vuna check .`（见 [effects.md](reference/effects.md)、[debugging.md](reference/debugging.md)） |
 | `packages/compiler/`（语法 / 类型 / 精化 / 擦除） | 全量测试 + `flake check`（至少 seed-selfhost） |
 | codegen 运行时 / main 钩子 / 位置表 | 第 6、13、38 段 + 第 45–46 段 + seed rotation（[debugging.md](reference/debugging.md)） |
 | 观测（`Target.Ocaml.Term.dtObsRuntime` / `#line` 注入 / `Base.Data.Obs` / `vuna dev obs`） | 第 107 段 + `checks.vuna-obs-schema` / `vuna-obs-dwarf` / `vuna-obs-overhead` + `vuna check .`（[observability.md](reference/observability.md)） |
+| 文本日志（`Base.Data.Log` / `log!` / `Target.Ocaml.Term.dtLogRuntime` / `VUNA_LOG*`） | 第 107 段的 `log!`/`mark!` 断言 + `vuna check .`（[logging.md](reference/logging.md)） |
 | CLI 工具（`run` / `test` 选项 / REPL / LSP） | 第 40、42、47–49 段 + `corpus/lsp/smoke.sh` + `vuna check .` |
 | split 输出 / `vuna.toml` | 第 28–29、33–34、38–39 段 |
 | Nix | `nix flake check` + `nix build .#vuna` |

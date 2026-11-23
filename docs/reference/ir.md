@@ -132,8 +132,8 @@ id 只需沿作用域链唯一，不同定义 / 单元可复用。Pass 里的合
 - `IrGroup`：`irGroupIsRec` + 成员（SCC 序）。
 - `IrUnit`：类型声明 + 分组 + `hasListFamily` + `typeRefs` + 可选 `IrEntry`。
 - `IrProgram`：`IrShared` + 一个 `IrUnit`（check 路径的整程序装配）。
-- `IrShared`：record 运行时字段表、canonical List 族、`usesFloat` / `usesTrace` /
-  `usesObs`、定义位置行。它只承载**后端渲染要消费**的表示决策结果；构造子形状、去装箱
+- `IrShared`：record 运行时字段表、canonical List 族、`usesFloat` / `usesTrace`（文本日志
+  runtime）/ `usesObs`、定义位置行。它只承载**后端渲染要消费**的表示决策结果；构造子形状、去装箱
   集合、类型参数槽是 Lowering 内部的查表输入，不进 IR。
 
 ## 运行时契约（`Vuna.Ir.Runtime`）

@@ -181,7 +181,7 @@ CPS 后缺 kind 的 binder 按位置是 `lam=4,824 / let=0 / alt=33`：几乎全
 
 §1 的「典型值」是**热 store** 口径（默认根 `~/.vuna/store` 已预热），同一源码在**空
 `VUNA_STORE`** 上会差一个数量级。同机（16 核，`nix build .#vuna` 产物，单进程，
-无 `--debug-perf`、`VUNA_OBS=0`）：
+`VUNA_LOG=off`、`VUNA_OBS=0`）：
 
 | 命令 | 冷（空 store，修前） | 冷（空 store，修后） | 热（同 store 第二遍） |
 | --- | --- | --- | --- |
@@ -221,14 +221,14 @@ Vuna.Compiler.Driver.ToolPayload`），于是每轮都补一遍 lib check（`col
 
 入口 import 必须覆盖 `[export]` 全部模块（否则 `iface-skip partial`、每轮补一遍 lib check）；
 回退护栏是 `nix/checks/compiler-growth*.sh` 的相邻档增长率门槛，绝对读数与分段构成见 §5 / §6。
-## 2. 探针设施：`dbg!` 日志行 + `VUNA_OBS` 结构化观测
+## 2. 探针设施：`log!` 文本行 + `VUNA_OBS` 结构化观测
 
 分两层，**两套独立开关**；绝对读数只用「都关闭」的口径（见 §7）：
 
 | 层 | 开关 | 输出 | 形态 |
 | --- | --- | --- | --- |
-| 日志行 | `--debug-perf` / `VUNA_DEBUG_PERF=1` | stderr | `DEBUG <epoch-us> <text>`，相邻两行相减 = 阶段耗时 |
-| 结构化观测 | `VUNA_OBS=1..3` / `--obs` / `--obs-level N` | Chrome Trace Event JSONL | `ph:"X"` 跨度（自带 `dur` 与 `args.allocWords`）、`ph:"C"` 计数、`ph:"i"` 日志与采样栈 |
+| 日志行 | `VUNA_LOG=debug`（缺省 `warn`，`off` 关闭） | stderr | `<epoch-us> DEBUG <scope> <text>`，相邻两行相减 = 阶段耗时 |
+| 结构化观测 | `VUNA_OBS=1..3` / `--obs` / `--obs-level N` | Chrome Trace Event JSONL | `ph:"X"` 跨度（自带 `dur` 与 `args.allocWords`）、`ph:"C"` 计数、`ph:"i"` 标记与采样栈 |
 
 结构化观测是**语言层**能力（任何 vuna 应用可用），完整规范见
 [observability.md](observability.md)；本页只讲「用它来量编译器」：
@@ -241,20 +241,20 @@ vuna dev obs run --level 2 -- vuna check packages/compiler                # 一�
 vuna dev obs convert --to folded --out f.folded trace/*.jsonl   # 火焰图
 ```
 
-`dbg!` 仍是**阶段边界的低成本日志**（展开规则见 [language.md](language.md) 的「内置宏」；
-后端是隐藏 runtime 原语 `@vuna@debug@on` / `@vuna@debug@line`）：
+`log!` 仍是**阶段边界的低成本日志**（展开规则见 [language.md](language.md) 的「内置宏」；
+后端是隐藏 runtime 原语 `@vuna@log@on` / `@vuna@log@emit`，见 [logging.md](logging.md)）：
 
 | 用法 | 语义 | 何时用 |
 | --- | --- | --- |
-| `dbg! label` | 阶段边界的时间戳行 | 阶段边界 |
-| `dbg! ("x=" ++ showTerm t)` | 任意诊断文本行 | 表规模、元变量数、字典目标数 |
+| `log! "debug" label` | 阶段边界的时间戳行 | 阶段边界 |
+| `log! "debug" ("x=" ++ showTerm t)` | 任意诊断文本行 | 表规模、元变量数、字典目标数 |
 | `obsCheck name (\_ => ...)` / `obsMarkEff name` | 结构化跨度 / 标记 | 需要归因表、嵌套、跨模块聚合时 |
 
-**关键纪律（宏已承担）**：守卫在展开里，`dbg! ("x=" ++ showTerm t)` 在关闭时**不会**
-先算字符串。表达式返回 `Int 0`，调用点写 `_ = dbg! ...`；开关是 runtime 里的 lazy CAF，
+**关键纪律（宏已承担）**：守卫在展开里，`log! "debug" ("x=" ++ showTerm t)` 在关闭时**不会**
+先算字符串。表达式返回 `Int 0`，调用点写 `_ = log! ...`；开关是 runtime 里的 lazy CAF，
 关闭时每个探针只做一次 `Lazy.force`。逐定义探针照常打印，冷 build 的 DEBUG 输出量约
 15.8 万行（全量精化），实测冷 build 墙钟膨胀 ~60%：
-阶段比例可用，**绝对读数必须用无 `--debug-perf` / `VUNA_OBS=0` 口径**（§7）。
+阶段比例可用，**绝对读数必须用 `VUNA_LOG=off` / `VUNA_OBS=0` 口径**（§7）。
 核心求值不执行 tracing / 观测（原语归约为 no-op），输出只发生在 compile+run 的 runtime。
 
 结构化观测的成本纪律（关闭路径、事件缓冲、采样开销的实测口径）在
@@ -290,7 +290,7 @@ HashMap.fromList / insert / insertAll / lookup / member / toList / size / ofName
 
 ## 4. 仍然存在的热点
 
-冷 `check packages/compiler` ~10 s（修后）的阶段构成（`--debug-perf` 时间戳相减，单次采样）：
+冷 `check packages/compiler` ~10 s（修后）的阶段构成（`VUNA_LOG=debug` 时间戳相减，单次采样）：
 load/parse 前缀 + iface 摘要 **~2.6 s** → 逐定义精化（`collectSigs-done` → `bodies-done`）
 **~4.6 s** → 实例体/终止性 **~0.4 s** → codegen 检查 + iface 影子写 **~3.2 s**
 （其中 compute 1.09 s + write 0.48 s，单遍 `iface-write=118/118`）。
@@ -309,10 +309,10 @@ load/parse 前缀 + iface 摘要 **~2.6 s** → 逐定义精化（`collectSigs-d
    `vuna.parse.syntax` 335 次 / **105 ms**（≈0.32 s，见 §6.1）。剩下的前缀耗时在 iface
    摘要、地址计算与 flatten，不在词法/语法。
 3. **冷 build 的 elab bodies**：`build --package vuna .` 的 6159 def 约 3.1 s
-   （`--debug-perf` 口径），集中在 `conv`/`force`/`infer` 的项重算与分配
+   （`VUNA_LOG=debug` 口径），集中在 `conv`/`force`/`infer` 的项重算与分配
    （`Term/Impl`、`Core/Eval|Conv`）。每 def 的定义值记忆化已否决（安全前置检查比命中收益
    更贵，A/B -2~3%）；更深的共享需要参数相关记忆化，未做。
-4. **冷 build 的 load/parse ~2.6 s + codegen split ~0.6 s**（`--debug-perf` 单次采样）：
+4. **冷 build 的 load/parse ~2.6 s + codegen split ~0.6 s**（`VUNA_LOG=debug` 单次采样）：
    `cg-splitmeta` 61 ms、位置表 23 ms、逐单元 lowering ~0.5 s、`validateUnit` ~70 ms、
    类型声明 2 ms、正文文本 ~0.17 s，余下是程序级擦除 / 归属检查与首单元。逐单元的定义与
    数据来自**归属桶**（一次 `O(def)` 分桶），不在每个单元重扫全程序；类型渲染与注解的
@@ -525,7 +525,7 @@ codegen 检查的分段（同一次冷跑、互不重叠的独占值）：逐定
 | `vuna.counter.core.reduce` | ~1.59×10^6 | `eval` 调用（level 3） |
 | `vuna.counter.core.delta` | ~1.4×10^4 | delta 展开次数（`eval` 的 1%） |
 
-pending 队列规模分桶（`elab.dict.pending.b*`，走 `--debug-perf` 的 `counters=` 行）：
+pending 队列规模分桶（`elab.dict.pending.b*`，走 `VUNA_LOG=debug` 的 `counters=` 行）：
 0 规模 10,878 轮、1–4 1,953 轮、5–16 1,244 轮、17–64 263 轮、65+ 2 轮。即「一趟 worklist
 要处理 >16 个目标」只有 265 轮，旋转语义的二次代价不在关键路径上。
 
@@ -884,9 +884,9 @@ fmt golden 与全量 `fmt --check` 逐字节不变。
   `user+sys` 只 0.29 s ⇒ 多出来的是等待，不是算力。
 - **包级增量路径要先把依赖包接口落盘**（`vuna check <dep>`，见 `compiler-growth-pkg.sh`）：
   否则探针每档都因「依赖接口缺失」走全量路径，测的就不是增量收尾。
-- `--debug-perf` 在**冷 build** 上会逐条打印 conv 诊断（约 15.8 万行；`dbg!` 的实参在
+- `VUNA_LOG=debug` 在**冷 build** 上会逐条打印 conv 诊断（约 15.8 万行；`log!` 的实参在
   开关打开时才求值），实测让冷 build 墙钟膨胀 ~60%：定位用阶段**比例**，绝对读数
-  一律用无 debug 口径；单次 <50 µs 的条目仍需「同形规模合成探针」对比总时间。
+  一律用 `VUNA_LOG=off` 口径；单次 <50 µs 的条目仍需「同形规模合成探针」对比总时间。
   注意冷 `check packages/compiler` 的 debug 膨胀**不是常数**（同窗口交替实测 22.2 s → 45.3 s，
   下一轮却 42.5 s → 23.0 s，loadavg 15–17），负载与开关同样重要。
 - **结构化观测的覆盖与盲区**：`VUNA_OBS=1` 现在有 `vuna.elab`（含子段
@@ -897,14 +897,14 @@ fmt golden 与全量 `fmt --check` 逐字节不变。
   这些名字（含计数至少一条）。**仍未接**：core 热路径计数（`vuna.counter.core.*` /
   `vuna.counter.steps`，要改 `Core.Eval` 热路径，先量代价）与 `VUNA_OBS=3` 的 CPU 采样
   调用点（`dtp_obs_sample_start` 在生成运行时里完整，但仓库内无人启动）。`Eff` 阶段的
-  **耗时**仍只能靠 `--debug-perf` 文本行（`iface-mods-phases` / `iface-write=…` 等），
+  **耗时**仍只能靠 `VUNA_LOG=debug` 文本行（`iface-mods-phases` / `iface-write=…` 等），
   trace 里只有顺序；冷 `check packages/compiler` 的 debug 口径约 18.8 万行。
 - **产物尺寸与构建耗时分开报**：`bench/artifact.sh` 的尺寸（文本文件树/字节/行数、二进制）
   由 flake 固定的工具链生成、产物不含绝对路径与时间戳，因此**尺寸不需要冷/热口径、可跨机器比**；
   构建耗时仍只同机可比，宿主有负载时看 `*_cpu_ms`（user+sys）而不是墙钟。
 - 用 `OCAMLRUNPARAM=s=...` 快速判断 GC 敏感性（注意：产物里 `Gc.set` 会覆盖环境变量，要
   比较不同 minor heap 大小得改代码重建）。
-- 阶段定位优先用阶段边界的 `dbg!`；逐定义观察直接看 `dbg!` 行；不要用「等大 case 跑完」
+- 阶段定位优先用阶段边界的 `log!`；逐定义观察直接看 `log!` 行；不要用「等大 case 跑完」
   定位。
 - 基准入口：`nix run .#vuna-bench`（手动，非 CI check），基线文件与软告警见
   [testing.md](testing.md)。

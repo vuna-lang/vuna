@@ -208,7 +208,7 @@ binder 全量拷进 `$env` 数组（与 native 同策略），闭包应用经 `$
 | 宿主（WASI preview1 import） | `fd_write`（经 `$rt_writeChunked`，每次 ≤64 KiB）、`fd_read`、`fd_close`、`path_open`、`path_filestat_get`、`path_create_directory`、`path_remove_directory`、`path_unlink_file`、`path_rename`、`fd_readdir`、`environ_get` / `environ_sizes_get`、`args_get` / `args_sizes_get`、`clock_time_get`、`proc_exit` |
 | 宿主叶子（`@vuna@host@*`） | `tryReadFile` / `tryWriteFile` / `tryWriteFileAtomic` / `tryReadDir` / `tryIsDirectory` / `tryMakeDir` / `tryMakeDirExclusive` / `tryRemoveFile` / `tryRemoveTree` / `tryRename`、`fileExists` / `fileSize`、`getenv` / `getcwd` / `execPath` / `getArgs`、`print` / `exitOp`、`newRef` / `readRef` / `writeRef`、`isTty`（恒 `False`） |
 | 显式降级 / 拒绝的叶子 | `trySymlink`（trap）、`tryReadFileRange`（trap：宿主把整文件读进内存，区间读没有收益）、`fileMtime`（状态置不可用，`FsOp.FileMtime` 得 `Nothing`）、`sleep`（trap）、`readLine` / `readBytes`（trap）、`runIn` / `spawn` / `wait`（trap） |
-| 其它 | `arrayEmpty`（空数组值）；`@vuna@debug@on`（恒 `False`）/ `@vuna@debug@line`（桩）；obs 叶子桩（见下） |
+| 其它 | `arrayEmpty`（空数组值）；`@vuna@log@on`（恒 `False`）/ `@vuna@log@emit`（恒 `0`）；obs 叶子桩（见下） |
 
 契约 ↔ 表的一致性（`irInlineArity` 的 arity、未实现符号清单）由
 `packages/target-wasm/test/RuntimeTable.vuna` 冻结（CI 的 `vuna test` 会跑）。

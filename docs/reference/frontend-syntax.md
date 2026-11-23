@@ -82,7 +82,7 @@
 | 行字面量 | `[Fetch]` / `[ConsoleOp@audit]` | 与列表同一语法；行位置的元素展开成 `Named "default"/"audit" ...` | `Elab.Term.Impl`、[effects.md](effects.md) |
 | 模板字符串 | `"hi ${name}"` | `Base.Trait.Interp.interp e` + `++` 链 | `Loader.Resolve`、[templates.md](templates.md) |
 | 洞 | `_` / `?name` | goal（check 位必须有期望类型） | `Elab.Term.Support`、[language.md](language.md) |
-| 内置宏 | `dbg! x` / `obs! x` / `mark! name` | `Loader.Expand` 展开成隐藏 runtime 原语 | `Loader.Expand`、[observability.md](observability.md) |
+| 内置宏 | `log! "level" msg` / `mark! name` | `Loader.Expand` 展开成隐藏 runtime 原语 | `Loader.Expand`、[logging.md](logging.md)、[observability.md](observability.md) |
 | 元组 | `(a, b, c)` | 右嵌套成 `Pair a (Pair b c)`；类型 / 值 / 模式同一套语法（要求 `Pair` 可见） | `Frontend.Parser`、`Loader.Resolve` |
 | unit | `()` | 类型位置是 `Unit`，值 / 模式位置是 `MkUnit`（要求可见） | `Frontend.Parser`、`Loader.Resolve` |
 | 类型标注 | `(e : T)` | parser 编码成 `@vuna@ascribe`，Loader 降级成 `EAnn`（按 `T` 检查 `e`） | `Frontend.Parser`、`Loader.Resolve`、`Elab.Term.Impl` |
@@ -168,8 +168,8 @@
 | 匿名洞 `_` | 只能在表达式 check 位；模式位报 `ExpectedPattern`，类型位按未绑定名报错 | `Elab.Term.Support` |
 | 命名洞 `?name` | `?` 与标识符紧邻；同名多次是互相独立的洞；未解报 `TC_UnsolvedHole` | `Elab.Term.Support` |
 | 宏调用 `name!` | `!` 与名字**紧邻**才算宏；`a ! b`（有空格）是普通中缀；`!=` / `!!` 不触发 | `Frontend.Parser.macroBangAt` |
-| 参数贪婪 | `f dbg! x` 解析为 `f (dbg! x)`；块实参用括号 | `Frontend.Parser` |
-| 内置宏集合 | `dbg!` / `obs!` / `mark!`；都展开成隐藏 runtime 原语，不需要 import | `Loader.Expand`、[observability.md](observability.md) |
+| 参数贪婪 | `f log! "debug" x` 解析为 `f (log! "debug" x)`；块实参用括号 | `Frontend.Parser` |
+| 内置宏集合 | `log!` / `mark!`；都展开成隐藏 runtime 原语，不需要 import | `Loader.Expand`、[logging.md](logging.md)、[observability.md](observability.md) |
 | 用户自定义宏 | **不支持**（宏 / DSL 在 `architecture-target.md` 的独立轨道） | — |
 
 ## 9. 工具面对表面语法的约定

@@ -3,8 +3,8 @@
 > 状态：**x86-64 Linux 上端到端工作**。支持面 = Int / Nat / Bool 纯值 + `String`
 > （字面量、`++` 及其 `IrConcatMany` 展平、`strFromInt`、`strLength`、`strAt`、
 > `strSubstring`、`strHash`、`strShow`、`bi_eq_str` / `bi_neq_str`、String 入口）+
-> 六种位运算、`assert` / `todo` / `prim_fail`（统一错误报告）、`dbg!` 的
-> `@vuna@debug@on` / `@vuna@debug@line`、**栈传参**（arity > 6）+ 用户 `data`（变体 tag
+> 六种位运算、`assert` / `todo` / `prim_fail`（统一错误报告）、`log!` 的
+> `@vuna@log@on`（恒 `False`）/ `@vuna@log@emit`（恒 `0`）、**栈传参**（arity > 6）+ 用户 `data`（变体 tag
 > 分派）、record 构造/投影/更新与通用 `case` + List 桥接（`strUnpack` / `strPack` /
 > `strConcatMany` / `strSubstTemplate`）+ 闭包与高阶应用 + Float（算术/比较/转换/展示）。
 > 堆是段链表 + 尺寸类复用 + **两代标记-清扫 GC**（非移动；沿 `rbp` 链逐帧保守扫根，
@@ -303,7 +303,7 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
   `bi_lt_bool` / `bi_le_bool` / `bi_gt_bool` / `bi_ge_bool`、
   `strFromInt` / `strLength` / `strAt` / `strSubstring` /
   `strHash` / `strShow`、`natAdd` / `natSub` / `natMul` / `natDiv` / `natToInt` /
-  `natFromInt`、`assert` / `todo` / `prim_fail`、`@vuna@debug@on` / `@vuna@debug@line`、
+  `natFromInt`、`assert` / `todo` / `prim_fail`、`@vuna@log@on` / `@vuna@log@emit`（恒 `False` / `0`）、
   可观测性叶子桩。其余 `IrRtApp` 符号拒绝。
 - **两种调用形态**都要覆盖：内建饱和应用走 `IrRtApp sym args`（`irInlineArity`）；
   `strAt` / `strSubstring` / `assert` / `todo` / `prim_fail` 这类**多参函数值**在 IR 里是

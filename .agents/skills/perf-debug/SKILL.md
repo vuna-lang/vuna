@@ -65,9 +65,9 @@ description: vuna 仓库里命令/阶段慢、几分钟不返回或打超时时�
    ```console
    VUNA=$PWD/result/bin/vuna VUNA_STORE=$(mktemp -d) sh nix/checks/compiler-growth.sh _scratch/out
    ```
-5. **`--debug-perf` 的膨胀不是常数，负载比开关更响**。冷 `check packages/compiler` 同一窗口交替：
+5. **`VUNA_LOG=debug` 的膨胀不是常数，负载比开关更响**。冷 `check packages/compiler` 同一窗口交替：
    clean 22.2 s / debug 45.3 s（`user+sys` 21.8 vs 37.7 s），下一轮却 42.5 s / 23.0 s
-   （loadavg 15–17）。规则：绝对读数只用「无 `--debug-perf`、`VUNA_OBS=0`」；
+   （loadavg 15–17）。规则：绝对读数只用「`VUNA_LOG=off`、`VUNA_OBS=0`」；
    阶段**比例**可用 debug，但 A/B 必须同窗口交替；读数行同时记 `user+sys`。
 6. **`vuna fmt --check`（省略 PATH）在本仓库必然 exit 2**：会扫 `test/suite/fixtures`
    （有依赖不存在模块的夹具）。CI 的 `nix/checks/vuna-fmt.sh` 只覆盖各包 + `examples`；
@@ -122,9 +122,9 @@ grep '"name":"vuna.def.elab"' _scratch/trace/*.jsonl \                # level 2 
 （实测 16.0 s / 21.6 s），看不到 load/parse/iface/split；**level 3 的 CPU 采样当前拿不到
 样本**——`dtp_obs_sample_start` 在生成运行时里完整，但仓库内**没有调用点**，实测
 `vuna.sample.cpu` 为 0 条、`summarize` 打 `samples:cpu (none)`。要看阶段顺序就用
-`VUNA_DEBUG_PERF=1`（冷 `check packages/compiler` 修后约 **18.8 万行**，其中逐 def ~1.1 万行 ×1 遍），
-它成本远高于 obs level 1，只适合回答「几遍 / 什么顺序」。判读配方：`dbg!` 行带
-`DEBUG <epoch-us> <text>`，用两行相减得到**无日志开销的净阶段时长**（首行到
+`VUNA_LOG=debug`（冷 `check packages/compiler` 修后约 **18.8 万行**，其中逐 def ~1.1 万行 ×1 遍），
+它成本远高于 obs level 1，只适合回答「几遍 / 什么顺序」。判读配方：`log! "debug"` 行带
+`<epoch-us> DEBUG <scope> <text>`，用两行相减得到**无日志开销的净阶段时长**（首行到
 `collectSigs-done` 是 load/parse 前缀、`collectSigs-done`→`bodies-done` 是逐 def 精化）；
 这比 obs 的 `sum%` 近似更接近墙钟。
 
@@ -132,7 +132,7 @@ grep '"name":"vuna.def.elab"' _scratch/trace/*.jsonl \                # level 2 
 
 ### ② 二分定位
 
-1. **先数「做了几遍」**：`--debug-perf` 的 `collectSigs-done` 出现几次 = 精化了几遍；
+1. **先数「做了几遍」**：`VUNA_LOG=debug` 的 `collectSigs-done` 出现几次 = 精化了几遍；
    `iface-skip partial ... missing=<模块>` ⇒ 入口闭包没写全导出面，每轮都补一遍 lib check
    （可执行包 + `[export]` 常见；实测入口漏 import 两个导出模块时冷 `check packages/compiler` 跑
    **两遍**、各约 11–12 s）；出现 `check-lib-skip covered=N` 说明第二遍已被省掉。

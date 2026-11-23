@@ -1,9 +1,9 @@
 # 调试与运行时错误报告
 
 本文覆盖**开发/调试回路**的三层支持：编译期诊断的源码片段、运行期未捕获异常的报告、
-语言级调试构造（`dbg!` / `dbgShow` / `assert` / `todo`，见 §3），以及配套命令（`vuna run` / `vuna test --verbose` /
-REPL `:type`）。语言语义见 [language.md](language.md)，诊断错误码与 CLI 退出码见
-[tooling.md](tooling.md)，lint 规则边界见 [lint.md](lint.md)。
+语言级调试构造（`log!` / `dbgShow` / `assert` / `todo`，见 §3），以及配套命令（`vuna run` / `vuna test --verbose` /
+REPL `:type`）。语言语义见 [language.md](language.md)，文本日志规范见 [logging.md](logging.md)，
+诊断错误码与 CLI 退出码见 [tooling.md](tooling.md)，lint 规则边界见 [lint.md](lint.md)。
 
 ## 1. 编译期诊断：源码片段
 
@@ -66,24 +66,27 @@ vuna: runtime error: division by zero
 会归到调用者帧；非入口单元顶层初始化的异常不在覆盖范围；没有表达式级 span / 局部
 变量值 / 断点（无 DAP，没有真调试器）。
 
-## 3. 语言级调试构造：`dbg!` / `dbgShow` / `assert` / `todo`
+## 3. 语言级调试构造：`log!` / `dbgShow` / `assert` / `todo`
 
-`dbg!` 是**门控调试行**的内置宏（不是库函数；任何包可用，不需要 import）。要**结构化**
-事件（span / 计数 / 采样 / 可换算到 Chrome Trace），用语言层的可观测性 API
-（`Base.Data.Obs` / `Base.Data.Obs.Span` 与 `obs!` / `mark!` 宏，见
+`log! "level" msg` 是**门控文本日志**的内置宏（不是库函数；任何包可用，不需要 import）：
+`level` 必须是 `error|warn|info|debug|trace` 字面量，`VUNA_LOG` 阈值与 `VUNA_LOG_SCOPE`
+过滤都放行时才写一行并求值 `msg`。scope 是所在模块名（入口文件取文件名），由展开期烘入；
+完整规范（级别、过滤、`VUNA_LOG_FORMAT`、JSONL）见 [logging.md](logging.md)。
+
+要**结构化**事件（span / 计数 / 采样 / 可换算到 Chrome Trace），用语言层的可观测性 API
+（`Base.Data.Obs` / `Base.Data.Obs.Span` 与 `mark!` 宏，见
 [observability.md](observability.md)）：
 
 | 名字 | 签名 | 行为 |
 | --- | --- | --- |
-| `dbg!` | `String -> Int` | 门控调试行：`--debug-perf` / `VUNA_DEBUG_PERF=1` 打开时向 stderr 写 `DEBUG <epoch-us> <text>`，关闭时实参**不求值**；返回 `0` |
-| `obs!` | `String -> Int` | 结构化日志事件（`vuna.log`，`VUNA_OBS>=1` 时写 trace，并同格式写 stderr）；实参**总会求值** |
-| `mark!` | `String -> Int` | 瞬时标记事件（`ph:"i"`）；实参**总会求值** |
-| `dbgShow` | `DebugShow a => a -> a` | 用 `debugShow`（默认由 `show` 派生）经 `dbg!` 打印后返回原值 |
+| `log!` | `String -> String -> Int` | 门控文本日志：`VUNA_LOG` 放行时写 `<epoch-us> <LEVEL> <scope> <text>`，关闭或被 scope 过滤时实参**不求值**；返回 `0` |
+| `mark!` | `String -> Int` | 瞬时标记事件（`ph:"i"`，`VUNA_OBS >= 1`）；实参**总会求值** |
+| `dbgShow` | `DebugShow a => a -> a` | 用 `debugShow`（默认由 `show` 派生）经 `log! "debug"` 打印后返回原值 |
 | `assert` | `Bool -> String -> a -> a` | `True` 返回第三个实参；`False` 以 `assertion failed: <msg>` abort（debug-only） |
 | `todo` | `String -> a` | 以 `TODO: <msg>` abort（debug-only 占位） |
 
-`dbg!` 展开为隐藏 runtime 原语（`@vuna@debug@on` / `@vuna@debug@line`，见
-[primitives.md](primitives.md)），`obs!` / `mark!` 展开为 `@vuna@obs@log` / `@vuna@obs@mark`，
+`log!` 展开为隐藏 runtime 原语（`@vuna@log@on` / `@vuna@log@emit`，见
+[primitives.md](primitives.md)），`mark!` 展开为 `@vuna@obs@mark`，
 所以源码里没有“假纯值”；核心求值路径（`vuna test` 纯测试 / REPL）不执行 tracing / 观测（都归约为 no-op），
 输出只发生在 compile+run 的 runtime。
 
@@ -93,15 +96,15 @@ vuna: runtime error: division by zero
 ```console
 $ cat app/Main.vuna
 main : Int
-main = let _ = dbg! "starting" in dbgShow 42
-$ VUNA_DEBUG_PERF=1 ./.output/bin/demo
-42                              # stdout：main 钩子打印的返回值
-DEBUG 1794470874925810 starting  # stderr：dbg!
-DEBUG 1794470874925811 42        # stderr：dbgShow
+main = let _ = log! "debug" "starting" in dbgShow 42
+$ VUNA_LOG=debug ./.output/bin/demo
+42                                   # stdout：main 钩子打印的返回值
+1794470874925810 DEBUG Main starting # stderr：log!
+1794470874925811 DEBUG Main 42       # stderr：dbgShow
 ```
 
 **release 构建**（`--release` 或 `VUNA_RELEASE=1`；CLI 边界解析成显式 Bool）拒绝
-`assert` / `todo`；`dbg!` / `dbgShow` 是调试输出、release 构建仍可用：
+`assert` / `todo`；`log!` / `dbgShow` 是调试输出、release 构建仍可用（开关仍是 `VUNA_LOG`）：
 
 ```console
 $ vuna check --release app/Main.vuna
@@ -124,8 +127,8 @@ vuna: runtime error: assertion failed: broken invariant
 [primitives.md](primitives.md) §7）：
 
 - `assert` / `todo`：§3 的语言级调试构造（由 `Loader.Resolve` 在 release 构建拒绝）；
-- `@vuna@debug@on` / `@vuna@debug@line`：`dbg!` 的隐藏 runtime 原语
-  （`visible = False`，源码不可写；签名与 runtime 在 Intrinsics）；
+- `@vuna@log@on` / `@vuna@log@emit`：`log!` 的隐藏 runtime 原语
+  （`visible = False`，源码不可写；签名与 runtime 在 Intrinsics；规范见 [logging.md](logging.md)）；
 - `prim_eprint : String -> Eff [] Int`（console 组）：写 stderr 并 flush；
 - `prim_fail : String -> a`：抛 `Failure <msg>`，可被报告器渲染。
 
@@ -134,7 +137,7 @@ vuna: runtime error: assertion failed: broken invariant
 
 编译器的性能/诊断探针分两层：
 
-- **`dbg!`**：单条门控日志行（`--debug-perf`，见 [performance.md](performance.md) §2）；
+- **`log! "debug"`**：单条文本日志行（`VUNA_LOG=debug`，见 [logging.md](logging.md)）；
 - **观测 span / 计数**（`Vuna.Compiler.Base.Obs` 的 `obsCheck` / `obsDefCheck` / `obsMarkEff`）：
   结构化事件（`VUNA_OBS>=1`），阶段跨度与逐定义跨度见
   [observability.md](observability.md) §3.3 词汇表。两者独立开关，可以只开其一。

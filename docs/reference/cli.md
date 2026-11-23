@@ -115,11 +115,11 @@ family / tier / matrix 词汇、`VUNA_OBS` 自采样、错误码枚举文档生�
 | `--filter` / `--select` / `--ignore` / `--only` / `--tier` / `--matrix` / `--backend` | 可重复筛选（按命令声明） |
 | `--release` | 发布构建；只对构建类命令合法 |
 | `--wasm-opt 0..3` | wasm 产物的 binaryen 优化级别（只对 `build` 合法；默认 3，`0` = 只汇编不优化） |
-| `--debug-perf` | 隐藏：由 runtime 读原始 argv，不进帮助、不参与分发 |
 
 **没有第二条全局旗标通路**：每条命令在命令表里声明自己接受的 flag；不属于该命令的
-flag 是 exit 2 的用法错误（附带最近候选建议）。`--debug-perf` 是唯一的例外——它在
-分发前被摘掉，因为读写它的是 runtime 原语而不是 CLI 层。
+flag 是 exit 2 的用法错误（附带最近候选建议）。运行时的观测开关（`--obs` /
+`--obs-level`）不走命令表，由 runtime 读原始 argv；文本日志没有 argv 开关，只认
+`VUNA_LOG` 系列 env（见 [logging.md](logging.md)）。
 
 ## 3. 帮助与建议
 

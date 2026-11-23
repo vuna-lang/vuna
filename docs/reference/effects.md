@@ -79,7 +79,7 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
   （登记在 [debt.md](debt.md) D62）。
 - **错误报告**：没有异常 / handler 层之外的语言级异常；未捕获的宿主异常由生成的 main 钩子
   统一报告为 `vuna: runtime error: ...` + 位置帧 + exit 2（见 [debugging.md](debugging.md)）。
-  `dbg!` / `dbgShow` / `assert` / `todo` 是语言级调试构造，不参与效应系统。
+  `log!` / `dbgShow` / `assert` / `todo` 是语言级调试构造，不参与效应系统。
 
 ## 3. 没有 transformer 栈
 

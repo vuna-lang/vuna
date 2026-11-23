@@ -183,9 +183,10 @@ dune/OCaml 项目，只用 `ocamlopt` 编译生成的种子和程序。
 | [docs/reference/package-store.md](docs/reference/package-store.md) | 持久包 store、`vuna deps fetch` / `store clean --packages`、内容摘要与语义身份 |
 | [docs/reference/core.md](docs/reference/core.md) | Core TT / NbE / 合一 / 精化器 / 擦除 / codegen 护栏的实现参考 |
 | [docs/reference/api-docs.md](docs/reference/api-docs.md) | API 文档：docstring、单文件 HTML、`vuna search` / 类型检索 |
-| [docs/reference/observability.md](docs/reference/observability.md) | 可观测性（语言层，任何 vuna 应用可用）：事件模型（Chrome Trace Event JSONL `vuna-obs 1`）、`VUNA_OBS=0..3` 分级与关闭快速路径、`Base.Data.Obs` / `Base.Data.Obs.Span` 与 `obs!`/`mark!` 宏、生成运行时（span/计数/日志/CPU 采样/分配栈）、`#line` → DWARF、`vuna dev obs run/summarize/validate/convert/render/merge/symbols`、成本纪律与门禁 |
+| [docs/reference/logging.md](docs/reference/logging.md) | 文本日志（语言层，任何 vuna 应用可用）：`log! "level" msg` 宏与编译期级别校验、scope = 模块名、`VUNA_LOG` 阈值 / `VUNA_LOG_SCOPE` 过滤 / `VUNA_LOG_FORMAT=text\|jsonl` / `VUNA_LOG_FILE`、关闭路径成本、`Base.Data.Log` 库层、与结构化观测的分工 |
+| [docs/reference/observability.md](docs/reference/observability.md) | 可观测性（语言层，任何 vuna 应用可用）：事件模型（Chrome Trace Event JSONL `vuna-obs 1`）、`VUNA_OBS=0..3` 分级与关闭快速路径、`Base.Data.Obs` / `Base.Data.Obs.Span` 与 `mark!` 宏、生成运行时（span/计数/CPU 采样/分配栈）、`#line` → DWARF、`vuna dev obs run/summarize/validate/convert/render/merge/symbols`、成本纪律与门禁 |
 | [docs/reference/tooling.md](docs/reference/tooling.md) | 工具链：`vuna goal`、LSP（含 codeAction quick fix）、`vuna doc`（单文件 HTML）、`vuna run` / REPL 调试命令、**REPL server / client（`repl serve --listen` / `repl client --addr`，JSON-RPC over socket）**、错误码体系与代表性错误索引 |
-| [docs/reference/debugging.md](docs/reference/debugging.md) | 调试：诊断源码片段、运行时错误报告（`vuna: runtime error` + 定义级帧 + exit 2）、语言级调试构造（`dbg!`/`dbgShow`/`assert`/`todo`）、`vuna run` / `test --verbose` / REPL `:type` |
+| [docs/reference/debugging.md](docs/reference/debugging.md) | 调试：诊断源码片段、运行时错误报告（`vuna: runtime error` + 定义级帧 + exit 2）、语言级调试构造（`log!`/`dbgShow`/`assert`/`todo`）、`vuna run` / `test --verbose` / REPL `:type` |
 | [docs/reference/diagnostics.md](docs/reference/diagnostics.md) | 诊断系统：结构化 `Diagnostic`/`Check` 通道、错误码域、short/human/JSON 渲染、LSP 映射 |
 | [docs/reference/compiler.md](docs/reference/compiler.md) | 编译器模块职责、codegen 表示与输出模型、接口摘要（TTC 式模块化精化）、夹具指标 |
 | [docs/reference/ir.md](docs/reference/ir.md) | 擦除后的中间表示（Track A）：IR 节点与边界、Core → IR 的决策划分、`Ir.Runtime` 运行时契约与 `checks.ir-boundary` |

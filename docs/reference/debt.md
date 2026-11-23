@@ -109,7 +109,7 @@ ID 是稳定引用（`层前缀-序号`）：条目关闭即删除该行，ID �
 | EC-20 · D | `Meta.vuna` 的 `ctorRefTerm*`：Ec 版与全局版两份实现 | `Elab/Meta.vuna` | 后续 |
 | EC-21 · A | `Trait.vuna` 的 `instArgAt`：实参取尽时伪造 `TGlobal "Int"`（不可达兜底） | `Elab/Trait.vuna` | 后续 |
 | EC-28 · C | `Elab/Driver.vuna` 的 `resolveDictGoalsFix`：字典收敛固定 8 轮（三处调用点） | `Elab/Driver.vuna` | 后续 |
-| EC-29 · D | `Elab/Driver.vuna` 的实例索引自检：只在 `--debug-perf` 下跑 | `Elab/Driver.vuna` | 后续 |
+| EC-29 · D | `Elab/Driver.vuna` 的实例索引自检：只在 `VUNA_LOG=debug` 下跑 | `Elab/Driver.vuna` | 后续 |
 | EC-30 · A | `Impl.vuna` 的 check 位 `if`：分支检查失败后整体重推断（位置 / 期望类型信息丢失，回退用原 `ec`） | `Elab/Term/Impl.vuna` | 后续 |
 | EC-31 · ⚠️D | `Ec` 是 22 字段巨型状态：每个 setter 按位置重列全部字段（15 处），漏一处即静默串字段；解表有三份真源（`ecSols` 列表 / `ecSolTbl` 哈希 / `csSolsCount`），靠「新解必须前插」这条隐式不变量同步 | `Elab/Types.vuna`（`Ec`、`ecPut*`、`solsDelta`） | 后续 |
 | EC-32 · D | `ConstraintStore` 一个记录兼任 5 种无关状态：待处理队列、id 分配、重试表、解表计数、**构造子索引是否完整**；`ecPutCtorTbl` 也会改它 | `Elab/Types.vuna`、`Elab/Meta.vuna` | 后续 |
@@ -164,8 +164,8 @@ ID 是稳定引用（`层前缀-序号`）：条目关闭即删除该行，ID �
 | D30 · C | docstring 覆盖未全仓化：`vuna doc --check` 受管辖包仍是 compiler+base；无 CI 门禁；多页 HTML 与零缺失不计划 | `Vuna.Doc.*`；[api-docs.md](api-docs.md) | 后续 |
 | D33 · C | 运行时错误只有定义级位置：无表达式级 span、局部变量值、断点（无 DAP）；`ocamlopt` 内联会把抛错点归到调用者帧 | `Target.Ocaml.Term`（`dtDefLocTable` / `dtRuntimeWith`）；[debugging.md](debugging.md) §2 | 后续 |
 | D35 · C | REPL 的 resize 重绘靠空闲轮询；Index 只覆盖 workspace 源码（外部依赖模块只能 `:load` 不能 `:browse`） | `Vuna.Repl.Edit`、`Vuna.Index.*`；[tooling.md](tooling.md) §4 | 后续 |
-| D67 · C | 隐藏旗标仍有两处原生读点：`--debug-perf` 在入口 / 插件各匹配一次、runtime 文本读原始 argv；`--release` 的解析在编译器包与 `VUNA_RELEASE` 读取处 | `Vuna.Cli`、`Driver/CompilerCli.vuna`、`Target/Ocaml/Term.vuna`；[cli.md](cli.md) §2 | 后续（不影响行为） |
-| D68 · C | 编译器 trace 开关是运行时原语（`@vuna@debug@on` 读 argv/env），不是显式传参：深部探针在 `Elab`/`Conv`/`Codegen` 的纯函数里 | `Base/Intrinsics.vuna`、`packages/target-ocaml/lib/Vuna/Target/Ocaml/Term.vuna`、`Loader/Expand.vuna` | 终局若要求零 ambient 配置，只能删探针或引入显式 trace 效应 |
+| D67 · C | `--release` 仍有两个解析来源：编译器包的 flag 解析与 `VUNA_RELEASE` 读取处 | `Driver/CompilerCli.vuna`；[cli.md](cli.md) §2 | 后续（不影响行为） |
+| D68 · C | 编译器日志 / 观测开关是运行时原语（`@vuna@log@on` / `@vuna@obs@level` 读 env），不是显式传参：深部探针在 `Elab`/`Conv`/`Codegen` 的纯函数里 | `Base/Intrinsics.vuna`、`packages/target-ocaml/lib/Vuna/Target/Ocaml/Term.vuna`、`Loader/Expand.vuna` | 终局若要求零 ambient 配置，只能删探针或引入显式 trace 效应 |
 | D79 · ⚠️A | 记录更新 `{ r \| f = v }` 直接作函数实参时精化器报 `TC_ErasedBinderUsed a#fam`（内部构造子字段 binder 被当运行时使用）；只能先在 `let` / 函数体里位构造绕开 | `Elab/Term/Impl.vuna`（record update 降级）、`Elab/Records.vuna` | 后续 |
 | D80 · C | 表达式级 / 分支级观测定位不存在：Core `Term` 里只有 `TVar` 与 `Binder` 带 span，其余节点擦除时丢位置；探针只能到「定义级 + 采样」 | `Core/Term.vuna`、`Target.Ocaml.Term.lineDirectiveOf`；[observability.md](observability.md) §5/§10 | 后续（与 D33 一起做） |
 | D81 · C | 进程 RSS / 峰值内存不可测：OCaml 5.5 的 `Unix` 没有 `getrusage`，`Gc.quick_stat` 只给分配字数；峰值只能 `/proc/self/statm` 轮询或外部 `time` | `Target/Ocaml/Term.vuna`（`dtp_obs_span`）；[observability.md](observability.md) §6/§10 | 后续 |

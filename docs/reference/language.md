@@ -263,26 +263,26 @@ vuna/base/compiler 三包源码统一按当前语言能力书写，新增/修改
 
 ## 内置宏（`name!`）
 
-标识符后**紧邻**的 `!` 是一次内置宏调用：`dbg! "x"`。`!` 与名字之间不能有空格；
+标识符后**紧邻**的 `!` 是一次内置宏调用：`log! "debug" "x"`。`!` 与名字之间不能有空格；
 带空格的 `a ! b` 仍是普通中缀运算符（`!` 也可以被 `infix` 声明），`!=` / `!!` 不触发。
 
-- **参数按原子贪婪**：`dbg! "phase"` 是一个调用；`f dbg! x` 解析为
-  `f (dbg! x)`（宏调用先吞掉自己的原子实参）；块实参用括号。
+- **参数按原子贪婪**：`log! "debug" "phase"` 是一个调用；`f log! "debug" x` 解析为
+  `f (log! "debug" x)`（宏调用先吞掉自己的原子实参）；块实参用括号。
 - **只出现在表达式位置**：模式位置不解析 `!`；宏也不能当函数值传递。
 - **展开时机**：`Loader` 在 fixity 重排之后、名字解析之前做 AST→AST 展开（`Loader.Expand`），
   Elab / 后端 / 接口缓存都只会看到普通表达式；parser 用保留名
   `@vuna@macro@<name>` 编码调用，Fmt 反向渲染回 `name!`，Index 不把标记当引用。
-- **卫生性**：展开结果只引用隐藏 runtime 原语（`@vuna@debug@*`，见
+- **卫生性**：展开结果只引用隐藏 runtime 原语（`@vuna@log@*` / `@vuna@obs@*`，见
   [primitives.md](primitives.md)），不依赖库模块、不捕获调用方局部名字；宏名不能被局部
   绑定遮蔽；每个实参只出现一次。
 - **span**：展开出的节点继承调用点 span（实参保留自身 span），诊断可回溯到 `name!`。
-- **内置宏**：`dbg! text`（`if @vuna@debug@on 0 then @vuna@debug@line text else 0`）、
-  `obs! msg`（结构化日志事件）、`mark! name`（瞬时标记事件）。它们在任何包可用、不需要
-  import；`dbg!` 在 `--debug-perf` / `VUNA_DEBUG_PERF=1` 打开时向 stderr 写
-  `DEBUG <epoch-us> <text>`（逐行 flush），关闭时实参**不求值**，表达式返回 `Int 0`；
-  `obs!` / `mark!` 的 schema 见 [observability.md](observability.md) §4.3。
-  见 [debugging.md](debugging.md) §3 与 [performance.md](performance.md) §2。
-- **错误**：未知宏 `[RN_UnknownMacro]`、参数个数不符 `[RN_MacroArity]`，都带调用点 span。
+- **内置宏**：`log! "level" msg`（`if @vuna@log@on level scope then @vuna@log@emit level scope msg else 0`，
+  `scope` 是所在模块名、展开期烘入）、`mark! name`（瞬时标记事件）。它们在任何包可用、不需要
+  import；`log!` 的 `level` 必须是 `error|warn|info|debug|trace` 字面量，关闭或被 scope
+  过滤时 `msg` **不求值**，表达式返回 `Int 0`；完整开关与输出格式见
+  [logging.md](logging.md)，`mark!` 的 schema 见 [observability.md](observability.md) §4.3。
+- **错误**：未知宏 `[RN_UnknownMacro]`、参数个数不符 `[RN_MacroArity]`、`log!` 级别非法
+  `[RN_LogLevelUnknown]` / 非字面量 `[RN_LogLevelNotLiteral]`，都带调用点 span。
 - **边界**：暂不支持用户自定义宏 / 模式宏 / 宏生成宏；宏名是全局内置名，不参与模块作用域
   （见 [debt.md](debt.md)）。
 
