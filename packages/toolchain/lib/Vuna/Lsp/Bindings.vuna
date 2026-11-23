@@ -21,6 +21,7 @@ import Vuna.Compiler.Frontend.Packages.Pkg
 import Vuna.Doc.Comments
 import Vuna.Doc.Types
 import Vuna.Files
+import Vuna.Fmt.Comment
 import Vuna.Fmt.Expr
 import Vuna.Json
 import Vuna.Lsp.Diagnostics
@@ -780,7 +781,7 @@ patBinders env kind pat mval = []
 -- | 内部：单行值文本（取 `inlineExpr` 的第一行并截断；块结构返回 ""）。
 renderValueText : WalkEnv -> Expr -> String
 renderValueText env e =
-  case inlineExpr env.weFx e of
+  case inlineExpr env.weFx emptyFmtCtx e of
     Nothing => ""
     Just s => truncateValue (firstLineOf s)
 
@@ -1127,7 +1128,6 @@ piNameStart fuel ln len i acc =
 exprStartOf : Expr -> (Int, Int)
 exprStartOf (EInfix op lhs rhs _) = exprStartOf lhs
 exprStartOf (EBacktick nm lhs rhs _) = exprStartOf lhs
-exprStartOf (EParen inner _) = exprStartOf inner
 exprStartOf (EAnn value ty _) = exprStartOf value
 exprStartOf e = (spanStartLine (exprSpan e), spanStartCol (exprSpan e))
 
@@ -1194,7 +1194,6 @@ walkExpr fuel env scope line col name e =
         case walkExpr (fuel - 1) env scope line col name lhs of
           Just hit => Just hit
           Nothing => walkExpr (fuel - 1) env scope line col name rhs
-      EParen inner _ => walkExpr (fuel - 1) env scope line col name inner
       EBacktick nm lhs rhs _ =>
         case walkExpr (fuel - 1) env scope line col name lhs of
           Just hit => Just hit

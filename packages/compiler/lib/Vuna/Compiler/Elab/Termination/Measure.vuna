@@ -309,7 +309,6 @@ fwExpr fwds (EDo stmts sp) = EDo (fwStmts fwds stmts) sp
 fwExpr fwds (EPi n implicit qty dom cod sp) =
   EPi n implicit qty (fwExpr fwds dom) (fwExpr fwds cod) sp
 fwExpr fwds (EInfix op l r sp) = EInfix op (fwExpr fwds l) (fwExpr fwds r) sp
-fwExpr fwds (EParen e sp) = EParen (fwExpr fwds e) sp
 fwExpr fwds (EBacktick op l r sp) = EBacktick op (fwExpr fwds l) (fwExpr fwds r) sp
 fwExpr fwds (ESectL op e sp) = ESectL op (fwExpr fwds e) sp
 fwExpr fwds (ESectR e op sp) = ESectR (fwExpr fwds e) op sp
@@ -398,7 +397,6 @@ sizeOfExpr projs sizes (EField base f sp) =
         Just k => Just (b, d + 1, append path [k])
         Nothing => Nothing
     Nothing => Nothing
-sizeOfExpr projs sizes (EParen e sp) = sizeOfExpr projs sizes e
 sizeOfExpr projs sizes _ = Nothing
 
 export extendSizesStrict : List (String, List Int) -> List (String, Int, Int, List Int) -> Expr -> Pat -> List (String, Int, Int, List Int)

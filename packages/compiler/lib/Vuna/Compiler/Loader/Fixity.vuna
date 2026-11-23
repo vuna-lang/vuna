@@ -2,8 +2,9 @@ module Vuna.Compiler.Loader.Fixity where
 
 -- Vuna.Compiler.Loader.Fixity：中缀重排。
 --
--- parser 不做优先级判断：中缀链统一收成右嵌套的 `EInfix` / `EBacktick`，括号收成
--- `EParen`（括号是重排的边界，必须显式保留）。本模块按模块可见的 `infix*` 声明
+-- parser 不做优先级判断：中缀链统一收成右嵌套的 `EInfix` / `EBacktick`。括号是重排的
+-- 边界，但它不在 AST 里（纯书写形式，树按节点 id 记录，见 `Frontend.Surface`），
+-- 所以本模块的重排上下文同时带 fixity 表与表面形状。本模块按模块可见的 `infix*` 声明
 -- （`FixityDecl`：优先级 0–9、结合性 0/1/2）把链重排成 `EApp`，并**在这一步**完成
 -- section 展开与 `>>` 的 do 派生。
 --
@@ -13,26 +14,29 @@ module Vuna.Compiler.Loader.Fixity where
 -- 优先级重排。反引号名字（`a `f` b`）是普通函数的中缀写法，没声明时按 9 左结合
 -- （Haskell 默认）。
 --
--- 重排后 AST 不含 `EInfix` / `EBacktick` / `ESect*` / `EParen`；Elab / codegen 不应看到
+-- 重排后 AST 不含 `EInfix` / `EBacktick` / `ESect*`；Elab / codegen 不应看到
 -- 它们（残留即 internal error）。Fmt / Index / Lsp 在 parse 后阶段各自处理这些节点。
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.Surface
 import Vuna.Compiler.Base.Diagnostics.Rn
 import Base.Container.HashMap as HashMap
 
+-- 重排上下文：fixity 表 + 表达式的表面形状（括号边界按节点 id 查）。
 export record FixityTable where
   renameMode : Bool
   fixityDecls : List FixityDecl
+  fixSurface : Surface
 
-export tableOf : List FixityDecl -> FixityTable
-tableOf ds = FixityTable True ds
+export tableOf : Surface -> List FixityDecl -> FixityTable
+tableOf surface ds = FixityTable True ds surface
 
 -- Fmt 用：不替换别名（打印时保留源码里的运算符写法）；section 与反引号保留原形。
-export tableOfKeepOps : List FixityDecl -> FixityTable
-tableOfKeepOps ds = FixityTable False ds
+export tableOfKeepOps : Surface -> List FixityDecl -> FixityTable
+tableOfKeepOps surface ds = FixityTable False ds surface
 
 renameMode : FixityTable -> Bool
-renameMode (FixityTable r ds) = r
+renameMode (FixityTable r ds _) = r
 
 -- 内建运算符：`->` 是语法，`&&` / `||` 是短路原语。fixity 由编译器固定，
 -- 用户声明会命中 `BuiltinFixity`。
@@ -123,12 +127,12 @@ infixTerm t c lhs rhs sp =
     EApp (EVar c.chainOp sp) [lhs, rhs] sp
 
 -- 把右嵌套的 `EInfix` / `EBacktick` 链展平成「首操作数 + 链元素列表」；括号 / 应用 / 原子
--- 作为边界操作数（先递归重排，EParen 在这里消失）。
+-- 作为边界操作数（先递归重排）。
 collectChain : FixityTable -> Expr -> Check (Expr, List ChainOp)
 collectChain t (EInfix op l r sp) =
   Vuna.Compiler.Base.Common.bind (reorderExpr t l) (
       \l2 =>
-        Vuna.Compiler.Base.Common.bind (collectChain t r) (
+        Vuna.Compiler.Base.Common.bind (chainOperand t r) (
             \p =>
               case p of
                 (first, rest) => OkC (l2, ChainOp op False first sp :: rest)
@@ -137,13 +141,22 @@ collectChain t (EInfix op l r sp) =
 collectChain t (EBacktick name l r sp) =
   Vuna.Compiler.Base.Common.bind (reorderExpr t l) (
       \l2 =>
-        Vuna.Compiler.Base.Common.bind (collectChain t r) (
+        Vuna.Compiler.Base.Common.bind (chainOperand t r) (
             \p =>
               case p of
                 (first, rest) => OkC (l2, ChainOp name True first sp :: rest)
           )
     )
 collectChain t e = Vuna.Compiler.Base.Common.bind (reorderNonChain t e) (\e2 => OkC (e2, []))
+
+-- | 链的右操作数：被括号包住时是**边界**（整体作为一个操作数，不再沿链展平）；
+-- 否则继续收集同一行上的后继运算符。
+chainOperand : FixityTable -> Expr -> Check (Expr, List ChainOp)
+chainOperand t r =
+  if parenDepthOf t.fixSurface (nodeRefId (exprRef r)) > 0 then
+    Vuna.Compiler.Base.Common.bind (reorderExpr t r) (\r2 => OkC (r2, []))
+  else
+    collectChain t r
 
 -- precedence climbing：`rest` 里同级/更高级的运算符继续被消费。
 -- 显式 fuel 计步（`more` 是列表模式变量，SCT 对「tuple 列表」的递减度量
@@ -210,7 +223,6 @@ reorderNonChain t (ESectR e op sp) =
   Vuna.Compiler.Base.Common.bind
     (reorderExpr t e)
     (\e2 => if renameMode t then OkC (ELam [(sectionBinderName, nodeRefSpan sp)] (EApp (EVar op sp) [e2, EVar sectionBinderName sp] sp) sp) else OkC (ESectR e2 op sp))
-reorderNonChain t (EParen inner _) = reorderExpr t inner
 reorderNonChain t (ELam names body sp) =
   Vuna.Compiler.Base.Common.bind (reorderExpr t body) (\b => OkC (ELam names b sp))
 -- section 出现在函数位置且被直接应用：`(+ e) a` ⇒ `a + e`，不生成 lambda
@@ -222,13 +234,6 @@ reorderNonChain t (EApp (ESectL op e secSp) args sp) =
       a :: rest => Vuna.Compiler.Base.Common.bind (reorderExpr t a) (\a2 => Vuna.Compiler.Base.Common.bind (reorderExpr t e) (\e2 => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (\x => reorderExpr t x) rest) (\rest2 => OkC (foldApps (EApp (EVar op sp) [a2, e2] sp) rest2 sp))))
   else
     Vuna.Compiler.Base.Common.bind (reorderExpr t e) (\e2 => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (\a => reorderExpr t a) args) (\args2 => OkC (EApp (ESectL op e2 secSp) args2 sp)))
-reorderNonChain t (EApp (EParen (ESectL op e secSp) pSp) args sp) =
-  if renameMode t then
-    case args of
-      [] => icInternal "section application without arguments"
-      a :: rest => Vuna.Compiler.Base.Common.bind (reorderExpr t a) (\a2 => Vuna.Compiler.Base.Common.bind (reorderExpr t e) (\e2 => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (\x => reorderExpr t x) rest) (\rest2 => OkC (foldApps (EApp (EVar op sp) [a2, e2] sp) rest2 sp))))
-  else
-    Vuna.Compiler.Base.Common.bind (reorderExpr t e) (\e2 => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (\a => reorderExpr t a) args) (\args2 => OkC (EApp (EParen (ESectL op e2 secSp) pSp) args2 sp)))
 reorderNonChain t (EApp (ESectR e op secSp) args sp) =
   if renameMode t then
     case args of
@@ -236,13 +241,6 @@ reorderNonChain t (EApp (ESectR e op secSp) args sp) =
       a :: rest => Vuna.Compiler.Base.Common.bind (reorderExpr t e) (\e2 => Vuna.Compiler.Base.Common.bind (reorderExpr t a) (\a2 => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (\x => reorderExpr t x) rest) (\rest2 => OkC (foldApps (EApp (EVar op sp) [e2, a2] sp) rest2 sp))))
   else
     Vuna.Compiler.Base.Common.bind (reorderExpr t e) (\e2 => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (\a => reorderExpr t a) args) (\args2 => OkC (EApp (ESectR e2 op secSp) args2 sp)))
-reorderNonChain t (EApp (EParen (ESectR e op secSp) pSp) args sp) =
-  if renameMode t then
-    case args of
-      [] => icInternal "section application without arguments"
-      a :: rest => Vuna.Compiler.Base.Common.bind (reorderExpr t e) (\e2 => Vuna.Compiler.Base.Common.bind (reorderExpr t a) (\a2 => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (\x => reorderExpr t x) rest) (\rest2 => OkC (foldApps (EApp (EVar op sp) [e2, a2] sp) rest2 sp))))
-  else
-    Vuna.Compiler.Base.Common.bind (reorderExpr t e) (\e2 => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (\a => reorderExpr t a) args) (\args2 => OkC (EApp (EParen (ESectR e2 op secSp) pSp) args2 sp)))
 reorderNonChain t (EApp fn args sp) =
   Vuna.Compiler.Base.Common.bind
     (reorderExpr t fn)
@@ -412,7 +410,7 @@ reorderDecl t (DInstance ctx head methods sp) =
     (Vuna.Compiler.Base.Common.traverse (\e => reorderExpr t e) ctx)
     (\ctx2 => Vuna.Compiler.Base.Common.bind (reorderExpr t head) (\head2 => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (\v => reorderInstanceMethodDecl t v) methods) (\ms => OkC (DInstance ctx2 head2 ms sp))))
 
--- | 重排 trait 参数显式 kind 里的中缀（`Type -> Type` 这类 kind 必须经过 Loader，否则 Elab 见到残留 EParen）。
+-- | 重排 trait 参数显式 kind 里的中缀（`Type -> Type` 这类 kind 必须经过 Loader，否则 Elab 见到残留 `EInfix`）。
 reorderTraitParam : FixityTable -> TraitParam -> Check TraitParam
 reorderTraitParam t p =
   case p.traitParamKind of

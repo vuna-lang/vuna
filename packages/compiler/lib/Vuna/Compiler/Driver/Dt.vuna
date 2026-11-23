@@ -55,6 +55,7 @@ import Base.Effect.Exit as EffExit
 import Base.Effect.Process as EffProcess
 import Vuna.Compiler.Elab.Driver
 import Vuna.Compiler.Frontend.Rast.Bridge
+import Vuna.Compiler.Frontend.Surface
 import Vuna.Compiler.Elab.Term
 
 -- 模块级接口：一次成功 check 的**完整输入面**。接口摘要要按模块归属切
@@ -272,7 +273,10 @@ dtFileHasModuleHeader path =
     parsed <- parseFileWithPath path text
     pure (
         case parsed of
-          OkC (SourceFile (Just _) _ _ _ _ _ _) => True
+          OkC parsedFile =>
+            case firstOf parsedFile of
+              SourceFile (Just _) _ _ _ _ _ _ => True
+              _ => False
           _ => False
       )
 
@@ -1822,6 +1826,7 @@ moduleOfIface mi =
     []
     (cachedOpaqueOf (miCachedOf mi))
     (exportIndexOf (miExportsOf mi))
+    emptySurface
 
 -- ---------------------------------------------------------------
 -- 依赖可见性收敛。全量路径只加载 entry/本包模块的 **import 闭包**；
@@ -1854,14 +1859,14 @@ closureGo fuel mods visited (n :: rest) =
       Just m => closureGo (fuel - 1) mods (n :: visited) (append rest (importsOfModuleNames m))
 
 filterProjectToImports : String -> Project -> (Project, List Module)
-filterProjectToImports pkg (Project ds imports implicit mods epkg fixes entryName) =
+filterProjectToImports pkg (Project ds imports implicit mods epkg fixes entryName surface) =
   let
     entryStarts = map findModuleNameField (append imports implicit)
     ownNames = map moduleNameOf (filter (\m => modulePackageOf m == pkg) mods)
     starts = append entryStarts ownNames
     closed = closureGo (closureFuel mods starts) mods [] starts
     kept = filter (\m => memName (moduleNameOf m) closed) mods
-  in (Project ds imports implicit kept epkg fixes entryName, kept)
+  in (Project ds imports implicit kept epkg fixes entryName surface, kept)
 
 preloadKeepOf : List ModuleIface -> List Module -> List String
 preloadKeepOf ifaces mods =

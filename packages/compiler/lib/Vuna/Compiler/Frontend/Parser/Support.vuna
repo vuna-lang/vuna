@@ -39,8 +39,13 @@ export record PState(..) where
   -- 声明构造；嵌套的 `withExtent` 会覆盖，但只在入口读一次，不会串。
   openNodeId : Int
   -- | 是否是独立 token 流（模板洞）：子流的 token 下标与主文件不相交，树也不会收它的
-  -- 事件，所以这里不分配节点 id（`withExtent` 一律用 -1），AST 侧就是「无身份」。
+  -- 事件。节点 id 仍要全文件唯一（AST 的表面形状按 id 查）：洞内 id 从 `-(2 + 洞起点字节)`
+  -- 起**递减**，与主文件的正 id、与其它洞的区间都不相交（洞的节点数不超过它的 token 数，
+  -- 而 token 数不超过洞的字节长度）。
   subStream : Bool
+  -- | 洞内解析收集到的 `(节点 id, 括号层数)` 表项（逆序）：`parseSourceDetailed` 把它们
+  -- 并进主文件的 `Surface`。主 token 流里没有洞内 token，所以必须由洞自己交回。
+  holeParens : List (Int, Int)
 
 -- ---------------------------------------------------------------
 -- vuna 源码 parser（offside layout）
@@ -54,12 +59,14 @@ pmodeOf st = st.pmodeOf
 
 -- | 从文件头开一个状态（`lastPos` 的 `Pos 1 0` 是「尚未消费 token」的哨兵）。
 export mkState : String -> List PTok -> ParseMode -> PState
-mkState file toks mode = PState file toks (Pos 1 0 0 0) (length toks) mode 0 [] 1 0 False
+mkState file toks mode = PState file toks (Pos 1 0 0 0) (length toks) mode 0 [] 1 0 False []
 
 -- | 指定 `lastPos` / 剩余数（模板洞、同一行的裸表达式等场景）。
--- 建树事件在模板洞内单独收集（洞内 token 的绝对下标从 0 起，与外层不相交）。
+-- 建树事件在模板洞内单独收集（洞内 token 的绝对下标从 0 起，与外层不相交）；节点 id
+-- 取负、由洞起点的字节偏移错开（见 `subStream`）。
 export mkStateAt : String -> List PTok -> Pos -> Int -> ParseMode -> PState
-mkStateAt file toks last count mode = PState file toks last count mode 0 [] 1 0 True
+mkStateAt file toks last count mode =
+  PState file toks last count mode 0 [] (0 - (2 + posOffset last)) 0 True []
 
 -- | 从起始状态到结束状态的建树事件（按发生顺序；每次事件一次 cons）。
 export eventsOf : PState -> PState -> List NodeEvent
@@ -73,14 +80,19 @@ eventsOf st st2 = reverse (st2.pendEvents)
 export withExtent : {a : Type} -> CstKind -> PState -> (PState -> Check (a, PState)) -> Check (a, PState)
 withExtent kind st k =
   let
-    nid = if st.subStream then 0 - 1 else st.nextNodeId
+    nid = st.nextNodeId
+    next = if st.subStream then nid - 1 else nid + 1
     opened =
       { st
         | pendEvents = EvOpen kind st.tokIndex nid :: st.pendEvents,
-        nextNodeId = if st.subStream then st.nextNodeId else nid + 1,
+        nextNodeId = next,
         openNodeId = nid
       }
   in Vuna.Compiler.Base.Common.step (k opened) (\v, st1 => OkC (v, closedAt st1))
+
+-- | 记下洞内解析交回的括号表项（嵌套模板会逐层累加）。
+export addHoleParens : List (Int, Int) -> PState -> PState
+addHoleParens entries st = { st | holeParens = append entries st.holeParens }
 
 -- | 关闭最近打开的节点：终点是当前 token 下标（半开区间）。
 closedAt : PState -> PState

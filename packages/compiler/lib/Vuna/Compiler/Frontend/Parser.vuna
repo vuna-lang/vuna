@@ -9,6 +9,7 @@ import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Cst
 import Vuna.Compiler.Base.Diagnostics.Frontend
 import Vuna.Compiler.Frontend.Lexer
+import Vuna.Compiler.Frontend.Surface
 import Vuna.Compiler.Frontend.Parser.Support
 
 -- ---------------------------------------------------------------
@@ -39,6 +40,9 @@ export record ParsedSource(..) where
   -- | 建树事件（按发生顺序）：配合 `parsedRawToks` → `Cst.lexTokensOf` 的 trivia 流，
   -- 用 `Cst.nestToTree` 得到无损节点树（`fmt` / LSP / 重构的注释归属与 span 来源）。
   parsedEvents : List NodeEvent
+  -- | 表面形状（括号层数；含模板洞内交回的条目）：AST 不携带「怎么写」的信息，
+  -- 需要它的消费者（Fmt 打印括号、中缀重排判定括号边界）按节点 id 查。
+  parsedSurface : Surface
 
 -- | 工具路径的唯一入口：**一次**词法同时给出注释表与 token 流，再做语法分析。
 -- 需要注释 / 原文切片 / 保留括号的工具（fmt / lint / index / doc / LSP）用它，
@@ -53,8 +57,11 @@ parseSourceDetailed file source =
       in case parseSourceFile False st0 of
         ErrC e => ErrC e
         OkC p =>
-          OkC
-            (ParsedSource (firstOf (firstOf p)) comments toks (eventsOf st0 (secondOf (firstOf p))))
+          let
+            fin = secondOf (firstOf p)
+            events = eventsOf st0 fin
+          in OkC
+            (ParsedSource (firstOf (firstOf p)) comments toks events (insertParens fin.holeParens (deriveSurface toks events)))
 
 -- | 只要 AST 与注释表的入口（复用 `parseSourceDetailed` 同一次词法）。
 export parseSourceWithComments : String -> String -> Check (SourceFile, List Comment)
@@ -1666,8 +1673,8 @@ parseExprBody fuel st blockCol =
   else
     ps0 st ExprNotIndented
 
--- 优先级/结合性不在 parser 决定——中缀链原样收成 `EInfix`（右嵌套，保留
--- 括号边界用 `EParen`），Loader 按 `infix*` 声明重排。
+-- 优先级/结合性不在 parser 决定——中缀链原样收成 `EInfix`（右嵌套）；括号边界由树
+-- 记录（`Frontend.Surface`），Loader 按 `infix*` 声明重排时按节点 id 查。
 parseInfix : Int -> PState -> Int -> Expr -> Check (Expr, PState)
 parseInfix fuel st blockCol lhs =
   if fuel <= 0 then
@@ -1731,6 +1738,8 @@ parseApplication fuel st blockCol =
       )
 
 -- `@` 后面的 payload 与行 `@` 同一规则：裸标识符是名字字面量，字符串/数字/括号表达式原样。
+-- 「是不是裸标识符」看**源码书写形态**：括号在 AST 里不建节点（见 `Frontend.Surface`），
+-- 所以必须在解析前用当前 token 判定，否则 `@(n)` 会被当成名字字面量 `n`。
 parseAtPayload : Int -> PState -> Int -> Check (Expr, PState)
 parseAtPayload fuel st blockCol =
   if fuel <= 0 then
@@ -1738,7 +1747,7 @@ parseAtPayload fuel st blockCol =
   else
     Vuna.Compiler.Base.Common.step
       (parseAtom (fuel - 1) st blockCol)
-      (\e, st1 => OkC (rowAtNameExpr e, st1))
+      (\e, st1 => OkC (if atSym st "(" then e else rowAtNameExpr e, st1))
 
 spanFromExpr : Expr -> PState -> Span
 spanFromExpr e st2 =
@@ -1846,26 +1855,29 @@ parseTemplateAtom fuel st multi parts endP =
     icFuel "parser"
   else
     Vuna.Compiler.Base.Common.bind (parseTemplateParts (fuel - 1) (fileOf st) (pmodeOf st) (tokSpan st) parts) (
-        \ps =>
+        \parsed =>
           let
+            ps = firstOf parsed
+            holeEntries = secondOf parsed
             advanced = advance st
-            st2 = withLastPos endP advanced
+            st2 = addHoleParens holeEntries (withLastPos endP advanced)
           in OkC (EInterp multi ps (detachedNodeRef (spanOf st st2)), st2)
       )
 
-parseTemplateParts : Int -> String -> ParseMode -> Span -> List TmplPart -> Check (List InterpPart)
+-- 洞内解析交回它自己的表面形状条目（洞内 token 不在主 token 流里，主文件的派生看不到）。
+parseTemplateParts : Int -> String -> ParseMode -> Span -> List TmplPart -> Check (List InterpPart, List (Int, Int))
 parseTemplateParts fuel file mode fallback parts =
   if fuel <= 0 then
     icFuel "parser"
   else
     case parts of
-      [] => OkC []
-      (TPText s) :: rest => Vuna.Compiler.Base.Common.bind (parseTemplateParts (fuel - 1) file mode fallback rest) (\ps => OkC ((::) (IPText s) ps))
-      (TPHole toks) :: rest => Vuna.Compiler.Base.Common.bind (parseTemplateHole (toksFuel toks) file mode fallback toks) (\e => Vuna.Compiler.Base.Common.bind (parseTemplateParts (fuel - 1) file mode fallback rest) (\ps => OkC ((::) (IPHole e) ps)))
+      [] => OkC ([], [])
+      (TPText s) :: rest => Vuna.Compiler.Base.Common.bind (parseTemplateParts (fuel - 1) file mode fallback rest) (\tail => OkC ((::) (IPText s) (firstOf tail), secondOf tail))
+      (TPHole toks) :: rest => Vuna.Compiler.Base.Common.bind (parseTemplateHole (toksFuel toks) file mode fallback toks) (\hole => Vuna.Compiler.Base.Common.bind (parseTemplateParts (fuel - 1) file mode fallback rest) (\tail => OkC ((::) (IPHole (firstOf hole)) (firstOf tail), append (secondOf hole) (secondOf tail))))
 
 -- 一个插值洞：空 token → `TemplateHoleEmpty`（指向字面量起点的兜底 span）；否则必须
 -- 恰好解析成一个表达式。洞内错误自带精确 span，兜底只为「无位置」的诊断补洞位置。
-parseTemplateHole : Int -> String -> ParseMode -> Span -> List PTok -> Check Expr
+parseTemplateHole : Int -> String -> ParseMode -> Span -> List PTok -> Check (Expr, List (Int, Int))
 parseTemplateHole fuel file mode fallback toks =
   if fuel <= 0 then
     icFuel "parser"
@@ -1878,7 +1890,7 @@ parseTemplateHole fuel file mode fallback toks =
           subState = mkStateAt file toks pos (length toks) mode
         in case parseExpr (fuel - 1) subState 0 of
           ErrC e => ErrC (withFallbackSpan (holeSpan file pos) e)
-          OkC (e, st2) => if isEof st2 then OkC e else ErrC (withLabel (Label (Just (holeSpan file pos)) "" LabelPrimary Nothing) (psMsg ExpectedEndOfExpr []))
+          OkC (e, st2) => if isEof st2 then OkC (e, append st2.holeParens (parenEntriesOf toks (eventsOf subState st2))) else ErrC (withLabel (Label (Just (holeSpan file pos)) "" LabelPrimary Nothing) (psMsg ExpectedEndOfExpr []))
 
 -- 插值洞的位置：洞内 token 的首位置（文件在 lexer 侧已知）。
 holeSpan : String -> Pos -> Span
@@ -1910,7 +1922,7 @@ parseParenAtom fuel st blockCol =
               st2 = advance st1
             in OkC (EVar tupleUnitSyntax (detachedNodeRef (spanOf st st2)), st2)
           else
-            Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st1 blockCol) (\first, st2 => if atSym st2 "," then Vuna.Compiler.Base.Common.step (parseParenTupleRest (fuel - 1) (advance st2) blockCol [first]) (\elems, st3 => OkC (foldPairExprs (detachedNodeRef (spanOf st st3)) elems, st3)) else if atSym st2 ":" then Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) (advance st2) blockCol) (\ty, st3 => Vuna.Compiler.Base.Common.bind (expectSym st3 ")") (\st4 => OkC (EApp (EVar ascribeSyntax (detachedNodeRef (spanOf st st2))) [first, ty] (detachedNodeRef (spanOf st st4)), st4))) else Vuna.Compiler.Base.Common.bind (expectSym st2 ")") (\st3 => OkC (EParen first (detachedNodeRef (spanOf st st3)), st3)))
+            Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st1 blockCol) (\first, st2 => if atSym st2 "," then Vuna.Compiler.Base.Common.step (parseParenTupleRest (fuel - 1) (advance st2) blockCol [first]) (\elems, st3 => OkC (foldPairExprs (detachedNodeRef (spanOf st st3)) elems, st3)) else if atSym st2 ":" then Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) (advance st2) blockCol) (\ty, st3 => Vuna.Compiler.Base.Common.bind (expectSym st3 ")") (\st4 => OkC (EApp (EVar ascribeSyntax (detachedNodeRef (spanOf st st2))) [first, ty] (detachedNodeRef (spanOf st st4)), st4))) else Vuna.Compiler.Base.Common.bind (expectSym st2 ")") (\st3 => OkC (first, st3)))
       )
 
 -- 元组剩余元素：进入时已消费逗号；收齐后要求 `)`。
@@ -2710,9 +2722,9 @@ foldPairPats sp ([p]) = p
 foldPairPats sp (p :: rest) = PCon tuplePairSyntax [p, foldPairPats sp rest] sp
 
 -- 文件加载专用：开启解析恢复（收集多个语法错误），调用范围外恢复短路。
--- 返回「解析结果 + 恢复期收集到的非致命诊断」（诊断按出现顺序；空 = 没有语法错误）。
+-- 返回「(解析结果, 表面形状) + 恢复期收集到的非致命诊断」（诊断按出现顺序；空 = 没有语法错误）。
 -- | 文件加载专用：开启解析恢复并显式返回多条语法错误。
-export parseSourceRecovering : String -> String -> Check (SourceFile, List Diagnostic)
+export parseSourceRecovering : String -> String -> Check ((SourceFile, Surface), List Diagnostic)
 parseSourceRecovering file source =
   Vuna.Compiler.Base.Common.bind
     (lexSource source)
@@ -2720,8 +2732,14 @@ parseSourceRecovering file source =
 
 -- 从**已有 token 流**解析（AST 缓存命中路径）：与 `parseSourceRecovering` 逐字节等价，
 -- 只是跳过 lex。位置全部来自 token 自身，因此诊断 span 与冷路径一致。
-export parseSourceRecoveringTokens : String -> ParseMode -> List PTok -> Check (SourceFile, List Diagnostic)
+export parseSourceRecoveringTokens : String -> ParseMode -> List PTok -> Check ((SourceFile, Surface), List Diagnostic)
 parseSourceRecoveringTokens file mode toks =
-  Vuna.Compiler.Base.Common.bind
-    (parseSourceFile True (mkState file toks mode))
-    (\p => OkC (firstOf (firstOf p), secondOf p))
+  let
+    st0 = mkState file toks mode
+  in Vuna.Compiler.Base.Common.bind (parseSourceFile True st0) (
+      \p =>
+        let
+          fin = secondOf (firstOf p)
+          events = eventsOf st0 fin
+        in OkC ((firstOf (firstOf p), insertParens fin.holeParens (deriveSurface toks events)), secondOf p)
+    )

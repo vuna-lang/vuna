@@ -351,8 +351,8 @@ printf '%s' '{"jsonrpc":"2.0","id":2,"method":"shutdown"}' | vuna repl client --
 **`where` 与 `infix*`**：`where` 块的绑定按源码顺序输出，带签名的绑定先输出签名行；
 `infix*` 声明打印在 imports 之后、第一个声明之前，保持源码顺序、每条一行
 （`infixl 6 +` / `infixr 5 ::`）。中缀链与反引号中缀按**源码顺序**打印，源码括号
-（`EParen`）原样保留：fmt 不重排中缀、不按优先级补括号，因此不需要程序级 fixity 闭包，
-未知运算符也不会让格式化失败。
+原样保留（括号层数来自树：`Frontend.Surface`，AST 里没有括号构造子）：fmt 不重排中缀、
+不按优先级补括号，因此不需要程序级 fixity 闭包，未知运算符也不会让格式化失败。
 
 **模板字面量**按 [templates.md](templates.md) 的规范形重写：`"""` 内容逐字（不
 dedent，开引号后的首个换行由 lexer 丢弃、渲染时按需补回），文本里的 `$` 紧跟 `{` 写成

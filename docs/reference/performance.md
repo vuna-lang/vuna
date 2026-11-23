@@ -859,67 +859,30 @@ fmt golden 与全量 `fmt --check` 逐字节不变。
 `name!` / `[]` / `()` / 元组列表折叠 / 中缀与 section / `EAnn` / `ELocalFun`）交给树，
 让 AST 变成纯投影（`architecture-target.md` D18 的第 2、3 步）。
 
-## 7. 测量规程
+### 6.3 括号表面形状（`Frontend.Surface`）
 
-- **探针必须隔离**：每个探针包一套自己的 `vuna.toml` + `lib/...`。常见事故：两个并行脚本
-  共用同一探针目录，`vuna.toml` 被覆盖成「整编译器」的 export 列表，读数整体作废，而且
-  看起来像「固定 45s 的神秘成本」。
-- **冷 / 热由 `VUNA_STORE` 决定，不由 `TMPDIR` 决定**。devShell 会
-  不再按 worktree 分 store（统一到默认根 `~/.vuna/store`，已预热）；换新 `TMPDIR` 对命中率没有影响
-  （实测同一热 store 换 TMPDIR，`check packages/compiler` 仍 73–75 ms）。要冷就显式给空目录：
-  `d=$(mktemp -d); VUNA_STORE=$d/store TMPDIR=$d ./result/bin/vuna ...`。这里固定用
-  `./result/bin/vuna`，先 `nix build .#vuna --out-link result`；`result` 是共享 out-link，
-  可能指向旧二进制或别的产物，测量前确认它对应本次构建。
-  `VUNA_STORE` 未设/空串会回退 `~/.vuna/store`（回退链见 `Store.storeDataRootEff`），
-  只读 HOME 下直接 `Sys_error ... Read-only file system`。
-- **入库的增长率门禁只隔离 `TMPDIR`、复用调用方 `VUNA_STORE`**：devShell 里本地跑时各档
-  共享热 store（对增长率影响小，但「每档 2 次取小」会吃掉第一档的固定成本、放大相邻比值）；
-  CI 的 `mkCheck` 没有 `VUNA_STORE`、`HOME=/homeless-shelter` ⇒ 每档天然隔离。
-  本地复现 CI 口径用 `VUNA_STORE=$(mktemp -d)` 显式喂空 store。
-- 只有包上下文一条加载路径；单文件夹具也按最近 manifest 解析，不存在「单文件 vs 包」两套
-  读数。
-- **机器可能被其他负载占用**（loadavg 波动时 wall 不可比）：A/B 在同一时间窗交替跑，记录
-  `time` 的 user+sys（单进程口径不受其他负载影响）；wall 只在机器空闲时引用。实测同一颗
-  二进制、同一档探针：loadavg 1.6 时 N=500 168–176 ms，loadavg 15–18 时 512 ms 且
-  `user+sys` 只 0.29 s ⇒ 多出来的是等待，不是算力。
-- **包级增量路径要先把依赖包接口落盘**（`vuna check <dep>`，见 `compiler-growth-pkg.sh`）：
-  否则探针每档都因「依赖接口缺失」走全量路径，测的就不是增量收尾。
-- `VUNA_LOG=debug` 在**冷 build** 上会逐条打印 conv 诊断（约 15.8 万行；`log!` 的实参在
-  开关打开时才求值），实测让冷 build 墙钟膨胀 ~60%：定位用阶段**比例**，绝对读数
-  一律用 `VUNA_LOG=off` 口径；单次 <50 µs 的条目仍需「同形规模合成探针」对比总时间。
-  注意冷 `check packages/compiler` 的 debug 膨胀**不是常数**（同窗口交替实测 22.2 s → 45.3 s，
-  下一轮却 42.5 s → 23.0 s，loadavg 15–17），负载与开关同样重要。
-- **结构化观测的覆盖与盲区**：`VUNA_OBS=1` 现在有 `vuna.elab`（含子段
-  `vuna.elab.bodies`）与 `vuna.codegen.check` 两个真实跨度，外加 `vuna.load` /
-  `vuna.resolve` / `vuna.iface.compute` / `vuna.iface.write` / `vuna.codegen.split` /
-  `vuna.cache.lookup` 六个 `Eff` 边界标记（`ph:"i"`，零宽度）与缓存三件套计数
-  （`vuna.counter.cache.hit|miss|write`，`ph:"C"`）。`checks.vuna-obs-schema` 逐项断言
-  这些名字（含计数至少一条）。**仍未接**：core 热路径计数（`vuna.counter.core.*` /
-  `vuna.counter.steps`，要改 `Core.Eval` 热路径，先量代价）与 `VUNA_OBS=3` 的 CPU 采样
-  调用点（`dtp_obs_sample_start` 在生成运行时里完整，但仓库内无人启动）。`Eff` 阶段的
-  **耗时**仍只能靠 `VUNA_LOG=debug` 文本行（`iface-mods-phases` / `iface-write=…` 等），
-  trace 里只有顺序；冷 `check packages/compiler` 的 debug 口径约 18.8 万行。
-- **产物尺寸与构建耗时分开报**：`bench/artifact.sh` 的尺寸（文本文件树/字节/行数、二进制）
-  由 flake 固定的工具链生成、产物不含绝对路径与时间戳，因此**尺寸不需要冷/热口径、可跨机器比**；
-  构建耗时仍只同机可比，宿主有负载时看 `*_cpu_ms`（user+sys）而不是墙钟。
-- 用 `OCAMLRUNPARAM=s=...` 快速判断 GC 敏感性（注意：产物里 `Gc.set` 会覆盖环境变量，要
-  比较不同 minor heap 大小得改代码重建）。
-- 阶段定位优先用阶段边界的 `log!`；逐定义观察直接看 `log!` 行；不要用「等大 case 跑完」
-  定位。
-- 基准入口：`nix run .#vuna-bench`（手动，非 CI check），基线文件与软告警见
-  [testing.md](testing.md)。
+括号退出 AST 后，「哪些表达式被括号包着」由 `Frontend.Surface` 从建树事件 + 词法 token
+派生（一趟线性扫描；模板洞的子解析把自己的条目交回主表）。价格分两块，读数同机交替
+（同一棵工作树、9 轮配对取中位）：
 
-## 8. 其它基准
+| 口径 | 改前 | 改后 | 配对差 |
+| --- | --- | --- | --- |
+| `fmt --check` 单文件（`Elab/Term/Impl.vuna`，3791 行，两遍 parse） | 0.102 s | 0.103 s | 噪声 |
+| `fmt --check packages/compiler`（~90 文件，冷） | 0.340 s | 0.378 s | **+33 ms（+11%）** |
+| `fmt --check .`（全仓，冷） | 0.686 s | 0.745 s | **+60 ms（+9%）** |
+| `fmt --check packages/base` | 0.099 s | 0.099 s | 噪声 |
 
-生成程序的**运行时**基准（`vuna-perf`：OCaml / native 同算法对拍、TCO 与 GC 验证项、
-wasm 浏览器路径）见 [benchmarks.md](benchmarks.md)；编译器 / 工具链自身的**命令墙钟**、
-编译热点与已量化否决的候选见 [compiler-benchmarks.md](compiler-benchmarks.md)。
+派生本身很便宜（单文件口径 +1 ms 就是两遍派生）；贵的是**查询**：
 
-## 相关阅读
+| 表表示（同一单文件口径，当时基线） | 中位 |
+| --- | --- |
+| 条目用线性 `List (Int, Int)`（每个表达式节点扫一遍） | 0.265 s（+161 ms） |
+| 条目用 `HashMap Int Int` | 0.107 s（+5 ms） |
 
-- 规模不变量与边界：[type-system.md](type-system.md)、[primitives.md](primitives.md)
-- 生成程序运行时基准：[benchmarks.md](benchmarks.md)
-- 编译器 / 工具链基准：[compiler-benchmarks.md](compiler-benchmarks.md)
-- 测试 / CI / bench：[testing.md](testing.md)
-- 编译器结构：[compiler.md](compiler.md)、[core.md](core.md)
-- 方法论技能：`.agents/skills/perf-debug/SKILL.md`
+Fmt 每渲染一个表达式节点都要问一次括号层数，`sourceInfixParts` 的链边界也要问，所以线性表
+在真实代码上退化成 O(节点 × 括号条目)（`fmt --check packages/compiler` 会慢到分钟级）。
+空 `HashMap` 字面量在 OCaml 侧会退化成弱类型变量（codegen 不写类型标注），实现用一条 `-1`
+哨兵钉住类型再删掉它。
+
+结论：派生按「每次 parse 一次线性扫描」计价；重复的代价来自**同一份源码被 parse 两次**
+（format 一次 + 程序级 fixity 一次），不是派生自身。要再压就先合并这两次 parse。

@@ -117,7 +117,8 @@ packages/compiler/lib/Vuna/Compiler/   （目录即层：层名 = 模块前缀�
 本模块类型名，再到导入模块导出的类型名）。
 语义与边界见 [language.md 的「type / value 双命名空间」](reference/language.md)。
 
-**运算符与 fixity**：parser 只产出 `EInfix` / `EBacktick` / `ESect*` / `EParen` 中间节点；
+**运算符与 fixity**：parser 只产出 `EInfix` / `EBacktick` / `ESect*` 中间节点（括号不建
+AST 节点：分组边界来自树，见 `Frontend.Surface`）；
 `Loader.Flatten` 按每模块可见表（`Module.fixities`，`dedupeFixities` 首现去重）在名字解析前调
 `Loader.Fixity.reorderProgram` 重排 / 换别名 / 展开 section。表来源 = 源码 `infix*` 声明
 （`->` 由 `syntaxFixityDecls` 恒可见；未知符号运算符报错）；fmt / LSP / lint 用

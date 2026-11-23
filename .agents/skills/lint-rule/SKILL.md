@@ -89,7 +89,7 @@ lint 属于 `packages/toolchain`（**不进 seed**）；改它不影响自举链
 | 切片少一个字符（`""` → `"`、`[]` → `[`） | 空字符串 / 空列表字面量的 span 末尾可能短一位；用 `tokenEndCovering (raw - 1) src.lintSrcToks` 把末 token 补全 |
 | 切片多一个 `)` 或 `,` | `exprText` / `spanTextLine` 会把紧贴的下一个 token 卷进来；用 `widenStart` / `widenEnd`（括号净差）补回，方括号另需 `widenBracketEnd` |
 | 起点从运算符开始 | 中缀表达式的 span 从运算符起；起点用 `exprStartLine/Col`（`startExpr`），不要用 `spanStartOffset` |
-| 取不到括号 | `lintParsedWithConfig` 会先 `reorderProgram`，AST 里**没有** `EParen` / `EInfix`；括号只能按 token 净差重建 |
+| 取不到括号 | `lintParsedWithConfig` 会先 `reorderProgram`，AST 里**没有** `EInfix`，括号也不在 AST 里；切片只能按 token 净差重建 |
 | 非 ASCII 行修完语法错 | `prefixBeforeCol` / `tailFromCol` 用**字符**列，`Span` 列是 **UTF-8 字节**；这类行用字节偏移切片（`offsetOfLineCol` + `sliceOffsets`） |
 | 明明可修却标 not auto-fixable | `hasComment` 把字符串里的 `--` 也当注释；含 `--` / `{-` / tab / CR 的行只报告 |
 | 元组/自带括号的模式被写成 `((a, b))` | `patNeedsParen` 要认识自带括号的语法（元组），否则 `asPatText` / clause 参数位置多包一层 |

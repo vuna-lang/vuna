@@ -547,7 +547,6 @@ goalAtRange sl sc el ec (g :: rest) =
 -- | 内部：非索引 data 的 kind 只能是 `Type`（索引族写成 `... -> Type`，不枚举）。
 dataKindIsType : Expr -> Bool
 dataKindIsType (EVar "Type" _) = True
-dataKindIsType (EParen inner _) = dataKindIsType inner
 dataKindIsType _ = False
 
 -- | 可 split 的类型：非索引 data（多分支）或 record（单构造器，构造器名 = 类型名）。
@@ -579,7 +578,6 @@ findSplitIn (_ :: rest) name = findSplitIn rest name
 typeHeadName : Expr -> Maybe String
 typeHeadName (EVar n _) = Just n
 typeHeadName (EApp f args _) = typeHeadName f
-typeHeadName (EParen inner _) = typeHeadName inner
 typeHeadName _ = Nothing
 
 -- | 内部：`Maybe` 列表里第一个 `Just`。
@@ -1064,19 +1062,21 @@ declSymbolJson lines decls d =
 -- 一样按程序级 fixity 重排；解析或 fixity 加载失败时为 []。
 export documentSymbols : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> Eff r (List Json)
 documentSymbols uri text =
-  case parseSource uri text of
+  case parseSourceDetailed uri text of
     ErrC e => pure []
-    OkC (SourceFile hdr imports fx decls0 _ _ _) =>
-      do
-        fxR <- formattingFixities uri text
-        pure (
-            case fxR of
-              ErrC _ => []
-              OkC programFixities =>
-                case reorderProgram (tableOfKeepOps (append programFixities fx)) decls0 of
-                  ErrC e => []
-                  OkC decls => map (declSymbolJson (split "\n" text) decls) decls
-          )
+    OkC parsed =>
+      case parsed.parsedFile of
+        SourceFile _ _ fx decls0 _ _ _ =>
+          do
+            fxR <- formattingFixities uri text
+            pure (
+                case fxR of
+                  ErrC _ => []
+                  OkC programFixities =>
+                    case reorderProgram (tableOfKeepOps parsed.parsedSurface (append programFixities fx)) decls0 of
+                      ErrC e => []
+                      OkC decls => map (declSymbolJson (split "\n" text) decls) decls
+              )
 
 -- ---------------------------------------------------------------
 -- definition：位置 → token → Index → Location

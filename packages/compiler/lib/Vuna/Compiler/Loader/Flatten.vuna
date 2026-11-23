@@ -19,6 +19,7 @@ import Base.Container.HashMap as HashMap
 import Base.Data.ObsSpan as ObsSpan
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Lexer
+import Vuna.Compiler.Frontend.Surface
 import Vuna.Compiler.Frontend.Parser
 import Vuna.Compiler.Frontend.Parser.Support
 import Vuna.Compiler.Loader.Fixity
@@ -46,10 +47,10 @@ import Base.Effect.Process as EffProcess
 -- | 解析一个源文件：lex 一次，再走语法分析。所有加载路径都走这里。
 -- 编译器路径用 `PmStrict`（语义级语法错误致命）；只需要 AST 的工具（fixity 解析）用
 -- `parseFileWithPathMode PmTool`，别让「重复 binder」把整个文件挡在门外。
-export parseFileWithPath : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> Eff r (Check SourceFile)
+export parseFileWithPath : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> Eff r (Check (SourceFile, Surface))
 parseFileWithPath = parseFileWithPathMode PmStrict
 
-export parseFileWithPathMode : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => ParseMode -> String -> String -> Eff r (Check SourceFile)
+export parseFileWithPathMode : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => ParseMode -> String -> String -> Eff r (Check (SourceFile, Surface))
 parseFileWithPathMode mode path src =
   case obsSpan "vuna.parse.lex" "vuna.phase" (\_ => lexSource src) of
     ErrC e => pure (ErrC (withSpanFileIfEmpty path e))
@@ -58,16 +59,17 @@ parseFileWithPathMode mode path src =
 -- | 由 token 流得到 parse 结果。Lexer/Parser 都已在产生点给出 span；这里只给词法诊断
 -- 那个 file 为空的 span 注入真实路径（parser 的 span 从 PState 拿文件名）。
 -- 恢复期收集到的多条诊断挂在首条错误上（批量错误通道），全部自带位置。
-parseWith : ParseMode -> String -> List PTok -> Check SourceFile
+parseWith : ParseMode -> String -> List PTok -> Check (SourceFile, Surface)
 parseWith mode path toks =
   case obsSpan "vuna.parse.syntax" "vuna.phase" (\_ => parseSourceRecoveringTokens path mode toks) of
     ErrC e => ErrC (withSpanFileIfEmpty path e)
     OkC p =>
       let
-        parsed = firstOf p
+        parsed = firstOf (firstOf p)
+        surface = secondOf (firstOf p)
         errs = secondOf p
       in case errs of
-        [] => OkC parsed
+        [] => OkC (parsed, surface)
         e :: rest => ErrC (withChildren rest e)
 
 -- fixity 是**程序级**属性：加载闭包里所有模块的声明构成一张表（import 到就全局生效），
@@ -245,7 +247,7 @@ isRecordTarget modules decls prefix target =
         isRecordDecl base decls
       else
         case findModule modules m of
-          Just (Module mname mpkg mimports mimps dcs exports mfx _ _ _) => isRecordDecl base dcs
+          Just (Module mname mpkg mimports mimps dcs exports mfx _ _ _ _) => isRecordDecl base dcs
           Nothing => False
 
 isRecordDecl : String -> List Decl -> Bool
@@ -678,8 +680,17 @@ loadModule fuel roots importerPkg modules stack imp =
                   parsed <- parseFileWithPath path text
                   case parsed of
                     ErrC e => pure (ErrC e)
-                    OkC (SourceFile hdr imports0 fixities decls exports reexports opacity) =>
+                    OkC parsed =>
                       let
+                        sf = firstOf parsed
+                        surface = secondOf parsed
+                        hdr = sf.sourceFileModDecl
+                        imports0 = sf.sourceFileImports
+                        fixities = sf.sourceFileFixities
+                        decls = sf.sourceFileDecls
+                        exports = sf.sourceFileExports
+                        reexports = sf.sourceFileReexports
+                        opacity = sf.sourceFileOpacity
                         imports1 = imports0
                         providers = []
                         modules1 = modules
@@ -707,7 +718,7 @@ loadModule fuel roots importerPkg modules stack imp =
                                             OkC exports =>
                                               let
                                                 visible = fixities
-                                              in pure (OkC ((::) (Module name (rootName root) imports2 implicit decls exports visible (append providers (append (reexportedImportNamesOfHeader imports2 hdr) (reexportedImportNames imports2 reexports))) (opaqueNamesOf name opacity) (exportIndexOf exports)) modules2))
+                                              in pure (OkC ((::) (Module name (rootName root) imports2 implicit decls exports visible (append providers (append (reexportedImportNamesOfHeader imports2 hdr) (reexportedImportNames imports2 reexports))) (opaqueNamesOf name opacity) (exportIndexOf exports) surface) modules2))
         else
           pure (onErrDiag (withImportSpan imp) (ldErr1 (InvalidModuleName name) name))
 
@@ -741,8 +752,18 @@ loadProjectWithPreloaded ctx entry preloaded =
         parsed <- parseFileWithPath entry text
         case parsed of
           ErrC e => pure (ErrC e)
-          OkC (SourceFile hdr imports fixities decls exports reexports opacity) =>
-            case hdr of
+          OkC parsed =>
+            let
+              sf = firstOf parsed
+              surface = secondOf parsed
+              hdr = sf.sourceFileModDecl
+              imports = sf.sourceFileImports
+              fixities = sf.sourceFileFixities
+              decls = sf.sourceFileDecls
+              exports = sf.sourceFileExports
+              reexports = sf.sourceFileReexports
+              opacity = sf.sourceFileOpacity
+            in case hdr of
               Just (ModDecl dname hasList items _ _ _ sp) => pure (onErrDiag (withFallbackSpan (nodeRefSpan sp)) (ldErr1 (ModuleHeaderInEntryFile entry) entry))
               Nothing =>
                 let
@@ -764,7 +785,7 @@ loadProjectWithPreloaded ctx entry preloaded =
                                   OkC modules =>
                                     let
                                       imports2 = normalizeImports modules imports1
-                                    in withLayerCheck (contextRoots ctx) (Project decls imports2 implicit modules (contextPackageName ctx) fixities (entryScopeOf (contextPackageName ctx) entry))
+                                    in withLayerCheck (contextRoots ctx) (Project decls imports2 implicit modules (contextPackageName ctx) fixities (entryScopeOf (contextPackageName ctx) entry) surface)
                               )
     else
       pure (ldErr1 (EntryFileNotFound entry) entry)
@@ -783,7 +804,7 @@ loadProjectModulesWithPreloaded ctx names preloaded =
     pure (
         case modulesR of
           ErrC e => ErrC e
-          OkC modules => withLayerCheck (contextRoots ctx) (Project [] [] [] modules (contextPackageName ctx) [] (contextPackageName ctx))
+          OkC modules => withLayerCheck (contextRoots ctx) (Project [] [] [] modules (contextPackageName ctx) [] (contextPackageName ctx) emptySurface)
       )
 
 -- 入口以**源码字符串**给出（REPL 的表达式求值）：入口不落盘（import 仍按上下文的
@@ -798,8 +819,18 @@ loadProjectSourceWithPreloaded ctx label source preloaded =
     parsed <- parseFileWithPathMode PmTool label source
     case parsed of
       ErrC e => pure (ErrC e)
-      OkC (SourceFile hdr imports fixities decls exports reexports opacity) =>
-        case hdr of
+      OkC parsed =>
+        let
+          sf = firstOf parsed
+          surface = secondOf parsed
+          hdr = sf.sourceFileModDecl
+          imports = sf.sourceFileImports
+          fixities = sf.sourceFileFixities
+          decls = sf.sourceFileDecls
+          exports = sf.sourceFileExports
+          reexports = sf.sourceFileReexports
+          opacity = sf.sourceFileOpacity
+        in case hdr of
           Just (ModDecl dname hasList items _ _ _ sp) => pure (ldErr1 (ModuleHeaderInEntrySource label) label)
           Nothing =>
             let
@@ -821,7 +852,7 @@ loadProjectSourceWithPreloaded ctx label source preloaded =
                               OkC modules =>
                                 let
                                   imports2 = normalizeImports modules imports1
-                                in withLayerCheck (contextRoots ctx) (Project decls imports2 implicit modules (contextPackageName ctx) fixities (entryScopeOf (contextPackageName ctx) label))
+                                in withLayerCheck (contextRoots ctx) (Project decls imports2 implicit modules (contextPackageName ctx) fixities (entryScopeOf (contextPackageName ctx) label) surface)
                           )
 
 -- 以**源码字符串**给出一个**库模块**：源码允许带 `module ... where`
@@ -839,8 +870,18 @@ loadModuleSourceWithPreloaded ctx label source preloaded =
     parsed <- parseFileWithPathMode PmTool label source
     case parsed of
       ErrC e => pure (ErrC e)
-      OkC (SourceFile hdr imports0 fixities decls exports reexports opacity) =>
-        case hdr of
+      OkC parsed =>
+        let
+          sf = firstOf parsed
+          surface = secondOf parsed
+          hdr = sf.sourceFileModDecl
+          imports0 = sf.sourceFileImports
+          fixities = sf.sourceFileFixities
+          decls = sf.sourceFileDecls
+          exports = sf.sourceFileExports
+          reexports = sf.sourceFileReexports
+          opacity = sf.sourceFileOpacity
+        in case hdr of
           Nothing => loadProjectSourceWithPreloaded ctx label source preloaded
           Just (ModDecl name hasList items _ _ _ sp) =>
             let
@@ -868,7 +909,7 @@ loadModuleSourceWithPreloaded ctx label source preloaded =
                               OkC exports =>
                                 let
                                   visible = fixities
-                                in pure (withLayerCheck (contextRoots ctx) (Project [] imports2 implicit (Module name (contextPackageName ctx) imports2 implicit decls exports visible (append providers (reexportedImportNames imports2 (append items reexports))) (opaqueNamesOf name opacity) (exportIndexOf exports) :: modules) (contextPackageName ctx) [] (contextPackageName ctx)))
+                                in pure (withLayerCheck (contextRoots ctx) (Project [] imports2 implicit (Module name (contextPackageName ctx) imports2 implicit decls exports visible (append providers (reexportedImportNames imports2 (append items reexports))) (opaqueNamesOf name opacity) (exportIndexOf exports) surface :: modules) (contextPackageName ctx) [] (contextPackageName ctx) emptySurface))
 
 -- fmt 用的「程序级 fixity」——本文件的 `infix*` 声明（在前，本地优先）
 -- ++ import 闭包可见的声明（Module 里已含各自的 import 闭包）。只 parse + 加载模块图，
@@ -885,7 +926,7 @@ fixitiesForSourceIn ctx modules0 label source =
     parsed <- parseFileWithPathMode PmTool label source
     case parsed of
       ErrC e => pure (ErrC e)
-      OkC sf => fixitiesFromParsed ctx modules0 label sf
+      OkC parsedFile => fixitiesFromParsed ctx modules0 label (firstOf parsedFile)
 
 -- | 同 `fixitiesForSourceIn`，但源码**已经**解析过（工具路径一次词法的产物）。
 --
@@ -957,12 +998,12 @@ resolveProjectWith release project = resolveProjectKeeping release [] project
 -- 逐模块的四段在 `resolveModulesKeep`（同名跨度，按次聚合）。名字解析本身没有内部的
 -- 结构化子阶段，`vuna.resolve` 标记到这组跨度之间只剩 `checkUniqueFixities` 与函数分派。
 export resolveProjectKeeping : Bool -> List String -> Project -> Check (List Diagnostic, List Decl, List Module)
-resolveProjectKeeping release keep (Project decls imports implicit modules entryPkg entryFixes entryName) =
+resolveProjectKeeping release keep (Project decls imports implicit modules entryPkg entryFixes entryName entrySurface) =
   let
     projectFixities = dedupeFixitiesOf modules entryFixes
   in Vuna.Compiler.Base.Common.bind
     (checkUniqueFixities projectFixities)
-    (\fixes => Vuna.Compiler.Base.Common.bind (obsCheck "vuna.resolve.reorder" (\_ => reorderProgram (tableOf fixes) decls)) (\decls2 => Vuna.Compiler.Base.Common.bind (obsCheck "vuna.resolve.expand" (\_ => expandDecls entryName decls2)) (\decls3 => Vuna.Compiler.Base.Common.bind (obsCheck "vuna.resolve.entry" (\_ => resolveEntry release modules entryPkg (append imports implicit) decls3)) (\entryDecls => Vuna.Compiler.Base.Common.bind (obsCheck "vuna.resolve.warn" (\_ => unusedImportWarnings modules imports entryDecls decls3 [])) (\entryWarns => Vuna.Compiler.Base.Common.bind (resolveModulesKeep release keep fixes modules) (\p2 => OkC (append entryWarns (secondOf p2), entryDecls, firstOf p2)))))))
+    (\fixes => Vuna.Compiler.Base.Common.bind (obsCheck "vuna.resolve.reorder" (\_ => reorderProgram (tableOf entrySurface fixes) decls)) (\decls2 => Vuna.Compiler.Base.Common.bind (obsCheck "vuna.resolve.expand" (\_ => expandDecls entryName decls2)) (\decls3 => Vuna.Compiler.Base.Common.bind (obsCheck "vuna.resolve.entry" (\_ => resolveEntry release modules entryPkg (append imports implicit) decls3)) (\entryDecls => Vuna.Compiler.Base.Common.bind (obsCheck "vuna.resolve.warn" (\_ => unusedImportWarnings modules imports entryDecls decls3 [])) (\entryWarns => Vuna.Compiler.Base.Common.bind (resolveModulesKeep release keep fixes modules) (\p2 => OkC (append entryWarns (secondOf p2), entryDecls, firstOf p2)))))))
 
 resolveModulesKeep : Bool -> List String -> List FixityDecl -> List Module -> Check (List Module, List Diagnostic)
 resolveModulesKeep release keep fixes [] = OkC ([], [])
@@ -973,7 +1014,7 @@ resolveModulesKeep release keep fixes (m :: rest) =
       (\p2 => OkC ((::) m (firstOf p2), secondOf p2))
   else
     Vuna.Compiler.Base.Common.bind
-      (obsCheck "vuna.resolve.reorder" (\_ => reorderProgram (tableOf fixes) (moduleDeclsOf m)))
+      (obsCheck "vuna.resolve.reorder" (\_ => reorderProgram (tableOf m.moduleSurfaceOf fixes) (moduleDeclsOf m)))
       (\decls2 => Vuna.Compiler.Base.Common.bind (resolveModuleGo release m rest (obsCheck "vuna.resolve.expand" (\_ => expandDecls (moduleNameOf m) decls2))) (\p => Vuna.Compiler.Base.Common.bind (resolveModulesKeep release keep fixes rest) (\p2 => OkC ((::) (firstOf p) (firstOf p2), append (secondOf p) (secondOf p2)))))
 
 -- | 单个模块 expand 之后的三段：命名空间建表 → 名字解析 → 未用 import 判定。
@@ -983,9 +1024,9 @@ resolveModuleGo release m rest declsR =
   Vuna.Compiler.Base.Common.bind declsR (
       \decls3 =>
         let
-          modules2 = Module (moduleNameOf m) (modulePackageOf m) m.moduleImportsOf m.moduleImplicitImportsOf decls3 m.moduleExportsOf (moduleFixitiesOf m) (moduleReexportsOf m) (moduleOpaqueOf m) m.moduleExportIndexOf :: rest
+          modules2 = Module (moduleNameOf m) (modulePackageOf m) m.moduleImportsOf m.moduleImplicitImportsOf decls3 m.moduleExportsOf (moduleFixitiesOf m) (moduleReexportsOf m) (moduleOpaqueOf m) m.moduleExportIndexOf m.moduleSurfaceOf :: rest
           ns = obsPure "vuna.resolve.ns" (\_ => namespacesOfWith release modules2 decls3)
-        in Vuna.Compiler.Base.Common.bind (obsCheck "vuna.resolve.module" (\_ => resolveProgram modules2 (moduleNameOf m) (moduleNameOf m) ns (moduleAllImportsOf m) decls3)) (\d1 => Vuna.Compiler.Base.Common.bind (obsCheck "vuna.resolve.warn" (\_ => unusedImportWarnings modules2 m.moduleImportsOf d1 decls3 (moduleReexportsOf m))) (\warns => OkC (Module (moduleNameOf m) (modulePackageOf m) m.moduleImportsOf m.moduleImplicitImportsOf d1 m.moduleExportsOf (moduleFixitiesOf m) (moduleReexportsOf m) (moduleOpaqueOf m) m.moduleExportIndexOf, warns)))
+        in Vuna.Compiler.Base.Common.bind (obsCheck "vuna.resolve.module" (\_ => resolveProgram modules2 (moduleNameOf m) (moduleNameOf m) ns (moduleAllImportsOf m) decls3)) (\d1 => Vuna.Compiler.Base.Common.bind (obsCheck "vuna.resolve.warn" (\_ => unusedImportWarnings modules2 m.moduleImportsOf d1 decls3 (moduleReexportsOf m))) (\warns => OkC (Module (moduleNameOf m) (modulePackageOf m) m.moduleImportsOf m.moduleImplicitImportsOf d1 m.moduleExportsOf (moduleFixitiesOf m) (moduleReexportsOf m) (moduleOpaqueOf m) m.moduleExportIndexOf m.moduleSurfaceOf, warns)))
     )
 
 -- ---------------------------------------------------------------
@@ -1265,7 +1306,6 @@ exprRefNamesGo (ERecord name fields _) acc = fieldExprsGo fields ((::) name acc)
 exprRefNamesGo (ERecUpdate base fields _) acc = exprRefNamesGo base (fieldExprsGo fields acc)
 exprRefNamesGo (EDo stmts _) acc = doStmtRefNamesListGo stmts acc
 exprRefNamesGo (EInfix op lhs rhs _) acc = exprRefNamesGo lhs (exprRefNamesGo rhs ((::) op acc))
-exprRefNamesGo (EParen inner _) acc = exprRefNamesGo inner acc
 exprRefNamesGo (EBacktick op lhs rhs _) acc = exprRefNamesGo lhs (exprRefNamesGo rhs ((::) op acc))
 exprRefNamesGo (ESectOp op _) acc = (::) op acc
 exprRefNamesGo (ESectL op rhs _) acc = (::) op (exprRefNamesGo rhs acc)

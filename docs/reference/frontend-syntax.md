@@ -18,8 +18,11 @@
         → Rast（名字已解析，糖已消失）→ Elab → Core → IR → 后端
 ```
 
-- **表面语法只活到 `Frontend.Ast`**：`EInfix` / `EBacktick` / `ESect*` / `EParen` 是 parser
+- **表面语法只活到 `Frontend.Ast`**：`EInfix` / `EBacktick` / `ESect*` 是 parser
   中间产物，`Loader.Fixity.reorderProgram` 之后必须消失；`Loader.Resolve` 对残留报 internal error。
+- **纯书写形式不建 AST 节点**：括号（层数）与「哪些 token 是括号」由 parser 的建树事件
+  按节点 id 记录在 `Frontend.Surface` 里（`(e)` / `((e))` / `(f x) y` / `f (a)` 都覆盖；
+  模板洞里由洞的子解析交回自己的条目）。Fmt 打印与 fixity 重排的括号边界都读这份表面形状。
 - 部分糖**不新增 AST 构造子**，而用保留名编码（`@vuna@list@*` / `@vuna@handle` /
   `@vuna@macro@*` / `@vuna@tuple@*` / `@vuna@ascribe` / `@vuna@do@*` / `?hole`）：列表字面量、
   `perform` / `handle`、`f@name`、行条目、元组 / unit、类型标注、do 链、洞、内置宏都走这条路。

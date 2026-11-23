@@ -212,7 +212,6 @@ normExpr names st (EVar name _) =
           in (firstOf paired, Just (TVar (secondOf paired)))
         else
           (st, Just (TCon (canonName names name)))
-normExpr names st (EParen inner _) = normExpr names st inner
 normExpr names st (EApp f args _) =
   let
     pf = normExpr names st f

@@ -1296,8 +1296,12 @@ toolImportsOfSource ctx label source =
     parsed <- parseFileWithPath label source
     case parsed of
       ErrC _ => pure []
-      OkC (SourceFile hdr imports fixities decls _ _ _) =>
-        case hdr of
+      OkC parsedFile =>
+        let
+          sf = firstOf parsedFile
+          hdr = sf.sourceFileModDecl
+          imports = sf.sourceFileImports
+        in case hdr of
           Just (ModDecl dname _ _ _ _ _ _) => toolImportNamesOf ctx dname imports
           Nothing => toolImportNamesOf ctx "" imports
 

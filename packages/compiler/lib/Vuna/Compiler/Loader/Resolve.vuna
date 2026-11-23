@@ -1007,7 +1007,7 @@ resolveExprRaw fuel modules label prefix ns imports scope expr =
       EVar name sp => if isHoleName name then OkC (EVar name sp) else if startsWith "!" name && strLength name > 1 then hiddenRef name sp else if isMacroSyntaxName name then icInternal "unexpanded macro invocation ${name}" else if isInternalSyntaxName name then if isParserSyntaxName name || isCompilerModulePrefix prefix then OkC (EVar name sp) else onErrDiag (withFallbackSpan (nodeRefSpan sp)) (rnNoLoc1 (UnknownVariable name) name) else if containsDot name then resolveDottedExpr modules label prefix ns imports scope name sp else Vuna.Compiler.Base.Common.bind (onErrDiag (withFallbackSpan (nodeRefSpan sp)) (resolveGlobal modules label prefix ns imports scope name)) (\n => checkDebugConstruct ns.nsRelease sp name n scope)
       -- 内置宏标记必须在 `Loader.Expand` 里展开；走到这里说明展开漏了（internal error，
       -- 不静默透传成普通内部名）。
-      -- `EInfix` / `EParen` 是 parser 的中间产物，正常路径在 Loader 重排里已消除；
+      -- `EInfix` 是 parser 的中间产物，正常路径在 Loader 重排里已消除；
       -- 走到这里说明重排漏了（internal error，不静默透传）。
       EInfix op lhs rhs _ => icInternal "unreordered infix operator ${op}"
       -- 反引号中缀与 section 同样必须在 Loader.Fixity 重排里消除（严格执行契约
@@ -1016,7 +1016,6 @@ resolveExprRaw fuel modules label prefix ns imports scope expr =
       ESectOp op _ => icInternal "unreordered operator section (${op})"
       ESectL op rhs _ => icInternal "unreordered left operator section (${op})"
       ESectR lhs op _ => icInternal "unreordered right operator section (${op})"
-      EParen inner _ => resolveExpr (fuel - 1) modules label prefix ns imports scope inner
       EInt n sp => OkC (EInt n sp)
       EStr s sp => OkC (EStr s sp)
       EFloat raw sp => OkC (EFloat raw sp)
@@ -1478,7 +1477,7 @@ resolveEntry release modules entryPkg imports decls =
 
 resolveModules : Bool -> List Module -> Check (List Decl)
 resolveModules release [] = OkC []
-resolveModules release (modules@((Module name mpkg imports imps decls exports fx _ _ _) :: rest)) =
+resolveModules release (modules@((Module name mpkg imports imps decls exports fx _ _ _ _) :: rest)) =
   Vuna.Compiler.Base.Common.bind
     (resolveProgram modules name name (namespacesOfWith release modules decls) (append imports imps) decls)
     (\d1 => Vuna.Compiler.Base.Common.bind (resolveModules release rest) (\d2 => OkC (append d1 d2)))

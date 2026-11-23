@@ -10,7 +10,7 @@
 -- 注释列表在 `formatSourceWith` 里按 `anchorRefs` 单趟归属（行尾优先、否则下一条目）：
 -- 锚点直接来自 parser 的事件流（条目类树节点，不遍历 AST、不建整棵树），按起点排序；
 -- 注释按源码顺序前进，维护已打开锚点的栈（最内层容器）与本行已结束锚点的候选池。
--- 渲染时用条目的 `NodeRef` 直接查 `TriviaCtx`（键是节点 id，不是 span 起点）。
+-- 渲染时用条目的 `NodeRef` 直接查 `FmtCtx`（键是节点 id，不是 span 起点）。
 module Vuna.Fmt.Comment where
 
 import Base.Container.HashMap as HashMap
@@ -19,6 +19,7 @@ import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Cst
 import Vuna.Compiler.Frontend.Lexer
+import Vuna.Compiler.Frontend.Surface
 import Vuna.Fmt.Doc
 import Vuna.Fmt.Util
 
@@ -364,16 +365,19 @@ stripLeadingBlanks (c :: rest) = if isBlankMarker c then stripLeadingBlanks rest
 -- CST trivia → 注释计划
 -- ---------------------------------------------------------------
 -- | 注释计划：附件表（节点 id → 前置 / 行尾注释）+ 文件末尾注释。
-export record TriviaCtx where
+export record FmtCtx where
+  -- | 条目节点 id → (前置注释, 行尾注释)。
   ctxAt : HashMap Int (List Comment, List Comment)
+  -- | 表面形状：括号层数等「怎么写」的信息（AST 不携带，按节点 id 查）。
+  ctxSurface : Surface
 
 -- | 内部：空附件表。
 emptySlotTable : HashMap Int (List Comment, List Comment)
 emptySlotTable = HashMap.fromList []
 
 -- | 空计划（模板洞等没有源码位置的位置）。
-export emptyTrivia : TriviaCtx
-emptyTrivia = TriviaCtx emptySlotTable
+export emptyFmtCtx : FmtCtx
+emptyFmtCtx = FmtCtx emptySlotTable emptySurface
 
 -- | 去掉注释原文的定界符（`--` / `{- -}`），得到旧注释模型的正文。
 stripLineDelim : String -> String
@@ -439,18 +443,18 @@ countNewlinesChars (c :: rest) = (if c == 10 then 1 else 0) + countNewlinesChars
 
 -- | 从 CST trivia 建注释计划：先按锚点分配（行尾优先、否则下一条目），再返回附件表与
 -- 文件末尾注释。
-export triviaCtxOf : List NodeRef -> List CstToken -> (TriviaCtx, List Comment)
-triviaCtxOf anchors toks =
+export fmtCtxOf : Surface -> List NodeRef -> List CstToken -> (FmtCtx, List Comment)
+fmtCtxOf surface anchors toks =
   let
     assigned = assignComments anchors (concatMap tokComments toks) emptySlotTable []
-  in (TriviaCtx (firstOf assigned), stripLeadingBlanks (secondOf assigned))
+  in (FmtCtx (firstOf assigned) surface, stripLeadingBlanks (secondOf assigned))
 
 -- | 把条目的注释贴到渲染结果上（按节点 id 查槽）。
-export attachAt : TriviaCtx -> NodeRef -> Doc -> Doc
+export attachAt : FmtCtx -> NodeRef -> Doc -> Doc
 attachAt ctx r doc = attachAtTable ctx.ctxAt r doc
 
 -- | 任一导出项挂了注释。
-export anyItemHasComments : TriviaCtx -> List ExportItem -> Bool
+export anyItemHasComments : FmtCtx -> List ExportItem -> Bool
 anyItemHasComments ctx items = anyItemHasCommentsTable ctx.ctxAt items
 
 -- | 文件末尾注释的文档（顶格）。
@@ -462,7 +466,7 @@ export tokComments : CstToken -> List Comment
 tokComments t = triviaComments t.cstLeading
 
 -- | 顶层条目的前置注释（丢掉最前面的空行标记，顶层空行由 section / 声明间距负责）。
-export attachAtTop : TriviaCtx -> NodeRef -> Doc -> Doc
+export attachAtTop : FmtCtx -> NodeRef -> Doc -> Doc
 attachAtTop ctx r doc =
   let
     cs = stripLeadingBlanks (leadOf ctx.ctxAt (nodeRefId r))

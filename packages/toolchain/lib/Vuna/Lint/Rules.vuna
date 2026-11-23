@@ -532,7 +532,6 @@ startExpr fuel e =
       ESectR lhs op sp => minPair (startFromSpan (nodeRefSpan sp)) (startExpr (fuel - 1) lhs)
       -- 中缀链 / 括号（parser 中间产物）也要给出真实起点，不能落到兜底 (0,0)。
       EInfix op l r sp => minPair (startFromSpan (nodeRefSpan sp)) (minPair (startExpr (fuel - 1) l) (startExpr (fuel - 1) r))
-      EParen inner sp => minPair (startFromSpan (nodeRefSpan sp)) (startExpr (fuel - 1) inner)
 
 -- | 内部：一组表达式的最小起始位置；空列表返回极大坐标。
 startExprs : Int -> List Expr -> (Int, Int)
@@ -640,9 +639,9 @@ parenDeficitGo (t :: rest) start end acc =
       PTok (TSym ")") _ => parenDeficitGo rest start end (acc + 1)
       _ => parenDeficitGo rest start end acc
 
--- | 内部：AST 的 `EParen` span 不含括号本身（`Ast.exprSpan` 取内层），所以父节点
--- 由它派生的 span 可能从括号内部开始；直接按 span 切会漏掉左括号、留下孤立的 `)`。
--- 按 token 净差把紧邻的 `(`（或 `)`）补回切片。
+-- | 内部：表达式 span 不保证含源码括号（括号不在 AST 里、也不是表达式的语义位置），
+-- 所以父节点由子 span 派生的区间可能从括号内部开始；直接按 span 切会漏掉左括号、留下
+-- 孤立的 `)`。按 token 净差把紧邻的 `(`（或 `)`）补回切片。
 widenStart : LintSrc -> Int -> Int -> Int
 widenStart src start end =
   let
@@ -978,7 +977,6 @@ mentionsExpr fuel name e =
       EAnn value ty _ => mentionsExpr (fuel - 1) name value || mentionsExpr (fuel - 1) name ty
       -- 中缀链与括号（parser 中间产物）：操作数继续递归。
       EInfix op l r _ => mentionsExpr (fuel - 1) name l || mentionsExpr (fuel - 1) name r
-      EParen inner _ => mentionsExpr (fuel - 1) name inner
       -- 反引号里的名字与 section 的 op 都是值引用，操作数继续递归。
       EBacktick nm l r _ => nm == name || mentionsExpr (fuel - 1) name l || mentionsExpr (fuel - 1) name r
       ESectOp op _ => op == name
@@ -1758,7 +1756,6 @@ walkExprGo allow fuel src e =
       EAnn value ty _ => append (walkExprGo allow (fuel - 1) src value) (walkExprGo allow (fuel - 1) src ty)
       -- parser 中间产物（中缀链 / 括号）：显式递归，不静默丢子树。
       EInfix op l r _ => append (walkExprGo allow (fuel - 1) src l) (walkExprGo allow (fuel - 1) src r)
-      EParen inner _ => walkExprGo allow (fuel - 1) src inner
       -- keep 模式下保留的反引号中缀 / section：结构递归，不静默丢子树。
       EBacktick nm l r _ => append (walkExprGo allow (fuel - 1) src l) (walkExprGo allow (fuel - 1) src r)
       ESectOp op _ => []
@@ -2334,7 +2331,6 @@ walkTypeSyntax fuel src e =
       EDo stmts _ => walkTypeSyntaxStmts (fuel - 1) src stmts
       EAnn value ty _ => append (walkTypeSyntax (fuel - 1) src value) (walkTypeSyntax (fuel - 1) src ty)
       EInfix op l r _ => append (walkTypeSyntax (fuel - 1) src l) (walkTypeSyntax (fuel - 1) src r)
-      EParen inner _ => walkTypeSyntax (fuel - 1) src inner
       EBacktick nm l r _ => append (walkTypeSyntax (fuel - 1) src l) (walkTypeSyntax (fuel - 1) src r)
       ESectOp op _ => []
       ESectL op rhs _ => walkTypeSyntax (fuel - 1) src rhs
@@ -2689,7 +2685,7 @@ lintParsedWithConfig cfg programFixities source parsed =
       in case parseSuppression comments of
         ErrC e => ErrC e
         OkC suppression =>
-          case reorderProgram (tableOfKeepOps (append programFixities fx)) decls0 of
+          case reorderProgram (tableOfKeepOps parsed.parsedSurface (append programFixities fx)) decls0 of
             ErrC e => ErrC e
             OkC decls =>
               let

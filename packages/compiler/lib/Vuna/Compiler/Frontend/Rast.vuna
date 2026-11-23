@@ -73,9 +73,8 @@ export data Expr(..) : Type where
   -- （`Loader.Resolve.reorderProgram`），Elab / codegen 永远不应看到（残留即 internal
   -- error）；Fmt / Index / Lsp 在 parse 后处理它们。
   EInfix : String -> Expr -> Expr -> Span -> Expr
-  EParen : Expr -> Span -> Expr
   -- 反引号中缀 `` a `f` b ``（f 是普通值名或符号名；Loader 按名字查 fixity）。
-  -- 与 EInfix/EParen 同属 parser 中间产物：rename 模式（Loader 正常路径）后不存在。
+  -- 与 EInfix 同属 parser 中间产物：rename 模式（Loader 正常路径）后不存在。
   EBacktick : String -> Expr -> Expr -> Span -> Expr
   -- section：op 值 / 左 section / 右 section。同样是 parser 中间产物，
   -- Loader 在名字解析前消除成 EVar / lambda。
@@ -154,7 +153,6 @@ patSpan (PRecord name fields sp) = sp
 export exprSpan : Expr -> Span
 exprSpan (EVar name sp) = sp
 exprSpan (EInfix op lhs rhs sp) = sp
-exprSpan (EParen inner _) = exprSpan inner
 exprSpan (EBacktick name lhs rhs sp) = sp
 exprSpan (ESectOp op sp) = sp
 exprSpan (ESectL op rhs sp) = sp
@@ -206,7 +204,6 @@ exprWeight (EInt _ _) = 1
 exprWeight (EStr _ _) = 1
 exprWeight (EFloat _ _) = 1
 exprWeight (EInfix _ lhs rhs _) = 1 + exprWeight lhs + exprWeight rhs
-exprWeight (EParen inner _) = 1 + exprWeight inner
 exprWeight (EBacktick _ lhs rhs _) = 1 + exprWeight lhs + exprWeight rhs
 exprWeight (ESectOp _ _) = 1
 exprWeight (ESectL _ rhs _) = 1 + exprWeight rhs
@@ -537,10 +534,9 @@ ofExpr scope e =
     Ast.ERecUpdate base fields sp =>
       ERecUpdate (ofExpr scope base) (map (ofFieldValue scope) fields) (Ast.nodeRefSpan sp)
     Ast.EDo stmts sp => EDo (ofStmts scope stmts) (Ast.nodeRefSpan sp)
-    -- 中缀 / 括号 / 反引号 / section 在 Resolve 之后不应出现；保留同形转换以免转换层
+    -- 中缀 / 反引号 / section 在 Resolve 之后不应出现；保留同形转换以免转换层
     -- 自身成为失败点（出现即由下游的 internal error 诊断）。
     Ast.EInfix op l r sp => EInfix op (ofExpr scope l) (ofExpr scope r) (Ast.nodeRefSpan sp)
-    Ast.EParen inner sp => EParen (ofExpr scope inner) (Ast.nodeRefSpan sp)
     Ast.EBacktick name l r sp =>
       EBacktick name (ofExpr scope l) (ofExpr scope r) (Ast.nodeRefSpan sp)
     Ast.ESectOp op sp => ESectOp op (Ast.nodeRefSpan sp)

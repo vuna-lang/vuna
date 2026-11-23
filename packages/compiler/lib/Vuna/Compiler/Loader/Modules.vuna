@@ -12,6 +12,7 @@ import Base.Container.HashMap as HashMap
 import Base.Data.List as List
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Lexer
+import Vuna.Compiler.Frontend.Surface
 import Base.Trait.Eq as Eq
 import Vuna.Compiler.Frontend.Packages.Pkg
 import Base.Effect.Fs as EffFs
@@ -38,6 +39,9 @@ export record Module(..) where
   -- | 公开名 → 该名字的全部导出条目（保持 `moduleExportsOf` 里的顺序）。解析期按名字
   -- 查导出走这张表；裸导出表线性扫在每次名字解析里都会重扫一遍。
   moduleExportIndexOf : HashMap String (List ExportEntry)
+  -- | 该模块源码的表面形状（括号层数）：中缀重排要用它判定括号边界。接口加载的
+  -- 模块没有源码，是 `emptySurface`（这些模块的声明已重排过，不再走重排）。
+  moduleSurfaceOf : Surface
 
 -- 已加载项目：入口声明/import + 依赖模块列表（保持 flatten 前的形态）。
 -- entryPkg 用于按包限制 effectful 内建（普通包只能经 Eff + handler 使用效果）。
@@ -52,31 +56,33 @@ export record Project(..) where
   -- | 入口文件名（文件入口取 basename 去掉 `.vuna`；纯库包没有入口文件，取包名）。
   -- 内置宏展开用它当 `log!` 的模块 scope。
   projectEntryName : String
+  -- | 入口文件源码的表面形状（括号层数）：入口声明重排要用它判定括号边界。
+  projectEntrySurface : Surface
 
 export moduleNameOf : Module -> String
-moduleNameOf (Module n p is imps ds es fx _ _ _) = n
+moduleNameOf (Module n p is imps ds es fx _ _ _ _) = n
 
 export modulePackageOf : Module -> String
-modulePackageOf (Module n p is imps ds es fx _ _ _) = p
+modulePackageOf (Module n p is imps ds es fx _ _ _ _) = p
 
 export moduleAllImportsOf : Module -> List Import
-moduleAllImportsOf (Module n p is imps ds es fx _ _ _) = append is imps
+moduleAllImportsOf (Module n p is imps ds es fx _ _ _ _) = append is imps
 
 export moduleDeclsOf : Module -> List Decl
-moduleDeclsOf (Module n p is imps ds es fx _ _ _) = ds
+moduleDeclsOf (Module n p is imps ds es fx _ _ _ _) = ds
 
 export moduleFixitiesOf : Module -> List FixityDecl
-moduleFixitiesOf (Module n p is imps ds es fx _ _ _) = fx
+moduleFixitiesOf (Module n p is imps ds es fx _ _ _ _) = fx
 
 -- | 模块重导出的 import 名（见 Module 字段注释）。
 export moduleReexportsOf : Module -> List String
-moduleReexportsOf (Module n p is imps ds es fx reexports _ _) = reexports
+moduleReexportsOf (Module n p is imps ds es fx reexports _ _ _) = reexports
 
 export moduleOpaqueOf : Module -> List String
-moduleOpaqueOf (Module n p is imps ds es fx reexports opacity _) = opacity
+moduleOpaqueOf (Module n p is imps ds es fx reexports opacity _ _) = opacity
 
 export projectEntryAllImports : Project -> List Import
-projectEntryAllImports (Project ds is imps ms pkg fx entryName) = append is imps
+projectEntryAllImports (Project ds is imps ms pkg fx entryName surface) = append is imps
 
 -- 解析期的三个命名空间，与导出表 kind 一一对应，**不拍平**。
 --   values = 值命名空间（DFun / 签名 / 实例名；导出 kind "val"）
@@ -327,7 +333,7 @@ missingModule name =
 export moduleDecls : List Module -> String -> Check (List Decl)
 moduleDecls modules name =
   case findModule modules name of
-    Just (Module mname mpkg imports imps decls exports fx _ _ _) => OkC decls
+    Just (Module mname mpkg imports imps decls exports fx _ _ _ _) => OkC decls
     Nothing => missingModule name
 
 moduleCtors : List Module -> String -> Check (List String)
@@ -387,7 +393,7 @@ resolvePathModule modules segs n =
 export exportsOf : List Module -> String -> Check (List ExportEntry)
 exportsOf modules name =
   case findModule modules (resolvedName modules name) of
-    Just (Module mname mpkg imports imps decls exports fx _ _ _) => OkC exports
+    Just (Module mname mpkg imports imps decls exports fx _ _ _ _) => OkC exports
     Nothing => missingModule name
 
 resolvedName : List Module -> String -> String
@@ -666,7 +672,7 @@ export walkNamespaceIndex : List Module -> String -> List String -> Maybe String
 walkNamespaceIndex modules m segs = walkNamespaceIndexFuel (1 + List.length segs) modules m segs
 
 export moduleExportIndexOfOf : Module -> HashMap String (List ExportEntry)
-moduleExportIndexOfOf (Module _ _ _ _ _ _ _ _ _ idx) = idx
+moduleExportIndexOfOf (Module _ _ _ _ _ _ _ _ _ idx _) = idx
 
 walkNamespaceIndexFuel : Int -> List Module -> String -> List String -> Maybe String
 walkNamespaceIndexFuel fuel modules m segs =
@@ -702,9 +708,9 @@ dropFirst n (x :: rest) = if n <= 0 then (::) x rest else dropFirst (n - 1) rest
 
 export findModule : List Module -> String -> Maybe Module
 findModule [] name = Nothing
-findModule ((Module mname mpkg imports imps decls exports fx reexports opacity idx) :: rest) name =
+findModule ((Module mname mpkg imports imps decls exports fx reexports opacity idx surface) :: rest) name =
   if mname == name then
-    Just (Module mname mpkg imports imps decls exports fx reexports opacity idx)
+    Just (Module mname mpkg imports imps decls exports fx reexports opacity idx surface)
   else
     findModule rest name
 

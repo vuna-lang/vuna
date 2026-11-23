@@ -153,7 +153,7 @@ buildModuleWith pkg path source parsed looked =
     OkC programFixities =>
       case parsed.parsedFile of
         SourceFile hdr imports fx decls0 _ _ _ =>
-          case reorderProgram (tableOfKeepOps (append programFixities fx)) decls0 of
+          case reorderProgram (tableOfKeepOps parsed.parsedSurface (append programFixities fx)) decls0 of
             ErrC e => (env2, err "${path}: ${diagText e}")
             OkC decls =>
               let

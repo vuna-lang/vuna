@@ -175,23 +175,25 @@ goalRun file =
     case textR of
       ErrC e => toolError (diagText e)
       OkC source =>
-        case parseSource file source of
+        case parseSourceDetailed file source of
           ErrC e => toolFailure (diagText e)
-          OkC (SourceFile _ _ fx decls0 _ _ _) =>
-            do
-              looked <- fixitiesForFile emptyFixityEnv file source
-              case secondOf looked of
-                ErrC e => toolFailure (diagText e)
-                OkC programFixities =>
-                  case reorderProgram (tableOfKeepOps (append programFixities fx)) decls0 of
+          OkC parsed =>
+            case parsed.parsedFile of
+              SourceFile _ _ fx decls0 _ _ _ =>
+                do
+                  looked <- fixitiesForFile emptyFixityEnv file source
+                  case secondOf looked of
                     ErrC e => toolFailure (diagText e)
-                    OkC decls =>
-                      case goalsOfProgramTolerant (toRastDecls decls) of
+                    OkC programFixities =>
+                      case reorderProgram (tableOfKeepOps parsed.parsedSurface (append programFixities fx)) decls0 of
                         ErrC e => toolFailure (diagText e)
-                        OkC infos =>
-                          do
-                            _ <- consolePrint (goalHeader file (length infos) ++ renderGoals file infos)
-                            pure 0
+                        OkC decls =>
+                          case goalsOfProgramTolerant (toRastDecls decls) of
+                            ErrC e => toolFailure (diagText e)
+                            OkC infos =>
+                              do
+                                _ <- consolePrint (goalHeader file (length infos) ++ renderGoals file infos)
+                                pure 0
 
 -- | 内部：逐个洞渲染 `位置: goal <标签>` 行，后接上下文变量行。
 renderGoals : String -> List DtGoalInfo -> String

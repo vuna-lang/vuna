@@ -26,11 +26,12 @@ trait 方法、instance 方法与 data 构造子都可以用符号名声明。
 
 ## 机制（`Vuna.Compiler.Loader.Fixity`）
 
-1. **parser 不做优先级**：任意中缀符号链收成右嵌套的 `EInfix` / `EBacktick`，括号收成
-   `EParen`（保留分组边界）；`::` 在 pattern 里也保留符号原形。
+1. **parser 不做优先级**：任意中缀符号链收成右嵌套的 `EInfix` / `EBacktick`；`::` 在
+   pattern 里也保留符号原形。括号**不建 AST 节点**（纯书写形式，分组边界由树按节点 id
+   记录，见 `Frontend.Surface` 的括号层数）。
 2. **Loader 在名字解析之前重排**：按模块可见 fixity 表做 precedence climbing，把链重排成
    `EApp` / `EPi`；同一步完成 **section 展开**。
-3. **重排后 AST 里没有 `EInfix` / `EBacktick` / `ESect*` / `EParen`**：Elab / codegen 看到的是
+3. **重排后 AST 里没有 `EInfix` / `EBacktick` / `ESect*`**：Elab / codegen 看到的是
    普通应用；`Resolve` 对残留节点报 internal error（不静默透传）。
 4. **fixity 唯一来源 = 源码里的 `infixl` / `infixr` / `infix` 声明**（库或用户）；
    base 侧的全部声明集中在 `Base.Internal.Operator`（定义模块 import 它），用户模块仍就地声明。

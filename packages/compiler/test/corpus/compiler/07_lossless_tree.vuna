@@ -241,7 +241,6 @@ exprSitesAt fuel e =
           EDo stmts r => concatMap (stmtSites (fuel - 1)) stmts
           EAnn inner ty r => append (exprSitesAt (fuel - 1) inner) (exprSitesAt (fuel - 1) ty)
           EInfix op l rhs r => append (exprSitesAt (fuel - 1) l) (exprSitesAt (fuel - 1) rhs)
-          EParen inner r => exprSitesAt (fuel - 1) inner
           EBacktick nm l rhs r => append (exprSitesAt (fuel - 1) l) (exprSitesAt (fuel - 1) rhs)
           ESectOp op r => []
           ESectL op inner r => exprSitesAt (fuel - 1) inner
@@ -469,7 +468,6 @@ bodyPatRefs e =
     ESectL op inner _ => bodyPatRefs inner
     ESectR inner op _ => bodyPatRefs inner
     EInfix op l r _ => append (bodyPatRefs l) (bodyPatRefs r)
-    EParen inner _ => bodyPatRefs inner
     EInterp multi parts _ => []
 
 -- | 一条绑定 / 一个分支贡献的 pat 引用（分支体 / 绑定值继续递归）。

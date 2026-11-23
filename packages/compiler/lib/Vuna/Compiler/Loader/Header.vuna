@@ -64,10 +64,10 @@ parseAndStore path srcDigest raw =
     parsed <- parseFileWithPath path raw
     case parsed of
       ErrC _ => pure []
-      OkC sf =>
+      OkC parsedFile =>
         let
           -- 模块名来自路径而不是源字节，所以头里不需要它：缓存的是名字无关的 import 边。
-          hdr = headerOfSource "" sf
+          hdr = headerOfSource "" (firstOf parsedFile)
           names = hdr.mhImports
         in do
           _ <- storeObjectWriteEff headerKind headerCodec (headerObjKey srcDigest) (encImports names)

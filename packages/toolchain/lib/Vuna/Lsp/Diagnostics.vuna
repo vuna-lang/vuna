@@ -782,15 +782,17 @@ goalsLocalOrFull allowFull cache ctx label text =
         case secondOf looked of
           ErrC e => []
           OkC programFixities =>
-            case parseSource label text of
+            case parseSourceDetailed label text of
               ErrC e => []
-              OkC (SourceFile hdr imports fx decls0 _ _ _) =>
-                case reorderProgram (tableOfKeepOps (append programFixities fx)) decls0 of
-                  ErrC e => []
-                  OkC decls =>
-                    case goalsOfProgramTolerant (toRastDecls decls) of
+              OkC parsed =>
+                case parsed.parsedFile of
+                  SourceFile _ _ fx decls0 _ _ _ =>
+                    case reorderProgram (tableOfKeepOps parsed.parsedSurface (append programFixities fx)) decls0 of
                       ErrC e => []
-                      OkC gs => gs
+                      OkC decls =>
+                        case goalsOfProgramTolerant (toRastDecls decls) of
+                          ErrC e => []
+                          OkC gs => gs
     in if allowFull then
       do
         _ <- pure (obsMark "vuna.lsp.goals.full")

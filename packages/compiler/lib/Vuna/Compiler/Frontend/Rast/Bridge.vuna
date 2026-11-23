@@ -38,7 +38,6 @@ toAstExpr (Rast.ERecUpdate base fields sp) =
 toAstExpr (Rast.EDo stmts sp) = Ast.EDo (map toAstStmt stmts) (Ast.detachedNodeRef sp)
 toAstExpr (Rast.EInfix op l r sp) =
   Ast.EInfix op (toAstExpr l) (toAstExpr r) (Ast.detachedNodeRef sp)
-toAstExpr (Rast.EParen inner sp) = Ast.EParen (toAstExpr inner) (Ast.detachedNodeRef sp)
 toAstExpr (Rast.EBacktick name l r sp) =
   Ast.EBacktick name (toAstExpr l) (toAstExpr r) (Ast.detachedNodeRef sp)
 toAstExpr (Rast.ESectOp op sp) = Ast.ESectOp op (Ast.detachedNodeRef sp)

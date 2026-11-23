@@ -153,13 +153,16 @@ export data Expr(..) : Type where
   ERecord : String -> List (String, Expr) -> NodeRef -> Expr
   ERecUpdate : Expr -> List (String, Expr) -> NodeRef -> Expr
   EDo : List DoStmt -> NodeRef -> Expr
-  -- 中缀链与括号。parser 的**中间产物**：Loader 按 fixity 表重排并消除它们
+  -- 中缀链。parser 的**中间产物**：Loader 按 fixity 表重排并消除它们
   -- （`Loader.Resolve.reorderProgram`），Elab / codegen 永远不应看到（残留即 internal
   -- error）；Fmt / Index / Lsp 在 parse 后处理它们。
+  --
+  -- 括号不在 AST 里：它是纯书写形式，由树记录、按节点 id 查
+  -- （`Frontend.Surface.surfaceParenDepth`）；需要括号边界的消费者（Fmt 打印、
+  -- 中缀重排）都读那份表面形状。
   EInfix : String -> Expr -> Expr -> NodeRef -> Expr
-  EParen : Expr -> NodeRef -> Expr
   -- 反引号中缀 `` a `f` b ``（f 是普通值名或符号名；Loader 按名字查 fixity）。
-  -- 与 EInfix/EParen 同属 parser 中间产物：rename 模式（Loader 正常路径）后不存在。
+  -- 与 EInfix 同属 parser 中间产物：rename 模式（Loader 正常路径）后不存在。
   EBacktick : String -> Expr -> Expr -> NodeRef -> Expr
   -- section：op 值 / 左 section / 右 section。同样是 parser 中间产物，
   -- Loader 在名字解析前消除成 EVar / lambda。
@@ -376,10 +379,8 @@ fieldPatOf fn ((n, p) :: rest) = if n == fn then Just p else fieldPatOf fn rest
 export clauseSubsumedBy : List Pat -> List Pat -> Bool
 clauseSubsumedBy ps qs = subsumePatList ps qs
 
--- | 表达式的**位置**：`EParen` 只看内层（括号不是表达式的语义位置），其余就是
--- 节点区间。需要节点身份时用 `exprRef`。
+-- | 表达式的**位置**：节点区间。需要节点身份时用 `exprRef`。
 export exprSpan : Expr -> Span
-exprSpan (EParen inner r) = exprSpan inner
 exprSpan e = nodeRefSpan (exprRef e)
 
 -- | 把表达式**根构造子**的 id 换成给定值，区间保持不变（parser 在 `parseExpr` 的
@@ -394,7 +395,6 @@ withExprId nid e = withExprRef (NodeRef nid (nodeRefSpan (exprRef e))) e
 export withExprRef : NodeRef -> Expr -> Expr
 withExprRef r (EVar name _) = EVar name r
 withExprRef r (EInfix op lhs rhs _) = EInfix op lhs rhs r
-withExprRef r (EParen inner _) = EParen inner r
 withExprRef r (EBacktick name lhs rhs _) = EBacktick name lhs rhs r
 withExprRef r (ESectOp op _) = ESectOp op r
 withExprRef r (ESectL op rhs _) = ESectL op rhs r
@@ -420,7 +420,6 @@ withExprRef r (EInterp multi parts _) = EInterp multi parts r
 export exprRef : Expr -> NodeRef
 exprRef (EVar name r) = r
 exprRef (EInfix op lhs rhs r) = r
-exprRef (EParen inner r) = r
 exprRef (EBacktick name lhs rhs r) = r
 exprRef (ESectOp op r) = r
 exprRef (ESectL op rhs r) = r

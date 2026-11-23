@@ -5,6 +5,7 @@ import Base.Container.HashMap as HashMap
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Manifest
+import Vuna.Compiler.Frontend.Surface
 import Vuna.Compiler.Frontend.Packages.Pkg
 import Vuna.Compiler.Loader.Layers
 import Vuna.Compiler.Loader.Modules
@@ -61,7 +62,8 @@ mkProject imports =
     []
     []
     []
-    [Module "L.A.One" "p" (map mkImport imports) [] [] [] [] [] [] emptyIndex]
+    [Module "L.A.One" "p" (map mkImport imports) [] [] [] [] [] [] emptyIndex emptySurface]
     "p"
     []
     "main"
+    emptySurface

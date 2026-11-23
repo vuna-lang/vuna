@@ -597,7 +597,6 @@ patLabelUse ctx startPos (fname, p) =
 moduleLike : Expr -> Bool
 moduleLike (EVar n _) = upperStart n
 moduleLike (EField base fname _) = moduleLike base
-moduleLike (EParen inner _) = moduleLike inner
 moduleLike _ = False
 
 -- | 内部：`x.fname` 里 `fname` 的位置（目标为记录字段、或 `base` 像模块前缀时才取值）——
@@ -669,7 +668,6 @@ usesInExpr fuel ctx e =
       ESectL op inner _ => usesInExpr (fuel - 1) ctx inner
       ESectR inner op _ => usesInExpr (fuel - 1) ctx inner
       EInfix op lhs rhs _ => append (usesInExpr (fuel - 1) ctx lhs) (usesInExpr (fuel - 1) ctx rhs)
-      EParen inner _ => usesInExpr (fuel - 1) ctx inner
 
 -- | 内部：模式里的使用位置——`PCon` 取构造子名，`PRecord` 取类型名与字段标签，
 -- `PVar` / 通配 / 字面量不产位置。

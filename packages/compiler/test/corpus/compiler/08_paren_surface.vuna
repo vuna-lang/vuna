@@ -1,0 +1,139 @@
+-- 括号表面形状（`Frontend.Surface`）：括号不在 AST 里，层数由建树事件 + 词法 token 派生，
+-- 按表达式节点的 id 查。覆盖四种位置：
+--   * 包装节点（定义体 / 中缀右操作数 / 括号内层，`(a)` / `((a))`）；
+--   * 原子位置括号（应用实参 / 中缀链左端，`f (a)` / `(f a) b` / `(a + b) * c`）；
+--   * 不该算括号的邻近 token（元组 / ascribe / section / 列表）；
+--   * 模板洞（独立 token 子流，条目由洞的子解析交回主表）。
+import Prelude
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.Cst
+import Vuna.Compiler.Frontend.Parser
+import Vuna.Compiler.Frontend.Surface
+
+-- | 解析 `x = <src>`，取定义体与表面形状。
+parseBody : String -> Maybe (Surface, Expr)
+parseBody src =
+  case parseSourceDetailed "<paren>" ("x = " ++ src ++ "\n") of
+    ErrC _ => Nothing
+    OkC p =>
+      case p.parsedFile.sourceFileDecls of
+        [DFun _ _ body _] => Just (p.parsedSurface, body)
+        _ => Nothing
+
+-- | 表达式节点的括号层数。
+depthOf : Surface -> Expr -> Int
+depthOf s e = parenDepthOf s (nodeRefId (exprRef e))
+
+-- | `(a)`：包装节点，1 层。
+wrappedOk : Bool
+wrappedOk =
+  case parseBody "(a)" of
+    Just (s, body) => depthOf s body == 1
+    Nothing => False
+
+-- | `((a))`：两层包装叠在同一个区间根上。
+nestedOk : Bool
+nestedOk =
+  case parseBody "((a))" of
+    Just (s, body) => depthOf s body == 2
+    Nothing => False
+
+-- | `(f a) b`：函数位置的括号（原子位置，不另开表达式节点）。
+fnParenOk : Bool
+fnParenOk =
+  case parseBody "(f a) b" of
+    Just (s, body) =>
+      case body of
+        EApp fn args _ => depthOf s fn == 1 && depthOf s body == 0
+        _ => False
+    Nothing => False
+
+-- | `f (a)`：实参位置的括号。
+argParenOk : Bool
+argParenOk =
+  case parseBody "f (a)" of
+    Just (s, body) =>
+      case body of
+        EApp _ (arg :: _) _ => depthOf s arg == 1
+        _ => False
+    Nothing => False
+
+-- | `(a, b)`：元组自带括号，但不是「表达式被括号包住」。
+tupleOk : Bool
+tupleOk =
+  case parseBody "(a, b)" of
+    Just (s, body) =>
+      case body of
+        EApp _ args _ => depthOf s body == 0 && allZero s args
+        _ => False
+    Nothing => False
+
+allZero : Surface -> List Expr -> Bool
+allZero s [] = True
+allZero s (e :: rest) = depthOf s e == 0 && allZero s rest
+
+-- | `a * (b + c)`：右操作数是括号边界（重排不能把它并进链）。
+infixRhsOk : Bool
+infixRhsOk =
+  case parseBody "a * (b + c)" of
+    Just (s, body) =>
+      case body of
+        EInfix _ l r _ => depthOf s l == 0 && depthOf s r == 1
+        _ => False
+    Nothing => False
+
+-- | `(a + b) * c`：中缀链左端也能认出括号（这里没有包装节点）。
+infixLhsOk : Bool
+infixLhsOk =
+  case parseBody "(a + b) * c" of
+    Just (s, body) =>
+      case body of
+        EInfix _ l r _ => depthOf s l == 1 && depthOf s r == 0
+        _ => False
+    Nothing => False
+
+-- | `(+)`：section 自带的括号不是表面括号。
+sectionOk : Bool
+sectionOk =
+  case parseBody "(+)" of
+    Just (s, body) =>
+      case body of
+        ESectOp _ _ => depthOf s body == 0
+        _ => False
+    Nothing => False
+
+-- | `[a]`：方括号不是圆括号。
+listOk : Bool
+listOk =
+  case parseBody "[a]" of
+    Just (s, body) =>
+      case body of
+        EApp _ (elem :: _) _ => depthOf s body == 0 && depthOf s elem == 0
+        _ => False
+    Nothing => False
+
+-- | `"""${(a + b) * c}"""`：洞内表达式的括号由洞的子解析交回主表。
+holeOk : Bool
+holeOk =
+  case parseBody "\"\"\"\${(a + b) * c}\"\"\"" of
+    Just (s, body) =>
+      case body of
+        EInterp _ ((IPHole hole) :: _) _ =>
+          case hole of
+            EInfix _ l r _ => depthOf s l == 1 && depthOf s r == 0
+            _ => False
+        _ => False
+    Nothing => False
+
+bit : Bool -> Int -> Int
+bit ok w = if ok then w else 0
+
+main : Int
+main =
+  bit wrappedOk 1
+    + bit nestedOk 2
+    + bit fnParenOk 4
+    + bit argParenOk 8
+    + bit tupleOk 16
+    + bit infixRhsOk 32 + bit infixLhsOk 64 + bit sectionOk 128 + bit listOk 256 + bit holeOk 512

@@ -474,8 +474,8 @@ refsInExprGo sMod e acc =
     ERecUpdate r fields _ => refsInExprGo sMod r (refsInFields sMod fields acc)
     EDo stmts _ => refsInDoStmts sMod stmts acc
     EAnn value ty _ => refsInExprGo sMod value (refsInExprGo sMod ty acc)
-    -- keep 模式（index/fmt）下反引号中缀与 section **保留原形**（不像 EParen/EInfix
-    -- 会被重排消掉），所以这里必须显式处理：反引号里的名字本身也是引用，操作数继续递归，
+    -- keep 模式（index/fmt）下反引号中缀与 section **保留原形**（不像 EInfix 会被重排
+    -- 消掉），所以这里必须显式处理：反引号里的名字本身也是引用，操作数继续递归，
     -- 不能静默丢整棵子树。
     EBacktick nm l r sp =>
       refsInExprGo
@@ -500,7 +500,6 @@ refsInExprGo sMod e acc =
         sMod
         l
         (refsInExprGo sMod r (Ref sMod op (spanStartLine (nodeRefSpan sp)) (spanStartCol (nodeRefSpan sp)) :: acc))
-    EParen inner _ => refsInExprGo sMod inner acc
 
 -- | 内部：模板字面量各片段里的引用——洞内表达式递归，文本块没有引用。
 refsInInterpParts : String -> List InterpPart -> List Ref -> List Ref
@@ -557,7 +556,7 @@ indexOneExisting env dir pkgName path =
                 -- 本地优先）。只用本地声明会让用到 `+`/`==`/`::` 的文件报 unknown fixity，
                 -- 然后被当错误跳过 → `vuna map` 静默漏模块。
                 SourceFile srcHdr imports fx decls0 _ _ _ =>
-                  case reorderProgram (tableOfKeepOps (append programFixities fx)) decls0 of
+                  case reorderProgram (tableOfKeepOps parsed.parsedSurface (append programFixities fx)) decls0 of
                     ErrC e => pure (env2, err "${path}: ${diagText e}")
                     OkC decls =>
                       let

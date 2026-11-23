@@ -257,14 +257,13 @@ encExpr (ERecord name fields _) acc = encTag 11 (encStr name (encStrExprList fie
 encExpr (ERecUpdate base fields _) acc = encTag 12 (encExpr base (encStrExprList fields acc))
 encExpr (EDo stmts _) acc = encTag 13 (encStmtList stmts acc)
 encExpr (EInfix op lhs rhs _) acc = encTag 14 (encStr op (encExpr lhs (encExpr rhs acc)))
-encExpr (EParen inner _) acc = encTag 15 (encExpr inner acc)
-encExpr (EBacktick name lhs rhs _) acc = encTag 16 (encStr name (encExpr lhs (encExpr rhs acc)))
-encExpr (ESectOp op _) acc = encTag 17 (encStr op acc)
-encExpr (ESectL op rhs _) acc = encTag 18 (encStr op (encExpr rhs acc))
-encExpr (ESectR lhs op _) acc = encTag 19 (encExpr lhs (encStr op acc))
-encExpr (EAnn inner ty _) acc = encTag 20 (encExpr inner (encExpr ty acc))
-encExpr (EInterp multi parts _) acc = encTag 21 (encBool multi (encPartList parts acc))
-encExpr (EFloat raw _) acc = encTag 22 (encStr raw acc)
+encExpr (EBacktick name lhs rhs _) acc = encTag 15 (encStr name (encExpr lhs (encExpr rhs acc)))
+encExpr (ESectOp op _) acc = encTag 16 (encStr op acc)
+encExpr (ESectL op rhs _) acc = encTag 17 (encStr op (encExpr rhs acc))
+encExpr (ESectR lhs op _) acc = encTag 18 (encExpr lhs (encStr op acc))
+encExpr (EAnn inner ty _) acc = encTag 19 (encExpr inner (encExpr ty acc))
+encExpr (EInterp multi parts _) acc = encTag 20 (encBool multi (encPartList parts acc))
+encExpr (EFloat raw _) acc = encTag 21 (encStr raw acc)
 
 -- | `Ctor` 的规范编码：data 构造子：名字 / 类型 / arity；`span` 丢弃。
 encCtor : Ctor -> List String -> List String
@@ -555,10 +554,6 @@ decExpr fuel bytes =
                       Nothing => Nothing
                       Just (v3, b4) => Just (EInfix v1 v2 v3 (detachedNodeRef noSpan), b4)
           15 =>
-            case decExpr (fuel - 1) b1 of
-              Nothing => Nothing
-              Just (v1, b2) => Just (EParen v1 (detachedNodeRef noSpan), b2)
-          16 =>
             case decStr (fuel - 1) b1 of
               Nothing => Nothing
               Just (v1, b2) =>
@@ -568,39 +563,39 @@ decExpr fuel bytes =
                     case decExpr (fuel - 1) b3 of
                       Nothing => Nothing
                       Just (v3, b4) => Just (EBacktick v1 v2 v3 (detachedNodeRef noSpan), b4)
-          17 =>
+          16 =>
             case decStr (fuel - 1) b1 of
               Nothing => Nothing
               Just (v1, b2) => Just (ESectOp v1 (detachedNodeRef noSpan), b2)
-          18 =>
+          17 =>
             case decStr (fuel - 1) b1 of
               Nothing => Nothing
               Just (v1, b2) =>
                 case decExpr (fuel - 1) b2 of
                   Nothing => Nothing
                   Just (v2, b3) => Just (ESectL v1 v2 (detachedNodeRef noSpan), b3)
-          19 =>
+          18 =>
             case decExpr (fuel - 1) b1 of
               Nothing => Nothing
               Just (v1, b2) =>
                 case decStr (fuel - 1) b2 of
                   Nothing => Nothing
                   Just (v2, b3) => Just (ESectR v1 v2 (detachedNodeRef noSpan), b3)
-          20 =>
+          19 =>
             case decExpr (fuel - 1) b1 of
               Nothing => Nothing
               Just (v1, b2) =>
                 case decExpr (fuel - 1) b2 of
                   Nothing => Nothing
                   Just (v2, b3) => Just (EAnn v1 v2 (detachedNodeRef noSpan), b3)
-          21 =>
+          20 =>
             case decBool (fuel - 1) b1 of
               Nothing => Nothing
               Just (v1, b2) =>
                 case decList decInterpPart (fuel - 1) b2 of
                   Nothing => Nothing
                   Just (v2, b3) => Just (EInterp v1 v2 (detachedNodeRef noSpan), b3)
-          22 =>
+          21 =>
             case decStr (fuel - 1) b1 of
               Nothing => Nothing
               Just (v1, b2) => Just (EFloat v1 (detachedNodeRef noSpan), b2)

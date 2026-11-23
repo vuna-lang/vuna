@@ -106,7 +106,7 @@ membersSuffix (Just (EMOnly ms)) = "(${joinComma ms})"
 -- 声明渲染
 -- ---------------------------------------------------------------
 -- | 内部：渲染单个声明并贴上它的注释。
-renderDeclAt : FmtDeclMods -> List FixityDecl -> TriviaCtx -> Decl -> Doc
+renderDeclAt : FmtDeclMods -> List FixityDecl -> FmtCtx -> Decl -> Doc
 renderDeclAt mods env at decl = attachAtTop at (declRef decl) (renderDeclBody mods env at decl)
 
 -- | 内部：声明头 + 缩进 2 的体（空体只输出头）。
@@ -122,7 +122,7 @@ derivingBlock : List Doc -> Doc
 derivingBlock docs = if isNilList docs then empty else appendDoc hard (vsep docs)
 
 -- | 内部：按声明种类分发到具体渲染。
-renderDeclBody : FmtDeclMods -> List FixityDecl -> TriviaCtx -> Decl -> Doc
+renderDeclBody : FmtDeclMods -> List FixityDecl -> FmtCtx -> Decl -> Doc
 renderDeclBody mods env at (DData name params kind ctors derivings viaField repr lin sp) =
   let
     prefix = lookupText name mods.fdmPrefix ++ declPrefix repr lin
@@ -141,7 +141,7 @@ renderDeclBody mods env at (DExtern name cName ty sp) =
     (lookupText name mods.fdmPrefix ++ "extern ${name} ${strShow cName} : " ++ renderTypeExpr env at ty)
 renderDeclBody mods env at (DSig name ctx ty sp) =
   text
-    (lookupText name mods.fdmPrefix ++ declNameText name ++ " : " ++ renderInstanceCtx env ctx ++ renderTypeExpr env at ty)
+    (lookupText name mods.fdmPrefix ++ declNameText name ++ " : " ++ renderInstanceCtx env at ctx ++ renderTypeExpr env at ty)
 renderDeclBody mods env at (DFun name pats body sp) = renderClause env at name pats body
 renderDeclBody mods env at (DRecord name params fields derivings viaField repr lin sp) =
   let
@@ -156,7 +156,7 @@ renderDeclBody mods env at (DTrait name params supers methods sp) =
   let
     members = membersSuffix (lookupMembersText name mods.fdmMembers)
     header =
-      "${lookupText name mods.fdmPrefix}trait ${renderInstanceCtx env supers}${name}${joinSpace (map (traitParamText env at) params)}${members} where"
+      "${lookupText name mods.fdmPrefix}trait ${renderInstanceCtx env at supers}${name}${joinSpace (map (traitParamText env at) params)}${members} where"
     methodDocs = map (renderMethodSig env at) methods
   in if isNilList methodDocs then
     text header
@@ -164,7 +164,7 @@ renderDeclBody mods env at (DTrait name params supers methods sp) =
     appendDoc (text header) (nest 2 (appendDoc hard (vsep methodDocs)))
 renderDeclBody mods env at (DInstance ctxE head methods sp) =
   let
-    headD = appendDoc (text "instance ${renderInstanceCtx env ctxE}") (renderExpr env at head)
+    headD = appendDoc (text "instance ${renderInstanceCtx env at ctxE}") (renderExpr env at head)
     header = appendDoc headD (text " where")
     methodDocs = map (renderDeclAt emptyFmtDeclMods env at) methods
   in if isNilList methodDocs then
@@ -184,7 +184,7 @@ isNameStart : Int -> Bool
 isNameStart c = c >= 65 && c <= 90 || c >= 97 && c <= 122 || c == 95
 
 -- | 内部：构造器行 `Ctor : Ty`（缩进 2）并贴上其注释。
-renderCtorDecl : List FixityDecl -> TriviaCtx -> Ctor -> Doc
+renderCtorDecl : List FixityDecl -> FmtCtx -> Ctor -> Doc
 renderCtorDecl env at (Ctor cname ty arity r) =
   attachAt at r (text "${declNameText cname} : ${renderTypeExpr env at ty}")
 
@@ -198,17 +198,17 @@ renderDerivings viaField names =
     [text "deriving (${joinComma names})"]
 
 -- | 内部：字段行 `name : Ty`（缩进 2）并贴上其注释。
-renderRecordField : List FixityDecl -> TriviaCtx -> Field -> Doc
+renderRecordField : List FixityDecl -> FmtCtx -> Field -> Doc
 renderRecordField env at f =
   attachAt at f.fieldRef (text "${fieldName f} : ${renderTypeExpr env at (fieldType f)}")
 
 -- | 内部：trait 参数文本（无 kind 时只写名字，有 kind 时 `(a : K)`）。
-traitParamText : List FixityDecl -> TriviaCtx -> TraitParam -> String
+traitParamText : List FixityDecl -> FmtCtx -> TraitParam -> String
 traitParamText env at (TraitParam n Nothing) = n
 traitParamText env at (TraitParam n (Just k)) = "(${n} : ${renderTypeExpr env at k})"
 
 -- | 内部：trait 方法签名行 `name : Ty`（缩进 2）并贴上其注释。
-renderMethodSig : List FixityDecl -> TriviaCtx -> TraitMethod -> Doc
+renderMethodSig : List FixityDecl -> FmtCtx -> TraitMethod -> Doc
 renderMethodSig env at m =
   attachAt
     at
@@ -216,9 +216,9 @@ renderMethodSig env at m =
     (text "${declNameText (traitMethodName m)} : ${renderTypeExpr env at m.traitMethodType}")
 
 -- | 内部：实例上下文 `C a, C b => `（空上下文输出空串）。
-renderInstanceCtx : List FixityDecl -> List Expr -> String
-renderInstanceCtx env [] = ""
-renderInstanceCtx env ctxE = "${joinTexts ", " (map (renderOneCtx env) ctxE)} => "
+renderInstanceCtx : List FixityDecl -> FmtCtx -> List Expr -> String
+renderInstanceCtx env at [] = ""
+renderInstanceCtx env at ctxE = "${joinTexts ", " (map (renderOneCtx env at) ctxE)} => "
 
 -- | 内部：用分隔串连接字符串列表（单元素不追加分隔串）。
 joinTexts : String -> List String -> String
@@ -227,15 +227,15 @@ joinTexts sep ([x]) = x
 joinTexts sep (x :: rest) = x ++ sep ++ joinTexts sep rest
 
 -- | 内部：单条上下文文本；渲不出单行时给占位 `…`。
-renderOneCtx : List FixityDecl -> Expr -> String
-renderOneCtx env e =
-  case inlineExpr env e of
+renderOneCtx : List FixityDecl -> FmtCtx -> Expr -> String
+renderOneCtx env at e =
+  case inlineExpr env at e of
     Just s => s
     Nothing => "…"
 
 -- | 内部：函数子句（顶层 / instance 方法 / where 绑定共用）；body 是 `ELet .. True`
 -- 时按 where 形式还原。
-renderClause : List FixityDecl -> TriviaCtx -> String -> List Pat -> Expr -> Doc
+renderClause : List FixityDecl -> FmtCtx -> String -> List Pat -> Expr -> Doc
 renderClause env at name pats body =
   let
     header = "${declNameText name}${joinSpace (map renderPatAtom pats)}"
@@ -254,13 +254,13 @@ renderClause env at name pats body =
 -- 顶层声明序列
 -- ---------------------------------------------------------------
 -- | 内部：顶层声明序列：不同函数之间一个空行；类型签名紧贴同名函数子句。
-renderTopDecls : FmtDeclMods -> List FixityDecl -> TriviaCtx -> List Decl -> Doc
+renderTopDecls : FmtDeclMods -> List FixityDecl -> FmtCtx -> List Decl -> Doc
 renderTopDecls mods env at [] = empty
 renderTopDecls mods env at (d :: rest) =
   appendDoc (renderDeclAt mods env at d) (renderTopRest mods env at d rest)
 
 -- | 内部：渲染余下声明，按 `attachDecl` 决定是否与上一条之间空行。
-renderTopRest : FmtDeclMods -> List FixityDecl -> TriviaCtx -> Decl -> List Decl -> Doc
+renderTopRest : FmtDeclMods -> List FixityDecl -> FmtCtx -> Decl -> List Decl -> Doc
 renderTopRest mods env at prev [] = empty
 renderTopRest mods env at prev (d :: rest) =
   let
@@ -282,13 +282,13 @@ declNamed _ n = False
 -- 模块头 / import / `infix*` 声明 / 文件组装
 -- ---------------------------------------------------------------
 -- | 内部：模块头：显式导出列表（排序后输出）或 `module M where`。
-renderModDecl : TriviaCtx -> ModDecl -> Doc
+renderModDecl : FmtCtx -> ModDecl -> Doc
 renderModDecl at (ModDecl name True items _ _ _ r) =
   renderExplicitModDecl at name (sortExports items)
 renderModDecl at (ModDecl name False items _ _ _ r) = text "module ${name} where"
 
 -- | 内部：显式导出列表：空列表与短列表保持单行；超宽或含项注释时逐项一行。
-renderExplicitModDecl : TriviaCtx -> String -> List ExportItem -> Doc
+renderExplicitModDecl : FmtCtx -> String -> List ExportItem -> Doc
 renderExplicitModDecl at name [] = text "module ${name} () where"
 renderExplicitModDecl at name sorted =
   if anyItemHasComments at sorted then
@@ -297,7 +297,7 @@ renderExplicitModDecl at name sorted =
     group (appendDoc (text "module ${name} (") (appendDoc (commaItems at sorted) (text ") where")))
 
 -- | 内部：导出项逐个用 `, ` 连接（展平用）。
-commaItems : TriviaCtx -> List ExportItem -> Doc
+commaItems : FmtCtx -> List ExportItem -> Doc
 commaItems at [] = empty
 commaItems at ([item]) = renderExportItemDoc at item
 commaItems at (item :: rest) =
@@ -306,7 +306,7 @@ commaItems at (item :: rest) =
     (appendDoc (text ",") (appendDoc line (commaItems at rest)))
 
 -- | 内部：多行导出列表（逗号前置）：首项 `( a`，其余 `, b`，收尾 `) where`。
-renderExportListBlock : TriviaCtx -> String -> List ExportItem -> Doc
+renderExportListBlock : FmtCtx -> String -> List ExportItem -> Doc
 renderExportListBlock at name [] = text "module ${name} () where"
 renderExportListBlock at name (first :: rest) =
   appendDoc
@@ -314,7 +314,7 @@ renderExportListBlock at name (first :: rest) =
     (nest 2 (appendDoc hard (appendDoc (appendDoc (text "( ") (renderExportItemDoc at first)) (appendDoc (hcat (map (\item => appendDoc hard (appendDoc (text ", ") (renderExportItemDoc at item))) rest)) (appendDoc hard (text ") where"))))))
 
 -- | 内部：单条导出项（贴上该项的注释）。
-renderExportItemDoc : TriviaCtx -> ExportItem -> Doc
+renderExportItemDoc : FmtCtx -> ExportItem -> Doc
 renderExportItemDoc at item = attachAt at (exportItemRef item) (text (renderExportItem item))
 
 -- | 内部：导出项文本（`name` / `name(..)` / `name(a, b)` / `module M`）。
@@ -375,17 +375,17 @@ renderFixityDecl : FixityDecl -> String
 renderFixityDecl (FixityDecl op level assoc sp) = "${assocKeyword assoc} ${level} ${op}"
 
 -- | 内部：单条 `infix*` 声明行（贴上该声明的注释）。
-renderFixityLine : TriviaCtx -> FixityDecl -> Doc
+renderFixityLine : FmtCtx -> FixityDecl -> Doc
 renderFixityLine at d = attachAtTop at d.fixityRef (text (renderFixityDecl d))
 
 -- | 内部：模块头 section（匿名 / 无名模块不输出）。
-renderHeader : TriviaCtx -> Maybe ModDecl -> Doc
+renderHeader : FmtCtx -> Maybe ModDecl -> Doc
 renderHeader at Nothing = empty
 renderHeader at (Just m) =
   if m.modDeclName == "" then empty else attachAtTop at m.modDeclRef (renderModDecl at m)
 
 -- | 内部：单条 import 行（贴上该 import 的注释）。
-renderImportLine : TriviaCtx -> Import -> Doc
+renderImportLine : FmtCtx -> Import -> Doc
 renderImportLine at imp = attachAtTop at imp.importRef (text (renderImport imp))
 
 -- | 内部：模块头里的 `export import` 重导出项（`export import` 行由它派生）。
@@ -476,7 +476,7 @@ renderNamespaceReexport _ = ""
 
 -- | 内部：import section；带重导出项的 import 渲染成 `export import` 行，
 -- `export module` 行单独追加在 import 之后。
-renderImportLines : TriviaCtx -> Maybe ModDecl -> List Import -> Doc
+renderImportLines : FmtCtx -> Maybe ModDecl -> List Import -> Doc
 renderImportLines at hdr imports =
   let
     importDocs =
@@ -498,7 +498,7 @@ renderEofComments comments = eofCommentsDoc comments
 
 -- | 文件组装的五个 section：模块头 / imports / `infix*` 声明 / 声明 / 文件末尾注释；
 -- 非空 section 之间空一行。
-export renderSourceSections : List FixityDecl -> Maybe ModDecl -> List Import -> List FixityDecl -> List Decl -> TriviaCtx -> List Comment -> Doc
+export renderSourceSections : List FixityDecl -> Maybe ModDecl -> List Import -> List FixityDecl -> List Decl -> FmtCtx -> List Comment -> Doc
 renderSourceSections env hdr imports fixities decls at eof =
   sectionsDoc
     [renderHeader at hdr, renderImportLines at hdr imports, vsep (map (renderFixityLine at) fixities), renderTopDecls (buildFmtDeclMods hdr) env at decls, renderEofComments eof]
