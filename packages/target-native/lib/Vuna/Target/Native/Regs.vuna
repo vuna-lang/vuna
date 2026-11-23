@@ -221,14 +221,14 @@ retargetRax d (IBinReg op Rax o) = IBinReg op d o
 retargetRax d (IBin op o) = IBinReg op d o
 retargetRax _ i = i
 
-takeRaxChain : Int -> List Instr -> List Instr -> Maybe (Pair Reg (Pair (List Instr) (List Instr)))
+takeRaxChain : Int -> List Instr -> List Instr -> Maybe (Reg, List Instr, List Instr)
 takeRaxChain fuel acc [] = Nothing
 takeRaxChain fuel acc (i :: rest) =
   if fuel <= 0 then
     Nothing
   else
     case i of
-      IMov (OpReg d) (OpReg Rax) => if isPromotedReg d && not (anyMiddleTouches d acc) && not (anyMiddleTouches Rax acc) then Just (Pair d (Pair (reverse acc) rest)) else Nothing
+      IMov (OpReg d) (OpReg Rax) => if isPromotedReg d && not (anyMiddleTouches d acc) && not (anyMiddleTouches Rax acc) then Just (d, reverse acc, rest) else Nothing
       _ => if isRaxMiddle i then takeRaxChain (fuel - 1) (i :: acc) rest else Nothing
 
 anyMiddleTouches : Reg -> List Instr -> Bool

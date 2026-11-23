@@ -1122,7 +1122,7 @@ genDivInto st pool a (DivMagic d m) =
                 inInstrs
                 [IMov (OpReg s1) (OpReg r), IMov (OpReg s2) (OpReg s1), IBinReg "sar" s2 (OpImm 63), IBinReg "xor" s1 (OpReg s2), IBinReg "sub" s1 (OpReg s2), IMov (OpReg Rax) (OpReg s1), IMov (OpReg s3) (OpImm m), IMulSigned s3, IMov (OpReg s3) (OpReg Rdx), IMov (OpReg Rax) (OpReg s3), IBinReg "imul" Rax (OpImm d), IBinReg "sub" s1 (OpReg Rax), IBinReg "sar" s1 (OpImm 63), IBinReg "add" s3 (OpReg s1), IMov (OpReg Rax) (OpReg s3), IBinReg "xor" Rax (OpReg s2), IBinReg "sub" Rax (OpReg s2)]
             outPool = dropReg s3 (dropReg s2 (dropReg s1 (dropReg Rax poolAfter)))
-          in Just (Pair Rax (Pair instrs outPool))
+          in Just (Rax, instrs, outPool)
         _ => Nothing
 genDivInto st pool a (DivIdiv c) =
   if memReg Rax pool then
@@ -2481,13 +2481,13 @@ resolveAliasStep fuel defs (ir@(IrApp _ _ _)) =
 resolveAliasStep fuel defs (IrCtor f c ty args) =
   IrCtor f c ty (map (resolveAliasIn fuel defs) args)
 resolveAliasStep fuel defs (IrRecord f ty fields) =
-  IrRecord f ty (map (\p => Pair (firstOf p) (resolveAliasIn fuel defs (secondOf p))) fields)
+  IrRecord f ty (map (\p => (firstOf p, resolveAliasIn fuel defs (secondOf p))) fields)
 resolveAliasStep fuel defs (IrProj base f fld ty) = IrProj (resolveAliasIn fuel defs base) f fld ty
 resolveAliasStep fuel defs (IrRecUpd base f fields ty) =
   IrRecUpd
     (resolveAliasIn fuel defs base)
     f
-    (map (\p => Pair (firstOf p) (resolveAliasIn fuel defs (secondOf p))) fields)
+    (map (\p => (firstOf p, resolveAliasIn fuel defs (secondOf p))) fields)
     ty
 resolveAliasStep fuel defs (IrRtApp sym args) = IrRtApp sym (map (resolveAliasIn fuel defs) args)
 resolveAliasStep fuel defs (IrCast a b inner) = IrCast a b (resolveAliasIn fuel defs inner)
@@ -2536,7 +2536,7 @@ record LoopRot where
 selfTailOf : String -> Ir -> Bool
 selfTailOf name ir =
   case flattenApp (stripTail ir) of
-    Pair (IrGlobal n) _ => n == name
+    (IrGlobal n, _) => n == name
     _ => False
 
 loopRotateOf : String -> Ir -> Maybe LoopRot
@@ -2559,7 +2559,7 @@ dropLastSelfJump label (i :: rest) =
         Just r => Just (i :: r)
         Nothing => Nothing
 
-genLoopBody : Int -> FGen -> Ir -> String -> String -> NRes (Pair (List Instr) FGen)
+genLoopBody : Int -> FGen -> Ir -> String -> String -> NRes (List Instr, FGen)
 genLoopBody fuel st inner name loopLabel =
   case loopRotateOf name inner of
     Nothing => genExpr fuel st inner
@@ -2589,7 +2589,7 @@ genLoopBody fuel st inner name loopLabel =
                     \pe =>
                       let
                         body = append [IJmp lc, ILabel lb] (append bodyInstrs (append [ILabel lc] (append (firstOf cb) (append [IJcc (secondOf cb) lb] (firstOf pe)))))
-                      in NOk (Pair body ({ (secondOf pe) | fgRanges = st.fgRanges }))
+                      in NOk (body, { (secondOf pe) | fgRanges = st.fgRanges })
                   )
             )
 
