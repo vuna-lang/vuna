@@ -300,11 +300,7 @@ export traitMethodSpan : TraitMethod -> Span
 traitMethodSpan (TraitMethod name ty sp) = sp
 
 export exportItemSpan : ExportItem -> Span
-exportItemSpan (XBare name sp) = sp
-exportItemSpan (XTypeAll name sp) = sp
-exportItemSpan (XTypeSome name members sp) = sp
-exportItemSpan (XModule name sp) = sp
-exportItemSpan (XNamespace name _ sp) = sp
+exportItemSpan item = nodeRefSpan (exportItemRef item)
 
 export collectClauses : List Decl -> String -> List (Pair (List Pat) Expr)
 collectClauses [] name = []

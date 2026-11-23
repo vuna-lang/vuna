@@ -46,7 +46,7 @@ OCaml / native / wasm 三个后端是独立包（`packages/target-{ocaml,native,
 
 | 模块 | 职责 | 关键入口 |
 | --- | --- | --- |
-| `Frontend.Ast` | 语法类型与 AST helper（`Expr`/`Decl`/`Pat`/`Ctor`/`Import`/`ModDecl`/`TraitMethod`）。`Decl` / `Import` / `FixityDecl` / `Ctor` / `Field` / `TraitMethod` / `DoStmt` / `Expr` / `Pat` 的末位是 `NodeRef`（节点 id + 区间）：id 由 parser 的 `withExtent` 分配、与建树事件同一个，`declSpan` / `importSpan` / `exprSpan` / `patSpan` 等访问器从 `NodeRef` 取区间。表达式的区间根由 `parseExpr` / `parsePatternSingle` 在区间出口贴 id（`withExprId` / `withPatId`，只换 id、不改构造子自己的 span：`EInfix` / `EBacktick` 的 span 从运算符起，树节点覆盖整个表达式）。没有解析身份的路径（Rast 桥 / 接口解码 / 合成节点）用 `detachedNodeRef` / `noNodeRef` | `clausesFor`、`funArity`、`declNames`、`declRef` |
+| `Frontend.Ast` | 语法类型与 AST helper（`Expr`/`Decl`/`Pat`/`Ctor`/`Import`/`ModDecl`/`TraitMethod`）。`Decl` / `Import` / `FixityDecl` / `Ctor` / `Field` / `TraitMethod` / `DoStmt` / `Expr` / `Pat` / `ModDecl` / `ExportItem` 的末位是 `NodeRef`（节点 id + 区间）：id 由 parser 的 `withExtent` 分配、与建树事件同一个，`declSpan` / `importSpan` / `exprSpan` / `patSpan` 等访问器从 `NodeRef` 取区间。表达式的区间根由 `parseExpr` / `parsePatternSingle` 在区间出口贴 id（`withExprId` / `withPatId`，只换 id、不改构造子自己的 span：`EInfix` / `EBacktick` 的 span 从运算符起，树节点覆盖整个表达式）。`EAnn` 是 where/let 签名行，存的是该签名行 `binding` 节点的 id（签名行不建 `pat` 节点）。没有解析身份的路径（Rast 桥 / 接口解码 / 合成节点）用 `detachedNodeRef` / `noNodeRef` | `clausesFor`、`funArity`、`declNames`、`declRef` |
 | `Frontend.Lexer` | 字符游标、token 与位置。token 路径（`lexChars`，不分配注释）与注释路径（`lexSourceWithComments`：一次扫描同时给 token 与注释）分开；注释正文规则（`collectLineBody` / `collectBlockBody`）只有一份 | `lexSource`、`lexSourceWithComments`、`lexComments` |
 | `Frontend.Cst` | 无损 CST 词法层：token 携带前置 trivia（空白 / 行注释 / 块注释）与 span，`renderCst` 逐字节还原源码；位置由一条**单调前进**的行/列游标给出（O(bytes)，不再按 token 走行表）。`lexTokensOf` 由已完成的词法（token + 注释）纯组装 trivia 流，工具路径不重复词法。节点树的区间由 **parser 发射**（`NodeEvent`：解析点成功后再补一对 open/close），`nestToTree` 只做一遍线性组装，**不从缩进或括号反推布局**；`collectLeaves` 与 token 流对齐即是无损断言。分支节点带 **parser 分配的 id**（文件根 0，`withExtent` 处递增并由 `EvOpen` 携带，`nodeIndex` 给 id → 节点的 O(1) 索引），这是节点身份：span 可被改写，id 在一次解析内不变；`nodeIdAtOffset` 把「起点字节偏移 → 最外层节点 id」做成桥，供尚未携带 `NodeRef` 的节点使用 | `lexCst`、`lexTokensOf`、`renderCst`、`roundtripOk`、`nestToTree`、`nodeId`、`nodeIndex`、`nodeIdAtOffset`、`collectLeaves` |
 | `Frontend.Parser` | offside layout parser → AST + imports；`where` 块与绑定签名行；方法签名带 span；顶层签名可带约束 ctx（`C a =>`）。需要注释与原文的工具用 `parseSourceDetailed`（**一次**词法同时给出 AST / 注释表 / token 流 / 建树事件）；`ParseMode` 分档：编译器路径 `PmStrict` 拒绝非线性格（重复 binder），只读工具 `PmTool` 只报语法、把语义留给诊断 | `parseSource`、`parseSourceWithComments`、`parseSourceDetailed`、`parseExpressionSource` |
@@ -174,7 +174,7 @@ OCaml / native / wasm 三个后端是独立包（`packages/target-{ocaml,native,
 | `Vuna.Cli` | 产品 CLI：工具命令分发 + in-process 调 compiler 命令（`runCli`） |
 | `Vuna.Interp` | 解释器 facade（DT 精化 + 核心求值，调 `Driver.Dt.dtEvalFile`；工具链侧） |
 | `Vuna.Files` | 目录遍历小工具（fmt/doc/test/Index 共用，`collectVunaFiles`；骨架在 `Vuna.Compiler.Base.Walk`，遵守 `.gitignore`） |
-| `Vuna.Fmt`（+ `Fmt.Comment`/`Decl`/`Expr`/`Util`） | 源码格式化器（`vuna fmt`，parse → 规范打印；门面只导出 `formatSourceWith`） |
+| `Vuna.Fmt`（+ `Fmt.Comment`/`Decl`/`Expr`/`Util`） | 源码格式化器（`vuna fmt`，parse → 规范打印；门面只导出 `formatSourceWith`）。注释槽位以条目节点的 `NodeRef` id 为键：`anchorRefs` 收集的锚点集合就是渲染器的挂载点，渲染时同一个 id 直接查表 |
 | `Vuna.Lint`（+ `Lint.Rules`/`Fix`/`Diagnostics`） | 风格检查与自动修复（`vuna lint`）；规则见 [lint.md](lint.md) |
 | `Vuna.Repl` | 交互式 REPL（`vuna repl`；定义自动签名、行编辑/Ctrl-R、`:load` 文件/目录/模块；表达式经 DT 求值） |
 | `Vuna.Doc`（+ `Doc.Types`/`Comments`/`Model`/`Prose`/`Html`/`Run`） | docstring 提取 + 单文件交互 HTML（`vuna doc`）；见 [api-docs.md](api-docs.md) |

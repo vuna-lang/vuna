@@ -36,21 +36,24 @@ formatSourceWith source =
     OkC (ParsedSource (SourceFile hdr imports fx decls exports reexports opacity) comments rawToks _events) =>
       let
         toks = lexTokensOf source rawToks comments
-        plan = triviaCtxOf (anchorSpans hdr imports fx decls) toks
+        plan = triviaCtxOf (anchorRefs hdr imports fx decls) toks
         ctx = firstOf plan
         eofComments = secondOf plan
         hdr2 =
           case hdr of
             Just m =>
               Just
-                (ModDecl m.modDeclName m.modDeclHasExportList m.modDeclExportItems exports reexports opacity m.modDeclSpan)
+                (ModDecl m.modDeclName m.modDeclHasExportList m.modDeclExportItems exports reexports opacity m.modDeclRef)
             Nothing =>
               case exports of
                 [] =>
                   case reexports of
                     [] => Nothing
-                    _ => Just (ModDecl "" False [] exports reexports opacity dummySpan)
-                _ => Just (ModDecl "" False [] exports reexports opacity dummySpan)
+                    _ =>
+                      Just
+                        (ModDecl "" False [] exports reexports opacity (detachedNodeRef dummySpan))
+                _ =>
+                  Just (ModDecl "" False [] exports reexports opacity (detachedNodeRef dummySpan))
         doc = renderSourceSections [] hdr2 imports fx decls ctx eofComments
       in if isDocEmpty doc then
         OkC ""

@@ -196,11 +196,11 @@ export data Decl(..) : Type where
 -- XTypeSome 是 `T(A, B)`（D11：data 构造子 / trait 方法子集；顺序无语义）。
 -- XNamespace 是 `export module C [as X]`：不带 alias 时平铺重导出 C，带 alias 时只导出命名空间路径。
 export data ExportItem(..) : Type where
-  XBare : String -> Span -> ExportItem
-  XTypeAll : String -> Span -> ExportItem
-  XTypeSome : String -> List String -> Span -> ExportItem
-  XModule : String -> Span -> ExportItem
-  XNamespace : String -> Maybe String -> Span -> ExportItem
+  XBare : String -> NodeRef -> ExportItem
+  XTypeAll : String -> NodeRef -> ExportItem
+  XTypeSome : String -> List String -> NodeRef -> ExportItem
+  XModule : String -> NodeRef -> ExportItem
+  XNamespace : String -> Maybe String -> NodeRef -> ExportItem
 
 -- D11：逐定义 `export` 的成员集合（`T` / `T(..)` / `T(A, B)`）。
 export data ExportMembers(..) : Type where
@@ -239,7 +239,7 @@ opacitySpecName (OpacitySpec name kind sp) = name
 export opacitySpecSpan : OpacitySpec -> Span
 opacitySpecSpan (OpacitySpec name kind sp) = sp
 
--- 模块头：模块名、是否写了显式导出列表、导出项、span；
+-- 模块头：模块名、是否写了显式导出列表、导出项、身份 + span；
 -- D11：逐定义导出/重导出/归约修饰符也挂在模块头（入口文件没有模块头，不需要它们）。
 export record ModDecl(..) where
   modDeclName : String
@@ -248,7 +248,10 @@ export record ModDecl(..) where
   modDeclExports : List ExportSpec
   modDeclReexports : List ExportItem
   modDeclOpacity : List OpacitySpec
-  modDeclSpan : Span
+  modDeclRef : NodeRef
+
+export modDeclSpan : ModDecl -> Span
+modDeclSpan m = nodeRefSpan m.modDeclRef
 
 -- parser 的产物：可选模块头 + imports + fixity/别名声明 + 顶层声明。
 export record SourceFile(..) where
@@ -407,6 +410,12 @@ doStmtSpan (DBind pat expr r) = nodeRefSpan r
 doStmtSpan (DExpr expr r) = nodeRefSpan r
 doStmtSpan (DLet binds r) = nodeRefSpan r
 
+-- | do 语句的身份 + 区间。
+export doStmtRef : DoStmt -> NodeRef
+doStmtRef (DBind pat expr r) = r
+doStmtRef (DExpr expr r) = r
+doStmtRef (DLet binds r) = r
+
 -- | 声明的节点身份 + 区间。
 export declRef : Decl -> NodeRef
 declRef (DData name params kind ctors derivings viaField repr lin r) = r
@@ -439,12 +448,25 @@ export record Import(..) where
 export importSpan : Import -> Span
 importSpan i = nodeRefSpan i.importRef
 
+-- | 导出项的身份 + 区间。
+export exportItemRef : ExportItem -> NodeRef
+exportItemRef (XBare name r) = r
+exportItemRef (XTypeAll name r) = r
+exportItemRef (XTypeSome name members r) = r
+exportItemRef (XModule name r) = r
+exportItemRef (XNamespace name alias r) = r
+
+-- | 换导出项的**根**身份（parser 在 `withExtent` 区间出口贴 id；解析中途构造时用
+-- `detachedNodeRef`）。
+export withExportItemRef : NodeRef -> ExportItem -> ExportItem
+withExportItemRef r (XBare name _) = XBare name r
+withExportItemRef r (XTypeAll name _) = XTypeAll name r
+withExportItemRef r (XTypeSome name members _) = XTypeSome name members r
+withExportItemRef r (XModule name _) = XModule name r
+withExportItemRef r (XNamespace name alias _) = XNamespace name alias r
+
 export exportItemSpan : ExportItem -> Span
-exportItemSpan (XBare name sp) = sp
-exportItemSpan (XTypeAll name sp) = sp
-exportItemSpan (XTypeSome name members sp) = sp
-exportItemSpan (XModule name sp) = sp
-exportItemSpan (XNamespace name _ sp) = sp
+exportItemSpan item = nodeRefSpan (exportItemRef item)
 
 export collectClauses : List Decl -> String -> List (Pair (List Pat) Expr)
 collectClauses [] name = []

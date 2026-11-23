@@ -948,7 +948,7 @@ altDoc fuel env at (Pair pat body) =
     let
       headD = text (renderPatGo formatFuelBound pat ++ " =>")
       bodyD = exprDoc (fuel - 1) env at body
-    in attachAt at (patSpan pat) (if multilineExpr body then appendDoc headD (nest 2 (appendDoc hard bodyD)) else group (appendDoc headD (nest 2 (appendDoc line bodyD))))
+    in attachAt at (patRef pat) (if multilineExpr body then appendDoc headD (nest 2 (appendDoc hard bodyD)) else group (appendDoc headD (nest 2 (appendDoc line bodyD))))
 
 -- | 内部：`let` 绑定块 + `in`。
 letDoc : Int -> List FixityDecl -> TriviaCtx -> List (Pair Pat Expr) -> Expr -> Doc
@@ -1200,10 +1200,10 @@ stmtDoc fuel env at stmt =
         let
           headD = text (renderPatGo formatFuelBound pat ++ " <-")
           valueD = exprDoc (fuel - 1) env at value
-        in attachAt at (nodeRefSpan r) (if multilineExpr value then appendDoc headD (nest 2 (appendDoc hard valueD)) else group (appendDoc headD (nest 2 (appendDoc line valueD))))
-      DExpr value r => attachAt at (nodeRefSpan r) (group (exprDoc (fuel - 1) env at value))
+        in attachAt at r (if multilineExpr value then appendDoc headD (nest 2 (appendDoc hard valueD)) else group (appendDoc headD (nest 2 (appendDoc line valueD))))
+      DExpr value r => attachAt at r (group (exprDoc (fuel - 1) env at value))
       DLet binds r =>
-        attachAt at (nodeRefSpan r) (
+        attachAt at r (
             case binds of
               [b] => if inlineLetBind b then appendDoc (text "let ") (bindingDoc (fuel - 1) env at b) else letBlockDoc (fuel - 1) env at binds
               _ => letBlockDoc (fuel - 1) env at binds
@@ -1231,10 +1231,10 @@ bindingDoc fuel env at (Pair pat value) =
     case value of
       EAnn inner ty annSp =>
         let
-          sigD = attachAt at (nodeRefSpan annSp) (text (renderPatGo formatFuelBound pat ++ " : " ++ typeText (fuel - 1) env at ty))
-          defD = attachAt at (patSpan pat) (bindingBodyDoc (fuel - 1) env at pat inner)
+          sigD = attachAt at annSp (text (renderPatGo formatFuelBound pat ++ " : " ++ typeText (fuel - 1) env at ty))
+          defD = attachAt at (patRef pat) (bindingBodyDoc (fuel - 1) env at pat inner)
         in vsep [sigD, defD]
-      _ => attachAt at (patSpan pat) (bindingBodyDoc (fuel - 1) env at pat value)
+      _ => attachAt at (patRef pat) (bindingBodyDoc (fuel - 1) env at pat value)
 
 -- | 内部：绑定体的形态（局部函数 / λ 还原成子句 / 普通值）。
 bindingBodyDoc : Int -> List FixityDecl -> TriviaCtx -> Pat -> Expr -> Doc

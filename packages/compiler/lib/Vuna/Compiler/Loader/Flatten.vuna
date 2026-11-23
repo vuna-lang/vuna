@@ -419,7 +419,7 @@ namespaceImportsGo imports ((XNamespace target alias sp) :: rest) acc =
   if hasImportOf imports target || hasImportOf acc target then
     namespaceImportsGo imports rest acc
   else
-    namespaceImportsGo imports rest ((::) (Import target False alias (detachedNodeRef sp)) acc)
+    namespaceImportsGo imports rest ((::) (Import target False alias sp) acc)
 namespaceImportsGo imports (_ :: rest) acc = namespaceImportsGo imports rest acc
 
 hasImportOf : List Import -> String -> Bool
@@ -450,13 +450,13 @@ exportItemEntries modules prefix decls imports (XNamespace name alias sp) =
           Just path => if path == name then OkC [namespaceEntry name m] else OkC [namespaceEntry name m, namespaceEntry path m]
     )
 exportItemEntries modules prefix decls imports (XTypeAll name sp) =
-  exportTypeAll modules prefix decls imports name sp
+  exportTypeAll modules prefix decls imports name (nodeRefSpan sp)
 exportItemEntries modules prefix decls imports (XTypeSome name members sp) =
   Vuna.Compiler.Base.Common.bind
-    (exportTypeAll modules prefix decls imports name sp)
+    (exportTypeAll modules prefix decls imports name (nodeRefSpan sp))
     (\es => OkC (filterExportMembers members es))
 exportItemEntries modules prefix decls imports (XBare name sp) =
-  exportBare modules prefix decls imports name sp
+  exportBare modules prefix decls imports name (nodeRefSpan sp)
 
 -- | 命名空间路径条目：public 是路径文本（完整模块名或 alias），target 是目标模块。
 namespaceEntry : String -> String -> ExportEntry
@@ -505,7 +505,10 @@ exportItemsAll modules prefix decls imports (item :: rest) =
 validateModuleHeader : String -> Maybe ModDecl -> Check (List a)
 validateModuleHeader label Nothing = OkC []
 validateModuleHeader label (Just (ModDecl declared hasList items _ _ _ sp)) =
-  if declared == label then OkC [] else rnAt1 sp (ModuleNameMismatch declared) declared
+  if declared == label then
+    OkC []
+  else
+    rnAt1 (nodeRefSpan sp) (ModuleNameMismatch declared) declared
 
 opaqueNamesOf : String -> List OpacitySpec -> List String
 opaqueNamesOf prefix [] = []
@@ -538,7 +541,7 @@ computeExports modules prefix hdr imports decls extraExports extraReexports =
     explicit = explicitExports modules prefix decls imports newItems
   in if notEmpty newItems then
     case hdr of
-      Just (ModDecl _ hasList _ _ _ _ sp) => if hasList then rnAt1 sp (DuplicateExport "module header") "module header" else explicit
+      Just (ModDecl _ hasList _ _ _ _ sp) => if hasList then rnAt1 (nodeRefSpan sp) (DuplicateExport "module header") "module header" else explicit
       Nothing => explicit
   else
     case hdr of
@@ -550,10 +553,10 @@ notEmpty [] = False
 notEmpty (_ :: _) = True
 
 exportSpecToItem : ExportSpec -> ExportItem
-exportSpecToItem (ESValue name sp) = XBare name sp
-exportSpecToItem (ESType name EMNone sp) = XBare name sp
-exportSpecToItem (ESType name EMAll sp) = XTypeAll name sp
-exportSpecToItem (ESType name (EMOnly members) sp) = XTypeSome name members sp
+exportSpecToItem (ESValue name sp) = XBare name (detachedNodeRef sp)
+exportSpecToItem (ESType name EMNone sp) = XBare name (detachedNodeRef sp)
+exportSpecToItem (ESType name EMAll sp) = XTypeAll name (detachedNodeRef sp)
+exportSpecToItem (ESType name (EMOnly members) sp) = XTypeSome name members (detachedNodeRef sp)
 
 showCycle : String -> List String -> String
 showCycle name stack = joinArrows (reverse (name :: stack))
@@ -731,7 +734,7 @@ loadProjectWithPreloaded ctx entry preloaded =
           ErrC e => pure (ErrC e)
           OkC (SourceFile hdr imports fixities decls exports reexports opacity) =>
             case hdr of
-              Just (ModDecl dname hasList items _ _ _ sp) => pure (onErrDiag (withFallbackSpan sp) (ldErr1 (ModuleHeaderInEntryFile entry) entry))
+              Just (ModDecl dname hasList items _ _ _ sp) => pure (onErrDiag (withFallbackSpan (nodeRefSpan sp)) (ldErr1 (ModuleHeaderInEntryFile entry) entry))
               Nothing =>
                 let
                   imports1 = imports

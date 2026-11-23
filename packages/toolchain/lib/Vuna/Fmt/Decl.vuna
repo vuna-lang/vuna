@@ -108,7 +108,7 @@ membersSuffix (Just (EMOnly ms)) = "(${joinComma ms})"
 -- ---------------------------------------------------------------
 -- | 内部：渲染单个声明并贴上它的注释。
 renderDeclAt : FmtDeclMods -> List FixityDecl -> TriviaCtx -> Decl -> Doc
-renderDeclAt mods env at decl = attachAtTop at (declSpan decl) (renderDeclBody mods env at decl)
+renderDeclAt mods env at decl = attachAtTop at (declRef decl) (renderDeclBody mods env at decl)
 
 -- | 内部：声明头 + 缩进 2 的体（空体只输出头）。
 bodyBlock : String -> List Doc -> Doc
@@ -187,7 +187,7 @@ isNameStart c = c >= 65 && c <= 90 || c >= 97 && c <= 122 || c == 95
 -- | 内部：构造器行 `Ctor : Ty`（缩进 2）并贴上其注释。
 renderCtorDecl : List FixityDecl -> TriviaCtx -> Ctor -> Doc
 renderCtorDecl env at (Ctor cname ty arity r) =
-  attachAt at (nodeRefSpan r) (text "${declNameText cname} : ${renderTypeExpr env at ty}")
+  attachAt at r (text "${declNameText cname} : ${renderTypeExpr env at ty}")
 
 -- | 内部：`deriving (...)` / `deriving via field (...)` 行（无派生项时为空）。
 renderDerivings : Bool -> List String -> List Doc
@@ -201,7 +201,7 @@ renderDerivings viaField names =
 -- | 内部：字段行 `name : Ty`（缩进 2）并贴上其注释。
 renderRecordField : List FixityDecl -> TriviaCtx -> Field -> Doc
 renderRecordField env at f =
-  attachAt at (fieldSpan f) (text "${fieldName f} : ${renderTypeExpr env at (fieldType f)}")
+  attachAt at f.fieldRef (text "${fieldName f} : ${renderTypeExpr env at (fieldType f)}")
 
 -- | 内部：trait 参数文本（无 kind 时只写名字，有 kind 时 `(a : K)`）。
 traitParamText : List FixityDecl -> TriviaCtx -> TraitParam -> String
@@ -213,7 +213,7 @@ renderMethodSig : List FixityDecl -> TriviaCtx -> TraitMethod -> Doc
 renderMethodSig env at m =
   attachAt
     at
-    (traitMethodSpan m)
+    m.traitMethodRef
     (text "${declNameText (traitMethodName m)} : ${renderTypeExpr env at m.traitMethodType}")
 
 -- | 内部：实例上下文 `C a, C b => `（空上下文输出空串）。
@@ -284,9 +284,9 @@ declNamed _ n = False
 -- ---------------------------------------------------------------
 -- | 内部：模块头：显式导出列表（排序后输出）或 `module M where`。
 renderModDecl : TriviaCtx -> ModDecl -> Doc
-renderModDecl at (ModDecl name True items _ _ _ sp) =
+renderModDecl at (ModDecl name True items _ _ _ r) =
   renderExplicitModDecl at name (sortExports items)
-renderModDecl at (ModDecl name False items _ _ _ sp) = text "module ${name} where"
+renderModDecl at (ModDecl name False items _ _ _ r) = text "module ${name} where"
 
 -- | 内部：显式导出列表：空列表与短列表保持单行；超宽或含项注释时逐项一行。
 renderExplicitModDecl : TriviaCtx -> String -> List ExportItem -> Doc
@@ -316,7 +316,7 @@ renderExportListBlock at name (first :: rest) =
 
 -- | 内部：单条导出项（贴上该项的注释）。
 renderExportItemDoc : TriviaCtx -> ExportItem -> Doc
-renderExportItemDoc at item = attachAt at (exportItemSpan item) (text (renderExportItem item))
+renderExportItemDoc at item = attachAt at (exportItemRef item) (text (renderExportItem item))
 
 -- | 内部：导出项文本（`name` / `name(..)` / `name(a, b)` / `module M`）。
 renderExportItem : ExportItem -> String
@@ -377,17 +377,17 @@ renderFixityDecl (FixityDecl op level assoc sp) = "${assocKeyword assoc} ${level
 
 -- | 内部：单条 `infix*` 声明行（贴上该声明的注释）。
 renderFixityLine : TriviaCtx -> FixityDecl -> Doc
-renderFixityLine at d = attachAtTop at (fixitySpan d) (text (renderFixityDecl d))
+renderFixityLine at d = attachAtTop at d.fixityRef (text (renderFixityDecl d))
 
 -- | 内部：模块头 section（匿名 / 无名模块不输出）。
 renderHeader : TriviaCtx -> Maybe ModDecl -> Doc
 renderHeader at Nothing = empty
 renderHeader at (Just m) =
-  if m.modDeclName == "" then empty else attachAtTop at m.modDeclSpan (renderModDecl at m)
+  if m.modDeclName == "" then empty else attachAtTop at m.modDeclRef (renderModDecl at m)
 
 -- | 内部：单条 import 行（贴上该 import 的注释）。
 renderImportLine : TriviaCtx -> Import -> Doc
-renderImportLine at imp = attachAtTop at (importSpan imp) (text (renderImport imp))
+renderImportLine at imp = attachAtTop at imp.importRef (text (renderImport imp))
 
 -- | 内部：模块头里的 `export import` 重导出项（`export import` 行由它派生）。
 headerReexports : Maybe ModDecl -> List ExportItem
@@ -485,11 +485,11 @@ renderImportLines at hdr imports =
           \imp =>
             case itemsForImport imp (headerReexports hdr) of
               [] => renderImportLine at imp
-              items => attachAtTop at (importSpan imp) (text (renderReexportLine imp items))
+              items => attachAtTop at imp.importRef (text (renderReexportLine imp items))
         ) imports
     nsDocs =
       map
-        (\item => attachAtTop at (exportItemSpan item) (text (renderNamespaceReexport item)))
+        (\item => attachAtTop at (exportItemRef item) (text (renderNamespaceReexport item)))
         (filter isNamespaceReexport (headerReexports hdr))
   in vsep (append importDocs nsDocs)
 

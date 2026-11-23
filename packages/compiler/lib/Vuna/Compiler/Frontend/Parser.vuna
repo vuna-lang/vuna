@@ -141,7 +141,7 @@ parseModDeclBody st =
   if atKw st "module" then
     Vuna.Compiler.Base.Common.bind
       (expectKw st "module")
-      (\st1 => Vuna.Compiler.Base.Common.step (expectIdent st1) (\name, st2 => if atSym st2 "(" then Vuna.Compiler.Base.Common.step (parseExportItems True st2) (\items, st3 => Vuna.Compiler.Base.Common.bind (expectKw st3 "where") (\st4 => OkC (Pair (Just (ModDecl name True items [] [] [] (spanOf st st4))) st4))) else Vuna.Compiler.Base.Common.bind (expectKw st2 "where") (\st3 => OkC (Pair (Just (ModDecl name False [] [] [] [] (spanOf st st3))) st3))))
+      (\st1 => Vuna.Compiler.Base.Common.step (expectIdent st1) (\name, st2 => if atSym st2 "(" then Vuna.Compiler.Base.Common.step (parseExportItems True st2) (\items, st3 => Vuna.Compiler.Base.Common.bind (expectKw st3 "where") (\st4 => OkC (Pair (Just (ModDecl name True items [] [] [] (NodeRef st.openNodeId (spanOf st st4)))) st4))) else Vuna.Compiler.Base.Common.bind (expectKw st2 "where") (\st3 => OkC (Pair (Just (ModDecl name False [] [] [] [] (NodeRef st.openNodeId (spanOf st st3)))) st3))))
   else
     OkC (Pair Nothing st)
 
@@ -163,7 +163,11 @@ parseExportItemsFrom anchored fuel st =
       (\item, st1 => if atSym st1 "," then Vuna.Compiler.Base.Common.step (parseExportItemsFrom anchored (fuel - 1) (advance st1)) (\rest, st2 => OkC (Pair ((::) item rest) st2)) else Vuna.Compiler.Base.Common.bind (expectSym st1 ")") (\st2 => OkC (Pair [item] st2)))
 
 parseExportItemAt : Bool -> PState -> Check (Pair ExportItem PState)
-parseExportItemAt True st = withExtent CstExportItemKind st (\st0 => parseExportItem st0)
+parseExportItemAt True st =
+  withExtent
+    CstExportItemKind
+    st
+    (\st0 => Vuna.Compiler.Base.Common.step (parseExportItem st0) (\item, st1 => OkC (Pair (withExportItemRef (NodeRef st0.openNodeId (spanOf st st1)) item) st1)))
 parseExportItemAt False st = parseExportItem st
 
 parseExportItem : PState -> Check (Pair ExportItem PState)
@@ -172,22 +176,22 @@ parseExportItem st =
     PTok (TKw "module") p =>
       Vuna.Compiler.Base.Common.bind
         (expectKw st "module")
-        (\st1 => Vuna.Compiler.Base.Common.step (expectIdent st1) (\name, st2 => OkC (Pair (XModule name (spanOf st st2)) st2)))
+        (\st1 => Vuna.Compiler.Base.Common.step (expectIdent st1) (\name, st2 => OkC (Pair (XModule name (detachedNodeRef (spanOf st st2))) st2)))
     PTok (TIdent name) p =>
       let
         st1 = advance st
       in if atSym st1 "(" then
         Vuna.Compiler.Base.Common.step
           (parseExportMembers st1)
-          (\members, st2 => OkC (Pair (exportItemOf name members (spanOf st st2)) st2))
+          (\members, st2 => OkC (Pair (exportItemOf name members (detachedNodeRef (spanOf st st2))) st2))
       else
-        OkC (Pair (XBare name (spanOf st st1)) st1)
+        OkC (Pair (XBare name (detachedNodeRef (spanOf st st1))) st1)
     -- 导出用户符号名函数（`(<+>)`）。保留符号不可导出。
     PTok (TSym op) p =>
       if isReservedValueName op then
         ps0 st ExpectedExportItem
       else
-        OkC (Pair (XBare op (spanOf st (advance st))) (advance st))
+        OkC (Pair (XBare op (detachedNodeRef (spanOf st (advance st)))) (advance st))
     _ => ps0 st ExpectedExportItem
 
 -- | `T(..)` / `T(A, B)` / `T()` 的括号体（`(` 尚未消费）。
@@ -206,7 +210,7 @@ parseMemberNames fuel st =
       (expectDeclName st)
       (\name, st1 => if atSym st1 "," then Vuna.Compiler.Base.Common.step (parseMemberNames (fuel - 1) (advance st1)) (\rest, st2 => OkC (Pair ((::) name rest) st2)) else Vuna.Compiler.Base.Common.bind (expectSym st1 ")") (\st2 => OkC (Pair [name] st2)))
 
-exportItemOf : String -> ExportMembers -> Span -> ExportItem
+exportItemOf : String -> ExportMembers -> NodeRef -> ExportItem
 exportItemOf name EMAll sp = XTypeAll name sp
 exportItemOf name EMNone sp = XTypeSome name [] sp
 exportItemOf name (EMOnly members) sp = XTypeSome name members sp
@@ -231,7 +235,7 @@ parseExportNamespaceBody : PState -> Check (Pair ExportItem PState)
 parseExportNamespaceBody st =
   Vuna.Compiler.Base.Common.step
     (expectIdent st)
-    (\_, st1 => Vuna.Compiler.Base.Common.bind (expectKw st1 "module") (\st2 => Vuna.Compiler.Base.Common.step (expectIdent st2) (\name, st3 => if atKw st3 "as" then Vuna.Compiler.Base.Common.bind (expectKw st3 "as") (\st4 => Vuna.Compiler.Base.Common.step (expectIdent st4) (\alias, st5 => OkC (Pair (XNamespace name (Just alias) (spanOf st st5)) st5))) else OkC (Pair (XNamespace name Nothing (spanOf st st3)) st3))))
+    (\_, st1 => Vuna.Compiler.Base.Common.bind (expectKw st1 "module") (\st2 => Vuna.Compiler.Base.Common.step (expectIdent st2) (\name, st3 => if atKw st3 "as" then Vuna.Compiler.Base.Common.bind (expectKw st3 "as") (\st4 => Vuna.Compiler.Base.Common.step (expectIdent st4) (\alias, st5 => OkC (Pair (XNamespace name (Just alias) (NodeRef st.openNodeId (spanOf st st5))) st5))) else OkC (Pair (XNamespace name Nothing (NodeRef st.openNodeId (spanOf st st3))) st3))))
 
 -- 复用 `import` 之后的 qualified/模块名/as 解析。`start` 是 import 构造的首 token
 -- （`import` 或 `export`）——`(importSpan Import)` 覆盖整个构造。
@@ -1153,12 +1157,13 @@ parseBindingItemBody fuel st bindCol =
     case peekTok st of
       -- `name : Ty` 是签名行，**不是**模式：名字按 binder 直接读，不建 `pat` 节点
       -- （签名行在树里只有 `binding` 节点；模式节点留给定义行 / case 分支等真模式）。
+      -- 签名行的身份就是该 `binding` 节点的 id（入口处的 `openNodeId`）。
       PTok (TIdent name) _ =>
         if name == "_" then
           parseBindingPattern fuel st bindCol
         else
           case peekTokAt st 1 of
-            Just (PTok (TSym ":") _) => Vuna.Compiler.Base.Common.bind (expectSym (advance st) ":") (\st1 => Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st1 bindCol) (\ty, st2 => Vuna.Compiler.Base.Common.bind (rejectCtxSuffix st2) (\st3 => OkC (Pair (BISig name ty (detachedNodeRef (spanOf st st3))) st3))))
+            Just (PTok (TSym ":") _) => Vuna.Compiler.Base.Common.bind (expectSym (advance st) ":") (\st1 => Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st1 bindCol) (\ty, st2 => Vuna.Compiler.Base.Common.bind (rejectCtxSuffix st2) (\st3 => OkC (Pair (BISig name ty (NodeRef st.openNodeId (spanOf st st3))) st3))))
             _ => parseBindingPattern fuel st bindCol
       _ => parseBindingPattern fuel st bindCol
 

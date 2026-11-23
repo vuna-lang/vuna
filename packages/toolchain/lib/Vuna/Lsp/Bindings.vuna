@@ -292,7 +292,7 @@ moduleHeaderPos sf lines name =
   case sf.sourceFileModDecl of
     Nothing => Pair 1 1
     Just m =>
-      case findNamePos lines m.modDeclSpan name of
+      case findNamePos lines (modDeclSpan m) name of
         Nothing => Pair 1 1
         Just (Pair l c) => Pair l c
 
@@ -458,8 +458,8 @@ exportModuleRef buffers uri line text sf tokStart token =
 
 -- | 内部：单个导出项是否命中光标；只有 `module B` 形式可解析成模块引用。
 exportItemMatch : Member nFs FsOp r, Member nEnv EnvOp r => List (Pair String String) -> String -> Int -> String -> SourceFile -> Int -> String -> List String -> ExportItem -> Eff r (Maybe ModuleRef)
-exportItemMatch buffers uri line text sf tokStart token lines (XModule name sp) =
-  case findNamePos lines sp name of
+exportItemMatch buffers uri line text sf tokStart token lines (XModule name r) =
+  case findNamePos lines (nodeRefSpan r) name of
     Just (Pair nl nc) =>
       if nl == line && nc == tokStart && token == name then
         do
@@ -478,7 +478,7 @@ headerModuleRef buffers uri line text sf tokStart token =
     Just m =>
       let
         lines = split "\n" text
-      in case findNamePos lines m.modDeclSpan m.modDeclName of
+      in case findNamePos lines (modDeclSpan m) m.modDeclName of
         Just (Pair nl nc) =>
           if nl == line && nc == tokStart && token == m.modDeclName then
             do

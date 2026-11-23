@@ -431,12 +431,14 @@ exportPositions lines kind name items =
 
 -- | 内部：单个导出项里目标名字的位置；`XModule` 项不产出。
 exportPosition : List String -> String -> ExportItem -> List (Pair Int Int)
-exportPosition lines name (XBare n sp) = if n == name then firstInSpanOf lines sp name else []
-exportPosition lines name (XTypeAll n sp) = if n == name then firstInSpanOf lines sp name else []
-exportPosition lines name (XTypeSome n members sp) =
-  if n == name then firstInSpanOf lines sp name else []
-exportPosition lines name (XModule n sp) = []
-exportPosition lines name (XNamespace n alias sp) = []
+exportPosition lines name (XBare n r) =
+  if n == name then firstInSpanOf lines (nodeRefSpan r) name else []
+exportPosition lines name (XTypeAll n r) =
+  if n == name then firstInSpanOf lines (nodeRefSpan r) name else []
+exportPosition lines name (XTypeSome n members r) =
+  if n == name then firstInSpanOf lines (nodeRefSpan r) name else []
+exportPosition lines name (XModule n r) = []
+exportPosition lines name (XNamespace n alias r) = []
 
 -- | 内部：源码文件的导出项列表（无 `module` 头为空表）。
 exportItemsOf : SourceFile -> List ExportItem

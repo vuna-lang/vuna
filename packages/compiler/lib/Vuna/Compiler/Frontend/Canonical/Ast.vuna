@@ -1081,11 +1081,11 @@ decExportItem fuel c =
     thenPair (decTag fuel c) (
         \tag, b1 =>
           case tag of
-            0 => thenPair (decStr (fuel - 1) b1) (\n, b2 => Just (Pair (XBare n noSpan) b2))
-            1 => thenPair (decStr (fuel - 1) b1) (\n, b2 => Just (Pair (XTypeAll n noSpan) b2))
-            3 => thenPair (decStr (fuel - 1) b1) (\n, b2 => thenPair (decList decStr (fuel - 1) b2) (\ms, b3 => Just (Pair (XTypeSome n ms noSpan) b3)))
-            2 => thenPair (decStr (fuel - 1) b1) (\n, b2 => Just (Pair (XModule n noSpan) b2))
-            4 => thenPair (decStr (fuel - 1) b1) (\n, b2 => thenPair (decMaybe decStr (fuel - 1) b2) (\alias, b3 => Just (Pair (XNamespace n alias noSpan) b3)))
+            0 => thenPair (decStr (fuel - 1) b1) (\n, b2 => Just (Pair (XBare n noNodeRef) b2))
+            1 => thenPair (decStr (fuel - 1) b1) (\n, b2 => Just (Pair (XTypeAll n noNodeRef) b2))
+            3 => thenPair (decStr (fuel - 1) b1) (\n, b2 => thenPair (decList decStr (fuel - 1) b2) (\ms, b3 => Just (Pair (XTypeSome n ms noNodeRef) b3)))
+            2 => thenPair (decStr (fuel - 1) b1) (\n, b2 => Just (Pair (XModule n noNodeRef) b2))
+            4 => thenPair (decStr (fuel - 1) b1) (\n, b2 => thenPair (decMaybe decStr (fuel - 1) b2) (\alias, b3 => Just (Pair (XNamespace n alias noNodeRef) b3)))
             _ => Nothing
       )
 
@@ -1141,7 +1141,7 @@ export decModDecl : Int -> Cur -> Maybe (Pair ModDecl Cur)
 decModDecl fuel c =
   thenPair
     (decStr (fuel - 1) c)
-    (\name, b1 => thenPair (decBool (fuel - 1) b1) (\hasList, b2 => thenPair (decList decExportItem (fuel - 1) b2) (\items, b3 => thenPair (decList decExportSpec (fuel - 1) b3) (\exports, b4 => thenPair (decList decExportItem (fuel - 1) b4) (\reexports, b5 => thenPair (decList decOpacitySpec (fuel - 1) b5) (\opacity, b6 => Just (Pair (ModDecl name hasList items exports reexports opacity noSpan) b6)))))))
+    (\name, b1 => thenPair (decBool (fuel - 1) b1) (\hasList, b2 => thenPair (decList decExportItem (fuel - 1) b2) (\items, b3 => thenPair (decList decExportSpec (fuel - 1) b3) (\exports, b4 => thenPair (decList decExportItem (fuel - 1) b4) (\reexports, b5 => thenPair (decList decOpacitySpec (fuel - 1) b5) (\opacity, b6 => Just (Pair (ModDecl name hasList items exports reexports opacity noNodeRef) b6)))))))
 
 decImportLike : Int -> Cur -> Maybe (Pair Import Cur)
 decImportLike fuel c =

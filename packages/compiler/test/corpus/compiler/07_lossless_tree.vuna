@@ -186,10 +186,22 @@ fixitiesOk index fx = refsOk index "fixity" (map fixityRefOf fx)
 -- ---------------------------------------------------------------
 -- 表达式 / 模式的身份：parseExpr / parsePatternSingle 的区间出口各建一个节点，
 -- 只有这些「区间根」带 id（更内层的构造子是同一区间的多个视图，没有独立节点）。
+-- where/let 签名行（`EAnn`）投影的是该签名行的 `binding` 节点，不是 `expr` 节点。
 -- ---------------------------------------------------------------
+-- | AST 节点 → 它投影的树节点：(期望 kind 标签, 引用)。
+record Site where
+  siteTag : String
+  siteRef : NodeRef
+
+siteTagOf : Site -> String
+siteTagOf sg = sg.siteTag
+
+siteRefOf : Site -> NodeRef
+siteRefOf sg = sg.siteRef
+
 -- | 一个表达式树上所有带身份的区间根（含自身）。
-exprRefsAt : Int -> Expr -> List NodeRef
-exprRefsAt fuel e =
+exprSitesAt : Int -> Expr -> List Site
+exprSitesAt fuel e =
   if fuel <= 0 then
     []
   else
@@ -200,96 +212,171 @@ exprRefsAt fuel e =
           EInt n r => []
           EStr s r => []
           EFloat raw r => []
-          EInterp multi parts r => concatMap (interpRefs (fuel - 1)) parts
-          ELam ps body r => exprRefsAt (fuel - 1) body
-          EApp fn args r => append (exprRefsAt (fuel - 1) fn) (concatMap (exprRefsAt (fuel - 1)) args)
-          EPi n i q dom cod r => append (exprRefsAt (fuel - 1) dom) (exprRefsAt (fuel - 1) cod)
-          ELet binds body rec_ r => append (concatMap (bindingRefs (fuel - 1)) binds) (exprRefsAt (fuel - 1) body)
-          ELocalFun clauses r => concatMap (localClauseRefs (fuel - 1)) clauses
-          ECase scrut alts r => append (exprRefsAt (fuel - 1) scrut) (concatMap (altRefs (fuel - 1)) alts)
-          EIf c t el r => append (exprRefsAt (fuel - 1) c) (append (exprRefsAt (fuel - 1) t) (exprRefsAt (fuel - 1) el))
-          EField base f r => exprRefsAt (fuel - 1) base
-          ERecord name fields r => concatMap (fieldValueRefs (fuel - 1)) fields
-          ERecUpdate base fields r => append (exprRefsAt (fuel - 1) base) (concatMap (fieldValueRefs (fuel - 1)) fields)
-          EDo stmts r => concatMap (stmtRefs (fuel - 1)) stmts
-          EAnn inner ty r => append (exprRefsAt (fuel - 1) inner) (exprRefsAt (fuel - 1) ty)
-          EInfix op l rhs r => append (exprRefsAt (fuel - 1) l) (exprRefsAt (fuel - 1) rhs)
-          EParen inner r => exprRefsAt (fuel - 1) inner
-          EBacktick nm l rhs r => append (exprRefsAt (fuel - 1) l) (exprRefsAt (fuel - 1) rhs)
+          EInterp multi parts r => concatMap (interpSites (fuel - 1)) parts
+          ELam ps body r => exprSitesAt (fuel - 1) body
+          EApp fn args r => append (exprSitesAt (fuel - 1) fn) (concatMap (exprSitesAt (fuel - 1)) args)
+          EPi n i q dom cod r => append (exprSitesAt (fuel - 1) dom) (exprSitesAt (fuel - 1) cod)
+          ELet binds body rec_ r => append (concatMap (bindingSites (fuel - 1)) binds) (exprSitesAt (fuel - 1) body)
+          ELocalFun clauses r => concatMap (localClauseSites (fuel - 1)) clauses
+          ECase scrut alts r => append (exprSitesAt (fuel - 1) scrut) (concatMap (altSites (fuel - 1)) alts)
+          EIf c t el r => append (exprSitesAt (fuel - 1) c) (append (exprSitesAt (fuel - 1) t) (exprSitesAt (fuel - 1) el))
+          EField base f r => exprSitesAt (fuel - 1) base
+          ERecord name fields r => concatMap (fieldValueSites (fuel - 1)) fields
+          ERecUpdate base fields r => append (exprSitesAt (fuel - 1) base) (concatMap (fieldValueSites (fuel - 1)) fields)
+          EDo stmts r => concatMap (stmtSites (fuel - 1)) stmts
+          EAnn inner ty r => append (exprSitesAt (fuel - 1) inner) (exprSitesAt (fuel - 1) ty)
+          EInfix op l rhs r => append (exprSitesAt (fuel - 1) l) (exprSitesAt (fuel - 1) rhs)
+          EParen inner r => exprSitesAt (fuel - 1) inner
+          EBacktick nm l rhs r => append (exprSitesAt (fuel - 1) l) (exprSitesAt (fuel - 1) rhs)
           ESectOp op r => []
-          ESectL op inner r => exprRefsAt (fuel - 1) inner
-          ESectR inner op r => exprRefsAt (fuel - 1) inner
-    in exprRef e :: rest
+          ESectL op inner r => exprSitesAt (fuel - 1) inner
+          ESectR inner op r => exprSitesAt (fuel - 1) inner
+    in case e of
+      -- 签名行投影的是签名行的 `binding` 节点，不是 `expr` 节点。
+      EAnn inner ty r => Site "binding" r :: rest
+      _ => Site "expr" (exprRef e) :: rest
 
-interpRefs : Int -> InterpPart -> List NodeRef
-interpRefs fuel part =
+interpSites : Int -> InterpPart -> List Site
+interpSites fuel part =
   if fuel <= 0 then
     []
   else
     case part of
       IPText s => []
-      IPHole e => exprRefsAt (fuel - 1) e
+      IPHole e => exprSitesAt (fuel - 1) e
 
-bindingRefs : Int -> Pair Pat Expr -> List NodeRef
-bindingRefs fuel (Pair pat value) = if fuel <= 0 then [] else exprRefsAt (fuel - 1) value
+bindingSites : Int -> Pair Pat Expr -> List Site
+bindingSites fuel (Pair pat value) = if fuel <= 0 then [] else exprSitesAt (fuel - 1) value
 
-localClauseRefs : Int -> Pair (List Pat) Expr -> List NodeRef
-localClauseRefs fuel (Pair pats body) = if fuel <= 0 then [] else exprRefsAt (fuel - 1) body
+localClauseSites : Int -> Pair (List Pat) Expr -> List Site
+localClauseSites fuel (Pair pats body) = if fuel <= 0 then [] else exprSitesAt (fuel - 1) body
 
-altRefs : Int -> Pair Pat Expr -> List NodeRef
-altRefs fuel (Pair pat body) = if fuel <= 0 then [] else exprRefsAt (fuel - 1) body
+altSites : Int -> Pair Pat Expr -> List Site
+altSites fuel (Pair pat body) = if fuel <= 0 then [] else exprSitesAt (fuel - 1) body
 
-fieldValueRefs : Int -> Pair String Expr -> List NodeRef
-fieldValueRefs fuel (Pair fname value) = if fuel <= 0 then [] else exprRefsAt (fuel - 1) value
+fieldValueSites : Int -> Pair String Expr -> List Site
+fieldValueSites fuel (Pair fname value) = if fuel <= 0 then [] else exprSitesAt (fuel - 1) value
 
-stmtRefs : Int -> DoStmt -> List NodeRef
-stmtRefs fuel stmt =
+stmtSites : Int -> DoStmt -> List Site
+stmtSites fuel stmt =
   if fuel <= 0 then
     []
   else
     case stmt of
-      DBind pat value r => exprRefsAt (fuel - 1) value
-      DExpr value r => exprRefsAt (fuel - 1) value
-      DLet binds r => concatMap (bindingRefs (fuel - 1)) binds
+      DBind pat value r => exprSitesAt (fuel - 1) value
+      DExpr value r => exprSitesAt (fuel - 1) value
+      DLet binds r => concatMap (bindingSites (fuel - 1)) binds
 
-declExprRefs : Int -> Decl -> List NodeRef
-declExprRefs fuel d =
+declExprSites : Int -> Decl -> List Site
+declExprSites fuel d =
   if fuel <= 0 then
     []
   else
     case d of
-      DData _ _ kind ctors _ _ _ _ _ => append (exprRefsAt (fuel - 1) kind) (concatMap (ctorTypeRefs (fuel - 1)) ctors)
-      DAxiom _ ty _ => exprRefsAt (fuel - 1) ty
-      DExtern _ _ ty _ => exprRefsAt (fuel - 1) ty
-      DSig _ ctx ty _ => append (concatMap (exprRefsAt (fuel - 1)) ctx) (exprRefsAt (fuel - 1) ty)
-      DFun _ pats body _ => exprRefsAt (fuel - 1) body
-      DRecord _ _ fields _ _ _ _ _ => concatMap (fieldTypeRefs (fuel - 1)) fields
-      DTrait _ params supers methods _ => append (concatMap (traitParamRefs (fuel - 1)) params) (append (concatMap (exprRefsAt (fuel - 1)) supers) (concatMap (methodTypeRefs (fuel - 1)) methods))
-      DInstance ctx head methods _ => append (concatMap (exprRefsAt (fuel - 1)) ctx) (append (exprRefsAt (fuel - 1) head) (concatMap (declExprRefs (fuel - 1)) methods))
+      DData _ _ kind ctors _ _ _ _ _ => append (exprSitesAt (fuel - 1) kind) (concatMap (ctorTypeSites (fuel - 1)) ctors)
+      DAxiom _ ty _ => exprSitesAt (fuel - 1) ty
+      DExtern _ _ ty _ => exprSitesAt (fuel - 1) ty
+      DSig _ ctx ty _ => append (concatMap (exprSitesAt (fuel - 1)) ctx) (exprSitesAt (fuel - 1) ty)
+      DFun _ pats body _ => exprSitesAt (fuel - 1) body
+      DRecord _ _ fields _ _ _ _ _ => concatMap (fieldTypeSites (fuel - 1)) fields
+      DTrait _ params supers methods _ => append (concatMap (traitParamSites (fuel - 1)) params) (append (concatMap (exprSitesAt (fuel - 1)) supers) (concatMap (methodTypeSites (fuel - 1)) methods))
+      DInstance ctx head methods _ => append (concatMap (exprSitesAt (fuel - 1)) ctx) (append (exprSitesAt (fuel - 1) head) (concatMap (declExprSites (fuel - 1)) methods))
 
-ctorTypeRefs : Int -> Ctor -> List NodeRef
-ctorTypeRefs fuel (Ctor _ ty _ r) = if fuel <= 0 then [] else exprRefsAt (fuel - 1) ty
+ctorTypeSites : Int -> Ctor -> List Site
+ctorTypeSites fuel (Ctor _ ty _ r) = if fuel <= 0 then [] else exprSitesAt (fuel - 1) ty
 
-fieldTypeRefs : Int -> Field -> List NodeRef
-fieldTypeRefs fuel f = if fuel <= 0 then [] else exprRefsAt (fuel - 1) (fieldType f)
+fieldTypeSites : Int -> Field -> List Site
+fieldTypeSites fuel f = if fuel <= 0 then [] else exprSitesAt (fuel - 1) (fieldType f)
 
-methodTypeRefs : Int -> TraitMethod -> List NodeRef
-methodTypeRefs fuel m = if fuel <= 0 then [] else exprRefsAt (fuel - 1) (methodTy m)
+methodTypeSites : Int -> TraitMethod -> List Site
+methodTypeSites fuel m = if fuel <= 0 then [] else exprSitesAt (fuel - 1) (methodTy m)
 
 methodTy : TraitMethod -> Expr
 methodTy m = m.traitMethodType
 
-traitParamRefs : Int -> TraitParam -> List NodeRef
-traitParamRefs fuel param =
+traitParamSites : Int -> TraitParam -> List Site
+traitParamSites fuel param =
   if fuel <= 0 then
     []
   else
     case param.traitParamKind of
       Nothing => []
-      Just k => exprRefsAt (fuel - 1) k
+      Just k => exprSitesAt (fuel - 1) k
 
-allExprRefs : List Decl -> List NodeRef
-allExprRefs decls = concatMap (declExprRefs 64) decls
+allExprSites : List Decl -> List Site
+allExprSites decls = concatMap (declExprSites 64) decls
+
+siteRefsOfTag : String -> List Site -> List NodeRef
+siteRefsOfTag tag sites = map siteRefOf (filter (\sg => siteTagOf sg == tag) sites)
+
+countSitesOfTag : String -> List Site -> Int
+countSitesOfTag tag sites = List.length (filter (\sg => siteTagOf sg == tag) sites)
+
+-- | 表达式区间根：id 指回 `expr` 节点，**终点相同、AST 区间落在节点区间内**
+-- （`EInfix` / `EBacktick` 的 span 从运算符起，比树节点窄）。签名行要求 kind 与区间
+-- 都精确相同。
+siteOk : HashMap Int CstNode -> Site -> Bool
+siteOk index site =
+  case HashMap.lookup (nodeRefId (siteRefOf site)) index of
+    Nothing => False
+    Just n =>
+      nodeKindTag n
+        == siteTagOf site
+        && spanEndOffset (nodeSpan n)
+        == spanEndOffset (nodeRefSpan (siteRefOf site))
+        && (
+          siteTagOf site
+            == "binding"
+            || spanStartOffset (nodeSpan n) <= spanStartOffset (nodeRefSpan (siteRefOf site))
+        ) && spanEndOffset (nodeRefSpan (siteRefOf site)) <= spanEndOffset (nodeSpan n)
+
+sitesOk : HashMap Int CstNode -> List Site -> Bool
+sitesOk index [] = True
+sitesOk index (site :: rest) =
+  (if nodeRefId (siteRefOf site) < 0 then True else siteOk index site) && sitesOk index rest
+
+-- | 带身份的引用条数与树上该 kind 的节点数相等（区间根一一对应，不多不少）。
+countTagged : String -> List CstNode -> Int
+countTagged tag nodes = List.length (nodesOfKindDeep tag nodes)
+
+nodesOfKindDeep : String -> List CstNode -> List CstNode
+nodesOfKindDeep tag [] = []
+nodesOfKindDeep tag (n :: rest) =
+  append (if nodeKindTag n == tag then [n] else []) (
+      case n of
+        CstLeaf _ => nodesOfKindDeep tag rest
+        CstBranch _ _ _ kids => append (nodesOfKindDeep tag kids) (nodesOfKindDeep tag rest)
+    )
+
+countIdentified : List NodeRef -> Int
+countIdentified refs = List.length (filter (\r => nodeRefId r >= 0) refs)
+
+-- | 签名行的 `binding` 节点没有 `pat` 子节点（定义行的 binding 有）。
+isEmpty : List a -> Bool
+isEmpty [] = True
+isEmpty (_ :: _) = False
+
+countSigBindings : List CstNode -> Int
+countSigBindings nodes =
+  List.length
+    (filter (\n => nodeKindTag n == "binding" && isEmpty (nodesOfKind "pat" (nodeChildren n))) (nodesOfKindDeep "binding" nodes))
+
+exprIdsOk : HashMap Int CstNode -> CstNode -> List Decl -> Bool
+exprIdsOk index tree decls =
+  let
+    sites = allExprSites decls
+    exprRefs = siteRefsOfTag "expr" sites
+    annRefs = siteRefsOfTag "binding" sites
+  in sitesOk index sites
+    && countIdentified exprRefs
+    == countTagged "expr" (nodeChildren tree)
+    && countIdentified annRefs == countSigBindings (nodeChildren tree)
+
+-- | 带身份的引用（id >= 0）必须指回同 kind、同区间的树节点。
+refsInIndexOk : HashMap Int CstNode -> String -> List NodeRef -> Bool
+refsInIndexOk index tag [] = True
+refsInIndexOk index tag (r :: rest) =
+  (if nodeRefId r < 0 then True else refOk index tag r) && refsInIndexOk index tag rest
 
 allPatRefs : List Decl -> List NodeRef
 allPatRefs decls = concatMap patRefsOfDecl decls
@@ -346,54 +433,6 @@ stmtPatRefs stmt =
         (concatMap (\b => bodyPatRefs (secondOf b)) binds)
 
 -- | 带身份的引用（id >= 0）必须指回同 kind、同区间的树节点。
-refsInIndexOk : HashMap Int CstNode -> String -> List NodeRef -> Bool
-refsInIndexOk index tag [] = True
-refsInIndexOk index tag (r :: rest) =
-  (if nodeRefId r < 0 then True else refOk index tag r) && refsInIndexOk index tag rest
-
--- | 表达式区间根：id 指回 `expr` 节点，**终点相同、AST 区间落在节点区间内**。
--- `EInfix` / `EBacktick` 的 span 从运算符起（诊断指向运算符），比树节点窄。
-exprRefOk : HashMap Int CstNode -> NodeRef -> Bool
-exprRefOk index r =
-  case HashMap.lookup (nodeRefId r) index of
-    Nothing => False
-    Just n =>
-      nodeKindTag n
-        == "expr"
-        && spanEndOffset (nodeSpan n)
-        == spanEndOffset (nodeRefSpan r)
-        && spanStartOffset (nodeSpan n)
-        <= spanStartOffset (nodeRefSpan r)
-        && spanEndOffset (nodeRefSpan r) <= spanEndOffset (nodeSpan n)
-
-exprRefsOk : HashMap Int CstNode -> List NodeRef -> Bool
-exprRefsOk index [] = True
-exprRefsOk index (r :: rest) =
-  (if nodeRefId r < 0 then True else exprRefOk index r) && exprRefsOk index rest
-
--- | 带身份的引用条数与树上该 kind 的节点数相等（区间根一一对应，不多不少）。
-countTagged : String -> List CstNode -> Int
-countTagged tag nodes = List.length (nodesOfKindDeep tag nodes)
-
-nodesOfKindDeep : String -> List CstNode -> List CstNode
-nodesOfKindDeep tag [] = []
-nodesOfKindDeep tag (n :: rest) =
-  append (if nodeKindTag n == tag then [n] else []) (
-      case n of
-        CstLeaf _ => nodesOfKindDeep tag rest
-        CstBranch _ _ _ kids => append (nodesOfKindDeep tag kids) (nodesOfKindDeep tag rest)
-    )
-
-countIdentified : List NodeRef -> Int
-countIdentified refs = List.length (filter (\r => nodeRefId r >= 0) refs)
-
-exprIdsOk : HashMap Int CstNode -> CstNode -> List Decl -> Bool
-exprIdsOk index tree decls =
-  let
-    refs = allExprRefs decls
-  in exprRefsOk index refs
-    && countIdentified refs == countTagged "expr" (nodeChildren tree)
-
 patIdsOk : HashMap Int CstNode -> CstNode -> List Decl -> Bool
 patIdsOk index tree decls =
   let
@@ -500,6 +539,19 @@ noHeaderDeclIds =
         tree = nestToTree toks p.parsedEvents
       in declIdsOk (nodeIdAtOffset tree) (nodeIndex tree) p.parsedFile.sourceFileDecls
 
+-- | 模块头与导出项：id 指回同 kind、同区间的树节点。
+headerIdsOk : HashMap Int CstNode -> Maybe ModDecl -> Bool
+headerIdsOk index Nothing = False
+headerIdsOk index (Just m) =
+  sameSpanIn index "modhead" m.modDeclRef
+    && refsOk index "exportItem" (map exportItemRef m.modDeclExportItems)
+
+sameSpanIn : HashMap Int CstNode -> String -> NodeRef -> Bool
+sameSpanIn index tag r =
+  case HashMap.lookup (nodeRefId r) index of
+    Nothing => False
+    Just n => nodeKindTag n == tag && sameSpan (nodeSpan n) (nodeRefSpan r)
+
 -- | 每种结构都得真的建出来了：只靠「根是 file」会放过把 token 全平铺在根上的实现。
 hasKinds : List String -> Bool
 hasKinds tags =
@@ -558,3 +610,4 @@ main =
         + (if doStmtsOk then 16384 else 0)
         + (if exprIdsOk (nodeIndex tree) tree p.parsedFile.sourceFileDecls then 32768 else 0)
         + (if patIdsOk (nodeIndex tree) tree p.parsedFile.sourceFileDecls then 65536 else 0)
+        + (if headerIdsOk (nodeIndex tree) p.parsedFile.sourceFileModDecl then 131072 else 0)

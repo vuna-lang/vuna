@@ -7,8 +7,8 @@
 -- 前置注释之间的源码空行保留（至多一级）；表达式内部的注释前移到最内层包含它的条目
 -- （没有则前移到下一条目；文件末尾的注释保留在文件末尾）。
 --
--- 注释列表在 `formatSourceWith` 里按 `anchorSpans` 做一次归属分配（行尾优先、否则下一条目），
--- 渲染时按条目 span 直接查 `TriviaCtx`。
+-- 注释列表在 `formatSourceWith` 里按 `anchorRefs` 做一次归属分配（行尾优先、否则下一条目），
+-- 渲染时用条目的 `NodeRef` 直接查 `TriviaCtx`（键是 parser 分配的节点 id，不是 span 起点）。
 module Vuna.Fmt.Comment where
 
 import Base.Container.HashMap as HashMap
@@ -142,47 +142,47 @@ containsPos sp line col =
     && posBeforeOrEq line col (spanEndLine sp) sp.spanEndCol
 
 -- | 内部：包含该位置的条目中起点最晚者（即最内层条目）。
-innermostEnclosing : List Span -> Span -> Maybe Span
+innermostEnclosing : List NodeRef -> Span -> Maybe NodeRef
 innermostEnclosing anchors csp = enclosingFold Nothing anchors csp
 
 -- | 内部：`innermostEnclosing` 的折叠。
-enclosingFold : Maybe Span -> List Span -> Span -> Maybe Span
+enclosingFold : Maybe NodeRef -> List NodeRef -> Span -> Maybe NodeRef
 enclosingFold best [] csp = best
-enclosingFold best (sp :: rest) csp =
-  if containsPos sp (spanStartLine csp) (spanStartCol csp) then
+enclosingFold best (r :: rest) csp =
+  if containsPos (nodeRefSpan r) (spanStartLine csp) (spanStartCol csp) then
     case best of
-      Nothing => enclosingFold (Just sp) rest csp
-      Just b => if betterNext sp b then enclosingFold (Just sp) rest csp else enclosingFold best rest csp
+      Nothing => enclosingFold (Just r) rest csp
+      Just b => if betterNext r b then enclosingFold (Just r) rest csp else enclosingFold best rest csp
   else
     enclosingFold best rest csp
 
--- | 内部：按条目起点偏移查附件槽。
+-- | 内部：按条目节点 id 查附件槽。
 lookupSlot : HashMap Int (Pair (List Comment) (List Comment)) -> Int -> Maybe (Pair (List Comment) (List Comment))
-lookupSlot at off = HashMap.lookup off at
+lookupSlot at nid = HashMap.lookup nid at
 
 -- | 内部：条目的前置注释列表（无槽时为空）。
 leadOf : HashMap Int (Pair (List Comment) (List Comment)) -> Int -> List Comment
-leadOf at off =
-  case lookupSlot at off of
+leadOf at nid =
+  case lookupSlot at nid of
     Nothing => []
     Just slot => firstOf slot
 
 -- | 内部：条目的行尾注释列表（无槽时为空）。
 trailOf : HashMap Int (Pair (List Comment) (List Comment)) -> Int -> List Comment
-trailOf at off =
-  case lookupSlot at off of
+trailOf at nid =
+  case lookupSlot at nid of
     Nothing => []
     Just slot => secondOf slot
 
 -- | 内部：把注释追加到该条目的前置或行尾列表；无槽时新建。
 addToSlot : Int -> Bool -> Comment -> HashMap Int (Pair (List Comment) (List Comment)) -> HashMap Int (Pair (List Comment) (List Comment))
-addToSlot off isTrail comment at =
-  case HashMap.lookup off at of
+addToSlot nid isTrail comment at =
+  case HashMap.lookup nid at of
     Nothing =>
       if isTrail then
-        HashMap.insert off (Pair [] [comment]) at
+        HashMap.insert nid (Pair [] [comment]) at
       else
-        HashMap.insert off (Pair [comment] []) at
+        HashMap.insert nid (Pair [comment] []) at
     Just slot =>
       let
         newSlot =
@@ -190,67 +190,81 @@ addToSlot off isTrail comment at =
             Pair (firstOf slot) (append (secondOf slot) [comment])
           else
             Pair (append (firstOf slot) [comment]) (secondOf slot)
-      in HashMap.insert off newSlot at
+      in HashMap.insert nid newSlot at
 
 -- | 内部：能否作为行尾锚点：与注释同行且结束于注释起点之前。
-trailCandidate : Span -> Span -> Bool
-trailCandidate sp csp = spanEndLine sp == spanStartLine csp && sp.spanEndCol < spanStartCol csp
+trailCandidate : NodeRef -> Span -> Bool
+trailCandidate r csp =
+  let
+    sp = nodeRefSpan r
+  in spanEndLine sp == spanStartLine csp && sp.spanEndCol < spanStartCol csp
 
 -- | 内部：行尾候选择优：结束列更大者优先，同列取起点更晚者（更深层条目）。
-betterTrail : Span -> Span -> Bool
-betterTrail sp b =
+betterTrail : NodeRef -> NodeRef -> Bool
+betterTrail r b =
   let
+    sp = nodeRefSpan r
+    bsp = nodeRefSpan b
     ec = sp.spanEndCol
-    bc = b.spanEndCol
+    bc = bsp.spanEndCol
   in if ec > bc then
     True
   else if ec < bc then
     False
   else
-    posBefore (spanStartLine b) (spanStartCol b) (spanStartLine sp) (spanStartCol sp)
+    posBefore (spanStartLine bsp) (spanStartCol bsp) (spanStartLine sp) (spanStartCol sp)
 
 -- | 内部：行尾注释的锚点（无候选为 `Nothing`）。
-bestTrailAnchor : List Span -> Span -> Maybe Span
+bestTrailAnchor : List NodeRef -> Span -> Maybe NodeRef
 bestTrailAnchor anchors csp = trailFold Nothing anchors csp
 
 -- | 内部：`bestTrailAnchor` 的折叠。
-trailFold : Maybe Span -> List Span -> Span -> Maybe Span
+trailFold : Maybe NodeRef -> List NodeRef -> Span -> Maybe NodeRef
 trailFold best [] csp = best
-trailFold best (sp :: rest) csp =
-  if trailCandidate sp csp then
+trailFold best (r :: rest) csp =
+  if trailCandidate r csp then
     case best of
-      Nothing => trailFold (Just sp) rest csp
-      Just b => if betterTrail sp b then trailFold (Just sp) rest csp else trailFold best rest csp
+      Nothing => trailFold (Just r) rest csp
+      Just b => if betterTrail r b then trailFold (Just r) rest csp else trailFold best rest csp
   else
     trailFold best rest csp
 
 -- | 内部：条目起点是否严格晚于注释起点。
-isLaterAnchor : Span -> Span -> Bool
-isLaterAnchor sp csp =
-  posBefore (spanStartLine csp) (spanStartCol csp) (spanStartLine sp) (spanStartCol sp)
+isLaterAnchor : NodeRef -> Span -> Bool
+isLaterAnchor r csp =
+  posBefore
+    (spanStartLine csp)
+    (spanStartCol csp)
+    (spanStartLine (nodeRefSpan r))
+    (spanStartCol (nodeRefSpan r))
 
 -- | 内部：候选择优：起点更早者优先。
-betterNext : Span -> Span -> Bool
-betterNext sp b = posBefore (spanStartLine sp) (spanStartCol sp) (spanStartLine b) (spanStartCol b)
+betterNext : NodeRef -> NodeRef -> Bool
+betterNext r b =
+  posBefore
+    (spanStartLine (nodeRefSpan r))
+    (spanStartCol (nodeRefSpan r))
+    (spanStartLine (nodeRefSpan b))
+    (spanStartCol (nodeRefSpan b))
 
 -- | 内部：注释之后最近的条目（无则为 `Nothing`）。
-bestNextAnchor : List Span -> Span -> Maybe Span
+bestNextAnchor : List NodeRef -> Span -> Maybe NodeRef
 bestNextAnchor anchors csp = nextFold Nothing anchors csp
 
 -- | 内部：`bestNextAnchor` 的折叠。
-nextFold : Maybe Span -> List Span -> Span -> Maybe Span
+nextFold : Maybe NodeRef -> List NodeRef -> Span -> Maybe NodeRef
 nextFold best [] csp = best
-nextFold best (sp :: rest) csp =
-  if isLaterAnchor sp csp then
+nextFold best (r :: rest) csp =
+  if isLaterAnchor r csp then
     case best of
-      Nothing => nextFold (Just sp) rest csp
-      Just b => if betterNext sp b then nextFold (Just sp) rest csp else nextFold best rest csp
+      Nothing => nextFold (Just r) rest csp
+      Just b => if betterNext r b then nextFold (Just r) rest csp else nextFold best rest csp
   else
     nextFold best rest csp
 
--- | 把注释分配到条目附件表：单行注释优先挂行尾锚点，否则走前置路径；
--- 返回 (附件表, 文件末尾注释)。
-assignComments : List Span -> List Comment -> HashMap Int (Pair (List Comment) (List Comment)) -> List Comment -> Pair (HashMap Int (Pair (List Comment) (List Comment))) (List Comment)
+-- | 把注释分配到条目附件表（条目节点 id 为键）：单行注释优先挂行尾锚点，否则走前置
+-- 路径；返回 (附件表, 文件末尾注释)。
+assignComments : List NodeRef -> List Comment -> HashMap Int (Pair (List Comment) (List Comment)) -> List Comment -> Pair (HashMap Int (Pair (List Comment) (List Comment))) (List Comment)
 assignComments anchors [] at eof = Pair at eof
 assignComments anchors (c :: rest) at eof =
   let
@@ -259,96 +273,101 @@ assignComments anchors (c :: rest) at eof =
     assignNextComment anchors c rest at eof
   else if isSingleLineComment c then
     case bestTrailAnchor anchors csp of
-      Just sp => assignComments anchors rest (addToSlot (spanStartOffset sp) True c at) eof
+      Just r => assignComments anchors rest (addToSlot (nodeRefId r) True c at) eof
       Nothing => assignNextComment anchors c rest at eof
   else
     assignNextComment anchors c rest at eof
 
 -- | 内部：前置路径：挂到下一条目；没有下一条目就落到文件末尾注释。
-assignNextComment : List Span -> Comment -> List Comment -> HashMap Int (Pair (List Comment) (List Comment)) -> List Comment -> Pair (HashMap Int (Pair (List Comment) (List Comment))) (List Comment)
+assignNextComment : List NodeRef -> Comment -> List Comment -> HashMap Int (Pair (List Comment) (List Comment)) -> List Comment -> Pair (HashMap Int (Pair (List Comment) (List Comment))) (List Comment)
 assignNextComment anchors c rest at eof =
   case nextAnchorWithFallback anchors (commentSpan c) of
-    Just sp => assignComments anchors rest (addToSlot (spanStartOffset sp) False c at) eof
+    Just r => assignComments anchors rest (addToSlot (nodeRefId r) False c at) eof
     Nothing => assignComments anchors rest at (append eof [c])
 
 -- | 内部：下一条目；若下一条目跳出最内层包含条目，则改用该包含条目
 -- （函数体末尾的注释回到该函数上方，而不是下一位函数上方）。
-nextAnchorWithFallback : List Span -> Span -> Maybe Span
+nextAnchorWithFallback : List NodeRef -> Span -> Maybe NodeRef
 nextAnchorWithFallback anchors csp =
   case bestNextAnchor anchors csp of
     Nothing =>
       case innermostEnclosing anchors csp of
         Nothing => Nothing
         Just enc => Just enc
-    Just sp =>
+    Just r =>
       case innermostEnclosing anchors csp of
-        Nothing => Just sp
+        Nothing => Just r
         Just enc =>
-          if posBeforeOrEq (spanStartLine enc) (spanStartCol enc) (spanStartLine sp) (spanStartCol sp) && posBeforeOrEq (spanStartLine sp) (spanStartCol sp) (spanEndLine enc) enc.spanEndCol then
-            Just sp
+          if posBeforeOrEq (spanStartLine (nodeRefSpan enc)) (spanStartCol (nodeRefSpan enc)) (spanStartLine (nodeRefSpan r)) (spanStartCol (nodeRefSpan r)) && posBeforeOrEq (spanStartLine (nodeRefSpan r)) (spanStartCol (nodeRefSpan r)) (spanEndLine (nodeRefSpan enc)) (spanEndCol (nodeRefSpan enc)) then
+            Just r
           else
             Just enc
 
--- | 内部：trait 方法的锚点用方法签名 span（方法名到类型结束）。
-traitMethodAnchor : TraitMethod -> Span
-traitMethodAnchor m = traitMethodSpan m
-
 -- | 内部：import 的锚点。
-importAnchor : Import -> Span
-importAnchor imp = (importSpan imp)
+importAnchor : Import -> NodeRef
+importAnchor imp = imp.importRef
 
 -- | 内部：模块头与其导出项的锚点。
-headerAnchors : Maybe ModDecl -> List Span
+headerAnchors : Maybe ModDecl -> List NodeRef
 headerAnchors Nothing = []
-headerAnchors (Just m) = append [m.modDeclSpan] (modDeclItemAnchors m)
+headerAnchors (Just m) = m.modDeclRef :: map exportItemRef m.modDeclExportItems
 
--- | 内部：导出项锚点（排序时项注释随项移动）。
-modDeclItemAnchors : ModDecl -> List Span
-modDeclItemAnchors (ModDecl _ _ items _ _ _ _) = map exportItemSpan items
+-- | 内部：构造器的锚点。
+ctorAnchor : Ctor -> NodeRef
+ctorAnchor (Ctor name ty arity r) = r
+
+-- | 内部：记录字段的锚点。
+fieldAnchor : Field -> NodeRef
+fieldAnchor (Field name ty r) = r
+
+-- | 内部：`infix*` 声明的锚点。
+fixityAnchor : FixityDecl -> NodeRef
+fixityAnchor (FixityDecl op level assoc r) = r
+
+-- | 内部：trait 方法签名行的锚点（方法名到类型结束）。
+methodAnchor : TraitMethod -> NodeRef
+methodAnchor m = m.traitMethodRef
 
 -- | 内部：一个声明自身的锚点 + 其内部条目（构造器 / 记录字段 / trait 方法 / 子表达式）。
-declAnchors : Decl -> List Span
-declAnchors (DData name params kind ctors derivings viaField repr lin r) =
-  nodeRefSpan r :: map ctorSpan ctors
-declAnchors (DAxiom name ty r) = [nodeRefSpan r]
-declAnchors (DExtern name cName ty r) = [nodeRefSpan r]
-declAnchors (DSig name ctx ty r) = [nodeRefSpan r]
-declAnchors (DFun name pats body r) = nodeRefSpan r :: exprAnchors body
-declAnchors (DRecord name params fields derivings viaField repr lin r) =
-  nodeRefSpan r :: map fieldSpan fields
-declAnchors (DTrait name params supers methods r) = nodeRefSpan r :: map traitMethodAnchor methods
-declAnchors (DInstance ctxE head methods r) = nodeRefSpan r :: concatMap declAnchors methods
+declAnchors : Decl -> List NodeRef
+declAnchors (DData name params kind ctors derivings viaField repr lin r) = r :: map ctorAnchor ctors
+declAnchors (DAxiom name ty r) = [r]
+declAnchors (DExtern name cName ty r) = [r]
+declAnchors (DSig name ctx ty r) = [r]
+declAnchors (DFun name pats body r) = r :: exprAnchors body
+declAnchors (DRecord name params fields derivings viaField repr lin r) = r :: map fieldAnchor fields
+declAnchors (DTrait name params supers methods r) = r :: map methodAnchor methods
+declAnchors (DInstance ctxE head methods r) = (::) r (concatMap declAnchors methods)
 
--- | 内部：let 绑定的锚点（模式 span）。
-bindingAnchor : Pair Pat Expr -> Span
-bindingAnchor (Pair pat value) = patSpan pat
+-- | 内部：let / where 绑定的锚点（模式节点）。
+bindingAnchor : Pair Pat Expr -> NodeRef
+bindingAnchor (Pair pat value) = patRef pat
 
 -- | 内部：let 绑定值里的表达式锚点。
-bindingValueAnchors : Pair Pat Expr -> List Span
+bindingValueAnchors : Pair Pat Expr -> List NodeRef
 bindingValueAnchors (Pair pat value) = exprAnchors value
 
--- | 内部：case 分支的锚点（模式 span）。
-altAnchor : Pair Pat Expr -> Span
-altAnchor (Pair pat body) = patSpan pat
+-- | 内部：case 分支的锚点（模式节点）。
+altAnchor : Pair Pat Expr -> NodeRef
+altAnchor (Pair pat body) = patRef pat
 
 -- | 内部：case 分支体内的表达式锚点。
-altBodyAnchors : Pair Pat Expr -> List Span
+altBodyAnchors : Pair Pat Expr -> List NodeRef
 altBodyAnchors (Pair pat body) = exprAnchors body
 
 -- | 内部：记录字段值的表达式锚点。
-fieldExprAnchors : Pair String Expr -> List Span
+fieldExprAnchors : Pair String Expr -> List NodeRef
 fieldExprAnchors (Pair fname value) = exprAnchors value
 
--- | 内部：do 语句的锚点（语句 span + 值里的表达式锚点）。
-doStmtAnchors : DoStmt -> List Span
-doStmtAnchors (DBind pat value r) = nodeRefSpan r :: exprAnchors value
-doStmtAnchors (DExpr value r) = nodeRefSpan r :: exprAnchors value
+-- | 内部：do 语句的锚点（语句节点 + 值里的表达式锚点）。
+doStmtAnchors : DoStmt -> List NodeRef
+doStmtAnchors (DBind pat value r) = r :: exprAnchors value
+doStmtAnchors (DExpr value r) = r :: exprAnchors value
 doStmtAnchors (DLet binds r) =
-  nodeRefSpan r :: append (map bindingAnchor binds) (concatMap bindingValueAnchors binds)
+  r :: append (map bindingAnchor binds) (concatMap bindingValueAnchors binds)
 
--- | 内部：表达式里可挂注释的条目（let 绑定、case 分支、do 语句、签名行、局部函数
--- clause 等），按源码顺序。
-exprAnchors : Expr -> List Span
+-- | 内部：表达式里可挂注释的条目（let 绑定、case 分支、do 语句、签名行等），按源码顺序。
+exprAnchors : Expr -> List NodeRef
 exprAnchors e =
   case e of
     EVar name _ => []
@@ -369,8 +388,9 @@ exprAnchors e =
     ERecord name fields _ => concatMap fieldExprAnchors fields
     ERecUpdate base fields _ => append (exprAnchors base) (concatMap fieldExprAnchors fields)
     EDo stmts _ => concatMap doStmtAnchors stmts
-    -- where 绑定签名行（`g : Int -> Int`）本身是注释锚点（前置/行尾注释挂签名行）。
-    EAnn value ty sp => (nodeRefSpan sp) :: exprAnchors value
+    -- where 绑定签名行（`g : Int -> Int`）本身是注释锚点（前置/行尾注释挂签名行）；
+    -- 身份是签名行对应的 `binding` 树节点。
+    EAnn value ty r => (::) r (exprAnchors value)
     -- where/let 多 clause 局部函数：每个 clause body 的表达式锚点。
     ELocalFun clauses _ => concatMap localClauseAnchors clauses
     EInfix op l r _ => append (exprAnchors l) (exprAnchors r)
@@ -385,46 +405,45 @@ exprAnchors e =
     EInterp multi parts _ => concatMap interpPartAnchors parts
 
 -- | 内部：模板片段里洞表达式的锚点（文本块没有锚点）。
-interpPartAnchors : InterpPart -> List Span
+interpPartAnchors : InterpPart -> List NodeRef
 interpPartAnchors (IPText s) = []
 interpPartAnchors (IPHole e) = exprAnchors e
 
 -- | 内部：局部函数 clause 体的锚点。
-localClauseAnchors : Pair (List Pat) Expr -> List Span
+localClauseAnchors : Pair (List Pat) Expr -> List NodeRef
 localClauseAnchors (Pair pats body) = exprAnchors body
 
--- | 收集整个文件的注释锚点（源码顺序）：模块头 / 导出项 / import / `infix*` 声明 /
--- 声明及其内部条目。
-export anchorSpans : Maybe ModDecl -> List Import -> List FixityDecl -> List Decl -> List Span
-anchorSpans hdr imports fixities decls =
+-- | 收集整个文件的注释锚点（源码顺序的节点身份）：模块头 / 导出项 / import /
+-- `infix*` 声明 / 声明及其内部条目。锚点集合就是渲染器的挂载点；渲染时用同一个
+-- `NodeRef` 查槽，不再按 span 起点做二次匹配。
+export anchorRefs : Maybe ModDecl -> List Import -> List FixityDecl -> List Decl -> List NodeRef
+anchorRefs hdr imports fixities decls =
   append
     (headerAnchors hdr)
-    (append (map importAnchor imports) (append (map fixitySpan fixities) (concatMap declAnchors decls)))
+    (append (map importAnchor imports) (append (map fixityAnchor fixities) (concatMap declAnchors decls)))
 
 -- | 内部：条目的前置注释文档（无注释时为空）。
-leadingDoc : HashMap Int (Pair (List Comment) (List Comment)) -> Span -> Doc
-leadingDoc at sp =
+leadingDoc : HashMap Int (Pair (List Comment) (List Comment)) -> NodeRef -> Doc
+leadingDoc at r =
   let
-    cs = leadOf at (spanStartOffset sp)
+    cs = leadOf at (nodeRefId r)
   in if isNilList cs then empty else vsep (map commentLeadDoc cs) `appendDoc` hard
 
 -- | 内部：把行尾注释逐个追加到条目最后一行末尾。
-trailingDoc : HashMap Int (Pair (List Comment) (List Comment)) -> Span -> Doc -> Doc
-trailingDoc at sp doc =
-  case trailOf at (spanStartOffset sp) of
+trailingDoc : HashMap Int (Pair (List Comment) (List Comment)) -> NodeRef -> Doc -> Doc
+trailingDoc at r doc =
+  case trailOf at (nodeRefId r) of
     [] => doc
     cs => foldl (\acc, c => acc `appendDoc` (text " ${inlineCommentText c}")) doc cs
 
 -- | 把条目的注释贴到渲染结果上：前置注释在上，行尾注释追加到最后一行。
-attachAtTable : HashMap Int (Pair (List Comment) (List Comment)) -> Span -> Doc -> Doc
-attachAtTable at sp doc = trailingDoc at sp (leadingDoc at sp `appendDoc` doc)
+attachAtTable : HashMap Int (Pair (List Comment) (List Comment)) -> NodeRef -> Doc -> Doc
+attachAtTable at r doc = trailingDoc at r (leadingDoc at r `appendDoc` doc)
 
 -- | 内部：导出项是否挂了注释（前置或行尾）。
 itemHasComments : HashMap Int (Pair (List Comment) (List Comment)) -> ExportItem -> Bool
 itemHasComments at item =
-  let
-    sp = exportItemSpan item
-  in case lookupSlot at (spanStartOffset sp) of
+  case lookupSlot at (nodeRefId (exportItemRef item)) of
     Nothing => False
     Just slot => not (isNilList (firstOf slot)) || not (isNilList (secondOf slot))
 
@@ -442,7 +461,7 @@ stripLeadingBlanks (c :: rest) = if isBlankMarker c then stripLeadingBlanks rest
 -- ---------------------------------------------------------------
 -- CST trivia → 注释计划
 -- ---------------------------------------------------------------
--- | 注释计划：附件表（与条目起点对齐）+ 文件末尾注释。渲染时按条目 span 查表。
+-- | 注释计划：附件表（节点 id → 前置 / 行尾注释）+ 文件末尾注释。
 export record TriviaCtx where
   ctxAt : HashMap Int (Pair (List Comment) (List Comment))
 
@@ -516,24 +535,17 @@ countNewlinesChars : List Int -> Int
 countNewlinesChars [] = 0
 countNewlinesChars (c :: rest) = (if c == 10 then 1 else 0) + countNewlinesChars rest
 
--- | 从 CST trivia 建注释计划：先按锚点分配（行尾优先、否则下一条目），再返回附件表与文件末尾注释。
-export triviaCtxOf : List Span -> List CstToken -> Pair TriviaCtx (List Comment)
+-- | 从 CST trivia 建注释计划：先按锚点分配（行尾优先、否则下一条目），再返回附件表与
+-- 文件末尾注释。
+export triviaCtxOf : List NodeRef -> List CstToken -> Pair TriviaCtx (List Comment)
 triviaCtxOf anchors toks =
   let
     assigned = assignComments anchors (concatMap tokComments toks) emptySlotTable []
   in Pair (TriviaCtx (firstOf assigned)) (stripLeadingBlanks (secondOf assigned))
 
--- | 把条目的注释贴到渲染结果上。
-export attachAt : TriviaCtx -> Span -> Doc -> Doc
-attachAt ctx sp doc = attachAtTable ctx.ctxAt sp doc
-
--- | 该条目是否挂了注释（前置或行尾）；导出列表据此强制多行。
-export spanHasComments : TriviaCtx -> Span -> Bool
-spanHasComments ctx sp =
-  case lookupSlot ctx.ctxAt (spanStartOffset sp) of
-    Nothing => False
-    Just slot =>
-      not (isNilList (stripLeadingBlanks (firstOf slot))) || not (isNilList (secondOf slot))
+-- | 把条目的注释贴到渲染结果上（按节点 id 查槽）。
+export attachAt : TriviaCtx -> NodeRef -> Doc -> Doc
+attachAt ctx r doc = attachAtTable ctx.ctxAt r doc
 
 -- | 任一导出项挂了注释。
 export anyItemHasComments : TriviaCtx -> List ExportItem -> Bool
@@ -548,9 +560,9 @@ export tokComments : CstToken -> List Comment
 tokComments t = triviaComments t.cstLeading
 
 -- | 顶层条目的前置注释（丢掉最前面的空行标记，顶层空行由 section / 声明间距负责）。
-export attachAtTop : TriviaCtx -> Span -> Doc -> Doc
-attachAtTop ctx sp doc =
+export attachAtTop : TriviaCtx -> NodeRef -> Doc -> Doc
+attachAtTop ctx r doc =
   let
-    cs = stripLeadingBlanks (leadOf ctx.ctxAt (spanStartOffset sp))
+    cs = stripLeadingBlanks (leadOf ctx.ctxAt (nodeRefId r))
     lead = if isNilList cs then empty else vsep (map commentLeadDoc cs) `appendDoc` hard
-  in trailingDoc ctx.ctxAt sp (lead `appendDoc` doc)
+  in trailingDoc ctx.ctxAt r (lead `appendDoc` doc)
