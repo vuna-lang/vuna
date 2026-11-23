@@ -14,7 +14,7 @@ bench/programs/
 
 | tier | 机制 | 参照 | 用例 |
 | --- | --- | --- | --- |
-| t0 | 地板与入口 | 手写 OCaml / 裸 syscall C | `startup` `entry_pure` `entry_effect` |
+| t0 | 地板与入口 | 手写 OCaml / 裸 syscall C | `startup` |
 | t1 | 标量算术与循环 | 手写 OCaml / C | `arith` `nat_bits` `float_math` `scalar_xor` `scalar_muladd` `scalar_divconst` |
 | t2 | 控制流与尾调用 | 手写 OCaml / C | `tco_mutual` `tco_wide` |
 | t3 | 调用约定与闭包 | 手写 OCaml / C | `closures` `micro_apply` |

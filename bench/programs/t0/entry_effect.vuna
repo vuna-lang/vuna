@@ -1,5 +1,0 @@
-import Base.Effect.Core as Eff
-import Base.Effect.Console as EffConsole
-
-main : Eff [ConsoleOp] Int
-main = pure 0

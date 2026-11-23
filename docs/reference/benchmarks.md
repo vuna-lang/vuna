@@ -435,7 +435,7 @@ T0 仍是 0.36x c / 0.23x ml（§1.6.2 的裁剪不改变地板读数）。
 
 读法：
 
-- **地板不是问题**：T0 上 native 比手写 OCaml 快 4 倍、比裸 syscall 的 C 还快（`entry_pure` 0.36x）。
+- **地板不是问题**：T0 上 native 比手写 OCaml 快 4 倍、比裸 syscall 的 C 还快（`startup` 0.36x）。
   入口初始化与产物尺寸不在差距里。
 - **T1 已与 C 同档**：`arith` 0.74x、`scalar_muladd` 1.08x、`scalar_divconst` 1.14x、
   `scalar_xor` 1.26x；几何平均 1.04x C / 1.01x 手写 OCaml。
@@ -491,12 +491,12 @@ T0 达标之后，`_start` 不再无条件初始化全部子系统：只按程�
 
 | 用例 | `_start` 的 init 调用 | 产物 bytes | 进程启动墙钟（交替 A/B） |
 | --- | --- | --- | --- |
-| entry_pure | stack / mem / gc / cpus / timeout → **timeout** | 49,640 → **15,576** | 211 → **190 µs**（n=2000 对的中位数） |
+| startup | stack / mem / gc / cpus / timeout → **timeout** | 49,640 → **15,576** | 211 → **190 µs**（n=2000 对的中位数） |
 | arith | 同上 → **timeout** | 49,680 → **15,608** | 5.20 → 5.17 ms（计算占比 >99%，落在噪声内） |
 | scalar_xor | 同上 → **timeout** | 49,736 → **15,672** | 49.0 → 49.0 ms（同上） |
 
 A/B 用 C harness 直接 `fork`/`exec` 交替采样（绕开 bench 自身的 bash fork 与 `date` 采样）。
-`entry_pure` 的 -21 µs 就是 init 的全部成本：`init_stack`（512 MiB mmap + 保护页 mprotect）
+`startup` 的 -21 µs 就是 init 的全部成本：`init_stack`（512 MiB mmap + 保护页 mprotect）
 约 4 µs、`init_cpus`（亲和性 + cgroup 读取）约 4 µs、堆 / GC / 超时约 1 µs，其余是页错误。
 
 **结论**：`bench/run.sh` 里 T0 的 0.58–0.67 ms 由 bench 自身的 bash fork（~400 µs）与
