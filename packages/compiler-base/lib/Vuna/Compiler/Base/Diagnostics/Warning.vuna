@@ -16,16 +16,16 @@ import Base.Data.Vec as Vec
 -- | 诊断域实现：Vuna.Compiler.Base.Diagnostics.Warning.WarnErr（目录/模板见 diagnostics.md）。
 export data WarnErr(..) : Nat -> Type where
   -- arity 0
-  WarnBranchAfterCatchAll : WarnErr Zero
+  WarnBranchAfterCatchAll : WarnErr 0
   -- arity 1
-  WarnRedundantCtorBranch : String -> WarnErr (Succ Zero)
-  WarnRedundantLiteralBranch : String -> WarnErr (Succ Zero)
-  UnusedBinder : String -> WarnErr (Succ Zero)
-  UnusedDefinition : String -> WarnErr (Succ Zero)
-  UnusedImport : String -> WarnErr (Succ Zero)
-  ShadowedBinder : String -> WarnErr (Succ Zero)
+  WarnRedundantCtorBranch : String -> WarnErr 1
+  WarnRedundantLiteralBranch : String -> WarnErr 1
+  UnusedBinder : String -> WarnErr 1
+  UnusedDefinition : String -> WarnErr 1
+  UnusedImport : String -> WarnErr 1
+  ShadowedBinder : String -> WarnErr 1
   -- arity 2
-  TargetEffectUnavailable : String -> String -> WarnErr (Succ (Succ Zero))
+  TargetEffectUnavailable : String -> String -> WarnErr 2
 
 -- | 诊断域实现：Vuna.Compiler.Base.Diagnostics.Warning.warnCode（目录/模板见 diagnostics.md）。
 export warnCode : {n : Nat} -> WarnErr n -> String

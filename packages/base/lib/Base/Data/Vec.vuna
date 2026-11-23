@@ -11,7 +11,7 @@ import Base.Trait.Num
 -- | 长度索引向量：`n : Nat` 在类型层锁定元素个数，`Nil` 对应 `Zero`、`VCons` 对应 `Succ n`；`n` 与 `a` 都是 Rig0，运行时擦除，因此不携带长度字段。
 export data Vec(..) : Nat -> Type -> Type where
   -- | 空向量（长度 `Zero`）。
-  Nil : {a : Type} -> Vec Zero a
+  Nil : {a : Type} -> Vec 0 a
   -- | 非空向量：头 `a` 与尾 `Vec n a`，长度 `Succ n`。
   VCons : {n : Nat} -> {a : Type} -> a -> Vec n a -> Vec (Succ n) a
 

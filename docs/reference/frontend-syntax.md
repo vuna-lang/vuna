@@ -180,6 +180,8 @@
 - **Lint**：`vuna lint --fix` 的 `list-literal` 规则把表达式 / 类型位置的闭合 `::` 链与裸 `Nil`
   归一成 `[..]`；模式里的 `::` 保持原样。`pair-sugar` 把表达式 / 类型 / 模式位置的显式
   `Pair a b` 应用归一成元组语法 `(a, b)`（右嵌套链展平），与 parser 的元组编码等价。
+  `nat-literal` 把表达式 / 类型 / 模式位置的闭合 `Zero` / `Succ` 链归一成十进制字面量；
+  开放链 `Succ n` 不动，模式位置依赖 Nat 字面量模式展开成构造子模式。
 - **Index / Lsp**：洞名与宏标记不算引用；`@` 实例名是静态名字；任何引入新 binder 的形式
   （tuple 模式、类型层 binder 等）都要在绑定扫描与 rename 里有对应分支。
 - **Parser 工具模式**：`PmTool` 跳过部分严格检查（如重复 binder），供 fmt / lint / index / doc / LSP

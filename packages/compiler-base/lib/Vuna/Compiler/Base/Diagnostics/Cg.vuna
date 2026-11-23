@@ -15,18 +15,18 @@ import Base.Data.Vec as Vec
 -- ---------------------------------------------------------------
 export data CgErr(..) : Nat -> Type where
   -- arity 0
-  DependencyCycle : CgErr Zero
-  InterpCannotExecuteEffects : CgErr Zero
-  MainNotValue : CgErr Zero
-  NoMain : CgErr Zero
-  TypeUsedAtRuntime : CgErr Zero
+  DependencyCycle : CgErr 0
+  InterpCannotExecuteEffects : CgErr 0
+  MainNotValue : CgErr 0
+  NoMain : CgErr 0
+  TypeUsedAtRuntime : CgErr 0
   -- arity 1
-  AxiomAtRuntime : String -> CgErr (Succ Zero)
-  ListBridgeRequired : String -> CgErr (Succ Zero)
-  RecursiveValueDefinition : String -> CgErr (Succ Zero)
-  TypeLevelBindingRuntime : String -> CgErr (Succ Zero)
-  TypeLevelNameRuntime : String -> CgErr (Succ Zero)
-  UnsolvedMetavarRuntime : String -> CgErr (Succ Zero)
+  AxiomAtRuntime : String -> CgErr 1
+  ListBridgeRequired : String -> CgErr 1
+  RecursiveValueDefinition : String -> CgErr 1
+  TypeLevelBindingRuntime : String -> CgErr 1
+  TypeLevelNameRuntime : String -> CgErr 1
+  UnsolvedMetavarRuntime : String -> CgErr 1
 
 export cgCode : {n : Nat} -> CgErr n -> String
 cgCode DependencyCycle = "CG_DependencyCycle"
@@ -117,15 +117,15 @@ export cgErr : {n : Nat} -> CgErr n -> Vec n String -> Check a
 cgErr e args = ErrC (cgMsg e args)
 
 -- | 便捷入口：cgErr0。
-export cgErr0 : CgErr Zero -> Check a
+export cgErr0 : CgErr 0 -> Check a
 cgErr0 e = cgErr e []
 
 -- | 便捷入口：cgErr1。
-export cgErr1 : CgErr (Succ Zero) -> String -> Check a
+export cgErr1 : CgErr 1 -> String -> Check a
 cgErr1 e a0 = cgErr e [a0]
 
 -- | 带位置的 codegen 诊断（入口缺失等）。
-export cgErr0At : Span -> CgErr Zero -> Check a
+export cgErr0At : Span -> CgErr 0 -> Check a
 cgErr0At sp e = ErrC (withLabel (Label (Just sp) "" LabelPrimary Nothing) (cgMsg e []))
 
 -- ---------------------------------------------------------------

@@ -9,8 +9,8 @@ import Base.Data.Nat as Nat
 
 export data IcErr(..) : Nat -> Type where
   -- arity 1：`<0>` = 阶段/子系统（"inference"/"parser"/"codegen"…）
-  FuelExhausted : String -> IcErr (Succ Zero)
-  InvariantViolated : String -> IcErr (Succ Zero)
+  FuelExhausted : String -> IcErr 1
+  InvariantViolated : String -> IcErr 1
 
 export icCode : {n : Nat} -> IcErr n -> String
 icCode (FuelExhausted _) = "IC_FuelExhausted"

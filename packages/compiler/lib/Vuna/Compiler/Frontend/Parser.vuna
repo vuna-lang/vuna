@@ -15,10 +15,10 @@ import Vuna.Compiler.Frontend.Parser.Support
 -- 诊断位置：parser 的每条诊断都带当前 token 的 span（EOF 退到最后消费位置）。
 -- 位置必须在**产生点**给出：此处集中两个 helper，避免 `psErrAt (tokSpan st)` 铺满全文。
 -- ---------------------------------------------------------------
-ps0 : PState -> PsDiag Zero -> Check a
+ps0 : PState -> PsDiag 0 -> Check a
 ps0 st e = psErr0At (tokSpan st) e
 
-ps1 : PState -> PsDiag (Succ Zero) -> String -> Check a
+ps1 : PState -> PsDiag 1 -> String -> Check a
 ps1 st e a0 = psErr1At (tokSpan st) e a0
 
 psAt : PState -> {n : Nat} -> PsDiag n -> Vec n String -> Check a

@@ -464,9 +464,9 @@ pkg_err/packages/test-m30 → `packages/cli`；web → `packages/web-cli`；其�
   `corpus/dt_err/35_where_no_sig`；
 - `corpus/lint/`、`corpus/fix/`：`vuna lint` / `lint --fix` golden、退出码与幂等（工具链，
   与检查器无关）。规则为 AST 驱动：`literal-if-chain`、`dispatch-lift`、`list-literal`、
-  `pair-sugar`；语料 05–14、15–18、19、21 与 fix 07–19、20、21 覆盖 dispatch 提升、
-  列表字面量归一、Pair 元组归一与「不报」形态，`pair-sugar` 另由 `steps/39_lint_cli` 的
-  `--select` 用例覆盖报告、修复与幂等。
+  `pair-sugar`、`nat-literal`；语料 05–14、15–18、19、21、22 与 fix 07–19、20、21、22 覆盖
+  dispatch 提升、列表字面量归一、Pair 元组归一、Nat 字面量归一与「不报」形态，
+  `pair-sugar` 另由 `steps/39_lint_cli` 的 `--select` 用例覆盖报告、修复与幂等。
   输出带错误码：
   `路径:行:列: [LN_XXX] <rule>: <message>`，错误码体系见 [tooling.md](tooling.md) 第 4 节，
   完整清单由 `vuna dev errors gen` 生成。规则与边界见 [lint.md](lint.md)；

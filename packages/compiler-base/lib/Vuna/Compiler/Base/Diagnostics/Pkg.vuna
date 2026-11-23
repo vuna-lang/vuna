@@ -13,54 +13,54 @@ import Base.Data.Vec as Vec
 -- | 诊断域实现：Vuna.Compiler.Base.Diagnostics.Pkg.PkgErr（目录/模板见 diagnostics.md）。
 export data PkgErr(..) : Nat -> Type where
   -- arity 0
-  EmptyDependencyName : PkgErr Zero
-  EmptyMember : PkgErr Zero
-  EmptyPackageName : PkgErr Zero
-  MissingPackageName : PkgErr Zero
-  EmptyWorkspace : PkgErr Zero
-  NotPackage : PkgErr Zero
+  EmptyDependencyName : PkgErr 0
+  EmptyMember : PkgErr 0
+  EmptyPackageName : PkgErr 0
+  MissingPackageName : PkgErr 0
+  EmptyWorkspace : PkgErr 0
+  NotPackage : PkgErr 0
   -- arity 1
-  DependencyPathNotString : String -> PkgErr (Succ Zero)
-  DuplicateDependency : String -> PkgErr (Succ Zero)
-  EmptyDependencyPath : String -> PkgErr (Succ Zero)
-  ExpectedBool : String -> PkgErr (Succ Zero)
-  ExpectedString : String -> PkgErr (Succ Zero)
-  ExpectedInt : String -> PkgErr (Succ Zero)
-  InvalidDiagFormat : String -> PkgErr (Succ Zero)
-  InvalidDiagMaxErrors : String -> PkgErr (Succ Zero)
-  InvalidDiagLang : String -> PkgErr (Succ Zero)
-  ExpectedStringArray : String -> PkgErr (Succ Zero)
-  Invalid : String -> PkgErr (Succ Zero)
-  InvalidExportModule : String -> PkgErr (Succ Zero)
-  InvalidPackageName : String -> PkgErr (Succ Zero)
-  MissingManifest : String -> PkgErr (Succ Zero)
-  MissingBase : String -> PkgErr (Succ Zero)
-  LibraryWithoutEntry : String -> PkgErr (Succ Zero)
-  NoManifestUpward : String -> PkgErr (Succ Zero)
-  TomlSyntax : String -> PkgErr (Succ Zero)
-  DependencySourceMissing : String -> PkgErr (Succ Zero)
-  GitRevRequired : String -> PkgErr (Succ Zero)
-  HashMalformed : String -> PkgErr (Succ Zero)
-  IdentityMalformed : String -> PkgErr (Succ Zero)
-  MissingHash : String -> PkgErr (Succ Zero)
-  SourceConflict : String -> PkgErr (Succ Zero)
-  NotMaterialized : String -> PkgErr (Succ Zero)
-  FetchFailed : String -> PkgErr (Succ Zero)
-  IndexMalformed : String -> PkgErr (Succ Zero)
-  UnexpectedTopLevelKey : String -> PkgErr (Succ Zero)
-  UnknownSection : String -> PkgErr (Succ Zero)
-  LayerInvalidName : String -> PkgErr (Succ Zero)
-  LayerInvalidTarget : String -> PkgErr (Succ Zero)
-  LayerKeyMustBeQuoted : String -> PkgErr (Succ Zero)
-  LayerCycle : String -> PkgErr (Succ Zero)
-  PackageSectionInWorkspaceRoot : String -> PkgErr (Succ Zero)
+  DependencyPathNotString : String -> PkgErr 1
+  DuplicateDependency : String -> PkgErr 1
+  EmptyDependencyPath : String -> PkgErr 1
+  ExpectedBool : String -> PkgErr 1
+  ExpectedString : String -> PkgErr 1
+  ExpectedInt : String -> PkgErr 1
+  InvalidDiagFormat : String -> PkgErr 1
+  InvalidDiagMaxErrors : String -> PkgErr 1
+  InvalidDiagLang : String -> PkgErr 1
+  ExpectedStringArray : String -> PkgErr 1
+  Invalid : String -> PkgErr 1
+  InvalidExportModule : String -> PkgErr 1
+  InvalidPackageName : String -> PkgErr 1
+  MissingManifest : String -> PkgErr 1
+  MissingBase : String -> PkgErr 1
+  LibraryWithoutEntry : String -> PkgErr 1
+  NoManifestUpward : String -> PkgErr 1
+  TomlSyntax : String -> PkgErr 1
+  DependencySourceMissing : String -> PkgErr 1
+  GitRevRequired : String -> PkgErr 1
+  HashMalformed : String -> PkgErr 1
+  IdentityMalformed : String -> PkgErr 1
+  MissingHash : String -> PkgErr 1
+  SourceConflict : String -> PkgErr 1
+  NotMaterialized : String -> PkgErr 1
+  FetchFailed : String -> PkgErr 1
+  IndexMalformed : String -> PkgErr 1
+  UnexpectedTopLevelKey : String -> PkgErr 1
+  UnknownSection : String -> PkgErr 1
+  LayerInvalidName : String -> PkgErr 1
+  LayerInvalidTarget : String -> PkgErr 1
+  LayerKeyMustBeQuoted : String -> PkgErr 1
+  LayerCycle : String -> PkgErr 1
+  PackageSectionInWorkspaceRoot : String -> PkgErr 1
   -- arity 2
-  UnknownKey : String -> String -> PkgErr (Succ (Succ Zero))
-  UnknownSourceKey : String -> String -> PkgErr (Succ (Succ Zero))
-  HashMismatch : String -> String -> PkgErr (Succ (Succ Zero))
-  IdentityMismatch : String -> String -> PkgErr (Succ (Succ Zero))
+  UnknownKey : String -> String -> PkgErr 2
+  UnknownSourceKey : String -> String -> PkgErr 2
+  HashMismatch : String -> String -> PkgErr 2
+  IdentityMismatch : String -> String -> PkgErr 2
   -- arity 3
-  DuplicatePackageName : String -> String -> String -> PkgErr (Succ (Succ (Succ Zero)))
+  DuplicatePackageName : String -> String -> String -> PkgErr 3
 
 -- | 诊断域实现：Vuna.Compiler.Base.Diagnostics.Pkg.pkgCode（目录/模板见 diagnostics.md）。
 export pkgCode : {n : Nat} -> PkgErr n -> String
@@ -199,31 +199,31 @@ export pkgNoLoc : {n : Nat} -> PkgErr n -> Vec n String -> Check a
 pkgNoLoc e args = ErrC (withAbsent NsPackageGraph (pkgMsg e args))
 
 -- | 诊断域实现：Vuna.Compiler.Base.Diagnostics.Pkg.pkgNoLoc1（目录/模板见 diagnostics.md）。
-export pkgNoLoc1 : PkgErr (Succ Zero) -> String -> Check a
+export pkgNoLoc1 : PkgErr 1 -> String -> Check a
 pkgNoLoc1 e a0 = pkgNoLoc e [a0]
 
 -- | 诊断域实现：Vuna.Compiler.Base.Diagnostics.Pkg.pkgAt0（目录/模板见 diagnostics.md）。
-export pkgAt0 : String -> Int -> PkgErr Zero -> Check a
+export pkgAt0 : String -> Int -> PkgErr 0 -> Check a
 pkgAt0 path line e = pkgAt path line e []
 
 -- | 诊断域实现：Vuna.Compiler.Base.Diagnostics.Pkg.pkgAt1（目录/模板见 diagnostics.md）。
-export pkgAt1 : String -> Int -> PkgErr (Succ Zero) -> String -> Check a
+export pkgAt1 : String -> Int -> PkgErr 1 -> String -> Check a
 pkgAt1 path line e a0 = pkgAt path line e [a0]
 
 -- | 诊断域实现：Vuna.Compiler.Base.Diagnostics.Pkg.pkgAt2（目录/模板见 diagnostics.md）。
-export pkgAt2 : String -> Int -> PkgErr (Succ (Succ Zero)) -> String -> String -> Check a
+export pkgAt2 : String -> Int -> PkgErr 2 -> String -> String -> Check a
 pkgAt2 path line e a0 a1 = pkgAt path line e [a0, a1]
 
 -- | 诊断域实现：Vuna.Compiler.Base.Diagnostics.Pkg.pkgPath0（目录/模板见 diagnostics.md）。
-export pkgPath0 : String -> PkgErr Zero -> Check a
+export pkgPath0 : String -> PkgErr 0 -> Check a
 pkgPath0 path e = pkgPath path e []
 
 -- | 诊断域实现：Vuna.Compiler.Base.Diagnostics.Pkg.pkgPath1（目录/模板见 diagnostics.md）。
-export pkgPath1 : String -> PkgErr (Succ Zero) -> String -> Check a
+export pkgPath1 : String -> PkgErr 1 -> String -> Check a
 pkgPath1 path e a0 = pkgPath path e [a0]
 
 -- | 诊断域实现：Vuna.Compiler.Base.Diagnostics.Pkg.pkgPath2（目录/模板见 diagnostics.md）。
-export pkgPath2 : String -> PkgErr (Succ (Succ Zero)) -> String -> String -> Check a
+export pkgPath2 : String -> PkgErr 2 -> String -> String -> Check a
 pkgPath2 path e a0 a1 = pkgPath path e [a0, a1]
 
 -- | 诊断域实现：Vuna.Compiler.Base.Diagnostics.Pkg.pkgInvalid（目录/模板见 diagnostics.md）。

@@ -1,5 +1,5 @@
 -- | lint 的规则实现：AST 驱动的 dispatch 规则（`literal-if-chain`、`dispatch-lift`）与字面量
--- 归一规则（`list-literal`、`pair-sugar`），以及从源码切片的辅助工具。
+-- 归一规则（`list-literal`、`pair-sugar`、`nat-literal`），以及从源码切片的辅助工具。
 --
 -- `lintSourceWith` 先 parseSource 得到 AST，规则判定全部走 AST；需要源码原文（字面量、模式、
 -- 分支体）时用 span 加 token 边界从源码切片，不重新渲染字符串字面量。产出的编辑用行范围表示
@@ -12,6 +12,8 @@
 -- 替换外层变量，多 alt 拆 clause 或拆 alt。`list-literal` 把表达式与类型位置的闭合 cons 链
 -- （`::` / `Cons` 加 `[]` / `Nil`）以及裸 `Nil` 改写成 `[a, b]` / `[]`，模式匹配不动。
 -- `pair-sugar` 把表达式 / 类型 / 模式位置的显式 `Pair` 应用改写成元组语法 `(a, b)`。
+-- `nat-literal` 把表达式 / 类型 / 模式位置的闭合 `Zero` / `Succ` 链改写成十进制字面量，
+-- 开放链（`Succ n`）与带模块前缀的名字不动。
 --
 -- 提升只发生在 clause/alt 的直接体上；嵌在表达式里的 dispatch 需要 case-of-case 上下文分发，
 -- 会复制代码，因此不做。clause 拆分要求该名字只有一条 clause，alt 拆分/替换要求该 alt 是最后
@@ -1716,6 +1718,12 @@ walkHandleAlts allow fuel src alts =
       [] => []
       alt :: rest => append (walkPairPat allow (fuel - 1) src alt.altPat) (append (walkExprGo allow (fuel - 1) src alt.altBody) (walkHandleAlts allow (fuel - 1) src rest))
 
+-- | 内部：裸 `Zero` / `Nil` 的 finding（表达式与类型位置共用）。
+zeroOrNilFindings : LintSrc -> Expr -> String -> List Finding
+zeroOrNilFindings src e "Zero" = natExprFindings src e 0
+zeroOrNilFindings src e "Nil" = nilFinding src e
+zeroOrNilFindings src e name = []
+
 -- | 内部：按构造子遍历表达式，收集各规则的 finding（不静默丢子树）。
 walkExpr : Int -> LintSrc -> Expr -> List Finding
 walkExpr fuel src e = walkExprGo True fuel src e
@@ -1726,7 +1734,7 @@ walkExprGo allow fuel src e =
     lintFuelExhausted "traversal"
   else
     case e of
-      EVar name _ => if allow && name == "Nil" then nilFinding src e else []
+      EVar name _ => if allow then zeroOrNilFindings src e name else []
       EInt n _ => []
       EStr s _ => []
       EFloat raw _ => []
@@ -1759,21 +1767,26 @@ walkExprGo allow fuel src e =
       -- 模板字面量：洞内表达式同样参与规则遍历。
       EInterp multi parts _ => walkInterpParts allow (fuel - 1) src parts
 
--- | 内部：应用位置的 list-literal / pair-sugar 检查；闭合链只产出一次并继续遍历元素。
+-- | 内部：应用位置的字面量归一检查（nat-literal / list-literal / pair-sugar）；闭合链只产出
+-- 一次并继续遍历元素。
 walkAppList : Bool -> Int -> LintSrc -> Expr -> List Finding
 walkAppList allow fuel src e =
-  case pairSugarElems fuel e of
-    Just elems => append (pairFindings src e elems) (walkExprs allow fuel src elems)
+  case natChainCount fuel e of
+    Just n => natExprFindings src e n
     Nothing =>
-      case consHeadOf e of
-        Just (h, t) =>
-          case consElems fuel e of
-            Just elems => append (consFindings src e elems) (walkExprs allow fuel src elems)
-            Nothing => append (walkExprGo allow fuel src h) (walkExprGo allow fuel src t)
+      case pairSugarElems fuel e of
+        Just elems => append (pairFindings src e elems) (walkExprs allow fuel src elems)
         Nothing =>
-          case e of
-            EApp fn args _ => append (walkExprGo allow fuel src fn) (walkExprs allow fuel src args)
-            _ => []
+          case consHeadOf e of
+            Just (h, t) =>
+              case consElems fuel e of
+                Just elems => append (consFindings src e elems) (walkExprs allow fuel src elems)
+                Nothing => append (walkExprGo allow fuel src h) (walkExprGo allow fuel src t)
+            Nothing =>
+              case e of
+                EApp fn args _ =>
+                  append (walkExprGo allow fuel src fn) (walkExprs allow fuel src args)
+                _ => []
 
 -- | 内部：遍历模板字面量各段里的洞表达式。
 walkInterpParts : Bool -> Int -> LintSrc -> List InterpPart -> List Finding
@@ -2050,8 +2063,8 @@ pairElemText src e =
 -- | 内部：把单行表达式 `e` 整体替换成 `replacement` 的编辑。切片走字节偏移（span 末尾对空
 -- 字符串等短一位时按 token 覆盖修正），并剥离紧邻的成对括号；跨行、含注释或偏移缺失时
 -- `Nothing`。
-pairEdit : LintSrc -> Expr -> String -> Maybe Edit
-pairEdit src e replacement =
+subtreeEdit : LintSrc -> Expr -> String -> Maybe Edit
+subtreeEdit src e replacement =
   let
     lineNo = exprStartLine e
     line = lineAt src.lintSrcLines lineNo
@@ -2080,7 +2093,7 @@ pairFindings src e elems =
   let
     texts = map (pairElemText src) elems
     suggestion = if allNonEmpty texts then "(" ++ join ", " texts ++ ")" else "(...)"
-    edit = if allNonEmpty texts then pairEdit src e suggestion else Nothing
+    edit = if allNonEmpty texts then subtreeEdit src e suggestion else Nothing
   in [
     mkFindingAt
       (exprStartLine e)
@@ -2130,8 +2143,8 @@ patText1 src pat =
 
 -- | 内部：把单行模式替换成 replacement 的编辑。切片走字节偏移（span 末尾短一位时按 token
 -- 覆盖修正），并剥离紧邻的成对括号；跨行、含注释或偏移缺失时 `Nothing`。
-patEdit : LintSrc -> Pat -> String -> Maybe Edit
-patEdit src pat replacement =
+patSubtreeEdit : LintSrc -> Pat -> String -> Maybe Edit
+patSubtreeEdit src pat replacement =
   let
     sp = patSpan pat
     lineNo = spanStartLine sp
@@ -2161,7 +2174,7 @@ pairPatFindings src pat elems =
   let
     texts = map (patText1 src) elems
     suggestion = if allNonEmpty texts then "(" ++ join ", " texts ++ ")" else "(...)"
-    edit = if allNonEmpty texts then patEdit src pat suggestion else Nothing
+    edit = if allNonEmpty texts then patSubtreeEdit src pat suggestion else Nothing
     sp = patSpan pat
   in [
     mkFindingAt
@@ -2173,64 +2186,143 @@ pairPatFindings src pat elems =
       edit
   ]
 
--- | 内部：模式位置的 pair-sugar；`emit` 为假时只递归（模板插值洞）。
+-- ---------------------------------------------------------------
+-- 规则 6：nat-literal（闭合 Zero / Succ 链 → Nat 字面量）
+--
+-- 只认裸名 `Zero` / `Succ`：闭合链（以 `Zero` 收尾）改写成十进制字面量，开放链
+-- （`Succ n` / `Succ (f x)`）不是可展开的字面量，不报。模式位置同样适用：精化器把
+-- Nat 字面量模式展开成构造子模式，两种写法落到同一个模式矩阵。
+-- ---------------------------------------------------------------
+-- | 内部：闭合 Nat 构造子链的层数（`Zero` = 0，`Succ ..` = +1）；开放链 / 非链给 `Nothing`。
+natChainCount : Int -> Expr -> Maybe Int
+natChainCount fuel e =
+  if fuel <= 0 then
+    lintFuelExhausted "nat chain"
+  else
+    case e of
+      EVar name _ => if name == "Zero" then Just 0 else Nothing
+      EApp (EVar name _) ([arg]) _ =>
+        if name == "Succ" then
+          case natChainCount (fuel - 1) arg of
+            Just n => Just (n + 1)
+            Nothing => Nothing
+        else
+          Nothing
+      _ => Nothing
+
+-- | 内部：闭合 Nat 链表达式的 finding 与编辑（替换成十进制字面量）。
+natExprFindings : LintSrc -> Expr -> Int -> List Finding
+natExprFindings src e n =
+  let
+    suggestion = strFromInt n
+  in [
+    mkFindingAt
+      (exprStartLine e)
+      (exprStartCol e)
+      (exprSpan e)
+      NatLiteral
+      (lintMsg NatLiteral suggestion)
+      (subtreeEdit src e suggestion)
+  ]
+
+-- | 内部：闭合 Nat 构造子模式链的层数；开放链 / 非链给 `Nothing`。
+natPatCount : Int -> Pat -> Maybe Int
+natPatCount fuel p =
+  if fuel <= 0 then
+    lintFuelExhausted "nat pattern chain"
+  else
+    case p of
+      PCon name [] _ => if name == "Zero" then Just 0 else Nothing
+      PCon name ([arg]) _ =>
+        if name == "Succ" then
+          case natPatCount (fuel - 1) arg of
+            Just n => Just (n + 1)
+            Nothing => Nothing
+        else
+          Nothing
+      _ => Nothing
+
+-- | 内部：闭合 Nat 模式链的 finding 与编辑（替换成十进制字面量）。
+natPatFindings : LintSrc -> Pat -> Int -> List Finding
+natPatFindings src pat n =
+  let
+    suggestion = strFromInt n
+    sp = patSpan pat
+  in [
+    mkFindingAt
+      (spanStartLine sp)
+      (spanStartCol sp)
+      sp
+      NatLiteral
+      (lintMsg NatLiteral suggestion)
+      (patSubtreeEdit src pat suggestion)
+  ]
+
+-- | 内部：模式位置的字面量归一（nat-literal / pair-sugar）；`emit` 为假时只递归
+-- （模板插值洞）。
 walkPairPat : Bool -> Int -> LintSrc -> Pat -> List Finding
 walkPairPat emit fuel src pat =
   if fuel <= 0 then
-    lintFuelExhausted "pair pattern traversal"
+    lintFuelExhausted "pattern traversal"
   else
-    case pairPatSugarElems (fuel - 1) pat of
-      Just elems => if emit then append (pairPatFindings src pat elems) (walkPairPats emit (fuel - 1) src elems) else walkPairPats emit (fuel - 1) src elems
+    case natPatCount (fuel - 1) pat of
+      Just n => if emit then natPatFindings src pat n else []
       Nothing =>
-        case pat of
-          PAs name inner _ => walkPairPat emit (fuel - 1) src inner
-          PCon name args _ => walkPairPats emit (fuel - 1) src args
-          PRecord name fields _ => walkPairPatFields emit (fuel - 1) src fields
-          _ => []
+        case pairPatSugarElems (fuel - 1) pat of
+          Just elems => if emit then append (pairPatFindings src pat elems) (walkPairPats emit (fuel - 1) src elems) else walkPairPats emit (fuel - 1) src elems
+          Nothing =>
+            case pat of
+              PAs name inner _ => walkPairPat emit (fuel - 1) src inner
+              PCon name args _ => walkPairPats emit (fuel - 1) src args
+              PRecord name fields _ => walkPairPatFields emit (fuel - 1) src fields
+              _ => []
 
--- | 内部：模式列表的 pair-sugar。
+-- | 内部：模式列表的字面量归一（nat-literal / pair-sugar）。
 walkPairPats : Bool -> Int -> LintSrc -> List Pat -> List Finding
 walkPairPats emit fuel src pats =
   if fuel <= 0 then
-    lintFuelExhausted "pair pattern traversal"
+    lintFuelExhausted "pattern traversal"
   else
     case pats of
       [] => []
       p :: rest => append (walkPairPat emit (fuel - 1) src p) (walkPairPats emit (fuel - 1) src rest)
 
--- | 内部：record 模式字段的 pair-sugar。
+-- | 内部：record 模式字段的字面量归一（nat-literal / pair-sugar）。
 walkPairPatFields : Bool -> Int -> LintSrc -> List (String, Pat) -> List Finding
 walkPairPatFields emit fuel src fields =
   if fuel <= 0 then
-    lintFuelExhausted "pair pattern traversal"
+    lintFuelExhausted "pattern traversal"
   else
     case fields of
       [] => []
       (f, p) :: rest => append (walkPairPat emit (fuel - 1) src p) (walkPairPatFields emit (fuel - 1) src rest)
 
--- | 内部：按构造子遍历表达式，收集类型位置的语法归一 finding（list-literal 与 pair-sugar；
--- 不进入模式）。
+-- | 内部：按构造子遍历表达式，收集类型位置的语法归一 finding（list-literal / pair-sugar /
+-- nat-literal；不进入模式）。
 walkTypeSyntax : Int -> LintSrc -> Expr -> List Finding
 walkTypeSyntax fuel src e =
   if fuel <= 0 then
     lintFuelExhausted "type syntax traversal"
   else
     case e of
-      EVar name _ => if name == "Nil" then nilFinding src e else []
+      EVar name _ => zeroOrNilFindings src e name
       EInt n _ => []
       EStr s _ => []
       EFloat raw _ => []
       ELam ps body _ => walkTypeSyntax (fuel - 1) src body
       EApp fn args _ =>
-        case pairSugarElems (fuel - 1) e of
-          Just elems => append (pairFindings src e elems) (walkTypeSyntaxExprs (fuel - 1) src elems)
+        case natChainCount (fuel - 1) e of
+          Just n => natExprFindings src e n
           Nothing =>
-            case consHeadOf e of
-              Just (h, t) =>
-                case consElems (fuel - 1) e of
-                  Just elems => append (consFindings src e elems) (walkTypeSyntaxExprs (fuel - 1) src elems)
-                  Nothing => append (walkTypeSyntax (fuel - 1) src h) (walkTypeSyntax (fuel - 1) src t)
-              Nothing => append (walkTypeSyntax (fuel - 1) src fn) (walkTypeSyntaxExprs (fuel - 1) src args)
+            case pairSugarElems (fuel - 1) e of
+              Just elems => append (pairFindings src e elems) (walkTypeSyntaxExprs (fuel - 1) src elems)
+              Nothing =>
+                case consHeadOf e of
+                  Just (h, t) =>
+                    case consElems (fuel - 1) e of
+                      Just elems => append (consFindings src e elems) (walkTypeSyntaxExprs (fuel - 1) src elems)
+                      Nothing => append (walkTypeSyntax (fuel - 1) src h) (walkTypeSyntax (fuel - 1) src t)
+                  Nothing => append (walkTypeSyntax (fuel - 1) src fn) (walkTypeSyntaxExprs (fuel - 1) src args)
       EPi name implicit qty dom cod _ => append (walkTypeSyntax (fuel - 1) src dom) (walkTypeSyntax (fuel - 1) src cod)
       ELet binds body recFlag _ => append (walkTypeSyntaxBinds (fuel - 1) src binds) (walkTypeSyntax (fuel - 1) src body)
       ELocalFun clauses _ => walkTypeSyntaxLocalClauses (fuel - 1) src clauses
@@ -2405,12 +2497,16 @@ traitParamKinds ((TraitParam name kind) :: rest) =
     Just e => e :: traitParamKinds rest
     Nothing => traitParamKinds rest
 
--- | 内部：只保留 pair-sugar finding。隐式 Pi 签名的函数跳过 clause 级改写（会改变模式矩阵与
--- 隐式 Pi 的对齐），但 pair-sugar 只换语法、不动 clause 结构，因此其体仍扫描。
-onlyPairFindings : List Finding -> List Finding
-onlyPairFindings [] = []
-onlyPairFindings (f :: rest) =
-  if f.findingCode == lintCode PairSugar then f :: onlyPairFindings rest else onlyPairFindings rest
+-- | 内部：只保留结构不变的语法归一 finding（nat-literal / list-literal / pair-sugar）。
+-- 隐式 Pi 签名的函数跳过 clause 级改写（会改变模式矩阵与隐式 Pi 的对齐），但这些规则只换
+-- 语法、不动 clause 结构，因此其体仍扫描。
+onlySyntaxFindings : List Finding -> List Finding
+onlySyntaxFindings [] = []
+onlySyntaxFindings (f :: rest) =
+  if f.findingCode == lintCode NatLiteral || f.findingCode == lintCode ListLiteral || f.findingCode == lintCode PairSugar then
+    f :: onlySyntaxFindings rest
+  else
+    onlySyntaxFindings rest
 
 -- | 内部：单条声明的 finding：函数子句做 clause 拆分、直接体扫描与模式 pair-sugar（隐式 Pi
 -- 签名跳过 clause 级改写），签名、axiom、extern、data、record、trait、instance 的类型位置走
@@ -2421,7 +2517,7 @@ declFindings src allDecls (DFun name pats body r) rest =
     line = spanStartLine (nodeRefSpan r)
     bodyFindings =
       if hasImplicitSig name allDecls then
-        onlyPairFindings (walkExpr lintFuel src body)
+        onlySyntaxFindings (walkExpr lintFuel src body)
       else
         let
           lastForName = not (laterHasFun name rest)

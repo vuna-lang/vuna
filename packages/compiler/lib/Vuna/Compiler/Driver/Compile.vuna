@@ -1424,7 +1424,7 @@ sourceInfoForPath path =
   do
     raw <- fsReadFile path
     mtime <- fmap (fromMaybe 0) (fsFileMtime path)
-    size <- fmap (\o => natToInt (fromMaybe Zero o)) (fsFileSize path)
+    size <- fmap (\o => natToInt (fromMaybe 0 o)) (fsFileSize path)
     pure (SourceInfo path (payloadDigest raw) mtime size)
 
 export toolNowSec : Member nClock ClockOp r => Eff r Int
@@ -1452,7 +1452,7 @@ sourceFresh builtSec si =
       else
         do
           m <- fmap (fromMaybe 0) (fsFileMtime path)
-          sz <- fmap (\o => natToInt (fromMaybe Zero o)) (fsFileSize path)
+          sz <- fmap (\o => natToInt (fromMaybe 0 o)) (fsFileSize path)
           if m == siMtimeOf si && sz == siSizeOf si && siMtimeOf si + mtimeSafetyWindowSec <= builtSec then
             pure True
           else
@@ -1513,7 +1513,7 @@ statOfClosureMod : Member nFs FsOp r => ClosureMod -> Eff r SourceInfo
 statOfClosureMod m =
   do
     mtime <- fmap (fromMaybe 0) (fsFileMtime m.cmPath)
-    size <- fmap (\o => natToInt (fromMaybe Zero o)) (fsFileSize m.cmPath)
+    size <- fmap (\o => natToInt (fromMaybe 0 o)) (fsFileSize m.cmPath)
     pure (SourceInfo m.cmPath m.cmSrc mtime size)
 
 -- 本包干净模块：按**对象地址**读本包模块接口，再做源内容 / 依赖链校验。
@@ -2154,7 +2154,7 @@ ownInfoOf m =
   do
     abs <- absolutePath m.cmPath
     mtime <- fmap (fromMaybe 0) (fsFileMtime abs)
-    size <- fmap (\o => natToInt (fromMaybe Zero o)) (fsFileSize abs)
+    size <- fmap (\o => natToInt (fromMaybe 0 o)) (fsFileSize abs)
     pure (m.cmName, SourceInfo abs m.cmSrc mtime size)
 
 -- | 干净模块的 `miSource` 来自磁盘接口记录（可能是上一次以相对/绝对不同写法 check 时写入的

@@ -1117,7 +1117,7 @@ fileTreeHash : Member nFs FsOp r => String -> String -> Eff r Int
 fileTreeHash source expected =
   do
     stamp <- fmap (fromMaybe 0) (fsFileMtime source)
-    size <- fmap (\o => natToInt (fromMaybe Zero o)) (fsFileSize source)
+    size <- fmap (\o => natToInt (fromMaybe 0 o)) (fsFileSize source)
     sourceText <- hashFileText source
     expectedText <- hashFileText expected
     pure (hashTextStrong "${sourceText}|${expectedText}|${strOfInt stamp}|${strOfInt size}")

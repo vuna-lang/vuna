@@ -12,16 +12,16 @@ export module Base.Data
 
 export data LdDiag(..) : Nat -> Type where
   -- arity 1
-  EntryFileNotFound : String -> LdDiag (Succ Zero)
-  ImportCycle : String -> LdDiag (Succ Zero)
-  InvalidModuleName : String -> LdDiag (Succ Zero)
-  ModuleHeaderInEntryFile : String -> LdDiag (Succ Zero)
-  ModuleHeaderInEntrySource : String -> LdDiag (Succ Zero)
+  EntryFileNotFound : String -> LdDiag 1
+  ImportCycle : String -> LdDiag 1
+  InvalidModuleName : String -> LdDiag 1
+  ModuleHeaderInEntryFile : String -> LdDiag 1
+  ModuleHeaderInEntrySource : String -> LdDiag 1
   -- arity 2
-  ModuleNotFound : String -> String -> LdDiag (Succ (Succ Zero))
-  ModuleNotExported : String -> String -> LdDiag (Succ (Succ Zero))
+  ModuleNotFound : String -> String -> LdDiag 2
+  ModuleNotExported : String -> String -> LdDiag 2
   -- arity 4
-  LayerViolation : String -> String -> String -> String -> LdDiag (Succ (Succ (Succ (Succ Zero))))
+  LayerViolation : String -> String -> String -> String -> LdDiag 4
 
 export ldCode : {n : Nat} -> LdDiag n -> String
 ldCode (EntryFileNotFound _) = "LD_EntryFileNotFound"
@@ -84,17 +84,17 @@ export ldErr : {n : Nat} -> LdDiag n -> Vec n String -> Check a
 ldErr e args = ErrC (ldMsg e args)
 
 -- | 零元加载诊断（`Check` 里直接是 `ErrC`）。
-export ldErr0 : LdDiag Zero -> Check a
+export ldErr0 : LdDiag 0 -> Check a
 ldErr0 e = ldErr e []
 
 -- | 一元加载诊断（实参填 `<0>`）。
-export ldErr1 : LdDiag (Succ Zero) -> String -> Check a
+export ldErr1 : LdDiag 1 -> String -> Check a
 ldErr1 e a0 = ldErr e [a0]
 
 -- | 四元加载诊断（实参填 `<0>`..`<3>`）。
-export ldErr4 : LdDiag (Succ (Succ (Succ (Succ Zero)))) -> String -> String -> String -> String -> Check a
+export ldErr4 : LdDiag 4 -> String -> String -> String -> String -> Check a
 ldErr4 e a0 a1 a2 a3 = ldErr e [a0, a1, a2, a3]
 
 -- | 二元加载诊断（实参填 `<0>` / `<1>`）。
-export ldErr2 : LdDiag (Succ (Succ Zero)) -> String -> String -> Check a
+export ldErr2 : LdDiag 2 -> String -> String -> Check a
 ldErr2 e a0 a1 = ldErr e [a0, a1]

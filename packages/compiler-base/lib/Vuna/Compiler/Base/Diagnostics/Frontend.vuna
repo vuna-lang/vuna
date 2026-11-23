@@ -16,15 +16,15 @@ export module Base.Data
 -- LX_：词法诊断
 -- ---------------------------------------------------------------
 export data LexDiag(..) : Nat -> Type where
-  UnterminatedBlockComment : LexDiag Zero
-  UnterminatedString : LexDiag Zero
+  UnterminatedBlockComment : LexDiag 0
+  UnterminatedString : LexDiag 0
   -- 模板字符串的插值洞没有闭合（缺 `}`）。
-  UnterminatedInterpolation : LexDiag Zero
-  UnknownEscape : LexDiag Zero
-  UnexpectedCharacter : LexDiag Zero
+  UnterminatedInterpolation : LexDiag 0
+  UnknownEscape : LexDiag 0
+  UnexpectedCharacter : LexDiag 0
   -- 十进制字面量超出 63 位可表示范围（OCaml int 上界）。词法期直接报错，
   -- 不再按 `acc * 10 + d` 静默回绕。
-  IntLiteralOutOfRange : LexDiag Zero
+  IntLiteralOutOfRange : LexDiag 0
 
 export lexCode : {n : Nat} -> LexDiag n -> String
 lexCode UnterminatedBlockComment = "LX_UnterminatedBlockComment"
@@ -47,67 +47,67 @@ lexTemplate IntLiteralOutOfRange = "integer literal is out of range (max is 4611
 -- ---------------------------------------------------------------
 export data PsDiag(..) : Nat -> Type where
   -- arity 0
-  CaseAltNotIndented : PsDiag Zero
-  CaseNeedsAlternative : PsDiag Zero
-  DoBlockMustEndWithExpr : PsDiag Zero
-  DoBlockNeedsStatement : PsDiag Zero
-  DoStatementNotIndented : PsDiag Zero
-  ExpectedCommaOrBracket : PsDiag Zero
-  ExpectedEndOfInput : PsDiag Zero
-  ExpectedEndOfExpr : PsDiag Zero
-  ExpectedExportItem : PsDiag Zero
-  ExpectedExpression : PsDiag Zero
-  ExpectedIdentifier : PsDiag Zero
-  ExpectedInstanceMethod : PsDiag Zero
-  ExpectedLetBinding : PsDiag Zero
-  ExpectedPattern : PsDiag Zero
-  ExpectedRecordFieldPattern : PsDiag Zero
-  ExpectedTopLevelDecl : PsDiag Zero
+  CaseAltNotIndented : PsDiag 0
+  CaseNeedsAlternative : PsDiag 0
+  DoBlockMustEndWithExpr : PsDiag 0
+  DoBlockNeedsStatement : PsDiag 0
+  DoStatementNotIndented : PsDiag 0
+  ExpectedCommaOrBracket : PsDiag 0
+  ExpectedEndOfInput : PsDiag 0
+  ExpectedEndOfExpr : PsDiag 0
+  ExpectedExportItem : PsDiag 0
+  ExpectedExpression : PsDiag 0
+  ExpectedIdentifier : PsDiag 0
+  ExpectedInstanceMethod : PsDiag 0
+  ExpectedLetBinding : PsDiag 0
+  ExpectedPattern : PsDiag 0
+  ExpectedRecordFieldPattern : PsDiag 0
+  ExpectedTopLevelDecl : PsDiag 0
   -- 同一绑定作用域内重复的模式绑定名直接拒绝（不实现相等约束）。
   -- | 同一绑定作用域内出现重复的模式绑定名（非线性格），当前不支持。
-  RepeatedPatternBinder : PsDiag Zero
+  RepeatedPatternBinder : PsDiag 0
   -- 模板字符串的两个语法边界（空洞 / 模式里带洞）。
-  TemplateHoleEmpty : PsDiag Zero
-  TemplateInPattern : PsDiag Zero
-  ExprNotIndented : PsDiag Zero
-  LetBindingNotIndented : PsDiag Zero
-  PiBinderNameNotSimple : PsDiag Zero
-  UnexpectedEndOfInput : PsDiag Zero
-  UnexpectedIndentAfterCaseAlt : PsDiag Zero
-  UnexpectedIndentInData : PsDiag Zero
-  UnexpectedIndentInDo : PsDiag Zero
-  UnexpectedIndentInInstance : PsDiag Zero
-  UnexpectedIndentInRecord : PsDiag Zero
-  UnexpectedIndentInTrait : PsDiag Zero
+  TemplateHoleEmpty : PsDiag 0
+  TemplateInPattern : PsDiag 0
+  ExprNotIndented : PsDiag 0
+  LetBindingNotIndented : PsDiag 0
+  PiBinderNameNotSimple : PsDiag 0
+  UnexpectedEndOfInput : PsDiag 0
+  UnexpectedIndentAfterCaseAlt : PsDiag 0
+  UnexpectedIndentInData : PsDiag 0
+  UnexpectedIndentInDo : PsDiag 0
+  UnexpectedIndentInInstance : PsDiag 0
+  UnexpectedIndentInRecord : PsDiag 0
+  UnexpectedIndentInTrait : PsDiag 0
   -- `let` / `where` 共用绑定块，缩进越界用统一诊断。
-  UnexpectedIndentInBinding : PsDiag Zero
+  UnexpectedIndentInBinding : PsDiag 0
   -- `infix*` 声明的优先级必须是 0–9 的十进制字面量。
-  ExpectedFixityLevel : PsDiag Zero
-  FixityLevelRange : PsDiag Zero
+  ExpectedFixityLevel : PsDiag 0
+  FixityLevelRange : PsDiag 0
   -- `C a => τ` 的约束语法只允许在顶层签名上；其它签名位置给明确诊断。
-  ConstraintUnsupportedHere : PsDiag Zero
+  ConstraintUnsupportedHere : PsDiag 0
   -- `handle` 语法的块与子句错误。
-  HandleClauseNeedsCtor : PsDiag Zero
-  HandleClauseNotIndented : PsDiag Zero
-  HandleNeedsOpClause : PsDiag Zero
-  HandleReturnMisplaced : PsDiag Zero
+  HandleClauseNeedsCtor : PsDiag 0
+  HandleClauseNotIndented : PsDiag 0
+  HandleNeedsOpClause : PsDiag 0
+  HandleReturnMisplaced : PsDiag 0
   -- arity 2
-  HandleContinuationNameMismatch : String -> String -> PsDiag (Succ (Succ Zero))
+  HandleContinuationNameMismatch : String -> String -> PsDiag 2
   -- arity 1（绑定块签名诊断；let/where 共用同一套码名，消息文案是通用
   -- "binding signature"）
-  WhereSigBeforeClause : String -> PsDiag (Succ Zero)
-  WhereSigDuplicate : String -> PsDiag (Succ Zero)
-  WhereSigMultiClause : String -> PsDiag (Succ Zero)
-  WhereSigNoDef : String -> PsDiag (Succ Zero)
+  WhereSigBeforeClause : String -> PsDiag 1
+  WhereSigDuplicate : String -> PsDiag 1
+  WhereSigMultiClause : String -> PsDiag 1
+  WhereSigNoDef : String -> PsDiag 1
   -- arity 1
-  ExpectedDeclAtColumn : String -> PsDiag (Succ Zero)
-  ExpectedToken : String -> PsDiag (Succ Zero)
+  ExpectedDeclAtColumn : String -> PsDiag 1
+  ExpectedToken : String -> PsDiag 1
   -- 顶层同名子句必须构成一个连续块（块内只允许空行 / 注释）。
-  ClauseNotAdjacent : String -> PsDiag (Succ Zero)
+  ClauseNotAdjacent : String -> PsDiag 1
   -- 零参定义只能有一条子句：第二条及以后永远不可达。
-  DefinitionDuplicate : String -> PsDiag (Succ Zero)
+  DefinitionDuplicate : String -> PsDiag 1
   -- 子句被前面的同名子句完全覆盖（语法蕴含）。
-  ClauseShadowed : String -> PsDiag (Succ Zero)
+  ClauseShadowed : String -> PsDiag 1
 
 export psCode : {n : Nat} -> PsDiag n -> String
 psCode CaseAltNotIndented = "PS_CaseAltNotIndented"
@@ -429,13 +429,13 @@ psErrAt sp e args =
     _ => ErrC (withLabel (Label (Just sp) "" LabelPrimary Nothing) (psMsg e args))
 
 -- | 零元词法诊断（带位置）。
-export lexErr0At : Span -> LexDiag Zero -> Check a
+export lexErr0At : Span -> LexDiag 0 -> Check a
 lexErr0At sp e = lexErrAt sp e []
 
 -- | 零元语法诊断（带位置）。
-export psErr0At : Span -> PsDiag Zero -> Check a
+export psErr0At : Span -> PsDiag 0 -> Check a
 psErr0At sp e = psErrAt sp e []
 
 -- | 一元语法诊断（带位置，实参填 `<0>`）。
-export psErr1At : Span -> PsDiag (Succ Zero) -> String -> Check a
+export psErr1At : Span -> PsDiag 1 -> String -> Check a
 psErr1At sp e a0 = psErrAt sp e [a0]

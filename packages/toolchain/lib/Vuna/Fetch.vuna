@@ -461,7 +461,7 @@ hashMismatch alias expected actual =
     OkC _ => pure 0
 
 -- | 内部：构造并打印单参数包诊断（`PKG_NotMaterialized` / `PKG_FetchFailed`）。
-fetchFail : Member nConsole ConsoleOp r => PkgErr (Succ Zero) -> String -> Eff r Int
+fetchFail : Member nConsole ConsoleOp r => PkgErr 1 -> String -> Eff r Int
 fetchFail e arg =
   case pkgNoLoc1 e arg of
     ErrC d => printDiagEff d

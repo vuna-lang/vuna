@@ -4,7 +4,7 @@ module Vuna.Compiler.Base.Diagnostics.Tc where
 --
 -- 对外名字集合不变，门面仍是 `Vuna.Compiler.Base.Diagnostics`（选择性重导出，调用点零改动）。
 -- arity 由 `TcErr : Nat -> Type` 的构造子索引在编译期锁定（`UnknownName : String ->
--- TcErr (Succ Zero)`），throw 点给 `Vec n String`——arity 拼错**编译失败**。
+-- TcErr 1`），throw 点给 `Vec n String`——arity 拼错**编译失败**。
 -- 模板/说明/码的派生都在本模块；`tcAll` 是 `gen-errors` 的文档遍历源。
 --
 -- 约定：符号语义稳定、只增不删；一个码只承载一种语义；占位符 `<k>` 每个只出现一次。
@@ -19,131 +19,131 @@ import Base.Data.Vec as Vec
 -- ---------------------------------------------------------------
 export data TcErr(..) : Nat -> Type where
   -- arity 0
-  BoolCaseRestriction : TcErr Zero
-  CaseBranchTooFewArgs : TcErr Zero
-  CaptureFuel : TcErr Zero
-  CatchAllNotLast : TcErr Zero
-  ClauseTooManyPatterns : TcErr Zero
+  BoolCaseRestriction : TcErr 0
+  CaseBranchTooFewArgs : TcErr 0
+  CaptureFuel : TcErr 0
+  CatchAllNotLast : TcErr 0
+  ClauseTooManyPatterns : TcErr 0
   -- 子句被前面的同名子句（并集）完全覆盖：永远不会被选中。
-  ClauseUnreachable : TcErr Zero
-  DataKindArrows : TcErr Zero
-  DefMoreParams : TcErr Zero
-  DefParamsMustBeVars : TcErr Zero
-  DoUnsupported : TcErr Zero
-  FunctionNoClauses : TcErr Zero
-  HoleNoExpectedType : TcErr Zero
-  ImplicitParamKind : TcErr Zero
-  ImpossibleBranchEmptyCtx : TcErr Zero
-  ImpossibleBranchIndex : TcErr Zero
-  IndexFuel : TcErr Zero
-  InstanceHeadNotApp : TcErr Zero
-  ConstraintNotDict : TcErr Zero
-  InstanceMissingMethod : TcErr Zero
-  OrphanInstance : TcErr Zero
-  InterfaceNoParam : TcErr Zero
-  NoInstParam : TcErr Zero
-  IntStringCaseNeedsFallback : TcErr Zero
-  IntStringCaseRestriction : TcErr Zero
-  InvalidArrowType : TcErr Zero
-  LambdaNoSignature : TcErr Zero
-  LambdaTooManyParams : TcErr Zero
-  NestedPatterns : TcErr Zero
-  NatLiteralOutOfRange : TcErr Zero
-  NotInductiveFamily : TcErr Zero
-  OnlyCtorPatterns : TcErr Zero
-  PatternFuel : TcErr Zero
-  RecordsUnsupported : TcErr Zero
-  TooManyArgs : TcErr Zero
-  TypeLevelArg : TcErr Zero
-  TypeMismatchCaseCount : TcErr Zero
-  TypeMismatchCtorArity : TcErr Zero
-  UniverseLevelNonNegative : TcErr Zero
+  ClauseUnreachable : TcErr 0
+  DataKindArrows : TcErr 0
+  DefMoreParams : TcErr 0
+  DefParamsMustBeVars : TcErr 0
+  DoUnsupported : TcErr 0
+  FunctionNoClauses : TcErr 0
+  HoleNoExpectedType : TcErr 0
+  ImplicitParamKind : TcErr 0
+  ImpossibleBranchEmptyCtx : TcErr 0
+  ImpossibleBranchIndex : TcErr 0
+  IndexFuel : TcErr 0
+  InstanceHeadNotApp : TcErr 0
+  ConstraintNotDict : TcErr 0
+  InstanceMissingMethod : TcErr 0
+  OrphanInstance : TcErr 0
+  InterfaceNoParam : TcErr 0
+  NoInstParam : TcErr 0
+  IntStringCaseNeedsFallback : TcErr 0
+  IntStringCaseRestriction : TcErr 0
+  InvalidArrowType : TcErr 0
+  LambdaNoSignature : TcErr 0
+  LambdaTooManyParams : TcErr 0
+  NestedPatterns : TcErr 0
+  NatLiteralOutOfRange : TcErr 0
+  NotInductiveFamily : TcErr 0
+  OnlyCtorPatterns : TcErr 0
+  PatternFuel : TcErr 0
+  RecordsUnsupported : TcErr 0
+  TooManyArgs : TcErr 0
+  TypeLevelArg : TcErr 0
+  TypeMismatchCaseCount : TcErr 0
+  TypeMismatchCtorArity : TcErr 0
+  UniverseLevelNonNegative : TcErr 0
   -- arity 1
-  AxiomWithDefinition : String -> TcErr (Succ Zero)
-  BranchTooManyArgs : String -> TcErr (Succ Zero)
-  CannotProveTermination : String -> TcErr (Succ Zero)
-  CannotRedefineBuiltin : String -> TcErr (Succ Zero)
-  CannotSolveMetavar : String -> TcErr (Succ Zero)
-  CannotSolveHigherOrder : String -> TcErr (Succ Zero)
-  CannotSolveOccurs : String -> TcErr (Succ Zero)
-  TypeMismatchCaseVars : String -> TcErr (Succ Zero)
-  DuplicateInstance : String -> TcErr (Succ Zero)
-  InstanceContextMissing : String -> TcErr (Succ Zero)
-  SuperclassNotSatisfied : String -> String -> TcErr (Succ (Succ Zero))
-  OverlappingInstances : String -> TcErr (Succ Zero)
-  DuplicateSignature : String -> TcErr (Succ Zero)
-  ExpectedSignature : String -> TcErr (Succ Zero)
-  ExpectedType : String -> TcErr (Succ Zero)
+  AxiomWithDefinition : String -> TcErr 1
+  BranchTooManyArgs : String -> TcErr 1
+  CannotProveTermination : String -> TcErr 1
+  CannotRedefineBuiltin : String -> TcErr 1
+  CannotSolveMetavar : String -> TcErr 1
+  CannotSolveHigherOrder : String -> TcErr 1
+  CannotSolveOccurs : String -> TcErr 1
+  TypeMismatchCaseVars : String -> TcErr 1
+  DuplicateInstance : String -> TcErr 1
+  InstanceContextMissing : String -> TcErr 1
+  SuperclassNotSatisfied : String -> String -> TcErr 2
+  OverlappingInstances : String -> TcErr 1
+  DuplicateSignature : String -> TcErr 1
+  ExpectedSignature : String -> TcErr 1
+  ExpectedType : String -> TcErr 1
   -- extern 签名超出受限 FFI 子集（基本类型 + 简单 Array）。
-  FfiTypeUnsupported : String -> TcErr (Succ Zero)
-  EqRequiresEvidence : String -> TcErr (Succ Zero)
-  InstanceUnknownMethod : String -> TcErr (Succ Zero)
-  InstanceDuplicateMethod : String -> TcErr (Succ Zero)
-  NeedsTwoArgs : String -> TcErr (Succ Zero)
-  NoInstanceFound : String -> TcErr (Succ Zero)
+  FfiTypeUnsupported : String -> TcErr 1
+  EqRequiresEvidence : String -> TcErr 1
+  InstanceUnknownMethod : String -> TcErr 1
+  InstanceDuplicateMethod : String -> TcErr 1
+  NeedsTwoArgs : String -> TcErr 1
+  NoInstanceFound : String -> TcErr 1
   -- 模板字符串插值（`${e}` → `Base.Trait.Interp.interp e`）找不到 `Interp`/`Show` 实例。
-  InterpNoInstance : String -> TcErr (Succ Zero)
-  NotExhaustive : String -> TcErr (Succ Zero)
-  SignatureNoDef : String -> TcErr (Succ Zero)
-  UnknownInterface : String -> TcErr (Succ Zero)
-  UnknownName : String -> TcErr (Succ Zero)
-  UnsolvedHole : String -> TcErr (Succ Zero)
-  UnsolvedMetavarInfer : String -> TcErr (Succ Zero)
+  InterpNoInstance : String -> TcErr 1
+  NotExhaustive : String -> TcErr 1
+  SignatureNoDef : String -> TcErr 1
+  UnknownInterface : String -> TcErr 1
+  UnknownName : String -> TcErr 1
+  UnsolvedHole : String -> TcErr 1
+  UnsolvedMetavarInfer : String -> TcErr 1
   -- QTT 用量检查。
-  LinearUnused : String -> TcErr (Succ Zero)
-  LinearOverused : String -> TcErr (Succ Zero)
-  ErasedBinderUsed : String -> TcErr (Succ Zero)
-  MultiplicityImplicit : String -> TcErr (Succ Zero)
-  MultiplicityTypeDomain : String -> TcErr (Succ Zero)
-  LinearTypeNeedsOne : String -> TcErr (Succ Zero)
-  LinearValueNeedsLinearBinder : String -> TcErr (Succ Zero)
-  LinearTopLevel : String -> TcErr (Succ Zero)
-  LinearCaptureEscapes : String -> TcErr (Succ Zero)
+  LinearUnused : String -> TcErr 1
+  LinearOverused : String -> TcErr 1
+  ErasedBinderUsed : String -> TcErr 1
+  MultiplicityImplicit : String -> TcErr 1
+  MultiplicityTypeDomain : String -> TcErr 1
+  LinearTypeNeedsOne : String -> TcErr 1
+  LinearValueNeedsLinearBinder : String -> TcErr 1
+  LinearTopLevel : String -> TcErr 1
+  LinearCaptureEscapes : String -> TcErr 1
   -- F3-1：效果运行入口仍有未处理效应（行必须为 Nil）。
-  UnhandledEffects : String -> TcErr (Succ Zero)
+  UnhandledEffects : String -> TcErr 1
   -- F3 B：release 构建里的 debug-only 构造（assert / todo）。
-  DebugConstructInRelease : String -> TcErr (Succ Zero)
+  DebugConstructInRelease : String -> TcErr 1
   -- D17：入口 `main` 不能带参数（结果类型拆掉动作层后是函数类型即 arity 错误）。
-  MainArity : String -> TcErr (Succ Zero)
+  MainArity : String -> TcErr 1
   -- `perform` 找不到 op 族（`<Op> : params… -> Type -> Type`）。
-  EffResFamilyMissing : String -> TcErr (Succ Zero)
+  EffResFamilyMissing : String -> TcErr 1
   -- `perform` / `handle` 的 op 族不满足降级协议：必须以结果类型为最后索引
   -- （`<Op> : params… -> Type -> Type`），且显式参数都是类型。
-  HandleFamilyUnsupported : String -> TcErr (Succ Zero)
+  HandleFamilyUnsupported : String -> TcErr 1
   -- arity 2
-  AmbiguousCtor : String -> String -> TcErr (Succ (Succ Zero))
-  AmbiguousName : String -> String -> TcErr (Succ (Succ Zero))
-  AmbiguousInstance : String -> String -> TcErr (Succ (Succ Zero))
+  AmbiguousCtor : String -> String -> TcErr 2
+  AmbiguousName : String -> String -> TcErr 2
+  AmbiguousInstance : String -> String -> TcErr 2
   -- 同一个 `handle` 块的 clause 构造子跨 op 族。
-  HandleClauseFamilyMismatch : String -> String -> TcErr (Succ (Succ Zero))
-  AppliedNotType : String -> TcErr (Succ Zero)
-  CtorDoesNotReturn : String -> String -> TcErr (Succ (Succ Zero))
-  CtorError : String -> String -> TcErr (Succ (Succ Zero))
-  CtorWrongIndices : String -> String -> TcErr (Succ (Succ Zero))
-  NotTraitMethod : String -> String -> TcErr (Succ (Succ Zero))
-  OpNotDefinedFor : String -> String -> TcErr (Succ (Succ Zero))
-  OpOnlyIntString : String -> String -> TcErr (Succ (Succ Zero))
-  UnknownConstructorInCase : String -> String -> TcErr (Succ (Succ Zero))
-  UnsolvedMetavar : String -> String -> TcErr (Succ (Succ Zero))
-  TypeMismatch : String -> String -> TcErr (Succ (Succ Zero))
-  TypeMismatchCaseBranch : String -> String -> TcErr (Succ (Succ Zero))
-  WhereNeedsSig : String -> String -> TcErr (Succ (Succ Zero))
+  HandleClauseFamilyMismatch : String -> String -> TcErr 2
+  AppliedNotType : String -> TcErr 1
+  CtorDoesNotReturn : String -> String -> TcErr 2
+  CtorError : String -> String -> TcErr 2
+  CtorWrongIndices : String -> String -> TcErr 2
+  NotTraitMethod : String -> String -> TcErr 2
+  OpNotDefinedFor : String -> String -> TcErr 2
+  OpOnlyIntString : String -> String -> TcErr 2
+  UnknownConstructorInCase : String -> String -> TcErr 2
+  UnsolvedMetavar : String -> String -> TcErr 2
+  TypeMismatch : String -> String -> TcErr 2
+  TypeMismatchCaseBranch : String -> String -> TcErr 2
+  WhereNeedsSig : String -> String -> TcErr 2
   -- `deriving via field` 只允许自动去装箱的单字段包装。
-  DerivingViaUnboxedRequired : TcErr Zero
+  DerivingViaUnboxedRequired : TcErr 0
   -- R4（records-v2）：`deriving via field` 只允许 `record`（`data` 已退役记录语义）。
-  DerivingViaOnlyRecord : TcErr Zero
+  DerivingViaOnlyRecord : TcErr 0
   -- R1（records-v2）：`alias record` 声明不满足「擦除后恰好一个运行时字段」（含递归）。
-  ReprAliasInvalid : TcErr Zero
-  RecordDuplicateField : TcErr Zero
-  RecordMissingField : String -> TcErr (Succ Zero)
-  RecordUnknownField : String -> TcErr (Succ Zero)
-  UnknownRecord : String -> TcErr (Succ Zero)
-  DeriveCtorFieldCount : String -> TcErr (Succ Zero)
-  DeriveFieldType : String -> String -> String -> TcErr (Succ (Succ (Succ Zero)))
-  DeriveSingleCtor : String -> TcErr (Succ Zero)
-  DeriveUnsupportedKind : String -> TcErr (Succ Zero)
+  ReprAliasInvalid : TcErr 0
+  RecordDuplicateField : TcErr 0
+  RecordMissingField : String -> TcErr 1
+  RecordUnknownField : String -> TcErr 1
+  UnknownRecord : String -> TcErr 1
+  DeriveCtorFieldCount : String -> TcErr 1
+  DeriveFieldType : String -> String -> String -> TcErr 3
+  DeriveSingleCtor : String -> TcErr 1
+  DeriveUnsupportedKind : String -> TcErr 1
   -- 入口行的内建宿主效应用了非 `default` 的显式实例名：entry 只预装默认实例。
-  EntryInstanceNotDefault : String -> TcErr (Succ Zero)
+  EntryInstanceNotDefault : String -> TcErr 1
 
 -- ---------------------------------------------------------------
 -- code 派生（唯一真源；`gen-errors` 与 throw 都用它）
@@ -856,15 +856,15 @@ tcErr sp e args = ErrC (withDiagSpan sp (tcMsg e args))
 -- 人体工学：按 arity 分档的 throw（调用点不必手搓 Vec）
 -- ---------------------------------------------------------------
 -- | 便捷入口：tcErr0。
-export tcErr0 : Span -> TcErr Zero -> Check a
+export tcErr0 : Span -> TcErr 0 -> Check a
 tcErr0 sp e = tcErr sp e []
 
 -- | 便捷入口：tcErr1。
-export tcErr1 : Span -> TcErr (Succ Zero) -> String -> Check a
+export tcErr1 : Span -> TcErr 1 -> String -> Check a
 tcErr1 sp e a0 = tcErr sp e [a0]
 
 -- | 便捷入口：tcErr2。
-export tcErr2 : Span -> TcErr (Succ (Succ Zero)) -> String -> String -> Check a
+export tcErr2 : Span -> TcErr 2 -> String -> String -> Check a
 tcErr2 sp e a0 a1 = tcErr sp e [a0, a1]
 
 -- ---------------------------------------------------------------
@@ -872,15 +872,15 @@ tcErr2 sp e a0 a1 = tcErr sp e [a0, a1]
 -- 输出形态是无前缀的 `[CODE] 消息`（与带位置的 `文件:行:列: [CODE] 消息` 区分）。
 -- ---------------------------------------------------------------
 -- | 便捷入口：tcErr0NoLoc。
-export tcErr0NoLoc : TcErr Zero -> Check a
+export tcErr0NoLoc : TcErr 0 -> Check a
 tcErr0NoLoc e = ErrC (tcMsg e [])
 
 -- | 便捷入口：tcErr1NoLoc。
-export tcErr1NoLoc : TcErr (Succ Zero) -> String -> Check a
+export tcErr1NoLoc : TcErr 1 -> String -> Check a
 tcErr1NoLoc e a0 = ErrC (tcMsg e [a0])
 
 -- | 便捷入口：tcErr2NoLoc。
-export tcErr2NoLoc : TcErr (Succ (Succ Zero)) -> String -> String -> Check a
+export tcErr2NoLoc : TcErr 2 -> String -> String -> Check a
 tcErr2NoLoc e a0 a1 = ErrC (tcMsg e [a0, a1])
 
 -- ---------------------------------------------------------------
@@ -899,7 +899,7 @@ tcTypeMismatchNoLoc expected found =
     (withField (FieldFound found) (withField (FieldExpected expected) (withTrace (TraceFrame PhUnify "unify: expected ${expected}" Nothing []) (withTrace (TraceFrame PhUnify "unify: found ${found}" Nothing []) (tcMsg (TypeMismatch expected found) [expected, found])))))
 
 -- | 诊断构造辅助：tcErr3（code/template 见本模块目录）。
-export tcErr3 : Span -> TcErr (Succ (Succ (Succ Zero))) -> String -> String -> String -> Check a
+export tcErr3 : Span -> TcErr 3 -> String -> String -> String -> Check a
 tcErr3 sp e a0 a1 a2 = tcErr sp e [a0, a1, a2]
 
 -- | 覆盖性：把所有不可达/未覆盖的构造子一次性列出（每个构造子进 `fields.candidates`）。

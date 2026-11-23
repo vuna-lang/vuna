@@ -1,4 +1,4 @@
-# lint：AST 驱动的 dispatch 提升、列表/元组字面量归一与自动修复
+# lint：AST 驱动的 dispatch 提升、列表/元组/Nat 字面量归一与自动修复
 
 本文记录 `vuna lint` 的规则、可修复判据与语料。实现入口是
 `packages/toolchain/lib/Vuna/Lint/Rules.vuna`（dispatch 判定、提升渲染、列表链与 `Pair` 应用检测、
@@ -47,6 +47,7 @@ literal-if-chain = "error"      # off | warn | error
 dispatch-lift = "error"
 list-literal = "error"
 pair-sugar = "error"
+nat-literal = "error"
 todo-marker = "off"              # 默认关闭；all 预设可开
 redundant-if = "off"             # 默认关闭；all 预设可开
 ```
@@ -111,6 +112,12 @@ trait 方法、instance 上下文/head/方法）仍由 `declFindings` 的 `walkT
 `handle` op 子句）；元素原文按表达式 / 模式的字节 span 切片（括号节点保留括号），避免把
 紧邻的 `)` / `,` 卷进来。
 
+`nat-literal` 也复用这两套遍历：表达式位置在 `walkAppList`，类型位置在 `walkTypeSyntax`，
+模式位置在 `walkPairPat`（同一批 6 处接线）。只认裸名 `Zero` / `Succ`，闭合链只报最外层
+（内层 `Succ Zero` 不再单独报告）；替换文本是 `strFromInt` 的十进制。模式改写依赖精化器把
+Nat 字面量模式展开成构造子模式（[type-system.md](type-system.md)「依赖模式匹配与 case」），
+因此 `1 => ...` 与 `Succ Zero => ...` 落在同一个模式矩阵。
+
 ## 3. 规则概览
 
 lint 的 dispatch 类改写统一是：**识别一个 dispatch，把它提升进外层的 clause / alt 模式**。
@@ -142,12 +149,13 @@ let 值里的 if）需要上下文分发（case-of-case），会复制代码与�
 | `LN_DispatchLift` | `dispatch-lift` | 是 | case / let dispatch 在可提升位置（单 alt 替换、多 alt 拆 clause / alt） |
 | `LN_ListLiteral` | `list-literal` | 是 | 表达式/类型位置的闭合 cons 链（`::` / `Cons` + `[]` / `Nil`）与裸 `Nil`；**模式匹配不动** |
 | `LN_PairSugar` | `pair-sugar` | 是 | 表达式/类型/模式位置的显式 `Pair a b` 应用（右嵌套链展平） |
+| `LN_NatLiteral` | `nat-literal` | 是 | 表达式/类型/模式位置的闭合 `Zero` / `Succ` 链（`Succ k` 等开放链不动） |
 | `LN_TodoMarker` | `todo-marker` | 否 | 注释里的 `TODO` / `FIXME` / `XXX`；默认关闭，`--select` / all 预设启用 |
 | `LN_RedundantIf` | `redundant-if` | 是 | `if True/False then a else b` 的常量条件；默认关闭，`--select` / all 预设启用 |
 
 dispatch 两条规则（`literal-if-chain` / `dispatch-lift`）共用同一套 lane 判定与 as-pattern
-渲染，区别只在 dispatch 源（if 链 vs case / let）。`list-literal` / `pair-sugar` 与 dispatch 同趟遍历，
-但判据独立（不是 dispatch 提升），见 §3.3 / §3.4。
+渲染，区别只在 dispatch 源（if 链 vs case / let）。`list-literal` / `pair-sugar` / `nat-literal`
+与 dispatch 同趟遍历，但判据独立（不是 dispatch 提升），见 §3.3 / §3.4 / §3.5。
 
 ### 3.1 `literal-if-chain`
 
@@ -247,6 +255,28 @@ clause（多 alt 拆分）；外层是嵌套 alt 时该 alt 是父 case 的最�
 - 只按裸名 `Pair` 判定，不做作用域名字解析：同名函数 / 用户自定义 `Pair` 由 `vuna check`
   裁决（与 `list-literal` 对 `Cons` / `Nil` 的边界一致）。
 
+### 3.5 `nat-literal`
+
+- **触发**：表达式 / 类型 / 模式位置的**闭合** Nat 构造子链：`Zero`、`Succ (Succ Zero)`；
+  改写文本是按 `Succ` 层数的十进制字面量（`0` / `1` / `2` …），只报最外层。
+- **不触发**：开放链 `Succ n` / `Succ (f x)`；带模块前缀的名字（`Nat.Zero`）；裸 `Succ`
+  （值传递 / 部分应用）；注释（AST 遍历看不到）；模板插值洞。
+- **为什么等价**：期望类型是 Nat 时字面量精化成同一个 `natLitTerm` 链
+  （`Elab/Term/Impl`）；类型层字面量本来就是语言特性（`Vec 3 a`）。模式里的 Nat 字面量在
+  模式解析阶段展开成 `Zero` / `Succ` 构造子模式，与手写链落同一个模式矩阵，穷尽性、
+  可达性与匹配顺序都不变（见 [type-system.md](type-system.md)）。
+- **可修复判据**：链单行；被替换行无 `--` / `{-` / tab / CR；切片走字节偏移并用末 token
+  补全、剥离**紧邻**的成对括号（`TcErr (Succ Zero)` → `TcErr 1`、`f (Succ Zero)` →
+  `f 1`、`x@(Succ Zero)` → `x@1`）。
+- **不可修复形态仍报告**（跨行、含注释 / tab），`--fix` 不写文件并在输出标
+  ` (not auto-fixable)`。
+- **表达式推断位置**：没有期望类型时字面量仍按 `Int` 推断；只有期望类型是 Nat（或被
+  Nat 上下文约束，如 `natToInt` 实参）时才与 `Succ Zero` 等价。规则只做语法归一，
+  `vuna check` 是最终裁决。
+- **已知边界**：单 clause 函数直接体里的可提升 `case`（`dispatch-lift` 会先给出整段编辑）
+  在 `--select nat-literal` 下可能吞掉模式 finding（`dedupFindings` 在配置过滤之前，见 §6）；
+  默认推荐配置的多轮 `--fix` 会先把 case 提升成 clause，再在下一轮改写成字面量。
+
 ## 4. 语料与测试
 
 原生 suite 的 `lint` / `fix` family（`test/suite.toml`，kind `lint` / `fix`）：
@@ -255,12 +285,15 @@ clause（多 alt 拆分）；外层是嵌套 alt 时该 alt 是父 case 的最�
   dispatch 两条规则与「不报」形态；15–18 覆盖 Bool 变量 if 的 clause/alt 报告、不报形态与
   模板字符串分支；19 覆盖 `list-literal`：`::` / `Cons` / 裸 `Nil` / 类型位置报告，
   以及 pattern、开放链、注释行、既有字面量不误报；21 覆盖 `pair-sugar`：类型/值/模式、
-  右嵌套展平、左嵌套多轮、部分应用与既有元组不报、注释/跨行报告但不可修复）。
+  右嵌套展平、左嵌套多轮、部分应用与既有元组不报、注释/跨行报告但不可修复；
+  22 覆盖 `nat-literal`：构造子结果类型、签名、clause / 嵌套 case 模式、表达式与裸 `Zero`，
+  以及开放链、`Nat.Zero`、裸 `Succ`、注释/跨行不误报）。
 - `packages/cli/test/corpus/fix/*.vuna` + `.expected`：`--fix` 产物与二次运行幂等（01–06 回归基线，
   07–15 覆盖 dispatch 两条规则与 let 解构；16–19 覆盖 Bool if 的 clause/alt/链提升、
   as-pattern 与模板字符串分支；20 覆盖 `list-literal`：表达式/类型位置、括号剥离、
   `Cons` / 裸 `Nil`、注释行不修、幂等；21 覆盖 `pair-sugar`：类型/值/模式、右嵌套展平、
-  左嵌套多轮、注释与跨行不修、幂等）。
+  左嵌套多轮、注释与跨行不修、幂等；22 覆盖 `nat-literal` 的类型/表达式/模式、
+  `Zero`、as-pattern 括号剥离、注释与跨行不修、幂等）。
 - `packages/cli/test/steps/39_lint_cli.steps`：`vuna.toml [lint]`、源码抑制、`--format json`
   （含结束位置与 fixable）、「未知规则只由 lint 认领、`vuna check` 仍通过」，以及
   `--select pair-sugar` 的报告 / `--fix` / 幂等 / 修完 `check` 通过。
@@ -290,12 +323,18 @@ Bool / 字面量分派同样适用：`keep b = if b then b else b` → `keep b@T
 - **dispatch 规则只报告可安全自动修复的形态**：不可安全折叠的情形（非最后 clause、clause
   head 跨行、含注释 / tab / CR、分支体无法安全收束等）**不报告**（语料期望为空输出）。
   `list-literal` 例外：不可修复的闭合链 / 裸 `Nil` 仍报告（`--fix` 标 not auto-fixable），
-  因为「应写成列表字面量」本身是确定的；`pair-sugar` 同样把跨行 / 含注释的 `Pair` 应用
-  报告为 not auto-fixable。
+  因为「应写成列表字面量」本身是确定的；`pair-sugar` / `nat-literal` 同样把跨行 / 含注释的
+  应用 / 链报告为 not auto-fixable。
 - **`list-literal` 的模板插值洞跳过**：lint 只拿到顶层 token 列表，`EInterp` 洞内 token
   不可见，切片右边界不可靠；formatter 同样不保留洞内注释（已知边界）。
 - **`pair-sugar` 只认裸名 `Pair`**：带模块前缀的名字、记录字段模式、裸 `Pair`（值传递 /
   部分应用）与模板插值洞不处理；作用域语义由 `vuna check` 裁决。
+- **`nat-literal` 只认裸名 `Zero` / `Succ` 的闭合链**：开放链（`Succ n`）、带模块前缀的
+  名字与注释不报；表达式推断位置的字面量默认 `Int`，只有期望类型是 Nat 时才与构造子链
+  等价，`vuna check` 是最终裁决。模式改写取决于精化器把 Nat 字面量模式展开成构造子模式
+  （[type-system.md](type-system.md)）；单 clause 函数直接体里的可提升 `case` 会先被
+  `dispatch-lift` 整段覆盖，`--select nat-literal` 下其中的模式 finding 可能被吞掉
+  （`dedupFindings` 在配置过滤之前），默认推荐配置的多轮 `--fix` 会先提升再改写。
 - **提升只在直接体**：嵌套 dispatch 需要上下文分发，lint 不做；保持原形。
 - **子句拆分只对单 clause 函数**：多 clause 函数里拆子句可能暴露 unreachable clause，
   因此 `if` / `case` 的 clause 拆分都要求 `countFunClauses == 1`；多 clause 函数的 Bool
@@ -305,7 +344,7 @@ Bool / 字面量分派同样适用：`keep b = if b then b else b` → `keep b@T
 - **签名含隐式 Pi 的函数跳过 clause 级改写**：`{n : Nat} -> ...` 这类隐式参数由精化器
   插入，把 dispatch 折叠进 clause 模式会改变模式矩阵与隐式 Pi 的对齐（`Base.Data.Vec.vhead`
   实测会把 `Cons` 错配到 `n : Nat`）；`literal-if-chain` / `dispatch-lift` 都跳过这类声明。
-  `list-literal` 不改变 clause 结构，因此这类函数的体仍会扫描。
+  `list-literal` / `pair-sugar` / `nat-literal` 不改变 clause 结构，因此这类函数的体仍会扫描。
 - **Bool 名字解析**：Bool if 提升按源码名字生成 `True` / `False` 模式；vuna 包内它们就是
   canonical `Base.Data.Bool` 构造子。用户自定义同名构造子的极端情况不由 lint 判定，`vuna check`
   是最终裁决（与现有 case 拆分边界一致）。

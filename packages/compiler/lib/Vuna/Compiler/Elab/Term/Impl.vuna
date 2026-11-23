@@ -3317,7 +3317,7 @@ natPatGo n sp =
 
 -- | 按期望类型/scrutinee 族解析模式头里的重载构造子与列表字面量，并递归解析嵌套模式。
 resolveOverPatFuel : Nat -> Ec -> Ctx -> Value -> Pat -> Check (Pat, Ec)
-resolveOverPatFuel Zero ec ctx expected pat = icFuel "pattern resolve"
+resolveOverPatFuel 0 ec ctx expected pat = icFuel "pattern resolve"
 resolveOverPatFuel (Succ k) ec ctx expected pat =
   case pat of
     PCon name args sp =>
@@ -3348,7 +3348,7 @@ resolveOverPatFuel (Succ k) ec ctx expected pat =
 
 -- | 构造子模式的解析：用构造子字段类型实例化后逐个解析实参模式。
 resolveCtorPatFuel : Nat -> Ec -> Ctx -> Value -> String -> List Pat -> Span -> Check (Pat, Ec)
-resolveCtorPatFuel Zero ec ctx expected cname args sp = icFuel "pattern resolve"
+resolveCtorPatFuel 0 ec ctx expected cname args sp = icFuel "pattern resolve"
 resolveCtorPatFuel (Succ k) ec ctx expected cname args sp =
   case dtCtorLookupEc ec cname of
     Nothing => OkC (PCon (classifyName cname) args sp, ec)
@@ -3364,7 +3364,7 @@ resolveCtorPatFuel (Succ k) ec ctx expected cname args sp =
 
 -- | 沿构造子 telescope 逐个解析实参模式（隐式 binder 直接跳过）。
 resolvePatArgsFuel : Nat -> Ec -> Ctx -> Value -> List Pat -> Check (List Pat, Ec)
-resolvePatArgsFuel Zero ec ctx ty args = icFuel "pattern resolve"
+resolvePatArgsFuel 0 ec ctx ty args = icFuel "pattern resolve"
 resolvePatArgsFuel (Succ k) ec ctx ty args =
   case args of
     [] => OkC ([], ec)
@@ -3396,7 +3396,7 @@ resolveOverAlts ec ctx ty alts = resolveOverAltsGo (natFromInt 512) ec ctx ty al
 
 -- | resolveOverAlts 的 Nat 燃料递归实现。
 resolveOverAltsGo : Nat -> Ec -> Ctx -> Value -> List (Pat, Expr) -> Check (List (Pat, Expr), Ec)
-resolveOverAltsGo Zero ec ctx ty alts = icFuel "pattern resolve"
+resolveOverAltsGo 0 ec ctx ty alts = icFuel "pattern resolve"
 resolveOverAltsGo (Succ k) ec ctx ty alts =
   case alts of
     [] => OkC ([], ec)
@@ -3420,7 +3420,7 @@ resolveOverFunPats ec ctx expected clauses =
 
 -- | resolveOverFunPats 的 Nat 燃料递归实现。
 resolveOverFunPatsGo : Nat -> Ec -> Ctx -> Value -> List (List Pat, Expr) -> Check (List (List Pat, Expr), Ec)
-resolveOverFunPatsGo Zero ec ctx ty clauses = icFuel "pattern resolve"
+resolveOverFunPatsGo 0 ec ctx ty clauses = icFuel "pattern resolve"
 resolveOverFunPatsGo (Succ k) ec ctx ty clauses =
   case clauses of
     [] => OkC ([], ec)
@@ -3438,7 +3438,7 @@ resolveOverFunPatsGo (Succ k) ec ctx ty clauses =
 
 -- | 逐列解析 clause 参数模式（Nat 燃料结构下降）。
 resolveClausePatsFuel : Nat -> Ec -> Ctx -> Value -> List Pat -> Check (List Pat, Ec)
-resolveClausePatsFuel Zero ec ctx ty pats = icFuel "pattern resolve"
+resolveClausePatsFuel 0 ec ctx ty pats = icFuel "pattern resolve"
 resolveClausePatsFuel (Succ k) ec ctx ty pats =
   case pats of
     [] => OkC ([], ec)

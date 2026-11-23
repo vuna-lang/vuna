@@ -674,7 +674,7 @@ sourceStatOf builtSec path =
     exists <- fsFileExists path
     if exists then
       do
-        bytes <- fmap (\o => natToInt (fromMaybe Zero o)) (fsFileSize path)
+        bytes <- fmap (\o => natToInt (fromMaybe 0 o)) (fsFileSize path)
         mtime <- fmap (fromMaybe 0) (fsFileMtime path)
         if mtime + indexMtimeSafetyWindowSec > builtSec then
           do

@@ -1,0 +1,42 @@
+-- nat-literal：闭合 Zero / Succ 链改写成十进制字面量；开放链、带前缀名、跨行与注释行不动。
+import Base.Data.Nat as Nat
+
+data TcErr : Nat -> Type where
+  ZeroArity : TcErr 0
+  OneArity : TcErr 1
+  TwoArity : TcErr 2
+
+sig : Vec 1 Int -> Vec 2 Int
+sig xs = xs
+
+clause : Nat -> Int
+clause 1 = 1
+clause 0 = 0
+clause _ = 2
+
+asPat : Nat -> Int
+asPat n =
+  (
+    \m =>
+      case m of
+        x@1 => Nat.toInt x
+        _ => 0
+  ) n
+
+expr : Nat
+expr = 2
+
+bare : Nat
+bare = 0
+
+prefixed : Nat
+prefixed = Nat.Zero
+
+partial : Nat -> Nat
+partial = Succ
+
+multi : Vec 1 Int
+multi = []
+
+commented : Nat
+commented = Succ Zero -- keep

@@ -449,17 +449,17 @@ warnAt : Ec -> Span -> {n : Nat} -> WarnErr n -> Vec n String -> Ec
 warnAt ec sp e args = ecAddWarning ec (warnDiagAt sp e args)
 
 -- | arity 0 的 warning。
-export warnAt0 : Ec -> Span -> WarnErr Zero -> Ec
+export warnAt0 : Ec -> Span -> WarnErr 0 -> Ec
 warnAt0 ec sp e = warnAt ec sp e []
 
 -- | arity 1 的 warning。
-export warnAt1 : Ec -> Span -> WarnErr (Succ Zero) -> String -> Ec
+export warnAt1 : Ec -> Span -> WarnErr 1 -> String -> Ec
 warnAt1 ec sp e a0 = warnAt ec sp e [a0]
 
 -- | 带后处理（如附加 suggestion）的 arity-1 warning。
-export warnAt1Mod : Ec -> (Diagnostic -> Diagnostic) -> Span -> WarnErr (Succ Zero) -> String -> Ec
+export warnAt1Mod : Ec -> (Diagnostic -> Diagnostic) -> Span -> WarnErr 1 -> String -> Ec
 warnAt1Mod ec f sp e a0 = ecAddWarning ec (warnDiagAtMod f sp e [a0])
 
 -- | 带后处理（如附加 suggestion）的 arity-0 warning。
-export warnAt0Mod : Ec -> (Diagnostic -> Diagnostic) -> Span -> WarnErr Zero -> Ec
+export warnAt0Mod : Ec -> (Diagnostic -> Diagnostic) -> Span -> WarnErr 0 -> Ec
 warnAt0Mod ec f sp e = ecAddWarning ec (warnDiagAtMod f sp e [])

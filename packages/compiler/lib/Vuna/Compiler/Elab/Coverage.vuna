@@ -168,7 +168,7 @@ dropPats n xs =
 export coverageWitness : List (String, Bool, List (String, Int)) -> Nat -> Maybe (List (String, Int)) -> List (List Pat) -> List Pat -> Maybe (List Pat)
 coverageWitness table fuel pending rows qs =
   case fuel of
-    Zero => Nothing
+    0 => Nothing
     Succ fuel2 =>
       case pending of
         Just ctors =>
@@ -229,7 +229,7 @@ export data ClauseCover(..) : Type where
 export clauseCover : List (String, Bool, List (String, Int)) -> Nat -> List (List Pat) -> List Pat -> ClauseCover
 clauseCover table fuel rows qs =
   case fuel of
-    Zero => CovUnknown
+    0 => CovUnknown
     Succ fuel2 =>
       case qs of
         [] => if hasNilRow rows then CovCovered else CovUncovered
