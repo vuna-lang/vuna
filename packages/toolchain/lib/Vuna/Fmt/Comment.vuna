@@ -7,11 +7,13 @@
 -- 前置注释之间的源码空行保留（至多一级）；表达式内部的注释前移到最内层包含它的条目
 -- （没有则前移到下一条目；文件末尾的注释保留在文件末尾）。
 --
--- 注释列表在 `formatSourceWith` 里按 `anchorRefs` 做一次归属分配（行尾优先、否则下一条目），
--- 渲染时用条目的 `NodeRef` 直接查 `TriviaCtx`（键是 parser 分配的节点 id，不是 span 起点）。
+-- 注释列表在 `formatSourceWith` 里按 `anchorRefs` 单趟归属（行尾优先、否则下一条目）：
+-- 锚点按起点排序，注释按源码顺序前进，维护已打开锚点的栈（最内层容器）与本行已结束
+-- 锚点的候选池。渲染时用条目的 `NodeRef` 直接查 `TriviaCtx`（键是节点 id，不是 span 起点）。
 module Vuna.Fmt.Comment where
 
 import Base.Container.HashMap as HashMap
+import Base.Data.Sort as Sort
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Cst
@@ -131,31 +133,6 @@ commentLeadLines c =
 posBefore : Int -> Int -> Int -> Int -> Bool
 posBefore l1 c1 l2 c2 = l1 < l2 || l1 == l2 && c1 < c2
 
--- | 内部：(行, 列) 不晚于比较。
-posBeforeOrEq : Int -> Int -> Int -> Int -> Bool
-posBeforeOrEq l1 c1 l2 c2 = l1 < l2 || l1 == l2 && c1 <= c2
-
--- | 内部：位置是否落在该 span 内（含两个端点）。
-containsPos : Span -> Int -> Int -> Bool
-containsPos sp line col =
-  posBeforeOrEq (spanStartLine sp) (spanStartCol sp) line col
-    && posBeforeOrEq line col (spanEndLine sp) sp.spanEndCol
-
--- | 内部：包含该位置的条目中起点最晚者（即最内层条目）。
-innermostEnclosing : List NodeRef -> Span -> Maybe NodeRef
-innermostEnclosing anchors csp = enclosingFold Nothing anchors csp
-
--- | 内部：`innermostEnclosing` 的折叠。
-enclosingFold : Maybe NodeRef -> List NodeRef -> Span -> Maybe NodeRef
-enclosingFold best [] csp = best
-enclosingFold best (r :: rest) csp =
-  if containsPos (nodeRefSpan r) (spanStartLine csp) (spanStartCol csp) then
-    case best of
-      Nothing => enclosingFold (Just r) rest csp
-      Just b => if betterNext r b then enclosingFold (Just r) rest csp else enclosingFold best rest csp
-  else
-    enclosingFold best rest csp
-
 -- | 内部：按条目节点 id 查附件槽。
 lookupSlot : HashMap Int (Pair (List Comment) (List Comment)) -> Int -> Maybe (Pair (List Comment) (List Comment))
 lookupSlot at nid = HashMap.lookup nid at
@@ -192,12 +169,27 @@ addToSlot nid isTrail comment at =
             Pair (append (firstOf slot) [comment]) (secondOf slot)
       in HashMap.insert nid newSlot at
 
--- | 内部：能否作为行尾锚点：与注释同行且结束于注释起点之前。
-trailCandidate : NodeRef -> Span -> Bool
-trailCandidate r csp =
+-- | 内部：锚点按起点偏移升序（稳定排序：同起点的锚点保持收集顺序）。
+sortAnchors : List NodeRef -> List NodeRef
+sortAnchors anchors = Sort.sortBy anchorBefore anchors
+
+anchorBefore : NodeRef -> NodeRef -> Bool
+anchorBefore a b = spanStartOffset (nodeRefSpan a) <= spanStartOffset (nodeRefSpan b)
+
+-- | 内部：行尾注释候选池：同一行里已结束的锚点；换行即清空。
+record TrailPool where
+  tpLine : Int
+  tpAnchors : List NodeRef
+
+emptyTrailPool : TrailPool
+emptyTrailPool = TrailPool 0 []
+
+-- | 内部：把本行新结束的锚点并进候选池（换行清空）。
+poolAtLine : TrailPool -> Int -> List NodeRef -> TrailPool
+poolAtLine pool line ended =
   let
-    sp = nodeRefSpan r
-  in spanEndLine sp == spanStartLine csp && sp.spanEndCol < spanStartCol csp
+    kept = if pool.tpLine == line then pool.tpAnchors else []
+  in TrailPool line (append ended kept)
 
 -- | 内部：行尾候选择优：结束列更大者优先，同列取起点更晚者（更深层条目）。
 betterTrail : NodeRef -> NodeRef -> Bool
@@ -214,94 +206,94 @@ betterTrail r b =
   else
     posBefore (spanStartLine bsp) (spanStartCol bsp) (spanStartLine sp) (spanStartCol sp)
 
--- | 内部：行尾注释的锚点（无候选为 `Nothing`）。
-bestTrailAnchor : List NodeRef -> Span -> Maybe NodeRef
-bestTrailAnchor anchors csp = trailFold Nothing anchors csp
+-- | 内部：本行里结束于注释起点之前的最近锚点。
+bestTrailIn : List NodeRef -> Int -> Maybe NodeRef
+bestTrailIn cands col = trailPick Nothing cands col
 
--- | 内部：`bestTrailAnchor` 的折叠。
-trailFold : Maybe NodeRef -> List NodeRef -> Span -> Maybe NodeRef
-trailFold best [] csp = best
-trailFold best (r :: rest) csp =
-  if trailCandidate r csp then
+trailPick : Maybe NodeRef -> List NodeRef -> Int -> Maybe NodeRef
+trailPick best [] col = best
+trailPick best (r :: rest) col =
+  if spanEndCol (nodeRefSpan r) < col then
     case best of
-      Nothing => trailFold (Just r) rest csp
-      Just b => if betterTrail r b then trailFold (Just r) rest csp else trailFold best rest csp
+      Nothing => trailPick (Just r) rest col
+      Just b => if betterTrail r b then trailPick (Just r) rest col else trailPick best rest col
   else
-    trailFold best rest csp
+    trailPick best rest col
 
--- | 内部：条目起点是否严格晚于注释起点。
-isLaterAnchor : NodeRef -> Span -> Bool
-isLaterAnchor r csp =
-  posBefore
-    (spanStartLine csp)
-    (spanStartCol csp)
-    (spanStartLine (nodeRefSpan r))
-    (spanStartCol (nodeRefSpan r))
-
--- | 内部：候选择优：起点更早者优先。
-betterNext : NodeRef -> NodeRef -> Bool
-betterNext r b =
-  posBefore
-    (spanStartLine (nodeRefSpan r))
-    (spanStartCol (nodeRefSpan r))
-    (spanStartLine (nodeRefSpan b))
-    (spanStartCol (nodeRefSpan b))
-
--- | 内部：注释之后最近的条目（无则为 `Nothing`）。
-bestNextAnchor : List NodeRef -> Span -> Maybe NodeRef
-bestNextAnchor anchors csp = nextFold Nothing anchors csp
-
--- | 内部：`bestNextAnchor` 的折叠。
-nextFold : Maybe NodeRef -> List NodeRef -> Span -> Maybe NodeRef
-nextFold best [] csp = best
-nextFold best (r :: rest) csp =
-  if isLaterAnchor r csp then
-    case best of
-      Nothing => nextFold (Just r) rest csp
-      Just b => if betterNext r b then nextFold (Just r) rest csp else nextFold best rest csp
+-- | 内部：打开起点不晚于 `off` 的锚点；返回 (剩余锚点, 打开的栈)。
+openUpTo : List NodeRef -> List NodeRef -> Int -> Pair (List NodeRef) (List NodeRef)
+openUpTo [] open _ = Pair [] open
+openUpTo (r :: rest) open off =
+  if spanStartOffset (nodeRefSpan r) <= off then
+    openUpTo rest (r :: open) off
   else
-    nextFold best rest csp
+    Pair (r :: rest) open
 
--- | 把注释分配到条目附件表（条目节点 id 为键）：单行注释优先挂行尾锚点，否则走前置
--- 路径；返回 (附件表, 文件末尾注释)。
+-- | 内部：弹掉已结束的锚点；返回 (剩余栈, 本行结束的锚点)。
+closeBefore : List NodeRef -> Int -> Int -> Pair (List NodeRef) (List NodeRef)
+closeBefore [] line off = Pair [] []
+closeBefore (r :: rest) line off =
+  if spanEndOffset (nodeRefSpan r) < off then
+    let
+      p = closeBefore rest line off
+      ended = if spanEndLine (nodeRefSpan r) == line then [r] else []
+    in Pair (firstOf p) (append ended (secondOf p))
+  else
+    Pair (r :: rest) []
+
+-- | 内部：前置注释的归属：下一条目；下一条目跳出最内层包含条目时改用包含条目
+-- （函数体末尾的注释回到该函数上方，而不是下一位函数上方）。
+leadTarget : List NodeRef -> List NodeRef -> Span -> Maybe NodeRef
+leadTarget future open csp =
+  let
+    next =
+      case future of
+        [] => Nothing
+        r :: _ => Just r
+    enclosing =
+      case open of
+        [] => Nothing
+        r :: _ => Just r
+  in case next of
+    Nothing => enclosing
+    Just nr =>
+      case enclosing of
+        Nothing => Just nr
+        Just er =>
+          if spanStartOffset (nodeRefSpan nr) <= spanEndOffset (nodeRefSpan er) then
+            Just nr
+          else
+            Just er
+
+-- | 注释归属（单趟）：锚点按起点排序、注释按源码顺序前进；`open` 是已打开锚点的栈
+-- （头为最内层），`pool` 收集本行已结束的锚点（行尾候选）。每条注释只付栈操作与
+-- 「同行已结束的锚点」的线性扫，不再对全部锚点做前后扫描。
 assignComments : List NodeRef -> List Comment -> HashMap Int (Pair (List Comment) (List Comment)) -> List Comment -> Pair (HashMap Int (Pair (List Comment) (List Comment))) (List Comment)
-assignComments anchors [] at eof = Pair at eof
-assignComments anchors (c :: rest) at eof =
+assignComments anchors comments at eof =
+  assignGo (sortAnchors anchors) [] emptyTrailPool comments at eof
+
+assignGo : List NodeRef -> List NodeRef -> TrailPool -> List Comment -> HashMap Int (Pair (List Comment) (List Comment)) -> List Comment -> Pair (HashMap Int (Pair (List Comment) (List Comment))) (List Comment)
+assignGo future open pool [] at eof = Pair at eof
+assignGo future open pool (c :: rest) at eof =
   let
     csp = commentSpan c
-  in if isBlankMarker c then
-    assignNextComment anchors c rest at eof
-  else if isSingleLineComment c then
-    case bestTrailAnchor anchors csp of
-      Just r => assignComments anchors rest (addToSlot (nodeRefId r) True c at) eof
-      Nothing => assignNextComment anchors c rest at eof
-  else
-    assignNextComment anchors c rest at eof
-
--- | 内部：前置路径：挂到下一条目；没有下一条目就落到文件末尾注释。
-assignNextComment : List NodeRef -> Comment -> List Comment -> HashMap Int (Pair (List Comment) (List Comment)) -> List Comment -> Pair (HashMap Int (Pair (List Comment) (List Comment))) (List Comment)
-assignNextComment anchors c rest at eof =
-  case nextAnchorWithFallback anchors (commentSpan c) of
-    Just r => assignComments anchors rest (addToSlot (nodeRefId r) False c at) eof
-    Nothing => assignComments anchors rest at (append eof [c])
-
--- | 内部：下一条目；若下一条目跳出最内层包含条目，则改用该包含条目
--- （函数体末尾的注释回到该函数上方，而不是下一位函数上方）。
-nextAnchorWithFallback : List NodeRef -> Span -> Maybe NodeRef
-nextAnchorWithFallback anchors csp =
-  case bestNextAnchor anchors csp of
+    line = spanStartLine csp
+    col = spanStartCol csp
+    opened = openUpTo future open (spanStartOffset csp)
+    future2 = firstOf opened
+    closed = closeBefore (secondOf opened) line (spanStartOffset csp)
+    open2 = firstOf closed
+    pool2 = poolAtLine pool line (secondOf closed)
+    trail =
+      if isBlankMarker c then
+        Nothing
+      else if isSingleLineComment c then bestTrailIn pool2.tpAnchors col else Nothing
+  in case trail of
+    Just r => assignGo future2 open2 pool2 rest (addToSlot (nodeRefId r) True c at) eof
     Nothing =>
-      case innermostEnclosing anchors csp of
-        Nothing => Nothing
-        Just enc => Just enc
-    Just r =>
-      case innermostEnclosing anchors csp of
-        Nothing => Just r
-        Just enc =>
-          if posBeforeOrEq (spanStartLine (nodeRefSpan enc)) (spanStartCol (nodeRefSpan enc)) (spanStartLine (nodeRefSpan r)) (spanStartCol (nodeRefSpan r)) && posBeforeOrEq (spanStartLine (nodeRefSpan r)) (spanStartCol (nodeRefSpan r)) (spanEndLine (nodeRefSpan enc)) (spanEndCol (nodeRefSpan enc)) then
-            Just r
-          else
-            Just enc
+      case leadTarget future2 open2 csp of
+        Just r => assignGo future2 open2 pool2 rest (addToSlot (nodeRefId r) False c at) eof
+        Nothing => assignGo future2 open2 pool2 rest at (append eof [c])
 
 -- | 内部：import 的锚点。
 importAnchor : Import -> NodeRef
