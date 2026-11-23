@@ -17,7 +17,7 @@ module Vuna.Target.Native.Regs where
 --   * 被提升的槽在整个函数里都换成寄存器（来参落位、尾调用搬运、返回值都跟着走），
 --     所以循环边界上不需要插入拷贝。
 --
--- 寄存器只用 `rbx` / `r12`–`r14`：SysV 的 callee-saved，运行时与生成代码都不用它们
+-- 寄存器用 `rbx` / `r12`–`r15`：SysV 的 callee-saved，运行时与生成代码都不用它们
 -- （`rt_gc` 只把 r15 存进自己的帧，不写它），由函数自己的 prologue / epilogue 保存。
 -- 尾调用（含闭包尾调用 `jmp reg`）在 `pop rbp` 之后、跳转之前恢复。
 --
@@ -34,11 +34,11 @@ import Vuna.Target.Native.Repr
 
 -- | 一个函数最多提升几个槽（寄存器池大小）。
 maxPromoted : Int
-maxPromoted = 4
+maxPromoted = 5
 
 -- | 可用的 callee-saved 寄存器（顺序固定：分数高的槽拿前面的）。
 promotableRegs : List Reg
-promotableRegs = [Rbx, R12, R13, R14]
+promotableRegs = [Rbx, R12, R13, R14, R15]
 
 -- | 提升结果：重写后的函数体 + 需要在 prologue / epilogue 里保存的寄存器。
 export record RegPlan(..) where

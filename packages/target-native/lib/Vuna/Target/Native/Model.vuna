@@ -137,6 +137,8 @@ export data Instr(..) : Type where
   IDiv : Reg -> Instr
   -- | `div reg`（无符号）。
   IDivUnsigned : Reg -> Instr
+  -- | `imul reg`（单操作数：`rdx:rax <- rax * reg`，有符号高半）。
+  IMulSigned : Reg -> Instr
   -- | `rep movsb`（rdi=目的、rsi=源、rcx=字节数）。
   IRepMovsb : Instr
   -- | `repe cmpsb`（rdi/rsi 为两段字节，rcx=字节数；相等时 ZF=1）。

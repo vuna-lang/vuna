@@ -853,6 +853,7 @@ needsRax (IrRtApp sym args) =
       [_dividend, IrInt d] =>
         case divPlanOf d of
           Just (DivIdiv _) => True
+          Just (DivMagic _ _) => True
           _ => foldl (\acc, a => if acc then True else needsRax a) False args
       _ => foldl (\acc, a => if acc then True else needsRax a) False args
   else
@@ -1107,6 +1108,26 @@ genDivInto st pool a (DivShift k) =
                   [IMov (OpReg s) (OpReg r), IBinReg "sar" s (OpImm 63), IBinReg "and" s (OpImm (ipow2 k - 1)), IBinReg "add" r (OpReg s), IBinReg "sar" r (OpImm k)]
           in Just (Pair r (Pair instrs (s :: rest)))
         [] => Nothing
+genDivInto st pool a (DivMagic d m) =
+  case genScalarInto st pool a of
+    Nothing => Nothing
+    Just pa =>
+      let
+        r = firstOf pa
+        inInstrs = firstOf (secondOf pa)
+        poolAfter = secondOf (secondOf pa)
+        -- magic 序列固定占用 rax/rdx，另需三个空闲寄存器：ax / sign / magic。
+        frees = filter (\x => not (sameReg x Rax)) poolAfter
+      in case frees of
+        s1 :: s2 :: s3 :: _ =>
+          let
+            instrs =
+              append
+                inInstrs
+                [IMov (OpReg s1) (OpReg r), IMov (OpReg s2) (OpReg s1), IBinReg "sar" s2 (OpImm 63), IBinReg "xor" s1 (OpReg s2), IBinReg "sub" s1 (OpReg s2), IMov (OpReg Rax) (OpReg s1), IMov (OpReg s3) (OpImm m), IMulSigned s3, IMov (OpReg s3) (OpReg Rdx), IMov (OpReg Rax) (OpReg s3), IBinReg "imul" Rax (OpImm d), IBinReg "sub" s1 (OpReg Rax), IBinReg "sar" s1 (OpImm 63), IBinReg "add" s3 (OpReg s1), IMov (OpReg Rax) (OpReg s3), IBinReg "xor" Rax (OpReg s2), IBinReg "sub" Rax (OpReg s2)]
+            outPool = dropReg s3 (dropReg s2 (dropReg s1 (dropReg Rax poolAfter)))
+          in Just (Pair Rax (Pair instrs outPool))
+        _ => Nothing
 genDivInto st pool a (DivIdiv c) =
   if memReg Rax pool then
     case genScalarInto st (dropReg Rax pool) a of
@@ -2441,6 +2462,58 @@ bindArgsGo (b :: rest) i st =
     (bindArgsGo rest (i + 1) (pushBinderCls b slot (binderCls st Nothing b) st1))
     (\q => NOk (Pair (append store (firstOf q)) (secondOf q)))
 
+-- ---------------------------------------------------------------
+-- 零参运行时别名解析
+-- ---------------------------------------------------------------
+-- | `Nat.plus = natAdd` 这类零参别名在应用位置直接改写成运行时叶子应用，
+--   让标量树（以及后续内联）看到 `IrRtApp`；实参顺序与求值顺序保持原样。
+resolveDefAliases : List IrDef -> IrDef -> IrDef
+resolveDefAliases defs (IrDef nm ar deps ty body recOk guard span) =
+  IrDef nm ar deps ty (resolveAliasIn (64 + 4 * irSize body) defs body) recOk guard span
+resolveDefAliases _ d = d
+
+resolveAliasIn : Int -> List IrDef -> Ir -> Ir
+resolveAliasIn fuel defs ir =
+  if fuel <= 0 then
+    ir
+  else
+    case ir of
+      IrApp _ _ _ =>
+        let
+          p = flattenApp ir
+          head = resolveAliasIn (fuel - 1) defs (firstOf p)
+          args = map (resolveAliasIn (fuel - 1) defs) (secondOf p)
+        in case head of
+          IrGlobal name =>
+            case Alias.irAliasTargetOf 8 defs name of
+              Just (Alias.IrAliasRt sym) => if length args == irInlineArity sym then IrRtApp sym args else Synthetic.applyAllIr head args
+              _ => Synthetic.applyAllIr head args
+          _ => Synthetic.applyAllIr head args
+      IrCtor f c ty args => IrCtor f c ty (map (resolveAliasIn (fuel - 1) defs) args)
+      IrRecord f ty fields => IrRecord f ty (map (\p => Pair (firstOf p) (resolveAliasIn (fuel - 1) defs (secondOf p))) fields)
+      IrProj base f fld ty => IrProj (resolveAliasIn (fuel - 1) defs base) f fld ty
+      IrRecUpd base f fields ty => IrRecUpd (resolveAliasIn (fuel - 1) defs base) f (map (\p => Pair (firstOf p) (resolveAliasIn (fuel - 1) defs (secondOf p))) fields) ty
+      IrRtApp sym args => IrRtApp sym (map (resolveAliasIn (fuel - 1) defs) args)
+      IrCast a b inner => IrCast a b (resolveAliasIn (fuel - 1) defs inner)
+      IrLet bs s b => IrLet bs (resolveAliasIn (fuel - 1) defs s) (resolveAliasIn (fuel - 1) defs b)
+      IrLam bs ty b => IrLam bs ty (resolveAliasIn (fuel - 1) defs b)
+      IrTail inner => IrTail (resolveAliasIn (fuel - 1) defs inner)
+      IrIf c t e => IrIf (resolveAliasIn (fuel - 1) defs c) (resolveAliasIn (fuel - 1) defs t) (resolveAliasIn (fuel - 1) defs e)
+      IrCase ty rty scrut alts => IrCase ty rty (resolveAliasIn (fuel - 1) defs scrut) (map (resolveAlt (fuel - 1) defs) alts)
+      IrNatCase scrut fresh z s c => IrNatCase (resolveAliasIn (fuel - 1) defs scrut) fresh (resolveAltM (fuel - 1) defs z) (resolveAltM (fuel - 1) defs s) (resolveAltM (fuel - 1) defs c)
+      IrConcatMany parts => IrConcatMany (map (resolveAliasIn (fuel - 1) defs) parts)
+      IrEffThunk f c ty ar prim => IrEffThunk f c ty ar (resolveAliasIn (fuel - 1) defs prim)
+      IrEffBind f c ty => IrEffBind f c ty
+      _ => ir
+
+resolveAlt : Int -> List IrDef -> IrAlt -> IrAlt
+resolveAlt fuel defs alt =
+  IrAlt alt.irAltCtor alt.irAltBinders (resolveAliasIn (fuel - 1) defs alt.irAltBody)
+
+resolveAltM : Int -> List IrDef -> Maybe IrAlt -> Maybe IrAlt
+resolveAltM _ _ Nothing = Nothing
+resolveAltM fuel defs (Just a) = Just (resolveAlt fuel defs a)
+
 -- | 生成一个定义；返回函数与该定义之后**模块内** label/slot 计数（`.L` 是文件局部
 --   符号，计数按模块保存；重编号不会跨模块扩散）。
 genDefFunc : List IrDef -> List (Pair String (List (Pair String String))) -> List (Pair String (List (Pair String String))) -> List String -> List String -> List IrTyDecl -> Int -> IrDef -> NRes (Pair (List NativeFunc) (Pair Int (List NativeClosure)))
@@ -2726,6 +2799,7 @@ instrLabelRefs (INeg _) = []
 instrLabelRefs ICqo = []
 instrLabelRefs (IDiv _) = []
 instrLabelRefs (IDivUnsigned _) = []
+instrLabelRefs (IMulSigned _) = []
 instrLabelRefs IRepMovsb = []
 instrLabelRefs IRepeCmpsb = []
 instrLabelRefs (ILabel _) = []
@@ -3233,10 +3307,13 @@ build program printResult =
                       -- 可达性再丢掉（不跟 `irDefDeps`：那是源码级 term-use 依赖，含已擦除
                       -- 的引用，会把刚内联掉的被调重新钉住）。
                       cpsOrdered = if secondOf inlined then reachableDefsByRefs (\_ => False) 0 seeds cps1 else cps1
+                      -- 零参别名（`Nat.plus = natAdd`）在应用位置展开成 `IrRtApp`，
+                      -- 让标量树与调用点内联看到运行时叶子。
+                      cpsAliased = map (resolveDefAliases cpsOrdered) cpsOrdered
                       pools = modulePools cpsOrdered
                       fpools = moduleFloatPools cpsOrdered
-                      allocs = allocatingDefNames cpsOrdered
-                    in case genDefs cpsOrdered pools fpools recNames allocs unit.irUnitTyDecls [] cpsOrdered [] [] of
+                      allocs = allocatingDefNames cpsAliased
+                    in case genDefs cpsAliased pools fpools recNames allocs unit.irUnitTyDecls [] cpsAliased [] [] of
                       NFail err => NativeRejected (nativeAuditEnrich err cpsOrdered)
                       NOk pair =>
                         let

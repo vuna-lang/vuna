@@ -134,8 +134,9 @@
   走闭包 ABI，跳过 `[clo+8]` 的 arity 检查与回退分支。解析不出的 head（函数参数、
   case / 投影字段、未知 binder）仍走上面的统一动态应用。arity 不能从静态类型的箭头数
   推：η-收缩定义当值时 wrapper 的 arity 是定义参数个数，可以小于类型的箭头数。
-- 生成代码只使用 caller-saved 寄存器（`rax, rdi, rsi, rdx, rcx, r8-r11`）与帧指针
-  `rbp`，不碰 `rbx/r12-r15`，因此无需保存 callee-saved（生成代码与运行时都不使用它们）。
+- 生成代码的普通值位置只使用 caller-saved 寄存器（`rax, rdi, rsi, rdx, rcx, r8-r11`）
+  与帧指针 `rbp`；热点循环的标量槽由 `Native.Regs` 提升到 callee-saved
+  `rbx/r12-r15`（函数自己的 prologue / epilogue 保存），运行时不用这些寄存器。
 - **单出口**：带栈帧的运行时函数体内出现的 `IRet` 由 `Native.Runtime.rtFunc` 统一改写
   成跳到函数尾标签（`mov rsp, rbp; pop rbp; ret`）；只有无栈帧的入口/陷阱（`rtRawFunc`）
   直接写 `ret`。`Native.Module` 的桥接函数同理：体内有 `IRet` 的必须走 `bridgeFnExits`
@@ -211,8 +212,8 @@ lambda 的定义不内联：把闭包体拖进调用者既复制代码，也放�
 ### 3.7 标量槽提升
 
 有回边的函数（尾递归循环 / 普通循环）里，`Native.Regs` 把访问次数最多的标量槽
-（`NClsScalar`：`Int` / `Bool`）提到 callee-saved 寄存器（`rbx` / `r12`–`r14`），整个
-函数都不再碰这些槽的内存位置——来参落位、循环回边、尾调用搬运、返回值都跟着走，所以
+（`NClsScalar`：`Int` / `Bool`）提到 callee-saved 寄存器（`rbx` / `r12`–`r15`，最多 5 个），
+整个函数都不再碰这些槽的内存位置——来参落位、循环回边、尾调用搬运、返回值都跟着走，所以
 循环边界上不需要插入拷贝。指针槽必须留在帧里：GC 只扫栈帧，寄存器里的指针会被漏扫。
 
 只提升**循环携带**的槽（循环头的 `live_in`，按「块内先读后写」的精确活跃性算）：
@@ -319,12 +320,18 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
   调试 / 可观测性零参桩。符号词表只有一份（`scalarPlanOf`），`RuntimeTable` 单测校验
   它与 `nativeRtTarget` 指向同一实现。
   - 63-bit wrap 仍是 `shl 1 / sar 1`；Nat 饱和 / 夹取用 `cmov`；比较结果固定在 `rax`
-    （`setcc` + `movzx`）。除零、移位计数越界、`natMul` / `natDiv` 仍走运行时。
+    （`setcc` + `movzx`）。除零、移位计数越界与 `natDiv` 仍走运行时；`natMul` 用
+    `imul` + `cmov`（64-bit 溢出与 63-bit max 两级夹取）内联。
   - **除以编译期常量**（`Select.divPlanOf`）在调用点展开：`d` 是 2 的幂时用符号修正
     移位 `(x + (x >> 63 & (d-1))) >> k`（向零截断，与 OCaml `/` 一致）；其余常量走
-    `cqo` + `idiv`（除数装 scratch）。`d = 0` / `d = -1` 仍走 `rt_div`——除零 trap 与
-    `min_int / -1` 的语义留在运行时。需要 `rax` 的 `idiv` 形状会被挑到「实参顺序」上：
+    magic 乘法（`ceil(2^64/d)`，`imul` 取 64-bit 高半后按余数修正符号），不再 `cqo` +
+    `idiv`。`d = 3`（magic 超出 63-bit）、负常量与 `d = 0` / `-1` 仍走 `idiv` / `rt_div`——
+    除零 trap 与 `min_int / -1` 的语义留在运行时。需要 `rax` 的形状会被挑到「实参顺序」上：
     第二个实参要 `rax` 时，第一个实参先拿非 `rax` 的寄存器。
+  - **零参运行时别名**（`Alias.irAliasTargetOf` + `Module.resolveDefAliases`）：
+    `Nat.plus = natAdd` / `Nat.mult = natMul` / `Nat.toInt = natToInt` 这类定义在应用位置
+    直接改写成 `IrRtApp`，参数顺序不变；标量树因此能看到运行时叶子，嵌套在实参里的
+    `Nat.mult` / `Nat.fromInt` 也能继续内联。
   - **条件直发分支**（`Select.branchInverse`）：`IrIf` 的条件是标量比较时，直接发
     `cmp` + 反向 `jcc`，不再物化 0/1 再 `test`；比较的左侧可以是任意可内联的标量树，
     右侧是字面量或槽变量。

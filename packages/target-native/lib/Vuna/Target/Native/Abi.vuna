@@ -5,8 +5,9 @@ module Vuna.Target.Native.Abi where
 -- 平台契约（见 docs/reference/native.md）：
 --   * 参数寄存器按序 rdi, rsi, rdx, rcx, r8, r9；返回 rax；
 --   * 每个函数 `push rbp; mov rbp, rsp; sub rsp, frame`，frame 为 16 的倍数；
---   * 所有 binder / 中间值走 `[rbp - 8*(slot+1)]`，不做寄存器分配；
---   * 生成代码只使用 caller-saved 寄存器，不碰 rbx/r12-r15；
+--   * 所有 binder / 中间值走 `[rbp - 8*(slot+1)]`；热点循环携带的标量槽由
+--     `Native.Regs` 提升到 callee-saved `rbx` / `r12`–`r15`（prologue / epilogue 保存）；
+--   * 其它生成代码只使用 caller-saved 寄存器，运行时不用 `rbx` / `r12`–`r15`；
 --   * 名字由 Vuna 全限定名派生，转义成 `[A-Za-z0-9_]`，不按位置编号。
 --
 -- 值表示：

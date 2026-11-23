@@ -66,7 +66,10 @@ cmpProblems =
     Pair r is => ["cmp setl: reg " ++ regText r ++ ", " ++ strFromInt (length is) ++ " instrs"]
 
 natProblems : List String
-natProblems = append natAddProblems (append natSubProblems (append natFromProblems natToProblems))
+natProblems =
+  append
+    natAddProblems
+    (append natMulProblems (append natSubProblems (append natFromProblems natToProblems)))
 
 natAddProblems : List String
 natAddProblems =
@@ -74,6 +77,16 @@ natAddProblems =
     Pair R11 ([IBinReg "add" R11 (OpReg R10), IMov (OpReg R10) (OpImm m), ICmp (OpReg R11) (OpReg R10), ICmov "cmovg" R11 (OpReg R10)]) =>
       if m == nativeMaxInt then [] else ["nat add: saturation constant drifted"]
     Pair r is => ["nat add: reg " ++ regText r ++ ", " ++ strFromInt (length is) ++ " instrs"]
+
+natMulProblems : List String
+natMulProblems =
+  case scalarInstrs ScalarNatMul R11 R10 of
+    Pair R11 ([IBinReg "imul" R11 (OpReg R10), IMov (OpReg R10) (OpImm m1), ICmov "cmovno" R10 (OpReg R11), IMov (OpReg R11) (OpImm m2), ICmp (OpReg R10) (OpReg R11), ICmov "cmovle" R11 (OpReg R10)]) =>
+      if m1 == nativeMaxInt && m2 == nativeMaxInt then
+        []
+      else
+        ["nat mul: saturation constant drifted"]
+    Pair r is => ["nat mul: reg " ++ regText r ++ ", " ++ strFromInt (length is) ++ " instrs"]
 
 natSubProblems : List String
 natSubProblems =
@@ -118,6 +131,7 @@ expectedPlans =
     Pair "natToInt" (nativeRtLabel "nat_to_int"),
     Pair "natFromInt" (nativeRtLabel "nat_from_int"),
     Pair "natAdd" (nativeRtLabel "nat_add"),
+    Pair "natMul" (nativeRtLabel "nat_mul"),
     Pair "natSub" (nativeRtLabel "nat_sub"),
     Pair "@vuna@debug@on" (nativeRtLabel "debug_on"),
     Pair "@vuna@obs@level" (nativeRtLabel "obs_level")
@@ -191,13 +205,14 @@ selfFoldProblems =
     [IMov (OpReg R11) (OpImm 3), IBinReg "add" R11 (OpReg R11)] => []
     is => ["self fold: " ++ strFromInt (length is) ++ " instrs"]
 
--- | 常数除法的展开判据：2 的幂走符号修正移位，其余走 `cqo`+`idiv`；
---   `0` / `-1` / 负数留给运行时（除零 trap、`min_int / -1` 语义）。
+-- | 常数除法的展开判据：2 的幂走符号修正移位，其余走 magic 乘法；
+--   d = 3（magic 超出 63-bit）与 `0` / `-1` / 负数走 `idiv` / 运行时
+--   （除零 trap、`min_int / -1` 语义）。
 divProblems : List String
 divProblems =
   filter
     (\s => s /= "")
-    [divCase "2" 2 (Just (DivShift 1)), divCase "8" 8 (Just (DivShift 3)), divCase "1000" 1000 (Just (DivIdiv 1000)), divCase "0" 0 Nothing, divCase "-1" (0 - 1) Nothing, divCase "-1000" (0 - 1000) Nothing]
+    [divCase "2" 2 (Just (DivShift 1)), divCase "8" 8 (Just (DivShift 3)), divCase "5" 5 (Just (DivMagic 5 3689348814741910324)), divCase "1000" 1000 (Just (DivMagic 1000 18446744073709552)), divCase "3" 3 (Just (DivIdiv 3)), divCase "0" 0 Nothing, divCase "-1" (0 - 1) Nothing, divCase "-1000" (0 - 1000) Nothing]
 
 divCase : String -> Int -> Maybe DivPlan -> String
 divCase label d want =
@@ -209,6 +224,7 @@ divCase label d want =
 planKey : Maybe DivPlan -> String
 planKey Nothing = "runtime"
 planKey (Just (DivShift k)) = "shift " ++ strFromInt k
+planKey (Just (DivMagic d m)) = "magic " ++ strFromInt d ++ " " ++ strFromInt m
 planKey (Just (DivIdiv c)) = "idiv " ++ strFromInt c
 
 -- | `IrIf` 的条件直接发 `cmp` + 反向 `jcc`。
