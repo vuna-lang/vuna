@@ -48,16 +48,16 @@ genUnitParts qc shared unitIr = genUnitPartsWith (\p => p) qc shared unitIr
 export genUnitPartsWith : (String -> String) -> QualCtx -> IrShared -> IrUnit -> Check UnitParts
 genUnitPartsWith norm qc shared unitIr =
   let
-    _ = dbg! "cg-unit-ir-ready"
+    _ = log! "info" "cg-unit-ir-ready"
   in Vuna.Compiler.Base.Common.bind (genTypePart qc unitIr) (
       \typeText =>
         let
-          _ = dbg! "cg-typedecls-done"
+          _ = log! "info" "cg-typedecls-done"
         in case genGroups (mkGenStWith norm qc shared) unitIr.irUnitGroups of
           ErrC e => ErrC e
           OkC (bodies, st) =>
             let
-              _ = dbg! "cg-genGroups-done"
+              _ = log! "info" "cg-genGroups-done"
               deps = uniqueDeps (append (append [runtimeUnit] (typeRefDeps qc unitIr.irUnitTypeRefs)) st.gsDeps)
             in OkC (UnitParts [openHeader qc, typeText, listBridgeFor shared unitIr] bodies st deps)
     )

@@ -417,7 +417,7 @@ convBothFuel fuel defs sols depth a b =
               convNatApplied fuel defs sols depth f x f2 x2 a b
             else
               let
-                _ = dbg! "vapp: ${showValue a} <> ${showValue b} | x=${showValue x} x2=${showValue x2}"
+                _ = log! "debug" "vapp: ${showValue a} <> ${showValue b} | x=${showValue x} x2=${showValue x2}"
               in Vuna.Compiler.Base.Common.bind (convFuel (fuel - 1) defs sols depth f f2) (\sols2 => convFuel (fuel - 1) defs sols2 depth x x2)
           _ => mismatchAt depth a b
       VCase scrut alts =>

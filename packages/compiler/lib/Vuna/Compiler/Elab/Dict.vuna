@@ -68,7 +68,7 @@ searchInstFuel globals ctx fuel ec0 dom sp =
     missingInstance ec dom sp
   else
     let
-      _ = dbg! "search: dom=${showValue dom} rigid=${if rigidSearchFast ec dom then "T" else "F"} insts=${length (ecInsts ec)}"
+      _ = log! "debug" "search: dom=${showValue dom} rigid=${if rigidSearchFast ec dom then "T" else "F"} insts=${length (ecInsts ec)}"
     in case localDictLookup ctx 0 dom ec of
       Just pair => OkC pair
       Nothing =>
@@ -376,12 +376,12 @@ tryMatchInst globals ctx fuel ec inst dom sp =
     case allocTeleMetas inst.dtInstSpan ctx ec inst.dtInstTele of
       (metas, ec1) =>
         let
-          _ = dbg! "inst-try: ${dtInstName inst} head=${showTerm inst.dtInstHead} tele=${length inst.dtInstTele}"
+          _ = log! "debug" "inst-try: ${dtInstName inst} head=${showTerm inst.dtInstHead} tele=${length inst.dtInstTele}"
           hd = eval (map (\m => VMeta m []) metas) inst.dtInstHead
         in case conv (ecDefTbl ec1) (ecSolsP ec1) (ctxDepth ctx) dom hd of
           ErrC e =>
             let
-              _ = dbg! "inst-conv-err: ${dtInstName inst} dom=${showValue dom} hd=${showValue hd}"
+              _ = log! "debug" "inst-conv-err: ${dtInstName inst} dom=${showValue dom} hd=${showValue hd}"
             in Nothing
           OkC sols2 =>
             let

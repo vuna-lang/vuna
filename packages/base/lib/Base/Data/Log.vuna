@@ -1,0 +1,43 @@
+-- | 文本日志的库层入口（规范见 `docs/reference/logging.md`）。
+--
+-- 这里是隐藏原语 `@vuna@log@*` 的薄包装：**纯函数、无 `Eff`**，深部纯函数照样能记录。
+-- 推荐在热路径用内置宏 `log! "level" msg`：宏带布尔门控，关闭或被 `VUNA_LOG_SCOPE`
+-- 过滤时消息实参不求值；本模块的函数形态已经拿到字符串，实参在调用点就构造了。
+--
+-- 级别：`0` error / `1` warn / `2` info / `3` debug / `4` trace；`VUNA_LOG` 设阈值
+-- （缺省 `warn`），`VUNA_LOG_SCOPE` 按模块名前缀 / glob 过滤，`VUNA_LOG_FORMAT`
+-- 选 `text` / `jsonl`，`VUNA_LOG_FILE` 改输出目标（缺省 stderr）。
+--
+-- `scope` 是模块名（入口文件是文件名）；宏会自动填，函数形态由调用方给。
+module Base.Data.Log where
+
+import Base.Data.Bool
+import Base.Data.Int
+
+-- | 当前调用是否会被输出（级别阈值 + scope 过滤都通过）。需要自行判断实参开销时用它。
+export logOn : Int -> String -> Bool
+logOn level scope = @vuna@log@on level scope
+
+-- | 一条日志：`level` 见模块说明，`scope` 是模块名。
+export logAt : Int -> String -> String -> Int
+logAt level scope text = @vuna@log@emit level scope text
+
+-- | `error` 级（0）。
+export logError : String -> String -> Int
+logError scope text = logAt 0 scope text
+
+-- | `warn` 级（1）。
+export logWarn : String -> String -> Int
+logWarn scope text = logAt 1 scope text
+
+-- | `info` 级（2）。
+export logInfo : String -> String -> Int
+logInfo scope text = logAt 2 scope text
+
+-- | `debug` 级（3）。
+export logDebug : String -> String -> Int
+logDebug scope text = logAt 3 scope text
+
+-- | `trace` 级（4）。
+export logTrace : String -> String -> Int
+logTrace scope text = logAt 4 scope text

@@ -37,6 +37,8 @@ export module Base.Data.Sort as Sort
 export module Base.Data.Stream as Stream
 export module Base.Data.Obs
 export module Base.Data.Obs as Obs
+export module Base.Data.Log
+export module Base.Data.Log as Log
 export module Base.Data.Obs.Span
 export module Base.Data.Obs.Span as ObsSpan
 

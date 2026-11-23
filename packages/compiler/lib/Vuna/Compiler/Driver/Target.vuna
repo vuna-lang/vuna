@@ -106,7 +106,7 @@ dispatchWith target bin program printResult outDir =
       case cached of
         Just (files, diags) =>
           do
-            _ <- pure (dbg! "target-cache=hit ${target}")
+            _ <- pure (log! "debug" "target-cache=hit ${target}")
             _ <- materializeEff outDir files
             pure (OkC (map firstOf files, diags))
         Nothing => runBackend target bin key irText irHash printResult outDir
@@ -115,7 +115,7 @@ dispatchWith target bin program printResult outDir =
 runBackend : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> String -> String -> String -> Bool -> String -> Eff r (Check (List String, List Diagnostic))
 runBackend target bin key irText irHash printResult outDir =
   do
-    _ <- pure (dbg! "target-cache=miss ${target}")
+    _ <- pure (log! "debug" "target-cache=miss ${target}")
     _ <- fsWriteFile (irPathOf outDir target) irText
     code <-
       processRunIn

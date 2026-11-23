@@ -29,6 +29,7 @@ export module Base.Data.Unit
 export module Base.Container.Map
 export module Base.Trait.Monad
 export module Base.Data.Obs
+export module Base.Data.Log
 export module Base.Data.Obs.Span
 
 -- 算术运算符 `+ - * /` 是 `Num` 方法的别名（fixity/别名真源在 Base.Trait.Num）。

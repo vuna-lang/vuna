@@ -366,7 +366,7 @@ generateDtSplitProgramWith lookup store modules entryDecls prog printResult root
     OkC allDefs =>
       let
         -- 把「精化完成 → 装配开始」之间的构建独有开销分段；stamp 关闭时只花一次分支。
-        _ = dbg! "cg-splitstart"
+        _ = log! "info" "cg-splitstart"
         allDatas = rtDatasOf (dtProgDatas prog)
         runtimeDefs = partitionRuntimeDefs allDefs
         env =
@@ -378,19 +378,19 @@ generateDtSplitProgramWith lookup store modules entryDecls prog printResult root
             (splitUnitOfModule entryOwner)
         shared = lwEnvShared env
         meta = splitMetaOf modules entryDecls
-        _ = dbg! "cg-splitmeta-done"
+        _ = log! "info" "cg-splitmeta-done"
         -- 位置表：Lowering 已算好本程序的运行时定义行；增量路径复用模块的额外行在这里合并
         -- （`extraDefLocs` 来自接口的 `miDefLocs`，落盘前统一排序，全量/增量一致）。
         locRows = append shared.irSharedDefLocs extraDefLocs
         locTbl = dtDefLocTable (splitLocPath roots contextDir) unitOfLocName locRows
-        _ = dbg! "cg-deflocs-done"
+        _ = log! "info" "cg-deflocs-done"
         runtimeText =
           dtRuntimeWith
             locTbl
             shared.irSharedUsesFloat
             shared.irSharedUsesTrace
             shared.irSharedUsesObs
-        _ = dbg! "cg-runtimeText-done"
+        _ = log! "info" "cg-runtimeText-done"
       in splitProgramFilesWith
         lookup
         store

@@ -702,7 +702,10 @@ elabConstraintDomains classes globals ctx ((cname, argExprs) :: rest) sp ec =
         Nothing => tcErr0 sp ConstraintNotDict
         Just kindVals =>
           let
-            _ = dbg! "constraint-dom: ${cname} args=${length argExprs} kinds=${length kindVals}"
+            _ =
+              log!
+                "debug"
+                "constraint-dom: ${cname} args=${length argExprs} kinds=${length kindVals}"
           in if length kindVals /= length argExprs then
             tcErr0 sp ConstraintNotDict
           else
@@ -1699,7 +1702,7 @@ elabFunDefIn globals ctx0 ec clauses expected sp =
 elabFunDefMulti : List (String, Term) -> Ctx -> Ec -> List (List Pat, Expr) -> Value -> Span -> Check (Term, Ec)
 elabFunDefMulti globals ctx0 ec clauses expected sp =
   let
-    _ = dbg! "MULTI"
+    _ = log! "debug" "MULTI"
   in Vuna.Compiler.Base.Common.bind
     (obsCheck "vuna.elab.pats" (\_ => resolveOverFunPats ec ctx0 expected clauses))
     (
@@ -1711,7 +1714,7 @@ elabFunDefMulti globals ctx0 ec clauses expected sp =
             in Vuna.Compiler.Base.Common.bind (obsCheck "vuna.elab.pats" (\_ => multiToExpr table clauses2)) (
                 \bodyExpr =>
                   let
-                    _ = dbg! "CHECKDEF"
+                    _ = log! "debug" "CHECKDEF"
                     checked = obsCheck "vuna.elab.term" (\_ => checkDefIn globals ctx0 ec1 [] bodyExpr expected sp)
                   in obsCheck "vuna.elab.coverage" (\_ => improveExhaustive table (\_ => matrixOf clauses2) (firstPatSpan clauses2) checked)
               )

@@ -585,7 +585,7 @@ checkTerminationGroups own ownDecls depDecls tableDecls =
     facts = computePosFactsWork nodes defTbl rgT 1024 [] callerNames
     -- own 只建一次哈希表，逐 SCC 的 own 判定是 O(1) 查表（逐 SCC 线性扫是 O(n²)）。
     ownTbl = HashMap.ofNames own
-    _ = dbg! "term-facts"
+    _ = log! "debug" "term-facts"
     fuel = graphFuel g nodes
     postR = postOrder gT g nodes
     compsR = sccOf (secondOf postR) fuel rgT (HashMap.fromList []) []

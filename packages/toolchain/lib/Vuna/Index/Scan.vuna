@@ -793,4 +793,4 @@ rebuildIndex ts repo node deps =
 -- | 工具链侧的 debug 行：与编译器探针共用唯一内置宏 `dbg!`（`--debug-perf` /
 -- `VUNA_DEBUG_PERF=1` 门控，stderr，带时间戳）；工具链不进 TCB，但宏展开不需要 import。
 indexNote : {r : Row} -> String -> Eff r Int
-indexNote msg = pure (dbg! msg)
+indexNote msg = pure (log! "debug" msg)

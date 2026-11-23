@@ -120,7 +120,7 @@ checkPackage release wantWarnings pkg =
                   if covered then
                     do
                       let
-                        _ = dbg! "check-lib-skip covered=${length names}"
+                        _ = log! "debug" "check-lib-skip covered=${length names}"
                       in pure (OkC ds)
                   else
                     do
@@ -224,7 +224,7 @@ compileToDirNormal inputs ctx entry printResult outDir =
               Just files =>
                 do
                   let
-                    _ = dbg! "split-pointer-hit cache-path=hit"
+                    _ = log! "debug" "split-pointer-hit cache-path=hit"
                   in do
                     n <- writeCompiledNormalized ctx outDir files
                     pure (
@@ -278,7 +278,7 @@ rebuildSplit inputs ctx entry printResult outDir fast =
                             _ <- writeSplitPointer fast sem
                             _ <- rootKeepEff ctx [fast, sem]
                             let
-                              _ = dbg! "split-identity-hit cache-path=hit"
+                              _ = log! "debug" "split-identity-hit cache-path=hit"
                             in do
                               n <- writeCompiledNormalized ctx outDir files
                               pure (
@@ -306,7 +306,7 @@ auditCompile inputs ctx entry printResult outDir =
     summary <- summarySplitParts ctx inputs.siClosure inputs.siDepIfaces entry printResult
     full <- dtSplitProjectParts ctx entry printResult (map modHashPair inputs.siClosure)
     let
-      _ = dbg! "iface-audit subject=compile entry=${entry}"
+      _ = log! "info" "iface-audit subject=compile entry=${entry}"
     in do
       compared <- pure (auditCompare "compile" entry (splitSignatureOf summary) (splitSignatureOf full))
       case compared of
@@ -367,7 +367,7 @@ writeCompiledNormalized ctx outDir files =
     id <- buildIdForEff ctx
     _ <- writeFileIfChanged "${outDir}/${buildIdFileName}" "${id}\n"
     let
-      _ = dbg! "write-compiled-start"
+      _ = log! "info" "write-compiled-start"
     in do
       written <- writeSplitFilesIfChanged outDir files
       case written of
@@ -375,14 +375,14 @@ writeCompiledNormalized ctx outDir files =
         OkC n =>
           do
             let
-              _ = dbg! "write-split-files-done"
+              _ = log! "info" "write-split-files-done"
               graph = splitGraph files
-              _ = dbg! "split-graph-done"
+              _ = log! "info" "split-graph-done"
             in do
               cFiles <- copyFfiFiles (contextDir ctx) outDir
               _ <- fsWriteFile "${outDir}/build.sh" (buildScript graph cFiles)
               let
-                _ = dbg! "build-script-done"
+                _ = log! "info" "build-script-done"
               in do
                 pure (OkC n)
 
@@ -594,7 +594,7 @@ depRootIdentityEff root =
           case saved of
             Just _ => "iface"
             Nothing => "manifest"
-        _ = dbg! "dep-identity=${rootName root} verdict=${verdict} src=${strFromInt h}"
+        _ = log! "debug" "dep-identity=${rootName root} verdict=${verdict} src=${strFromInt h}"
       in case saved of
         Just s => pure (rootName root, "iface:${s}")
         Nothing =>
@@ -1000,7 +1000,7 @@ ifaceModsWithEff ctx pkgs =
       srcTbl = srcTblOf mods
       assigned = map (withAddr srcTbl) mods
     in do
-      _ <- pure (dbg! "iface-mods-phases n=${strFromInt (length mods)} closure=${strFromInt ((tb - ta) / 1000)}ms assign=direct")
+      _ <- pure (log! "info" "iface-mods-phases n=${strFromInt (length mods)} closure=${strFromInt ((tb - ta) / 1000)}ms assign=direct")
       _ <- obsMarkEff "vuna.iface.compute"
       pure assigned
 
@@ -1097,7 +1097,7 @@ readIfaceListEff (m :: rest) =
       Nothing =>
         do
           let
-            _ = dbg! "iface-miss ${m.cmName} ${m.cmAddr} pkg=${m.cmPkg} src=${m.cmSrc}"
+            _ = log! "debug" "iface-miss ${m.cmName} ${m.cmAddr} pkg=${m.cmPkg} src=${m.cmSrc}"
             _ = obsMark "vuna.tool.iface.miss:${m.cmName}:${m.cmAddr}"
           in do
             _ <- obsCountEff "vuna.counter.cache.miss" 1
@@ -1137,7 +1137,7 @@ depIfacesOfWith ctx mods =
           Nothing =>
             do
               let
-                _ = dbg! "iface-reject=module-order"
+                _ = log! "debug" "iface-reject=module-order"
               in do
                 pure Nothing
           Just depMods => readIfaceListEff depMods
@@ -1365,7 +1365,7 @@ depIfacesForToolSource ctx label source =
         let
           needed = importClosureOf mods starts
           depMods = toolDepModsOf ctx mods needed
-          _ = dbg! "tool-closure modules=${length depMods}"
+          _ = log! "debug" "tool-closure modules=${length depMods}"
         in do
           readIfaceListEff depMods
     else
@@ -1491,7 +1491,7 @@ depIfacesForToolSourceDetailed ctx label source =
           depMods = toolDepModsOf ctx mods needed
           depHashes = map modHashPair depMods
           ownNames = map modNameOf (selfModsOf ctx mods)
-          _ = dbg! "tool-closure modules=${length depMods}"
+          _ = log! "debug" "tool-closure modules=${length depMods}"
         in do
           ifaces <- readIfaceListEff depMods
           case ifaces of
@@ -1559,7 +1559,7 @@ cleanSelfOk builtSec (m :: rest) acc =
   do
     selfOk <- payloadSelfOk m
     let
-      _ = if selfOk then 0 else dbg! "iface-reject=self-hash ${miNameOf m}"
+      _ = if selfOk then 0 else log! "debug" "iface-reject=self-hash ${miNameOf m}"
     in do
       fresh <- sourceFresh builtSec (miSourceOf m)
       let
@@ -1790,14 +1790,14 @@ checkViaGraph ctx mods run =
                 Just (CheckPassed ds) =>
                   do
                     let
-                      _ = dbg! "cache-path=hit"
+                      _ = log! "debug" "cache-path=hit"
                     in do
                       _ <- obsCountEff "vuna.counter.cache.hit" 1
                       pure (OkC (map (resolveStoredDiag ctx) ds))
                 Just (CheckFailed ds) =>
                   do
                     let
-                      _ = dbg! "cache-path=hit"
+                      _ = log! "debug" "cache-path=hit"
                     in do
                       _ <- obsCountEff "vuna.counter.cache.hit" 1
                       pure (replayFailure (map (resolveStoredDiag ctx) ds))
@@ -1810,7 +1810,7 @@ runAndStore : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp 
 runAndStore ctx dig run =
   do
     let
-      _ = dbg! "cache-path=miss"
+      _ = log! "debug" "cache-path=miss"
     in do
       _ <- obsCountEff "vuna.counter.cache.miss" 1
       r <- run
@@ -1818,12 +1818,12 @@ runAndStore ctx dig run =
         ErrC e =>
           let
             stored = map (prepareForStore ctx) [e]
-            _ = dbg! "check-store stable=${strFromInt (length (filter (\d => isStableDiag d) stored))}/${strFromInt (length stored)}"
+            _ = log! "debug" "check-store stable=${strFromInt (length (filter (\d => isStableDiag d) stored))}/${strFromInt (length stored)}"
           in if allStableDiags stored then
             do
               n <- storeCheckPayload ctx dig (CheckFailed stored)
               let
-                _ = dbg! "check-store write=${strFromInt n}"
+                _ = log! "debug" "check-store write=${strFromInt n}"
               in do
                 -- 落盘成功 ⇒ 一次缓存写（`vuna.cache.write` 是保留名，作 `ph:"C"` 计数用）。
                 _ <- obsCountEff "vuna.counter.cache.write" 1
@@ -1831,7 +1831,7 @@ runAndStore ctx dig run =
           else
             do
               let
-                _ = dbg! "check-cache=skip volatile"
+                _ = log! "debug" "check-cache=skip volatile"
               in pure (ErrC e)
         OkC ds =>
           let
@@ -1840,12 +1840,12 @@ runAndStore ctx dig run =
             allStored = map (prepareForStore ctx) ds
             stored = filter isStableDiag allStored
             dropped = length allStored - length stored
-            _ = dbg! "check-store pass stable=${strFromInt (length stored)}/${strFromInt (length allStored)}"
-            _ = if dropped > 0 then dbg! "check-store dropped=${strFromInt dropped}" else 0
+            _ = log! "debug" "check-store pass stable=${strFromInt (length stored)}/${strFromInt (length allStored)}"
+            _ = if dropped > 0 then log! "debug" "check-store dropped=${strFromInt dropped}" else 0
           in do
             n <- storeCheckPayload ctx dig (CheckPassed stored)
             let
-              _ = dbg! "check-store write=${strFromInt n}"
+              _ = log! "debug" "check-store write=${strFromInt n}"
             in do
               _ <- obsCountEff "vuna.counter.cache.write" 1
               pure (OkC ds)
@@ -1889,7 +1889,7 @@ summaryCheckExeParts wantWarnings ctx mods entry =
       Nothing =>
         do
           let
-            _ = dbg! "cache-path=full"
+            _ = log! "debug" "cache-path=full"
           in do
             dtCheckWithProgramParts ctx entry
       Just ifaces =>
@@ -1902,21 +1902,21 @@ summaryCheckExeParts wantWarnings ctx mods entry =
               do
                 let
                   cleanReal = if wantWarnings then [] else clean2
-                  _ = dbg! "cache-path=summary deps=${depPackageCount ctx}"
-                  _ = dbg! "cache-own-clean=${length cleanReal}"
+                  _ = log! "debug" "cache-path=summary deps=${depPackageCount ctx}"
+                  _ = log! "debug" "cache-own-clean=${length cleanReal}"
                 in do
                   dtCheckPackageIncrementalParts ctx entry ifaces cleanReal
             Nothing =>
               do
                 let
-                  _ = dbg! "cache-path=summary deps=${depPackageCount ctx}"
+                  _ = log! "debug" "cache-path=summary deps=${depPackageCount ctx}"
                 in do
                   dtCheckPackageWithIfacesParts ctx entry ifaces
 
 fullCheckExe : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Eff r (Check (List Diagnostic))
 fullCheckExe ctx entry =
   let
-    _ = dbg! "cache-path=full"
+    _ = log! "debug" "cache-path=full"
   in do
     mods <- shadowClosureMods ctx
     checkAndShadowWith ctx mods (dtCheckWithProgramParts ctx entry)
@@ -1929,7 +1929,7 @@ auditCheckExe wantWarnings ctx mods entry =
     summary <- summaryCheckExeParts wantWarnings ctx mods entry
     full <- dtCheckWithProgramParts ctx entry
     let
-      _ = dbg! "iface-audit subject=check entry=${entry}"
+      _ = log! "info" "iface-audit subject=check entry=${entry}"
     in do
       compared <- pure (auditCompare "check" entry (checkSignatureOf summary) (checkSignatureOf full))
       case compared of
@@ -2232,7 +2232,7 @@ writeIfaceShadowGo ctx checked pre clean =
   else
     do
       let
-        _ = dbg! "iface-shadow-start"
+        _ = log! "info" "iface-shadow-start"
       in do
         -- 闭包只算一次：让 `depIfaceHashTable` 自己再跑一遍 `ifaceModsEff`（那是「读全部源文件
         -- + 算地址 + 取 header」的全量扫描）等于把最贵的一步做两遍。
@@ -2255,7 +2255,7 @@ writeIfaceShadowGo ctx checked pre clean =
             ErrC e =>
               do
                 let
-                  _ = dbg! "iface-reject=compute iface-skip ${diagText e}"
+                  _ = log! "debug" "iface-reject=compute iface-skip ${diagText e}"
                 in do
                   pure (OkC [])
             OkC modules =>
@@ -2277,7 +2277,7 @@ writeIfaceShadowGo ctx checked pre clean =
                   if length unwritten > 0 then
                     do
                       let
-                        _ = dbg! "iface-skip partial closure=${length own} required=${length required} covered=${length modules} missing=${join "," unwritten}"
+                        _ = log! "debug" "iface-skip partial closure=${length own} required=${length required} covered=${length modules} missing=${join "," unwritten}"
                       in do
                         pure (OkC [])
                   else
@@ -2289,7 +2289,7 @@ writeIfaceShadowGo ctx checked pre clean =
                       if not selfOk then
                         do
                           let
-                            _ = dbg! "iface-selftest=skip-write ${strFromInt (length toWrite)}"
+                            _ = log! "debug" "iface-selftest=skip-write ${strFromInt (length toWrite)}"
                           in do
                             pure (OkC modules)
                       else
@@ -2306,7 +2306,7 @@ writeIfaceShadowGo ctx checked pre clean =
                           _ <- writePkgIfaceSummaryEff ctx modules
                           t4 <- clockNow
                           let
-                            _ = dbg! "iface-write=${n}/${length modules} closure=${length own} phases mods=${strFromInt ((t1 - t0) / 1000)}ms sources=${strFromInt ((t2 - t1) / 1000)}ms compute=${strFromInt ((t3 - t2) / 1000)}ms write=${strFromInt ((t4 - t3) / 1000)}ms"
+                            _ = log! "info" "iface-write=${n}/${length modules} closure=${length own} phases mods=${strFromInt ((t1 - t0) / 1000)}ms sources=${strFromInt ((t2 - t1) / 1000)}ms compute=${strFromInt ((t3 - t2) / 1000)}ms write=${strFromInt ((t4 - t3) / 1000)}ms"
                           in do
                             pure (OkC modules)
 
@@ -2334,7 +2334,11 @@ ifaceSelfCheckGo (m :: rest) =
   let
     h = miIfaceHashOf m
     h2 = hashOfIface m
-    _ = if h == h2 then 0 else dbg! "iface-hash-mismatch ${miNameOf m} stored=${h} recomputed=${h2}"
+    _ =
+      if h == h2 then
+        0
+      else
+        log! "debug" "iface-hash-mismatch ${miNameOf m} stored=${h} recomputed=${h2}"
     _ = if h == h2 then 0 else obsCounter "vuna.counter.iface.hash.mismatch" 1
   in h == h2 && ifaceSelfCheckGo rest
 
@@ -2415,7 +2419,7 @@ summaryCheckLibParts wantWarnings ctx mods names =
       Nothing =>
         do
           let
-            _ = dbg! "cache-path=full"
+            _ = log! "debug" "cache-path=full"
           in do
             dtCheckLibraryWithProgramParts ctx names
       Just ifaces =>
@@ -2427,21 +2431,21 @@ summaryCheckLibParts wantWarnings ctx mods names =
               do
                 let
                   cleanReal = if wantWarnings then [] else clean2
-                  _ = dbg! "cache-path=summary deps=${depPackageCount ctx}"
-                  _ = dbg! "cache-own-clean=${length cleanReal}"
+                  _ = log! "debug" "cache-path=summary deps=${depPackageCount ctx}"
+                  _ = log! "debug" "cache-own-clean=${length cleanReal}"
                 in do
                   dtCheckLibraryPackageIncrementalParts ctx names ifaces cleanReal
             Nothing =>
               do
                 let
-                  _ = dbg! "cache-path=summary deps=${depPackageCount ctx}"
+                  _ = log! "debug" "cache-path=summary deps=${depPackageCount ctx}"
                 in do
                   dtCheckLibraryPackageWithIfacesParts ctx names ifaces
 
 fullCheckLib : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> List String -> Eff r (Check (List Diagnostic))
 fullCheckLib ctx names =
   let
-    _ = dbg! "cache-path=full"
+    _ = log! "debug" "cache-path=full"
   in do
     mods <- shadowClosureMods ctx
     checkAndShadowWith ctx mods (dtCheckLibraryWithProgramParts ctx names)
@@ -2453,7 +2457,7 @@ auditCheckLib wantWarnings ctx mods names =
     full <- dtCheckLibraryWithProgramParts ctx names
     let
       subject = joinLines names
-      _ = dbg! "iface-audit subject=check-lib entry=${subject}"
+      _ = log! "info" "iface-audit subject=check-lib entry=${subject}"
     in do
       compared <- pure (auditCompare "check-lib" subject (checkSignatureOf summary) (checkSignatureOf full))
       case compared of

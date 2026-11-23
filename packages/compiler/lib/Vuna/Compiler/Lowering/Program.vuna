@@ -1470,7 +1470,7 @@ lowerUnitCheckedFrom env unitDatas defs =
   Vuna.Compiler.Base.Common.bind (lowerUnitPrepared env unitDatas defs) (
       \u =>
         let
-          _ = dbg! "cg-unit-validate-start"
+          _ = log! "info" "cg-unit-validate-start"
         in Vuna.Compiler.Base.Common.bind (validateUnit (lwEnvShared env) u) (\_ => OkC u)
     )
 

@@ -27,6 +27,7 @@ modules = [
   "Base.Data.Function",
   "Base.Data.Int",
   "Base.Data.List",
+  "Base.Data.Log",
   "Base.Data.Maybe",
   "Base.Data.Nat",
   "Base.Data.Obs",

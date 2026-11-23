@@ -563,7 +563,7 @@ gcSweep root keep grace maxBytes dry =
       targets = pickGo total maxBytes (sortByAge cands) []
       paths = map (\q => secondOf (secondOf q)) targets
       n = length paths
-      _ = dbg! "store-gc candidates=${length cands} delete=${strFromInt n} total=${strFromInt total}"
+      _ = log! "debug" "store-gc candidates=${length cands} delete=${strFromInt n} total=${strFromInt total}"
     in do
       _ <- if dry then pure 0 else removeEachPath paths
       _ <- consolePrint "store-gc: ${storeVerb dry} ${strFromInt n} object(s) under ${root} (keep ${strFromInt (length keep)}, grace ${strFromInt grace}s)\n"
