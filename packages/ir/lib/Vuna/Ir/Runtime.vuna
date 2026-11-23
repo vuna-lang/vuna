@@ -331,6 +331,8 @@ irRtPlainNames =
     "@vuna@prim_eff_execPath",
     "@vuna@debug@on",
     "@vuna@debug@line",
+    "@vuna@log@on",
+    "@vuna@log@emit",
     "@vuna@obs@level",
     "@vuna@obs@span",
     "@vuna@obs@log",

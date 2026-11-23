@@ -1854,14 +1854,14 @@ closureGo fuel mods visited (n :: rest) =
       Just m => closureGo (fuel - 1) mods (n :: visited) (append rest (importsOfModuleNames m))
 
 filterProjectToImports : String -> Project -> (Project, List Module)
-filterProjectToImports pkg (Project ds imports implicit mods epkg fixes) =
+filterProjectToImports pkg (Project ds imports implicit mods epkg fixes entryName) =
   let
     entryStarts = map findModuleNameField (append imports implicit)
     ownNames = map moduleNameOf (filter (\m => modulePackageOf m == pkg) mods)
     starts = append entryStarts ownNames
     closed = closureGo (closureFuel mods starts) mods [] starts
     kept = filter (\m => memName (moduleNameOf m) closed) mods
-  in (Project ds imports implicit kept epkg fixes, kept)
+  in (Project ds imports implicit kept epkg fixes entryName, kept)
 
 preloadKeepOf : List ModuleIface -> List Module -> List String
 preloadKeepOf ifaces mods =

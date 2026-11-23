@@ -314,6 +314,8 @@ ocamlRtTextTable =
     ("@vuna@prim_eff_execPath", "(dtp_execPath ())"),
     ("@vuna@debug@on", "dtp_debug_on"),
     ("@vuna@debug@line", "dtp_debug_line"),
+    ("@vuna@log@on", "dtp_log_on"),
+    ("@vuna@log@emit", "dtp_log_emit"),
     ("@vuna@obs@level", "dtp_obs_level"),
     ("@vuna@obs@span", "dtp_obs_span"),
     ("@vuna@obs@spanLab", "dtp_obs_span_lab"),

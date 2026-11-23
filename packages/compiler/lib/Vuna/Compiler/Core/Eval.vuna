@@ -692,7 +692,7 @@ primReduce defs sols fuel g sp =
           OpNone =>
             case obsReduce g sp of
               Just v => Just v
-              Nothing => if g == debugOnIntrinsicName then Just (VBool False) else if g == debugLineIntrinsicName then Just (VInt 0) else Nothing
+              Nothing => if g == logOnIntrinsicName then Just (VBool False) else if g == logEmitIntrinsicName then Just (VInt 0) else if g == debugOnIntrinsicName then Just (VBool False) else if g == debugLineIntrinsicName then Just (VInt 0) else Nothing
       Nothing => Nothing
 
 -- 可观测性原语在核心求值里的归约（永远静默：不写文件、不读时钟、不采样）。

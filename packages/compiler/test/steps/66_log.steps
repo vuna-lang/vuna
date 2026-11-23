@@ -1,0 +1,120 @@
+# 66) 文本日志 `log!`（规范见 `docs/reference/logging.md`）。
+#     两参：`log! "level" msg`；scope 由编译器填成模块名（入口文件取文件名）。
+#     级别 error(0) / warn(1) / info(2) / debug(3) / trace(4)；`VUNA_LOG` 阈值缺省 warn。
+#     输出默认 `<epoch-us> <LEVEL> <scope> <text>`，`VUNA_LOG_FORMAT=jsonl` 改 JSONL。
+#     关闭或被 `VUNA_LOG_SCOPE` 过滤时消息**不求值**。
+#
+# store-isolated：断言 build 与运行输出，使用 case 私有 store。
+run: mkdir -p "$TMPDIR/lvl/app"
+run: printf '[package]\nname = "lvl"\n\n[dependencies]\nvuna-base = "%s"\n' "$VUNA_BASE" > "$TMPDIR/lvl/vuna.toml"
+run: printf 'main : Int\nmain =\n  let\n    _ = log! "trace" "trace-line"\n    _ = log! "debug" "debug-line"\n    _ = log! "info" "info-line"\n    _ = log! "warn" "warn-line"\n    _ = log! "error" "error-line"\n  in 42\n' > "$TMPDIR/lvl/app/Main.vuna"
+run: sh -c '"$VUNA" build --out "$TMPDIR/lvl-out" "$TMPDIR/lvl"'
+exit: 0
+
+# ---------------------------------------------------------------- 1) 级别阈值
+run: sh -c '"$TMPDIR/lvl-out/bin/lvl" 2>&1 >/dev/null'
+out-contains: WARN Main warn-line
+out-contains: ERROR Main error-line
+out-not-contains: INFO Main info-line
+out-not-contains: DEBUG Main debug-line
+run: sh -c 'VUNA_LOG=off "$TMPDIR/lvl-out/bin/lvl" 2>&1 >/dev/null'
+out-equals:
+run: sh -c 'VUNA_LOG=error "$TMPDIR/lvl-out/bin/lvl" 2>&1 >/dev/null | sed -E "s/^[0-9]+ //"'
+out-equals: ERROR Main error-line
+run: sh -c 'VUNA_LOG=info "$TMPDIR/lvl-out/bin/lvl" 2>&1 >/dev/null'
+out-contains: INFO Main info-line
+out-contains: WARN Main warn-line
+out-not-contains: DEBUG Main debug-line
+run: sh -c 'VUNA_LOG=trace "$TMPDIR/lvl-out/bin/lvl" 2>&1 >/dev/null'
+out-contains: TRACE Main trace-line
+out-contains: DEBUG Main debug-line
+run: sh -c '"$TMPDIR/lvl-out/bin/lvl" 2>/dev/null'
+out-equals: 42
+# 行首字段：整数微秒时间戳 + 大写级别 + scope。
+run: sh -c 'VUNA_LOG=warn "$TMPDIR/lvl-out/bin/lvl" 2>&1 >/dev/null | grep -cE "^[0-9]+ WARN Main warn-line$"'
+out-equals: 1
+
+# ---------------------------------------------------------------- 2) 前缀阈值（数值等价）
+run: sh -c 'VUNA_LOG=2 "$TMPDIR/lvl-out/bin/lvl" 2>&1 >/dev/null'
+out-contains: INFO Main info-line
+out-not-contains: DEBUG Main debug-line
+run: sh -c 'VUNA_LOG=bogus "$TMPDIR/lvl-out/bin/lvl" 2>&1 >/dev/null'
+out-contains: WARN Main warn-line
+out-not-contains: INFO Main info-line
+
+# ---------------------------------------------------------------- 3) 模块 scope 与过滤
+run: mkdir -p "$TMPDIR/scope/app" "$TMPDIR/scope/lib/Lib"
+run: printf '[package]\nname = "scope"\n\n[export]\nmodules = ["Helper", "Lib.A", "Lib.AB"]\n\n[dependencies]\nvuna-base = "%s"\n' "$VUNA_BASE" > "$TMPDIR/scope/vuna.toml"
+run: printf 'module Helper where\n\nexport bump : Int -> Int\nbump n =\n  let _ = log! "debug" "bump n=${n}"\n  in n + 1\n' > "$TMPDIR/scope/lib/Helper.vuna"
+run: printf 'module Lib.A where\n\nexport tagA : Int -> Int\ntagA n =\n  let _ = log! "info" "a-line"\n  in n\n' > "$TMPDIR/scope/lib/Lib/A.vuna"
+run: printf 'module Lib.AB where\n\nexport tagAB : Int -> Int\ntagAB n =\n  let _ = log! "info" "ab-line"\n  in n\n' > "$TMPDIR/scope/lib/Lib/AB.vuna"
+run: printf 'import Helper\nimport Lib.A\nimport Lib.AB\n\nmain : Int\nmain =\n  let\n    _ = log! "info" "main-line"\n    x = bump 41\n    _ = tagA 0\n    _ = tagAB 0\n  in x\n' > "$TMPDIR/scope/app/Main.vuna"
+run: sh -c '"$VUNA" build --out "$TMPDIR/scope-out" "$TMPDIR/scope"'
+exit: 0
+# 精确模块名。
+run: sh -c 'VUNA_LOG=trace VUNA_LOG_SCOPE=Helper "$TMPDIR/scope-out/bin/scope" 2>&1 >/dev/null | sed -E "s/^[0-9]+ //"'
+out-equals: DEBUG Helper bump n=41
+# 无点模式按原始前缀：`Hel` 命中 `Helper`，`Lib` 命中 `Lib.A` / `Lib.AB`。
+run: sh -c 'VUNA_LOG=trace VUNA_LOG_SCOPE=Hel "$TMPDIR/scope-out/bin/scope" 2>&1 >/dev/null | sed -E "s/^[0-9]+ //"'
+out-equals: DEBUG Helper bump n=41
+run: sh -c 'VUNA_LOG=info VUNA_LOG_SCOPE=Lib "$TMPDIR/scope-out/bin/scope" 2>&1 >/dev/null'
+out-contains: INFO Lib.A a-line
+out-contains: INFO Lib.AB ab-line
+# 带点模式按点边界前缀：`Lib.A` 命中 `Lib.A`，不命中 `Lib.AB`。
+run: sh -c 'VUNA_LOG=info VUNA_LOG_SCOPE=Lib.A "$TMPDIR/scope-out/bin/scope" 2>&1 >/dev/null | sed -E "s/^[0-9]+ //"'
+out-equals: INFO Lib.A a-line
+# glob。
+run: sh -c 'VUNA_LOG=info VUNA_LOG_SCOPE="Lib.*" "$TMPDIR/scope-out/bin/scope" 2>&1 >/dev/null'
+out-contains: INFO Lib.A a-line
+out-contains: INFO Lib.AB ab-line
+run: sh -c 'VUNA_LOG=trace VUNA_LOG_SCOPE="M?in" "$TMPDIR/scope-out/bin/scope" 2>&1 >/dev/null | sed -E "s/^[0-9]+ //"'
+out-equals: INFO Main main-line
+# 否定：只配否定时从全开起算。
+run: sh -c 'VUNA_LOG=info VUNA_LOG_SCOPE="!Lib.AB" "$TMPDIR/scope-out/bin/scope" 2>&1 >/dev/null'
+out-not-contains: INFO Lib.AB ab-line
+out-contains: INFO Lib.A a-line
+run: sh -c 'VUNA_LOG=trace VUNA_LOG_SCOPE=Nope "$TMPDIR/scope-out/bin/scope" 2>&1 >/dev/null'
+out-equals:
+
+# ---------------------------------------------------------------- 4) 过滤时消息不求值
+run: mkdir -p "$TMPDIR/eager/app"
+run: printf '[package]\nname = "eager"\n\n[dependencies]\nvuna-base = "%s"\n' "$VUNA_BASE" > "$TMPDIR/eager/vuna.toml"
+run: printf 'main : Int\nmain = let _ = log! "trace" (prim_fail "eager") in 7\n' > "$TMPDIR/eager/app/Main.vuna"
+run: sh -c '"$VUNA" build --out "$TMPDIR/eager-out" "$TMPDIR/eager"'
+run: sh -c 'VUNA_LOG=warn "$TMPDIR/eager-out/bin/eager"'
+out-equals: 7
+run: sh -c 'VUNA_LOG=warn VUNA_LOG_SCOPE=Nope "$TMPDIR/eager-out/bin/eager"'
+out-equals: 7
+run: sh -c 'VUNA_LOG=trace "$TMPDIR/eager-out/bin/eager"'
+exit: nonzero
+
+# ---------------------------------------------------------------- 5) JSONL 与文件输出
+run: sh -c 'VUNA_LOG=info VUNA_LOG_FORMAT=jsonl "$TMPDIR/scope-out/bin/scope" 2>&1 >/dev/null'
+out-contains: {"ts":
+out-contains: "level":"info",
+out-contains: "scope":"Main",
+out-contains: "text":"main-line"
+run: sh -c 'VUNA_LOG=info VUNA_LOG_FORMAT=jsonl "$TMPDIR/scope-out/bin/scope" 2>&1 >/dev/null | grep "main-line" | grep -qE "^\{\"ts\":[0-9]+,\"pid\":[0-9]+,\"level\":\"info\",\"scope\":\"Main\",\"text\":\"main-line\"\}$"'
+exit: 0
+# 文件输出：stderr 保持干净；文件里是同一格式。
+run: sh -c 'VUNA_LOG=warn VUNA_LOG_FILE="$TMPDIR/log.txt" "$TMPDIR/lvl-out/bin/lvl" 2>"$TMPDIR/err.txt" >/dev/null; sed -E "s/^[0-9]+ //" "$TMPDIR/log.txt"'
+out-contains: WARN Main warn-line
+out-contains: ERROR Main error-line
+run: sh -c 'test ! -s "$TMPDIR/err.txt"'
+exit: 0
+
+# ---------------------------------------------------------------- 6) 编译期诊断
+run: printf 'main : Int\nmain = log! "loud" "x"\n' > "$TMPDIR/bad-level.vuna"
+run: "$VUNA" check "$TMPDIR/bad-level.vuna" 2>&1
+exit: nonzero
+out-contains: RN_LogLevelUnknown
+out-contains: unknown log level loud
+run: printf 'main : Int\nmain = let lvl = "info" in log! lvl "x"\n' > "$TMPDIR/bad-literal.vuna"
+run: "$VUNA" check "$TMPDIR/bad-literal.vuna" 2>&1
+exit: nonzero
+out-contains: RN_LogLevelNotLiteral
+run: printf 'main : Int\nmain = log! "info" "a" "b"\n' > "$TMPDIR/bad-arity.vuna"
+run: "$VUNA" check "$TMPDIR/bad-arity.vuna" 2>&1
+exit: nonzero
+out-contains: RN_MacroArity
+out-contains: macro log expects 2 argument(s), got 3

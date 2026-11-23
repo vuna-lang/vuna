@@ -7,6 +7,8 @@ module Vuna.Compiler.Loader.Flatten where
 -- 入口统一吃 `PackageContext`（最近 manifest 的包 + 依赖闭包 roots）；DT 精化由
 -- `Driver.Dt` 按「依赖序列 + 入口声明」拼接。
 import Base.Data.List as List
+import Base.Data.String as String
+import Base.Data.Nat as Nat
 import Vuna.Compiler.Loader.Layers
 import Vuna.Compiler.Base.Diagnostics.Loader
 import Vuna.Compiler.Loader.Expand
@@ -715,6 +717,16 @@ loadModule fuel roots importerPkg modules stack imp =
 export loadProject : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Eff r (Check Project)
 loadProject ctx entry = loadProjectWithPreloaded ctx entry []
 
+-- | 入口文件的内置宏 scope（`log!`）：basename 去掉 `.vuna`，取不到时退回包名。
+-- 模块文件的 scope 由 `moduleNameOf` 给出；入口不是模块，只能从路径取。
+entryScopeOf : String -> String -> String
+entryScopeOf pkg path =
+  let
+    name = foldl (\acc, seg => seg) path (String.split "/" path)
+  in if String.endsWith ".vuna" name then
+    String.substring 0 (Nat.minus (String.byteLength name) 5) name
+  else if name == "" then pkg else name
+
 -- 接口模式加载。`preloaded` 是依赖包里**已解析**的模块（来自模块接口），
 -- 加载器把它们当「已加载模块」直接命中：不读源码、不 parse、不算导出表。本包模块与入口
 -- 仍按源码加载；模块表的顺序约定与 `loadAll` 一致（新加载模块前插，dependents-first），
@@ -752,7 +764,7 @@ loadProjectWithPreloaded ctx entry preloaded =
                                   OkC modules =>
                                     let
                                       imports2 = normalizeImports modules imports1
-                                    in withLayerCheck (contextRoots ctx) (Project decls imports2 implicit modules (contextPackageName ctx) fixities)
+                                    in withLayerCheck (contextRoots ctx) (Project decls imports2 implicit modules (contextPackageName ctx) fixities (entryScopeOf (contextPackageName ctx) entry))
                               )
     else
       pure (ldErr1 (EntryFileNotFound entry) entry)
@@ -771,7 +783,7 @@ loadProjectModulesWithPreloaded ctx names preloaded =
     pure (
         case modulesR of
           ErrC e => ErrC e
-          OkC modules => withLayerCheck (contextRoots ctx) (Project [] [] [] modules (contextPackageName ctx) [])
+          OkC modules => withLayerCheck (contextRoots ctx) (Project [] [] [] modules (contextPackageName ctx) [] (contextPackageName ctx))
       )
 
 -- 入口以**源码字符串**给出（REPL 的表达式求值）：入口不落盘（import 仍按上下文的
@@ -809,7 +821,7 @@ loadProjectSourceWithPreloaded ctx label source preloaded =
                               OkC modules =>
                                 let
                                   imports2 = normalizeImports modules imports1
-                                in withLayerCheck (contextRoots ctx) (Project decls imports2 implicit modules (contextPackageName ctx) fixities)
+                                in withLayerCheck (contextRoots ctx) (Project decls imports2 implicit modules (contextPackageName ctx) fixities (entryScopeOf (contextPackageName ctx) label))
                           )
 
 -- 以**源码字符串**给出一个**库模块**：源码允许带 `module ... where`
@@ -856,7 +868,7 @@ loadModuleSourceWithPreloaded ctx label source preloaded =
                               OkC exports =>
                                 let
                                   visible = fixities
-                                in pure (withLayerCheck (contextRoots ctx) (Project [] imports2 implicit (Module name (contextPackageName ctx) imports2 implicit decls exports visible (append providers (reexportedImportNames imports2 (append items reexports))) (opaqueNamesOf name opacity) (exportIndexOf exports) :: modules) (contextPackageName ctx) []))
+                                in pure (withLayerCheck (contextRoots ctx) (Project [] imports2 implicit (Module name (contextPackageName ctx) imports2 implicit decls exports visible (append providers (reexportedImportNames imports2 (append items reexports))) (opaqueNamesOf name opacity) (exportIndexOf exports) :: modules) (contextPackageName ctx) [] (contextPackageName ctx)))
 
 -- fmt 用的「程序级 fixity」——本文件的 `infix*` 声明（在前，本地优先）
 -- ++ import 闭包可见的声明（Module 里已含各自的 import 闭包）。只 parse + 加载模块图，
@@ -945,12 +957,12 @@ resolveProjectWith release project = resolveProjectKeeping release [] project
 -- 逐模块的四段在 `resolveModulesKeep`（同名跨度，按次聚合）。名字解析本身没有内部的
 -- 结构化子阶段，`vuna.resolve` 标记到这组跨度之间只剩 `checkUniqueFixities` 与函数分派。
 export resolveProjectKeeping : Bool -> List String -> Project -> Check (List Diagnostic, List Decl, List Module)
-resolveProjectKeeping release keep (Project decls imports implicit modules entryPkg entryFixes) =
+resolveProjectKeeping release keep (Project decls imports implicit modules entryPkg entryFixes entryName) =
   let
     projectFixities = dedupeFixitiesOf modules entryFixes
   in Vuna.Compiler.Base.Common.bind
     (checkUniqueFixities projectFixities)
-    (\fixes => Vuna.Compiler.Base.Common.bind (obsCheck "vuna.resolve.reorder" (\_ => reorderProgram (tableOf fixes) decls)) (\decls2 => Vuna.Compiler.Base.Common.bind (obsCheck "vuna.resolve.expand" (\_ => expandDecls decls2)) (\decls3 => Vuna.Compiler.Base.Common.bind (obsCheck "vuna.resolve.entry" (\_ => resolveEntry release modules entryPkg (append imports implicit) decls3)) (\entryDecls => Vuna.Compiler.Base.Common.bind (obsCheck "vuna.resolve.warn" (\_ => unusedImportWarnings modules imports entryDecls decls3 [])) (\entryWarns => Vuna.Compiler.Base.Common.bind (resolveModulesKeep release keep fixes modules) (\p2 => OkC (append entryWarns (secondOf p2), entryDecls, firstOf p2)))))))
+    (\fixes => Vuna.Compiler.Base.Common.bind (obsCheck "vuna.resolve.reorder" (\_ => reorderProgram (tableOf fixes) decls)) (\decls2 => Vuna.Compiler.Base.Common.bind (obsCheck "vuna.resolve.expand" (\_ => expandDecls entryName decls2)) (\decls3 => Vuna.Compiler.Base.Common.bind (obsCheck "vuna.resolve.entry" (\_ => resolveEntry release modules entryPkg (append imports implicit) decls3)) (\entryDecls => Vuna.Compiler.Base.Common.bind (obsCheck "vuna.resolve.warn" (\_ => unusedImportWarnings modules imports entryDecls decls3 [])) (\entryWarns => Vuna.Compiler.Base.Common.bind (resolveModulesKeep release keep fixes modules) (\p2 => OkC (append entryWarns (secondOf p2), entryDecls, firstOf p2)))))))
 
 resolveModulesKeep : Bool -> List String -> List FixityDecl -> List Module -> Check (List Module, List Diagnostic)
 resolveModulesKeep release keep fixes [] = OkC ([], [])
@@ -962,7 +974,7 @@ resolveModulesKeep release keep fixes (m :: rest) =
   else
     Vuna.Compiler.Base.Common.bind
       (obsCheck "vuna.resolve.reorder" (\_ => reorderProgram (tableOf fixes) (moduleDeclsOf m)))
-      (\decls2 => Vuna.Compiler.Base.Common.bind (resolveModuleGo release m rest (obsCheck "vuna.resolve.expand" (\_ => expandDecls decls2))) (\p => Vuna.Compiler.Base.Common.bind (resolveModulesKeep release keep fixes rest) (\p2 => OkC ((::) (firstOf p) (firstOf p2), append (secondOf p) (secondOf p2)))))
+      (\decls2 => Vuna.Compiler.Base.Common.bind (resolveModuleGo release m rest (obsCheck "vuna.resolve.expand" (\_ => expandDecls (moduleNameOf m) decls2))) (\p => Vuna.Compiler.Base.Common.bind (resolveModulesKeep release keep fixes rest) (\p2 => OkC ((::) (firstOf p) (firstOf p2), append (secondOf p) (secondOf p2)))))
 
 -- | 单个模块 expand 之后的三段：命名空间建表 → 名字解析 → 未用 import 判定。
 -- `rest` 参与模块表：解析期要看到后续模块的导出面。

@@ -1163,6 +1163,187 @@ let dtp_debug_line (s : string) =
   0
 """
 
+-- | 文本日志 runtime（`log!` 与 `Base.Data.Log` 共用；规范见 `docs/reference/logging.md`）。
+--
+-- 门控：`VUNA_LOG`（`off|error|warn|info|debug|trace`，缺省 `warn`；缺口径兼容
+-- `--debug-perf` / `VUNA_DEBUG_PERF=1` = `debug`）。输出格式 `VUNA_LOG_FORMAT`
+-- （`text` 缺省 / `jsonl`），目标 `VUNA_LOG_FILE`（缺省 stderr）。
+-- scope 过滤：`VUNA_LOG_SCOPE` 逗号分隔；无通配符按**点边界前缀**匹配，含 `*`/`?` 走 glob，
+-- `!pat` 是否定；全部按 scope 记忆（模块名是有限常量）。
+-- 关闭路径 = 一次 `Lazy.force` + 整数比较；scope 未配置时不进表。
+dtLogRuntime : String
+dtLogRuntime = """(* vuna text log runtime (generated; see docs/reference/logging.md). *)
+let dtp_log_qc = Char.chr 34
+let dtp_log_bs = Char.chr 92
+let dtp_log_nl = Char.chr 10
+let dtp_log_lb = Char.chr 123
+let dtp_log_rb = Char.chr 125
+let dtp_log_ls = Char.chr 91
+let dtp_log_rs = Char.chr 93
+let dtp_log_colon = Char.chr 58
+let dtp_log_comma = Char.chr 44
+
+let dtp_log_level_lazy = lazy (
+  let env = String.lowercase_ascii (try Sys.getenv \"VUNA_LOG\" with Not_found -> \"\") in
+  if env = \"\" then
+    (let legacy =
+       (try Sys.getenv \"VUNA_DEBUG_PERF\" = \"1\" with Not_found -> false)
+       || Array.exists (fun a -> a = \"--debug-perf\") Sys.argv
+     in
+     if legacy then 3 else 1)
+  else match env with
+    | \"off\" | \"none\" -> -1
+    | \"error\" -> 0
+    | \"warn\" -> 1
+    | \"info\" -> 2
+    | \"debug\" -> 3
+    | \"trace\" -> 4
+    | s -> (match int_of_string_opt s with Some n -> n | None -> 1))
+
+let dtp_log_threshold () = Lazy.force dtp_log_level_lazy
+
+let dtp_log_name (lvl : int) =
+  if lvl <= 0 then \"ERROR\"
+  else if lvl = 1 then \"WARN\"
+  else if lvl = 2 then \"INFO\"
+  else if lvl = 3 then \"DEBUG\"
+  else \"TRACE\"
+
+let dtp_log_scopes_lazy = lazy (
+  let raw = try Sys.getenv \"VUNA_LOG_SCOPE\" with Not_found -> \"\" in
+  if raw = \"\" then []
+  else List.filter (fun s -> s <> \"\") (List.map String.trim (String.split_on_char ',' raw)))
+
+let dtp_log_scope_cache : (string, bool) Hashtbl.t = Hashtbl.create 16
+
+let dtp_log_glob (pat : string) (s : string) =
+  let np = String.length pat and ns = String.length s in
+  let rec go i j =
+    if i = np then j = ns
+    else match pat.[i] with
+      | '*' -> go (i + 1) j || (j < ns && go i (j + 1))
+      | '?' -> j < ns && go (i + 1) (j + 1)
+      | c -> j < ns && c = s.[j] && go (i + 1) (j + 1)
+  in go 0 0
+
+let dtp_log_scope_match (pat : string) (scope : string) =
+  if String.contains pat '*' || String.contains pat '?' then dtp_log_glob pat scope
+  else if String.contains pat '.' then
+    (* 带点的模式按点边界前缀匹配：`Vuna.Compiler` 命中 `Vuna.Compiler.*`，不命中 `Vuna.CompilerBase`。 *)
+    scope = pat
+    || (String.length scope > String.length pat
+        && String.sub scope 0 (String.length pat) = pat
+        && scope.[String.length pat] = '.')
+  else
+    String.length scope >= String.length pat
+    && String.sub scope 0 (String.length pat) = pat
+
+let dtp_log_scope_eval (scope : string) (pats : string list) =
+  let inc = List.filter (fun p -> p <> \"\" && p.[0] <> '!') pats in
+  let exc = List.filter (fun p -> p <> \"\" && p.[0] = '!') pats in
+  let strip p = if p <> \"\" && p.[0] = '!' then String.sub p 1 (String.length p - 1) else p in
+  let base = if inc = [] then true else List.exists (fun p -> dtp_log_scope_match p scope) inc in
+  base && not (List.exists (fun p -> dtp_log_scope_match (strip p) scope) exc)
+
+let dtp_log_scope_on (scope : string) =
+  match Lazy.force dtp_log_scopes_lazy with
+  | [] -> true
+  | pats ->
+    (match Hashtbl.find_opt dtp_log_scope_cache scope with
+     | Some b -> b
+     | None ->
+       let b = dtp_log_scope_eval scope pats in
+       Hashtbl.replace dtp_log_scope_cache scope b;
+       b)
+
+let dtp_log_on (lvl : int) (scope : string) : bool =
+  lvl <= dtp_log_threshold () && dtp_log_scope_on scope
+
+let dtp_log_pid_lazy = lazy (Unix.getpid ())
+let dtp_log_pid () = Lazy.force dtp_log_pid_lazy
+
+let dtp_log_format_lazy = lazy (
+  String.lowercase_ascii (try Sys.getenv \"VUNA_LOG_FORMAT\" with Not_found -> \"\"))
+let dtp_log_json_mode () = Lazy.force dtp_log_format_lazy = \"jsonl\"
+
+let dtp_log_out = ref None
+let dtp_log_opened = ref false
+
+let dtp_log_channel () =
+  if not !dtp_log_opened then begin
+    dtp_log_opened := true;
+    dtp_log_out := (try Some (open_out (Sys.getenv \"VUNA_LOG_FILE\")) with _ -> None)
+  end;
+  !dtp_log_out
+
+let () = at_exit (fun () -> match !dtp_log_out with Some oc -> close_out_noerr oc | None -> ())
+
+let dtp_log_write (s : string) =
+  match dtp_log_channel () with
+  | Some oc -> output_string oc s; flush oc
+  | None -> output_string stderr s; flush stderr
+
+let dtp_log_json_str b (s : string) =
+  Buffer.add_char b dtp_log_qc;
+  String.iter
+    (fun c ->
+      if Char.code c = 34 then begin Buffer.add_char b dtp_log_bs; Buffer.add_char b dtp_log_qc end
+      else if Char.code c = 92 then begin Buffer.add_char b dtp_log_bs; Buffer.add_char b dtp_log_bs end
+      else if Char.code c = 10 then begin Buffer.add_char b dtp_log_bs; Buffer.add_char b (Char.chr 110) end
+      else if Char.code c = 13 then begin Buffer.add_char b dtp_log_bs; Buffer.add_char b (Char.chr 114) end
+      else if Char.code c = 9 then begin Buffer.add_char b dtp_log_bs; Buffer.add_char b (Char.chr 116) end
+      else if Char.code c < 32 then begin
+        Buffer.add_char b dtp_log_bs;
+        Buffer.add_char b (Char.chr 117);
+        Buffer.add_string b (Printf.sprintf \"%04x\" (Char.code c))
+      end
+      else Buffer.add_char b c)
+    s;
+  Buffer.add_char b dtp_log_qc
+
+let dtp_log_json_line (ts : int) (lvl : int) (scope : string) (text : string) =
+  let b = Buffer.create 128 in
+  Buffer.add_char b dtp_log_lb;
+  dtp_log_json_str b \"ts\"; Buffer.add_char b dtp_log_colon;
+  Buffer.add_string b (string_of_int ts);
+  Buffer.add_char b dtp_log_comma;
+  dtp_log_json_str b \"pid\"; Buffer.add_char b dtp_log_colon;
+  Buffer.add_string b (string_of_int (dtp_log_pid ()));
+  Buffer.add_char b dtp_log_comma;
+  dtp_log_json_str b \"level\"; Buffer.add_char b dtp_log_colon;
+  dtp_log_json_str b (String.lowercase_ascii (dtp_log_name lvl));
+  Buffer.add_char b dtp_log_comma;
+  dtp_log_json_str b \"scope\"; Buffer.add_char b dtp_log_colon;
+  dtp_log_json_str b scope;
+  Buffer.add_char b dtp_log_comma;
+  dtp_log_json_str b \"text\"; Buffer.add_char b dtp_log_colon;
+  dtp_log_json_str b text;
+  Buffer.add_char b dtp_log_rb;
+  Buffer.add_char b dtp_log_nl;
+  dtp_log_write (Buffer.contents b)
+
+let dtp_log_text_line (ts : int) (lvl : int) (scope : string) (text : string) =
+  let b = Buffer.create 96 in
+  Buffer.add_string b (string_of_int ts);
+  Buffer.add_char b ' ';
+  Buffer.add_string b (dtp_log_name lvl);
+  Buffer.add_char b ' ';
+  Buffer.add_string b scope;
+  Buffer.add_char b ' ';
+  Buffer.add_string b text;
+  Buffer.add_char b dtp_log_nl;
+  dtp_log_write (Buffer.contents b)
+
+let dtp_log_emit (lvl : int) (scope : string) (text : string) : int =
+  if not (dtp_log_on lvl scope) then 0
+  else begin
+    let ts = dtp_timeUs () in
+    if dtp_log_json_mode () then dtp_log_json_line ts lvl scope text
+    else dtp_log_text_line ts lvl scope text;
+    0
+  end
+"""
+
 -- | 可观测性运行时（仅在程序引用 `@vuna@obs@*` 隐藏原语时追加；见 `dtRuntimeWith`
 -- 的 `usesObs`）。规范见 `docs/reference/observability.md`。
 --
@@ -1682,7 +1863,8 @@ dtRuntimeWith locs usesFloat usesTrace usesObs =
     ++ (if usesFloat then dtFloatRuntime else "")
     ++ (if locs == "" then "let dt_def_locs = []\n" else "let dt_def_locs = [\n${locs}]\n")
     ++ dtReporterRuntime
-    ++ (if usesTrace then dtTraceRuntime else "") ++ (if usesObs then dtObsRuntime else "")
+    ++ (if usesTrace then dtTraceRuntime ++ dtLogRuntime else "")
+    ++ (if usesObs then dtObsRuntime else "")
 
 -- `strUnpack` / `strPack` 的运行时桥接。
 -- Core 的 `strUnpack` 语义是「OCaml int list」，而 DT 路径里 `List` 是程序自己声明的

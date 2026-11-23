@@ -34,168 +34,173 @@ expandFuelBound : Int
 expandFuelBound = 1073741824
 
 -- | 展开一组声明里的全部内置宏调用；无宏时逐节点重建 AST、语义与 span 不变。
-export expandDecls : List Decl -> Check (List Decl)
-expandDecls decls = expandDeclsGo expandFuelBound decls
+-- `scope` 是所在模块的规范名（模块名，或入口文件的文件名），`log!` 把它烘进展开结果。
+export expandDecls : String -> List Decl -> Check (List Decl)
+expandDecls scope decls = expandDeclsGo expandFuelBound scope decls
 
-expandDeclsGo : Int -> List Decl -> Check (List Decl)
-expandDeclsGo fuel decls =
+expandDeclsGo : Int -> String -> List Decl -> Check (List Decl)
+expandDeclsGo fuel scope decls =
   if fuel <= 0 then
     icFuel "macro expansion"
   else
     case decls of
       [] => OkC []
-      d :: rest => Vuna.Compiler.Base.Common.bind (expandDecl fuel d) (\d2 => Vuna.Compiler.Base.Common.bind (expandDeclsGo (fuel - 1) rest) (\rest2 => OkC ((::) d2 rest2)))
+      d :: rest => Vuna.Compiler.Base.Common.bind (expandDecl fuel scope d) (\d2 => Vuna.Compiler.Base.Common.bind (expandDeclsGo (fuel - 1) scope rest) (\rest2 => OkC ((::) d2 rest2)))
 
-expandDecl : Int -> Decl -> Check Decl
-expandDecl fuel d =
+expandDecl : Int -> String -> Decl -> Check Decl
+expandDecl fuel scope d =
   if fuel <= 0 then
     icFuel "macro expansion"
   else
     case d of
-      DData name params kind ctors derivings viaField repr lin sp => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) kind) (\kind2 => Vuna.Compiler.Base.Common.bind (expandCtors (fuel - 1) ctors) (\ctors2 => OkC (DData name params kind2 ctors2 derivings viaField repr lin sp)))
-      DAxiom name ty sp => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) ty) (\ty2 => OkC (DAxiom name ty2 sp))
-      DExtern name cname ty sp => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) ty) (\ty2 => OkC (DExtern name cname ty2 sp))
-      DSig name ctx ty sp => Vuna.Compiler.Base.Common.bind (expandExprs (fuel - 1) ctx) (\ctx2 => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) ty) (\ty2 => OkC (DSig name ctx2 ty2 sp)))
-      DFun name pats body sp => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) body) (\body2 => OkC (DFun name pats body2 sp))
-      DRecord name params fields derivings viaField repr lin sp => Vuna.Compiler.Base.Common.bind (expandFields (fuel - 1) fields) (\fields2 => OkC (DRecord name params fields2 derivings viaField repr lin sp))
-      DTrait name params supers methods sp => Vuna.Compiler.Base.Common.bind (expandExprs (fuel - 1) supers) (\supers2 => Vuna.Compiler.Base.Common.bind (expandTraitMethods (fuel - 1) methods) (\methods2 => OkC (DTrait name params supers2 methods2 sp)))
-      DInstance ctxE head methods sp => Vuna.Compiler.Base.Common.bind (expandExprs (fuel - 1) ctxE) (\ctx2 => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) head) (\head2 => Vuna.Compiler.Base.Common.bind (expandDeclsGo (fuel - 1) methods) (\methods2 => OkC (DInstance ctx2 head2 methods2 sp))))
+      DData name params kind ctors derivings viaField repr lin sp => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) scope kind) (\kind2 => Vuna.Compiler.Base.Common.bind (expandCtors (fuel - 1) scope ctors) (\ctors2 => OkC (DData name params kind2 ctors2 derivings viaField repr lin sp)))
+      DAxiom name ty sp => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) scope ty) (\ty2 => OkC (DAxiom name ty2 sp))
+      DExtern name cname ty sp => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) scope ty) (\ty2 => OkC (DExtern name cname ty2 sp))
+      DSig name ctx ty sp => Vuna.Compiler.Base.Common.bind (expandExprs (fuel - 1) scope ctx) (\ctx2 => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) scope ty) (\ty2 => OkC (DSig name ctx2 ty2 sp)))
+      DFun name pats body sp => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) scope body) (\body2 => OkC (DFun name pats body2 sp))
+      DRecord name params fields derivings viaField repr lin sp => Vuna.Compiler.Base.Common.bind (expandFields (fuel - 1) scope fields) (\fields2 => OkC (DRecord name params fields2 derivings viaField repr lin sp))
+      DTrait name params supers methods sp => Vuna.Compiler.Base.Common.bind (expandExprs (fuel - 1) scope supers) (\supers2 => Vuna.Compiler.Base.Common.bind (expandTraitMethods (fuel - 1) scope methods) (\methods2 => OkC (DTrait name params supers2 methods2 sp)))
+      DInstance ctxE head methods sp => Vuna.Compiler.Base.Common.bind (expandExprs (fuel - 1) scope ctxE) (\ctx2 => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) scope head) (\head2 => Vuna.Compiler.Base.Common.bind (expandDeclsGo (fuel - 1) scope methods) (\methods2 => OkC (DInstance ctx2 head2 methods2 sp))))
 
-expandCtors : Int -> List Ctor -> Check (List Ctor)
-expandCtors fuel ctors =
+expandCtors : Int -> String -> List Ctor -> Check (List Ctor)
+expandCtors fuel scope ctors =
   if fuel <= 0 then
     icFuel "macro expansion"
   else
     case ctors of
       [] => OkC []
-      c :: rest => Vuna.Compiler.Base.Common.bind (expandCtor (fuel - 1) c) (\c2 => Vuna.Compiler.Base.Common.bind (expandCtors (fuel - 1) rest) (\rest2 => OkC ((::) c2 rest2)))
+      c :: rest => Vuna.Compiler.Base.Common.bind (expandCtor (fuel - 1) scope c) (\c2 => Vuna.Compiler.Base.Common.bind (expandCtors (fuel - 1) scope rest) (\rest2 => OkC ((::) c2 rest2)))
 
-expandCtor : Int -> Ctor -> Check Ctor
-expandCtor fuel (Ctor name ty arity sp) =
-  Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) ty) (\ty2 => OkC (Ctor name ty2 arity sp))
+expandCtor : Int -> String -> Ctor -> Check Ctor
+expandCtor fuel scope (Ctor name ty arity sp) =
+  Vuna.Compiler.Base.Common.bind
+    (expandExpr (fuel - 1) scope ty)
+    (\ty2 => OkC (Ctor name ty2 arity sp))
 
-expandFields : Int -> List Field -> Check (List Field)
-expandFields fuel fields =
+expandFields : Int -> String -> List Field -> Check (List Field)
+expandFields fuel scope fields =
   if fuel <= 0 then
     icFuel "macro expansion"
   else
     case fields of
       [] => OkC []
-      f :: rest => Vuna.Compiler.Base.Common.bind (expandField (fuel - 1) f) (\f2 => Vuna.Compiler.Base.Common.bind (expandFields (fuel - 1) rest) (\rest2 => OkC ((::) f2 rest2)))
+      f :: rest => Vuna.Compiler.Base.Common.bind (expandField (fuel - 1) scope f) (\f2 => Vuna.Compiler.Base.Common.bind (expandFields (fuel - 1) scope rest) (\rest2 => OkC ((::) f2 rest2)))
 
-expandField : Int -> Field -> Check Field
-expandField fuel (Field name ty sp) =
-  Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) ty) (\ty2 => OkC (Field name ty2 sp))
+expandField : Int -> String -> Field -> Check Field
+expandField fuel scope (Field name ty sp) =
+  Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) scope ty) (\ty2 => OkC (Field name ty2 sp))
 
-expandTraitMethods : Int -> List TraitMethod -> Check (List TraitMethod)
-expandTraitMethods fuel methods =
+expandTraitMethods : Int -> String -> List TraitMethod -> Check (List TraitMethod)
+expandTraitMethods fuel scope methods =
   if fuel <= 0 then
     icFuel "macro expansion"
   else
     case methods of
       [] => OkC []
-      m :: rest => Vuna.Compiler.Base.Common.bind (expandTraitMethod (fuel - 1) m) (\m2 => Vuna.Compiler.Base.Common.bind (expandTraitMethods (fuel - 1) rest) (\rest2 => OkC ((::) m2 rest2)))
+      m :: rest => Vuna.Compiler.Base.Common.bind (expandTraitMethod (fuel - 1) scope m) (\m2 => Vuna.Compiler.Base.Common.bind (expandTraitMethods (fuel - 1) scope rest) (\rest2 => OkC ((::) m2 rest2)))
 
-expandTraitMethod : Int -> TraitMethod -> Check TraitMethod
-expandTraitMethod fuel (TraitMethod name ty sp) =
-  Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) ty) (\ty2 => OkC (TraitMethod name ty2 sp))
+expandTraitMethod : Int -> String -> TraitMethod -> Check TraitMethod
+expandTraitMethod fuel scope (TraitMethod name ty sp) =
+  Vuna.Compiler.Base.Common.bind
+    (expandExpr (fuel - 1) scope ty)
+    (\ty2 => OkC (TraitMethod name ty2 sp))
 
-expandExprs : Int -> List Expr -> Check (List Expr)
-expandExprs fuel exprs =
+expandExprs : Int -> String -> List Expr -> Check (List Expr)
+expandExprs fuel scope exprs =
   if fuel <= 0 then
     icFuel "macro expansion"
   else
     case exprs of
       [] => OkC []
-      e :: rest => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) e) (\e2 => Vuna.Compiler.Base.Common.bind (expandExprs (fuel - 1) rest) (\rest2 => OkC ((::) e2 rest2)))
+      e :: rest => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) scope e) (\e2 => Vuna.Compiler.Base.Common.bind (expandExprs (fuel - 1) scope rest) (\rest2 => OkC ((::) e2 rest2)))
 
-expandExpr : Int -> Expr -> Check Expr
-expandExpr fuel e =
+expandExpr : Int -> String -> Expr -> Check Expr
+expandExpr fuel scope e =
   if fuel <= 0 then
     icFuel "macro expansion"
   else
     case e of
       EVar name sp =>
         case macroNameOf name of
-          Just macroName => expandMacro macroName [] sp
+          Just macroName => expandMacro scope macroName [] sp
           Nothing => OkC e
       EApp fn args sp =>
         case fn of
           EVar name _ =>
             case macroNameOf name of
-              Just macroName => Vuna.Compiler.Base.Common.bind (expandExprs (fuel - 1) args) (\args2 => expandMacro macroName args2 sp)
-              Nothing => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) fn) (\fn2 => Vuna.Compiler.Base.Common.bind (expandExprs (fuel - 1) args) (\args2 => OkC (EApp fn2 args2 sp)))
-          _ => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) fn) (\fn2 => Vuna.Compiler.Base.Common.bind (expandExprs (fuel - 1) args) (\args2 => OkC (EApp fn2 args2 sp)))
+              Just macroName => Vuna.Compiler.Base.Common.bind (expandExprs (fuel - 1) scope args) (\args2 => expandMacro scope macroName args2 sp)
+              Nothing => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) scope fn) (\fn2 => Vuna.Compiler.Base.Common.bind (expandExprs (fuel - 1) scope args) (\args2 => OkC (EApp fn2 args2 sp)))
+          _ => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) scope fn) (\fn2 => Vuna.Compiler.Base.Common.bind (expandExprs (fuel - 1) scope args) (\args2 => OkC (EApp fn2 args2 sp)))
       EInt n _ => OkC e
       EStr s _ => OkC e
       EFloat raw _ => OkC e
-      ELam ps body sp => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) body) (\body2 => OkC (ELam ps body2 sp))
-      EPi name implicit qty dom cod sp => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) dom) (\dom2 => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) cod) (\cod2 => OkC (EPi name implicit qty dom2 cod2 sp)))
-      ELet binds body rec_ sp => Vuna.Compiler.Base.Common.bind (expandPatExprs (fuel - 1) binds) (\binds2 => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) body) (\body2 => OkC (ELet binds2 body2 rec_ sp)))
-      ELocalFun clauses sp => Vuna.Compiler.Base.Common.bind (expandClauses (fuel - 1) clauses) (\clauses2 => OkC (ELocalFun clauses2 sp))
-      ECase scrut alts sp => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) scrut) (\scrut2 => Vuna.Compiler.Base.Common.bind (expandAlts (fuel - 1) alts) (\alts2 => OkC (ECase scrut2 alts2 sp)))
-      EIf c t el sp => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) c) (\c2 => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) t) (\t2 => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) el) (\el2 => OkC (EIf c2 t2 el2 sp))))
-      EField base fname sp => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) base) (\base2 => OkC (EField base2 fname sp))
-      ERecord name fields sp => Vuna.Compiler.Base.Common.bind (expandFieldExprs (fuel - 1) fields) (\fields2 => OkC (ERecord name fields2 sp))
-      ERecUpdate base fields sp => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) base) (\base2 => Vuna.Compiler.Base.Common.bind (expandFieldExprs (fuel - 1) fields) (\fields2 => OkC (ERecUpdate base2 fields2 sp)))
-      EDo stmts sp => Vuna.Compiler.Base.Common.bind (expandDoStmts (fuel - 1) stmts) (\stmts2 => OkC (EDo stmts2 sp))
-      EInfix op lhs rhs sp => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) lhs) (\lhs2 => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) rhs) (\rhs2 => OkC (EInfix op lhs2 rhs2 sp)))
-      EParen inner sp => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) inner) (\inner2 => OkC (EParen inner2 sp))
-      EBacktick op lhs rhs sp => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) lhs) (\lhs2 => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) rhs) (\rhs2 => OkC (EBacktick op lhs2 rhs2 sp)))
+      ELam ps body sp => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) scope body) (\body2 => OkC (ELam ps body2 sp))
+      EPi name implicit qty dom cod sp => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) scope dom) (\dom2 => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) scope cod) (\cod2 => OkC (EPi name implicit qty dom2 cod2 sp)))
+      ELet binds body rec_ sp => Vuna.Compiler.Base.Common.bind (expandPatExprs (fuel - 1) scope binds) (\binds2 => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) scope body) (\body2 => OkC (ELet binds2 body2 rec_ sp)))
+      ELocalFun clauses sp => Vuna.Compiler.Base.Common.bind (expandClauses (fuel - 1) scope clauses) (\clauses2 => OkC (ELocalFun clauses2 sp))
+      ECase scrut alts sp => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) scope scrut) (\scrut2 => Vuna.Compiler.Base.Common.bind (expandAlts (fuel - 1) scope alts) (\alts2 => OkC (ECase scrut2 alts2 sp)))
+      EIf c t el sp => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) scope c) (\c2 => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) scope t) (\t2 => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) scope el) (\el2 => OkC (EIf c2 t2 el2 sp))))
+      EField base fname sp => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) scope base) (\base2 => OkC (EField base2 fname sp))
+      ERecord name fields sp => Vuna.Compiler.Base.Common.bind (expandFieldExprs (fuel - 1) scope fields) (\fields2 => OkC (ERecord name fields2 sp))
+      ERecUpdate base fields sp => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) scope base) (\base2 => Vuna.Compiler.Base.Common.bind (expandFieldExprs (fuel - 1) scope fields) (\fields2 => OkC (ERecUpdate base2 fields2 sp)))
+      EDo stmts sp => Vuna.Compiler.Base.Common.bind (expandDoStmts (fuel - 1) scope stmts) (\stmts2 => OkC (EDo stmts2 sp))
+      EInfix op lhs rhs sp => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) scope lhs) (\lhs2 => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) scope rhs) (\rhs2 => OkC (EInfix op lhs2 rhs2 sp)))
+      EParen inner sp => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) scope inner) (\inner2 => OkC (EParen inner2 sp))
+      EBacktick op lhs rhs sp => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) scope lhs) (\lhs2 => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) scope rhs) (\rhs2 => OkC (EBacktick op lhs2 rhs2 sp)))
       ESectOp op _ => OkC e
-      ESectL op inner sp => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) inner) (\inner2 => OkC (ESectL op inner2 sp))
-      ESectR inner op sp => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) inner) (\inner2 => OkC (ESectR inner2 op sp))
-      EAnn value ty sp => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) value) (\value2 => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) ty) (\ty2 => OkC (EAnn value2 ty2 sp)))
-      EInterp multi parts sp => Vuna.Compiler.Base.Common.bind (expandInterpParts (fuel - 1) parts) (\parts2 => OkC (EInterp multi parts2 sp))
+      ESectL op inner sp => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) scope inner) (\inner2 => OkC (ESectL op inner2 sp))
+      ESectR inner op sp => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) scope inner) (\inner2 => OkC (ESectR inner2 op sp))
+      EAnn value ty sp => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) scope value) (\value2 => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) scope ty) (\ty2 => OkC (EAnn value2 ty2 sp)))
+      EInterp multi parts sp => Vuna.Compiler.Base.Common.bind (expandInterpParts (fuel - 1) scope parts) (\parts2 => OkC (EInterp multi parts2 sp))
 
 -- | 表达式列表项（`ELet` 绑定 / `ECase` 分支）的宏展开。
-expandPatExprs : Int -> List Binding -> Check (List Binding)
-expandPatExprs fuel binds =
+expandPatExprs : Int -> String -> List Binding -> Check (List Binding)
+expandPatExprs fuel scope binds =
   if fuel <= 0 then
     icFuel "macro expansion"
   else
     case binds of
       [] => OkC []
-      b :: rest => Vuna.Compiler.Base.Common.bind (expandBindingSig (fuel - 1) b.bindSig) (\sig2 => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) b.bindValue) (\value2 => Vuna.Compiler.Base.Common.bind (expandPatExprs (fuel - 1) rest) (\rest2 => OkC ((::) (Binding b.bindPat value2 sig2 b.bindRef) rest2))))
+      b :: rest => Vuna.Compiler.Base.Common.bind (expandBindingSig (fuel - 1) scope b.bindSig) (\sig2 => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) scope b.bindValue) (\value2 => Vuna.Compiler.Base.Common.bind (expandPatExprs (fuel - 1) scope rest) (\rest2 => OkC ((::) (Binding b.bindPat value2 sig2 b.bindRef) rest2))))
 
 -- | 绑定签名行的宏展开（类型里的 `name!` 也要展开）。
-expandBindingSig : Int -> Maybe BindingSig -> Check (Maybe BindingSig)
-expandBindingSig fuel Nothing = OkC Nothing
-expandBindingSig fuel (Just s) =
+expandBindingSig : Int -> String -> Maybe BindingSig -> Check (Maybe BindingSig)
+expandBindingSig fuel scope Nothing = OkC Nothing
+expandBindingSig fuel scope (Just s) =
   Vuna.Compiler.Base.Common.bind
-    (expandExpr (fuel - 1) s.sigType)
+    (expandExpr (fuel - 1) scope s.sigType)
     (\ty2 => OkC (Just (BindingSig ty2 s.sigRef)))
 
 -- | `case` 分支的宏展开。
-expandAlts : Int -> List Alt -> Check (List Alt)
-expandAlts fuel alts =
+expandAlts : Int -> String -> List Alt -> Check (List Alt)
+expandAlts fuel scope alts =
   if fuel <= 0 then
     icFuel "macro expansion"
   else
     case alts of
       [] => OkC []
-      a :: rest => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) a.altBody) (\body2 => Vuna.Compiler.Base.Common.bind (expandAlts (fuel - 1) rest) (\rest2 => OkC ((::) (Alt a.altPat body2 a.altRef) rest2)))
+      a :: rest => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) scope a.altBody) (\body2 => Vuna.Compiler.Base.Common.bind (expandAlts (fuel - 1) scope rest) (\rest2 => OkC ((::) (Alt a.altPat body2 a.altRef) rest2)))
 
-expandClauses : Int -> List LocalClause -> Check (List LocalClause)
-expandClauses fuel clauses =
+expandClauses : Int -> String -> List LocalClause -> Check (List LocalClause)
+expandClauses fuel scope clauses =
   if fuel <= 0 then
     icFuel "macro expansion"
   else
     case clauses of
       [] => OkC []
-      clause :: rest => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) clause.lcBody) (\body2 => Vuna.Compiler.Base.Common.bind (expandClauses (fuel - 1) rest) (\rest2 => OkC ((::) (LocalClause clause.lcPats body2 clause.lcRef clause.lcHead) rest2)))
+      clause :: rest => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) scope clause.lcBody) (\body2 => Vuna.Compiler.Base.Common.bind (expandClauses (fuel - 1) scope rest) (\rest2 => OkC ((::) (LocalClause clause.lcPats body2 clause.lcRef clause.lcHead) rest2)))
 
-expandFieldExprs : Int -> List (String, Expr) -> Check (List (String, Expr))
-expandFieldExprs fuel fields =
+expandFieldExprs : Int -> String -> List (String, Expr) -> Check (List (String, Expr))
+expandFieldExprs fuel scope fields =
   if fuel <= 0 then
     icFuel "macro expansion"
   else
     case fields of
       [] => OkC []
-      (fname, value) :: rest => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) value) (\value2 => Vuna.Compiler.Base.Common.bind (expandFieldExprs (fuel - 1) rest) (\rest2 => OkC ((::) (fname, value2) rest2)))
+      (fname, value) :: rest => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) scope value) (\value2 => Vuna.Compiler.Base.Common.bind (expandFieldExprs (fuel - 1) scope rest) (\rest2 => OkC ((::) (fname, value2) rest2)))
 
-expandDoStmts : Int -> List DoStmt -> Check (List DoStmt)
-expandDoStmts fuel stmts =
+expandDoStmts : Int -> String -> List DoStmt -> Check (List DoStmt)
+expandDoStmts fuel scope stmts =
   if fuel <= 0 then
     icFuel "macro expansion"
   else
@@ -203,12 +208,12 @@ expandDoStmts fuel stmts =
       [] => OkC []
       stmt :: rest =>
         case stmt of
-          DBind pat stmtExpr sp => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) stmtExpr) (\stmtExpr2 => Vuna.Compiler.Base.Common.bind (expandDoStmts (fuel - 1) rest) (\rest2 => OkC ((::) (DBind pat stmtExpr2 sp) rest2)))
-          DExpr stmtExpr sp => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) stmtExpr) (\stmtExpr2 => Vuna.Compiler.Base.Common.bind (expandDoStmts (fuel - 1) rest) (\rest2 => OkC ((::) (DExpr stmtExpr2 sp) rest2)))
-          DLet binds sp => Vuna.Compiler.Base.Common.bind (expandPatExprs (fuel - 1) binds) (\binds2 => Vuna.Compiler.Base.Common.bind (expandDoStmts (fuel - 1) rest) (\rest2 => OkC ((::) (DLet binds2 sp) rest2)))
+          DBind pat stmtExpr sp => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) scope stmtExpr) (\stmtExpr2 => Vuna.Compiler.Base.Common.bind (expandDoStmts (fuel - 1) scope rest) (\rest2 => OkC ((::) (DBind pat stmtExpr2 sp) rest2)))
+          DExpr stmtExpr sp => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) scope stmtExpr) (\stmtExpr2 => Vuna.Compiler.Base.Common.bind (expandDoStmts (fuel - 1) scope rest) (\rest2 => OkC ((::) (DExpr stmtExpr2 sp) rest2)))
+          DLet binds sp => Vuna.Compiler.Base.Common.bind (expandPatExprs (fuel - 1) scope binds) (\binds2 => Vuna.Compiler.Base.Common.bind (expandDoStmts (fuel - 1) scope rest) (\rest2 => OkC ((::) (DLet binds2 sp) rest2)))
 
-expandInterpParts : Int -> List InterpPart -> Check (List InterpPart)
-expandInterpParts fuel parts =
+expandInterpParts : Int -> String -> List InterpPart -> Check (List InterpPart)
+expandInterpParts fuel scope parts =
   if fuel <= 0 then
     icFuel "macro expansion"
   else
@@ -216,8 +221,8 @@ expandInterpParts fuel parts =
       [] => OkC []
       part :: rest =>
         case part of
-          IPText text => Vuna.Compiler.Base.Common.bind (expandInterpParts (fuel - 1) rest) (\rest2 => OkC ((::) (IPText text) rest2))
-          IPHole holeExpr => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) holeExpr) (\holeExpr2 => Vuna.Compiler.Base.Common.bind (expandInterpParts (fuel - 1) rest) (\rest2 => OkC ((::) (IPHole holeExpr2) rest2)))
+          IPText text => Vuna.Compiler.Base.Common.bind (expandInterpParts (fuel - 1) scope rest) (\rest2 => OkC ((::) (IPText text) rest2))
+          IPHole holeExpr => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) scope holeExpr) (\holeExpr2 => Vuna.Compiler.Base.Common.bind (expandInterpParts (fuel - 1) scope rest) (\rest2 => OkC ((::) (IPHole holeExpr2) rest2)))
 
 -- ---------------------------------------------------------------
 -- 内置宏注册表与展开
@@ -235,6 +240,24 @@ internalRef name sp = EVar ("!" ++ name) sp
 debugOnRef : NodeRef -> Expr
 debugOnRef sp = EApp (internalRef debugOnIntrinsicName sp) [EInt 0 sp] sp
 
+-- | `log!` 的级别字面量 → 整数（与运行时 `dtp_log_*` 的排序一致）。
+logLevelOf : String -> Maybe Int
+logLevelOf s = lookupPair s [("error", 0), ("warn", 1), ("info", 2), ("debug", 3), ("trace", 4)]
+
+-- `log!` 的开关查询：级别 + 模块 scope。
+logOnRef : Int -> String -> NodeRef -> Expr
+logOnRef level scope sp = EApp (internalRef logOnIntrinsicName sp) [EInt level sp, EStr scope sp] sp
+
+-- | `log!` 的展开：`if @vuna@log@on level scope then @vuna@log@emit level scope msg else 0`。
+-- 关闭或 scope 被过滤时只付一次门控查询，`msg` 不求值。
+logExpand : String -> Int -> Expr -> NodeRef -> Expr
+logExpand scope level msg sp =
+  EIf
+    (logOnRef level scope sp)
+    (EApp (internalRef logEmitIntrinsicName sp) [EInt level sp, EStr scope sp, msg] sp)
+    (EInt 0 sp)
+    sp
+
 macroArityMismatch : String -> Int -> List Expr -> NodeRef -> Check Expr
 macroArityMismatch name expected args sp =
   let
@@ -244,19 +267,30 @@ macroArityMismatch name expected args sp =
 
 -- | 展开一个 `name!` 调用：未知宏 / arity 不符报 `RN_UnknownMacro` / `RN_MacroArity`。
 --
--- 内置宏清单（规范见 `docs/reference/observability.md` §4.3）：
+-- 内置宏清单（规范见 `docs/reference/logging.md` 与 `observability.md` §4.3）：
 --   * `dbg! msg`    → 既有形态，stderr 协议逐字节不变（`--debug-perf` 门控）；
+--   * `log! "level" msg` → `if @vuna@log@on level scope then @vuna@log@emit level scope msg else 0`
+--     （`scope` 是本模块名，展开期烘入；关闭或被 `VUNA_LOG_SCOPE` 过滤时 `msg` 不求值）；
 --   * `obs! msg`    → `@vuna@obs@log msg`（结构化日志事件 + 同格式 stderr 行）；
 --   * `mark! name`  → `@vuna@obs@mark name`（瞬时标记事件）。
--- 三个宏都不求值副作用以外的东西：`obs!` / `mark!` 的实参在关闭级别下**仍会求值**
--- （与 `dbg!` 不同）——它们没有布尔门控形态，因为原语本身关闭时只返回 0；要避免实参
--- 开销，用 `Base.Data.Obs.obsOn 0` 自己判。
-expandMacro : String -> List Expr -> NodeRef -> Check Expr
-expandMacro name args sp =
+-- `obs!` / `mark!` 的实参在关闭级别下**仍会求值**（与 `dbg!` / `log!` 不同）——它们没有
+-- 布尔门控形态，因为原语本身关闭时只返回 0；要避免实参开销，用 `Base.Data.Obs.obsOn 0` 自己判。
+expandMacro : String -> String -> List Expr -> NodeRef -> Check Expr
+expandMacro scope name args sp =
   if name == "dbg" then
     case args of
       [msg] => OkC (EIf (debugOnRef sp) (EApp (internalRef debugLineIntrinsicName sp) [msg] sp) (EInt 0 sp) sp)
       _ => macroArityMismatch name 1 args sp
+  else if name == "log" then
+    case args of
+      [levelExpr, msg] =>
+        case levelExpr of
+          EStr level _ =>
+            case logLevelOf level of
+              Just n => OkC (logExpand scope n msg sp)
+              Nothing => rnAt1 (nodeRefSpan sp) (LogLevelUnknown level) level
+          _ => rnAt0 (nodeRefSpan sp) LogLevelNotLiteral
+      _ => macroArityMismatch name 2 args sp
   else if name == "obs" then
     case args of
       [msg] => OkC (EApp (internalRef obsLogIntrinsicName sp) [msg] sp)

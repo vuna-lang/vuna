@@ -57,4 +57,11 @@ mkImport name = Import name False Nothing noNodeRef
 
 mkProject : List String -> Project
 mkProject imports =
-  Project [] [] [] [Module "L.A.One" "p" (map mkImport imports) [] [] [] [] [] [] emptyIndex] "p" []
+  Project
+    []
+    []
+    []
+    [Module "L.A.One" "p" (map mkImport imports) [] [] [] [] [] [] emptyIndex]
+    "p"
+    []
+    "main"

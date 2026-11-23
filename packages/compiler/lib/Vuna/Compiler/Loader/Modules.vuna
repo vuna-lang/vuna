@@ -49,6 +49,9 @@ export record Project(..) where
   projectModules : List Module
   projectEntryPkg : String
   projectEntryFixities : List FixityDecl
+  -- | 入口文件名（文件入口取 basename 去掉 `.vuna`；纯库包没有入口文件，取包名）。
+  -- 内置宏展开用它当 `log!` 的模块 scope。
+  projectEntryName : String
 
 export moduleNameOf : Module -> String
 moduleNameOf (Module n p is imps ds es fx _ _ _) = n
@@ -73,7 +76,7 @@ export moduleOpaqueOf : Module -> List String
 moduleOpaqueOf (Module n p is imps ds es fx reexports opacity _) = opacity
 
 export projectEntryAllImports : Project -> List Import
-projectEntryAllImports (Project ds is imps ms pkg fx) = append is imps
+projectEntryAllImports (Project ds is imps ms pkg fx entryName) = append is imps
 
 -- 解析期的三个命名空间，与导出表 kind 一一对应，**不拍平**。
 --   values = 值命名空间（DFun / 签名 / 实例名；导出 kind "val"）

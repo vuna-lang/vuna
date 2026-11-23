@@ -1727,6 +1727,13 @@ rtConstFalse1 =
     params = [("$p0", WvAnyRef)]
   in rtFunc "$rt_constFalse1" params [WvAnyRef] [] (boolValue False)
 
+-- | `@vuna@log@on`：2 元常量 False（文本日志在 wasm 上恒关）。
+rtConstFalse2 : WatFunc
+rtConstFalse2 =
+  let
+    params = [("$p0", WvAnyRef), ("$p1", WvAnyRef)]
+  in rtFunc "$rt_constFalse2" params [WvAnyRef] [] (boolValue False)
+
 -- | 三向比较基元（-1 / 0 / 1）；`$rt_compare` 与字符串/数组比较共用。
 --   `i32.sub` 是「先压的减后压的」，所以先算 `x > y`、再算 `x < y`。
 rtCmpI32 : WatFunc
@@ -1790,6 +1797,12 @@ rtBoxZero2 =
   let
     params = [("$p0", WvAnyRef), ("$p1", WvAnyRef)]
   in rtFunc "$rt_boxZero2" params [WvAnyRef] [] [IConstI64 0, IStructNew "$int"]
+
+rtBoxZero3 : WatFunc
+rtBoxZero3 =
+  let
+    params = [("$p0", WvAnyRef), ("$p1", WvAnyRef), ("$p2", WvAnyRef)]
+  in rtFunc "$rt_boxZero3" params [WvAnyRef] [] [IConstI64 0, IStructNew "$int"]
 
 -- | 未实现的宿主操作：按 arity 生成显式失败函数（不伪造结果）。
 rtHostTrap : RtConsts -> Int -> WatFunc
@@ -2029,6 +2042,8 @@ rtFunctions c =
     rtBoxZero,
     rtConstFalse1,
     rtBoxZero2,
+    rtConstFalse2,
+    rtBoxZero3,
     rtCleanupPush,
     rtCleanupPop,
     rtHostTrap c 0,
@@ -2092,6 +2107,8 @@ rtImplOf "@ir@showBool" = RtFunc 1 "$rt_showBool"
 rtImplOf "@ir@showStr" = RtFunc 1 "$rt_showStr"
 rtImplOf "@vuna@debug@on" = RtFunc 1 "$rt_constFalse1"
 rtImplOf "@vuna@debug@line" = RtFunc 1 "$rt_boxZero"
+rtImplOf "@vuna@log@on" = RtFunc 2 "$rt_constFalse2"
+rtImplOf "@vuna@log@emit" = RtFunc 3 "$rt_boxZero3"
 rtImplOf "@vuna@obs@level" = RtFunc 1 "$rt_boxZero"
 rtImplOf "@vuna@obs@log" = RtFunc 1 "$rt_boxZero"
 rtImplOf "@vuna@obs@counter" = RtFunc 2 "$rt_boxZero2"

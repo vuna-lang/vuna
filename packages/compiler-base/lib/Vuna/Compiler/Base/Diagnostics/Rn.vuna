@@ -41,6 +41,10 @@ export data RnErr(..) : Nat -> Type where
   UnknownVariable : String -> RnErr (Succ Zero)
   -- | 内置宏调用用了未注册的宏名。
   UnknownMacro : String -> RnErr (Succ Zero)
+  -- | `log!` 的级别不在 `error` / `warn` / `info` / `debug` / `trace` 里。
+  LogLevelUnknown : String -> RnErr (Succ Zero)
+  -- | `log!` 的级别必须是字符串字面量。
+  LogLevelNotLiteral : RnErr Zero
   AmbiguousPrelude : String -> RnErr (Succ Zero)
   -- arity 2
   AmbiguousConstructor : String -> String -> RnErr (Succ (Succ Zero))
@@ -77,6 +81,8 @@ rnCode (UnknownType _) = "RN_UnknownType"
 rnCode (UnknownFixity _) = "RN_UnknownFixity"
 rnCode (UnknownVariable _) = "RN_UnknownVariable"
 rnCode (UnknownMacro _) = "RN_UnknownMacro"
+rnCode (LogLevelUnknown _) = "RN_LogLevelUnknown"
+rnCode LogLevelNotLiteral = "RN_LogLevelNotLiteral"
 rnCode (AmbiguousPrelude _) = "RN_AmbiguousPrelude"
 rnCode (AmbiguousConstructor _ _) = "RN_AmbiguousConstructor"
 rnCode (AmbiguousConstructorInExport _ _) = "RN_AmbiguousConstructorInExport"
@@ -113,6 +119,9 @@ rnTemplate (BuiltinFixity _) =
   "the fixity of built-in operator <0> is fixed by the compiler (remove the declaration)"
 rnTemplate (UnknownVariable _) = "unbound variable <0>"
 rnTemplate (UnknownMacro _) = "unknown macro <0>"
+rnTemplate (LogLevelUnknown _) =
+  "unknown log level <0> (expected error, warn, info, debug, or trace)"
+rnTemplate LogLevelNotLiteral = "log! level must be a string literal"
 rnTemplate (AmbiguousPrelude _) = "ambiguous implicit Prelude (found in: <0>)"
 rnTemplate (AmbiguousConstructor _ _) = "ambiguous constructor <0> (qualify it as <1>)"
 rnTemplate (AmbiguousConstructorInExport _ _) =
@@ -235,6 +244,11 @@ rnAll =
       "内建运算符 fixity 由编译器固定",
     RnEntry (rnCode (UnknownVariable "")) (rnTemplate (UnknownVariable "")) "未绑定变量",
     RnEntry (rnCode (UnknownMacro "")) (rnTemplate (UnknownMacro "")) "未知宏",
+    RnEntry (rnCode (LogLevelUnknown "")) (rnTemplate (LogLevelUnknown "")) "未知日志级别",
+    RnEntry
+      (rnCode LogLevelNotLiteral)
+      (rnTemplate LogLevelNotLiteral)
+      "日志级别必须是字符串字面量",
     RnEntry
       (rnCode (AmbiguousPrelude ""))
       (rnTemplate (AmbiguousPrelude ""))

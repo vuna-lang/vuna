@@ -2741,6 +2741,8 @@ pureRtLabels =
     nativeRtLabel "obs_sample_stop",
     nativeRtLabel "debug_on",
     nativeRtLabel "debug_line",
+    nativeRtLabel "log_on",
+    nativeRtLabel "log_emit",
     nativeRtLabel "effect_id",
     nativeRtLabel "print_int",
     nativeRtLabel "print_bool",
