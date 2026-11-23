@@ -358,7 +358,24 @@ doStmtAnchors (DExpr value r) = r :: exprAnchors value
 doStmtAnchors (DLet binds r) =
   r :: append (map bindingAnchor binds) (concatMap bindingValueAnchors binds)
 
--- | 内部：表达式里可挂注释的条目（let 绑定、case 分支、do 语句、签名行等），按源码顺序。
+-- | 内部：handle 块 `return` 子句的锚点（没有 return 子句时是哨兵 `EVar`）。
+retClauseAnchor : Expr -> List NodeRef
+retClauseAnchor (ELam _ _ r) = [r]
+retClauseAnchor _ = []
+
+-- | 内部：应用头若 `handle` 合成标记，取其 `return` 子句的锚点。
+appHandleRetAnchors : Expr -> List Expr -> List NodeRef
+appHandleRetAnchors (EVar name _) args =
+  if isHandleSyntax name then
+    case args of
+      [_, ret, _] => retClauseAnchor ret
+      _ => []
+  else
+    []
+appHandleRetAnchors _ args = []
+
+-- | 内部：表达式里可挂注释的条目（let 绑定、case 分支、do 语句、签名行、局部函数子句、
+-- handle 子句等），按源码顺序。
 exprAnchors : Expr -> List NodeRef
 exprAnchors e =
   case e of
@@ -367,7 +384,10 @@ exprAnchors e =
     EStr s _ => []
     EFloat raw _ => []
     ELam ps body _ => exprAnchors body
-    EApp fn args _ => append (exprAnchors fn) (concatMap exprAnchors args)
+    -- `handle` 块是 parser 合成结构：`return` 子句的 λ 携带子句节点（额外锚点），
+    -- op 子句的模式是合成 `case` 的 alt 模式；其余照常递归。
+    EApp fn args _ =>
+      append (appHandleRetAnchors fn args) (append (exprAnchors fn) (concatMap exprAnchors args))
     EPi name implicit _ dom cod _ => append (exprAnchors dom) (exprAnchors cod)
     ELet binds body rec_ _ =>
       append
@@ -403,7 +423,7 @@ interpPartAnchors (IPHole e) = exprAnchors e
 
 -- | 内部：局部函数 clause 的锚点（子句节点 + 体里的表达式锚点）。
 localClauseAnchors : LocalClause -> List NodeRef
-localClauseAnchors clause = (::) clause.lcRef (exprAnchors clause.lcBody)
+localClauseAnchors (LocalClause pats body r head) = (::) r (exprAnchors body)
 
 -- | 收集整个文件的注释锚点（源码顺序的节点身份）：模块头 / 导出项 / import /
 -- `infix*` 声明 / 声明及其内部条目。锚点集合就是渲染器的挂载点；渲染时用同一个

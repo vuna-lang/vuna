@@ -2179,9 +2179,9 @@ parsePerform fuel st blockCol =
 data HandleOp : Type where
   HandleOp : String -> List Pat -> NodeRef -> String -> Expr -> HandleOp
 
--- | `handle` 块：可选 return 子句（binder 名 + 体 + span）与 op 子句列表。
+-- | `handle` 块：可选 return 子句（binder 名 + 体 + 该子句的 `alt` 节点）与 op 子句列表。
 data HandleBlock : Type where
-  HandleBlock : Maybe (String, Expr, Span) -> List HandleOp -> HandleBlock
+  HandleBlock : Maybe (String, Expr, NodeRef) -> List HandleOp -> HandleBlock
 
 -- | `handle` 块合成的 op λ 的 scrutinee binder 名（保留名，用户写不出）。
 handleOpBinder : String
@@ -2253,7 +2253,7 @@ isReturnClauseHead stat =
     _ => False
 
 -- | handle 子句循环：同列续行；遇 `}` 或缩进回退结束。
-parseHandleClauses : Int -> PState -> Int -> Maybe (String, Expr, Span) -> List HandleOp -> Check ((Maybe (String, Expr, Span), List HandleOp), PState)
+parseHandleClauses : Int -> PState -> Int -> Maybe (String, Expr, NodeRef) -> List HandleOp -> Check ((Maybe (String, Expr, NodeRef), List HandleOp), PState)
 parseHandleClauses fuel st clauseCol retOpt acc =
   if fuel <= 0 then
     icFuel "parser"
@@ -2282,15 +2282,16 @@ parseHandleClauses fuel st clauseCol retOpt acc =
         else
           OkC ((retOpt, reverse acc), st)
 
--- | 解析 `return x -> body` 子句。
-parseHandleRetClause : Int -> PState -> Int -> Check ((String, Expr, Span), PState)
+-- | 解析 `return x -> body` 子句（子句自身是 `alt` 节点：注释挂载点）。
+parseHandleRetClause : Int -> PState -> Int -> Check ((String, Expr, NodeRef), PState)
 parseHandleRetClause fuel st clauseCol =
   if fuel <= 0 then
     icFuel "parser"
   else
-    Vuna.Compiler.Base.Common.step
-      (expectIdent st)
-      (\_kw, st0 => Vuna.Compiler.Base.Common.step (expectIdent st0) (\x, st1 => Vuna.Compiler.Base.Common.bind (expectSym st1 "->") (\st2 => Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st2 clauseCol) (\body, st3 => OkC ((x, body, spanOf st st3), st3)))))
+    withExtent
+      CstAltKind
+      st
+      (\st0 => Vuna.Compiler.Base.Common.step (expectIdent st0) (\_kw, st1 => Vuna.Compiler.Base.Common.step (expectIdent st1) (\x, st2 => Vuna.Compiler.Base.Common.bind (expectSym st2 "->") (\st3 => Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st3 clauseCol) (\body, st4 => OkC ((x, body, NodeRef st0.openNodeId (spanOf st0 st4)), st4))))))
 
 -- | 解析一个 op 子句头：构造子模式 + 尾部续延 binder（`_` 允许，统一成 `_`）。
 parseHandleOpClause : Int -> PState -> Int -> Check (HandleOp, PState)
@@ -2342,9 +2343,9 @@ handleAlt : HandleOp -> (Pat, Expr)
 handleAlt (HandleOp cname pats psp _ body) = (PCon cname pats psp, body)
 
 -- | ret 实参表达式（缺 return 子句时用哨兵）。
-handleRetExpr : Maybe (String, Expr, Span) -> NodeRef -> Expr
+handleRetExpr : Maybe (String, Expr, NodeRef) -> NodeRef -> Expr
 handleRetExpr Nothing sp = EVar handleNoRetSyntax sp
-handleRetExpr (Just (x, body, rsp)) sp = ELam [(x, rsp)] body sp
+handleRetExpr (Just (x, body, retRef)) sp = ELam [(x, nodeRefSpan retRef)] body retRef
 
 -- | 合成 op λ：`\o, k => case o of alts`。
 handleOpLam : List HandleOp -> String -> NodeRef -> Expr

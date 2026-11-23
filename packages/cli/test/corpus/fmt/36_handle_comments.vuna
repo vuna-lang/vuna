@@ -1,0 +1,18 @@
+module T where
+
+-- handle 块的 return / op 子句各自带注释。
+f : Int
+f =
+  handle (pure 1) {
+    -- return 前置
+    return x -> x -- return 行尾
+    -- op 前置
+    Print s k -> k 0 -- op 行尾
+  }
+
+g : Int
+g =
+  handle (pure 2) {
+    -- 没有 return 子句
+    Print s k -> k 0
+  }

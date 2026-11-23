@@ -1,4 +1,4 @@
--- | 格式化器共用的行/字符串小工具与行宽常量（无 AST 逻辑），供 [Vuna.Fmt.Expr]、
+-- | 格式化器共用的行/字符串小工具、行宽常量与语法糖标记分解，供 [Vuna.Fmt.Expr]、
 -- [Vuna.Fmt.Comment]、[Vuna.Fmt.Decl] 与门面 [Vuna.Fmt] 共用。
 module Vuna.Fmt.Util where
 
@@ -8,6 +8,13 @@ import Vuna.Compiler.Frontend.Ast
 -- ---------------------------------------------------------------
 -- 行 / 字符串小工具
 -- ---------------------------------------------------------------
+-- | `handle comp { ... }` 的合成标记分解（`@vuna@handle` + `[comp, ret, opH]`）；
+-- 不是 handle 块时 `Nothing`。
+export handleParts : Expr -> Maybe (Expr, Expr, Expr)
+handleParts (EApp (EVar name _) ([comp, ret, opH]) _) =
+  if isHandleSyntax name then Just (comp, ret, opH) else Nothing
+handleParts _ = Nothing
+
 -- | `n` 个空格；`n <= 0` 时为空串。
 export spaces : Int -> String
 spaces n = if n <= 0 then "" else " ${spaces (n - 1)}"

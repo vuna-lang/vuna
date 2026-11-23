@@ -427,11 +427,6 @@ appAtParts _ = Nothing
 
 -- | 内部：`handle` 标记的 (comp, (ret, op handler))。编码见 `Frontend/Ast.handleSyntax`：
 -- `EApp (EVar "@vuna@handle") [comp, ret, opH]`；ret 缺失时是哨兵。
-handleParts : Expr -> Maybe (Expr, Expr, Expr)
-handleParts (EApp (EVar name _) ([comp, ret, opH]) _) =
-  if isHandleSyntax name then Just (comp, ret, opH) else Nothing
-handleParts _ = Nothing
-
 -- | 内部：handle 子句模式的逐项渲染（无前导空格）。合成形态把结果索引与续延 binder 拆成了
 -- λ 的前两个参数，所以 alt 的 pattern 就是构造子的全部实参；续延名由调用方另行拼上。
 renderHandlePats : Int -> List Pat -> String
@@ -1282,7 +1277,7 @@ handleDoc fuel env at comp ret op =
       headD = appendDoc (text "handle ") (appendDoc (handleCompDoc (fuel - 1) env at comp) (text " {"))
       retDs =
         case ret of
-          ELam ([(x, _)]) body _ => [handleRetDoc (fuel - 1) env at x body]
+          ELam ([(x, _)]) body r => [handleRetDoc (fuel - 1) env at x body r]
           _ => []
       opDs =
         case op of
@@ -1305,14 +1300,16 @@ handleCompDoc fuel env at comp =
       EParen e _ => parenInlineOrBlock (fuel - 1) env at e
       _ => parenInlineOrBlock (fuel - 1) env at comp
 
--- | 内部：`return x -> body` 子句。
-handleRetDoc : Int -> List FixityDecl -> TriviaCtx -> String -> Expr -> Doc
-handleRetDoc fuel env at x body =
+-- | 内部：`return x -> body` 子句（注释挂在子句的 `alt` 节点上）。
+handleRetDoc : Int -> List FixityDecl -> TriviaCtx -> String -> Expr -> NodeRef -> Doc
+handleRetDoc fuel env at x body r =
   if fuel <= 0 then
     empty
   else
-    group
-      (appendDoc (text ("return " ++ x ++ " ->")) (nest 2 (appendDoc line (exprDoc (fuel - 1) env at body))))
+    attachAt
+      at
+      r
+      (group (appendDoc (text ("return " ++ x ++ " ->")) (nest 2 (appendDoc line (exprDoc (fuel - 1) env at body)))))
 
 -- | 内部：operator handler 子句 `Op p1 p2 k -> body`。
 handleAltDoc : Int -> List FixityDecl -> TriviaCtx -> String -> (Pat, Expr) -> Doc
@@ -1328,7 +1325,7 @@ handleAltDoc fuel env at k (pat, body) =
       cname = firstOf parts
       patsTxt = secondOf parts
       headText = if patsTxt == "" then "${cname} ${k} ->" else "${cname} ${patsTxt} ${k} ->"
-    in group (appendDoc (text headText) (nest 2 (appendDoc line (exprDoc (fuel - 1) env at body))))
+    in attachAt at (patRef pat) (group (appendDoc (text headText) (nest 2 (appendDoc line (exprDoc (fuel - 1) env at body)))))
 
 -- | 内部：Pi 类型 `(x : A) -> B` / 隐式 `{x : A} -> B`。
 piDoc : Int -> List FixityDecl -> TriviaCtx -> Maybe Qty -> Bool -> String -> Expr -> Expr -> Doc

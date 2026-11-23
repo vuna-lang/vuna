@@ -189,10 +189,11 @@ isPerformSyntax name = name == performSyntax
 -- `handle <comp> { ... }` 的保留名编码。parser 产出
 -- `EApp (EVar "@vuna@handle") [comp, ret, opH]`：
 --   * `comp` 是被 handler 包裹的动作；
---   * `ret` 是 `ELam [x] body`；没有 return 子句时是哨兵 `EVar "@vuna@handle@noret"`
---     （Fmt 据此不打印 return 子句）；
---   * `opH` 是 `ELam [o, k] (ECase (EVar o) alts)`：每个 alt 的 pattern 只含构造子实参，
---     续延 binder `k` 是 λ 的第二个参数（同一 handle 块的所有 op 子句共用这个名字）。
+--   * `ret` 是 `ELam [x] body`（λ 的 `NodeRef` 是 return 子句的 `alt` 节点）；没有
+--     return 子句时是哨兵 `EVar "@vuna@handle@noret"`（Fmt 据此不打印 return 子句）；
+--   * `opH` 是 `ELam [o, k] (ECase (EVar o) alts)`：每个 alt 的 pattern 只含构造子实参
+--     （pattern 的 `NodeRef` 是该子句的模式节点，注释挂载点），续延 binder `k` 是 λ 的
+--     第二个参数（同一 handle 块的所有 op 子句共用这个名字）。
 -- Elab 从 clause 构造子推 op 族，再降级到 `Base.Effect.Core.handleWith`。
 -- | `handle <comp> { ... }` 的保留名（parser 产出、Elab 展开）。
 export handleSyntax : String
