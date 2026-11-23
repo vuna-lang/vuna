@@ -297,23 +297,9 @@ effMainRunName = "Base.Effect.Core.runMain"
 --   * `assert cond "msg" x`：debug-only；失败走 failwith（main 钩子渲染），release
 --     构建由 `Loader.Resolve` 拒绝；
 --   * `todo "msg"`：debug-only 的未实现占位，语义同 assert(False, msg)。
--- 用户面调试输出统一走内置宏 `dbg!`（见下方编译器 tracing 段）；`DebugShow` / `dbgShow`
--- 是 `Base.Trait.Show` 里基于 `dbg!` 的库层。
+-- 用户面调试输出统一走内置宏 `log!`（见 `docs/reference/logging.md`）；`DebugShow` / `dbgShow`
+-- 是 `Base.Trait.Show` 里基于 `log! "debug"` 的库层。
 -- ---------------------------------------------------------------
--- 编译器 tracing（内置宏 `dbg!` 的隐藏后端）
--- ---------------------------------------------------------------
--- 这两个名字只由 `Loader.Expand` 展开 `dbg!` 时引用：它们以 `@vuna@` 开头，
--- `Loader.Resolve` 作为内部名直通，`Elab.Prelude` 提供签名，`Target.Ocaml.Term` 映射到
--- 生成的 `Vuna_runtime`；`visible = False`，源码写不出来。
--- 用哑 `Int` 实参承载开关查询，避免在源码层出现「纯 Bool 值读取进程配置」的形态。
--- | `dbg!` 的开关查询原语（`--debug-perf` / `VUNA_DEBUG_PERF=1`）。
-export debugOnIntrinsicName : String
-debugOnIntrinsicName = "@vuna@debug@on"
-
--- | `dbg!` 的发射原语（带时间戳写 stderr，返回 0）。
-export debugLineIntrinsicName : String
-debugLineIntrinsicName = "@vuna@debug@line"
-
 -- ---------------------------------------------------------------
 -- 文本日志（`log!`）隐藏原语
 -- ---------------------------------------------------------------
@@ -334,7 +320,7 @@ logEmitIntrinsicName = "@vuna@log@emit"
 -- ---------------------------------------------------------------
 -- 可观测性（`obs`）隐藏原语
 -- ---------------------------------------------------------------
--- 规范见 `docs/reference/observability.md`。与 `dbg!` 同一策略：`@vuna@` 前缀 ⇒
+-- 规范见 `docs/reference/observability.md`。与文本日志同一策略：`@vuna@` 前缀 ⇒
 -- `Loader.Resolve` 直通、`Elab.Prelude` 只补签名（用户源码写不出来）、`Core.Eval`
 -- 归约成 no-op、`Ir.Runtime` 契约 + `Target.Ocaml.Runtime` 表 + `Target.Ocaml.Term` 运行时文本
 -- 三处对齐（漏一处 `checkRuntimeContract` 直接报内部错）。
@@ -356,10 +342,6 @@ obsSpanIntrinsicName = "@vuna@obs@span"
 -- 逐定义 span 需要把定义名放进 `args.def`（规范 §3.2），label 就是这个位置。
 export obsSpanLabIntrinsicName : String
 obsSpanLabIntrinsicName = "@vuna@obs@spanLab"
-
--- | 日志事件（`args.text`；开 `--debug-perf` 时同时写既有 stderr 行）。
-export obsLogIntrinsicName : String
-obsLogIntrinsicName = "@vuna@obs@log"
 
 -- | 计数器事件（`args.value`）。
 export obsCounterIntrinsicName : String
@@ -1243,31 +1225,29 @@ effIntrinsics =
     Intrinsic "@vuna@prim_eff_execPath" (IEff IStr) OpNone False
   ]
 
--- | 编译器 tracing / 文本日志 / 可观测性的隐藏原语（`visible = False`）：只由内置宏
--- `dbg!` / `log!` / `obs!` / `mark!` 展开与 `Base.Data.Obs` 引用，用户源码不可写。签名在此表；
+-- | 文本日志 / 可观测性的隐藏原语（`visible = False`）：只由内置宏 `log!` / `mark!`
+-- 展开与 `Base.Data.Obs` 引用，用户源码不可写。签名在此表；
 -- `Elab.Prelude` 会把它们补进 prelude globals（不进用户可见名单），`Core.Eval`
 -- 在 interp 里归约为 no-op。
 export internalIntrinsics : List Intrinsic
 internalIntrinsics =
   append
-    [Intrinsic debugOnIntrinsicName (IFun IInt IBool) OpNone False, Intrinsic debugLineIntrinsicName (IFun IStr IInt) OpNone False, Intrinsic logOnIntrinsicName (IFun IInt (IFun IStr IBool)) OpNone False, Intrinsic logEmitIntrinsicName (IFun IInt (IFun IStr (IFun IStr IInt))) OpNone False, Intrinsic obsLevelIntrinsicName (IFun IInt IInt) OpNone False, Intrinsic obsSpanIntrinsicName (IPi "a" (IFun IStr (IFun IStr (IFun (IFun IInt (IVar "a")) (IVar "a"))))) OpNone False, Intrinsic obsSpanLabIntrinsicName (IPi "a" (IFun IStr (IFun IStr (IFun IStr (IFun (IFun IInt (IVar "a")) (IVar "a")))))) OpNone False, Intrinsic obsLogIntrinsicName (IFun IStr IInt) OpNone False, Intrinsic obsCounterIntrinsicName (IFun IStr (IFun IInt IInt)) OpNone False, Intrinsic obsMarkIntrinsicName (IFun IStr IInt) OpNone False, Intrinsic obsSpanBeginIntrinsicName (IFun IStr (IFun IStr IInt)) OpNone False, Intrinsic obsSpanEndIntrinsicName (IFun IInt IInt) OpNone False, Intrinsic obsSampleStartIntrinsicName (IFun IStr (IFun IInt IInt)) OpNone False, Intrinsic obsSampleStopIntrinsicName (IFun IInt IInt) OpNone False]
+    [Intrinsic logOnIntrinsicName (IFun IInt (IFun IStr IBool)) OpNone False, Intrinsic logEmitIntrinsicName (IFun IInt (IFun IStr (IFun IStr IInt))) OpNone False, Intrinsic obsLevelIntrinsicName (IFun IInt IInt) OpNone False, Intrinsic obsSpanIntrinsicName (IPi "a" (IFun IStr (IFun IStr (IFun (IFun IInt (IVar "a")) (IVar "a"))))) OpNone False, Intrinsic obsSpanLabIntrinsicName (IPi "a" (IFun IStr (IFun IStr (IFun IStr (IFun (IFun IInt (IVar "a")) (IVar "a")))))) OpNone False, Intrinsic obsCounterIntrinsicName (IFun IStr (IFun IInt IInt)) OpNone False, Intrinsic obsMarkIntrinsicName (IFun IStr IInt) OpNone False, Intrinsic obsSpanBeginIntrinsicName (IFun IStr (IFun IStr IInt)) OpNone False, Intrinsic obsSpanEndIntrinsicName (IFun IInt IInt) OpNone False, Intrinsic obsSampleStartIntrinsicName (IFun IStr (IFun IInt IInt)) OpNone False, Intrinsic obsSampleStopIntrinsicName (IFun IInt IInt) OpNone False]
     (filter (\i => not (intrinsicVisible i)) effIntrinsics)
 
--- | 文本日志 / 编译器 tracing 原语名：codegen 据此按需追加文本日志 runtime（`usesTrace`）。
+-- | 文本日志原语名：codegen 据此按需追加文本日志 runtime（`usesTrace`）。
 export logIntrinsicNames : List String
-logIntrinsicNames =
-  [debugOnIntrinsicName, debugLineIntrinsicName, logOnIntrinsicName, logEmitIntrinsicName]
+logIntrinsicNames = [logOnIntrinsicName, logEmitIntrinsicName]
 
 -- | 可观测性原语名：codegen 据此按需追加 obs runtime 文本（`usesObs`）。
 --
--- `obs` 与 `log` 分开：`dbg!` / `log!` 的程序不该为此背上事件缓冲/文件 sink 的代码，反之亦然。
+-- `obs` 与 `log` 分开：`log!` 的程序不该为此背上事件缓冲/文件 sink 的代码，反之亦然。
 export obsIntrinsicNames : List String
 obsIntrinsicNames =
   [
     obsLevelIntrinsicName,
     obsSpanIntrinsicName,
     obsSpanLabIntrinsicName,
-    obsLogIntrinsicName,
     obsCounterIntrinsicName,
     obsMarkIntrinsicName,
     obsSpanBeginIntrinsicName,

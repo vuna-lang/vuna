@@ -84,7 +84,7 @@ two = one + one
 EOF
 
 # 1) 首次构建：图节点未命中 → 建索引、写 blob。
-first=$( cd "$ws" && VUNA_DEBUG_PERF=1 "$VUNA" map 2>&1 )
+first=$( cd "$ws" && VUNA_LOG=debug "$VUNA" map 2>&1 )
 check_eq "index first map exit" "0" "$?"
 check_contains "index first map builds" "$first" "index-path=build"
 check_contains "index map output" "$first" "Demo.A"
@@ -100,7 +100,7 @@ check_contains "api 模块 docstring 保留多行" "$api_out" "second module doc
 # 2) 第二次 map：节点命中（读 blob 解码），blob 集合与字节数不变。
 before_count=$(blobs | wc -l | tr -d ' ')
 before_size=$(wc -c < "$blob" | tr -d ' ')
-second=$( cd "$ws" && VUNA_DEBUG_PERF=1 "$VUNA" map 2>&1 )
+second=$( cd "$ws" && VUNA_LOG=debug "$VUNA" map 2>&1 )
 check_eq "index second map exit" "0" "$?"
 check_contains "index cache hit" "$second" "index-path=cache"
 check_eq "index cache hit keeps blob count" "$before_count" "$(blobs | wc -l | tr -d ' ')"
@@ -111,12 +111,12 @@ check_contains "模块 docstring 经 payload 编解码仍在" "$(cd "$ws" && "$V
 cp -p "$ws/lib/Demo/A.vuna" "$tmp/A.bak"
 sed -i '5s/for/Xor/' "$ws/lib/Demo/A.vuna"
 touch -r "$tmp/A.bak" "$ws/lib/Demo/A.vuna"
-changed=$( cd "$ws" && VUNA_DEBUG_PERF=1 "$VUNA" map 2>&1 )
+changed=$( cd "$ws" && VUNA_LOG=debug "$VUNA" map 2>&1 )
 check_eq "index content-change map exit" "0" "$?"
 check_contains "index content change rebuilds" "$changed" "index-path=build"
 check_contains "index symbols updated with content" "$(cd "$ws" && "$VUNA" api Demo.A 2>&1)" "Xor"
 cp -p "$tmp/A.bak" "$ws/lib/Demo/A.vuna"
-restored=$( cd "$ws" && VUNA_DEBUG_PERF=1 "$VUNA" map 2>&1 )
+restored=$( cd "$ws" && VUNA_LOG=debug "$VUNA" map 2>&1 )
 check_eq "index restored content map exit" "0" "$?"
 # 输入寻址：内容 A → B → A 时 A 的对象仍在（不随"最近一次"覆盖），恢复后直接命中。
 check_contains "index restored content hits" "$restored" "index-path=cache"
@@ -128,13 +128,13 @@ check_contains "index restored content hits" "$restored" "index-path=cache"
 #    [index-payl]`）。改为按 codec 挑出被重写的那份 index-payload blob，并用一次
 #    后续 map 验证节点仍能命中（命中路径会校验 framing）。
 for f in $(blobs); do head -c 64 "$f" > "$f.part"; mv "$f.part" "$f"; done
-rebuilt=$( cd "$ws" && VUNA_DEBUG_PERF=1 "$VUNA" map 2>&1 )
+rebuilt=$( cd "$ws" && VUNA_LOG=debug "$VUNA" map 2>&1 )
 check_eq "index truncated-blob map exit" "0" "$?"
 check_contains "index truncated blob rebuild" "$rebuilt" "index-path=build"
 n_blob=$(for f in $(blobs); do [ "$(head -1 "$f" | cut -d'|' -f3)" = "index-payload 2" ] && printf '%s\n' "$f"; done | head -1)
 if [ -n "$n_blob" ]; then ok; else bad "index truncated blob not reframed (no valid index-payload blob)"; fi
 check_eq "index blob reframed magic" "vuna-cache-frame 2" "$(head -c 18 "$n_blob" 2>/dev/null)"
-check_contains "index reframed blob reusable" "$( cd "$ws" && VUNA_DEBUG_PERF=1 "$VUNA" map 2>&1 )" "index-path=cache"
+check_contains "index reframed blob reusable" "$( cd "$ws" && VUNA_LOG=debug "$VUNA" map 2>&1 )" "index-path=cache"
 
 # 5) 并发两个 map：都成功，随后缓存可读。
 ( cd "$ws" && "$VUNA" map >/dev/null 2>&1; echo $? >"$tmp/c1" ) &
@@ -142,7 +142,7 @@ check_contains "index reframed blob reusable" "$( cd "$ws" && VUNA_DEBUG_PERF=1 
 wait
 check_eq "index concurrent map 1 exit" "0" "$(cat "$tmp/c1" 2>/dev/null)"
 check_eq "index concurrent map 2 exit" "0" "$(cat "$tmp/c2" 2>/dev/null)"
-check_contains "index concurrent cache readable" "$( cd "$ws" && VUNA_DEBUG_PERF=1 "$VUNA" map 2>&1 )" "index-path=cache"
+check_contains "index concurrent cache readable" "$( cd "$ws" && VUNA_LOG=debug "$VUNA" map 2>&1 )" "index-path=cache"
 
 # 6) 非 workspace：可读错误 + 非 0。
 mkdir -p "$tmp/empty"

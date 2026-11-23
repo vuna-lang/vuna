@@ -5,7 +5,7 @@
 run: sh -c 'rm -rf "$TMPDIR/44b-store"'
 run: sh -c 'VUNA_STORE="$TMPDIR/44b-store" "$VUNA" check "$VUNA_BASE"'
 run: sh -c 'VUNA_STORE="$TMPDIR/44b-store" "$VUNA" check $VUNA_SUITE_ROOT/packages/cli/test/corpus/packages/m34_summary/dep'
-run: VUNA_STORE="$TMPDIR/44b-store" "$VUNA" check $VUNA_SUITE_ROOT/packages/cli/test/corpus/packages/m34_summary/root --debug-perf
+run: VUNA_STORE="$TMPDIR/44b-store" VUNA_LOG=debug "$VUNA" check $VUNA_SUITE_ROOT/packages/cli/test/corpus/packages/m34_summary/root
 exit: 0
 # 44b-2) 对象库冷/热：删掉整个 store 后重跑根包，仍然通过（对象全部按 miss 重建）。
 run: sh -c 'rm -rf "$TMPDIR/44b-store2" "$TMPDIR/44b-cache2"; export VUNA_STORE="$TMPDIR/44b-store2" TMPDIR="$TMPDIR/44b-cache2"; "$VUNA" check "$VUNA_BASE" && "$VUNA" check $VUNA_SUITE_ROOT/packages/cli/test/corpus/packages/m34_summary/dep && "$VUNA" check $VUNA_SUITE_ROOT/packages/cli/test/corpus/packages/m34_summary/root'

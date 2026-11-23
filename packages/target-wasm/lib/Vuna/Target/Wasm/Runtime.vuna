@@ -1720,13 +1720,6 @@ rtBoxZero =
     params = [("$p0", WvAnyRef)]
   in rtFunc "$rt_boxZero" params [WvAnyRef] [] [IConstI64 0, IStructNew "$int"]
 
--- | `@vuna@debug@on`：1 元常量 False（`dbg!` 的开关在 wasm 上恒关）。
-rtConstFalse1 : WatFunc
-rtConstFalse1 =
-  let
-    params = [("$p0", WvAnyRef)]
-  in rtFunc "$rt_constFalse1" params [WvAnyRef] [] (boolValue False)
-
 -- | `@vuna@log@on`：2 元常量 False（文本日志在 wasm 上恒关）。
 rtConstFalse2 : WatFunc
 rtConstFalse2 =
@@ -2040,7 +2033,6 @@ rtFunctions c =
     rtEqStr,
     rtNeqStr,
     rtBoxZero,
-    rtConstFalse1,
     rtBoxZero2,
     rtConstFalse2,
     rtBoxZero3,
@@ -2105,12 +2097,9 @@ rtImplOf "@ir@showInt" = RtFunc 1 "$rt_strFromInt"
 rtImplOf "@ir@showNat" = RtFunc 1 "$rt_strFromInt"
 rtImplOf "@ir@showBool" = RtFunc 1 "$rt_showBool"
 rtImplOf "@ir@showStr" = RtFunc 1 "$rt_showStr"
-rtImplOf "@vuna@debug@on" = RtFunc 1 "$rt_constFalse1"
-rtImplOf "@vuna@debug@line" = RtFunc 1 "$rt_boxZero"
 rtImplOf "@vuna@log@on" = RtFunc 2 "$rt_constFalse2"
 rtImplOf "@vuna@log@emit" = RtFunc 3 "$rt_boxZero3"
 rtImplOf "@vuna@obs@level" = RtFunc 1 "$rt_boxZero"
-rtImplOf "@vuna@obs@log" = RtFunc 1 "$rt_boxZero"
 rtImplOf "@vuna@obs@counter" = RtFunc 2 "$rt_boxZero2"
 rtImplOf "@vuna@obs@mark" = RtFunc 1 "$rt_boxZero"
 rtImplOf "@vuna@obs@spanBegin" = RtFunc 2 "$rt_boxZero2"

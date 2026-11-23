@@ -30,7 +30,7 @@ import Vuna.Compiler.Base.Obs
 import Vuna.Compiler.Frontend.Rast
 import Vuna.Compiler.Frontend.Rast.Name
 
--- 计数器渲染（仅 `--debug-perf` 的规模行使用）：稳定顺序便于逐行 diff。
+-- 计数器渲染（仅 `VUNA_LOG=debug` 的规模行使用）：稳定顺序便于逐行 diff。
 showCounters : List String -> String
 showCounters names =
   join
@@ -1054,7 +1054,7 @@ elabProgramCoreWithAux recover startEc startGlobals records decls =
                                                                   ec3 = obsPure "vuna.elab.dictfix" (\_ => resolveDictGoalsFix globals ec3a 8)
                                                                   defs = obsPure "vuna.elab.rezonk" (\_ => rezonkDefs ec3 defs0)
                                                                   _ = log! "info" "bodies-done g=${length globals} sols=${length (ecSols ec3a)} defs=${length (ecDefs ec3a)} metas=${ecNext ec3a} dgoals=${ecPendingCount ec3a} datas=${length (ecDatas ec3a)} insts=${length (ecInsts ec3a)} classes=${length (ecClasses ec3a)} counters=${showCounters (ecCounters ec3a)}"
-                                                                  -- 实例表索引自检（派生索引 == 权威表）。只在 --debug-perf 下跑：
+                                                                  -- 实例表索引自检（派生索引 == 权威表）。只在 VUNA_LOG=debug 下跑：
                                                                   -- `ecInstsAudit` 会扫全实例表，生产路径不付这个成本。
                                                                   _ = log! "debug" (if ecInstsAudit ec3a then "inst-index=ok" else "inst-index=MISMATCH")
                                                                 in Vuna.Compiler.Base.Common.bind (obsCheck "vuna.elab.instbodies" (\_ => elabInstanceBodies recover decls classesAll datas1 globals ec3)) (

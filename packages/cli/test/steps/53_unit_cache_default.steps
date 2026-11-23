@@ -8,13 +8,13 @@ run: sh -c 'rm -rf "$TMPDIR/u53" "$TMPDIR/u53-cache" "$TMPDIR/u53-out"; mkdir -p
 # 预热默认路径，并记录「本次单元数」（产物 .ml 数）与桶内 .unit 基线。
 run: sh -c 'TMPDIR="$TMPDIR/u53-cache" "$VUNA" build --no-compile --out "$TMPDIR/u53-out" "$TMPDIR/u53" >/dev/null 2>&1; find "$TMPDIR/u53-out" -maxdepth 1 -name "*.ml" | wc -l | tr -d " " > "$TMPDIR/u53-units"; find "$VUNA_STORE"/units/* -name "*.unit" 2>/dev/null | wc -l | tr -d " " > "$TMPDIR/u53-bucket0"'
 # 改叶子（Leaf/Mid/Top 三个单元失效；Other1..4 与 runtime/entry 中 runtime 仍可命中）。
-run: sh -c 'printf "module Leaf where\n\nexport leafVal : Int\nleafVal = 2\n" > "$TMPDIR/u53/lib/Leaf.vuna"; TMPDIR="$TMPDIR/u53-cache" VUNA_DEBUG_PERF=1 "$VUNA" build --no-compile --out "$TMPDIR/u53-out" "$TMPDIR/u53" 2>&1 | tee "$TMPDIR/u53.log"'
+run: sh -c 'printf "module Leaf where\n\nexport leafVal : Int\nleafVal = 2\n" > "$TMPDIR/u53/lib/Leaf.vuna"; TMPDIR="$TMPDIR/u53-cache" VUNA_LOG=debug "$VUNA" build --no-compile --out "$TMPDIR/u53-out" "$TMPDIR/u53" 2>&1 | tee "$TMPDIR/u53.log"'
 out-contains: unit-cache-hit
 # 干净重建（独立缓存 + 显式关闭）→ 产物逐字节一致。
 run: sh -c 'rm -rf "$TMPDIR/u53-fresh" "$TMPDIR/u53-fresh-out"; TMPDIR="$TMPDIR/u53-fresh" VUNA_UNIT_CACHE=0 "$VUNA" build --no-compile --out "$TMPDIR/u53-fresh-out" "$TMPDIR/u53" >/dev/null 2>&1'
 run: diff -r "$TMPDIR/u53-out" "$TMPDIR/u53-fresh-out"
 # opt-out：完全不使用单元缓存（无 hit 记录，也不产生 split-units 文件）。
-run: sh -c 'TMPDIR="$TMPDIR/u53-optout-cache" VUNA_UNIT_CACHE=0 VUNA_DEBUG_PERF=1 "$VUNA" build --no-compile --out "$TMPDIR/u53-optout-out" "$TMPDIR/u53" > "$TMPDIR/u53-optout.log" 2>&1'
+run: sh -c 'TMPDIR="$TMPDIR/u53-optout-cache" VUNA_UNIT_CACHE=0 VUNA_LOG=debug "$VUNA" build --no-compile --out "$TMPDIR/u53-optout-out" "$TMPDIR/u53" > "$TMPDIR/u53-optout.log" 2>&1'
 read: $TMPDIR/u53-optout.log
 out-not-contains: unit-cache-hit
 run: sh -c '! find "$TMPDIR/u53-optout-cache" -name "*.unit" 2>/dev/null | grep -q .'

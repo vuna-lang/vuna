@@ -1,7 +1,7 @@
 # 107) 可观测性（`docs/reference/observability.md`）：语言层 obs 原语 + 生成运行时 +
 #      `vuna dev obs` 工具链 + `#line` 注入。依赖 PATH 里的 readelf（devShell/e2e 已提供）。
 #
-# 覆盖：关闭口径不产 trace；`dbg!` stderr 协议不变而 `obs!`/`mark!` 走结构化事件；
+# 覆盖：关闭口径不产 trace；`log!` 文本日志与 `mark!` 结构化事件各自独立；
 # `VUNA_OBS=2` trace 的结构与 `obs validate`；`#line` 是包相对 `.vuna` 路径、产物可跑；
 # DWARF `.debug_line` 指向 `.vuna`；运行时错误回栈落到 `.vuna`；`VUNA_OBS=3` 采样；
 # convert（cpuprofile/folded/speedscope）与 render 的确定性；summarize --json / --baseline；
@@ -16,8 +16,8 @@ run: sh -c 'd="$TMPDIR/app"; mkdir -p "$d/app"; printf "[package]\nname = \"obsa
 exit: 0
 file-exists: $TMPDIR/app-out/bin/obsapp
 
-# 宏夹具：dbg! / obs! / mark! 三种都出现。
-run: sh -c 'd="$TMPDIR/mac"; mkdir -p "$d/app"; printf "[package]\nname = \"mac\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Int\nmain =\n  let\n    _ = dbg! \"legacy\"\n    _ = obs! \"structured\"\n    _ = mark! \"checkpoint\"\n  in 0\n" > "$d/app/Main.vuna"; "$VUNA" build --out "$TMPDIR/mac-out" "$d"'
+# 宏夹具：log! 文本与 mark! 事件同时出现。
+run: sh -c 'd="$TMPDIR/mac"; mkdir -p "$d/app"; printf "[package]\nname = \"mac\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Int\nmain =\n  let\n    _ = log! \"debug\" \"legacy\"\n    _ = log! \"info\" \"structured\"\n    _ = mark! \"checkpoint\"\n  in 0\n" > "$d/app/Main.vuna"; "$VUNA" build --out "$TMPDIR/mac-out" "$d"'
 exit: 0
 
 # let 组夹具（`#line` 在 `let rec` / `and` 上也要写）。
@@ -45,16 +45,13 @@ run: sh -c 'find "$TMPDIR/trace-on" -name "*.jsonl" -type f | head -1'
 exit: 0
 out-contains: vuna-
 
-# ---------------------------------------------------------------- 2) dbg! 协议 / obs! / mark!
-run: sh -c 'VUNA_DEBUG_PERF=1 VUNA_OBS=0 "$TMPDIR/mac-out/bin/mac" 2>&1 >/dev/null | sed -e "s/^DEBUG [0-9][0-9]* /DEBUG <ts> /"'
+# ---------------------------------------------------------------- 2) log! 文本 / mark! 事件
+run: sh -c 'VUNA_LOG=debug VUNA_OBS=0 "$TMPDIR/mac-out/bin/mac" 2>&1 >/dev/null'
 exit: 0
-out-equals: DEBUG <ts> legacy
+out-contains: DEBUG Main legacy
+out-contains: INFO Main structured
 
 run: sh -c 'VUNA_OBS=2 VUNA_OBS_DIR="$TMPDIR/mac-trace" "$TMPDIR/mac-out/bin/mac" 2>/dev/null'
-exit: 0
-run: sh -c 'grep -l "vuna.log" "$TMPDIR"/mac-trace/*.jsonl'
-exit: 0
-run: sh -c 'grep -c "structured" "$TMPDIR"/mac-trace/*.jsonl'
 exit: 0
 run: sh -c 'grep -l "checkpoint" "$TMPDIR"/mac-trace/*.jsonl'
 exit: 0
@@ -70,7 +67,7 @@ out-contains: "ph":"M"
 out-contains: "schema":"vuna-obs 1"
 
 # 人为破坏：倒挂时间戳拒绝（exit 1，消息可读）。
-run: sh -c 'printf "%s\n" "{\"ph\":\"M\",\"name\":\"vuna.obs.schema\",\"pid\":1,\"tid\":0,\"args\":{\"schema\":\"vuna-obs 1\"}}" "{\"ph\":\"i\",\"ts\":200,\"pid\":1,\"tid\":0,\"name\":\"vuna.log\",\"args\":{\"text\":\"a\"}}" "{\"ph\":\"i\",\"ts\":100,\"pid\":1,\"tid\":0,\"name\":\"vuna.log\",\"args\":{\"text\":\"b\"}}" > "$TMPDIR/bad-order.jsonl"; "$VUNA" dev obs validate "$TMPDIR/bad-order.jsonl"'
+run: sh -c 'printf "%s\n" "{\"ph\":\"M\",\"name\":\"vuna.obs.schema\",\"pid\":1,\"tid\":0,\"args\":{\"schema\":\"vuna-obs 1\"}}" "{\"ph\":\"i\",\"ts\":200,\"pid\":1,\"tid\":0,\"name\":\"vuna.mark.probe\"}" "{\"ph\":\"i\",\"ts\":100,\"pid\":1,\"tid\":0,\"name\":\"vuna.mark.probe\"}" > "$TMPDIR/bad-order.jsonl"; "$VUNA" dev obs validate "$TMPDIR/bad-order.jsonl"'
 exit: 1
 out-contains: goes backwards
 
@@ -173,7 +170,7 @@ run: sh -c 't=$(find "$TMPDIR/mac-trace" -name "*.jsonl" | head -1); "$VUNA" dev
 exit: 0
 
 # ---------------------------------------------------------------- 10) 非 OCaml 后端
-run: sh -c 'd="$TMPDIR/wobs"; mkdir -p "$d/app"; printf "[package]\nname = \"wobs\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Data.Obs as Obs\n\nmain : Int\nmain =\n  let\n    _ = obsLevel 0\n    _ = obsLog \"wasm\"\n  in 9\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/wobs-out" "$d"'
+run: sh -c 'd="$TMPDIR/wobs"; mkdir -p "$d/app"; printf "[package]\nname = \"wobs\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Data.Obs as Obs\n\nmain : Int\nmain =\n  let\n    _ = obsLevel 0\n    _ = log! \"info\" \"wasm\"\n  in 9\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/wobs-out" "$d"'
 exit: 0
 file-exists: $TMPDIR/wobs-out/main.wat
 

@@ -3,7 +3,7 @@
 #      依赖接口以 $VUNA_SUITE_ROOT/packages/cli/test/corpus/packages/m34_summary（仓库自身 check 写入镜像）为上下文；
 #      LSP 冒烟脚本为 $VUNA_SUITE_ROOT/packages/cli/test/corpus/lsp/smoke.sh（自包含）。
 run: sh -c 'mkdir -p "$TMPDIR/repo-cache"; ( cd "$VUNA_SUITE_ROOT" && TMPDIR="$TMPDIR/repo-cache" "$VUNA" check . >/dev/null 2>&1 ) || true'
-run: sh -c 'cd "$VUNA_SUITE_ROOT" && printf "x : Int\nx = 1 + 1\nx + 40\n:q\n" | TMPDIR="$TMPDIR/repo-cache" VUNA_IFACE_TOOL=1 VUNA_DEBUG_PERF=1 "$VUNA" repl 2>&1 | tee "$TMPDIR/repl-iface.log"'
+run: sh -c 'cd "$VUNA_SUITE_ROOT" && printf "x : Int\nx = 1 + 1\nx + 40\n:q\n" | TMPDIR="$TMPDIR/repo-cache" VUNA_IFACE_TOOL=1 VUNA_LOG=debug "$VUNA" repl 2>&1 | tee "$TMPDIR/repl-iface.log"'
 out-contains: iface-source=repl modules=
 out-contains: 42
 # 懒加载闭包规模：tool-closure modules=N，N < 60（不是把整棵 base 全载入）。

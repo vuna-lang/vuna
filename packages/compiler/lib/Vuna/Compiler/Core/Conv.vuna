@@ -825,7 +825,8 @@ conv a1 a2 a3 a4 a5 =
   let
     _ = obsCountAt 3 "vuna.counter.core.conv" 1
     _ =
-      dbg!
+      log!
+        "debug"
         "conv-in: ${showTerm (quote a3 a4)} <> ${showTerm (quote a3 a5)} |v: ${showValueAt a3 a4} <> ${showValueAt a3 a5} @${a3}"
   in convFuel (convFuelFor a4 a5) a1 a2 a3 a4 a5
 

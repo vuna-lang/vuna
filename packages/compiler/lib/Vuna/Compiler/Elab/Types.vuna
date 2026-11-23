@@ -317,7 +317,7 @@ export record Ec(..) where
   ecUseSpans : List (String, Span)
   -- 本次精化发射的 warning（按发射顺序；由 Elab 显式线程，精化出口挂到 DtProgram）。
   ecWarnings : List Diagnostic
-  -- 诊断计数器事件（前插的只读日志；仅在 `--debug-perf` 的规模行里归并读取）。
+  -- 诊断计数器事件（前插的只读日志；仅在 `VUNA_LOG=debug` 的规模行里归并读取）。
   -- 用「事件列表」而不是 HashMap：每次 bump 只付一次 cons，热路径上不付哈希/桶复制。
   ecCounters : List String
   -- 逐定义恢复时收集的诊断（前插；出口 reverse）。严格路径不用它（首个错误直接短路）。
@@ -476,7 +476,7 @@ export ecInstsFamily : Ec -> String -> List DtInst
 ecInstsFamily (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl haslin mspans uspans warnings counters errors) fam =
   instStoreFamily insts fam
 
--- 索引自检（**只**在 `--debug-perf` 下由 `Elab.Driver` 调用；调用方负责先判
+-- 索引自检（**只**在 `VUNA_LOG=debug` 下由 `Elab.Driver` 调用；调用方负责先判
 -- `perfEnabled`，因为这里会扫全表）。两个判据：
 --   1) 所有桶的条目总数 == 权威表长度（没漏、没重）；
 --   2) 每个桶逐项等于「按该族过滤权威表」的结果（桶内容与族键一致，且桶内保序）。
@@ -1038,7 +1038,7 @@ ecPutWarnings (Ec next sols defs datas depths goals insts classes dgoals deftbl 
 export ecAddWarning : Ec -> Diagnostic -> Ec
 ecAddWarning ec d = ecPutWarnings ec (append (ecWarnings ec) [d])
 
--- 诊断计数器：只在 `--debug-perf` 的 elab dump 里读取，不参与语义。
+-- 诊断计数器：只在 `VUNA_LOG=debug` 的 elab dump 里读取，不参与语义。
 export ecCounters : Ec -> List String
 ecCounters e = e.ecCounters
 

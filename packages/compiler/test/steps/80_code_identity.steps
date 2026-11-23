@@ -5,12 +5,12 @@ run: sh -c 'S="$TMPDIR/ci"; rm -rf "$S"; mkdir -p "$S/p/lib" "$S/p/app"; printf 
 exit: 0
 
 # 未改动：快指针命中，零精化。
-run: sh -c 'S="$TMPDIR/ci"; VUNA_DEBUG_PERF=1 VUNA_STORE="$S/store" "$VUNA" build --no-compile --out "$S/o1" "$S/p" 2>&1'
+run: sh -c 'S="$TMPDIR/ci"; VUNA_LOG=debug VUNA_STORE="$S/store" "$VUNA" build --no-compile --out "$S/o1" "$S/p" 2>&1'
 exit: 0
 out-contains: split-pointer-hit
 
 # 行内尾注释（行号/语义不变）⇒ 语义 blob 命中，产物逐字节不变。
-run: sh -c 'S="$TMPDIR/ci"; printf "module M where\n\nexport one : Int\none = 1 -- trailing\n" > "$S/p/lib/M.vuna"; VUNA_DEBUG_PERF=1 VUNA_STORE="$S/store" "$VUNA" build --no-compile --out "$S/o2" "$S/p" 2>&1'
+run: sh -c 'S="$TMPDIR/ci"; printf "module M where\n\nexport one : Int\none = 1 -- trailing\n" > "$S/p/lib/M.vuna"; VUNA_LOG=debug VUNA_STORE="$S/store" "$VUNA" build --no-compile --out "$S/o2" "$S/p" 2>&1'
 exit: 0
 out-contains: split-identity-hit
 run: sh -c 'S="$TMPDIR/ci"; test "$(find "$S/store/blobs" -type f | wc -l)" = "1"; diff -r "$S/o1" "$S/o2"'
@@ -21,7 +21,7 @@ run: sh -c 'S="$TMPDIR/ci"; printf "module M where\n\n\nexport one : Int\none = 
 exit: 0
 
 # 指针丢失 ⇒ 重新精化一次、语义 blob 仍命中，指针补写。
-run: sh -c 'S="$TMPDIR/ci"; rm -rf "$S/store/objects/splitptr"; VUNA_DEBUG_PERF=1 VUNA_STORE="$S/store" "$VUNA" build --no-compile --out "$S/o3" "$S/p" 2>&1'
+run: sh -c 'S="$TMPDIR/ci"; rm -rf "$S/store/objects/splitptr"; VUNA_LOG=debug VUNA_STORE="$S/store" "$VUNA" build --no-compile --out "$S/o3" "$S/p" 2>&1'
 exit: 0
 out-contains: split-identity-hit
 run: sh -c 'S="$TMPDIR/ci"; test -n "$(find "$S/store/objects/splitptr" -type f | head -1)"; test "$(find "$S/store/blobs" -type f | wc -l)" = "2"'
@@ -35,15 +35,15 @@ run: sh -c 'S="$TMPDIR/ci"; mkdir -p "$S/q/lib" "$S/q/app"; printf "[package]\nn
 exit: 0
 
 # p 的 opaque 体 h=8 → h=9：p 换产物；q 的依赖身份（pkgIfaceHash）不变 ⇒ 快指针命中。
-run: sh -c 'S="$TMPDIR/ci"; printf "module M where\n\n\nexport one : Int\none = 1 -- trailing\n\nexport opaque h : Int\nh = 9\n" > "$S/p/lib/M.vuna"; VUNA_STORE="$S/store" "$VUNA" build --no-compile --out "$S/o6" "$S/p" >/dev/null 2>&1 || exit 1; VUNA_DEBUG_PERF=1 VUNA_STORE="$S/store" "$VUNA" build --no-compile --out "$S/oq2" "$S/q" 2>&1'
+run: sh -c 'S="$TMPDIR/ci"; printf "module M where\n\n\nexport one : Int\none = 1 -- trailing\n\nexport opaque h : Int\nh = 9\n" > "$S/p/lib/M.vuna"; VUNA_STORE="$S/store" "$VUNA" build --no-compile --out "$S/o6" "$S/p" >/dev/null 2>&1 || exit 1; VUNA_LOG=debug VUNA_STORE="$S/store" "$VUNA" build --no-compile --out "$S/oq2" "$S/q" 2>&1'
 exit: 0
 out-contains: split-pointer-hit
 
 # p 新增 abstract 导出：接口面变了 ⇒ q 未命中；改 abstract 体后 q 恢复快指针命中。
-run: sh -c 'S="$TMPDIR/ci"; printf "module M where\n\n\nexport one : Int\none = 1 -- trailing\n\nexport opaque h : Int\nh = 9\n\nexport abstract a : Int\na = 7\n" > "$S/p/lib/M.vuna"; VUNA_STORE="$S/store" "$VUNA" build --no-compile --out "$S/o7" "$S/p" >/dev/null 2>&1 || exit 1; VUNA_DEBUG_PERF=1 VUNA_STORE="$S/store" "$VUNA" build --no-compile --out "$S/oq3" "$S/q" 2>&1'
+run: sh -c 'S="$TMPDIR/ci"; printf "module M where\n\n\nexport one : Int\none = 1 -- trailing\n\nexport opaque h : Int\nh = 9\n\nexport abstract a : Int\na = 7\n" > "$S/p/lib/M.vuna"; VUNA_STORE="$S/store" "$VUNA" build --no-compile --out "$S/o7" "$S/p" >/dev/null 2>&1 || exit 1; VUNA_LOG=debug VUNA_STORE="$S/store" "$VUNA" build --no-compile --out "$S/oq3" "$S/q" 2>&1'
 exit: 0
 out-not-contains: split-pointer-hit
 
-run: sh -c 'S="$TMPDIR/ci"; printf "module M where\n\n\nexport one : Int\none = 1 -- trailing\n\nexport opaque h : Int\nh = 9\n\nexport abstract a : Int\na = 8\n" > "$S/p/lib/M.vuna"; VUNA_STORE="$S/store" "$VUNA" build --no-compile --out "$S/o8" "$S/p" >/dev/null 2>&1 || exit 1; VUNA_DEBUG_PERF=1 VUNA_STORE="$S/store" "$VUNA" build --no-compile --out "$S/oq4" "$S/q" 2>&1'
+run: sh -c 'S="$TMPDIR/ci"; printf "module M where\n\n\nexport one : Int\none = 1 -- trailing\n\nexport opaque h : Int\nh = 9\n\nexport abstract a : Int\na = 8\n" > "$S/p/lib/M.vuna"; VUNA_STORE="$S/store" "$VUNA" build --no-compile --out "$S/o8" "$S/p" >/dev/null 2>&1 || exit 1; VUNA_LOG=debug VUNA_STORE="$S/store" "$VUNA" build --no-compile --out "$S/oq4" "$S/q" 2>&1'
 exit: 0
 out-contains: split-pointer-hit

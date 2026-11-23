@@ -4,7 +4,7 @@
 # 背景：`checkPackage` 在入口闭包覆盖导出面时跳过补做的 lib check；
 # 覆盖不全时 `writeIfaceShadow` 判 `iface-skip partial`（不写包接口），于是同一份源码
 # 再精化一遍，并且依赖方读不到导出面、只能整体回退全量。两者都**不报错**——只在
-# `--debug-perf` 里留一行，所以用这条门禁把它变成会红的事实。
+# `VUNA_LOG=debug` 里留一行，所以用这条门禁把它变成会红的事实。
 #
 # 判据（每个包用独立空对象库，避免热 store 把读数与路径都磨平）：
 #   * 不出现 `iface-skip`；
@@ -30,7 +30,7 @@ for pkg in $PACKAGES; do
   export TMPDIR="$work/tmp"
   mkdir -p "$TMPDIR"
 
-  if ! VUNA_DEBUG_PERF=1 "$VUNA" check "$pkg" >"$work/stdout" 2>"$work/stderr"; then
+  if ! VUNA_LOG=debug "$VUNA" check "$pkg" >"$work/stdout" 2>"$work/stderr"; then
     echo "single-pass: check $pkg 失败" >&2
     tail -40 "$work/stdout" "$work/stderr" >&2
     exit 1

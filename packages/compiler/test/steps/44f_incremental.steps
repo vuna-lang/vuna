@@ -4,8 +4,8 @@
 #      注入类型错误后增量与全量诊断逐字节一致。
 #      夹具：$VUNA_BASE 复制到 $TMPDIR/incr-base（不改工作树）；缓存与临时 TMPDIR 均在 case 私有根下。
 run: sh -c 'rm -rf "$TMPDIR/incr-base" "$TMPDIR/incr-cache"; mkdir -p "$TMPDIR/incr-cache"; cp -r "$VUNA_BASE" "$TMPDIR/incr-base"; TMPDIR="$TMPDIR/incr-cache" "$VUNA" check "$TMPDIR/incr-base" >/dev/null 2>&1'
-# 改一个叶子模块后带 --debug-perf 重算，日志落盘供后续计数/片段断言。
-run: sh -c 'printf "\nincrProbe : Int\nincrProbe = 1\n" >> "$TMPDIR/incr-base/lib/Base/Effect/Pure/Error.vuna"; TMPDIR="$TMPDIR/incr-cache" "$VUNA" check "$TMPDIR/incr-base" --debug-perf > "$TMPDIR/incr.log" 2>&1'
+# 改一个叶子模块后带 VUNA_LOG=debug 重算，日志落盘供后续计数/片段断言。
+run: sh -c 'printf "\nincrProbe : Int\nincrProbe = 1\n" >> "$TMPDIR/incr-base/lib/Base/Effect/Pure/Error.vuna"; TMPDIR="$TMPDIR/incr-cache" VUNA_LOG=debug "$VUNA" check "$TMPDIR/incr-base" > "$TMPDIR/incr.log" 2>&1'
 # 0 < cache-own-clean < 模块总数（总数取 iface-write=N/M 的 M；内容寻址下目录文件数不可靠）。
 run: sh -c 'log="$TMPDIR/incr.log"; total=$(grep -o "iface-write=[0-9]*/[0-9]*" "$log" | head -1 | cut -d/ -f2); clean=$(sed -n "s/.*cache-own-clean=\([0-9][0-9]*\).*/\1/p" "$log"); [ -n "$clean" ] && [ -n "$total" ] && [ "$total" -gt 0 ] && [ "$clean" -lt "$total" ]'
 # 只 parse 脏模块：parse-module 行数 == total - clean。
@@ -15,7 +15,7 @@ run: sh -c 'log="$TMPDIR/incr.log"; writes=$(grep -o "iface-write=[0-9]*" "$log"
 # 删掉 check 缓存后重跑：全部命中 clean、对象库零新增（收敛）。
 # 断言用「对象文件数不变」而不是 `iface-write=0/`：完全命中时写侧会走
 # `iface-skip partial`（没有脏模块产出的接口可写），两者是同一件事的两种表述。
-run: sh -c 'rm -rf "$VUNA_STORE"/query; n1=$(find "$VUNA_STORE/objects/module-iface" -type f 2>/dev/null | wc -l); TMPDIR="$TMPDIR/incr-cache" "$VUNA" check "$TMPDIR/incr-base" --debug-perf > "$TMPDIR/incr2.log" 2>&1; n2=$(find "$VUNA_STORE/objects/module-iface" -type f 2>/dev/null | wc -l); [ "$n1" -eq "$n2" ]'
+run: sh -c 'rm -rf "$VUNA_STORE"/query; n1=$(find "$VUNA_STORE/objects/module-iface" -type f 2>/dev/null | wc -l); TMPDIR="$TMPDIR/incr-cache" VUNA_LOG=debug "$VUNA" check "$TMPDIR/incr-base" > "$TMPDIR/incr2.log" 2>&1; n2=$(find "$VUNA_STORE/objects/module-iface" -type f 2>/dev/null | wc -l); [ "$n1" -eq "$n2" ]'
 run: sh -c 'log="$TMPDIR/incr2.log"; grep -qE "cache-path=" "$log"'
 # 注入类型错误：增量路径与全量路径（VUNA_ELAB_FULL=1）的诊断（去掉 DEBUG 行）逐字节一致。
 run: sh -c 'printf "\nbadProbe : Int\nbadProbe = \"x\"\n" >> "$TMPDIR/incr-base/lib/Base/Effect/Pure/Error.vuna"'

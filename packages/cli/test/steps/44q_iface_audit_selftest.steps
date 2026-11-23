@@ -8,19 +8,19 @@ run: sh -c 'printf "%s\n" "[package]" "name = \"c49rec\"" "" "[dependencies]" "v
 run: sh -c 'printf "%s\n" "module C49 where" "" "export record Box(..) where" "  a : Int" "  b : Int" "" "export bump : Box -> Box" "bump x = { x | a = x.a + 1 }" > "$TMPDIR/c49/pkg/lib/C49.vuna"'
 run: sh -c 'printf "%s\n" "import C49" "" "main : Int" "main = (bump (Box { a = 1, b = 2 })).a" > "$TMPDIR/c49/pkg/app/Main.vuna"'
 # 冷缓存 + 审计：摘要/全量两条路径诊断必须逐字节一致。
-run: sh -c 'rm -rf "$TMPDIR/c49/store" "$TMPDIR/c49/cache"; VUNA_STORE="$TMPDIR/c49/store" TMPDIR="$TMPDIR/c49/cache" VUNA_IFACE_AUDIT=1 "$VUNA" check "$TMPDIR/c49/pkg" --debug-perf 2>&1'
+run: sh -c 'rm -rf "$TMPDIR/c49/store" "$TMPDIR/c49/cache"; VUNA_STORE="$TMPDIR/c49/store" TMPDIR="$TMPDIR/c49/cache" VUNA_IFACE_AUDIT=1 VUNA_LOG=debug "$VUNA" check "$TMPDIR/c49/pkg" 2>&1'
 exit: 0
 out-contains: iface-audit subject=check
 out-not-contains: iface-audit-mismatch
 # 热缓存 + 审计：审计绕过判定重跑两条路径，仍然一致。
-run: sh -c 'VUNA_STORE="$TMPDIR/c49/store" TMPDIR="$TMPDIR/c49/cache" VUNA_IFACE_AUDIT=1 "$VUNA" check "$TMPDIR/c49/pkg" --debug-perf 2>&1'
+run: sh -c 'VUNA_STORE="$TMPDIR/c49/store" TMPDIR="$TMPDIR/c49/cache" VUNA_IFACE_AUDIT=1 VUNA_LOG=debug "$VUNA" check "$TMPDIR/c49/pkg" 2>&1'
 exit: 0
 out-not-contains: iface-audit-mismatch
 # 正常路径（不带审计）冷缓存也通过。
 run: sh -c 'rm -rf "$TMPDIR/c49/cache"; VUNA_STORE="$TMPDIR/c49/store" TMPDIR="$TMPDIR/c49/cache" "$VUNA" check "$TMPDIR/c49/pkg"'
 exit: 0
 # 构建/编译路径的审计（`subject=compile`）：摘要 codegen 与全量 codegen 逐字节一致。
-run: sh -c 'rm -rf "$TMPDIR/c49/out" "$TMPDIR/c49/cache"; VUNA_STORE="$TMPDIR/c49/store" TMPDIR="$TMPDIR/c49/cache" VUNA_IFACE_AUDIT=1 "$VUNA" build --no-compile --out "$TMPDIR/c49/out" "$TMPDIR/c49/pkg" --debug-perf 2>&1'
+run: sh -c 'rm -rf "$TMPDIR/c49/out" "$TMPDIR/c49/cache"; VUNA_STORE="$TMPDIR/c49/store" TMPDIR="$TMPDIR/c49/cache" VUNA_IFACE_AUDIT=1 VUNA_LOG=debug "$VUNA" build --no-compile --out "$TMPDIR/c49/out" "$TMPDIR/c49/pkg" 2>&1'
 exit: 0
 out-contains: iface-audit subject=compile
 out-not-contains: iface-audit-mismatch

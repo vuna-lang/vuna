@@ -1,15 +1,15 @@
 # store-isolated: 断言 build 的“首次构建/错误且不留产物”，不能被已发布视图命中。
-# 65) 内置宏机制：`name!` 的紧邻规则、fmt 往返、统一 `dbg!` 的开关/惰性/输出协议。
+# 65) 内置宏机制：`name!` 的紧邻规则、fmt 往返、`log!` 的开关/惰性/输出协议。
 #     宏在 parser 里编码成保留名标记（`@vuna@macro@name`），Loader 在名字解析前展开；
 #     fmt / lint / index 只处理调用形式，不展开。展开到隐藏 runtime 原语，任何包可用。
 #
 # 65a) fmt 往返：`name!` 在原子位置与应用位置都稳定；二次 fmt 幂等。
 run: mkdir -p "$TMPDIR/mac-fmt"
-run: sh -c 'printf "%s\n" "main : Int" "main = dbg! (if True then \"a\" else \"b\")" "" "f : Int -> Int" "f x = x" "" "g : Int" "g = f dbg! \"x\"" > "$TMPDIR/mac-fmt/Main.vuna"'
+run: sh -c 'printf "%s\n" "main : Int" "main = log! \"debug\" (if True then \"a\" else \"b\")" "" "f : Int -> Int" "f x = x" "" "g : Int" "g = f log! \"debug\" \"x\"" > "$TMPDIR/mac-fmt/Main.vuna"'
 run: "$VUNA" fmt "$TMPDIR/mac-fmt/Main.vuna" >/dev/null 2>&1
 read: $TMPDIR/mac-fmt/Main.vuna
-out-contains: dbg! (if True then "a" else "b")
-out-contains: (dbg! "x")
+out-contains: log! "debug" (if True then "a" else "b")
+out-contains: (log! "debug" "x")
 run: "$VUNA" fmt --check "$TMPDIR/mac-fmt/Main.vuna" >/dev/null 2>&1
 exit: 0
 
@@ -22,22 +22,22 @@ out-contains: built
 run: "$TMPDIR/mac-infix/.output/bin/mac-infix" 2>&1
 out-equals: 3
 
-# 65c) 错误边界：未知宏 / arity 不符。`dbg!` 不依赖任何库模块，base-only 包也能用。
+# 65c) 错误边界：未知宏 / arity 不符。`log!` 不依赖任何库模块，base-only 包也能用。
 run: printf 'main : Int\nmain = nope! 1\n' > "$TMPDIR/mac-unknown.vuna"
 run: "$VUNA" check "$TMPDIR/mac-unknown.vuna" 2>&1
 exit: nonzero
 out-contains: RN_UnknownMacro
 out-contains: unknown macro nope
-run: printf 'main : Int\nmain = dbg! "a" "b"\n' > "$TMPDIR/mac-arity.vuna"
+run: printf 'main : Int\nmain = log! "info" "a" "b"\n' > "$TMPDIR/mac-arity.vuna"
 run: "$VUNA" check "$TMPDIR/mac-arity.vuna" 2>&1
 exit: nonzero
 out-contains: RN_MacroArity
-out-contains: macro dbg expects 1 argument(s), got 2
+out-contains: macro log expects 2 argument(s), got 3
 
 # 65d) e2e（base-only 包，不需要 compiler 依赖）：开关、输出协议、惰性。
 run: mkdir -p "$TMPDIR/mac-e2e/app" "$TMPDIR/mac-e2e/tmp"
 run: printf '[package]\nname = "mac-app"\n\n[dependencies]\nvuna-base = "%s"\n' "$VUNA_BASE" > "$TMPDIR/mac-e2e/vuna.toml"
-run: printf 'main : Int\nmain = let _ = dbg! "probe=${42}" in 43\n' > "$TMPDIR/mac-e2e/app/Main.vuna"
+run: printf 'main : Int\nmain = let _ = log! "debug" "probe=${42}" in 43\n' > "$TMPDIR/mac-e2e/app/Main.vuna"
 run: TMPDIR="$TMPDIR/mac-e2e/tmp" "$VUNA" build "$TMPDIR/mac-e2e" 2>&1
 out-contains: built
 # 默认关闭：无 DEBUG 行，结果 43。
@@ -46,23 +46,19 @@ read: $TMPDIR/mac-e2e/off.out
 out-equals: 43
 read: $TMPDIR/mac-e2e/off.err
 out-equals:
-# VUNA_DEBUG_PERF=1：输出协议 `DEBUG <epoch-us> <text>`（stderr），时间戳是整数微秒。
-run: VUNA_DEBUG_PERF=1 "$TMPDIR/mac-e2e/.output/bin/mac-app" >"$TMPDIR/mac-e2e/on.out" 2>"$TMPDIR/mac-e2e/on.err"
+# VUNA_LOG=debug：输出协议 `<epoch-us> DEBUG <scope> <text>`（stderr），时间戳是整数微秒。
+run: VUNA_LOG=debug "$TMPDIR/mac-e2e/.output/bin/mac-app" >"$TMPDIR/mac-e2e/on.out" 2>"$TMPDIR/mac-e2e/on.err"
 read: $TMPDIR/mac-e2e/on.out
 out-equals: 43
-run: grep -E '^DEBUG [0-9]+ probe=42$' "$TMPDIR/mac-e2e/on.err"
+run: grep -E '^[0-9]+ DEBUG Main probe=42$' "$TMPDIR/mac-e2e/on.err"
 exit: 0
-# 生成的程序读自己的 argv：直接给二进制 `--debug-perf` 也打开。
-run: "$TMPDIR/mac-e2e/.output/bin/mac-app" --debug-perf >/dev/null 2>"$TMPDIR/mac-e2e/argv.err"
-run: grep -E '^DEBUG [0-9]+ probe=42$' "$TMPDIR/mac-e2e/argv.err"
-exit: 0
-# 惰性：关闭时 dbg! 的实参不求值（prim_fail 不触发），开启时才求值并失败。
-run: printf 'main : Int\nmain = let _ = dbg! (prim_fail "eager") in 7\n' > "$TMPDIR/mac-e2e/app/Main.vuna"
+# 惰性：关闭时 log! 的实参不求值（prim_fail 不触发），开启时才求值并失败。
+run: printf 'main : Int\nmain = let _ = log! "debug" (prim_fail "eager") in 7\n' > "$TMPDIR/mac-e2e/app/Main.vuna"
 run: TMPDIR="$TMPDIR/mac-e2e/tmp" "$VUNA" build "$TMPDIR/mac-e2e" 2>&1
 out-contains: built
 run: "$TMPDIR/mac-e2e/.output/bin/mac-app" 2>&1
 out-equals: 7
-run: VUNA_DEBUG_PERF=1 "$TMPDIR/mac-e2e/.output/bin/mac-app" >/dev/null 2>"$TMPDIR/mac-e2e/eager.err"
+run: VUNA_LOG=debug "$TMPDIR/mac-e2e/.output/bin/mac-app" >/dev/null 2>"$TMPDIR/mac-e2e/eager.err"
 exit: 2
 read: $TMPDIR/mac-e2e/eager.err
 out-contains: runtime error: eager

@@ -1148,25 +1148,9 @@ let bi_gt_float (a : float) (b : float) = a > b
 let bi_ge_float (a : float) (b : float) = a >= b
 """
 
--- | 编译器 tracing runtime（仅在程序引用 `dbg!` 展开出的隐藏原语时追加；见
--- `dtRuntimeWith` 的 `usesTrace`）。开关是 lazy CAF：第一次探针才读 argv/env，
--- 关闭时每个探针只剩一次 `Lazy.force`；输出走 stderr，行格式
--- `DEBUG <epoch-us> <text>`（逐行 flush）。
-dtTraceRuntime : String
-dtTraceRuntime = """let dtp_debug_on_lazy = lazy (
-  let has f = Array.exists (fun a -> a = f) Sys.argv in
-  has \"--debug-perf\" || (try Sys.getenv \"VUNA_DEBUG_PERF\" = \"1\" with Not_found -> false))
-let dtp_debug_on (_ : int) = Lazy.force dtp_debug_on_lazy
-let dtp_debug_line (s : string) =
-  Printf.eprintf \"DEBUG %d %s
-%!\" (dtp_timeUs ()) s;
-  0
-"""
-
 -- | 文本日志 runtime（`log!` 与 `Base.Data.Log` 共用；规范见 `docs/reference/logging.md`）。
 --
--- 门控：`VUNA_LOG`（`off|error|warn|info|debug|trace`，缺省 `warn`；缺口径兼容
--- `--debug-perf` / `VUNA_DEBUG_PERF=1` = `debug`）。输出格式 `VUNA_LOG_FORMAT`
+-- 门控：`VUNA_LOG`（`off|error|warn|info|debug|trace`，缺省 `warn`）。输出格式 `VUNA_LOG_FORMAT`
 -- （`text` 缺省 / `jsonl`），目标 `VUNA_LOG_FILE`（缺省 stderr）。
 -- scope 过滤：`VUNA_LOG_SCOPE` 逗号分隔；无通配符按**点边界前缀**匹配，含 `*`/`?` 走 glob，
 -- `!pat` 是否定；全部按 scope 记忆（模块名是有限常量）。
@@ -1185,12 +1169,7 @@ let dtp_log_comma = Char.chr 44
 
 let dtp_log_level_lazy = lazy (
   let env = String.lowercase_ascii (try Sys.getenv \"VUNA_LOG\" with Not_found -> \"\") in
-  if env = \"\" then
-    (let legacy =
-       (try Sys.getenv \"VUNA_DEBUG_PERF\" = \"1\" with Not_found -> false)
-       || Array.exists (fun a -> a = \"--debug-perf\") Sys.argv
-     in
-     if legacy then 3 else 1)
+  if env = \"\" then 1
   else match env with
     | \"off\" | \"none\" -> -1
     | \"error\" -> 0
@@ -1660,16 +1639,6 @@ let dtp_obs_mark_like (ph : string) (name : string) (cat : string) (kv : (Buffer
   ignore (dtp_obs_emit (Buffer.contents b));
   0
 
-let dtp_obs_log (text : string) : int =
-  if not (dtp_obs_on ()) then 0
-  else begin
-    Printf.eprintf \"DEBUG %d %s\" (dtp_timeUs ()) text;
-    output_char stderr dtp_obs_nl;
-    flush stderr;
-    dtp_obs_mark_like \"i\" \"vuna.log\" \"vuna.log\"
-      (Some (fun b -> dtp_obs_key b \"text\"; dtp_obs_str b text))
-  end
-
 let dtp_obs_counter (name : string) (v : int) : int =
   if not (dtp_obs_on ()) then 0
   else dtp_obs_mark_like \"C\" name \"vuna.counter\"
@@ -1863,8 +1832,7 @@ dtRuntimeWith locs usesFloat usesTrace usesObs =
     ++ (if usesFloat then dtFloatRuntime else "")
     ++ (if locs == "" then "let dt_def_locs = []\n" else "let dt_def_locs = [\n${locs}]\n")
     ++ dtReporterRuntime
-    ++ (if usesTrace then dtTraceRuntime ++ dtLogRuntime else "")
-    ++ (if usesObs then dtObsRuntime else "")
+    ++ (if usesTrace then dtLogRuntime else "") ++ (if usesObs then dtObsRuntime else "")
 
 -- `strUnpack` / `strPack` 的运行时桥接。
 -- Core 的 `strUnpack` 语义是「OCaml int list」，而 DT 路径里 `List` 是程序自己声明的

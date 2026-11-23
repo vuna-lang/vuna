@@ -101,7 +101,7 @@ dtLoad ctx entry =
 --
 -- 阶段边界用**瞬时标记**（`vuna.load` / `vuna.resolve`）：`loadProject*` 是 `Eff` 动作，
 -- 不能被纯跨度包住（执行发生在 runner 里），时间轴上只能是零宽度点（规范 §2）；
--- 与 `dbg!` 文本行并存（文本行是既有口径，steps 用例 grep 它）。
+-- 与 `log!` 文本行并存（文本行是既有口径，steps 用例 grep 它）。
 dtLoadPartsForCheck : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Eff r (Check (List Diagnostic, List Decl, List Module))
 dtLoadPartsForCheck ctx entry =
   do
@@ -1472,7 +1472,7 @@ dtFinishScoped depCps cleanCps prog cache =
 -- `codegen` 检查的收窄版：`allDatas` 是渲染/构造子表的完整视图（依赖 + 干净 + 本次），
 -- `unitDatas` 只生成本次精化模块的类型声明；检查链（名字护栏 / 擦除 / SCC / 生成）只跑
 -- `defs`。每个 def 的检查只看自身项与全部数据族，因此对本文件的诊断语义与整包检查一致。
--- 观测：这是增量路径上唯一没被 `vuna.elab` / `vuna.codegen.check` 覆盖的检查段（`dbg!`
+-- 观测：这是增量路径上唯一没被 `vuna.elab` / `vuna.codegen.check` 覆盖的检查段（`log!`
 -- 文本行在调用方），整段包进 `vuna.codegen.check`；两个调用点（`dtFinishPackageScoped` /
 -- `dtFinishScoped`）因此各得一个 span，不重复包。
 dtCheckScoped : List DtData -> List DtData -> List DtDef -> List (String, Term) -> Check Int

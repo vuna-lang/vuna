@@ -7,11 +7,11 @@ run: sh -c 'd="$TMPDIR/tc/min"; mkdir -p "$d/app"; printf "[package]\nname = \"t
 exit: 0
 
 # 111a) wasm：冷构建 miss。
-run: sh -c 'VUNA_STORE="$TMPDIR/tc/store" "$VUNA" build --target wasm --no-compile --out "$TMPDIR/tc/out" --debug-perf "$TMPDIR/tc/min" 2>&1'
+run: sh -c 'VUNA_STORE="$TMPDIR/tc/store" VUNA_LOG=debug "$VUNA" build --target wasm --no-compile --out "$TMPDIR/tc/out" "$TMPDIR/tc/min" 2>&1'
 out-contains: target-cache=miss
 
 # 111b) 同 store 同目标：hit。
-run: sh -c 'VUNA_STORE="$TMPDIR/tc/store" "$VUNA" build --target wasm --no-compile --out "$TMPDIR/tc/out" --debug-perf "$TMPDIR/tc/min" 2>&1'
+run: sh -c 'VUNA_STORE="$TMPDIR/tc/store" VUNA_LOG=debug "$VUNA" build --target wasm --no-compile --out "$TMPDIR/tc/out" "$TMPDIR/tc/min" 2>&1'
 out-contains: target-cache=hit
 
 # 111c) hit 的产物与冷构建一致：删掉输出目录后用缓存重建。
@@ -19,7 +19,7 @@ run: sh -c 'a=$(cksum < "$TMPDIR/tc/out/main.wat"); rm -rf "$TMPDIR/tc/out"; VUN
 exit: 0
 
 # 111e) 换目标：键里有 target，必须 miss；第二次 hit。
-run: sh -c 'VUNA_STORE="$TMPDIR/tc/store" "$VUNA" build --target native --no-compile --out "$TMPDIR/tc/outn" --debug-perf "$TMPDIR/tc/min" 2>&1'
+run: sh -c 'VUNA_STORE="$TMPDIR/tc/store" VUNA_LOG=debug "$VUNA" build --target native --no-compile --out "$TMPDIR/tc/outn" "$TMPDIR/tc/min" 2>&1'
 out-contains: target-cache=miss
-run: sh -c 'VUNA_STORE="$TMPDIR/tc/store" "$VUNA" build --target native --no-compile --out "$TMPDIR/tc/outn" --debug-perf "$TMPDIR/tc/min" 2>&1'
+run: sh -c 'VUNA_STORE="$TMPDIR/tc/store" VUNA_LOG=debug "$VUNA" build --target native --no-compile --out "$TMPDIR/tc/outn" "$TMPDIR/tc/min" 2>&1'
 out-contains: target-cache=hit

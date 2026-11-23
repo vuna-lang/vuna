@@ -688,11 +688,11 @@ primReduce defs sols fuel g sp =
           OpBitNot => intPrim1 sp (\a => VInt (bitNot a))
           OpBitShl => intPrim2 sp (\a, n => VInt (bitShl a n))
           OpBitShr => intPrim2 sp (\a, n => VInt (bitShr a n))
-          -- 编译器 tracing 隐藏原语：interp 不执行输出，按“关闭/空发射”归约，保持纯与静默。
+          -- 文本日志隐藏原语：interp 不执行输出，按“关闭/空发射”归约，保持纯与静默。
           OpNone =>
             case obsReduce g sp of
               Just v => Just v
-              Nothing => if g == logOnIntrinsicName then Just (VBool False) else if g == logEmitIntrinsicName then Just (VInt 0) else if g == debugOnIntrinsicName then Just (VBool False) else if g == debugLineIntrinsicName then Just (VInt 0) else Nothing
+              Nothing => if g == logOnIntrinsicName then Just (VBool False) else if g == logEmitIntrinsicName then Just (VInt 0) else Nothing
       Nothing => Nothing
 
 -- 可观测性原语在核心求值里的归约（永远静默：不写文件、不读时钟、不采样）。
@@ -701,8 +701,6 @@ primReduce defs sols fuel g sp =
 obsReduce : String -> List Value -> Maybe Value
 obsReduce g sp =
   if g == obsLevelIntrinsicName then
-    Just (VInt 0)
-  else if g == obsLogIntrinsicName then
     Just (VInt 0)
   else if g == obsCounterIntrinsicName then
     Just (VInt 0)

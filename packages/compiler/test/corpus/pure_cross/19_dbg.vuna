@@ -1,5 +1,5 @@
 main : Int
 main =
   let
-    _ = dbg! "x"
+    _ = log! "debug" "x"
   in 43

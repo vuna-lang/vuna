@@ -204,7 +204,7 @@ cachedProgramValid (CachedProgram datas defs globals insts classes _) =
     && defsValid defs && globalsValid globals && instsValid insts && classesValid classes
 
 -- ---------------------------------------------------------------
--- 诊断（仅摘要被判无效时调用）：指出第一个不可用项，便于 --debug-perf 定位
+-- 诊断（仅摘要被判无效时调用）：指出第一个不可用项，便于 VUNA_LOG=debug 定位
 -- ---------------------------------------------------------------
 termIssueAt : Int -> Term -> String
 termIssueAt depth t =

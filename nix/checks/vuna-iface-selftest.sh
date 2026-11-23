@@ -20,7 +20,7 @@ export TMPDIR="$work/tmp"
 mkdir -p "$TMPDIR"
 
 for pkg in packages/base packages/compiler; do
-  if ! VUNA_IFACE_SELFTEST=1 VUNA_DEBUG_PERF=1 "$VUNA" check "$pkg" \
+  if ! VUNA_IFACE_SELFTEST=1 VUNA_LOG=debug "$VUNA" check "$pkg" \
     >"$work/out" 2>"$work/err"; then
     echo "iface-selftest: check $pkg 失败（自证失败时写侧不写接口）" >&2
     tail -40 "$work/out" "$work/err" >&2

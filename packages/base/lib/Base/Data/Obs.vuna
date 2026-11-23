@@ -2,11 +2,11 @@
 --
 -- 默认关闭（`VUNA_OBS=1..3` / `--obs` / `--obs-level N`）：关闭时每次调用只付一次 `Lazy.force` + 一个布尔分支，不分配、不读时钟、不碰文件。打开后事件写 Chrome Trace Event JSONL（`ph:"X"` 跨度 / `ph:"C"` 计数 / `ph:"i"` 日志与采样），可直接拖进 `chrome://tracing` / Perfetto，或经 `vuna dev obs convert` 换算成 `.cpuprofile` / speedscope / folded。
 --
--- 全部是**纯函数**（返回 `Int` 或 `Bool`，无 `Eff`）：深部纯函数照样能埋探针，不需要把签名 effect 化；开关是 ambient 运行时配置，与 `dbg!` 同形态。
+-- 全部是**纯函数**（返回 `Int` 或 `Bool`，无 `Eff`）：深部纯函数照样能埋探针，不需要把签名 effect 化；开关是 ambient 运行时配置，与文本日志 `log!` 同形态。
 --
 -- **高阶**部分（`obsSpan` / `obsSpanP` / `obsSample`：吃 `Int -> a` thunk）在 `Base.Data.Obs.Span`——OCaml / native 后端用闭包实现，wasm 没有闭包表示、引用点编译期拒绝（见 native.md / wasm.md 的「可观测性」段）。
 --
--- 与 `dbg!` 的关系：`dbg!` 保留其 stderr 文本协议（`DEBUG <epoch-us> <text>`，由 `--debug-perf` 门控）；本层是结构化事件。需要两者都拿到时用 `obsLog`——它在 observability 打开时写事件、并同格式写 stderr。
+-- 人读文本不在这里：文本日志走 `Base.Data.Log` / 内置宏 `log!`（见 `docs/reference/logging.md`）；本层只产出结构化事件（span / counter / mark / sample）。
 --
 -- 名字词汇表：编译链事件用 `vuna.*`；用户程序事件用自己的域前缀（如 `app.render`），`vuna dev obs validate` 只校验 `vuna.*` 前缀。
 --
@@ -31,10 +31,6 @@ obsOn n = if @vuna@obs@level n > 0 then True else False
 -- ---------------------------------------------------------------
 -- 事件
 -- ---------------------------------------------------------------
--- | 一条日志事件（`args.text`），并同格式写 `DEBUG <epoch-us> <text>` 到 stderr；返回 0。
-export obsLog : String -> Int
-obsLog text = @vuna@obs@log text
-
 -- | 计数器读数（`ph:"C"`，`args.value`）：用于步数 / 命中数 / 规模的归因。
 export obsCounter : String -> Int -> Int
 obsCounter name value = @vuna@obs@counter name value

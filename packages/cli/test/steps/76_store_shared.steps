@@ -7,7 +7,7 @@ run: sh -c 'rm -rf "$TMPDIR/share-store" "$TMPDIR/share-pkg"; mkdir -p "$TMPDIR/
 exit: 0
 run: sh -c 'VUNA_STORE="$TMPDIR/share-store" "$VUNA" check "$TMPDIR/share-pkg" >/dev/null 2>&1'
 exit: 0
-run: sh -c 'VUNA_STORE="$TMPDIR/share-store" VUNA_DEBUG_PERF=1 "$VUNA" check "$TMPDIR/share-pkg" 2>&1 | grep -q "cache-path=hit"'
+run: sh -c 'VUNA_STORE="$TMPDIR/share-store" VUNA_LOG=debug "$VUNA" check "$TMPDIR/share-pkg" 2>&1 | grep -q "cache-path=hit"'
 exit: 0
 run: sh -c 'test -n "$(find "$TMPDIR/share-store/objects" -type f | head -1)"'
 exit: 0
@@ -27,7 +27,7 @@ run: sh -c 'S="$TMPDIR/uni"; find "$S/store/roots" -name .project | head -1 | xa
 exit: 0
 
 # 另一个目录、同一个 store：check 判定命中。
-run: sh -c 'S="$TMPDIR/uni"; VUNA_STORE="$S/store" VUNA_DEBUG_PERF=1 "$VUNA" check "$S/b" 2>&1 | grep -q "cache-path=hit"'
+run: sh -c 'S="$TMPDIR/uni"; VUNA_STORE="$S/store" VUNA_LOG=debug "$VUNA" check "$S/b" 2>&1 | grep -q "cache-path=hit"'
 exit: 0
 
 # 另一个目录、同一个 store：build 复用视图（不重跑 codegen / 链接）。

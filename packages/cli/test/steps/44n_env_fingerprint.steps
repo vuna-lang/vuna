@@ -8,12 +8,12 @@ run: sh -c 'VUNA_STORE="$TMPDIR/env-store" TMPDIR="$TMPDIR/env-cache" "$VUNA" ch
 exit: 0
 # 非语义变化（注释 + [diagnostics] 显示配置），模块源码不变 ⇒ **不进**语义身份 ⇒ 命中。
 run: sh -c 'printf "\n# env probe\n[diagnostics]\nformat = \"short\"\n" >> "$TMPDIR/env-pkg/mid/vuna.toml"; rm -rf "$TMPDIR/env-cache"'
-run: sh -c 'VUNA_STORE="$TMPDIR/env-store" TMPDIR="$TMPDIR/env-cache" "$VUNA" check "$TMPDIR/env-pkg/mid" --debug-perf'
+run: sh -c 'VUNA_STORE="$TMPDIR/env-store" TMPDIR="$TMPDIR/env-cache" VUNA_LOG=debug "$VUNA" check "$TMPDIR/env-pkg/mid"'
 exit: 0
 out-contains: cache-path=hit
 # 语义变化（包名）：地址变化 ⇒ 重算并写回接口。
 run: sh -c 'sed -i "s/name = \"iface-audit-mid\"/name = \"iface-audit-mid2\"/" "$TMPDIR/env-pkg/mid/vuna.toml"; rm -rf "$TMPDIR/env-cache"'
-run: sh -c 'VUNA_STORE="$TMPDIR/env-store" TMPDIR="$TMPDIR/env-cache" "$VUNA" check "$TMPDIR/env-pkg/mid" --debug-perf'
+run: sh -c 'VUNA_STORE="$TMPDIR/env-store" TMPDIR="$TMPDIR/env-cache" VUNA_LOG=debug "$VUNA" check "$TMPDIR/env-pkg/mid"'
 exit: 0
 out-contains: iface-write=
 # 收敛：再跑一遍，对象库文件数不变。

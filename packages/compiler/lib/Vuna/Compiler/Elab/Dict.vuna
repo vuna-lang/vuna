@@ -234,7 +234,8 @@ finishInstanceSearch dom sp ([m]) ec = OkC (m.instMatchTerm, ec)
 finishInstanceSearch dom sp matches ec =
   let
     _ =
-      dbg!
+      log!
+        "debug"
         "search-ambig: dom=${showValue dom} cands=${join "," (map (\x => dtInstName (instMatchInst x)) matches)}"
     sd = showValue dom
     names = joinInstNames (map instMatchInst matches)
@@ -683,7 +684,7 @@ resolveDictGoals globals ec =
     ecPutPassMarker
       (resolveDictGoalsFuel (n + 1) globals (ecBump ec "elab.dict.pending.b${pendingBucket n}"))
 
--- | pending 队列规模分桶：`--debug-perf` 的 counters 行按桶聚合成直方图，
+-- | pending 队列规模分桶：`VUNA_LOG=debug` 的 counters 行按桶聚合成直方图，
 -- 最大桶即本次 check 的 pending 峰值量级。
 pendingBucket : Int -> String
 pendingBucket n =

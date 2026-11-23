@@ -72,9 +72,9 @@ runPlugin =
 
 -- | 按 argv 执行一条命令；`--vuna-describe [FILE]` 与 `--help` 优先。
 export runArgs : List String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
-runArgs raw = runArgsClean (withoutPerfFlag raw)
+runArgs raw = runArgsClean raw
 
--- | 内部：`runArgs` 的主体（已去掉隐藏旗标）。
+-- | 内部：`runArgs` 的主体。
 runArgsClean : List String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
 runArgsClean args =
   case args of
@@ -168,9 +168,3 @@ storeArgs ("gc" :: more) = Vuna.Clean.runStoreGc more
 storeArgs ("clean" :: more) = Vuna.Clean.runClean more
 storeArgs [] = usageErrorFor ["store"]
 storeArgs (bad :: _) = unknownSubcommand ["store"] bad ["gc", "clean"]
-
--- | 内部：去掉隐藏的性能旗标（runtime 从原始 argv 读取，命令解析要忽略）。
-withoutPerfFlag : List String -> List String
-withoutPerfFlag [] = []
-withoutPerfFlag (a :: rest) =
-  if a == "--debug-perf" then withoutPerfFlag rest else a :: withoutPerfFlag rest

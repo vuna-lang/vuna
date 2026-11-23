@@ -74,16 +74,10 @@ runCli args =
         let
           cmds = tableOf plugins
         in let
-          route = withoutPerfFlag args
+          route = args
         in case helpPathIn 3 cmds route of
           Just path => helpOut plugins cmds path
           Nothing => dispatch plugins cmds args route
-
--- | 内部：去掉隐藏的性能旗标（它由 runtime 从原始 argv 读取，路由时要忽略）。
-withoutPerfFlag : List String -> List String
-withoutPerfFlag [] = []
-withoutPerfFlag (a :: rest) =
-  if a == "--debug-perf" then withoutPerfFlag rest else a :: withoutPerfFlag rest
 
 -- | 内部：分发——元命令就地处理，其余查插件。
 dispatch : List Plugin -> List Cmd -> List String -> List String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int

@@ -15,7 +15,7 @@ run: "$VUNA" check "$VUNA_BASE"
 run: "$VUNA" check "$TMPDIR/iface-k-dep"
 run: "$VUNA" check "$TMPDIR/iface-k-root"
 # 默认（惰性闭包）：同包模块自己 import 的依赖模块必须进闭包，REPL 能求值出 43。
-run: cd "$TMPDIR/iface-k-root" && printf 'import KOuter\nouterVal\n:q\n' | VUNA_DEBUG_PERF=1 "$VUNA" repl 2>&1
+run: cd "$TMPDIR/iface-k-root" && printf 'import KOuter\nouterVal\n:q\n' | VUNA_LOG=debug "$VUNA" repl 2>&1
 out-contains: tool-closure modules=
 out-contains: 43
 out-not-contains: TC_UnknownName
@@ -29,6 +29,6 @@ out-not-contains: TC_UnknownName
 # 新增一个模块：它被 buffer import 时，header 图能直接把它纳入闭包。断言：结果正确且
 # 不走整体回退全量。
 run: printf 'module KNew where\n\nimport KDep\n\nexport newVal : Int\nnewVal = kdepVal + 1\n' > "$TMPDIR/iface-k-root/lib/KNew.vuna"
-run: cd "$TMPDIR/iface-k-root" && printf 'import KNew\nnewVal\n:q\n' | VUNA_DEBUG_PERF=1 "$VUNA" repl 2>&1
+run: cd "$TMPDIR/iface-k-root" && printf 'import KNew\nnewVal\n:q\n' | VUNA_LOG=debug "$VUNA" repl 2>&1
 out-contains: 43
 out-not-contains: TC_UnknownName

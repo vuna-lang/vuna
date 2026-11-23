@@ -1324,13 +1324,13 @@ check_not_contains "completion 不回落到磁盘 docstring" "$cp2" 'disk fn doc
 # 参数、洞、宏），字符串与运算符留给 TextMate；documentHighlight 的局部绑定走作用域
 # 解析（定义 + 使用）；foldingRange 按行首缩进产出 offside 块。
 sm_uri="file://$tmp/semantic.vuna"
-sm_text='module Sm where\n\ndata Color : Type where\n  Red : Color\n\nrecord Pt where\n  px : Int\n\nparse : Int -> Int\nparse n = dbg! n\n\nmain : Int\nmain =\n  let\n    y : Int\n    y = ?goal\n  in parse y\n'
+sm_text='module Sm where\n\ndata Color : Type where\n  Red : Color\n\nrecord Pt where\n  px : Int\n\nparse : Int -> Int\nparse n = log! \"debug\" (strFromInt n)\n\nmain : Int\nmain =\n  let\n    y : Int\n    y = ?goal\n  in parse y\n'
 {
   frame_line '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}'
   frame_line '{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"'"$sm_uri"'","languageId":"vuna","version":1,"text":"'"$sm_text"'"}}}'
   frame_line '{"jsonrpc":"2.0","id":2,"method":"textDocument/semanticTokens/full","params":{"textDocument":{"uri":"'"$sm_uri"'"}}}'
-  # line9 char15 = `parse n = dbg! n` 的最后一个 n（局部 binder）
-  frame_line '{"jsonrpc":"2.0","id":3,"method":"textDocument/documentHighlight","params":{"textDocument":{"uri":"'"$sm_uri"'"},"position":{"line":9,"character":15}}}'
+  # line9 char35 = `parse n = log! \"debug\" (strFromInt n)` 的最后一个 n（局部 binder）
+  frame_line '{"jsonrpc":"2.0","id":3,"method":"textDocument/documentHighlight","params":{"textDocument":{"uri":"'"$sm_uri"'"},"position":{"line":9,"character":35}}}'
   # line0 char1 = module 关键字（不是 ident，回空）
   frame_line '{"jsonrpc":"2.0","id":4,"method":"textDocument/documentHighlight","params":{"textDocument":{"uri":"'"$sm_uri"'"},"position":{"line":0,"character":1}}}'
   frame_line '{"jsonrpc":"2.0","id":5,"method":"textDocument/foldingRange","params":{"textDocument":{"uri":"'"$sm_uri"'"}}}'

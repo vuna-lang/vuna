@@ -27,7 +27,7 @@ run: sh -c 'out=$("$VUNA" check --json "$VUNA_SUITE_ROOT/packages/cli/test/corpu
 exit: 0
 
 # 15c) 纯显示配置（[diagnostics]）不进语义缓存身份：改 format 后 check 仍命中。
-run: sh -c 'set -e; d="$TMPDIR/diagcfg"; rm -rf "$d"; cp -R "$VUNA_SUITE_ROOT/packages/cli/test/corpus/packages/01_workspace" "$d"; sed -i "s|../../../../../../packages/base|$VUNA_SUITE_ROOT/packages/base|" "$d/vuna.toml"; VUNA_DEBUG_PERF=1 "$VUNA" check "$d" >/dev/null 2>&1 || true; printf "\n[diagnostics]\nformat = \"human\"\n" >> "$d/vuna.toml"; err=$(VUNA_DEBUG_PERF=1 "$VUNA" check "$d" 2>&1 >/dev/null); printf "%s" "$err" | grep -q "cache-path=hit"'
+run: sh -c 'set -e; d="$TMPDIR/diagcfg"; rm -rf "$d"; cp -R "$VUNA_SUITE_ROOT/packages/cli/test/corpus/packages/01_workspace" "$d"; sed -i "s|../../../../../../packages/base|$VUNA_SUITE_ROOT/packages/base|" "$d/vuna.toml"; VUNA_LOG=debug "$VUNA" check "$d" >/dev/null 2>&1 || true; printf "\n[diagnostics]\nformat = \"human\"\n" >> "$d/vuna.toml"; err=$(VUNA_LOG=debug "$VUNA" check "$d" 2>&1 >/dev/null); printf "%s" "$err" | grep -q "cache-path=hit"'
 exit: 0
 
 # 15d) `--release` 是语义开关：debug 检查过的同一输入，release 不能命中缓存而放行
@@ -41,7 +41,7 @@ run: sh -c 'set -e; d="$TMPDIR/cjk"; rm -rf "$d"; mkdir -p "$d"; printf "main : 
 exit: 0
 
 # 15f) 失败检查按输入地址 replay：第二次 check 命中缓存，错误与位置逐字一致。
-run: sh -c 'set -e; d="$TMPDIR/replay"; rm -rf "$d"; cp -R "$VUNA_SUITE_ROOT/packages/cli/test/corpus/packages/01_workspace" "$d"; sed -i "s|../../../../../../packages/base|$VUNA_SUITE_ROOT/packages/base|" "$d/vuna.toml"; printf "main : Int\nmain = \"boom\"\n" > "$d/app/Main.vuna"; out1=$("$VUNA" check "$d" 2>&1 || true); err=$("$VUNA" check "$d" --debug-perf 2>&1 >/dev/null || true); printf "%s" "$err" | grep -q "cache-path=hit"; out2=$("$VUNA" check "$d" 2>&1 || true); [ "$out1" = "$out2" ]'
+run: sh -c 'set -e; d="$TMPDIR/replay"; rm -rf "$d"; cp -R "$VUNA_SUITE_ROOT/packages/cli/test/corpus/packages/01_workspace" "$d"; sed -i "s|../../../../../../packages/base|$VUNA_SUITE_ROOT/packages/base|" "$d/vuna.toml"; printf "main : Int\nmain = \"boom\"\n" > "$d/app/Main.vuna"; out1=$("$VUNA" check "$d" 2>&1 || true); err=$(VUNA_LOG=debug "$VUNA" check "$d" 2>&1 >/dev/null || true); printf "%s" "$err" | grep -q "cache-path=hit"; out2=$("$VUNA" check "$d" 2>&1 || true); [ "$out1" = "$out2" ]'
 exit: 0
 
 # 15g) 同内容不同目录共享 store：命中后路径按**当前**项目解析，不泄露上一个目录。

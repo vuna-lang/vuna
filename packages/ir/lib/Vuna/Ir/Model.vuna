@@ -411,10 +411,10 @@ export record IrShared(..) where
   irSharedListFam : Maybe IrListFam
   -- | 程序是否用到浮点（决定 `Vuna_runtime.ml` 是否追加浮点 helper）。
   irSharedUsesFloat : Bool
-  -- | 程序是否用到编译器 tracing 隐藏原语（决定是否追加 tracing helper）。
+  -- | 程序是否用到文本日志隐藏原语（决定是否追加文本日志 runtime）。
   irSharedUsesTrace : Bool
-  -- | 程序是否用到可观测性隐藏原语（决定是否追加 obs runtime；与 tracing 分开，
-  -- 让 `dbg!` 程序不背事件缓冲、obs 程序不背 stderr 门控）。
+  -- | 程序是否用到可观测性隐藏原语（决定是否追加 obs runtime；与文本日志分开，
+  -- 让 `log!` 程序不背事件缓冲、obs 程序不背文本 sink）。
   irSharedUsesObs : Bool
   -- | 运行时定义的位置行：定义名 → (文件, 起始行)。只有带 span 的定义在这里；
   -- 跨单元的 `extraDefLocs` 由调用方与这里合并（顺序无关，落盘前统一排序）。

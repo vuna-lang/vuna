@@ -45,15 +45,9 @@ main =
     sample <- sampleWanted
     _ <- if sample then pure (obsSampleStart "" 0) else pure 0
     args <- argsGetArgs
-    code <- runMain (withoutPerfFlag args)
+    code <- runMain args
     _ <- if sample then pure (obsSampleStop 0) else pure 0
     exitWith code
-
--- | 内部：去掉隐藏的性能旗标（runtime 从原始 argv 读取，命令解析要忽略）。
-withoutPerfFlag : List String -> List String
-withoutPerfFlag [] = []
-withoutPerfFlag (a :: rest) =
-  if a == "--debug-perf" then withoutPerfFlag rest else a :: withoutPerfFlag rest
 
 -- | 内部：入口主体——describe 优先，其余交给编译器 CLI。
 runMain : List String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, ArgsOp] Int

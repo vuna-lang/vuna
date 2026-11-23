@@ -19,6 +19,6 @@ run: sh -c 'test -d "$TMPDIR/org-store/objects/module-iface"'
 exit: 0
 # 命令行 check 复用这些对象：包级判定若命中则直接通过；未命中时也不应出现
 # 「依赖接口缺件 ⇒ 全量回退」的信号。
-run: sh -c 'VUNA_STORE="$TMPDIR/org-store" TMPDIR="$TMPDIR/org-cache" "$VUNA" check "$TMPDIR/org-pkg/mid" --debug-perf 2>&1'
+run: sh -c 'VUNA_STORE="$TMPDIR/org-store" TMPDIR="$TMPDIR/org-cache" VUNA_LOG=debug "$VUNA" check "$TMPDIR/org-pkg/mid" 2>&1'
 exit: 0
 out-not-contains: iface-miss

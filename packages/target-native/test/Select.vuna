@@ -133,7 +133,7 @@ expectedPlans =
     Pair "natAdd" (nativeRtLabel "nat_add"),
     Pair "natMul" (nativeRtLabel "nat_mul"),
     Pair "natSub" (nativeRtLabel "nat_sub"),
-    Pair "@vuna@debug@on" (nativeRtLabel "debug_on"),
+    Pair "@vuna@log@on" (nativeRtLabel "log_on"),
     Pair "@vuna@obs@level" (nativeRtLabel "obs_level")
   ]
 

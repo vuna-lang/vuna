@@ -5,31 +5,31 @@ run: sh -c 'S="$TMPDIR/di"; rm -rf "$S"; mkdir -p "$S/dep/lib" "$S/mid/lib" "$S/
 exit: 0
 
 # 依赖源码追加注释（语义面不变）⇒ 依赖方 check 命中。
-run: sh -c 'S="$TMPDIR/di"; printf "module D where\n\n-- harmless note\nexport f : Int -> Int\nf x = x\n" > "$S/dep/lib/D.vuna"; VUNA_STORE="$S/store" "$VUNA" check "$S/dep" >/dev/null 2>&1; VUNA_DEBUG_PERF=1 VUNA_STORE="$S/store" "$VUNA" check "$S/mid" 2>&1'
+run: sh -c 'S="$TMPDIR/di"; printf "module D where\n\n-- harmless note\nexport f : Int -> Int\nf x = x\n" > "$S/dep/lib/D.vuna"; VUNA_STORE="$S/store" "$VUNA" check "$S/dep" >/dev/null 2>&1; VUNA_LOG=debug VUNA_STORE="$S/store" "$VUNA" check "$S/mid" 2>&1'
 exit: 0
 out-contains: cache-path=hit
 
 # 依赖 manifest 追加注释（非语义配置）⇒ 依赖方 check 命中。
-run: sh -c 'S="$TMPDIR/di"; printf "\n# dep note\n" >> "$S/dep/vuna.toml"; VUNA_STORE="$S/store" "$VUNA" check "$S/dep" >/dev/null 2>&1; VUNA_DEBUG_PERF=1 VUNA_STORE="$S/store" "$VUNA" check "$S/mid" 2>&1'
+run: sh -c 'S="$TMPDIR/di"; printf "\n# dep note\n" >> "$S/dep/vuna.toml"; VUNA_STORE="$S/store" "$VUNA" check "$S/dep" >/dev/null 2>&1; VUNA_LOG=debug VUNA_STORE="$S/store" "$VUNA" check "$S/mid" 2>&1'
 exit: 0
 out-contains: cache-path=hit
 
 # 依赖的透明定义体变化（接口语义面变化）⇒ 依赖方 check 未命中。
-run: sh -c 'S="$TMPDIR/di"; printf "module D where\n\n-- harmless note\nexport f : Int -> Int\nf x = 1\n" > "$S/dep/lib/D.vuna"; VUNA_STORE="$S/store" "$VUNA" check "$S/dep" >/dev/null 2>&1; VUNA_DEBUG_PERF=1 VUNA_STORE="$S/store" "$VUNA" check "$S/mid" 2>&1'
+run: sh -c 'S="$TMPDIR/di"; printf "module D where\n\n-- harmless note\nexport f : Int -> Int\nf x = 1\n" > "$S/dep/lib/D.vuna"; VUNA_STORE="$S/store" "$VUNA" check "$S/dep" >/dev/null 2>&1; VUNA_LOG=debug VUNA_STORE="$S/store" "$VUNA" check "$S/mid" 2>&1'
 exit: 0
 out-contains: cache-path=miss
 
 # 依赖新增导出（接口变化）⇒ 依赖方未命中；随后只改 opaque 体 ⇒ 依赖方命中。
-run: sh -c 'S="$TMPDIR/di"; printf "module D where\n\n-- harmless note\nexport f : Int -> Int\nf x = 1\n\nexport opaque h : Int\nh = 7\n" > "$S/dep/lib/D.vuna"; VUNA_STORE="$S/store" "$VUNA" check "$S/dep" >/dev/null 2>&1; VUNA_DEBUG_PERF=1 VUNA_STORE="$S/store" "$VUNA" check "$S/mid" 2>&1'
+run: sh -c 'S="$TMPDIR/di"; printf "module D where\n\n-- harmless note\nexport f : Int -> Int\nf x = 1\n\nexport opaque h : Int\nh = 7\n" > "$S/dep/lib/D.vuna"; VUNA_STORE="$S/store" "$VUNA" check "$S/dep" >/dev/null 2>&1; VUNA_LOG=debug VUNA_STORE="$S/store" "$VUNA" check "$S/mid" 2>&1'
 exit: 0
 out-contains: cache-path=miss
 
-run: sh -c 'S="$TMPDIR/di"; printf "module D where\n\n-- harmless note\nexport f : Int -> Int\nf x = 1\n\nexport opaque h : Int\nh = 8\n" > "$S/dep/lib/D.vuna"; VUNA_STORE="$S/store" "$VUNA" check "$S/dep" >/dev/null 2>&1; VUNA_DEBUG_PERF=1 VUNA_STORE="$S/store" "$VUNA" check "$S/mid" 2>&1'
+run: sh -c 'S="$TMPDIR/di"; printf "module D where\n\n-- harmless note\nexport f : Int -> Int\nf x = 1\n\nexport opaque h : Int\nh = 8\n" > "$S/dep/lib/D.vuna"; VUNA_STORE="$S/store" "$VUNA" check "$S/dep" >/dev/null 2>&1; VUNA_LOG=debug VUNA_STORE="$S/store" "$VUNA" check "$S/mid" 2>&1'
 exit: 0
 out-contains: cache-path=hit
 
 # 接口身份摘要缺失（依赖还没写 summary）⇒ 回退 manifest 身份，仍能检查成功；依赖重跑后恢复命中。
-run: sh -c 'S="$TMPDIR/di"; rm -rf "$S/store/objects/pkg-iface"; VUNA_STORE="$S/store" "$VUNA" check "$S/mid" >/dev/null 2>&1 && VUNA_STORE="$S/store" "$VUNA" check "$S/dep" >/dev/null 2>&1; VUNA_DEBUG_PERF=1 VUNA_STORE="$S/store" "$VUNA" check "$S/mid" 2>&1'
+run: sh -c 'S="$TMPDIR/di"; rm -rf "$S/store/objects/pkg-iface"; VUNA_STORE="$S/store" "$VUNA" check "$S/mid" >/dev/null 2>&1 && VUNA_STORE="$S/store" "$VUNA" check "$S/dep" >/dev/null 2>&1; VUNA_LOG=debug VUNA_STORE="$S/store" "$VUNA" check "$S/mid" 2>&1'
 exit: 0
 out-contains: cache-path=hit
 
@@ -38,7 +38,7 @@ out-contains: cache-path=hit
 run: sh -c 'S="$TMPDIR/dsw"; rm -rf "$S"; mkdir -p "$S/dep/lib" "$S/mid/lib" "$S/mid/app"; printf "[package]\nname = \"dep\"\n[export]\nmodules = [\"D\"]\n" > "$S/dep/vuna.toml"; printf "module D where\n\nexport f : Int -> Int\nf x = x\n" > "$S/dep/lib/D.vuna"; printf "[package]\nname = \"mid\"\n[export]\nmodules = [\"M\"]\n\n[dependencies.dep]\npath = \"../dep\"\n" > "$S/mid/vuna.toml"; printf "module M where\n\nimport D\n\nexport g : Int\ng = f 1\n" > "$S/mid/lib/M.vuna"; printf "import M\n\nmain : Int\nmain = g\n" > "$S/mid/app/Main.vuna"; VUNA_STORE="$S/store" "$VUNA" check "$S/dep" >/dev/null 2>&1 && VUNA_STORE="$S/store" "$VUNA" check "$S/mid" >/dev/null 2>&1'
 exit: 0
 
-run: sh -c 'S="$TMPDIR/dsw"; printf "module D where\n\nexport f : Int -> String\nf x = \"s\"\n" > "$S/dep/lib/D.vuna"; VUNA_DEBUG_PERF=1 VUNA_STORE="$S/store" "$VUNA" check "$S/mid" 2>&1'
+run: sh -c 'S="$TMPDIR/dsw"; printf "module D where\n\nexport f : Int -> String\nf x = \"s\"\n" > "$S/dep/lib/D.vuna"; VUNA_LOG=debug VUNA_STORE="$S/store" "$VUNA" check "$S/mid" 2>&1'
 exit: 1
 out-contains: TC_TypeMismatch
 out-not-contains: cache-path=hit
@@ -47,7 +47,7 @@ out-not-contains: cache-path=hit
 run: sh -c 'S="$TMPDIR/dsc"; rm -rf "$S"; mkdir -p "$S/dep/lib" "$S/mid/lib" "$S/mid/app"; printf "[package]\nname = \"dep\"\n[export]\nmodules = [\"D\"]\n" > "$S/dep/vuna.toml"; printf "module D where\n\nexport f : Int -> Int\nf x = x\n" > "$S/dep/lib/D.vuna"; printf "[package]\nname = \"mid\"\n[export]\nmodules = [\"M\"]\n\n[dependencies.dep]\npath = \"../dep\"\n" > "$S/mid/vuna.toml"; printf "module M where\n\nimport D\n\nexport g : Int\ng = f 1\n" > "$S/mid/lib/M.vuna"; printf "import M\n\nmain : Int\nmain = g\n" > "$S/mid/app/Main.vuna"; VUNA_STORE="$S/store" "$VUNA" check "$S/mid" >/dev/null 2>&1'
 exit: 0
 
-run: sh -c 'S="$TMPDIR/dsc"; printf "module D where\n\nexport f : Int -> String\nf x = \"s\"\n" > "$S/dep/lib/D.vuna"; VUNA_DEBUG_PERF=1 VUNA_STORE="$S/store" "$VUNA" check "$S/mid" 2>&1'
+run: sh -c 'S="$TMPDIR/dsc"; printf "module D where\n\nexport f : Int -> String\nf x = \"s\"\n" > "$S/dep/lib/D.vuna"; VUNA_LOG=debug VUNA_STORE="$S/store" "$VUNA" check "$S/mid" 2>&1'
 exit: 1
 out-contains: TC_TypeMismatch
 out-not-contains: cache-path=hit
@@ -56,12 +56,12 @@ out-not-contains: cache-path=hit
 run: sh -c 'S="$TMPDIR/dsb"; rm -rf "$S"; mkdir -p "$S/dep/lib" "$S/mid/lib" "$S/mid/app"; printf "[package]\nname = \"dep\"\n[export]\nmodules = [\"D\"]\n" > "$S/dep/vuna.toml"; printf "module D where\n\nexport f : Int -> Int\nf x = x\n" > "$S/dep/lib/D.vuna"; printf "[package]\nname = \"mid\"\n[export]\nmodules = [\"M\"]\n\n[dependencies.dep]\npath = \"../dep\"\n" > "$S/mid/vuna.toml"; printf "module M where\n\nimport D\n\nexport g : Int\ng = f 1\n" > "$S/mid/lib/M.vuna"; printf "import M\n\nmain : Int\nmain = g\n" > "$S/mid/app/Main.vuna"; VUNA_STORE="$S/store" "$VUNA" check "$S/dep" >/dev/null 2>&1 && VUNA_STORE="$S/store" "$VUNA" build --no-compile --out "$S/o1" "$S/mid" >/dev/null 2>&1'
 exit: 0
 
-run: sh -c 'S="$TMPDIR/dsb"; printf "module D where\n\nexport f : Int -> Int\nf x = x\n\nexport h : Int\nh = 1\n" > "$S/dep/lib/D.vuna"; VUNA_DEBUG_PERF=1 VUNA_STORE="$S/store" "$VUNA" build --no-compile --out "$S/o2" "$S/mid" 2>&1'
+run: sh -c 'S="$TMPDIR/dsb"; printf "module D where\n\nexport f : Int -> Int\nf x = x\n\nexport h : Int\nh = 1\n" > "$S/dep/lib/D.vuna"; VUNA_LOG=debug VUNA_STORE="$S/store" "$VUNA" build --no-compile --out "$S/o2" "$S/mid" 2>&1'
 exit: 0
 out-not-contains: split-pointer-hit
 # 依赖已重跑后，注释变更不脏依赖方的构建：mid 的快指针必须命中、产物不重建。
 run: sh -c 'S="$TMPDIR/dsb"; VUNA_STORE="$S/store" "$VUNA" check "$S/dep" >/dev/null 2>&1 && VUNA_STORE="$S/store" "$VUNA" build --no-compile --out "$S/o3" "$S/mid" >/dev/null 2>&1'
 exit: 0
-run: sh -c 'S="$TMPDIR/dsb"; printf "module D where\n\n-- harmless note\n\nexport f : Int -> Int\nf x = x\n\nexport h : Int\nh = 1\n" > "$S/dep/lib/D.vuna"; VUNA_STORE="$S/store" "$VUNA" check "$S/dep" >/dev/null 2>&1; VUNA_DEBUG_PERF=1 VUNA_STORE="$S/store" "$VUNA" build --no-compile --out "$S/o4" "$S/mid" 2>&1'
+run: sh -c 'S="$TMPDIR/dsb"; printf "module D where\n\n-- harmless note\n\nexport f : Int -> Int\nf x = x\n\nexport h : Int\nh = 1\n" > "$S/dep/lib/D.vuna"; VUNA_STORE="$S/store" "$VUNA" check "$S/dep" >/dev/null 2>&1; VUNA_LOG=debug VUNA_STORE="$S/store" "$VUNA" build --no-compile --out "$S/o4" "$S/mid" 2>&1'
 exit: 0
 out-contains: split-pointer-hit

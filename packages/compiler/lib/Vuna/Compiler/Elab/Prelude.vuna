@@ -128,7 +128,7 @@ preludeTypeGlobals =
 export preludeValueGlobals : List (String, Term)
 preludeValueGlobals = map (\i => (intrinsicName i, ityToTerm (intrinsicSignature i))) userIntrinsics
 
--- 编译器 tracing 的隐藏原语签名：只进 prelude globals（供 `dbg!` 展开后的
+-- 文本日志 / 观测的隐藏原语签名：只进 prelude globals（供 `log!` 展开后的
 -- `@vuna@…` 类型检查），不进 `preludeValueNames`/用户可见名单。
 internalValueGlobals : List (String, Term)
 internalValueGlobals =

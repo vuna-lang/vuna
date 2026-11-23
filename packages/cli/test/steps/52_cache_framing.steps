@@ -44,10 +44,10 @@ out-equals: vuna-cache-frame 2
 run: sh -c 'rm -rf "$TMPDIR/c32-check-cache"; VUNA_STORE="$TMPDIR/c32-check-cache/store" TMPDIR="$TMPDIR/c32-check-cache" "$VUNA" check "$TMPDIR/c32-pkg/dep" >/dev/null 2>&1; VUNA_STORE="$TMPDIR/c32-check-cache/store" TMPDIR="$TMPDIR/c32-check-cache" "$VUNA" check "$TMPDIR/c32-pkg/root" >/dev/null 2>&1'
 run: sh -c 'test "$(find "$TMPDIR/c32-check-cache/store/objects/check-outcome" -type f | wc -l)" -ge 2'
 # 命中：再 check 一次必须直接判过（不再精化）。
-run: sh -c 'VUNA_STORE="$TMPDIR/c32-check-cache/store" TMPDIR="$TMPDIR/c32-check-cache" VUNA_DEBUG_PERF=1 "$VUNA" check "$TMPDIR/c32-pkg/dep" 2>&1 | tee "$TMPDIR/c32-check.log"'
+run: sh -c 'VUNA_STORE="$TMPDIR/c32-check-cache/store" TMPDIR="$TMPDIR/c32-check-cache" VUNA_LOG=debug "$VUNA" check "$TMPDIR/c32-pkg/dep" 2>&1 | tee "$TMPDIR/c32-check.log"'
 out-contains: cache-path=hit
 # 删掉全部 check marker ⇒ 下一次必须重算并重新写回。
-run: sh -c 'rm -rf "$TMPDIR/c32-check-cache/store/objects/check-outcome"; VUNA_STORE="$TMPDIR/c32-check-cache/store" TMPDIR="$TMPDIR/c32-check-cache" VUNA_DEBUG_PERF=1 "$VUNA" check "$TMPDIR/c32-pkg/dep" 2>&1 | tee "$TMPDIR/c32-check-miss.log"'
+run: sh -c 'rm -rf "$TMPDIR/c32-check-cache/store/objects/check-outcome"; VUNA_STORE="$TMPDIR/c32-check-cache/store" TMPDIR="$TMPDIR/c32-check-cache" VUNA_LOG=debug "$VUNA" check "$TMPDIR/c32-pkg/dep" 2>&1 | tee "$TMPDIR/c32-check-miss.log"'
 out-contains: cache-path=miss
 run: sh -c 'test "$(find "$TMPDIR/c32-check-cache/store/objects/check-outcome" -type f | wc -l)" -ge 1'
 # 52e) 接口载荷：全部截断后照常重新精化并重写（载荷不是 OCaml Marshal，截断按 framing 拒绝）。
