@@ -20,6 +20,7 @@ modules = [
   "Vuna.Target.Native.Module",
   "Vuna.Target.Native.Pal",
   "Vuna.Target.Native.Plugin",
+  "Vuna.Target.Native.Range",
   "Vuna.Target.Native.Regs",
   "Vuna.Target.Native.Render",
   "Vuna.Target.Native.Repr",

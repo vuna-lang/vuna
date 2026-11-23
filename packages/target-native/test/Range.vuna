@@ -1,0 +1,153 @@
+-- 范围信息（`Native.Range`）的单测。
+--
+-- 锁四件事：饱和算术在 `Int` 边界上不回绕；区间传播（加减乘 / 常量除法 / 掩码 /
+-- Nat 夹取）是上近似；分支守卫推导出的 then/else 区间（含常量在左的翻转与求交为空）；
+-- `overflowFree` 在「恰好等于 minInt」这类边界上偏保守。
+import Base
+import Base.Data.List as List
+import Base.Data.Maybe as Maybe
+import Base.Data.Pair as Pair
+import Base.Effect.Core
+import Vuna.Ir.Model
+import Vuna.Target.Native.Abi
+import Vuna.Target.Native.Range
+
+main : Eff [] String
+main =
+  case problems of
+    [] => pure ""
+    ps =>
+      do
+        _ <- prim_eff_print ("native range drifted:\n" ++ join "\n" ps ++ "\n")
+        _ <- prim_eff_exit 1
+        pure ""
+
+xBinder : IrBinder
+xBinder = mkIrBinderTyped 10 "x" IrTyInt
+
+-- | 变量 x 的区间（无事实 = 全域；给定时是 env 里的那一条）。
+varX : Ir
+varX = IrVar xBinder
+
+-- | 便捷：`x <op> k` / `k <op> x`。
+cmp : String -> Ir -> Ir -> Ir
+cmp sym a b = IrRtApp sym [a, b]
+
+problems : List String
+problems =
+  concatMap
+    (\s => if s == "" then [] else [s])
+    (append edgeProblems (append overflowProblems (append rangeProblems factProblems)))
+
+-- ---------------------------------------------------------------
+-- 饱和算术
+-- ---------------------------------------------------------------
+edgeProblems : List String
+edgeProblems =
+  [
+    intCheck "satAdd max+1" nativeMaxInt (satAdd nativeMaxInt 1),
+    intCheck "satAdd min-1" nativeMinInt (satAdd nativeMinInt (0 - 1)),
+    intCheck "satAdd min+max" (0 - 1) (satAdd nativeMinInt nativeMaxInt),
+    intCheck "satSub min-1" nativeMinInt (satSub nativeMinInt 1),
+    intCheck "satSub max+1" nativeMaxInt (satSub nativeMaxInt (0 - 1)),
+    intCheck "satSub 0-min" nativeMaxInt (satSub 0 nativeMinInt),
+    intCheck "satMul max*2" nativeMaxInt (satMul nativeMaxInt 2),
+    intCheck "satMul min*-1" nativeMaxInt (satMul nativeMinInt (0 - 1)),
+    intCheck "satMul min*2" nativeMinInt (satMul nativeMinInt 2),
+    intCheck "satMul min*min" nativeMaxInt (satMul nativeMinInt nativeMinInt),
+    intCheck "satMul plain" (0 - 12) (satMul 3 (0 - 4))
+  ]
+
+intCheck : String -> Int -> Int -> String
+intCheck label want got =
+  if want == got then "" else label ++ ": want " ++ strFromInt want ++ " got " ++ strFromInt got
+
+-- ---------------------------------------------------------------
+-- 溢出判据
+-- ---------------------------------------------------------------
+overflowProblems : List String
+overflowProblems =
+  [
+    boolCheck "sub n-1 (n>=1) fits" True (overflowFree "-" (Pair 1 nativeMaxInt) (Pair 1 1)),
+    boolCheck "sub unknown n-1" False (overflowFree "-" (Pair nativeMinInt nativeMaxInt) (Pair 1 1)),
+    boolCheck "add max+1" False (overflowFree "+" (Pair nativeMaxInt nativeMaxInt) (Pair 1 1)),
+    boolCheck "add small" True (overflowFree "+" (Pair 0 100) (Pair 0 100)),
+    boolCheck "mul small" True (overflowFree "*" (Pair 0 100) (Pair 0 10)),
+    boolCheck "mul wide" False (overflowFree "*" (Pair 0 nativeMaxInt) (Pair 0 2)),
+    boolCheck
+      "mul min*-1"
+      False
+      (overflowFree "*" (Pair nativeMinInt nativeMinInt) (Pair (0 - 1) (0 - 1))),
+    boolCheck "nonneg yes" True (nonNegative (Pair 0 nativeMaxInt)),
+    boolCheck "nonneg no" False (nonNegative (Pair (0 - 1) nativeMaxInt))
+  ]
+
+boolCheck : String -> Bool -> Bool -> String
+boolCheck label want got = if want == got then "" else label ++ ": drifted"
+
+-- ---------------------------------------------------------------
+-- 区间传播
+-- ---------------------------------------------------------------
+rangeProblems : List String
+rangeProblems =
+  [
+    rangeCheck "literal" (rangeOf [] (IrInt 7)) (Pair 7 7),
+    rangeCheck "env fact" (rangeOf [Pair 10 (Pair 1 5)] varX) (Pair 1 5),
+    rangeCheck "unknown var" (rangeOf [] varX) fullRange,
+    rangeCheck
+      "add saturates"
+      (rangeOf [] (IrRtApp "+" [varX, IrInt 1]))
+      (Pair (nativeMinInt + 1) nativeMaxInt),
+    rangeCheck "mask" (rangeOf [] (IrRtApp "bitAnd" [varX, IrInt 255])) (Pair 0 255),
+    rangeCheck
+      "div nonneg"
+      (rangeOf [Pair 10 (Pair 4 40)] (IrRtApp "/" [varX, IrInt 2]))
+      (Pair 2 20),
+    rangeCheck "div unknown" (rangeOf [] (IrRtApp "/" [varX, IrInt 2])) fullRange,
+    rangeCheck "natFromInt clamps" (rangeOf [] (IrRtApp "natFromInt" [IrInt (0 - 5)])) (Pair 0 0),
+    rangeCheck "natSub floors" (rangeOf [] (IrRtApp "natSub" [IrInt 3, IrInt 10])) (Pair 0 0)
+  ]
+
+rangeCheck : String -> Pair Int Int -> Pair Int Int -> String
+rangeCheck label got want =
+  if firstOf got == firstOf want && secondOf got == secondOf want then
+    ""
+  else
+    label ++ ": got (" ++ strFromInt (firstOf got) ++ ", " ++ strFromInt (secondOf got) ++ ")"
+
+-- ---------------------------------------------------------------
+-- 守卫事实
+-- ---------------------------------------------------------------
+factProblems : List String
+factProblems =
+  [
+    factCheck "n <= 0 then" (factsThen [] (cmp "bi_le_int" varX (IrInt 0))) (Pair nativeMinInt 0),
+    factCheck "n <= 0 else" (factsElse [] (cmp "bi_le_int" varX (IrInt 0))) (Pair 1 nativeMaxInt),
+    factCheck "0 >= n then" (factsThen [] (cmp "bi_ge_int" (IrInt 0) varX)) (Pair nativeMinInt 0),
+    factCheck "0 >= n else" (factsElse [] (cmp "bi_ge_int" (IrInt 0) varX)) (Pair 1 nativeMaxInt),
+    factCheck "n < k then" (factsThen [] (cmp "bi_lt_int" varX (IrInt 5))) (Pair nativeMinInt 4),
+    factCheck "n >= k else" (factsElse [] (cmp "bi_ge_int" varX (IrInt 5))) (Pair nativeMinInt 4),
+    factCheck
+      "intersect keeps env"
+      (factsThen [Pair 10 (Pair 0 10)] (cmp "bi_le_int" varX (IrInt 5)))
+      (Pair 0 5),
+    factCheck "eq narrows" (factsThen [] (cmp "bi_eq_int" varX (IrInt 3))) (Pair 3 3),
+    emptyCheck "min edge has no then" (factsThen [] (cmp "bi_lt_int" varX (IrInt nativeMinInt))),
+    emptyCheck
+      "empty intersection"
+      (factsElse [Pair 10 (Pair 0 10)] (cmp "bi_le_int" varX (IrInt 15))),
+    emptyCheck "non-comparison" (factsThen [] varX)
+  ]
+
+factCheck : String -> List (Pair Int (Pair Int Int)) -> Pair Int Int -> String
+factCheck label got want =
+  case got of
+    [] => label ++ ": no fact"
+    (Pair _ r) :: _ =>
+      if firstOf r == firstOf want && secondOf r == secondOf want then
+        ""
+      else
+        label ++ ": got (" ++ strFromInt (firstOf r) ++ ", " ++ strFromInt (secondOf r) ++ ")"
+
+emptyCheck : String -> List (Pair Int (Pair Int Int)) -> String
+emptyCheck label got = if length got == 0 then "" else label ++ ": unexpected fact"

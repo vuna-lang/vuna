@@ -1,0 +1,237 @@
+module Vuna.Target.Native.Range where
+
+-- native 后端的整数范围信息。
+--
+-- 目的只有一个：在**不改变语义**的前提下，省掉可证明多余的 63-bit wrap 与符号修正
+-- 移位。区间是 `Int` 域内的上近似（`[-2^62, 2^62-1]`），「不知道」就是全域——不需要
+-- 单独的 Top 构造子。任何一步算不准都退回全域，只会少优化，不会错优化。
+--
+-- 两条使用口径（不要混为一谈）：
+--
+--   * **上下文消除**（`Native.Module` 的延时 wrap）：中间值只被 mod 2^63 的运算或低位
+--     掩码消费，值可以暂时不规范化；
+--   * **证明消除**（本模块 + `overflowFree`）：结果可证明落在 `Int` 域内，wrap 本身就是
+--     no-op，值仍然规范化，所以对任何消费者（包括 `cmp`、除法）都安全。
+--
+-- 边界：只 import Base 与 `Native.Abi`；不依赖 codegen，便于单测。
+import Base.Data.Bool as Bool
+import Base.Data.Int as Int
+import Base.Data.List as List
+import Base.Data.Maybe as Maybe
+import Base.Data.Pair as Pair
+import Vuna.Ir.Model
+import Vuna.Target.Native.Abi
+
+-- | 区间 = `(lo, hi)`，不变式 `lo <= hi`；全域 = 整个 `Int`。
+export fullRange : Pair Int Int
+fullRange = Pair nativeMinInt nativeMaxInt
+
+-- ---------------------------------------------------------------
+-- 饱和算术（编译器自身也是 63-bit，不能直接乘加）
+-- ---------------------------------------------------------------
+export satAdd : Int -> Int -> Int
+satAdd a b =
+  if b > 0 then
+    if a > nativeMaxInt - b then nativeMaxInt else a + b
+  else if b < 0 then if a < nativeMinInt - b then nativeMinInt else a + b else a
+
+export satSub : Int -> Int -> Int
+satSub a b =
+  if b > 0 then
+    if a < nativeMinInt + b then nativeMinInt else a - b
+  else if b < 0 then if a > nativeMaxInt + b then nativeMaxInt else a - b else a
+
+-- | 绝对值（`minInt` 的绝对值越界，饱和到 `maxInt`；只在判溢出时用）。
+magOf : Int -> Int
+magOf a = if a < 0 then satSub 0 a else a
+
+-- | 乘法：溢出时按符号饱和。判据全部用除法，避免编译器自身的乘法回绕。
+export satMul : Int -> Int -> Int
+satMul a b =
+  if a == 0 || b == 0 then
+    0
+  else if a == 1 then
+    b
+  else if b == 1 then
+    a
+  else if a == 0 - 1 then
+    satSub 0 b
+  else if b == 0 - 1 then
+    satSub 0 a
+  else if a == nativeMinInt || b == nativeMinInt then
+    if a > 0 || b > 0 then nativeMinInt else nativeMaxInt
+  else
+    let
+      ma = magOf a
+      mb = magOf b
+      neg = (a < 0 && b > 0) || (a > 0 && b < 0)
+    in if ma > nativeMaxInt / mb then if neg then nativeMinInt else nativeMaxInt else if neg then 0 - (ma * mb) else ma * mb
+
+-- ---------------------------------------------------------------
+-- 溢出判据（用区间端点，不能拿饱和值反推）
+-- ---------------------------------------------------------------
+fitsAdd : Int -> Int -> Bool
+fitsAdd a b = if b >= 0 then a <= nativeMaxInt - b else a >= nativeMinInt - b
+
+fitsSub : Int -> Int -> Bool
+fitsSub a b = if b >= 0 then a >= nativeMinInt + b else a <= nativeMaxInt + b
+
+-- | `a * b` 是否落在 `Int` 域内（保守：恰好等于 `minInt` 的积也判不通过）。
+fitsMul : Int -> Int -> Bool
+fitsMul a b =
+  if a == 0 || b == 0 then
+    True
+  else if a == 1 || b == 1 then
+    True
+  else if a == 0 - 1 then
+    b /= nativeMinInt
+  else if b == 0 - 1 then
+    a /= nativeMinInt
+  else if a == nativeMinInt || b == nativeMinInt then False else magOf a <= nativeMaxInt / magOf b
+
+-- | 两个操作数区间做 `op` 后仍可能落在 `Int` 域内。
+export overflowFree : String -> Pair Int Int -> Pair Int Int -> Bool
+overflowFree "+" (Pair al ah) (Pair bl bh) = fitsAdd al bl && fitsAdd ah bh
+overflowFree "-" (Pair al ah) (Pair bl bh) = fitsSub al bh && fitsSub ah bl
+overflowFree "*" (Pair al ah) (Pair bl bh) =
+  fitsMul al bl && fitsMul al bh && fitsMul ah bl && fitsMul ah bh
+overflowFree _ _ _ = False
+
+export nonNegative : Pair Int Int -> Bool
+nonNegative (Pair lo _) = lo >= 0
+
+-- ---------------------------------------------------------------
+-- 区间传播
+-- ---------------------------------------------------------------
+minInt2 : Int -> Int -> Int
+minInt2 a b = if a <= b then a else b
+
+maxInt2 : Int -> Int -> Int
+maxInt2 a b = if a >= b then a else b
+
+lookupRange : Int -> List (Pair Int (Pair Int Int)) -> Pair Int Int
+lookupRange _ [] = fullRange
+lookupRange id (p :: rest) = if firstOf p == id then secondOf p else lookupRange id rest
+
+addRanges : Pair Int Int -> Pair Int Int -> Pair Int Int
+addRanges (Pair al ah) (Pair bl bh) = Pair (satAdd al bl) (satAdd ah bh)
+
+subRanges : Pair Int Int -> Pair Int Int -> Pair Int Int
+subRanges (Pair al ah) (Pair bl bh) = Pair (satSub al bh) (satSub ah bl)
+
+mulRanges : Pair Int Int -> Pair Int Int -> Pair Int Int
+mulRanges (Pair al ah) (Pair bl bh) =
+  let
+    p1 = satMul al bl
+    p2 = satMul al bh
+    p3 = satMul ah bl
+    p4 = satMul ah bh
+  in Pair (minInt2 (minInt2 p1 p2) (minInt2 p3 p4)) (maxInt2 (maxInt2 p1 p2) (maxInt2 p3 p4))
+
+clampNonNeg : Pair Int Int -> Pair Int Int
+clampNonNeg (Pair lo hi) = Pair (maxInt2 0 lo) (maxInt2 0 hi)
+
+-- | 常量除数：只在对被除数非负时给出精确区间（负数域留全域，保守）。
+divRange : Pair Int Int -> Int -> Pair Int Int
+divRange (Pair al ah) d = if d > 0 && al >= 0 then Pair (al / d) (ah / d) else fullRange
+
+-- | `IrRtApp` 的区间传播；白名单之外一律全域。
+rangeOfRt : List (Pair Int (Pair Int Int)) -> String -> List Ir -> Pair Int Int
+rangeOfRt env "+" ([a, b]) = addRanges (rangeOf env a) (rangeOf env b)
+rangeOfRt env "-" ([a, b]) = subRanges (rangeOf env a) (rangeOf env b)
+rangeOfRt env "*" ([a, b]) = mulRanges (rangeOf env a) (rangeOf env b)
+rangeOfRt env "/" ([a, IrInt d]) = divRange (rangeOf env a) d
+rangeOfRt env "bitAnd" ([_, IrInt m]) =
+  if m >= 0 then Pair 0 (minInt2 m nativeMaxInt) else fullRange
+rangeOfRt env "natFromInt" ([a]) = clampNonNeg (rangeOf env a)
+rangeOfRt env "natToInt" ([a]) = clampNonNeg (rangeOf env a)
+rangeOfRt env "natAdd" ([a, b]) = clampNonNeg (addRanges (rangeOf env a) (rangeOf env b))
+rangeOfRt env "natSub" ([a, b]) = clampNonNeg (subRanges (rangeOf env a) (rangeOf env b))
+rangeOfRt _ _ _ = fullRange
+
+export rangeOf : List (Pair Int (Pair Int Int)) -> Ir -> Pair Int Int
+rangeOf _ (IrInt n) = Pair n n
+rangeOf env (IrVar b) = lookupRange b.irBinderId env
+rangeOf env (IrCast _ _ inner) = rangeOf env inner
+rangeOf env (IrTail inner) = rangeOf env inner
+rangeOf env (IrRtApp sym args) = rangeOfRt env sym args
+rangeOf _ _ = fullRange
+
+-- ---------------------------------------------------------------
+-- 分支守卫 → 事实
+-- ---------------------------------------------------------------
+-- | 把 `a <op> b` 归一成 `(op, 常量, binder id)`：常量在左时翻转比较方向。
+cmpShape : String -> Ir -> Ir -> Maybe (Pair String (Pair Int Int))
+cmpShape sym (IrVar v) (IrInt k) = Just (Pair sym (Pair k v.irBinderId))
+cmpShape sym (IrInt k) (IrVar v) =
+  case flipCmp sym of
+    Just f => Just (Pair f (Pair k v.irBinderId))
+    Nothing => Nothing
+cmpShape _ _ _ = Nothing
+
+flipCmp : String -> Maybe String
+flipCmp "bi_lt_int" = Just "bi_gt_int"
+flipCmp "bi_gt_int" = Just "bi_lt_int"
+flipCmp "bi_le_int" = Just "bi_ge_int"
+flipCmp "bi_ge_int" = Just "bi_le_int"
+flipCmp "bi_eq_int" = Just "bi_eq_int"
+flipCmp "bi_neq_int" = Just "bi_neq_int"
+flipCmp _ = Nothing
+
+-- | 守卫为真时变量必须落在的区间。
+thenRange : String -> Int -> Maybe (Pair Int Int)
+thenRange "bi_lt_int" k = if k == nativeMinInt then Nothing else Just (Pair nativeMinInt (k - 1))
+thenRange "bi_le_int" k = Just (Pair nativeMinInt k)
+thenRange "bi_gt_int" k = if k == nativeMaxInt then Nothing else Just (Pair (k + 1) nativeMaxInt)
+thenRange "bi_ge_int" k = Just (Pair k nativeMaxInt)
+thenRange "bi_eq_int" k = Just (Pair k k)
+thenRange _ _ = Nothing
+
+-- | 守卫为假时变量必须落在的区间。
+elseRange : String -> Int -> Maybe (Pair Int Int)
+elseRange "bi_lt_int" k = Just (Pair k nativeMaxInt)
+elseRange "bi_le_int" k = if k == nativeMaxInt then Nothing else Just (Pair (k + 1) nativeMaxInt)
+elseRange "bi_gt_int" k = Just (Pair nativeMinInt k)
+elseRange "bi_ge_int" k = if k == nativeMinInt then Nothing else Just (Pair nativeMinInt (k - 1))
+elseRange "bi_neq_int" k = Just (Pair k k)
+elseRange _ _ = Nothing
+
+intersectRange : Pair Int Int -> Pair Int Int -> Maybe (Pair Int Int)
+intersectRange (Pair al ah) (Pair bl bh) =
+  let
+    lo = maxInt2 al bl
+    hi = minInt2 ah bh
+  in if lo <= hi then Just (Pair lo hi) else Nothing
+
+-- | 与已有事实求交；交为空说明这条路径不可达，不建事实（保守）。
+narrow : List (Pair Int (Pair Int Int)) -> Int -> Pair Int Int -> List (Pair Int (Pair Int Int))
+narrow env binderId new =
+  case intersectRange (lookupRange binderId env) new of
+    Nothing => []
+    Just r => [Pair binderId r]
+
+export factsThen : List (Pair Int (Pair Int Int)) -> Ir -> List (Pair Int (Pair Int Int))
+factsThen env (IrRtApp sym ([a, b])) =
+  case cmpShape sym a b of
+    Nothing => []
+    Just p =>
+      let
+        k = firstOf (secondOf p)
+        binderId = secondOf (secondOf p)
+      in case thenRange (firstOf p) k of
+        Nothing => []
+        Just r => narrow env binderId r
+factsThen _ _ = []
+
+export factsElse : List (Pair Int (Pair Int Int)) -> Ir -> List (Pair Int (Pair Int Int))
+factsElse env (IrRtApp sym ([a, b])) =
+  case cmpShape sym a b of
+    Nothing => []
+    Just p =>
+      let
+        k = firstOf (secondOf p)
+        binderId = secondOf (secondOf p)
+      in case elseRange (firstOf p) k of
+        Nothing => []
+        Just r => narrow env binderId r
+factsElse _ _ = []
