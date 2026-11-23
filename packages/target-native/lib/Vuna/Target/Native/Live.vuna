@@ -37,9 +37,11 @@ import Vuna.Target.Native.Repr
 -- ---------------------------------------------------------------
 -- 槽偏移
 -- ---------------------------------------------------------------
--- | 一个操作数读到的帧槽偏移（`[rbp - off]`）；不是帧槽就返回 `Nothing`。
+-- | 一个操作数读到的帧槽偏移（`[rbp - off]`，`off < 0`）；不是帧槽就返回 `Nothing`。
+--   `[rbp + off]` 是调用者压的来参区（尾调用把它当作新的实参区复用），不属于本帧槽：
+--   把它算进来会让死存储删除把写回栈实参的 `mov` 当成「没人读」删掉。
 operandSlotOff : Operand -> Maybe Int
-operandSlotOff (OpMem Rbp off) = Just off
+operandSlotOff (OpMem Rbp off) = if off < 0 then Just off else Nothing
 operandSlotOff _ = Nothing
 
 maybeToList : Maybe a -> List a

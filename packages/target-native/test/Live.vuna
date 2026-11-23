@@ -5,7 +5,8 @@
 --   * 回边上的读让槽保持活跃（不能清）；
 --   * 帧不会被再次进入的函数（非递归、无回边）不付产物成本；
 --   * 含 `rt_apply` 调用的基本块整块不清（实参的根就是调用方槽）；
---   * 从不写的槽（死存储删掉后留下的洞）能被找出来，且只在「帧会再次进入」时清。
+--   * 从不写的槽（死存储删掉后留下的洞）能被找出来，且只在「帧会再次进入」时清；
+--   * 尾调用写回 `[rbp+16...]` 的来参区不算本帧槽，既不能当死存储删，也不能占掉帧里的洞。
 import Base
 import Base.Data.Int as Int
 import Base.Data.List as List
@@ -63,11 +64,31 @@ writtenOnly = [IMov (OpMem Rbp slot1) (OpReg Rax), IMov (OpReg Rax) (OpImm 5)]
 holesBody : List Instr
 holesBody = [IMov (OpMem Rbp slot0) (OpReg Rax), IMov (OpReg Rax) (OpMem Rbp slot0)]
 
+-- | 尾调用写回调用者的来参区：`[rbp+16]` 被本函数读过，`[rbp+24]` 只写不读，
+--   但它不是本帧槽，死存储删除不能碰。
+tailArgStores : List Instr
+tailArgStores =
+  [
+    IMov (OpReg Rax) (OpMem Rbp (nativeStackArgOff 6)),
+    IMov (OpMem Rbp (nativeStackArgOff 6)) (OpReg Rax),
+    IMov (OpReg Rax) (OpImm 7),
+    IMov (OpMem Rbp (nativeStackArgOff 7)) (OpReg Rax)
+  ]
+
+-- | 只写 `[rbp+24]` 不能把帧里的偏移 -24 当成「写过」的洞。
+holesWithTailArg : List Instr
+holesWithTailArg =
+  [
+    IMov (OpMem Rbp slot0) (OpReg Rax),
+    IMov (OpReg Rax) (OpMem Rbp slot0),
+    IMov (OpMem Rbp (nativeStackArgOff 7)) (OpReg Rax)
+  ]
+
 problems : List String
 problems =
   filter
     (\s => s /= "")
-    [check "straight (reenter)" True (hasClear 0 (clearDeadSlots True cls0 straight)), check "straight (no reenter)" False (hasClear 0 (clearDeadSlots False cls0 straight)), check "loop body keeps slot" False (hasClear 0 (clearDeadSlots True cls0 loopBody)), check "apply block untouched" False (hasClear 0 (clearDeadSlots True cls0 applyBody)), checkN "dead store dropped" 1 (length (clearDeadSlots False cls0 writtenOnly)), check "scalar slot not cleared" False (hasClear 0 (clearDeadSlots True [Pair 0 NClsScalar] straight)), checkN "unwritten slots" 2 (length (unwrittenSlots 32 holesBody)), check "written slot not a hole" False (memIntT 16 (unwrittenSlots 32 holesBody)), check "frame reused (recursive)" True (frameReused True holesBody), check "frame not reused (straight line)" False (frameReused False holesBody)]
+    [check "straight (reenter)" True (hasClear 0 (clearDeadSlots True cls0 straight)), check "straight (no reenter)" False (hasClear 0 (clearDeadSlots False cls0 straight)), check "loop body keeps slot" False (hasClear 0 (clearDeadSlots True cls0 loopBody)), check "apply block untouched" False (hasClear 0 (clearDeadSlots True cls0 applyBody)), checkN "dead store dropped" 1 (length (clearDeadSlots False cls0 writtenOnly)), checkN "tail stack arg stores kept" 4 (length (clearDeadSlots False cls0 tailArgStores)), check "scalar slot not cleared" False (hasClear 0 (clearDeadSlots True [Pair 0 NClsScalar] straight)), checkN "unwritten slots" 2 (length (unwrittenSlots 32 holesBody)), check "written slot not a hole" False (memIntT 16 (unwrittenSlots 32 holesBody)), checkN "tail stack arg is not a frame hole" 2 (length (unwrittenSlots 32 holesWithTailArg)), check "frame reused (recursive)" True (frameReused True holesBody), check "frame not reused (straight line)" False (frameReused False holesBody)]
 
 memIntT : Int -> List Int -> Bool
 memIntT _ [] = False

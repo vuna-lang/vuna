@@ -1,0 +1,18 @@
+-- 尾调用把实参写回调用者的来参区：7 参函数尾调 8 参函数要写两个栈槽。
+-- 第 8 个参数只在终止分支读；漏写第二个栈槽会读到上一轮留下的值。
+import Base.Data.Nat as Nat
+
+evenStep : Nat -> Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int
+evenStep n a b c d e f g =
+  case n of
+    Zero => a + b + c + d + e + f + g
+    Succ k => oddStep k a b c d e f
+
+oddStep : Nat -> Int -> Int -> Int -> Int -> Int -> Int -> Int
+oddStep n a b c d e f =
+  case n of
+    Zero => a + b + c + d + e + f
+    Succ k => evenStep k a b c d e f 100
+
+main : Int
+main = oddStep (Succ (Succ (Succ Zero))) 1 2 3 4 5 6
