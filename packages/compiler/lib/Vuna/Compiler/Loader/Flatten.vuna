@@ -76,11 +76,11 @@ parseWith mode path toks =
 dedupeFixitiesOf : List Module -> List FixityDecl -> List FixityDecl
 dedupeFixitiesOf modules local =
   dedupeFixitiesGo
-    (append (concatMap (\m => map (\d => Pair "${moduleNameOf m}|${fixityDeclKey d}" d) (moduleFixitiesOf m)) modules) (map (\d => Pair "|entry|${fixityDeclKey d}" d) local))
+    (append (concatMap (\m => map (\d => ("${moduleNameOf m}|${fixityDeclKey d}", d)) (moduleFixitiesOf m)) modules) (map (\d => ("|entry|${fixityDeclKey d}", d)) local))
     (HashMap.fromList [])
     []
 
-dedupeFixitiesGo : List (Pair String FixityDecl) -> HashMap String Int -> List FixityDecl -> List FixityDecl
+dedupeFixitiesGo : List (String, FixityDecl) -> HashMap String Int -> List FixityDecl -> List FixityDecl
 dedupeFixitiesGo [] seen acc = reverse acc
 dedupeFixitiesGo (p :: rest) seen acc =
   let
@@ -114,19 +114,16 @@ privateExportMsg prefix sp name =
 
 -- 本模块里与导出相关的「数据类型」信息：类型名 + 公开构造器名列表。
 -- data / record / trait 都按同一套 T / T(..) 规则导出（trait 的方法是它的「构造器」）。
-findOwnData : String -> List Decl -> Maybe (Pair String (List String))
+findOwnData : String -> List Decl -> Maybe (String, List String)
 findOwnData name [] = Nothing
 findOwnData name (d :: rest) =
   case d of
     DData dname params kind ctors derivings viaField repr lin sp =>
-      if dname == name then Just (Pair dname (map ctorName ctors)) else findOwnData name rest
+      if dname == name then Just (dname, map ctorName ctors) else findOwnData name rest
     DRecord dname params fields derivings viaField repr lin sp =>
-      if dname == name then Just (Pair dname [dname]) else findOwnData name rest
+      if dname == name then Just (dname, [dname]) else findOwnData name rest
     DTrait tname params supers methods sp =>
-      if tname == name then
-        Just (Pair tname (map traitMethodName methods))
-      else
-        findOwnData name rest
+      if tname == name then Just (tname, map traitMethodName methods) else findOwnData name rest
     _ => findOwnData name rest
 
 findOwnFn : String -> List Decl -> Maybe String
@@ -151,22 +148,22 @@ findMethodNamed name ((TraitMethod mname ty msp) :: rest) =
   if mname == name then Just mname else findMethodNamed name rest
 
 -- | 本模块里名为 name 的**全部**构造子（不同族可同名）。裸名导出/重导出必须检测歧义。
-findOwnCtorNames : String -> List Decl -> List (Pair String String)
+findOwnCtorNames : String -> List Decl -> List (String, String)
 findOwnCtorNames name [] = []
 findOwnCtorNames name (d :: rest) =
   case d of
     DData dname params kind ctors derivings viaField repr lin sp =>
       append
-        (map (\c => Pair dname (ctorName c)) (filter (\c => ctorName c == name) ctors))
+        (map (\c => (dname, ctorName c)) (filter (\c => ctorName c == name) ctors))
         (findOwnCtorNames name rest)
     DRecord dname params fields derivings viaField repr lin sp =>
       if dname == name then
-        (::) (Pair dname dname) (findOwnCtorNames name rest)
+        (::) (dname, dname) (findOwnCtorNames name rest)
       else
         findOwnCtorNames name rest
     DTrait tname params supers methods sp =>
       append
-        (map (\m => Pair tname (traitMethodName m)) (filter (\m => traitMethodName m == name) methods))
+        (map (\m => (tname, traitMethodName m)) (filter (\m => traitMethodName m == name) methods))
         (findOwnCtorNames name rest)
     _ => findOwnCtorNames name rest
 
@@ -239,7 +236,7 @@ typeRefDominates modules decls prefix Nothing vr = False
 isRecordTarget : List Module -> List Decl -> String -> String -> Bool
 isRecordTarget modules decls prefix target =
   case splitLastDot (splitOnDot target) of
-    Pair revPrefix base =>
+    (revPrefix, base) =>
       let
         m = joinDots revPrefix
       in if m == prefix then
@@ -265,7 +262,7 @@ refEntryList pub (Just (ExportRef k tgt parent)) =
 ownOrImportedTypeRef : List Module -> String -> List Decl -> List Import -> String -> Check (Maybe ExportRef)
 ownOrImportedTypeRef modules prefix decls imports name =
   case findOwnData name decls of
-    Just (Pair dname ctorNames) => OkC (Just (ExportRef "type" (mangle prefix dname) ""))
+    Just (dname, ctorNames) => OkC (Just (ExportRef "type" (mangle prefix dname) ""))
     Nothing =>
       Vuna.Compiler.Base.Common.bind (modulesExportingType modules imports name) (
           \pairs =>
@@ -323,7 +320,7 @@ ownCtorEntriesNamed prefix name (d :: rest) =
 exportBare : List Module -> String -> List Decl -> List Import -> String -> Span -> Check (List ExportEntry)
 exportBare modules prefix decls imports name sp =
   case splitLastDot (splitOnDot name) of
-    Pair revPrefix base =>
+    (revPrefix, base) =>
       case revPrefix of
         [] =>
           Vuna.Compiler.Base.Common.bind (ownOrImportedTypeRef modules prefix decls imports name) (
@@ -375,7 +372,7 @@ isEmptyEntries (_ :: _) = False
 exportTypeAll : List Module -> String -> List Decl -> List Import -> String -> Span -> Check (List ExportEntry)
 exportTypeAll modules prefix decls imports name sp =
   case splitLastDot (splitOnDot name) of
-    Pair revPrefix base =>
+    (revPrefix, base) =>
       case revPrefix of
         [] =>
           case ownTypeEntries prefix decls name of
@@ -583,7 +580,7 @@ implicitPreludeFrom roots importerPkg =
       allowed = firstOf collected
     in pure (implicitPreludeDeps importerPkg (filter (\c => rootName (secondOf c) /= importerPkg) allowed))
 
-implicitPreludeDeps : String -> List (Pair String Root) -> Check (List Import)
+implicitPreludeDeps : String -> List (String, Root) -> Check (List Import)
 implicitPreludeDeps importerPkg [] = OkC []
 implicitPreludeDeps importerPkg ([_]) = OkC [Import "Prelude" False Nothing noNodeRef]
 implicitPreludeDeps importerPkg deps =
@@ -615,14 +612,14 @@ loadAll fuel roots importerPkg modules stack imports =
             ErrC e => pure (ErrC e)
             OkC modules2 => loadAll (fuel - 1) roots importerPkg modules2 stack rest
 
-pathPrefixOf : Member nFs FsOp r => List Root -> String -> List String -> Int -> Eff r (Maybe (Pair String Int))
+pathPrefixOf : Member nFs FsOp r => List Root -> String -> List String -> Int -> Eff r (Maybe (String, Int))
 pathPrefixOf roots importerPkg segs n =
   if n < 1 then
     pure Nothing
   else
     do
       collected <- collectModuleFiles roots (joinDots (nsTakeLocal n segs)) importerPkg [] []
-      if notEmpty (firstOf collected) then pure (Just (Pair (joinDots (nsTakeLocal n segs)) n)) else pathPrefixOf roots importerPkg segs (n - 1)
+      if notEmpty (firstOf collected) then pure (Just (joinDots (nsTakeLocal n segs), n)) else pathPrefixOf roots importerPkg segs (n - 1)
 
 nsTakeLocal : Int -> List String -> List String
 nsTakeLocal n [] = []
@@ -656,7 +653,7 @@ loadModule fuel roots importerPkg modules stack imp =
                       prefixR <- pathPrefixOf roots importerPkg (splitOnDot name) (List.length (splitOnDot name) - 1)
                       case prefixR of
                         Nothing => pure (ErrC e)
-                        Just (Pair prefix n) =>
+                        Just (prefix, n) =>
                           do
                             modsR <- loadModule (fuel - 1) roots importerPkg modules stack (Import prefix False Nothing (detachedNodeRef (importSpan imp)))
                             case modsR of
@@ -870,7 +867,7 @@ loadModuleSourceWithPreloaded ctx label source preloaded =
 -- imports 不同，跨文件复用声明表会让 fmt 给 `::`/`+` 等打出错误的括号。
 -- 返回值同时带回更新后的模块表，供调用方继续复用。
 -- parse 读 lex 缓存 / 探测模块文件是宿主动作，外壳显式 `Eff r`；声明表计算保持纯。
-export fixitiesForSourceIn : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> List Module -> String -> String -> Eff r (Check (Pair (List Module) (List FixityDecl)))
+export fixitiesForSourceIn : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> List Module -> String -> String -> Eff r (Check (List Module, List FixityDecl))
 fixitiesForSourceIn ctx modules0 label source =
   do
     parsed <- parseFileWithPathMode PmTool label source
@@ -882,7 +879,7 @@ fixitiesForSourceIn ctx modules0 label source =
 --
 -- 工具（lint / index / doc）本来就要为规则或 docstring 解析一遍；再为 fixity 解析一遍是
 -- 同一份源码的第二次完整语法分析。这里只做「加载 import 闭包的模块图 + 拼接声明表」。
-export fixitiesFromParsed : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> List Module -> String -> SourceFile -> Eff r (Check (Pair (List Module) (List FixityDecl)))
+export fixitiesFromParsed : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> List Module -> String -> SourceFile -> Eff r (Check (List Module, List FixityDecl))
 fixitiesFromParsed ctx modules0 label (SourceFile hdr imports0 fixities decls exports reexports opacity) =
   let
     imports1 = imports0
@@ -903,7 +900,7 @@ fixitiesFromParsed ctx modules0 label (SourceFile hdr imports0 fixities decls ex
                   pure (
                       case modulesR of
                         ErrC e => ErrC e
-                        OkC modules => OkC (Pair modules (dedupeFixitiesOf modules fixities))
+                        OkC modules => OkC (modules, dedupeFixitiesOf modules fixities)
                     )
     Just (ModDecl name hasList items _ _ _ sp) =>
       case validateImports name imports of
@@ -919,7 +916,7 @@ fixitiesFromParsed ctx modules0 label (SourceFile hdr imports0 fixities decls ex
                   pure (
                       case modulesR of
                         ErrC e => ErrC e
-                        OkC modules => OkC (Pair modules (dedupeFixitiesOf modules fixities))
+                        OkC modules => OkC (modules, dedupeFixitiesOf modules fixities)
                     )
 
 -- 单文件便捷入口（LSP formatting / fmt 探针）：不跨调用复用模块表。
@@ -935,11 +932,11 @@ fixitiesForSource ctx label source =
 
 -- 返回逐模块已解析（未 flatten）的声明 + 本次解析产生的 warning（unused import）。
 -- warning 是显式返回值：名字解析期不维护 used-set，解析完成后按「实际引用的目标」判定。
-export resolveProject : Project -> Check (Pair (List Diagnostic) (Pair (List Decl) (List Module)))
+export resolveProject : Project -> Check (List Diagnostic, List Decl, List Module)
 resolveProject project = resolveProjectKeeping False [] project
 
 -- | 带 release 模式的解析入口（CLI 路径显式传入 `--release` / `VUNA_RELEASE=1`）。
-export resolveProjectWith : Bool -> Project -> Check (Pair (List Diagnostic) (Pair (List Decl) (List Module)))
+export resolveProjectWith : Bool -> Project -> Check (List Diagnostic, List Decl, List Module)
 resolveProjectWith release project = resolveProjectKeeping release [] project
 
 -- `keep` 里的模块已经解析过（来自接口文件），原样保留、不重解析。
@@ -947,36 +944,36 @@ resolveProjectWith release project = resolveProjectKeeping release [] project
 -- 阶段跨度：`vuna.resolve.reorder` / `.expand` / `.entry` / `.warn` 是入口声明的四段；
 -- 逐模块的四段在 `resolveModulesKeep`（同名跨度，按次聚合）。名字解析本身没有内部的
 -- 结构化子阶段，`vuna.resolve` 标记到这组跨度之间只剩 `checkUniqueFixities` 与函数分派。
-export resolveProjectKeeping : Bool -> List String -> Project -> Check (Pair (List Diagnostic) (Pair (List Decl) (List Module)))
+export resolveProjectKeeping : Bool -> List String -> Project -> Check (List Diagnostic, List Decl, List Module)
 resolveProjectKeeping release keep (Project decls imports implicit modules entryPkg entryFixes) =
   let
     projectFixities = dedupeFixitiesOf modules entryFixes
   in Vuna.Compiler.Base.Common.bind
     (checkUniqueFixities projectFixities)
-    (\fixes => Vuna.Compiler.Base.Common.bind (obsCheck "vuna.resolve.reorder" (\_ => reorderProgram (tableOf fixes) decls)) (\decls2 => Vuna.Compiler.Base.Common.bind (obsCheck "vuna.resolve.expand" (\_ => expandDecls decls2)) (\decls3 => Vuna.Compiler.Base.Common.bind (obsCheck "vuna.resolve.entry" (\_ => resolveEntry release modules entryPkg (append imports implicit) decls3)) (\entryDecls => Vuna.Compiler.Base.Common.bind (obsCheck "vuna.resolve.warn" (\_ => unusedImportWarnings modules imports entryDecls decls3 [])) (\entryWarns => Vuna.Compiler.Base.Common.bind (resolveModulesKeep release keep fixes modules) (\p2 => OkC (Pair (append entryWarns (secondOf p2)) (Pair entryDecls (firstOf p2)))))))))
+    (\fixes => Vuna.Compiler.Base.Common.bind (obsCheck "vuna.resolve.reorder" (\_ => reorderProgram (tableOf fixes) decls)) (\decls2 => Vuna.Compiler.Base.Common.bind (obsCheck "vuna.resolve.expand" (\_ => expandDecls decls2)) (\decls3 => Vuna.Compiler.Base.Common.bind (obsCheck "vuna.resolve.entry" (\_ => resolveEntry release modules entryPkg (append imports implicit) decls3)) (\entryDecls => Vuna.Compiler.Base.Common.bind (obsCheck "vuna.resolve.warn" (\_ => unusedImportWarnings modules imports entryDecls decls3 [])) (\entryWarns => Vuna.Compiler.Base.Common.bind (resolveModulesKeep release keep fixes modules) (\p2 => OkC (append entryWarns (secondOf p2), entryDecls, firstOf p2)))))))
 
-resolveModulesKeep : Bool -> List String -> List FixityDecl -> List Module -> Check (Pair (List Module) (List Diagnostic))
-resolveModulesKeep release keep fixes [] = OkC (Pair [] [])
+resolveModulesKeep : Bool -> List String -> List FixityDecl -> List Module -> Check (List Module, List Diagnostic)
+resolveModulesKeep release keep fixes [] = OkC ([], [])
 resolveModulesKeep release keep fixes (m :: rest) =
   if memName (moduleNameOf m) keep then
     Vuna.Compiler.Base.Common.bind
       (resolveModulesKeep release keep fixes rest)
-      (\p2 => OkC (Pair ((::) m (firstOf p2)) (secondOf p2)))
+      (\p2 => OkC ((::) m (firstOf p2), secondOf p2))
   else
     Vuna.Compiler.Base.Common.bind
       (obsCheck "vuna.resolve.reorder" (\_ => reorderProgram (tableOf fixes) (moduleDeclsOf m)))
-      (\decls2 => Vuna.Compiler.Base.Common.bind (resolveModuleGo release m rest (obsCheck "vuna.resolve.expand" (\_ => expandDecls decls2))) (\p => Vuna.Compiler.Base.Common.bind (resolveModulesKeep release keep fixes rest) (\p2 => OkC (Pair ((::) (firstOf p) (firstOf p2)) (append (secondOf p) (secondOf p2))))))
+      (\decls2 => Vuna.Compiler.Base.Common.bind (resolveModuleGo release m rest (obsCheck "vuna.resolve.expand" (\_ => expandDecls decls2))) (\p => Vuna.Compiler.Base.Common.bind (resolveModulesKeep release keep fixes rest) (\p2 => OkC ((::) (firstOf p) (firstOf p2), append (secondOf p) (secondOf p2)))))
 
 -- | 单个模块 expand 之后的三段：命名空间建表 → 名字解析 → 未用 import 判定。
 -- `rest` 参与模块表：解析期要看到后续模块的导出面。
-resolveModuleGo : Bool -> Module -> List Module -> Check (List Decl) -> Check (Pair Module (List Diagnostic))
+resolveModuleGo : Bool -> Module -> List Module -> Check (List Decl) -> Check (Module, List Diagnostic)
 resolveModuleGo release m rest declsR =
   Vuna.Compiler.Base.Common.bind declsR (
       \decls3 =>
         let
           modules2 = Module (moduleNameOf m) (modulePackageOf m) m.moduleImportsOf m.moduleImplicitImportsOf decls3 m.moduleExportsOf (moduleFixitiesOf m) (moduleReexportsOf m) (moduleOpaqueOf m) m.moduleExportIndexOf :: rest
           ns = obsPure "vuna.resolve.ns" (\_ => namespacesOfWith release modules2 decls3)
-        in Vuna.Compiler.Base.Common.bind (obsCheck "vuna.resolve.module" (\_ => resolveProgram modules2 (moduleNameOf m) (moduleNameOf m) ns (moduleAllImportsOf m) decls3)) (\d1 => Vuna.Compiler.Base.Common.bind (obsCheck "vuna.resolve.warn" (\_ => unusedImportWarnings modules2 m.moduleImportsOf d1 decls3 (moduleReexportsOf m))) (\warns => OkC (Pair (Module (moduleNameOf m) (modulePackageOf m) m.moduleImportsOf m.moduleImplicitImportsOf d1 m.moduleExportsOf (moduleFixitiesOf m) (moduleReexportsOf m) (moduleOpaqueOf m) m.moduleExportIndexOf) warns)))
+        in Vuna.Compiler.Base.Common.bind (obsCheck "vuna.resolve.module" (\_ => resolveProgram modules2 (moduleNameOf m) (moduleNameOf m) ns (moduleAllImportsOf m) decls3)) (\d1 => Vuna.Compiler.Base.Common.bind (obsCheck "vuna.resolve.warn" (\_ => unusedImportWarnings modules2 m.moduleImportsOf d1 decls3 (moduleReexportsOf m))) (\warns => OkC (Module (moduleNameOf m) (modulePackageOf m) m.moduleImportsOf m.moduleImplicitImportsOf d1 m.moduleExportsOf (moduleFixitiesOf m) (moduleReexportsOf m) (moduleOpaqueOf m) m.moduleExportIndexOf, warns)))
     )
 
 -- ---------------------------------------------------------------
@@ -1228,7 +1225,7 @@ patRefNamesListGo : List Pat -> List String -> List String
 patRefNamesListGo [] acc = acc
 patRefNamesListGo (p :: rest) acc = patRefNamesListGo rest (patRefNamesGo p acc)
 
-fieldPatsGo : List (Pair String Pat) -> List String -> List String
+fieldPatsGo : List (String, Pat) -> List String -> List String
 fieldPatsGo [] acc = acc
 fieldPatsGo (f :: rest) acc = fieldPatsGo rest (patRefNamesGo (secondOf f) acc)
 
@@ -1268,23 +1265,23 @@ exprRefNamesListGo : List Expr -> List String -> List String
 exprRefNamesListGo [] acc = acc
 exprRefNamesListGo (e :: rest) acc = exprRefNamesListGo rest (exprRefNamesGo e acc)
 
-fieldExprsGo : List (Pair String Expr) -> List String -> List String
+fieldExprsGo : List (String, Expr) -> List String -> List String
 fieldExprsGo [] acc = acc
 fieldExprsGo (f :: rest) acc = fieldExprsGo rest (exprRefNamesGo (secondOf f) acc)
 
 -- | `pat = expr` 绑定里的引用名（模式 binder 不算引用）。
-bindRefNamesGo : Pair Pat Expr -> List String -> List String
+bindRefNamesGo : (Pat, Expr) -> List String -> List String
 bindRefNamesGo p acc = patRefNamesGo (firstOf p) (exprRefNamesGo (secondOf p) acc)
 
-bindRefNamesListGo : List (Pair Pat Expr) -> List String -> List String
+bindRefNamesListGo : List (Pat, Expr) -> List String -> List String
 bindRefNamesListGo [] acc = acc
 bindRefNamesListGo (b :: rest) acc = bindRefNamesListGo rest (bindRefNamesGo b acc)
 
 -- | 局部函数 clause（参数模式 + body）里的引用名。
-clauseRefNamesGo : Pair (List Pat) Expr -> List String -> List String
+clauseRefNamesGo : (List Pat, Expr) -> List String -> List String
 clauseRefNamesGo p acc = patRefNamesListGo (firstOf p) (exprRefNamesGo (secondOf p) acc)
 
-clauseRefNamesListGo : List (Pair (List Pat) Expr) -> List String -> List String
+clauseRefNamesListGo : List (List Pat, Expr) -> List String -> List String
 clauseRefNamesListGo [] acc = acc
 clauseRefNamesListGo (c :: rest) acc = clauseRefNamesListGo rest (clauseRefNamesGo c acc)
 

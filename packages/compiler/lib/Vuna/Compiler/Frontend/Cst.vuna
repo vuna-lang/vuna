@@ -153,25 +153,25 @@ tokTag TEof = "eof"
 
 -- | 一个 token 的源码原文与尾后偏移。模板用 token 自带的 `endPos`（结束引号位置）
 -- 定界（多行文本里含换行，按位置推进才能算对）。
-tokText : String -> LineCur -> Tok -> Pair String Int
-tokText src c (TIdent s) = Pair s (c.lcOff + strLength s)
-tokText src c (TKw s) = Pair s (c.lcOff + strLength s)
-tokText src c (TSym s) = Pair s (c.lcOff + strLength s)
-tokText src c (TFloat s) = Pair s (c.lcOff + strLength s)
+tokText : String -> LineCur -> Tok -> (String, Int)
+tokText src c (TIdent s) = (s, c.lcOff + strLength s)
+tokText src c (TKw s) = (s, c.lcOff + strLength s)
+tokText src c (TSym s) = (s, c.lcOff + strLength s)
+tokText src c (TFloat s) = (s, c.lcOff + strLength s)
 tokText src c (TInt _) =
   let
     end = scanDigitsEnd (strLength src) src c.lcOff
-  in Pair (sliceText src c.lcOff end) end
+  in (sliceText src c.lcOff end, end)
 tokText src c (TStr _) =
   let
     end = scanStringEnd (strLength src) src (c.lcOff + 1)
-  in Pair (sliceText src c.lcOff end) end
+  in (sliceText src c.lcOff end, end)
 tokText src c (TTmpl _ _ endPos) =
   let
     endCur = advanceTo (strLength src) src c endPos
     end = endCur.lcOff + 1
-  in Pair (sliceText src c.lcOff end) end
-tokText src c TEof = Pair "" c.lcOff
+  in (sliceText src c.lcOff end, end)
+tokText src c TEof = ("", c.lcOff)
 
 -- ---------------------------------------------------------------
 -- trivia 切分
@@ -184,15 +184,15 @@ record TrivComment where
   tcommEnd : Int
 
 -- | `Comment` → 预计算区间。注释按源码顺序，游标只前进（每条一次位置推进 + 1 字节）。
-toTrivComments : Int -> String -> LineCur -> List Comment -> Pair (List TrivComment) LineCur
-toTrivComments fuel src cur [] = Pair [] cur
+toTrivComments : Int -> String -> LineCur -> List Comment -> (List TrivComment, LineCur)
+toTrivComments fuel src cur [] = ([], cur)
 toTrivComments fuel src cur ((Comment kind _ sp) :: rest) =
   let
     c1 = advanceTo fuel src cur (spanStartOf sp)
     c2 = advanceTo fuel src c1 (spanEndOf sp)
     c3 = advanceBy fuel src c2 1
     tailRes = toTrivComments fuel src c3 rest
-  in Pair (TrivComment kind sp c1.lcOff c3.lcOff :: firstOf tailRes) (secondOf tailRes)
+  in (TrivComment kind sp c1.lcOff c3.lcOff :: firstOf tailRes, secondOf tailRes)
 
 -- | 注释 span 的起点（`Span` 的字段投影写成具名 helper，避免模式匹配噪音）。
 spanStartOf : Span -> Pos
@@ -202,7 +202,7 @@ spanEndOf : Span -> Pos
 spanEndOf sp = Pos (spanEndLine sp) (spanEndCol sp) (spanEndOffset sp) (spanEndOffset sp)
 
 -- | 空白 trivia：区间非空时一项；span 用区间两端的位置。
-spaceTrivia : String -> Pair Int Pos -> Pair Int Pos -> List Trivia
+spaceTrivia : String -> (Int, Pos) -> (Int, Pos) -> List Trivia
 spaceTrivia src from to =
   let
     fo = firstOf from
@@ -229,32 +229,32 @@ commentTrivia src tc =
   in Trivia (commentTriviaKind tc.tcommKind) (sliceText src start tc.tcommEnd) tc.tcommSpan
 
 -- | 注释尾后位置（`tcommEnd` 是尾后偏移，最后一个正文字符不是换行 ⇒ 列 +1）。
-commentEndPos : TrivComment -> Pair Int Pos
+commentEndPos : TrivComment -> (Int, Pos)
 commentEndPos tc =
   let
     endSp = tc.tcommSpan
-  in Pair tc.tcommEnd (advanceChar 0 (spanEndOf endSp))
+  in (tc.tcommEnd, advanceChar 0 (spanEndOf endSp))
 
 -- | 把 gap `[from, to)` 切成 trivia 列表：注释之间是空白。
-gapTrivia : String -> Pair Int Pos -> Pair Int Pos -> List TrivComment -> List Trivia
+gapTrivia : String -> (Int, Pos) -> (Int, Pos) -> List TrivComment -> List Trivia
 gapTrivia src from to [] = spaceTrivia src from to
 gapTrivia src from to (c :: rest) =
   let
-    cStart = Pair c.tcommStart (spanStartOf c.tcommSpan)
+    cStart = (c.tcommStart, spanStartOf c.tcommSpan)
   in append
     (spaceTrivia src from cStart)
     (append [commentTrivia src c] (gapTrivia src (commentEndPos c) to rest))
 
 -- | 取起始偏移严格小于 `bound` 的注释前缀，其余留给后续 token。
-takeCommentsBefore : Int -> List TrivComment -> Pair (List TrivComment) (List TrivComment)
-takeCommentsBefore bound [] = Pair [] []
+takeCommentsBefore : Int -> List TrivComment -> (List TrivComment, List TrivComment)
+takeCommentsBefore bound [] = ([], [])
 takeCommentsBefore bound (c :: rest) =
   if c.tcommStart < bound then
     let
       taken = takeCommentsBefore bound rest
-    in Pair (c :: firstOf taken) (secondOf taken)
+    in (c :: firstOf taken, secondOf taken)
   else
-    Pair [] (c :: rest)
+    ([], c :: rest)
 
 -- | 丢弃落在上一 token 内部的注释（保守过滤；模板洞内的注释本就不报告）。
 commentStartsAtOrAfter : Int -> TrivComment -> Bool
@@ -265,7 +265,7 @@ commentStartsAtOrAfter bound c = c.tcommStart >= bound
 -- ---------------------------------------------------------------
 -- | 单个 token 的 CST 节点 + 结束游标。`prevEnd` 是上一 token 的（尾后偏移, 位置），
 -- | `comments` 是本 gap 内（上一 token 之后、本 token 之前）的注释。
-tokenNode : String -> LineCur -> Pair Int Pos -> List TrivComment -> Tok -> Pair CstToken LineCur
+tokenNode : String -> LineCur -> (Int, Pos) -> List TrivComment -> Tok -> (CstToken, LineCur)
 tokenNode src curStart prevEnd comments tok =
   let
     textEnd = tokText src curStart tok
@@ -282,12 +282,11 @@ tokenNode src curStart prevEnd comments tok =
         (posCol (curPos curEnd))
         (posOffset startPos)
         (posOffset (curPos curEnd))
-  in Pair
-    (CstToken (tokTag tok) text sp (gapTrivia src prevEnd (Pair curStart.lcOff startPos) comments))
-    curEnd
+  in (CstToken (tokTag tok) text sp (gapTrivia src prevEnd (curStart.lcOff, startPos) comments),
+    curEnd)
 
 -- | 逐个 token 组装：文本/span/前置 trivia，并把注释游标与 `prevEnd` 传给下一个 token。
-buildTokens : String -> List TrivComment -> LineCur -> Pair Int Pos -> List PTok -> List CstToken
+buildTokens : String -> List TrivComment -> LineCur -> (Int, Pos) -> List PTok -> List CstToken
 buildTokens src comments cur prevEnd [] = []
 buildTokens src comments cur prevEnd (t :: rest) =
   let
@@ -297,8 +296,7 @@ buildTokens src comments cur prevEnd (t :: rest) =
     live = filter (commentStartsAtOrAfter (firstOf prevEnd)) (firstOf before)
     node = tokenNode src curStart prevEnd live t.ptokTok
     curEnd = secondOf node
-  in firstOf node
-    :: buildTokens src (secondOf before) curEnd (Pair curEnd.lcOff (curPos curEnd)) rest
+  in firstOf node :: buildTokens src (secondOf before) curEnd (curEnd.lcOff, curPos curEnd) rest
 
 -- | 由**已完成的一次词法**（token 流 + 注释表）组装无损 token 流。
 --
@@ -309,7 +307,7 @@ lexTokensOf source toks comments =
   let
     fuel = strLength source + 1
     tcs = toTrivComments fuel source lineCurStart comments
-  in buildTokens source (firstOf tcs) lineCurStart (Pair 0 (Pos 1 1 0 0)) toks
+  in buildTokens source (firstOf tcs) lineCurStart (0, Pos 1 1 0 0) toks
 
 -- | 把源码切成无损 token 流（每个 token 带前置 trivia）；编译器 lexer 拒绝源码
 -- （词法错误）时返回 `Nothing`。
@@ -317,7 +315,7 @@ export lexCst : String -> Maybe (List CstToken)
 lexCst source =
   case lexSourceWithComments source of
     ErrC _ => Nothing
-    OkC (Pair toks comments) =>
+    OkC (toks, comments) =>
       Just (obsSpan "vuna.parse.cst" "vuna.phase" (\_ => lexTokensOf source toks comments))
 
 -- | 取 trivia 的原文（`renderCst` 用；具名函数而非 lambda，字段投影需要已知的记录类型）。
@@ -586,9 +584,9 @@ collectLeaves (CstLeaf t) = [t]
 collectLeaves (CstBranch _ _ _ kids) = concatMap collectLeaves kids
 
 -- | 先序的分支节点表（id → 节点）。
-nodeTable : CstNode -> List (Pair Int CstNode)
+nodeTable : CstNode -> List (Int, CstNode)
 nodeTable (CstLeaf _) = []
-nodeTable (n@(CstBranch _ nid _ kids)) = Pair nid n :: concatMap nodeTable kids
+nodeTable (n@(CstBranch _ nid _ kids)) = (nid, n) :: concatMap nodeTable kids
 
 -- | 整棵树的「id → 节点」索引。节点身份只此一处：span、kind、children 都从这里取，
 -- 而不是再按区间比较。

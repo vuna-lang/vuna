@@ -55,12 +55,12 @@ pushAll [] q = q
 pushAll (x :: rest) q = pushAll rest (push x q)
 
 -- | 出队：返回队首元素与剩余队列；空队列返回 `Nothing`。`front` 空时反转 `back`（摊还 O(1)）。
-export pop : Queue a -> Maybe (Pair a (Queue a))
-pop (Queue (x :: rest) back n) = Just (Pair x (Queue rest back (n - 1)))
+export pop : Queue a -> Maybe (a, Queue a)
+pop (Queue (x :: rest) back n) = Just (x, Queue rest back (n - 1))
 pop (Queue [] back n) =
   case reverse back of
     [] => Nothing
-    x :: rest => Just (Pair x (Queue rest [] (n - 1)))
+    x :: rest => Just (x, Queue rest [] (n - 1))
 
 -- | 只读队首元素；空队列返回 `Nothing`。
 export peek : Queue a -> Maybe a

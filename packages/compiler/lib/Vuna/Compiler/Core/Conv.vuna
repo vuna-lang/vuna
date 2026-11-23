@@ -546,7 +546,7 @@ metaCreatedDepth sols depth m =
 
 -- 项在「创建深度 created、quote 深度 depth、已进入 extra 个内部 binder」下是否只引用
 -- 本地 binder / 创建深度之前的自由变量 / pattern spine 里的变量。
-termScopedTo : Int -> Int -> Int -> List (Pair String Int) -> Term -> Bool
+termScopedTo : Int -> Int -> Int -> List (String, Int) -> Term -> Bool
 termScopedTo created depth extra levels (TVar name i _) =
   if i < 0 then
     False
@@ -566,7 +566,7 @@ termScopedTo created depth extra levels (TLam name rig slot _ body) =
     slotOk =
       case slot of
         Nothing => True
-        Just (Pair _ (Pair bt _)) =>
+        Just (_, bt, _) =>
           case bt of
             Nothing => True
             Just ty => termScopedTo created depth extra levels ty
@@ -592,19 +592,19 @@ termScopedTo created depth extra levels (TIf c th el) =
   termScopedTo created depth extra levels c
     && termScopedTo created depth extra levels th && termScopedTo created depth extra levels el
 
-argsScopedTo : Int -> Int -> Int -> List (Pair String Int) -> List (Pair Term Rig) -> Bool
+argsScopedTo : Int -> Int -> Int -> List (String, Int) -> List (Term, Rig) -> Bool
 argsScopedTo created depth extra levels [] = True
-argsScopedTo created depth extra levels ((Pair a rig) :: rest) =
+argsScopedTo created depth extra levels ((a, rig) :: rest) =
   termScopedTo created depth extra levels a && argsScopedTo created depth extra levels rest
 
-altsScopedTo : Int -> Int -> Int -> List (Pair String Int) -> List CaseAlt -> Bool
+altsScopedTo : Int -> Int -> Int -> List (String, Int) -> List CaseAlt -> Bool
 altsScopedTo created depth extra levels [] = True
 altsScopedTo created depth extra levels (alt :: rest) =
   termScopedTo created depth (extra + length (caseAltBinders alt)) levels (caseAltBody alt)
     && altsScopedTo created depth extra levels rest
 
 -- Miller pattern 判据：spine 全是不重复、无实参的局部中性变量。
-patternSpineOf : List Value -> Maybe (List (Pair String Int))
+patternSpineOf : List Value -> Maybe (List (String, Int))
 patternSpineOf [] = Just []
 patternSpineOf (v :: rest) =
   case v of
@@ -613,7 +613,7 @@ patternSpineOf (v :: rest) =
         NVar name level sp =>
           if isNilSpine sp then
             case patternSpineOf rest of
-              Just more => if memLevel level more then Nothing else Just ((::) (Pair name level) more)
+              Just more => if memLevel level more then Nothing else Just ((::) (name, level) more)
               Nothing => Nothing
           else
             Nothing
@@ -624,9 +624,9 @@ isNilSpine : List Value -> Bool
 isNilSpine [] = True
 isNilSpine _ = False
 
-memLevel : Int -> List (Pair String Int) -> Bool
+memLevel : Int -> List (String, Int) -> Bool
 memLevel level [] = False
-memLevel level ((Pair n l) :: rest) = l == level || memLevel level rest
+memLevel level ((n, l) :: rest) = l == level || memLevel level rest
 
 levelPos : Int -> List Int -> Maybe Int
 levelPos level levels = levelPosGo level levels 0
@@ -635,7 +635,7 @@ levelPosGo : Int -> List Int -> Int -> Maybe Int
 levelPosGo level [] i = Nothing
 levelPosGo level (l :: rest) i = if l == level then Just i else levelPosGo level rest (i + 1)
 
-spineLevels : List (Pair String Int) -> List Int
+spineLevels : List (String, Int) -> List Int
 spineLevels [] = []
 spineLevels (p :: rest) = secondOf p :: spineLevels rest
 
@@ -665,7 +665,7 @@ absPatternBody n created depth extra levels (TLam name rig slot sp body) =
     slot2 =
       case slot of
         Nothing => Nothing
-        Just (Pair mark (Pair bt rt)) =>
+        Just (mark, bt, rt) =>
           let
             bt2 =
               case bt of
@@ -675,7 +675,7 @@ absPatternBody n created depth extra levels (TLam name rig slot sp body) =
               case rt of
                 Nothing => Nothing
                 Just t => Just (absPatternBody n created depth (extra + 1) levels t)
-          in Just (Pair mark (Pair bt2 rt2))
+          in Just (mark, bt2, rt2)
   in TLam name rig slot2 sp (absPatternBody n created depth (extra + 1) levels body)
 absPatternBody n created depth extra levels (TApp f a rig) =
   TApp
@@ -683,9 +683,7 @@ absPatternBody n created depth extra levels (TApp f a rig) =
     (absPatternBody n created depth extra levels a)
     rig
 absPatternBody n created depth extra levels (TCon c args) =
-  TCon
-    c
-    (map (\p => Pair (absPatternBody n created depth extra levels (firstOf p)) (secondOf p)) args)
+  TCon c (map (\p => (absPatternBody n created depth extra levels (firstOf p), secondOf p)) args)
 absPatternBody n created depth extra levels (TCase scrut alts) =
   TCase
     (absPatternBody n created depth extra levels scrut)
@@ -698,9 +696,9 @@ absPatternBody n created depth extra levels (TIf c th el) =
 absPatternBody n created depth extra levels t = t
 
 -- 解里的 λ 链：spine 头部为最外层绑定。
-wrapPatternLams : List (Pair String Int) -> Term -> Term
+wrapPatternLams : List (String, Int) -> Term -> Term
 wrapPatternLams [] body = body
-wrapPatternLams ((Pair name lvl) :: rest) body =
+wrapPatternLams ((name, lvl) :: rest) body =
   TLam name RigOmega Nothing spanEmpty (wrapPatternLams rest body)
 
 -- 闭包环境：按 level 复原创建点的上下文变量。第一个条目对应 level `depth-1`；创建深度
@@ -716,11 +714,11 @@ patternEnv created depth =
       lvl = if level < created then level else 0
     in (::) (VNeutral (NVar "_" lvl [])) (patternEnv created (depth - 1))
 
-patternSolution : List (Pair String Int) -> Int -> Int -> Term -> Value
+patternSolution : List (String, Int) -> Int -> Int -> Term -> Value
 -- 空 spine 由 `solveMetaEmpty` 处理，调用点已排除（`patternSpineOf` 的非空分支）；
 -- 这里取 n=0 的自然延拓：不包 λ，直接在 `patternEnv` 下求值，不伪造排序值。
 patternSolution [] created depth body = eval (patternEnv created depth) body
-patternSolution ((Pair name lvl) :: rest) created depth body =
+patternSolution ((name, lvl) :: rest) created depth body =
   VLam name RigOmega (Closure (patternEnv created depth) (wrapPatternLams rest body))
 
 -- 空 spine：直接存解，但先就地检查作用域（自由变量必须早于创建深度）。
@@ -746,12 +744,12 @@ solveMetaEmptyStore sols depth m rhs =
 -- 非 pattern 形状的兜底：「头一致」提取，仅用于 spine 不是 Miller
 -- pattern 的场景（如 `?m (e1 e2) = head args`）。这不是合一理论的一部分，只是保守
 -- 近似：能提取就提取，其余仍报 CannotSolveHigherOrder；pattern 路径优先，命中时不会走到这里。
-splitAtVals : Int -> List Value -> Pair (List Value) (List Value)
-splitAtVals 0 xs = Pair [] xs
-splitAtVals n [] = Pair [] []
+splitAtVals : Int -> List Value -> (List Value, List Value)
+splitAtVals 0 xs = ([], xs)
+splitAtVals n [] = ([], [])
 splitAtVals n (x :: xs) =
   case splitAtVals (n - 1) xs of
-    Pair a b => Pair ((::) x a) b
+    (a, b) => ((::) x a, b)
 
 solveMetaHoLegacyFuel : Int -> HashMap String Term -> Sols -> Int -> Int -> List Value -> Value -> Check Sols
 solveMetaHoLegacyFuel fuel defs sols depth m sp rhs =
@@ -778,7 +776,7 @@ solveMetaHeadLegacyFuel fuel defs sols depth m sp whole headVal args =
     let
       extra = length args - length sp
     in case splitAtVals extra args of
-      Pair headArgs tailArgs => Vuna.Compiler.Base.Common.bind (solveMetaFuel (fuel - 1) defs sols depth m [] (applySpine headVal headArgs)) (\sols2 => convSpinesFuel (fuel - 1) defs sols2 depth sp tailArgs (VMeta m sp) whole)
+      (headArgs, tailArgs) => Vuna.Compiler.Base.Common.bind (solveMetaFuel (fuel - 1) defs sols depth m [] (applySpine headVal headArgs)) (\sols2 => convSpinesFuel (fuel - 1) defs sols2 depth sp tailArgs (VMeta m sp) whole)
   else
     tcErr1NoLoc (CannotSolveHigherOrder (strFromInt m)) (strFromInt m)
 

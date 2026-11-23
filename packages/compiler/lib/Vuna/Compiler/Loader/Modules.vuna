@@ -91,7 +91,7 @@ export record Namespaces(..) where
   nsTypeSet : HashMap String Bool
   -- data/record 构造子的候选表（短名 → 未加模块 prefix 的 "Data.Ctor"）。
   -- 同名构造子按族区分；trait 方法不在此表（不是族的构造子）。
-  nsCtorCands : List (Pair String String)
+  nsCtorCands : List (String, String)
   -- | 模块名 → 模块（解析期按 import 名查导出，见 `Modules.moduleTblOf`）。
   nsModuleTbl : HashMap String Module
   -- release 构建模式：Resolve 的 assert/todo 拒绝检查用（显式传入，不读进程环境）。
@@ -206,7 +206,7 @@ aliasIs q imp =
 lastSegment : String -> String
 lastSegment name =
   case splitLastDot (splitOnDot name) of
-    Pair _ base => base
+    (_, base) => base
 
 notEmptyList : List a -> Bool
 notEmptyList [] = False
@@ -346,7 +346,7 @@ resolveModuleName modules name =
 -- 名字解析里最大的一项固定成本；入口建一次表，后续都是 O(1)。
 export moduleTblOf : List Module -> HashMap String Module
 moduleTblOf modules =
-  HashMap.insertAll (map (\m => Pair (moduleNameOf m) m) modules) (HashMap.fromList [])
+  HashMap.insertAll (map (\m => (moduleNameOf m, m)) modules) (HashMap.fromList [])
 
 -- | `resolveModuleName` 的表版本。名字不是真实模块时退回命名空间路径解析
 -- （罕见路径，按需把表展回列表）。
@@ -515,70 +515,70 @@ findExportCtorsIn idx name = filterCtors name (entriesByName name idx)
 export findExportTypeIn : HashMap String (List ExportEntry) -> String -> Maybe ExportEntry
 findExportTypeIn idx name = lookupExport ["type"] name (entriesByName name idx)
 
-modulesExportingValueFrom : (String -> Check (HashMap String (List ExportEntry))) -> List String -> String -> Check (List (Pair String ExportEntry))
+modulesExportingValueFrom : (String -> Check (HashMap String (List ExportEntry))) -> List String -> String -> Check (List (String, ExportEntry))
 modulesExportingValueFrom idxOf [] name = OkC []
 modulesExportingValueFrom idxOf (m :: rest) name =
   Vuna.Compiler.Base.Common.bind (idxOf m) (
       \idx =>
         case findExportValuesIn idx name of
           [] => modulesExportingValueFrom idxOf rest name
-          entries => Vuna.Compiler.Base.Common.bind (modulesExportingValueFrom idxOf rest name) (\more => OkC (append (map (\e => Pair m e) entries) more))
+          entries => Vuna.Compiler.Base.Common.bind (modulesExportingValueFrom idxOf rest name) (\more => OkC (append (map (\e => (m, e)) entries) more))
     )
 
-export modulesExportingValue : List Module -> List Import -> String -> Check (List (Pair String ExportEntry))
+export modulesExportingValue : List Module -> List Import -> String -> Check (List (String, ExportEntry))
 modulesExportingValue modules imports name =
   modulesExportingValueFrom (exportIndexOfModule modules) (openModuleNames imports) name
 
 -- | 表版本（解析期热路径）。
-export modulesExportingValueIn : HashMap String Module -> List Import -> String -> Check (List (Pair String ExportEntry))
+export modulesExportingValueIn : HashMap String Module -> List Import -> String -> Check (List (String, ExportEntry))
 modulesExportingValueIn tbl imports name =
   modulesExportingValueFrom (exportIndexOfModuleIn tbl) (openModuleNames imports) name
 
 -- | 在给定的多个模块里找同名构造子的导出条目（每个模块可贡献多条）。
-modulesExportingCtorFrom : (String -> Check (HashMap String (List ExportEntry))) -> List String -> String -> Check (List (Pair String ExportEntry))
+modulesExportingCtorFrom : (String -> Check (HashMap String (List ExportEntry))) -> List String -> String -> Check (List (String, ExportEntry))
 modulesExportingCtorFrom idxOf [] name = OkC []
 modulesExportingCtorFrom idxOf (m :: rest) name =
   Vuna.Compiler.Base.Common.bind (idxOf m) (
       \idx =>
         let
           found = findExportCtorsIn idx name
-        in Vuna.Compiler.Base.Common.bind (modulesExportingCtorFrom idxOf rest name) (\more => OkC (append (map (\e => Pair m e) found) more))
+        in Vuna.Compiler.Base.Common.bind (modulesExportingCtorFrom idxOf rest name) (\more => OkC (append (map (\e => (m, e)) found) more))
     )
 
-export modulesExportingCtor : List Module -> List Import -> String -> Check (List (Pair String ExportEntry))
+export modulesExportingCtor : List Module -> List Import -> String -> Check (List (String, ExportEntry))
 modulesExportingCtor modules imports name =
   modulesExportingCtorFrom (exportIndexOfModule modules) (openModuleNames imports) name
 
 -- | 表版本（解析期热路径）。
-export modulesExportingCtorIn : HashMap String Module -> List Import -> String -> Check (List (Pair String ExportEntry))
+export modulesExportingCtorIn : HashMap String Module -> List Import -> String -> Check (List (String, ExportEntry))
 modulesExportingCtorIn tbl imports name =
   modulesExportingCtorFrom (exportIndexOfModuleIn tbl) (openModuleNames imports) name
 
-modulesExportingTypeFrom : (String -> Check (HashMap String (List ExportEntry))) -> List String -> String -> Check (List (Pair String ExportEntry))
+modulesExportingTypeFrom : (String -> Check (HashMap String (List ExportEntry))) -> List String -> String -> Check (List (String, ExportEntry))
 modulesExportingTypeFrom idxOf [] name = OkC []
 modulesExportingTypeFrom idxOf (m :: rest) name =
   Vuna.Compiler.Base.Common.bind (idxOf m) (
       \idx =>
         case findExportTypesIn idx name of
           [] => modulesExportingTypeFrom idxOf rest name
-          entries => Vuna.Compiler.Base.Common.bind (modulesExportingTypeFrom idxOf rest name) (\more => OkC (append (map (\e => Pair m e) entries) more))
+          entries => Vuna.Compiler.Base.Common.bind (modulesExportingTypeFrom idxOf rest name) (\more => OkC (append (map (\e => (m, e)) entries) more))
     )
 
 -- | 表版本（解析期热路径）。
-export modulesExportingTypeIn : HashMap String Module -> List Import -> String -> Check (List (Pair String ExportEntry))
+export modulesExportingTypeIn : HashMap String Module -> List Import -> String -> Check (List (String, ExportEntry))
 modulesExportingTypeIn tbl imports name =
   modulesExportingTypeFrom (exportIndexOfModuleIn tbl) (openModuleNames imports) name
 
-export modulesExportingType : List Module -> List Import -> String -> Check (List (Pair String ExportEntry))
+export modulesExportingType : List Module -> List Import -> String -> Check (List (String, ExportEntry))
 modulesExportingType modules imports name =
   modulesExportingTypeFrom (exportIndexOfModule modules) (openModuleNames imports) name
 
 -- 重导出时同名可能来自多个模块；只要 target 相同就不是歧义（门面伞模块常见）。
-sameTargetRest : ExportEntry -> List (Pair a ExportEntry) -> Bool
+sameTargetRest : ExportEntry -> List (a, ExportEntry) -> Bool
 sameTargetRest e [] = True
-sameTargetRest e ((Pair m e2) :: rest) = e.target == e2.target && sameTargetRest e rest
+sameTargetRest e ((m, e2) :: rest) = e.target == e2.target && sameTargetRest e rest
 
-export unifyEntryPairs : String -> String -> String -> List (Pair String ExportEntry) -> Check (Pair String ExportEntry)
+export unifyEntryPairs : String -> String -> String -> List (String, ExportEntry) -> Check (String, ExportEntry)
 unifyEntryPairs label kindLabel name [] = icInternal "unifyEntryPairs: empty candidates"
 unifyEntryPairs label kindLabel name (p :: rest) =
   if sameTargetRest (secondOf p) rest then
@@ -615,9 +615,8 @@ moduleVisibleTo roots importerPkg m =
 
 -- 模块根候选的**存在性探测**是宿主动作，显式在 `Eff []` 里；
 -- 可见性判定与候选分类保持纯。
-export collectModuleFiles : Member nFs FsOp r => List Root -> String -> String -> List (Pair String Root) -> List String -> Eff r (Pair (List (Pair String Root)) (List String))
-collectModuleFiles [] name importerPkg allowed hidden =
-  pure (Pair (reverse allowed) (reverse hidden))
+export collectModuleFiles : Member nFs FsOp r => List Root -> String -> String -> List (String, Root) -> List String -> Eff r (List (String, Root), List String)
+collectModuleFiles [] name importerPkg allowed hidden = pure (reverse allowed, reverse hidden)
 collectModuleFiles (root :: rest) name importerPkg allowed hidden =
   let
     path = modulePath root name
@@ -625,7 +624,7 @@ collectModuleFiles (root :: rest) name importerPkg allowed hidden =
     exists <- fsFileExists path
     if exists then
       if rootAllows importerPkg root name then
-        collectModuleFiles rest name importerPkg (Pair path root :: allowed) hidden
+        collectModuleFiles rest name importerPkg ((path, root) :: allowed) hidden
       else
         collectModuleFiles rest name importerPkg allowed (rootName root :: hidden)
     else
@@ -634,14 +633,14 @@ collectModuleFiles (root :: rest) name importerPkg allowed hidden =
 _joinRootDirs : List Root -> String
 _joinRootDirs roots = _joinNames (map rootDir roots)
 
-candidateDir : Pair String Root -> String
+candidateDir : (String, Root) -> String
 candidateDir candidate = rootDir (secondOf candidate)
 
 -- 导入点位置兜底：隐式 Prelude 的合成 Import 没有真实 span（file = ""）时不加位置。
 withImporterSpan : Span -> Diagnostic -> Diagnostic
 withImporterSpan sp d = if spanFile sp == "" then d else withFallbackSpan sp d
 
-export findModuleFile : Member nFs FsOp r => List Root -> String -> String -> Span -> Eff r (Check (Pair String Root))
+export findModuleFile : Member nFs FsOp r => List Root -> String -> String -> Span -> Eff r (Check (String, Root))
 findModuleFile roots name importerPkg importerSpan =
   do
     collected <- collectModuleFiles roots name importerPkg [] []
@@ -679,15 +678,15 @@ walkNamespaceIndexFuel fuel modules m segs =
         else
           case longestIndexPrefix (moduleExportIndexOfOf md) segs (List.length segs) of
             Nothing => Nothing
-            Just (Pair target k) => walkNamespaceIndexFuel (fuel - 1) modules target (dropFirst k segs)
+            Just (target, k) => walkNamespaceIndexFuel (fuel - 1) modules target (dropFirst k segs)
 
-longestIndexPrefix : HashMap String (List ExportEntry) -> List String -> Int -> Maybe (Pair String Int)
+longestIndexPrefix : HashMap String (List ExportEntry) -> List String -> Int -> Maybe (String, Int)
 longestIndexPrefix idx segs k =
   if k <= 0 then
     Nothing
   else
     case findExportModuleIn idx (joinDots (takeSegsLocal k segs)) of
-      Just e => Just (Pair e.target k)
+      Just e => Just (e.target, k)
       Nothing => longestIndexPrefix idx segs (k - 1)
 
 takeSegsLocal : Int -> List String -> List String

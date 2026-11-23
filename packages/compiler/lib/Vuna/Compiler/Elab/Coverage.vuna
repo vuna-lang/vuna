@@ -93,12 +93,12 @@ hasNilRow (row :: rest) =
     [] => True
     _ => hasNilRow rest
 
-lookupEntry : String -> List (Pair String Int) -> Maybe Int
+lookupEntry : String -> List (String, Int) -> Maybe Int
 lookupEntry cname [] = Nothing
-lookupEntry cname ((Pair c n) :: rest) = if c == cname then Just n else lookupEntry cname rest
+lookupEntry cname ((c, n) :: rest) = if c == cname then Just n else lookupEntry cname rest
 
 -- 构造子所属族的构造子表。**必须唯一**：重载构造子无法从名字定位族，按「未知」处理。
-familyCtors : List (Pair String (Pair Bool (List (Pair String Int)))) -> String -> Maybe (List (Pair String Int))
+familyCtors : List (String, Bool, List (String, Int)) -> String -> Maybe (List (String, Int))
 familyCtors table cname =
   case filter (\e => lookupEntry cname (secondOf (secondOf e)) /= Nothing) table of
     -- 索引族的构造子不可按名字判可达（`Vec 2 a` 没有 `VNil`），对见证按「未知」处理。
@@ -108,34 +108,34 @@ familyCtors table cname =
 -- | 按构造子**短名**定位族：列表字面量哨兵（`@vuna@list@nil` / `@vuna@list@cons`）
 -- 在模式矩阵里还没有 canonical 名字，只能按短名找。候选短名是**或**关系（不同列表族
 -- 可能叫 `::` 或 `Cons`）；**必须唯一命中族**，否则按未知处理。
-export familyOfShortCtors : List (Pair String (Pair Bool (List (Pair String Int)))) -> List String -> Maybe (List (Pair String Int))
+export familyOfShortCtors : List (String, Bool, List (String, Int)) -> List String -> Maybe (List (String, Int))
 familyOfShortCtors table shorts =
   case filter (\e => anyShortCtor shorts (secondOf (secondOf e))) table of
     [one] => if firstOf (secondOf one) then Just (secondOf (secondOf one)) else Nothing
     _ => Nothing
 
-anyShortCtor : List String -> List (Pair String Int) -> Bool
+anyShortCtor : List String -> List (String, Int) -> Bool
 anyShortCtor [] ctors = False
 anyShortCtor (s :: rest) ctors = hasShortCtor s ctors || anyShortCtor rest ctors
 
-hasShortCtor : String -> List (Pair String Int) -> Bool
+hasShortCtor : String -> List (String, Int) -> Bool
 hasShortCtor s [] = False
-hasShortCtor s ((Pair c n) :: rest) = ctorShortName c == s || hasShortCtor s rest
+hasShortCtor s ((c, n) :: rest) = ctorShortName c == s || hasShortCtor s rest
 
 -- | 列表字面量哨兵 → 该族里对应的 canonical 构造子名；非哨兵原样返回。
-export sentinelCtorIn : List (Pair String Int) -> String -> Maybe String
+export sentinelCtorIn : List (String, Int) -> String -> Maybe String
 sentinelCtorIn ctors h =
   if isListNilSyntax h then
     findShortCtor ctors ["Nil"]
   else if isListConsSyntax h then findShortCtor ctors ["::", "Cons"] else Just h
 
-findShortCtor : List (Pair String Int) -> List String -> Maybe String
+findShortCtor : List (String, Int) -> List String -> Maybe String
 findShortCtor [] shorts = Nothing
 findShortCtor (p :: rest) shorts =
   if memName (ctorShortName (firstOf p)) shorts then Just (firstOf p) else findShortCtor rest shorts
 
 -- 构造子尝试顺序：本列没出现的在前（见证更具体），已出现的在后。
-orderedCtors : List (Pair String Int) -> List String -> List (Pair String Int)
+orderedCtors : List (String, Int) -> List String -> List (String, Int)
 orderedCtors ctors heads =
   append
     (filter (\e => not (memName (firstOf e) heads)) ctors)
@@ -165,7 +165,7 @@ dropPats n xs =
 --   * `Nothing` = 处理当前列（列下降）；
 --   * `Just ctors` = 已按族展开，正在逐个构造子尝试（取第一个出现缺失的分支）。
 -- 燃料用 `Nat` 并按其构造子递归（`Zero`/`Succ`），终止性由结构下降直接可证。
-export coverageWitness : List (Pair String (Pair Bool (List (Pair String Int)))) -> Nat -> Maybe (List (Pair String Int)) -> List (List Pat) -> List Pat -> Maybe (List Pat)
+export coverageWitness : List (String, Bool, List (String, Int)) -> Nat -> Maybe (List (String, Int)) -> List (List Pat) -> List Pat -> Maybe (List Pat)
 coverageWitness table fuel pending rows qs =
   case fuel of
     Zero => Nothing
@@ -203,7 +203,7 @@ coverageWitness table fuel pending rows qs =
                       coverageWitness table fuel2 (Just (orderedCtors ctors heads)) rows qsRest
 
 -- 矩阵穷尽性：`Just w` = 缺 w（w 的长度等于矩阵列数）。
-export matrixWitness : List (Pair String (Pair Bool (List (Pair String Int)))) -> List (List Pat) -> Maybe (List Pat)
+export matrixWitness : List (String, Bool, List (String, Int)) -> List (List Pat) -> Maybe (List Pat)
 matrixWitness table clauses =
   if uniformArity clauses then
     coverageWitness
@@ -226,7 +226,7 @@ export data ClauseCover(..) : Type where
   CovCovered : ClauseCover
   CovUnknown : ClauseCover
 
-export clauseCover : List (Pair String (Pair Bool (List (Pair String Int)))) -> Nat -> List (List Pat) -> List Pat -> ClauseCover
+export clauseCover : List (String, Bool, List (String, Int)) -> Nat -> List (List Pat) -> List Pat -> ClauseCover
 clauseCover table fuel rows qs =
   case fuel of
     Zero => CovUnknown
@@ -266,7 +266,7 @@ clauseCover table fuel rows qs =
 
 -- 逐个构造子尝试：任一支有缺口 ⇒ `CovUncovered`；否则只要有未知 ⇒ `CovUnknown`；
 -- 全部分支都被覆盖才是 `CovCovered`。
-clauseCoverCtorsGo : List (Pair String (Pair Bool (List (Pair String Int)))) -> Nat -> List (Pair String Int) -> List (List Pat) -> List Pat -> ClauseCover -> ClauseCover
+clauseCoverCtorsGo : List (String, Bool, List (String, Int)) -> Nat -> List (String, Int) -> List (List Pat) -> List Pat -> ClauseCover -> ClauseCover
 clauseCoverCtorsGo table fuel [] rows qsRest acc = acc
 clauseCoverCtorsGo table fuel (entry :: rest) rows qsRest acc =
   let
@@ -287,9 +287,9 @@ patNodesList : List Pat -> Int
 patNodesList [] = 0
 patNodesList (p :: rest) = patNodes p + patNodesList rest
 
-patNodesFields : List (Pair String Pat) -> Int
+patNodesFields : List (String, Pat) -> Int
 patNodesFields [] = 0
-patNodesFields ((Pair _ p) :: rest) = patNodes p + patNodesFields rest
+patNodesFields ((_, p) :: rest) = patNodes p + patNodesFields rest
 
 matrixNodes : List (List Pat) -> Int
 matrixNodes [] = 0
@@ -326,11 +326,11 @@ matrixArity (row :: _) = natToInt (length row)
 -- `clausesOf` 是**惰性**的源矩阵：矩阵只在诊断需要改写时才构建（正常精化不付这份
 -- 遍历；`matrixOf` 在 Match 里，Coverage 不能反向 import，因此用 thunk 而不是直接吃
 -- 已建好的 `List (List Pat)`）。
-export improveExhaustive : List (Pair String (Pair Bool (List (Pair String Int)))) -> (Int -> List (List Pat)) -> Span -> Check a -> Check a
+export improveExhaustive : List (String, Bool, List (String, Int)) -> (Int -> List (List Pat)) -> Span -> Check a -> Check a
 improveExhaustive table clausesOf sp (OkC v) = OkC v
 improveExhaustive table clausesOf sp (ErrC d) = ErrC (improveDiag table (clausesOf 0) sp d)
 
-improveDiag : List (Pair String (Pair Bool (List (Pair String Int)))) -> List (List Pat) -> Span -> Diagnostic -> Diagnostic
+improveDiag : List (String, Bool, List (String, Int)) -> List (List Pat) -> Span -> Diagnostic -> Diagnostic
 improveDiag table clauses sp d =
   if d.diagCode /= "TC_NotExhaustive" then
     d

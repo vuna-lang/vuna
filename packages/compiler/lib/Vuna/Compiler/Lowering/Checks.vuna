@@ -30,32 +30,32 @@ import Vuna.Compiler.Elab.Usage
 -- 精化器可能把饱和的构造子应用表示成嵌套 `TApp (TApp (TCon c []) a) b`，
 -- 也可能直接给 `TCon c [a, b]`。这里统一折叠成 (构造子名, 实参列表)：
 -- 擦除/依赖分析按实参自带的擦除标志判断，生成侧好一次性 tupled 出来。
-export flattenConApp : Term -> Maybe (Pair String (List (Pair Term Rig)))
+export flattenConApp : Term -> Maybe (String, List (Term, Rig))
 flattenConApp t =
   case flattenAppSpine t of
-    Pair head args =>
+    (head, args) =>
       case head of
-        TCon c cargs => Just (Pair c (append cargs args))
-        TMk c cargs => Just (Pair c (append cargs args))
+        TCon c cargs => Just (c, append cargs args)
+        TMk c cargs => Just (c, append cargs args)
         _ => Nothing
 
 -- | 应用脊展平：`TApp (TApp f a) b` → `(f, [a, b])`（一次线性累积，保持原序）。
-export flattenAppSpine : Term -> Pair Term (List (Pair Term Rig))
+export flattenAppSpine : Term -> (Term, List (Term, Rig))
 flattenAppSpine t = flattenAppSpineGo t []
 
-flattenAppSpineGo : Term -> List (Pair Term Rig) -> Pair Term (List (Pair Term Rig))
-flattenAppSpineGo (TApp f a rig) acc = flattenAppSpineGo f (Pair a rig :: acc)
-flattenAppSpineGo t acc = Pair t acc
+flattenAppSpineGo : Term -> List (Term, Rig) -> (Term, List (Term, Rig))
+flattenAppSpineGo (TApp f a rig) acc = flattenAppSpineGo f ((a, rig) :: acc)
+flattenAppSpineGo t acc = (t, acc)
 
 -- ---------------------------------------------------------------
 -- 预处理：分区（类型级 / 运行时）、擦除检查、依赖拓扑排序
 -- ---------------------------------------------------------------
-export defTable : List DtDef -> List (Pair String Term)
+export defTable : List DtDef -> List (String, Term)
 defTable [] = []
 defTable (d :: rest) =
   case dtDefBody d of
     -- axiom 无体，不进 delta 展开表。
-    Just body => Pair (dtDefName d) body :: defTable rest
+    Just body => (dtDefName d, body) :: defTable rest
     Nothing => defTable rest
 
 export findDtDef : String -> List DtDef -> Maybe DtDef
@@ -77,11 +77,11 @@ isTypeLevelDef tbl d = isTypeForming (force tbl solsEmpty defaultFuel (eval [] (
 -- 类型级 / 运行时分区。`axiom` 是擦除/不透明顶层——**无论它的类型是什么**
 -- 都进类型级分区（没有运行时定义体，不能被 codegen 生成）；它的运行时使用由
 -- `checkNoAxiomRuntime` 报专门诊断。
-export partitionDefs : List (Pair String Term) -> List DtDef -> Pair (List DtDef) (List String)
+export partitionDefs : List (String, Term) -> List DtDef -> (List DtDef, List String)
 partitionDefs table defs = partitionDefsGo (HashMap.fromList table) defs [] []
 
-partitionDefsGo : HashMap String Term -> List DtDef -> List DtDef -> List String -> Pair (List DtDef) (List String)
-partitionDefsGo table [] runtime typeNames = Pair (reverse runtime) (reverse typeNames)
+partitionDefsGo : HashMap String Term -> List DtDef -> List DtDef -> List String -> (List DtDef, List String)
+partitionDefsGo table [] runtime typeNames = (reverse runtime, reverse typeNames)
 partitionDefsGo table (d :: rest) runtime typeNames =
   if isAxiomDef d then
     partitionDefsGo table rest runtime (dtDefName d :: typeNames)
@@ -138,7 +138,7 @@ checkOneErasure typeNames d =
 export showMetaHint : Int -> String
 showMetaHint m = " ?${m}"
 
-checkErasureNode : Int -> List String -> List (Pair String Rig) -> Term -> Check Int
+checkErasureNode : Int -> List String -> List (String, Rig) -> Term -> Check Int
 checkErasureNode fuel typeNames binders t =
   if fuel <= 0 then
     icFuel "erasure"
@@ -146,17 +146,17 @@ checkErasureNode fuel typeNames binders t =
     case t of
       TVar name i _ =>
         case binderAt i binders of
-          Just (Pair n rig) => if rigIsErased rig then cgErr1 (TypeLevelBindingRuntime name) name else OkC 0
+          Just (n, rig) => if rigIsErased rig then cgErr1 (TypeLevelBindingRuntime name) name else OkC 0
           Nothing => icInternal "unbound runtime variable ${name} (index ${i}, binders ${length binders})"
       TGlobal name => if memName name typeNames then cgErr1 (TypeLevelNameRuntime name) name else OkC 0
       TType l => cgErr0 TypeUsedAtRuntime
       TPi name implicit rig dom cod => cgErr0 TypeUsedAtRuntime
       TMeta m => cgErr1 (UnsolvedMetavarRuntime (showMetaHint m)) (showMetaHint m)
-      TLam name rig _ _ body => checkErasureFuel (fuel - 1) typeNames (Pair name rig :: binders) body
+      TLam name rig _ _ body => checkErasureFuel (fuel - 1) typeNames ((name, rig) :: binders) body
       TApp f a rig =>
         case flattenConApp t of
           -- 嵌套在构造子上的应用按构造子实参检查（实参自带擦除标志，比 TApp 的更准）。
-          Just (Pair c args) => checkConArgsErasureFuel (fuel - 1) typeNames binders args
+          Just (c, args) => checkConArgsErasureFuel (fuel - 1) typeNames binders args
           Nothing => if rigIsErased rig then checkErasureFuel (fuel - 1) typeNames binders f else Vuna.Compiler.Base.Common.bind (checkErasureFuel (fuel - 1) typeNames binders f) (\_ => checkErasureFuel (fuel - 1) typeNames binders a)
       -- 构造子应用只看非擦除实参（擦除实参是族参数/索引，允许是类型项）。
       TCon c args => checkConArgsErasureFuel (fuel - 1) typeNames binders args
@@ -173,9 +173,9 @@ checkErasureNode fuel typeNames binders t =
       TBool b => OkC 0
       TIf c th el => Vuna.Compiler.Base.Common.bind (checkErasureFuel (fuel - 1) typeNames binders c) (\_ => Vuna.Compiler.Base.Common.bind (checkErasureFuel (fuel - 1) typeNames binders th) (\_ => checkErasureFuel (fuel - 1) typeNames binders el))
 
-checkConArgsErasureFuel : Int -> List String -> List (Pair String Rig) -> List (Pair Term Rig) -> Check Int
+checkConArgsErasureFuel : Int -> List String -> List (String, Rig) -> List (Term, Rig) -> Check Int
 checkConArgsErasureFuel fuel typeNames binders [] = if fuel <= 0 then icFuel "erasure" else OkC 0
-checkConArgsErasureFuel fuel typeNames binders ((Pair arg rig) :: rest) =
+checkConArgsErasureFuel fuel typeNames binders ((arg, rig) :: rest) =
   if fuel <= 0 then
     icFuel "erasure"
   else if rigIsErased rig then
@@ -185,7 +185,7 @@ checkConArgsErasureFuel fuel typeNames binders ((Pair arg rig) :: rest) =
       (checkErasureFuel (fuel - 1) typeNames binders arg)
       (\_ => checkConArgsErasureFuel (fuel - 1) typeNames binders rest)
 
-checkAltErasureFuel : Int -> List String -> List (Pair String Rig) -> List CaseAlt -> Check Int
+checkAltErasureFuel : Int -> List String -> List (String, Rig) -> List CaseAlt -> Check Int
 checkAltErasureFuel fuel typeNames binders [] = if fuel <= 0 then icFuel "erasure" else OkC 0
 checkAltErasureFuel fuel typeNames binders (alt :: rest) =
   if fuel <= 0 then
@@ -196,7 +196,7 @@ checkAltErasureFuel fuel typeNames binders (alt :: rest) =
       env = append (reverse altBinders) binders
     in Vuna.Compiler.Base.Common.bind (checkErasureFuel (fuel - 1) typeNames env (caseAltBody alt)) (\_ => checkAltErasureFuel (fuel - 1) typeNames binders rest)
 
-export binderAt : Int -> List (Pair String Rig) -> Maybe (Pair String Rig)
+export binderAt : Int -> List (String, Rig) -> Maybe (String, Rig)
 binderAt i [] = Nothing
 binderAt i (b :: rest) = if i <= 0 then Just b else binderAt (i - 1) rest
 
@@ -215,7 +215,7 @@ termDepsIntoFuel fuel runtimeNames acc t =
       TLam name rig _ _ body => termDepsIntoFuel (fuel - 1) runtimeNames acc body
       TApp f a rig =>
         case flattenConApp t of
-          Just (Pair c args) => termDepsArgsFuel (fuel - 1) runtimeNames acc args
+          Just (c, args) => termDepsArgsFuel (fuel - 1) runtimeNames acc args
           Nothing => if rigIsErased rig then termDepsIntoFuel (fuel - 1) runtimeNames acc f else termDepsIntoFuel (fuel - 1) runtimeNames (termDepsIntoFuel (fuel - 1) runtimeNames acc f) a
       TCon c args => termDepsArgsFuel (fuel - 1) runtimeNames acc args
       TMk c args => termDepsArgsFuel (fuel - 1) runtimeNames acc args
@@ -230,9 +230,9 @@ termDepsIntoFuel fuel runtimeNames acc t =
       TBool b => acc
       TIf c th el => termDepsIntoFuel (fuel - 1) runtimeNames (termDepsIntoFuel (fuel - 1) runtimeNames (termDepsIntoFuel (fuel - 1) runtimeNames acc c) th) el
 
-termDepsArgsFuel : Int -> HashMap String Bool -> List String -> List (Pair Term Rig) -> List String
+termDepsArgsFuel : Int -> HashMap String Bool -> List String -> List (Term, Rig) -> List String
 termDepsArgsFuel fuel runtimeNames acc [] = if fuel <= 0 then acc else acc
-termDepsArgsFuel fuel runtimeNames acc ((Pair arg rig) :: rest) =
+termDepsArgsFuel fuel runtimeNames acc ((arg, rig) :: rest) =
   if fuel <= 0 then
     acc
   else if rigIsErased rig then
@@ -328,9 +328,9 @@ termUseFuel fuel names flagOf live acc t =
       TCase scrut alts => termUseAltsFuel (fuel - 1) names flagOf live (termUseFuel (fuel - 1) names flagOf live acc scrut) alts
       TIf c th el => termUseFuel (fuel - 1) names flagOf live (termUseFuel (fuel - 1) names flagOf live (termUseFuel (fuel - 1) names flagOf live acc c) th) el
 
-termUseArgsFuel : Int -> HashMap String Bool -> (String -> UseFlags) -> Bool -> TermUse -> List (Pair Term Rig) -> TermUse
+termUseArgsFuel : Int -> HashMap String Bool -> (String -> UseFlags) -> Bool -> TermUse -> List (Term, Rig) -> TermUse
 termUseArgsFuel fuel names flagOf live acc [] = acc
-termUseArgsFuel fuel names flagOf live acc ((Pair a rig) :: rest) =
+termUseArgsFuel fuel names flagOf live acc ((a, rig) :: rest) =
   if fuel <= 0 then
     acc
   else
@@ -407,16 +407,16 @@ checkTermScopesMaybe : Int -> Maybe Term -> Check Int
 checkTermScopesMaybe depth Nothing = OkC 0
 checkTermScopesMaybe depth (Just t) = checkTermScopes depth t
 
-checkTermScopesSlot : Int -> Maybe (Pair LamMark (Pair (Maybe Term) (Maybe Term))) -> Check Int
+checkTermScopesSlot : Int -> Maybe (LamMark, Maybe Term, Maybe Term) -> Check Int
 checkTermScopesSlot depth Nothing = OkC 0
 checkTermScopesSlot depth (Just p) =
   Vuna.Compiler.Base.Common.bind
     (checkTermScopesMaybe depth (firstOf (secondOf p)))
     (\_ => checkTermScopesMaybe (depth + 1) (secondOf (secondOf p)))
 
-checkTermScopesArgs : Int -> List (Pair Term Rig) -> Check Int
+checkTermScopesArgs : Int -> List (Term, Rig) -> Check Int
 checkTermScopesArgs depth [] = OkC 0
-checkTermScopesArgs depth ((Pair arg _) :: rest) =
+checkTermScopesArgs depth ((arg, _) :: rest) =
   Vuna.Compiler.Base.Common.bind (checkTermScopes depth arg) (\_ => checkTermScopesArgs depth rest)
 
 checkAltScopes : Int -> List CaseAlt -> Check Int
@@ -441,19 +441,19 @@ checkAllDefScopes (d :: rest) =
 export termDepsInto : HashMap String Bool -> List String -> Term -> List String
 termDepsInto a1 a2 a3 = termDepsIntoFuel (useBudgetFor (termSize a3)) a1 a2 a3
 
-termDepsArgs : HashMap String Bool -> List String -> List (Pair Term Rig) -> List String
+termDepsArgs : HashMap String Bool -> List String -> List (Term, Rig) -> List String
 termDepsArgs a1 a2 a3 = termDepsArgsFuel 100000 a1 a2 a3
 
 termDepsAlts : HashMap String Bool -> List String -> List CaseAlt -> List String
 termDepsAlts a1 a2 a3 = termDepsAltsFuel 100000 a1 a2 a3
 
-checkErasure : List String -> List (Pair String Rig) -> Term -> Check Int
+checkErasure : List String -> List (String, Rig) -> Term -> Check Int
 checkErasure typeNames binders t =
   checkErasureFuel (erasureFuelFor (termSize t)) typeNames binders t
 
 -- D24：每个节点先试折闭合 Nat 链 —— 链里只有 canonical `Zero`/`Succ`，不可能藏擦除违规；
 -- 折回后既不按链长吃 fuel，也不逐节点展开长字面量。
-checkErasureFuel : Int -> List String -> List (Pair String Rig) -> Term -> Check Int
+checkErasureFuel : Int -> List String -> List (String, Rig) -> Term -> Check Int
 checkErasureFuel fuel typeNames binders t =
   if fuel <= 0 then
     icFuel "erasure"
@@ -473,18 +473,18 @@ erasureFuelFor size =
 erasureFuelMax : Int
 erasureFuelMax = 1000000
 
-erasureFuelForArgs : List (Pair Term Rig) -> Int
+erasureFuelForArgs : List (Term, Rig) -> Int
 erasureFuelForArgs [] = 0
-erasureFuelForArgs ((Pair a _) :: rest) =
+erasureFuelForArgs ((a, _) :: rest) =
   let
     total = termSize a + erasureFuelForArgs rest
   in if total > erasureFuelMax then erasureFuelMax else total
 
-checkConArgsErasure : List String -> List (Pair String Rig) -> List (Pair Term Rig) -> Check Int
+checkConArgsErasure : List String -> List (String, Rig) -> List (Term, Rig) -> Check Int
 checkConArgsErasure a1 a2 a3 =
   checkConArgsErasureFuel (erasureFuelFor (erasureFuelForArgs a3)) a1 a2 a3
 
-checkAltErasure : List String -> List (Pair String Rig) -> List CaseAlt -> Check Int
+checkAltErasure : List String -> List (String, Rig) -> List CaseAlt -> Check Int
 checkAltErasure a1 a2 a3 = checkAltErasureFuel (erasureFuelFor (erasureFuelForAlts a3)) a1 a2 a3
 
 erasureFuelForAlts : List CaseAlt -> Int

@@ -47,8 +47,8 @@ instance Monad EffCheck where
   (>>=) m k = EffCheck (m.effCheckRun >>= (\x => (k x).effCheckRun))
 
 -- | 处理 `Check (Pair a b)` 的双参数绑定（状态传递用）。
-export step : Check (Pair a b) -> (a -> b -> Check c) -> Check c
-step (OkC (Pair x st)) k = k x st
+export step : Check (a, b) -> (a -> b -> Check c) -> Check c
+step (OkC (x, st)) k = k x st
 step (ErrC e) _ = ErrC e
 
 -- | 对列表逐项执行 `Check` 计算；遇到第一个 `ErrC` 立即返回。

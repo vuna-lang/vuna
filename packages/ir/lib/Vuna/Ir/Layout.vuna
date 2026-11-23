@@ -28,31 +28,31 @@ irDeclName (IrRecordDecl name _ _ _) = name
 irDeclName (IrUnboxedDecl name _ _) = name
 
 -- | 变体族的构造子表（其它形状为空）。
-export irDeclCtorsOf : IrTyDecl -> List (Pair String (List IrTy))
+export irDeclCtorsOf : IrTyDecl -> List (String, List IrTy)
 irDeclCtorsOf (IrVariantDecl _ _ ctors) = ctors
 irDeclCtorsOf _ = []
 
 -- | record 族的字段表 `(序号, 源码名)`（其它形状为空）。
-export irDeclRecordFieldsOf : IrTyDecl -> List (Pair Int String)
+export irDeclRecordFieldsOf : IrTyDecl -> List (Int, String)
 irDeclRecordFieldsOf (IrRecordDecl _ _ fields _) = fields
 irDeclRecordFieldsOf _ = []
 
 -- | 构造子在族内的声明序 tag（不在表里返回 `Nothing`）。
-export irCtorTagIn : List (Pair String (List IrTy)) -> String -> Maybe Int
+export irCtorTagIn : List (String, List IrTy) -> String -> Maybe Int
 irCtorTagIn ctors ctor = irCtorTagGo ctors ctor 0
 
-irCtorTagGo : List (Pair String (List IrTy)) -> String -> Int -> Maybe Int
+irCtorTagGo : List (String, List IrTy) -> String -> Int -> Maybe Int
 irCtorTagGo [] _ _ = Nothing
 irCtorTagGo (p :: rest) name i = if firstOf p == name then Just i else irCtorTagGo rest name (i + 1)
 
 -- | 构造子的运行时字段个数。
-export irCtorArityIn : List (Pair String (List IrTy)) -> String -> Maybe Int
+export irCtorArityIn : List (String, List IrTy) -> String -> Maybe Int
 irCtorArityIn [] _ = Nothing
 irCtorArityIn (p :: rest) name =
   if firstOf p == name then Just (lenOf (secondOf p)) else irCtorArityIn rest name
 
 -- | 族内最大构造子 arity（补齐字段用）。
-export irMaxArityIn : List (Pair String (List IrTy)) -> Int
+export irMaxArityIn : List (String, List IrTy) -> Int
 irMaxArityIn [] = 0
 irMaxArityIn (p :: rest) =
   let
@@ -61,10 +61,10 @@ irMaxArityIn (p :: rest) =
   in if n > m then n else m
 
 -- | record 字段在族里的位置。
-export irRecordPosOf : List (Pair Int String) -> String -> Maybe Int
+export irRecordPosOf : List (Int, String) -> String -> Maybe Int
 irRecordPosOf fields name = irRecordPosGo fields name 0
 
-irRecordPosGo : List (Pair Int String) -> String -> Int -> Maybe Int
+irRecordPosGo : List (Int, String) -> String -> Int -> Maybe Int
 irRecordPosGo [] _ _ = Nothing
 irRecordPosGo (p :: rest) name i =
   if secondOf p == name then Just i else irRecordPosGo rest name (i + 1)

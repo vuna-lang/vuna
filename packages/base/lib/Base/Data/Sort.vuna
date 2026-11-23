@@ -48,11 +48,11 @@ revOnto [] acc = acc
 revOnto (x :: xs) acc = revOnto xs (x :: acc)
 
 -- | 内部：两两拆半（尾递归），`left` / `right` 保持原相对顺序。
-splitHalves : List a -> List a -> List a -> Pair (List a) (List a)
-splitHalves left right [] = Pair left right
+splitHalves : List a -> List a -> List a -> (List a, List a)
+splitHalves left right [] = (left, right)
 splitHalves left right (x :: rest) =
   case rest of
-    [] => Pair (x :: left) right
+    [] => (x :: left, right)
     y :: more => splitHalves (x :: left) (y :: right) more
 
 -- | 内部：两路归并（尾递归，结果经 `revOnto` 还原顺序）；相等时取左侧，保持稳定。
@@ -73,7 +73,7 @@ msort le fuel xs =
       [_] => xs
       _ :: _ :: _ =>
         case splitHalves [] [] xs of
-          Pair left right => mergeOnto le [] (msort le (fuel - 1) left) (msort le (fuel - 1) right)
+          (left, right) => mergeOnto le [] (msort le (fuel - 1) left) (msort le (fuel - 1) right)
 
 -- | 自定义比较函数的**稳定**升序排序；`le` 表示 `<=`。已有序输入原样返回，长度 ≤ 16 用插入排序，其余归并。
 export sortBy : (a -> a -> Bool) -> List a -> List a

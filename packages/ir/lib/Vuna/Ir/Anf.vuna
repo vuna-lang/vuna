@@ -17,26 +17,26 @@ import Base.Data.String as String
 import Vuna.Ir.Model
 
 record Anf where
-  anfLets : List (Pair IrBinder Ir)
+  anfLets : List (IrBinder, Ir)
   anfExpr : Ir
   anfNext : Int
 
-mkAnf : List (Pair IrBinder Ir) -> Ir -> Int -> Anf
+mkAnf : List (IrBinder, Ir) -> Ir -> Int -> Anf
 mkAnf lets e n = Anf lets e n
 
 record Bound where
-  boundLets : List (Pair IrBinder Ir)
+  boundLets : List (IrBinder, Ir)
   boundExpr : Ir
   boundNext : Int
 
 record AnfList where
-  anfLets : List (Pair IrBinder Ir)
+  anfLets : List (IrBinder, Ir)
   anfExprs : List Ir
   anfNext : Int
 
 record AnfFields where
-  anfLets : List (Pair IrBinder Ir)
-  anfValues : List (Pair String Ir)
+  anfLets : List (IrBinder, Ir)
+  anfValues : List (String, Ir)
   anfNext : Int
 
 record AnfAlts where
@@ -47,16 +47,16 @@ record AnfAltM where
   anfAltM : Maybe IrAlt
   anfNext : Int
 
-spineOfIr : Ir -> Pair Ir (List Ir)
+spineOfIr : Ir -> (Ir, List Ir)
 spineOfIr (IrApp _ f a) =
   let
     p = spineOfIr f
-  in Pair (firstOf p) (append (secondOf p) [a])
-spineOfIr x = Pair x []
+  in (firstOf p, append (secondOf p) [a])
+spineOfIr x = (x, [])
 
 applyIrs : Ir -> List Ir -> Ir
 applyIrs f [] = f
-applyIrs f (a :: rest) = applyIrs (IrApp (Just (Pair IrTyOpaque IrTyOpaque)) f a) rest
+applyIrs f (a :: rest) = applyIrs (IrApp (Just (IrTyOpaque, IrTyOpaque)) f a) rest
 
 isSimple : Ir -> Bool
 isSimple (IrVar _) = True
@@ -76,16 +76,16 @@ anfIdBase = 100000000000000000
 freshBinder : Int -> IrBinder
 freshBinder n = mkIrBinder (0 - (anfIdBase + n)) ("__anf" ++ strFromInt n)
 
-bindSimple : Int -> List (Pair IrBinder Ir) -> Ir -> Bound
+bindSimple : Int -> List (IrBinder, Ir) -> Ir -> Bound
 bindSimple next lets e =
   if isSimple e then
     Bound lets e next
   else
     let
       b = freshBinder next
-    in Bound (append lets [Pair b e]) (IrVar b) (next + 1)
+    in Bound (append lets [(b, e)]) (IrVar b) (next + 1)
 
-letsIn : List (Pair IrBinder Ir) -> Ir -> Ir
+letsIn : List (IrBinder, Ir) -> Ir -> Ir
 letsIn [] body = body
 letsIn (p :: rest) body = IrLet [firstOf p] (secondOf p) (letsIn rest body)
 
@@ -195,7 +195,7 @@ anfList fuel next xs =
           r = anfList (fuel - 1) b.boundNext rest
         in AnfList (append b.boundLets r.anfLets) (b.boundExpr :: r.anfExprs) r.anfNext
 
-anfFields : Int -> Int -> List (Pair String Ir) -> AnfFields
+anfFields : Int -> Int -> List (String, Ir) -> AnfFields
 anfFields fuel next fields =
   if fuel <= 0 then
     AnfFields [] fields next
@@ -207,7 +207,7 @@ anfFields fuel next fields =
           a = anf (fuel - 1) next (secondOf p)
           b = bindSimple a.anfNext a.anfLets a.anfExpr
           r = anfFields (fuel - 1) b.boundNext rest
-        in AnfFields (append b.boundLets r.anfLets) (Pair (firstOf p) b.boundExpr :: r.anfValues) r.anfNext
+        in AnfFields (append b.boundLets r.anfLets) ((firstOf p, b.boundExpr) :: r.anfValues) r.anfNext
 
 anfAlts : Int -> Int -> List IrAlt -> AnfAlts
 anfAlts fuel next alts =
@@ -285,7 +285,7 @@ countAnfList fuel xs =
       [] => 0
       x :: rest => countAnfBinders (fuel - 1) x + countAnfList (fuel - 1) rest
 
-countAnfFields : Int -> List (Pair String Ir) -> Int
+countAnfFields : Int -> List (String, Ir) -> Int
 countAnfFields fuel xs =
   if fuel <= 0 then
     0

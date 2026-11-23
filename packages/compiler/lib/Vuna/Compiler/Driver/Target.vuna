@@ -69,7 +69,7 @@ searchBackend (d :: rest) target =
       if exists then pure (Just (backendPath d target)) else searchBackend rest target
 
 -- | 编译到非 OCaml 目标：检查 + Lowering，再把 IR 交给后端插件。
-export compileBackend : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> String -> Bool -> String -> Eff r (Check (Pair (List String) (List Diagnostic)))
+export compileBackend : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> String -> Bool -> String -> Eff r (Check (List String, List Diagnostic))
 compileBackend ctx target entry printResult outDir =
   do
     _ <- ensureDirPath outDir
@@ -83,7 +83,7 @@ compileBackend ctx target entry printResult outDir =
           ErrC e => pure (ErrC e)
           OkC program => dispatch target program printResult outDir
 
-dispatch : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> IrProgram -> Bool -> String -> Eff r (Check (Pair (List String) (List Diagnostic)))
+dispatch : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> IrProgram -> Bool -> String -> Eff r (Check (List String, List Diagnostic))
 dispatch target program printResult outDir =
   do
     backend <- findBackend target
@@ -92,7 +92,7 @@ dispatch target program printResult outDir =
       Just bin => dispatchWith target bin program printResult outDir
 
 -- | 内部：先查产物缓存；未命中才编码 IR、写临时文件并起插件。
-dispatchWith : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> IrProgram -> Bool -> String -> Eff r (Check (Pair (List String) (List Diagnostic)))
+dispatchWith : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> IrProgram -> Bool -> String -> Eff r (Check (List String, List Diagnostic))
 dispatchWith target bin program printResult outDir =
   let
     irText = encodeProgram program
@@ -104,15 +104,15 @@ dispatchWith target bin program printResult outDir =
     in do
       cached <- readOutputsEff key
       case cached of
-        Just (Pair files diags) =>
+        Just (files, diags) =>
           do
             _ <- pure (dbg! "target-cache=hit ${target}")
             _ <- materializeEff outDir files
-            pure (OkC (Pair (map firstOf files) diags))
+            pure (OkC (map firstOf files, diags))
         Nothing => runBackend target bin key irText irHash printResult outDir
 
 -- | 内部：缓存未命中——写 IR、起插件、读回诊断与产物，最后写产物缓存。
-runBackend : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> String -> String -> String -> Bool -> String -> Eff r (Check (Pair (List String) (List Diagnostic)))
+runBackend : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> String -> String -> String -> Bool -> String -> Eff r (Check (List String, List Diagnostic))
 runBackend target bin key irText irHash printResult outDir =
   do
     _ <- pure (dbg! "target-cache=miss ${target}")
@@ -135,7 +135,7 @@ runBackend target bin key irText irHash printResult outDir =
       in do
         contents <- readProducedEff outDir names
         _ <- writeOutputsEff key contents diags
-        pure (OkC (Pair names diags))
+        pure (OkC (names, diags))
     else
       pure (ErrC (firstDiagOr (decodedDiags payload) target code))
 

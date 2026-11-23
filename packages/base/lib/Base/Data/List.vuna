@@ -92,7 +92,7 @@ memName name [] = False
 memName name (x :: rest) = x == name || memName name rest
 
 -- | 按键查找 `Pair` 列表中的值。
-export lookupPair : String -> List (Pair String v) -> Maybe v
+export lookupPair : String -> List (String, v) -> Maybe v
 lookupPair name [] = Nothing
 lookupPair name (p :: rest) = if firstOf p == name then Just (secondOf p) else lookupPair name rest
 
@@ -119,8 +119,8 @@ hasDupNames [] = False
 hasDupNames (x :: rest) = memName x rest || hasDupNames rest
 
 -- | 把两个列表逐项配对；长度取较短者。
-export zip : List a -> List b -> List (Pair a b)
-zip (x :: xs) (y :: ys) = Pair x y :: zip xs ys
+export zip : List a -> List b -> List (a, b)
+zip (x :: xs) (y :: ys) = (x, y) :: zip xs ys
 zip _ _ = []
 
 -- | 取前 `n` 个元素（不足则返回全部）。

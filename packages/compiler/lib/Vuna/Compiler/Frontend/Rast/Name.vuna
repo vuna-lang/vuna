@@ -91,12 +91,12 @@ hasIntrinsic name =
     Nothing => False
 
 -- | 全局编码 `Module.name` → `(Module, name)`：按**最后一个**点切分（模块名本身含点）。
-export splitGlobalKey : String -> Maybe (Pair String String)
+export splitGlobalKey : String -> Maybe (String, String)
 splitGlobalKey name =
   let
     cs = strUnpack name
     at = lastDotAt 0 cs (0 - 1)
-  in if at < 0 then Nothing else Just (Pair (strPack (take at cs)) (strPack (drop (at + 1) cs)))
+  in if at < 0 then Nothing else Just (strPack (take at cs), strPack (drop (at + 1) cs))
 
 -- | 最后一个点的下标（没有则 -1）。
 lastDotAt : Int -> List Int -> Int -> Int

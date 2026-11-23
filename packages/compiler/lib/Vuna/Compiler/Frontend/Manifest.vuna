@@ -195,7 +195,7 @@ reachesFrom fuel layers todo seen target =
   else
     case Queue.pop todo of
       Nothing => False
-      Just (Pair n rest) => if n == target then True else if layerSeen n seen then reachesFrom (fuel - 1) layers rest seen target else reachesFrom (fuel - 1) layers (Queue.pushAll (layerUsesOf layers n) rest) (n :: seen) target
+      Just (n, rest) => if n == target then True else if layerSeen n seen then reachesFrom (fuel - 1) layers rest seen target else reachesFrom (fuel - 1) layers (Queue.pushAll (layerUsesOf layers n) rest) (n :: seen) target
 
 -- 队列里每个节点最多被弹出一次；重复边会让同一节点重复入队，因此上界是
 -- 「节点数 + 边数 + 1」（只按层数给界时，宽图会在环路前耗尽）。
@@ -362,12 +362,12 @@ collectTables path ((TomlEntry section key value line) :: rest) acc =
     collectTables path rest acc
 
 -- 字符串简写：`[dependencies] name = "相对路径"`。
-collectStrings : String -> List TomlEntry -> List (Pair String (Pair String Int)) -> Check (List (Pair String (Pair String Int)))
+collectStrings : String -> List TomlEntry -> List (String, String, Int) -> Check (List (String, String, Int))
 collectStrings path [] acc = OkC (reverse acc)
 collectStrings path ((TomlEntry section key value line) :: rest) acc =
   if sameSection section ["dependencies"] then
     case value of
-      TStr rel => collectStrings path rest (Pair key (Pair rel line) :: acc)
+      TStr rel => collectStrings path rest ((key, rel, line) :: acc)
       _ => pkgAt1 path line (DependencyPathNotString key) key
   else
     collectStrings path rest acc

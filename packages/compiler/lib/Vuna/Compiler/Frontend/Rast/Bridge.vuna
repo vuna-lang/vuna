@@ -51,17 +51,17 @@ toAstInterpPart : Rast.InterpPart -> Ast.InterpPart
 toAstInterpPart (Rast.IPText s) = Ast.IPText s
 toAstInterpPart (Rast.IPHole e) = Ast.IPHole (toAstExpr e)
 
-toAstBinding : Pair Rast.Pat Rast.Expr -> Pair Ast.Pat Ast.Expr
-toAstBinding (Pair pat value) = Pair (toAstPat pat) (toAstExpr value)
+toAstBinding : (Rast.Pat, Rast.Expr) -> (Ast.Pat, Ast.Expr)
+toAstBinding (pat, value) = (toAstPat pat, toAstExpr value)
 
-toAstLocalClause : Pair (List Rast.Pat) Rast.Expr -> Pair (List Ast.Pat) Ast.Expr
-toAstLocalClause (Pair pats body) = Pair (map toAstPat pats) (toAstExpr body)
+toAstLocalClause : (List Rast.Pat, Rast.Expr) -> (List Ast.Pat, Ast.Expr)
+toAstLocalClause (pats, body) = (map toAstPat pats, toAstExpr body)
 
-toAstAlt : Pair Rast.Pat Rast.Expr -> Pair Ast.Pat Ast.Expr
-toAstAlt (Pair pat body) = Pair (toAstPat pat) (toAstExpr body)
+toAstAlt : (Rast.Pat, Rast.Expr) -> (Ast.Pat, Ast.Expr)
+toAstAlt (pat, body) = (toAstPat pat, toAstExpr body)
 
-toAstFieldValue : Pair String Rast.Expr -> Pair String Ast.Expr
-toAstFieldValue (Pair fname value) = Pair fname (toAstExpr value)
+toAstFieldValue : (String, Rast.Expr) -> (String, Ast.Expr)
+toAstFieldValue (fname, value) = (fname, toAstExpr value)
 
 toAstStmt : Rast.DoStmt -> Ast.DoStmt
 toAstStmt (Rast.DBind pat value sp) =
@@ -69,8 +69,8 @@ toAstStmt (Rast.DBind pat value sp) =
 toAstStmt (Rast.DExpr value sp) = Ast.DExpr (toAstExpr value) (Ast.detachedNodeRef sp)
 toAstStmt (Rast.DLet binds sp) = Ast.DLet (map toAstBind binds) (Ast.detachedNodeRef sp)
 
-toAstBind : Pair Rast.Pat Rast.Expr -> Pair Ast.Pat Ast.Expr
-toAstBind (Pair pat value) = Pair (toAstPat pat) (toAstExpr value)
+toAstBind : (Rast.Pat, Rast.Expr) -> (Ast.Pat, Ast.Expr)
+toAstBind (pat, value) = (toAstPat pat, toAstExpr value)
 
 toAstPat : Rast.Pat -> Ast.Pat
 toAstPat (Rast.PVar name sp) = Ast.PVar name (Ast.detachedNodeRef sp)
@@ -83,8 +83,8 @@ toAstPat (Rast.PStr s sp) = Ast.PStr s (Ast.detachedNodeRef sp)
 toAstPat (Rast.PRecord name fields sp) =
   Ast.PRecord (RastName.rnameKey name) (map toAstPatField fields) (Ast.detachedNodeRef sp)
 
-toAstPatField : Pair String Rast.Pat -> Pair String Ast.Pat
-toAstPatField (Pair fname pat) = Pair fname (toAstPat pat)
+toAstPatField : (String, Rast.Pat) -> (String, Ast.Pat)
+toAstPatField (fname, pat) = (fname, toAstPat pat)
 
 -- | Ast 表达式 → RAst（解码路径用；名字按无作用域分类）。
 export toRastExpr : Ast.Expr -> Rast.Expr
@@ -162,5 +162,5 @@ toRastPat (Ast.PStr s r) = Rast.PStr s (Ast.nodeRefSpan r)
 toRastPat (Ast.PRecord name fields r) =
   Rast.PRecord (RastName.classifyName name) (map toRastPatField fields) (Ast.nodeRefSpan r)
 
-toRastPatField : Pair String Ast.Pat -> Pair String Rast.Pat
-toRastPatField (Pair fname pat) = Pair fname (toRastPat pat)
+toRastPatField : (String, Ast.Pat) -> (String, Rast.Pat)
+toRastPatField (fname, pat) = (fname, toRastPat pat)

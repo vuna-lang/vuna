@@ -55,7 +55,7 @@ genUnitPartsWith norm qc shared unitIr =
           _ = dbg! "cg-typedecls-done"
         in case genGroups (mkGenStWith norm qc shared) unitIr.irUnitGroups of
           ErrC e => ErrC e
-          OkC (Pair bodies st) =>
+          OkC (bodies, st) =>
             let
               _ = dbg! "cg-genGroups-done"
               deps = uniqueDeps (append (append [runtimeUnit] (typeRefDeps qc unitIr.irUnitTypeRefs)) st.gsDeps)

@@ -130,21 +130,21 @@ export data Term(..) : Type where
   -- 类型槽是 `Pair binderTy resultTy`：binder 类型在外层上下文里（不引用该 binder
   -- 自己），结果类型在 binder 的作用域里。binder span 只服务诊断
   -- （未使用/遮蔽/线性用量），不参与语义与编码。
-  TLam : String -> Rig -> Maybe (Pair LamMark (Pair (Maybe Term) (Maybe Term))) -> Span -> Term -> Term
+  TLam : String -> Rig -> Maybe (LamMark, Maybe Term, Maybe Term) -> Span -> Term -> Term
   TApp : Term -> Term -> Rig -> Term
   -- 构造子应用（自携每个实参的 multiplicity，与 TApp 一致）。
-  TCon : String -> List (Pair Term Rig) -> Term
+  TCon : String -> List (Term, Rig) -> Term
   -- R3：record 构造原语（记录构造子名 + 实参）：语义与 TCon 相同，codegen 扩展回 TCon。
-  TMk : String -> List (Pair Term Rig) -> Term
+  TMk : String -> List (Term, Rig) -> Term
   -- 依赖模式匹配。CaseAlt 的名字是构造子名（case 已按分支顺序排列）。
   TCase : Term -> List CaseAlt -> Term
   -- R3（records-v2）：记录字段投影原语（base、构造子/记录名、字段序号、字段数）。
   -- 精化期把 `p.x` 从生成的 `case` 改为这个原语；codegen 再按同一形状展开成
   -- 原有 `TCase`（产物逐字节一致），eval/quote/conv 直接消费它（iota + stuck）。
-  TProj : Term -> String -> List (Pair String Rig) -> Int -> Int -> Term
+  TProj : Term -> String -> List (String, Rig) -> Int -> Int -> Term
   -- R3：记录更新原语（base、构造子名、字段 telescope、被改字段序号、重建体）。
   -- 语义与「单分支 TCase」完全相同（eval 直接按 case 展开），原语只多带记录身份标注。
-  TRecUpd : Term -> String -> List (Pair String Rig) -> List Int -> Term -> Term
+  TRecUpd : Term -> String -> List (String, Rig) -> List Int -> Term -> Term
   TInt : Int -> Term
   TStr : String -> Term
   TBool : Bool -> Term
@@ -153,7 +153,7 @@ export data Term(..) : Type where
   TFloat : String -> Term
   -- R4（records-v2）：record 族的类型应用前导（记录名 + 实参）。语义 = `TGlobal name`
   -- 的应用脊；只在精化期存在，codegen 展开回 `TApp` 链（产物逐字节一致）。
-  TRecord : String -> List (Pair Term Rig) -> Term
+  TRecord : String -> List (Term, Rig) -> Term
 
 -- binder（case 分支的构造子字段）：名字、multiplicity、binder 自身的源码位置。
 -- span 只服务诊断（未使用/遮蔽/线性用量），不参与语义与编码；合成 binder 用 `spanEmpty`。
@@ -172,17 +172,17 @@ export binderSpanOf : Binder -> Span
 binderSpanOf (Binder n r sp) = sp
 
 -- | binder → (名字, multiplicity)：给只吃名字/rig 的位置（telescope / codegen / 值层）。
-export binderPair : Binder -> Pair String Rig
-binderPair b = Pair (binderNameOf b) (binderRigOf b)
+export binderPair : Binder -> (String, Rig)
+binderPair b = (binderNameOf b, binderRigOf b)
 
-export binderPairs : List Binder -> List (Pair String Rig)
+export binderPairs : List Binder -> List (String, Rig)
 binderPairs bs = map binderPair bs
 
 -- | (名字, multiplicity) → 没有源码位置的 binder（telescope / 合成分支）。
-export binderOfPair : Pair String Rig -> Binder
-binderOfPair (Pair n r) = Binder n r spanEmpty
+export binderOfPair : (String, Rig) -> Binder
+binderOfPair (n, r) = Binder n r spanEmpty
 
-export bindersOfPairs : List (Pair String Rig) -> List Binder
+export bindersOfPairs : List (String, Rig) -> List Binder
 bindersOfPairs ps = map binderOfPair ps
 
 -- case 分支：构造子名 + 绑定子（名字 / multiplicity / 位置）+ 体。
@@ -221,7 +221,7 @@ export data Value(..) : Type where
   -- 卡住的 case（scrutinee 是中性值）。
   VCase : Value -> List VCaseAlt -> Value
   -- R3：卡住的记录投影（base 是中性值）；base 为 VCon 时 eval 直接取字段（iota）。
-  VProj : Value -> String -> List (Pair String Rig) -> Int -> Int -> Value
+  VProj : Value -> String -> List (String, Rig) -> Int -> Int -> Value
   VInt : Int -> Value
   VStr : String -> Value
   VBool : Bool -> Value
@@ -232,7 +232,7 @@ export data Value(..) : Type where
 -- case 分支的值形态：绑定子 + 悬挂在「绑定子入环境后」的闭包。
 export record VCaseAlt(..) where
   vCaseAltName : String
-  vCaseAltBinders : List (Pair String Rig)
+  vCaseAltBinders : List (String, Rig)
   vCaseAltClosure : Closure
 
 export defaultFuel : Int
@@ -265,13 +265,13 @@ natChainGo fuel t =
     Nothing
   else
     case flattenTermApp t of
-      Pair head args =>
+      (head, args) =>
         case head of
           TCon c cargs => natChainArgs (fuel - 1) c (append cargs args)
           TGlobal c => natChainArgs (fuel - 1) c args
           _ => Nothing
 
-natChainArgs : Int -> String -> List (Pair Term Rig) -> Maybe Int
+natChainArgs : Int -> String -> List (Term, Rig) -> Maybe Int
 natChainArgs fuel c args =
   if c == natZeroCtor then
     case args of
@@ -279,7 +279,7 @@ natChainArgs fuel c args =
       _ => Nothing
   else if c == natSuccCtor then
     case args of
-      [Pair a _] =>
+      [(a, _)] =>
         case natChainGo fuel a of
           Just n => Just (natChainNext n)
           Nothing => Nothing
@@ -292,13 +292,13 @@ natChainNext : Int -> Int
 natChainNext n = if n >= natChainMax then natChainMax else n + 1
 
 -- 应用脊展平：`TApp (TApp f a) b` → `(f, [a, b])`（累积参数，保持线性）。
-export flattenTermApp : Term -> Pair Term (List (Pair Term Rig))
+export flattenTermApp : Term -> (Term, List (Term, Rig))
 flattenTermApp t = flattenTermAppGo t []
 
-flattenTermAppGo : Term -> List (Pair Term Rig) -> Pair Term (List (Pair Term Rig))
-flattenTermAppGo (TApp f a rig) acc = flattenTermAppGo f (Pair a rig :: acc)
-flattenTermAppGo (TRecord name args) acc = Pair (TGlobal name) (append args acc)
-flattenTermAppGo t acc = Pair t acc
+flattenTermAppGo : Term -> List (Term, Rig) -> (Term, List (Term, Rig))
+flattenTermAppGo (TApp f a rig) acc = flattenTermAppGo f ((a, rig) :: acc)
+flattenTermAppGo (TRecord name args) acc = (TGlobal name, append args acc)
+flattenTermAppGo t acc = (t, acc)
 
 -- | 项的节点数（`TVar` / 字面量 / binder 各计 1，case 只数 scrutinee 与分支体），
 -- **饱和**在 `termSizeCap`。
@@ -342,15 +342,15 @@ termSizeWork (TProj base _ _ _ _) = [base]
 termSizeWork (TRecUpd base _ _ _ body) = [base, body]
 termSizeWork (TIf c th el) = [c, th, el]
 
-termSizeArgTerms : List (Pair Term Rig) -> List Term
+termSizeArgTerms : List (Term, Rig) -> List Term
 termSizeArgTerms [] = []
-termSizeArgTerms ((Pair a _) :: rest) = a :: termSizeArgTerms rest
+termSizeArgTerms ((a, _) :: rest) = a :: termSizeArgTerms rest
 
 termSizeAltTerms : List CaseAlt -> List Term
 termSizeAltTerms [] = []
 termSizeAltTerms (alt :: rest) = caseAltBody alt :: termSizeAltTerms rest
 
-termSizeSlotTerms : Maybe (Pair LamMark (Pair (Maybe Term) (Maybe Term))) -> List Term
+termSizeSlotTerms : Maybe (LamMark, Maybe Term, Maybe Term) -> List Term
 termSizeSlotTerms Nothing = []
 termSizeSlotTerms (Just p) =
   append (termSizeMaybeTerms (firstOf (secondOf p))) (termSizeMaybeTerms (secondOf (secondOf p)))
@@ -367,9 +367,9 @@ export metaLookup : Int -> HashMap Int Value -> Maybe Value
 metaLookup i t = HashMap.lookup i t
 
 -- 纯 list 场景（只有解表 list、没有索引）的线性兜底；热路径不要用。
-export metaLookupList : Int -> List (Pair Int Value) -> Maybe Value
+export metaLookupList : Int -> List (Int, Value) -> Maybe Value
 metaLookupList i [] = Nothing
-metaLookupList i ((Pair j t) :: rest) = if i == j then Just t else metaLookupList i rest
+metaLookupList i ((j, t) :: rest) = if i == j then Just t else metaLookupList i rest
 
 -- ---------------------------------------------------------------
 -- Sols：解表 + 其哈希索引。
@@ -383,20 +383,20 @@ metaLookupList i ((Pair j t) :: rest) = if i == j then Just t else metaLookupLis
 -- 不存「先存解、事后扫解表」的两段式复核。
 export record Sols(..) where
   solsTbl : HashMap Int Value
-  solsList : List (Pair Int Value)
+  solsList : List (Int, Value)
   solsDepth : HashMap Int Int
 
 export solsEmpty : Sols
 solsEmpty = Sols (HashMap.fromList []) [] (HashMap.fromList [])
 
-export solsFromList : List (Pair Int Value) -> Sols
+export solsFromList : List (Int, Value) -> Sols
 solsFromList xs = Sols (HashMap.insertAll xs (HashMap.fromList [])) xs (HashMap.fromList [])
 
 -- Elab 侧构造：解表（list 权威）+ 解索引 + 元变量创建深度索引。
-export solsOf : HashMap Int Value -> List (Pair Int Value) -> HashMap Int Int -> Sols
+export solsOf : HashMap Int Value -> List (Int, Value) -> HashMap Int Int -> Sols
 solsOf t xs d = Sols t xs d
 
-export solsList : Sols -> List (Pair Int Value)
+export solsList : Sols -> List (Int, Value)
 solsList (Sols t xs d) = xs
 
 -- 元变量创建深度（绑定当时的上下文长度）；未登记的元变量返回 Nothing。
@@ -409,7 +409,7 @@ export solsLookup : Int -> Sols -> Maybe Value
 solsLookup i (Sols t xs d) = HashMap.lookup i t
 
 export solsCons : Int -> Value -> Sols -> Sols
-solsCons i v (Sols t xs d) = Sols (HashMap.insert i v t) (Pair i v :: xs) d
+solsCons i v (Sols t xs d) = Sols (HashMap.insert i v t) ((i, v) :: xs) d
 
 -- 项里是否有**未解**元变量（值共享的安全条件之一：含未解 meta 的体不缓存）。
 -- 已解的 TMeta 不算：缓存里留下的是已解值，再求解也不会改写既有解。
@@ -428,8 +428,7 @@ termHasUnsolvedMeta sols (TLam name rig slot _ body) =
     tys =
       case slot of
         Nothing => False
-        Just (Pair _ (Pair b r)) =>
-          termHasUnsolvedMetaMaybe sols b || termHasUnsolvedMetaMaybe sols r
+        Just (_, b, r) => termHasUnsolvedMetaMaybe sols b || termHasUnsolvedMetaMaybe sols r
   in tys || termHasUnsolvedMeta sols body
 termHasUnsolvedMeta sols (TApp f a rig) = termHasUnsolvedMeta sols f || termHasUnsolvedMeta sols a
 termHasUnsolvedMeta sols (TCon c args) = termHasUnsolvedMetaArgs sols args
@@ -451,9 +450,9 @@ termHasUnsolvedMetaMaybe : Sols -> Maybe Term -> Bool
 termHasUnsolvedMetaMaybe sols Nothing = False
 termHasUnsolvedMetaMaybe sols (Just t) = termHasUnsolvedMeta sols t
 
-termHasUnsolvedMetaArgs : Sols -> List (Pair Term Rig) -> Bool
+termHasUnsolvedMetaArgs : Sols -> List (Term, Rig) -> Bool
 termHasUnsolvedMetaArgs sols [] = False
-termHasUnsolvedMetaArgs sols ((Pair a rig) :: rest) =
+termHasUnsolvedMetaArgs sols ((a, rig) :: rest) =
   termHasUnsolvedMeta sols a || termHasUnsolvedMetaArgs sols rest
 
 termHasUnsolvedMetaAlts : Sols -> List CaseAlt -> Bool
@@ -486,9 +485,9 @@ termUsesFloat names (TIf c th el) =
   termUsesFloat names c || termUsesFloat names th || termUsesFloat names el
 
 -- | 实参列表里是否有任一表达式用到浮点（`termUsesFloat` 的列表版）。
-anyArgUsesFloat : List String -> List (Pair Term Rig) -> Bool
+anyArgUsesFloat : List String -> List (Term, Rig) -> Bool
 anyArgUsesFloat names [] = False
-anyArgUsesFloat names ((Pair a rig) :: rest) = termUsesFloat names a || anyArgUsesFloat names rest
+anyArgUsesFloat names ((a, rig) :: rest) = termUsesFloat names a || anyArgUsesFloat names rest
 
 -- | case 分支体列表里是否有任一用到浮点（`termUsesFloat` 的列表版）。
 anyAltUsesFloat : List String -> List CaseAlt -> Bool
@@ -536,7 +535,7 @@ hasFreeVar depth (TLam name rig slot _ body) =
     tys =
       case slot of
         Nothing => False
-        Just (Pair _ (Pair b r)) => hasFreeVarMaybe depth b || hasFreeVarMaybe (depth + 1) r
+        Just (_, b, r) => hasFreeVarMaybe depth b || hasFreeVarMaybe (depth + 1) r
   in tys || hasFreeVar (depth + 1) body
 hasFreeVar depth (TApp f a rig) = hasFreeVar depth f || hasFreeVar depth a
 hasFreeVar depth (TCon c args) = hasFreeVarArgs depth args
@@ -556,9 +555,9 @@ export hasFreeVarMaybe : Int -> Maybe Term -> Bool
 hasFreeVarMaybe depth Nothing = False
 hasFreeVarMaybe depth (Just t) = hasFreeVar depth t
 
-hasFreeVarArgs : Int -> List (Pair Term Rig) -> Bool
+hasFreeVarArgs : Int -> List (Term, Rig) -> Bool
 hasFreeVarArgs depth [] = False
-hasFreeVarArgs depth ((Pair a rig) :: rest) = hasFreeVar depth a || hasFreeVarArgs depth rest
+hasFreeVarArgs depth ((a, rig) :: rest) = hasFreeVar depth a || hasFreeVarArgs depth rest
 
 export hasFreeVarAlts : Int -> List CaseAlt -> Bool
 hasFreeVarAlts depth [] = False
@@ -576,7 +575,7 @@ hasMeta m depth (TLam name rig slot _ body) =
     tys =
       case slot of
         Nothing => False
-        Just (Pair _ (Pair b r)) => hasMetaMaybe m depth b || hasMetaMaybe m (depth + 1) r
+        Just (_, b, r) => hasMetaMaybe m depth b || hasMetaMaybe m (depth + 1) r
   in tys || hasMeta m (depth + 1) body
 hasMeta m depth (TApp f a rig) = hasMeta m depth f || hasMeta m depth a
 hasMeta m depth (TCon c args) = hasMetaArgs m depth args
@@ -596,9 +595,9 @@ export hasMetaMaybe : Int -> Int -> Maybe Term -> Bool
 hasMetaMaybe m depth Nothing = False
 hasMetaMaybe m depth (Just t) = hasMeta m depth t
 
-hasMetaArgs : Int -> Int -> List (Pair Term Rig) -> Bool
+hasMetaArgs : Int -> Int -> List (Term, Rig) -> Bool
 hasMetaArgs m depth [] = False
-hasMetaArgs m depth ((Pair a rig) :: rest) = hasMeta m depth a || hasMetaArgs m depth rest
+hasMetaArgs m depth ((a, rig) :: rest) = hasMeta m depth a || hasMetaArgs m depth rest
 
 export hasMetaAlts : Int -> Int -> List CaseAlt -> Bool
 hasMetaAlts m depth [] = False
@@ -620,43 +619,43 @@ export data LamMark(..) : Type where
   LamPlain : LamMark
   LamLinearClosure : LamMark
 
-export lamMarkOf : Maybe (Pair LamMark (Pair (Maybe Term) (Maybe Term))) -> LamMark
+export lamMarkOf : Maybe (LamMark, Maybe Term, Maybe Term) -> LamMark
 lamMarkOf Nothing = LamPlain
 lamMarkOf (Just p) = firstOf p
 
-export lamSlotTys : Maybe (Pair LamMark (Pair (Maybe Term) (Maybe Term))) -> Maybe (Pair (Maybe Term) (Maybe Term))
+export lamSlotTys : Maybe (LamMark, Maybe Term, Maybe Term) -> Maybe (Maybe Term, Maybe Term)
 lamSlotTys Nothing = Nothing
 lamSlotTys (Just p) = Just (secondOf p)
 
-export lamBinderTyOf : Maybe (Pair LamMark (Pair (Maybe Term) (Maybe Term))) -> Maybe Term
+export lamBinderTyOf : Maybe (LamMark, Maybe Term, Maybe Term) -> Maybe Term
 lamBinderTyOf slot =
   case lamSlotTys slot of
     Nothing => Nothing
     Just p => firstOf p
 
-export lamResultTyOf : Maybe (Pair LamMark (Pair (Maybe Term) (Maybe Term))) -> Maybe Term
+export lamResultTyOf : Maybe (LamMark, Maybe Term, Maybe Term) -> Maybe Term
 lamResultTyOf slot =
   case lamSlotTys slot of
     Nothing => Nothing
     Just p => secondOf p
 
-export lamTyOf : Maybe Term -> Maybe Term -> Maybe (Pair LamMark (Pair (Maybe Term) (Maybe Term)))
+export lamTyOf : Maybe Term -> Maybe Term -> Maybe (LamMark, Maybe Term, Maybe Term)
 lamTyOf Nothing Nothing = Nothing
-lamTyOf binderTy resultTy = Just (Pair LamPlain (Pair binderTy resultTy))
+lamTyOf binderTy resultTy = Just (LamPlain, binderTy, resultTy)
 
-export markLamLinear : Maybe (Pair LamMark (Pair (Maybe Term) (Maybe Term))) -> Maybe (Pair LamMark (Pair (Maybe Term) (Maybe Term)))
+export markLamLinear : Maybe (LamMark, Maybe Term, Maybe Term) -> Maybe (LamMark, Maybe Term, Maybe Term)
 markLamLinear slot =
   let
     tys =
       case lamSlotTys slot of
-        Nothing => Pair Nothing Nothing
+        Nothing => (Nothing, Nothing)
         Just p => p
-  in Just (Pair LamLinearClosure tys)
+  in Just (LamLinearClosure, tys)
 
-export lamTyWithBinder : Maybe Term -> Maybe (Pair LamMark (Pair (Maybe Term) (Maybe Term)))
+export lamTyWithBinder : Maybe Term -> Maybe (LamMark, Maybe Term, Maybe Term)
 lamTyWithBinder binderTy = lamTyOf binderTy Nothing
 
-export lamTyWithResult : Maybe Term -> Maybe (Pair LamMark (Pair (Maybe Term) (Maybe Term)))
+export lamTyWithResult : Maybe Term -> Maybe (LamMark, Maybe Term, Maybe Term)
 lamTyWithResult resultTy = lamTyOf Nothing resultTy
 
 -- ---------------------------------------------------------------
@@ -675,7 +674,7 @@ shift depth amount (TLam name rig slot sp body) =
     slot2 =
       case slot of
         Nothing => Nothing
-        Just (Pair mark (Pair bt rt)) =>
+        Just (mark, bt, rt) =>
           let
             bt2 =
               case bt of
@@ -685,7 +684,7 @@ shift depth amount (TLam name rig slot sp body) =
               case rt of
                 Nothing => Nothing
                 Just t => Just (shift (depth + 1) amount t)
-          in Just (Pair mark (Pair bt2 rt2))
+          in Just (mark, bt2, rt2)
   in TLam name rig slot2 sp (shift (depth + 1) amount body)
 shift depth amount (TApp f a rig) = TApp (shift depth amount f) (shift depth amount a) rig
 shift depth amount (TCon c args) = TCon c (shiftArgs depth amount args)
@@ -703,10 +702,10 @@ shift depth amount (t@(TBool b)) = t
 shift depth amount (TIf c th el) =
   TIf (shift depth amount c) (shift depth amount th) (shift depth amount el)
 
-export shiftArgs : Int -> Int -> List (Pair Term Rig) -> List (Pair Term Rig)
+export shiftArgs : Int -> Int -> List (Term, Rig) -> List (Term, Rig)
 shiftArgs depth amount [] = []
-shiftArgs depth amount ((Pair a rig) :: rest) =
-  Pair (shift depth amount a) rig :: shiftArgs depth amount rest
+shiftArgs depth amount ((a, rig) :: rest) =
+  (shift depth amount a, rig) :: shiftArgs depth amount rest
 
 export shiftAlts : Int -> Int -> List CaseAlt -> List CaseAlt
 shiftAlts depth amount [] = []
@@ -729,7 +728,7 @@ substVarAt idx arg (TLam n erased slot sp body) =
     slot2 =
       case slot of
         Nothing => Nothing
-        Just (Pair mark (Pair bt rt)) =>
+        Just (mark, bt, rt) =>
           let
             bt2 =
               case bt of
@@ -739,15 +738,15 @@ substVarAt idx arg (TLam n erased slot sp body) =
               case rt of
                 Nothing => Nothing
                 Just t => Just (substVarAt (idx + 1) arg t)
-          in Just (Pair mark (Pair bt2 rt2))
+          in Just (mark, bt2, rt2)
   in TLam n erased slot2 sp (substVarAt (idx + 1) arg body)
 substVarAt idx arg (TApp f a erased) = TApp (substVarAt idx arg f) (substVarAt idx arg a) erased
 substVarAt idx arg (TCon c cargs) =
-  TCon c (map (\p => Pair (substVarAt idx arg (firstOf p)) (secondOf p)) cargs)
+  TCon c (map (\p => (substVarAt idx arg (firstOf p), secondOf p)) cargs)
 substVarAt idx arg (TMk c cargs) =
-  TMk c (map (\p => Pair (substVarAt idx arg (firstOf p)) (secondOf p)) cargs)
+  TMk c (map (\p => (substVarAt idx arg (firstOf p), secondOf p)) cargs)
 substVarAt idx arg (TRecord c cargs) =
-  TRecord c (map (\p => Pair (substVarAt idx arg (firstOf p)) (secondOf p)) cargs)
+  TRecord c (map (\p => (substVarAt idx arg (firstOf p), secondOf p)) cargs)
 substVarAt idx arg (TProj base c tele i fi) = TProj (substVarAt idx arg base) c tele i fi
 substVarAt idx arg (TRecUpd base c tele idxs body) =
   TRecUpd (substVarAt idx arg base) c tele idxs (substVarAt (idx + length tele) arg body)
@@ -780,7 +779,7 @@ substMetaVarGo m name q depth (TLam n r slot sp b) =
     slot2 =
       case slot of
         Nothing => Nothing
-        Just (Pair mark (Pair bt rt)) =>
+        Just (mark, bt, rt) =>
           let
             bt2 =
               case bt of
@@ -790,16 +789,16 @@ substMetaVarGo m name q depth (TLam n r slot sp b) =
               case rt of
                 Nothing => Nothing
                 Just t => Just (substMetaVarGo m name q (depth + 1) t)
-          in Just (Pair mark (Pair bt2 rt2))
+          in Just (mark, bt2, rt2)
   in TLam n r slot2 sp (substMetaVarGo m name q (depth + 1) b)
 substMetaVarGo m name q depth (TApp f a r) =
   TApp (substMetaVarGo m name q depth f) (substMetaVarGo m name q depth a) r
 substMetaVarGo m name q depth (TCon c args) =
-  TCon c (map (\p => Pair (substMetaVarGo m name q depth (firstOf p)) (secondOf p)) args)
+  TCon c (map (\p => (substMetaVarGo m name q depth (firstOf p), secondOf p)) args)
 substMetaVarGo m name q depth (TMk c args) =
-  TMk c (map (\p => Pair (substMetaVarGo m name q depth (firstOf p)) (secondOf p)) args)
+  TMk c (map (\p => (substMetaVarGo m name q depth (firstOf p), secondOf p)) args)
 substMetaVarGo m name q depth (TRecord c args) =
-  TRecord c (map (\p => Pair (substMetaVarGo m name q depth (firstOf p)) (secondOf p)) args)
+  TRecord c (map (\p => (substMetaVarGo m name q depth (firstOf p), secondOf p)) args)
 substMetaVarGo m name q depth (TProj base c tele i fi) =
   TProj (substMetaVarGo m name q depth base) c tele i fi
 substMetaVarGo m name q depth (TCase s alts) =
@@ -880,7 +879,7 @@ hasFreeTermVar d (TLam n r slot _ b) =
     tys =
       case slot of
         Nothing => False
-        Just (Pair _ (Pair bt rt)) => hasFreeTermVarMaybe d bt || hasFreeTermVarMaybe (d + 1) rt
+        Just (_, bt, rt) => hasFreeTermVarMaybe d bt || hasFreeTermVarMaybe (d + 1) rt
   in tys || hasFreeTermVar (d + 1) b
 hasFreeTermVar d (TApp f a r) = hasFreeTermVar d f || hasFreeTermVar d a
 hasFreeTermVar d (TCon c args) = anyPairFree d args
@@ -899,9 +898,9 @@ hasFreeTermVarMaybe : Int -> Maybe Term -> Bool
 hasFreeTermVarMaybe d Nothing = False
 hasFreeTermVarMaybe d (Just t) = hasFreeTermVar d t
 
-export anyPairFree : Int -> List (Pair Term Rig) -> Bool
+export anyPairFree : Int -> List (Term, Rig) -> Bool
 anyPairFree d [] = False
-anyPairFree d ((Pair a r) :: rest) = hasFreeTermVar d a || anyPairFree d rest
+anyPairFree d ((a, r) :: rest) = hasFreeTermVar d a || anyPairFree d rest
 
 export anyAltFree : Int -> List CaseAlt -> Bool
 anyAltFree d [] = False
@@ -919,7 +918,7 @@ hasNegativeVar (TLam n r slot _ b) =
     tys =
       case slot of
         Nothing => False
-        Just (Pair _ (Pair bt rt)) => hasNegativeVarMaybe bt || hasNegativeVarMaybe rt
+        Just (_, bt, rt) => hasNegativeVarMaybe bt || hasNegativeVarMaybe rt
   in tys || hasNegativeVar b
 hasNegativeVar (TApp f a r) = hasNegativeVar f || hasNegativeVar a
 hasNegativeVar (TCon c args) = anyNegativeVarArgs args
@@ -935,9 +934,9 @@ hasNegativeVarMaybe : Maybe Term -> Bool
 hasNegativeVarMaybe Nothing = False
 hasNegativeVarMaybe (Just t) = hasNegativeVar t
 
-export anyNegativeVarArgs : List (Pair Term Rig) -> Bool
+export anyNegativeVarArgs : List (Term, Rig) -> Bool
 anyNegativeVarArgs [] = False
-anyNegativeVarArgs ((Pair a r) :: rest) = hasNegativeVar a || anyNegativeVarArgs rest
+anyNegativeVarArgs ((a, r) :: rest) = hasNegativeVar a || anyNegativeVarArgs rest
 
 export anyNegativeVarAlts : List CaseAlt -> Bool
 anyNegativeVarAlts [] = False
@@ -1093,23 +1092,23 @@ showSigParenIfPi : Term -> String
 showSigParenIfPi (TPi name implicit rig dom cod) = "(" ++ showPiSig name implicit dom cod ++ ")"
 showSigParenIfPi t = showTypeSig t
 
-showSigArgs : List (Pair Term Rig) -> String
+showSigArgs : List (Term, Rig) -> String
 showSigArgs [] = ""
-showSigArgs ((Pair a rig) :: rest) = " " ++ showSigParenIfPi a ++ showSigArgs rest
+showSigArgs ((a, rig) :: rest) = " " ++ showSigParenIfPi a ++ showSigArgs rest
 
-export showArgTerms : List (Pair Term Rig) -> String
+export showArgTerms : List (Term, Rig) -> String
 showArgTerms [] = ""
-showArgTerms ((Pair a rig) :: rest) = " ${showTerm a}${showArgTerms rest}"
+showArgTerms ((a, rig) :: rest) = " ${showTerm a}${showArgTerms rest}"
 
 -- | R4：`TRecord name args` 的显示与等价 `TApp` 链一致（嵌套括号，诊断文案不变）。
-recordAppShow : String -> List (Pair Term Rig) -> String
+recordAppShow : String -> List (Term, Rig) -> String
 recordAppShow s [] = s
-recordAppShow s ((Pair a _) :: rest) = recordAppShow ("(" ++ s ++ " " ++ showTerm a ++ ")") rest
+recordAppShow s ((a, _) :: rest) = recordAppShow ("(" ++ s ++ " " ++ showTerm a ++ ")") rest
 
 -- | R4：`showTypeSig` 版本（实参按需补 Pi 括号，与 `TApp` 链一致）。
-showSigAppText : String -> List (Pair Term Rig) -> String
+showSigAppText : String -> List (Term, Rig) -> String
 showSigAppText s [] = s
-showSigAppText s ((Pair a _) :: rest) =
+showSigAppText s ((a, _) :: rest) =
   showSigAppText ("(" ++ s ++ " " ++ showSigParenIfPi a ++ ")") rest
 
 export showCoreAlts : List CaseAlt -> String
@@ -1117,9 +1116,9 @@ showCoreAlts [] = ""
 showCoreAlts (alt :: rest) =
   "${caseAltName alt}${showBinders (binderPairs (caseAltBinders alt))} => ${showTerm (caseAltBody alt)} | ${showCoreAlts rest}"
 
-export showBinders : List (Pair String Rig) -> String
+export showBinders : List (String, Rig) -> String
 showBinders [] = ""
-showBinders ((Pair n rig) :: rest) = " ${n}${showBinders rest}"
+showBinders ((n, rig) :: rest) = " ${n}${showBinders rest}"
 
 export showCoreString : String -> String
 showCoreString s = "\"${showCoreChars (strUnpack s)}\""

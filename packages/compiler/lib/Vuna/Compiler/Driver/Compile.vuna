@@ -161,7 +161,7 @@ ensureDirPathFuel fuel path =
 -- 逐模块 split 输出到 outDir：各模块 .ml + Main.ml + build.sh；Ok 写出的文件数。
 -- outDir 在 codegen 成功后才创建（精化失败不留产物）。
 -- 包根 `ffi/*.c` 复制到 `OUTDIR/ffi/` 并写进 build.sh（受限 FFI 的 C 实现）。
-export compileToDir : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Bool -> String -> Eff r (Check (Pair Int (List Diagnostic)))
+export compileToDir : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Bool -> String -> Eff r (Check (Int, List Diagnostic))
 compileToDir ctx entry printResult outDir =
   do
     inputs <- splitInputsOf ctx entry printResult
@@ -169,7 +169,7 @@ compileToDir ctx entry printResult outDir =
 
 -- | 同上，复用调用方已经算好的 split 输入：`build` 的 view 地址与 codegen 判定共用同一次
 -- 闭包扫描 / 依赖接口读取（一次整包源扫描 + 每个模块的头解析）。
-export compileToDirGiven : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => SplitInputs -> PackageContext -> String -> Bool -> String -> Eff r (Check (Pair Int (List Diagnostic)))
+export compileToDirGiven : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => SplitInputs -> PackageContext -> String -> Bool -> String -> Eff r (Check (Int, List Diagnostic))
 compileToDirGiven inputs ctx entry printResult outDir =
   do
     audit <- ifaceAuditRequested
@@ -179,8 +179,8 @@ compileToDirGiven inputs ctx entry printResult outDir =
       compileToDirNormal inputs ctx entry printResult outDir
 
 -- 单元缓存 key 的逐模块身份：闭包扫描已经算好的接口地址。
-modHashPair : ClosureMod -> Pair String String
-modHashPair m = Pair m.cmName m.cmAddr
+modHashPair : ClosureMod -> (String, String)
+modHashPair m = (m.cmName, m.cmAddr)
 
 -- 摘要路径的 split（**不读 split 缓存**）：接口可用 ⇒ 摘要路径（干净模块 + 依赖接口），
 -- 否则全量。抽出来供正常路径与审计路径共用，保证两条路径的「摘要分支」完全一致。
@@ -193,7 +193,7 @@ modHashPair m = Pair m.cmName m.cmAddr
 -- 先后覆盖。
 -- 构建一律走全量 lowering（单元缓存仍按声明哈希命中，所以热构建依然快），
 -- 产物因此是输入摘要的纯函数。
-summarySplitParts : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> List ClosureMod -> Maybe (List ModuleIface) -> String -> Bool -> Eff r (Check (Pair (List SplitFile) CheckedPackage))
+summarySplitParts : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> List ClosureMod -> Maybe (List ModuleIface) -> String -> Bool -> Eff r (Check (List SplitFile, CheckedPackage))
 summarySplitParts ctx mods depIfaces entry printResult =
   let
     -- 单元缓存 key 的逐模块身份：闭包扫描已经算好的接口地址。
@@ -209,7 +209,7 @@ summarySplitParts ctx mods depIfaces entry printResult =
 -- 2. **语义 key**（`splitIdentityOf`）：本包 `pkgIfaceHash` + `pkgImplHash` + 布局摘要 +
 --    依赖身份 + 产物口径；`blobs/<语义 key>` 是产物真身。注释变更 ⇒ 快 key 变、语义 key
 --    不变 ⇒ 精化一次、codegen 复用；行移动 ⇒ 布局摘要变 ⇒ 重建（运行时位置表正确）。
-compileToDirNormal : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => SplitInputs -> PackageContext -> String -> Bool -> String -> Eff r (Check (Pair Int (List Diagnostic)))
+compileToDirNormal : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => SplitInputs -> PackageContext -> String -> Bool -> String -> Eff r (Check (Int, List Diagnostic))
 compileToDirNormal inputs ctx entry printResult outDir =
   do
     let
@@ -230,14 +230,14 @@ compileToDirNormal inputs ctx entry printResult outDir =
                     pure (
                         case n of
                           ErrC e => ErrC e
-                          OkC count => OkC (Pair count [])
+                          OkC count => OkC (count, [])
                       )
               Nothing => rebuildSplit inputs ctx entry printResult outDir fast
         Nothing => rebuildSplit inputs ctx entry printResult outDir fast
 
 -- 快指针未命中：精化一次 → 写接口（返回模块摘要）→ 语义 key → blob 命中则复用，
 -- 否则 codegen + 写 blob + 写快指针。
-rebuildSplit : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => SplitInputs -> PackageContext -> String -> Bool -> String -> String -> Eff r (Check (Pair Int (List Diagnostic)))
+rebuildSplit : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => SplitInputs -> PackageContext -> String -> Bool -> String -> String -> Eff r (Check (Int, List Diagnostic))
 rebuildSplit inputs ctx entry printResult outDir fast =
   do
     -- 同包干净模块的接口读一次：codegen 的语义 key 与写回都用这份表。
@@ -284,7 +284,7 @@ rebuildSplit inputs ctx entry printResult outDir fast =
                               pure (
                                   case n of
                                     ErrC e => ErrC e
-                                    OkC count => OkC (Pair count checked.checkedWarnings)
+                                    OkC count => OkC (count, checked.checkedWarnings)
                                 )
                         Nothing =>
                           do
@@ -295,12 +295,12 @@ rebuildSplit inputs ctx entry printResult outDir fast =
                             pure (
                                 case n of
                                   ErrC e => ErrC e
-                                  OkC count => OkC (Pair count checked.checkedWarnings)
+                                  OkC count => OkC (count, checked.checkedWarnings)
                               )
 
 -- 审计（`VUNA_IFACE_AUDIT=1`）：同一进程分别走摘要路径与全量路径，codegen 产物逐字节比较；
 -- 一致才落盘，不一致报 `iface-audit-mismatch` 且**不写任何缓存/接口**。
-auditCompile : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => SplitInputs -> PackageContext -> String -> Bool -> String -> Eff r (Check (Pair Int (List Diagnostic)))
+auditCompile : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => SplitInputs -> PackageContext -> String -> Bool -> String -> Eff r (Check (Int, List Diagnostic))
 auditCompile inputs ctx entry printResult outDir =
   do
     summary <- summarySplitParts ctx inputs.siClosure inputs.siDepIfaces entry printResult
@@ -341,7 +341,7 @@ auditCompile inputs ctx entry printResult outDir =
                           pure (
                               case n of
                                 ErrC e => ErrC e
-                                OkC count => OkC (Pair count checked.checkedWarnings)
+                                OkC count => OkC (count, checked.checkedWarnings)
                             )
 
 -- 内容相同就不写：`build-id` 这类小文件反复重写会改 mtime，影响 `diff -r` 与增量判定。
@@ -484,7 +484,7 @@ moduleNameOfPath rootPath path =
     rel = if endsWith ".vuna" rel0 then substring 0 (byteLength rel0 - 5) rel0 else rel0
   in slashesToDots rel
 
-rootSources : Member nFs FsOp r => Root -> Eff r (List (Pair String Int))
+rootSources : Member nFs FsOp r => Root -> Eff r (List (String, Int))
 rootSources root =
   do
     paths <- collectVunaMeta (rootDir root)
@@ -492,7 +492,7 @@ rootSources root =
         \p =>
           do
             content <- fsReadFile p
-            pure (Pair (moduleNameOfPath (rootDir root) p) (textHash content))
+            pure (moduleNameOfPath (rootDir root) p, textHash content)
       ) paths
 
 rootHash : Member nFs FsOp r => Root -> Eff r Int
@@ -501,22 +501,22 @@ rootHash root =
     sources <- rootSources root
     pure (closureHashOf sources 0)
 
-closureHashOf : List (Pair String Int) -> Int -> Int
+closureHashOf : List (String, Int) -> Int -> Int
 closureHashOf [] acc = acc
-closureHashOf ((Pair name h) :: rest) acc = closureHashOf rest (acc * 1000003 + h)
+closureHashOf ((name, h) :: rest) acc = closureHashOf rest (acc * 1000003 + h)
 
 -- 入口文件 + 所有模块根的源码（模块名 → 哈希）。
-entrySource : Member nFs FsOp r => String -> Eff r (Pair String Int)
+entrySource : Member nFs FsOp r => String -> Eff r (String, Int)
 entrySource entry =
   do
     content <- fsReadFile entry
-    pure (Pair "<entry>" (textHash content))
+    pure ("<entry>", textHash content)
 
 -- 本包自己的模块根（依赖根由 `depIdentitiesEff` 的接口身份负责，不进源闭包）。
 ownRootsOf : PackageContext -> List Root
 ownRootsOf ctx = filter (\r => rootName r == contextPackageName ctx) (contextRoots ctx)
 
-contextSources : Member nFs FsOp r => PackageContext -> String -> Eff r (List (Pair String Int))
+contextSources : Member nFs FsOp r => PackageContext -> String -> Eff r (List (String, Int))
 contextSources ctx entry =
   do
     own <- concatMapEff rootSources (ownRootsOf ctx)
@@ -524,7 +524,7 @@ contextSources ctx entry =
     pure (append own [es])
 
 -- 依赖闭包（跳过第一个根：它是本包自己的 lib；base-only 由 build 不会走到）。
-dependencyHashes : Member nFs FsOp r => PackageContext -> Eff r (List (Pair String Int))
+dependencyHashes : Member nFs FsOp r => PackageContext -> Eff r (List (String, Int))
 dependencyHashes ctx =
   case contextRoots ctx of
     [] => pure []
@@ -533,7 +533,7 @@ dependencyHashes ctx =
           \r =>
             do
               h <- rootHash r
-              pure (Pair (rootName r) h)
+              pure (rootName r, h)
         ) deps
 
 -- ---------------------------------------------------------------
@@ -580,7 +580,7 @@ pkgIfaceSummaryKeyOf : String -> String -> String -> String
 pkgIfaceSummaryKeyOf pkg srcClosure tag = addrOf ["pkg-iface", pkg, srcClosure, tag]
 
 -- | 依赖根的接口身份（或 manifest 回退）。
-depRootIdentityEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Root -> Eff r (Pair String String)
+depRootIdentityEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Root -> Eff r (String, String)
 depRootIdentityEff root =
   do
     h <- rootHash root
@@ -596,7 +596,7 @@ depRootIdentityEff root =
             Nothing => "manifest"
         _ = dbg! "dep-identity=${rootName root} verdict=${verdict} src=${strFromInt h}"
       in case saved of
-        Just s => pure (Pair (rootName root) "iface:${s}")
+        Just s => pure (rootName root, "iface:${s}")
         Nothing =>
           do
             let
@@ -604,18 +604,18 @@ depRootIdentityEff root =
             in do
               exists <- fsFileExists tomlPath
               toml <- if exists then fsReadFile tomlPath else pure ""
-              pure (Pair (rootName root) "manifest:${textHash toml}:${strFromInt h}")
+              pure (rootName root, "manifest:${textHash toml}:${strFromInt h}")
 
-depIdentitiesEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> Eff r (List (Pair String String))
+depIdentitiesEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> Eff r (List (String, String))
 depIdentitiesEff ctx =
   case contextRoots ctx of
     [] => pure []
     _ :: deps => mapEff depRootIdentityEff deps
 
-depIdentitiesHash : List (Pair String String) -> String
+depIdentitiesHash : List (String, String) -> String
 depIdentitiesHash pairs = addrOf ("dep-identities" :: map pairText pairs)
 
-pairText : Pair String String -> String
+pairText : (String, String) -> String
 pairText p = "${firstOf p}=${secondOf p}"
 
 -- | 写本包的接口身份摘要（供依赖方读；失败/缺根不影响正确性，只是依赖方回退 manifest）。
@@ -632,8 +632,8 @@ writePkgIfaceSummaryEff ctx modules =
           payload = pkgIfaceHashOfModules (contextPackageName ctx) modules
         in storeObjectWriteEff pkgIfaceSummaryKind pkgIfaceSummaryCodec key payload
 
-metaPairText : Pair String Int -> String
-metaPairText (Pair name hash) = "{\"name\":\"${name}\",\"hash\":${hash}}"
+metaPairText : (String, Int) -> String
+metaPairText (name, hash) = "{\"name\":\"${name}\",\"hash\":${hash}}"
 
 joinJsonList : List String -> String
 joinJsonList [] = ""
@@ -774,16 +774,16 @@ checkModsLib ctx names =
 -- 依赖优先的 DFS 后序 + 按包名去重（与 `Packages.Pkg.dependencyRoots` 同规则）。
 -- 直接依赖经单 clause 投影 `depPackagesOf` 取（SCT 认作结构子项），遍历本身是结构递归，
 -- 不设 fuel：包图再深也不会截断成部分列表。
-collectDepPackages : List String -> List Package -> Pair (List String) (List Package)
-collectDepPackages seen [] = Pair seen []
+collectDepPackages : List String -> List Package -> (List String, List Package)
+collectDepPackages seen [] = (seen, [])
 collectDepPackages seen (p :: rest) =
   if memName (packageName p) seen then
     collectDepPackages seen rest
   else
     case collectDepPackages (packageName p :: seen) (depPackagesOf p) of
-      Pair seen1 transitive =>
+      (seen1, transitive) =>
         case collectDepPackages seen1 rest of
-          Pair seen2 siblings => Pair seen2 (append transitive (p :: siblings))
+          (seen2, siblings) => (seen2, append transitive (p :: siblings))
 
 -- | 直接依赖的投影：单 clause 构造子模式是结构子项，终止性判据直接认。
 depPackagesOf : Package -> List Package
@@ -923,8 +923,8 @@ appendPrelude hasPrelude m =
   else
     m
 
-modGraphEntry : ClosureMod -> Pair String (List String)
-modGraphEntry m = Pair m.cmName m.cmImports
+modGraphEntry : ClosureMod -> (String, List String)
+modGraphEntry m = (m.cmName, m.cmImports)
 
 modNameOf : ClosureMod -> String
 modNameOf m = m.cmName
@@ -935,7 +935,7 @@ isDepModOf ctx m = m.cmPkg /= contextPackageName ctx
 isSelfModOf : PackageContext -> ClosureMod -> Bool
 isSelfModOf ctx m = m.cmPkg == contextPackageName ctx
 
-moduleGraphOf : List ClosureMod -> List (Pair String (List String))
+moduleGraphOf : List ClosureMod -> List (String, List String)
 moduleGraphOf mods = map modGraphEntry mods
 
 -- 依赖身份：直接用**依赖的源摘要**（不是已分配地址、也不是排序位置）。
@@ -957,8 +957,8 @@ depSrcOf tbl name =
 srcTblOf : List ClosureMod -> HashMap.HashMap String String
 srcTblOf mods = HashMap.fromList (map srcPairOf mods)
 
-srcPairOf : ClosureMod -> Pair String String
-srcPairOf m = Pair (modNameOf m) "${m.cmPkgKey}|${m.cmSrc}"
+srcPairOf : ClosureMod -> (String, String)
+srcPairOf m = (modNameOf m, "${m.cmPkgKey}|${m.cmSrc}")
 
 -- | 模块接口地址：包身份 / 模块名 / 自身源摘要 / 包环境 / 每个直接依赖的源摘要。
 ifaceAddrOf : HashMap.HashMap String String -> ClosureMod -> String
@@ -1163,7 +1163,7 @@ decOrderNamesComplete : String -> Maybe (List String)
 decOrderNamesComplete s =
   case decList decStr (strLength s) (curOf s) of
     Nothing => Nothing
-    Just (Pair names rest) => if curAtEnd rest then Just names else Nothing
+    Just (names, rest) => if curAtEnd rest then Just names else Nothing
 
 rootOfName : String -> List Root -> Maybe Root
 rootOfName _ [] = Nothing
@@ -1408,7 +1408,7 @@ baseDepIfacesOf ctx =
 -- `tcOwnDir`：本包接口目录（建会话时在 Eff 上取好；`toolNeededOfImports` 仍是纯函数）。
 export record ToolContext(..) where
   tcDepIfaces : List ModuleIface
-  tcDepHashes : List (Pair String String)
+  tcDepHashes : List (String, String)
   tcNeeded : List String
   -- 本包模块名集合。LSP 用它把闭包分成「本包模块」（可预置干净接口）与依赖模块；
   -- 由会话建立时直接算好。
@@ -1547,7 +1547,7 @@ ownCleanWanted needed exclude m =
 --   2. 依赖链判据（本包模块的 `miDepHashes` 必须命中「依赖表 或 已收干净模块」）——纯定点。
 -- 第 2 步必须定点而不是单遍：候选顺序是闭包枚举顺序（不保证拓扑序），单遍会把「依赖还没
 -- 被接受」的模块误判成脏，连锁把大半包判脏（实测根包 27 个候选里 16 个这样被拒）。
-toolCleanGo : Member nFs FsOp r, Member nEnv EnvOp r => Int -> List (Pair String String) -> List ModuleIface -> List ModuleIface -> Eff r (List ModuleIface)
+toolCleanGo : Member nFs FsOp r, Member nEnv EnvOp r => Int -> List (String, String) -> List ModuleIface -> List ModuleIface -> Eff r (List ModuleIface)
 toolCleanGo builtSec depTbl cands cleanRev =
   do
     ok <- cleanSelfOk builtSec cands []
@@ -1575,14 +1575,14 @@ cleanSelfOk builtSec (m :: rest) acc =
 
 -- 依赖链定点：每遍按枚举顺序收「依赖已满足」的模块，链式依赖在同一遍里推进；
 -- 一遍没有任何进展 ⇒ 其余模块的依赖不在闭包内，整批拒绝（fuel 只防脏数据）。
-cleanFixpoint : Int -> List (Pair String String) -> List ModuleIface -> List ModuleIface -> List ModuleIface
+cleanFixpoint : Int -> List (String, String) -> List ModuleIface -> List ModuleIface -> List ModuleIface
 cleanFixpoint fuel depTbl pending cleanRev =
   if fuel <= 0 then
     append (reverse pending) cleanRev
   else
     case cleanPass depTbl pending cleanRev [] of
-      Pair [] kept => append (reverse kept) cleanRev
-      Pair rest kept =>
+      ([], kept) => append (reverse kept) cleanRev
+      (rest, kept) =>
         if length kept == 0 then
           append (reverse rest) cleanRev
         else
@@ -1590,15 +1590,15 @@ cleanFixpoint fuel depTbl pending cleanRev =
             _ = obsCounter "vuna.tool.clean.kept" (length kept)
           in cleanFixpoint (fuel - 1) depTbl rest (append (reverse kept) cleanRev)
 
-cleanPass : List (Pair String String) -> List ModuleIface -> List ModuleIface -> List ModuleIface -> Pair (List ModuleIface) (List ModuleIface)
-cleanPass depTbl [] cleanRev acc = Pair [] (reverse acc)
+cleanPass : List (String, String) -> List ModuleIface -> List ModuleIface -> List ModuleIface -> (List ModuleIface, List ModuleIface)
+cleanPass depTbl [] cleanRev acc = ([], reverse acc)
 cleanPass depTbl (m :: rest) cleanRev acc =
   if moduleDepsOk depTbl cleanRev (miDepHashesOf m) then
     cleanPass depTbl rest (m :: cleanRev) (m :: acc)
   else
     let
       p = cleanPass depTbl rest cleanRev acc
-    in Pair (m :: firstOf p) (secondOf p)
+    in (m :: firstOf p, secondOf p)
 
 -- 单模块接口写回：LSP 每次成功请求后只写「当前模块」的接口对象。语义与整包 ifaceOfPackage
 -- 一致（见 `Iface.ifaceOfModule`）；有缺口/其他脏模块时返回 Err，调用方静默跳过（不影响诊断）。
@@ -1881,7 +1881,7 @@ checkUncachedExe wantWarnings ctx entry =
 
 -- 摘要路径（**不落盘**）：接口不可用 ⇒ 全量（只是不直接写缓存）。
 -- wantWarnings 时 clean 列表清空 ⇒ 本包模块全部重算（warning 不在缓存里）。
-summaryCheckExeParts : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Bool -> PackageContext -> List ClosureMod -> String -> Eff r (Check (Pair (List Diagnostic) CheckedPackage))
+summaryCheckExeParts : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Bool -> PackageContext -> List ClosureMod -> String -> Eff r (Check (List Diagnostic, CheckedPackage))
 summaryCheckExeParts wantWarnings ctx mods entry =
   do
     depIfaces <- depIfacesOfWith ctx mods
@@ -1955,11 +1955,11 @@ ifaceAuditRequested =
 -- 直接按构造子在 clause 头分派（dispatch-lift），避免再嵌一层 case。
 -- warning 不参与签名：摘要路径在 `wantWarnings=false` 时会复用干净模块（不重算 warning），
 -- 全量路径会全算，二者在 warning 上不可比（warning 不进缓存）。
-checkSignatureOf : Check (Pair (List Diagnostic) CheckedPackage) -> String
+checkSignatureOf : Check (List Diagnostic, CheckedPackage) -> String
 checkSignatureOf (OkC _) = "ok\n"
 checkSignatureOf (ErrC e) = "err\n${diagText e}"
 
-splitSignatureOf : Check (Pair (List SplitFile) CheckedPackage) -> String
+splitSignatureOf : Check (List SplitFile, CheckedPackage) -> String
 -- 审计签名：只用于「摘要路径与全量路径产物是否一致」的比较，不进缓存。
 -- 用规范编码——同一 SplitFile 列表编码逐字节稳定。
 splitSignatureOf (OkC p) = "ok\n" ++ encTop encSplitFiles (firstOf p)
@@ -1981,7 +1981,7 @@ auditCompare subject at s f =
 
 -- 依赖模块的「名字 → 输入摘要」表：写本包接口时给 `miDepHashes` 用。
 -- 对象库下依赖的标识就是它的接口地址（与 `ifaceAddrOf` 的口径一致）。
-depIfaceHashTable : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> Eff r (List (Pair String String))
+depIfaceHashTable : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> Eff r (List (String, String))
 depIfaceHashTable ctx =
   do
     mods <- ifaceModsEff ctx
@@ -2018,11 +2018,11 @@ packageEnvHash ctx =
 -- 与 `ownCleanModules` 同一次读取，同时回报「已有整包接口是否可完整读回」（按模块跳过
 -- 的前提）：check/build 的写前校验已经解码过整包接口，写回时复用
 -- 这次结果，不必把同样的 65 个模块文件读 + decode 第二遍。
-readOneModIface : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => ClosureMod -> Eff r (Pair ClosureMod (Maybe ModuleIface))
+readOneModIface : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => ClosureMod -> Eff r (ClosureMod, Maybe ModuleIface)
 readOneModIface m =
   do
     mi <- readIfaceAtEff m.cmAddr
-    pure (Pair m mi)
+    pure (m, mi)
 
 ownCleanInfo : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> Eff r (Maybe (List ModuleIface))
 ownCleanInfo ctx =
@@ -2044,7 +2044,7 @@ ownCleanInfoWith ctx mods =
     in pure (if length clean == 0 then Nothing else Just clean)
 
 -- 候选（同包、接口可读）模块的接口列表。
-readIfaces : List (Pair ClosureMod (Maybe ModuleIface)) -> List ModuleIface
+readIfaces : List (ClosureMod, Maybe ModuleIface) -> List ModuleIface
 readIfaces [] = []
 readIfaces (p :: rest) =
   case secondOf p of
@@ -2116,9 +2116,9 @@ payloadSelfOk m =
     self <- ifaceSelfTestRequested
     pure (if self then hashOfIface m == miIfaceHashOf m else True)
 
-moduleDepsOk : List (Pair String String) -> List ModuleIface -> List (Pair String String) -> Bool
+moduleDepsOk : List (String, String) -> List ModuleIface -> List (String, String) -> Bool
 moduleDepsOk depTbl cleanRev [] = True
-moduleDepsOk depTbl cleanRev ((Pair name h) :: rest) =
+moduleDepsOk depTbl cleanRev ((name, h) :: rest) =
   if h == depMissingHash then
     moduleDepsOk depTbl cleanRev rest
   else
@@ -2146,20 +2146,20 @@ ifaceCompilerTag = cacheTagEff
 -- 持久化/共享。相对值按进程 cwd 解析（启动时读取一次）。
 -- | 本包模块的 `SourceInfo`：源摘要直接取闭包扫描时算好的 `cmSrc`（同一个
 -- `contentAddress`），这里只补 mtime / size，不再重读源文件。
-ownSourceInfos : Member nFs FsOp r, Member nEnv EnvOp r => PackageContext -> List ClosureMod -> Eff r (List (Pair String SourceInfo))
+ownSourceInfos : Member nFs FsOp r, Member nEnv EnvOp r => PackageContext -> List ClosureMod -> Eff r (List (String, SourceInfo))
 ownSourceInfos ctx mods = mapEff ownInfoOf (selfModsOf ctx mods)
 
-ownInfoOf : Member nFs FsOp r, Member nEnv EnvOp r => ClosureMod -> Eff r (Pair String SourceInfo)
+ownInfoOf : Member nFs FsOp r, Member nEnv EnvOp r => ClosureMod -> Eff r (String, SourceInfo)
 ownInfoOf m =
   do
     abs <- absolutePath m.cmPath
     mtime <- fmap (fromMaybe 0) (fsFileMtime abs)
     size <- fmap (\o => natToInt (fromMaybe Zero o)) (fsFileSize abs)
-    pure (Pair m.cmName (SourceInfo abs m.cmSrc mtime size))
+    pure (m.cmName, SourceInfo abs m.cmSrc mtime size)
 
 -- | 干净模块的 `miSource` 来自磁盘接口记录（可能是上一次以相对/绝对不同写法 check 时写入的
 -- 路径）。复用时必须换成本次上下文的路径，否则相对/绝对入口交替会算出空路径而整包跳过写。
-resyncCleanSources : List (Pair String SourceInfo) -> List ModuleIface -> List ModuleIface
+resyncCleanSources : List (String, SourceInfo) -> List ModuleIface -> List ModuleIface
 resyncCleanSources sources clean =
   map (
       \m =>
@@ -2365,10 +2365,10 @@ ifaceSelfTestRequested =
     pure (v == "1")
 
 -- 成功收尾：写接口影子（check 结果节点由 `checkViaGraph` 提交，这里不再写 marker 文件）。
-checkAndShadow : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> Eff r (Check (Pair (List Diagnostic) CheckedPackage)) -> Eff r (Check (List Diagnostic))
+checkAndShadow : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> Eff r (Check (List Diagnostic, CheckedPackage)) -> Eff r (Check (List Diagnostic))
 checkAndShadow ctx checked = checkAndShadowWith ctx Nothing checked
 
-checkAndShadowWith : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> Maybe (List ClosureMod) -> Eff r (Check (Pair (List Diagnostic) CheckedPackage)) -> Eff r (Check (List Diagnostic))
+checkAndShadowWith : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> Maybe (List ClosureMod) -> Eff r (Check (List Diagnostic, CheckedPackage)) -> Eff r (Check (List Diagnostic))
 checkAndShadowWith ctx pre checked =
   do
     checkedR <- checked
@@ -2407,7 +2407,7 @@ checkUncachedLib wantWarnings ctx names =
             summary <- summaryCheckLibParts wantWarnings ctx mods names
             checkAndShadowWith ctx (Just mods) (pure summary)
 
-summaryCheckLibParts : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Bool -> PackageContext -> List ClosureMod -> List String -> Eff r (Check (Pair (List Diagnostic) CheckedPackage))
+summaryCheckLibParts : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Bool -> PackageContext -> List ClosureMod -> List String -> Eff r (Check (List Diagnostic, CheckedPackage))
 summaryCheckLibParts wantWarnings ctx mods names =
   do
     depIfaces <- depIfacesOfWith ctx mods
@@ -2570,7 +2570,7 @@ readSplitPointer fast =
 writeSplitPointer : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> Eff r Int
 writeSplitPointer fast sem = storeObjectWriteEff splitPtrKind splitPtrCodec fast sem
 
-defLocLine : PackageContext -> Pair String (Pair String Int) -> String
+defLocLine : PackageContext -> (String, String, Int) -> String
 defLocLine ctx p =
   "${firstOf p}|${dropPrefixMeta "${contextDir ctx}/" (firstOf (secondOf p))}|${strFromInt (secondOf (secondOf p))}"
 

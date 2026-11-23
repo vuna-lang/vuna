@@ -73,17 +73,17 @@ evalAlts env (alt :: rest) = evalAlt env alt :: evalAlts env rest
 
 -- 求值分支体时重新播种自己的预算：`fuel` 只数扫描了多少个分支，
 -- 不能再兼作分支体的求值深度。
-export evalArgTerms : List Value -> List (Pair Term Rig) -> List Value
+export evalArgTerms : List Value -> List (Term, Rig) -> List Value
 evalArgTerms env args = evalArgTermsFuel (length args + 1) env args
 
-evalArgTermsFuel : Int -> List Value -> List (Pair Term Rig) -> List Value
+evalArgTermsFuel : Int -> List Value -> List (Term, Rig) -> List Value
 evalArgTermsFuel fuel env args =
   if fuel <= 0 then
     []
   else
     case args of
       [] => []
-      (Pair a rig) :: rest => evalFuel evalFuelMax env a :: evalArgTermsFuel (fuel - 1) env rest
+      (a, rig) :: rest => evalFuel evalFuelMax env a :: evalArgTermsFuel (fuel - 1) env rest
 
 -- case 求值：命中构造子则把该构造子的实参绑进分支闭包，否则卡住。
 -- 构造子实参按「最近绑定在前」入环境（与 ctxBind 的 de Bruijn 约定一致）。
@@ -807,7 +807,7 @@ argAt i [] = Nothing
 argAt i (x :: rest) = if i <= 0 then Just x else argAt (i - 1) rest
 
 -- | R3：`TProj` 的求值：base 规约到 `VCon` 时取第 i 个实参（iota），否则保持卡住。
-evalProjFuel : Int -> Value -> String -> List (Pair String Rig) -> Int -> Int -> Value
+evalProjFuel : Int -> Value -> String -> List (String, Rig) -> Int -> Int -> Value
 evalProjFuel fuel v c tele i fi =
   if fuel <= 0 then
     VProj v c tele i fi
@@ -847,7 +847,7 @@ normalizeCaseFuel fuel defs sols evalFuel scrut alts =
       s2 => VCase s2 alts
 
 -- | R3：投影正规化：base 规约到构造子后取字段并继续正规化；否则保持卡住。
-normalizeProjFuel : Int -> HashMap String Term -> Sols -> Int -> Value -> String -> List (Pair String Rig) -> Int -> Int -> Value
+normalizeProjFuel : Int -> HashMap String Term -> Sols -> Int -> Value -> String -> List (String, Rig) -> Int -> Int -> Value
 normalizeProjFuel fuel defs sols evalFuel v c tele i fi =
   if fuel <= 0 then
     VProj v c tele i fi
@@ -943,22 +943,21 @@ quoteCaseAltFuel fuel depth alt0 =
           body = quoteFuel (fuel - 1) (depth + n) (applyClosureBinder clo argVals)
         in CaseAlt name (bindersOfPairs binders) body
 
-export quoteArgValues : Int -> List Value -> List (Pair Term Rig)
+export quoteArgValues : Int -> List Value -> List (Term, Rig)
 quoteArgValues depth vs = quoteArgValuesFuel quoteFuelBound depth vs
 
-quoteArgValuesFuel : Int -> Int -> List Value -> List (Pair Term Rig)
+quoteArgValuesFuel : Int -> Int -> List Value -> List (Term, Rig)
 quoteArgValuesFuel fuel depth vs =
   if fuel <= 0 then
     []
   else
     case vs of
       [] => []
-      a :: rest => Pair (quoteFuel (fuel - 1) depth a) RigOmega :: quoteArgValuesFuel (fuel - 1) depth rest
+      a :: rest => (quoteFuel (fuel - 1) depth a, RigOmega) :: quoteArgValuesFuel (fuel - 1) depth rest
 
-export argValsAt : List (Pair String Rig) -> Int -> Int -> List Value
+export argValsAt : List (String, Rig) -> Int -> Int -> List Value
 argValsAt [] depth i = []
-argValsAt ((Pair name rig) :: rest) depth i =
-  freshVar name (depth + i) :: argValsAt rest depth (i + 1)
+argValsAt ((name, rig) :: rest) depth i = freshVar name (depth + i) :: argValsAt rest depth (i + 1)
 
 -- 逐个把实参喂给闭包：闭包 env 是分支外环境，实参按 arg0 先喂的顺序。
 -- 喂完后必须求值 body（`quote` / `conv` 都靠它拿到分支体）。
@@ -1001,7 +1000,7 @@ applyTermSpine head (a :: rest) = applyTermSpine (TApp head a RigOmega) rest
 -- 字典元变量是运行时实参（Rig1），codegen 会对残留的 `TMeta` 报错；只有擦除的
 -- 类型/索引元变量（Rig0）可留在项里。字典解（实例构造子）是闭的，`quote 0` 安全；
 -- 带自由变量（非闭）的解跳过——它们只可能是擦除元变量，codegen 跳过。
-export substSolvedMetas : List (Pair Int Value) -> Term -> Term
+export substSolvedMetas : List (Int, Value) -> Term -> Term
 substSolvedMetas sols (t@(TMeta m)) =
   case metaLookupList m sols of
     Just v =>
@@ -1016,7 +1015,7 @@ substSolvedMetas sols (TLam n r slot sp b) =
     slot2 =
       case slot of
         Nothing => Nothing
-        Just (Pair mark (Pair bt rt)) =>
+        Just (mark, bt, rt) =>
           let
             bt2 =
               case bt of
@@ -1026,15 +1025,15 @@ substSolvedMetas sols (TLam n r slot sp b) =
               case rt of
                 Nothing => Nothing
                 Just t => Just (substSolvedMetas sols t)
-          in Just (Pair mark (Pair bt2 rt2))
+          in Just (mark, bt2, rt2)
   in TLam n r slot2 sp (substSolvedMetas sols b)
 substSolvedMetas sols (TApp f a r) = TApp (substSolvedMetas sols f) (substSolvedMetas sols a) r
 substSolvedMetas sols (TCon c args) =
-  TCon c (map (\p => Pair (substSolvedMetas sols (firstOf p)) (secondOf p)) args)
+  TCon c (map (\p => (substSolvedMetas sols (firstOf p), secondOf p)) args)
 substSolvedMetas sols (TMk c args) =
-  TMk c (map (\p => Pair (substSolvedMetas sols (firstOf p)) (secondOf p)) args)
+  TMk c (map (\p => (substSolvedMetas sols (firstOf p), secondOf p)) args)
 substSolvedMetas sols (TRecord c args) =
-  TRecord c (map (\p => Pair (substSolvedMetas sols (firstOf p)) (secondOf p)) args)
+  TRecord c (map (\p => (substSolvedMetas sols (firstOf p), secondOf p)) args)
 substSolvedMetas sols (TProj base c tele i fi) = TProj (substSolvedMetas sols base) c tele i fi
 substSolvedMetas sols (TRecUpd base c tele idxs body) =
   TRecUpd (substSolvedMetas sols base) c tele idxs (substSolvedMetas sols body)
@@ -1044,7 +1043,7 @@ substSolvedMetas sols (TIf c th el) =
   TIf (substSolvedMetas sols c) (substSolvedMetas sols th) (substSolvedMetas sols el)
 substSolvedMetas sols t = t
 
-export substSolvedAlt : List (Pair Int Value) -> CaseAlt -> CaseAlt
+export substSolvedAlt : List (Int, Value) -> CaseAlt -> CaseAlt
 substSolvedAlt sols (CaseAlt n bs b) = CaseAlt n bs (substSolvedMetas sols b)
 
 -- 字典提升：替换 `?m` 为 `TVar d (depth - q)`（`q` = 插入点外侧绑定子数，含类参数绑定子）。
@@ -1053,11 +1052,11 @@ substSolvedAlt sols (CaseAlt n bs b) = CaseAlt n bs (substSolvedMetas sols b)
 -- binder 上下文里重写目标类型（`?a` 已解成定义自己的刚性变量），必须按那个深度取
 -- de Bruijn index；深度 0 的版本会把解里的 `NVar` 拍成越界变量
 -- （字典签名会变成 `{d : Dict_Ord ?67}` 这类错形）。
-export substSolvedMetasAt : Int -> List (Pair Int Value) -> Term -> Term
+export substSolvedMetasAt : Int -> List (Int, Value) -> Term -> Term
 substSolvedMetasAt d [] t = t
 substSolvedMetasAt d sols t = substSolvedMetasAtGo d sols t
 
-export substSolvedMetasAtGo : Int -> List (Pair Int Value) -> Term -> Term
+export substSolvedMetasAtGo : Int -> List (Int, Value) -> Term -> Term
 substSolvedMetasAtGo depth sols (t@(TMeta m)) =
   case metaLookupList m sols of
     Just v => quote depth v
@@ -1069,7 +1068,7 @@ substSolvedMetasAtGo depth sols (TLam n r slot sp b) =
     slot2 =
       case slot of
         Nothing => Nothing
-        Just (Pair mark (Pair bt rt)) =>
+        Just (mark, bt, rt) =>
           let
             bt2 =
               case bt of
@@ -1079,16 +1078,16 @@ substSolvedMetasAtGo depth sols (TLam n r slot sp b) =
               case rt of
                 Nothing => Nothing
                 Just t => Just (substSolvedMetasAtGo depth sols t)
-          in Just (Pair mark (Pair bt2 rt2))
+          in Just (mark, bt2, rt2)
   in TLam n r slot2 sp (substSolvedMetasAtGo depth sols b)
 substSolvedMetasAtGo depth sols (TApp f a r) =
   TApp (substSolvedMetasAtGo depth sols f) (substSolvedMetasAtGo depth sols a) r
 substSolvedMetasAtGo depth sols (TCon c args) =
-  TCon c (map (\p => Pair (substSolvedMetasAtGo depth sols (firstOf p)) (secondOf p)) args)
+  TCon c (map (\p => (substSolvedMetasAtGo depth sols (firstOf p), secondOf p)) args)
 substSolvedMetasAtGo depth sols (TMk c args) =
-  TMk c (map (\p => Pair (substSolvedMetasAtGo depth sols (firstOf p)) (secondOf p)) args)
+  TMk c (map (\p => (substSolvedMetasAtGo depth sols (firstOf p), secondOf p)) args)
 substSolvedMetasAtGo depth sols (TRecord c args) =
-  TRecord c (map (\p => Pair (substSolvedMetasAtGo depth sols (firstOf p)) (secondOf p)) args)
+  TRecord c (map (\p => (substSolvedMetasAtGo depth sols (firstOf p), secondOf p)) args)
 substSolvedMetasAtGo depth sols (TProj base c tele i fi) =
   TProj (substSolvedMetasAtGo depth sols base) c tele i fi
 substSolvedMetasAtGo depth sols (TRecUpd base c tele idxs body) =
@@ -1102,7 +1101,7 @@ substSolvedMetasAtGo depth sols (TIf c th el) =
     (substSolvedMetasAtGo depth sols el)
 substSolvedMetasAtGo depth sols t = t
 
-export substSolvedAltAt : Int -> List (Pair Int Value) -> CaseAlt -> CaseAlt
+export substSolvedAltAt : Int -> List (Int, Value) -> CaseAlt -> CaseAlt
 substSolvedAltAt depth sols (CaseAlt n bs b) = CaseAlt n bs (substSolvedMetasAtGo depth sols b)
 
 isNilList : List a -> Bool
@@ -1184,7 +1183,7 @@ substSolvedMetasAtTblFuel fuel sols depth t =
           slot2 =
             case slot of
               Nothing => Nothing
-              Just (Pair mark (Pair bt rt)) =>
+              Just (mark, bt, rt) =>
                 let
                   bt2 =
                     case bt of
@@ -1194,10 +1193,10 @@ substSolvedMetasAtTblFuel fuel sols depth t =
                     case rt of
                       Nothing => Nothing
                       Just t => Just (substSolvedMetasAtTblFuel (fuel - 1) sols (depth + 1) t)
-                in Just (Pair mark (Pair bt2 rt2))
+                in Just (mark, bt2, rt2)
         in TLam n r slot2 sp (substSolvedMetasAtTblFuel (fuel - 1) sols (depth + 1) b)
       TApp f a r => TApp (substSolvedMetasAtTblFuel (fuel - 1) sols depth f) (substSolvedMetasAtTblFuel (fuel - 1) sols depth a) r
-      TCon c args => TCon c (map (\p => Pair (substSolvedMetasAtTblFuel (fuel - 1) sols depth (firstOf p)) (secondOf p)) args)
+      TCon c args => TCon c (map (\p => (substSolvedMetasAtTblFuel (fuel - 1) sols depth (firstOf p), secondOf p)) args)
       TCase sc alts => TCase (substSolvedMetasAtTblFuel (fuel - 1) sols depth sc) (map (substSolvedAltAtTbl (fuel - 1) sols depth) alts)
       TIf c th el => TIf (substSolvedMetasAtTblFuel (fuel - 1) sols depth c) (substSolvedMetasAtTblFuel (fuel - 1) sols depth th) (substSolvedMetasAtTblFuel (fuel - 1) sols depth el)
       _ => t

@@ -67,21 +67,21 @@ floatToInt = intFromFloat
 -- ---------------------------------------------------------------
 -- 只用 Float / Int 运算与 String 拼接；`Show Float` 与 `main : Float` 入口在三个后端共用这一份代码。
 -- | 内部：规格化的单步——`m >= 10` 时除以 10、`m < 1` 时乘以 10，指数同步 ±1；第一个参数是 `Pair 指数 尾数`。
-normStep : Pair Int Float -> Int -> Pair Int Float
+normStep : (Int, Float) -> Int -> (Int, Float)
 normStep p _ =
   let
     e = firstOf p
     m = secondOf p
-  in if m >= 10.0 then Pair (e + 1) (m / 10.0) else if m < 1.0 then Pair (e - 1) (m * 10.0) else p
+  in if m >= 10.0 then (e + 1, m / 10.0) else if m < 1.0 then (e - 1, m * 10.0) else p
 
 -- | 内部：取尾数的整数位作为一个数字，把余数乘 10 交给下一位；状态是 `Pair 尾数 已取数字`。
-digStep : Pair Float (List Int) -> Int -> Pair Float (List Int)
+digStep : (Float, List Int) -> Int -> (Float, List Int)
 digStep p _ =
   let
     m = firstOf p
     ds = secondOf p
     d = floatToInt m
-  in Pair ((m - intToFloat d) * 10.0) (append ds [d])
+  in ((m - intToFloat d) * 10.0, append ds [d])
 
 -- | 内部：逆序数字串上的进位；`Nothing` 表示溢出（`9.99… → 10.00…`）。
 carryRev : List Int -> Maybe (List Int)
@@ -164,19 +164,19 @@ floatRender x =
       let
         neg = x < 0.0
         a = if neg then 0.0 - x else x
-        p = foldl (\q => \i => normStep q i) (Pair 0 a) (range 0 700)
+        p = foldl (\q => \i => normStep q i) (0, a) (range 0 700)
         e0 = firstOf p
         m0 = secondOf p
-        dp = foldl (\q => \i => digStep q i) (Pair m0 []) (range 0 12)
+        dp = foldl (\q => \i => digStep q i) (m0, []) (range 0 12)
         d13 = floatToInt (firstOf dp)
         raw = secondOf dp
         ed =
           if d13 >= 5 then
             case carryRev (reverse raw) of
-              Just r => Pair e0 (trimZeros (reverse r))
-              Nothing => Pair (e0 + 1) (trimZeros (1 :: map (\_ => 0) (range 0 11)))
+              Just r => (e0, trimZeros (reverse r))
+              Nothing => (e0 + 1, trimZeros (1 :: map (\_ => 0) (range 0 11)))
           else
-            Pair e0 (trimZeros raw)
+            (e0, trimZeros raw)
         e = firstOf ed
         ds = secondOf ed
         body = if e < 0 - 4 || e >= 12 then expForm e ds else fixedForm e ds

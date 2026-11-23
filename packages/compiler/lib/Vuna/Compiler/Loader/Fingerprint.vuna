@@ -44,12 +44,12 @@ buildIdSchema = "vuna-compiler-id 1"
 -- | 编译器闭包的内容身份：本包源闭包（模块名 → 内容哈希，按名排序）+ 依赖身份摘要。
 --
 -- 与谁构建它无关：rotation 的 stage1 / stage2 写入同一个值，同源跨目录也一致。
-export compilerIdOf : List (Pair String Int) -> String -> String
+export compilerIdOf : List (String, Int) -> String -> String
 compilerIdOf own depsDigest =
   addrOf
     (buildIdSchema :: depsDigest :: map sourceFrag (sortBy (\a, b => firstOf a <= firstOf b) own))
 
-sourceFrag : Pair String Int -> String
+sourceFrag : (String, Int) -> String
 sourceFrag p = "${firstOf p}=${strFromInt (secondOf p)}"
 
 -- | 指纹派生：把三要素拼成内容键（纯函数，便于测试与跨模块复用口径）。

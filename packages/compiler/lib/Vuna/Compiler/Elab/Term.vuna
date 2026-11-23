@@ -17,148 +17,148 @@ import Vuna.Compiler.Elab.Term.Support
 import Vuna.Compiler.Frontend.Rast
 import Vuna.Compiler.Frontend.Rast.Name
 
-export deferDictBinder : List (Pair String Term) -> Ctx -> Ec -> Value -> Closure -> List Expr -> Span -> Check (Pair (List (Pair Term Rig)) (Pair Value Ec))
+export deferDictBinder : List (String, Term) -> Ctx -> Ec -> Value -> Closure -> List Expr -> Span -> Check (List (Term, Rig), Value, Ec)
 deferDictBinder globals ctx ec dom clo args sp =
   deferDictBinderFuel 64 globals ctx ec dom clo args sp Nothing
 
-export specializeCmpApp : List (Pair String Term) -> Ctx -> Ec -> String -> List Expr -> Span -> Check (Maybe (Pair Term (Pair Value Ec)))
+export specializeCmpApp : List (String, Term) -> Ctx -> Ec -> String -> List Expr -> Span -> Check (Maybe (Term, Value, Ec))
 specializeCmpApp a1 a2 a3 a4 a5 a6 = specializeCmpAppFuel 256 a1 a2 a3 a4 a5 a6
 
-export specializeEqApp : List (Pair String Term) -> Ctx -> Ec -> String -> List Expr -> Span -> Check (Maybe (Pair Term (Pair Value Ec)))
+export specializeEqApp : List (String, Term) -> Ctx -> Ec -> String -> List Expr -> Span -> Check (Maybe (Term, Value, Ec))
 specializeEqApp a1 a2 a3 a4 a5 a6 = specializeEqAppFuel 256 a1 a2 a3 a4 a5 a6
 
-export checkTypeInfer : List (Pair String Term) -> Ctx -> Ec -> Expr -> Check (Pair Term (Pair Level Ec))
+export checkTypeInfer : List (String, Term) -> Ctx -> Ec -> Expr -> Check (Term, Level, Ec)
 checkTypeInfer a1 a2 a3 a4 = checkTypeInferFuel (exprBudget 256 a4) a1 a2 a3 a4
 
-export checkByInfer : List (Pair String Term) -> Ctx -> Ec -> Expr -> Value -> Check (Pair Term Ec)
+export checkByInfer : List (String, Term) -> Ctx -> Ec -> Expr -> Value -> Check (Term, Ec)
 checkByInfer a1 a2 a3 a4 a5 = checkByInferFuel (exprBudget 256 a4) a1 a2 a3 a4 a5
 
-export inferLetIgnored : List (Pair String Term) -> Ctx -> Ec -> Expr -> List (Pair Pat Expr) -> Expr -> Bool -> Span -> Span -> Check (Pair Term (Pair Value Ec))
+export inferLetIgnored : List (String, Term) -> Ctx -> Ec -> Expr -> List (Pat, Expr) -> Expr -> Bool -> Span -> Span -> Check (Term, Value, Ec)
 inferLetIgnored a1 a2 a3 a4 a5 a6 a7 a8 a9 = inferLetIgnoredFuel 256 a1 a2 a3 a4 a5 a6 a7 a8 a9
 
-export inferLetBound : List (Pair String Term) -> Ctx -> Ec -> String -> Expr -> List (Pair Pat Expr) -> Expr -> Bool -> Span -> Span -> Check (Pair Term (Pair Value Ec))
+export inferLetBound : List (String, Term) -> Ctx -> Ec -> String -> Expr -> List (Pat, Expr) -> Expr -> Bool -> Span -> Span -> Check (Term, Value, Ec)
 inferLetBound a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 = inferLetBoundFuel 256 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10
 
-export inferLet : List (Pair String Term) -> Ctx -> Ec -> List (Pair Pat Expr) -> Expr -> Bool -> Span -> Check (Pair Term (Pair Value Ec))
+export inferLet : List (String, Term) -> Ctx -> Ec -> List (Pat, Expr) -> Expr -> Bool -> Span -> Check (Term, Value, Ec)
 inferLet a1 a2 a3 a4 a5 a6 a7 = inferLetFuel 256 a1 a2 a3 a4 a5 a6 a7
 
-export inferLetGo : List (Pair String Term) -> Ctx -> Ec -> List (Pair Pat Expr) -> Expr -> Bool -> Span -> Check (Pair Term (Pair Value Ec))
+export inferLetGo : List (String, Term) -> Ctx -> Ec -> List (Pat, Expr) -> Expr -> Bool -> Span -> Check (Term, Value, Ec)
 inferLetGo a1 a2 a3 a4 a5 a6 a7 = inferLetGoFuel 256 a1 a2 a3 a4 a5 a6 a7
 
-export checkAppCtor : List (Pair String Term) -> Ctx -> Ec -> String -> List Expr -> Value -> Span -> Check (Pair Term Ec)
+export checkAppCtor : List (String, Term) -> Ctx -> Ec -> String -> List Expr -> Value -> Span -> Check (Term, Ec)
 checkAppCtor a1 a2 a3 a4 a5 a6 a7 = checkAppCtorFuel 256 a1 a2 a3 a4 a5 a6 a7
 
-export checkAppUnderType : List (Pair String Term) -> Ctx -> Ec -> String -> List Expr -> Value -> Span -> Check (Pair Term Ec)
+export checkAppUnderType : List (String, Term) -> Ctx -> Ec -> String -> List Expr -> Value -> Span -> Check (Term, Ec)
 checkAppUnderType a1 a2 a3 a4 a5 a6 a7 = checkAppUnderTypeFuel 256 a1 a2 a3 a4 a5 a6 a7
 
-export checkApp : List (Pair String Term) -> Ctx -> Ec -> Expr -> List Expr -> Value -> Span -> Check (Pair Term Ec)
+export checkApp : List (String, Term) -> Ctx -> Ec -> Expr -> List Expr -> Value -> Span -> Check (Term, Ec)
 checkApp a1 a2 a3 a4 a5 a6 a7 = checkAppFuel 256 a1 a2 a3 a4 a5 a6 a7
 
-export checkAppGeneral : List (Pair String Term) -> Ctx -> Ec -> Expr -> List Expr -> Value -> Span -> Check (Pair Term Ec)
+export checkAppGeneral : List (String, Term) -> Ctx -> Ec -> Expr -> List Expr -> Value -> Span -> Check (Term, Ec)
 checkAppGeneral a1 a2 a3 a4 a5 a6 a7 = checkAppGeneralFuel 256 a1 a2 a3 a4 a5 a6 a7
 
-export specializeOpApp : List (Pair String Term) -> Ctx -> Ec -> String -> List Expr -> Span -> Check (Maybe (Pair Term (Pair Value Ec)))
+export specializeOpApp : List (String, Term) -> Ctx -> Ec -> String -> List Expr -> Span -> Check (Maybe (Term, Value, Ec))
 specializeOpApp a1 a2 a3 a4 a5 a6 = specializeOpAppFuel 256 a1 a2 a3 a4 a5 a6
 
-export specializeBoolApp : List (Pair String Term) -> Ctx -> Ec -> String -> List Expr -> Span -> Check (Maybe (Pair Term (Pair Value Ec)))
+export specializeBoolApp : List (String, Term) -> Ctx -> Ec -> String -> List Expr -> Span -> Check (Maybe (Term, Value, Ec))
 specializeBoolApp a1 a2 a3 a4 a5 a6 = specializeBoolAppFuel 256 a1 a2 a3 a4 a5 a6
 
-export checkLam : List (Pair String Term) -> Ctx -> Ec -> List (Pair String Span) -> Expr -> Value -> Span -> Check (Pair Term Ec)
+export checkLam : List (String, Term) -> Ctx -> Ec -> List (String, Span) -> Expr -> Value -> Span -> Check (Term, Ec)
 checkLam a1 a2 a3 a4 a5 a6 a7 = checkLamFuel 256 a1 a2 a3 a4 a5 a6 a7
 
-export checkLetOne : List (Pair String Term) -> Ctx -> Ec -> Pair Pat Expr -> List (Pair Pat Expr) -> Expr -> Bool -> Value -> Span -> Check (Pair Term Ec)
+export checkLetOne : List (String, Term) -> Ctx -> Ec -> (Pat, Expr) -> List (Pat, Expr) -> Expr -> Bool -> Value -> Span -> Check (Term, Ec)
 checkLetOne a1 a2 a3 a4 a5 a6 a7 a8 a9 = checkLetOneFuel 256 a1 a2 a3 a4 a5 a6 a7 a8 a9
 
-export checkLet : List (Pair String Term) -> Ctx -> Ec -> List (Pair Pat Expr) -> Expr -> Bool -> Value -> Span -> Check (Pair Term Ec)
+export checkLet : List (String, Term) -> Ctx -> Ec -> List (Pat, Expr) -> Expr -> Bool -> Value -> Span -> Check (Term, Ec)
 checkLet a1 a2 a3 a4 a5 a6 a7 a8 = checkLetFuel 256 a1 a2 a3 a4 a5 a6 a7 a8
 
-export checkLetGo : List (Pair String Term) -> Ctx -> Ec -> List (Pair Pat Expr) -> Expr -> Bool -> Value -> Span -> Check (Pair Term Ec)
+export checkLetGo : List (String, Term) -> Ctx -> Ec -> List (Pat, Expr) -> Expr -> Bool -> Value -> Span -> Check (Term, Ec)
 checkLetGo a1 a2 a3 a4 a5 a6 a7 a8 = checkLetGoFuel 256 a1 a2 a3 a4 a5 a6 a7 a8
 
-export checkLitBoundVar : List (Pair String Term) -> Ctx -> Ec -> Term -> String -> String -> Expr -> Value -> Span -> Span -> Check (Pair Term Ec)
+export checkLitBoundVar : List (String, Term) -> Ctx -> Ec -> Term -> String -> String -> Expr -> Value -> Span -> Span -> Check (Term, Ec)
 checkLitBoundVar a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 =
   checkLitBoundVarFuel 256 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10
 
-export litAltStep : List (Pair String Term) -> Ctx -> Ec -> Term -> String -> Term -> Expr -> List (Pair Pat Expr) -> Value -> Span -> Check (Pair Term (Pair Bool Ec))
+export litAltStep : List (String, Term) -> Ctx -> Ec -> Term -> String -> Term -> Expr -> List (Pat, Expr) -> Value -> Span -> Check (Term, Bool, Ec)
 litAltStep a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 = litAltStepFuel 256 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10
 
-export checkLitCase : List (Pair String Term) -> Ctx -> Ec -> Term -> String -> List (Pair Pat Expr) -> Value -> Span -> Check (Pair Term Ec)
+export checkLitCase : List (String, Term) -> Ctx -> Ec -> Term -> String -> List (Pat, Expr) -> Value -> Span -> Check (Term, Ec)
 checkLitCase a1 a2 a3 a4 a5 a6 a7 a8 = checkLitCaseFuel 256 a1 a2 a3 a4 a5 a6 a7 a8
 
-export checkLitAlts : List (Pair String Term) -> Ctx -> Ec -> Term -> String -> List (Pair Pat Expr) -> Value -> Span -> Check (Pair Term (Pair Bool Ec))
+export checkLitAlts : List (String, Term) -> Ctx -> Ec -> Term -> String -> List (Pat, Expr) -> Value -> Span -> Check (Term, Bool, Ec)
 checkLitAlts a1 a2 a3 a4 a5 a6 a7 a8 = checkLitAltsFuel 256 a1 a2 a3 a4 a5 a6 a7 a8
 
-export checkBoolCase : List (Pair String Term) -> Ctx -> Ec -> Term -> List (Pair Pat Expr) -> Value -> Span -> Check (Pair Term Ec)
+export checkBoolCase : List (String, Term) -> Ctx -> Ec -> Term -> List (Pat, Expr) -> Value -> Span -> Check (Term, Ec)
 checkBoolCase a1 a2 a3 a4 a5 a6 a7 = checkBoolCaseFuel 256 a1 a2 a3 a4 a5 a6 a7
 
-export boolAlt : List (Pair String Term) -> Ctx -> Ec -> List (Pair Pat Expr) -> String -> Value -> Span -> Check (Pair Term (Pair (Maybe Term) Ec))
+export boolAlt : List (String, Term) -> Ctx -> Ec -> List (Pat, Expr) -> String -> Value -> Span -> Check (Term, Maybe Term, Ec)
 boolAlt a1 a2 a3 a4 a5 a6 a7 = boolAltFuel 256 a1 a2 a3 a4 a5 a6 a7
 
-export boolAltGo : List (Pair String Term) -> Ctx -> Ec -> List (Pair Pat Expr) -> String -> Value -> Span -> Maybe Term -> Check (Pair Term (Pair (Maybe Term) Ec))
+export boolAltGo : List (String, Term) -> Ctx -> Ec -> List (Pat, Expr) -> String -> Value -> Span -> Maybe Term -> Check (Term, Maybe Term, Ec)
 boolAltGo a1 a2 a3 a4 a5 a6 a7 a8 = boolAltGoFuel 256 a1 a2 a3 a4 a5 a6 a7 a8
 
-export elabCatchAll : List (Pair String Term) -> Ctx -> Ec -> Value -> DtData -> List Value -> Value -> List (Pair Pat Expr) -> List CaseAlt -> Expr -> String -> Span -> Check (Pair (List CaseAlt) Ec)
+export elabCatchAll : List (String, Term) -> Ctx -> Ec -> Value -> DtData -> List Value -> Value -> List (Pat, Expr) -> List CaseAlt -> Expr -> String -> Span -> Check (List CaseAlt, Ec)
 elabCatchAll a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 =
   elabCatchAllFuel 256 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12
 
-export checkE : List (Pair String Term) -> Ctx -> Ec -> Expr -> Value -> Check (Pair Term Ec)
+export checkE : List (String, Term) -> Ctx -> Ec -> Expr -> Value -> Check (Term, Ec)
 checkE a1 a2 a3 a4 a5 = checkEFuel (exprBudget 256 a4) a1 a2 a3 a4 a5
 
-export inferPi : List (Pair String Term) -> Ctx -> Ec -> String -> Bool -> Maybe Qty -> Expr -> Expr -> Span -> Check (Pair Term (Pair Value Ec))
+export inferPi : List (String, Term) -> Ctx -> Ec -> String -> Bool -> Maybe Qty -> Expr -> Expr -> Span -> Check (Term, Value, Ec)
 inferPi a1 a2 a3 a4 a5 a6 a7 a8 a9 = inferPiFuel 256 a1 a2 a3 a4 a5 a6 a7 a8 a9
 
-export inferAnn : List (Pair String Term) -> Ctx -> Ec -> Expr -> Expr -> Span -> Check (Pair Term (Pair Value Ec))
+export inferAnn : List (String, Term) -> Ctx -> Ec -> Expr -> Expr -> Span -> Check (Term, Value, Ec)
 inferAnn a1 a2 a3 a4 a5 a6 = inferAnnFuel 256 a1 a2 a3 a4 a5 a6
 
-export checkType : List (Pair String Term) -> Ctx -> Ec -> Expr -> Check (Pair Term (Pair Level Ec))
+export checkType : List (String, Term) -> Ctx -> Ec -> Expr -> Check (Term, Level, Ec)
 checkType a1 a2 a3 a4 = checkTypeFuel (exprBudget 256 a4) a1 a2 a3 a4
 
-export inferAppUnderType : List (Pair String Term) -> Ctx -> Ec -> String -> List Expr -> Span -> Check (Pair Term (Pair Level Ec))
+export inferAppUnderType : List (String, Term) -> Ctx -> Ec -> String -> List Expr -> Span -> Check (Term, Level, Ec)
 inferAppUnderType a1 a2 a3 a4 a5 a6 = inferAppUnderTypeFuel 256 a1 a2 a3 a4 a5 a6
 
-export inferArgs : List (Pair String Term) -> Ctx -> Ec -> Value -> List Expr -> Span -> Check (Pair (List (Pair Term Rig)) (Pair Value Ec))
+export inferArgs : List (String, Term) -> Ctx -> Ec -> Value -> List Expr -> Span -> Check (List (Term, Rig), Value, Ec)
 inferArgs a1 a2 a3 a4 a5 a6 = inferArgsFuel 256 a1 a2 a3 a4 a5 a6 Nothing
 
-export constrainDictDom : List (Pair String Term) -> Ec -> Ctx -> Value -> List Expr -> Span -> Check Ec
+export constrainDictDom : List (String, Term) -> Ec -> Ctx -> Value -> List Expr -> Span -> Check Ec
 constrainDictDom a1 a2 a3 a4 a5 a6 = constrainDictDomFuel 256 a1 a2 a3 a4 a5 a6
 
-export constrainDictDomGoK : List (Pair String Term) -> Ec -> Ctx -> Value -> Value -> List Expr -> Span -> Check Ec
+export constrainDictDomGoK : List (String, Term) -> Ec -> Ctx -> Value -> Value -> List Expr -> Span -> Check Ec
 constrainDictDomGoK a1 a2 a3 a4 a5 a6 a7 = constrainDictDomGoKFuel 256 a1 a2 a3 a4 a5 a6 a7
 
-export inferApp : List (Pair String Term) -> Ctx -> Ec -> Expr -> List Expr -> Span -> Check (Pair Term (Pair Value Ec))
+export inferApp : List (String, Term) -> Ctx -> Ec -> Expr -> List Expr -> Span -> Check (Term, Value, Ec)
 inferApp a1 a2 a3 a4 a5 a6 = inferAppFuel 256 a1 a2 a3 a4 a5 a6 Nothing
 
-export inferAppGeneral : List (Pair String Term) -> Ctx -> Ec -> Expr -> List Expr -> Span -> Check (Pair Term (Pair Value Ec))
+export inferAppGeneral : List (String, Term) -> Ctx -> Ec -> Expr -> List Expr -> Span -> Check (Term, Value, Ec)
 inferAppGeneral a1 a2 a3 a4 a5 a6 = inferAppGeneralFuel 256 a1 a2 a3 a4 a5 a6 Nothing
 
-export inferAppGeneralGo : List (Pair String Term) -> Ctx -> Ec -> Expr -> List Expr -> Span -> Check (Pair Term (Pair Value Ec))
+export inferAppGeneralGo : List (String, Term) -> Ctx -> Ec -> Expr -> List Expr -> Span -> Check (Term, Value, Ec)
 inferAppGeneralGo a1 a2 a3 a4 a5 a6 = inferAppGeneralGoFuel 256 a1 a2 a3 a4 a5 a6 Nothing
 
-export checkCondBool : List (Pair String Term) -> Ctx -> Ec -> Expr -> Span -> Check (Pair Term Ec)
+export checkCondBool : List (String, Term) -> Ctx -> Ec -> Expr -> Span -> Check (Term, Ec)
 checkCondBool a1 a2 a3 a4 a5 = checkCondBoolFuel 256 a1 a2 a3 a4 a5
 
-export inferE : List (Pair String Term) -> Ctx -> Ec -> Expr -> Check (Pair Term (Pair Value Ec))
+export inferE : List (String, Term) -> Ctx -> Ec -> Expr -> Check (Term, Value, Ec)
 inferE a1 a2 a3 a4 = inferEFuel (exprBudget 256 a4) a1 a2 a3 a4
 
-export inferCaseE : List (Pair String Term) -> Ctx -> Ec -> Expr -> List (Pair Pat Expr) -> Span -> Check (Pair Term (Pair Value Ec))
+export inferCaseE : List (String, Term) -> Ctx -> Ec -> Expr -> List (Pat, Expr) -> Span -> Check (Term, Value, Ec)
 inferCaseE a1 a2 a3 a4 a5 a6 = inferCaseEFuel 256 a1 a2 a3 a4 a5 a6
 
-export checkCase : List (Pair String Term) -> Ctx -> Ec -> Expr -> List (Pair Pat Expr) -> Value -> Span -> Check (Pair Term Ec)
+export checkCase : List (String, Term) -> Ctx -> Ec -> Expr -> List (Pat, Expr) -> Value -> Span -> Check (Term, Ec)
 checkCase a1 a2 a3 a4 a5 a6 a7 = checkCaseFuel 256 a1 a2 a3 a4 a5 a6 a7
 
-export checkCaseFam : List (Pair String Term) -> Ctx -> Ec -> Term -> Value -> List (Pair Pat Expr) -> Value -> Span -> Check (Pair Term Ec)
+export checkCaseFam : List (String, Term) -> Ctx -> Ec -> Term -> Value -> List (Pat, Expr) -> Value -> Span -> Check (Term, Ec)
 checkCaseFam a1 a2 a3 a4 a5 a6 a7 a8 = checkCaseFamFuel 256 a1 a2 a3 a4 a5 a6 a7 a8
 
-export checkCaseOf : List (Pair String Term) -> Ctx -> Ec -> Term -> Value -> String -> List Value -> List (Pair Pat Expr) -> Value -> Span -> Check (Pair Term Ec)
+export checkCaseOf : List (String, Term) -> Ctx -> Ec -> Term -> Value -> String -> List Value -> List (Pat, Expr) -> Value -> Span -> Check (Term, Ec)
 checkCaseOf a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 = checkCaseOfFuel 256 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10
 
-export elabCaseAlts : List (Pair String Term) -> Ctx -> Ec -> Value -> DtData -> List Value -> Value -> Value -> List (Pair Pat Expr) -> List CaseAlt -> Check (Pair (List CaseAlt) Ec)
+export elabCaseAlts : List (String, Term) -> Ctx -> Ec -> Value -> DtData -> List Value -> Value -> Value -> List (Pat, Expr) -> List CaseAlt -> Check (List CaseAlt, Ec)
 elabCaseAlts a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 = elabCaseAltsFuel 256 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10
 
-export elabConAlt : List (Pair String Term) -> Ctx -> Ec -> DtData -> List Value -> Value -> Value -> String -> List Pat -> Span -> Expr -> Check (Pair CaseAlt Ec)
+export elabConAlt : List (String, Term) -> Ctx -> Ec -> DtData -> List Value -> Value -> Value -> String -> List Pat -> Span -> Expr -> Check (CaseAlt, Ec)
 elabConAlt a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 =
   elabConAltFuel 256 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11
 
 -- | 按签名 Pi 链逐列解析多子句函数/实例方法的参数模式（重载构造子与列表字面量归一化）。
-export resolveOverFunPats : Ec -> Ctx -> Value -> List (Pair (List Pat) Expr) -> Check (Pair (List (Pair (List Pat) Expr)) Ec)
+export resolveOverFunPats : Ec -> Ctx -> Value -> List (List Pat, Expr) -> Check (List (List Pat, Expr), Ec)
 resolveOverFunPats a1 a2 a3 a4 = Vuna.Compiler.Elab.Term.Impl.resolveOverFunPats a1 a2 a3 a4

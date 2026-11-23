@@ -79,13 +79,13 @@ writeSplitFilesIfChanged dir (f :: rest) =
 
 -- 编译单元依赖图：按输出顺序取 .ml（跳过 .mli），unit = 文件名去掉 ".ml"；
 -- deps 原样保留（已是直接依赖单元名，保持顺序、不去重）。
-export splitGraph : List SplitFile -> List (Pair String (List String))
+export splitGraph : List SplitFile -> List (String, List String)
 splitGraph [] = []
 splitGraph (f :: rest) =
   let
     name = splitName f
   in if endsWith ".ml" name then
-    (::) (Pair (stripMl name) (splitDeps f)) (splitGraph rest)
+    (::) (stripMl name, splitDeps f) (splitGraph rest)
   else
     splitGraph rest
 
@@ -95,7 +95,7 @@ stripMl name = substring 0 (byteLength name - 3) name
 -- 按直接依赖分层。graph 是拓扑序（依赖在前），一遍扫描即可算出所有层的 depth：
 --   depth(unit) = 1 + max(depth(dep))；无依赖 depth = 0；dep 不在 graph 里按 depth 0 计。
 -- 层内保持 graph 顺序（确定），层间按 depth 升序。
-export splitLayers : List (Pair String (List String)) -> List (List (Pair String (List String)))
+export splitLayers : List (String, List String) -> List (List (String, List String))
 splitLayers [] = []
 splitLayers graph =
   let
@@ -104,9 +104,9 @@ splitLayers graph =
   in map (\d => filter (\q => depthOfUnit depths (firstOf q) == d) graph) (range 0 (maxD + 1))
 
 -- 扫描 graph 建 depth 表；依赖都已在前（拓扑序），因此一遍就够。
-splitDepths : List (Pair String (List String)) -> HashMap String Int -> HashMap String Int
+splitDepths : List (String, List String) -> HashMap String Int -> HashMap String Int
 splitDepths [] depths = depths
-splitDepths ((Pair unit deps) :: rest) depths =
+splitDepths ((unit, deps) :: rest) depths =
   splitDepths rest (HashMap.insert unit (depthOfDeps depths deps) depths)
 
 -- depth(unit) = 1 + max(depth(dep))；空依赖 = 0。
@@ -120,9 +120,9 @@ depthOfUnit depths unit =
     Just d => d
     Nothing => 0
 
-graphMaxDepth : List (Pair String (List String)) -> HashMap String Int -> Int -> Int
+graphMaxDepth : List (String, List String) -> HashMap String Int -> Int -> Int
 graphMaxDepth [] depths acc = acc
-graphMaxDepth ((Pair unit deps) :: rest) depths acc =
+graphMaxDepth ((unit, deps) :: rest) depths acc =
   graphMaxDepth rest depths (maxInt acc (depthOfUnit depths unit))
 
 maxInt : Int -> Int -> Int
@@ -137,7 +137,7 @@ maxInt a b = if a > b then a else b
 --   * 其余情况（干净 + 多核，或已有 .cmx 的增量）：按**内容哈希**（.ml/.mli + 直接依赖
 --     .stamp）逐单元编译，同层 `&` 并行 + 层间 `wait` 收尾。
 -- 单元表只写一份（`UNIT_TABLE`）：编译、stamp 与链接顺序都从它派生。
-export buildScript : List (Pair String (List String)) -> List String -> String
+export buildScript : List (String, List String) -> List String -> String
 buildScript graph cFiles = """#!/bin/sh
 # 由 vuna 生成：分离编译构建脚本（直接依赖表 + 内容哈希增量 + 分层并行）。用法: ./build.sh [OUT]
 # 单元表在本文件末尾的 `VUNA_UNIT_TABLE` 里：`@` 分隔并行层，其余每行 `单元 直接依赖...`
@@ -238,15 +238,15 @@ echo \"built $OUT\"
 """
 
 -- 单元表：一层若干行 `单元 直接依赖...`，层间用 `@` 分隔（同层互不依赖，可并行）。
-unitTableText : List (List (Pair String (List String))) -> String
+unitTableText : List (List (String, List String)) -> String
 unitTableText [] = ""
 unitTableText (layer :: rest) = tableRows layer ++ tableRest rest
 
-tableRows : List (Pair String (List String)) -> String
+tableRows : List (String, List String) -> String
 tableRows [] = ""
-tableRows ((Pair unit deps) :: rest) = "${unit}${depsSuffix deps}\n${tableRows rest}"
+tableRows ((unit, deps) :: rest) = "${unit}${depsSuffix deps}\n${tableRows rest}"
 
-tableRest : List (List (Pair String (List String))) -> String
+tableRest : List (List (String, List String)) -> String
 tableRest [] = ""
 tableRest (layer :: rest) = "@\n${tableRows layer}${tableRest rest}"
 
@@ -264,10 +264,10 @@ export splitGraphAcyclic : List SplitFile -> Bool
 splitGraphAcyclic files =
   let
     graph = splitGraph files
-    baseMemo = HashMap.fromList (map (\p => Pair (firstOf p) 0) graph)
+    baseMemo = HashMap.fromList (map (\p => (firstOf p, 0)) graph)
   in convergedWithin (length graph + 2) graph baseMemo
 
-convergedWithin : Int -> List (Pair String (List String)) -> HashMap String Int -> Bool
+convergedWithin : Int -> List (String, List String) -> HashMap String Int -> Bool
 convergedWithin fuel graph memo =
   if fuel <= 0 then
     False
@@ -291,19 +291,19 @@ unitTieKey : String -> Int
 unitTieKey name = Vuna.Compiler.Base.Hash.contentKey "t:${name}"
 
 -- 名字集合（graph 单元 + 全部直接依赖）：tie key 只对唯一名字各算一次 SHA-256。
-nameSetOf : List (Pair String (List String)) -> HashMap String Bool -> HashMap String Bool
+nameSetOf : List (String, List String) -> HashMap String Bool -> HashMap String Bool
 nameSetOf [] seen = seen
-nameSetOf ((Pair unit deps) :: rest) seen =
+nameSetOf ((unit, deps) :: rest) seen =
   nameSetOf rest (markNames deps (HashMap.insert unit True seen))
 
 markNames : List String -> HashMap String Bool -> HashMap String Bool
 markNames [] seen = seen
 markNames (n :: rest) seen = markNames rest (HashMap.insert n True seen)
 
-tieTableOf : List (Pair String (List String)) -> HashMap String Int
+tieTableOf : List (String, List String) -> HashMap String Int
 tieTableOf graph =
   HashMap.fromList
-    (map (\n => Pair n (unitTieKey n)) (map firstOf (HashMap.toList (nameSetOf graph (HashMap.fromList [])))))
+    (map (\n => (n, unitTieKey n)) (map firstOf (HashMap.toList (nameSetOf graph (HashMap.fromList [])))))
 
 tieOf : HashMap String Int -> String -> Int
 tieOf ties name =
@@ -321,20 +321,20 @@ maxDepth memo (d :: rest) =
     mm = maxDepth memo rest
   in if dd > mm then dd else mm
 
-stepDepths : HashMap String Int -> List (Pair String (List String)) -> List (Pair String Int)
+stepDepths : HashMap String Int -> List (String, List String) -> List (String, Int)
 stepDepths memo [] = []
 stepDepths memo (p :: rest) =
   let
     md = maxDepth memo (secondOf p)
-  in Pair (firstOf p) (if md < 0 then 0 else md + 1) :: stepDepths memo rest
+  in (firstOf p, if md < 0 then 0 else md + 1) :: stepDepths memo rest
 
 -- 层表键集固定（graph 的单元名），逐项比同值。
-sameDepthTable : HashMap String Int -> List (Pair String Int) -> Bool
+sameDepthTable : HashMap String Int -> List (String, Int) -> Bool
 sameDepthTable memo [] = True
 sameDepthTable memo (p :: rest) =
   depthOfUnit memo (firstOf p) == secondOf p && sameDepthTable memo rest
 
-fixDepths : Int -> List (Pair String (List String)) -> HashMap String Int -> HashMap String Int
+fixDepths : Int -> List (String, List String) -> HashMap String Int -> HashMap String Int
 fixDepths fuel graph memo =
   if fuel <= 0 then
     memo
@@ -344,14 +344,14 @@ fixDepths fuel graph memo =
     in if sameDepthTable memo next then memo else fixDepths (fuel - 1) graph (HashMap.fromList next)
 
 -- 排序键 = (depth, tieKey)；预计算后比较只碰 Int。
-depthEntryLess : Pair (Pair Int Int) String -> Pair (Pair Int Int) String -> Bool
+depthEntryLess : ((Int, Int), String) -> ((Int, Int), String) -> Bool
 depthEntryLess a b =
   if firstOf (firstOf a) /= firstOf (firstOf b) then
     firstOf (firstOf a) < firstOf (firstOf b)
   else
     secondOf (firstOf a) <= secondOf (firstOf b)
 
-sortDepthEntries : List (Pair (Pair Int Int) String) -> List (Pair (Pair Int Int) String)
+sortDepthEntries : List ((Int, Int), String) -> List ((Int, Int), String)
 sortDepthEntries xs = sortBy depthEntryLess xs
 
 -- 文件名索引：查 `${unit}.ml`；非 .ml 项不参与。
@@ -367,20 +367,17 @@ canonicalTopo files =
   let
     graph = splitGraph files
     ties = tieTableOf graph
-    fileTable = HashMap.fromList (map (\f => Pair (splitName f) f) files)
-    baseMemo = HashMap.fromList (map (\p => Pair (firstOf p) 0) graph)
+    fileTable = HashMap.fromList (map (\f => (splitName f, f)) files)
+    baseMemo = HashMap.fromList (map (\p => (firstOf p, 0)) graph)
     depths = fixDepths (length graph + 2) graph baseMemo
-    keyed =
-      map
-        (\p => Pair (Pair (depthOfUnit depths (firstOf p)) (tieOf ties (firstOf p))) (firstOf p))
-        graph
+    keyed = map (\p => ((depthOfUnit depths (firstOf p), tieOf ties (firstOf p)), firstOf p)) graph
     ordered = map secondOf (sortDepthEntries keyed)
   in map (normalizeFileDeps ties) (filesOfDepthEntries fileTable ordered)
 
 sortDepsByTie : HashMap String Int -> List String -> List String
-sortDepsByTie ties deps = map firstOf (sortDepEntries (map (\d => Pair d (tieOf ties d)) deps))
+sortDepsByTie ties deps = map firstOf (sortDepEntries (map (\d => (d, tieOf ties d)) deps))
 
-sortDepEntries : List (Pair String Int) -> List (Pair String Int)
+sortDepEntries : List (String, Int) -> List (String, Int)
 sortDepEntries xs = sortBy (\a, b => secondOf a <= secondOf b) xs
 
 normalizeFileDeps : HashMap String Int -> SplitFile -> SplitFile
@@ -397,13 +394,13 @@ normalizeFileDeps ties f = SplitFile (splitName f) (splitText f) (sortDepsByTie 
 export encSplitFile : SplitFile -> List String -> List String
 encSplitFile f acc = encStr f.splitName (encStr f.splitText (encList encStr f.splitDeps acc))
 
-decSplitFile : Int -> Cur -> Maybe (Pair SplitFile Cur)
+decSplitFile : Int -> Cur -> Maybe (SplitFile, Cur)
 decSplitFile fuel c =
   do
     p1 <- decStr (fuel - 1) c
     p2 <- decStr (fuel - 1) (secondOf p1)
     p3 <- decList decStr (fuel - 1) (secondOf p2)
-    pure (Pair (SplitFile (firstOf p1) (firstOf p2) (firstOf p3)) (secondOf p3))
+    pure (SplitFile (firstOf p1) (firstOf p2) (firstOf p3), secondOf p3)
 
 -- | `List SplitFile` 的规范编码（split 缓存载荷）。
 export encSplitFiles : List SplitFile -> List String -> List String
@@ -414,11 +411,11 @@ export decSplitFilesComplete : String -> Maybe (List SplitFile)
 decSplitFilesComplete s =
   case decList decSplitFile (strLength s) (curOf s) of
     Nothing => Nothing
-    Just (Pair fs rest) => if curAtEnd rest then Just fs else Nothing
+    Just (fs, rest) => if curAtEnd rest then Just fs else Nothing
 
 -- | 整串解析单个 `SplitFile`（单元缓存载荷入口）。
 export decSplitFileComplete : String -> Maybe SplitFile
 decSplitFileComplete s =
   case decSplitFile (strLength s) (curOf s) of
     Nothing => Nothing
-    Just (Pair f rest) => if curAtEnd rest then Just f else Nothing
+    Just (f, rest) => if curAtEnd rest then Just f else Nothing

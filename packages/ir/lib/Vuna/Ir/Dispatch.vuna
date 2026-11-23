@@ -35,15 +35,15 @@ dispatchIdNameOf name arity =
 
 -- | 应用脊的一个实参：保留原节点的类型槽（插入的新实参没有槽）。
 record SpineArg where
-  saTy : Maybe (Pair IrTy IrTy)
+  saTy : Maybe (IrTy, IrTy)
   saValue : Ir
 
-flattenSpine : Ir -> Pair Ir (List SpineArg)
+flattenSpine : Ir -> (Ir, List SpineArg)
 flattenSpine (IrApp ty f a) =
   let
     p = flattenSpine f
-  in Pair (firstOf p) (append (secondOf p) [SpineArg ty a])
-flattenSpine x = Pair x []
+  in (firstOf p, append (secondOf p) [SpineArg ty a])
+flattenSpine x = (x, [])
 
 buildSpine : Ir -> List SpineArg -> Ir
 buildSpine head [] = head
@@ -68,7 +68,7 @@ dispatchSpine (head@(IrGlobal name)) args =
         a :: b :: rest =>
           buildSpine
             (IrGlobal idName)
-            (a :: b :: SpineArg (Just (Pair IrTyOpaque IrTyOpaque)) (dispatchIdArg a.saValue) :: SpineArg (Just (Pair IrTyOpaque IrTyOpaque)) (dispatchIdArg b.saValue) :: rest)
+            (a :: b :: SpineArg (Just (IrTyOpaque, IrTyOpaque)) (dispatchIdArg a.saValue) :: SpineArg (Just (IrTyOpaque, IrTyOpaque)) (dispatchIdArg b.saValue) :: rest)
         _ => buildSpine head args
     Nothing => buildSpine head args
 dispatchSpine head args = buildSpine head args
@@ -133,14 +133,14 @@ dispatchList fuel xs =
       [] => []
       x :: rest => dispatch (fuel - 1) x :: dispatchList (fuel - 1) rest
 
-dispatchFields : Int -> List (Pair String Ir) -> List (Pair String Ir)
+dispatchFields : Int -> List (String, Ir) -> List (String, Ir)
 dispatchFields fuel fs =
   if fuel <= 0 then
     fs
   else
     case fs of
       [] => []
-      p :: rest => Pair (firstOf p) (dispatch (fuel - 1) (secondOf p)) :: dispatchFields (fuel - 1) rest
+      p :: rest => (firstOf p, dispatch (fuel - 1) (secondOf p)) :: dispatchFields (fuel - 1) rest
 
 dispatchAlt : Int -> IrAlt -> IrAlt
 dispatchAlt fuel a =

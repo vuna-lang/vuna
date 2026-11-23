@@ -63,9 +63,9 @@ peek (PriorityQueue HEmpty _) = Nothing
 peek (PriorityQueue (HNode _ x _ _) _) = Just x
 
 -- | 出队最小元素并返回剩余队列（O(log n)）。
-export pop : PriorityQueue a -> Maybe (Pair a (PriorityQueue a))
+export pop : PriorityQueue a -> Maybe (a, PriorityQueue a)
 pop (PriorityQueue HEmpty n) = Nothing
-pop (PriorityQueue (HNode _ x l r) n) = Just (Pair x (PriorityQueue (meld l r) (n - 1)))
+pop (PriorityQueue (HNode _ x l r) n) = Just (x, PriorityQueue (meld l r) (n - 1))
 
 -- | 元素个数（`Nat`，O(1)）。
 export size : PriorityQueue a -> Nat
@@ -87,7 +87,7 @@ drain fuel q acc =
   else
     case pop q of
       Nothing => reverse acc
-      Just (Pair x rest) => drain (fuel - 1) rest (x :: acc)
+      Just (x, rest) => drain (fuel - 1) rest (x :: acc)
 
 -- | 逐个出队展开为升序列表（O(n log n)）。
 export toAscList : Ord a => PriorityQueue a -> List a

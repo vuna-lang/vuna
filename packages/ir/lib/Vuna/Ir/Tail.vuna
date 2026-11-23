@@ -85,8 +85,8 @@ stripTailAt fuel ir =
       IrEffThunk family ctor unitTy arity prim => IrEffThunk family ctor unitTy arity (stripTailAt (fuel - 1) prim)
       IrEffBind _ _ _ => ir
 
-stripField : Int -> Pair String Ir -> Pair String Ir
-stripField fuel p = Pair (firstOf p) (stripTailAt fuel (secondOf p))
+stripField : Int -> (String, Ir) -> (String, Ir)
+stripField fuel p = (firstOf p, stripTailAt fuel (secondOf p))
 
 stripAlt : Int -> IrAlt -> IrAlt
 stripAlt fuel alt = IrAlt alt.irAltCtor alt.irAltBinders (stripTailAt fuel alt.irAltBody)
@@ -138,8 +138,8 @@ annotateAt fuel arityOf tail ir =
       IrEffThunk family ctor unitTy arity prim => IrEffThunk family ctor unitTy arity (annotateAt (fuel - 1) arityOf False prim)
       IrEffBind _ _ _ => ir
 
-annotateField : Int -> (String -> Maybe Int) -> Pair String Ir -> Pair String Ir
-annotateField fuel arityOf p = Pair (firstOf p) (annotateAt fuel arityOf False (secondOf p))
+annotateField : Int -> (String -> Maybe Int) -> (String, Ir) -> (String, Ir)
+annotateField fuel arityOf p = (firstOf p, annotateAt fuel arityOf False (secondOf p))
 
 annotateAlt : Int -> (String -> Maybe Int) -> Bool -> IrAlt -> IrAlt
 annotateAlt fuel arityOf tail alt =

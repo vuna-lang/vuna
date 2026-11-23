@@ -1741,13 +1741,13 @@ let dtp_substTemplate tmpl xs =
 -- 确定性：增量路径的干净模块从接口复用，位置行来自接口里持久化的
 -- `miDefLocs`；两条路径的拼接顺序不同，所以这里把行**按文本排序**再拼接——
 -- 全量/增量产物因此逐字节一致，运行时 `assoc_opt` 查找不依赖顺序。
-export dtDefLocTable : (String -> String) -> (String -> String) -> List (Pair String (Pair String Int)) -> String
+export dtDefLocTable : (String -> String) -> (String -> String) -> List (String, String, Int) -> String
 dtDefLocTable norm unitOf rows = strConcatMany (sortLocRows (map (locRowOf norm unitOf) rows))
 
 sortLocRows : List String -> List String
 sortLocRows rows = sortBy (\a, b => a <= b) rows
 
-locRowOf : (String -> String) -> (String -> String) -> Pair String (Pair String Int) -> String
+locRowOf : (String -> String) -> (String -> String) -> (String, String, Int) -> String
 locRowOf norm unitOf row =
   let
     name = firstOf row
@@ -1789,18 +1789,18 @@ gsAddDep st unit =
     GenSt st.gsShared st.gsQual (unit :: st.gsDeps) st.gsNormPath
 
 -- | 值引用：文本 + 依赖（跨单元 `Unit.name`）。
-export genValueRef : GenSt -> String -> Pair String GenSt
+export genValueRef : GenSt -> String -> (String, GenSt)
 genValueRef st name =
   let
     p = qualValueText st.gsQual name
-  in Pair (firstOf p) (gsAddDep st (secondOf p))
+  in (firstOf p, gsAddDep st (secondOf p))
 
 -- | 构造子引用：文本 + 依赖（族归属决定单元）。
-genCtorRef : GenSt -> String -> String -> Pair String GenSt
+genCtorRef : GenSt -> String -> String -> (String, GenSt)
 genCtorRef st family ctor =
   let
     p = qualCtorText st.gsQual family ctor
-  in Pair (firstOf p) (gsAddDep st (secondOf p))
+  in (firstOf p, gsAddDep st (secondOf p))
 
 -- 族归属单元（record label / 类型引用）：同单元不记依赖（否则 split 出现自依环）。
 export gsDepOfFamily : GenSt -> String -> GenSt
@@ -1835,18 +1835,18 @@ qualifyBridgeText : String -> String -> String
 qualifyBridgeText unit text =
   if unit == "" then text else qualifyBridgeNames unit ocamlRtHelperNames text
 
-genBridgeRef : GenSt -> String -> Pair String GenSt
+genBridgeRef : GenSt -> String -> (String, GenSt)
 genBridgeRef st text =
   let
     unit = bridgeUnitOf st
-  in Pair (qualifyBridgeText unit text) (gsAddDep st unit)
+  in (qualifyBridgeText unit text, gsAddDep st unit)
 
 -- `EffUnit` 族的运行时类型文本 + 依赖（族名与 `IrTyData` 里带的一致）。
-effUnitTyPair : GenSt -> Pair String GenSt
+effUnitTyPair : GenSt -> (String, GenSt)
 effUnitTyPair st =
   let
     p = qualTypeText st.gsQual effUnitTypeNameIr
-  in Pair (firstOf p) (gsAddDep st (secondOf p))
+  in (firstOf p, gsAddDep st (secondOf p))
 
 effUnitTypeNameIr : String
 effUnitTypeNameIr = "Base.Effect.Core.EffUnit"
@@ -1854,20 +1854,20 @@ effUnitTypeNameIr = "Base.Effect.Core.EffUnit"
 -- ---------------------------------------------------------------
 -- IR 节点 → 后端模型
 -- ---------------------------------------------------------------
-export genIr : GenSt -> Ir -> Check (Pair OTerm GenSt)
+export genIr : GenSt -> Ir -> Check (OTerm, GenSt)
 genIr st node = genIrNode st node
 
 -- | 普通应用：把函数与实参分别生成后拼成 `(f a)`。
-genAppNode : GenSt -> Ir -> Ir -> Check (Pair OTerm GenSt)
+genAppNode : GenSt -> Ir -> Ir -> Check (OTerm, GenSt)
 genAppNode st f a =
   Vuna.Compiler.Base.Common.bind (genIr st f) (
       \p =>
         case p of
-          Pair fTerm st1 =>
+          (fTerm, st1) =>
             Vuna.Compiler.Base.Common.bind (genIr st1 a) (
                 \q =>
                   case q of
-                    Pair aTerm st2 => OkC (Pair (OApp fTerm aTerm) st2)
+                    (aTerm, st2) => OkC (OApp fTerm aTerm, st2)
               )
     )
 
@@ -1875,46 +1875,46 @@ genAppNode st f a =
 ocamlLitText : String -> String
 ocamlLitText s = if strAt s 0 == 45 then "(" ++ s ++ ")" else s
 
-genIrNode : GenSt -> Ir -> Check (Pair OTerm GenSt)
-genIrNode st (IrVar b) = OkC (Pair (OName (irBinderText b)) st)
+genIrNode : GenSt -> Ir -> Check (OTerm, GenSt)
+genIrNode st (IrVar b) = OkC (OName (irBinderText b), st)
 genIrNode st (IrGlobal name) =
   let
     p = genValueRef st name
-  in OkC (Pair (OName (firstOf p)) (secondOf p))
+  in OkC (OName (firstOf p), secondOf p)
 genIrNode st (IrCtor family ctor _ args) =
   Vuna.Compiler.Base.Common.bind (genIrArgs st args) (
       \p =>
         case p of
-          Pair terms st1 =>
+          (terms, st1) =>
             let
               r = genCtorRef st1 family ctor
-            in OkC (Pair (OCtorApp (firstOf r) terms) (secondOf r))
+            in OkC (OCtorApp (firstOf r) terms, secondOf r)
     )
 genIrNode st (IrRecord family _ fields) =
   Vuna.Compiler.Base.Common.bind (genAssignedFields st family fields) (
       \p =>
         case p of
-          Pair fields st1 => OkC (Pair (ORecordCon fields) (gsDepOfFamily st1 family))
+          (fields, st1) => OkC (ORecordCon fields, gsDepOfFamily st1 family)
     )
 genIrNode st (IrProj base family field _) =
   Vuna.Compiler.Base.Common.bind (genIr st base) (
       \p =>
         case p of
-          Pair baseTerm st1 =>
+          (baseTerm, st1) =>
             let
               st2 = gsDepOfFamily st1 family
               label = recordFieldLabel family field
-            in OkC (Pair (OProj baseTerm (recordLabelOf st2 family label)) st2)
+            in OkC (OProj baseTerm (recordLabelOf st2 family label), st2)
     )
 genIrNode st (IrRecUpd base family fields _) =
   Vuna.Compiler.Base.Common.bind (genIr st base) (
       \p =>
         case p of
-          Pair baseTerm st1 =>
+          (baseTerm, st1) =>
             Vuna.Compiler.Base.Common.bind (genAssignedFields st1 family fields) (
                 \q =>
                   case q of
-                    Pair fields st2 => OkC (Pair (ORecordUpd baseTerm fields) (gsDepOfFamily st2 family))
+                    (fields, st2) => OkC (ORecordUpd baseTerm fields, gsDepOfFamily st2 family)
               )
     )
 genIrNode st (IrRt sym) =
@@ -1924,38 +1924,38 @@ genIrNode st (IrRt sym) =
       if irRtBridgesList sym then
         let
           p = genBridgeRef st text
-        in OkC (Pair (ORaw (firstOf p)) (secondOf p))
+        in OkC (ORaw (firstOf p), secondOf p)
       else
-        OkC (Pair (ORaw text) st)
+        OkC (ORaw text, st)
 genIrNode st (IrCast cFrom cTo inner) =
   Vuna.Compiler.Base.Common.bind (genIr st inner) (
       \p =>
         case p of
-          Pair term st1 =>
+          (term, st1) =>
             case cTo of
               -- 带目标类型的 cast 渲染成 `(Obj.magic e : T)`：机器化把构造子实参
               -- cast 到 `Control ObjTy` 时，靠这层标注把多态钉成单态（value restriction）。
-              Nothing => OkC (Pair (OCast term) st1)
-              Just ty => OkC (Pair (OAnnot (OCast term) (irTyText st1.gsQual ty)) st1)
+              Nothing => OkC (OCast term, st1)
+              Just ty => OkC (OAnnot (OCast term) (irTyText st1.gsQual ty), st1)
     )
-genIrNode st (IrInt n) = OkC (Pair (OName (ocamlLitText (strFromInt n))) st)
-genIrNode st (IrStr s) = OkC (Pair (OName (ocamlString s)) st)
-genIrNode st (IrBool b) = OkC (Pair (OName (boolText b)) st)
-genIrNode st (IrFloatLit raw) = OkC (Pair (OName (ocamlLitText raw)) st)
+genIrNode st (IrInt n) = OkC (OName (ocamlLitText (strFromInt n)), st)
+genIrNode st (IrStr s) = OkC (OName (ocamlString s), st)
+genIrNode st (IrBool b) = OkC (OName (boolText b), st)
+genIrNode st (IrFloatLit raw) = OkC (OName (ocamlLitText raw), st)
 genIrNode st (IrLet bs scrut body) =
   Vuna.Compiler.Base.Common.bind (genIr st scrut) (
       \p =>
         case p of
-          Pair scrutTerm st1 =>
+          (scrutTerm, st1) =>
             Vuna.Compiler.Base.Common.bind (genIr st1 body) (
                 \q =>
                   case q of
-                    Pair bodyTerm st2 =>
+                    (bodyTerm, st2) =>
                       case filter (\n => n /= "") (map nonErasedBinderText bs) of
-                        [] => OkC (Pair (OLet OPWild scrutTerm bodyTerm) st2)
+                        [] => OkC (OLet OPWild scrutTerm bodyTerm, st2)
                         pat :: rest =>
                           case rest of
-                            [] => OkC (Pair (OLet (OPVar pat) scrutTerm bodyTerm) st2)
+                            [] => OkC (OLet (OPVar pat) scrutTerm bodyTerm, st2)
                             _ => icInternal "unboxed case arm has more than one runtime binder"
               )
     )
@@ -1963,11 +1963,11 @@ genIrNode st (IrLam bs _ body) =
   Vuna.Compiler.Base.Common.bind (genLamParams st bs) (
       \p =>
         case p of
-          Pair params st1 =>
+          (params, st1) =>
             Vuna.Compiler.Base.Common.bind (genIr st1 body) (
                 \q =>
                   case q of
-                    Pair bodyTerm st2 => OkC (Pair (OLam params bodyTerm) st2)
+                    (bodyTerm, st2) => OkC (OLam params bodyTerm, st2)
               )
     )
 genIrNode st (IrTail inner) = genIrNode st inner
@@ -1982,11 +1982,11 @@ genIrNode st (IrApp _ f a) =
         Vuna.Compiler.Base.Common.bind (genIr st a) (
             \p =>
               case p of
-                Pair aTerm st1 =>
+                (aTerm, st1) =>
                   Vuna.Compiler.Base.Common.bind (genIr st1 body) (
                       \q =>
                         case q of
-                          Pair bodyTerm st2 => OkC (Pair (OLet (OPVar (nonErasedBinderText b)) aTerm bodyTerm) st2)
+                          (bodyTerm, st2) => OkC (OLet (OPVar (nonErasedBinderText b)) aTerm bodyTerm, st2)
                     )
           )
     _ => genAppNode st f a
@@ -1994,15 +1994,15 @@ genIrNode st (IrIf c th el) =
   Vuna.Compiler.Base.Common.bind (genIr st c) (
       \p =>
         case p of
-          Pair cTerm st1 =>
+          (cTerm, st1) =>
             Vuna.Compiler.Base.Common.bind (genIr st1 th) (
                 \q =>
                   case q of
-                    Pair tTerm st2 =>
+                    (tTerm, st2) =>
                       Vuna.Compiler.Base.Common.bind (genIr st2 el) (
                           \r =>
                             case r of
-                              Pair eTerm st3 => OkC (Pair (OIf cTerm tTerm eTerm) st3)
+                              (eTerm, st3) => OkC (OIf cTerm tTerm eTerm, st3)
                         )
               )
     )
@@ -2010,48 +2010,48 @@ genIrNode st (IrCase _ _ scrut alts) =
   Vuna.Compiler.Base.Common.bind (genIr st scrut) (
       \p =>
         case p of
-          Pair scrutTerm st1 =>
+          (scrutTerm, st1) =>
             Vuna.Compiler.Base.Common.bind (genArms st1 alts) (
                 \q =>
                   case q of
-                    Pair arms st2 => OkC (Pair (OMatch scrutTerm arms (hasCatchAll alts)) st2)
+                    (arms, st2) => OkC (OMatch scrutTerm arms (hasCatchAll alts), st2)
               )
     )
 genIrNode st (IrNatCase scrut fresh zero succ catch) =
   Vuna.Compiler.Base.Common.bind (genIr st scrut) (
       \p =>
         case p of
-          Pair scrutTerm st1 =>
+          (scrutTerm, st1) =>
             Vuna.Compiler.Base.Common.bind (genNatBranches st1 fresh zero succ catch) (
                 \q =>
                   case q of
-                    Pair branches st2 => OkC (Pair (OLet (OPVar "dtnat__${strFromInt fresh}") scrutTerm branches) st2)
+                    (branches, st2) => OkC (OLet (OPVar "dtnat__${strFromInt fresh}") scrutTerm branches, st2)
               )
     )
 genIrNode st (IrRtApp name args) =
   Vuna.Compiler.Base.Common.bind (genIrArgs st args) (
       \p =>
         case p of
-          Pair terms st1 =>
+          (terms, st1) =>
             case inlineText name (map renderTerm terms) of
-              Just text => OkC (Pair (ORaw text) st1)
+              Just text => OkC (ORaw text, st1)
               Nothing => icInternal "no inline text for builtin `${name}`"
     )
 genIrNode st (IrConcatMany parts) =
   Vuna.Compiler.Base.Common.bind (genIrArgs st parts) (
       \p =>
         case p of
-          Pair terms st1 => OkC (Pair (OConcatStr terms) st1)
+          (terms, st1) => OkC (OConcatStr terms, st1)
     )
 genIrNode st (IrEffThunk family ctor unitTy arity prim) =
   Vuna.Compiler.Base.Common.bind (genIr st prim) (
       \p =>
         case p of
-          Pair primTerm st1 =>
+          (primTerm, st1) =>
             let
               ctorP = genCtorRef st1 family ctor
               st2 = gsDepOfFamily (secondOf ctorP) family
-            in OkC (Pair (ORaw (effThunkText (firstOf ctorP) (irTyText st2.gsQual unitTy) (renderTerm primTerm) arity)) st2)
+            in OkC (ORaw (effThunkText (firstOf ctorP) (irTyText st2.gsQual unitTy) (renderTerm primTerm) arity), st2)
     )
 genIrNode st (IrEffBind family ctor unitTy) =
   let
@@ -2059,7 +2059,7 @@ genIrNode st (IrEffBind family ctor unitTy) =
     st1 = gsDepOfFamily (secondOf ctorP) family
     unitText = irTyText st1.gsQual unitTy
   in OkC
-    (Pair (ORaw "(fun m k -> ${firstOf ctorP} (fun (u : ${unitText}) -> match m with ${firstOf ctorP} f -> (match k (f u) with ${firstOf ctorP} g -> g u)))") st1)
+    (ORaw "(fun m k -> ${firstOf ctorP} (fun (u : ${unitText}) -> match m with ${firstOf ctorP} f -> (match k (f u) with ${firstOf ctorP} g -> g u)))", st1)
 
 -- Eff 原语：运行时仍是 eager 函数，但结果必须是装箱的 `MkEff`（Eff 是 base data）。
 -- 生成 `MkEff (fun (_ : EffUnit) -> rt args)`。
@@ -2086,36 +2086,36 @@ takeNames n names =
       [] => []
       name :: rest => name :: takeNames (n - 1) rest
 
-genIrArgs : GenSt -> List Ir -> Check (Pair (List OTerm) GenSt)
-genIrArgs st [] = OkC (Pair [] st)
+genIrArgs : GenSt -> List Ir -> Check (List OTerm, GenSt)
+genIrArgs st [] = OkC ([], st)
 genIrArgs st (ir :: rest) =
   Vuna.Compiler.Base.Common.bind (genIr st ir) (
       \p =>
         case p of
-          Pair term st1 =>
+          (term, st1) =>
             Vuna.Compiler.Base.Common.bind (genIrArgs st1 rest) (
                 \q =>
                   case q of
-                    Pair terms st2 => OkC (Pair ((::) term terms) st2)
+                    (terms, st2) => OkC ((::) term terms, st2)
               )
     )
 
 -- record 构造 / 更新的字段赋值表（字段 label 按族所属单元限定）。
-genAssignedFields : GenSt -> String -> List (Pair String Ir) -> Check (Pair (List (Pair String OTerm)) GenSt)
-genAssignedFields st family [] = OkC (Pair [] st)
+genAssignedFields : GenSt -> String -> List (String, Ir) -> Check (List (String, OTerm), GenSt)
+genAssignedFields st family [] = OkC ([], st)
 genAssignedFields st family (f :: rest) =
   Vuna.Compiler.Base.Common.bind (genIr st (secondOf f)) (
       \p =>
         case p of
-          Pair term st1 =>
+          (term, st1) =>
             Vuna.Compiler.Base.Common.bind (genAssignedFields st1 family rest) (
                 \q =>
                   case q of
-                    Pair fields st2 =>
+                    (fields, st2) =>
                       let
                         st3 = gsDepOfFamily st2 family
                         label = recordLabelOf st3 family (recordFieldLabel family (firstOf f))
-                      in OkC (Pair (Pair label term :: fields) st3)
+                      in OkC ((label, term) :: fields, st3)
               )
     )
 
@@ -2126,8 +2126,8 @@ nonErasedBinderText b = irBinderText b
 -- | λ 参数表：擦除占位不渲染；有可命名运行时类型的 binder 渲染成 `(x : ty)`。
 -- 注解里的跨单元类型引用记成依赖（与构造子 / record 引用同一条通道）。
 -- `IrTyOpaque` / 类型变量槽不写注解：那会固定 OCaml 的多态性。
-genLamParams : GenSt -> List IrBinder -> Check (Pair (List (Pair String (Maybe String))) GenSt)
-genLamParams st [] = OkC (Pair [] st)
+genLamParams : GenSt -> List IrBinder -> Check (List (String, Maybe String), GenSt)
+genLamParams st [] = OkC ([], st)
 genLamParams st (b :: rest) =
   if b.irBinderErased then
     genLamParams st rest
@@ -2141,18 +2141,18 @@ genLamParams st (b :: rest) =
           in Vuna.Compiler.Base.Common.bind (genLamParams st1 rest) (
               \p =>
                 case p of
-                  Pair params st2 => OkC (Pair (Pair (irBinderText b) annotation :: params) st2)
+                  (params, st2) => OkC ((irBinderText b, annotation) :: params, st2)
             )
         else
           genLamParamsUnannotated st b rest
       Nothing => genLamParamsUnannotated st b rest
 
-genLamParamsUnannotated : GenSt -> IrBinder -> List IrBinder -> Check (Pair (List (Pair String (Maybe String))) GenSt)
+genLamParamsUnannotated : GenSt -> IrBinder -> List IrBinder -> Check (List (String, Maybe String), GenSt)
 genLamParamsUnannotated st b rest =
   Vuna.Compiler.Base.Common.bind (genLamParams st rest) (
       \p =>
         case p of
-          Pair params st1 => OkC (Pair (Pair (irBinderText b) Nothing :: params) st1)
+          (params, st1) => OkC ((irBinderText b, Nothing) :: params, st1)
     )
 
 -- | 注解类型引用到的运行时族归属单元（去重后记录）。
@@ -2166,28 +2166,28 @@ hasCatchAll (alt :: rest) =
     Nothing => True
     Just _ => hasCatchAll rest
 
-genArms : GenSt -> List IrAlt -> Check (Pair (List (Pair OPat OTerm)) GenSt)
-genArms st [] = OkC (Pair [] st)
+genArms : GenSt -> List IrAlt -> Check (List (OPat, OTerm), GenSt)
+genArms st [] = OkC ([], st)
 genArms st (alt :: rest) =
   Vuna.Compiler.Base.Common.bind (genArm st alt) (
       \p =>
         case p of
-          Pair arm st1 =>
+          (arm, st1) =>
             Vuna.Compiler.Base.Common.bind (genArms st1 rest) (
                 \q =>
                   case q of
-                    Pair arms st2 => OkC (Pair ((::) arm arms) st2)
+                    (arms, st2) => OkC ((::) arm arms, st2)
               )
     )
 
-genArm : GenSt -> IrAlt -> Check (Pair (Pair OPat OTerm) GenSt)
+genArm : GenSt -> IrAlt -> Check ((OPat, OTerm), GenSt)
 genArm st alt =
   let
     envPats = filter (\n => n /= "") (map nonErasedBinderText (irAltBindersOf alt))
   in Vuna.Compiler.Base.Common.bind (genIr st (irAltBodyOf alt)) (
       \p =>
         case p of
-          Pair bodyTerm st1 =>
+          (bodyTerm, st1) =>
             case irAltCtorOf alt of
               Nothing =>
                 let
@@ -2195,30 +2195,30 @@ genArm st alt =
                     case envPats of
                       [] => OPWild
                       p2 :: rest => OPVar p2
-                in OkC (Pair (Pair pat bodyTerm) st1)
-              Just (Pair family ctor) =>
+                in OkC ((pat, bodyTerm), st1)
+              Just (family, ctor) =>
                 case irSharedRecordFieldsOf family st1.gsShared.irSharedRecordFields of
                   [] =>
                     let
                       r = genCtorRef st1 family ctor
-                    in OkC (Pair (Pair (OPCtorPat (firstOf r) (map OPVar envPats)) bodyTerm) (secondOf r))
-                  fields => OkC (Pair (Pair (OPRecordPat (recordPatFields st1 family fields envPats)) bodyTerm) (gsDepOfFamily st1 family))
+                    in OkC ((OPCtorPat (firstOf r) (map OPVar envPats), bodyTerm), secondOf r)
+                  fields => OkC ((OPRecordPat (recordPatFields st1 family fields envPats), bodyTerm), gsDepOfFamily st1 family)
     )
 
 -- record 模式字段表（字段表与运行时 binder 按序对齐）。
-recordPatFields : GenSt -> String -> List (Pair Int String) -> List String -> List (Pair String OPat)
+recordPatFields : GenSt -> String -> List (Int, String) -> List String -> List (String, OPat)
 recordPatFields st family [] pats = []
 recordPatFields st family (f :: fs) pats =
   case pats of
     [] => []
     p :: ps =>
-      Pair (recordLabelOf st family (recordFieldLabel family (secondOf f))) (OPVar p)
+      (recordLabelOf st family (recordFieldLabel family (secondOf f)), OPVar p)
         :: recordPatFields st family fs ps
 
 -- ---------------------------------------------------------------
 -- Nat case 降级：Nat 运行时是 int，不能生成变体 match。
 -- ---------------------------------------------------------------
-genNatBranches : GenSt -> Int -> Maybe IrAlt -> Maybe IrAlt -> Maybe IrAlt -> Check (Pair OTerm GenSt)
+genNatBranches : GenSt -> Int -> Maybe IrAlt -> Maybe IrAlt -> Maybe IrAlt -> Check (OTerm, GenSt)
 genNatBranches st fresh zero succ catch =
   let
     sc = "dtnat__${strFromInt fresh}"
@@ -2227,15 +2227,15 @@ genNatBranches st fresh zero succ catch =
   in Vuna.Compiler.Base.Common.bind (genNatAlt st zero Nothing) (
       \pz =>
         case pz of
-          Pair zeroTerm st1 =>
+          (zeroTerm, st1) =>
             Vuna.Compiler.Base.Common.bind (genNatAlt st1 succ (Just predExpr)) (
                 \ps =>
                   case ps of
-                    Pair succTerm st2 =>
+                    (succTerm, st2) =>
                       Vuna.Compiler.Base.Common.bind (genNatAlt st2 catch (Just sc)) (
                           \pc =>
                             case pc of
-                              Pair catchTerm st3 =>
+                              (catchTerm, st3) =>
                                 let
                                   trueTerm =
                                     case zero of
@@ -2251,7 +2251,7 @@ genNatBranches st fresh zero succ catch =
                                         case catch of
                                           Just _ => termOrImpossible catchTerm impossible
                                           Nothing => impossible
-                                in OkC (Pair (OIf (ORaw "(${sc} = 0)") trueTerm falseTerm) st3)
+                                in OkC (OIf (ORaw "(${sc} = 0)") trueTerm falseTerm, st3)
                         )
               )
     )
@@ -2260,20 +2260,20 @@ termOrImpossible : Maybe OTerm -> OTerm -> OTerm
 termOrImpossible (Just t) fallback = t
 termOrImpossible Nothing fallback = fallback
 
-genNatAlt : GenSt -> Maybe IrAlt -> Maybe String -> Check (Pair (Maybe OTerm) GenSt)
-genNatAlt st Nothing bindExpr = OkC (Pair Nothing st)
+genNatAlt : GenSt -> Maybe IrAlt -> Maybe String -> Check (Maybe OTerm, GenSt)
+genNatAlt st Nothing bindExpr = OkC (Nothing, st)
 genNatAlt st (Just alt) bindExpr =
   Vuna.Compiler.Base.Common.bind (genIr st (irAltBodyOf alt)) (
       \p =>
         case p of
-          Pair bodyTerm st1 =>
+          (bodyTerm, st1) =>
             case filter (\n => n /= "") (map nonErasedBinderText (irAltBindersOf alt)) of
-              [] => OkC (Pair (Just bodyTerm) st1)
+              [] => OkC (Just bodyTerm, st1)
               nm :: rest =>
                 case rest of
                   [] =>
                     case bindExpr of
-                      Just expr => OkC (Pair (Just (OLet (OPVar nm) (ORaw expr) bodyTerm)) st1)
+                      Just expr => OkC (Just (OLet (OPVar nm) (ORaw expr) bodyTerm), st1)
                       Nothing => icInternal "Nat case arm has a binder but no runtime binding"
                   _ => icInternal "Nat case arm has more than one runtime binder"
     )
@@ -2282,47 +2282,47 @@ genNatAlt st (Just alt) bindExpr =
 -- 分组 → OCaml 定义
 -- ---------------------------------------------------------------
 -- 定义级 CG 错误带来源位置（`IrDef` 的 `Maybe Span` + 定义名）。
-export genGroups : GenSt -> List IrGroup -> Check (Pair (List String) GenSt)
-genGroups st [] = OkC (Pair [] st)
+export genGroups : GenSt -> List IrGroup -> Check (List String, GenSt)
+genGroups st [] = OkC ([], st)
 genGroups st (g :: rest) =
   Vuna.Compiler.Base.Common.bind (genGroup st g) (
       \p =>
         case p of
-          Pair text st1 =>
+          (text, st1) =>
             Vuna.Compiler.Base.Common.bind (genGroups st1 rest) (
                 \q =>
                   case q of
-                    Pair texts st2 => OkC (Pair ((::) text texts) st2)
+                    (texts, st2) => OkC ((::) text texts, st2)
               )
     )
 
-genGroup : GenSt -> IrGroup -> Check (Pair String GenSt)
+genGroup : GenSt -> IrGroup -> Check (String, GenSt)
 genGroup st group =
   Vuna.Compiler.Base.Common.bind (genGroupDefs st (irGroupDefs group)) (
       \p =>
         case p of
           -- 单定义 + extern：`external` 前不能有 `let` 头；指令由 `renderDefOf` 自己写在前面。
-          Pair defs st1 =>
+          (defs, st1) =>
             case irGroupDefs group of
               [d] =>
                 case irDefExtern d of
-                  Just _ => OkC (Pair (joinWith "\n" (map (\p => renderDefOf (secondOf p)) defs)) st1)
-                  Nothing => OkC (Pair (bindGroupOf st1 group defs) st1)
-              _ => OkC (Pair (bindGroupOf st1 group defs) st1)
+                  Just _ => OkC (joinWith "\n" (map (\p => renderDefOf (secondOf p)) defs), st1)
+                  Nothing => OkC (bindGroupOf st1 group defs, st1)
+              _ => OkC (bindGroupOf st1 group defs, st1)
     )
 
 -- 分组装配：`#line` 指令在前（自成一行），`let` / `let rec` / `and` 关键字与绑定名
 -- 仍在同一行 —— 既有 `^let v_` 断言、快照 grep 与 `letrec` 口径都不受影响。
-bindGroupOf : GenSt -> IrGroup -> List (Pair IrDef ODef) -> String
+bindGroupOf : GenSt -> IrGroup -> List (IrDef, ODef) -> String
 bindGroupOf st group [] = ""
 bindGroupOf st group (p :: rest) =
   joinWith "\n" ((::) (bindFirstOf st group p) (map (bindAndOf st) rest))
 
-bindFirstOf : GenSt -> IrGroup -> Pair IrDef ODef -> String
-bindFirstOf st group (Pair d def) = lineDirectiveOf st d ++ bindKeywordOf group ++ renderDefOf def
+bindFirstOf : GenSt -> IrGroup -> (IrDef, ODef) -> String
+bindFirstOf st group (d, def) = lineDirectiveOf st d ++ bindKeywordOf group ++ renderDefOf def
 
-bindAndOf : GenSt -> Pair IrDef ODef -> String
-bindAndOf st (Pair d def) = lineDirectiveOf st d ++ "and " ++ renderDefOf def
+bindAndOf : GenSt -> (IrDef, ODef) -> String
+bindAndOf st (d, def) = lineDirectiveOf st d ++ "and " ++ renderDefOf def
 
 bindKeywordOf : IrGroup -> String
 bindKeywordOf group = if irGroupIsRec group then "let rec " else "let "
@@ -2343,25 +2343,24 @@ lineDirectiveOf st d =
         file = st.gsNormPath sp.spanFile
       in if file == "" then "" else "# ${strFromInt (spanStartLine sp)} ${ocamlString file}\n"
 
-genGroupDefs : GenSt -> List IrDef -> Check (Pair (List (Pair IrDef ODef)) GenSt)
-genGroupDefs st [] = OkC (Pair [] st)
+genGroupDefs : GenSt -> List IrDef -> Check (List (IrDef, ODef), GenSt)
+genGroupDefs st [] = OkC ([], st)
 genGroupDefs st (d :: rest) =
   Vuna.Compiler.Base.Common.bind (genDef st d) (
       \p =>
         case p of
-          Pair def st1 =>
+          (def, st1) =>
             Vuna.Compiler.Base.Common.bind (genGroupDefs st1 rest) (
                 \q =>
                   case q of
-                    Pair defs st2 => OkC (Pair ((::) (Pair d def) defs) st2)
+                    (defs, st2) => OkC ((::) (d, def) defs, st2)
               )
     )
 
-genDef : GenSt -> IrDef -> Check (Pair ODef GenSt)
+genDef : GenSt -> IrDef -> Check (ODef, GenSt)
 genDef st d =
   case irDefExtern d of
-    Just (Pair ty cName) =>
-      OkC (Pair (ODExternal (valueName (irDefName d)) (irTyText st.gsQual ty) cName) st)
+    Just (ty, cName) => OkC (ODExternal (valueName (irDefName d)) (irTyText st.gsQual ty) cName, st)
     Nothing =>
       case irDefBody d of
         Nothing =>
@@ -2371,10 +2370,10 @@ genDef st d =
           Vuna.Compiler.Base.Common.bind (genIr st body) (
               \p =>
                 case p of
-                  Pair bodyTerm st1 =>
+                  (bodyTerm, st1) =>
                     let
                       guarded = if irDefInitGuard d then ORaw "(try ${renderTerm bodyTerm} with e -> dt_report_exn e (Printexc.get_raw_backtrace ()); exit 2)" else bodyTerm
-                    in OkC (Pair (ODValue (valueName (irDefName d)) guarded) st1)
+                    in OkC (ODValue (valueName (irDefName d)) guarded, st1)
             )
 
 -- 定义文本：值绑定 `name = body`；受限 FFI `external name : ty = "c"`。
@@ -2390,12 +2389,12 @@ renderDefOf (ODExternal name ty cName) = "external ${name} : ${ty} = ${ocamlStri
 -- 动作整体包进 `try`——未捕获异常交给运行时报告器（dt_report_exn）打印
 -- "vuna: runtime error: ..." + 命中的 vuna 位置帧，然后 exit 2（不再是 OCaml 的
 -- Fatal error 形态）。try 只包 main 这一处，不碰 lambda，尾调不受影响。
-export genEntryHook : GenSt -> IrEntry -> Bool -> Check (Pair String (List String))
+export genEntryHook : GenSt -> IrEntry -> Bool -> Check (String, List String)
 genEntryHook st entry printResult =
   Vuna.Compiler.Base.Common.bind (genIr st (irEntryShowOf entry)) (
       \sp =>
         case sp of
-          Pair showTerm st1 =>
+          (showTerm, st1) =>
             case irEntryIsActionOf entry of
               True =>
                 case irEntryRunMainOf entry of
@@ -2407,19 +2406,19 @@ genEntryHook st entry printResult =
                       runP = genValueRef st2 runMain
                       st3 = secondOf runP
                     in case foldHandlers st3 (firstOf mainP) (irEntryHandlersOf entry) of
-                      Pair wrappedText st4 =>
+                      (wrappedText, st4) =>
                         let
                           body = "dtp_sched_main (fun () -> ${firstOf runP} ${wrappedText})"
-                        in OkC (Pair (hookText (renderTerm showTerm) body printResult) st4.gsDeps)
+                        in OkC (hookText (renderTerm showTerm) body printResult, st4.gsDeps)
               False =>
                 let
                   mainP = genValueRef st1 (irEntryMainOf entry)
-                in OkC (Pair (hookText (renderTerm showTerm) (firstOf mainP) printResult) (secondOf mainP).gsDeps)
+                in OkC (hookText (renderTerm showTerm) (firstOf mainP) printResult, (secondOf mainP).gsDeps)
     )
 
 -- handlers 左折：`(${hRef} ${acc})`（行顺序：后出现的包在外层）。
-foldHandlers : GenSt -> String -> List String -> Pair String GenSt
-foldHandlers st acc [] = Pair acc st
+foldHandlers : GenSt -> String -> List String -> (String, GenSt)
+foldHandlers st acc [] = (acc, st)
 foldHandlers st acc (h :: rest) =
   let
     p = genValueRef st h

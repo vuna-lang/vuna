@@ -147,14 +147,14 @@ freshA fuel i =
 
 applyAll : Ir -> List Ir -> Ir
 applyAll f [] = f
-applyAll f (a :: rest) = applyAll (IrApp (Just (Pair IrTyOpaque IrTyOpaque)) f a) rest
+applyAll f (a :: rest) = applyAll (IrApp (Just (IrTyOpaque, IrTyOpaque)) f a) rest
 
-flattenApp : Ir -> Pair Ir (List Ir)
+flattenApp : Ir -> (Ir, List Ir)
 flattenApp (IrApp _ f a) =
   let
     p = flattenApp f
-  in Pair (firstOf p) (append (secondOf p) [a])
-flattenApp x = Pair x []
+  in (firstOf p, append (secondOf p) [a])
+flattenApp x = (x, [])
 
 -- | 直接递归的列表映射：避免把递归调用藏在 `map` 的 lambda 里（SCT 看不到）。
 mapDirect : Int -> List Ir -> List Ir
@@ -184,14 +184,14 @@ mapAltCps fuel env xs k =
       [] => []
       a :: rest => cpsAlt (fuel - 1) env a k :: mapAltCps (fuel - 1) env rest k
 
-mapFieldsDirect : Int -> List (Pair String Ir) -> List (Pair String Ir)
+mapFieldsDirect : Int -> List (String, Ir) -> List (String, Ir)
 mapFieldsDirect fuel xs =
   if fuel <= 0 then
     xs
   else
     case xs of
       [] => []
-      p :: rest => Pair (firstOf p) (transformDirect (fuel - 1) (secondOf p)) :: mapFieldsDirect (fuel - 1) rest
+      p :: rest => (firstOf p, transformDirect (fuel - 1) (secondOf p)) :: mapFieldsDirect (fuel - 1) rest
 
 -- | thunk 构造子：`MkEff` 或 `MkScoped`。
 isThunkCtor : String -> String -> Bool
@@ -202,7 +202,7 @@ isThunkCtor family ctor =
 isThunkAlt : IrAlt -> Bool
 isThunkAlt alt =
   case alt.irAltCtor of
-    Just (Pair family ctor) => isThunkCtor family ctor
+    Just (family, ctor) => isThunkCtor family ctor
     Nothing => False
 
 -- | 一个 case 分支引入的 thunk binder（只对 `MkEff` / `MkScoped` 分支）。
@@ -224,7 +224,7 @@ identityCont =
 cpsExpr : Int -> List IrBinder -> Ir -> Ir -> Ir
 cpsExpr fuel env e k =
   if fuel <= 0 then
-    IrApp (Just (Pair IrTyOpaque IrTyOpaque)) k (transformDirect (fuel - 1) e)
+    IrApp (Just (IrTyOpaque, IrTyOpaque)) k (transformDirect (fuel - 1) e)
   else
     case e of
       IrApp _ _ _ => cpsApp (fuel - 1) env e k
@@ -249,7 +249,7 @@ cpsExpr fuel env e k =
           kLet = IrLam [v] (Just IrTyOpaque) (IrLet bs (IrVar v) (cpsExpr (fuel - 1) env body k))
         in cpsExpr (fuel - 1) env scrut kLet
       IrCast cFrom cTo inner => IrCast cFrom cTo (cpsExpr (fuel - 1) env inner k)
-      _ => IrApp (Just (Pair IrTyOpaque IrTyOpaque)) k (transformDirect (fuel - 1) e)
+      _ => IrApp (Just (IrTyOpaque, IrTyOpaque)) k (transformDirect (fuel - 1) e)
 
 cpsAlt : Int -> List IrBinder -> IrAlt -> Ir -> IrAlt
 cpsAlt fuel env alt k =
@@ -273,10 +273,10 @@ cpsAltMaybe fuel env m k =
 cpsArgs : Int -> List IrBinder -> List Ir -> Ir -> List Ir -> Ir -> Ir
 cpsArgs fuel env args head acc k =
   if fuel <= 0 then
-    IrApp (Just (Pair IrTyOpaque IrTyOpaque)) k (applyAll head (reverse acc))
+    IrApp (Just (IrTyOpaque, IrTyOpaque)) k (applyAll head (reverse acc))
   else
     case args of
-      [] => IrApp (Just (Pair IrTyOpaque IrTyOpaque)) k (applyAll head (reverse acc))
+      [] => IrApp (Just (IrTyOpaque, IrTyOpaque)) k (applyAll head (reverse acc))
       a :: rest =>
         let
           v = freshV fuel
@@ -294,7 +294,7 @@ cpsThunkCall fuel head args k =
 cpsApp : Int -> List IrBinder -> Ir -> Ir -> Ir
 cpsApp fuel env e k =
   if fuel <= 0 then
-    IrApp (Just (Pair IrTyOpaque IrTyOpaque)) k e
+    IrApp (Just (IrTyOpaque, IrTyOpaque)) k e
   else
     let
       p = flattenApp e
@@ -338,7 +338,7 @@ transformDirect fuel e =
           k = freshK fuel
           argBs = map (\i => freshA fuel i) (range 0 arity)
           applied = applyAll (transformDirect (fuel - 1) prim) (map IrVar argBs)
-          inner = IrCtor family ctor Nothing [IrLam [u, k] (Just IrTyOpaque) (IrApp (Just (Pair IrTyOpaque IrTyOpaque)) (IrVar k) applied)]
+          inner = IrCtor family ctor Nothing [IrLam [u, k] (Just IrTyOpaque) (IrApp (Just (IrTyOpaque, IrTyOpaque)) (IrVar k) applied)]
         in if arity <= 0 then inner else IrLam argBs (Just IrTyOpaque) inner
       IrRecord family resTy fields => IrRecord family resTy (mapFieldsDirect (fuel - 1) fields)
       IrProj base family field resTy => IrProj (transformDirect (fuel - 1) base) family field resTy
@@ -541,7 +541,7 @@ mEraseHead e = e
 mStripErase : Ir -> Ir
 mStripErase (IrCast cFrom cTo x) = mStripErase x
 mStripErase (IrApp _ (IrRt s) x) =
-  if s == "prim_erase" then mStripErase x else IrApp (Just (Pair IrTyOpaque IrTyOpaque)) (IrRt s) x
+  if s == "prim_erase" then mStripErase x else IrApp (Just (IrTyOpaque, IrTyOpaque)) (IrRt s) x
 mStripErase x = x
 
 mIsResumeApp : IrBinder -> Ir -> Bool
@@ -599,7 +599,7 @@ mRunEffTerm eff k =
     (Just IrTyOpaque)
     (Just IrTyOpaque)
     eff
-    [IrAlt (Just (Pair irEffTypeName irEffMkCtor)) [th] (IrRtApp irMRunEffName [IrVar th, k])]
+    [IrAlt (Just (irEffTypeName, irEffMkCtor)) [th] (IrRtApp irMRunEffName [IrVar th, k])]
 
 mNoResumption : IrBinder
 mNoResumption = mkBinderAt (cpsFixedId 3) "@vuna@noresume"
@@ -646,10 +646,10 @@ mIsControl _ = False
 mCpsArgs : Int -> IrBinder -> Ir -> String -> List Ir -> List Ir -> Ir
 mCpsArgs fuel r k sym args acc =
   if fuel <= 0 then
-    IrApp (Just (Pair IrTyOpaque IrTyOpaque)) k (IrRtApp sym (append (reverse acc) args))
+    IrApp (Just (IrTyOpaque, IrTyOpaque)) k (IrRtApp sym (append (reverse acc) args))
   else
     case args of
-      [] => IrApp (Just (Pair IrTyOpaque IrTyOpaque)) k (IrRtApp sym (reverse acc))
+      [] => IrApp (Just (IrTyOpaque, IrTyOpaque)) k (IrRtApp sym (reverse acc))
       a :: rest =>
         let
           v = mFreshV fuel
@@ -663,11 +663,11 @@ mCpsApply fuel r k parts =
   if fuel <= 0 then
     case parts of
       -- `[]` 不可达（调用点保证 `head :: args`），保留只为模式穷尽。
-      [] => IrApp (Just (Pair IrTyOpaque IrTyOpaque)) k (IrGlobal "?")
-      h :: t => IrApp (Just (Pair IrTyOpaque IrTyOpaque)) k (applyAll h t)
+      [] => IrApp (Just (IrTyOpaque, IrTyOpaque)) k (IrGlobal "?")
+      h :: t => IrApp (Just (IrTyOpaque, IrTyOpaque)) k (applyAll h t)
   else
     case parts of
-      [] => IrApp (Just (Pair IrTyOpaque IrTyOpaque)) k (IrGlobal "?")
+      [] => IrApp (Just (IrTyOpaque, IrTyOpaque)) k (IrGlobal "?")
       [x] => mCps (fuel - 1) r k x
       x :: rest =>
         let
@@ -677,10 +677,10 @@ mCpsApply fuel r k parts =
 mCpsApplyArgs : Int -> IrBinder -> Ir -> List Ir -> List Ir -> IrBinder -> Ir
 mCpsApplyArgs fuel r k args acc headV =
   if fuel <= 0 then
-    IrApp (Just (Pair IrTyOpaque IrTyOpaque)) k (applyAll (IrVar headV) (append (reverse acc) args))
+    IrApp (Just (IrTyOpaque, IrTyOpaque)) k (applyAll (IrVar headV) (append (reverse acc) args))
   else
     case args of
-      [] => IrApp (Just (Pair IrTyOpaque IrTyOpaque)) k (applyAll (IrVar headV) (reverse acc))
+      [] => IrApp (Just (IrTyOpaque, IrTyOpaque)) k (applyAll (IrVar headV) (reverse acc))
       a :: rest =>
         let
           v = mFreshV fuel
@@ -694,9 +694,9 @@ isTailCont _ = False
 mCps : Int -> IrBinder -> Ir -> Ir -> Ir
 mCps fuel r k e =
   if fuel <= 0 then
-    IrApp (Just (Pair IrTyOpaque IrTyOpaque)) k e
+    IrApp (Just (IrTyOpaque, IrTyOpaque)) k e
   else if mIsResumeApp r e then
-    if isTailCont k then IrApp (Just (Pair IrTyOpaque IrTyOpaque)) e (IrCtor "Base.Effect.Core.Rest" "Base.Effect.Core.Rest.MkRestTail" Nothing []) else IrApp (Just (Pair IrTyOpaque IrTyOpaque)) e (IrCtor "Base.Effect.Core.Rest" "Base.Effect.Core.Rest.MkRestCont" Nothing [k])
+    if isTailCont k then IrApp (Just (IrTyOpaque, IrTyOpaque)) e (IrCtor "Base.Effect.Core.Rest" "Base.Effect.Core.Rest.MkRestTail" Nothing []) else IrApp (Just (IrTyOpaque, IrTyOpaque)) e (IrCtor "Base.Effect.Core.Rest" "Base.Effect.Core.Rest.MkRestCont" Nothing [k])
   else
     case e of
       IrLet bs rhs body =>
@@ -721,12 +721,12 @@ mCps fuel r k e =
         in mCps (fuel - 1) r cont scrut
       IrCast cFrom cTo x => IrCast cFrom cTo (mCps (fuel - 1) r k x)
       IrRtApp sym args => mCpsArgs (fuel - 1) r k sym args []
-      IrLam bs rt body => if isEffContLambda rt then IrApp (Just (Pair IrTyOpaque IrTyOpaque)) k (mEffContLambda (fuel - 1) r bs rt body) else IrApp (Just (Pair IrTyOpaque IrTyOpaque)) k e
+      IrLam bs rt body => if isEffContLambda rt then IrApp (Just (IrTyOpaque, IrTyOpaque)) k (mEffContLambda (fuel - 1) r bs rt body) else IrApp (Just (IrTyOpaque, IrTyOpaque)) k e
       IrApp _ _ _ =>
         let
           p = flattenApp e
         in mCpsApply (fuel - 1) r k (append [firstOf p] (secondOf p))
-      _ => IrApp (Just (Pair IrTyOpaque IrTyOpaque)) k e
+      _ => IrApp (Just (IrTyOpaque, IrTyOpaque)) k e
 
 mHandlerLam : Int -> List IrBinder -> Ir -> Ir
 mHandlerLam fuel bs body =
@@ -750,14 +750,14 @@ mListH fuel xs =
       [] => []
       x :: rest => mHandlers (fuel - 1) x :: mListH (fuel - 1) rest
 
-mFieldsH : Int -> List (Pair String Ir) -> List (Pair String Ir)
+mFieldsH : Int -> List (String, Ir) -> List (String, Ir)
 mFieldsH fuel fs =
   if fuel <= 0 then
     fs
   else
     case fs of
       [] => []
-      p :: rest => Pair (firstOf p) (mHandlers (fuel - 1) (secondOf p)) :: mFieldsH (fuel - 1) rest
+      p :: rest => (firstOf p, mHandlers (fuel - 1) (secondOf p)) :: mFieldsH (fuel - 1) rest
 
 mHandlers : Int -> Ir -> Ir
 mHandlers fuel e =
@@ -773,7 +773,7 @@ mHandlers fuel e =
       IrRtApp sym args => IrRtApp sym (mListH (fuel - 1) args)
       IrCast cFrom cTo x => IrCast cFrom cTo (mHandlers (fuel - 1) x)
       IrLet bs rhs body => IrLet bs (mHandlers (fuel - 1) rhs) (mHandlers (fuel - 1) body)
-      IrApp _ f a => IrApp (Just (Pair IrTyOpaque IrTyOpaque)) (mHandlers (fuel - 1) f) (mHandlers (fuel - 1) a)
+      IrApp _ f a => IrApp (Just (IrTyOpaque, IrTyOpaque)) (mHandlers (fuel - 1) f) (mHandlers (fuel - 1) a)
       IrIf c t el => IrIf (mHandlers (fuel - 1) c) (mHandlers (fuel - 1) t) (mHandlers (fuel - 1) el)
       IrCase caseTy _ s alts => IrCase caseTy (Just IrTyOpaque) (mHandlers (fuel - 1) s) (mHandlersAlts (fuel - 1) alts)
       IrNatCase s fr z su ca => IrNatCase (mHandlers (fuel - 1) s) fr (mHandlersAltM (fuel - 1) z) (mHandlersAltM (fuel - 1) su) (mHandlersAltM (fuel - 1) ca)
@@ -820,7 +820,7 @@ mSyms fuel e =
       IrCast cFrom cTo x => IrCast cFrom cTo (mSyms (fuel - 1) x)
       IrLet bs r b => IrLet bs (mSyms (fuel - 1) r) (mSyms (fuel - 1) b)
       IrLam bs rt b => IrLam bs rt (mSyms (fuel - 1) b)
-      IrApp _ f a => IrApp (Just (Pair IrTyOpaque IrTyOpaque)) (mSyms (fuel - 1) f) (mSyms (fuel - 1) a)
+      IrApp _ f a => IrApp (Just (IrTyOpaque, IrTyOpaque)) (mSyms (fuel - 1) f) (mSyms (fuel - 1) a)
       IrIf c t el => IrIf (mSyms (fuel - 1) c) (mSyms (fuel - 1) t) (mSyms (fuel - 1) el)
       IrCase caseTy _ sc alts => IrCase caseTy (Just IrTyOpaque) (mSyms (fuel - 1) sc) (mSymsAltsM (fuel - 1) alts)
       IrNatCase sc fr z su ca => IrNatCase (mSyms (fuel - 1) sc) fr (mSymsAltMM (fuel - 1) z) (mSymsAltMM (fuel - 1) su) (mSymsAltMM (fuel - 1) ca)
@@ -837,14 +837,14 @@ mListS fuel xs =
       [] => []
       x :: rest => mSyms (fuel - 1) x :: mListS (fuel - 1) rest
 
-mFieldsS : Int -> List (Pair String Ir) -> List (Pair String Ir)
+mFieldsS : Int -> List (String, Ir) -> List (String, Ir)
 mFieldsS fuel fs =
   if fuel <= 0 then
     fs
   else
     case fs of
       [] => []
-      p :: rest => Pair (firstOf p) (mSyms (fuel - 1) (secondOf p)) :: mFieldsS (fuel - 1) rest
+      p :: rest => (firstOf p, mSyms (fuel - 1) (secondOf p)) :: mFieldsS (fuel - 1) rest
 
 mSymsAltsM : Int -> List IrAlt -> List IrAlt
 mSymsAltsM fuel alts =
@@ -871,7 +871,7 @@ mDoneCont =
   in IrLam
     [v]
     (Just IrTyOpaque)
-    (IrApp (Just (Pair IrTyOpaque IrTyOpaque)) (IrRt irMDoneName) (IrVar v))
+    (IrApp (Just (IrTyOpaque, IrTyOpaque)) (IrRt irMDoneName) (IrVar v))
 
 mTrampolineBody : String -> Ir -> Result Ir
 mTrampolineBody name (IrLam bs rt inner) =
@@ -885,7 +885,7 @@ mTrampolineBody name (IrCast cFrom cTo inner) =
 mTrampolineBody name (IrApp _ (IrApp _ (IrApp _ (IrGlobal g) e) u) _idc) =
   if g == runThunkName then
     Ok
-      (IrApp (Just (Pair IrTyOpaque IrTyOpaque)) (IrRt irMRunName) (applyAll (IrGlobal g) [e, u, mDoneCont]))
+      (IrApp (Just (IrTyOpaque, IrTyOpaque)) (IrRt irMRunName) (applyAll (IrGlobal g) [e, u, mDoneCont]))
   else
     Err ("machine CPS: unexpected trampoline shape: " ++ name)
 mTrampolineBody name _ = Err ("machine CPS: unexpected trampoline shape: " ++ name)
@@ -903,35 +903,35 @@ mBodyOf d =
     Nothing => IrInt 0
 
 record HandlerTables where
-  htArities : List (Pair String Int)
-  htSigs : List (Pair String (Maybe IrTy))
+  htArities : List (String, Int)
+  htSigs : List (String, Maybe IrTy)
 
-defArities : Int -> List IrDef -> List (Pair String Int)
+defArities : Int -> List IrDef -> List (String, Int)
 defArities fuel ds =
   if fuel <= 0 then
     []
   else
     case ds of
       [] => []
-      d :: rest => Pair (irDefName d) (irDefArity d) :: defArities (fuel - 1) rest
+      d :: rest => (irDefName d, irDefArity d) :: defArities (fuel - 1) rest
 
-defSigs : Int -> List IrDef -> List (Pair String (Maybe IrTy))
+defSigs : Int -> List IrDef -> List (String, Maybe IrTy)
 defSigs fuel ds =
   if fuel <= 0 then
     []
   else
     case ds of
       [] => []
-      d :: rest => Pair (irDefName d) (irDefTy d) :: defSigs (fuel - 1) rest
+      d :: rest => (irDefName d, irDefTy d) :: defSigs (fuel - 1) rest
 
 handlerTables : Int -> List IrDef -> HandlerTables
 handlerTables fuel ds = HandlerTables (defArities fuel ds) (defSigs fuel ds)
 
-arityOf : List (Pair String Int) -> String -> Int
+arityOf : List (String, Int) -> String -> Int
 arityOf [] _ = 0
 arityOf (x :: rest) n = if firstOf x == n then secondOf x else arityOf rest n
 
-sigOf : List (Pair String (Maybe IrTy)) -> String -> Maybe IrTy
+sigOf : List (String, Maybe IrTy) -> String -> Maybe IrTy
 sigOf [] _ = Nothing
 sigOf (x :: rest) n = if firstOf x == n then secondOf x else sigOf rest n
 
@@ -1021,7 +1021,7 @@ clauseGlobals t args =
             case flattenApp a of
               -- 部分应用的 clause（如 `processOpHIOWith onExit`）：剩余运行时参数仍是
               -- (o, k)，同样要按 clause 补 kDone/runScoped。
-              Pair (IrGlobal h) prefixArgs => if isClauseGlobal t h && clauseArityOf t h - lenOf prefixArgs >= 2 then h :: clauseGlobals t rest else clauseGlobals t rest
+              (IrGlobal h, prefixArgs) => if isClauseGlobal t h && clauseArityOf t h - lenOf prefixArgs >= 2 then h :: clauseGlobals t rest else clauseGlobals t rest
               _ => clauseGlobals t rest
 
 lenOf : List a -> Int
@@ -1071,7 +1071,7 @@ collectHandlerGlobalsList t fuel xs =
       [] => []
       x :: rest => append (collectHandlerGlobals t (fuel - 1) x) (collectHandlerGlobalsList t (fuel - 1) rest)
 
-collectHandlerGlobalsFields : HandlerTables -> Int -> List (Pair String Ir) -> List String
+collectHandlerGlobalsFields : HandlerTables -> Int -> List (String, Ir) -> List String
 collectHandlerGlobalsFields t fuel fs =
   if fuel <= 0 then
     []
@@ -1145,8 +1145,8 @@ mScopedCalls fuel rs e =
           f1 = mScopedCalls (fuel - 1) rs f
           a1 = mScopedCalls (fuel - 1) rs a
         in case f1 of
-          IrGlobal n => if n == scopedName then IrApp (Just (Pair IrTyOpaque IrTyOpaque)) (IrVar rs) a1 else if n == selfName then IrApp (Just (Pair IrTyOpaque IrTyOpaque)) (IrVar rs) (IrApp (Just (Pair IrTyOpaque IrTyOpaque)) (IrGlobal scopeName) a1) else IrApp (Just (Pair IrTyOpaque IrTyOpaque)) f1 a1
-          _ => IrApp (Just (Pair IrTyOpaque IrTyOpaque)) f1 a1
+          IrGlobal n => if n == scopedName then IrApp (Just (IrTyOpaque, IrTyOpaque)) (IrVar rs) a1 else if n == selfName then IrApp (Just (IrTyOpaque, IrTyOpaque)) (IrVar rs) (IrApp (Just (IrTyOpaque, IrTyOpaque)) (IrGlobal scopeName) a1) else IrApp (Just (IrTyOpaque, IrTyOpaque)) f1 a1
+          _ => IrApp (Just (IrTyOpaque, IrTyOpaque)) f1 a1
       IrRtApp sym args => IrRtApp sym (mScopedList (fuel - 1) rs args)
       IrCtor fam ctor _ args => IrCtor fam ctor Nothing (mScopedList (fuel - 1) rs args)
       IrRecord fam _ fs => IrRecord fam (Just IrTyOpaque) (mScopedFields (fuel - 1) rs fs)
@@ -1171,14 +1171,14 @@ mScopedList fuel rs xs =
       [] => []
       x :: rest => mScopedCalls (fuel - 1) rs x :: mScopedList (fuel - 1) rs rest
 
-mScopedFields : Int -> IrBinder -> List (Pair String Ir) -> List (Pair String Ir)
+mScopedFields : Int -> IrBinder -> List (String, Ir) -> List (String, Ir)
 mScopedFields fuel rs fs =
   if fuel <= 0 then
     fs
   else
     case fs of
       [] => []
-      p :: rest => Pair (firstOf p) (mScopedCalls (fuel - 1) rs (secondOf p)) :: mScopedFields (fuel - 1) rs rest
+      p :: rest => (firstOf p, mScopedCalls (fuel - 1) rs (secondOf p)) :: mScopedFields (fuel - 1) rs rest
 
 mScopedAlts : Int -> IrBinder -> List IrAlt -> List IrAlt
 mScopedAlts fuel rs alts =
@@ -1296,8 +1296,8 @@ mApplys fuel e =
     case e of
       IrApp _ f a =>
         case f of
-          IrVar b => if isContBinder b then IrRtApp irMApplyName [IrVar b, mApplys (fuel - 1) a] else IrApp (Just (Pair IrTyOpaque IrTyOpaque)) (mApplys (fuel - 1) f) (mApplys (fuel - 1) a)
-          _ => IrApp (Just (Pair IrTyOpaque IrTyOpaque)) (mApplys (fuel - 1) f) (mApplys (fuel - 1) a)
+          IrVar b => if isContBinder b then IrRtApp irMApplyName [IrVar b, mApplys (fuel - 1) a] else IrApp (Just (IrTyOpaque, IrTyOpaque)) (mApplys (fuel - 1) f) (mApplys (fuel - 1) a)
+          _ => IrApp (Just (IrTyOpaque, IrTyOpaque)) (mApplys (fuel - 1) f) (mApplys (fuel - 1) a)
       IrRtApp sym args => IrRtApp sym (mApplysList (fuel - 1) args)
       IrCtor fam ctor _ args => IrCtor fam ctor Nothing (mApplysList (fuel - 1) args)
       IrRecord fam _ fs => IrRecord fam (Just IrTyOpaque) (mApplysFields (fuel - 1) fs)
@@ -1322,14 +1322,14 @@ mApplysList fuel xs =
       [] => []
       x :: rest => mApplys (fuel - 1) x :: mApplysList (fuel - 1) rest
 
-mApplysFields : Int -> List (Pair String Ir) -> List (Pair String Ir)
+mApplysFields : Int -> List (String, Ir) -> List (String, Ir)
 mApplysFields fuel fs =
   if fuel <= 0 then
     fs
   else
     case fs of
       [] => []
-      p :: rest => Pair (firstOf p) (mApplys (fuel - 1) (secondOf p)) :: mApplysFields (fuel - 1) rest
+      p :: rest => (firstOf p, mApplys (fuel - 1) (secondOf p)) :: mApplysFields (fuel - 1) rest
 
 mApplysAlts : Int -> List IrAlt -> List IrAlt
 mApplysAlts fuel alts =
@@ -1363,7 +1363,7 @@ mMarked fuel e =
     case e of
       IrLam bs rt body => if isEffContLambda rt && not (isEffThunkBody body) then mEffContLambda (fuel - 1) mNoResumption bs rt body else IrLam bs rt (mMarked (fuel - 1) body)
       -- `handleScoped`：`self th id` 的值语义边界 => `run (self th doneCont)`
-      IrApp _ (IrApp _ (IrRt "@ir@m@self") th) (IrLam ([_]) _ _) => IrApp (Just (Pair IrTyOpaque IrTyOpaque)) (IrRt irMRunName) (IrApp (Just (Pair IrTyOpaque IrTyOpaque)) (IrApp (Just (Pair IrTyOpaque IrTyOpaque)) (IrRt "@ir@m@self") (mMarked (fuel - 1) th)) mDoneCont)
+      IrApp _ (IrApp _ (IrRt "@ir@m@self") th) (IrLam ([_]) _ _) => IrApp (Just (IrTyOpaque, IrTyOpaque)) (IrRt irMRunName) (IrApp (Just (IrTyOpaque, IrTyOpaque)) (IrApp (Just (IrTyOpaque, IrTyOpaque)) (IrRt "@ir@m@self") (mMarked (fuel - 1) th)) mDoneCont)
       IrRtApp sym args => IrRtApp sym (mMarkedList (fuel - 1) args)
       IrCtor fam ctor _ args => IrCtor fam ctor Nothing (mMarkedList (fuel - 1) args)
       IrRecord fam _ fs => IrRecord fam (Just IrTyOpaque) (mMarkedFields (fuel - 1) fs)
@@ -1371,7 +1371,7 @@ mMarked fuel e =
       IrRecUpd b fam fs _ => IrRecUpd (mMarked (fuel - 1) b) fam (mMarkedFields (fuel - 1) fs) (Just IrTyOpaque)
       IrCast cFrom cTo x => IrCast cFrom cTo (mMarked (fuel - 1) x)
       IrLet bs rhs body => IrLet bs (mMarked (fuel - 1) rhs) (mMarked (fuel - 1) body)
-      IrApp _ f a => IrApp (Just (Pair IrTyOpaque IrTyOpaque)) (mMarked (fuel - 1) f) (mMarked (fuel - 1) a)
+      IrApp _ f a => IrApp (Just (IrTyOpaque, IrTyOpaque)) (mMarked (fuel - 1) f) (mMarked (fuel - 1) a)
       IrIf c t el => IrIf (mMarked (fuel - 1) c) (mMarked (fuel - 1) t) (mMarked (fuel - 1) el)
       IrCase caseTy _ sc alts => IrCase caseTy (Just IrTyOpaque) (mMarked (fuel - 1) sc) (mMarkedAlts (fuel - 1) alts)
       IrNatCase sc fr z su ca => IrNatCase (mMarked (fuel - 1) sc) fr (mMarkedAltM (fuel - 1) z) (mMarkedAltM (fuel - 1) su) (mMarkedAltM (fuel - 1) ca)
@@ -1388,14 +1388,14 @@ mMarkedList fuel xs =
       [] => []
       x :: rest => mMarked (fuel - 1) x :: mMarkedList (fuel - 1) rest
 
-mMarkedFields : Int -> List (Pair String Ir) -> List (Pair String Ir)
+mMarkedFields : Int -> List (String, Ir) -> List (String, Ir)
 mMarkedFields fuel fs =
   if fuel <= 0 then
     fs
   else
     case fs of
       [] => []
-      p :: rest => Pair (firstOf p) (mMarked (fuel - 1) (secondOf p)) :: mMarkedFields (fuel - 1) rest
+      p :: rest => (firstOf p, mMarked (fuel - 1) (secondOf p)) :: mMarkedFields (fuel - 1) rest
 
 mMarkedAlts : Int -> List IrAlt -> List IrAlt
 mMarkedAlts fuel alts =
@@ -1477,7 +1477,7 @@ mSteps fuel e =
           Nothing =>
             if sym == irMRunName then
               case args of
-                [a] => IrApp (Just (Pair IrTyOpaque IrTyOpaque)) (IrGlobal "Base.Effect.Core.machineRun") (mSteps (fuel - 1) a)
+                [a] => IrApp (Just (IrTyOpaque, IrTyOpaque)) (IrGlobal "Base.Effect.Core.machineRun") (mSteps (fuel - 1) a)
                 _ => IrRtApp sym (mStepsList (fuel - 1) args)
             else
               IrRtApp sym (mStepsList (fuel - 1) args)
@@ -1493,7 +1493,7 @@ mSteps fuel e =
               Nothing =>
                 if sym == irMRunName then
                   case args of
-                    [a] => IrApp (Just (Pair IrTyOpaque IrTyOpaque)) (IrGlobal "Base.Effect.Core.machineRun") (mSteps (fuel - 1) a)
+                    [a] => IrApp (Just (IrTyOpaque, IrTyOpaque)) (IrGlobal "Base.Effect.Core.machineRun") (mSteps (fuel - 1) a)
                     _ => foldAppMap (fuel - 1) (mSteps (fuel - 1) head) args
                 else
                   foldAppMap (fuel - 1) (mSteps (fuel - 1) head) args
@@ -1521,14 +1521,14 @@ mStepsList fuel xs =
       [] => []
       x :: rest => mSteps (fuel - 1) x :: mStepsList (fuel - 1) rest
 
-mStepsFields : Int -> List (Pair String Ir) -> List (Pair String Ir)
+mStepsFields : Int -> List (String, Ir) -> List (String, Ir)
 mStepsFields fuel fs =
   if fuel <= 0 then
     fs
   else
     case fs of
       [] => []
-      p :: rest => Pair (firstOf p) (mSteps (fuel - 1) (secondOf p)) :: mStepsFields (fuel - 1) rest
+      p :: rest => (firstOf p, mSteps (fuel - 1) (secondOf p)) :: mStepsFields (fuel - 1) rest
 
 mStepsAlts : Int -> List IrAlt -> List IrAlt
 mStepsAlts fuel alts =
@@ -1556,7 +1556,7 @@ foldAppMap fuel acc xs =
   else
     case xs of
       [] => acc
-      x :: rest => foldAppMap (fuel - 1) (IrApp (Just (Pair IrTyOpaque IrTyOpaque)) acc (mSteps (fuel - 1) x)) rest
+      x :: rest => foldAppMap (fuel - 1) (IrApp (Just (IrTyOpaque, IrTyOpaque)) acc (mSteps (fuel - 1) x)) rest
 
 -- | 机器 pass 注入的运行时全局；`mSteps` 只在本模块产生这条引用，deps 必须跟着体走。
 machineRunGlobal : String
@@ -1624,9 +1624,9 @@ anyMachine : List Ir -> Bool
 anyMachine [] = False
 anyMachine (x :: rest) = mentionsMachine x || anyMachine rest
 
-anyMachineFields : List (Pair String Ir) -> Bool
+anyMachineFields : List (String, Ir) -> Bool
 anyMachineFields [] = False
-anyMachineFields ((Pair _ fe) :: rest) = mentionsMachine fe || anyMachineFields rest
+anyMachineFields ((_, fe) :: rest) = mentionsMachine fe || anyMachineFields rest
 
 anyMachineAlts : List IrAlt -> Bool
 anyMachineAlts [] = False

@@ -47,7 +47,7 @@ export toDescList : TreeSet a -> List a
 toDescList (TreeSet m) = keysOf (Base.Container.TreeMap.toDescList m)
 
 -- | 内部：取条目键（尾递归累积 + 一次反转，长集合也不加深递归）。
-keysOf : List (Pair a b) -> List a
+keysOf : List (a, b) -> List a
 keysOf xs = reverse (foldl (\acc, p => firstOf p :: acc) [] xs)
 
 -- | 从列表构造（重复元素自然去重）。

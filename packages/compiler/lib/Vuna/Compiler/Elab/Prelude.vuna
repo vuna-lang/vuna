@@ -119,23 +119,22 @@ typeCtorKindTerm arity =
     TPi "_" False Rig0 (TType levelZero) (typeCtorKindTerm (arity - 1))
 
 -- | prelude 类型层全局：primitive 类型名 + 内建类型构造子的 kind。
-preludeTypeGlobals : List (Pair String Term)
+preludeTypeGlobals : List (String, Term)
 preludeTypeGlobals =
   append
-    (map (\n => Pair n (TType levelZero)) typeIntrinsicNames)
-    (map (\t => Pair (typeIntrinsicCtorName t) (typeCtorKindTerm (typeIntrinsicCtorArity t))) typeIntrinsicArities)
+    (map (\n => (n, TType levelZero)) typeIntrinsicNames)
+    (map (\t => (typeIntrinsicCtorName t, typeCtorKindTerm (typeIntrinsicCtorArity t))) typeIntrinsicArities)
 
-export preludeValueGlobals : List (Pair String Term)
-preludeValueGlobals =
-  map (\i => Pair (intrinsicName i) (ityToTerm (intrinsicSignature i))) userIntrinsics
+export preludeValueGlobals : List (String, Term)
+preludeValueGlobals = map (\i => (intrinsicName i, ityToTerm (intrinsicSignature i))) userIntrinsics
 
 -- 编译器 tracing 的隐藏原语签名：只进 prelude globals（供 `dbg!` 展开后的
 -- `@vuna@…` 类型检查），不进 `preludeValueNames`/用户可见名单。
-internalValueGlobals : List (Pair String Term)
+internalValueGlobals : List (String, Term)
 internalValueGlobals =
-  map (\i => Pair (intrinsicName i) (ityToTerm (intrinsicSignature i))) internalIntrinsics
+  map (\i => (intrinsicName i, ityToTerm (intrinsicSignature i))) internalIntrinsics
 
-export preludeGlobals : List (Pair String Term)
+export preludeGlobals : List (String, Term)
 preludeGlobals = append preludeTypeGlobals (append preludeValueGlobals internalValueGlobals)
 
 -- 「禁止重定义」名单：primitive 类型名 + 内建类型构造子 + 全部用户可见内建值名。
@@ -177,10 +176,10 @@ baseNameOf : String -> String
 baseNameOf name = lastSeg name
 
 -- 类方法（按短名）的投影全局名：Loader 把 trait 方法 mangle 成 `<模块前缀>.<方法短名>`。
-export classMethodProjection : List (Pair String Term) -> String -> String
+export classMethodProjection : List (String, Term) -> String -> String
 classMethodProjection methods short = classMethodProjectionGo short methods short
 
-classMethodProjectionGo : String -> List (Pair String Term) -> String -> String
+classMethodProjectionGo : String -> List (String, Term) -> String -> String
 classMethodProjectionGo short [] fallback = fallback
 classMethodProjectionGo short (m :: rest) fallback =
   if baseNameOf (firstOf m) == short then firstOf m else classMethodProjectionGo short rest fallback

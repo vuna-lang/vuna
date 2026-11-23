@@ -44,30 +44,30 @@ checkGroupOrderGo (g :: rest) seen nameTbl =
       icInternal
         "IR group order is inconsistent: `${secondOf bad}` referenced before it is defined (group of `${firstOf bad}`)"
 
-firstUnorderedDep : HashMap String Bool -> HashMap String Bool -> List IrDef -> Maybe (Pair String String)
+firstUnorderedDep : HashMap String Bool -> HashMap String Bool -> List IrDef -> Maybe (String, String)
 firstUnorderedDep nameTbl visible defs = firstUnorderedDepGo nameTbl visible defs
 
-firstUnorderedDepGo : HashMap String Bool -> HashMap String Bool -> List IrDef -> Maybe (Pair String String)
+firstUnorderedDepGo : HashMap String Bool -> HashMap String Bool -> List IrDef -> Maybe (String, String)
 firstUnorderedDepGo nameTbl visible [] = Nothing
 firstUnorderedDepGo nameTbl visible (d :: rest) =
   case firstMissingDep nameTbl visible (irDefName d) (irDefDeps d) of
     Just bad => Just bad
     Nothing => firstUnorderedDepGo nameTbl visible rest
 
-firstMissingDep : HashMap String Bool -> HashMap String Bool -> String -> List String -> Maybe (Pair String String)
+firstMissingDep : HashMap String Bool -> HashMap String Bool -> String -> List String -> Maybe (String, String)
 firstMissingDep nameTbl visible self [] = Nothing
 firstMissingDep nameTbl visible self (dep :: rest) =
   if HashMap.member dep nameTbl then
     if HashMap.member dep visible then
       firstMissingDep nameTbl visible self rest
     else
-      Just (Pair self dep)
+      Just (self, dep)
   else
     firstMissingDep nameTbl visible self rest
 
 -- | 每个运行时符号都必须在 `Ir.Runtime` 契约里；饱和应用还必须与 `irInlineArity` 一致。
 -- 违反即编译器 bug（内部错），不是用户面诊断。
-checkSymbolRefs : List (Pair String (Maybe Int)) -> Check Int
+checkSymbolRefs : List (String, Maybe Int) -> Check Int
 checkSymbolRefs [] = OkC 0
 checkSymbolRefs (p :: rest) =
   case irRtLookup (firstOf p) of
@@ -184,7 +184,7 @@ checkNodeBinderTys shared decls (IrCast from to _) =
 checkNodeBinderTys shared decls (IrTail inner) = checkNodeBinderTys shared decls inner
 checkNodeBinderTys shared decls _ = OkC 0
 
-checkAppTy : List IrTyDecl -> Maybe (Pair IrTy IrTy) -> Check Int
+checkAppTy : List IrTyDecl -> Maybe (IrTy, IrTy) -> Check Int
 checkAppTy decls Nothing = icInternal "IR application has an empty runtime type slot"
 checkAppTy decls (Just p) =
   Vuna.Compiler.Base.Common.bind
@@ -216,7 +216,7 @@ checkCtorArity : IrShared -> String -> String -> Int -> Check Int
 checkCtorArity shared family ctor nargs =
   case irSharedCtorShapeOf ctor shared.irSharedCtorShapes of
     Nothing => icInternal "IR references an undeclared constructor: `${ctor}`"
-    Just (Pair fam flags) =>
+    Just (fam, flags) =>
       if fam == family then
         let
           n = countKeptFlags flags
@@ -344,9 +344,9 @@ checkDeclSlots all (IrVariantDecl name n ctors) = checkDeclCtorSlots all name n 
 checkDeclSlots all (IrRecordDecl name n fields tys) = checkTyArityListIn all (Just n) tys
 checkDeclSlots all (IrUnboxedDecl name n ty) = checkTyArityIn all (Just n) ty
 
-checkDeclCtorSlots : List IrTyDecl -> String -> Int -> List (Pair String (List IrTy)) -> Check Int
+checkDeclCtorSlots : List IrTyDecl -> String -> Int -> List (String, List IrTy) -> Check Int
 checkDeclCtorSlots all name n [] = OkC 0
-checkDeclCtorSlots all name n ((Pair ctor tys) :: rest) =
+checkDeclCtorSlots all name n ((ctor, tys) :: rest) =
   Vuna.Compiler.Base.Common.bind
     (checkTyArityListIn all (Just n) tys)
     (\_ => checkDeclCtorSlots all name n rest)
@@ -383,55 +383,55 @@ checkScopedDefs (d :: rest) =
     Nothing => checkScopedDefs rest
     Just body =>
       Vuna.Compiler.Base.Common.bind
-        (checkScopedWork (scopedFuelOf body + 1) [Pair [] body])
+        (checkScopedWork (scopedFuelOf body + 1) [([], body)])
         (\_ => checkScopedDefs rest)
 
 scopedFuelOf : Ir -> Int
 scopedFuelOf body = 8 * irSize body + 64
 
-checkScopedWork : Int -> List (Pair (List IrBinder) Ir) -> Check Int
+checkScopedWork : Int -> List (List IrBinder, Ir) -> Check Int
 checkScopedWork fuel work =
   if fuel <= 0 then
     icFuel "ir-scope"
   else
     case work of
       [] => OkC 0
-      (Pair scope ir) :: rest =>
+      (scope, ir) :: rest =>
         case ir of
           IrVar b => if b.irBinderErased then icInternal "erased binder reached runtime IR" else if memBinder b scope then checkScopedWork (fuel - 1) rest else icInternal "IR variable references a binder outside its scope"
           _ => checkScopedWork (fuel - 1) (append (scopedChildren scope ir) rest)
 
 -- 子节点 + 它们的作用域：只有 `IrLam` / `IrLet` / `IrCase` / `IrNatCase` 引入 binder。
-scopedChildren : List IrBinder -> Ir -> List (Pair (List IrBinder) Ir)
-scopedChildren scope (IrCtor family ctor _ args) = map (\a => Pair scope a) args
-scopedChildren scope (IrRecord family _ fields) = map (\p => Pair scope (secondOf p)) fields
-scopedChildren scope (IrProj base family field _) = [Pair scope base]
+scopedChildren : List IrBinder -> Ir -> List (List IrBinder, Ir)
+scopedChildren scope (IrCtor family ctor _ args) = map (\a => (scope, a)) args
+scopedChildren scope (IrRecord family _ fields) = map (\p => (scope, secondOf p)) fields
+scopedChildren scope (IrProj base family field _) = [(scope, base)]
 scopedChildren scope (IrRecUpd base family fields _) =
-  Pair scope base :: map (\p => Pair scope (secondOf p)) fields
-scopedChildren scope (IrRtApp sym args) = map (\a => Pair scope a) args
-scopedChildren scope (IrCast cFrom cTo inner) = [Pair scope inner]
-scopedChildren scope (IrLet bs scrut body) = [Pair scope scrut, Pair (append bs scope) body]
-scopedChildren scope (IrLam bs _ body) = [Pair (append bs scope) body]
-scopedChildren scope (IrApp _ f a) = [Pair scope f, Pair scope a]
-scopedChildren scope (IrIf c th el) = [Pair scope c, Pair scope th, Pair scope el]
-scopedChildren scope (IrCase _ _ scrut alts) = Pair scope scrut :: altWork scope alts
+  (scope, base) :: map (\p => (scope, secondOf p)) fields
+scopedChildren scope (IrRtApp sym args) = map (\a => (scope, a)) args
+scopedChildren scope (IrCast cFrom cTo inner) = [(scope, inner)]
+scopedChildren scope (IrLet bs scrut body) = [(scope, scrut), (append bs scope, body)]
+scopedChildren scope (IrLam bs _ body) = [(append bs scope, body)]
+scopedChildren scope (IrApp _ f a) = [(scope, f), (scope, a)]
+scopedChildren scope (IrIf c th el) = [(scope, c), (scope, th), (scope, el)]
+scopedChildren scope (IrCase _ _ scrut alts) = (scope, scrut) :: altWork scope alts
 scopedChildren scope (IrNatCase scrut fresh zero succ catch) =
   append
-    [Pair scope scrut]
+    [(scope, scrut)]
     (append (altWork scope (maybeAlts zero)) (append (altWork scope (maybeAlts succ)) (altWork scope (maybeAlts catch))))
-scopedChildren scope (IrConcatMany parts) = map (\a => Pair scope a) parts
-scopedChildren scope (IrEffThunk family ctor unitTy arity prim) = [Pair scope prim]
-scopedChildren scope (IrTail inner) = [Pair scope inner]
+scopedChildren scope (IrConcatMany parts) = map (\a => (scope, a)) parts
+scopedChildren scope (IrEffThunk family ctor unitTy arity prim) = [(scope, prim)]
+scopedChildren scope (IrTail inner) = [(scope, inner)]
 scopedChildren scope _ = []
 
 maybeAlts : Maybe IrAlt -> List IrAlt
 maybeAlts Nothing = []
 maybeAlts (Just alt) = [alt]
 
-altWork : List IrBinder -> List IrAlt -> List (Pair (List IrBinder) Ir)
+altWork : List IrBinder -> List IrAlt -> List (List IrBinder, Ir)
 altWork scope [] = []
 altWork scope (alt :: rest) =
-  Pair (append (irAltBindersOf alt) scope) (irAltBodyOf alt) :: altWork scope rest
+  (append (irAltBindersOf alt) scope, irAltBodyOf alt) :: altWork scope rest
 
 -- 结构子节点（不含作用域）：`checkBinderTys` 只按节点校验注解，不需要 binder 作用域；
 -- 用它替代 `scopedChildren []` 省掉「造 scope 对、再 map secondOf 丢掉」的整轮分配。

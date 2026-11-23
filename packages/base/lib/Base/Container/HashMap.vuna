@@ -19,7 +19,7 @@ import Base.Trait.Num
 -- | 键泛型的持久哈希映射：1024 桶（两层 32 叉 `Array`）结构；构造器不导出，只能经本模块 API 使用。
 export record HashMap k v where
   -- | 桶数组（两层 32 叉）；空表用 `[||]` 表示，首次 `insert` 才分配 32×32 桶。
-  hashMapBuckets : Array (Array (List (Pair k v)))
+  hashMapBuckets : Array (Array (List (k, v)))
   -- | 键值对个数（`size` 的 O(1) 来源；`insert` 去重、`remove` 摘除时维护）。
   hashMapCount : Int
 
@@ -31,29 +31,29 @@ _bucketOf n =
   in if m < 0 then m + 1024 else m
 
 -- | 内部：桶内插入或替换；返回「是否新建键」（`True` 才增加计数）。
-_bucketInsert : Eq k => k -> v -> List (Pair k v) -> Pair Bool (List (Pair k v))
-_bucketInsert key v [] = Pair True [Pair key v]
-_bucketInsert key v ((Pair k2 v2) :: rest) =
+_bucketInsert : Eq k => k -> v -> List (k, v) -> (Bool, List (k, v))
+_bucketInsert key v [] = (True, [(key, v)])
+_bucketInsert key v ((k2, v2) :: rest) =
   if key == k2 then
-    Pair False (Pair key v :: rest)
+    (False, (key, v) :: rest)
   else
     case _bucketInsert key v rest of
-      Pair added rest2 => Pair added (Pair k2 v2 :: rest2)
+      (added, rest2) => (added, (k2, v2) :: rest2)
 
 -- | 内部：桶内删除；返回「是否真的删掉了」。
-_bucketRemove : Eq k => k -> List (Pair k v) -> Pair Bool (List (Pair k v))
-_bucketRemove key [] = Pair False []
-_bucketRemove key ((Pair k2 v2) :: rest) =
+_bucketRemove : Eq k => k -> List (k, v) -> (Bool, List (k, v))
+_bucketRemove key [] = (False, [])
+_bucketRemove key ((k2, v2) :: rest) =
   if key == k2 then
-    Pair True rest
+    (True, rest)
   else
     case _bucketRemove key rest of
-      Pair removed rest2 => Pair removed (Pair k2 v2 :: rest2)
+      (removed, rest2) => (removed, (k2, v2) :: rest2)
 
 -- | 内部：桶内线性查找第一个匹配键。
-_lookupAssoc : Eq k => k -> List (Pair k v) -> Maybe v
+_lookupAssoc : Eq k => k -> List (k, v) -> Maybe v
 _lookupAssoc key [] = Nothing
-_lookupAssoc key ((Pair k v) :: rest) = if key == k then Just v else _lookupAssoc key rest
+_lookupAssoc key ((k, v) :: rest) = if key == k then Just v else _lookupAssoc key rest
 
 -- 空表用 `[||]`（non-expansive，可泛化）；`Array.make` 是函数应用，会触发弱类型变量。
 -- | 插入键值；同键替换为最新值（桶内命中即替换）。`Array.set` 是 copy-on-write，返回新表。
@@ -72,7 +72,7 @@ insert key v (HashMap outers n) =
     outer = Base.Container.Array.get base oi
     inner = Base.Container.Array.get outer ii
   in case _bucketInsert key v inner of
-    Pair added inner2 =>
+    (added, inner2) =>
       HashMap
         (Base.Container.Array.set base oi (Base.Container.Array.set outer ii inner2))
         (if added then n + 1 else n)
@@ -91,8 +91,8 @@ remove key (t@(HashMap outers n)) =
       outer = Base.Container.Array.get outers oi
       inner = Base.Container.Array.get outer ii
     in case _bucketRemove key inner of
-      Pair False _ => t
-      Pair True inner2 => HashMap (Base.Container.Array.set outers oi (Base.Container.Array.set outer ii inner2)) (n - 1)
+      (False, _) => t
+      (True, inner2) => HashMap (Base.Container.Array.set outers oi (Base.Container.Array.set outer ii inner2)) (n - 1)
 
 -- | 按键查找，返回 `Maybe v`；桶内命中第一个匹配即返回（该键最新值）。
 export lookup : Eq k, Hashable k => k -> HashMap k v -> Maybe v
@@ -115,21 +115,21 @@ member key t =
     Nothing => False
 
 -- | 批量插入 `Pair` 列表：**后面的条目覆盖前面的**（与 `fromList` 的优先顺序相反）。
-export insertAll : Eq k, Hashable k => List (Pair k v) -> HashMap k v -> HashMap k v
+export insertAll : Eq k, Hashable k => List (k, v) -> HashMap k v -> HashMap k v
 insertAll [] t = t
-insertAll ((Pair k v) :: rest) t = insertAll rest (insert k v t)
+insertAll ((k, v) :: rest) t = insertAll rest (insert k v t)
 
 -- | 从 `Pair` 列表构造：**前面的条目优先**（先递归 rest，再插头部），与 [Base.Container.HashMap.insertAll] 的「后者覆盖前者」相反。
-export fromList : Eq k, Hashable k => List (Pair k v) -> HashMap k v
+export fromList : Eq k, Hashable k => List (k, v) -> HashMap k v
 fromList [] = HashMap arrayEmpty 0
-fromList ((Pair k v) :: rest) = insert k v (fromList rest)
+fromList ((k, v) :: rest) = insert k v (fromList rest)
 
 -- | 名字集合的成员判定表：每个名字映射到 True。
 export ofNames : List String -> HashMap String Bool
-ofNames xs = insertAll (map (\n => Pair n True) xs) (fromList [])
+ofNames xs = insertAll (map (\n => (n, True)) xs) (fromList [])
 
 -- | 按桶序展开所有键值对（同键只有一条）；**不保证插入序**。
-export toList : HashMap k v -> List (Pair k v)
+export toList : HashMap k v -> List (k, v)
 toList (HashMap outers _) =
   concatMap
     (\outer => concatMap (\inner => inner) (Base.Container.Array.toList outer))

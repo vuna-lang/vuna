@@ -16,16 +16,16 @@ import Vuna.Compiler.Base.Intrinsics
 -- ---------------------------------------------------------------------------
 -- 类参数的 kind 推断（多参数 trait 逐参数调用）：参数名被应用了 k 个实参就当
 -- `Type -> ... -> Type`（k 个箭头），从未被应用就是 `Type`。
-export classParamKindOf : String -> List (Pair String Expr) -> Term
+export classParamKindOf : String -> List (String, Expr) -> Term
 classParamKindOf pname methods = arityFun (methodMaxAppArity pname methods) (TType levelZero)
 
-export classParamKind : String -> List (Pair String Expr) -> Term
+export classParamKind : String -> List (String, Expr) -> Term
 classParamKind pname methods = classParamKindOf pname methods
 
 export arityFun : Int -> Term -> Term
 arityFun n res = if n <= 0 then res else TPi "_" False Rig0 (TType levelZero) (arityFun (n - 1) res)
 
-methodMaxAppArity : String -> List (Pair String Expr) -> Int
+methodMaxAppArity : String -> List (String, Expr) -> Int
 methodMaxAppArity pname methods =
   maxIntList (map (\m => exprMaxAppArity pname (secondOf m)) methods)
 
@@ -118,30 +118,30 @@ quantifyTopKindsWith domOf (n :: rest) scanExprs e sp =
 
 -- 签名约束里的 `Member n e r`：收集 n/r 的域覆盖（String/Row），供量化使用。
 -- 只有顶层签名 ctx 走这里；`Member` 本身仍是 Base.Effect.Core 的 data family，不是 trait。
-memberDomainOverrides : List Expr -> List (Pair String Expr)
+memberDomainOverrides : List Expr -> List (String, Expr)
 memberDomainOverrides [] = []
 memberDomainOverrides (e :: rest) = append (memberDomainOverridesOne e) (memberDomainOverrides rest)
 
-memberDomainOverridesOne : Expr -> List (Pair String Expr)
+memberDomainOverridesOne : Expr -> List (String, Expr)
 memberDomainOverridesOne (EApp (EVar g _) ([nExpr, _, rExpr]) sp) =
   if rnameKey g == effMemberFamilyName then
     let
       nPart =
         case nExpr of
-          EVar n nsp => [Pair (rnameKey n) (EVar (classifyName strTypeName) nsp)]
+          EVar n nsp => [(rnameKey n, EVar (classifyName strTypeName) nsp)]
           _ => []
       rPart =
         case rExpr of
-          EVar r rsp => [Pair (rnameKey r) (EVar (classifyName effRowFamilyName) rsp)]
+          EVar r rsp => [(rnameKey r, EVar (classifyName effRowFamilyName) rsp)]
           _ => []
     in append nPart rPart
   else
     []
 memberDomainOverridesOne _ = []
 
-memberDomainOf : List (Pair String Expr) -> String -> Maybe Expr
+memberDomainOf : List (String, Expr) -> String -> Maybe Expr
 memberDomainOf [] n = Nothing
-memberDomainOf ((Pair k v) :: rest) n = if k == n then Just v else memberDomainOf rest n
+memberDomainOf ((k, v) :: rest) n = if k == n then Just v else memberDomainOf rest n
 
 kindArrowExpr : Int -> Span -> Expr
 kindArrowExpr k sp =
@@ -195,12 +195,12 @@ quantifyTopSig banned ty sp =
 -- data 声明里每个族的**参数 kind**（kind 的箭头域，源语法形态）。
 -- 自由名作为类型构造子实参时用它定 kind：`Box f` 里的 `f` 需要 `Type -> Type`，
 -- 只看「被应用了几次」会把 `f` 判成 `Type`（`Box f` 于是报 kind 不匹配）。
-export dataParamKindTbl : List Decl -> List (Pair String (List Expr))
+export dataParamKindTbl : List Decl -> List (String, List Expr)
 dataParamKindTbl [] = []
 dataParamKindTbl (d :: rest) =
   case d of
     DData name params kind ctors derivings viaField repr lin sp =>
-      Pair name (kindDomains kind) :: dataParamKindTbl rest
+      (name, kindDomains kind) :: dataParamKindTbl rest
     _ => dataParamKindTbl rest
 
 -- 两种箭头编码都要认：binder 形态是 `EPi`，匿名 `A -> B` 是 `EApp (EVar "->") [A, B]`
@@ -220,10 +220,10 @@ kindDomains _ = []
 -- 只收集直接写出的 `T x1 … xk`（`EVar T` 应用）里的裸变量实参；实参本身是应用时
 -- 交给「按应用次数」的规则。
 -- | `argParamKinds` 的一组表达式版本（签名 ctx ++ 返回类型）。
-export argParamKindsIn : List (Pair String (List Expr)) -> List Expr -> List (Pair String Expr)
+export argParamKindsIn : List (String, List Expr) -> List Expr -> List (String, Expr)
 argParamKindsIn tbl exprs = concatMap (argParamKinds tbl) exprs
 
-export argParamKinds : List (Pair String (List Expr)) -> Expr -> List (Pair String Expr)
+export argParamKinds : List (String, List Expr) -> Expr -> List (String, Expr)
 argParamKinds tbl (EApp (EVar t _) args sp) =
   append (zipArgKinds (lookupParamKinds tbl (rnameKey t)) args) (concatMap (argParamKinds tbl) args)
 argParamKinds tbl (EApp fn args sp) =
@@ -242,21 +242,20 @@ argParamKinds tbl (ERecUpdate b fields sp) = argParamKinds tbl b
 argParamKinds tbl (EAnn v ty sp) = append (argParamKinds tbl v) (argParamKinds tbl ty)
 argParamKinds tbl _ = []
 
-lookupParamKinds : List (Pair String (List Expr)) -> String -> Maybe (List Expr)
+lookupParamKinds : List (String, List Expr) -> String -> Maybe (List Expr)
 lookupParamKinds [] name = Nothing
-lookupParamKinds ((Pair n ks) :: rest) name =
-  if n == name then Just ks else lookupParamKinds rest name
+lookupParamKinds ((n, ks) :: rest) name = if n == name then Just ks else lookupParamKinds rest name
 
-zipArgKinds : Maybe (List Expr) -> List Expr -> List (Pair String Expr)
+zipArgKinds : Maybe (List Expr) -> List Expr -> List (String, Expr)
 zipArgKinds Nothing args = []
 zipArgKinds (Just doms) args = zipArgKindsGo doms args
 
-zipArgKindsGo : List Expr -> List Expr -> List (Pair String Expr)
+zipArgKindsGo : List Expr -> List Expr -> List (String, Expr)
 zipArgKindsGo [] args = []
 zipArgKindsGo doms [] = []
 zipArgKindsGo (dom :: drest) (a :: arest) =
   case a of
-    EVar n nsp => Pair (rnameKey n) dom :: zipArgKindsGo drest arest
+    EVar n nsp => (rnameKey n, dom) :: zipArgKindsGo drest arest
     _ => zipArgKindsGo drest arest
 
 -- 顶层量化要排除的名字集合（本程序定义名 + 内建 prelude 名），哈希集合 O(1) 判定。
@@ -281,7 +280,7 @@ filterNamesInModule sigName (n :: rest) =
 export modulePrefixOf : String -> String
 modulePrefixOf name =
   case splitLastDot (splitOnDot name) of
-    Pair rev base => joinDots rev
+    (rev, base) => joinDots rev
 
 -- ---------------------------------------------------------------
 -- 签名量化的**共享 banned 表**
@@ -295,7 +294,7 @@ modulePrefixOf name =
 export qualifiedBannedTbl : List String -> HashMap String Bool
 qualifiedBannedTbl defined =
   HashMap.insertAll
-    (map (\n => Pair (qualifiedKey (modulePrefixOf n) n) True) defined)
+    (map (\n => (qualifiedKey (modulePrefixOf n) n, True)) defined)
     (HashMap.fromList [])
 
 qualifiedKey : String -> String -> String
@@ -328,7 +327,7 @@ quantifyTopSigCtxCached prefix banned preludeBanned ctx ty sp =
 
 -- 与 `quantifyTopSigCtxCached` 同义，额外用 data 声明的参数 kind 给「作为类型构造子
 -- 实参的自由名」定 kind（优先级：`Member` 域覆盖 > 参数位置 kind > 按应用次数）。
-export quantifyTopSigCtxCachedKinds : String -> HashMap String Bool -> HashMap String Bool -> List (Pair String (List Expr)) -> List Expr -> Expr -> Span -> Expr
+export quantifyTopSigCtxCachedKinds : String -> HashMap String Bool -> HashMap String Bool -> List (String, List Expr) -> List Expr -> Expr -> Span -> Expr
 quantifyTopSigCtxCachedKinds prefix banned preludeBanned paramKinds ctx ty sp =
   let
     scanExprs = append ctx [ty]
@@ -339,15 +338,15 @@ quantifyTopSigCtxCachedKinds prefix banned preludeBanned paramKinds ctx ty sp =
   in quantifyTopKindsWith (kindOverrideOf memberOverrides argOverrides) names scanExprs ty sp
 
 -- kind 来源优先级：`Member` 域覆盖 > 参数位置 kind > 按应用次数（后者由调用点兜底）。
-kindOverrideOf : List (Pair String Expr) -> List (Pair String Expr) -> String -> Maybe Expr
+kindOverrideOf : List (String, Expr) -> List (String, Expr) -> String -> Maybe Expr
 kindOverrideOf memberOverrides argOverrides n =
   case memberDomainOf memberOverrides n of
     Just d => Just d
     Nothing => paramKindOf argOverrides n
 
-paramKindOf : List (Pair String Expr) -> String -> Maybe Expr
+paramKindOf : List (String, Expr) -> String -> Maybe Expr
 paramKindOf [] n = Nothing
-paramKindOf ((Pair k d) :: rest) n = if k == n then Just d else paramKindOf rest n
+paramKindOf ((k, d) :: rest) n = if k == n then Just d else paramKindOf rest n
 
 keepOutQualified : String -> HashMap String Bool -> HashMap String Bool -> List String -> List String
 keepOutQualified prefix banned preludeBanned [] = []

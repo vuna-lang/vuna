@@ -160,11 +160,11 @@ markFormatExplicit o =
     o.optWasmOpt
 
 -- 显式 state 辅助：把不改 opts 的动作结果带回（退出码 + 当前 CliOpts）。
-withOpts : {r : Row} -> CliOpts -> Eff r Int -> Eff r (Pair Int CliOpts)
+withOpts : {r : Row} -> CliOpts -> Eff r Int -> Eff r (Int, CliOpts)
 withOpts o m =
   do
     code <- m
-    pure (Pair code o)
+    pure (code, o)
 
 diagExitFor : Diagnostic -> Int
 diagExitFor d =
@@ -384,10 +384,10 @@ moduleOfRel rel =
       if endsWith ".vuna" rel1 then substring 0 (natFromInt (strLength rel1 - 5)) rel1 else rel1
   in join "." (splitSlash rel2)
 
-findPkgRootGo : Member nFs FsOp r => Int -> String -> Eff r (Pair String String)
+findPkgRootGo : Member nFs FsOp r => Int -> String -> Eff r (String, String)
 findPkgRootGo fuel dir =
   if fuel <= 0 then
-    pure (Pair "" "")
+    pure ("", "")
   else
     let
       candidate = if dir == "/" then "/vuna.toml" else "${dir}/vuna.toml"
@@ -404,8 +404,8 @@ findPkgRootGo fuel dir =
                     Nothing => ""
                     Just n => n
                 ErrC _ => ""
-          in pure (Pair dir name)
-      else if dir == "/" || dir == "." then pure (Pair "" "") else findPkgRootGo (fuel - 1) (dirOf dir)
+          in pure (dir, name)
+      else if dir == "/" || dir == "." then pure ("", "") else findPkgRootGo (fuel - 1) (dirOf dir)
 
 sourceRefEff : Member nFs FsOp r, Member nEnv EnvOp r => String -> Eff r SourceRef
 sourceRefEff file =
@@ -469,17 +469,17 @@ hasFormatFlag (arg :: rest) =
     hasFormatFlag rest
 
 -- | 剥离并解析诊断格式参数。
-stripDiagFormat : List String -> Pair (List String) (Maybe String)
+stripDiagFormat : List String -> (List String, Maybe String)
 stripDiagFormat args = stripDiagFormatGo args [] Nothing
 
 -- | 诊断格式参数扫描实现。
-stripDiagFormatGo : List String -> List String -> Maybe String -> Pair (List String) (Maybe String)
-stripDiagFormatGo [] acc found = Pair (reverse acc) found
+stripDiagFormatGo : List String -> List String -> Maybe String -> (List String, Maybe String)
+stripDiagFormatGo [] acc found = (reverse acc, found)
 stripDiagFormatGo ("--json" :: rest) acc found = stripDiagFormatGo rest acc (Just "json")
 stripDiagFormatGo ("--error-format" :: rest) acc found =
   case rest of
     value :: more => stripDiagFormatGo more acc (Just value)
-    [] => Pair (reverse acc) (Just "short")
+    [] => (reverse acc, Just "short")
 stripDiagFormatGo (arg :: rest) acc found =
   if startsWith "--error-format=" arg then
     stripDiagFormatGo
@@ -546,16 +546,16 @@ parseWasmOptLevel s =
   in if n >= 0 && n <= 3 then Just n else Nothing
 
 -- | 剥离并解析 --max-errors（写入全局上限）。
-stripMaxErrors : List String -> Pair (List String) Int
+stripMaxErrors : List String -> (List String, Int)
 stripMaxErrors args = stripMaxErrorsGo args [] 20
 
 -- | --max-errors 参数扫描实现。
-stripMaxErrorsGo : List String -> List String -> Int -> Pair (List String) Int
-stripMaxErrorsGo [] acc n = Pair (reverse acc) n
+stripMaxErrorsGo : List String -> List String -> Int -> (List String, Int)
+stripMaxErrorsGo [] acc n = (reverse acc, n)
 stripMaxErrorsGo ("--max-errors" :: rest) acc n =
   case rest of
     v :: more => stripMaxErrorsGo more acc (parseIntOr v n)
-    [] => Pair (reverse acc) n
+    [] => (reverse acc, n)
 stripMaxErrorsGo (arg :: rest) acc n =
   if startsWith "--max-errors=" arg then
     stripMaxErrorsGo
@@ -566,7 +566,7 @@ stripMaxErrorsGo (arg :: rest) acc n =
     stripMaxErrorsGo rest (arg :: acc) n
 
 -- | 编译器 CLI 子命令分发。
-runCompilerCliFor1 : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => String -> List String -> CliOpts -> Eff r (Pair Int CliOpts)
+runCompilerCliFor1 : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => String -> List String -> CliOpts -> Eff r (Int, CliOpts)
 runCompilerCliFor1 prog args o =
   case args of
     [] => withOpts o (usageErr prog)
@@ -676,28 +676,28 @@ severityLabelOf d =
     SevHelp => "help"
 
 -- 单条诊断按当前格式输出并返回退出码；json/sarif 时把诊断收集进 opts（显式写回）。
-emitDiag : Member nFs FsOp r, Member nConsole ConsoleOp r => CliOpts -> String -> Diagnostic -> Eff r (Pair Int CliOpts)
+emitDiag : Member nFs FsOp r, Member nConsole ConsoleOp r => CliOpts -> String -> Diagnostic -> Eff r (Int, CliOpts)
 emitDiag o extra d =
   if o.optDiagFormat == "json" then
-    pure (Pair (diagExitFor d) (collectSarifIn o d))
+    pure (diagExitFor d, collectSarifIn o d)
   else if o.optDiagFormat == "human" then
     do
       msg <- renderHuman o.optDiagLang d
       _ <- printErrText (msg ++ "\n")
-      pure (Pair (diagExitFor d) o)
+      pure (diagExitFor d, o)
   else if o.optDiagFormat == "sarif" then
-    pure (Pair (diagExitFor d) (collectSarifIn o d))
+    pure (diagExitFor d, collectSarifIn o d)
   else if o.optDiagFormat == "github" then
     do
       _ <- printErrText (renderGithub d ++ "\n")
-      pure (Pair (diagExitFor d) o)
+      pure (diagExitFor d, o)
   else
     do
       -- short：首行保持 `error: [pkg] file:line:col: [CODE] 消息`；片段从 label 结构化渲染。
       -- 终止性的 call 边另起若干行，否则「证不出终止性」这句话没有可操作信息。
       snippet <- renderShortSnippetEff d
       _ <- printErrText (severityLabelOf d ++ ": " ++ extra ++ renderShort d ++ snippet ++ callFieldSuffix d.diagFields ++ "\n")
-      pure (Pair (diagExitFor d) o)
+      pure (diagExitFor d, o)
 
 -- sarif/json 诊断收集（写回 CliOpts，显式 state 传递）。
 collectSarifIn : CliOpts -> Diagnostic -> CliOpts
@@ -714,7 +714,7 @@ emitDiagSeq o extra (d :: rest) =
     r <- emitDiag o extra d
     emitDiagSeq (secondOf r) extra rest
 
-printDiagWithPrefix : Member nFs FsOp r, Member nConsole ConsoleOp r => CliOpts -> String -> Diagnostic -> Eff r (Pair Int CliOpts)
+printDiagWithPrefix : Member nFs FsOp r, Member nConsole ConsoleOp r => CliOpts -> String -> Diagnostic -> Eff r (Int, CliOpts)
 printDiagWithPrefix o extra d =
   case d.diagChildren of
     [] => emitDiag o extra d
@@ -723,10 +723,10 @@ printDiagWithPrefix o extra d =
         shown = takeDiags (maxErrorsOf o) (d :: visibleDiags o d.diagChildren)
       in do
         o1 <- emitDiagRevSeq o extra shown
-        pure (Pair (diagExitFor d) o1)
+        pure (diagExitFor d, o1)
 
 -- | 输出错误诊断并返回退出码。
-printDiag : Member nFs FsOp r, Member nConsole ConsoleOp r => CliOpts -> Diagnostic -> Eff r (Pair Int CliOpts)
+printDiag : Member nFs FsOp r, Member nConsole ConsoleOp r => CliOpts -> Diagnostic -> Eff r (Int, CliOpts)
 printDiag o d = printDiagWithPrefix o "" d
 
 -- | 诊断输出辅助：printErr。
@@ -734,13 +734,13 @@ printErr : Member nConsole ConsoleOp r => String -> Eff r Int
 printErr e = printErrText "error: ${e}\n"
 
 -- | 诊断/告警实现：printDiagList（详见 diagnostics.md）。
-printDiagList : Member nFs FsOp r, Member nConsole ConsoleOp r => CliOpts -> String -> List Diagnostic -> Eff r (Pair Int CliOpts)
+printDiagList : Member nFs FsOp r, Member nConsole ConsoleOp r => CliOpts -> String -> List Diagnostic -> Eff r (Int, CliOpts)
 printDiagList o extra ds =
   let
     shown = takeDiags (maxErrorsOf o) (visibleDiags o ds)
   in do
     o1 <- emitDiagRevSeq o extra shown
-    pure (Pair 0 o1)
+    pure (0, o1)
 
 defaultDir : Maybe String -> String
 defaultDir (Just dir2) = dir2
@@ -780,10 +780,10 @@ executablePackageAt label dir =
 -- 或包目录入口（可执行包），逐模块写出到 OUTDIR；成功静默。
 -- ---------------------------------------------------------------
 -- | CLI 辅助：compileArgs（参数/退出码约定见 tooling.md）。
-compileArgs : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> List String -> CliOpts -> Eff r (Pair Int CliOpts)
+compileArgs : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> List String -> CliOpts -> Eff r (Int, CliOpts)
 compileArgs prog args o = compileParse prog True Nothing Nothing args o
 
-compileParse : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Bool -> Maybe String -> Maybe String -> List String -> CliOpts -> Eff r (Pair Int CliOpts)
+compileParse : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Bool -> Maybe String -> Maybe String -> List String -> CliOpts -> Eff r (Int, CliOpts)
 compileParse prog printResult entry outDir args o =
   case args of
     [] => compileFinish prog printResult entry outDir o
@@ -809,14 +809,14 @@ compileParse prog printResult entry outDir args o =
 isKnownTarget : String -> Bool
 isKnownTarget t = t == "ocaml" || t == "wasm" || t == "native"
 
-compileFinish : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Bool -> Maybe String -> Maybe String -> CliOpts -> Eff r (Pair Int CliOpts)
+compileFinish : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Bool -> Maybe String -> Maybe String -> CliOpts -> Eff r (Int, CliOpts)
 compileFinish prog printResult Nothing outDir o = withOpts o (usageErr prog)
 compileFinish prog printResult (Just e) outDir o =
   case outDir of
     Nothing => withOpts o (usageErr prog)
     Just out => compileRun printResult e out o
 
-compileRun : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Bool -> String -> String -> CliOpts -> Eff r (Pair Int CliOpts)
+compileRun : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Bool -> String -> String -> CliOpts -> Eff r (Int, CliOpts)
 compileRun printResult entry outDir o =
   do
     exists <- fsFileExists entry
@@ -828,7 +828,7 @@ compileRun printResult entry outDir o =
       withOpts o (dtPathErr entry)
 
 -- | 按 `--target` 选择后端；wasm/native 分支不产 OCaml split 目录。
-compileToTarget : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Bool -> String -> String -> Eff r (Check (Pair (List String) (List Diagnostic)))
+compileToTarget : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Bool -> String -> String -> Eff r (Check (List String, List Diagnostic))
 compileToTarget ctx entry printResult outDir target =
   if target == "ocaml" then
     do
@@ -836,12 +836,12 @@ compileToTarget ctx entry printResult outDir target =
       pure (
           case r of
             ErrC e => ErrC e
-            OkC p => OkC (Pair [] (secondOf p))
+            OkC p => OkC ([], secondOf p)
         )
   else
     compileBackend ctx target entry printResult outDir
 
-compileFileEntry : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Bool -> String -> String -> CliOpts -> Eff r (Pair Int CliOpts)
+compileFileEntry : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Bool -> String -> String -> CliOpts -> Eff r (Int, CliOpts)
 compileFileEntry printResult entry outDir o =
   do
     ctxR <- contextForFile entry
@@ -857,7 +857,7 @@ compileFileEntry printResult entry outDir o =
             ErrC e => printDiag o1 e
             OkC p => finishWarningsDir (secondOf p) o1 outDir 0
 
-compilePkgDir : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Bool -> String -> String -> CliOpts -> Eff r (Pair Int CliOpts)
+compilePkgDir : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Bool -> String -> String -> CliOpts -> Eff r (Int, CliOpts)
 compilePkgDir printResult dir outDir o =
   do
     pkgR <- executablePackage "compile" dir
@@ -876,7 +876,7 @@ compilePkgDir printResult dir outDir o =
 -- check：文件入口（包上下文）或包目录（可执行包 check 入口；库包 check [export].modules）
 -- ---------------------------------------------------------------
 -- | CLI 辅助：checkArgs（参数/退出码约定见 tooling.md）。
-checkArgs : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => String -> List String -> CliOpts -> Eff r (Pair Int CliOpts)
+checkArgs : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => String -> List String -> CliOpts -> Eff r (Int, CliOpts)
 checkArgs prog [] o = withOpts o (usageErr prog)
 checkArgs prog ("--release" :: rest) o = checkArgs prog rest (markRelease o)
 checkArgs prog (arg :: rest) o =
@@ -888,7 +888,7 @@ checkArgs prog (arg :: rest) o =
       _ => withOpts o (usageErr prog)
 
 -- | CLI 辅助：checkEmit（参数/退出码约定见 tooling.md）。
-checkEmit : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => String -> CliOpts -> Eff r (Pair Int CliOpts)
+checkEmit : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => String -> CliOpts -> Eff r (Int, CliOpts)
 checkEmit path o =
   do
     exists <- fsFileExists path
@@ -899,7 +899,7 @@ checkEmit path o =
     else
       withOpts o (dtPathErr path)
 
-checkPkgDir : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => String -> CliOpts -> Eff r (Pair Int CliOpts)
+checkPkgDir : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => String -> CliOpts -> Eff r (Int, CliOpts)
 checkPkgDir dir o =
   do
     pkgsR <- workspacePackages dir
@@ -939,8 +939,8 @@ checkSpawnArgs o dir =
 isMachineFormat : String -> Bool
 isMachineFormat f = f == "json" || f == "sarif"
 
-checkPackages : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => List Package -> Int -> CliOpts -> Eff r (Pair Int CliOpts)
-checkPackages [] code o = pure (Pair code o)
+checkPackages : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => List Package -> Int -> CliOpts -> Eff r (Int, CliOpts)
+checkPackages [] code o = pure (code, o)
 checkPackages ([pkg]) code o = checkPackageSeq pkg code o
 -- 成员在父进程内逐个检查，诊断进同一个 optSarifItems，stdout 只在最后的
 -- flushSarif 输出一次（多进程各打一份会得到非法 JSON / 多份 SARIF）。
@@ -959,8 +959,8 @@ checkPackages pkgs code o =
 -- 为什么分层而不是一次全起：成员的 check 只有在「全部依赖包接口已落盘」时才走摘要路径
 -- （`summaryCheckExeParts` 的 `depIfacesOf`）；缺一个兄弟包接口就退回整闭包全量
 -- （`cache-path=full`），同一份编译器源码被精化多次。分层后同层仍并行，跨层等接口。
-checkPackagesSpawn : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => List Package -> Int -> CliOpts -> Eff r (Pair Int CliOpts)
-checkPackagesSpawn [] code o = pure (Pair code o)
+checkPackagesSpawn : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => List Package -> Int -> CliOpts -> Eff r (Int, CliOpts)
+checkPackagesSpawn [] code o = pure (code, o)
 checkPackagesSpawn pkgs code o =
   do
     let
@@ -974,10 +974,10 @@ checkPackagesSpawn pkgs code o =
 -- 每轮挑出「依赖的成员包都已检查完」的那批一起跑，跑完进入下一轮。
 -- 轮数上界 = 成员数（每轮至少摘掉一个），因此用成员数作 fuel；fuel 用尽说明依赖成环
 -- （loader 已拒环），剩余一次全起，不静默跳过。
-checkMembersByLevel : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Int -> List Package -> List String -> List String -> Int -> CliOpts -> Eff r (Pair Int CliOpts)
+checkMembersByLevel : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Int -> List Package -> List String -> List String -> Int -> CliOpts -> Eff r (Int, CliOpts)
 checkMembersByLevel fuel pending memberNames done code o =
   if length pending == 0 then
-    pure (Pair code o)
+    pure (code, o)
   else if fuel <= 0 then
     checkMembersParallel pending code o
   else
@@ -1004,8 +1004,8 @@ depsReadyList memberNames done (d :: rest) =
   in (not isMember || isDone) && depsReadyList memberNames done rest
 
 -- 一批成员包并行检查：全部 spawn 后逐个 wait，退出码汇总进 code。
-checkMembersParallel : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => List Package -> Int -> CliOpts -> Eff r (Pair Int CliOpts)
-checkMembersParallel [] code o = pure (Pair code o)
+checkMembersParallel : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => List Package -> Int -> CliOpts -> Eff r (Int, CliOpts)
+checkMembersParallel [] code o = pure (code, o)
 checkMembersParallel members code o =
   do
     started <-
@@ -1013,14 +1013,14 @@ checkMembersParallel members code o =
           \pkg =>
             do
               pid <- processSpawn (checkSpawnArgs o (packageDir pkg))
-              pure (Pair pkg pid)
+              pure (pkg, pid)
         ) members
     codes <- mapEff (\pr => processWait (secondOf pr)) started
-    pure (Pair (countFailures code codes) o)
+    pure (countFailures code codes, o)
 
 -- 机器格式的工作区检查：父进程内顺序检查每个包，共享同一份 CliOpts/SARIF 收集器。
-checkPkgsInProcess : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => List Package -> Int -> CliOpts -> Eff r (Pair Int CliOpts)
-checkPkgsInProcess [] code o = pure (Pair code o)
+checkPkgsInProcess : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => List Package -> Int -> CliOpts -> Eff r (Int, CliOpts)
+checkPkgsInProcess [] code o = pure (code, o)
 checkPkgsInProcess (pkg :: rest) code o =
   do
     r <- checkPackageSeq pkg code o
@@ -1031,16 +1031,16 @@ checkPkgsInProcess (pkg :: rest) code o =
 isWorkspaceRoot : Package -> Bool
 isWorkspaceRoot pkg = pkg.packageManifest.manifestIsWorkspace
 
-checkRootsSeq : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => List Package -> Int -> CliOpts -> Eff r (Pair Int CliOpts)
-checkRootsSeq [] code o = pure (Pair code o)
+checkRootsSeq : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => List Package -> Int -> CliOpts -> Eff r (Int, CliOpts)
+checkRootsSeq [] code o = pure (code, o)
 checkRootsSeq (pkg :: rest) code o =
   do
     r <- checkPackageSeq pkg code o
     let
       code1 = firstOf r
-    in if o.optFailFast && code1 /= 0 then pure (Pair code1 (secondOf r)) else checkRootsSeq rest code1 (secondOf r)
+    in if o.optFailFast && code1 /= 0 then pure (code1, secondOf r) else checkRootsSeq rest code1 (secondOf r)
 
-checkPackageSeq : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Package -> Int -> CliOpts -> Eff r (Pair Int CliOpts)
+checkPackageSeq : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Package -> Int -> CliOpts -> Eff r (Int, CliOpts)
 checkPackageSeq pkg code o =
   let
     o1 = applyDiagConfig (Just pkg) o
@@ -1049,9 +1049,9 @@ checkPackageSeq pkg code o =
     wantWarnings = o1.optShowWarnings || o1.optDenyWarnings
   in do
     r <- checkPackageCode pkg wantWarnings o1
-    pure (Pair (if firstOf r > code then firstOf r else code) (secondOf r))
+    pure (if firstOf r > code then firstOf r else code, secondOf r)
 
-checkPackageCode : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Package -> Bool -> CliOpts -> Eff r (Pair Int CliOpts)
+checkPackageCode : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Package -> Bool -> CliOpts -> Eff r (Int, CliOpts)
 checkPackageCode pkg wantWarnings o =
   do
     r <- checkPackage o.optRelease wantWarnings pkg
@@ -1064,13 +1064,13 @@ checkPackageCode pkg wantWarnings o =
           failed = if o.optDenyWarnings && length ws > 0 then 1 else 0
         in do
           r1 <- printDiagList o "[${packageName pkg}] " shown
-          pure (Pair failed (secondOf r1))
+          pure (failed, secondOf r1)
 
 countFailures : Int -> List Int -> Int
 countFailures acc [] = acc
 countFailures acc (c :: rest) = if c == 0 then countFailures acc rest else countFailures 1 rest
 
-checkFileEntry : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> CliOpts -> Eff r (Pair Int CliOpts)
+checkFileEntry : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> CliOpts -> Eff r (Int, CliOpts)
 checkFileEntry path o =
   do
     ctxR <- contextForFile path
@@ -1103,7 +1103,7 @@ isPackageEntryPath ctx path =
 
 -- 单文件库模块检查：错误直接上报（`--continue-on-error` 的恢复只支持入口文件）；
 -- 成功时只打印/统计本文件的告警（依赖模块不刷屏）。
-checkModuleFileEntry : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> CliOpts -> Eff r (Pair Int CliOpts)
+checkModuleFileEntry : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> CliOpts -> Eff r (Int, CliOpts)
 checkModuleFileEntry ctx path o =
   do
     checked <- dtCheckModuleFile ctx path
@@ -1115,10 +1115,10 @@ checkModuleFileEntry ctx path o =
           shown = if o.optShowWarnings || o.optDenyWarnings then ws else []
         in do
           r <- printDiagList o "" shown
-          pure (Pair (if o.optDenyWarnings && length ws > 0 then 1 else 0) (secondOf r))
+          pure (if o.optDenyWarnings && length ws > 0 then 1 else 0, secondOf r)
 
 -- 入口文件检查（无 module 头；唯一支持 `--continue-on-error` 恢复的路径）。
-checkEntryFile : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> CliOpts -> Eff r (Pair Int CliOpts)
+checkEntryFile : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> CliOpts -> Eff r (Int, CliOpts)
 checkEntryFile ctx path o =
   do
     checked <- dtCheck ctx path
@@ -1133,7 +1133,7 @@ checkEntryFile ctx path o =
                   shown = takeDiags o.optMaxErrors ds
                 in do
                   r <- printDiagList o "" shown
-                  if length shown == 0 then printDiag (secondOf r) e else pure (Pair 1 (secondOf r))
+                  if length shown == 0 then printDiag (secondOf r) e else pure (1, secondOf r)
               ErrC e2 => printDiag o e
         else
           printDiag o e
@@ -1143,7 +1143,7 @@ checkEntryFile ctx path o =
           shown = if o.optShowWarnings || o.optDenyWarnings then ws else []
         in do
           r <- printDiagList o "" shown
-          pure (Pair (if o.optDenyWarnings && length ws > 0 then 1 else 0) (secondOf r))
+          pure (if o.optDenyWarnings && length ws > 0 then 1 else 0, secondOf r)
 
 -- ---------------------------------------------------------------
 -- build：包级逐模块 codegen 到 DIR（默认 <PKG-DIR>/.output），再跑 build.sh 链接到
@@ -1153,10 +1153,10 @@ checkEntryFile ctx path o =
 -- build meta（同哈希跳过）见 Vuna.Compiler.Driver.Compile。
 -- ---------------------------------------------------------------
 -- | CLI 辅助：buildArgs（参数/退出码约定见 tooling.md）。
-buildArgs : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => String -> List String -> CliOpts -> Eff r (Pair Int CliOpts)
+buildArgs : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => String -> List String -> CliOpts -> Eff r (Int, CliOpts)
 buildArgs prog args o = buildParse prog False Nothing Nothing Nothing args o
 
-buildParse : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => String -> Bool -> Maybe String -> Maybe String -> Maybe String -> List String -> CliOpts -> Eff r (Pair Int CliOpts)
+buildParse : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => String -> Bool -> Maybe String -> Maybe String -> Maybe String -> List String -> CliOpts -> Eff r (Int, CliOpts)
 buildParse prog noCompile out dir pkg args o =
   case args of
     [] => buildRun noCompile (defaultDir dir) out pkg o
@@ -1205,7 +1205,7 @@ buildParse prog noCompile out dir pkg args o =
           Nothing => buildParse prog noCompile out (Just arg) pkg rest o
           Just _ => withOpts o (usageErr prog)
 
-buildRun : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Bool -> String -> Maybe String -> Maybe String -> CliOpts -> Eff r (Pair Int CliOpts)
+buildRun : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Bool -> String -> Maybe String -> Maybe String -> CliOpts -> Eff r (Int, CliOpts)
 buildRun noCompile dir outM pkgM o =
   do
     workspaceR <- loadWorkspace dir
@@ -1255,8 +1255,8 @@ findPackageByName name (pkg :: rest) =
   if packageName pkg == name then Just pkg else findPackageByName name rest
 
 -- | CLI 辅助：buildTargets（参数/退出码约定见 tooling.md）。
-buildTargets : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Bool -> Bool -> Maybe String -> List Package -> Int -> CliOpts -> Eff r (Pair Int CliOpts)
-buildTargets noCompile multiOut outM [] code o = pure (Pair code o)
+buildTargets : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Bool -> Bool -> Maybe String -> List Package -> Int -> CliOpts -> Eff r (Int, CliOpts)
+buildTargets noCompile multiOut outM [] code o = pure (code, o)
 buildTargets noCompile multiOut outM (pkg :: rest) code o =
   do
     r <- buildOne noCompile multiOut outM pkg o
@@ -1266,7 +1266,7 @@ buildTargets noCompile multiOut outM (pkg :: rest) code o =
 
 -- 单包：可执行包 build；库包只 check（workspace 构建单元覆盖所有成员）。
 -- | native 目标的 build：compile 产按模块切分的 `.s` 文件集，再调 `build.sh`（cc）链接。
-buildNativeOne : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Bool -> Bool -> Maybe String -> Package -> CliOpts -> Eff r (Pair Int CliOpts)
+buildNativeOne : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Bool -> Bool -> Maybe String -> Package -> CliOpts -> Eff r (Int, CliOpts)
 buildNativeOne noCompile multiOut outM pkg o =
   let
     name = packageName pkg
@@ -1295,7 +1295,7 @@ buildNativeOne noCompile multiOut outM pkg o =
           if noCompile then
             do
               _ <- consolePrint "wrote ${scriptPath}\n"
-              pure (Pair 0 o)
+              pure (0, o)
           else
             do
               _ <- ensureDirPath binDir
@@ -1303,11 +1303,11 @@ buildNativeOne noCompile multiOut outM pkg o =
               if code == 0 then
                 do
                   _ <- consolePrint "wrote ${binPath}\n"
-                  pure (Pair 0 o)
+                  pure (0, o)
               else
                 do
                   _ <- consolePrint "native link failed: cc exited ${strFromInt code}\n"
-                  pure (Pair 1 o)
+                  pure (1, o)
 
 -- | native 的多对象构建脚本：内容哈希判增量（`cksum`），只重编变化的 `.s`，然后链接。
 --   对象与哈希都放在 `build/`；文件顺序由生成的文件列表固定。
@@ -1321,7 +1321,7 @@ nativeBuildScript name files =
 -- | wasm 目标的 build：产 main.wat（+ build.sh）；非 `--no-compile` 时跑 `build.sh`
 -- （`wasm-tools parse` 汇编，`--wasm-opt N` > 0 时再经 `wasm-opt -ON`）。
 -- 与 native 分支同构：外部工具是构建期依赖，缺失即明确失败（不静默产半成品）。
-buildWasmOne : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Bool -> Maybe String -> Package -> CliOpts -> Eff r (Pair Int CliOpts)
+buildWasmOne : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Bool -> Maybe String -> Package -> CliOpts -> Eff r (Int, CliOpts)
 buildWasmOne noCompile outM pkg o =
   let
     outDir =
@@ -1360,7 +1360,7 @@ buildWasmOne noCompile outM pkg o =
                   do
                     _ <- consolePrint "wasm assembly failed: build.sh exited ${strFromInt c}\n"
                     pure 1
-          if code == 0 then finishWarningsDir (secondOf p) o outDir 0 else pure (Pair 1 o)
+          if code == 0 then finishWarningsDir (secondOf p) o outDir 0 else pure (1, o)
 
 -- | wasm 产物的 `build.sh`：`wasm-tools parse` 汇编；`optLevel > 0` 时再跑
 -- `wasm-opt -ON`（binaryen 的必需特性开关见 docs/reference/wasm.md §1）。
@@ -1380,7 +1380,7 @@ wasmBuildScript optLevel =
       optimize = "if ! wasm-opt ${features} -g -O${level} main.wasm -o main.wasm.tmp 2>opt.log; then\n  cat opt.log >&2\n  rm -f opt.log main.wasm.tmp\n  exit 1\nfi\nrm -f opt.log\nmv main.wasm.tmp main.wasm\n"
     in "#!/bin/sh\nset -eu\ncd \"$(dirname \"$0\")\"\n${assemble}${optimize}"
 
-buildOne : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Bool -> Bool -> Maybe String -> Package -> CliOpts -> Eff r (Pair Int CliOpts)
+buildOne : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Bool -> Bool -> Maybe String -> Package -> CliOpts -> Eff r (Int, CliOpts)
 buildOne noCompile multiOut outM pkg o =
   if o.optTarget == "wasm" then
     buildWasmOne noCompile outM pkg o
@@ -1415,10 +1415,10 @@ buildOne noCompile multiOut outM pkg o =
             OkC _ =>
               do
                 _ <- consolePrint "skipped (library): ${name}\n"
-                pure (Pair 0 o)
+                pure (0, o)
 
 -- 显式 `--out`：外部消费者要求真目录，保持直写；不发布 store 视图。
-buildExplicit : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Bool -> Package -> PackageContext -> String -> CliOpts -> Eff r (Pair Int CliOpts)
+buildExplicit : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Bool -> Package -> PackageContext -> String -> CliOpts -> Eff r (Int, CliOpts)
 buildExplicit out multiOut pkg ctx entry o =
   let
     name = packageName pkg
@@ -1429,7 +1429,7 @@ buildExplicit out multiOut pkg ctx entry o =
     if fresh then
       do
         _ <- consolePrint "up to date: ${binPath}\n"
-        pure (Pair 0 o)
+        pure (0, o)
     else
       do
         r <- compileToDir ctx entry True outDir
@@ -1439,7 +1439,7 @@ buildExplicit out multiOut pkg ctx entry o =
 
 -- 默认输出：`$VUNA_STORE/views/bin/<splitIn>`；`<pkg>/.output` 只是符号链接。
 -- 同一 digest 用 mkdir 锁串行化；在**最终 view 路径**构建，保证 codegen 路径稳定。
-buildDefaultView : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => SplitInputs -> PackageContext -> Package -> String -> String -> String -> CliOpts -> Eff r (Pair Int CliOpts)
+buildDefaultView : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => SplitInputs -> PackageContext -> Package -> String -> String -> String -> CliOpts -> Eff r (Int, CliOpts)
 buildDefaultView inputs ctx pkg name entry viewDigest o =
   do
     view <- storeViewPathEff "bin" viewDigest
@@ -1452,7 +1452,7 @@ buildDefaultView inputs ctx pkg name entry viewDigest o =
         do
           _ <- linkDefaultOutput Nothing pkg view viewDigest
           _ <- consolePrint "up to date: ${binPath}\n"
-          pure (Pair 0 o)
+          pure (0, o)
       else
         do
           state <- waitView "bin" viewDigest 600
@@ -1465,7 +1465,7 @@ buildDefaultView inputs ctx pkg name entry viewDigest o =
                   _ <- linkDefaultOutput Nothing pkg view viewDigest
                   _ <- storeViewUnlockEff "bin" viewDigest
                   _ <- consolePrint "up to date: ${binPath}\n"
-                  pure (Pair 0 o)
+                  pure (0, o)
               else
                 do
                   r <- compileToDirGiven inputs ctx entry True view
@@ -1492,11 +1492,11 @@ buildDefaultView inputs ctx pkg name entry viewDigest o =
             do
               _ <- linkDefaultOutput Nothing pkg view viewDigest
               _ <- consolePrint "up to date: ${binPath}\n"
-              pure (Pair 0 o)
+              pure (0, o)
           else
             do
               _ <- consolePrint "error: timed out waiting for view ${viewDigest}\n"
-              pure (Pair 1 o)
+              pure (1, o)
 
 -- 等同一 view 的构建：拿到锁 => "locked"；别人已发布 => "ready"；超时 => "timeout"。
 waitView : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> Int -> Eff r String
@@ -1533,17 +1533,17 @@ linkDefaultOutput Nothing pkg outDir _viewDigest =
       _ <- fsRemoveTree link
       fsSymlink outDir link
 
-compileCodegen : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> String -> CliOpts -> Eff r (Pair Int CliOpts)
+compileCodegen : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> String -> CliOpts -> Eff r (Int, CliOpts)
 compileCodegen ctx entry outDir o =
   do
     r <- compileToDir ctx entry True outDir
     case r of
       ErrC e => printDiag o e
-      OkC _ => pure (Pair 0 o)
+      OkC _ => pure (0, o)
 
 -- 链接：先建 bin/（build.sh 的 -o bin/<pkg> 需要父目录存在），再跑 build.sh；
 -- 链接成功后写 build-meta.json（同哈希跳过在 buildOne 入口判定）。
-buildLinked : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nProcess ProcessOp r => PackageContext -> String -> String -> String -> CliOpts -> Eff r (Pair Int CliOpts)
+buildLinked : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nProcess ProcessOp r => PackageContext -> String -> String -> String -> CliOpts -> Eff r (Int, CliOpts)
 buildLinked ctx entry outDir name o =
   do
     _ <- ensureDirPath "${outDir}/bin"
@@ -1554,7 +1554,7 @@ buildLinked ctx entry outDir name o =
         do
           _ <- writeBuildMeta outDir ctx entry True
           _ <- consolePrint "built ${outDir}/bin/${name}\n"
-          pure (Pair 0 o)
+          pure (0, o)
 
 -- ---------------------------------------------------------------
 -- warning 归属：只显示当前检查单元自己的文件（依赖包的 warning 不重复刷屏）。
@@ -1580,18 +1580,18 @@ ownedByPackage pkg d =
 
 -- compile/build 成功路径的 warning 消费（默认静默；-W 显示；--deny-warnings 提升退出码）。
 -- | 诊断/告警实现：finishWarnings（详见 diagnostics.md）。
-finishWarnings : Member nFs FsOp r, Member nConsole ConsoleOp r => List Diagnostic -> Int -> CliOpts -> Eff r (Pair Int CliOpts)
+finishWarnings : Member nFs FsOp r, Member nConsole ConsoleOp r => List Diagnostic -> Int -> CliOpts -> Eff r (Int, CliOpts)
 finishWarnings warns code o =
   let
     ws = dedupeWarnings warns
     shown = if o.optShowWarnings || o.optDenyWarnings then ws else []
   in do
     r <- printDiagList o "" shown
-    pure (Pair (if o.optDenyWarnings && length ws > 0 then 1 else code) (secondOf r))
+    pure (if o.optDenyWarnings && length ws > 0 then 1 else code, secondOf r)
 
 -- 与 finishWarnings 相同，但失败时删除已生成的输出目录（编译失败不留产物）。
 -- | 诊断/告警实现：finishWarningsDir（详见 diagnostics.md）。
-finishWarningsDir : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nProcess ProcessOp r => List Diagnostic -> CliOpts -> String -> Int -> Eff r (Pair Int CliOpts)
+finishWarningsDir : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nProcess ProcessOp r => List Diagnostic -> CliOpts -> String -> Int -> Eff r (Int, CliOpts)
 finishWarningsDir warns o dir code =
   let
     ws = dedupeWarnings warns
@@ -1601,22 +1601,22 @@ finishWarningsDir warns o dir code =
     if o.optDenyWarnings && length ws > 0 then
       do
         _ <- fsRemoveTree dir
-        pure (Pair 1 (secondOf r))
+        pure (1, secondOf r)
     else
-      pure (Pair code (secondOf r))
+      pure (code, secondOf r)
 
 -- 剥离 `--lang zh`（human 说明语言；默认 en）。
 -- | 剥离 --lang 参数。
-stripLang : List String -> Pair (List String) String
+stripLang : List String -> (List String, String)
 stripLang args = stripLangGo args [] "en"
 
 -- | --lang 参数扫描实现。
-stripLangGo : List String -> List String -> String -> Pair (List String) String
-stripLangGo [] acc lang = Pair (reverse acc) lang
+stripLangGo : List String -> List String -> String -> (List String, String)
+stripLangGo [] acc lang = (reverse acc, lang)
 stripLangGo ("--lang" :: rest) acc lang =
   case rest of
     v :: more => stripLangGo more acc v
-    [] => Pair (reverse acc) lang
+    [] => (reverse acc, lang)
 stripLangGo (arg :: rest) acc lang =
   if startsWith "--lang=" arg then
     stripLangGo rest acc (substring (natFromInt 7) (natFromInt (strLength arg - 7)) arg)
@@ -1629,15 +1629,15 @@ hasLangFlag [] = False
 hasLangFlag (arg :: rest) =
   if arg == "--lang" || startsWith "--lang=" arg then True else hasLangFlag rest
 
-stripContinueOnError : List String -> Pair (List String) Bool
+stripContinueOnError : List String -> (List String, Bool)
 stripContinueOnError args = stripContinueGo args [] False
 
-stripContinueGo : List String -> List String -> Bool -> Pair (List String) Bool
-stripContinueGo [] acc found = Pair (reverse acc) found
+stripContinueGo : List String -> List String -> Bool -> (List String, Bool)
+stripContinueGo [] acc found = (reverse acc, found)
 stripContinueGo ("--continue-on-error" :: rest) acc found = stripContinueGo rest acc True
 stripContinueGo (arg :: rest) acc found = stripContinueGo rest (arg :: acc) found
 
-checkPackageErr : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Package -> Diagnostic -> CliOpts -> Eff r (Pair Int CliOpts)
+checkPackageErr : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Package -> Diagnostic -> CliOpts -> Eff r (Int, CliOpts)
 checkPackageErr pkg e o =
   if o.optContinueOnError then
     packageRecover pkg e o
@@ -1646,14 +1646,14 @@ checkPackageErr pkg e o =
 
 -- | 包检查恢复入口：可执行包走入口文件，库包走 [export].modules。
 -- | 包检查恢复入口：可执行包走入口文件，库包走导出模块。
-packageRecover : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Package -> Diagnostic -> CliOpts -> Eff r (Pair Int CliOpts)
+packageRecover : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Package -> Diagnostic -> CliOpts -> Eff r (Int, CliOpts)
 packageRecover pkg e o =
   do
     exists <- fsFileExists (packageEntry pkg)
     if exists then packageRecoverExe pkg e o else packageRecoverLib pkg e o
 
 -- | 可执行包入口的恢复式检查。
-packageRecoverExe : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Package -> Diagnostic -> CliOpts -> Eff r (Pair Int CliOpts)
+packageRecoverExe : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Package -> Diagnostic -> CliOpts -> Eff r (Int, CliOpts)
 packageRecoverExe pkg e o =
   do
     recovered <-
@@ -1663,7 +1663,7 @@ packageRecoverExe pkg e o =
       ErrC e2 => printDiagWithPrefix o "[${packageName pkg}] " e2
 
 -- | 库包（[export].modules）的恢复式检查。
-packageRecoverLib : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Package -> Diagnostic -> CliOpts -> Eff r (Pair Int CliOpts)
+packageRecoverLib : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Package -> Diagnostic -> CliOpts -> Eff r (Int, CliOpts)
 packageRecoverLib pkg e o =
   case packageExports pkg of
     Just names =>
@@ -1676,7 +1676,7 @@ packageRecoverLib pkg e o =
     Nothing => printDiagWithPrefix o "[${packageName pkg}] " e
 
 -- | 打印恢复出的诊断并返回退出码。
-printRecovered : Member nFs FsOp r, Member nConsole ConsoleOp r => Package -> Diagnostic -> List Diagnostic -> CliOpts -> Eff r (Pair Int CliOpts)
+printRecovered : Member nFs FsOp r, Member nConsole ConsoleOp r => Package -> Diagnostic -> List Diagnostic -> CliOpts -> Eff r (Int, CliOpts)
 printRecovered pkg e ds o =
   let
     shown = takeDiags o.optMaxErrors ds
@@ -1685,4 +1685,4 @@ printRecovered pkg e ds o =
     if length shown == 0 then
       printDiagWithPrefix (secondOf r) "[${packageName pkg}] " e
     else
-      pure (Pair 1 (secondOf r))
+      pure (1, secondOf r)

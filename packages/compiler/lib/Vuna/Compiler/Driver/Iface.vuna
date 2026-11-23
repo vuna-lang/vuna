@@ -74,7 +74,7 @@ export record ModuleIface(..) where
   -- 直接 import 的模块接口哈希（含同包模块与隐式 import）：TTC 的 `importHashes`。
   -- 依赖接口变化会通过它使本模块失效；`depMissingHash` = 写接口时该依赖接口不可得
   -- （哨兵，永不失配任何真实哈希）。
-  miDepHashes : List (Pair String String)
+  miDepHashes : List (String, String)
   miImports : List Import
   miImplicitImports : List Import
   miExports : List ExportEntry
@@ -95,7 +95,7 @@ export record ModuleIface(..) where
   -- 只服务 codegen 的 `dt_def_locs`（运行时错误回溯）：增量路径从接口复用干净模块时，
   -- `DtDef` 的 span 不在载荷里，必须用本表把干净模块的行补回位置表；否则「首次全量
   -- 构建」与「后续增量构建」的 `Vuna_runtime.ml` 不一致，产物身份就破了。
-  miDefLocs : List (Pair String (Pair String Int))
+  miDefLocs : List (String, String, Int)
 
 export siPathOf : SourceInfo -> String
 siPathOf s = s.siPath
@@ -124,7 +124,7 @@ miIfaceHashOf m = m.miIfaceHash
 export miImplHashOf : ModuleIface -> String
 miImplHashOf m = m.miImplHash
 
-export miDepHashesOf : ModuleIface -> List (Pair String String)
+export miDepHashesOf : ModuleIface -> List (String, String)
 miDepHashesOf m = m.miDepHashes
 
 export miSourceOf : ModuleIface -> SourceInfo
@@ -154,19 +154,19 @@ miPreparedOf m = m.miPrepared
 
 -- | 本模块定义的位置表（vuna 全名 → (spanFile, spanStartLine)）；不进接口哈希，
 -- 只用于 codegen 的位置表补行（见字段注释）。
-export miDefLocsOf : ModuleIface -> List (Pair String (Pair String Int))
+export miDefLocsOf : ModuleIface -> List (String, String, Int)
 miDefLocsOf m = m.miDefLocs
 
-defLocOf : DtDef -> Maybe (Pair String (Pair String Int))
+defLocOf : DtDef -> Maybe (String, String, Int)
 defLocOf d =
   case dtDefSpan d of
     Nothing => Nothing
-    Just sp => Just (Pair (dtDefName d) (Pair sp.spanFile sp.spanStartLine))
+    Just sp => Just (dtDefName d, sp.spanFile, sp.spanStartLine)
 
 -- 位置表按 vuna 名排序：写侧（整包接口）与读侧（增量 codegen 补行）各取一次，顺序
 -- 必须与全量路径 codegen 的位置表逐字节一致（产物是输入摘要的纯函数）。无 span 的定义跳过
 -- （与 `dtDefLocTable` 的跳过语义一致）。
-defLocsOfDefs : List DtDef -> List (Pair String (Pair String Int))
+defLocsOfDefs : List DtDef -> List (String, String, Int)
 defLocsOfDefs ds = sortBy (\a, b => firstOf a <= firstOf b) (mapMaybe defLocOf ds)
 
 -- 单模块的 prepared decls：aux = 同包其它模块的原始 decls + 入口声明。
@@ -255,11 +255,11 @@ depMissingHash = "missing"
 -- 两条路径上的列表顺序可能不同（globals 由「干净模块产物 + 本次精化产物」拼接），
 -- 接口哈希不能因此漂移。按键文本排序是确定性的，也消除「两个名字哈希碰撞 ⇒ 顺序歧义」
 -- 这一类隐患。`sortBy` 是混合归并（已有序输入直接返回，O(d log d)）。
-sortTextPairs : List (Pair String a) -> List (Pair String a)
+sortTextPairs : List (String, a) -> List (String, a)
 sortTextPairs ps = sortBy (\a, b => firstOf a <= firstOf b) ps
 
 sortByText : (a -> String) -> List a -> List a
-sortByText key xs = map secondOf (sortTextPairs (map (\x => Pair (key x) x) xs))
+sortByText key xs = map secondOf (sortTextPairs (map (\x => (key x, x)) xs))
 
 -- 接口哈希里的项要**规范化**。增量路径与全量路径的擦除位残 meta 编号不同
 -- （增量从干净模块 meta 之上开始编号），按原始编号哈希会让同一模块的哈希随路径漂移；
@@ -271,66 +271,65 @@ record CanonState where
 canonStateEmpty : CanonState
 canonStateEmpty = CanonState 0 (HashMap.fromList [])
 
-canonTerm : CanonState -> Term -> Pair Term CanonState
+canonTerm : CanonState -> Term -> (Term, CanonState)
 canonTerm st (TMeta m) =
   case HashMap.lookup m st.csMap of
-    Just m2 => Pair (TMeta m2) st
-    Nothing =>
-      Pair (TMeta st.csNext) (CanonState (st.csNext + 1) (HashMap.insert m st.csNext st.csMap))
+    Just m2 => (TMeta m2, st)
+    Nothing => (TMeta st.csNext, CanonState (st.csNext + 1) (HashMap.insert m st.csNext st.csMap))
 canonTerm st (TPi n i r d c) =
   let
     pd = canonTerm st d
     pc = canonTerm (secondOf pd) c
-  in Pair (TPi n i r (firstOf pd) (firstOf pc)) (secondOf pc)
+  in (TPi n i r (firstOf pd) (firstOf pc), secondOf pc)
 canonTerm st (TLam n r _ _ b) =
   let
     pb = canonTerm st b
-  in Pair (TLam n r Nothing spanEmpty (firstOf pb)) (secondOf pb)
+  in (TLam n r Nothing spanEmpty (firstOf pb), secondOf pb)
 canonTerm st (TApp f a r) =
   let
     pf = canonTerm st f
     pa = canonTerm (secondOf pf) a
-  in Pair (TApp (firstOf pf) (firstOf pa) r) (secondOf pa)
+  in (TApp (firstOf pf) (firstOf pa) r, secondOf pa)
 canonTerm st (TCon c args) =
   let
     pr = canonArgs st args
-  in Pair (TCon c (firstOf pr)) (secondOf pr)
+  in (TCon c (firstOf pr), secondOf pr)
 canonTerm st (TMk c args) =
   let
     pr = canonArgs st args
-  in Pair (TMk c (firstOf pr)) (secondOf pr)
+  in (TMk c (firstOf pr), secondOf pr)
 canonTerm st (TRecord c args) =
   let
     pr = canonArgs st args
-  in Pair (TRecord c (firstOf pr)) (secondOf pr)
+  in (TRecord c (firstOf pr), secondOf pr)
 canonTerm st (TCase s alts) =
   let
     ps = canonTerm st s
     pa = canonAlts (secondOf ps) alts
-  in Pair (TCase (firstOf ps) (firstOf pa)) (secondOf pa)
+  in (TCase (firstOf ps) (firstOf pa), secondOf pa)
 canonTerm st (TIf c th el) =
   let
     pc = canonTerm st c
     pt = canonTerm (secondOf pc) th
     pe = canonTerm (secondOf pt) el
-  in Pair (TIf (firstOf pc) (firstOf pt) (firstOf pe)) (secondOf pe)
-canonTerm st t = Pair t st
+  in (TIf (firstOf pc) (firstOf pt) (firstOf pe), secondOf pe)
+canonTerm st t = (t, st)
 
-canonArgs : CanonState -> List (Pair Term Rig) -> Pair (List (Pair Term Rig)) CanonState
-canonArgs st [] = Pair [] st
-canonArgs st ((Pair t r) :: rest) =
+canonArgs : CanonState -> List (Term, Rig) -> (List (Term, Rig), CanonState)
+canonArgs st [] = ([], st)
+canonArgs st ((t, r) :: rest) =
   let
     pt = canonTerm st t
     pr = canonArgs (secondOf pt) rest
-  in Pair (Pair (firstOf pt) r :: firstOf pr) (secondOf pr)
+  in ((firstOf pt, r) :: firstOf pr, secondOf pr)
 
-canonAlts : CanonState -> List CaseAlt -> Pair (List CaseAlt) CanonState
-canonAlts st [] = Pair [] st
+canonAlts : CanonState -> List CaseAlt -> (List CaseAlt, CanonState)
+canonAlts st [] = ([], st)
 canonAlts st ((CaseAlt n bs b) :: rest) =
   let
     pb = canonTerm st b
     pr = canonAlts (secondOf pb) rest
-  in Pair (CaseAlt n bs (firstOf pb) :: firstOf pr) (secondOf pr)
+  in (CaseAlt n bs (firstOf pb) :: firstOf pr, secondOf pr)
 
 canonTermTop : Term -> Term
 canonTermTop t = firstOf (canonTerm canonStateEmpty t)
@@ -341,23 +340,23 @@ canonMaybe Nothing = Nothing
 
 -- 定义视图：名字 + 类型 + 体（`DtDef` 的 span 不参与；vuna 的精化会 delta 展开定义，
 -- 所以导出体的变化必须使依赖者失效——与 Idris2 的 `hashit = Public` 同一规则）。
-defView : DtDef -> Pair String (Pair Term (Maybe Term))
-defView d = Pair (dtDefName d) (Pair (canonTermTop (dtDefType d)) (canonMaybe (dtDefBody d)))
+defView : DtDef -> (String, Term, Maybe Term)
+defView d = (dtDefName d, canonTermTop (dtDefType d), canonMaybe (dtDefBody d))
 
 -- ---------------------------------------------------------------
 -- 接口哈希的各段（显式规范编码）
 -- ---------------------------------------------------------------
 -- 段输入先规范化顺序（`sortByText`），再由 `Canonical.*` 编码：span / 路径不参与，
 -- 读方消费的字段全部覆盖（含 `ExportEntry.parent`、fixity 别名目标、record 字段类型）。
-encDefView : Pair String (Pair Term (Maybe Term)) -> List String -> List String
-encDefView (Pair name (Pair ty body)) acc = encStr name (encTerm ty (encMaybe encTerm body acc))
+encDefView : (String, Term, Maybe Term) -> List String -> List String
+encDefView (name, ty, body) acc = encStr name (encTerm ty (encMaybe encTerm body acc))
 
-hashDefView : List String -> DtDef -> Pair String (Pair Term (Maybe Term))
+hashDefView : List String -> DtDef -> (String, Term, Maybe Term)
 hashDefView names d =
   let
     name = dtDefName d
     body = if memName name names then Nothing else dtDefBody d
-  in Pair name (Pair (canonTermTop (dtDefType d)) (canonMaybe body))
+  in (name, canonTermTop (dtDefType d), canonMaybe body)
 
 hashDefs : List String -> List DtDef -> String
 hashDefs names ds =
@@ -379,10 +378,10 @@ hashClasses cs =
   payloadDigest (encTop (encList encDtClassSem) (sortByText (\c => dtClassName c) cs))
 
 -- | globals 的（名字, 项）对。
-encGlobal : Pair String Term -> List String -> List String
-encGlobal (Pair n t) acc = encStr n (encTerm t acc)
+encGlobal : (String, Term) -> List String -> List String
+encGlobal (n, t) acc = encStr n (encTerm t acc)
 
-hashGlobals : List (Pair String Term) -> String
+hashGlobals : List (String, Term) -> String
 hashGlobals gs = payloadDigest (encTop (encList encGlobal) (sortByText (\p => firstOf p) gs))
 
 -- 导出条目：ctor 条目的 `parent`（所属类型）也参与键与编码。
@@ -426,7 +425,7 @@ hashDeclsForIface names ds = hashDecls (map (stripOpaqueDeclBodies names) ds)
 -- 模块双摘要（iface / impl）一次算完：两者只在「opaque 体是否可见」上不同，其余分片
 -- 输入相同；`defs` / `decls` 是这里最贵的两项（单模块 ~7 ms）。没有 opaque 体时两种取法
 -- 的输入完全相同，只算一遍。
-moduleHashes : String -> String -> List Import -> List Import -> List FixityDecl -> List RecordMeta -> List ExportEntry -> List Decl -> CachedProgram -> Pair String String
+moduleHashes : String -> String -> List Import -> List Import -> List FixityDecl -> List RecordMeta -> List ExportEntry -> List Decl -> CachedProgram -> (String, String)
 moduleHashes name pkg imports implicitImports fixities records exports decls cp =
   let
     opaqueNames = map opaqueBaseName (cachedOpaqueOf cp)
@@ -448,9 +447,9 @@ moduleHashes name pkg imports implicitImports fixities records exports decls cp 
         _ => False
     declsIface = if noOpaque then declsImpl else hashDeclsForIface opaqueNames decls
     defsIface = if noOpaque then defsImpl else hashDefs opaqueNames (cachedDefs cp)
-  in Pair
-    (digestParts [ifaceHashVersion, name, pkg, im, imi, fx, re, declsIface, da, defsIface, gl, inst, cl, ex, op])
-    (digestParts ["vuna-impl-hash 1", name, pkg, re, ex, declsImpl, da, defsImpl, gl, inst, cl])
+  in (digestParts
+      [ifaceHashVersion, name, pkg, im, imi, fx, re, declsIface, da, defsIface, gl, inst, cl, ex, op],
+    digestParts ["vuna-impl-hash 1", name, pkg, re, ex, declsImpl, da, defsImpl, gl, inst, cl])
 
 export hashOfIface : ModuleIface -> String
 hashOfIface m =
@@ -504,10 +503,10 @@ dataOwnerOf oi name =
     Nothing => if containsDot name then prefixOwner oi.oiKnown name else Nothing
 
 -- 构造子 → 数据族名；数据族自身的归属在 oiData 里。
-ctorFamilyPairs : List DtData -> List (Pair String String)
+ctorFamilyPairs : List DtData -> List (String, String)
 ctorFamilyPairs [] = []
 ctorFamilyPairs (d :: rest) =
-  append (map (\c => Pair (dtCtorName c) (dtDataName d)) (dtDataCtors d)) (ctorFamilyPairs rest)
+  append (map (\c => (dtCtorName c, dtDataName d)) (dtDataCtors d)) (ctorFamilyPairs rest)
 
 ctorOwnerOf : OwnerIndex -> String -> Maybe String
 ctorOwnerOf oi name =
@@ -551,7 +550,7 @@ record ProgParts where
   ppSols : HashMap Int Value
   ppDatas : HashMap String (List DtData)
   ppDefs : HashMap String (List DtDef)
-  ppGlobals : HashMap String (List (Pair String Term))
+  ppGlobals : HashMap String (List (String, Term))
   ppInsts : HashMap String (List DtInst)
   ppClasses : HashMap String (List DtClass)
 
@@ -574,8 +573,8 @@ bucketOf name tbl =
 reverseBuckets : HashMap String (List a) -> HashMap String (List a)
 reverseBuckets tbl = HashMap.fromList (map reverseBucket (HashMap.toList tbl))
 
-reverseBucket : Pair String (List a) -> Pair String (List a)
-reverseBucket (Pair k xs) = Pair k (reverse xs)
+reverseBucket : (String, List a) -> (String, List a)
+reverseBucket (k, xs) = (k, reverse xs)
 
 progPartsOf : OwnerIndex -> DtProgram -> ProgParts
 progPartsOf oi prog =
@@ -600,9 +599,9 @@ cpOfModule parts prog mod opaqueNames =
     slice = DtProgram datas defs [] (dtProgSols prog) globals insts classes 0 [] []
   in withCachedOpaque opaqueNames (cachedOfProgramWith parts.ppSols slice)
 
-sourceOf : List (Pair String SourceInfo) -> String -> SourceInfo
+sourceOf : List (String, SourceInfo) -> String -> SourceInfo
 sourceOf [] _ = SourceInfo "" "" 0 0
-sourceOf ((Pair n s) :: rest) name = if n == name then s else sourceOf rest name
+sourceOf ((n, s) :: rest) name = if n == name then s else sourceOf rest name
 
 importNameOf : Import -> String
 importNameOf = importName
@@ -612,18 +611,18 @@ importNamesOfModule m = map importNameOf (append m.moduleImportsOf m.moduleImpli
 
 -- | 依赖哈希表里是否还有"写接口时不可得"的哨兵：有则说明这份接口是在依赖接口缺失时
 -- 写下的，读侧不能信任它的依赖链（要重算并重写，见 Compile 的 clean 判定）。
-export hasMissingDep : List (Pair String String) -> Bool
+export hasMissingDep : List (String, String) -> Bool
 hasMissingDep [] = False
-hasMissingDep ((Pair _ h) :: rest) = h == depMissingHash || hasMissingDep rest
+hasMissingDep ((_, h) :: rest) = h == depMissingHash || hasMissingDep rest
 
-hashOfImportName : List (Pair String String) -> String -> String
+hashOfImportName : List (String, String) -> String -> String
 hashOfImportName tbl name =
   case lookupPair name tbl of
     Just h => h
     Nothing => depMissingHash
 
-depHashesOf : List (Pair String String) -> Module -> List (Pair String String)
-depHashesOf tbl m = map (\n => Pair n (hashOfImportName tbl n)) (importNamesOfModule m)
+depHashesOf : List (String, String) -> Module -> List (String, String)
+depHashesOf tbl m = map (\n => (n, hashOfImportName tbl n)) (importNamesOfModule m)
 
 cleanIfaceOf : List ModuleIface -> String -> Maybe ModuleIface
 cleanIfaceOf [] _ = Nothing
@@ -634,7 +633,7 @@ cleanIfaceOf (m :: rest) name = if miNameOf m == name then Just m else cleanIfac
 -- 也不会出现「依赖还没算到 → 哨兵/旧值」导致下一次运行误判脏。
 -- `clean` = 包内增量复用的模块（记录原样保留：重算依赖整包 sols，而增量路径没有干净
 -- 模块的 sols，重算会改变擦除位残 meta 的 zonk 结果 → 哈希漂移）。
-mkIfaceBase : String -> ProgParts -> DtProgram -> List (Pair String SourceInfo) -> List ModuleIface -> Module -> ModuleIface
+mkIfaceBase : String -> ProgParts -> DtProgram -> List (String, SourceInfo) -> List ModuleIface -> Module -> ModuleIface
 mkIfaceBase pkg parts prog sources clean m =
   case cleanIfaceOf clean (moduleNameOf m) of
     Just old => old
@@ -673,7 +672,7 @@ mkIfaceBase pkg parts prog sources clean m =
         cp
         (defLocsOfDefs (cachedDefs cp))
 
-finishIface : List (Pair String String) -> List ModuleIface -> Module -> ModuleIface -> ModuleIface
+finishIface : List (String, String) -> List ModuleIface -> Module -> ModuleIface -> ModuleIface
 finishIface tbl clean m mi =
   case cleanIfaceOf clean (miNameOf mi) of
     Just old => old
@@ -695,13 +694,13 @@ finishIface tbl clean m mi =
         (miCachedOf mi)
         (miDefLocsOf mi)
 
-ifacesGo : String -> ProgParts -> DtProgram -> List (Pair String SourceInfo) -> List (Pair String String) -> List ModuleIface -> List Module -> Pair (List ModuleIface) (List (Pair String String))
+ifacesGo : String -> ProgParts -> DtProgram -> List (String, SourceInfo) -> List (String, String) -> List ModuleIface -> List Module -> (List ModuleIface, List (String, String))
 ifacesGo pkg parts prog sources knownDeps clean modules =
   let
-    built = map (\m => Pair m (mkIfaceBase pkg parts prog sources clean m)) modules
-    hashes = map (\p => Pair (miNameOf (secondOf p)) (miIfaceHashOf (secondOf p))) built
+    built = map (\m => (m, mkIfaceBase pkg parts prog sources clean m)) modules
+    hashes = map (\p => (miNameOf (secondOf p), miIfaceHashOf (secondOf p))) built
     fullTbl = append knownDeps hashes
-  in Pair (map (\p => finishIface fullTbl clean (firstOf p) (secondOf p)) built) fullTbl
+  in (map (\p => finishIface fullTbl clean (firstOf p) (secondOf p)) built, fullTbl)
 
 -- ---------------------------------------------------------------
 -- 覆盖性检查：本包模块拥有的 def/data/inst/class/global 必须全部出现在某个模块摘要里
@@ -784,17 +783,17 @@ coverageResult oi ourNames inherited ifaces prog =
     Just issue => icInternal "iface: ${issue}"
     Nothing => OkC ifaces
 
-export ifaceOfPackage : String -> List (Pair String SourceInfo) -> List (Pair String String) -> List String -> List ModuleIface -> List Module -> List Decl -> DtProgram -> Check (List ModuleIface)
+export ifaceOfPackage : String -> List (String, SourceInfo) -> List (String, String) -> List String -> List ModuleIface -> List Module -> List Decl -> DtProgram -> Check (List ModuleIface)
 ifaceOfPackage pkg sources knownDeps inherited clean modules entryDecls prog =
   let
     ourModules = reverse (filter (\m => modulePackageOf m == pkg) modules)
-    declModules = map (\m => Pair (moduleNameOf m) (moduleDeclsOf m)) modules
+    declModules = map (\m => (moduleNameOf m, moduleDeclsOf m)) modules
     meta = splitMetaOf declModules entryDecls
     oi = ownerIndexOf meta (dtProgDatas prog)
     parts = progPartsOf oi prog
     ourNames = map moduleNameOf ourModules
   in case ifacesGo pkg parts prog sources knownDeps clean ourModules of
-    Pair ifaces _ => coverageResult oi ourNames inherited ifaces prog
+    (ifaces, _) => coverageResult oi ourNames inherited ifaces prog
 
 -- ---------------------------------------------------------------
 -- 单模块接口（LSP 增量写回）
@@ -835,11 +834,11 @@ allOwnedPresent oi inherited name (a :: rest) present =
   else
     memName a present && allOwnedPresent oi inherited name rest present
 
-export ifaceOfModule : String -> SourceInfo -> List (Pair String String) -> List String -> List ModuleIface -> List Module -> List Decl -> DtProgram -> String -> Check ModuleIface
+export ifaceOfModule : String -> SourceInfo -> List (String, String) -> List String -> List ModuleIface -> List Module -> List Decl -> DtProgram -> String -> Check ModuleIface
 ifaceOfModule pkg si knownDeps inherited clean modules entryDecls prog name =
   let
     ourModules = reverse (filter (\m => modulePackageOf m == pkg) modules)
-    declModules = map (\m => Pair (moduleNameOf m) (moduleDeclsOf m)) modules
+    declModules = map (\m => (moduleNameOf m, moduleDeclsOf m)) modules
     meta = splitMetaOf declModules entryDecls
     oi = ownerIndexOf meta (dtProgDatas prog)
     parts = progPartsOf oi prog
@@ -848,9 +847,8 @@ ifaceOfModule pkg si knownDeps inherited clean modules entryDecls prog name =
     Nothing => icInternal "iface: module ${name} is not part of the checked package"
     Just m =>
       let
-        mi0 = mkIfaceBase pkg parts prog [Pair name si] [] m
-        tbl =
-          append knownDeps (map (\x => Pair (miNameOf x) (miIfaceHashOf x)) (append clean [mi0]))
+        mi0 = mkIfaceBase pkg parts prog [(name, si)] [] m
+        tbl = append knownDeps (map (\x => (miNameOf x, miIfaceHashOf x)) (append clean [mi0]))
         mi = finishIface tbl [] m mi0
         miP =
           case preparedForModule ourModules entryDecls name of
@@ -869,30 +867,30 @@ moduleNamesOf (m :: rest) = miNameOf m :: moduleNamesOf rest
 export encSourceInfo : SourceInfo -> List String -> List String
 encSourceInfo s acc = encStr s.siPath (encStr s.siHash (encInt s.siMtime (encInt s.siSize acc)))
 
-export decSourceInfo : Int -> Cur -> Maybe (Pair SourceInfo Cur)
+export decSourceInfo : Int -> Cur -> Maybe (SourceInfo, Cur)
 decSourceInfo fuel c =
   thenPair
     (decStr (fuel - 1) c)
-    (\path, b1 => thenPair (decStr (fuel - 1) b1) (\hash, b2 => thenPair (decInt (fuel - 1) b2) (\mtime, b3 => thenPair (decInt (fuel - 1) b3) (\size, b4 => Just (Pair (SourceInfo path hash mtime size) b4)))))
+    (\path, b1 => thenPair (decStr (fuel - 1) b1) (\hash, b2 => thenPair (decInt (fuel - 1) b2) (\mtime, b3 => thenPair (decInt (fuel - 1) b3) (\size, b4 => Just (SourceInfo path hash mtime size, b4)))))
 
-export encDepPair : Pair String String -> List String -> List String
-encDepPair (Pair n h) acc = encStr n (encStr h acc)
+export encDepPair : (String, String) -> List String -> List String
+encDepPair (n, h) acc = encStr n (encStr h acc)
 
-export decDepPair : Int -> Cur -> Maybe (Pair (Pair String String) Cur)
+export decDepPair : Int -> Cur -> Maybe ((String, String), Cur)
 decDepPair fuel c =
   thenPair
     (decStr (fuel - 1) c)
-    (\n, b1 => thenPair (decStr (fuel - 1) b1) (\h, b2 => Just (Pair (Pair n h) b2)))
+    (\n, b1 => thenPair (decStr (fuel - 1) b1) (\h, b2 => Just ((n, h), b2)))
 
 -- | 定义位置表条目：vuna 全名 → (spanFile, spanStartLine)。
-encDefLoc : Pair String (Pair String Int) -> List String -> List String
-encDefLoc (Pair name (Pair file line)) acc = encStr name (encStr file (encInt line acc))
+encDefLoc : (String, String, Int) -> List String -> List String
+encDefLoc (name, file, line) acc = encStr name (encStr file (encInt line acc))
 
-decDefLoc : Int -> Cur -> Maybe (Pair (Pair String (Pair String Int)) Cur)
+decDefLoc : Int -> Cur -> Maybe ((String, String, Int), Cur)
 decDefLoc fuel c =
   thenPair
     (decStr (fuel - 1) c)
-    (\name, b1 => thenPair (decStr (fuel - 1) b1) (\file, b2 => thenPair (decInt (fuel - 1) b2) (\line, b3 => Just (Pair (Pair name (Pair file line)) b3))))
+    (\name, b1 => thenPair (decStr (fuel - 1) b1) (\file, b2 => thenPair (decInt (fuel - 1) b2) (\line, b3 => Just ((name, file, line), b3))))
 
 -- | `ModuleIface` 的规范编码（字段顺序 = record 声明顺序）。
 encModuleIfacePayload : ModuleIface -> List String -> List String
@@ -908,10 +906,10 @@ encModuleIfaceAt = encModuleIfacePayload
 export encModuleIface : ModuleIface -> String
 encModuleIface m = encTop encModuleIfacePayload m
 
-export decModuleIfaceAt : Int -> Cur -> Maybe (Pair ModuleIface Cur)
+export decModuleIfaceAt : Int -> Cur -> Maybe (ModuleIface, Cur)
 decModuleIfaceAt = decModuleIfacePayload
 
-decModuleIfacePayload : Int -> Cur -> Maybe (Pair ModuleIface Cur)
+decModuleIfacePayload : Int -> Cur -> Maybe (ModuleIface, Cur)
 decModuleIfacePayload fuel c =
   do
     p1 <- decStr (fuel - 1) c
@@ -930,10 +928,10 @@ decModuleIfacePayload fuel c =
     p14 <- decCachedProgram (fuel - 1) (secondOf p13)
     p15 <- decList decDefLoc (fuel - 1) (secondOf p14)
     pure
-      (Pair (ModuleIface (firstOf p1) (firstOf p2) (firstOf p3) (firstOf p4) (firstOf p5) (firstOf p6) (firstOf p7) (firstOf p8) (firstOf p9) (firstOf p10) (firstOf p11) (firstOf p12) (firstOf p13) (firstOf p14) (firstOf p15)) (secondOf p15))
+      (ModuleIface (firstOf p1) (firstOf p2) (firstOf p3) (firstOf p4) (firstOf p5) (firstOf p6) (firstOf p7) (firstOf p8) (firstOf p9) (firstOf p10) (firstOf p11) (firstOf p12) (firstOf p13) (firstOf p14) (firstOf p15), secondOf p15)
 
 export decModuleIfaceComplete : String -> Maybe ModuleIface
 decModuleIfaceComplete s =
   case decModuleIfacePayload (strLength s) (curOf s) of
     Nothing => Nothing
-    Just (Pair m rest) => if curAtEnd rest then Just m else Nothing
+    Just (m, rest) => if curAtEnd rest then Just m else Nothing

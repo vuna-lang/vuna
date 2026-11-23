@@ -36,12 +36,11 @@ allVarPats (p :: rest) =
 
 -- 只拒绝「比首子句 arity 更多」的 clause；少模式的 catch-all（如 `floatPrim1 _`）
 -- 是 curry 后的合法降级，保持既有语义。
-clauseArityTooMany : Int -> List (Pair (List Pat) Expr) -> Bool
+clauseArityTooMany : Int -> List (List Pat, Expr) -> Bool
 clauseArityTooMany n [] = False
-clauseArityTooMany n ((Pair pats _) :: rest) =
-  natToInt (length pats) > n || clauseArityTooMany n rest
+clauseArityTooMany n ((pats, _) :: rest) = natToInt (length pats) > n || clauseArityTooMany n rest
 
-export multiToExpr : List (Pair String (Pair Bool (List (Pair String Int)))) -> List (Pair (List Pat) Expr) -> Check Expr
+export multiToExpr : List (String, Bool, List (String, Int)) -> List (List Pat, Expr) -> Check Expr
 multiToExpr table clauses =
   case arityOf clauses of
     Nothing => ErrC (tcMsg FunctionNoClauses [])
@@ -61,7 +60,7 @@ multiToExpr table clauses =
 --   （`True` / `False` 之后再来 `_`）。未知族 / 重载构造子 / 燃料耗尽不报
 --   （`CovUnknown`）：不能证明不可达就不报。
 --   列数不一致的组（`where` / `let` 允许少模式的 catch-all）不判。
-export checkReachable : List (Pair String (Pair Bool (List (Pair String Int)))) -> List (Pair (List Pat) Expr) -> Check Bool
+export checkReachable : List (String, Bool, List (String, Int)) -> List (List Pat, Expr) -> Check Bool
 checkReachable table clauses =
   let
     rows = matrixOf clauses
@@ -70,9 +69,9 @@ checkReachable table clauses =
   else
     OkC True
 
-reachableGo : List (Pair String (Pair Bool (List (Pair String Int)))) -> Nat -> List (List Pat) -> List (Pair (List Pat) Expr) -> Check Bool
+reachableGo : List (String, Bool, List (String, Int)) -> Nat -> List (List Pat) -> List (List Pat, Expr) -> Check Bool
 reachableGo table fuel rows [] = OkC True
-reachableGo table fuel rows ((Pair pats body) :: rest) =
+reachableGo table fuel rows ((pats, body) :: rest) =
   let
     qs = map stripAsPat pats
   in case clauseCover table fuel rows qs of
@@ -86,7 +85,7 @@ clauseHeadSpan [] body = exprSpan body
 -- 与 multiToExpr 同一套模式矩阵，但不包 lambda：`name` 是已在作用域里的位置名，
 -- 直接返回以它为 scrutinee 的嵌套 case 体。供 Elab 的 case 去重降级使用
 -- （先把 scrutinee 用 let 绑定成 name，保证只求值一次）。
-export multiToCaseExpr : List (Pair String (Pair Bool (List (Pair String Int)))) -> List (Pair (List Pat) Expr) -> String -> Check Expr
+export multiToCaseExpr : List (String, Bool, List (String, Int)) -> List (List Pat, Expr) -> String -> Check Expr
 multiToCaseExpr table clauses name =
   case arityOf clauses of
     Nothing => tcErr0 (firstPatSpan clauses) ClauseTooManyPatterns
@@ -97,16 +96,16 @@ multiToCaseExpr table clauses name =
         buildColumnExpr table clauses [name] (firstPatSpan clauses) 200
 
 -- 源矩阵（剥掉 as-pattern）：覆盖性见证用。
-export matrixOf : List (Pair (List Pat) Expr) -> List (List Pat)
+export matrixOf : List (List Pat, Expr) -> List (List Pat)
 matrixOf clauses = map (map stripAsPat) (map firstOf clauses)
 
 stripAsPat : Pat -> Pat
 stripAsPat (PAs _ inner _) = stripAsPat inner
 stripAsPat p = p
 
-arityOf : List (Pair (List Pat) Expr) -> Maybe Int
+arityOf : List (List Pat, Expr) -> Maybe Int
 arityOf [] = Nothing
-arityOf ((Pair pats body) :: rest) = Just (natToInt (length pats))
+arityOf ((pats, body) :: rest) = Just (natToInt (length pats))
 
 paramNames : Int -> List String
 paramNames n = paramNamesGo (n - 0) n []
@@ -120,23 +119,23 @@ paramNamesGo remaining n acc =
 
 wrapLambdas : List String -> Expr -> Expr
 wrapLambdas [] body = body
-wrapLambdas (n :: rest) body = ELam [Pair n spanEmpty] (wrapLambdas rest body) spanEmpty
+wrapLambdas (n :: rest) body = ELam [(n, spanEmpty)] (wrapLambdas rest body) spanEmpty
 
 -- 按列递归。params 是**尚未消耗**的位置名（与剩余模式列一一对应）。该列含内建字面量模式
 -- （Int / String）：生成嵌套 if 链——`f 0 = a; f 1 = b; f n = c` → `if pos == 0 then a else
 -- if pos == 1 then b else c`；变量/通配 clause 在字面量之后提供 fallback（体按剩余列递归构建）。
-litAltExpr : List (Pair String (Pair Bool (List (Pair String Int)))) -> List (Pair (List Pat) Expr) -> String -> List String -> Span -> Int -> Check Expr
+litAltExpr : List (String, Bool, List (String, Int)) -> List (List Pat, Expr) -> String -> List String -> Span -> Int -> Check Expr
 litAltExpr table clauses pos restParams fb fuel =
   if fuel <= 0 then icFuel "pattern matrix" else litAltExprGo table clauses pos restParams fb fuel
 
-litAltExprGo : List (Pair String (Pair Bool (List (Pair String Int)))) -> List (Pair (List Pat) Expr) -> String -> List String -> Span -> Int -> Check Expr
+litAltExprGo : List (String, Bool, List (String, Int)) -> List (List Pat, Expr) -> String -> List String -> Span -> Int -> Check Expr
 litAltExprGo table clauses pos restParams fb fuel =
   if fuel <= 0 then
     icFuel "pattern matrix"
   else
     case clauses of
       [] => tcErr0 fb IntStringCaseNeedsFallback
-      (Pair (p :: ps) body) :: rest =>
+      (p :: ps, body) :: rest =>
         case p of
           PVar pname psp => buildColumnExpr table (prepVarColumn pos clauses) restParams fb (fuel - 1)
           PWild psp => buildColumnExpr table (stripFirstCol clauses) restParams fb (fuel - 1)
@@ -145,22 +144,22 @@ litAltExprGo table clauses pos restParams fb fuel =
       -- 变量/通配行也匹配这个字面量，必须一起进入子矩阵，否则内层列会缺分支
       -- （`TCon "a" [] => ...; TCon "b" _ => ...; TCon _ _ => ...` 报 missing Cons，
       -- 且 `f "a" [] = 1; f "a" _ = 2; f _ _ = 3` 会丢掉第二条同字面量分支）。
-      (Pair [] body) :: rest => tcErr0 fb ClauseTooManyPatterns
+      ([], body) :: rest => tcErr0 fb ClauseTooManyPatterns
 
 -- 字面量分支的子矩阵：同字面量的行 + 变量/通配行（它们也匹配该字面量），保持原顺序；
 -- 其它字面量的行不匹配这个值。变量/通配行要把该列的头变量改名成 scrutinee 位置名
 -- (pos)，否则体里对该变量的引用在「字面量分支的兜底」里没有 binder（TCon n args 的 n）。
-litBranchClauses : Pat -> String -> List (Pair (List Pat) Expr) -> List (Pair (List Pat) Expr)
+litBranchClauses : Pat -> String -> List (List Pat, Expr) -> List (List Pat, Expr)
 litBranchClauses lit pos clauses = filterLitBranch lit pos clauses []
 
-filterLitBranch : Pat -> String -> List (Pair (List Pat) Expr) -> List (Pair (List Pat) Expr) -> List (Pair (List Pat) Expr)
+filterLitBranch : Pat -> String -> List (List Pat, Expr) -> List (List Pat, Expr) -> List (List Pat, Expr)
 filterLitBranch lit pos [] acc = reverse acc
-filterLitBranch lit pos ((Pair (p :: ps) body) :: rest) acc =
+filterLitBranch lit pos ((p :: ps, body) :: rest) acc =
   if litPatMatches lit p then
-    filterLitBranch lit pos rest (Pair ps (literalBranchBody pos p body) :: acc)
+    filterLitBranch lit pos rest ((ps, literalBranchBody pos p body) :: acc)
   else
     filterLitBranch lit pos rest acc
-filterLitBranch lit pos ((Pair [] body) :: rest) acc = filterLitBranch lit pos rest acc
+filterLitBranch lit pos (([], body) :: rest) acc = filterLitBranch lit pos rest acc
 
 -- 同字面量行直接用体；变量/通配行把该列的头变量改写成位置名。
 literalBranchBody : String -> Pat -> Expr -> Expr
@@ -189,14 +188,14 @@ litPatExpr (PStr s sp) = EStr s sp
 litPatExpr _ = EInt 0 (Span "" 0 0 0 0 0 0)
 
 -- | 模式矩阵的列下降：按当前列（`pos`）的模式形态分派成 case / if 表达式。
-buildColumnExpr : List (Pair String (Pair Bool (List (Pair String Int)))) -> List (Pair (List Pat) Expr) -> List String -> Span -> Int -> Check Expr
+buildColumnExpr : List (String, Bool, List (String, Int)) -> List (List Pat, Expr) -> List String -> Span -> Int -> Check Expr
 buildColumnExpr table clauses0 params fb fuel =
   if fuel <= 0 then
     ErrC (tcMsg PatternFuel [])
   else
     buildColumnExprPruned table (pruneRows clauses0) params fb fuel
 
-buildColumnExprPruned : List (Pair String (Pair Bool (List (Pair String Int)))) -> List (Pair (List Pat) Expr) -> List String -> Span -> Int -> Check Expr
+buildColumnExprPruned : List (String, Bool, List (String, Int)) -> List (List Pat, Expr) -> List String -> Span -> Int -> Check Expr
 buildColumnExprPruned table clauses params fb fuel =
   if fuel <= 0 then
     ErrC (tcMsg PatternFuel [])
@@ -215,14 +214,14 @@ buildColumnExprPruned table clauses params fb fuel =
 
 -- as-pattern 列：先把该列 head 统一成变量（body 里的绑定名改写成该列变量 pos），
 -- 再把内层模式作为「新列」对同一 pos 分派（等价于 `case pos of <inner> => body`）。
-hasAsHead : List (Pair (List Pat) Expr) -> Bool
+hasAsHead : List (List Pat, Expr) -> Bool
 hasAsHead [] = False
 hasAsHead (c :: rest) =
   case c of
-    Pair ((PAs _ _ _) :: ps) body => True
+    ((PAs _ _ _) :: ps, body) => True
     _ => hasAsHead rest
 
-asColumn : List (Pair String (Pair Bool (List (Pair String Int)))) -> List (Pair (List Pat) Expr) -> String -> List String -> Span -> Int -> Check Expr
+asColumn : List (String, Bool, List (String, Int)) -> List (List Pat, Expr) -> String -> List String -> Span -> Int -> Check Expr
 asColumn table clauses pos restParams fb fuel =
   if fuel <= 0 then
     ErrC (tcMsg PatternFuel [])
@@ -231,9 +230,9 @@ asColumn table clauses pos restParams fb fuel =
       (buildColumnExpr table (map (asInnerClause pos) clauses) (pos :: restParams) fb (fuel - 1))
       (\e => OkC e)
 
-asInnerClause : String -> Pair (List Pat) Expr -> Pair (List Pat) Expr
-asInnerClause pos (Pair (p :: ps) body) = Pair (append [innerOfHead p] ps) (renameAsHead pos p body)
-asInnerClause pos (c@(Pair [] body)) = c
+asInnerClause : String -> (List Pat, Expr) -> (List Pat, Expr)
+asInnerClause pos (p :: ps, body) = (append [innerOfHead p] ps, renameAsHead pos p body)
+asInnerClause pos (c@([], body)) = c
 
 innerOfHead : Pat -> Pat
 innerOfHead (PAs n inner sp) = inner
@@ -246,8 +245,8 @@ renameAsHead pos p body = body
 
 -- 合成 case 的位置：用首个 clause 的模式 span，让覆盖性错误能指回源码
 -- （用空 span 会把穷尽性诊断报在 :0:0）。
-export firstPatSpan : List (Pair (List Pat) Expr) -> Span
-firstPatSpan ((Pair (p :: ps) body) :: rest) = patSpan p
+export firstPatSpan : List (List Pat, Expr) -> Span
+firstPatSpan ((p :: ps, body) :: rest) = patSpan p
 firstPatSpan _ = Span "" 0 0 0 0 0 0
 
 -- 构造子列：每个构造子一个分支。**该族构造子已经全覆盖时不再生成兜底分支**——
@@ -255,7 +254,7 @@ firstPatSpan _ = Span "" 0 0 0 0 0 0
 -- 再补一个 `_` 兜底只会把「剩余列在兜底里匹配不全」暴露成假的覆盖错误
 -- （`mergeBy le [] ys` / `mergeBy le xs []` / `mergeBy le (x::xs) (y::ys)`
 -- 会报 `missing Cons`）。族信息由 Elab 传入（`ctorTable`）。
-ctorColumn : List (Pair String (Pair Bool (List (Pair String Int)))) -> List (Pair (List Pat) Expr) -> String -> List String -> Span -> Int -> Check Expr
+ctorColumn : List (String, Bool, List (String, Int)) -> List (List Pat, Expr) -> String -> List String -> Span -> Int -> Check Expr
 ctorColumn table clauses pos restParams fbSp fuel =
   if fuel <= 0 then
     icFuel "pattern matrix"
@@ -268,7 +267,7 @@ ctorColumn table clauses pos restParams fbSp fuel =
       )
 
 -- 构造子名 → 所属族的构造子表；列表字面量哨兵按短名找族，其余找不到族时按未知处理。
-familyOfCtor : List (Pair String (Pair Bool (List (Pair String Int)))) -> String -> Maybe (Pair Bool (List (Pair String Int)))
+familyOfCtor : List (String, Bool, List (String, Int)) -> String -> Maybe (Bool, List (String, Int))
 familyOfCtor [] ctor = Nothing
 familyOfCtor (p :: rest) ctor =
   if memName ctor (map firstOf (secondOf (secondOf p))) then
@@ -276,7 +275,7 @@ familyOfCtor (p :: rest) ctor =
   else
     familyOfCtor rest ctor
 
-familyOfHead : List (Pair String (Pair Bool (List (Pair String Int)))) -> String -> Maybe (List (Pair String Int))
+familyOfHead : List (String, Bool, List (String, Int)) -> String -> Maybe (List (String, Int))
 familyOfHead table h =
   case familyOfCtor table h of
     Just fam => Just (secondOf fam)
@@ -286,7 +285,7 @@ familyOfHead table h =
       else if isListConsSyntax h then familyOfShortCtors table ["::", "Cons"] else Nothing
 
 -- 该列 head 里的列表哨兵折回族里的 canonical 构造子名；非哨兵原样保留。
-canonHeads : List (Pair String Int) -> List String -> Maybe (List String)
+canonHeads : List (String, Int) -> List String -> Maybe (List String)
 canonHeads ctors [] = Just []
 canonHeads ctors (h :: rest) =
   case sentinelCtorIn ctors h of
@@ -299,7 +298,7 @@ canonHeads ctors (h :: rest) =
 -- 该族是否已被本列构造子 head 全覆盖。族未知（表与模式不一致）时不推断：
 -- 补 `_` 兜底会用不完整的残矩阵独立判覆盖，反而在不可达兜底里报假 missing；
 -- 交给外层穷尽检查（它按真实构造子判）更准确。
-familyCovered : List (Pair String (Pair Bool (List (Pair String Int)))) -> List String -> Bool
+familyCovered : List (String, Bool, List (String, Int)) -> List String -> Bool
 familyCovered table [] = False
 familyCovered table (heads@(h :: rest)) =
   case familyOfHead table h of
@@ -313,26 +312,26 @@ familyCovered table (heads@(h :: rest)) =
 
 -- 该列至少有一个构造子模式（与变量/通配混合时也要走构造子分支 + 兜底，
 -- 不能落到 `litAltExpr`——它不会展开构造子子模式，丢失子模式绑定）。
-hasCtorHead : List (Pair (List Pat) Expr) -> Bool
+hasCtorHead : List (List Pat, Expr) -> Bool
 hasCtorHead [] = False
 hasCtorHead (c :: rest) =
   case c of
-    Pair (p :: ps) body =>
+    (p :: ps, body) =>
       case p of
         PCon _ _ _ => True
         _ => hasCtorHead rest
-    Pair [] body => hasCtorHead rest
+    ([], body) => hasCtorHead rest
 
 -- 该列全是构造子模式（不含字面量）。
-allCtorHeads : List (Pair (List Pat) Expr) -> Bool
+allCtorHeads : List (List Pat, Expr) -> Bool
 allCtorHeads [] = True
 allCtorHeads (c :: rest) =
   case c of
-    Pair (p :: ps) body =>
+    (p :: ps, body) =>
       case p of
         PCon cname subpats psp => allCtorHeads rest
         _ => False
-    Pair [] body => False
+    ([], body) => False
 
 -- 剩余模式是否全为通配（体不引用任何绑定名，可直接返回）。
 allWildPats : List Pat -> Bool
@@ -343,8 +342,8 @@ isWildPat : Pat -> Bool
 isWildPat (PWild _) = True
 isWildPat _ = False
 
-firstPats : List (Pair (List Pat) Expr) -> List Pat
-firstPats ((Pair pats body) :: rest) = pats
+firstPats : List (List Pat, Expr) -> List Pat
+firstPats ((pats, body) :: rest) = pats
 firstPats [] = []
 
 -- 不可辩模式（变量/通配/as-通配）：该行从这一列起覆盖一切。
@@ -359,19 +358,19 @@ allIrrefutablePats [] = True
 allIrrefutablePats (p :: rest) = irrefutablePat p && allIrrefutablePats rest
 
 -- 保留到第一个「剩余模式全不可辩」的行（含），丢弃其后不可达的行。
-pruneRows : List (Pair (List Pat) Expr) -> List (Pair (List Pat) Expr)
+pruneRows : List (List Pat, Expr) -> List (List Pat, Expr)
 pruneRows [] = []
 pruneRows (c :: rest) = if allIrrefutablePats (firstOf c) then [c] else c :: pruneRows rest
 
-allEmptyPats : List (Pair (List Pat) Expr) -> Bool
+allEmptyPats : List (List Pat, Expr) -> Bool
 allEmptyPats [] = True
 allEmptyPats (c :: rest) =
   case c of
-    Pair [] body => allEmptyPats rest
+    ([], body) => allEmptyPats rest
     _ => False
 
-bodyOfFirst : List (Pair (List Pat) Expr) -> Expr
-bodyOfFirst ((Pair pats body) :: rest) = body
+bodyOfFirst : List (List Pat, Expr) -> Expr
+bodyOfFirst ((pats, body) :: rest) = body
 bodyOfFirst [] = EInt 0 (Span "" 0 0 0 0 0 0)
 
 isVarPatD : Pat -> Bool
@@ -379,33 +378,33 @@ isVarPatD (PVar n sp) = True
 isVarPatD (PWild sp) = True
 isVarPatD _ = False
 
-allVarHeads : List (Pair (List Pat) Expr) -> Bool
+allVarHeads : List (List Pat, Expr) -> Bool
 allVarHeads [] = True
 allVarHeads (c :: rest) =
   case c of
-    Pair (p :: ps) body => isVarPatD p && allVarHeads rest
-    Pair [] body => False
+    (p :: ps, body) => isVarPatD p && allVarHeads rest
+    ([], body) => False
 
-stripFirstCol : List (Pair (List Pat) Expr) -> List (Pair (List Pat) Expr)
+stripFirstCol : List (List Pat, Expr) -> List (List Pat, Expr)
 stripFirstCol [] = []
 stripFirstCol (c :: rest) =
   case c of
-    Pair [] body => c :: stripFirstCol rest
-    Pair (p :: ps) body => Pair ps body :: stripFirstCol rest
+    ([], body) => c :: stripFirstCol rest
+    (p :: ps, body) => (ps, body) :: stripFirstCol rest
 
 -- | 整列都是变量：剥掉该列，并把**每个 clause 自己**的 head 变量改名成位置名。
 --   只改本 clause 的体：把改名推迟到整个内层表达式建好之后会误捕获其它 clause 里
 --   同名的更深子模式（`n :: e :: r :: _` 与 `e :: r :: _` 两条分支会串位）。
-prepVarColumn : String -> List (Pair (List Pat) Expr) -> List (Pair (List Pat) Expr)
+prepVarColumn : String -> List (List Pat, Expr) -> List (List Pat, Expr)
 prepVarColumn pos [] = []
 prepVarColumn pos (c :: rest) =
   case c of
-    Pair (p :: ps) body =>
+    (p :: ps, body) =>
       case p of
-        PVar nm psp => Pair ps (renameExpr nm pos body) :: prepVarColumn pos rest
-        PWild psp => Pair ps body :: prepVarColumn pos rest
-        _ => Pair ps body :: prepVarColumn pos rest
-    Pair [] body => c :: prepVarColumn pos rest
+        PVar nm psp => (ps, renameExpr nm pos body) :: prepVarColumn pos rest
+        PWild psp => (ps, body) :: prepVarColumn pos rest
+        _ => (ps, body) :: prepVarColumn pos rest
+    ([], body) => c :: prepVarColumn pos rest
 
 renameExpr : String -> String -> Expr -> Expr
 renameExpr oldName newName e =
@@ -471,21 +470,20 @@ renameExprUnless : String -> String -> List String -> Expr -> Expr
 renameExprUnless oldName newName names body =
   if memName oldName names then body else renameExpr oldName newName body
 
-renameBind : String -> String -> Pair Pat Expr -> Pair Pat Expr
-renameBind oldName newName bnd = Pair (firstOf bnd) (renameExpr oldName newName (secondOf bnd))
+renameBind : String -> String -> (Pat, Expr) -> (Pat, Expr)
+renameBind oldName newName bnd = (firstOf bnd, renameExpr oldName newName (secondOf bnd))
 
-renameFieldValue : String -> String -> Pair String Expr -> Pair String Expr
+renameFieldValue : String -> String -> (String, Expr) -> (String, Expr)
 renameFieldValue oldName newName field =
-  Pair (firstOf field) (renameExpr oldName newName (secondOf field))
+  (firstOf field, renameExpr oldName newName (secondOf field))
 
 -- 局部函数 clause —— 参数模式里的绑定名遮蔽 oldName。
-renameLocalClause : String -> String -> Pair (List Pat) Expr -> Pair (List Pat) Expr
+renameLocalClause : String -> String -> (List Pat, Expr) -> (List Pat, Expr)
 renameLocalClause oldName newName clause =
-  Pair
-    (firstOf clause)
-    (renameExprUnless oldName newName (concatMap patNamesOf (firstOf clause)) (secondOf clause))
+  (firstOf clause,
+    renameExprUnless oldName newName (concatMap patNamesOf (firstOf clause)) (secondOf clause))
 
-bindNames : List (Pair Pat Expr) -> List String
+bindNames : List (Pat, Expr) -> List String
 bindNames [] = []
 bindNames (b :: rest) = append (patNamesOf (firstOf b)) (bindNames rest)
 
@@ -498,25 +496,25 @@ patNamesOf (PInt n sp) = []
 patNamesOf (PStr s sp) = []
 patNamesOf (PRecord rn fields sp) = concatMap (\f => patNamesOf (secondOf f)) fields
 
-renameAlt : String -> String -> Pair Pat Expr -> Pair Pat Expr
+renameAlt : String -> String -> (Pat, Expr) -> (Pat, Expr)
 renameAlt oldName newName alt =
   let
     p = firstOf alt
-  in Pair p (renameExprUnless oldName newName (patNamesOf p) (secondOf alt))
+  in (p, renameExprUnless oldName newName (patNamesOf p) (secondOf alt))
 
 -- 该列出现构造子：每个构造子一组。
 --
 -- **分支 pattern 的子模式一律用新鲜变量**（`_sc<i>`）：规范形的精化器只接受变量/通配
 -- 子模式（`bindCtorTele`），位置名与 body 里的引用完全可控；子模式的真实形态交给内层
 -- `buildColumnExpr` 用 case 表达。
-ctorAltList : List (Pair String (Pair Bool (List (Pair String Int)))) -> List (Pair (List Pat) Expr) -> String -> List String -> Span -> Int -> Check (List (Pair Pat Expr))
+ctorAltList : List (String, Bool, List (String, Int)) -> List (List Pat, Expr) -> String -> List String -> Span -> Int -> Check (List (Pat, Expr))
 ctorAltList table clauses pos restParams fbSp fuel =
   if fuel <= 0 then
     icFuel "pattern matrix"
   else
     ctorAltListGo table clauses (ctorHeads clauses) pos restParams fbSp fuel
 
-ctorAltListGo : List (Pair String (Pair Bool (List (Pair String Int)))) -> List (Pair (List Pat) Expr) -> List String -> String -> List String -> Span -> Int -> Check (List (Pair Pat Expr))
+ctorAltListGo : List (String, Bool, List (String, Int)) -> List (List Pat, Expr) -> List String -> String -> List String -> Span -> Int -> Check (List (Pat, Expr))
 ctorAltListGo table clauses [] pos restParams fbSp fuel =
   if fuel <= 0 then icFuel "pattern matrix" else OkC []
 ctorAltListGo table clauses (cname :: rest) pos restParams fbSp fuel =
@@ -529,19 +527,19 @@ ctorAltListGo table clauses (cname :: rest) pos restParams fbSp fuel =
       subParams = append freshSubs restParams
       branchPats = map (\n => PVar n (Span "" 0 0 0 0 0 0)) freshSubs
       expanded = clausesForCtor cname branchPats pos clauses
-    in Vuna.Compiler.Base.Common.bind (buildColumnExpr table expanded subParams fbSp (fuel - 1)) (\bodyExpr => Vuna.Compiler.Base.Common.bind (ctorAltListGo table clauses rest pos restParams fbSp (fuel - 1)) (\tail => OkC ((::) (Pair (PCon (classifyName cname) branchPats (Span "" 0 0 0 0 0 0)) bodyExpr) tail)))
+    in Vuna.Compiler.Base.Common.bind (buildColumnExpr table expanded subParams fbSp (fuel - 1)) (\bodyExpr => Vuna.Compiler.Base.Common.bind (ctorAltListGo table clauses rest pos restParams fbSp (fuel - 1)) (\tail => OkC ((::) (PCon (classifyName cname) branchPats (Span "" 0 0 0 0 0 0), bodyExpr) tail)))
 
 -- 该构造子在本列各 clause 里的子模式个数（取第一个匹配 clause 的长度）。
-ctorSubPatCount : List (Pair (List Pat) Expr) -> String -> Int
+ctorSubPatCount : List (List Pat, Expr) -> String -> Int
 ctorSubPatCount [] cname = 0
 ctorSubPatCount (c :: rest) cname =
   case c of
-    Pair (p :: ps) body =>
+    (p :: ps, body) =>
       case p of
         PCon cn subpats psp =>
           if rnameKey cn == cname then length subpats else ctorSubPatCount rest cname
         _ => ctorSubPatCount rest cname
-    Pair [] body => ctorSubPatCount rest cname
+    ([], body) => ctorSubPatCount rest cname
 
 -- 新鲜子模式名必须带**所在列的**位置名：不同层 `ctorAltList` 递归会各自生成 `_sc0/_sc1`，
 -- 若同名则内层 case 的 binder 遮蔽外层，且外层变量改名会把外层变量改写成
@@ -559,15 +557,15 @@ subNamesForGoGo pos remaining n acc =
   else
     subNamesForGoGo pos (remaining - 1) n ("_sc_${pos}_${n - remaining}" :: acc)
 
-ctorHeads : List (Pair (List Pat) Expr) -> List String
+ctorHeads : List (List Pat, Expr) -> List String
 ctorHeads [] = []
 ctorHeads (c :: rest) =
   case c of
-    Pair (p :: ps) body =>
+    (p :: ps, body) =>
       case p of
         PCon cname subpats psp => addNameDistinct (rnameKey cname) (ctorHeads rest)
         _ => ctorHeads rest
-    Pair [] body => ctorHeads rest
+    ([], body) => ctorHeads rest
 
 addNameDistinct : String -> List String -> List String
 addNameDistinct name [] = [name]
@@ -577,50 +575,49 @@ addNameDistinct name (x :: rest) =
 -- 该构造子分支的「匹配子句」：PCon 子句保留其子模式；变量/通配子句分发进该分支，
 -- 用分支的新鲜子名（`freshSubs`）占位、并把体里的变量引用改写成该列 scrutinee（`pos`），
 -- 否则变量子句被 `filterFallback` 收进外层兜底，嵌套 case 会缺该构造子的分支（覆盖错误）。
-clausesForCtor : String -> List Pat -> String -> List (Pair (List Pat) Expr) -> List (Pair (List Pat) Expr)
+clausesForCtor : String -> List Pat -> String -> List (List Pat, Expr) -> List (List Pat, Expr)
 clausesForCtor cname freshSubs pos [] = []
 clausesForCtor cname freshSubs pos (c :: rest) =
   case c of
-    Pair (p :: ps) body =>
+    (p :: ps, body) =>
       case p of
         PCon cn subpats psp =>
           if rnameKey cn == cname then
-            (::) (Pair (append subpats ps) body) (clausesForCtor cname freshSubs pos rest)
+            (::) (append subpats ps, body) (clausesForCtor cname freshSubs pos rest)
           else
             clausesForCtor cname freshSubs pos rest
         PVar nm psp =>
-          Pair (append freshSubs ps) (renameExpr nm pos body)
-            :: clausesForCtor cname freshSubs pos rest
-        PWild psp => Pair (append freshSubs ps) body :: clausesForCtor cname freshSubs pos rest
+          (append freshSubs ps, renameExpr nm pos body) :: clausesForCtor cname freshSubs pos rest
+        PWild psp => (append freshSubs ps, body) :: clausesForCtor cname freshSubs pos rest
         _ => clausesForCtor cname freshSubs pos rest
-    Pair [] body => clausesForCtor cname freshSubs pos rest
+    ([], body) => clausesForCtor cname freshSubs pos rest
 
-filterFallback : List (Pair (List Pat) Expr) -> List (Pair (List Pat) Expr)
+filterFallback : List (List Pat, Expr) -> List (List Pat, Expr)
 filterFallback [] = []
 filterFallback (c :: rest) =
   case c of
-    Pair (p :: ps) body => if isVarPatD p then (::) c (filterFallback rest) else filterFallback rest
-    Pair [] body => filterFallback rest
+    (p :: ps, body) => if isVarPatD p then (::) c (filterFallback rest) else filterFallback rest
+    ([], body) => filterFallback rest
 
 -- 兜底分支：变量/通配 head 的 clause 在**这一列**被通配吃掉，体里对该变量的引用
 -- 要改写成外层 scrutinee 位置名（`pos`）。直接拿原始体时变量名在通配分支里没有
 -- binder，会报 unknown name（`join sep (x :: rest)` 的 `rest`）。
-fallbackAltList : List (Pair String (Pair Bool (List (Pair String Int)))) -> String -> List (Pair (List Pat) Expr) -> List String -> Span -> Int -> Check (List (Pair Pat Expr))
+fallbackAltList : List (String, Bool, List (String, Int)) -> String -> List (List Pat, Expr) -> List String -> Span -> Int -> Check (List (Pat, Expr))
 fallbackAltList table pos clauses restParams fbSp fuel =
   if fuel <= 0 then
     icFuel "pattern matrix"
   else
     case prepFallbacks pos (filterFallback clauses) of
       [] => OkC []
-      fbs => Vuna.Compiler.Base.Common.bind (buildColumnExpr table fbs restParams fbSp (fuel - 1)) (\bodyExpr => OkC [Pair (PWild (Span "" 0 0 0 0 0 0)) bodyExpr])
+      fbs => Vuna.Compiler.Base.Common.bind (buildColumnExpr table fbs restParams fbSp (fuel - 1)) (\bodyExpr => OkC [(PWild (Span "" 0 0 0 0 0 0), bodyExpr)])
 
-prepFallbacks : String -> List (Pair (List Pat) Expr) -> List (Pair (List Pat) Expr)
+prepFallbacks : String -> List (List Pat, Expr) -> List (List Pat, Expr)
 prepFallbacks pos [] = []
 prepFallbacks pos (c :: rest) =
   case c of
-    Pair (p :: ps) body =>
+    (p :: ps, body) =>
       case p of
-        PVar nm psp => Pair ps (renameExpr nm pos body) :: prepFallbacks pos rest
-        PWild psp => Pair ps body :: prepFallbacks pos rest
+        PVar nm psp => (ps, renameExpr nm pos body) :: prepFallbacks pos rest
+        PWild psp => (ps, body) :: prepFallbacks pos rest
         _ => c :: prepFallbacks pos rest
-    Pair [] body => c :: prepFallbacks pos rest
+    ([], body) => c :: prepFallbacks pos rest

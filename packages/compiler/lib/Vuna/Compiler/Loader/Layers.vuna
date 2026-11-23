@@ -38,7 +38,7 @@ closureGo fuel layers todo acc =
   else
     case Queue.pop todo of
       Nothing => acc
-      Just (Pair n rest) => if memName n acc then closureGo (fuel - 1) layers rest acc else closureGo (fuel - 1) layers (Queue.pushAll (usesOfLayer layers n) rest) (n :: acc)
+      Just (n, rest) => if memName n acc then closureGo (fuel - 1) layers rest acc else closureGo (fuel - 1) layers (Queue.pushAll (usesOfLayer layers n) rest) (n :: acc)
 
 -- 队列里每个层名最多被弹出一次；重复边会让同一名字重复入队，因此上界是
 -- 「层数 + uses 总数 + 2」（只按层数给界时，宽图会提前截断闭包）。

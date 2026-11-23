@@ -64,36 +64,36 @@ outputsKeyOf target version irHash printResult =
     (append ["target-out", targetOutCodec, target, version, irHash] (if printResult then ["print"] else ["quiet"]))
 
 -- | 读产物缓存；未命中或载荷不完整 ⇒ `Nothing`。
-export readOutputsEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Eff r (Maybe (Pair (List (Pair String String)) (List Diagnostic)))
+export readOutputsEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Eff r (Maybe (List (String, String), List Diagnostic))
 readOutputsEff key =
   do
     raw <- Store.storeObjectReadEff targetOutKind targetOutCodec key
     pure (bindRaw raw)
 
-bindRaw : Maybe String -> Maybe (Pair (List (Pair String String)) (List Diagnostic))
+bindRaw : Maybe String -> Maybe (List (String, String), List Diagnostic)
 bindRaw Nothing = Nothing
 bindRaw (Just raw) = decodeOutputs raw
 
 -- | 写产物缓存。
-export writeOutputsEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> List (Pair String String) -> List Diagnostic -> Eff r Int
+export writeOutputsEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> List (String, String) -> List Diagnostic -> Eff r Int
 writeOutputsEff key files diags =
   Store.storeObjectWriteEff targetOutKind targetOutCodec key (encodeOutputs files diags)
 
 -- | 内部：载荷 = `(文件表, 诊断编码)`。
-encodeOutputs : List (Pair String String) -> List Diagnostic -> String
+encodeOutputs : List (String, String) -> List Diagnostic -> String
 encodeOutputs files diags =
   Bytes.encTop
     (Bytes.encPair (Bytes.encList (Bytes.encPair Bytes.encStr Bytes.encStr)) Bytes.encStr)
-    (Pair files (encDiagnostics diags))
+    (files, encDiagnostics diags)
 
-decodeOutputs : String -> Maybe (Pair (List (Pair String String)) (List Diagnostic))
+decodeOutputs : String -> Maybe (List (String, String), List Diagnostic)
 decodeOutputs raw =
   if strLength raw <= 0 then
     Nothing
   else
     case Bytes.decPair (Bytes.decList (Bytes.decPair Bytes.decStr Bytes.decStr)) Bytes.decStr (strLength raw + 1) (Bytes.curOf raw) of
       Nothing => Nothing
-      Just (Pair (Pair files diagText) rest) => if Bytes.curAtEnd rest then Just (Pair files (decodedDiags diagText)) else Nothing
+      Just ((files, diagText), rest) => if Bytes.curAtEnd rest then Just (files, decodedDiags diagText) else Nothing
 
 decodedDiags : String -> List Diagnostic
 decodedDiags text =
@@ -102,13 +102,13 @@ decodedDiags text =
     Nothing => []
 
 -- | 把产物文件表写回目录（命中路径用；与插件写侧同一布局）。
-export materializeEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> List (Pair String String) -> Eff r Int
+export materializeEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> List (String, String) -> Eff r Int
 materializeEff outDir files =
   do
     _ <- ensureDirPath outDir
     writeFiles outDir files
 
-writeFiles : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> List (Pair String String) -> Eff r Int
+writeFiles : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> List (String, String) -> Eff r Int
 writeFiles outDir [] = pure 0
 writeFiles outDir (f :: rest) =
   do
@@ -128,7 +128,7 @@ dropLast ([_]) = []
 dropLast (x :: rest) = x :: dropLast rest
 
 -- | 读回插件写出的产物（缓存 miss 时用它填充产物表）。
-export readProducedEff : Member nFs FsOp r => String -> List String -> Eff r (List (Pair String String))
+export readProducedEff : Member nFs FsOp r => String -> List String -> Eff r (List (String, String))
 readProducedEff outDir [] = pure []
 readProducedEff outDir (name :: rest) =
   do
@@ -136,8 +136,8 @@ readProducedEff outDir (name :: rest) =
     more <- readProducedEff outDir rest
     pure (one :: more)
 
-readProduced : Member nFs FsOp r => String -> String -> Eff r (Pair String String)
+readProduced : Member nFs FsOp r => String -> String -> Eff r (String, String)
 readProduced outDir name =
   do
     content <- fsReadFile "${outDir}/${name}"
-    pure (Pair name content)
+    pure (name, content)

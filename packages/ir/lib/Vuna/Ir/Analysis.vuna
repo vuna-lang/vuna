@@ -24,7 +24,7 @@ neighborsOf adjT name =
     Just ns => ns
     Nothing => []
 
-export adjTblOf : List (Pair String (List String)) -> HashMap String (List String)
+export adjTblOf : List (String, List String) -> HashMap String (List String)
 adjTblOf adj = HashMap.insertAll adj (HashMap.fromList [])
 
 addDependents : String -> List String -> HashMap String (List String) -> HashMap String (List String)
@@ -37,80 +37,80 @@ addDependents src (m :: rest) t =
         Nothing => []
   in addDependents src rest (HashMap.insert m ((::) src cur) t)
 
-reverseAdjTbl : List (Pair String (List String)) -> HashMap String (List String)
+reverseAdjTbl : List (String, List String) -> HashMap String (List String)
 reverseAdjTbl [] = HashMap.fromList []
-reverseAdjTbl ((Pair n ns) :: rest) = addDependents n ns (reverseAdjTbl rest)
+reverseAdjTbl ((n, ns) :: rest) = addDependents n ns (reverseAdjTbl rest)
 
 -- ---------------------------------------------------------------
 -- 完成序（正向图 DFS 后序）
 -- ---------------------------------------------------------------
-foldNeighborsPost : HashMap String (List String) -> List String -> HashMap String Bool -> List String -> Pair (HashMap String Bool) (List String)
+foldNeighborsPost : HashMap String (List String) -> List String -> HashMap String Bool -> List String -> (HashMap String Bool, List String)
 foldNeighborsPost adjT ms visited order = foldNeighborsPostFuel 100000 adjT ms visited order
 
-foldNeighborsPostFuel : Int -> HashMap String (List String) -> List String -> HashMap String Bool -> List String -> Pair (HashMap String Bool) (List String)
+foldNeighborsPostFuel : Int -> HashMap String (List String) -> List String -> HashMap String Bool -> List String -> (HashMap String Bool, List String)
 foldNeighborsPostFuel fuel adjT ms visited order =
   if fuel <= 0 then
-    Pair visited order
+    (visited, order)
   else
     case ms of
-      [] => Pair visited order
+      [] => (visited, order)
       m :: rest =>
         if HashMap.member m visited then
           foldNeighborsPostFuel (fuel - 1) adjT rest visited order
         else
           case dfsPostFuel (fuel - 1) adjT m (HashMap.insert m True visited) order of
-            Pair visited2 order2 => foldNeighborsPostFuel (fuel - 1) adjT rest visited2 order2
+            (visited2, order2) => foldNeighborsPostFuel (fuel - 1) adjT rest visited2 order2
 
-dfsPost : HashMap String (List String) -> String -> HashMap String Bool -> List String -> Pair (HashMap String Bool) (List String)
+dfsPost : HashMap String (List String) -> String -> HashMap String Bool -> List String -> (HashMap String Bool, List String)
 dfsPost adjT n visited order = dfsPostFuel 100000 adjT n visited order
 
-dfsPostFuel : Int -> HashMap String (List String) -> String -> HashMap String Bool -> List String -> Pair (HashMap String Bool) (List String)
+dfsPostFuel : Int -> HashMap String (List String) -> String -> HashMap String Bool -> List String -> (HashMap String Bool, List String)
 dfsPostFuel fuel adjT n visited order =
   if fuel <= 0 then
-    Pair visited order
+    (visited, order)
   else
     case foldNeighborsPostFuel (fuel - 1) adjT (neighborsOf adjT n) visited order of
-      Pair visited2 order2 => Pair visited2 ((::) n order2)
+      (visited2, order2) => (visited2, (::) n order2)
 
-postOrder : HashMap String (List String) -> List String -> HashMap String Bool -> List String -> Pair (HashMap String Bool) (List String)
-postOrder adjT [] visited order = Pair visited order
+postOrder : HashMap String (List String) -> List String -> HashMap String Bool -> List String -> (HashMap String Bool, List String)
+postOrder adjT [] visited order = (visited, order)
 postOrder adjT (n :: rest) visited order =
   if HashMap.member n visited then
     postOrder adjT rest visited order
   else
     case dfsPost adjT n (HashMap.insert n True visited) order of
-      Pair visited2 order2 => postOrder adjT rest visited2 order2
+      (visited2, order2) => postOrder adjT rest visited2 order2
 
 -- ---------------------------------------------------------------
 -- 反向图收集分量
 -- ---------------------------------------------------------------
-foldNeighborsCollect : HashMap String (List String) -> List String -> HashMap String Bool -> List String -> Pair (HashMap String Bool) (List String)
+foldNeighborsCollect : HashMap String (List String) -> List String -> HashMap String Bool -> List String -> (HashMap String Bool, List String)
 foldNeighborsCollect adjT ms visited comp = foldNeighborsCollectFuel 100000 adjT ms visited comp
 
-foldNeighborsCollectFuel : Int -> HashMap String (List String) -> List String -> HashMap String Bool -> List String -> Pair (HashMap String Bool) (List String)
+foldNeighborsCollectFuel : Int -> HashMap String (List String) -> List String -> HashMap String Bool -> List String -> (HashMap String Bool, List String)
 foldNeighborsCollectFuel fuel adjT ms visited comp =
   if fuel <= 0 then
-    Pair visited comp
+    (visited, comp)
   else
     case ms of
-      [] => Pair visited comp
+      [] => (visited, comp)
       m :: rest =>
         if HashMap.member m visited then
           foldNeighborsCollectFuel (fuel - 1) adjT rest visited comp
         else
           case dfsCollectFuel (fuel - 1) adjT m (HashMap.insert m True visited) comp of
-            Pair visited2 comp2 => foldNeighborsCollectFuel (fuel - 1) adjT rest visited2 comp2
+            (visited2, comp2) => foldNeighborsCollectFuel (fuel - 1) adjT rest visited2 comp2
 
-dfsCollect : HashMap String (List String) -> String -> HashMap String Bool -> List String -> Pair (HashMap String Bool) (List String)
+dfsCollect : HashMap String (List String) -> String -> HashMap String Bool -> List String -> (HashMap String Bool, List String)
 dfsCollect adjT n visited comp = dfsCollectFuel 100000 adjT n visited comp
 
-dfsCollectFuel : Int -> HashMap String (List String) -> String -> HashMap String Bool -> List String -> Pair (HashMap String Bool) (List String)
+dfsCollectFuel : Int -> HashMap String (List String) -> String -> HashMap String Bool -> List String -> (HashMap String Bool, List String)
 dfsCollectFuel fuel adjT n visited comp =
   if fuel <= 0 then
-    Pair visited comp
+    (visited, comp)
   else
     case foldNeighborsCollectFuel (fuel - 1) adjT (neighborsOf adjT n) visited comp of
-      Pair visited2 comp2 => Pair visited2 ((::) n comp2)
+      (visited2, comp2) => (visited2, (::) n comp2)
 
 collectComps : HashMap String (List String) -> List String -> HashMap String Bool -> List (List String) -> List (List String)
 collectComps adjT [] visited comps = comps
@@ -119,12 +119,12 @@ collectComps adjT (n :: rest) visited comps =
     collectComps adjT rest visited comps
   else
     case dfsCollect adjT n (HashMap.insert n True visited) [] of
-      Pair visited2 comp => collectComps adjT rest visited2 (comp :: comps)
+      (visited2, comp) => collectComps adjT rest visited2 (comp :: comps)
 
 -- 名字 → 所属分量（一次构建，O(1) 查）。
 componentTblOf : List (List String) -> HashMap String (List String)
 componentTblOf comps =
-  HashMap.insertAll (concatMap (\g => map (\n => Pair n g) g) comps) (HashMap.fromList [])
+  HashMap.insertAll (concatMap (\g => map (\n => (n, g)) g) comps) (HashMap.fromList [])
 
 addAllNames : List String -> HashMap String Bool -> HashMap String Bool
 addAllNames [] t = t
@@ -173,9 +173,8 @@ orderGroups adjT groups =
   let
     indexed = indexGroups 0 groups []
     groupIdxT = groupIndexTbl indexed
-    grpTbl =
-      HashMap.insertAll (map (\p => Pair (firstOf p) (secondOf p)) indexed) (HashMap.fromList [])
-    depPairs = map (\p => Pair (firstOf p) (groupDepIdx adjT groupIdxT p)) indexed
+    grpTbl = HashMap.insertAll (map (\p => (firstOf p, secondOf p)) indexed) (HashMap.fromList [])
+    depPairs = map (\p => (firstOf p, groupDepIdx adjT groupIdxT p)) indexed
     revTbl = reverseDepTbl depPairs
     indeg =
       foldl
@@ -185,20 +184,20 @@ orderGroups adjT groups =
     ready = filter (\n => lookupInt indeg n == 0) (map firstOf indexed)
   in orderGroupsGo (countList groups + 1) grpTbl revTbl indeg ready (countList groups) []
 
-indexGroups : Int -> List (List String) -> List (Pair Int (List String)) -> List (Pair Int (List String))
+indexGroups : Int -> List (List String) -> List (Int, List String) -> List (Int, List String)
 indexGroups i [] acc = reverse acc
-indexGroups i (g :: rest) acc = indexGroups (i + 1) rest (Pair i g :: acc)
+indexGroups i (g :: rest) acc = indexGroups (i + 1) rest ((i, g) :: acc)
 
-groupIndexTbl : List (Pair Int (List String)) -> HashMap String Int
+groupIndexTbl : List (Int, List String) -> HashMap String Int
 groupIndexTbl indexed =
   HashMap.insertAll
-    (concatMap (\p => map (\n => Pair n (firstOf p)) (secondOf p)) indexed)
+    (concatMap (\p => map (\n => (n, firstOf p)) (secondOf p)) indexed)
     (HashMap.fromList [])
 
 -- | 组的下标依赖：把组内各成员在邻接表里的依赖映射成组下标（去重、去自环）。
 -- 不在本单元的依赖已在 `groupNames` 过滤。
-groupDepIdx : HashMap String (List String) -> HashMap String Int -> Pair Int (List String) -> List Int
-groupDepIdx adjT gIdxT (Pair i g) =
+groupDepIdx : HashMap String (List String) -> HashMap String Int -> (Int, List String) -> List Int
+groupDepIdx adjT gIdxT (i, g) =
   groupDepIdxGo i gIdxT (concatMap (neighborsOf adjT) g) (HashMap.fromList []) []
 
 groupDepIdxGo : Int -> HashMap String Int -> List String -> HashMap Int Bool -> List Int -> List Int
@@ -212,12 +211,12 @@ groupDepIdxGo i gIdxT (n :: rest) seen acc =
         groupDepIdxGo i gIdxT rest (HashMap.insert j True seen) (j :: acc)
     Nothing => groupDepIdxGo i gIdxT rest seen acc
 
-reverseDepTbl : List (Pair Int (List Int)) -> HashMap Int (List Int)
+reverseDepTbl : List (Int, List Int) -> HashMap Int (List Int)
 reverseDepTbl pairs = foldl addReverseEdges (HashMap.fromList []) pairs
 
 -- 同一个依赖被多个组引用时必须追加（`insertAll` 会覆盖同键）。
-addReverseEdges : HashMap Int (List Int) -> Pair Int (List Int) -> HashMap Int (List Int)
-addReverseEdges tbl (Pair i deps) =
+addReverseEdges : HashMap Int (List Int) -> (Int, List Int) -> HashMap Int (List Int)
+addReverseEdges tbl (i, deps) =
   foldl (\acc, d => HashMap.insert d (append (lookupDeps acc d) [i]) acc) tbl deps
 
 lookupInt : HashMap Int Int -> Int -> Int
@@ -265,15 +264,15 @@ orderGroupsGo fuel grpTbl revTbl indeg ready remaining acc =
 -- | 纯名字级分组：入参是 (名字, 依赖) 与名字的全序（源码顺序）。
 -- 依赖里不在 `names` 里的（内建 / 运行时常量 / 类型级名）在这里被忽略——迁移前
 -- `depAdjacency` 已先把它们滤掉，这里再保险一次。
-export groupNames : List (Pair String (List String)) -> List String -> Check (List (List String))
+export groupNames : List (String, List String) -> List String -> Check (List (List String))
 groupNames adj names =
   let
     nameTbl = HashMap.ofNames names
-    adj2 = map (\p => Pair (firstOf p) (filter (\n => HashMap.member n nameTbl) (secondOf p))) adj
+    adj2 = map (\p => (firstOf p, filter (\n => HashMap.member n nameTbl) (secondOf p))) adj
     adjT = adjTblOf adj2
     revT = reverseAdjTbl adj2
   in case postOrder adjT names (HashMap.fromList []) [] of
-    Pair _ order =>
+    (_, order) =>
       let
         comps = collectComps revT order (HashMap.fromList []) []
         groups = groupsFromComps comps names
@@ -354,7 +353,7 @@ assembleGroups adjT defs (g :: rest) =
 export reachableDefs : List String -> List IrDef -> List IrDef
 reachableDefs seeds defs =
   let
-    defTbl = HashMap.insertAll (map (\d => Pair (irDefName d) d) defs) (HashMap.fromList [])
+    defTbl = HashMap.insertAll (map (\d => (irDefName d, d)) defs) (HashMap.fromList [])
     budget = 8 + countList seeds + depEdgeCount defs
     seen = reachableNames budget seeds defTbl (HashMap.fromList [])
   in filter (\d => HashMap.member (irDefName d) seen) defs
@@ -411,7 +410,7 @@ irStringsOf (IrConcatMany parts) = concatMap irStringsOf parts
 irStringsOf (IrEffThunk _ _ _ _ prim) = irStringsOf prim
 irStringsOf _ = []
 
-irStringsOfField : Pair String Ir -> List String
+irStringsOfField : (String, Ir) -> List String
 irStringsOfField p = irStringsOf (secondOf p)
 
 irStringsOfAlt : IrAlt -> List String
@@ -446,7 +445,7 @@ irFloatLitsOf (IrConcatMany parts) = concatMap irFloatLitsOf parts
 irFloatLitsOf (IrEffThunk _ _ _ _ prim) = irFloatLitsOf prim
 irFloatLitsOf _ = []
 
-floatsOfField : Pair String Ir -> List String
+floatsOfField : (String, Ir) -> List String
 floatsOfField p = irFloatLitsOf (secondOf p)
 
 floatsOfAlt : IrAlt -> List String
@@ -457,12 +456,12 @@ floatsOfAltMaybe Nothing = []
 floatsOfAltMaybe (Just alt) = floatsOfAlt alt
 
 -- | 应用的左脊：拆出 head 与按序实参。`IrTail` 不属于脊，调用方先处理标记。
-export flattenApp : Ir -> Pair Ir (List Ir)
+export flattenApp : Ir -> (Ir, List Ir)
 flattenApp (IrApp _ f a) =
   let
     p = flattenApp f
-  in Pair (firstOf p) (append (secondOf p) [a])
-flattenApp x = Pair x []
+  in (firstOf p, append (secondOf p) [a])
+flattenApp x = (x, [])
 
 -- | 一个 IR 项引用的顶层定义名（`IrGlobal`），按出现顺序；`IrTail` 同内层。
 export irGlobalsOf : Ir -> List String
@@ -487,7 +486,7 @@ irGlobalsOf (IrEffThunk _ _ _ _ p) = irGlobalsOf p
 irGlobalsOf (IrTail inner) = irGlobalsOf inner
 irGlobalsOf _ = []
 
-globalsOfField : Pair String Ir -> List String
+globalsOfField : (String, Ir) -> List String
 globalsOfField p = irGlobalsOf (secondOf p)
 
 globalsOfAlt : IrAlt -> List String
@@ -503,7 +502,7 @@ globalsOfAltMaybe (Just a) = globalsOfAlt a
 export reachableDefsByRefs : (String -> Bool) -> Int -> List String -> List IrDef -> List IrDef
 reachableDefsByRefs keepDep fuel roots defs =
   let
-    tbl = HashMap.fromList (map (\d => Pair (irDefName d) d) defs)
+    tbl = HashMap.fromList (map (\d => (irDefName d, d)) defs)
     budget = 8 + fuel + refEdgeCount defs
     names = closeRefsByRefs budget tbl keepDep roots []
   in filter (\d => memName (irDefName d) names) defs
@@ -569,15 +568,15 @@ checkUniqueDefNamesGo (n :: rest) seen =
 -- Lowering 必须在**生成体之前**知道分组顺序：fresh binder 编号是单元内全局递增的
 -- （迁移前的 `gsNext` 跨组累积），所以生成顺序 = 分组顺序。这里把「分组 + 护栏」与
 -- 「生成」解耦：`recOk` / `spanOf` 由调用方按 Core 定义提供。
-export assembleGroupNames : List (Pair String (List String)) -> List String -> (String -> Bool) -> (String -> Maybe Span) -> Check (List (Pair Bool (List String)))
+export assembleGroupNames : List (String, List String) -> List String -> (String -> Bool) -> (String -> Maybe Span) -> Check (List (Bool, List String))
 assembleGroupNames adj names recOk spanOf =
   groupNamesGo (adjTblOf adj) names (groupNames adj names) recOk spanOf
 
-groupNamesGo : HashMap String (List String) -> List String -> Check (List (List String)) -> (String -> Bool) -> (String -> Maybe Span) -> Check (List (Pair Bool (List String)))
+groupNamesGo : HashMap String (List String) -> List String -> Check (List (List String)) -> (String -> Bool) -> (String -> Maybe Span) -> Check (List (Bool, List String))
 groupNamesGo adjT names (ErrC e) recOk spanOf = ErrC e
 groupNamesGo adjT names (OkC groups) recOk spanOf = assembleGo adjT groups recOk spanOf
 
-assembleGo : HashMap String (List String) -> List (List String) -> (String -> Bool) -> (String -> Maybe Span) -> Check (List (Pair Bool (List String)))
+assembleGo : HashMap String (List String) -> List (List String) -> (String -> Bool) -> (String -> Maybe Span) -> Check (List (Bool, List String))
 assembleGo adjT [] recOk spanOf = OkC []
 assembleGo adjT (g :: rest) recOk spanOf =
   let
@@ -586,9 +585,9 @@ assembleGo adjT (g :: rest) recOk spanOf =
       if isRec then
         case firstBadRecName g recOk of
           Just name => cgErrDefAt (spanOf name) name (RecursiveValueDefinition name) [name]
-          Nothing => OkC (Pair True g)
+          Nothing => OkC (True, g)
       else
-        OkC (Pair False g)
+        OkC (False, g)
   in Vuna.Compiler.Base.Common.bind
     checked
     (\grp => Vuna.Compiler.Base.Common.bind (assembleGo adjT rest recOk spanOf) (\tail => OkC ((::) grp tail)))
@@ -627,10 +626,9 @@ anyMentions : String -> List Ir -> Bool
 anyMentions name [] = False
 anyMentions name (x :: rest) = irMentionsGlobal name x || anyMentions name rest
 
-anyMentionsFields : String -> List (Pair String Ir) -> Bool
+anyMentionsFields : String -> List (String, Ir) -> Bool
 anyMentionsFields name [] = False
-anyMentionsFields name ((Pair fn fe) :: rest) =
-  irMentionsGlobal name fe || anyMentionsFields name rest
+anyMentionsFields name ((fn, fe) :: rest) = irMentionsGlobal name fe || anyMentionsFields name rest
 
 anyMentionsAlts : String -> List IrAlt -> Bool
 anyMentionsAlts name [] = False

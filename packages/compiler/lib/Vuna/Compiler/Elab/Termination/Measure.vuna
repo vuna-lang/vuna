@@ -33,19 +33,19 @@ joinComma ([x]) = x
 joinComma (x :: rest) = "${x}, ${joinComma rest}"
 
 -- 正数事实表：函数名 + 形参下标。
-export posHas : String -> Int -> List (Pair String Int) -> Bool
+export posHas : String -> Int -> List (String, Int) -> Bool
 posHas f i [] = False
-posHas f i ((Pair g j) :: rest) =
+posHas f i ((g, j) :: rest) =
   if f == g then if i == j then True else posHas f i rest else posHas f i rest
 
 -- facts 的 O(1) 查找：name → 正位置列表。不动点每轮建一次表（posWalk 逐节点查 facts）；
 -- 逐实参位置线性扫整个 facts 列表会随 def 数增长呈 n²。
-export posTblOf : List (Pair String Int) -> HashMap String (List Int)
+export posTblOf : List (String, Int) -> HashMap String (List Int)
 posTblOf xs = posTblOfGo xs (HashMap.fromList [])
 
-posTblOfGo : List (Pair String Int) -> HashMap String (List Int) -> HashMap String (List Int)
+posTblOfGo : List (String, Int) -> HashMap String (List Int) -> HashMap String (List Int)
 posTblOfGo [] tbl = tbl
-posTblOfGo ((Pair f i) :: rest) tbl =
+posTblOfGo ((f, i) :: rest) tbl =
   case HashMap.lookup f tbl of
     Just is => posTblOfGo rest (HashMap.insert f (i :: is) tbl)
     Nothing => posTblOfGo rest (HashMap.insert f [i] tbl)
@@ -60,63 +60,63 @@ memInt : Int -> List Int -> Bool
 memInt i [] = False
 memInt i (x :: rest) = i == x || memInt i rest
 
-export posAdd : String -> Int -> List (Pair String Int) -> List (Pair String Int)
-posAdd f i facts = if posHas f i facts then facts else Pair f i :: facts
+export posAdd : String -> Int -> List (String, Int) -> List (String, Int)
+posAdd f i facts = if posHas f i facts then facts else (f, i) :: facts
 
-export posSubset : List (Pair String Int) -> List (Pair String Int) -> Bool
+export posSubset : List (String, Int) -> List (String, Int) -> Bool
 posSubset [] b = True
-posSubset ((Pair f i) :: rest) b = posHas f i b && posSubset rest b
+posSubset ((f, i) :: rest) b = posHas f i b && posSubset rest b
 
-export posSetEq : List (Pair String Int) -> List (Pair String Int) -> Bool
+export posSetEq : List (String, Int) -> List (String, Int) -> Bool
 posSetEq a b = length a == length b && posSubset a b
 
-export posFilter : List (Pair String Int) -> List (Pair String Int) -> List (Pair String Int)
+export posFilter : List (String, Int) -> List (String, Int) -> List (String, Int)
 posFilter [] neg = []
-posFilter ((Pair f i) :: rest) neg =
-  if posHas f i neg then posFilter rest neg else Pair f i :: posFilter rest neg
+posFilter ((f, i) :: rest) neg =
+  if posHas f i neg then posFilter rest neg else (f, i) :: posFilter rest neg
 
-export posUnion : List (Pair String Int) -> List (Pair String Int) -> List (Pair String Int)
+export posUnion : List (String, Int) -> List (String, Int) -> List (String, Int)
 posUnion [] b = b
-posUnion ((Pair f i) :: rest) b = posUnion rest (posAdd f i b)
+posUnion ((f, i) :: rest) b = posUnion rest (posAdd f i b)
 
 -- 表版集合操作：不动点每轮的 filter / 并集 / 相等比较用 name→位置表；
 -- 逐候选线性扫另一个集合在 facts 千级时每轮是 O(n²)。
-export posFilterTbl : List (Pair String Int) -> HashMap String (List Int) -> List (Pair String Int)
+export posFilterTbl : List (String, Int) -> HashMap String (List Int) -> List (String, Int)
 posFilterTbl [] neg = []
-posFilterTbl ((Pair f i) :: rest) neg =
-  if posHasTbl f i neg then posFilterTbl rest neg else Pair f i :: posFilterTbl rest neg
+posFilterTbl ((f, i) :: rest) neg =
+  if posHasTbl f i neg then posFilterTbl rest neg else (f, i) :: posFilterTbl rest neg
 
-posSubsetTbl : List (Pair String Int) -> HashMap String (List Int) -> Bool
+posSubsetTbl : List (String, Int) -> HashMap String (List Int) -> Bool
 posSubsetTbl [] b = True
-posSubsetTbl ((Pair f i) :: rest) b = posHasTbl f i b && posSubsetTbl rest b
+posSubsetTbl ((f, i) :: rest) b = posHasTbl f i b && posSubsetTbl rest b
 
-posSetEqTbl : List (Pair String Int) -> List (Pair String Int) -> Bool
+posSetEqTbl : List (String, Int) -> List (String, Int) -> Bool
 posSetEqTbl a b = length a == length b && posSubsetTbl a (posTblOf b) && posSubsetTbl b (posTblOf a)
 
 -- 并集：fresh 在前，facts 中不在 fresh 的在后（集合语义与 `posUnion facts fresh` 一致）。
-export posUnionTbl : List (Pair String Int) -> List (Pair String Int) -> List (Pair String Int)
+export posUnionTbl : List (String, Int) -> List (String, Int) -> List (String, Int)
 posUnionTbl facts fresh = append fresh (posFilterTbl facts (posTblOf fresh))
 
-export funDeclsOf : List Decl -> List (Pair String (Pair (List Pat) Expr))
+export funDeclsOf : List Decl -> List (String, List Pat, Expr)
 funDeclsOf [] = []
 funDeclsOf (d :: rest) =
   case d of
-    DFun name pats body sp => Pair name (Pair pats body) :: funDeclsOf rest
+    DFun name pats body sp => (name, pats, body) :: funDeclsOf rest
     -- 实例方法体同样参与终止性分析：按方法短名分组建 SCC（同名方法在整个包内
     -- 共用一组，覆盖 trait dispatch 的任意实例选择；方向保守）。
     DInstance ctx head methods sp => append (funDeclsOf methods) (funDeclsOf rest)
     _ => funDeclsOf rest
 
-export lookupGroup : String -> List (Pair String (List (Pair (List Pat) Expr))) -> Maybe (List (Pair (List Pat) Expr))
+export lookupGroup : String -> List (String, List (List Pat, Expr)) -> Maybe (List (List Pat, Expr))
 lookupGroup name [] = Nothing
-lookupGroup name ((Pair n cls) :: rest) = if n == name then Just cls else lookupGroup name rest
+lookupGroup name ((n, cls) :: rest) = if n == name then Just cls else lookupGroup name rest
 
-export replaceGroup : String -> List (Pair (List Pat) Expr) -> List (Pair String (List (Pair (List Pat) Expr))) -> List (Pair String (List (Pair (List Pat) Expr)))
+export replaceGroup : String -> List (List Pat, Expr) -> List (String, List (List Pat, Expr)) -> List (String, List (List Pat, Expr))
 replaceGroup name cls [] = []
-replaceGroup name cls ((Pair n olds) :: rest) =
-  if n == name then Pair n cls :: rest else Pair n olds :: replaceGroup name cls rest
+replaceGroup name cls ((n, olds) :: rest) =
+  if n == name then (n, cls) :: rest else (n, olds) :: replaceGroup name cls rest
 
-export groupDefs : List Decl -> List (Pair String (List (Pair (List Pat) Expr)))
+export groupDefs : List Decl -> List (String, List (List Pat, Expr))
 groupDefs decls =
   let
     stepped = groupDefsGo (HashMap.fromList []) [] (funDeclsOf decls)
@@ -124,22 +124,23 @@ groupDefs decls =
     order = secondOf stepped
   in map (
       \n =>
-        Pair n (
+        let
+          cls2 =
             case HashMap.lookup n tbl of
               Just cls => reverse cls
               Nothing => []
-          )
+        in (n, cls2)
     ) (reverse order)
 
 -- O(1) 分组：HashMap 累积 clauses（逆序，最后 reverse），order 记录首次出现顺序。
-export groupDefsGo : HashMap String (List (Pair (List Pat) Expr)) -> List String -> List (Pair String (Pair (List Pat) Expr)) -> Pair (HashMap String (List (Pair (List Pat) Expr))) (List String)
-groupDefsGo tbl order [] = Pair tbl order
-groupDefsGo tbl order ((Pair name clause) :: rest) =
+export groupDefsGo : HashMap String (List (List Pat, Expr)) -> List String -> List (String, List Pat, Expr) -> (HashMap String (List (List Pat, Expr)), List String)
+groupDefsGo tbl order [] = (tbl, order)
+groupDefsGo tbl order ((name, clause) :: rest) =
   case HashMap.lookup name tbl of
     Just cls => groupDefsGo (HashMap.insert name (clause :: cls) tbl) order rest
     Nothing => groupDefsGo (HashMap.insert name [clause] tbl) (name :: order) rest
 
-export defNames : List (Pair String (List (Pair (List Pat) Expr))) -> List String
+export defNames : List (String, List (List Pat, Expr)) -> List String
 defNames defs = map firstOf defs
 
 -- ---------------------------------------------------------------
@@ -182,8 +183,8 @@ argParamIndices params (a :: rest) =
         Nothing => Nothing
     _ => Nothing
 
-forwarderOfClause : String -> Pair (List Pat) Expr -> Maybe Forwarder
-forwarderOfClause name (Pair pats body) =
+forwarderOfClause : String -> (List Pat, Expr) -> Maybe Forwarder
+forwarderOfClause name (pats, body) =
   let
     params = pvarParamsOf pats
   in if length params == length pats then
@@ -207,21 +208,21 @@ sameIntLists _ _ = False
 sameForwarder : Forwarder -> Forwarder -> Bool
 sameForwarder a b = a.fwdCbParam == b.fwdCbParam && sameIntLists a.fwdArgParams b.fwdArgParams
 
-matchForwarders : Forwarder -> List (Pair (List Pat) Expr) -> Bool
+matchForwarders : Forwarder -> List (List Pat, Expr) -> Bool
 matchForwarders f [] = True
 matchForwarders f (cl :: rest) =
   case forwarderOfClause f.fwdCallee cl of
     Just g => sameForwarder f g && matchForwarders f rest
     Nothing => False
 
-forwarderOfGroup : Pair String (List (Pair (List Pat) Expr)) -> Maybe Forwarder
-forwarderOfGroup (Pair name (cl :: rest)) =
+forwarderOfGroup : (String, List (List Pat, Expr)) -> Maybe Forwarder
+forwarderOfGroup (name, cl :: rest) =
   case forwarderOfClause name cl of
     Just f => if matchForwarders f rest then Just f else Nothing
     Nothing => Nothing
 forwarderOfGroup _ = Nothing
 
-forwardersOfDefs : List (Pair String (List (Pair (List Pat) Expr))) -> List Forwarder
+forwardersOfDefs : List (String, List (List Pat, Expr)) -> List Forwarder
 forwardersOfDefs [] = []
 forwardersOfDefs (d :: rest) =
   case forwarderOfGroup d of
@@ -249,21 +250,21 @@ fwArgs : List Forwarder -> List Expr -> List Expr
 fwArgs fwds [] = []
 fwArgs fwds (a :: rest) = fwExpr fwds a :: fwArgs fwds rest
 
-fwFields : List Forwarder -> List (Pair String Expr) -> List (Pair String Expr)
+fwFields : List Forwarder -> List (String, Expr) -> List (String, Expr)
 fwFields fwds [] = []
-fwFields fwds ((Pair fn fe) :: rest) = Pair fn (fwExpr fwds fe) :: fwFields fwds rest
+fwFields fwds ((fn, fe) :: rest) = (fn, fwExpr fwds fe) :: fwFields fwds rest
 
-fwBinds : List Forwarder -> List (Pair Pat Expr) -> List (Pair Pat Expr)
+fwBinds : List Forwarder -> List (Pat, Expr) -> List (Pat, Expr)
 fwBinds fwds [] = []
-fwBinds fwds ((Pair pat val) :: rest) = Pair pat (fwExpr fwds val) :: fwBinds fwds rest
+fwBinds fwds ((pat, val) :: rest) = (pat, fwExpr fwds val) :: fwBinds fwds rest
 
-fwAlts : List Forwarder -> List (Pair Pat Expr) -> List (Pair Pat Expr)
+fwAlts : List Forwarder -> List (Pat, Expr) -> List (Pat, Expr)
 fwAlts fwds [] = []
-fwAlts fwds ((Pair pat body) :: rest) = Pair pat (fwExpr fwds body) :: fwAlts fwds rest
+fwAlts fwds ((pat, body) :: rest) = (pat, fwExpr fwds body) :: fwAlts fwds rest
 
-fwClauses : List Forwarder -> List (Pair (List Pat) Expr) -> List (Pair (List Pat) Expr)
+fwClauses : List Forwarder -> List (List Pat, Expr) -> List (List Pat, Expr)
 fwClauses fwds [] = []
-fwClauses fwds ((Pair pats body) :: rest) = Pair pats (fwExpr fwds body) :: fwClauses fwds rest
+fwClauses fwds ((pats, body) :: rest) = (pats, fwExpr fwds body) :: fwClauses fwds rest
 
 fwStmts : List Forwarder -> List DoStmt -> List DoStmt
 fwStmts fwds [] = []
@@ -328,22 +329,22 @@ expandForwarders decls =
     [] => decls
     fwds => map (fwDecl fwds) decls
 
-export clausesOfDef : String -> List (Pair String (List (Pair (List Pat) Expr))) -> List (Pair (List Pat) Expr)
+export clausesOfDef : String -> List (String, List (List Pat, Expr)) -> List (List Pat, Expr)
 clausesOfDef name [] = []
-clausesOfDef name ((Pair n cls) :: rest) = if n == name then cls else clausesOfDef name rest
+clausesOfDef name ((n, cls) :: rest) = if n == name then cls else clausesOfDef name rest
 
 -- O(1) 版：终止性检查（SCC / measure）用 name→clauses 表，避免逐 SCC 线性扫全部 defs。
-export clausesOfDefTbl : String -> HashMap String (List (Pair (List Pat) Expr)) -> List (Pair (List Pat) Expr)
+export clausesOfDefTbl : String -> HashMap String (List (List Pat, Expr)) -> List (List Pat, Expr)
 clausesOfDefTbl name tbl =
   case HashMap.lookup name tbl of
     Just cls => cls
     Nothing => []
 
-export defArity : List (Pair (List Pat) Expr) -> Int
+export defArity : List (List Pat, Expr) -> Int
 defArity [] = 0
 defArity (c :: rest) = maxInt (length (firstOf c)) (defArity rest)
 
-export maxArityOf : List String -> HashMap String (List (Pair (List Pat) Expr)) -> Int
+export maxArityOf : List String -> HashMap String (List (List Pat, Expr)) -> Int
 maxArityOf [] defTbl = 0
 maxArityOf (n :: rest) defTbl =
   maxInt (defArity (clausesOfDefTbl n defTbl)) (maxArityOf rest defTbl)
@@ -360,72 +361,70 @@ ctorNamesOf (d :: rest) =
 export ctorNameOf : Ctor -> String
 ctorNameOf (Ctor name ty arity sp) = name
 
-export patSizeStrict : Pat -> Int -> List Int -> List (Pair String (Pair Int (Pair Int (List Int)))) -> List (Pair String (Pair Int (Pair Int (List Int))))
+export patSizeStrict : Pat -> Int -> List Int -> List (String, Int, Int, List Int) -> List (String, Int, Int, List Int)
 patSizeStrict (PAs n inner sp) base path acc =
-  patSizeStrict inner base path (Pair n (Pair base (Pair (natToInt (length path)) path)) :: acc)
-patSizeStrict (PVar n sp) base path acc =
-  Pair n (Pair base (Pair (natToInt (length path)) path)) :: acc
+  patSizeStrict inner base path ((n, base, natToInt (length path), path) :: acc)
+patSizeStrict (PVar n sp) base path acc = (n, base, natToInt (length path), path) :: acc
 patSizeStrict (PWild sp) base path acc = acc
 patSizeStrict (PCon c ps sp) base path acc = patsSizeStrict ps base path 0 acc
 patSizeStrict (PRecord rn fields sp) base path acc = fieldsSizeStrict fields base path 0 acc
 patSizeStrict _ base path acc = acc
 
-export patsSizeStrict : List Pat -> Int -> List Int -> Int -> List (Pair String (Pair Int (Pair Int (List Int)))) -> List (Pair String (Pair Int (Pair Int (List Int))))
+export patsSizeStrict : List Pat -> Int -> List Int -> Int -> List (String, Int, Int, List Int) -> List (String, Int, Int, List Int)
 patsSizeStrict [] base path k acc = acc
 patsSizeStrict (p :: rest) base path k acc =
   patsSizeStrict rest base path (k + 1) (patSizeStrict p base (append path [k]) acc)
 
-export fieldsSizeStrict : List (Pair String Pat) -> Int -> List Int -> Int -> List (Pair String (Pair Int (Pair Int (List Int)))) -> List (Pair String (Pair Int (Pair Int (List Int))))
+export fieldsSizeStrict : List (String, Pat) -> Int -> List Int -> Int -> List (String, Int, Int, List Int) -> List (String, Int, Int, List Int)
 fieldsSizeStrict [] base path k acc = acc
-fieldsSizeStrict ((Pair fn fp) :: rest) base path k acc =
+fieldsSizeStrict ((fn, fp) :: rest) base path k acc =
   fieldsSizeStrict rest base path (k + 1) (patSizeStrict fp base (append path [k]) acc)
 
-export strSizeEntries : List Pat -> List (Pair String (Pair Int (Pair Int (List Int))))
+export strSizeEntries : List Pat -> List (String, Int, Int, List Int)
 strSizeEntries pats = strSizeEntriesGo pats 0
 
-export strSizeEntriesGo : List Pat -> Int -> List (Pair String (Pair Int (Pair Int (List Int))))
+export strSizeEntriesGo : List Pat -> Int -> List (String, Int, Int, List Int)
 strSizeEntriesGo [] i = []
 strSizeEntriesGo (p :: rest) i = append (patSizeStrict p i [] []) (strSizeEntriesGo rest (i + 1))
 
 -- | 表达式携带的尺寸：变量直接查表；非 alias record 的字段投影按声明顺序下推一位。
 -- alias record 的投影是恒等，不能在字段表里出现（`fieldProjectionsOf` 会剔除）。
-export sizeOfExpr : List (Pair String (List Int)) -> List (Pair String (Pair Int (Pair Int (List Int)))) -> Expr -> Maybe (Pair Int (Pair Int (List Int)))
+export sizeOfExpr : List (String, List Int) -> List (String, Int, Int, List Int) -> Expr -> Maybe (Int, Int, List Int)
 sizeOfExpr projs sizes (EVar n sp) = sizeOfVarStrict (rnameKey n) sizes
 sizeOfExpr projs sizes (EField base f sp) =
   case sizeOfExpr projs sizes base of
-    Just (Pair b (Pair d path)) =>
+    Just (b, d, path) =>
       case fieldIndexOf f projs of
-        Just k => Just (Pair b (Pair (d + 1) (append path [k])))
+        Just k => Just (b, d + 1, append path [k])
         Nothing => Nothing
     Nothing => Nothing
 sizeOfExpr projs sizes (EParen e sp) = sizeOfExpr projs sizes e
 sizeOfExpr projs sizes _ = Nothing
 
-export extendSizesStrict : List (Pair String (List Int)) -> List (Pair String (Pair Int (Pair Int (List Int)))) -> Expr -> Pat -> List (Pair String (Pair Int (Pair Int (List Int))))
+export extendSizesStrict : List (String, List Int) -> List (String, Int, Int, List Int) -> Expr -> Pat -> List (String, Int, Int, List Int)
 extendSizesStrict projs sizes scrut pat =
   case sizeOfExpr projs sizes scrut of
     Just sz =>
       case sz of
-        Pair base (Pair depth path) =>
+        (base, depth, path) =>
           case pat of
             -- `let ys = xs` / `do ys <- xs`：别名继承被绑定变量的尺寸。
-            PVar n nsp => Pair n sz :: sizes
-            PAs n inner asp => extendSizesStrict projs (Pair n sz :: sizes) scrut inner
+            PVar n nsp => (n, sz) :: sizes
+            PAs n inner asp => extendSizesStrict projs ((n, sz) :: sizes) scrut inner
             PCon c ps sp2 => append sizes (patsSizeStrict ps base path 0 [])
             PRecord rn fields sp2 => append sizes (fieldsSizeStrict fields base path 0 [])
             _ => sizes
     Nothing => sizes
 
 -- | 顺序绑定块：第 k 条的尺寸只对后面的绑定与 body 可见。
-export extendByBinds : List (Pair String (List Int)) -> List (Pair Pat Expr) -> List (Pair String (Pair Int (Pair Int (List Int)))) -> List (Pair String (Pair Int (Pair Int (List Int))))
+export extendByBinds : List (String, List Int) -> List (Pat, Expr) -> List (String, Int, Int, List Int) -> List (String, Int, Int, List Int)
 extendByBinds projs [] sizes = sizes
-extendByBinds projs ((Pair pat val) :: rest) sizes =
+extendByBinds projs ((pat, val) :: rest) sizes =
   extendByBinds projs rest (extendSizesStrict projs sizes val pat)
 
-export sizeOfVarStrict : String -> List (Pair String (Pair Int (Pair Int (List Int)))) -> Maybe (Pair Int (Pair Int (List Int)))
+export sizeOfVarStrict : String -> List (String, Int, Int, List Int) -> Maybe (Int, Int, List Int)
 sizeOfVarStrict name [] = Nothing
-sizeOfVarStrict name ((Pair n sz) :: rest) =
-  if n == name then Just sz else sizeOfVarStrict name rest
+sizeOfVarStrict name ((n, sz) :: rest) = if n == name then Just sz else sizeOfVarStrict name rest
 
 -- `map (\v => body) lst`：lambda 绑定 v 视为 lst 的元素（更深的子项），
 -- 让 map 回调里的递归/投影参与下降判定。
@@ -461,18 +460,18 @@ opBaseName name = secondOf (splitLastDot (splitOnDot name))
 
 -- 比较运算的最后两个**语义**实参：方法投影带类型 / 字典实参时（`le t d n 0`）前面还有
 -- 隐式位，但比较的左右操作数始终是最后两个。
-export lastTwo : List Expr -> Maybe (Pair Expr Expr)
+export lastTwo : List Expr -> Maybe (Expr, Expr)
 lastTwo (a :: b :: rest) = Just (lastTwoGo a b rest)
 lastTwo _ = Nothing
 
-lastTwoGo : Expr -> Expr -> List Expr -> Pair Expr Expr
-lastTwoGo a b [] = Pair a b
+lastTwoGo : Expr -> Expr -> List Expr -> (Expr, Expr)
+lastTwoGo a b [] = (a, b)
 lastTwoGo a b (c :: rest) = lastTwoGo b c rest
 
 export guardLE : List Expr -> Maybe String
 guardLE args =
   case lastTwo args of
-    Just (Pair lhs rhs) =>
+    Just (lhs, rhs) =>
       case rhs of
         EInt k ksp => if k == 0 then varOfExpr lhs else Nothing
         _ => Nothing
@@ -481,7 +480,7 @@ guardLE args =
 export guardGE : List Expr -> Maybe String
 guardGE args =
   case lastTwo args of
-    Just (Pair lhs rhs) =>
+    Just (lhs, rhs) =>
       case lhs of
         EInt k ksp => if k == 0 then varOfExpr rhs else Nothing
         _ => Nothing
@@ -490,7 +489,7 @@ guardGE args =
 export guardLT : List Expr -> Maybe String
 guardLT args =
   case lastTwo args of
-    Just (Pair lhs rhs) =>
+    Just (lhs, rhs) =>
       case rhs of
         EInt k ksp => if k == 1 then varOfExpr lhs else Nothing
         _ => Nothing
@@ -511,10 +510,9 @@ isNatCoerceName name =
 
 -- | 局部函数子句 → 只保留体的“绑定”视图（模式不影响正性/尺寸事实）。
 --   树的三种遍历共用这一份，避免各自实现漂移。
-export localClauseBinds : List (Pair (List Pat) Expr) -> List (Pair Pat Expr)
+export localClauseBinds : List (List Pat, Expr) -> List (Pat, Expr)
 localClauseBinds [] = []
-localClauseBinds ((Pair pats body) :: rest) =
-  Pair (PWild (exprSpan body)) body :: localClauseBinds rest
+localClauseBinds ((pats, body) :: rest) = (PWild (exprSpan body), body) :: localClauseBinds rest
 
 -- | 正性事实的集合运算：`&&` 的真分支取并、`||` 的真分支取交；
 -- 假分支由德摩根定律对调。
@@ -529,7 +527,7 @@ guardInter (x :: rest) b = if memName x b then x :: guardInter rest b else guard
 guardThenPosAtom : String -> List Expr -> Maybe String
 guardThenPosAtom op args =
   case lastTwo args of
-    Just (Pair lhs rhs) =>
+    Just (lhs, rhs) =>
       case rhs of
         EInt k ksp =>
           if op == "gt" || op == ">" then
@@ -555,7 +553,7 @@ guardThenPosAtom op args =
 guardElsePosAtom : String -> List Expr -> Maybe String
 guardElsePosAtom op args =
   case lastTwo args of
-    Just (Pair lhs rhs) =>
+    Just (lhs, rhs) =>
       case rhs of
         EInt k ksp =>
           if op == "le" || op == "<=" then
@@ -631,7 +629,7 @@ isFalseLit (EInt k sp) = k == 0
 isFalseLit _ = False
 
 -- 一个实参是否「已知为正」：字面量 >0，或变量处于守卫区 / 调用方同位置形参已有正事实。
-export argPositive : List Expr -> Int -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> HashMap String (List Int) -> List String -> Bool
+export argPositive : List Expr -> Int -> List (String, Int, Int, List Int) -> String -> HashMap String (List Int) -> List String -> Bool
 argPositive args i sizes caller facts region =
   case nthExpr args i of
     Nothing => False
@@ -645,7 +643,7 @@ argPositive args i sizes caller facts region =
             case sizeOfVarStrict (rnameKey n) sizes of
               Just sz =>
                 case sz of
-                  Pair base (Pair depth path) => depth == 0 && posHasTbl caller base facts
+                  (base, depth, path) => depth == 0 && posHasTbl caller base facts
               Nothing => False
         _ => False
 
@@ -653,27 +651,27 @@ argPositive args i sizes caller facts region =
 -- 扫阶段的累积只做 O(1) 前插，**去重推迟到一轮扫描结束**（冷路径）：
 -- 每标记一个 (callee, argIndex) 就对已累积的整表线性扫一遍（`posAdd`），
 -- 一轮扫描内累积到数千条 ⇒ O(#标记 × #事实)，是 check 冷路径的最大热点。
-export posMarkPos : String -> Int -> Pair (List (Pair String Int)) (List (Pair String Int)) -> Pair (List (Pair String Int)) (List (Pair String Int))
-posMarkPos f i st = Pair (Pair f i :: firstOf st) (secondOf st)
+export posMarkPos : String -> Int -> (List (String, Int), List (String, Int)) -> (List (String, Int), List (String, Int))
+posMarkPos f i st = ((f, i) :: firstOf st, secondOf st)
 
-export posMarkNeg : String -> Int -> Pair (List (Pair String Int)) (List (Pair String Int)) -> Pair (List (Pair String Int)) (List (Pair String Int))
-posMarkNeg f i st = Pair (firstOf st) (Pair f i :: secondOf st)
+export posMarkNeg : String -> Int -> (List (String, Int), List (String, Int)) -> (List (String, Int), List (String, Int))
+posMarkNeg f i st = (firstOf st, (f, i) :: secondOf st)
 
 -- 一轮扫描结束后的去重（哈希分组 + 每组 memInt 去重；顺序不影响语义）。
-posNormalize : List (Pair String Int) -> List (Pair String Int)
+posNormalize : List (String, Int) -> List (String, Int)
 posNormalize xs = posTblPairs (posTblOf xs)
 
-posTblPairs : HashMap String (List Int) -> List (Pair String Int)
+posTblPairs : HashMap String (List Int) -> List (String, Int)
 posTblPairs tbl = concatMap posEntryPairs (HashMap.toList tbl)
 
-posEntryPairs : Pair String (List Int) -> List (Pair String Int)
-posEntryPairs (Pair n is) = map (\i => Pair n i) (dedupInts is)
+posEntryPairs : (String, List Int) -> List (String, Int)
+posEntryPairs (n, is) = map (\i => (n, i)) (dedupInts is)
 
 dedupInts : List Int -> List Int
 dedupInts [] = []
 dedupInts (x :: rest) = if memInt x rest then dedupInts rest else x :: dedupInts rest
 
-export posWalkArgs : HashMap String Bool -> String -> List (Pair String (Pair Int (Pair Int (List Int)))) -> HashMap String (List Int) -> List String -> List Expr -> Pair (List (Pair String Int)) (List (Pair String Int)) -> Pair (List (Pair String Int)) (List (Pair String Int))
+export posWalkArgs : HashMap String Bool -> String -> List (String, Int, Int, List Int) -> HashMap String (List Int) -> List String -> List Expr -> (List (String, Int), List (String, Int)) -> (List (String, Int), List (String, Int))
 posWalkArgs namesTbl caller sizes facts region [] st = st
 posWalkArgs namesTbl caller sizes facts region (a :: rest) st =
   posWalkArgs
@@ -685,9 +683,9 @@ posWalkArgs namesTbl caller sizes facts region (a :: rest) st =
     rest
     (posWalk namesTbl caller sizes facts region a st)
 
-export posWalkFields : HashMap String Bool -> String -> List (Pair String (Pair Int (Pair Int (List Int)))) -> HashMap String (List Int) -> List String -> List (Pair String Expr) -> Pair (List (Pair String Int)) (List (Pair String Int)) -> Pair (List (Pair String Int)) (List (Pair String Int))
+export posWalkFields : HashMap String Bool -> String -> List (String, Int, Int, List Int) -> HashMap String (List Int) -> List String -> List (String, Expr) -> (List (String, Int), List (String, Int)) -> (List (String, Int), List (String, Int))
 posWalkFields namesTbl caller sizes facts region [] st = st
-posWalkFields namesTbl caller sizes facts region ((Pair fn fe) :: rest) st =
+posWalkFields namesTbl caller sizes facts region ((fn, fe) :: rest) st =
   posWalkFields
     namesTbl
     caller
@@ -697,9 +695,9 @@ posWalkFields namesTbl caller sizes facts region ((Pair fn fe) :: rest) st =
     rest
     (posWalk namesTbl caller sizes facts region fe st)
 
-export posWalkAlts : HashMap String Bool -> String -> List (Pair String (Pair Int (Pair Int (List Int)))) -> HashMap String (List Int) -> List String -> Expr -> List (Pair Pat Expr) -> Pair (List (Pair String Int)) (List (Pair String Int)) -> Pair (List (Pair String Int)) (List (Pair String Int))
+export posWalkAlts : HashMap String Bool -> String -> List (String, Int, Int, List Int) -> HashMap String (List Int) -> List String -> Expr -> List (Pat, Expr) -> (List (String, Int), List (String, Int)) -> (List (String, Int), List (String, Int))
 posWalkAlts namesTbl caller sizes facts region scrut [] st = st
-posWalkAlts namesTbl caller sizes facts region scrut ((Pair pat body) :: rest) st =
+posWalkAlts namesTbl caller sizes facts region scrut ((pat, body) :: rest) st =
   posWalkAlts
     namesTbl
     caller
@@ -712,14 +710,14 @@ posWalkAlts namesTbl caller sizes facts region scrut ((Pair pat body) :: rest) s
 
 -- `posWalk` 不携带投影表：只有变量 scrutinee 能扩尺寸（`case r.field of …` 的下降由
 -- `strWalkAlts` / `siteCollectAlts` 的完整版本负责）。
-extendSizesVarOnly : List (Pair String (Pair Int (Pair Int (List Int)))) -> Expr -> Pat -> List (Pair String (Pair Int (Pair Int (List Int))))
+extendSizesVarOnly : List (String, Int, Int, List Int) -> Expr -> Pat -> List (String, Int, Int, List Int)
 extendSizesVarOnly sizes (scrut@(EVar _ _)) pat = extendSizesStrict [] sizes scrut pat
 extendSizesVarOnly sizes _ pat = sizes
 
 -- 局部函数的 clause 列表：与 `posWalkAlts` 同形，沿子项结构下降（不走 fuel）。
-export posWalkClauses : HashMap String Bool -> String -> List (Pair String (Pair Int (Pair Int (List Int)))) -> HashMap String (List Int) -> List String -> List (Pair (List Pat) Expr) -> Pair (List (Pair String Int)) (List (Pair String Int)) -> Pair (List (Pair String Int)) (List (Pair String Int))
+export posWalkClauses : HashMap String Bool -> String -> List (String, Int, Int, List Int) -> HashMap String (List Int) -> List String -> List (List Pat, Expr) -> (List (String, Int), List (String, Int)) -> (List (String, Int), List (String, Int))
 posWalkClauses namesTbl caller sizes facts region [] st = st
-posWalkClauses namesTbl caller sizes facts region ((Pair pats body) :: rest) st =
+posWalkClauses namesTbl caller sizes facts region ((pats, body) :: rest) st =
   posWalkClauses
     namesTbl
     caller
@@ -729,9 +727,9 @@ posWalkClauses namesTbl caller sizes facts region ((Pair pats body) :: rest) st 
     rest
     (posWalk namesTbl caller sizes facts region body st)
 
-export posWalkBinds : HashMap String Bool -> String -> List (Pair String (Pair Int (Pair Int (List Int)))) -> HashMap String (List Int) -> List String -> List (Pair Pat Expr) -> Pair (List (Pair String Int)) (List (Pair String Int)) -> Pair (List (Pair String Int)) (List (Pair String Int))
+export posWalkBinds : HashMap String Bool -> String -> List (String, Int, Int, List Int) -> HashMap String (List Int) -> List String -> List (Pat, Expr) -> (List (String, Int), List (String, Int)) -> (List (String, Int), List (String, Int))
 posWalkBinds namesTbl caller sizes facts region [] st = st
-posWalkBinds namesTbl caller sizes facts region ((Pair pat val) :: rest) st =
+posWalkBinds namesTbl caller sizes facts region ((pat, val) :: rest) st =
   posWalkBinds
     namesTbl
     caller
@@ -741,7 +739,7 @@ posWalkBinds namesTbl caller sizes facts region ((Pair pat val) :: rest) st =
     rest
     (posWalk namesTbl caller sizes facts region val st)
 
-export posWalkStmts : HashMap String Bool -> String -> List (Pair String (Pair Int (Pair Int (List Int)))) -> HashMap String (List Int) -> List String -> List DoStmt -> Pair (List (Pair String Int)) (List (Pair String Int)) -> Pair (List (Pair String Int)) (List (Pair String Int))
+export posWalkStmts : HashMap String Bool -> String -> List (String, Int, Int, List Int) -> HashMap String (List Int) -> List String -> List DoStmt -> (List (String, Int), List (String, Int)) -> (List (String, Int), List (String, Int))
 posWalkStmts namesTbl caller sizes facts region [] st = st
 posWalkStmts namesTbl caller sizes facts region (s :: rest) st =
   case s of
@@ -773,7 +771,7 @@ posWalkStmts namesTbl caller sizes facts region (s :: rest) st =
         rest
         (posWalkBinds namesTbl caller sizes facts region binds st)
 
-export posWalk : HashMap String Bool -> String -> List (Pair String (Pair Int (Pair Int (List Int)))) -> HashMap String (List Int) -> List String -> Expr -> Pair (List (Pair String Int)) (List (Pair String Int)) -> Pair (List (Pair String Int)) (List (Pair String Int))
+export posWalk : HashMap String Bool -> String -> List (String, Int, Int, List Int) -> HashMap String (List Int) -> List String -> Expr -> (List (String, Int), List (String, Int)) -> (List (String, Int), List (String, Int))
 posWalk namesTbl caller sizes facts region (EApp fn args sp) st =
   case fn of
     EVar g gsp =>
@@ -861,11 +859,11 @@ posWalk namesTbl caller sizes facts region (EAnn value ty sp) st =
 posWalk namesTbl caller sizes facts region (EVar n sp) st = st
 posWalk namesTbl caller sizes facts region _ st = st
 
-export posWalkCallee : HashMap String Bool -> String -> List (Pair String (Pair Int (Pair Int (List Int)))) -> HashMap String (List Int) -> List String -> String -> Int -> List Expr -> Pair (List (Pair String Int)) (List (Pair String Int)) -> Pair (List (Pair String Int)) (List (Pair String Int))
+export posWalkCallee : HashMap String Bool -> String -> List (String, Int, Int, List Int) -> HashMap String (List Int) -> List String -> String -> Int -> List Expr -> (List (String, Int), List (String, Int)) -> (List (String, Int), List (String, Int))
 posWalkCallee namesTbl caller sizes facts region g i args st =
   posWalkCalleeGo namesTbl caller sizes facts region g (length args - i) args st
 
-export posWalkCalleeGo : HashMap String Bool -> String -> List (Pair String (Pair Int (Pair Int (List Int)))) -> HashMap String (List Int) -> List String -> String -> Int -> List Expr -> Pair (List (Pair String Int)) (List (Pair String Int)) -> Pair (List (Pair String Int)) (List (Pair String Int))
+export posWalkCalleeGo : HashMap String Bool -> String -> List (String, Int, Int, List Int) -> HashMap String (List Int) -> List String -> String -> Int -> List Expr -> (List (String, Int), List (String, Int)) -> (List (String, Int), List (String, Int))
 posWalkCalleeGo namesTbl caller sizes facts region g remaining args st =
   if remaining <= 0 then
     st
@@ -875,7 +873,7 @@ posWalkCalleeGo namesTbl caller sizes facts region g remaining args st =
       st1 = if argPositive args i sizes caller facts region then posMarkPos g i st else posMarkNeg g i st
     in posWalkCalleeGo namesTbl caller sizes facts region g (remaining - 1) args st1
 
-export posScanClauses : HashMap String Bool -> List (Pair String (List (Pair (List Pat) Expr))) -> HashMap String (List Int) -> String -> List (Pair (List Pat) Expr) -> Pair (List (Pair String Int)) (List (Pair String Int)) -> Pair (List (Pair String Int)) (List (Pair String Int))
+export posScanClauses : HashMap String Bool -> List (String, List (List Pat, Expr)) -> HashMap String (List Int) -> String -> List (List Pat, Expr) -> (List (String, Int), List (String, Int)) -> (List (String, Int), List (String, Int))
 posScanClauses namesTbl defs facts caller [] st = st
 posScanClauses namesTbl defs facts caller (cl :: rest) st =
   let
@@ -883,7 +881,7 @@ posScanClauses namesTbl defs facts caller (cl :: rest) st =
     st2 = posWalk namesTbl caller sizes facts [] (secondOf cl) st
   in posScanClauses namesTbl defs facts caller rest st2
 
-export posScanDefs : HashMap String Bool -> List (Pair String (List (Pair (List Pat) Expr))) -> HashMap String (List Int) -> List (Pair String (List (Pair (List Pat) Expr))) -> Pair (List (Pair String Int)) (List (Pair String Int)) -> Pair (List (Pair String Int)) (List (Pair String Int))
+export posScanDefs : HashMap String Bool -> List (String, List (List Pat, Expr)) -> HashMap String (List Int) -> List (String, List (List Pat, Expr)) -> (List (String, Int), List (String, Int)) -> (List (String, Int), List (String, Int))
 posScanDefs namesTbl defs facts [] st = st
 posScanDefs namesTbl defs facts (d :: rest) st =
   posScanDefs
@@ -894,13 +892,13 @@ posScanDefs namesTbl defs facts (d :: rest) st =
     (posScanClauses namesTbl defs facts (firstOf d) (secondOf d) st)
 
 -- 按名字列表扫描（worklist 不动点用）：只扫受影响的 caller，而不是每轮全量 defs。
-export posScanNames : HashMap String Bool -> HashMap String (List (Pair (List Pat) Expr)) -> HashMap String (List Int) -> List String -> Pair (List (Pair String Int)) (List (Pair String Int)) -> Pair (List (Pair String Int)) (List (Pair String Int))
+export posScanNames : HashMap String Bool -> HashMap String (List (List Pat, Expr)) -> HashMap String (List Int) -> List String -> (List (String, Int), List (String, Int)) -> (List (String, Int), List (String, Int))
 posScanNames namesTbl defTbl factsTbl work st =
   let
     scanned = posScanNamesGo namesTbl defTbl factsTbl work st
-  in Pair (posNormalize (firstOf scanned)) (posNormalize (secondOf scanned))
+  in (posNormalize (firstOf scanned), posNormalize (secondOf scanned))
 
-posScanNamesGo : HashMap String Bool -> HashMap String (List (Pair (List Pat) Expr)) -> HashMap String (List Int) -> List String -> Pair (List (Pair String Int)) (List (Pair String Int)) -> Pair (List (Pair String Int)) (List (Pair String Int))
+posScanNamesGo : HashMap String Bool -> HashMap String (List (List Pat, Expr)) -> HashMap String (List Int) -> List String -> (List (String, Int), List (String, Int)) -> (List (String, Int), List (String, Int))
 posScanNamesGo namesTbl defTbl factsTbl [] st = st
 posScanNamesGo namesTbl defTbl factsTbl (n :: rest) st =
   posScanNamesGo
@@ -911,15 +909,15 @@ posScanNamesGo namesTbl defTbl factsTbl (n :: rest) st =
     (posScanClauses namesTbl [] factsTbl n (clausesOfDefTbl n defTbl) st)
 
 -- 单调不动点：每轮用当前事实重扫，只增不减；不收敛时提前停（保守，宁可多拒）。
-export computePosFacts : List (Pair String (List (Pair (List Pat) Expr))) -> Int -> List (Pair String Int) -> List (Pair String Int)
+export computePosFacts : List (String, List (List Pat, Expr)) -> Int -> List (String, Int) -> List (String, Int)
 computePosFacts defs fuel facts = if fuel <= 0 then facts else computePosFactsStep defs fuel facts
 
-export computePosFactsStep : List (Pair String (List (Pair (List Pat) Expr))) -> Int -> List (Pair String Int) -> List (Pair String Int)
+export computePosFactsStep : List (String, List (List Pat, Expr)) -> Int -> List (String, Int) -> List (String, Int)
 computePosFactsStep defs fuel facts =
   let
     namesTbl = HashMap.ofNames (defNames defs)
-    scanned = posScanDefs namesTbl defs (posTblOf facts) defs (Pair [] [])
-    scan = Pair (posNormalize (firstOf scanned)) (posNormalize (secondOf scanned))
+    scanned = posScanDefs namesTbl defs (posTblOf facts) defs ([], [])
+    scan = (posNormalize (firstOf scanned), posNormalize (secondOf scanned))
     fresh = posFilterTbl (firstOf scan) (posTblOf (secondOf scan))
     merged = posUnionTbl facts fresh
   in if posSetEqTbl facts merged then merged else computePosFacts defs (fuel - 1) merged
@@ -931,9 +929,9 @@ pathInPats v (p :: rest) path k =
     Just q => Just q
     Nothing => pathInPats v rest path (k + 1)
 
-export pathInFields : String -> List (Pair String Pat) -> List Int -> Int -> Maybe (List Int)
+export pathInFields : String -> List (String, Pat) -> List Int -> Int -> Maybe (List Int)
 pathInFields v [] path k = Nothing
-pathInFields v ((Pair fn fp) :: rest) path k =
+pathInFields v ((fn, fp) :: rest) path k =
   case pathInPat v fp (append path [k]) of
     Just q => Just q
     Nothing => pathInFields v rest path (k + 1)
@@ -945,7 +943,7 @@ pathInPat v (PCon c ps sp) path = pathInPats v ps path 0
 pathInPat v (PRecord rn fields sp) path = pathInFields v fields path 0
 pathInPat v _ path = Nothing
 
-export projectionOfDef : Pair String (List (Pair (List Pat) Expr)) -> Maybe (Pair String (List Int))
+export projectionOfDef : (String, List (List Pat, Expr)) -> Maybe (String, List Int)
 projectionOfDef d =
   case secondOf d of
     [cl] =>
@@ -954,17 +952,17 @@ projectionOfDef d =
           case secondOf cl of
             EVar v vsp =>
               case pathInPat (rnameKey v) pat [] of
-                Just path => if notEmpty path then Just (Pair (firstOf d) path) else Nothing
+                Just path => if notEmpty path then Just (firstOf d, path) else Nothing
                 Nothing => Nothing
             -- 精化后的单构造子投影：`\p => case p of C .. v .. => v`。
             -- 与源码层的 `f (C .. v ..) = v` 是同一个定义，字段下标取**运行时位置**
             -- （擦除 binder 已在翻译时剔除）。
             ECase scrut alts csp =>
               case (pat, scrut, alts) of
-                (PVar pn psp, EVar sn ssp, [Pair altPat (EVar v vsp2)]) =>
+                (PVar pn psp, EVar sn ssp, [(altPat, EVar v vsp2)]) =>
                   if pn == rnameKey sn then
                     case pathInPat (rnameKey v) altPat [] of
-                      Just path => if notEmpty path then Just (Pair (firstOf d) path) else Nothing
+                      Just path => if notEmpty path then Just (firstOf d, path) else Nothing
                       Nothing => Nothing
                   else
                     Nothing
@@ -973,7 +971,7 @@ projectionOfDef d =
         _ => Nothing
     _ => Nothing
 
-export projectionsOf : List (Pair String (List (Pair (List Pat) Expr))) -> List (Pair String (List Int))
+export projectionsOf : List (String, List (List Pat, Expr)) -> List (String, List Int)
 projectionsOf [] = []
 projectionsOf (d :: rest) =
   case projectionOfDef d of
@@ -988,43 +986,43 @@ projectionsOf (d :: rest) =
 fieldProjPrefix : String
 fieldProjPrefix = "$field."
 
-fieldEntryName : Pair String Int -> String
+fieldEntryName : (String, Int) -> String
 fieldEntryName p = firstOf p
 
-fieldEntryIndex : Pair String Int -> Int
+fieldEntryIndex : (String, Int) -> Int
 fieldEntryIndex p = secondOf p
 
 fieldNameOfField : Field -> String
 fieldNameOfField f = f.fieldName
 
-numberedFieldNames : List Field -> Int -> List (Pair String Int)
+numberedFieldNames : List Field -> Int -> List (String, Int)
 numberedFieldNames [] i = []
-numberedFieldNames (f :: rest) i = Pair (fieldNameOfField f) i :: numberedFieldNames rest (i + 1)
+numberedFieldNames (f :: rest) i = (fieldNameOfField f, i) :: numberedFieldNames rest (i + 1)
 
-recordFieldEntries : List Decl -> Pair (List (Pair String Int)) (List String)
-recordFieldEntries [] = Pair [] []
+recordFieldEntries : List Decl -> (List (String, Int), List String)
+recordFieldEntries [] = ([], [])
 recordFieldEntries (d :: rest) =
   let
     prev = recordFieldEntries rest
   in case d of
     DRecord name params fields derivings viaField repr lin sp =>
       if reprAlias repr then
-        Pair (firstOf prev) (append (map fieldNameOfField fields) (secondOf prev))
+        (firstOf prev, append (map fieldNameOfField fields) (secondOf prev))
       else
-        Pair (append (numberedFieldNames fields 0) (firstOf prev)) (secondOf prev)
+        (append (numberedFieldNames fields 0) (firstOf prev), secondOf prev)
     _ => prev
 
 reprAlias : ReprTier -> Bool
 reprAlias ReprAlias = True
 reprAlias _ = False
 
-fieldIndexOfEntries : String -> List (Pair String Int) -> Maybe Int
+fieldIndexOfEntries : String -> List (String, Int) -> Maybe Int
 fieldIndexOfEntries name entries =
   case dedupInts (map fieldEntryIndex (filter (\p => fieldEntryName p == name) entries)) of
     [k] => Just k
     _ => Nothing
 
-export fieldProjectionsOf : List Decl -> List (Pair String (List Int))
+export fieldProjectionsOf : List Decl -> List (String, List Int)
 fieldProjectionsOf decls =
   let
     collected = recordFieldEntries decls
@@ -1032,18 +1030,18 @@ fieldProjectionsOf decls =
     poisoned = secondOf collected
   in fieldProjectionsGo (dedup (map fieldEntryName entries)) entries poisoned
 
-fieldProjectionsGo : List String -> List (Pair String Int) -> List String -> List (Pair String (List Int))
+fieldProjectionsGo : List String -> List (String, Int) -> List String -> List (String, List Int)
 fieldProjectionsGo [] entries poisoned = []
 fieldProjectionsGo (n :: rest) entries poisoned =
   if memName n poisoned then
     fieldProjectionsGo rest entries poisoned
   else
     case fieldIndexOfEntries n entries of
-      Just k => Pair (fieldProjPrefix ++ n) [k] :: fieldProjectionsGo rest entries poisoned
+      Just k => (fieldProjPrefix ++ n, [k]) :: fieldProjectionsGo rest entries poisoned
       Nothing => fieldProjectionsGo rest entries poisoned
 
 -- | 字段名 → 声明顺序下标（只查 `fieldProjectionsOf` 写进 `projs` 的规范条目）。
-export fieldIndexOf : String -> List (Pair String (List Int)) -> Maybe Int
+export fieldIndexOf : String -> List (String, List Int) -> Maybe Int
 fieldIndexOf f projs =
   case fieldProjPath (fieldProjPrefix ++ f) projs of
     Just path =>
@@ -1052,21 +1050,20 @@ fieldIndexOf f projs =
         _ => Nothing
     Nothing => Nothing
 
-fieldProjPath : String -> List (Pair String (List Int)) -> Maybe (List Int)
+fieldProjPath : String -> List (String, List Int) -> Maybe (List Int)
 fieldProjPath name [] = Nothing
-fieldProjPath name ((Pair g path) :: rest) =
-  if name == g then Just path else fieldProjPath name rest
+fieldProjPath name ((g, path) :: rest) = if name == g then Just path else fieldProjPath name rest
 
-export projHas : String -> List (Pair String (List Int)) -> Bool
+export projHas : String -> List (String, List Int) -> Bool
 projHas f [] = False
-projHas f ((Pair g path) :: rest) = f == g || projHas f rest
+projHas f ((g, path) :: rest) = f == g || projHas f rest
 
 -- | 实参 `Ctor x0..xn` 恰好把形参同一构造子的各字段**原样**拼回：`xk` 的路径正好
 -- 是 `[k]`（该字段本身）。成立时实参与形参相等 —— 弱边，不是下降。
-export sameCtorApp : Int -> List Expr -> List (Pair String (Pair Int (Pair Int (List Int)))) -> Bool
+export sameCtorApp : Int -> List Expr -> List (String, Int, Int, List Int) -> Bool
 sameCtorApp p args sizes = sameCtorGo p args sizes 0
 
-sameCtorGo : Int -> List Expr -> List (Pair String (Pair Int (Pair Int (List Int)))) -> Int -> Bool
+sameCtorGo : Int -> List Expr -> List (String, Int, Int, List Int) -> Int -> Bool
 sameCtorGo p [] sizes k = k > 0
 sameCtorGo p (a :: rest) sizes k =
   case a of
@@ -1074,11 +1071,11 @@ sameCtorGo p (a :: rest) sizes k =
       case sizeOfVarStrict (rnameKey n) sizes of
         Just sz =>
           case sz of
-            Pair base (Pair depth path) => sameCtorField base depth path p rest sizes k
+            (base, depth, path) => sameCtorField base depth path p rest sizes k
         Nothing => False
     _ => False
 
-sameCtorField : Int -> Int -> List Int -> Int -> List Expr -> List (Pair String (Pair Int (Pair Int (List Int)))) -> Int -> Bool
+sameCtorField : Int -> Int -> List Int -> Int -> List Expr -> List (String, Int, Int, List Int) -> Int -> Bool
 sameCtorField base depth path p rest sizes k =
   case base == p of
     True =>
@@ -1093,7 +1090,7 @@ sameCtorField base depth path p rest sizes k =
         False => False
     False => False
 
-export findWrapField : Int -> List Expr -> List (Pair String (Pair Int (Pair Int (List Int)))) -> Int -> Maybe Int
+export findWrapField : Int -> List Expr -> List (String, Int, Int, List Int) -> Int -> Maybe Int
 findWrapField p [] sizes k = Nothing
 findWrapField p (a :: rest) sizes k =
   case a of
@@ -1101,7 +1098,7 @@ findWrapField p (a :: rest) sizes k =
       case sizeOfVarStrict (rnameKey n) sizes of
         Just sz =>
           case sz of
-            Pair base (Pair depth path) =>
+            (base, depth, path) =>
               if base == p then
                 wrapCheck p rest sizes k depth path
               else
@@ -1111,7 +1108,7 @@ findWrapField p (a :: rest) sizes k =
 
 -- | 重建同一个构造子时，第 k 个字段必须换成原第 k 个字段的**真**子项：
 -- `path = k :: restPath` 且 `restPath` 非空；`path = [k]` 是字段本身（相等），不是下降。
-export wrapCheck : Int -> List Expr -> List (Pair String (Pair Int (Pair Int (List Int)))) -> Int -> Int -> List Int -> Maybe Int
+export wrapCheck : Int -> List Expr -> List (String, Int, Int, List Int) -> Int -> Int -> List Int -> Maybe Int
 wrapCheck p rest sizes k depth path =
   case depth > 0 of
     True =>
@@ -1127,7 +1124,7 @@ wrapCheck p rest sizes k depth path =
 export posVarIn : String -> Int -> String -> HashMap String (List Int) -> List String -> Bool
 posVarIn x p caller facts region = memName x region || posHasTbl caller p facts
 
-export arithRel : Int -> Expr -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> HashMap String (List Int) -> List String -> Maybe Int
+export arithRel : Int -> Expr -> List (String, Int, Int, List Int) -> String -> HashMap String (List Int) -> List String -> Maybe Int
 arithRel p (EApp (EVar op osp) args sp) sizes caller facts region =
   if isSubOpName (rnameKey op) then arithMinus p args sizes caller facts region else Nothing
 arithRel p _ sizes caller facts region = Nothing
@@ -1143,10 +1140,10 @@ isSubOpName op =
 export isAddOpName : String -> Bool
 isAddOpName op = op == "+" || op == "Base.Trait.Num.add" || op == "Base.Trait.Num.+"
 
-export arithMinus : Int -> List Expr -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> HashMap String (List Int) -> List String -> Maybe Int
+export arithMinus : Int -> List Expr -> List (String, Int, Int, List Int) -> String -> HashMap String (List Int) -> List String -> Maybe Int
 arithMinus p args sizes caller facts region =
   case lastTwo args of
-    Just (Pair base rhs) =>
+    Just (base, rhs) =>
       case natLitOf rhs of
         Just k => if k > 0 then arithMinusBase p base k sizes caller facts region else Nothing
         Nothing => Nothing
@@ -1170,12 +1167,12 @@ natLitOf (EApp (EVar c csp) ([x]) sp) =
     Nothing
 natLitOf _ = Nothing
 
-export arithMinusBase : Int -> Expr -> Int -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> HashMap String (List Int) -> List String -> Maybe Int
+export arithMinusBase : Int -> Expr -> Int -> List (String, Int, Int, List Int) -> String -> HashMap String (List Int) -> List String -> Maybe Int
 arithMinusBase p (EVar x xsp) k sizes caller facts region =
   case sizeOfVarStrict (rnameKey x) sizes of
     Just sz =>
       case sz of
-        Pair baseIdx (Pair depth path) =>
+        (baseIdx, depth, path) =>
           if baseIdx == p then
             if depth == 0 then
               if posVarIn (rnameKey x) p caller facts region then Just 4 else Nothing
@@ -1187,7 +1184,7 @@ arithMinusBase p (EVar x xsp) k sizes caller facts region =
 arithMinusBase p _ k sizes caller facts region = Nothing
 
 -- 投影调用 `proj v`：v 是 p 位置形参（或其次子项）时，结果是严格子项 ⇒ 直接下降。
-export projRel : Int -> List Expr -> List (Pair String (Pair Int (Pair Int (List Int)))) -> Maybe Int
+export projRel : Int -> List Expr -> List (String, Int, Int, List Int) -> Maybe Int
 projRel p args sizes =
   case lastOf args of
     Just v =>
@@ -1196,7 +1193,7 @@ projRel p args sizes =
           case sizeOfVarStrict (rnameKey x) sizes of
             Just sz =>
               case sz of
-                Pair base (Pair depth path) => if base == p then Just 1 else Nothing
+                (base, depth, path) => if base == p then Just 1 else Nothing
             Nothing => Nothing
         _ => Nothing
     Nothing => Nothing
@@ -1208,17 +1205,16 @@ lastOf (x :: rest) =
     [] => Just x
     _ => lastOf rest
 
-export relOfArg : Int -> Expr -> List (Pair String (Pair Int (Pair Int (List Int)))) -> List String -> List (Pair String (List Int)) -> String -> HashMap String (List Int) -> List String -> Maybe Int
+export relOfArg : Int -> Expr -> List (String, Int, Int, List Int) -> List String -> List (String, List Int) -> String -> HashMap String (List Int) -> List String -> Maybe Int
 relOfArg p (EVar n sp) sizes ctors projs caller facts region =
   case sizeOfVarStrict (rnameKey n) sizes of
     Just sz =>
       case sz of
-        Pair base (Pair depth path) =>
-          if base == p then if depth > 0 then Just 1 else Just 0 else Nothing
+        (base, depth, path) => if base == p then if depth > 0 then Just 1 else Just 0 else Nothing
     Nothing => Nothing
 relOfArg p (EField base f sp) sizes ctors projs caller facts region =
   case sizeOfExpr projs sizes (EField base f sp) of
-    Just (Pair b (Pair d path)) => if b == p then if d > 0 then Just 1 else Just 0 else Nothing
+    Just (b, d, path) => if b == p then if d > 0 then Just 1 else Just 0 else Nothing
     Nothing => Nothing
 relOfArg p (a@(EApp fn cargs sp)) sizes ctors projs caller facts region =
   case fn of
@@ -1231,7 +1227,7 @@ relOfArg p (a@(EApp fn cargs sp)) sizes ctors projs caller facts region =
     _ => arithRel p a sizes caller facts region
 relOfArg p _ sizes ctors projs caller facts region = Nothing
 
-export argRel : Int -> List Expr -> List (Pair String (Pair Int (Pair Int (List Int)))) -> List String -> List (Pair String (List Int)) -> String -> HashMap String (List Int) -> List String -> Maybe Int
+export argRel : Int -> List Expr -> List (String, Int, Int, List Int) -> List String -> List (String, List Int) -> String -> HashMap String (List Int) -> List String -> Maybe Int
 argRel p args sizes ctors projs caller facts region =
   case nthExpr args p of
     Nothing => Nothing
@@ -1239,7 +1235,7 @@ argRel p args sizes ctors projs caller facts region =
 
 -- | 位置 p 的实参**为什么**证不出关系：只服务失败诊断，不参与判定。
 -- 返回值是 `relMissingGuard` / `relAscending` / `relUnknownSize` / `relOtherPosition` / `relNoRelation`。
-export argRelHint : Int -> List Expr -> List (Pair String (Pair Int (Pair Int (List Int)))) -> List String -> Maybe Int
+export argRelHint : Int -> List Expr -> List (String, Int, Int, List Int) -> List String -> Maybe Int
 argRelHint p args sizes ctors =
   case nthExpr args p of
     Nothing => Nothing
@@ -1252,7 +1248,7 @@ argRelHint p args sizes ctors =
             case sizeOfVarStrict (rnameKey n) sizes of
               Just sz =>
                 case sz of
-                  Pair base (Pair depth path) => if base == p then Just relNoRelation else Just relOtherPosition
+                  (base, depth, path) => if base == p then Just relNoRelation else Just relOtherPosition
               Nothing => Just relUnknownSize
         EApp (EVar op osp) xs sp =>
           if isSubOpName (rnameKey op) then
@@ -1263,7 +1259,7 @@ argRelHint p args sizes ctors =
             Just relNoRelation
         _ => Just relNoRelation
 
-hintArith : Int -> List Expr -> List (Pair String (Pair Int (Pair Int (List Int)))) -> Int -> Maybe Int
+hintArith : Int -> List Expr -> List (String, Int, Int, List Int) -> Int -> Maybe Int
 hintArith p ([EVar x xsp, EInt k ksp]) sizes mode =
   if k <= 0 then
     Just relNoRelation
@@ -1271,16 +1267,15 @@ hintArith p ([EVar x xsp, EInt k ksp]) sizes mode =
     case sizeOfVarStrict (rnameKey x) sizes of
       Just sz =>
         case sz of
-          Pair base (Pair depth path) => if base == p then if depth == 0 then Just mode else Just relNoRelation else Just relOtherPosition
+          (base, depth, path) => if base == p then if depth == 0 then Just mode else Just relNoRelation else Just relOtherPosition
       Nothing => Just relUnknownSize
 hintArith p _ sizes mode = Just relNoRelation
 
-export markInvalid : Pair Bool (List (Pair (Pair (Pair String String) Int) Span)) -> Pair Bool (List (Pair (Pair (Pair String String) Int) Span))
-markInvalid acc = Pair False (secondOf acc)
+export markInvalid : (Bool, List (((String, String), Int), Span)) -> (Bool, List (((String, String), Int), Span))
+markInvalid acc = (False, secondOf acc)
 
-export addEdgeMode : String -> String -> Int -> Span -> Pair Bool (List (Pair (Pair (Pair String String) Int) Span)) -> Pair Bool (List (Pair (Pair (Pair String String) Int) Span))
-addEdgeMode caller callee m sp acc =
-  Pair (firstOf acc) (Pair (Pair (Pair caller callee) m) sp :: secondOf acc)
+export addEdgeMode : String -> String -> Int -> Span -> (Bool, List (((String, String), Int), Span)) -> (Bool, List (((String, String), Int), Span))
+addEdgeMode caller callee m sp acc = (firstOf acc, (((caller, callee), m), sp) :: secondOf acc)
 
 export groupHead : List String -> Expr -> Maybe String
 groupHead comp (EVar n sp) = if memName (rnameKey n) comp then Just (rnameKey n) else Nothing
@@ -1333,10 +1328,10 @@ nthName [] i = Nothing
 nthName (n :: rest) i = if i <= 0 then Just n else nthName rest (i - 1)
 
 -- | 展开 `n` 个 lambda 参数（兼容 `\a, b =>` 与 `\a => \b =>` 两种写法）。
-peelLam : Int -> Expr -> Maybe (Pair (List String) Expr)
+peelLam : Int -> Expr -> Maybe (List String, Expr)
 peelLam n e =
   if n <= 0 then
-    Just (Pair [] e)
+    Just ([], e)
   else
     case e of
       ELam ns body sp =>
@@ -1344,7 +1339,7 @@ peelLam n e =
           Nothing
         else
           case peelLam (n - length ns) body of
-            Just (Pair more final) => Just (Pair (append (map firstOf ns) more) final)
+            Just (more, final) => Just (append (map firstOf ns) more, final)
             Nothing => Nothing
       _ => Nothing
 
@@ -1353,7 +1348,7 @@ peelLam n e =
 export hofLambdaCall : HofSpec -> List Expr -> Maybe HofCall
 hofLambdaCall spec (e :: rest) =
   case peelLam spec.hofLambdaArity e of
-    Just (Pair ns body) =>
+    Just (ns, body) =>
       if length rest == spec.hofListArg then
         case nthExpr rest (spec.hofListArg - 1) of
           Just lst =>
@@ -1366,22 +1361,21 @@ hofLambdaCall spec (e :: rest) =
     Nothing => Nothing
 hofLambdaCall spec _ = Nothing
 
-export extendElemSizes : List (Pair String (Pair Int (Pair Int (List Int)))) -> Expr -> String -> List (Pair String (Pair Int (Pair Int (List Int))))
+export extendElemSizes : List (String, Int, Int, List Int) -> Expr -> String -> List (String, Int, Int, List Int)
 extendElemSizes sizes (EVar n sp) v =
   case sizeOfVarStrict (rnameKey n) sizes of
     Just sz =>
       case sz of
-        Pair base (Pair depth path) =>
-          Pair v (Pair base (Pair (depth + 1) (append path [0]))) :: sizes
+        (base, depth, path) => (v, base, depth + 1, append path [0]) :: sizes
     Nothing => sizes
 extendElemSizes sizes _ v = sizes
 
-export edgeStrict : String -> String -> List (Pair (Pair (Pair String String) Int) Span) -> Bool
+export edgeStrict : String -> String -> List (((String, String), Int), Span) -> Bool
 edgeStrict f g edges = edgeStrictGo f g edges False True
 
-export edgeStrictGo : String -> String -> List (Pair (Pair (Pair String String) Int) Span) -> Bool -> Bool -> Bool
+export edgeStrictGo : String -> String -> List (((String, String), Int), Span) -> Bool -> Bool -> Bool
 edgeStrictGo f g [] seen acc = seen && acc
-edgeStrictGo f g ((Pair (Pair (Pair cf cg) m) sp) :: rest) seen acc =
+edgeStrictGo f g ((((cf, cg), m), sp) :: rest) seen acc =
   if cf == f then
     if cg == g then
       edgeStrictGo f g rest True (if m > 0 then acc else False)
@@ -1390,27 +1384,27 @@ edgeStrictGo f g ((Pair (Pair (Pair cf cg) m) sp) :: rest) seen acc =
   else
     edgeStrictGo f g rest seen acc
 
-export edgeTargets : String -> List (Pair (Pair (Pair String String) Int) Span) -> List String
+export edgeTargets : String -> List (((String, String), Int), Span) -> List String
 edgeTargets f edges = dedup (edgeTargetsGo f edges)
 
-export edgeTargetsGo : String -> List (Pair (Pair (Pair String String) Int) Span) -> List String
+export edgeTargetsGo : String -> List (((String, String), Int), Span) -> List String
 edgeTargetsGo f [] = []
-edgeTargetsGo f ((Pair (Pair (Pair cf cg) m) sp) :: rest) =
+edgeTargetsGo f ((((cf, cg), m), sp) :: rest) =
   if cf == f then cg :: edgeTargetsGo f rest else edgeTargetsGo f rest
 
 -- 弱边邻接：组内边里「存在非严格调用点」的那些目标。
-export weakAdj : List String -> List (Pair (Pair (Pair String String) Int) Span) -> String -> List String
+export weakAdj : List String -> List (((String, String), Int), Span) -> String -> List String
 weakAdj comp edges f = weakAdjGo comp edges f (edgeTargets f edges)
 
-export weakAdjGo : List String -> List (Pair (Pair (Pair String String) Int) Span) -> String -> List String -> List String
+export weakAdjGo : List String -> List (((String, String), Int), Span) -> String -> List String -> List String
 weakAdjGo comp edges f [] = []
 weakAdjGo comp edges f (g :: rest) =
   if edgeStrict f g edges then weakAdjGo comp edges f rest else g :: weakAdjGo comp edges f rest
 
-export weakReach : List String -> List (Pair (Pair (Pair String String) Int) Span) -> String -> List String -> List String -> Bool
+export weakReach : List String -> List (((String, String), Int), Span) -> String -> List String -> List String -> Bool
 weakReach comp edges start frontier visited = weakReachFuel 100000 comp edges start frontier visited
 
-export weakReachFuel : Int -> List String -> List (Pair (Pair (Pair String String) Int) Span) -> String -> List String -> List String -> Bool
+export weakReachFuel : Int -> List String -> List (((String, String), Int), Span) -> String -> List String -> List String -> Bool
 weakReachFuel fuel comp edges start frontier visited =
   if fuel <= 0 then
     True
@@ -1420,10 +1414,10 @@ weakReachFuel fuel comp edges start frontier visited =
       [] => False
       n :: rest => if n == start then True else if memName n visited then weakReachFuel (fuel - 1) comp edges start rest visited else weakReachFuel (fuel - 1) comp edges start (append rest (weakAdj comp edges n)) (n :: visited)
 
-export hasWeakCycle : List String -> List (Pair (Pair (Pair String String) Int) Span) -> Bool
+export hasWeakCycle : List String -> List (((String, String), Int), Span) -> Bool
 hasWeakCycle comp edges = hasWeakCycleGo comp edges comp
 
-export hasWeakCycleGo : List String -> List (Pair (Pair (Pair String String) Int) Span) -> List String -> Bool
+export hasWeakCycleGo : List String -> List (((String, String), Int), Span) -> List String -> Bool
 hasWeakCycleGo comp edges [] = False
 hasWeakCycleGo comp edges (f :: rest) =
   weakReach comp edges f (weakAdj comp edges f) [f] || hasWeakCycleGo comp edges rest

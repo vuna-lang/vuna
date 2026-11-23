@@ -62,7 +62,7 @@ export data Pat(..) : Type where
   PCon : String -> List Pat -> NodeRef -> Pat
   PInt : Int -> NodeRef -> Pat
   PStr : String -> NodeRef -> Pat
-  PRecord : String -> List (Pair String Pat) -> NodeRef -> Pat
+  PRecord : String -> List (String, Pat) -> NodeRef -> Pat
 
 export data InterpPart(..) : Type where
   IPText : String -> InterpPart
@@ -98,22 +98,22 @@ export data Expr(..) : Type where
   EInt : Int -> NodeRef -> Expr
   EStr : String -> NodeRef -> Expr
   -- λ：参数名 + 参数名自身的源码位置（`spanEmpty` = 合成 binder），体与整体 span。
-  ELam : List (Pair String Span) -> Expr -> NodeRef -> Expr
+  ELam : List (String, Span) -> Expr -> NodeRef -> Expr
   EApp : Expr -> List Expr -> NodeRef -> Expr
   -- 命名 Pi：`(x : A) -> B` 与隐式 `{x : A} -> B`；第三个字段是显式 quantity
   -- （`Nothing` = 默认 ω）。
   -- 匿名 `A -> B` 仍沿用 `EApp (EVar "->") [A, B]` 编码（默认 ω）。
   EPi : String -> Bool -> Maybe Qty -> Expr -> Expr -> NodeRef -> Expr
-  ELet : List (Pair Pat Expr) -> Expr -> Bool -> NodeRef -> Expr
+  ELet : List (Pat, Expr) -> Expr -> Bool -> NodeRef -> Expr
   -- 局部函数组（where/let 内的多 clause 函数）。
   -- 只作为 `ELet` 绑定值出现：每个 clause 是「参数模式列表 + body」。
   -- 由 Elab 用 `Elab.Match.multiToExpr` 降级成 lambda + 模式矩阵（与顶层 DFun 同一路径）。
-  ELocalFun : List (Pair (List Pat) Expr) -> NodeRef -> Expr
-  ECase : Expr -> List (Pair Pat Expr) -> NodeRef -> Expr
+  ELocalFun : List (List Pat, Expr) -> NodeRef -> Expr
+  ECase : Expr -> List (Pat, Expr) -> NodeRef -> Expr
   EIf : Expr -> Expr -> Expr -> NodeRef -> Expr
   EField : Expr -> String -> NodeRef -> Expr
-  ERecord : String -> List (Pair String Expr) -> NodeRef -> Expr
-  ERecUpdate : Expr -> List (Pair String Expr) -> NodeRef -> Expr
+  ERecord : String -> List (String, Expr) -> NodeRef -> Expr
+  ERecUpdate : Expr -> List (String, Expr) -> NodeRef -> Expr
   EDo : List DoStmt -> NodeRef -> Expr
   -- 中缀链与括号。parser 的**中间产物**：Loader 按 fixity 表重排并消除它们
   -- （`Loader.Resolve.reorderProgram`），Elab / codegen 永远不应看到（残留即 internal
@@ -156,7 +156,7 @@ export data DoStmt(..) : Type where
   DBind : Pat -> Expr -> NodeRef -> DoStmt
   DExpr : Expr -> NodeRef -> DoStmt
   -- `let pat = e`（同组可多条，含签名行与局部函数组）：纯绑定，只对块内后续语句可见。
-  DLet : List (Pair Pat Expr) -> NodeRef -> DoStmt
+  DLet : List (Pat, Expr) -> NodeRef -> DoStmt
 
 export record Ctor(..) where
   ctorName : String
@@ -323,16 +323,16 @@ subsumePatList (p :: ps) (q :: qs) = patSubsumes p q && subsumePatList ps qs
 subsumePatList _ _ = False
 
 -- record 模式可以只写部分字段：`p` 约束了而 `q` 没写的字段，`q` 照样匹配全部取值。
-subsumePatFields : List (Pair String Pat) -> List (Pair String Pat) -> Bool
+subsumePatFields : List (String, Pat) -> List (String, Pat) -> Bool
 subsumePatFields [] _ = True
-subsumePatFields ((Pair fn fp) :: rest) qs =
+subsumePatFields ((fn, fp) :: rest) qs =
   case fieldPatOf fn qs of
     Just qp => patSubsumes fp qp && subsumePatFields rest qs
     Nothing => subsumePatFields rest qs
 
-fieldPatOf : String -> List (Pair String Pat) -> Maybe Pat
+fieldPatOf : String -> List (String, Pat) -> Maybe Pat
 fieldPatOf fn [] = Nothing
-fieldPatOf fn ((Pair n p) :: rest) = if n == fn then Just p else fieldPatOf fn rest
+fieldPatOf fn ((n, p) :: rest) = if n == fn then Just p else fieldPatOf fn rest
 
 -- | 子句蕴含（参数个数不同时恒为 `False`：arity 由 `TC_DefMoreParams` 单独报）。
 --   零参子句之间恒为 `True`——同名的第二条零参定义不可达。
@@ -468,22 +468,22 @@ withExportItemRef r (XNamespace name alias _) = XNamespace name alias r
 export exportItemSpan : ExportItem -> Span
 exportItemSpan item = nodeRefSpan (exportItemRef item)
 
-export collectClauses : List Decl -> String -> List (Pair (List Pat) Expr)
+export collectClauses : List Decl -> String -> List (List Pat, Expr)
 collectClauses [] name = []
 collectClauses (d :: rest) name =
   case d of
     DFun n pats body _ =>
-      if n == name then Pair pats body :: collectClauses rest name else collectClauses rest name
+      if n == name then (pats, body) :: collectClauses rest name else collectClauses rest name
     _ => collectClauses rest name
 
-export clausesFor : List Decl -> String -> List (Pair (List Pat) Expr)
+export clausesFor : List Decl -> String -> List (List Pat, Expr)
 clausesFor decls name = collectClauses decls name
 
 export funArity : String -> List Decl -> Maybe Int
 funArity name decls =
   case clausesFor decls name of
     [] => Nothing
-    (Pair pats body) :: _ => Just (natToInt (length pats))
+    (pats, body) :: _ => Just (natToInt (length pats))
 
 export ctorName : Ctor -> String
 ctorName (Ctor name ty arity _) = name
@@ -500,8 +500,8 @@ ctorShortName name = lastSeg name
 export ctorDisplayName : String -> String
 ctorDisplayName name =
   case splitLastDot (splitOnDot name) of
-    Pair [] base => base
-    Pair revPrefix base =>
+    ([], base) => base
+    (revPrefix, base) =>
       case reverse revPrefix of
         [] => base
         fam :: rest => "${fam}.${base}"

@@ -155,11 +155,11 @@ splitOnCharGo sep s start i n fuel acc =
 
 -- | 把已拆分的段列表的**最后一段**单独分出来：`["A","B"]` → `(["A"], "B")`；
 -- 空列表返回 `([], "")`。
-export splitLastDot : List String -> Pair (List String) String
+export splitLastDot : List String -> (List String, String)
 splitLastDot parts =
   case reverse parts of
-    [] => Pair [] ""
-    last :: rest => Pair (reverse rest) last
+    [] => ([], "")
+    last :: rest => (reverse rest, last)
 
 -- | 用 `.` 拼接模块路径段；空列表得空串，单段原样返回。
 export joinDots : List String -> String
@@ -196,7 +196,7 @@ lastSegGo name i fuel =
 export prefixOfName : String -> String
 prefixOfName name =
   case splitLastDot (splitOnDot name) of
-    Pair revSegs _ => joinDots revSegs
+    (revSegs, _) => joinDots revSegs
 
 -- | 用 `/` 拼接文件路径段；空列表得空串，单段原样返回。
 export joinSlashes : List String -> String
@@ -212,17 +212,17 @@ joinArrows (x :: rest) = "${x} -> ${joinArrows rest}"
 
 -- | 路径拆分：返回去掉最后一段的目录与最后一段（无 "/" 时目录为 ""）。
 -- 编译器驱动（创建输出文件父目录）与 doc 共用，因此放在 Base 而不是工具模块。
-export splitPath : String -> Pair String String
+export splitPath : String -> (String, String)
 splitPath path = splitPathChars (strUnpack path) []
 
 -- | `splitPath` 的码点级实现：遇 `/`（47）即切成目录与剩余（含最后一段）。
-splitPathChars : List Int -> List Int -> Pair String String
+splitPathChars : List Int -> List Int -> (String, String)
 splitPathChars [] acc =
   let
     chars = reverse acc
-  in Pair "" (strPack chars)
+  in ("", strPack chars)
 splitPathChars (c :: rest) acc =
-  if c == 47 then Pair (strPack (reverse acc)) (strPack rest) else splitPathChars rest (c :: acc)
+  if c == 47 then (strPack (reverse acc), strPack rest) else splitPathChars rest (c :: acc)
 
 -- | 取路径最后一段（文件名/模块名），等价 `secondOf (splitPath path)`。
 export baseName : String -> String

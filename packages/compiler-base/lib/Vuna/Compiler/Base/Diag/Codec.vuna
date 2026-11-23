@@ -154,33 +154,33 @@ encSpan sp acc =
     sp.spanFile
     (encInt sp.spanStartLine (encInt sp.spanStartCol (encInt sp.spanEndLine (encInt sp.spanEndCol (encInt sp.spanStartOffset (encInt sp.spanEndOffset acc))))))
 
-decSpan : Int -> Cur -> Maybe (Pair Span Cur)
+decSpan : Int -> Cur -> Maybe (Span, Cur)
 decSpan fuel c =
   thenPair
     (decStr (fuel - 1) c)
-    (\file, b1 => thenPair (decInt (fuel - 1) b1) (\sl, b2 => thenPair (decInt (fuel - 1) b2) (\sc, b3 => thenPair (decInt (fuel - 1) b3) (\el, b4 => thenPair (decInt (fuel - 1) b4) (\ec, b5 => thenPair (decInt (fuel - 1) b5) (\so, b6 => thenPair (decInt (fuel - 1) b6) (\eo, b7 => Just (Pair (Span file sl sc el ec so eo) b7))))))))
+    (\file, b1 => thenPair (decInt (fuel - 1) b1) (\sl, b2 => thenPair (decInt (fuel - 1) b2) (\sc, b3 => thenPair (decInt (fuel - 1) b3) (\el, b4 => thenPair (decInt (fuel - 1) b4) (\ec, b5 => thenPair (decInt (fuel - 1) b5) (\so, b6 => thenPair (decInt (fuel - 1) b6) (\eo, b7 => Just (Span file sl sc el ec so eo, b7))))))))
 
 -- 列表头 `[<count>:`（与 `encList` 的字节文法一致）。递归载荷不用 `decList`：
 -- 把递归解码器当高阶实参时终止性判据看不到下降边。
-readCount : Int -> Int -> Cur -> Maybe (Pair Int Cur)
+readCount : Int -> Int -> Cur -> Maybe (Int, Cur)
 readCount fuel acc c =
   if fuel <= 0 then
     Nothing
   else
     case curChar c of
-      Just 58 => Just (Pair acc (curSkip c))
+      Just 58 => Just (acc, curSkip c)
       Just d => if d >= 48 && d <= 57 then readCount (fuel - 1) (acc * 10 + (d - 48)) (curSkip c) else Nothing
       Nothing => Nothing
 
-decCount : Int -> Cur -> Maybe (Pair Int Cur)
+decCount : Int -> Cur -> Maybe (Int, Cur)
 decCount fuel c =
   case curChar c of
     Just 91 => readCount (fuel - 1) 0 (curSkip c)
     _ => Nothing
 
-thenPair : Maybe (Pair a Cur) -> (a -> Cur -> Maybe (Pair b Cur)) -> Maybe (Pair b Cur)
+thenPair : Maybe (a, Cur) -> (a -> Cur -> Maybe (b, Cur)) -> Maybe (b, Cur)
 thenPair Nothing _ = Nothing
-thenPair (Just (Pair x rest)) k = k x rest
+thenPair (Just (x, rest)) k = k x rest
 
 encLabel : Label -> List String -> List String
 encLabel l acc =
@@ -189,7 +189,7 @@ encLabel l acc =
     l.labelSpan
     (encStr l.labelText (encTag (styleTag l.labelStyle) (encMaybe encSpan l.labelProvenance acc)))
 
-decLabel : Int -> Cur -> Maybe (Pair Label Cur)
+decLabel : Int -> Cur -> Maybe (Label, Cur)
 decLabel fuel c =
   thenPair (decMaybe decSpan (fuel - 1) c) (
       \msp, b1 =>
@@ -199,7 +199,7 @@ decLabel fuel c =
                   \stag, b3 =>
                     case styleOfTag stag of
                       Nothing => Nothing
-                      Just style => thenPair (decMaybe decSpan (fuel - 1) b3) (\prov, b4 => Just (Pair (Label msp text style prov) b4))
+                      Just style => thenPair (decMaybe decSpan (fuel - 1) b3) (\prov, b4 => Just (Label msp text style prov, b4))
                 )
           )
     )
@@ -207,11 +207,11 @@ decLabel fuel c =
 encEdit : DiagEdit -> List String -> List String
 encEdit e acc = encSpan e.editSpan (encStr e.editNewText acc)
 
-decEdit : Int -> Cur -> Maybe (Pair DiagEdit Cur)
+decEdit : Int -> Cur -> Maybe (DiagEdit, Cur)
 decEdit fuel c =
   thenPair
     (decSpan (fuel - 1) c)
-    (\sp, b1 => thenPair (decStr (fuel - 1) b1) (\t, b2 => Just (Pair (DiagEdit sp t) b2)))
+    (\sp, b1 => thenPair (decStr (fuel - 1) b1) (\t, b2 => Just (DiagEdit sp t, b2)))
 
 encSuggestion : Suggestion -> List String -> List String
 encSuggestion s acc =
@@ -219,7 +219,7 @@ encSuggestion s acc =
     s.suggestionTitle
     (encTag (applicabilityTag s.suggestionApplicability) (encList encEdit s.suggestionEdits acc))
 
-decSuggestion : Int -> Cur -> Maybe (Pair Suggestion Cur)
+decSuggestion : Int -> Cur -> Maybe (Suggestion, Cur)
 decSuggestion fuel c =
   thenPair (decStr (fuel - 1) c) (
       \title, b1 =>
@@ -227,7 +227,7 @@ decSuggestion fuel c =
             \atag, b2 =>
               case applicabilityOfTag atag of
                 Nothing => Nothing
-                Just app => thenPair (decList decEdit (fuel - 1) b2) (\es, b3 => Just (Pair (Suggestion title app es) b3))
+                Just app => thenPair (decList decEdit (fuel - 1) b2) (\es, b3 => Just (Suggestion title app es, b3))
           )
     )
 
@@ -237,11 +237,11 @@ encCandidate cand acc =
     cand.candidateText
     (encMaybe encSpan cand.candidateSpan (encMaybe encStr cand.candidateReason acc))
 
-decCandidate : Int -> Cur -> Maybe (Pair Candidate Cur)
+decCandidate : Int -> Cur -> Maybe (Candidate, Cur)
 decCandidate fuel c =
   thenPair
     (decStr (fuel - 1) c)
-    (\text, b1 => thenPair (decMaybe decSpan (fuel - 1) b1) (\msp, b2 => thenPair (decMaybe decStr (fuel - 1) b2) (\reason, b3 => Just (Pair (Candidate text msp reason) b3))))
+    (\text, b1 => thenPair (decMaybe decSpan (fuel - 1) b1) (\msp, b2 => thenPair (decMaybe decStr (fuel - 1) b2) (\reason, b3 => Just (Candidate text msp reason, b3))))
 
 encCall : CallInfo -> List String -> List String
 encCall ci acc =
@@ -249,11 +249,11 @@ encCall ci acc =
     ci.callCallee
     (encStr ci.callArg (encStr ci.callRelation (encMaybe encSpan ci.callSpan acc)))
 
-decCall : Int -> Cur -> Maybe (Pair CallInfo Cur)
+decCall : Int -> Cur -> Maybe (CallInfo, Cur)
 decCall fuel c =
   thenPair
     (decStr (fuel - 1) c)
-    (\callee, b1 => thenPair (decStr (fuel - 1) b1) (\arg, b2 => thenPair (decStr (fuel - 1) b2) (\rel, b3 => thenPair (decMaybe decSpan (fuel - 1) b3) (\msp, b4 => Just (Pair (CallInfo callee arg rel msp) b4)))))
+    (\callee, b1 => thenPair (decStr (fuel - 1) b1) (\arg, b2 => thenPair (decStr (fuel - 1) b2) (\rel, b3 => thenPair (decMaybe decSpan (fuel - 1) b3) (\msp, b4 => Just (CallInfo callee arg rel msp, b4)))))
 
 -- DiagField 的 tag：0..9
 encField : DiagField -> List String -> List String
@@ -269,21 +269,21 @@ encField (FieldModule s) acc = encTag 7 (encStr s acc)
 encField (FieldSpan name sp) acc = encTag 8 (encStr name (encSpan sp acc))
 encField (FieldNote s) acc = encTag 9 (encStr s acc)
 
-decField : Int -> Cur -> Maybe (Pair DiagField Cur)
+decField : Int -> Cur -> Maybe (DiagField, Cur)
 decField fuel c =
   thenPair (decTag (fuel - 1) c) (
       \tg, b1 =>
         case tg of
-          0 => thenPair (decStr (fuel - 1) b1) (\s, b2 => Just (Pair (FieldExpected s) b2))
-          1 => thenPair (decStr (fuel - 1) b1) (\s, b2 => Just (Pair (FieldFound s) b2))
-          2 => thenPair (decStr (fuel - 1) b1) (\s, b2 => Just (Pair (FieldName s) b2))
-          3 => thenPair (decList decCandidate (fuel - 1) b1) (\cs, b2 => Just (Pair (FieldCandidates cs) b2))
-          4 => thenPair (decCall (fuel - 1) b1) (\ci, b2 => Just (Pair (FieldCall ci) b2))
-          5 => thenPair (decStr (fuel - 1) b1) (\name, b2 => thenPair (decInt (fuel - 1) b2) (\d, b3 => thenPair (decInt (fuel - 1) b3) (\o, b4 => Just (Pair (FieldQuantity name d o) b4))))
-          6 => thenPair (decStr (fuel - 1) b1) (\s, b2 => Just (Pair (FieldEffect s) b2))
-          7 => thenPair (decStr (fuel - 1) b1) (\s, b2 => Just (Pair (FieldModule s) b2))
-          8 => thenPair (decStr (fuel - 1) b1) (\name, b2 => thenPair (decSpan (fuel - 1) b2) (\sp, b3 => Just (Pair (FieldSpan name sp) b3)))
-          9 => thenPair (decStr (fuel - 1) b1) (\s, b2 => Just (Pair (FieldNote s) b2))
+          0 => thenPair (decStr (fuel - 1) b1) (\s, b2 => Just (FieldExpected s, b2))
+          1 => thenPair (decStr (fuel - 1) b1) (\s, b2 => Just (FieldFound s, b2))
+          2 => thenPair (decStr (fuel - 1) b1) (\s, b2 => Just (FieldName s, b2))
+          3 => thenPair (decList decCandidate (fuel - 1) b1) (\cs, b2 => Just (FieldCandidates cs, b2))
+          4 => thenPair (decCall (fuel - 1) b1) (\ci, b2 => Just (FieldCall ci, b2))
+          5 => thenPair (decStr (fuel - 1) b1) (\name, b2 => thenPair (decInt (fuel - 1) b2) (\d, b3 => thenPair (decInt (fuel - 1) b3) (\o, b4 => Just (FieldQuantity name d o, b4))))
+          6 => thenPair (decStr (fuel - 1) b1) (\s, b2 => Just (FieldEffect s, b2))
+          7 => thenPair (decStr (fuel - 1) b1) (\s, b2 => Just (FieldModule s, b2))
+          8 => thenPair (decStr (fuel - 1) b1) (\name, b2 => thenPair (decSpan (fuel - 1) b2) (\sp, b3 => Just (FieldSpan name sp, b3)))
+          9 => thenPair (decStr (fuel - 1) b1) (\s, b2 => Just (FieldNote s, b2))
           _ => Nothing
     )
 
@@ -291,13 +291,13 @@ encOrigin : Origin -> List String -> List String
 encOrigin OriginDirect acc = encTag 0 acc
 encOrigin (OriginCascade parent) acc = encTag 1 (encMaybe encInt parent acc)
 
-decOrigin : Int -> Cur -> Maybe (Pair Origin Cur)
+decOrigin : Int -> Cur -> Maybe (Origin, Cur)
 decOrigin fuel c =
   thenPair (decTag (fuel - 1) c) (
       \tg, b1 =>
         case tg of
-          0 => Just (Pair OriginDirect b1)
-          1 => thenPair (decMaybe decInt (fuel - 1) b1) (\p, b2 => Just (Pair (OriginCascade p) b2))
+          0 => Just (OriginDirect, b1)
+          1 => thenPair (decMaybe decInt (fuel - 1) b1) (\p, b2 => Just (OriginCascade p, b2))
           _ => Nothing
     )
 
@@ -305,22 +305,22 @@ encIce : IceInfo -> List String -> List String
 encIce (IceInfo iphase ifn iinv ifp ihint) acc =
   encTag (phaseTag iphase) (encStr ifn (encStr iinv (encStr ifp (encStr ihint acc))))
 
-decIce : Int -> Cur -> Maybe (Pair IceInfo Cur)
+decIce : Int -> Cur -> Maybe (IceInfo, Cur)
 decIce fuel c =
   thenPair (decTag (fuel - 1) c) (
       \pt, b1 =>
         case phaseOfTag pt of
           Nothing => Nothing
-          Just phase => thenPair (decStr (fuel - 1) b1) (\fn, b2 => thenPair (decStr (fuel - 1) b2) (\inv, b3 => thenPair (decStr (fuel - 1) b3) (\fp, b4 => thenPair (decStr (fuel - 1) b4) (\hint, b5 => Just (Pair (IceInfo phase fn inv fp hint) b5)))))
+          Just phase => thenPair (decStr (fuel - 1) b1) (\fn, b2 => thenPair (decStr (fuel - 1) b2) (\inv, b3 => thenPair (decStr (fuel - 1) b3) (\fp, b4 => thenPair (decStr (fuel - 1) b4) (\hint, b5 => Just (IceInfo phase fn inv fp hint, b5)))))
     )
 
-decTrace : Int -> Cur -> Maybe (Pair TraceFrame Cur)
+decTrace : Int -> Cur -> Maybe (TraceFrame, Cur)
 decTrace fuel c =
   thenPair (decTag (fuel - 1) c) (
       \pt, b1 =>
         case phaseOfTag pt of
           Nothing => Nothing
-          Just phase => thenPair (decStr (fuel - 1) b1) (\text, b2 => thenPair (decMaybe decSpan (fuel - 1) b2) (\msp, b3 => thenPair (decCount (fuel - 1) b3) (\n, b4 => if n == 0 then Just (Pair (TraceFrame phase text msp []) b4) else Nothing)))
+          Just phase => thenPair (decStr (fuel - 1) b1) (\text, b2 => thenPair (decMaybe decSpan (fuel - 1) b2) (\msp, b3 => thenPair (decCount (fuel - 1) b3) (\n, b4 => if n == 0 then Just (TraceFrame phase text msp [], b4) else Nothing)))
     )
 
 encDiagList : List Diagnostic -> List String -> List String
@@ -341,7 +341,7 @@ encDiag (Diagnostic did dsev dphase dcat dcode dmsg dlabels dfields dtrace dnote
     did
     (encTag (sevTag dsev) (encTag (phaseTag dphase) (encTag (catTag dcat) (encStr dcode (encStr dmsg (encList encLabel dlabels (encList encField dfields (encList encTrace dtrace (encList encStr dnotes (encList encSuggestion dsugs (encOrigin dorigin (encDiagList dkids (encBool dinternal (encMaybe encIce dice (encMaybe absentEnc dabsent (encTag (stabilityTag dstab) acc))))))))))))))))
 
-decDiag : Int -> Cur -> Maybe (Pair Diagnostic Cur)
+decDiag : Int -> Cur -> Maybe (Diagnostic, Cur)
 decDiag fuel c =
   if fuel <= 0 then
     Nothing
@@ -394,7 +394,7 @@ decDiag fuel c =
                                                                                                                         \stab, b17 =>
                                                                                                                           case stabilityOfTag stab of
                                                                                                                             Nothing => Nothing
-                                                                                                                            Just stability => Just (Pair (Diagnostic id sev phase cat code msg labels fields trace notes sugs origin kids internal ice absent stability) b17)
+                                                                                                                            Just stability => Just (Diagnostic id sev phase cat code msg labels fields trace notes sugs origin kids internal ice absent stability, b17)
                                                                                                                       )
                                                                                                             )
                                                                                                       )
@@ -414,25 +414,25 @@ decDiag fuel c =
       )
 
 -- 诊断子节点表（递归）。
-decDiagList : Int -> Cur -> Maybe (Pair (List Diagnostic) Cur)
+decDiagList : Int -> Cur -> Maybe (List Diagnostic, Cur)
 decDiagList fuel c =
   if fuel <= 0 then
     Nothing
   else
     case decCount (fuel - 1) c of
       Nothing => Nothing
-      Just (Pair n b1) => decDiagItems (fuel - 1) n b1 []
+      Just (n, b1) => decDiagItems (fuel - 1) n b1 []
 
-decDiagItems : Int -> Int -> Cur -> List Diagnostic -> Maybe (Pair (List Diagnostic) Cur)
+decDiagItems : Int -> Int -> Cur -> List Diagnostic -> Maybe (List Diagnostic, Cur)
 decDiagItems fuel n c acc =
   if fuel <= 0 then
     Nothing
   else if n <= 0 then
-    Just (Pair (reverse acc) c)
+    Just (reverse acc, c)
   else
     case decDiag (fuel - 1) c of
       Nothing => Nothing
-      Just (Pair d b) => decDiagItems (fuel - 1) (n - 1) b (d :: acc)
+      Just (d, b) => decDiagItems (fuel - 1) (n - 1) b (d :: acc)
 
 mtAbsent : Maybe Int -> Maybe (Maybe NoSourceReason)
 mtAbsent Nothing = Just Nothing
@@ -458,7 +458,7 @@ decDiagnostics payload =
     fuel = strLength payload + 1
   in case decDiagList fuel (curOf payload) of
     Nothing => Nothing
-    Just (Pair ds rest) => if curAtEnd rest then Just ds else Nothing
+    Just (ds, rest) => if curAtEnd rest then Just ds else Nothing
 
 -- | 包级 check 的结果：通过（诊断通常是 warning）或失败（首错 + 后续）。
 export data CheckOutcome(..) : Type where
@@ -472,15 +472,15 @@ encOutcome : CheckOutcome -> List String -> List String
 encOutcome (CheckPassed ds) acc = encTag 0 (encDiagList ds acc)
 encOutcome (CheckFailed ds) acc = encTag 1 (encDiagList ds acc)
 
-decOutcome : Int -> Cur -> Maybe (Pair CheckOutcome Cur)
+decOutcome : Int -> Cur -> Maybe (CheckOutcome, Cur)
 decOutcome fuel c =
   thenPair (decTag (fuel - 1) c) (
       \tg, b1 =>
         thenPair (decDiagList (fuel - 1) b1) (
             \ds, b2 =>
               case tg of
-                0 => Just (Pair (CheckPassed ds) b2)
-                1 => Just (Pair (CheckFailed ds) b2)
+                0 => Just (CheckPassed ds, b2)
+                1 => Just (CheckFailed ds, b2)
                 _ => Nothing
           )
     )
@@ -498,4 +498,4 @@ decCheckOutcome payload =
     fuel = strLength payload + 1
   in case decOutcome fuel (curOf payload) of
     Nothing => Nothing
-    Just (Pair o rest) => if curAtEnd rest then Just o else Nothing
+    Just (o, rest) => if curAtEnd rest then Just o else Nothing

@@ -28,7 +28,7 @@ export record OCtor(..) where
 -- | 一条类型声明。`odParams` 是参数槽个数（渲染成 `'a0` / `('a0, 'a1)`）。
 export data ODecl(..) : Type where
   ODVariant : Int -> String -> List OCtor -> ODecl
-  ODRecord : Int -> String -> List (Pair String OTy) -> ODecl
+  ODRecord : Int -> String -> List (String, OTy) -> ODecl
   ODAlias : Int -> String -> OTy -> ODecl
 
 -- ---------------------------------------------------------------
@@ -42,20 +42,20 @@ export data OPat(..) : Type where
   OPVar : String -> OPat
   OPWild : OPat
   OPCtorPat : String -> List OPat -> OPat
-  OPRecordPat : List (Pair String OPat) -> OPat
+  OPRecordPat : List (String, OPat) -> OPat
 
 -- | 表达式。多实参构造子是 OCaml 的 tupled 变体（`C (a, b)`）。
 export data OTerm(..) : Type where
   OName : String -> OTerm
   ORaw : String -> OTerm
   OApp : OTerm -> OTerm -> OTerm
-  OLam : List (Pair String (Maybe String)) -> OTerm -> OTerm
+  OLam : List (String, Maybe String) -> OTerm -> OTerm
   OLet : OPat -> OTerm -> OTerm -> OTerm
   OIf : OTerm -> OTerm -> OTerm -> OTerm
-  OMatch : OTerm -> List (Pair OPat OTerm) -> Bool -> OTerm
+  OMatch : OTerm -> List (OPat, OTerm) -> Bool -> OTerm
   OCtorApp : String -> List OTerm -> OTerm
-  ORecordCon : List (Pair String OTerm) -> OTerm
-  ORecordUpd : OTerm -> List (Pair String OTerm) -> OTerm
+  ORecordCon : List (String, OTerm) -> OTerm
+  ORecordUpd : OTerm -> List (String, OTerm) -> OTerm
   OProj : OTerm -> String -> OTerm
   OConcatStr : List OTerm -> OTerm
   OCast : OTerm -> OTerm

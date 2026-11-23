@@ -117,24 +117,24 @@ eraseAlts allowErased ctx ((CaseAlt name bs body) :: rest) =
     (eraseTermIn allowErased ctx2 body)
     (\body2 => Vuna.Compiler.Base.Common.bind (eraseAlts allowErased ctx rest) (\rest2 => OkC (CaseAlt name bs body2 :: rest2)))
 
-eraseCtorArgs : Bool -> List Bool -> String -> List (Pair Term Rig) -> Bool -> Check Term
+eraseCtorArgs : Bool -> List Bool -> String -> List (Term, Rig) -> Bool -> Check Term
 eraseCtorArgs allowErased ctx c args isMk =
   Vuna.Compiler.Base.Common.bind
     (eraseArgs allowErased ctx args)
     (\args2 => OkC (if isMk then TMk c args2 else TCon c args2))
 
 -- 只擦运行时实参；`Rig0` 实参是类型面，原样保留。
-eraseArgs : Bool -> List Bool -> List (Pair Term Rig) -> Check (List (Pair Term Rig))
+eraseArgs : Bool -> List Bool -> List (Term, Rig) -> Check (List (Term, Rig))
 eraseArgs allowErased ctx [] = OkC []
 eraseArgs allowErased ctx (a :: rest) =
   if rigIsErased (secondOf a) then
     Vuna.Compiler.Base.Common.bind
       (eraseArgs allowErased ctx rest)
-      (\rest2 => OkC (Pair (firstOf a) (secondOf a) :: rest2))
+      (\rest2 => OkC ((firstOf a, secondOf a) :: rest2))
   else
     Vuna.Compiler.Base.Common.bind
       (eraseTermIn allowErased ctx (firstOf a))
-      (\a2 => Vuna.Compiler.Base.Common.bind (eraseArgs allowErased ctx rest) (\rest2 => OkC (Pair a2 (secondOf a) :: rest2)))
+      (\a2 => Vuna.Compiler.Base.Common.bind (eraseArgs allowErased ctx rest) (\rest2 => OkC ((a2, secondOf a) :: rest2)))
 
 -- ---------------------------------------------------------------
 -- 校验
@@ -179,7 +179,7 @@ validateErasedIn ctx t =
     TType _ => icInternal "erased core: Type at runtime"
     TMeta _ => icInternal "erased core: unsolved meta at runtime"
 
-validateErasedArgs : List Bool -> List (Pair Term Rig) -> Check Int
+validateErasedArgs : List Bool -> List (Term, Rig) -> Check Int
 validateErasedArgs ctx [] = OkC 0
 validateErasedArgs ctx (a :: rest) =
   if rigIsErased (secondOf a) then

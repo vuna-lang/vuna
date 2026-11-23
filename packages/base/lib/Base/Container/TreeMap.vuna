@@ -62,47 +62,47 @@ rebalance key val l r =
     mkTree key val l r
 
 -- | 内部：插入并返回「是否新建键」；已存在的键只替换值。
-insertTree : Ord k => k -> v -> Tree k v -> Pair Bool (Tree k v)
-insertTree key val Leaf = Pair True (mkTree key val Leaf Leaf)
+insertTree : Ord k => k -> v -> Tree k v -> (Bool, Tree k v)
+insertTree key val Leaf = (True, mkTree key val Leaf Leaf)
 insertTree key val (Node _ k2 v2 l r) =
   if key < k2 then
     case insertTree key val l of
-      Pair added l2 => Pair added (rebalance k2 v2 l2 r)
+      (added, l2) => (added, rebalance k2 v2 l2 r)
   else if k2 < key then
     case insertTree key val r of
-      Pair added r2 => Pair added (rebalance k2 v2 l r2)
+      (added, r2) => (added, rebalance k2 v2 l r2)
   else
-    Pair False (mkTree k2 val l r)
+    (False, mkTree k2 val l r)
 
 -- | 内部：删除最小项，返回被删项（空树 `Nothing`）与剩余树。
-popMinTree : Tree k v -> Pair (Maybe (Pair k v)) (Tree k v)
-popMinTree Leaf = Pair Nothing Leaf
-popMinTree (Node _ k v Leaf r) = Pair (Just (Pair k v)) r
+popMinTree : Tree k v -> (Maybe (k, v), Tree k v)
+popMinTree Leaf = (Nothing, Leaf)
+popMinTree (Node _ k v Leaf r) = (Just (k, v), r)
 popMinTree (Node _ k v l r) =
   case popMinTree l of
-    Pair m l2 => Pair m (rebalance k v l2 r)
+    (m, l2) => (m, rebalance k v l2 r)
 
 -- | 内部：删除键并返回「是否真的删掉了」；缺失键原样返回。
-removeTree : Ord k => k -> Tree k v -> Pair Bool (Tree k v)
-removeTree key Leaf = Pair False Leaf
+removeTree : Ord k => k -> Tree k v -> (Bool, Tree k v)
+removeTree key Leaf = (False, Leaf)
 removeTree key (Node _ k2 v2 l r) =
   if key < k2 then
     case removeTree key l of
-      Pair removed l2 => Pair removed (rebalance k2 v2 l2 r)
+      (removed, l2) => (removed, rebalance k2 v2 l2 r)
   else if k2 < key then
     case removeTree key r of
-      Pair removed r2 => Pair removed (rebalance k2 v2 l r2)
+      (removed, r2) => (removed, rebalance k2 v2 l r2)
   else
     case l of
-      Leaf => Pair True r
+      Leaf => (True, r)
       Node _ _ _ _ _ =>
         case r of
-          Leaf => Pair True l
+          Leaf => (True, l)
           Node _ _ _ _ _ =>
             case popMinTree r of
-              Pair (Just (Pair mk mv)) r2 => Pair True (rebalance mk mv l r2)
+              (Just (mk, mv), r2) => (True, rebalance mk mv l r2)
               -- `r` 非空时 `popMinTree` 必返回 `Just`；该分支只为穷尽匹配。
-              Pair Nothing _ => Pair True l
+              (Nothing, _) => (True, l)
 
 -- | 内部：按键查找。
 lookupTree : Ord k => k -> Tree k v -> Maybe v
@@ -111,22 +111,22 @@ lookupTree key (Node _ k2 v2 l r) =
   if key < k2 then lookupTree key l else if k2 < key then lookupTree key r else Just v2
 
 -- | 内部：中序遍历（升序）；`acc` 是已累积的后继元素。
-toAscGo : Tree k v -> List (Pair k v) -> List (Pair k v)
+toAscGo : Tree k v -> List (k, v) -> List (k, v)
 toAscGo Leaf acc = acc
-toAscGo (Node _ k v l r) acc = toAscGo l (Pair k v :: toAscGo r acc)
+toAscGo (Node _ k v l r) acc = toAscGo l ((k, v) :: toAscGo r acc)
 
 -- | 内部：逆中序遍历（降序）。
-toDescGo : Tree k v -> List (Pair k v) -> List (Pair k v)
+toDescGo : Tree k v -> List (k, v) -> List (k, v)
 toDescGo Leaf acc = acc
-toDescGo (Node _ k v l r) acc = toDescGo r (Pair k v :: toDescGo l acc)
+toDescGo (Node _ k v l r) acc = toDescGo r ((k, v) :: toDescGo l acc)
 
 -- | 内部：闭区间 `[lo, hi]` 内的条目（升序）；越界子树整棵剪掉。
-rangeGo : Ord k => k -> k -> Tree k v -> List (Pair k v) -> List (Pair k v)
+rangeGo : Ord k => k -> k -> Tree k v -> List (k, v) -> List (k, v)
 rangeGo lo hi Leaf acc = acc
 rangeGo lo hi (Node _ k v l r) acc =
   if k < lo then
     rangeGo lo hi r acc
-  else if hi < k then rangeGo lo hi l acc else rangeGo lo hi l (Pair k v :: rangeGo lo hi r acc)
+  else if hi < k then rangeGo lo hi l acc else rangeGo lo hi l ((k, v) :: rangeGo lo hi r acc)
 
 -- | 有序持久映射：AVL 树根 + 元素计数；构造器不导出。
 export record TreeMap k v where
@@ -143,13 +143,13 @@ empty = TreeMap Leaf 0
 export insert : Ord k => k -> v -> TreeMap k v -> TreeMap k v
 insert key val (TreeMap root n) =
   case insertTree key val root of
-    Pair added root2 => TreeMap root2 (if added then n + 1 else n)
+    (added, root2) => TreeMap root2 (if added then n + 1 else n)
 
 -- | 删除键；键不存在时原样返回（O(log n)）。
 export remove : Ord k => k -> TreeMap k v -> TreeMap k v
 remove key (TreeMap root n) =
   case removeTree key root of
-    Pair removed root2 => TreeMap root2 (if removed then n - 1 else n)
+    (removed, root2) => TreeMap root2 (if removed then n - 1 else n)
 
 -- | 按键查找（O(log n)）。
 export lookup : Ord k => k -> TreeMap k v -> Maybe v
@@ -171,19 +171,19 @@ export height : TreeMap k v -> Nat
 height (TreeMap root _) = natFromInt (heightTree root)
 
 -- | 按键升序展开全部条目。
-export toAscList : TreeMap k v -> List (Pair k v)
+export toAscList : TreeMap k v -> List (k, v)
 toAscList (TreeMap root _) = toAscGo root []
 
 -- | 按键降序展开全部条目。
-export toDescList : TreeMap k v -> List (Pair k v)
+export toDescList : TreeMap k v -> List (k, v)
 toDescList (TreeMap root _) = toDescGo root []
 
 -- | 闭区间 `[lo, hi]` 内的条目（升序）；`hi < lo` 时为空。
-export range : Ord k => k -> k -> TreeMap k v -> List (Pair k v)
+export range : Ord k => k -> k -> TreeMap k v -> List (k, v)
 range lo hi (TreeMap root _) = rangeGo lo hi root []
 
 -- | 从 `Pair` 列表构造：同键**后面的条目覆盖前面的**（逐项 `insert`）。
-export fromList : Ord k => List (Pair k v) -> TreeMap k v
+export fromList : Ord k => List (k, v) -> TreeMap k v
 fromList ps = foldl (\acc, p => insert (firstOf p) (secondOf p) acc) empty ps
 
 -- 经 `toAscList` 展示（构造器不导出）。

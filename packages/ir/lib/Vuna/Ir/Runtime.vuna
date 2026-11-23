@@ -421,7 +421,7 @@ irListLength [] = 0
 irListLength (x :: rest) = 1 + irListLength rest
 
 -- | 一个 IR 项引用到的运行时符号（`Nothing` = 作为值引用，`Just n` = 饱和应用 n 个实参）。
-export irSymbolsOf : Ir -> List (Pair String (Maybe Int))
+export irSymbolsOf : Ir -> List (String, Maybe Int)
 irSymbolsOf (IrVar _) = []
 irSymbolsOf (IrGlobal _) = []
 irSymbolsOf (IrCtor _ _ _ args) = concatMap irSymbolsOf args
@@ -429,9 +429,9 @@ irSymbolsOf (IrRecord _ _ fields) = concatMap irSymbolsOfField fields
 irSymbolsOf (IrProj base _ _ _) = irSymbolsOf base
 irSymbolsOf (IrRecUpd base _ fields _) =
   append (irSymbolsOf base) (concatMap irSymbolsOfField fields)
-irSymbolsOf (IrRt sym) = [Pair sym Nothing]
+irSymbolsOf (IrRt sym) = [(sym, Nothing)]
 irSymbolsOf (IrRtApp sym args) =
-  append [Pair sym (Just (irListLength args))] (concatMap irSymbolsOf args)
+  append [(sym, Just (irListLength args))] (concatMap irSymbolsOf args)
 irSymbolsOf (IrCast cFrom cTo inner) = irSymbolsOf inner
 irSymbolsOf (IrInt _) = []
 irSymbolsOf (IrStr _) = []
@@ -451,29 +451,29 @@ irSymbolsOf (IrConcatMany parts) = concatMap irSymbolsOf parts
 irSymbolsOf (IrEffThunk _ _ _ _ prim) = irSymbolsOf prim
 irSymbolsOf (IrEffBind _ _ _) = []
 
-irSymbolsOfField : Pair String Ir -> List (Pair String (Maybe Int))
+irSymbolsOfField : (String, Ir) -> List (String, Maybe Int)
 irSymbolsOfField p = irSymbolsOf (secondOf p)
 
-irSymbolsOfAlt : IrAlt -> List (Pair String (Maybe Int))
+irSymbolsOfAlt : IrAlt -> List (String, Maybe Int)
 irSymbolsOfAlt alt = irSymbolsOf (irAltBodyOf alt)
 
-irSymbolsOfAltMaybe : Maybe IrAlt -> List (Pair String (Maybe Int))
+irSymbolsOfAltMaybe : Maybe IrAlt -> List (String, Maybe Int)
 irSymbolsOfAltMaybe Nothing = []
 irSymbolsOfAltMaybe (Just alt) = irSymbolsOfAlt alt
 
-irSymbolsOfDef : IrDef -> List (Pair String (Maybe Int))
+irSymbolsOfDef : IrDef -> List (String, Maybe Int)
 irSymbolsOfDef d =
   case irDefBody d of
     Nothing => []
     Just b => irSymbolsOf b
 
 -- | 一个单元的符号引用（全部定义体 + 入口展示节点）。
-export irSymbolsOfUnit : IrUnit -> List (Pair String (Maybe Int))
+export irSymbolsOfUnit : IrUnit -> List (String, Maybe Int)
 irSymbolsOfUnit u =
   append
     (concatMap irSymbolsOfDef (concatMap irGroupDefs u.irUnitGroups))
     (irSymbolsOfEntry u.irUnitEntry)
 
-irSymbolsOfEntry : Maybe IrEntry -> List (Pair String (Maybe Int))
+irSymbolsOfEntry : Maybe IrEntry -> List (String, Maybe Int)
 irSymbolsOfEntry Nothing = []
 irSymbolsOfEntry (Just e) = irSymbolsOf (irEntryShowOf e)

@@ -29,15 +29,15 @@ export record PackageFile(..) where
 export record PackageSource(..) where
   psName : String
   psExports : List String
-  psDeps : List (Pair String String)
+  psDeps : List (String, String)
   psFiles : List PackageFile
 
 -- | 语义身份视图：文件用内容摘要替代字节（不必携带载荷）。
 export record PackageIdentity(..) where
   piName : String
   piExports : List String
-  piDeps : List (Pair String String)
-  piFiles : List (Pair String String)
+  piDeps : List (String, String)
+  piFiles : List (String, String)
 
 contentTag : Int
 contentTag = 1
@@ -60,10 +60,10 @@ encPackageContent files = encTop encFiles files
 export identityOfSource : PackageSource -> PackageIdentity
 identityOfSource ps = PackageIdentity ps.psName ps.psExports ps.psDeps (map hashFile ps.psFiles)
 
-hashFile : PackageFile -> Pair String String
-hashFile f = Pair f.pfPath (contentAddress f.pfContent)
+hashFile : PackageFile -> (String, String)
+hashFile f = (f.pfPath, contentAddress f.pfContent)
 
-encStrPair : Pair String String -> List String -> List String
+encStrPair : (String, String) -> List String -> List String
 encStrPair p acc = encStr (firstOf p) (encStr (secondOf p) acc)
 
 encIdentity : PackageIdentity -> List String -> List String
@@ -77,49 +77,49 @@ export encPackageIdentity : PackageIdentity -> String
 encPackageIdentity pi = encTop encIdentity pi
 
 -- ---------------------------------------------------------------- 解码
-decFile : Int -> Cur -> Maybe (Pair PackageFile Cur)
+decFile : Int -> Cur -> Maybe (PackageFile, Cur)
 decFile fuel c =
   case decStr fuel c of
     Nothing => Nothing
-    Just (Pair path c1) =>
+    Just (path, c1) =>
       case decStr fuel c1 of
         Nothing => Nothing
-        Just (Pair content c2) => Just (Pair (PackageFile path content) c2)
+        Just (content, c2) => Just (PackageFile path content, c2)
 
-decContentAt : Int -> Cur -> Maybe (Pair (List PackageFile) Cur)
+decContentAt : Int -> Cur -> Maybe (List PackageFile, Cur)
 decContentAt fuel c =
   case decTag fuel c of
     Nothing => Nothing
-    Just (Pair tag c1) => if tag == contentTag then decList decFile fuel c1 else Nothing
+    Just (tag, c1) => if tag == contentTag then decList decFile fuel c1 else Nothing
 
 -- | 内容解码（供 roundtrip 与 store 读回）。
 export decPackageContent : String -> Maybe (List PackageFile)
 decPackageContent raw =
   case decContentAt (2 * strLength raw + 16) (curOf raw) of
     Nothing => Nothing
-    Just (Pair files c2) => if curAtEnd c2 then Just files else Nothing
+    Just (files, c2) => if curAtEnd c2 then Just files else Nothing
 
-decStrPair : Int -> Cur -> Maybe (Pair (Pair String String) Cur)
+decStrPair : Int -> Cur -> Maybe ((String, String), Cur)
 decStrPair fuel c = decPair decStr decStr fuel c
 
-decIdentityAt : Int -> Cur -> Maybe (Pair PackageIdentity Cur)
+decIdentityAt : Int -> Cur -> Maybe (PackageIdentity, Cur)
 decIdentityAt fuel c =
   case decTag fuel c of
     Nothing => Nothing
-    Just (Pair tag c1) =>
+    Just (tag, c1) =>
       if tag == identityTag then
         case decStr fuel c1 of
           Nothing => Nothing
-          Just (Pair name c2) =>
+          Just (name, c2) =>
             case decList decStr fuel c2 of
               Nothing => Nothing
-              Just (Pair exports c3) =>
+              Just (exports, c3) =>
                 case decList decStrPair fuel c3 of
                   Nothing => Nothing
-                  Just (Pair deps c4) =>
+                  Just (deps, c4) =>
                     case decList decStrPair fuel c4 of
                       Nothing => Nothing
-                      Just (Pair files c5) => Just (Pair (PackageIdentity name exports deps files) c5)
+                      Just (files, c5) => Just (PackageIdentity name exports deps files, c5)
       else
         Nothing
 
@@ -128,4 +128,4 @@ export decPackageIdentity : String -> Maybe PackageIdentity
 decPackageIdentity raw =
   case decIdentityAt (2 * strLength raw + 16) (curOf raw) of
     Nothing => Nothing
-    Just (Pair ident c2) => if curAtEnd c2 then Just ident else Nothing
+    Just (ident, c2) => if curAtEnd c2 then Just ident else Nothing

@@ -201,11 +201,11 @@ manifestNameString manifest =
 
 -- ---------------------------------------------------------------- 加载包
 -- 依赖链栈：每个元素是 (规范化目录, 包名)；只用于循环检测。
-memStackDir : Eq a => a -> List (Pair a b) -> Bool
+memStackDir : Eq a => a -> List (a, b) -> Bool
 memStackDir dir [] = False
 memStackDir dir (pair :: rest) = firstOf pair == dir || memStackDir dir rest
 
-cyclePrefix : Eq a => a -> List (Pair a b) -> Maybe (List (Pair a b))
+cyclePrefix : Eq a => a -> List (a, b) -> Maybe (List (a, b))
 cyclePrefix dir [] = Nothing
 cyclePrefix dir (pair :: rest) =
   if firstOf pair == dir then
@@ -215,7 +215,7 @@ cyclePrefix dir (pair :: rest) =
       Nothing => Nothing
       Just prefix => Just ((::) pair prefix)
 
-cycleMessage : String -> Maybe String -> List (Pair String String) -> String
+cycleMessage : String -> Maybe String -> List (String, String) -> String
 cycleMessage dir Nothing stack = "pkg: dependency cycle at ${dir}"
 cycleMessage dir (Just dep) stack =
   case cyclePrefix dir stack of
@@ -234,7 +234,7 @@ mismatchMessage (Just expected) actual =
 
 -- 不可变源依赖：定位 store 物化视图（`<store>/pkgs/<digest>`）并校验 `.complete`。
 -- 物化视图由 `vuna deps fetch` 写入；check/build 只读，缺失即 `PKG_NotMaterialized`。
-loadStoreDependency : Member nFs FsOp r, Member nEnv EnvOp r => Int -> List (Pair String String) -> Dependency -> Eff r (Check Package)
+loadStoreDependency : Member nFs FsOp r, Member nEnv EnvOp r => Int -> List (String, String) -> Dependency -> Eff r (Check Package)
 loadStoreDependency fuel stack dep =
   case depHashOf dep of
     Nothing => pure (pkgNoLoc1 (NotMaterialized (depAliasOf dep)) (depAliasOf dep))
@@ -307,7 +307,7 @@ verifyPathHashEff dep dir =
                   detail = "declared ${expected}, actual ${actual}"
                 in pure (pkgNoLoc (HashMismatch (depAliasOf dep) detail) [depAliasOf dep, detail])
 
-loadDependencyList : Member nFs FsOp r, Member nEnv EnvOp r => Int -> List (Pair String String) -> String -> List Dependency -> Eff r (Check (List Package))
+loadDependencyList : Member nFs FsOp r, Member nEnv EnvOp r => Int -> List (String, String) -> String -> List Dependency -> Eff r (Check (List Package))
 loadDependencyList fuel stack baseDir deps =
   if fuel <= 0 then
     pure (icFuel "pkg")
@@ -329,7 +329,7 @@ loadDependencyList fuel stack baseDir deps =
                   )
 
 -- 单条依赖：path 定位工作树目录（显式摘要则校验）；git/url 定位 store 物化视图。
-loadOneDependency : Member nFs FsOp r, Member nEnv EnvOp r => Int -> List (Pair String String) -> String -> Dependency -> Eff r (Check Package)
+loadOneDependency : Member nFs FsOp r, Member nEnv EnvOp r => Int -> List (String, String) -> String -> Dependency -> Eff r (Check Package)
 loadOneDependency fuel stack baseDir dep =
   case depSourceOf dep of
     DepPath rel =>
@@ -354,7 +354,7 @@ loadOneDependency fuel stack baseDir dep =
     DepGit url rev => loadStoreDependency fuel stack dep
     DepUrl url => loadStoreDependency fuel stack dep
 
-loadPackageWalk : Member nFs FsOp r, Member nEnv EnvOp r => Int -> List (Pair String String) -> Maybe String -> String -> Eff r (Check Package)
+loadPackageWalk : Member nFs FsOp r, Member nEnv EnvOp r => Int -> List (String, String) -> Maybe String -> String -> Eff r (Check Package)
 loadPackageWalk fuel stack depName dir =
   if fuel <= 0 then
     pure (icFuel "pkg")
@@ -376,7 +376,7 @@ loadPackageWalk fuel stack depName dir =
                   name = manifestNameString manifest
                 in if dependencyNameOk depName name then
                   do
-                    dependencyR <- loadDependencyList (fuel - 1) (Pair normalized name :: stack) normalized manifest.manifestDependencies
+                    dependencyR <- loadDependencyList (fuel - 1) ((normalized, name) :: stack) normalized manifest.manifestDependencies
                     pure (
                         case dependencyR of
                           ErrC e => ErrC e
@@ -391,26 +391,25 @@ loadPackageWalk fuel stack depName dir =
 -- 因此同一依赖图里两个**不同目录**共用包名是配置错误。按包名去重会让后出现的那支
 -- 依赖（连同它自己的整支依赖）被静默丢弃、模块解析退化到前一个同名包，所以加载后
 -- 显式校验：同名同目录（diamond 依赖）合法，同名不同目录直接报错。
-collectPackageIds : Package -> List (Pair String String)
+collectPackageIds : Package -> List (String, String)
 collectPackageIds package =
-  Pair (packageName package) (packageDir package)
-    :: collectDependencyIds (packageDependencies package)
+  (packageName package, packageDir package) :: collectDependencyIds (packageDependencies package)
 
-collectDependencyIds : List Package -> List (Pair String String)
+collectDependencyIds : List Package -> List (String, String)
 collectDependencyIds [] = []
 collectDependencyIds (package :: rest) =
   append (collectPackageIds package) (collectDependencyIds rest)
 
-lookupPackageDir : String -> List (Pair String String) -> Maybe String
+lookupPackageDir : String -> List (String, String) -> Maybe String
 lookupPackageDir name [] = Nothing
-lookupPackageDir name ((Pair n dir) :: rest) =
+lookupPackageDir name ((n, dir) :: rest) =
   if n == name then Just dir else lookupPackageDir name rest
 
-checkUniqueNamesGo : List (Pair String String) -> List (Pair String String) -> Check Int
+checkUniqueNamesGo : List (String, String) -> List (String, String) -> Check Int
 checkUniqueNamesGo seen [] = OkC 0
-checkUniqueNamesGo seen ((Pair name dir) :: rest) =
+checkUniqueNamesGo seen ((name, dir) :: rest) =
   case lookupPackageDir name seen of
-    Nothing => checkUniqueNamesGo (Pair name dir :: seen) rest
+    Nothing => checkUniqueNamesGo ((name, dir) :: seen) rest
     Just prevDir =>
       if prevDir == dir then
         checkUniqueNamesGo seen rest
@@ -559,16 +558,16 @@ dependencyRootOf package =
 -- 包名唯一性由 `checkUniquePackageNames` 在加载期保证（同名 ⇒ 同目录），所以
 -- 按名字去重不会再丢掉不同目录的依赖。
 -- 返回 (更新后的 seen, 根列表)。
-dependencyRoots : List String -> List Package -> Pair (List String) (List Root)
-dependencyRoots seen [] = Pair seen []
+dependencyRoots : List String -> List Package -> (List String, List Root)
+dependencyRoots seen [] = (seen, [])
 dependencyRoots seen (package :: rest) =
   if memName (packageName package) seen then
     dependencyRoots seen rest
   else
     case dependencyRoots (packageName package :: seen) (packageDependencies package) of
-      Pair seen1 transitive =>
+      (seen1, transitive) =>
         case dependencyRoots seen1 rest of
-          Pair seen2 siblings => Pair seen2 (append transitive (dependencyRootOf package :: siblings))
+          (seen2, siblings) => (seen2, append transitive (dependencyRootOf package :: siblings))
 
 -- 自身 lib 根在最前（exports = Nothing：本包内全部可见）；
 -- 随后是传递依赖的 lib 根（依赖优先的 DFS 后序），各自用 [export].modules 限制。
@@ -578,7 +577,7 @@ packageRoots package =
     selfName = packageName package
     selfRoot = Root "${packageDir package}/lib" selfName Nothing (packageLayers package)
   in case dependencyRoots [selfName] package.packageDependencies of
-    Pair seen roots => selfRoot :: roots
+    (seen, roots) => selfRoot :: roots
 
 -- 包入口固定为 <dir>/app/Main.vuna。
 export packageEntry : Package -> String

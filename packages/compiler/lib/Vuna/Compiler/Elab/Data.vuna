@@ -21,7 +21,7 @@ import Vuna.Compiler.Frontend.Rast.Name
 
 -- 精化一个构造子：类型是「Pi 链 → F r1..rk」。`famLevel` 是族 kind 的结果层级
 -- （kind 末尾的 `Type l`）：字段 binder 的域 sort 必须 `≤ famLevel`。
-export elabCtor : List (Pair String Term) -> String -> Int -> Level -> Ec -> Ctor -> Check (Pair DtCtor Ec)
+export elabCtor : List (String, Term) -> String -> Int -> Level -> Ec -> Ctor -> Check (DtCtor, Ec)
 elabCtor globals fam arity famLevel ec c =
   case c of
     Ctor cname tyExpr arityHint csp =>
@@ -39,24 +39,24 @@ elabCtor globals fam arity famLevel ec c =
       in Vuna.Compiler.Base.Common.bind (checkType gl emptyCtx ec tyExpr2) (
           \pk =>
             case pk of
-              Pair tyTerm0 (Pair sort ec1) =>
+              (tyTerm0, sort, ec1) =>
                 let
                   tyTerm = zonkTerm ec1 0 tyTerm0
                 in case resultSpine (dropParams tyTerm) of
-                  Pair head args => if head /= fam then tcErr2 csp (CtorDoesNotReturn (ctorDisplayName cname) fam) (ctorDisplayName cname) fam else if length args /= arity then tcErr2 csp (CtorWrongIndices (ctorDisplayName cname) fam) (ctorDisplayName cname) fam else Vuna.Compiler.Base.Common.bind (checkCtorFieldSorts gl emptyCtx ec1 arity famLevel cname csp (countTelePis tyTerm) tyExpr2) (\_ => OkC (Pair (DtCtor cname fam (teleOfType tyTerm) tyTerm (Just csp)) ec1))
+                  (head, args) => if head /= fam then tcErr2 csp (CtorDoesNotReturn (ctorDisplayName cname) fam) (ctorDisplayName cname) fam else if length args /= arity then tcErr2 csp (CtorWrongIndices (ctorDisplayName cname) fam) (ctorDisplayName cname) fam else Vuna.Compiler.Base.Common.bind (checkCtorFieldSorts gl emptyCtx ec1 arity famLevel cname csp (countTelePis tyTerm) tyExpr2) (\_ => OkC (DtCtor cname fam (teleOfType tyTerm) tyTerm (Just csp), ec1))
         )
 
-export elabCtors : List (Pair String Term) -> String -> Int -> Level -> Ec -> List Ctor -> Check (Pair (List DtCtor) Ec)
-elabCtors globals fam arity famLevel ec [] = OkC (Pair [] ec)
+export elabCtors : List (String, Term) -> String -> Int -> Level -> Ec -> List Ctor -> Check (List DtCtor, Ec)
+elabCtors globals fam arity famLevel ec [] = OkC ([], ec)
 elabCtors globals fam arity famLevel ec (c :: rest) =
   Vuna.Compiler.Base.Common.bind (elabCtor globals fam arity famLevel ec c) (
       \p =>
         case p of
-          Pair dc ec1 =>
+          (dc, ec1) =>
             Vuna.Compiler.Base.Common.bind (elabCtors globals fam arity famLevel ec1 rest) (
                 \q =>
                   case q of
-                    Pair dcs ec2 => OkC (Pair ((::) dc dcs) ec2)
+                    (dcs, ec2) => OkC ((::) dc dcs, ec2)
               )
     )
 
@@ -75,7 +75,7 @@ kindResultLevel _ = Nothing
 -- （`Type i : Type (i+1)` 严格分层：字段比族大就是宇宙不一致）。
 -- 匿名箭头在 AST 里是 `EApp (EVar "->") [a, b]`，命名 Pi 是 `EPi`；两者都算一个 binder。
 -- 返回的 `Ec` 只是校验过程中的状态，调用方丢弃，不污染主精化。
-checkCtorFieldSorts : List (Pair String Term) -> Ctx -> Ec -> Int -> Level -> String -> Span -> Int -> Expr -> Check Ec
+checkCtorFieldSorts : List (String, Term) -> Ctx -> Ec -> Int -> Level -> String -> Span -> Int -> Expr -> Check Ec
 checkCtorFieldSorts globals ctx ec arity famLevel cname csp tyPis tyExpr =
   let
     -- 表面形态与已精化形态必须同构（否则无法确定每个字段的层级，显式拒绝而不是静默放行）。
@@ -99,19 +99,19 @@ countTelePis : Term -> Int
 countTelePis (TPi _ _ _ _ cod) = 1 + countTelePis cod
 countTelePis _ = 0
 
-ctorFieldSortsGo : List (Pair String Term) -> Ctx -> Ec -> Int -> Int -> Level -> String -> Span -> Expr -> Check Ec
+ctorFieldSortsGo : List (String, Term) -> Ctx -> Ec -> Int -> Int -> Level -> String -> Span -> Expr -> Check Ec
 ctorFieldSortsGo globals ctx ec pos arity famLevel cname csp (EPi name _ _ dom cod _) =
   ctorFieldSortsBinder globals ctx ec pos arity famLevel cname csp name dom cod
 ctorFieldSortsGo globals ctx ec pos arity famLevel cname csp (EApp (EVar (RIntrinsic "->") _) ([a, b]) _) =
   ctorFieldSortsBinder globals ctx ec pos arity famLevel cname csp "_" a b
 ctorFieldSortsGo globals ctx ec pos arity famLevel cname csp _ = OkC ec
 
-ctorFieldSortsBinder : List (Pair String Term) -> Ctx -> Ec -> Int -> Int -> Level -> String -> Span -> String -> Expr -> Expr -> Check Ec
+ctorFieldSortsBinder : List (String, Term) -> Ctx -> Ec -> Int -> Int -> Level -> String -> Span -> String -> Expr -> Expr -> Check Ec
 ctorFieldSortsBinder globals ctx ec pos arity famLevel cname csp name dom cod =
   Vuna.Compiler.Base.Common.bind (checkType globals ctx ec dom) (
       \p =>
         case p of
-          Pair domTerm (Pair sort ec1) =>
+          (domTerm, sort, ec1) =>
             let
               ctx2 = ctxBind name domTerm ctx
             in if pos < arity then
@@ -129,10 +129,10 @@ ctorFieldSortsBinder globals ctx ec pos arity famLevel cname csp name dom cod =
 -- `Field` 引用后面的 `Expr`、`Expr` 与 `DoStmt` 互递归），所以必须先登记所有族。
 -- kind 之间也可能互相引用（`data Vec : Nat -> Type -> Type`），用「一轮能算多少算多少」
 -- 的迭代处理：一轮无进展时把首个失败声明的真实错误抛出。
-export elabDataHead : List (Pair String Term) -> Ec -> Pair Decl Span -> Check (Pair DataHead (Pair (List (Pair String Term)) Ec))
+export elabDataHead : List (String, Term) -> Ec -> (Decl, Span) -> Check (DataHead, List (String, Term), Ec)
 elabDataHead globals ec ds =
   case ds of
-    Pair d dsp =>
+    (d, dsp) =>
       case d of
         DData dname writtenParams kindExpr ctors derivings viaField repr lin dsp2 =>
           if memName dname preludeNames then
@@ -141,7 +141,7 @@ elabDataHead globals ec ds =
             Vuna.Compiler.Base.Common.bind (checkType globals emptyCtx ec kindExpr) (
                 \pk =>
                   case pk of
-                    Pair kindTerm0 (Pair kindSort ec1) =>
+                    (kindTerm0, kindSort, ec1) =>
                       let
                         -- 族名后的参数并进 kind（`data List a : Type`），否则 `List a` 在构造子
                         -- 类型里被当成「把非函数应用」。用显式 binder，与 `: Type -> Type` 写法一致。
@@ -149,7 +149,7 @@ elabDataHead globals ec ds =
                         fullKind = prependParams writtenParams (zonkTerm ec1 0 kindTerm0)
                         tele = splitKind fullKind
                         arity = length tele
-                      in if not (kindWellFormed fullKind) then tcErr0 dsp2 DataKindArrows else OkC (Pair (DataHead dname fullKind arity) (Pair [Pair dname fullKind] ec1))
+                      in if not (kindWellFormed fullKind) then tcErr0 dsp2 DataKindArrows else OkC (DataHead dname fullKind arity, [(dname, fullKind)], ec1)
               )
         -- record 的 kind 固定为 `{params} -> Type`；字段类型在 body 阶段
         -- 精化（与 data 一样允许引用后声明的族）。
@@ -160,36 +160,36 @@ elabDataHead globals ec ds =
             let
               fullKind = prependParams params (TType levelZero)
               arity = length params
-            in if not (kindWellFormed fullKind) then tcErr0 dsp2 DataKindArrows else OkC (Pair (DataHead dname fullKind arity) (Pair [Pair dname fullKind] ec))
+            in if not (kindWellFormed fullKind) then tcErr0 dsp2 DataKindArrows else OkC (DataHead dname fullKind arity, [(dname, fullKind)], ec)
         _ => errAt dsp "DT: internal: expected a data declaration"
 
-export elabDataHeadsRound : List (Pair Decl Span) -> List (Pair String Term) -> Ec -> List DataHead -> List (Pair Decl Span) -> Pair (List DataHead) (Pair (List (Pair String Term)) (Pair Ec (List (Pair Decl Span))))
-elabDataHeadsRound [] globals ec heads failed = Pair heads (Pair globals (Pair ec (reverse failed)))
+export elabDataHeadsRound : List (Decl, Span) -> List (String, Term) -> Ec -> List DataHead -> List (Decl, Span) -> (List DataHead, List (String, Term), Ec, List (Decl, Span))
+elabDataHeadsRound [] globals ec heads failed = (heads, globals, ec, reverse failed)
 elabDataHeadsRound (ds :: rest) globals ec heads failed =
   case elabDataHead globals ec ds of
     ErrC _ => elabDataHeadsRound rest globals ec heads (ds :: failed)
-    OkC (Pair head (Pair delta ec1)) =>
+    OkC (head, delta, ec1) =>
       elabDataHeadsRound rest (append globals delta) ec1 (head :: heads) failed
 
-export elabDataHeads : List (Pair Decl Span) -> List (Pair String Term) -> Ec -> List DataHead -> Check (Pair (List DataHead) (Pair (List (Pair String Term)) Ec))
+export elabDataHeads : List (Decl, Span) -> List (String, Term) -> Ec -> List DataHead -> Check (List DataHead, List (String, Term), Ec)
 elabDataHeads pending globals ec heads = elabDataHeadsFuel 64 pending globals ec heads
 
-elabDataHeadsFuel : Int -> List (Pair Decl Span) -> List (Pair String Term) -> Ec -> List DataHead -> Check (Pair (List DataHead) (Pair (List (Pair String Term)) Ec))
+elabDataHeadsFuel : Int -> List (Decl, Span) -> List (String, Term) -> Ec -> List DataHead -> Check (List DataHead, List (String, Term), Ec)
 elabDataHeadsFuel fuel pending globals ec heads =
   if fuel <= 0 then
     icInternal "data head registration fuel exhausted"
   else
     case pending of
-      [] => OkC (Pair (reverse heads) (Pair globals ec))
+      [] => OkC (reverse heads, globals, ec)
       _ =>
         case elabDataHeadsRound pending globals ec heads [] of
-          Pair heads2 (Pair globals2 (Pair ec2 failed)) =>
+          (heads2, globals2, ec2, failed) =>
             case failed of
-              [] => OkC (Pair (reverse heads2) (Pair globals2 ec2))
+              [] => OkC (reverse heads2, globals2, ec2)
               _ => if length failed == length pending then elabDataHeadsNoProgress globals ec failed else elabDataHeadsFuel (fuel - 1) failed globals2 ec2 heads2
 
 -- 一轮毫无进展：重跑首个失败声明，把它的真实错误报出去（通常是 kind 依赖成环）。
-export elabDataHeadsNoProgress : List (Pair String Term) -> Ec -> List (Pair Decl Span) -> Check (Pair (List DataHead) (Pair (List (Pair String Term)) Ec))
+export elabDataHeadsNoProgress : List (String, Term) -> Ec -> List (Decl, Span) -> Check (List DataHead, List (String, Term), Ec)
 elabDataHeadsNoProgress globals ec [] = icInternal "no failed data declarations"
 elabDataHeadsNoProgress globals ec (ds :: rest) =
   case elabDataHead globals ec ds of
@@ -232,18 +232,18 @@ dtFieldsOfRecordGo (_ :: _) i ty =
 
 -- Phase B：所有族名都已就位，按源顺序精化构造子（构造子字段可引用任意已声明族，
 -- 含互递归族）。构造子 globals 仍按族逐批追加，索引项里的构造子按源码顺序可见。
-export elabDataBodies : List (Pair Decl Span) -> List DataHead -> List (Pair String Term) -> Ec -> List DtData -> List RecordMeta -> Check (Pair (List DtData) (Pair (List (Pair String Term)) Ec))
+export elabDataBodies : List (Decl, Span) -> List DataHead -> List (String, Term) -> Ec -> List DtData -> List RecordMeta -> Check (List DtData, List (String, Term), Ec)
 elabDataBodies decls heads globals ec acc records =
   case decls of
-    [] => OkC (Pair (reverse acc) (Pair globals ec))
+    [] => OkC (reverse acc, globals, ec)
     ds :: rest =>
       case ds of
-        Pair d dsp =>
+        (d, dsp) =>
           case d of
             DData dname writtenParams kindExpr ctors derivings viaField repr lin dsp2 =>
               case lookupDataHead dname heads of
                 Nothing => errAt dsp2 "DT: internal: missing data head for ${dname}"
-                Just (Pair fullKind arity) =>
+                Just (fullKind, arity) =>
                   let
                     tele = splitKind fullKind
                     -- 族层级（kind 末尾 `Type l`）传给构造子检查；kindWellFormed 已
@@ -258,7 +258,7 @@ elabDataBodies decls heads globals ec acc records =
                     Vuna.Compiler.Base.Common.bind (elabCtors globals dname arity famLevel ec ctors) (
                         \q =>
                           case q of
-                            Pair dctors ec2 =>
+                            (dctors, ec2) =>
                               Vuna.Compiler.Base.Common.bind (dtFieldsOfRecord records dname (length tele) dctors) (
                                   \fields =>
                                     let
@@ -275,7 +275,7 @@ elabDataBodies decls heads globals ec acc records =
             DRecord dname params fields derivings viaField repr lin dsp2 =>
               case lookupDataHead dname heads of
                 Nothing => errAt dsp2 "DT: internal: missing data head for ${dname}"
-                Just (Pair fullKind arity) =>
+                Just (fullKind, arity) =>
                   let
                     tele = splitKind fullKind
                     famLevel =
@@ -289,7 +289,7 @@ elabDataBodies decls heads globals ec acc records =
                     (
                       \q =>
                         case q of
-                          Pair dctors ec2 =>
+                          (dctors, ec2) =>
                             Vuna.Compiler.Base.Common.bind (dtFieldsOfRecord records dname (length tele) dctors) (
                                 \fieldsMeta =>
                                   let
@@ -314,13 +314,13 @@ sameCtorSet expected actual =
 -- | 遍历 data 声明，校验带 `deriving via` 的声明确实是自动去装箱的单字段包装；
 -- 违规报 `DerivingViaUnboxedRequired`。
 -- 去装箱判定（候选集 + 环检测）与 datas 相关但与具体声明无关：整趟只算一次。
-checkViaDataDecls : List (Pair Decl Span) -> List DtData -> Check Int
+checkViaDataDecls : List (Decl, Span) -> List DtData -> Check Int
 checkViaDataDecls decls datas =
   checkViaDataDeclsGo decls datas (unboxedFamilySet datas) (unboxedInfoOf datas)
 
-checkViaDataDeclsGo : List (Pair Decl Span) -> List DtData -> List String -> List (Pair String (Pair DtCtor Int)) -> Check Int
+checkViaDataDeclsGo : List (Decl, Span) -> List DtData -> List String -> List (String, DtCtor, Int) -> Check Int
 checkViaDataDeclsGo [] datas fams info = OkC 0
-checkViaDataDeclsGo ((Pair d sp) :: rest) datas fams info =
+checkViaDataDeclsGo ((d, sp) :: rest) datas fams info =
   case d of
     DData dname params kind ctors derivings viaField repr lin dsp2 =>
       if viaField then
@@ -345,7 +345,7 @@ checkViaDataDeclsGo ((Pair d sp) :: rest) datas fams info =
 
 -- | `deriving via field` 的合法性看声明档位：transparent/auto 看形状（auto 走自动推断），
 -- opaque 恒为装箱 ⇒ 直接拒绝。
-viaFieldOk : ReprTier -> String -> List DtData -> List String -> List (Pair String (Pair DtCtor Int)) -> Bool
+viaFieldOk : ReprTier -> String -> List DtData -> List String -> List (String, DtCtor, Int) -> Bool
 viaFieldOk ReprAlias dname datas fams info = viaShapeOkWith dname datas fams info
 viaFieldOk ReprAuto dname datas fams info = viaShapeOkWith dname datas fams info
 viaFieldOk ReprBoxed _ _ _ _ = False
@@ -361,11 +361,11 @@ reprIsAlias _ = False
 viaShapeOk : String -> List DtData -> Bool
 viaShapeOk dname datas = viaShapeOkWith dname datas (unboxedFamilySet datas) (unboxedInfoOf datas)
 
-viaShapeOkWith : String -> List DtData -> List String -> List (Pair String (Pair DtCtor Int)) -> Bool
+viaShapeOkWith : String -> List DtData -> List String -> List (String, DtCtor, Int) -> Bool
 viaShapeOkWith dname datas fams info =
   if memName dname fams then
     case lookupUnboxedInfo dname info of
-      Just (Pair c idx) =>
+      Just (c, idx) =>
         case findDtData dname datas of
           Just d => idx == length d.dtDataParams
           Nothing => False
@@ -375,15 +375,15 @@ viaShapeOkWith dname datas fams info =
 
 -- 两阶段精化所有 data 声明（允许 data 之间的前向引用与互递归）。
 -- records 是 `prepareDecls*` 返回的结构化字段表，写进 record 族的 DtData。
-export elabDatas : List (Pair Decl Span) -> List RecordMeta -> List (Pair String Term) -> Ec -> Check (Pair (List DtData) (Pair (List (Pair String Term)) Ec))
+export elabDatas : List (Decl, Span) -> List RecordMeta -> List (String, Term) -> Ec -> Check (List DtData, List (String, Term), Ec)
 elabDatas decls records globals ec =
   Vuna.Compiler.Base.Common.bind (elabDataHeads decls globals ec []) (
       \p =>
         case p of
-          Pair heads (Pair globals2 ec2) =>
+          (heads, globals2, ec2) =>
             Vuna.Compiler.Base.Common.bind (elabDataBodies decls heads globals2 ec2 [] records) (
                 \q =>
                   case q of
-                    Pair datas ec3 => Vuna.Compiler.Base.Common.bind (checkViaDataDecls decls datas) (\_ => OkC (Pair datas ec3))
+                    (datas, ec3) => Vuna.Compiler.Base.Common.bind (checkViaDataDecls decls datas) (\_ => OkC (datas, ec3))
               )
     )

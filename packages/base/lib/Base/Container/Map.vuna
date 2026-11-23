@@ -12,26 +12,25 @@ import Base.Trait.Show
 -- | 基于 assoc list 的持久映射，内部就是 `List (Pair k v)`；构造器不导出，只能经本模块 API 使用（`k` 需 `Eq`）。`lookup` 命中第一个匹配键，`insert` 覆盖时保留原位置。
 export record Map k v where
   -- | 内部关联表；元素顺序即插入顺序（覆盖不改位置，新键追加到末尾）。
-  toList : List (Pair k v)
+  toList : List (k, v)
 
 -- 辅助函数必须先于公开函数定义：`_insertPair` 的 `==` 会把 `Dict_Eq k` 提升成隐式参数，
 -- 调用点需要看到提升后的签名才能补字典实参。
 -- | 内部：插入或覆盖单个键值；新键追加到末尾，已有键保留原位置。
-_insertPair : Eq k => k -> v -> List (Pair k v) -> List (Pair k v)
-_insertPair key value [] = [Pair key value]
-_insertPair key value ((Pair k2 v2) :: rest) =
-  if k2 == key then Pair key value :: rest else Pair k2 v2 :: _insertPair key value rest
+_insertPair : Eq k => k -> v -> List (k, v) -> List (k, v)
+_insertPair key value [] = [(key, value)]
+_insertPair key value ((k2, v2) :: rest) =
+  if k2 == key then (key, value) :: rest else (k2, v2) :: _insertPair key value rest
 
 -- | 内部：线性查找第一个匹配键。
-_lookupPair : Eq k => k -> List (Pair k v) -> Maybe v
+_lookupPair : Eq k => k -> List (k, v) -> Maybe v
 _lookupPair key [] = Nothing
-_lookupPair key ((Pair k2 v2) :: rest) = if k2 == key then Just v2 else _lookupPair key rest
+_lookupPair key ((k2, v2) :: rest) = if k2 == key then Just v2 else _lookupPair key rest
 
 -- | 内部：删除第一个匹配键；键不存在时原样返回。
-_removePair : Eq k => k -> List (Pair k v) -> List (Pair k v)
+_removePair : Eq k => k -> List (k, v) -> List (k, v)
 _removePair key [] = []
-_removePair key ((Pair k2 v2) :: rest) =
-  if k2 == key then rest else Pair k2 v2 :: _removePair key rest
+_removePair key ((k2, v2) :: rest) = if k2 == key then rest else (k2, v2) :: _removePair key rest
 
 -- | 空映射。
 export empty : Map k v
@@ -62,11 +61,11 @@ export size : Map k v -> Nat
 size (Map pairs) = length pairs
 
 -- | 从 `Pair` 列表直接构造，**不去重也不排序**；有重复键时 `lookup` 命中第一个。
-export fromList : List (Pair k v) -> Map k v
+export fromList : List (k, v) -> Map k v
 fromList pairs = Map pairs
 
 -- | 原样取回内部 `Pair` 列表（`fromList` 的逆操作，可能含重复键）。
-export toList : Map k v -> List (Pair k v)
+export toList : Map k v -> List (k, v)
 toList (Map pairs) = pairs
 
 -- 经 `toList`；构造器不导出，跨模块不能模式匹配。

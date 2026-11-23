@@ -76,7 +76,7 @@ export unitCacheEntryDir : String -> String -> String
 unitCacheEntryDir base entryKey =
   "${base}/e-${textHashOf "entry:${entryKey}"}-${textHashOf "entry2:${entryKey}"}"
 
-export unitCacheEntryKeyOf : List (Pair String String) -> String
+export unitCacheEntryKeyOf : List (String, String) -> String
 unitCacheEntryKeyOf keys =
   case lookupPair "__entry__" keys of
     Just k => k

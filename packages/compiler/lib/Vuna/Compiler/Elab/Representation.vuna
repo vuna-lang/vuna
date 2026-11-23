@@ -201,9 +201,9 @@ candidateNames : List UnboxedCand -> List String
 candidateNames cands = map unboxedCandName cands
 
 -- | 为每个候选建一条「候选族名 → 它字段类型引用到的候选族名」的依赖边。
-candidateEdges : List DtData -> List String -> List UnboxedCand -> List (Pair String (List String))
+candidateEdges : List DtData -> List String -> List UnboxedCand -> List (String, List String)
 candidateEdges datas names cands =
-  map (\cand => Pair (unboxedCandName cand) (candidateRefs datas names cand)) cands
+  map (\cand => (unboxedCandName cand, candidateRefs datas names cand)) cands
 
 -- | 候选保留字段类型里引用到的其它候选族名（用于递归检测）。
 candidateRefs : List DtData -> List String -> UnboxedCand -> List String
@@ -213,13 +213,13 @@ candidateRefs datas names cand =
     Nothing => []
 
 -- | 在依赖邻接表里查某个节点的后继列表；未知节点返回空表。
-lookupNeighbors : String -> List (Pair String (List String)) -> List String
+lookupNeighbors : String -> List (String, List String) -> List String
 lookupNeighbors name [] = []
 lookupNeighbors name (p :: rest) =
   if firstOf p == name then secondOf p else lookupNeighbors name rest
 
 -- | 沿候选依赖边做有界搜索，判断从 node 出发能否回到 target（燃料耗尽时保守判 True）。
-reachesBackTo : Int -> List (Pair String (List String)) -> List String -> String -> String -> Bool
+reachesBackTo : Int -> List (String, List String) -> List String -> String -> String -> Bool
 reachesBackTo fuel edges visited target node =
   if fuel <= 0 then
     True
@@ -227,7 +227,7 @@ reachesBackTo fuel edges visited target node =
     anyReachBack (fuel - 1) edges visited target (lookupNeighbors node edges)
 
 -- | reachesBackTo 的邻居遍历辅助：检查一组后继里是否有能回到 target 的路径。
-anyReachBack : Int -> List (Pair String (List String)) -> List String -> String -> List String -> Bool
+anyReachBack : Int -> List (String, List String) -> List String -> String -> List String -> Bool
 anyReachBack fuel edges visited target [] = False
 anyReachBack fuel edges visited target (n :: rest) =
   if n == target then
@@ -242,7 +242,7 @@ anyReachBack fuel edges visited target (n :: rest) =
     anyReachBack (fuel - 1) edges visited target rest
 
 -- | 计算最终可去装箱的族到 (构造子, 保留字段下标) 的映射，滤掉自身或互递归候选。
-export unboxedInfoOf : List DtData -> List (Pair String (Pair DtCtor Int))
+export unboxedInfoOf : List DtData -> List (String, DtCtor, Int)
 unboxedInfoOf datas =
   let
     cands = unboxedCandidates datas
@@ -250,7 +250,7 @@ unboxedInfoOf datas =
     edges = candidateEdges datas names cands
     fuel = length names + 2
   in map
-    (\cand => Pair (unboxedCandName cand) (Pair (unboxedCandCtor cand) (unboxedCandIndex cand)))
+    (\cand => (unboxedCandName cand, unboxedCandCtor cand, unboxedCandIndex cand))
     (filter (\cand => not (reachesBackTo fuel edges [unboxedCandName cand] (unboxedCandName cand) (unboxedCandName cand))) cands)
 
 -- | 可去装箱族的名字集合（unboxedInfoOf 的键）。
@@ -258,7 +258,7 @@ export unboxedFamilySet : List DtData -> List String
 unboxedFamilySet datas = map firstOf (unboxedInfoOf datas)
 
 -- | 在去装箱信息表里按族名查 (构造子, 下标)；未命中返回 Nothing。
-export lookupUnboxedInfo : String -> List (Pair String (Pair DtCtor Int)) -> Maybe (Pair DtCtor Int)
+export lookupUnboxedInfo : String -> List (String, DtCtor, Int) -> Maybe (DtCtor, Int)
 lookupUnboxedInfo name [] = Nothing
 lookupUnboxedInfo name (p :: rest) =
   if firstOf p == name then Just (secondOf p) else lookupUnboxedInfo name rest

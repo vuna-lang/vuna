@@ -41,7 +41,7 @@ export data Pat(..) : Type where
   PCon : RName -> List Pat -> Span -> Pat
   PInt : Int -> Span -> Pat
   PStr : String -> Span -> Pat
-  PRecord : RName -> List (Pair String Pat) -> Span -> Pat
+  PRecord : RName -> List (String, Pat) -> Span -> Pat
 
 export data InterpPart(..) : Type where
   IPText : String -> InterpPart
@@ -52,22 +52,22 @@ export data Expr(..) : Type where
   EInt : Int -> Span -> Expr
   EStr : String -> Span -> Expr
   -- λ：参数名 + 参数名自身的源码位置（`spanEmpty` = 合成 binder），体与整体 span。
-  ELam : List (Pair String Span) -> Expr -> Span -> Expr
+  ELam : List (String, Span) -> Expr -> Span -> Expr
   EApp : Expr -> List Expr -> Span -> Expr
   -- 命名 Pi：`(x : A) -> B` 与隐式 `{x : A} -> B`；第三个字段是显式 quantity
   -- （`Nothing` = 默认 ω）。
   -- 匿名 `A -> B` 仍沿用 `EApp (EVar "->") [A, B]` 编码（默认 ω）。
   EPi : String -> Bool -> Maybe Qty -> Expr -> Expr -> Span -> Expr
-  ELet : List (Pair Pat Expr) -> Expr -> Bool -> Span -> Expr
+  ELet : List (Pat, Expr) -> Expr -> Bool -> Span -> Expr
   -- 局部函数组（where/let 内的多 clause 函数）。
   -- 只作为 `ELet` 绑定值出现：每个 clause 是「参数模式列表 + body」。
   -- 由 Elab 用 `Elab.Match.multiToExpr` 降级成 lambda + 模式矩阵（与顶层 DFun 同一路径）。
-  ELocalFun : List (Pair (List Pat) Expr) -> Span -> Expr
-  ECase : Expr -> List (Pair Pat Expr) -> Span -> Expr
+  ELocalFun : List (List Pat, Expr) -> Span -> Expr
+  ECase : Expr -> List (Pat, Expr) -> Span -> Expr
   EIf : Expr -> Expr -> Expr -> Span -> Expr
   EField : Expr -> String -> Span -> Expr
-  ERecord : RName -> List (Pair String Expr) -> Span -> Expr
-  ERecUpdate : Expr -> List (Pair String Expr) -> Span -> Expr
+  ERecord : RName -> List (String, Expr) -> Span -> Expr
+  ERecUpdate : Expr -> List (String, Expr) -> Span -> Expr
   EDo : List DoStmt -> Span -> Expr
   -- 中缀链与括号。parser 的**中间产物**：Loader 按 fixity 表重排并消除它们
   -- （`Loader.Resolve.reorderProgram`），Elab / codegen 永远不应看到（残留即 internal
@@ -97,7 +97,7 @@ export data Expr(..) : Type where
 export data DoStmt(..) : Type where
   DBind : Pat -> Expr -> Span -> DoStmt
   DExpr : Expr -> Span -> DoStmt
-  DLet : List (Pair Pat Expr) -> Span -> DoStmt
+  DLet : List (Pat, Expr) -> Span -> DoStmt
 
 export record Ctor(..) where
   ctorName : String
@@ -194,7 +194,7 @@ patWeightList : List Pat -> Int
 patWeightList [] = 0
 patWeightList (p :: rest) = patWeight p + patWeightList rest
 
-patWeightFields : List (Pair String Pat) -> Int
+patWeightFields : List (String, Pat) -> Int
 patWeightFields [] = 0
 patWeightFields (f :: rest) = patWeight (secondOf f) + patWeightFields rest
 
@@ -229,15 +229,15 @@ exprWeightList : List Expr -> Int
 exprWeightList [] = 0
 exprWeightList (e :: rest) = exprWeight e + exprWeightList rest
 
-patExprWeight : List (Pair Pat Expr) -> Int
+patExprWeight : List (Pat, Expr) -> Int
 patExprWeight [] = 0
 patExprWeight (p :: rest) = patWeight (firstOf p) + exprWeight (secondOf p) + patExprWeight rest
 
-clauseWeight : List (Pair (List Pat) Expr) -> Int
+clauseWeight : List (List Pat, Expr) -> Int
 clauseWeight [] = 0
 clauseWeight (c :: rest) = patWeightList (firstOf c) + exprWeight (secondOf c) + clauseWeight rest
 
-exprWeightFields : List (Pair String Expr) -> Int
+exprWeightFields : List (String, Expr) -> Int
 exprWeightFields [] = 0
 exprWeightFields (f :: rest) = exprWeight (secondOf f) + exprWeightFields rest
 
@@ -302,22 +302,22 @@ traitMethodSpan (TraitMethod name ty sp) = sp
 export exportItemSpan : ExportItem -> Span
 exportItemSpan item = nodeRefSpan (exportItemRef item)
 
-export collectClauses : List Decl -> String -> List (Pair (List Pat) Expr)
+export collectClauses : List Decl -> String -> List (List Pat, Expr)
 collectClauses [] name = []
 collectClauses (d :: rest) name =
   case d of
     DFun n pats body _ =>
-      if n == name then Pair pats body :: collectClauses rest name else collectClauses rest name
+      if n == name then (pats, body) :: collectClauses rest name else collectClauses rest name
     _ => collectClauses rest name
 
-export clausesFor : List Decl -> String -> List (Pair (List Pat) Expr)
+export clausesFor : List Decl -> String -> List (List Pat, Expr)
 clausesFor decls name = collectClauses decls name
 
 export funArity : String -> List Decl -> Maybe Int
 funArity name decls =
   case clausesFor decls name of
     [] => Nothing
-    (Pair pats body) :: _ => Just (natToInt (length pats))
+    (pats, body) :: _ => Just (natToInt (length pats))
 
 export ctorName : Ctor -> String
 ctorName (Ctor name ty arity _) = name
@@ -334,8 +334,8 @@ ctorShortName name = lastSeg name
 export ctorDisplayName : String -> String
 ctorDisplayName name =
   case splitLastDot (splitOnDot name) of
-    Pair [] base => base
-    Pair revPrefix base =>
+    ([], base) => base
+    (revPrefix, base) =>
       case reverse revPrefix of
         [] => base
         fam :: rest => "${fam}.${base}"
@@ -492,8 +492,8 @@ ofPat scope (Ast.PStr s r) = PStr s (Ast.nodeRefSpan r)
 ofPat scope (Ast.PRecord name fields r) =
   PRecord (nameOf scope name) (map (ofPatField scope) fields) (Ast.nodeRefSpan r)
 
-ofPatField : List String -> Pair String Ast.Pat -> Pair String Pat
-ofPatField scope (Pair fname pat) = Pair fname (ofPat scope pat)
+ofPatField : List String -> (String, Ast.Pat) -> (String, Pat)
+ofPatField scope (fname, pat) = (fname, ofPat scope pat)
 
 -- | 模式引入的 binder 名。
 patBinders : Ast.Pat -> List String
@@ -548,21 +548,21 @@ ofExpr scope e =
     Ast.ESectR l op sp => ESectR (ofExpr scope l) op (Ast.nodeRefSpan sp)
     Ast.EAnn value ty sp => EAnn (ofExpr scope value) (ofExpr scope ty) (Ast.nodeRefSpan sp)
 
-ofBinding : List String -> List String -> Pair Ast.Pat Ast.Expr -> Pair Pat Expr
-ofBinding bound scope (Pair pat value) =
+ofBinding : List String -> List String -> (Ast.Pat, Ast.Expr) -> (Pat, Expr)
+ofBinding bound scope (pat, value) =
   let
     valueScope = append (patBinders pat) bound
-  in Pair (ofPat scope pat) (ofExpr valueScope value)
+  in (ofPat scope pat, ofExpr valueScope value)
 
-ofLocalClause : List String -> Pair (List Ast.Pat) Ast.Expr -> Pair (List Pat) Expr
-ofLocalClause scope (Pair pats body) =
-  Pair (map (ofPat scope) pats) (ofExpr (append (bindersOfPats pats) scope) body)
+ofLocalClause : List String -> (List Ast.Pat, Ast.Expr) -> (List Pat, Expr)
+ofLocalClause scope (pats, body) =
+  (map (ofPat scope) pats, ofExpr (append (bindersOfPats pats) scope) body)
 
-ofAlt : List String -> Pair Ast.Pat Ast.Expr -> Pair Pat Expr
-ofAlt scope (Pair pat body) = Pair (ofPat scope pat) (ofExpr (append (patBinders pat) scope) body)
+ofAlt : List String -> (Ast.Pat, Ast.Expr) -> (Pat, Expr)
+ofAlt scope (pat, body) = (ofPat scope pat, ofExpr (append (patBinders pat) scope) body)
 
-ofFieldValue : List String -> Pair String Ast.Expr -> Pair String Expr
-ofFieldValue scope (Pair fname value) = Pair fname (ofExpr scope value)
+ofFieldValue : List String -> (String, Ast.Expr) -> (String, Expr)
+ofFieldValue scope (fname, value) = (fname, ofExpr scope value)
 
 ofInterpPart : List String -> Ast.InterpPart -> InterpPart
 ofInterpPart scope (Ast.IPText s) = IPText s
@@ -581,11 +581,11 @@ ofStmts scope (stmt :: rest) =
       in DLet (map (ofBinding bound scope) binds) (nodeRefSpan r) :: ofStmts bound rest
     Ast.DExpr value r => DExpr (ofExpr scope value) (nodeRefSpan r) :: ofStmts scope rest
 
-patFieldBinders : Pair String Ast.Pat -> List String
-patFieldBinders (Pair fname pat) = patBinders pat
+patFieldBinders : (String, Ast.Pat) -> List String
+patFieldBinders (fname, pat) = patBinders pat
 
-bindingBinders : Pair Ast.Pat Ast.Expr -> List String
-bindingBinders (Pair pat value) = patBinders pat
+bindingBinders : (Ast.Pat, Ast.Expr) -> List String
+bindingBinders (pat, value) = patBinders pat
 
 astTraitParamName : Ast.TraitParam -> String
 astTraitParamName p = p.traitParamName

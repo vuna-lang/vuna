@@ -21,10 +21,10 @@ import Vuna.Compiler.Lowering.Env
 -- ---------------------------------------------------------------
 -- 判据：main 是动作（`Eff r a`）还是普通值；动作再按行收集
 -- 内建宿主 handler（行顺序：后出现的包在外层）。
-actionResultTyIn : Term -> Maybe (Pair String Term)
+actionResultTyIn : Term -> Maybe (String, Term)
 actionResultTyIn (TApp (TApp fn row _) arg _) =
   case fn of
-    TGlobal g => if g == effTypeName then Just (Pair "eff" arg) else Nothing
+    TGlobal g => if g == effTypeName then Just ("eff", arg) else Nothing
     _ => Nothing
 actionResultTyIn _ = Nothing
 
@@ -43,7 +43,7 @@ collectBuiltinRowTags (TCon g args) =
     []
 collectBuiltinRowTags _ = []
 
-tagOf : Pair Term Rig -> List String -> List String
+tagOf : (Term, Rig) -> List String -> List String
 tagOf label rest =
   case unwrapNamedTerm (firstOf label) of
     TGlobal tag => if isBuiltinEffectTag tag then (::) tag rest else rest
@@ -59,7 +59,7 @@ mainRowTags _ = []
 -- 展示函数：内建类型（含类型别名折回后的内建类型）用 runtime 展示函数；其它类型用
 -- Elab 收尾合成的 `@vuna@main_show : T -> String`。强制归约的定义表必须与 Elab 收尾
 -- （`Elab.Driver` 合成 `main_show` 时用的 `bodies`）同源。
-mainShowIr : List (Pair String Term) -> Term -> Ir
+mainShowIr : List (String, Term) -> Term -> Ir
 mainShowIr defTbl tyTerm =
   case force (HashMap.fromList defTbl) solsEmpty defaultFuel (eval [] tyTerm) of
     VNeutral n =>

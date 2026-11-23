@@ -165,7 +165,7 @@ mkIrBinderWild id = IrBinder id IrBWild False Nothing
 -- `irAltBinders` 保留**全部**分支 binder（含擦除占位），因此分支体的 `IrVar` 下标与
 -- Core 一致；只有非擦除 binder 进运行时 pattern。
 export record IrAlt(..) where
-  irAltCtor : Maybe (Pair String String)
+  irAltCtor : Maybe (String, String)
   irAltBinders : List IrBinder
   irAltBody : Ir
 
@@ -182,11 +182,11 @@ export data Ir(..) : Type where
   -- （已按 keep 形状对齐、不可命名字段已 cast）。
   IrCtor : String -> String -> Maybe (List IrTy) -> List Ir -> Ir
   -- | record 构造：族名 + 结果运行时类型（可选）+ (字段源码名, 值)（按运行时字段顺序）。
-  IrRecord : String -> Maybe IrTy -> List (Pair String Ir) -> Ir
+  IrRecord : String -> Maybe IrTy -> List (String, Ir) -> Ir
   -- | record 投影：base、族名、字段源码名、结果运行时类型（可选）。
   IrProj : Ir -> String -> String -> Maybe IrTy -> Ir
   -- | record 更新：base、族名、(字段源码名, 新值)、结果运行时类型（可选）。
-  IrRecUpd : Ir -> String -> List (Pair String Ir) -> Maybe IrTy -> Ir
+  IrRecUpd : Ir -> String -> List (String, Ir) -> Maybe IrTy -> Ir
   -- | 运行时符号引用（目标中立；名字必须在 `Ir.Runtime` 的契约里声明）。
   -- 目标文本由后端按契约映射，IR 里不出现 `bi_*` / `dtp_*` / OCaml 表达式。
   IrRt : String -> Ir
@@ -211,7 +211,7 @@ export data Ir(..) : Type where
   IrLam : List IrBinder -> Maybe IrTy -> Ir -> Ir
   -- | 应用（擦除实参已在 Lowering 丢弃）。第一个字段是函数类型与结果类型
   -- （`IrTyFun` 的域/余域；未知时 `Nothing`）。
-  IrApp : Maybe (Pair IrTy IrTy) -> Ir -> Ir -> Ir
+  IrApp : Maybe (IrTy, IrTy) -> Ir -> Ir -> Ir
   -- | 尾位置标记：求值与内层相同。只表示内层处在函数结果位置，后端按自身能力
   -- 决定是否发射尾调用；允许包裹 `IrApp` / `IrRtApp` / `IrRt` / 零参 `IrGlobal`。
   IrTail : Ir -> Ir
@@ -301,9 +301,9 @@ irEffMkCtor = "Base.Effect.Core.Eff.MkEff"
 -- 族名、运行时类型参数个数与 `IrTy` 字段表，后端只做文本渲染与跨单元限定。
 export data IrTyDecl(..) : Type where
   -- | 变体族：族名、运行时类型参数个数、[(构造子名, 字段运行时类型表)]。
-  IrVariantDecl : String -> Int -> List (Pair String (List IrTy)) -> IrTyDecl
+  IrVariantDecl : String -> Int -> List (String, List IrTy) -> IrTyDecl
   -- | record 族：族名、运行时类型参数个数、(字段序号, 字段源码名) 表、字段运行时类型表。
-  IrRecordDecl : String -> Int -> List (Pair Int String) -> List IrTy -> IrTyDecl
+  IrRecordDecl : String -> Int -> List (Int, String) -> List IrTy -> IrTyDecl
   -- | 去装箱族：族名、运行时类型参数个数、唯一保留字段的运行时类型。
   IrUnboxedDecl : String -> Int -> IrTy -> IrTyDecl
 
@@ -340,9 +340,9 @@ export irDefBody : IrDef -> Maybe Ir
 irDefBody (IrDef name arity deps ty body recOk initGuard span) = Just body
 irDefBody (IrExternDef name ty cName span) = Nothing
 
-export irDefExtern : IrDef -> Maybe (Pair IrTy String)
+export irDefExtern : IrDef -> Maybe (IrTy, String)
 irDefExtern (IrDef name arity deps ty body recOk initGuard span) = Nothing
-irDefExtern (IrExternDef name ty cName span) = Just (Pair ty cName)
+irDefExtern (IrExternDef name ty cName span) = Just (ty, cName)
 
 -- | 零参定义作为 `let rec` 右值是否合法（`let rec` 只接受函数 / 构造子应用）。
 export irDefRecValueOk : IrDef -> Bool
@@ -406,7 +406,7 @@ export record IrListFam(..) where
 export record IrShared(..) where
   -- | 用 OCaml record 表示的族 → 运行时字段表 `(字段序号, 字段源码名)`。
   -- case 分支的 record pattern 需要它；构造 / 投影 / 更新节点自带字段名。
-  irSharedRecordFields : List (Pair String (List (Pair Int String)))
+  irSharedRecordFields : List (String, List (Int, String))
   -- | canonical List 族（没有声明时 Nothing）。
   irSharedListFam : Maybe IrListFam
   -- | 程序是否用到浮点（决定 `Vuna_runtime.ml` 是否追加浮点 helper）。
@@ -418,24 +418,24 @@ export record IrShared(..) where
   irSharedUsesObs : Bool
   -- | 运行时定义的位置行：定义名 → (文件, 起始行)。只有带 span 的定义在这里；
   -- 跨单元的 `extraDefLocs` 由调用方与这里合并（顺序无关，落盘前统一排序）。
-  irSharedDefLocs : List (Pair String (Pair String Int))
+  irSharedDefLocs : List (String, String, Int)
   -- | 去装箱族：族名 → (唯一构造子名, 保留字段序号)。表示选择 pass 的输入。
-  irSharedUnboxed : List (Pair String (Pair String Int))
+  irSharedUnboxed : List (String, String, Int)
   -- | 构造子形状：构造子名 → (族名, keep flags)。pass 把构造子应用/分支 pattern
   -- 改写成去装箱形式时需要它；Lowering 仍在项生成期用它做擦除与实参对齐。
-  irSharedCtorShapes : List (Pair String (Pair String (List Bool)))
+  irSharedCtorShapes : List (String, String, List Bool)
 
-export irSharedUnboxedOf : String -> List (Pair String (Pair String Int)) -> Maybe (Pair String Int)
+export irSharedUnboxedOf : String -> List (String, String, Int) -> Maybe (String, Int)
 irSharedUnboxedOf family [] = Nothing
 irSharedUnboxedOf family (p :: rest) =
   if firstOf p == family then Just (secondOf p) else irSharedUnboxedOf family rest
 
-export irSharedCtorShapeOf : String -> List (Pair String (Pair String (List Bool))) -> Maybe (Pair String (List Bool))
+export irSharedCtorShapeOf : String -> List (String, String, List Bool) -> Maybe (String, List Bool)
 irSharedCtorShapeOf ctor [] = Nothing
 irSharedCtorShapeOf ctor (p :: rest) =
   if firstOf p == ctor then Just (secondOf p) else irSharedCtorShapeOf ctor rest
 
-export irSharedRecordFieldsOf : String -> List (Pair String (List (Pair Int String))) -> List (Pair Int String)
+export irSharedRecordFieldsOf : String -> List (String, List (Int, String)) -> List (Int, String)
 irSharedRecordFieldsOf family [] = []
 irSharedRecordFieldsOf family (p :: rest) =
   if firstOf p == family then secondOf p else irSharedRecordFieldsOf family rest
@@ -525,7 +525,7 @@ export irListConsOf : IrListFam -> String
 irListConsOf (IrListFam fam nil cons) = cons
 
 -- | 分支的构造子（`Nothing` = catch-all）。
-export irAltCtorOf : IrAlt -> Maybe (Pair String String)
+export irAltCtorOf : IrAlt -> Maybe (String, String)
 irAltCtorOf (IrAlt ctor bs body) = ctor
 
 -- | 分支的 binder 表（完整 telescope，含擦除占位）。
@@ -599,9 +599,9 @@ export irSizeList : List Ir -> Int
 irSizeList [] = 0
 irSizeList (ir :: rest) = irSize ir + irSizeList rest
 
-irSizeFields : List (Pair String Ir) -> Int
+irSizeFields : List (String, Ir) -> Int
 irSizeFields [] = 0
-irSizeFields ((Pair label ir) :: rest) = irSize ir + irSizeFields rest
+irSizeFields ((label, ir) :: rest) = irSize ir + irSizeFields rest
 
 irSizeAlts : List IrAlt -> Int
 irSizeAlts [] = 0

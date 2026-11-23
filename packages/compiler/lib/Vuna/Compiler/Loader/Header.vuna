@@ -41,7 +41,7 @@ decImports : String -> Maybe (List String)
 decImports s =
   case decList decStr (strLength s) (curOf s) of
     Nothing => Nothing
-    Just (Pair names rest) => if curAtEnd rest then Just names else Nothing
+    Just (names, rest) => if curAtEnd rest then Just names else Nothing
 
 -- | 模块的 import 名单（含 `export module` 合成的边，见 `Addr.headerOfSource`）。
 --

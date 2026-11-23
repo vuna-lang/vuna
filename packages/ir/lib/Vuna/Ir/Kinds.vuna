@@ -102,14 +102,14 @@ irKindIsMissing _ = False
 -- ---------------------------------------------------------------
 -- | 剥掉 `n` 层 `IrTyFun`，返回 `(定义域表, 余域)`；形状不是恰好 `n` 元函数时
 --   `Nothing`（调用方据此保守处理，而不是猜）。
-export irTyFunSplit : Int -> Maybe IrTy -> Maybe (Pair (List IrTy) IrTy)
+export irTyFunSplit : Int -> Maybe IrTy -> Maybe (List IrTy, IrTy)
 irTyFunSplit n mty = irTyFunSplitGo n mty []
 
-irTyFunSplitGo : Int -> Maybe IrTy -> List IrTy -> Maybe (Pair (List IrTy) IrTy)
+irTyFunSplitGo : Int -> Maybe IrTy -> List IrTy -> Maybe (List IrTy, IrTy)
 irTyFunSplitGo n mty acc =
   if n <= 0 then
     case mty of
-      Just cod => Just (Pair (reverse acc) cod)
+      Just cod => Just (reverse acc, cod)
       Nothing => Nothing
   else
     case mty of
@@ -373,7 +373,7 @@ irBinderKind decls fallback b =
     k => k
 
 -- | 按 binder 身份（稳定 id）查环境；名字只是渲染，不承担身份。
-export irKindEnvLookup : Int -> List (Pair Int IrKind) -> Maybe IrKind
+export irKindEnvLookup : Int -> List (Int, IrKind) -> Maybe IrKind
 irKindEnvLookup _ [] = Nothing
 irKindEnvLookup id (p :: rest) =
   if firstOf p == id then Just (secondOf p) else irKindEnvLookup id rest
@@ -382,7 +382,7 @@ irKindEnvLookup id (p :: rest) =
 --
 -- `env` 是当前作用域的 binder kind 表；找不到的 binder 落 `KMissing`，不当错误——
 -- CPS 合成的 Lam 形参可能真的没有类型可推（D125）。
-export irKindOfValue : List IrTyDecl -> List IrDef -> List (Pair Int IrKind) -> Ir -> Maybe IrKind
+export irKindOfValue : List IrTyDecl -> List IrDef -> List (Int, IrKind) -> Ir -> Maybe IrKind
 irKindOfValue decls defs env (IrVar b) =
   case irKindOfTy decls b.irBinderTy of
     KMissing =>
@@ -426,8 +426,8 @@ irDefTyNamed name (d :: rest) = if irDefName d == name then irDefTy d else irDef
 -- ---------------------------------------------------------------
 -- | 分支 binder 的 kind fallback：有构造子就按字段类型（代入 scrutinee 的运行时类型
 --   实参），否则用 scrutinee 自己的 kind。`idx` 是运行时字段序号（跳过擦除位）。
-export irAltBinderKindFallback : List IrTyDecl -> Maybe IrTy -> Maybe (Pair String String) -> Int -> Maybe IrKind
-irAltBinderKindFallback decls caseTy (Just (Pair fam ctor)) idx =
+export irAltBinderKindFallback : List IrTyDecl -> Maybe IrTy -> Maybe (String, String) -> Int -> Maybe IrKind
+irAltBinderKindFallback decls caseTy (Just (fam, ctor)) idx =
   case Layout.irDeclOf fam decls of
     Just d =>
       case irTyAt (ctorFieldTysOf d ctor) idx of
@@ -442,6 +442,6 @@ ctorFieldTysOf (IrVariantDecl _ _ ctors) ctor = ctorFieldsIn ctor ctors
 ctorFieldTysOf (IrRecordDecl _ _ _ fields) ctor = fields
 ctorFieldTysOf (IrUnboxedDecl _ _ _) ctor = []
 
-ctorFieldsIn : String -> List (Pair String (List IrTy)) -> List IrTy
+ctorFieldsIn : String -> List (String, List IrTy) -> List IrTy
 ctorFieldsIn _ [] = []
 ctorFieldsIn ctor (p :: rest) = if firstOf p == ctor then secondOf p else ctorFieldsIn ctor rest

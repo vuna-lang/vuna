@@ -39,12 +39,12 @@ export data TomlValue(..) : Type where
   TInt : Int -> TomlValue
   TBool : Bool -> TomlValue
   TArray : List TomlValue -> TomlValue
-  TTable : List (Pair String TomlValue) -> TomlValue
-  TTableArray : List (List (Pair String TomlValue)) -> TomlValue
+  TTable : List (String, TomlValue) -> TomlValue
+  TTableArray : List (List (String, TomlValue)) -> TomlValue
 
 -- | 树视图的根：顶层字段表（字段有序，顺序 = 首次出现顺序）。
 export TomlDoc : Type
-TomlDoc = List (Pair String TomlValue)
+TomlDoc = List (String, TomlValue)
 
 -- section path、key、value 与 key 所在行号（从 1 开始）。
 export record TomlEntry(..) where
@@ -68,9 +68,9 @@ data TableKind : Type where
 -- 解析中间树（带行号与表种类；不导出）。
 data TomlNode : Type where
   NodeLeaf : TomlValue -> Int -> TomlNode
-  NodeTable : List (Pair String TomlNode) -> TableKind -> Int -> TomlNode
+  NodeTable : List (String, TomlNode) -> TableKind -> Int -> TomlNode
   -- 表数组的每个元素**就是**一张字段表（不存在「元素不是表」这个状态）。
-  NodeTableArray : List (List (Pair String TomlNode)) -> Int -> TomlNode
+  NodeTableArray : List (List (String, TomlNode)) -> Int -> TomlNode
 
 -- ---------------------------------------------------------------- 通用小工具
 lenInt : List a -> Int
@@ -157,31 +157,31 @@ failAt path line msg = pkgAt1 path line (TomlSyntax msg) msg
 appendPath : List String -> List String -> List String
 appendPath xs ys = append xs ys
 
-splitLast : List String -> Maybe (Pair (List String) String)
+splitLast : List String -> Maybe (List String, String)
 splitLast [] = Nothing
-splitLast ([x]) = Just (Pair [] x)
+splitLast ([x]) = Just ([], x)
 splitLast (x :: rest) =
   case splitLast rest of
     Nothing => Nothing
-    Just (Pair section key) => Just (Pair (x :: section) key)
+    Just (section, key) => Just (x :: section, key)
 
 -- ---------------------------------------------------------------- 树操作
-lookupField : String -> List (Pair String TomlNode) -> Maybe TomlNode
+lookupField : String -> List (String, TomlNode) -> Maybe TomlNode
 lookupField name [] = Nothing
-lookupField name ((Pair k node) :: rest) = if k == name then Just node else lookupField name rest
+lookupField name ((k, node) :: rest) = if k == name then Just node else lookupField name rest
 
-replaceField : String -> TomlNode -> List (Pair String TomlNode) -> List (Pair String TomlNode)
-replaceField name node [] = [Pair name node]
-replaceField name node ((Pair k old) :: rest) =
-  if k == name then Pair k node :: rest else Pair k old :: replaceField name node rest
+replaceField : String -> TomlNode -> List (String, TomlNode) -> List (String, TomlNode)
+replaceField name node [] = [(name, node)]
+replaceField name node ((k, old) :: rest) =
+  if k == name then (k, node) :: rest else (k, old) :: replaceField name node rest
 
 -- 最后一个表数组元素（用于 `[a.b]` 中 a 是表数组时取当前元素）。
-lastFields : List (List (Pair String TomlNode)) -> Maybe (List (Pair String TomlNode))
+lastFields : List (List (String, TomlNode)) -> Maybe (List (String, TomlNode))
 lastFields [] = Nothing
 lastFields ([x]) = Just x
 lastFields (_ :: rest) = lastFields rest
 
-replaceLastFields : List (Pair String TomlNode) -> List (List (Pair String TomlNode)) -> List (List (Pair String TomlNode))
+replaceLastFields : List (String, TomlNode) -> List (List (String, TomlNode)) -> List (List (String, TomlNode))
 replaceLastFields fields [] = [fields]
 replaceLastFields fields ([old]) = [fields]
 replaceLastFields fields (old :: rest) = old :: replaceLastFields fields rest
@@ -196,7 +196,7 @@ kindIsDotted _ = False
 
 -- | 确保 `path` 指向的表存在（创建或升级种类），返回更新后的根字段表。
 --   `line` 用于新建表的行号；中间表隐式创建。
-ensureTable : Int -> String -> Int -> List String -> TableKind -> List (Pair String TomlNode) -> Check (List (Pair String TomlNode))
+ensureTable : Int -> String -> Int -> List String -> TableKind -> List (String, TomlNode) -> Check (List (String, TomlNode))
 ensureTable fuel path line pathSegs kind fields =
   if fuel <= 0 then
     icFuel "toml"
@@ -205,7 +205,7 @@ ensureTable fuel path line pathSegs kind fields =
       [] => failAt path line "empty table path"
       [name] =>
         case lookupField name fields of
-          Nothing => OkC (append fields [Pair name (NodeTable [] kind line)])
+          Nothing => OkC (append fields [(name, NodeTable [] kind line)])
           Just existing =>
             case existing of
               NodeTable inner oldKind oldLine => if kindIsExplicit kind && kindIsExplicit oldKind then failAt path line "duplicate table [${name}]" else if kindIsExplicit kind && kindIsDotted oldKind then failAt path line "table [${name}] was already defined by dotted keys" else OkC (replaceField name (NodeTable inner kind oldLine) fields)
@@ -215,7 +215,7 @@ ensureTable fuel path line pathSegs kind fields =
           Nothing =>
             case ensureTable (fuel - 1) path line rest kind [] of
               ErrC e => ErrC e
-              OkC inner => OkC (append fields [Pair name (NodeTable inner KindImplicit line)])
+              OkC inner => OkC (append fields [(name, NodeTable inner KindImplicit line)])
           Just existing =>
             case existing of
               NodeTable inner oldKind oldLine =>
@@ -232,7 +232,7 @@ ensureTable fuel path line pathSegs kind fields =
               NodeLeaf _ leafLine => failAt path leafLine "key \"${name}\" is not a table"
 
 -- | 在 `path` 指向的表里追加一个表数组元素（`[[path]]`），返回更新后的根字段表。
-appendTableArray : Int -> String -> Int -> List String -> List (Pair String TomlNode) -> Check (List (Pair String TomlNode))
+appendTableArray : Int -> String -> Int -> List String -> List (String, TomlNode) -> Check (List (String, TomlNode))
 appendTableArray fuel path line pathSegs fields =
   if fuel <= 0 then
     icFuel "toml"
@@ -241,7 +241,7 @@ appendTableArray fuel path line pathSegs fields =
       [] => failAt path line "empty table array path"
       [name] =>
         case lookupField name fields of
-          Nothing => OkC (append fields [Pair name (NodeTableArray [[]] line)])
+          Nothing => OkC (append fields [(name, NodeTableArray [[]] line)])
           Just existing =>
             case existing of
               NodeTableArray elems arrayLine => OkC (replaceField name (NodeTableArray (append elems [[]]) arrayLine) fields)
@@ -252,7 +252,7 @@ appendTableArray fuel path line pathSegs fields =
           Nothing =>
             case appendTableArray (fuel - 1) path line rest [] of
               ErrC e => ErrC e
-              OkC inner => OkC (append fields [Pair name (NodeTable inner KindImplicit line)])
+              OkC inner => OkC (append fields [(name, NodeTable inner KindImplicit line)])
           Just existing =>
             case existing of
               NodeTable inner oldKind oldLine =>
@@ -272,7 +272,7 @@ appendTableArray fuel path line pathSegs fields =
 sectionOfPath : List String -> List String
 sectionOfPath pathSegs =
   case splitLast pathSegs of
-    Just (Pair section key) => section
+    Just (section, key) => section
     Nothing => []
 
 duplicateKeyMsg : String -> List String -> String
@@ -283,7 +283,7 @@ duplicateKeyMsg name section =
     "duplicate key \"${name}\" in [${joinDots section}]"
 
 -- | 插入叶子值：`path` 的最后一段是键，前面是表；中间表按点键规则创建。
-insertValue : Int -> String -> Int -> List String -> List String -> TomlValue -> List (Pair String TomlNode) -> Check (List (Pair String TomlNode))
+insertValue : Int -> String -> Int -> List String -> List String -> TomlValue -> List (String, TomlNode) -> Check (List (String, TomlNode))
 insertValue fuel path line pathSegs section value fields =
   if fuel <= 0 then
     icFuel "toml"
@@ -292,7 +292,7 @@ insertValue fuel path line pathSegs section value fields =
       [] => failAt path line "empty key"
       [name] =>
         case lookupField name fields of
-          Nothing => OkC (append fields [Pair name (NodeLeaf value line)])
+          Nothing => OkC (append fields [(name, NodeLeaf value line)])
           Just existing =>
             case existing of
               NodeLeaf _ oldLine => failAt path line (duplicateKeyMsg name section)
@@ -302,7 +302,7 @@ insertValue fuel path line pathSegs section value fields =
           Nothing =>
             case insertValue (fuel - 1) path line rest section value [] of
               ErrC e => ErrC e
-              OkC inner => OkC (append fields [Pair name (NodeTable inner KindDotted line)])
+              OkC inner => OkC (append fields [(name, NodeTable inner KindDotted line)])
           Just existing =>
             case existing of
               NodeTable inner oldKind oldLine =>
@@ -321,7 +321,7 @@ insertValue fuel path line pathSegs section value fields =
 -- ---------------------------------------------------------------- 展平
 -- 展平与树视图都对节点结构做带 fuel 的递归（SCT 要求显式下降；fuel 由调用方按
 -- 输入规模给出，展平深度不超过条目数 + 路径长度）。
-flattenFields : Int -> List String -> List (Pair String TomlNode) -> List TomlEntry
+flattenFields : Int -> List String -> List (String, TomlNode) -> List TomlEntry
 flattenFields fuel path [] = []
 flattenFields fuel path (p :: rest) =
   append
@@ -333,7 +333,7 @@ flattenNode fuel path (NodeLeaf value line) = flattenLeaf (fuel - 1) path value 
 flattenNode fuel path (NodeTable fields _ _) = flattenFields (fuel - 1) path fields
 flattenNode fuel path (NodeTableArray elems _) = flattenElems (fuel - 1) 0 path elems
 
-flattenElems : Int -> Int -> List String -> List (List (Pair String TomlNode)) -> List TomlEntry
+flattenElems : Int -> Int -> List String -> List (List (String, TomlNode)) -> List TomlEntry
 flattenElems fuel i path [] = []
 flattenElems fuel i path (fields :: rest) =
   append
@@ -346,9 +346,9 @@ flattenLeaf fuel path (TTable fields) line = flattenLeafFields (fuel - 1) path f
 flattenLeaf fuel path value line =
   case splitLast path of
     Nothing => []
-    Just (Pair section key) => [TomlEntry section key value line]
+    Just (section, key) => [TomlEntry section key value line]
 
-flattenLeafFields : Int -> List String -> List (Pair String TomlValue) -> Int -> List TomlEntry
+flattenLeafFields : Int -> List String -> List (String, TomlValue) -> Int -> List TomlEntry
 flattenLeafFields fuel path [] line = []
 flattenLeafFields fuel path (p :: rest) line =
   append
@@ -361,16 +361,16 @@ nodeValue fuel (NodeLeaf value line) = value
 nodeValue fuel (NodeTable fields _ _) = TTable (fieldValues (fuel - 1) fields)
 nodeValue fuel (NodeTableArray elems _) = TTableArray (tableFields (fuel - 1) elems)
 
-fieldValues : Int -> List (Pair String TomlNode) -> List (Pair String TomlValue)
+fieldValues : Int -> List (String, TomlNode) -> List (String, TomlValue)
 fieldValues fuel [] = []
 fieldValues fuel (p :: rest) =
-  Pair (firstOf p) (nodeValue (fuel - 1) (secondOf p)) :: fieldValues (fuel - 1) rest
+  (firstOf p, nodeValue (fuel - 1) (secondOf p)) :: fieldValues (fuel - 1) rest
 
-tableFields : Int -> List (List (Pair String TomlNode)) -> List (List (Pair String TomlValue))
+tableFields : Int -> List (List (String, TomlNode)) -> List (List (String, TomlValue))
 tableFields fuel [] = []
 tableFields fuel (fields :: rest) = fieldValues (fuel - 1) fields :: tableFields (fuel - 1) rest
 
-rootValue : Int -> List (Pair String TomlNode) -> TomlDoc
+rootValue : Int -> List (String, TomlNode) -> TomlDoc
 rootValue fuel fields = fieldValues fuel fields
 
 -- ---------------------------------------------------------------- 字符扫描
@@ -424,13 +424,13 @@ isSurrogate c = c >= 55296 && c <= 57343
 
 -- ---------------------------------------------------------------- 字符串
 -- basic string（单行）：`"..."`，支持转义。
-parseBasicString : String -> TomlCursor -> Check (Pair String TomlCursor)
+parseBasicString : String -> TomlCursor -> Check (String, TomlCursor)
 parseBasicString path cs =
   case cs.cursorChars of
     [] => failAt path cs.cursorLine "unterminated basic string"
     c :: rest => parseBasicChars (cursorFuel (advanceCursor cs)) path cs (advanceCursor cs) []
 
-parseBasicChars : Int -> String -> TomlCursor -> TomlCursor -> List Int -> Check (Pair String TomlCursor)
+parseBasicChars : Int -> String -> TomlCursor -> TomlCursor -> List Int -> Check (String, TomlCursor)
 parseBasicChars fuel path startCs cs acc =
   if fuel <= 0 then
     icFuel "toml"
@@ -439,12 +439,12 @@ parseBasicChars fuel path startCs cs acc =
       [] => failAt path startCs.cursorLine "unterminated basic string"
       c :: rest =>
         case c of
-          34 => OkC (Pair (strPack (reverse acc)) (advanceCursor cs))
+          34 => OkC (strPack (reverse acc), advanceCursor cs)
           10 => failAt path startCs.cursorLine "unterminated basic string (newline in string)"
           92 => parseBasicEscape (fuel - 1) path startCs (advanceCursor cs) acc
           _ => parseBasicChars (fuel - 1) path startCs (advanceCursor cs) (c :: acc)
 
-parseBasicEscape : Int -> String -> TomlCursor -> TomlCursor -> List Int -> Check (Pair String TomlCursor)
+parseBasicEscape : Int -> String -> TomlCursor -> TomlCursor -> List Int -> Check (String, TomlCursor)
 parseBasicEscape fuel path startCs cs acc =
   if fuel <= 0 then
     icFuel "toml"
@@ -464,20 +464,20 @@ parseBasicEscape fuel path startCs cs acc =
           85 => parseUnicodeEscape (fuel - 1) 8 path startCs (advanceCursor cs) acc
           _ => failAt path cs.cursorLine "unknown escape sequence \\${strPack [c]}"
 
-parseUnicodeEscape : Int -> Int -> String -> TomlCursor -> TomlCursor -> List Int -> Check (Pair String TomlCursor)
+parseUnicodeEscape : Int -> Int -> String -> TomlCursor -> TomlCursor -> List Int -> Check (String, TomlCursor)
 parseUnicodeEscape fuel digits path startCs cs acc =
   if fuel <= 0 then
     icFuel "toml"
   else
     case parseHexCode (cursorFuel cs) digits path cs 0 0 of
       ErrC e => ErrC e
-      OkC (Pair code after) => if code > 1114111 then failAt path startCs.cursorLine "unicode escape out of range" else if isSurrogate code then failAt path startCs.cursorLine "unicode escape is a surrogate code point" else parseBasicChars (fuel - 1) path startCs after (append (reverse (utf8OfCode code)) acc)
+      OkC (code, after) => if code > 1114111 then failAt path startCs.cursorLine "unicode escape out of range" else if isSurrogate code then failAt path startCs.cursorLine "unicode escape is a surrogate code point" else parseBasicChars (fuel - 1) path startCs after (append (reverse (utf8OfCode code)) acc)
 
 -- 读 `digits` 位十六进制（`fuel` 为剩余位数 + 余量）。
-parseHexCode : Int -> Int -> String -> TomlCursor -> Int -> Int -> Check (Pair Int TomlCursor)
+parseHexCode : Int -> Int -> String -> TomlCursor -> Int -> Int -> Check (Int, TomlCursor)
 parseHexCode fuel digits path cs count acc =
   if count >= digits then
-    OkC (Pair acc cs)
+    OkC (acc, cs)
   else if fuel <= 0 then
     icFuel "toml"
   else
@@ -486,13 +486,13 @@ parseHexCode fuel digits path cs count acc =
       c :: rest => if isHexDigit c then parseHexCode (fuel - 1) digits path (advanceCursor cs) (count + 1) (acc * 16 + hexValue c) else failAt path cs.cursorLine "invalid hex digit in unicode escape"
 
 -- literal string（单行）：`'...'`，不处理转义。
-parseLiteralString : String -> TomlCursor -> Check (Pair String TomlCursor)
+parseLiteralString : String -> TomlCursor -> Check (String, TomlCursor)
 parseLiteralString path cs =
   case cs.cursorChars of
     [] => failAt path cs.cursorLine "unterminated literal string"
     c :: rest => parseLiteralChars (cursorFuel (advanceCursor cs)) path cs (advanceCursor cs) []
 
-parseLiteralChars : Int -> String -> TomlCursor -> TomlCursor -> List Int -> Check (Pair String TomlCursor)
+parseLiteralChars : Int -> String -> TomlCursor -> TomlCursor -> List Int -> Check (String, TomlCursor)
 parseLiteralChars fuel path startCs cs acc =
   if fuel <= 0 then
     icFuel "toml"
@@ -501,13 +501,13 @@ parseLiteralChars fuel path startCs cs acc =
       [] => failAt path startCs.cursorLine "unterminated literal string"
       c :: rest =>
         case c of
-          39 => OkC (Pair (strPack (reverse acc)) (advanceCursor cs))
+          39 => OkC (strPack (reverse acc), advanceCursor cs)
           10 => failAt path startCs.cursorLine "unterminated literal string (newline in string)"
           _ => parseLiteralChars (fuel - 1) path startCs (advanceCursor cs) (c :: acc)
 
 -- 多行 basic string：`"""..."""`（首个换行被裁剪；行尾 `\` 续行；支持转义）。
 -- 调用方传入的游标已经越过三个开引号。
-parseMultilineBasic : String -> TomlCursor -> Check (Pair String TomlCursor)
+parseMultilineBasic : String -> TomlCursor -> Check (String, TomlCursor)
 parseMultilineBasic path cs =
   let
     afterOpen = dropFirstNewline cs
@@ -518,7 +518,7 @@ dropFirstNewline (TomlCursor [] line col) = TomlCursor [] line col
 dropFirstNewline (TomlCursor (c :: rest) line col) =
   if c == 10 then TomlCursor rest (line + 1) 1 else TomlCursor (c :: rest) line col
 
-parseMultilineBasicChars : Int -> String -> TomlCursor -> TomlCursor -> List Int -> Check (Pair String TomlCursor)
+parseMultilineBasicChars : Int -> String -> TomlCursor -> TomlCursor -> List Int -> Check (String, TomlCursor)
 parseMultilineBasicChars fuel path startCs cs acc =
   if fuel <= 0 then
     icFuel "toml"
@@ -527,13 +527,13 @@ parseMultilineBasicChars fuel path startCs cs acc =
       [] => failAt path startCs.cursorLine "unterminated multiline string"
       c :: rest =>
         case c of
-          34 => if startsWithTripleOf 34 cs.cursorChars then OkC (Pair (strPack (reverse acc)) (advanceChars 3 cs)) else parseMultilineBasicChars (fuel - 1) path startCs (advanceCursor cs) (34 :: acc)
+          34 => if startsWithTripleOf 34 cs.cursorChars then OkC (strPack (reverse acc), advanceChars 3 cs) else parseMultilineBasicChars (fuel - 1) path startCs (advanceCursor cs) (34 :: acc)
           10 => parseMultilineBasicChars (fuel - 1) path startCs (TomlCursor rest (cs.cursorLine + 1) 1) (10 :: acc)
           92 => parseMultilineEscape (fuel - 1) path startCs (advanceCursor cs) acc
           _ => parseMultilineBasicChars (fuel - 1) path startCs (advanceCursor cs) (c :: acc)
 
 -- 多行字符串里的转义：行尾 `\` = 续行（吞掉换行与后续空白），其余同 basic。
-parseMultilineEscape : Int -> String -> TomlCursor -> TomlCursor -> List Int -> Check (Pair String TomlCursor)
+parseMultilineEscape : Int -> String -> TomlCursor -> TomlCursor -> List Int -> Check (String, TomlCursor)
 parseMultilineEscape fuel path startCs cs acc =
   if fuel <= 0 then
     icFuel "toml"
@@ -558,13 +558,13 @@ skipContinuation (TomlCursor (c :: rest) line col) =
     TomlCursor (c :: rest) line col
 
 -- 多行 literal string：`'''...'''`（首个换行裁剪，无转义）。调用方游标已越过三个开引号。
-parseMultilineLiteral : String -> TomlCursor -> Check (Pair String TomlCursor)
+parseMultilineLiteral : String -> TomlCursor -> Check (String, TomlCursor)
 parseMultilineLiteral path cs =
   let
     afterOpen = dropFirstNewline cs
   in parseMultilineLiteralChars (cursorFuel afterOpen) path cs afterOpen []
 
-parseMultilineLiteralChars : Int -> String -> TomlCursor -> TomlCursor -> List Int -> Check (Pair String TomlCursor)
+parseMultilineLiteralChars : Int -> String -> TomlCursor -> TomlCursor -> List Int -> Check (String, TomlCursor)
 parseMultilineLiteralChars fuel path startCs cs acc =
   if fuel <= 0 then
     icFuel "toml"
@@ -573,20 +573,20 @@ parseMultilineLiteralChars fuel path startCs cs acc =
       [] => failAt path startCs.cursorLine "unterminated multiline literal string"
       c :: rest =>
         case c of
-          39 => if startsWithTripleOf 39 cs.cursorChars then OkC (Pair (strPack (reverse acc)) (advanceChars 3 cs)) else parseMultilineLiteralChars (fuel - 1) path startCs (advanceCursor cs) (39 :: acc)
+          39 => if startsWithTripleOf 39 cs.cursorChars then OkC (strPack (reverse acc), advanceChars 3 cs) else parseMultilineLiteralChars (fuel - 1) path startCs (advanceCursor cs) (39 :: acc)
           10 => parseMultilineLiteralChars (fuel - 1) path startCs (TomlCursor rest (cs.cursorLine + 1) 1) (10 :: acc)
           _ => parseMultilineLiteralChars (fuel - 1) path startCs (advanceCursor cs) (c :: acc)
 
 -- ---------------------------------------------------------------- 键
-collectBareKey : TomlCursor -> List Int -> Pair String TomlCursor
-collectBareKey (TomlCursor [] line col) acc = Pair (strPack (reverse acc)) (TomlCursor [] line col)
+collectBareKey : TomlCursor -> List Int -> (String, TomlCursor)
+collectBareKey (TomlCursor [] line col) acc = (strPack (reverse acc), TomlCursor [] line col)
 collectBareKey (TomlCursor (c :: rest) line col) acc =
   if isBareKeyChar c then
     collectBareKey (TomlCursor rest line (col + 1)) (c :: acc)
   else
-    Pair (strPack (reverse acc)) (TomlCursor (c :: rest) line col)
+    (strPack (reverse acc), TomlCursor (c :: rest) line col)
 
-parseBareKey : String -> TomlCursor -> Check (Pair String TomlCursor)
+parseBareKey : String -> TomlCursor -> Check (String, TomlCursor)
 parseBareKey path cs =
   case cs.cursorChars of
     [] => failAt path cs.cursorLine "expected a key"
@@ -597,7 +597,7 @@ parseBareKey path cs =
         failAt path cs.cursorLine "expected a key"
 
 -- 一段键：裸键 / basic 引号 / literal 引号。
-parseKeySegment : String -> TomlCursor -> Check (Pair String TomlCursor)
+parseKeySegment : String -> TomlCursor -> Check (String, TomlCursor)
 parseKeySegment path cs =
   case cs.cursorChars of
     [] => failAt path cs.cursorLine "expected a key"
@@ -606,35 +606,35 @@ parseKeySegment path cs =
         34 =>
           case parseBasicString path cs of
             ErrC e => ErrC e
-            OkC (Pair s after) =>
-              if s == "" then failAt path cs.cursorLine "expected a key" else OkC (Pair s after)
+            OkC (s, after) =>
+              if s == "" then failAt path cs.cursorLine "expected a key" else OkC (s, after)
         39 =>
           case parseLiteralString path cs of
             ErrC e => ErrC e
-            OkC (Pair s after) =>
-              if s == "" then failAt path cs.cursorLine "expected a key" else OkC (Pair s after)
+            OkC (s, after) =>
+              if s == "" then failAt path cs.cursorLine "expected a key" else OkC (s, after)
         _ => parseBareKey path cs
 
 -- dotted key：`a.b."c.d"`（段之间允许空格）。
-parseKeyPath : String -> TomlCursor -> Check (Pair (List String) TomlCursor)
+parseKeyPath : String -> TomlCursor -> Check (List String, TomlCursor)
 parseKeyPath path cs = parseKeySegments (cursorFuel cs) path cs []
 
-parseKeySegments : Int -> String -> TomlCursor -> List String -> Check (Pair (List String) TomlCursor)
+parseKeySegments : Int -> String -> TomlCursor -> List String -> Check (List String, TomlCursor)
 parseKeySegments fuel path cs acc =
   if fuel <= 0 then
     icFuel "toml"
   else
     case parseKeySegment path (skipBlank cs) of
       ErrC e => ErrC e
-      OkC (Pair seg afterSeg) =>
+      OkC (seg, afterSeg) =>
         case skipBlank afterSeg of
           TomlCursor chars line col =>
             case chars of
-              [] => OkC (Pair (reverse (seg :: acc)) (TomlCursor chars line col))
-              c :: rest => if c == 46 then parseKeySegments (fuel - 1) path (TomlCursor rest line (col + 1)) (seg :: acc) else OkC (Pair (reverse (seg :: acc)) (TomlCursor chars line col))
+              [] => OkC (reverse (seg :: acc), TomlCursor chars line col)
+              c :: rest => if c == 46 then parseKeySegments (fuel - 1) path (TomlCursor rest line (col + 1)) (seg :: acc) else OkC (reverse (seg :: acc), TomlCursor chars line col)
 
 -- ---------------------------------------------------------------- 值
-parseValue : Int -> String -> TomlCursor -> Check (Pair TomlValue TomlCursor)
+parseValue : Int -> String -> TomlCursor -> Check (TomlValue, TomlCursor)
 parseValue fuel path cs =
   if fuel <= 0 then
     icFuel "toml"
@@ -656,14 +656,14 @@ parseValue fuel path cs =
           parseIntValue path cs
         else
           case matchWord "true" cs of
-            Just afterTrue => OkC (Pair (TBool True) afterTrue)
+            Just afterTrue => OkC (TBool True, afterTrue)
             Nothing =>
               case matchWord "false" cs of
-                Just afterFalse => OkC (Pair (TBool False) afterFalse)
+                Just afterFalse => OkC (TBool False, afterFalse)
                 Nothing => failAt path cs.cursorLine "expected a value"
 
 -- 单行字符串值：basic 或 literal（游标在开引号上）。
-parseSingleStringValue : String -> TomlCursor -> Check (Pair TomlValue TomlCursor)
+parseSingleStringValue : String -> TomlCursor -> Check (TomlValue, TomlCursor)
 parseSingleStringValue path cs =
   case cs.cursorChars of
     [] => failAt path cs.cursorLine "expected a string"
@@ -671,28 +671,28 @@ parseSingleStringValue path cs =
       if c == 34 then
         case parseBasicString path cs of
           ErrC e => ErrC e
-          OkC (Pair s afterString) => OkC (Pair (TStr s) afterString)
+          OkC (s, afterString) => OkC (TStr s, afterString)
       else
         case parseLiteralString path cs of
           ErrC e => ErrC e
-          OkC (Pair s afterString) => OkC (Pair (TStr s) afterString)
+          OkC (s, afterString) => OkC (TStr s, afterString)
 
 -- 多行字符串值（游标在第一个开引号上；跳过三个开引号后进入内容扫描）。
-parseMultilineValue : Bool -> String -> TomlCursor -> Check (Pair TomlValue TomlCursor)
+parseMultilineValue : Bool -> String -> TomlCursor -> Check (TomlValue, TomlCursor)
 parseMultilineValue basic path cs =
   let
     after = advanceChars 3 cs
   in if basic then
     case parseMultilineBasic path after of
       ErrC e => ErrC e
-      OkC (Pair s afterString) => OkC (Pair (TStr s) afterString)
+      OkC (s, afterString) => OkC (TStr s, afterString)
   else
     case parseMultilineLiteral path after of
       ErrC e => ErrC e
-      OkC (Pair s afterString) => OkC (Pair (TStr s) afterString)
+      OkC (s, afterString) => OkC (TStr s, afterString)
 
 -- 数组：任意值，可跨行，元素间允许注释/空格/换行，允许尾逗号。
-parseArrayValue : Int -> String -> TomlCursor -> Check (Pair TomlValue TomlCursor)
+parseArrayValue : Int -> String -> TomlCursor -> Check (TomlValue, TomlCursor)
 parseArrayValue fuel path cs =
   if fuel <= 0 then
     icFuel "toml"
@@ -701,7 +701,7 @@ parseArrayValue fuel path cs =
       [] => failAt path cs.cursorLine "unterminated array"
       c :: rest => parseArrayItems (cursorFuel (advanceCursor cs)) path (advanceCursor cs) []
 
-parseArrayItems : Int -> String -> TomlCursor -> List TomlValue -> Check (Pair TomlValue TomlCursor)
+parseArrayItems : Int -> String -> TomlCursor -> List TomlValue -> Check (TomlValue, TomlCursor)
 parseArrayItems fuel path cs acc =
   if fuel <= 0 then
     icFuel "toml"
@@ -712,21 +712,21 @@ parseArrayItems fuel path cs acc =
           [] => failAt path line "unterminated array"
           c :: rest =>
             if c == 93 then
-              OkC (Pair (TArray (reverse acc)) (advanceCursor (TomlCursor chars line col)))
+              OkC (TArray (reverse acc), advanceCursor (TomlCursor chars line col))
             else
               case parseValue (fuel - 1) path (TomlCursor chars line col) of
                 ErrC e => ErrC e
-                OkC (Pair value afterValue) =>
+                OkC (value, afterValue) =>
                   case skipGap afterValue of
                     TomlCursor chars2 line2 col2 =>
                       case chars2 of
                         [] => failAt path line2 "unterminated array"
                         44 :: rest2 => parseArrayItems (fuel - 1) path (advanceCursor (TomlCursor chars2 line2 col2)) (value :: acc)
-                        93 :: rest2 => OkC (Pair (TArray (reverse (value :: acc))) (advanceCursor (TomlCursor chars2 line2 col2)))
+                        93 :: rest2 => OkC (TArray (reverse (value :: acc)), advanceCursor (TomlCursor chars2 line2 col2))
                         _ :: rest2 => failAt path line2 "expected ',' or ']' in array"
 
 -- 内联表：`{ k = v, ... }`（单行；可嵌套、可空；点键按 TOML 规则插入）。
-parseInlineTable : Int -> String -> TomlCursor -> Check (Pair TomlValue TomlCursor)
+parseInlineTable : Int -> String -> TomlCursor -> Check (TomlValue, TomlCursor)
 parseInlineTable fuel path cs =
   if fuel <= 0 then
     icFuel "toml"
@@ -735,7 +735,7 @@ parseInlineTable fuel path cs =
       [] => failAt path cs.cursorLine "unterminated inline table"
       c :: rest => parseInlineFields (cursorFuel (advanceCursor cs)) path (advanceCursor cs) []
 
-parseInlineFields : Int -> String -> TomlCursor -> List (Pair String TomlNode) -> Check (Pair TomlValue TomlCursor)
+parseInlineFields : Int -> String -> TomlCursor -> List (String, TomlNode) -> Check (TomlValue, TomlCursor)
 parseInlineFields fuel path cs fields =
   if fuel <= 0 then
     icFuel "toml"
@@ -746,11 +746,11 @@ parseInlineFields fuel path cs fields =
           [] => failAt path line "unterminated inline table"
           c :: rest =>
             if c == 125 then
-              OkC (Pair (TTable (rootValue fuel fields)) (advanceCursor (TomlCursor chars line col)))
+              OkC (TTable (rootValue fuel fields), advanceCursor (TomlCursor chars line col))
             else
               case parseKeyPath path (TomlCursor chars line col) of
                 ErrC e => ErrC e
-                OkC (Pair keyPath afterKey) =>
+                OkC (keyPath, afterKey) =>
                   case skipBlank afterKey of
                     TomlCursor chars2 line2 col2 =>
                       case chars2 of
@@ -759,7 +759,7 @@ parseInlineFields fuel path cs fields =
                           if c2 == 61 then
                             case parseValue (fuel - 1) path (skipBlank (TomlCursor rest2 line2 (col2 + 1))) of
                               ErrC e => ErrC e
-                              OkC (Pair value afterValue) =>
+                              OkC (value, afterValue) =>
                                 case insertValue (pathFuel keyPath) path line2 keyPath (sectionOfPath keyPath) value fields of
                                   ErrC e => ErrC e
                                   OkC fields2 =>
@@ -768,13 +768,13 @@ parseInlineFields fuel path cs fields =
                                         case chars3 of
                                           [] => failAt path line3 "unterminated inline table"
                                           44 :: rest3 => parseInlineFields (fuel - 1) path (TomlCursor rest3 line3 (col3 + 1)) fields2
-                                          125 :: rest3 => OkC (Pair (TTable (rootValue fuel fields2)) (advanceCursor (TomlCursor chars3 line3 col3)))
+                                          125 :: rest3 => OkC (TTable (rootValue fuel fields2), advanceCursor (TomlCursor chars3 line3 col3))
                                           _ :: rest3 => failAt path line3 "expected ',' or '}' in inline table"
                           else
                             failAt path line2 "expected '=' in inline table"
 
 -- 整数：可选前导 '-'，至少一位十进制数字；小数点/尾随字母报错。
-parseInteger : String -> TomlCursor -> Check (Pair Int TomlCursor)
+parseInteger : String -> TomlCursor -> Check (Int, TomlCursor)
 parseInteger path cs =
   case cs.cursorChars of
     [] => failAt path cs.cursorLine "expected an integer"
@@ -786,7 +786,7 @@ parseInteger path cs =
       else
         failAt path cs.cursorLine "expected an integer"
 
-parseIntegerDigits : Int -> String -> TomlCursor -> TomlCursor -> Int -> Int -> Bool -> Check (Pair Int TomlCursor)
+parseIntegerDigits : Int -> String -> TomlCursor -> TomlCursor -> Int -> Int -> Bool -> Check (Int, TomlCursor)
 parseIntegerDigits fuel path startCs cs count acc negative =
   if fuel <= 0 then
     icFuel "toml"
@@ -801,24 +801,24 @@ parseIntegerDigits fuel path startCs cs count acc negative =
         else
           finishInteger path startCs cs count acc negative
 
-finishInteger : String -> TomlCursor -> TomlCursor -> Int -> Int -> Bool -> Check (Pair Int TomlCursor)
+finishInteger : String -> TomlCursor -> TomlCursor -> Int -> Int -> Bool -> Check (Int, TomlCursor)
 finishInteger path startCs cs count acc negative =
   if count == 0 then
     failAt path startCs.cursorLine "expected digits for integer"
   else
     case cs.cursorChars of
-      [] => OkC (Pair (makeInteger acc negative) cs)
-      c :: rest => if c == 46 then failAt path startCs.cursorLine "floating point numbers are not supported" else if isBareKeyChar c then failAt path startCs.cursorLine "invalid integer literal" else OkC (Pair (makeInteger acc negative) cs)
+      [] => OkC (makeInteger acc negative, cs)
+      c :: rest => if c == 46 then failAt path startCs.cursorLine "floating point numbers are not supported" else if isBareKeyChar c then failAt path startCs.cursorLine "invalid integer literal" else OkC (makeInteger acc negative, cs)
 
 makeInteger : Int -> Bool -> Int
 makeInteger acc True = 0 - acc
 makeInteger acc False = acc
 
-parseIntValue : String -> TomlCursor -> Check (Pair TomlValue TomlCursor)
+parseIntValue : String -> TomlCursor -> Check (TomlValue, TomlCursor)
 parseIntValue path cs =
   case parseInteger path cs of
     ErrC e => ErrC e
-    OkC (Pair n afterInteger) => OkC (Pair (TInt n) afterInteger)
+    OkC (n, afterInteger) => OkC (TInt n, afterInteger)
 
 -- 精确匹配一个 TOML 单词（true/false），且后面不能紧跟裸键字符。
 matchChars : List Int -> TomlCursor -> Maybe TomlCursor
@@ -862,21 +862,21 @@ expectEolAfterComment path cs =
             failAt path line "unexpected character after comment"
 
 -- `[section]` 头：解析段路径，期望 `]`。
-parseSectionLine : Int -> String -> TomlCursor -> List String -> List (Pair String TomlNode) -> Check (List (Pair String TomlNode))
+parseSectionLine : Int -> String -> TomlCursor -> List String -> List (String, TomlNode) -> Check (List (String, TomlNode))
 parseSectionLine fuel path cs currentPath fields =
   if fuel <= 0 then
     icFuel "toml"
   else
     case parseKeyPath path (advanceCursor cs) of
       ErrC e => ErrC e
-      OkC (Pair newSection afterPath) =>
+      OkC (newSection, afterPath) =>
         case skipBlank afterPath of
           TomlCursor chars line col =>
             case chars of
               [] => failAt path line "unterminated section header"
               c :: rest => if c == 93 then afterSingleBracket (fuel - 1) path line col rest newSection fields else failAt path line "expected '.' or ']' in section header"
 
-afterSingleBracket : Int -> String -> Int -> Int -> List Int -> List String -> List (Pair String TomlNode) -> Check (List (Pair String TomlNode))
+afterSingleBracket : Int -> String -> Int -> Int -> List Int -> List String -> List (String, TomlNode) -> Check (List (String, TomlNode))
 afterSingleBracket fuel path line col rest newSection fields =
   if fuel <= 0 then
     icFuel "toml"
@@ -889,21 +889,21 @@ afterSingleBracket fuel path line col rest newSection fields =
           OkC fields2 => parseTomlLoop (fuel - 1) path afterLine newSection fields2
 
 -- `[[table]]` 头：解析段路径，期望 `]]`。
-parseTableArrayLine : Int -> String -> TomlCursor -> List String -> List (Pair String TomlNode) -> Check (List (Pair String TomlNode))
+parseTableArrayLine : Int -> String -> TomlCursor -> List String -> List (String, TomlNode) -> Check (List (String, TomlNode))
 parseTableArrayLine fuel path cs currentPath fields =
   if fuel <= 0 then
     icFuel "toml"
   else
     case parseKeyPath path (advanceCursor (advanceCursor cs)) of
       ErrC e => ErrC e
-      OkC (Pair newSection afterPath) =>
+      OkC (newSection, afterPath) =>
         case skipBlank afterPath of
           TomlCursor chars line col =>
             case chars of
               [] => failAt path line "unterminated table array header"
               c :: rest => if c == 93 then afterDoubleBracket (fuel - 1) path line col rest newSection fields else failAt path line "expected ']]' in table array header"
 
-afterDoubleBracket : Int -> String -> Int -> Int -> List Int -> List String -> List (Pair String TomlNode) -> Check (List (Pair String TomlNode))
+afterDoubleBracket : Int -> String -> Int -> Int -> List Int -> List String -> List (String, TomlNode) -> Check (List (String, TomlNode))
 afterDoubleBracket fuel path line col rest newSection fields =
   if fuel <= 0 then
     icFuel "toml"
@@ -921,14 +921,14 @@ afterDoubleBracket fuel path line col rest newSection fields =
           failAt path line "expected ']]' in table array header"
       _ => failAt path line "expected ']]' in table array header"
 
-parseEntryValue : Int -> String -> TomlCursor -> Int -> List String -> List String -> List (Pair String TomlNode) -> Check (List (Pair String TomlNode))
+parseEntryValue : Int -> String -> TomlCursor -> Int -> List String -> List String -> List (String, TomlNode) -> Check (List (String, TomlNode))
 parseEntryValue fuel path cs keyLine keyPath currentPath fields =
   if fuel <= 0 then
     icFuel "toml"
   else
     case parseValue (fuel - 1) path (skipBlank cs) of
       ErrC e => ErrC e
-      OkC (Pair value afterValue) =>
+      OkC (value, afterValue) =>
         case expectEol path afterValue of
           ErrC e => ErrC e
           OkC afterLine =>
@@ -938,28 +938,28 @@ parseEntryValue fuel path cs keyLine keyPath currentPath fields =
               ErrC e => ErrC e
               OkC fields2 => parseTomlLoop (fuel - 1) path afterLine currentPath fields2
 
-parseKeyLine : Int -> String -> TomlCursor -> List String -> List (Pair String TomlNode) -> Check (List (Pair String TomlNode))
+parseKeyLine : Int -> String -> TomlCursor -> List String -> List (String, TomlNode) -> Check (List (String, TomlNode))
 parseKeyLine fuel path cs currentPath fields =
   if fuel <= 0 then
     icFuel "toml"
   else
     case parseKeyPath path cs of
       ErrC e => ErrC e
-      OkC (Pair keyPath afterKey) =>
+      OkC (keyPath, afterKey) =>
         case skipBlank afterKey of
           TomlCursor chars line col =>
             case chars of
               [] => failAt path cs.cursorLine "expected '=' after key"
               c :: rest => if c == 61 then parseEntryValue (fuel - 1) path (TomlCursor rest line (col + 1)) cs.cursorLine keyPath currentPath fields else failAt path cs.cursorLine "expected '=' after key"
 
-parseTomlLoop : Int -> String -> TomlCursor -> List String -> List (Pair String TomlNode) -> Check (List (Pair String TomlNode))
+parseTomlLoop : Int -> String -> TomlCursor -> List String -> List (String, TomlNode) -> Check (List (String, TomlNode))
 parseTomlLoop fuel path cs currentPath fields =
   if fuel <= 0 then
     icFuel "toml"
   else
     parseTomlLoopAt (fuel - 1) path (skipGap cs) currentPath fields
 
-parseTomlLoopAt : Int -> String -> TomlCursor -> List String -> List (Pair String TomlNode) -> Check (List (Pair String TomlNode))
+parseTomlLoopAt : Int -> String -> TomlCursor -> List String -> List (String, TomlNode) -> Check (List (String, TomlNode))
 parseTomlLoopAt fuel path cs currentPath fields =
   if fuel <= 0 then
     icFuel "toml"
@@ -969,7 +969,7 @@ parseTomlLoopAt fuel path cs currentPath fields =
       c :: rest => if c == 91 then parseBracketLine (fuel - 1) path cs currentPath fields else parseKeyLine (fuel - 1) path cs currentPath fields
 
 -- `[` 开头：第二个字符还是 `[` 就是表数组，否则是普通 section。
-parseBracketLine : Int -> String -> TomlCursor -> List String -> List (Pair String TomlNode) -> Check (List (Pair String TomlNode))
+parseBracketLine : Int -> String -> TomlCursor -> List String -> List (String, TomlNode) -> Check (List (String, TomlNode))
 parseBracketLine fuel path cs currentPath fields =
   if fuel <= 0 then
     icFuel "toml"
@@ -1043,7 +1043,7 @@ childSectionOf : List String -> List String -> Maybe String
 childSectionOf prefix section =
   case splitAtList (lenInt prefix) section of
     Nothing => Nothing
-    Just (Pair head tail) =>
+    Just (head, tail) =>
       if samePath head prefix then
         case tail of
           [name] => Just name
@@ -1051,17 +1051,17 @@ childSectionOf prefix section =
       else
         Nothing
 
-splitAtList : Int -> List a -> Maybe (Pair (List a) (List a))
+splitAtList : Int -> List a -> Maybe (List a, List a)
 splitAtList n xs =
   if n <= 0 then
-    Just (Pair [] xs)
+    Just ([], xs)
   else
     case xs of
       [] => Nothing
       y :: ys =>
         case splitAtList (n - 1) ys of
           Nothing => Nothing
-          Just (Pair head tail) => Just (Pair (y :: head) tail)
+          Just (head, tail) => Just (y :: head, tail)
 
 samePath : Eq a => List a -> List a -> Bool
 samePath [] [] = True

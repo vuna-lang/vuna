@@ -61,8 +61,8 @@ renderDecl qual (ODRecord n name fields) =
   "${typeParamDecl n}${name} = { ${joinWith "; " (map (fieldDecl qual) fields)} }"
 renderDecl qual (ODAlias n name ty) = "${typeParamDecl n}${name} = ${renderTy qual ty}"
 
-fieldDecl : (String -> String) -> Pair String OTy -> String
-fieldDecl qual (Pair label ty) = "${label} : ${renderTy qual ty}"
+fieldDecl : (String -> String) -> (String, OTy) -> String
+fieldDecl qual (label, ty) = "${label} : ${renderTy qual ty}"
 
 -- | 一个单元的类型声明块：空表 → `""`；否则 `type ... \nand ...\n\n`（末尾空行固定）。
 export renderDecls : (String -> String) -> List ODecl -> String
@@ -81,12 +81,12 @@ renderPat (OPCtorPat c []) = c
 renderPat (OPCtorPat c ps) = "${c} (${joinWith ", " (map renderPat ps)})"
 renderPat (OPRecordPat fields) = "{ ${joinWith "; " (map fieldAssign fields)} }"
 
-fieldAssign : Pair String OPat -> String
-fieldAssign (Pair label p) = "${label} = ${renderPat p}"
+fieldAssign : (String, OPat) -> String
+fieldAssign (label, p) = "${label} = ${renderPat p}"
 
-binderText : Pair String (Maybe String) -> String
-binderText (Pair name Nothing) = name
-binderText (Pair name (Just t)) = "(${name} : ${t})"
+binderText : (String, Maybe String) -> String
+binderText (name, Nothing) = name
+binderText (name, Just t) = "(${name} : ${t})"
 
 export renderTerm : OTerm -> String
 renderTerm (OName s) = s
@@ -113,11 +113,11 @@ renderTerm (OConcatStr parts) = "(String.concat \"\" [${joinWith "; " (map rende
 renderTerm (OCast e) = "(Obj.magic ${renderTerm e})"
 renderTerm (OAnnot e ty) = "(${renderTerm e} : ${ty})"
 
-renderArm : Pair OPat OTerm -> String
-renderArm (Pair pat body) = "  | ${renderPat pat} -> ${renderTerm body}\n"
+renderArm : (OPat, OTerm) -> String
+renderArm (pat, body) = "  | ${renderPat pat} -> ${renderTerm body}\n"
 
-recordField : Pair String OTerm -> String
-recordField (Pair label v) = "${label} = ${renderTerm v}"
+recordField : (String, OTerm) -> String
+recordField (label, v) = "${label} = ${renderTerm v}"
 
-recordFields : List (Pair String OTerm) -> List String
+recordFields : List (String, OTerm) -> List String
 recordFields fields = map recordField fields

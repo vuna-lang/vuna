@@ -79,10 +79,10 @@ lookupFixityDecl t op =
     Just d => Just d
     Nothing => lookupDecl op builtinFixityDecls
 
-export lookupFixity : FixityTable -> String -> Maybe (Pair Int Int)
+export lookupFixity : FixityTable -> String -> Maybe (Int, Int)
 lookupFixity t op =
   case lookupFixityDecl t op of
-    Just d => Just (Pair d.fixityLevel d.fixityAssoc)
+    Just d => Just (d.fixityLevel, d.fixityAssoc)
     Nothing => Nothing
 
 -- 链元素：运算符名、是否反引号写法（fmt keep 模式要按原样重建）、右操作数。
@@ -98,13 +98,13 @@ unknownFixityMsg op = rnMsg (UnknownFixity op) [op]
 
 -- 运算符优先级：查表；反引号名字没声明时按 9 左结合（Haskell 默认）；未知**符号**运算符
 -- 一律报错——fmt 宁可拒绝格式化也不按错优先级重排改变语义。
-fixityOf : FixityTable -> ChainOp -> Check (Pair Int Int)
+fixityOf : FixityTable -> ChainOp -> Check (Int, Int)
 fixityOf t c =
   case lookupFixity t c.chainOp of
     Just p => OkC p
     Nothing =>
       if c.chainIsBacktick then
-        OkC (Pair 9 1)
+        OkC (9, 1)
       else
         onErrDiag (withFallbackSpan (nodeRefSpan c.chainRef)) (ErrC (unknownFixityMsg c.chainOp))
 
@@ -114,7 +114,7 @@ infixTerm : FixityTable -> ChainOp -> Expr -> Expr -> NodeRef -> Expr
 infixTerm t c lhs rhs sp =
   if renameMode t then
     if c.chainOp == ">>" then
-      EApp (EVar ">>=" sp) [lhs, ELam [Pair "_" spanEmpty] rhs sp] sp
+      EApp (EVar ">>=" sp) [lhs, ELam [("_", spanEmpty)] rhs sp] sp
     else
       EApp (EVar c.chainOp sp) [lhs, rhs] sp
   else if c.chainIsBacktick then
@@ -124,14 +124,14 @@ infixTerm t c lhs rhs sp =
 
 -- 把右嵌套的 `EInfix` / `EBacktick` 链展平成「首操作数 + 链元素列表」；括号 / 应用 / 原子
 -- 作为边界操作数（先递归重排，EParen 在这里消失）。
-collectChain : FixityTable -> Expr -> Check (Pair Expr (List ChainOp))
+collectChain : FixityTable -> Expr -> Check (Expr, List ChainOp)
 collectChain t (EInfix op l r sp) =
   Vuna.Compiler.Base.Common.bind (reorderExpr t l) (
       \l2 =>
         Vuna.Compiler.Base.Common.bind (collectChain t r) (
             \p =>
               case p of
-                Pair first rest => OkC (Pair l2 (ChainOp op False first sp :: rest))
+                (first, rest) => OkC (l2, ChainOp op False first sp :: rest)
           )
     )
 collectChain t (EBacktick name l r sp) =
@@ -140,21 +140,21 @@ collectChain t (EBacktick name l r sp) =
         Vuna.Compiler.Base.Common.bind (collectChain t r) (
             \p =>
               case p of
-                Pair first rest => OkC (Pair l2 (ChainOp name True first sp :: rest))
+                (first, rest) => OkC (l2, ChainOp name True first sp :: rest)
           )
     )
-collectChain t e = Vuna.Compiler.Base.Common.bind (reorderNonChain t e) (\e2 => OkC (Pair e2 []))
+collectChain t e = Vuna.Compiler.Base.Common.bind (reorderNonChain t e) (\e2 => OkC (e2, []))
 
 -- precedence climbing：`rest` 里同级/更高级的运算符继续被消费。
 -- 显式 fuel 计步（`more` 是列表模式变量，SCT 对「tuple 列表」的递减度量
 -- 不闭合；按「守卫 Int」判据给上界，每次递归消费一个运算符）。
-climb : Int -> FixityTable -> Int -> Expr -> List ChainOp -> NodeRef -> Check (Pair Expr (List ChainOp))
+climb : Int -> FixityTable -> Int -> Expr -> List ChainOp -> NodeRef -> Check (Expr, List ChainOp)
 climb fuel t minPrec lhs rest sp =
   if fuel <= 0 then
     icInternal "infix reorder fuel exhausted"
   else
     case rest of
-      [] => OkC (Pair lhs [])
+      [] => OkC (lhs, [])
       c :: more =>
         case fixityOf t c of
           ErrC e => ErrC e
@@ -165,12 +165,12 @@ climb fuel t minPrec lhs rest sp =
               nextMin = if assoc == 2 then level else level + 1
               rhs = c.chainRhs
             in if level < minPrec then
-              OkC (Pair lhs rest)
+              OkC (lhs, rest)
             else
               Vuna.Compiler.Base.Common.bind (climb (fuel - 1) t nextMin rhs more sp) (
                   \p =>
                     case p of
-                      Pair rhs2 more2 => climb (fuel - 1) t minPrec (infixTerm t c lhs rhs2 sp) more2 sp
+                      (rhs2, more2) => climb (fuel - 1) t minPrec (infixTerm t c lhs rhs2 sp) more2 sp
                 )
 
 -- 一条中缀链：先展平，再按优先级重排；重排后不允许剩运算符。
@@ -179,11 +179,11 @@ reorderChain t e =
   Vuna.Compiler.Base.Common.bind (collectChain t e) (
       \p =>
         case p of
-          Pair first rest =>
+          (first, rest) =>
             Vuna.Compiler.Base.Common.bind (climb (2 * length rest + 2) t 0 first rest (exprRef e)) (
                 \q =>
                   case q of
-                    Pair out leftover => if length leftover == 0 then OkC out else icInternal "infix reorder left an operator"
+                    (out, leftover) => if length leftover == 0 then OkC out else icInternal "infix reorder left an operator"
               )
     )
 
@@ -205,11 +205,11 @@ reorderNonChain t (ESectOp op sp) = if renameMode t then OkC (EVar op sp) else O
 reorderNonChain t (ESectL op e sp) =
   Vuna.Compiler.Base.Common.bind
     (reorderExpr t e)
-    (\e2 => if renameMode t then OkC (ELam [Pair sectionBinderName (nodeRefSpan sp)] (EApp (EVar op sp) [EVar sectionBinderName sp, e2] sp) sp) else OkC (ESectL op e2 sp))
+    (\e2 => if renameMode t then OkC (ELam [(sectionBinderName, nodeRefSpan sp)] (EApp (EVar op sp) [EVar sectionBinderName sp, e2] sp) sp) else OkC (ESectL op e2 sp))
 reorderNonChain t (ESectR e op sp) =
   Vuna.Compiler.Base.Common.bind
     (reorderExpr t e)
-    (\e2 => if renameMode t then OkC (ELam [Pair sectionBinderName (nodeRefSpan sp)] (EApp (EVar op sp) [e2, EVar sectionBinderName sp] sp) sp) else OkC (ESectR e2 op sp))
+    (\e2 => if renameMode t then OkC (ELam [(sectionBinderName, nodeRefSpan sp)] (EApp (EVar op sp) [e2, EVar sectionBinderName sp] sp) sp) else OkC (ESectR e2 op sp))
 reorderNonChain t (EParen inner _) = reorderExpr t inner
 reorderNonChain t (ELam names body sp) =
   Vuna.Compiler.Base.Common.bind (reorderExpr t body) (\b => OkC (ELam names b sp))
@@ -305,40 +305,40 @@ reorderInterpParts t (p :: rest) =
         (reorderExpr t e)
         (\e2 => Vuna.Compiler.Base.Common.bind (reorderInterpParts t rest) (\ps => OkC (IPHole e2 :: ps)))
 
-reorderBinds : FixityTable -> List (Pair Pat Expr) -> Check (List (Pair Pat Expr))
+reorderBinds : FixityTable -> List (Pat, Expr) -> Check (List (Pat, Expr))
 reorderBinds t binds = Vuna.Compiler.Base.Common.traverse (\v => reorderBind t v) binds
 
-reorderBind : FixityTable -> Pair Pat Expr -> Check (Pair Pat Expr)
-reorderBind t (Pair pat value) =
+reorderBind : FixityTable -> (Pat, Expr) -> Check (Pat, Expr)
+reorderBind t (pat, value) =
   Vuna.Compiler.Base.Common.bind
     (reorderPattern t pat)
-    (\p2 => Vuna.Compiler.Base.Common.bind (reorderExpr t value) (\v2 => OkC (Pair p2 v2)))
+    (\p2 => Vuna.Compiler.Base.Common.bind (reorderExpr t value) (\v2 => OkC (p2, v2)))
 
-reorderFields : FixityTable -> List (Pair String Expr) -> Check (List (Pair String Expr))
+reorderFields : FixityTable -> List (String, Expr) -> Check (List (String, Expr))
 reorderFields t fields = Vuna.Compiler.Base.Common.traverse (\v => reorderField t v) fields
 
-reorderField : FixityTable -> Pair String Expr -> Check (Pair String Expr)
-reorderField t (Pair fname value) =
-  Vuna.Compiler.Base.Common.bind (reorderExpr t value) (\v2 => OkC (Pair fname v2))
+reorderField : FixityTable -> (String, Expr) -> Check (String, Expr)
+reorderField t (fname, value) =
+  Vuna.Compiler.Base.Common.bind (reorderExpr t value) (\v2 => OkC (fname, v2))
 
-reorderClauses : FixityTable -> List (Pair (List Pat) Expr) -> Check (List (Pair (List Pat) Expr))
+reorderClauses : FixityTable -> List (List Pat, Expr) -> Check (List (List Pat, Expr))
 reorderClauses t clauses = Vuna.Compiler.Base.Common.traverse (\v => reorderClause t v) clauses
 
 -- `case ... of` 的分支是 `Pair Pat Expr`（局部函数 clause 才是 `Pair (List Pat) Expr`）。
-reorderAlts : FixityTable -> List (Pair Pat Expr) -> Check (List (Pair Pat Expr))
+reorderAlts : FixityTable -> List (Pat, Expr) -> Check (List (Pat, Expr))
 reorderAlts t alts = Vuna.Compiler.Base.Common.traverse (\a => reorderAlt t a) alts
 
-reorderAlt : FixityTable -> Pair Pat Expr -> Check (Pair Pat Expr)
-reorderAlt t (Pair pat body) =
+reorderAlt : FixityTable -> (Pat, Expr) -> Check (Pat, Expr)
+reorderAlt t (pat, body) =
   Vuna.Compiler.Base.Common.bind
     (reorderPattern t pat)
-    (\p2 => Vuna.Compiler.Base.Common.bind (reorderExpr t body) (\b2 => OkC (Pair p2 b2)))
+    (\p2 => Vuna.Compiler.Base.Common.bind (reorderExpr t body) (\b2 => OkC (p2, b2)))
 
-reorderClause : FixityTable -> Pair (List Pat) Expr -> Check (Pair (List Pat) Expr)
-reorderClause t (Pair pats body) =
+reorderClause : FixityTable -> (List Pat, Expr) -> Check (List Pat, Expr)
+reorderClause t (pats, body) =
   Vuna.Compiler.Base.Common.bind
     (Vuna.Compiler.Base.Common.traverse (\pat => reorderPattern t pat) pats)
-    (\pats2 => Vuna.Compiler.Base.Common.bind (reorderExpr t body) (\b2 => OkC (Pair pats2 b2)))
+    (\pats2 => Vuna.Compiler.Base.Common.bind (reorderExpr t body) (\b2 => OkC (pats2, b2)))
 
 reorderDoStmt : FixityTable -> DoStmt -> Check DoStmt
 reorderDoStmt t (DBind pat expr sp) =
@@ -369,9 +369,9 @@ reorderPattern t pat =
         (Vuna.Compiler.Base.Common.traverse (\p => reorderRecPatField t p) fields)
         (\fs => OkC (PRecord rname fs sp))
 
-reorderRecPatField : FixityTable -> Pair String Pat -> Check (Pair String Pat)
-reorderRecPatField t (Pair fname pat) =
-  Vuna.Compiler.Base.Common.bind (reorderPattern t pat) (\p2 => OkC (Pair fname p2))
+reorderRecPatField : FixityTable -> (String, Pat) -> Check (String, Pat)
+reorderRecPatField t (fname, pat) =
+  Vuna.Compiler.Base.Common.bind (reorderPattern t pat) (\p2 => OkC (fname, p2))
 
 -- 类型表达式同样走重排（`a -> b -> c` 是 `EInfix "->"` 链）。
 reorderDecl : FixityTable -> Decl -> Check Decl

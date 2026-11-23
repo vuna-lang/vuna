@@ -253,9 +253,9 @@ maj32 : Int -> Int -> Int -> Int
 maj32 a b c = bxor (band a b) (bxor (band a c) (band b c))
 
 -- | 64 轮压缩：状态以 8 个参数传递，消息表与轮常量成对消费（列表头 O(1)）。
-roundsGo : Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int -> List (Pair Int Int) -> List Int
+roundsGo : Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int -> List (Int, Int) -> List Int
 roundsGo a b c d e f g h [] = [a, b, c, d, e, f, g, h]
-roundsGo a b c d e f g h ((Pair w k) :: rest) =
+roundsGo a b c d e f g h ((w, k) :: rest) =
   let
     t1 = add32 (add32 (add32 h (bigSigma1 e)) (add32 (ch32 e f g) k)) w
     t2 = add32 (bigSigma0 a) (maj32 a b c)

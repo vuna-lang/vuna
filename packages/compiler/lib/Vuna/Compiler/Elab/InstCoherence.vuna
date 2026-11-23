@@ -35,15 +35,15 @@ export data InstClash(..) : Type where
   ClashDuplicate : InstClash
   ClashOverlap : InstClash
 
-export findInstanceClash : Ec -> String -> String -> String -> List (Pair String Term) -> Term -> List DtInst -> Pair (Maybe InstClash) Ec
+export findInstanceClash : Ec -> String -> String -> String -> List (String, Term) -> Term -> List DtInst -> (Maybe InstClash, Ec)
 -- 符号是 codegen 的 dict 名：两个实例撞同一个符号仍然必须拒绝。
 findInstanceClash ec name sym key tele head seen =
   if hasInstKey key seen then
-    Pair (Just ClashDuplicate) ec
+    (Just ClashDuplicate, ec)
   else if hasInstSym sym seen then
-    Pair (Just ClashDuplicate) ec
+    (Just ClashDuplicate, ec)
   else if anyInstanceExact ec (length tele) head seen then
-    Pair (Just ClashDuplicate) ec
+    (Just ClashDuplicate, ec)
   else
     anyInstanceOverlap ec (isBlanketInstHead (length tele) head) tele head seen
 
@@ -57,9 +57,9 @@ anyInstanceExact ec n head (i :: rest) =
 
 -- 重叠扫描：blanket 与具体实例共存是**允许**的（blanket 是 fallback），所以任一侧是
 -- blanket 就跳过这一对；两侧都是具体头时才判重叠。
-anyInstanceOverlap : Ec -> Bool -> List (Pair String Term) -> Term -> List DtInst -> Pair (Maybe InstClash) Ec
-anyInstanceOverlap ec newBlanket [] head [] = Pair Nothing ec
-anyInstanceOverlap ec newBlanket (t :: ts) head [] = Pair Nothing ec
+anyInstanceOverlap : Ec -> Bool -> List (String, Term) -> Term -> List DtInst -> (Maybe InstClash, Ec)
+anyInstanceOverlap ec newBlanket [] head [] = (Nothing, ec)
+anyInstanceOverlap ec newBlanket (t :: ts) head [] = (Nothing, ec)
 anyInstanceOverlap ec newBlanket tele head (i :: rest) =
   if instanceExactQuiet ec (length tele) head i then
     anyInstanceOverlap ec newBlanket tele head rest
@@ -67,8 +67,8 @@ anyInstanceOverlap ec newBlanket tele head (i :: rest) =
     anyInstanceOverlap ec newBlanket tele head rest
   else
     case headsOverlap ec tele head i.dtInstTele i.dtInstHead of
-      Pair True ec1 => Pair (Just ClashOverlap) ec1
-      Pair False ec1 => anyInstanceOverlap ec newBlanket tele head rest
+      (True, ec1) => (Just ClashOverlap, ec1)
+      (False, ec1) => anyInstanceOverlap ec newBlanket tele head rest
 
 export instanceExactQuiet : Ec -> Int -> Term -> DtInst -> Bool
 instanceExactQuiet ec n head inst =
@@ -86,7 +86,7 @@ headsAlphaEqual ec n a b =
 -- 头先按已解元变量 zonk，再把 telescope 变量实例化成 `#tele` 刚性占位（与 coherence
 -- 的 α-等价判定同一套环境），quote 后走 span-free 的 Core 规范编码取摘要。
 -- 因此与源码 binder 名、声明顺序、span、哪个包先加载都无关。
-export instanceKey : Ec -> String -> List (Pair String Term) -> Term -> String
+export instanceKey : Ec -> String -> List (String, Term) -> Term -> String
 instanceKey ec cname tele head =
   let
     zonked = zonkTerm ec 0 head
@@ -106,26 +106,26 @@ teleAlphaEnvGo remaining i =
 
 -- 重叠判定：把一侧 tele 变量实例化成 meta、另一侧实例化成互不相同的刚性占位（global），
 -- conv 成功即「可合一」。两侧都有 tele 时只需一个方向（另一方向由对称性覆盖）。
-export headsOverlap : Ec -> List (Pair String Term) -> Term -> List (Pair String Term) -> Term -> Pair Bool Ec
+export headsOverlap : Ec -> List (String, Term) -> Term -> List (String, Term) -> Term -> (Bool, Ec)
 headsOverlap ec tele1 h1 tele2 h2 =
   case tele1 of
     [] =>
       case tele2 of
-        [] => Pair (headsAlphaEqual ec 0 h1 h2) ec
+        [] => (headsAlphaEqual ec 0 h1 h2, ec)
         -- 一侧无 tele：把**有 tele 的一侧**实例化成 meta（否则无法与具体头合一）。
         _ => headsOverlapOne ec tele2 h2 tele1 h1
     _ => headsOverlapOne ec tele1 h1 tele2 h2
 
-headsOverlapOne : Ec -> List (Pair String Term) -> Term -> List (Pair String Term) -> Term -> Pair Bool Ec
+headsOverlapOne : Ec -> List (String, Term) -> Term -> List (String, Term) -> Term -> (Bool, Ec)
 headsOverlapOne ec teleA hA teleB hB =
   case allocTeleMetas Nothing emptyCtx ec teleA of
-    Pair ids ec1 =>
+    (ids, ec1) =>
       let
         envA = map (\m => VMeta m []) ids
         envB = teleGlobalEnv (length teleB)
       in case conv (ecDefTbl ec1) (ecSolsP ec1) 0 (eval envA hA) (eval envB hB) of
-        OkC sols2 => Pair True (ecPutSols ec1 (solsList sols2))
-        ErrC e => Pair False ec1
+        OkC sols2 => (True, ecPutSols ec1 (solsList sols2))
+        ErrC e => (False, ec1)
 
 teleGlobalEnv : Int -> List Value
 teleGlobalEnv n = teleGlobalEnvGo n 0

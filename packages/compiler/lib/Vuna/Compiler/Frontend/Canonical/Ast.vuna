@@ -102,22 +102,22 @@ encPatListGo [] acc = acc
 encPatListGo (x :: rest) acc = encPat x (encPatListGo rest acc)
 
 -- | `(模式, 表达式)` 表（`ELet` 绑定 / `ECase` 分支）。
-encPatExprList : List (Pair Pat Expr) -> List String -> List String
+encPatExprList : List (Pat, Expr) -> List String -> List String
 encPatExprList xs acc = "[${strFromInt (lenOf xs)}:" :: encPatExprListGo xs acc
 
 -- | `(模式, 表达式)` 表的递归主体（计数头由 `encPatExprList` 写）。
-encPatExprListGo : List (Pair Pat Expr) -> List String -> List String
+encPatExprListGo : List (Pat, Expr) -> List String -> List String
 encPatExprListGo [] acc = acc
-encPatExprListGo ((Pair p e) :: rest) acc = encPat p (encExpr e (encPatExprListGo rest acc))
+encPatExprListGo ((p, e) :: rest) acc = encPat p (encExpr e (encPatExprListGo rest acc))
 
 -- | 局部函数子句表（每项 = 参数模式表 + body）。
-encClauses : List (Pair (List Pat) Expr) -> List String -> List String
+encClauses : List (List Pat, Expr) -> List String -> List String
 encClauses xs acc = "[${strFromInt (lenOf xs)}:" :: encClausesGo xs acc
 
 -- | 局部函数子句表的递归主体（计数头由 `encClauses` 写）。
-encClausesGo : List (Pair (List Pat) Expr) -> List String -> List String
+encClausesGo : List (List Pat, Expr) -> List String -> List String
 encClausesGo [] acc = acc
-encClausesGo ((Pair ps body) :: rest) acc = encPatList ps (encExpr body (encClausesGo rest acc))
+encClausesGo ((ps, body) :: rest) acc = encPatList ps (encExpr body (encClausesGo rest acc))
 
 -- | do 语句表。
 encStmtList : List DoStmt -> List String -> List String
@@ -138,22 +138,22 @@ encPartListGo [] acc = acc
 encPartListGo (x :: rest) acc = encInterpPart x (encPartListGo rest acc)
 
 -- | `(字段名, 表达式)` 表（记录字面量 / 记录更新）。
-encStrExprList : List (Pair String Expr) -> List String -> List String
+encStrExprList : List (String, Expr) -> List String -> List String
 encStrExprList xs acc = "[${strFromInt (lenOf xs)}:" :: encStrExprListGo xs acc
 
 -- | `(字段名, 表达式)` 表的递归主体（计数头由 `encStrExprList` 写）。
-encStrExprListGo : List (Pair String Expr) -> List String -> List String
+encStrExprListGo : List (String, Expr) -> List String -> List String
 encStrExprListGo [] acc = acc
-encStrExprListGo ((Pair n e) :: rest) acc = encStr n (encExpr e (encStrExprListGo rest acc))
+encStrExprListGo ((n, e) :: rest) acc = encStr n (encExpr e (encStrExprListGo rest acc))
 
 -- | `(字段名, 模式)` 表（记录模式）。
-encStrPatList : List (Pair String Pat) -> List String -> List String
+encStrPatList : List (String, Pat) -> List String -> List String
 encStrPatList xs acc = "[${strFromInt (lenOf xs)}:" :: encStrPatListGo xs acc
 
 -- | `(字段名, 模式)` 表的递归主体（计数头由 `encStrPatList` 写）。
-encStrPatListGo : List (Pair String Pat) -> List String -> List String
+encStrPatListGo : List (String, Pat) -> List String -> List String
 encStrPatListGo [] acc = acc
-encStrPatListGo ((Pair n p) :: rest) acc = encStr n (encPat p (encStrPatListGo rest acc))
+encStrPatListGo ((n, p) :: rest) acc = encStr n (encPat p (encStrPatListGo rest acc))
 
 -- | data 构造子表。
 encCtorList : List Ctor -> List String -> List String
@@ -290,558 +290,558 @@ encDecl (DInstance ctxE head methods _) acc =
 -- 解码（roundtrip 自检用；要求恰好消费完）
 -- ---------------------------------------------------------------
 -- | 解析 quantity：tag 0/1。
-export decQty : Int -> Cur -> Maybe (Pair Qty Cur)
+export decQty : Int -> Cur -> Maybe (Qty, Cur)
 decQty fuel bytes =
   if fuel <= 0 then
     Nothing
   else
     case decTag fuel bytes of
       Nothing => Nothing
-      Just (Pair tag b1) =>
+      Just (tag, b1) =>
         case tag of
-          0 => Just (Pair Q0 b1)
-          1 => Just (Pair Q1 b1)
+          0 => Just (Q0, b1)
+          1 => Just (Q1, b1)
           _ => Nothing
 
 -- | 解析记录表示档位：tag 0/1/2。
-export decReprTier : Int -> Cur -> Maybe (Pair ReprTier Cur)
+export decReprTier : Int -> Cur -> Maybe (ReprTier, Cur)
 decReprTier fuel bytes =
   if fuel <= 0 then
     Nothing
   else
     case decTag fuel bytes of
       Nothing => Nothing
-      Just (Pair tag b1) =>
+      Just (tag, b1) =>
         case tag of
-          0 => Just (Pair ReprAuto b1)
-          1 => Just (Pair ReprAlias b1)
-          2 => Just (Pair ReprBoxed b1)
+          0 => Just (ReprAuto, b1)
+          1 => Just (ReprAlias, b1)
+          2 => Just (ReprBoxed, b1)
           _ => Nothing
 
 -- | 解析可选 quantity。
-decMaybeQty : Int -> Cur -> Maybe (Pair (Maybe Qty) Cur)
+decMaybeQty : Int -> Cur -> Maybe (Maybe Qty, Cur)
 decMaybeQty fuel bytes = decMaybe decQty fuel bytes
 
 -- | 解析可选表达式。
-decMaybeExpr : Int -> Cur -> Maybe (Pair (Maybe Expr) Cur)
+decMaybeExpr : Int -> Cur -> Maybe (Maybe Expr, Cur)
 decMaybeExpr fuel bytes = decMaybe decExpr fuel bytes
 
 -- | 解析 `InterpPart`：tag 必须与 `encInterpPart` 一致。
-export decInterpPart : Int -> Cur -> Maybe (Pair InterpPart Cur)
+export decInterpPart : Int -> Cur -> Maybe (InterpPart, Cur)
 decInterpPart fuel bytes =
   if fuel <= 0 then
     Nothing
   else
     case decTag fuel bytes of
       Nothing => Nothing
-      Just (Pair tag b1) =>
+      Just (tag, b1) =>
         case tag of
           0 =>
             case decStr (fuel - 1) b1 of
               Nothing => Nothing
-              Just (Pair v1 b2) => Just (Pair (IPText v1) b2)
+              Just (v1, b2) => Just (IPText v1, b2)
           1 =>
             case decExpr (fuel - 1) b1 of
               Nothing => Nothing
-              Just (Pair v1 b2) => Just (Pair (IPHole v1) b2)
+              Just (v1, b2) => Just (IPHole v1, b2)
           _ => Nothing
 
 -- | 解析 `Pat`：tag 必须与 `encPat` 一致。
-export decPat : Int -> Cur -> Maybe (Pair Pat Cur)
+export decPat : Int -> Cur -> Maybe (Pat, Cur)
 decPat fuel bytes =
   if fuel <= 0 then
     Nothing
   else
     case decTag fuel bytes of
       Nothing => Nothing
-      Just (Pair tag b1) =>
+      Just (tag, b1) =>
         case tag of
           0 =>
             case decStr (fuel - 1) b1 of
               Nothing => Nothing
-              Just (Pair v1 b2) => Just (Pair (PVar v1 (detachedNodeRef noSpan)) b2)
+              Just (v1, b2) => Just (PVar v1 (detachedNodeRef noSpan), b2)
           1 =>
             case decStr (fuel - 1) b1 of
               Nothing => Nothing
-              Just (Pair v1 b2) =>
+              Just (v1, b2) =>
                 case decPat (fuel - 1) b2 of
                   Nothing => Nothing
-                  Just (Pair v2 b3) => Just (Pair (PAs v1 v2 (detachedNodeRef noSpan)) b3)
-          2 => Just (Pair (PWild (detachedNodeRef noSpan)) b1)
+                  Just (v2, b3) => Just (PAs v1 v2 (detachedNodeRef noSpan), b3)
+          2 => Just (PWild (detachedNodeRef noSpan), b1)
           3 =>
             case decStr (fuel - 1) b1 of
               Nothing => Nothing
-              Just (Pair v1 b2) =>
+              Just (v1, b2) =>
                 case decPatList (fuel - 1) b2 of
                   Nothing => Nothing
-                  Just (Pair v2 b3) => Just (Pair (PCon v1 v2 (detachedNodeRef noSpan)) b3)
+                  Just (v2, b3) => Just (PCon v1 v2 (detachedNodeRef noSpan), b3)
           4 =>
             case decInt (fuel - 1) b1 of
               Nothing => Nothing
-              Just (Pair v1 b2) => Just (Pair (PInt v1 (detachedNodeRef noSpan)) b2)
+              Just (v1, b2) => Just (PInt v1 (detachedNodeRef noSpan), b2)
           5 =>
             case decStr (fuel - 1) b1 of
               Nothing => Nothing
-              Just (Pair v1 b2) => Just (Pair (PStr v1 (detachedNodeRef noSpan)) b2)
+              Just (v1, b2) => Just (PStr v1 (detachedNodeRef noSpan), b2)
           6 =>
             case decStr (fuel - 1) b1 of
               Nothing => Nothing
-              Just (Pair v1 b2) =>
+              Just (v1, b2) =>
                 case decList decStrPat (fuel - 1) b2 of
                   Nothing => Nothing
-                  Just (Pair v2 b3) => Just (Pair (PRecord v1 v2 (detachedNodeRef noSpan)) b3)
+                  Just (v2, b3) => Just (PRecord v1 v2 (detachedNodeRef noSpan), b3)
           _ => Nothing
 
 -- | 解析 `DoStmt`：tag 必须与 `encDoStmt` 一致。
-export decDoStmt : Int -> Cur -> Maybe (Pair DoStmt Cur)
+export decDoStmt : Int -> Cur -> Maybe (DoStmt, Cur)
 decDoStmt fuel bytes =
   if fuel <= 0 then
     Nothing
   else
     case decTag fuel bytes of
       Nothing => Nothing
-      Just (Pair tag b1) =>
+      Just (tag, b1) =>
         case tag of
           0 =>
             case decPat (fuel - 1) b1 of
               Nothing => Nothing
-              Just (Pair v1 b2) =>
+              Just (v1, b2) =>
                 case decExpr (fuel - 1) b2 of
                   Nothing => Nothing
-                  Just (Pair v2 b3) => Just (Pair (DBind v1 v2 noNodeRef) b3)
+                  Just (v2, b3) => Just (DBind v1 v2 noNodeRef, b3)
           1 =>
             case decExpr (fuel - 1) b1 of
               Nothing => Nothing
-              Just (Pair v1 b2) => Just (Pair (DExpr v1 noNodeRef) b2)
+              Just (v1, b2) => Just (DExpr v1 noNodeRef, b2)
           2 =>
             case decList decPatExpr (fuel - 1) b1 of
               Nothing => Nothing
-              Just (Pair v1 b2) => Just (Pair (DLet v1 noNodeRef) b2)
+              Just (v1, b2) => Just (DLet v1 noNodeRef, b2)
           _ => Nothing
 
 -- | 解析 `Expr`：tag 必须与 `encExpr` 一致。
-export decExpr : Int -> Cur -> Maybe (Pair Expr Cur)
+export decExpr : Int -> Cur -> Maybe (Expr, Cur)
 decExpr fuel bytes =
   if fuel <= 0 then
     Nothing
   else
     case decTag fuel bytes of
       Nothing => Nothing
-      Just (Pair tag b1) =>
+      Just (tag, b1) =>
         case tag of
           0 =>
             case decStr (fuel - 1) b1 of
               Nothing => Nothing
-              Just (Pair v1 b2) => Just (Pair (EVar v1 (detachedNodeRef noSpan)) b2)
+              Just (v1, b2) => Just (EVar v1 (detachedNodeRef noSpan), b2)
           1 =>
             case decInt (fuel - 1) b1 of
               Nothing => Nothing
-              Just (Pair v1 b2) => Just (Pair (EInt v1 (detachedNodeRef noSpan)) b2)
+              Just (v1, b2) => Just (EInt v1 (detachedNodeRef noSpan), b2)
           2 =>
             case decStr (fuel - 1) b1 of
               Nothing => Nothing
-              Just (Pair v1 b2) => Just (Pair (EStr v1 (detachedNodeRef noSpan)) b2)
+              Just (v1, b2) => Just (EStr v1 (detachedNodeRef noSpan), b2)
           3 =>
             case decList decStr (fuel - 1) b1 of
               Nothing => Nothing
-              Just (Pair v1 b2) =>
+              Just (v1, b2) =>
                 case decExpr (fuel - 1) b2 of
                   Nothing => Nothing
-                  Just (Pair v2 b3) => Just (Pair (ELam (map (\n => Pair n noSpan) v1) v2 (detachedNodeRef noSpan)) b3)
+                  Just (v2, b3) => Just (ELam (map (\n => (n, noSpan)) v1) v2 (detachedNodeRef noSpan), b3)
           4 =>
             case decExpr (fuel - 1) b1 of
               Nothing => Nothing
-              Just (Pair v1 b2) =>
+              Just (v1, b2) =>
                 case decExprList (fuel - 1) b2 of
                   Nothing => Nothing
-                  Just (Pair v2 b3) => Just (Pair (EApp v1 v2 (detachedNodeRef noSpan)) b3)
+                  Just (v2, b3) => Just (EApp v1 v2 (detachedNodeRef noSpan), b3)
           5 =>
             case decStr (fuel - 1) b1 of
               Nothing => Nothing
-              Just (Pair v1 b2) =>
+              Just (v1, b2) =>
                 case decBool (fuel - 1) b2 of
                   Nothing => Nothing
-                  Just (Pair v2 b3) =>
+                  Just (v2, b3) =>
                     case decMaybe decQty (fuel - 1) b3 of
                       Nothing => Nothing
-                      Just (Pair v3 b4) =>
+                      Just (v3, b4) =>
                         case decExpr (fuel - 1) b4 of
                           Nothing => Nothing
-                          Just (Pair v4 b5) =>
+                          Just (v4, b5) =>
                             case decExpr (fuel - 1) b5 of
                               Nothing => Nothing
-                              Just (Pair v5 b6) => Just (Pair (EPi v1 v2 v3 v4 v5 (detachedNodeRef noSpan)) b6)
+                              Just (v5, b6) => Just (EPi v1 v2 v3 v4 v5 (detachedNodeRef noSpan), b6)
           6 =>
             case decList decPatExpr (fuel - 1) b1 of
               Nothing => Nothing
-              Just (Pair v1 b2) =>
+              Just (v1, b2) =>
                 case decExpr (fuel - 1) b2 of
                   Nothing => Nothing
-                  Just (Pair v2 b3) =>
+                  Just (v2, b3) =>
                     case decBool (fuel - 1) b3 of
                       Nothing => Nothing
-                      Just (Pair v3 b4) => Just (Pair (ELet v1 v2 v3 (detachedNodeRef noSpan)) b4)
+                      Just (v3, b4) => Just (ELet v1 v2 v3 (detachedNodeRef noSpan), b4)
           7 =>
             case decList decClause (fuel - 1) b1 of
               Nothing => Nothing
-              Just (Pair v1 b2) => Just (Pair (ELocalFun v1 (detachedNodeRef noSpan)) b2)
+              Just (v1, b2) => Just (ELocalFun v1 (detachedNodeRef noSpan), b2)
           8 =>
             case decExpr (fuel - 1) b1 of
               Nothing => Nothing
-              Just (Pair v1 b2) =>
+              Just (v1, b2) =>
                 case decList decPatExpr (fuel - 1) b2 of
                   Nothing => Nothing
-                  Just (Pair v2 b3) => Just (Pair (ECase v1 v2 (detachedNodeRef noSpan)) b3)
+                  Just (v2, b3) => Just (ECase v1 v2 (detachedNodeRef noSpan), b3)
           9 =>
             case decExpr (fuel - 1) b1 of
               Nothing => Nothing
-              Just (Pair v1 b2) =>
+              Just (v1, b2) =>
                 case decExpr (fuel - 1) b2 of
                   Nothing => Nothing
-                  Just (Pair v2 b3) =>
+                  Just (v2, b3) =>
                     case decExpr (fuel - 1) b3 of
                       Nothing => Nothing
-                      Just (Pair v3 b4) => Just (Pair (EIf v1 v2 v3 (detachedNodeRef noSpan)) b4)
+                      Just (v3, b4) => Just (EIf v1 v2 v3 (detachedNodeRef noSpan), b4)
           10 =>
             case decExpr (fuel - 1) b1 of
               Nothing => Nothing
-              Just (Pair v1 b2) =>
+              Just (v1, b2) =>
                 case decStr (fuel - 1) b2 of
                   Nothing => Nothing
-                  Just (Pair v2 b3) => Just (Pair (EField v1 v2 (detachedNodeRef noSpan)) b3)
+                  Just (v2, b3) => Just (EField v1 v2 (detachedNodeRef noSpan), b3)
           11 =>
             case decStr (fuel - 1) b1 of
               Nothing => Nothing
-              Just (Pair v1 b2) =>
+              Just (v1, b2) =>
                 case decList decStrExpr (fuel - 1) b2 of
                   Nothing => Nothing
-                  Just (Pair v2 b3) => Just (Pair (ERecord v1 v2 (detachedNodeRef noSpan)) b3)
+                  Just (v2, b3) => Just (ERecord v1 v2 (detachedNodeRef noSpan), b3)
           12 =>
             case decExpr (fuel - 1) b1 of
               Nothing => Nothing
-              Just (Pair v1 b2) =>
+              Just (v1, b2) =>
                 case decList decStrExpr (fuel - 1) b2 of
                   Nothing => Nothing
-                  Just (Pair v2 b3) => Just (Pair (ERecUpdate v1 v2 (detachedNodeRef noSpan)) b3)
+                  Just (v2, b3) => Just (ERecUpdate v1 v2 (detachedNodeRef noSpan), b3)
           13 =>
             case decList decDoStmt (fuel - 1) b1 of
               Nothing => Nothing
-              Just (Pair v1 b2) => Just (Pair (EDo v1 (detachedNodeRef noSpan)) b2)
+              Just (v1, b2) => Just (EDo v1 (detachedNodeRef noSpan), b2)
           14 =>
             case decStr (fuel - 1) b1 of
               Nothing => Nothing
-              Just (Pair v1 b2) =>
+              Just (v1, b2) =>
                 case decExpr (fuel - 1) b2 of
                   Nothing => Nothing
-                  Just (Pair v2 b3) =>
+                  Just (v2, b3) =>
                     case decExpr (fuel - 1) b3 of
                       Nothing => Nothing
-                      Just (Pair v3 b4) => Just (Pair (EInfix v1 v2 v3 (detachedNodeRef noSpan)) b4)
+                      Just (v3, b4) => Just (EInfix v1 v2 v3 (detachedNodeRef noSpan), b4)
           15 =>
             case decExpr (fuel - 1) b1 of
               Nothing => Nothing
-              Just (Pair v1 b2) => Just (Pair (EParen v1 (detachedNodeRef noSpan)) b2)
+              Just (v1, b2) => Just (EParen v1 (detachedNodeRef noSpan), b2)
           16 =>
             case decStr (fuel - 1) b1 of
               Nothing => Nothing
-              Just (Pair v1 b2) =>
+              Just (v1, b2) =>
                 case decExpr (fuel - 1) b2 of
                   Nothing => Nothing
-                  Just (Pair v2 b3) =>
+                  Just (v2, b3) =>
                     case decExpr (fuel - 1) b3 of
                       Nothing => Nothing
-                      Just (Pair v3 b4) => Just (Pair (EBacktick v1 v2 v3 (detachedNodeRef noSpan)) b4)
+                      Just (v3, b4) => Just (EBacktick v1 v2 v3 (detachedNodeRef noSpan), b4)
           17 =>
             case decStr (fuel - 1) b1 of
               Nothing => Nothing
-              Just (Pair v1 b2) => Just (Pair (ESectOp v1 (detachedNodeRef noSpan)) b2)
+              Just (v1, b2) => Just (ESectOp v1 (detachedNodeRef noSpan), b2)
           18 =>
             case decStr (fuel - 1) b1 of
               Nothing => Nothing
-              Just (Pair v1 b2) =>
+              Just (v1, b2) =>
                 case decExpr (fuel - 1) b2 of
                   Nothing => Nothing
-                  Just (Pair v2 b3) => Just (Pair (ESectL v1 v2 (detachedNodeRef noSpan)) b3)
+                  Just (v2, b3) => Just (ESectL v1 v2 (detachedNodeRef noSpan), b3)
           19 =>
             case decExpr (fuel - 1) b1 of
               Nothing => Nothing
-              Just (Pair v1 b2) =>
+              Just (v1, b2) =>
                 case decStr (fuel - 1) b2 of
                   Nothing => Nothing
-                  Just (Pair v2 b3) => Just (Pair (ESectR v1 v2 (detachedNodeRef noSpan)) b3)
+                  Just (v2, b3) => Just (ESectR v1 v2 (detachedNodeRef noSpan), b3)
           20 =>
             case decExpr (fuel - 1) b1 of
               Nothing => Nothing
-              Just (Pair v1 b2) =>
+              Just (v1, b2) =>
                 case decExpr (fuel - 1) b2 of
                   Nothing => Nothing
-                  Just (Pair v2 b3) => Just (Pair (EAnn v1 v2 (detachedNodeRef noSpan)) b3)
+                  Just (v2, b3) => Just (EAnn v1 v2 (detachedNodeRef noSpan), b3)
           21 =>
             case decBool (fuel - 1) b1 of
               Nothing => Nothing
-              Just (Pair v1 b2) =>
+              Just (v1, b2) =>
                 case decList decInterpPart (fuel - 1) b2 of
                   Nothing => Nothing
-                  Just (Pair v2 b3) => Just (Pair (EInterp v1 v2 (detachedNodeRef noSpan)) b3)
+                  Just (v2, b3) => Just (EInterp v1 v2 (detachedNodeRef noSpan), b3)
           22 =>
             case decStr (fuel - 1) b1 of
               Nothing => Nothing
-              Just (Pair v1 b2) => Just (Pair (EFloat v1 (detachedNodeRef noSpan)) b2)
+              Just (v1, b2) => Just (EFloat v1 (detachedNodeRef noSpan), b2)
           _ => Nothing
 
 -- | 解析 `Ctor`：tag 必须与 `encCtor` 一致。
-export decCtor : Int -> Cur -> Maybe (Pair Ctor Cur)
+export decCtor : Int -> Cur -> Maybe (Ctor, Cur)
 decCtor fuel bytes =
   if fuel <= 0 then
     Nothing
   else
     case decTag fuel bytes of
       Nothing => Nothing
-      Just (Pair tag b1) =>
+      Just (tag, b1) =>
         case tag of
           0 =>
             case decStr (fuel - 1) b1 of
               Nothing => Nothing
-              Just (Pair v1 b2) =>
+              Just (v1, b2) =>
                 case decExpr (fuel - 1) b2 of
                   Nothing => Nothing
-                  Just (Pair v2 b3) =>
+                  Just (v2, b3) =>
                     case decInt (fuel - 1) b3 of
                       Nothing => Nothing
-                      Just (Pair v3 b4) => Just (Pair (Ctor v1 v2 v3 noNodeRef) b4)
+                      Just (v3, b4) => Just (Ctor v1 v2 v3 noNodeRef, b4)
           _ => Nothing
 
 -- | 解析 `Field`：tag 必须与 `encField` 一致。
-export decField : Int -> Cur -> Maybe (Pair Field Cur)
+export decField : Int -> Cur -> Maybe (Field, Cur)
 decField fuel bytes =
   if fuel <= 0 then
     Nothing
   else
     case decTag fuel bytes of
       Nothing => Nothing
-      Just (Pair tag b1) =>
+      Just (tag, b1) =>
         case tag of
           0 =>
             case decStr (fuel - 1) b1 of
               Nothing => Nothing
-              Just (Pair v1 b2) =>
+              Just (v1, b2) =>
                 case decExpr (fuel - 1) b2 of
                   Nothing => Nothing
-                  Just (Pair v2 b3) => Just (Pair (Field v1 v2 noNodeRef) b3)
+                  Just (v2, b3) => Just (Field v1 v2 noNodeRef, b3)
           _ => Nothing
 
 -- | 解析 `TraitParam`：tag 必须与 `encTraitParam` 一致。
-export decTraitParam : Int -> Cur -> Maybe (Pair TraitParam Cur)
+export decTraitParam : Int -> Cur -> Maybe (TraitParam, Cur)
 decTraitParam fuel bytes =
   if fuel <= 0 then
     Nothing
   else
     case decTag fuel bytes of
       Nothing => Nothing
-      Just (Pair tag b1) =>
+      Just (tag, b1) =>
         case tag of
           0 =>
             case decStr (fuel - 1) b1 of
               Nothing => Nothing
-              Just (Pair v1 b2) =>
+              Just (v1, b2) =>
                 case decMaybe decExpr (fuel - 1) b2 of
                   Nothing => Nothing
-                  Just (Pair v2 b3) => Just (Pair (TraitParam v1 v2) b3)
+                  Just (v2, b3) => Just (TraitParam v1 v2, b3)
           _ => Nothing
 
 -- | 解析 `TraitMethod`：tag 必须与 `encTraitMethod` 一致。
-export decTraitMethod : Int -> Cur -> Maybe (Pair TraitMethod Cur)
+export decTraitMethod : Int -> Cur -> Maybe (TraitMethod, Cur)
 decTraitMethod fuel bytes =
   if fuel <= 0 then
     Nothing
   else
     case decTag fuel bytes of
       Nothing => Nothing
-      Just (Pair tag b1) =>
+      Just (tag, b1) =>
         case tag of
           0 =>
             case decStr (fuel - 1) b1 of
               Nothing => Nothing
-              Just (Pair v1 b2) =>
+              Just (v1, b2) =>
                 case decExpr (fuel - 1) b2 of
                   Nothing => Nothing
-                  Just (Pair v2 b3) => Just (Pair (TraitMethod v1 v2 noNodeRef) b3)
+                  Just (v2, b3) => Just (TraitMethod v1 v2 noNodeRef, b3)
           _ => Nothing
 
 -- | 解析 `Decl`：tag 必须与 `encDecl` 一致。
-export decDecl : Int -> Cur -> Maybe (Pair Decl Cur)
+export decDecl : Int -> Cur -> Maybe (Decl, Cur)
 decDecl fuel bytes =
   if fuel <= 0 then
     Nothing
   else
     case decTag fuel bytes of
       Nothing => Nothing
-      Just (Pair tag b1) =>
+      Just (tag, b1) =>
         case tag of
           0 =>
             case decStr (fuel - 1) b1 of
               Nothing => Nothing
-              Just (Pair v1 b2) =>
+              Just (v1, b2) =>
                 case decList decStr (fuel - 1) b2 of
                   Nothing => Nothing
-                  Just (Pair v2 b3) =>
+                  Just (v2, b3) =>
                     case decExpr (fuel - 1) b3 of
                       Nothing => Nothing
-                      Just (Pair v3 b4) =>
+                      Just (v3, b4) =>
                         case decList decCtor (fuel - 1) b4 of
                           Nothing => Nothing
-                          Just (Pair v4 b5) =>
+                          Just (v4, b5) =>
                             case decList decStr (fuel - 1) b5 of
                               Nothing => Nothing
-                              Just (Pair v5 b6) =>
+                              Just (v5, b6) =>
                                 case decBool (fuel - 1) b6 of
                                   Nothing => Nothing
-                                  Just (Pair v6 b7) =>
+                                  Just (v6, b7) =>
                                     case decReprTier (fuel - 1) b7 of
                                       Nothing => Nothing
-                                      Just (Pair v7 b8) =>
+                                      Just (v7, b8) =>
                                         case decBool (fuel - 1) b8 of
                                           Nothing => Nothing
-                                          Just (Pair v8 b9) => Just (Pair (DData v1 v2 v3 v4 v5 v6 v7 v8 noNodeRef) b9)
+                                          Just (v8, b9) => Just (DData v1 v2 v3 v4 v5 v6 v7 v8 noNodeRef, b9)
           1 =>
             case decStr (fuel - 1) b1 of
               Nothing => Nothing
-              Just (Pair v1 b2) =>
+              Just (v1, b2) =>
                 case decExpr (fuel - 1) b2 of
                   Nothing => Nothing
-                  Just (Pair v2 b3) => Just (Pair (DAxiom v1 v2 noNodeRef) b3)
+                  Just (v2, b3) => Just (DAxiom v1 v2 noNodeRef, b3)
           2 =>
             case decStr (fuel - 1) b1 of
               Nothing => Nothing
-              Just (Pair v1 b2) =>
+              Just (v1, b2) =>
                 case decStr (fuel - 1) b2 of
                   Nothing => Nothing
-                  Just (Pair v2 b3) =>
+                  Just (v2, b3) =>
                     case decExpr (fuel - 1) b3 of
                       Nothing => Nothing
-                      Just (Pair v3 b4) => Just (Pair (DExtern v1 v2 v3 noNodeRef) b4)
+                      Just (v3, b4) => Just (DExtern v1 v2 v3 noNodeRef, b4)
           3 =>
             case decStr (fuel - 1) b1 of
               Nothing => Nothing
-              Just (Pair v1 b2) =>
+              Just (v1, b2) =>
                 case decExprList (fuel - 1) b2 of
                   Nothing => Nothing
-                  Just (Pair v2 b3) =>
+                  Just (v2, b3) =>
                     case decExpr (fuel - 1) b3 of
                       Nothing => Nothing
-                      Just (Pair v3 b4) => Just (Pair (DSig v1 v2 v3 noNodeRef) b4)
+                      Just (v3, b4) => Just (DSig v1 v2 v3 noNodeRef, b4)
           4 =>
             case decStr (fuel - 1) b1 of
               Nothing => Nothing
-              Just (Pair v1 b2) =>
+              Just (v1, b2) =>
                 case decPatList (fuel - 1) b2 of
                   Nothing => Nothing
-                  Just (Pair v2 b3) =>
+                  Just (v2, b3) =>
                     case decExpr (fuel - 1) b3 of
                       Nothing => Nothing
-                      Just (Pair v3 b4) => Just (Pair (DFun v1 v2 v3 noNodeRef) b4)
+                      Just (v3, b4) => Just (DFun v1 v2 v3 noNodeRef, b4)
           5 =>
             case decStr (fuel - 1) b1 of
               Nothing => Nothing
-              Just (Pair v1 b2) =>
+              Just (v1, b2) =>
                 case decList decStr (fuel - 1) b2 of
                   Nothing => Nothing
-                  Just (Pair v2 b3) =>
+                  Just (v2, b3) =>
                     case decList decField (fuel - 1) b3 of
                       Nothing => Nothing
-                      Just (Pair v3 b4) =>
+                      Just (v3, b4) =>
                         case decList decStr (fuel - 1) b4 of
                           Nothing => Nothing
-                          Just (Pair v4 b5) =>
+                          Just (v4, b5) =>
                             case decBool (fuel - 1) b5 of
                               Nothing => Nothing
-                              Just (Pair v5 b6) =>
+                              Just (v5, b6) =>
                                 case decReprTier (fuel - 1) b6 of
                                   Nothing => Nothing
-                                  Just (Pair v6 b7) =>
+                                  Just (v6, b7) =>
                                     case decBool (fuel - 1) b7 of
                                       Nothing => Nothing
-                                      Just (Pair v7 b8) => Just (Pair (DRecord v1 v2 v3 v4 v5 v6 v7 noNodeRef) b8)
+                                      Just (v7, b8) => Just (DRecord v1 v2 v3 v4 v5 v6 v7 noNodeRef, b8)
           6 =>
             case decStr (fuel - 1) b1 of
               Nothing => Nothing
-              Just (Pair v1 b2) =>
+              Just (v1, b2) =>
                 case decList decTraitParam (fuel - 1) b2 of
                   Nothing => Nothing
-                  Just (Pair v2 b3) =>
+                  Just (v2, b3) =>
                     case decExprList (fuel - 1) b3 of
                       Nothing => Nothing
-                      Just (Pair vsup bsup) =>
+                      Just (vsup, bsup) =>
                         case decList decTraitMethod (fuel - 1) bsup of
                           Nothing => Nothing
-                          Just (Pair v3 b4) => Just (Pair (DTrait v1 v2 vsup v3 noNodeRef) b4)
+                          Just (v3, b4) => Just (DTrait v1 v2 vsup v3 noNodeRef, b4)
           7 =>
             case decExprList (fuel - 1) b1 of
               Nothing => Nothing
-              Just (Pair v1 b2) =>
+              Just (v1, b2) =>
                 case decExpr (fuel - 1) b2 of
                   Nothing => Nothing
-                  Just (Pair v2 b3) =>
+                  Just (v2, b3) =>
                     case decDecls (fuel - 1) b3 of
                       Nothing => Nothing
-                      Just (Pair v3 b4) => Just (Pair (DInstance v1 v2 v3 noNodeRef) b4)
+                      Just (v3, b4) => Just (DInstance v1 v2 v3 noNodeRef, b4)
           _ => Nothing
 
 -- | 解析 `(模式, 表达式)`（`ELet` 绑定 / `ECase` 分支的元素）。
-decPatExpr : Int -> Cur -> Maybe (Pair (Pair Pat Expr) Cur)
+decPatExpr : Int -> Cur -> Maybe ((Pat, Expr), Cur)
 decPatExpr fuel bytes =
   if fuel <= 0 then
     Nothing
   else
     case decPat (fuel - 1) bytes of
       Nothing => Nothing
-      Just (Pair p b1) =>
+      Just (p, b1) =>
         case decExpr (fuel - 1) b1 of
           Nothing => Nothing
-          Just (Pair e b2) => Just (Pair (Pair p e) b2)
+          Just (e, b2) => Just ((p, e), b2)
 
 -- | 解析局部函数子句（参数模式表 + body）。
-decClause : Int -> Cur -> Maybe (Pair (Pair (List Pat) Expr) Cur)
+decClause : Int -> Cur -> Maybe ((List Pat, Expr), Cur)
 decClause fuel bytes =
   if fuel <= 0 then
     Nothing
   else
     case decPatList (fuel - 1) bytes of
       Nothing => Nothing
-      Just (Pair ps b1) =>
+      Just (ps, b1) =>
         case decExpr (fuel - 1) b1 of
           Nothing => Nothing
-          Just (Pair body b2) => Just (Pair (Pair ps body) b2)
+          Just (body, b2) => Just ((ps, body), b2)
 
 -- | 解析 `(字段名, 表达式)`。
-decStrExpr : Int -> Cur -> Maybe (Pair (Pair String Expr) Cur)
+decStrExpr : Int -> Cur -> Maybe ((String, Expr), Cur)
 decStrExpr fuel bytes =
   if fuel <= 0 then
     Nothing
   else
     case decStr (fuel - 1) bytes of
       Nothing => Nothing
-      Just (Pair n b1) =>
+      Just (n, b1) =>
         case decExpr (fuel - 1) b1 of
           Nothing => Nothing
-          Just (Pair e b2) => Just (Pair (Pair n e) b2)
+          Just (e, b2) => Just ((n, e), b2)
 
 -- | 解析 `(字段名, 模式)`。
-decStrPat : Int -> Cur -> Maybe (Pair (Pair String Pat) Cur)
+decStrPat : Int -> Cur -> Maybe ((String, Pat), Cur)
 decStrPat fuel bytes =
   if fuel <= 0 then
     Nothing
   else
     case decStr (fuel - 1) bytes of
       Nothing => Nothing
-      Just (Pair n b1) =>
+      Just (n, b1) =>
         case decPat (fuel - 1) b1 of
           Nothing => Nothing
-          Just (Pair p b2) => Just (Pair (Pair n p) b2)
+          Just (p, b2) => Just ((n, p), b2)
 
 -- | 解析列表头 `[<n>:`（`Bytes.decNumStop` 是私有的；这里只服务本模块的三个递归
 -- 列表）。返回元素个数 + 剩余字节。
-decListHead : Int -> Cur -> Maybe (Pair Int Cur)
+decListHead : Int -> Cur -> Maybe (Int, Cur)
 decListHead fuel c =
   if fuel <= 0 then
     Nothing
@@ -851,14 +851,14 @@ decListHead fuel c =
       _ => Nothing
 
 -- | 列表头里的十进制数字，读到 `:`（58）为止。
-decListDigits : Int -> Int -> Cur -> Maybe (Pair Int Cur)
+decListDigits : Int -> Int -> Cur -> Maybe (Int, Cur)
 decListDigits fuel acc c =
   if fuel <= 0 then
     Nothing
   else
     case curChar c of
       Nothing => Nothing
-      Just b => if b == 58 then Just (Pair acc (curSkip c)) else if b >= 48 && b <= 57 then decListDigits (fuel - 1) (acc * 10 + (b - 48)) (curSkip c) else Nothing
+      Just b => if b == 58 then Just (acc, curSkip c) else if b >= 48 && b <= 57 then decListDigits (fuel - 1) (acc * 10 + (b - 48)) (curSkip c) else Nothing
 
 -- 三个递归列表（Expr / Pat / Decl）的解析器不复用 `Bytes.decList`：元素函数是同一
 -- 递归组内的 `decExpr` / `decPat` / `decDecl`，作为 `decList` 的裸实参时 SCT 只看到
@@ -866,154 +866,154 @@ decListDigits fuel acc c =
 -- （每个子调用 `(fuel - 1)`），检查器能逐跳看到下降。
 --
 -- | 解析表达式表（`EApp` 实参 / `DSig` 约束 / `DInstance` 上下文）。
-decExprList : Int -> Cur -> Maybe (Pair (List Expr) Cur)
+decExprList : Int -> Cur -> Maybe (List Expr, Cur)
 decExprList fuel bytes =
   if fuel <= 0 then
     Nothing
   else
     case decListHead fuel bytes of
       Nothing => Nothing
-      Just (Pair n b1) => decExprListItems (fuel - 1) n b1 []
+      Just (n, b1) => decExprListItems (fuel - 1) n b1 []
 
 -- | 表达式表的解析循环（元素数 + fuel 双重递减）。
-decExprListItems : Int -> Int -> Cur -> List Expr -> Maybe (Pair (List Expr) Cur)
+decExprListItems : Int -> Int -> Cur -> List Expr -> Maybe (List Expr, Cur)
 decExprListItems fuel n bytes acc =
   if fuel <= 0 then
     Nothing
   else if n <= 0 then
-    Just (Pair (reverse acc) bytes)
+    Just (reverse acc, bytes)
   else
     case decExpr (fuel - 1) bytes of
       Nothing => Nothing
-      Just (Pair x b1) => decExprListItems (fuel - 1) (n - 1) b1 (x :: acc)
+      Just (x, b1) => decExprListItems (fuel - 1) (n - 1) b1 (x :: acc)
 
 -- | 解析模式表（`PCon` 实参 / `DFun` 参数）。
-decPatList : Int -> Cur -> Maybe (Pair (List Pat) Cur)
+decPatList : Int -> Cur -> Maybe (List Pat, Cur)
 decPatList fuel bytes =
   if fuel <= 0 then
     Nothing
   else
     case decListHead fuel bytes of
       Nothing => Nothing
-      Just (Pair n b1) => decPatListItems (fuel - 1) n b1 []
+      Just (n, b1) => decPatListItems (fuel - 1) n b1 []
 
 -- | 模式表的解析循环（元素数 + fuel 双重递减）。
-decPatListItems : Int -> Int -> Cur -> List Pat -> Maybe (Pair (List Pat) Cur)
+decPatListItems : Int -> Int -> Cur -> List Pat -> Maybe (List Pat, Cur)
 decPatListItems fuel n bytes acc =
   if fuel <= 0 then
     Nothing
   else if n <= 0 then
-    Just (Pair (reverse acc) bytes)
+    Just (reverse acc, bytes)
   else
     case decPat (fuel - 1) bytes of
       Nothing => Nothing
-      Just (Pair x b1) => decPatListItems (fuel - 1) (n - 1) b1 (x :: acc)
+      Just (x, b1) => decPatListItems (fuel - 1) (n - 1) b1 (x :: acc)
 
 -- | 解析声明表（`DInstance` 的方法；也是顶层 `decDecls`）。
-export decDecls : Int -> Cur -> Maybe (Pair (List Decl) Cur)
+export decDecls : Int -> Cur -> Maybe (List Decl, Cur)
 decDecls fuel bytes =
   if fuel <= 0 then
     Nothing
   else
     case decListHead fuel bytes of
       Nothing => Nothing
-      Just (Pair n b1) => decDeclsItems (fuel - 1) n b1 []
+      Just (n, b1) => decDeclsItems (fuel - 1) n b1 []
 
 -- | 声明表的解析循环（元素数 + fuel 双重递减）。
-decDeclsItems : Int -> Int -> Cur -> List Decl -> Maybe (Pair (List Decl) Cur)
+decDeclsItems : Int -> Int -> Cur -> List Decl -> Maybe (List Decl, Cur)
 decDeclsItems fuel n bytes acc =
   if fuel <= 0 then
     Nothing
   else if n <= 0 then
-    Just (Pair (reverse acc) bytes)
+    Just (reverse acc, bytes)
   else
     case decDecl (fuel - 1) bytes of
       Nothing => Nothing
-      Just (Pair x b1) => decDeclsItems (fuel - 1) (n - 1) b1 (x :: acc)
+      Just (x, b1) => decDeclsItems (fuel - 1) (n - 1) b1 (x :: acc)
 
 -- | 整串解析 `Pat`：用串长当 fuel，并要求恰好消费完。
 export decPatComplete : String -> Maybe Pat
 decPatComplete s =
   case decPat (strLength s) (curOf s) of
     Nothing => Nothing
-    Just (Pair v rest) => if curAtEnd rest then Just v else Nothing
+    Just (v, rest) => if curAtEnd rest then Just v else Nothing
 
 -- | 整串解析 `Expr`：用串长当 fuel，并要求恰好消费完。
 export decExprComplete : String -> Maybe Expr
 decExprComplete s =
   case decExpr (strLength s) (curOf s) of
     Nothing => Nothing
-    Just (Pair v rest) => if curAtEnd rest then Just v else Nothing
+    Just (v, rest) => if curAtEnd rest then Just v else Nothing
 
 -- | 整串解析 `Decl`：用串长当 fuel，并要求恰好消费完。
 export decDeclComplete : String -> Maybe Decl
 decDeclComplete s =
   case decDecl (strLength s) (curOf s) of
     Nothing => Nothing
-    Just (Pair v rest) => if curAtEnd rest then Just v else Nothing
+    Just (v, rest) => if curAtEnd rest then Just v else Nothing
 
 -- | 整串解析 `Qty`：用串长当 fuel，并要求恰好消费完。
 export decQtyComplete : String -> Maybe Qty
 decQtyComplete s =
   case decQty (strLength s) (curOf s) of
     Nothing => Nothing
-    Just (Pair v rest) => if curAtEnd rest then Just v else Nothing
+    Just (v, rest) => if curAtEnd rest then Just v else Nothing
 
 -- | 整串解析 `ReprTier`：用串长当 fuel，并要求恰好消费完。
 export decReprTierComplete : String -> Maybe ReprTier
 decReprTierComplete s =
   case decReprTier (strLength s) (curOf s) of
     Nothing => Nothing
-    Just (Pair v rest) => if curAtEnd rest then Just v else Nothing
+    Just (v, rest) => if curAtEnd rest then Just v else Nothing
 
 -- | 整串解析 `InterpPart`：用串长当 fuel，并要求恰好消费完。
 export decInterpPartComplete : String -> Maybe InterpPart
 decInterpPartComplete s =
   case decInterpPart (strLength s) (curOf s) of
     Nothing => Nothing
-    Just (Pair v rest) => if curAtEnd rest then Just v else Nothing
+    Just (v, rest) => if curAtEnd rest then Just v else Nothing
 
 -- | 整串解析 `DoStmt`：用串长当 fuel，并要求恰好消费完。
 export decDoStmtComplete : String -> Maybe DoStmt
 decDoStmtComplete s =
   case decDoStmt (strLength s) (curOf s) of
     Nothing => Nothing
-    Just (Pair v rest) => if curAtEnd rest then Just v else Nothing
+    Just (v, rest) => if curAtEnd rest then Just v else Nothing
 
 -- | 整串解析 `Ctor`：用串长当 fuel，并要求恰好消费完。
 export decCtorComplete : String -> Maybe Ctor
 decCtorComplete s =
   case decCtor (strLength s) (curOf s) of
     Nothing => Nothing
-    Just (Pair v rest) => if curAtEnd rest then Just v else Nothing
+    Just (v, rest) => if curAtEnd rest then Just v else Nothing
 
 -- | 整串解析 `Field`：用串长当 fuel，并要求恰好消费完。
 export decFieldComplete : String -> Maybe Field
 decFieldComplete s =
   case decField (strLength s) (curOf s) of
     Nothing => Nothing
-    Just (Pair v rest) => if curAtEnd rest then Just v else Nothing
+    Just (v, rest) => if curAtEnd rest then Just v else Nothing
 
 -- | 整串解析 `TraitParam`：用串长当 fuel，并要求恰好消费完。
 export decTraitParamComplete : String -> Maybe TraitParam
 decTraitParamComplete s =
   case decTraitParam (strLength s) (curOf s) of
     Nothing => Nothing
-    Just (Pair v rest) => if curAtEnd rest then Just v else Nothing
+    Just (v, rest) => if curAtEnd rest then Just v else Nothing
 
 -- | 整串解析 `TraitMethod`：用串长当 fuel，并要求恰好消费完。
 export decTraitMethodComplete : String -> Maybe TraitMethod
 decTraitMethodComplete s =
   case decTraitMethod (strLength s) (curOf s) of
     Nothing => Nothing
-    Just (Pair v rest) => if curAtEnd rest then Just v else Nothing
+    Just (v, rest) => if curAtEnd rest then Just v else Nothing
 
 -- | 整串解析声明表（`decDecls` 的 roundtrip 入口）。
 export decDeclsComplete : String -> Maybe (List Decl)
 decDeclsComplete s =
   case decDecls (strLength s) (curOf s) of
     Nothing => Nothing
-    Just (Pair v rest) => if curAtEnd rest then Just v else Nothing
+    Just (v, rest) => if curAtEnd rest then Just v else Nothing
 
 -- ---------------------------------------------------------------
 -- 载荷层：整文件 `SourceFile`
@@ -1073,7 +1073,7 @@ encFixityLike : FixityDecl -> List String -> List String
 encFixityLike f acc = encStr f.fixityOp (encInt f.fixityLevel (encInt f.fixityAssoc acc))
 
 -- | 解析 `ExportItem`（tag 0/1/2/3/4）。
-export decExportItem : Int -> Cur -> Maybe (Pair ExportItem Cur)
+export decExportItem : Int -> Cur -> Maybe (ExportItem, Cur)
 decExportItem fuel c =
   if fuel <= 0 then
     Nothing
@@ -1081,15 +1081,15 @@ decExportItem fuel c =
     thenPair (decTag fuel c) (
         \tag, b1 =>
           case tag of
-            0 => thenPair (decStr (fuel - 1) b1) (\n, b2 => Just (Pair (XBare n noNodeRef) b2))
-            1 => thenPair (decStr (fuel - 1) b1) (\n, b2 => Just (Pair (XTypeAll n noNodeRef) b2))
-            3 => thenPair (decStr (fuel - 1) b1) (\n, b2 => thenPair (decList decStr (fuel - 1) b2) (\ms, b3 => Just (Pair (XTypeSome n ms noNodeRef) b3)))
-            2 => thenPair (decStr (fuel - 1) b1) (\n, b2 => Just (Pair (XModule n noNodeRef) b2))
-            4 => thenPair (decStr (fuel - 1) b1) (\n, b2 => thenPair (decMaybe decStr (fuel - 1) b2) (\alias, b3 => Just (Pair (XNamespace n alias noNodeRef) b3)))
+            0 => thenPair (decStr (fuel - 1) b1) (\n, b2 => Just (XBare n noNodeRef, b2))
+            1 => thenPair (decStr (fuel - 1) b1) (\n, b2 => Just (XTypeAll n noNodeRef, b2))
+            3 => thenPair (decStr (fuel - 1) b1) (\n, b2 => thenPair (decList decStr (fuel - 1) b2) (\ms, b3 => Just (XTypeSome n ms noNodeRef, b3)))
+            2 => thenPair (decStr (fuel - 1) b1) (\n, b2 => Just (XModule n noNodeRef, b2))
+            4 => thenPair (decStr (fuel - 1) b1) (\n, b2 => thenPair (decMaybe decStr (fuel - 1) b2) (\alias, b3 => Just (XNamespace n alias noNodeRef, b3)))
             _ => Nothing
       )
 
-decExportMembers : Int -> Cur -> Maybe (Pair ExportMembers Cur)
+decExportMembers : Int -> Cur -> Maybe (ExportMembers, Cur)
 decExportMembers fuel c =
   if fuel <= 0 then
     Nothing
@@ -1097,13 +1097,13 @@ decExportMembers fuel c =
     thenPair (decTag fuel c) (
         \tag, b1 =>
           case tag of
-            0 => Just (Pair EMNone b1)
-            1 => Just (Pair EMAll b1)
-            2 => thenPair (decList decStr (fuel - 1) b1) (\ms, b2 => Just (Pair (EMOnly ms) b2))
+            0 => Just (EMNone, b1)
+            1 => Just (EMAll, b1)
+            2 => thenPair (decList decStr (fuel - 1) b1) (\ms, b2 => Just (EMOnly ms, b2))
             _ => Nothing
       )
 
-decExportSpec : Int -> Cur -> Maybe (Pair ExportSpec Cur)
+decExportSpec : Int -> Cur -> Maybe (ExportSpec, Cur)
 decExportSpec fuel c =
   if fuel <= 0 then
     Nothing
@@ -1111,12 +1111,12 @@ decExportSpec fuel c =
     thenPair (decTag fuel c) (
         \tag, b1 =>
           case tag of
-            0 => thenPair (decStr (fuel - 1) b1) (\n, b2 => Just (Pair (ESValue n noSpan) b2))
-            1 => thenPair (decStr (fuel - 1) b1) (\n, b2 => thenPair (decExportMembers (fuel - 1) b2) (\ms, b3 => Just (Pair (ESType n ms noSpan) b3)))
+            0 => thenPair (decStr (fuel - 1) b1) (\n, b2 => Just (ESValue n noSpan, b2))
+            1 => thenPair (decStr (fuel - 1) b1) (\n, b2 => thenPair (decExportMembers (fuel - 1) b2) (\ms, b3 => Just (ESType n ms noSpan, b3)))
             _ => Nothing
       )
 
-decOpacity : Int -> Cur -> Maybe (Pair Opacity Cur)
+decOpacity : Int -> Cur -> Maybe (Opacity, Cur)
 decOpacity fuel c =
   if fuel <= 0 then
     Nothing
@@ -1124,46 +1124,46 @@ decOpacity fuel c =
     thenPair (decTag fuel c) (
         \tag, b1 =>
           case tag of
-            0 => Just (Pair OpacityOpaque b1)
-            1 => Just (Pair OpacityTransparent b1)
-            2 => Just (Pair OpacityAbstract b1)
+            0 => Just (OpacityOpaque, b1)
+            1 => Just (OpacityTransparent, b1)
+            2 => Just (OpacityAbstract, b1)
             _ => Nothing
       )
 
-decOpacitySpec : Int -> Cur -> Maybe (Pair OpacitySpec Cur)
+decOpacitySpec : Int -> Cur -> Maybe (OpacitySpec, Cur)
 decOpacitySpec fuel c =
   thenPair
     (decStr (fuel - 1) c)
-    (\name, b1 => thenPair (decOpacity (fuel - 1) b1) (\kind, b2 => Just (Pair (OpacitySpec name kind noSpan) b2)))
+    (\name, b1 => thenPair (decOpacity (fuel - 1) b1) (\kind, b2 => Just (OpacitySpec name kind noSpan, b2)))
 
 -- | 解析 `ModDecl`。
-export decModDecl : Int -> Cur -> Maybe (Pair ModDecl Cur)
+export decModDecl : Int -> Cur -> Maybe (ModDecl, Cur)
 decModDecl fuel c =
   thenPair
     (decStr (fuel - 1) c)
-    (\name, b1 => thenPair (decBool (fuel - 1) b1) (\hasList, b2 => thenPair (decList decExportItem (fuel - 1) b2) (\items, b3 => thenPair (decList decExportSpec (fuel - 1) b3) (\exports, b4 => thenPair (decList decExportItem (fuel - 1) b4) (\reexports, b5 => thenPair (decList decOpacitySpec (fuel - 1) b5) (\opacity, b6 => Just (Pair (ModDecl name hasList items exports reexports opacity noNodeRef) b6)))))))
+    (\name, b1 => thenPair (decBool (fuel - 1) b1) (\hasList, b2 => thenPair (decList decExportItem (fuel - 1) b2) (\items, b3 => thenPair (decList decExportSpec (fuel - 1) b3) (\exports, b4 => thenPair (decList decExportItem (fuel - 1) b4) (\reexports, b5 => thenPair (decList decOpacitySpec (fuel - 1) b5) (\opacity, b6 => Just (ModDecl name hasList items exports reexports opacity noNodeRef, b6)))))))
 
-decImportLike : Int -> Cur -> Maybe (Pair Import Cur)
+decImportLike : Int -> Cur -> Maybe (Import, Cur)
 decImportLike fuel c =
   thenPair
     (decStr (fuel - 1) c)
-    (\name, b1 => thenPair (decBool (fuel - 1) b1) (\qual, b2 => thenPair (decMaybe decStr (fuel - 1) b2) (\alias, b3 => Just (Pair (Import name qual alias noNodeRef) b3))))
+    (\name, b1 => thenPair (decBool (fuel - 1) b1) (\qual, b2 => thenPair (decMaybe decStr (fuel - 1) b2) (\alias, b3 => Just (Import name qual alias noNodeRef, b3))))
 
-decFixityLike : Int -> Cur -> Maybe (Pair FixityDecl Cur)
+decFixityLike : Int -> Cur -> Maybe (FixityDecl, Cur)
 decFixityLike fuel c =
   thenPair
     (decStr (fuel - 1) c)
-    (\op, b1 => thenPair (decInt (fuel - 1) b1) (\level, b2 => thenPair (decInt (fuel - 1) b2) (\assoc, b3 => Just (Pair (FixityDecl op level assoc noNodeRef) b3))))
+    (\op, b1 => thenPair (decInt (fuel - 1) b1) (\level, b2 => thenPair (decInt (fuel - 1) b2) (\assoc, b3 => Just (FixityDecl op level assoc noNodeRef, b3))))
 
 -- | 整串解析 `SourceFile`（AST 缓存载荷入口）：要求恰好消费完。
 export decSourceFileComplete : String -> Maybe SourceFile
 decSourceFileComplete s =
   case decSourceFileGo (strLength s) (curOf s) of
     Nothing => Nothing
-    Just (Pair v rest) => if curAtEnd rest then Just v else Nothing
+    Just (v, rest) => if curAtEnd rest then Just v else Nothing
 
-decSourceFileGo : Int -> Cur -> Maybe (Pair SourceFile Cur)
+decSourceFileGo : Int -> Cur -> Maybe (SourceFile, Cur)
 decSourceFileGo fuel c =
   thenPair
     (decMaybe decModDecl (fuel - 1) c)
-    (\modDecl, b1 => thenPair (decList decImportLike (fuel - 1) b1) (\imports, b2 => thenPair (decList decFixityLike (fuel - 1) b2) (\fixities, b3 => thenPair (decList decDecl (fuel - 1) b3) (\decls, b4 => thenPair (decList decExportSpec (fuel - 1) b4) (\exports, b5 => thenPair (decList decExportItem (fuel - 1) b5) (\reexports, b6 => thenPair (decList decOpacitySpec (fuel - 1) b6) (\opacity, b7 => Just (Pair (SourceFile modDecl imports fixities decls exports reexports opacity) b7))))))))
+    (\modDecl, b1 => thenPair (decList decImportLike (fuel - 1) b1) (\imports, b2 => thenPair (decList decFixityLike (fuel - 1) b2) (\fixities, b3 => thenPair (decList decDecl (fuel - 1) b3) (\decls, b4 => thenPair (decList decExportSpec (fuel - 1) b4) (\exports, b5 => thenPair (decList decExportItem (fuel - 1) b5) (\reexports, b6 => thenPair (decList decOpacitySpec (fuel - 1) b6) (\opacity, b7 => Just (SourceFile modDecl imports fixities decls exports reexports opacity, b7))))))))

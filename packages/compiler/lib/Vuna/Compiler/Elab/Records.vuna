@@ -37,9 +37,9 @@ export record RecordMeta(..) where
   recordMetaLinear : Bool
 
 -- | 字段表 → （名字，类型）对（供仍需要这种形状的调用方使用）。
-export recordFieldPairs : List RecordFieldMeta -> List (Pair String Expr)
+export recordFieldPairs : List RecordFieldMeta -> List (String, Expr)
 recordFieldPairs [] = []
-recordFieldPairs (f :: rest) = Pair f.recordFieldName f.recordFieldType :: recordFieldPairs rest
+recordFieldPairs (f :: rest) = (f.recordFieldName, f.recordFieldType) :: recordFieldPairs rest
 
 -- | 字段表 → 字段名列表。
 recordFieldNames : List RecordFieldMeta -> List String
@@ -51,17 +51,17 @@ export lookupRecord : String -> List RecordMeta -> Maybe RecordMeta
 lookupRecord name [] = Nothing
 lookupRecord name (r :: rest) = if r.recordMetaName == name then Just r else lookupRecord name rest
 
-export fieldNamesOf : List (Pair a b) -> List a
+export fieldNamesOf : List (a, b) -> List a
 fieldNamesOf [] = []
-fieldNamesOf ((Pair n t) :: rest) = n :: fieldNamesOf rest
+fieldNamesOf ((n, t) :: rest) = n :: fieldNamesOf rest
 
-export lookupProvided : String -> List (Pair String a) -> Maybe a
+export lookupProvided : String -> List (String, a) -> Maybe a
 lookupProvided fname [] = Nothing
-lookupProvided fname ((Pair n e) :: rest) = if n == fname then Just e else lookupProvided fname rest
+lookupProvided fname ((n, e) :: rest) = if n == fname then Just e else lookupProvided fname rest
 
-export hasDuplicateFieldNames : List (Pair String a) -> Bool
+export hasDuplicateFieldNames : List (String, a) -> Bool
 hasDuplicateFieldNames [] = False
-hasDuplicateFieldNames ((Pair n e) :: rest) =
+hasDuplicateFieldNames ((n, e) :: rest) =
   case lookupProvided n rest of
     Just _ => True
     Nothing => hasDuplicateFieldNames rest
@@ -75,14 +75,14 @@ unknownFieldMsg sp fname = withDiagSpan sp (tcMsg (RecordUnknownField fname) [fn
 export duplicateFieldMsg : Span -> Diagnostic
 duplicateFieldMsg sp = withDiagSpan sp (tcMsg RecordDuplicateField [])
 
-hasUnknownFields : List String -> List (Pair String a) -> Bool
+hasUnknownFields : List String -> List (String, a) -> Bool
 hasUnknownFields fieldNames [] = False
-hasUnknownFields fieldNames ((Pair n v) :: rest) =
+hasUnknownFields fieldNames ((n, v) :: rest) =
   if memName n fieldNames then hasUnknownFields fieldNames rest else True
 
-export firstUnknownFieldMsg : Span -> List String -> List (Pair String a) -> Diagnostic
+export firstUnknownFieldMsg : Span -> List String -> List (String, a) -> Diagnostic
 firstUnknownFieldMsg sp fieldNames [] = unknownFieldMsg sp ""
-firstUnknownFieldMsg sp fieldNames ((Pair n v) :: rest) =
+firstUnknownFieldMsg sp fieldNames ((n, v) :: rest) =
   if memName n fieldNames then firstUnknownFieldMsg sp fieldNames rest else unknownFieldMsg sp n
 
 -- 收集 record 声明的结构化元数据（**不降级**；DRecord 原样留在 decls 里）。
@@ -176,7 +176,7 @@ desugarPatternFuel fuel records pat =
           Nothing => tcErr1 sp (UnknownRecord (rnameKey name)) (rnameKey name)
           Just r => if hasDuplicateFieldNames fields then ErrC (duplicateFieldMsg sp) else if hasUnknownFields (recordFieldNames r.recordMetaFields) fields then ErrC (firstUnknownFieldMsg sp (recordFieldNames r.recordMetaFields) fields) else Vuna.Compiler.Base.Common.bind (desugarRecordPatternFieldsFuel (fuel - 1) records r.recordMetaFields fields sp) (\ps => OkC (PCon (classifyName r.recordMetaCtor) ps sp))
 
-desugarRecordPatternFieldsFuel : Int -> List RecordMeta -> List RecordFieldMeta -> List (Pair String Pat) -> Span -> Check (List Pat)
+desugarRecordPatternFieldsFuel : Int -> List RecordMeta -> List RecordFieldMeta -> List (String, Pat) -> Span -> Check (List Pat)
 desugarRecordPatternFieldsFuel fuel records fdefs provided sp =
   if fuel <= 0 then
     icFuel "record pattern desugar"
@@ -229,7 +229,7 @@ desugarDoStmtFuel fuel records stmt =
       DExpr e sp => Vuna.Compiler.Base.Common.bind (desugarExprFuel (fuel - 1) records e) (\e2 => OkC (DExpr e2 sp))
       DLet binds sp => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (desugarBindFuel (fuel - 1) records) binds) (\b2 => OkC (DLet b2 sp))
 
-desugarRecordValuesFuel : Int -> List RecordMeta -> List RecordFieldMeta -> List (Pair String Expr) -> Span -> Check (List Expr)
+desugarRecordValuesFuel : Int -> List RecordMeta -> List RecordFieldMeta -> List (String, Expr) -> Span -> Check (List Expr)
 desugarRecordValuesFuel fuel records [] provided sp =
   if fuel <= 0 then icFuel "record desugar" else OkC []
 desugarRecordValuesFuel fuel records (f :: rest) provided sp =
@@ -240,42 +240,40 @@ desugarRecordValuesFuel fuel records (f :: rest) provided sp =
       Nothing => ErrC (missingFieldMsg sp f.recordFieldName)
       Just v => Vuna.Compiler.Base.Common.bind (desugarExprFuel (fuel - 1) records v) (\v2 => Vuna.Compiler.Base.Common.bind (desugarRecordValuesFuel (fuel - 1) records rest provided sp) (\vs => OkC (v2 :: vs)))
 
-desugarFieldValueFuel : Int -> List RecordMeta -> Pair String Expr -> Check (Pair String Expr)
-desugarFieldValueFuel fuel records (Pair fname v) =
+desugarFieldValueFuel : Int -> List RecordMeta -> (String, Expr) -> Check (String, Expr)
+desugarFieldValueFuel fuel records (fname, v) =
   if fuel <= 0 then
     icFuel "record desugar"
   else
-    Vuna.Compiler.Base.Common.bind
-      (desugarExprFuel (fuel - 1) records v)
-      (\v2 => OkC (Pair fname v2))
+    Vuna.Compiler.Base.Common.bind (desugarExprFuel (fuel - 1) records v) (\v2 => OkC (fname, v2))
 
-desugarBindFuel : Int -> List RecordMeta -> Pair Pat Expr -> Check (Pair Pat Expr)
-desugarBindFuel fuel records (Pair pat value) =
+desugarBindFuel : Int -> List RecordMeta -> (Pat, Expr) -> Check (Pat, Expr)
+desugarBindFuel fuel records (pat, value) =
   if fuel <= 0 then
     icFuel "record desugar"
   else
     Vuna.Compiler.Base.Common.bind
       (desugarPatternFuel (fuel - 1) records pat)
-      (\p2 => Vuna.Compiler.Base.Common.bind (desugarExprFuel (fuel - 1) records value) (\v2 => OkC (Pair p2 v2)))
+      (\p2 => Vuna.Compiler.Base.Common.bind (desugarExprFuel (fuel - 1) records value) (\v2 => OkC (p2, v2)))
 
 -- 局部函数 clause（参数模式列表 + body）。
-desugarLocalClauseFuel : Int -> List RecordMeta -> Pair (List Pat) Expr -> Check (Pair (List Pat) Expr)
+desugarLocalClauseFuel : Int -> List RecordMeta -> (List Pat, Expr) -> Check (List Pat, Expr)
 desugarLocalClauseFuel fuel records clause =
   if fuel <= 0 then
     icFuel "record desugar"
   else
     Vuna.Compiler.Base.Common.bind
       (Vuna.Compiler.Base.Common.traverse (desugarPatternFuel (fuel - 1) records) (firstOf clause))
-      (\p2 => Vuna.Compiler.Base.Common.bind (desugarExprFuel (fuel - 1) records (secondOf clause)) (\b2 => OkC (Pair p2 b2)))
+      (\p2 => Vuna.Compiler.Base.Common.bind (desugarExprFuel (fuel - 1) records (secondOf clause)) (\b2 => OkC (p2, b2)))
 
-desugarAltFuel : Int -> List RecordMeta -> Pair Pat Expr -> Check (Pair Pat Expr)
-desugarAltFuel fuel records (Pair pat body) =
+desugarAltFuel : Int -> List RecordMeta -> (Pat, Expr) -> Check (Pat, Expr)
+desugarAltFuel fuel records (pat, body) =
   if fuel <= 0 then
     icFuel "record desugar"
   else
     Vuna.Compiler.Base.Common.bind
       (desugarPatternFuel (fuel - 1) records pat)
-      (\p2 => Vuna.Compiler.Base.Common.bind (desugarExprFuel (fuel - 1) records body) (\b2 => OkC (Pair p2 b2)))
+      (\p2 => Vuna.Compiler.Base.Common.bind (desugarExprFuel (fuel - 1) records body) (\b2 => OkC (p2, b2)))
 
 -- HasField 实例：为当前模块的 record 字段生成 `instance HasField (Field "f") R T`。
 -- | 为一批记录的每个字段生成 `HasField` 实例声明。
@@ -296,9 +294,9 @@ recordHasFieldInstancesOf r =
     0
 
 -- | 逐字段生成 `HasField` 实例的递归辅助（带字段下标）。
-recordHasFieldInstancesGo : String -> List String -> String -> Int -> List (Pair String Expr) -> Int -> List Decl
+recordHasFieldInstancesGo : String -> List String -> String -> Int -> List (String, Expr) -> Int -> List Decl
 recordHasFieldInstancesGo rname params ctor n [] i = []
-recordHasFieldInstancesGo rname params ctor n ((Pair fname fty) :: rest) i =
+recordHasFieldInstancesGo rname params ctor n ((fname, fty) :: rest) i =
   hasFieldInstanceDecl rname params ctor n i fname fty
     :: recordHasFieldInstancesGo rname params ctor n rest (i + 1)
 
@@ -333,7 +331,7 @@ hasFieldInstanceDecl rname params ctor n fi fname fty =
     body =
       ECase
         (EVar (classifyName "p") fsp)
-        [Pair (PCon (classifyName ctor) pats fsp) (EVar (classifyName (recordInstanceVar fi)) fsp)]
+        [(PCon (classifyName ctor) pats fsp, EVar (classifyName (recordInstanceVar fi)) fsp)]
         fsp
     meth = DFun hasFieldMethodName [PVar "p" fsp] body fsp
   in DInstance [] head [meth] fsp
@@ -342,16 +340,16 @@ hasFieldInstanceDecl rname params ctor n fi fname fty =
 -- 同时返回本包/依赖包的 `RecordMeta` 表，供 `elabDatas` 把字段表写进 `DtData`。
 -- 返回的 decls **保留 DRecord**（不再降级成 DData）；依赖包的 record 头只贡献
 -- 元数据，供本包字段访问/更新/模式与 `HasField` 实例生成使用。
-export prepareDecls : List Decl -> Check (Pair (List RecordMeta) (List Decl))
+export prepareDecls : List Decl -> Check (List RecordMeta, List Decl)
 prepareDecls decls0 = prepareDeclsWith [] decls0
 
 -- 接口摘要路径：本包的 record 语法降级需要**依赖包 record 头**参与字段访问/
 -- record 更新/模式降级的消解（依赖包只提供语法头，不精化）；auxDecls 是依赖模块的原始 decls。
-export prepareDeclsWith : List Decl -> List Decl -> Check (Pair (List RecordMeta) (List Decl))
+export prepareDeclsWith : List Decl -> List Decl -> Check (List RecordMeta, List Decl)
 prepareDeclsWith auxDecls decls0 =
   let
     records = append (recordsOfDecls auxDecls) (recordsOfDecls decls0)
-  in Vuna.Compiler.Base.Common.bind (desugarRecords records decls0) (\ds => OkC (Pair records ds))
+  in Vuna.Compiler.Base.Common.bind (desugarRecords records decls0) (\ds => OkC (records, ds))
 
 -- 记录的构造子名：记录名本身。Elab 在值位置先查构造子表、类型位置走 globals
 -- （`checkType` / `checkAppUnderType`），所以「类型名与构造子同名」不冲突
@@ -365,10 +363,10 @@ desugarExpr a1 a2 = desugarExprFuel (exprBudget 512 a2) a1 a2
 
 -- case 分支左端的 as-pattern（`y@pat => body`）：等价于 `pat => let y = <scrutinee> in body`。
 -- 纯语言里 scrutinee 可重复求值；常见形态（scrutinee 是变量）无额外开销。
-expandCaseAs : Expr -> Pair Pat Expr -> Pair Pat Expr
-expandCaseAs scrut (Pair pat body) = expandCaseAsGo scrut pat body
+expandCaseAs : Expr -> (Pat, Expr) -> (Pat, Expr)
+expandCaseAs scrut (pat, body) = expandCaseAsGo scrut pat body
 
-expandCaseAsGo : Expr -> Pat -> Expr -> Pair Pat Expr
+expandCaseAsGo : Expr -> Pat -> Expr -> (Pat, Expr)
 expandCaseAsGo scrut (PAs n inner psp) body =
-  expandCaseAsGo scrut inner (ELet [Pair (PVar n psp) scrut] body False psp)
-expandCaseAsGo scrut pat body = Pair pat body
+  expandCaseAsGo scrut inner (ELet [(PVar n psp, scrut)] body False psp)
+expandCaseAsGo scrut pat body = (pat, body)

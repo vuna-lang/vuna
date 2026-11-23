@@ -708,6 +708,42 @@ exprTextLine src e =
       else
         trimEnd (tailFromCol line col)
 
+-- | 内部：范围内方括号净差（`]` 数 - `[` 数）。
+bracketDeficit : LintSrc -> Int -> Int -> Int
+bracketDeficit src start end = bracketDeficitGo src.lintSrcToks start end 0
+
+bracketDeficitGo : List PTok -> Int -> Int -> Int -> Int
+bracketDeficitGo [] start end acc = acc
+bracketDeficitGo (t :: rest) start end acc =
+  let
+    off = posOffset t.ptokPos
+  in if off < start || off >= end then
+    bracketDeficitGo rest start end acc
+  else
+    case t of
+      PTok (TSym "[") _ => bracketDeficitGo rest start end (acc - 1)
+      PTok (TSym "]") _ => bracketDeficitGo rest start end (acc + 1)
+      _ => bracketDeficitGo rest start end acc
+
+-- | 内部：范围里 `[` 多于 `]` 时把紧跟的 `]` 补进末偏移（列表字面量的 span 末尾不含 `]`）。
+widenBracketEnd : LintSrc -> Int -> Int -> Int
+widenBracketEnd src start end =
+  let
+    deficit = bracketDeficit src start end
+  in if deficit >= 0 then end else widenBracketEndGo src.lintSrcToks end deficit
+
+widenBracketEndGo : List PTok -> Int -> Int -> Int
+widenBracketEndGo [] end n = end
+widenBracketEndGo (t :: rest) end n =
+  if n >= 0 then
+    end
+  else if posOffset t.ptokPos < end then
+    widenBracketEndGo rest end n
+  else
+    case t of
+      PTok (TSym "]") _ => widenBracketEndGo rest (posEndOffset t.ptokPos) (n + 1)
+      _ => end
+
 -- | 内部：表达式是否收束在自己的行片段末尾：同行后随 token 只能是 `else`（inline 链尾）或
 -- 没有。
 segmentOk : LintSrc -> Expr -> Bool
@@ -1990,20 +2026,49 @@ pairSugarElems fuel e =
       EApp (EVar name _) ([a, b]) _ => if name == "Pair" then Just (a :: pairTailElems (fuel - 1) b) else Nothing
       _ => Nothing
 
--- | 内部：pair 元素的单行原文：按表达式自身（括号节点含括号）的字节 span 切片，避免相邻的
--- `)` / `,` 被卷进来；跨行或偏移不完整时回落到 `exprText`。
+-- | 内部：pair 元素的单行原文。起点取 `startExpr` 的真实起点（中缀 span 从运算符开始），
+-- 终点先把元素的末 token 补齐（空字符串 / 列表字面量的 span 末尾可能短一位），再按括号净差
+-- 把紧邻的 `(` / `)` / `[` / `]` 补回；跨行时为空串。
 pairElemText : LintSrc -> Expr -> String
 pairElemText src e =
-  let
-    sp = nodeRefSpan (exprRef e)
-    start = spanStartOffset sp
-    end = spanEndOffset sp
-  in if not (exprSingleLine e) then
+  if not (exprSingleLine e) then
     ""
-  else if end <= start || start == 0 && spanStartCol sp > 1 then
-    exprText src e
   else
-    trimEnd (sliceOffsets src start end)
+    let
+      start0 = offsetOfLineCol src (exprStartLine e) (exprStartCol e)
+      raw = spanEndOffset (exprSpan e)
+      end0 = if raw <= start0 then raw else tokenEndCovering (raw - 1) src.lintSrcToks
+      start = widenStart src start0 end0
+      end1 = widenEnd src start0 end0
+      end = widenBracketEnd src start0 end1
+    in if end <= start then exprText src e else trimEnd (sliceOffsets src start end)
+
+-- | 内部：把单行表达式 `e` 整体替换成 `replacement` 的编辑。切片走字节偏移（span 末尾对空
+-- 字符串等短一位时按 token 覆盖修正），并剥离紧邻的成对括号；跨行、含注释或偏移缺失时
+-- `Nothing`。
+pairEdit : LintSrc -> Expr -> String -> Maybe Edit
+pairEdit src e replacement =
+  let
+    lineNo = exprStartLine e
+    line = lineAt src.lintSrcLines lineNo
+    lineStart = offsetOfLineCol src lineNo 1
+    lineEnd = lineStart + byteLength line
+    start0 = offsetOfLineCol src lineNo (exprStartCol e)
+    raw = spanEndOffset (exprSpan e)
+    end1 = if raw <= start0 then raw else tokenEndCovering (raw - 1) src.lintSrcToks
+    end0 = widenBracketEnd src start0 (widenEnd src start0 end1)
+  in if not (exprSingleLine e) then
+    Nothing
+  else if not (linesCleanRange src.lintSrcLines lineNo lineNo) then
+    Nothing
+  else if raw <= start0 then
+    Nothing
+  else
+    let
+      prefix = sliceOffsets src lineStart start0
+      suffix = sliceOffsets src end0 lineEnd
+      stripped = stripParens (strLength line + 1) prefix suffix
+    in Just (Edit lineNo lineNo [firstOf stripped ++ replacement ++ secondOf stripped])
 
 -- | 内部：pair 应用的单行 finding 与编辑：元素原文齐全时改写成 `(a, b)`，否则只报告 `(...)`。
 pairFindings : LintSrc -> Expr -> List Expr -> List Finding
@@ -2011,7 +2076,7 @@ pairFindings src e elems =
   let
     texts = map (pairElemText src) elems
     suggestion = if allNonEmpty texts then "(" ++ join ", " texts ++ ")" else "(...)"
-    edit = if allNonEmpty texts then exprEdit src e suggestion else Nothing
+    edit = if allNonEmpty texts then pairEdit src e suggestion else Nothing
   in [
     mkFindingAt
       (exprStartLine e)
@@ -2042,14 +2107,16 @@ pairPatSugarElems fuel p =
       PCon name ([a, b]) _ => if name == "Pair" then Just (a :: pairPatTailElems (fuel - 1) b) else Nothing
       _ => Nothing
 
--- | 内部：模式的单行原文；偏移完整时按 span 字节切片（`spanEndOffset` 是开区间），
--- 否则回落到行列路径。跨行时为空串（不能安全切片）。
+-- | 内部：模式的单行原文；按字节偏移切片（span 末尾对空字符串 / 列表模式可能短一位时按
+-- token 覆盖修正），未闭合的 `[` 用紧跟的 `]` 补回；偏移缺失时回落到行列路径。跨行时为空串。
 patText1 : LintSrc -> Pat -> String
 patText1 src pat =
   let
     sp = patSpan pat
     start = spanStartOffset sp
-    end = spanEndOffset sp
+    raw = spanEndOffset sp
+    end0 = if raw <= start then raw else tokenEndCovering (raw - 1) src.lintSrcToks
+    end = widenBracketEnd src start end0
   in if not (spanSingleLine sp) then
     ""
   else if end <= start || start == 0 && spanStartCol sp > 1 then
@@ -2057,22 +2124,32 @@ patText1 src pat =
   else
     trimEnd (sliceOffsets src start end)
 
--- | 内部：把单行模式替换成 replacement 的编辑；跨行、含注释或定位不到末列时 `Nothing`。
+-- | 内部：把单行模式替换成 replacement 的编辑。切片走字节偏移（span 末尾短一位时按 token
+-- 覆盖修正），并剥离紧邻的成对括号；跨行、含注释或偏移缺失时 `Nothing`。
 patEdit : LintSrc -> Pat -> String -> Maybe Edit
 patEdit src pat replacement =
   let
     sp = patSpan pat
+    lineNo = spanStartLine sp
+    line = lineAt src.lintSrcLines lineNo
+    lineStart = offsetOfLineCol src lineNo 1
+    lineEnd = lineStart + byteLength line
+    start0 = spanStartOffset sp
+    raw = spanEndOffset sp
+    end1 = if raw <= start0 then raw else tokenEndCovering (raw - 1) src.lintSrcToks
+    end0 = widenBracketEnd src start0 (widenEnd src start0 end1)
   in if not (spanSingleLine sp) then
     Nothing
-  else if not (linesCleanRange src.lintSrcLines (spanStartLine sp) (spanEndLine sp)) then
+  else if not (linesCleanRange src.lintSrcLines lineNo lineNo) then
+    Nothing
+  else if raw <= start0 then
     Nothing
   else
     let
-      line = lineAt src.lintSrcLines (spanStartLine sp)
-      prefix = prefixBeforeCol line (spanStartCol sp)
-      suffix = tailFromCol line (spanEndCol sp)
+      prefix = sliceOffsets src lineStart start0
+      suffix = sliceOffsets src end0 lineEnd
       stripped = stripParens (strLength line + 1) prefix suffix
-    in Just (Edit (spanStartLine sp) (spanStartLine sp) [firstOf stripped ++ replacement ++ secondOf stripped])
+    in Just (Edit lineNo lineNo [firstOf stripped ++ replacement ++ secondOf stripped])
 
 -- | 内部：pair 模式的 finding 与编辑：元素原文齐全时改写成 `(a, b)`，否则只报告 `(...)`。
 pairPatFindings : LintSrc -> Pat -> List Pat -> List Finding
@@ -2324,6 +2401,13 @@ traitParamKinds ((TraitParam name kind) :: rest) =
     Just e => e :: traitParamKinds rest
     Nothing => traitParamKinds rest
 
+-- | 内部：只保留 pair-sugar finding。隐式 Pi 签名的函数跳过 clause 级改写（会改变模式矩阵与
+-- 隐式 Pi 的对齐），但 pair-sugar 只换语法、不动 clause 结构，因此其体仍扫描。
+onlyPairFindings : List Finding -> List Finding
+onlyPairFindings [] = []
+onlyPairFindings (f :: rest) =
+  if f.findingCode == lintCode PairSugar then f :: onlyPairFindings rest else onlyPairFindings rest
+
 -- | 内部：单条声明的 finding：函数子句做 clause 拆分、直接体扫描与模式 pair-sugar（隐式 Pi
 -- 签名跳过 clause 级改写），签名、axiom、extern、data、record、trait、instance 的类型位置走
 -- 类型位置的语法归一。
@@ -2331,16 +2415,16 @@ declFindings : LintSrc -> List Decl -> Decl -> List Decl -> List Finding
 declFindings src allDecls (DFun name pats body r) rest =
   let
     line = spanStartLine (nodeRefSpan r)
-    lifted =
+    bodyFindings =
       if hasImplicitSig name allDecls then
-        []
+        onlyPairFindings (walkExpr lintFuel src body)
       else
         let
           lastForName = not (laterHasFun name rest)
           singleClause = countFunClauses name allDecls == 1
           lane = LClause line pats lastForName singleClause
         in append (caseToClauses src line name pats body singleClause) (scanBodyPos lintFuel src (Just lane) body)
-  in append (walkPairPats True lintFuel src pats) lifted
+  in append (walkPairPats True lintFuel src pats) bodyFindings
 declFindings src allDecls (DSig name ctx ty sp) rest =
   append (walkTypeSyntaxExprs lintFuel src ctx) (walkTypeSyntax lintFuel src ty)
 declFindings src allDecls (DAxiom name ty sp) rest = walkTypeSyntax lintFuel src ty

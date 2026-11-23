@@ -111,14 +111,13 @@ valueNamesOf decls = concatMap declValueNames decls
 --   data 构造子 -> "Data.Ctor"；record 构造子 -> "Record"（构造子名 = 类型名）。
 -- trait 方法不在其中（不是族的构造子，仍按原名字解析）。
 -- | 从声明列表收集构造子候选（短名 → 族限定名）。
-ctorCandsOf : List Decl -> List (Pair String String)
+ctorCandsOf : List Decl -> List (String, String)
 ctorCandsOf [] = []
 ctorCandsOf (d :: rest) =
   case d of
     DData dname params kind ctors derivings viaField repr lin sp =>
-      append (map (\c => Pair (ctorName c) "${dname}.${ctorName c}") ctors) (ctorCandsOf rest)
-    DRecord dname params fields derivings viaField repr lin sp =>
-      Pair dname dname :: ctorCandsOf rest
+      append (map (\c => (ctorName c, "${dname}.${ctorName c}")) ctors) (ctorCandsOf rest)
+    DRecord dname params fields derivings viaField repr lin sp => (dname, dname) :: ctorCandsOf rest
     _ => ctorCandsOf rest
 
 -- | 解析期命名空间（`release` 决定 assert/todo 拒绝检查是否生效；
@@ -160,11 +159,11 @@ localCtorTarget prefix ns name =
 -- 候选按出现顺序去重（`Base.nubNames`）。
 -- 从 (module, ExportEntry) 取 target（lambda 里直接字段访问在 vuna 里不可用）。
 -- | `(module, ExportEntry)` 里的 target（lambda 里不能直接字段访问）。
-pairExportTarget : Pair String ExportEntry -> String
+pairExportTarget : (String, ExportEntry) -> String
 pairExportTarget p = (secondOf p).target
 
 -- | 该导出条目是否指向 data/record 构造子。
-pairIsDataCtor : List Module -> Pair String ExportEntry -> Bool
+pairIsDataCtor : List Module -> (String, ExportEntry) -> Bool
 pairIsDataCtor modules p = isDataOrRecordCtorTarget modules (pairExportTarget p)
 
 -- | open import 里同名 data/record 构造子的 target 集合（去重）。
@@ -193,10 +192,10 @@ notEmptyList (_ :: rest) = True
 
 -- | 命名空间路径：在模块 `m` 的导出表里按最长点号前缀匹配 `kind = "module"` 条目，
 -- 连续走到最后一个模块；返回目标模块与未消费的剩余段。
-walkNamespacePaths : List Module -> String -> List String -> Check (Pair String (List String))
+walkNamespacePaths : List Module -> String -> List String -> Check (String, List String)
 walkNamespacePaths modules m segs = walkNamespacePathsFuel (1 + List.length segs) modules m segs
 
-walkNamespacePathsFuel : Int -> List Module -> String -> List String -> Check (Pair String (List String))
+walkNamespacePathsFuel : Int -> List Module -> String -> List String -> Check (String, List String)
 walkNamespacePathsFuel fuel modules m segs =
   if fuel <= 0 then
     icFuel "namespace path"
@@ -204,28 +203,28 @@ walkNamespacePathsFuel fuel modules m segs =
     Vuna.Compiler.Base.Common.bind (exportsOf modules m) (
         \es =>
           case longestNamespaceEntry es segs of
-            Nothing => OkC (Pair m segs)
-            Just (Pair target k) => walkNamespacePathsFuel (fuel - 1) modules target (dropSegs k segs)
+            Nothing => OkC (m, segs)
+            Just (target, k) => walkNamespacePathsFuel (fuel - 1) modules target (dropSegs k segs)
       )
   else
-    OkC (Pair m segs)
+    OkC (m, segs)
 
 -- | 在导出表里找最长匹配的点号路径前缀（`Map` / `Base.Container.Map`），返回 target 与消费的段数。
-longestNamespaceEntry : List ExportEntry -> List String -> Maybe (Pair String Int)
+longestNamespaceEntry : List ExportEntry -> List String -> Maybe (String, Int)
 longestNamespaceEntry es segs = longestNamespaceEntryGo es segs (List.length segs)
 
-longestNamespaceEntryGo : List ExportEntry -> List String -> Int -> Maybe (Pair String Int)
+longestNamespaceEntryGo : List ExportEntry -> List String -> Int -> Maybe (String, Int)
 longestNamespaceEntryGo es segs k =
   if k <= 0 then
     Nothing
   else
     case findExportModule es (joinDots (takeSegs k segs)) of
-      Just e => Just (Pair e.target k)
+      Just e => Just (e.target, k)
       Nothing => longestNamespaceEntryGo es segs (k - 1)
 
 -- | 把名字的前缀解析成若干「目标模块 + 剩余段」候选：先找最长真实 import 前缀
 -- （强/弱限定候选），再逐候选走命名空间路径。歧义留到成员查找之后再判定。
-resolvePathPrefixes : List Module -> List Import -> List String -> Check (List (Pair String (List String)))
+resolvePathPrefixes : List Module -> List Import -> List String -> Check (List (String, List String))
 resolvePathPrefixes modules imports segs =
   resolvePathPrefixesTry modules imports segs (List.length segs - 1)
 
@@ -237,7 +236,7 @@ realModuleName modules name =
     Just real => real
     Nothing => name
 
-resolvePathPrefixesTry : List Module -> List Import -> List String -> Int -> Check (List (Pair String (List String)))
+resolvePathPrefixesTry : List Module -> List Import -> List String -> Int -> Check (List (String, List String))
 resolvePathPrefixesTry modules imports segs n =
   if n < 1 then
     OkC []
@@ -252,22 +251,22 @@ resolvePathPrefixesTry modules imports segs n =
                 ps => OkC ps
           )
 
-walkNamespaceCandidates : List Module -> List String -> List String -> List (Pair String (List String)) -> Check (List (Pair String (List String)))
+walkNamespaceCandidates : List Module -> List String -> List String -> List (String, List String) -> Check (List (String, List String))
 walkNamespaceCandidates modules [] segs acc = OkC (reverse acc)
 walkNamespaceCandidates modules (m :: rest) segs acc =
   Vuna.Compiler.Base.Common.bind
     (walkNamespacePaths modules m segs)
     (\p => walkNamespaceCandidates modules rest segs ((::) p acc))
 
-uniqPathResults : List (Pair String (List String)) -> List (Pair String (List String))
+uniqPathResults : List (String, List String) -> List (String, List String)
 uniqPathResults [] = []
 uniqPathResults (p :: rest) =
   if memPathKey (pathKey p) rest then uniqPathResults rest else (::) p (uniqPathResults rest)
 
-pathKey : Pair String (List String) -> String
-pathKey (Pair m segs) = "${m}|${joinDots segs}"
+pathKey : (String, List String) -> String
+pathKey (m, segs) = "${m}|${joinDots segs}"
 
-memPathKey : String -> List (Pair String (List String)) -> Bool
+memPathKey : String -> List (String, List String) -> Bool
 memPathKey key [] = False
 memPathKey key (p :: rest) = pathKey p == key || memPathKey key rest
 
@@ -279,24 +278,24 @@ commaJoin (x :: rest) = "${x}, ${commaJoin rest}"
 lastSegmentOf : String -> String
 lastSegmentOf name =
   case splitLastDot (splitOnDot name) of
-    Pair _ base => base
+    (_, base) => base
 
 -- | 候选里第一个剩余段的名字（用于诊断）。
-memberLabel : String -> List (Pair String (List String)) -> String
+memberLabel : String -> List (String, List String) -> String
 memberLabel fallback [] = fallback
-memberLabel fallback ((Pair _ rest) :: more) =
+memberLabel fallback ((_, rest) :: more) =
   case rest of
     base :: _ => base
     [] => memberLabel fallback more
 
-firstModuleOf : String -> List (Pair String (List String)) -> String
+firstModuleOf : String -> List (String, List String) -> String
 firstModuleOf fallback [] = fallback
-firstModuleOf fallback ((Pair m _) :: _) = m
+firstModuleOf fallback ((m, _) :: _) = m
 
 -- | 在候选模块里按短名收集导出条目（只接受剩余段恰好是 `[base]` 的候选）。
-entryHits : (List ExportEntry -> String -> List ExportEntry) -> List Module -> List (Pair String (List String)) -> String -> Check (List (Pair String ExportEntry))
+entryHits : (List ExportEntry -> String -> List ExportEntry) -> List Module -> List (String, List String) -> String -> Check (List (String, ExportEntry))
 entryHits pick modules [] base = OkC []
-entryHits pick modules ((Pair m rest) :: more) base =
+entryHits pick modules ((m, rest) :: more) base =
   case rest of
     [member] =>
       if member == base then
@@ -304,7 +303,7 @@ entryHits pick modules ((Pair m rest) :: more) base =
             \es =>
               case pick es base of
                 [] => entryHits pick modules more base
-                entries => Vuna.Compiler.Base.Common.bind (entryHits pick modules more base) (\hits => OkC (append (map (\e => Pair m e) entries) hits))
+                entries => Vuna.Compiler.Base.Common.bind (entryHits pick modules more base) (\hits => OkC (append (map (\e => (m, e)) entries) hits))
           )
       else
         entryHits pick modules more base
@@ -379,13 +378,13 @@ findFamilyCtorInModules (m :: rest) famTarget base =
 ctorRelFamily : String -> String -> String
 ctorRelFamily prefix rel =
   case splitLastDot (splitOnDot rel) of
-    Pair revFam ctor => mangle prefix (joinDots revFam)
+    (revFam, ctor) => mangle prefix (joinDots revFam)
 
 -- | 族 `famTarget` 下短名 `base` 的 canonical target（本地候选优先，再查已加载模块）。
 ctorTargetInFamily : List Module -> String -> Namespaces -> String -> String -> Maybe String
 ctorTargetInFamily modules prefix ns famTarget base =
   case filter (\p => firstOf p == base && ctorRelFamily prefix (secondOf p) == famTarget) ns.nsCtorCands of
-    [Pair _ rel] => Just (mangle prefix rel)
+    [(_, rel)] => Just (mangle prefix rel)
     _ => findFamilyCtorInModules modules famTarget base
 
 -- 族前缀只按**类型命名空间**解析（不回头做构造子退化），避免与 resolveTypeName 形成
@@ -429,7 +428,7 @@ resolveDottedTypeTargetOnly modules label imports name =
 resolveFamilyQualifiedCtor : List Module -> String -> String -> Namespaces -> List Import -> String -> Check String
 resolveFamilyQualifiedCtor modules label prefix ns imports name =
   case splitLastDot (splitOnDot name) of
-    Pair revPrefix base =>
+    (revPrefix, base) =>
       let
         famName = joinDots revPrefix
       in Vuna.Compiler.Base.Common.bind
@@ -467,9 +466,9 @@ allEq x (y :: rest) = x == y && allEq x rest
 
 -- 模式里的限定名：import 模块前缀优先，其次 data family 前缀。
 -- | 模式里的限定构造子：import 模块前缀优先，其次 data family 前缀。
-ctorEntryHits : List Module -> List (Pair String (List String)) -> String -> Check (List (Pair String ExportEntry))
+ctorEntryHits : List Module -> List (String, List String) -> String -> Check (List (String, ExportEntry))
 ctorEntryHits modules [] base = OkC []
-ctorEntryHits modules ((Pair m rest) :: more) base =
+ctorEntryHits modules ((m, rest) :: more) base =
   case rest of
     [member] =>
       if member == base then
@@ -477,7 +476,7 @@ ctorEntryHits modules ((Pair m rest) :: more) base =
             \es =>
               case findExportCtors es member of
                 [] => ctorEntryHits modules more base
-                entries => Vuna.Compiler.Base.Common.bind (ctorEntryHits modules more base) (\hits => OkC (append (map (\e => Pair m e) entries) hits))
+                entries => Vuna.Compiler.Base.Common.bind (ctorEntryHits modules more base) (\hits => OkC (append (map (\e => (m, e)) entries) hits))
           )
       else
         ctorEntryHits modules more base
@@ -487,9 +486,9 @@ ctorEntryHits modules ((Pair m rest) :: more) base =
 ctorFamilyEntryOf : String -> String -> ExportEntry -> Bool
 ctorFamilyEntryOf base parent x = x.kind == "ctor" && x.public == base && x.parent == parent
 
-ctorFamilyHits : List Module -> List (Pair String (List String)) -> String -> String -> Check (List (Pair String ExportEntry))
+ctorFamilyHits : List Module -> List (String, List String) -> String -> String -> Check (List (String, ExportEntry))
 ctorFamilyHits modules [] fam base = OkC []
-ctorFamilyHits modules ((Pair m rest) :: more) fam base =
+ctorFamilyHits modules ((m, rest) :: more) fam base =
   case rest of
     [f, member] =>
       if f == fam && member == base then
@@ -498,12 +497,12 @@ ctorFamilyHits modules ((Pair m rest) :: more) fam base =
               case findExportType es fam of
                 Just e =>
                   case filter (ctorFamilyEntryOf base e.target) es of
-                    x :: _ => Vuna.Compiler.Base.Common.bind (ctorFamilyHits modules more fam base) (\hits => OkC ((::) (Pair m ExportEntry { kind = "ctor", public = base, target = x.target, parent = e.target }) hits))
+                    x :: _ => Vuna.Compiler.Base.Common.bind (ctorFamilyHits modules more fam base) (\hits => OkC ((::) (m, ExportEntry { kind = "ctor", public = base, target = x.target, parent = e.target }) hits))
                     [] =>
                       Vuna.Compiler.Base.Common.bind (moduleDecls modules m) (
                           \ds =>
                             case ctorTargetInDecls m e.target base ds of
-                              Just t => Vuna.Compiler.Base.Common.bind (ctorFamilyHits modules more fam base) (\hits => OkC ((::) (Pair m ExportEntry { kind = "ctor", public = base, target = t, parent = e.target }) hits))
+                              Just t => Vuna.Compiler.Base.Common.bind (ctorFamilyHits modules more fam base) (\hits => OkC ((::) (m, ExportEntry { kind = "ctor", public = base, target = t, parent = e.target }) hits))
                               Nothing => ctorFamilyHits modules more fam base
                         )
                 Nothing => ctorFamilyHits modules more fam base
@@ -572,9 +571,9 @@ dropSegs : Int -> List a -> List a
 dropSegs n [] = []
 dropSegs n (x :: rest) = if n <= 0 then (::) x rest else dropSegs (n - 1) rest
 
-pathEntryHits : List Module -> List (Pair String (List String)) -> String -> Check (List (Pair String (List String)))
+pathEntryHits : List Module -> List (String, List String) -> String -> Check (List (String, List String))
 pathEntryHits modules [] base = OkC []
-pathEntryHits modules ((Pair m rest) :: more) base =
+pathEntryHits modules ((m, rest) :: more) base =
   case rest of
     [member] =>
       if member == base then
@@ -582,7 +581,7 @@ pathEntryHits modules ((Pair m rest) :: more) base =
             \es =>
               case pickValueEntries es base of
                 [] => pathEntryHits modules more base
-                entries => Vuna.Compiler.Base.Common.bind (pathEntryHits modules more base) (\hits => OkC (append (map (\e => Pair (exportTarget e) []) entries) hits))
+                entries => Vuna.Compiler.Base.Common.bind (pathEntryHits modules more base) (\hits => OkC (append (map (\e => (exportTarget e, [])) entries) hits))
           )
       else
         pathEntryHits modules more base
@@ -592,13 +591,13 @@ pathEntryHits modules ((Pair m rest) :: more) base =
             \es =>
               case findExportValues es base of
                 [] => pathEntryHits modules more base
-                entries => Vuna.Compiler.Base.Common.bind (pathEntryHits modules more base) (\hits => OkC (append (map (\e => Pair (exportTarget e) tail) entries) hits))
+                entries => Vuna.Compiler.Base.Common.bind (pathEntryHits modules more base) (\hits => OkC (append (map (\e => (exportTarget e, tail)) entries) hits))
           )
       else
         pathEntryHits modules more base
     [] => pathEntryHits modules more base
 
-uniqPathTargets : List (Pair String (List String)) -> List (Pair String (List String))
+uniqPathTargets : List (String, List String) -> List (String, List String)
 uniqPathTargets [] = []
 uniqPathTargets (p :: rest) =
   if memPathKey (pathKey p) rest then uniqPathTargets rest else (::) p (uniqPathTargets rest)
@@ -614,15 +613,15 @@ resolveQualifiedPath modules label imports segs n sp =
               \hits =>
                 case uniqPathTargets hits of
                   [] => rnNoLoc2 (ValueNotExported (memberLabel "" ps) (firstModuleOf "" ps)) (memberLabel "" ps) (firstModuleOf "" ps)
-                  [Pair target []] => OkC (Just (EVar target sp))
-                  [Pair target tail] => OkC (Just (foldFieldChain (EVar target sp) tail sp))
+                  [(target, [])] => OkC (Just (EVar target sp))
+                  [(target, tail)] => OkC (Just (foldFieldChain (EVar target sp) tail sp))
                   multiple => rnNoLoc2 (AmbiguousModule (memberLabel "" ps) (commaJoin (map firstOf multiple))) (memberLabel "" ps) (commaJoin (map firstOf multiple))
             )
     )
 
-allEmptyTails : List (Pair String (List String)) -> Bool
+allEmptyTails : List (String, List String) -> Bool
 allEmptyTails [] = True
-allEmptyTails ((Pair _ tail) :: rest) =
+allEmptyTails ((_, tail) :: rest) =
   case tail of
     [] => allEmptyTails rest
     _ => False
@@ -695,15 +694,15 @@ resolveGlobal modules label prefix ns imports scope name =
             )
 
 -- 同一批导出命中里的真值条目 target（排除 kind=ctor 与 target 是 data/record 构造子的条目）。
-valuePairTargets : List Module -> List (Pair String ExportEntry) -> List String
+valuePairTargets : List Module -> List (String, ExportEntry) -> List String
 valuePairTargets modules [] = []
-valuePairTargets modules ((Pair m e) :: rest) =
+valuePairTargets modules ((m, e) :: rest) =
   let
     isCtor = e.kind == "ctor" || isDataOrRecordCtorTarget modules e.target
   in if isCtor then valuePairTargets modules rest else (::) e.target (valuePairTargets modules rest)
 
 -- | 从候选 target 里选唯一名；多个不同 target 编码成重载值标记名，交给精化器按期望类型选。
-pickValueOrOver : String -> List (Pair String ExportEntry) -> String
+pickValueOrOver : String -> List (String, ExportEntry) -> String
 pickValueOrOver name pairs =
   case nubNames (map pairExportTarget pairs) of
     [] => name
@@ -756,57 +755,57 @@ resolveTopName : String -> String -> String -> Check String
 resolveTopName label prefix name =
   Vuna.Compiler.Base.Common.bind (checkTopName label name) (\_ => OkC (mangle prefix name))
 
-resolvePattern : Int -> List Module -> String -> String -> Namespaces -> List Import -> Pat -> Check (Pair Pat (List String))
+resolvePattern : Int -> List Module -> String -> String -> Namespaces -> List Import -> Pat -> Check (Pat, List String)
 resolvePattern fuel modules label prefix ns imports pat =
   if fuel <= 0 then
     icFuel "resolver"
   else
     case pat of
-      PWild sp => OkC (Pair (PWild sp) [])
-      PVar name sp => Vuna.Compiler.Base.Common.bind (onErrDiag (withFallbackSpan (nodeRefSpan sp)) (checkBinder label name)) (\_ => OkC (Pair (PVar name sp) [name]))
-      PAs name inner sp => Vuna.Compiler.Base.Common.bind (resolvePattern (fuel - 1) modules label prefix ns imports inner) (\p => OkC (Pair (PAs name (firstOf p) sp) ((::) name (secondOf p))))
-      PInt n sp => OkC (Pair (PInt n sp) [])
-      PStr s sp => OkC (Pair (PStr s sp) [])
-      PCon name pats sp => if isTuplePairSyntax name then resolvePattern (fuel - 1) modules label prefix ns imports (PCon "Pair" pats sp) else if isTupleUnitSyntax name then resolvePattern (fuel - 1) modules label prefix ns imports (PCon "MkUnit" [] sp) else if isInternalSyntaxName name then Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (\dtv => resolvePattern (fuel - 1) modules label prefix ns imports dtv) pats) (\parts => OkC (Pair (PCon name (map firstOf parts) sp) (concatMap secondOf parts))) else Vuna.Compiler.Base.Common.bind (onErrDiag (withFallbackSpan (nodeRefSpan sp)) (resolveCtor modules label prefix ns imports name)) (\name2 => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (\dtv => resolvePattern (fuel - 1) modules label prefix ns imports dtv) pats) (\parts => OkC (Pair (PCon name2 (map firstOf parts) sp) (concatMap secondOf parts))))
-      PRecord name fields sp => Vuna.Compiler.Base.Common.bind (onErrDiag (withFallbackSpan (nodeRefSpan sp)) (resolveCtor modules label prefix ns imports name)) (\name2 => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (\dtv => resolveRecordPatternField (fuel - 1) modules label prefix ns imports dtv) fields) (\parts => OkC (Pair (PRecord name2 (map firstOf parts) sp) (concatMap secondOf parts))))
+      PWild sp => OkC (PWild sp, [])
+      PVar name sp => Vuna.Compiler.Base.Common.bind (onErrDiag (withFallbackSpan (nodeRefSpan sp)) (checkBinder label name)) (\_ => OkC (PVar name sp, [name]))
+      PAs name inner sp => Vuna.Compiler.Base.Common.bind (resolvePattern (fuel - 1) modules label prefix ns imports inner) (\p => OkC (PAs name (firstOf p) sp, (::) name (secondOf p)))
+      PInt n sp => OkC (PInt n sp, [])
+      PStr s sp => OkC (PStr s sp, [])
+      PCon name pats sp => if isTuplePairSyntax name then resolvePattern (fuel - 1) modules label prefix ns imports (PCon "Pair" pats sp) else if isTupleUnitSyntax name then resolvePattern (fuel - 1) modules label prefix ns imports (PCon "MkUnit" [] sp) else if isInternalSyntaxName name then Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (\dtv => resolvePattern (fuel - 1) modules label prefix ns imports dtv) pats) (\parts => OkC (PCon name (map firstOf parts) sp, concatMap secondOf parts)) else Vuna.Compiler.Base.Common.bind (onErrDiag (withFallbackSpan (nodeRefSpan sp)) (resolveCtor modules label prefix ns imports name)) (\name2 => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (\dtv => resolvePattern (fuel - 1) modules label prefix ns imports dtv) pats) (\parts => OkC (PCon name2 (map firstOf parts) sp, concatMap secondOf parts)))
+      PRecord name fields sp => Vuna.Compiler.Base.Common.bind (onErrDiag (withFallbackSpan (nodeRefSpan sp)) (resolveCtor modules label prefix ns imports name)) (\name2 => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (\dtv => resolveRecordPatternField (fuel - 1) modules label prefix ns imports dtv) fields) (\parts => OkC (PRecord name2 (map firstOf parts) sp, concatMap secondOf parts)))
 
-resolveRecordPatternField : Int -> List Module -> String -> String -> Namespaces -> List Import -> Pair String Pat -> Check (Pair (Pair String Pat) (List String))
-resolveRecordPatternField fuel modules label prefix ns imports (Pair fname pat) =
+resolveRecordPatternField : Int -> List Module -> String -> String -> Namespaces -> List Import -> (String, Pat) -> Check ((String, Pat), List String)
+resolveRecordPatternField fuel modules label prefix ns imports (fname, pat) =
   if fuel <= 0 then
     icFuel "resolver"
   else
     Vuna.Compiler.Base.Common.bind (resolvePattern (fuel - 1) modules label prefix ns imports pat) (
         \p =>
           case p of
-            Pair pat2 bound => OkC (Pair (Pair fname pat2) bound)
+            (pat2, bound) => OkC ((fname, pat2), bound)
       )
 
-resolveAlt : Int -> List Module -> String -> String -> Namespaces -> List Import -> List String -> Pair Pat Expr -> Check (Pair Pat Expr)
-resolveAlt fuel modules label prefix ns imports scope (Pair pat body) =
+resolveAlt : Int -> List Module -> String -> String -> Namespaces -> List Import -> List String -> (Pat, Expr) -> Check (Pat, Expr)
+resolveAlt fuel modules label prefix ns imports scope (pat, body) =
   if fuel <= 0 then
     icFuel "resolver"
   else
     Vuna.Compiler.Base.Common.bind (resolvePattern resolveFuelBound modules label prefix ns imports pat) (
         \p =>
           case p of
-            Pair pat2 bound => Vuna.Compiler.Base.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports (append bound scope) body) (\body2 => OkC (Pair pat2 body2))
+            (pat2, bound) => Vuna.Compiler.Base.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports (append bound scope) body) (\body2 => OkC (pat2, body2))
       )
 
 -- 局部函数的一个 clause（参数模式列表 + body）；参数绑定累加到 body 的作用域。
-resolveLocalClause : Int -> List Module -> String -> String -> Namespaces -> List Import -> List String -> Pair (List Pat) Expr -> Check (Pair (List Pat) Expr)
-resolveLocalClause fuel modules label prefix ns imports scope (Pair pats body) =
+resolveLocalClause : Int -> List Module -> String -> String -> Namespaces -> List Import -> List String -> (List Pat, Expr) -> Check (List Pat, Expr)
+resolveLocalClause fuel modules label prefix ns imports scope (pats, body) =
   if fuel <= 0 then
     icFuel "resolver"
   else
     Vuna.Compiler.Base.Common.bind (resolveLocalPats (fuel - 1) modules label prefix ns imports pats) (
         \p =>
           case p of
-            Pair pats2 bound => Vuna.Compiler.Base.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports (append bound scope) body) (\body2 => OkC (Pair pats2 body2))
+            (pats2, bound) => Vuna.Compiler.Base.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports (append bound scope) body) (\body2 => OkC (pats2, body2))
       )
 
-resolveLocalPats : Int -> List Module -> String -> String -> Namespaces -> List Import -> List Pat -> Check (Pair (List Pat) (List String))
+resolveLocalPats : Int -> List Module -> String -> String -> Namespaces -> List Import -> List Pat -> Check (List Pat, List String)
 resolveLocalPats fuel modules label prefix ns imports [] =
-  if fuel <= 0 then icFuel "resolver" else OkC (Pair [] [])
+  if fuel <= 0 then icFuel "resolver" else OkC ([], [])
 resolveLocalPats fuel modules label prefix ns imports (pat :: rest) =
   if fuel <= 0 then
     icFuel "resolver"
@@ -814,15 +813,15 @@ resolveLocalPats fuel modules label prefix ns imports (pat :: rest) =
     Vuna.Compiler.Base.Common.bind (resolvePattern (fuel - 1) modules label prefix ns imports pat) (
         \p =>
           case p of
-            Pair pat2 bound =>
+            (pat2, bound) =>
               Vuna.Compiler.Base.Common.bind (resolveLocalPats (fuel - 1) modules label prefix ns imports rest) (
                   \r =>
                     case r of
-                      Pair rest2 restBound => OkC (Pair ((::) pat2 rest2) (append bound restBound))
+                      (rest2, restBound) => OkC ((::) pat2 rest2, append bound restBound)
                 )
       )
 
-resolveLet : Int -> List Module -> String -> String -> Namespaces -> List Import -> List String -> Bool -> List (Pair Pat Expr) -> Expr -> Check (Pair (List (Pair Pat Expr)) Expr)
+resolveLet : Int -> List Module -> String -> String -> Namespaces -> List Import -> List String -> Bool -> List (Pat, Expr) -> Expr -> Check (List (Pat, Expr), Expr)
 resolveLet fuel modules label prefix ns imports scope rec_ binds body =
   if fuel <= 0 then
     icFuel "resolver"
@@ -831,67 +830,67 @@ resolveLet fuel modules label prefix ns imports scope rec_ binds body =
   else
     resolveLetSeq (fuel - 1) modules label prefix ns imports scope binds body
 
-resolveLetSeq : Int -> List Module -> String -> String -> Namespaces -> List Import -> List String -> List (Pair Pat Expr) -> Expr -> Check (Pair (List (Pair Pat Expr)) Expr)
+resolveLetSeq : Int -> List Module -> String -> String -> Namespaces -> List Import -> List String -> List (Pat, Expr) -> Expr -> Check (List (Pat, Expr), Expr)
 resolveLetSeq fuel modules label prefix ns imports scope binds body =
   if fuel <= 0 then
     icFuel "resolver"
   else
     case binds of
-      [] => Vuna.Compiler.Base.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope body) (\b => OkC (Pair [] b))
-      (Pair pat value) :: rest =>
+      [] => Vuna.Compiler.Base.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope body) (\b => OkC ([], b))
+      (pat, value) :: rest =>
         Vuna.Compiler.Base.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope value) (
             \value2 =>
               Vuna.Compiler.Base.Common.bind (resolvePattern resolveFuelBound modules label prefix ns imports pat) (
                   \p =>
                     case p of
-                      Pair pat2 bound =>
+                      (pat2, bound) =>
                         Vuna.Compiler.Base.Common.bind (resolveLetSeq (fuel - 1) modules label prefix ns imports (append bound scope) rest body) (
                             \r =>
                               case r of
-                                Pair binds2 body2 => OkC (Pair ((::) (Pair pat2 value2) binds2) body2)
+                                (binds2, body2) => OkC ((::) (pat2, value2) binds2, body2)
                           )
                 )
           )
 
 -- 递归 let（where 块）：所有绑定名对全部 value 与 body 可见。
-resolveRecLet : Int -> List Module -> String -> String -> Namespaces -> List Import -> List String -> List (Pair Pat Expr) -> Expr -> Check (Pair (List (Pair Pat Expr)) Expr)
+resolveRecLet : Int -> List Module -> String -> String -> Namespaces -> List Import -> List String -> List (Pat, Expr) -> Expr -> Check (List (Pat, Expr), Expr)
 resolveRecLet fuel modules label prefix ns imports scope binds body =
   if fuel <= 0 then
     icFuel "resolver"
   else
     case collectRecBinds modules label prefix ns imports binds of
       ErrC e => ErrC e
-      OkC (Pair names pairs) =>
+      OkC (names, pairs) =>
         let
           scope2 = append names scope
-        in Vuna.Compiler.Base.Common.bind (resolveRecValues (fuel - 1) modules label prefix ns imports scope2 pairs) (\values2 => Vuna.Compiler.Base.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope2 body) (\b => OkC (Pair values2 b)))
+        in Vuna.Compiler.Base.Common.bind (resolveRecValues (fuel - 1) modules label prefix ns imports scope2 pairs) (\values2 => Vuna.Compiler.Base.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope2 body) (\b => OkC (values2, b)))
 
-collectRecBinds : List Module -> String -> String -> Namespaces -> List Import -> List (Pair Pat Expr) -> Check (Pair (List String) (List (Pair Pat Expr)))
-collectRecBinds modules label prefix ns imports [] = OkC (Pair [] [])
-collectRecBinds modules label prefix ns imports ((Pair pat value) :: rest) =
+collectRecBinds : List Module -> String -> String -> Namespaces -> List Import -> List (Pat, Expr) -> Check (List String, List (Pat, Expr))
+collectRecBinds modules label prefix ns imports [] = OkC ([], [])
+collectRecBinds modules label prefix ns imports ((pat, value) :: rest) =
   Vuna.Compiler.Base.Common.bind
     (resolvePattern resolveFuelBound modules label prefix ns imports pat)
     (
       \pr =>
         case pr of
-          Pair pat2 bound =>
+          (pat2, bound) =>
             Vuna.Compiler.Base.Common.bind (collectRecBinds modules label prefix ns imports rest) (
                 \r =>
                   case r of
-                    Pair names tail => OkC (Pair (append bound names) ((::) (Pair pat2 value) tail))
+                    (names, tail) => OkC (append bound names, (::) (pat2, value) tail)
               )
     )
 
-resolveRecValues : Int -> List Module -> String -> String -> Namespaces -> List Import -> List String -> List (Pair Pat Expr) -> Check (List (Pair Pat Expr))
+resolveRecValues : Int -> List Module -> String -> String -> Namespaces -> List Import -> List String -> List (Pat, Expr) -> Check (List (Pat, Expr))
 resolveRecValues fuel modules label prefix ns imports scope [] =
   if fuel <= 0 then icFuel "resolver" else OkC []
-resolveRecValues fuel modules label prefix ns imports scope ((Pair pat value) :: rest) =
+resolveRecValues fuel modules label prefix ns imports scope ((pat, value) :: rest) =
   if fuel <= 0 then
     icFuel "resolver"
   else
     Vuna.Compiler.Base.Common.bind
       (resolveExpr (fuel - 1) modules label prefix ns imports scope value)
-      (\value2 => Vuna.Compiler.Base.Common.bind (resolveRecValues (fuel - 1) modules label prefix ns imports scope rest) (\tail => OkC ((::) (Pair pat value2) tail)))
+      (\value2 => Vuna.Compiler.Base.Common.bind (resolveRecValues (fuel - 1) modules label prefix ns imports scope rest) (\tail => OkC ((::) (pat, value2) tail)))
 
 -- 模板字符串降级（rename 之后、Elab 之前）。
 --
@@ -1022,7 +1021,7 @@ resolveExprRaw fuel modules label prefix ns imports scope expr =
         Vuna.Compiler.Base.Common.bind (resolveLet (fuel - 1) modules label prefix ns imports scope rec_ binds body) (
             \r =>
               case r of
-                Pair binds2 body2 => OkC (ELet binds2 body2 rec_ sp)
+                (binds2, body2) => OkC (ELet binds2 body2 rec_ sp)
           )
       -- where/let 多 clause 局部函数：逐 clause 解析参数模式并累加作用域。
       ELocalFun clauses sp => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (\dtv => resolveLocalClause (fuel - 1) modules label prefix ns imports scope dtv) clauses) (\clauses2 => OkC (ELocalFun clauses2 sp))
@@ -1092,14 +1091,14 @@ resolveDoChain fuel modules label prefix ns imports scope bindName stmts blockSp
     case stmts of
       [] => psErr0At blockSpan DoBlockNeedsStatement
       [DExpr e sp] => resolveExpr (fuel - 1) modules label prefix ns imports scope e
-      (DExpr e r) :: rest => Vuna.Compiler.Base.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope e) (\e2 => Vuna.Compiler.Base.Common.bind (resolveDoChain (fuel - 1) modules label prefix ns imports scope bindName rest blockSpan) (\tail => OkC (EApp (EVar (doIgnoreSyntaxName bindName) (detachedNodeRef (nodeRefSpan r))) [e2, ELam [Pair "_" spanEmpty] tail (detachedNodeRef (nodeRefSpan r))] (detachedNodeRef (nodeRefSpan r)))))
-      (DBind (PVar name psp) e r) :: rest => Vuna.Compiler.Base.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope e) (\e2 => Vuna.Compiler.Base.Common.bind (resolveDoChain (fuel - 1) modules label prefix ns imports (name :: scope) bindName rest blockSpan) (\tail => OkC (EApp (EVar (doBindSyntaxName bindName) (detachedNodeRef (nodeRefSpan r))) [e2, ELam [Pair name (spanAtName name (nodeRefSpan psp))] tail (detachedNodeRef (nodeRefSpan r))] (detachedNodeRef (nodeRefSpan r)))))
-      (DBind (PWild _) e r) :: rest => Vuna.Compiler.Base.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope e) (\e2 => Vuna.Compiler.Base.Common.bind (resolveDoChain (fuel - 1) modules label prefix ns imports scope bindName rest blockSpan) (\tail => OkC (EApp (EVar (doIgnoreSyntaxName bindName) (detachedNodeRef (nodeRefSpan r))) [e2, ELam [Pair "_" spanEmpty] tail (detachedNodeRef (nodeRefSpan r))] (detachedNodeRef (nodeRefSpan r)))))
+      (DExpr e r) :: rest => Vuna.Compiler.Base.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope e) (\e2 => Vuna.Compiler.Base.Common.bind (resolveDoChain (fuel - 1) modules label prefix ns imports scope bindName rest blockSpan) (\tail => OkC (EApp (EVar (doIgnoreSyntaxName bindName) (detachedNodeRef (nodeRefSpan r))) [e2, ELam [("_", spanEmpty)] tail (detachedNodeRef (nodeRefSpan r))] (detachedNodeRef (nodeRefSpan r)))))
+      (DBind (PVar name psp) e r) :: rest => Vuna.Compiler.Base.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope e) (\e2 => Vuna.Compiler.Base.Common.bind (resolveDoChain (fuel - 1) modules label prefix ns imports (name :: scope) bindName rest blockSpan) (\tail => OkC (EApp (EVar (doBindSyntaxName bindName) (detachedNodeRef (nodeRefSpan r))) [e2, ELam [(name, spanAtName name (nodeRefSpan psp))] tail (detachedNodeRef (nodeRefSpan r))] (detachedNodeRef (nodeRefSpan r)))))
+      (DBind (PWild _) e r) :: rest => Vuna.Compiler.Base.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope e) (\e2 => Vuna.Compiler.Base.Common.bind (resolveDoChain (fuel - 1) modules label prefix ns imports scope bindName rest blockSpan) (\tail => OkC (EApp (EVar (doIgnoreSyntaxName bindName) (detachedNodeRef (nodeRefSpan r))) [e2, ELam [("_", spanEmpty)] tail (detachedNodeRef (nodeRefSpan r))] (detachedNodeRef (nodeRefSpan r)))))
       (DLet binds dr) :: rest =>
         Vuna.Compiler.Base.Common.bind (resolveDoLet (fuel - 1) modules label prefix ns imports scope binds) (
             \r =>
               case r of
-                Pair binds2 names => Vuna.Compiler.Base.Common.bind (resolveDoChain (fuel - 1) modules label prefix ns imports (append names scope) bindName rest blockSpan) (\tail => OkC (ELet binds2 tail False (detachedNodeRef (nodeRefSpan dr))))
+                (binds2, names) => Vuna.Compiler.Base.Common.bind (resolveDoChain (fuel - 1) modules label prefix ns imports (append names scope) bindName rest blockSpan) (\tail => OkC (ELet binds2 tail False (detachedNodeRef (nodeRefSpan dr))))
           )
       -- 一般模式绑定：降级成 `bind e (\v -> case v of pat => 后续语句)`。模式拆解借普通
       -- `case`，因此可反驳模式在精化期报穷尽性错误（没有 `MonadFail` 等价物）。
@@ -1107,42 +1106,42 @@ resolveDoChain fuel modules label prefix ns imports scope bindName stmts blockSp
         Vuna.Compiler.Base.Common.bind (resolvePattern resolveFuelBound modules label prefix ns imports pat) (
             \rp =>
               case rp of
-                Pair pat2 names => Vuna.Compiler.Base.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope e) (\e2 => Vuna.Compiler.Base.Common.bind (resolveDoChain (fuel - 1) modules label prefix ns imports (append names scope) bindName rest blockSpan) (\tail => OkC (EApp (EVar (doBindSyntaxName bindName) (detachedNodeRef (nodeRefSpan r))) [e2, ELam [Pair doPatternBinderName spanEmpty] (ECase (EVar doPatternBinderName (detachedNodeRef spanEmpty)) [Pair pat2 tail] (detachedNodeRef (nodeRefSpan r))) (detachedNodeRef (nodeRefSpan r))] (detachedNodeRef (nodeRefSpan r)))))
+                (pat2, names) => Vuna.Compiler.Base.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope e) (\e2 => Vuna.Compiler.Base.Common.bind (resolveDoChain (fuel - 1) modules label prefix ns imports (append names scope) bindName rest blockSpan) (\tail => OkC (EApp (EVar (doBindSyntaxName bindName) (detachedNodeRef (nodeRefSpan r))) [e2, ELam [(doPatternBinderName, spanEmpty)] (ECase (EVar doPatternBinderName (detachedNodeRef spanEmpty)) [(pat2, tail)] (detachedNodeRef (nodeRefSpan r))) (detachedNodeRef (nodeRefSpan r))] (detachedNodeRef (nodeRefSpan r)))))
           )
 
 -- do 块里的 `let` 语句：绑定按出现顺序解析（与 `let ... in` 同一条顺序作用域规则），
 -- 返回解析后的绑定表与对块内后续语句可见的名字。
 -- | 解析 do 块 `let` 语句的绑定表；返回解析后的绑定与对后续语句可见的名字。
-resolveDoLet : Int -> List Module -> String -> String -> Namespaces -> List Import -> List String -> List (Pair Pat Expr) -> Check (Pair (List (Pair Pat Expr)) (List String))
+resolveDoLet : Int -> List Module -> String -> String -> Namespaces -> List Import -> List String -> List (Pat, Expr) -> Check (List (Pat, Expr), List String)
 resolveDoLet fuel modules label prefix ns imports scope binds =
   if fuel <= 0 then
     icFuel "resolver"
   else
     case binds of
-      [] => OkC (Pair [] [])
-      (Pair pat value) :: rest =>
+      [] => OkC ([], [])
+      (pat, value) :: rest =>
         Vuna.Compiler.Base.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope value) (
             \value2 =>
               Vuna.Compiler.Base.Common.bind (resolvePattern resolveFuelBound modules label prefix ns imports pat) (
                   \p =>
                     case p of
-                      Pair pat2 bound =>
+                      (pat2, bound) =>
                         Vuna.Compiler.Base.Common.bind (resolveDoLet (fuel - 1) modules label prefix ns imports (append bound scope) rest) (
                             \r =>
                               case r of
-                                Pair binds2 names => OkC (Pair ((::) (Pair pat2 value2) binds2) (append bound names))
+                                (binds2, names) => OkC ((::) (pat2, value2) binds2, append bound names)
                           )
                 )
           )
 
-resolveFieldValue : Int -> List Module -> String -> String -> Namespaces -> List Import -> List String -> Pair String Expr -> Check (Pair String Expr)
-resolveFieldValue fuel modules label prefix ns imports scope (Pair fname value) =
+resolveFieldValue : Int -> List Module -> String -> String -> Namespaces -> List Import -> List String -> (String, Expr) -> Check (String, Expr)
+resolveFieldValue fuel modules label prefix ns imports scope (fname, value) =
   if fuel <= 0 then
     icFuel "resolver"
   else
     Vuna.Compiler.Base.Common.bind
       (resolveExpr (fuel - 1) modules label prefix ns imports scope value)
-      (\v => OkC (Pair fname v))
+      (\v => OkC (fname, v))
 
 -- | 声明处构造子的 canonical 名（`Module.Data.Ctor`）。
 resolveCtorDecl : String -> String -> String -> String -> Check String
@@ -1416,7 +1415,7 @@ resolveProgram modules label prefix ns imports decls =
 -- 以及约束 ctx 里自由的小写名（`Member n e r => ...` 的 n/r）。这些名字在定义体里
 -- 可引用：resolver 把它们加进子句作用域，elaborator 的 `checkBinders` 会绑定它们。
 -- 只在同一模块的源码名上匹配（DFun 与 DSig 同名）。
-implicitScopeTable : List Decl -> List (Pair String (List String))
+implicitScopeTable : List Decl -> List (String, List String)
 implicitScopeTable [] = []
 implicitScopeTable (d :: rest) =
   case d of
@@ -1425,7 +1424,7 @@ implicitScopeTable (d :: rest) =
         names = nubNames (append (leadingImplicitNames ty) (concatMap exprLowerNames ctx))
       in case names of
         [] => implicitScopeTable rest
-        _ => Pair name names :: implicitScopeTable rest
+        _ => (name, names) :: implicitScopeTable rest
     _ => implicitScopeTable rest
 
 leadingImplicitNames : Expr -> List String
@@ -1446,11 +1445,11 @@ isLowerIdent n =
     [] => False
     c :: rest => c >= 97 && c <= 122
 
-scopeNamesOf : String -> List (Pair String (List String)) -> List String
+scopeNamesOf : String -> List (String, List String) -> List String
 scopeNamesOf n [] = []
-scopeNamesOf n ((Pair k v) :: rest) = if k == n then v else scopeNamesOf n rest
+scopeNamesOf n ((k, v) :: rest) = if k == n then v else scopeNamesOf n rest
 
-resolveDeclWithImplicitScopes : List (Pair String (List String)) -> List Module -> String -> String -> Namespaces -> List Import -> Decl -> Check Decl
+resolveDeclWithImplicitScopes : List (String, List String) -> List Module -> String -> String -> Namespaces -> List Import -> Decl -> Check Decl
 resolveDeclWithImplicitScopes scopes modules label prefix ns imports (DFun name pats body sp) =
   Vuna.Compiler.Base.Common.bind
     (onErrDiag (withFallbackSpan (nodeRefSpan sp)) (resolveTopName label prefix name))
@@ -1486,9 +1485,9 @@ tyShape _ = "other"
 -- 值命名空间命中里混入的同名构造子条目（含 module 重导出/iface 缓存）：
 -- 取 kind=ctor 或 target 是 data/record 构造子的条目，按重载候选处理。
 -- | 值命名空间命中里混入的构造子条目的 target（按重载候选处理）。
-ctorPairTargets : List Module -> List (Pair String ExportEntry) -> List String
+ctorPairTargets : List Module -> List (String, ExportEntry) -> List String
 ctorPairTargets modules [] = []
-ctorPairTargets modules ((Pair m e) :: rest) =
+ctorPairTargets modules ((m, e) :: rest) =
   let
     isCtor = e.kind == "ctor" || isDataOrRecordCtorTarget modules e.target
   in if isCtor then (::) e.target (ctorPairTargets modules rest) else ctorPairTargets modules rest

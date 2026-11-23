@@ -18,30 +18,30 @@ import Vuna.Compiler.Elab.Types
 
 -- | 记录元变量创建点（同 id 覆盖：新记录前插，查找取首个匹配）。
 export recordMetaSpan : Ec -> Int -> Span -> Ec
-recordMetaSpan ec m sp = ecPutMetaSpans ec (Pair m sp :: ecMetaSpans ec)
+recordMetaSpan ec m sp = ecPutMetaSpans ec ((m, sp) :: ecMetaSpans ec)
 
 -- | 按元变量 id 查创建点。
 export metaSpanOf : Ec -> Int -> Maybe Span
 metaSpanOf ec m = lookupMeta m (ecMetaSpans ec)
 
 -- | 线性查表（后创建覆盖先创建）。
-lookupMeta : Int -> List (Pair Int Span) -> Maybe Span
+lookupMeta : Int -> List (Int, Span) -> Maybe Span
 lookupMeta m [] = Nothing
-lookupMeta m ((Pair k sp) :: rest) = if k == m then Just sp else lookupMeta m rest
+lookupMeta m ((k, sp) :: rest) = if k == m then Just sp else lookupMeta m rest
 
 -- | 新建元变量并登记创建点（诊断可反查「在哪个源码构造创建」）。
-export newMetaAt : Span -> Ctx -> Ec -> Pair Term Ec
+export newMetaAt : Span -> Ctx -> Ec -> (Term, Ec)
 newMetaAt sp ctx ec =
   let
     p = newMeta ctx ec
-  in Pair (firstOf p) (recordMetaSpan (secondOf p) (ecNext ec) sp)
+  in (firstOf p, recordMetaSpan (secondOf p) (ecNext ec) sp)
 
 -- 新建一个「洞」元变量：除创建深度外还记下目标类型与上下文快照（供 goal 显示）。
 -- `name` 是洞的显示名（`_` 传 `""`，`?name` 传 `"?name"`）。
-export newHoleMeta : Ctx -> Ec -> Span -> Value -> String -> Pair Term Ec
+export newHoleMeta : Ctx -> Ec -> Span -> Value -> String -> (Term, Ec)
 newHoleMeta ctx ec sp ty name =
   let
     m = ecNext ec
     p = newMeta ctx ec
     ec1 = ecAddGoal (secondOf p) (DtGoal m sp ty ctx.ctxItems name)
-  in Pair (firstOf p) (recordMetaSpan ec1 m sp)
+  in (firstOf p, recordMetaSpan ec1 m sp)

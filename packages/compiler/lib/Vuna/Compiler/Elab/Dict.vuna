@@ -40,11 +40,11 @@ isDictFamily ec g = memName g (map (\c => dictTypeName (dtClassName c)) (ecClass
 --      每个隐式插入点的全实例 conv 扫描（自检热路径）；
 --   3. 全局候选按「分配 tele meta → conv 结果头 → 递归解 ctx」匹配；命名实例不参与
 --      自动搜索（只能用 `@name` 显式选中）。
-export searchInstanceIn : List (Pair String Term) -> Ctx -> Ec -> Value -> Span -> Check (Pair Term Ec)
+export searchInstanceIn : List (String, Term) -> Ctx -> Ec -> Value -> Span -> Check (Term, Ec)
 searchInstanceIn globals ctx ec dom sp = searchInstFuel globals ctx 16 ec dom sp
 
 -- 兼容入口：无局部上下文（顶层回填路径）。
-searchInstance : Ec -> Value -> Span -> Check (Pair Term Ec)
+searchInstance : Ec -> Value -> Span -> Check (Term, Ec)
 searchInstance ec dom sp = searchInstanceIn [] emptyCtx ec dom sp
 
 record InstMatch where
@@ -60,7 +60,7 @@ instMatchInst (InstMatch i t) = i
 -- 搜索分两阶段——先只试**具体**实例；一个都没命中时才试 blanket。这样具体实例
 -- 优先（`Interp String` 覆盖 blanket `Show a => Interp a`），且 blanket 的 ctx 求解
 -- 不会污染具体候选的元变量解。
-searchInstFuel : List (Pair String Term) -> Ctx -> Int -> Ec -> Value -> Span -> Check (Pair Term Ec)
+searchInstFuel : List (String, Term) -> Ctx -> Int -> Ec -> Value -> Span -> Check (Term, Ec)
 searchInstFuel globals ctx fuel ec0 dom sp =
   let
     ec = ecBump ec0 "elab.inst.search"
@@ -76,14 +76,14 @@ searchInstFuel globals ctx fuel ec0 dom sp =
           missingInstance ec dom sp
         else
           case matchInstances globals ctx fuel ec dom sp (specificInstances (searchCandidates ec dom)) [] of
-            Pair [] ec1 =>
+            ([], ec1) =>
               case tryViaDict globals ctx (fuel - 1) ec1 dom sp of
                 OkC (Just pair) => OkC pair
                 OkC Nothing =>
                   case matchInstances globals ctx fuel ec1 dom sp (blanketInstances (searchCandidates ec dom)) [] of
-                    Pair matches ec2 => finishInstanceSearch dom sp matches ec2
+                    (matches, ec2) => finishInstanceSearch dom sp matches ec2
                 ErrC e => ErrC e
-            Pair matches ec1 => finishInstanceSearch dom sp matches ec1
+            (matches, ec1) => finishInstanceSearch dom sp matches ec1
 
 -- ---------------------------------------------------------------
 -- `deriving via field` 的字典委托（通用 GND：class 集合由底层实例决定）
@@ -185,7 +185,7 @@ replaceAt i x [] = []
 replaceAt i x (a :: rest) = if i <= 0 then (::) x rest else (::) a (replaceAt (i - 1) x rest)
 
 -- | 尝试用 `deriving via field` 委托求字典目标：找到包装候选后逐实参定位字段。
-tryViaDict : List (Pair String Term) -> Ctx -> Int -> Ec -> Value -> Span -> Check (Maybe (Pair Term Ec))
+tryViaDict : List (String, Term) -> Ctx -> Int -> Ec -> Value -> Span -> Check (Maybe (Term, Ec))
 tryViaDict globals ctx fuel ec dom sp =
   if fuel <= 0 then
     OkC Nothing
@@ -195,7 +195,7 @@ tryViaDict globals ctx fuel ec dom sp =
       _ => OkC Nothing
 
 -- | 在目标实参里找可用的 via 包装；用替换后的字段类型重新搜索字典实例。
-tryViaArgs : List (Pair String Term) -> Ctx -> Int -> Ec -> Span -> String -> List Value -> Int -> Check (Maybe (Pair Term Ec))
+tryViaArgs : List (String, Term) -> Ctx -> Int -> Ec -> Span -> String -> List Value -> Int -> Check (Maybe (Term, Ec))
 tryViaArgs globals ctx fuel ec sp fam args idx =
   if fuel <= 0 then
     OkC Nothing
@@ -228,9 +228,9 @@ blanketInstances [] = []
 blanketInstances (i :: rest) =
   if isBlanketInst i then (::) i (blanketInstances rest) else blanketInstances rest
 
-finishInstanceSearch : Value -> Span -> List InstMatch -> Ec -> Check (Pair Term Ec)
+finishInstanceSearch : Value -> Span -> List InstMatch -> Ec -> Check (Term, Ec)
 finishInstanceSearch dom sp [] ec = missingInstance ec dom sp
-finishInstanceSearch dom sp ([m]) ec = OkC (Pair m.instMatchTerm ec)
+finishInstanceSearch dom sp ([m]) ec = OkC (m.instMatchTerm, ec)
 finishInstanceSearch dom sp matches ec =
   let
     _ =
@@ -283,23 +283,23 @@ firstUnsolvedInterpGoalGo ec ((Constraint cid kind m dom span depth) :: rest) =
         firstUnsolvedInterpGoalGo ec rest
 
 -- 局部上下文查找：ctxItems 最近的 binder 在前，其 de Bruijn index 就是下标 i。
-localDictLookup : Ctx -> Int -> Value -> Ec -> Maybe (Pair Term Ec)
+localDictLookup : Ctx -> Int -> Value -> Ec -> Maybe (Term, Ec)
 localDictLookup ctx i dom ec = localDictLookupExact ctx i dom ec
 
-localDictLookupExact : Ctx -> Int -> Value -> Ec -> Maybe (Pair Term Ec)
+localDictLookupExact : Ctx -> Int -> Value -> Ec -> Maybe (Term, Ec)
 localDictLookupExact ctx i dom ec =
   case ctx.ctxItems of
     [] => Nothing
     _ => localDictLookupGo ctx i dom ec ctx.ctxItems
 
-localDictLookupGo : Ctx -> Int -> Value -> Ec -> List (Pair String Term) -> Maybe (Pair Term Ec)
+localDictLookupGo : Ctx -> Int -> Value -> Ec -> List (String, Term) -> Maybe (Term, Ec)
 localDictLookupGo ctx i dom ec [] = Nothing
-localDictLookupGo ctx i dom ec ((Pair name ty) :: rest) =
+localDictLookupGo ctx i dom ec ((name, ty) :: rest) =
   let
     v = forceVal ec (varTypeValue ctx i ty)
   in if isDictValue ec v then
     case conv (ecDefTbl ec) (ecSolsP ec) (ctxDepth ctx) v dom of
-      OkC sols2 => Just (Pair (TVar name i (Span "" 0 0 0 0 0 0)) (ecPutSols ec (solsList sols2)))
+      OkC sols2 => Just (TVar name i (Span "" 0 0 0 0 0 0), ecPutSols ec (solsList sols2))
       ErrC e => localDictLookupGo ctx (i + 1) dom ec rest
   else
     localDictLookupGo ctx (i + 1) dom ec rest
@@ -338,7 +338,7 @@ hasSpecificInterpInstanceGo tyName (i :: rest) =
 instHeadArgTypeName : DtInst -> String
 instHeadArgTypeName i =
   case flattenTaggedApp i.dtInstHead of
-    Just (Pair g (arg :: rest)) => termTypeNameOf (firstOf arg)
+    Just (g, arg :: rest) => termTypeNameOf (firstOf arg)
     _ => ""
 
 termTypeNameOf : Term -> String
@@ -359,23 +359,22 @@ allInstancesMono : List DtInst -> Bool
 allInstancesMono [] = True
 allInstancesMono (i :: rest) = if isMonoInst i then allInstancesMono rest else False
 
-matchInstances : List (Pair String Term) -> Ctx -> Int -> Ec -> Value -> Span -> List DtInst -> List InstMatch -> Pair (List InstMatch) Ec
-matchInstances globals ctx fuel ec dom sp [] acc = Pair (reverse acc) ec
+matchInstances : List (String, Term) -> Ctx -> Int -> Ec -> Value -> Span -> List DtInst -> List InstMatch -> (List InstMatch, Ec)
+matchInstances globals ctx fuel ec dom sp [] acc = (reverse acc, ec)
 matchInstances globals ctx fuel ec dom sp (i :: rest) acc =
   case tryMatchInst globals ctx fuel ec i dom sp of
-    Just (Pair term ec1) =>
-      matchInstances globals ctx fuel ec1 dom sp rest (InstMatch i term :: acc)
+    Just (term, ec1) => matchInstances globals ctx fuel ec1 dom sp rest (InstMatch i term :: acc)
     Nothing => matchInstances globals ctx fuel ec dom sp rest acc
 
 -- 单个候选：alloc tele metas → conv 结果头 → 读 tele 解 → 递归解 ctx → 组装
 -- `TGlobal inst <typeArgs(Rig0)> <dictArgs(Rig1)>`。
-tryMatchInst : List (Pair String Term) -> Ctx -> Int -> Ec -> DtInst -> Value -> Span -> Maybe (Pair Term Ec)
+tryMatchInst : List (String, Term) -> Ctx -> Int -> Ec -> DtInst -> Value -> Span -> Maybe (Term, Ec)
 tryMatchInst globals ctx fuel ec inst dom sp =
   if fuel <= 0 then
     Nothing
   else
     case allocTeleMetas inst.dtInstSpan ctx ec inst.dtInstTele of
-      Pair metas ec1 =>
+      (metas, ec1) =>
         let
           _ = dbg! "inst-try: ${dtInstName inst} head=${showTerm inst.dtInstHead} tele=${length inst.dtInstTele}"
           hd = eval (map (\m => VMeta m []) metas) inst.dtInstHead
@@ -391,22 +390,22 @@ tryMatchInst globals ctx fuel ec inst dom sp =
               Nothing => Nothing
               Just solved =>
                 let
-                  teleArgs = map (\v => Pair (quote (ctxDepth ctx) (forceVal ec2 v)) Rig0) (reverse solved)
+                  teleArgs = map (\v => (quote (ctxDepth ctx) (forceVal ec2 v), Rig0)) (reverse solved)
                   env2 = map (\v => forceVal ec2 v) solved
                   ctxVals = map (\t => forceVal ec2 (eval env2 t)) inst.dtInstCtx
                 in case solveDictCtxs globals ctx (fuel - 1) ec2 sp ctxVals [] of
                   Nothing => Nothing
-                  Just (Pair dictArgs ec3) => Just (Pair (foldAppTerms (TGlobal (dtInstSym inst)) (append teleArgs dictArgs)) ec3)
+                  Just (dictArgs, ec3) => Just (foldAppTerms (TGlobal (dtInstSym inst)) (append teleArgs dictArgs), ec3)
 
-export allocTeleMetas : Maybe Span -> Ctx -> Ec -> List (Pair String Term) -> Pair (List Int) Ec
-allocTeleMetas msp ctx ec [] = Pair [] ec
+export allocTeleMetas : Maybe Span -> Ctx -> Ec -> List (String, Term) -> (List Int, Ec)
+allocTeleMetas msp ctx ec [] = ([], ec)
 allocTeleMetas msp ctx ec (t :: rest) =
   case allocMetaAt msp ctx ec of
-    Pair tm ec1 =>
+    (tm, ec1) =>
       case allocTeleMetas msp ctx ec1 rest of
-        Pair ids ec2 => Pair (termMetaId tm :: ids) ec2
+        (ids, ec2) => (termMetaId tm :: ids, ec2)
 
-allocMetaAt : Maybe Span -> Ctx -> Ec -> Pair Term Ec
+allocMetaAt : Maybe Span -> Ctx -> Ec -> (Term, Ec)
 allocMetaAt Nothing ctx ec = newMeta ctx ec
 allocMetaAt (Just sp) ctx ec = newMetaAt sp ctx ec
 
@@ -424,12 +423,12 @@ solveTeleMetas ec (m :: rest) =
         Nothing => Nothing
         Just vs => Just (v :: vs)
 
-solveDictCtxs : List (Pair String Term) -> Ctx -> Int -> Ec -> Span -> List Value -> List (Pair Term Rig) -> Maybe (Pair (List (Pair Term Rig)) Ec)
-solveDictCtxs globals ctx fuel ec sp [] acc = Just (Pair (reverse acc) ec)
+solveDictCtxs : List (String, Term) -> Ctx -> Int -> Ec -> Span -> List Value -> List (Term, Rig) -> Maybe (List (Term, Rig), Ec)
+solveDictCtxs globals ctx fuel ec sp [] acc = Just (reverse acc, ec)
 solveDictCtxs globals ctx fuel ec sp (cv :: rest) acc =
   case searchInstFuel globals ctx fuel ec cv sp of
     ErrC e => Nothing
-    OkC (Pair t ec1) => solveDictCtxs globals ctx fuel ec1 sp rest (Pair t RigOmega :: acc)
+    OkC (t, ec1) => solveDictCtxs globals ctx fuel ec1 sp rest ((t, RigOmega) :: acc)
 
 -- 行成员约束：把 `rowMem e r` 的隐式证明当作一个特殊的延迟目标。
 -- 这些名字来自受信任的 Base.Effect.Core（见 effects.md §8）；编译器只认这三个头名。
@@ -485,11 +484,11 @@ isMemberDomain _ec (VNeutral (NGlobal g sp)) =
     False
 isMemberDomain _ec _ = False
 
-memberSpine : Value -> Maybe (Pair Value Value)
+memberSpine : Value -> Maybe (Value, Value)
 memberSpine (VNeutral (NGlobal g sp)) =
   if g == memberDomName then
     case sp of
-      e :: r :: _ => Just (Pair e r)
+      e :: r :: _ => Just (e, r)
       _ => Nothing
   else
     Nothing
@@ -508,7 +507,7 @@ memberLookup fuel depth ec dom =
   else
     case memberSpine dom of
       Nothing => MemberStuck
-      Just (Pair eVal rVal) => memberLookupRowLabel fuel depth ec eVal rVal
+      Just (eVal, rVal) => memberLookupRowLabel fuel depth ec eVal rVal
 
 -- | 探测：convEc 在给定 Ec 上跑，只取成功与否（解表不回传）。
 memberProbe : Ec -> Int -> Value -> Value -> Bool
@@ -547,7 +546,7 @@ labelCandText ec v =
         showValueAt 6 v
     _ => showValueAt 6 v
 
-labelScan : Int -> Int -> Sols -> Ec -> Value -> Value -> Int -> List LabelCand -> Maybe (Pair (List LabelCand) Bool)
+labelScan : Int -> Int -> Sols -> Ec -> Value -> Value -> Int -> List LabelCand -> Maybe (List LabelCand, Bool)
 labelScan fuel depth sols ec eF rF idx acc =
   if fuel <= 0 then
     Nothing
@@ -555,7 +554,7 @@ labelScan fuel depth sols ec eF rF idx acc =
     case forceVal ec rF of
       VCon cname cargs =>
         if cname == effRowNilCtor then
-          Just (Pair (reverse acc) True)
+          Just (reverse acc, True)
         else if cname == effRowConsCtor then
           case cargs of
             h :: t :: _ =>
@@ -569,10 +568,10 @@ labelScan fuel depth sols ec eF rF idx acc =
             _ => Nothing
         else
           Nothing
-      VNeutral _ => Just (Pair (reverse acc) False)
+      VNeutral _ => Just (reverse acc, False)
       _ => Nothing
 
-memberProofAtLabel : Int -> Int -> Ec -> Value -> Value -> Int -> Check (Pair Value Ec)
+memberProofAtLabel : Int -> Int -> Ec -> Value -> Value -> Int -> Check (Value, Ec)
 memberProofAtLabel fuel depth ec eF rF target =
   if fuel <= 0 then
     icFuel "member proof"
@@ -581,7 +580,7 @@ memberProofAtLabel fuel depth ec eF rF target =
       VCon cname cargs =>
         if cname == effRowConsCtor then
           case cargs of
-            h :: t :: _ => if target <= 0 then Vuna.Compiler.Base.Common.bind (convEc ec depth eF h) (\ec1 => OkC (Pair (ctorValue ec1 hereCtorName [eF, t]) ec1)) else Vuna.Compiler.Base.Common.bind (memberProofAtLabel (fuel - 1) depth ec eF t (target - 1)) (\p => OkC (Pair (ctorValue (secondOf p) thereCtorName [eF, h, t, firstOf p]) (secondOf p)))
+            h :: t :: _ => if target <= 0 then Vuna.Compiler.Base.Common.bind (convEc ec depth eF h) (\ec1 => OkC (ctorValue ec1 hereCtorName [eF, t], ec1)) else Vuna.Compiler.Base.Common.bind (memberProofAtLabel (fuel - 1) depth ec eF t (target - 1)) (\p => OkC (ctorValue (secondOf p) thereCtorName [eF, h, t, firstOf p], secondOf p))
             _ => icInternal "malformed row in member proof"
         else
           icInternal "member proof target out of range"
@@ -597,23 +596,23 @@ memberLookupRowLabel fuel depth ec eVal rVal =
       sols = ecSolsP ec
     in case labelScan 64 depth sols ec eF rVal 0 [] of
       Nothing => MemberStuck
-      Just (Pair cands closed) =>
+      Just (cands, closed) =>
         case cands of
           [] => if closed then MemberAbsent else MemberStuck
           c :: rest =>
             case rest of
               [] =>
                 case memberProofAtLabel (fuel - 1) depth ec eF rVal (labelCandIdx c) of
-                  OkC (Pair proof ec1) => MemberFound proof ec1
+                  OkC (proof, ec1) => MemberFound proof ec1
                   ErrC _ => MemberStuck
               _ => MemberAmbiguous (map labelCandName cands)
 
-ctxMemberProofUnify : Ctx -> Ec -> Value -> Maybe (Pair Term Ec)
+ctxMemberProofUnify : Ctx -> Ec -> Value -> Maybe (Term, Ec)
 ctxMemberProofUnify ctx ec dom = ctxMemberProofUnifyGo ctx ctx.ctxItems 0 ec dom
 
-ctxMemberProofUnifyGo : Ctx -> List (Pair String Term) -> Int -> Ec -> Value -> Maybe (Pair Term Ec)
+ctxMemberProofUnifyGo : Ctx -> List (String, Term) -> Int -> Ec -> Value -> Maybe (Term, Ec)
 ctxMemberProofUnifyGo ctx [] idx ec dom = Nothing
-ctxMemberProofUnifyGo ctx ((Pair name ty) :: rest) idx ec dom =
+ctxMemberProofUnifyGo ctx ((name, ty) :: rest) idx ec dom =
   let
     -- `ty` 是在**绑定点**（比它更老的上下文）里合法的项；直接 `evalCtx ctx` 会把
     -- 其中的自由变量错指到更新的 binder（wrapper 的显式参数）。用 rest（更老的项）
@@ -621,7 +620,7 @@ ctxMemberProofUnifyGo ctx ((Pair name ty) :: rest) idx ec dom =
     olderDepth = length rest
     tyVal = eval (map (refineValue ctx.ctxRefVals defaultFuel) (ctxEnvAt rest 0 olderDepth)) ty
   in case convEc ec (ctxDepth ctx) tyVal dom of
-    OkC ec2 => Just (Pair (TVar name idx (Span "" 0 0 0 0 0 0)) ec2)
+    OkC ec2 => Just (TVar name idx (Span "" 0 0 0 0 0 0), ec2)
     ErrC _ => ctxMemberProofUnifyGo ctx rest (idx + 1) ec dom
 
 solveRowMeta : Ec -> Int -> Int -> Value -> Check Ec
@@ -630,10 +629,10 @@ solveRowMeta ec depth m v =
     OkC sols2 => OkC (ecPutSols ec (solsList sols2))
     ErrC e => ErrC e
 
-export resolveRowGoalsCtx : List (Pair String Term) -> Ctx -> Ec -> Span -> Check Ec
+export resolveRowGoalsCtx : List (String, Term) -> Ctx -> Ec -> Span -> Check Ec
 resolveRowGoalsCtx globals ctx ec sp = resolveRowGoalsCtxGo globals ctx sp (ecPendingList ec) ec []
 
-resolveRowGoalsCtxGo : List (Pair String Term) -> Ctx -> Span -> List Constraint -> Ec -> List Constraint -> Check Ec
+resolveRowGoalsCtxGo : List (String, Term) -> Ctx -> Span -> List Constraint -> Ec -> List Constraint -> Check Ec
 resolveRowGoalsCtxGo globals ctx sp [] ec kept = OkC (ecPutPending ec (reverse kept))
 resolveRowGoalsCtxGo globals ctx sp ((c@(Constraint cid kind m dom cspan cdepth)) :: rest) ec kept =
   case isMemberDomain ec dom of
@@ -653,7 +652,7 @@ resolveRowGoalsCtxGo globals ctx sp ((c@(Constraint cid kind m dom cspan cdepth)
             (join ", " cands)
         MemberStuck =>
           case ctxMemberProofUnify ctx ec dom of
-            Just (Pair proofTerm ec2) =>
+            Just (proofTerm, ec2) =>
               case solveRowMeta ec2 (ctxDepth ctx) m (eval (ctxEnv ctx) proofTerm) of
                 OkC ec3 => resolveRowGoalsCtxGo globals ctx sp rest ec3 kept
                 ErrC e => ErrC e
@@ -668,13 +667,13 @@ resolveRowGoalsCtxGo globals ctx sp ((c@(Constraint cid kind m dom cspan cdepth)
             resolveRowGoalsCtxGo globals ctx sp rest ec (c :: kept)
           else
             case searchInstanceIn globals ctx ec (forceVal ec dom) sp of
-              OkC (Pair instTerm ec1) =>
+              OkC (instTerm, ec1) =>
                 case solveMeta (ecDefTbl ec1) (ecSolsP ec1) (ctxDepth ctx) m [] (eval (ctxEnv ctx) instTerm) of
                   OkC sols2 => resolveRowGoalsCtxGo globals ctx sp rest (ecPutSols ec1 (solsList sols2)) kept
                   ErrC e => resolveRowGoalsCtxGo globals ctx sp rest ec (c :: kept)
               ErrC e => resolveRowGoalsCtxGo globals ctx sp rest ec (c :: kept)
 
-export resolveDictGoals : List (Pair String Term) -> Ec -> Ec
+export resolveDictGoals : List (String, Term) -> Ec -> Ec
 resolveDictGoals globals ec =
   let
     n = ecPendingCount ec
@@ -695,14 +694,14 @@ pendingBucket n =
 -- 单趟 worklist：逐个从队首取目标，成功即提交；未解目标按原顺序追加到队尾（FIFO）。
 -- 把“处理尾部”算两遍（keep + 成功分支再递归）在目标同时可解时是 2^k；这里每个目标每趟
 -- 只处理一次，指数消除。队列让「追加到队尾」从 O(长度) 降到 O(1)。
-resolveDictGoalsFuel : Int -> List (Pair String Term) -> Ec -> Ec
+resolveDictGoalsFuel : Int -> List (String, Term) -> Ec -> Ec
 resolveDictGoalsFuel fuel globals ec0 =
   if fuel <= 0 then
     ec0
   else
     case ecPopPending ec0 of
       Nothing => ec0
-      Just (Pair (c@(Constraint cid kind m dom cspan cdepth)) ec) =>
+      Just (c@(Constraint cid kind m dom cspan cdepth), ec) =>
         let
           ec1 = ecBump ec "elab.dict.round"
         in case metaLookup m (ecSolTbl ec1) of
@@ -744,7 +743,7 @@ resolveDictGoalsFuel fuel globals ec0 =
                     in ecPushPending ec3 kept
 
 -- | 尝试求解一条延迟约束：行成员走 memberLookup，字典目标走实例搜索并回填元变量。
-tryResolveDictGoal : List (Pair String Term) -> Ec -> Constraint -> Value -> Maybe Ec
+tryResolveDictGoal : List (String, Term) -> Ec -> Constraint -> Value -> Maybe Ec
 tryResolveDictGoal globals ec (Constraint cid kind m dom cspan cdepth) forced =
   if cdepth > 0 then
     Nothing
@@ -769,7 +768,7 @@ tryResolveDictGoal globals ec (Constraint cid kind m dom cspan cdepth) forced =
           Nothing
         else
           case searchInstance ec forced (Span "" 0 0 0 0 0 0) of
-            OkC (Pair instTerm ec2) =>
+            OkC (instTerm, ec2) =>
               case solveMeta (ecDefTbl ec2) (ecSolsP ec2) cdepth m [] (eval [] instTerm) of
                 OkC sols2 => Just (ecPutSols ec2 (solsList sols2))
                 ErrC e => Nothing
@@ -801,7 +800,7 @@ substDictTermGo ec depth (TLam n r slot sp b) =
     slot2 =
       case slot of
         Nothing => Nothing
-        Just (Pair mark (Pair bt rt)) =>
+        Just (mark, bt, rt) =>
           let
             bt2 =
               case bt of
@@ -811,16 +810,16 @@ substDictTermGo ec depth (TLam n r slot sp b) =
               case rt of
                 Nothing => Nothing
                 Just t => Just (substDictTermGo ec (depth + 1) t)
-          in Just (Pair mark (Pair bt2 rt2))
+          in Just (mark, bt2, rt2)
   in TLam n r slot2 sp (substDictTermGo ec (depth + 1) b)
 substDictTermGo ec depth (TApp f a r) =
   TApp (substDictTermGo ec depth f) (substDictTermGo ec depth a) r
 substDictTermGo ec depth (TCon c args) =
-  TCon c (map (\p => Pair (substDictTermGo ec depth (firstOf p)) (secondOf p)) args)
+  TCon c (map (\p => (substDictTermGo ec depth (firstOf p), secondOf p)) args)
 substDictTermGo ec depth (TMk c args) =
-  TMk c (map (\p => Pair (substDictTermGo ec depth (firstOf p)) (secondOf p)) args)
+  TMk c (map (\p => (substDictTermGo ec depth (firstOf p), secondOf p)) args)
 substDictTermGo ec depth (TRecord c args) =
-  TRecord c (map (\p => Pair (substDictTermGo ec depth (firstOf p)) (secondOf p)) args)
+  TRecord c (map (\p => (substDictTermGo ec depth (firstOf p), secondOf p)) args)
 substDictTermGo ec depth (TCase s alts) =
   TCase (substDictTermGo ec depth s) (map (\alt => substDictTermAlt ec depth alt) alts)
 substDictTermGo ec depth (TIf c th el) =
@@ -956,7 +955,7 @@ dictFamilyNameOf ec dom =
 
 -- 实参头部 `g` 的 kind 与类参数 kind 一致（`Color` 对 `Show`，`Maybe` 对 `Monad`）才约束。
 -- 头部是元变量（`?m' Int`）或 Pi 都不是具体构造子 ⇒ 不约束。
-export argHeadMatchesKind : List (Pair String Term) -> Ec -> Ctx -> Value -> Value -> Bool
+export argHeadMatchesKind : List (String, Term) -> Ec -> Ctx -> Value -> Value -> Bool
 argHeadMatchesKind globals ec ctx forced argKind =
   case neutralHeadOrSelf forced of
     VNeutral (NGlobal g []) =>
@@ -1158,13 +1157,13 @@ projectionFor cls short = classMethodProjection cls.dtClassMethods short
 -- **没有泛型结构比较兜底**——程序里没有 `Eq` 类、或具体类型搜不到实例时
 -- 在 check 期报错（`TC_EqRequiresEvidence` / `TC_NoInstanceFound`），不退回
 -- `bi_eq_generic`（OCaml 多态相等）或 interp 的另一套 `valueEqDeep`。
-export specializeEqTy : List (Pair String Term) -> Ctx -> String -> Term -> Term -> Span -> Value -> Ec -> Check (Maybe (Pair Term (Pair Value Ec)))
+export specializeEqTy : List (String, Term) -> Ctx -> String -> Term -> Term -> Span -> Value -> Ec -> Check (Maybe (Term, Value, Ec))
 specializeEqTy globals ctx name aTerm bTerm sp aTy ec =
   case builtinEqTyName (forceVal ec aTy) of
     Just tyName =>
       Vuna.Compiler.Base.Common.bind
         (eqRuntimeName (methodShortOf name) tyName)
-        (\rt => OkC (Just (Pair (TApp (TApp (TGlobal rt) aTerm Rig1) bTerm Rig1) (Pair boolTyValue ec))))
+        (\rt => OkC (Just (TApp (TApp (TGlobal rt) aTerm Rig1) bTerm Rig1, boolTyValue, ec)))
     Nothing =>
       case findEqClass name ec of
         Nothing =>
@@ -1183,19 +1182,19 @@ specializeEqTy globals ctx name aTerm bTerm sp aTy ec =
             deferEqDict globals ctx mname tyTerm aTerm bTerm sp dictTy ec
           else
             case searchInstanceIn globals ctx ec dictTy sp of
-              OkC (Pair dictTerm ec1) => OkC (Just (Pair (TApp (TApp (TApp (TApp (TGlobal mname) tyTerm Rig0) dictTerm RigOmega) aTerm Rig1) bTerm Rig1) (Pair boolTyValue ec1)))
+              OkC (dictTerm, ec1) => OkC (Just (TApp (TApp (TApp (TApp (TGlobal mname) tyTerm Rig0) dictTerm RigOmega) aTerm Rig1) bTerm Rig1, boolTyValue, ec1))
               ErrC e => if isRigidDictArg ec dictTy then deferEqDict globals ctx mname tyTerm aTerm bTerm sp dictTy ec else ErrC e
 
 -- 刚性类参数（如 `mem` 的 `a`）没有可搜实例：延迟成裸元变量 + 记录自由字典目标，
 -- 等定义体精化完由 `liftFreeDictGoals` 提升成 `{d : Dict_Eq a}` 隐式参数。
-deferEqDict : List (Pair String Term) -> Ctx -> String -> Term -> Term -> Term -> Span -> Value -> Ec -> Check (Maybe (Pair Term (Pair Value Ec)))
+deferEqDict : List (String, Term) -> Ctx -> String -> Term -> Term -> Term -> Span -> Value -> Ec -> Check (Maybe (Term, Value, Ec))
 deferEqDict globals ctx mname tyTerm aTerm bTerm sp dictTy ec =
   let
     m = ecNext ec
   in case newMetaAt sp ctx ec of
-    Pair metaTerm ec1 =>
+    (metaTerm, ec1) =>
       OkC
-        (Just (Pair (TApp (TApp (TApp (TApp (TGlobal mname) tyTerm Rig0) metaTerm RigOmega) aTerm Rig1) bTerm Rig1) (Pair boolTyValue (ecAddConstraint ec1 CkDict m dictTy (Just sp) (ctxDepth ctx)))))
+        (Just (TApp (TApp (TApp (TApp (TGlobal mname) tyTerm Rig0) metaTerm RigOmega) aTerm Rig1) bTerm Rig1, boolTyValue, ecAddConstraint ec1 CkDict m dictTy (Just sp) (ctxDepth ctx)))
 
 -- ---------------------------------------------------------------
 -- `<` / `<=` / `>` / `>=` 的饱和应用按实参类型特化
@@ -1238,7 +1237,7 @@ anyUnsolvedMetaArg ec [] = False
 anyUnsolvedMetaArg ec (arg :: rest) =
   hasUnsolvedMetaValue (ecSolsP ec) (forceVal ec arg) || anyUnsolvedMetaArg ec rest
 
-export specializeCmpTy : List (Pair String Term) -> Ctx -> String -> Term -> Term -> Span -> Value -> Ec -> Check (Maybe (Pair Term (Pair Value Ec)))
+export specializeCmpTy : List (String, Term) -> Ctx -> String -> Term -> Term -> Span -> Value -> Ec -> Check (Maybe (Term, Value, Ec))
 -- `Ord` 类/实例在库（`Base.Trait.Ord`），按短名查类并用真实字典名/方法投影名。
 -- `name` 是方法投影完整名（`Base.Trait.Ord.lt` 等），字典分支直接使用。
 -- **没有「无 Ord 类 → 任意类型泛型比较」兜底**——没有 `Ord` 证据时在 check 期报错
@@ -1248,7 +1247,7 @@ specializeCmpTy globals ctx name aTerm bTerm sp aTy ec =
     Just tyName =>
       Vuna.Compiler.Base.Common.bind
         (cmpRuntimeName sp (methodShortOf name) tyName)
-        (\rt => OkC (Just (Pair (TApp (TApp (TGlobal rt) aTerm Rig1) bTerm Rig1) (Pair boolTyValue ec))))
+        (\rt => OkC (Just (TApp (TApp (TGlobal rt) aTerm Rig1) bTerm Rig1, boolTyValue, ec)))
     Nothing =>
       case findOrdClass name ec of
         Nothing =>
@@ -1268,7 +1267,7 @@ specializeCmpTy globals ctx name aTerm bTerm sp aTy ec =
             deferEqDict globals ctx mname tyTerm aTerm bTerm sp dictTy ec
           else
             case searchInstanceIn globals ctx ec dictTy sp of
-              OkC (Pair dictTerm ec1) => OkC (Just (Pair (TApp (TApp (TApp (TApp (TGlobal mname) tyTerm Rig0) dictTerm RigOmega) aTerm Rig1) bTerm Rig1) (Pair boolTyValue ec1)))
+              OkC (dictTerm, ec1) => OkC (Just (TApp (TApp (TApp (TApp (TGlobal mname) tyTerm Rig0) dictTerm RigOmega) aTerm Rig1) bTerm Rig1, boolTyValue, ec1))
               ErrC e => if isRigidDictArg ec dictTy then deferEqDict globals ctx mname tyTerm aTerm bTerm sp dictTy ec else ErrC e
 
 export boolShortCircuit : String -> Term -> Term -> Term

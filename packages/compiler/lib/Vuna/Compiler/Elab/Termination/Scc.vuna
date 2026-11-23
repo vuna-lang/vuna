@@ -14,14 +14,14 @@ record Site where
   siteCaller : String
   siteCallee : String
   siteArgs : List Expr
-  siteSizes : List (Pair String (Pair Int (Pair Int (List Int))))
+  siteSizes : List (String, Int, Int, List Int)
   siteRegion : List String
   -- 编译期看不见实参位置的调用（callee 以值传递 / 遍历预算耗尽）：只落全弱边。
   siteBlind : Bool
 
 -- 遍历预算耗尽或 callee 以值传递时，用「全弱边」占位站点覆盖该 caller 到组内每个
 -- 成员：漏掉的调用边仍留在图上，且不可能贡献严格下降（sound 方向）。
-blindSitesOf : List String -> String -> List (Pair String (Pair Int (Pair Int (List Int)))) -> List String -> List Site
+blindSitesOf : List String -> String -> List (String, Int, Int, List Int) -> List String -> List Site
 blindSitesOf comp caller sizes region = map (\g => Site caller g [] sizes region True) comp
 
 record ScEdge where
@@ -29,7 +29,7 @@ record ScEdge where
   edgeTo : Int
   scStrictEdge : Bool
 
-siteCollectList : Int -> List String -> List String -> List (Pair String (List Int)) -> String -> HashMap String (List Int) -> List (Pair String (Pair Int (Pair Int (List Int)))) -> List String -> List Expr -> List Site -> List Site
+siteCollectList : Int -> List String -> List String -> List (String, List Int) -> String -> HashMap String (List Int) -> List (String, Int, Int, List Int) -> List String -> List Expr -> List Site -> List Site
 siteCollectList fuel comp ctors projs caller facts sizes region [] acc =
   if fuel <= 0 then acc else acc
 siteCollectList fuel comp ctors projs caller facts sizes region (a :: rest) acc =
@@ -48,10 +48,10 @@ siteCollectList fuel comp ctors projs caller facts sizes region (a :: rest) acc 
       rest
       (siteWalkC (fuel - 1) comp ctors projs caller facts sizes region a acc)
 
-siteCollectFields : Int -> List String -> List String -> List (Pair String (List Int)) -> String -> HashMap String (List Int) -> List (Pair String (Pair Int (Pair Int (List Int)))) -> List String -> List (Pair String Expr) -> List Site -> List Site
+siteCollectFields : Int -> List String -> List String -> List (String, List Int) -> String -> HashMap String (List Int) -> List (String, Int, Int, List Int) -> List String -> List (String, Expr) -> List Site -> List Site
 siteCollectFields fuel comp ctors projs caller facts sizes region [] acc =
   if fuel <= 0 then acc else acc
-siteCollectFields fuel comp ctors projs caller facts sizes region ((Pair fn fe) :: rest) acc =
+siteCollectFields fuel comp ctors projs caller facts sizes region ((fn, fe) :: rest) acc =
   if fuel <= 0 then
     append (blindSitesOf comp caller sizes region) acc
   else
@@ -67,10 +67,10 @@ siteCollectFields fuel comp ctors projs caller facts sizes region ((Pair fn fe) 
       rest
       (siteWalkC (fuel - 1) comp ctors projs caller facts sizes region fe acc)
 
-siteCollectAlts : Int -> List String -> List String -> List (Pair String (List Int)) -> String -> HashMap String (List Int) -> List (Pair String (Pair Int (Pair Int (List Int)))) -> List String -> Expr -> List (Pair Pat Expr) -> List Site -> List Site
+siteCollectAlts : Int -> List String -> List String -> List (String, List Int) -> String -> HashMap String (List Int) -> List (String, Int, Int, List Int) -> List String -> Expr -> List (Pat, Expr) -> List Site -> List Site
 siteCollectAlts fuel comp ctors projs caller facts sizes region scrut [] acc =
   if fuel <= 0 then acc else acc
-siteCollectAlts fuel comp ctors projs caller facts sizes region scrut ((Pair pat body) :: rest) acc =
+siteCollectAlts fuel comp ctors projs caller facts sizes region scrut ((pat, body) :: rest) acc =
   if fuel <= 0 then
     append (blindSitesOf comp caller sizes region) acc
   else
@@ -87,10 +87,10 @@ siteCollectAlts fuel comp ctors projs caller facts sizes region scrut ((Pair pat
       rest
       (siteWalkC (fuel - 1) comp ctors projs caller facts (extendSizesStrict projs sizes scrut pat) region body acc)
 
-siteCollectBinds : Int -> List String -> List String -> List (Pair String (List Int)) -> String -> HashMap String (List Int) -> List (Pair String (Pair Int (Pair Int (List Int)))) -> List String -> List (Pair Pat Expr) -> List Site -> List Site
+siteCollectBinds : Int -> List String -> List String -> List (String, List Int) -> String -> HashMap String (List Int) -> List (String, Int, Int, List Int) -> List String -> List (Pat, Expr) -> List Site -> List Site
 siteCollectBinds fuel comp ctors projs caller facts sizes region [] acc =
   if fuel <= 0 then acc else acc
-siteCollectBinds fuel comp ctors projs caller facts sizes region ((Pair pat val) :: rest) acc =
+siteCollectBinds fuel comp ctors projs caller facts sizes region ((pat, val) :: rest) acc =
   if fuel <= 0 then
     append (blindSitesOf comp caller sizes region) acc
   else
@@ -106,7 +106,7 @@ siteCollectBinds fuel comp ctors projs caller facts sizes region ((Pair pat val)
       rest
       (siteWalkC (fuel - 1) comp ctors projs caller facts sizes region val acc)
 
-siteCollectStmts : Int -> List String -> List String -> List (Pair String (List Int)) -> String -> HashMap String (List Int) -> List (Pair String (Pair Int (Pair Int (List Int)))) -> List String -> List DoStmt -> List Site -> List Site
+siteCollectStmts : Int -> List String -> List String -> List (String, List Int) -> String -> HashMap String (List Int) -> List (String, Int, Int, List Int) -> List String -> List DoStmt -> List Site -> List Site
 siteCollectStmts fuel comp ctors projs caller facts sizes region [] acc =
   if fuel <= 0 then acc else acc
 siteCollectStmts fuel comp ctors projs caller facts sizes region (s :: rest) acc =
@@ -118,7 +118,7 @@ siteCollectStmts fuel comp ctors projs caller facts sizes region (s :: rest) acc
       DExpr e sp => siteCollectStmts (fuel - 1) comp ctors projs caller facts sizes region rest (siteWalkC (fuel - 1) comp ctors projs caller facts sizes region e acc)
       DLet binds sp => siteCollectStmts (fuel - 1) comp ctors projs caller facts (extendByBinds projs binds sizes) region rest (siteCollectBinds (fuel - 1) comp ctors projs caller facts sizes region binds acc)
 
-siteWalkC : Int -> List String -> List String -> List (Pair String (List Int)) -> String -> HashMap String (List Int) -> List (Pair String (Pair Int (Pair Int (List Int)))) -> List String -> Expr -> List Site -> List Site
+siteWalkC : Int -> List String -> List String -> List (String, List Int) -> String -> HashMap String (List Int) -> List (String, Int, Int, List Int) -> List String -> Expr -> List Site -> List Site
 siteWalkC fuel comp ctors projs caller facts sizes region e acc =
   if fuel <= 0 then
     append (blindSitesOf comp caller sizes region) acc
@@ -145,7 +145,7 @@ siteWalkC fuel comp ctors projs caller facts sizes region e acc =
       EVar n sp => if memName (rnameKey n) comp then Site caller (rnameKey n) [] sizes region True :: acc else acc
       _ => acc
 
-siteWalkEApp : Int -> List String -> List String -> List (Pair String (List Int)) -> String -> HashMap String (List Int) -> List (Pair String (Pair Int (Pair Int (List Int)))) -> List String -> Expr -> List Expr -> List Site -> List Site
+siteWalkEApp : Int -> List String -> List String -> List (String, List Int) -> String -> HashMap String (List Int) -> List (String, Int, Int, List Int) -> List String -> Expr -> List Expr -> List Site -> List Site
 siteWalkEApp fuel comp ctors projs caller facts sizes region fn args acc =
   if fuel <= 0 then
     append (blindSitesOf comp caller sizes region) acc
@@ -167,7 +167,7 @@ siteWalkEApp fuel comp ctors projs caller facts sizes region fn args acc =
               Nothing => siteCollectList (fuel - 1) comp ctors projs caller facts sizes region args (siteWalkC (fuel - 1) comp ctors projs caller facts sizes region fn acc)
           _ => siteCollectList (fuel - 1) comp ctors projs caller facts sizes region args (siteWalkC (fuel - 1) comp ctors projs caller facts sizes region fn acc)
 
-siteWalkEAppMap : Int -> List String -> List String -> List (Pair String (List Int)) -> String -> HashMap String (List Int) -> List (Pair String (Pair Int (Pair Int (List Int)))) -> List String -> Expr -> List Expr -> List Site -> List Site
+siteWalkEAppMap : Int -> List String -> List String -> List (String, List Int) -> String -> HashMap String (List Int) -> List (String, Int, Int, List Int) -> List String -> Expr -> List Expr -> List Site -> List Site
 siteWalkEAppMap fuel comp ctors projs caller facts sizes region fn args acc =
   if fuel <= 0 then
     append (blindSitesOf comp caller sizes region) acc
@@ -180,7 +180,7 @@ siteWalkEAppMap fuel comp ctors projs caller facts sizes region fn args acc =
           _ => siteCollectList (fuel - 1) comp ctors projs caller facts sizes region args acc
       _ => siteCollectList (fuel - 1) comp ctors projs caller facts sizes region args acc
 
-siteWalkMapPartialInline : Int -> List String -> List String -> List (Pair String (List Int)) -> String -> HashMap String (List Int) -> List (Pair String (Pair Int (Pair Int (List Int)))) -> List String -> String -> List Expr -> Expr -> Span -> List Site -> List Site
+siteWalkMapPartialInline : Int -> List String -> List String -> List (String, List Int) -> String -> HashMap String (List Int) -> List (String, Int, Int, List Int) -> List String -> String -> List Expr -> Expr -> Span -> List Site -> List Site
 siteWalkMapPartialInline fuel comp ctors projs caller facts sizes region g pargs lst cbsp acc =
   if fuel <= 0 then
     append (blindSitesOf comp caller sizes region) acc
@@ -196,67 +196,67 @@ siteWalkMapPartialInline fuel comp ctors projs caller facts sizes region g pargs
 -- 别名解析：`let g = f in g x`（f 是同组函数）按直接调用参与尺寸分析。
 -- 只在绑定是裸 `PVar` + `EVar` 组内函数时替换；遇到同名 binder 立即屏蔽。
 -- ---------------------------------------------------------------
-aliasNameOf : Pair String String -> String
+aliasNameOf : (String, String) -> String
 aliasNameOf p = firstOf p
 
-lookupAlias : String -> List (Pair String String) -> Maybe String
+lookupAlias : String -> List (String, String) -> Maybe String
 lookupAlias n [] = Nothing
-lookupAlias n ((Pair k v) :: rest) = if n == k then Just v else lookupAlias n rest
+lookupAlias n ((k, v) :: rest) = if n == k then Just v else lookupAlias n rest
 
-dropAliases : List String -> List (Pair String String) -> List (Pair String String)
+dropAliases : List String -> List (String, String) -> List (String, String)
 dropAliases [] als = als
 dropAliases (n :: rest) als = dropAliases rest (filter (\p => aliasNameOf p /= n) als)
 
-aliasOf : List String -> Pair Pat Expr -> Maybe (Pair String String)
-aliasOf comp (Pair (PVar g gsp) val) =
+aliasOf : List String -> (Pat, Expr) -> Maybe (String, String)
+aliasOf comp (PVar g gsp, val) =
   case val of
-    EVar n nsp => if memName (rnameKey n) comp then Just (Pair g (rnameKey n)) else Nothing
+    EVar n nsp => if memName (rnameKey n) comp then Just (g, rnameKey n) else Nothing
     _ => Nothing
-aliasOf comp (Pair _ val) = Nothing
+aliasOf comp (_, val) = Nothing
 
-inlArgs : List String -> List (Pair String String) -> List Expr -> List Expr
+inlArgs : List String -> List (String, String) -> List Expr -> List Expr
 inlArgs comp als [] = []
 inlArgs comp als (a :: rest) = inlGo comp als a :: inlArgs comp als rest
 
-inlFields : List String -> List (Pair String String) -> List (Pair String Expr) -> List (Pair String Expr)
+inlFields : List String -> List (String, String) -> List (String, Expr) -> List (String, Expr)
 inlFields comp als [] = []
-inlFields comp als ((Pair fn fe) :: rest) = Pair fn (inlGo comp als fe) :: inlFields comp als rest
+inlFields comp als ((fn, fe) :: rest) = (fn, inlGo comp als fe) :: inlFields comp als rest
 
-inlParts : List String -> List (Pair String String) -> List InterpPart -> List InterpPart
+inlParts : List String -> List (String, String) -> List InterpPart -> List InterpPart
 inlParts comp als [] = []
 inlParts comp als (p :: rest) =
   case p of
     IPText t => IPText t :: inlParts comp als rest
     IPHole e => IPHole (inlGo comp als e) :: inlParts comp als rest
 
-inlBinds : List String -> List (Pair String String) -> List (Pair Pat Expr) -> Pair (List (Pair Pat Expr)) (List (Pair String String))
-inlBinds comp als [] = Pair [] als
-inlBinds comp als ((Pair pat val) :: rest) =
+inlBinds : List String -> List (String, String) -> List (Pat, Expr) -> (List (Pat, Expr), List (String, String))
+inlBinds comp als [] = ([], als)
+inlBinds comp als ((pat, val) :: rest) =
   let
     rhs = inlGo comp als val
-  in case aliasOf comp (Pair pat rhs) of
+  in case aliasOf comp (pat, rhs) of
     -- 纯别名（`let g = f`）：绑定本身没有分析价值，丢掉以免它的裸值引用
     -- 被当成「callee 以值传递」的盲站点；body 里的 `g` 已在 `inlGo` 里替换。
     Just a =>
       let
         restP = inlBinds comp (a :: als) rest
-      in Pair (firstOf restP) (secondOf restP)
+      in (firstOf restP, secondOf restP)
     Nothing =>
       let
         restP = inlBinds comp (dropAliases (patNamesOf pat) als) rest
-      in Pair (Pair pat rhs :: firstOf restP) (secondOf restP)
+      in ((pat, rhs) :: firstOf restP, secondOf restP)
 
-inlAlts : List String -> List (Pair String String) -> List (Pair Pat Expr) -> List (Pair Pat Expr)
+inlAlts : List String -> List (String, String) -> List (Pat, Expr) -> List (Pat, Expr)
 inlAlts comp als [] = []
-inlAlts comp als ((Pair pat body) :: rest) =
-  Pair pat (inlGo comp (dropAliases (patNamesOf pat) als) body) :: inlAlts comp als rest
+inlAlts comp als ((pat, body) :: rest) =
+  (pat, inlGo comp (dropAliases (patNamesOf pat) als) body) :: inlAlts comp als rest
 
-inlClauses : List String -> List (Pair String String) -> List (Pair (List Pat) Expr) -> List (Pair (List Pat) Expr)
+inlClauses : List String -> List (String, String) -> List (List Pat, Expr) -> List (List Pat, Expr)
 inlClauses comp als [] = []
-inlClauses comp als ((Pair pats body) :: rest) =
-  Pair pats (inlGo comp (dropAliases (patNamesOfPats pats) als) body) :: inlClauses comp als rest
+inlClauses comp als ((pats, body) :: rest) =
+  (pats, inlGo comp (dropAliases (patNamesOfPats pats) als) body) :: inlClauses comp als rest
 
-inlStmts : List String -> List (Pair String String) -> List DoStmt -> List DoStmt
+inlStmts : List String -> List (String, String) -> List DoStmt -> List DoStmt
 inlStmts comp als [] = []
 inlStmts comp als (s :: rest) =
   case s of
@@ -268,7 +268,7 @@ inlStmts comp als (s :: rest) =
         p = inlBinds comp als binds
       in DLet (firstOf p) sp :: inlStmts comp (secondOf p) rest
 
-inlGo : List String -> List (Pair String String) -> Expr -> Expr
+inlGo : List String -> List (String, String) -> Expr -> Expr
 inlGo comp als (EVar n sp) =
   case lookupAlias (rnameKey n) als of
     Just target => EVar (classifyName target) sp
@@ -301,7 +301,7 @@ inlGo comp als e = e
 inlineAliases : List String -> Expr -> Expr
 inlineAliases comp e = inlGo comp [] e
 
-siteCollectClauses : List String -> List String -> List (Pair String (List Int)) -> HashMap String (List Int) -> String -> List (Pair (List Pat) Expr) -> List Site -> List Site
+siteCollectClauses : List String -> List String -> List (String, List Int) -> HashMap String (List Int) -> String -> List (List Pat, Expr) -> List Site -> List Site
 siteCollectClauses comp ctors projs facts caller [] acc = acc
 siteCollectClauses comp ctors projs facts caller (cl :: rest) acc =
   let
@@ -315,10 +315,10 @@ siteCollectClauses comp ctors projs facts caller (cl :: rest) acc =
     rest
     (siteWalkC (exprBudget 32 body) comp ctors projs caller facts (strSizeEntries (firstOf cl)) [] body acc)
 
-siteCollect : List String -> List String -> List (Pair String (List Int)) -> HashMap String (List (Pair (List Pat) Expr)) -> HashMap String (List Int) -> List Site
+siteCollect : List String -> List String -> List (String, List Int) -> HashMap String (List (List Pat, Expr)) -> HashMap String (List Int) -> List Site
 siteCollect comp ctors projs defTbl facts = siteCollectGo comp ctors projs defTbl facts comp []
 
-siteCollectGo : List String -> List String -> List (Pair String (List Int)) -> HashMap String (List (Pair (List Pat) Expr)) -> HashMap String (List Int) -> List String -> List Site -> List Site
+siteCollectGo : List String -> List String -> List (String, List Int) -> HashMap String (List (List Pat, Expr)) -> HashMap String (List Int) -> List String -> List Site -> List Site
 siteCollectGo comp ctors projs defTbl facts [] acc = acc
 siteCollectGo comp ctors projs defTbl facts (f :: rest) acc =
   siteCollectGo
@@ -333,9 +333,9 @@ siteCollectGo comp ctors projs defTbl facts (f :: rest) acc =
 scIsStrict : Int -> Bool
 scIsStrict m = m /= 0
 
-maxBaseOf : List (Pair String (Pair Int (Pair Int (List Int)))) -> Int
+maxBaseOf : List (String, Int, Int, List Int) -> Int
 maxBaseOf [] = 0
-maxBaseOf ((Pair n (Pair base (Pair depth path))) :: rest) = maxInt base (maxBaseOf rest)
+maxBaseOf ((n, base, depth, path) :: rest) = maxInt base (maxBaseOf rest)
 
 insertEdge : ScEdge -> List ScEdge -> List ScEdge
 insertEdge e [] = [e]
@@ -422,9 +422,9 @@ graphsOK (g :: rest) = graphOK g && graphsOK rest
 tableGraphCap : Int
 tableGraphCap = 512
 
-tableLookup : Pair String String -> List (Pair (Pair String String) (List (List ScEdge))) -> Maybe (List (List ScEdge))
+tableLookup : (String, String) -> List ((String, String), List (List ScEdge)) -> Maybe (List (List ScEdge))
 tableLookup k [] = Nothing
-tableLookup k ((Pair k2 gs) :: rest) =
+tableLookup k ((k2, gs) :: rest) =
   if firstOf k == firstOf k2 then
     if secondOf k == secondOf k2 then Just gs else tableLookup k rest
   else
@@ -438,87 +438,84 @@ graphListSubset : List (List ScEdge) -> List (List ScEdge) -> Bool
 graphListSubset [] b = True
 graphListSubset (g :: rest) b = graphListHas g b && graphListSubset rest b
 
-tableAddPair : String -> String -> List ScEdge -> List (Pair (Pair String String) (List (List ScEdge))) -> List (Pair (Pair String String) (List (List ScEdge)))
-tableAddPair f g edges [] = [Pair (Pair f g) [edges]]
-tableAddPair f g edges ((Pair (Pair f2 g2) gs) :: rest) =
+tableAddPair : String -> String -> List ScEdge -> List ((String, String), List (List ScEdge)) -> List ((String, String), List (List ScEdge))
+tableAddPair f g edges [] = [((f, g), [edges])]
+tableAddPair f g edges (((f2, g2), gs) :: rest) =
   if f == f2 then
-    if g == g2 then
-      Pair (Pair f g) (edges :: gs) :: rest
-    else
-      Pair (Pair f2 g2) gs :: tableAddPair f g edges rest
+    if g == g2 then ((f, g), edges :: gs) :: rest else ((f2, g2), gs) :: tableAddPair f g edges rest
   else
-    Pair (Pair f2 g2) gs :: tableAddPair f g edges rest
+    ((f2, g2), gs) :: tableAddPair f g edges rest
 
-tableAdd : String -> String -> List ScEdge -> List (Pair (Pair String String) (List (List ScEdge))) -> Pair (List (Pair (Pair String String) (List (List ScEdge)))) Bool
+tableAdd : String -> String -> List ScEdge -> List ((String, String), List (List ScEdge)) -> (List ((String, String), List (List ScEdge)), Bool)
 tableAdd f g edges table =
-  case tableLookup (Pair f g) table of
-    Nothing => Pair (tableAddPair f g edges table) True
+  case tableLookup (f, g) table of
+    Nothing => (tableAddPair f g edges table, True)
     Just gs =>
       if graphListHas edges gs then
-        Pair table True
+        (table, True)
       else if length gs >= tableGraphCap then
-        Pair table False
+        (table, False)
       else
-        Pair (tableAddPair f g edges table) True
+        (tableAddPair f g edges table, True)
 
 -- ---------------------------------------------------------------
 -- 传递闭包（每轮：对表中每张图 a:(f,g) 与每张图 b:(g,h) 合成加入 (f,h)）
 -- ---------------------------------------------------------------
-closureStepHs : String -> String -> List ScEdge -> List (List ScEdge) -> List (Pair (Pair String String) (List (List ScEdge))) -> Pair (List (Pair (Pair String String) (List (List ScEdge)))) Bool
-closureStepHs f h a [] acc = Pair acc True
+closureStepHs : String -> String -> List ScEdge -> List (List ScEdge) -> List ((String, String), List (List ScEdge)) -> (List ((String, String), List (List ScEdge)), Bool)
+closureStepHs f h a [] acc = (acc, True)
 closureStepHs f h a (b :: bs) acc =
   case tableAdd f h (composeEdges a b) acc of
-    Pair acc2 True => closureStepHs f h a bs acc2
-    Pair acc2 False => Pair acc2 False
+    (acc2, True) => closureStepHs f h a bs acc2
+    (acc2, False) => (acc2, False)
 
-closureStepOne : String -> String -> List ScEdge -> List (Pair (Pair String String) (List (List ScEdge))) -> List (Pair (Pair String String) (List (List ScEdge))) -> Pair (List (Pair (Pair String String) (List (List ScEdge)))) Bool
+closureStepOne : String -> String -> List ScEdge -> List ((String, String), List (List ScEdge)) -> List ((String, String), List (List ScEdge)) -> (List ((String, String), List (List ScEdge)), Bool)
 closureStepOne f g a table acc = closureStepOneGo f g a table acc True
 
-closureStepOneGo : String -> String -> List ScEdge -> List (Pair (Pair String String) (List (List ScEdge))) -> List (Pair (Pair String String) (List (List ScEdge))) -> Bool -> Pair (List (Pair (Pair String String) (List (List ScEdge)))) Bool
-closureStepOneGo f g a [] acc ok = Pair acc ok
-closureStepOneGo f g a ((Pair (Pair g2 h) hs) :: rest) acc ok =
+closureStepOneGo : String -> String -> List ScEdge -> List ((String, String), List (List ScEdge)) -> List ((String, String), List (List ScEdge)) -> Bool -> (List ((String, String), List (List ScEdge)), Bool)
+closureStepOneGo f g a [] acc ok = (acc, ok)
+closureStepOneGo f g a (((g2, h), hs) :: rest) acc ok =
   if g2 == g then
     case closureStepHs f h a hs acc of
-      Pair acc2 (ok2@True) => closureStepOneGo f g a rest acc2 ok2
-      Pair acc2 False => Pair acc2 False
+      (acc2, ok2@True) => closureStepOneGo f g a rest acc2 ok2
+      (acc2, False) => (acc2, False)
   else
     closureStepOneGo f g a rest acc ok
 
-closureStepGraphs : String -> String -> List (List ScEdge) -> List (Pair (Pair String String) (List (List ScEdge))) -> List (Pair (Pair String String) (List (List ScEdge))) -> Pair (List (Pair (Pair String String) (List (List ScEdge)))) Bool
-closureStepGraphs f g [] table acc = Pair acc True
+closureStepGraphs : String -> String -> List (List ScEdge) -> List ((String, String), List (List ScEdge)) -> List ((String, String), List (List ScEdge)) -> (List ((String, String), List (List ScEdge)), Bool)
+closureStepGraphs f g [] table acc = (acc, True)
 closureStepGraphs f g (a :: arest) table acc =
   case closureStepOne f g a table acc of
-    Pair acc2 True => closureStepGraphs f g arest table acc2
-    Pair acc2 False => Pair acc2 False
+    (acc2, True) => closureStepGraphs f g arest table acc2
+    (acc2, False) => (acc2, False)
 
-closureStepGo : List (Pair (Pair String String) (List (List ScEdge))) -> List (Pair (Pair String String) (List (List ScEdge))) -> List (Pair (Pair String String) (List (List ScEdge))) -> Pair (List (Pair (Pair String String) (List (List ScEdge)))) Bool
-closureStepGo [] table acc = Pair acc True
-closureStepGo ((Pair (Pair f g) gs) :: rest) table acc =
+closureStepGo : List ((String, String), List (List ScEdge)) -> List ((String, String), List (List ScEdge)) -> List ((String, String), List (List ScEdge)) -> (List ((String, String), List (List ScEdge)), Bool)
+closureStepGo [] table acc = (acc, True)
+closureStepGo (((f, g), gs) :: rest) table acc =
   case closureStepGraphs f g gs table acc of
-    Pair acc2 True => closureStepGo rest table acc2
-    Pair acc2 False => Pair acc2 False
+    (acc2, True) => closureStepGo rest table acc2
+    (acc2, False) => (acc2, False)
 
-closureStep : List (Pair (Pair String String) (List (List ScEdge))) -> Pair (List (Pair (Pair String String) (List (List ScEdge)))) Bool
+closureStep : List ((String, String), List (List ScEdge)) -> (List ((String, String), List (List ScEdge)), Bool)
 closureStep table = closureStepGo table table table
 
-tableSame : List (Pair (Pair String String) (List (List ScEdge))) -> List (Pair (Pair String String) (List (List ScEdge))) -> Bool
+tableSame : List ((String, String), List (List ScEdge)) -> List ((String, String), List (List ScEdge)) -> Bool
 tableSame a b = length a == length b && tableSubset a b
 
-tableSubset : List (Pair (Pair String String) (List (List ScEdge))) -> List (Pair (Pair String String) (List (List ScEdge))) -> Bool
+tableSubset : List ((String, String), List (List ScEdge)) -> List ((String, String), List (List ScEdge)) -> Bool
 tableSubset [] b = True
-tableSubset ((Pair k gs) :: rest) b =
+tableSubset ((k, gs) :: rest) b =
   case tableLookup k b of
     Nothing => False
     Just gs2 => graphListSubset gs gs2 && tableSubset rest b
 
-closureLoop : List (Pair (Pair String String) (List (List ScEdge))) -> Int -> Pair (List (Pair (Pair String String) (List (List ScEdge)))) (Pair Bool Int)
+closureLoop : List ((String, String), List (List ScEdge)) -> Int -> (List ((String, String), List (List ScEdge)), Bool, Int)
 closureLoop table fuel =
   if fuel <= 0 then
-    Pair table (Pair False fuel)
+    (table, False, fuel)
   else
     case closureStep table of
-      Pair table2 True => if tableSame table table2 then Pair table2 (Pair True fuel) else closureLoop table2 (fuel - 1)
-      Pair table2 False => Pair table2 (Pair False fuel)
+      (table2, True) => if tableSame table table2 then (table2, True, fuel) else closureLoop table2 (fuel - 1)
+      (table2, False) => (table2, False, fuel)
 
 -- ---------------------------------------------------------------
 -- 从调用点构造图
@@ -526,7 +523,7 @@ closureLoop table fuel =
 
 -- 实参依赖的 caller 形参位：关系证不出时用它决定落哪些弱边。只按真实依赖落边，
 -- 否则 `f x y = f x (y - 1)` 会凭空得到 0→1 / 1→0 的弱环，把正常程序判失败。
-argBases : List (Pair String (Pair Int (Pair Int (List Int)))) -> Expr -> List Int
+argBases : List (String, Int, Int, List Int) -> Expr -> List Int
 argBases sizes e = dedupBases (argBasesGo sizes [] e)
 
 basesUpToGo : Int -> List Int -> List Int
@@ -554,20 +551,20 @@ patNamesOfPats : List Pat -> List String
 patNamesOfPats [] = []
 patNamesOfPats (p :: rest) = append (patNamesOf p) (patNamesOfPats rest)
 
-patNamesOfFields : List (Pair String Pat) -> List String
+patNamesOfFields : List (String, Pat) -> List String
 patNamesOfFields [] = []
-patNamesOfFields ((Pair fn fp) :: rest) = append (patNamesOf fp) (patNamesOfFields rest)
+patNamesOfFields ((fn, fp) :: rest) = append (patNamesOf fp) (patNamesOfFields rest)
 
-patNamesOfBinds : List (Pair Pat Expr) -> List String
+patNamesOfBinds : List (Pat, Expr) -> List String
 patNamesOfBinds [] = []
-patNamesOfBinds ((Pair pat val) :: rest) = append (patNamesOf pat) (patNamesOfBinds rest)
+patNamesOfBinds ((pat, val) :: rest) = append (patNamesOf pat) (patNamesOfBinds rest)
 
-argBasesGo : List (Pair String (Pair Int (Pair Int (List Int)))) -> List String -> Expr -> List Int
+argBasesGo : List (String, Int, Int, List Int) -> List String -> Expr -> List Int
 argBasesGo sizes locals (EVar n sp) =
   let
     name = rnameKey n
   in case sizeOfVarStrict name sizes of
-    Just (Pair base pr) => [base]
+    Just (base, pr) => [base]
     Nothing => if memName name locals then basesUpTo (maxBaseOf sizes) else []
 argBasesGo sizes locals (ELam ns body sp) = argBasesGo sizes (append (map firstOf ns) locals) body
 argBasesGo sizes locals (EApp fn args sp) =
@@ -602,34 +599,34 @@ argBasesGo sizes locals (EAnn value ty sp) =
 argBasesGo sizes locals (EInterp multi parts sp) = argBasesParts sizes locals parts
 argBasesGo sizes locals _ = []
 
-argBasesArgs : List (Pair String (Pair Int (Pair Int (List Int)))) -> List String -> List Expr -> List Int
+argBasesArgs : List (String, Int, Int, List Int) -> List String -> List Expr -> List Int
 argBasesArgs sizes locals [] = []
 argBasesArgs sizes locals (a :: rest) =
   append (argBasesGo sizes locals a) (argBasesArgs sizes locals rest)
 
-argBasesFields : List (Pair String (Pair Int (Pair Int (List Int)))) -> List String -> List (Pair String Expr) -> List Int
+argBasesFields : List (String, Int, Int, List Int) -> List String -> List (String, Expr) -> List Int
 argBasesFields sizes locals [] = []
-argBasesFields sizes locals ((Pair fn fe) :: rest) =
+argBasesFields sizes locals ((fn, fe) :: rest) =
   append (argBasesGo sizes locals fe) (argBasesFields sizes locals rest)
 
-argBasesBinds : List (Pair String (Pair Int (Pair Int (List Int)))) -> List String -> List (Pair Pat Expr) -> List Int
+argBasesBinds : List (String, Int, Int, List Int) -> List String -> List (Pat, Expr) -> List Int
 argBasesBinds sizes locals [] = []
-argBasesBinds sizes locals ((Pair pat val) :: rest) =
+argBasesBinds sizes locals ((pat, val) :: rest) =
   append (argBasesGo sizes locals val) (argBasesBinds sizes locals rest)
 
-argBasesAlts : List (Pair String (Pair Int (Pair Int (List Int)))) -> List String -> List (Pair Pat Expr) -> List Int
+argBasesAlts : List (String, Int, Int, List Int) -> List String -> List (Pat, Expr) -> List Int
 argBasesAlts sizes locals [] = []
-argBasesAlts sizes locals ((Pair pat body) :: rest) =
+argBasesAlts sizes locals ((pat, body) :: rest) =
   append (argBasesGo sizes (append (patNamesOf pat) locals) body) (argBasesAlts sizes locals rest)
 
-argBasesClauses : List (Pair String (Pair Int (Pair Int (List Int)))) -> List String -> List (Pair (List Pat) Expr) -> List Int
+argBasesClauses : List (String, Int, Int, List Int) -> List String -> List (List Pat, Expr) -> List Int
 argBasesClauses sizes locals [] = []
-argBasesClauses sizes locals ((Pair pats body) :: rest) =
+argBasesClauses sizes locals ((pats, body) :: rest) =
   append
     (argBasesGo sizes (append (patNamesOfPats pats) locals) body)
     (argBasesClauses sizes locals rest)
 
-argBasesStmts : List (Pair String (Pair Int (Pair Int (List Int)))) -> List String -> List DoStmt -> List Int
+argBasesStmts : List (String, Int, Int, List Int) -> List String -> List DoStmt -> List Int
 argBasesStmts sizes locals [] = []
 argBasesStmts sizes locals (s :: rest) =
   case s of
@@ -641,7 +638,7 @@ argBasesStmts sizes locals (s :: rest) =
         (argBasesBinds sizes locals binds)
         (argBasesStmts sizes (append (patNamesOfBinds binds) locals) rest)
 
-argBasesParts : List (Pair String (Pair Int (Pair Int (List Int)))) -> List String -> List InterpPart -> List Int
+argBasesParts : List (String, Int, Int, List Int) -> List String -> List InterpPart -> List Int
 argBasesParts sizes locals [] = []
 argBasesParts sizes locals (p :: rest) =
   case p of
@@ -660,13 +657,13 @@ blindEdgesI i arity =
   else
     append (blindEdgesJ arity i) (blindEdgesI (i - 1) arity)
 
-blindEdges : HashMap String (List (Pair (List Pat) Expr)) -> Site -> List ScEdge
+blindEdges : HashMap String (List (List Pat, Expr)) -> Site -> List ScEdge
 blindEdges defTbl s =
   blindEdgesI
     (defArity (clausesOfDefTbl s.siteCaller defTbl) - 1)
     (defArity (clausesOfDefTbl s.siteCallee defTbl))
 
-siteEdgeAt : Int -> Int -> List Int -> Site -> List String -> List (Pair String (List Int)) -> HashMap String (List Int) -> List ScEdge
+siteEdgeAt : Int -> Int -> List Int -> Site -> List String -> List (String, List Int) -> HashMap String (List Int) -> List ScEdge
 siteEdgeAt i j deps s ctors projs facts =
   case nthExpr s.siteArgs j of
     Nothing => []
@@ -680,7 +677,7 @@ nthDeps : List (List Int) -> Int -> List Int
 nthDeps [] i = []
 nthDeps (d :: rest) i = if i <= 0 then d else nthDeps rest (i - 1)
 
-siteEdgesJ : Int -> Int -> List (List Int) -> Site -> List String -> List (Pair String (List Int)) -> HashMap String (List Int) -> List ScEdge
+siteEdgesJ : Int -> Int -> List (List Int) -> Site -> List String -> List (String, List Int) -> HashMap String (List Int) -> List ScEdge
 siteEdgesJ i count deps s ctors projs facts =
   if count <= 0 then
     []
@@ -689,7 +686,7 @@ siteEdgesJ i count deps s ctors projs facts =
       (siteEdgeAt i (count - 1) (nthDeps deps (count - 1)) s ctors projs facts)
       (siteEdgesJ i (count - 1) deps s ctors projs facts)
 
-siteEdgesI : Int -> List (List Int) -> Site -> List String -> List (Pair String (List Int)) -> HashMap String (List Int) -> List ScEdge
+siteEdgesI : Int -> List (List Int) -> Site -> List String -> List (String, List Int) -> HashMap String (List Int) -> List ScEdge
 siteEdgesI i deps s ctors projs facts =
   if i <= 0 then
     siteEdgesJ 0 (length s.siteArgs) deps s ctors projs facts
@@ -698,24 +695,24 @@ siteEdgesI i deps s ctors projs facts =
       (siteEdgesJ i (length s.siteArgs) deps s ctors projs facts)
       (siteEdgesI (i - 1) deps s ctors projs facts)
 
-siteEdgesOf : HashMap String (List (Pair (List Pat) Expr)) -> List String -> List (Pair String (List Int)) -> HashMap String (List Int) -> Site -> List ScEdge
+siteEdgesOf : HashMap String (List (List Pat, Expr)) -> List String -> List (String, List Int) -> HashMap String (List Int) -> Site -> List ScEdge
 siteEdgesOf defTbl ctors projs facts s =
   if s.siteBlind then
     blindEdges defTbl s
   else
     siteEdgesI (maxBaseOf s.siteSizes) (map (argBases s.siteSizes) s.siteArgs) s ctors projs facts
 
-initialTable : HashMap String (List (Pair (List Pat) Expr)) -> List Site -> List String -> List (Pair String (List Int)) -> HashMap String (List Int) -> Pair (List (Pair (Pair String String) (List (List ScEdge)))) Bool
+initialTable : HashMap String (List (List Pat, Expr)) -> List Site -> List String -> List (String, List Int) -> HashMap String (List Int) -> (List ((String, String), List (List ScEdge)), Bool)
 initialTable defTbl sites ctors projs facts = initialTableGo defTbl sites ctors projs facts [] True
 
-initialTableGo : HashMap String (List (Pair (List Pat) Expr)) -> List Site -> List String -> List (Pair String (List Int)) -> HashMap String (List Int) -> List (Pair (Pair String String) (List (List ScEdge))) -> Bool -> Pair (List (Pair (Pair String String) (List (List ScEdge)))) Bool
-initialTableGo defTbl [] ctors projs facts acc ok = Pair acc ok
+initialTableGo : HashMap String (List (List Pat, Expr)) -> List Site -> List String -> List (String, List Int) -> HashMap String (List Int) -> List ((String, String), List (List ScEdge)) -> Bool -> (List ((String, String), List (List ScEdge)), Bool)
+initialTableGo defTbl [] ctors projs facts acc ok = (acc, ok)
 initialTableGo defTbl (s :: rest) ctors projs facts acc ok =
   if ok then
     case tableAdd s.siteCaller s.siteCallee (siteEdgesOf defTbl ctors projs facts s) acc of
-      Pair acc2 ok2 => initialTableGo defTbl rest ctors projs facts acc2 ok2
+      (acc2, ok2) => initialTableGo defTbl rest ctors projs facts acc2 ok2
   else
-    Pair acc False
+    (acc, False)
 
 -- ---------------------------------------------------------------
 -- 判定
@@ -725,18 +722,18 @@ sctClosureFuel : Int
 sctClosureFuel = 240
 
 -- 幂等图的起点必然等于终点（幂等即自合成），所以只检查 `f == g` 的配对。
-sctCheckTable : List (Pair (Pair String String) (List (List ScEdge))) -> Bool
+sctCheckTable : List ((String, String), List (List ScEdge)) -> Bool
 sctCheckTable [] = True
-sctCheckTable ((Pair (Pair f g) gs) :: rest) =
+sctCheckTable (((f, g), gs) :: rest) =
   if f == g then if graphsOK gs then sctCheckTable rest else False else sctCheckTable rest
 
 sctBadGraphs : String -> List (List ScEdge) -> List String
 sctBadGraphs f [] = []
 sctBadGraphs f (g :: rest) = if graphOK g then sctBadGraphs f rest else f :: sctBadGraphs f rest
 
-sctBadPairs : List (Pair (Pair String String) (List (List ScEdge))) -> List String
+sctBadPairs : List ((String, String), List (List ScEdge)) -> List String
 sctBadPairs [] = []
-sctBadPairs ((Pair (Pair f g) gs) :: rest) =
+sctBadPairs (((f, g), gs) :: rest) =
   if f == g then append (sctBadGraphs f gs) (sctBadPairs rest) else sctBadPairs rest
 
 edgeText : ScEdge -> String
@@ -758,12 +755,12 @@ badGraphText f [] = []
 badGraphText f (g :: rest) =
   if graphOK g then badGraphText f rest else "${f}{${edgesText g}}" :: badGraphText f rest
 
-sctBadText : List (Pair (Pair String String) (List (List ScEdge))) -> List String
+sctBadText : List ((String, String), List (List ScEdge)) -> List String
 sctBadText [] = []
-sctBadText ((Pair (Pair f g) gs) :: rest) =
+sctBadText (((f, g), gs) :: rest) =
   if f == g then append (badGraphText f gs) (sctBadText rest) else sctBadText rest
 
-sctDiag : List (Pair (Pair String String) (List (List ScEdge))) -> String
+sctDiag : List ((String, String), List (List ScEdge)) -> String
 sctDiag table = joinComma (dedup (sctBadText table))
 
 -- 盲调用（callee 以值传递 / 遍历预算耗尽）只按弱边计入；单独点名，避免与
@@ -781,16 +778,16 @@ sctBlindNote sites =
     ns =>
       " [SCT 未识别调用：${joinComma ns}（callee 以值传递或遍历预算耗尽，只按弱边计入）]"
 
-export sctCheck : List String -> HashMap String (List (Pair (List Pat) Expr)) -> List String -> List (Pair String (List Int)) -> HashMap String (List Int) -> Diagnostic -> Check Int
+export sctCheck : List String -> HashMap String (List (List Pat, Expr)) -> List String -> List (String, List Int) -> HashMap String (List Int) -> Diagnostic -> Check Int
 sctCheck comp defTbl ctors projs facts msg =
   obsCheck "vuna.term.sct" (\_ => sctCheckGo comp defTbl ctors projs facts msg)
 
 -- | 表内图总数（SCT 规模读数）。
-countGraphs : List (Pair (Pair String String) (List (List ScEdge))) -> Int
+countGraphs : List ((String, String), List (List ScEdge)) -> Int
 countGraphs [] = 0
-countGraphs ((Pair k gs) :: rest) = length gs + countGraphs rest
+countGraphs ((k, gs) :: rest) = length gs + countGraphs rest
 
-sctCheckGo : List String -> HashMap String (List (Pair (List Pat) Expr)) -> List String -> List (Pair String (List Int)) -> HashMap String (List Int) -> Diagnostic -> Check Int
+sctCheckGo : List String -> HashMap String (List (List Pat, Expr)) -> List String -> List (String, List Int) -> HashMap String (List Int) -> Diagnostic -> Check Int
 sctCheckGo comp defTbl ctors projs facts msg =
   let
     sites = siteCollect comp ctors projs defTbl facts
@@ -798,12 +795,12 @@ sctCheckGo comp defTbl ctors projs facts msg =
     _ = Obs.obsCounter "vuna.counter.term.scc_size" (length comp)
     _ = Obs.obsCounter "vuna.counter.term.sites" (length sites)
   in case initialTable defTbl sites ctors projs facts of
-    Pair table0 ok0 =>
+    (table0, ok0) =>
       if ok0 then
         let
           _ = Obs.obsCounter "vuna.counter.term.graphs" (countGraphs table0)
         in case closureLoop table0 sctClosureFuel of
-          Pair table1 (Pair closed remaining) =>
+          (table1, closed, remaining) =>
             let
               _ = Obs.obsCounter "vuna.counter.term.closure_rounds" (sctClosureFuel - remaining)
               _ = Obs.obsCounter "vuna.counter.term.graphs_final" (countGraphs table1)
@@ -846,14 +843,14 @@ hasFuelGuard p0 (ELet binds body rec_ sp) = hasFuelGuard p0 body || anyBindFuelG
 hasFuelGuard p0 (ELam ns b sp) = hasFuelGuard p0 b
 hasFuelGuard p0 _ = False
 
-anyAltFuelGuard : String -> List (Pair Pat Expr) -> Bool
+anyAltFuelGuard : String -> List (Pat, Expr) -> Bool
 anyAltFuelGuard p0 [] = False
-anyAltFuelGuard p0 ((Pair pat body) :: rest) =
+anyAltFuelGuard p0 ((pat, body) :: rest) =
   if hasFuelGuard p0 body then True else anyAltFuelGuard p0 rest
 
-anyBindFuelGuard : String -> List (Pair Pat Expr) -> Bool
+anyBindFuelGuard : String -> List (Pat, Expr) -> Bool
 anyBindFuelGuard p0 [] = False
-anyBindFuelGuard p0 ((Pair pat val) :: rest) =
+anyBindFuelGuard p0 ((pat, val) :: rest) =
   if hasFuelGuard p0 val then True else anyBindFuelGuard p0 rest
 
 guardParamGo : List String -> Expr -> Maybe String
@@ -861,7 +858,7 @@ guardParamGo [] body = Nothing
 guardParamGo (n :: rest) body = if hasFuelGuard n body then Just n else guardParamGo rest body
 
 -- | 首个 clause 里被 `<= 0` 守卫的形参名（fuel 参数）。
-fuelParamNameOf : String -> HashMap String (List (Pair (List Pat) Expr)) -> Maybe String
+fuelParamNameOf : String -> HashMap String (List (List Pat, Expr)) -> Maybe String
 fuelParamNameOf name defTbl =
   case clausesOfDefTbl name defTbl of
     [] => Nothing
@@ -869,7 +866,7 @@ fuelParamNameOf name defTbl =
 
 -- | callee 的 fuel 实参位置：有守卫时取守卫形参；否则按「与 caller 的 fuel 同名」的
 -- 形参定位（同一组里命名通常一致），都没有则退回第 0 个参数。
-fuelParamIndexOf : String -> String -> HashMap String (List (Pair (List Pat) Expr)) -> Maybe Int
+fuelParamIndexOf : String -> String -> HashMap String (List (List Pat, Expr)) -> Maybe Int
 fuelParamIndexOf callee callerFuel defTbl =
   case clausesOfDefTbl callee defTbl of
     [] => Just 0
@@ -883,7 +880,7 @@ fuelParamIndexOf callee callerFuel defTbl =
             Just i => Just i
             Nothing => Just 0
 
-callerFuelName : String -> HashMap String (List (Pair (List Pat) Expr)) -> String
+callerFuelName : String -> HashMap String (List (List Pat, Expr)) -> String
 callerFuelName name defTbl =
   case fuelParamNameOf name defTbl of
     Just n => n
@@ -895,7 +892,7 @@ callerFuelName name defTbl =
             [] => ""
             n :: rest2 => n
 
-paramsOf : String -> HashMap String (List (Pair (List Pat) Expr)) -> List String
+paramsOf : String -> HashMap String (List (List Pat, Expr)) -> List String
 paramsOf name defTbl =
   case clausesOfDefTbl name defTbl of
     [] => []
@@ -933,12 +930,12 @@ siteFuelStrict callerParams callerGuard (Just i) site =
                 Nothing
             _ => Nothing
 
-fuelEdgesOf : List String -> HashMap String (List (Pair (List Pat) Expr)) -> List Site -> List (Pair (Pair (Pair String String) Int) Span)
+fuelEdgesOf : List String -> HashMap String (List (List Pat, Expr)) -> List Site -> List (((String, String), Int), Span)
 fuelEdgesOf comp defTbl sites = fuelEdgesGo comp defTbl sites []
 
 -- | 收集调用边：识别出「fuel / fuel-k」的站点标严格边，其余**组内**站点按弱边计入。
 --   把未识别站点当弱边（而不是丢掉）是判据成立的前提：丢掉会让「弱环」在图上消失。
-fuelEdgesGo : List String -> HashMap String (List (Pair (List Pat) Expr)) -> List Site -> List (Pair (Pair (Pair String String) Int) Span) -> List (Pair (Pair (Pair String String) Int) Span)
+fuelEdgesGo : List String -> HashMap String (List (List Pat, Expr)) -> List Site -> List (((String, String), Int), Span) -> List (((String, String), Int), Span)
 fuelEdgesGo comp defTbl [] acc = acc
 fuelEdgesGo comp defTbl (s :: rest) acc =
   let
@@ -949,56 +946,52 @@ fuelEdgesGo comp defTbl (s :: rest) acc =
         Just False => 0
         Nothing => 0
     acc2 =
-      if inGroup then
-        Pair (Pair (Pair s.siteCaller s.siteCallee) mode) (Span "" 0 0 0 0 0 0) :: acc
-      else
-        acc
+      if inGroup then (((s.siteCaller, s.siteCallee), mode), Span "" 0 0 0 0 0 0) :: acc else acc
   in fuelEdgesGo comp defTbl rest acc2
 
 -- | 单个成员是否有 `fuel <= 0` 守卫（取首个 clause 里的守卫参数）。
-memberGuarded : String -> HashMap String (List (Pair (List Pat) Expr)) -> Bool
+memberGuarded : String -> HashMap String (List (List Pat, Expr)) -> Bool
 memberGuarded f defTbl =
   case fuelParamNameOf f defTbl of
     Just _ => True
     Nothing => False
 
-unguardedOf : List String -> HashMap String (List (Pair (List Pat) Expr)) -> List String
+unguardedOf : List String -> HashMap String (List (List Pat, Expr)) -> List String
 unguardedOf [] defTbl = []
 unguardedOf (f :: rest) defTbl =
   if memberGuarded f defTbl then unguardedOf rest defTbl else f :: unguardedOf rest defTbl
 
 -- 只问「有没有环」：严格边也参与，否则同一对之间的严格边会让弱邻接丢失。
-allWeakEdges : List (Pair (Pair (Pair String String) Int) Span) -> List (Pair (Pair (Pair String String) Int) Span)
+allWeakEdges : List (((String, String), Int), Span) -> List (((String, String), Int), Span)
 allWeakEdges [] = []
-allWeakEdges ((Pair (Pair (Pair c g) m) sp) :: rest) =
-  Pair (Pair (Pair c g) 0) sp :: allWeakEdges rest
+allWeakEdges ((((c, g), m), sp) :: rest) = (((c, g), 0), sp) :: allWeakEdges rest
 
-onlyUnguarded : List String -> List (Pair (Pair (Pair String String) Int) Span) -> List (Pair (Pair (Pair String String) Int) Span)
+onlyUnguarded : List String -> List (((String, String), Int), Span) -> List (((String, String), Int), Span)
 onlyUnguarded unguarded [] = []
-onlyUnguarded unguarded ((Pair (Pair (Pair c g) m) sp) :: rest) =
+onlyUnguarded unguarded ((((c, g), m), sp) :: rest) =
   if memName c unguarded then
     if memName g unguarded then
-      Pair (Pair (Pair c g) m) sp :: onlyUnguarded unguarded rest
+      (((c, g), m), sp) :: onlyUnguarded unguarded rest
     else
       onlyUnguarded unguarded rest
   else
     onlyUnguarded unguarded rest
 
 -- 不含守卫的子图是否有环：有环 ⇒ 存在一条永不触底的路径，判据不成立。
-unguardedCycle : List String -> List (Pair (Pair (Pair String String) Int) Span) -> Bool
+unguardedCycle : List String -> List (((String, String), Int), Span) -> Bool
 unguardedCycle unguarded edges =
   hasWeakCycle unguarded (allWeakEdges (onlyUnguarded unguarded edges))
 
 -- | 守卫条件：全组都守卫，或任何环都穿过守卫节点（不含守卫的子图无环）。
 -- 后者覆盖「守卫只写在少数几个入口函数上」的写法，仍然 sound：无限下降必然反复
 -- 经过守卫节点，而守卫节点在 `fuel <= 0` 时直接返回。
-fuelAcceptable : List String -> HashMap String (List (Pair (List Pat) Expr)) -> List (Pair (Pair (Pair String String) Int) Span) -> Bool
+fuelAcceptable : List String -> HashMap String (List (List Pat, Expr)) -> List (((String, String), Int), Span) -> Bool
 fuelAcceptable comp defTbl edges =
   case unguardedOf comp defTbl of
     [] => True
     unguarded => if unguardedCycle unguarded edges then False else True
 
-export tryFuelThread : List String -> HashMap String (List (Pair (List Pat) Expr)) -> List String -> List (Pair String (List Int)) -> HashMap String (List Int) -> Diagnostic -> Check Int
+export tryFuelThread : List String -> HashMap String (List (List Pat, Expr)) -> List String -> List (String, List Int) -> HashMap String (List Int) -> Diagnostic -> Check Int
 tryFuelThread comp defTbl ctors projs facts msg =
   let
     sites = siteCollect comp ctors projs defTbl facts
@@ -1010,5 +1003,5 @@ tryFuelThread comp defTbl ctors projs facts msg =
     ErrC msg
 
 -- | 取边上的参数关系编号。
-edgeModeOf : Pair (Pair (Pair String String) Int) Span -> Int
-edgeModeOf (Pair (Pair (Pair caller callee) mode) sp) = mode
+edgeModeOf : (((String, String), Int), Span) -> Int
+edgeModeOf (((caller, callee), mode), sp) = mode

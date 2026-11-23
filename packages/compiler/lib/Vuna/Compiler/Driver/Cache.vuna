@@ -28,7 +28,7 @@ import Vuna.Compiler.Elab.Types
 export record CachedProgram(..) where
   cachedDatas : List DtData
   cachedDefs : List DtDef
-  cachedGlobals : List (Pair String Term)
+  cachedGlobals : List (String, Term)
   cachedInsts : List DtInst
   cachedClasses : List DtClass
   cachedOpaque : List String
@@ -39,7 +39,7 @@ cachedDatas (CachedProgram datas defs globals insts classes _) = datas
 export cachedDefs : CachedProgram -> List DtDef
 cachedDefs (CachedProgram datas defs globals insts classes _) = defs
 
-export cachedGlobals : CachedProgram -> List (Pair String Term)
+export cachedGlobals : CachedProgram -> List (String, Term)
 cachedGlobals (CachedProgram datas defs globals insts classes _) = globals
 
 export cachedInsts : CachedProgram -> List DtInst
@@ -94,15 +94,14 @@ fixClass tbl (DtClass n ps supers projs tys spans) =
     n
     ps
     (map (fixTerm tbl (length ps)) supers)
-    (map (\p => Pair (firstOf p) (fixTerm tbl 0 (secondOf p))) projs)
+    (map (\p => (firstOf p, fixTerm tbl 0 (secondOf p))) projs)
     (map (fixTerm tbl (length ps)) tys)
     spans
 
 -- 实例 telescope：tele 第 i 项在 i 个 tele binder 之下；ctx 域与结果头在全部 tele binder 之下。
-fixTele : HashMap Int Value -> Int -> List (Pair String Term) -> List (Pair String Term)
+fixTele : HashMap Int Value -> Int -> List (String, Term) -> List (String, Term)
 fixTele tbl depth [] = []
-fixTele tbl depth ((Pair n t) :: rest) =
-  Pair n (fixTerm tbl depth t) :: fixTele tbl (depth + 1) rest
+fixTele tbl depth ((n, t) :: rest) = (n, fixTerm tbl depth t) :: fixTele tbl (depth + 1) rest
 
 fixInst : HashMap Int Value -> DtInst -> DtInst
 fixInst tbl (DtInst n sym key tele ctxE head sp) =
@@ -128,7 +127,7 @@ cachedOfProgramWith tbl prog =
   CachedProgram
     (map (fixData tbl) (dtProgDatas prog))
     (map (fixDef tbl) (dtProgDefs prog))
-    (map (\p => Pair (firstOf p) (fixTerm tbl 0 (secondOf p))) (dtProgGlobals prog))
+    (map (\p => (firstOf p, fixTerm tbl 0 (secondOf p))) (dtProgGlobals prog))
     (map (fixInst tbl) (dtProgInsts prog))
     (map (fixClass tbl) (dtProgClasses prog))
     []
@@ -170,13 +169,13 @@ defsValid (d :: rest) =
 bodyValid : Term -> Bool
 bodyValid t = length (termMetasRuntime t) == 0 && not (hasFreeTermVar 0 t) && not (hasNegativeVar t)
 
-globalsValid : List (Pair String Term) -> Bool
+globalsValid : List (String, Term) -> Bool
 globalsValid [] = True
-globalsValid ((Pair n t) :: rest) = termValidAt 0 t && globalsValid rest
+globalsValid ((n, t) :: rest) = termValidAt 0 t && globalsValid rest
 
-teleValid : Int -> List (Pair String Term) -> Bool
+teleValid : Int -> List (String, Term) -> Bool
 teleValid depth [] = True
-teleValid depth ((Pair n t) :: rest) = termValidAt depth t && teleValid (depth + 1) rest
+teleValid depth ((n, t) :: rest) = termValidAt depth t && teleValid (depth + 1) rest
 
 termsValidAt : Int -> List Term -> Bool
 termsValidAt depth [] = True
@@ -274,9 +273,9 @@ defsIssue (d :: rest) =
     issue = defIssue d
   in if issue == "" then defsIssue rest else issue
 
-globalsIssue : List (Pair String Term) -> String
+globalsIssue : List (String, Term) -> String
 globalsIssue [] = ""
-globalsIssue ((Pair n t) :: rest) =
+globalsIssue ((n, t) :: rest) =
   let
     issue = termIssueAt 0 t
   in if issue == "" then globalsIssue rest else "${n}:${issue}"
@@ -298,9 +297,9 @@ instIssue i =
         headIssue = termIssueAt nTele i.dtInstHead
       in if headIssue == "" then "" else "${dtInstName i} head:${headIssue}"
 
-teleIssueGo : Int -> List (Pair String Term) -> String
+teleIssueGo : Int -> List (String, Term) -> String
 teleIssueGo depth [] = ""
-teleIssueGo depth ((Pair n t) :: rest) =
+teleIssueGo depth ((n, t) :: rest) =
   let
     issue = termIssueAt depth t
   in if issue == "" then teleIssueGo (depth + 1) rest else "${n}:${issue}"
@@ -408,14 +407,14 @@ shiftTermFuel fuel off t =
       TFloat raw => OkC (TFloat raw)
 
 -- λ 类型槽（binder 类型 + 结果类型）的 meta 移位。
-shiftLamTyFuel : Int -> Int -> Maybe (Pair LamMark (Pair (Maybe Term) (Maybe Term))) -> Check (Maybe (Pair LamMark (Pair (Maybe Term) (Maybe Term))))
+shiftLamTyFuel : Int -> Int -> Maybe (LamMark, Maybe Term, Maybe Term) -> Check (Maybe (LamMark, Maybe Term, Maybe Term))
 shiftLamTyFuel fuel off Nothing = OkC Nothing
 shiftLamTyFuel fuel off (Just p) =
   let
     tys = secondOf p
   in Vuna.Compiler.Base.Common.bind
     (shiftTermMaybeFuel fuel off (firstOf tys))
-    (\b => Vuna.Compiler.Base.Common.bind (shiftTermMaybeFuel fuel off (secondOf tys)) (\r => OkC (Just (Pair (firstOf p) (Pair b r)))))
+    (\b => Vuna.Compiler.Base.Common.bind (shiftTermMaybeFuel fuel off (secondOf tys)) (\r => OkC (Just (firstOf p, b, r))))
 
 -- λ binder 类型槽的 meta 移位（`Nothing` 不动）。
 shiftTermMaybeFuel : Int -> Int -> Maybe Term -> Check (Maybe Term)
@@ -424,12 +423,12 @@ shiftTermMaybeFuel fuel off (Just t) =
   Vuna.Compiler.Base.Common.bind (shiftTermFuel fuel off t) (\t2 => OkC (Just t2))
 
 -- 实参表 / case 分支表：元素项是 Term 的子项（不是结构子项，SCT 证不了终止 ⇒ 走 fuel）。
-shiftArgs : Int -> Int -> List (Pair Term Rig) -> Check (List (Pair Term Rig))
+shiftArgs : Int -> Int -> List (Term, Rig) -> Check (List (Term, Rig))
 shiftArgs fuel off [] = OkC []
-shiftArgs fuel off ((Pair a r) :: rest) =
+shiftArgs fuel off ((a, r) :: rest) =
   Vuna.Compiler.Base.Common.bind
     (shiftTermFuel fuel off a)
-    (\a2 => Vuna.Compiler.Base.Common.bind (shiftArgs fuel off rest) (\rest2 => OkC (Pair a2 r :: rest2)))
+    (\a2 => Vuna.Compiler.Base.Common.bind (shiftArgs fuel off rest) (\rest2 => OkC ((a2, r) :: rest2)))
 
 shiftAlts : Int -> Int -> List CaseAlt -> Check (List CaseAlt)
 shiftAlts fuel off [] = OkC []
@@ -462,12 +461,12 @@ shiftData off (DtData n ps ctors kind viaClasses lin repr fields isRec) =
     (Vuna.Compiler.Base.Common.traverse (shiftCtor off) ctors)
     (\ctors2 => Vuna.Compiler.Base.Common.bind (shiftTerm off kind) (\kind2 => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (shiftFieldMeta off) fields) (\fields2 => OkC (DtData n ps ctors2 kind2 viaClasses lin repr fields2 isRec))))
 
-shiftTele : Int -> List (Pair String Term) -> Check (List (Pair String Term))
+shiftTele : Int -> List (String, Term) -> Check (List (String, Term))
 shiftTele off [] = OkC []
-shiftTele off ((Pair n t) :: rest) =
+shiftTele off ((n, t) :: rest) =
   Vuna.Compiler.Base.Common.bind
     (shiftTerm off t)
-    (\t2 => Vuna.Compiler.Base.Common.bind (shiftTele off rest) (\rest2 => OkC (Pair n t2 :: rest2)))
+    (\t2 => Vuna.Compiler.Base.Common.bind (shiftTele off rest) (\rest2 => OkC ((n, t2) :: rest2)))
 
 shiftClass : Int -> DtClass -> Check DtClass
 shiftClass off (DtClass n ps supers projs tys spans) =
@@ -481,9 +480,8 @@ shiftInst off (DtInst n sym key tele ctxE head sp) =
     (shiftTele off tele)
     (\tele2 => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (shiftTerm off) ctxE) (\ctx2 => Vuna.Compiler.Base.Common.bind (shiftTerm off head) (\head2 => OkC (DtInst n sym key tele2 ctx2 head2 sp))))
 
-shiftGlobal : Int -> Pair String Term -> Check (Pair String Term)
-shiftGlobal off (Pair n t) =
-  Vuna.Compiler.Base.Common.bind (shiftTerm off t) (\t2 => OkC (Pair n t2))
+shiftGlobal : Int -> (String, Term) -> Check (String, Term)
+shiftGlobal off (n, t) = Vuna.Compiler.Base.Common.bind (shiftTerm off t) (\t2 => OkC (n, t2))
 
 export shiftCachedProgram : Int -> CachedProgram -> Check CachedProgram
 shiftCachedProgram off (CachedProgram datas defs globals insts classes _) =
@@ -508,24 +506,24 @@ encCachedProgram cp acc =
     cp.cachedDatas
     (encList encDtDef cp.cachedDefs (encList encGlobalPair cp.cachedGlobals (encList encDtInst cp.cachedInsts (encList encDtClass cp.cachedClasses (encList encStr cp.cachedOpaque acc)))))
 
-encGlobalPair : Pair String Term -> List String -> List String
-encGlobalPair (Pair n t) acc = encStr n (encTerm t acc)
+encGlobalPair : (String, Term) -> List String -> List String
+encGlobalPair (n, t) acc = encStr n (encTerm t acc)
 
 -- | 解析 `CachedProgram`（整串入口：要求恰好消费完）。
 export decCachedProgramComplete : String -> Maybe CachedProgram
 decCachedProgramComplete s =
   case decCachedProgram (strLength s) (curOf s) of
     Nothing => Nothing
-    Just (Pair cp rest) => if curAtEnd rest then Just cp else Nothing
+    Just (cp, rest) => if curAtEnd rest then Just cp else Nothing
 
-export decCachedProgram : Int -> Cur -> Maybe (Pair CachedProgram Cur)
+export decCachedProgram : Int -> Cur -> Maybe (CachedProgram, Cur)
 decCachedProgram fuel c =
   thenPair
     (decList decDtData (fuel - 1) c)
-    (\datas, b1 => thenPair (decList decDtDef (fuel - 1) b1) (\defs, b2 => thenPair (decList decGlobalPair (fuel - 1) b2) (\globals, b3 => thenPair (decList decDtInst (fuel - 1) b3) (\insts, b4 => thenPair (decList decDtClass (fuel - 1) b4) (\classes, b5 => thenPair (decList decStr (fuel - 1) b5) (\names, b6 => Just (Pair (CachedProgram datas defs globals insts classes names) b6)))))))
+    (\datas, b1 => thenPair (decList decDtDef (fuel - 1) b1) (\defs, b2 => thenPair (decList decGlobalPair (fuel - 1) b2) (\globals, b3 => thenPair (decList decDtInst (fuel - 1) b3) (\insts, b4 => thenPair (decList decDtClass (fuel - 1) b4) (\classes, b5 => thenPair (decList decStr (fuel - 1) b5) (\names, b6 => Just (CachedProgram datas defs globals insts classes names, b6)))))))
 
-decGlobalPair : Int -> Cur -> Maybe (Pair (Pair String Term) Cur)
+decGlobalPair : Int -> Cur -> Maybe ((String, Term), Cur)
 decGlobalPair fuel c =
   thenPair
     (decStr (fuel - 1) c)
-    (\n, b1 => thenPair (decTerm (fuel - 1) b1) (\t, b2 => Just (Pair (Pair n t) b2)))
+    (\n, b1 => thenPair (decTerm (fuel - 1) b1) (\t, b2 => Just ((n, t), b2)))

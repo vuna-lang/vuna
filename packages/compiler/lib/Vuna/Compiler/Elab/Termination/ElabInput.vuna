@@ -62,12 +62,12 @@ record DefShape where
 record ConvCtx where
   ccProjs : List ProjEntry
   -- | 字典符号 → 类名（本包自己的实例）。
-  ccDicts : List (Pair String String)
+  ccDicts : List (String, String)
   ccShapes : List DefShape
   ccClasses : List DtClass
   -- | record 构造子 → 按位置排列的字段名（`TProj` 的 `tele` 只有位置名，字段身份在
   -- `DtData.dtDataFields`）。
-  ccFields : List (Pair String (List String))
+  ccFields : List (String, List String)
   -- | 合成节点的 span：Core 的调用节点没有 span，统一用定义自身的声明位置，
   -- 终止性诊断的 label 因此落在定义上（而不是像源码层那样落在调用点）。
   ccSpan : Span
@@ -86,7 +86,7 @@ export grNameOf : Group -> String
 grNameOf g = g.grName
 
 -- | 把精化后的定义拆成分析组。返回（本包组名，`DFun` 形式的声明）。
-export elabTermInput : List DtData -> List DtClass -> List DtDef -> Pair (List String) (List Decl)
+export elabTermInput : List DtData -> List DtClass -> List DtDef -> (List String, List Decl)
 elabTermInput datas classes defs =
   let
     projs = projectionTable defs
@@ -94,12 +94,12 @@ elabTermInput datas classes defs =
     shapes = mapMaybe defShape defs
     fields = recordFieldTable datas
     groups = concatMap (groupsOfDef projs dicts shapes classes fields) defs
-  in Pair (map grNameOf groups) (map groupToDecl groups)
+  in (map grNameOf groups, map groupToDecl groups)
 
 groupToDecl : Group -> Decl
 groupToDecl g = DFun g.grName (map (\p => PVar p spanEmpty) g.grParams) g.grBody g.grSpan
 
-groupsOfDef : List ProjEntry -> List (Pair String String) -> List DefShape -> List DtClass -> List (Pair String (List String)) -> DtDef -> List Group
+groupsOfDef : List ProjEntry -> List (String, String) -> List DefShape -> List DtClass -> List (String, List String) -> DtDef -> List Group
 groupsOfDef projs dicts shapes classes fields d =
   let
     sp = fromMaybe spanEmpty (dtDefSpan d)
@@ -116,28 +116,28 @@ groupsOfDefGo cc d =
       else
         case dictFieldsOf cc body of
           -- 投影定义本身不是用户函数：它只提供 `投影 → 方法序号` 的映射。
-          Just (Pair ctor fields) => dictFieldGroups cc (dtDefName d) ctor fields
+          Just (ctor, fields) => dictFieldGroups cc (dtDefName d) ctor fields
           Nothing =>
             let
               stripped = stripLeading (dtDefType d) body
             in [Group (dtDefName d) (firstOf stripped) (convExpr cc (secondOf stripped)) cc.ccSpan]
 
 -- 字典定义：λ tele → λ ctx → `TCon MkDict_C [方法实现...]`。
-dictFieldsOf : ConvCtx -> Term -> Maybe (Pair String (List (Pair Term Rig)))
+dictFieldsOf : ConvCtx -> Term -> Maybe (String, List (Term, Rig))
 dictFieldsOf cc body =
   case peelLams body of
     TCon ctor fields =>
       case lookupDictCtor cc.ccClasses ctor of
-        Just _ => Just (Pair ctor fields)
+        Just _ => Just (ctor, fields)
         Nothing => Nothing
     _ => Nothing
 
-dictFieldGroups : ConvCtx -> String -> String -> List (Pair Term Rig) -> List Group
+dictFieldGroups : ConvCtx -> String -> String -> List (Term, Rig) -> List Group
 dictFieldGroups cc dictSym dictCtor fields = dictFieldGroupsGo cc dictSym dictCtor fields 0
 
-dictFieldGroupsGo : ConvCtx -> String -> String -> List (Pair Term Rig) -> Int -> List Group
+dictFieldGroupsGo : ConvCtx -> String -> String -> List (Term, Rig) -> Int -> List Group
 dictFieldGroupsGo cc dictSym dictCtor [] i = []
-dictFieldGroupsGo cc dictSym dictCtor ((Pair fieldTerm _) :: rest) i =
+dictFieldGroupsGo cc dictSym dictCtor ((fieldTerm, _) :: rest) i =
   case lookupCtorClass cc.ccClasses dictCtor of
     Nothing => dictFieldGroupsGo cc dictSym dictCtor rest (i + 1)
     Just cls =>
@@ -162,10 +162,10 @@ dictFieldGroupsGo cc dictSym dictCtor ((Pair fieldTerm _) :: rest) i =
 -- 字典符号 / 构造子 ↔ 类
 -- ---------------------------------------------------------------
 -- | 本包字典定义的名字 → 类名（由定义体的 `MkDict_C` 推出）。
-dictSymbolsOf : List DtClass -> List DtDef -> List (Pair String String)
+dictSymbolsOf : List DtClass -> List DtDef -> List (String, String)
 dictSymbolsOf classes defs = mapMaybe (dictSymbolOf classes) defs
 
-dictSymbolOf : List DtClass -> DtDef -> Maybe (Pair String String)
+dictSymbolOf : List DtClass -> DtDef -> Maybe (String, String)
 dictSymbolOf classes d =
   case dtDefBody d of
     Nothing => Nothing
@@ -173,7 +173,7 @@ dictSymbolOf classes d =
       case peelLams body of
         TCon ctor _ =>
           case lookupCtorClass classes ctor of
-            Just cls => Just (Pair (dtDefName d) (dtClassName cls))
+            Just cls => Just (dtDefName d, dtClassName cls)
             Nothing => Nothing
         _ => Nothing
 
@@ -188,7 +188,7 @@ lookupCtorClass = lookupDictCtor
 lookupDictClass : ConvCtx -> String -> Maybe String
 lookupDictClass cc sym =
   case filter (\p => firstOf p == sym) cc.ccDicts of
-    (Pair _ cls) :: _ => Just cls
+    (_, cls) :: _ => Just cls
     [] => Nothing
 
 lookupClassByName : List DtClass -> String -> Maybe DtClass
@@ -212,16 +212,16 @@ defShape d =
         counts = shapeOfTy (dtDefType d)
       in Just (DefShape (dtDefName d) (firstOf counts) (secondOf counts))
 
-shapeOfTy : Term -> Pair Int Int
+shapeOfTy : Term -> (Int, Int)
 shapeOfTy ty = shapeGo ty 0 0
 
-shapeGo : Term -> Int -> Int -> Pair Int Int
+shapeGo : Term -> Int -> Int -> (Int, Int)
 shapeGo (TPi _ implicit rig _ cod) prefix arity =
   if implicit then
     shapeGo cod (if rigIsErased rig then prefix else prefix + 1) arity
   else
     shapeGo cod prefix (if rigIsErased rig then arity else arity + 1)
-shapeGo _ prefix arity = Pair prefix arity
+shapeGo _ prefix arity = (prefix, arity)
 
 lookupShape : String -> List DefShape -> Maybe DefShape
 lookupShape name [] = Nothing
@@ -230,10 +230,10 @@ lookupShape name (s :: rest) = if s.dsName == name then Just s else lookupShape 
 -- | 按类型 Pi 链剥掉函数前导 λ：隐式 / 擦除 binder 不是值参数。
 --
 -- 类型链比 λ 链短时（函数返回函数）停在链尾：剩下的 λ 属于体，不再当参数。
-stripLeading : Term -> Term -> Pair (List String) Term
+stripLeading : Term -> Term -> (List String, Term)
 stripLeading ty body = stripGo ty body []
 
-stripGo : Term -> Term -> List String -> Pair (List String) Term
+stripGo : Term -> Term -> List String -> (List String, Term)
 stripGo (TPi _ implicit rig _ cod) body acc =
   case body of
     TLam name lamRig _ _ inner =>
@@ -241,8 +241,8 @@ stripGo (TPi _ implicit rig _ cod) body acc =
         isParam = not implicit && not (rigIsErased rig) && not (rigIsErased lamRig)
         acc2 = if isParam then append acc [name] else acc
       in stripGo cod inner acc2
-    _ => Pair acc body
-stripGo _ body acc = Pair acc body
+    _ => (acc, body)
+stripGo _ body acc = (acc, body)
 
 -- ---------------------------------------------------------------
 -- 表达式翻译
@@ -267,12 +267,12 @@ convGo cc t acc =
           if rigIsErased lamRig then
             convGo cc body (a :: rest)
           else
-            ELet [Pair (PVar name spanEmpty) a] (convGo cc body rest) False cc.ccSpan
+            ELet [(PVar name spanEmpty, a)] (convGo cc body rest) False cc.ccSpan
         [] =>
           if rigIsErased lamRig then
             convGo cc body []
           else
-            ELam [Pair name spanEmpty] (convGo cc body []) cc.ccSpan
+            ELam [(name, spanEmpty)] (convGo cc body []) cc.ccSpan
     _ => convLeaf cc t acc
 
 convLeaf : ConvCtx -> Term -> List Expr -> Expr
@@ -300,15 +300,15 @@ convLeaf cc t acc =
     -- 类型 / 元变量 / 布尔字面量：分析视角下是惰性常量。
     _ => applyAcc cc (EInt 0 cc.ccSpan) acc
 
-convArgs : ConvCtx -> List (Pair Term Rig) -> List Expr
+convArgs : ConvCtx -> List (Term, Rig) -> List Expr
 convArgs cc [] = []
-convArgs cc ((Pair arg rig) :: rest) =
+convArgs cc ((arg, rig) :: rest) =
   if rigIsErased rig then convArgs cc rest else convExpr cc arg :: convArgs cc rest
 
-convAlts : ConvCtx -> List CaseAlt -> List (Pair Pat Expr)
+convAlts : ConvCtx -> List CaseAlt -> List (Pat, Expr)
 convAlts cc [] = []
 convAlts cc ((CaseAlt name binders body) :: rest) =
-  Pair (altPattern name binders) (convExpr cc body) :: convAlts cc rest
+  (altPattern name binders, convExpr cc body) :: convAlts cc rest
 
 altPattern : String -> List Binder -> Pat
 altPattern "" binders = PWild spanEmpty
@@ -342,7 +342,7 @@ appGlobal cc name args =
                   case lookupClassByName cc.ccClasses cls of
                     Just classTerm =>
                       case nthAt classTerm.dtClassMethods pe.peField of
-                        Just (Pair method _) =>
+                        Just (method, _) =>
                           applyAcc
                             cc
                             (EVar (RLocal (dictGroupKey (rnameKey rname) method)) cc.ccSpan)
@@ -385,7 +385,7 @@ fieldMetaName m =
     n = m.dtFieldName
   in n
 
-recordFieldTable : List DtData -> List (Pair String (List String))
+recordFieldTable : List DtData -> List (String, List String)
 recordFieldTable [] = []
 recordFieldTable (d :: rest) =
   case dtDataFields d of
@@ -393,10 +393,10 @@ recordFieldTable (d :: rest) =
     fields =>
       let
         names = map fieldMetaName fields
-        entries = map (\c => Pair (dtCtorName c) names) (dtDataCtors d)
+        entries = map (\c => (dtCtorName c, names)) (dtDataCtors d)
       in append entries (recordFieldTable rest)
 
-fieldNameAt : ConvCtx -> String -> Int -> List (Pair String Rig) -> Maybe String
+fieldNameAt : ConvCtx -> String -> Int -> List (String, Rig) -> Maybe String
 fieldNameAt cc ctor i tele =
   case lookupFieldNames ctor cc.ccFields of
     Just names =>
@@ -405,15 +405,15 @@ fieldNameAt cc ctor i tele =
         Nothing => teleName tele i
     Nothing => teleName tele i
 
-lookupFieldNames : String -> List (Pair String (List String)) -> Maybe (List String)
+lookupFieldNames : String -> List (String, List String) -> Maybe (List String)
 lookupFieldNames ctor [] = Nothing
-lookupFieldNames ctor ((Pair c names) :: rest) =
+lookupFieldNames ctor ((c, names) :: rest) =
   if c == ctor then Just names else lookupFieldNames ctor rest
 
-teleName : List (Pair String Rig) -> Int -> Maybe String
+teleName : List (String, Rig) -> Int -> Maybe String
 teleName tele i =
   case nthAt tele i of
-    Just (Pair n _) => Just n
+    Just (n, _) => Just n
     Nothing => Nothing
 
 -- ---------------------------------------------------------------
@@ -448,10 +448,10 @@ projectionTable : List DtDef -> List ProjEntry
 projectionTable [] = []
 projectionTable (d :: rest) =
   case projectionShape (dtDefBody d) of
-    Just (Pair ctor field) => ProjEntry (dtDefName d) ctor field :: projectionTable rest
+    Just (ctor, field) => ProjEntry (dtDefName d) ctor field :: projectionTable rest
     Nothing => projectionTable rest
 
-projectionShape : Maybe Term -> Maybe (Pair String Int)
+projectionShape : Maybe Term -> Maybe (String, Int)
 projectionShape Nothing = Nothing
 projectionShape (Just body) =
   case peelToCase body of
@@ -459,7 +459,7 @@ projectionShape (Just body) =
       case appHeadVar (caseAltBody alt) of
         Just v =>
           case fieldIndexOfVar v of
-            Just k => Just (Pair (caseAltName alt) k)
+            Just k => Just (caseAltName alt, k)
             Nothing => Nothing
         Nothing => Nothing
     Nothing => Nothing

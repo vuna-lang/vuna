@@ -42,27 +42,27 @@ hasNoExplicitPiFuel fuel ec v =
 -- 元变量项要作为 `TCon` 的擦除实参保留：核心求值器的 `VCon` 实参表与构造子
 -- telescope **逐位对齐**（case 分支按 telescope 绑定子压环境），少一个擦除实参就会让
 -- 分支体里的变量索引整体偏移（`foldl` 的 `Nil` 分支取到错误的值）。
-export instantiateNullaryCtor : Ec -> Ctx -> Value -> Check (Pair Value (Pair (List Term) Ec))
+export instantiateNullaryCtor : Ec -> Ctx -> Value -> Check (Value, List Term, Ec)
 instantiateNullaryCtor ec ctx v = instantiateNullaryCtorFuel 64 ec ctx v
 
-instantiateNullaryCtorFuel : Int -> Ec -> Ctx -> Value -> Check (Pair Value (Pair (List Term) Ec))
+instantiateNullaryCtorFuel : Int -> Ec -> Ctx -> Value -> Check (Value, List Term, Ec)
 instantiateNullaryCtorFuel fuel ec ctx v =
   if fuel <= 0 then
-    OkC (Pair v (Pair [] ec))
+    OkC (v, [], ec)
   else
     case forceVal ec v of
       VPi _ True _ dom clo =>
         if isImplicitDomain ctx ec dom then
           case newMeta ctx ec of
-            Pair metaTerm ec1 =>
+            (metaTerm, ec1) =>
               Vuna.Compiler.Base.Common.bind (instantiateNullaryCtorFuel (fuel - 1) ec1 ctx (applyClosure clo (eval (ctxEnv ctx) metaTerm))) (
                   \p =>
                     case p of
-                      Pair ty (Pair metas ec2) => OkC (Pair ty (Pair ((::) metaTerm metas) ec2))
+                      (ty, metas, ec2) => OkC (ty, (::) metaTerm metas, ec2)
                 )
         else
-          OkC (Pair v (Pair [] ec))
-      _ => OkC (Pair v (Pair [] ec))
+          OkC (v, [], ec)
+      _ => OkC (v, [], ec)
 
 -- 零参构造子的项：`TCon name [擦除实参...]`。元变量个数必须与 telescope 等长才
 -- 能保持 VCon 实参对齐；长度对不上（隐式非索引参数等边缘形态）退回 `TGlobal`。
@@ -73,10 +73,10 @@ nullaryCtorTerm ctor metas =
   else
     TGlobal (dtCtorName ctor)
 
-export zipTeleRigs : List Term -> List (Pair String Rig) -> List (Pair Term Rig)
+export zipTeleRigs : List Term -> List (String, Rig) -> List (Term, Rig)
 zipTeleRigs [] bs = []
 zipTeleRigs ms [] = []
-zipTeleRigs (m :: ms) (b :: bs) = Pair m (secondOf b) :: zipTeleRigs ms bs
+zipTeleRigs (m :: ms) (b :: bs) = (m, secondOf b) :: zipTeleRigs ms bs
 
 -- Bool 是 base 的普通 data 声明，身份 = 完整符号 `Base.Data.Bool.Bool`；canonical 族的
 -- `True` / `False` 精化成核心 `TBool`（OCaml bool），用户 `data Bool` 是普通 data。
@@ -93,22 +93,22 @@ boolCtorTerm name =
 
 -- `inferE (EVar ctor)`：零参构造子（`Nil`/`Nothing` 等）的隐式类型参数实例化成元变量，
 -- 使其类型为 `List ?m`/`Maybe ?m`（值），而非 `{a}->List a`（函数）。
-export inferCtorRef : Ec -> Ctx -> String -> Term -> Check (Pair Term (Pair Value Ec))
+export inferCtorRef : Ec -> Ctx -> String -> Term -> Check (Term, Value, Ec)
 inferCtorRef ec ctx name tyTerm =
   case dtCtorLookupEc ec name of
     Just ctor =>
       if isBoolCanonical (dtCtorFamily ctor) then
-        OkC (Pair (boolCtorTerm (dtCtorName ctor)) (Pair boolTyValue ec))
+        OkC (boolCtorTerm (dtCtorName ctor), boolTyValue, ec)
       else
         let
           ctorTy = eval [] tyTerm
         in if hasNoExplicitPi ec ctorTy then
           case instantiateNullaryCtor ec ctx ctorTy of
-            OkC (Pair instTy (Pair metas ec1)) => OkC (Pair (nullaryCtorTerm ctor metas) (Pair instTy ec1))
+            OkC (instTy, metas, ec1) => OkC (nullaryCtorTerm ctor metas, instTy, ec1)
             ErrC e => ErrC e
         else
-          OkC (Pair (ctorRefTermEc ec name) (Pair ctorTy ec))
-    Nothing => OkC (Pair (ctorRefTermEc ec name) (Pair (eval [] tyTerm) ec))
+          OkC (ctorRefTermEc ec name, ctorTy, ec)
+    Nothing => OkC (ctorRefTermEc ec name, eval [] tyTerm, ec)
 
 -- 定义性相等（唯一入口；Bool 与其它 primitive 类型一样按同名全局比较）。
 -- 解的作用域在求解点就地检查（Core.Conv.solveMeta*），这里只把解表写回 Ec；
@@ -118,9 +118,9 @@ metaSpanOf ec (VMeta m _) = lookupSpanPair m (ecMetaSpans ec)
 metaSpanOf ec (VApp f _) = metaSpanOf ec f
 metaSpanOf ec _ = Nothing
 
-lookupSpanPair : Int -> List (Pair Int Span) -> Maybe Span
+lookupSpanPair : Int -> List (Int, Span) -> Maybe Span
 lookupSpanPair m [] = Nothing
-lookupSpanPair m ((Pair k sp) :: rest) = if k == m then Just sp else lookupSpanPair m rest
+lookupSpanPair m ((k, sp) :: rest) = if k == m then Just sp else lookupSpanPair m rest
 
 export convEc : Ec -> Int -> Value -> Value -> Check Ec
 convEc ec depth expected actual =
@@ -199,7 +199,7 @@ termMetasAll (TLam n rig slot _ body) =
     tys =
       case slot of
         Nothing => []
-        Just (Pair _ (Pair b r)) => append (termMetasAllMaybe b) (termMetasAllMaybe r)
+        Just (_, b, r) => append (termMetasAllMaybe b) (termMetasAllMaybe r)
   in append tys (termMetasAll body)
 termMetasAll (TApp f a rig) = append (termMetasAll f) (termMetasAll a)
 termMetasAll (TCon c args) = concatMap (\p => termMetasAll (firstOf p)) args
@@ -222,14 +222,14 @@ termMetasAllMaybe (Just t) = termMetasAll t
 export maxInt : Int -> Int -> Int
 maxInt a b = if a >= b then a else b
 
-export globalLookup : String -> List (Pair String Term) -> Maybe Term
+export globalLookup : String -> List (String, Term) -> Maybe Term
 globalLookup name [] = Nothing
-globalLookup name ((Pair n ty) :: rest) = if name == n then Just ty else globalLookup name rest
+globalLookup name ((n, ty) :: rest) = if name == n then Just ty else globalLookup name rest
 
 -- 全局名查找的**热路径**入口：先查 Ec 里的哈希索引（O(1)），未命中再回落到线性扫。
 -- 回落是必要的：索引只在 `elabBodies` 之前从当时的 globals 建一次，之前的数据族/trait/
 -- 签名阶段索引为空（那些阶段总量小，线性扫可接受）；索引与 globals 不一致时以列表为准。
-export globalsLookup : String -> List (Pair String Term) -> Ec -> Maybe Term
+export globalsLookup : String -> List (String, Term) -> Ec -> Maybe Term
 globalsLookup name globals ec =
   case HashMap.lookup name (ecGlobalsTbl ec) of
     Just ty => Just ty
@@ -241,19 +241,19 @@ globalsLookup name globals ec =
 -- 值签名后追加」，因此值位置取到值签名；类型位置由 `typeHeadLookup` 走
 -- `dtDataKind`，不依赖这张表。注意 `Base.Container.HashMap.fromList` 是**先出现获胜**，用它建
 -- 这张表会让同名值定义被族 kind 盖掉——所以这里用 `insertAll`（后出现获胜）。
-export globalsTableOf : List (Pair String Term) -> HashMap String Term
+export globalsTableOf : List (String, Term) -> HashMap String Term
 globalsTableOf globals = HashMap.insertAll globals (HashMap.fromList [])
 
 -- ---------------------------------------------------------------
-export memSig : Eq a => List (Pair a b) -> a -> Bool
+export memSig : Eq a => List (a, b) -> a -> Bool
 memSig [] name = False
-memSig ((Pair n ty) :: rest) name = n == name || memSig rest name
+memSig ((n, ty) :: rest) name = n == name || memSig rest name
 
-export memDefName : String -> List (Pair String Term) -> Bool
+export memDefName : String -> List (String, Term) -> Bool
 memDefName name [] = False
-memDefName name ((Pair n ty) :: rest) = n == name || memDefName name rest
+memDefName name ((n, ty) :: rest) = n == name || memDefName name rest
 
-export collectSigs : List Decl -> Check (List (Pair String (Pair (List Expr) (Pair Expr Span))))
+export collectSigs : List Decl -> Check (List (String, List Expr, Expr, Span))
 collectSigs decls =
   let
     defined = definedNames decls
@@ -267,7 +267,7 @@ collectSigs decls =
 -- banned 集按**签名所属模块**作用域，且是共享缓存：
 -- `banned` 的键是「模块前缀 \t 名字」（`Sig.qualifiedBannedTbl`），`preludeBanned` 是
 -- 全局 prelude 名单，两者都只建一次。
-export collectSigsInto : HashMap String Bool -> HashMap String Bool -> List (Pair String (List Expr)) -> HashMap String Bool -> List (Pair String (Pair (List Expr) (Pair Expr Span))) -> List Decl -> Check (List (Pair String (Pair (List Expr) (Pair Expr Span))))
+export collectSigsInto : HashMap String Bool -> HashMap String Bool -> List (String, List Expr) -> HashMap String Bool -> List (String, List Expr, Expr, Span) -> List Decl -> Check (List (String, List Expr, Expr, Span))
 collectSigsInto banned preludeBanned paramKinds seen acc [] = OkC (reverse acc)
 collectSigsInto banned preludeBanned paramKinds seen acc (d :: rest) =
   case d of
@@ -286,7 +286,7 @@ collectSigsInto banned preludeBanned paramKinds seen acc (d :: rest) =
       collectSigsInto banned preludeBanned paramKinds seen acc rest
     DInstance ctxE head methods sp => collectSigsInto banned preludeBanned paramKinds seen acc rest
 
-collectSigOne : HashMap String Bool -> HashMap String Bool -> List (Pair String (List Expr)) -> HashMap String Bool -> List (Pair String (Pair (List Expr) (Pair Expr Span))) -> String -> List Expr -> Expr -> Span -> List Decl -> Check (List (Pair String (Pair (List Expr) (Pair Expr Span))))
+collectSigOne : HashMap String Bool -> HashMap String Bool -> List (String, List Expr) -> HashMap String Bool -> List (String, List Expr, Expr, Span) -> String -> List Expr -> Expr -> Span -> List Decl -> Check (List (String, List Expr, Expr, Span))
 collectSigOne banned preludeBanned paramKinds seen acc name ctx ty sp rest =
   if memName name preludeNames then
     tcErr1 sp (CannotRedefineBuiltin name) name
@@ -298,20 +298,20 @@ collectSigOne banned preludeBanned paramKinds seen acc name ctx ty sp rest =
       preludeBanned
       paramKinds
       (HashMap.insert name True seen)
-      (Pair name (Pair ctx (Pair (quantifyTopSigCtxCachedKinds (modulePrefixOf name) banned preludeBanned paramKinds ctx ty sp) sp)) :: acc)
+      ((name, ctx, quantifyTopSigCtxCachedKinds (modulePrefixOf name) banned preludeBanned paramKinds ctx ty sp, sp) :: acc)
       rest
 
 -- 已精化的族按源顺序积累在 Ec 的 datas 里（case 精化需要族的 ctor telescope）。
 -- 收集 data 声明（按源顺序）。
-export collectDataDecls : List Decl -> List (Pair Decl Span) -> List (Pair Decl Span)
+export collectDataDecls : List Decl -> List (Decl, Span) -> List (Decl, Span)
 collectDataDecls [] acc = reverse acc
 collectDataDecls (d :: rest) acc =
   case d of
     DData dname params kind ctors derivings viaField repr lin sp =>
-      collectDataDecls rest (Pair d sp :: acc)
+      collectDataDecls rest ((d, sp) :: acc)
     -- record 声明直接进 `elabDatas` 精化（不再先降级成 DData）。
     DRecord dname params fields derivings viaField repr lin sp =>
-      collectDataDecls rest (Pair d sp :: acc)
+      collectDataDecls rest ((d, sp) :: acc)
     _ => collectDataDecls rest acc
 
 -- 绑到实际族上。
@@ -347,8 +347,8 @@ kindDomainWellFormed (TPi _ _ _ d c) = kindDomainWellFormed d && kindDomainWellF
 kindDomainWellFormed _ = True
 
 -- 族的参数/索引 telescope：binder 名 + 声明的 Rig（直接用 TPi 携带的量，不重算）。
-export splitKind : Term -> List (Pair String Rig)
-splitKind (TPi name implicit rig dom cod) = Pair name rig :: splitKind cod
+export splitKind : Term -> List (String, Rig)
+splitKind (TPi name implicit rig dom cod) = (name, rig) :: splitKind cod
 splitKind _ = []
 
 export dtDataLookup : String -> List DtData -> Maybe DtData
@@ -394,13 +394,13 @@ isDataFamilyName ec name =
     Nothing => False
 
 -- 全局签名是否是类型层：`Type`、`Type -> Type`、`Nat -> Type` 这类 Pi 链 → 宇宙。
-isTypeLevelGlobal : List (Pair String Term) -> Ec -> String -> Bool
+isTypeLevelGlobal : List (String, Term) -> Ec -> String -> Bool
 isTypeLevelGlobal globals ec name =
   case globalsLookup name globals ec of
     Just ty => kindWellFormed ty
     Nothing => False
 
-export isTypeName : List (Pair String Term) -> Ec -> String -> Bool
+export isTypeName : List (String, Term) -> Ec -> String -> Bool
 isTypeName globals ec name = isTypeLevelGlobal globals ec name || isDataFamilyName ec name
 
 -- 与族同名的构造子（`data Pair ... where Pair : ...`）。data 构造子的 canonical 名
@@ -510,14 +510,14 @@ defaultOrOver ec sp short targets =
 -- 同模块同名值定义（`data T` 与 `T : Int`）会覆盖族的 kind；类型位置不受
 -- 该覆盖影响，值位置仍由 `valueLookup` 取值签名。数据头登记阶段 `ecDatas` 尚未含
 -- 当前族，此时回退到 globals 里的 kind，因此前向引用 / 互递归语义不变。
-export typeHeadLookup : List (Pair String Term) -> Ec -> String -> Maybe Term
+export typeHeadLookup : List (String, Term) -> Ec -> String -> Maybe Term
 typeHeadLookup globals ec name =
   case dtDataLookup name (ecDatas ec) of
     Just dd => Just (dtDataKind dd)
     Nothing => if isTypeLevelGlobal globals ec name then globalsLookup name globals ec else Nothing
 
 -- 类型位置查类型命名空间：返回该名字的签名项（族的 kind / 类型层 def 的类型）。
-export typeLookup : List (Pair String Term) -> Ec -> String -> Maybe Term
+export typeLookup : List (String, Term) -> Ec -> String -> Maybe Term
 typeLookup globals ec name = typeHeadLookup globals ec name
 
 -- 值命名空间的查询结果：构造子（值位置优先）或全局定义（含数据族名）。
@@ -527,7 +527,7 @@ export data ValueEntry(..) : Type where
 
 -- 值位置查值命名空间（构造子 + 全局定义）：同名时构造子优先——族 kind 与构造子同串，
 -- 直接查 globals 会先拿到族 kind（`Type -> ... -> Type`）而不是构造子类型。
-export valueLookup : List (Pair String Term) -> Ec -> String -> Maybe ValueEntry
+export valueLookup : List (String, Term) -> Ec -> String -> Maybe ValueEntry
 valueLookup globals ec name =
   case dtCtorLookupEc ec name of
     Just ctor => Just (VECtor ctor)
@@ -538,26 +538,26 @@ valueLookup globals ec name =
 
 -- 构造子类型的 telescope：逐个 binder 求值域。
 -- 隐式 binder（族参数/索引）一律擦除；显式 binder 只有在域是宇宙时才擦除。
-export teleOfType : Term -> List (Pair String Rig)
+export teleOfType : Term -> List (String, Rig)
 teleOfType ty = teleOf ty []
 
-export teleOf : Term -> List Value -> List (Pair String Rig)
+export teleOf : Term -> List Value -> List (String, Rig)
 teleOf (TPi name implicit rig dom cod) env =
   let
     v = VNeutral (NVar name (length env) [])
-  in Pair name rig :: teleOf cod (v :: env)
+  in (name, rig) :: teleOf cod (v :: env)
 teleOf _ env = []
 
 -- 结果类型 `F r1..rk` 的「头 + 实参」。
-export spineOfType : Term -> Pair String (List Term)
+export spineOfType : Term -> (String, List Term)
 spineOfType (TApp f a erased) =
   case spineOfType f of
-    Pair h args => Pair h (append args [a])
-spineOfType (TRecord name args) = Pair name (map firstOf args)
-spineOfType (TGlobal g) = Pair g []
-spineOfType _ = Pair "" []
+    (h, args) => (h, append args [a])
+spineOfType (TRecord name args) = (name, map firstOf args)
+spineOfType (TGlobal g) = (g, [])
+spineOfType _ = ("", [])
 
-export resultSpine : Term -> Pair String (List Term)
+export resultSpine : Term -> (String, List Term)
 resultSpine (TPi name implicit rig dom cod) = resultSpine cod
 resultSpine ty = spineOfType ty
 
@@ -604,7 +604,7 @@ zonkTermFuel fuel ec depth t =
           slot2 =
             case slot of
               Nothing => Nothing
-              Just (Pair mark (Pair bt rt)) =>
+              Just (mark, bt, rt) =>
                 let
                   bt2 =
                     case bt of
@@ -614,11 +614,11 @@ zonkTermFuel fuel ec depth t =
                     case rt of
                       Nothing => Nothing
                       Just t => Just (zonkTermFuel (fuel - 1) ec (depth + 1) t)
-                in Just (Pair mark (Pair bt2 rt2))
+                in Just (mark, bt2, rt2)
         in TLam n r slot2 sp (zonkTermFuel (fuel - 1) ec (depth + 1) b)
       TApp f a r => TApp (zonkTermFuel (fuel - 1) ec depth f) (zonkTermFuel (fuel - 1) ec depth a) r
-      TCon c args => TCon c (map (\p => Pair (zonkTermFuel (fuel - 1) ec depth (firstOf p)) (secondOf p)) args)
-      TMk c args => TMk c (map (\p => Pair (zonkTermFuel (fuel - 1) ec depth (firstOf p)) (secondOf p)) args)
+      TCon c args => TCon c (map (\p => (zonkTermFuel (fuel - 1) ec depth (firstOf p), secondOf p)) args)
+      TMk c args => TMk c (map (\p => (zonkTermFuel (fuel - 1) ec depth (firstOf p), secondOf p)) args)
       TCase s alts => TCase (zonkTermFuel (fuel - 1) ec depth s) (map (\alt => zonkAltFuel (fuel - 1) ec depth alt) alts)
       TIf c th el => TIf (zonkTermFuel (fuel - 1) ec depth c) (zonkTermFuel (fuel - 1) ec depth th) (zonkTermFuel (fuel - 1) ec depth el)
       _ => t
@@ -639,7 +639,7 @@ zonkAltFuel fuel ec depth alt0 =
 export hasOutOfScopeVar : Term -> Bool
 hasOutOfScopeVar t = hasNegativeVar t
 
-export hasOutOfScopeVarArgs : List (Pair Term Rig) -> Bool
+export hasOutOfScopeVarArgs : List (Term, Rig) -> Bool
 hasOutOfScopeVarArgs args = anyNegativeVarArgs args
 
 export hasOutOfScopeVarAlts : List CaseAlt -> Bool
@@ -663,9 +663,9 @@ export dropParams : Term -> Term
 dropParams (TPi n implicit rigB dom cod) = dropParams cod
 dropParams t = t
 
-export ctorGlobals : List DtCtor -> List (Pair String Term)
+export ctorGlobals : List DtCtor -> List (String, Term)
 ctorGlobals [] = []
-ctorGlobals (c :: rest) = Pair (dtCtorName c) (dtCtorType c) :: ctorGlobals rest
+ctorGlobals (c :: rest) = (dtCtorName c, dtCtorType c) :: ctorGlobals rest
 
 -- 一个 data 头的两阶段精化结果：族名、完整 kind、参数个数。
 export record DataHead(..) where
@@ -673,11 +673,11 @@ export record DataHead(..) where
   dataHeadKind : Term
   dataHeadArity : Int
 
-export lookupDataHead : String -> List DataHead -> Maybe (Pair Term Int)
+export lookupDataHead : String -> List DataHead -> Maybe (Term, Int)
 lookupDataHead name [] = Nothing
 lookupDataHead name (h :: rest) =
   if h.dataHeadName == name then
-    Just (Pair h.dataHeadKind h.dataHeadArity)
+    Just (h.dataHeadKind, h.dataHeadArity)
   else
     lookupDataHead name rest
 
@@ -696,18 +696,18 @@ export dictCtorName : String -> String
 dictCtorName cname = "MkDict_${cname}"
 
 -- 收集 trait / instance 声明（按源顺序）。
-export collectTraitDecls : List Decl -> List (Pair Decl Span) -> List (Pair Decl Span)
+export collectTraitDecls : List Decl -> List (Decl, Span) -> List (Decl, Span)
 collectTraitDecls [] acc = reverse acc
 collectTraitDecls (d :: rest) acc =
   case d of
-    DTrait tname params supers methods sp => collectTraitDecls rest (Pair d sp :: acc)
+    DTrait tname params supers methods sp => collectTraitDecls rest ((d, sp) :: acc)
     _ => collectTraitDecls rest acc
 
-export collectInstDecls : List Decl -> List (Pair Decl Span) -> List (Pair Decl Span)
+export collectInstDecls : List Decl -> List (Decl, Span) -> List (Decl, Span)
 collectInstDecls [] acc = reverse acc
 collectInstDecls (d :: rest) acc =
   case d of
-    DInstance ctxE head methods sp => collectInstDecls rest (Pair d sp :: acc)
+    DInstance ctxE head methods sp => collectInstDecls rest ((d, sp) :: acc)
     _ => collectInstDecls rest acc
 
 -- 单参数接口的参数名（elabTrait 已校验 length params == 1）。
@@ -716,13 +716,13 @@ paramNameOf [] = "_"
 paramNameOf (p :: rest) = p
 
 -- 方法参数 x_i 的 (项, rig)：index = n + (ar - 1 - i)。
-export methodArgTerms : List Rig -> Int -> List (Pair Term Rig)
+export methodArgTerms : List Rig -> Int -> List (Term, Rig)
 methodArgTerms rigs nFields = methodArgTermsGo rigs nFields 0 (length rigs)
 
-export methodArgTermsGo : List Rig -> Int -> Int -> Int -> List (Pair Term Rig)
+export methodArgTermsGo : List Rig -> Int -> Int -> Int -> List (Term, Rig)
 methodArgTermsGo [] nFields i arity = []
 methodArgTermsGo (rig :: rest) nFields i arity =
-  Pair (TVar "x${i}" (nFields + (arity - 1 - i)) (Span "" 0 0 0 0 0 0)) rig
+  (TVar "x${i}" (nFields + (arity - 1 - i)) (Span "" 0 0 0 0 0 0), rig)
     :: methodArgTermsGo rest nFields (i + 1) arity
 
 -- 逐层 lambda 绑定方法参数（x_0 最外），每层用各自 rig。
@@ -737,18 +737,18 @@ methodArgLams (rig :: rest) i body =
 export fieldVarName : Int -> String
 fieldVarName i = "_f${i}"
 
-export fieldBinderNames : Int -> List (Pair String Rig)
+export fieldBinderNames : Int -> List (String, Rig)
 fieldBinderNames n = fieldBinderGo n 0 []
 
-export fieldBinderGo : Int -> Int -> List (Pair String Rig) -> List (Pair String Rig)
+export fieldBinderGo : Int -> Int -> List (String, Rig) -> List (String, Rig)
 fieldBinderGo n i acc = fieldBinderGoGo (n - i) n acc
 
-fieldBinderGoGo : Int -> Int -> List (Pair String Rig) -> List (Pair String Rig)
+fieldBinderGoGo : Int -> Int -> List (String, Rig) -> List (String, Rig)
 fieldBinderGoGo remaining n acc =
   if remaining <= 0 then
     reverse acc
   else
-    fieldBinderGoGo (remaining - 1) n (Pair (fieldVarName (n - remaining)) RigOmega :: acc)
+    fieldBinderGoGo (remaining - 1) n ((fieldVarName (n - remaining), RigOmega) :: acc)
 
 -- | 方法投影全名 → owning class：按类的**方法表**精确匹配，不靠从名字切前缀
 -- （类的完整名是 `<模块>.<类短名>`，投影名是 `<模块>.<方法短名>`，不能简单去尾段）。
@@ -770,10 +770,10 @@ isBlanketInstHead n head =
     False
   else
     case flattenTaggedApp head of
-      Just (Pair g args) => nonEmpty args && allTeleArgs n args
+      Just (g, args) => nonEmpty args && allTeleArgs n args
       Nothing => False
 
-allTeleArgs : Int -> List (Pair Term Rig) -> Bool
+allTeleArgs : Int -> List (Term, Rig) -> Bool
 allTeleArgs n [] = True
 allTeleArgs n (arg :: rest) =
   case firstOf arg of
@@ -901,7 +901,7 @@ isTypeLikeWithCtx fuel ctx ec v =
       VMeta m sp => True
       _ => False
 
-export ctxItemAt : Int -> List (Pair String Term) -> Maybe (Pair String Term)
+export ctxItemAt : Int -> List (String, Term) -> Maybe (String, Term)
 ctxItemAt i [] = Nothing
 ctxItemAt i (x :: rest) = if i <= 0 then Just x else ctxItemAt (i - 1) rest
 
@@ -1045,7 +1045,7 @@ nvarOpaqueCtx ctx lvl =
     False
   else
     case ctxItemAt idx ctx.ctxItems of
-      Just (Pair name ty) => isFamilyKindValue (varTypeValue ctx idx ty)
+      Just (name, ty) => isFamilyKindValue (varTypeValue ctx idx ty)
       Nothing => False
 
 -- 只解元变量、不做 delta：判据必须与 codegen（看不到定义展开）保持同一视角，
@@ -1091,7 +1091,7 @@ wrapOpaqueUsesFuel fuel depth idxs t =
           slot2 =
             case slot of
               Nothing => Nothing
-              Just (Pair mark (Pair bt rt)) =>
+              Just (mark, bt, rt) =>
                 let
                   bt2 =
                     case bt of
@@ -1101,12 +1101,12 @@ wrapOpaqueUsesFuel fuel depth idxs t =
                     case rt of
                       Nothing => Nothing
                       Just t => Just (wrapOpaqueUsesFuel (fuel - 1) (depth + 1) idxs t)
-                in Just (Pair mark (Pair bt2 rt2))
+                in Just (mark, bt2, rt2)
         in TLam name rig slot2 sp (wrapOpaqueUsesFuel (fuel - 1) (depth + 1) idxs body)
       TApp f a rig => TApp (wrapOpaqueUsesFuel (fuel - 1) depth idxs f) (wrapOpaqueUsesFuel (fuel - 1) depth idxs a) rig
-      TCon c args => TCon c (map (\p => Pair (wrapOpaqueUsesFuel (fuel - 1) depth idxs (firstOf p)) (secondOf p)) args)
-      TMk c args => TMk c (map (\p => Pair (wrapOpaqueUsesFuel (fuel - 1) depth idxs (firstOf p)) (secondOf p)) args)
-      TRecord name args => TRecord name (map (\p => Pair (wrapOpaqueUsesFuel (fuel - 1) depth idxs (firstOf p)) (secondOf p)) args)
+      TCon c args => TCon c (map (\p => (wrapOpaqueUsesFuel (fuel - 1) depth idxs (firstOf p), secondOf p)) args)
+      TMk c args => TMk c (map (\p => (wrapOpaqueUsesFuel (fuel - 1) depth idxs (firstOf p), secondOf p)) args)
+      TRecord name args => TRecord name (map (\p => (wrapOpaqueUsesFuel (fuel - 1) depth idxs (firstOf p), secondOf p)) args)
       TProj base c tele i fi => TProj (wrapOpaqueUsesFuel (fuel - 1) depth idxs base) c tele i fi
       TRecUpd base c tele idxs2 body => TRecUpd (wrapOpaqueUsesFuel (fuel - 1) depth idxs base) c tele idxs2 (wrapOpaqueUsesFuel (fuel - 1) (depth + length tele) idxs body)
       TCase scrut alts => TCase (wrapOpaqueUsesFuel (fuel - 1) depth idxs scrut) (map (\alt => wrapOpaqueAltFuel (fuel - 1) depth idxs alt) alts)
@@ -1180,9 +1180,9 @@ rigOfLinearValue ec dom = if isLinearType ec dom then Rig1 else RigOmega
 export ctxHasLinear : Ec -> Ctx -> Bool
 ctxHasLinear ec ctx = ctxHasLinearItems ec ctx ctx.ctxItems 0
 
-ctxHasLinearItems : Ec -> Ctx -> List (Pair String Term) -> Int -> Bool
+ctxHasLinearItems : Ec -> Ctx -> List (String, Term) -> Int -> Bool
 ctxHasLinearItems ec ctx [] i = False
-ctxHasLinearItems ec ctx ((Pair name ty) :: rest) i =
+ctxHasLinearItems ec ctx ((name, ty) :: rest) i =
   isLinearType ec (varTypeValue ctx i ty) || ctxHasLinearItems ec ctx rest (i + 1)
 
 -- λ body 是否引用了外层（非本 λ binder）的线性值。ctx 传当前 binder 已入栈的上下文；
@@ -1194,7 +1194,7 @@ outerScan : Ec -> Ctx -> Int -> Term -> Bool
 outerScan ec ctx depth (TVar name i _) =
   if i > depth then
     case ctxItemAt (i - depth) ctx.ctxItems of
-      Just (Pair n ty) => isLinearType ec (varTypeValue ctx (i - depth) ty)
+      Just (n, ty) => isLinearType ec (varTypeValue ctx (i - depth) ty)
       Nothing => False
   else
     False
@@ -1212,9 +1212,9 @@ outerScan ec ctx depth (TIf c th el) =
   outerScan ec ctx depth c || outerScan ec ctx depth th || outerScan ec ctx depth el
 outerScan ec ctx depth t = False
 
-outerScanArgs : Ec -> Ctx -> Int -> List (Pair Term Rig) -> Bool
+outerScanArgs : Ec -> Ctx -> Int -> List (Term, Rig) -> Bool
 outerScanArgs ec ctx depth [] = False
-outerScanArgs ec ctx depth ((Pair a r) :: rest) =
+outerScanArgs ec ctx depth ((a, r) :: rest) =
   outerScan ec ctx depth a || outerScanArgs ec ctx depth rest
 
 outerScanAlts : Ec -> Ctx -> Int -> List CaseAlt -> Bool
@@ -1301,7 +1301,7 @@ ctorRefTerm datas name =
 -- 否则「构造子当函数值传递」会留 TGlobal 脊：精化期 conv 与 VCon 对不上、
 -- codegen 也会把裸构造子名当运行期值输出（OCaml 报 should not be a constructor）。
 -- | `ctorAppTerm` 的 Ec 版本（构造子查表；record 判定仍需族表）。
-export ctorAppTermEc : Ec -> Term -> List (Pair Term Rig) -> Term
+export ctorAppTermEc : Ec -> Term -> List (Term, Rig) -> Term
 ctorAppTermEc ec (TGlobal g) args =
   case dtCtorLookupEc ec g of
     Just ctor =>
@@ -1314,7 +1314,7 @@ ctorAppTermEc ec (TGlobal g) args =
     Nothing => foldAppTerms (TGlobal g) args
 ctorAppTermEc ec fn args = foldAppTerms fn args
 
-export ctorAppTerm : List DtData -> Term -> List (Pair Term Rig) -> Term
+export ctorAppTerm : List DtData -> Term -> List (Term, Rig) -> Term
 ctorAppTerm datas (TGlobal g) args =
   case dtCtorLookup g datas of
     Just ctor =>
@@ -1330,7 +1330,7 @@ ctorAppTerm datas fn args = foldAppTerms fn args
 -- | record 族的构造产出 `TMk` 原语（语义同 `TCon`，多带记录身份）；
 -- 普通 data 仍生成 `TCon`。
 -- 按 `dtDataIsRecord` 判定（零字段 record 也走 TMk）。
-mkCtorTerm : List DtData -> DtCtor -> String -> List (Pair Term Rig) -> Term
+mkCtorTerm : List DtData -> DtCtor -> String -> List (Term, Rig) -> Term
 mkCtorTerm datas ctor g args =
   case findDtData (dtCtorFamily ctor) datas of
     Just dd => if dtDataIsRecord dd then TMk g args else TCon g args
@@ -1345,7 +1345,7 @@ mkCtorTerm datas ctor g args =
 -- 这里按 telescope 补 λ：`Succ` ⇒ `\x -> Succ x`、`Cons a` ⇒ `\n -> \x -> \xs -> Cons a n x xs`，
 -- 于是精化期 β 归约直接得到 `VCon`，运行期得到合法闭包。
 -- 已收到的实参先 `shift` 到 λ 之下（外层 de Bruijn 索引整体 +k）；零参与饱和应用不变。
-etaCtorTerm : DtCtor -> List (Pair Term Rig) -> Term
+etaCtorTerm : DtCtor -> List (Term, Rig) -> Term
 etaCtorTerm ctor args =
   let
     rest = dropCount (length args) (dtCtorTelescope ctor)
@@ -1353,18 +1353,18 @@ etaCtorTerm ctor args =
   in etaCtorLa (dtCtorName ctor) 0 rest (shiftCtorArgs k args)
 
 -- 把构造子已收到的实参搬到 k 个 λ 之下（外层 de Bruijn 索引整体 +k）。
-shiftCtorArgs : Int -> List (Pair Term Rig) -> List (Pair Term Rig)
+shiftCtorArgs : Int -> List (Term, Rig) -> List (Term, Rig)
 shiftCtorArgs n [] = []
-shiftCtorArgs n ((Pair a rig) :: rest) = Pair (shift 0 n a) rig :: shiftCtorArgs n rest
+shiftCtorArgs n ((a, rig) :: rest) = (shift 0 n a, rig) :: shiftCtorArgs n rest
 
 -- 逐层搭 λ：第 i 个剩余形参在最终体里的 de Bruijn 索引 = 剩余 binder 数 - 1。
 -- binder 名必须**唯一**（用 `#eta<i>`）：telescope 里的匿名字段名都是 `_`，codegen 按
 -- binder 名渲染 OCaml 变量、不做 shadow 规避——两个 `_` 都被渲染成 `_u`，体里同时引用
 -- 两个形参就会互相捕获（实测 OCaml 类型错误 `'a t_List` vs `'a t_List t_List`）。
 -- `#` 不是源码标识符字符（sanitize 成 `_h`），因此不会和用户变量撞名。
-etaCtorLa : String -> Int -> List (Pair String Rig) -> List (Pair Term Rig) -> Term
+etaCtorLa : String -> Int -> List (String, Rig) -> List (Term, Rig) -> Term
 etaCtorLa name i [] args = TCon name args
-etaCtorLa name i ((Pair _ rig) :: rest) args =
+etaCtorLa name i ((_, rig) :: rest) args =
   let
     binder = etaBinderName i
   in TLam
@@ -1372,7 +1372,7 @@ etaCtorLa name i ((Pair _ rig) :: rest) args =
     rig
     Nothing
     spanEmpty
-    (etaCtorLa name (i + 1) rest (append args [Pair (TVar binder (length rest) (Span "" 0 0 0 0 0 0)) rig]))
+    (etaCtorLa name (i + 1) rest (append args [(TVar binder (length rest) (Span "" 0 0 0 0 0 0), rig)]))
 
 -- 丢掉列表前 n 个元素（构造子已收到的实参前缀）。
 dropCount : Int -> List a -> List a
@@ -1384,9 +1384,9 @@ dropCount n xs =
       [] => []
       _ :: rest => dropCount (n - 1) rest
 
-export foldAppTerms : Term -> List (Pair Term Rig) -> Term
+export foldAppTerms : Term -> List (Term, Rig) -> Term
 foldAppTerms fn [] = fn
-foldAppTerms fn ((Pair arg erased) :: rest) = foldAppTerms (TApp fn arg erased) rest
+foldAppTerms fn ((arg, erased) :: rest) = foldAppTerms (TApp fn arg erased) rest
 
 -- 构造子类型是否已**显式写出**族参数 binder。
 -- 判据是「首个 binder 有名字且域是宇宙」：`(a : Type) ->` / `{a : Type} ->` 这类构造子
@@ -1420,10 +1420,10 @@ explicitPiArity _ = 0
 
 -- 族名 → [(构造子, 显式参数个数)]。参数个数供模式矩阵的穷尽性见证使用（缺的构造子
 -- 没有 clause 可查，只能从 data 声明取）。
-export ctorFamilyTable : Ec -> List (Pair String (Pair Bool (List (Pair String Int))))
+export ctorFamilyTable : Ec -> List (String, Bool, List (String, Int))
 ctorFamilyTable ec =
   map
-    (\d => Pair (dtDataName d) (Pair (not (familyIndexed d)) (map (\c => Pair (dtCtorName c) (explicitPiArity (dtCtorType c))) (dtDataCtors d))))
+    (\d => (dtDataName d, not (familyIndexed d), map (\c => (dtCtorName c, explicitPiArity (dtCtorType c))) (dtDataCtors d)))
     (ecDatas ec)
 
 -- 索引族不能只按构造子名字判覆盖性：索引精化会让某些构造子在该类型下不可构造
@@ -1439,7 +1439,7 @@ anyCtorIndexed (c :: rest) = ctorResultIndexed c || anyCtorIndexed rest
 ctorResultIndexed : DtCtor -> Bool
 ctorResultIndexed c =
   case resultSpine (dropPis (dtCtorType c)) of
-    Pair _ args => anyNonVarArg args
+    (_, args) => anyNonVarArg args
 
 dropPis : Term -> Term
 dropPis (TPi _ _ _ _ cod) = dropPis cod
@@ -1453,9 +1453,9 @@ anyNonVarArg (a :: rest) =
     _ => True
 
 -- 后续分支里的兜底体（`case` 最后一个变量/通配分支），供嵌套模式的折叠使用。
-export findCatchAllBody : List (Pair Pat Expr) -> Maybe Expr
+export findCatchAllBody : List (Pat, Expr) -> Maybe Expr
 findCatchAllBody [] = Nothing
-findCatchAllBody ((Pair pat body) :: rest) =
+findCatchAllBody ((pat, body) :: rest) =
   case pat of
     PCon cname args psp => findCatchAllBody rest
     _ => Just body

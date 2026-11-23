@@ -56,9 +56,9 @@ bigEndian32 x = [mask8 (shr32 x 24), mask8 (shr32 x 16), mask8 (shr32 x 8), mask
 compressBlock : List Int -> List Int -> List Int
 compressBlock (hs@([h0, h1, h2, h3, h4])) blk =
   let
-    st = foldl sha1Round (Pair (expand (wordsOf blk)) [h0, h1, h2, h3, h4]) (range 0 80)
+    st = foldl sha1Round (expand (wordsOf blk), [h0, h1, h2, h3, h4]) (range 0 80)
   in case st of
-    Pair _ regs =>
+    (_, regs) =>
       case regs of
         [a, b, c, d, e] => [add32 h0 a, add32 h1 b, add32 h2 c, add32 h3 d, add32 h4 e]
         _ => hs
@@ -93,15 +93,15 @@ headAfter k xs =
     [] => 0
 
 -- | 单轮：位移寄存器并写回新的 a。
-sha1Round : Pair (List Int) (List Int) -> Int -> Pair (List Int) (List Int)
-sha1Round (Pair (w@[]) regs) t = Pair w regs
-sha1Round (Pair (w@(wt :: rest)) regs) t =
+sha1Round : (List Int, List Int) -> Int -> (List Int, List Int)
+sha1Round (w@[], regs) t = (w, regs)
+sha1Round (w@(wt :: rest), regs) t =
   case regs of
     [a, b, c, d, e] =>
       let
         tmp = add32 (add32 (add32 (add32 (rol32 a 5) (roundF t b c d)) e) (roundK t)) wt
-      in Pair rest [tmp, a, rol32 b 30, c, d]
-    _ => Pair w regs
+      in (rest, [tmp, a, rol32 b 30, c, d])
+    _ => (w, regs)
 
 -- | 轮函数 `f`（按轮次区间选择）。
 roundF : Int -> Int -> Int -> Int -> Int

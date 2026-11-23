@@ -39,12 +39,12 @@ representIr shared (IrCtor family ctor tys args) =
         _ => IrCtor family ctor tys args2
     Nothing => IrCtor family ctor tys args2
 representIr shared (IrRecord family resTy fields) =
-  IrRecord family resTy (map (\p => Pair (firstOf p) (representIr shared (secondOf p))) fields)
+  IrRecord family resTy (map (\p => (firstOf p, representIr shared (secondOf p))) fields)
 representIr shared (IrRecUpd base family fields resTy) =
   IrRecUpd
     (representIr shared base)
     family
-    (map (\p => Pair (firstOf p) (representIr shared (secondOf p))) fields)
+    (map (\p => (firstOf p, representIr shared (secondOf p))) fields)
     resTy
 representIr shared (IrProj base family field resTy) =
   IrProj (representIr shared base) family field resTy
@@ -79,7 +79,7 @@ representCase shared caseTy resultTy scrut alts =
   in case alts of
     alt :: rest =>
       case irAltCtorOf alt of
-        Just (Pair family _) =>
+        Just (family, _) =>
           case irSharedUnboxedOf family shared.irSharedUnboxed of
             Just _ =>
               if allCatchAll rest then

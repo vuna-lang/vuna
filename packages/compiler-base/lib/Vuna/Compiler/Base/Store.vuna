@@ -78,24 +78,21 @@ export storeEncodeAs : String -> String -> String -> String -> String
 storeEncodeAs tag codec digest payload = frameHeader tag codec (strLength payload) digest ++ payload
 
 -- 头行字段拆分：恰好 5 段（magic/tag/codec/len/digest）。多一段 / 少一段都拒绝。
-headerFields : String -> Maybe (Pair String (Pair String (Pair String (Pair String String))))
+headerFields : String -> Maybe (String, String, String, String, String)
 headerFields line =
   case split "|" line of
-    [m, t, c, l, d] => Just (Pair m (Pair t (Pair c (Pair l d))))
+    [m, t, c, l, d] => Just (m, t, c, l, d)
     _ => Nothing
 
-breakFirstNewline : List Int -> List Int -> Maybe (Pair String String)
+breakFirstNewline : List Int -> List Int -> Maybe (String, String)
 breakFirstNewline [] _ = Nothing
 breakFirstNewline (c :: rest) acc =
-  if c == 10 then
-    Just (Pair (strPack (reverse acc)) (strPack rest))
-  else
-    breakFirstNewline rest (c :: acc)
+  if c == 10 then Just (strPack (reverse acc), strPack rest) else breakFirstNewline rest (c :: acc)
 
 -- 头行 + 载荷切分：只在**前 512 字节**里找换行（头行约 160 字节，远小于上限）。
 -- 不能对整段载荷做 `strUnpack`：5 MB 载荷会建 500 万个 cons cell 再把列表拼回字符串。
 -- 载荷用 `strSubstring` 切一次（一次内存拷贝）。
-frameSplit : String -> Maybe (Pair String String)
+frameSplit : String -> Maybe (String, String)
 frameSplit raw =
   let
     n = strLength raw
@@ -106,7 +103,7 @@ frameSplit raw =
       let
         header = firstOf p
         start = strLength header + 1
-      in Just (Pair header (strSubstring start (n - start) raw))
+      in Just (header, strSubstring start (n - start) raw)
 
 -- 头行必须同时命中 magic / tag / codec / 长度；四者任一不符即拒绝（不解码任何字节）。
 headerOk : String -> String -> String -> String -> Bool

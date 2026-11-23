@@ -683,12 +683,10 @@ sameDiag a b =
     && sameSeverity a.diagSeverity b.diagSeverity
     && labelSpanOf a.diagLabels == labelSpanOf b.diagLabels
 
-labelSpanOf : List Label -> List (Pair String (Pair Int (Pair Int Int)))
+labelSpanOf : List Label -> List (String, Int, Int, Int)
 labelSpanOf [] = []
 labelSpanOf ((Label msp _ _ _) :: rest) =
   case msp of
-    Nothing => (::) (Pair "" (Pair 0 (Pair 0 0))) (labelSpanOf rest)
+    Nothing => (::) ("", 0, 0, 0) (labelSpanOf rest)
     Just sp =>
-      (::)
-        (Pair (spanFile sp) (Pair (spanStartLine sp) (Pair (spanStartCol sp) (spanEndLine sp))))
-        (labelSpanOf rest)
+      (::) (spanFile sp, spanStartLine sp, spanStartCol sp, spanEndLine sp) (labelSpanOf rest)
