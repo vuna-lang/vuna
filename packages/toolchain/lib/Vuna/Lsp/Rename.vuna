@@ -524,9 +524,12 @@ fieldValueUses : Int -> UseCtx -> (String, Expr) -> List (Int, Int)
 fieldValueUses fuel ctx (fname, value) = if fuel <= 0 then [] else usesInExpr (fuel - 1) ctx value
 
 -- | 内部：`case` 分支（模式 + 体）里的使用位置。
-altUses : Int -> UseCtx -> (Pat, Expr) -> List (Int, Int)
-altUses fuel ctx (pat, body) =
-  if fuel <= 0 then [] else append (patUses (fuel - 1) ctx pat) (usesInExpr (fuel - 1) ctx body)
+altUses : Int -> UseCtx -> Alt -> List (Int, Int)
+altUses fuel ctx alt =
+  if fuel <= 0 then
+    []
+  else
+    append (patUses (fuel - 1) ctx alt.altPat) (usesInExpr (fuel - 1) ctx alt.altBody)
 
 -- | 内部：局部函数一个 clause（模式列表 + 体）里的使用位置。
 clauseUses : Int -> UseCtx -> LocalClause -> List (Int, Int)
@@ -539,9 +542,12 @@ clauseUses fuel ctx clause =
       (usesInExpr (fuel - 1) ctx clause.lcBody)
 
 -- | 内部：`let` 绑定的模式与值里的使用位置。
-bindUses : Int -> UseCtx -> (Pat, Expr) -> List (Int, Int)
-bindUses fuel ctx (pat, value) =
-  if fuel <= 0 then [] else append (patUses (fuel - 1) ctx pat) (usesInExpr (fuel - 1) ctx value)
+bindUses : Int -> UseCtx -> Binding -> List (Int, Int)
+bindUses fuel ctx b =
+  if fuel <= 0 then
+    []
+  else
+    append (patUses (fuel - 1) ctx b.bindPat) (usesInExpr (fuel - 1) ctx b.bindValue)
 
 -- | 内部：`do` 语句（绑定或表达式）里的使用位置。
 stmtUses : Int -> UseCtx -> DoStmt -> List (Int, Int)

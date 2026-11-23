@@ -385,8 +385,8 @@ declFixtures =
 exprFixture : Expr
 exprFixture =
   ELet
-    [(PVar "x" (detachedNodeRef spA), EInt 1 (detachedNodeRef spA)), (PAs "y" (PCon "Just" [PInt 2 (detachedNodeRef spB)] (detachedNodeRef spB)) (detachedNodeRef spB), EFloat "1.5" (detachedNodeRef spA))]
-    (EDo [DBind (PVar "z" (detachedNodeRef spA)) (EField (EVar "r" (detachedNodeRef spA)) "field" (detachedNodeRef spA)) (detachedNodeRef spA), DBind (PRecord "Point" [("x", PVar "px" (detachedNodeRef spA))] (detachedNodeRef spA)) (ERecord "Point" [("x", EInt 3 (detachedNodeRef spA))] (detachedNodeRef spA)) (detachedNodeRef spA), DExpr (EIf (EVar "True" (detachedNodeRef spA)) (ECase (EVar "z" (detachedNodeRef spA)) [(PStr "s" (detachedNodeRef spA), EInt 0 (detachedNodeRef spA))] (detachedNodeRef spA)) (EBacktick "add" (EInt 1 (detachedNodeRef spA)) (EInt 2 (detachedNodeRef spA)) (detachedNodeRef spA)) (detachedNodeRef spA)) (detachedNodeRef spA), DExpr (ESectL "+" (EInt 4 (detachedNodeRef spA)) (detachedNodeRef spA)) (detachedNodeRef spA)] (detachedNodeRef spA))
+    [Binding (PVar "x" (detachedNodeRef spA)) (EInt 1 (detachedNodeRef spA)) (detachedNodeRef spA), Binding (PAs "y" (PCon "Just" [PInt 2 (detachedNodeRef spB)] (detachedNodeRef spB)) (detachedNodeRef spB)) (EFloat "1.5" (detachedNodeRef spA)) (detachedNodeRef spB)]
+    (EDo [DBind (PVar "z" (detachedNodeRef spA)) (EField (EVar "r" (detachedNodeRef spA)) "field" (detachedNodeRef spA)) (detachedNodeRef spA), DBind (PRecord "Point" [("x", PVar "px" (detachedNodeRef spA))] (detachedNodeRef spA)) (ERecord "Point" [("x", EInt 3 (detachedNodeRef spA))] (detachedNodeRef spA)) (detachedNodeRef spA), DExpr (EIf (EVar "True" (detachedNodeRef spA)) (ECase (EVar "z" (detachedNodeRef spA)) [Alt (PStr "s" (detachedNodeRef spA)) (EInt 0 (detachedNodeRef spA)) (detachedNodeRef spA)] (detachedNodeRef spA)) (EBacktick "add" (EInt 1 (detachedNodeRef spA)) (EInt 2 (detachedNodeRef spA)) (detachedNodeRef spA)) (detachedNodeRef spA)) (detachedNodeRef spA), DExpr (ESectL "+" (EInt 4 (detachedNodeRef spA)) (detachedNodeRef spA)) (detachedNodeRef spA)] (detachedNodeRef spA))
     False
     (detachedNodeRef spA)
 

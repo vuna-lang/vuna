@@ -548,11 +548,12 @@ ofExpr scope e =
     Ast.ESectR l op sp => ESectR (ofExpr scope l) op (Ast.nodeRefSpan sp)
     Ast.EAnn value ty sp => EAnn (ofExpr scope value) (ofExpr scope ty) (Ast.nodeRefSpan sp)
 
-ofBinding : List String -> List String -> (Ast.Pat, Ast.Expr) -> (Pat, Expr)
-ofBinding bound scope (pat, value) =
+ofBinding : List String -> List String -> Ast.Binding -> (Pat, Expr)
+ofBinding bound scope binding =
   let
+    pat = binding.bindPat
     valueScope = append (patBinders pat) bound
-  in (ofPat scope pat, ofExpr valueScope value)
+  in (ofPat scope pat, ofExpr valueScope binding.bindValue)
 
 ofLocalClause : List String -> Ast.LocalClause -> (List Pat, Expr)
 ofLocalClause scope clause =
@@ -560,8 +561,11 @@ ofLocalClause scope clause =
     pats = clause.lcPats
   in (map (ofPat scope) pats, ofExpr (append (bindersOfPats pats) scope) clause.lcBody)
 
-ofAlt : List String -> (Ast.Pat, Ast.Expr) -> (Pat, Expr)
-ofAlt scope (pat, body) = (ofPat scope pat, ofExpr (append (patBinders pat) scope) body)
+ofAlt : List String -> Ast.Alt -> (Pat, Expr)
+ofAlt scope alt =
+  let
+    pat = alt.altPat
+  in (ofPat scope pat, ofExpr (append (patBinders pat) scope) alt.altBody)
 
 ofFieldValue : List String -> (String, Ast.Expr) -> (String, Expr)
 ofFieldValue scope (fname, value) = (fname, ofExpr scope value)
@@ -586,8 +590,8 @@ ofStmts scope (stmt :: rest) =
 patFieldBinders : (String, Ast.Pat) -> List String
 patFieldBinders (fname, pat) = patBinders pat
 
-bindingBinders : (Ast.Pat, Ast.Expr) -> List String
-bindingBinders (pat, value) = patBinders pat
+bindingBinders : Ast.Binding -> List String
+bindingBinders binding = patBinders binding.bindPat
 
 astTraitParamName : Ast.TraitParam -> String
 astTraitParamName p = p.traitParamName

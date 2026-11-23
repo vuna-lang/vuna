@@ -930,22 +930,22 @@ exprDoc fuel env at e =
       _ => flatDoc env e
 
 -- | 内部：`case` 分支序列。
-altsDoc : Int -> List FixityDecl -> TriviaCtx -> List (Pat, Expr) -> Doc
+altsDoc : Int -> List FixityDecl -> TriviaCtx -> List Alt -> Doc
 altsDoc fuel env at alts = if fuel <= 0 then empty else vsep (map (altDoc (fuel - 1) env at) alts)
 
 -- | 内部：单个 case 分支 `pat => body`。
-altDoc : Int -> List FixityDecl -> TriviaCtx -> (Pat, Expr) -> Doc
-altDoc fuel env at (pat, body) =
+altDoc : Int -> List FixityDecl -> TriviaCtx -> Alt -> Doc
+altDoc fuel env at alt =
   if fuel <= 0 then
     empty
   else
     let
-      headD = text (renderPatGo formatFuelBound pat ++ " =>")
-      bodyD = exprDoc (fuel - 1) env at body
-    in attachAt at (patRef pat) (if multilineExpr body then appendDoc headD (nest 2 (appendDoc hard bodyD)) else group (appendDoc headD (nest 2 (appendDoc line bodyD))))
+      headD = text (renderPatGo formatFuelBound alt.altPat ++ " =>")
+      bodyD = exprDoc (fuel - 1) env at alt.altBody
+    in attachAt at alt.altRef (if multilineExpr alt.altBody then appendDoc headD (nest 2 (appendDoc hard bodyD)) else group (appendDoc headD (nest 2 (appendDoc line bodyD))))
 
 -- | 内部：`let` 绑定块 + `in`。
-letDoc : Int -> List FixityDecl -> TriviaCtx -> List (Pat, Expr) -> Expr -> Doc
+letDoc : Int -> List FixityDecl -> TriviaCtx -> List Binding -> Expr -> Doc
 letDoc fuel env at binds body =
   if fuel <= 0 then
     empty
@@ -1203,42 +1203,45 @@ stmtDoc fuel env at stmt =
           )
 
 -- | 内部：`do` 里的 `let` 绑定块（`let` + 缩进 2 的绑定表）。
-letBlockDoc : Int -> List FixityDecl -> TriviaCtx -> List (Pat, Expr) -> Doc
+letBlockDoc : Int -> List FixityDecl -> TriviaCtx -> List Binding -> Doc
 letBlockDoc fuel env at binds =
   appendDoc (text "let") (nest 2 (appendDoc hard (vsep (map (bindingDoc (fuel - 1) env at) binds))))
 
 -- 单条绑定能否写成 `let pat = value`：签名行、局部函数组与块结构值必须走绑定块，
 -- 因为它们的后续行要与绑定列对齐。
 -- | 内部：单条 `let` 绑定是否可以内联成 `let pat = value`。
-inlineLetBind : (Pat, Expr) -> Bool
-inlineLetBind (_, EAnn _ _ _) = False
-inlineLetBind (_, ELocalFun _ _) = False
-inlineLetBind (_, value) = not (multilineExpr value)
+inlineLetBind : Binding -> Bool
+inlineLetBind b =
+  case b.bindValue of
+    EAnn _ _ _ => False
+    ELocalFun _ _ => False
+    value => not (multilineExpr value)
 
--- | 内部：绑定（`name = value`，可带签名行 / 局部函数 clause）。
-bindingDoc : Int -> List FixityDecl -> TriviaCtx -> (Pat, Expr) -> Doc
-bindingDoc fuel env at (pat, value) =
+-- | 内部：绑定（`name = value`，可带签名行 / 局部函数 clause）。签名行挂签名行的
+-- `binding` 节点，定义行挂绑定自己的节点；局部函数组由各子句自带挂载，外层不再重复挂。
+bindingDoc : Int -> List FixityDecl -> TriviaCtx -> Binding -> Doc
+bindingDoc fuel env at binding =
   if fuel <= 0 then
     empty
   else
-    case value of
-      EAnn inner ty annSp =>
+    case binding.bindValue of
+      EAnn inner ty sigRef =>
         let
-          sigD = attachAt at annSp (text (renderPatGo formatFuelBound pat ++ " : " ++ typeText (fuel - 1) env at ty))
-          defD = attachAt at (patRef pat) (bindingBodyDoc (fuel - 1) env at pat inner)
+          sigD = attachAt at sigRef (text (renderPatGo formatFuelBound binding.bindPat ++ " : " ++ typeText (fuel - 1) env at ty))
+          defD = bindingDefDoc (fuel - 1) env at binding.bindPat binding.bindRef inner
         in vsep [sigD, defD]
-      _ => attachAt at (patRef pat) (bindingBodyDoc (fuel - 1) env at pat value)
+      value => bindingDefDoc (fuel - 1) env at binding.bindPat binding.bindRef value
 
--- | 内部：绑定体的形态（局部函数 / λ 还原成子句 / 普通值）。
-bindingBodyDoc : Int -> List FixityDecl -> TriviaCtx -> Pat -> Expr -> Doc
-bindingBodyDoc fuel env at pat value =
+-- | 内部：定义行的形态（局部函数 / λ 还原成子句 / 普通值）。
+bindingDefDoc : Int -> List FixityDecl -> TriviaCtx -> Pat -> NodeRef -> Expr -> Doc
+bindingDefDoc fuel env at pat ref value =
   if fuel <= 0 then
     empty
   else
     case value of
       ELocalFun clauses _ => localFunDoc (fuel - 1) env at (renderPatGo formatFuelBound pat) clauses
-      ELam ps inner _ => localFunDoc (fuel - 1) env at (renderPatGo formatFuelBound pat) [LocalClause (map (\p => PVar (firstOf p) (detachedNodeRef (secondOf p))) ps) inner noNodeRef noNodeRef]
-      _ => bindingValueDoc (fuel - 1) env at (renderPatGo formatFuelBound pat) value
+      ELam ps inner _ => attachAt at ref (localFunDoc (fuel - 1) env at (renderPatGo formatFuelBound pat) [LocalClause (map (\p => PVar (firstOf p) (detachedNodeRef (secondOf p))) ps) inner noNodeRef noNodeRef])
+      _ => attachAt at ref (bindingValueDoc (fuel - 1) env at (renderPatGo formatFuelBound pat) value)
 
 -- | 内部：`lhs = value`（能一行就一行，否则值缩进 2）。
 bindingValueDoc : Int -> List FixityDecl -> TriviaCtx -> String -> Expr -> Doc
@@ -1312,20 +1315,20 @@ handleRetDoc fuel env at x body r =
       (group (appendDoc (text ("return " ++ x ++ " ->")) (nest 2 (appendDoc line (exprDoc (fuel - 1) env at body)))))
 
 -- | 内部：operator handler 子句 `Op p1 p2 k -> body`。
-handleAltDoc : Int -> List FixityDecl -> TriviaCtx -> String -> (Pat, Expr) -> Doc
-handleAltDoc fuel env at k (pat, body) =
+handleAltDoc : Int -> List FixityDecl -> TriviaCtx -> String -> Alt -> Doc
+handleAltDoc fuel env at k alt =
   if fuel <= 0 then
     empty
   else
     let
       parts =
-        case pat of
+        case alt.altPat of
           PCon c ps _ => (c, renderHandlePats formatFuelBound ps)
           _ => ("_", "")
       cname = firstOf parts
       patsTxt = secondOf parts
       headText = if patsTxt == "" then "${cname} ${k} ->" else "${cname} ${patsTxt} ${k} ->"
-    in attachAt at (patRef pat) (group (appendDoc (text headText) (nest 2 (appendDoc line (exprDoc (fuel - 1) env at body)))))
+    in attachAt at alt.altRef (group (appendDoc (text headText) (nest 2 (appendDoc line (exprDoc (fuel - 1) env at alt.altBody)))))
 
 -- | 内部：Pi 类型 `(x : A) -> B` / 隐式 `{x : A} -> B`。
 piDoc : Int -> List FixityDecl -> TriviaCtx -> Maybe Qty -> Bool -> String -> Expr -> Expr -> Doc
@@ -1406,7 +1409,7 @@ export renderPatAtom : Pat -> String
 renderPatAtom pat = renderPatAtomGo formatFuelBound pat
 
 -- | 渲染 let / where 绑定（带签名行时先输出签名，局部函数展开成多 clause）。
-export renderBinding : List FixityDecl -> TriviaCtx -> (Pat, Expr) -> Doc
+export renderBinding : List FixityDecl -> TriviaCtx -> Binding -> Doc
 renderBinding env at binding = bindingDoc formatFuelBound env at binding
 
 -- | 内部：section 自带括号，外层 `EParen` 不再重复加。

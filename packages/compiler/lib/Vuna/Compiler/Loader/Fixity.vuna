@@ -305,14 +305,14 @@ reorderInterpParts t (p :: rest) =
         (reorderExpr t e)
         (\e2 => Vuna.Compiler.Base.Common.bind (reorderInterpParts t rest) (\ps => OkC (IPHole e2 :: ps)))
 
-reorderBinds : FixityTable -> List (Pat, Expr) -> Check (List (Pat, Expr))
+reorderBinds : FixityTable -> List Binding -> Check (List Binding)
 reorderBinds t binds = Vuna.Compiler.Base.Common.traverse (\v => reorderBind t v) binds
 
-reorderBind : FixityTable -> (Pat, Expr) -> Check (Pat, Expr)
-reorderBind t (pat, value) =
+reorderBind : FixityTable -> Binding -> Check Binding
+reorderBind t binding =
   Vuna.Compiler.Base.Common.bind
-    (reorderPattern t pat)
-    (\p2 => Vuna.Compiler.Base.Common.bind (reorderExpr t value) (\v2 => OkC (p2, v2)))
+    (reorderPattern t binding.bindPat)
+    (\p2 => Vuna.Compiler.Base.Common.bind (reorderExpr t binding.bindValue) (\v2 => OkC (Binding p2 v2 binding.bindRef)))
 
 reorderFields : FixityTable -> List (String, Expr) -> Check (List (String, Expr))
 reorderFields t fields = Vuna.Compiler.Base.Common.traverse (\v => reorderField t v) fields
@@ -325,14 +325,14 @@ reorderClauses : FixityTable -> List LocalClause -> Check (List LocalClause)
 reorderClauses t clauses = Vuna.Compiler.Base.Common.traverse (\v => reorderClause t v) clauses
 
 -- `case ... of` 的分支是 `(Pat, Expr)`（局部函数 clause 是 `LocalClause`）。
-reorderAlts : FixityTable -> List (Pat, Expr) -> Check (List (Pat, Expr))
+reorderAlts : FixityTable -> List Alt -> Check (List Alt)
 reorderAlts t alts = Vuna.Compiler.Base.Common.traverse (\a => reorderAlt t a) alts
 
-reorderAlt : FixityTable -> (Pat, Expr) -> Check (Pat, Expr)
-reorderAlt t (pat, body) =
+reorderAlt : FixityTable -> Alt -> Check Alt
+reorderAlt t alt =
   Vuna.Compiler.Base.Common.bind
-    (reorderPattern t pat)
-    (\p2 => Vuna.Compiler.Base.Common.bind (reorderExpr t body) (\b2 => OkC (p2, b2)))
+    (reorderPattern t alt.altPat)
+    (\p2 => Vuna.Compiler.Base.Common.bind (reorderExpr t alt.altBody) (\b2 => OkC (Alt p2 b2 alt.altRef)))
 
 reorderClause : FixityTable -> LocalClause -> Check LocalClause
 reorderClause t clause =

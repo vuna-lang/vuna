@@ -409,9 +409,14 @@ refsInFields sMod ((fname, value) :: rest) acc =
   refsInFields sMod rest (refsInExprGo sMod value acc)
 
 -- | 内部：绑定里的引用（`let` 绑定与 `case` 分支的「模式, 表达式」），只看值表达式。
-refsInBinds : String -> List (Pat, Expr) -> List Ref -> List Ref
+refsInBinds : String -> List Binding -> List Ref -> List Ref
 refsInBinds sMod [] acc = acc
-refsInBinds sMod ((p, x) :: rest) acc = refsInBinds sMod rest (refsInExprGo sMod x acc)
+refsInBinds sMod (b :: rest) acc = refsInBinds sMod rest (refsInExprGo sMod b.bindValue acc)
+
+-- | 内部：`case` 分支的引用，只看分支体。
+refsInAlts : String -> List Alt -> List Ref -> List Ref
+refsInAlts sMod [] acc = acc
+refsInAlts sMod (a :: rest) acc = refsInAlts sMod rest (refsInExprGo sMod a.altBody acc)
 
 -- | 内部：`where` / `let` 多子句局部函数的引用，只看各 clause 的 body（与绑定一致，不看模式）。
 refsInLocalClauses : String -> List LocalClause -> List Ref -> List Ref
@@ -459,7 +464,7 @@ refsInExprGo sMod e acc =
     EApp f args _ => refsInArgs sMod args (refsInExprGo sMod f acc)
     EPi n i _ dom cod _ => refsInExprGo sMod cod (refsInExprGo sMod dom acc)
     ELet binds body isRec _ => refsInBinds sMod binds (refsInExprGo sMod body acc)
-    ECase scrut alts _ => refsInBinds sMod alts (refsInExprGo sMod scrut acc)
+    ECase scrut alts _ => refsInAlts sMod alts (refsInExprGo sMod scrut acc)
     -- where/let 多 clause 局部函数：只看各 clause 的 body（与 refsInBind 一致，不看模式）。
     ELocalFun clauses _ => refsInLocalClauses sMod clauses acc
     EIf c t e2 _ => refsInExprGo sMod c (refsInExprGo sMod t (refsInExprGo sMod e2 acc))

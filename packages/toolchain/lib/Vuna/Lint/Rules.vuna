@@ -553,24 +553,24 @@ startFields fuel fields =
       (f, e) :: rest => minPair (startExpr (fuel - 1) e) (startFields (fuel - 1) rest)
 
 -- | 内部：let 绑定右值的最小起始位置。
-startBinds : Int -> List (Pat, Expr) -> (Int, Int)
+startBinds : Int -> List Binding -> (Int, Int)
 startBinds fuel binds =
   if fuel <= 0 then
     lintFuelExhausted "expression position"
   else
     case binds of
       [] => (1000000000, 1000000000)
-      (pat, e) :: rest => minPair (startExpr (fuel - 1) e) (startBinds (fuel - 1) rest)
+      b :: rest => minPair (startExpr (fuel - 1) b.bindValue) (startBinds (fuel - 1) rest)
 
 -- | 内部：case alt 体的最小起始位置。
-startAlts : Int -> List (Pat, Expr) -> (Int, Int)
+startAlts : Int -> List Alt -> (Int, Int)
 startAlts fuel alts =
   if fuel <= 0 then
     lintFuelExhausted "expression position"
   else
     case alts of
       [] => (1000000000, 1000000000)
-      (pat, e) :: rest => minPair (startExpr (fuel - 1) e) (startAlts (fuel - 1) rest)
+      a :: rest => minPair (startExpr (fuel - 1) a.altBody) (startAlts (fuel - 1) rest)
 
 -- | 内部：局部函数 clause 体的最小起始位置。
 startLocalClauses : Int -> List LocalClause -> (Int, Int)
@@ -1017,24 +1017,24 @@ mentionsFields fuel name fields =
       (f, e) :: rest => mentionsExpr (fuel - 1) name e || mentionsFields (fuel - 1) name rest
 
 -- | 内部：let 绑定右值是否引用该名字。
-mentionsBinds : Int -> String -> List (Pat, Expr) -> Bool
+mentionsBinds : Int -> String -> List Binding -> Bool
 mentionsBinds fuel name binds =
   if fuel <= 0 then
     lintFuelExhausted "mention scan"
   else
     case binds of
       [] => False
-      (pat, e) :: rest => mentionsExpr (fuel - 1) name e || mentionsBinds (fuel - 1) name rest
+      b :: rest => mentionsExpr (fuel - 1) name b.bindValue || mentionsBinds (fuel - 1) name rest
 
 -- | 内部：任一 case alt 体是否引用该名字。
-mentionsAlts : Int -> String -> List (Pat, Expr) -> Bool
+mentionsAlts : Int -> String -> List Alt -> Bool
 mentionsAlts fuel name alts =
   if fuel <= 0 then
     lintFuelExhausted "mention scan"
   else
     case alts of
       [] => False
-      (pat, e) :: rest => mentionsExpr (fuel - 1) name e || mentionsAlts (fuel - 1) name rest
+      a :: rest => mentionsExpr (fuel - 1) name a.altBody || mentionsAlts (fuel - 1) name rest
 
 -- | 内部：任一局部函数 clause 体是否引用该名字。
 mentionsClauses : Int -> String -> List LocalClause -> Bool
@@ -1480,10 +1480,10 @@ asPatText src name pat =
   if patNeedsParen pat then "${name}@(${patText src pat})" else "${name}@${patText src pat}"
 
 -- | 内部：对 `case x of` 单 alt 形式的提升；scrutinee 不是变量或 alt 不止一个时不产出。
-liftCase : LintSrc -> Lane -> Expr -> Expr -> List (Pat, Expr) -> Span -> List Finding
-liftCase src lane caseExpr scrut ([(pat, body)]) sp =
+liftCase : LintSrc -> Lane -> Expr -> Expr -> List Alt -> Span -> List Finding
+liftCase src lane caseExpr scrut ([alt]) sp =
   case scrut of
-    EVar name _ => liftCaseOk src lane pat body name sp
+    EVar name _ => liftCaseOk src lane alt.altPat alt.altBody name sp
     _ => []
 liftCase src lane caseExpr scrut _ sp = []
 
@@ -1540,7 +1540,7 @@ liftFindings src lane (expr@(ECase scrut alts sp)) =
 liftFindings src lane (ELet binds body recFlag sp) =
   if not recFlag then
     case binds of
-      [(pat, value)] => liftLet src lane (nodeRefSpan sp) pat value body
+      [b] => liftLet src lane (nodeRefSpan sp) b.bindPat b.bindValue body
       _ => []
   else
     []
@@ -1559,19 +1559,19 @@ isWildPat _ = False
 
 -- | 内部：该 alt 能否搬进 clause：模式变量不与外层其他变量冲突；引用 scrutinee 时模式必须
 -- 是通配或可提升模式。
-caseAltLiftableOk : String -> List String -> (Pat, Expr) -> Bool
-caseAltLiftableOk x others (pat, body) =
-  not (intersectsNames (patVarFuel lintFuel pat) others)
-    && (if exprMentions x body then isWildPat pat || liftablePat pat else True)
+caseAltLiftableOk : String -> List String -> Alt -> Bool
+caseAltLiftableOk x others alt =
+  not (intersectsNames (patVarFuel lintFuel alt.altPat) others)
+    && (if exprMentions x alt.altBody then isWildPat alt.altPat || liftablePat alt.altPat else True)
 
 -- | 内部：逐个 alt 检查可拆分性。
-altsLiftableGo : String -> List String -> List (Pat, Expr) -> Bool
+altsLiftableGo : String -> List String -> List Alt -> Bool
 altsLiftableGo x others [] = True
 altsLiftableGo x others (alt :: rest) =
   caseAltLiftableOk x others alt && altsLiftableGo x others rest
 
 -- | 内部：全部 alt 都可拆分（外层变量取 clause head 绑定的名字）。
-altsLiftable : String -> List Pat -> List (Pat, Expr) -> Bool
+altsLiftable : String -> List Pat -> List Alt -> Bool
 altsLiftable x pats alts = altsLiftableGo x (removeName x (patVars pats)) alts
 
 -- | 内部：把一个 alt 渲染成 clause 行：head 里替换 scrutinee，body 按单行/多行放置。
@@ -1590,21 +1590,21 @@ caseAltClauseLines src headPrefix varTok x headIndent pat body =
     newHead :: blockBodyLines src.lintSrcLines body (headIndent + 2)
 
 -- | 内部：把全部 alt 渲染成多条 clause 行。
-clausesForAlts : LintSrc -> String -> PTok -> String -> Int -> List (Pat, Expr) -> List String
+clausesForAlts : LintSrc -> String -> PTok -> String -> Int -> List Alt -> List String
 clausesForAlts src headPrefix varTok x headIndent [] = []
-clausesForAlts src headPrefix varTok x headIndent ((pat, body) :: rest) =
+clausesForAlts src headPrefix varTok x headIndent (alt :: rest) =
   append
-    (caseAltClauseLines src headPrefix varTok x headIndent pat body)
+    (caseAltClauseLines src headPrefix varTok x headIndent alt.altPat alt.altBody)
     (clausesForAlts src headPrefix varTok x headIndent rest)
 
 -- | 内部：每个 alt 的 body 在原位置都可安全放置。
-altsPlacementOk : LintSrc -> List (Pat, Expr) -> Bool
+altsPlacementOk : LintSrc -> List Alt -> Bool
 altsPlacementOk src [] = True
-altsPlacementOk src ((pat, body) :: rest) =
-  liftBodyPlacementOk src pat body && altsPlacementOk src rest
+altsPlacementOk src (alt :: rest) =
+  liftBodyPlacementOk src alt.altPat alt.altBody && altsPlacementOk src rest
 
 -- | 内部：case 拆 clause 的可行判据：head 模式单行、行区间干净、各 body 可放置。
-caseToClausesFixable : LintSrc -> List Pat -> Int -> Span -> List (Pat, Expr) -> Bool
+caseToClausesFixable : LintSrc -> List Pat -> Int -> Span -> List Alt -> Bool
 caseToClausesFixable src pats headLine sp alts =
   patsOnLine pats headLine
     && linesCleanRange src.lintSrcLines headLine (spanEndLine sp)
@@ -1613,16 +1613,16 @@ caseToClausesFixable src pats headLine sp alts =
 -- 前一个 alt 的模式蕴含后一个时，拆成 clause 会得到 `PS_ClauseShadowed` / `TC_ClauseUnreachable`
 -- 拒绝的源。`countVar x pats == 1` 保证被替换的位置只有一处，其余位置在各 clause 间相同，
 -- 所以只比 alt 模式本身即可。
-altsUnshadowed : List (Pat, Expr) -> Bool
+altsUnshadowed : List Alt -> Bool
 altsUnshadowed [] = True
-altsUnshadowed ((pat, body) :: rest) = not (anySubsumedBy pat rest) && altsUnshadowed rest
+altsUnshadowed (alt :: rest) = not (anySubsumedBy alt.altPat rest) && altsUnshadowed rest
 
-anySubsumedBy : Pat -> List (Pat, Expr) -> Bool
+anySubsumedBy : Pat -> List Alt -> Bool
 anySubsumedBy p [] = False
-anySubsumedBy p ((q, _) :: rest) = patSubsumes p q || anySubsumedBy p rest
+anySubsumedBy p (alt :: rest) = patSubsumes p alt.altPat || anySubsumedBy p rest
 
 -- | 内部：构造把整个顶层 case 表达式替换成多条 clause 的编辑。
-caseToClausesEdit : LintSrc -> String -> List Pat -> Int -> Span -> List (Pat, Expr) -> Edit
+caseToClausesEdit : LintSrc -> String -> List Pat -> Int -> Span -> List Alt -> Edit
 caseToClausesEdit src x pats headLine sp alts =
   let
     headText = lineAt src.lintSrcLines headLine
@@ -1707,14 +1707,14 @@ walkHandlePayload allow fuel src comp ret opH =
     in append (append (walkExprGo allow (fuel - 1) src comp) retFindings) opFindings
 
 -- | 内部：遍历 op 处理器各 alt 的模式与体。
-walkHandleAlts : Bool -> Int -> LintSrc -> List (Pat, Expr) -> List Finding
+walkHandleAlts : Bool -> Int -> LintSrc -> List Alt -> List Finding
 walkHandleAlts allow fuel src alts =
   if fuel <= 0 then
     lintFuelExhausted "traversal"
   else
     case alts of
       [] => []
-      (pat, body) :: rest => append (walkPairPat allow (fuel - 1) src pat) (append (walkExprGo allow (fuel - 1) src body) (walkHandleAlts allow (fuel - 1) src rest))
+      alt :: rest => append (walkPairPat allow (fuel - 1) src alt.altPat) (append (walkExprGo allow (fuel - 1) src alt.altBody) (walkHandleAlts allow (fuel - 1) src rest))
 
 -- | 内部：按构造子遍历表达式，收集各规则的 finding（不静默丢子树）。
 walkExpr : Int -> LintSrc -> Expr -> List Finding
@@ -1817,27 +1817,27 @@ walkFields allow fuel src fields =
       (f, e) :: rest => append (walkExprGo allow (fuel - 1) src e) (walkFields allow (fuel - 1) src rest)
 
 -- | 内部：遍历 let 绑定右值与绑定模式。
-walkBinds : Bool -> Int -> LintSrc -> List (Pat, Expr) -> List Finding
+walkBinds : Bool -> Int -> LintSrc -> List Binding -> List Finding
 walkBinds allow fuel src binds =
   if fuel <= 0 then
     lintFuelExhausted "traversal"
   else
     case binds of
       [] => []
-      (pat, e) :: rest => append (walkPairPat allow (fuel - 1) src pat) (append (walkExprGo allow (fuel - 1) src e) (walkBinds allow (fuel - 1) src rest))
+      b :: rest => append (walkPairPat allow (fuel - 1) src b.bindPat) (append (walkExprGo allow (fuel - 1) src b.bindValue) (walkBinds allow (fuel - 1) src rest))
 
 -- | 内部：逐个 alt 的模式与体按 lane 上下文扫描（最后一个 alt 标记为 isLast）。
-walkAlts : Bool -> Int -> LintSrc -> List (Pat, Expr) -> List Finding
+walkAlts : Bool -> Int -> LintSrc -> List Alt -> List Finding
 walkAlts allow fuel src alts =
   if fuel <= 0 then
     lintFuelExhausted "traversal"
   else
     case alts of
       [] => []
-      (pat, body) :: rest =>
+      alt :: rest =>
         let
-          lane = LAlt (spanStartLine (patSpan pat)) pat (isNilList rest)
-        in append (walkPairPat allow (fuel - 1) src pat) (append (scanBodyPos (fuel - 1) src (Just lane) body) (walkAlts allow (fuel - 1) src rest))
+          lane = LAlt (spanStartLine (patSpan alt.altPat)) alt.altPat (isNilList rest)
+        in append (walkPairPat allow (fuel - 1) src alt.altPat) (append (scanBodyPos (fuel - 1) src (Just lane) alt.altBody) (walkAlts allow (fuel - 1) src rest))
 
 -- | 内部：遍历局部函数 clause 的模式与体（不提供 lane，因此不做 clause 级提升）。
 walkLocalClauses : Bool -> Int -> LintSrc -> List LocalClause -> List Finding
@@ -2271,24 +2271,24 @@ walkTypeSyntaxFields fuel src fields =
       (f, e) :: rest => append (walkTypeSyntax (fuel - 1) src e) (walkTypeSyntaxFields (fuel - 1) src rest)
 
 -- | 内部：遍历 let 绑定右值的类型位置语法归一。
-walkTypeSyntaxBinds : Int -> LintSrc -> List (Pat, Expr) -> List Finding
+walkTypeSyntaxBinds : Int -> LintSrc -> List Binding -> List Finding
 walkTypeSyntaxBinds fuel src binds =
   if fuel <= 0 then
     lintFuelExhausted "type syntax traversal"
   else
     case binds of
       [] => []
-      (pat, e) :: rest => append (walkTypeSyntax (fuel - 1) src e) (walkTypeSyntaxBinds (fuel - 1) src rest)
+      b :: rest => append (walkTypeSyntax (fuel - 1) src b.bindValue) (walkTypeSyntaxBinds (fuel - 1) src rest)
 
 -- | 内部：遍历 case alt 体的类型位置语法归一。
-walkTypeSyntaxAlts : Int -> LintSrc -> List (Pat, Expr) -> List Finding
+walkTypeSyntaxAlts : Int -> LintSrc -> List Alt -> List Finding
 walkTypeSyntaxAlts fuel src alts =
   if fuel <= 0 then
     lintFuelExhausted "type syntax traversal"
   else
     case alts of
       [] => []
-      (pat, body) :: rest => append (walkTypeSyntax (fuel - 1) src body) (walkTypeSyntaxAlts (fuel - 1) src rest)
+      alt :: rest => append (walkTypeSyntax (fuel - 1) src alt.altBody) (walkTypeSyntaxAlts (fuel - 1) src rest)
 
 -- | 内部：遍历局部函数 clause 体的类型位置语法归一。
 walkTypeSyntaxLocalClauses : Int -> LintSrc -> List LocalClause -> List Finding

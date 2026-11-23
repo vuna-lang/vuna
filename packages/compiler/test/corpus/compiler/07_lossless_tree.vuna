@@ -260,8 +260,16 @@ interpSites fuel part =
       IPText s => []
       IPHole e => exprSitesAt (fuel - 1) e
 
-bindingSites : Int -> Pair Pat Expr -> List Site
-bindingSites fuel (Pair pat value) = if fuel <= 0 then [] else exprSitesAt (fuel - 1) value
+-- 局部函数组的绑定节点由首条子句自带，不重复收（与注释锚点同一口径）。
+bindingSites : Int -> Binding -> List Site
+bindingSites fuel b =
+  if fuel <= 0 then
+    []
+  else
+    case b.bindValue of
+      ELocalFun _ _ => exprSitesAt (fuel - 1) b.bindValue
+      EAnn (ELocalFun _ _) _ _ => exprSitesAt (fuel - 1) b.bindValue
+      _ => Site "binding" "def" b.bindRef :: exprSitesAt (fuel - 1) b.bindValue
 
 localClauseSites : Int -> LocalClause -> List Site
 localClauseSites fuel clause =
@@ -270,8 +278,12 @@ localClauseSites fuel clause =
   else
     Site "binding" "clause" clause.lcRef :: exprSitesAt (fuel - 1) clause.lcBody
 
-altSites : Int -> Pair Pat Expr -> List Site
-altSites fuel (Pair pat body) = if fuel <= 0 then [] else exprSitesAt (fuel - 1) body
+altSites : Int -> Alt -> List Site
+altSites fuel alt =
+  if fuel <= 0 then
+    []
+  else
+    Site "alt" "alt" alt.altRef :: exprSitesAt (fuel - 1) alt.altBody
 
 fieldValueSites : Int -> Pair String Expr -> List Site
 fieldValueSites fuel (Pair fname value) = if fuel <= 0 then [] else exprSitesAt (fuel - 1) value
@@ -341,9 +353,12 @@ siteOk index site =
         && spanEndOffset (nodeSpan n)
         == spanEndOffset (nodeRefSpan (siteRefOf site))
         && (
-          siteRoleOf site
-            == "expr"
-            || spanStartOffset (nodeSpan n) <= spanStartOffset (nodeRefSpan (siteRefOf site))
+          -- 表达式区间根：AST 构造子的 span 可以比树节点窄（`EInfix` 从运算符起）；
+          -- 条目节点（绑定 / 分支 / 子句 / 签名行）要求区间完全相同。
+          if siteRoleOf site == "expr" then
+            spanStartOffset (nodeSpan n) <= spanStartOffset (nodeRefSpan (siteRefOf site))
+          else
+            spanStartOffset (nodeSpan n) == spanStartOffset (nodeRefSpan (siteRefOf site))
         ) && spanEndOffset (nodeRefSpan (siteRefOf site)) <= spanEndOffset (nodeSpan n)
 
 sitesOk : HashMap Int CstNode -> List Site -> Bool
@@ -383,10 +398,17 @@ exprIdsOk index tree decls =
     sites = allExprSites decls
     exprRefs = siteRefsOfRole "expr" sites
     sigRefs = siteRefsOfRole "sig" sites
+    bindingRefs =
+      append
+        (siteRefsOfRole "def" sites)
+        (append (siteRefsOfRole "sig" sites) (siteRefsOfRole "clause" sites))
+    altRefs = siteRefsOfRole "alt" sites
   in sitesOk index sites
     && countIdentified exprRefs
     == countTagged "expr" (nodeChildren tree)
     && countIdentified sigRefs == countSigBindings (nodeChildren tree)
+    && countIdentified (distinctIds bindingRefs) == countTagged "binding" (nodeChildren tree)
+    && countIdentified altRefs == countTagged "alt" (nodeChildren tree)
 
 -- | 带身份的引用（id >= 0）必须指回同 kind、同区间的树节点。
 refsInIndexOk : HashMap Int CstNode -> String -> List NodeRef -> Bool
@@ -408,13 +430,9 @@ bodyPatRefs : Expr -> List NodeRef
 bodyPatRefs e =
   case e of
     ELet binds body rec_ _ =>
-      append
-        (map (\b => patRef (firstOf b)) binds)
-        (append (concatMap (\b => bodyPatRefs (secondOf b)) binds) (bodyPatRefs body))
+      append (concatMap bindingPatRefs binds) (append (concatMap bindingBodyPatRefs binds) (bodyPatRefs body))
     ECase scrut alts _ =>
-      append
-        (bodyPatRefs scrut)
-        (concatMap (\a => append [patRef (firstOf a)] (bodyPatRefs (secondOf a))) alts)
+      append (bodyPatRefs scrut) (concatMap altPatRefs alts)
     ELam ps body _ => append (map (\p => detachedNodeRef (secondOf p)) ps) (bodyPatRefs body)
     EApp fn args _ => append (bodyPatRefs fn) (concatMap bodyPatRefs args)
     EIf c t el _ => append (bodyPatRefs c) (append (bodyPatRefs t) (bodyPatRefs el))
@@ -438,6 +456,16 @@ bodyPatRefs e =
     EParen inner _ => bodyPatRefs inner
     EInterp multi parts _ => []
 
+-- | 一条绑定 / 一个分支贡献的 pat 引用（分支体 / 绑定值继续递归）。
+bindingPatRefs : Binding -> List NodeRef
+bindingPatRefs b = [patRef b.bindPat]
+
+bindingBodyPatRefs : Binding -> List NodeRef
+bindingBodyPatRefs b = bodyPatRefs b.bindValue
+
+altPatRefs : Alt -> List NodeRef
+altPatRefs alt = append [patRef alt.altPat] (bodyPatRefs alt.altBody)
+
 clausePatRefs : LocalClause -> List NodeRef
 clausePatRefs clause = clause.lcHead :: bodyPatRefs clause.lcBody
 
@@ -446,10 +474,7 @@ stmtPatRefs stmt =
   case stmt of
     DBind pat value r => patRef pat :: bodyPatRefs value
     DExpr value r => bodyPatRefs value
-    DLet binds r =>
-      append
-        (map (\b => patRef (firstOf b)) binds)
-        (concatMap (\b => bodyPatRefs (secondOf b)) binds)
+    DLet binds r => append (concatMap bindingPatRefs binds) (concatMap bindingBodyPatRefs binds)
 
 -- | 带身份的引用（id >= 0）必须指回同 kind、同区间的树节点。
 patIdsOk : HashMap Int CstNode -> CstNode -> List Decl -> Bool

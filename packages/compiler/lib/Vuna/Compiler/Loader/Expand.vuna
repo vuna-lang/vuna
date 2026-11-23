@@ -133,7 +133,7 @@ expandExpr fuel e =
       EPi name implicit qty dom cod sp => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) dom) (\dom2 => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) cod) (\cod2 => OkC (EPi name implicit qty dom2 cod2 sp)))
       ELet binds body rec_ sp => Vuna.Compiler.Base.Common.bind (expandPatExprs (fuel - 1) binds) (\binds2 => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) body) (\body2 => OkC (ELet binds2 body2 rec_ sp)))
       ELocalFun clauses sp => Vuna.Compiler.Base.Common.bind (expandClauses (fuel - 1) clauses) (\clauses2 => OkC (ELocalFun clauses2 sp))
-      ECase scrut alts sp => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) scrut) (\scrut2 => Vuna.Compiler.Base.Common.bind (expandPatExprs (fuel - 1) alts) (\alts2 => OkC (ECase scrut2 alts2 sp)))
+      ECase scrut alts sp => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) scrut) (\scrut2 => Vuna.Compiler.Base.Common.bind (expandAlts (fuel - 1) alts) (\alts2 => OkC (ECase scrut2 alts2 sp)))
       EIf c t el sp => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) c) (\c2 => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) t) (\t2 => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) el) (\el2 => OkC (EIf c2 t2 el2 sp))))
       EField base fname sp => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) base) (\base2 => OkC (EField base2 fname sp))
       ERecord name fields sp => Vuna.Compiler.Base.Common.bind (expandFieldExprs (fuel - 1) fields) (\fields2 => OkC (ERecord name fields2 sp))
@@ -148,14 +148,25 @@ expandExpr fuel e =
       EAnn value ty sp => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) value) (\value2 => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) ty) (\ty2 => OkC (EAnn value2 ty2 sp)))
       EInterp multi parts sp => Vuna.Compiler.Base.Common.bind (expandInterpParts (fuel - 1) parts) (\parts2 => OkC (EInterp multi parts2 sp))
 
-expandPatExprs : Int -> List (Pat, Expr) -> Check (List (Pat, Expr))
-expandPatExprs fuel pairs =
+-- | 表达式列表项（`ELet` 绑定 / `ECase` 分支）的宏展开。
+expandPatExprs : Int -> List Binding -> Check (List Binding)
+expandPatExprs fuel binds =
   if fuel <= 0 then
     icFuel "macro expansion"
   else
-    case pairs of
+    case binds of
       [] => OkC []
-      (pat, value) :: rest => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) value) (\value2 => Vuna.Compiler.Base.Common.bind (expandPatExprs (fuel - 1) rest) (\rest2 => OkC ((::) (pat, value2) rest2)))
+      b :: rest => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) b.bindValue) (\value2 => Vuna.Compiler.Base.Common.bind (expandPatExprs (fuel - 1) rest) (\rest2 => OkC ((::) (Binding b.bindPat value2 b.bindRef) rest2)))
+
+-- | `case` 分支的宏展开。
+expandAlts : Int -> List Alt -> Check (List Alt)
+expandAlts fuel alts =
+  if fuel <= 0 then
+    icFuel "macro expansion"
+  else
+    case alts of
+      [] => OkC []
+      a :: rest => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) a.altBody) (\body2 => Vuna.Compiler.Base.Common.bind (expandAlts (fuel - 1) rest) (\rest2 => OkC ((::) (Alt a.altPat body2 a.altRef) rest2)))
 
 expandClauses : Int -> List LocalClause -> Check (List LocalClause)
 expandClauses fuel clauses =
@@ -186,7 +197,7 @@ expandDoStmts fuel stmts =
         case stmt of
           DBind pat stmtExpr sp => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) stmtExpr) (\stmtExpr2 => Vuna.Compiler.Base.Common.bind (expandDoStmts (fuel - 1) rest) (\rest2 => OkC ((::) (DBind pat stmtExpr2 sp) rest2)))
           DExpr stmtExpr sp => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) stmtExpr) (\stmtExpr2 => Vuna.Compiler.Base.Common.bind (expandDoStmts (fuel - 1) rest) (\rest2 => OkC ((::) (DExpr stmtExpr2 sp) rest2)))
-          DLet binds sp => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (\b => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) (secondOf b)) (\v2 => OkC (firstOf b, v2))) binds) (\binds2 => Vuna.Compiler.Base.Common.bind (expandDoStmts (fuel - 1) rest) (\rest2 => OkC ((::) (DLet binds2 sp) rest2)))
+          DLet binds sp => Vuna.Compiler.Base.Common.bind (expandPatExprs (fuel - 1) binds) (\binds2 => Vuna.Compiler.Base.Common.bind (expandDoStmts (fuel - 1) rest) (\rest2 => OkC ((::) (DLet binds2 sp) rest2)))
 
 expandInterpParts : Int -> List InterpPart -> Check (List InterpPart)
 expandInterpParts fuel parts =

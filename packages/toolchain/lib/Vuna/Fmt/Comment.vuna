@@ -331,21 +331,22 @@ declAnchors (DRecord name params fields derivings viaField repr lin r) = r :: ma
 declAnchors (DTrait name params supers methods r) = r :: map methodAnchor methods
 declAnchors (DInstance ctxE head methods r) = (::) r (concatMap declAnchors methods)
 
--- | 内部：let / where 绑定的锚点（模式节点）。
-bindingAnchor : (Pat, Expr) -> NodeRef
-bindingAnchor (pat, value) = patRef pat
+-- | 内部：一条绑定的锚点（定义行节点 + 值里的条目）。局部函数组的首条子句节点与
+-- 绑定自身同源，由子句自带，不重复收。
+bindingAnchors : Binding -> List NodeRef
+bindingAnchors b =
+  case b.bindValue of
+    ELocalFun _ _ => exprAnchors b.bindValue
+    EAnn (ELocalFun _ _) _ _ => exprAnchors b.bindValue
+    _ => (::) b.bindRef (exprAnchors b.bindValue)
 
--- | 内部：let 绑定值里的表达式锚点。
-bindingValueAnchors : (Pat, Expr) -> List NodeRef
-bindingValueAnchors (pat, value) = exprAnchors value
-
--- | 内部：case 分支的锚点（模式节点）。
-altAnchor : (Pat, Expr) -> NodeRef
-altAnchor (pat, body) = patRef pat
+-- | 内部：case 分支的锚点（分支的 `alt` 节点）。
+altAnchor : Alt -> NodeRef
+altAnchor alt = alt.altRef
 
 -- | 内部：case 分支体内的表达式锚点。
-altBodyAnchors : (Pat, Expr) -> List NodeRef
-altBodyAnchors (pat, body) = exprAnchors body
+altBodyAnchors : Alt -> List NodeRef
+altBodyAnchors alt = exprAnchors alt.altBody
 
 -- | 内部：记录字段值的表达式锚点。
 fieldExprAnchors : (String, Expr) -> List NodeRef
@@ -355,8 +356,7 @@ fieldExprAnchors (fname, value) = exprAnchors value
 doStmtAnchors : DoStmt -> List NodeRef
 doStmtAnchors (DBind pat value r) = r :: exprAnchors value
 doStmtAnchors (DExpr value r) = r :: exprAnchors value
-doStmtAnchors (DLet binds r) =
-  r :: append (map bindingAnchor binds) (concatMap bindingValueAnchors binds)
+doStmtAnchors (DLet binds r) = r :: concatMap bindingAnchors binds
 
 -- | 内部：handle 块 `return` 子句的锚点（没有 return 子句时是哨兵 `EVar`）。
 retClauseAnchor : Expr -> List NodeRef
@@ -389,10 +389,7 @@ exprAnchors e =
     EApp fn args _ =>
       append (appHandleRetAnchors fn args) (append (exprAnchors fn) (concatMap exprAnchors args))
     EPi name implicit _ dom cod _ => append (exprAnchors dom) (exprAnchors cod)
-    ELet binds body rec_ _ =>
-      append
-        (append (map bindingAnchor binds) (concatMap bindingValueAnchors binds))
-        (exprAnchors body)
+    ELet binds body rec_ _ => append (concatMap bindingAnchors binds) (exprAnchors body)
     ECase scrut alts _ =>
       append (exprAnchors scrut) (append (map altAnchor alts) (concatMap altBodyAnchors alts))
     EIf c t el _ => append (exprAnchors c) (append (exprAnchors t) (exprAnchors el))

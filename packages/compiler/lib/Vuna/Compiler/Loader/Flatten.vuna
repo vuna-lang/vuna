@@ -1246,7 +1246,7 @@ exprRefNamesGo (EApp fn args _) acc = exprRefNamesGo fn (exprRefNamesListGo args
 exprRefNamesGo (EPi name implicit qty dom cod _) acc = exprRefNamesGo dom (exprRefNamesGo cod acc)
 exprRefNamesGo (ELet binds body rec_ _) acc = exprRefNamesGo body (bindRefNamesListGo binds acc)
 exprRefNamesGo (ELocalFun clauses _) acc = clauseRefNamesListGo clauses acc
-exprRefNamesGo (ECase scrut alts _) acc = exprRefNamesGo scrut (bindRefNamesListGo alts acc)
+exprRefNamesGo (ECase scrut alts _) acc = exprRefNamesGo scrut (altRefNamesListGo alts acc)
 exprRefNamesGo (EIf c t el _) acc = exprRefNamesGo c (exprRefNamesGo t (exprRefNamesGo el acc))
 exprRefNamesGo (EField base fname _) acc = exprRefNamesGo base acc
 exprRefNamesGo (ERecord name fields _) acc = fieldExprsGo fields ((::) name acc)
@@ -1270,12 +1270,20 @@ fieldExprsGo [] acc = acc
 fieldExprsGo (f :: rest) acc = fieldExprsGo rest (exprRefNamesGo (secondOf f) acc)
 
 -- | `pat = expr` 绑定里的引用名（模式 binder 不算引用）。
-bindRefNamesGo : (Pat, Expr) -> List String -> List String
-bindRefNamesGo p acc = patRefNamesGo (firstOf p) (exprRefNamesGo (secondOf p) acc)
+bindRefNamesGo : Binding -> List String -> List String
+bindRefNamesGo b acc = patRefNamesGo b.bindPat (exprRefNamesGo b.bindValue acc)
 
-bindRefNamesListGo : List (Pat, Expr) -> List String -> List String
+bindRefNamesListGo : List Binding -> List String -> List String
 bindRefNamesListGo [] acc = acc
 bindRefNamesListGo (b :: rest) acc = bindRefNamesListGo rest (bindRefNamesGo b acc)
+
+-- | `case` 分支里的引用名。
+altRefNamesGo : Alt -> List String -> List String
+altRefNamesGo alt acc = patRefNamesGo alt.altPat (exprRefNamesGo alt.altBody acc)
+
+altRefNamesListGo : List Alt -> List String -> List String
+altRefNamesListGo [] acc = acc
+altRefNamesListGo (a :: rest) acc = altRefNamesListGo rest (altRefNamesGo a acc)
 
 -- | 局部函数 clause（参数模式 + body）里的引用名。
 clauseRefNamesGo : LocalClause -> List String -> List String

@@ -51,16 +51,17 @@ toAstInterpPart : Rast.InterpPart -> Ast.InterpPart
 toAstInterpPart (Rast.IPText s) = Ast.IPText s
 toAstInterpPart (Rast.IPHole e) = Ast.IPHole (toAstExpr e)
 
-toAstBinding : (Rast.Pat, Rast.Expr) -> (Ast.Pat, Ast.Expr)
-toAstBinding (pat, value) = (toAstPat pat, toAstExpr value)
+-- 绑定 / 分支身份不进 Rast（Elab 不消费）；回到 Ast 时是 detached（工具侧用解析产物）。
+toAstBinding : (Rast.Pat, Rast.Expr) -> Ast.Binding
+toAstBinding (pat, value) = Ast.Binding (toAstPat pat) (toAstExpr value) Ast.noNodeRef
 
 -- 子句身份不进 Rast（Elab 不消费）；回到 Ast 时是 detached（工具侧用解析产物）。
 toAstLocalClause : (List Rast.Pat, Rast.Expr) -> Ast.LocalClause
 toAstLocalClause (pats, body) =
   Ast.LocalClause (map toAstPat pats) (toAstExpr body) Ast.noNodeRef Ast.noNodeRef
 
-toAstAlt : (Rast.Pat, Rast.Expr) -> (Ast.Pat, Ast.Expr)
-toAstAlt (pat, body) = (toAstPat pat, toAstExpr body)
+toAstAlt : (Rast.Pat, Rast.Expr) -> Ast.Alt
+toAstAlt (pat, body) = Ast.Alt (toAstPat pat) (toAstExpr body) Ast.noNodeRef
 
 toAstFieldValue : (String, Rast.Expr) -> (String, Ast.Expr)
 toAstFieldValue (fname, value) = (fname, toAstExpr value)
@@ -69,10 +70,7 @@ toAstStmt : Rast.DoStmt -> Ast.DoStmt
 toAstStmt (Rast.DBind pat value sp) =
   Ast.DBind (toAstPat pat) (toAstExpr value) (Ast.detachedNodeRef sp)
 toAstStmt (Rast.DExpr value sp) = Ast.DExpr (toAstExpr value) (Ast.detachedNodeRef sp)
-toAstStmt (Rast.DLet binds sp) = Ast.DLet (map toAstBind binds) (Ast.detachedNodeRef sp)
-
-toAstBind : (Rast.Pat, Rast.Expr) -> (Ast.Pat, Ast.Expr)
-toAstBind (pat, value) = (toAstPat pat, toAstExpr value)
+toAstStmt (Rast.DLet binds sp) = Ast.DLet (map toAstBinding binds) (Ast.detachedNodeRef sp)
 
 toAstPat : Rast.Pat -> Ast.Pat
 toAstPat (Rast.PVar name sp) = Ast.PVar name (Ast.detachedNodeRef sp)

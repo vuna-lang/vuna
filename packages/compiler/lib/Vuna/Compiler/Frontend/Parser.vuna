@@ -1102,7 +1102,7 @@ parseClause st blockCol name ds =
 -- Elab 据此在 checking 模式精化该值。两条记法只差一条：`where` 块**要求**每个绑定都有
 -- 签名行（由 Elab 的 `checkBindingSigs` 用一个诊断收口），`let` 的签名是可选的。
 -- ---------------------------------------------------------------
-parseWhere : PState -> Int -> Check (List (Pat, Expr), PState)
+parseWhere : PState -> Int -> Check (List Binding, PState)
 parseWhere st blockCol =
   case peekTok st of
     PTok (TKw "where") p =>
@@ -1114,7 +1114,7 @@ parseWhere st blockCol =
         OkC ([], st)
     _ => OkC ([], st)
 
-parseWhereBindings : PState -> Int -> Check (List (Pat, Expr), PState)
+parseWhereBindings : PState -> Int -> Check (List Binding, PState)
 parseWhereBindings st whereCol =
   if isEof st then
     OkC ([], st)
@@ -1125,7 +1125,7 @@ parseWhereBindings st whereCol =
 -- 绑定块的条目：签名行或一条绑定（`pat = expr` / `name pats = expr`）。
 data BindingItem : Type where
   BISig : String -> Expr -> NodeRef -> BindingItem
-  BIBind : (Pat, Expr) -> BindingItem
+  BIBind : Binding -> BindingItem
 
 parseBindingItemsAt : Int -> PState -> Int -> Check (List BindingItem, PState)
 parseBindingItemsAt fuel st bindCol =
@@ -1178,24 +1178,24 @@ parseBindingDef fuel stStart st bindCol pat =
     icFuel "parser"
   else
     case pat of
-      PVar name _ => if startsPatternAtom st && canContinue st bindCol then Vuna.Compiler.Base.Common.step (parseClausePatterns (stateFuel st) st bindCol) (\pats, st2 => Vuna.Compiler.Base.Common.bind (checkBindersAt st pats) (\_ => Vuna.Compiler.Base.Common.bind (expectSym st2 "=") (\st3 => Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st3 bindCol) (\value, st4 => OkC (BIBind (PVar name (patRef pat), ELocalFun [LocalClause pats value (NodeRef stStart.openNodeId (spanOf stStart st4)) (patRef pat)] (detachedNodeRef (spanOf stStart st4))), st4))))) else Vuna.Compiler.Base.Common.step (parseBindingValue (fuel - 1) st pat bindCol) (\b, st2 => OkC (BIBind b, st2))
-      _ => Vuna.Compiler.Base.Common.step (parseBindingValue (fuel - 1) st pat bindCol) (\b, st2 => OkC (BIBind b, st2))
+      PVar name _ => if startsPatternAtom st && canContinue st bindCol then Vuna.Compiler.Base.Common.step (parseClausePatterns (stateFuel st) st bindCol) (\pats, st2 => Vuna.Compiler.Base.Common.bind (checkBindersAt st pats) (\_ => Vuna.Compiler.Base.Common.bind (expectSym st2 "=") (\st3 => Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st3 bindCol) (\value, st4 => OkC (BIBind (Binding (PVar name (patRef pat)) (ELocalFun [LocalClause pats value (NodeRef stStart.openNodeId (spanOf stStart st4)) (patRef pat)] (detachedNodeRef (spanOf stStart st4))) (NodeRef stStart.openNodeId (spanOf stStart st4))), st4))))) else Vuna.Compiler.Base.Common.step (parseBindingValue (fuel - 1) stStart st stStart.openNodeId pat bindCol) (\b, st2 => OkC (BIBind b, st2))
+      _ => Vuna.Compiler.Base.Common.step (parseBindingValue (fuel - 1) stStart st stStart.openNodeId pat bindCol) (\b, st2 => OkC (BIBind b, st2))
 
-parseBindingValue : Int -> PState -> Pat -> Int -> Check ((Pat, Expr), PState)
-parseBindingValue fuel st pat blockCol =
+parseBindingValue : Int -> PState -> PState -> Int -> Pat -> Int -> Check (Binding, PState)
+parseBindingValue fuel stStart st nid pat blockCol =
   if fuel <= 0 then
     icFuel "parser"
   else
     Vuna.Compiler.Base.Common.bind
       (checkBindersAt st [pat])
-      (\_ => Vuna.Compiler.Base.Common.bind (expectSym st "=") (\st1 => Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st1 blockCol) (\value, st2 => OkC ((pat, value), st2))))
+      (\_ => Vuna.Compiler.Base.Common.bind (expectSym st "=") (\st1 => Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st1 blockCol) (\value, st2 => OkC ((Binding pat value (NodeRef nid (spanOf stStart st2))), st2))))
 
 -- 条目 → ELet 绑定：把签名贴到同名定义的值上（`EAnn value ty`），并校验布局约束：
 -- 签名必须先于同名定义、不能重复、不能悬空。
-bindingItemsToBinds : List BindingItem -> Check (List (Pat, Expr))
+bindingItemsToBinds : List BindingItem -> Check (List Binding)
 bindingItemsToBinds items = bindingBindsGo items [] [] []
 
-bindingBindsGo : List BindingItem -> List (String, Expr, NodeRef) -> List String -> List (Pat, Expr) -> Check (List (Pat, Expr))
+bindingBindsGo : List BindingItem -> List (String, Expr, NodeRef) -> List String -> List Binding -> Check (List Binding)
 bindingBindsGo [] sigs bound acc =
   case firstDanglingSig (reverse sigs) bound of
     Nothing => OkC (reverse acc)
@@ -1213,41 +1213,45 @@ bindingBindsGo (item :: rest) sigs bound acc =
           (withLabel (Label (Just (nodeRefSpan sp)) "" LabelPrimary Nothing) (psMsg (WhereSigDuplicate name) [name]))
       else
         bindingBindsGo rest ((name, ty, sp) :: sigs) bound acc
-    BIBind (pat, value) =>
-      case localFunMerge (patBoundName pat) value acc of
+    BIBind binding =>
+      case localFunMerge (patBoundName binding.bindPat) binding.bindValue acc of
         Just merged => bindingBindsGo rest sigs bound merged
         Nothing =>
-          case bindingSigOf (patBoundName pat) sigs of
+          case bindingSigOf (patBoundName binding.bindPat) sigs of
             Just (ty, sp) =>
-              if memName (patBoundName pat) bound then
+              if memName (patBoundName binding.bindPat) bound then
                 ErrC
-                  (withLabel (Label (Just (nodeRefSpan sp)) "" LabelPrimary Nothing) (psMsg (WhereSigMultiClause (patBoundName pat)) [patBoundName pat]))
+                  (withLabel (Label (Just (nodeRefSpan sp)) "" LabelPrimary Nothing) (psMsg (WhereSigMultiClause (patBoundName binding.bindPat)) [patBoundName binding.bindPat]))
               else
                 bindingBindsGo
                   rest
                   sigs
-                  (patBoundName pat :: bound)
-                  ((pat, EAnn value ty sp) :: acc)
-            Nothing => bindingBindsGo rest sigs (patBoundName pat :: bound) ((pat, value) :: acc)
+                  (patBoundName binding.bindPat :: bound)
+                  (Binding binding.bindPat (EAnn binding.bindValue ty sp) binding.bindRef :: acc)
+            Nothing =>
+              bindingBindsGo rest sigs (patBoundName binding.bindPat :: bound) (binding :: acc)
 
 -- 把相邻同名函数子句合并成一个 `ELocalFun` 绑定（where/let 多 clause）。
 -- 签名保留在合并后的条目上（`EAnn` 只包裹第一条的 `ELocalFun`）；不连续的同名子句
 -- 不合并，按 `WhereSigMultiClause` 报错。
-localFunMerge : String -> Expr -> List (Pat, Expr) -> Maybe (List (Pat, Expr))
-localFunMerge name value ((PVar n nsp, ELocalFun cs0 sp0) :: rest) =
-  if n == name then
-    case value of
-      ELocalFun cs1 _ => Just ((::) (PVar n nsp, ELocalFun (append cs0 cs1) sp0) rest)
-      _ => Nothing
-  else
-    Nothing
-localFunMerge name value ((PVar n nsp, EAnn (ELocalFun cs0 sp0) ty annSp) :: rest) =
-  if n == name then
-    case value of
-      ELocalFun cs1 _ => Just ((::) (PVar n nsp, EAnn (ELocalFun (append cs0 cs1) sp0) ty annSp) rest)
-      _ => Nothing
-  else
-    Nothing
+localFunMerge : String -> Expr -> List Binding -> Maybe (List Binding)
+localFunMerge name value (binding :: rest) =
+  case binding.bindPat of
+    PVar n nsp =>
+      if n == name then
+        case binding.bindValue of
+          ELocalFun cs0 sp0 =>
+            case value of
+              ELocalFun cs1 _ => Just ((::) (Binding (PVar n nsp) (ELocalFun (append cs0 cs1) sp0) binding.bindRef) rest)
+              _ => Nothing
+          EAnn (ELocalFun cs0 sp0) ty annSp =>
+            case value of
+              ELocalFun cs1 _ => Just ((::) (Binding (PVar n nsp) (EAnn (ELocalFun (append cs0 cs1) sp0) ty annSp) binding.bindRef) rest)
+              _ => Nothing
+          _ => Nothing
+      else
+        Nothing
+    _ => Nothing
 localFunMerge name value _ = Nothing
 
 -- 绑定名（非简单变量绑定返回空串，永远匹配不到签名）。
@@ -2085,7 +2089,7 @@ parseLet fuel st blockCol =
 
 -- `let` 绑定块：与 `where` 共用 `parseBindingItemsAt` / `bindingItemsToBinds`
 -- （签名行可选；函数子句降级成 λ）。块结束于缩进回退或 `in`。
-parseLetBindings : Int -> PState -> Int -> Check (List (Pat, Expr), PState)
+parseLetBindings : Int -> PState -> Int -> Check (List Binding, PState)
 parseLetBindings fuel st blockCol =
   if fuel <= 0 then
     icFuel "parser"
@@ -2106,7 +2110,7 @@ parseCase fuel st blockCol =
       (expectKw st "case")
       (\st1 => Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st1 blockCol) (\scrut, st2 => Vuna.Compiler.Base.Common.bind (expectKw st2 "of") (\st3 => Vuna.Compiler.Base.Common.step (parseCaseAlts (fuel - 1) st3 blockCol) (\alts, st4 => OkC (ECase scrut alts (detachedNodeRef (spanOf st st4)), st4)))))
 
-parseCaseAlts : Int -> PState -> Int -> Check (List (Pat, Expr), PState)
+parseCaseAlts : Int -> PState -> Int -> Check (List Alt, PState)
 parseCaseAlts fuel st blockCol =
   if fuel <= 0 then
     icFuel "parser"
@@ -2128,7 +2132,7 @@ parseCaseAlts fuel st blockCol =
                     _ => OkC (alts, st2)
             )
 
-parseAltList : Int -> PState -> Int -> Check (List (Pat, Expr), PState)
+parseAltList : Int -> PState -> Int -> Check (List Alt, PState)
 parseAltList fuel st altCol =
   if fuel <= 0 then
     icFuel "parser"
@@ -2138,15 +2142,19 @@ parseAltList fuel st altCol =
     case peekPos st of
       Pos line col _ _ => if col == altCol then Vuna.Compiler.Base.Common.step (parseAlt (fuel - 1) st altCol) (\alt, st1 => Vuna.Compiler.Base.Common.step (parseAltList (fuel - 1) st1 altCol) (\rest, st2 => OkC ((::) alt rest, st2))) else OkC ([], st)
 
--- | 一条 case 分支（`pat => body`）；分支头是注释锚点。
-parseAlt : Int -> PState -> Int -> Check ((Pat, Expr), PState)
-parseAlt fuel st altCol = withExtent CstAltKind st (\st0 => parseAltBody fuel st0 altCol)
+-- | 一条 case 分支（`pat => body`）；分支自身是 `alt` 节点（注释锚点）。
+parseAlt : Int -> PState -> Int -> Check (Alt, PState)
+parseAlt fuel st altCol =
+  withExtent
+    CstAltKind
+    st
+    (\st0 => Vuna.Compiler.Base.Common.step (parseAltBody fuel st0 altCol) (\alt, st1 => OkC (Alt alt.altPat alt.altBody (NodeRef st0.openNodeId (spanOf st st1)), st1)))
 
-parseAltBody : Int -> PState -> Int -> Check ((Pat, Expr), PState)
+parseAltBody : Int -> PState -> Int -> Check (Alt, PState)
 parseAltBody fuel st altCol =
   Vuna.Compiler.Base.Common.step
     (parsePatternSingle (stateFuel st) st altCol)
-    (\pat, st1 => Vuna.Compiler.Base.Common.bind (checkBindersAt st [pat]) (\_ => Vuna.Compiler.Base.Common.bind (expectSym st1 "=>") (\st2 => Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st2 altCol) (\body, st3 => OkC ((pat, body), st3)))))
+    (\pat, st1 => Vuna.Compiler.Base.Common.bind (checkBindersAt st [pat]) (\_ => Vuna.Compiler.Base.Common.bind (expectSym st1 "=>") (\st2 => Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st2 altCol) (\body, st3 => OkC ((Alt pat body (NodeRef st.openNodeId (spanOf st st3))), st3)))))
 
 -- `@` 后面的裸标识符是实例名**字面量**（`[Console@audit]` → 名字 "audit"）；字符串原样。
 rowAtNameExpr : Expr -> Expr
@@ -2177,7 +2185,7 @@ parsePerform fuel st blockCol =
 --     是 λ 的第三个参数，第二个是结果索引 binder）；op 族、实例名、效应签名全部由 Elab 从 clause 构造子推导。
 -- | 一个 `handle` op 子句：构造子名、实参模式、子句 span、续延 binder 名、子句体。
 data HandleOp : Type where
-  HandleOp : String -> List Pat -> NodeRef -> String -> Expr -> HandleOp
+  HandleOp : String -> List Pat -> NodeRef -> NodeRef -> String -> Expr -> HandleOp
 
 -- | `handle` 块：可选 return 子句（binder 名 + 体 + 该子句的 `alt` 节点）与 op 子句列表。
 data HandleBlock : Type where
@@ -2299,6 +2307,14 @@ parseHandleOpClause fuel st clauseCol =
   if fuel <= 0 then
     icFuel "parser"
   else
+    withExtent CstAltKind st (\st0 => parseHandleOpClauseBody fuel st0 clauseCol st0.openNodeId)
+
+-- | op 子句体（`nid` 是子句的 `alt` 节点 id）。
+parseHandleOpClauseBody : Int -> PState -> Int -> Int -> Check (HandleOp, PState)
+parseHandleOpClauseBody fuel st clauseCol nid =
+  if fuel <= 0 then
+    icFuel "parser"
+  else
     Vuna.Compiler.Base.Common.step (parsePatternSingle (stateFuel st) st clauseCol) (
         \pat, st1 =>
           Vuna.Compiler.Base.Common.bind (checkBindersAt st [pat]) (
@@ -2309,26 +2325,26 @@ parseHandleOpClause fuel st clauseCol =
                       [] => psErr0At (nodeRefSpan psp) HandleClauseNeedsCtor
                       last :: revRest =>
                         case last of
-                          PVar kname _ => handleOpTail (fuel - 1) st1 clauseCol cname (reverse revRest) psp kname
-                          PWild _ => handleOpTail (fuel - 1) st1 clauseCol cname (reverse revRest) psp "_"
+                          PVar kname _ => handleOpTail (fuel - 1) st st1 clauseCol cname (reverse revRest) psp nid kname
+                          PWild _ => handleOpTail (fuel - 1) st st1 clauseCol cname (reverse revRest) psp nid "_"
                           _ => psErr0At (nodeRefSpan psp) HandleClauseNeedsCtor
                   _ => ps0 st HandleClauseNeedsCtor
             )
       )
 
 -- | op 子句的 `-> body` 尾段。
-handleOpTail : Int -> PState -> Int -> String -> List Pat -> NodeRef -> String -> Check (HandleOp, PState)
-handleOpTail fuel st clauseCol cname pats psp kname =
+handleOpTail : Int -> PState -> PState -> Int -> String -> List Pat -> NodeRef -> Int -> String -> Check (HandleOp, PState)
+handleOpTail fuel stStart st clauseCol cname pats psp nid kname =
   if fuel <= 0 then
     icFuel "parser"
   else
     Vuna.Compiler.Base.Common.bind
       (expectSym st "->")
-      (\st1 => Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st1 clauseCol) (\body, st2 => OkC (HandleOp cname pats psp kname body, st2)))
+      (\st1 => Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st1 clauseCol) (\body, st2 => OkC ((HandleOp cname pats psp (NodeRef nid (spanOf stStart st2)) kname body), st2)))
 
 -- | op 子句的续延 binder 名。
 handleOpKName : HandleOp -> String
-handleOpKName (HandleOp _ _ _ k _) = k
+handleOpKName (HandleOp _ _ _ _ k _) = k
 
 -- | 找出与基准不同的续延 binder 名（都一致则 Nothing）。
 firstOtherKName : List HandleOp -> String -> Maybe String
@@ -2338,9 +2354,9 @@ firstOtherKName (op :: rest) k =
     k2 = handleOpKName op
   in if k2 == k then firstOtherKName rest k else Just k2
 
--- | HandleOp → 合成 case 的 alt（pattern 只含构造子实参）。
-handleAlt : HandleOp -> (Pat, Expr)
-handleAlt (HandleOp cname pats psp _ body) = (PCon cname pats psp, body)
+-- | HandleOp → 合成 case 的 alt（pattern 只含构造子实参；分支身份是子句的 `alt` 节点）。
+handleAlt : HandleOp -> Alt
+handleAlt (HandleOp cname pats psp hopRef _ body) = Alt (PCon cname pats psp) body hopRef
 
 -- | ret 实参表达式（缺 return 子句时用哨兵）。
 handleRetExpr : Maybe (String, Expr, NodeRef) -> NodeRef -> Expr

@@ -102,13 +102,22 @@ encPatListGo [] acc = acc
 encPatListGo (x :: rest) acc = encPat x (encPatListGo rest acc)
 
 -- | `(模式, 表达式)` 表（`ELet` 绑定 / `ECase` 分支）。
-encPatExprList : List (Pat, Expr) -> List String -> List String
+encPatExprList : List Binding -> List String -> List String
 encPatExprList xs acc = "[${strFromInt (lenOf xs)}:" :: encPatExprListGo xs acc
 
--- | `(模式, 表达式)` 表的递归主体（计数头由 `encPatExprList` 写）。
-encPatExprListGo : List (Pat, Expr) -> List String -> List String
+-- | 绑定表的递归主体（计数头由 `encPatExprList` 写）。
+encPatExprListGo : List Binding -> List String -> List String
 encPatExprListGo [] acc = acc
-encPatExprListGo ((p, e) :: rest) acc = encPat p (encExpr e (encPatExprListGo rest acc))
+encPatExprListGo (b :: rest) acc =
+  encPat b.bindPat (encExpr b.bindValue (encPatExprListGo rest acc))
+
+-- | `case` 分支表（编码与绑定表同形：模式 + 表达式；身份不进摘要）。
+encAltList : List Alt -> List String -> List String
+encAltList xs acc = "[${strFromInt (lenOf xs)}:" :: encAltListGo xs acc
+
+encAltListGo : List Alt -> List String -> List String
+encAltListGo [] acc = acc
+encAltListGo (a :: rest) acc = encPat a.altPat (encExpr a.altBody (encAltListGo rest acc))
 
 -- | 局部函数子句表（每项 = 参数模式表 + body）。
 encClauses : List LocalClause -> List String -> List String
@@ -234,7 +243,7 @@ encExpr (EPi name implicit qty dom cod _) acc =
 encExpr (ELet binds body recursive _) acc =
   encTag 6 (encPatExprList binds (encExpr body (encBool recursive acc)))
 encExpr (ELocalFun clauses _) acc = encTag 7 (encClauses clauses acc)
-encExpr (ECase scrut alts _) acc = encTag 8 (encExpr scrut (encPatExprList alts acc))
+encExpr (ECase scrut alts _) acc = encTag 8 (encExpr scrut (encAltList alts acc))
 encExpr (EIf c t e _) acc = encTag 9 (encExpr c (encExpr t (encExpr e acc)))
 encExpr (EField base field _) acc = encTag 10 (encExpr base (encStr field acc))
 encExpr (ERecord name fields _) acc = encTag 11 (encStr name (encStrExprList fields acc))
@@ -415,7 +424,7 @@ decDoStmt fuel bytes =
               Nothing => Nothing
               Just (v1, b2) => Just (DExpr v1 noNodeRef, b2)
           2 =>
-            case decList decPatExpr (fuel - 1) b1 of
+            case decList decBinding (fuel - 1) b1 of
               Nothing => Nothing
               Just (v1, b2) => Just (DLet v1 noNodeRef, b2)
           _ => Nothing
@@ -473,7 +482,7 @@ decExpr fuel bytes =
                               Nothing => Nothing
                               Just (v5, b6) => Just (EPi v1 v2 v3 v4 v5 (detachedNodeRef noSpan), b6)
           6 =>
-            case decList decPatExpr (fuel - 1) b1 of
+            case decList decBinding (fuel - 1) b1 of
               Nothing => Nothing
               Just (v1, b2) =>
                 case decExpr (fuel - 1) b2 of
@@ -490,7 +499,7 @@ decExpr fuel bytes =
             case decExpr (fuel - 1) b1 of
               Nothing => Nothing
               Just (v1, b2) =>
-                case decList decPatExpr (fuel - 1) b2 of
+                case decList decAlt (fuel - 1) b2 of
                   Nothing => Nothing
                   Just (v2, b3) => Just (ECase v1 v2 (detachedNodeRef noSpan), b3)
           9 =>
@@ -788,9 +797,9 @@ decDecl fuel bytes =
                       Just (v3, b4) => Just (DInstance v1 v2 v3 noNodeRef, b4)
           _ => Nothing
 
--- | 解析 `(模式, 表达式)`（`ELet` 绑定 / `ECase` 分支的元素）。
-decPatExpr : Int -> Cur -> Maybe ((Pat, Expr), Cur)
-decPatExpr fuel bytes =
+-- | 解析一条绑定（`ELet` / do-`let`）；身份不进编码，解码用 `noNodeRef`。
+decBinding : Int -> Cur -> Maybe (Binding, Cur)
+decBinding fuel bytes =
   if fuel <= 0 then
     Nothing
   else
@@ -799,7 +808,20 @@ decPatExpr fuel bytes =
       Just (p, b1) =>
         case decExpr (fuel - 1) b1 of
           Nothing => Nothing
-          Just (e, b2) => Just ((p, e), b2)
+          Just (e, b2) => Just ((Binding p e noNodeRef), b2)
+
+-- | 解析一个 `case` 分支；身份不进编码，解码用 `noNodeRef`。
+decAlt : Int -> Cur -> Maybe (Alt, Cur)
+decAlt fuel bytes =
+  if fuel <= 0 then
+    Nothing
+  else
+    case decPat (fuel - 1) bytes of
+      Nothing => Nothing
+      Just (p, b1) =>
+        case decExpr (fuel - 1) b1 of
+          Nothing => Nothing
+          Just (e, b2) => Just ((Alt p e noNodeRef), b2)
 
 -- | 解析局部函数子句（参数模式表 + body）。
 decClause : Int -> Cur -> Maybe (LocalClause, Cur)

@@ -1,0 +1,19 @@
+module T where
+
+-- let 绑定与 case 分支各自挂注释（多行体上的行尾注释留在原处）。
+f : Int -> Int
+f x =
+  let
+    -- 绑定前置
+    y = x + 1 -- 绑定行尾
+  in case y of
+    -- 分支前置
+    0 => y -- 分支行尾
+    _ => 2
+
+-- where 绑定同样按绑定挂载。
+g : Int -> Int
+g x = y
+  where
+    -- where 绑定前置
+    y = x -- where 绑定行尾

@@ -965,22 +965,22 @@ walkInterpParts fuel env scope line col name parts =
 
 -- | 内部：遍历绑定块（`let` / `where`）。作用域是顺序的——第 k 条的值只看得到前 k-1 个 binder；
 -- body 看全部（由调用方追加）。
-walkBinds : Int -> WalkEnv -> List LocalBind -> Int -> Int -> String -> String -> List (Pat, Expr) -> Maybe LocalBind
+walkBinds : Int -> WalkEnv -> List LocalBind -> Int -> Int -> String -> String -> List Binding -> Maybe LocalBind
 walkBinds fuel env scope line col name kind binds =
   if fuel <= 0 then
     Nothing
   else
     case binds of
       [] => Nothing
-      (pat, value) :: rest =>
+      b :: rest =>
         let
-          binders = patBinders env kind pat (Just value)
-        in if patHit env line col pat then
+          binders = patBinders env kind b.bindPat (Just b.bindValue)
+        in if patHit env line col b.bindPat then
           case binderNamed name binders of
             Just hit => Just hit
             Nothing => walkBinds (fuel - 1) env (append scope binders) line col name kind rest
         else
-          case walkBindValue (fuel - 1) env scope line col name value of
+          case walkBindValue (fuel - 1) env scope line col name b.bindValue of
             Just hit => Just hit
             Nothing => walkBinds (fuel - 1) env (append scope binders) line col name kind rest
 
@@ -997,22 +997,22 @@ walkBindValue fuel env scope line col name (ELocalFun clauses _) =
 walkBindValue fuel env scope line col name value = walkExpr (fuel - 1) env scope line col name value
 
 -- | 内部：遍历 `case` 分支：每个分支的模式 binder 只在该分支 body 里可见。
-walkAlts : Int -> WalkEnv -> List LocalBind -> Int -> Int -> String -> List (Pat, Expr) -> Maybe LocalBind
+walkAlts : Int -> WalkEnv -> List LocalBind -> Int -> Int -> String -> List Alt -> Maybe LocalBind
 walkAlts fuel env scope line col name alts =
   if fuel <= 0 then
     Nothing
   else
     case alts of
       [] => Nothing
-      (pat, body) :: rest =>
+      alt :: rest =>
         let
-          binders = patBinders env "case" pat Nothing
-        in if patHit env line col pat then
+          binders = patBinders env "case" alt.altPat Nothing
+        in if patHit env line col alt.altPat then
           case binderNamed name binders of
             Just hit => Just hit
             Nothing => walkAlts (fuel - 1) env scope line col name rest
         else
-          case walkExpr (fuel - 1) env (append scope binders) line col name body of
+          case walkExpr (fuel - 1) env (append scope binders) line col name alt.altBody of
             Just hit => Just hit
             Nothing => walkAlts (fuel - 1) env scope line col name rest
 
@@ -1208,11 +1208,11 @@ walkExpr fuel env scope line col name e =
       EInterp multi parts _ => walkInterpParts (fuel - 1) env scope line col name parts
 
 -- | 内部：单个绑定引入的 binder（`kind` 标签 + 值作为单行值 / 语法类型来源）。
-bindBinders : WalkEnv -> String -> (Pat, Expr) -> List LocalBind
-bindBinders env kind (pat, value) = patBinders env kind pat (Just value)
+bindBinders : WalkEnv -> String -> Binding -> List LocalBind
+bindBinders env kind b = patBinders env kind b.bindPat (Just b.bindValue)
 
 -- | 内部：绑定块里全部 binder（顺序拼接；调用方在整块可见处把它追加进 scope）。
-bindersOfBinds : WalkEnv -> String -> List (Pat, Expr) -> List LocalBind
+bindersOfBinds : WalkEnv -> String -> List Binding -> List LocalBind
 bindersOfBinds env kind binds = concatMap (bindBinders env kind) binds
 
 -- ---------------------------------------------------------------

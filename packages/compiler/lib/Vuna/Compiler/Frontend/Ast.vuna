@@ -102,6 +102,20 @@ export record LocalClause(..) where
   lcRef : NodeRef
   lcHead : NodeRef
 
+-- | `case` / `handle` 的一个分支：模式 + 体 + 该分支的 `alt` 树节点。
+-- 分支本身不是表达式节点；`altRef` 只用于身份与注释挂载。
+export record Alt(..) where
+  altPat : Pat
+  altBody : Expr
+  altRef : NodeRef
+
+-- | `let` / `where` / do-`let` 的一条绑定：模式 + 值 + 该绑定的 `binding` 树节点。
+-- 带签名行时 `bindRef` 是**定义行**的节点，签名行节点在 `EAnn` 里。
+export record Binding(..) where
+  bindPat : Pat
+  bindValue : Expr
+  bindRef : NodeRef
+
 export data Expr(..) : Type where
   EVar : String -> NodeRef -> Expr
   EInt : Int -> NodeRef -> Expr
@@ -113,13 +127,13 @@ export data Expr(..) : Type where
   -- （`Nothing` = 默认 ω）。
   -- 匿名 `A -> B` 仍沿用 `EApp (EVar "->") [A, B]` 编码（默认 ω）。
   EPi : String -> Bool -> Maybe Qty -> Expr -> Expr -> NodeRef -> Expr
-  ELet : List (Pat, Expr) -> Expr -> Bool -> NodeRef -> Expr
+  ELet : List Binding -> Expr -> Bool -> NodeRef -> Expr
   -- 局部函数组（where/let 内的多 clause 函数）。
   -- 只作为 `ELet` 绑定值出现：每个 clause 是「参数模式列表 + body + 该子句的 `binding`
   -- 节点」。由 Elab 用 `Elab.Match.multiToExpr` 降级成 lambda + 模式矩阵（与顶层 DFun
   -- 同一路径）。
   ELocalFun : List LocalClause -> NodeRef -> Expr
-  ECase : Expr -> List (Pat, Expr) -> NodeRef -> Expr
+  ECase : Expr -> List Alt -> NodeRef -> Expr
   EIf : Expr -> Expr -> Expr -> NodeRef -> Expr
   EField : Expr -> String -> NodeRef -> Expr
   ERecord : String -> List (String, Expr) -> NodeRef -> Expr
@@ -166,7 +180,7 @@ export data DoStmt(..) : Type where
   DBind : Pat -> Expr -> NodeRef -> DoStmt
   DExpr : Expr -> NodeRef -> DoStmt
   -- `let pat = e`（同组可多条，含签名行与局部函数组）：纯绑定，只对块内后续语句可见。
-  DLet : List (Pat, Expr) -> NodeRef -> DoStmt
+  DLet : List Binding -> NodeRef -> DoStmt
 
 export record Ctor(..) where
   ctorName : String
