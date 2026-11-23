@@ -4,7 +4,8 @@ module Vuna.Target.Native.Select where
 --
 -- 把白名单里**不分配、不触发 GC、只碰 rax/r11** 的运行时叶子在调用点展开成机器
 -- 序列：`Module` 用 [scalarPlanOf] 判断能否内联，用 [scalarInstrs] 发射。语义与
--- `Native.Runtime` 的同名模板逐条对应（63-bit wrap、Nat 饱和/夹取、比较返回 0/1），
+-- `Native.Runtime` 的同名模板逐条对应（算术的 63-bit wrap、位运算不 wrap、
+-- Nat 饱和/夹取、比较返回 0/1），
 -- 词表只有这里一份；`RuntimeTable` 单测用 [scalarPlanOf] 第二项与
 -- `Runtime.nativeRtTarget` 交叉校验。
 --
@@ -19,11 +20,13 @@ import Vuna.Target.Native.Model
 
 -- | 一个可内联的标量叶子。
 export data ScalarOp(..) : Type where
-  -- | 63-bit wrap 的二元指令（`add` / `sub` / `imul` / `and` / `or` / `xor`）。
+  -- | 63-bit wrap 的算术二元指令（`add` / `sub` / `imul`）。
   ScalarWrap : String -> ScalarOp
+  -- | 位运算二元指令（`and` / `or` / `xor`）：规范化对位运算封闭，不需要 wrap。
+  ScalarBitOp : String -> ScalarOp
   -- | 比较：`cmp` + `setcc` + `movzx`，结果 0/1。
   ScalarCmp : String -> ScalarOp
-  -- | `xor -1` 再 wrap（`bitNot`）。
+  -- | `xor -1`（`bitNot`）：同样对规范化封闭。
   ScalarBitNot : ScalarOp
   -- | Nat 饱和加法。
   ScalarNatAdd : ScalarOp
@@ -41,9 +44,9 @@ export scalarPlanOf : String -> Maybe (Pair ScalarOp String)
 scalarPlanOf "+" = Just (Pair (ScalarWrap "add") (nativeRtLabel "add"))
 scalarPlanOf "-" = Just (Pair (ScalarWrap "sub") (nativeRtLabel "sub"))
 scalarPlanOf "*" = Just (Pair (ScalarWrap "imul") (nativeRtLabel "mul"))
-scalarPlanOf "bitAnd" = Just (Pair (ScalarWrap "and") (nativeRtLabel "bit_and"))
-scalarPlanOf "bitOr" = Just (Pair (ScalarWrap "or") (nativeRtLabel "bit_or"))
-scalarPlanOf "bitXor" = Just (Pair (ScalarWrap "xor") (nativeRtLabel "bit_xor"))
+scalarPlanOf "bitAnd" = Just (Pair (ScalarBitOp "and") (nativeRtLabel "bit_and"))
+scalarPlanOf "bitOr" = Just (Pair (ScalarBitOp "or") (nativeRtLabel "bit_or"))
+scalarPlanOf "bitXor" = Just (Pair (ScalarBitOp "xor") (nativeRtLabel "bit_xor"))
 scalarPlanOf "bitNot" = Just (Pair ScalarBitNot (nativeRtLabel "bit_not"))
 scalarPlanOf "bi_eq_int" = Just (Pair (ScalarCmp "sete") (nativeRtLabel "eq_int"))
 scalarPlanOf "bi_neq_int" = Just (Pair (ScalarCmp "setne") (nativeRtLabel "neq_int"))
@@ -77,9 +80,10 @@ scalarPlanOf _ = Nothing
 export scalarInstrs : ScalarOp -> Reg -> Reg -> Pair Reg (List Instr)
 scalarInstrs (ScalarWrap op) a b =
   Pair a [IBinReg op a (OpReg b), IBinReg "shl" a (OpImm 1), IBinReg "sar" a (OpImm 1)]
+-- | 两个操作数都是规范化（63-bit 符号扩展）值时，按位结果也规范化。
+scalarInstrs (ScalarBitOp op) a b = Pair a [IBinReg op a (OpReg b)]
 scalarInstrs (ScalarCmp cond) a b = Pair Rax [ICmp (OpReg a) (OpReg b), ISetcc cond Rax, IMovzxAl]
-scalarInstrs ScalarBitNot a _ =
-  Pair a [IBinReg "xor" a (OpImm (0 - 1)), IBinReg "shl" a (OpImm 1), IBinReg "sar" a (OpImm 1)]
+scalarInstrs ScalarBitNot a _ = Pair a [IBinReg "xor" a (OpImm (0 - 1))]
 scalarInstrs ScalarNatAdd a b =
   Pair
     a
@@ -90,6 +94,13 @@ scalarInstrs ScalarNatFromInt a b =
   Pair a [IMov (OpReg b) (OpImm 0), ICmp (OpReg a) (OpReg b), ICmov "cmovl" a (OpReg b)]
 scalarInstrs ScalarNatToInt a _ = Pair a []
 scalarInstrs (ScalarConst n) a _ = Pair a [IMov (OpReg a) (OpImm n)]
+
+-- | 与 [scalarInstrs] 相同，但省掉算术的 63-bit wrap。只在这个值**随后只被 mod 2^63
+--   语义的操作（加减乘）或清高位的掩码消费**时可用：两层 wrap 之间其它的运算只影响
+--   高位，最终结果不变。
+export scalarInstrsNoWrap : ScalarOp -> Reg -> Reg -> Pair Reg (List Instr)
+scalarInstrsNoWrap (ScalarWrap op) a b = Pair a [IBinReg op a (OpReg b)]
+scalarInstrsNoWrap op a b = scalarInstrs op a b
 
 -- ---------------------------------------------------------------
 -- 除以编译期常量
@@ -182,13 +193,14 @@ isScratchReg r = sameReg r R10 || sameReg r R11
 immFits32 : Int -> Bool
 immFits32 n = n >= 0 - 2147483648 && n <= 2147483647
 
--- | scratch 在后续直线上是否在「先读」之前先被重写（或块结束）。
+-- | scratch 在后续直线上是否在「先读」之前先被重写。块边界视为自由：`r10` / `r11` 只作
+--   块内临时，跨块的值一律走帧槽（生成器不在块之间保留 scratch）。
 regFreeAhead : Reg -> List Instr -> Bool
 regFreeAhead _ [] = True
 regFreeAhead r (i :: rest) =
   if instrReadsReg r i then
     False
-  else if instrWritesReg r i then True else if isBlockBoundary i then False else regFreeAhead r rest
+  else if instrWritesReg r i then True else if isBlockBoundary i then True else regFreeAhead r rest
 
 isBlockBoundary : Instr -> Bool
 isBlockBoundary (ILabel _) = True

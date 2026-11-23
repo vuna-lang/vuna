@@ -1,0 +1,149 @@
+-- 标量槽提升（`Native.Regs`）的单测。
+--
+-- 锁六件事：只有带回边的函数才提升；有栈实参（arity > 6）的函数不提升；只提升循环
+-- 携带的标量槽（指针槽与迭代内临时留在帧里）；提升后整个函数都不再引用这些槽；
+-- prologue / epilogue / 尾调用都按保存的寄存器恢复（奇数个补对齐）。
+import Base
+import Base.Data.List as List
+import Base.Data.Pair as Pair
+import Base.Effect.Core
+import Vuna.Target.Native.Abi
+import Vuna.Target.Native.Model
+import Vuna.Target.Native.Regs
+import Vuna.Target.Native.Repr
+
+main : Eff [] String
+main =
+  case problems of
+    [] => pure ""
+    ps =>
+      do
+        _ <- prim_eff_print ("native regs drifted:\n" ++ join "\n" ps ++ "\n")
+        _ <- prim_eff_exit 1
+        pure ""
+
+-- | 有栈实参的循环（arity > 6）：prologue 多压的寄存器会移动来参区，所以不提升。
+stackArgBody : List Instr
+stackArgBody =
+  [
+    ILabel ".L",
+    IMov (OpReg Rax) (OpMem Rbp 16),
+    IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rax),
+    IJmp ".L"
+  ]
+
+-- 槽 0 / 1 是循环携带的标量（off -16 / -24），槽 2 是指针（off -32），
+-- 槽 3 是迭代内即用即弃的标量临时（off -40）。
+slotCls : List (Pair Int NCls)
+slotCls = [Pair 0 NClsScalar, Pair 1 NClsScalar, Pair 2 NClsPtr, Pair 3 NClsScalar]
+
+-- | 一个自递归循环：读两个标量槽、写回、读一次指针槽，最后闭包尾调用。
+loopBody : List Instr
+loopBody =
+  [
+    ILabel ".L",
+    IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 1)),
+    ICmp (OpReg Rax) (OpImm 0),
+    IJcc "jg" ".Lb",
+    IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 0)),
+    IJmp ".Le",
+    ILabel ".Lb",
+    IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 0)),
+    IMov (OpReg R11) (OpMem Rbp (nativeSlotOff 1)),
+    IBinReg "xor" Rax (OpReg R11),
+    IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rax),
+    IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 1)),
+    IMov (OpMem Rbp (nativeSlotOff 1)) (OpReg Rax),
+    IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 2)),
+    IMov (OpMem Rbp (nativeSlotOff 3)) (OpReg Rax),
+    IMov (OpReg R10) (OpMem Rbp (nativeSlotOff 3)),
+    IJmp ".L",
+    ILabel ".Le",
+    IMov (OpReg Rsp) (OpReg Rbp),
+    IPop Rbp,
+    IJmp "vuna_target"
+  ]
+
+-- | 直线函数（没有回边）。
+straightBody : List Instr
+straightBody =
+  [IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 0)), IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rax)]
+
+-- | 只有一个标量槽的循环（保存寄存器个数为奇数）。
+slimBody : List Instr
+slimBody =
+  [
+    ILabel ".L",
+    IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 0)),
+    IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rax),
+    IJmp ".L"
+  ]
+
+loopPlan : RegPlan
+loopPlan = promoteLoops slotCls loopBody
+
+straightPlan : RegPlan
+straightPlan = promoteLoops slotCls straightBody
+
+stackArgPlan : RegPlan
+stackArgPlan = promoteLoops slotCls stackArgBody
+
+slimPlan : RegPlan
+slimPlan = promoteLoops [Pair 0 NClsScalar] slimBody
+
+problems : List String
+problems =
+  concatMap
+    (\s => if s == "" then [] else [s])
+    [check "loop keeps two registers" True (length loopPlan.rpSaved == 2), check "first register is rbx" True (firstSavedIsRbx loopPlan.rpSaved), check "scalar slots promoted" False (mentionsOff (nativeSlotOff 0) loopPlan.rpBody), check "second scalar promoted" False (mentionsOff (nativeSlotOff 1) loopPlan.rpBody), check "pointer slot stays" True (mentionsOff (nativeSlotOff 2) loopPlan.rpBody), check "temp slot stays" True (mentionsOff (nativeSlotOff 3) loopPlan.rpBody), check "tail call restores" True (tailRestored loopPlan.rpBody), check "straight line untouched" True (mentionsOff (nativeSlotOff 0) straightPlan.rpBody), check "straight line saves nothing" True (length straightPlan.rpSaved == 0), check "odd count pads" True (hasPad (prologueOf slimPlan.rpSaved)), check "odd count unpads" True (hasUnpad (epilogueOf slimPlan.rpSaved)), check "even count no pad" False (hasPad (prologueOf loopPlan.rpSaved)), check "epilogue pops both" True (epiloguePops loopPlan.rpSaved)]
+
+check : String -> Bool -> Bool -> String
+check label want got = if want == got then "" else label ++ ": drifted"
+
+firstSavedIsRbx : List Reg -> Bool
+firstSavedIsRbx (r :: _) = sameReg r Rbx
+firstSavedIsRbx [] = False
+
+hasPad : List Instr -> Bool
+hasPad instructions = foldl (\acc, i => acc || isPad i) False instructions
+
+isPad : Instr -> Bool
+isPad (IBinReg "sub" Rsp (OpImm 8)) = True
+isPad _ = False
+
+hasUnpad : List Instr -> Bool
+hasUnpad instructions = foldl (\acc, i => acc || isUnpad i) False instructions
+
+isUnpad : Instr -> Bool
+isUnpad (IBinReg "add" Rsp (OpImm 8)) = True
+isUnpad _ = False
+
+-- | epilogue 的形状：拆帧、`pop rbp`、两个 `pop`、`ret`。
+epiloguePops : List Reg -> Bool
+epiloguePops saved =
+  case epilogueOf saved of
+    [IMov (OpReg Rsp) (OpReg Rbp), IPop Rbp, IPop R12, IPop Rbx, IRet] => True
+    _ => False
+
+-- | 尾调用：`pop rbp` 之后必须恢复两个被提升的寄存器，再跳转。
+tailRestored : List Instr -> Bool
+tailRestored [] = False
+tailRestored ((IPop Rbp) :: (IPop R12) :: (IPop Rbx) :: (IJmp _) :: _) = True
+tailRestored (_ :: rest) = tailRestored rest
+
+mentionsOff : Int -> List Instr -> Bool
+mentionsOff off instructions = foldl (\acc, i => acc || instrMentionsOff off i) False instructions
+
+instrMentionsOff : Int -> Instr -> Bool
+instrMentionsOff off (IMov a b) = operandIsOff off a || operandIsOff off b
+instrMentionsOff off (IBin _ src) = operandIsOff off src
+instrMentionsOff off (IBinReg _ _ src) = operandIsOff off src
+instrMentionsOff off (ICmp a b) = operandIsOff off a || operandIsOff off b
+instrMentionsOff off (ICmov _ _ src) = operandIsOff off src
+instrMentionsOff off (IXmmLoad _ src) = operandIsOff off src
+instrMentionsOff off (IXmmStore op _) = operandIsOff off op
+instrMentionsOff _ _ = False
+
+operandIsOff : Int -> Operand -> Bool
+operandIsOff off (OpMem Rbp o) = o == off
+operandIsOff _ _ = False

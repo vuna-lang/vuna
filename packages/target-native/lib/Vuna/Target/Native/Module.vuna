@@ -38,6 +38,7 @@ import Vuna.Target.Native.Abi
 import Vuna.Target.Native.Audit
 import Vuna.Target.Native.Model
 import Vuna.Target.Native.Live
+import Vuna.Target.Native.Regs
 import Vuna.Target.Native.Repr
 import Vuna.Target.Native.Runtime
 import Vuna.Target.Native.Select
@@ -124,6 +125,8 @@ record FGen where
   fgSelfLoop : String
   -- | 自递归尾调用要写回的形参槽（按参数顺序）。
   fgSelfParams : List Int
+  -- | 形参 binder（与 `fgSelfParams` 同序）：判断实参求值是否还会读某个形参槽。
+  fgSelfBinds : List IrBinder
   -- | 本次生成收集到的静态闭包对象（无捕获的函数值）。
   fgStatics : List NativeClosure
   -- | binder id -> 调用点静态已知的被调用者（见 `KnownCallee`）。binder 身份在
@@ -592,17 +595,50 @@ selfSlotMoves (src :: ss) (dst :: ds) =
     [IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff src)), IMov (OpMem Rbp (nativeSlotOff dst)) (OpReg Rax)]
     (selfSlotMoves ss ds)
 
+-- | 自递归尾调用的实参：目标形参槽不会被**后面的实参**读到时，求值完立即写回去，省掉
+--   一个中转槽（`loop (f acc n) (n - 1)` 这类热点循环的常见形状）；否则先落到临时槽，
+--   全部求值完再统一搬（保持原来的求值顺序与语义）。
+record SelfArgs where
+  saInstrs : List Instr
+  saState : FGen
+  saPending : List (Pair Int Int)
+
 genSelfTailCall : Int -> FGen -> List Ir -> NRes (Pair (List Instr) FGen)
 genSelfTailCall fuel st args =
   if fuel <= 0 then
     internal "native codegen fuel exhausted"
+  else if length args /= length st.fgSelfParams then
+    internal "self tail call arity mismatch"
   else
-    nbind (genArgs (fuel - 1) st args) (
-        \p =>
-          let
-            argSlots = firstOf (secondOf p)
-          in if length argSlots == length st.fgSelfParams then NOk (Pair (append (firstOf p) (append (selfSlotMoves argSlots st.fgSelfParams) [IJmp st.fgSelfLoop])) (secondOf (secondOf p))) else internal "self tail call arity mismatch"
-      )
+    nbind
+      (genSelfArgs (fuel - 1) (SelfArgs [] st []) args st.fgSelfParams st.fgSelfBinds)
+      (\q => NOk (Pair (append q.saInstrs (append (copyBacks q.saPending) [IJmp st.fgSelfLoop])) q.saState))
+
+genSelfArgs : Int -> SelfArgs -> List Ir -> List Int -> List IrBinder -> NRes SelfArgs
+genSelfArgs _ acc [] _ _ = NOk acc
+genSelfArgs _ _ (_ :: _) [] _ = internal "self tail call arity mismatch"
+genSelfArgs _ _ (_ :: _) (_ :: _) [] = internal "self tail call arity mismatch"
+genSelfArgs fuel acc (a :: rest) (dst :: dsts) (b :: binds) =
+  if fuel <= 0 then
+    internal "native codegen fuel exhausted"
+  else if anyArgRefs b rest then
+    let
+      p = freshSlot acc.saState
+      tmp = firstOf p
+      st1 = secondOf p
+    in nbind (genExpr (fuel - 1) st1 a) (\q => genSelfArgs (fuel - 1) (SelfArgs (append acc.saInstrs (append (firstOf q) (storeSlot tmp))) (secondOf q) (append acc.saPending [Pair tmp dst])) rest dsts binds)
+  else
+    nbind (genExpr (fuel - 1) acc.saState a) (\q => genSelfArgs (fuel - 1) (SelfArgs (append acc.saInstrs (append (firstOf q) (storeSlot dst))) (secondOf q) acc.saPending) rest dsts binds)
+
+anyArgRefs : IrBinder -> List Ir -> Bool
+anyArgRefs b args = foldl (\acc, a => acc || memBinderId b.irBinderId (binderRefsOf a)) False args
+
+copyBacks : List (Pair Int Int) -> List Instr
+copyBacks [] = []
+copyBacks (p :: rest) =
+  append
+    [IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff (firstOf p))), IMov (OpMem Rbp (nativeSlotOff (secondOf p))) (OpReg Rax)]
+    (copyBacks rest)
 
 -- | 沿零参定义解析别名链（`f = rt:add` / `f = g`）：判据与链解析在 `Ir.Alias`。
 --   不是别名的零参 CAF（真实计算/分配）返回 Nothing，调用方回退 `rt_apply`。
@@ -1082,26 +1118,33 @@ ipow2 k = if k <= 0 then 1 else 2 * ipow2 (k - 1)
 
 -- | 把纯标量表达式选进寄存器：只接受字面量、槽变量、标量 cast 与白名单 `IrRtApp`；
 --   返回结果寄存器、指令与回收后的寄存器池。其它形态返回 Nothing（整棵子树回退）。
+--
+-- `wrap` 表示这棵子树的结果要不要 63-bit wrap：根位置总是要；父算子是加减乘（mod 2^63）
+-- 或低位掩码时不要——两层 wrap 之间的中间值只影响高位，最后统一 wrap 一次即可。
 genScalarInto : FGen -> List Reg -> Ir -> Maybe (Pair Reg (Pair (List Instr) (List Reg)))
-genScalarInto st pool (IrInt n) =
+genScalarInto st pool ir = genScalarIntoW True st pool ir
+
+genScalarIntoW : Bool -> FGen -> List Reg -> Ir -> Maybe (Pair Reg (Pair (List Instr) (List Reg)))
+genScalarIntoW _ st pool (IrInt n) =
   case pool of
     r :: rest => Just (Pair r (Pair [IMov (OpReg r) (OpImm n)] rest))
     [] => Nothing
-genScalarInto st pool (IrVar b) =
+genScalarIntoW _ st pool (IrVar b) =
   case lookupBinder b st.fgSlots of
     Just slot =>
       case pool of
         r :: rest => Just (Pair r (Pair [IMov (OpReg r) (OpMem Rbp (nativeSlotOff slot))] rest))
         [] => Nothing
     Nothing => Nothing
-genScalarInto st pool (IrCast from to inner) =
+genScalarIntoW wrap st pool (IrCast from to inner) =
   if isScalarCls (clsOfTy st from) && isScalarCls (clsOfTy st to) then
-    genScalarInto st pool inner
+    genScalarIntoW wrap st pool inner
   else
     Nothing
 -- 除以编译期常量：`d = 2^k` 用符号修正移位，其余走内联 `idiv`（都省掉一次调用与
--- 实参槽往返）。`d = 0` / `d = -1` 仍走 `rt_div`（除零 trap 与 `min_int / -1` 语义）。
-genScalarInto st pool (IrRtApp sym args) =
+-- 实参槽往返）。除法的操作数必须已 wrap、结果天然在范围内。`d = 0` / `d = -1` 仍走
+-- `rt_div`（除零 trap 与 `min_int / -1` 语义）。
+genScalarIntoW wrap st pool (IrRtApp sym args) =
   if sym == "/" then
     case args of
       [a, IrInt d] =>
@@ -1112,16 +1155,19 @@ genScalarInto st pool (IrRtApp sym args) =
   else
     case scalarPlanOf sym of
       Nothing => Nothing
-      Just plan => if length args /= irInlineArity sym then Nothing else genScalarOp st pool (firstOf plan) args
-genScalarInto _ _ _ = Nothing
+      Just plan => if length args /= irInlineArity sym then Nothing else genScalarOpW wrap st pool (firstOf plan) args
+genScalarIntoW _ _ _ _ = Nothing
 
 -- | 白名单算子的寄存器选择；`ScalarCmp` 的结果固定在 rax（`setcc` + `movzx rax, al`）。
 genScalarOp : FGen -> List Reg -> ScalarOp -> List Ir -> Maybe (Pair Reg (Pair (List Instr) (List Reg)))
-genScalarOp st pool (ScalarConst n) _ =
+genScalarOp st pool op args = genScalarOpW True st pool op args
+
+genScalarOpW : Bool -> FGen -> List Reg -> ScalarOp -> List Ir -> Maybe (Pair Reg (Pair (List Instr) (List Reg)))
+genScalarOpW _ st pool (ScalarConst n) _ =
   case pool of
     r :: rest => Just (Pair r (Pair [IMov (OpReg r) (OpImm n)] rest))
     [] => Nothing
-genScalarOp st pool (ScalarCmp cc) args =
+genScalarOpW _ st pool (ScalarCmp cc) args =
   if not (memReg Rax pool) then
     Nothing
   else
@@ -1142,7 +1188,7 @@ genScalarOp st pool (ScalarCmp cc) args =
               Nothing => Nothing
           Nothing => Nothing
       _ => Nothing
-genScalarOp st pool ScalarNatFromInt args =
+genScalarOpW _ st pool ScalarNatFromInt args =
   case args of
     [a] =>
       case pool of
@@ -1159,43 +1205,85 @@ genScalarOp st pool ScalarNatFromInt args =
             Nothing => Nothing
         [] => Nothing
     _ => Nothing
-genScalarOp st pool op args =
-  case args of
-    [] =>
-      case pool of
-        r :: rest =>
-          let
-            res = scalarInstrs op r r
-          in Just (Pair (firstOf res) (Pair (secondOf res) (r :: rest)))
-        [] => Nothing
-    [a] =>
-      case pool of
-        r :: rest =>
-          case genScalarInto st (r :: rest) a of
-            Just pa =>
-              let
-                res = scalarInstrs op (firstOf pa) (firstOf pa)
-              in Just
-                (Pair (firstOf res) (Pair (append (firstOf (secondOf pa)) (secondOf res)) (secondOf (secondOf pa))))
-            Nothing => Nothing
-        [] => Nothing
-    [a, b] =>
-      case genScalarInto st (pickFirst pool (needsRax b)) a of
+-- `band x 常量掩码`：掩码清掉高位（`0 ≤ m ≤ maxInt`），所以 x 不必先 wrap，
+-- 结果也天然落在 `[0, m]` 里。
+genScalarOpW _ st pool (ScalarBitOp "and") ([a, IrInt m]) =
+  if m >= 0 && m <= nativeMaxInt then
+    genScalarBinInto
+      False
+      True
+      st
+      pool
+      a
+      (IrInt m)
+      (\rA, rB => Pair rA [IBinReg "and" rA (OpReg rB)])
+  else
+    genScalarOpGeneric False st pool (ScalarBitOp "and") [a, IrInt m]
+genScalarOpW wrap st pool op args = genScalarOpGeneric wrap st pool op args
+
+genScalarOpGeneric : Bool -> FGen -> List Reg -> ScalarOp -> List Ir -> Maybe (Pair Reg (Pair (List Instr) (List Reg)))
+genScalarOpGeneric _ st pool op [] =
+  case pool of
+    r :: rest =>
+      let
+        res = scalarInstrs op r r
+      in Just (Pair (firstOf res) (Pair (secondOf res) (r :: rest)))
+    [] => Nothing
+genScalarOpGeneric wrap st pool op ([a]) =
+  case pool of
+    r :: rest =>
+      case genScalarIntoW (childWrap op) st (r :: rest) a of
         Just pa =>
-          case genScalarInto st (secondOf (secondOf pa)) b of
-            Just pb =>
-              let
-                rA = firstOf pa
-                inA = firstOf (secondOf pa)
-                rB = firstOf pb
-                inB = firstOf (secondOf pb)
-                restB = secondOf (secondOf pb)
-                res = scalarInstrs op rA rB
-              in Just
-                (Pair (firstOf res) (Pair (append inA (append inB (secondOf res))) (rB :: restB)))
-            Nothing => Nothing
+          let
+            res = resOf wrap op (firstOf pa) (firstOf pa)
+          in Just
+            (Pair (firstOf res) (Pair (append (firstOf (secondOf pa)) (secondOf res)) (secondOf (secondOf pa))))
         Nothing => Nothing
-    _ => Nothing
+    [] => Nothing
+genScalarOpGeneric wrap st pool op ([a, b]) =
+  case genScalarIntoW (childWrap op) st (pickFirst pool (needsRax b)) a of
+    Just pa =>
+      case genScalarIntoW (childWrap op) st (secondOf (secondOf pa)) b of
+        Just pb =>
+          let
+            rA = firstOf pa
+            inA = firstOf (secondOf pa)
+            rB = firstOf pb
+            inB = firstOf (secondOf pb)
+            restB = secondOf (secondOf pb)
+            res = resOf wrap op rA rB
+          in Just (Pair (firstOf res) (Pair (append inA (append inB (secondOf res))) (rB :: restB)))
+        Nothing => Nothing
+    Nothing => Nothing
+genScalarOpGeneric _ _ _ _ _ = Nothing
+
+-- | 子表达式能否省 wrap：加减乘是 mod 2^63 的运算，中间结果不必 wrap；其它算子要看
+--   高位，操作数必须是已 wrap 的值。
+childWrap : ScalarOp -> Bool
+childWrap (ScalarWrap _) = False
+childWrap _ = True
+
+resOf : Bool -> ScalarOp -> Reg -> Reg -> Pair Reg (List Instr)
+resOf True op a b = scalarInstrs op a b
+resOf False op a b = scalarInstrsNoWrap op a b
+
+-- | 二元算子的求值：两个操作数按各自的口径求值，指令拼在一起。
+genScalarBinInto : Bool -> Bool -> FGen -> List Reg -> Ir -> Ir -> (Reg -> Reg -> Pair Reg (List Instr)) -> Maybe (Pair Reg (Pair (List Instr) (List Reg)))
+genScalarBinInto wrapA wrapB st pool a b mk =
+  case genScalarIntoW wrapA st (pickFirst pool (needsRax b)) a of
+    Just pa =>
+      case genScalarIntoW wrapB st (secondOf (secondOf pa)) b of
+        Just pb =>
+          let
+            rA = firstOf pa
+            inA = firstOf (secondOf pa)
+            rB = firstOf pb
+            inB = firstOf (secondOf pb)
+            restB = secondOf (secondOf pb)
+            res = mk rA rB
+          in Just (Pair (firstOf res) (Pair (append inA (append inB (secondOf res))) (rB :: restB)))
+        Nothing => Nothing
+    Nothing => Nothing
 
 -- | `IrRtApp` 的标量选择：命中返回以 rax 收尾的指令序列，否则 Nothing（调用方回退）。
 genInlineRt : FGen -> String -> List Ir -> Maybe (List Instr)
@@ -1724,7 +1812,7 @@ genLamValue fuel st bs body =
       st1 = { st | fgNextLabel = idx + 1 }
       -- 闭包体自己的来参区由闭包 ABI 决定（`rdi` 是闭包自身，实参从 `rsi` 起）。
       lamRoom = nativeTailRoomBytes (nativeStackArgCount arity (length closureArgRegs))
-      stBody = FGen st1.fgDefs st1.fgPool st1.fgFloats [] [] st1.fgFams 0 st1.fgNextLabel [] lamRoom st1.fgModule st1.fgOwner "" "" [] [] (filterKnown caps st.fgKnown) st1.fgReenter
+      stBody = FGen st1.fgDefs st1.fgPool st1.fgFloats [] [] st1.fgFams 0 st1.fgNextLabel [] lamRoom st1.fgModule st1.fgOwner "" "" [] [] [] (filterKnown caps st.fgKnown) st1.fgReenter
     in nbind (bindCaptures stBody st.fgSlotCls caps 0) (
         \cp =>
           nbind (bindArgsGo rbs 1 (secondOf cp)) (
@@ -1735,8 +1823,9 @@ genLamValue fuel st bs body =
                         stF = secondOf q
                         frame = nativeFrameBytes stF.fgNextSlot
                         lamBody = append (firstOf cp) (append (firstOf bp) (firstOf q))
-                        lamInstrs = append (clearDeadSlots stF.fgReenter stF.fgSlotCls (peephole lamBody)) nativeEpilogue
-                        lamFunc = NativeFunc lamName frame (append (nativePrologueOf frame (unwrittenSlots frame lamInstrs)) lamInstrs) st.fgModule
+                        lamPromo = Regs.promoteLoops stF.fgSlotCls (clearDeadSlots stF.fgReenter stF.fgSlotCls (peephole lamBody))
+                        lamInstrs = append lamPromo.rpBody (Regs.epilogueOf lamPromo.rpSaved)
+                        lamFunc = NativeFunc lamName frame (append (Regs.prologueOf lamPromo.rpSaved) (append (nativePrologueOf frame (unwrittenSlots frame lamInstrs)) lamInstrs)) st.fgModule
                         lams = append st1.fgLams (append stF.fgLams [lamFunc])
                       in if ncap == 0 then
                         let
@@ -2232,6 +2321,7 @@ genDefFunc defs pools floats recNames allocs fams nextLabel (IrDef name arity _ 
         []
         []
         []
+        []
         (memStr name recNames)
   in if arity == 0 then
     nbind (genExpr (nativeFuelOfBody body) st0 body) (
@@ -2239,9 +2329,10 @@ genDefFunc defs pools floats recNames allocs fams nextLabel (IrDef name arity _ 
           let
             st1 = secondOf p
             frame = nativeFrameBytes st1.fgNextSlot
-            instrs = append (clearDeadSlots st1.fgReenter st1.fgSlotCls (peephole (firstOf p))) nativeEpilogue
+            promo = Regs.promoteLoops st1.fgSlotCls (clearDeadSlots st1.fgReenter st1.fgSlotCls (peephole (firstOf p)))
+            instrs = append promo.rpBody (Regs.epilogueOf promo.rpSaved)
             holes = if memStr name allocs && frameReused st1.fgReenter instrs then unwrittenSlots frame instrs else []
-            mainF = NativeFunc (nativeFuncLabel name) frame (append (nativePrologueOf frame holes) instrs) modPath
+            mainF = NativeFunc (nativeFuncLabel name) frame (append (Regs.prologueOf promo.rpSaved) (append (nativePrologueOf frame holes) instrs)) modPath
           in NOk (Pair (append st1.fgLams [mainF]) (Pair st1.fgNextLabel st1.fgStatics))
       )
   else
@@ -2258,16 +2349,17 @@ genDefFunc defs pools floats recNames allocs fams nextLabel (IrDef name arity _ 
                   stB = secondOf bp
                   loopP = freshLabel stB
                   loopLabel = firstOf loopP
-                  stLoop = { (secondOf loopP) | fgSelfLabel = nativeFuncLabel name, fgSelfLoop = loopLabel, fgSelfParams = slotsOfBinders rbs stB.fgSlots }
+                  stLoop = { (secondOf loopP) | fgSelfLabel = nativeFuncLabel name, fgSelfLoop = loopLabel, fgSelfParams = slotsOfBinders rbs stB.fgSlots, fgSelfBinds = rbs }
                 in nbind (genExpr (nativeFuelOfBody inner) stLoop inner) (
                     \q =>
                       let
                         st1 = secondOf q
                         frame = nativeFrameBytes st1.fgNextSlot
                         body0 = append (firstOf bp) (append [ILabel loopLabel] (firstOf q))
-                        instrs = append (clearDeadSlots st1.fgReenter st1.fgSlotCls (peephole body0)) nativeEpilogue
+                        promo = Regs.promoteLoops st1.fgSlotCls (clearDeadSlots st1.fgReenter st1.fgSlotCls (peephole body0))
+                        instrs = append promo.rpBody (Regs.epilogueOf promo.rpSaved)
                         holes = if memStr name allocs && frameReused st1.fgReenter instrs then unwrittenSlots frame instrs else []
-                        mainF = NativeFunc (nativeFuncLabel name) frame (append (nativePrologueOf frame holes) instrs) modPath
+                        mainF = NativeFunc (nativeFuncLabel name) frame (append (Regs.prologueOf promo.rpSaved) (append (nativePrologueOf frame holes) instrs)) modPath
                       in NOk (Pair (append st1.fgLams [mainF]) (Pair st1.fgNextLabel st1.fgStatics))
                   )
             )

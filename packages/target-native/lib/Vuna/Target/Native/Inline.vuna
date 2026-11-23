@@ -1,13 +1,14 @@
 module Vuna.Target.Native.Inline where
 
 -- 已知小函数的调用点内联：特化把函数值形参换成了直调，但直调仍是一次 `call`；
--- 这里把「体足够小、非递归、实参平凡」的顶层函数直接代进调用点，连调用都省掉。
+-- 这里把「体足够小、非递归、实参可重复求值」的顶层函数直接代进调用点，连调用都省掉。
 --
 -- 判据（都成立才内联）：
 --   * 被调是非递归的顶层定义（不在递归名单里），没有 init guard；
 --   * 体是 lambda，运行时 binder 数与实参个数相同，体节点数 ≤ `inlineSize`；
---   * 所有实参都是可重复求值的平凡值（变量 / 字面量 / 运行时叶子 / 顶层函数）——
---     代入不会重复求值，也不会改变求值顺序；
+--   * 所有实参都是可重复求值的值：平凡值（变量 / 字面量 / 运行时叶子 / 顶层函数），
+--     或不分配、不产生效应、不会失败的小标量表达式（加减乘 / 位运算 / 比较 / 非零常量
+--     除法）——体内重复用到时只重算几条指令；
 --   * 整程序内联次数没超预算。
 --
 -- 代入按 binder 身份做（身份全局唯一，不会捕获），随后丢掉体的结果位置标记：
@@ -222,7 +223,7 @@ tryInline defs name args st =
                     rbs = runtimeBindersOf bs
                   in if length rbs /= length args then
                     Nothing
-                  else if not (allTrivial args) then
+                  else if not (allInlinableArg args) then
                     Nothing
                   else if irSize inner > inlineSize then
                     Nothing
@@ -271,9 +272,60 @@ anyHasLamAltM : Maybe IrAlt -> Bool
 anyHasLamAltM Nothing = False
 anyHasLamAltM (Just a) = hasLam a.irAltBody
 
-allTrivial : List Ir -> Bool
-allTrivial [] = True
-allTrivial (a :: rest) = if trivialArg a then allTrivial rest else False
+-- | 实参可以是平凡值，也可以是**不会失败的小标量表达式**（加减乘、位运算、比较）。
+--   这类表达式不分配、不产生效应、不会 trap，所以体内即使用了两次也只是重算几条指令，
+--   求值顺序与语义都不变。
+allInlinableArg : List Ir -> Bool
+allInlinableArg [] = True
+allInlinableArg (a :: rest) = if inlinableArg a then allInlinableArg rest else False
+
+inlinableArg : Ir -> Bool
+inlinableArg (IrRtApp sym args) =
+  (memStr sym scalarArgSyms || (isDivLike sym && divisorSafe args)) && allInlinableArg args
+inlinableArg ir = trivialArg ir
+
+-- | 可以安全重复求值的标量运行时符号。除法 / 取模只收「除数是非零字面量」的形状
+--   （其余形状会在运行时 trap，重复求值就改变了失败点的位置）。
+scalarArgSyms : List String
+scalarArgSyms =
+  [
+    "+",
+    "-",
+    "*",
+    "bitAnd",
+    "bitOr",
+    "bitXor",
+    "bitNot",
+    "bitShl",
+    "bitShr",
+    "bi_eq_int",
+    "bi_neq_int",
+    "bi_lt_int",
+    "bi_le_int",
+    "bi_gt_int",
+    "bi_ge_int",
+    "bi_eq_bool",
+    "bi_neq_bool",
+    "bi_lt_bool",
+    "bi_le_bool",
+    "bi_gt_bool",
+    "bi_ge_bool",
+    "natAdd",
+    "natSub",
+    "natMul",
+    "natToInt",
+    "natFromInt"
+  ]
+
+isDivLike : String -> Bool
+isDivLike "/" = True
+isDivLike "%" = True
+isDivLike "mod" = True
+isDivLike _ = False
+
+divisorSafe : List Ir -> Bool
+divisorSafe ([_, IrInt d]) = d /= 0
+divisorSafe _ = False
 
 trivialArg : Ir -> Bool
 trivialArg (IrVar _) = True

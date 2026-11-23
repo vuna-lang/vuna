@@ -31,7 +31,8 @@ nativeErrText (NativeInternal msg) = "internal native backend error: " ++ msg
 -- ---------------------------------------------------------------
 -- 寄存器与操作数
 -- ---------------------------------------------------------------
--- | x86-64 通用寄存器（只需要这些；callee-saved 的 rbx/r12-r15 不使用）。
+-- | x86-64 通用寄存器。`rbx` / `r12`–`r15` 是 callee-saved：运行时不用它们，
+--   生成代码只在标量槽提升（`Native.Regs`）时使用，并由函数自己保存恢复。
 export data Reg(..) : Type where
   Rax : Reg
   Rcx : Reg
@@ -44,6 +45,10 @@ export data Reg(..) : Type where
   R9 : Reg
   R10 : Reg
   R11 : Reg
+  Rbx : Reg
+  R12 : Reg
+  R13 : Reg
+  R14 : Reg
   R15 : Reg
 
 export regText : Reg -> String
@@ -58,6 +63,10 @@ regText R8 = "r8"
 regText R9 = "r9"
 regText R10 = "r10"
 regText R11 = "r11"
+regText Rbx = "rbx"
+regText R12 = "r12"
+regText R13 = "r13"
+regText R14 = "r14"
 regText R15 = "r15"
 
 -- | 8-bit 别名（`setcc` / 字节存储用）。
@@ -73,6 +82,10 @@ reg8Text R8 = "r8b"
 reg8Text R9 = "r9b"
 reg8Text R10 = "r10b"
 reg8Text R11 = "r11b"
+reg8Text Rbx = "bl"
+reg8Text R12 = "r12b"
+reg8Text R13 = "r13b"
+reg8Text R14 = "r14b"
 reg8Text R15 = "r15b"
 
 -- | 操作数：寄存器 / 立即数 / `[base + off]` / `[base + index + off]`（scale 1）/

@@ -236,6 +236,49 @@ liveFix fuel labels blocks uses defs live =
     in if secondOf p then liveFix (fuel - 1) labels blocks uses defs (firstOf p) else Just (firstOf p)
 
 -- ---------------------------------------------------------------
+-- 循环携带的槽
+-- ---------------------------------------------------------------
+-- | 块内「先读后写」的槽：写在读之前的槽不算入口活（块级并集会把迭代内临时也高估成
+--   入口活，`loopCarriedSlots` 需要精确到指令顺序）。
+blockUsesBeforeDef : Block -> List Int
+blockUsesBeforeDef b = scanUsesBeforeDef [] b.blkInstrs
+
+scanUsesBeforeDef : List Int -> List Instr -> List Int
+scanUsesBeforeDef seen [] = []
+scanUsesBeforeDef seen (i :: rest) =
+  let
+    reads = filter (\o => not (memInt o seen)) (instrSlotReads i)
+    seen2 = mergeUnion seen (instrSlotWrites i)
+  in mergeUnion reads (scanUsesBeforeDef seen2 rest)
+
+-- | 回边目标块（循环头）的 `live_in`：进入下一轮迭代时必须保住的槽。`Int` 是**槽偏移**
+--   （`instrSlotReads` 的口径），不是槽序号。
+export loopCarriedSlots : List Instr -> List Int
+loopCarriedSlots instrs =
+  let
+    blocks = blocksOf instrs
+    labels = labelMapOf blocks
+    uses = map blockUsesBeforeDef blocks
+    defs = map blockDefs blocks
+    init = HashMap.fromList (map (\p => Pair (firstOf p) []) (zipIdxFrom 0 blocks))
+    headers = loopHeaders blocks labels
+  in case liveFix 64 labels blocks uses defs init of
+    Nothing => []
+    Just live =>
+      foldl (\acc, i => mergeUnion acc (withDefault (HashMap.lookup i live) [])) [] headers
+
+loopHeaders : List Block -> HashMap String Int -> List Int
+loopHeaders blocks labels =
+  nubInts (concatMap (\p => backTargets labels (firstOf p) (secondOf p)) (zipIdxFrom 0 blocks))
+
+backTargets : HashMap String Int -> Int -> Block -> List Int
+backTargets labels i b = filter (\j => j <= i) (succIndices labels i b)
+
+nubInts : List Int -> List Int
+nubInts [] = []
+nubInts (x :: rest) = if memInt x rest then nubInts rest else x :: nubInts rest
+
+-- ---------------------------------------------------------------
 -- 重写：在最后一次读之后清零
 -- ---------------------------------------------------------------
 ptrMapOf : List (Pair Int NCls) -> HashMap Int Bool

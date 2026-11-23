@@ -1,7 +1,8 @@
 -- 标量指令选择（`Native.Select`）的单测。
 --
 -- 锁三件事：白名单符号与运行时标签/契约一致；每个算子的寄存器序列形状；
--- 63-bit wrap、Nat 饱和/夹取与比较结果寄存器（`rax` + `setcc`/`movzx`）不被改坏。
+-- 算术的 63-bit wrap、位运算不 wrap、Nat 饱和/夹取与比较结果寄存器
+-- （`rax` + `setcc`/`movzx`）不被改坏。
 import Base
 import Base.Data.List as List
 import Base.Data.Pair as Pair
@@ -24,8 +25,8 @@ main =
 problems : List String
 problems =
   append
-    (append (append wrapProblems cmpProblems) (append natProblems constProblems))
-    (append planProblems (append peepholeProblems (append divProblems branchProblems)))
+    (append (append wrapProblems bitProblems) (append cmpProblems (append natProblems constProblems)))
+    (append planProblems (append peepholeProblems (append divProblems (append branchProblems noWrapProblems))))
 
 wrapProblems : List String
 wrapProblems =
@@ -33,6 +34,30 @@ wrapProblems =
     Pair R11 ([IBinReg "add" R11 (OpReg R10), IBinReg "shl" R11 (OpImm 1), IBinReg "sar" R11 (OpImm 1)]) =>
       []
     Pair r is => ["wrap add: reg " ++ regText r ++ ", " ++ strFromInt (length is) ++ " instrs"]
+
+-- 位运算对规范化封闭：只发一条 `and` / `or` / `xor`，不跟 wrap。
+bitProblems : List String
+bitProblems = append xorBitProblems bitNotProblems
+
+xorBitProblems : List String
+xorBitProblems =
+  case scalarInstrs (ScalarBitOp "xor") R11 R10 of
+    Pair R11 ([IBinReg "xor" R11 (OpReg R10)]) => []
+    Pair r is => ["bit xor: reg " ++ regText r ++ ", " ++ strFromInt (length is) ++ " instrs"]
+
+bitNotProblems : List String
+bitNotProblems =
+  case scalarInstrs ScalarBitNot R11 R10 of
+    Pair R11 ([IBinReg "xor" R11 (OpImm m)]) =>
+      if m == 0 - 1 then [] else ["bit not: imm " ++ strFromInt m]
+    Pair r is => ["bit not: reg " ++ regText r ++ ", " ++ strFromInt (length is) ++ " instrs"]
+
+-- 延时 wrap：中间值只被 mod 2^63 的操作消费时省掉本层的 `shl; sar`。
+noWrapProblems : List String
+noWrapProblems =
+  case scalarInstrsNoWrap (ScalarWrap "imul") R11 R10 of
+    Pair R11 ([IBinReg "imul" R11 (OpReg R10)]) => []
+    Pair r is => ["nowrap imul: reg " ++ regText r ++ ", " ++ strFromInt (length is) ++ " instrs"]
 
 cmpProblems : List String
 cmpProblems =

@@ -418,36 +418,67 @@ wasm 删掉 wat 机器后连纯程序也小了 ~4%。上表 native 两列是「�
 **第一个不达标的 tier 就是问题所在**。三端同窗口：`vuna`（native）、`vuna_ocaml`
 （vuna 源码走 OCaml 后端）、`ml`（手写 OCaml）、`c`（手写 C，同形；N 从 argv 读）。
 
-本机一档（`--target both --tier t0 --tier t1 --runs 5 --warmup 2`，loadavg 1.21；
+本机一档（`--target both --tier t1 --runs 7 --warmup 3`，loadavg 1.57；
 `ns/op` 是 `median_ms × 1e6 / ops`，绝对 ms 只同机可比）：
 
 | 用例 | tier | native ms | native ns/op | native vs c | native vs ml | vuna_ocaml vs c | vuna_ocaml vs ml |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| entry_pure | t0 | 0.66 | - | 0.36x | 0.25x | 1.03x | 0.73x |
-| entry_effect | t0 | 0.62 | - | - | 0.22x | - | 0.65x |
-| startup | t0 | 0.69 | - | - | 0.23x | - | 0.65x |
-| arith | t1 | 7.02 | 2.34 | 1.12x | 1.34x | 0.91x | 1.10x |
-| float_math | t1 | 9.15 | - | - | 1.29x | - | 1.87x |
-| nat_bits | t1 | 6.66 | - | - | 2.48x | - | 1.85x |
-| scalar_xor | t1 | 51.74 | 2.59 | 4.99x | 4.27x | 1.24x | 1.06x |
-| scalar_muladd | t1 | 58.19 | 2.91 | 2.63x | 2.42x | 1.11x | 1.02x |
-| scalar_divconst | t1 | 52.41 | 2.62 | 5.11x | 3.32x | 1.64x | 1.06x |
+| arith | t1 | 6.90 | 2.30 | 1.02x | 1.39x | 0.77x | 1.06x |
+| float_math | t1 | 8.35 | - | - | 1.15x | - | 1.86x |
+| nat_bits | t1 | 5.81 | - | - | 1.48x | - | 1.29x |
+| scalar_xor | t1 | 15.16 | 0.76 | 1.71x | 1.33x | 1.41x | 1.10x |
+| scalar_muladd | t1 | 24.01 | 1.20 | 1.14x | 1.00x | 1.15x | 1.01x |
+| scalar_divconst | t1 | 18.16 | 0.91 | 1.77x | 1.07x | 1.70x | 1.03x |
 
-几何平均：**t0 native 0.36x c / 0.23x ml；t1 native 2.94x c / 2.30x ml；t1 vuna_ocaml 1.20x c / 1.28x ml**。
-新增用例的条目在 `programs.json` 下一次重标时写入；在那之前 `--check` 会把它们报成 `new`。
+几何平均：**t1 native 1.37x c / 1.22x ml；t1 vuna_ocaml 1.21x c / 1.19x ml**。
+T0 仍是 0.36x c / 0.23x ml（§1.6.2 的裁剪不改变地板读数）。
 
 读法：
 
 - **地板不是问题**：T0 上 native 比手写 OCaml 快 4 倍、比裸 syscall 的 C 还快（`entry_pure` 0.36x）。
   入口初始化与产物尺寸不在差距里。
-- **T1 的差距是每轮固定成本，不是算术量**：`scalar_xor`（2e7 轮）与 `arith`（3e6 轮、每轮多两次
-  乘除）的 native `ns/op` 都在 2.3–2.6，说明每轮约 2 ns 被固定开销吃掉——63-bit wrap
-  （`op; shl; sar`）与每个 binder 一个栈槽。C 的同一项是 0.5 ns。
-- **OCaml 后端在标量环上比 native 快 4 倍**（`scalar_xor` 12.9 vs 51.7 ms）：
-  ocamlopt 把环变量放进寄存器，native 不做寄存器分配。这一列是 native 后端的直接对照。
-- 结论按 tier 切断：T0 达标；T1 的 2.9x 全部来自表示与寄存器分配，与 GC、闭包、效应无关。
+- **标量环的固定成本已经压到 C 附近**（`scalar_muladd` 1.14x、`arith` 1.02x）：这一档的
+  native 每轮 1.2–2.3 ns，与 C 的 1.06–2.26 ns 同一量级。
+- **剩下的差距集中在「循环计数器」的 63-bit wrap 与有符号除法**（`scalar_xor` 1.71x、
+  `scalar_divconst` 1.77x）：每轮 `n - 1` 仍带 `shl; sar`，`n / 2` 仍走符号修正移位
+  （`sar r,63; and; add; sar`）。C 的同一项是一条 `dec` / `shr`。
+- **OCaml 后端在标量环上也已经接近 C**（1.21x c）；native 与它的差距只剩上面两项。
+- 结论按 tier 切断：T0 达标；T1 的剩余差距是**范围信息**（知道循环计数器非负 / 不溢出），
+  与 GC、闭包、效应无关。
 
-#### 1.6.1 入口初始化裁剪
+#### 1.6.1 T1 优化（2026-11-23）
+
+三处改动（细节见 [native.md](native.md) §3.6–§3.9）：
+
+1. **调用点内联放宽**：实参可以是可重复求值的小标量表达式（加减乘 / 位运算 / 非零常量
+   除法），`bxor acc (n / 2)`、`band (acc * C + c) mask` 这类调用不再留下 `call`；
+2. **延时 wrap**：同一棵标量表达式树只在根位置 wrap 一次；`band` 的掩码消费时整棵树
+   都不 wrap（掩码只看低位）；`band` / `bor` / `bxor` / `bnot` 自身对规范化封闭，不再跟
+   `shl; sar`；
+3. **标量槽提升**：有回边的函数把循环携带的标量槽提到 `rbx` / `r12`–`r14`（只提升
+   `NClsScalar`，指针槽留给保守扫根），自递归尾调用的实参在安全时直写形参槽。
+
+同一台机器上的前后对照（`native ms`，前 = 主分支原状）：
+
+| 用例 | 前 | 后 | C |
+| --- | --- | --- | --- |
+| arith | 7.19 | 6.90 | 6.79 |
+| float_math | 8.86 | 8.35 | - |
+| nat_bits | 8.05 | 5.81 | - |
+| scalar_xor | 19.52 | 15.16 | 8.87 |
+| scalar_muladd | 56.94 | 24.01 | 21.14 |
+| scalar_divconst | 52.98 | 18.16 | 10.28 |
+| **几何平均（vs c）** | **2.39x** | **1.37x** | 1.00x |
+
+下一步的顺序（都有明确的读数目标）：
+
+- **范围信息**：`if n <= 0 then … else …` 的真分支里 `n ≥ 1`，可以省掉 `n - 1` 的 wrap；
+  `n / 2` 在非负时用一条 `shr`。这直接对应 `scalar_xor` / `scalar_divconst` 的剩余差距。
+- **32-bit 窄化**：`band (acc * C + c) 0xFFFFFFFF` 用 `imul/add` 的 32-bit 形式，
+  把 `scalar_muladd` 的每轮 4 条压到 2 条。
+- **未引用 `.bss` 缓冲**：可达性裁剪只裁了函数，8 MiB 的 `rt_read_buf` 等仍进产物。
+
+#### 1.6.2 入口初始化裁剪
 
 T0 达标之后，`_start` 不再无条件初始化全部子系统：只按程序实际用到的部分发调用，
 并按 `_start` 的标签可达性裁剪运行时函数（规则见 [native.md](native.md) §5.1）。

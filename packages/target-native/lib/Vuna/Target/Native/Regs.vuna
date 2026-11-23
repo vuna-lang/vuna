@@ -1,0 +1,220 @@
+module Vuna.Target.Native.Regs where
+
+-- 标量帧槽提升到 callee-saved 寄存器。
+--
+-- 帧槽是所有 binder 的统一落点，因此热点循环的每次迭代都在「写槽 → 读回」上绕一圈。
+-- 只有**标量**槽（Int / Bool，`NClsScalar`）可以安全地常驻寄存器：GC 的保守扫根只看
+-- 栈帧，指针槽必须留在内存里；标量在寄存器里既不会被漏扫，也不会被当成根。
+--
+-- 判据与范围：
+--   * 只处理**有回边**的函数（尾递归循环 / 普通循环）：同一帧跨迭代复用，槽的读写
+--     都在热点上；直线函数保持原来的槽布局（避免为一次调用付 push/pop）；
+--   * 只提升**循环携带**的槽（循环头 `live_in`）：迭代内定义、迭代内用完的临时值
+--     留在槽里更好——提升它们只多出两次寄存器搬运，反而加长关键路径；
+--   * 有**栈实参**（`[rbp + 正偏移]`，arity > 6）的函数不提升：prologue 多压的
+--     callee-saved 寄存器会把来参区整体上移，`[rbp+16]` 不再指向第一个栈实参；
+--   * 按槽在函数体里出现的次数挑前 `maxPromoted` 个（够用即可，不追求全局最优）；
+--   * 被提升的槽在整个函数里都换成寄存器（来参落位、尾调用搬运、返回值都跟着走），
+--     所以循环边界上不需要插入拷贝。
+--
+-- 寄存器只用 `rbx` / `r12`–`r14`：SysV 的 callee-saved，运行时与生成代码都不用它们
+-- （`rt_gc` 只把 r15 存进自己的帧，不写它），由函数自己的 prologue / epilogue 保存。
+-- 尾调用（含闭包尾调用 `jmp reg`）在 `pop rbp` 之后、跳转之前恢复。
+--
+-- 边界：只 import Base 与 `Native.{Abi,Live,Model,Repr}`；不改 ABI 与帧大小。
+import Base.Data.Bool as Bool
+import Base.Data.Int as Int
+import Base.Data.List as List
+import Base.Data.Maybe as Maybe
+import Base.Data.Pair as Pair
+import Vuna.Target.Native.Abi
+import Vuna.Target.Native.Live
+import Vuna.Target.Native.Model
+import Vuna.Target.Native.Repr
+
+-- | 一个函数最多提升几个槽（寄存器池大小）。
+maxPromoted : Int
+maxPromoted = 4
+
+-- | 可用的 callee-saved 寄存器（顺序固定：分数高的槽拿前面的）。
+promotableRegs : List Reg
+promotableRegs = [Rbx, R12, R13, R14]
+
+-- | 提升结果：重写后的函数体 + 需要在 prologue / epilogue 里保存的寄存器。
+export record RegPlan(..) where
+  rpBody : List Instr
+  rpSaved : List Reg
+
+-- ---------------------------------------------------------------
+-- 槽的识别与计分
+-- ---------------------------------------------------------------
+slotOffOf : Operand -> Maybe Int
+slotOffOf (OpMem Rbp off) = Just off
+slotOffOf _ = Nothing
+
+collectMaybe : List (Maybe Int) -> List Int
+collectMaybe [] = []
+collectMaybe (Nothing :: rest) = collectMaybe rest
+collectMaybe ((Just x) :: rest) = x :: collectMaybe rest
+
+-- | 指令在**值位置**引用的帧槽（读和写都算，只用于计分）。
+--   `movzx` / `mov byte` 的源是字符串字节，不是标量槽，因此不计也不改写。
+instrSlotOffs : Instr -> List Int
+instrSlotOffs (IMov a b) = collectMaybe [slotOffOf a, slotOffOf b]
+instrSlotOffs (IBin _ src) = collectMaybe [slotOffOf src]
+instrSlotOffs (IBinReg _ _ src) = collectMaybe [slotOffOf src]
+instrSlotOffs (ICmp a b) = collectMaybe [slotOffOf a, slotOffOf b]
+instrSlotOffs (ICmov _ _ src) = collectMaybe [slotOffOf src]
+instrSlotOffs (IXmmLoad _ src) = collectMaybe [slotOffOf src]
+instrSlotOffs (IXmmStore op _) = collectMaybe [slotOffOf op]
+instrSlotOffs _ = []
+
+slotScore : List Instr -> Int -> Int
+slotScore instrs slot = length (filter (\o => o == slot) (concatMap instrSlotOffs instrs))
+
+-- | 前 `k` 个最常出现的槽（只收访问次数 > 0 的）。
+pickTop : Int -> List Int -> List Instr -> List Int
+pickTop k candidates instrs =
+  if k <= 0 then
+    []
+  else
+    case bestOf candidates instrs Nothing of
+      Nothing => []
+      Just p =>
+        let
+          slot = firstOf p
+          score = secondOf p
+        in if score <= 0 then [] else slot :: pickTop (k - 1) (withoutInt slot candidates) instrs
+
+bestOf : List Int -> List Instr -> Maybe (Pair Int Int) -> Maybe (Pair Int Int)
+bestOf [] _ best = best
+bestOf (s :: rest) instrs best =
+  let
+    score = slotScore instrs s
+  in case best of
+    Nothing => bestOf rest instrs (Just (Pair s score))
+    Just b =>
+      if score > secondOf b then
+        bestOf rest instrs (Just (Pair s score))
+      else
+        bestOf rest instrs best
+
+withoutInt : Int -> List Int -> List Int
+withoutInt _ [] = []
+withoutInt x (y :: rest) = if x == y then rest else y :: withoutInt x rest
+
+-- ---------------------------------------------------------------
+-- 重写
+-- ---------------------------------------------------------------
+lookupSlot : Int -> List (Pair Int Reg) -> Maybe Reg
+lookupSlot _ [] = Nothing
+lookupSlot off (p :: rest) = if firstOf p == off then Just (secondOf p) else lookupSlot off rest
+
+substOperand : List (Pair Int Reg) -> Operand -> Operand
+substOperand reps op =
+  case slotOffOf op of
+    Nothing => op
+    Just off =>
+      case lookupSlot off reps of
+        Nothing => op
+        Just r => OpReg r
+
+-- | 只改写值位置的指令；`IMovzx` / `IMovByte*` 的字节操作数保持原样。
+mapValueOperands : (Operand -> Operand) -> Instr -> Instr
+mapValueOperands f (IMov a b) = IMov (f a) (f b)
+mapValueOperands f (IBin op src) = IBin op (f src)
+mapValueOperands f (IBinReg op dst src) = IBinReg op dst (f src)
+mapValueOperands f (ICmp a b) = ICmp (f a) (f b)
+mapValueOperands f (ICmov cc dst src) = ICmov cc dst (f src)
+mapValueOperands f (IXmmLoad n src) = IXmmLoad n (f src)
+mapValueOperands f (IXmmStore op n) = IXmmStore (f op) n
+mapValueOperands _ i = i
+
+-- ---------------------------------------------------------------
+-- 保存 / 恢复
+-- ---------------------------------------------------------------
+-- | prologue 里追加在 `push rbp` 之前的部分：保存用到的寄存器。用到的个数为奇数时
+--   补 8 字节空洞，保持 `call` 前的 16 字节对齐。
+export prologueOf : List Reg -> List Instr
+prologueOf saved =
+  append (map IPush saved) (if odd (length saved) then [IBinReg "sub" Rsp (OpImm 8)] else [])
+
+-- | epilogue / 尾调用的恢复序列（`pop rbp` 之后执行）。
+teardownInstrs : List Reg -> List Instr
+teardownInstrs saved =
+  append
+    (if odd (length saved) then [IBinReg "add" Rsp (OpImm 8)] else [])
+    (map IPop (reverse saved))
+
+-- | 函数正常返回的 epilogue。
+export epilogueOf : List Reg -> List Instr
+epilogueOf saved =
+  append [IMov (OpReg Rsp) (OpReg Rbp), IPop Rbp] (append (teardownInstrs saved) [IRet])
+
+-- | 尾调用：`mov rsp, rbp; pop rbp; jmp …` 在这条序列的 `pop rbp` 之后插入恢复。
+restoreTailJumps : List Reg -> List Instr -> List Instr
+restoreTailJumps saved [] = []
+restoreTailJumps saved (i :: rest) =
+  case i of
+    IPop Rbp =>
+      case rest of
+        (IJmp l) :: more =>
+          append [IPop Rbp] (append (teardownInstrs saved) (IJmp l :: restoreTailJumps saved more))
+        (IJmpReg r) :: more =>
+          append
+            [IPop Rbp]
+            (append (teardownInstrs saved) (IJmpReg r :: restoreTailJumps saved more))
+        _ => i :: restoreTailJumps saved rest
+    _ => i :: restoreTailJumps saved rest
+
+odd : Int -> Bool
+odd n = n - n / 2 * 2 == 1
+
+-- ---------------------------------------------------------------
+-- 入口
+-- ---------------------------------------------------------------
+-- | 有回边的函数里，把最热的标量槽换成 callee-saved 寄存器。
+export promoteLoops : List (Pair Int NCls) -> List Instr -> RegPlan
+promoteLoops slotCls instrs =
+  if not (frameReused False instrs) || hasStackArgs instrs then
+    RegPlan instrs []
+  else
+    let
+      carried = loopCarriedSlots instrs
+      scalarOffs = map (\p => nativeSlotOff (firstOf p)) (filter (\p => isScalarCls (secondOf p)) slotCls)
+      candidates = filter (\off => memIntList off carried) scalarOffs
+      top = pickTop maxPromoted candidates instrs
+      reps = List.zip top promotableRegs
+      saved = map secondOf reps
+      body = map (\i => mapValueOperands (substOperand reps) i) instrs
+    in RegPlan (restoreTailJumps saved body) saved
+
+-- | 有栈实参（`[rbp + 正偏移]`）：prologue 多压的寄存器会移动来参区，见文件头。
+hasStackArgs : List Instr -> Bool
+hasStackArgs instrs = foldl (\acc, i => acc || instrHasStackArg i) False instrs
+
+instrHasStackArg : Instr -> Bool
+instrHasStackArg i = foldl (\acc, o => acc || positiveRbpOffset o) False (instrOperands i)
+
+positiveRbpOffset : Operand -> Bool
+positiveRbpOffset (OpMem Rbp off) = off > 0
+positiveRbpOffset _ = False
+
+-- | 值位置的操作数（与 `mapValueOperands` 的范围一致）。
+instrOperands : Instr -> List Operand
+instrOperands (IMov a b) = [a, b]
+instrOperands (IBin _ src) = [src]
+instrOperands (IBinReg _ _ src) = [src]
+instrOperands (ICmp a b) = [a, b]
+instrOperands (ICmov _ _ src) = [src]
+instrOperands (IXmmLoad _ src) = [src]
+instrOperands (IXmmStore op _) = [op]
+instrOperands _ = []
+
+isScalarCls : NCls -> Bool
+isScalarCls NClsScalar = True
+isScalarCls _ = False
+
+memIntList : Int -> List Int -> Bool
+memIntList _ [] = False
+memIntList x (y :: rest) = if x == y then True else memIntList x rest
