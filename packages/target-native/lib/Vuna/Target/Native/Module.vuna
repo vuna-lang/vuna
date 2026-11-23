@@ -951,6 +951,7 @@ floatTree st (x :: rest) ir =
         Nothing => Nothing
     IrRtApp sym args => if isFloatBin sym then floatTreeBin st (x :: rest) sym args else Nothing
     IrApp _ f a => floatTreeApp st (x :: rest) f a
+    IrIf c t e => floatTreeCond st (x :: rest) c t e
     _ => Nothing
 
 floatTreeBin : FGen -> List Int -> String -> List Ir -> Maybe (Pair Int (Pair (List Instr) (List Int)))
@@ -1166,6 +1167,18 @@ genScalarIntoW wrap st pool (IrRtApp sym args) =
     case scalarPlanOf sym of
       Nothing => Nothing
       Just plan => if length args /= irInlineArity sym then Nothing else genScalarOpW wrap st pool (firstOf plan) args
+-- `if b then 1 else 0` 就是 b（0/1）；作为标量实参时直接取值的计划，父算子继续内联。
+genScalarIntoW wrap st pool (IrIf c t e) =
+  case boolSelectModeOf t e of
+    Just mode =>
+      case genScalarIntoW wrap st pool c of
+        Just pa =>
+          let
+            r = firstOf pa
+          in Just
+            (Pair r (Pair (append (firstOf (secondOf pa)) (boolSelectInstrs mode r)) (secondOf (secondOf pa))))
+        Nothing => Nothing
+    Nothing => Nothing
 genScalarIntoW _ _ _ _ = Nothing
 
 -- | 白名单算子的寄存器选择；`ScalarCmp` 的结果固定在 rax（`setcc` + `movzx rax, al`）。
@@ -1375,15 +1388,18 @@ genRtApp fuel st isTail sym args =
             case floatInline st sym args of
               Just instrs => NOk (Pair instrs st)
               Nothing =>
-                case strInline st sym args of
-                  Just p => NOk p
+                case floatCmpInline st sym args of
+                  Just instrs => NOk (Pair instrs st)
                   Nothing =>
-                    case genInlineRt st sym args of
-                      Just instrs => NOk (Pair instrs st)
+                    case strInline st sym args of
+                      Just p => NOk p
                       Nothing =>
-                        case nativeRtTarget sym of
-                          Nothing => unsupported "native target: runtime symbol `${sym}` is not supported yet"
-                          Just label => if length args /= irInlineArity sym then internal "runtime symbol arity mismatch: ${sym}" else if isTail then genTailCall (fuel - 1) st label args else genSaturatedCall (fuel - 1) st label args
+                        case genInlineRt st sym args of
+                          Just instrs => NOk (Pair instrs st)
+                          Nothing =>
+                            case nativeRtTarget sym of
+                              Nothing => unsupported "native target: runtime symbol `${sym}` is not supported yet"
+                              Just label => if length args /= irInlineArity sym then internal "runtime symbol arity mismatch: ${sym}" else if isTail then genTailCall (fuel - 1) st label args else genSaturatedCall (fuel - 1) st label args
 
 -- | `IrApp (IrRt sym) args`：运行时常量函数值的应用（`irInlineArity = 0` 的那些）。
 --   标量叶子先走内联选择；其余饱和走直调，部分/过度应用先求值成闭包再交给 `rt_apply`。
@@ -1401,26 +1417,32 @@ genRtValueCall fuel st isTail sym args =
         case floatInline st sym args of
           Just instrs => NOk (Pair instrs st)
           Nothing =>
-            case strInline st sym args of
-              Just p => NOk p
-              Nothing => genRtValueCallFallback (fuel - 1) st isTail sym args
+            case floatCmpInline st sym args of
+              Just instrs => NOk (Pair instrs st)
+              Nothing =>
+                case strInline st sym args of
+                  Just p => NOk p
+                  Nothing => genRtValueCallFallback (fuel - 1) st isTail sym args
 
 -- | 值形态的剩余路径：标量选择 → 直调 → 部分 / 过度应用。
 genRtValueCallFallback : Int -> FGen -> Bool -> String -> List Ir -> NRes (Pair (List Instr) FGen)
 genRtValueCallFallback fuel st isTail sym args =
-  case genInlineRt st sym args of
+  case floatCmpInline st sym args of
     Just instrs => NOk (Pair instrs st)
     Nothing =>
-      let
-        arity = rtValueArityOf sym
-      in if arity <= 0 then
-        unsupported "native target: runtime function values are not supported yet"
-      else if length args == arity then
-        case nativeRtTarget sym of
-          Nothing => unsupported "native target: runtime symbol `${sym}` is not supported yet"
-          Just label => if isTail then genTailCall fuel st label args else genSaturatedCall fuel st label args
-      else
-        genApplyHead fuel st isTail (IrRt sym) args
+      case genInlineRt st sym args of
+        Just instrs => NOk (Pair instrs st)
+        Nothing =>
+          let
+            arity = rtValueArityOf sym
+          in if arity <= 0 then
+            unsupported "native target: runtime function values are not supported yet"
+          else if length args == arity then
+            case nativeRtTarget sym of
+              Nothing => unsupported "native target: runtime symbol `${sym}` is not supported yet"
+              Just label => if isTail then genTailCall fuel st label args else genSaturatedCall fuel st label args
+          else
+            genApplyHead fuel st isTail (IrRt sym) args
 
 -- | `IrConcatMany`：左→右两两拼接（与 OCaml 的 `String.concat ""` 语义一致）。
 --   `parts` 至少 3 项（Lowering 的门槛），空/单元素的兜底只防空指针。
@@ -1508,13 +1530,32 @@ nativeFuelOfBody body = 64 + 16 * irSize body
 genExpr : Int -> FGen -> Ir -> NRes (Pair (List Instr) FGen)
 genExpr fuel st ir = genExprAt fuel st False ir
 
+-- ---------------------------------------------------------------
+-- Bool 槽的选择
+-- ---------------------------------------------------------------
+-- | `if b then 1 else 0` / `if b then 0 else 1` 里的 Bool 选择。native 的 Bool 就是
+--   0/1，所以前者直接复用值，后者只翻转最低位——都不需要分支。
+export data BoolSelect(..) : Type where
+  BoolAsIs : BoolSelect
+  BoolInvert : BoolSelect
+
+export boolSelectModeOf : Ir -> Ir -> Maybe BoolSelect
+boolSelectModeOf (IrInt 1) (IrInt 0) = Just BoolAsIs
+boolSelectModeOf (IrBool True) (IrBool False) = Just BoolAsIs
+boolSelectModeOf (IrInt 0) (IrInt 1) = Just BoolInvert
+boolSelectModeOf (IrBool False) (IrBool True) = Just BoolInvert
+boolSelectModeOf _ _ = Nothing
+
+boolSelectInstrs : BoolSelect -> Reg -> List Instr
+boolSelectInstrs BoolAsIs _ = []
+boolSelectInstrs BoolInvert r = [IBinReg "xor" r (OpImm 1)]
+
 -- | 条件在 `IrIf` 里直接当分支用：`IrRtApp` 的标量比较 + 原子实参 →
 --   (装载+`cmp` 指令, 反向 `jcc`)。实参只接受字面量 / 槽变量（求值无副作用，
 --   也不产生新的 GC 点）。
 condBranch : FGen -> Ir -> Maybe (Pair (List Instr) String)
 condBranch st (IrRtApp sym args) =
   case branchInverse sym of
-    Nothing => Nothing
     Just inv =>
       case args of
         [a, b] =>
@@ -1526,6 +1567,12 @@ condBranch st (IrRtApp sym args) =
                 Nothing => Nothing
             Nothing => Nothing
         _ => Nothing
+    Nothing =>
+      case floatCmpInline st sym args of
+        -- 浮点比较：原子实参直接装进 xmm0/xmm1，物化 0/1 后 `test` + `je`；
+        -- 不调用运行时、不装箱（NaN 语义在 `Native.Select` 的序列里）。
+        Just instrs => Just (Pair (append instrs [ITest Rax Rax]) "je")
+        Nothing => Nothing
 condBranch _ _ = Nothing
 
 atomOperand : FGen -> Ir -> Maybe Operand
@@ -1535,6 +1582,71 @@ atomOperand st (IrVar b) =
     Just slot => Just (OpMem Rbp (nativeSlotOff slot))
     Nothing => Nothing
 atomOperand _ _ = Nothing
+
+-- | 浮点原子 → `xmm<reg>`：槽里的装箱 Float（解引用）或浮点字面量（`.rodata`）。
+floatAtomToXmm : FGen -> Int -> Ir -> Maybe (List Instr)
+floatAtomToXmm st x (IrCast _ _ inner) = floatAtomToXmm st x inner
+floatAtomToXmm st x (IrVar b) =
+  case lookupBinder b st.fgSlots of
+    Just slot => Just [IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff slot)), IXmmLoad x (OpMem Rax 0)]
+    Nothing => Nothing
+floatAtomToXmm st x (IrFloatLit raw) =
+  case poolLabelOf raw st.fgFloats of
+    Just label => Just [IXmmLoad x (OpRip label)]
+    Nothing => Nothing
+floatAtomToXmm _ _ _ = Nothing
+
+-- | 浮点比较内联：两个原子实参装进 `xmm0` / `xmm1`，用 `Native.Select` 的序列物化 0/1。
+--   不分配、不装箱、不调用；实参不是原子时返回 Nothing（回退运行时）。
+floatCmpInline : FGen -> String -> List Ir -> Maybe (List Instr)
+floatCmpInline st sym args =
+  case floatCompareInstrs sym of
+    Nothing => Nothing
+    Just tail =>
+      case args of
+        [a, b] =>
+          case Pair (floatAtomToXmm st 0 a) (floatAtomToXmm st 1 b) of
+            Pair (Just la) (Just lb) => Just (cat [la, lb, tail])
+            _ => Nothing
+        _ => Nothing
+
+-- | 浮点原子 → 指针寄存器（槽里的装箱对象或 `.rodata` 地址），供 floatTree 的
+--   无分支选择（`cmov` 指针）使用。
+floatAtomToPtr : FGen -> Reg -> Ir -> Maybe (List Instr)
+floatAtomToPtr st r (IrCast _ _ inner) = floatAtomToPtr st r inner
+floatAtomToPtr st r (IrVar b) =
+  case lookupBinder b st.fgSlots of
+    Just slot => Just [IMov (OpReg r) (OpMem Rbp (nativeSlotOff slot))]
+    Nothing => Nothing
+floatAtomToPtr st r (IrFloatLit raw) =
+  case poolLabelOf raw st.fgFloats of
+    Just label => Just [ILea r label]
+    Nothing => Nothing
+floatAtomToPtr _ _ _ = Nothing
+
+-- | 浮点树里的条件选择：`if <浮点比较> then <浮点原子> else <浮点原子>`。
+--   比较在 xmm4/xmm5 上做（不占树的 xmm0..3），结果用 `cmov` 选指针后再解引用；
+--   没有分支、没有调用，整棵树仍然只装箱一次。
+floatTreeCond : FGen -> List Int -> Ir -> Ir -> Ir -> Maybe (Pair Int (Pair (List Instr) (List Int)))
+floatTreeCond st (x :: rest) c t e =
+  case c of
+    IrRtApp sym args =>
+      case floatCompareInstrsAt 4 5 sym of
+        Just tail =>
+          case args of
+            [a, b] =>
+              case Pair (floatAtomToXmm st 4 a) (floatAtomToXmm st 5 b) of
+                Pair (Just la) (Just lb) =>
+                  case Pair (floatAtomToPtr st Rcx t) (floatAtomToPtr st Rdx e) of
+                    Pair (Just lt) (Just le) =>
+                      Just
+                        (Pair x (Pair (cat [la, lb, tail, [ITest Rax Rax], lt, le, [ICmov "cmovz" Rcx (OpReg Rdx), IXmmLoad x (OpMem Rcx 0)]]) rest))
+                    _ => Nothing
+                _ => Nothing
+            _ => Nothing
+        Nothing => Nothing
+    _ => Nothing
+floatTreeCond _ _ _ _ _ = Nothing
 
 -- | `isTail` 表示结果位置。只有「结果就是本函数返回值」的位置才允许尾调用：
 --   `IrLet` 的 body、`IrIf` 两支、`IrCase` / `IrNatCase` 各臂、`IrCast` 内层与
@@ -1578,48 +1690,51 @@ genExprAt fuel st isTail ir =
                 _ => unsupported "native target: let with more than one runtime binder is not supported yet"
           )
       IrIf c t e =>
-        case condBranch st c of
-          Just cb =>
-            let
-              -- 条件是标量比较：直接发 `cmp` + 反向 `jcc`，不再物化 0/1 再 `test`。
-              lElseP = freshLabel st
-              lElse = firstOf lElseP
-              st1 = secondOf lElseP
-              lEndP = freshLabel st1
-              lEnd = firstOf lEndP
-              st2 = secondOf lEndP
-              -- 两个分支各自带上守卫推导出的区间事实；分支结束恢复到外层。
-              thenSt = withThen st2 c
-            in nbind (genExprAt (fuel - 1) thenSt isTail t) (
-                \pt =>
-                  nbind (genExprAt (fuel - 1) (withElse (secondOf pt) st c) isTail e) (
-                      \pe =>
-                        let
-                          body = append (firstOf cb) (append [IJcc (secondOf cb) lElse] (append (firstOf pt) (append [IJmp lEnd, ILabel lElse] (append (firstOf pe) [ILabel lEnd]))))
-                          outSt = { (secondOf pe) | fgRanges = st.fgRanges }
-                        in NOk (Pair body outSt)
-                    )
-              )
+        case boolSelectModeOf t e of
+          Just mode => nbind (genExpr (fuel - 1) st c) (\p => NOk (Pair (append (firstOf p) (boolSelectInstrs mode Rax)) (secondOf p)))
           Nothing =>
-            nbind (genExpr (fuel - 1) st c) (
-                \p =>
-                  let
-                    lElseP = freshLabel (secondOf p)
-                    lElse = firstOf lElseP
-                    st1 = secondOf lElseP
-                    lEndP = freshLabel st1
-                    lEnd = firstOf lEndP
-                    st2 = secondOf lEndP
-                  in nbind (genExprAt (fuel - 1) st2 isTail t) (
-                      \pt =>
-                        nbind (genExprAt (fuel - 1) (secondOf pt) isTail e) (
-                            \pe =>
-                              let
-                                body = append (firstOf p) (append [ITest Rax Rax, IJcc "je" lElse] (append (firstOf pt) (append [IJmp lEnd, ILabel lElse] (append (firstOf pe) [ILabel lEnd]))))
-                              in NOk (Pair body (secondOf pe))
-                          )
-                    )
-              )
+            case condBranch st c of
+              Just cb =>
+                let
+                  -- 条件是标量比较：直接发 `cmp` + 反向 `jcc`，不再物化 0/1 再 `test`。
+                  lElseP = freshLabel st
+                  lElse = firstOf lElseP
+                  st1 = secondOf lElseP
+                  lEndP = freshLabel st1
+                  lEnd = firstOf lEndP
+                  st2 = secondOf lEndP
+                  -- 两个分支各自带上守卫推导出的区间事实；分支结束恢复到外层。
+                  thenSt = withThen st2 c
+                in nbind (genExprAt (fuel - 1) thenSt isTail t) (
+                    \pt =>
+                      nbind (genExprAt (fuel - 1) (withElse (secondOf pt) st c) isTail e) (
+                          \pe =>
+                            let
+                              body = append (firstOf cb) (append [IJcc (secondOf cb) lElse] (append (firstOf pt) (append [IJmp lEnd, ILabel lElse] (append (firstOf pe) [ILabel lEnd]))))
+                              outSt = { (secondOf pe) | fgRanges = st.fgRanges }
+                            in NOk (Pair body outSt)
+                        )
+                  )
+              Nothing =>
+                nbind (genExpr (fuel - 1) st c) (
+                    \p =>
+                      let
+                        lElseP = freshLabel (secondOf p)
+                        lElse = firstOf lElseP
+                        st1 = secondOf lElseP
+                        lEndP = freshLabel st1
+                        lEnd = firstOf lEndP
+                        st2 = secondOf lEndP
+                      in nbind (genExprAt (fuel - 1) st2 isTail t) (
+                          \pt =>
+                            nbind (genExprAt (fuel - 1) (secondOf pt) isTail e) (
+                                \pe =>
+                                  let
+                                    body = append (firstOf p) (append [ITest Rax Rax, IJcc "je" lElse] (append (firstOf pt) (append [IJmp lEnd, ILabel lElse] (append (firstOf pe) [ILabel lEnd]))))
+                                  in NOk (Pair body (secondOf pe))
+                              )
+                        )
+                  )
       IrCtor family ctor _ args => genCtor (fuel - 1) st family ctor args
       IrRecord family _ fields => genRecord (fuel - 1) st family fields
       IrProj base family field _ => genProj (fuel - 1) st base family field

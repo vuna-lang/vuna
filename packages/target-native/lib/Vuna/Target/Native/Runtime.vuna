@@ -27,6 +27,7 @@ import Vuna.Target.Native.Abi
 import Vuna.Target.Native.Gc
 import Vuna.Target.Native.Model
 import Vuna.Target.Native.Pal
+import Vuna.Target.Native.Select
 
 -- ---------------------------------------------------------------
 -- 常量与只读数据
@@ -570,30 +571,7 @@ floatBinFn name op =
     0
     (append [IXmmLoad 0 (OpMem Rdi 0), IXmmLoad 1 (OpMem Rsi 0), IXmmBin op 0 1] floatBox)
 
--- | 有序比较：`ucomisd` 之后先看 PF（NaN ⇒ 一律 false）。
-floatCmpOrdered : String -> List Instr
-floatCmpOrdered cc =
-  [
-    IXmmCmp 0 1,
-    ISetcc "setnp" Rax,
-    IMovzxAl,
-    ISetcc cc Rdx,
-    IBinReg "and" Rdx (OpImm 1),
-    IBinReg "and" Rax (OpReg Rdx)
-  ]
-
--- | `!=`：NaN 参与时结果为 true（与 OCaml `<>` 一致）。
-floatCmpNeq : List Instr
-floatCmpNeq =
-  [
-    IXmmCmp 0 1,
-    ISetcc "setne" Rax,
-    IMovzxAl,
-    ISetcc "setp" Rdx,
-    IBinReg "and" Rdx (OpImm 1),
-    IBinReg "or" Rax (OpReg Rdx)
-  ]
-
+-- | 有序比较与 `!=` 的 0/1 物化序列在 `Native.Select`（与指令选择共用一份）。
 floatCmpFn : String -> List Instr -> NativeFunc
 floatCmpFn name tail =
   rtFunc name 0 (append [IXmmLoad 0 (OpMem Rdi 0), IXmmLoad 1 (OpMem Rsi 0)] tail)
@@ -1569,7 +1547,7 @@ envFilterFn =
 export nativeRtFuncs : List NativeFunc
 nativeRtFuncs =
   append
-    [intBinary "add" "add", intBinary "sub" "sub", intBinary "mul" "imul", divFn, intBitBinary "bit_and" "and", intBitBinary "bit_or" "or", intBitBinary "bit_xor" "xor", bitNotFn, bitShlFn, bitShrFn, intCompare "eq_int" "sete", intCompare "neq_int" "setne", intCompare "lt_int" "setl", intCompare "le_int" "setle", intCompare "gt_int" "setg", intCompare "ge_int" "setge", natAddFn, natSubFn, natMulFn, natDivFn, natToIntFn, natFromIntFn, natSuccFn, obsZeroFn "obs_level", obsZeroFn "obs_log", obsZero2Fn "obs_counter", obsZeroFn "obs_mark", obsZero2Fn "obs_span_begin", obsZeroFn "obs_span_end", obsZero2Fn "obs_sample_start", obsZeroFn "obs_sample_stop", obsSpanFn, obsSpanLabFn, debugOnFn, debugLineFn, strAllocFn, strLengthFn, strConcatFn, bytesEqFn, bytesCmpFn, strEqFn, strNeqFn, strCompareFn, strCompareFnOf "str_lt" "setl", strCompareFnOf "str_le" "setle", strCompareFnOf "str_gt" "setg", strCompareFnOf "str_ge" "setge", strFromIntFn, strAtFn, strSubstringFn, strHashFn, effectIdFn, strShowFn, printIntFn, printBoolFn, printStrFn, assertFn, primFailFn, todoFn, trapMsgFn, trapAssertFn, trapTodoFn, allocFn, allocLeafFn, applyFn, applyExactFn, applyShimFn, strFromBytesFn, strFromCFn, strOneCharFn, strEmptyFn, getenvFn, getcwdFn, execPathFn, nowUsFn, sleepUsFn, isTtyFn, hostStatusFn, cleanupPushFn, cleanupPopFn, fsFailFn, strictFailFn, strictReadFileFn, strictReadFileRangeFn, strictWriteFileFn, strictWriteFileAtomicFn, strictReadDirFn, strictIsDirFn, strictMakeDirFn, strictRemoveFileFn, strToCFn, strToC2Fn, strCopyIntoFn, cStrCpyFn, u64ToDecFn, statPathFn, lstatPathFn, fileExistsFn, fileMtimeFn, fileSizeFn, tryIsDirFn, tryReadFileFn, tryReadFileRangeFn, tryWriteFileFn, tryWriteFileAtomicFn, tryMakeDirFn, tryMakeDirExclusiveFn, tryRemoveFileFn, tryRenameFn, trySymlinkFn, removeTreeFn, tryRemoveTreeFn, dirOpenFn, dirNamesFn, dirCloseFn, childPushFn, childDropFn, sigBlockFn, sigUnblockFn, cmdRunShFn, spawnExecFn, waitPidFn, exitWithFn, trapImpossibleFn, trapDivZeroFn, trapArrayOobFn, trapOomFn, trapPathLongFn, trapMemLimitFn, initStackFn, initMemFn, initCpusFn, initTimeoutFn, envLookupFn, parseU64Fn, cgroupCpusFn, envFilterFn, sigreturnStubFn, sigalrmFn, arrayEmptyFn, arrayLengthFn, arrayGetFn, arraySetFn, arrayMakeFn, trapRmtreeDeepFn, mRunEffFn, pow2CeilFn, eraseFn, effNewRefFn, effReadRefFn, effWriteRefFn, effPrintFn "prim_eff_print" 1, effPrintFn "prim_eff_eprint" 2, effExitFn, floatFromIntFn, intFromFloatFn, floatBinFn "float_add" "add", floatBinFn "float_sub" "sub", floatBinFn "float_mul" "mul", floatBinFn "float_div" "div", floatCmpFn "float_eq" (floatCmpOrdered "sete"), floatCmpFn "float_neq" floatCmpNeq, floatCmpFn "float_lt" (floatCmpOrdered "setb"), floatCmpFn "float_le" (floatCmpOrdered "setbe"), floatCmpFn "float_gt" (floatCmpOrdered "seta"), floatCmpFn "float_ge" (floatCmpOrdered "setae"), floatAbsFn, floatSqrtFn]
+    [intBinary "add" "add", intBinary "sub" "sub", intBinary "mul" "imul", divFn, intBitBinary "bit_and" "and", intBitBinary "bit_or" "or", intBitBinary "bit_xor" "xor", bitNotFn, bitShlFn, bitShrFn, intCompare "eq_int" "sete", intCompare "neq_int" "setne", intCompare "lt_int" "setl", intCompare "le_int" "setle", intCompare "gt_int" "setg", intCompare "ge_int" "setge", natAddFn, natSubFn, natMulFn, natDivFn, natToIntFn, natFromIntFn, natSuccFn, obsZeroFn "obs_level", obsZeroFn "obs_log", obsZero2Fn "obs_counter", obsZeroFn "obs_mark", obsZero2Fn "obs_span_begin", obsZeroFn "obs_span_end", obsZero2Fn "obs_sample_start", obsZeroFn "obs_sample_stop", obsSpanFn, obsSpanLabFn, debugOnFn, debugLineFn, strAllocFn, strLengthFn, strConcatFn, bytesEqFn, bytesCmpFn, strEqFn, strNeqFn, strCompareFn, strCompareFnOf "str_lt" "setl", strCompareFnOf "str_le" "setle", strCompareFnOf "str_gt" "setg", strCompareFnOf "str_ge" "setge", strFromIntFn, strAtFn, strSubstringFn, strHashFn, effectIdFn, strShowFn, printIntFn, printBoolFn, printStrFn, assertFn, primFailFn, todoFn, trapMsgFn, trapAssertFn, trapTodoFn, allocFn, allocLeafFn, applyFn, applyExactFn, applyShimFn, strFromBytesFn, strFromCFn, strOneCharFn, strEmptyFn, getenvFn, getcwdFn, execPathFn, nowUsFn, sleepUsFn, isTtyFn, hostStatusFn, cleanupPushFn, cleanupPopFn, fsFailFn, strictFailFn, strictReadFileFn, strictReadFileRangeFn, strictWriteFileFn, strictWriteFileAtomicFn, strictReadDirFn, strictIsDirFn, strictMakeDirFn, strictRemoveFileFn, strToCFn, strToC2Fn, strCopyIntoFn, cStrCpyFn, u64ToDecFn, statPathFn, lstatPathFn, fileExistsFn, fileMtimeFn, fileSizeFn, tryIsDirFn, tryReadFileFn, tryReadFileRangeFn, tryWriteFileFn, tryWriteFileAtomicFn, tryMakeDirFn, tryMakeDirExclusiveFn, tryRemoveFileFn, tryRenameFn, trySymlinkFn, removeTreeFn, tryRemoveTreeFn, dirOpenFn, dirNamesFn, dirCloseFn, childPushFn, childDropFn, sigBlockFn, sigUnblockFn, cmdRunShFn, spawnExecFn, waitPidFn, exitWithFn, trapImpossibleFn, trapDivZeroFn, trapArrayOobFn, trapOomFn, trapPathLongFn, trapMemLimitFn, initStackFn, initMemFn, initCpusFn, initTimeoutFn, envLookupFn, parseU64Fn, cgroupCpusFn, envFilterFn, sigreturnStubFn, sigalrmFn, arrayEmptyFn, arrayLengthFn, arrayGetFn, arraySetFn, arrayMakeFn, trapRmtreeDeepFn, mRunEffFn, pow2CeilFn, eraseFn, effNewRefFn, effReadRefFn, effWriteRefFn, effPrintFn "prim_eff_print" 1, effPrintFn "prim_eff_eprint" 2, effExitFn, floatFromIntFn, intFromFloatFn, floatBinFn "float_add" "add", floatBinFn "float_sub" "sub", floatBinFn "float_mul" "mul", floatBinFn "float_div" "div", floatCmpFn "float_eq" (floatOrderedCmp "sete"), floatCmpFn "float_neq" floatNeqCmp, floatCmpFn "float_lt" (floatOrderedCmp "setb"), floatCmpFn "float_le" (floatOrderedCmp "setbe"), floatCmpFn "float_gt" (floatOrderedCmp "seta"), floatCmpFn "float_ge" (floatOrderedCmp "setae"), floatAbsFn, floatSqrtFn]
     nativeGcFuncs
 
 -- | IR 符号 -> 运行时函数标签。白名单之外返回 Nothing（Module 报 NativeUnsupported）。

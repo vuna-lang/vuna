@@ -26,7 +26,7 @@ problems : List String
 problems =
   append
     (append (append wrapProblems bitProblems) (append cmpProblems (append natProblems constProblems)))
-    (append planProblems (append peepholeProblems (append divProblems (append branchProblems noWrapProblems))))
+    (append planProblems (append peepholeProblems (append divProblems (append branchProblems (append noWrapProblems floatProblems)))))
 
 wrapProblems : List String
 wrapProblems =
@@ -228,3 +228,31 @@ branchCase label sym want =
 branchKey : Maybe String -> String
 branchKey Nothing = "none"
 branchKey (Just s) = s
+
+-- | 浮点比较的 0/1 物化序列：有序比较先 `setnp`，`!=` 在 NaN 时为真；
+--   寄存器对由调用方给（floatTree 用 xmm4/xmm5，条件分支用 xmm0/xmm1）。
+floatProblems : List String
+floatProblems =
+  filter
+    (\s => s /= "")
+    [orderedFloatCase "lt" "bi_lt_float" "setb", orderedFloatCase "ge" "bi_ge_float" "setae", neqFloatCase, unknownFloatCase]
+
+orderedFloatCase : String -> String -> String -> String
+orderedFloatCase label sym cc =
+  case floatCompareInstrsAt 4 5 sym of
+    Just ([IXmmCmp 4 5, ISetcc "setnp" Rax, IMovzxAl, ISetcc cc1 Rdx, IBinReg "and" Rdx (OpImm 1), IBinReg "and" Rax (OpReg Rdx)]) =>
+      if cc1 == cc then "" else label ++ ": cc " ++ cc1
+    _ => label ++ ": unexpected sequence"
+
+neqFloatCase : String
+neqFloatCase =
+  case floatCompareInstrsAt 0 1 "bi_neq_float" of
+    Just ([IXmmCmp 0 1, ISetcc "setne" Rax, IMovzxAl, ISetcc "setp" Rdx, IBinReg "and" Rdx (OpImm 1), IBinReg "or" Rax (OpReg Rdx)]) =>
+      ""
+    _ => "neq: unexpected sequence"
+
+unknownFloatCase : String
+unknownFloatCase =
+  case floatCompareInstrs "bi_add_int" of
+    Nothing => ""
+    Just _ => "unknown float cmp: expected Nothing"

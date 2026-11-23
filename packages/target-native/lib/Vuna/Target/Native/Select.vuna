@@ -153,6 +153,53 @@ branchInverse "bi_ge_bool" = Just "jl"
 branchInverse _ = Nothing
 
 -- ---------------------------------------------------------------
+-- 浮点比较
+-- ---------------------------------------------------------------
+-- | 有序比较的 0/1 物化：`ucomisd xmm<a>, xmm<b>` 之后先看 PF（NaN ⇒ 一律 false）。
+--   与 `Native.Runtime` 的 `float_*` 模板共用同一份序列（Runtime 从这里取）。
+export floatOrderedCmpAt : Int -> Int -> String -> List Instr
+floatOrderedCmpAt a b cc =
+  [
+    IXmmCmp a b,
+    ISetcc "setnp" Rax,
+    IMovzxAl,
+    ISetcc cc Rdx,
+    IBinReg "and" Rdx (OpImm 1),
+    IBinReg "and" Rax (OpReg Rdx)
+  ]
+
+export floatOrderedCmp : String -> List Instr
+floatOrderedCmp cc = floatOrderedCmpAt 0 1 cc
+
+-- | `!=`：NaN 参与时结果为 true（与 OCaml `<>` 一致）。
+export floatNeqCmpAt : Int -> Int -> List Instr
+floatNeqCmpAt a b =
+  [
+    IXmmCmp a b,
+    ISetcc "setne" Rax,
+    IMovzxAl,
+    ISetcc "setp" Rdx,
+    IBinReg "and" Rdx (OpImm 1),
+    IBinReg "or" Rax (OpReg Rdx)
+  ]
+
+export floatNeqCmp : List Instr
+floatNeqCmp = floatNeqCmpAt 0 1
+
+-- | IR 的浮点比较符号 → 0/1 物化序列（操作数已装在两个 xmm 寄存器）。
+export floatCompareInstrsAt : Int -> Int -> String -> Maybe (List Instr)
+floatCompareInstrsAt a b "bi_eq_float" = Just (floatOrderedCmpAt a b "sete")
+floatCompareInstrsAt a b "bi_neq_float" = Just (floatNeqCmpAt a b)
+floatCompareInstrsAt a b "bi_lt_float" = Just (floatOrderedCmpAt a b "setb")
+floatCompareInstrsAt a b "bi_le_float" = Just (floatOrderedCmpAt a b "setbe")
+floatCompareInstrsAt a b "bi_gt_float" = Just (floatOrderedCmpAt a b "seta")
+floatCompareInstrsAt a b "bi_ge_float" = Just (floatOrderedCmpAt a b "setae")
+floatCompareInstrsAt _ _ _ = Nothing
+
+export floatCompareInstrs : String -> Maybe (List Instr)
+floatCompareInstrs sym = floatCompareInstrsAt 0 1 sym
+
+-- ---------------------------------------------------------------
 -- 窥孔：只做局部、可证明安全的合并
 -- ---------------------------------------------------------------
 -- | 槽写完又立刻读回（rax 里的值没变）时删掉读。

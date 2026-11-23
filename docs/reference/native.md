@@ -328,14 +328,23 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
   - **条件直发分支**（`Select.branchInverse`）：`IrIf` 的条件是标量比较时，直接发
     `cmp` + 反向 `jcc`，不再物化 0/1 再 `test`；比较的左侧可以是任意可内联的标量树，
     右侧是字面量或槽变量。
+  - **Bool 槽选择**（`Module.boolSelectModeOf`）：`if b then 1 else 0` 就是 `b`
+    （Bool 表示即 0/1），`if b then 0 else 1` 只发一条 `xor 1`；值位置与标量实参都
+    不再发 `test` + 两次 `mov` 的分支。
+  - **浮点比较**（`Select.floatCompareInstrs`）：操作数是原子（槽 / 浮点字面量）时，
+    直接装进 `xmm` 并用 `ucomisd` + `setnp` / `setcc` 物化 0/1；NaN 语义与运行时模板
+    一致（有序比较在 PF 时取 false，`!=` 在 NaN 时取 true）。`IrIf` 条件与值位置都
+    不再 `call rt_float_lt`，也不装箱；非原子实参回退运行时。
   - **字符串叶子内联**：`strLength` 变成一次 `mov rax, [s]`；`strAt` 展开成
     「长度头比较 + `movzx` 一个字节」，越界（`i < 0` 或 `i >= len`）走冷分支返回 -1
     （与 `rt_str_at` 同义）。实参不是原子（槽变量 / 字面量）时整棵回退运行时调用。
   - **浮点表达式树**（`Module.floatTree`）：一棵只由「槽里的装箱 Float / 浮点字面量 /
-    `floatFromInt` 的整数原子 / `sqrt` / `abs` / `bi_*_float`」组成的树整棵在 `xmm0..3`
+    `floatFromInt` 的整数原子 / `sqrt` / `abs` / `bi_*_float` / `if <浮点比较>
+    then <浮点原子> else <浮点原子>`」组成的树整棵在 `xmm0..3`
     上算完，**只有根装盒一次**（装盒放在树计算之前：`alloc_leaf` 可能触发 GC，此时实参
-    指针还只在槽里；之后树内没有 `call`，`xmm` 与装盒对象都不需要是根）。`sqrt` / `abs`
-    / `intToFloat` 是 η-收缩的零参别名，调用点上先解析到运行时叶子。外形超出这几类
+    指针还只在槽里；之后树内没有 `call`，`xmm` 与装盒对象都不需要是根）。条件选择在
+    `xmm4` / `xmm5` 上比较，用 `cmov` 选分支指针后再 `movsd`，没有分支与调用。`sqrt` /
+    `abs` / `intToFloat` 是 η-收缩的零参别名，调用点上先解析到运行时叶子。外形超出这几类
     （调用结果、记录字段、高阶）整棵回退到逐运算的运行时调用。
   - 实参只接受**原子标量**（字面量、槽变量、标量 cast）；任何非标量子树整体回退
     `call rt_*`，不重排求值。寄存器池是 `rax` / `r11` / `r10` / `r8` / `r9`；序列内

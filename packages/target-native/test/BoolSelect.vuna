@@ -1,0 +1,48 @@
+-- `if b then 1 else 0` 的 native 选择模式（Bool 就是 0/1）。
+import Base
+import Base.Effect.Core
+import Vuna.Ir.Model
+import Vuna.Target.Native.Module
+
+main : Eff [] String
+main =
+  case problems of
+    [] => pure ""
+    ps =>
+      do
+        _ <- prim_eff_print ("native bool-select drifted:\n" ++ join "\n" ps ++ "\n")
+        _ <- prim_eff_exit 1
+        pure ""
+
+problems : List String
+problems = filter (\s => s /= "") [asIsInt, asIsBool, invertInt, invertBool, other]
+
+asIsInt : String
+asIsInt =
+  case boolSelectModeOf (IrInt 1) (IrInt 0) of
+    Just BoolAsIs => ""
+    _ => "int 1/0 should be as-is"
+
+asIsBool : String
+asIsBool =
+  case boolSelectModeOf (IrBool True) (IrBool False) of
+    Just BoolAsIs => ""
+    _ => "bool True/False should be as-is"
+
+invertInt : String
+invertInt =
+  case boolSelectModeOf (IrInt 0) (IrInt 1) of
+    Just BoolInvert => ""
+    _ => "int 0/1 should be invert"
+
+invertBool : String
+invertBool =
+  case boolSelectModeOf (IrBool False) (IrBool True) of
+    Just BoolInvert => ""
+    _ => "bool False/True should be invert"
+
+other : String
+other =
+  case boolSelectModeOf (IrInt 2) (IrInt 0) of
+    Nothing => ""
+    _ => "2/0 should not be a bool select"

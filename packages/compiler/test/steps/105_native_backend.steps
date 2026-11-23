@@ -688,3 +688,23 @@ run: sh -c 'd="$TMPDIR/ftree"; "$VUNA" build --out "$TMPDIR/ftree-o" "$d"'
 exit: 0
 run: sh -c '"$TMPDIR/ftree-o/bin/ftree"'
 out-equals: "1.5"
+
+# 9ao4) 浮点比较与条件选择并进 floatTree：`ucomisd` + `cmov` 选指针，整棵树仍只
+#       装箱一次，不再调用 `rt_float_lt` / `rt_float_add`。
+run: sh -c 'd="$TMPDIR/ftreecmp"; mkdir -p "$d/app"; printf "[package]\nname = \"ftreecmp\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base\nimport Base.Data.Float as Float\nimport Base.Data.String as String\n\nmain : String\nmain =\n  let\n    x = 1.0 + 0.5\n  in show (x + (if x < 2.0 then 3.0 else 4.0))\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/ftreecmp-n" "$d"'
+exit: 0
+run: sh -c '"$TMPDIR/ftreecmp-n/bin/ftreecmp"'
+out-equals: "4.5"
+file-contains: $TMPDIR/ftreecmp-n/Main.s ucomisd
+file-contains: $TMPDIR/ftreecmp-n/Main.s cmovz
+run: sh -c '! grep -q "call rt_float_" "$TMPDIR/ftreecmp-n/Main.s"'
+exit: 0
+
+# 9s3) 物化 Bool 选择不发分支：`if b then 1 else 0` 直接复用 0/1 槽，累加回到内联 `add`。
+run: sh -c 'd="$TMPDIR/bselect"; mkdir -p "$d/app"; printf "[package]\nname = \"bselect\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "loop : Int -> Bool -> Int -> Int\nloop acc b n = if n <= 0 then acc else loop (acc + (if b then 1 else 0)) (n < 5) (n - 1)\n\nmain : Int\nmain = loop 0 True 100\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/bselect-n" "$d"'
+exit: 0
+run: sh -c '"$TMPDIR/bselect-n/bin/bselect"'
+out-equals: 4
+file-contains: $TMPDIR/bselect-n/Main.s setl al
+run: sh -c '! grep -q "call rt_add" "$TMPDIR/bselect-n/Main.s"'
+exit: 0
