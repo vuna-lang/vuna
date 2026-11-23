@@ -7,7 +7,7 @@ data TickOp : Type -> Type where
   Tick : Int -> TickOp Int
 
 sum : Nat -> Eff [TickOp] Int
-sum Zero = perform (Tick 1)
+sum 0 = perform (Tick 1)
 sum (Succ m) =
   do
     y <- sum m

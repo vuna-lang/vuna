@@ -4,7 +4,7 @@ import Base.Data.Bits as Bits
 import Base.Data.Nat as Nat
 
 loop : Nat -> Nat -> Nat
-loop acc Zero = acc
+loop acc 0 = acc
 loop acc (Succ k) = loop (Nat.plus acc (Nat.mult k (Nat.fromInt 3))) k
 
 rotr : Int -> Int -> Int
@@ -13,7 +13,7 @@ rotr x k = if k <= 0 then x else rotr (bxor (shr x 1) (shl (band x 1) 62)) (k - 
 main : Int
 main =
   let
-    n = Nat.toInt (Nat.minus (loop Zero (Nat.fromInt 800000)) (Nat.fromInt 3))
+    n = Nat.toInt (Nat.minus (loop 0 (Nat.fromInt 800000)) (Nat.fromInt 3))
     m = Nat.toInt (Nat.fromInt (0 - 7))
     r = rotr 123456789 64
   in n + band r 65535 + m

@@ -7,7 +7,7 @@ data POp : Type -> Type where
   P : Int -> POp Int
 
 sum : Nat -> Eff [POp] Int
-sum Zero = pure 0
+sum 0 = pure 0
 sum (Succ m) =
   do
     x <- perform (P 1)

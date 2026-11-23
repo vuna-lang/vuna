@@ -10,7 +10,7 @@ import Base.Effect.Console as EffConsole
 import Base.Data.Nat as Nat
 
 loop : Nat -> Int -> Eff [ConsoleOp] Int
-loop Zero acc = pure acc
+loop 0 acc = pure acc
 loop (Succ m) acc =
   do
     _ <- consolePrint ""

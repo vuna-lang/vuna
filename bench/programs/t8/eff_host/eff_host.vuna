@@ -8,7 +8,7 @@ data TickOp : Type -> Type where
   Tick : Int -> TickOp Int
 
 loop : Nat -> Eff [ConsoleOp@mock] Int
-loop Zero = pure 0
+loop 0 = pure 0
 loop (Succ m) =
   do
     _ <- consolePrint@mock "x"

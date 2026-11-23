@@ -16,7 +16,7 @@ once =
   }
 
 loop : Nat -> Eff [] Int
-loop Zero = pure 0
+loop 0 = pure 0
 loop (Succ m) =
   do
     x <- once

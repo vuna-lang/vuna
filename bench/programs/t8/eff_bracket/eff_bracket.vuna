@@ -7,7 +7,7 @@ data TickOp : Type -> Type where
   Tick : Int -> TickOp Int
 
 loop : Nat -> Int -> Eff [TickOp] Int
-loop Zero acc = pure acc
+loop 0 acc = pure acc
 loop (Succ m) acc =
   do
     x <- bracket (pure 0) (\_ => pure 1) (\_ => perform (Tick 1))
