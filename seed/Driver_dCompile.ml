@@ -489,7 +489,7 @@ let rec v_pickDepMods = (fun (mc0 : Frontend_dPackages_dPkg.t_PackageContext) (m
 
 # 1291 "Vuna/Compiler/Driver/Compile.vuna"
 let v_importNameStr = (fun (mc0 : Frontend_dAst.t_Import) -> (match mc0 with
-  | { Frontend_dAst.f_Import_importName = dtb__80; Frontend_dAst.f_Import_importIsQualified = dtb__81; Frontend_dAst.f_Import_importAlias = dtb__82; Frontend_dAst.f_Import_importSpan = dtb__83 } -> dtb__80
+  | { Frontend_dAst.f_Import_importName = dtb__80; Frontend_dAst.f_Import_importIsQualified = dtb__81; Frontend_dAst.f_Import_importAlias = dtb__82; Frontend_dAst.f_Import_importRef = dtb__83 } -> dtb__80
   | _ -> failwith "DT: impossible branch"
 ))
 
@@ -506,7 +506,7 @@ let v_toolImportsOfSource = (fun (nFs : string) (nEnv : string) (nProcess : stri
   | { Frontend_dAst.f_SourceFile_sourceFileModDecl = dtb__87; Frontend_dAst.f_SourceFile_sourceFileImports = dtb__88; Frontend_dAst.f_SourceFile_sourceFileFixities = dtb__89; Frontend_dAst.f_SourceFile_sourceFileDecls = dtb__90; Frontend_dAst.f_SourceFile_sourceFileExports = dtb__91; Frontend_dAst.f_SourceFile_sourceFileReexports = dtb__92; Frontend_dAst.f_SourceFile_sourceFileOpacity = dtb__93 } -> (let nd_uscrut21 = dtb__87 in (match nd_uscrut21 with
   | B_dData_dMaybe.C_Maybe_Nothing -> ((((v_toolImportNamesOf nFs) ctx) "") dtb__88)
   | B_dData_dMaybe.C_Maybe_Just (dtb__94) -> (match dtb__94 with
-  | { Frontend_dAst.f_ModDecl_modDeclName = dtb__95; Frontend_dAst.f_ModDecl_modDeclHasExportList = dtb__96; Frontend_dAst.f_ModDecl_modDeclExportItems = dtb__97; Frontend_dAst.f_ModDecl_modDeclExports = dtb__98; Frontend_dAst.f_ModDecl_modDeclReexports = dtb__99; Frontend_dAst.f_ModDecl_modDeclOpacity = dtb__100; Frontend_dAst.f_ModDecl_modDeclSpan = dtb__101 } -> ((((v_toolImportNamesOf nFs) ctx) dtb__95) dtb__88)
+  | { Frontend_dAst.f_ModDecl_modDeclName = dtb__95; Frontend_dAst.f_ModDecl_modDeclHasExportList = dtb__96; Frontend_dAst.f_ModDecl_modDeclExportItems = dtb__97; Frontend_dAst.f_ModDecl_modDeclExports = dtb__98; Frontend_dAst.f_ModDecl_modDeclReexports = dtb__99; Frontend_dAst.f_ModDecl_modDeclOpacity = dtb__100; Frontend_dAst.f_ModDecl_modDeclRef = dtb__101 } -> ((((v_toolImportNamesOf nFs) ctx) dtb__95) dtb__88)
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"

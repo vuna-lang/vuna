@@ -369,7 +369,7 @@ let rec v_findFrame = (fun (fuel : int) (key : int) (name : int) chain -> (if (f
   | _ -> failwith "DT: impossible branch"
 )))
 
-# 701 "Base/Effect/Core.vuna"
+# 745 "Base/Effect/Core.vuna"
 let rec v_removeFrame = (fun (fuel : int) f chain -> (if (fuel <= 0) then chain else (match chain with
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
   | B_dData_dMaybe.C_Maybe_Just (dtb__144) -> (if ((v_samePrompt dtb__144) f) then (v_framePrev dtb__144) else (match dtb__144 with
@@ -379,26 +379,26 @@ let rec v_removeFrame = (fun (fuel : int) f chain -> (if (fuel <= 0) then chain 
   | _ -> failwith "DT: impossible branch"
 )))
 
-# 723 "Base/Effect/Core.vuna"
+# 774 "Base/Effect/Core.vuna"
 let v_cleanupRun = (fun (mc0 : t_Cleanup) -> (match mc0 with
   | C_Cleanup_MkCleanup (dtb__154) -> (dtb__154 0)
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 727 "Base/Effect/Core.vuna"
+# 778 "Base/Effect/Core.vuna"
 let rec v_dropCleanups = (fun (fuel : int) (depth : int) (cs : t_Cleanup B_dData_dList.t_List) (d : int) -> (if (fuel <= 0) then { B_dData_dPair.f_Pair_first = cs; B_dData_dPair.f_Pair_second = d } else (if (d <= depth) then { B_dData_dPair.f_Pair_first = cs; B_dData_dPair.f_Pair_second = d } else (match cs with
   | B_dData_dList.C_List_Nil -> { B_dData_dPair.f_Pair_first = cs; B_dData_dPair.f_Pair_second = d }
   | B_dData_dList.C_List__x58__x58_ (dtb__155, dtb__156) -> (let _u = (v_cleanupRun dtb__155) in ((((v_dropCleanups (fuel - 1)) depth) dtb__156) (d - 1)))
   | _ -> failwith "DT: impossible branch"
 ))))
 
-# 715 "Base/Effect/Core.vuna"
+# 759 "Base/Effect/Core.vuna"
 let v_finish = (fun (fuel : int) st frame r -> (match ((((v_dropCleanups fuel) (v_frameCleanDepth (Obj.magic frame))) ((Obj.magic st)).f_MSt_msCleanups) ((Obj.magic st)).f_MSt_msCleanDepth) with
   | { B_dData_dPair.f_Pair_first = dtb__157; B_dData_dPair.f_Pair_second = dtb__158 } -> (Obj.magic { B_dData_dPair.f_Pair_first = { f_MSt_msFrames = (((v_removeFrame fuel) (Obj.magic frame)) ((Obj.magic st)).f_MSt_msFrames); f_MSt_msCtx = ((Obj.magic st)).f_MSt_msCtx; f_MSt_msUsed = ((Obj.magic st)).f_MSt_msUsed; f_MSt_msNext = ((Obj.magic st)).f_MSt_msNext; f_MSt_msFree = ((Obj.magic st)).f_MSt_msFree; f_MSt_msEpoch = ((Obj.magic st)).f_MSt_msEpoch; f_MSt_msCleanups = dtb__157; f_MSt_msCleanDepth = dtb__158 }; B_dData_dPair.f_Pair_second = ((v_frameKOuter (Obj.magic frame)) (Obj.magic r)) })
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 687 "Base/Effect/Core.vuna"
+# 724 "Base/Effect/Core.vuna"
 let v_unwind = (fun (fuel : int) st frame r -> (match ((Obj.magic st)).f_MSt_msCtx with
   | B_dData_dMaybe.C_Maybe_Just (dtb__159) -> (Obj.magic (if ((v_samePrompt (v_ctxPrompt dtb__159)) (Obj.magic frame)) then { B_dData_dPair.f_Pair_first = { f_MSt_msFrames = ((Obj.magic st)).f_MSt_msFrames; f_MSt_msCtx = (v_ctxPrev dtb__159); f_MSt_msUsed = ((Obj.magic st)).f_MSt_msUsed; f_MSt_msNext = ((Obj.magic st)).f_MSt_msNext; f_MSt_msFree = ((v_prependFree (v_ctxSlot dtb__159)) ((Obj.magic st)).f_MSt_msFree); f_MSt_msEpoch = ((Obj.magic st)).f_MSt_msEpoch; f_MSt_msCleanups = ((Obj.magic st)).f_MSt_msCleanups; f_MSt_msCleanDepth = ((Obj.magic st)).f_MSt_msCleanDepth }; B_dData_dPair.f_Pair_second = ((v_ctxKRest dtb__159) (Obj.magic r)) } else ((((v_finish fuel) (Obj.magic st)) (Obj.magic frame)) (Obj.magic r))))
   | B_dData_dMaybe.C_Maybe_Nothing -> (Obj.magic ((((v_finish fuel) (Obj.magic st)) (Obj.magic frame)) (Obj.magic r)))
@@ -461,5 +461,5 @@ and v_step = (fun (mc0 : int) mc1 mc2 -> (match (Obj.magic mc2) with
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 742 "Base/Effect/Core.vuna"
+# 793 "Base/Effect/Core.vuna"
 let v_machineRun = (fun c -> (((v_runGo 1000000000) v_emptySt) (Obj.magic c)))

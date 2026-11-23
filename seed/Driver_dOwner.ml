@@ -48,21 +48,21 @@ let v_headClassName = (fun (mc0 : Frontend_dAst.t_Expr) -> (match mc0 with
 
 # 82 "Vuna/Compiler/Driver/Owner.vuna"
 let v_hasFieldRecordTypeExpr = (fun (mc0 : string) (mc1 : string B_dData_dList.t_List) -> (match mc1 with
-  | B_dData_dList.C_List_Nil -> (Frontend_dAst.C_Expr_EVar (mc0, v_splitNoSpan))
-  | _ -> (Frontend_dAst.C_Expr_EApp ((Frontend_dAst.C_Expr_EVar (mc0, v_splitNoSpan)), ((B_dData_dList.v_map (fun (p : string) -> (Frontend_dAst.C_Expr_EVar (p, v_splitNoSpan)))) mc1), v_splitNoSpan))
+  | B_dData_dList.C_List_Nil -> (Frontend_dAst.C_Expr_EVar (mc0, (Frontend_dAst.v_detachedNodeRef v_splitNoSpan)))
+  | _ -> (Frontend_dAst.C_Expr_EApp ((Frontend_dAst.C_Expr_EVar (mc0, (Frontend_dAst.v_detachedNodeRef v_splitNoSpan))), ((B_dData_dList.v_map (fun (p : string) -> (Frontend_dAst.C_Expr_EVar (p, (Frontend_dAst.v_detachedNodeRef v_splitNoSpan))))) mc1), (Frontend_dAst.v_detachedNodeRef v_splitNoSpan)))
 ))
 
-# 87 "Vuna/Compiler/Driver/Owner.vuna"
-let v_hasFieldOwnerOf = (fun (owner : string) (dname : string) (params : string B_dData_dList.t_List) (f : Frontend_dAst.t_Field) -> (let fname = (Frontend_dAst.v_fieldName f) in (let fty = (Frontend_dAst.v_fieldType f) in (let label = (Frontend_dAst.C_Expr_EApp ((Frontend_dAst.C_Expr_EVar (Base_dIntrinsics.v_hasFieldLabelName, v_splitNoSpan)), (B_dData_dList.C_List__x58__x58_ ((Frontend_dAst.C_Expr_EStr (fname, v_splitNoSpan)), B_dData_dList.C_List_Nil)), v_splitNoSpan)) in (let head = (Frontend_dAst.C_Expr_EApp ((Frontend_dAst.C_Expr_EVar (Base_dIntrinsics.v_hasFieldTraitName, v_splitNoSpan)), (B_dData_dList.C_List__x58__x58_ (label, (B_dData_dList.C_List__x58__x58_ (((v_hasFieldRecordTypeExpr dname) params), (B_dData_dList.C_List__x58__x58_ (fty, B_dData_dList.C_List_Nil)))))), v_splitNoSpan)) in { B_dData_dPair.f_Pair_first = ((Elab_dInstName.v_instanceSymbol Base_dIntrinsics.v_hasFieldTraitName) (Frontend_dRast_dBridge.v_toRastExpr head)); B_dData_dPair.f_Pair_second = owner })))))
+# 90 "Vuna/Compiler/Driver/Owner.vuna"
+let v_hasFieldOwnerOf = (fun (owner : string) (dname : string) (params : string B_dData_dList.t_List) (f : Frontend_dAst.t_Field) -> (let fname = (Frontend_dAst.v_fieldName f) in (let fty = (Frontend_dAst.v_fieldType f) in (let label = (Frontend_dAst.C_Expr_EApp ((Frontend_dAst.C_Expr_EVar (Base_dIntrinsics.v_hasFieldLabelName, (Frontend_dAst.v_detachedNodeRef v_splitNoSpan))), (B_dData_dList.C_List__x58__x58_ ((Frontend_dAst.C_Expr_EStr (fname, (Frontend_dAst.v_detachedNodeRef v_splitNoSpan))), B_dData_dList.C_List_Nil)), (Frontend_dAst.v_detachedNodeRef v_splitNoSpan))) in (let head = (Frontend_dAst.C_Expr_EApp ((Frontend_dAst.C_Expr_EVar (Base_dIntrinsics.v_hasFieldTraitName, (Frontend_dAst.v_detachedNodeRef v_splitNoSpan))), (B_dData_dList.C_List__x58__x58_ (label, (B_dData_dList.C_List__x58__x58_ (((v_hasFieldRecordTypeExpr dname) params), (B_dData_dList.C_List__x58__x58_ (fty, B_dData_dList.C_List_Nil)))))), (Frontend_dAst.v_detachedNodeRef v_splitNoSpan))) in { B_dData_dPair.f_Pair_first = ((Elab_dInstName.v_instanceSymbol Base_dIntrinsics.v_hasFieldTraitName) (Frontend_dRast_dBridge.v_toRastExpr head)); B_dData_dPair.f_Pair_second = owner })))))
 
-# 100 "Vuna/Compiler/Driver/Owner.vuna"
+# 107 "Vuna/Compiler/Driver/Owner.vuna"
 let rec v_splitHasFieldOwners = (fun (mc0 : string) (mc1 : string) (mc2 : string B_dData_dList.t_List) (mc3 : Frontend_dAst.t_Field B_dData_dList.t_List) -> (match mc3 with
   | B_dData_dList.C_List__x58__x58_ (dtb__62, dtb__63) -> (B_dData_dList.C_List__x58__x58_ (((((v_hasFieldOwnerOf mc0) mc1) mc2) dtb__62), ((((v_splitHasFieldOwners mc0) mc1) mc2) dtb__63)))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 105 "Vuna/Compiler/Driver/Owner.vuna"
+# 112 "Vuna/Compiler/Driver/Owner.vuna"
 let rec v_splitDerivedOwners = (fun (mc0 : string) (mc1 : string) (mc2 : string B_dData_dList.t_List) (mc3 : string B_dData_dList.t_List) -> (match mc3 with
   | B_dData_dList.C_List__x58__x58_ (dtb__64, dtb__65) -> (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = ((Elab_dInstName.v_instanceSymbol dtb__64) ((((Elab_dDerive.v_instHead dtb__64) mc1) mc2) v_splitNoSpan)); B_dData_dPair.f_Pair_second = mc0 }, ((((v_splitDerivedOwners mc0) mc1) mc2) dtb__65)))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
@@ -81,32 +81,32 @@ let v_splitInstanceOwnerOf = (fun (mc0 : string) (mc1 : Frontend_dAst.t_Decl) ->
   | _ -> B_dData_dList.C_List_Nil
 ))
 
-# 113 "Vuna/Compiler/Driver/Owner.vuna"
+# 120 "Vuna/Compiler/Driver/Owner.vuna"
 let v_splitTraitDefOwnerOf = (fun (mc0 : string) (mc1 : Frontend_dAst.t_Decl) -> (match mc1 with
   | Frontend_dAst.C_Decl_DTrait (dtb__88, dtb__89, dtb__90, dtb__91, dtb__92) -> ((B_dData_dList.v_map (fun (m : Frontend_dAst.t_TraitMethod) -> { B_dData_dPair.f_Pair_first = (Frontend_dAst.v_traitMethodName m); B_dData_dPair.f_Pair_second = mc0 })) dtb__91)
   | _ -> B_dData_dList.C_List_Nil
 ))
 
-# 118 "Vuna/Compiler/Driver/Owner.vuna"
+# 125 "Vuna/Compiler/Driver/Owner.vuna"
 let v_splitTraitDataOwnerOf = (fun (mc0 : string) (mc1 : Frontend_dAst.t_Decl) -> (match mc1 with
   | Frontend_dAst.C_Decl_DTrait (dtb__93, dtb__94, dtb__95, dtb__96, dtb__97) -> (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = ("Dict_" ^ dtb__93); B_dData_dPair.f_Pair_second = mc0 }, B_dData_dList.C_List_Nil))
   | _ -> B_dData_dList.C_List_Nil
 ))
 
-# 122 "Vuna/Compiler/Driver/Owner.vuna"
+# 129 "Vuna/Compiler/Driver/Owner.vuna"
 let rec v_splitInstanceOwnersGo = (fun (mc0 : string) (mc1 : Frontend_dAst.t_Decl B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__98, dtb__99) -> ((B_dData_dList.v_append ((v_splitInstanceOwnerOf mc0) dtb__98)) ((v_splitInstanceOwnersGo mc0) dtb__99))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 127 "Vuna/Compiler/Driver/Owner.vuna"
+# 134 "Vuna/Compiler/Driver/Owner.vuna"
 let v_splitOwnerEntriesOf = (fun (owner : string) (decls : Frontend_dAst.t_Decl B_dData_dList.t_List) -> ((B_dData_dList.v_append ((B_dData_dList.v_map (fun (n : string) -> { B_dData_dPair.f_Pair_first = n; B_dData_dPair.f_Pair_second = owner })) (v_splitDeclNames decls))) ((B_dData_dList.v_append ((v_splitInstanceOwnersGo owner) decls)) ((B_dData_dList.v_concatMap (v_splitTraitDefOwnerOf owner)) decls))))
 
-# 133 "Vuna/Compiler/Driver/Owner.vuna"
+# 140 "Vuna/Compiler/Driver/Owner.vuna"
 let v_splitDataOwnerEntriesOf = (fun (owner : string) (decls : Frontend_dAst.t_Decl B_dData_dList.t_List) -> ((B_dData_dList.v_append ((B_dData_dList.v_map (fun (n : string) -> { B_dData_dPair.f_Pair_first = n; B_dData_dPair.f_Pair_second = owner })) (v_splitDataNames decls))) ((B_dData_dList.v_concatMap (v_splitTraitDataOwnerOf owner)) decls)))
 
-# 139 "Vuna/Compiler/Driver/Owner.vuna"
+# 146 "Vuna/Compiler/Driver/Owner.vuna"
 let rec v_splitOwnerEntriesOfModules = (fun (mc0 : (string, Frontend_dAst.t_Decl B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__100, dtb__101) -> (match dtb__100 with
   | { B_dData_dPair.f_Pair_first = dtb__102; B_dData_dPair.f_Pair_second = dtb__103 } -> ((B_dData_dList.v_append ((v_splitOwnerEntriesOf dtb__102) dtb__103)) (v_splitOwnerEntriesOfModules dtb__101))
@@ -116,7 +116,7 @@ let rec v_splitOwnerEntriesOfModules = (fun (mc0 : (string, Frontend_dAst.t_Decl
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 144 "Vuna/Compiler/Driver/Owner.vuna"
+# 151 "Vuna/Compiler/Driver/Owner.vuna"
 let rec v_splitDataOwnerEntriesOfModules = (fun (mc0 : (string, Frontend_dAst.t_Decl B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__104, dtb__105) -> (match dtb__104 with
   | { B_dData_dPair.f_Pair_first = dtb__106; B_dData_dPair.f_Pair_second = dtb__107 } -> ((B_dData_dList.v_append ((v_splitDataOwnerEntriesOf dtb__106) dtb__107)) (v_splitDataOwnerEntriesOfModules dtb__105))
@@ -126,40 +126,40 @@ let rec v_splitDataOwnerEntriesOfModules = (fun (mc0 : (string, Frontend_dAst.t_
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 159 "Vuna/Compiler/Driver/Owner.vuna"
+# 166 "Vuna/Compiler/Driver/Owner.vuna"
 let v_splitMetaOf = (fun (modules : (string, Frontend_dAst.t_Decl B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) (entryDecls : Frontend_dAst.t_Decl B_dData_dList.t_List) -> (let knownModules = ((B_dData_dList.v_map (fun (p : (string, Frontend_dAst.t_Decl B_dData_dList.t_List) B_dData_dPair.t_Pair) -> (B_dData_dPair.v_firstOf p))) modules) in (let defOwners = ((B_dData_dList.v_append (v_splitOwnerEntriesOfModules modules)) ((v_splitOwnerEntriesOf v_entryOwner) entryDecls)) in (let dataOwners = ((B_dData_dList.v_append (v_splitDataOwnerEntriesOfModules modules)) ((v_splitDataOwnerEntriesOf v_entryOwner) entryDecls)) in { f_SplitMeta_smDefOwners = defOwners; f_SplitMeta_smDataOwners = dataOwners; f_SplitMeta_smKnownModules = knownModules; f_SplitMeta_smDefOwnerT = (((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) defOwners); f_SplitMeta_smDataOwnerT = (((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) dataOwners) }))))
 
-# 176 "Vuna/Compiler/Driver/Owner.vuna"
+# 183 "Vuna/Compiler/Driver/Owner.vuna"
 let v_lookupModuleOf = (fun (pairs : (string, string) B_dData_dPair.t_Pair B_dData_dList.t_List) (name : string) -> ((B_dData_dList.v_lookupPair name) pairs))
 
-# 179 "Vuna/Compiler/Driver/Owner.vuna"
+# 186 "Vuna/Compiler/Driver/Owner.vuna"
 let v_knownModuleOrErr = (fun (knownModules : string B_dData_dList.t_List) (what : string) (name : string) -> (let prefix = (v_modulePrefixOfName name) in (if ((B_dData_dList.v_memName prefix) knownModules) then (Base_dDiag.C_Check_OkC (prefix)) else (Base_dDiag.v_icInternal (String.concat "" ["DT split: `"; what; "` "; name; " has module prefix `"; prefix; "` but no such module"])))))
 
-# 188 "Vuna/Compiler/Driver/Owner.vuna"
+# 195 "Vuna/Compiler/Driver/Owner.vuna"
 let v_splitDataOwnerOf = (fun (meta : t_SplitMeta) (d : Elab_dTypes.t_DtData) -> (match ((((B_dContainer_dHashMap.v_lookup B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) (Elab_dTypes.v_dtDataName d)) (meta).f_SplitMeta_smDataOwnerT) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__108) -> (Base_dDiag.C_Check_OkC (dtb__108))
   | B_dData_dMaybe.C_Maybe_Nothing -> (if (Base_dSource.v_containsDot (Elab_dTypes.v_dtDataName d)) then (((v_knownModuleOrErr (meta).f_SplitMeta_smKnownModules) "data") (Elab_dTypes.v_dtDataName d)) else (Base_dDiag.v_icInternal (String.concat "" ["DT split: cannot determine module for data `"; (Elab_dTypes.v_dtDataName d); "`"])))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 201 "Vuna/Compiler/Driver/Owner.vuna"
+# 208 "Vuna/Compiler/Driver/Owner.vuna"
 let v_isSyntheticInternalName = (fun (name : string) -> (if (name = Base_dIntrinsics.v_mainShowDefName) then true else ((B_dData_dString.v_startsWith "@vuna@") name)))
 
-# 204 "Vuna/Compiler/Driver/Owner.vuna"
+# 211 "Vuna/Compiler/Driver/Owner.vuna"
 let v_splitDefOwnerOf = (fun (meta : t_SplitMeta) (name : string) -> (match ((((B_dContainer_dHashMap.v_lookup B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) name) (meta).f_SplitMeta_smDefOwnerT) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__109) -> (Base_dDiag.C_Check_OkC (dtb__109))
   | B_dData_dMaybe.C_Maybe_Nothing -> (if (Base_dSource.v_containsDot name) then (((v_knownModuleOrErr (meta).f_SplitMeta_smKnownModules) "definition") name) else (if (v_isSyntheticInternalName name) then (Base_dDiag.C_Check_OkC (v_entryOwner)) else (Base_dDiag.v_icInternal (String.concat "" ["DT split: cannot determine module for definition `"; name; "`"]))))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 216 "Vuna/Compiler/Driver/Owner.vuna"
+# 223 "Vuna/Compiler/Driver/Owner.vuna"
 let rec v_nameOwnerPairsOfDefs = (fun (mc0 : t_SplitMeta) (mc1 : Elab_dTypes.t_DtDef B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__110, dtb__111) -> ((Base_dCommon.v_bind ((v_splitDefOwnerOf mc0) (Elab_dTypes.v_dtDefName dtb__110))) (fun (o : string) -> ((Base_dCommon.v_bind ((v_nameOwnerPairsOfDefs mc0) dtb__111)) (fun (ps : (string, string) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC ((B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = (Elab_dTypes.v_dtDefName dtb__110); B_dData_dPair.f_Pair_second = o }, ps))))))))
   | B_dData_dList.C_List_Nil -> (Base_dDiag.C_Check_OkC (B_dData_dList.C_List_Nil))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 223 "Vuna/Compiler/Driver/Owner.vuna"
+# 230 "Vuna/Compiler/Driver/Owner.vuna"
 let rec v_nameOwnerPairsOfDatas = (fun (mc0 : t_SplitMeta) (mc1 : Elab_dTypes.t_DtData B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__112, dtb__113) -> ((Base_dCommon.v_bind ((v_splitDataOwnerOf mc0) dtb__112)) (fun (o : string) -> ((Base_dCommon.v_bind ((v_nameOwnerPairsOfDatas mc0) dtb__113)) (fun (ps : (string, string) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC ((B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = (Elab_dTypes.v_dtDataName dtb__112); B_dData_dPair.f_Pair_second = o }, ps))))))))
   | B_dData_dList.C_List_Nil -> (Base_dDiag.C_Check_OkC (B_dData_dList.C_List_Nil))

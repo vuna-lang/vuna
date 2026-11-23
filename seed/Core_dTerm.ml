@@ -374,13 +374,13 @@ let rec v_termHasUnsolvedMeta = (fun (mc0 : t_Sols) (mc1 : t_Term) -> (match mc1
 )
   | _ -> failwith "DT: impossible branch"
 ))
-# 451 "Vuna/Compiler/Core/Term.vuna"
+# 450 "Vuna/Compiler/Core/Term.vuna"
 and v_termHasUnsolvedMetaMaybe = (fun (mc0 : t_Sols) (mc1 : t_Term B_dData_dMaybe.t_Maybe) -> (match mc1 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__163) -> ((v_termHasUnsolvedMeta mc0) dtb__163)
   | B_dData_dMaybe.C_Maybe_Nothing -> false
   | _ -> failwith "DT: impossible branch"
 ))
-# 455 "Vuna/Compiler/Core/Term.vuna"
+# 454 "Vuna/Compiler/Core/Term.vuna"
 and v_termHasUnsolvedMetaArgs = (fun (mc0 : t_Sols) (mc1 : (t_Term, t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__164, dtb__165) -> (match dtb__164 with
   | { B_dData_dPair.f_Pair_first = dtb__166; B_dData_dPair.f_Pair_second = dtb__167 } -> (if ((v_termHasUnsolvedMeta mc0) dtb__166) then true else ((v_termHasUnsolvedMetaArgs mc0) dtb__165))
@@ -389,14 +389,14 @@ and v_termHasUnsolvedMetaArgs = (fun (mc0 : t_Sols) (mc1 : (t_Term, t_Rig) B_dDa
   | B_dData_dList.C_List_Nil -> false
   | _ -> failwith "DT: impossible branch"
 ))
-# 460 "Vuna/Compiler/Core/Term.vuna"
+# 459 "Vuna/Compiler/Core/Term.vuna"
 and v_termHasUnsolvedMetaAlts = (fun (mc0 : t_Sols) (mc1 : t_CaseAlt B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__168, dtb__169) -> (if ((v_termHasUnsolvedMeta mc0) (v_caseAltBody dtb__168)) then true else ((v_termHasUnsolvedMetaAlts mc0) dtb__169))
   | B_dData_dList.C_List_Nil -> false
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 467 "Vuna/Compiler/Core/Term.vuna"
+# 466 "Vuna/Compiler/Core/Term.vuna"
 let rec v_termUsesFloat = (fun (mc0 : string B_dData_dList.t_List) (mc1 : t_Term) -> (match mc1 with
   | C_Term_TIf (dtb__170, dtb__171, dtb__172) -> (if (if ((v_termUsesFloat mc0) dtb__170) then true else ((v_termUsesFloat mc0) dtb__171)) then true else ((v_termUsesFloat mc0) dtb__172))
   | C_Term_TBool (dtb__173) -> false
@@ -418,7 +418,7 @@ let rec v_termUsesFloat = (fun (mc0 : string B_dData_dList.t_List) (mc1 : t_Term
   | C_Term_TFloat (dtb__213) -> true
   | _ -> failwith "DT: impossible branch"
 ))
-# 490 "Vuna/Compiler/Core/Term.vuna"
+# 489 "Vuna/Compiler/Core/Term.vuna"
 and v_anyArgUsesFloat = (fun (mc0 : string B_dData_dList.t_List) (mc1 : (t_Term, t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__214, dtb__215) -> (match dtb__214 with
   | { B_dData_dPair.f_Pair_first = dtb__216; B_dData_dPair.f_Pair_second = dtb__217 } -> (if ((v_termUsesFloat mc0) dtb__216) then true else ((v_anyArgUsesFloat mc0) dtb__215))
@@ -427,14 +427,14 @@ and v_anyArgUsesFloat = (fun (mc0 : string B_dData_dList.t_List) (mc1 : (t_Term,
   | B_dData_dList.C_List_Nil -> false
   | _ -> failwith "DT: impossible branch"
 ))
-# 495 "Vuna/Compiler/Core/Term.vuna"
+# 494 "Vuna/Compiler/Core/Term.vuna"
 and v_anyAltUsesFloat = (fun (mc0 : string B_dData_dList.t_List) (mc1 : t_CaseAlt B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__218, dtb__219) -> (if ((v_termUsesFloat mc0) (v_caseAltBody dtb__218)) then true else ((v_anyAltUsesFloat mc0) dtb__219))
   | B_dData_dList.C_List_Nil -> false
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 501 "Vuna/Compiler/Core/Term.vuna"
+# 500 "Vuna/Compiler/Core/Term.vuna"
 let rec v_termGlobalNames = (fun (mc0 : t_Term) -> (match mc0 with
   | C_Term_TIf (dtb__220, dtb__221, dtb__222) -> ((B_dData_dList.v_append (v_termGlobalNames dtb__220)) ((B_dData_dList.v_append (v_termGlobalNames dtb__221)) (v_termGlobalNames dtb__222)))
   | C_Term_TBool (dtb__223) -> B_dData_dList.C_List_Nil
@@ -457,10 +457,10 @@ let rec v_termGlobalNames = (fun (mc0 : t_Term) -> (match mc0 with
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 524 "Vuna/Compiler/Core/Term.vuna"
+# 523 "Vuna/Compiler/Core/Term.vuna"
 let v_defLookup = (fun (name : string) (tbl : (string, t_Term) B_dContainer_dHashMap.t_HashMap) -> ((((B_dContainer_dHashMap.v_lookup B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) name) tbl))
 
-# 528 "Vuna/Compiler/Core/Term.vuna"
+# 527 "Vuna/Compiler/Core/Term.vuna"
 let rec v_hasFreeVar = (fun (mc0 : int) (mc1 : t_Term) -> (match mc1 with
   | C_Term_TIf (dtb__264, dtb__265, dtb__266) -> (if (if ((v_hasFreeVar mc0) dtb__264) then true else ((v_hasFreeVar mc0) dtb__265)) then true else ((v_hasFreeVar mc0) dtb__266))
   | C_Term_TBool (dtb__267) -> false
@@ -492,13 +492,13 @@ let rec v_hasFreeVar = (fun (mc0 : int) (mc1 : t_Term) -> (match mc1 with
   | C_Term_TVar (dtb__310, dtb__311, dtb__312) -> (dtb__311 >= mc0)
   | _ -> failwith "DT: impossible branch"
 ))
-# 556 "Vuna/Compiler/Core/Term.vuna"
+# 555 "Vuna/Compiler/Core/Term.vuna"
 and v_hasFreeVarMaybe = (fun (mc0 : int) (mc1 : t_Term B_dData_dMaybe.t_Maybe) -> (match mc1 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__313) -> ((v_hasFreeVar mc0) dtb__313)
   | B_dData_dMaybe.C_Maybe_Nothing -> false
   | _ -> failwith "DT: impossible branch"
 ))
-# 560 "Vuna/Compiler/Core/Term.vuna"
+# 559 "Vuna/Compiler/Core/Term.vuna"
 and v_hasFreeVarArgs = (fun (mc0 : int) (mc1 : (t_Term, t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__314, dtb__315) -> (match dtb__314 with
   | { B_dData_dPair.f_Pair_first = dtb__316; B_dData_dPair.f_Pair_second = dtb__317 } -> (if ((v_hasFreeVar mc0) dtb__316) then true else ((v_hasFreeVarArgs mc0) dtb__315))
@@ -507,14 +507,14 @@ and v_hasFreeVarArgs = (fun (mc0 : int) (mc1 : (t_Term, t_Rig) B_dData_dPair.t_P
   | B_dData_dList.C_List_Nil -> false
   | _ -> failwith "DT: impossible branch"
 ))
-# 564 "Vuna/Compiler/Core/Term.vuna"
+# 563 "Vuna/Compiler/Core/Term.vuna"
 and v_hasFreeVarAlts = (fun (mc0 : int) (mc1 : t_CaseAlt B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__318, dtb__319) -> (if ((v_hasFreeVar (mc0 + (B_dData_dList.v_length (v_caseAltBinders dtb__318)))) (v_caseAltBody dtb__318)) then true else ((v_hasFreeVarAlts mc0) dtb__319))
   | B_dData_dList.C_List_Nil -> false
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 569 "Vuna/Compiler/Core/Term.vuna"
+# 568 "Vuna/Compiler/Core/Term.vuna"
 let rec v_hasMeta = (fun (mc0 : int) (mc1 : int) (mc2 : t_Term) -> (match mc2 with
   | C_Term_TIf (dtb__320, dtb__321, dtb__322) -> (if (if (((v_hasMeta mc0) mc1) dtb__320) then true else (((v_hasMeta mc0) mc1) dtb__321)) then true else (((v_hasMeta mc0) mc1) dtb__322))
   | C_Term_TBool (dtb__323) -> false
@@ -546,13 +546,13 @@ let rec v_hasMeta = (fun (mc0 : int) (mc1 : int) (mc2 : t_Term) -> (match mc2 wi
   | C_Term_TMeta (dtb__368) -> (mc0 = dtb__368)
   | _ -> failwith "DT: impossible branch"
 ))
-# 596 "Vuna/Compiler/Core/Term.vuna"
+# 595 "Vuna/Compiler/Core/Term.vuna"
 and v_hasMetaMaybe = (fun (mc0 : int) (mc1 : int) (mc2 : t_Term B_dData_dMaybe.t_Maybe) -> (match mc2 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__369) -> (((v_hasMeta mc0) mc1) dtb__369)
   | B_dData_dMaybe.C_Maybe_Nothing -> false
   | _ -> failwith "DT: impossible branch"
 ))
-# 600 "Vuna/Compiler/Core/Term.vuna"
+# 599 "Vuna/Compiler/Core/Term.vuna"
 and v_hasMetaArgs = (fun (mc0 : int) (mc1 : int) (mc2 : (t_Term, t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc2 with
   | B_dData_dList.C_List__x58__x58_ (dtb__370, dtb__371) -> (match dtb__370 with
   | { B_dData_dPair.f_Pair_first = dtb__372; B_dData_dPair.f_Pair_second = dtb__373 } -> (if (((v_hasMeta mc0) mc1) dtb__372) then true else (((v_hasMetaArgs mc0) mc1) dtb__371))
@@ -561,49 +561,49 @@ and v_hasMetaArgs = (fun (mc0 : int) (mc1 : int) (mc2 : (t_Term, t_Rig) B_dData_
   | B_dData_dList.C_List_Nil -> false
   | _ -> failwith "DT: impossible branch"
 ))
-# 604 "Vuna/Compiler/Core/Term.vuna"
+# 603 "Vuna/Compiler/Core/Term.vuna"
 and v_hasMetaAlts = (fun (mc0 : int) (mc1 : int) (mc2 : t_CaseAlt B_dData_dList.t_List) -> (match mc2 with
   | B_dData_dList.C_List__x58__x58_ (dtb__374, dtb__375) -> (if (((v_hasMeta mc0) (mc1 + (B_dData_dList.v_length (v_caseAltBinders dtb__374)))) (v_caseAltBody dtb__374)) then true else (((v_hasMetaAlts mc0) mc1) dtb__375))
   | B_dData_dList.C_List_Nil -> false
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 610 "Vuna/Compiler/Core/Term.vuna"
+# 609 "Vuna/Compiler/Core/Term.vuna"
 let v_mapTermMaybe = (fun (mc0 : (t_Term) -> t_Term) (mc1 : t_Term B_dData_dMaybe.t_Maybe) -> (match mc1 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__376) -> (B_dData_dMaybe.C_Maybe_Just ((mc0 dtb__376)))
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 624 "Vuna/Compiler/Core/Term.vuna"
+# 623 "Vuna/Compiler/Core/Term.vuna"
 let v_lamMarkOf = (fun (mc0 : (t_LamMark, (t_Term B_dData_dMaybe.t_Maybe, t_Term B_dData_dMaybe.t_Maybe) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dMaybe.t_Maybe) -> (match mc0 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__377) -> (B_dData_dPair.v_firstOf dtb__377)
   | B_dData_dMaybe.C_Maybe_Nothing -> C_LamMark_LamPlain
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 628 "Vuna/Compiler/Core/Term.vuna"
+# 627 "Vuna/Compiler/Core/Term.vuna"
 let v_lamSlotTys = (fun (mc0 : (t_LamMark, (t_Term B_dData_dMaybe.t_Maybe, t_Term B_dData_dMaybe.t_Maybe) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dMaybe.t_Maybe) -> (match mc0 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__378) -> (B_dData_dMaybe.C_Maybe_Just ((B_dData_dPair.v_secondOf dtb__378)))
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 632 "Vuna/Compiler/Core/Term.vuna"
+# 631 "Vuna/Compiler/Core/Term.vuna"
 let v_lamBinderTyOf = (fun (slot : (t_LamMark, (t_Term B_dData_dMaybe.t_Maybe, t_Term B_dData_dMaybe.t_Maybe) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dMaybe.t_Maybe) -> (match (v_lamSlotTys slot) with
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
   | B_dData_dMaybe.C_Maybe_Just (dtb__379) -> (B_dData_dPair.v_firstOf dtb__379)
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 638 "Vuna/Compiler/Core/Term.vuna"
+# 637 "Vuna/Compiler/Core/Term.vuna"
 let v_lamResultTyOf = (fun (slot : (t_LamMark, (t_Term B_dData_dMaybe.t_Maybe, t_Term B_dData_dMaybe.t_Maybe) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dMaybe.t_Maybe) -> (match (v_lamSlotTys slot) with
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
   | B_dData_dMaybe.C_Maybe_Just (dtb__380) -> (B_dData_dPair.v_secondOf dtb__380)
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 644 "Vuna/Compiler/Core/Term.vuna"
+# 643 "Vuna/Compiler/Core/Term.vuna"
 let v_lamTyOf = (fun (mc0 : t_Term B_dData_dMaybe.t_Maybe) (mc1 : t_Term B_dData_dMaybe.t_Maybe) -> (match mc0 with
   | B_dData_dMaybe.C_Maybe_Nothing -> (match mc1 with
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
@@ -612,20 +612,20 @@ let v_lamTyOf = (fun (mc0 : t_Term B_dData_dMaybe.t_Maybe) (mc1 : t_Term B_dData
   | _ -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = C_LamMark_LamPlain; B_dData_dPair.f_Pair_second = { B_dData_dPair.f_Pair_first = mc0; B_dData_dPair.f_Pair_second = mc1 } }))
 ))
 
-# 648 "Vuna/Compiler/Core/Term.vuna"
+# 647 "Vuna/Compiler/Core/Term.vuna"
 let v_markLamLinear = (fun (slot : (t_LamMark, (t_Term B_dData_dMaybe.t_Maybe, t_Term B_dData_dMaybe.t_Maybe) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dMaybe.t_Maybe) -> (let tys = (match (v_lamSlotTys slot) with
   | B_dData_dMaybe.C_Maybe_Nothing -> { B_dData_dPair.f_Pair_first = B_dData_dMaybe.C_Maybe_Nothing; B_dData_dPair.f_Pair_second = B_dData_dMaybe.C_Maybe_Nothing }
   | B_dData_dMaybe.C_Maybe_Just (dtb__381) -> dtb__381
   | _ -> failwith "DT: impossible branch"
 ) in (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = C_LamMark_LamLinearClosure; B_dData_dPair.f_Pair_second = tys }))))
 
-# 657 "Vuna/Compiler/Core/Term.vuna"
+# 656 "Vuna/Compiler/Core/Term.vuna"
 let v_lamTyWithBinder = (fun (binderTy : t_Term B_dData_dMaybe.t_Maybe) -> ((v_lamTyOf binderTy) B_dData_dMaybe.C_Maybe_Nothing))
 
-# 660 "Vuna/Compiler/Core/Term.vuna"
+# 659 "Vuna/Compiler/Core/Term.vuna"
 let v_lamTyWithResult = (fun (resultTy : t_Term B_dData_dMaybe.t_Maybe) -> ((v_lamTyOf B_dData_dMaybe.C_Maybe_Nothing) resultTy))
 
-# 667 "Vuna/Compiler/Core/Term.vuna"
+# 666 "Vuna/Compiler/Core/Term.vuna"
 let rec v_shift = (fun (mc0 : int) (mc1 : int) (mc2 : t_Term) -> (match mc2 with
   | C_Term_TIf (dtb__382, dtb__383, dtb__384) -> (C_Term_TIf ((((v_shift mc0) mc1) dtb__382), (((v_shift mc0) mc1) dtb__383), (((v_shift mc0) mc1) dtb__384)))
   | C_Term_TBool (dtb__385) -> mc2
@@ -665,7 +665,7 @@ let rec v_shift = (fun (mc0 : int) (mc1 : int) (mc2 : t_Term) -> (match mc2 with
   | C_Term_TVar (dtb__430, dtb__431, dtb__432) -> (if (dtb__431 >= mc0) then (C_Term_TVar (dtb__430, (dtb__431 + mc1), dtb__432)) else mc2)
   | _ -> failwith "DT: impossible branch"
 ))
-# 707 "Vuna/Compiler/Core/Term.vuna"
+# 706 "Vuna/Compiler/Core/Term.vuna"
 and v_shiftArgs = (fun (mc0 : int) (mc1 : int) (mc2 : (t_Term, t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc2 with
   | B_dData_dList.C_List__x58__x58_ (dtb__433, dtb__434) -> (match dtb__433 with
   | { B_dData_dPair.f_Pair_first = dtb__435; B_dData_dPair.f_Pair_second = dtb__436 } -> (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = (((v_shift mc0) mc1) dtb__435); B_dData_dPair.f_Pair_second = dtb__436 }, (((v_shiftArgs mc0) mc1) dtb__434)))
@@ -674,19 +674,19 @@ and v_shiftArgs = (fun (mc0 : int) (mc1 : int) (mc2 : (t_Term, t_Rig) B_dData_dP
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
 ))
-# 712 "Vuna/Compiler/Core/Term.vuna"
+# 711 "Vuna/Compiler/Core/Term.vuna"
 and v_shiftAlts = (fun (mc0 : int) (mc1 : int) (mc2 : t_CaseAlt B_dData_dList.t_List) -> (match mc2 with
   | B_dData_dList.C_List__x58__x58_ (dtb__437, dtb__438) -> (B_dData_dList.C_List__x58__x58_ ((((v_shiftAlt mc0) mc1) dtb__437), (((v_shiftAlts mc0) mc1) dtb__438)))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
 ))
-# 716 "Vuna/Compiler/Core/Term.vuna"
+# 715 "Vuna/Compiler/Core/Term.vuna"
 and v_shiftAlt = (fun (mc0 : int) (mc1 : int) (mc2 : t_CaseAlt) -> (match mc2 with
   | { f_CaseAlt_caseAltName = dtb__439; f_CaseAlt_caseAltBinders = dtb__440; f_CaseAlt_caseAltBody = dtb__441 } -> { f_CaseAlt_caseAltName = dtb__439; f_CaseAlt_caseAltBinders = dtb__440; f_CaseAlt_caseAltBody = (((v_shift (mc0 + (B_dData_dList.v_length dtb__440))) mc1) dtb__441) }
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 721 "Vuna/Compiler/Core/Term.vuna"
+# 720 "Vuna/Compiler/Core/Term.vuna"
 let rec v_substVarAt = (fun (mc0 : int) (mc1 : t_Term) (mc2 : t_Term) -> (match mc2 with
   | C_Term_TIf (dtb__442, dtb__443, dtb__444) -> (C_Term_TIf ((((v_substVarAt mc0) mc1) dtb__442), (((v_substVarAt mc0) mc1) dtb__443), (((v_substVarAt mc0) mc1) dtb__444)))
   | C_Term_TBool (dtb__445) -> mc2
@@ -726,10 +726,10 @@ let rec v_substVarAt = (fun (mc0 : int) (mc1 : t_Term) (mc2 : t_Term) -> (match 
   | C_Term_TVar (dtb__490, dtb__491, dtb__492) -> (if (dtb__491 = mc0) then mc1 else mc2)
   | _ -> failwith "DT: impossible branch"
 ))
-# 764 "Vuna/Compiler/Core/Term.vuna"
+# 763 "Vuna/Compiler/Core/Term.vuna"
 and v_substAltAt = (fun (idx : int) (arg : t_Term) (alt : t_CaseAlt) -> { f_CaseAlt_caseAltName = (v_caseAltName alt); f_CaseAlt_caseAltBinders = (v_caseAltBinders alt); f_CaseAlt_caseAltBody = (((v_substVarAt (idx + (B_dData_dList.v_length (v_caseAltBinders alt)))) arg) (v_caseAltBody alt)) })
 
-# 774 "Vuna/Compiler/Core/Term.vuna"
+# 773 "Vuna/Compiler/Core/Term.vuna"
 let rec v_substMetaVarGo = (fun (mc0 : int) (mc1 : string) (mc2 : int) (mc3 : int) (mc4 : t_Term) -> (match mc4 with
   | C_Term_TIf (dtb__493, dtb__494, dtb__495) -> (C_Term_TIf ((((((v_substMetaVarGo mc0) mc1) mc2) mc3) dtb__493), (((((v_substMetaVarGo mc0) mc1) mc2) mc3) dtb__494), (((((v_substMetaVarGo mc0) mc1) mc2) mc3) dtb__495)))
   | C_Term_TCase (dtb__496, dtb__497) -> (C_Term_TCase ((((((v_substMetaVarGo mc0) mc1) mc2) mc3) dtb__496), ((B_dData_dList.v_map ((((v_substMetaVarAlt mc0) mc1) mc2) mc3)) dtb__497)))
@@ -761,58 +761,58 @@ let rec v_substMetaVarGo = (fun (mc0 : int) (mc1 : string) (mc2 : int) (mc3 : in
   | C_Term_TMeta (dtb__529) -> (if (dtb__529 = mc0) then (C_Term_TVar (mc1, (mc3 - mc2), { Base_dSource.f_Span_spanFile = ""; Base_dSource.f_Span_spanStartLine = 0; Base_dSource.f_Span_spanStartCol = 0; Base_dSource.f_Span_spanEndLine = 0; Base_dSource.f_Span_spanEndCol = 0; Base_dSource.f_Span_spanStartOffset = 0; Base_dSource.f_Span_spanEndOffset = 0 })) else mc4)
   | _ -> mc4
 ))
-# 815 "Vuna/Compiler/Core/Term.vuna"
+# 814 "Vuna/Compiler/Core/Term.vuna"
 and v_substMetaVarAlt = (fun (mc0 : int) (mc1 : string) (mc2 : int) (mc3 : int) (mc4 : t_CaseAlt) -> (match mc4 with
   | { f_CaseAlt_caseAltName = dtb__530; f_CaseAlt_caseAltBinders = dtb__531; f_CaseAlt_caseAltBody = dtb__532 } -> { f_CaseAlt_caseAltName = dtb__530; f_CaseAlt_caseAltBinders = dtb__531; f_CaseAlt_caseAltBody = (((((v_substMetaVarGo mc0) mc1) mc2) (mc3 + (B_dData_dList.v_length dtb__531))) dtb__532) }
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 771 "Vuna/Compiler/Core/Term.vuna"
+# 770 "Vuna/Compiler/Core/Term.vuna"
 let v_substMetaVar = (fun (m : int) (name : string) (q : int) (t : t_Term) -> (((((v_substMetaVarGo m) name) q) 0) t))
 
-# 827 "Vuna/Compiler/Core/Term.vuna"
+# 826 "Vuna/Compiler/Core/Term.vuna"
 let rec v_insertDictBinderGo = (fun (mc0 : string) (mc1 : int) (mc2 : t_Term) (mc3 : int) (mc4 : t_Term) -> (match mc4 with
   | C_Term_TPi (dtb__533, dtb__534, dtb__535, dtb__536, dtb__537) -> (if (mc3 = mc1) then (C_Term_TPi (dtb__533, dtb__534, dtb__535, dtb__536, (C_Term_TPi (mc0, true, C_Rig_RigOmega, mc2, (((v_shift 0) 1) dtb__537))))) else (C_Term_TPi (dtb__533, dtb__534, dtb__535, dtb__536, (((((v_insertDictBinderGo mc0) mc1) mc2) (mc3 + 1)) dtb__537))))
   | _ -> mc4
 ))
 
-# 821 "Vuna/Compiler/Core/Term.vuna"
+# 820 "Vuna/Compiler/Core/Term.vuna"
 let v_insertDictBinder = (fun (name : string) (idx : int) (dictDom : t_Term) (t : t_Term) -> (((((v_insertDictBinderGo name) idx) dictDom) 0) t))
 
-# 839 "Vuna/Compiler/Core/Term.vuna"
+# 838 "Vuna/Compiler/Core/Term.vuna"
 let rec v_insertImplicitBinderGo = (fun (mc0 : string) (mc1 : int) (mc2 : t_Rig) (mc3 : t_Term) (mc4 : int) (mc5 : t_Term) -> (match mc5 with
   | C_Term_TPi (dtb__538, dtb__539, dtb__540, dtb__541, dtb__542) -> (if (mc4 = mc1) then (C_Term_TPi (dtb__538, dtb__539, dtb__540, dtb__541, (C_Term_TPi (mc0, true, mc2, mc3, (((v_shift 0) 1) dtb__542))))) else (C_Term_TPi (dtb__538, dtb__539, dtb__540, dtb__541, ((((((v_insertImplicitBinderGo mc0) mc1) mc2) mc3) (mc4 + 1)) dtb__542))))
   | _ -> mc5
 ))
 
-# 836 "Vuna/Compiler/Core/Term.vuna"
+# 835 "Vuna/Compiler/Core/Term.vuna"
 let v_insertImplicitBinder = (fun (name : string) (idx : int) (rig : t_Rig) (dom : t_Term) (t : t_Term) -> ((((((v_insertImplicitBinderGo name) idx) rig) dom) 0) t))
 
-# 848 "Vuna/Compiler/Core/Term.vuna"
+# 847 "Vuna/Compiler/Core/Term.vuna"
 let v_cutoffOf = (fun (total : int) (idx : int) -> (if ((total - (idx + 1)) <= 0) then 0 else (total - (idx + 1))))
 
-# 851 "Vuna/Compiler/Core/Term.vuna"
+# 850 "Vuna/Compiler/Core/Term.vuna"
 let rec v_countPis = (fun (mc0 : t_Term) -> (match mc0 with
   | C_Term_TPi (dtb__543, dtb__544, dtb__545, dtb__546, dtb__547) -> (1 + (v_countPis dtb__547))
   | _ -> 0
 ))
 
-# 863 "Vuna/Compiler/Core/Term.vuna"
+# 862 "Vuna/Compiler/Core/Term.vuna"
 let rec v_insertLamBinderGo = (fun (mc0 : string) (mc1 : int) (mc2 : int) (mc3 : t_Term) -> (match mc3 with
   | C_Term_TLam (dtb__548, dtb__549, dtb__550, dtb__551, dtb__552) -> (if (mc2 = mc1) then (C_Term_TLam (dtb__548, dtb__549, dtb__550, dtb__551, (C_Term_TLam (mc0, C_Rig_RigOmega, B_dData_dMaybe.C_Maybe_Nothing, Base_dSource.v_spanEmpty, (((v_shift 0) 1) dtb__552))))) else (C_Term_TLam (dtb__548, dtb__549, dtb__550, dtb__551, ((((v_insertLamBinderGo mc0) mc1) (mc2 + 1)) dtb__552))))
   | _ -> mc3
 ))
 
-# 860 "Vuna/Compiler/Core/Term.vuna"
+# 859 "Vuna/Compiler/Core/Term.vuna"
 let v_insertLamBinder = (fun (name : string) (idx : int) (t : t_Term) -> ((((v_insertLamBinderGo name) idx) 0) t))
 
-# 871 "Vuna/Compiler/Core/Term.vuna"
+# 870 "Vuna/Compiler/Core/Term.vuna"
 let rec v_countLams = (fun (mc0 : t_Term) -> (match mc0 with
   | C_Term_TLam (dtb__553, dtb__554, dtb__555, dtb__556, dtb__557) -> (1 + (v_countLams dtb__557))
   | _ -> 0
 ))
 
-# 876 "Vuna/Compiler/Core/Term.vuna"
+# 875 "Vuna/Compiler/Core/Term.vuna"
 let rec v_hasFreeTermVar = (fun (mc0 : int) (mc1 : t_Term) -> (match mc1 with
   | C_Term_TIf (dtb__558, dtb__559, dtb__560) -> (if (if ((v_hasFreeTermVar mc0) dtb__558) then true else ((v_hasFreeTermVar mc0) dtb__559)) then true else ((v_hasFreeTermVar mc0) dtb__560))
   | C_Term_TCase (dtb__561, dtb__562) -> (if ((v_hasFreeTermVar mc0) dtb__561) then true else ((v_anyAltFree mc0) dtb__562))
@@ -837,13 +837,13 @@ let rec v_hasFreeTermVar = (fun (mc0 : int) (mc1 : t_Term) -> (match mc1 with
   | C_Term_TVar (dtb__597, dtb__598, dtb__599) -> (dtb__598 >= mc0)
   | _ -> false
 ))
-# 899 "Vuna/Compiler/Core/Term.vuna"
+# 898 "Vuna/Compiler/Core/Term.vuna"
 and v_hasFreeTermVarMaybe = (fun (mc0 : int) (mc1 : t_Term B_dData_dMaybe.t_Maybe) -> (match mc1 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__600) -> ((v_hasFreeTermVar mc0) dtb__600)
   | B_dData_dMaybe.C_Maybe_Nothing -> false
   | _ -> failwith "DT: impossible branch"
 ))
-# 903 "Vuna/Compiler/Core/Term.vuna"
+# 902 "Vuna/Compiler/Core/Term.vuna"
 and v_anyPairFree = (fun (mc0 : int) (mc1 : (t_Term, t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__601, dtb__602) -> (match dtb__601 with
   | { B_dData_dPair.f_Pair_first = dtb__603; B_dData_dPair.f_Pair_second = dtb__604 } -> (if ((v_hasFreeTermVar mc0) dtb__603) then true else ((v_anyPairFree mc0) dtb__602))
@@ -852,7 +852,7 @@ and v_anyPairFree = (fun (mc0 : int) (mc1 : (t_Term, t_Rig) B_dData_dPair.t_Pair
   | B_dData_dList.C_List_Nil -> false
   | _ -> failwith "DT: impossible branch"
 ))
-# 907 "Vuna/Compiler/Core/Term.vuna"
+# 906 "Vuna/Compiler/Core/Term.vuna"
 and v_anyAltFree = (fun (mc0 : int) (mc1 : t_CaseAlt B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__605, dtb__606) -> (match dtb__605 with
   | { f_CaseAlt_caseAltName = dtb__607; f_CaseAlt_caseAltBinders = dtb__608; f_CaseAlt_caseAltBody = dtb__609 } -> (if ((v_hasFreeTermVar (mc0 + (B_dData_dList.v_length dtb__608))) dtb__609) then true else ((v_anyAltFree mc0) dtb__606))
@@ -862,7 +862,7 @@ and v_anyAltFree = (fun (mc0 : int) (mc1 : t_CaseAlt B_dData_dList.t_List) -> (m
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 915 "Vuna/Compiler/Core/Term.vuna"
+# 914 "Vuna/Compiler/Core/Term.vuna"
 let rec v_hasNegativeVar = (fun (mc0 : t_Term) -> (match mc0 with
   | C_Term_TIf (dtb__610, dtb__611, dtb__612) -> (if (if (v_hasNegativeVar dtb__610) then true else (v_hasNegativeVar dtb__611)) then true else (v_hasNegativeVar dtb__612))
   | C_Term_TCase (dtb__613, dtb__614) -> (if (v_hasNegativeVar dtb__613) then true else (v_anyNegativeVarAlts dtb__614))
@@ -887,13 +887,13 @@ let rec v_hasNegativeVar = (fun (mc0 : t_Term) -> (match mc0 with
   | C_Term_TVar (dtb__649, dtb__650, dtb__651) -> (dtb__650 < 0)
   | _ -> false
 ))
-# 935 "Vuna/Compiler/Core/Term.vuna"
+# 934 "Vuna/Compiler/Core/Term.vuna"
 and v_hasNegativeVarMaybe = (fun (mc0 : t_Term B_dData_dMaybe.t_Maybe) -> (match mc0 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__652) -> (v_hasNegativeVar dtb__652)
   | B_dData_dMaybe.C_Maybe_Nothing -> false
   | _ -> failwith "DT: impossible branch"
 ))
-# 939 "Vuna/Compiler/Core/Term.vuna"
+# 938 "Vuna/Compiler/Core/Term.vuna"
 and v_anyNegativeVarArgs = (fun (mc0 : (t_Term, t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__653, dtb__654) -> (match dtb__653 with
   | { B_dData_dPair.f_Pair_first = dtb__655; B_dData_dPair.f_Pair_second = dtb__656 } -> (if (v_hasNegativeVar dtb__655) then true else (v_anyNegativeVarArgs dtb__654))
@@ -902,7 +902,7 @@ and v_anyNegativeVarArgs = (fun (mc0 : (t_Term, t_Rig) B_dData_dPair.t_Pair B_dD
   | B_dData_dList.C_List_Nil -> false
   | _ -> failwith "DT: impossible branch"
 ))
-# 943 "Vuna/Compiler/Core/Term.vuna"
+# 942 "Vuna/Compiler/Core/Term.vuna"
 and v_anyNegativeVarAlts = (fun (mc0 : t_CaseAlt B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__657, dtb__658) -> (match dtb__657 with
   | { f_CaseAlt_caseAltName = dtb__659; f_CaseAlt_caseAltBinders = dtb__660; f_CaseAlt_caseAltBody = dtb__661 } -> (if (v_hasNegativeVar dtb__661) then true else (v_anyNegativeVarAlts dtb__658))
@@ -912,10 +912,10 @@ and v_anyNegativeVarAlts = (fun (mc0 : t_CaseAlt B_dData_dList.t_List) -> (match
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 949 "Vuna/Compiler/Core/Term.vuna"
+# 948 "Vuna/Compiler/Core/Term.vuna"
 let v_metaScanBound = 262144
 
-# 955 "Vuna/Compiler/Core/Term.vuna"
+# 954 "Vuna/Compiler/Core/Term.vuna"
 let rec v_hasUnsolvedMetaValueFuel = (fun (fuel : int) (sols : t_Sols) (v : t_Value) -> (if (fuel <= 0) then true else (match v with
   | C_Value_VMeta (dtb__662, dtb__663) -> (match ((v_solsLookup dtb__662) sols) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__664) -> (((v_hasUnsolvedMetaValueFuel (fuel - 1)) sols) dtb__664)
@@ -936,40 +936,40 @@ let rec v_hasUnsolvedMetaValueFuel = (fun (fuel : int) (sols : t_Sols) (v : t_Va
   | C_Value_VIf (dtb__690, dtb__691, dtb__692) -> (if (if (((v_hasUnsolvedMetaValueFuel (fuel - 1)) sols) dtb__690) then true else (((v_hasUnsolvedMetaValueFuel (fuel - 1)) sols) dtb__691)) then true else (((v_hasUnsolvedMetaValueFuel (fuel - 1)) sols) dtb__692))
   | _ -> false
 )))
-# 981 "Vuna/Compiler/Core/Term.vuna"
+# 980 "Vuna/Compiler/Core/Term.vuna"
 and v_hasUnsolvedMetaListFuel = (fun (fuel : int) (sols : t_Sols) (vs : t_Value B_dData_dList.t_List) -> (if (fuel <= 0) then true else (match vs with
   | B_dData_dList.C_List_Nil -> false
   | B_dData_dList.C_List__x58__x58_ (dtb__693, dtb__694) -> (if (((v_hasUnsolvedMetaValueFuel (fuel - 1)) sols) dtb__693) then true else (((v_hasUnsolvedMetaListFuel (fuel - 1)) sols) dtb__694))
   | _ -> failwith "DT: impossible branch"
 )))
-# 993 "Vuna/Compiler/Core/Term.vuna"
+# 992 "Vuna/Compiler/Core/Term.vuna"
 and v_hasUnsolvedMetaCloFuel = (fun (fuel : int) (sols : t_Sols) (clo : t_Closure) -> (if (fuel <= 0) then true else (match clo with
   | { f_Closure_closureEnv = dtb__695; f_Closure_closureBody = dtb__696 } -> (((v_hasUnsolvedMetaListFuel (fuel - 1)) sols) dtb__695)
   | _ -> failwith "DT: impossible branch"
 )))
 
-# 952 "Vuna/Compiler/Core/Term.vuna"
+# 951 "Vuna/Compiler/Core/Term.vuna"
 let v_hasUnsolvedMetaValue = (fun (sols : t_Sols) (v : t_Value) -> (((v_hasUnsolvedMetaValueFuel v_metaScanBound) sols) v))
 
-# 978 "Vuna/Compiler/Core/Term.vuna"
+# 977 "Vuna/Compiler/Core/Term.vuna"
 let v_hasUnsolvedMetaList = (fun (sols : t_Sols) (vs : t_Value B_dData_dList.t_List) -> (((v_hasUnsolvedMetaListFuel v_metaScanBound) sols) vs))
 
-# 990 "Vuna/Compiler/Core/Term.vuna"
+# 989 "Vuna/Compiler/Core/Term.vuna"
 let v_hasUnsolvedMetaClo = (fun (sols : t_Sols) (clo : t_Closure) -> (((v_hasUnsolvedMetaCloFuel v_metaScanBound) sols) clo))
 
-# 1004 "Vuna/Compiler/Core/Term.vuna"
+# 1003 "Vuna/Compiler/Core/Term.vuna"
 let v_isTypeValue = (fun (mc0 : t_Value) -> (match mc0 with
   | C_Value_VType (dtb__697) -> true
   | _ -> false
 ))
 
-# 1008 "Vuna/Compiler/Core/Term.vuna"
+# 1007 "Vuna/Compiler/Core/Term.vuna"
 let v_typeLevelOf = (fun (mc0 : t_Value) -> (match mc0 with
   | C_Value_VType (dtb__698) -> (B_dData_dMaybe.C_Maybe_Just (dtb__698))
   | _ -> B_dData_dMaybe.C_Maybe_Nothing
 ))
 
-# 1016 "Vuna/Compiler/Core/Term.vuna"
+# 1015 "Vuna/Compiler/Core/Term.vuna"
 let rec v_levelEscapes = (fun (mc0 : int) (mc1 : int) (mc2 : t_Value) -> (match mc2 with
   | C_Value_VBool (dtb__699) -> false
   | C_Value_VFloat (dtb__700) -> false
@@ -991,19 +991,19 @@ let rec v_levelEscapes = (fun (mc0 : int) (mc1 : int) (mc2 : t_Value) -> (match 
 )
   | _ -> failwith "DT: impossible branch"
 ))
-# 1037 "Vuna/Compiler/Core/Term.vuna"
+# 1036 "Vuna/Compiler/Core/Term.vuna"
 and v_levelEscapesList = (fun (mc0 : int) (mc1 : t_Value B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__734, dtb__735) -> (if (((v_levelEscapes mc0) 0) dtb__734) then true else ((v_levelEscapesList mc0) dtb__735))
   | B_dData_dList.C_List_Nil -> false
   | _ -> failwith "DT: impossible branch"
 ))
-# 1041 "Vuna/Compiler/Core/Term.vuna"
+# 1040 "Vuna/Compiler/Core/Term.vuna"
 and v_levelEscapesClo = (fun (mc0 : int) (mc1 : t_Closure) -> (match mc1 with
   | { f_Closure_closureEnv = dtb__736; f_Closure_closureBody = dtb__737 } -> ((v_levelEscapesList mc0) dtb__736)
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1121 "Vuna/Compiler/Core/Term.vuna"
+# 1120 "Vuna/Compiler/Core/Term.vuna"
 let rec v_showBinders = (fun (mc0 : (string, t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__738, dtb__739) -> (match dtb__738 with
   | { B_dData_dPair.f_Pair_first = dtb__740; B_dData_dPair.f_Pair_second = dtb__741 } -> (String.concat "" [" "; dtb__740; (v_showBinders dtb__739)])
@@ -1013,17 +1013,17 @@ let rec v_showBinders = (fun (mc0 : (string, t_Rig) B_dData_dPair.t_Pair B_dData
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1128 "Vuna/Compiler/Core/Term.vuna"
+# 1127 "Vuna/Compiler/Core/Term.vuna"
 let rec v_showCoreChars = (fun (mc0 : int B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__742, dtb__743) -> (if (dtb__742 = 34) then ("\\\"" ^ (v_showCoreChars dtb__743)) else (if (dtb__742 = 92) then ("\\\\" ^ (v_showCoreChars dtb__743)) else (if (dtb__742 = 10) then ("\\n" ^ (v_showCoreChars dtb__743)) else (if (dtb__742 = 9) then ("\\t" ^ (v_showCoreChars dtb__743)) else (if (dtb__742 = 13) then ("\\r" ^ (v_showCoreChars dtb__743)) else ((B_dData_dList.dtp_pack (B_dData_dList.C_List__x58__x58_ (dtb__742, B_dData_dList.C_List_Nil))) ^ (v_showCoreChars dtb__743)))))))
   | B_dData_dList.C_List_Nil -> ""
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1125 "Vuna/Compiler/Core/Term.vuna"
+# 1124 "Vuna/Compiler/Core/Term.vuna"
 let v_showCoreString = (fun (s : string) -> (String.concat "" ["\""; (v_showCoreChars (B_dData_dList.dtp_unpack s)); "\""]))
 
-# 1044 "Vuna/Compiler/Core/Term.vuna"
+# 1043 "Vuna/Compiler/Core/Term.vuna"
 let rec v_showTerm = (fun (mc0 : t_Term) -> (match mc0 with
   | C_Term_TIf (dtb__744, dtb__745, dtb__746) -> (String.concat "" ["if "; (v_showTerm dtb__744); " then "; (v_showTerm dtb__745); " else "; (v_showTerm dtb__746)])
   | C_Term_TBool (dtb__747) -> (if dtb__747 then "True" else "False")
@@ -1045,7 +1045,7 @@ let rec v_showTerm = (fun (mc0 : t_Term) -> (match mc0 with
   | C_Term_TVar (dtb__785, dtb__786, dtb__787) -> dtb__785
   | _ -> failwith "DT: impossible branch"
 ))
-# 1101 "Vuna/Compiler/Core/Term.vuna"
+# 1100 "Vuna/Compiler/Core/Term.vuna"
 and v_showArgTerms = (fun (mc0 : (t_Term, t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__788, dtb__789) -> (match dtb__788 with
   | { B_dData_dPair.f_Pair_first = dtb__790; B_dData_dPair.f_Pair_second = dtb__791 } -> (String.concat "" [" "; (v_showTerm dtb__790); (v_showArgTerms dtb__789)])
@@ -1054,7 +1054,7 @@ and v_showArgTerms = (fun (mc0 : (t_Term, t_Rig) B_dData_dPair.t_Pair B_dData_dL
   | B_dData_dList.C_List_Nil -> ""
   | _ -> failwith "DT: impossible branch"
 ))
-# 1106 "Vuna/Compiler/Core/Term.vuna"
+# 1105 "Vuna/Compiler/Core/Term.vuna"
 and v_recordAppShow = (fun (mc0 : string) (mc1 : (t_Term, t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__792, dtb__793) -> (match dtb__792 with
   | { B_dData_dPair.f_Pair_first = dtb__794; B_dData_dPair.f_Pair_second = dtb__795 } -> ((v_recordAppShow (String.concat "" ["("; mc0; " "; (v_showTerm dtb__794); ")"])) dtb__793)
@@ -1063,16 +1063,16 @@ and v_recordAppShow = (fun (mc0 : string) (mc1 : (t_Term, t_Rig) B_dData_dPair.t
   | B_dData_dList.C_List_Nil -> mc0
   | _ -> failwith "DT: impossible branch"
 ))
-# 1116 "Vuna/Compiler/Core/Term.vuna"
+# 1115 "Vuna/Compiler/Core/Term.vuna"
 and v_showCoreAlts = (fun (mc0 : t_CaseAlt B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__796, dtb__797) -> (String.concat "" [(v_caseAltName dtb__796); (v_showBinders (v_binderPairs (v_caseAltBinders dtb__796))); " => "; (v_showTerm (v_caseAltBody dtb__796)); " | "; (v_showCoreAlts dtb__797)])
   | B_dData_dList.C_List_Nil -> ""
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1076 "Vuna/Compiler/Core/Term.vuna"
+# 1075 "Vuna/Compiler/Core/Term.vuna"
 let rec v_showPiSig = (fun (name : string) (implicit : bool) (dom : t_Term) (cod : t_Term) -> (if (name = "_") then (String.concat "" [(v_showSigParenIfPi dom); " -> "; (v_showTypeSig cod)]) else (if implicit then (String.concat "" ["{"; name; " : "; (v_showTypeSig dom); "} -> "; (v_showTypeSig cod)]) else (String.concat "" ["("; name; " : "; (v_showTypeSig dom); ") -> "; (v_showTypeSig cod)]))))
-# 1085 "Vuna/Compiler/Core/Term.vuna"
+# 1084 "Vuna/Compiler/Core/Term.vuna"
 and v_showTypeSig = (fun (mc0 : t_Term) -> (match mc0 with
   | C_Term_TRecord (dtb__798, dtb__799) -> ((v_showSigAppText dtb__798) dtb__799)
   | C_Term_TCon (dtb__800, dtb__801) -> (match dtb__801 with
@@ -1083,12 +1083,12 @@ and v_showTypeSig = (fun (mc0 : t_Term) -> (match mc0 with
   | C_Term_TPi (dtb__805, dtb__806, dtb__807, dtb__808, dtb__809) -> ((((v_showPiSig dtb__805) dtb__806) dtb__808) dtb__809)
   | _ -> (v_showTerm mc0)
 ))
-# 1093 "Vuna/Compiler/Core/Term.vuna"
+# 1092 "Vuna/Compiler/Core/Term.vuna"
 and v_showSigParenIfPi = (fun (mc0 : t_Term) -> (match mc0 with
   | C_Term_TPi (dtb__810, dtb__811, dtb__812, dtb__813, dtb__814) -> (String.concat "" ["("; ((((v_showPiSig dtb__810) dtb__811) dtb__813) dtb__814); ")"])
   | _ -> (v_showTypeSig mc0)
 ))
-# 1097 "Vuna/Compiler/Core/Term.vuna"
+# 1096 "Vuna/Compiler/Core/Term.vuna"
 and v_showSigArgs = (fun (mc0 : (t_Term, t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__815, dtb__816) -> (match dtb__815 with
   | { B_dData_dPair.f_Pair_first = dtb__817; B_dData_dPair.f_Pair_second = dtb__818 } -> (String.concat "" [" "; (v_showSigParenIfPi dtb__817); (v_showSigArgs dtb__816)])
@@ -1097,7 +1097,7 @@ and v_showSigArgs = (fun (mc0 : (t_Term, t_Rig) B_dData_dPair.t_Pair B_dData_dLi
   | B_dData_dList.C_List_Nil -> ""
   | _ -> failwith "DT: impossible branch"
 ))
-# 1111 "Vuna/Compiler/Core/Term.vuna"
+# 1110 "Vuna/Compiler/Core/Term.vuna"
 and v_showSigAppText = (fun (mc0 : string) (mc1 : (t_Term, t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__819, dtb__820) -> (match dtb__819 with
   | { B_dData_dPair.f_Pair_first = dtb__821; B_dData_dPair.f_Pair_second = dtb__822 } -> ((v_showSigAppText (String.concat "" ["("; mc0; " "; (v_showSigParenIfPi dtb__821); ")"])) dtb__820)

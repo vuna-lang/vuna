@@ -155,13 +155,13 @@ let rec v_hashFields = (fun (mc0 : string) (mc1 : string) (mc2 : string B_dData_
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 430 "Vuna/Compiler/Elab/Derive.vuna"
+# 429 "Vuna/Compiler/Elab/Derive.vuna"
 let rec v_varNamesAtGo = (fun (remaining : int) (prefix : string) (n : int) -> (if (remaining <= 0) then B_dData_dList.C_List_Nil else (B_dData_dList.C_List__x58__x58_ ((prefix ^ (bi_strFromInt (n - remaining))), (((v_varNamesAtGo (remaining - 1)) prefix) n)))))
 
-# 427 "Vuna/Compiler/Elab/Derive.vuna"
+# 426 "Vuna/Compiler/Elab/Derive.vuna"
 let v_varNamesAt = (fun (prefix : string) (i : int) (n : int) -> (((v_varNamesAtGo (n - i)) prefix) n))
 
-# 424 "Vuna/Compiler/Elab/Derive.vuna"
+# 423 "Vuna/Compiler/Elab/Derive.vuna"
 let v_varNames = (fun (prefix : string) (n : int) -> (((v_varNamesAt prefix) 0) n))
 
 # 263 "Vuna/Compiler/Elab/Derive.vuna"
@@ -190,19 +190,19 @@ let rec v_hashAlts = (fun (mc0 : string) (mc1 : string) (mc2 : Frontend_dRast.t_
 # 298 "Vuna/Compiler/Elab/Derive.vuna"
 let v_hashBody = (fun (proj : string) (combineProj : string) (ctors : Frontend_dRast.t_Ctor B_dData_dList.t_List) (sp : Base_dSource.t_Span) -> (Frontend_dRast.C_Expr_ECase ((Frontend_dRast.C_Expr_EVar ((Frontend_dRast_dName.v_classifyName "sx"), sp)), (((((v_hashAlts proj) combineProj) ctors) 0) sp), sp)))
 
-# 438 "Vuna/Compiler/Elab/Derive.vuna"
+# 437 "Vuna/Compiler/Elab/Derive.vuna"
 let v_gtBody = (fun (ltProj : string) (sp : Base_dSource.t_Span) -> (Frontend_dRast.C_Expr_EApp ((Frontend_dRast.C_Expr_EVar ((Frontend_dRast_dName.v_classifyName ltProj), sp)), (B_dData_dList.C_List__x58__x58_ ((Frontend_dRast.C_Expr_EVar ((Frontend_dRast_dName.v_classifyName "sy"), sp)), (B_dData_dList.C_List__x58__x58_ ((Frontend_dRast.C_Expr_EVar ((Frontend_dRast_dName.v_classifyName "sx"), sp)), B_dData_dList.C_List_Nil)))), sp)))
 
-# 442 "Vuna/Compiler/Elab/Derive.vuna"
+# 441 "Vuna/Compiler/Elab/Derive.vuna"
 let v_geBody = (fun (leProj : string) (sp : Base_dSource.t_Span) -> (Frontend_dRast.C_Expr_EApp ((Frontend_dRast.C_Expr_EVar ((Frontend_dRast_dName.v_classifyName leProj), sp)), (B_dData_dList.C_List__x58__x58_ ((Frontend_dRast.C_Expr_EVar ((Frontend_dRast_dName.v_classifyName "sy"), sp)), (B_dData_dList.C_List__x58__x58_ ((Frontend_dRast.C_Expr_EVar ((Frontend_dRast_dName.v_classifyName "sx"), sp)), B_dData_dList.C_List_Nil)))), sp)))
 
-# 452 "Vuna/Compiler/Elab/Derive.vuna"
+# 451 "Vuna/Compiler/Elab/Derive.vuna"
 let v_boolTrue = (fun (sp : Base_dSource.t_Span) -> (Frontend_dRast.C_Expr_EVar ((Frontend_dRast_dName.v_classifyName Base_dIntrinsics.v_boolTrueCtor), sp)))
 
-# 455 "Vuna/Compiler/Elab/Derive.vuna"
+# 454 "Vuna/Compiler/Elab/Derive.vuna"
 let v_boolFalse = (fun (sp : Base_dSource.t_Span) -> (Frontend_dRast.C_Expr_EVar ((Frontend_dRast_dName.v_classifyName Base_dIntrinsics.v_boolFalseCtor), sp)))
 
-# 348 "Vuna/Compiler/Elab/Derive.vuna"
+# 347 "Vuna/Compiler/Elab/Derive.vuna"
 let rec v_conjFields = (fun (mc0 : string B_dData_dList.t_List) (mc1 : string B_dData_dList.t_List) (mc2 : Base_dSource.t_Span) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__80, dtb__81) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__82, dtb__83) -> (match dtb__81 with
@@ -227,10 +227,10 @@ let v_eqAlt = (fun (mc0 : Frontend_dRast.t_Ctor) (mc1 : Base_dSource.t_Span) -> 
 # 327 "Vuna/Compiler/Elab/Derive.vuna"
 let v_eqBody = (fun (ctors : Frontend_dRast.t_Ctor B_dData_dList.t_List) (sp : Base_dSource.t_Span) -> (Frontend_dRast.C_Expr_ECase ((Frontend_dRast.C_Expr_EVar ((Frontend_dRast_dName.v_classifyName "sx"), sp)), ((B_dData_dList.v_map (fun (c : Frontend_dRast.t_Ctor) -> ((v_eqAlt c) sp))) ctors), sp)))
 
-# 361 "Vuna/Compiler/Elab/Derive.vuna"
+# 360 "Vuna/Compiler/Elab/Derive.vuna"
 let v_neqBody = (fun (eqProj : string) (sp : Base_dSource.t_Span) -> (Frontend_dRast.C_Expr_EIf ((Frontend_dRast.C_Expr_EApp ((Frontend_dRast.C_Expr_EVar ((Frontend_dRast_dName.v_classifyName eqProj), sp)), (B_dData_dList.C_List__x58__x58_ ((Frontend_dRast.C_Expr_EVar ((Frontend_dRast_dName.v_classifyName "sx"), sp)), (B_dData_dList.C_List__x58__x58_ ((Frontend_dRast.C_Expr_EVar ((Frontend_dRast_dName.v_classifyName "sy"), sp)), B_dData_dList.C_List_Nil)))), sp)), (v_boolFalse sp), (v_boolTrue sp), sp)))
 
-# 402 "Vuna/Compiler/Elab/Derive.vuna"
+# 401 "Vuna/Compiler/Elab/Derive.vuna"
 let rec v_ltFields = (fun (mc0 : string) (mc1 : string B_dData_dList.t_List) (mc2 : string B_dData_dList.t_List) (mc3 : Base_dSource.t_Span) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__88, dtb__89) -> (match mc2 with
   | B_dData_dList.C_List__x58__x58_ (dtb__90, dtb__91) -> (match dtb__89 with
@@ -243,7 +243,7 @@ let rec v_ltFields = (fun (mc0 : string) (mc1 : string B_dData_dList.t_List) (mc
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 388 "Vuna/Compiler/Elab/Derive.vuna"
+# 387 "Vuna/Compiler/Elab/Derive.vuna"
 let rec v_ordInnerGo = (fun (mc0 : string) (mc1 : int) (mc2 : int) (mc3 : Frontend_dRast.t_Ctor B_dData_dList.t_List) (mc4 : int) (mc5 : Base_dSource.t_Span) -> (match mc3 with
   | B_dData_dList.C_List__x58__x58_ (dtb__92, dtb__93) -> (match dtb__92 with
   | { Frontend_dRast.f_Ctor_ctorName = dtb__94; Frontend_dRast.f_Ctor_ctorType = dtb__95; Frontend_dRast.f_Ctor_ctorArity = dtb__96; Frontend_dRast.f_Ctor_ctorSpan = dtb__97 } -> (let gs = ((v_varNames "fb") dtb__96) in (let pat = (Frontend_dRast.C_Pat_PCon ((Frontend_dRast_dName.v_classifyName dtb__94), ((B_dData_dList.v_map (fun (v : string) -> (Frontend_dRast.C_Pat_PVar (v, mc5)))) gs), mc5)) in (let body = (if (mc4 = mc1) then ((((v_ltFields mc0) ((v_varNames "fa") mc2)) gs) mc5) else (if (mc4 < mc1) then (v_boolFalse mc5) else (v_boolTrue mc5))) in (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = pat; B_dData_dPair.f_Pair_second = body }, ((((((v_ordInnerGo mc0) mc1) mc2) dtb__93) (mc4 + 1)) mc5))))))
@@ -253,10 +253,10 @@ let rec v_ordInnerGo = (fun (mc0 : string) (mc1 : int) (mc2 : int) (mc3 : Fronte
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 385 "Vuna/Compiler/Elab/Derive.vuna"
+# 384 "Vuna/Compiler/Elab/Derive.vuna"
 let v_ordInner = (fun (leProj : string) (i : int) (ar : int) (all : Frontend_dRast.t_Ctor B_dData_dList.t_List) (sp : Base_dSource.t_Span) -> ((((((v_ordInnerGo leProj) i) ar) all) 0) sp))
 
-# 375 "Vuna/Compiler/Elab/Derive.vuna"
+# 374 "Vuna/Compiler/Elab/Derive.vuna"
 let rec v_ordAlts = (fun (mc0 : string) (mc1 : Frontend_dRast.t_Ctor B_dData_dList.t_List) (mc2 : Frontend_dRast.t_Ctor B_dData_dList.t_List) (mc3 : int) (mc4 : Base_dSource.t_Span) -> (match mc2 with
   | B_dData_dList.C_List__x58__x58_ (dtb__98, dtb__99) -> (match dtb__98 with
   | { Frontend_dRast.f_Ctor_ctorName = dtb__100; Frontend_dRast.f_Ctor_ctorType = dtb__101; Frontend_dRast.f_Ctor_ctorArity = dtb__102; Frontend_dRast.f_Ctor_ctorSpan = dtb__103 } -> (let vs = ((v_varNames "fa") dtb__102) in (let pat = (Frontend_dRast.C_Pat_PCon ((Frontend_dRast_dName.v_classifyName dtb__100), ((B_dData_dList.v_map (fun (v : string) -> (Frontend_dRast.C_Pat_PVar (v, mc4)))) vs), mc4)) in (let body = (Frontend_dRast.C_Expr_ECase ((Frontend_dRast.C_Expr_EVar ((Frontend_dRast_dName.v_classifyName "sy"), mc4)), (((((v_ordInner mc0) mc3) dtb__102) mc1) mc4), mc4)) in (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = pat; B_dData_dPair.f_Pair_second = body }, (((((v_ordAlts mc0) mc1) dtb__99) (mc3 + 1)) mc4))))))
@@ -266,10 +266,10 @@ let rec v_ordAlts = (fun (mc0 : string) (mc1 : Frontend_dRast.t_Ctor B_dData_dLi
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 372 "Vuna/Compiler/Elab/Derive.vuna"
+# 371 "Vuna/Compiler/Elab/Derive.vuna"
 let v_ordBody = (fun (leProj : string) (ctors : Frontend_dRast.t_Ctor B_dData_dList.t_List) (sp : Base_dSource.t_Span) -> (Frontend_dRast.C_Expr_ECase ((Frontend_dRast.C_Expr_EVar ((Frontend_dRast_dName.v_classifyName "sx"), sp)), (((((v_ordAlts leProj) ctors) ctors) 0) sp), sp)))
 
-# 417 "Vuna/Compiler/Elab/Derive.vuna"
+# 416 "Vuna/Compiler/Elab/Derive.vuna"
 let v_leBody = (fun (ltProj : string) (sp : Base_dSource.t_Span) -> (Frontend_dRast.C_Expr_EApp ((Frontend_dRast.C_Expr_EVar ((Frontend_dRast_dName.v_classifyName "||"), sp)), (B_dData_dList.C_List__x58__x58_ ((Frontend_dRast.C_Expr_EApp ((Frontend_dRast.C_Expr_EVar ((Frontend_dRast_dName.v_classifyName ltProj), sp)), (B_dData_dList.C_List__x58__x58_ ((Frontend_dRast.C_Expr_EVar ((Frontend_dRast_dName.v_classifyName "sx"), sp)), (B_dData_dList.C_List__x58__x58_ ((Frontend_dRast.C_Expr_EVar ((Frontend_dRast_dName.v_classifyName "sy"), sp)), B_dData_dList.C_List_Nil)))), sp)), (B_dData_dList.C_List__x58__x58_ ((Frontend_dRast.C_Expr_EIf ((Frontend_dRast.C_Expr_EApp ((Frontend_dRast.C_Expr_EVar ((Frontend_dRast_dName.v_classifyName ltProj), sp)), (B_dData_dList.C_List__x58__x58_ ((Frontend_dRast.C_Expr_EVar ((Frontend_dRast_dName.v_classifyName "sy"), sp)), (B_dData_dList.C_List__x58__x58_ ((Frontend_dRast.C_Expr_EVar ((Frontend_dRast_dName.v_classifyName "sx"), sp)), B_dData_dList.C_List_Nil)))), sp)), (v_boolFalse sp), (v_boolTrue sp), sp)), B_dData_dList.C_List_Nil)))), sp)))
 
 # 159 "Vuna/Compiler/Elab/Derive.vuna"

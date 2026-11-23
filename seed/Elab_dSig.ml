@@ -212,7 +212,7 @@ let rec v_lookupParamKinds = (fun (mc0 : (string, Frontend_dRast.t_Expr B_dData_
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 255 "Vuna/Compiler/Elab/Sig.vuna"
+# 254 "Vuna/Compiler/Elab/Sig.vuna"
 let rec v_zipArgKindsGo = (fun (mc0 : Frontend_dRast.t_Expr B_dData_dList.t_List) (mc1 : Frontend_dRast.t_Expr B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__146, dtb__147) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__148, dtb__149) -> (match dtb__148 with
@@ -226,7 +226,7 @@ let rec v_zipArgKindsGo = (fun (mc0 : Frontend_dRast.t_Expr B_dData_dList.t_List
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 251 "Vuna/Compiler/Elab/Sig.vuna"
+# 250 "Vuna/Compiler/Elab/Sig.vuna"
 let v_zipArgKinds = (fun (mc0 : Frontend_dRast.t_Expr B_dData_dList.t_List B_dData_dMaybe.t_Maybe) (mc1 : Frontend_dRast.t_Expr B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__152) -> ((v_zipArgKindsGo dtb__152) mc1)
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dList.C_List_Nil
@@ -254,26 +254,26 @@ let rec v_argParamKinds = (fun (mc0 : (string, Frontend_dRast.t_Expr B_dData_dLi
 # 224 "Vuna/Compiler/Elab/Sig.vuna"
 let v_argParamKindsIn = (fun (tbl : (string, Frontend_dRast.t_Expr B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) (exprs : Frontend_dRast.t_Expr B_dData_dList.t_List) -> ((B_dData_dList.v_concatMap (v_argParamKinds tbl)) exprs))
 
-# 282 "Vuna/Compiler/Elab/Sig.vuna"
+# 281 "Vuna/Compiler/Elab/Sig.vuna"
 let v_modulePrefixOf = (fun (name : string) -> (match (Base_dSource.v_splitLastDot (Base_dSource.v_splitOnDot name)) with
   | { B_dData_dPair.f_Pair_first = dtb__190; B_dData_dPair.f_Pair_second = dtb__191 } -> (Base_dSource.v_joinDots dtb__190)
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 273 "Vuna/Compiler/Elab/Sig.vuna"
+# 272 "Vuna/Compiler/Elab/Sig.vuna"
 let rec v_filterNamesInModule = (fun (mc0 : string) (mc1 : string B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__192, dtb__193) -> (if ((v_modulePrefixOf dtb__192) = (v_modulePrefixOf mc0)) then (B_dData_dList.C_List__x58__x58_ (dtb__192, ((v_filterNamesInModule mc0) dtb__193))) else ((v_filterNamesInModule mc0) dtb__193))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 302 "Vuna/Compiler/Elab/Sig.vuna"
+# 301 "Vuna/Compiler/Elab/Sig.vuna"
 let v_qualifiedKey = (fun (prefix : string) (name : string) -> (String.concat "" [prefix; "\t"; name]))
 
-# 296 "Vuna/Compiler/Elab/Sig.vuna"
+# 295 "Vuna/Compiler/Elab/Sig.vuna"
 let v_qualifiedBannedTbl = (fun (defined : string B_dData_dList.t_List) -> ((((B_dContainer_dHashMap.v_insertAll B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) ((B_dData_dList.v_map (fun (n : string) -> { B_dData_dPair.f_Pair_first = ((v_qualifiedKey (v_modulePrefixOf n)) n); B_dData_dPair.f_Pair_second = true })) defined)) (((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) B_dData_dList.C_List_Nil)))
 
-# 349 "Vuna/Compiler/Elab/Sig.vuna"
+# 348 "Vuna/Compiler/Elab/Sig.vuna"
 let rec v_paramKindOf = (fun (mc0 : (string, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc1 : string) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__194, dtb__195) -> (match dtb__194 with
   | { B_dData_dPair.f_Pair_first = dtb__196; B_dData_dPair.f_Pair_second = dtb__197 } -> (if (dtb__196 = mc1) then (B_dData_dMaybe.C_Maybe_Just (dtb__197)) else ((v_paramKindOf dtb__195) mc1))
@@ -283,30 +283,30 @@ let rec v_paramKindOf = (fun (mc0 : (string, Frontend_dRast.t_Expr) B_dData_dPai
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 343 "Vuna/Compiler/Elab/Sig.vuna"
+# 342 "Vuna/Compiler/Elab/Sig.vuna"
 let v_kindOverrideOf = (fun (memberOverrides : (string, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) (argOverrides : (string, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) (n : string) -> (match ((v_memberDomainOf memberOverrides) n) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__198) -> (B_dData_dMaybe.C_Maybe_Just (dtb__198))
   | B_dData_dMaybe.C_Maybe_Nothing -> ((v_paramKindOf argOverrides) n)
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 353 "Vuna/Compiler/Elab/Sig.vuna"
+# 352 "Vuna/Compiler/Elab/Sig.vuna"
 let rec v_keepOutQualified = (fun (mc0 : string) (mc1 : (string, bool) B_dContainer_dHashMap.t_HashMap) (mc2 : (string, bool) B_dContainer_dHashMap.t_HashMap) (mc3 : string B_dData_dList.t_List) -> (match mc3 with
   | B_dData_dList.C_List__x58__x58_ (dtb__199, dtb__200) -> (if ((((B_dContainer_dHashMap.v_member B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) dtb__199) mc2) then ((((v_keepOutQualified mc0) mc1) mc2) dtb__200) else (if ((((B_dContainer_dHashMap.v_member B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) ((v_qualifiedKey mc0) dtb__199)) mc1) then ((((v_keepOutQualified mc0) mc1) mc2) dtb__200) else (B_dData_dList.C_List__x58__x58_ (dtb__199, ((((v_keepOutQualified mc0) mc1) mc2) dtb__200)))))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 306 "Vuna/Compiler/Elab/Sig.vuna"
+# 305 "Vuna/Compiler/Elab/Sig.vuna"
 let v_quantifyTopSigCached = (fun (prefix : string) (banned : (string, bool) B_dContainer_dHashMap.t_HashMap) (preludeBanned : (string, bool) B_dContainer_dHashMap.t_HashMap) (ty : Frontend_dRast.t_Expr) (sp : Base_dSource.t_Span) -> ((((v_quantifyTopKinds ((((v_keepOutQualified prefix) banned) preludeBanned) ((v_freeNames (fun (n : string) -> false)) ty))) ty) ty) sp))
 
-# 317 "Vuna/Compiler/Elab/Sig.vuna"
+# 316 "Vuna/Compiler/Elab/Sig.vuna"
 let v_quantifyTopSigCtxCached = (fun (prefix : string) (banned : (string, bool) B_dContainer_dHashMap.t_HashMap) (preludeBanned : (string, bool) B_dContainer_dHashMap.t_HashMap) (ctx : Frontend_dRast.t_Expr B_dData_dList.t_List) (ty : Frontend_dRast.t_Expr) (sp : Base_dSource.t_Span) -> (let scanExprs = ((B_dData_dList.v_append ctx) (B_dData_dList.C_List__x58__x58_ (ty, B_dData_dList.C_List_Nil))) in (let lower = (B_dData_dList.v_nubNames ((B_dData_dList.v_append ((B_dData_dList.v_concatMap v_exprLowerVars) ctx)) (v_exprLowerVars ty))) in (let names = ((((v_keepOutQualified prefix) banned) preludeBanned) ((v_dropPiBound lower) (v_piBoundNames ty))) in (let overrides = (v_memberDomainOverrides ctx) in (((((v_quantifyTopKindsWith (v_memberDomainOf overrides)) names) scanExprs) ty) sp))))))
 
-# 332 "Vuna/Compiler/Elab/Sig.vuna"
+# 331 "Vuna/Compiler/Elab/Sig.vuna"
 let v_quantifyTopSigCtxCachedKinds = (fun (prefix : string) (banned : (string, bool) B_dContainer_dHashMap.t_HashMap) (preludeBanned : (string, bool) B_dContainer_dHashMap.t_HashMap) (paramKinds : (string, Frontend_dRast.t_Expr B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) (ctx : Frontend_dRast.t_Expr B_dData_dList.t_List) (ty : Frontend_dRast.t_Expr) (sp : Base_dSource.t_Span) -> (let scanExprs = ((B_dData_dList.v_append ctx) (B_dData_dList.C_List__x58__x58_ (ty, B_dData_dList.C_List_Nil))) in (let lower = (B_dData_dList.v_nubNames ((B_dData_dList.v_append ((B_dData_dList.v_concatMap v_exprLowerVars) ctx)) (v_exprLowerVars ty))) in (let names = ((((v_keepOutQualified prefix) banned) preludeBanned) ((v_dropPiBound lower) (v_piBoundNames ty))) in (let memberOverrides = (v_memberDomainOverrides ctx) in (let argOverrides = ((v_argParamKindsIn paramKinds) scanExprs) in (((((v_quantifyTopKindsWith ((v_kindOverrideOf memberOverrides) argOverrides)) names) scanExprs) ty) sp)))))))
 
-# 363 "Vuna/Compiler/Elab/Sig.vuna"
+# 362 "Vuna/Compiler/Elab/Sig.vuna"
 let rec v_keepOutTbl = (fun (mc0 : (string, bool) B_dContainer_dHashMap.t_HashMap) (mc1 : string B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__201, dtb__202) -> (if ((((B_dContainer_dHashMap.v_member B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) dtb__201) mc0) then ((v_keepOutTbl mc0) dtb__202) else (B_dData_dList.C_List__x58__x58_ (dtb__201, ((v_keepOutTbl mc0) dtb__202))))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
@@ -316,16 +316,16 @@ let rec v_keepOutTbl = (fun (mc0 : (string, bool) B_dContainer_dHashMap.t_HashMa
 # 192 "Vuna/Compiler/Elab/Sig.vuna"
 let v_quantifyTopSig = (fun (banned : (string, bool) B_dContainer_dHashMap.t_HashMap) (ty : Frontend_dRast.t_Expr) (sp : Base_dSource.t_Span) -> ((((v_quantifyTopKinds ((v_keepOutTbl banned) ((v_freeNames (fun (n : string) -> false)) ty))) ty) ty) sp))
 
-# 368 "Vuna/Compiler/Elab/Sig.vuna"
+# 367 "Vuna/Compiler/Elab/Sig.vuna"
 let v_topPreludeNames = ((B_dData_dList.v_append (B_dData_dList.C_List__x58__x58_ ("Type", (B_dData_dList.C_List__x58__x58_ ("->", (B_dData_dList.C_List__x58__x58_ ("_", B_dData_dList.C_List_Nil))))))) ((B_dData_dList.v_append Base_dIntrinsics.v_typeIntrinsicNames) Base_dIntrinsics.v_preludeValueNames))
 
-# 264 "Vuna/Compiler/Elab/Sig.vuna"
+# 263 "Vuna/Compiler/Elab/Sig.vuna"
 let v_topQuantBanned = (fun (defined : string B_dData_dList.t_List) -> (B_dContainer_dHashMap.v_ofNames ((B_dData_dList.v_append defined) v_topPreludeNames)))
 
-# 270 "Vuna/Compiler/Elab/Sig.vuna"
+# 269 "Vuna/Compiler/Elab/Sig.vuna"
 let v_bannedForModule = (fun (sigName : string) (defined : string B_dData_dList.t_List) -> (v_topQuantBanned ((v_filterNamesInModule sigName) defined)))
 
-# 372 "Vuna/Compiler/Elab/Sig.vuna"
+# 371 "Vuna/Compiler/Elab/Sig.vuna"
 let rec v_definedNames = (fun (mc0 : Frontend_dRast.t_Decl B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__203, dtb__204) -> (match dtb__203 with
   | Frontend_dRast.C_Decl_DFun (dtb__205, dtb__206, dtb__207, dtb__208) -> (B_dData_dList.C_List__x58__x58_ (dtb__205, (v_definedNames dtb__204)))

@@ -172,7 +172,7 @@ let v_encMaybeExpr = (fun (mc0 : Frontend_dAst.t_Expr B_dData_dMaybe.t_Maybe) (m
 
 # 254 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
 let v_encCtor = (fun (mc0 : Frontend_dAst.t_Ctor) (mc1 : string B_dData_dList.t_List) -> (match mc0 with
-  | { Frontend_dAst.f_Ctor_ctorName = dtb__121; Frontend_dAst.f_Ctor_ctorType = dtb__122; Frontend_dAst.f_Ctor_ctorArity = dtb__123; Frontend_dAst.f_Ctor_ctorSpan = dtb__124 } -> ((Base_dBytes.v_encTag 0) ((Base_dBytes.v_encStr dtb__121) ((v_encExpr dtb__122) ((Base_dBytes.v_encInt dtb__123) mc1))))
+  | { Frontend_dAst.f_Ctor_ctorName = dtb__121; Frontend_dAst.f_Ctor_ctorType = dtb__122; Frontend_dAst.f_Ctor_ctorArity = dtb__123; Frontend_dAst.f_Ctor_ctorRef = dtb__124 } -> ((Base_dBytes.v_encTag 0) ((Base_dBytes.v_encStr dtb__121) ((v_encExpr dtb__122) ((Base_dBytes.v_encInt dtb__123) mc1))))
   | _ -> failwith "DT: impossible branch"
 ))
 
@@ -188,7 +188,7 @@ let v_encCtorList = (fun (xs : Frontend_dAst.t_Ctor B_dData_dList.t_List) (acc :
 
 # 258 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
 let v_encField = (fun (mc0 : Frontend_dAst.t_Field) (mc1 : string B_dData_dList.t_List) -> (match mc0 with
-  | { Frontend_dAst.f_Field_fieldName = dtb__127; Frontend_dAst.f_Field_fieldType = dtb__128; Frontend_dAst.f_Field_fieldSpan = dtb__129 } -> ((Base_dBytes.v_encTag 0) ((Base_dBytes.v_encStr dtb__127) ((v_encExpr dtb__128) mc1)))
+  | { Frontend_dAst.f_Field_fieldName = dtb__127; Frontend_dAst.f_Field_fieldType = dtb__128; Frontend_dAst.f_Field_fieldRef = dtb__129 } -> ((Base_dBytes.v_encTag 0) ((Base_dBytes.v_encStr dtb__127) ((v_encExpr dtb__128) mc1)))
   | _ -> failwith "DT: impossible branch"
 ))
 
@@ -220,7 +220,7 @@ let v_encTraitParamList = (fun (xs : Frontend_dAst.t_TraitParam B_dData_dList.t_
 
 # 266 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
 let v_encTraitMethod = (fun (mc0 : Frontend_dAst.t_TraitMethod) (mc1 : string B_dData_dList.t_List) -> (match mc0 with
-  | { Frontend_dAst.f_TraitMethod_traitMethodName = dtb__136; Frontend_dAst.f_TraitMethod_traitMethodType = dtb__137; Frontend_dAst.f_TraitMethod_traitMethodSpan = dtb__138 } -> ((Base_dBytes.v_encTag 0) ((Base_dBytes.v_encStr dtb__136) ((v_encExpr dtb__137) mc1)))
+  | { Frontend_dAst.f_TraitMethod_traitMethodName = dtb__136; Frontend_dAst.f_TraitMethod_traitMethodType = dtb__137; Frontend_dAst.f_TraitMethod_traitMethodRef = dtb__138 } -> ((Base_dBytes.v_encTag 0) ((Base_dBytes.v_encStr dtb__136) ((v_encExpr dtb__137) mc1)))
   | _ -> failwith "DT: impossible branch"
 ))
 
@@ -296,7 +296,7 @@ let rec v_decPat = (fun (fuel : int) (bytes : Base_dBytes.t_Cur) -> (if (fuel <=
   | B_dData_dMaybe.C_Maybe_Just (dtb__192) -> (match dtb__192 with
   | { B_dData_dPair.f_Pair_first = dtb__193; B_dData_dPair.f_Pair_second = dtb__194 } -> (if (dtb__193 = 0) then (let nd_uscrut9 = ((Base_dBytes.v_decStr (fuel - 1)) dtb__194) in (match nd_uscrut9 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__195) -> (match dtb__195 with
-  | { B_dData_dPair.f_Pair_first = dtb__196; B_dData_dPair.f_Pair_second = dtb__197 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Pat_PVar (dtb__196, v_noSpan)); B_dData_dPair.f_Pair_second = dtb__197 }))
+  | { B_dData_dPair.f_Pair_first = dtb__196; B_dData_dPair.f_Pair_second = dtb__197 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Pat_PVar (dtb__196, (Frontend_dAst.v_detachedNodeRef v_noSpan))); B_dData_dPair.f_Pair_second = dtb__197 }))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
@@ -305,7 +305,7 @@ let rec v_decPat = (fun (fuel : int) (bytes : Base_dBytes.t_Cur) -> (if (fuel <=
   | B_dData_dMaybe.C_Maybe_Just (dtb__198) -> (match dtb__198 with
   | { B_dData_dPair.f_Pair_first = dtb__199; B_dData_dPair.f_Pair_second = dtb__200 } -> (let nd_uscrut16 = ((v_decPat (fuel - 1)) dtb__200) in (match nd_uscrut16 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__201) -> (match dtb__201 with
-  | { B_dData_dPair.f_Pair_first = dtb__202; B_dData_dPair.f_Pair_second = dtb__203 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Pat_PAs (dtb__199, dtb__202, v_noSpan)); B_dData_dPair.f_Pair_second = dtb__203 }))
+  | { B_dData_dPair.f_Pair_first = dtb__202; B_dData_dPair.f_Pair_second = dtb__203 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Pat_PAs (dtb__199, dtb__202, (Frontend_dAst.v_detachedNodeRef v_noSpan))); B_dData_dPair.f_Pair_second = dtb__203 }))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
@@ -315,11 +315,11 @@ let rec v_decPat = (fun (fuel : int) (bytes : Base_dBytes.t_Cur) -> (if (fuel <=
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
-)) else (if (dtb__193 = 2) then (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Pat_PWild (v_noSpan)); B_dData_dPair.f_Pair_second = dtb__194 })) else (if (dtb__193 = 3) then (let nd_uscrut9 = ((Base_dBytes.v_decStr (fuel - 1)) dtb__194) in (match nd_uscrut9 with
+)) else (if (dtb__193 = 2) then (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Pat_PWild ((Frontend_dAst.v_detachedNodeRef v_noSpan))); B_dData_dPair.f_Pair_second = dtb__194 })) else (if (dtb__193 = 3) then (let nd_uscrut9 = ((Base_dBytes.v_decStr (fuel - 1)) dtb__194) in (match nd_uscrut9 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__204) -> (match dtb__204 with
   | { B_dData_dPair.f_Pair_first = dtb__205; B_dData_dPair.f_Pair_second = dtb__206 } -> (let nd_uscrut16 = ((v_decPatList (fuel - 1)) dtb__206) in (match nd_uscrut16 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__207) -> (match dtb__207 with
-  | { B_dData_dPair.f_Pair_first = dtb__208; B_dData_dPair.f_Pair_second = dtb__209 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Pat_PCon (dtb__205, dtb__208, v_noSpan)); B_dData_dPair.f_Pair_second = dtb__209 }))
+  | { B_dData_dPair.f_Pair_first = dtb__208; B_dData_dPair.f_Pair_second = dtb__209 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Pat_PCon (dtb__205, dtb__208, (Frontend_dAst.v_detachedNodeRef v_noSpan))); B_dData_dPair.f_Pair_second = dtb__209 }))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
@@ -331,14 +331,14 @@ let rec v_decPat = (fun (fuel : int) (bytes : Base_dBytes.t_Cur) -> (if (fuel <=
   | _ -> failwith "DT: impossible branch"
 )) else (if (dtb__193 = 4) then (let nd_uscrut9 = ((Base_dBytes.v_decInt (fuel - 1)) dtb__194) in (match nd_uscrut9 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__210) -> (match dtb__210 with
-  | { B_dData_dPair.f_Pair_first = dtb__211; B_dData_dPair.f_Pair_second = dtb__212 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Pat_PInt (dtb__211, v_noSpan)); B_dData_dPair.f_Pair_second = dtb__212 }))
+  | { B_dData_dPair.f_Pair_first = dtb__211; B_dData_dPair.f_Pair_second = dtb__212 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Pat_PInt (dtb__211, (Frontend_dAst.v_detachedNodeRef v_noSpan))); B_dData_dPair.f_Pair_second = dtb__212 }))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
 )) else (if (dtb__193 = 5) then (let nd_uscrut9 = ((Base_dBytes.v_decStr (fuel - 1)) dtb__194) in (match nd_uscrut9 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__213) -> (match dtb__213 with
-  | { B_dData_dPair.f_Pair_first = dtb__214; B_dData_dPair.f_Pair_second = dtb__215 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Pat_PStr (dtb__214, v_noSpan)); B_dData_dPair.f_Pair_second = dtb__215 }))
+  | { B_dData_dPair.f_Pair_first = dtb__214; B_dData_dPair.f_Pair_second = dtb__215 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Pat_PStr (dtb__214, (Frontend_dAst.v_detachedNodeRef v_noSpan))); B_dData_dPair.f_Pair_second = dtb__215 }))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
@@ -347,7 +347,7 @@ let rec v_decPat = (fun (fuel : int) (bytes : Base_dBytes.t_Cur) -> (if (fuel <=
   | B_dData_dMaybe.C_Maybe_Just (dtb__216) -> (match dtb__216 with
   | { B_dData_dPair.f_Pair_first = dtb__217; B_dData_dPair.f_Pair_second = dtb__218 } -> (let nd_uscrut16 = (((Base_dBytes.v_decList v_decStrPat) (fuel - 1)) dtb__218) in (match nd_uscrut16 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__219) -> (match dtb__219 with
-  | { B_dData_dPair.f_Pair_first = dtb__220; B_dData_dPair.f_Pair_second = dtb__221 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Pat_PRecord (dtb__217, dtb__220, v_noSpan)); B_dData_dPair.f_Pair_second = dtb__221 }))
+  | { B_dData_dPair.f_Pair_first = dtb__220; B_dData_dPair.f_Pair_second = dtb__221 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Pat_PRecord (dtb__217, dtb__220, (Frontend_dAst.v_detachedNodeRef v_noSpan))); B_dData_dPair.f_Pair_second = dtb__221 }))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
@@ -428,7 +428,7 @@ and v_decDoStmt = (fun (fuel : int) (bytes : Base_dBytes.t_Cur) -> (if (fuel <= 
   | B_dData_dMaybe.C_Maybe_Just (dtb__246) -> (match dtb__246 with
   | { B_dData_dPair.f_Pair_first = dtb__247; B_dData_dPair.f_Pair_second = dtb__248 } -> (let nd_uscrut16 = ((v_decExpr (fuel - 1)) dtb__248) in (match nd_uscrut16 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__249) -> (match dtb__249 with
-  | { B_dData_dPair.f_Pair_first = dtb__250; B_dData_dPair.f_Pair_second = dtb__251 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_DoStmt_DBind (dtb__247, dtb__250, v_noSpan)); B_dData_dPair.f_Pair_second = dtb__251 }))
+  | { B_dData_dPair.f_Pair_first = dtb__250; B_dData_dPair.f_Pair_second = dtb__251 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_DoStmt_DBind (dtb__247, dtb__250, Frontend_dAst.v_noNodeRef)); B_dData_dPair.f_Pair_second = dtb__251 }))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
@@ -440,14 +440,14 @@ and v_decDoStmt = (fun (fuel : int) (bytes : Base_dBytes.t_Cur) -> (if (fuel <= 
   | _ -> failwith "DT: impossible branch"
 )) else (if (dtb__244 = 1) then (let nd_uscrut9 = ((v_decExpr (fuel - 1)) dtb__245) in (match nd_uscrut9 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__252) -> (match dtb__252 with
-  | { B_dData_dPair.f_Pair_first = dtb__253; B_dData_dPair.f_Pair_second = dtb__254 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_DoStmt_DExpr (dtb__253, v_noSpan)); B_dData_dPair.f_Pair_second = dtb__254 }))
+  | { B_dData_dPair.f_Pair_first = dtb__253; B_dData_dPair.f_Pair_second = dtb__254 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_DoStmt_DExpr (dtb__253, Frontend_dAst.v_noNodeRef)); B_dData_dPair.f_Pair_second = dtb__254 }))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
 )) else (if (dtb__244 = 2) then (let nd_uscrut9 = (((Base_dBytes.v_decList v_decPatExpr) (fuel - 1)) dtb__245) in (match nd_uscrut9 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__255) -> (match dtb__255 with
-  | { B_dData_dPair.f_Pair_first = dtb__256; B_dData_dPair.f_Pair_second = dtb__257 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_DoStmt_DLet (dtb__256, v_noSpan)); B_dData_dPair.f_Pair_second = dtb__257 }))
+  | { B_dData_dPair.f_Pair_first = dtb__256; B_dData_dPair.f_Pair_second = dtb__257 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_DoStmt_DLet (dtb__256, Frontend_dAst.v_noNodeRef)); B_dData_dPair.f_Pair_second = dtb__257 }))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
@@ -463,21 +463,21 @@ and v_decExpr = (fun (fuel : int) (bytes : Base_dBytes.t_Cur) -> (if (fuel <= 0)
   | B_dData_dMaybe.C_Maybe_Just (dtb__258) -> (match dtb__258 with
   | { B_dData_dPair.f_Pair_first = dtb__259; B_dData_dPair.f_Pair_second = dtb__260 } -> (if (dtb__259 = 0) then (let nd_uscrut9 = ((Base_dBytes.v_decStr (fuel - 1)) dtb__260) in (match nd_uscrut9 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__261) -> (match dtb__261 with
-  | { B_dData_dPair.f_Pair_first = dtb__262; B_dData_dPair.f_Pair_second = dtb__263 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Expr_EVar (dtb__262, v_noSpan)); B_dData_dPair.f_Pair_second = dtb__263 }))
+  | { B_dData_dPair.f_Pair_first = dtb__262; B_dData_dPair.f_Pair_second = dtb__263 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Expr_EVar (dtb__262, (Frontend_dAst.v_detachedNodeRef v_noSpan))); B_dData_dPair.f_Pair_second = dtb__263 }))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
 )) else (if (dtb__259 = 1) then (let nd_uscrut9 = ((Base_dBytes.v_decInt (fuel - 1)) dtb__260) in (match nd_uscrut9 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__264) -> (match dtb__264 with
-  | { B_dData_dPair.f_Pair_first = dtb__265; B_dData_dPair.f_Pair_second = dtb__266 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Expr_EInt (dtb__265, v_noSpan)); B_dData_dPair.f_Pair_second = dtb__266 }))
+  | { B_dData_dPair.f_Pair_first = dtb__265; B_dData_dPair.f_Pair_second = dtb__266 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Expr_EInt (dtb__265, (Frontend_dAst.v_detachedNodeRef v_noSpan))); B_dData_dPair.f_Pair_second = dtb__266 }))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
 )) else (if (dtb__259 = 2) then (let nd_uscrut9 = ((Base_dBytes.v_decStr (fuel - 1)) dtb__260) in (match nd_uscrut9 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__267) -> (match dtb__267 with
-  | { B_dData_dPair.f_Pair_first = dtb__268; B_dData_dPair.f_Pair_second = dtb__269 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Expr_EStr (dtb__268, v_noSpan)); B_dData_dPair.f_Pair_second = dtb__269 }))
+  | { B_dData_dPair.f_Pair_first = dtb__268; B_dData_dPair.f_Pair_second = dtb__269 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Expr_EStr (dtb__268, (Frontend_dAst.v_detachedNodeRef v_noSpan))); B_dData_dPair.f_Pair_second = dtb__269 }))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
@@ -486,7 +486,7 @@ and v_decExpr = (fun (fuel : int) (bytes : Base_dBytes.t_Cur) -> (if (fuel <= 0)
   | B_dData_dMaybe.C_Maybe_Just (dtb__270) -> (match dtb__270 with
   | { B_dData_dPair.f_Pair_first = dtb__271; B_dData_dPair.f_Pair_second = dtb__272 } -> (let nd_uscrut16 = ((v_decExpr (fuel - 1)) dtb__272) in (match nd_uscrut16 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__273) -> (match dtb__273 with
-  | { B_dData_dPair.f_Pair_first = dtb__274; B_dData_dPair.f_Pair_second = dtb__275 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Expr_ELam (((B_dData_dList.v_map (fun (n : string) -> { B_dData_dPair.f_Pair_first = n; B_dData_dPair.f_Pair_second = v_noSpan })) dtb__271), dtb__274, v_noSpan)); B_dData_dPair.f_Pair_second = dtb__275 }))
+  | { B_dData_dPair.f_Pair_first = dtb__274; B_dData_dPair.f_Pair_second = dtb__275 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Expr_ELam (((B_dData_dList.v_map (fun (n : string) -> { B_dData_dPair.f_Pair_first = n; B_dData_dPair.f_Pair_second = v_noSpan })) dtb__271), dtb__274, (Frontend_dAst.v_detachedNodeRef v_noSpan))); B_dData_dPair.f_Pair_second = dtb__275 }))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
@@ -500,7 +500,7 @@ and v_decExpr = (fun (fuel : int) (bytes : Base_dBytes.t_Cur) -> (if (fuel <= 0)
   | B_dData_dMaybe.C_Maybe_Just (dtb__276) -> (match dtb__276 with
   | { B_dData_dPair.f_Pair_first = dtb__277; B_dData_dPair.f_Pair_second = dtb__278 } -> (let nd_uscrut16 = ((v_decExprList (fuel - 1)) dtb__278) in (match nd_uscrut16 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__279) -> (match dtb__279 with
-  | { B_dData_dPair.f_Pair_first = dtb__280; B_dData_dPair.f_Pair_second = dtb__281 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Expr_EApp (dtb__277, dtb__280, v_noSpan)); B_dData_dPair.f_Pair_second = dtb__281 }))
+  | { B_dData_dPair.f_Pair_first = dtb__280; B_dData_dPair.f_Pair_second = dtb__281 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Expr_EApp (dtb__277, dtb__280, (Frontend_dAst.v_detachedNodeRef v_noSpan))); B_dData_dPair.f_Pair_second = dtb__281 }))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
@@ -520,7 +520,7 @@ and v_decExpr = (fun (fuel : int) (bytes : Base_dBytes.t_Cur) -> (if (fuel <= 0)
   | B_dData_dMaybe.C_Maybe_Just (dtb__291) -> (match dtb__291 with
   | { B_dData_dPair.f_Pair_first = dtb__292; B_dData_dPair.f_Pair_second = dtb__293 } -> (let nd_uscrut37 = ((v_decExpr (fuel - 1)) dtb__293) in (match nd_uscrut37 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__294) -> (match dtb__294 with
-  | { B_dData_dPair.f_Pair_first = dtb__295; B_dData_dPair.f_Pair_second = dtb__296 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Expr_EPi (dtb__283, dtb__286, dtb__289, dtb__292, dtb__295, v_noSpan)); B_dData_dPair.f_Pair_second = dtb__296 }))
+  | { B_dData_dPair.f_Pair_first = dtb__295; B_dData_dPair.f_Pair_second = dtb__296 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Expr_EPi (dtb__283, dtb__286, dtb__289, dtb__292, dtb__295, (Frontend_dAst.v_detachedNodeRef v_noSpan))); B_dData_dPair.f_Pair_second = dtb__296 }))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
@@ -551,7 +551,7 @@ and v_decExpr = (fun (fuel : int) (bytes : Base_dBytes.t_Cur) -> (if (fuel <= 0)
   | B_dData_dMaybe.C_Maybe_Just (dtb__300) -> (match dtb__300 with
   | { B_dData_dPair.f_Pair_first = dtb__301; B_dData_dPair.f_Pair_second = dtb__302 } -> (let nd_uscrut23 = ((Base_dBytes.v_decBool (fuel - 1)) dtb__302) in (match nd_uscrut23 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__303) -> (match dtb__303 with
-  | { B_dData_dPair.f_Pair_first = dtb__304; B_dData_dPair.f_Pair_second = dtb__305 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Expr_ELet (dtb__298, dtb__301, dtb__304, v_noSpan)); B_dData_dPair.f_Pair_second = dtb__305 }))
+  | { B_dData_dPair.f_Pair_first = dtb__304; B_dData_dPair.f_Pair_second = dtb__305 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Expr_ELet (dtb__298, dtb__301, dtb__304, (Frontend_dAst.v_detachedNodeRef v_noSpan))); B_dData_dPair.f_Pair_second = dtb__305 }))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
@@ -568,7 +568,7 @@ and v_decExpr = (fun (fuel : int) (bytes : Base_dBytes.t_Cur) -> (if (fuel <= 0)
   | _ -> failwith "DT: impossible branch"
 )) else (if (dtb__259 = 7) then (let nd_uscrut9 = (((Base_dBytes.v_decList v_decClause) (fuel - 1)) dtb__260) in (match nd_uscrut9 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__306) -> (match dtb__306 with
-  | { B_dData_dPair.f_Pair_first = dtb__307; B_dData_dPair.f_Pair_second = dtb__308 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Expr_ELocalFun (dtb__307, v_noSpan)); B_dData_dPair.f_Pair_second = dtb__308 }))
+  | { B_dData_dPair.f_Pair_first = dtb__307; B_dData_dPair.f_Pair_second = dtb__308 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Expr_ELocalFun (dtb__307, (Frontend_dAst.v_detachedNodeRef v_noSpan))); B_dData_dPair.f_Pair_second = dtb__308 }))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
@@ -577,7 +577,7 @@ and v_decExpr = (fun (fuel : int) (bytes : Base_dBytes.t_Cur) -> (if (fuel <= 0)
   | B_dData_dMaybe.C_Maybe_Just (dtb__309) -> (match dtb__309 with
   | { B_dData_dPair.f_Pair_first = dtb__310; B_dData_dPair.f_Pair_second = dtb__311 } -> (let nd_uscrut16 = (((Base_dBytes.v_decList v_decPatExpr) (fuel - 1)) dtb__311) in (match nd_uscrut16 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__312) -> (match dtb__312 with
-  | { B_dData_dPair.f_Pair_first = dtb__313; B_dData_dPair.f_Pair_second = dtb__314 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Expr_ECase (dtb__310, dtb__313, v_noSpan)); B_dData_dPair.f_Pair_second = dtb__314 }))
+  | { B_dData_dPair.f_Pair_first = dtb__313; B_dData_dPair.f_Pair_second = dtb__314 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Expr_ECase (dtb__310, dtb__313, (Frontend_dAst.v_detachedNodeRef v_noSpan))); B_dData_dPair.f_Pair_second = dtb__314 }))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
@@ -593,7 +593,7 @@ and v_decExpr = (fun (fuel : int) (bytes : Base_dBytes.t_Cur) -> (if (fuel <= 0)
   | B_dData_dMaybe.C_Maybe_Just (dtb__318) -> (match dtb__318 with
   | { B_dData_dPair.f_Pair_first = dtb__319; B_dData_dPair.f_Pair_second = dtb__320 } -> (let nd_uscrut23 = ((v_decExpr (fuel - 1)) dtb__320) in (match nd_uscrut23 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__321) -> (match dtb__321 with
-  | { B_dData_dPair.f_Pair_first = dtb__322; B_dData_dPair.f_Pair_second = dtb__323 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Expr_EIf (dtb__316, dtb__319, dtb__322, v_noSpan)); B_dData_dPair.f_Pair_second = dtb__323 }))
+  | { B_dData_dPair.f_Pair_first = dtb__322; B_dData_dPair.f_Pair_second = dtb__323 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Expr_EIf (dtb__316, dtb__319, dtb__322, (Frontend_dAst.v_detachedNodeRef v_noSpan))); B_dData_dPair.f_Pair_second = dtb__323 }))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
@@ -612,7 +612,7 @@ and v_decExpr = (fun (fuel : int) (bytes : Base_dBytes.t_Cur) -> (if (fuel <= 0)
   | B_dData_dMaybe.C_Maybe_Just (dtb__324) -> (match dtb__324 with
   | { B_dData_dPair.f_Pair_first = dtb__325; B_dData_dPair.f_Pair_second = dtb__326 } -> (let nd_uscrut16 = ((Base_dBytes.v_decStr (fuel - 1)) dtb__326) in (match nd_uscrut16 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__327) -> (match dtb__327 with
-  | { B_dData_dPair.f_Pair_first = dtb__328; B_dData_dPair.f_Pair_second = dtb__329 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Expr_EField (dtb__325, dtb__328, v_noSpan)); B_dData_dPair.f_Pair_second = dtb__329 }))
+  | { B_dData_dPair.f_Pair_first = dtb__328; B_dData_dPair.f_Pair_second = dtb__329 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Expr_EField (dtb__325, dtb__328, (Frontend_dAst.v_detachedNodeRef v_noSpan))); B_dData_dPair.f_Pair_second = dtb__329 }))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
@@ -626,7 +626,7 @@ and v_decExpr = (fun (fuel : int) (bytes : Base_dBytes.t_Cur) -> (if (fuel <= 0)
   | B_dData_dMaybe.C_Maybe_Just (dtb__330) -> (match dtb__330 with
   | { B_dData_dPair.f_Pair_first = dtb__331; B_dData_dPair.f_Pair_second = dtb__332 } -> (let nd_uscrut16 = (((Base_dBytes.v_decList v_decStrExpr) (fuel - 1)) dtb__332) in (match nd_uscrut16 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__333) -> (match dtb__333 with
-  | { B_dData_dPair.f_Pair_first = dtb__334; B_dData_dPair.f_Pair_second = dtb__335 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Expr_ERecord (dtb__331, dtb__334, v_noSpan)); B_dData_dPair.f_Pair_second = dtb__335 }))
+  | { B_dData_dPair.f_Pair_first = dtb__334; B_dData_dPair.f_Pair_second = dtb__335 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Expr_ERecord (dtb__331, dtb__334, (Frontend_dAst.v_detachedNodeRef v_noSpan))); B_dData_dPair.f_Pair_second = dtb__335 }))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
@@ -640,7 +640,7 @@ and v_decExpr = (fun (fuel : int) (bytes : Base_dBytes.t_Cur) -> (if (fuel <= 0)
   | B_dData_dMaybe.C_Maybe_Just (dtb__336) -> (match dtb__336 with
   | { B_dData_dPair.f_Pair_first = dtb__337; B_dData_dPair.f_Pair_second = dtb__338 } -> (let nd_uscrut16 = (((Base_dBytes.v_decList v_decStrExpr) (fuel - 1)) dtb__338) in (match nd_uscrut16 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__339) -> (match dtb__339 with
-  | { B_dData_dPair.f_Pair_first = dtb__340; B_dData_dPair.f_Pair_second = dtb__341 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Expr_ERecUpdate (dtb__337, dtb__340, v_noSpan)); B_dData_dPair.f_Pair_second = dtb__341 }))
+  | { B_dData_dPair.f_Pair_first = dtb__340; B_dData_dPair.f_Pair_second = dtb__341 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Expr_ERecUpdate (dtb__337, dtb__340, (Frontend_dAst.v_detachedNodeRef v_noSpan))); B_dData_dPair.f_Pair_second = dtb__341 }))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
@@ -652,7 +652,7 @@ and v_decExpr = (fun (fuel : int) (bytes : Base_dBytes.t_Cur) -> (if (fuel <= 0)
   | _ -> failwith "DT: impossible branch"
 )) else (if (dtb__259 = 13) then (let nd_uscrut9 = (((Base_dBytes.v_decList v_decDoStmt) (fuel - 1)) dtb__260) in (match nd_uscrut9 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__342) -> (match dtb__342 with
-  | { B_dData_dPair.f_Pair_first = dtb__343; B_dData_dPair.f_Pair_second = dtb__344 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Expr_EDo (dtb__343, v_noSpan)); B_dData_dPair.f_Pair_second = dtb__344 }))
+  | { B_dData_dPair.f_Pair_first = dtb__343; B_dData_dPair.f_Pair_second = dtb__344 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Expr_EDo (dtb__343, (Frontend_dAst.v_detachedNodeRef v_noSpan))); B_dData_dPair.f_Pair_second = dtb__344 }))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
@@ -663,7 +663,7 @@ and v_decExpr = (fun (fuel : int) (bytes : Base_dBytes.t_Cur) -> (if (fuel <= 0)
   | B_dData_dMaybe.C_Maybe_Just (dtb__348) -> (match dtb__348 with
   | { B_dData_dPair.f_Pair_first = dtb__349; B_dData_dPair.f_Pair_second = dtb__350 } -> (let nd_uscrut23 = ((v_decExpr (fuel - 1)) dtb__350) in (match nd_uscrut23 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__351) -> (match dtb__351 with
-  | { B_dData_dPair.f_Pair_first = dtb__352; B_dData_dPair.f_Pair_second = dtb__353 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Expr_EInfix (dtb__346, dtb__349, dtb__352, v_noSpan)); B_dData_dPair.f_Pair_second = dtb__353 }))
+  | { B_dData_dPair.f_Pair_first = dtb__352; B_dData_dPair.f_Pair_second = dtb__353 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Expr_EInfix (dtb__346, dtb__349, dtb__352, (Frontend_dAst.v_detachedNodeRef v_noSpan))); B_dData_dPair.f_Pair_second = dtb__353 }))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
@@ -680,7 +680,7 @@ and v_decExpr = (fun (fuel : int) (bytes : Base_dBytes.t_Cur) -> (if (fuel <= 0)
   | _ -> failwith "DT: impossible branch"
 )) else (if (dtb__259 = 15) then (let nd_uscrut9 = ((v_decExpr (fuel - 1)) dtb__260) in (match nd_uscrut9 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__354) -> (match dtb__354 with
-  | { B_dData_dPair.f_Pair_first = dtb__355; B_dData_dPair.f_Pair_second = dtb__356 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Expr_EParen (dtb__355, v_noSpan)); B_dData_dPair.f_Pair_second = dtb__356 }))
+  | { B_dData_dPair.f_Pair_first = dtb__355; B_dData_dPair.f_Pair_second = dtb__356 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Expr_EParen (dtb__355, (Frontend_dAst.v_detachedNodeRef v_noSpan))); B_dData_dPair.f_Pair_second = dtb__356 }))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
@@ -691,7 +691,7 @@ and v_decExpr = (fun (fuel : int) (bytes : Base_dBytes.t_Cur) -> (if (fuel <= 0)
   | B_dData_dMaybe.C_Maybe_Just (dtb__360) -> (match dtb__360 with
   | { B_dData_dPair.f_Pair_first = dtb__361; B_dData_dPair.f_Pair_second = dtb__362 } -> (let nd_uscrut23 = ((v_decExpr (fuel - 1)) dtb__362) in (match nd_uscrut23 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__363) -> (match dtb__363 with
-  | { B_dData_dPair.f_Pair_first = dtb__364; B_dData_dPair.f_Pair_second = dtb__365 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Expr_EBacktick (dtb__358, dtb__361, dtb__364, v_noSpan)); B_dData_dPair.f_Pair_second = dtb__365 }))
+  | { B_dData_dPair.f_Pair_first = dtb__364; B_dData_dPair.f_Pair_second = dtb__365 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Expr_EBacktick (dtb__358, dtb__361, dtb__364, (Frontend_dAst.v_detachedNodeRef v_noSpan))); B_dData_dPair.f_Pair_second = dtb__365 }))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
@@ -708,7 +708,7 @@ and v_decExpr = (fun (fuel : int) (bytes : Base_dBytes.t_Cur) -> (if (fuel <= 0)
   | _ -> failwith "DT: impossible branch"
 )) else (if (dtb__259 = 17) then (let nd_uscrut9 = ((Base_dBytes.v_decStr (fuel - 1)) dtb__260) in (match nd_uscrut9 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__366) -> (match dtb__366 with
-  | { B_dData_dPair.f_Pair_first = dtb__367; B_dData_dPair.f_Pair_second = dtb__368 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Expr_ESectOp (dtb__367, v_noSpan)); B_dData_dPair.f_Pair_second = dtb__368 }))
+  | { B_dData_dPair.f_Pair_first = dtb__367; B_dData_dPair.f_Pair_second = dtb__368 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Expr_ESectOp (dtb__367, (Frontend_dAst.v_detachedNodeRef v_noSpan))); B_dData_dPair.f_Pair_second = dtb__368 }))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
@@ -717,7 +717,7 @@ and v_decExpr = (fun (fuel : int) (bytes : Base_dBytes.t_Cur) -> (if (fuel <= 0)
   | B_dData_dMaybe.C_Maybe_Just (dtb__369) -> (match dtb__369 with
   | { B_dData_dPair.f_Pair_first = dtb__370; B_dData_dPair.f_Pair_second = dtb__371 } -> (let nd_uscrut16 = ((v_decExpr (fuel - 1)) dtb__371) in (match nd_uscrut16 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__372) -> (match dtb__372 with
-  | { B_dData_dPair.f_Pair_first = dtb__373; B_dData_dPair.f_Pair_second = dtb__374 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Expr_ESectL (dtb__370, dtb__373, v_noSpan)); B_dData_dPair.f_Pair_second = dtb__374 }))
+  | { B_dData_dPair.f_Pair_first = dtb__373; B_dData_dPair.f_Pair_second = dtb__374 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Expr_ESectL (dtb__370, dtb__373, (Frontend_dAst.v_detachedNodeRef v_noSpan))); B_dData_dPair.f_Pair_second = dtb__374 }))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
@@ -731,7 +731,7 @@ and v_decExpr = (fun (fuel : int) (bytes : Base_dBytes.t_Cur) -> (if (fuel <= 0)
   | B_dData_dMaybe.C_Maybe_Just (dtb__375) -> (match dtb__375 with
   | { B_dData_dPair.f_Pair_first = dtb__376; B_dData_dPair.f_Pair_second = dtb__377 } -> (let nd_uscrut16 = ((Base_dBytes.v_decStr (fuel - 1)) dtb__377) in (match nd_uscrut16 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__378) -> (match dtb__378 with
-  | { B_dData_dPair.f_Pair_first = dtb__379; B_dData_dPair.f_Pair_second = dtb__380 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Expr_ESectR (dtb__376, dtb__379, v_noSpan)); B_dData_dPair.f_Pair_second = dtb__380 }))
+  | { B_dData_dPair.f_Pair_first = dtb__379; B_dData_dPair.f_Pair_second = dtb__380 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Expr_ESectR (dtb__376, dtb__379, (Frontend_dAst.v_detachedNodeRef v_noSpan))); B_dData_dPair.f_Pair_second = dtb__380 }))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
@@ -745,7 +745,7 @@ and v_decExpr = (fun (fuel : int) (bytes : Base_dBytes.t_Cur) -> (if (fuel <= 0)
   | B_dData_dMaybe.C_Maybe_Just (dtb__381) -> (match dtb__381 with
   | { B_dData_dPair.f_Pair_first = dtb__382; B_dData_dPair.f_Pair_second = dtb__383 } -> (let nd_uscrut16 = ((v_decExpr (fuel - 1)) dtb__383) in (match nd_uscrut16 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__384) -> (match dtb__384 with
-  | { B_dData_dPair.f_Pair_first = dtb__385; B_dData_dPair.f_Pair_second = dtb__386 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Expr_EAnn (dtb__382, dtb__385, v_noSpan)); B_dData_dPair.f_Pair_second = dtb__386 }))
+  | { B_dData_dPair.f_Pair_first = dtb__385; B_dData_dPair.f_Pair_second = dtb__386 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Expr_EAnn (dtb__382, dtb__385, (Frontend_dAst.v_detachedNodeRef v_noSpan))); B_dData_dPair.f_Pair_second = dtb__386 }))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
@@ -759,7 +759,7 @@ and v_decExpr = (fun (fuel : int) (bytes : Base_dBytes.t_Cur) -> (if (fuel <= 0)
   | B_dData_dMaybe.C_Maybe_Just (dtb__387) -> (match dtb__387 with
   | { B_dData_dPair.f_Pair_first = dtb__388; B_dData_dPair.f_Pair_second = dtb__389 } -> (let nd_uscrut16 = (((Base_dBytes.v_decList v_decInterpPart) (fuel - 1)) dtb__389) in (match nd_uscrut16 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__390) -> (match dtb__390 with
-  | { B_dData_dPair.f_Pair_first = dtb__391; B_dData_dPair.f_Pair_second = dtb__392 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Expr_EInterp (dtb__388, dtb__391, v_noSpan)); B_dData_dPair.f_Pair_second = dtb__392 }))
+  | { B_dData_dPair.f_Pair_first = dtb__391; B_dData_dPair.f_Pair_second = dtb__392 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Expr_EInterp (dtb__388, dtb__391, (Frontend_dAst.v_detachedNodeRef v_noSpan))); B_dData_dPair.f_Pair_second = dtb__392 }))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
@@ -771,7 +771,7 @@ and v_decExpr = (fun (fuel : int) (bytes : Base_dBytes.t_Cur) -> (if (fuel <= 0)
   | _ -> failwith "DT: impossible branch"
 )) else (if (dtb__259 = 22) then (let nd_uscrut9 = ((Base_dBytes.v_decStr (fuel - 1)) dtb__260) in (match nd_uscrut9 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__393) -> (match dtb__393 with
-  | { B_dData_dPair.f_Pair_first = dtb__394; B_dData_dPair.f_Pair_second = dtb__395 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Expr_EFloat (dtb__394, v_noSpan)); B_dData_dPair.f_Pair_second = dtb__395 }))
+  | { B_dData_dPair.f_Pair_first = dtb__394; B_dData_dPair.f_Pair_second = dtb__395 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Expr_EFloat (dtb__394, (Frontend_dAst.v_detachedNodeRef v_noSpan))); B_dData_dPair.f_Pair_second = dtb__395 }))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
@@ -861,7 +861,7 @@ let v_decCtor = (fun (fuel : int) (bytes : Base_dBytes.t_Cur) -> (if (fuel <= 0)
   | B_dData_dMaybe.C_Maybe_Just (dtb__426) -> (match dtb__426 with
   | { B_dData_dPair.f_Pair_first = dtb__427; B_dData_dPair.f_Pair_second = dtb__428 } -> (let nd_uscrut23 = ((Base_dBytes.v_decInt (fuel - 1)) dtb__428) in (match nd_uscrut23 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__429) -> (match dtb__429 with
-  | { B_dData_dPair.f_Pair_first = dtb__430; B_dData_dPair.f_Pair_second = dtb__431 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = { Frontend_dAst.f_Ctor_ctorName = dtb__424; Frontend_dAst.f_Ctor_ctorType = dtb__427; Frontend_dAst.f_Ctor_ctorArity = dtb__430; Frontend_dAst.f_Ctor_ctorSpan = v_noSpan }; B_dData_dPair.f_Pair_second = dtb__431 }))
+  | { B_dData_dPair.f_Pair_first = dtb__430; B_dData_dPair.f_Pair_second = dtb__431 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = { Frontend_dAst.f_Ctor_ctorName = dtb__424; Frontend_dAst.f_Ctor_ctorType = dtb__427; Frontend_dAst.f_Ctor_ctorArity = dtb__430; Frontend_dAst.f_Ctor_ctorRef = Frontend_dAst.v_noNodeRef }; B_dData_dPair.f_Pair_second = dtb__431 }))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
@@ -890,7 +890,7 @@ let v_decField = (fun (fuel : int) (bytes : Base_dBytes.t_Cur) -> (if (fuel <= 0
   | B_dData_dMaybe.C_Maybe_Just (dtb__435) -> (match dtb__435 with
   | { B_dData_dPair.f_Pair_first = dtb__436; B_dData_dPair.f_Pair_second = dtb__437 } -> (let nd_uscrut16 = ((v_decExpr (fuel - 1)) dtb__437) in (match nd_uscrut16 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__438) -> (match dtb__438 with
-  | { B_dData_dPair.f_Pair_first = dtb__439; B_dData_dPair.f_Pair_second = dtb__440 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = { Frontend_dAst.f_Field_fieldName = dtb__436; Frontend_dAst.f_Field_fieldType = dtb__439; Frontend_dAst.f_Field_fieldSpan = v_noSpan }; B_dData_dPair.f_Pair_second = dtb__440 }))
+  | { B_dData_dPair.f_Pair_first = dtb__439; B_dData_dPair.f_Pair_second = dtb__440 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = { Frontend_dAst.f_Field_fieldName = dtb__436; Frontend_dAst.f_Field_fieldType = dtb__439; Frontend_dAst.f_Field_fieldRef = Frontend_dAst.v_noNodeRef }; B_dData_dPair.f_Pair_second = dtb__440 }))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
@@ -938,7 +938,7 @@ let v_decTraitMethod = (fun (fuel : int) (bytes : Base_dBytes.t_Cur) -> (if (fue
   | B_dData_dMaybe.C_Maybe_Just (dtb__453) -> (match dtb__453 with
   | { B_dData_dPair.f_Pair_first = dtb__454; B_dData_dPair.f_Pair_second = dtb__455 } -> (let nd_uscrut16 = ((v_decExpr (fuel - 1)) dtb__455) in (match nd_uscrut16 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__456) -> (match dtb__456 with
-  | { B_dData_dPair.f_Pair_first = dtb__457; B_dData_dPair.f_Pair_second = dtb__458 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = { Frontend_dAst.f_TraitMethod_traitMethodName = dtb__454; Frontend_dAst.f_TraitMethod_traitMethodType = dtb__457; Frontend_dAst.f_TraitMethod_traitMethodSpan = v_noSpan }; B_dData_dPair.f_Pair_second = dtb__458 }))
+  | { B_dData_dPair.f_Pair_first = dtb__457; B_dData_dPair.f_Pair_second = dtb__458 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = { Frontend_dAst.f_TraitMethod_traitMethodName = dtb__454; Frontend_dAst.f_TraitMethod_traitMethodType = dtb__457; Frontend_dAst.f_TraitMethod_traitMethodRef = Frontend_dAst.v_noNodeRef }; B_dData_dPair.f_Pair_second = dtb__458 }))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
@@ -974,7 +974,7 @@ let rec v_decDecl = (fun (fuel : int) (bytes : Base_dBytes.t_Cur) -> (if (fuel <
   | B_dData_dMaybe.C_Maybe_Just (dtb__480) -> (match dtb__480 with
   | { B_dData_dPair.f_Pair_first = dtb__481; B_dData_dPair.f_Pair_second = dtb__482 } -> (let nd_uscrut58 = ((Base_dBytes.v_decBool (fuel - 1)) dtb__482) in (match nd_uscrut58 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__483) -> (match dtb__483 with
-  | { B_dData_dPair.f_Pair_first = dtb__484; B_dData_dPair.f_Pair_second = dtb__485 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Decl_DData (dtb__463, dtb__466, dtb__469, dtb__472, dtb__475, dtb__478, dtb__481, dtb__484, v_noSpan)); B_dData_dPair.f_Pair_second = dtb__485 }))
+  | { B_dData_dPair.f_Pair_first = dtb__484; B_dData_dPair.f_Pair_second = dtb__485 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Decl_DData (dtb__463, dtb__466, dtb__469, dtb__472, dtb__475, dtb__478, dtb__481, dtb__484, Frontend_dAst.v_noNodeRef)); B_dData_dPair.f_Pair_second = dtb__485 }))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
@@ -1018,7 +1018,7 @@ let rec v_decDecl = (fun (fuel : int) (bytes : Base_dBytes.t_Cur) -> (if (fuel <
   | B_dData_dMaybe.C_Maybe_Just (dtb__486) -> (match dtb__486 with
   | { B_dData_dPair.f_Pair_first = dtb__487; B_dData_dPair.f_Pair_second = dtb__488 } -> (let nd_uscrut16 = ((v_decExpr (fuel - 1)) dtb__488) in (match nd_uscrut16 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__489) -> (match dtb__489 with
-  | { B_dData_dPair.f_Pair_first = dtb__490; B_dData_dPair.f_Pair_second = dtb__491 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Decl_DAxiom (dtb__487, dtb__490, v_noSpan)); B_dData_dPair.f_Pair_second = dtb__491 }))
+  | { B_dData_dPair.f_Pair_first = dtb__490; B_dData_dPair.f_Pair_second = dtb__491 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Decl_DAxiom (dtb__487, dtb__490, Frontend_dAst.v_noNodeRef)); B_dData_dPair.f_Pair_second = dtb__491 }))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
@@ -1034,7 +1034,7 @@ let rec v_decDecl = (fun (fuel : int) (bytes : Base_dBytes.t_Cur) -> (if (fuel <
   | B_dData_dMaybe.C_Maybe_Just (dtb__495) -> (match dtb__495 with
   | { B_dData_dPair.f_Pair_first = dtb__496; B_dData_dPair.f_Pair_second = dtb__497 } -> (let nd_uscrut23 = ((v_decExpr (fuel - 1)) dtb__497) in (match nd_uscrut23 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__498) -> (match dtb__498 with
-  | { B_dData_dPair.f_Pair_first = dtb__499; B_dData_dPair.f_Pair_second = dtb__500 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Decl_DExtern (dtb__493, dtb__496, dtb__499, v_noSpan)); B_dData_dPair.f_Pair_second = dtb__500 }))
+  | { B_dData_dPair.f_Pair_first = dtb__499; B_dData_dPair.f_Pair_second = dtb__500 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Decl_DExtern (dtb__493, dtb__496, dtb__499, Frontend_dAst.v_noNodeRef)); B_dData_dPair.f_Pair_second = dtb__500 }))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
@@ -1055,7 +1055,7 @@ let rec v_decDecl = (fun (fuel : int) (bytes : Base_dBytes.t_Cur) -> (if (fuel <
   | B_dData_dMaybe.C_Maybe_Just (dtb__504) -> (match dtb__504 with
   | { B_dData_dPair.f_Pair_first = dtb__505; B_dData_dPair.f_Pair_second = dtb__506 } -> (let nd_uscrut23 = ((v_decExpr (fuel - 1)) dtb__506) in (match nd_uscrut23 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__507) -> (match dtb__507 with
-  | { B_dData_dPair.f_Pair_first = dtb__508; B_dData_dPair.f_Pair_second = dtb__509 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Decl_DSig (dtb__502, dtb__505, dtb__508, v_noSpan)); B_dData_dPair.f_Pair_second = dtb__509 }))
+  | { B_dData_dPair.f_Pair_first = dtb__508; B_dData_dPair.f_Pair_second = dtb__509 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Decl_DSig (dtb__502, dtb__505, dtb__508, Frontend_dAst.v_noNodeRef)); B_dData_dPair.f_Pair_second = dtb__509 }))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
@@ -1076,7 +1076,7 @@ let rec v_decDecl = (fun (fuel : int) (bytes : Base_dBytes.t_Cur) -> (if (fuel <
   | B_dData_dMaybe.C_Maybe_Just (dtb__513) -> (match dtb__513 with
   | { B_dData_dPair.f_Pair_first = dtb__514; B_dData_dPair.f_Pair_second = dtb__515 } -> (let nd_uscrut23 = ((v_decExpr (fuel - 1)) dtb__515) in (match nd_uscrut23 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__516) -> (match dtb__516 with
-  | { B_dData_dPair.f_Pair_first = dtb__517; B_dData_dPair.f_Pair_second = dtb__518 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Decl_DFun (dtb__511, dtb__514, dtb__517, v_noSpan)); B_dData_dPair.f_Pair_second = dtb__518 }))
+  | { B_dData_dPair.f_Pair_first = dtb__517; B_dData_dPair.f_Pair_second = dtb__518 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Decl_DFun (dtb__511, dtb__514, dtb__517, Frontend_dAst.v_noNodeRef)); B_dData_dPair.f_Pair_second = dtb__518 }))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
@@ -1105,7 +1105,7 @@ let rec v_decDecl = (fun (fuel : int) (bytes : Base_dBytes.t_Cur) -> (if (fuel <
   | B_dData_dMaybe.C_Maybe_Just (dtb__534) -> (match dtb__534 with
   | { B_dData_dPair.f_Pair_first = dtb__535; B_dData_dPair.f_Pair_second = dtb__536 } -> (let nd_uscrut51 = ((Base_dBytes.v_decBool (fuel - 1)) dtb__536) in (match nd_uscrut51 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__537) -> (match dtb__537 with
-  | { B_dData_dPair.f_Pair_first = dtb__538; B_dData_dPair.f_Pair_second = dtb__539 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Decl_DRecord (dtb__520, dtb__523, dtb__526, dtb__529, dtb__532, dtb__535, dtb__538, v_noSpan)); B_dData_dPair.f_Pair_second = dtb__539 }))
+  | { B_dData_dPair.f_Pair_first = dtb__538; B_dData_dPair.f_Pair_second = dtb__539 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Decl_DRecord (dtb__520, dtb__523, dtb__526, dtb__529, dtb__532, dtb__535, dtb__538, Frontend_dAst.v_noNodeRef)); B_dData_dPair.f_Pair_second = dtb__539 }))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
@@ -1148,7 +1148,7 @@ let rec v_decDecl = (fun (fuel : int) (bytes : Base_dBytes.t_Cur) -> (if (fuel <
   | B_dData_dMaybe.C_Maybe_Just (dtb__546) -> (match dtb__546 with
   | { B_dData_dPair.f_Pair_first = dtb__547; B_dData_dPair.f_Pair_second = dtb__548 } -> (let nd_uscrut30 = (((Base_dBytes.v_decList v_decTraitMethod) (fuel - 1)) dtb__548) in (match nd_uscrut30 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__549) -> (match dtb__549 with
-  | { B_dData_dPair.f_Pair_first = dtb__550; B_dData_dPair.f_Pair_second = dtb__551 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Decl_DTrait (dtb__541, dtb__544, dtb__547, dtb__550, v_noSpan)); B_dData_dPair.f_Pair_second = dtb__551 }))
+  | { B_dData_dPair.f_Pair_first = dtb__550; B_dData_dPair.f_Pair_second = dtb__551 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Decl_DTrait (dtb__541, dtb__544, dtb__547, dtb__550, Frontend_dAst.v_noNodeRef)); B_dData_dPair.f_Pair_second = dtb__551 }))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
@@ -1174,7 +1174,7 @@ let rec v_decDecl = (fun (fuel : int) (bytes : Base_dBytes.t_Cur) -> (if (fuel <
   | B_dData_dMaybe.C_Maybe_Just (dtb__555) -> (match dtb__555 with
   | { B_dData_dPair.f_Pair_first = dtb__556; B_dData_dPair.f_Pair_second = dtb__557 } -> (let nd_uscrut23 = ((v_decDecls (fuel - 1)) dtb__557) in (match nd_uscrut23 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__558) -> (match dtb__558 with
-  | { B_dData_dPair.f_Pair_first = dtb__559; B_dData_dPair.f_Pair_second = dtb__560 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Decl_DInstance (dtb__553, dtb__556, dtb__559, v_noSpan)); B_dData_dPair.f_Pair_second = dtb__560 }))
+  | { B_dData_dPair.f_Pair_first = dtb__559; B_dData_dPair.f_Pair_second = dtb__560 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Decl_DInstance (dtb__553, dtb__556, dtb__559, Frontend_dAst.v_noNodeRef)); B_dData_dPair.f_Pair_second = dtb__560 }))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
@@ -1383,7 +1383,7 @@ let v_encFixityLike = (fun (f : Frontend_dAst.t_FixityDecl) (acc : string B_dDat
 let v_encSourceFile = (fun (f : Frontend_dAst.t_SourceFile) (acc : string B_dData_dList.t_List) -> (((Base_dBytes.v_encMaybe v_encModDecl) (f).Frontend_dAst.f_SourceFile_sourceFileModDecl) (((Base_dBytes.v_encList v_encImportLike) (f).Frontend_dAst.f_SourceFile_sourceFileImports) (((Base_dBytes.v_encList v_encFixityLike) (f).Frontend_dAst.f_SourceFile_sourceFileFixities) (((Base_dBytes.v_encList v_encDecl) (f).Frontend_dAst.f_SourceFile_sourceFileDecls) (((Base_dBytes.v_encList v_encExportSpec) (f).Frontend_dAst.f_SourceFile_sourceFileExports) (((Base_dBytes.v_encList v_encExportItem) (f).Frontend_dAst.f_SourceFile_sourceFileReexports) (((Base_dBytes.v_encList v_encOpacitySpec) (f).Frontend_dAst.f_SourceFile_sourceFileOpacity) acc))))))))
 
 # 1077 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
-let v_decExportItem = (fun (fuel : int) (c : Base_dBytes.t_Cur) -> (if (fuel <= 0) then B_dData_dMaybe.C_Maybe_Nothing else ((Base_dBytes.v_thenPair ((Base_dBytes.v_decTag fuel) c)) (fun (tag : int) (b1 : Base_dBytes.t_Cur) -> (if (tag = 0) then ((Base_dBytes.v_thenPair ((Base_dBytes.v_decStr (fuel - 1)) b1)) (fun (n : string) (b2 : Base_dBytes.t_Cur) -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_ExportItem_XBare (n, v_noSpan)); B_dData_dPair.f_Pair_second = b2 })))) else (if (tag = 1) then ((Base_dBytes.v_thenPair ((Base_dBytes.v_decStr (fuel - 1)) b1)) (fun (n : string) (b2 : Base_dBytes.t_Cur) -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_ExportItem_XTypeAll (n, v_noSpan)); B_dData_dPair.f_Pair_second = b2 })))) else (if (tag = 3) then ((Base_dBytes.v_thenPair ((Base_dBytes.v_decStr (fuel - 1)) b1)) (fun (n : string) (b2 : Base_dBytes.t_Cur) -> ((Base_dBytes.v_thenPair (((Base_dBytes.v_decList Base_dBytes.v_decStr) (fuel - 1)) b2)) (fun (ms : string B_dData_dList.t_List) (b3 : Base_dBytes.t_Cur) -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_ExportItem_XTypeSome (n, ms, v_noSpan)); B_dData_dPair.f_Pair_second = b3 })))))) else (if (tag = 2) then ((Base_dBytes.v_thenPair ((Base_dBytes.v_decStr (fuel - 1)) b1)) (fun (n : string) (b2 : Base_dBytes.t_Cur) -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_ExportItem_XModule (n, v_noSpan)); B_dData_dPair.f_Pair_second = b2 })))) else (if (tag = 4) then ((Base_dBytes.v_thenPair ((Base_dBytes.v_decStr (fuel - 1)) b1)) (fun (n : string) (b2 : Base_dBytes.t_Cur) -> ((Base_dBytes.v_thenPair (((Base_dBytes.v_decMaybe Base_dBytes.v_decStr) (fuel - 1)) b2)) (fun (alias : string B_dData_dMaybe.t_Maybe) (b3 : Base_dBytes.t_Cur) -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_ExportItem_XNamespace (n, alias, v_noSpan)); B_dData_dPair.f_Pair_second = b3 })))))) else B_dData_dMaybe.C_Maybe_Nothing)))))))))
+let v_decExportItem = (fun (fuel : int) (c : Base_dBytes.t_Cur) -> (if (fuel <= 0) then B_dData_dMaybe.C_Maybe_Nothing else ((Base_dBytes.v_thenPair ((Base_dBytes.v_decTag fuel) c)) (fun (tag : int) (b1 : Base_dBytes.t_Cur) -> (if (tag = 0) then ((Base_dBytes.v_thenPair ((Base_dBytes.v_decStr (fuel - 1)) b1)) (fun (n : string) (b2 : Base_dBytes.t_Cur) -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_ExportItem_XBare (n, Frontend_dAst.v_noNodeRef)); B_dData_dPair.f_Pair_second = b2 })))) else (if (tag = 1) then ((Base_dBytes.v_thenPair ((Base_dBytes.v_decStr (fuel - 1)) b1)) (fun (n : string) (b2 : Base_dBytes.t_Cur) -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_ExportItem_XTypeAll (n, Frontend_dAst.v_noNodeRef)); B_dData_dPair.f_Pair_second = b2 })))) else (if (tag = 3) then ((Base_dBytes.v_thenPair ((Base_dBytes.v_decStr (fuel - 1)) b1)) (fun (n : string) (b2 : Base_dBytes.t_Cur) -> ((Base_dBytes.v_thenPair (((Base_dBytes.v_decList Base_dBytes.v_decStr) (fuel - 1)) b2)) (fun (ms : string B_dData_dList.t_List) (b3 : Base_dBytes.t_Cur) -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_ExportItem_XTypeSome (n, ms, Frontend_dAst.v_noNodeRef)); B_dData_dPair.f_Pair_second = b3 })))))) else (if (tag = 2) then ((Base_dBytes.v_thenPair ((Base_dBytes.v_decStr (fuel - 1)) b1)) (fun (n : string) (b2 : Base_dBytes.t_Cur) -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_ExportItem_XModule (n, Frontend_dAst.v_noNodeRef)); B_dData_dPair.f_Pair_second = b2 })))) else (if (tag = 4) then ((Base_dBytes.v_thenPair ((Base_dBytes.v_decStr (fuel - 1)) b1)) (fun (n : string) (b2 : Base_dBytes.t_Cur) -> ((Base_dBytes.v_thenPair (((Base_dBytes.v_decMaybe Base_dBytes.v_decStr) (fuel - 1)) b2)) (fun (alias : string B_dData_dMaybe.t_Maybe) (b3 : Base_dBytes.t_Cur) -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_ExportItem_XNamespace (n, alias, Frontend_dAst.v_noNodeRef)); B_dData_dPair.f_Pair_second = b3 })))))) else B_dData_dMaybe.C_Maybe_Nothing)))))))))
 
 # 1093 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
 let v_decExportMembers = (fun (fuel : int) (c : Base_dBytes.t_Cur) -> (if (fuel <= 0) then B_dData_dMaybe.C_Maybe_Nothing else ((Base_dBytes.v_thenPair ((Base_dBytes.v_decTag fuel) c)) (fun (tag : int) (b1 : Base_dBytes.t_Cur) -> (if (tag = 0) then (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = Frontend_dAst.C_ExportMembers_EMNone; B_dData_dPair.f_Pair_second = b1 })) else (if (tag = 1) then (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = Frontend_dAst.C_ExportMembers_EMAll; B_dData_dPair.f_Pair_second = b1 })) else (if (tag = 2) then ((Base_dBytes.v_thenPair (((Base_dBytes.v_decList Base_dBytes.v_decStr) (fuel - 1)) b1)) (fun (ms : string B_dData_dList.t_List) (b2 : Base_dBytes.t_Cur) -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_ExportMembers_EMOnly (ms)); B_dData_dPair.f_Pair_second = b2 })))) else B_dData_dMaybe.C_Maybe_Nothing)))))))
@@ -1398,13 +1398,13 @@ let v_decOpacity = (fun (fuel : int) (c : Base_dBytes.t_Cur) -> (if (fuel <= 0) 
 let v_decOpacitySpec = (fun (fuel : int) (c : Base_dBytes.t_Cur) -> ((Base_dBytes.v_thenPair ((Base_dBytes.v_decStr (fuel - 1)) c)) (fun (name : string) (b1 : Base_dBytes.t_Cur) -> ((Base_dBytes.v_thenPair ((v_decOpacity (fuel - 1)) b1)) (fun (kind : Frontend_dAst.t_Opacity) (b2 : Base_dBytes.t_Cur) -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = { Frontend_dAst.f_OpacitySpec_opacityName = name; Frontend_dAst.f_OpacitySpec_opacityKind = kind; Frontend_dAst.f_OpacitySpec_opacitySpan = v_noSpan }; B_dData_dPair.f_Pair_second = b2 })))))))
 
 # 1141 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
-let v_decModDecl = (fun (fuel : int) (c : Base_dBytes.t_Cur) -> ((Base_dBytes.v_thenPair ((Base_dBytes.v_decStr (fuel - 1)) c)) (fun (name : string) (b1 : Base_dBytes.t_Cur) -> ((Base_dBytes.v_thenPair ((Base_dBytes.v_decBool (fuel - 1)) b1)) (fun (hasList : bool) (b2 : Base_dBytes.t_Cur) -> ((Base_dBytes.v_thenPair (((Base_dBytes.v_decList v_decExportItem) (fuel - 1)) b2)) (fun (items : Frontend_dAst.t_ExportItem B_dData_dList.t_List) (b3 : Base_dBytes.t_Cur) -> ((Base_dBytes.v_thenPair (((Base_dBytes.v_decList v_decExportSpec) (fuel - 1)) b3)) (fun (exports : Frontend_dAst.t_ExportSpec B_dData_dList.t_List) (b4 : Base_dBytes.t_Cur) -> ((Base_dBytes.v_thenPair (((Base_dBytes.v_decList v_decExportItem) (fuel - 1)) b4)) (fun (reexports : Frontend_dAst.t_ExportItem B_dData_dList.t_List) (b5 : Base_dBytes.t_Cur) -> ((Base_dBytes.v_thenPair (((Base_dBytes.v_decList v_decOpacitySpec) (fuel - 1)) b5)) (fun (opacity : Frontend_dAst.t_OpacitySpec B_dData_dList.t_List) (b6 : Base_dBytes.t_Cur) -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = { Frontend_dAst.f_ModDecl_modDeclName = name; Frontend_dAst.f_ModDecl_modDeclHasExportList = hasList; Frontend_dAst.f_ModDecl_modDeclExportItems = items; Frontend_dAst.f_ModDecl_modDeclExports = exports; Frontend_dAst.f_ModDecl_modDeclReexports = reexports; Frontend_dAst.f_ModDecl_modDeclOpacity = opacity; Frontend_dAst.f_ModDecl_modDeclSpan = v_noSpan }; B_dData_dPair.f_Pair_second = b6 })))))))))))))))
+let v_decModDecl = (fun (fuel : int) (c : Base_dBytes.t_Cur) -> ((Base_dBytes.v_thenPair ((Base_dBytes.v_decStr (fuel - 1)) c)) (fun (name : string) (b1 : Base_dBytes.t_Cur) -> ((Base_dBytes.v_thenPair ((Base_dBytes.v_decBool (fuel - 1)) b1)) (fun (hasList : bool) (b2 : Base_dBytes.t_Cur) -> ((Base_dBytes.v_thenPair (((Base_dBytes.v_decList v_decExportItem) (fuel - 1)) b2)) (fun (items : Frontend_dAst.t_ExportItem B_dData_dList.t_List) (b3 : Base_dBytes.t_Cur) -> ((Base_dBytes.v_thenPair (((Base_dBytes.v_decList v_decExportSpec) (fuel - 1)) b3)) (fun (exports : Frontend_dAst.t_ExportSpec B_dData_dList.t_List) (b4 : Base_dBytes.t_Cur) -> ((Base_dBytes.v_thenPair (((Base_dBytes.v_decList v_decExportItem) (fuel - 1)) b4)) (fun (reexports : Frontend_dAst.t_ExportItem B_dData_dList.t_List) (b5 : Base_dBytes.t_Cur) -> ((Base_dBytes.v_thenPair (((Base_dBytes.v_decList v_decOpacitySpec) (fuel - 1)) b5)) (fun (opacity : Frontend_dAst.t_OpacitySpec B_dData_dList.t_List) (b6 : Base_dBytes.t_Cur) -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = { Frontend_dAst.f_ModDecl_modDeclName = name; Frontend_dAst.f_ModDecl_modDeclHasExportList = hasList; Frontend_dAst.f_ModDecl_modDeclExportItems = items; Frontend_dAst.f_ModDecl_modDeclExports = exports; Frontend_dAst.f_ModDecl_modDeclReexports = reexports; Frontend_dAst.f_ModDecl_modDeclOpacity = opacity; Frontend_dAst.f_ModDecl_modDeclRef = Frontend_dAst.v_noNodeRef }; B_dData_dPair.f_Pair_second = b6 })))))))))))))))
 
 # 1147 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
-let v_decImportLike = (fun (fuel : int) (c : Base_dBytes.t_Cur) -> ((Base_dBytes.v_thenPair ((Base_dBytes.v_decStr (fuel - 1)) c)) (fun (name : string) (b1 : Base_dBytes.t_Cur) -> ((Base_dBytes.v_thenPair ((Base_dBytes.v_decBool (fuel - 1)) b1)) (fun (qual : bool) (b2 : Base_dBytes.t_Cur) -> ((Base_dBytes.v_thenPair (((Base_dBytes.v_decMaybe Base_dBytes.v_decStr) (fuel - 1)) b2)) (fun (alias : string B_dData_dMaybe.t_Maybe) (b3 : Base_dBytes.t_Cur) -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = { Frontend_dAst.f_Import_importName = name; Frontend_dAst.f_Import_importIsQualified = qual; Frontend_dAst.f_Import_importAlias = alias; Frontend_dAst.f_Import_importSpan = v_noSpan }; B_dData_dPair.f_Pair_second = b3 })))))))))
+let v_decImportLike = (fun (fuel : int) (c : Base_dBytes.t_Cur) -> ((Base_dBytes.v_thenPair ((Base_dBytes.v_decStr (fuel - 1)) c)) (fun (name : string) (b1 : Base_dBytes.t_Cur) -> ((Base_dBytes.v_thenPair ((Base_dBytes.v_decBool (fuel - 1)) b1)) (fun (qual : bool) (b2 : Base_dBytes.t_Cur) -> ((Base_dBytes.v_thenPair (((Base_dBytes.v_decMaybe Base_dBytes.v_decStr) (fuel - 1)) b2)) (fun (alias : string B_dData_dMaybe.t_Maybe) (b3 : Base_dBytes.t_Cur) -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = { Frontend_dAst.f_Import_importName = name; Frontend_dAst.f_Import_importIsQualified = qual; Frontend_dAst.f_Import_importAlias = alias; Frontend_dAst.f_Import_importRef = Frontend_dAst.v_noNodeRef }; B_dData_dPair.f_Pair_second = b3 })))))))))
 
 # 1153 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
-let v_decFixityLike = (fun (fuel : int) (c : Base_dBytes.t_Cur) -> ((Base_dBytes.v_thenPair ((Base_dBytes.v_decStr (fuel - 1)) c)) (fun (op : string) (b1 : Base_dBytes.t_Cur) -> ((Base_dBytes.v_thenPair ((Base_dBytes.v_decInt (fuel - 1)) b1)) (fun (level : int) (b2 : Base_dBytes.t_Cur) -> ((Base_dBytes.v_thenPair ((Base_dBytes.v_decInt (fuel - 1)) b2)) (fun (assoc : int) (b3 : Base_dBytes.t_Cur) -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = { Frontend_dAst.f_FixityDecl_fixityOp = op; Frontend_dAst.f_FixityDecl_fixityLevel = level; Frontend_dAst.f_FixityDecl_fixityAssoc = assoc; Frontend_dAst.f_FixityDecl_fixitySpan = v_noSpan }; B_dData_dPair.f_Pair_second = b3 })))))))))
+let v_decFixityLike = (fun (fuel : int) (c : Base_dBytes.t_Cur) -> ((Base_dBytes.v_thenPair ((Base_dBytes.v_decStr (fuel - 1)) c)) (fun (op : string) (b1 : Base_dBytes.t_Cur) -> ((Base_dBytes.v_thenPair ((Base_dBytes.v_decInt (fuel - 1)) b1)) (fun (level : int) (b2 : Base_dBytes.t_Cur) -> ((Base_dBytes.v_thenPair ((Base_dBytes.v_decInt (fuel - 1)) b2)) (fun (assoc : int) (b3 : Base_dBytes.t_Cur) -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = { Frontend_dAst.f_FixityDecl_fixityOp = op; Frontend_dAst.f_FixityDecl_fixityLevel = level; Frontend_dAst.f_FixityDecl_fixityAssoc = assoc; Frontend_dAst.f_FixityDecl_fixityRef = Frontend_dAst.v_noNodeRef }; B_dData_dPair.f_Pair_second = b3 })))))))))
 
 # 1166 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
 let v_decSourceFileGo = (fun (fuel : int) (c : Base_dBytes.t_Cur) -> ((Base_dBytes.v_thenPair (((Base_dBytes.v_decMaybe v_decModDecl) (fuel - 1)) c)) (fun (modDecl : Frontend_dAst.t_ModDecl B_dData_dMaybe.t_Maybe) (b1 : Base_dBytes.t_Cur) -> ((Base_dBytes.v_thenPair (((Base_dBytes.v_decList v_decImportLike) (fuel - 1)) b1)) (fun (imports : Frontend_dAst.t_Import B_dData_dList.t_List) (b2 : Base_dBytes.t_Cur) -> ((Base_dBytes.v_thenPair (((Base_dBytes.v_decList v_decFixityLike) (fuel - 1)) b2)) (fun (fixities : Frontend_dAst.t_FixityDecl B_dData_dList.t_List) (b3 : Base_dBytes.t_Cur) -> ((Base_dBytes.v_thenPair (((Base_dBytes.v_decList v_decDecl) (fuel - 1)) b3)) (fun (decls : Frontend_dAst.t_Decl B_dData_dList.t_List) (b4 : Base_dBytes.t_Cur) -> ((Base_dBytes.v_thenPair (((Base_dBytes.v_decList v_decExportSpec) (fuel - 1)) b4)) (fun (exports : Frontend_dAst.t_ExportSpec B_dData_dList.t_List) (b5 : Base_dBytes.t_Cur) -> ((Base_dBytes.v_thenPair (((Base_dBytes.v_decList v_decExportItem) (fuel - 1)) b5)) (fun (reexports : Frontend_dAst.t_ExportItem B_dData_dList.t_List) (b6 : Base_dBytes.t_Cur) -> ((Base_dBytes.v_thenPair (((Base_dBytes.v_decList v_decOpacitySpec) (fuel - 1)) b6)) (fun (opacity : Frontend_dAst.t_OpacitySpec B_dData_dList.t_List) (b7 : Base_dBytes.t_Cur) -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = { Frontend_dAst.f_SourceFile_sourceFileModDecl = modDecl; Frontend_dAst.f_SourceFile_sourceFileImports = imports; Frontend_dAst.f_SourceFile_sourceFileFixities = fixities; Frontend_dAst.f_SourceFile_sourceFileDecls = decls; Frontend_dAst.f_SourceFile_sourceFileExports = exports; Frontend_dAst.f_SourceFile_sourceFileReexports = reexports; Frontend_dAst.f_SourceFile_sourceFileOpacity = opacity }; B_dData_dPair.f_Pair_second = b7 })))))))))))))))))

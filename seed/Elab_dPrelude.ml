@@ -78,45 +78,45 @@ let v_preludeTypeGlobals = ((B_dData_dList.v_append ((B_dData_dList.v_map (fun (
 # 129 "Vuna/Compiler/Elab/Prelude.vuna"
 let v_preludeValueGlobals = ((B_dData_dList.v_map (fun (i : Base_dIntrinsics.t_Intrinsic) -> { B_dData_dPair.f_Pair_first = (Base_dIntrinsics.v_intrinsicName i); B_dData_dPair.f_Pair_second = (v_ityToTerm (Base_dIntrinsics.v_intrinsicSignature i)) })) Base_dIntrinsics.v_userIntrinsics)
 
-# 135 "Vuna/Compiler/Elab/Prelude.vuna"
+# 134 "Vuna/Compiler/Elab/Prelude.vuna"
 let v_internalValueGlobals = ((B_dData_dList.v_map (fun (i : Base_dIntrinsics.t_Intrinsic) -> { B_dData_dPair.f_Pair_first = (Base_dIntrinsics.v_intrinsicName i); B_dData_dPair.f_Pair_second = (v_ityToTerm (Base_dIntrinsics.v_intrinsicSignature i)) })) Base_dIntrinsics.v_internalIntrinsics)
 
-# 139 "Vuna/Compiler/Elab/Prelude.vuna"
+# 138 "Vuna/Compiler/Elab/Prelude.vuna"
 let v_preludeGlobals = ((B_dData_dList.v_append v_preludeTypeGlobals) ((B_dData_dList.v_append v_preludeValueGlobals) v_internalValueGlobals))
 
-# 144 "Vuna/Compiler/Elab/Prelude.vuna"
+# 143 "Vuna/Compiler/Elab/Prelude.vuna"
 let v_preludeNames = ((B_dData_dList.v_append Base_dIntrinsics.v_preludeTypeNames) Base_dIntrinsics.v_preludeValueNames)
 
-# 148 "Vuna/Compiler/Elab/Prelude.vuna"
+# 147 "Vuna/Compiler/Elab/Prelude.vuna"
 let v_builtinEqTyName = (fun (v : Core_dTerm.t_Value) -> (match (v_builtinTyName v) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__18) -> (if (dtb__18 = Base_dIntrinsics.v_intTypeName) then (B_dData_dMaybe.C_Maybe_Just (Base_dIntrinsics.v_intTypeName)) else (if (dtb__18 = Base_dIntrinsics.v_strTypeName) then (B_dData_dMaybe.C_Maybe_Just (Base_dIntrinsics.v_strTypeName)) else (if (dtb__18 = Base_dIntrinsics.v_floatTypeName) then (B_dData_dMaybe.C_Maybe_Just (Base_dIntrinsics.v_floatTypeName)) else B_dData_dMaybe.C_Maybe_Nothing)))
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 161 "Vuna/Compiler/Elab/Prelude.vuna"
+# 160 "Vuna/Compiler/Elab/Prelude.vuna"
 let v_cmpBuiltinTyName = (fun (v : Core_dTerm.t_Value) -> (match (v_builtinTyName v) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__19) -> (if ((B_dData_dList.v_memName dtb__19) Base_dIntrinsics.v_cmpSpecializedTyNames) then (B_dData_dMaybe.C_Maybe_Just (dtb__19)) else B_dData_dMaybe.C_Maybe_Nothing)
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 169 "Vuna/Compiler/Elab/Prelude.vuna"
+# 168 "Vuna/Compiler/Elab/Prelude.vuna"
 let rec v_prependParams = (fun (mc0 : string B_dData_dList.t_List) (mc1 : Core_dTerm.t_Term) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__20, dtb__21) -> (Core_dTerm.C_Term_TPi (dtb__20, false, Core_dTerm.C_Rig_Rig0, (Core_dTerm.C_Term_TType (Core_dTerm.v_levelZero)), ((v_prependParams dtb__21) mc1)))
   | B_dData_dList.C_List_Nil -> mc1
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 177 "Vuna/Compiler/Elab/Prelude.vuna"
+# 176 "Vuna/Compiler/Elab/Prelude.vuna"
 let v_baseNameOf = (fun (name : string) -> (Base_dSource.v_lastSeg name))
 
-# 184 "Vuna/Compiler/Elab/Prelude.vuna"
+# 183 "Vuna/Compiler/Elab/Prelude.vuna"
 let rec v_classMethodProjectionGo = (fun (mc0 : string) (mc1 : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc2 : string) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__22, dtb__23) -> (if ((v_baseNameOf (B_dData_dPair.v_firstOf dtb__22)) = mc0) then (B_dData_dPair.v_firstOf dtb__22) else (((v_classMethodProjectionGo mc0) dtb__23) mc2))
   | B_dData_dList.C_List_Nil -> mc2
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 181 "Vuna/Compiler/Elab/Prelude.vuna"
+# 180 "Vuna/Compiler/Elab/Prelude.vuna"
 let v_classMethodProjection = (fun (methods : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List) (short : string) -> (((v_classMethodProjectionGo short) methods) short))

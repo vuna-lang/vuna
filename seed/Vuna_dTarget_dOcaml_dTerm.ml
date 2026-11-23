@@ -843,7 +843,7 @@ let rec v_genGroupDefs = (fun (mc0 : t_GenSt) (mc1 : Vuna_dIr_dModel.t_IrDef B_d
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 2382 "Vuna/Target/Ocaml/Term.vuna"
+# 2381 "Vuna/Target/Ocaml/Term.vuna"
 let v_renderDefOf = (fun (mc0 : Vuna_dTarget_dOcaml_dModel.t_ODef) -> (match mc0 with
   | Vuna_dTarget_dOcaml_dModel.C_ODef_ODExternal (dtb__372, dtb__373, dtb__374) -> (String.concat "" ["external "; dtb__372; " : "; dtb__373; " = "; (Vuna_dTarget_dOcaml_dDecl.v_ocamlString dtb__374)])
   | Vuna_dTarget_dOcaml_dModel.C_ODef_ODValue (dtb__375, dtb__376) -> (String.concat "" [dtb__375; " = "; (Vuna_dTarget_dOcaml_dRender.v_renderTerm dtb__376)])
@@ -898,17 +898,17 @@ let rec v_genGroups = (fun (mc0 : t_GenSt) (mc1 : Vuna_dIr_dModel.t_IrGroup B_dD
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 2422 "Vuna/Target/Ocaml/Term.vuna"
+# 2421 "Vuna/Target/Ocaml/Term.vuna"
 let rec v_foldHandlers = (fun (mc0 : t_GenSt) (mc1 : string) (mc2 : string B_dData_dList.t_List) -> (match mc2 with
   | B_dData_dList.C_List__x58__x58_ (dtb__394, dtb__395) -> (let p = ((v_genValueRef mc0) dtb__394) in (((v_foldHandlers (B_dData_dPair.v_secondOf p)) (String.concat "" ["("; (B_dData_dPair.v_firstOf p); " "; mc1; ")"])) dtb__395))
   | B_dData_dList.C_List_Nil -> { B_dData_dPair.f_Pair_first = mc1; B_dData_dPair.f_Pair_second = mc0 }
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 2429 "Vuna/Target/Ocaml/Term.vuna"
+# 2428 "Vuna/Target/Ocaml/Term.vuna"
 let v_hookText = (fun (showText : string) (body : string) (printResult : bool) -> (let action = (if printResult then (String.concat "" ["print_endline ("; showText; " ("; body; "))"]) else (String.concat "" ["ignore ("; body; ")"])) in (String.concat "" ["\nlet () =\n  Printexc.record_backtrace true;\n  try "; action; "\n  with e -> dt_report_exn e (Printexc.get_raw_backtrace ()); exit 2\n"])))
 
-# 2394 "Vuna/Target/Ocaml/Term.vuna"
+# 2393 "Vuna/Target/Ocaml/Term.vuna"
 let v_genEntryHook = (fun (st : t_GenSt) (entry : Vuna_dIr_dModel.t_IrEntry) (printResult : bool) -> ((Base_dCommon.v_bind ((v_genIr st) (Vuna_dIr_dModel.v_irEntryShowOf entry))) (fun (sp : (Vuna_dTarget_dOcaml_dModel.t_OTerm, t_GenSt) B_dData_dPair.t_Pair) -> (match sp with
   | { B_dData_dPair.f_Pair_first = dtb__396; B_dData_dPair.f_Pair_second = dtb__397 } -> (if (Vuna_dIr_dModel.v_irEntryIsActionOf entry) then (match (Vuna_dIr_dModel.v_irEntryRunMainOf entry) with
   | B_dData_dMaybe.C_Maybe_Nothing -> (Base_dDiag.v_icInternal "action entry has no runMain")

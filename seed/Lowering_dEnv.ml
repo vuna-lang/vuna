@@ -328,7 +328,7 @@ let v_lowerSharedOf = (fun (datas : Elab_dTypes.t_DtData B_dData_dList.t_List) (
 # 460 "Vuna/Compiler/Lowering/Env.vuna"
 let v_ctorOpaqueTableOf = (fun (datas : Elab_dTypes.t_DtData B_dData_dList.t_List) -> ((B_dData_dList.v_concatMap (fun (d : Elab_dTypes.t_DtData) -> ((B_dData_dList.v_map (fun (c : Elab_dTypes.t_DtCtor) -> { B_dData_dPair.f_Pair_first = (Elab_dTypes.v_dtCtorName c); B_dData_dPair.f_Pair_second = ((v_ctorOpaqueFlagsOf datas) c) })) (Elab_dTypes.v_dtDataCtors d)))) datas))
 
-# 482 "Vuna/Compiler/Lowering/Env.vuna"
+# 480 "Vuna/Compiler/Lowering/Env.vuna"
 let rec v_eraseDefsGo = (fun (mc0 : (string, bool) B_dContainer_dHashMap.t_HashMap) (mc1 : Elab_dTypes.t_DtDef B_dData_dList.t_List) (mc2 : Elab_dTypes.t_DtDef B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__119, dtb__120) -> (match dtb__119 with
   | Elab_dTypes.C_DtDef_DtDef (dtb__121, dtb__122, dtb__123, dtb__124) -> (if ((((B_dContainer_dHashMap.v_member B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) dtb__121) mc0) then ((Base_dCommon.v_bind (Lowering_dErased.v_eraseTerm dtb__123)) (fun (body2 : Core_dTerm.t_Term) -> (((v_eraseDefsGo mc0) dtb__120) (B_dData_dList.C_List__x58__x58_ ((Elab_dTypes.C_DtDef_DtDef (dtb__121, dtb__122, body2, dtb__124)), mc2))))) else (((v_eraseDefsGo mc0) dtb__120) (B_dData_dList.C_List__x58__x58_ (dtb__119, mc2))))
@@ -338,58 +338,58 @@ let rec v_eraseDefsGo = (fun (mc0 : (string, bool) B_dContainer_dHashMap.t_HashM
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 475 "Vuna/Compiler/Lowering/Env.vuna"
+# 473 "Vuna/Compiler/Lowering/Env.vuna"
 let v_eraseDefs = (fun (defs : Elab_dTypes.t_DtDef B_dData_dList.t_List) -> (let runtimeNames = ((B_dData_dList.v_map Elab_dTypes.v_dtDefName) (B_dData_dPair.v_firstOf ((Lowering_dChecks.v_partitionDefs (Lowering_dChecks.v_defTable defs)) defs))) in (let runtimeTbl = ((((B_dContainer_dHashMap.v_insertAll B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) ((B_dData_dList.v_map (fun (n : string) -> { B_dData_dPair.f_Pair_first = n; B_dData_dPair.f_Pair_second = true })) runtimeNames)) (((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) B_dData_dList.C_List_Nil)) in (((v_eraseDefsGo runtimeTbl) defs) B_dData_dList.C_List_Nil))))
 
-# 538 "Vuna/Compiler/Lowering/Env.vuna"
+# 534 "Vuna/Compiler/Lowering/Env.vuna"
 let v_intrinsicUseFlagsTbl = ((((B_dContainer_dHashMap.v_insertAll B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) ((B_dData_dList.v_append ((B_dData_dList.v_map (fun (n : string) -> { B_dData_dPair.f_Pair_first = n; B_dData_dPair.f_Pair_second = { Lowering_dChecks.f_UseFlags_useFlagsFloat = true; Lowering_dChecks.f_UseFlags_useFlagsTrace = false; Lowering_dChecks.f_UseFlags_useFlagsObs = false } })) Base_dIntrinsics.v_floatIntrinsicNames)) ((B_dData_dList.v_append ((B_dData_dList.v_map (fun (n : string) -> { B_dData_dPair.f_Pair_first = n; B_dData_dPair.f_Pair_second = { Lowering_dChecks.f_UseFlags_useFlagsFloat = false; Lowering_dChecks.f_UseFlags_useFlagsTrace = true; Lowering_dChecks.f_UseFlags_useFlagsObs = false } })) Base_dIntrinsics.v_traceIntrinsicNames)) ((B_dData_dList.v_map (fun (n : string) -> { B_dData_dPair.f_Pair_first = n; B_dData_dPair.f_Pair_second = { Lowering_dChecks.f_UseFlags_useFlagsFloat = false; Lowering_dChecks.f_UseFlags_useFlagsTrace = false; Lowering_dChecks.f_UseFlags_useFlagsObs = true } })) Base_dIntrinsics.v_obsIntrinsicNames)))) (((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) B_dData_dList.C_List_Nil))
 
-# 544 "Vuna/Compiler/Lowering/Env.vuna"
+# 540 "Vuna/Compiler/Lowering/Env.vuna"
 let v_useFlagsOfName = (fun (name : string) -> (match ((((B_dContainer_dHashMap.v_lookup B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) name) v_intrinsicUseFlagsTbl) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__125) -> dtb__125
   | B_dData_dMaybe.C_Maybe_Nothing -> Lowering_dChecks.v_noUseFlags
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 531 "Vuna/Compiler/Lowering/Env.vuna"
+# 527 "Vuna/Compiler/Lowering/Env.vuna"
 let v_defFactsOf = (fun (names : (string, bool) B_dContainer_dHashMap.t_HashMap) (d : Elab_dTypes.t_DtDef) -> (match (Elab_dTypes.v_dtDefBody d) with
   | B_dData_dMaybe.C_Maybe_Nothing -> { Lowering_dChecks.f_TermUse_termUseDeps = B_dData_dList.C_List_Nil; Lowering_dChecks.f_TermUse_termUseFlags = Lowering_dChecks.v_noUseFlags; Lowering_dChecks.f_TermUse_termUseFloatLit = false }
   | B_dData_dMaybe.C_Maybe_Just (dtb__126) -> (((Lowering_dChecks.v_termUseInto names) v_useFlagsOfName) dtb__126)
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 551 "Vuna/Compiler/Lowering/Env.vuna"
+# 547 "Vuna/Compiler/Lowering/Env.vuna"
 let rec v_defTblOf = (fun (mc0 : Elab_dTypes.t_DtDef B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__127, dtb__128) -> (((((B_dContainer_dHashMap.v_insert B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) (Elab_dTypes.v_dtDefName dtb__127)) dtb__127) (v_defTblOf dtb__128))
   | B_dData_dList.C_List_Nil -> (((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) B_dData_dList.C_List_Nil)
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 556 "Vuna/Compiler/Lowering/Env.vuna"
+# 552 "Vuna/Compiler/Lowering/Env.vuna"
 let v_strTblOf = (fun pairs -> ((((B_dContainer_dHashMap.v_insertAll B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) pairs) (((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) B_dData_dList.C_List_Nil)))
 
-# 560 "Vuna/Compiler/Lowering/Env.vuna"
+# 556 "Vuna/Compiler/Lowering/Env.vuna"
 let v_dataTblOf = (fun (datas : Elab_dTypes.t_DtData B_dData_dList.t_List) -> ((((B_dContainer_dHashMap.v_insertAll B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) ((B_dData_dList.v_map (fun (d : Elab_dTypes.t_DtData) -> { B_dData_dPair.f_Pair_first = (Elab_dTypes.v_dtDataName d); B_dData_dPair.f_Pair_second = d })) datas)) (((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) B_dData_dList.C_List_Nil)))
 
-# 564 "Vuna/Compiler/Lowering/Env.vuna"
+# 560 "Vuna/Compiler/Lowering/Env.vuna"
 let rec v_hasDataNamed = (fun (mc0 : string) (mc1 : Elab_dTypes.t_DtData B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__129, dtb__130) -> (if ((Elab_dTypes.v_dtDataName dtb__129) = mc0) then true else ((v_hasDataNamed mc0) dtb__130))
   | B_dData_dList.C_List_Nil -> false
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 568 "Vuna/Compiler/Lowering/Env.vuna"
+# 564 "Vuna/Compiler/Lowering/Env.vuna"
 let rec v_nameSetOf = (fun (mc0 : string B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__131, dtb__132) -> (((((B_dContainer_dHashMap.v_insert B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) dtb__131) true) (v_nameSetOf dtb__132))
   | B_dData_dList.C_List_Nil -> (((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) B_dData_dList.C_List_Nil)
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 521 "Vuna/Compiler/Lowering/Env.vuna"
+# 519 "Vuna/Compiler/Lowering/Env.vuna"
 let v_defFactsTblOf = (fun (defs : Elab_dTypes.t_DtDef B_dData_dList.t_List) -> (let names = (v_nameSetOf (B_dData_dList.C_List__x58__x58_ ("strFromFloat", (Lowering_dChecks.v_runtimeNamesOf defs)))) in ((((B_dContainer_dHashMap.v_insertAll B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) ((B_dData_dList.v_map (fun (d : Elab_dTypes.t_DtDef) -> { B_dData_dPair.f_Pair_first = (Elab_dTypes.v_dtDefName d); B_dData_dPair.f_Pair_second = ((v_defFactsOf names) d) })) defs)) (((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) B_dData_dList.C_List_Nil))))
 
-# 496 "Vuna/Compiler/Lowering/Env.vuna"
+# 494 "Vuna/Compiler/Lowering/Env.vuna"
 let v_mkLwEnvFromErased = (fun (datas : Elab_dTypes.t_DtData B_dData_dList.t_List) (defs : Elab_dTypes.t_DtDef B_dData_dList.t_List) (origDefs : Elab_dTypes.t_DtDef B_dData_dList.t_List) (globals : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List) (unit : string) -> (let facts = (v_defFactsTblOf defs) in (let shared = (((v_lowerSharedOf datas) defs) facts) in (let runtime = (v_rtDatasOf datas) in { f_LwEnv_lwShared = shared; f_LwEnv_lwDatas = runtime; f_LwEnv_lwDataTbl = (v_dataTblOf runtime); f_LwEnv_lwTyParams = (v_strTblOf (v_tyParamsOf runtime)); f_LwEnv_lwUnboxedInfo = (Elab_dRepresentation.v_unboxedInfoOf runtime); f_LwEnv_lwRecordFields = (v_strTblOf (shared).Vuna_dIr_dModel.f_IrShared_irSharedRecordFields); f_LwEnv_lwCtors = (v_strTblOf (v_ctorTableOf runtime)); f_LwEnv_lwOpaques = (v_strTblOf (v_ctorOpaqueTableOf runtime)); f_LwEnv_lwUnboxed = (B_dContainer_dHashMap.v_ofNames (Elab_dRepresentation.v_unboxedFamilySet runtime)); f_LwEnv_lwHasListFamily = ((v_hasDataNamed Base_dIntrinsics.v_listFamilyName) datas); f_LwEnv_lwDefs = defs; f_LwEnv_lwOrigDefs = origDefs; f_LwEnv_lwDefTbl = (v_defTblOf defs); f_LwEnv_lwGlobals = (v_strTblOf globals); f_LwEnv_lwFacts = facts; f_LwEnv_lwUnit = unit }))))
 
-# 467 "Vuna/Compiler/Lowering/Env.vuna"
+# 465 "Vuna/Compiler/Lowering/Env.vuna"
 let v_mkLwEnv = (fun (datas : Elab_dTypes.t_DtData B_dData_dList.t_List) (defs : Elab_dTypes.t_DtDef B_dData_dList.t_List) (globals : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List) (unit : string) -> ((Base_dCommon.v_bind (v_eraseDefs defs)) (fun (defs2 : Elab_dTypes.t_DtDef B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC ((((((v_mkLwEnvFromErased datas) defs2) defs) globals) unit))))))

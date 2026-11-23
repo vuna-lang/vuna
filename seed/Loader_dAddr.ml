@@ -19,7 +19,7 @@ let v_fixRowOf = (fun (f : Frontend_dAst.t_FixityDecl) -> { f_FixRow_frOp = (f).
 
 # 67 "Vuna/Compiler/Loader/Addr.vuna"
 let v_importNameOf = (fun (mc0 : Frontend_dAst.t_Import) -> (match mc0 with
-  | { Frontend_dAst.f_Import_importName = dtb__0; Frontend_dAst.f_Import_importIsQualified = dtb__1; Frontend_dAst.f_Import_importAlias = dtb__2; Frontend_dAst.f_Import_importSpan = dtb__3 } -> dtb__0
+  | { Frontend_dAst.f_Import_importName = dtb__0; Frontend_dAst.f_Import_importIsQualified = dtb__1; Frontend_dAst.f_Import_importAlias = dtb__2; Frontend_dAst.f_Import_importRef = dtb__3 } -> dtb__0
   | _ -> failwith "DT: impossible branch"
 ))
 

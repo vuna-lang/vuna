@@ -69,7 +69,7 @@ let v_exportsOf = (fun (manifest : Frontend_dManifest.t_Manifest) -> (match (man
 ))
 
 # 181 "Vuna/Compiler/Frontend/Packages/Source.vuna"
-let v_depKeyOf = (fun (dep : Frontend_dManifest.t_Dependency) -> { B_dData_dPair.f_Pair_first = (Frontend_dManifest.v_depAliasOf dep); B_dData_dPair.f_Pair_second = (match (Frontend_dManifest.v_depIdentityOf dep) with
+let v_depKeyOf = (fun (dep : Frontend_dManifest.t_Dependency) -> (let key = (match (Frontend_dManifest.v_depIdentityOf dep) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__14) -> (v_normalizeHash dtb__14)
   | B_dData_dMaybe.C_Maybe_Nothing -> (match (Frontend_dManifest.v_depHashOf dep) with
   | B_dData_dMaybe.C_Maybe_Nothing -> "path"
@@ -77,7 +77,7 @@ let v_depKeyOf = (fun (dep : Frontend_dManifest.t_Dependency) -> { B_dData_dPair
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
-) })
+) in { B_dData_dPair.f_Pair_first = (Frontend_dManifest.v_depAliasOf dep); B_dData_dPair.f_Pair_second = key }))
 
 # 159 "Vuna/Compiler/Frontend/Packages/Source.vuna"
 let v_packageSourceEff = (fun (nFs : string) (root : string) (manifest : Frontend_dManifest.t_Manifest) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((v_packageFilesEff nFs) root)) (fun filesR -> (match filesR with
@@ -86,8 +86,8 @@ let v_packageSourceEff = (fun (nFs : string) (root : string) (manifest : Fronten
   | _ -> failwith "DT: impossible branch"
 ))))
 
-# 193 "Vuna/Compiler/Frontend/Packages/Source.vuna"
+# 194 "Vuna/Compiler/Frontend/Packages/Source.vuna"
 let v_contentHashOf = (fun (ps : Frontend_dCanonical_dPkg.t_PackageSource) -> (Base_dHash.v_contentAddress (Frontend_dCanonical_dPkg.v_encPackageContent (ps).Frontend_dCanonical_dPkg.f_PackageSource_psFiles)))
 
-# 197 "Vuna/Compiler/Frontend/Packages/Source.vuna"
+# 198 "Vuna/Compiler/Frontend/Packages/Source.vuna"
 let v_identityHashOf = (fun (ps : Frontend_dCanonical_dPkg.t_PackageSource) -> (Base_dHash.v_contentAddress (Frontend_dCanonical_dPkg.v_encPackageIdentity (Frontend_dCanonical_dPkg.v_identityOfSource ps))))

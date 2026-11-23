@@ -74,7 +74,7 @@ let rec v_layersOfRoot = (fun (mc0 : Frontend_dPackages_dPkg.t_Root B_dData_dLis
 ))
 
 # 90 "Vuna/Compiler/Loader/Layers.vuna"
-let v_withImportSpan = (fun (imp : Frontend_dAst.t_Import) (e : Base_dDiag.t_Diagnostic) -> (if ((Base_dSource.v_spanFile (imp).Frontend_dAst.f_Import_importSpan) = "") then e else ((Base_dDiag.v_withFallbackSpan (imp).Frontend_dAst.f_Import_importSpan) e)))
+let v_withImportSpan = (fun (imp : Frontend_dAst.t_Import) (e : Base_dDiag.t_Diagnostic) -> (if ((Base_dSource.v_spanFile (Frontend_dAst.v_importSpan imp)) = "") then e else ((Base_dDiag.v_withFallbackSpan (Frontend_dAst.v_importSpan imp)) e)))
 
 # 94 "Vuna/Compiler/Loader/Layers.vuna"
 let rec v_checkImports = (fun (mc0 : Frontend_dManifest.t_Layer B_dData_dList.t_List) (mc1 : Frontend_dManifest.t_Layer B_dData_dList.t_List) (mc2 : string) (mc3 : string) (mc4 : string) (mc5 : Loader_dModules.t_Module B_dData_dList.t_List) (mc6 : Frontend_dAst.t_Import B_dData_dList.t_List) -> (match mc6 with
