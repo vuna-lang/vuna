@@ -1,7 +1,8 @@
-# lint：AST 驱动的 dispatch 提升、列表字面量归一与自动修复
+# lint：AST 驱动的 dispatch 提升、列表/元组字面量归一与自动修复
 
 本文记录 `vuna lint` 的规则、可修复判据与语料。实现入口是
-`packages/toolchain/lib/Vuna/Lint/Rules.vuna`（dispatch 判定、提升渲染、列表链检测、源码切片）、
+`packages/toolchain/lib/Vuna/Lint/Rules.vuna`（dispatch 判定、提升渲染、列表链与 `Pair` 应用检测、
+源码切片）、
 `packages/toolchain/lib/Vuna/Lint/Fix.vuna`（应用 Edit 的多轮循环）、`packages/toolchain/lib/Vuna/Lint.vuna`（CLI 与输出）、
 `packages/toolchain/lib/Vuna/Lint/Config.vuna`（`vuna.toml [lint]`）、`packages/toolchain/lib/Vuna/Lint/Suppress.vuna`（源码抑制）、
 `packages/toolchain/lib/Vuna/Lint/Diagnostics.vuna`（规则枚举：
@@ -45,6 +46,7 @@ exclude = ["test/**", "examples/**"]
 literal-if-chain = "error"      # off | warn | error
 dispatch-lift = "error"
 list-literal = "error"
+pair-sugar = "off"               # 默认关闭；all 预设可开
 todo-marker = "off"              # 默认关闭；all 预设可开
 redundant-if = "off"             # 默认关闭；all 预设可开
 ```
@@ -100,9 +102,14 @@ token 的起点，模板字面量（`TTmpl`）的 span end 是字面量结束后
 
 `list-literal` 在 `walkExprGo` 的应用/变量位置与 dispatch 同趟检查（模板插值洞用
 `allow=False` 跳过）；类型位置（签名、axiom/extern、data kind/构造子、record 字段、
-trait 方法、instance 上下文/head/方法）仍由 `declFindings` 的 `walkListLiteral` 扫描。模板插值洞
+trait 方法、instance 上下文/head/方法）仍由 `declFindings` 的 `walkTypeSyntax` 扫描。模板插值洞
 （`EInterp` 的 `IPHole`）跳过：lint 的顶层 token 列表不含洞内 token，`exprText` 无法
 可靠切片（已知边界，见 §6）。
+
+`pair-sugar` 复用同一批遍历：表达式位置接在 `walkAppList`，类型位置接在 `walkTypeSyntax`，
+模式位置由 `walkPairPat` 覆盖（clause 头、case alt、let 绑定、do 绑定、局部函数 clause 与
+`handle` op 子句）；元素原文按表达式 / 模式的字节 span 切片（括号节点保留括号），避免把
+紧邻的 `)` / `,` 卷进来。
 
 ## 3. 规则概览
 
@@ -134,12 +141,13 @@ let 值里的 if）需要上下文分发（case-of-case），会复制代码与�
 | `LN_LiteralIfChain` | `literal-if-chain` | 是 | if dispatch（`x == lit` 链 / Bool 变量）在可提升位置；字面量链提升失败时改写为 case |
 | `LN_DispatchLift` | `dispatch-lift` | 是 | case / let dispatch 在可提升位置（单 alt 替换、多 alt 拆 clause / alt） |
 | `LN_ListLiteral` | `list-literal` | 是 | 表达式/类型位置的闭合 cons 链（`::` / `Cons` + `[]` / `Nil`）与裸 `Nil`；**模式匹配不动** |
+| `LN_PairSugar` | `pair-sugar` | 是 | 表达式/类型/模式位置的显式 `Pair a b` 应用；默认关闭，`--select` / all 预设启用 |
 | `LN_TodoMarker` | `todo-marker` | 否 | 注释里的 `TODO` / `FIXME` / `XXX`；默认关闭，`--select` / all 预设启用 |
 | `LN_RedundantIf` | `redundant-if` | 是 | `if True/False then a else b` 的常量条件；默认关闭，`--select` / all 预设启用 |
 
 dispatch 两条规则（`literal-if-chain` / `dispatch-lift`）共用同一套 lane 判定与 as-pattern
-渲染，区别只在 dispatch 源（if 链 vs case / let）。`list-literal` 与 dispatch 同趟遍历，
-但判据独立（不是 dispatch 提升），见 §3.3。
+渲染，区别只在 dispatch 源（if 链 vs case / let）。`list-literal` / `pair-sugar` 与 dispatch 同趟遍历，
+但判据独立（不是 dispatch 提升），见 §3.3 / §3.4。
 
 ### 3.1 `literal-if-chain`
 
@@ -220,6 +228,25 @@ clause（多 alt 拆分）；外层是嵌套 alt 时该 alt 是父 case 的最�
   仍保留：它们测试的是构造子名解析 / 同名重载，不是列表语法覆盖；corpus 不在
   `checks.vuna-lint` 门禁内。
 
+### 3.4 `pair-sugar`
+
+- **触发**：表达式 / 类型位置的显式 `Pair` 应用 `EApp (EVar "Pair") [a, b]`，以及模式位置的
+  `PCon "Pair" [a, b]`（clause 头、case alt、let 绑定、do 绑定、局部函数 clause、`handle` op
+  子句）。右嵌套链展平：`Pair a (Pair b c)` → `(a, b, c)`；左嵌套 `Pair (Pair a b) c` →
+  `((a, b), c)`（内层由下一轮修复处理）。
+- **不触发**：裸名 `Pair`（值传递 / 部分应用）、实参不是恰好两个、带模块前缀的名字
+  （`Pair.Pair`）、记录字段模式 `Pair { first = a, second = b }`、元组语法本身、模板插值洞。
+- **为什么等价**：元组语法由 parser 编成 `@vuna@tuple@pair` 保留名，`Loader.Resolve` 把它还原成
+  与显式写法相同的 `Pair` 应用 / 构造子模式；改写只换语法，不改名字解析结果（`Pair` 在显式
+  写法里可见，说明元组语法要求的作用域已经满足）。
+- **可修复判据**：整个应用 / 模式单行；被替换行无 `--` / `{-` / tab / CR；每个元素能按 span
+  切出原文。修复文本是 `(e1, e2, ...)`，并剥离**紧邻**的成对括号
+  （`first (Pair a b)` → `first (a, b)`，不会写成双括号）。
+- **不可修复形态仍报告**（跨行、含注释 / tab），`--fix` 不写文件并在输出标
+  ` (not auto-fixable)`。
+- 只按裸名 `Pair` 判定，不做作用域名字解析：同名函数 / 用户自定义 `Pair` 由 `vuna check`
+  裁决（与 `list-literal` 对 `Cons` / `Nil` 的边界一致）。
+
 ## 4. 语料与测试
 
 原生 suite 的 `lint` / `fix` family（`test/suite.toml`，kind `lint` / `fix`）：
@@ -233,7 +260,8 @@ clause（多 alt 拆分）；外层是嵌套 alt 时该 alt 是父 case 的最�
   as-pattern 与模板字符串分支；20 覆盖 `list-literal`：表达式/类型位置、括号剥离、
   `Cons` / 裸 `Nil`、注释行不修、幂等）。
 - `packages/cli/test/steps/39_lint_cli.steps`：`vuna.toml [lint]`、源码抑制、`--format json`
-  （含结束位置与 fixable）、以及「未知规则只由 lint 认领、`vuna check` 仍通过」。
+  （含结束位置与 fixable）、「未知规则只由 lint 认领、`vuna check` 仍通过」，以及
+  `--select pair-sugar` 的报告 / `--fix` / 幂等 / 修完 `check` 通过。
 - `nix/checks/vuna-lint.sh`：workspace 默认目标 + `--max-warnings 0`。
 
 ## 5. as-pattern 生成
@@ -260,9 +288,12 @@ Bool / 字面量分派同样适用：`keep b = if b then b else b` → `keep b@T
 - **dispatch 规则只报告可安全自动修复的形态**：不可安全折叠的情形（非最后 clause、clause
   head 跨行、含注释 / tab / CR、分支体无法安全收束等）**不报告**（语料期望为空输出）。
   `list-literal` 例外：不可修复的闭合链 / 裸 `Nil` 仍报告（`--fix` 标 not auto-fixable），
-  因为「应写成列表字面量」本身是确定的。
+  因为「应写成列表字面量」本身是确定的；`pair-sugar` 同样把跨行 / 含注释的 `Pair` 应用
+  报告为 not auto-fixable。
 - **`list-literal` 的模板插值洞跳过**：lint 只拿到顶层 token 列表，`EInterp` 洞内 token
   不可见，切片右边界不可靠；formatter 同样不保留洞内注释（已知边界）。
+- **`pair-sugar` 只认裸名 `Pair`**：带模块前缀的名字、记录字段模式、裸 `Pair`（值传递 /
+  部分应用）与模板插值洞不处理；作用域语义由 `vuna check` 裁决。
 - **提升只在直接体**：嵌套 dispatch 需要上下文分发，lint 不做；保持原形。
 - **子句拆分只对单 clause 函数**：多 clause 函数里拆子句可能暴露 unreachable clause，
   因此 `if` / `case` 的 clause 拆分都要求 `countFunClauses == 1`；多 clause 函数的 Bool

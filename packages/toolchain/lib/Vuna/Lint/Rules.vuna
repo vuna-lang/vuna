@@ -1,5 +1,5 @@
--- | lint 的规则实现：AST 驱动的 dispatch 规则（`literal-if-chain`、`dispatch-lift`）与列表
--- 字面量规则（`list-literal`），以及从源码切片的辅助工具。
+-- | lint 的规则实现：AST 驱动的 dispatch 规则（`literal-if-chain`、`dispatch-lift`）与字面量
+-- 归一规则（`list-literal`、`pair-sugar`），以及从源码切片的辅助工具。
 --
 -- `lintSourceWith` 先 parseSource 得到 AST，规则判定全部走 AST；需要源码原文（字面量、模式、
 -- 分支体）时用 span 加 token 边界从源码切片，不重新渲染字符串字面量。产出的编辑用行范围表示
@@ -11,6 +11,7 @@
 -- 或更细的 alt，字面量链提升不了时回退成 case。`dispatch-lift` 处理 case / let 分派：单 alt
 -- 替换外层变量，多 alt 拆 clause 或拆 alt。`list-literal` 把表达式与类型位置的闭合 cons 链
 -- （`::` / `Cons` 加 `[]` / `Nil`）以及裸 `Nil` 改写成 `[a, b]` / `[]`，模式匹配不动。
+-- `pair-sugar` 把表达式 / 类型 / 模式位置的显式 `Pair` 应用改写成元组语法 `(a, b)`。
 --
 -- 提升只发生在 clause/alt 的直接体上；嵌在表达式里的 dispatch 需要 case-of-case 上下文分发，
 -- 会复制代码，因此不做。clause 拆分要求该名字只有一条 clause，alt 拆分/替换要求该 alt 是最后
@@ -1656,16 +1657,16 @@ walkHandlePayload allow fuel src comp ret opH =
     let
       retFindings =
         case ret of
-          ELam _ body _ => walkExprGo allow (fuel - 1) src body
+          ELam ps body _ => walkExprGo allow (fuel - 1) src body
           _ => []
       opFindings =
         case opH of
-          ELam _ (ECase _ alts _) _ => walkHandleAlts allow (fuel - 1) src alts
-          ELam _ body _ => walkExprGo allow (fuel - 1) src body
+          ELam ps (ECase _ alts _) _ => walkHandleAlts allow (fuel - 1) src alts
+          ELam ps body _ => walkExprGo allow (fuel - 1) src body
           _ => []
     in append (append (walkExprGo allow (fuel - 1) src comp) retFindings) opFindings
 
--- | 内部：遍历 op 处理器各 alt 的体。
+-- | 内部：遍历 op 处理器各 alt 的模式与体。
 walkHandleAlts : Bool -> Int -> LintSrc -> List (Pair Pat Expr) -> List Finding
 walkHandleAlts allow fuel src alts =
   if fuel <= 0 then
@@ -1673,7 +1674,7 @@ walkHandleAlts allow fuel src alts =
   else
     case alts of
       [] => []
-      (Pair _ body) :: rest => append (walkExprGo allow (fuel - 1) src body) (walkHandleAlts allow (fuel - 1) src rest)
+      (Pair pat body) :: rest => append (walkPairPat allow (fuel - 1) src pat) (append (walkExprGo allow (fuel - 1) src body) (walkHandleAlts allow (fuel - 1) src rest))
 
 -- | 内部：按构造子遍历表达式，收集各规则的 finding（不静默丢子树）。
 walkExpr : Int -> LintSrc -> Expr -> List Finding
@@ -1718,18 +1719,21 @@ walkExprGo allow fuel src e =
       -- 模板字面量：洞内表达式同样参与规则遍历。
       EInterp multi parts _ => walkInterpParts allow (fuel - 1) src parts
 
--- | 内部：应用位置的 list-literal 检查；闭合链只产出一次并继续遍历元素。
+-- | 内部：应用位置的 list-literal / pair-sugar 检查；闭合链只产出一次并继续遍历元素。
 walkAppList : Bool -> Int -> LintSrc -> Expr -> List Finding
 walkAppList allow fuel src e =
-  case consHeadOf e of
-    Just (Pair h t) =>
-      case consElems fuel e of
-        Just elems => append (consFindings src e elems) (walkExprs allow fuel src elems)
-        Nothing => append (walkExprGo allow fuel src h) (walkExprGo allow fuel src t)
+  case pairSugarElems fuel e of
+    Just elems => append (pairFindings src e elems) (walkExprs allow fuel src elems)
     Nothing =>
-      case e of
-        EApp fn args _ => append (walkExprGo allow fuel src fn) (walkExprs allow fuel src args)
-        _ => []
+      case consHeadOf e of
+        Just (Pair h t) =>
+          case consElems fuel e of
+            Just elems => append (consFindings src e elems) (walkExprs allow fuel src elems)
+            Nothing => append (walkExprGo allow fuel src h) (walkExprGo allow fuel src t)
+        Nothing =>
+          case e of
+            EApp fn args _ => append (walkExprGo allow fuel src fn) (walkExprs allow fuel src args)
+            _ => []
 
 -- | 内部：遍历模板字面量各段里的洞表达式。
 walkInterpParts : Bool -> Int -> LintSrc -> List InterpPart -> List Finding
@@ -1772,7 +1776,7 @@ walkFields allow fuel src fields =
       [] => []
       (Pair f e) :: rest => append (walkExprGo allow (fuel - 1) src e) (walkFields allow (fuel - 1) src rest)
 
--- | 内部：遍历 let 绑定右值。
+-- | 内部：遍历 let 绑定右值与绑定模式。
 walkBinds : Bool -> Int -> LintSrc -> List (Pair Pat Expr) -> List Finding
 walkBinds allow fuel src binds =
   if fuel <= 0 then
@@ -1780,9 +1784,9 @@ walkBinds allow fuel src binds =
   else
     case binds of
       [] => []
-      (Pair pat e) :: rest => append (walkExprGo allow (fuel - 1) src e) (walkBinds allow (fuel - 1) src rest)
+      (Pair pat e) :: rest => append (walkPairPat allow (fuel - 1) src pat) (append (walkExprGo allow (fuel - 1) src e) (walkBinds allow (fuel - 1) src rest))
 
--- | 内部：逐个 alt 体按 lane 上下文扫描（最后一个 alt 标记为 isLast）。
+-- | 内部：逐个 alt 的模式与体按 lane 上下文扫描（最后一个 alt 标记为 isLast）。
 walkAlts : Bool -> Int -> LintSrc -> List (Pair Pat Expr) -> List Finding
 walkAlts allow fuel src alts =
   if fuel <= 0 then
@@ -1793,9 +1797,9 @@ walkAlts allow fuel src alts =
       (Pair pat body) :: rest =>
         let
           lane = LAlt (spanStartLine (patSpan pat)) pat (isNilList rest)
-        in append (scanBodyPos (fuel - 1) src (Just lane) body) (walkAlts allow (fuel - 1) src rest)
+        in append (walkPairPat allow (fuel - 1) src pat) (append (scanBodyPos (fuel - 1) src (Just lane) body) (walkAlts allow (fuel - 1) src rest))
 
--- | 内部：遍历局部函数 clause 体（不提供 lane，因此不做 clause 级提升）。
+-- | 内部：遍历局部函数 clause 的模式与体（不提供 lane，因此不做 clause 级提升）。
 walkLocalClauses : Bool -> Int -> LintSrc -> List (Pair (List Pat) Expr) -> List Finding
 walkLocalClauses allow fuel src clauses =
   if fuel <= 0 then
@@ -1803,7 +1807,7 @@ walkLocalClauses allow fuel src clauses =
   else
     case clauses of
       [] => []
-      (Pair pats body) :: rest => append (walkExprGo allow (fuel - 1) src body) (walkLocalClauses allow (fuel - 1) src rest)
+      (Pair pats body) :: rest => append (walkPairPats allow (fuel - 1) src pats) (append (walkExprGo allow (fuel - 1) src body) (walkLocalClauses allow (fuel - 1) src rest))
 
 -- | 内部：遍历 do 语句列表。
 walkStmts : Bool -> Int -> LintSrc -> List DoStmt -> List Finding
@@ -1815,14 +1819,14 @@ walkStmts allow fuel src stmts =
       [] => []
       stmt :: rest => append (walkStmt allow (fuel - 1) src stmt) (walkStmts allow (fuel - 1) src rest)
 
--- | 内部：遍历单条 do 语句的表达式。
+-- | 内部：遍历单条 do 语句的绑定模式与表达式。
 walkStmt : Bool -> Int -> LintSrc -> DoStmt -> List Finding
 walkStmt allow fuel src stmt =
   if fuel <= 0 then
     lintFuelExhausted "traversal"
   else
     case stmt of
-      DBind pat e sp => walkExprGo allow (fuel - 1) src e
+      DBind pat e sp => append (walkPairPat allow (fuel - 1) src pat) (walkExprGo allow (fuel - 1) src e)
       DExpr e sp => walkExprGo allow (fuel - 1) src e
       DLet binds sp => walkBinds allow (fuel - 1) src binds
 
@@ -1958,114 +1962,283 @@ nilFinding src e =
       (exprEdit src e "[]")
   ]
 
--- | 内部：按构造子遍历表达式，收集 list-literal finding（不进入模式）。
-walkListLiteral : Int -> LintSrc -> Expr -> List Finding
-walkListLiteral fuel src e =
+-- ---------------------------------------------------------------
+-- 规则 5：pair-sugar（显式 Pair 应用 → 元组语法）
+--
+-- `Pair a b` 在值 / 类型位置是 `EApp (EVar "Pair") [a, b]`，在模式位置是
+-- `PCon "Pair" [a, b]`；元组语法 `(a, b)` 由 parser 编成保留名、由 Loader 还原成同一个
+-- `Pair` 应用 / 模式，所以这条改写只换语法、不改名字解析结果。只认裸名 `Pair`，不做作用域
+-- 名字解析；恰好两个实参之外（部分应用 / 值传递）与模板插值洞不处理。
+-- ---------------------------------------------------------------
+-- | 内部：pair 链的元素表：`e` 是 `Pair` / 元组保留名应用时右嵌套展开，否则就是单元素。
+pairTailElems : Int -> Expr -> List Expr
+pairTailElems fuel e =
   if fuel <= 0 then
-    lintFuelExhausted "list literal traversal"
+    lintFuelExhausted "pair chain"
+  else
+    case e of
+      EApp (EVar name _) ([a, b]) _ => if name == "Pair" || isTuplePairSyntax name then a :: pairTailElems (fuel - 1) b else [e]
+      _ => [e]
+
+-- | 内部：显式 `Pair` 应用的元素表（头部必须是裸 `Pair`）；元组语法本身不报。
+pairSugarElems : Int -> Expr -> Maybe (List Expr)
+pairSugarElems fuel e =
+  if fuel <= 0 then
+    lintFuelExhausted "pair chain"
+  else
+    case e of
+      EApp (EVar name _) ([a, b]) _ => if name == "Pair" then Just (a :: pairTailElems (fuel - 1) b) else Nothing
+      _ => Nothing
+
+-- | 内部：pair 元素的单行原文：按表达式自身（括号节点含括号）的字节 span 切片，避免相邻的
+-- `)` / `,` 被卷进来；跨行或偏移不完整时回落到 `exprText`。
+pairElemText : LintSrc -> Expr -> String
+pairElemText src e =
+  let
+    sp = nodeRefSpan (exprRef e)
+    start = spanStartOffset sp
+    end = spanEndOffset sp
+  in if not (exprSingleLine e) then
+    ""
+  else if end <= start || start == 0 && spanStartCol sp > 1 then
+    exprText src e
+  else
+    trimEnd (sliceOffsets src start end)
+
+-- | 内部：pair 应用的单行 finding 与编辑：元素原文齐全时改写成 `(a, b)`，否则只报告 `(...)`。
+pairFindings : LintSrc -> Expr -> List Expr -> List Finding
+pairFindings src e elems =
+  let
+    texts = map (pairElemText src) elems
+    suggestion = if allNonEmpty texts then "(" ++ join ", " texts ++ ")" else "(...)"
+    edit = if allNonEmpty texts then exprEdit src e suggestion else Nothing
+  in [
+    mkFindingAt
+      (exprStartLine e)
+      (exprStartCol e)
+      (exprSpan e)
+      PairSugar
+      (lintMsg PairSugar suggestion)
+      edit
+  ]
+
+-- | 内部：pair 模式的元素表：`p` 是 `Pair` / 元组保留名模式时右嵌套展开，否则就是单元素。
+pairPatTailElems : Int -> Pat -> List Pat
+pairPatTailElems fuel p =
+  if fuel <= 0 then
+    lintFuelExhausted "pair pattern chain"
+  else
+    case p of
+      PCon name ([a, b]) _ => if name == "Pair" || isTuplePairSyntax name then a :: pairPatTailElems (fuel - 1) b else [p]
+      _ => [p]
+
+-- | 内部：显式 `Pair` 模式应用的元素表（头部必须是裸 `Pair`）；元组模式本身不报。
+pairPatSugarElems : Int -> Pat -> Maybe (List Pat)
+pairPatSugarElems fuel p =
+  if fuel <= 0 then
+    lintFuelExhausted "pair pattern chain"
+  else
+    case p of
+      PCon name ([a, b]) _ => if name == "Pair" then Just (a :: pairPatTailElems (fuel - 1) b) else Nothing
+      _ => Nothing
+
+-- | 内部：模式的单行原文；偏移完整时按 span 字节切片（`spanEndOffset` 是开区间），
+-- 否则回落到行列路径。跨行时为空串（不能安全切片）。
+patText1 : LintSrc -> Pat -> String
+patText1 src pat =
+  let
+    sp = patSpan pat
+    start = spanStartOffset sp
+    end = spanEndOffset sp
+  in if not (spanSingleLine sp) then
+    ""
+  else if end <= start || start == 0 && spanStartCol sp > 1 then
+    patText src pat
+  else
+    trimEnd (sliceOffsets src start end)
+
+-- | 内部：把单行模式替换成 replacement 的编辑；跨行、含注释或定位不到末列时 `Nothing`。
+patEdit : LintSrc -> Pat -> String -> Maybe Edit
+patEdit src pat replacement =
+  let
+    sp = patSpan pat
+  in if not (spanSingleLine sp) then
+    Nothing
+  else if not (linesCleanRange src.lintSrcLines (spanStartLine sp) (spanEndLine sp)) then
+    Nothing
+  else
+    let
+      line = lineAt src.lintSrcLines (spanStartLine sp)
+      prefix = prefixBeforeCol line (spanStartCol sp)
+      suffix = tailFromCol line (spanEndCol sp)
+      stripped = stripParens (strLength line + 1) prefix suffix
+    in Just (Edit (spanStartLine sp) (spanStartLine sp) [firstOf stripped ++ replacement ++ secondOf stripped])
+
+-- | 内部：pair 模式的 finding 与编辑：元素原文齐全时改写成 `(a, b)`，否则只报告 `(...)`。
+pairPatFindings : LintSrc -> Pat -> List Pat -> List Finding
+pairPatFindings src pat elems =
+  let
+    texts = map (patText1 src) elems
+    suggestion = if allNonEmpty texts then "(" ++ join ", " texts ++ ")" else "(...)"
+    edit = if allNonEmpty texts then patEdit src pat suggestion else Nothing
+    sp = patSpan pat
+  in [
+    mkFindingAt
+      (spanStartLine sp)
+      (spanStartCol sp)
+      sp
+      PairSugar
+      (lintMsg PairSugar suggestion)
+      edit
+  ]
+
+-- | 内部：模式位置的 pair-sugar；`emit` 为假时只递归（模板插值洞）。
+walkPairPat : Bool -> Int -> LintSrc -> Pat -> List Finding
+walkPairPat emit fuel src pat =
+  if fuel <= 0 then
+    lintFuelExhausted "pair pattern traversal"
+  else
+    case pairPatSugarElems (fuel - 1) pat of
+      Just elems => if emit then append (pairPatFindings src pat elems) (walkPairPats emit (fuel - 1) src elems) else walkPairPats emit (fuel - 1) src elems
+      Nothing =>
+        case pat of
+          PAs name inner _ => walkPairPat emit (fuel - 1) src inner
+          PCon name args _ => walkPairPats emit (fuel - 1) src args
+          PRecord name fields _ => walkPairPatFields emit (fuel - 1) src fields
+          _ => []
+
+-- | 内部：模式列表的 pair-sugar。
+walkPairPats : Bool -> Int -> LintSrc -> List Pat -> List Finding
+walkPairPats emit fuel src pats =
+  if fuel <= 0 then
+    lintFuelExhausted "pair pattern traversal"
+  else
+    case pats of
+      [] => []
+      p :: rest => append (walkPairPat emit (fuel - 1) src p) (walkPairPats emit (fuel - 1) src rest)
+
+-- | 内部：record 模式字段的 pair-sugar。
+walkPairPatFields : Bool -> Int -> LintSrc -> List (Pair String Pat) -> List Finding
+walkPairPatFields emit fuel src fields =
+  if fuel <= 0 then
+    lintFuelExhausted "pair pattern traversal"
+  else
+    case fields of
+      [] => []
+      (Pair f p) :: rest => append (walkPairPat emit (fuel - 1) src p) (walkPairPatFields emit (fuel - 1) src rest)
+
+-- | 内部：按构造子遍历表达式，收集类型位置的语法归一 finding（list-literal 与 pair-sugar；
+-- 不进入模式）。
+walkTypeSyntax : Int -> LintSrc -> Expr -> List Finding
+walkTypeSyntax fuel src e =
+  if fuel <= 0 then
+    lintFuelExhausted "type syntax traversal"
   else
     case e of
       EVar name _ => if name == "Nil" then nilFinding src e else []
       EInt n _ => []
       EStr s _ => []
       EFloat raw _ => []
-      ELam ps body _ => walkListLiteral (fuel - 1) src body
+      ELam ps body _ => walkTypeSyntax (fuel - 1) src body
       EApp fn args _ =>
-        case consHeadOf e of
-          Just (Pair h t) =>
-            case consElems (fuel - 1) e of
-              Just elems => append (consFindings src e elems) (walkListLiteralExprs (fuel - 1) src elems)
-              Nothing => append (walkListLiteral (fuel - 1) src h) (walkListLiteral (fuel - 1) src t)
-          Nothing => append (walkListLiteral (fuel - 1) src fn) (walkListLiteralExprs (fuel - 1) src args)
-      EPi name implicit qty dom cod _ => append (walkListLiteral (fuel - 1) src dom) (walkListLiteral (fuel - 1) src cod)
-      ELet binds body recFlag _ => append (walkListLiteralBinds (fuel - 1) src binds) (walkListLiteral (fuel - 1) src body)
-      ELocalFun clauses _ => walkListLiteralLocalClauses (fuel - 1) src clauses
-      ECase scrut alts _ => append (walkListLiteral (fuel - 1) src scrut) (walkListLiteralAlts (fuel - 1) src alts)
-      EIf cond yes no _ => append (walkListLiteral (fuel - 1) src cond) (append (walkListLiteral (fuel - 1) src yes) (walkListLiteral (fuel - 1) src no))
-      EField base f _ => walkListLiteral (fuel - 1) src base
-      ERecord rname fields _ => walkListLiteralFields (fuel - 1) src fields
-      ERecUpdate base fields _ => append (walkListLiteral (fuel - 1) src base) (walkListLiteralFields (fuel - 1) src fields)
-      EDo stmts _ => walkListLiteralStmts (fuel - 1) src stmts
-      EAnn value ty _ => append (walkListLiteral (fuel - 1) src value) (walkListLiteral (fuel - 1) src ty)
-      EInfix op l r _ => append (walkListLiteral (fuel - 1) src l) (walkListLiteral (fuel - 1) src r)
-      EParen inner _ => walkListLiteral (fuel - 1) src inner
-      EBacktick nm l r _ => append (walkListLiteral (fuel - 1) src l) (walkListLiteral (fuel - 1) src r)
+        case pairSugarElems (fuel - 1) e of
+          Just elems => append (pairFindings src e elems) (walkTypeSyntaxExprs (fuel - 1) src elems)
+          Nothing =>
+            case consHeadOf e of
+              Just (Pair h t) =>
+                case consElems (fuel - 1) e of
+                  Just elems => append (consFindings src e elems) (walkTypeSyntaxExprs (fuel - 1) src elems)
+                  Nothing => append (walkTypeSyntax (fuel - 1) src h) (walkTypeSyntax (fuel - 1) src t)
+              Nothing => append (walkTypeSyntax (fuel - 1) src fn) (walkTypeSyntaxExprs (fuel - 1) src args)
+      EPi name implicit qty dom cod _ => append (walkTypeSyntax (fuel - 1) src dom) (walkTypeSyntax (fuel - 1) src cod)
+      ELet binds body recFlag _ => append (walkTypeSyntaxBinds (fuel - 1) src binds) (walkTypeSyntax (fuel - 1) src body)
+      ELocalFun clauses _ => walkTypeSyntaxLocalClauses (fuel - 1) src clauses
+      ECase scrut alts _ => append (walkTypeSyntax (fuel - 1) src scrut) (walkTypeSyntaxAlts (fuel - 1) src alts)
+      EIf cond yes no _ => append (walkTypeSyntax (fuel - 1) src cond) (append (walkTypeSyntax (fuel - 1) src yes) (walkTypeSyntax (fuel - 1) src no))
+      EField base f _ => walkTypeSyntax (fuel - 1) src base
+      ERecord rname fields _ => walkTypeSyntaxFields (fuel - 1) src fields
+      ERecUpdate base fields _ => append (walkTypeSyntax (fuel - 1) src base) (walkTypeSyntaxFields (fuel - 1) src fields)
+      EDo stmts _ => walkTypeSyntaxStmts (fuel - 1) src stmts
+      EAnn value ty _ => append (walkTypeSyntax (fuel - 1) src value) (walkTypeSyntax (fuel - 1) src ty)
+      EInfix op l r _ => append (walkTypeSyntax (fuel - 1) src l) (walkTypeSyntax (fuel - 1) src r)
+      EParen inner _ => walkTypeSyntax (fuel - 1) src inner
+      EBacktick nm l r _ => append (walkTypeSyntax (fuel - 1) src l) (walkTypeSyntax (fuel - 1) src r)
       ESectOp op _ => []
-      ESectL op rhs _ => walkListLiteral (fuel - 1) src rhs
-      ESectR lhs op _ => walkListLiteral (fuel - 1) src lhs
+      ESectL op rhs _ => walkTypeSyntax (fuel - 1) src rhs
+      ESectR lhs op _ => walkTypeSyntax (fuel - 1) src lhs
       -- 模板插值洞：token 切片不可靠，跳过（见本段头注释）。
       EInterp multi parts _ => []
 
--- | 内部：遍历一组表达式的 list-literal。
-walkListLiteralExprs : Int -> LintSrc -> List Expr -> List Finding
-walkListLiteralExprs fuel src exprs =
+-- | 内部：遍历一组表达式的类型位置语法归一。
+walkTypeSyntaxExprs : Int -> LintSrc -> List Expr -> List Finding
+walkTypeSyntaxExprs fuel src exprs =
   if fuel <= 0 then
-    lintFuelExhausted "list literal traversal"
+    lintFuelExhausted "type syntax traversal"
   else
     case exprs of
       [] => []
-      e :: rest => append (walkListLiteral (fuel - 1) src e) (walkListLiteralExprs (fuel - 1) src rest)
+      e :: rest => append (walkTypeSyntax (fuel - 1) src e) (walkTypeSyntaxExprs (fuel - 1) src rest)
 
--- | 内部：遍历 record 字段值的 list-literal。
-walkListLiteralFields : Int -> LintSrc -> List (Pair String Expr) -> List Finding
-walkListLiteralFields fuel src fields =
+-- | 内部：遍历 record 字段值的类型位置语法归一。
+walkTypeSyntaxFields : Int -> LintSrc -> List (Pair String Expr) -> List Finding
+walkTypeSyntaxFields fuel src fields =
   if fuel <= 0 then
-    lintFuelExhausted "list literal traversal"
+    lintFuelExhausted "type syntax traversal"
   else
     case fields of
       [] => []
-      (Pair f e) :: rest => append (walkListLiteral (fuel - 1) src e) (walkListLiteralFields (fuel - 1) src rest)
+      (Pair f e) :: rest => append (walkTypeSyntax (fuel - 1) src e) (walkTypeSyntaxFields (fuel - 1) src rest)
 
--- | 内部：遍历 let 绑定右值的 list-literal。
-walkListLiteralBinds : Int -> LintSrc -> List (Pair Pat Expr) -> List Finding
-walkListLiteralBinds fuel src binds =
+-- | 内部：遍历 let 绑定右值的类型位置语法归一。
+walkTypeSyntaxBinds : Int -> LintSrc -> List (Pair Pat Expr) -> List Finding
+walkTypeSyntaxBinds fuel src binds =
   if fuel <= 0 then
-    lintFuelExhausted "list literal traversal"
+    lintFuelExhausted "type syntax traversal"
   else
     case binds of
       [] => []
-      (Pair pat e) :: rest => append (walkListLiteral (fuel - 1) src e) (walkListLiteralBinds (fuel - 1) src rest)
+      (Pair pat e) :: rest => append (walkTypeSyntax (fuel - 1) src e) (walkTypeSyntaxBinds (fuel - 1) src rest)
 
--- | 内部：遍历 case alt 体的 list-literal。
-walkListLiteralAlts : Int -> LintSrc -> List (Pair Pat Expr) -> List Finding
-walkListLiteralAlts fuel src alts =
+-- | 内部：遍历 case alt 体的类型位置语法归一。
+walkTypeSyntaxAlts : Int -> LintSrc -> List (Pair Pat Expr) -> List Finding
+walkTypeSyntaxAlts fuel src alts =
   if fuel <= 0 then
-    lintFuelExhausted "list literal traversal"
+    lintFuelExhausted "type syntax traversal"
   else
     case alts of
       [] => []
-      (Pair pat body) :: rest => append (walkListLiteral (fuel - 1) src body) (walkListLiteralAlts (fuel - 1) src rest)
+      (Pair pat body) :: rest => append (walkTypeSyntax (fuel - 1) src body) (walkTypeSyntaxAlts (fuel - 1) src rest)
 
--- | 内部：遍历局部函数 clause 体的 list-literal。
-walkListLiteralLocalClauses : Int -> LintSrc -> List (Pair (List Pat) Expr) -> List Finding
-walkListLiteralLocalClauses fuel src clauses =
+-- | 内部：遍历局部函数 clause 体的类型位置语法归一。
+walkTypeSyntaxLocalClauses : Int -> LintSrc -> List (Pair (List Pat) Expr) -> List Finding
+walkTypeSyntaxLocalClauses fuel src clauses =
   if fuel <= 0 then
-    lintFuelExhausted "list literal traversal"
+    lintFuelExhausted "type syntax traversal"
   else
     case clauses of
       [] => []
-      (Pair pats body) :: rest => append (walkListLiteral (fuel - 1) src body) (walkListLiteralLocalClauses (fuel - 1) src rest)
+      (Pair pats body) :: rest => append (walkTypeSyntax (fuel - 1) src body) (walkTypeSyntaxLocalClauses (fuel - 1) src rest)
 
--- | 内部：遍历 do 语句的 list-literal。
-walkListLiteralStmts : Int -> LintSrc -> List DoStmt -> List Finding
-walkListLiteralStmts fuel src stmts =
+-- | 内部：遍历 do 语句的类型位置语法归一。
+walkTypeSyntaxStmts : Int -> LintSrc -> List DoStmt -> List Finding
+walkTypeSyntaxStmts fuel src stmts =
   if fuel <= 0 then
-    lintFuelExhausted "list literal traversal"
+    lintFuelExhausted "type syntax traversal"
   else
     case stmts of
       [] => []
-      stmt :: rest => append (walkListLiteralStmt (fuel - 1) src stmt) (walkListLiteralStmts (fuel - 1) src rest)
+      stmt :: rest => append (walkTypeSyntaxStmt (fuel - 1) src stmt) (walkTypeSyntaxStmts (fuel - 1) src rest)
 
--- | 内部：遍历单条 do 语句的 list-literal。
-walkListLiteralStmt : Int -> LintSrc -> DoStmt -> List Finding
-walkListLiteralStmt fuel src stmt =
+-- | 内部：遍历单条 do 语句的类型位置语法归一。
+walkTypeSyntaxStmt : Int -> LintSrc -> DoStmt -> List Finding
+walkTypeSyntaxStmt fuel src stmt =
   if fuel <= 0 then
-    lintFuelExhausted "list literal traversal"
+    lintFuelExhausted "type syntax traversal"
   else
     case stmt of
-      DBind pat e sp => walkListLiteral (fuel - 1) src e
-      DExpr e sp => walkListLiteral (fuel - 1) src e
-      DLet binds sp => walkListLiteralBinds (fuel - 1) src binds
+      DBind pat e sp => walkTypeSyntax (fuel - 1) src e
+      DExpr e sp => walkTypeSyntax (fuel - 1) src e
+      DLet binds sp => walkTypeSyntaxBinds (fuel - 1) src binds
 
 -- ---------------------------------------------------------------
 -- 声明遍历与结果整理
@@ -2111,17 +2284,21 @@ countFunClauses name (d :: rest) =
     DFun n pats body sp => (if n == name then 1 else 0) + countFunClauses name rest
     _ => countFunClauses name rest
 
--- | 内部：扫描 instance 方法：方法体走 dispatch 规则，签名与类型位置走 list-literal。
+-- | 内部：扫描 instance 方法：方法体走 dispatch 规则，模式走 pair-sugar，签名与类型位置走
+-- 类型位置的语法归一。
 scanMethodDecls : LintSrc -> List Decl -> List Finding
 scanMethodDecls src [] = []
 scanMethodDecls src (d :: rest) =
   case d of
-    DFun name pats body sp => append (walkExpr lintFuel src body) (scanMethodDecls src rest)
+    DFun name pats body sp =>
+      append
+        (walkPairPats True lintFuel src pats)
+        (append (walkExpr lintFuel src body) (scanMethodDecls src rest))
     DSig name ctx ty sp =>
       append
-        (walkListLiteralExprs lintFuel src ctx)
-        (append (walkListLiteral lintFuel src ty) (scanMethodDecls src rest))
-    DAxiom name ty sp => append (walkListLiteral lintFuel src ty) (scanMethodDecls src rest)
+        (walkTypeSyntaxExprs lintFuel src ctx)
+        (append (walkTypeSyntax lintFuel src ty) (scanMethodDecls src rest))
+    DAxiom name ty sp => append (walkTypeSyntax lintFuel src ty) (scanMethodDecls src rest)
     _ => scanMethodDecls src rest
 
 -- | 内部：record 各字段的类型表达式。
@@ -2147,8 +2324,9 @@ traitParamKinds ((TraitParam name kind) :: rest) =
     Just e => e :: traitParamKinds rest
     Nothing => traitParamKinds rest
 
--- | 内部：单条声明的 finding：函数子句做 clause 拆分与直接体扫描（隐式 Pi 签名跳过 clause 级
--- 改写），签名、axiom、extern、data、record、trait、instance 的类型位置走 list-literal。
+-- | 内部：单条声明的 finding：函数子句做 clause 拆分、直接体扫描与模式 pair-sugar（隐式 Pi
+-- 签名跳过 clause 级改写），签名、axiom、extern、data、record、trait、instance 的类型位置走
+-- 类型位置的语法归一。
 declFindings : LintSrc -> List Decl -> Decl -> List Decl -> List Finding
 declFindings src allDecls (DFun name pats body r) rest =
   let
@@ -2162,23 +2340,23 @@ declFindings src allDecls (DFun name pats body r) rest =
           singleClause = countFunClauses name allDecls == 1
           lane = LClause line pats lastForName singleClause
         in append (caseToClauses src line name pats body singleClause) (scanBodyPos lintFuel src (Just lane) body)
-  in lifted
+  in append (walkPairPats True lintFuel src pats) lifted
 declFindings src allDecls (DSig name ctx ty sp) rest =
-  append (walkListLiteralExprs lintFuel src ctx) (walkListLiteral lintFuel src ty)
-declFindings src allDecls (DAxiom name ty sp) rest = walkListLiteral lintFuel src ty
-declFindings src allDecls (DExtern name cName ty sp) rest = walkListLiteral lintFuel src ty
+  append (walkTypeSyntaxExprs lintFuel src ctx) (walkTypeSyntax lintFuel src ty)
+declFindings src allDecls (DAxiom name ty sp) rest = walkTypeSyntax lintFuel src ty
+declFindings src allDecls (DExtern name cName ty sp) rest = walkTypeSyntax lintFuel src ty
 declFindings src allDecls (DData name params kind ctors derivings viaField repr lin sp) rest =
-  append (walkListLiteral lintFuel src kind) (walkListLiteralExprs lintFuel src (ctorTypes ctors))
+  append (walkTypeSyntax lintFuel src kind) (walkTypeSyntaxExprs lintFuel src (ctorTypes ctors))
 declFindings src allDecls (DRecord name params fields derivings viaField repr lin sp) rest =
-  walkListLiteralExprs lintFuel src (fieldTypes fields)
+  walkTypeSyntaxExprs lintFuel src (fieldTypes fields)
 declFindings src allDecls (DTrait name params supers methods sp) rest =
   append
-    (walkListLiteralExprs lintFuel src supers)
-    (append (walkListLiteralExprs lintFuel src (traitParamKinds params)) (walkListLiteralExprs lintFuel src (traitMethodTypes methods)))
+    (walkTypeSyntaxExprs lintFuel src supers)
+    (append (walkTypeSyntaxExprs lintFuel src (traitParamKinds params)) (walkTypeSyntaxExprs lintFuel src (traitMethodTypes methods)))
 declFindings src allDecls (DInstance ctxE head methods sp) rest =
   append
-    (walkListLiteralExprs lintFuel src ctxE)
-    (append (walkListLiteral lintFuel src head) (scanMethodDecls src methods))
+    (walkTypeSyntaxExprs lintFuel src ctxE)
+    (append (walkTypeSyntax lintFuel src head) (scanMethodDecls src methods))
 
 -- | 内部：逐条声明收集 finding。
 scanDecls : LintSrc -> List Decl -> List Decl -> List Finding

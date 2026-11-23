@@ -16,7 +16,8 @@ import Base.Data.String as String
 -- | 规则枚举，按 dispatch 源划分：`literal-if-chain` 处理 if 分派（字面量链 / Bool 变量），
 -- 提升进外层模式，字面量链提升失败时回退成 case；`dispatch-lift` 处理 case / let 分派，
 -- 提升进外层模式（单 alt 替换、多 alt 拆分）；`list-literal` 处理表达式与类型位置的闭合
--- cons 链（`::` / `Cons` 加 `Nil` / `[]`）以及裸 `Nil`，改写成列表字面量，模式匹配不在范围内。
+-- cons 链（`::` / `Cons` 加 `Nil` / `[]`）以及裸 `Nil`，改写成列表字面量，模式匹配不在范围内；
+-- `pair-sugar` 处理表达式 / 类型 / 模式位置的显式 `Pair` 应用，改写成元组语法。
 export data LintRule(..) : Type where
   -- | if 分派（`x == 字面量` 链 / Bool 变量）可提升进外层模式，失败时回退为 case。
   LiteralIfChain : LintRule
@@ -24,6 +25,8 @@ export data LintRule(..) : Type where
   DispatchLift : LintRule
   -- | 闭合 cons 链与裸 `Nil` 应写成列表字面量。
   ListLiteral : LintRule
+  -- | 显式 `Pair a b` 应用应写成元组语法 `(a, b)`。
+  PairSugar : LintRule
   -- | 注释里出现 TODO / FIXME / XXX 标记（默认关闭，all 预设可选）。
   TodoMarker : LintRule
   -- | `if True` / `if False` 常量条件（默认关闭，all 预设可选）。
@@ -34,6 +37,7 @@ export lintCode : LintRule -> String
 lintCode LiteralIfChain = "LN_LiteralIfChain"
 lintCode DispatchLift = "LN_DispatchLift"
 lintCode ListLiteral = "LN_ListLiteral"
+lintCode PairSugar = "LN_PairSugar"
 lintCode TodoMarker = "LN_TodoMarker"
 lintCode RedundantIf = "LN_RedundantIf"
 
@@ -42,6 +46,7 @@ export lintRule : LintRule -> String
 lintRule LiteralIfChain = "literal-if-chain"
 lintRule DispatchLift = "dispatch-lift"
 lintRule ListLiteral = "list-literal"
+lintRule PairSugar = "pair-sugar"
 lintRule TodoMarker = "todo-marker"
 lintRule RedundantIf = "redundant-if"
 
@@ -54,6 +59,8 @@ lintRuleCode code =
     lintRule DispatchLift
   else if code == lintCode ListLiteral then
     lintRule ListLiteral
+  else if code == lintCode PairSugar then
+    lintRule PairSugar
   else if code == lintCode TodoMarker then
     lintRule TodoMarker
   else if code == lintCode RedundantIf then lintRule RedundantIf else ""
@@ -65,6 +72,7 @@ lintMsg LiteralIfChain scrutinee =
 lintMsg DispatchLift scrutinee =
   "dispatch on `${scrutinee}` can be lifted into the enclosing pattern"
 lintMsg ListLiteral suggestion = "list construction can be written as `${suggestion}`"
+lintMsg PairSugar suggestion = "pair construction can be written as `${suggestion}`"
 lintMsg TodoMarker marker = "comment contains `${marker}` marker"
 lintMsg RedundantIf branch = "conditional on a constant Bool can be simplified to `${branch}`"
 
@@ -76,6 +84,8 @@ lintEdit DispatchLift =
   "把 case / let 分派提升进外层模式（单 alt 替换；多 alt 拆 clause 或拆 alt）"
 lintEdit ListLiteral =
   "把闭合 `::` / `Cons` 链与裸 `Nil` 改写为 `[a, b]` / `[]`（模式匹配不动）"
+lintEdit PairSugar =
+  "把显式 `Pair` 应用改写为元组语法 `(a, b)`（右嵌套链展平为 `(a, b, c)`）"
 lintEdit TodoMarker = "删除或处理注释里的 TODO / FIXME / XXX 标记"
 lintEdit RedundantIf = "把 `if True/False then a else b` 化简为对应分支"
 
@@ -87,6 +97,8 @@ lintDesc DispatchLift =
   "case / let 分派可提升进外层 clause/alt 模式（单 alt 替换、多 alt 拆分）。"
 lintDesc ListLiteral =
   "表达式/类型位置的闭合 cons 链与裸 `Nil` 应写成 `[a, b]` / `[]`；模式匹配里的 `::`/`Cons` 不受影响。"
+lintDesc PairSugar =
+  "表达式/类型/模式位置的显式 `Pair` 应用应写成元组语法 `(a, b)`；右嵌套链展平为 `(a, b, c)`。"
 lintDesc TodoMarker =
   "注释里的 TODO / FIXME / XXX 标记应在合入前处理；默认关闭，all 预设或 --select 启用。"
 lintDesc RedundantIf =
@@ -97,6 +109,7 @@ export lintFixable : LintRule -> Bool
 lintFixable LiteralIfChain = True
 lintFixable DispatchLift = True
 lintFixable ListLiteral = True
+lintFixable PairSugar = True
 lintFixable TodoMarker = False
 lintFixable RedundantIf = True
 
@@ -144,18 +157,20 @@ export lintDefaultSeverity : LintRule -> LintSeverity
 lintDefaultSeverity LiteralIfChain = LintWarn
 lintDefaultSeverity DispatchLift = LintWarn
 lintDefaultSeverity ListLiteral = LintWarn
+lintDefaultSeverity PairSugar = LintWarn
 lintDefaultSeverity TodoMarker = LintWarn
 lintDefaultSeverity RedundantIf = LintWarn
 
 -- | 全部规则（配置与默认预设的遍历源）。
 export lintAllRules : List LintRule
-lintAllRules = [LiteralIfChain, DispatchLift, ListLiteral, TodoMarker, RedundantIf]
+lintAllRules = [LiteralIfChain, DispatchLift, ListLiteral, PairSugar, TodoMarker, RedundantIf]
 
 -- | 规则是否属于 recommended 预设。
 export lintRecommended : LintRule -> Bool
 lintRecommended LiteralIfChain = True
 lintRecommended DispatchLift = True
 lintRecommended ListLiteral = True
+lintRecommended PairSugar = False
 lintRecommended TodoMarker = False
 lintRecommended RedundantIf = False
 
@@ -194,6 +209,12 @@ lintAll =
       (lintDesc ListLiteral)
       (lintFixable ListLiteral)
       (lintEdit ListLiteral),
+    LintEntry
+      (lintCode PairSugar)
+      (lintRule PairSugar)
+      (lintDesc PairSugar)
+      (lintFixable PairSugar)
+      (lintEdit PairSugar),
     LintEntry
       (lintCode TodoMarker)
       (lintRule TodoMarker)
