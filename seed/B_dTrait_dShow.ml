@@ -21,4 +21,4 @@ let v_debugShow = (fun _ud x0 -> (match _ud with
 ))
 
 # 31 "Base/Trait/Show.vuna"
-let v_dbgShow = (fun _uctx0 x -> (let _u = (if (dtp_debug_on 0) then (dtp_debug_line ((v_debugShow _uctx0) x)) else 0) in x))
+let v_dbgShow = (fun _uctx0 x -> (let _u = (if ((dtp_log_on 3) "Base.Trait.Show") then (((dtp_log_emit 3) "Base.Trait.Show") ((v_debugShow _uctx0) x)) else 0) in x))

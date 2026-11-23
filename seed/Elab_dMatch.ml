@@ -28,7 +28,7 @@ let v_clauseHeadSpan = (fun (mc0 : Frontend_dRast.t_Pat B_dData_dList.t_List) (m
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 103 "Vuna/Compiler/Elab/Match.vuna"
+# 108 "Vuna/Compiler/Elab/Match.vuna"
 let rec v_stripAsPat = (fun (mc0 : Frontend_dRast.t_Pat) -> (match mc0 with
   | Frontend_dRast.C_Pat_PAs (dtb__14, dtb__15, dtb__16) -> (v_stripAsPat dtb__15)
   | _ -> mc0
@@ -47,13 +47,13 @@ let rec v_reachableGo = (fun (mc0 : (string, (bool, (string, int) B_dData_dPair.
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 100 "Vuna/Compiler/Elab/Match.vuna"
+# 105 "Vuna/Compiler/Elab/Match.vuna"
 let v_matrixOf = (fun (clauses : (Frontend_dRast.t_Pat B_dData_dList.t_List, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) -> ((B_dData_dList.v_map (B_dData_dList.v_map v_stripAsPat)) ((B_dData_dList.v_map B_dData_dPair.v_firstOf) clauses)))
 
 # 64 "Vuna/Compiler/Elab/Match.vuna"
 let v_checkReachable = (fun (table : (string, (bool, (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (clauses : (Frontend_dRast.t_Pat B_dData_dList.t_List, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (let rows = (v_matrixOf clauses) in (if (Elab_dCoverage.v_uniformArity rows) then ((((v_reachableGo table) (bi_natFromInt (Elab_dCoverage.v_coverageFuelFor rows))) B_dData_dList.C_List_Nil) clauses) else (Base_dDiag.C_Check_OkC (true)))))
 
-# 107 "Vuna/Compiler/Elab/Match.vuna"
+# 112 "Vuna/Compiler/Elab/Match.vuna"
 let v_arityOf = (fun (mc0 : (Frontend_dRast.t_Pat B_dData_dList.t_List, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__21, dtb__22) -> (match dtb__21 with
   | { B_dData_dPair.f_Pair_first = dtb__23; B_dData_dPair.f_Pair_second = dtb__24 } -> (B_dData_dMaybe.C_Maybe_Just ((B_dData_dList.v_length dtb__23)))
@@ -63,20 +63,20 @@ let v_arityOf = (fun (mc0 : (Frontend_dRast.t_Pat B_dData_dList.t_List, Frontend
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 114 "Vuna/Compiler/Elab/Match.vuna"
+# 119 "Vuna/Compiler/Elab/Match.vuna"
 let rec v_paramNamesGo = (fun (remaining : int) (n : int) (acc : string B_dData_dList.t_List) -> (if (remaining <= 0) then (B_dData_dList.v_reverse acc) else (((v_paramNamesGo (remaining - 1)) n) (B_dData_dList.C_List__x58__x58_ (("mc" ^ (bi_strFromInt (n - remaining))), acc)))))
 
-# 111 "Vuna/Compiler/Elab/Match.vuna"
+# 116 "Vuna/Compiler/Elab/Match.vuna"
 let v_paramNames = (fun (n : int) -> (((v_paramNamesGo (n - 0)) n) B_dData_dList.C_List_Nil))
 
-# 121 "Vuna/Compiler/Elab/Match.vuna"
+# 126 "Vuna/Compiler/Elab/Match.vuna"
 let rec v_wrapLambdas = (fun (mc0 : string B_dData_dList.t_List) (mc1 : Frontend_dRast.t_Expr) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__25, dtb__26) -> (Frontend_dRast.C_Expr_ELam ((B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = dtb__25; B_dData_dPair.f_Pair_second = Base_dSource.v_spanEmpty }, B_dData_dList.C_List_Nil)), ((v_wrapLambdas dtb__26) mc1), Base_dSource.v_spanEmpty))
   | B_dData_dList.C_List_Nil -> mc1
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 170 "Vuna/Compiler/Elab/Match.vuna"
+# 175 "Vuna/Compiler/Elab/Match.vuna"
 let v_litPatMatches = (fun (mc0 : Frontend_dRast.t_Pat) (mc1 : Frontend_dRast.t_Pat) -> (match mc0 with
   | Frontend_dRast.C_Pat_PStr (dtb__27, dtb__28) -> (match mc1 with
   | Frontend_dRast.C_Pat_PStr (dtb__29, dtb__30) -> (dtb__27 = dtb__29)
@@ -93,14 +93,14 @@ let v_litPatMatches = (fun (mc0 : Frontend_dRast.t_Pat) (mc1 : Frontend_dRast.t_
   | _ -> false
 ))
 
-# 186 "Vuna/Compiler/Elab/Match.vuna"
+# 191 "Vuna/Compiler/Elab/Match.vuna"
 let v_litPatExpr = (fun (mc0 : Frontend_dRast.t_Pat) -> (match mc0 with
   | Frontend_dRast.C_Pat_PStr (dtb__41, dtb__42) -> (Frontend_dRast.C_Expr_EStr (dtb__41, dtb__42))
   | Frontend_dRast.C_Pat_PInt (dtb__43, dtb__44) -> (Frontend_dRast.C_Expr_EInt (dtb__43, dtb__44))
   | _ -> (Frontend_dRast.C_Expr_EInt (0, { Base_dSource.f_Span_spanFile = ""; Base_dSource.f_Span_spanStartLine = 0; Base_dSource.f_Span_spanStartCol = 0; Base_dSource.f_Span_spanEndLine = 0; Base_dSource.f_Span_spanEndCol = 0; Base_dSource.f_Span_spanStartOffset = 0; Base_dSource.f_Span_spanEndOffset = 0 }))
 ))
 
-# 218 "Vuna/Compiler/Elab/Match.vuna"
+# 223 "Vuna/Compiler/Elab/Match.vuna"
 let rec v_hasAsHead = (fun (mc0 : (Frontend_dRast.t_Pat B_dData_dList.t_List, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__45, dtb__46) -> (let nd_uscrut4 = dtb__45 in (match nd_uscrut4 with
   | { B_dData_dPair.f_Pair_first = dtb__47; B_dData_dPair.f_Pair_second = dtb__48 } -> (match dtb__47 with
@@ -116,13 +116,13 @@ let rec v_hasAsHead = (fun (mc0 : (Frontend_dRast.t_Pat B_dData_dList.t_List, Fr
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 238 "Vuna/Compiler/Elab/Match.vuna"
+# 243 "Vuna/Compiler/Elab/Match.vuna"
 let v_innerOfHead = (fun (mc0 : Frontend_dRast.t_Pat) -> (match mc0 with
   | Frontend_dRast.C_Pat_PAs (dtb__54, dtb__55, dtb__56) -> dtb__55
   | _ -> mc0
 ))
 
-# 249 "Vuna/Compiler/Elab/Match.vuna"
+# 254 "Vuna/Compiler/Elab/Match.vuna"
 let v_firstPatSpan = (fun (mc0 : (Frontend_dRast.t_Pat B_dData_dList.t_List, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__57, dtb__58) -> (match dtb__57 with
   | { B_dData_dPair.f_Pair_first = dtb__59; B_dData_dPair.f_Pair_second = dtb__60 } -> (match dtb__59 with
@@ -134,21 +134,21 @@ let v_firstPatSpan = (fun (mc0 : (Frontend_dRast.t_Pat B_dData_dList.t_List, Fro
   | _ -> { Base_dSource.f_Span_spanFile = ""; Base_dSource.f_Span_spanStartLine = 0; Base_dSource.f_Span_spanStartCol = 0; Base_dSource.f_Span_spanEndLine = 0; Base_dSource.f_Span_spanEndCol = 0; Base_dSource.f_Span_spanStartOffset = 0; Base_dSource.f_Span_spanEndOffset = 0 }
 ))
 
-# 271 "Vuna/Compiler/Elab/Match.vuna"
+# 276 "Vuna/Compiler/Elab/Match.vuna"
 let rec v_familyOfCtor = (fun (mc0 : (string, (bool, (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc1 : string) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__63, dtb__64) -> (if ((B_dData_dList.v_memName mc1) ((B_dData_dList.v_map B_dData_dPair.v_firstOf) (B_dData_dPair.v_secondOf (B_dData_dPair.v_secondOf dtb__63)))) then (B_dData_dMaybe.C_Maybe_Just ((B_dData_dPair.v_secondOf dtb__63))) else ((v_familyOfCtor dtb__64) mc1))
   | B_dData_dList.C_List_Nil -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 279 "Vuna/Compiler/Elab/Match.vuna"
+# 284 "Vuna/Compiler/Elab/Match.vuna"
 let v_familyOfHead = (fun (table : (string, (bool, (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (h : string) -> (match ((v_familyOfCtor table) h) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__65) -> (B_dData_dMaybe.C_Maybe_Just ((B_dData_dPair.v_secondOf dtb__65)))
   | B_dData_dMaybe.C_Maybe_Nothing -> (if (Frontend_dReserved.v_isListNilSyntax h) then ((Elab_dCoverage.v_familyOfShortCtors table) (B_dData_dList.C_List__x58__x58_ ("Nil", B_dData_dList.C_List_Nil))) else (if (Frontend_dReserved.v_isListConsSyntax h) then ((Elab_dCoverage.v_familyOfShortCtors table) (B_dData_dList.C_List__x58__x58_ ("::", (B_dData_dList.C_List__x58__x58_ ("Cons", B_dData_dList.C_List_Nil))))) else B_dData_dMaybe.C_Maybe_Nothing))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 289 "Vuna/Compiler/Elab/Match.vuna"
+# 294 "Vuna/Compiler/Elab/Match.vuna"
 let rec v_canonHeads = (fun (mc0 : (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc1 : string B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__66, dtb__67) -> (match ((Elab_dCoverage.v_sentinelCtorIn mc0) dtb__66) with
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
@@ -163,7 +163,7 @@ let rec v_canonHeads = (fun (mc0 : (string, int) B_dData_dPair.t_Pair B_dData_dL
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 302 "Vuna/Compiler/Elab/Match.vuna"
+# 307 "Vuna/Compiler/Elab/Match.vuna"
 let v_familyCovered = (fun (mc0 : (string, (bool, (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc1 : string B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__70, dtb__71) -> (match ((v_familyOfHead mc0) dtb__70) with
   | B_dData_dMaybe.C_Maybe_Nothing -> false
@@ -178,7 +178,7 @@ let v_familyCovered = (fun (mc0 : (string, (bool, (string, int) B_dData_dPair.t_
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 316 "Vuna/Compiler/Elab/Match.vuna"
+# 321 "Vuna/Compiler/Elab/Match.vuna"
 let rec v_hasCtorHead = (fun (mc0 : (Frontend_dRast.t_Pat B_dData_dList.t_List, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__74, dtb__75) -> (let nd_uscrut4 = dtb__74 in (match nd_uscrut4 with
   | { B_dData_dPair.f_Pair_first = dtb__76; B_dData_dPair.f_Pair_second = dtb__77 } -> (match dtb__76 with
@@ -195,7 +195,7 @@ let rec v_hasCtorHead = (fun (mc0 : (Frontend_dRast.t_Pat B_dData_dList.t_List, 
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 327 "Vuna/Compiler/Elab/Match.vuna"
+# 332 "Vuna/Compiler/Elab/Match.vuna"
 let rec v_allCtorHeads = (fun (mc0 : (Frontend_dRast.t_Pat B_dData_dList.t_List, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__83, dtb__84) -> (let nd_uscrut4 = dtb__83 in (match nd_uscrut4 with
   | { B_dData_dPair.f_Pair_first = dtb__85; B_dData_dPair.f_Pair_second = dtb__86 } -> (match dtb__85 with
@@ -212,20 +212,20 @@ let rec v_allCtorHeads = (fun (mc0 : (Frontend_dRast.t_Pat B_dData_dList.t_List,
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 342 "Vuna/Compiler/Elab/Match.vuna"
+# 347 "Vuna/Compiler/Elab/Match.vuna"
 let v_isWildPat = (fun (mc0 : Frontend_dRast.t_Pat) -> (match mc0 with
   | Frontend_dRast.C_Pat_PWild (dtb__92) -> true
   | _ -> false
 ))
 
-# 338 "Vuna/Compiler/Elab/Match.vuna"
+# 343 "Vuna/Compiler/Elab/Match.vuna"
 let rec v_allWildPats = (fun (mc0 : Frontend_dRast.t_Pat B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__93, dtb__94) -> (if (v_isWildPat dtb__93) then (v_allWildPats dtb__94) else false)
   | B_dData_dList.C_List_Nil -> true
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 346 "Vuna/Compiler/Elab/Match.vuna"
+# 351 "Vuna/Compiler/Elab/Match.vuna"
 let v_firstPats = (fun (mc0 : (Frontend_dRast.t_Pat B_dData_dList.t_List, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | B_dData_dList.C_List__x58__x58_ (dtb__95, dtb__96) -> (match dtb__95 with
@@ -235,7 +235,7 @@ let v_firstPats = (fun (mc0 : (Frontend_dRast.t_Pat B_dData_dList.t_List, Fronte
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 351 "Vuna/Compiler/Elab/Match.vuna"
+# 356 "Vuna/Compiler/Elab/Match.vuna"
 let rec v_irrefutablePat = (fun (mc0 : Frontend_dRast.t_Pat) -> (match mc0 with
   | Frontend_dRast.C_Pat_PAs (dtb__99, dtb__100, dtb__101) -> (v_irrefutablePat dtb__100)
   | Frontend_dRast.C_Pat_PWild (dtb__102) -> true
@@ -243,21 +243,21 @@ let rec v_irrefutablePat = (fun (mc0 : Frontend_dRast.t_Pat) -> (match mc0 with
   | _ -> false
 ))
 
-# 357 "Vuna/Compiler/Elab/Match.vuna"
+# 362 "Vuna/Compiler/Elab/Match.vuna"
 let rec v_allIrrefutablePats = (fun (mc0 : Frontend_dRast.t_Pat B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__105, dtb__106) -> (if (v_irrefutablePat dtb__105) then (v_allIrrefutablePats dtb__106) else false)
   | B_dData_dList.C_List_Nil -> true
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 362 "Vuna/Compiler/Elab/Match.vuna"
+# 367 "Vuna/Compiler/Elab/Match.vuna"
 let rec v_pruneRows = (fun (mc0 : (Frontend_dRast.t_Pat B_dData_dList.t_List, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__107, dtb__108) -> (if (v_allIrrefutablePats (B_dData_dPair.v_firstOf dtb__107)) then (B_dData_dList.C_List__x58__x58_ (dtb__107, B_dData_dList.C_List_Nil)) else (B_dData_dList.C_List__x58__x58_ (dtb__107, (v_pruneRows dtb__108))))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 366 "Vuna/Compiler/Elab/Match.vuna"
+# 371 "Vuna/Compiler/Elab/Match.vuna"
 let rec v_allEmptyPats = (fun (mc0 : (Frontend_dRast.t_Pat B_dData_dList.t_List, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__109, dtb__110) -> (let nd_uscrut4 = dtb__109 in (match nd_uscrut4 with
   | { B_dData_dPair.f_Pair_first = dtb__111; B_dData_dPair.f_Pair_second = dtb__112 } -> (match dtb__111 with
@@ -270,7 +270,7 @@ let rec v_allEmptyPats = (fun (mc0 : (Frontend_dRast.t_Pat B_dData_dList.t_List,
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 373 "Vuna/Compiler/Elab/Match.vuna"
+# 378 "Vuna/Compiler/Elab/Match.vuna"
 let v_bodyOfFirst = (fun (mc0 : (Frontend_dRast.t_Pat B_dData_dList.t_List, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List_Nil -> (Frontend_dRast.C_Expr_EInt (0, { Base_dSource.f_Span_spanFile = ""; Base_dSource.f_Span_spanStartLine = 0; Base_dSource.f_Span_spanStartCol = 0; Base_dSource.f_Span_spanEndLine = 0; Base_dSource.f_Span_spanEndCol = 0; Base_dSource.f_Span_spanStartOffset = 0; Base_dSource.f_Span_spanEndOffset = 0 }))
   | B_dData_dList.C_List__x58__x58_ (dtb__113, dtb__114) -> (match dtb__113 with
@@ -280,14 +280,14 @@ let v_bodyOfFirst = (fun (mc0 : (Frontend_dRast.t_Pat B_dData_dList.t_List, Fron
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 377 "Vuna/Compiler/Elab/Match.vuna"
+# 382 "Vuna/Compiler/Elab/Match.vuna"
 let v_isVarPatD = (fun (mc0 : Frontend_dRast.t_Pat) -> (match mc0 with
   | Frontend_dRast.C_Pat_PWild (dtb__117) -> true
   | Frontend_dRast.C_Pat_PVar (dtb__118, dtb__119) -> true
   | _ -> false
 ))
 
-# 382 "Vuna/Compiler/Elab/Match.vuna"
+# 387 "Vuna/Compiler/Elab/Match.vuna"
 let rec v_allVarHeads = (fun (mc0 : (Frontend_dRast.t_Pat B_dData_dList.t_List, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__120, dtb__121) -> (let nd_uscrut4 = dtb__120 in (match nd_uscrut4 with
   | { B_dData_dPair.f_Pair_first = dtb__122; B_dData_dPair.f_Pair_second = dtb__123 } -> (match dtb__122 with
@@ -301,7 +301,7 @@ let rec v_allVarHeads = (fun (mc0 : (Frontend_dRast.t_Pat B_dData_dList.t_List, 
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 389 "Vuna/Compiler/Elab/Match.vuna"
+# 394 "Vuna/Compiler/Elab/Match.vuna"
 let rec v_stripFirstCol = (fun (mc0 : (Frontend_dRast.t_Pat B_dData_dList.t_List, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__126, dtb__127) -> (let nd_uscrut4 = dtb__126 in (match nd_uscrut4 with
   | { B_dData_dPair.f_Pair_first = dtb__128; B_dData_dPair.f_Pair_second = dtb__129 } -> (match dtb__128 with
@@ -315,7 +315,7 @@ let rec v_stripFirstCol = (fun (mc0 : (Frontend_dRast.t_Pat B_dData_dList.t_List
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 491 "Vuna/Compiler/Elab/Match.vuna"
+# 496 "Vuna/Compiler/Elab/Match.vuna"
 let rec v_patNamesOf = (fun (mc0 : Frontend_dRast.t_Pat) -> (match mc0 with
   | Frontend_dRast.C_Pat_PRecord (dtb__132, dtb__133, dtb__134) -> ((B_dData_dList.v_concatMap (fun (f : (string, Frontend_dRast.t_Pat) B_dData_dPair.t_Pair) -> (v_patNamesOf (B_dData_dPair.v_secondOf f)))) dtb__133)
   | Frontend_dRast.C_Pat_PStr (dtb__135, dtb__136) -> B_dData_dList.C_List_Nil
@@ -327,14 +327,14 @@ let rec v_patNamesOf = (fun (mc0 : Frontend_dRast.t_Pat) -> (match mc0 with
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 487 "Vuna/Compiler/Elab/Match.vuna"
+# 492 "Vuna/Compiler/Elab/Match.vuna"
 let rec v_bindNames = (fun (mc0 : (Frontend_dRast.t_Pat, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__148, dtb__149) -> ((B_dData_dList.v_append (v_patNamesOf (B_dData_dPair.v_firstOf dtb__148))) (v_bindNames dtb__149))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 410 "Vuna/Compiler/Elab/Match.vuna"
+# 415 "Vuna/Compiler/Elab/Match.vuna"
 let rec v_renameExpr = (fun (oldName : string) (newName : string) (e : Frontend_dRast.t_Expr) -> (match e with
   | Frontend_dRast.C_Expr_EVar (dtb__150, dtb__151) -> (if ((Frontend_dRast_dName.v_rnameKey dtb__150) = oldName) then (Frontend_dRast.C_Expr_EVar ((Frontend_dRast_dName.v_classifyName newName), dtb__151)) else e)
   | Frontend_dRast.C_Expr_EInt (dtb__152, dtb__153) -> (Frontend_dRast.C_Expr_EInt (dtb__152, dtb__153))
@@ -361,7 +361,7 @@ let rec v_renameExpr = (fun (oldName : string) (newName : string) (e : Frontend_
   | Frontend_dRast.C_Expr_EInterp (dtb__215, dtb__216, dtb__217) -> (Frontend_dRast.C_Expr_EInterp (dtb__215, (((v_renameInterpParts oldName) newName) dtb__216), dtb__217))
   | _ -> failwith "DT: impossible branch"
 ))
-# 463 "Vuna/Compiler/Elab/Match.vuna"
+# 468 "Vuna/Compiler/Elab/Match.vuna"
 and v_renameInterpParts = (fun (mc0 : string) (mc1 : string) (mc2 : Frontend_dRast.t_InterpPart B_dData_dList.t_List) -> (match mc2 with
   | B_dData_dList.C_List__x58__x58_ (dtb__218, dtb__219) -> (match dtb__218 with
   | Frontend_dRast.C_InterpPart_IPHole (dtb__220) -> (B_dData_dList.C_List__x58__x58_ ((Frontend_dRast.C_InterpPart_IPHole ((((v_renameExpr mc0) mc1) dtb__220))), (((v_renameInterpParts mc0) mc1) dtb__219)))
@@ -371,24 +371,24 @@ and v_renameInterpParts = (fun (mc0 : string) (mc1 : string) (mc2 : Frontend_dRa
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
 ))
-# 470 "Vuna/Compiler/Elab/Match.vuna"
+# 475 "Vuna/Compiler/Elab/Match.vuna"
 and v_renameExprUnless = (fun (oldName : string) (newName : string) (names : string B_dData_dList.t_List) (body : Frontend_dRast.t_Expr) -> (if ((B_dData_dList.v_memName oldName) names) then body else (((v_renameExpr oldName) newName) body)))
-# 474 "Vuna/Compiler/Elab/Match.vuna"
+# 479 "Vuna/Compiler/Elab/Match.vuna"
 and v_renameBind = (fun (oldName : string) (newName : string) (bnd : (Frontend_dRast.t_Pat, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair) -> { B_dData_dPair.f_Pair_first = (B_dData_dPair.v_firstOf bnd); B_dData_dPair.f_Pair_second = (((v_renameExpr oldName) newName) (B_dData_dPair.v_secondOf bnd)) })
-# 477 "Vuna/Compiler/Elab/Match.vuna"
-and v_renameFieldValue = (fun (oldName : string) (newName : string) (field : (string, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair) -> { B_dData_dPair.f_Pair_first = (B_dData_dPair.v_firstOf field); B_dData_dPair.f_Pair_second = (((v_renameExpr oldName) newName) (B_dData_dPair.v_secondOf field)) })
 # 482 "Vuna/Compiler/Elab/Match.vuna"
+and v_renameFieldValue = (fun (oldName : string) (newName : string) (field : (string, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair) -> { B_dData_dPair.f_Pair_first = (B_dData_dPair.v_firstOf field); B_dData_dPair.f_Pair_second = (((v_renameExpr oldName) newName) (B_dData_dPair.v_secondOf field)) })
+# 487 "Vuna/Compiler/Elab/Match.vuna"
 and v_renameLocalClause = (fun (oldName : string) (newName : string) (clause : (Frontend_dRast.t_Pat B_dData_dList.t_List, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair) -> { B_dData_dPair.f_Pair_first = (B_dData_dPair.v_firstOf clause); B_dData_dPair.f_Pair_second = ((((v_renameExprUnless oldName) newName) ((B_dData_dList.v_concatMap v_patNamesOf) (B_dData_dPair.v_firstOf clause))) (B_dData_dPair.v_secondOf clause)) })
-# 500 "Vuna/Compiler/Elab/Match.vuna"
+# 505 "Vuna/Compiler/Elab/Match.vuna"
 and v_renameAlt = (fun (oldName : string) (newName : string) (alt : (Frontend_dRast.t_Pat, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair) -> (let p = (B_dData_dPair.v_firstOf alt) in { B_dData_dPair.f_Pair_first = p; B_dData_dPair.f_Pair_second = ((((v_renameExprUnless oldName) newName) (v_patNamesOf p)) (B_dData_dPair.v_secondOf alt)) }))
 
-# 166 "Vuna/Compiler/Elab/Match.vuna"
+# 171 "Vuna/Compiler/Elab/Match.vuna"
 let v_literalBranchBody = (fun (mc0 : string) (mc1 : Frontend_dRast.t_Pat) (mc2 : Frontend_dRast.t_Expr) -> (match mc1 with
   | Frontend_dRast.C_Pat_PVar (dtb__222, dtb__223) -> (((v_renameExpr dtb__222) mc0) mc2)
   | _ -> mc2
 ))
 
-# 156 "Vuna/Compiler/Elab/Match.vuna"
+# 161 "Vuna/Compiler/Elab/Match.vuna"
 let rec v_filterLitBranch = (fun (mc0 : Frontend_dRast.t_Pat) (mc1 : string) (mc2 : (Frontend_dRast.t_Pat B_dData_dList.t_List, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc3 : (Frontend_dRast.t_Pat B_dData_dList.t_List, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc2 with
   | B_dData_dList.C_List__x58__x58_ (dtb__224, dtb__225) -> (match dtb__224 with
   | { B_dData_dPair.f_Pair_first = dtb__226; B_dData_dPair.f_Pair_second = dtb__227 } -> (match dtb__226 with
@@ -402,17 +402,17 @@ let rec v_filterLitBranch = (fun (mc0 : Frontend_dRast.t_Pat) (mc1 : string) (mc
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 153 "Vuna/Compiler/Elab/Match.vuna"
+# 158 "Vuna/Compiler/Elab/Match.vuna"
 let v_litBranchClauses = (fun (lit : Frontend_dRast.t_Pat) (pos : string) (clauses : (Frontend_dRast.t_Pat B_dData_dList.t_List, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) -> ((((v_filterLitBranch lit) pos) clauses) B_dData_dList.C_List_Nil))
 
-# 242 "Vuna/Compiler/Elab/Match.vuna"
+# 247 "Vuna/Compiler/Elab/Match.vuna"
 let v_renameAsHead = (fun (mc0 : string) (mc1 : Frontend_dRast.t_Pat) (mc2 : Frontend_dRast.t_Expr) -> (match mc1 with
   | Frontend_dRast.C_Pat_PVar (dtb__230, dtb__231) -> (((v_renameExpr dtb__230) mc0) mc2)
   | Frontend_dRast.C_Pat_PAs (dtb__232, dtb__233, dtb__234) -> (((v_renameExpr dtb__232) mc0) mc2)
   | _ -> mc2
 ))
 
-# 234 "Vuna/Compiler/Elab/Match.vuna"
+# 239 "Vuna/Compiler/Elab/Match.vuna"
 let v_asInnerClause = (fun (mc0 : string) (mc1 : (Frontend_dRast.t_Pat B_dData_dList.t_List, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair) -> (match mc1 with
   | { B_dData_dPair.f_Pair_first = dtb__235; B_dData_dPair.f_Pair_second = dtb__236 } -> (match dtb__235 with
   | B_dData_dList.C_List_Nil -> mc1
@@ -422,7 +422,7 @@ let v_asInnerClause = (fun (mc0 : string) (mc1 : (Frontend_dRast.t_Pat B_dData_d
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 399 "Vuna/Compiler/Elab/Match.vuna"
+# 404 "Vuna/Compiler/Elab/Match.vuna"
 let rec v_prepVarColumn = (fun (mc0 : string) (mc1 : (Frontend_dRast.t_Pat B_dData_dList.t_List, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__239, dtb__240) -> (let nd_uscrut5 = dtb__239 in (match nd_uscrut5 with
   | { B_dData_dPair.f_Pair_first = dtb__241; B_dData_dPair.f_Pair_second = dtb__242 } -> (match dtb__241 with
@@ -440,7 +440,7 @@ let rec v_prepVarColumn = (fun (mc0 : string) (mc1 : (Frontend_dRast.t_Pat B_dDa
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 534 "Vuna/Compiler/Elab/Match.vuna"
+# 539 "Vuna/Compiler/Elab/Match.vuna"
 let rec v_ctorSubPatCount = (fun (mc0 : (Frontend_dRast.t_Pat B_dData_dList.t_List, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc1 : string) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__248, dtb__249) -> (let nd_uscrut5 = dtb__248 in (match nd_uscrut5 with
   | { B_dData_dPair.f_Pair_first = dtb__250; B_dData_dPair.f_Pair_second = dtb__251 } -> (match dtb__250 with
@@ -457,23 +457,23 @@ let rec v_ctorSubPatCount = (fun (mc0 : (Frontend_dRast.t_Pat B_dData_dList.t_Li
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 554 "Vuna/Compiler/Elab/Match.vuna"
+# 559 "Vuna/Compiler/Elab/Match.vuna"
 let rec v_subNamesForGoGo = (fun (pos : string) (remaining : int) (n : int) (acc : string B_dData_dList.t_List) -> (if (remaining <= 0) then (B_dData_dList.v_reverse acc) else ((((v_subNamesForGoGo pos) (remaining - 1)) n) (B_dData_dList.C_List__x58__x58_ ((String.concat "" ["_sc_"; pos; "_"; (bi_strFromInt (n - remaining))]), acc)))))
 
-# 551 "Vuna/Compiler/Elab/Match.vuna"
+# 556 "Vuna/Compiler/Elab/Match.vuna"
 let v_subNamesForGo = (fun (pos : string) (i : int) (n : int) (acc : string B_dData_dList.t_List) -> ((((v_subNamesForGoGo pos) (n - i)) n) acc))
 
-# 548 "Vuna/Compiler/Elab/Match.vuna"
+# 553 "Vuna/Compiler/Elab/Match.vuna"
 let v_subNamesFor = (fun (pos : string) (n : int) -> ((((v_subNamesForGo pos) 0) n) B_dData_dList.C_List_Nil))
 
-# 571 "Vuna/Compiler/Elab/Match.vuna"
+# 576 "Vuna/Compiler/Elab/Match.vuna"
 let rec v_addNameDistinct = (fun (mc0 : string) (mc1 : string B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__257, dtb__258) -> (if (dtb__257 = mc0) then (B_dData_dList.C_List__x58__x58_ (dtb__257, dtb__258)) else (B_dData_dList.C_List__x58__x58_ (dtb__257, ((v_addNameDistinct mc0) dtb__258))))
   | B_dData_dList.C_List_Nil -> (B_dData_dList.C_List__x58__x58_ (mc0, B_dData_dList.C_List_Nil))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 561 "Vuna/Compiler/Elab/Match.vuna"
+# 566 "Vuna/Compiler/Elab/Match.vuna"
 let rec v_ctorHeads = (fun (mc0 : (Frontend_dRast.t_Pat B_dData_dList.t_List, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__259, dtb__260) -> (let nd_uscrut4 = dtb__259 in (match nd_uscrut4 with
   | { B_dData_dPair.f_Pair_first = dtb__261; B_dData_dPair.f_Pair_second = dtb__262 } -> (match dtb__261 with
@@ -490,7 +490,7 @@ let rec v_ctorHeads = (fun (mc0 : (Frontend_dRast.t_Pat B_dData_dList.t_List, Fr
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 579 "Vuna/Compiler/Elab/Match.vuna"
+# 584 "Vuna/Compiler/Elab/Match.vuna"
 let rec v_clausesForCtor = (fun (mc0 : string) (mc1 : Frontend_dRast.t_Pat B_dData_dList.t_List) (mc2 : string) (mc3 : (Frontend_dRast.t_Pat B_dData_dList.t_List, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc3 with
   | B_dData_dList.C_List__x58__x58_ (dtb__268, dtb__269) -> (let nd_uscrut7 = dtb__268 in (match nd_uscrut7 with
   | { B_dData_dPair.f_Pair_first = dtb__270; B_dData_dPair.f_Pair_second = dtb__271 } -> (match dtb__270 with
@@ -509,7 +509,7 @@ let rec v_clausesForCtor = (fun (mc0 : string) (mc1 : Frontend_dRast.t_Pat B_dDa
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 596 "Vuna/Compiler/Elab/Match.vuna"
+# 601 "Vuna/Compiler/Elab/Match.vuna"
 let rec v_filterFallback = (fun (mc0 : (Frontend_dRast.t_Pat B_dData_dList.t_List, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__280, dtb__281) -> (let nd_uscrut4 = dtb__280 in (match nd_uscrut4 with
   | { B_dData_dPair.f_Pair_first = dtb__282; B_dData_dPair.f_Pair_second = dtb__283 } -> (match dtb__282 with
@@ -523,7 +523,7 @@ let rec v_filterFallback = (fun (mc0 : (Frontend_dRast.t_Pat B_dData_dList.t_Lis
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 615 "Vuna/Compiler/Elab/Match.vuna"
+# 620 "Vuna/Compiler/Elab/Match.vuna"
 let rec v_prepFallbacks = (fun (mc0 : string) (mc1 : (Frontend_dRast.t_Pat B_dData_dList.t_List, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__286, dtb__287) -> (let nd_uscrut5 = dtb__286 in (match nd_uscrut5 with
   | { B_dData_dPair.f_Pair_first = dtb__288; B_dData_dPair.f_Pair_second = dtb__289 } -> (match dtb__288 with
@@ -541,9 +541,9 @@ let rec v_prepFallbacks = (fun (mc0 : string) (mc1 : (Frontend_dRast.t_Pat B_dDa
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 128 "Vuna/Compiler/Elab/Match.vuna"
+# 133 "Vuna/Compiler/Elab/Match.vuna"
 let rec v_litAltExpr = (fun (table : (string, (bool, (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (clauses : (Frontend_dRast.t_Pat B_dData_dList.t_List, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) (pos : string) (restParams : string B_dData_dList.t_List) (fb : Base_dSource.t_Span) (fuel : int) -> (if (fuel <= 0) then (Base_dDiag.v_icFuel "pattern matrix") else ((((((v_litAltExprGo table) clauses) pos) restParams) fb) fuel)))
-# 132 "Vuna/Compiler/Elab/Match.vuna"
+# 137 "Vuna/Compiler/Elab/Match.vuna"
 and v_litAltExprGo = (fun (table : (string, (bool, (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (clauses : (Frontend_dRast.t_Pat B_dData_dList.t_List, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) (pos : string) (restParams : string B_dData_dList.t_List) (fb : Base_dSource.t_Span) (fuel : int) -> (if (fuel <= 0) then (Base_dDiag.v_icFuel "pattern matrix") else (let nd_uscrut6 = clauses in (match nd_uscrut6 with
   | B_dData_dList.C_List__x58__x58_ (dtb__295, dtb__296) -> (match dtb__295 with
   | { B_dData_dPair.f_Pair_first = dtb__297; B_dData_dPair.f_Pair_second = dtb__298 } -> (match dtb__297 with
@@ -560,27 +560,27 @@ and v_litAltExprGo = (fun (table : (string, (bool, (string, int) B_dData_dPair.t
   | B_dData_dList.C_List_Nil -> ((Base_dDiagnostics_dTc.v_tcErr0 fb) Base_dDiagnostics_dTc.C_TcErr_IntStringCaseNeedsFallback)
   | _ -> failwith "DT: impossible branch"
 ))))
-# 192 "Vuna/Compiler/Elab/Match.vuna"
+# 197 "Vuna/Compiler/Elab/Match.vuna"
 and v_buildColumnExpr = (fun (table : (string, (bool, (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (clauses0 : (Frontend_dRast.t_Pat B_dData_dList.t_List, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) (params : string B_dData_dList.t_List) (fb : Base_dSource.t_Span) (fuel : int) -> (if (fuel <= 0) then (Base_dDiag.C_Check_ErrC (((Base_dDiagnostics_dTc.v_tcMsg Base_dDiagnostics_dTc.C_TcErr_PatternFuel) B_dData_dVec.C_Vec_Nil))) else (((((v_buildColumnExprPruned table) (v_pruneRows clauses0)) params) fb) fuel)))
-# 199 "Vuna/Compiler/Elab/Match.vuna"
+# 204 "Vuna/Compiler/Elab/Match.vuna"
 and v_buildColumnExprPruned = (fun (table : (string, (bool, (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (clauses : (Frontend_dRast.t_Pat B_dData_dList.t_List, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) (params : string B_dData_dList.t_List) (fb : Base_dSource.t_Span) (fuel : int) -> (if (fuel <= 0) then (Base_dDiag.C_Check_ErrC (((Base_dDiagnostics_dTc.v_tcMsg Base_dDiagnostics_dTc.C_TcErr_PatternFuel) B_dData_dVec.C_Vec_Nil))) else (if (v_allEmptyPats clauses) then (Base_dDiag.C_Check_OkC ((v_bodyOfFirst clauses))) else (if (v_allWildPats (v_firstPats clauses)) then (Base_dDiag.C_Check_OkC ((v_bodyOfFirst clauses))) else (match params with
   | B_dData_dList.C_List_Nil -> ((Base_dDiagnostics_dTc.v_tcErr0 fb) Base_dDiagnostics_dTc.C_TcErr_ClauseTooManyPatterns)
   | B_dData_dList.C_List__x58__x58_ (dtb__304, dtb__305) -> (if (v_hasAsHead clauses) then ((((((v_asColumn table) clauses) dtb__304) dtb__305) fb) fuel) else (if (v_allVarHeads clauses) then (((((v_buildColumnExpr table) ((v_prepVarColumn dtb__304) clauses)) dtb__305) fb) (fuel - 1)) else (if (v_allCtorHeads clauses) then ((((((v_ctorColumn table) clauses) dtb__304) dtb__305) fb) fuel) else (if (v_hasCtorHead clauses) then ((((((v_ctorColumn table) clauses) dtb__304) dtb__305) fb) fuel) else ((((((v_litAltExpr table) clauses) dtb__304) dtb__305) fb) (fuel - 1))))))
   | _ -> failwith "DT: impossible branch"
 )))))
-# 225 "Vuna/Compiler/Elab/Match.vuna"
+# 230 "Vuna/Compiler/Elab/Match.vuna"
 and v_asColumn = (fun (table : (string, (bool, (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (clauses : (Frontend_dRast.t_Pat B_dData_dList.t_List, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) (pos : string) (restParams : string B_dData_dList.t_List) (fb : Base_dSource.t_Span) (fuel : int) -> (if (fuel <= 0) then (Base_dDiag.C_Check_ErrC (((Base_dDiagnostics_dTc.v_tcMsg Base_dDiagnostics_dTc.C_TcErr_PatternFuel) B_dData_dVec.C_Vec_Nil))) else ((Base_dCommon.v_bind (((((v_buildColumnExpr table) ((B_dData_dList.v_map (v_asInnerClause pos)) clauses)) (B_dData_dList.C_List__x58__x58_ (pos, restParams))) fb) (fuel - 1))) (fun (e : Frontend_dRast.t_Expr) -> (Base_dDiag.C_Check_OkC (e))))))
-# 258 "Vuna/Compiler/Elab/Match.vuna"
+# 263 "Vuna/Compiler/Elab/Match.vuna"
 and v_ctorColumn = (fun (table : (string, (bool, (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (clauses : (Frontend_dRast.t_Pat B_dData_dList.t_List, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) (pos : string) (restParams : string B_dData_dList.t_List) (fbSp : Base_dSource.t_Span) (fuel : int) -> (if (fuel <= 0) then (Base_dDiag.v_icFuel "pattern matrix") else ((Base_dCommon.v_bind ((((((v_ctorAltList table) clauses) pos) restParams) fbSp) (fuel - 1))) (fun (alts : (Frontend_dRast.t_Pat, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (let caseSp = (v_firstPatSpan clauses) in (if ((v_familyCovered table) (v_ctorHeads clauses)) then (Base_dDiag.C_Check_OkC ((Frontend_dRast.C_Expr_ECase ((Frontend_dRast.C_Expr_EVar ((Frontend_dRast_dName.v_classifyName pos), caseSp)), alts, caseSp)))) else ((Base_dCommon.v_bind ((((((v_fallbackAltList table) pos) clauses) restParams) fbSp) (fuel - 1))) (fun (fbAlts : (Frontend_dRast.t_Pat, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC ((Frontend_dRast.C_Expr_ECase ((Frontend_dRast.C_Expr_EVar ((Frontend_dRast_dName.v_classifyName pos), caseSp)), ((B_dData_dList.v_append alts) fbAlts), caseSp))))))))))))
-# 511 "Vuna/Compiler/Elab/Match.vuna"
+# 516 "Vuna/Compiler/Elab/Match.vuna"
 and v_ctorAltList = (fun (table : (string, (bool, (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (clauses : (Frontend_dRast.t_Pat B_dData_dList.t_List, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) (pos : string) (restParams : string B_dData_dList.t_List) (fbSp : Base_dSource.t_Span) (fuel : int) -> (if (fuel <= 0) then (Base_dDiag.v_icFuel "pattern matrix") else (((((((v_ctorAltListGo table) clauses) (v_ctorHeads clauses)) pos) restParams) fbSp) fuel)))
-# 518 "Vuna/Compiler/Elab/Match.vuna"
+# 523 "Vuna/Compiler/Elab/Match.vuna"
 and v_ctorAltListGo = (fun (mc0 : (string, (bool, (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc1 : (Frontend_dRast.t_Pat B_dData_dList.t_List, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc2 : string B_dData_dList.t_List) (mc3 : string) (mc4 : string B_dData_dList.t_List) (mc5 : Base_dSource.t_Span) (mc6 : int) -> (match mc2 with
   | B_dData_dList.C_List__x58__x58_ (dtb__306, dtb__307) -> (if (mc6 <= 0) then (Base_dDiag.v_icFuel "pattern matrix") else (let subpatCount = ((v_ctorSubPatCount mc1) dtb__306) in (let freshSubs = ((v_subNamesFor mc3) subpatCount) in (let subParams = ((B_dData_dList.v_append freshSubs) mc4) in (let branchPats = ((B_dData_dList.v_map (fun (n : string) -> (Frontend_dRast.C_Pat_PVar (n, { Base_dSource.f_Span_spanFile = ""; Base_dSource.f_Span_spanStartLine = 0; Base_dSource.f_Span_spanStartCol = 0; Base_dSource.f_Span_spanEndLine = 0; Base_dSource.f_Span_spanEndCol = 0; Base_dSource.f_Span_spanStartOffset = 0; Base_dSource.f_Span_spanEndOffset = 0 })))) freshSubs) in (let expanded = ((((v_clausesForCtor dtb__306) branchPats) mc3) mc1) in ((Base_dCommon.v_bind (((((v_buildColumnExpr mc0) expanded) subParams) mc5) (mc6 - 1))) (fun (bodyExpr : Frontend_dRast.t_Expr) -> ((Base_dCommon.v_bind (((((((v_ctorAltListGo mc0) mc1) dtb__307) mc3) mc4) mc5) (mc6 - 1))) (fun (tail : (Frontend_dRast.t_Pat, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC ((B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = (Frontend_dRast.C_Pat_PCon ((Frontend_dRast_dName.v_classifyName dtb__306), branchPats, { Base_dSource.f_Span_spanFile = ""; Base_dSource.f_Span_spanStartLine = 0; Base_dSource.f_Span_spanStartCol = 0; Base_dSource.f_Span_spanEndLine = 0; Base_dSource.f_Span_spanEndCol = 0; Base_dSource.f_Span_spanStartOffset = 0; Base_dSource.f_Span_spanEndOffset = 0 })); B_dData_dPair.f_Pair_second = bodyExpr }, tail))))))))))))))
   | B_dData_dList.C_List_Nil -> (if (mc6 <= 0) then (Base_dDiag.v_icFuel "pattern matrix") else (Base_dDiag.C_Check_OkC (B_dData_dList.C_List_Nil)))
   | _ -> failwith "DT: impossible branch"
 ))
-# 606 "Vuna/Compiler/Elab/Match.vuna"
+# 611 "Vuna/Compiler/Elab/Match.vuna"
 and v_fallbackAltList = (fun (table : (string, (bool, (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (pos : string) (clauses : (Frontend_dRast.t_Pat B_dData_dList.t_List, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) (restParams : string B_dData_dList.t_List) (fbSp : Base_dSource.t_Span) (fuel : int) -> (if (fuel <= 0) then (Base_dDiag.v_icFuel "pattern matrix") else (match ((v_prepFallbacks pos) (v_filterFallback clauses)) with
   | B_dData_dList.C_List_Nil -> (Base_dDiag.C_Check_OkC (B_dData_dList.C_List_Nil))
   | dtb__308 -> ((Base_dCommon.v_bind (((((v_buildColumnExpr table) dtb__308) restParams) fbSp) (fuel - 1))) (fun (bodyExpr : Frontend_dRast.t_Expr) -> (Base_dDiag.C_Check_OkC ((B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = (Frontend_dRast.C_Pat_PWild ({ Base_dSource.f_Span_spanFile = ""; Base_dSource.f_Span_spanStartLine = 0; Base_dSource.f_Span_spanStartCol = 0; Base_dSource.f_Span_spanEndLine = 0; Base_dSource.f_Span_spanEndCol = 0; Base_dSource.f_Span_spanStartOffset = 0; Base_dSource.f_Span_spanEndOffset = 0 })); B_dData_dPair.f_Pair_second = bodyExpr }, B_dData_dList.C_List_Nil))))))
@@ -589,13 +589,13 @@ and v_fallbackAltList = (fun (table : (string, (bool, (string, int) B_dData_dPai
 # 44 "Vuna/Compiler/Elab/Match.vuna"
 let v_multiToExpr = (fun (table : (string, (bool, (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (clauses : (Frontend_dRast.t_Pat B_dData_dList.t_List, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match (v_arityOf clauses) with
   | B_dData_dMaybe.C_Maybe_Nothing -> (Base_dDiag.C_Check_ErrC (((Base_dDiagnostics_dTc.v_tcMsg Base_dDiagnostics_dTc.C_TcErr_FunctionNoClauses) B_dData_dVec.C_Vec_Nil)))
-  | B_dData_dMaybe.C_Maybe_Just (dtb__309) -> (if ((v_clauseArityTooMany dtb__309) clauses) then ((Base_dDiagnostics_dTc.v_tcErr0 (v_firstPatSpan clauses)) Base_dDiagnostics_dTc.C_TcErr_ClauseTooManyPatterns) else ((Base_dCommon.v_bind ((v_checkReachable table) clauses)) (fun (_u : bool) -> (let names = (v_paramNames dtb__309) in ((Base_dCommon.v_bind (((((v_buildColumnExpr table) clauses) names) (v_firstPatSpan clauses)) 200)) (fun (body : Frontend_dRast.t_Expr) -> (Base_dDiag.C_Check_OkC (((v_wrapLambdas names) body)))))))))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__309) -> (if ((v_clauseArityTooMany dtb__309) clauses) then ((Base_dDiagnostics_dTc.v_tcErr0 (v_firstPatSpan clauses)) Base_dDiagnostics_dTc.C_TcErr_ClauseTooManyPatterns) else ((Base_dCommon.v_bind ((v_checkReachable table) clauses)) (fun (_u : bool) -> (let names = (v_paramNames dtb__309) in ((Base_dCommon.v_bind (((((v_buildColumnExpr table) clauses) names) (v_firstPatSpan clauses)) (Elab_dCoverage.v_coverageFuelFor (v_matrixOf clauses)))) (fun (body : Frontend_dRast.t_Expr) -> (Base_dDiag.C_Check_OkC (((v_wrapLambdas names) body)))))))))
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 89 "Vuna/Compiler/Elab/Match.vuna"
 let v_multiToCaseExpr = (fun (table : (string, (bool, (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (clauses : (Frontend_dRast.t_Pat B_dData_dList.t_List, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) (name : string) -> (match (v_arityOf clauses) with
   | B_dData_dMaybe.C_Maybe_Nothing -> ((Base_dDiagnostics_dTc.v_tcErr0 (v_firstPatSpan clauses)) Base_dDiagnostics_dTc.C_TcErr_ClauseTooManyPatterns)
-  | B_dData_dMaybe.C_Maybe_Just (dtb__310) -> (if ((v_clauseArityTooMany dtb__310) clauses) then ((Base_dDiagnostics_dTc.v_tcErr0 (v_firstPatSpan clauses)) Base_dDiagnostics_dTc.C_TcErr_ClauseTooManyPatterns) else (((((v_buildColumnExpr table) clauses) (B_dData_dList.C_List__x58__x58_ (name, B_dData_dList.C_List_Nil))) (v_firstPatSpan clauses)) 200))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__310) -> (if ((v_clauseArityTooMany dtb__310) clauses) then ((Base_dDiagnostics_dTc.v_tcErr0 (v_firstPatSpan clauses)) Base_dDiagnostics_dTc.C_TcErr_ClauseTooManyPatterns) else (((((v_buildColumnExpr table) clauses) (B_dData_dList.C_List__x58__x58_ (name, B_dData_dList.C_List_Nil))) (v_firstPatSpan clauses)) (Elab_dCoverage.v_coverageFuelFor (v_matrixOf clauses))))
   | _ -> failwith "DT: impossible branch"
 ))

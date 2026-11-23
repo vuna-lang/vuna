@@ -283,7 +283,7 @@ let v_groupNames = (fun (adj : (string, string B_dData_dList.t_List) B_dData_dPa
 ))))))
 
 # 362 "Vuna/Ir/Analysis.vuna"
-let v_depEdgeCount = (fun (defs : Vuna_dIr_dModel.t_IrDef B_dData_dList.t_List) -> (((B_dData_dList.v_foldl (fun (acc : int) (d : Vuna_dIr_dModel.t_IrDef) -> (((B_dTrait_dNum.v__x43_ B_dData_dInt.v_Num_ub27c21f837ed69cc_uInt) acc) (v_countList (Vuna_dIr_dModel.v_irDefDeps d))))) 0) defs))
+let v_depEdgeCount = (fun (defs : Vuna_dIr_dModel.t_IrDef B_dData_dList.t_List) -> (((B_dData_dList.v_foldl (fun (acc : int) (d : Vuna_dIr_dModel.t_IrDef) -> (acc + (v_countList (Vuna_dIr_dModel.v_irDefDeps d))))) 0) defs))
 
 # 369 "Vuna/Ir/Analysis.vuna"
 let rec v_reachableNames = (fun (fuel : int) (pending : string B_dData_dList.t_List) (defTbl : (string, Vuna_dIr_dModel.t_IrDef) B_dContainer_dHashMap.t_HashMap) (seen : (string, bool) B_dContainer_dHashMap.t_HashMap) -> (if (fuel <= 0) then seen else (match pending with
@@ -406,7 +406,7 @@ let v_bodyRefCount = (fun (mc0 : Vuna_dIr_dModel.t_Ir B_dData_dMaybe.t_Maybe) ->
 ))
 
 # 511 "Vuna/Ir/Analysis.vuna"
-let v_refEdgeCount = (fun (defs : Vuna_dIr_dModel.t_IrDef B_dData_dList.t_List) -> (((B_dData_dList.v_foldl (fun (acc : int) (d : Vuna_dIr_dModel.t_IrDef) -> ((((B_dTrait_dNum.v__x43_ B_dData_dInt.v_Num_ub27c21f837ed69cc_uInt) acc) (v_bodyRefCount (Vuna_dIr_dModel.v_irDefBody d))) + (v_countList (Vuna_dIr_dModel.v_irDefDeps d))))) 0) defs))
+let v_refEdgeCount = (fun (defs : Vuna_dIr_dModel.t_IrDef B_dData_dList.t_List) -> (((B_dData_dList.v_foldl (fun (acc : int) (d : Vuna_dIr_dModel.t_IrDef) -> ((acc + (v_bodyRefCount (Vuna_dIr_dModel.v_irDefBody d))) + (v_countList (Vuna_dIr_dModel.v_irDefDeps d))))) 0) defs))
 
 # 519 "Vuna/Ir/Analysis.vuna"
 let v_refsOfDef = (fun (keepDep : (string) -> bool) (d : Vuna_dIr_dModel.t_IrDef) -> (match (Vuna_dIr_dModel.v_irDefBody d) with

@@ -9,6 +9,7 @@ B_dData_dFloat.ml
 B_dData_dFunction.ml
 B_dData_dInt.ml
 B_dData_dList.ml
+B_dData_dLog.ml
 B_dData_dMaybe.ml
 B_dData_dNat.ml
 B_dData_dObs.ml
