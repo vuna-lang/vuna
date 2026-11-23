@@ -933,8 +933,9 @@ liftablePat _ = False
 
 -- | 内部：模式放进 clause 参数位置时是否需要加括号：带参数构造子与 record 模式需要，否则
 -- 会被解析成多个参数模式（0 元构造子与后续模式分开）；无参数构造子、字面量、变量不需要。
+-- 元组模式自带括号，不需要再加。
 patNeedsParen : Pat -> Bool
-patNeedsParen (PCon _ args _) = notEmptyPatList args
+patNeedsParen (PCon name args _) = if isTuplePairSyntax name then False else notEmptyPatList args
 patNeedsParen (PRecord _ _ _) = True
 patNeedsParen _ = False
 
@@ -1433,7 +1434,7 @@ liftEdit src lane pat body name sp =
   let
     headLine = laneHeadLine lane
     ownLine = startsOwnLine src.lintSrcLines (spanStartLine sp) (spanStartCol sp)
-    patTextValue = if exprMentions name body then asPatText src name pat else "(${patText src pat})"
+    patTextValue = if exprMentions name body then asPatText src name pat else patReplacement src pat
     newHead = laneReplace src lane name patTextValue (spanStartLine sp) (spanStartCol sp)
     target =
       if ownLine then spanStartCol sp - 1 else indentOf (lineAt src.lintSrcLines headLine) + 2
@@ -1468,6 +1469,10 @@ liftCaseOk src lane pat body name sp =
 laneIsClause : Lane -> Bool
 laneIsClause (LClause line pats last single) = True
 laneIsClause (LAlt line pat last) = False
+
+-- | 内部：不需要保留绑定时，模式放进 clause 参数位置的形式（自带括号的元组不再包一层）。
+patReplacement : LintSrc -> Pat -> String
+patReplacement src pat = if patNeedsParen pat then "(${patText src pat})" else patText src pat
 
 -- | 内部：`name@pat` 形式的模式文本；带参数或 record 模式加括号。
 asPatText : LintSrc -> String -> Pat -> String
@@ -1517,7 +1522,7 @@ liftLetEdit : LintSrc -> Lane -> Pat -> Expr -> String -> Span -> Edit
 liftLetEdit src lane pat body name sp =
   let
     headLine = laneHeadLine lane
-    patTextValue = if exprMentions name body then asPatText src name pat else "(${patText src pat})"
+    patTextValue = if exprMentions name body then asPatText src name pat else patReplacement src pat
     newHead = laneReplace src lane name patTextValue (spanStartLine sp) (spanStartCol sp)
     target = indentOf (lineAt src.lintSrcLines headLine) + 2
     -- let 解构没有既有语料约束，单行 body 直接按 fmt 规范形态与 clause/alt 头同行。
@@ -1576,7 +1581,8 @@ caseAltClauseLines src headPrefix varTok x headIndent pat body =
     replacement =
       if exprMentions x body then
         if isWildPat pat then x else asPatText src x pat
-      else if patNeedsParen pat then "(${patText src pat})" else patText src pat
+      else
+        patReplacement src pat
     newHead = replaceIdentInLine headPrefix varTok replacement
   in if exprSingleLine body then
     ["${newHead} ${exprText src body}"]

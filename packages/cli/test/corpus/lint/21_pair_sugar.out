@@ -1,0 +1,14 @@
+corpus/lint/21_pair_sugar.vuna:4:10: [LN_PairSugar] pair-sugar: pair construction can be written as `(Int, String)`
+corpus/lint/21_pair_sugar.vuna:5:10: [LN_PairSugar] pair-sugar: pair construction can be written as `(1, "a")`
+corpus/lint/21_pair_sugar.vuna:7:10: [LN_PairSugar] pair-sugar: pair construction can be written as `(Int, String)`
+corpus/lint/21_pair_sugar.vuna:8:9: [LN_PairSugar] pair-sugar: pair construction can be written as `(n, _)`
+corpus/lint/21_pair_sugar.vuna:10:10: [LN_PairSugar] pair-sugar: pair construction can be written as `(Int, Int, Int)`
+corpus/lint/21_pair_sugar.vuna:11:10: [LN_PairSugar] pair-sugar: pair construction can be written as `(1, 2, 3)`
+corpus/lint/21_pair_sugar.vuna:13:8: [LN_PairSugar] pair-sugar: pair construction can be written as `(Pair Int Int, Int)`
+corpus/lint/21_pair_sugar.vuna:13:14: [LN_PairSugar] pair-sugar: pair construction can be written as `(Int, Int)`
+corpus/lint/21_pair_sugar.vuna:14:8: [LN_PairSugar] pair-sugar: pair construction can be written as `(Pair 1 2, 3)`
+corpus/lint/21_pair_sugar.vuna:14:14: [LN_PairSugar] pair-sugar: pair construction can be written as `(1, 2)`
+corpus/lint/21_pair_sugar.vuna:22:13: [LN_PairSugar] pair-sugar: pair construction can be written as `(Int, Int)`
+corpus/lint/21_pair_sugar.vuna:23:13: [LN_PairSugar] pair-sugar: pair construction can be written as `(1, 2)`
+corpus/lint/21_pair_sugar.vuna:25:9: [LN_PairSugar] pair-sugar: pair construction can be written as `(Int, String)`
+corpus/lint/21_pair_sugar.vuna:28:9: [LN_PairSugar] pair-sugar: pair construction can be written as `(1, "a")`

@@ -1,7 +1,7 @@
-f (Pair a b) =
+f (a, b) =
   case b of
     0 => a
     _ => b
 f other = 0
 
-main = f (Pair 1 2)
+main = f (1, 2)

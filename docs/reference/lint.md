@@ -46,7 +46,7 @@ exclude = ["test/**", "examples/**"]
 literal-if-chain = "error"      # off | warn | error
 dispatch-lift = "error"
 list-literal = "error"
-pair-sugar = "off"               # 默认关闭；all 预设可开
+pair-sugar = "error"
 todo-marker = "off"              # 默认关闭；all 预设可开
 redundant-if = "off"             # 默认关闭；all 预设可开
 ```
@@ -141,7 +141,7 @@ let 值里的 if）需要上下文分发（case-of-case），会复制代码与�
 | `LN_LiteralIfChain` | `literal-if-chain` | 是 | if dispatch（`x == lit` 链 / Bool 变量）在可提升位置；字面量链提升失败时改写为 case |
 | `LN_DispatchLift` | `dispatch-lift` | 是 | case / let dispatch 在可提升位置（单 alt 替换、多 alt 拆 clause / alt） |
 | `LN_ListLiteral` | `list-literal` | 是 | 表达式/类型位置的闭合 cons 链（`::` / `Cons` + `[]` / `Nil`）与裸 `Nil`；**模式匹配不动** |
-| `LN_PairSugar` | `pair-sugar` | 是 | 表达式/类型/模式位置的显式 `Pair a b` 应用；默认关闭，`--select` / all 预设启用 |
+| `LN_PairSugar` | `pair-sugar` | 是 | 表达式/类型/模式位置的显式 `Pair a b` 应用（右嵌套链展平） |
 | `LN_TodoMarker` | `todo-marker` | 否 | 注释里的 `TODO` / `FIXME` / `XXX`；默认关闭，`--select` / all 预设启用 |
 | `LN_RedundantIf` | `redundant-if` | 是 | `if True/False then a else b` 的常量条件；默认关闭，`--select` / all 预设启用 |
 
@@ -254,11 +254,13 @@ clause（多 alt 拆分）；外层是嵌套 alt 时该 alt 是父 case 的最�
 - `packages/cli/test/corpus/lint/*.vuna` + `.out`：报告 golden 与退出码（01–04 为回归基线，05–14 覆盖
   dispatch 两条规则与「不报」形态；15–18 覆盖 Bool 变量 if 的 clause/alt 报告、不报形态与
   模板字符串分支；19 覆盖 `list-literal`：`::` / `Cons` / 裸 `Nil` / 类型位置报告，
-  以及 pattern、开放链、注释行、既有字面量不误报）。
+  以及 pattern、开放链、注释行、既有字面量不误报；21 覆盖 `pair-sugar`：类型/值/模式、
+  右嵌套展平、左嵌套多轮、部分应用与既有元组不报、注释/跨行报告但不可修复）。
 - `packages/cli/test/corpus/fix/*.vuna` + `.expected`：`--fix` 产物与二次运行幂等（01–06 回归基线，
   07–15 覆盖 dispatch 两条规则与 let 解构；16–19 覆盖 Bool if 的 clause/alt/链提升、
   as-pattern 与模板字符串分支；20 覆盖 `list-literal`：表达式/类型位置、括号剥离、
-  `Cons` / 裸 `Nil`、注释行不修、幂等）。
+  `Cons` / 裸 `Nil`、注释行不修、幂等；21 覆盖 `pair-sugar`：类型/值/模式、右嵌套展平、
+  左嵌套多轮、注释与跨行不修、幂等）。
 - `packages/cli/test/steps/39_lint_cli.steps`：`vuna.toml [lint]`、源码抑制、`--format json`
   （含结束位置与 fixable）、「未知规则只由 lint 认领、`vuna check` 仍通过」，以及
   `--select pair-sugar` 的报告 / `--fix` / 幂等 / 修完 `check` 通过。

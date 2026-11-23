@@ -1,4 +1,4 @@
-lookupPair name ((Pair k v) :: rest) =
+lookupPair name ((k, v) :: rest) =
   if k == name then v else 0
 
 main = 0

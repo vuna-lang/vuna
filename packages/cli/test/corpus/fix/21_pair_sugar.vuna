@@ -1,0 +1,24 @@
+-- pair-sugar：显式 Pair 应用改写成元组语法，右嵌套链展平；跨行与注释行保持原样。
+import Base.Data.Pair as Pair
+
+pairTy : Pair Int String
+pairTy = Pair 1 "a"
+
+unpair : Pair Int String -> Int
+unpair (Pair n _) = n
+
+nested : Pair Int (Pair Int Int)
+nested = Pair 1 (Pair 2 3)
+
+keep : Pair Int Int -> Int
+keep (Pair a b) = a + b
+
+commented : Pair Int Int
+commented = Pair 1 2 -- keep
+
+multi : Pair
+  Int
+  String
+multi = Pair
+  1
+  "a"

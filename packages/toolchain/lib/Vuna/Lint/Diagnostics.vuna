@@ -170,7 +170,7 @@ export lintRecommended : LintRule -> Bool
 lintRecommended LiteralIfChain = True
 lintRecommended DispatchLift = True
 lintRecommended ListLiteral = True
-lintRecommended PairSugar = False
+lintRecommended PairSugar = True
 lintRecommended TodoMarker = False
 lintRecommended RedundantIf = False
 

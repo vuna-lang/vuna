@@ -1,10 +1,10 @@
 data Wrap : Type where
-  Wrap : Pair Int Int -> Int -> Wrap
+  Wrap : (Int, Int) -> Int -> Wrap
 
-h : Wrap -> Pair Int Int
+h : Wrap -> (Int, Int)
 h w = case w of
   Wrap p n => case p of
-    Pair a b => p
+    (a, b) => p
 
-main : Pair Int Int
-main = h (Wrap (Pair 1 2) 0)
+main : (Int, Int)
+main = h (Wrap (1, 2) 0)

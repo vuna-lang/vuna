@@ -1,2 +1,2 @@
-wrap (Just (Pair a c)) =
+wrap (Just (a, c)) =
   a

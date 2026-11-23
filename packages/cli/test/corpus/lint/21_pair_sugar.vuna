@@ -1,0 +1,30 @@
+-- pair-sugar：表达式 / 类型 / 模式位置的显式 Pair 应用应写成元组语法 `(a, b)`。
+import Base.Data.Pair as Pair
+
+pairTy : Pair Int String
+pairTy = Pair 1 "a"
+
+unpair : Pair Int String -> Int
+unpair (Pair n _) = n
+
+nested : Pair Int (Pair Int Int)
+nested = Pair 1 (Pair 2 3)
+
+left : Pair (Pair Int Int) Int
+left = Pair (Pair 1 2) 3
+
+partial : Pair Int -> Int
+partial f = firstOf (f 1)
+
+same : (Int, Int)
+same = (1, 2)
+
+commented : Pair Int Int
+commented = Pair 1 2 -- keep
+
+multi : Pair
+  Int
+  String
+multi = Pair
+  1
+  "a"
