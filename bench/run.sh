@@ -606,11 +606,15 @@ run_bench() { # name
 
   note "== $name =="
 
-  # 手写 OCaml 对照（FFI 基准带 C 源）。
+  # 手写 OCaml 对照（FFI 基准带 C 源）。ocamlopt 把 .cmi/.cmx/.o 写在源文件旁边，
+  # 所以先把 `.ml` 复制进工作目录再编译，产物不落到 fixture 目录。
   local mldir=$WORK/$name-ml
   mkdir -p "$mldir"
+  local mlbase
+  mlbase=$(basename "$ml")
+  cp "$ml" "$mldir/$mlbase"
   local oprog=$mldir/prog
-  local -a mlargs=("$ml")
+  local -a mlargs=("$mlbase")
   [ -n "$csrc" ] && mlargs+=("$bdir/$csrc")
   if ! ( cd "$mldir" && "$OCAMLOPT_BIN" -o "$oprog" "${mlargs[@]}" ) >"$WORK/$name.ocamlopt.log" 2>&1; then
     die "$name: ocamlopt failed for $ml"
