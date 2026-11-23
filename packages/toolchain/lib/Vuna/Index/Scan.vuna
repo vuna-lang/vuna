@@ -411,7 +411,8 @@ refsInFields sMod ((fname, value) :: rest) acc =
 -- | 内部：绑定里的引用（`let` 绑定与 `case` 分支的「模式, 表达式」），只看值表达式。
 refsInBinds : String -> List Binding -> List Ref -> List Ref
 refsInBinds sMod [] acc = acc
-refsInBinds sMod (b :: rest) acc = refsInBinds sMod rest (refsInExprGo sMod b.bindValue acc)
+refsInBinds sMod (b :: rest) acc =
+  refsInBinds sMod rest (refsInExprGo sMod (bindingValueView b) acc)
 
 -- | 内部：`case` 分支的引用，只看分支体。
 refsInAlts : String -> List Alt -> List Ref -> List Ref

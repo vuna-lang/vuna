@@ -260,15 +260,31 @@ interpSites fuel part =
       IPText s => []
       IPHole e => exprSitesAt (fuel - 1) e
 
--- 局部函数组的绑定节点由首条子句自带，不重复收（与注释锚点同一口径）。
+-- 一条绑定：签名行（`bindSig`）+ 定义行。局部函数组的绑定节点由首条子句自带，
+-- 不重复收（与注释锚点同一口径）。
 bindingSites : Int -> Binding -> List Site
 bindingSites fuel b =
   if fuel <= 0 then
     []
   else
+    append (bindingSigSites (fuel - 1) b.bindSig) (bindingDefSites (fuel - 1) b)
+
+bindingSigSites : Int -> Maybe BindingSig -> List Site
+bindingSigSites fuel sig =
+  if fuel <= 0 then
+    []
+  else
+    case sig of
+      Nothing => []
+      Just s => Site "binding" "sig" s.sigRef :: exprSitesAt (fuel - 1) s.sigType
+
+bindingDefSites : Int -> Binding -> List Site
+bindingDefSites fuel b =
+  if fuel <= 0 then
+    []
+  else
     case b.bindValue of
       ELocalFun _ _ => exprSitesAt (fuel - 1) b.bindValue
-      EAnn (ELocalFun _ _) _ _ => exprSitesAt (fuel - 1) b.bindValue
       _ => Site "binding" "def" b.bindRef :: exprSitesAt (fuel - 1) b.bindValue
 
 localClauseSites : Int -> LocalClause -> List Site
@@ -280,10 +296,7 @@ localClauseSites fuel clause =
 
 altSites : Int -> Alt -> List Site
 altSites fuel alt =
-  if fuel <= 0 then
-    []
-  else
-    Site "alt" "alt" alt.altRef :: exprSitesAt (fuel - 1) alt.altBody
+  if fuel <= 0 then [] else Site "alt" "alt" alt.altRef :: exprSitesAt (fuel - 1) alt.altBody
 
 fieldValueSites : Int -> Pair String Expr -> List Site
 fieldValueSites fuel (Pair fname value) = if fuel <= 0 then [] else exprSitesAt (fuel - 1) value
@@ -347,14 +360,14 @@ siteOk : HashMap Int CstNode -> Site -> Bool
 siteOk index site =
   case HashMap.lookup (nodeRefId (siteRefOf site)) index of
     Nothing => False
+    -- 表达式区间根：AST 构造子的 span 可以比树节点窄（`EInfix` 从运算符起）；
+    -- 条目节点（绑定 / 分支 / 子句 / 签名行）要求区间完全相同。
     Just n =>
       nodeKindTag n
         == siteTagOf site
         && spanEndOffset (nodeSpan n)
         == spanEndOffset (nodeRefSpan (siteRefOf site))
         && (
-          -- 表达式区间根：AST 构造子的 span 可以比树节点窄（`EInfix` 从运算符起）；
-          -- 条目节点（绑定 / 分支 / 子句 / 签名行）要求区间完全相同。
           if siteRoleOf site == "expr" then
             spanStartOffset (nodeSpan n) <= spanStartOffset (nodeRefSpan (siteRefOf site))
           else
@@ -406,8 +419,10 @@ exprIdsOk index tree decls =
   in sitesOk index sites
     && countIdentified exprRefs
     == countTagged "expr" (nodeChildren tree)
-    && countIdentified sigRefs == countSigBindings (nodeChildren tree)
-    && countIdentified (distinctIds bindingRefs) == countTagged "binding" (nodeChildren tree)
+    && countIdentified sigRefs
+    == countSigBindings (nodeChildren tree)
+    && countIdentified (distinctIds bindingRefs)
+    == countTagged "binding" (nodeChildren tree)
     && countIdentified altRefs == countTagged "alt" (nodeChildren tree)
 
 -- | 带身份的引用（id >= 0）必须指回同 kind、同区间的树节点。
@@ -430,9 +445,10 @@ bodyPatRefs : Expr -> List NodeRef
 bodyPatRefs e =
   case e of
     ELet binds body rec_ _ =>
-      append (concatMap bindingPatRefs binds) (append (concatMap bindingBodyPatRefs binds) (bodyPatRefs body))
-    ECase scrut alts _ =>
-      append (bodyPatRefs scrut) (concatMap altPatRefs alts)
+      append
+        (concatMap bindingPatRefs binds)
+        (append (concatMap bindingBodyPatRefs binds) (bodyPatRefs body))
+    ECase scrut alts _ => append (bodyPatRefs scrut) (concatMap altPatRefs alts)
     ELam ps body _ => append (map (\p => detachedNodeRef (secondOf p)) ps) (bodyPatRefs body)
     EApp fn args _ => append (bodyPatRefs fn) (concatMap bodyPatRefs args)
     EIf c t el _ => append (bodyPatRefs c) (append (bodyPatRefs t) (bodyPatRefs el))

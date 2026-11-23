@@ -1271,7 +1271,13 @@ fieldExprsGo (f :: rest) acc = fieldExprsGo rest (exprRefNamesGo (secondOf f) ac
 
 -- | `pat = expr` 绑定里的引用名（模式 binder 不算引用）。
 bindRefNamesGo : Binding -> List String -> List String
-bindRefNamesGo b acc = patRefNamesGo b.bindPat (exprRefNamesGo b.bindValue acc)
+bindRefNamesGo b acc =
+  patRefNamesGo b.bindPat (exprRefNamesGo b.bindValue (bindingSigRefNames b.bindSig acc))
+
+-- | 绑定签名行里的引用名。
+bindingSigRefNames : Maybe BindingSig -> List String -> List String
+bindingSigRefNames Nothing acc = acc
+bindingSigRefNames (Just s) acc = exprRefNamesGo s.sigType acc
 
 bindRefNamesListGo : List Binding -> List String -> List String
 bindRefNamesListGo [] acc = acc

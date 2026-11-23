@@ -974,13 +974,14 @@ walkBinds fuel env scope line col name kind binds =
       [] => Nothing
       b :: rest =>
         let
-          binders = patBinders env kind b.bindPat (Just b.bindValue)
+          view = bindingValueView b
+          binders = patBinders env kind b.bindPat (Just view)
         in if patHit env line col b.bindPat then
           case binderNamed name binders of
             Just hit => Just hit
             Nothing => walkBinds (fuel - 1) env (append scope binders) line col name kind rest
         else
-          case walkBindValue (fuel - 1) env scope line col name b.bindValue of
+          case walkBindValue (fuel - 1) env scope line col name view of
             Just hit => Just hit
             Nothing => walkBinds (fuel - 1) env (append scope binders) line col name kind rest
 
@@ -1209,7 +1210,7 @@ walkExpr fuel env scope line col name e =
 
 -- | 内部：单个绑定引入的 binder（`kind` 标签 + 值作为单行值 / 语法类型来源）。
 bindBinders : WalkEnv -> String -> Binding -> List LocalBind
-bindBinders env kind b = patBinders env kind b.bindPat (Just b.bindValue)
+bindBinders env kind b = patBinders env kind b.bindPat (Just (bindingValueView b))
 
 -- | 内部：绑定块里全部 binder（顺序拼接；调用方在整块可见处把它追加进 scope）。
 bindersOfBinds : WalkEnv -> String -> List Binding -> List LocalBind

@@ -312,7 +312,15 @@ reorderBind : FixityTable -> Binding -> Check Binding
 reorderBind t binding =
   Vuna.Compiler.Base.Common.bind
     (reorderPattern t binding.bindPat)
-    (\p2 => Vuna.Compiler.Base.Common.bind (reorderExpr t binding.bindValue) (\v2 => OkC (Binding p2 v2 binding.bindRef)))
+    (\p2 => Vuna.Compiler.Base.Common.bind (reorderBindingSig t binding.bindSig) (\sig2 => Vuna.Compiler.Base.Common.bind (reorderExpr t binding.bindValue) (\v2 => OkC (Binding p2 v2 sig2 binding.bindRef))))
+
+-- | 绑定签名行的重排（类型里的中缀链同样要按 fixity 重排）。
+reorderBindingSig : FixityTable -> Maybe BindingSig -> Check (Maybe BindingSig)
+reorderBindingSig t Nothing = OkC Nothing
+reorderBindingSig t (Just s) =
+  Vuna.Compiler.Base.Common.bind
+    (reorderExpr t s.sigType)
+    (\ty2 => OkC (Just (BindingSig ty2 s.sigRef)))
 
 reorderFields : FixityTable -> List (String, Expr) -> Check (List (String, Expr))
 reorderFields t fields = Vuna.Compiler.Base.Common.traverse (\v => reorderField t v) fields

@@ -105,11 +105,18 @@ encPatListGo (x :: rest) acc = encPat x (encPatListGo rest acc)
 encPatExprList : List Binding -> List String -> List String
 encPatExprList xs acc = "[${strFromInt (lenOf xs)}:" :: encPatExprListGo xs acc
 
--- | 绑定表的递归主体（计数头由 `encPatExprList` 写）。
+-- | 绑定表的递归主体（计数头由 `encPatExprList` 写）：模式 + 可选签名 + 值。
 encPatExprListGo : List Binding -> List String -> List String
 encPatExprListGo [] acc = acc
 encPatExprListGo (b :: rest) acc =
-  encPat b.bindPat (encExpr b.bindValue (encPatExprListGo rest acc))
+  encPat b.bindPat (encBindingSig b (encExpr b.bindValue (encPatExprListGo rest acc)))
+
+-- | 绑定签名行：0 = 无，1 = 有 + 类型表达式。
+encBindingSig : Binding -> List String -> List String
+encBindingSig b acc =
+  case b.bindSig of
+    Nothing => encTag 0 acc
+    Just sig => encTag 1 (encExpr sig.sigType acc)
 
 -- | `case` 分支表（编码与绑定表同形：模式 + 表达式；身份不进摘要）。
 encAltList : List Alt -> List String -> List String
@@ -806,9 +813,22 @@ decBinding fuel bytes =
     case decPat (fuel - 1) bytes of
       Nothing => Nothing
       Just (p, b1) =>
-        case decExpr (fuel - 1) b1 of
+        case decTag fuel b1 of
           Nothing => Nothing
-          Just (e, b2) => Just ((Binding p e noNodeRef), b2)
+          Just (tag, b2) =>
+            case tag of
+              0 =>
+                case decExpr (fuel - 1) b2 of
+                  Nothing => Nothing
+                  Just (e, b3) => Just ((Binding p e Nothing noNodeRef), b3)
+              1 =>
+                case decExpr (fuel - 1) b2 of
+                  Nothing => Nothing
+                  Just (ty, b3) =>
+                    case decExpr (fuel - 1) b3 of
+                      Nothing => Nothing
+                      Just (e, b4) => Just ((Binding p e (Just (BindingSig ty noNodeRef)) noNodeRef), b4)
+              _ => Nothing
 
 -- | 解析一个 `case` 分支；身份不进编码，解码用 `noNodeRef`。
 decAlt : Int -> Cur -> Maybe (Alt, Cur)

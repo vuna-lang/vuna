@@ -1212,10 +1212,12 @@ letBlockDoc fuel env at binds =
 -- | 内部：单条 `let` 绑定是否可以内联成 `let pat = value`。
 inlineLetBind : Binding -> Bool
 inlineLetBind b =
-  case b.bindValue of
-    EAnn _ _ _ => False
-    ELocalFun _ _ => False
-    value => not (multilineExpr value)
+  case b.bindSig of
+    Just _ => False
+    Nothing =>
+      case b.bindValue of
+        ELocalFun _ _ => False
+        value => not (multilineExpr value)
 
 -- | 内部：绑定（`name = value`，可带签名行 / 局部函数 clause）。签名行挂签名行的
 -- `binding` 节点，定义行挂绑定自己的节点；局部函数组由各子句自带挂载，外层不再重复挂。
@@ -1224,13 +1226,13 @@ bindingDoc fuel env at binding =
   if fuel <= 0 then
     empty
   else
-    case binding.bindValue of
-      EAnn inner ty sigRef =>
+    case binding.bindSig of
+      Just sig =>
         let
-          sigD = attachAt at sigRef (text (renderPatGo formatFuelBound binding.bindPat ++ " : " ++ typeText (fuel - 1) env at ty))
-          defD = bindingDefDoc (fuel - 1) env at binding.bindPat binding.bindRef inner
+          sigD = attachAt at sig.sigRef (text (renderPatGo formatFuelBound binding.bindPat ++ " : " ++ typeText (fuel - 1) env at sig.sigType))
+          defD = bindingDefDoc (fuel - 1) env at binding.bindPat binding.bindRef binding.bindValue
         in vsep [sigD, defD]
-      value => bindingDefDoc (fuel - 1) env at binding.bindPat binding.bindRef value
+      Nothing => bindingDefDoc (fuel - 1) env at binding.bindPat binding.bindRef binding.bindValue
 
 -- | 内部：定义行的形态（局部函数 / λ 还原成子句 / 普通值）。
 bindingDefDoc : Int -> List FixityDecl -> TriviaCtx -> Pat -> NodeRef -> Expr -> Doc

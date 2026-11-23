@@ -547,7 +547,7 @@ bindUses fuel ctx b =
   if fuel <= 0 then
     []
   else
-    append (patUses (fuel - 1) ctx b.bindPat) (usesInExpr (fuel - 1) ctx b.bindValue)
+    append (patUses (fuel - 1) ctx b.bindPat) (usesInExpr (fuel - 1) ctx (bindingValueView b))
 
 -- | 内部：`do` 语句（绑定或表达式）里的使用位置。
 stmtUses : Int -> UseCtx -> DoStmt -> List (Int, Int)

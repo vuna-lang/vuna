@@ -53,7 +53,7 @@ toAstInterpPart (Rast.IPHole e) = Ast.IPHole (toAstExpr e)
 
 -- 绑定 / 分支身份不进 Rast（Elab 不消费）；回到 Ast 时是 detached（工具侧用解析产物）。
 toAstBinding : (Rast.Pat, Rast.Expr) -> Ast.Binding
-toAstBinding (pat, value) = Ast.Binding (toAstPat pat) (toAstExpr value) Ast.noNodeRef
+toAstBinding (pat, value) = Ast.Binding (toAstPat pat) (toAstExpr value) Nothing Ast.noNodeRef
 
 -- 子句身份不进 Rast（Elab 不消费）；回到 Ast 时是 detached（工具侧用解析产物）。
 toAstLocalClause : (List Rast.Pat, Rast.Expr) -> Ast.LocalClause

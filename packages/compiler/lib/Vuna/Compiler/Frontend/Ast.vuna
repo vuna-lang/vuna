@@ -94,8 +94,8 @@ reprPrefix ReprAlias = "alias "
 reprPrefix ReprBoxed = "boxed "
 
 -- | 局部函数子句：参数模式 + 体 + 该子句对应的 `binding` 树节点 + 子句头的函数名
--- `pat` 节点。子句本身不是表达式节点；`lcRef` 只用于身份与注释挂载（与 `EAnn` 存
--- 签名行同源），`lcHead` 让每条子句都能指回自己的名字节点（首条与绑定的模式同源）。
+-- `pat` 节点。子句本身不是表达式节点；`lcRef` 只用于身份与注释挂载，`lcHead` 让每条
+-- 子句都能指回自己的名字节点（首条与绑定的模式同源）。
 export record LocalClause(..) where
   lcPats : List Pat
   lcBody : Expr
@@ -109,12 +109,26 @@ export record Alt(..) where
   altBody : Expr
   altRef : NodeRef
 
--- | `let` / `where` / do-`let` 的一条绑定：模式 + 值 + 该绑定的 `binding` 树节点。
--- 带签名行时 `bindRef` 是**定义行**的节点，签名行节点在 `EAnn` 里。
+-- | 绑定项的签名行：类型表达式 + 签名行自己的 `binding` 树节点。
+export record BindingSig(..) where
+  sigType : Expr
+  sigRef : NodeRef
+
+-- | `let` / `where` / do-`let` 的一条绑定：模式 + 值 + 可选签名行 + 定义行的 `binding`
+-- 树节点。签名行（`g : Int -> Int`）是绑定项的一部分，不再编码成表达式标注。
 export record Binding(..) where
   bindPat : Pat
   bindValue : Expr
+  bindSig : Maybe BindingSig
   bindRef : NodeRef
+
+-- | 绑定在「表达式视图」下的值：带签名行时是 `EAnn value ty sigRef`。
+-- 仍按表达式遍历的消费者（Lint / Index / Lsp）用它沿用同一条路径；Fmt 分开渲染签名行。
+export bindingValueView : Binding -> Expr
+bindingValueView b =
+  case b.bindSig of
+    Just sig => EAnn b.bindValue sig.sigType sig.sigRef
+    Nothing => b.bindValue
 
 export data Expr(..) : Type where
   EVar : String -> NodeRef -> Expr
@@ -152,9 +166,8 @@ export data Expr(..) : Type where
   ESectOp : String -> NodeRef -> Expr
   ESectL : String -> Expr -> NodeRef -> Expr
   ESectR : Expr -> String -> NodeRef -> Expr
-  -- 表达式类型标注。只由 parser 的 where 绑定签名生成（`g : Int -> Int` 行
-  -- 绑定到随后的 `g ... = ...` 子句），Elab 精化时据此把 where 组按签名递归提升；
-  -- 普通表达式位置不产生它，Fmt 在非 where 位置把它当透明括号渲染。
+  -- 表达式类型标注：`(e : T)` 的 ascribe 标记在 `Loader.Resolve` 里降级成它（Elab 据此
+  -- 在 checking 模式精化）。绑定项的签名行不走这里，见 `Binding.bindSig`。
   EAnn : Expr -> Expr -> NodeRef -> Expr
   -- 模板字符串字面量。`multi` = 是否 `"""` 形式（Fmt 用它保留书写形式；单行
   -- 字面量保持单行转义形式）。`Loader.Resolve` 把它降级成 `Base.Trait.Interp.interp`

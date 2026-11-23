@@ -791,6 +791,14 @@ resolveAlt fuel modules label prefix ns imports scope alt =
             (pat2, bound) => Vuna.Compiler.Base.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports (append bound scope) alt.altBody) (\body2 => OkC (Alt pat2 body2 alt.altRef))
       )
 
+-- | 绑定签名行的名字解析（类型表达式）。
+resolveBindingSig : Int -> List Module -> String -> String -> Namespaces -> List Import -> List String -> Maybe BindingSig -> Check (Maybe BindingSig)
+resolveBindingSig fuel modules label prefix ns imports scope Nothing = OkC Nothing
+resolveBindingSig fuel modules label prefix ns imports scope (Just s) =
+  Vuna.Compiler.Base.Common.bind
+    (resolveExpr (fuel - 1) modules label prefix ns imports scope s.sigType)
+    (\ty2 => OkC (Just (BindingSig ty2 s.sigRef)))
+
 -- 局部函数的一个 clause（参数模式列表 + body）；参数绑定累加到 body 的作用域。
 resolveLocalClause : Int -> List Module -> String -> String -> Namespaces -> List Import -> List String -> LocalClause -> Check LocalClause
 resolveLocalClause fuel modules label prefix ns imports scope clause =
@@ -838,17 +846,20 @@ resolveLetSeq fuel modules label prefix ns imports scope binds body =
     case binds of
       [] => Vuna.Compiler.Base.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope body) (\b => OkC ([], b))
       binding :: rest =>
-        Vuna.Compiler.Base.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope binding.bindValue) (
-            \value2 =>
-              Vuna.Compiler.Base.Common.bind (resolvePattern resolveFuelBound modules label prefix ns imports binding.bindPat) (
-                  \p =>
-                    case p of
-                      (pat2, bound) =>
-                        Vuna.Compiler.Base.Common.bind (resolveLetSeq (fuel - 1) modules label prefix ns imports (append bound scope) rest body) (
-                            \r =>
-                              case r of
-                                (binds2, body2) => OkC ((::) (Binding pat2 value2 binding.bindRef) binds2, body2)
-                          )
+        Vuna.Compiler.Base.Common.bind (resolveBindingSig (fuel - 1) modules label prefix ns imports scope binding.bindSig) (
+            \sig2 =>
+              Vuna.Compiler.Base.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope binding.bindValue) (
+                  \value2 =>
+                    Vuna.Compiler.Base.Common.bind (resolvePattern resolveFuelBound modules label prefix ns imports binding.bindPat) (
+                        \p =>
+                          case p of
+                            (pat2, bound) =>
+                              Vuna.Compiler.Base.Common.bind (resolveLetSeq (fuel - 1) modules label prefix ns imports (append bound scope) rest body) (
+                                  \r =>
+                                    case r of
+                                      (binds2, body2) => OkC ((::) (Binding pat2 value2 sig2 binding.bindRef) binds2, body2)
+                                )
+                      )
                 )
           )
 
@@ -877,7 +888,7 @@ collectRecBinds modules label prefix ns imports (binding :: rest) =
             Vuna.Compiler.Base.Common.bind (collectRecBinds modules label prefix ns imports rest) (
                 \r =>
                   case r of
-                    (names, tail) => OkC (append bound names, (::) (Binding pat2 binding.bindValue binding.bindRef) tail)
+                    (names, tail) => OkC (append bound names, (::) (Binding pat2 binding.bindValue binding.bindSig binding.bindRef) tail)
               )
     )
 
@@ -889,8 +900,8 @@ resolveRecValues fuel modules label prefix ns imports scope (binding :: rest) =
     icFuel "resolver"
   else
     Vuna.Compiler.Base.Common.bind
-      (resolveExpr (fuel - 1) modules label prefix ns imports scope binding.bindValue)
-      (\value2 => Vuna.Compiler.Base.Common.bind (resolveRecValues (fuel - 1) modules label prefix ns imports scope rest) (\tail => OkC ((::) (Binding binding.bindPat value2 binding.bindRef) tail)))
+      (resolveBindingSig (fuel - 1) modules label prefix ns imports scope binding.bindSig)
+      (\sig2 => Vuna.Compiler.Base.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope binding.bindValue) (\value2 => Vuna.Compiler.Base.Common.bind (resolveRecValues (fuel - 1) modules label prefix ns imports scope rest) (\tail => OkC ((::) (Binding binding.bindPat value2 sig2 binding.bindRef) tail))))
 
 -- 模板字符串降级（rename 之后、Elab 之前）。
 --
@@ -1120,17 +1131,20 @@ resolveDoLet fuel modules label prefix ns imports scope binds =
     case binds of
       [] => OkC ([], [])
       binding :: rest =>
-        Vuna.Compiler.Base.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope binding.bindValue) (
-            \value2 =>
-              Vuna.Compiler.Base.Common.bind (resolvePattern resolveFuelBound modules label prefix ns imports binding.bindPat) (
-                  \p =>
-                    case p of
-                      (pat2, bound) =>
-                        Vuna.Compiler.Base.Common.bind (resolveDoLet (fuel - 1) modules label prefix ns imports (append bound scope) rest) (
-                            \r =>
-                              case r of
-                                (binds2, names) => OkC ((::) (Binding pat2 value2 binding.bindRef) binds2, append bound names)
-                          )
+        Vuna.Compiler.Base.Common.bind (resolveBindingSig (fuel - 1) modules label prefix ns imports scope binding.bindSig) (
+            \sig2 =>
+              Vuna.Compiler.Base.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope binding.bindValue) (
+                  \value2 =>
+                    Vuna.Compiler.Base.Common.bind (resolvePattern resolveFuelBound modules label prefix ns imports binding.bindPat) (
+                        \p =>
+                          case p of
+                            (pat2, bound) =>
+                              Vuna.Compiler.Base.Common.bind (resolveDoLet (fuel - 1) modules label prefix ns imports (append bound scope) rest) (
+                                  \r =>
+                                    case r of
+                                      (binds2, names) => OkC ((::) (Binding pat2 value2 sig2 binding.bindRef) binds2, append bound names)
+                                )
+                      )
                 )
           )
 
