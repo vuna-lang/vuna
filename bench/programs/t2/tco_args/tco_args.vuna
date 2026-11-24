@@ -1,0 +1,12 @@
+-- T2：尾调用的实参写回顺序。每轮实参交叉依赖：`b` / `c` 会被后面的实参读到，
+-- `c'` 读完旧值立即写回；写回时序错了 golden 会直接不同。
+-- 一次 op 是一次尾调用；手写 OCaml 对照见 tco_args.ml（同算法）。
+step : Int -> Int -> Int -> Int -> Int
+step a b c n =
+  if n <= 0 then
+    a * 1000000 + b * 1000 + c
+  else
+    step b c ((a + b + c) - ((a + b + c) / 1000) * 1000) (n - 1)
+
+main : Int
+main = step 1 2 3 5000000

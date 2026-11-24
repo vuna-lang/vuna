@@ -7,4 +7,4 @@ odd : Int -> Bool
 odd n = if n <= 0 then False else even (n - 1)
 
 main : Int
-main = if even 4000000 then 1 else 0
+main = if even 20000000 then 1 else 0

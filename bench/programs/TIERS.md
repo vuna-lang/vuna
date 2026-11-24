@@ -18,7 +18,7 @@ bench/programs/
 | --- | --- | --- | --- |
 | t0 | 地板与入口 | 手写 OCaml / 裸 syscall C | `startup` |
 | t1 | 标量算术与循环 | 手写 OCaml / C | `arith` `nat_bits` `float_math` `scalar_xor` `scalar_muladd` `scalar_divconst` `scalar_idiv` `scalar_divsigned` `scalar_cmp` `scalar_bit` `scalar_ilp` |
-| t2 | 控制流与尾调用 | 手写 OCaml / C | `tco_mutual` `tco_wide` |
+| t2 | 控制流与尾调用 | 手写 OCaml / C | `micro_tco` `tco_mutual` `tco_wide` `tco_args` `tco_unrotated` `tco_arity6` `tco_narrow_wide` `tco_nat` `state_machine` |
 | t3 | 调用约定与闭包 | 手写 OCaml / C | `closures` `micro_apply` |
 | t4 | 数据表示（record / variant / array） | 手写 OCaml / C | `records` `array` |
 | t5 | 分配与 GC | 手写 OCaml / C | `gc_low_live` `gc_pressure` `gc_retain` `gc_array_churn` |

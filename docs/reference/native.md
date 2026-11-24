@@ -679,13 +679,15 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
   - 路径缓冲 4096 字节：超长路径 trap（`vuna: runtime error: path too long`，exit 2）；
   - `Int` 除法 `min_int / -1` 返回 `min_int`（与 OCaml / wasm 一致，不触发 x86 `#DE`）。
 - **运行期性能与内存**：`nix run .#vuna-perf -- --target native`（或 `--target both`）
-  在 16 个生成程序基准上测 native 产物；基线 `bench/baselines/programs.json`，读数与口径见
+  在 `bench/programs/t*` 的生成程序基准上测 native 产物；基线 `bench/baselines/programs.json`，读数与口径见
 [benchmarks.md](benchmarks.md) §1.1。非尾深递归吃入口自带栈（512 MiB 虚拟，独立于
   `ulimit -s`），JSON 的 `meta.stack_policy` 记为 `self-managed`、每项另有
   `default_stack_ok` 探针；峰值 RSS = 已触碰的栈页 + live 堆，需与墙钟一起读。TCO 由
   `IrTail` 标记驱动，覆盖直调、饱和闭包、函数值 wrapper、runtime 符号与自递归 loop；
-  窄调宽、`rt_apply` 慢路径与非尾递归仍吃帧。`tco_mutual` / `tco_wide` / `arith` / `records`
-  的判定与实测读数见 [benchmarks.md](benchmarks.md) §1.2；§1.1 的 native 列是 TCO 前快照。
+  窄调宽、`rt_apply` 慢路径与非尾递归仍吃帧。`tco_narrow_wide` 直接量窄调宽的回退成本
+  （1M 层 RSS ~150 MiB，见 [benchmarks.md](benchmarks.md) §1.2）；
+  `tco_mutual` / `tco_wide` / `arith` / `records` 的判定与实测读数见
+  [benchmarks.md](benchmarks.md) §1.2；§1.1 的 native 列是 TCO 前快照。
 - 核数限制是**亲和性**，不是 CPU 配额：单核跑多久不管，长时间占用用
   `VUNA_NATIVE_TIMEOUT_MS`；cgroup 只读 v2 挂载根的 `cpu.max`。
 - `Int`/`Nat`/`Bool` 的 heap 布局、对象头/复用（Perceus RC 依赖这一层）。

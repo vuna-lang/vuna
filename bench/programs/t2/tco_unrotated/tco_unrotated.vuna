@@ -1,0 +1,21 @@
+-- T2：尾调用但循环体不旋转的两个形状。
+--  A（step）：外层 `if` 两支都不是直接自调用，内层两支都自调用；
+--  B（guard）：条件是 `&&` 复合式，`condBranch` 不成立。
+-- 一次 op 是一次尾调用；手写 OCaml 对照见 tco_unrotated.ml（同算法）。
+import Base.Data.Bits as Bits
+
+step : Bool -> Int -> Int -> Int
+step flag acc n =
+  if n <= 0 then acc else if flag then step False (acc + n) (n - 1) else step True (acc - n) (n - 1)
+
+guard : Int -> Int -> Int
+guard acc n =
+  if n <= 0 then
+    acc
+  else if (n > 2500000) && ((band n 1) == 0) then
+    guard (acc + 1) (n - 1)
+  else
+    guard (acc + 2) (n - 1)
+
+main : Int
+main = step True 0 5000000 + guard 0 5000000

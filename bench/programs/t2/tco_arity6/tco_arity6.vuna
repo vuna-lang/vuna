@@ -1,0 +1,8 @@
+-- T2：6 参自递归尾调用。arity 恰好 6（全部走参数寄存器、无栈实参），
+-- 压标量槽提升的上限（只提升最热的 5 个）与 6 参实参写回。
+-- 一次 op 是一次尾调用；手写 OCaml 对照见 tco_arity6.ml（同算法）。
+step : Int -> Int -> Int -> Int -> Int -> Int -> Int
+step a b c d e n = if n <= 0 then a + b + c + d + e else step b c d e (a + n) (n - 1)
+
+main : Int
+main = step 0 0 0 0 0 10000000

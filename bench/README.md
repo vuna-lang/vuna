@@ -41,8 +41,9 @@
   `ns_per_op = median_ms * 1e6 / N`，同一项在不同后端、不同规模之间就有了可比的单位；
   没有声明则显示 `-`。当前声明了 `ops` 的有 `arith`、`scalar_xor`、`scalar_muladd`、
   `scalar_divconst`、`scalar_idiv`、`scalar_divsigned`、`scalar_cmp`、`scalar_bit`、
-  `scalar_ilp`、`text_scan`、`array`、`hashmap`、`gc_low_live`、`eff_tick`、
-  `micro_apply`、`micro_concat`。
+  `scalar_ilp`、`micro_tco`、`tco_mutual`、`tco_wide`、`tco_args`、`tco_unrotated`、
+  `tco_arity6`、`tco_narrow_wide`、`tco_nat`、`state_machine`、`text_scan`、`array`、
+  `hashmap`、`gc_low_live`、`eff_tick`、`micro_apply`、`micro_concat`。
 - 每项先 `--warmup` 次预热，再跑 `--runs` 次取**中位数**；峰值内存用 GNU time 的 max RSS，
   计时结束后单独跑 `--rss-passes` 次取**最大值**（不参与计时）。
 - native 只有**直接饱和尾调用**复用栈帧（[native.md](../docs/reference/native.md) §3），
@@ -149,8 +150,15 @@ nix run .#vuna-artifacts -- --json bench/baselines/artifacts.json   # 重标
 | float_math | Float 算术 / sqrt / abs | ~0.7x | ~1.3x | ~5.3x |
 | text_scan | 逐字节 `strAt` 扫描 | ~1.0x | ~1.2x | skipped |
 | nat_bits | Nat 饱和算术 + 位运算 | ~1.0x | ~1.5x | ~8.2x |
-| tco_mutual | 互递归尾调用 | ~1.6x | ~2.0x | ~9.2x |
-| tco_wide | 9 参数尾递归 | ~1.5x | ~1.5x | ~8.0x |
+| tco_mutual | 互递归尾调用 | ~1.1x | ~2.3x | ~5.4x |
+| tco_wide | 9 参数尾递归 | ~1.0x | ~1.5x | ~5.8x |
+| micro_tco | 最小自递归尾调用 | ~1.0x | ~1.3x | ~4.5x |
+| tco_args | 交叉依赖实参的尾递归 | ~1.1x | ~1.8x | ~3.0x |
+| tco_unrotated | 不旋转的尾调用 | ~1.0x | ~1.0x | ~6.0x |
+| tco_arity6 | 6 参尾递归 | ~1.1x | ~0.9x | ~4.2x |
+| tco_narrow_wide | 窄调宽回退 | ~1.1x | ~22x | ~6.6x |
+| tco_nat | Nat 结构递归尾调用 | ~1.6x | ~1.1x | ~5.5x |
+| state_machine | Int 分支链状态机 | ~1.4x | ~1.3x | ~5.6x |
 | gc_low_live | 低存活集、大累计分配 | ~0.8x | ~0.6x | skipped |
 | gc_array_churn | 大对象 churn（Array COW） | ~0.8x | ~1.2x | skipped |
 | gc_retain | 高存活集（live ~19 MB）+ 等量 churn | ~2.1x | ~4.2x | ~7.7x |
@@ -168,8 +176,10 @@ native 侧由 `VUNA_NATIVE_GC_LOG=1` 的末次诊断行采集 `collections` / `l
 另记峰值 RSS 与默认栈探针。`gc_low_live` 的 RSS 约 4 MiB（0.02x 手写），
 `gc_array_churn` 仍是 GC 相关的最差项（COW 数组复制）；`gc_retain` 是反向的一档——
 live 单调上升（~19 MB），整堆回收必须重扫整个存活集，是 `gen=` 分布与整堆触发策略的
-测量项（低存活的 `gc_low_live` / `gc_pressure` 覆盖不到）。TCO 已覆盖直调、自递归 loop、饱和闭包、wrapper 与 runtime 符号；
-判定与读数见 [benchmarks.md §1.2](../docs/reference/benchmarks.md)。
+测量项（低存活的 `gc_low_live` / `gc_pressure` 覆盖不到）。TCO 已覆盖直调、
+自递归 loop、饱和闭包、wrapper 与 runtime 符号；t2 的基准把实参写回、非旋转尾调用、
+6/9 参边界、窄调宽回退与 Nat/Int 分支链各自单列，矩阵与读数见
+[benchmarks.md §1.2](../docs/reference/benchmarks.md)。
 
 效应基准（`eff_tick` / `eff_deep` / `eff_deepseq` / `eff_bracket` / `eff_nested` /
 `eff_host` / `eff_abort` / `eff_install`）与 `startup`（sidecar `repeat=20`）、`traits`

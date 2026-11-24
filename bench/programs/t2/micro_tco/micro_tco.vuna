@@ -1,0 +1,7 @@
+-- T2 micro：最小自递归尾调用（比较 + 递减），只压尾调用本身。
+-- 一次 op 是一次尾调用；手写 OCaml 对照见 micro_tco.ml（同算法）。
+loop : Int -> Int -> Int
+loop acc n = if n <= 0 then acc else loop (acc + n) (n - 1)
+
+main : Int
+main = loop 0 20000000

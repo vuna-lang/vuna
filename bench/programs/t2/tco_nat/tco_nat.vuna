@@ -1,0 +1,10 @@
+-- T2：Nat 结构递归的尾调用（`zero` / `Succ` 两支），压 `IrNatCase` 的尾位置传播。
+-- 一次 op 是一次尾调用；手写 OCaml 对照见 tco_nat.ml（同算法）。
+import Base.Data.Nat as Nat
+
+loop : Nat -> Nat -> Nat
+loop acc 0 = acc
+loop acc (Succ k) = loop (Nat.plus acc k) k
+
+main : Int
+main = Nat.toInt (loop 0 (Nat.fromInt 10000000))

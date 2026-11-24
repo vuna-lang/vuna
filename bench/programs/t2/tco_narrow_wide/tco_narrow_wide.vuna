@@ -1,0 +1,13 @@
+-- T2：窄尾调宽。`narrow`（2 参）尾调 `wide`（10 参，4 个栈实参）超过来参区，
+-- native 回退普通 `call`；`wide` 尾调 `narrow` 仍走 `jmp`。同一程序在 wasm 上两侧
+-- 都是 `return_call`，用来量 native 的回退成本。
+-- 一次 op 是一次尾调用；手写 OCaml 对照见 tco_narrow_wide.ml（同算法）。
+narrow : Int -> Int -> Int
+narrow acc n = if n <= 0 then acc else wide acc n 1 2 3 4 5 6 7 8
+
+wide : Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int
+wide acc n a b c d e f g h =
+  if n <= 0 then acc else narrow (acc + a + b + c + d + e + f + g + h) (n - 1)
+
+main : Int
+main = narrow 0 1000000

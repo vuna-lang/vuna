@@ -34,14 +34,21 @@
 | float_math | Float 算术 / sqrt / abs / 转换 | ~1.9x | 浮点内建；盒装表示与 OCaml 相同 |
 | text_scan | 逐字节 `strAt` 扫描 | ~1.5x | `strAt` 直调原语，不经 List 桥接 |
 | nat_bits | Nat 饱和算术 + 63-bit 位运算 | ~1.3x | Nat 运行时即 Int；位运算内建 |
-| tco_mutual | 互递归（`even`/`odd`） | ~1.0x | 尾调用在 OCaml 侧直接复用栈帧 |
-| tco_wide | 9 参数尾递归（3 个栈参数） | ~1.3x | 尾调用与栈传参 ABI 由 ocamlopt 处理 |
+| tco_mutual | 互递归（`even`/`odd`） | ~1.1x | 尾调用在 OCaml 侧直接复用栈帧 |
+| tco_wide | 9 参数尾递归（3 个栈参数） | ~1.0x | 尾调用与栈传参 ABI 由 ocamlopt 处理 |
+| micro_tco | 最小自递归尾调用 | ~1.0x | 旋转后的 loop header + 比较直发分支 |
+| tco_args | 交叉依赖实参的尾递归 | ~1.1x | 实参按需落临时槽 + 统一写回 |
+| tco_unrotated | 双支自调用 / `&&` 条件 | ~1.0x | 不旋转时回退整帧 `jmp` |
+| tco_arity6 | 6 参尾递归（全走寄存器） | ~1.1x | 5 个热标量槽提升 |
+| tco_narrow_wide | 2 参 ↔ 10 参窄调宽 | ~1.1x | native 回退普通 `call`（已知缺口，见 §1.2） |
+| tco_nat | Nat 结构递归尾调用 | ~1.6x | `IrNatCase` 的尾位置传播 |
+| state_machine | 9 状态 Int 分支链 | ~1.4x | 线性比较链 + `_` 兜底臂 |
 | gc_low_live | 低存活集、大累计分配 | ~0.8x | OCaml GC 回收；vuna 侧只有 bump 分配 |
 | gc_array_churn | 大对象 churn（Array COW） | ~1.7x | `Array.set` COW 与手写 `Array.copy` 对齐 |
 | gc_retain | 高存活集（live ~19 MB）+ 等量 churn | ~1.9x | 整堆回收要重扫整个存活集；整堆触发策略的测量项 |
 
 场景覆盖：数值 / 字符串 / 容器 / 分配 / 数组 / 记录与变体 / 高阶函数 / 算法 / 浮点 /
-逐字节文本 / Nat 与位运算 / TCO / GC。新增场景按机制归入 `bench/programs/t<N>/`，
+逐字节文本 / Nat 与位运算 / 尾调用与分支链 / GC。新增场景按机制归入 `bench/programs/t<N>/`，
 清单见 [`bench/programs/TIERS.md`](../../bench/programs/TIERS.md)。
 
 关键设计决策与改动（`packages/target-ocaml/lib/Vuna/Target/Ocaml/Term.vuna`、`Base.Intrinsics` / `Elab.Prelude` / `Target.Ocaml.Decl` 与
@@ -142,16 +149,36 @@
 native 的 TCO / GC 验证项。**GC 与 TCO 均已落地**；下表「前」列取 §1.1 的 TCO 前快照，
 「后」列是 `--target both --runs 5 --warmup 2 --only <name>` 的实测（与 §1.1 同口径）：
 
-| 用例 | TCO 前 | TCO 后实测 | 判定列 |
+| 用例 | TCO 前（旧 N） | TCO 后实测（当前 N） | 判定列 |
 | --- | --- | --- | --- |
-| `tco_mutual` | 189 ms / 244 MiB / `default_stack_ok=false` | 8 ms / 0.4 MiB / `true` | wall, rss, stack |
-| `tco_wide` | 343 ms / 442 MiB / `false` | 6 ms / 0.4 MiB / `true` | wall, rss, stack |
+| `tco_mutual`（N=20M） | 189 ms / 244 MiB / `default_stack_ok=false` | 30 ms / 0.4 MiB / `true` | wall, rss, stack |
+| `tco_wide`（N=5M） | 343 ms / 442 MiB / `false` | 13 ms / 0.4 MiB / `true` | wall, rss, stack |
 | `arith` | 338 ms / 412 MiB / `false` | 8 ms / 0.4 MiB / `true` | wall, rss, stack |
 | `records` | 151 ms / 151 MiB / `false` | 20 ms / 1.0 MiB / `true` | wall, rss, stack |
+| `tco_narrow_wide`（N=1M） | — | 136 ms / 150 MiB / `true` | rss, wall（窄调宽回退） |
+
+「TCO 前」是旧 N 的历史快照；`tco_mutual` / `tco_wide` 的 N 已抬到 20M / 5M，
+「后」列与当前 fixture 同 N。
 
 - **TCO**：判据是 `default_stack_ok` 由 false 翻为 true，且 RSS 从百 MB 降到进程基线
-  （~0.4 MiB）；上表四项都满足。`arith` / `records` 也翻真，说明它们的递归主体同样是
-  **直接饱和尾调用**；`tco_wide` 覆盖 9 参（3 个栈实参）的自递归。
+  （~0.4 MiB）；上表前四项都满足。`arith` / `records` 也翻真，说明它们的递归主体同样是
+  **直接饱和尾调用**；`tco_wide` 覆盖 9 参（3 个栈实参）的自递归。`tco_narrow_wide`
+  是反向对照：`default_stack_ok` 仍为 true（自带栈生效），但窄调宽的调用回退成普通
+  `call`，RSS 随层数线性涨（1M 层 ~150 MiB）——这是待消掉的 native 优化缺口，不是栈策略
+  失效。
+- **T2 覆盖矩阵**（每项锁一条生成路径；`micro_tco` 是层内基线）：
+
+  | 用例 | 形状 | 锁住的生成路径 / 判定 |
+  | --- | --- | --- |
+  | `micro_tco` | 单函数自递归 + 标量比较 | 旋转后的 loop header、自递归实参写回 |
+  | `tco_mutual` | `even` / `odd` 互递归 | 全局饱和直调（不旋转） |
+  | `tco_wide` | 9 参（3 个栈实参） | 来参区搬运；`arity > 6` 不提升 |
+  | `tco_args` | 交叉依赖实参 | 临时槽 + `copyBacks` 的写回顺序（golden） |
+  | `tco_unrotated` | 两支自调用 / `&&` 条件 | 不旋转时回退整帧 `jmp` |
+  | `tco_arity6` | 6 参全部循环携带 | 5 个热标量槽提升的上限 |
+  | `tco_narrow_wide` | 2 参 ↔ 10 参互递归 | 窄调宽回退普通 `call`（native 1M 层 RSS ~150 MiB） |
+  | `tco_nat` | Nat `zero` / `Succ` | `IrNatCase` 的尾位置传播 |
+  | `state_machine` | 9 状态 Int 分派 | 线性比较链 + `_` 兜底臂 |
 - **GC**：主判据是 RSS 落在存活集量级，四项都满足——`gc_low_live` 218 ms / 2.8 MiB、
   `gc_array_churn` 140 ms / 3.1 MiB、`gc_pressure` 32.8 MiB、`gc_retain` 55.2 MiB。
   `gc_low_live` / `gc_array_churn` 此前的不满足来自逐帧保守扫根把陈旧栈槽里的死对象一并留住；
@@ -169,9 +196,10 @@ wasm 产物由仓库自带的宿主执行（`wasm-host/run.mjs`，Node/V8；与�
 `WebAssembly` API 和 host 层）。`--target wasm`（或 `--target all`）跑同一批程序
 （另有 9 个效应基准与 `startup` / `traits` 见 §1.4）。
 
-> **读数来源**：`bench/baselines/programs.json`（HEAD `cf17a85`，`--target all --runs 5 --warmup 2`；
-> node v24.21.0、wasm-opt 125、loadavg ≈1.3）。wasm 列是 `median_ms`（含 ~22 ms 宿主启动）；
-> 减掉 `meta.node_startup_ms` 的净耗时见 JSON 的 `wasm.net_median_ms`。
+> **读数来源**：`bench/baselines/programs.json`（`--target all --runs 5 --warmup 2`；
+> node v24.21.0、wasm-opt 133）。t2 行按当前基线，其余行沿用上一轮快照。
+> wasm 列是 `median_ms`（含 ~22 ms 宿主启动）；减掉 `meta.node_startup_ms` 的净耗时见
+> JSON 的 `wasm.net_median_ms`。
 
 本机一档（绝对 ms / RSS 只作同机对比）：
 
@@ -189,8 +217,15 @@ wasm 产物由仓库自带的宿主执行（`wasm-host/run.mjs`，Node/V8；与�
 | records | 69 | 32 | 15 | 8 | 8.6x | 4.0x |
 | sort_lib | 78 | 25 | 20 | 7 | 11.1x | 3.6x |
 | string_ops | 28 | 3 | 3 | 3 | 9.3x | 1.0x |
-| tco_mutual | 40 | 8 | 6 | 4 | 10.0x | 2.0x |
-| tco_wide | 31 | 6 | 4 | 3 | 10.3x | 2.0x |
+| micro_tco | 59 | 17 | 14 | 13 | 4.5x | 1.3x |
+| tco_mutual | 69 | 30 | 14 | 13 | 5.4x | 2.3x |
+| tco_wide | 50 | 13 | 9 | 9 | 5.8x | 1.5x |
+| tco_args | 51 | 31 | 19 | 17 | 3.0x | 1.8x |
+| tco_unrotated | 72 | 12 | 11 | 12 | 6.0x | 1.0x |
+| tco_arity6 | 44 | 9 | 12 | 10 | 4.2x | 0.9x |
+| tco_narrow_wide | 42 | 136 | 7 | 6 | 6.6x | 22x |
+| tco_nat | 47 | 10 | 13 | 9 | 5.5x | 1.1x |
+| state_machine | 48 | 11 | 12 | 9 | 5.6x | 1.3x |
 | treemap | 82 | 31 | 20 | 9 | 9.1x | 3.4x |
 | gc_retain | 362 | 168 | 81 | 41 | 8.8x | 4.1x |
 | array / closures / list_recursion / sorting / text_scan / gc_pressure / gc_array_churn / gc_low_live | `run_ok=false` | 22 / 25 / 29 / 40 / 7 / 68 / 517 / 473 | 15 / 11 / 12 / 22 / 6 / 31 / 190 / 310 | 15 / 8 / 15 / 18 / 5 / 28 / 118 / 367 | — | — |
@@ -215,7 +250,8 @@ wasm 产物由仓库自带的宿主执行（`wasm-host/run.mjs`，Node/V8；与�
 领先（`records` net 47 vs 32、`gc_retain` 340 vs 168、`hashmap` 30 vs 11、`tco_wide` 9 vs 6、
 `nat_bits` 11 vs 7）。差异来源与 native 的既有缺口一致：native 无寄存器分配、每个算术/比较
 都是一次运行时调用，而 V8 有优化编译器；native 赢在「调用少、字符串/栈传参多」的形状
-（[performance.md](performance.md) §3）。
+（[performance.md](performance.md) §3）。`tco_narrow_wide` 是反向的一档：wasm 42 /
+native 136——wasm 两侧都发 `return_call`，native 的窄调宽回退成普通 `call`（§1.2）。
 
 `wasm-opt -O3` 的内联会**掩盖**后端 codegen 的成本：binaryen 把闭包调用链与装箱/拆箱
 内联掉后，`call $rt_apply`、`struct.new $int` 这些开销不再直接体现在读数里。所以量后端
