@@ -410,7 +410,8 @@ exit: 0
 run: "$TMPDIR/tcomutual-out/bin/tcomutual" 2>&1
 exit: 0
 out-equals: 1
-file-contains: $TMPDIR/tcomutual-out/Main.s jmp vuna_odd
+file-contains: $TMPDIR/tcomutual-out/Main.s jmp .L
+run: sh -c '! grep -q "vuna_odd" "$TMPDIR/tcomutual-out/Main.s"'
 
 # 9ac) 自递归尾调用：9 参自递归（3 个栈参数）走本地循环，常量栈跑完 100 万层；
 #      循环回边是函数内 label，不再 `jmp vuna_step`。
@@ -429,9 +430,9 @@ run: "$TMPDIR/tcopos-out/bin/tcopos" 2>&1
 exit: 0
 out-equals: 0
 
-# 9ae) 来参区不够时不发尾调用：窄函数尾调 8 参宽函数回退普通 `call`，语义不变；
+# 9ae) 来参区不够且被调不可尾内联时：窄函数尾调 8 参宽函数回退普通 `call`，语义不变；
 #      `Main.s` 里该调用点是 `call`，而宽函数尾调窄函数（够用）仍是 `jmp`。
-run: sh -c 'd="$TMPDIR/tcofb"; mkdir -p "$d/app"; printf "[package]\nname = \"tcofb\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "narrow : Int -> Int\nnarrow n = if n <= 0 then 42 else wide8 (n - 1) 1 2 3 4 5 6 n\n\nwide8 : Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int\nwide8 n a b c d e f g = narrow n\n\nmain : Int\nmain = narrow 50000\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/tcofb-out" "$d"'
+run: sh -c 'd="$TMPDIR/tcofb"; mkdir -p "$d/app"; printf "[package]\nname = \"tcofb\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "narrow : Int -> Int\nnarrow n = if n <= 0 then 42 else wide8 (n - 1) (strLength \"x\") 2 3 4 5 6 n\n\nwide8 : Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int\nwide8 n a b c d e f g = narrow n\n\nmain : Int\nmain = narrow 50000\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/tcofb-out" "$d"'
 exit: 0
 run: "$TMPDIR/tcofb-out/bin/tcofb" 2>&1
 exit: 0
