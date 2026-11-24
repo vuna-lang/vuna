@@ -13,51 +13,60 @@
 ## 口径
 
 - 每个 benchmark 是一组**同算法**实现：`programs/t<N>/<name>/<name>.vuna`（vuna 源码）、
-  同目录 `<name>.ml`（手写 OCaml 对照）与可选的 `<name>.c`（手写 C 对照）；`t<N>` 是机制分层，
-  见 [`programs/TIERS.md`](programs/TIERS.md)。库基准（如 `hashmap`）的 OCaml 对照用标准库
-  上限，文件头注释会说明；这测的是「vuna 库/表示与手写最优实现的差距」。
-- C 对照用 `-O2` 编译，N 从 argv 读（sidecar 的 `n=`），避免 GCC 把常量循环折成闭式；
-  vuna / OCaml 侧用字面量 N。`<name>.best.c` 之类的最佳变体按需通过 `cc_flags=` 选择。
-- `--target ocaml|native|wasm|both|all` 选择被测后端（默认 `ocaml`）；`<name>.c` 存在时
-  同时测 `c_ref`，比值里给 `vs_c` 与 `vs_handwritten` 两列，`--no-c-ref` 关闭。
+  同目录 `<name>.ml`（手写 OCaml 对照）与 `<name>.c`（手写 C 对照）；`t<N>` 是机制分层，
+  见 [`programs/TIERS.md`](programs/TIERS.md)。库基准（如 `hashmap`）的 OCaml / C 对照都用
+  同档手写结构（标准库 Hashtbl、AVL、环形队列等），文件头注释会说明；这测的是
+  「vuna 库/表示与手写最优实现的差距」。
+- **五个列 × 三个指标**：`ocaml_ref` / `c_ref` / `vuna_ocaml` / `native` / `wasm` 各自测
+  墙钟、CPU（user+sys）、峰值 RSS；每个后端对两个对照组各给一套 ratio
+  （`vs_handwritten` 对手写 OCaml，`vs_c` 对手写 C），三个指标各一组。
+- C 对照用 `-O2` 编译，N 从 argv 读（sidecar 的 `n=`，可含多个参数），避免 GCC 把常量
+  循环折成闭式；vuna / OCaml 侧用字面量 N。`vuna Int` 是 **63 位**补码（同 OCaml），
+  输出依赖回绕的用例在 C 侧按 63 位模拟并配 `cc_flags=-fwrapv`。
+- `--target ocaml|native|wasm|both|all` 选择被测后端（默认 `ocaml`）；`--no-c-ref` 关闭 C 对照
+  （`--c-ref on` 则要求每个用例都有 `<name>.c`）。
 - 超时用于**首次 golden 校验**：`timeout_x × t_ref + 200ms`，夹在 `--timeout-min-ms`
-  （1000）与 `--timeout-max-ms`（30000）之间；`timeout_x` 缺省按 tier（t5/t6 为 5，其余 3），
+  （1000）与 `--timeout-max-ms`（30000）之间；`t_ref` 取两个参照里**较慢**的那个（C 普遍比
+  OCaml 快，取最快参照会把正常后端判成超时）。`timeout_x` 缺省按 tier（t5/t6 为 5，其余 3），
   sidecar 的 `timeout_x=` / `timeout_ms=` 覆盖。超时记 `skip_reason=timeout`，是硬失败而不是慢。
-  同一二进制、同一 N 通过校验之后，计时与采样跑裸程序（wrapper 的 fork 会污染小项与 RSS）。
+  同一二进制、同一 N 通过校验之后，计时与采样跑裸程序（C 对照直接以 `n=` 作 argv，
+  不经 shim；wrapper 的 fork 会污染小项与 RSS）。
 - `--tier t1` 只跑某一层（可重复）；`--list` 的输出带 tier 列。
+- 三个指标由 `bench/lib/timestat.c` 在**同一次运行**里采：墙钟 `CLOCK_MONOTONIC`、
+  CPU `wait4` 的 `ru_utime+ru_stime`（微秒级）、峰值 RSS `ru_maxrss`。GNU time 的 `%U/%S`
+  只有 10ms 量化、bash 内建 time 是 1ms，5ms 量级的项不够用，所以自带一个 80 行的小工具；
+  `nix run .#vuna-perf` 的 PATH 里已有 cc。
 - wasm 产物由仓库自带的宿主执行（`wasm-host/run.mjs`，Node/V8，与浏览器同一套
   `WebAssembly` API 与 host 层）。`meta` 记录 `node` / `node_startup_ms` /
+  `node_startup_cpu_ms` / `node_rss_kb`（空 node 进程的固定地板）以及
   `wasm_host_runner` / `wasm_opt`。
 - wasm 的 `.wasm` 有两段外部工具：`wasm-tools parse` 汇编，然后 `wasm-opt -O3` 优化。
   `--target wasm` 的构建时间分三段记录（`toolchain` / `postprocess` / `toolchain_warm`）。
   产物大小与运行时间都按优化后的 `.wasm` 口径；`main.wat` 仍是 canonical 文本。
 - V8 的 wasm 栈约 1 MB 且无开关：非尾深递归的程序会以 `Maximum call stack size exceeded`
   收口，JSON 记 `"run_ok": false`（浏览器路径的真实边界，不是测量设施的限制）。
-  wasm 的 RSS 是 node 进程量级（~55 MB 起），只作量级参考，不与 native/OCaml 的峰值口径比较。
-- `programs/<name>.out` 是 golden：**每个被测产物与手写 OCaml 都必须输出它**，脚本会在计时
-  前各校验一次，输出不一致直接失败（不会拿错误程序刷基线）。
+  wasm 的三个指标先减固定地板（`net_median_ms` / `net_cpu_ms` / `net_rss_kb`），
+  `ratio` 一律用 net；另外仍记 wasm 线性内存 `memory_bytes`（GC 堆的真实口径）。
+  wasm 的 `rss_kb` 是 node 进程量级（~55 MB 起），减地板后才是可比部分。
+- `programs/<name>.out` 是 golden：**每个被测产物、手写 OCaml 与手写 C 都必须输出它**，
+  脚本会在计时前各校验一次，输出不一致直接失败（不会拿错误程序刷基线）。
 - `programs/<name>.bench` 的 `ops=N` 声明该程序一次运行的**代表性操作数**（算术步、字节、
   分配、`perform` 等，单位写在程序头注释里）。声明后表格与 JSON 都给出
-  `ns_per_op = median_ms * 1e6 / N`，同一项在不同后端、不同规模之间就有了可比的单位；
-  没有声明则显示 `-`。当前声明了 `ops` 的有 `arith`、`scalar_xor`、`scalar_muladd`、
-  `scalar_divconst`、`scalar_idiv`、`scalar_divsigned`、`scalar_cmp`、`scalar_bit`、
-  `scalar_ilp`、`micro_tco`、`tco_mutual`、`tco_wide`、`tco_args`、`tco_unrotated`、
-  `tco_arity6`、`tco_narrow_wide`、`tco_nat`、`state_machine`、`text_scan`、`array`、
-  `hashmap`、`gc_low_live`、`eff_tick`、`micro_apply`、`micro_concat`。
-- 每项先 `--warmup` 次预热，再跑 `--runs` 次取**中位数**；峰值内存用 GNU time 的 max RSS，
-  计时结束后单独跑 `--rss-passes` 次取**最大值**（不参与计时）。
+  `ns_per_op = median_ms * 1e6 / N` 与 `cpu_ns_per_op`，同一项在不同后端、不同规模之间
+  就有了可比的单位；没有声明则显示 `-`。
+- 每项先 `--warmup` 次预热，再跑 `--runs` 个样本：墙钟与 CPU 取**中位数**，峰值 RSS 取
+  **最大值**；每个样本都同时产三个指标，GC 诊断行来自同一样本。
 - native 只有**直接饱和尾调用**复用栈帧（[native.md](../docs/reference/native.md) §3），
   非尾深递归吃入口自带栈：`_start` 默认 mmap 512 MiB 虚拟栈（`VUNA_NATIVE_STACK_MB`），
   与 `ulimit -s` 无关，JSON `meta.stack_policy` 记为 `self-managed`；栈页计入峰值 RSS
   （未触碰的虚拟部分不提交、不计 RSS）。
-- wasm 的计时包含 node 启动 + 模块实例化（`meta.node_startup_ms`，本机 ~18 ms）；
-  小项先减地板再看。
 - native 每个 benchmark 另记 `default_stack_ok`：固定 8 MiB soft limit 跑一次、记录能否正常
   退出（探针不参与计时）。自带栈生效时这项应恒为 true；false 说明栈初始化回落到了进程栈。
-- 跨机器只比较 `ratio = <backend>_median / ocaml_median` 与
-  `rss_ratio = <backend>_max_rss / ocaml_max_rss`；绝对 ms/KB 不可比。`--check` 默认读
-  对应基线，对超过 `--threshold`（默认 20%）的项打 `PERF-CHECK-WARN`（软告警、退出 0），
-  并额外提示 `default_stack_ok` 的变化。
+- 跨机器只比较 ratio（`wall` / `cpu` / `rss` 各一组）；绝对 ms/KB 不可比。`--check` 默认读
+  对应基线，三个指标都参与判定：超过 `--threshold`（默认 20%）打 `PERF-CHECK-WARN`
+  （软告警、退出 0），超过 `--fail-threshold`（默认 50%）直接失败；同机器另比 `wall` / `cpu`
+  的绝对值，并提示 `default_stack_ok` 的变化。宿主负载只污染墙钟，CPU 与 RSS 的口径
+  不受影响，机器繁忙时以 `cpu` 行为准。
 - 编译器侧基准（`check compiler` / `check .` / `compile .`）与 runtime 基准共用同一脚本与
   JSON 结构；当前先由 `bench/bootstrap.sh` 记录编译墙钟，`bench/run.sh` 的 runtime 段不重复测量
   编译（含 `VN_PERF_STATS` 的分配/GC 读数）。
@@ -88,17 +97,19 @@ VUNA=$PWD/result/bin/vuna ./bench/run.sh --runs 3
 
 ## 基线维护
 
-- 基线统一在 `bench/baselines/`：`programs.json`（全部生成程序 × 三端）、`bootstrap.json`、
+- 基线统一在 `bench/baselines/`：`programs.json`（全部生成程序 × 三端 × 三指标）、`bootstrap.json`、
   `compiler.txt`、`artifacts.json`、`native.json`。每个 family 只有一份，不再按 target 拆文件。
 - `programs.json` 用 `--target all --runs 5 --warmup 2` 生成；`--check` 只比本次实际跑的
-  target / benchmark（`--only eff_*` 就是效应子集）。wasm 另有 `net_median_ms`
-  （减 `meta.node_startup_ms`）。
+  target / benchmark（`--only eff_*` 就是效应子集）。wasm 一律比 `net_*`（减
+  `meta.node_startup_{ms,cpu_ms}` 与 `meta.node_rss_kb`）。
 - 统一重标：`nix build .#vuna --out-link result && sh bench/update-baselines.sh`
   （`--only programs|bootstrap|compiler|artifacts|native` 可单跑）。
 - 基线是**软门槛**：默认 WARN；`--strict` 把 WARN 变 exit 1，`--fail-threshold`（默认 50%）
   直接失败。不为跨机器/环境差异改阈值，只有确认是生成程序质量的真实变化才重标。
+  三个指标都可 FAIL；宿主繁忙时墙钟会整体抬升，先看 `cpu` 行确认是否是真实回退。
 - 每个 benchmark 可用同名 `.bench` sidecar 覆盖默认口径：`repeat=N`（一次采样内重复）、
-  `targets=a,b`（限定后端）、`c=path`（参与链接的 C 源）、`skip=1`。
+  `targets=a,b`（限定后端）、`c=path`（参与链接的 C 源）、`n=...`（C 对照的 argv）、
+  `cc_flags=...`、`skip=1`。
 
 ## 产物基线
 

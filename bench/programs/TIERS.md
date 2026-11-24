@@ -41,23 +41,29 @@ bench/programs/
 | --- | --- | --- |
 | `<name>.vuna` | vuna 实现 | 是 |
 | `<name>.ml` | 手写 OCaml 对照 | 是 |
+| `<name>.c` | 手写 C 对照（N 从 argv 读，sidecar 写 `n=`） | 是 |
 | `<name>.out` | golden（各端输出必须逐字节一致） | 是 |
-| `<name>.bench` | `ops=` / `repeat=` / `targets=` 等 sidecar 元数据 | 是 |
-| `<name>.c` | 手写 C 对照（N 从 argv 读，sidecar 写 `n=`） | 否 |
+| `<name>.bench` | `ops=` / `n=` / `repeat=` / `targets=` 等 sidecar 元数据 | 是 |
 | `<name>.bench` 键 | 作用 | 必需 |
-| `ops=N` | 每操作数（报 ns/op） | 否 |
-| `n=N` | 传给 C 对照的 argv | 有 `.c` 时 |
+| `ops=N` | 每操作数（报 wall/cpu 的 ns/op） | 否 |
+| `n=N` | 传给 C 对照的 argv（可含多个参数） | 是 |
 | `repeat=N` | 单次采样内重复次数（小项用） | 否 |
 | `targets=a,b` | 只在这些后端上跑 | 否 |
-| `timeout_x=N` | 超时 = N × 参照耗时 | 否 |
+| `timeout_x=N` | 超时 = N × 参照耗时（取两个参照里较慢的） | 否 |
 | `timeout_ms=N` | 绝对超时（优先于 `timeout_x`） | 否 |
-| `cc_flags=...` | 额外 cc 参数（如 T0 的 `-nostdlib`） | 否 |
+| `cc_flags=...` | 额外 cc 参数（如 `-fwrapv`、T0 的 `-nostdlib`） | 否 |
 
 约束：
 
 1. 一个屏幕能读完；2. 有 `ops=` 单位；3. 各端输出与同一份 golden 逐字节一致；
-4. 计时必须随 N 增长（不能被常量折叠成空循环）。
+4. 计时必须随 N 增长（不能被常量折叠成空循环）；5. `n=` 必须让 C 对照产生同样的工作量，
+   且 `vuna Int` 是 63 位补码——输出依赖回绕时按 63 位模拟并配 `cc_flags=-fwrapv`。
+
+`--check` 对墙钟、CPU、RSS 三个指标都判定；宿主繁忙时墙钟会整体抬升，先看 CPU 行。
+每个 `micro_*` 的「本层增量」对三个指标同样成立：先看 micro 的增量定位机制，再看 real 的
+绝对值判定整体。
 
 加用例不需要改 `bench/run.sh`：发现逻辑按 `t*/*/<name>.vuna` 自动收集（文件名 stem
 必须与用例目录名一致；目录里的其他文件不参与发现），同名用例出现在两个目录下会直接
-报错（会撞基线键）。
+报错（会撞基线键）。写完 C 对照后先跑 `sh bench/lib/verify-c-refs.sh`：它按 `run.sh`
+同样的口径（`-O2` + sidecar 的 `cc_flags`、`n=` 作 argv）全量编译并比对 golden。

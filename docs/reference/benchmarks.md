@@ -6,15 +6,20 @@
 
 ## 1. `vuna-perf` 读数
 
-`nix run .#vuna-perf`（逻辑在 `bench/run.sh`）测**生成程序运行时**：每个 benchmark 是一对
-同算法实现（`bench/programs/t<N>/<name>/<name>.vuna` vs 同目录 `<name>.ml` 手写 OCaml），
-`t<N>` 是机制分层（见 [`bench/programs/TIERS.md`](../../bench/programs/TIERS.md)）；先校验
-两侧输出与 golden 一致，再 warmup + 多次取中位数；`--target ocaml|native|both` 选择被测后端，峰值内存
-用 GNU time 的 max RSS。跨机器只比 `ratio = <backend>/ocaml` 与 `rss_ratio`
-（绝对 ms / KB 不可比）。
+`nix run .#vuna-perf`（逻辑在 `bench/run.sh`）测**生成程序运行时**：每个 benchmark 是一组
+同算法实现（`bench/programs/t<N>/<name>/<name>.vuna`、同目录 `<name>.ml` 手写 OCaml、
+`<name>.c` 手写 C），`t<N>` 是机制分层（见
+[`bench/programs/TIERS.md`](../../bench/programs/TIERS.md)）；先校验各侧输出与 golden 一致，
+再 warmup + 多次采样。**五个列 × 三个指标**：`ocaml_ref` / `c_ref` / `vuna_ocaml` / `native` /
+`wasm` 各测墙钟、CPU（user+sys）、峰值 RSS，三者在同一次运行里由 `bench/lib/timestat`
+采出；每个后端对两个对照组各给一套比值（`wall` / `cpu` / `rss` × 手写 OCaml / 手写 C）。
+跨机器只比 ratio（绝对 ms / KB 不可比）；宿主繁忙时墙钟整体抬升，回归判断先看 `cpu` 行。
+
+C 对照的存在让「vuna 相对最优手写实现」有了第二条参照；`vuna Int` 是 63 位补码（同 OCaml），
+输出依赖回绕的用例在 C 侧按 63 位模拟。
 
 口径与基线维护见 `bench/README.md`；基线统一在 `bench/baselines/`：`programs.json` 一份
-（全部生成程序 × ocaml/native/wasm），`--check` 只比本次实际跑的 target / benchmark。
+（全部生成程序 × ocaml/native/wasm × 三指标），`--check` 只比本次实际跑的 target / benchmark。
 与 `bench/bootstrap.sh` 的分工：后者测构建 / 编译墙钟与产物尺寸，本设施测运行期。
 
 当前读数（`--runs 3 --warmup 1`，x86_64 / 16 核 / ocamlopt 5.5.1 非 flambda；绝对 ms 随
@@ -89,9 +94,8 @@
   `meta.stack_policy` 记为 `self-managed`。每个 native 项另记 `default_stack_ok`
   （8 MiB soft limit 下能否正常退出，探针不参与计时；自带栈生效时应恒为 true）；
 - native 有**两代标记-清扫 GC**（[native.md](native.md) §5.2），峰值 RSS = 已触碰的栈页 + live 堆
-  （自带栈未触碰的虚拟页不提交）；
-  `--rss-passes 3` 取最大值，与墙钟分开采样；
-- `--runs 5 --warmup 2` 取中位数；基线记录生成时的 `meta.loadavg`，跨机器只比 ratio。
+  （自带栈未触碰的虚拟页不提交）；每个样本都同时给墙钟 / CPU / RSS，RSS 取样本最大值；
+- `--runs 5 --warmup 2`：墙钟与 CPU 取中位数；基线记录生成时的 `meta.loadavg`，跨机器只比 ratio。
 
 本机一档（16 核，`6117ce8`，生成时 `loadavg ≈ 0.36`，同一窗口）：
 
@@ -240,8 +244,10 @@ wasm 产物由仓库自带的宿主执行（`wasm-host/run.mjs`，Node/V8；与�
   上表八个非尾深递归程序以 `Maximum call stack size exceeded` 收口，JSON 记
   `"run_ok": false, "skip_reason": "run"`。`wasm-opt` 不改变这一点——优化后这 8 项仍然 trap
   （栈深问题，不是性能问题）。这是浏览器路径的实际执行边界，不是测量设施的限制。
-- **RSS 不可比**：wasm 列是 node 进程量级（~55 MB 起），内存只增不减的是 wasm 线性内存；
-  与 native「栈页 + live 堆」、OCaml「GC 高水位」不是一个口径。
+- **RSS 口径**：wasm 先减空 node 进程的固定地板（`meta.node_rss_kb`，JSON `net_rss_kb`），
+  减完才是与 OCaml「GC 高水位」、native「栈页 + live 堆」可比的量；wasm 线性内存
+  （`memory_bytes`）是 GC 堆的真实大小，单独记录。node 进程的绝对 `rss_kb`（~55 MB 起）
+  只作宿主开销参考。
 - **引擎/宿主版本是一阶变量**：基线只与 `meta.node` + `meta.wasm_host_runner` 同版本
   可比；换 Node 版本要重标基线。
 
