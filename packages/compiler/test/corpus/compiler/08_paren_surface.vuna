@@ -137,7 +137,7 @@ sectionOk =
   case parseBody "(+)" of
     Just (s, body) =>
       case body of
-        ESectOp _ _ => depthOf s body == 0
+        EVar name _ => name == "+" && depthOf s body == 0
         _ => False
     Nothing => False
 

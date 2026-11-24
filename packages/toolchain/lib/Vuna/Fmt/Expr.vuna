@@ -30,8 +30,6 @@ multilineExpr (EApp fn args _) = multilineExpr fn || anyMultiline args
 multilineExpr (EField base f _) = multilineExpr base
 multilineExpr (ERecord name fields _) = anyMultilineFields fields
 multilineExpr (ERecUpdate base fields _) = multilineExpr base || anyMultilineFields fields
-multilineExpr (ESectL op inner _) = multilineExpr inner
-multilineExpr (ESectR inner op _) = multilineExpr inner
 multilineExpr _ = False
 
 -- | 内部：表达式在源码里被几层括号包着（表面形状来自树，AST 里没有括号构造子）。
@@ -61,10 +59,138 @@ backtickMark at e =
     Just _ => True
     Nothing => False
 
+-- | 表面形状里的 section：value（`ELam` / `EVar`）看表达式自己的区间；应用折叠后的
+-- section 看应用头 `EVar` 的区间（parser 把 section λ 的 `EVar` 放在 section 区间上）。
+sectionValueShape : FmtCtx -> Expr -> Maybe SectionShape
+sectionValueShape at (EApp _ _ _) = Nothing
+sectionValueShape at e = sectionShapeOfSpan at.ctxSurface (exprSpan e)
+
+-- | 运算符值 `(op)`：作为函数应用时不能还原成中缀（`(::) x xs` 不是 `x :: xs`）。
+isSectionOp : FmtCtx -> Expr -> Bool
+isSectionOp at (EVar _ sp) =
+  case sectionShapeOfSpan at.ctxSurface (nodeRefSpan sp) of
+    Just (SectionOp _) => True
+    _ => False
+isSectionOp at _ = False
+
+sectionShapeOfExpr : FmtCtx -> Expr -> Maybe SectionShape
+sectionShapeOfExpr at e =
+  case sectionValueShape at e of
+    Just sh => Just sh
+    Nothing =>
+      case e of
+        EApp fn _ _ => sectionShapeOfExpr at fn
+        _ => Nothing
+
+-- | section 当值：从降级后的 λ 里取出操作数。
+sectionValueParts : FmtCtx -> Expr -> Maybe (SectionShape, Expr)
+sectionValueParts at (ELam _ body sp) =
+  case sectionShapeOfSpan at.ctxSurface (nodeRefSpan sp) of
+    Just shape =>
+      case shape of
+        SectionLeft _ =>
+          case body of
+            EApp _ ([_, operand]) _ => Just (shape, operand)
+            _ => Nothing
+        SectionRight _ =>
+          case body of
+            EApp _ ([operand, _]) _ => Just (shape, operand)
+            _ => Nothing
+        SectionOp _ => Nothing
+    Nothing => Nothing
+sectionValueParts at _ = Nothing
+
+-- | section 被直接应用：折叠后的 AST 是 `EApp op [a, operand]`（左）或
+-- `EApp op [operand, a]`（右）；外层应用再继续套。返回（形态, 操作数, 首个实参, 其余实参）。
+sectionAppParts : FmtCtx -> Expr -> Maybe (SectionShape, Expr, Expr, List Expr)
+sectionAppParts at (EApp fn args _) =
+  case fn of
+    EVar _ sp =>
+      case sectionShapeOfSpan at.ctxSurface (nodeRefSpan sp) of
+        Just shape =>
+          case shape of
+            SectionLeft _ =>
+              case args of
+                a :: operand :: rest => Just (shape, operand, a, rest)
+                _ => Nothing
+            SectionRight _ =>
+              case args of
+                operand :: a :: rest => Just (shape, operand, a, rest)
+                _ => Nothing
+            SectionOp _ => Nothing
+        Nothing => Nothing
+    EApp _ _ _ =>
+      case sectionAppParts at fn of
+        Just (shape, operand, first, rest) => Just (shape, operand, first, append rest args)
+        Nothing => Nothing
+    _ => Nothing
+sectionAppParts at _ = Nothing
+
+sectionHeadInline : Int -> List FixityDecl -> FmtCtx -> SectionShape -> Expr -> Maybe String
+sectionHeadInline fuel env at (SectionLeft op) operand =
+  case inlinePrecGo (fuel - 1) env at 0 operand of
+    Nothing => Nothing
+    Just s => Just "(${op} ${s})"
+sectionHeadInline fuel env at (SectionRight op) operand =
+  case inlineAtomGo (fuel - 1) env at operand of
+    Nothing => Nothing
+    Just s => Just "(${s} ${op})"
+sectionHeadInline fuel env at (SectionOp op) operand = Just "(${op})"
+
+sectionInline : Int -> List FixityDecl -> FmtCtx -> Int -> Expr -> Maybe String
+sectionInline fuel env at minPrec e =
+  if fuel <= 0 then
+    Nothing
+  else
+    case e of
+      ELam _ _ _ =>
+        case sectionValueParts at e of
+          Just (shape, operand) => sectionHeadInline (fuel - 1) env at shape operand
+          Nothing => Nothing
+      EApp _ _ _ =>
+        case sectionAppParts at e of
+          Just (shape, operand, first, rest) =>
+            case sectionHeadInline (fuel - 1) env at shape operand of
+              Nothing => Nothing
+              Just headText =>
+                case mapMaybeStrings (\a => inlineAtomGo (fuel - 1) env at a) (first :: rest) of
+                  Nothing => Nothing
+                  Just argTexts => Just (wrapPrec (9 < minPrec) (headText ++ concatStrings (map (\a => " ${a}") argTexts)))
+          Nothing => Nothing
+      _ => Nothing
+
+sectionValueDoc : Int -> List FixityDecl -> FmtCtx -> SectionShape -> Expr -> Doc
+sectionValueDoc fuel env at (SectionLeft op) operand =
+  group (appendDoc (text "(${op} ") (appendDoc (exprDoc (fuel - 1) env at operand) (text ")")))
+sectionValueDoc fuel env at (SectionRight op) operand =
+  group (appendDoc (text "(") (appendDoc (atomDoc (fuel - 1) env at operand) (text " ${op})")))
+sectionValueDoc fuel env at (SectionOp op) operand = text "(${op})"
+
+sectionAppDoc : Int -> List FixityDecl -> FmtCtx -> SectionShape -> Expr -> Expr -> List Expr -> Doc
+sectionAppDoc fuel env at shape operand first rest =
+  group
+    (appendDoc (sectionValueDoc (fuel - 1) env at shape operand) (nest 2 (hcat (map (\a => appendDoc line (atomDoc (fuel - 1) env at a)) (first :: rest)))))
+
+sectionDoc : Int -> List FixityDecl -> FmtCtx -> Expr -> Maybe Doc
+sectionDoc fuel env at e =
+  if fuel <= 0 then
+    Nothing
+  else
+    case e of
+      ELam _ _ _ =>
+        case sectionValueParts at e of
+          Just (shape, operand) => Just (sectionValueDoc (fuel - 1) env at shape operand)
+          Nothing => Nothing
+      EApp _ _ _ =>
+        case sectionAppParts at e of
+          Just (shape, operand, first, rest) => Just (sectionAppDoc (fuel - 1) env at shape operand first rest)
+          Nothing => Nothing
+      _ => Nothing
+
 -- | 内部：实际要打印的括号层数。section 自带一对括号（`(+)` / `(+ e)` / `(e +)`），
 -- 表面形状记的那层已经由 section 自己打出来，不再重复。
 parensToPrint : FmtCtx -> Expr -> Int -> Int
-parensToPrint at e n = if n <= 0 then 0 else if isSection e then n - 1 else n
+parensToPrint at e n = if n <= 0 then 0 else if isSection at e then n - 1 else n
 
 -- | 内部：`n` 层括号包住文本。
 wrapParens : Int -> String -> String
@@ -513,6 +639,15 @@ inlineBareGo fuel env at minPrec e =
   if fuel <= 0 then
     Nothing
   else
+    case sectionInline fuel env at minPrec e of
+      Just s => Just s
+      Nothing => inlineBareCore fuel env at minPrec e
+
+inlineBareCore : Int -> List FixityDecl -> FmtCtx -> Int -> Expr -> Maybe String
+inlineBareCore fuel env at minPrec e =
+  if fuel <= 0 then
+    Nothing
+  else
     case e of
       EVar name _ =>
         case macroNameOf name of
@@ -640,17 +775,6 @@ inlineBareGo fuel env at minPrec e =
                   [] => Just "{ ${b} }"
                   _ => Just "{ ${b} | ${joinComma ss} }"
       EDo stmts _ => Nothing
-      ESectOp op _ => Just "(${op})"
-      ESectL op inner _ =>
-        case inlinePrecGo (fuel - 1) env at 0 inner of
-          Nothing => Nothing
-          Just s => Just "(${op} ${s})"
-      -- 右 section 的 inner 必须按**原子**打印：`((a + b) +)` 才能重新 parse 成
-      -- `ESectR (a + b) +`（否则最后一个 `+` 会被解析成更内层的右 section）。
-      ESectR inner op _ =>
-        case inlineAtomGo (fuel - 1) env at inner of
-          Nothing => Nothing
-          Just s => Just "(${s} ${op})"
       _ => Nothing
 
 -- | 内部：`needParen` 为真时把文本包进一对括号。
@@ -707,9 +831,11 @@ inlineAppGo fuel env at minPrec whole fn args =
   else
     case fn of
       -- 符号名当作中缀运算符：两参应用还原成 `a op b`（哪怕无声明也按 9 左打印）。
-      -- 普通标识符保持应用形式。
+      -- `(op)` 是 section 值，应用时必须保持前缀形式；普通标识符保持应用形式。
       EVar op _ =>
-        if isSymbolName op then
+        if isSectionOp at fn then
+          inlineApplyGo (fuel - 1) env at minPrec fn args
+        else if isSymbolName op then
           case args of
             [a, b] =>
               let
@@ -766,19 +892,25 @@ inlineAtomGo fuel env at e =
   else
     case inlinePrecGo (fuel - 1) env at 0 e of
       Nothing => Nothing
-      Just s => if parenDepth at e > 0 || atomForm e then Just s else Just "(${s})"
+      Just s => if parenDepth at e > 0 || atomForm at e then Just s else Just "(${s})"
 
 -- | 内部：该表达式本身是否已是原子形式（原子位置无需再加括号）。
-atomForm : Expr -> Bool
-atomForm (EVar name _) = True
-atomForm (EInt n _) = True
-atomForm (EStr s _) = True
-atomForm (EFloat raw _) = True
-atomForm (EInterp multi parts _) = True
-atomForm (EField base f _) = True
-atomForm (ERecord name fields _) = True
-atomForm (ERecUpdate base fields _) = True
-atomForm (EApp fn args sp) =
+atomForm : FmtCtx -> Expr -> Bool
+atomForm at e =
+  case sectionValueShape at e of
+    Just _ => True
+    Nothing => atomFormCore e
+
+atomFormCore : Expr -> Bool
+atomFormCore (EVar name _) = True
+atomFormCore (EInt n _) = True
+atomFormCore (EStr s _) = True
+atomFormCore (EFloat raw _) = True
+atomFormCore (EInterp multi parts _) = True
+atomFormCore (EField base f _) = True
+atomFormCore (ERecord name fields _) = True
+atomFormCore (ERecUpdate base fields _) = True
+atomFormCore (EApp fn args sp) =
   case listExprElems (EApp fn args sp) of
     Just elems => True
     Nothing =>
@@ -788,11 +920,7 @@ atomForm (EApp fn args sp) =
           case ascribeParts (EApp fn args sp) of
             Just _ => True
             Nothing => False
--- section 自带括号，永远是原子；反引号中缀是运算符形式（最低优先级）。
-atomForm (ESectOp op _) = True
-atomForm (ESectL op inner _) = True
-atomForm (ESectR inner op _) = True
-atomForm _ = False
+atomFormCore _ = False
 
 -- ---------------------------------------------------------------
 -- 块级表达式：Doc
@@ -912,6 +1040,15 @@ exprDocBare fuel env at e =
   if fuel <= 0 then
     empty
   else
+    case sectionDoc fuel env at e of
+      Just d => d
+      Nothing => exprDocCore fuel env at e
+
+exprDocCore : Int -> List FixityDecl -> FmtCtx -> Expr -> Doc
+exprDocCore fuel env at e =
+  if fuel <= 0 then
+    empty
+  else
     case e of
       ECase scrut alts _ => appendDoc (text "case ") (appendDoc (scrutDoc (fuel - 1) env at scrut) (appendDoc (text " of") (nest 2 (appendDoc hard (altsDoc (fuel - 1) env at alts)))))
       ELet binds body recFlag _ => letDoc (fuel - 1) env at binds body
@@ -929,9 +1066,6 @@ exprDocBare fuel env at e =
       ERecord name fields _ => recordDoc (fuel - 1) env at name fields
       ERecUpdate base fields _ => recUpdateDoc (fuel - 1) env at base fields
       EDo stmts _ => appendDoc (text "do") (nest 2 (appendDoc hard (stmtsDoc (fuel - 1) env at stmts)))
-      ESectOp op _ => text "(${op})"
-      ESectL op inner _ => group (appendDoc (text "(${op} ") (appendDoc (exprDoc (fuel - 1) env at inner) (text ")")))
-      ESectR inner op _ => group (appendDoc (text "(") (appendDoc (exprDoc (fuel - 1) env at inner) (text " ${op})")))
       EInterp multi parts _ => verbatim (interpText (fuel - 1) env at multi parts)
       _ => flatDoc env at e
 
@@ -1014,7 +1148,9 @@ infixOrApply fuel env at fn args =
   else
     case fn of
       EVar op _ =>
-        if isSymbolName op then
+        if isSectionOp at fn then
+          applyDoc (fuel - 1) env at fn args
+        else if isSymbolName op then
           case args of
             [a, b] =>
               let
@@ -1426,12 +1562,12 @@ renderPatAtom pat = renderPatAtomGo formatFuelBound pat
 export renderBinding : List FixityDecl -> FmtCtx -> Binding -> Doc
 renderBinding env at binding = bindingDoc formatFuelBound env at binding
 
--- | 内部：section 自带括号（表面形状记的额外括号要少算一层）。
-isSection : Expr -> Bool
-isSection (ESectOp op _) = True
-isSection (ESectL op inner _) = True
-isSection (ESectR inner op _) = True
-isSection _ = False
+-- | 内部：section 当值自带括号（表面形状记的额外括号要少算一层）。
+isSection : FmtCtx -> Expr -> Bool
+isSection at e =
+  case sectionValueShape at e of
+    Just _ => True
+    Nothing => False
 
 -- | 内部：字符串是否含换行。
 textHasNewline : String -> Bool

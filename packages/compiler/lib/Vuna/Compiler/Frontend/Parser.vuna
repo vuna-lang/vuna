@@ -1696,7 +1696,7 @@ parseInfix fuel nid st blockCol lhs =
           if closeParenNext st then
             let
               sp = spanOf st (advance st)
-            in OkC (ESectR lhs op (detachedNodeRef sp), addSectionShape (spanStartOffset sp) (SectionRight op) (advance st))
+            in OkC (sectionRightExpr op lhs sp, addSectionShape (spanStartOffset sp) (SectionRight op) (advance st))
           else
             Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) (advance st) blockCol) (\rhs, st2 => parseInfix (fuel - 1) nid st2 blockCol (EApp (EVar op (detachedNodeRef (tokenSpan st))) [lhs, rhs] (detachedNodeRef (spanOf st st2))))
         else
@@ -1971,7 +1971,7 @@ parseSectionAtom fuel st blockCol op =
                 if atSym st2 ")" then
                   let
                     sp = spanOf st (advance st2)
-                  in OkC (ESectOp op (detachedNodeRef sp), addSectionShape (spanStartOffset sp) (SectionOp op) (advance st2))
+                  in OkC (EVar op (detachedNodeRef sp), addSectionShape (spanStartOffset sp) (SectionOp op) (advance st2))
                 else
                   Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st2 blockCol) (
                       \rhs, st3 =>
@@ -1979,11 +1979,27 @@ parseSectionAtom fuel st blockCol op =
                             \st4 =>
                               let
                                 sp = spanOf st st4
-                              in OkC (ESectL op rhs (detachedNodeRef sp), addSectionShape (spanStartOffset sp) (SectionLeft op) st4)
+                              in OkC (sectionLeftExpr op rhs sp, addSectionShape (spanStartOffset sp) (SectionLeft op) st4)
                           )
                     )
             )
       )
+
+-- section 的 lambda 降级：binder 名源码写不出（`#section`），Loader.Fixity 会稍后
+-- 按表面形状折叠立即应用，Elab 只会在 section 当值时看到这个 λ。
+sectionLeftExpr : String -> Expr -> Span -> Expr
+sectionLeftExpr op operand sp =
+  ELam
+    [(sectionBinderName, sp)]
+    (EApp (EVar op (detachedNodeRef sp)) [EVar sectionBinderName (detachedNodeRef sp), operand] (detachedNodeRef sp))
+    (detachedNodeRef sp)
+
+sectionRightExpr : String -> Expr -> Span -> Expr
+sectionRightExpr op operand sp =
+  ELam
+    [(sectionBinderName, sp)]
+    (EApp (EVar op (detachedNodeRef sp)) [operand, EVar sectionBinderName (detachedNodeRef sp)] (detachedNodeRef sp))
+    (detachedNodeRef sp)
 
 -- Pi binder：`(x : A) -> B`、`{x : A} -> B`，以及带 quantity 的 `(0 x : A)` / `(1 x : A)`。
 -- 多参数 trait 探针的 `{a b : Type} -> ...` 支持同一 binder 组写多个名字（展开成嵌套 EPi）。

@@ -522,9 +522,6 @@ startExpr fuel e =
       ERecord rn fields sp => minPair (startFromSpan (nodeRefSpan sp)) (startFields (fuel - 1) fields)
       ERecUpdate base fields sp => minPair (startFromSpan (nodeRefSpan sp)) (minPair (startExpr (fuel - 1) base) (startFields (fuel - 1) fields))
       EDo stmts sp => minPair (startFromSpan (nodeRefSpan sp)) (startStmts (fuel - 1) stmts)
-      ESectOp op sp => startFromSpan (nodeRefSpan sp)
-      ESectL op rhs sp => minPair (startFromSpan (nodeRefSpan sp)) (startExpr (fuel - 1) rhs)
-      ESectR lhs op sp => minPair (startFromSpan (nodeRefSpan sp)) (startExpr (fuel - 1) lhs)
 
 -- | 内部：一组表达式的最小起始位置；空列表返回极大坐标。
 startExprs : Int -> List Expr -> (Int, Int)
@@ -982,10 +979,6 @@ mentionsExpr fuel name e =
       ERecord rname fields _ => mentionsFields (fuel - 1) name fields
       ERecUpdate base fields _ => mentionsExpr (fuel - 1) name base || mentionsFields (fuel - 1) name fields
       EDo stmts _ => mentionsStmts (fuel - 1) name stmts
-      -- section 的 op 是值引用，操作数继续递归。
-      ESectOp op _ => op == name
-      ESectL op rhs _ => op == name || mentionsExpr (fuel - 1) name rhs
-      ESectR lhs op _ => op == name || mentionsExpr (fuel - 1) name lhs
       -- 模板字面量：洞内引用照常算 mention（否则 where 变量会被误报未使用）。
       EInterp multi parts _ => mentionsInterpParts (fuel - 1) name parts
 
@@ -1776,9 +1769,6 @@ walkExprGo allow fuel src e =
       ERecUpdate base fields _ => append (walkExprGo allow (fuel - 1) src base) (walkFields allow (fuel - 1) src fields)
       EDo stmts _ => walkStmts allow (fuel - 1) src stmts
       -- section（keep 模式下保留原形）：结构递归，不静默丢子树。
-      ESectOp op _ => []
-      ESectL op rhs _ => walkExprGo allow (fuel - 1) src rhs
-      ESectR lhs op _ => walkExprGo allow (fuel - 1) src lhs
       -- 模板字面量：洞内表达式同样参与规则遍历。
       EInterp multi parts _ => walkInterpParts allow (fuel - 1) src parts
 
@@ -2362,9 +2352,6 @@ walkTypeSyntax fuel src e =
       ERecord rname fields _ => walkTypeSyntaxFields (fuel - 1) src fields
       ERecUpdate base fields _ => append (walkTypeSyntax (fuel - 1) src base) (walkTypeSyntaxFields (fuel - 1) src fields)
       EDo stmts _ => walkTypeSyntaxStmts (fuel - 1) src stmts
-      ESectOp op _ => []
-      ESectL op rhs _ => walkTypeSyntax (fuel - 1) src rhs
-      ESectR lhs op _ => walkTypeSyntax (fuel - 1) src lhs
       -- 模板插值洞：token 切片不可靠，跳过（见本段头注释）。
       EInterp multi parts _ => []
 

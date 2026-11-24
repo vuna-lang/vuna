@@ -451,9 +451,6 @@ renameExpr oldName newName e =
       ERecUpdate (renameExpr oldName newName b) (map (renameFieldValue oldName newName) fields) sp
     EDo stmts sp => EDo stmts sp
     -- parser 中间产物；Elab 阶段正常不存在（Loader 重排已消除），这里保持结构递归。
-    ESectOp op sp => ESectOp op sp
-    ESectL op rhs sp => ESectL op (renameExpr oldName newName rhs) sp
-    ESectR lhs op sp => ESectR (renameExpr oldName newName lhs) op sp
     EAnn value ty sp => EAnn (renameExpr oldName newName value) (renameExpr oldName newName ty) sp
     -- 模板字面量在 Elab 之前已被 Loader 降级（正常不存在）；保持结构递归，
     -- 不静默丢洞内子表达式。

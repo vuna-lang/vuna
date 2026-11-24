@@ -32,9 +32,10 @@ trait 方法、instance 方法与 data 构造子都可以用符号名声明。
    节点 id 记录，见 `Frontend.Surface` 的括号层数）；反引号写法（``a `f` b``）的名字是普通
    标识符、没法从形状区分，也记在 `Frontend.Surface` 里。
 2. **Loader 在名字解析之前重排**：按模块可见 fixity 表做 precedence climbing，把链重排成
-   `EApp` / `EPi`；同一步完成 **section 展开**。
-3. **重排后 AST 里没有未展开的 section**：Elab / codegen 看到的是普通应用；`Resolve` 对
-   残留的 section 报 internal error（不静默透传）。中缀链本身就是应用，不需要再消除。
+   `EApp` / `EPi`；section 已在 parser 降级成 `EVar` / 单 binder λ，Loader 只折叠「section
+   立即应用」（`(+ e) a` ⇒ `a + e`）。
+3. **重排后 AST 里没有未展开的 section**：Elab / codegen 看到的是普通应用 / λ；中缀链本身
+   就是应用，不需要再消除。
 4. **fixity 唯一来源 = 源码里的 `infixl` / `infixr` / `infix` 声明**（库或用户）；
    base 侧的全部声明集中在 `Base.Internal.Operator`（定义模块 import 它），用户模块仍就地声明。
    编译器只为内建符号（`->`、`&&`、`||`）提供固定声明
@@ -119,14 +120,16 @@ import 之后、第一个声明之前（fmt 的规范位置），每条一行。
 
 - **反引号中缀**：`` a `f` b `` ≡ `f a b`。`f` 可以是标识符或符号名；fixity 按名字查表，
   没有声明时按 9 左结合（Haskell 默认），**不报错**（前缀形式本身无歧义）。
-- **section**（语法糖，Loader 在名字解析前展开）：
+- **section**（语法糖，parser 在解析时降级，Loader 只折叠立即应用）：
   - `(+)` ≡ 运算符作为值（`(==)` / `(::)` / `(>>=)` 就是方法 / 构造子本身）；
-  - `(+ e)` ≡ `\vuna_section => vuna_section + e`；
-  - `(e +)` ≡ `\vuna_section => e + vuna_section`。
+  - `(+ e)` ≡ `\#section => #section + e`；
+  - `(e +)` ≡ `\#section => e + #section`。
   - section 不要求运算符有 fixity 声明（`(+)` 是无歧义的前缀使用）。
-  - 展开产物是 **lambda**，因此把 section 传给带签名的参数（`inc : Int -> Int`、
-    `inc = (+ 3)`）正常；推断位置直接写 `(+ 3) 4` 时 parser 把它折叠成 `3 + 4`（不生成
-    lambda），而当值传递且无期望类型时仍会命中 `TC_LambdaNoSignature`。
+  - 降级产物是 **lambda**，因此把 section 传给带签名的参数（`inc : Int -> Int`、
+    `inc = (+ 3)`）正常；推断位置直接写 `(+ 3) 4` 时 `Loader.Fixity` 把它折叠成 `3 + 4`
+    （不生成 lambda），而当值传递且无期望类型时仍会命中 `TC_LambdaNoSignature`。
+  - section 的书写形态（op 值 / 左 / 右、op 拼写）记在 `Frontend.Surface.surfaceSections`，
+    Fmt 据此打印；Fixity 据此排除链重排。
 - **用户符号名**：`<+> a b = ...` 与 `<+> : Int -> Int -> Int` 允许符号名 def / signature，
   可出现在中缀（需 `infix*` 声明）、反引号、section、导出列表；`->`、反引号与语法符号是保留
   集合，不能当可定义名。codegen 把非 `[A-Za-z0-9]` 字符转义成 `_x<code>_`
@@ -198,7 +201,7 @@ import 之后、第一个声明之前（fmt 的规范位置），每条一行。
 
 | 关注点 | 位置 |
 | --- | --- |
-| 中缀重排 / section 展开 / keep 模式 | `Loader.Fixity`（`reorderProgram` / `lookupFixity` / `lookupFixityDecl` / `syntaxFixityDecls` / `tableOf` / `tableOfKeepOps`） |
+| 中缀重排 / section 立即应用折叠 / keep 模式 | `Loader.Fixity`（`reorderProgram` / `lookupFixity` / `lookupFixityDecl` / `syntaxFixityDecls` / `tableOf` / `tableOfKeepOps`） |
 | fixity 声明语法与收集 | `Frontend.Parser`（`parseFixityDecl` / `parseSectionAtom` / `parseInfix`）+ `Frontend.Ast`（`FixityDecl` / `Source.fixities`） |
 | 模块可见 fixity 闭包与去重 | `Loader.Modules.Module.fixities` + `Loader.Flatten.visibleFixitiesOf` / `dedupeFixities` |
 | 程序级 fixity（lint / index / doc / 符号排序） | `Loader.Flatten.fixitiesForSource` + `Loader.Fixity.reorderProgram` |

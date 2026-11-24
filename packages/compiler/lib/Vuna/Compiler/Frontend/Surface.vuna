@@ -26,6 +26,11 @@ export data SectionShape(..) : Type where
   SectionLeft : String -> SectionShape
   SectionRight : String -> SectionShape
 
+export sectionOpOf : SectionShape -> String
+sectionOpOf (SectionOp op) = op
+sectionOpOf (SectionLeft op) = op
+sectionOpOf (SectionRight op) = op
+
 -- | 一份源码（含它的模板洞）的表面形状。
 export record Surface(..) where
   -- | 表达式节点 id → 源码里包着它的括号层数（`(e)` = 1，`((e))` = 2）。

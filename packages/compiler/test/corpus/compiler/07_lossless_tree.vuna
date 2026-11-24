@@ -238,9 +238,6 @@ exprSitesAt fuel e =
           ERecord name fields r => concatMap (fieldValueSites (fuel - 1)) fields
           ERecUpdate base fields r => append (exprSitesAt (fuel - 1) base) (concatMap (fieldValueSites (fuel - 1)) fields)
           EDo stmts r => concatMap (stmtSites (fuel - 1)) stmts
-          ESectOp op r => []
-          ESectL op inner r => exprSitesAt (fuel - 1) inner
-          ESectR inner op r => exprSitesAt (fuel - 1) inner
     in Site "expr" "expr" (exprRef e) :: rest
 
 interpSites : Int -> InterpPart -> List Site
@@ -453,9 +450,6 @@ bodyPatRefs e =
     EInt n _ => []
     EStr s _ => []
     EVar n _ => []
-    ESectOp op _ => []
-    ESectL op inner _ => bodyPatRefs inner
-    ESectR inner op _ => bodyPatRefs inner
     EInterp multi parts _ => []
 
 -- | 一条绑定 / 一个分支贡献的 pat 引用（分支体 / 绑定值继续递归）。

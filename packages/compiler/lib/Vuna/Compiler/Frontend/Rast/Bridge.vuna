@@ -37,9 +37,6 @@ toAstExpr (Rast.ERecord name fields sp) =
 toAstExpr (Rast.ERecUpdate base fields sp) =
   Ast.ERecUpdate (toAstExpr base) (map toAstFieldValue fields) (Ast.detachedNodeRef sp)
 toAstExpr (Rast.EDo stmts sp) = Ast.EDo (map toAstStmt stmts) (Ast.detachedNodeRef sp)
-toAstExpr (Rast.ESectOp op sp) = Ast.ESectOp op (Ast.detachedNodeRef sp)
-toAstExpr (Rast.ESectL op r sp) = Ast.ESectL op (toAstExpr r) (Ast.detachedNodeRef sp)
-toAstExpr (Rast.ESectR l op sp) = Ast.ESectR (toAstExpr l) op (Ast.detachedNodeRef sp)
 toAstExpr (Rast.EAnn value ty sp) =
   Ast.EApp
     (Ast.EVar Ast.ascribeSyntax (Ast.detachedNodeRef sp))

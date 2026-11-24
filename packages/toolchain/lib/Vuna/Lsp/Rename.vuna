@@ -672,9 +672,6 @@ usesInExpr fuel ctx e =
           labelUses = if useFieldKind ctx then recordLabelUses ctx start fields else []
         in append labelUses (append (usesInExpr (fuel - 1) ctx base) (concatMap (fieldValueUses (fuel - 1) ctx) fields))
       EDo stmts _ => concatMap (stmtUses (fuel - 1) ctx) stmts
-      ESectOp op _ => []
-      ESectL op inner _ => usesInExpr (fuel - 1) ctx inner
-      ESectR inner op _ => usesInExpr (fuel - 1) ctx inner
 
 -- | 内部：模式里的使用位置——`PCon` 取构造子名，`PRecord` 取类型名与字段标签，
 -- `PVar` / 通配 / 字面量不产位置。

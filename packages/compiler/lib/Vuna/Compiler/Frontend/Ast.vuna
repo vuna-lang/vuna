@@ -148,16 +148,10 @@ export data Expr(..) : Type where
   ERecord : String -> List (String, Expr) -> NodeRef -> Expr
   ERecUpdate : Expr -> List (String, Expr) -> NodeRef -> Expr
   EDo : List DoStmt -> NodeRef -> Expr
-  -- 括号与中缀链都不在 AST 里：它们都是纯书写形式，由树按节点 id 记录
-  -- （`Frontend.Surface`：括号层数、这一层是不是链步 / 是否反引号）。parser 把
-  -- `a op b` 降级成普通应用 `EApp (EVar op) [a, b]`（右嵌套、源码顺序），
-  -- `Loader.Fixity` 按 fixity 表重排、Fmt 按源码顺序打印时都读表面形状。
-  --
-  -- section：op 值 / 左 section / 右 section。是 parser 的中间产物，
-  -- Loader 在名字解析前消除成 EVar / lambda。
-  ESectOp : String -> NodeRef -> Expr
-  ESectL : String -> Expr -> NodeRef -> Expr
-  ESectR : Expr -> String -> NodeRef -> Expr
+  -- 括号、中缀链与 section 都不在 AST 里：它们都是纯书写形式，由树/表面形状按区间记录
+  -- （`Frontend.Surface`：括号层数、链步是否反引号、section 是 op 值 / 左 / 右）。parser 把
+  -- `a op b` 降级成普通应用 `EApp (EVar op) [a, b]`，section 降级成 `EVar` / 单 binder λ；
+  -- `Loader.Fixity` 按 fixity 表重排并折叠 section 应用，Fmt 按表面形状还原书写。
   -- 模板字符串字面量。`multi` = 是否 `"""` 形式（Fmt 用它保留书写形式；单行
   -- 字面量保持单行转义形式）。`Loader.Resolve` 把它降级成 `Base.Trait.Interp.interp`
   -- 调用 + `++` 链；Fmt / Lint / Index / Doc 在 parse 后处理它。
@@ -383,9 +377,6 @@ withExprId nid e = withExprRef (NodeRef nid (nodeRefSpan (exprRef e))) e
 -- | 把表达式**根构造子**的身份换成给定 `NodeRef`（子表达式保留自己的身份）。
 export withExprRef : NodeRef -> Expr -> Expr
 withExprRef r (EVar name _) = EVar name r
-withExprRef r (ESectOp op _) = ESectOp op r
-withExprRef r (ESectL op rhs _) = ESectL op rhs r
-withExprRef r (ESectR lhs op _) = ESectR lhs op r
 withExprRef r (EInt n _) = EInt n r
 withExprRef r (EStr s _) = EStr s r
 withExprRef r (EFloat raw _) = EFloat raw r
@@ -404,9 +395,6 @@ withExprRef r (EInterp multi parts _) = EInterp multi parts r
 -- | 表达式的节点身份 + 区间（与树节点同源）。
 export exprRef : Expr -> NodeRef
 exprRef (EVar name r) = r
-exprRef (ESectOp op r) = r
-exprRef (ESectL op rhs r) = r
-exprRef (ESectR lhs op r) = r
 exprRef (EInt n r) = r
 exprRef (EStr s r) = r
 exprRef (EFloat raw r) = r

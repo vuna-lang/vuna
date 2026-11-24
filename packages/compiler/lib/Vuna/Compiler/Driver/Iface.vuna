@@ -209,7 +209,7 @@ setPrepared prepared mi =
 
 -- 接口格式版本：载荷布局或字段语义变化必须 bump（地址随之换代，旧载荷自然失效）。
 export ifaceSchema : String
-ifaceSchema = "vuna-iface 32"
+ifaceSchema = "vuna-iface 33"
 
 -- | 接口哈希的**算法格式版本**：参与哈希输入（与 `ifaceSchema` 独立——schema 管载荷
 -- 布局，本版本管摘要算法/分片编码；换算法时旧哈希自然换代）。

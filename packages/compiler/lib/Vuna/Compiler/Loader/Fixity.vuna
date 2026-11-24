@@ -7,7 +7,7 @@ module Vuna.Compiler.Loader.Fixity where
 -- （`Frontend.Surface`，按节点 id 查）。括号是重排的边界，同样在表面形状里。
 -- 所以本模块的重排上下文同时带 fixity 表与表面形状。本模块按模块可见的 `infix*` 声明
 -- （`FixityDecl`：优先级 0–9、结合性 0/1/2）把链重排成 `EApp`，并**在这一步**完成
--- section 展开与 `>>` 的 do 派生。
+-- section 立即应用折叠与 `>>` 的 do 派生。
 --
 -- 表来源：**唯一来源是源码声明**（库或用户）。`->` 是语法而不是用户运算符，
 -- 由 `syntaxFixityDecls` 恒可见。表里没有声明的**符号**运算符在中缀位置一律报错（不静默
@@ -205,8 +205,8 @@ reorderChain t e =
               )
     )
 
--- section 出现在函数位置且被直接应用时按定义展开（`(+ e) a` ⇒ `a + e`），不生成
--- lambda——否则 `(+ 1) 2` 会撞上「lambda 缺签名」。section 当值用（无期望类型）仍走 lambda。
+-- section 已在 parser 降级成 λ；这里只把「section 立即应用」折叠成普通应用
+-- （`(+ e) a` ⇒ `a + e`），不生成新的 lambda。
 foldApps : Expr -> List Expr -> NodeRef -> Expr
 foldApps base [] sp = base
 foldApps base (a :: rest) sp = foldApps (EApp base [a] sp) rest sp
@@ -217,39 +217,29 @@ reorderNonChain t (EVar name sp) = OkC (EVar name sp)
 reorderNonChain t (EInt n sp) = OkC (EInt n sp)
 reorderNonChain t (EStr s sp) = OkC (EStr s sp)
 reorderNonChain t (EFloat raw sp) = OkC (EFloat raw sp)
--- section：rename 模式在名字解析前展开成 `EVar` / lambda（名字就是运算符本身）；keep 模式
--- 保留原形供 fmt 打印。
-reorderNonChain t (ESectOp op sp) = if renameMode t then OkC (EVar op sp) else OkC (ESectOp op sp)
-reorderNonChain t (ESectL op e sp) =
-  Vuna.Compiler.Base.Common.bind
-    (reorderExpr t e)
-    (\e2 => if renameMode t then OkC (ELam [(sectionBinderName, nodeRefSpan sp)] (EApp (EVar op sp) [EVar sectionBinderName sp, e2] sp) sp) else OkC (ESectL op e2 sp))
-reorderNonChain t (ESectR e op sp) =
-  Vuna.Compiler.Base.Common.bind
-    (reorderExpr t e)
-    (\e2 => if renameMode t then OkC (ELam [(sectionBinderName, nodeRefSpan sp)] (EApp (EVar op sp) [e2, EVar sectionBinderName sp] sp) sp) else OkC (ESectR e2 op sp))
+-- section 已是 parser 降级的 `EVar` / 单 binder λ；这里按表面形状识别 section λ，
+-- 只在 lambda 体内重排操作数，**不**把合成应用当普通中缀链收集（否则 `(+ (1+2)) 3`
+-- 会被重排成 `(x*1)+2`）。
 reorderNonChain t (ELam names body sp) =
-  Vuna.Compiler.Base.Common.bind (reorderExpr t body) (\b => OkC (ELam names b sp))
+  case sectionShapeOfSpan t.fixSurface (nodeRefSpan sp) of
+    Just _ =>
+      case body of
+        EApp fn args bsp =>
+          Vuna.Compiler.Base.Common.bind
+            (reorderExpr t fn)
+            (\fn2 => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (\a => reorderExpr t a) args) (\args2 => OkC (ELam names (EApp fn2 args2 bsp) sp)))
+        _ => Vuna.Compiler.Base.Common.bind (reorderExpr t body) (\b => OkC (ELam names b sp))
+    Nothing => Vuna.Compiler.Base.Common.bind (reorderExpr t body) (\b => OkC (ELam names b sp))
 -- section 出现在函数位置且被直接应用：`(+ e) a` ⇒ `a + e`，不生成 lambda
--- （否则 `(+ 1) 2` 撞「lambda 缺签名」）。section 当值用仍走下面的 lambda 展开。
-reorderNonChain t (EApp (ESectL op e secSp) args sp) =
-  if renameMode t then
-    case args of
-      [] => icInternal "section application without arguments"
-      a :: rest => Vuna.Compiler.Base.Common.bind (reorderExpr t a) (\a2 => Vuna.Compiler.Base.Common.bind (reorderExpr t e) (\e2 => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (\x => reorderExpr t x) rest) (\rest2 => OkC (foldApps (EApp (EVar op sp) [a2, e2] sp) rest2 sp))))
-  else
-    Vuna.Compiler.Base.Common.bind (reorderExpr t e) (\e2 => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (\a => reorderExpr t a) args) (\args2 => OkC (EApp (ESectL op e2 secSp) args2 sp)))
-reorderNonChain t (EApp (ESectR e op secSp) args sp) =
-  if renameMode t then
-    case args of
-      [] => icInternal "section application without arguments"
-      a :: rest => Vuna.Compiler.Base.Common.bind (reorderExpr t e) (\e2 => Vuna.Compiler.Base.Common.bind (reorderExpr t a) (\a2 => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (\x => reorderExpr t x) rest) (\rest2 => OkC (foldApps (EApp (EVar op sp) [e2, a2] sp) rest2 sp))))
-  else
-    Vuna.Compiler.Base.Common.bind (reorderExpr t e) (\e2 => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (\a => reorderExpr t a) args) (\args2 => OkC (EApp (ESectR e2 op secSp) args2 sp)))
+-- （否则 `(+ 1) 2` 撞「lambda 缺签名」）。section 当值用仍走上面的 λ，由调用点期望类型精化。
 reorderNonChain t (EApp fn args sp) =
-  Vuna.Compiler.Base.Common.bind
-    (reorderExpr t fn)
-    (\fn2 => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (\a => reorderExpr t a) args) (\args2 => OkC (EApp fn2 args2 sp)))
+  case fn of
+    ELam _ body secSp =>
+      case sectionShapeOfSpan t.fixSurface (nodeRefSpan secSp) of
+        Just shape =>
+          if renameMode t then reorderSectionApply t shape body args sp else reorderApp t fn args sp
+        Nothing => reorderApp t fn args sp
+    _ => reorderApp t fn args sp
 reorderNonChain t (EPi name implicit qty dom cod sp) =
   Vuna.Compiler.Base.Common.bind
     (reorderExpr t dom)
@@ -282,6 +272,40 @@ reorderNonChain t (EDo stmts sp) =
 -- 表达式；降级为 `interp` 调用发生在 `Loader.Resolve`（rename 之后）。
 reorderNonChain t (EInterp multi parts sp) =
   Vuna.Compiler.Base.Common.bind (reorderInterpParts t parts) (\ps => OkC (EInterp multi ps sp))
+
+reorderApp : FixityTable -> Expr -> List Expr -> NodeRef -> Check Expr
+reorderApp t fn args sp =
+  Vuna.Compiler.Base.Common.bind
+    (reorderExpr t fn)
+    (\fn2 => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (\a => reorderExpr t a) args) (\args2 => OkC (EApp fn2 args2 sp)))
+
+reorderSectionApply : FixityTable -> SectionShape -> Expr -> List Expr -> NodeRef -> Check Expr
+reorderSectionApply t shape (EApp (EVar op opSp) bodyArgs bsp) args sp =
+  case shape of
+    SectionLeft _ =>
+      case bodyArgs of
+        [_, operand] => applySectionLeft t op opSp operand args sp
+        _ => reorderApp t (EApp (EVar op opSp) bodyArgs bsp) args sp
+    SectionRight _ =>
+      case bodyArgs of
+        [operand, _] => applySectionRight t op opSp operand args sp
+        _ => reorderApp t (EApp (EVar op opSp) bodyArgs bsp) args sp
+    SectionOp _ => reorderApp t (EApp (EVar op opSp) bodyArgs bsp) args sp
+reorderSectionApply t shape body args sp = reorderApp t body args sp
+
+applySectionLeft : FixityTable -> String -> NodeRef -> Expr -> List Expr -> NodeRef -> Check Expr
+applySectionLeft t op opSp operand [] sp = icInternal "section application without arguments"
+applySectionLeft t op opSp operand (a :: rest) sp =
+  Vuna.Compiler.Base.Common.bind
+    (reorderExpr t a)
+    (\a2 => Vuna.Compiler.Base.Common.bind (reorderExpr t operand) (\o2 => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (\x => reorderExpr t x) rest) (\r2 => OkC (foldApps (EApp (EVar op opSp) [a2, o2] sp) r2 sp))))
+
+applySectionRight : FixityTable -> String -> NodeRef -> Expr -> List Expr -> NodeRef -> Check Expr
+applySectionRight t op opSp operand [] sp = icInternal "section application without arguments"
+applySectionRight t op opSp operand (a :: rest) sp =
+  Vuna.Compiler.Base.Common.bind
+    (reorderExpr t operand)
+    (\o2 => Vuna.Compiler.Base.Common.bind (reorderExpr t a) (\a2 => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (\x => reorderExpr t x) rest) (\r2 => OkC (foldApps (EApp (EVar op opSp) [o2, a2] sp) r2 sp))))
 
 -- | 表达式重排入口：中缀 / backtick 链交给 `reorderChain`，其余交给 `reorderNonChain`。
 export reorderExpr : FixityTable -> Expr -> Check Expr

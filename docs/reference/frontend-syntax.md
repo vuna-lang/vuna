@@ -18,9 +18,9 @@
         → Rast（名字已解析，糖已消失）→ Elab → Core → IR → 后端
 ```
 
-- **表面语法只活到 `Frontend.Ast`**：`ESect*` 是 parser 中间产物，`Loader.Fixity.reorderProgram`
-  之后必须消失；`Loader.Resolve` 对残留报 internal error。中缀链在 parser 里就降级成普通应用
-  `EApp (EVar op) [l, r]`（符号名作函数的 2 参应用只可能来自中缀降级），所以重排前后 AST 都是应用。
+- **表面语法只活到 `Frontend.Ast`**：括号 / 中缀 / section 在 parser 里就降级成普通
+  `EVar` / `EApp` / 单 binder λ；section 的书写形态记在 `Frontend.Surface.surfaceSections`，
+  `Loader.Fixity` 只按 fixity 重排并折叠立即应用，`Rast` 里没有 section 构造子。
 - **纯书写形式不建 AST 节点**：括号（层数）与「哪些 token 是括号」由 parser 的建树事件
   按节点 id 记录在 `Frontend.Surface` 里（`(e)` / `((e))` / `(f x) y` / `f (a)` 都覆盖；
   模板洞里由洞的子解析交回自己的条目）；反引号链步同理（名字是普通标识符，形状认不出）。
@@ -196,7 +196,7 @@
 
 ## 10. 成本模型：新增一个表面形式要动什么
 
-实测一个**新 AST 节点**会落在约 18 个文件里（`ESect*` 的例子）：
+实测一个**新 AST 节点**会落在约 18 个文件里（已删的 `ESect*` 曾是例子）：
 `Frontend.Ast` + `Frontend.Canonical.Ast`（哈希编码 / 解码）+ `Frontend.Rast` 与 `Rast.Bridge`
 + `Frontend.Parser` + `Loader.{Fixity,Expand,Flatten,Resolve}` + `Elab.{Match,Term.Impl}`
 + `Fmt.{Expr,Comment}` + `Index.Scan` + `Lint.Rules` + `Lsp.{Bindings,Rename}` + `Sig`。

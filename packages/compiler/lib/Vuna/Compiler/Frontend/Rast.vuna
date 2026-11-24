@@ -70,12 +70,8 @@ export data Expr(..) : Type where
   ERecord : RName -> List (String, Expr) -> Span -> Expr
   ERecUpdate : Expr -> List (String, Expr) -> Span -> Expr
   EDo : List DoStmt -> Span -> Expr
-  -- 括号与中缀链不在 AST 里（纯书写形式，见 `Frontend.Surface`）；中缀链由 parser
-  -- 降级成普通应用。section 是 parser 的中间产物：Loader 在名字解析前消除成
-  -- EVar / lambda。
-  ESectOp : String -> Span -> Expr
-  ESectL : String -> Expr -> Span -> Expr
-  ESectR : Expr -> String -> Span -> Expr
+  -- 括号、中缀链与 section 不在 AST 里（纯书写形式，见 `Frontend.Surface`）；
+  -- 中缀链由 parser 降级成普通应用，section 由 parser 降级成 `EVar` / 单 binder λ。
   -- 表达式类型标注。只由 parser 的 where 绑定签名生成（`g : Int -> Int` 行
   -- 绑定到随后的 `g ... = ...` 子句），Elab 精化时据此把 where 组按签名递归提升；
   -- 普通表达式位置不产生它，Fmt 在非 where 位置把它当透明括号渲染。
@@ -147,9 +143,6 @@ patSpan (PRecord name fields sp) = sp
 
 export exprSpan : Expr -> Span
 exprSpan (EVar name sp) = sp
-exprSpan (ESectOp op sp) = sp
-exprSpan (ESectL op rhs sp) = sp
-exprSpan (ESectR lhs op sp) = sp
 exprSpan (EInt n sp) = sp
 exprSpan (EStr s sp) = sp
 exprSpan (EFloat raw sp) = sp
@@ -196,9 +189,6 @@ exprWeight (EVar _ _) = 1
 exprWeight (EInt _ _) = 1
 exprWeight (EStr _ _) = 1
 exprWeight (EFloat _ _) = 1
-exprWeight (ESectOp _ _) = 1
-exprWeight (ESectL _ rhs _) = 1 + exprWeight rhs
-exprWeight (ESectR lhs _ _) = 1 + exprWeight lhs
 exprWeight (ELam _ body _) = 1 + exprWeight body
 exprWeight (EApp fn args _) = 1 + exprWeight fn + exprWeightList args
 exprWeight (EPi _ _ _ dom cod _) = 1 + exprWeight dom + exprWeight cod
@@ -500,6 +490,7 @@ bindersOfPats pats = concatMap patBinders pats
 export ofExpr : List String -> Ast.Expr -> Expr
 ofExpr scope e =
   case e of
+    -- vuna-lint: disable-next-line dispatch-lift
     Ast.EVar name sp => EVar (nameOf scope name) (Ast.nodeRefSpan sp)
     Ast.EInt n sp => EInt n (Ast.nodeRefSpan sp)
     Ast.EStr s sp => EStr s (Ast.nodeRefSpan sp)
@@ -534,26 +525,22 @@ ofExpr scope e =
     Ast.ERecUpdate base fields sp =>
       ERecUpdate (ofExpr scope base) (map (ofFieldValue scope) fields) (Ast.nodeRefSpan sp)
     Ast.EDo stmts sp => EDo (ofStmts scope stmts) (Ast.nodeRefSpan sp)
-    -- 中缀 / 反引号 / section 在 Resolve 之后不应出现；保留同形转换以免转换层
-    -- 自身成为失败点（出现即由下游的 internal error 诊断）。
-    Ast.ESectOp op sp => ESectOp op (Ast.nodeRefSpan sp)
-    Ast.ESectL op r sp => ESectL op (ofExpr scope r) (Ast.nodeRefSpan sp)
-    Ast.ESectR l op sp => ESectR (ofExpr scope l) op (Ast.nodeRefSpan sp)
 
 ofBinding : List String -> List String -> Ast.Binding -> (Pat, Expr)
-ofBinding bound scope binding =
+ofBinding bound scope (Ast.Binding pat (Ast.BVal e) sig ref) =
   let
-    pat = binding.bindPat
     valueScope = append (patBinders pat) bound
-    value =
-      case binding.bindValue of
-        Ast.BVal e => ofExpr valueScope e
-        Ast.BClauses clauses =>
-          ELocalFun (map (ofLocalClause valueScope) clauses) (Ast.nodeRefSpan binding.bindRef)
-  in case binding.bindSig of
+    value = ofExpr valueScope e
+  in case sig of
     -- 绑定签名行重新合成 Rast 的 `EAnn`（Elab 的 where 组按签名递归提升）。
-    Just sig =>
-      (ofPat scope pat, EAnn value (ofExpr valueScope sig.sigType) (Ast.nodeRefSpan sig.sigRef))
+    Just s => (ofPat scope pat, EAnn value (ofExpr valueScope s.sigType) (Ast.nodeRefSpan s.sigRef))
+    Nothing => (ofPat scope pat, value)
+ofBinding bound scope (Ast.Binding pat (Ast.BClauses clauses) sig ref) =
+  let
+    valueScope = append (patBinders pat) bound
+    value = ELocalFun (map (ofLocalClause valueScope) clauses) (Ast.nodeRefSpan ref)
+  in case sig of
+    Just s => (ofPat scope pat, EAnn value (ofExpr valueScope s.sigType) (Ast.nodeRefSpan s.sigRef))
     Nothing => (ofPat scope pat, value)
 
 ofLocalClause : List String -> Ast.LocalClause -> (List Pat, Expr)

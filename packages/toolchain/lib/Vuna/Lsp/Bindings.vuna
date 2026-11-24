@@ -1212,9 +1212,6 @@ walkExpr fuel env scope line col name e =
           Just hit => Just hit
           Nothing => walkExprFields (fuel - 1) env scope line col name fields
       EDo stmts _ => walkDo (fuel - 1) env scope line col name stmts
-      ESectOp op _ => Nothing
-      ESectL op inner _ => walkExpr (fuel - 1) env scope line col name inner
-      ESectR inner op _ => walkExpr (fuel - 1) env scope line col name inner
       EInterp multi parts _ => walkInterpParts (fuel - 1) env scope line col name parts
 
 -- | 内部：单个绑定引入的 binder（`kind` 标签 + 值作为单行值 / 语法类型来源）。

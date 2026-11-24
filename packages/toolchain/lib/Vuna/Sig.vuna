@@ -82,9 +82,6 @@ renderTypePlain (EApp f args _) = "${renderTypeAtom f} ${join " " (map renderTyp
 renderTypePlain (EInt n _) = strFromInt n
 renderTypePlain (EStr s _) = "\"${s}\""
 renderTypePlain (EFloat raw _) = raw
-renderTypePlain (ESectOp op _) = "(${op})"
-renderTypePlain (ESectL op e _) = "(${op} ${renderType e})"
-renderTypePlain (ESectR e op _) = "(${renderType e} ${op})"
 renderTypePlain _ = "_"
 
 -- | 内部：把表达式打印成应用参数位置的原子——变量与列表字面量不加括号，其余（含 `->`）加括号。

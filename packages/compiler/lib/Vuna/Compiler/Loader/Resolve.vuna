@@ -1021,9 +1021,6 @@ resolveExprRaw fuel modules label prefix ns imports scope expr =
       -- 不静默透传成普通内部名）。
       -- section 必须在 Loader.Fixity 重排里消除（严格执行契约「rename 后不存在」），
       -- 走到这里说明重排漏了，显式 internal error 不静默透传。
-      ESectOp op _ => icInternal "unreordered operator section (${op})"
-      ESectL op rhs _ => icInternal "unreordered left operator section (${op})"
-      ESectR lhs op _ => icInternal "unreordered right operator section (${op})"
       EInt n sp => OkC (EInt n sp)
       EStr s sp => OkC (EStr s sp)
       EFloat raw sp => OkC (EFloat raw sp)

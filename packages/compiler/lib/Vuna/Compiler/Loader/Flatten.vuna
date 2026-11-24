@@ -1130,14 +1130,14 @@ definedNamesOf [] = []
 definedNamesOf (d :: rest) = append (definedNamesOfDecl d) (definedNamesOf rest)
 
 definedNamesOfDecl : Decl -> List String
-definedNamesOfDecl (DData dname params kind ctors derivings viaField repr lin sp) = (::) dname []
-definedNamesOfDecl (DRecord dname params fields derivings viaField repr lin sp) = (::) dname []
+definedNamesOfDecl (DData dname params kind ctors derivings viaField repr lin sp) = [dname]
+definedNamesOfDecl (DRecord dname params fields derivings viaField repr lin sp) = [dname]
 definedNamesOfDecl (DTrait tname params supers methods sp) = tname :: traitMethodNames methods
 definedNamesOfDecl (DInstance ctxE head methods sp) = []
-definedNamesOfDecl (DSig name ctx ty sp) = (::) name []
-definedNamesOfDecl (DAxiom name ty sp) = (::) name []
-definedNamesOfDecl (DExtern name cName ty sp) = (::) name []
-definedNamesOfDecl (DFun name pats body sp) = (::) name []
+definedNamesOfDecl (DSig name ctx ty sp) = [name]
+definedNamesOfDecl (DAxiom name ty sp) = [name]
+definedNamesOfDecl (DExtern name cName ty sp) = [name]
+definedNamesOfDecl (DFun name pats body sp) = [name]
 
 traitMethodNames : List TraitMethod -> List String
 traitMethodNames [] = []
@@ -1221,8 +1221,8 @@ expandGlobalName n =
     overCtorTargets n
   else
     case doSyntaxCanonical n of
-      Just canonical => (::) canonical []
-      Nothing => (::) n []
+      Just canonical => [canonical]
+      Nothing => [n]
 
 -- | 导出条目的 canonical target。
 exportTargetOf : ExportEntry -> String
@@ -1304,9 +1304,6 @@ exprRefNamesGo (EField base fname _) acc = exprRefNamesGo base acc
 exprRefNamesGo (ERecord name fields _) acc = fieldExprsGo fields ((::) name acc)
 exprRefNamesGo (ERecUpdate base fields _) acc = exprRefNamesGo base (fieldExprsGo fields acc)
 exprRefNamesGo (EDo stmts _) acc = doStmtRefNamesListGo stmts acc
-exprRefNamesGo (ESectOp op _) acc = (::) op acc
-exprRefNamesGo (ESectL op rhs _) acc = (::) op (exprRefNamesGo rhs acc)
-exprRefNamesGo (ESectR lhs op _) acc = (::) op (exprRefNamesGo lhs acc)
 exprRefNamesGo (EInterp multi parts _) acc = interpPartRefNamesListGo parts acc
 
 exprRefNamesListGo : List Expr -> List String -> List String

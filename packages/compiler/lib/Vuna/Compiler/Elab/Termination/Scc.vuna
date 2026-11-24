@@ -289,8 +289,6 @@ inlGo comp als (ERecord rn fields sp) = ERecord rn (inlFields comp als fields) s
 inlGo comp als (ERecUpdate base fields sp) =
   ERecUpdate (inlGo comp als base) (inlFields comp als fields) sp
 inlGo comp als (EDo stmts sp) = EDo (inlStmts comp als stmts) sp
-inlGo comp als (ESectL op e sp) = ESectL op (inlGo comp als e) sp
-inlGo comp als (ESectR e op sp) = ESectR (inlGo comp als e) op sp
 inlGo comp als (EAnn value ty sp) = EAnn (inlGo comp als value) (inlGo comp als ty) sp
 inlGo comp als (EInterp multi parts sp) = EInterp multi (inlParts comp als parts) sp
 inlGo comp als e = e
@@ -584,8 +582,6 @@ argBasesGo sizes locals (ERecord rn fields sp) = argBasesFields sizes locals fie
 argBasesGo sizes locals (ERecUpdate base fields sp) =
   append (argBasesGo sizes locals base) (argBasesFields sizes locals fields)
 argBasesGo sizes locals (EDo stmts sp) = argBasesStmts sizes locals stmts
-argBasesGo sizes locals (ESectL op e sp) = argBasesGo sizes locals e
-argBasesGo sizes locals (ESectR e op sp) = argBasesGo sizes locals e
 argBasesGo sizes locals (EAnn value ty sp) =
   append (argBasesGo sizes locals value) (argBasesGo sizes locals ty)
 argBasesGo sizes locals (EInterp multi parts sp) = argBasesParts sizes locals parts

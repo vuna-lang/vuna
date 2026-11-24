@@ -481,20 +481,6 @@ refsInExprGo sMod e acc =
     ERecord tn fields _ => refsInFields sMod fields acc
     ERecUpdate r fields _ => refsInExprGo sMod r (refsInFields sMod fields acc)
     EDo stmts _ => refsInDoStmts sMod stmts acc
-    -- section 在 keep 模式下保留原形，显式处理：op 本身也是引用，操作数继续递归，
-    -- 不能静默丢整棵子树。
-    ESectOp op sp =>
-      Ref sMod op (spanStartLine (nodeRefSpan sp)) (spanStartCol (nodeRefSpan sp)) :: acc
-    ESectL op inner sp =>
-      refsInExprGo
-        sMod
-        inner
-        (Ref sMod op (spanStartLine (nodeRefSpan sp)) (spanStartCol (nodeRefSpan sp)) :: acc)
-    ESectR inner op sp =>
-      refsInExprGo
-        sMod
-        inner
-        (Ref sMod op (spanStartLine (nodeRefSpan sp)) (spanStartCol (nodeRefSpan sp)) :: acc)
 
 -- | 内部：模板字面量各片段里的引用——洞内表达式递归，文本块没有引用。
 refsInInterpParts : String -> List InterpPart -> List Ref -> List Ref
