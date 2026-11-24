@@ -318,30 +318,44 @@ cleanup instrs =
   let
     folded = cleanupFix 8 instrs
     copied = switchCopy folded
-    tested = dropRedundantTests copied
+    tested = dropRedundantTests (jumpTargets copied) copied
   in if hasJumpTable tested then tested else dropUnreachable tested
 
 -- | `sub r, 1; test r, r; jg` 里的 `test` 是冗余的：上一条 `add`/`sub`/逻辑运算
---   已经按结果 r 设置了 ZF/SF/OF，后面的有符号条件跳转只看这些位。
---   只处理不读 CF 的 jcc；`ja`/`jb` 仍保留 `test`。
-dropRedundantTests : List Instr -> List Instr
-dropRedundantTests [] = []
-dropRedundantTests (i :: rest) =
+--   已经按结果 r 设置了 ZF/SF。两个例外：
+--   * 标签是跳转目标：别的路径跳到这里时上一条指令没执行过，`test` 必须重建标志位；
+--   * `add`/`sub` 的 OF 与 `test`（恒 0）不同，读 OF 的 `jg`/`jge`/`jl`/`jle` 不折；
+--     逻辑运算同样把 OF 清 0，四类条件都可以折。
+dropRedundantTests : HashMap String Bool -> List Instr -> List Instr
+dropRedundantTests targets [] = []
+dropRedundantTests targets (i :: rest) =
   case rest of
     (ILabel l) :: more =>
       case more of
         (ITest r1 r2) :: (IJcc cc target) :: tail =>
-          if sameReg r1 r2 && signedJcc cc && setsFlagsFor r1 i then
-            i :: ILabel l :: IJcc cc target :: dropRedundantTests tail
+          if sameReg r1 r2 && not (HashMap.member l targets) && flagReuseSafe cc i r1 then
+            i :: ILabel l :: IJcc cc target :: dropRedundantTests targets tail
           else
-            i :: dropRedundantTests rest
-        _ => i :: dropRedundantTests rest
+            i :: dropRedundantTests targets rest
+        _ => i :: dropRedundantTests targets rest
     (ITest r1 r2) :: (IJcc cc target) :: tail =>
-      if sameReg r1 r2 && signedJcc cc && setsFlagsFor r1 i then
-        i :: IJcc cc target :: dropRedundantTests tail
+      if sameReg r1 r2 && flagReuseSafe cc i r1 then
+        i :: IJcc cc target :: dropRedundantTests targets tail
       else
-        i :: dropRedundantTests rest
-    _ => i :: dropRedundantTests rest
+        i :: dropRedundantTests targets rest
+    _ => i :: dropRedundantTests targets rest
+
+-- | `test r, r` 之后的 jcc 能否直接复用上一条指令的标志位。
+flagReuseSafe : String -> Instr -> Reg -> Bool
+flagReuseSafe cc i r = setsFlagsFor r i && ((isLogicOp i && signedJcc cc) || zfSfJcc cc)
+
+isLogicOp : Instr -> Bool
+isLogicOp (IBinReg op _ _) = op == "and" || op == "or" || op == "xor"
+isLogicOp (IBin op _) = op == "and" || op == "or" || op == "xor"
+isLogicOp _ = False
+
+zfSfJcc : String -> Bool
+zfSfJcc cc = cc == "je" || cc == "jne" || cc == "jz" || cc == "jnz" || cc == "js" || cc == "jns"
 
 signedJcc : String -> Bool
 signedJcc cc =
@@ -363,7 +377,9 @@ flagOp : String -> Bool
 flagOp op = op == "add" || op == "sub" || op == "and" || op == "or" || op == "xor"
 
 -- | 跳转表分派头的 `mov rax, r; cmp rax, k; ... jmp [base+rax*8]` 直接用 r 作
---   cmp 操作数与索引，省掉一次搬运。只认 `isCalleeSaved` 源，避免和 scratch 冲突。
+--   cmp 操作数与索引，省掉一次搬运。只认 `isCalleeSaved` 源，避免和 scratch 冲突；
+--   臂与兜底块从各自标签进入，生成器保证块入口不读 `rax`（跨块的值一律走帧槽），
+--   所以丢掉这条 `mov` 不需要再做活跃性检查。
 switchCopy : List Instr -> List Instr
 switchCopy ((IMov (OpReg Rax) (OpReg r)) :: (ICmp (OpReg Rax) (OpImm k)) :: jcc :: lea :: (IJmpMem (OpMemS base Rax 8)) :: rest) =
   if isCalleeSaved r then
@@ -482,9 +498,9 @@ addJumpTarget _ acc = acc
 immFits32 : Int -> Bool
 immFits32 n = n >= 0 - 2147483648 && n <= 2147483647
 
--- | scratch 在后续直线上是否在「先读」之前先被重写。块边界视为自由：`r10` / `r11` 只作
---   块内临时，跨块的值一律走帧槽（生成器不在块之间保留 scratch）。
-regFreeAhead : Reg -> List Instr -> Bool
+-- | scratch 在后续直线上是否在「先读」之前先被重写。块边界视为自由：`rax` / `r10` /
+--   `r11` 只作块内临时，跨块的值一律走帧槽（生成器不在块之间保留 scratch）。
+export regFreeAhead : Reg -> List Instr -> Bool
 regFreeAhead _ [] = True
 regFreeAhead r (i :: rest) =
   if instrReadsReg r i then

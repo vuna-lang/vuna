@@ -248,6 +248,9 @@ anyMiddleTouches r (i :: rest) = if middleOperandUses r i then True else anyMidd
 raxChainPass : List Instr -> List Instr
 raxChainPass instrs = raxChainFuel (length instrs + 1) instrs
 
+-- | `mov rax, src; <只碰 rax / scratch 的链>; mov d, rax` 把链直接以 `d` 为目标。
+--   改向之后这条 `mov` 不再给 `rax` 赋值，所以只在链之后 `rax` 已不被读（同一块内
+--   先被重写，或已到块边界）时才做——紧跟在链后的 `add rax, …` 读的就是它。
 raxChainFuel : Int -> List Instr -> List Instr
 raxChainFuel fuel [] = []
 raxChainFuel fuel (i :: rest) =
@@ -263,7 +266,7 @@ raxChainFuel fuel (i :: rest) =
               middle = firstOf (secondOf p)
               rest1 = secondOf (secondOf p)
               init = if sameReg src d then [] else [IMov (OpReg d) (OpReg src)]
-            in append init (append (map (retargetRax d) middle) (raxChainFuel (fuel - 1) rest1))
+            in if regFreeAhead Rax rest1 then append init (append (map (retargetRax d) middle) (raxChainFuel (fuel - 1) rest1)) else i :: raxChainFuel (fuel - 1) rest
           Nothing => i :: raxChainFuel (fuel - 1) rest
       _ => i :: raxChainFuel (fuel - 1) rest
 

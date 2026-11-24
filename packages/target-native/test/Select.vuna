@@ -205,14 +205,19 @@ selfFoldProblems =
     [IMov (OpReg R11) (OpImm 3), IBinReg "add" R11 (OpReg R11)] => []
     is => ["self fold: " ++ strFromInt (length is) ++ " instrs"]
 
--- | `cleanup` 去掉 `sub; test; jg` 里的冗余 `test`，但保留读 CF 的 `ja`。
+-- | `cleanup` 只在标志位能安全复用时删 `sub/add/逻辑; test; jcc` 里的 `test`：
+--   中间标签不是跳转目标、且 jcc 读的位与上一条指令一致（`add`/`sub` 的 OF 与
+--   `test` 恒 0 不同，`ja`/`jb` 读 CF，两类都保留 `test`）。
 cleanupTestProblems : List String
-cleanupTestProblems = append cleanupDropProblems cleanupKeepProblems
+cleanupTestProblems =
+  append
+    (append cleanupDropProblems cleanupKeepProblems)
+    (append cleanupTargetProblems (append cleanupOfProblems cleanupLogicProblems))
 
 cleanupDropProblems : List String
 cleanupDropProblems =
-  case cleanup [IBinReg "sub" Rbx (OpImm 1), ILabel ".L", ITest Rbx Rbx, IJcc "jg" ".L"] of
-    [IBinReg "sub" Rbx (OpImm 1), ILabel ".L", IJcc "jg" ".L"] => []
+  case cleanup [IBinReg "sub" Rbx (OpImm 1), ILabel ".L", ITest Rbx Rbx, IJcc "jz" ".Lend"] of
+    [IBinReg "sub" Rbx (OpImm 1), ILabel ".L", IJcc "jz" ".Lend"] => []
     is => ["cleanup drop: " ++ strFromInt (length is) ++ " instrs"]
 
 cleanupKeepProblems : List String
@@ -220,6 +225,31 @@ cleanupKeepProblems =
   case cleanup [IBinReg "sub" Rbx (OpImm 1), ILabel ".L", ITest Rbx Rbx, IJcc "ja" ".L"] of
     [IBinReg "sub" Rbx (OpImm 1), ILabel ".L", ITest Rbx Rbx, IJcc "ja" ".L"] => []
     is => ["cleanup keep: " ++ strFromInt (length is) ++ " instrs"]
+
+-- | 标签是跳转目标：别的路径跳进来时上一条指令没执行过，`test` 必须重建标志位。
+cleanupTargetProblems : List String
+cleanupTargetProblems =
+  case cleanup [IBinReg "sub" Rbx (OpImm 1), ILabel ".L", ITest Rbx Rbx, IJcc "jz" ".Lend", IJmp ".L", ILabel ".Lend"] of
+    out => if hasTest out then [] else ["cleanup target: test dropped"]
+
+-- | `add`/`sub` 可能置 OF（`test` 恒清 0），读 OF 的 `jl`/`jg` 不能折。
+cleanupOfProblems : List String
+cleanupOfProblems =
+  case cleanup [IBinReg "sub" Rbx (OpImm 1), ITest Rbx Rbx, IJcc "jl" ".Lend", ILabel ".Lend"] of
+    out => if hasTest out then [] else ["cleanup of: test dropped"]
+
+-- | 逻辑运算和 `test` 一样清 OF：读 OF 的条件也能复用标志位。
+cleanupLogicProblems : List String
+cleanupLogicProblems =
+  case cleanup [IBinReg "and" Rbx (OpImm 1), ITest Rbx Rbx, IJcc "jl" ".Lend", ILabel ".Lend"] of
+    out => if hasTest out then ["cleanup logic: test kept"] else []
+
+hasTest : List Instr -> Bool
+hasTest instrs = foldl (\acc, i => acc || isTest i) False instrs
+
+isTest : Instr -> Bool
+isTest (ITest r1 r2) = sameReg r1 r2
+isTest _ = False
 
 -- | 常数除法的展开判据：2 的幂走符号修正移位，其余走 magic 乘法；
 --   d = 3（magic 超出 63-bit）与 `0` / `-1` / 负数走 `idiv` / 运行时

@@ -136,14 +136,40 @@ patternBody =
 patternPlan : RegPlan
 patternPlan = promoteLoops [Pair 0 NClsScalar, Pair 1 NClsScalar] patternBody
 
+-- | 链之后还要读 `rax`（`add rax, rbx`）：链不能改向，首条 `mov rax, rbx` 必须保留——
+--   改向之后 `rax` 里是上一段留下的值。
+liveChainBody : List Instr
+liveChainBody =
+  [
+    ILabel ".L",
+    IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 0)),
+    IMov (OpReg R11) (OpMem Rbp (nativeSlotOff 1)),
+    IBinReg "shr" R11 (OpImm 1),
+    IBinReg "xor" Rax (OpReg R11),
+    IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rax),
+    IBinReg "add" Rax (OpReg Rbx),
+    IJmp ".L"
+  ]
+
+liveChainPlan : RegPlan
+liveChainPlan = promoteLoops [Pair 0 NClsScalar, Pair 1 NClsScalar] liveChainBody
+
 problems : List String
 problems =
   concatMap
     (\s => if s == "" then [] else [s])
-    [check "loop keeps two registers" True (length loopPlan.rpSaved == 2), check "first register is rbx" True (firstSavedIsRbx loopPlan.rpSaved), check "scalar slots promoted" False (mentionsOff (nativeSlotOff 0) loopPlan.rpBody), check "second scalar promoted" False (mentionsOff (nativeSlotOff 1) loopPlan.rpBody), check "pointer slot stays" True (mentionsOff (nativeSlotOff 2) loopPlan.rpBody), check "temp slot stays" True (mentionsOff (nativeSlotOff 3) loopPlan.rpBody), check "tail call restores" True (tailRestored loopPlan.rpBody), check "straight line untouched" True (mentionsOff (nativeSlotOff 0) straightPlan.rpBody), check "straight line saves nothing" True (length straightPlan.rpSaved == 0), check "odd count pads" True (hasPad (prologueOf slimPlan.rpSaved)), check "odd count unpads" True (hasUnpad (epilogueOf slimPlan.rpSaved)), check "even count no pad" False (hasPad (prologueOf loopPlan.rpSaved)), check "epilogue pops both" True (epiloguePops loopPlan.rpSaved), check "five slots promoted" True (length fivePlan.rpSaved == 5), check "r15 used" True (savedHasR15 fivePlan.rpSaved), check "five slots leave frame" True (allSlotsGone fivePlan.rpBody), check "stack args promote" True (length stackArgPlan.rpSaved == 1), check "stack arg old offset gone" False (mentionsPos 16 stackArgPlan.rpBody), check "stack arg offset shifted" True (mentionsPos 32 stackArgPlan.rpBody), check "rax chain coalesced" False (usesRax patternPlan.rpBody)]
+    [check "loop keeps two registers" True (length loopPlan.rpSaved == 2), check "first register is rbx" True (firstSavedIsRbx loopPlan.rpSaved), check "scalar slots promoted" False (mentionsOff (nativeSlotOff 0) loopPlan.rpBody), check "second scalar promoted" False (mentionsOff (nativeSlotOff 1) loopPlan.rpBody), check "pointer slot stays" True (mentionsOff (nativeSlotOff 2) loopPlan.rpBody), check "temp slot stays" True (mentionsOff (nativeSlotOff 3) loopPlan.rpBody), check "tail call restores" True (tailRestored loopPlan.rpBody), check "straight line untouched" True (mentionsOff (nativeSlotOff 0) straightPlan.rpBody), check "straight line saves nothing" True (length straightPlan.rpSaved == 0), check "odd count pads" True (hasPad (prologueOf slimPlan.rpSaved)), check "odd count unpads" True (hasUnpad (epilogueOf slimPlan.rpSaved)), check "even count no pad" False (hasPad (prologueOf loopPlan.rpSaved)), check "epilogue pops both" True (epiloguePops loopPlan.rpSaved), check "five slots promoted" True (length fivePlan.rpSaved == 5), check "r15 used" True (savedHasR15 fivePlan.rpSaved), check "five slots leave frame" True (allSlotsGone fivePlan.rpBody), check "stack args promote" True (length stackArgPlan.rpSaved == 1), check "stack arg old offset gone" False (mentionsPos 16 stackArgPlan.rpBody), check "stack arg offset shifted" True (mentionsPos 32 stackArgPlan.rpBody), check "rax chain coalesced" False (usesRax patternPlan.rpBody), check "live rax keeps chain" True (hasRaxFromRbx liveChainPlan.rpBody)]
 
 check : String -> Bool -> Bool -> String
 check label want got = if want == got then "" else label ++ ": drifted"
+
+-- | `mov rax, rbx` 是否还在（链没有被改向）。
+hasRaxFromRbx : List Instr -> Bool
+hasRaxFromRbx instrs = foldl (\acc, i => acc || isRaxFromRbx i) False instrs
+
+isRaxFromRbx : Instr -> Bool
+isRaxFromRbx (IMov (OpReg Rax) (OpReg r)) = sameReg r Rbx
+isRaxFromRbx _ = False
 
 firstSavedIsRbx : List Reg -> Bool
 firstSavedIsRbx (r :: _) = sameReg r Rbx
