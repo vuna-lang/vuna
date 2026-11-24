@@ -64,3 +64,17 @@ exit: 0
 run: sh -c 'grep -q "call rt_write_barrier" "$TMPDIR/gcrem-out/runtime.s"'
 exit: 0
 
+
+# 9ab) 多线程 + GC：子线程在堆锁下分配、主线程在并行区分配；线程全部 join 后恢复回收
+#       （并行区 `rt_thread_count > 0` 时 GC 暂停，避免漏扫子线程栈根）。`GC_STRESS` 下
+#       仍必须输出一致；产物里要出现线程运行时（`rt_thread_spawn`）。
+run: sh -c 'd="$TMPDIR/gcthread"; mkdir -p "$d/app"; printf "[package]\nname = \"gcthread\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Effect.Core\nimport Base.Thread as Thread\n\nwork : Int -> Int -> Eff [] Int\nwork acc n = if n <= 0 then pure acc else do\n  k <- pure (strLength (strFromInt n))\n  work (acc + k) (n - 1)\n\nafter : Int -> Int -> Int\nafter acc n = if n <= 0 then acc else after (acc + strLength (strFromInt n)) (n - 1)\n\nmain : Eff [] Int\nmain = do\n  a <- Thread.spawn (work 0 300)\n  b <- Thread.spawn (work 0 301)\n  x <- Thread.join a\n  c <- Thread.join b\n  p <- pure (after 0 2000)\n  pure (if x >= 0 && c >= 0 && p > 0 then 1 else 0)\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --out "$TMPDIR/gcthread-out" "$d"'
+exit: 0
+run: "$TMPDIR/gcthread-out/bin/gcthread" 2>&1
+out-equals: 1
+run: sh -c 'VUNA_NATIVE_GC_STRESS=1 timeout 120 "$TMPDIR/gcthread-out/bin/gcthread" 2>&1'
+out-equals: 1
+run: sh -c 'VUNA_NATIVE_GC_MIN=4096 timeout 120 "$TMPDIR/gcthread-out/bin/gcthread" 2>&1'
+out-equals: 1
+run: sh -c 'grep -rq "call rt_thread_spawn" "$TMPDIR/gcthread-out"'
+exit: 0

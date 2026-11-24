@@ -2,6 +2,9 @@
 allocFn                          "mmap" "mmap" "mmap" "mmap"
 cgroupCpusFn                     "openat" "read" "close"
 cmdRunShFn                       "getcwd" "chdir" "fork" "setpgid" "wait4" "chdir" "setpgid" "execve" "exit" "chdir"
+condvarBroadcastFn               "futex"
+condvarSignalFn                  "futex"
+condvarWaitFn                    "futex"
 dirCloseFn                       "close"
 dirNamesFn                       "getdents64"
 dirOpenFn                        "openat"
@@ -11,11 +14,15 @@ errFinish                        "write" "exit"
 execPathFn                       "readlink"
 exitWithFn                       "exit"
 getcwdFn                         "getcwd"
+heapLockFn                       "futex"
+heapUnlockFn                     "futex"
 initCpusFn                       "sched_getaffinity" "sched_setaffinity"
 initStackFn                      "mmap" "mprotect"
 initTimeoutFn                    "rt_sigaction" "setitimer"
 isTtyFn                          "ioctl"
 lstatPathFn                      "newfstatat"
+mutexLockFn                      "futex"
+mutexUnlockFn                    "futex"
 nowUsFn                          "clock_gettime"
 printBoolFn                      "write" "write"
 printIntFn                       "write" "write"
@@ -30,6 +37,11 @@ spawnExecFn                      "fork" "setpgid" "setpgid" "execve" "exit"
 statPathFn                       "newfstatat"
 stderrWrite                      "write"
 strictFailFn                     "exit"
+threadIdFn                       "gettid"
+threadJoinFn                     "futex" "munmap"
+threadParallelismFn              "sched_getaffinity"
+threadSpawnFn                    "mmap" "mprotect" "clone" "futex" "exit"
+threadYieldFn                    "sched_yield"
 trapArrayOobFn                   "write" "exit"
 trapDivZeroFn                    "write" "exit"
 trapImpossibleFn                 "write" "exit"
@@ -62,6 +74,7 @@ dirBufLabel 32768
 dirNamesLabel 32256
 envChildLabel 8192
 envpLabel 8
+heapLockLabel 8
 hostErrnoLabel 8
 hostStatusLabel 8
 memLimitLabel 8
@@ -71,6 +84,7 @@ nativeHeapEndLabel 0
 nativeHeapPtrLabel 8
 nativeHugeFreeLabel 8
 nativeSegsLabel 8
+nativeThreadCountLabel 8
 readBufLabel 8388608
 shArgvLabel 32
 sigalrmSetLabel 8

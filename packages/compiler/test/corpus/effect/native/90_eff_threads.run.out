@@ -1,0 +1,2 @@
+threads atomic=600 mutex=100 cond=0
+0

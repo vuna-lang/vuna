@@ -3443,6 +3443,16 @@ instrLabelRefs : Instr -> List String
 instrLabelRefs (IMov dst src) = append (operandLabelRefs dst) (operandLabelRefs src)
 instrLabelRefs (IMovByteOp op _) = operandLabelRefs op
 instrLabelRefs (IMovByteRegOp op _) = operandLabelRefs op
+instrLabelRefs (IMov32 _ op) = operandLabelRefs op
+instrLabelRefs (IMov32Mem op _) = operandLabelRefs op
+instrLabelRefs (ICmp32 op _) = operandLabelRefs op
+instrLabelRefs (ILockCmpxchg32 op _) = operandLabelRefs op
+instrLabelRefs (ILockCmpxchg64 op _) = operandLabelRefs op
+instrLabelRefs (IXchg32 op _) = operandLabelRefs op
+instrLabelRefs (IXchg64 op _) = operandLabelRefs op
+instrLabelRefs (ILockInc32 op) = operandLabelRefs op
+instrLabelRefs (ILockInc64 op) = operandLabelRefs op
+instrLabelRefs (ILockDec64 op) = operandLabelRefs op
 instrLabelRefs (IMovzx _ src) = operandLabelRefs src
 instrLabelRefs IMovzxAl = []
 instrLabelRefs (ILea _ l) = [l]

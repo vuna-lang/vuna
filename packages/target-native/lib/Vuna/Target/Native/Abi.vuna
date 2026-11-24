@@ -217,6 +217,10 @@ nativeGcForceMajorLabel = "rt_gc_force_major"
 export nativeCleanupHeadLabel : String
 nativeCleanupHeadLabel = "rt_cleanups"
 
+-- | 活着的子线程数（不含主线程）。`alloc` 据此拿堆锁，GC 在 `> 0` 时不回收。
+export nativeThreadCountLabel : String
+nativeThreadCountLabel = "rt_thread_count"
+
 -- | 零参顶层定义的缓存区（CAF）：`[caf_begin, caf_end)` 是连续的 8 字节槽，
 --   每个零参定义一格，`_start` 求值一次后写入；GC 按这段区间扫根。
 export nativeCafBeginLabel : String

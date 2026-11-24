@@ -126,6 +126,24 @@ export data Operand(..) : Type where
 export data Instr(..) : Type where
   -- | `mov dst, src`（dst 是内存时渲染 `qword ptr`）。
   IMov : Operand -> Operand -> Instr
+  -- | `mov <reg32>, dword ptr <op>`（读 32 位原子/状态字）。
+  IMov32 : Reg -> Operand -> Instr
+  -- | `mov dword ptr <op>, <reg32>`。
+  IMov32Mem : Operand -> Reg -> Instr
+  -- | `cmp dword ptr <op>, imm32`。
+  ICmp32 : Operand -> Int -> Instr
+  -- | `lock cmpxchg dword ptr <op>, <reg32>`（expected 在 eax）。
+  ILockCmpxchg32 : Operand -> Reg -> Instr
+  -- | `lock cmpxchg qword ptr <op>, <reg>`（expected 在 rax）。
+  ILockCmpxchg64 : Operand -> Reg -> Instr
+  -- | `xchg dword ptr <op>, <reg32>`（隐式 lock，返回旧值）。
+  IXchg32 : Operand -> Reg -> Instr
+  -- | `xchg qword ptr <op>, <reg>`（隐式 lock，seq_cst store）。
+  IXchg64 : Operand -> Reg -> Instr
+  -- | `lock inc dword ptr <op>` / `lock dec qword ptr <op>`。
+  ILockInc32 : Operand -> Instr
+  ILockInc64 : Operand -> Instr
+  ILockDec64 : Operand -> Instr
   -- | `mov byte ptr <op>, imm8`（字符串缓冲写入）。
   IMovByteOp : Operand -> Int -> Instr
   -- | `mov byte ptr <op>, r8`（字符串缓冲写入）。

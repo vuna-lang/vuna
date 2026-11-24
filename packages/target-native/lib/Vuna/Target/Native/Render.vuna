@@ -24,6 +24,25 @@ import Vuna.Target.Native.Model
 indent : String -> String
 indent line = "  " ++ line
 
+-- | 64 位寄存器的 32 位视图（原子/标志指令用）。
+reg32Text : Reg -> String
+reg32Text Rax = "eax"
+reg32Text Rcx = "ecx"
+reg32Text Rdx = "edx"
+reg32Text Rsi = "esi"
+reg32Text Rdi = "edi"
+reg32Text Rbp = "ebp"
+reg32Text Rsp = "esp"
+reg32Text R8 = "r8d"
+reg32Text R9 = "r9d"
+reg32Text R10 = "r10d"
+reg32Text R11 = "r11d"
+reg32Text Rbx = "ebx"
+reg32Text R12 = "r12d"
+reg32Text R13 = "r13d"
+reg32Text R14 = "r14d"
+reg32Text R15 = "r15d"
+
 memText : Reg -> Int -> String
 memText base off =
   if off == 0 then
@@ -84,6 +103,16 @@ renderByteOp op = "byte ptr ${renderOperand op}"
 
 renderInstr : Instr -> String
 renderInstr (IMov dst src) = renderMov dst src
+renderInstr (IMov32 r op) = "mov ${reg32Text r}, dword ptr ${renderOperand op}"
+renderInstr (IMov32Mem op r) = "mov dword ptr ${renderOperand op}, ${reg32Text r}"
+renderInstr (ICmp32 op imm) = "cmp dword ptr ${renderOperand op}, ${strFromInt imm}"
+renderInstr (ILockCmpxchg32 op r) = "lock cmpxchg dword ptr ${renderOperand op}, ${reg32Text r}"
+renderInstr (ILockCmpxchg64 op r) = "lock cmpxchg qword ptr ${renderOperand op}, ${regText r}"
+renderInstr (IXchg32 op r) = "xchg dword ptr ${renderOperand op}, ${reg32Text r}"
+renderInstr (IXchg64 op r) = "xchg qword ptr ${renderOperand op}, ${regText r}"
+renderInstr (ILockInc32 op) = "lock inc dword ptr ${renderOperand op}"
+renderInstr (ILockInc64 op) = "lock inc qword ptr ${renderOperand op}"
+renderInstr (ILockDec64 op) = "lock dec qword ptr ${renderOperand op}"
 renderInstr (IMovByteOp op imm) = "mov ${renderByteOp op}, ${strFromInt imm}"
 renderInstr (IMovByteRegOp op src) = "mov ${renderByteOp op}, ${reg8Text src}"
 renderInstr (IMovzx dst src) = "movzx ${regText dst}, ${renderByteOp src}"

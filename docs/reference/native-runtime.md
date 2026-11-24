@@ -284,6 +284,11 @@ IR 支持面；这里讲生成物**跑起来**依赖的那一层——运行时�
   的栈深是常量（trampoline），不随 perform 次数增长；延迟 answer 的 handler 仍不支持
   （[debt.md](debt.md) D101）。
 - FFI / extern；stdin 的 `readLine` / `readBytes` 与 net。
+- **多线程原语的并行区不回收**：`clone` + futex 已实现（`thread_*` / `mutex*` /
+  `condvar*` / `atomic*`），但子线程存活期间 GC 直接返回（子线程栈根不在主线程可见
+  范围），线程全部 join 后才恢复回收；并行区只增长。另有：`bracket` cleanup 链与
+  fs/process 宿主缓冲仍是全局的（并发使用不安全），线程栈固定 64 MiB，`threadId` 是
+  `gettid`。见 [debt.md](debt.md) D135。
 - **自举运行**：`vuna build packages/compiler --target native` 产出可链接的 `bin/vuna-compiler`
   （`version` / 帮助可用）；成员包 `processSpawn` 按 argv 边界逐项传参（105 的 9u5），GC 逐帧
   保守扫根，入口自带栈（105 的 9u7）。空 store 下整仓 `check .` 在默认 `ulimit -s 8192`

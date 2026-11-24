@@ -1,0 +1,91 @@
+-- 多线程原语的三端对拍（ocaml / native）：spawn/join、原子单元、互斥、条件变量。
+-- 断言值都与调度顺序无关（join 后读取 / 持锁读取 / 原子累计）。
+import Base.Data.Nat
+import Base.Effect.Core
+import Base.Effect.Console
+import Base.Effect.Pure.IORef
+import Base.Thread as Thread
+
+addMany : Atomic -> Int -> Int -> Eff [] Int
+addMany cell k n =
+  if n <= 0 then
+    pure 0
+  else
+    do
+      _ <- Thread.atomicFetchAdd cell k
+      addMany cell k (n - 1)
+
+bumpOnce : IORef Int -> Eff [] Int
+bumpOnce r =
+  do
+    x <- readRef r
+    _ <- writeRef r (x + 1)
+    pure 0
+
+bumpLocked : Mutex -> IORef Int -> Int -> Eff [] Int
+bumpLocked m r n =
+  if n <= 0 then
+    pure 0
+  else
+    do
+      _ <- Thread.withMutex m (bumpOnce r)
+      bumpLocked m r (n - 1)
+
+awaitOne : Nat -> Condvar -> Mutex -> IORef Int -> Eff [] Int
+awaitOne fuel c m r =
+  case fuel of
+    0 => pure 0
+    Succ k =>
+      do
+        x <- readRef r
+        if x >= 1 then
+          pure 0
+        else
+          do
+            _ <- Thread.condWait c m
+            awaitOne k c m r
+
+waitLocked : Condvar -> Mutex -> IORef Int -> Eff [] Int
+waitLocked c m r =
+  do
+    _ <- Thread.lockMutex m
+    v <- awaitOne 1024 c m r
+    _ <- Thread.unlockMutex m
+    pure v
+
+setReady : Condvar -> IORef Int -> Eff [] Int
+setReady c r =
+  do
+    _ <- writeRef r 1
+    Thread.condSignal c
+
+main : Eff [ConsoleOp] Int
+main =
+  do
+    cell <- Thread.newAtomic 0
+    m <- Thread.newMutex
+    counter <- newRef 0
+    cond <- Thread.newCondvar
+    ready <- newRef 0
+    t0 <- Thread.spawn (addMany cell 1 100)
+    t1 <- Thread.spawn (addMany cell 2 100)
+    t2 <- Thread.spawn (addMany cell 3 100)
+    _ <- Thread.join t0
+    _ <- Thread.join t1
+    _ <- Thread.join t2
+    total <- Thread.atomicLoad cell
+    b0 <- Thread.spawn (bumpLocked m counter 50)
+    b1 <- Thread.spawn (bumpLocked m counter 50)
+    _ <- Thread.join b0
+    _ <- Thread.join b1
+    locked <- readRef counter
+    waiter <- Thread.spawn (waitLocked cond m ready)
+    _ <- Thread.withMutex m (setReady cond ready)
+    signalled <- Thread.join waiter
+    _ <-
+      consolePrint
+        ("threads atomic=" ++ strFromInt total
+          ++ " mutex=" ++ strFromInt locked
+          ++ " cond=" ++ strFromInt signalled
+          ++ "\n")
+    pure 0

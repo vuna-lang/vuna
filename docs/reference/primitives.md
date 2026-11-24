@@ -274,8 +274,25 @@
 - 没有取消 / 优先级 / 线程本地存储 / 异步 I/O；协作取消用 `Atomic` 标志 + `join` 组合。
 
 **target 能力**：`Ir.Runtime.irRtTargets` 是唯一判据（线程符号为 `["ocaml","native"]`）。
-wasm 在引用点拒绝（文案点明「不是待补缺口」）；native 当前在 `RuntimeTable.runtimeGaps`
-里声明为未实现，缺口见 [debt.md](debt.md) D135 与 [native.md](native.md) §4。
+wasm 在引用点拒绝（文案点明「不是待补缺口」）。
+
+**native 运行时**（`Native.Runtime` 的 `thread_*` / `*mutex*` / `*condvar*` / `atomic_*`）：
+
+- 线程 = 共享地址空间的内核线程（`clone`，`CLONE_VM|FS|FILES|SIGHAND|THREAD|SYSVSEM`）；
+  每线程一条 64 MiB 虚拟栈（低页 `PROT_NONE` 护栏）。Thread 对象在堆上
+  （state/futex | result | stack base | size | closure），`join` 用 futex 等 state，
+  完成后 `munmap` 栈；重复 join 返回同一结果。
+- 子线程在 `runPure` 里执行任务体；`threadId` 是 `gettid`，`threadParallelism` 数
+  `sched_getaffinity` 的位。
+- 分配：有子线程（`rt_thread_count > 0`）时 `alloc` 拿一把 futex 堆锁；单线程路径不加锁。
+  **并行区 GC 暂停**：`gc_collect` 在子线程存活时直接返回（子线程的栈根不在主线程可见范围，
+  标记-清扫会误收），线程全部 `join` 后恢复正常回收。因此并行区只增长不回收，长驻并行
+  负载需要外部预算（[debt.md](debt.md) D135）。
+- `Mutex` 是 3 态 futex（0 空闲 / 1 锁定 / 2 有等待者）；`Condvar` 是 32-bit 序号 + futex
+  （抗虚假唤醒）；`Atomic` 是 8 字节单元，load 普通 mov、store/RMW `xchg`/`lock` 前缀
+  （C11 seq_cst 的 x86 映射），`fetchAdd` 用 CAS 循环并保持 63-bit 回绕。
+- 边界：并行区里 `bracket` 的 cleanup 链与 fs/process 宿主缓冲仍是全局的（并发使用不安全，
+  D135）；线程栈固定 64 MiB，不读 `VUNA_NATIVE_STACK_MB`。
 
 **OCaml 运行时**（`Vuna_runtime.ml` 的 `dtThreadRuntime`）：
 

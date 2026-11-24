@@ -25,14 +25,17 @@ sysNr "close" = 3
 sysNr "lseek" = 8
 sysNr "mmap" = 9
 sysNr "mprotect" = 10
+sysNr "munmap" = 11
 sysNr "rt_sigaction" = 13
 sysNr "rt_sigprocmask" = 14
 sysNr "rt_sigreturn" = 15
 sysNr "ioctl" = 16
+sysNr "sched_yield" = 24
 sysNr "nanosleep" = 35
 sysNr "setitimer" = 38
 sysNr "getpid" = 39
 sysNr "fork" = 57
+sysNr "clone" = 56
 sysNr "execve" = 59
 sysNr "exit" = 60
 sysNr "wait4" = 61
@@ -44,6 +47,8 @@ sysNr "rmdir" = 84
 sysNr "readlink" = 89
 sysNr "setpgid" = 109
 sysNr "getpgid" = 121
+sysNr "gettid" = 186
+sysNr "futex" = 202
 sysNr "sched_setaffinity" = 203
 sysNr "sched_getaffinity" = 204
 sysNr "getdents64" = 217
@@ -81,6 +86,17 @@ mmapFlagsAnonNoReserve = 16418
 -- | `mprotect` 保护位：不可访问（溢出护栏页）。
 export protNone : Int
 protNone = 0
+
+-- | `futex` 操作：私有等待 / 唤醒（同一地址空间内的线程）。
+export futexWaitPrivate : Int
+futexWaitPrivate = 128
+
+export futexWakePrivate : Int
+futexWakePrivate = 129
+
+-- | `clone` flags：`CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM`。
+export cloneThreadFlags : Int
+cloneThreadFlags = 331520
 
 -- | 新建普通文件 / 目录的权限位（`0666` / `0755`；受 umask 约束）。
 export modeFileDefault : Int
