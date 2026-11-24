@@ -1,0 +1,14 @@
+-- MutArray：两个同元素类型的数组省略实例名时按候选报 TC_AmbiguousInstance。
+import Base.Effect.MutArray as MutArray
+import Base.Effect.Core as Eff
+import Base.Trait.Monad
+
+bad : Int
+bad =
+  MutArray.withMutArrayPure "a" 1 0 (
+      MutArray.withMutArray "b" 1 0 (
+          do
+            MutArray.set 0 1
+            MutArray.get 0
+        )
+    )

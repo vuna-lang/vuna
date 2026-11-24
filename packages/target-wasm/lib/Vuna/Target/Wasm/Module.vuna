@@ -1798,6 +1798,7 @@ baseTypes =
     WatStructType "$float" [WatField False WvF64],
     WatArrayType "$str" True WvI8,
     WatArrayType "$arr" True WvAnyRef,
+    WatStructType "$buf" [WatField True (WvRef "$str"), WatField True WvI32, WatField True WvI32],
     WatStructType "$clean" [WatField False WvAnyRef, WatField False WvAnyRef]
   ]
 

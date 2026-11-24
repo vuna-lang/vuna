@@ -813,7 +813,7 @@ isIndexDomain ec dom = isTypeDomain dom || isDataHead (ecDatas ec) (forceVal ec 
 -- 运行时使用由 `Checks` 的擦除检查报错（`dt_err/42_implicit_value_runtime`）。
 export isImplicitDomain : Ctx -> Ec -> Value -> Bool
 isImplicitDomain ctx ec dom =
-  if isCellDomain ec dom then
+  if isHandleDomain ec dom then
     True
   else if isIndexDomain ec dom then
     True
@@ -840,16 +840,19 @@ isStringImplicitDomain ec dom =
     VNeutral (NGlobal g []) => g == strTypeName
     _ => False
 
--- | 编译器合成的单元参数域：`@vuna@Cell a`（隐藏类型，只能由 MutRef 精化合成）。
-export isCellDomain : Ec -> Value -> Bool
-isCellDomain ec dom =
+-- | 编译器合成的句柄参数域：`@vuna@Cell a` / `@vuna@MArray a` / `@vuna@MBuffer`
+-- （隐藏类型，只能由命名可变家族的精化合成）。
+export isHandleDomain : Ec -> Value -> Bool
+isHandleDomain ec dom =
   case forceVal ec dom of
-    VNeutral (NGlobal g _) => g == "@vuna@Cell"
+    VNeutral (NGlobal g _) => g == "@vuna@Cell" || g == "@vuna@MArray" || g == "@vuna@MBuffer"
     _ => False
 
 export implicitBinderRig : Ec -> Value -> Rig
 implicitBinderRig ec dom =
-  if isStringImplicitDomain ec dom then RigOmega else if isCellDomain ec dom then RigOmega else Rig0
+  if isStringImplicitDomain ec dom then
+    RigOmega
+  else if isHandleDomain ec dom then RigOmega else Rig0
 
 -- 上下文里 level 为 lvl 的 binder 的类型是不是 index domain。
 -- Ctx 项按「最近绑定在前」存；level 0 是最外层 binder，所以位置 = depth - lvl - 1。

@@ -1,0 +1,20 @@
+-- MutBuffer：追加 / 追加字节 / 长度 / 取快照 / 清空。
+import Base.Effect.MutBuffer as MutBuffer
+import Base.Effect.Core as Eff
+import Base.Data.String
+
+main : Int
+main =
+  MutBuffer.withMutBufferPure "out" (
+      do
+        MutBuffer.append "abc"
+        MutBuffer.appendChar 100
+        n1 <- MutBuffer.length
+        s1 <- MutBuffer.toString
+        MutBuffer.clear
+        n2 <- MutBuffer.length
+        s2 <- MutBuffer.toString
+        MutBuffer.append s1
+        n3 <- MutBuffer.length
+        pure (n1 * 10000 + n2 * 1000 + n3 * 100 + strLength s2 + strAt s1 3)
+    )

@@ -428,8 +428,8 @@ withMutRefPure : (n : String) -> a -> Eff [Named n (MutRefOp a)] b -> b
 - **行条目就是表示**：`Named n (MutRefOp a)` 同时带实例名与载荷类型；没有
   `Cell a` 这样的句柄值，所以没有东西能带着单元逃出作用域。
 - **单元是编译期绑定**：`withMutRef "x" init body` 在精化期展开成
-  `@vuna@mrefWith "x" init (\@vuna@cell@x => body)`；`read`/`write` 的调用点改写成
-  `@vuna@mrefReadOp @x @vuna@cell@x` / `@vuna@mrefWriteOp @x @vuna@cell@x v`，
+  `cellWith "x" init (\@vuna@cell@x => body)`；`read`/`write` 的调用点改写成
+  `cellReadOp @x @vuna@cell@x` / `cellWriteOp @x @vuna@cell@x v`，
   运行时只剩三个隐藏原语（OCaml `ref` / wasm `$rt_*Ref` / native heap cell），
   **没有 handler 派发、没有名字查找**。
 - **跨函数**：签名里出现具体 `MutRefOp` 条目的函数，精化器自动补
@@ -437,16 +437,110 @@ withMutRefPure : (n : String) -> a -> Eff [Named n (MutRefOp a)] b -> b
   作用域取单元传进去。名字不匹配 → `TC_CellNotInScope`。
 - **逃逸**：`read`/`write` 的改写仍带 `Member (Named n (MutRefOp a)) r` 约束，
   所以把写操作捕获进 `Eff []` 的闭包会因「找不到实例」被拒；`withMutRef` 的
-  结果类型也不含该条目（`@vuna@effDropHead`）。
+  结果类型也不含该条目（`dropEffHead`）。
 - **唯一性**：签名里的 concrete 行前缀按 `(族头, 实例名)` 查重
   （`TC_DuplicateInstance`）；`withMutRef` 嵌套同名也走同一条错误。
 - **消歧**：同一作用域两个同载荷单元时，省略名字报 `TC_AmbiguousInstance`，
   用 `read@a` / `write@a` 指定。
+- **依赖载荷**：句柄参数插在**前导隐式 binder 之后、第一个显式 binder 之前**（非擦除
+  隐式保持前缀；插入点之后整体上移索引，载荷按后缀 binder 数下移）。因此
+  `{a : Type} -> … Named "xs" (MutArrayOp a) …` 这类多态 helper 可以直接写。
 - 名称必须是字符串字面量（`TC_CellNameNotLiteral`）。
 
 夹具：`effect/common/60..62`（单单元、双单元 `@` + 跨函数、循环累加），
-负例 `dt_err/117..121`。限制（依赖载荷、重复藏在行变量里、`Member` 诊断不够专用）
+负例 `dt_err/117..121`。剩余限制（重复藏在行变量里、`Member` 诊断不够专用）
 见 [debt.md](debt.md) D63。
+
+### 8.9 定长原地数组：`Base.Effect.MutArray`
+
+`MutArray a` 是**运行时定长**的原地数组：长度在引入时确定，`set` 写穿同一块存储，
+不返回新数组（与不可变 `Array` 的 copy-on-write `set` 不同）：
+
+```vuna
+main : Int
+main =
+  MutArray.withMutArrayPure "xs" 3 0 (
+      do
+        MutArray.set 0 7
+        MutArray.set 1 35
+        v <- MutArray.get 1
+        n <- MutArray.size
+        pure (v * 100 + n)             -- 3503
+    )
+```
+
+形状：
+
+```vuna
+data MutArrayOp : Type -> Type -> Type where
+  Get  : {a : Type} -> Nat -> MutArrayOp a a
+  Set  : {a : Type} -> Nat -> a -> MutArrayOp a Unit
+  Size : {a : Type} -> MutArrayOp a Nat
+
+get  : {n : String} -> ... -> Nat -> Eff r a
+set  : {n : String} -> ... -> Nat -> a -> Eff r Unit
+size : {n : String} -> ... -> Eff r Nat
+withMutArray     : (n : String) -> Nat -> a -> Eff (Named n (MutArrayOp a) :: r) b -> Eff r b
+withMutArrayPure : (n : String) -> Nat -> a -> Eff [Named n (MutArrayOp a)] b -> b
+```
+
+- **元素类型在行条目里**：`Named n (MutArrayOp a)` 同时带实例名与元素类型，因此
+  `set` 与存储的元素类型绑定，不同元素类型的数组不是同一条目。
+- 机制与 §8.8 完全同构：编译期名字绑定、跨函数补 `{@vuna@marr@x : @vuna@MArray a}`、
+  `Member` 约束挡逃逸、concrete 前缀查重、`@x` 消歧、名字必须是字面量。
+- **表示**：`@vuna@MArray a` 编译到普通数组（IR `IrTyArray a`）；`new/get/len` 直接
+  复用 `arrayMake` / `arrayGet` / `arrayLength`，只有原地写 `@vuna@prim_marrSet` 是新的
+  （三端都不复制；native 写后登记写屏障）。
+- 越界是宿主 trap（与 `arrayGet` 一致）；`size` 是容量 = 长度。
+- 需要「容量 + 逻辑长度」时，用 `MutArray` + 一个 `MutRef` 计数器组合；
+  类型层定长的可变量（`MutVec n a`，`Fin n` 索引）依赖 `Fin` 先落地，见
+  [debt.md](debt.md)。
+
+夹具：`effect/common/63..65`（原地读写、双数组 `@` + 跨函数、多态 helper），
+负例 `dt_err/122/123/125`。
+
+### 8.10 变长字节缓冲：`Base.Effect.MutBuffer`
+
+`MutBuffer` 是**变长字节**缓冲（对标 OCaml `Buffer.t` / `StringBuilder`）：元素固定
+为字节，所以操作族没有元素类型参数；追加原地进行，容量不足时按倍数增长，
+`toString` 取一次快照：
+
+```vuna
+main : Int
+main =
+  MutBuffer.withMutBufferPure "out" (
+      do
+        MutBuffer.append "abc"
+        MutBuffer.appendChar 100       -- 'd'
+        n <- MutBuffer.length          -- 4
+        s <- MutBuffer.toString        -- "abcd"
+        pure (n * 100 + strAt s 3)     -- 500
+    )
+```
+
+形状：
+
+```vuna
+data MutBufferOp : Type -> Type where
+  Append     : String -> MutBufferOp Unit
+  AppendChar : Int -> MutBufferOp Unit     -- 低 8 位
+  Length     : MutBufferOp Nat
+  Clear      : MutBufferOp Unit
+  ToString   : MutBufferOp String
+
+append / appendChar / length / clear / toString : {n : String} -> ...
+withMutBuffer     : (n : String) -> Eff (Named n MutBufferOp :: r) b -> Eff r b
+withMutBufferPure : (n : String) -> Eff [Named n MutBufferOp] b -> b
+```
+
+- 机制同 §8.8/§8.9，句柄是 `{@vuna@mbuf@x : @vuna@MBuffer}`（无载荷参数）。
+- **表示**：OCaml `Buffer.t`；wasm `$buf { data: (mut (ref $str)), len, cap }`；native 句柄
+  `[data][len][cap]`（地址稳定）+ 单独的 leaf 字节块，增长 = 2× 重分配 + 复制。
+- `toString` 复制成新字符串，之后继续追加不影响已取出的串；`clear` 保留容量。
+- `appendChar` 取低 8 位，不做 UTF-8 校验（按字节语义）。
+
+夹具：`effect/common/66..67`（追加/长度/快照/清空、跨函数 + 格式化组合），
+负例 `dt_err/124/126`。
 
 ## 9. 仍开放的边界
 

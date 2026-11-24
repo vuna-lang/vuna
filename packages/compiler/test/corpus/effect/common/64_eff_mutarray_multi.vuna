@@ -1,0 +1,22 @@
+-- MutArray：两个数组用 `@name` 消歧；跨函数经行条目传隐藏句柄。
+import Base.Effect.MutArray as MutArray
+import Base.Effect.Core as Eff
+
+sumInto : {r : Row} -> Int -> Eff (Named "acc" (MutArrayOp Int) :: r) Int
+sumInto k =
+  do
+    v <- MutArray.get@acc 0
+    MutArray.set@acc 0 (v + k)
+    MutArray.get@acc 0
+
+main : Int
+main =
+  MutArray.withMutArrayPure "scratch" 2 9 (
+      MutArray.withMutArray "acc" 1 0 (
+          do
+            a <- sumInto 5
+            b <- sumInto 7
+            s <- MutArray.get@scratch 1
+            pure (a * 100 + b * 10 + s)
+        )
+    )

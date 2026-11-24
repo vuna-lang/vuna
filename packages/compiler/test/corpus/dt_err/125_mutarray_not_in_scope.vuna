@@ -1,0 +1,6 @@
+-- MutArray：作用域里没有数组句柄时，操作调用报 TC_CellNotInScope。
+import Base.Effect.MutArray as MutArray
+import Base.Effect.Core as Eff
+
+bad : Eff [] Int
+bad = MutArray.get 0

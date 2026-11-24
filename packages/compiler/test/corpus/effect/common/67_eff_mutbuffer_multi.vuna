@@ -1,0 +1,22 @@
+-- MutBuffer：跨函数经行条目传隐藏句柄；追加与读取在 helper 里原地完成。
+import Base.Effect.MutBuffer as MutBuffer
+import Base.Effect.Core as Eff
+import Base.Data.String
+
+emit : {r : Row} -> Int -> Eff (Named "log" MutBufferOp :: r) Unit
+emit n =
+  do
+    MutBuffer.append@log "v="
+    MutBuffer.append@log (strFromInt n)
+    MutBuffer.append@log ";"
+
+main : Int
+main =
+  MutBuffer.withMutBufferPure "log" (
+      do
+        emit 7
+        emit 35
+        n <- MutBuffer.length
+        s <- MutBuffer.toString
+        pure (n * 100 + strAt s 0)
+    )

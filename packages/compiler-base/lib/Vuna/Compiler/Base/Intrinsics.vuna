@@ -46,6 +46,10 @@ export data IType(..) : Type where
   IRef : IType -> IType
   -- `@vuna@Cell a`：`Base.Effect.MutRef` 私有的可变单元类型（源码写不出）。
   ICell : IType -> IType
+  -- `@vuna@MArray a`：`Base.Effect.MutArray` 私有的定长原地数组类型（源码写不出）。
+  IMArray : IType -> IType
+  -- `@vuna@MBuffer`：`Base.Effect.MutBuffer` 私有的变长字节缓冲类型（源码写不出）。
+  IMBuffer : IType
   -- 隐式类型参数绑定（`{a : Type} -> ...`）；不进函数 arity。
   IPi : String -> IType -> IType
   -- `Float` primitive 类型的签名形状（保持已有 tag 顺序；新构造子只追加在它之后）。
@@ -84,7 +88,13 @@ typeIntrinsicCtorArity (TypeIntrinsic name arity) = arity
 -- | 全部内建类型构造子及其 arity（Elab.Prelude 生成 kind、Target.Ocaml.Decl 渲染的唯一真源）。
 export typeIntrinsicArities : List TypeIntrinsic
 typeIntrinsicArities =
-  [TypeIntrinsic "Array" 1, TypeIntrinsic "IORef" 1, TypeIntrinsic "@vuna@Cell" 1]
+  [
+    TypeIntrinsic "Array" 1,
+    TypeIntrinsic "IORef" 1,
+    TypeIntrinsic "@vuna@Cell" 1,
+    TypeIntrinsic "@vuna@MArray" 1,
+    TypeIntrinsic "@vuna@MBuffer" 0
+  ]
 
 -- | 名字对应的内建类型构造子 arity；不是内建类型构造子时返回 `-1`。
 export typeIntrinsicArityOf : String -> Int
@@ -947,6 +957,10 @@ effIntrinsics : List Intrinsic
 -- 显式效应机器的装箱/拆箱（运行时恒等；见 Base.Effect.Core.Obj）。
 -- MutRef 的私有单元原语：类型 `@vuna@Cell a` 不对用户开放，
 -- 只能由精化器在 `withMutRef` 作用域里合成引用。
+-- MutArray 的私有原地数组原语：类型 `@vuna@MArray a` 不对用户开放，
+-- 只能由精化器在 `withMutArray` 作用域里合成数组。`marrSet` 是唯一原地写的入口
+-- （不可变 `arraySet` 是 copy-on-write，不能复用）。
+-- MutBuffer 的私有字节缓冲原语：类型 `@vuna@MBuffer` 不对用户开放。
 effIntrinsics =
   [
     Intrinsic
@@ -1000,6 +1014,28 @@ effIntrinsics =
       (IPi "a" (IFun (ICell (IVar "a")) (IFun (IVar "a") (IEff IInt))))
       OpNone
       False,
+    Intrinsic
+      "@vuna@prim_marrNew"
+      (IPi "a" (IFun IInt (IFun (IVar "a") (IMArray (IVar "a")))))
+      OpNone
+      False,
+    Intrinsic
+      "@vuna@prim_marrGet"
+      (IPi "a" (IFun (IMArray (IVar "a")) (IFun IInt (IEff (IVar "a")))))
+      OpNone
+      False,
+    Intrinsic
+      "@vuna@prim_marrSet"
+      (IPi "a" (IFun (IMArray (IVar "a")) (IFun IInt (IFun (IVar "a") (IEff IInt)))))
+      OpNone
+      False,
+    Intrinsic "@vuna@prim_marrLen" (IPi "a" (IFun (IMArray (IVar "a")) IInt)) OpNone False,
+    Intrinsic "@vuna@prim_mbufNew" (IFun IInt IMBuffer) OpNone False,
+    Intrinsic "@vuna@prim_mbufAppend" (IFun IMBuffer (IFun IStr (IEff IInt))) OpNone False,
+    Intrinsic "@vuna@prim_mbufAppendChar" (IFun IMBuffer (IFun IInt (IEff IInt))) OpNone False,
+    Intrinsic "@vuna@prim_mbufLen" (IFun IMBuffer IInt) OpNone False,
+    Intrinsic "@vuna@prim_mbufClear" (IFun IMBuffer (IEff IInt)) OpNone False,
+    Intrinsic "@vuna@prim_mbufToString" (IFun IMBuffer IStr) OpNone False,
     Intrinsic "prim_eff_print" (IFun IStr (IEff IInt)) OpNone True,
     Intrinsic "@vuna@prim_eff_print" (IFun IStr (IEff IInt)) OpNone False,
     Intrinsic "prim_eff_print_host" (IFun IStr (IEff IInt)) OpNone True,

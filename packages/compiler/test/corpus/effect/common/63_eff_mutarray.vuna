@@ -1,0 +1,16 @@
+-- MutArray：定长原地数组；set 写穿同一块存储，size 是容量。
+import Base.Effect.MutArray as MutArray
+import Base.Effect.Core as Eff
+
+main : Int
+main =
+  MutArray.withMutArrayPure "xs" 3 0 (
+      do
+        MutArray.set 0 7
+        MutArray.set 1 35
+        v <- MutArray.get 1
+        n <- MutArray.size
+        MutArray.set 2 (v + n)
+        w <- MutArray.get 2
+        pure (v * 100 + w)
+    )

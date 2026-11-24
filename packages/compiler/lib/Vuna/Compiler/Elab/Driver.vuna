@@ -15,7 +15,7 @@ import Vuna.Compiler.Elab.Data
 import Vuna.Compiler.Elab.Derive
 import Vuna.Compiler.Elab.Dict
 import Vuna.Compiler.Elab.Meta
-import Vuna.Compiler.Elab.MutRef
+import Vuna.Compiler.Elab.Mut
 import Vuna.Compiler.Elab.Prelude
 import Vuna.Compiler.Elab.Records
 import Vuna.Compiler.Elab.Term
@@ -98,15 +98,15 @@ elabSigsGo ((name, ctxExprs, tyExpr, sigSpan) :: rest) globals ec acc =
                     (tyTerm1, ec2) =>
                       let
                         sigTy0 = zonkTerm ec2 0 tyTerm1
-                      in Vuna.Compiler.Base.Common.bind (mrefWrapSig name sigTy0 sigSpan) (\sigTy => elabSigsGo rest ((name, sigTy) :: globals) (ecPutGlobalsTbl ec2 (HashMap.insert name sigTy (ecGlobalsTbl ec2))) ((name, sigTy) :: acc))
+                      in Vuna.Compiler.Base.Common.bind (mutWrapSig name sigTy0 sigSpan) (\sigTy => elabSigsGo rest ((name, sigTy) :: globals) (ecPutGlobalsTbl ec2 (HashMap.insert name sigTy (ecGlobalsTbl ec2))) ((name, sigTy) :: acc))
               )
     )
 
 -- 签名收尾：重复实例名报错；`MutRefOp` 条目合成隐藏的单元参数。
-mrefWrapSig : String -> Term -> Span -> Check Term
-mrefWrapSig nm ty sp =
-  case duplicateRowKeys ty of
-    [] => OkC (mrefAddCellParams ty)
+mutWrapSig : String -> Term -> Span -> Check Term
+mutWrapSig nm ty sp =
+  case mutDuplicateRowKeys ty of
+    [] => OkC (mutAddHandleParams ty)
     (f, n) :: _ => tcErr1 sp (DuplicateInstance (f ++ " " ++ n)) (f ++ " " ++ n)
 
 -- 顶层签名里的前导隐式 Pi 前缀 → Ctx（`{a : Type} -> {n : Nat} -> ...`）。

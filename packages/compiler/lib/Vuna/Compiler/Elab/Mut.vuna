@@ -1,0 +1,344 @@
+-- | 命名可变家族的编译期部分（`Base.Effect.MutRef` / `MutArray` / `MutBuffer`）：
+-- 名字常量、签名里的隐藏句柄参数合成、用户面声明到内部入口的改写。
+--
+-- 三个家族的机制完全相同（名字 → 编译期句柄绑定、跨函数合成隐藏参数、逃逸靠 `Member`
+-- 约束），差别只在「族头 / 句柄类型 / 操作表 / 引入入口」——这些差异由 `mutFamilies`
+-- 一张表描述，本模块其余函数都按表工作。
+--
+-- 这一层只做纯结构操作（Term / Expr 的形状），不碰求解器状态。
+module Vuna.Compiler.Elab.Mut where
+
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Base.Intrinsics
+import Vuna.Compiler.Core.Term
+import Vuna.Compiler.Frontend.Rast
+import Vuna.Compiler.Frontend.Rast.Name
+
+-- ---------------------------------------------------------------
+-- 表：家族 / 操作
+-- ---------------------------------------------------------------
+-- | 一个用户面操作：公开名字、内部入口名字、显式参数个数。
+export record MutOp(..) where
+  mutOpUser : String
+  mutOpInternal : String
+  mutOpArity : Int
+
+-- | 一个命名可变家族。
+export record MutFamily(..) where
+  -- | 定义模块（内部入口按 `<module>.<name>` 引用）。
+  mutFamModule : String
+  -- | 诊断文本里的家族标签（`mutable ref` / `mutable array` / `mutable buffer`）。
+  mutFamLabel : String
+  -- | 行条目的操作族全名（`Base.Effect.MutArray.MutArrayOp`）。
+  mutFamOpFamily : String
+  -- | 隐藏句柄类型构造子（`@vuna@Cell` / `@vuna@MArray` / `@vuna@MBuffer`）。
+  mutFamHandleType : String
+  -- | 句柄类型的参数个数（决定合成参数是否带行条目的载荷）。
+  mutFamHandleArity : Int
+  -- | 编译期句柄 binder 前缀（`@vuna@cell@` / `@vuna@marr@` / `@vuna@mbuf@`）。
+  mutFamBinderPrefix : String
+  -- | 用户面引入入口（作用域版 / 纯端点）。
+  mutFamWith : String
+  mutFamWithPure : String
+  -- | 内部引入入口。
+  mutFamWithInternal : String
+  mutFamWithPureInternal : String
+  -- | 引入入口除名字与 body 之外的显式参数个数（初值 / 容量）。
+  mutFamIntroArity : Int
+  mutFamOps : List MutOp
+
+-- | 全部家族。
+export mutFamilies : List MutFamily
+mutFamilies =
+  [
+    MutFamily
+      "Base.Effect.MutRef"
+      "mutable ref"
+      "Base.Effect.MutRef.MutRefOp"
+      "@vuna@Cell"
+      1
+      "@vuna@cell@"
+      "Base.Effect.MutRef.withMutRef"
+      "Base.Effect.MutRef.withMutRefPure"
+      "cellWith"
+      "cellWithPure"
+      1
+      [MutOp "Base.Effect.MutRef.read" "cellReadOp" 0, MutOp "Base.Effect.MutRef.write" "cellWriteOp" 1],
+    MutFamily
+      "Base.Effect.MutArray"
+      "mutable array"
+      "Base.Effect.MutArray.MutArrayOp"
+      "@vuna@MArray"
+      1
+      "@vuna@marr@"
+      "Base.Effect.MutArray.withMutArray"
+      "Base.Effect.MutArray.withMutArrayPure"
+      "marrWith"
+      "marrWithPure"
+      2
+      [MutOp "Base.Effect.MutArray.get" "marrGetOp" 1, MutOp "Base.Effect.MutArray.set" "marrSetOp" 2, MutOp "Base.Effect.MutArray.size" "marrLenOp" 0],
+    MutFamily
+      "Base.Effect.MutBuffer"
+      "mutable buffer"
+      "Base.Effect.MutBuffer.MutBufferOp"
+      "@vuna@MBuffer"
+      0
+      "@vuna@mbuf@"
+      "Base.Effect.MutBuffer.withMutBuffer"
+      "Base.Effect.MutBuffer.withMutBufferPure"
+      "mbufWith"
+      "mbufWithPure"
+      0
+      [MutOp "Base.Effect.MutBuffer.append" "mbufAppendOp" 1, MutOp "Base.Effect.MutBuffer.appendChar" "mbufAppendCharOp" 1, MutOp "Base.Effect.MutBuffer.length" "mbufLenOp" 0, MutOp "Base.Effect.MutBuffer.clear" "mbufClearOp" 0, MutOp "Base.Effect.MutBuffer.toString" "mbufToStringOp" 0]
+  ]
+
+-- | 用户面操作名 → (家族, 操作)。
+export mutOpOf : String -> Maybe (MutFamily, MutOp)
+mutOpOf head = mutOpOfFamilies mutFamilies head
+
+mutOpOfFamilies : List MutFamily -> String -> Maybe (MutFamily, MutOp)
+mutOpOfFamilies [] _ = Nothing
+mutOpOfFamilies (fam :: rest) head =
+  case mutOpInFamOf fam.mutFamOps head of
+    Just op => Just (fam, op)
+    Nothing => mutOpOfFamilies rest head
+
+mutOpInFamOf : List MutOp -> String -> Maybe MutOp
+mutOpInFamOf [] _ = Nothing
+mutOpInFamOf (op :: rest) head = if op.mutOpUser == head then Just op else mutOpInFamOf rest head
+
+-- | 用户面引入入口名 → (家族, 是否纯端点)。
+export mutIntroOf : String -> Maybe (MutFamily, Bool)
+mutIntroOf head = mutIntroOfFamilies mutFamilies head
+
+mutIntroOfFamilies : List MutFamily -> String -> Maybe (MutFamily, Bool)
+mutIntroOfFamilies [] _ = Nothing
+mutIntroOfFamilies (fam :: rest) head =
+  if head == fam.mutFamWith then
+    Just (fam, False)
+  else if head == fam.mutFamWithPure then Just (fam, True) else mutIntroOfFamilies rest head
+
+-- | 行条目的操作族全名 → 家族。
+export mutFamilyOfOpFamily : String -> Maybe MutFamily
+mutFamilyOfOpFamily name = mutFamilyOfOpFamilyGo mutFamilies name
+
+mutFamilyOfOpFamilyGo : List MutFamily -> String -> Maybe MutFamily
+mutFamilyOfOpFamilyGo [] _ = Nothing
+mutFamilyOfOpFamilyGo (fam :: rest) name =
+  if fam.mutFamOpFamily == name then Just fam else mutFamilyOfOpFamilyGo rest name
+
+-- ---------------------------------------------------------------
+-- 句柄 binder 名（编译期名字 ↔ 运行时参数的唯一对应）
+-- ---------------------------------------------------------------
+-- | 家族 + 实例名 → 句柄 binder 名。
+export mutBinderName : MutFamily -> String -> String
+mutBinderName fam n = fam.mutFamBinderPrefix ++ n
+
+-- | 句柄 binder 名 → (家族, 实例名)；不是句柄 binder 时 `Nothing`。
+export mutBinderOf : String -> Maybe (MutFamily, String)
+mutBinderOf name = mutBinderOfGo mutFamilies name
+
+mutBinderOfGo : List MutFamily -> String -> Maybe (MutFamily, String)
+mutBinderOfGo [] _ = Nothing
+mutBinderOfGo (fam :: rest) name =
+  case stripPrefixString fam.mutFamBinderPrefix name of
+    Just n => Just (fam, n)
+    Nothing => mutBinderOfGo rest name
+
+stripPrefixString : String -> String -> Maybe String
+stripPrefixString pre s =
+  if startsWith pre s then
+    Just (substring (natFromInt (strLength pre)) (natFromInt (strLength s - strLength pre)) s)
+  else
+    Nothing
+
+-- ---------------------------------------------------------------
+-- 类型里的行条目
+-- ---------------------------------------------------------------
+-- | 类型项 Pi 尾里的 `Eff <row> _` 行条目：实例名 + 族头 + 载荷项。
+export record MutRowEntry(..) where
+  mutRowEntryName : String
+  mutRowEntryFamily : String
+  mutRowEntryPayload : Term
+
+-- | 项的（头部全局名, 显式实参）：`TApp` 脊与构造子应用统一展开。
+export mutHeadArgs : Term -> Maybe (String, List Term)
+mutHeadArgs t = mutHeadArgsGo t []
+
+mutHeadArgsGo : Term -> List Term -> Maybe (String, List Term)
+mutHeadArgsGo (TApp f a _) acc = mutHeadArgsGo f (a :: acc)
+mutHeadArgsGo (TCon n args) acc = Just (n, append (map firstOf args) acc)
+mutHeadArgsGo (TMk n args) acc = Just (n, append (map firstOf args) acc)
+mutHeadArgsGo (TGlobal g) acc = Just (g, acc)
+mutHeadArgsGo _ acc = Nothing
+
+-- | 类型项 Pi 尾里的 `Eff <row> _` 行条目。
+export mutRowEntriesOfTy : Term -> List MutRowEntry
+mutRowEntriesOfTy t = mutRowEntriesOfTyGo 256 t
+
+mutRowEntriesOfTyGo : Int -> Term -> List MutRowEntry
+mutRowEntriesOfTyGo fuel t =
+  if fuel <= 0 then
+    []
+  else
+    case t of
+      TPi _ _ _ _ cod => mutRowEntriesOfTyGo (fuel - 1) cod
+      _ =>
+        case mutHeadArgs t of
+          Just (g, args) =>
+            if g == "Base.Effect.Core.Eff" then
+              case args of
+                row :: _ => mutRowEntriesGo fuel row
+                [] => []
+            else
+              []
+          Nothing => []
+
+mutRowEntriesGo : Int -> Term -> List MutRowEntry
+mutRowEntriesGo fuel r =
+  if fuel <= 0 then
+    []
+  else
+    case mutHeadArgs r of
+      Just (g, args) =>
+        if g == effRowConsCtor then
+          case args of
+            head :: tail :: _ =>
+              case mutEntryOf head of
+                Just e => e :: mutRowEntriesGo (fuel - 1) tail
+                Nothing => mutRowEntriesGo (fuel - 1) tail
+            _ => []
+        else
+          []
+      Nothing => []
+
+mutEntryOf : Term -> Maybe MutRowEntry
+mutEntryOf e =
+  case mutHeadArgs e of
+    Just (g, args) =>
+      if g == effNamedName then
+        case args of
+          nameTerm :: inner :: _ =>
+            case nameTerm of
+              TStr n =>
+                case mutHeadArgs inner of
+                  Just (f, iargs) =>
+                    case iargs of
+                      payload :: _ => Just (MutRowEntry n f payload)
+                      [] => Just (MutRowEntry n f inner)
+                  Nothing => Nothing
+              _ => Nothing
+          _ => Nothing
+      else
+        Nothing
+    Nothing => Nothing
+
+-- | 签名里的隐藏句柄参数：`(binder 名, 句柄类型项)`，按行条目的家族从表里取句柄构造子。
+export mutHandleParamsOf : Term -> List (String, Term)
+mutHandleParamsOf ty = mutHandleParamsGo (mutRowEntriesOfTy ty) []
+
+mutHandleParamsGo : List MutRowEntry -> List (String, Term) -> List (String, Term)
+mutHandleParamsGo [] acc = reverse acc
+mutHandleParamsGo (e :: rest) acc =
+  case mutFamilyOfOpFamily e.mutRowEntryFamily of
+    Just fam =>
+      let
+        hty =
+          if fam.mutFamHandleArity <= 0 then
+            TGlobal fam.mutFamHandleType
+          else
+            TApp (TGlobal fam.mutFamHandleType) e.mutRowEntryPayload Rig0
+      in mutHandleParamsGo rest ((mutBinderName fam e.mutRowEntryName, hty) :: acc)
+    Nothing => mutHandleParamsGo rest acc
+
+-- | 把句柄参数合成进签名类型：插在**前导隐式 binder 之后、第一个显式 binder 之前**。
+--
+-- 两个约束同时满足：
+--   * 句柄类型可以依赖签名里的类型参数（`{a : Type} -> … Cell a …`）——载荷只看得到
+--     前导隐式 binder，因此插入点之后的所有 binder 只影响索引、不影响可见性；
+--   * 非擦除隐式 binder 保持在前缀位置（`Termination.ElabInput` 与 codegen 的 arity
+--     约定都按「非擦除隐式是前缀」剥实参）。
+--
+-- 插入点之后的整个后缀要按插入个数上移索引；载荷从 `Eff` 位置回落到插入点，按后缀
+-- binder 个数下移索引（载荷只能依赖前导隐式 binder；依赖运行时显式参数的载荷不在支持面内）。
+export mutAddHandleParams : Term -> Term
+mutAddHandleParams ty =
+  let
+    skipped = mutSuffixBinderCount ty
+    params = map (\p => (firstOf p, shift 0 (0 - skipped) (secondOf p))) (mutHandleParamsOf ty)
+  in mutAddHandleParamsTyped params ty
+
+-- | 前导隐式 binder 之后（第一个显式 binder 起）的 Pi 个数：插入点上移索引的量。
+mutSuffixBinderCount : Term -> Int
+mutSuffixBinderCount (TPi _ True _ _ cod) = mutSuffixBinderCount cod
+mutSuffixBinderCount ty = mutPiCount ty
+
+mutPiCount : Term -> Int
+mutPiCount (TPi _ _ _ _ cod) = 1 + mutPiCount cod
+mutPiCount _ = 0
+
+mutAddHandleParamsTyped : List (String, Term) -> Term -> Term
+mutAddHandleParamsTyped [] ty = ty
+mutAddHandleParamsTyped params (TPi n True rig dom cod) =
+  TPi n True rig dom (mutAddHandleParamsTyped params cod)
+mutAddHandleParamsTyped params ty = mutWrapHandleParams 0 params ty
+
+mutWrapHandleParams : Int -> List (String, Term) -> Term -> Term
+mutWrapHandleParams extra [] ty = shift 0 extra ty
+mutWrapHandleParams extra ((binder, hty) :: rest) ty =
+  TPi binder True RigOmega (shift 0 extra hty) (mutWrapHandleParams (extra + 1) rest ty)
+
+-- ---------------------------------------------------------------
+-- 重复实例名检查（concrete 前缀，按 (族头, 实例名)）
+-- ---------------------------------------------------------------
+-- | 行里重复的 `(族头, 实例名)`（只在 concrete 前缀上判断）。
+export mutDuplicateRowKeys : Term -> List (String, String)
+mutDuplicateRowKeys ty = duplicateKeysGo (rowKeys (mutRowEntriesOfTy ty)) []
+
+rowKeys : List MutRowEntry -> List (String, String)
+rowKeys [] = []
+rowKeys (e :: rest) = (e.mutRowEntryFamily, e.mutRowEntryName) :: rowKeys rest
+
+duplicateKeysGo : List (String, String) -> List (String, String) -> List (String, String)
+duplicateKeysGo [] _ = []
+duplicateKeysGo (k :: rest) seen =
+  if memKey k seen then k :: duplicateKeysGo rest seen else duplicateKeysGo rest (k :: seen)
+
+memKey : (String, String) -> List (String, String) -> Bool
+memKey k [] = False
+memKey (f, n) ((f2, n2) :: rest) = if f == f2 && n == n2 then True else memKey (f, n) rest
+
+-- ---------------------------------------------------------------
+-- 用户面声明 → 内部入口的表达式改写
+-- ---------------------------------------------------------------
+-- | 操作调用：`<internal> (@name "n") <handle> args...`。
+export mutOpExpr : MutFamily -> MutOp -> Span -> String -> List Expr -> Expr
+mutOpExpr fam op sp name args =
+  EApp
+    (EVar (RGlobal fam.mutFamModule op.mutOpInternal) sp)
+    (append [EApp (EVar (RIntrinsic instArgSyntax) sp) [EStr name sp] sp, EVar (RLocal (mutBinderName fam name)) sp] args)
+    sp
+
+-- | 引入调用：`dropEffHead (<internal> "n" extra... (\<handle> => body))`；
+-- 纯端点再套一层 `runPure`。
+export mutIntroExpr : MutFamily -> Bool -> Span -> Expr -> List Expr -> Expr -> String -> Expr
+mutIntroExpr fam pure sp nExpr extraArgs body name =
+  let
+    lam = ELam [(mutBinderName fam name, spanEmpty)] body sp
+    core =
+      EApp
+        (EVar (RGlobal fam.mutFamModule (if pure then fam.mutFamWithPureInternal else fam.mutFamWithInternal)) sp)
+        (append [nExpr] (append extraArgs [lam]))
+        sp
+  in if pure then
+    EApp
+      (EVar (RGlobal "Base.Effect.Core" "runPure") sp)
+      [EApp (EVar (RGlobal "Base.Effect.Core" "dropEffHead") sp) [core] sp]
+      sp
+  else
+    EApp (EVar (RGlobal "Base.Effect.Core" "dropEffHead") sp) [core] sp
+
+-- | 字面量名字（引入入口的实例名必须是编译期常量）。
+export stringLitOf : Expr -> Maybe String
+stringLitOf (EStr s _) = Just s
+stringLitOf _ = Nothing

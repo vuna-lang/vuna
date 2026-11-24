@@ -15,7 +15,7 @@ import Vuna.Compiler.Elab.Coverage
 import Vuna.Compiler.Elab.Match
 import Vuna.Compiler.Elab.Meta
 import Vuna.Compiler.Elab.MetaSpans
-import Vuna.Compiler.Elab.MutRef
+import Vuna.Compiler.Elab.Mut
 import Vuna.Compiler.Elab.Prelude
 import Vuna.Compiler.Elab.Records
 import Vuna.Compiler.Base.Intrinsics
@@ -555,83 +555,110 @@ appAtCallExpr (EApp (EVar _ _) (f :: nm :: rest) sp) =
 appAtCallExpr _ = icInternal "malformed @ marker"
 
 -- ---------------------------------------------------------------
--- `Base.Effect.MutRef`：用户面声明 → 内部入口
+-- 命名可变家族（MutRef / MutArray / MutBuffer）：用户面声明 → 内部入口
 -- ---------------------------------------------------------------
--- 作用域里的单元 binder（`@vuna@cell@x`）→ 实例名列表（最近绑定在前）。
-mrefCellNames : Ctx -> List String
-mrefCellNames ctx = mrefCellNamesGo ctx.ctxItems
+-- 作用域里某家族的句柄 binder（`@vuna@cell@x` 等）→ 实例名列表（最近绑定在前）。
+mutHandleNames : MutFamily -> Ctx -> List String
+mutHandleNames fam ctx = mutHandleNamesGo fam ctx.ctxItems
 
-mrefCellNamesGo : List (String, Term) -> List String
-mrefCellNamesGo [] = []
-mrefCellNamesGo ((n, _) :: rest) =
-  case mrefCellNameOf n of
-    Just c => c :: mrefCellNamesGo rest
-    Nothing => mrefCellNamesGo rest
+mutHandleNamesGo : MutFamily -> List (String, Term) -> List String
+mutHandleNamesGo fam [] = []
+mutHandleNamesGo fam ((n, _) :: rest) =
+  case mutBinderOf n of
+    Just (fam2, c) =>
+      if fam2.mutFamOpFamily == fam.mutFamOpFamily then
+        c :: mutHandleNamesGo fam rest
+      else
+        mutHandleNamesGo fam rest
+    Nothing => mutHandleNamesGo fam rest
 
--- 解析 `read`/`write` 的实例名：显式 `@x` 优先，否则取作用域里唯一的单元。
-mrefResolveCell : Ctx -> Maybe String -> Span -> Check String
-mrefResolveCell ctx (Just n) sp =
-  case ctxLookup (mrefCellBinder n) ctx of
+-- 解析操作调用的实例名：显式 `@x` 优先，否则取作用域里唯一的同族句柄。
+mutResolveHandle : MutFamily -> Ctx -> Maybe String -> Span -> Check String
+mutResolveHandle fam ctx (Just n) sp =
+  case ctxLookup (mutBinderName fam n) ctx of
     Just _ => OkC n
     Nothing => tcErr1 sp (CellNotInScope n) n
-mrefResolveCell ctx Nothing sp =
-  case mrefCellNames ctx of
+mutResolveHandle fam ctx Nothing sp =
+  case mutHandleNames fam ctx of
     [n] => OkC n
     [] => tcErr1 sp (CellNotInScope "any") "any"
     ns =>
       let
         text = join ", " ns
-      in tcErr2 sp (AmbiguousInstance "mutable ref" text) "mutable ref" text
+      in tcErr2 sp (AmbiguousInstance fam.mutFamLabel text) fam.mutFamLabel text
 
--- 识别 MutRef 的用户面声明并给出改写后的表达式。
-mrefRewriteExpr : Ctx -> Expr -> Maybe (Check Expr)
-mrefRewriteExpr ctx (EVar name sp) = mrefRewriteCall ctx (rnameKey name) [] sp
-mrefRewriteExpr ctx (EApp (EVar name _) args sp) = mrefRewriteCall ctx (rnameKey name) args sp
-mrefRewriteExpr ctx _ = Nothing
-
-mrefRewriteCall : Ctx -> String -> List Expr -> Span -> Maybe (Check Expr)
-mrefRewriteCall ctx head args sp =
-  if head == mrefReadName then
+-- 识别用户面调用的形状：`f` / `f@name args` / `f (@vuna@inst@arg "name") args`。
+-- 结果 = (名字, 显式实例名, 位置实参)。
+mutCallParts : Expr -> Maybe (String, Maybe Expr, List Expr)
+mutCallParts (EVar name _) = Just (rnameKey name, Nothing, [])
+mutCallParts (EApp (EVar name _) args sp) =
+  if isAppAtSyntax (rnameKey name) then
     case args of
-      [] => Just (Vuna.Compiler.Base.Common.bind (mrefResolveCell ctx Nothing sp) (\n => OkC (mrefReadExpr sp n)))
-      [a] =>
-        case instArgOperand a of
-          Just payload =>
-            case stringLitOf payload of
-              Just n => Just (Vuna.Compiler.Base.Common.bind (mrefResolveCell ctx (Just n) sp) (\n2 => OkC (mrefReadExpr sp n2)))
-              Nothing => Nothing
-          Nothing => Nothing
-      _ => Nothing
-  else if head == mrefWriteName then
-    case args of
-      [v] => Just (Vuna.Compiler.Base.Common.bind (mrefResolveCell ctx Nothing sp) (\n => OkC (mrefWriteExpr sp n v)))
-      [a, v] =>
-        case instArgOperand a of
-          Just payload =>
-            case stringLitOf payload of
-              Just n => Just (Vuna.Compiler.Base.Common.bind (mrefResolveCell ctx (Just n) sp) (\n2 => OkC (mrefWriteExpr sp n2 v)))
-              Nothing => Nothing
-          Nothing => Nothing
-      _ => Nothing
-  else if head == mrefWithName || head == mrefWithPureName then
-    case args of
-      [nExpr, init, body] =>
-        case stringLitOf nExpr of
-          Just n =>
-            case ctxLookup (mrefCellBinder n) ctx of
-              Just _ => Just (tcErr1 (exprSpan nExpr) (DuplicateInstance (mrefOpName ++ " " ++ n)) (mrefOpName ++ " " ++ n))
-              Nothing => Just (OkC (mrefWithOf head sp nExpr init body n))
-          Nothing => Just (tcErr1 (exprSpan nExpr) (CellNameNotLiteral "") "")
+      f :: nm :: rest =>
+        case f of
+          EVar fn _ => Just (rnameKey fn, Just nm, rest)
+          _ => Nothing
       _ => Nothing
   else
-    Nothing
+    case args of
+      a :: rest =>
+        case instArgOperand a of
+          Just payload => Just (rnameKey name, Just payload, rest)
+          Nothing => Just (rnameKey name, Nothing, args)
+      [] => Just (rnameKey name, Nothing, [])
+mutCallParts _ = Nothing
 
-mrefWithOf : String -> Span -> Expr -> Expr -> Expr -> String -> Expr
-mrefWithOf head sp nExpr init body n =
-  if head == mrefWithPureName then
-    mrefWithPureExpr sp nExpr init body n
-  else
-    mrefWithExpr sp nExpr init body n
+-- 识别命名可变家族的用户面声明并给出改写后的表达式。
+mutRewriteExpr : Ctx -> Expr -> Maybe (Check Expr)
+mutRewriteExpr ctx expr =
+  case mutCallParts expr of
+    Just (head, marker, args) =>
+      case mutOpOf head of
+        Just (fam, op) =>
+          if length args == op.mutOpArity then
+            Just (mutRewriteOp ctx fam op marker args (exprSpan expr))
+          else
+            Nothing
+        Nothing =>
+          case mutIntroOf head of
+            Just (fam, pure) =>
+              if length args == 1 + fam.mutFamIntroArity + 1 then
+                Just (mutRewriteIntro ctx fam pure (exprSpan expr) args)
+              else
+                Nothing
+            Nothing => Nothing
+    Nothing => Nothing
+
+mutRewriteOp : Ctx -> MutFamily -> MutOp -> Maybe Expr -> List Expr -> Span -> Check Expr
+mutRewriteOp ctx fam op (Just payload) args sp =
+  case stringLitOf payload of
+    Just n =>
+      Vuna.Compiler.Base.Common.bind
+        (mutResolveHandle fam ctx (Just n) sp)
+        (\n2 => OkC (mutOpExpr fam op sp n2 args))
+    Nothing => tcErr1 (exprSpan payload) (CellNameNotLiteral "") ""
+mutRewriteOp ctx fam op Nothing args sp =
+  Vuna.Compiler.Base.Common.bind
+    (mutResolveHandle fam ctx Nothing sp)
+    (\n => OkC (mutOpExpr fam op sp n args))
+
+mutRewriteIntro : Ctx -> MutFamily -> Bool -> Span -> List Expr -> Check Expr
+mutRewriteIntro ctx fam pure sp (nExpr :: rest) =
+  case stringLitOf nExpr of
+    Just n =>
+      case ctxLookup (mutBinderName fam n) ctx of
+        Just _ =>
+          tcErr1
+            (exprSpan nExpr)
+            (DuplicateInstance (fam.mutFamOpFamily ++ " " ++ n))
+            (fam.mutFamOpFamily ++ " " ++ n)
+        Nothing =>
+          case drop fam.mutFamIntroArity rest of
+            body :: _ =>
+              OkC (mutIntroExpr fam pure sp nExpr (take fam.mutFamIntroArity rest) body n)
+            [] => icInternal "malformed mutable introduction"
+    Nothing => tcErr1 (exprSpan nExpr) (CellNameNotLiteral "") ""
+mutRewriteIntro ctx fam pure sp [] = icInternal "malformed mutable introduction"
 
 -- 由 op 的类型值构造降级调用表达式：`performCore <n=洞> "<key>" <sig> <op>`。
 -- 效应签名 `sig` 包住 op 族（按显式参数个数 k 补洞：`ConsoleOp` k=0、`StateOp` k=1），
@@ -898,7 +925,7 @@ inferEFuelCorePlain fuel globals ctx ec expr =
   if fuel <= 0 then
     icFuel "inference"
   else
-    case mrefRewriteExpr ctx expr of
+    case mutRewriteExpr ctx expr of
       Just rewrite => Vuna.Compiler.Base.Common.bind rewrite (\e2 => inferEFuel (fuel - 1) globals ctx ec e2)
       Nothing => inferEFuelCorePlainGo fuel globals ctx ec expr
 
@@ -1617,7 +1644,7 @@ inferArgsGo fuel globals ctx ec ty args sp hint =
                             (argTerms, resTy, ec3) => OkC ((::) (metaTerm, Rig0) argTerms, resTy, ec3)
                       )
           else if isImplicitDomain ctx ec dom then
-            if isCellDomain ec dom then
+            if isHandleDomain ec dom then
               case ctxLookup name ctx of
                 -- 编译器合成的单元参数：按 binder 名（`@vuna@cell@x`）取调用方作用域里的单元。
                 Just (idx, _) =>
@@ -2155,7 +2182,7 @@ checkEFuelNoRowPlain fuel globals ctx ec expr expected =
   if fuel <= 0 then
     icFuel "inference"
   else
-    case mrefRewriteExpr ctx expr of
+    case mutRewriteExpr ctx expr of
       Just rewrite => Vuna.Compiler.Base.Common.bind rewrite (\e2 => checkEFuel (fuel - 1) globals ctx ec e2 expected)
       Nothing => checkEFuelNoRowPlainGo fuel globals ctx ec expr expected
 

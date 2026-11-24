@@ -1,0 +1,17 @@
+-- MutArray：多态 helper 的句柄参数依赖签名前面的类型参数 `a`（合成点必须在 `Eff` 之前）。
+import Base.Effect.MutArray as MutArray
+import Base.Effect.Core as Eff
+
+writeFirst : {a : Type} -> {r : Row} -> a -> Eff (Named "dst" (MutArrayOp a) :: r) Unit
+writeFirst v = MutArray.set@dst 0 v
+
+readFirst : {a : Type} -> {r : Row} -> Eff (Named "dst" (MutArrayOp a) :: r) a
+readFirst = MutArray.get@dst 0
+
+main : Int
+main =
+  MutArray.withMutArrayPure "dst" 2 0 (
+      do
+        writeFirst 42
+        readFirst
+    )
