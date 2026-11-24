@@ -62,8 +62,8 @@ mkProject imports =
     []
     []
     []
-    [Module "L.A.One" "p" (map mkImport imports) [] [] [] [] [] [] emptyIndex emptySurface]
+    [Module "L.A.One" "p" (map mkImport imports) [] [] [] [] [] [] emptyIndex emptyFixityFacts]
     "p"
     []
     "main"
-    emptySurface
+    emptyFixityFacts

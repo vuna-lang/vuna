@@ -2717,7 +2717,7 @@ lintParsedWithConfig cfg programFixities source parsed =
       in case parseSuppression comments of
         ErrC e => ErrC e
         OkC suppression =>
-          case reorderProgram (tableOfKeepOps parsed.parsedSurface (append programFixities fx)) decls0 of
+          case reorderProgram (tableOfKeepOpsCst parsed.parsedCst (append programFixities fx)) decls0 of
             ErrC e => ErrC e
             OkC decls =>
               let

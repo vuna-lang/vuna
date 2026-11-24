@@ -483,7 +483,7 @@ renderRecPatFieldGo fuel (fname, pat) =
 -- ---------------------------------------------------------------
 -- | 内部：运算符的可见声明：只查名字本身（没有反向别名）。
 opDeclOf : List FixityDecl -> String -> Maybe FixityDecl
-opDeclOf env op = lookupFixityDecl (tableOfKeepOps emptySurface env) op
+opDeclOf env op = lookupFixityDecl (tableOfKeepOps emptyFixityFacts env) op
 
 -- | 内部：中缀打印用的 (优先级, 结合性)：1 = 右，0 = 左/未知。
 infixPrecOf : List FixityDecl -> String -> Maybe (Int, Int)

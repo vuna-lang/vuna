@@ -47,10 +47,10 @@ import Base.Effect.Process as EffProcess
 -- | 解析一个源文件：lex 一次，再走语法分析。所有加载路径都走这里。
 -- 编译器路径用 `PmStrict`（语义级语法错误致命）；只需要 AST 的工具（fixity 解析）用
 -- `parseFileWithPathMode PmTool`，别让「重复 binder」把整个文件挡在门外。
-export parseFileWithPath : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> Eff r (Check (SourceFile, Surface))
+export parseFileWithPath : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> Eff r (Check (SourceFile, FixityFacts))
 parseFileWithPath = parseFileWithPathMode PmStrict
 
-export parseFileWithPathMode : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => ParseMode -> String -> String -> Eff r (Check (SourceFile, Surface))
+export parseFileWithPathMode : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => ParseMode -> String -> String -> Eff r (Check (SourceFile, FixityFacts))
 parseFileWithPathMode mode path src =
   case obsSpan "vuna.parse.lex" "vuna.phase" (\_ => lexSource src) of
     ErrC e => pure (ErrC (withSpanFileIfEmpty path e))
@@ -59,7 +59,7 @@ parseFileWithPathMode mode path src =
 -- | 由 token 流得到 parse 结果。Lexer/Parser 都已在产生点给出 span；这里只给词法诊断
 -- 那个 file 为空的 span 注入真实路径（parser 的 span 从 PState 拿文件名）。
 -- 恢复期收集到的多条诊断挂在首条错误上（批量错误通道），全部自带位置。
-parseWith : ParseMode -> String -> String -> List PTok -> Check (SourceFile, Surface)
+parseWith : ParseMode -> String -> String -> List PTok -> Check (SourceFile, FixityFacts)
 parseWith mode path src toks =
   case obsSpan "vuna.parse.syntax" "vuna.phase" (\_ => parseSourceRecoveringTokens path src mode toks) of
     ErrC e => ErrC (withSpanFileIfEmpty path e)
@@ -804,7 +804,7 @@ loadProjectModulesWithPreloaded ctx names preloaded =
     pure (
         case modulesR of
           ErrC e => ErrC e
-          OkC modules => withLayerCheck (contextRoots ctx) (Project [] [] [] modules (contextPackageName ctx) [] (contextPackageName ctx) emptySurface)
+          OkC modules => withLayerCheck (contextRoots ctx) (Project [] [] [] modules (contextPackageName ctx) [] (contextPackageName ctx) emptyFixityFacts)
       )
 
 -- 入口以**源码字符串**给出（REPL 的表达式求值）：入口不落盘（import 仍按上下文的
@@ -909,7 +909,7 @@ loadModuleSourceWithPreloaded ctx label source preloaded =
                               OkC exports =>
                                 let
                                   visible = fixities
-                                in pure (withLayerCheck (contextRoots ctx) (Project [] imports2 implicit (Module name (contextPackageName ctx) imports2 implicit decls exports visible (append providers (reexportedImportNames imports2 (append items reexports))) (opaqueNamesOf name opacity) (exportIndexOf exports) surface :: modules) (contextPackageName ctx) [] (contextPackageName ctx) emptySurface))
+                                in pure (withLayerCheck (contextRoots ctx) (Project [] imports2 implicit (Module name (contextPackageName ctx) imports2 implicit decls exports visible (append providers (reexportedImportNames imports2 (append items reexports))) (opaqueNamesOf name opacity) (exportIndexOf exports) surface :: modules) (contextPackageName ctx) [] (contextPackageName ctx) emptyFixityFacts))
 
 -- fmt 用的「程序级 fixity」——本文件的 `infix*` 声明（在前，本地优先）
 -- ++ import 闭包可见的声明（Module 里已含各自的 import 闭包）。只 parse + 加载模块图，
@@ -998,12 +998,12 @@ resolveProjectWith release project = resolveProjectKeeping release [] project
 -- 逐模块的四段在 `resolveModulesKeep`（同名跨度，按次聚合）。名字解析本身没有内部的
 -- 结构化子阶段，`vuna.resolve` 标记到这组跨度之间只剩 `checkUniqueFixities` 与函数分派。
 export resolveProjectKeeping : Bool -> List String -> Project -> Check (List Diagnostic, List Decl, List Module)
-resolveProjectKeeping release keep (Project decls imports implicit modules entryPkg entryFixes entryName entrySurface) =
+resolveProjectKeeping release keep (Project decls imports implicit modules entryPkg entryFixes entryName entryFacts) =
   let
     projectFixities = dedupeFixitiesOf modules entryFixes
   in Vuna.Compiler.Base.Common.bind
     (checkUniqueFixities projectFixities)
-    (\fixes => Vuna.Compiler.Base.Common.bind (obsCheck "vuna.resolve.reorder" (\_ => reorderProgram (tableOf entrySurface fixes) decls)) (\decls2 => Vuna.Compiler.Base.Common.bind (obsCheck "vuna.resolve.expand" (\_ => expandDecls entryName decls2)) (\decls3 => Vuna.Compiler.Base.Common.bind (obsCheck "vuna.resolve.entry" (\_ => resolveEntry release modules entryPkg (append imports implicit) decls3)) (\entryDecls => Vuna.Compiler.Base.Common.bind (obsCheck "vuna.resolve.warn" (\_ => unusedImportWarnings modules imports entryDecls decls3 [])) (\entryWarns => Vuna.Compiler.Base.Common.bind (resolveModulesKeep release keep fixes modules) (\p2 => OkC (append entryWarns (secondOf p2), entryDecls, firstOf p2)))))))
+    (\fixes => Vuna.Compiler.Base.Common.bind (obsCheck "vuna.resolve.reorder" (\_ => reorderProgram (tableOf entryFacts fixes) decls)) (\decls2 => Vuna.Compiler.Base.Common.bind (obsCheck "vuna.resolve.expand" (\_ => expandDecls entryName decls2)) (\decls3 => Vuna.Compiler.Base.Common.bind (obsCheck "vuna.resolve.entry" (\_ => resolveEntry release modules entryPkg (append imports implicit) decls3)) (\entryDecls => Vuna.Compiler.Base.Common.bind (obsCheck "vuna.resolve.warn" (\_ => unusedImportWarnings modules imports entryDecls decls3 [])) (\entryWarns => Vuna.Compiler.Base.Common.bind (resolveModulesKeep release keep fixes modules) (\p2 => OkC (append entryWarns (secondOf p2), entryDecls, firstOf p2)))))))
 
 resolveModulesKeep : Bool -> List String -> List FixityDecl -> List Module -> Check (List Module, List Diagnostic)
 resolveModulesKeep release keep fixes [] = OkC ([], [])
@@ -1014,7 +1014,7 @@ resolveModulesKeep release keep fixes (m :: rest) =
       (\p2 => OkC ((::) m (firstOf p2), secondOf p2))
   else
     Vuna.Compiler.Base.Common.bind
-      (obsCheck "vuna.resolve.reorder" (\_ => reorderProgram (tableOf m.moduleSurfaceOf fixes) (moduleDeclsOf m)))
+      (obsCheck "vuna.resolve.reorder" (\_ => reorderProgram (tableOf m.moduleFixFactsOf fixes) (moduleDeclsOf m)))
       (\decls2 => Vuna.Compiler.Base.Common.bind (resolveModuleGo release m rest (obsCheck "vuna.resolve.expand" (\_ => expandDecls (moduleNameOf m) decls2))) (\p => Vuna.Compiler.Base.Common.bind (resolveModulesKeep release keep fixes rest) (\p2 => OkC ((::) (firstOf p) (firstOf p2), append (secondOf p) (secondOf p2)))))
 
 -- | 单个模块 expand 之后的三段：命名空间建表 → 名字解析 → 未用 import 判定。
@@ -1024,9 +1024,9 @@ resolveModuleGo release m rest declsR =
   Vuna.Compiler.Base.Common.bind declsR (
       \decls3 =>
         let
-          modules2 = Module (moduleNameOf m) (modulePackageOf m) m.moduleImportsOf m.moduleImplicitImportsOf decls3 m.moduleExportsOf (moduleFixitiesOf m) (moduleReexportsOf m) (moduleOpaqueOf m) m.moduleExportIndexOf m.moduleSurfaceOf :: rest
+          modules2 = Module (moduleNameOf m) (modulePackageOf m) m.moduleImportsOf m.moduleImplicitImportsOf decls3 m.moduleExportsOf (moduleFixitiesOf m) (moduleReexportsOf m) (moduleOpaqueOf m) m.moduleExportIndexOf m.moduleFixFactsOf :: rest
           ns = obsPure "vuna.resolve.ns" (\_ => namespacesOfWith release modules2 decls3)
-        in Vuna.Compiler.Base.Common.bind (obsCheck "vuna.resolve.module" (\_ => resolveProgram modules2 (moduleNameOf m) (moduleNameOf m) ns (moduleAllImportsOf m) decls3)) (\d1 => Vuna.Compiler.Base.Common.bind (obsCheck "vuna.resolve.warn" (\_ => unusedImportWarnings modules2 m.moduleImportsOf d1 decls3 (moduleReexportsOf m))) (\warns => OkC (Module (moduleNameOf m) (modulePackageOf m) m.moduleImportsOf m.moduleImplicitImportsOf d1 m.moduleExportsOf (moduleFixitiesOf m) (moduleReexportsOf m) (moduleOpaqueOf m) m.moduleExportIndexOf m.moduleSurfaceOf, warns)))
+        in Vuna.Compiler.Base.Common.bind (obsCheck "vuna.resolve.module" (\_ => resolveProgram modules2 (moduleNameOf m) (moduleNameOf m) ns (moduleAllImportsOf m) decls3)) (\d1 => Vuna.Compiler.Base.Common.bind (obsCheck "vuna.resolve.warn" (\_ => unusedImportWarnings modules2 m.moduleImportsOf d1 decls3 (moduleReexportsOf m))) (\warns => OkC (Module (moduleNameOf m) (modulePackageOf m) m.moduleImportsOf m.moduleImplicitImportsOf d1 m.moduleExportsOf (moduleFixitiesOf m) (moduleReexportsOf m) (moduleOpaqueOf m) m.moduleExportIndexOf m.moduleFixFactsOf, warns)))
     )
 
 -- ---------------------------------------------------------------

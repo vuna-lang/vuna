@@ -38,12 +38,10 @@ export record ParsedSource(..) where
   parsedRawToks : List PTok
   -- | parser 发射的无损节点树：kind / id / span / 表面形状 / 有序 children。
   --
-  -- 表面形状挂在分支节点上，`parsedSurface` 是从这棵树派生的缓存（`surfaceOfCst`）。
-  -- 需要注释归属、原文切片或节点身份的消费者直接用树，不必再自己组装一遍。
+  -- 表面形状（括号层数 / 反引号 / section / 模板 `"""`）就在分支节点上：
+  -- `Cst.cstIndexOf` 建定位表后按节点 id / span 查；`Cst.fixityFactsOf` 派生出中缀重排
+  -- 需要的那三条事实（树在加载器里随后就丢，事实按模块保留）。
   parsedCst : CstNode
-  -- | 表面形状缓存（见 [Vuna.Compiler.Frontend.Cst.surfaceOfCst]）：AST 不携带「怎么写」的信息，需要它的
-  -- 消费者（Fmt 打印括号、中缀重排判定括号边界）按节点 id / 区间查。
-  parsedSurface : Surface
 
 -- | 工具路径的唯一入口：**一次**词法同时给出注释表与 token 流，再做语法分析。
 -- 需要注释 / 原文切片 / 保留括号的工具（fmt / lint / index / doc / LSP）用它，
@@ -70,8 +68,7 @@ parseSourceDetailed file source =
                 fin.sectionShapes
                 fin.interpMultis
                 fin.templateHoles
-            surface = surfaceOfCst cst
-          in OkC (ParsedSource (firstOf (firstOf p)) comments toks cst surface)
+          in OkC (ParsedSource (firstOf (firstOf p)) comments toks cst)
 
 -- | 只要 AST 与注释表的入口（复用 `parseSourceDetailed` 同一次词法）。
 export parseSourceWithComments : String -> String -> Check (SourceFile, List Comment)
@@ -2790,18 +2787,21 @@ foldPairPats sp ([p]) = p
 foldPairPats sp (p :: rest) = PCon tuplePairSyntax [p, foldPairPats sp rest] sp
 
 -- 文件加载专用：开启解析恢复（收集多个语法错误），调用范围外恢复短路。
--- 返回「(解析结果, 表面形状) + 恢复期收集到的非致命诊断」（诊断按出现顺序；空 = 没有语法错误）。
+-- 返回「(解析结果, fixity 事实) + 恢复期收集到的非致命诊断」（诊断按出现顺序；空 = 没有语法错误）。
 -- | 文件加载专用：开启解析恢复并显式返回多条语法错误。
-export parseSourceRecovering : String -> String -> Check ((SourceFile, Surface), List Diagnostic)
+export parseSourceRecovering : String -> String -> Check ((SourceFile, FixityFacts), List Diagnostic)
 parseSourceRecovering file source =
   Vuna.Compiler.Base.Common.bind
     (lexSource source)
     (\toks => parseSourceRecoveringTokens file source PmStrict toks)
 
 -- 从**已有 token 流**解析（加载路径复用同一次词法）：与 `parseSourceRecovering` 逐字节等价，
--- 只是跳过 lex。位置全部来自 token 自身，因此诊断 span 与冷路径一致；`source` 只用于
--- 模板洞按原文切 token、建洞子树。
-export parseSourceRecoveringTokens : String -> String -> ParseMode -> List PTok -> Check ((SourceFile, Surface), List Diagnostic)
+-- 只是跳过 lex。位置全部来自 token 自身，因此诊断 span 与冷路径一致。
+--
+-- 加载器只需要中缀重排的三条表面事实，不需要树（树带 token 文本，按模块保留太重）：
+-- 这里建一遍树、`fixityFactsOf` 派生事实后就地丢弃。token 流不带注释（加载器不渲染），
+-- 原文按 gap 切片，`renderCstTree` 仍逐字节等价，只是注释被归成空白。
+export parseSourceRecoveringTokens : String -> String -> ParseMode -> List PTok -> Check ((SourceFile, FixityFacts), List Diagnostic)
 parseSourceRecoveringTokens file source mode toks =
   let
     st0 = mkState file source toks mode
@@ -2810,6 +2810,6 @@ parseSourceRecoveringTokens file source mode toks =
         let
           fin = secondOf (firstOf p)
           events = eventsOf st0 fin
-          surface = surfaceOf toks events fin.backtickShapes fin.sectionShapes fin.interpMultis fin.templateHoles
-        in OkC ((firstOf (firstOf p), surface), secondOf p)
+          cst = nestToTreeWithSurface (lexTokensOf source toks []) events (parenEntriesOf toks events) fin.backtickShapes fin.sectionShapes fin.interpMultis fin.templateHoles
+        in OkC ((firstOf (firstOf p), fixityFactsOf cst), secondOf p)
     )

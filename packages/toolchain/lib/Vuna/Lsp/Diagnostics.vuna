@@ -787,7 +787,7 @@ goalsLocalOrFull allowFull cache ctx label text =
               OkC parsed =>
                 case parsed.parsedFile of
                   SourceFile _ _ fx decls0 _ _ _ =>
-                    case reorderProgram (tableOfKeepOps parsed.parsedSurface (append programFixities fx)) decls0 of
+                    case reorderProgram (tableOfKeepOpsCst parsed.parsedCst (append programFixities fx)) decls0 of
                       ErrC e => []
                       OkC decls =>
                         case goalsOfProgramTolerant (toRastDecls decls) of

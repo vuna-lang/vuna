@@ -537,7 +537,7 @@ indexOneExisting env dir pkgName path =
                 -- 本地优先）。只用本地声明会让用到 `+`/`==`/`::` 的文件报 unknown fixity，
                 -- 然后被当错误跳过 → `vuna map` 静默漏模块。
                 SourceFile srcHdr imports fx decls0 _ _ _ =>
-                  case reorderProgram (tableOfKeepOps parsed.parsedSurface (append programFixities fx)) decls0 of
+                  case reorderProgram (tableOfKeepOpsCst parsed.parsedCst (append programFixities fx)) decls0 of
                     ErrC e => pure (env2, err "${path}: ${diagText e}")
                     OkC decls =>
                       let

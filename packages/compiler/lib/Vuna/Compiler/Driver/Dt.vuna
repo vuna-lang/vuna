@@ -1826,7 +1826,7 @@ moduleOfIface mi =
     []
     (cachedOpaqueOf (miCachedOf mi))
     (exportIndexOf (miExportsOf mi))
-    emptySurface
+    emptyFixityFacts
 
 -- ---------------------------------------------------------------
 -- 依赖可见性收敛。全量路径只加载 entry/本包模块的 **import 闭包**；

@@ -55,7 +55,7 @@ export record PState(..) where
   -- | 模板节点 id → 该字面量内部每个洞的子树（逆序累积）。
   --
   -- 洞是独立 token 子流，洞内节点不在主树的 children 里（`TTmpl` 叶已覆盖那段字节），
-  -- 子树随模板节点携带；`surfaceOfCst` / 索引沿同一棵「主树 + 洞子树」走。
+  -- 子树随模板节点携带；`cstIndexOf` / `fixityFactsOf` 沿同一棵「主树 + 洞子树」走。
   templateHoles : List (Int, List CstNode)
 
 -- ---------------------------------------------------------------

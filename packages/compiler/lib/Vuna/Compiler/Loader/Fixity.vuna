@@ -24,18 +24,25 @@ import Vuna.Compiler.Frontend.Lexer
 import Vuna.Compiler.Base.Diagnostics.Rn
 import Base.Container.HashMap as HashMap
 
--- 重排上下文：fixity 表 + 表达式的表面形状（括号边界按节点 id 查）。
+-- 重排上下文：fixity 表 + 从树派生的表面事实（括号边界按节点 id 查）。
 export record FixityTable where
   renameMode : Bool
   fixityDecls : List FixityDecl
-  fixSurface : Surface
+  fixFacts : FixityFacts
 
-export tableOf : Surface -> List FixityDecl -> FixityTable
-tableOf surface ds = FixityTable True ds surface
+export tableOf : FixityFacts -> List FixityDecl -> FixityTable
+tableOf facts ds = FixityTable True ds facts
 
 -- Fmt 用：不替换别名（打印时保留源码里的运算符写法）；section 与反引号保留原形。
-export tableOfKeepOps : Surface -> List FixityDecl -> FixityTable
-tableOfKeepOps surface ds = FixityTable False ds surface
+export tableOfKeepOps : FixityFacts -> List FixityDecl -> FixityTable
+tableOfKeepOps facts ds = FixityTable False ds facts
+
+-- 从树现取事实（工具侧：树就在手上）。
+export tableOfCst : CstNode -> List FixityDecl -> FixityTable
+tableOfCst cst = tableOf (fixityFactsOf cst)
+
+export tableOfKeepOpsCst : CstNode -> List FixityDecl -> FixityTable
+tableOfKeepOpsCst cst = tableOfKeepOps (fixityFactsOf cst)
 
 renameMode : FixityTable -> Bool
 renameMode (FixityTable r ds _) = r
@@ -127,7 +134,7 @@ infixTerm t c lhs rhs sp =
 -- 来自中缀（前缀写法必须加括号，那是 section）；反引号写法（普通标识符）由表面形状记。
 isChainNode : FixityTable -> Expr -> Bool
 isChainNode t e =
-  case sectionShapeOfSpan t.fixSurface (exprSpan e) of
+  case sectionOfFacts t.fixFacts (exprSpan e) of
     Just _ => False
     Nothing =>
       case e of
@@ -135,12 +142,9 @@ isChainNode t e =
         EApp (EVar _ _) ([_, _]) _ => chainBacktick t e
         _ => False
 
--- 链步是否反引号写法（表面形状；普通符号中缀不在表里）。
+-- 链步是否反引号写法（表面事实；普通符号中缀不在表里）。
 chainBacktick : FixityTable -> Expr -> Bool
-chainBacktick t e =
-  case backtickShapeOf t.fixSurface (nodeRefId (exprRef e)) of
-    Just _ => True
-    Nothing => False
+chainBacktick t e = backtickOfFacts t.fixFacts (nodeRefId (exprRef e))
 
 -- 把右嵌套的链展平成「首操作数 + 链元素列表」；括号 / 应用 / 原子作为边界操作数
 -- （先递归重排）。
@@ -158,7 +162,7 @@ collectChain t e = Vuna.Compiler.Base.Common.bind (reorderNonChain t e) (\e2 => 
 -- 否则继续收集同一行上的后继运算符。
 chainOperand : FixityTable -> Expr -> Check (Expr, List ChainOp)
 chainOperand t r =
-  if parenDepthOf t.fixSurface (nodeRefId (exprRef r)) > 0 then
+  if parenDepthOfFacts t.fixFacts (nodeRefId (exprRef r)) > 0 then
     Vuna.Compiler.Base.Common.bind (reorderExpr t r) (\r2 => OkC (r2, []))
   else
     collectChain t r
@@ -221,7 +225,7 @@ reorderNonChain t (EFloat raw sp) = OkC (EFloat raw sp)
 -- 只在 lambda 体内重排操作数，**不**把合成应用当普通中缀链收集（否则 `(+ (1+2)) 3`
 -- 会被重排成 `(x*1)+2`）。
 reorderNonChain t (ELam names body sp) =
-  case sectionShapeOfSpan t.fixSurface (nodeRefSpan sp) of
+  case sectionOfFacts t.fixFacts (nodeRefSpan sp) of
     Just _ =>
       case body of
         EApp fn args bsp =>
@@ -235,7 +239,7 @@ reorderNonChain t (ELam names body sp) =
 reorderNonChain t (EApp fn args sp) =
   case fn of
     ELam _ body secSp =>
-      case sectionShapeOfSpan t.fixSurface (nodeRefSpan secSp) of
+      case sectionOfFacts t.fixFacts (nodeRefSpan secSp) of
         Just shape =>
           if renameMode t then reorderSectionApply t shape body args sp else reorderApp t fn args sp
         Nothing => reorderApp t fn args sp

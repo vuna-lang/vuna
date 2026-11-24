@@ -1,10 +1,10 @@
 -- 括号表面形状（`Frontend.Cst`）：括号不在 AST 里，层数由建树事件 + 词法 token 派生，
--- 按表达式节点的 id 查。覆盖四种位置：
+-- 写在树节点字段上，用 `CstIndex` 按节点 id / span 查。覆盖四种位置：
 --   * 包装节点（定义体 / 中缀右操作数 / 括号内层，`(a)` / `((a))`）；
 --   * 原子位置括号（应用实参 / 中缀链左端，`f (a)` / `(f a) b` / `(a + b) * c`）；
 --   * 不该算括号的邻近 token（元组 / ascribe / section / 列表）；
---   * section 写法按区间起点登记（`surfaceSections`），右 section 也有自己的原子节点；
---   * 模板洞（独立 token 子流，事实挂在模板节点上，`surfaceOfCst` 从树派生）。
+--   * section 写法在节点字段上（按区间起点查），右 section 也有自己的原子节点；
+--   * 模板洞（独立 token 子流，子树挂在模板节点上，索引一起走）。
 import Prelude
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Ast
@@ -12,38 +12,35 @@ import Vuna.Compiler.Frontend.Cst
 import Vuna.Compiler.Frontend.Lexer
 import Vuna.Compiler.Frontend.Parser
 
--- | 解析 `x = <src>`，取定义体与表面形状。
-parseBody : String -> Maybe (Surface, Expr)
+-- | 解析 `x = <src>`，取定义体与树索引。
+parseBody : String -> Maybe (CstIndex, Expr)
 parseBody src =
   case parseSourceDetailed "<paren>" ("x = " ++ src ++ "\n") of
     ErrC _ => Nothing
     OkC p =>
       case p.parsedFile.sourceFileDecls of
-        [DFun _ _ body _] => Just (p.parsedSurface, body)
+        [DFun _ _ body _] => Just (cstIndexOf p.parsedCst, body)
         _ => Nothing
 
 -- | 表达式节点的括号层数。
-depthOf : Surface -> Expr -> Int
-depthOf s e = parenDepthOf s (nodeRefId (exprRef e))
+depthOf : CstIndex -> Expr -> Int
+depthOf ix e = parenDepthOfIndex ix (nodeRefId (exprRef e))
 
 -- | 表达式节点是不是中缀链步：符号名作函数的 2 参应用（前缀写法必须加括号，所以只可能
--- 来自中缀降级），或表面形状里记下的反引号写法。
-infixStep : Surface -> Expr -> Bool
-infixStep s e =
-  case sectionShapeOfSpan s (exprSpan e) of
+-- 来自中缀降级），或节点字段里记下的反引号写法。
+infixStep : CstIndex -> Expr -> Bool
+infixStep ix e =
+  case sectionOfIndex ix (exprSpan e) of
     Just _ => False
     Nothing =>
       case e of
-        EApp (EVar op _) ([_, _]) _ => isSymbolName op || infixBacktick s e
-        EApp (EVar _ _) ([_, _]) _ => infixBacktick s e
+        EApp (EVar op _) ([_, _]) _ => isSymbolName op || infixBacktick ix e
+        EApp (EVar _ _) ([_, _]) _ => infixBacktick ix e
         _ => False
 
 -- | 表达式节点是不是反引号写的链步。
-infixBacktick : Surface -> Expr -> Bool
-infixBacktick s e =
-  case backtickShapeOf s (nodeRefId (exprRef e)) of
-    Just _ => True
-    Nothing => False
+infixBacktick : CstIndex -> Expr -> Bool
+infixBacktick ix e = backtickOfIndex ix (nodeRefId (exprRef e))
 
 -- | `(a)`：包装节点，1 层。
 wrappedOk : Bool
@@ -89,7 +86,7 @@ tupleOk =
         _ => False
     Nothing => False
 
-allZero : Surface -> List Expr -> Bool
+allZero : CstIndex -> List Expr -> Bool
 allZero s [] = True
 allZero s (e :: rest) = depthOf s e == 0 && allZero s rest
 
@@ -147,21 +144,21 @@ sectionShapeOk =
     leftOk =
       case parseBody "(+ 1)" of
         Just (s, body) =>
-          case sectionShapeOfSpan s (exprSpan body) of
+          case sectionOfIndex s (exprSpan body) of
             Just (SectionLeft "+") => True
             _ => False
         Nothing => False
     rightOk =
       case parseBody "(1 +)" of
         Just (s, body) =>
-          case sectionShapeOfSpan s (exprSpan body) of
+          case sectionOfIndex s (exprSpan body) of
             Just (SectionRight "+") => True
             _ => False
         Nothing => False
     opOk =
       case parseBody "(+)" of
         Just (s, body) =>
-          case sectionShapeOfSpan s (exprSpan body) of
+          case sectionOfIndex s (exprSpan body) of
             Just (SectionOp "+") => True
             _ => False
         Nothing => False
@@ -188,12 +185,12 @@ parseTree src =
     ErrC _ => Nothing
     OkC p => Just p.parsedCst
 
--- | 树 + 从树派生的表面缓存（`surfaceOfCst` 不需要额外输入）。
-parseTreeSurface : String -> Maybe (Surface, CstNode)
+-- | 树 + 从树建的查询索引（事实在节点字段上）。
+parseTreeSurface : String -> Maybe (CstIndex, CstNode)
 parseTreeSurface src =
   case parseTree src of
     Nothing => Nothing
-    Just tree => Just (surfaceOfCst tree, tree)
+    Just tree => Just (cstIndexOf tree, tree)
 
 -- | 先序找第一个满足谓词的节点。
 findNode : (CstNode -> Bool) -> CstNode -> Maybe CstNode
@@ -223,7 +220,7 @@ rightSectionNodeOk =
       in case findNode isRight tree of
         Nothing => False
         Just n =>
-          case sectionShapeOfSpan surface (nodeSpan n) of
+          case sectionOfIndex surface (nodeSpan n) of
             Just (SectionRight "+") => True
             _ => False
     Nothing => False

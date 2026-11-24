@@ -185,7 +185,7 @@ goalRun file =
                   case secondOf looked of
                     ErrC e => toolFailure (diagText e)
                     OkC programFixities =>
-                      case reorderProgram (tableOfKeepOps parsed.parsedSurface (append programFixities fx)) decls0 of
+                      case reorderProgram (tableOfKeepOpsCst parsed.parsedCst (append programFixities fx)) decls0 of
                         ErrC e => toolFailure (diagText e)
                         OkC decls =>
                           case goalsOfProgramTolerant (toRastDecls decls) of

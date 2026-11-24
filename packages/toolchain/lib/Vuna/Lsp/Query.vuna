@@ -1072,7 +1072,7 @@ documentSymbols uri text =
                 case fxR of
                   ErrC _ => []
                   OkC programFixities =>
-                    case reorderProgram (tableOfKeepOps parsed.parsedSurface (append programFixities fx)) decls0 of
+                    case reorderProgram (tableOfKeepOpsCst parsed.parsedCst (append programFixities fx)) decls0 of
                       ErrC e => []
                       OkC decls => map (declSymbolJson (split "\n" text) decls) decls
               )

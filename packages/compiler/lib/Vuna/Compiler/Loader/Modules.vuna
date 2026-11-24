@@ -39,9 +39,9 @@ export record Module(..) where
   -- | 公开名 → 该名字的全部导出条目（保持 `moduleExportsOf` 里的顺序）。解析期按名字
   -- 查导出走这张表；裸导出表线性扫在每次名字解析里都会重扫一遍。
   moduleExportIndexOf : HashMap String (List ExportEntry)
-  -- | 该模块源码的表面形状（括号层数）：中缀重排要用它判定括号边界。接口加载的
-  -- 模块没有源码，是 `emptySurface`（这些模块的声明已重排过，不再走重排）。
-  moduleSurfaceOf : Surface
+  -- | 该模块的 fixity 事实（从树派生）：中缀重排用它判定括号边界。接口加载的模块
+  -- 没有源码，是 `emptyFixityFacts`（这些模块的声明已重排过，不再走重排）。
+  moduleFixFactsOf : FixityFacts
 
 -- 已加载项目：入口声明/import + 依赖模块列表（保持 flatten 前的形态）。
 -- entryPkg 用于按包限制 effectful 内建（普通包只能经 Eff + handler 使用效果）。
@@ -56,8 +56,8 @@ export record Project(..) where
   -- | 入口文件名（文件入口取 basename 去掉 `.vuna`；纯库包没有入口文件，取包名）。
   -- 内置宏展开用它当 `log!` 的模块 scope。
   projectEntryName : String
-  -- | 入口文件源码的表面形状（括号层数）：入口声明重排要用它判定括号边界。
-  projectEntrySurface : Surface
+  -- | 入口文件的 fixity 事实（从树派生）：入口声明重排用它判定括号边界。
+  projectEntryFacts : FixityFacts
 
 export moduleNameOf : Module -> String
 moduleNameOf (Module n p is imps ds es fx _ _ _ _) = n
