@@ -31,7 +31,6 @@ B_dEffect_dEnv.ml
 B_dEffect_dExit.ml
 B_dEffect_dFs.ml
 B_dEffect_dProcess.ml
-B_dEffect_dPure_dIORef.ml
 B_dEffect_dStdin.ml
 B_dEffect_dTypes.ml
 B_dInternal_dOperator.ml
