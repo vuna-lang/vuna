@@ -1410,6 +1410,7 @@ ivarBound env (IGlobal _) = True
 ivarBound env (IList e) = ivarBound env e
 ivarBound env (IArray e) = ivarBound env e
 ivarBound env (IRef e) = ivarBound env e
+ivarBound env (ICell e) = ivarBound env e
 ivarBound env (IEff e) = ivarBound env e
 ivarBound env (IFun a b) = ivarBound env a && ivarBound env b
 ivarBound env (IFun1 a b) = ivarBound env a && ivarBound env b

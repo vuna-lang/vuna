@@ -1723,7 +1723,8 @@ hostLeafGroups =
         "prim_eff_newRef_host",
         "@vuna@prim_eff_newRef_host",
         "prim_eff_newRef",
-        "@vuna@prim_eff_newRef"
+        "@vuna@prim_eff_newRef",
+        "@vuna@prim_mrefNew"
       ]),
     ("prim_eff_print",
       [
@@ -1739,7 +1740,8 @@ hostLeafGroups =
         "prim_eff_readRef_host",
         "@vuna@prim_eff_readRef_host",
         "prim_eff_readRef",
-        "@vuna@prim_eff_readRef"
+        "@vuna@prim_eff_readRef",
+        "@vuna@prim_mrefRead"
       ]),
     ("prim_eff_write_ref",
       [
@@ -1747,7 +1749,8 @@ hostLeafGroups =
         "prim_eff_writeRef_host",
         "@vuna@prim_eff_writeRef_host",
         "prim_eff_writeRef",
-        "@vuna@prim_eff_writeRef"
+        "@vuna@prim_eff_writeRef",
+        "@vuna@prim_mrefWrite"
       ]),
     ("sleep_us",
       [
@@ -1931,6 +1934,9 @@ nativeRtValueArityHost "prim_eff_readRef" = 1
 nativeRtValueArityHost "@vuna@prim_eff_readRef" = 1
 nativeRtValueArityHost "prim_eff_writeRef" = 2
 nativeRtValueArityHost "@vuna@prim_eff_writeRef" = 2
+nativeRtValueArityHost "@vuna@prim_mrefNew" = 1
+nativeRtValueArityHost "@vuna@prim_mrefRead" = 1
+nativeRtValueArityHost "@vuna@prim_mrefWrite" = 2
 nativeRtValueArityHost "prim_eff_print" = 1
 nativeRtValueArityHost "@vuna@prim_eff_print" = 1
 nativeRtValueArityHost "prim_eff_eprint" = 1

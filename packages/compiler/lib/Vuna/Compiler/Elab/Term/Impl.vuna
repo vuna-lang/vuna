@@ -15,6 +15,7 @@ import Vuna.Compiler.Elab.Coverage
 import Vuna.Compiler.Elab.Match
 import Vuna.Compiler.Elab.Meta
 import Vuna.Compiler.Elab.MetaSpans
+import Vuna.Compiler.Elab.Mref
 import Vuna.Compiler.Elab.Prelude
 import Vuna.Compiler.Elab.Records
 import Vuna.Compiler.Base.Intrinsics
@@ -553,6 +554,85 @@ appAtCallExpr (EApp (EVar _ _) (f :: nm :: rest) sp) =
   OkC (EApp f (EApp (EVar (RIntrinsic instArgSyntax) sp) [nm] sp :: rest) sp)
 appAtCallExpr _ = icInternal "malformed @ marker"
 
+-- ---------------------------------------------------------------
+-- `Base.Effect.MutableRef`：用户面声明 → 内部入口
+-- ---------------------------------------------------------------
+-- 作用域里的单元 binder（`@vuna@cell@x`）→ 实例名列表（最近绑定在前）。
+mrefCellNames : Ctx -> List String
+mrefCellNames ctx = mrefCellNamesGo ctx.ctxItems
+
+mrefCellNamesGo : List (String, Term) -> List String
+mrefCellNamesGo [] = []
+mrefCellNamesGo ((n, _) :: rest) =
+  case mrefCellNameOf n of
+    Just c => c :: mrefCellNamesGo rest
+    Nothing => mrefCellNamesGo rest
+
+-- 解析 `read`/`write` 的实例名：显式 `@x` 优先，否则取作用域里唯一的单元。
+mrefResolveCell : Ctx -> Maybe String -> Span -> Check String
+mrefResolveCell ctx (Just n) sp =
+  case ctxLookup (mrefCellBinder n) ctx of
+    Just _ => OkC n
+    Nothing => tcErr1 sp (CellNotInScope n) n
+mrefResolveCell ctx Nothing sp =
+  case mrefCellNames ctx of
+    [n] => OkC n
+    [] => tcErr1 sp (CellNotInScope "any") "any"
+    ns =>
+      let
+        text = join ", " ns
+      in tcErr2 sp (AmbiguousInstance "mutable ref" text) "mutable ref" text
+
+-- 识别 MutableRef 的用户面声明并给出改写后的表达式。
+mrefRewriteExpr : Ctx -> Expr -> Maybe (Check Expr)
+mrefRewriteExpr ctx (EVar name sp) = mrefRewriteCall ctx (rnameKey name) [] sp
+mrefRewriteExpr ctx (EApp (EVar name _) args sp) = mrefRewriteCall ctx (rnameKey name) args sp
+mrefRewriteExpr ctx _ = Nothing
+
+mrefRewriteCall : Ctx -> String -> List Expr -> Span -> Maybe (Check Expr)
+mrefRewriteCall ctx head args sp =
+  if head == mrefReadName then
+    case args of
+      [] => Just (Vuna.Compiler.Base.Common.bind (mrefResolveCell ctx Nothing sp) (\n => OkC (mrefReadExpr sp n)))
+      [a] =>
+        case instArgOperand a of
+          Just payload =>
+            case stringLitOf payload of
+              Just n => Just (Vuna.Compiler.Base.Common.bind (mrefResolveCell ctx (Just n) sp) (\n2 => OkC (mrefReadExpr sp n2)))
+              Nothing => Nothing
+          Nothing => Nothing
+      _ => Nothing
+  else if head == mrefWriteName then
+    case args of
+      [v] => Just (Vuna.Compiler.Base.Common.bind (mrefResolveCell ctx Nothing sp) (\n => OkC (mrefWriteExpr sp n v)))
+      [a, v] =>
+        case instArgOperand a of
+          Just payload =>
+            case stringLitOf payload of
+              Just n => Just (Vuna.Compiler.Base.Common.bind (mrefResolveCell ctx (Just n) sp) (\n2 => OkC (mrefWriteExpr sp n2 v)))
+              Nothing => Nothing
+          Nothing => Nothing
+      _ => Nothing
+  else if head == mrefWithName || head == mrefWithPureName then
+    case args of
+      [nExpr, init, body] =>
+        case stringLitOf nExpr of
+          Just n =>
+            case ctxLookup (mrefCellBinder n) ctx of
+              Just _ => Just (tcErr1 (exprSpan nExpr) (DuplicateInstance (mrefOpName ++ " " ++ n)) (mrefOpName ++ " " ++ n))
+              Nothing => Just (OkC (mrefWithOf head sp nExpr init body n))
+          Nothing => Just (tcErr1 (exprSpan nExpr) (CellNameNotLiteral "") "")
+      _ => Nothing
+  else
+    Nothing
+
+mrefWithOf : String -> Span -> Expr -> Expr -> Expr -> String -> Expr
+mrefWithOf head sp nExpr init body n =
+  if head == mrefWithPureName then
+    mrefWithPureExpr sp nExpr init body n
+  else
+    mrefWithExpr sp nExpr init body n
+
 -- 由 op 的类型值构造降级调用表达式：`performCore <n=洞> "<key>" <sig> <op>`。
 -- 效应签名 `sig` 包住 op 族（按显式参数个数 k 补洞：`ConsoleOp` k=0、`StateOp` k=1），
 -- 结果类型由 op 的索引决定（`o : sigOf sig i` ⇒ `Eff r i`）。
@@ -815,6 +895,15 @@ inferEFuelCore fuel globals ctx ec expr =
 -- | 推断模式的形状分派核心：跳过列表字面量与 do 标记链后按表达式构造分派。
 inferEFuelCorePlain : Int -> List (String, Term) -> Ctx -> Ec -> Expr -> Check (Term, Value, Ec)
 inferEFuelCorePlain fuel globals ctx ec expr =
+  if fuel <= 0 then
+    icFuel "inference"
+  else
+    case mrefRewriteExpr ctx expr of
+      Just rewrite => Vuna.Compiler.Base.Common.bind rewrite (\e2 => inferEFuel (fuel - 1) globals ctx ec e2)
+      Nothing => inferEFuelCorePlainGo fuel globals ctx ec expr
+
+inferEFuelCorePlainGo : Int -> List (String, Term) -> Ctx -> Ec -> Expr -> Check (Term, Value, Ec)
+inferEFuelCorePlainGo fuel globals ctx ec expr =
   if fuel <= 0 then
     icFuel "inference"
   else
@@ -1528,7 +1617,17 @@ inferArgsGo fuel globals ctx ec ty args sp hint =
                             (argTerms, resTy, ec3) => OkC ((::) (metaTerm, Rig0) argTerms, resTy, ec3)
                       )
           else if isImplicitDomain ctx ec dom then
-            if isStringImplicitDomain ec dom then
+            if isCellDomain ec dom then
+              case ctxLookup name ctx of
+                -- 编译器合成的单元参数：按 binder 名（`@vuna@cell@x`）取调用方作用域里的单元。
+                Just (idx, _) =>
+                  Vuna.Compiler.Base.Common.bind (inferArgsGo (fuel - 1) globals ctx ec (applyClosure clo (VNeutral (NVar name idx []))) args sp hint) (
+                      \p =>
+                        case p of
+                          (argTerms, resTy, ec2) => OkC ((::) (TVar name idx sp, RigOmega) argTerms, resTy, ec2)
+                    )
+                Nothing => tcErr1 sp (CellNotInScope name) name
+            else if isStringImplicitDomain ec dom then
               case args of
                 a :: rest =>
                   case instArgOperand a of
@@ -2053,6 +2152,15 @@ resolveOverValueTarget globals ctx ec short targets expected sp =
 
 checkEFuelNoRowPlain : Int -> List (String, Term) -> Ctx -> Ec -> Expr -> Value -> Check (Term, Ec)
 checkEFuelNoRowPlain fuel globals ctx ec expr expected =
+  if fuel <= 0 then
+    icFuel "inference"
+  else
+    case mrefRewriteExpr ctx expr of
+      Just rewrite => Vuna.Compiler.Base.Common.bind rewrite (\e2 => checkEFuel (fuel - 1) globals ctx ec e2 expected)
+      Nothing => checkEFuelNoRowPlainGo fuel globals ctx ec expr expected
+
+checkEFuelNoRowPlainGo : Int -> List (String, Term) -> Ctx -> Ec -> Expr -> Value -> Check (Term, Ec)
+checkEFuelNoRowPlainGo fuel globals ctx ec expr expected =
   if fuel <= 0 then
     icFuel "inference"
   else

@@ -44,6 +44,8 @@ export data IType(..) : Type where
   IVar : String -> IType
   IArray : IType -> IType
   IRef : IType -> IType
+  -- `@vuna@Cell a`：`Base.Effect.MutableRef` 私有的可变单元类型（源码写不出）。
+  ICell : IType -> IType
   -- 隐式类型参数绑定（`{a : Type} -> ...`）；不进函数 arity。
   IPi : String -> IType -> IType
   -- `Float` primitive 类型的签名形状（保持已有 tag 顺序；新构造子只追加在它之后）。
@@ -81,7 +83,8 @@ typeIntrinsicCtorArity (TypeIntrinsic name arity) = arity
 
 -- | 全部内建类型构造子及其 arity（Elab.Prelude 生成 kind、Target.Ocaml.Decl 渲染的唯一真源）。
 export typeIntrinsicArities : List TypeIntrinsic
-typeIntrinsicArities = [TypeIntrinsic "Array" 1, TypeIntrinsic "IORef" 1]
+typeIntrinsicArities =
+  [TypeIntrinsic "Array" 1, TypeIntrinsic "IORef" 1, TypeIntrinsic "@vuna@Cell" 1]
 
 -- | 名字对应的内建类型构造子 arity；不是内建类型构造子时返回 `-1`。
 export typeIntrinsicArityOf : String -> Int
@@ -942,6 +945,8 @@ effIntrinsics : List Intrinsic
 -- 带内建效应行的宿主原语（Clock/Env/Process/Exit/Stdin/Args）。
 -- Ref / Net 的带行宿主原语。
 -- 显式效应机器的装箱/拆箱（运行时恒等；见 Base.Effect.Core.Obj）。
+-- MutableRef 的私有单元原语：类型 `@vuna@Cell a` 不对用户开放，
+-- 只能由精化器在 `withMutableRef` 作用域里合成引用。
 effIntrinsics =
   [
     Intrinsic
@@ -982,6 +987,17 @@ effIntrinsics =
     Intrinsic
       "@vuna@prim_eff_writeRef"
       (IPi "a" (IFun (IRef (IVar "a")) (IFun (IVar "a") (IEff IInt))))
+      OpNone
+      False,
+    Intrinsic "@vuna@prim_mrefNew" (IPi "a" (IFun (IVar "a") (ICell (IVar "a")))) OpNone False,
+    Intrinsic
+      "@vuna@prim_mrefRead"
+      (IPi "a" (IFun (ICell (IVar "a")) (IEff (IVar "a"))))
+      OpNone
+      False,
+    Intrinsic
+      "@vuna@prim_mrefWrite"
+      (IPi "a" (IFun (ICell (IVar "a")) (IFun (IVar "a") (IEff IInt))))
       OpNone
       False,
     Intrinsic "prim_eff_print" (IFun IStr (IEff IInt)) OpNone True,

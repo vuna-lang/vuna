@@ -5,7 +5,7 @@ name = "vuna-compiler"
 owner = "compiler"
 jobs = 0
 timeout = 300
-min_cases = 730
+min_cases = 738
 
 [family.dt]
 dir = "corpus/dt"

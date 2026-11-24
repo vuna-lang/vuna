@@ -1445,7 +1445,10 @@ leadingImplicitNames : Expr -> List String
 leadingImplicitNames (EPi n True _ dom cod _) =
   if n == "_" then
     leadingImplicitNames cod
-  else if isStringDomainExpr dom then n :: leadingImplicitNames cod else leadingImplicitNames cod
+  else if isStringDomainExpr dom || isTypeDomainExpr dom || isRowDomainExpr dom then
+    n :: leadingImplicitNames cod
+  else
+    leadingImplicitNames cod
 leadingImplicitNames _ = []
 
 exprLowerNames : Expr -> List String
@@ -1510,3 +1513,14 @@ isStringDomainExpr : Expr -> Bool
 isStringDomainExpr (EVar "String" _) = True
 isStringDomainExpr (EVar "Base.Data.String.String" _) = True
 isStringDomainExpr _ = False
+
+-- 隐式类型 / 行 binder 的名字（`{a : Type}` / `{r : Row}`）也在定义体里可引用：
+-- 精化器把前导隐式 binder 都绑成擦除的 lambda，body 的类型位置用得到它们。
+isTypeDomainExpr : Expr -> Bool
+isTypeDomainExpr (EVar "Type" _) = True
+isTypeDomainExpr _ = False
+
+isRowDomainExpr : Expr -> Bool
+isRowDomainExpr (EVar "Row" _) = True
+isRowDomainExpr (EVar "Base.Effect.Core.Row" _) = True
+isRowDomainExpr _ = False

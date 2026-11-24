@@ -813,7 +813,9 @@ isIndexDomain ec dom = isTypeDomain dom || isDataHead (ecDatas ec) (forceVal ec 
 -- 运行时使用由 `Checks` 的擦除检查报错（`dt_err/42_implicit_value_runtime`）。
 export isImplicitDomain : Ctx -> Ec -> Value -> Bool
 isImplicitDomain ctx ec dom =
-  if isIndexDomain ec dom then
+  if isCellDomain ec dom then
+    True
+  else if isIndexDomain ec dom then
     True
   else
     case forceVal ec dom of
@@ -830,16 +832,24 @@ isImplicitDomain ctx ec dom =
       VPi _ _ _ d clo => isKindWithCtx ctx ec (forceVal ec dom)
       _ => False
 
--- 隐式 binder 的 rig：String 实例名是运行时值（RigOmega），其余隐式仍 Rig0。
--- （`binderRig` 只用于显式 binder；隐式 binder 的 Pi rig 在 `inferPiFuel` 里由这里给出。）
+-- 隐式 binder 的 rig：String 实例名与编译器合成的单元参数是运行时值（RigOmega），
+-- 其余隐式仍 Rig0。（`binderRig` 只用于显式 binder；隐式 binder 的 Pi rig 在 `inferPiFuel` 里由这里给出。）
 export isStringImplicitDomain : Ec -> Value -> Bool
 isStringImplicitDomain ec dom =
   case forceVal ec dom of
     VNeutral (NGlobal g []) => g == strTypeName
     _ => False
 
+-- | 编译器合成的单元参数域：`@vuna@Cell a`（隐藏类型，只能由 MutableRef 精化合成）。
+export isCellDomain : Ec -> Value -> Bool
+isCellDomain ec dom =
+  case forceVal ec dom of
+    VNeutral (NGlobal g _) => g == "@vuna@Cell"
+    _ => False
+
 export implicitBinderRig : Ec -> Value -> Rig
-implicitBinderRig ec dom = if isStringImplicitDomain ec dom then RigOmega else Rig0
+implicitBinderRig ec dom =
+  if isStringImplicitDomain ec dom then RigOmega else if isCellDomain ec dom then RigOmega else Rig0
 
 -- 上下文里 level 为 lvl 的 binder 的类型是不是 index domain。
 -- Ctx 项按「最近绑定在前」存；level 0 是最外层 binder，所以位置 = depth - lvl - 1。

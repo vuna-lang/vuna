@@ -15,6 +15,7 @@ import Vuna.Compiler.Elab.Data
 import Vuna.Compiler.Elab.Derive
 import Vuna.Compiler.Elab.Dict
 import Vuna.Compiler.Elab.Meta
+import Vuna.Compiler.Elab.Mref
 import Vuna.Compiler.Elab.Prelude
 import Vuna.Compiler.Elab.Records
 import Vuna.Compiler.Elab.Term
@@ -96,10 +97,17 @@ elabSigsGo ((name, ctxExprs, tyExpr, sigSpan) :: rest) globals ec acc =
                   case q of
                     (tyTerm1, ec2) =>
                       let
-                        sigTy = zonkTerm ec2 0 tyTerm1
-                      in elabSigsGo rest ((name, sigTy) :: globals) (ecPutGlobalsTbl ec2 (HashMap.insert name sigTy (ecGlobalsTbl ec2))) ((name, sigTy) :: acc)
+                        sigTy0 = zonkTerm ec2 0 tyTerm1
+                      in Vuna.Compiler.Base.Common.bind (mrefWrapSig name sigTy0 sigSpan) (\sigTy => elabSigsGo rest ((name, sigTy) :: globals) (ecPutGlobalsTbl ec2 (HashMap.insert name sigTy (ecGlobalsTbl ec2))) ((name, sigTy) :: acc))
               )
     )
+
+-- 签名收尾：重复实例名报错；`MutableRefOp` 条目合成隐藏的单元参数。
+mrefWrapSig : String -> Term -> Span -> Check Term
+mrefWrapSig nm ty sp =
+  case duplicateRowKeys ty of
+    [] => OkC (mrefAddCellParams ty)
+    (f, n) :: _ => tcErr1 sp (DuplicateInstance (f ++ " " ++ n)) (f ++ " " ++ n)
 
 -- 顶层签名里的前导隐式 Pi 前缀 → Ctx（`{a : Type} -> {n : Nat} -> ...`）。
 leadingImplicitCtx : Term -> Ctx

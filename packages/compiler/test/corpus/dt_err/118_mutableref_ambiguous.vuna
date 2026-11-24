@@ -1,0 +1,14 @@
+-- MutableRef：两个同类型单元时省略实例名报 TC_AmbiguousInstance。
+import Base.Effect.MutableRef as MutableRef
+import Base.Effect.Types
+import Base.Trait.Monad
+
+bad : Int
+bad =
+  MutableRef.withMutableRefPure "a" 0 (
+      MutableRef.withMutableRef "b" 0 (
+          do
+            _ <- MutableRef.write 1
+            MutableRef.read
+        )
+    )

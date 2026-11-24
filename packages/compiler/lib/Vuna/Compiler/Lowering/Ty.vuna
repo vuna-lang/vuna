@@ -77,6 +77,7 @@ renderTyGlobal fuel levels table dataTbl g sp =
 renderTyIntrinsicWith : (Value -> IrTy) -> String -> List Value -> Maybe IrTy
 renderTyIntrinsicWith render "Array" ([a]) = Just (IrTyArray (render a))
 renderTyIntrinsicWith render "IORef" ([a]) = Just (IrTyRef (render a))
+renderTyIntrinsicWith render "@vuna@Cell" ([a]) = Just (IrTyRef (render a))
 renderTyIntrinsicWith render _ _ = Nothing
 
 renderFamilyArgs : Int -> List Int -> HashMap String (List Int) -> HashMap String DtData -> List Int -> List Value -> List IrTy
@@ -309,6 +310,13 @@ annotHeadTy fuel dflt env binders g args =
           Just t => Just (IrTyArray t)
       _ => dflt
   else if g == "IORef" then
+    case args of
+      [a] =>
+        case annotTyOfFuel (fuel - 1) dflt env binders a of
+          Nothing => Nothing
+          Just t => Just (IrTyRef t)
+      _ => dflt
+  else if g == "@vuna@Cell" then
     case args of
       [a] =>
         case annotTyOfFuel (fuel - 1) dflt env binders a of
