@@ -8,7 +8,6 @@ module Base.Effect.Fs where
 
 import Base.Effect.Core
 import Base.Effect.Cursor
-import Base.Effect.Pure.IORef
 import Base.Trait.Eq
 import Base.Data.Maybe
 import Base.Data.Nat
@@ -17,6 +16,7 @@ import Base.Trait.Num
 import Base.Trait.Ord
 import Base.Data.Bool
 import Base.Data.List
+import Base.Data.Pair
 import Base.Data.Result
 import Base.Data.Sort
 import Base.Data.String
@@ -127,23 +127,22 @@ fsReadFileRange p offset length =
     sendCore (Named n FsOp) "fs" n (ReadFileRange p offset length)
 
 -- | 按块读文件的游标：每次 `next` 读至多 `chunk` 字节（`chunk <= 0` 按 64 KiB），
---   EOF 给 `Nothing`。消费方用 `Cursor.takeC` / `Cursor.foldC` 按上界收口。
-export fsFileCursor : Member n FsOp r => String -> Int -> Eff r (Cursor r String)
+--   EOF 给 `Nothing`。状态是 `(path, offset, chunk)` 纯数据，消费方用
+--   `Cursor.takeC` / `Cursor.foldC` 按上界收口。
+export fsFileCursor : Member n FsOp r => String -> Int -> Eff r (Cursor r (String, Int, Int) String)
 fsFileCursor path chunk =
-  do
-    cell <- newRef 0
-    pure (cursorOfStep (\_ => fileChunkAt cell path (if chunk <= 0 then 65536 else chunk)))
+  pure (cursorOfState (path, 0, if chunk <= 0 then 65536 else chunk) fsChunkStep)
 
-fileChunkAt : Member n FsOp r => IORef Int -> String -> Int -> Eff r (Maybe String)
-fileChunkAt cell path chunk =
-  readRef cell
-    >>= \off =>
+fsChunkStep : Member n FsOp r => (String, Int, Int) -> Eff r (Maybe String, String, Int, Int)
+fsChunkStep (st@(path, rest)) =
+  case rest of
+    (off, chunk) =>
       fsReadFileRange path off chunk
         >>= \s =>
           if strLength s <= 0 then
-            pure Nothing
+            pure (Nothing, st)
           else
-            writeRef cell (off + strLength s) >>= \_ => pure (Just s)
+            pure (Just s, path, off + strLength s, chunk)
 
 -- | 通过命名实例把整串写入文件，返回写入字节数（`Nat`）。
 export fsWriteFile : Member n FsOp r => String -> String -> Eff r Nat

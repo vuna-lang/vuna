@@ -5,7 +5,7 @@ name = "vuna-base"
 owner = "base"
 jobs = 0
 timeout = 300
-min_cases = 31
+min_cases = 30
 
 [family.stdlib]
 dir = "corpus/stdlib"

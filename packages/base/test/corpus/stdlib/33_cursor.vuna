@@ -1,9 +1,10 @@
--- stdlib：有界游标；takeC 从 IORef 列表源按需取，EOF 后继续 takeC 给空。
+-- stdlib：持久游标；takeC / foldC 都返回剩余游标，消费进度显式接住（没有内部 IORef）。
 import Base.Effect.Core
 import Base.Effect.Cursor as Cursor
 import Base.Effect.Console as EffConsole
 import Base.Trait.Monad
 import Base.Data.List as List
+import Base.Data.Pair
 
 sumL : List Int -> Int
 sumL xs = List.foldl (\acc, x => acc + x) 0 xs
@@ -11,12 +12,10 @@ sumL xs = List.foldl (\acc, x => acc + x) 0 xs
 main : Eff [ConsoleOp] Int
 main =
   do
-    c <- Cursor.ofList [1, 2, 3, 4]
-    xs <- Cursor.takeC 2 c
-    ys <- Cursor.takeC 5 c
-    c2 <- Cursor.ofList [10, 20, 30]
-    folded <- Cursor.foldC 2 (\acc, x => acc + x) 0 c2
+    p1 <- Cursor.takeC 2 (Cursor.ofList [1, 2, 3, 4])
+    p2 <- Cursor.takeC 5 (secondOf p1)
+    p3 <- Cursor.foldC 2 (\acc, x => acc + x) 0 (Cursor.ofList [10, 20, 30])
     _ <-
       consolePrint
-        (strFromInt (sumL xs) ++ "/" ++ strFromInt (sumL ys) ++ "/" ++ strFromInt folded ++ "\n")
-    pure (sumL xs + sumL ys + folded)
+        (strFromInt (sumL (firstOf p1)) ++ "/" ++ strFromInt (sumL (firstOf p2)) ++ "/" ++ strFromInt (firstOf p3) ++ "\n")
+    pure (sumL (firstOf p1) + sumL (firstOf p2) + firstOf p3)

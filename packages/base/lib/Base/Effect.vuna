@@ -13,7 +13,6 @@ export module Base.Effect.Error as Error
 export module Base.Effect.Exn as Exn
 export module Base.Effect.Ref as Ref
 export module Base.Effect.MutRef as MutRef
-export module Base.Effect.Lazy as Lazy
 export module Base.Effect.Cursor as Cursor
 export module Base.Effect.Fs as Fs
 export module Base.Effect.Console as Console

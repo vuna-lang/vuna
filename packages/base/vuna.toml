@@ -52,7 +52,6 @@ modules = [
   "Base.Effect.Exit",
   "Base.Effect.Exn",
   "Base.Effect.Fs",
-  "Base.Effect.Lazy",
   "Base.Effect.MutRef",
   "Base.Effect.Net",
   "Base.Effect.Process",

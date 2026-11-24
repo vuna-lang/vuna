@@ -1,7 +1,7 @@
 -- | 拉式流：每一步显式传 dummy `Unit` 才推进一格，尾是尚未计算的 thunk。
 --
 -- 与 [Base.Data.List] 的差别只在尾部：`List` 的尾已经算好，`Stream` 的尾调用一次才拿到。
--- 没有记忆化：同一个 `Stream` 被消费两次就重算两次（要缓存用 [Base.Effect.Lazy]）。
+-- 没有记忆化：同一个 `Stream` 被消费两次就重算两次。
 -- 也没有无限流：构造不出无限长结构（无界余递归过不了终止性判据），所以这里的分支
 -- 只要底层流有限就必然走完。组合子在以 `StreamStep` 为形参的 helper 里 `case`：
 -- payload 才是形参的子项，终止性判据认这个形状（在 `Stream` 形参上直接 `case uncons s` 不认）。

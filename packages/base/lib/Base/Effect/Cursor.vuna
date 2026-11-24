@@ -1,76 +1,76 @@
--- | 有界消费的效应游标：一个游标是「每 `next` 一次前进一格」的有状态源，EOF 给 `Nothing`。
+-- | 有界消费的**持久游标**：`next` 返回「前进后的游标」，同一个游标可以被反复使用而
+-- 不共享状态（要续读就把返回的新游标接住）。
 --
--- 只提供**有界**消费者（`takeC` / `foldC`），循环由 `Int` 上界守卫，库内没有无界递归，
--- 也没有无界消费入口，所以游标不会把「长度未知」传播到调用方。源由调用方给：
--- `stdinReadLine` / `stdinReadBytes`、`IORef` 包住的列表都是合法来源（`ofList` 就是后者）。
+-- 游标就是一台纯状态机 `Cursor r s a`：状态 `s` 是普通值，由游标自己带着，没有内部
+-- `IORef`，所以游标可以存进数据结构、跨作用域传。只提供**有界**消费者
+-- （`takeC` / `foldC`），循环由 `Int` 上界守卫，库内没有无界递归。
+-- 源由调用方给：`stdinReadLine` / `stdinReadBytes`、`List`、按块读文件的 `fsFileCursor`。
 module Base.Effect.Cursor where
 
 import Base.Effect.Core
-import Base.Effect.Pure.IORef
 import Base.Data.List
 import Base.Data.Maybe
+import Base.Data.Pair
 import Base.Data.Unit
 import Base.Trait.Monad
 import Base.Trait.Num
 import Base.Trait.Ord
 
--- | 游标：`Unit -> Eff r (Maybe a)`，`Nothing` 表示源已结束。
-export data Cursor : Row -> Type -> Type where
-  MkCursor : {r : Row} -> {a : Type} -> (Unit -> Eff r (Maybe a)) -> Cursor r a
+-- | 游标：状态类型 `s` + 元素类型 `a`；前进只通过 `next` 返回的新游标体现。
+export data Cursor : Row -> Type -> Type -> Type where
+  MkCursor : {r : Row} -> {s : Type} -> {a : Type} -> s -> (s -> Eff r (Maybe a, s)) -> Cursor r s a
 
--- | 用一步函数建游标（`stdinReadLine`、按块读文件的 `fsFileCursor` 都走这里）。
-export cursorOfStep : (Unit -> Eff r (Maybe a)) -> Cursor r a
-cursorOfStep f = MkCursor f
+-- | 用初始状态与一步函数建游标。
+export cursorOfState : {r : Row} -> {s : Type} -> {a : Type} -> s -> (s -> Eff r (Maybe a, s)) -> Cursor r s a
+cursorOfState s step = MkCursor s step
 
--- | 前进一格；源结束时给 `Nothing`。
-export next : Cursor r a -> Eff r (Maybe a)
-next (MkCursor f) = f MkUnit
+-- | 前进一格：返回元素（EOF 给 `Nothing`）与前进后的游标。
+export next : Cursor r s a -> Eff r (Maybe a, Cursor r s a)
+next (MkCursor s step) = step s >>= \p => pure (firstOf p, MkCursor (secondOf p) step)
 
 -- | 逐步映射；不缓存，也不预取。
-export mapC : (a -> b) -> Cursor r a -> Cursor r b
-mapC f (MkCursor g) = MkCursor (\_ => mapStepC f g)
+export mapC : (a -> b) -> Cursor r s a -> Cursor r s b
+mapC f (MkCursor s step) = MkCursor s (mapStep f step)
 
-mapStepC : (a -> b) -> (Unit -> Eff r (Maybe a)) -> Eff r (Maybe b)
-mapStepC f g =
-  do
-    m <- g MkUnit
-    pure (fmap f m)
+mapStep : (a -> b) -> (s -> Eff r (Maybe a, s)) -> s -> Eff r (Maybe b, s)
+mapStep f step s =
+  step s >>= \p =>
+      case p of
+        (m, s2) => pure (fmap f m, s2)
 
--- | 用 `IORef` 包一个列表当源：之后每次 `next` 取走一个元素。
-export ofList : List a -> Eff r (Cursor r a)
-ofList xs =
-  do
-    cell <- newRef xs
-    pure (MkCursor (\_ => popCell cell))
+-- | 用 `List` 当源：每次取走一个元素。
+export ofList : List a -> Cursor r (List a) a
+ofList xs = MkCursor xs ofListStep
 
-popCell : IORef (List a) -> Eff r (Maybe a)
-popCell cell = readRef cell >>= popStep cell
+ofListStep : List a -> Eff r (Maybe a, List a)
+ofListStep [] = pure (Nothing, [])
+ofListStep (x :: rest) = pure (Just x, rest)
 
-popStep : IORef (List a) -> List a -> Eff r (Maybe a)
-popStep _ [] = pure Nothing
-popStep cell (x :: rest) =
-  do
-    _ <- writeRef cell rest
-    pure (Just x)
-
--- | 最多消费 `n` 个元素；提前遇到 EOF 就停。
-export takeC : Int -> Cursor r a -> Eff r (List a)
+-- | 最多消费 `n` 个元素：返回取到的元素与**剩余游标**；提前遇到 EOF 也一样收口。
+export takeC : Int -> Cursor r s a -> Eff r (List a, Cursor r s a)
 takeC n c =
   if n <= 0 then
-    pure []
+    pure ([], c)
   else
-    next c >>= \m =>
-        case m of
-          Nothing => pure []
-          Just x => takeC (n - 1) c >>= \rest => pure (x :: rest)
+    next c >>= \p =>
+        case p of
+          (m, c2) =>
+            case m of
+              Nothing => pure ([], c2)
+              Just x =>
+                takeC (n - 1) c2 >>= \q =>
+                    case q of
+                      (rest, c3) => pure (x :: rest, c3)
 
--- | 最多消费 `n` 个元素做左折叠；`f` 的第一个实参是累加器。
-export foldC : Int -> (b -> a -> b) -> b -> Cursor r a -> Eff r b
+-- | 最多消费 `n` 个元素做左折叠（`f` 的第一个实参是累加器）：返回结果与剩余游标。
+export foldC : Int -> (b -> a -> b) -> b -> Cursor r s a -> Eff r (b, Cursor r s a)
 foldC n f acc c =
   if n <= 0 then
-    pure acc
+    pure (acc, c)
   else
-    next c >>= \m =>
-        case m of
-          Nothing => pure acc
-          Just x => foldC (n - 1) f (f acc x) c
+    next c >>= \p =>
+        case p of
+          (m, c2) =>
+            case m of
+              Nothing => pure (acc, c2)
+              Just x => foldC (n - 1) f (f acc x) c2

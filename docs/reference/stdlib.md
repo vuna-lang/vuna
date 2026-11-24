@@ -32,8 +32,7 @@
 | `Base.Data.Base64` | Base64（RFC 4648 标准字母表、带 padding）：`base64Encode` / `base64EncodeString` / `base64Decode`；解码严格（长度、字母表、padding 位置），失败是 `Nothing` |
 | `Base.Container.Array` | 不可变数组（内建类型构造子 `Array`；`fromList` / `toList` / `length` / `get` / `set` / `make`，长度与下标是 `Nat`；`set` 返回新数组） |
 | `Base.Effect.Pure.IORef` | 可变引用（`newRef` / `readRef` / `writeRef` / `modifyRef`，公开操作与实现都是 `Eff []`） |
-| `Base.Effect.Lazy` | 显式记忆化的单值延迟（`Lazy a` = `IORef (Maybe a)` + `Unit -> a`）：`lazy` / `force`，行 `[RefOp]`；首次 `force` 求值并缓存，无 blackholing；thunk 是纯的，所以缓存对观察者等价于重算 |
-| `Base.Effect.Cursor` | 有界消费的效应游标（`Cursor r a` = `Unit -> Eff r (Maybe a)`）：`next` / `mapC` / `ofList` / `takeC` / `foldC`；只有带 `Int` 上界的消费者，库内无无界递归 |
+| `Base.Effect.Cursor` | 有界消费的**持久游标**（`Cursor r a` = 初始状态 + 一步函数 `s -> Eff r (Maybe a, s)`，状态类型对调用方隐藏）：`next` 返回「前进后的游标」，`mapC` / `ofList` / `takeC` / `foldC` 都返回剩余游标；状态是纯数据（没有内部 IORef），只有带 `Int` 上界的消费者，库内无无界递归 |
 | `Base.Effect.Pure.State` / `Base.Effect.Pure.Reader` / `Base.Effect.Pure.Error` | 库级效应 monad：纯函数表示 + `Functor`/`Applicative`/`Monad` 实例（`do` 可用）；`State` 是 `s -> Pair a s`、`Reader` 是 `e -> a`、`Error` 是泛型 `Ok`/`Err` 和；handler 是 `runState` / `evalState` / `execState`、`runReader` / `ask` / `local`、`runError` / `throwError` / `catchError`。通用运行时效应见 `Base.Effect.Core`（[effects.md](effects.md) §8） |
 | `Base.Data.Nat` | 非负整数（`Zero` / `Succ`）；运行时是 OCaml `int`。`plus` / `minus` / `mult` / `toInt` / `fromInt` / `fromIntMaybe` / `pred` / `isZero` + `Num`（除法经 `Num.div` / `/`）+ `Eq` / `Ord` / `Show` / `Hashable` / `Semigroup` / `Monoid` 实例 |
 | `Base.Data.Fin` | 长度索引位置：`Fin n` 恰有 n 个值（`FZero` / `FSucc`），`n` 是 Rig0、运行时擦除；`finToNat` / `finWeaken` / `finLast` / `finFromNat`（带界转换，越界 `Nothing`） |
