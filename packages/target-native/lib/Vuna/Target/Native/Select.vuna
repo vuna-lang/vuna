@@ -279,8 +279,10 @@ isScratchReg r = sameReg r R10 || sameReg r R11
 -- 提升之后的清理
 -- ---------------------------------------------------------------
 -- | 在槽提升之后跑：把 `mov rax, r; cmp rax, 0` 折成 `cmp r, 0` / `test r, r`，
---   并删掉无条件跳转/返回之后直到下一个被引用标签的不可达指令。
---   只折 callee-saved 源寄存器：`rax` 是生成器的 scratch，折叠会丢掉它的旧值。
+--   把 `mov rax, <imm|槽>; mov r, rax` 折成 `mov r, <imm|槽>`，并删掉无条件跳转/返回
+--   之后直到下一个被引用标签的不可达指令。
+--   只折 callee-saved 源寄存器；凡是要丢掉 rax 旧值的折叠都先问 `raxSafeAfter`——
+--   `rax` 是生成器的 scratch，常数除法的符号修正会 `add rax, s` 继续读它。
 export cleanup : List Instr -> List Instr
 cleanup instrs =
   let
@@ -324,13 +326,17 @@ cleanupOnce (i :: rest) =
         (IMov (OpReg Rax) (OpImm k), IMov (OpReg r) (OpReg Rax)) =>
           if sameReg r Rax then
             i :: cleanupOnce rest
-          else
+          else if raxSafeAfter more then
             IMov (OpReg r) (OpImm k) :: cleanupOnce more
+          else
+            i :: cleanupOnce rest
         (IMov (OpReg Rax) (OpMem base off), IMov (OpReg r) (OpReg Rax)) =>
           if sameReg r Rax then
             i :: cleanupOnce rest
-          else
+          else if raxSafeAfter more then
             IMov (OpReg r) (OpMem base off) :: cleanupOnce more
+          else
+            i :: cleanupOnce rest
         (IMov (OpReg Rax) (OpReg r), ICmp (OpReg Rax) (OpImm k)) =>
           if isCalleeSaved r && raxSafeAfter more then
             ICmp (OpReg r) (OpImm k) :: cleanupOnce more
@@ -347,7 +353,7 @@ cleanupOnce (i :: rest) =
         _ => i :: cleanupOnce rest
     [] => [i]
 
--- | 折叠 `mov rax, r; cmp rax, …` 后 rax 是否可以丢：后续在写 rax 之前不能读它。
+-- | 折叠掉 rax 的旧值后它是否可以丢：后续在写 rax 之前不能读它。
 --   switch 的 `mov rax, [table+rax*8]` 会读 rax，必须拦住。
 raxSafeAfter : List Instr -> Bool
 raxSafeAfter [] = True

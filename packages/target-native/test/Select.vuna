@@ -2,7 +2,7 @@
 --
 -- 锁三件事：白名单符号与运行时标签/契约一致；每个算子的寄存器序列形状；
 -- 算术的 63-bit wrap、位运算不 wrap、Nat 饱和/夹取与比较结果寄存器
--- （`rax` + `setcc`/`movzx`）不被改坏。
+-- （`rax` + `setcc`/`movzx`）不被改坏；提升后 cleanup 的拷贝折叠不丢仍被读的 `rax`。
 import Base
 import Base.Data.List as List
 import Base.Data.Pair as Pair
@@ -26,7 +26,7 @@ problems : List String
 problems =
   append
     (append (append wrapProblems bitProblems) (append cmpProblems (append natProblems constProblems)))
-    (append planProblems (append peepholeProblems (append divProblems (append branchProblems (append noWrapProblems floatProblems)))))
+    (append planProblems (append peepholeProblems (append divProblems (append branchProblems (append noWrapProblems (append floatProblems cleanupProblems))))))
 
 wrapProblems : List String
 wrapProblems =
@@ -272,3 +272,69 @@ unknownFloatCase =
   case floatCompareInstrs "bi_add_int" of
     Nothing => ""
     Just _ => "unknown float cmp: expected Nothing"
+
+-- | 提升后 cleanup 的拷贝折叠：`mov rax, <imm|槽>; mov r, rax` 只有在 rax 之后
+--   不再被读（先被重写）时才能折成 `mov r, <imm|槽>`。常数除法的符号修正
+--   `add rax, s` 会继续读它，折掉装载就让被除数变成上一个占用 rax 的值。
+cleanupProblems : List String
+cleanupProblems =
+  append
+    (append cleanupSlotProblems cleanupImmKeepProblems)
+    (append cleanupFoldProblems cleanupImmFoldProblems)
+
+-- | `mov rax, [slot]; mov r11, rax; …; add rax, r11`：rax 仍被读，装载必须保留。
+cleanupSlotProblems : List String
+cleanupSlotProblems =
+  let
+    body =
+      [
+        IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 0)),
+        IMov (OpReg R11) (OpReg Rax),
+        IBinReg "sar" R11 (OpImm 63),
+        IBinReg "and" R11 (OpImm 1),
+        IBinReg "add" Rax (OpReg R11),
+        IBinReg "sar" Rax (OpImm 1),
+        IMov (OpMem Rbp (nativeSlotOff 1)) (OpReg Rax)
+      ]
+    out = cleanup body
+  in filter
+    (\s => s /= "")
+    [if length out == length body then "" else "cleanup kept load: " ++ strFromInt (length out) ++ " instrs", if hasRaxLoad (nativeSlotOff 0) out then "" else "cleanup kept load: rax load dropped"]
+
+-- | 立即数版：rax 是否仍被读同样决定能否折叠。
+cleanupImmKeepProblems : List String
+cleanupImmKeepProblems =
+  let
+    body = [IMov (OpReg Rax) (OpImm 3), IMov (OpReg R11) (OpReg Rax), IBinReg "add" Rax (OpReg R11)]
+    out = cleanup body
+  in filter
+    (\s => s /= "")
+    [if length out == length body then "" else "cleanup kept imm: " ++ strFromInt (length out) ++ " instrs", if hasRaxImm 3 out then "" else "cleanup kept imm: rax mov dropped"]
+
+-- | rax 已死时折叠照旧发生：`mov rax, [slot]; mov r11, rax` → `mov r11, [slot]`。
+cleanupFoldProblems : List String
+cleanupFoldProblems =
+  case cleanup [IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 0)), IMov (OpReg R11) (OpReg Rax), IMov (OpMem Rbp (nativeSlotOff 1)) (OpReg R11)] of
+    [IMov (OpReg R11) (OpMem Rbp o), IMov (OpMem Rbp _) (OpReg R11)] =>
+      if o == nativeSlotOff 0 then [] else ["cleanup fold: wrong slot " ++ strFromInt o]
+    is => ["cleanup fold: " ++ strFromInt (length is) ++ " instrs"]
+
+cleanupImmFoldProblems : List String
+cleanupImmFoldProblems =
+  case cleanup [IMov (OpReg Rax) (OpImm 3), IMov (OpReg R11) (OpReg Rax), IMov (OpMem Rbp (nativeSlotOff 1)) (OpReg R11)] of
+    [IMov (OpReg R11) (OpImm 3), IMov (OpMem Rbp _) (OpReg R11)] => []
+    is => ["cleanup imm fold: " ++ strFromInt (length is) ++ " instrs"]
+
+hasRaxLoad : Int -> List Instr -> Bool
+hasRaxLoad off instrs = foldl (\acc, i => acc || isRaxLoad off i) False instrs
+
+isRaxLoad : Int -> Instr -> Bool
+isRaxLoad off (IMov (OpReg Rax) (OpMem Rbp o)) = o == off
+isRaxLoad _ _ = False
+
+hasRaxImm : Int -> List Instr -> Bool
+hasRaxImm n instrs = foldl (\acc, i => acc || isRaxImm n i) False instrs
+
+isRaxImm : Int -> Instr -> Bool
+isRaxImm n (IMov (OpReg Rax) (OpImm k)) = k == n
+isRaxImm _ _ = False
