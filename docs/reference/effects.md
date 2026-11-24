@@ -234,7 +234,7 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
 | `Base.Effect.Core` | `Row(..)`、`Named`、`Eff`、`Member(..)`/`rowRem`、内建 `Functor`/`Applicative`/`Monad (Eff r)`（`do`/`>>=`/`>>`，不提供 `bindEff`/`pureEff`）、`sendCore`/`handleCore`/`handleCoreLin`、`handleWith`/`handleWithAt` + `EffSig`/`sigFn`/`sigOf`/`resIdx`（`handle` 语法的两个降级目标：handler 类型显式、效应签名作擦除量；行首条目版用于 comp 行未具体化）、`Cont`/`mkCont`/`resumeCont`、`bracket`/`finally`、`weaken`、`joinEff`/`raise`、`runPure` |
 | `Base.Effect.Reader` | `ReaderOp s` + `Ask`；`ask`/`handleReader`；实例名并进标签（`Named "counter" (ReaderOp Int)`） |
 | `Base.Effect.State` | `StateOp s` + `Get`/`Put`；`get`/`put`/`handleState`（answer `s -> Pair a s` 线程状态） |
-| `Base.Effect.MutableRef` | 命名可变单元（原地读写，不是状态线程化）：行条目 `Named n (MutableRefOp a)` 是唯一语言级表示；`withMutableRef n init body` 引入单元、`withMutableRefPure` 是纯端点；`read`/`write` 的实例名是隐式 `String`（`read@x` 消歧）。没有句柄值，单元只在编译期名字→运行时参数绑定里存在：精化器把调用改写成 `@vuna@mrefReadOp`/`@vuna@mrefWriteOp`，签名里出现具体 `MutableRefOp` 条目时自动补 `{@vuna@cell@n : Cell a}` 参数（跨函数传递）。逃逸由 `Member` 约束挡住（闭包进更窄行 → 无实例），`withMutableRef` 结果行删掉条目。见 §8.8 |
+| `Base.Effect.MutRef` | 命名可变单元（原地读写，不是状态线程化）：行条目 `Named n (MutRefOp a)` 是唯一语言级表示；`withMutRef n init body` 引入单元、`withMutRefPure` 是纯端点；`read`/`write` 的实例名是隐式 `String`（`read@x` 消歧）。没有句柄值，单元只在编译期名字→运行时参数绑定里存在：精化器把调用改写成 `@vuna@mrefReadOp`/`@vuna@mrefWriteOp`，签名里出现具体 `MutRefOp` 条目时自动补 `{@vuna@cell@n : Cell a}` 参数（跨函数传递）。逃逸由 `Member` 约束挡住（闭包进更窄行 → 无实例），`withMutRef` 结果行删掉条目。见 §8.8 |
 | `Base.Effect.Fs` | 宿主-backed Fs 效应（完整 fs 面；标签 `FsOp`，实例名并进标签，如 `Named "real" FsOp`）：`ReadFile`/`ReadFileRange`/`WriteFile`/`WriteFileAtomic`/`ReadDir`/`IsDirectory`/`MakeDir`/`RemoveFile`/`FileExists`/`FileMtime`/`FileSize`（结果索引在构造子上）；`fsReadFile n`/`fsReadFileRange n`/`fsWriteFile n`/…/`fsFileCursor`（按块读文件，配 `Base.Effect.Cursor`）/`handleFs n`（泛型）/`handleFsHost n`（answer `Eff []`，`runFs = joinEff ∘ handleFsHost`）；真实 handler 用 `@vuna@host@try*` 原语（`WriteFile` 的结果索引是 `Nat`），宿主失败抛 `FsErrorOp`，`runFsError` 可局部收成 `Result`；`fsFileSize`/`fsFileMtime` 返回 `Maybe`（取不到 = 无值，不是 0）；mock/real 可并存（`dt_base/40`） |
 | `Base.Effect.Console` | console 标签 `ConsoleOp`（实例名并进标签，如 `ConsoleOp@mock`/`ConsoleOp@real`）：`Print`/`EPrint`；`consolePrint`/`consoleEprint`/`handleConsole`/`handleConsoleHost`（真实 handler 用 `prim_eff_print`/`prim_eff_eprint`，`Print` 的结果索引是 `Nat`）；写失败（EPIPE 等）返回 0、不崩进程 |
 | `Base.Effect.Clock` | clock 标签 `ClockOp`：`Now`（微秒时间戳）/`SleepMicros`；`clockNow`/`clockSleepMicros`/`handleClock`/`handleClockHost`（真实 handler 用 `effTimeUs` 与编译器原生 `prim_eff_sleep`） |
@@ -395,51 +395,51 @@ net 的阻塞操作有对应的超时变体：`netAcceptWithin` / `netRecvWithin
 剩余边界：没有异步/多连接/TLS（非目标）；超时只覆盖单次 accept/read/write，
 没有全局 deadline——见 [debt.md](debt.md) D90。
 
-### 8.8 局部可变：`Base.Effect.MutableRef`
+### 8.8 局部可变：`Base.Effect.MutRef`
 
-`Eff []` 不是「无副作用」的许可证，但也不是局部可变的唯一落点。`MutableRef` 提供
+`Eff []` 不是「无副作用」的许可证，但也不是局部可变的唯一落点。`MutRef` 提供
 **命名单元的原地读写**，外部签名仍然纯：
 
 ```vuna
 count : Eff [] Int
 count =
-  MutableRef.withMutableRefPure "acc" 0 (
+  MutRef.withMutRefPure "acc" 0 (
       do
-        MutableRef.write 41
-        x <- MutableRef.read
-        MutableRef.write (x + 1)
-        MutableRef.read
+        MutRef.write 41
+        x <- MutRef.read
+        MutRef.write (x + 1)
+        MutRef.read
     )                                  -- 42
 ```
 
 形状：
 
 ```vuna
-data MutableRefOp : Type -> Type -> Type where
-  Read  : {a : Type} -> MutableRefOp a a
-  Write : {a : Type} -> a -> MutableRefOp a Unit     -- 结果索引 Unit
+data MutRefOp : Type -> Type -> Type where
+  Read  : {a : Type} -> MutRefOp a a
+  Write : {a : Type} -> a -> MutRefOp a Unit     -- 结果索引 Unit
 
 read  : {n : String} -> ... -> Eff r a
 write : {n : String} -> ... -> a -> Eff r Unit
-withMutableRef     : (n : String) -> a -> Eff (Named n (MutableRefOp a) :: r) b -> Eff r b
-withMutableRefPure : (n : String) -> a -> Eff [Named n (MutableRefOp a)] b -> b
+withMutRef     : (n : String) -> a -> Eff (Named n (MutRefOp a) :: r) b -> Eff r b
+withMutRefPure : (n : String) -> a -> Eff [Named n (MutRefOp a)] b -> b
 ```
 
-- **行条目就是表示**：`Named n (MutableRefOp a)` 同时带实例名与载荷类型；没有
+- **行条目就是表示**：`Named n (MutRefOp a)` 同时带实例名与载荷类型；没有
   `Cell a` 这样的句柄值，所以没有东西能带着单元逃出作用域。
-- **单元是编译期绑定**：`withMutableRef "x" init body` 在精化期展开成
+- **单元是编译期绑定**：`withMutRef "x" init body` 在精化期展开成
   `@vuna@mrefWith "x" init (\@vuna@cell@x => body)`；`read`/`write` 的调用点改写成
   `@vuna@mrefReadOp @x @vuna@cell@x` / `@vuna@mrefWriteOp @x @vuna@cell@x v`，
   运行时只剩三个隐藏原语（OCaml `ref` / wasm `$rt_*Ref` / native heap cell），
   **没有 handler 派发、没有名字查找**。
-- **跨函数**：签名里出现具体 `MutableRefOp` 条目的函数，精化器自动补
+- **跨函数**：签名里出现具体 `MutRefOp` 条目的函数，精化器自动补
   `{@vuna@cell@x : @vuna@Cell a}` 参数（RigOmega 运行时值）；调用点按 binder 名从
   作用域取单元传进去。名字不匹配 → `TC_CellNotInScope`。
-- **逃逸**：`read`/`write` 的改写仍带 `Member (Named n (MutableRefOp a)) r` 约束，
-  所以把写操作捕获进 `Eff []` 的闭包会因「找不到实例」被拒；`withMutableRef` 的
+- **逃逸**：`read`/`write` 的改写仍带 `Member (Named n (MutRefOp a)) r` 约束，
+  所以把写操作捕获进 `Eff []` 的闭包会因「找不到实例」被拒；`withMutRef` 的
   结果类型也不含该条目（`@vuna@effDropHead`）。
 - **唯一性**：签名里的 concrete 行前缀按 `(族头, 实例名)` 查重
-  （`TC_DuplicateInstance`）；`withMutableRef` 嵌套同名也走同一条错误。
+  （`TC_DuplicateInstance`）；`withMutRef` 嵌套同名也走同一条错误。
 - **消歧**：同一作用域两个同载荷单元时，省略名字报 `TC_AmbiguousInstance`，
   用 `read@a` / `write@a` 指定。
 - 名称必须是字符串字面量（`TC_CellNameNotLiteral`）。

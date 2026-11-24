@@ -1,8 +1,0 @@
--- MutableRef：闭包把写操作捕获进 `Eff []` 行时，单元条目的 `Member` 约束不成立（逃逸被拒）。
-import Base.Effect.MutableRef as MutableRef
-import Base.Effect.Types
-import Base.Trait.Monad
-import Base.Data.Unit
-
-leak : Unit -> Eff [] Unit
-leak = MutableRef.withMutableRefPure "x" 0 (pure (\_ => MutableRef.write@x 1))

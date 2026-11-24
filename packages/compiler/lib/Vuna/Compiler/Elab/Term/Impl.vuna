@@ -15,7 +15,7 @@ import Vuna.Compiler.Elab.Coverage
 import Vuna.Compiler.Elab.Match
 import Vuna.Compiler.Elab.Meta
 import Vuna.Compiler.Elab.MetaSpans
-import Vuna.Compiler.Elab.Mref
+import Vuna.Compiler.Elab.MutRef
 import Vuna.Compiler.Elab.Prelude
 import Vuna.Compiler.Elab.Records
 import Vuna.Compiler.Base.Intrinsics
@@ -555,7 +555,7 @@ appAtCallExpr (EApp (EVar _ _) (f :: nm :: rest) sp) =
 appAtCallExpr _ = icInternal "malformed @ marker"
 
 -- ---------------------------------------------------------------
--- `Base.Effect.MutableRef`：用户面声明 → 内部入口
+-- `Base.Effect.MutRef`：用户面声明 → 内部入口
 -- ---------------------------------------------------------------
 -- 作用域里的单元 binder（`@vuna@cell@x`）→ 实例名列表（最近绑定在前）。
 mrefCellNames : Ctx -> List String
@@ -583,7 +583,7 @@ mrefResolveCell ctx Nothing sp =
         text = join ", " ns
       in tcErr2 sp (AmbiguousInstance "mutable ref" text) "mutable ref" text
 
--- 识别 MutableRef 的用户面声明并给出改写后的表达式。
+-- 识别 MutRef 的用户面声明并给出改写后的表达式。
 mrefRewriteExpr : Ctx -> Expr -> Maybe (Check Expr)
 mrefRewriteExpr ctx (EVar name sp) = mrefRewriteCall ctx (rnameKey name) [] sp
 mrefRewriteExpr ctx (EApp (EVar name _) args sp) = mrefRewriteCall ctx (rnameKey name) args sp

@@ -1,0 +1,12 @@
+-- MutRef：`withMutRef` 的名字必须是字符串字面量。
+import Base.Effect.MutRef as MutRef
+import Base.Effect.Types
+import Base.Trait.Monad
+
+bad : String -> Int
+bad n =
+  MutRef.withMutRefPure n 0 (
+      do
+        _ <- MutRef.write 1
+        MutRef.read@n
+    )

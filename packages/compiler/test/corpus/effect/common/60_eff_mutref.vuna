@@ -1,0 +1,12 @@
+-- MutRef：命名单元的原地读写，作用域结束时条目消失、最终状态丢弃。
+import Base.Effect.MutRef as MutRef
+
+main : Int
+main =
+  MutRef.withMutRefPure "acc" 0 (
+      do
+        MutRef.write 41
+        x <- MutRef.read
+        MutRef.write (x + 1)
+        MutRef.read
+    )

@@ -1,0 +1,22 @@
+-- MutRef：循环里原地累加，每次 write 改的是同一块存储。
+import Base.Effect.MutRef as MutRef
+import Base.Effect.Types
+import Base.Data.Nat as Nat
+
+loop : Nat -> Eff [Named "sum" (MutRefOp Int)] Int
+loop n =
+  case n of
+    Zero => pure 0
+    Succ m =>
+      do
+        s <- MutRef.read
+        MutRef.write (s + 1)
+        loop m
+
+main : Int
+main =
+  MutRef.withMutRefPure "sum" 0 (
+      do
+        _ <- loop (natFromInt 1000)
+        MutRef.read
+    )

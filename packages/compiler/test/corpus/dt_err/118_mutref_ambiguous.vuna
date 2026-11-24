@@ -1,0 +1,14 @@
+-- MutRef：两个同类型单元时省略实例名报 TC_AmbiguousInstance。
+import Base.Effect.MutRef as MutRef
+import Base.Effect.Types
+import Base.Trait.Monad
+
+bad : Int
+bad =
+  MutRef.withMutRefPure "a" 0 (
+      MutRef.withMutRef "b" 0 (
+          do
+            _ <- MutRef.write 1
+            MutRef.read
+        )
+    )

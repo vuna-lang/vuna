@@ -840,7 +840,7 @@ isStringImplicitDomain ec dom =
     VNeutral (NGlobal g []) => g == strTypeName
     _ => False
 
--- | 编译器合成的单元参数域：`@vuna@Cell a`（隐藏类型，只能由 MutableRef 精化合成）。
+-- | 编译器合成的单元参数域：`@vuna@Cell a`（隐藏类型，只能由 MutRef 精化合成）。
 export isCellDomain : Ec -> Value -> Bool
 isCellDomain ec dom =
   case forceVal ec dom of

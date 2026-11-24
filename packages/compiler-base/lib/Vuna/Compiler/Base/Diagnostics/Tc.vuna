@@ -110,9 +110,9 @@ export data TcErr(..) : Nat -> Type where
   -- `perform` / `handle` 的 op 族不满足降级协议：必须以结果类型为最后索引
   -- （`<Op> : params… -> Type -> Type`），且显式参数都是类型。
   HandleFamilyUnsupported : String -> TcErr 1
-  -- MutableRef 的单元名字在作用域里找不到（`read`/`write`/跨函数传参）。
+  -- MutRef 的单元名字在作用域里找不到（`read`/`write`/跨函数传参）。
   CellNotInScope : String -> TcErr 1
-  -- `withMutableRef` 的名字不是字符串字面量。
+  -- `withMutRef` 的名字不是字符串字面量。
   CellNameNotLiteral : String -> TcErr 1
   -- arity 2
   AmbiguousCtor : String -> String -> TcErr 2
@@ -354,8 +354,8 @@ tcTemplate (EffResFamilyMissing _) =
 tcTemplate (HandleFamilyUnsupported _) =
   "effect syntax (perform / handle) supports only op families indexed by their result type (<Op> : params -> Type -> Type with type-valued params); got <0>"
 tcTemplate (CellNotInScope _) =
-  "mutable ref <0> is not in scope (introduce it with withMutableRef, or pass the same name through the row)"
-tcTemplate (CellNameNotLiteral _) = "withMutableRef requires a string literal name"
+  "mutable ref <0> is not in scope (introduce it with withMutRef, or pass the same name through the row)"
+tcTemplate (CellNameNotLiteral _) = "withMutRef requires a string literal name"
 tcTemplate (AmbiguousCtor _ _) = "ambiguous constructor <0> (candidates: <1>)"
 tcTemplate (AmbiguousName _ _) = "ambiguous name <0> (candidates: <1>)"
 tcTemplate (AmbiguousInstance _ _) = "ambiguous instance for <0> (candidates: <1>)"
@@ -846,11 +846,11 @@ tcChunk12 =
     TcEntry
       (tcCode (CellNotInScope ""))
       (tcTemplate (CellNotInScope ""))
-      "MutableRef 的单元不在作用域里",
+      "MutRef 的单元不在作用域里",
     TcEntry
       (tcCode (CellNameNotLiteral ""))
       (tcTemplate (CellNameNotLiteral ""))
-      "withMutableRef 的名字不是字符串字面量"
+      "withMutRef 的名字不是字符串字面量"
   ]
 
 export tcAll : List TcEntry

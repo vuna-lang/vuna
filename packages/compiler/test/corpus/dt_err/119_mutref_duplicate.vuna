@@ -1,0 +1,14 @@
+-- MutRef：同名嵌套引入在 concrete 行前缀里重复，报 TC_DuplicateInstance。
+import Base.Effect.MutRef as MutRef
+import Base.Effect.Types
+import Base.Trait.Monad
+
+bad : Int
+bad =
+  MutRef.withMutRefPure "x" 0 (
+      MutRef.withMutRef "x" 0 (
+          do
+            _ <- MutRef.write 1
+            MutRef.read@x
+        )
+    )

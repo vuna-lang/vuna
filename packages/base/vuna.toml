@@ -52,7 +52,7 @@ modules = [
   "Base.Effect.Exn",
   "Base.Effect.Fs",
   "Base.Effect.Lazy",
-  "Base.Effect.MutableRef",
+  "Base.Effect.MutRef",
   "Base.Effect.Net",
   "Base.Effect.Process",
   "Base.Effect.Pure",

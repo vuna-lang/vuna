@@ -40,7 +40,7 @@ modules = [
   "Vuna.Compiler.Elab.Match",
   "Vuna.Compiler.Elab.Meta",
   "Vuna.Compiler.Elab.MetaSpans",
-  "Vuna.Compiler.Elab.Mref",
+  "Vuna.Compiler.Elab.MutRef",
   "Vuna.Compiler.Elab.Prelude",
   "Vuna.Compiler.Elab.Records",
   "Vuna.Compiler.Elab.Representation",

@@ -1,8 +1,8 @@
--- | `Base.Effect.MutableRef` 的编译期部分：名字常量、签名里的单元参数合成、
--- 以及用户面声明（`read`/`write`/`withMutableRef`）到内部入口的改写。
+-- | `Base.Effect.MutRef` 的编译期部分：名字常量、签名里的单元参数合成、
+-- 以及用户面声明（`read`/`write`/`withMutRef`）到内部入口的改写。
 --
 -- 这一层只做纯结构操作（Term / Expr 的形状），不碰求解器状态。
-module Vuna.Compiler.Elab.Mref where
+module Vuna.Compiler.Elab.MutRef where
 
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Base.Diagnostics
@@ -17,37 +17,37 @@ import Vuna.Compiler.Frontend.Reserved
 -- ---------------------------------------------------------------
 -- | 模块名。
 export mrefModuleName : String
-mrefModuleName = "Base.Effect.MutableRef"
+mrefModuleName = "Base.Effect.MutRef"
 
--- | 操作族：`MutableRefOp a i`。
+-- | 操作族：`MutRefOp a i`。
 export mrefOpName : String
-mrefOpName = "Base.Effect.MutableRef.MutableRefOp"
+mrefOpName = "Base.Effect.MutRef.MutRefOp"
 
 -- | 用户面声明（精化器识别后改写，不进运行时）。
 export mrefReadName : String
-mrefReadName = "Base.Effect.MutableRef.read"
+mrefReadName = "Base.Effect.MutRef.read"
 
 export mrefWriteName : String
-mrefWriteName = "Base.Effect.MutableRef.write"
+mrefWriteName = "Base.Effect.MutRef.write"
 
 export mrefWithName : String
-mrefWithName = "Base.Effect.MutableRef.withMutableRef"
+mrefWithName = "Base.Effect.MutRef.withMutRef"
 
 export mrefWithPureName : String
-mrefWithPureName = "Base.Effect.MutableRef.withMutableRefPure"
+mrefWithPureName = "Base.Effect.MutRef.withMutRefPure"
 
 -- | 内部入口（`@vuna@` 前缀；用户源码写不出）。
 export mrefReadOpName : String
-mrefReadOpName = "Base.Effect.MutableRef.cellReadOp"
+mrefReadOpName = "Base.Effect.MutRef.cellReadOp"
 
 export mrefWriteOpName : String
-mrefWriteOpName = "Base.Effect.MutableRef.cellWriteOp"
+mrefWriteOpName = "Base.Effect.MutRef.cellWriteOp"
 
 export mrefWithOpName : String
-mrefWithOpName = "Base.Effect.MutableRef.cellWith"
+mrefWithOpName = "Base.Effect.MutRef.cellWith"
 
 export mrefWithPureOpName : String
-mrefWithPureOpName = "Base.Effect.MutableRef.cellWithPure"
+mrefWithPureOpName = "Base.Effect.MutRef.cellWithPure"
 
 -- | 单元类型（隐藏）。
 export mrefCellTypeName : String
@@ -163,7 +163,7 @@ mrefEntryOf e =
         Nothing
     Nothing => Nothing
 
--- | 签名里的单元参数：`MutableRefOp` 条目的 `(实例名, 载荷项)`；依赖载荷跳过（v1 只要闭合载荷）。
+-- | 签名里的单元参数：`MutRefOp` 条目的 `(实例名, 载荷项)`；依赖载荷跳过（v1 只要闭合载荷）。
 export mrefCellParamsOf : Term -> List (String, Term)
 mrefCellParamsOf ty = mrefCellParamsGo (mrefRowEntriesOfTy ty) []
 
@@ -230,7 +230,7 @@ mrefWriteExpr sp cell v =
     [EApp (EVar (RIntrinsic instArgSyntax) sp) [EStr cell sp] sp, EVar (RLocal (mrefCellBinder cell)) sp, v]
     sp
 
--- | `withMutableRef n init body` 的改写。
+-- | `withMutRef n init body` 的改写。
 export mrefWithExpr : Span -> Expr -> Expr -> Expr -> String -> Expr
 mrefWithExpr sp nExpr init body cellName =
   EApp
@@ -238,7 +238,7 @@ mrefWithExpr sp nExpr init body cellName =
     [EApp (EVar (RGlobal mrefModuleName "cellWith") sp) [nExpr, init, ELam [(mrefCellBinder cellName, spanEmpty)] body sp] sp]
     sp
 
--- | `withMutableRefPure n init body` 的改写。
+-- | `withMutRefPure n init body` 的改写。
 export mrefWithPureExpr : Span -> Expr -> Expr -> Expr -> String -> Expr
 mrefWithPureExpr sp nExpr init body cellName =
   EApp
@@ -246,7 +246,7 @@ mrefWithPureExpr sp nExpr init body cellName =
     [EApp (EVar (RGlobal "Base.Effect.Core" "dropEffHead") sp) [EApp (EVar (RGlobal mrefModuleName "cellWithPure") sp) [nExpr, init, ELam [(mrefCellBinder cellName, spanEmpty)] body sp] sp] sp]
     sp
 
--- | 字面量名字（`withMutableRef` 的引入名必须是编译期常量）。
+-- | 字面量名字（`withMutRef` 的引入名必须是编译期常量）。
 export stringLitOf : Expr -> Maybe String
 stringLitOf (EStr s _) = Just s
 stringLitOf _ = Nothing

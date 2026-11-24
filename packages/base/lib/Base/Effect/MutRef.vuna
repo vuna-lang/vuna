@@ -1,0 +1,55 @@
+-- | 局部可变的命名单元：行条目 `Named n (MutRefOp a)` 是唯一的语言级表示。
+--
+-- 单元是 handler 私有的运行时存储，不出现在任何用户可见的类型里：没有句柄值，
+-- 因此没有东西能带着它逃出 `withMutRef` 的作用域。读写都是原地操作（同一块存储），
+-- 不是函数式 state 的线程化。
+--
+-- 用户面的 `read` / `write` / `withMutRef` 是**声明**（没有运行时实现）：精化器在
+-- 编译期把实例名绑定到作用域里的单元，并把调用改写成下面 `@vuna@` 入口。
+-- `read@name` / `write@name` 用实例名覆盖消歧；省略名字时取作用域里唯一的单元。
+module Base.Effect.MutRef where
+
+import Base.Effect.Core
+import Base.Effect.Types
+import Base.Trait.Monad
+import Base.Data.Unit
+
+-- | 单元操作：`Read` 的结果是单元的值类型 `a`，`Write` 无有意义返回值（`Unit`）。
+export data MutRefOp(..) : Type -> Type -> Type where
+  -- | 读当前值。
+  Read : {a : Type} -> MutRefOp a a
+  -- | 写新值（结果 `Unit`）。
+  Write : {a : Type} -> a -> MutRefOp a Unit
+
+-- | 读作用域里的单元 `n`；行里需要 `Member (Named n (MutRefOp a)) r` 证明。
+export axiom read : {n : String} -> {a : Type} -> {r : Row} -> {w : Member (Named n (MutRefOp a)) r} -> Eff r a
+
+-- | 写作用域里的单元 `n`；结果 `Unit`。
+export axiom write : {n : String} -> {a : Type} -> {r : Row} -> {w : Member (Named n (MutRefOp a)) r} -> a -> Eff r Unit
+
+-- | 引入一个存 `a` 的作用域：初始值由调用方给，body 结束后条目消失、最终值丢弃。
+export axiom withMutRef : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> a -> Eff (Named n (MutRefOp a) :: r) b -> Eff r b
+
+-- | 纯端点：body 只剩这一个条目，执行完丢弃最终状态。
+export axiom withMutRefPure : {a : Type} -> {b : Type} -> (n : String) -> a -> Eff [Named n (MutRefOp a)] b -> b
+
+-- | 内部入口：精化器把 `read` 改写成它（单元由编译期绑定给出）。
+-- 行约束仍然保留：闭包把单元捕获进更窄的行（例如 `Eff []`）时类型检查会拒绝。
+export cellReadOp : {n : String} -> {a : Type} -> {r : Row} -> {w : Member (Named n (MutRefOp a)) r} -> (@vuna@Cell a) -> Eff r a
+cellReadOp c = raise (@vuna@prim_mrefRead c)
+
+-- | 内部入口：精化器把 `write` 改写成它。
+export cellWriteOp : {n : String} -> {a : Type} -> {r : Row} -> {w : Member (Named n (MutRefOp a)) r} -> (@vuna@Cell a) -> a -> Eff r Unit
+cellWriteOp c v =
+  do
+    _ <- raise (@vuna@prim_mrefWrite c v)
+    pure MkUnit
+
+-- | 内部入口：精化器把 `withMutRef` 改写成它；body 拿到编译期绑定的单元。
+-- 结果行保留被引入的条目，由精化器用 `@vuna@effDropHead` 收掉（运行时恒等）。
+export cellWith : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> a -> ((@vuna@Cell a) -> Eff (Named n (MutRefOp a) :: r) b) -> Eff (Named n (MutRefOp a) :: r) b
+cellWith n init body = body (@vuna@prim_mrefNew init)
+
+-- | 内部入口：`withMutRefPure` 的降级目标（结果行由精化器收口）。
+export cellWithPure : {a : Type} -> {b : Type} -> (n : String) -> a -> ((@vuna@Cell a) -> Eff [Named n (MutRefOp a)] b) -> Eff [Named n (MutRefOp a)] b
+cellWithPure n init body = body (@vuna@prim_mrefNew init)

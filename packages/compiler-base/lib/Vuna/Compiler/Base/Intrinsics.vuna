@@ -44,7 +44,7 @@ export data IType(..) : Type where
   IVar : String -> IType
   IArray : IType -> IType
   IRef : IType -> IType
-  -- `@vuna@Cell a`：`Base.Effect.MutableRef` 私有的可变单元类型（源码写不出）。
+  -- `@vuna@Cell a`：`Base.Effect.MutRef` 私有的可变单元类型（源码写不出）。
   ICell : IType -> IType
   -- 隐式类型参数绑定（`{a : Type} -> ...`）；不进函数 arity。
   IPi : String -> IType -> IType
@@ -945,8 +945,8 @@ effIntrinsics : List Intrinsic
 -- 带内建效应行的宿主原语（Clock/Env/Process/Exit/Stdin/Args）。
 -- Ref / Net 的带行宿主原语。
 -- 显式效应机器的装箱/拆箱（运行时恒等；见 Base.Effect.Core.Obj）。
--- MutableRef 的私有单元原语：类型 `@vuna@Cell a` 不对用户开放，
--- 只能由精化器在 `withMutableRef` 作用域里合成引用。
+-- MutRef 的私有单元原语：类型 `@vuna@Cell a` 不对用户开放，
+-- 只能由精化器在 `withMutRef` 作用域里合成引用。
 effIntrinsics =
   [
     Intrinsic
