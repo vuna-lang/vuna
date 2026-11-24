@@ -109,7 +109,7 @@ encPatExprList xs acc = "[${strFromInt (lenOf xs)}:" :: encPatExprListGo xs acc
 encPatExprListGo : List Binding -> List String -> List String
 encPatExprListGo [] acc = acc
 encPatExprListGo (b :: rest) acc =
-  encPat b.bindPat (encBindingSig b (encExpr b.bindValue (encPatExprListGo rest acc)))
+  encPat b.bindPat (encBindingSig b (encBindingValue b.bindValue (encPatExprListGo rest acc)))
 
 -- | 绑定签名行：0 = 无，1 = 有 + 类型表达式。
 encBindingSig : Binding -> List String -> List String
@@ -117,6 +117,11 @@ encBindingSig b acc =
   case b.bindSig of
     Nothing => encTag 0 acc
     Just sig => encTag 1 (encExpr sig.sigType acc)
+
+-- | 绑定右值：0 = 普通表达式，1 = 局部函数子句组。
+encBindingValue : BindingValue -> List String -> List String
+encBindingValue (BVal e) acc = encTag 0 (encExpr e acc)
+encBindingValue (BClauses clauses) acc = encTag 1 (encClauses clauses acc)
 
 -- | `case` 分支表（编码与绑定表同形：模式 + 表达式；身份不进摘要）。
 encAltList : List Alt -> List String -> List String
@@ -249,18 +254,17 @@ encExpr (EPi name implicit qty dom cod _) acc =
   encTag 5 (encStr name (encBool implicit (encMaybeQty qty (encExpr dom (encExpr cod acc)))))
 encExpr (ELet binds body recursive _) acc =
   encTag 6 (encPatExprList binds (encExpr body (encBool recursive acc)))
-encExpr (ELocalFun clauses _) acc = encTag 7 (encClauses clauses acc)
-encExpr (ECase scrut alts _) acc = encTag 8 (encExpr scrut (encAltList alts acc))
-encExpr (EIf c t e _) acc = encTag 9 (encExpr c (encExpr t (encExpr e acc)))
-encExpr (EField base field _) acc = encTag 10 (encExpr base (encStr field acc))
-encExpr (ERecord name fields _) acc = encTag 11 (encStr name (encStrExprList fields acc))
-encExpr (ERecUpdate base fields _) acc = encTag 12 (encExpr base (encStrExprList fields acc))
-encExpr (EDo stmts _) acc = encTag 13 (encStmtList stmts acc)
-encExpr (ESectOp op _) acc = encTag 14 (encStr op acc)
-encExpr (ESectL op rhs _) acc = encTag 15 (encStr op (encExpr rhs acc))
-encExpr (ESectR lhs op _) acc = encTag 16 (encExpr lhs (encStr op acc))
-encExpr (EInterp multi parts _) acc = encTag 17 (encBool multi (encPartList parts acc))
-encExpr (EFloat raw _) acc = encTag 18 (encStr raw acc)
+encExpr (ECase scrut alts _) acc = encTag 7 (encExpr scrut (encAltList alts acc))
+encExpr (EIf c t e _) acc = encTag 8 (encExpr c (encExpr t (encExpr e acc)))
+encExpr (EField base field _) acc = encTag 9 (encExpr base (encStr field acc))
+encExpr (ERecord name fields _) acc = encTag 10 (encStr name (encStrExprList fields acc))
+encExpr (ERecUpdate base fields _) acc = encTag 11 (encExpr base (encStrExprList fields acc))
+encExpr (EDo stmts _) acc = encTag 12 (encStmtList stmts acc)
+encExpr (ESectOp op _) acc = encTag 13 (encStr op acc)
+encExpr (ESectL op rhs _) acc = encTag 14 (encStr op (encExpr rhs acc))
+encExpr (ESectR lhs op _) acc = encTag 15 (encExpr lhs (encStr op acc))
+encExpr (EInterp multi parts _) acc = encTag 16 (encBool multi (encPartList parts acc))
+encExpr (EFloat raw _) acc = encTag 17 (encStr raw acc)
 
 -- | `Ctor` 的规范编码：data 构造子：名字 / 类型 / arity；`span` 丢弃。
 encCtor : Ctor -> List String -> List String
@@ -495,17 +499,13 @@ decExpr fuel bytes =
                       Nothing => Nothing
                       Just (v3, b4) => Just (ELet v1 v2 v3 (detachedNodeRef noSpan), b4)
           7 =>
-            case decList decClause (fuel - 1) b1 of
-              Nothing => Nothing
-              Just (v1, b2) => Just (ELocalFun v1 (detachedNodeRef noSpan), b2)
-          8 =>
             case decExpr (fuel - 1) b1 of
               Nothing => Nothing
               Just (v1, b2) =>
                 case decList decAlt (fuel - 1) b2 of
                   Nothing => Nothing
                   Just (v2, b3) => Just (ECase v1 v2 (detachedNodeRef noSpan), b3)
-          9 =>
+          8 =>
             case decExpr (fuel - 1) b1 of
               Nothing => Nothing
               Just (v1, b2) =>
@@ -515,57 +515,57 @@ decExpr fuel bytes =
                     case decExpr (fuel - 1) b3 of
                       Nothing => Nothing
                       Just (v3, b4) => Just (EIf v1 v2 v3 (detachedNodeRef noSpan), b4)
-          10 =>
+          9 =>
             case decExpr (fuel - 1) b1 of
               Nothing => Nothing
               Just (v1, b2) =>
                 case decStr (fuel - 1) b2 of
                   Nothing => Nothing
                   Just (v2, b3) => Just (EField v1 v2 (detachedNodeRef noSpan), b3)
-          11 =>
+          10 =>
             case decStr (fuel - 1) b1 of
               Nothing => Nothing
               Just (v1, b2) =>
                 case decList decStrExpr (fuel - 1) b2 of
                   Nothing => Nothing
                   Just (v2, b3) => Just (ERecord v1 v2 (detachedNodeRef noSpan), b3)
-          12 =>
+          11 =>
             case decExpr (fuel - 1) b1 of
               Nothing => Nothing
               Just (v1, b2) =>
                 case decList decStrExpr (fuel - 1) b2 of
                   Nothing => Nothing
                   Just (v2, b3) => Just (ERecUpdate v1 v2 (detachedNodeRef noSpan), b3)
-          13 =>
+          12 =>
             case decList decDoStmt (fuel - 1) b1 of
               Nothing => Nothing
               Just (v1, b2) => Just (EDo v1 (detachedNodeRef noSpan), b2)
-          14 =>
+          13 =>
             case decStr (fuel - 1) b1 of
               Nothing => Nothing
               Just (v1, b2) => Just (ESectOp v1 (detachedNodeRef noSpan), b2)
-          15 =>
+          14 =>
             case decStr (fuel - 1) b1 of
               Nothing => Nothing
               Just (v1, b2) =>
                 case decExpr (fuel - 1) b2 of
                   Nothing => Nothing
                   Just (v2, b3) => Just (ESectL v1 v2 (detachedNodeRef noSpan), b3)
-          16 =>
+          15 =>
             case decExpr (fuel - 1) b1 of
               Nothing => Nothing
               Just (v1, b2) =>
                 case decStr (fuel - 1) b2 of
                   Nothing => Nothing
                   Just (v2, b3) => Just (ESectR v1 v2 (detachedNodeRef noSpan), b3)
-          17 =>
+          16 =>
             case decBool (fuel - 1) b1 of
               Nothing => Nothing
               Just (v1, b2) =>
                 case decList decInterpPart (fuel - 1) b2 of
                   Nothing => Nothing
                   Just (v2, b3) => Just (EInterp v1 v2 (detachedNodeRef noSpan), b3)
-          18 =>
+          17 =>
             case decStr (fuel - 1) b1 of
               Nothing => Nothing
               Just (v1, b2) => Just (EFloat v1 (detachedNodeRef noSpan), b2)
@@ -783,17 +783,37 @@ decBinding fuel bytes =
           Just (tag, b2) =>
             case tag of
               0 =>
-                case decExpr (fuel - 1) b2 of
+                case decBindingValue (fuel - 1) b2 of
                   Nothing => Nothing
-                  Just (e, b3) => Just ((Binding p e Nothing noNodeRef), b3)
+                  Just (v, b3) => Just ((Binding p v Nothing noNodeRef), b3)
               1 =>
                 case decExpr (fuel - 1) b2 of
                   Nothing => Nothing
                   Just (ty, b3) =>
-                    case decExpr (fuel - 1) b3 of
+                    case decBindingValue (fuel - 1) b3 of
                       Nothing => Nothing
-                      Just (e, b4) => Just ((Binding p e (Just (BindingSig ty noNodeRef)) noNodeRef), b4)
+                      Just (v, b4) => Just ((Binding p v (Just (BindingSig ty noNodeRef)) noNodeRef), b4)
               _ => Nothing
+
+-- | 解析绑定右值：0 = 普通表达式，1 = 局部函数子句组。
+decBindingValue : Int -> Cur -> Maybe (BindingValue, Cur)
+decBindingValue fuel bytes =
+  if fuel <= 0 then
+    Nothing
+  else
+    case decTag fuel bytes of
+      Nothing => Nothing
+      Just (tag, b1) =>
+        case tag of
+          0 =>
+            case decExpr (fuel - 1) b1 of
+              Nothing => Nothing
+              Just (e, b2) => Just (BVal e, b2)
+          1 =>
+            case decList decClause (fuel - 1) b1 of
+              Nothing => Nothing
+              Just (clauses, b2) => Just (BClauses clauses, b2)
+          _ => Nothing
 
 -- | 解析一个 `case` 分支；身份不进编码，解码用 `noNodeRef`。
 decAlt : Int -> Cur -> Maybe (Alt, Cur)

@@ -858,7 +858,7 @@ fmt golden 与全量 `fmt --check` 逐字节不变。
 因此树的收益只能来自**替换**而不是叠加：把 parser 的表层形式（括号 / 反引号 / 中缀链 /
 section / 模板的 `"""` 标记）交给树，让 AST 变成纯投影（`architecture-target.md` D18 的
 第 2、3 步）。`EFloat raw` 是字面量载荷而不是表层文本；`ELocalFun` 是带身份的子句组，
-降级点在 Elab。
+已收在 `BindingValue.BClauses`，降级点仍在 Elab。
 
 ### 6.3 括号表面形状（`Frontend.Surface`）
 

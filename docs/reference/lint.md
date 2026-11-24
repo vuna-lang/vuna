@@ -84,7 +84,7 @@ probe x = if x == 1 then 1 else if x == 2 then 2 else 3
 
 规则判定全部走 AST：`lintSourceWithConfig` 先 `parseSourceDetailed`（一次词法同时给出 AST、
 注释表与 token 流），再按声明遍历 `Expr`（覆盖全部构造子，
-含 `ELocalFun`；where / let 签名行由 `Binding.bindSig` 单独遍历），同时携带外层模式上下文（clause 模式列表或外层 case 的 alt
+含 `BindingValue` 的局部函数组；where / let 签名行由 `Binding.bindSig` 单独遍历），同时携带外层模式上下文（clause 模式列表或外层 case 的 alt
 模式）。需要源码原文（字面量、表达式体）时按 `Span` / token 的字节偏移直接切片
 （`exprText` / `spanText`），**不重新渲染 / 转义字符串字面量**；模式文本在 parser pattern
 span 偏移不完整时回落到行/列路径（`patText`）。程序级 fixity 也吃同一次解析的
@@ -361,5 +361,5 @@ Bool / 字面量分派同样适用：`keep b = if b then b else b` → `keep b@T
 - `--fix` 产物保证可重新 parse；不保证 `vuna fmt` 幂等（部分既有语料的期望产物保留
   lift 的换行体形态）。新增 fix 语料按 fmt 规范形态设计并验证幂等。
 - `dispatch-lift` 只处理顶层 DFun 的 clause 与 case alt 的直接体；instance 方法、
-  `where` 绑定不参与 clause 级提升（`ELocalFun` 与 `Binding.bindSig` 只做遍历）。
+  `where` 绑定不参与 clause 级提升（局部函数组 `BClauses` 与 `Binding.bindSig` 只做遍历）。
 - 规则不做类型 / 语义推理，只做语法可证的改写。

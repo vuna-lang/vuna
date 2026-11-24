@@ -516,7 +516,6 @@ startExpr fuel e =
       EApp fn args sp => minPair (startFromSpan (nodeRefSpan sp)) (minPair (startExpr (fuel - 1) fn) (startExprs (fuel - 1) args))
       EPi n implicit _ dom cod sp => minPair (startFromSpan (nodeRefSpan sp)) (minPair (startExpr (fuel - 1) dom) (startExpr (fuel - 1) cod))
       ELet binds body recFlag sp => minPair (startFromSpan (nodeRefSpan sp)) (minPair (startBinds (fuel - 1) binds) (startExpr (fuel - 1) body))
-      ELocalFun clauses sp => minPair (startFromSpan (nodeRefSpan sp)) (startLocalClauses (fuel - 1) clauses)
       ECase scrut alts sp => minPair (startFromSpan (nodeRefSpan sp)) (minPair (startExpr (fuel - 1) scrut) (startAlts (fuel - 1) alts))
       EIf c t el sp => minPair (startFromSpan (nodeRefSpan sp)) (minPair (startExpr (fuel - 1) c) (minPair (startExpr (fuel - 1) t) (startExpr (fuel - 1) el)))
       EField base f sp => minPair (startFromSpan (nodeRefSpan sp)) (startExpr (fuel - 1) base)
@@ -551,7 +550,11 @@ startFields fuel fields =
 bindingStart : Int -> Binding -> (Int, Int)
 bindingStart fuel b =
   let
-    valueStart = startExpr (fuel - 1) b.bindValue
+    valueStart =
+      case b.bindValue of
+        BVal e => startExpr (fuel - 1) e
+        BClauses clauses =>
+          minPair (startFromSpan (nodeRefSpan b.bindRef)) (startLocalClauses (fuel - 1) clauses)
     sigStart =
       case b.bindSig of
         Just sig =>
@@ -973,7 +976,6 @@ mentionsExpr fuel name e =
       EApp fn args _ => mentionsExpr (fuel - 1) name fn || mentionsExprs (fuel - 1) name args
       EPi n implicit _ dom cod _ => mentionsExpr (fuel - 1) name dom || mentionsExpr (fuel - 1) name cod
       ELet binds body recFlag _ => mentionsBinds (fuel - 1) name binds || mentionsExpr (fuel - 1) name body
-      ELocalFun clauses _ => mentionsClauses (fuel - 1) name clauses
       ECase scrut alts _ => mentionsExpr (fuel - 1) name scrut || mentionsAlts (fuel - 1) name alts
       EIf cond yes no _ => mentionsExpr (fuel - 1) name cond || mentionsExpr (fuel - 1) name yes || mentionsExpr (fuel - 1) name no
       EField base f _ => mentionsExpr (fuel - 1) name base
@@ -1021,9 +1023,14 @@ mentionsFields fuel name fields =
 -- | 内部：单条绑定的值或签名类型是否引用该名字。
 bindingMentions : Int -> String -> Binding -> Bool
 bindingMentions fuel name b =
-  mentionsExpr (fuel - 1) name b.bindValue || case b.bindSig of
+  bindingValueMentions (fuel - 1) name b.bindValue || case b.bindSig of
       Just sig => mentionsExpr (fuel - 1) name sig.sigType
       Nothing => False
+
+-- | 内部：绑定右值是否引用该名字（局部函数组逐 clause 查）。
+bindingValueMentions : Int -> String -> BindingValue -> Bool
+bindingValueMentions fuel name (BVal e) = mentionsExpr (fuel - 1) name e
+bindingValueMentions fuel name (BClauses clauses) = mentionsClauses (fuel - 1) name clauses
 
 -- | 内部：let 绑定右值是否引用该名字。
 mentionsBinds : Int -> String -> List Binding -> Bool
@@ -1553,7 +1560,10 @@ liftFindings src lane (ELet binds body recFlag sp) =
       [b] =>
         case b.bindSig of
           Just _ => []
-          Nothing => liftLet src lane (nodeRefSpan sp) b.bindPat b.bindValue body
+          Nothing =>
+            case b.bindValue of
+              BVal value => liftLet src lane (nodeRefSpan sp) b.bindPat value body
+              BClauses _ => []
       _ => []
   else
     []
@@ -1675,7 +1685,7 @@ caseToClauses src headLine name pats (ECase scrut alts sp) singleClause =
 caseToClauses src headLine name pats _ singleClause = []
 
 -- ---------------------------------------------------------------
--- AST 遍历（覆盖全部 Expr 构造子，含 ELocalFun）
+-- AST 遍历（覆盖全部 Expr 构造子；局部函数组在 `BindingValue` 里单独遍历）
 --
 -- 相互递归组统一把 fuel 放在第 0 形参并 `if fuel <= 0` 守卫：这是编译器
 -- `tryFuelThread` 判据能接受的形态（每个环至少一条 `fuel - k` 严格下降边）。
@@ -1759,7 +1769,6 @@ walkExprGo allow fuel src e =
           Nothing => if allow then walkAppList allow (fuel - 1) src e else append (walkExprGo allow (fuel - 1) src fn) (walkExprs allow (fuel - 1) src args)
       EPi name implicit _ dom cod _ => append (walkExprGo allow (fuel - 1) src dom) (walkExprGo allow (fuel - 1) src cod)
       ELet binds body recFlag _ => append (walkBinds allow (fuel - 1) src binds) (walkExprGo allow (fuel - 1) src body)
-      ELocalFun clauses _ => walkLocalClauses allow (fuel - 1) src clauses
       ECase scrut alts _ => append (walkExprGo allow (fuel - 1) src scrut) (walkAlts allow (fuel - 1) src alts)
       EIf cond yes no _ => append (constantIfFindings src e) (walkIf allow (fuel - 1) src e cond yes no)
       EField base f _ => walkExprGo allow (fuel - 1) src base
@@ -1839,12 +1848,17 @@ walkFields allow fuel src fields =
 walkBinding : Bool -> Int -> LintSrc -> Binding -> List Finding
 walkBinding allow fuel src b =
   append (walkPairPat allow (fuel - 1) src b.bindPat) (
-      append (walkExprGo allow (fuel - 1) src b.bindValue) (
+      append (walkBindingValue allow (fuel - 1) src b.bindValue) (
           case b.bindSig of
             Just sig => walkExprGo allow (fuel - 1) src sig.sigType
             Nothing => []
         )
     )
+
+-- | 内部：绑定右值（普通表达式递归；局部函数组逐 clause 查）。
+walkBindingValue : Bool -> Int -> LintSrc -> BindingValue -> List Finding
+walkBindingValue allow fuel src (BVal e) = walkExprGo allow (fuel - 1) src e
+walkBindingValue allow fuel src (BClauses clauses) = walkLocalClauses allow (fuel - 1) src clauses
 
 -- | 内部：遍历 let 绑定右值与绑定模式。
 walkBinds : Bool -> Int -> LintSrc -> List Binding -> List Finding
@@ -2342,7 +2356,6 @@ walkTypeSyntax fuel src e =
                   Nothing => append (walkTypeSyntax (fuel - 1) src fn) (walkTypeSyntaxExprs (fuel - 1) src args)
       EPi name implicit qty dom cod _ => append (walkTypeSyntax (fuel - 1) src dom) (walkTypeSyntax (fuel - 1) src cod)
       ELet binds body recFlag _ => append (walkTypeSyntaxBinds (fuel - 1) src binds) (walkTypeSyntax (fuel - 1) src body)
-      ELocalFun clauses _ => walkTypeSyntaxLocalClauses (fuel - 1) src clauses
       ECase scrut alts _ => append (walkTypeSyntax (fuel - 1) src scrut) (walkTypeSyntaxAlts (fuel - 1) src alts)
       EIf cond yes no _ => append (walkTypeSyntax (fuel - 1) src cond) (append (walkTypeSyntax (fuel - 1) src yes) (walkTypeSyntax (fuel - 1) src no))
       EField base f _ => walkTypeSyntax (fuel - 1) src base
@@ -2378,11 +2391,17 @@ walkTypeSyntaxFields fuel src fields =
 -- | 内部：单条绑定的值 + 可选签名类型（类型位置语法归一）。
 walkTypeSyntaxBinding : Int -> LintSrc -> Binding -> List Finding
 walkTypeSyntaxBinding fuel src b =
-  append (walkTypeSyntax (fuel - 1) src b.bindValue) (
+  append (walkTypeSyntaxBindingValue (fuel - 1) src b.bindValue) (
       case b.bindSig of
         Just sig => walkTypeSyntax (fuel - 1) src sig.sigType
         Nothing => []
     )
+
+-- | 内部：绑定右值的类型位置语法归一（局部函数组逐 clause 查）。
+walkTypeSyntaxBindingValue : Int -> LintSrc -> BindingValue -> List Finding
+walkTypeSyntaxBindingValue fuel src (BVal e) = walkTypeSyntax (fuel - 1) src e
+walkTypeSyntaxBindingValue fuel src (BClauses clauses) =
+  walkTypeSyntaxLocalClauses (fuel - 1) src clauses
 
 -- | 内部：遍历 let 绑定右值的类型位置语法归一。
 walkTypeSyntaxBinds : Int -> LintSrc -> List Binding -> List Finding

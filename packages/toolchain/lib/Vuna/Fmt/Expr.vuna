@@ -637,8 +637,6 @@ inlineBareGo fuel env at minPrec e =
                   [] => Just "{ ${b} }"
                   _ => Just "{ ${b} | ${joinComma ss} }"
       EDo stmts _ => Nothing
-      -- 局部函数组只作为 let/where 绑定值出现，由 `renderLetBindingGo` 展开成多子句。
-      ELocalFun clauses _ => Nothing
       ESectOp op _ => Just "(${op})"
       ESectL op inner _ =>
         case inlinePrecGo (fuel - 1) env at 0 inner of
@@ -928,8 +926,6 @@ exprDocBare fuel env at e =
       ERecord name fields _ => recordDoc (fuel - 1) env at name fields
       ERecUpdate base fields _ => recUpdateDoc (fuel - 1) env at base fields
       EDo stmts _ => appendDoc (text "do") (nest 2 (appendDoc hard (stmtsDoc (fuel - 1) env at stmts)))
-      -- 局部函数组只作为 let / where 绑定值出现，由 `bindingBodyDoc` 展开成多子句。
-      ELocalFun clauses _ => empty
       ESectOp op _ => text "(${op})"
       ESectL op inner _ => group (appendDoc (text "(${op} ") (appendDoc (exprDoc (fuel - 1) env at inner) (text ")")))
       ESectR inner op _ => group (appendDoc (text "(") (appendDoc (exprDoc (fuel - 1) env at inner) (text " ${op})")))
@@ -1232,8 +1228,8 @@ inlineLetBind b =
     Just _ => False
     Nothing =>
       case b.bindValue of
-        ELocalFun _ _ => False
-        value => not (multilineExpr value)
+        BClauses _ => False
+        BVal value => not (multilineExpr value)
 
 -- | 内部：绑定（`name = value`，可带签名行 / 局部函数 clause）。签名行挂签名行的
 -- `binding` 节点，定义行挂绑定自己的节点；局部函数组由各子句自带挂载，外层不再重复挂。
@@ -1251,15 +1247,17 @@ bindingDoc fuel env at binding =
       Nothing => bindingDefDoc (fuel - 1) env at binding.bindPat binding.bindRef binding.bindValue
 
 -- | 内部：定义行的形态（局部函数 / λ 还原成子句 / 普通值）。
-bindingDefDoc : Int -> List FixityDecl -> FmtCtx -> Pat -> NodeRef -> Expr -> Doc
+bindingDefDoc : Int -> List FixityDecl -> FmtCtx -> Pat -> NodeRef -> BindingValue -> Doc
 bindingDefDoc fuel env at pat ref value =
   if fuel <= 0 then
     empty
   else
     case value of
-      ELocalFun clauses _ => localFunDoc (fuel - 1) env at (renderPatGo formatFuelBound pat) clauses
-      ELam ps inner _ => attachAt at ref (localFunDoc (fuel - 1) env at (renderPatGo formatFuelBound pat) [LocalClause (map (\p => PVar (firstOf p) (detachedNodeRef (secondOf p))) ps) inner noNodeRef noNodeRef])
-      _ => attachAt at ref (bindingValueDoc (fuel - 1) env at (renderPatGo formatFuelBound pat) value)
+      BClauses clauses => localFunDoc (fuel - 1) env at (renderPatGo formatFuelBound pat) clauses
+      BVal inner =>
+        case inner of
+          ELam ps body _ => attachAt at ref (localFunDoc (fuel - 1) env at (renderPatGo formatFuelBound pat) [LocalClause (map (\p => PVar (firstOf p) (detachedNodeRef (secondOf p))) ps) body noNodeRef noNodeRef])
+          _ => attachAt at ref (bindingValueDoc (fuel - 1) env at (renderPatGo formatFuelBound pat) inner)
 
 -- | 内部：`lhs = value`（能一行就一行，否则值缩进 2）。
 bindingValueDoc : Int -> List FixityDecl -> FmtCtx -> String -> Expr -> Doc

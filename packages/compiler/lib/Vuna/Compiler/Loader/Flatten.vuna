@@ -1298,7 +1298,6 @@ exprRefNamesGo (ELam ps body _) acc = exprRefNamesGo body acc
 exprRefNamesGo (EApp fn args _) acc = exprRefNamesGo fn (exprRefNamesListGo args acc)
 exprRefNamesGo (EPi name implicit qty dom cod _) acc = exprRefNamesGo dom (exprRefNamesGo cod acc)
 exprRefNamesGo (ELet binds body rec_ _) acc = exprRefNamesGo body (bindRefNamesListGo binds acc)
-exprRefNamesGo (ELocalFun clauses _) acc = clauseRefNamesListGo clauses acc
 exprRefNamesGo (ECase scrut alts _) acc = exprRefNamesGo scrut (altRefNamesListGo alts acc)
 exprRefNamesGo (EIf c t el _) acc = exprRefNamesGo c (exprRefNamesGo t (exprRefNamesGo el acc))
 exprRefNamesGo (EField base fname _) acc = exprRefNamesGo base acc
@@ -1321,7 +1320,12 @@ fieldExprsGo (f :: rest) acc = fieldExprsGo rest (exprRefNamesGo (secondOf f) ac
 -- | `pat = expr` 绑定里的引用名（模式 binder 不算引用）。
 bindRefNamesGo : Binding -> List String -> List String
 bindRefNamesGo b acc =
-  patRefNamesGo b.bindPat (exprRefNamesGo b.bindValue (bindingSigRefNames b.bindSig acc))
+  patRefNamesGo b.bindPat (bindingValueRefNames b.bindValue (bindingSigRefNames b.bindSig acc))
+
+-- | 绑定右值里的引用名：普通表达式递归；局部函数组只看各 clause 的体。
+bindingValueRefNames : BindingValue -> List String -> List String
+bindingValueRefNames (BVal e) acc = exprRefNamesGo e acc
+bindingValueRefNames (BClauses clauses) acc = clauseRefNamesListGo clauses acc
 
 -- | 绑定签名行里的引用名。
 bindingSigRefNames : Maybe BindingSig -> List String -> List String

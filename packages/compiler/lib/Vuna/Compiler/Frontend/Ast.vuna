@@ -114,33 +114,19 @@ export record BindingSig(..) where
   sigType : Expr
   sigRef : NodeRef
 
--- | `let` / `where` / do-`let` 的一条绑定：模式 + 值 + 可选签名行 + 定义行的 `binding`
+-- | 绑定的右值形态：普通表达式，或 where / let 的多子句局部函数组。
+-- 子句组只能是绑定值，不是表达式；这样 `Expr` 里不需要一个只在一个位置合法的构造子。
+export data BindingValue(..) : Type where
+  BVal : Expr -> BindingValue
+  BClauses : List LocalClause -> BindingValue
+
+-- | `let` / `where` / do-`let` 的一条绑定：模式 + 右值 + 可选签名行 + 定义行的 `binding`
 -- 树节点。签名行（`g : Int -> Int`）是绑定项的一部分，不再编码成表达式标注。
 export record Binding(..) where
   bindPat : Pat
-  bindValue : Expr
+  bindValue : BindingValue
   bindSig : Maybe BindingSig
   bindRef : NodeRef
-
--- | 绑定的值 + 可选签名类型。工具侧把值按表达式、签名按类型分别遍历：
--- 签名行不是 `Expr`，不能塞回表达式树。
-export bindingValueAndSig : Binding -> (Expr, Maybe Expr)
-bindingValueAndSig b =
-  case b.bindSig of
-    Just sig => (b.bindValue, Just sig.sigType)
-    Nothing => (b.bindValue, Nothing)
-
--- | 绑定在「表达式视图」下的值：带签名行时是 parser 同形的 `@vuna@ascribe` 应用。
--- 供仍按单棵表达式遍历的消费者使用；需要区分值 / 签名的消费者用 `bindingValueAndSig`。
-export bindingValueView : Binding -> Expr
-bindingValueView b =
-  case b.bindSig of
-    Just sig =>
-      EApp
-        (EVar ascribeSyntax (detachedNodeRef (nodeRefSpan sig.sigRef)))
-        [b.bindValue, sig.sigType]
-        (detachedNodeRef (nodeRefSpan sig.sigRef))
-    Nothing => b.bindValue
 
 export data Expr(..) : Type where
   EVar : String -> NodeRef -> Expr
@@ -154,11 +140,8 @@ export data Expr(..) : Type where
   -- 匿名 `A -> B` 仍沿用 `EApp (EVar "->") [A, B]` 编码（默认 ω）。
   EPi : String -> Bool -> Maybe Qty -> Expr -> Expr -> NodeRef -> Expr
   ELet : List Binding -> Expr -> Bool -> NodeRef -> Expr
-  -- 局部函数组（where/let 内的多 clause 函数）。
-  -- 只作为 `ELet` 绑定值出现：每个 clause 是「参数模式列表 + body + 该子句的 `binding`
-  -- 节点」。由 Elab 用 `Elab.Match.multiToExpr` 降级成 lambda + 模式矩阵（与顶层 DFun
-  -- 同一路径）。
-  ELocalFun : List LocalClause -> NodeRef -> Expr
+  -- 局部函数组不在这里：它是 `BindingValue.BClauses`（只作为绑定右值出现）。
+  -- 由 Elab 用 `Elab.Match.multiToExpr` 降级成 lambda + 模式矩阵（与顶层 DFun 同一路径）。
   ECase : Expr -> List Alt -> NodeRef -> Expr
   EIf : Expr -> Expr -> Expr -> NodeRef -> Expr
   EField : Expr -> String -> NodeRef -> Expr
@@ -410,7 +393,6 @@ withExprRef r (ELam ps body _) = ELam ps body r
 withExprRef r (EApp fn args _) = EApp fn args r
 withExprRef r (EPi name implicit qty dom cod _) = EPi name implicit qty dom cod r
 withExprRef r (ELet binds body rec_ _) = ELet binds body rec_ r
-withExprRef r (ELocalFun clauses _) = ELocalFun clauses r
 withExprRef r (ECase scrut alts _) = ECase scrut alts r
 withExprRef r (EIf c t e _) = EIf c t e r
 withExprRef r (EField base f _) = EField base f r
@@ -432,7 +414,6 @@ exprRef (ELam ps body r) = r
 exprRef (EApp fn args r) = r
 exprRef (EPi name implicit qty dom cod r) = r
 exprRef (ELet binds body _ r) = r
-exprRef (ELocalFun clauses r) = r
 exprRef (ECase scrut alts r) = r
 exprRef (EIf c t e r) = r
 exprRef (EField base f r) = r

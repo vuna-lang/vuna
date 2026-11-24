@@ -548,12 +548,17 @@ bindUses fuel ctx b =
     []
   else
     append (patUses (fuel - 1) ctx b.bindPat) (
-        append (usesInExpr (fuel - 1) ctx b.bindValue) (
+        append (bindingValueUses (fuel - 1) ctx b.bindValue) (
             case b.bindSig of
               Just sig => usesInExpr (fuel - 1) ctx sig.sigType
               Nothing => []
           )
       )
+
+-- | 内部：绑定右值里的使用位置（普通表达式递归；局部函数组逐 clause 查）。
+bindingValueUses : Int -> UseCtx -> BindingValue -> List (Int, Int)
+bindingValueUses fuel ctx (BVal e) = usesInExpr (fuel - 1) ctx e
+bindingValueUses fuel ctx (BClauses clauses) = concatMap (clauseUses (fuel - 1) ctx) clauses
 
 -- | 内部：`do` 语句（绑定或表达式）里的使用位置。
 stmtUses : Int -> UseCtx -> DoStmt -> List (Int, Int)
@@ -652,7 +657,6 @@ usesInExpr fuel ctx e =
       EApp f args _ => append (usesInExpr (fuel - 1) ctx f) (concatMap (usesInExpr (fuel - 1) ctx) args)
       EPi n implicit qty dom cod _ => append (usesInExpr (fuel - 1) ctx dom) (usesInExpr (fuel - 1) ctx cod)
       ELet binds body isRec _ => append (concatMap (bindUses (fuel - 1) ctx) binds) (usesInExpr (fuel - 1) ctx body)
-      ELocalFun clauses _ => concatMap (clauseUses (fuel - 1) ctx) clauses
       ECase scrut alts _ => append (usesInExpr (fuel - 1) ctx scrut) (concatMap (altUses (fuel - 1) ctx) alts)
       EIf c t f _ => append (usesInExpr (fuel - 1) ctx c) (append (usesInExpr (fuel - 1) ctx t) (usesInExpr (fuel - 1) ctx f))
       EField base fname sp => append (efieldNamePos ctx base (nodeRefSpan sp) fname) (usesInExpr (fuel - 1) ctx base)

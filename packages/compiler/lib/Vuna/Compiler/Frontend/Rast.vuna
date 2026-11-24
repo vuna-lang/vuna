@@ -1,6 +1,7 @@
 -- | 解析后语法层（RAst）：名字是身份（`RName`），糖已由 Loader 去掉。
 --
--- 形状与 [Vuna.Compiler.Frontend.Ast] 一一对应（便于 Elab 逐步迁移），但所有**引用**
+-- 形状与 [Vuna.Compiler.Frontend.Ast] 大体对应（便于 Elab 逐步迁移）：局部函数组在 Ast
+-- 是 `BindingValue.BClauses`，在 Rast 仍以 `ELocalFun` 表达式作为 Elab 的输入。所有**引用**
 -- 位置（变量、构造子、记录类型）都用 `RName`；binder 与声明名仍是源码短名。
 -- `RName` 与字符串分类在 [Vuna.Compiler.Frontend.Rast.Name]（本模块重导出）。
 module Vuna.Compiler.Frontend.Rast where
@@ -524,7 +525,6 @@ ofExpr scope e =
       let
         bound = append (concatMap bindingBinders binds) scope
       in ELet (map (ofBinding bound scope) binds) (ofExpr bound body) rec_ (Ast.nodeRefSpan sp)
-    Ast.ELocalFun clauses sp => ELocalFun (map (ofLocalClause scope) clauses) (Ast.nodeRefSpan sp)
     Ast.ECase scrut alts sp =>
       ECase (ofExpr scope scrut) (map (ofAlt scope) alts) (Ast.nodeRefSpan sp)
     Ast.EIf c t f sp => EIf (ofExpr scope c) (ofExpr scope t) (ofExpr scope f) (Ast.nodeRefSpan sp)
@@ -545,7 +545,11 @@ ofBinding bound scope binding =
   let
     pat = binding.bindPat
     valueScope = append (patBinders pat) bound
-    value = ofExpr valueScope binding.bindValue
+    value =
+      case binding.bindValue of
+        Ast.BVal e => ofExpr valueScope e
+        Ast.BClauses clauses =>
+          ELocalFun (map (ofLocalClause valueScope) clauses) (Ast.nodeRefSpan binding.bindRef)
   in case binding.bindSig of
     -- 绑定签名行重新合成 Rast 的 `EAnn`（Elab 的 where 组按签名递归提升）。
     Just sig =>

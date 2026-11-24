@@ -255,8 +255,6 @@ reorderNonChain t (ELet binds body rec_ sp) =
   Vuna.Compiler.Base.Common.bind
     (reorderBinds t binds)
     (\binds2 => Vuna.Compiler.Base.Common.bind (reorderExpr t body) (\body2 => OkC (ELet binds2 body2 rec_ sp)))
-reorderNonChain t (ELocalFun clauses sp) =
-  Vuna.Compiler.Base.Common.bind (reorderClauses t clauses) (\cs => OkC (ELocalFun cs sp))
 reorderNonChain t (ECase scrut alts sp) =
   Vuna.Compiler.Base.Common.bind
     (reorderExpr t scrut)
@@ -307,7 +305,14 @@ reorderBind : FixityTable -> Binding -> Check Binding
 reorderBind t binding =
   Vuna.Compiler.Base.Common.bind
     (reorderPattern t binding.bindPat)
-    (\p2 => Vuna.Compiler.Base.Common.bind (reorderBindingSig t binding.bindSig) (\sig2 => Vuna.Compiler.Base.Common.bind (reorderExpr t binding.bindValue) (\v2 => OkC (Binding p2 v2 sig2 binding.bindRef))))
+    (\p2 => Vuna.Compiler.Base.Common.bind (reorderBindingSig t binding.bindSig) (\sig2 => Vuna.Compiler.Base.Common.bind (reorderBindingValue t binding.bindValue) (\v2 => OkC (Binding p2 v2 sig2 binding.bindRef))))
+
+-- | 绑定右值的中缀重排：普通表达式递归；局部函数组逐 clause 处理。
+reorderBindingValue : FixityTable -> BindingValue -> Check BindingValue
+reorderBindingValue t (BVal e) =
+  Vuna.Compiler.Base.Common.bind (reorderExpr t e) (\e2 => OkC (BVal e2))
+reorderBindingValue t (BClauses clauses) =
+  Vuna.Compiler.Base.Common.bind (reorderClauses t clauses) (\cs => OkC (BClauses cs))
 
 -- | 绑定签名行的重排（类型里的中缀链同样要按 fixity 重排）。
 reorderBindingSig : FixityTable -> Maybe BindingSig -> Check (Maybe BindingSig)

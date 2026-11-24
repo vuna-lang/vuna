@@ -1186,7 +1186,7 @@ parseBindingDef fuel stStart st bindCol pat =
     icFuel "parser"
   else
     case pat of
-      PVar name _ => if startsPatternAtom st && canContinue st bindCol then Vuna.Compiler.Base.Common.step (parseClausePatterns (stateFuel st) st bindCol) (\pats, st2 => Vuna.Compiler.Base.Common.bind (checkBindersAt st pats) (\_ => Vuna.Compiler.Base.Common.bind (expectSym st2 "=") (\st3 => Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st3 bindCol) (\value, st4 => OkC (BIBind (Binding (PVar name (patRef pat)) (ELocalFun [LocalClause pats value (NodeRef stStart.openNodeId (spanOf stStart st4)) (patRef pat)] (detachedNodeRef (spanOf stStart st4))) Nothing (NodeRef stStart.openNodeId (spanOf stStart st4))), st4))))) else Vuna.Compiler.Base.Common.step (parseBindingValue (fuel - 1) stStart st stStart.openNodeId pat bindCol) (\b, st2 => OkC (BIBind b, st2))
+      PVar name _ => if startsPatternAtom st && canContinue st bindCol then Vuna.Compiler.Base.Common.step (parseClausePatterns (stateFuel st) st bindCol) (\pats, st2 => Vuna.Compiler.Base.Common.bind (checkBindersAt st pats) (\_ => Vuna.Compiler.Base.Common.bind (expectSym st2 "=") (\st3 => Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st3 bindCol) (\value, st4 => OkC (BIBind (Binding (PVar name (patRef pat)) (BClauses [LocalClause pats value (NodeRef stStart.openNodeId (spanOf stStart st4)) (patRef pat)]) Nothing (NodeRef stStart.openNodeId (spanOf stStart st4))), st4))))) else Vuna.Compiler.Base.Common.step (parseBindingValue (fuel - 1) stStart st stStart.openNodeId pat bindCol) (\b, st2 => OkC (BIBind b, st2))
       _ => Vuna.Compiler.Base.Common.step (parseBindingValue (fuel - 1) stStart st stStart.openNodeId pat bindCol) (\b, st2 => OkC (BIBind b, st2))
 
 parseBindingValue : Int -> PState -> PState -> Int -> Pat -> Int -> Check (Binding, PState)
@@ -1196,7 +1196,7 @@ parseBindingValue fuel stStart st nid pat blockCol =
   else
     Vuna.Compiler.Base.Common.bind
       (checkBindersAt st [pat])
-      (\_ => Vuna.Compiler.Base.Common.bind (expectSym st "=") (\st1 => Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st1 blockCol) (\value, st2 => OkC ((Binding pat value Nothing (NodeRef nid (spanOf stStart st2))), st2))))
+      (\_ => Vuna.Compiler.Base.Common.bind (expectSym st "=") (\st1 => Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st1 blockCol) (\value, st2 => OkC ((Binding pat (BVal value) Nothing (NodeRef nid (spanOf stStart st2))), st2))))
 
 -- 条目 → ELet 绑定：把签名行存进同名定义的 `Binding.bindSig`，并校验布局约束：
 -- 签名必须先于同名定义、不能重复、不能悬空。
@@ -1239,18 +1239,18 @@ bindingBindsGo (item :: rest) sigs bound acc =
             Nothing =>
               bindingBindsGo rest sigs (patBoundName binding.bindPat :: bound) (binding :: acc)
 
--- 把相邻同名函数子句合并成一个 `ELocalFun` 绑定（where/let 多 clause）。
--- 签名保留在合并后的条目上（`Binding.bindSig` 挂在第一条的 `ELocalFun` 旁）；不连续的同名子句
+-- 把相邻同名函数子句合并成一个 `BClauses` 绑定（where/let 多 clause）。
+-- 签名保留在合并后的条目上（`Binding.bindSig` 挂在第一条的 `BClauses` 旁）；不连续的同名子句
 -- 不合并，按 `WhereSigMultiClause` 报错。
-localFunMerge : String -> Expr -> List Binding -> Maybe (List Binding)
+localFunMerge : String -> BindingValue -> List Binding -> Maybe (List Binding)
 localFunMerge name value (binding :: rest) =
   case binding.bindPat of
     PVar n nsp =>
       if n == name then
         case binding.bindValue of
-          ELocalFun cs0 sp0 =>
+          BClauses cs0 =>
             case value of
-              ELocalFun cs1 _ => Just ((::) (Binding (PVar n nsp) (ELocalFun (append cs0 cs1) sp0) binding.bindSig binding.bindRef) rest)
+              BClauses cs1 => Just ((::) (Binding (PVar n nsp) (BClauses (append cs0 cs1)) binding.bindSig binding.bindRef) rest)
               _ => Nothing
           _ => Nothing
       else

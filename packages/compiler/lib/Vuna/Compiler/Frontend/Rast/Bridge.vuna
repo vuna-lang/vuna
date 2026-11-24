@@ -24,8 +24,9 @@ toAstExpr (Rast.EPi name implicit qty dom cod sp) =
   Ast.EPi name implicit qty (toAstExpr dom) (toAstExpr cod) (Ast.detachedNodeRef sp)
 toAstExpr (Rast.ELet binds body rec_ sp) =
   Ast.ELet (map toAstBinding binds) (toAstExpr body) rec_ (Ast.detachedNodeRef sp)
-toAstExpr (Rast.ELocalFun clauses sp) =
-  Ast.ELocalFun (map toAstLocalClause clauses) (Ast.detachedNodeRef sp)
+-- 局部函数组只作为绑定值出现，由 `toAstBinding` 转成 `BClauses`；走到这里说明
+-- 调用方把绑定值当成了普通表达式，保留一个写不出的标记而不是静默丢子树。
+toAstExpr (Rast.ELocalFun _ sp) = Ast.EVar "#local-fun" (Ast.detachedNodeRef sp)
 toAstExpr (Rast.ECase scrut alts sp) =
   Ast.ECase (toAstExpr scrut) (map toAstAlt alts) (Ast.detachedNodeRef sp)
 toAstExpr (Rast.EIf c t f sp) =
@@ -51,7 +52,10 @@ toAstInterpPart (Rast.IPHole e) = Ast.IPHole (toAstExpr e)
 
 -- 绑定 / 分支身份不进 Rast（Elab 不消费）；回到 Ast 时是 detached（工具侧用解析产物）。
 toAstBinding : (Rast.Pat, Rast.Expr) -> Ast.Binding
-toAstBinding (pat, value) = Ast.Binding (toAstPat pat) (toAstExpr value) Nothing Ast.noNodeRef
+toAstBinding (pat, Rast.ELocalFun clauses sp) =
+  Ast.Binding (toAstPat pat) (Ast.BClauses (map toAstLocalClause clauses)) Nothing Ast.noNodeRef
+toAstBinding (pat, value) =
+  Ast.Binding (toAstPat pat) (Ast.BVal (toAstExpr value)) Nothing Ast.noNodeRef
 
 -- 子句身份不进 Rast（Elab 不消费）；回到 Ast 时是 detached（工具侧用解析产物）。
 toAstLocalClause : (List Rast.Pat, Rast.Expr) -> Ast.LocalClause

@@ -232,7 +232,6 @@ exprSitesAt fuel e =
           EApp fn args r => append (exprSitesAt (fuel - 1) fn) (concatMap (exprSitesAt (fuel - 1)) args)
           EPi n i q dom cod r => append (exprSitesAt (fuel - 1) dom) (exprSitesAt (fuel - 1) cod)
           ELet binds body rec_ r => append (concatMap (bindingSites (fuel - 1)) binds) (exprSitesAt (fuel - 1) body)
-          ELocalFun clauses r => concatMap (localClauseSites (fuel - 1)) clauses
           ECase scrut alts r => append (exprSitesAt (fuel - 1) scrut) (concatMap (altSites (fuel - 1)) alts)
           EIf c t el r => append (exprSitesAt (fuel - 1) c) (append (exprSitesAt (fuel - 1) t) (exprSitesAt (fuel - 1) el))
           EField base f r => exprSitesAt (fuel - 1) base
@@ -277,8 +276,8 @@ bindingDefSites fuel b =
     []
   else
     case b.bindValue of
-      ELocalFun _ _ => exprSitesAt (fuel - 1) b.bindValue
-      _ => Site "binding" "def" b.bindRef :: exprSitesAt (fuel - 1) b.bindValue
+      BClauses clauses => concatMap (localClauseSites (fuel - 1)) clauses
+      BVal value => Site "binding" "def" b.bindRef :: exprSitesAt (fuel - 1) value
 
 localClauseSites : Int -> LocalClause -> List Site
 localClauseSites fuel clause =
@@ -450,7 +449,6 @@ bodyPatRefs e =
     ERecUpdate base fields _ =>
       append (bodyPatRefs base) (concatMap (\fv => bodyPatRefs (secondOf fv)) fields)
     EDo stmts _ => concatMap stmtPatRefs stmts
-    ELocalFun clauses _ => concatMap clausePatRefs clauses
     EFloat raw _ => []
     EInt n _ => []
     EStr s _ => []
@@ -465,7 +463,11 @@ bindingPatRefs : Binding -> List NodeRef
 bindingPatRefs b = [patRef b.bindPat]
 
 bindingBodyPatRefs : Binding -> List NodeRef
-bindingBodyPatRefs b = bodyPatRefs b.bindValue
+bindingBodyPatRefs b = bindingValuePatRefs b.bindValue
+
+bindingValuePatRefs : BindingValue -> List NodeRef
+bindingValuePatRefs (BVal e) = bodyPatRefs e
+bindingValuePatRefs (BClauses clauses) = concatMap clausePatRefs clauses
 
 altPatRefs : Alt -> List NodeRef
 altPatRefs alt = append [patRef alt.altPat] (bodyPatRefs alt.altBody)

@@ -978,37 +978,39 @@ walkBinds fuel env scope line col name kind binds =
             case b.bindSig of
               Just sig => Just sig.sigType
               Nothing => Nothing
-          binders = patBinders env kind b.bindPat (Just b.bindValue) mty
+          mval =
+            case b.bindValue of
+              BVal value => Just value
+              BClauses _ => Nothing
+          binders = patBinders env kind b.bindPat mval mty
         in if patHit env line col b.bindPat then
           case binderNamed name binders of
             Just hit => Just hit
             Nothing => walkBinds (fuel - 1) env (append scope binders) line col name kind rest
         else
-          case walkBindValue (fuel - 1) env scope line col name b.bindValue mty of
+          case walkBindingValue (fuel - 1) env scope line col name b.bindValue mty of
             Just hit => Just hit
             Nothing => walkBinds (fuel - 1) env (append scope binders) line col name kind rest
 
--- | 内部：遍历一个绑定的值；签名类型给出时同时作为局部函数参数的语法类型。
-walkBindValue : Int -> WalkEnv -> List LocalBind -> Int -> Int -> String -> Expr -> Maybe Expr -> Maybe LocalBind
-walkBindValue fuel env scope line col name (ELocalFun clauses _) mty =
-  let
-    mSig =
-      case mty of
-        Just ty => Just (arrowDomains ty)
-        Nothing => Nothing
-  in case walkClauses fuel env scope line col name mSig clauses of
+-- | 内部：遍历绑定右值；签名类型给出时同时作为局部函数参数的语法类型。
+walkBindingValue : Int -> WalkEnv -> List LocalBind -> Int -> Int -> String -> BindingValue -> Maybe Expr -> Maybe LocalBind
+walkBindingValue fuel env scope line col name (BVal value) mty =
+  walkBindValue fuel env scope line col name value mty
+walkBindingValue fuel env scope line col name (BClauses clauses) Nothing =
+  walkClauses fuel env scope line col name Nothing clauses
+walkBindingValue fuel env scope line col name (BClauses clauses) (Just ty) =
+  case walkClauses fuel env scope line col name (Just (arrowDomains ty)) clauses of
     Just hit => Just hit
-    Nothing =>
-      case mty of
-        Just ty => walkExpr (fuel - 1) env scope line col name ty
-        Nothing => Nothing
-walkBindValue fuel env scope line col name value mty =
-  case mty of
-    Just ty =>
-      case walkExpr (fuel - 1) env scope line col name value of
-        Just hit => Just hit
-        Nothing => walkExpr (fuel - 1) env scope line col name ty
-    Nothing => walkExpr (fuel - 1) env scope line col name value
+    Nothing => walkExpr (fuel - 1) env scope line col name ty
+
+-- | 内部：遍历普通表达式值；签名类型给出时先找值，再找签名类型。
+walkBindValue : Int -> WalkEnv -> List LocalBind -> Int -> Int -> String -> Expr -> Maybe Expr -> Maybe LocalBind
+walkBindValue fuel env scope line col name value Nothing =
+  walkExpr (fuel - 1) env scope line col name value
+walkBindValue fuel env scope line col name value (Just ty) =
+  case walkExpr (fuel - 1) env scope line col name value of
+    Just hit => Just hit
+    Nothing => walkExpr (fuel - 1) env scope line col name ty
 
 -- | 内部：遍历 `case` 分支：每个分支的模式 binder 只在该分支 body 里可见。
 walkAlts : Int -> WalkEnv -> List LocalBind -> Int -> Int -> String -> List Alt -> Maybe LocalBind
@@ -1192,7 +1194,6 @@ walkExpr fuel env scope line col name e =
         in case walkBinds (fuel - 1) env scope line col name kind binds of
           Just hit => Just hit
           Nothing => walkExpr (fuel - 1) env (append scope (bindersOfBinds env kind binds)) line col name body
-      ELocalFun clauses _ => walkClauses (fuel - 1) env scope line col name Nothing clauses
       ECase scrut alts _ =>
         case walkExpr (fuel - 1) env scope line col name scrut of
           Just hit => Just hit
@@ -1224,7 +1225,11 @@ bindBinders env kind b =
       case b.bindSig of
         Just sig => Just sig.sigType
         Nothing => Nothing
-  in patBinders env kind b.bindPat (Just b.bindValue) mty
+    mval =
+      case b.bindValue of
+        BVal value => Just value
+        BClauses _ => Nothing
+  in patBinders env kind b.bindPat mval mty
 
 -- | 内部：绑定块里全部 binder（顺序拼接；调用方在整块可见处把它追加进 scope）。
 bindersOfBinds : WalkEnv -> String -> List Binding -> List LocalBind

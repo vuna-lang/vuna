@@ -134,7 +134,6 @@ expandExpr fuel scope e =
       ELam ps body sp => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) scope body) (\body2 => OkC (ELam ps body2 sp))
       EPi name implicit qty dom cod sp => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) scope dom) (\dom2 => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) scope cod) (\cod2 => OkC (EPi name implicit qty dom2 cod2 sp)))
       ELet binds body rec_ sp => Vuna.Compiler.Base.Common.bind (expandPatExprs (fuel - 1) scope binds) (\binds2 => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) scope body) (\body2 => OkC (ELet binds2 body2 rec_ sp)))
-      ELocalFun clauses sp => Vuna.Compiler.Base.Common.bind (expandClauses (fuel - 1) scope clauses) (\clauses2 => OkC (ELocalFun clauses2 sp))
       ECase scrut alts sp => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) scope scrut) (\scrut2 => Vuna.Compiler.Base.Common.bind (expandAlts (fuel - 1) scope alts) (\alts2 => OkC (ECase scrut2 alts2 sp)))
       EIf c t el sp => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) scope c) (\c2 => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) scope t) (\t2 => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) scope el) (\el2 => OkC (EIf c2 t2 el2 sp))))
       EField base fname sp => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) scope base) (\base2 => OkC (EField base2 fname sp))
@@ -154,7 +153,7 @@ expandPatExprs fuel scope binds =
   else
     case binds of
       [] => OkC []
-      b :: rest => Vuna.Compiler.Base.Common.bind (expandBindingSig (fuel - 1) scope b.bindSig) (\sig2 => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) scope b.bindValue) (\value2 => Vuna.Compiler.Base.Common.bind (expandPatExprs (fuel - 1) scope rest) (\rest2 => OkC ((::) (Binding b.bindPat value2 sig2 b.bindRef) rest2))))
+      b :: rest => Vuna.Compiler.Base.Common.bind (expandBindingSig (fuel - 1) scope b.bindSig) (\sig2 => Vuna.Compiler.Base.Common.bind (expandBindingValue (fuel - 1) scope b.bindValue) (\value2 => Vuna.Compiler.Base.Common.bind (expandPatExprs (fuel - 1) scope rest) (\rest2 => OkC ((::) (Binding b.bindPat value2 sig2 b.bindRef) rest2))))
 
 -- | 绑定签名行的宏展开（类型里的 `name!` 也要展开）。
 expandBindingSig : Int -> String -> Maybe BindingSig -> Check (Maybe BindingSig)
@@ -182,6 +181,13 @@ expandClauses fuel scope clauses =
     case clauses of
       [] => OkC []
       clause :: rest => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) scope clause.lcBody) (\body2 => Vuna.Compiler.Base.Common.bind (expandClauses (fuel - 1) scope rest) (\rest2 => OkC ((::) (LocalClause clause.lcPats body2 clause.lcRef clause.lcHead) rest2)))
+
+-- | 绑定右值的宏展开：普通表达式递归；局部函数组逐 clause 处理。
+expandBindingValue : Int -> String -> BindingValue -> Check BindingValue
+expandBindingValue fuel scope (BVal e) =
+  Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) scope e) (\e2 => OkC (BVal e2))
+expandBindingValue fuel scope (BClauses clauses) =
+  Vuna.Compiler.Base.Common.bind (expandClauses (fuel - 1) scope clauses) (\cs => OkC (BClauses cs))
 
 expandFieldExprs : Int -> String -> List (String, Expr) -> Check (List (String, Expr))
 expandFieldExprs fuel scope fields =

@@ -412,7 +412,17 @@ refsInFields sMod ((fname, value) :: rest) acc =
 refsInBinds : String -> List Binding -> List Ref -> List Ref
 refsInBinds sMod [] acc = acc
 refsInBinds sMod (b :: rest) acc =
-  refsInBinds sMod rest (refsInExprGo sMod (bindingValueView b) acc)
+  refsInBinds sMod rest (refsInBindingValue sMod b.bindValue (refsInBindingSig sMod b.bindSig acc))
+
+-- | 内部：绑定右值的引用（普通表达式递归；局部函数组只看各 clause 的 body）。
+refsInBindingValue : String -> BindingValue -> List Ref -> List Ref
+refsInBindingValue sMod (BVal e) acc = refsInExprGo sMod e acc
+refsInBindingValue sMod (BClauses clauses) acc = refsInLocalClauses sMod clauses acc
+
+-- | 内部：绑定签名行里的引用。
+refsInBindingSig : String -> Maybe BindingSig -> List Ref -> List Ref
+refsInBindingSig sMod Nothing acc = acc
+refsInBindingSig sMod (Just sig) acc = refsInExprGo sMod sig.sigType acc
 
 -- | 内部：`case` 分支的引用，只看分支体。
 refsInAlts : String -> List Alt -> List Ref -> List Ref
@@ -466,8 +476,6 @@ refsInExprGo sMod e acc =
     EPi n i _ dom cod _ => refsInExprGo sMod cod (refsInExprGo sMod dom acc)
     ELet binds body isRec _ => refsInBinds sMod binds (refsInExprGo sMod body acc)
     ECase scrut alts _ => refsInAlts sMod alts (refsInExprGo sMod scrut acc)
-    -- where/let 多 clause 局部函数：只看各 clause 的 body（与 refsInBind 一致，不看模式）。
-    ELocalFun clauses _ => refsInLocalClauses sMod clauses acc
     EIf c t e2 _ => refsInExprGo sMod c (refsInExprGo sMod t (refsInExprGo sMod e2 acc))
     EField r fname _ => refsInExprGo sMod r acc
     ERecord tn fields _ => refsInFields sMod fields acc
