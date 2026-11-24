@@ -2079,13 +2079,17 @@ anyBackend (b :: rest) targets =
 filterCases : SuiteOpts -> List Case -> List Case
 filterCases opts cases = filter (caseMatches opts) cases
 
--- | 内部：`--timeout` 覆盖全部 case 的预算（0 = 未给出，保持 discovery 的结果）。
--- 覆盖是固定的，不是上限：family 写了更大的 timeout 也按 flag 走。
+-- | 内部：`--timeout` 是全部 case 预算的**上限**（0 = 未给出，保持 discovery 的结果）。
+-- 取 `min flag (family / steps / suite 的声明值)`：flag 只能把预算压低，不能放宽 fixture
+-- 自己声明的更紧的门槛（`effect_perf` / `elab_perf` 这类族的显式 timeout 在 CI 里照样生效）。
 applyTimeoutOverride : Int -> List Case -> List Case
-applyTimeoutOverride secs cases = if secs <= 0 then cases else map (setCaseTimeout secs) cases
+applyTimeoutOverride secs cases = if secs <= 0 then cases else map (capCaseTimeout secs) cases
 
-setCaseTimeout : Int -> Case -> Case
-setCaseTimeout secs c = Case c.caseId c.caseTags c.caseKind secs c.caseTier c.caseMatrix
+capCaseTimeout : Int -> Case -> Case
+capCaseTimeout secs c =
+  let
+    budget = if secs < c.caseTimeout then secs else c.caseTimeout
+  in Case c.caseId c.caseTags c.caseKind budget c.caseTier c.caseMatrix
 
 -- ---------------------------------------------------------------
 -- 打印与汇总

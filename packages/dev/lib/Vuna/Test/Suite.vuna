@@ -38,7 +38,7 @@ export record SuiteOpts(..) where
   suiteOnly : List String
   -- | `--filter`：对 case id / tag 做子串过滤（可重复，多值 OR）。
   suiteFilter : List String
-  -- | `--timeout` 的解析值（0 = 未给出）；> 0 时覆盖每个 case 的超时（family 的 `timeout` 不再生效）。
+  -- | `--timeout` 的解析值（0 = 未给出）；> 0 时作为每个 case 预算的上限（`min` flag 与 family 的 `timeout`）。
   suiteTimeout : Int
   -- | `Just (i, n)` 是父进程 spawn 出来的 worker 模式：默认只跑 index mod n == i 的 case；LPT 分桶模式下只跑自己那一桶。
   suiteWorker : Maybe (Int, Int)

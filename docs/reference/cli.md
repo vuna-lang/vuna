@@ -111,7 +111,7 @@ family / tier / matrix 词汇、`VUNA_OBS` 自采样、错误码枚举文档生�
 | `--json` | 单行 JSON 输出（`lint --format json`、`search`、`errors`、`dev suite`、`dev obs summarize`） |
 | `--format text\|json\|github\|sarif` | 诊断渲染格式（`lint`） |
 | `--jobs auto\|N` | 并行度（`test` / `dev suite`；`dev suite` 未给出时用 `[suite].jobs`，`auto` 强制探测） |
-| `--timeout SECS` | 单个 case 超时（`dev suite`；覆盖 family / suite 配置） |
+| `--timeout SECS` | 单个 case 预算的上限（`dev suite`；更紧的 family `timeout` 仍生效） |
 | `--filter` / `--select` / `--ignore` / `--only` / `--tier` / `--matrix` / `--backend` | 可重复筛选（按命令声明） |
 | `--release` | 发布构建；只对构建类命令合法 |
 | `--wasm-opt 0..3` | wasm 产物的 binaryen 优化级别（只对 `build` 合法；默认 3，`0` = 只汇编不优化） |

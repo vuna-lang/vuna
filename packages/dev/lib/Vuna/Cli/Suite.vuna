@@ -121,7 +121,7 @@ suiteJobsOf parsed =
         Just n => OkC n
 
 -- | 内部：suite 的 `--timeout`——缺省 0（未给出，沿用 family / `[suite].timeout`）；
--- 否则必须是 >= 1 的整数（秒），并覆盖每个 case 的预算。
+-- 否则必须是 >= 1 的整数（秒），作为每个 case 预算的上限（更紧的 family 值仍然生效）。
 suiteTimeoutOf : Parsed -> Check Int
 suiteTimeoutOf parsed =
   case flagValue parsed "timeout" of

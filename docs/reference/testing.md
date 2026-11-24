@@ -26,7 +26,7 @@ vuna dev suite --all --backend wasm       # 只跑 matrix 允许 wasm 的 case
 vuna dev suite --all --matrix pure-cross  # 只跑三端差分精选集
 vuna dev suite --all --filter layer:effect  # 按层次 tag 筛选
 vuna dev suite --all --jobs 16            # 显式并行度（覆盖 auto）
-vuna dev suite --all --timeout 240        # 覆盖每个 case 的超时（秒）
+vuna dev suite --all --timeout 240        # 每个 case 预算的上限（秒；更紧的 family 值仍生效）
 vuna dev suite --all --json               # 机器可读汇总（每个 suite 一行）
 ```
 
@@ -164,8 +164,8 @@ end:
 
 - 父进程发现 case 后按 `--jobs`（未给出时用 `[suite].jobs`，再回落自动探测）spawn N 个自身（隐藏 `--worker i/N`），worker 按
   `index mod N` 静态分片；每个 case 写一份 TSV 结果到共享临时目录，父进程按序读回。
-- 每个 case 有独立临时目录与 per-case 超时（默认 300s，`--timeout` / family `timeout`
-  覆盖）。子进程输出经固定 shell helper 捕获（`timeout -s TERM -k 10 ... >out 2>err`，
+- 每个 case 有独立临时目录与 per-case 超时（默认 300s；family `timeout` 声明更紧的预算，
+  `--timeout` 只能再压低、不能放宽）。子进程输出经固定 shell helper 捕获（`timeout -s TERM -k 10 ... >out 2>err`，
   可选合并），不新增编译器原语；超时按 `timeout` 建的进程组收尾，steps 经 `sh -c` 起的
   孙进程一并退出。
 - SIGKILL runner 时收不到信号：每次 run 在临时根写 `runner.pid`，下次启动先清扫这些根
@@ -234,7 +234,7 @@ end:
 
 | 层 | 控制 | 默认 | 行为 |
 | --- | --- | --- | --- |
-| case | `--timeout` / family `timeout` | 300s | `--timeout` 覆盖全部 case（含并行 worker，固定值不是上限）；未给出时用 family `timeout`，再回落 `[suite].timeout`。超时计 FAIL 并继续其余 case；`timeout` 缺失时降级直跑 |
+| case | `--timeout` / family `timeout` | 300s | 预算是「declared 与 flag 取小」：family `timeout` 声明更紧的值（`effect_perf` 60s、`elab_perf` 15s），`--timeout` 只能把它压得更低，不会放宽；未声明 family `timeout` 时回落 `[suite].timeout`（默认 300s）。超时计 FAIL 并继续其余 case；`timeout` 缺失时降级直跑 |
 | steps 单步 | 同上（继承 case timeout） | 300s | 单步超时即失败，失败信息带 `timed out after Ns` |
 
 ### 产品化过滤与更新
