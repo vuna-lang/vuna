@@ -45,18 +45,19 @@ let v_indexOfName = (fun (name : string) (env : string B_dData_dList.t_List) -> 
 # 86 "Vuna/Compiler/Elab/Prelude.vuna"
 let rec v_ityToTermEnv = (fun (mc0 : string B_dData_dList.t_List) (mc1 : Base_dIntrinsics.t_IType) -> (match mc1 with
   | Base_dIntrinsics.C_IType_IPi (dtb__5, dtb__6) -> (Core_dTerm.C_Term_TPi (dtb__5, true, Core_dTerm.C_Rig_Rig0, (Core_dTerm.C_Term_TType (Core_dTerm.v_levelZero)), ((v_ityToTermEnv (B_dData_dList.C_List__x58__x58_ (dtb__5, mc0))) dtb__6)))
-  | Base_dIntrinsics.C_IType_IRef (dtb__7) -> (Core_dTerm.C_Term_TApp ((Core_dTerm.C_Term_TGlobal ("IORef")), ((v_ityToTermEnv mc0) dtb__7), Core_dTerm.C_Rig_Rig0))
-  | Base_dIntrinsics.C_IType_IArray (dtb__8) -> (Core_dTerm.C_Term_TApp ((Core_dTerm.C_Term_TGlobal ("Array")), ((v_ityToTermEnv mc0) dtb__8), Core_dTerm.C_Rig_Rig0))
-  | Base_dIntrinsics.C_IType_IVar (dtb__9) -> (match ((v_indexOfName dtb__9) mc0) with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__10) -> (Core_dTerm.C_Term_TVar (dtb__9, dtb__10, { Base_dSource.f_Span_spanFile = ""; Base_dSource.f_Span_spanStartLine = 0; Base_dSource.f_Span_spanStartCol = 0; Base_dSource.f_Span_spanEndLine = 0; Base_dSource.f_Span_spanEndCol = 0; Base_dSource.f_Span_spanStartOffset = 0; Base_dSource.f_Span_spanEndOffset = 0 }))
-  | B_dData_dMaybe.C_Maybe_Nothing -> (Core_dTerm.C_Term_TGlobal (dtb__9))
+  | Base_dIntrinsics.C_IType_ICell (dtb__7) -> (Core_dTerm.C_Term_TApp ((Core_dTerm.C_Term_TGlobal ("@vuna@Cell")), ((v_ityToTermEnv mc0) dtb__7), Core_dTerm.C_Rig_Rig0))
+  | Base_dIntrinsics.C_IType_IRef (dtb__8) -> (Core_dTerm.C_Term_TApp ((Core_dTerm.C_Term_TGlobal ("IORef")), ((v_ityToTermEnv mc0) dtb__8), Core_dTerm.C_Rig_Rig0))
+  | Base_dIntrinsics.C_IType_IArray (dtb__9) -> (Core_dTerm.C_Term_TApp ((Core_dTerm.C_Term_TGlobal ("Array")), ((v_ityToTermEnv mc0) dtb__9), Core_dTerm.C_Rig_Rig0))
+  | Base_dIntrinsics.C_IType_IVar (dtb__10) -> (match ((v_indexOfName dtb__10) mc0) with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__11) -> (Core_dTerm.C_Term_TVar (dtb__10, dtb__11, { Base_dSource.f_Span_spanFile = ""; Base_dSource.f_Span_spanStartLine = 0; Base_dSource.f_Span_spanStartCol = 0; Base_dSource.f_Span_spanEndLine = 0; Base_dSource.f_Span_spanEndCol = 0; Base_dSource.f_Span_spanStartOffset = 0; Base_dSource.f_Span_spanEndOffset = 0 }))
+  | B_dData_dMaybe.C_Maybe_Nothing -> (Core_dTerm.C_Term_TGlobal (dtb__10))
   | _ -> failwith "DT: impossible branch"
 )
-  | Base_dIntrinsics.C_IType_IFun1 (dtb__11, dtb__12) -> (Core_dTerm.C_Term_TPi ("_", false, Core_dTerm.C_Rig_Rig1, ((v_ityToTermEnv mc0) dtb__11), ((v_ityToTermEnv (B_dData_dList.C_List__x58__x58_ ("_", mc0))) dtb__12)))
-  | Base_dIntrinsics.C_IType_IFun (dtb__13, dtb__14) -> (Core_dTerm.C_Term_TPi ("_", false, Core_dTerm.C_Rig_RigOmega, ((v_ityToTermEnv mc0) dtb__13), ((v_ityToTermEnv (B_dData_dList.C_List__x58__x58_ ("_", mc0))) dtb__14)))
-  | Base_dIntrinsics.C_IType_IGlobal (dtb__15) -> (Core_dTerm.C_Term_TGlobal (dtb__15))
-  | Base_dIntrinsics.C_IType_IEff (dtb__16) -> (Core_dTerm.C_Term_TApp ((Core_dTerm.C_Term_TApp ((Core_dTerm.C_Term_TGlobal (Base_dIntrinsics.v_effTypeName)), (Core_dTerm.C_Term_TCon (Base_dIntrinsics.v_effRowNilCtor, B_dData_dList.C_List_Nil)), Core_dTerm.C_Rig_Rig0)), ((v_ityToTermEnv mc0) dtb__16), Core_dTerm.C_Rig_Rig0))
-  | Base_dIntrinsics.C_IType_IList (dtb__17) -> (Core_dTerm.C_Term_TApp ((Core_dTerm.C_Term_TGlobal (Base_dIntrinsics.v_listFamilyName)), ((v_ityToTermEnv mc0) dtb__17), Core_dTerm.C_Rig_Rig0))
+  | Base_dIntrinsics.C_IType_IFun1 (dtb__12, dtb__13) -> (Core_dTerm.C_Term_TPi ("_", false, Core_dTerm.C_Rig_Rig1, ((v_ityToTermEnv mc0) dtb__12), ((v_ityToTermEnv (B_dData_dList.C_List__x58__x58_ ("_", mc0))) dtb__13)))
+  | Base_dIntrinsics.C_IType_IFun (dtb__14, dtb__15) -> (Core_dTerm.C_Term_TPi ("_", false, Core_dTerm.C_Rig_RigOmega, ((v_ityToTermEnv mc0) dtb__14), ((v_ityToTermEnv (B_dData_dList.C_List__x58__x58_ ("_", mc0))) dtb__15)))
+  | Base_dIntrinsics.C_IType_IGlobal (dtb__16) -> (Core_dTerm.C_Term_TGlobal (dtb__16))
+  | Base_dIntrinsics.C_IType_IEff (dtb__17) -> (Core_dTerm.C_Term_TApp ((Core_dTerm.C_Term_TApp ((Core_dTerm.C_Term_TGlobal (Base_dIntrinsics.v_effTypeName)), (Core_dTerm.C_Term_TCon (Base_dIntrinsics.v_effRowNilCtor, B_dData_dList.C_List_Nil)), Core_dTerm.C_Rig_Rig0)), ((v_ityToTermEnv mc0) dtb__17), Core_dTerm.C_Rig_Rig0))
+  | Base_dIntrinsics.C_IType_IList (dtb__18) -> (Core_dTerm.C_Term_TApp ((Core_dTerm.C_Term_TGlobal (Base_dIntrinsics.v_listFamilyName)), ((v_ityToTermEnv mc0) dtb__18), Core_dTerm.C_Rig_Rig0))
   | Base_dIntrinsics.C_IType_INat -> (Core_dTerm.C_Term_TGlobal (Base_dIntrinsics.v_natTypeName))
   | Base_dIntrinsics.C_IType_IBool -> v_boolTy
   | Base_dIntrinsics.C_IType_IFloat -> v_floatTy
@@ -69,54 +70,54 @@ let rec v_ityToTermEnv = (fun (mc0 : string B_dData_dList.t_List) (mc1 : Base_dI
 # 83 "Vuna/Compiler/Elab/Prelude.vuna"
 let v_ityToTerm = (fun (ty : Base_dIntrinsics.t_IType) -> ((v_ityToTermEnv B_dData_dList.C_List_Nil) ty))
 
-# 115 "Vuna/Compiler/Elab/Prelude.vuna"
+# 116 "Vuna/Compiler/Elab/Prelude.vuna"
 let rec v_typeCtorKindTerm = (fun (arity : int) -> (if (arity <= 0) then (Core_dTerm.C_Term_TType (Core_dTerm.v_levelZero)) else (Core_dTerm.C_Term_TPi ("_", false, Core_dTerm.C_Rig_Rig0, (Core_dTerm.C_Term_TType (Core_dTerm.v_levelZero)), (v_typeCtorKindTerm (arity - 1))))))
 
-# 123 "Vuna/Compiler/Elab/Prelude.vuna"
+# 124 "Vuna/Compiler/Elab/Prelude.vuna"
 let v_preludeTypeGlobals = ((B_dData_dList.v_append ((B_dData_dList.v_map (fun (n : string) -> { B_dData_dPair.f_Pair_first = n; B_dData_dPair.f_Pair_second = (Core_dTerm.C_Term_TType (Core_dTerm.v_levelZero)) })) Base_dIntrinsics.v_typeIntrinsicNames)) ((B_dData_dList.v_map (fun (t : Base_dIntrinsics.t_TypeIntrinsic) -> { B_dData_dPair.f_Pair_first = (Base_dIntrinsics.v_typeIntrinsicCtorName t); B_dData_dPair.f_Pair_second = (v_typeCtorKindTerm (Base_dIntrinsics.v_typeIntrinsicCtorArity t)) })) Base_dIntrinsics.v_typeIntrinsicArities))
 
-# 129 "Vuna/Compiler/Elab/Prelude.vuna"
+# 130 "Vuna/Compiler/Elab/Prelude.vuna"
 let v_preludeValueGlobals = ((B_dData_dList.v_map (fun (i : Base_dIntrinsics.t_Intrinsic) -> { B_dData_dPair.f_Pair_first = (Base_dIntrinsics.v_intrinsicName i); B_dData_dPair.f_Pair_second = (v_ityToTerm (Base_dIntrinsics.v_intrinsicSignature i)) })) Base_dIntrinsics.v_userIntrinsics)
 
-# 134 "Vuna/Compiler/Elab/Prelude.vuna"
+# 135 "Vuna/Compiler/Elab/Prelude.vuna"
 let v_internalValueGlobals = ((B_dData_dList.v_map (fun (i : Base_dIntrinsics.t_Intrinsic) -> { B_dData_dPair.f_Pair_first = (Base_dIntrinsics.v_intrinsicName i); B_dData_dPair.f_Pair_second = (v_ityToTerm (Base_dIntrinsics.v_intrinsicSignature i)) })) Base_dIntrinsics.v_internalIntrinsics)
 
-# 138 "Vuna/Compiler/Elab/Prelude.vuna"
+# 139 "Vuna/Compiler/Elab/Prelude.vuna"
 let v_preludeGlobals = ((B_dData_dList.v_append v_preludeTypeGlobals) ((B_dData_dList.v_append v_preludeValueGlobals) v_internalValueGlobals))
 
-# 143 "Vuna/Compiler/Elab/Prelude.vuna"
+# 144 "Vuna/Compiler/Elab/Prelude.vuna"
 let v_preludeNames = ((B_dData_dList.v_append Base_dIntrinsics.v_preludeTypeNames) Base_dIntrinsics.v_preludeValueNames)
 
-# 147 "Vuna/Compiler/Elab/Prelude.vuna"
+# 148 "Vuna/Compiler/Elab/Prelude.vuna"
 let v_builtinEqTyName = (fun (v : Core_dTerm.t_Value) -> (match (v_builtinTyName v) with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__18) -> (if (dtb__18 = Base_dIntrinsics.v_intTypeName) then (B_dData_dMaybe.C_Maybe_Just (Base_dIntrinsics.v_intTypeName)) else (if (dtb__18 = Base_dIntrinsics.v_strTypeName) then (B_dData_dMaybe.C_Maybe_Just (Base_dIntrinsics.v_strTypeName)) else (if (dtb__18 = Base_dIntrinsics.v_floatTypeName) then (B_dData_dMaybe.C_Maybe_Just (Base_dIntrinsics.v_floatTypeName)) else B_dData_dMaybe.C_Maybe_Nothing)))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__19) -> (if (dtb__19 = Base_dIntrinsics.v_intTypeName) then (B_dData_dMaybe.C_Maybe_Just (Base_dIntrinsics.v_intTypeName)) else (if (dtb__19 = Base_dIntrinsics.v_strTypeName) then (B_dData_dMaybe.C_Maybe_Just (Base_dIntrinsics.v_strTypeName)) else (if (dtb__19 = Base_dIntrinsics.v_floatTypeName) then (B_dData_dMaybe.C_Maybe_Just (Base_dIntrinsics.v_floatTypeName)) else B_dData_dMaybe.C_Maybe_Nothing)))
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 160 "Vuna/Compiler/Elab/Prelude.vuna"
+# 161 "Vuna/Compiler/Elab/Prelude.vuna"
 let v_cmpBuiltinTyName = (fun (v : Core_dTerm.t_Value) -> (match (v_builtinTyName v) with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__19) -> (if ((B_dData_dList.v_memName dtb__19) Base_dIntrinsics.v_cmpSpecializedTyNames) then (B_dData_dMaybe.C_Maybe_Just (dtb__19)) else B_dData_dMaybe.C_Maybe_Nothing)
+  | B_dData_dMaybe.C_Maybe_Just (dtb__20) -> (if ((B_dData_dList.v_memName dtb__20) Base_dIntrinsics.v_cmpSpecializedTyNames) then (B_dData_dMaybe.C_Maybe_Just (dtb__20)) else B_dData_dMaybe.C_Maybe_Nothing)
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 168 "Vuna/Compiler/Elab/Prelude.vuna"
+# 169 "Vuna/Compiler/Elab/Prelude.vuna"
 let rec v_prependParams = (fun (mc0 : string B_dData_dList.t_List) (mc1 : Core_dTerm.t_Term) -> (match mc0 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__20, dtb__21) -> (Core_dTerm.C_Term_TPi (dtb__20, false, Core_dTerm.C_Rig_Rig0, (Core_dTerm.C_Term_TType (Core_dTerm.v_levelZero)), ((v_prependParams dtb__21) mc1)))
+  | B_dData_dList.C_List__x58__x58_ (dtb__21, dtb__22) -> (Core_dTerm.C_Term_TPi (dtb__21, false, Core_dTerm.C_Rig_Rig0, (Core_dTerm.C_Term_TType (Core_dTerm.v_levelZero)), ((v_prependParams dtb__22) mc1)))
   | B_dData_dList.C_List_Nil -> mc1
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 176 "Vuna/Compiler/Elab/Prelude.vuna"
+# 177 "Vuna/Compiler/Elab/Prelude.vuna"
 let v_baseNameOf = (fun (name : string) -> (Base_dSource.v_lastSeg name))
 
-# 183 "Vuna/Compiler/Elab/Prelude.vuna"
+# 184 "Vuna/Compiler/Elab/Prelude.vuna"
 let rec v_classMethodProjectionGo = (fun (mc0 : string) (mc1 : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc2 : string) -> (match mc1 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__22, dtb__23) -> (if ((v_baseNameOf (B_dData_dPair.v_firstOf dtb__22)) = mc0) then (B_dData_dPair.v_firstOf dtb__22) else (((v_classMethodProjectionGo mc0) dtb__23) mc2))
+  | B_dData_dList.C_List__x58__x58_ (dtb__23, dtb__24) -> (if ((v_baseNameOf (B_dData_dPair.v_firstOf dtb__23)) = mc0) then (B_dData_dPair.v_firstOf dtb__23) else (((v_classMethodProjectionGo mc0) dtb__24) mc2))
   | B_dData_dList.C_List_Nil -> mc2
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 180 "Vuna/Compiler/Elab/Prelude.vuna"
+# 181 "Vuna/Compiler/Elab/Prelude.vuna"
 let v_classMethodProjection = (fun (methods : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List) (short : string) -> (((v_classMethodProjectionGo short) methods) short))

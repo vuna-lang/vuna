@@ -102,6 +102,7 @@ Elab_dInstName.ml
 Elab_dMatch.ml
 Elab_dMeta.ml
 Elab_dMetaSpans.ml
+Elab_dMref.ml
 Elab_dPrelude.ml
 Elab_dRecords.ml
 Elab_dRepresentation.ml

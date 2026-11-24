@@ -87,7 +87,7 @@ let v_preparedForModule = (fun (modules : Loader_dModules.t_Module B_dData_dList
 let v_setPrepared = (fun (prepared : Frontend_dAst.t_Decl B_dData_dList.t_List) (mi : t_ModuleIface) -> { f_ModuleIface_miName = (mi).f_ModuleIface_miName; f_ModuleIface_miPackage = (mi).f_ModuleIface_miPackage; f_ModuleIface_miSource = (mi).f_ModuleIface_miSource; f_ModuleIface_miIfaceHash = (mi).f_ModuleIface_miIfaceHash; f_ModuleIface_miImplHash = (mi).f_ModuleIface_miImplHash; f_ModuleIface_miDepHashes = (mi).f_ModuleIface_miDepHashes; f_ModuleIface_miImports = (mi).f_ModuleIface_miImports; f_ModuleIface_miImplicitImports = (mi).f_ModuleIface_miImplicitImports; f_ModuleIface_miExports = (mi).f_ModuleIface_miExports; f_ModuleIface_miFixities = (mi).f_ModuleIface_miFixities; f_ModuleIface_miDecls = (mi).f_ModuleIface_miDecls; f_ModuleIface_miRecords = (mi).f_ModuleIface_miRecords; f_ModuleIface_miPrepared = prepared; f_ModuleIface_miCached = (mi).f_ModuleIface_miCached; f_ModuleIface_miDefLocs = (mi).f_ModuleIface_miDefLocs })
 
 # 212 "Vuna/Compiler/Driver/Iface.vuna"
-let v_ifaceSchema = "vuna-iface 30"
+let v_ifaceSchema = "vuna-iface 34"
 
 # 217 "Vuna/Compiler/Driver/Iface.vuna"
 let v_ifaceHashVersion = "vuna-iface-hash 13 (instance stable key + full-class symbol)"
