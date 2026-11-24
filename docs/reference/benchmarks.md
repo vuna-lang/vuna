@@ -22,35 +22,66 @@ C 对照的存在让「vuna 相对最优手写实现」有了第二条参照；`
 （全部生成程序 × ocaml/native/wasm × 三指标），`--check` 只比本次实际跑的 target / benchmark。
 与 `bench/bootstrap.sh` 的分工：后者测构建 / 编译墙钟与产物尺寸，本设施测运行期。
 
-当前读数（`--runs 3 --warmup 1`，x86_64 / 16 核 / ocamlopt 5.5.1 非 flambda；绝对 ms 随
-机器变化，只比较 ratio）：
+三口径读数（`--target all --runs 5 --warmup 2`，x86_64 / 16 核 / 生成时 `meta.loadavg ≈ 2`；
+ratio 对手写 OCaml，wasm 用 net；完整的 50 个用例、native / wasm 列与对手写 C 的对照见
+`bench/baselines/programs.json`）：
 
-| benchmark | 场景 | ratio | 优化手段 |
-| --- | --- | --- | --- |
-| arith | Int 算术 + 尾递归 | ~1.2x | 饱和内联 + 多参数 lambda 链 |
-| string_ops | 字符串拼接 / repeat / substring | ~1.3x | `++` 链 / `strPack` 批拼为一次 `String.concat`；`strSubstring` + `repeat` 一次 `strConcatMany` |
-| hashmap | 持久哈希表 + 字典派发 | ~2.0x | 桶改 `Array`（`Array.get` O(1) + copy-on-write） |
-| list_recursion | List 非尾递归 / fold / append | ~0.8x | 已达标 |
-| gc_pressure | 分配压力（字符串 churn） | ~1.2x | 已达标 |
-| array | 不可变 Array（get / set / length） | ~0.9x | 不可变 `Array` 与手写 OCaml 持平 |
-| records | record 更新 + variant 分派 | ~2.1x | record 直接映射 OCaml record；多字段更新无额外分配 |
-| closures | 高阶函数 / 每次迭代新建闭包 | ~1.4x | 多参数 lambda 链 + 饱和调用直调 |
-| sorting | 归并排序（List + Pair 拆半） | ~1.5x | List 单元与模式匹配与手写一致 |
-| float_math | Float 算术 / sqrt / abs / 转换 | ~1.9x | 浮点内建；盒装表示与 OCaml 相同 |
-| text_scan | 逐字节 `strAt` 扫描 | ~1.5x | `strAt` 直调原语，不经 List 桥接 |
-| nat_bits | Nat 饱和算术 + 63-bit 位运算 | ~1.3x | Nat 运行时即 Int；位运算内建 |
-| tco_mutual | 互递归（`even`/`odd`） | ~1.1x | 尾调用在 OCaml 侧直接复用栈帧 |
-| tco_wide | 9 参数尾递归（3 个栈参数） | ~1.0x | 尾调用与栈传参 ABI 由 ocamlopt 处理 |
-| micro_tco | 最小自递归尾调用 | ~1.0x | 旋转后的 loop header + 比较直发分支 |
-| tco_args | 交叉依赖实参的尾递归 | ~1.1x | 实参按需落临时槽 + 统一写回 |
-| tco_unrotated | 双支自调用 / `&&` 条件 | ~1.0x | 不旋转时回退整帧 `jmp` |
-| tco_arity6 | 6 参尾递归（全走寄存器） | ~1.1x | 5 个热标量槽提升 |
-| tco_narrow_wide | 2 参 ↔ 10 参窄调宽 | ~1.1x | native 回退普通 `call`（已知缺口，见 §1.2） |
-| tco_nat | Nat 结构递归尾调用 | ~1.6x | `IrNatCase` 的尾位置传播 |
-| state_machine | 9 状态 Int 分支链 | ~1.4x | 线性比较链 + `_` 兜底臂 |
-| gc_low_live | 低存活集、大累计分配 | ~0.8x | OCaml GC 回收；vuna 侧只有 bump 分配 |
-| gc_array_churn | 大对象 churn（Array COW） | ~1.7x | `Array.set` COW 与手写 `Array.copy` 对齐 |
-| gc_retain | 高存活集（live ~19 MB）+ 等量 churn | ~1.9x | 整堆回收要重扫整个存活集；整堆触发策略的测量项 |
+| benchmark | 场景 | wall | cpu | rss | vs_c (w/c/r) |
+| --- | --- | --- | --- | --- | --- |
+| arith | Int 算术 + 尾递归 | 1.21 | 1.23 | 1.69 | 1.77/1.79/2.57 |
+| string_ops | 字符串拼接 / repeat / substring | 1.62 | 1.82 | 1.54 | 3.72/4.07/2.89 |
+| hashmap | 持久哈希表 + 字典派发 | 2.87 | 2.95 | 2.61 | 2.98/3.07/4.97 |
+| list_recursion | List 非尾递归 / fold / append | 0.75 | 0.75 | 1.23 | 1.00/0.99/1.15 |
+| gc_pressure | 分配压力（字符串 churn） | 1.17 | 1.18 | 3.05 | 4.10/4.12/20.04 |
+| array | 不可变 Array（get / set / length） | 0.96 | 0.95 | 1.27 | 6.65/6.74/4.17 |
+| records | record 更新 + variant 分派 | 2.31 | 2.31 | 4.87 | 4.01/4.07/13.28 |
+| closures | 高阶函数 / 每次迭代新建闭包 | 1.29 | 1.28 | 1.50 | 7.91/8.22/7.56 |
+| sorting | 归并排序（List + Pair 拆半） | 1.14 | 1.14 | 3.68 | 0.63/0.62/0.86 |
+| float_math | Float 算术 / sqrt / abs / 转换 | 2.05 | 2.06 | 4.28 | 3.03/3.04/11.47 |
+| text_scan | 逐字节 `strAt` 扫描 | 1.65 | 1.68 | 1.80 | 2.46/2.52/3.52 |
+| nat_bits | Nat 饱和算术 + 63-bit 位运算 | 1.79 | 1.84 | 1.70 | 2.63/2.73/2.64 |
+| tco_mutual | 互递归（`even`/`odd`） | 1.09 | 1.10 | 1.66 | 3.20/3.36/2.80 |
+| tco_wide | 9 参数尾递归（3 个栈参数） | 1.05 | 1.04 | 1.67 | 2.29/2.38/2.60 |
+| micro_tco | 最小自递归尾调用 | 1.06 | 1.06 | 1.66 | 1.97/1.98/2.59 |
+| tco_args | 交叉依赖实参的尾递归 | 1.13 | 1.13 | 1.68 | 1.29/1.29/2.60 |
+| tco_unrotated | 双支自调用 / `&&` 条件 | 0.99 | 0.99 | 1.64 | 1.92/1.93/2.57 |
+| tco_arity6 | 6 参尾递归（全走寄存器） | 1.15 | 1.15 | 1.65 | 2.08/2.09/2.78 |
+| tco_narrow_wide | 2 参 ↔ 10 参窄调宽 | 1.18 | 1.18 | 1.65 | 4.07/4.27/2.58 |
+| tco_nat | Nat 结构递归尾调用 | 1.92 | 1.94 | 1.65 | 3.23/3.30/2.57 |
+| state_machine | 9 状态 Int 分支链 | 1.72 | 1.75 | 1.65 | 6.28/6.48/2.58 |
+| gc_low_live | 低存活集、大累计分配 | 0.86 | 0.86 | 1.36 | 2.11/2.11/199.33 |
+| gc_array_churn | 大对象 churn（Array COW） | 1.65 | 1.65 | 2.56 | 1.68/1.68/126.55 |
+| gc_retain | 高存活集（live ~19 MB）+ 等量 churn | 2.08 | 2.11 | 5.62 | 1.03/1.03/5.51 |
+
+优化手段（数字见上表；`vs_c` 是同一窗对手写 C 的 wall/cpu/rss 比）：
+
+| benchmark | 场景 | 优化手段 |
+| --- | --- | --- |
+| arith | Int 算术 + 尾递归 | 饱和内联 + 多参数 lambda 链 |
+| string_ops | 字符串拼接 / repeat / substring | `++` 链 / `strPack` 批拼为一次 `String.concat`；`strSubstring` + `repeat` 一次 `strConcatMany` |
+| hashmap | 持久哈希表 + 字典派发 | 桶改 `Array`（`Array.get` O(1) + copy-on-write） |
+| list_recursion | List 非尾递归 / fold / append | 已达标 |
+| gc_pressure | 分配压力（字符串 churn） | 已达标 |
+| array | 不可变 Array（get / set / length） | 不可变 `Array` 与手写 OCaml 持平 |
+| records | record 更新 + variant 分派 | record 直接映射 OCaml record；多字段更新无额外分配 |
+| closures | 高阶函数 / 每次迭代新建闭包 | 多参数 lambda 链 + 饱和调用直调 |
+| sorting | 归并排序（List + Pair 拆半） | List 单元与模式匹配与手写一致 |
+| float_math | Float 算术 / sqrt / abs / 转换 | 浮点内建；盒装表示与 OCaml 相同 |
+| text_scan | 逐字节 `strAt` 扫描 | `strAt` 直调原语，不经 List 桥接 |
+| nat_bits | Nat 饱和算术 + 63-bit 位运算 | Nat 运行时即 Int；位运算内建 |
+| tco_mutual | 互递归（`even`/`odd`） | 尾调用在 OCaml 侧直接复用栈帧 |
+| tco_wide | 9 参数尾递归（3 个栈参数） | 尾调用与栈传参 ABI 由 ocamlopt 处理 |
+| micro_tco | 最小自递归尾调用 | 旋转后的 loop header + 比较直发分支 |
+| tco_args | 交叉依赖实参的尾递归 | 实参按需落临时槽 + 统一写回 |
+| tco_unrotated | 双支自调用 / `&&` 条件 | 不旋转时回退整帧 `jmp` |
+| tco_arity6 | 6 参尾递归（全走寄存器） | 5 个热标量槽提升 |
+| tco_narrow_wide | 2 参 ↔ 10 参窄调宽 | native 回退普通 `call`（已知缺口，见 §1.2） |
+| tco_nat | Nat 结构递归尾调用 | `IrNatCase` 的尾位置传播 |
+| state_machine | 9 状态 Int 分支链 | 线性比较链 + `_` 兜底臂 |
+| gc_low_live | 低存活集、大累计分配 | OCaml GC 回收；vuna 侧只有 bump 分配 |
+| gc_array_churn | 大对象 churn（Array COW） | `Array.set` COW 与手写 `Array.copy` 对齐 |
+| gc_retain | 高存活集（live ~19 MB）+ 等量 churn | 整堆回收要重扫整个存活集；整堆触发策略的测量项 |
+
 
 场景覆盖：数值 / 字符串 / 容器 / 分配 / 数组 / 记录与变体 / 高阶函数 / 算法 / 浮点 /
 逐字节文本 / Nat 与位运算 / 尾调用与分支链 / GC。新增场景按机制归入 `bench/programs/t<N>/`，
@@ -97,27 +128,29 @@ C 对照的存在让「vuna 相对最优手写实现」有了第二条参照；`
   （自带栈未触碰的虚拟页不提交）；每个样本都同时给墙钟 / CPU / RSS，RSS 取样本最大值；
 - `--runs 5 --warmup 2`：墙钟与 CPU 取中位数；基线记录生成时的 `meta.loadavg`，跨机器只比 ratio。
 
-本机一档（16 核，`6117ce8`，生成时 `loadavg ≈ 0.36`，同一窗口）：
+本机一档（16 核，`--target all --runs 5 --warmup 2`，生成时 `meta.loadavg ≈ 2`，同一窗口；
+数值取 `programs.json`）：
 
 | benchmark | native ms | OCaml 后端 ms | 手写 OCaml ms | native/手写 | native/OCaml 后端 | native RSS | 手写 RSS | RSS 比 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| arith | 8 | 5 | 5 | 1.60x | 1.60x | 0.4 MiB | 2.5 MiB | 0.15x |
-| string_ops | 3 | 4 | 3 | 1.00x | 0.75x | 0.8 MiB | 3.1 MiB | 0.24x |
-| hashmap | 8 | 7 | 4 | 2.00x | 1.14x | 4.0 MiB | 4.0 MiB | 0.99x |
-| list_recursion | 24 | 10 | 13 | 1.85x | 2.40x | 19.8 MiB | 11.3 MiB | 1.74x |
-| gc_pressure | 39 | 30 | 26 | 1.50x | 1.30x | 32.8 MiB | 11.2 MiB | 2.93x |
-| array | 21 | 15 | 16 | 1.31x | 1.40x | 27.4 MiB | 15.5 MiB | 1.77x |
-| records | 20 | 14 | 7 | 2.86x | 1.43x | 1.0 MiB | 4.7 MiB | 0.21x |
-| closures | 23 | 11 | 9 | 2.56x | 2.09x | 24.2 MiB | 8.6 MiB | 2.81x |
-| sorting | 36 | 20 | 18 | 2.00x | 1.80x | 16.2 MiB | 9.4 MiB | 1.72x |
-| float_math | 9 | 13 | 7 | 1.29x | 0.69x | 1.0 MiB | 4.5 MiB | 0.22x |
-| text_scan | 5 | 5 | 4 | 1.25x | 1.00x | 3.4 MiB | 3.5 MiB | 0.98x |
-| nat_bits | 6 | 6 | 4 | 1.50x | 1.00x | 0.4 MiB | 2.5 MiB | 0.15x |
-| tco_mutual | 8 | 5 | 4 | 2.00x | 1.60x | 0.4 MiB | 2.4 MiB | 0.16x |
-| tco_wide | 6 | 4 | 4 | 1.50x | 1.50x | 0.4 MiB | 2.6 MiB | 0.15x |
-| gc_low_live | 218 | 285 | 339 | 0.64x | 0.76x | 2.8 MiB | 244.5 MiB | 0.01x |
-| gc_array_churn | 140 | 183 | 112 | 1.25x | 0.77x | 3.1 MiB | 82.1 MiB | 0.04x |
-| gc_retain | 160 | 75 | 38 | 4.21x | 2.13x | 55.2 MiB | 19.4 MiB | 2.85x |
+| arith | 3.2 | 3.8 | 3.2 | 1.01x | 0.83x | 0.9 MiB | 2.6 MiB | 0.33x |
+| string_ops | 1.2 | 2.2 | 1.4 | 0.84x | 0.52x | 1 MiB | 3.2 MiB | 0.31x |
+| hashmap | 7.2 | 6.2 | 2.1 | 3.37x | 1.17x | 3.9 MiB | 4 MiB | 0.97x |
+| list_recursion | 20.5 | 7.8 | 10.4 | 1.96x | 2.62x | 19.9 MiB | 11.3 MiB | 1.76x |
+| gc_pressure | 36.8 | 28.5 | 24.3 | 1.51x | 1.29x | 32.8 MiB | 11.3 MiB | 2.90x |
+| array | 18.8 | 13 | 13.6 | 1.38x | 1.44x | 27.5 MiB | 15.5 MiB | 1.77x |
+| records | 18.7 | 11.9 | 5.2 | 3.62x | 1.57x | 1 MiB | 4.7 MiB | 0.21x |
+| closures | 19.1 | 8.5 | 6.6 | 2.92x | 2.26x | 24.4 MiB | 8.7 MiB | 2.81x |
+| sorting | 41.1 | 19.4 | 17.1 | 2.41x | 2.12x | 16.3 MiB | 9.5 MiB | 1.70x |
+| float_math | 10.9 | 11.9 | 5.8 | 1.89x | 0.92x | 1 MiB | 4.6 MiB | 0.22x |
+| text_scan | 4.1 | 4 | 2.4 | 1.69x | 1.02x | 3.4 MiB | 3.6 MiB | 0.94x |
+| nat_bits | 1.8 | 3.2 | 1.8 | 1.03x | 0.57x | 0.9 MiB | 2.7 MiB | 0.32x |
+| tco_mutual | 25.7 | 10.5 | 9.6 | 2.69x | 2.46x | 0.9 MiB | 2.7 MiB | 0.32x |
+| tco_wide | 11 | 5.2 | 5 | 2.21x | 2.11x | 0.9 MiB | 2.7 MiB | 0.32x |
+| gc_low_live | 221.3 | 293 | 339.3 | 0.65x | 0.76x | 2.6 MiB | 244.4 MiB | 0.01x |
+| gc_array_churn | 148.8 | 186 | 112.8 | 1.32x | 0.80x | 3.1 MiB | 82.3 MiB | 0.04x |
+| gc_retain | 173.9 | 78.9 | 38 | 4.58x | 2.20x | 55.3 MiB | 19.5 MiB | 2.83x |
+
 
 读法：
 
@@ -140,11 +173,13 @@ C 对照的存在让「vuna 相对最优手写实现」有了第二条参照；`
 - **GC 的主判据已成立**：逐帧保守扫根会把帧内**已死**的指针槽当成根（`gc_low_live` 的
   `churn` 每帧用完 `xs` / `s` 之后递归），`Native.Live` 在递归 / 带回边的函数里对指针槽
   在最后一次读之后写 0（[native.md](native.md) §3），死对象当轮即可回收：
-  `gc_low_live` 218 ms / 2.8 MiB、`gc_array_churn` 140 ms / 3.1 MiB（手写侧 244.1 / 82.2 MiB）；
+  `gc_low_live` 221 ms / 2.6 MiB、`gc_array_churn` 149 ms / 3.1 MiB（手写侧 244.4 / 82.3 MiB）；
   对照「按精确槽集扫描」时期的 231 / 3.6 与 138 / 3.9 MiB，墙钟只差一点、RSS 落回存活集量级。
-  `gc_pressure` 32.8 MiB 与 `gc_retain` 55.2 MiB（live 单调上升到 ~19 MB）仍符合预期，
+  `gc_pressure` 32.8 MiB 与 `gc_retain` 55.3 MiB（live 单调上升到 ~19 MB）仍符合预期，
   是 `VUNA_NATIVE_GC_LOG` 里 `gen=` 分布的测量项（[native.md](native.md) §5.2）。
-- 峰值 RSS 的语义：OCaml 侧是 GC 后高水位，native 侧是栈页 + live 堆；两者只作量级参考。
+- 峰值 RSS 的语义：OCaml 侧是 GC 后高水位，native 侧是栈页 + live 堆，C 侧是 malloc 高水位
+  （t5 用显式 free，比到 C 就是 GC 元数据与高水位的代价）；wasm 减掉 node 地板后才进入比较。
+  三者都只作量级参考，判定以 ratio 为主。
 - 这组数不是 CI 门槛：跨机器、跨负载不可比；回归判断用 `--target native --check` 对
   `bench/baselines/programs.json` 的 ratio、rss_ratio、artifact 与 `default_stack_ok` 变化做提示。
 
@@ -201,38 +236,39 @@ wasm 产物由仓库自带的宿主执行（`wasm-host/run.mjs`，Node/V8；与�
 （另有 9 个效应基准与 `startup` / `traits` 见 §1.4）。
 
 > **读数来源**：`bench/baselines/programs.json`（`--target all --runs 5 --warmup 2`；
-> node v24.21.0、wasm-opt 133）。t2 行按当前基线，其余行沿用上一轮快照。
-> wasm 列是 `median_ms`（含 ~22 ms 宿主启动）；减掉 `meta.node_startup_ms` 的净耗时见
-> JSON 的 `wasm.net_median_ms`。
+> node v24.21.0、wasm-opt 133）。wasm ms 是绝对 `median_ms`（含 ~22 ms 宿主启动），
+> `wasm/手写` 列是减掉 `meta.node_startup_ms` 后的 net 比值；cpu / rss 的绝对量与 net
+> 值都在 JSON（`wasm.net_cpu_ms` / `wasm.net_rss_kb`）。
 
-本机一档（绝对 ms / RSS 只作同机对比）：
+本机一档（绝对 ms / RSS 只作同机对比；每行取同一窗口的 `programs.json`）：
 
-| benchmark | wasm ms | native ms | OCaml 后端 ms | 手写 ms | wasm/手写 | native/手写 |
+| benchmark | wasm ms | native ms | OCaml 后端 ms | 手写 ms | wasm/手写（net） | native/手写 |
 | --- | --- | --- | --- | --- | --- | --- |
-| arith | 37 | 16 | 6 | 5 | 7.4x | 3.2x |
-| float_math | 36 | 66 | 13 | 7 | 5.1x | 9.4x |
-| hashmap | 52 | 11 | 9 | 5 | 10.4x | 2.2x |
-| hashmap_remove | 106 | 102 | 35 | 5 | 21.2x | 20.4x |
-| micro_apply | 51 | 28 | 9 | 8 | 6.4x | 3.5x |
-| micro_concat | 97 | 23 | 33 | 16 | 6.1x | 1.4x |
-| nat_bits | 33 | 7 | 5 | 4 | 8.2x | 1.8x |
-| priority_queue | 56 | 28 | 18 | 10 | 5.6x | 2.8x |
-| queue | 51 | 10 | 8 | 4 | 12.8x | 2.5x |
-| records | 69 | 32 | 15 | 8 | 8.6x | 4.0x |
-| sort_lib | 78 | 25 | 20 | 7 | 11.1x | 3.6x |
-| string_ops | 28 | 3 | 3 | 3 | 9.3x | 1.0x |
-| micro_tco | 59 | 17 | 14 | 13 | 4.5x | 1.3x |
-| tco_mutual | 69 | 30 | 14 | 13 | 5.4x | 2.3x |
-| tco_wide | 50 | 13 | 9 | 9 | 5.8x | 1.5x |
-| tco_args | 51 | 31 | 19 | 17 | 3.0x | 1.8x |
-| tco_unrotated | 72 | 12 | 11 | 12 | 6.0x | 1.0x |
-| tco_arity6 | 44 | 9 | 12 | 10 | 4.2x | 0.9x |
-| tco_narrow_wide | 42 | 136 | 7 | 6 | 6.6x | 22x |
-| tco_nat | 47 | 10 | 13 | 9 | 5.5x | 1.1x |
-| state_machine | 48 | 11 | 12 | 9 | 5.6x | 1.3x |
-| treemap | 82 | 31 | 20 | 9 | 9.1x | 3.4x |
-| gc_retain | 362 | 168 | 81 | 41 | 8.8x | 4.1x |
-| array / closures / list_recursion / sorting / text_scan / gc_pressure / gc_array_churn / gc_low_live | `run_ok=false` | 22 / 25 / 29 / 40 / 7 / 68 / 517 / 473 | 15 / 11 / 12 / 22 / 6 / 31 / 190 / 310 | 15 / 8 / 15 / 18 / 5 / 28 / 118 / 367 | — | — |
+| arith | 35.5 | 3.2 | 3.8 | 3.2 | 4.31x | 1.01x |
+| float_math | 36.7 | 10.9 | 11.9 | 5.8 | 2.58x | 1.89x |
+| hashmap | 47.6 | 7.2 | 6.2 | 2.1 | 12.04x | 3.37x |
+| hashmap_remove | 101.7 | 102 | 34.4 | 3.2 | 24.92x | 31.83x |
+| micro_apply | 52.8 | 4 | 7.6 | 6.6 | 4.68x | 0.60x |
+| micro_concat | 70.4 | 16.7 | 26.1 | 13.7 | 3.54x | 1.22x |
+| nat_bits | 30.9 | 1.8 | 3.2 | 1.8 | 5.01x | 1.03x |
+| priority_queue | 56.8 | 22.2 | 14.7 | 7.3 | 4.80x | 3.05x |
+| queue | 44.3 | 6.9 | 5.2 | 1.9 | 11.63x | 3.58x |
+| records | 64.4 | 18.7 | 11.9 | 5.2 | 8.25x | 3.62x |
+| sort_lib | 82.2 | 19.8 | 17.5 | 4.5 | 13.27x | 4.36x |
+| string_ops | 32.9 | 1.2 | 2.2 | 1.4 | 8.11x | 0.84x |
+| micro_tco | 49.3 | 13.3 | 10.2 | 9.6 | 2.85x | 1.38x |
+| tco_mutual | 61.9 | 25.7 | 10.5 | 9.6 | 4.19x | 2.69x |
+| tco_wide | 47.5 | 11 | 5.2 | 5 | 5.17x | 2.21x |
+| tco_args | 44.2 | 28.5 | 16.9 | 14.9 | 1.50x | 1.91x |
+| tco_unrotated | 64.2 | 9.8 | 8.8 | 9 | 4.74x | 1.09x |
+| tco_arity6 | 37.1 | 6.6 | 8.5 | 7.4 | 2.06x | 0.88x |
+| tco_narrow_wide | 35.7 | 139.6 | 3.6 | 3.1 | 4.53x | 45.48x |
+| tco_nat | 36.3 | 7.2 | 11.1 | 5.8 | 2.51x | 1.25x |
+| state_machine | 46.2 | 9.2 | 9.8 | 5.7 | 4.28x | 1.61x |
+| treemap | 109.8 | 42.6 | 25.2 | 9.2 | 9.60x | 4.66x |
+| gc_retain | 357.1 | 173.9 | 78.9 | 38 | 8.82x | 4.58x |
+| array / closures / list_recursion / sorting / text_scan / gc_pressure / gc_array_churn / gc_low_live | `run_ok=false` | 99 / 26 / 19 / 30 / 4 / 31 / 178 / 444 | 16 / 11 / 8 / 12 / 5 / 16 / 96 / 168 | 15 / 7 / 12 / 16 / 4 / 14 / 74 / 190 | — | — |
+
 
 口径（读数前先看）：
 
@@ -251,13 +287,11 @@ wasm 产物由仓库自带的宿主执行（`wasm-host/run.mjs`，Node/V8；与�
 - **引擎/宿主版本是一阶变量**：基线只与 `meta.node` + `meta.wasm_host_runner` 同版本
   可比；换 Node 版本要重标基线。
 
-读法（减掉 ~22 ms 地板）：**V8 在 `float_math`（net 14 vs native 66）与 `hashmap_remove`
-（net 84 vs 102）上快过 native**，`arith` 基本持平（net 15 vs 16）；其余跑得动的项 native
-领先（`records` net 47 vs 32、`gc_retain` 340 vs 168、`hashmap` 30 vs 11、`tco_wide` 9 vs 6、
-`nat_bits` 11 vs 7）。差异来源与 native 的既有缺口一致：native 无寄存器分配、每个算术/比较
-都是一次运行时调用，而 V8 有优化编译器；native 赢在「调用少、字符串/栈传参多」的形状
-（[performance.md](performance.md) §3）。`tco_narrow_wide` 是反向的一档：wasm 42 /
-native 136——wasm 两侧都发 `return_call`，native 的窄调宽回退成普通 `call`（§1.2）。
+读法：V8 在少数形状上快过 native——`tco_narrow_wide`（wasm 两侧都发 `return_call`，
+native 的窄调宽回退成普通 `call`，见 §1.2）与 `tco_args`，`hashmap_remove` 接近。其余
+跑得动的项 native 领先。差异来源与 native 的既有缺口一致：native 无寄存器分配、每个
+算术 / 比较都是一次运行时调用，而 V8 有优化编译器；native 赢在「调用少、字符串 / 栈传参
+多」的形状（[performance.md](performance.md) §3）。
 
 `wasm-opt -O3` 的内联会**掩盖**后端 codegen 的成本：binaryen 把闭包调用链与装箱/拆箱
 内联掉后，`call $rt_apply`、`struct.new $int` 这些开销不再直接体现在读数里。所以量后端

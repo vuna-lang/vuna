@@ -64,9 +64,10 @@
   退出（探针不参与计时）。自带栈生效时这项应恒为 true；false 说明栈初始化回落到了进程栈。
 - 跨机器只比较 ratio（`wall` / `cpu` / `rss` 各一组）；绝对 ms/KB 不可比。`--check` 默认读
   对应基线，三个指标都参与判定：超过 `--threshold`（默认 20%）打 `PERF-CHECK-WARN`
-  （软告警、退出 0），超过 `--fail-threshold`（默认 50%）直接失败；同机器另比 `wall` / `cpu`
-  的绝对值，并提示 `default_stack_ok` 的变化。宿主负载只污染墙钟，CPU 与 RSS 的口径
-  不受影响，机器繁忙时以 `cpu` 行为准。
+  （软告警、退出 0），超过 `--fail-threshold`（默认 50%）直接失败；同机器另比 `wall` / `cpu` /
+  `rss` 的绝对值，并提示 `default_stack_ok` 的变化。wasm 的净耗时不到地板两倍时（启动成本
+  主导）绝对值行只作参考。宿主负载只污染墙钟，CPU 与 RSS 的口径不受影响，机器繁忙时以
+  `cpu` 行为准。
 - 编译器侧基准（`check compiler` / `check .` / `compile .`）与 runtime 基准共用同一脚本与
   JSON 结构；当前先由 `bench/bootstrap.sh` 记录编译墙钟，`bench/run.sh` 的 runtime 段不重复测量
   编译（含 `VN_PERF_STATS` 的分配/GC 读数）。
@@ -144,52 +145,56 @@ nix run .#vuna-artifacts -- --json bench/baselines/artifacts.json   # 重标
 
 ## 当前基线
 
-`--runs 3 --warmup 1`（native / wasm 列用 `--runs 5 --warmup 2`），x86_64 / 16 核 / ocamlopt 5.5.1
-（非 flambda）。读数见 [benchmarks.md](../docs/reference/benchmarks.md)：
+`--target all --runs 5 --warmup 2`（生成时 `meta.loadavg ≈ 2`），x86_64 / 16 核 / ocamlopt 5.5.1
+（非 flambda）。每格是 **wall/cpu/rss 三口径的 ratio（对手写 OCaml）**，wasm 列已是减地板的
+net；对手写 C 的对照与全量 50 个用例见 `bench/baselines/programs.json`，解读见
+[benchmarks.md](../docs/reference/benchmarks.md)：
 
-| benchmark | 场景 | OCaml 后端 ratio | native ratio | wasm ratio |
+| benchmark | 场景 | OCaml 后端 (w/c/r) | native (w/c/r) | wasm net (w/c/r) |
 | --- | --- | --- | --- | --- |
-| arith | Int 算术 + 尾递归 | ~1.6x | ~1.6x | ~6.6x |
-| string_ops | 字符串拼接 / repeat / substring | ~0.8x | ~1.0x | ~10.7x |
-| hashmap | 持久哈希表 + 字典派发 | ~1.1x | ~2.0x | ~10.2x |
-| list_recursion | List 非尾递归 / fold / append | ~2.4x | ~1.8x | skipped |
-| gc_pressure | 分配压力（字符串 churn） | ~1.3x | ~1.5x | skipped |
-| array | 不可变 Array | ~1.4x | ~1.3x | skipped |
-| records | record 更新 + variant 分派 | ~1.4x | ~2.9x | ~9.4x |
-| closures | 高阶函数 / 每次迭代新建闭包 | ~2.1x | ~2.6x | skipped |
-| sorting | 归并排序（List + Pair 拆半） | ~1.8x | ~2.0x | skipped |
-| float_math | Float 算术 / sqrt / abs | ~0.7x | ~1.3x | ~5.3x |
-| text_scan | 逐字节 `strAt` 扫描 | ~1.0x | ~1.2x | skipped |
-| nat_bits | Nat 饱和算术 + 位运算 | ~1.0x | ~1.5x | ~8.2x |
-| tco_mutual | 互递归尾调用 | ~1.1x | ~2.3x | ~5.4x |
-| tco_wide | 9 参数尾递归 | ~1.0x | ~1.5x | ~5.8x |
-| micro_tco | 最小自递归尾调用 | ~1.0x | ~1.3x | ~4.5x |
-| tco_args | 交叉依赖实参的尾递归 | ~1.1x | ~1.8x | ~3.0x |
-| tco_unrotated | 不旋转的尾调用 | ~1.0x | ~1.0x | ~6.0x |
-| tco_arity6 | 6 参尾递归 | ~1.1x | ~0.9x | ~4.2x |
-| tco_narrow_wide | 窄调宽回退 | ~1.1x | ~22x | ~6.6x |
-| tco_nat | Nat 结构递归尾调用 | ~1.6x | ~1.1x | ~5.5x |
-| state_machine | Int 分支链状态机 | ~1.4x | ~1.3x | ~5.6x |
-| gc_low_live | 低存活集、大累计分配 | ~0.8x | ~0.6x | skipped |
-| gc_array_churn | 大对象 churn（Array COW） | ~0.8x | ~1.2x | skipped |
-| gc_retain | 高存活集（live ~19 MB）+ 等量 churn | ~2.1x | ~4.2x | ~7.7x |
+| arith | Int 算术 + 尾递归 | 1.21/1.23/1.69 | 1.01/1.01/0.33 | 4.31/4.76/3.64 |
+| string_ops | 字符串拼接 / repeat / substring | 1.62/1.82/1.54 | 0.84/0.93/0.31 | 8.11/10.02/2.49 |
+| hashmap | 持久哈希表 + 字典派发 | 2.87/2.95/2.61 | 3.37/3.49/0.97 | 12.04/16.67/4.24 |
+| list_recursion | List 非尾递归 / fold / append | 0.75/0.75/1.23 | 1.96/1.97/1.76 | skipped |
+| gc_pressure | 分配压力（字符串 churn） | 1.17/1.18/3.05 | 1.51/1.52/2.90 | skipped |
+| array | 不可变 Array | 0.96/0.95/1.27 | 1.38/1.39/1.77 | skipped |
+| records | record 更新 + variant 分派 | 2.31/2.31/4.87 | 3.62/3.65/0.21 | 8.25/9.24/2.63 |
+| closures | 高阶函数 / 每次迭代新建闭包 | 1.29/1.28/1.50 | 2.92/2.94/2.81 | skipped |
+| sorting | 归并排序（List + Pair 拆半） | 1.14/1.14/3.68 | 2.41/2.43/1.70 | skipped |
+| float_math | Float 算术 / sqrt / abs | 2.05/2.06/4.28 | 1.89/1.90/0.22 | 2.58/2.97/2.53 |
+| text_scan | 逐字节 `strAt` 扫描 | 1.65/1.68/1.80 | 1.69/1.72/0.94 | skipped |
+| nat_bits | Nat 饱和算术 + 位运算 | 1.79/1.84/1.70 | 1.03/1.02/0.32 | 5.01/5.90/4.39 |
+| tco_mutual | 互递归尾调用 | 1.09/1.10/1.66 | 2.69/2.72/0.32 | 4.19/4.28/4.37 |
+| tco_wide | 9 参数尾递归 | 1.05/1.04/1.67 | 2.21/2.23/0.32 | 5.17/5.61/3.54 |
+| micro_tco | 最小自递归尾调用 | 1.06/1.06/1.66 | 1.38/1.39/0.32 | 2.85/3.10/3.56 |
+| tco_args | 交叉依赖实参的尾递归 | 1.13/1.13/1.68 | 1.91/1.92/0.32 | 1.50/1.64/3.63 |
+| tco_unrotated | 不旋转的尾调用 | 0.99/0.99/1.64 | 1.09/1.10/0.32 | 4.74/4.88/4.44 |
+| tco_arity6 | 6 参尾递归 | 1.15/1.15/1.65 | 0.88/0.88/0.32 | 2.06/2.33/3.52 |
+| tco_narrow_wide | 窄调宽回退 | 1.18/1.18/1.65 | 45.48/46.60/56.66 | 4.53/5.48/4.39 |
+| tco_nat | Nat 结构递归尾调用 | 1.92/1.94/1.65 | 1.25/1.26/0.32 | 2.51/2.90/3.37 |
+| state_machine | Int 分支链状态机 | 1.72/1.75/1.65 | 1.61/1.64/0.32 | 4.28/4.91/4.37 |
+| gc_low_live | 低存活集、大累计分配 | 0.86/0.86/1.36 | 0.65/0.65/0.01 | skipped |
+| gc_array_churn | 大对象 churn（Array COW） | 1.65/1.65/2.56 | 1.32/1.32/0.04 | skipped |
+| gc_retain | 高存活集（live ~19 MB）+ 等量 churn | 2.08/2.11/5.62 | 4.58/4.65/2.83 | 8.82/10.03/5.77 |
+
 
 wasm 列的 `skipped` 是 V8 的 wasm 栈上限（非尾深递归），浏览器路径同样如此；wasm 的
 绝对 ms、宿主启动地板与 RSS 口径见 [benchmarks.md §1.3](../docs/reference/benchmarks.md)。
 wasm 侧 `VN_PERF_STATS=1` 另报线性内存大小与启动四段（`read_ms` / `compile_ms` /
 `instantiate_ms` / `start_ms`），JSON 记在每个 benchmark 的 `startup` 字段里——
 `net_median_ms` 只减掉了 node 空启动，不区分这几段。
-OCaml 后端全部基准在 ~2× 手写 OCaml 内（最高的 `records` 约 2.1×）；native 的绝对值、峰值内存
-与 `default_stack_ok` 见 [benchmarks.md](../docs/reference/benchmarks.md)。分配 / GC 统计由
-OCaml 后端生成 runtime 的 `VN_PERF_STATS=1` 输出，`bench/run.sh` 采集进 JSON 的 `gc` 字段；
-native 侧由 `VUNA_NATIVE_GC_LOG=1` 的末次诊断行采集 `collections` / `live_bytes` /
-`alloc_bytes`（两代 mark-sweep，见 [native.md](../docs/reference/native.md) §5.2），
-另记峰值 RSS 与默认栈探针。`gc_low_live` 的 RSS 约 4 MiB（0.02x 手写），
-`gc_array_churn` 仍是 GC 相关的最差项（COW 数组复制）；`gc_retain` 是反向的一档——
-live 单调上升（~19 MB），整堆回收必须重扫整个存活集，是 `gen=` 分布与整堆触发策略的
-测量项（低存活的 `gc_low_live` / `gc_pressure` 覆盖不到）。TCO 已覆盖直调、
-自递归 loop、饱和闭包、wrapper 与 runtime 符号；t2 的基准把实参写回、非旋转尾调用、
-6/9 参边界、窄调宽回退与 Nat/Int 分支链各自单列，矩阵与读数见
+OCaml 后端大多数用例在 ~2× 手写 OCaml 内；例外是 `hashmap_remove`（~10.7×）与
+`eff_bracket`（~8.8×），原因见 [benchmarks.md §1](../docs/reference/benchmarks.md)。native 的
+绝对值、峰值内存与 `default_stack_ok` 也见该页。分配 / GC 统计由 OCaml 后端生成 runtime 的
+`VN_PERF_STATS=1` 输出，`bench/run.sh` 采集进 JSON 的 `gc` 字段；native 侧由
+`VUNA_NATIVE_GC_LOG=1` 的末次诊断行采集 `collections` / `live_bytes` / `alloc_bytes`
+（两代 mark-sweep，见 [native.md](../docs/reference/native.md) §5.2），另记峰值 RSS 与默认栈探针。
+`gc_low_live` 的 native RSS 落回进程基线（~2.6 MB，0.01× 手写 OCaml），C 对照是手工
+malloc/free，RSS 比到 C 更能看出 GC 元数据与高水位的代价；`gc_array_churn` 仍是 GC 相关的
+最差项（COW 数组复制）；`gc_retain` 是反向的一档——live 单调上升（~19 MB），整堆回收必须重扫
+整个存活集，是 `gen=` 分布与整堆触发策略的测量项（低存活的 `gc_low_live` / `gc_pressure`
+覆盖不到）。TCO 已覆盖直调、自递归 loop、饱和闭包、wrapper 与 runtime 符号；t2 的基准把
+实参写回、非旋转尾调用、6/9 参边界、窄调宽回退与 Nat/Int 分支链各自单列，矩阵与读数见
 [benchmarks.md §1.2](../docs/reference/benchmarks.md)。
 
 效应基准（`eff_tick` / `eff_deep` / `eff_deepseq` / `eff_bracket` / `eff_nested` /
