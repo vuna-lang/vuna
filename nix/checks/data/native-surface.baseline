@@ -1,5 +1,6 @@
 # syscall sites（函数名: 该站点的 syscall 号）
 allocFn                          "mmap" "mmap" "mmap" "mmap"
+blockBeginFn                     "futex"
 cgroupCpusFn                     "openat" "read" "close"
 cmdRunShFn                       "getcwd" "chdir" "fork" "setpgid" "wait4" "chdir" "setpgid" "execve" "exit" "chdir"
 condvarBroadcastFn               "futex"
@@ -18,6 +19,7 @@ heapLockFn                       "futex"
 heapUnlockFn                     "futex"
 initCpusFn                       "sched_getaffinity" "sched_setaffinity"
 initStackFn                      "mmap" "mprotect"
+initThreadsFn                    "arch_prctl"
 initTimeoutFn                    "rt_sigaction" "setitimer"
 isTtyFn                          "ioctl"
 lstatPathFn                      "newfstatat"
@@ -28,6 +30,7 @@ printBoolFn                      "write" "write"
 printIntFn                       "write" "write"
 printStrFn                       "write" "write"
 removeTreeFn                     "openat" "getdents64" "close" "close" "rmdir" "unlinkat" "close"
+safepointFn                      "futex" "futex"
 sigBlockFn                       "rt_sigprocmask"
 sigUnblockFn                     "rt_sigprocmask"
 sigalrmFn                        "getpgid" "kill" "kill" "write" "exit"
@@ -40,7 +43,7 @@ strictFailFn                     "exit"
 threadIdFn                       "gettid"
 threadJoinFn                     "futex" "munmap"
 threadParallelismFn              "sched_getaffinity"
-threadSpawnFn                    "mmap" "mprotect" "clone" "futex" "exit"
+threadSpawnFn                    "mmap" "mprotect" "futex" "clone" "futex" "futex" "futex" "exit"
 threadYieldFn                    "sched_yield"
 trapArrayOobFn                   "write" "exit"
 trapDivZeroFn                    "write" "exit"
@@ -80,11 +83,17 @@ hostStatusLabel 8
 memLimitLabel 8
 nativeArenaEndLabel 8
 nativeCurSegLabel 8
+nativeGcEpochLabel 8
+nativeGcRequestedLabel 8
 nativeHeapEndLabel 0
 nativeHeapPtrLabel 8
 nativeHugeFreeLabel 8
+nativeLiveThreadsLabel 8
+nativeParkedLabel 8
 nativeSegsLabel 8
 nativeThreadCountLabel 8
+nativeThreadTabLabel 8192
+nativeThreadedLabel 8
 readBufLabel 8388608
 shArgvLabel 32
 sigalrmSetLabel 8

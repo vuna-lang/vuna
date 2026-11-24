@@ -144,6 +144,10 @@ export data Instr(..) : Type where
   ILockInc32 : Operand -> Instr
   ILockInc64 : Operand -> Instr
   ILockDec64 : Operand -> Instr
+  -- | `mov <reg>, qword ptr fs:[off]`（当前线程 TCB）。
+  IMovFsLoad : Reg -> Int -> Instr
+  -- | `mov qword ptr fs:[off], <reg>`。
+  IMovFsStore : Int -> Reg -> Instr
   -- | `mov byte ptr <op>, imm8`（字符串缓冲写入）。
   IMovByteOp : Operand -> Int -> Instr
   -- | `mov byte ptr <op>, r8`（字符串缓冲写入）。

@@ -278,21 +278,25 @@ wasm 在引用点拒绝（文案点明「不是待补缺口」）。
 
 **native 运行时**（`Native.Runtime` 的 `thread_*` / `*mutex*` / `*condvar*` / `atomic_*`）：
 
-- 线程 = 共享地址空间的内核线程（`clone`，`CLONE_VM|FS|FILES|SIGHAND|THREAD|SYSVSEM`）；
-  每线程一条 64 MiB 虚拟栈（低页 `PROT_NONE` 护栏）。Thread 对象在堆上
-  （state/futex | result | stack base | size | closure），`join` 用 futex 等 state，
-  完成后 `munmap` 栈；重复 join 返回同一结果。
+- 线程 = 共享地址空间的内核线程（`clone`，`CLONE_VM|FS|FILES|SIGHAND|THREAD|SYSVSEM|SETTLS`）；
+  每线程一条 64 MiB 虚拟栈（低页 `PROT_NONE` 护栏），TCB 在栈顶下方、`%fs` 指向它；
+  固定 1024 槽的线程表登记 live TCB。Thread 对象在堆上（state/futex | result |
+  stack base | size | closure | tcb | slot），`join` 用 futex 等 state，完成后 `munmap` 栈；
+  重复 join 返回同一结果。
 - 子线程在 `runPure` 里执行任务体；`threadId` 是 `gettid`，`threadParallelism` 数
   `sched_getaffinity` 的位。
 - 分配：有子线程（`rt_thread_count > 0`）时 `alloc` 拿一把 futex 堆锁；单线程路径不加锁。
-  **并行区 GC 暂停**：`gc_collect` 在子线程存活时直接返回（子线程的栈根不在主线程可见范围，
-  标记-清扫会误收），线程全部 `join` 后恢复正常回收。因此并行区只增长不回收，长驻并行
-  负载需要外部预算（[debt.md](debt.md) D135）。
+- **STW GC**：回收器置 `rt_gc_requested`，等 `rt_parked_threads == live-1`；线程在
+  `alloc` / 循环头（`rt_safepoint`，只在线程程序里注入）以及 futex 等待（`block_begin`/
+  `block_end`）发布 `saved_rsp` 并停车。根集 = 每个 live 线程的 `[saved_rsp, stack_top)`
+  保守扫描 + CAF + cleanup 链。回收结束清请求、推进 `rt_gc_epoch` 并唤醒全部停车线程
+  （先读 epoch 再查请求，避免丢失唤醒）。
 - `Mutex` 是 3 态 futex（0 空闲 / 1 锁定 / 2 有等待者）；`Condvar` 是 32-bit 序号 + futex
   （抗虚假唤醒）；`Atomic` 是 8 字节单元，load 普通 mov、store/RMW `xchg`/`lock` 前缀
   （C11 seq_cst 的 x86 映射），`fetchAdd` 用 CAS 循环并保持 63-bit 回绕。
-- 边界：并行区里 `bracket` 的 cleanup 链与 fs/process 宿主缓冲仍是全局的（并发使用不安全，
-  D135）；线程栈固定 64 MiB，不读 `VUNA_NATIVE_STACK_MB`。
+- 边界：并行区里 `bracket` 的 cleanup 链与 fs/process 宿主戳记/缓冲仍是全局的（并发使用
+  不安全）；阻塞在宿主 syscall（read/write 等）的线程没有停车标记，GC 会等它返回后再
+  回收；线程栈固定 64 MiB，不读 `VUNA_NATIVE_STACK_MB`。见 [debt.md](debt.md) D135。
 
 **OCaml 运行时**（`Vuna_runtime.ml` 的 `dtThreadRuntime`）：
 

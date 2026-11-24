@@ -221,6 +221,51 @@ nativeCleanupHeadLabel = "rt_cleanups"
 export nativeThreadCountLabel : String
 nativeThreadCountLabel = "rt_thread_count"
 
+-- ---------------------------------------------------------------
+-- 线程 TCB 与 STW GC 协调槽
+-- ---------------------------------------------------------------
+-- | 当前线程 TCB 的字段偏移（`%fs` 基址；`Runtime.init_threads` 建立）。
+export nativeTcbSelfOff : Int
+nativeTcbSelfOff = 0
+
+export nativeTcbStackTopOff : Int
+nativeTcbStackTopOff = 8
+
+export nativeTcbSavedRspOff : Int
+nativeTcbSavedRspOff = 16
+
+-- | 0 = running，1 = blocked（阻塞在 futex），2 = parked（safepoint），3 = dead。
+export nativeTcbStateOff : Int
+nativeTcbStateOff = 24
+
+-- | 主线程 TCB（`.bss`；子线程 TCB 放在自己的栈顶下方）。
+export nativeMainTcbLabel : String
+nativeMainTcbLabel = "rt_main_tcb"
+
+-- | 线程表：固定 1024 项，每项一个 TCB 指针（0 = 空槽）。
+export nativeThreadTabLabel : String
+nativeThreadTabLabel = "rt_thread_tab"
+
+-- | 活线程数（含主线程）。
+export nativeLiveThreadsLabel : String
+nativeLiveThreadsLabel = "rt_live_threads"
+
+-- | 已 blocked / parked 的线程数（collector 等它等于 `live-1`）。
+export nativeParkedLabel : String
+nativeParkedLabel = "rt_parked_threads"
+
+-- | GC 的停车请求（1 = 请求所有线程停车）。
+export nativeGcRequestedLabel : String
+nativeGcRequestedLabel = "rt_gc_requested"
+
+-- | 停车纪元：collector 在回收结束、清请求后递增并 futex 唤醒。
+export nativeGcEpochLabel : String
+nativeGcEpochLabel = "rt_gc_epoch"
+
+-- | 线程运行时是否已启用（`init_threads` 置 1；GC 用它选择单线程 / STW 路径）。
+export nativeThreadedLabel : String
+nativeThreadedLabel = "rt_threaded"
+
 -- | 零参顶层定义的缓存区（CAF）：`[caf_begin, caf_end)` 是连续的 8 字节槽，
 --   每个零参定义一格，`_start` 求值一次后写入；GC 按这段区间扫根。
 export nativeCafBeginLabel : String

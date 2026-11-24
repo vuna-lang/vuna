@@ -49,6 +49,7 @@ sysNr "setpgid" = 109
 sysNr "getpgid" = 121
 sysNr "gettid" = 186
 sysNr "futex" = 202
+sysNr "arch_prctl" = 158
 sysNr "sched_setaffinity" = 203
 sysNr "sched_getaffinity" = 204
 sysNr "getdents64" = 217
@@ -94,9 +95,13 @@ futexWaitPrivate = 128
 export futexWakePrivate : Int
 futexWakePrivate = 129
 
--- | `clone` flags：`CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM`。
+-- | `clone` flags：`CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS`。
 export cloneThreadFlags : Int
-cloneThreadFlags = 331520
+cloneThreadFlags = 855808
+
+-- | `arch_prctl` 的 `ARCH_SET_FS`（主线程建立 TCB 的 `%fs` 基址）。
+export archSetFs : Int
+archSetFs = 4098
 
 -- | 新建普通文件 / 目录的权限位（`0666` / `0755`；受 umask 约束）。
 export modeFileDefault : Int

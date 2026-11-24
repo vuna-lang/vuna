@@ -151,6 +151,8 @@ record FGen where
   fgFloatSlotRegs : List (Int, Int)
   -- | 正在求值的 self 尾调用实参是否允许保留未归一化值（只对 dirty 目标置位）。
   fgAllowDirty : Bool
+  -- | 程序使用了线程原语：在函数循环头注入 `rt_safepoint`。
+  fgThreaded : Bool
 
 freshSlot : FGen -> (Int, FGen)
 freshSlot st =
@@ -2530,7 +2532,7 @@ genLamValue fuel st bs body =
       st1 = { st | fgNextLabel = idx + 1 }
       -- 闭包体自己的来参区由闭包 ABI 决定（`rdi` 是闭包自身，实参从 `rsi` 起）。
       lamRoom = nativeTailRoomBytes (nativeStackArgCount arity (length closureArgRegs))
-      stBody = FGen st1.fgDefs st1.fgPool st1.fgFloats [] [] st1.fgFams 0 st1.fgNextLabel [] lamRoom st1.fgModule st1.fgOwner "" "" [] [] [] [] (filterKnown caps st.fgKnown) st1.fgReenter [] [] [] [] False
+      stBody = FGen st1.fgDefs st1.fgPool st1.fgFloats [] [] st1.fgFams 0 st1.fgNextLabel [] lamRoom st1.fgModule st1.fgOwner "" "" [] [] [] [] (filterKnown caps st.fgKnown) st1.fgReenter [] [] [] [] False st1.fgThreaded
     in nbind (bindCaptures stBody st.fgSlotCls caps 0) (
         \cp =>
           nbind (bindArgsGo rbs 1 (secondOf cp)) (
@@ -3158,17 +3160,27 @@ genLoopBody fuel st inner name loopLabel =
                 in nbind (genExprAt (fuel - 1) exitSt True rot.lrExit) (
                     \pe =>
                       let
-                        body = append [IJmp lc, ILabel lb] (append bodyInstrs (append [ILabel lc] (append (firstOf cb) (append [IJcc (secondOf cb) lb] (firstOf pe)))))
+                        body = append [IJmp lc, ILabel lb] (append bodyInstrs (append (if st.fgThreaded then [ILabel lc, ICall (nativeRtLabel "safepoint")] else [ILabel lc]) (append (firstOf cb) (append [IJcc (secondOf cb) lb] (firstOf pe)))))
                       in NOk (body, { (secondOf pe) | fgRanges = st.fgRanges })
                   )
             )
 
+-- | 程序是否使用线程原语（决定循环头是否注入 `rt_safepoint`）。
+defUsesThread : IrDef -> Bool
+defUsesThread d =
+  case irDefBody d of
+    Nothing => False
+    Just b => foldl (\a, p => a || memName (firstOf p) irRtThreadNames) False (irSymbolsOf b)
+
+defsUseThread : List IrDef -> Bool
+defsUseThread defs = foldl (\a, d => a || defUsesThread d) False defs
+
 -- | 生成一个定义；返回函数与该定义之后**模块内** label/slot 计数（`.L` 是文件局部
 --   符号，计数按模块保存；重编号不会跨模块扩散）。
-genDefFunc : List IrDef -> List (String, List (String, String)) -> List (String, List (String, String)) -> List String -> List String -> List IrTyDecl -> Int -> IrDef -> NRes (List NativeFunc, Int, List NativeClosure)
-genDefFunc _defs _pools _floats _recNames _allocs _fams _nextLabel (IrExternDef name _ _ _) =
+genDefFunc : List IrDef -> List (String, List (String, String)) -> List (String, List (String, String)) -> List String -> List String -> List IrTyDecl -> Int -> Bool -> IrDef -> NRes (List NativeFunc, Int, List NativeClosure)
+genDefFunc _defs _pools _floats _recNames _allocs _fams _nextLabel _threaded (IrExternDef name _ _ _) =
   unsupported "native target: extern definition `${name}` is not supported yet"
-genDefFunc defs pools floats recNames allocs fams nextLabel (IrDef name arity _ _ body _ _ _) =
+genDefFunc defs pools floats recNames allocs fams nextLabel threaded (IrDef name arity _ _ body _ _ _) =
   let
     -- 本函数来参区：零参定义没有调用者压的栈实参，其余按标准 ABI 推算。
     room = nativeTailRoomBytes (nativeStackArgCount arity nativeMaxArgs)
@@ -3202,6 +3214,7 @@ genDefFunc defs pools floats recNames allocs fams nextLabel (IrDef name arity _ 
         []
         []
         False
+        threaded
   in if arity == 0 then
     nbind (genExpr (nativeFuelOfBody body) st0 body) (
         \p =>
@@ -3237,7 +3250,7 @@ genDefFunc defs pools floats recNames allocs fams nextLabel (IrDef name arity _ 
                       let
                         st1 = secondOf q
                         frame = nativeFrameBytes st1.fgNextSlot
-                        body0 = append (firstOf bp) (append [ILabel loopLabel] (firstOf q))
+                        body0 = append (firstOf bp) (append (if threaded then [ILabel loopLabel, ICall (nativeRtLabel "safepoint")] else [ILabel loopLabel]) (firstOf q))
                         -- 常驻 xmm 的浮点形参在调用前后溢出/重载（槽是权威副本）；要在死槽清零之前。
                         bodySpill = spillReloadFloatRegs st1.fgFloatSlotRegs body0
                         promo = Regs.promoteLoops st1.fgSlotCls (clearDeadSlots st1.fgReenter st1.fgSlotCls (peephole bodySpill))
@@ -3260,19 +3273,19 @@ putLabelCount key n [] = [(key, n)]
 putLabelCount key n (p :: rest) =
   if firstOf p == key then (key, n) :: rest else p :: putLabelCount key n rest
 
-genDefs : List IrDef -> List (String, List (String, String)) -> List (String, List (String, String)) -> List String -> List String -> List IrTyDecl -> List (String, Int) -> List IrDef -> List (List NativeFunc) -> List NativeClosure -> NRes (List NativeFunc, Int, List NativeClosure)
-genDefs _all _pools _floats _recNames _allocs _fams _labels [] acc statAcc =
+genDefs : List IrDef -> List (String, List (String, String)) -> List (String, List (String, String)) -> List String -> List String -> List IrTyDecl -> List (String, Int) -> Bool -> List IrDef -> List (List NativeFunc) -> List NativeClosure -> NRes (List NativeFunc, Int, List NativeClosure)
+genDefs _all _pools _floats _recNames _allocs _fams _labels _threaded [] acc statAcc =
   NOk (concatMap (\x => x) (reverse acc), 0, statAcc)
-genDefs all pools floats recNames allocs fams labels (d :: rest) acc statAcc =
+genDefs all pools floats recNames allocs fams labels threaded (d :: rest) acc statAcc =
   let
     key = moduleKeyOf (irDefName d)
     start = labelCountOf key labels
-  in nbind (genDefFunc all pools floats recNames allocs fams start d) (
+  in nbind (genDefFunc all pools floats recNames allocs fams start threaded d) (
       \p =>
         let
           next = firstOf (secondOf p)
           statics = secondOf (secondOf p)
-        in genDefs all pools floats recNames allocs fams (putLabelCount key next labels) rest (firstOf p :: acc) (append statics statAcc)
+        in genDefs all pools floats recNames allocs fams (putLabelCount key next labels) threaded rest (firstOf p :: acc) (append statics statAcc)
     )
 
 -- | 不会分配堆的运行时符号（整数 / 位运算 / 比较 / 字符串只读 / obs / 打印 / 陷阱）。
@@ -3432,6 +3445,7 @@ export record InitNeeds(..) where
   inHeap : Bool
   inStack : Bool
   inCpus : Bool
+  inThreads : Bool
 
 -- | 操作数里的标签引用（`[rip + label]`）。
 operandLabelRefs : Operand -> List String
@@ -3453,6 +3467,8 @@ instrLabelRefs (IXchg64 op _) = operandLabelRefs op
 instrLabelRefs (ILockInc32 op) = operandLabelRefs op
 instrLabelRefs (ILockInc64 op) = operandLabelRefs op
 instrLabelRefs (ILockDec64 op) = operandLabelRefs op
+instrLabelRefs (IMovFsLoad _ _) = []
+instrLabelRefs (IMovFsStore _ _) = []
 instrLabelRefs (IMovzx _ src) = operandLabelRefs src
 instrLabelRefs IMovzxAl = []
 instrLabelRefs (ILea _ l) = [l]
@@ -3567,6 +3583,7 @@ initNeeds funcs live =
     (anyMem ["rt_alloc", "rt_alloc_leaf"] live || foldl (\acc, f => acc || touchesHeapPtr f) False liveFuncs)
     (hasCallCycle funcs live || anyFuncIndirect liveFuncs)
     (anyMem ["rt_spawn_exec", "rt_cmd_run_sh", "rt_wait_pid", "rt_child_push", "rt_child_drop", "rt_env_filter"] live)
+    (anyMem ["rt_thread_spawn", "rt_thread_join", "rt_mutex_lock", "rt_condvar_wait", "rt_safepoint"] live)
 
 -- ---------------------------------------------------------------
 -- 入口
@@ -3663,7 +3680,7 @@ startFunc printResult kind mainName runMainM handlers cafs needs =
     callMain =
       append
         [IBinReg "and" Rsp (OpImm (0 - 16)), IMov (OpRip nativeStackTopLabel) (OpReg Rsp)]
-        (append cafInit (append [ICall (nativeFuncLabel mainName)] (append handlerPart runPart)))
+        (append (if needs.inThreads then [ICall (nativeRtLabel "init_threads")] else []) (append cafInit (append [ICall (nativeFuncLabel mainName)] (append handlerPart runPart))))
     printer =
       if printResult then
         case kind of
@@ -3997,7 +4014,8 @@ build program printResult =
                       pools = modulePools cpsOrdered
                       fpools = moduleFloatPools cpsOrdered
                       allocs = allocatingDefNames cpsAliased
-                    in case genDefs cpsFloatLets pools fpools recNames allocs unit.irUnitTyDecls [] cpsFloatLets [] [] of
+                      threaded = defsUseThread cpsFloatLets
+                    in case genDefs cpsFloatLets pools fpools recNames allocs unit.irUnitTyDecls [] threaded cpsFloatLets [] [] of
                       NFail err => NativeRejected (nativeAuditEnrich err cpsOrdered)
                       NOk pair =>
                         let
