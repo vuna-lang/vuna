@@ -60,8 +60,9 @@ parseSourceDetailed file source =
           let
             fin = secondOf (firstOf p)
             events = eventsOf st0 fin
-          in OkC
-            (ParsedSource (firstOf (firstOf p)) comments toks events (insertParens fin.holeParens (deriveSurface toks events)))
+            surface =
+              surfaceOf toks events fin.holeParens (append fin.backtickShapes fin.holeBackticks)
+          in OkC (ParsedSource (firstOf (firstOf p)) comments toks events surface)
 
 -- | 只要 AST 与注释表的入口（复用 `parseSourceDetailed` 同一次词法）。
 export parseSourceWithComments : String -> String -> Check (SourceFile, List Comment)
@@ -1658,10 +1659,10 @@ parseExpr fuel st blockCol =
   withExtent
     CstExprKind
     st
-    (\st0 => Vuna.Compiler.Base.Common.step (parseExprBody fuel st0 blockCol) (\e, st1 => OkC (withExprId st0.openNodeId e, st1)))
+    (\st0 => Vuna.Compiler.Base.Common.step (parseExprBody fuel st0.openNodeId st0 blockCol) (\e, st1 => OkC (withExprId st0.openNodeId e, rekeyInfix (nodeRefId (exprRef e)) st0.openNodeId st1)))
 
-parseExprBody : Int -> PState -> Int -> Check (Expr, PState)
-parseExprBody fuel st blockCol =
+parseExprBody : Int -> Int -> PState -> Int -> Check (Expr, PState)
+parseExprBody fuel nid st blockCol =
   if fuel <= 0 then
     icFuel "parser"
   else if isEof st then
@@ -1669,22 +1670,23 @@ parseExprBody fuel st blockCol =
   else if canContinue st blockCol then
     Vuna.Compiler.Base.Common.step
       (parseLhs (fuel - 1) st blockCol)
-      (\lhs, st1 => parseInfix (fuel - 1) st1 blockCol lhs)
+      (\lhs, st1 => parseInfix (fuel - 1) nid st1 blockCol lhs)
   else
     ps0 st ExprNotIndented
 
--- 优先级/结合性不在 parser 决定——中缀链原样收成 `EInfix`（右嵌套）；括号边界由树
--- 记录（`Frontend.Surface`），Loader 按 `infix*` 声明重排时按节点 id 查。
-parseInfix : Int -> PState -> Int -> Expr -> Check (Expr, PState)
-parseInfix fuel st blockCol lhs =
+-- 优先级/结合性不在 parser 决定——中缀链按源码顺序**右嵌套**，但降级成普通应用
+-- `EApp (EVar op) [lhs, rhs]`；「这一层是链步、是否反引号」记进表面形状（按区间根 id），
+-- Loader 按 `infix*` 声明重排、Fmt 按源码顺序打印时都读它。
+parseInfix : Int -> Int -> PState -> Int -> Expr -> Check (Expr, PState)
+parseInfix fuel nid st blockCol lhs =
   if fuel <= 0 then
     icFuel "parser"
   else
     case peekTok st of
       -- 反引号中缀 `` a `f` b ``。名字是普通值名或符号名（expectValueName）；
       -- rhs 用 parseExpr（与普通中缀一致，会继续吞后续中缀），形成右嵌套链交给 Loader 重排。
-      PTok (TSym "`") p => if canContinue st blockCol then Vuna.Compiler.Base.Common.step (expectValueName (advance st)) (\name, st1 => Vuna.Compiler.Base.Common.bind (expectSym st1 "`") (\st2 => Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st2 blockCol) (\rhs, st3 => parseInfix (fuel - 1) st3 blockCol (EBacktick name lhs rhs (detachedNodeRef (spanOf st st3)))))) else OkC (lhs, st)
-      PTok (TSym op) p => if canContinue st blockCol && not (isSyntaxSym op) then if closeParenNext st then OkC (ESectR lhs op (detachedNodeRef (spanOf st (advance st))), advance st) else Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) (advance st) blockCol) (\rhs, st2 => parseInfix (fuel - 1) st2 blockCol (EInfix op lhs rhs (detachedNodeRef (spanOf st st2)))) else OkC (lhs, st)
+      PTok (TSym "`") p => if canContinue st blockCol then Vuna.Compiler.Base.Common.step (expectValueName (advance st)) (\name, st1 => Vuna.Compiler.Base.Common.bind (expectSym st1 "`") (\st2 => Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st2 blockCol) (\rhs, st3 => parseInfix (fuel - 1) nid (addBacktickShape nid st3) blockCol (EApp (EVar name (detachedNodeRef (tokenSpan (advance st)))) [lhs, rhs] (detachedNodeRef (spanOf st st3)))))) else OkC (lhs, st)
+      PTok (TSym op) p => if canContinue st blockCol && not (isSyntaxSym op) then if closeParenNext st then OkC (ESectR lhs op (detachedNodeRef (spanOf st (advance st))), advance st) else Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) (advance st) blockCol) (\rhs, st2 => parseInfix (fuel - 1) nid st2 blockCol (EApp (EVar op (detachedNodeRef (tokenSpan st))) [lhs, rhs] (detachedNodeRef (spanOf st st2)))) else OkC (lhs, st)
       -- 右 section `(e op)`。只消费 op；`)` 由外层 `(` 分支消费。
       _ => OkC (lhs, st)
 
@@ -1858,26 +1860,26 @@ parseTemplateAtom fuel st multi parts endP =
         \parsed =>
           let
             ps = firstOf parsed
-            holeEntries = secondOf parsed
+            bits = secondOf parsed
             advanced = advance st
-            st2 = addHoleParens holeEntries (withLastPos endP advanced)
+            st2 = addHoleBackticks bits.sbBackticks (addHoleParens bits.sbParens (withLastPos endP advanced))
           in OkC (EInterp multi ps (detachedNodeRef (spanOf st st2)), st2)
       )
 
 -- 洞内解析交回它自己的表面形状条目（洞内 token 不在主 token 流里，主文件的派生看不到）。
-parseTemplateParts : Int -> String -> ParseMode -> Span -> List TmplPart -> Check (List InterpPart, List (Int, Int))
+parseTemplateParts : Int -> String -> ParseMode -> Span -> List TmplPart -> Check (List InterpPart, SurfaceBits)
 parseTemplateParts fuel file mode fallback parts =
   if fuel <= 0 then
     icFuel "parser"
   else
     case parts of
-      [] => OkC ([], [])
+      [] => OkC ([], emptySurfaceBits)
       (TPText s) :: rest => Vuna.Compiler.Base.Common.bind (parseTemplateParts (fuel - 1) file mode fallback rest) (\tail => OkC ((::) (IPText s) (firstOf tail), secondOf tail))
-      (TPHole toks) :: rest => Vuna.Compiler.Base.Common.bind (parseTemplateHole (toksFuel toks) file mode fallback toks) (\hole => Vuna.Compiler.Base.Common.bind (parseTemplateParts (fuel - 1) file mode fallback rest) (\tail => OkC ((::) (IPHole (firstOf hole)) (firstOf tail), append (secondOf hole) (secondOf tail))))
+      (TPHole toks) :: rest => Vuna.Compiler.Base.Common.bind (parseTemplateHole (toksFuel toks) file mode fallback toks) (\hole => Vuna.Compiler.Base.Common.bind (parseTemplateParts (fuel - 1) file mode fallback rest) (\tail => OkC ((::) (IPHole (firstOf hole)) (firstOf tail), appendSurfaceBits (secondOf hole) (secondOf tail))))
 
 -- 一个插值洞：空 token → `TemplateHoleEmpty`（指向字面量起点的兜底 span）；否则必须
 -- 恰好解析成一个表达式。洞内错误自带精确 span，兜底只为「无位置」的诊断补洞位置。
-parseTemplateHole : Int -> String -> ParseMode -> Span -> List PTok -> Check (Expr, List (Int, Int))
+parseTemplateHole : Int -> String -> ParseMode -> Span -> List PTok -> Check (Expr, SurfaceBits)
 parseTemplateHole fuel file mode fallback toks =
   if fuel <= 0 then
     icFuel "parser"
@@ -1890,7 +1892,7 @@ parseTemplateHole fuel file mode fallback toks =
           subState = mkStateAt file toks pos (length toks) mode
         in case parseExpr (fuel - 1) subState 0 of
           ErrC e => ErrC (withFallbackSpan (holeSpan file pos) e)
-          OkC (e, st2) => if isEof st2 then OkC (e, append st2.holeParens (parenEntriesOf toks (eventsOf subState st2))) else ErrC (withLabel (Label (Just (holeSpan file pos)) "" LabelPrimary Nothing) (psMsg ExpectedEndOfExpr []))
+          OkC (e, st2) => if isEof st2 then OkC (e, SurfaceBits (append st2.holeParens (parenEntriesOf toks (eventsOf subState st2))) (append st2.holeBackticks st2.backtickShapes)) else ErrC (withLabel (Label (Just (holeSpan file pos)) "" LabelPrimary Nothing) (psMsg ExpectedEndOfExpr []))
 
 -- 插值洞的位置：洞内 token 的首位置（文件在 lexer 侧已知）。
 holeSpan : String -> Pos -> Span
@@ -2741,5 +2743,6 @@ parseSourceRecoveringTokens file mode toks =
         let
           fin = secondOf (firstOf p)
           events = eventsOf st0 fin
-        in OkC ((firstOf (firstOf p), insertParens fin.holeParens (deriveSurface toks events)), secondOf p)
+          surface = surfaceOf toks events fin.holeParens (append fin.backtickShapes fin.holeBackticks)
+        in OkC ((firstOf (firstOf p), surface), secondOf p)
     )

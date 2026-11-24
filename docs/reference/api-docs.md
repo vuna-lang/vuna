@@ -113,7 +113,7 @@ vuna search [--type|--name|--doc] [--module PFX] [--limit N] [--json] <query...>
 
 归一化：
 
-- 去括号；`->`（`EApp` / `EInfix`）→ 箭头；应用 spine 拉平；
+- 去括号；`->`（`EApp (EVar "->")` 两参应用）→ 箭头；应用 spine 拉平；
 - 隐式 Pi binder 丢弃并绑定变量，显式 Pi → 箭头（依赖被擦除）；
 - 小写自由名与 `_` → 变量；大写 / `Type` → 构造子；
 - 用索引里 data/record/trait 的短名 → 全名做类型名归一（只有唯一短名时）。

@@ -256,14 +256,12 @@ encExpr (EField base field _) acc = encTag 10 (encExpr base (encStr field acc))
 encExpr (ERecord name fields _) acc = encTag 11 (encStr name (encStrExprList fields acc))
 encExpr (ERecUpdate base fields _) acc = encTag 12 (encExpr base (encStrExprList fields acc))
 encExpr (EDo stmts _) acc = encTag 13 (encStmtList stmts acc)
-encExpr (EInfix op lhs rhs _) acc = encTag 14 (encStr op (encExpr lhs (encExpr rhs acc)))
-encExpr (EBacktick name lhs rhs _) acc = encTag 15 (encStr name (encExpr lhs (encExpr rhs acc)))
-encExpr (ESectOp op _) acc = encTag 16 (encStr op acc)
-encExpr (ESectL op rhs _) acc = encTag 17 (encStr op (encExpr rhs acc))
-encExpr (ESectR lhs op _) acc = encTag 18 (encExpr lhs (encStr op acc))
-encExpr (EAnn inner ty _) acc = encTag 19 (encExpr inner (encExpr ty acc))
-encExpr (EInterp multi parts _) acc = encTag 20 (encBool multi (encPartList parts acc))
-encExpr (EFloat raw _) acc = encTag 21 (encStr raw acc)
+encExpr (ESectOp op _) acc = encTag 14 (encStr op acc)
+encExpr (ESectL op rhs _) acc = encTag 15 (encStr op (encExpr rhs acc))
+encExpr (ESectR lhs op _) acc = encTag 16 (encExpr lhs (encStr op acc))
+encExpr (EAnn inner ty _) acc = encTag 17 (encExpr inner (encExpr ty acc))
+encExpr (EInterp multi parts _) acc = encTag 18 (encBool multi (encPartList parts acc))
+encExpr (EFloat raw _) acc = encTag 19 (encStr raw acc)
 
 -- | `Ctor` 的规范编码：data 构造子：名字 / 类型 / arity；`span` 丢弃。
 encCtor : Ctor -> List String -> List String
@@ -546,56 +544,36 @@ decExpr fuel bytes =
           14 =>
             case decStr (fuel - 1) b1 of
               Nothing => Nothing
-              Just (v1, b2) =>
-                case decExpr (fuel - 1) b2 of
-                  Nothing => Nothing
-                  Just (v2, b3) =>
-                    case decExpr (fuel - 1) b3 of
-                      Nothing => Nothing
-                      Just (v3, b4) => Just (EInfix v1 v2 v3 (detachedNodeRef noSpan), b4)
+              Just (v1, b2) => Just (ESectOp v1 (detachedNodeRef noSpan), b2)
           15 =>
             case decStr (fuel - 1) b1 of
               Nothing => Nothing
               Just (v1, b2) =>
                 case decExpr (fuel - 1) b2 of
                   Nothing => Nothing
-                  Just (v2, b3) =>
-                    case decExpr (fuel - 1) b3 of
-                      Nothing => Nothing
-                      Just (v3, b4) => Just (EBacktick v1 v2 v3 (detachedNodeRef noSpan), b4)
-          16 =>
-            case decStr (fuel - 1) b1 of
-              Nothing => Nothing
-              Just (v1, b2) => Just (ESectOp v1 (detachedNodeRef noSpan), b2)
-          17 =>
-            case decStr (fuel - 1) b1 of
-              Nothing => Nothing
-              Just (v1, b2) =>
-                case decExpr (fuel - 1) b2 of
-                  Nothing => Nothing
                   Just (v2, b3) => Just (ESectL v1 v2 (detachedNodeRef noSpan), b3)
-          18 =>
+          16 =>
             case decExpr (fuel - 1) b1 of
               Nothing => Nothing
               Just (v1, b2) =>
                 case decStr (fuel - 1) b2 of
                   Nothing => Nothing
                   Just (v2, b3) => Just (ESectR v1 v2 (detachedNodeRef noSpan), b3)
-          19 =>
+          17 =>
             case decExpr (fuel - 1) b1 of
               Nothing => Nothing
               Just (v1, b2) =>
                 case decExpr (fuel - 1) b2 of
                   Nothing => Nothing
                   Just (v2, b3) => Just (EAnn v1 v2 (detachedNodeRef noSpan), b3)
-          20 =>
+          18 =>
             case decBool (fuel - 1) b1 of
               Nothing => Nothing
               Just (v1, b2) =>
                 case decList decInterpPart (fuel - 1) b2 of
                   Nothing => Nothing
                   Just (v2, b3) => Just (EInterp v1 v2 (detachedNodeRef noSpan), b3)
-          21 =>
+          19 =>
             case decStr (fuel - 1) b1 of
               Nothing => Nothing
               Just (v1, b2) => Just (EFloat v1 (detachedNodeRef noSpan), b2)

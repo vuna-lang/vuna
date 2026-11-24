@@ -248,37 +248,6 @@ normExpr names st (EPi name implicit _ dom cod _) =
         case secondOf pc of
           Nothing => (firstOf pc, Nothing)
           Just tc => (firstOf pc, Just (TArr td tc))
-normExpr names st (EInfix op l r _) =
-  if op == "->" then
-    let
-      pl = normExpr names st l
-      pr = normExpr names (firstOf pl) r
-    in case secondOf pl of
-      Nothing => (firstOf pr, Nothing)
-      Just tl =>
-        case secondOf pr of
-          Nothing => (firstOf pr, Nothing)
-          Just tr => (firstOf pr, Just (TArr tl tr))
-  else
-    let
-      pl = normExpr names st l
-      pr = normExpr names (firstOf pl) r
-    in case secondOf pl of
-      Nothing => (firstOf pr, Nothing)
-      Just tl =>
-        case secondOf pr of
-          Nothing => (firstOf pr, Nothing)
-          Just tr => (firstOf pr, Just (TApp (TCon op) [tl, tr]))
-normExpr names st (EBacktick nm l r _) =
-  let
-    pl = normExpr names st l
-    pr = normExpr names (firstOf pl) r
-  in case secondOf pl of
-    Nothing => (firstOf pr, Nothing)
-    Just tl =>
-      case secondOf pr of
-        Nothing => (firstOf pr, Nothing)
-        Just tr => (firstOf pr, Just (TApp (TCon nm) [tl, tr]))
 normExpr names st (EInt n _) = (st, Just (TCon (strFromInt n)))
 normExpr names st (EStr s _) = (st, Just (TCon s))
 normExpr names st (EFloat raw _) = (st, Just (TCon raw))

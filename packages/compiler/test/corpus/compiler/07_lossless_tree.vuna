@@ -240,8 +240,6 @@ exprSitesAt fuel e =
           ERecUpdate base fields r => append (exprSitesAt (fuel - 1) base) (concatMap (fieldValueSites (fuel - 1)) fields)
           EDo stmts r => concatMap (stmtSites (fuel - 1)) stmts
           EAnn inner ty r => append (exprSitesAt (fuel - 1) inner) (exprSitesAt (fuel - 1) ty)
-          EInfix op l rhs r => append (exprSitesAt (fuel - 1) l) (exprSitesAt (fuel - 1) rhs)
-          EBacktick nm l rhs r => append (exprSitesAt (fuel - 1) l) (exprSitesAt (fuel - 1) rhs)
           ESectOp op r => []
           ESectL op inner r => exprSitesAt (fuel - 1) inner
           ESectR inner op r => exprSitesAt (fuel - 1) inner
@@ -353,13 +351,12 @@ siteRefsOfRole : String -> List Site -> List NodeRef
 siteRefsOfRole role sites = map siteRefOf (filter (\sg => siteRoleOf sg == role) sites)
 
 -- | 表达式区间根：id 指回 `expr` 节点，**终点相同、AST 区间落在节点区间内**
--- （`EInfix` / `EBacktick` 的 span 从运算符起，比树节点窄）。签名行要求 kind 与区间
--- 都精确相同。
+-- （中缀链步的 span 从运算符起，比树节点窄）。签名行要求 kind 与区间都精确相同。
 siteOk : HashMap Int CstNode -> Site -> Bool
 siteOk index site =
   case HashMap.lookup (nodeRefId (siteRefOf site)) index of
     Nothing => False
-    -- 表达式区间根：AST 构造子的 span 可以比树节点窄（`EInfix` 从运算符起）；
+    -- 表达式区间根：AST 构造子的 span 可以比树节点窄（中缀链步从运算符起）；
     -- 条目节点（绑定 / 分支 / 子句 / 签名行）要求区间完全相同。
     Just n =>
       nodeKindTag n
@@ -463,11 +460,9 @@ bodyPatRefs e =
     EInt n _ => []
     EStr s _ => []
     EVar n _ => []
-    EBacktick nm l r _ => append (bodyPatRefs l) (bodyPatRefs r)
     ESectOp op _ => []
     ESectL op inner _ => bodyPatRefs inner
     ESectR inner op _ => bodyPatRefs inner
-    EInfix op l r _ => append (bodyPatRefs l) (bodyPatRefs r)
     EInterp multi parts _ => []
 
 -- | 一条绑定 / 一个分支贡献的 pat 引用（分支体 / 绑定值继续递归）。

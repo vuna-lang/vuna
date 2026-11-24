@@ -524,14 +524,9 @@ startExpr fuel e =
       ERecUpdate base fields sp => minPair (startFromSpan (nodeRefSpan sp)) (minPair (startExpr (fuel - 1) base) (startFields (fuel - 1) fields))
       EDo stmts sp => minPair (startFromSpan (nodeRefSpan sp)) (startStmts (fuel - 1) stmts)
       EAnn value ty sp => minPair (startFromSpan (nodeRefSpan sp)) (minPair (startExpr (fuel - 1) value) (startExpr (fuel - 1) ty))
-      -- keep 模式（lint 的 parse 后阶段）下反引号中缀 / section 保留原形；
-      -- 起始位置要递归到操作数（中缀 span 从运算符开始，lhs 可能更靠前）。
-      EBacktick nm l r sp => minPair (startFromSpan (nodeRefSpan sp)) (minPair (startExpr (fuel - 1) l) (startExpr (fuel - 1) r))
       ESectOp op sp => startFromSpan (nodeRefSpan sp)
       ESectL op rhs sp => minPair (startFromSpan (nodeRefSpan sp)) (startExpr (fuel - 1) rhs)
       ESectR lhs op sp => minPair (startFromSpan (nodeRefSpan sp)) (startExpr (fuel - 1) lhs)
-      -- 中缀链 / 括号（parser 中间产物）也要给出真实起点，不能落到兜底 (0,0)。
-      EInfix op l r sp => minPair (startFromSpan (nodeRefSpan sp)) (minPair (startExpr (fuel - 1) l) (startExpr (fuel - 1) r))
 
 -- | 内部：一组表达式的最小起始位置；空列表返回极大坐标。
 startExprs : Int -> List Expr -> (Int, Int)
@@ -975,10 +970,7 @@ mentionsExpr fuel name e =
       ERecUpdate base fields _ => mentionsExpr (fuel - 1) name base || mentionsFields (fuel - 1) name fields
       EDo stmts _ => mentionsStmts (fuel - 1) name stmts
       EAnn value ty _ => mentionsExpr (fuel - 1) name value || mentionsExpr (fuel - 1) name ty
-      -- 中缀链与括号（parser 中间产物）：操作数继续递归。
-      EInfix op l r _ => mentionsExpr (fuel - 1) name l || mentionsExpr (fuel - 1) name r
-      -- 反引号里的名字与 section 的 op 都是值引用，操作数继续递归。
-      EBacktick nm l r _ => nm == name || mentionsExpr (fuel - 1) name l || mentionsExpr (fuel - 1) name r
+      -- section 的 op 是值引用，操作数继续递归。
       ESectOp op _ => op == name
       ESectL op rhs _ => op == name || mentionsExpr (fuel - 1) name rhs
       ESectR lhs op _ => op == name || mentionsExpr (fuel - 1) name lhs
@@ -1754,10 +1746,7 @@ walkExprGo allow fuel src e =
       ERecUpdate base fields _ => append (walkExprGo allow (fuel - 1) src base) (walkFields allow (fuel - 1) src fields)
       EDo stmts _ => walkStmts allow (fuel - 1) src stmts
       EAnn value ty _ => append (walkExprGo allow (fuel - 1) src value) (walkExprGo allow (fuel - 1) src ty)
-      -- parser 中间产物（中缀链 / 括号）：显式递归，不静默丢子树。
-      EInfix op l r _ => append (walkExprGo allow (fuel - 1) src l) (walkExprGo allow (fuel - 1) src r)
-      -- keep 模式下保留的反引号中缀 / section：结构递归，不静默丢子树。
-      EBacktick nm l r _ => append (walkExprGo allow (fuel - 1) src l) (walkExprGo allow (fuel - 1) src r)
+      -- section（keep 模式下保留原形）：结构递归，不静默丢子树。
       ESectOp op _ => []
       ESectL op rhs _ => walkExprGo allow (fuel - 1) src rhs
       ESectR lhs op _ => walkExprGo allow (fuel - 1) src lhs
@@ -2330,8 +2319,6 @@ walkTypeSyntax fuel src e =
       ERecUpdate base fields _ => append (walkTypeSyntax (fuel - 1) src base) (walkTypeSyntaxFields (fuel - 1) src fields)
       EDo stmts _ => walkTypeSyntaxStmts (fuel - 1) src stmts
       EAnn value ty _ => append (walkTypeSyntax (fuel - 1) src value) (walkTypeSyntax (fuel - 1) src ty)
-      EInfix op l r _ => append (walkTypeSyntax (fuel - 1) src l) (walkTypeSyntax (fuel - 1) src r)
-      EBacktick nm l r _ => append (walkTypeSyntax (fuel - 1) src l) (walkTypeSyntax (fuel - 1) src r)
       ESectOp op _ => []
       ESectL op rhs _ => walkTypeSyntax (fuel - 1) src rhs
       ESectR lhs op _ => walkTypeSyntax (fuel - 1) src lhs

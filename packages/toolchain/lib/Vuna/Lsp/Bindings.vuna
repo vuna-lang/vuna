@@ -803,7 +803,6 @@ truncateValue s =
 -- | 内部：把类型表达式拆成参数 domain 列表，沿 `->` / 非隐式 `EPi` 逐段剥。
 arrowDomains : Expr -> List Expr
 arrowDomains (EApp (EVar "->" _) ([a, b]) _) = a :: arrowDomains b
-arrowDomains (EInfix "->" a b _) = a :: arrowDomains b
 arrowDomains (EPi n implicit qty dom cod _) =
   if implicit then arrowDomains cod else dom :: arrowDomains cod
 arrowDomains ty = []
@@ -1124,12 +1123,22 @@ piNameStart fuel ln len i acc =
           got = join "" collected
         in if ch == " " || ch == "\t" || ch == ":" then Just (i + 1, got) else if isId then piNameStart (fuel - 1) ln len (i - 1) (ch :: collected) else Just (i + 1, got)
 
--- | 内部：表达式首 token 位置（`EInfix` 等的 span 从运算符开始，body 起点要取左操作数）。
+-- | 内部：表达式首 token 位置。中缀链步的 span 从运算符开始，首 token 要取更靠前的操作数
+-- （parser 把链降级成 `EApp (EVar op) [l, r]`，取所有子表达式起点的最小值）。
 exprStartOf : Expr -> (Int, Int)
-exprStartOf (EInfix op lhs rhs _) = exprStartOf lhs
-exprStartOf (EBacktick nm lhs rhs _) = exprStartOf lhs
+exprStartOf (EApp fn args _) = argsStartOf (exprStartOf fn) args
 exprStartOf (EAnn value ty _) = exprStartOf value
 exprStartOf e = (spanStartLine (exprSpan e), spanStartCol (exprSpan e))
+
+-- | 内部：一组表达式里最小的起点。
+argsStartOf : (Int, Int) -> List Expr -> (Int, Int)
+argsStartOf acc [] = acc
+argsStartOf acc (a :: rest) = argsStartOf (minStart acc (exprStartOf a)) rest
+
+-- | 内部：两个 (行, 列) 里靠前的那个。
+minStart : (Int, Int) -> (Int, Int) -> (Int, Int)
+minStart a b =
+  if firstOf a < firstOf b || firstOf a == firstOf b && secondOf a <= secondOf b then a else b
 
 -- | 内部：遍历表达式找覆盖光标的局部绑定：光标落在 `EVar` 上就按名字查 scope，落在 binder 名上
 -- 就返回该 binder；未命中返回 `Nothing`。`fuel` 限制递归深度。`EPi` 的具名 binder 也按局部绑定
@@ -1190,14 +1199,6 @@ walkExpr fuel env scope line col name e =
           Just hit => Just hit
           Nothing => walkExprFields (fuel - 1) env scope line col name fields
       EDo stmts _ => walkDo (fuel - 1) env scope line col name stmts
-      EInfix op lhs rhs _ =>
-        case walkExpr (fuel - 1) env scope line col name lhs of
-          Just hit => Just hit
-          Nothing => walkExpr (fuel - 1) env scope line col name rhs
-      EBacktick nm lhs rhs _ =>
-        case walkExpr (fuel - 1) env scope line col name lhs of
-          Just hit => Just hit
-          Nothing => walkExpr (fuel - 1) env scope line col name rhs
       ESectOp op _ => Nothing
       ESectL op inner _ => walkExpr (fuel - 1) env scope line col name inner
       ESectR inner op _ => walkExpr (fuel - 1) env scope line col name inner

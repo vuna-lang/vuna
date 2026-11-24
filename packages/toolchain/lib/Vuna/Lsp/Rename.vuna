@@ -663,11 +663,9 @@ usesInExpr fuel ctx e =
         in append labelUses (append (usesInExpr (fuel - 1) ctx base) (concatMap (fieldValueUses (fuel - 1) ctx) fields))
       EDo stmts _ => concatMap (stmtUses (fuel - 1) ctx) stmts
       EAnn value ty _ => append (usesInExpr (fuel - 1) ctx value) (usesInExpr (fuel - 1) ctx ty)
-      EBacktick nm lhs rhs _ => append (usesInExpr (fuel - 1) ctx lhs) (usesInExpr (fuel - 1) ctx rhs)
       ESectOp op _ => []
       ESectL op inner _ => usesInExpr (fuel - 1) ctx inner
       ESectR inner op _ => usesInExpr (fuel - 1) ctx inner
-      EInfix op lhs rhs _ => append (usesInExpr (fuel - 1) ctx lhs) (usesInExpr (fuel - 1) ctx rhs)
 
 -- | 内部：模式里的使用位置——`PCon` 取构造子名，`PRecord` 取类型名与字段标签，
 -- `PVar` / 通配 / 字面量不产位置。

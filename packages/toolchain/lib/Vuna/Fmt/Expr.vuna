@@ -27,8 +27,6 @@ multilineExpr (EDo stmts _) = True
 multilineExpr (EIf c t el _) = multilineExpr t || multilineExpr el
 multilineExpr (ELam ps body _) = multilineExpr body
 multilineExpr (EApp fn args _) = multilineExpr fn || anyMultiline args
-multilineExpr (EInfix op l r _) = multilineExpr l || multilineExpr r
-multilineExpr (EBacktick name l r _) = multilineExpr l || multilineExpr r
 multilineExpr (EField base f _) = multilineExpr base
 multilineExpr (EAnn value ty _) = multilineExpr value
 multilineExpr (ERecord name fields _) = anyMultilineFields fields
@@ -40,6 +38,26 @@ multilineExpr _ = False
 -- | 内部：表达式在源码里被几层括号包着（表面形状来自树，AST 里没有括号构造子）。
 parenDepth : FmtCtx -> Expr -> Int
 parenDepth at e = parenDepthOf at.ctxSurface (nodeRefId (exprRef e))
+
+-- | 内部：这一层是不是**中缀链步**。parser 把中缀降级成 `EApp (EVar op) [l, r]`：符号名
+-- 作函数的 2 参应用只可能来自中缀（前缀写法必须加括号），反引号写法由表面形状记。
+isInfixStep : FmtCtx -> Expr -> Bool
+isInfixStep at e =
+  case e of
+    EApp (EVar op _) ([_, _]) _ => isSymbolName op || backtickMark at e
+    EApp (EVar _ _) ([_, _]) _ => backtickMark at e
+    _ => False
+
+-- | 内部：链步当时是否反引号写法（``a `f` b``）。
+infixBacktick : FmtCtx -> Expr -> Bool
+infixBacktick at e = backtickMark at e
+
+-- | 内部：表面形状里记的反引号链步。
+backtickMark : FmtCtx -> Expr -> Bool
+backtickMark at e =
+  case backtickShapeOf at.ctxSurface (nodeRefId (exprRef e)) of
+    Just _ => True
+    Nothing => False
 
 -- | 内部：实际要打印的括号层数。section 自带一对括号（`(+)` / `(+ e)` / `(e +)`），
 -- 表面形状记的那层已经由 section 自己打出来，不再重复。
@@ -338,48 +356,6 @@ renderRecPatFieldGo fuel (fname, pat) =
 -- 单行表达式：inlineExprGo / inlinePrecGo / inlineAtomGo
 -- inlinePrecGo 按运算符优先级决定是否补括号；块结构（case/let/do）返回 Nothing。
 -- ---------------------------------------------------------------
--- | 内部：符号字符码（与 lexer 的 `isOpChar` 一致）。
-isOpCharCode : Int -> Bool
-isOpCharCode c =
-  c
-    == 33
-    || c
-    == 36
-    || c
-    == 37
-    || c
-    == 38
-    || c
-    == 42
-    || c
-    == 43
-    || c
-    == 45
-    || c
-    == 46
-    || c
-    == 47
-    || c
-    == 60
-    || c
-    == 61 || c == 62 || c == 63 || c == 64 || c == 92 || c == 94 || c == 124 || c == 126 || c == 58
-
--- | 内部：字符码是否全是符号字符。
-allOpChars : List Int -> Bool
-allOpChars [] = True
-allOpChars (c :: rest) = isOpCharCode c && allOpChars rest
-
--- | 内部：整个名字是否都由符号字符组成（`+`、`<+>`、`->`、`::`）；`p.x` / `Mod.name`
--- 这类带标识符字符的名字不算。
---
--- 符号名在原子 / 前缀位置必须打成 `(op)`，否则产物不可重新 parse；中缀位置按源码写法
--- 原样输出（fmt 不查 fixity、不重排）。
-isSymbolName : String -> Bool
-isSymbolName name =
-  case strUnpack name of
-    [] => False
-    cs => allOpChars cs
-
 -- | 内部：运算符的可见声明：只查名字本身（没有反向别名）。
 opDeclOf : List FixityDecl -> String -> Maybe FixityDecl
 opDeclOf env op = lookupFixityDecl (tableOfKeepOps emptySurface env) op
@@ -626,7 +602,7 @@ inlineBareGo fuel env at minPrec e =
                                         case inlineExprGo (fuel - 1) env at t of
                                           Nothing => Nothing
                                           Just ts => Just "(${vs} : ${ts})"
-                                  Nothing => inlineAppGo (fuel - 1) env at minPrec fn args
+                                  Nothing => inlineAppGo (fuel - 1) env at minPrec (EApp fn args sp) fn args
       EPi name implicit qty dom cod _ => inlinePiGo (fuel - 1) env at minPrec qty name implicit dom cod
       ELet binds body rec_ _ => Nothing
       ECase scrut alts _ => Nothing
@@ -667,9 +643,6 @@ inlineBareGo fuel env at minPrec e =
       -- 非 where 位置（例如 `let` 绑定值）的 `EAnn` 透明渲染内部表达式：
       -- 表达式位置没有 `: Ty` 语法，输出标注会让 fmt 产物无法重新 parse。
       EAnn value ty _ => inlinePrecGo (fuel - 1) env at minPrec value
-      -- 反引号中缀 / 中缀链 / 括号按源码顺序与括号边界打印（不重排、不补括号）。
-      EBacktick name l r sp => inlineInfixChain (fuel - 1) env at (EBacktick name l r sp)
-      EInfix op l r sp => inlineInfixChain (fuel - 1) env at (EInfix op l r sp)
       ESectOp op _ => Just "(${op})"
       ESectL op inner _ =>
         case inlinePrecGo (fuel - 1) env at 0 inner of
@@ -727,11 +700,13 @@ qtyPrefix (Just Q0) = "0 "
 qtyPrefix (Just Q1) = "1 "
 
 -- | 内部：应用的单行渲染：符号名 / canonical 别名的两参应用还原成中缀 `a op b`
--- （哪怕无声明也按 9 左打印），其余按应用形式。
-inlineAppGo : Int -> List FixityDecl -> FmtCtx -> Int -> Expr -> List Expr -> Maybe String
-inlineAppGo fuel env at minPrec fn args =
+-- （哪怕无声明也按 9 左打印），其余按应用形式。中缀链步按源码顺序打印。
+inlineAppGo : Int -> List FixityDecl -> FmtCtx -> Int -> Expr -> Expr -> List Expr -> Maybe String
+inlineAppGo fuel env at minPrec whole fn args =
   if fuel <= 0 then
     Nothing
+  else if isInfixStep at whole then
+    inlineInfixChain (fuel - 1) env at whole
   else
     case fn of
       -- 符号名当作中缀运算符：两参应用还原成 `a op b`（哪怕无声明也按 9 左打印）。
@@ -961,8 +936,6 @@ exprDocBare fuel env at e =
       ELocalFun clauses _ => empty
       -- 表达式位置的 `EAnn` 没有 `: Ty` 语法，透明渲染内部表达式。
       EAnn value ty _ => exprDoc (fuel - 1) env at value
-      EBacktick name l r sp => sourceInfixDoc (fuel - 1) env at (EBacktick name l r sp)
-      EInfix op l r sp => sourceInfixDoc (fuel - 1) env at (EInfix op l r sp)
       ESectOp op _ => text "(${op})"
       ESectL op inner _ => group (appendDoc (text "(${op} ") (appendDoc (exprDoc (fuel - 1) env at inner) (text ")")))
       ESectR inner op _ => group (appendDoc (text "(") (appendDoc (exprDoc (fuel - 1) env at inner) (text " ${op})")))
@@ -1021,6 +994,8 @@ appDoc : Int -> List FixityDecl -> FmtCtx -> Expr -> Expr -> List Expr -> Doc
 appDoc fuel env at whole fn args =
   if fuel <= 0 then
     empty
+  else if isInfixStep at whole then
+    sourceInfixDoc (fuel - 1) env at whole
   else
     case appAtParts whole of
       Just (f, nm, rest) => appAtDoc (fuel - 1) env at whole f nm rest
@@ -1066,20 +1041,19 @@ applyDoc fuel env at fn args =
     group
       (appendDoc (atomDoc (fuel - 1) env at fn) (nest 2 (hcat (map (\a => appendDoc line (atomDoc (fuel - 1) env at a)) args))))
 
--- | 内部：把中缀 / 反引号链按源码顺序摊平成「操作数表 + 运算符表」。
--- 源码括号是链的边界：被括号包住的子链整体作为一个操作数（括号由它自己的渲染打出来）。
+-- | 内部：把中缀链按源码顺序摊平成「操作数表 + 运算符表」。
+-- parser 把链步降级成 `EApp (EVar op) [l, r]`，这里按表面形状认出来；源码括号是链的
+-- 边界：被括号包住的子链整体作为一个操作数（括号由它自己的渲染打出来）。
 sourceInfixParts : FmtCtx -> Expr -> (List Expr, List String)
-sourceInfixParts at (EInfix op l r _) =
-  let
-    lp = infixPartsOperand at l
-    rp = infixPartsOperand at r
-  in (append (firstOf lp) (firstOf rp), append (secondOf lp) (append [op] (secondOf rp)))
-sourceInfixParts at (EBacktick name l r _) =
-  let
-    lp = infixPartsOperand at l
-    rp = infixPartsOperand at r
-  in (append (firstOf lp) (firstOf rp),
-    append (secondOf lp) (append ["`" ++ name ++ "`"] (secondOf rp)))
+sourceInfixParts at (e@(EApp (EVar op _) ([l, r]) _)) =
+  if isInfixStep at e then
+    let
+      lp = infixPartsOperand at l
+      rp = infixPartsOperand at r
+      label = if infixBacktick at e then "`" ++ op ++ "`" else op
+    in (append (firstOf lp) (firstOf rp), append (secondOf lp) (append [label] (secondOf rp)))
+  else
+    ([e], [])
 sourceInfixParts at e = ([e], [])
 
 -- | 内部：链上的一个操作数；带源码括号时不再展开（括号即边界）。

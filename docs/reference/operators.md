@@ -26,13 +26,15 @@ trait 方法、instance 方法与 data 构造子都可以用符号名声明。
 
 ## 机制（`Vuna.Compiler.Loader.Fixity`）
 
-1. **parser 不做优先级**：任意中缀符号链收成右嵌套的 `EInfix` / `EBacktick`；`::` 在
-   pattern 里也保留符号原形。括号**不建 AST 节点**（纯书写形式，分组边界由树按节点 id
-   记录，见 `Frontend.Surface` 的括号层数）。
+1. **parser 不做优先级**：中缀链按源码顺序**右嵌套**，但降级成普通应用
+   `EApp (EVar op) [lhs, rhs]`（`a op b` 就是一个应用节点，id 与树里的表达式节点一致）；
+   `::` 在 pattern 里也保留符号原形。括号**不建 AST 节点**（纯书写形式，分组边界由树按
+   节点 id 记录，见 `Frontend.Surface` 的括号层数）；反引号写法（``a `f` b``）的名字是普通
+   标识符、没法从形状区分，也记在 `Frontend.Surface` 里。
 2. **Loader 在名字解析之前重排**：按模块可见 fixity 表做 precedence climbing，把链重排成
    `EApp` / `EPi`；同一步完成 **section 展开**。
-3. **重排后 AST 里没有 `EInfix` / `EBacktick` / `ESect*`**：Elab / codegen 看到的是
-   普通应用；`Resolve` 对残留节点报 internal error（不静默透传）。
+3. **重排后 AST 里没有未展开的 section**：Elab / codegen 看到的是普通应用；`Resolve` 对
+   残留的 section 报 internal error（不静默透传）。中缀链本身就是应用，不需要再消除。
 4. **fixity 唯一来源 = 源码里的 `infixl` / `infixr` / `infix` 声明**（库或用户）；
    base 侧的全部声明集中在 `Base.Internal.Operator`（定义模块 import 它），用户模块仍就地声明。
    编译器只为内建符号（`->`、`&&`、`||`）提供固定声明
@@ -133,8 +135,9 @@ import 之后、第一个声明之前（fmt 的规范位置），每条一行。
 ## fmt 与 fixity
 
 - `Vuna.Fmt.formatSourceWith : String -> Result String`：无需 fixity 闭包。
-- 中缀链（`EInfix`）/ 反引号 / section 按**源码顺序与源码括号**打印：fmt 不重排中缀、
-  不按优先级补括号，未知运算符也不会让格式化失败。
+- 中缀链 / 反引号 / section 按**源码顺序与源码括号**打印：fmt 不重排中缀、不按优先级补
+  括号，未知运算符也不会让格式化失败。链步靠**形状**认出来（符号名作函数的 2 参应用只可能
+  来自中缀降级——前缀写法必须加括号，那是 section），反引号写法读 `Frontend.Surface`。
 - fmt 会**打印 `infix*` 声明**（imports 之后、源码顺序，每条一行），声明的 span 参与注释锚点。
 - 需要按 fixity 重排的消费者（Elab、lint、index、doc）仍走 `Loader.Fixity.reorderProgram`。
 

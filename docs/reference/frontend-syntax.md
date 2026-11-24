@@ -18,11 +18,13 @@
         → Rast（名字已解析，糖已消失）→ Elab → Core → IR → 后端
 ```
 
-- **表面语法只活到 `Frontend.Ast`**：`EInfix` / `EBacktick` / `ESect*` 是 parser
-  中间产物，`Loader.Fixity.reorderProgram` 之后必须消失；`Loader.Resolve` 对残留报 internal error。
+- **表面语法只活到 `Frontend.Ast`**：`ESect*` 是 parser 中间产物，`Loader.Fixity.reorderProgram`
+  之后必须消失；`Loader.Resolve` 对残留报 internal error。中缀链在 parser 里就降级成普通应用
+  `EApp (EVar op) [l, r]`（符号名作函数的 2 参应用只可能来自中缀降级），所以重排前后 AST 都是应用。
 - **纯书写形式不建 AST 节点**：括号（层数）与「哪些 token 是括号」由 parser 的建树事件
   按节点 id 记录在 `Frontend.Surface` 里（`(e)` / `((e))` / `(f x) y` / `f (a)` 都覆盖；
-  模板洞里由洞的子解析交回自己的条目）。Fmt 打印与 fixity 重排的括号边界都读这份表面形状。
+  模板洞里由洞的子解析交回自己的条目）；反引号链步同理（名字是普通标识符，形状认不出）。
+  Fmt 打印与 fixity 重排的括号边界都读这份表面形状。
 - 部分糖**不新增 AST 构造子**，而用保留名编码（`@vuna@list@*` / `@vuna@handle` /
   `@vuna@macro@*` / `@vuna@tuple@*` / `@vuna@ascribe` / `@vuna@do@*` / `?hole`）：列表字面量、
   `perform` / `handle`、`f@name`、行条目、元组 / unit、类型标注、do 链、洞、内置宏都走这条路。
@@ -66,7 +68,7 @@
 | 应用 | `f a b` | `EApp` | `Frontend.Parser` |
 | 实例名覆盖（应用） | `f@audit x` | `f (@vuna@inst@arg audit) x`，在第一个隐式 String binder 处消费 | `Frontend.Parser`、`Elab.Term.Impl` |
 | 行条目实例名（后置） | `e @audit` | `@vuna@row@at` 编码，行展开期使用 | `Frontend.Parser`、`Elab.Term.Impl` |
-| 中缀 | `a + b` / `` a `f` b `` | 先收 `EInfix` / `EBacktick`，Loader 按可见 fixity 重排成 `EApp`；未知符号运算符报错 | `Loader.Fixity`、[operators.md](operators.md) |
+| 中缀 | `a + b` / `` a `f` b `` | parser 直接降级成 `EApp (EVar op) [l, r]`（源码顺序、右嵌套，反引号写法登记在 `Frontend.Surface`）；Loader 按可见 fixity 重排；未知符号运算符报错 | `Frontend.Parser`、`Loader.Fixity`、[operators.md](operators.md) |
 | section | `(+)` / `(+ e)` / `(e +)` | `EVar op` / lambda；直接应用 `(+ e) a` 折叠成 `a + e`（不生成 lambda） | `Loader.Fixity` |
 | `>>` | `a >> b` | `(>>=) a (\_ => b)`（用调用点可见的 `>>=`） | `Loader.Fixity.infixTerm` |
 | 一元负号 | `-1` / `-e` | 负字面量 / `negate e` | `Frontend.Parser` |

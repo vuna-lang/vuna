@@ -474,14 +474,8 @@ refsInExprGo sMod e acc =
     ERecUpdate r fields _ => refsInExprGo sMod r (refsInFields sMod fields acc)
     EDo stmts _ => refsInDoStmts sMod stmts acc
     EAnn value ty _ => refsInExprGo sMod value (refsInExprGo sMod ty acc)
-    -- keep 模式（index/fmt）下反引号中缀与 section **保留原形**（不像 EInfix 会被重排
-    -- 消掉），所以这里必须显式处理：反引号里的名字本身也是引用，操作数继续递归，
+    -- section 在 keep 模式下保留原形，显式处理：op 本身也是引用，操作数继续递归，
     -- 不能静默丢整棵子树。
-    EBacktick nm l r sp =>
-      refsInExprGo
-        sMod
-        l
-        (refsInExprGo sMod r (Ref sMod nm (spanStartLine (nodeRefSpan sp)) (spanStartCol (nodeRefSpan sp)) :: acc))
     ESectOp op sp =>
       Ref sMod op (spanStartLine (nodeRefSpan sp)) (spanStartCol (nodeRefSpan sp)) :: acc
     ESectL op inner sp =>
@@ -494,12 +488,6 @@ refsInExprGo sMod e acc =
         sMod
         inner
         (Ref sMod op (spanStartLine (nodeRefSpan sp)) (spanStartCol (nodeRefSpan sp)) :: acc)
-    -- 中缀链与括号是 parser 中间产物：op 记一条引用，操作数按同一累积器顺序递归。
-    EInfix op l r sp =>
-      refsInExprGo
-        sMod
-        l
-        (refsInExprGo sMod r (Ref sMod op (spanStartLine (nodeRefSpan sp)) (spanStartCol (nodeRefSpan sp)) :: acc))
 
 -- | 内部：模板字面量各片段里的引用——洞内表达式递归，文本块没有引用。
 refsInInterpParts : String -> List InterpPart -> List Ref -> List Ref

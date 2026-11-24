@@ -2,8 +2,9 @@ module Vuna.Compiler.Loader.Fixity where
 
 -- Vuna.Compiler.Loader.Fixity：中缀重排。
 --
--- parser 不做优先级判断：中缀链统一收成右嵌套的 `EInfix` / `EBacktick`。括号是重排的
--- 边界，但它不在 AST 里（纯书写形式，树按节点 id 记录，见 `Frontend.Surface`），
+-- parser 不做优先级判断：中缀链按源码顺序右嵌套，但降级成普通应用
+-- `EApp (EVar op) [lhs, rhs]`；「这一层是链步、是否反引号」记在表面形状里
+-- （`Frontend.Surface`，按节点 id 查）。括号是重排的边界，同样在表面形状里。
 -- 所以本模块的重排上下文同时带 fixity 表与表面形状。本模块按模块可见的 `infix*` 声明
 -- （`FixityDecl`：优先级 0–9、结合性 0/1/2）把链重排成 `EApp`，并**在这一步**完成
 -- section 展开与 `>>` 的 do 派生。
@@ -14,10 +15,11 @@ module Vuna.Compiler.Loader.Fixity where
 -- 优先级重排。反引号名字（`a `f` b`）是普通函数的中缀写法，没声明时按 9 左结合
 -- （Haskell 默认）。
 --
--- 重排后 AST 不含 `EInfix` / `EBacktick` / `ESect*`；Elab / codegen 不应看到
--- 它们（残留即 internal error）。Fmt / Index / Lsp 在 parse 后阶段各自处理这些节点。
+-- 重排后 AST 不含 section 与未展开的链步；Elab / codegen 不应看到它们
+-- （残留即 internal error）。
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.Lexer
 import Vuna.Compiler.Frontend.Surface
 import Vuna.Compiler.Base.Diagnostics.Rn
 import Base.Container.HashMap as HashMap
@@ -89,7 +91,7 @@ lookupFixity t op =
     Just d => Just (d.fixityLevel, d.fixityAssoc)
     Nothing => Nothing
 
--- 链元素：运算符名、是否反引号写法（fmt keep 模式要按原样重建）、右操作数。
+-- 链元素：运算符名、是否反引号写法（未声明时按 9 左结合）、右操作数。
 record ChainOp where
   chainOp : String
   chainIsBacktick : Bool
@@ -112,41 +114,41 @@ fixityOf t c =
       else
         onErrDiag (withFallbackSpan (nodeRefSpan c.chainRef)) (ErrC (unknownFixityMsg c.chainOp))
 
--- rename 模式产出普通应用（别名已替换，`>>` 也走别名到库函数）；keep 模式保留反引号原形
--- 供 fmt 打印（普通运算符仍是 `EApp (EVar op)`，fmt 按 fixity 打回中缀）。
+-- rename 模式在名字解析前把 `>>` 派生成 `>>=`（keep 模式留给工具按原形打印）。
+-- 两种模式都产出普通应用；反引号写法只影响 fixity 默认值，不影响 AST。
 infixTerm : FixityTable -> ChainOp -> Expr -> Expr -> NodeRef -> Expr
 infixTerm t c lhs rhs sp =
-  if renameMode t then
-    if c.chainOp == ">>" then
-      EApp (EVar ">>=" sp) [lhs, ELam [("_", spanEmpty)] rhs sp] sp
-    else
-      EApp (EVar c.chainOp sp) [lhs, rhs] sp
-  else if c.chainIsBacktick then
-    EBacktick c.chainOp lhs rhs sp
+  if renameMode t && c.chainOp == ">>" then
+    EApp (EVar ">>=" sp) [lhs, ELam [("_", spanEmpty)] rhs sp] sp
   else
     EApp (EVar c.chainOp sp) [lhs, rhs] sp
 
--- 把右嵌套的 `EInfix` / `EBacktick` 链展平成「首操作数 + 链元素列表」；括号 / 应用 / 原子
--- 作为边界操作数（先递归重排）。
+-- 链步判定：parser 把中缀降级成 `EApp (EVar op) [l, r]`。符号名作函数的 2 参应用只可能
+-- 来自中缀（前缀写法必须加括号，那是 section）；反引号写法（普通标识符）由表面形状记。
+isChainNode : FixityTable -> Expr -> Bool
+isChainNode t e =
+  case e of
+    EApp (EVar op _) ([_, _]) _ => isSymbolName op || chainBacktick t e
+    EApp (EVar _ _) ([_, _]) _ => chainBacktick t e
+    _ => False
+
+-- 链步是否反引号写法（表面形状；普通符号中缀不在表里）。
+chainBacktick : FixityTable -> Expr -> Bool
+chainBacktick t e =
+  case backtickShapeOf t.fixSurface (nodeRefId (exprRef e)) of
+    Just _ => True
+    Nothing => False
+
+-- 把右嵌套的链展平成「首操作数 + 链元素列表」；括号 / 应用 / 原子作为边界操作数
+-- （先递归重排）。
 collectChain : FixityTable -> Expr -> Check (Expr, List ChainOp)
-collectChain t (EInfix op l r sp) =
-  Vuna.Compiler.Base.Common.bind (reorderExpr t l) (
-      \l2 =>
-        Vuna.Compiler.Base.Common.bind (chainOperand t r) (
-            \p =>
-              case p of
-                (first, rest) => OkC (l2, ChainOp op False first sp :: rest)
-          )
-    )
-collectChain t (EBacktick name l r sp) =
-  Vuna.Compiler.Base.Common.bind (reorderExpr t l) (
-      \l2 =>
-        Vuna.Compiler.Base.Common.bind (chainOperand t r) (
-            \p =>
-              case p of
-                (first, rest) => OkC (l2, ChainOp name True first sp :: rest)
-          )
-    )
+collectChain t (e@(EApp (EVar op _) ([l, r]) sp)) =
+  if isChainNode t e then
+    Vuna.Compiler.Base.Common.bind
+      (reorderExpr t l)
+      (\l2 => Vuna.Compiler.Base.Common.bind (chainOperand t r) (\p => OkC (l2, ChainOp op (chainBacktick t e) (firstOf p) sp :: secondOf p)))
+  else
+    Vuna.Compiler.Base.Common.bind (reorderNonChain t e) (\e2 => OkC (e2, []))
 collectChain t e = Vuna.Compiler.Base.Common.bind (reorderNonChain t e) (\e2 => OkC (e2, []))
 
 -- | 链的右操作数：被括号包住时是**边界**（整体作为一个操作数，不再沿链展平）；
@@ -283,12 +285,11 @@ reorderNonChain t (EAnn inner ty sp) =
 -- 表达式；降级为 `interp` 调用发生在 `Loader.Resolve`（rename 之后）。
 reorderNonChain t (EInterp multi parts sp) =
   Vuna.Compiler.Base.Common.bind (reorderInterpParts t parts) (\ps => OkC (EInterp multi ps sp))
-reorderNonChain t other = icInternal "Fixity.reorderNonChain: unexpected expression form"
 
 -- | 表达式重排入口：中缀 / backtick 链交给 `reorderChain`，其余交给 `reorderNonChain`。
 export reorderExpr : FixityTable -> Expr -> Check Expr
-reorderExpr t (EInfix op l r sp) = reorderChain t (EInfix op l r sp)
-reorderExpr t (EBacktick name l r sp) = reorderChain t (EBacktick name l r sp)
+reorderExpr t (e@(EApp (EVar _ _) ([_, _]) _)) =
+  if isChainNode t e then reorderChain t e else reorderNonChain t e
 reorderExpr t e = reorderNonChain t e
 
 -- 模板片段列表（`EInterp` 的洞内表达式同样要按 fixity 重排）。
@@ -379,7 +380,7 @@ reorderRecPatField : FixityTable -> (String, Pat) -> Check (String, Pat)
 reorderRecPatField t (fname, pat) =
   Vuna.Compiler.Base.Common.bind (reorderPattern t pat) (\p2 => OkC (fname, p2))
 
--- 类型表达式同样走重排（`a -> b -> c` 是 `EInfix "->"` 链）。
+-- 类型表达式同样走重排（`a -> b -> c` 是按源码顺序右嵌套的 `->` 链）。
 reorderDecl : FixityTable -> Decl -> Check Decl
 reorderDecl t (DData name params kind ctors derivings viaField repr lin sp) =
   Vuna.Compiler.Base.Common.bind
@@ -410,7 +411,7 @@ reorderDecl t (DInstance ctx head methods sp) =
     (Vuna.Compiler.Base.Common.traverse (\e => reorderExpr t e) ctx)
     (\ctx2 => Vuna.Compiler.Base.Common.bind (reorderExpr t head) (\head2 => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (\v => reorderInstanceMethodDecl t v) methods) (\ms => OkC (DInstance ctx2 head2 ms sp))))
 
--- | 重排 trait 参数显式 kind 里的中缀（`Type -> Type` 这类 kind 必须经过 Loader，否则 Elab 见到残留 `EInfix`）。
+-- | 重排 trait 参数显式 kind 里的中缀（`Type -> Type` 这类 kind 必须经过 Loader，否则 Elab 见到未重排的链步）。
 reorderTraitParam : FixityTable -> TraitParam -> Check TraitParam
 reorderTraitParam t p =
   case p.traitParamKind of

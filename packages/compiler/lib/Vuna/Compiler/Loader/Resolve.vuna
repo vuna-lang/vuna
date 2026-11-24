@@ -1007,12 +1007,8 @@ resolveExprRaw fuel modules label prefix ns imports scope expr =
       EVar name sp => if isHoleName name then OkC (EVar name sp) else if startsWith "!" name && strLength name > 1 then hiddenRef name sp else if isMacroSyntaxName name then icInternal "unexpanded macro invocation ${name}" else if isInternalSyntaxName name then if isParserSyntaxName name || isCompilerModulePrefix prefix then OkC (EVar name sp) else onErrDiag (withFallbackSpan (nodeRefSpan sp)) (rnNoLoc1 (UnknownVariable name) name) else if containsDot name then resolveDottedExpr modules label prefix ns imports scope name sp else Vuna.Compiler.Base.Common.bind (onErrDiag (withFallbackSpan (nodeRefSpan sp)) (resolveGlobal modules label prefix ns imports scope name)) (\n => checkDebugConstruct ns.nsRelease sp name n scope)
       -- 内置宏标记必须在 `Loader.Expand` 里展开；走到这里说明展开漏了（internal error，
       -- 不静默透传成普通内部名）。
-      -- `EInfix` 是 parser 的中间产物，正常路径在 Loader 重排里已消除；
-      -- 走到这里说明重排漏了（internal error，不静默透传）。
-      EInfix op lhs rhs _ => icInternal "unreordered infix operator ${op}"
-      -- 反引号中缀与 section 同样必须在 Loader.Fixity 重排里消除（严格执行契约
-      -- 「rename 后不存在」），走到这里说明重排漏了，显式 internal error 不静默透传。
-      EBacktick name lhs rhs _ => icInternal "unreordered backtick infix operator ${name}"
+      -- section 必须在 Loader.Fixity 重排里消除（严格执行契约「rename 后不存在」），
+      -- 走到这里说明重排漏了，显式 internal error 不静默透传。
       ESectOp op _ => icInternal "unreordered operator section (${op})"
       ESectL op rhs _ => icInternal "unreordered left operator section (${op})"
       ESectR lhs op _ => icInternal "unreordered right operator section (${op})"

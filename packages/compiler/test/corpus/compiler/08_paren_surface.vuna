@@ -8,6 +8,7 @@ import Prelude
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Cst
+import Vuna.Compiler.Frontend.Lexer
 import Vuna.Compiler.Frontend.Parser
 import Vuna.Compiler.Frontend.Surface
 
@@ -24,6 +25,22 @@ parseBody src =
 -- | 表达式节点的括号层数。
 depthOf : Surface -> Expr -> Int
 depthOf s e = parenDepthOf s (nodeRefId (exprRef e))
+
+-- | 表达式节点是不是中缀链步：符号名作函数的 2 参应用（前缀写法必须加括号，所以只可能
+-- 来自中缀降级），或表面形状里记下的反引号写法。
+infixStep : Surface -> Expr -> Bool
+infixStep s e =
+  case e of
+    EApp (EVar op _) ([_, _]) _ => isSymbolName op || infixBacktick s e
+    EApp (EVar _ _) ([_, _]) _ => infixBacktick s e
+    _ => False
+
+-- | 表达式节点是不是反引号写的链步。
+infixBacktick : Surface -> Expr -> Bool
+infixBacktick s e =
+  case backtickShapeOf s (nodeRefId (exprRef e)) of
+    Just _ => True
+    Nothing => False
 
 -- | `(a)`：包装节点，1 层。
 wrappedOk : Bool
@@ -79,7 +96,7 @@ infixRhsOk =
   case parseBody "a * (b + c)" of
     Just (s, body) =>
       case body of
-        EInfix _ l r _ => depthOf s l == 0 && depthOf s r == 1
+        EApp (EVar "*" _) ([l, r]) _ => depthOf s l == 0 && depthOf s r == 1 && infixStep s body
         _ => False
     Nothing => False
 
@@ -89,8 +106,25 @@ infixLhsOk =
   case parseBody "(a + b) * c" of
     Just (s, body) =>
       case body of
-        EInfix _ l r _ => depthOf s l == 1 && depthOf s r == 0
+        EApp (EVar "*" _) ([l, r]) _ => depthOf s l == 1 && depthOf s r == 0
         _ => False
+    Nothing => False
+
+-- | 链步登记：`a * b` 的区间根在表面形状里是链步，普通应用 `f a` 不是。
+infixShapeOk : Bool
+infixShapeOk =
+  case parseBody "a * b" of
+    Just (s, body) =>
+      case parseBody "f a" of
+        Just (s2, app) => infixStep s body && not (infixStep s2 app)
+        Nothing => False
+    Nothing => False
+
+-- | 反引号写法也记在表面形状里（``a `f` b``）。
+backtickOk : Bool
+backtickOk =
+  case parseBody "a `f` b" of
+    Just (s, body) => infixBacktick s body
     Nothing => False
 
 -- | `(+)`：section 自带的括号不是表面括号。
@@ -121,7 +155,7 @@ holeOk =
       case body of
         EInterp _ ((IPHole hole) :: _) _ =>
           case hole of
-            EInfix _ l r _ => depthOf s l == 1 && depthOf s r == 0
+            EApp (EVar "*" _) ([l, r]) _ => depthOf s l == 1 && depthOf s r == 0
             _ => False
         _ => False
     Nothing => False
@@ -136,4 +170,7 @@ main =
     + bit fnParenOk 4
     + bit argParenOk 8
     + bit tupleOk 16
-    + bit infixRhsOk 32 + bit infixLhsOk 64 + bit sectionOk 128 + bit listOk 256 + bit holeOk 512
+    + bit infixRhsOk 32
+    + bit infixLhsOk 64
+    + bit sectionOk 128
+    + bit listOk 256 + bit holeOk 512 + bit infixShapeOk 1024 + bit backtickOk 2048

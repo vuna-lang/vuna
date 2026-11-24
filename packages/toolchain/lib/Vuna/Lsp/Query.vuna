@@ -574,7 +574,7 @@ findSplitIn (_ :: rest) name = findSplitIn rest name
 -- 洞上下文里的类型是精化器 `showTerm` 的文本，应用写在全括号里且左结合
 -- （`((Base.Data.Pair.Pair Int) Base.Data.Bool.Bool)`），所以 `EApp` 要沿函数侧递归剥括号。
 -- 箭头 `A -> B` 若编码成 `EApp (EVar "->") [A, B]`，头名是 `->`，后续解析不到声明即降级；
--- `EInfix` / `EPi` / 其它形状返回 `Nothing`。
+-- 其它形状（`EPi` / 字面量 / section / 中缀链步）返回 `Nothing`。
 typeHeadName : Expr -> Maybe String
 typeHeadName (EVar n _) = Just n
 typeHeadName (EApp f args _) = typeHeadName f
@@ -715,7 +715,6 @@ resolveTypeSplit sf roots curMod tyText =
 -- | 内部：构造子的模式参数个数：显式 `->` / `(a : Type) ->`（EPi implicit = False）才占通配；
 -- 隐式 `{a : Type} ->`（EPi implicit = True）由调用点推断，不进模式。
 ctorPatArity : Expr -> Int
-ctorPatArity (EInfix "->" lhs rhs _) = 1 + ctorPatArity rhs
 ctorPatArity (EApp (EVar "->" _) ([x, rest]) _) = 1 + ctorPatArity rest
 ctorPatArity (EPi n implicit qty dom cod _) = (if implicit then 0 else 1) + ctorPatArity cod
 ctorPatArity ty = 0

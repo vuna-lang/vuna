@@ -1,7 +1,7 @@
 -- | 语法级类型打印（工具链共用；永不进 seed 闭包）。
 --
 -- 单一真源：`vuna api` 的签名、`vuna doc` 的 HTML、`vuna search` 的类型索引都从同一套
--- 打印器取文本——只有一处实现，`EBacktick` / section 的处理不会漂移。
+-- 打印器取文本——只有一处实现，中缀 / section 的处理不会漂移。
 --
 -- 输出是**可回读**的：`vuna search --type` 会把它存进索引的 `symType` 再用 parser 读回来。
 -- 括号策略（应用参数加括号、箭头右结合）是输出契约的一部分。
@@ -14,6 +14,7 @@ module Vuna.Sig where
 
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.Lexer
 
 -- | 打印一个类型表达式（无签名约束前缀）：箭头右结合、应用参数与嵌套类型加括号。
 export renderType : Expr -> String
@@ -27,7 +28,6 @@ renderType (ty@(EApp (EVar op _) ([a, b]) _)) =
       Just rest => "[" ++ renderType a ++ rest
       Nothing => renderTypePlain ty
   else if isTuplePairSyntax op then "(" ++ renderType a ++ tupleTailText b ++ ")" else if op == "::" then "${renderTypeArg a} :: ${renderType b}" else renderTypePlain ty
-renderType (EInfix "->" a b _) = "${renderTypeArg a} -> ${renderType b}"
 renderType (EPi name implicit qty dom cod _) =
   let
     binder =
@@ -68,16 +68,20 @@ export renderTypeInCtx : List Expr -> Expr -> String
 renderTypeInCtx [] ty = renderType ty
 renderTypeInCtx ctx ty = "${join ", " (map renderType ctx)} => ${renderType ty}"
 
--- | 内部：通用打印（应用 / 字面量 / 中缀 / 反引号 / section）；其余表达式形状打印成 `_`。
+-- | 内部：通用打印（应用 / 字面量 / 中缀 / section）；其余表达式形状打印成 `_`。
 renderTypePlain : Expr -> String
+renderTypePlain (e@(EApp f ([l, r]) _)) =
+  case f of
+    EVar op _ =>
+      if isSymbolName op && op /= "->" && op /= "::" then
+        "${renderTypeArg l} ${op} ${renderTypeArg r}"
+      else
+        "${renderTypeAtom f} ${renderTypeArg l} ${renderTypeArg r}"
+    _ => "${renderTypeAtom f} ${renderTypeArg l} ${renderTypeArg r}"
 renderTypePlain (EApp f args _) = "${renderTypeAtom f} ${join " " (map renderTypeArg args)}"
 renderTypePlain (EInt n _) = strFromInt n
 renderTypePlain (EStr s _) = "\"${s}\""
 renderTypePlain (EFloat raw _) = raw
-renderTypePlain (EInfix op l r _) = "${renderTypeArg l} ${op} ${renderTypeArg r}"
--- 类型位置也可能出现反引号中缀 / section（keep 模式下保留原形）；显式渲染，
--- 不落到 `_` 静默丢表达式。
-renderTypePlain (EBacktick nm l r _) = "${renderTypeArg l} `${nm}` ${renderTypeArg r}"
 renderTypePlain (ESectOp op _) = "(${op})"
 renderTypePlain (ESectL op e _) = "(${op} ${renderType e})"
 renderTypePlain (ESectR e op _) = "(${renderType e} ${op})"
@@ -91,7 +95,6 @@ renderTypeArg (ty@(EApp (EVar cons _) ([_, _]) _)) =
   if isListConsSyntax cons then
     renderType ty
   else if isTuplePairSyntax cons then renderType ty else "(${renderType ty})"
-renderTypeArg (ty@(EInfix "->" a b _)) = "(${renderType ty})"
 renderTypeArg ty = "(${renderType ty})"
 
 -- | 内部：把表达式打印成应用函数位置的原子（与 `renderTypeArg` 同策略）。

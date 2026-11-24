@@ -142,6 +142,19 @@ isOpChar c =
     || c
     == 61 || c == 62 || c == 63 || c == 64 || c == 92 || c == 94 || c == 124 || c == 126 || c == 58
 
+-- | 整个名字是否都由运算符字符组成（`+`、`<+>`、`->`、`::`）；`p.x` / `Mod.name` 这类带
+-- 标识符字符的名字不算。parser 把中缀链降级成 `EApp (EVar op) [l, r]`，消费者靠它把
+-- 「链步」与普通应用区分开（见 `Frontend/Ast` 的表达式说明）。
+export isSymbolName : String -> Bool
+isSymbolName name =
+  case strUnpack name of
+    [] => False
+    cs => allOpChars cs
+
+allOpChars : List Int -> Bool
+allOpChars [] = True
+allOpChars (c :: rest) = isOpChar c && allOpChars rest
+
 -- 关键字表（含 `axiom`、`infixl` / `infixr` / `infix`）。
 export isKeyword : String -> Bool
 -- 表示档位前缀（`alias record` / `boxed record`）与 `export` / `abstract` 是

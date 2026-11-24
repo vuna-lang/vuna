@@ -1,14 +1,17 @@
 -- | 表达式的**表面形状**（「怎么写」而不是「是什么」）。
 --
 -- AST 只保留语义结构：括号是纯书写选择（`(a)` 与 `a` 是同一个表达式，但重新打印时
--- 必须原样保留，否则 `a * (b + c)` 会变成 `a * b + c`）。这类信息由 parser 在建树区间里
--- 声明，按节点 id 查：**没有新的树，也没有从 AST 反推**。
+-- 必须原样保留，否则 `a * (b + c)` 会变成 `a * b + c`）；中缀链同理——parser 把它降级成
+-- 普通应用 `EApp (EVar op) [l, r]`（源码顺序、右嵌套），「这一层是链步」由**形状本身**
+-- 说明（符号名作函数的 2 参应用只可能来自中缀降级）；只有**反引号写法**（``a `f` b``）
+-- 是普通标识符、没法从形状区分，按节点 id 记在本表里。信息由 parser 在解析点声明：
+-- **没有新的树，也没有从 AST 反推**。
 --
--- 表从建树事件 + 词法 token 派生（不建整棵树）：每个区间在 open 时记下首 token、在 close
--- 时用首/末 token 与直接子节点区间判定它是不是一对括号的包装。整份文件一趟线性扫描。
+-- 括号从建树事件 + 词法 token 派生（不建整棵树）：每个区间在 open 时记下首 token、在
+-- close 时用首/末 token 与直接子节点区间判定它是不是一对括号的包装。整份文件一趟线性扫描。
 --
 -- 模板洞是独立的 token 子流（id 取负、按洞起点字节错开，保证全文件唯一）：洞内解析
--- 把自己的条目交回主文件，与主表合并，所以洞里的括号同样不丢。
+-- 把自己的条目交回主文件，与主表合并，所以洞里的括号与反引号链步同样不丢。
 module Vuna.Compiler.Frontend.Surface where
 
 import Base.Container.HashMap as HashMap
@@ -21,12 +24,17 @@ export record Surface(..) where
   -- | 表达式节点 id → 源码里包着它的括号层数（`(e)` = 1，`((e))` = 2）。
   -- 只有区间根（AST 的 `exprRef` 指向的那个 id）有值。
   surfaceParens : HashMap Int Int
+  -- | **反引号写法的**中缀链步：表达式节点 id → `True`（书写形态，不是语义）。
+  -- 普通符号中缀不登记：parser 把它降级成 `EApp (EVar op) [l, r]`，而「符号名作函数的
+  -- 2 参应用」只可能来自中缀降级（前缀写法必须加括号，那是 section）。反引号名字是普通
+  -- 标识符，没法从形状上区分，所以只给它们建表——通常一份源码只有个位数条。
+  surfaceBackticks : List (Int, Bool)
 
 -- | 空表（没有源码位置的合成表达式、接口解码出来的 AST）。
 export emptySurface : Surface
-emptySurface = Surface emptyParenTable
+emptySurface = Surface emptyParenTable []
 
--- 空 HashMap 的**字面量**在 OCaml 侧会退化成弱类型变量（codegen 不写类型标注），所以用一个
+-- 空 HashMap 的**字面量**在 OCaml 侧会退化成弱类型变量（codegen 不写类型标注），所以用一条
 -- `-1` 哨兵钉住类型再删掉它：`-1` 是 `noNodeRef` 的 id（永远不查），表确实是空的。
 emptyParenTable : HashMap Int Int
 emptyParenTable = HashMap.remove emptyKey (HashMap.fromList [(emptyKey, 0)])
@@ -41,9 +49,14 @@ parenDepthOf s nid =
     Just n => n
     Nothing => 0
 
--- | 把一批 `(节点 id, 括号层数)` 并进表（模板洞的子解析交回自己的条目）。
-export insertParens : List (Int, Int) -> Surface -> Surface
-insertParens entries s = Surface (HashMap.insertAll entries s.surfaceParens)
+-- | 查一个表达式节点是不是**反引号写法**的链步。普通符号中缀不在这张表里（见字段注释）。
+export backtickShapeOf : Surface -> Int -> Maybe Bool
+backtickShapeOf s nid = lookupBacktick nid s.surfaceBackticks
+
+lookupBacktick : Int -> List (Int, Bool) -> Maybe Bool
+lookupBacktick nid [] = Nothing
+lookupBacktick nid (p :: rest) =
+  if firstOf p == nid then Just (secondOf p) else lookupBacktick nid rest
 
 -- ---------------------------------------------------------------
 -- 派生：事件流上的括号层数
@@ -153,9 +166,11 @@ parenWalk acc frames cursor lastTok toks ((EvClose at) :: rest) =
             p :: ps => addKid f.pfKind f.pfOpen at structD p :: ps
       in parenWalk acc2 outer2 at last2 live rest
 
--- | 从一次解析的 token 流 + 建树事件派生表面形状。
-export deriveSurface : List PTok -> List NodeEvent -> Surface
-deriveSurface toks events = Surface (HashMap.fromList (parenEntriesOf toks events))
+-- | 从一次解析的 token 流 + 建树事件派生表面形状（括号），再并上 parser 登记的反引号链步
+-- （主流的 + 模板洞交回的）。
+export surfaceOf : List PTok -> List NodeEvent -> List (Int, Int) -> List (Int, Bool) -> Surface
+surfaceOf toks events extraParens backticks =
+  Surface (HashMap.fromList (append (parenEntriesOf toks events) extraParens)) backticks
 
 -- | 只取表项（模板洞把子解析的条目并进主表，避免建两张表再合并）。
 export parenEntriesOf : List PTok -> List NodeEvent -> List (Int, Int)
