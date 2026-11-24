@@ -26,6 +26,8 @@ export data ParseMode(..) : Type where
 -- 区间由它的栈配对，所以事件流天然真嵌套（见 [Vuna.Compiler.Frontend.Cst.nestToTree]）。
 export record PState(..) where
   fileOf : String
+  -- | 源码原文。模板洞要按它切 token 文本、建洞子树（洞内的 token 只给出位置）。
+  sourceOf : String
   toksOf : List PTok
   lastPos : Pos
   toksLeft : Int
@@ -50,11 +52,11 @@ export record PState(..) where
   sectionShapes : List (Int, SectionShape)
   -- | 本 token 流里的模板 `"""` 标记：模板区间起点字节偏移 → 是否多行形式。
   interpMultis : List (Int, Bool)
-  -- | 模板节点 id → 该字面量内部洞的子解析交回的事实（逆序累积）。
+  -- | 模板节点 id → 该字面量内部每个洞的子树（逆序累积）。
   --
-  -- 洞是独立 token 子流，洞内节点不在主树里；事实随模板节点携带，`surfaceOfCst`
-  -- 建树后从节点字段派生，不需要另一条额外输入。
-  templateHoles : List (Int, CstHoleSurface)
+  -- 洞是独立 token 子流，洞内节点不在主树的 children 里（`TTmpl` 叶已覆盖那段字节），
+  -- 子树随模板节点携带；`surfaceOfCst` / 索引沿同一棵「主树 + 洞子树」走。
+  templateHoles : List (Int, List CstNode)
 
 -- ---------------------------------------------------------------
 -- vuna 源码 parser（offside layout）
@@ -67,16 +69,16 @@ export pmodeOf : PState -> ParseMode
 pmodeOf st = st.pmodeOf
 
 -- | 从文件头开一个状态（`lastPos` 的 `Pos 1 0` 是「尚未消费 token」的哨兵）。
-export mkState : String -> List PTok -> ParseMode -> PState
-mkState file toks mode =
-  PState file toks (Pos 1 0 0 0) (length toks) mode 0 [] 1 0 False [] [] [] []
+export mkState : String -> String -> List PTok -> ParseMode -> PState
+mkState file source toks mode =
+  PState file source toks (Pos 1 0 0 0) (length toks) mode 0 [] 1 0 False [] [] [] []
 
 -- | 指定 `lastPos` / 剩余数（模板洞、同一行的裸表达式等场景）。
 -- 建树事件在模板洞内单独收集（洞内 token 的绝对下标从 0 起，与外层不相交）；节点 id
 -- 取负、由洞起点的字节偏移错开（见 `subStream`）。
-export mkStateAt : String -> List PTok -> Pos -> Int -> ParseMode -> PState
-mkStateAt file toks last count mode =
-  PState file toks last count mode 0 [] (0 - (2 + posOffset last)) 0 True [] [] [] []
+export mkStateAt : String -> String -> List PTok -> Pos -> Int -> ParseMode -> PState
+mkStateAt file source toks last count mode =
+  PState file source toks last count mode 0 [] (0 - (2 + posOffset last)) 0 True [] [] [] []
 
 -- | 从起始状态到结束状态的建树事件（按发生顺序；每次事件一次 cons）。
 export eventsOf : PState -> PState -> List NodeEvent
@@ -112,9 +114,9 @@ addSectionShape off shape st = { st | sectionShapes = (off, shape) :: st.section
 export addInterpMulti : Int -> Bool -> PState -> PState
 addInterpMulti off multi st = { st | interpMultis = (off, multi) :: st.interpMultis }
 
--- | 把模板字面量洞内的事实挂到模板节点上（键 = 模板节点 id）。
-export addTemplateHoles : Int -> CstHoleSurface -> PState -> PState
-addTemplateHoles nid bits st = { st | templateHoles = (nid, bits) :: st.templateHoles }
+-- | 把模板字面量内部每个洞的子树挂到模板节点上（键 = 模板节点 id）。
+export addTemplateHoles : Int -> List CstNode -> PState -> PState
+addTemplateHoles nid trees st = { st | templateHoles = (nid, trees) :: st.templateHoles }
 
 -- | 区间根换 id 时把链步登记跟着换：括号等外层 `parseExpr` 会用 `withExprId` 把返回表达式的
 -- id 换成自己的，登记在旧 id 上的链步否则就查不到了（括号里的链会被当成普通应用）。

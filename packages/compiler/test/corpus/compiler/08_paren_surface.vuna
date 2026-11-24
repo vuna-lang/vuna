@@ -228,28 +228,26 @@ rightSectionNodeOk =
             _ => False
     Nothing => False
 
--- | 模板洞的事实挂在模板节点上：模板节点的 `cstHoleFacts` 非空。
+-- | 模板洞的子树挂在模板节点上（洞内节点不在主树的 children 里）。
 holeOnTemplateNodeOk : Bool
 holeOnTemplateNodeOk =
   case parseTreeSurface "\"\"\"\${(a + b) * c}\"\"\"" of
-    Just (_, tree) => hasHoleFacts tree
+    Just (_, tree) => hasHoleTree tree
     Nothing => False
 
-hasHoleFacts : CstNode -> Bool
-hasHoleFacts n =
+hasHoleTree : CstNode -> Bool
+hasHoleTree n =
   case n of
     CstLeaf _ => False
-    CstBranch _ _ _ surface kids => holeParensPresent surface.cstHoleFacts || anyHoleFacts kids
+    CstBranch _ _ _ surface kids => holeTreesPresent surface.cstHoleTrees || anyHoleTree kids
 
-anyHoleFacts : List CstNode -> Bool
-anyHoleFacts [] = False
-anyHoleFacts (k :: rest) = hasHoleFacts k || anyHoleFacts rest
+anyHoleTree : List CstNode -> Bool
+anyHoleTree [] = False
+anyHoleTree (k :: rest) = hasHoleTree k || anyHoleTree rest
 
-holeParensPresent : CstHoleSurface -> Bool
-holeParensPresent bits =
-  case bits.chsParens of
-    _ :: _ => True
-    [] => False
+holeTreesPresent : List CstNode -> Bool
+holeTreesPresent [] = False
+holeTreesPresent (_ :: _) = True
 
 -- | 只从树派生的表面缓存也知道洞内括号（不需要洞的子解析再交一遍）。
 holeFromTreeOk : Bool

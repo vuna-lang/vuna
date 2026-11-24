@@ -54,14 +54,14 @@ export parseFileWithPathMode : Member nFs FsOp r, Member nEnv EnvOp r, Member nP
 parseFileWithPathMode mode path src =
   case obsSpan "vuna.parse.lex" "vuna.phase" (\_ => lexSource src) of
     ErrC e => pure (ErrC (withSpanFileIfEmpty path e))
-    OkC toks => pure (parseWith mode path toks)
+    OkC toks => pure (parseWith mode path src toks)
 
 -- | 由 token 流得到 parse 结果。Lexer/Parser 都已在产生点给出 span；这里只给词法诊断
 -- 那个 file 为空的 span 注入真实路径（parser 的 span 从 PState 拿文件名）。
 -- 恢复期收集到的多条诊断挂在首条错误上（批量错误通道），全部自带位置。
-parseWith : ParseMode -> String -> List PTok -> Check (SourceFile, Surface)
-parseWith mode path toks =
-  case obsSpan "vuna.parse.syntax" "vuna.phase" (\_ => parseSourceRecoveringTokens path mode toks) of
+parseWith : ParseMode -> String -> String -> List PTok -> Check (SourceFile, Surface)
+parseWith mode path src toks =
+  case obsSpan "vuna.parse.syntax" "vuna.phase" (\_ => parseSourceRecoveringTokens path src mode toks) of
     ErrC e => ErrC (withSpanFileIfEmpty path e)
     OkC p =>
       let

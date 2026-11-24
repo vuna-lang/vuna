@@ -23,7 +23,7 @@
   `Loader.Fixity` 只按 fixity 重排并折叠立即应用，`Rast` 里没有 section 构造子。
 - **纯书写形式不建 AST 节点**：括号（层数）与「哪些 token 是括号」由 parser 的建树事件
   按节点 id 记录在 `Frontend.Cst` 里（`(e)` / `((e))` / `(f x) y` / `f (a)` 都覆盖；
-  模板洞是独立 token 子流，洞内事实随模板节点携带）；反引号链步同理（名字是普通标识符，
+  模板洞是独立 token 子流，洞的子树挂在模板节点上）；反引号链步同理（名字是普通标识符，
   形状认不出）。Fmt 打印与 fixity 重排的括号边界都读这份表面形状。
 - 部分糖**不新增 AST 构造子**，而用保留名编码（`@vuna@list@*` / `@vuna@handle` /
   `@vuna@macro@*` / `@vuna@tuple@*` / `@vuna@ascribe` / `@vuna@do@*` / `?hole`）：列表字面量、
