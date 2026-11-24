@@ -45,6 +45,18 @@ compare_interp = false
 matrix = "effect-common"
 tags = ["effect"]
 
+# 深度/嵌套类效应的独立预算族：回归形态是「跑很久」而不是功能错误，
+# 用显式 timeout 把暴露时间收紧，别的 case 也就不必替它守着默认预算。
+# 算法层面的增长率由 `checks.vuna-effect-machine-growth` 单独卡。
+[family.effect_perf]
+dir = "corpus/effect/perf"
+interp = false
+check = true
+compare_interp = false
+matrix = "effect-common"
+timeout = 60
+tags = ["effect", "perf"]
+
 # 系统级副作用：process / sleep / mtime / 真实 cwd（ocaml + native）。
 [family.effect_native]
 dir = "corpus/effect/native"
