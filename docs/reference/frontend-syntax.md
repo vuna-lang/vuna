@@ -19,10 +19,10 @@
 ```
 
 - **表面语法只活到 `Frontend.Ast`**：括号 / 中缀 / section 在 parser 里就降级成普通
-  `EVar` / `EApp` / 单 binder λ；section 的书写形态记在 `Frontend.Surface.surfaceSections`，
+  `EVar` / `EApp` / 单 binder λ；section 的书写形态记在 `Frontend.Cst.surfaceSections`，
   `Loader.Fixity` 只按 fixity 重排并折叠立即应用，`Rast` 里没有 section 构造子。
 - **纯书写形式不建 AST 节点**：括号（层数）与「哪些 token 是括号」由 parser 的建树事件
-  按节点 id 记录在 `Frontend.Surface` 里（`(e)` / `((e))` / `(f x) y` / `f (a)` 都覆盖；
+  按节点 id 记录在 `Frontend.Cst` 里（`(e)` / `((e))` / `(f x) y` / `f (a)` 都覆盖；
   模板洞里由洞的子解析交回自己的条目）；反引号链步同理（名字是普通标识符，形状认不出）。
   Fmt 打印与 fixity 重排的括号边界都读这份表面形状。
 - 部分糖**不新增 AST 构造子**，而用保留名编码（`@vuna@list@*` / `@vuna@handle` /
@@ -68,7 +68,7 @@
 | 应用 | `f a b` | `EApp` | `Frontend.Parser` |
 | 实例名覆盖（应用） | `f@audit x` | `f (@vuna@inst@arg audit) x`，在第一个隐式 String binder 处消费 | `Frontend.Parser`、`Elab.Term.Impl` |
 | 行条目实例名（后置） | `e @audit` | `@vuna@row@at` 编码，行展开期使用 | `Frontend.Parser`、`Elab.Term.Impl` |
-| 中缀 | `a + b` / `` a `f` b `` | parser 直接降级成 `EApp (EVar op) [l, r]`（源码顺序、右嵌套，反引号写法登记在 `Frontend.Surface`）；Loader 按可见 fixity 重排；未知符号运算符报错 | `Frontend.Parser`、`Loader.Fixity`、[operators.md](operators.md) |
+| 中缀 | `a + b` / `` a `f` b `` | parser 直接降级成 `EApp (EVar op) [l, r]`（源码顺序、右嵌套，反引号写法登记在 `Frontend.Cst`）；Loader 按可见 fixity 重排；未知符号运算符报错 | `Frontend.Parser`、`Loader.Fixity`、[operators.md](operators.md) |
 | section | `(+)` / `(+ e)` / `(e +)` | `EVar op` / lambda；直接应用 `(+ e) a` 折叠成 `a + e`（不生成 lambda） | `Loader.Fixity` |
 | `>>` | `a >> b` | `(>>=) a (\_ => b)`（用调用点可见的 `>>=`） | `Loader.Fixity.infixTerm` |
 | 一元负号 | `-1` / `-e` | 负字面量 / `negate e` | `Frontend.Parser` |

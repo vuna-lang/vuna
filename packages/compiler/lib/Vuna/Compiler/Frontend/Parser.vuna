@@ -9,7 +9,6 @@ import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Cst
 import Vuna.Compiler.Base.Diagnostics.Frontend
 import Vuna.Compiler.Frontend.Lexer
-import Vuna.Compiler.Frontend.Surface
 import Vuna.Compiler.Frontend.Parser.Support
 
 -- ---------------------------------------------------------------
@@ -1755,7 +1754,7 @@ parseApplication fuel st blockCol =
       )
 
 -- `@` 后面的 payload 与行 `@` 同一规则：裸标识符是名字字面量，字符串/数字/括号表达式原样。
--- 「是不是裸标识符」看**源码书写形态**：括号在 AST 里不建节点（见 `Frontend.Surface`），
+-- 「是不是裸标识符」看**源码书写形态**：括号在 AST 里不建节点（见 `Frontend.Cst`），
 -- 所以必须在解析前用当前 token 判定，否则 `@(n)` 会被当成名字字面量 `n`。
 parseAtPayload : Int -> PState -> Int -> Check (Expr, PState)
 parseAtPayload fuel st blockCol =

@@ -118,7 +118,7 @@ packages/compiler/lib/Vuna/Compiler/   （目录即层：层名 = 模块前缀�
 语义与边界见 [language.md 的「type / value 双命名空间」](reference/language.md)。
 
 **运算符与 fixity**：parser 把中缀链直接降级成普通应用 `EApp (EVar op) [l, r]`（源码顺序、
-右嵌套；括号、反引号与 section 写法来自树的表面形状 `Frontend.Surface`），section 由 parser
+右嵌套；括号、反引号与 section 写法来自树的表面形状 `Frontend.Cst`），section 由 parser
 降级成 `EVar` / 单 binder λ，Loader 只折叠立即应用；
 `Loader.Flatten` 按每模块可见表（`Module.fixities`，`dedupeFixities` 首现去重）在名字解析前调
 `Loader.Fixity.reorderProgram` 重排 / 换别名 / 展开 section。表来源 = 源码 `infix*` 声明
@@ -126,7 +126,7 @@ packages/compiler/lib/Vuna/Compiler/   （目录即层：层名 = 模块前缀�
 `fixitiesForSource(In)` 取程序级闭包。详见 [operators.md](reference/operators.md)。
 
 **模板字符串**：lexer 产出 `TTmpl`（洞内 token 原位保留），parser 组成 `EInterp`；`"""` 写法
-记在 `Frontend.Surface.surfaceInterps`，AST 只保留语义分段。`Loader.Resolve` 在名字解析后
+记在 `Frontend.Cst.surfaceInterps`，AST 只保留语义分段。`Loader.Resolve` 在名字解析后
 **降级**成 `Base.Trait.Interp.interp` 调用 + `++` 链（纯语法糖，Elab/codegen 看不到模板）。
 fmt/lint/index/doc 只 parse，仍按 `EInterp` 处理。详见
 [templates.md](reference/templates.md)。

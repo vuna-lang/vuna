@@ -1,4 +1,4 @@
--- 括号表面形状（`Frontend.Surface`）：括号不在 AST 里，层数由建树事件 + 词法 token 派生，
+-- 括号表面形状（`Frontend.Cst`）：括号不在 AST 里，层数由建树事件 + 词法 token 派生，
 -- 按表达式节点的 id 查。覆盖四种位置：
 --   * 包装节点（定义体 / 中缀右操作数 / 括号内层，`(a)` / `((a))`）；
 --   * 原子位置括号（应用实参 / 中缀链左端，`f (a)` / `(f a) b` / `(a + b) * c`）；
@@ -11,7 +11,6 @@ import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Cst
 import Vuna.Compiler.Frontend.Lexer
 import Vuna.Compiler.Frontend.Parser
-import Vuna.Compiler.Frontend.Surface
 
 -- | 解析 `x = <src>`，取定义体与表面形状。
 parseBody : String -> Maybe (Surface, Expr)

@@ -1,11 +1,11 @@
 -- LD-03：模块表不闭合（preloaded 装配）时，目标缺失的 import 边仍要按层判定；
 -- 目标不在任何已声明层里时无法从名字推归属，放行（防御分支）。
+import Vuna.Compiler.Frontend.Cst
 import Base
 import Base.Container.HashMap as HashMap
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Manifest
-import Vuna.Compiler.Frontend.Surface
 import Vuna.Compiler.Frontend.Packages.Pkg
 import Vuna.Compiler.Loader.Layers
 import Vuna.Compiler.Loader.Modules

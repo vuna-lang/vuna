@@ -6,11 +6,11 @@
 -- `formatFuelBound` 作为固定预算。
 module Vuna.Fmt.Expr where
 
+import Vuna.Compiler.Frontend.Cst
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Loader.Fixity
 import Vuna.Compiler.Frontend.Lexer
-import Vuna.Compiler.Frontend.Surface
 import Vuna.Fmt.Comment
 import Vuna.Fmt.Doc
 import Vuna.Fmt.Util

@@ -149,10 +149,10 @@ export data Expr(..) : Type where
   ERecUpdate : Expr -> List (String, Expr) -> NodeRef -> Expr
   EDo : List DoStmt -> NodeRef -> Expr
   -- 括号、中缀链与 section 都不在 AST 里：它们都是纯书写形式，由树/表面形状按区间记录
-  -- （`Frontend.Surface`：括号层数、链步是否反引号、section 是 op 值 / 左 / 右）。parser 把
+  -- （`Frontend.Cst`：括号层数、链步是否反引号、section 是 op 值 / 左 / 右）。parser 把
   -- `a op b` 降级成普通应用 `EApp (EVar op) [a, b]`，section 降级成 `EVar` / 单 binder λ；
   -- `Loader.Fixity` 按 fixity 表重排并折叠 section 应用，Fmt 按表面形状还原书写。
-  -- 模板字符串字面量。是否 `"""` 形式是书写形态，记在 `Frontend.Surface` 的
+  -- 模板字符串字面量。是否 `"""` 形式是书写形态，记在 `Frontend.Cst` 的
   -- `surfaceInterps`（按模板区间起点字节偏移）；AST 只保留语义分段。
   -- `Loader.Resolve` 把它降级成 `Base.Trait.Interp.interp` 调用 + `++` 链；
   -- Fmt / Lint / Index / Doc 在 parse 后处理它。

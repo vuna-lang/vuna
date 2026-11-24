@@ -5,6 +5,7 @@ module Vuna.Compiler.Loader.Modules where
 -- 只放：Module / Project / ExportEntry / ExportRef 的类型与访问器、import 表的纯函数
 -- 校验、模块根查找（`findModuleFile`）、模块表与导出表的查询。名字解析在 Resolve，
 -- 导出表计算、加载流程与 flatten 在 Flatten；门面 `Vuna.Compiler.Loader` 重导出这些入口。
+import Vuna.Compiler.Frontend.Cst
 import Vuna.Compiler.Base.Diagnostics.Loader
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Base.Diagnostics.Rn
@@ -12,7 +13,6 @@ import Base.Container.HashMap as HashMap
 import Base.Data.List as List
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Lexer
-import Vuna.Compiler.Frontend.Surface
 import Base.Trait.Eq as Eq
 import Vuna.Compiler.Frontend.Packages.Pkg
 import Base.Effect.Fs as EffFs

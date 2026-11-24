@@ -6,6 +6,7 @@ module Vuna.Compiler.Loader.Flatten where
 -- 导出表，再按 import 图递归加载（含隐式 Prelude）。
 -- 入口统一吃 `PackageContext`（最近 manifest 的包 + 依赖闭包 roots）；DT 精化由
 -- `Driver.Dt` 按「依赖序列 + 入口声明」拼接。
+import Vuna.Compiler.Frontend.Cst
 import Base.Data.List as List
 import Base.Data.String as String
 import Base.Data.Nat as Nat
@@ -19,7 +20,6 @@ import Base.Container.HashMap as HashMap
 import Base.Data.ObsSpan as ObsSpan
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Lexer
-import Vuna.Compiler.Frontend.Surface
 import Vuna.Compiler.Frontend.Parser
 import Vuna.Compiler.Frontend.Parser.Support
 import Vuna.Compiler.Loader.Fixity

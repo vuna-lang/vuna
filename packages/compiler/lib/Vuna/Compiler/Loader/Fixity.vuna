@@ -4,7 +4,7 @@ module Vuna.Compiler.Loader.Fixity where
 --
 -- parser 不做优先级判断：中缀链按源码顺序右嵌套，但降级成普通应用
 -- `EApp (EVar op) [lhs, rhs]`；「这一层是链步、是否反引号」记在表面形状里
--- （`Frontend.Surface`，按节点 id 查）。括号是重排的边界，同样在表面形状里。
+-- （`Frontend.Cst`，按节点 id 查）。括号是重排的边界，同样在表面形状里。
 -- 所以本模块的重排上下文同时带 fixity 表与表面形状。本模块按模块可见的 `infix*` 声明
 -- （`FixityDecl`：优先级 0–9、结合性 0/1/2）把链重排成 `EApp`，并**在这一步**完成
 -- section 立即应用折叠与 `>>` 的 do 派生。
@@ -17,10 +17,10 @@ module Vuna.Compiler.Loader.Fixity where
 --
 -- 重排后 AST 不含 section 与未展开的链步；Elab / codegen 不应看到它们
 -- （残留即 internal error）。
+import Vuna.Compiler.Frontend.Cst
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Lexer
-import Vuna.Compiler.Frontend.Surface
 import Vuna.Compiler.Base.Diagnostics.Rn
 import Base.Container.HashMap as HashMap
 

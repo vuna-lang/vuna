@@ -29,8 +29,8 @@ trait 方法、instance 方法与 data 构造子都可以用符号名声明。
 1. **parser 不做优先级**：中缀链按源码顺序**右嵌套**，但降级成普通应用
    `EApp (EVar op) [lhs, rhs]`（`a op b` 就是一个应用节点，id 与树里的表达式节点一致）；
    `::` 在 pattern 里也保留符号原形。括号**不建 AST 节点**（纯书写形式，分组边界由树按
-   节点 id 记录，见 `Frontend.Surface` 的括号层数）；反引号写法（``a `f` b``）的名字是普通
-   标识符、没法从形状区分，也记在 `Frontend.Surface` 里。
+   节点 id 记录，见 `Frontend.Cst` 的括号层数）；反引号写法（``a `f` b``）的名字是普通
+   标识符、没法从形状区分，也记在 `Frontend.Cst` 里。
 2. **Loader 在名字解析之前重排**：按模块可见 fixity 表做 precedence climbing，把链重排成
    `EApp` / `EPi`；section 已在 parser 降级成 `EVar` / 单 binder λ，Loader 只折叠「section
    立即应用」（`(+ e) a` ⇒ `a + e`）。
@@ -128,7 +128,7 @@ import 之后、第一个声明之前（fmt 的规范位置），每条一行。
   - 降级产物是 **lambda**，因此把 section 传给带签名的参数（`inc : Int -> Int`、
     `inc = (+ 3)`）正常；推断位置直接写 `(+ 3) 4` 时 `Loader.Fixity` 把它折叠成 `3 + 4`
     （不生成 lambda），而当值传递且无期望类型时仍会命中 `TC_LambdaNoSignature`。
-  - section 的书写形态（op 值 / 左 / 右、op 拼写）记在 `Frontend.Surface.surfaceSections`，
+  - section 的书写形态（op 值 / 左 / 右、op 拼写）记在 `Frontend.Cst.surfaceSections`，
     Fmt 据此打印；Fixity 据此排除链重排。
 - **用户符号名**：`<+> a b = ...` 与 `<+> : Int -> Int -> Int` 允许符号名 def / signature，
   可出现在中缀（需 `infix*` 声明）、反引号、section、导出列表；`->`、反引号与语法符号是保留
@@ -140,7 +140,7 @@ import 之后、第一个声明之前（fmt 的规范位置），每条一行。
 - `Vuna.Fmt.formatSourceWith : String -> Result String`：无需 fixity 闭包。
 - 中缀链 / 反引号 / section 按**源码顺序与源码括号**打印：fmt 不重排中缀、不按优先级补
   括号，未知运算符也不会让格式化失败。链步靠**形状**认出来（符号名作函数的 2 参应用只可能
-  来自中缀降级——前缀写法必须加括号，那是 section），反引号写法读 `Frontend.Surface`。
+  来自中缀降级——前缀写法必须加括号，那是 section），反引号写法读 `Frontend.Cst`。
 - fmt 会**打印 `infix*` 声明**（imports 之后、源码顺序，每条一行），声明的 span 参与注释锚点。
 - 需要按 fixity 重排的消费者（Elab、lint、index、doc）仍走 `Loader.Fixity.reorderProgram`。
 

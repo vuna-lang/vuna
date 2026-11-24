@@ -860,9 +860,9 @@ section / 模板的 `"""` 标记）交给树，让 AST 变成纯投影（`archit
 第 2、3 步）。`EFloat raw` 是字面量载荷而不是表层文本；`ELocalFun` 是带身份的子句组，
 已收在 `BindingValue.BClauses`，降级点仍在 Elab。
 
-### 6.3 括号表面形状（`Frontend.Surface`）
+### 6.3 括号表面形状（`Frontend.Cst`）
 
-括号退出 AST 后，「哪些表达式被括号包着」由 `Frontend.Surface` 从建树事件 + 词法 token
+括号退出 AST 后，「哪些表达式被括号包着」由 `Frontend.Cst` 从建树事件 + 词法 token
 派生（一趟线性扫描；模板洞的子解析把自己的条目交回主表）。价格分两块，读数同机交替
 （同一棵工作树、9 轮配对取中位）：
 
@@ -893,7 +893,7 @@ Fmt 每渲染一个表达式节点都要问一次括号层数，`sourceInfixPart
 中缀链在 parser 里降级成普通应用 `EApp (EVar op) [l, r]` 之后，消费者（Fmt 的源码顺序打印、
 `Loader.Fixity` 的链重排）用**形状**认出链步：符号名作函数的 2 参应用只可能来自中缀降级
 （前缀写法必须加括号，那是 section）。只有反引号写法（名字是普通标识符）按节点 id 记在
-`Frontend.Surface` 的**小列表**里（一份源码通常个位数条）。同机交替 9 轮配对
+`Frontend.Cst` 的**小列表**里（一份源码通常个位数条）。同机交替 9 轮配对
 （`fmt --check`）：
 
 | 口径 | 改前 | 改后 |

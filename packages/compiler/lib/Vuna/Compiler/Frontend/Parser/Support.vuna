@@ -7,7 +7,6 @@ import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Cst
 import Vuna.Compiler.Frontend.Lexer
-import Vuna.Compiler.Frontend.Surface
 import Vuna.Compiler.Base.Diagnostics.Frontend
 
 -- | 解析模式。决定「语义级语法错误」是否致命：

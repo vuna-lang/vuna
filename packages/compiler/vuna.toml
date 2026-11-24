@@ -68,7 +68,6 @@ modules = [
   "Vuna.Compiler.Frontend.Rast.Bridge",
   "Vuna.Compiler.Frontend.Rast.Name",
   "Vuna.Compiler.Frontend.Reserved",
-  "Vuna.Compiler.Frontend.Surface",
   "Vuna.Compiler.Frontend.Toml",
   "Vuna.Compiler.Loader.Addr",
   "Vuna.Compiler.Loader.Expand",

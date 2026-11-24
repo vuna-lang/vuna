@@ -8,6 +8,7 @@ module Vuna.Compiler.Driver.Dt where
 -- base-only）。
 -- 唯一 codegen 入口是 `dtSplitProject`（逐模块 split 输出模型）；DT 精化器按
 -- **整程序**精化，模块边界对精化不构成约束。
+import Vuna.Compiler.Frontend.Cst
 import Base.Data.Sort as Sort
 import Base.Data.List as List
 import Base.Data.String as String
@@ -55,7 +56,6 @@ import Base.Effect.Exit as EffExit
 import Base.Effect.Process as EffProcess
 import Vuna.Compiler.Elab.Driver
 import Vuna.Compiler.Frontend.Rast.Bridge
-import Vuna.Compiler.Frontend.Surface
 import Vuna.Compiler.Elab.Term
 
 -- 模块级接口：一次成功 check 的**完整输入面**。接口摘要要按模块归属切
