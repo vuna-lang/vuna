@@ -212,7 +212,7 @@ divProblems : List String
 divProblems =
   filter
     (\s => s /= "")
-    [divCase "2" 2 (Just (DivShift 1)), divCase "8" 8 (Just (DivShift 3)), divCase "5" 5 (Just (DivMagic 5 3689348814741910324)), divCase "1000" 1000 (Just (DivMagic 1000 18446744073709552)), divCase "3" 3 (Just (DivIdiv 3)), divCase "0" 0 Nothing, divCase "-1" (0 - 1) Nothing, divCase "-1000" (0 - 1000) Nothing]
+    [divCase "2" 2 (Just (DivShift 1)), divCase "8" 8 (Just (DivShift 3)), divCase "5" 5 (Just (DivMagic 5 3689348814741910324 0)), divCase "1000" 1000 (Just (DivMagic 1000 2361183241434822607 7)), divCase "7" 7 (Just (DivIdiv 7)), divCase "1001" 1001 (Just (DivIdiv 1001)), divCase "3" 3 (Just (DivIdiv 3)), divCase "0" 0 Nothing, divCase "-1" (0 - 1) Nothing, divCase "-1000" (0 - 1000) Nothing]
 
 divCase : String -> Int -> Maybe DivPlan -> String
 divCase label d want =
@@ -224,7 +224,8 @@ divCase label d want =
 planKey : Maybe DivPlan -> String
 planKey Nothing = "runtime"
 planKey (Just (DivShift k)) = "shift " ++ strFromInt k
-planKey (Just (DivMagic d m)) = "magic " ++ strFromInt d ++ " " ++ strFromInt m
+planKey (Just (DivMagic d m s)) =
+  "magic " ++ strFromInt d ++ " " ++ strFromInt m ++ " " ++ strFromInt s
 planKey (Just (DivIdiv c)) = "idiv " ++ strFromInt c
 
 -- | `IrIf` 的条件直接发 `cmp` + 反向 `jcc`。

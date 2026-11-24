@@ -869,7 +869,7 @@ needsRax (IrRtApp sym args) =
       [_dividend, IrInt d] =>
         case divPlanOf d of
           Just (DivIdiv _) => True
-          Just (DivMagic _ _) => True
+          Just (DivMagic _ _ _) => True
           _ => foldl (\acc, a => if acc then True else needsRax a) False args
       _ => foldl (\acc, a => if acc then True else needsRax a) False args
   else
@@ -1123,7 +1123,7 @@ genDivInto bud st pool a (DivShift k) =
                   [IMov (OpReg s) (OpReg r), IBinReg "sar" s (OpImm 63), IBinReg "and" s (OpImm (ipow2 k - 1)), IBinReg "add" r (OpReg s), IBinReg "sar" r (OpImm k)]
           in Just (r, instrs, s :: rest)
         [] => Nothing
-genDivInto bud st pool a (DivMagic d m) =
+genDivInto bud st pool a (DivMagic _ m shift) =
   case genScalarIntoW (bud - 1) True st pool a of
     Nothing => Nothing
     Just pa =>
@@ -1131,17 +1131,18 @@ genDivInto bud st pool a (DivMagic d m) =
         r = firstOf pa
         inInstrs = firstOf (secondOf pa)
         poolAfter = secondOf (secondOf pa)
-        -- magic 序列固定占用 rax/rdx，另需三个空闲寄存器：ax / sign / magic。
+        -- magic 序列固定占用 rax/rdx，另需三个空闲寄存器：x/q / sign / magic。
         frees = filter (\x => not (sameReg x Rax)) poolAfter
       in case frees of
         s1 :: s2 :: s3 :: _ =>
           let
+            shiftIns = if shift == 0 then [] else [IBinReg "sar" s1 (OpImm shift)]
             instrs =
               append
                 inInstrs
-                [IMov (OpReg s1) (OpReg r), IMov (OpReg s2) (OpReg s1), IBinReg "sar" s2 (OpImm 63), IBinReg "xor" s1 (OpReg s2), IBinReg "sub" s1 (OpReg s2), IMov (OpReg Rax) (OpReg s1), IMov (OpReg s3) (OpImm m), IMulSigned s3, IMov (OpReg s3) (OpReg Rdx), IMov (OpReg Rax) (OpReg s3), IBinReg "imul" Rax (OpImm d), IBinReg "sub" s1 (OpReg Rax), IBinReg "sar" s1 (OpImm 63), IBinReg "add" s3 (OpReg s1), IMov (OpReg Rax) (OpReg s3), IBinReg "xor" Rax (OpReg s2), IBinReg "sub" Rax (OpReg s2)]
-            outPool = dropReg Rax poolAfter
-          in Just (Rax, instrs, outPool)
+                (append [IMov (OpReg s1) (OpReg r), IMov (OpReg s2) (OpReg s1), IBinReg "sar" s2 (OpImm 63), IMov (OpReg Rax) (OpReg s1), IMov (OpReg s3) (OpImm m), IMulSigned s3, IMov (OpReg s1) (OpReg Rdx)] (append shiftIns [IBinReg "sub" s1 (OpReg s2)]))
+            outPool = s2 :: s3 :: dropReg Rax poolAfter
+          in Just (s1, instrs, outPool)
         _ => Nothing
 genDivInto bud st pool a (DivIdiv c) =
   if memReg Rax pool then
