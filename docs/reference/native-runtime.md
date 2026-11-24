@@ -200,8 +200,8 @@ IR 支持面；这里讲生成物**跑起来**依赖的那一层——运行时�
 ## 2. 模块布局与确定性
 
 - `Native.Model`：寄存器/操作数/指令/函数/程序 + `NativeErr`；`OpMemX`
-  （`[base+index]` 字节访问）、`OpRip`、字节读写、`rep movsb` / `repe cmpsb`、
-  `NativeStrLit` / `NativeBss`。
+  （`[base+index]` 字节访问）、`OpRip`、字节读写、32 位/`lock cmpxchg`/`xchg` 原子指令、
+  `rep movsb` / `repe cmpsb`、`NativeStrLit` / `NativeBss`。
 - `Native.Abi`：参数寄存器、栈槽偏移、frame 对齐、字符串头大小、堆大小与标签、
   prologue/epilogue、稳定命名（函数 / 运行时 / 字面量 / 内部 label / 数据标签）。
 - `Native.Pal`：**平台面**——x86-64 Linux syscall 号、syscall 参数常量（`AT_FDCWD`、
@@ -211,8 +211,9 @@ IR 支持面；这里讲生成物**跑起来**依赖的那一层——运行时�
 - `Native.Gc`：两代标记-清扫 GC——块头判据、段索引（二分定位）、根集扫描（逐帧保守 /
   脏卡片）、写屏障与卡片表、年轻代 / 整堆回收的决定、标记栈（倍增 mmap）、
   清扫与尺寸类回收、`GC_LOG` 诊断行；`alloc` 在预算/阈值处调 `rt_gc_collect`。
+  子线程存活（`rt_thread_count > 0`）时回收直接返回（并行区只增长）。
 - `Native.Runtime`：`rt_*` 汇编模板、只读数据、`.bss` 布局、IR 符号 → 运行时标签白名单
-  与值形态 arity。
+  与值形态 arity；线程/同步原语（`clone` + futex）也在这里。
 - `Native.Module`：`IrProgram` → `NativeProgram`（可达性、入口、栈槽、**按模块切分的
   字面量池**、**模块内 `.L` label 编号**、fuel）。
 - `Native.Render`：`NativeProgram` → `.s` 文件集（`runtime.s` + 每模块一个文件；固定段

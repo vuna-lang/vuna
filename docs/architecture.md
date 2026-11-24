@@ -309,6 +309,7 @@ stage1 == stage2；seed 只含 compiler 包入口闭包。
 | `packages/compiler/`（语法 / 类型 / 精化 / 擦除） | 全量测试 + `flake check`（至少 seed-selfhost） |
 | codegen 运行时 / main 钩子 / 位置表 | 第 6、13、38 段 + 第 45–46 段 + seed rotation（[debugging.md](reference/debugging.md)） |
 | 观测（`Target.Ocaml.Term.dtObsRuntime` / `#line` 注入 / `Base.Data.Obs` / `vuna dev obs`） | 第 107 段 + `checks.vuna-obs-schema` / `vuna-obs-dwarf` / `vuna-obs-overhead` + `vuna check .`（[observability.md](reference/observability.md)） |
+| 多线程原语（`Base.Thread` / OCaml `Domain` / native `clone`+futex） | `--only compiler/effect_native`（`90_eff_threads`）+ `steps_native/105d_native_gc`（9ab）+ `vuna test packages/base` + `vuna check .` |
 | 文本日志（`Base.Data.Log` / `log!` / `Target.Ocaml.Term.dtLogRuntime` / `VUNA_LOG*`） | 第 107 段的 `log!`/`mark!` 断言 + `vuna check .`（[logging.md](reference/logging.md)） |
 | CLI 工具（`run` / `test` 选项 / REPL / LSP） | 第 40、42、47–49 段 + `corpus/lsp/smoke.sh` + `vuna check .` |
 | 工具链 / 插件自身（fmt/lint/dev/后端） | `nix/tools/dev-loop.sh -p <pkg> -- <cmd>`（只重建改动的包；[tooling.md](reference/tooling.md) §0） |

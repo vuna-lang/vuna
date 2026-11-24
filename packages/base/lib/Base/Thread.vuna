@@ -33,7 +33,8 @@ join t = raise (@vuna@prim_eff_threadJoin t)
 export yieldNow : {r : Row} -> Eff r Int
 yieldNow = raise (@vuna@prim_eff_threadYield)
 
--- | 当前线程的标识（全程序唯一、不复用；主线程为 0）。
+-- | 当前线程的宿主标识（OCaml = domain id，native = `gettid`）；只用于诊断，
+-- 不保证跨后端/跨次运行的数值一致，也不保证退出后不被复用。
 export currentId : {r : Row} -> Eff r Int
 currentId = raise (@vuna@prim_eff_threadId)
 
