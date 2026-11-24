@@ -1,6 +1,7 @@
--- T2：窄尾调宽。`narrow`（2 参）尾调 `wide`（10 参，4 个栈实参）超过来参区，
--- native 回退普通 `call`；`wide` 尾调 `narrow` 仍走 `jmp`。同一程序在 wasm 上两侧
--- 都是 `return_call`，用来量 native 的回退成本。
+-- T2：窄调宽形状的尾位置内联。`narrow`（2 参）尾调 `wide`（10 参，4 个栈实参），
+-- 尾位置内联把 `wide` 代进 `narrow` 后回边变成自递归 loop；本用例锁住这个形状与 golden。
+-- native 的窄调宽回退只在未被内联消除的 SCC 上触发（见 native.md §3）。
+-- 同一程序在 wasm 上两侧都是 `return_call`，用来对照两端的内联/尾调用形状。
 -- 一次 op 是一次尾调用；手写 OCaml 对照见 tco_narrow_wide.ml（同算法）。
 narrow : Int -> Int -> Int
 narrow acc n = if n <= 0 then acc else wide acc n 1 2 3 4 5 6 7 8

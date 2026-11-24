@@ -704,8 +704,9 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
   `ulimit -s`），JSON 的 `meta.stack_policy` 记为 `self-managed`、每项另有
   `default_stack_ok` 探针；峰值 RSS = 已触碰的栈页 + live 堆，需与墙钟一起读。TCO 由
   `IrTail` 标记驱动，覆盖直调、饱和闭包、函数值 wrapper、runtime 符号与自递归 loop；
-  窄调宽、`rt_apply` 慢路径与非尾递归仍吃帧。`tco_narrow_wide` 直接量窄调宽的回退成本
-  （1M 层 RSS ~150 MiB，见 [benchmarks.md](benchmarks.md) §1.2）；
+  窄调宽（未被尾位置内联消除的 SCC）、`rt_apply` 慢路径与非尾递归仍吃帧。
+  `tco_narrow_wide` 现在锁内联后的自循环，不再量回退成本（见
+  [benchmarks.md](benchmarks.md) §1.2）；
   `tco_mutual` / `tco_wide` / `arith` / `records` 的判定与实测读数见
   [benchmarks.md](benchmarks.md) §1.2；§1.1 的 native 列是 TCO 前快照。
 - 核数限制是**亲和性**，不是 CPU 配额：单核跑多久不管，长时间占用用

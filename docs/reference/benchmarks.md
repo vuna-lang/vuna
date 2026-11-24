@@ -75,7 +75,7 @@ ratio 对手写 OCaml，wasm 用 net；完整的 50 个用例、native / wasm �
 | tco_args | 交叉依赖实参的尾递归 | 实参按需落临时槽 + 统一写回 |
 | tco_unrotated | 双支自调用 / `&&` 条件 | 不旋转时回退整帧 `jmp` |
 | tco_arity6 | 6 参尾递归（全走寄存器） | 5 个热标量槽提升 |
-| tco_narrow_wide | 2 参 ↔ 10 参窄调宽 | native 回退普通 `call`（已知缺口，见 §1.2） |
+| tco_narrow_wide | 2 参 ↔ 10 参窄调宽 | 尾位置内联折叠成自循环（见 §1.2） |
 | tco_nat | Nat 结构递归尾调用 | `IrNatCase` 的尾位置传播 |
 | state_machine | 9 状态 Int 分支链 | 线性比较链 + `_` 兜底臂 |
 | gc_low_live | 低存活集、大累计分配 | OCaml GC 回收；vuna 侧只有 bump 分配 |
@@ -194,7 +194,6 @@ native 的 TCO / GC 验证项。**GC 与 TCO 均已落地**；下表「前」列
 | `tco_wide`（N=5M） | 343 ms / 442 MiB / `false` | 13 ms / 0.4 MiB / `true` | wall, rss, stack |
 | `arith` | 338 ms / 412 MiB / `false` | 8 ms / 0.4 MiB / `true` | wall, rss, stack |
 | `records` | 151 ms / 151 MiB / `false` | 20 ms / 1.0 MiB / `true` | wall, rss, stack |
-| `tco_narrow_wide`（N=1M） | — | 136 ms / 150 MiB / `true` | rss, wall（窄调宽回退） |
 
 「TCO 前」是旧 N 的历史快照；`tco_mutual` / `tco_wide` 的 N 已抬到 20M / 5M，
 「后」列与当前 fixture 同 N。
@@ -202,20 +201,19 @@ native 的 TCO / GC 验证项。**GC 与 TCO 均已落地**；下表「前」列
 - **TCO**：判据是 `default_stack_ok` 由 false 翻为 true，且 RSS 从百 MB 降到进程基线
   （~0.4 MiB）；上表前四项都满足。`arith` / `records` 也翻真，说明它们的递归主体同样是
   **直接饱和尾调用**；`tco_wide` 覆盖 9 参（3 个栈实参）的自递归。`tco_narrow_wide`
-  是反向对照：`default_stack_ok` 仍为 true（自带栈生效），但窄调宽的调用回退成普通
-  `call`，RSS 随层数线性涨（1M 层 ~150 MiB）——这是待消掉的 native 优化缺口，不是栈策略
-  失效。
+  现在被尾位置内联折叠成 `acc += 36` 的自循环：它锁内联后的形状，不再量窄调宽回退。
+  回退本身仍保留在未被内联消除的 SCC 上（见 [native.md](native.md) §3）。
 - **T2 覆盖矩阵**（每项锁一条生成路径；`micro_tco` 是层内基线）：
 
   | 用例 | 形状 | 锁住的生成路径 / 判定 |
   | --- | --- | --- |
   | `micro_tco` | 单函数自递归 + 标量比较 | 旋转后的 loop header、自递归实参写回 |
-  | `tco_mutual` | `even` / `odd` 互递归 | 全局饱和直调（不旋转） |
+  | `tco_mutual` | `even` / `odd` 互递归 | 尾位置内联后的自递归 loop（互递归直调不再命中） |
   | `tco_wide` | 9 参（3 个栈实参） | 来参区搬运；`arity > 6` 不提升 |
   | `tco_args` | 交叉依赖实参 | 临时槽 + `copyBacks` 的写回顺序（golden） |
   | `tco_unrotated` | 两支自调用 / `&&` 条件 | 不旋转时回退整帧 `jmp` |
   | `tco_arity6` | 6 参全部循环携带 | 5 个热标量槽提升的上限 |
-  | `tco_narrow_wide` | 2 参 ↔ 10 参互递归 | 窄调宽回退普通 `call`（native 1M 层 RSS ~150 MiB） |
+  | `tco_narrow_wide` | 2 参 ↔ 10 参互递归 | 尾位置内联折叠成自循环；不再覆盖回退路径 |
   | `tco_nat` | Nat `zero` / `Succ` | `IrNatCase` 的尾位置传播 |
   | `state_machine` | 9 状态 Int 分派 | 线性比较链 + `_` 兜底臂 |
 - **GC**：主判据是 RSS 落在存活集量级，四项都满足——`gc_low_live` 218 ms / 2.8 MiB、
@@ -227,7 +225,7 @@ native 的 TCO / GC 验证项。**GC 与 TCO 均已落地**；下表「前」列
   （年轻代）与 `max(GC_MIN, 2 × live, 栈跨度)`（整堆）摊销扫栈成本；栈帧整段保守扫。
 - 重标基线时 `default_stack_ok` 是布尔快照：自带栈生效时所有项都应为 true（包括非尾深
   递归）；false 说明 `init_stack` 回落到了进程栈。非尾深递归的栈帧成本仍体现在 RSS 与
-  墙钟上——窄调宽与 `rt_apply` 慢路径仍回退普通调用。
+  墙钟上——未被尾位置内联消除的窄调宽与 `rt_apply` 慢路径仍回退普通调用。
 
 ### 1.3 wasm 后端（浏览器路径：JS 宿主 / V8）
 
@@ -287,11 +285,10 @@ wasm 产物由仓库自带的宿主执行（`wasm-host/run.mjs`，Node/V8；与�
 - **引擎/宿主版本是一阶变量**：基线只与 `meta.node` + `meta.wasm_host_runner` 同版本
   可比；换 Node 版本要重标基线。
 
-读法：V8 在少数形状上快过 native——`tco_narrow_wide`（wasm 两侧都发 `return_call`，
-native 的窄调宽回退成普通 `call`，见 §1.2）与 `tco_args`，`hashmap_remove` 接近。其余
-跑得动的项 native 领先。差异来源与 native 的既有缺口一致：native 无寄存器分配、每个
-算术 / 比较都是一次运行时调用，而 V8 有优化编译器；native 赢在「调用少、字符串 / 栈传参
-多」的形状（[performance.md](performance.md) §3）。
+读法：`hashmap_remove` 接近；`tco_args` 两侧已落在同一量级（见 §1.2）。其余跑得动的项
+native 领先。差异来源与 native 的既有缺口一致：native 无寄存器分配、每个算术 / 比较
+都是一次运行时调用，而 V8 有优化编译器；native 赢在「调用少、字符串 / 栈传参多」的形状
+（[performance.md](performance.md) §3）。
 
 `wasm-opt -O3` 的内联会**掩盖**后端 codegen 的成本：binaryen 把闭包调用链与装箱/拆箱
 内联掉后，`call $rt_apply`、`struct.new $int` 这些开销不再直接体现在读数里。所以量后端
