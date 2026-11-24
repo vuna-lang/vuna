@@ -528,12 +528,13 @@ pkg_err/packages/test-m30 → `packages/cli`；web → `packages/web-cli`；其�
 
 ## Nix checks 清单
 
-`nix flake check` 实测 **32 项**：3 个 package 构建（`vuna` / `vuna-compiler` /
-`vuna-seed`，同时暴露为 checks）+ 29 个 check 语义项（`context-budget`、
+`nix flake check` 实测 **33 项**：3 个 package 构建（`vuna` / `vuna-compiler` /
+`vuna-seed`，同时暴露为 checks）+ 30 个 check 语义项（`context-budget`、
 `seed-selfhost`、`vscode-ext`、`vuna-checks-inventory`、`vuna-compiler-growth`、
 `vuna-compiler-growth-ctor`、`vuna-compiler-growth-incremental`、`vuna-container-growth`、
 `vuna-diag`、`vuna-fmt`、`vuna-frontend-growth`、`vuna-iface-selftest`、
-`vuna-lint`、`vuna-metrics`、`vuna-native-artifact`、`vuna-native-surface`、
+`vuna-lint`、`vuna-metrics`、`vuna-native-artifact`、`vuna-native-codegen-growth`、
+`vuna-native-surface`、
 `vuna-nix-fmt`、`vuna-obs-dwarf`、`vuna-obs-overhead`、
 `vuna-obs-schema`、`vuna-resolve-chain-growth`、`vuna-single-pass`、`vuna-static`、
 `vuna-tests-e2e`、`vuna-tests-gate`、
@@ -623,6 +624,10 @@ CI 把它拆成三个 job（`.github/workflows/ci.yml`）：`flake-check` 跑除
   （见 [native-platform.md](native-platform.md)）；
 - `vuna-native-artifact`：最小程序的 `runtime.s` / `Main.s` 逐字节基线。`runtime.s` 与
   程序无关、覆盖全部运行时函数，因此纯重构必须保持它不变（见 [native.md](native.md) §6）；
+- `vuna-native-codegen-growth`：native codegen 的两类探针——右深标量链
+  `1 + (2 + (… + x))` 与 N 个顶层闭包 `g0 … gN`——各 100/400/800 档，每档在 120 s 硬上限内
+  完成、相邻档墙钟 ≤6×+5 s（线性 ≈2×）。这两类形状分别对应标量链回溯与跳转目标枚举的
+  指数级退化，每档独立空 `VUNA_STORE`；
 - `context-budget`：入口文档字节数与单模块行数对 `nix/checks/data/context.budget`（预算按实测 ×1.5
   留余量；超过预算失败，达到 70% 只打印 `WARN`。`WARN` 在本机跑 check 时可见，nix 只在
   失败时打印 builder 日志，所以 CI 成功时不显示）；

@@ -315,6 +315,18 @@ in
     script = ./native-artifact.sh;
   };
 
+  # native codegen 的增长率门槛：右深标量链与多顶层闭包各 100/400/800 档，
+  # 每档在硬上限内完成且相邻档墙钟 ≤6×+5s（挡这两类形状的指数级回溯）。
+  vuna-native-codegen-growth = vunaCheck {
+    name = "vuna-native-codegen-growth";
+    srcs = [
+      src.base
+      src.manifest
+    ];
+    nativeBuildInputs = e2eTools;
+    script = ./native-codegen-growth.sh;
+  };
+
   # 编译器增长率门槛（合成 N 个同形定义，相邻档墙钟比有上界）。
   # 绝对时间不可跨机器比；增长率可比，用来挡「某次改动把线性路径退化成 n²」。
   vuna-compiler-growth = vunaCheck {
