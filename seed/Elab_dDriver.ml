@@ -19,12 +19,12 @@ let rec v_countNames = (fun (mc0 : string B_dData_dList.t_List) (mc1 : (string, 
 let v_showCounters = (fun (names : string B_dData_dList.t_List) -> ((B_dData_dString.v_join ",") ((B_dData_dList.v_map (fun (p : (string, int) B_dData_dPair.t_Pair) -> (String.concat "" [((B_dTrait_dInterp.v_interp B_dTrait_dInterp.v_Interp_uc9feaa570847b590_uString) (B_dData_dPair.v_firstOf p)); "="; ((B_dTrait_dInterp.v_interp (B_dTrait_dInterp.v_Interp_uc9feaa570847b590_ua B_dData_dInt.v_Show_u0077d73cf424e521_uInt)) (B_dData_dPair.v_secondOf p))]))) ((B_dData_dSort.v_sortBy (fun (a : (string, int) B_dData_dPair.t_Pair) (b : (string, int) B_dData_dPair.t_Pair) -> (((B_dTrait_dOrd.v__x60_ B_dData_dString.v_Ord_u5afb3bbeddafcb50_uString) (B_dData_dPair.v_firstOf a)) (B_dData_dPair.v_firstOf b)))) (B_dContainer_dHashMap.v_toList ((v_countNames names) (((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) B_dData_dList.C_List_Nil)))))))
 
 # 107 "Vuna/Compiler/Elab/Driver.vuna"
-let v_mrefWrapSig = (fun (nm : string) (ty : Core_dTerm.t_Term) (sp : Base_dSource.t_Span) -> (let nd_uscrut3 = (Elab_dMutRef.v_duplicateRowKeys ty) in (match nd_uscrut3 with
+let v_mutWrapSig = (fun (nm : string) (ty : Core_dTerm.t_Term) (sp : Base_dSource.t_Span) -> (let nd_uscrut3 = (Elab_dMut.v_mutDuplicateRowKeys ty) in (match nd_uscrut3 with
   | B_dData_dList.C_List__x58__x58_ (dtb__3, dtb__4) -> (match dtb__3 with
   | { B_dData_dPair.f_Pair_first = dtb__5; B_dData_dPair.f_Pair_second = dtb__6 } -> (((Base_dDiagnostics_dTc.v_tcErr1 sp) (Base_dDiagnostics_dTc.C_TcErr_DuplicateInstance ((String.concat "" [dtb__5; " "; dtb__6])))) (String.concat "" [dtb__5; " "; dtb__6]))
   | _ -> failwith "DT: impossible branch"
 )
-  | B_dData_dList.C_List_Nil -> (Base_dDiag.C_Check_OkC ((Elab_dMutRef.v_mrefAddCellParams ty)))
+  | B_dData_dList.C_List_Nil -> (Base_dDiag.C_Check_OkC ((Elab_dMut.v_mutAddHandleParams ty)))
   | _ -> failwith "DT: impossible branch"
 )))
 
@@ -150,7 +150,7 @@ let rec v_elabSigsGo = (fun (mc0 : (string, (Frontend_dRast.t_Expr B_dData_dList
   | { B_dData_dPair.f_Pair_first = dtb__52; B_dData_dPair.f_Pair_second = dtb__53 } -> ((Base_dCommon.v_bind ((((Elab_dTerm.v_checkType mc1) Elab_dTypes.v_emptyCtx) mc2) dtb__52)) (fun (p : (Core_dTerm.t_Term, (Core_dTerm.t_Level, Elab_dTypes.t_Ec) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair) -> (let nd_uscrut20 = p in (match nd_uscrut20 with
   | { B_dData_dPair.f_Pair_first = dtb__54; B_dData_dPair.f_Pair_second = dtb__55 } -> (match dtb__55 with
   | { B_dData_dPair.f_Pair_first = dtb__56; B_dData_dPair.f_Pair_second = dtb__57 } -> ((Base_dCommon.v_bind (((((v_elabSigDictBinders mc1) dtb__57) dtb__54) dtb__50) dtb__53)) (fun (q : (Core_dTerm.t_Term, Elab_dTypes.t_Ec) B_dData_dPair.t_Pair) -> (match q with
-  | { B_dData_dPair.f_Pair_first = dtb__58; B_dData_dPair.f_Pair_second = dtb__59 } -> (let sigTy0 = (((Elab_dMeta.v_zonkTerm dtb__59) 0) dtb__58) in ((Base_dCommon.v_bind (((v_mrefWrapSig dtb__48) sigTy0) dtb__53)) (fun (sigTy : Core_dTerm.t_Term) -> ((((v_elabSigsGo dtb__47) (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = dtb__48; B_dData_dPair.f_Pair_second = sigTy }, mc1))) ((Elab_dTypes.v_ecPutGlobalsTbl dtb__59) (((((B_dContainer_dHashMap.v_insert B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) dtb__48) sigTy) (Elab_dTypes.v_ecGlobalsTbl dtb__59)))) (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = dtb__48; B_dData_dPair.f_Pair_second = sigTy }, mc3))))))
+  | { B_dData_dPair.f_Pair_first = dtb__58; B_dData_dPair.f_Pair_second = dtb__59 } -> (let sigTy0 = (((Elab_dMeta.v_zonkTerm dtb__59) 0) dtb__58) in ((Base_dCommon.v_bind (((v_mutWrapSig dtb__48) sigTy0) dtb__53)) (fun (sigTy : Core_dTerm.t_Term) -> ((((v_elabSigsGo dtb__47) (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = dtb__48; B_dData_dPair.f_Pair_second = sigTy }, mc1))) ((Elab_dTypes.v_ecPutGlobalsTbl dtb__59) (((((B_dContainer_dHashMap.v_insert B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) dtb__48) sigTy) (Elab_dTypes.v_ecGlobalsTbl dtb__59)))) (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = dtb__48; B_dData_dPair.f_Pair_second = sigTy }, mc3))))))
   | _ -> failwith "DT: impossible branch"
 )))
   | _ -> failwith "DT: impossible branch"

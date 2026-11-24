@@ -5,6 +5,7 @@ B_dData.ml
 B_dData_dBase64.ml
 B_dData_dBits.ml
 B_dData_dBool.ml
+B_dData_dFin.ml
 B_dData_dFloat.ml
 B_dData_dFunction.ml
 B_dData_dInt.ml
@@ -101,7 +102,7 @@ Elab_dInstName.ml
 Elab_dMatch.ml
 Elab_dMeta.ml
 Elab_dMetaSpans.ml
-Elab_dMutRef.ml
+Elab_dMut.ml
 Elab_dPrelude.ml
 Elab_dRecords.ml
 Elab_dRepresentation.ml
