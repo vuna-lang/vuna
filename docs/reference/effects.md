@@ -493,8 +493,8 @@ withMutArrayPure : (n : String) -> Nat -> a -> Eff [Named n (MutArrayOp a)] b ->
   （三端都不复制；native 写后登记写屏障）。
 - 越界是宿主 trap（与 `arrayGet` 一致）；`size` 是容量 = 长度。
 - 需要「容量 + 逻辑长度」时，用 `MutArray` + 一个 `MutRef` 计数器组合；
-  类型层定长的可变量（`MutVec n a`，`Fin n` 索引）依赖 `Fin` 先落地，见
-  [debt.md](debt.md)。
+  类型层定长的可变量（`MutVec n a`，`Fin n` 索引）与可增长元素容器（`MutDynArray a`）
+  属于后续家族（`Fin` 已落地），见 [debt.md](debt.md)。
 
 夹具：`effect/common/63..65`（原地读写、双数组 `@` + 跨函数、多态 helper），
 负例 `dt_err/122/123/125`。
