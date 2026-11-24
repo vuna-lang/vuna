@@ -26,7 +26,7 @@ problems : List String
 problems =
   append
     (append (append wrapProblems bitProblems) (append cmpProblems (append natProblems constProblems)))
-    (append planProblems (append peepholeProblems (append divProblems (append branchProblems (append noWrapProblems (append floatProblems cleanupProblems))))))
+    (append planProblems (append peepholeProblems (append divProblems (append branchProblems (append noWrapProblems (append floatProblems (append cleanupProblems cleanupTestProblems)))))))
 
 wrapProblems : List String
 wrapProblems =
@@ -204,6 +204,22 @@ selfFoldProblems =
   case peephole [IMov (OpReg R11) (OpImm 3), IBinReg "add" R11 (OpReg R11)] of
     [IMov (OpReg R11) (OpImm 3), IBinReg "add" R11 (OpReg R11)] => []
     is => ["self fold: " ++ strFromInt (length is) ++ " instrs"]
+
+-- | `cleanup` 去掉 `sub; test; jg` 里的冗余 `test`，但保留读 CF 的 `ja`。
+cleanupTestProblems : List String
+cleanupTestProblems = append cleanupDropProblems cleanupKeepProblems
+
+cleanupDropProblems : List String
+cleanupDropProblems =
+  case cleanup [IBinReg "sub" Rbx (OpImm 1), ILabel ".L", ITest Rbx Rbx, IJcc "jg" ".L"] of
+    [IBinReg "sub" Rbx (OpImm 1), ILabel ".L", IJcc "jg" ".L"] => []
+    is => ["cleanup drop: " ++ strFromInt (length is) ++ " instrs"]
+
+cleanupKeepProblems : List String
+cleanupKeepProblems =
+  case cleanup [IBinReg "sub" Rbx (OpImm 1), ILabel ".L", ITest Rbx Rbx, IJcc "ja" ".L"] of
+    [IBinReg "sub" Rbx (OpImm 1), ILabel ".L", ITest Rbx Rbx, IJcc "ja" ".L"] => []
+    is => ["cleanup keep: " ++ strFromInt (length is) ++ " instrs"]
 
 -- | 常数除法的展开判据：2 的幂走符号修正移位，其余走 magic 乘法；
 --   d = 3（magic 超出 63-bit）与 `0` / `-1` / 负数走 `idiv` / 运行时

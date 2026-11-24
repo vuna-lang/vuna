@@ -318,7 +318,49 @@ cleanup instrs =
   let
     folded = cleanupFix 8 instrs
     copied = switchCopy folded
-  in if hasJumpTable copied then copied else dropUnreachable copied
+    tested = dropRedundantTests copied
+  in if hasJumpTable tested then tested else dropUnreachable tested
+
+-- | `sub r, 1; test r, r; jg` 里的 `test` 是冗余的：上一条 `add`/`sub`/逻辑运算
+--   已经按结果 r 设置了 ZF/SF/OF，后面的有符号条件跳转只看这些位。
+--   只处理不读 CF 的 jcc；`ja`/`jb` 仍保留 `test`。
+dropRedundantTests : List Instr -> List Instr
+dropRedundantTests [] = []
+dropRedundantTests (i :: rest) =
+  case rest of
+    (ILabel l) :: more =>
+      case more of
+        (ITest r1 r2) :: (IJcc cc target) :: tail =>
+          if sameReg r1 r2 && signedJcc cc && setsFlagsFor r1 i then
+            i :: ILabel l :: IJcc cc target :: dropRedundantTests tail
+          else
+            i :: dropRedundantTests rest
+        _ => i :: dropRedundantTests rest
+    (ITest r1 r2) :: (IJcc cc target) :: tail =>
+      if sameReg r1 r2 && signedJcc cc && setsFlagsFor r1 i then
+        i :: IJcc cc target :: dropRedundantTests tail
+      else
+        i :: dropRedundantTests rest
+    _ => i :: dropRedundantTests rest
+
+signedJcc : String -> Bool
+signedJcc cc =
+  cc
+    == "je"
+    || cc
+    == "jne"
+    || cc
+    == "jz"
+    || cc
+    == "jnz" || cc == "jg" || cc == "jge" || cc == "jl" || cc == "jle" || cc == "js" || cc == "jns"
+
+setsFlagsFor : Reg -> Instr -> Bool
+setsFlagsFor r (IBinReg op dst _) = sameReg r dst && flagOp op
+setsFlagsFor r (IBin op _) = sameReg r Rax && flagOp op
+setsFlagsFor _ _ = False
+
+flagOp : String -> Bool
+flagOp op = op == "add" || op == "sub" || op == "and" || op == "or" || op == "xor"
 
 -- | 跳转表分派头的 `mov rax, r; cmp rax, k; ... jmp [base+rax*8]` 直接用 r 作
 --   cmp 操作数与索引，省掉一次搬运。只认 `isCalleeSaved` 源，避免和 scratch 冲突。
