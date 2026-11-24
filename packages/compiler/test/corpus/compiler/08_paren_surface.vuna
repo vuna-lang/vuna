@@ -168,6 +168,41 @@ sectionShapeOk =
         Nothing => False
   in leftOk && rightOk && opOk
 
+-- | section / 模板原子各自有 CST 表达式节点（表面事实以后挂在这些节点上）。
+sectionNodeOk : Bool
+sectionNodeOk =
+  case parseTree "(+ 1)" of
+    Just t => countExprNodes t >= 2
+    Nothing => False
+
+templateNodeOk : Bool
+templateNodeOk =
+  case parseTree "\"\"\"\${(a + b) * c}\"\"\"" of
+    Just t => countExprNodes t >= 2
+    Nothing => False
+
+parseTree : String -> Maybe CstNode
+parseTree src =
+  let
+    full = "x = " ++ src ++ "\n"
+  in case parseSourceDetailed "<paren>" full of
+    ErrC _ => Nothing
+    OkC p => Just (nestToTree (lexTokensOf full p.parsedRawToks p.parsedComments) p.parsedEvents)
+
+countExprNodes : CstNode -> Int
+countExprNodes node =
+  case node of
+    CstLeaf _ => 0
+    CstBranch kind _ _ kids => (if kindTagIsExpr kind then 1 else 0) + sumExprNodes kids
+
+sumExprNodes : List CstNode -> Int
+sumExprNodes [] = 0
+sumExprNodes (n :: rest) = countExprNodes n + sumExprNodes rest
+
+kindTagIsExpr : CstKind -> Bool
+kindTagIsExpr CstExprKind = True
+kindTagIsExpr _ = False
+
 -- | `[a]`：方括号不是圆括号。
 listOk : Bool
 listOk =
@@ -205,4 +240,7 @@ main =
     + bit infixLhsOk 64
     + bit sectionOk 128
     + bit listOk 256
-    + bit holeOk 512 + bit infixShapeOk 1024 + bit backtickOk 2048 + bit sectionShapeOk 4096
+    + bit holeOk 512
+    + bit infixShapeOk 1024
+    + bit backtickOk 2048
+    + bit sectionShapeOk 4096 + bit sectionNodeOk 8192 + bit templateNodeOk 16384

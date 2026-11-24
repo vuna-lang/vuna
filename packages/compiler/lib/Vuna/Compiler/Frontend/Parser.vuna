@@ -1840,7 +1840,7 @@ parseAtomBase fuel st blockCol =
       PTok (TInt n) p => OkC (EInt n (detachedNodeRef (spanOf st (advance st))), advance st)
       PTok (TFloat raw) p => OkC (EFloat raw (detachedNodeRef (spanOf st (advance st))), advance st)
       PTok (TStr s) p => OkC (EStr s (detachedNodeRef (spanOf st (advance st))), advance st)
-      PTok (TTmpl multi parts endP) p => parseTemplateAtom (fuel - 1) st multi parts endP
+      PTok (TTmpl multi parts endP) p => withExtent CstExprKind st (\st0 => parseTemplateAtom (fuel - 1) st0 multi parts endP)
       PTok (TKw "Type") p => OkC (EVar "Type" (detachedNodeRef (spanOf st (advance st))), advance st)
       PTok (TSym "(") p =>
         case binderHead (advance st) of
@@ -1848,7 +1848,7 @@ parseAtomBase fuel st blockCol =
           -- `(+)` / `(+ e)` section。`(e op)` 由 parseInfix 的右 section 分支处理。
           Nothing =>
             case sectionOpAt st of
-              Just op => parseSectionAtom (fuel - 1) st blockCol op
+              Just op => withExtent CstExprKind st (\st0 => parseSectionAtom (fuel - 1) st0 blockCol op)
               Nothing => parseParenAtom (fuel - 1) st blockCol
       PTok (TSym "[") p => parseListExpr (fuel - 1) st blockCol
       -- 命名洞 `?name`（`?` 与标识符紧邻）。编码成 `EVar "?name"`（不新增 AST 构造子），
