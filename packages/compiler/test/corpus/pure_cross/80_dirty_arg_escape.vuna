@@ -1,0 +1,18 @@
+import Base.Data.String as String
+
+-- 延迟归一化：累加器在循环里先走纯算术（可以带未归一化值跨迭代），随后在分支里参与
+-- 非常量除法与一次函数调用——这两个消费者都按归一化值工作，三端必须给同一个结果。
+drain : Int -> Int -> Int
+drain x n = if n <= 0 then (if x > 0 then 1 else 0) else drain x (n - 1)
+
+loop : Int -> Int -> Int
+loop acc n =
+  if n <= 0 then acc
+  else if n >= 4 then loop (acc * acc + 1) (n - 1)
+  else loop (acc * acc + acc / (n + 2) + drain acc 1) (n - 1)
+
+main : String
+main =
+  String.join
+    ","
+    ["big=" ++ show (loop 4000000000 6), "small=" ++ show (loop 3 6), "neg=" ++ show (loop (0 - 3000000000) 6)]

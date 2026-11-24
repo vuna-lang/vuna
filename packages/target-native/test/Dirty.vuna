@@ -1,0 +1,62 @@
+-- `Native.Dirty` 的单元测试：延迟 63-bit 归一化的判据与边界。
+--
+-- 锁三件事：dirty 形参按自调用实参的不动点算（循环守卫里的计数器保持 clean）；
+-- 纯标量链（`+ - *`、位运算、常量除数除法）可以带未归一化值；调用、构造、分支、
+-- 非常量除数必须按归一化值生成（值会交给按归一化值工作的代码）。
+import Base
+import Base.Data.Int as Int
+import Base.Data.List as List
+import Base.Data.Pair as Pair
+import Base.Effect.Core
+import Vuna.Ir.Model
+import Vuna.Target.Native.Dirty
+
+main : Eff [] String
+main =
+  case problems of
+    [] => pure ""
+    ps =>
+      do
+        _ <- prim_eff_print ("native dirty drifted:\n" ++ join "\n" ps ++ "\n")
+        _ <- prim_eff_exit 1
+        pure ""
+
+accB : IrBinder
+accB = mkIrBinderTyped 10 "acc" IrTyInt
+
+nB : IrBinder
+nB = mkIrBinderTyped 11 "n" IrTyInt
+
+fB : IrBinder
+fB = mkIrBinderTyped 12 "f" (IrTyFun IrTyInt IrTyInt)
+
+-- loop acc n = if n <= 0 then acc else loop (acc + f acc) (n - 1)
+loopBody : Ir
+loopBody =
+  IrIf
+    (IrRtApp "bi_le_int" (IrVar nB :: IrInt 0 :: []))
+    (IrVar accB)
+    (IrTail (IrApp Nothing (IrApp Nothing (IrGlobal "loop") (IrRtApp "+" (IrVar accB :: IrApp Nothing (IrVar fB) (IrVar accB) :: []))) (IrRtApp "-" (IrVar nB :: IrInt 1 :: []))))
+
+problems : List String
+problems = append dirtyProblems safetyProblems
+
+-- | 累加器是 dirty（自调用实参是算术），守卫里的计数器不是。
+dirtyProblems : List String
+dirtyProblems =
+  case dirtyParamIds "loop" [accB, nB] loopBody of
+    [p] => if p == 10 then [] else ["dirty params: " ++ strFromInt p]
+    ps => ["dirty params: " ++ strFromInt (length ps) ++ " ids"]
+
+-- | 实参边界：能带未归一化值的纯标量链，与必须保持归一化的形态。
+safetyProblems : List String
+safetyProblems =
+  filter
+    (\s => s /= "")
+    [expectSafe "add const" (IrRtApp "+" (IrVar accB :: IrInt 1 :: [])), expectSafe "mul self" (IrRtApp "*" (IrVar accB :: IrVar accB :: [])), expectSafe "band" (IrRtApp "bitAnd" (IrVar accB :: IrInt 255 :: [])), expectSafe "div const" (IrRtApp "/" (IrVar accB :: IrInt 3 :: [])), expectSafe "cast" (IrCast (Just IrTyInt) (Just IrTyInt) (IrVar accB)), expectUnsafe "div var" (IrRtApp "/" (IrVar accB :: IrVar nB :: [])), expectUnsafe "nested call" (IrRtApp "+" (IrVar accB :: IrApp Nothing (IrVar fB) (IrVar accB) :: [])), expectUnsafe "ctor" (IrCtor "Pair" "Pair" Nothing [IrVar accB, IrVar accB]), expectUnsafe "if" (IrIf (IrVar accB) (IrInt 1) (IrInt 2)), expectUnsafe "proj" (IrProj (IrVar accB) "Point" "x" (Just IrTyInt))]
+
+expectSafe : String -> Ir -> String
+expectSafe label ir = if dirtySafeArg ir then "" else label ++ ": expected safe"
+
+expectUnsafe : String -> Ir -> String
+expectUnsafe label ir = if dirtySafeArg ir then label ++ ": expected unsafe" else ""

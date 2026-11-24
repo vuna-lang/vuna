@@ -236,6 +236,35 @@ anySelfAltM : String -> Maybe IrAlt -> Bool
 anySelfAltM _ Nothing = False
 anySelfAltM name (Just (IrAlt _ _ body)) = containsSelf name body
 
+-- | 自我尾调用实参能否带着未归一化值求值：只允许**纯标量链**。
+--
+--   链上只有这几类消费者，它们的低 63 位结果都不受高位垃圾影响：
+--   * `+` / `-` / `*`：mod 2^63；
+--   * `bitAnd` / `bitOr` / `bitXor` / `bitNot`：逐位，操作数由调用点按需归一化；
+--   * 常量除数 `/`：`genDivInto` 自己先归一化被除数。
+--
+--   其它形态（调用 / 构造 / 投影 / 分支 / 用例 / 非常量除数）会把值交给按归一化值
+--   工作的代码，必须按值 `shl/sar`。
+export dirtySafeArg : Ir -> Bool
+dirtySafeArg (IrVar _) = True
+dirtySafeArg (IrInt _) = True
+dirtySafeArg (IrCast _ _ inner) = dirtySafeArg inner
+dirtySafeArg (IrTail inner) = dirtySafeArg inner
+dirtySafeArg (IrRtApp "/" ([a, IrInt _])) = dirtySafeArg a
+dirtySafeArg (IrRtApp sym args) = scalarChainSym sym && allDirtySafe args
+dirtySafeArg _ = False
+
+allDirtySafe : List Ir -> Bool
+allDirtySafe [] = True
+allDirtySafe (a :: rest) = dirtySafeArg a && allDirtySafe rest
+
+scalarChainSym : String -> Bool
+scalarChainSym sym =
+  sym
+    == "+"
+    || sym
+    == "-" || sym == "*" || sym == "bitAnd" || sym == "bitOr" || sym == "bitXor" || sym == "bitNot"
+
 binderIdsOf : Ir -> List Int
 binderIdsOf (IrVar b) = [binderIdOf b]
 binderIdsOf (IrInt _) = []

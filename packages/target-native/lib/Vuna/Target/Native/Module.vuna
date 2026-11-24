@@ -331,13 +331,17 @@ argRegAtIn i (r :: rest) = if i == 0 then Just r else argRegAtIn (i - 1) rest
 -- ---------------------------------------------------------------
 -- 表达式
 -- -----------------------------------------------------------
+-- | 调用 / 构造 / 记录字段的实参：值会离开当前函数的 dirty 链——被调方与堆字段都按
+--   归一化值工作——所以这里一律清掉 `fgAllowDirty`，按值 wrap。
 genArgs : Int -> FGen -> List Ir -> NRes (List Instr, List Int, FGen)
 genArgs _ st [] = NOk ([], [], st)
 genArgs fuel st (a :: rest) =
   if fuel <= 0 then
     internal "native codegen fuel exhausted"
   else
-    nbind (genExpr (fuel - 1) st a) (
+    let
+      st0 = { st | fgAllowDirty = False }
+    in nbind (genExpr (fuel - 1) st0 a) (
         \p =>
           let
             st1 = secondOf p
@@ -638,13 +642,15 @@ genSelfArgs fuel acc (a :: rest) (dst :: dsts) (b :: binds) =
       p = freshSlot acc.saState
       tmp = firstOf p
       st1 = secondOf p
-    in nbind (genExpr (fuel - 1) (dirtyArgState st1 dst) a) (\q => genSelfArgs (fuel - 1) (SelfArgs (append acc.saInstrs (append (firstOf q) (storeSlot tmp))) (restoreDirty (secondOf q) acc.saState) (append acc.saPending [(tmp, dst)])) rest dsts binds)
+    in nbind (genExpr (fuel - 1) (dirtyArgState st1 dst a) a) (\q => genSelfArgs (fuel - 1) (SelfArgs (append acc.saInstrs (append (firstOf q) (storeSlot tmp))) (restoreDirty (secondOf q) acc.saState) (append acc.saPending [(tmp, dst)])) rest dsts binds)
   else
-    nbind (genExpr (fuel - 1) (dirtyArgState acc.saState dst) a) (\q => genSelfArgs (fuel - 1) (SelfArgs (append acc.saInstrs (append (firstOf q) (storeSlot dst))) (restoreDirty (secondOf q) acc.saState) acc.saPending) rest dsts binds)
+    nbind (genExpr (fuel - 1) (dirtyArgState acc.saState dst a) a) (\q => genSelfArgs (fuel - 1) (SelfArgs (append acc.saInstrs (append (firstOf q) (storeSlot dst))) (restoreDirty (secondOf q) acc.saState) acc.saPending) rest dsts binds)
 
--- | 目标是 dirty 参数时，实参求值可以保留未归一化值；其它目标正常 wrap。
-dirtyArgState : FGen -> Int -> FGen
-dirtyArgState st dst = { st | fgAllowDirty = memInt dst st.fgDirtySlots }
+-- | 目标是 dirty 参数、且实参是纯标量链时，求值可以保留未归一化值；其它实参照常
+--   按归一化值生成（调用边界另有 `genArgs` 兜底）。
+dirtyArgState : FGen -> Int -> Ir -> FGen
+dirtyArgState st dst a =
+  if memInt dst st.fgDirtySlots && Dirty.dirtySafeArg a then { st | fgAllowDirty = True } else st
 
 restoreDirty : FGen -> FGen -> FGen
 restoreDirty st base = { st | fgAllowDirty = base.fgAllowDirty }
