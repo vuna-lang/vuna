@@ -1101,9 +1101,9 @@ allocLeafToR10 =
   [IMov (OpReg Rdi) (OpImm 8), ICall (nativeRtLabel "alloc_leaf"), IMov (OpReg R10) (OpReg Rax)]
 
 -- | 常数除法：先选被除数，再从剩余池里取 scratch。
-genDivInto : FGen -> List Reg -> Ir -> DivPlan -> Maybe (Reg, List Instr, List Reg)
-genDivInto st pool a (DivShift k) =
-  case genScalarInto st pool a of
+genDivInto : Int -> FGen -> List Reg -> Ir -> DivPlan -> Maybe (Reg, List Instr, List Reg)
+genDivInto bud st pool a (DivShift k) =
+  case genScalarIntoW (bud - 1) True st pool a of
     Nothing => Nothing
     Just pa =>
       case secondOf (secondOf pa) of
@@ -1123,8 +1123,8 @@ genDivInto st pool a (DivShift k) =
                   [IMov (OpReg s) (OpReg r), IBinReg "sar" s (OpImm 63), IBinReg "and" s (OpImm (ipow2 k - 1)), IBinReg "add" r (OpReg s), IBinReg "sar" r (OpImm k)]
           in Just (r, instrs, s :: rest)
         [] => Nothing
-genDivInto st pool a (DivMagic d m) =
-  case genScalarInto st pool a of
+genDivInto bud st pool a (DivMagic d m) =
+  case genScalarIntoW (bud - 1) True st pool a of
     Nothing => Nothing
     Just pa =>
       let
@@ -1143,9 +1143,9 @@ genDivInto st pool a (DivMagic d m) =
             outPool = dropReg Rax poolAfter
           in Just (Rax, instrs, outPool)
         _ => Nothing
-genDivInto st pool a (DivIdiv c) =
+genDivInto bud st pool a (DivIdiv c) =
   if memReg Rax pool then
-    case genScalarInto st (dropReg Rax pool) a of
+    case genScalarIntoW (bud - 1) True st (dropReg Rax pool) a of
       -- `cqo` + `idiv` 固定用 rax:rdx，所以 rax 必须还没被更早的实参占住。
       Nothing => Nothing
       Just pa =>
@@ -1163,20 +1163,26 @@ genDivInto st pool a (DivIdiv c) =
 ipow2 : Int -> Int
 ipow2 k = if k <= 0 then 1 else 2 * ipow2 (k - 1)
 
+-- | 标量求值失败后改试「先右后左」/ 溢出到栈的预算：每下沉一层子表达式消耗 1。
+--   用尽后只按源码顺序求值、失败即回退通用路径。回溯次数因此被钉在 `3^预算` 倍以内，
+--   不会随表达式深度指数增长（右深加法链曾在 `main` 上打出千万次重试）。
+scalarRetryBudget : Int
+scalarRetryBudget = 5
+
 -- | 把纯标量表达式选进寄存器：只接受字面量、槽变量、标量 cast 与白名单 `IrRtApp`；
 --   返回结果寄存器、指令与回收后的寄存器池。其它形态返回 Nothing（整棵子树回退）。
 --
 -- `wrap` 表示这棵子树的结果要不要 63-bit wrap：根位置总是要；父算子是加减乘（mod 2^63）
 -- 或低位掩码时不要——两层 wrap 之间的中间值只影响高位，最后统一 wrap 一次即可。
 genScalarInto : FGen -> List Reg -> Ir -> Maybe (Reg, List Instr, List Reg)
-genScalarInto st pool ir = genScalarIntoW True st pool ir
+genScalarInto st pool ir = genScalarIntoW scalarRetryBudget True st pool ir
 
-genScalarIntoW : Bool -> FGen -> List Reg -> Ir -> Maybe (Reg, List Instr, List Reg)
-genScalarIntoW _ st pool (IrInt n) =
+genScalarIntoW : Int -> Bool -> FGen -> List Reg -> Ir -> Maybe (Reg, List Instr, List Reg)
+genScalarIntoW _ _ st pool (IrInt n) =
   case pool of
     r :: rest => Just (r, [IMov (OpReg r) (OpImm n)], rest)
     [] => Nothing
-genScalarIntoW wrap st pool (IrVar b) =
+genScalarIntoW bud wrap st pool (IrVar b) =
   case lookupBinder b st.fgSlots of
     Just slot =>
       case pool of
@@ -1191,31 +1197,31 @@ genScalarIntoW wrap st pool (IrVar b) =
           in Just (r, instrs, rest)
         [] => Nothing
     Nothing => Nothing
-genScalarIntoW wrap st pool (IrCast from to inner) =
+genScalarIntoW bud wrap st pool (IrCast from to inner) =
   if isScalarCls (clsOfTy st from) && isScalarCls (clsOfTy st to) then
-    genScalarIntoW wrap st pool inner
+    genScalarIntoW bud wrap st pool inner
   else
     Nothing
 -- 除以编译期常量：`d = 2^k` 用符号修正移位，其余走内联 `idiv`（都省掉一次调用与
 -- 实参槽往返）。除法的操作数必须已 wrap、结果天然在范围内。`d = 0` / `d = -1` 仍走
 -- `rt_div`（除零 trap 与 `min_int / -1` 语义）。
-genScalarIntoW wrap st pool (IrRtApp sym args) =
+genScalarIntoW bud wrap st pool (IrRtApp sym args) =
   if sym == "/" then
     case args of
       [a, IrInt d] =>
         case divPlanOf d of
-          Just plan => genDivInto st pool a plan
+          Just plan => genDivInto bud st pool a plan
           Nothing => Nothing
       _ => Nothing
   else
     case scalarPlanOf sym of
       Nothing => Nothing
-      Just plan => if length args /= irInlineArity sym then Nothing else genScalarOpW wrap st pool (firstOf plan) args
+      Just plan => if length args /= irInlineArity sym then Nothing else genScalarOpW bud wrap st pool (firstOf plan) args
 -- `if b then 1 else 0` 就是 b（0/1）；作为标量实参时直接取值的计划，父算子继续内联。
-genScalarIntoW wrap st pool (IrIf c t e) =
+genScalarIntoW bud wrap st pool (IrIf c t e) =
   case boolSelectModeOf t e of
     Just mode =>
-      case genScalarIntoW wrap st pool c of
+      case genScalarIntoW bud wrap st pool c of
         Just pa =>
           let
             r = firstOf pa
@@ -1223,26 +1229,26 @@ genScalarIntoW wrap st pool (IrIf c t e) =
             (r, append (firstOf (secondOf pa)) (boolSelectInstrs mode r), secondOf (secondOf pa))
         Nothing => Nothing
     Nothing => Nothing
-genScalarIntoW _ _ _ _ = Nothing
+genScalarIntoW _ _ _ _ _ = Nothing
 
 -- | 白名单算子的寄存器选择；`ScalarCmp` 的结果固定在 rax（`setcc` + `movzx rax, al`）。
 genScalarOp : FGen -> List Reg -> ScalarOp -> List Ir -> Maybe (Reg, List Instr, List Reg)
-genScalarOp st pool op args = genScalarOpW True st pool op args
+genScalarOp st pool op args = genScalarOpW scalarRetryBudget True st pool op args
 
-genScalarOpW : Bool -> FGen -> List Reg -> ScalarOp -> List Ir -> Maybe (Reg, List Instr, List Reg)
-genScalarOpW _ st pool (ScalarConst n) _ =
+genScalarOpW : Int -> Bool -> FGen -> List Reg -> ScalarOp -> List Ir -> Maybe (Reg, List Instr, List Reg)
+genScalarOpW _ _ st pool (ScalarConst n) _ =
   case pool of
     r :: rest => Just (r, [IMov (OpReg r) (OpImm n)], rest)
     [] => Nothing
-genScalarOpW _ st pool (ScalarCmp cc) args =
+genScalarOpW bud _ st pool (ScalarCmp cc) args =
   if not (memReg Rax pool) then
     Nothing
   else
     case args of
       [a, b] =>
-        case genScalarInto st (dropReg Rax pool) a of
+        case genScalarIntoW (bud - 1) True st (dropReg Rax pool) a of
           Just pa =>
-            case genScalarInto st (secondOf (secondOf pa)) b of
+            case genScalarIntoW (bud - 1) True st (secondOf (secondOf pa)) b of
               Just pb =>
                 let
                   rA = firstOf pa
@@ -1255,12 +1261,12 @@ genScalarOpW _ st pool (ScalarCmp cc) args =
               Nothing => Nothing
           Nothing => Nothing
       _ => Nothing
-genScalarOpW _ st pool ScalarNatFromInt args =
+genScalarOpW bud _ st pool ScalarNatFromInt args =
   case args of
     [a] =>
       case pool of
         r :: rest =>
-          case genScalarInto st (r :: rest) a of
+          case genScalarIntoW (bud - 1) True st (r :: rest) a of
             Just pa =>
               case secondOf (secondOf pa) of
                 s :: rest2 =>
@@ -1273,25 +1279,33 @@ genScalarOpW _ st pool ScalarNatFromInt args =
     _ => Nothing
 -- `band x 常量掩码`：掩码清掉高位（`0 ≤ m ≤ maxInt`），所以 x 不必先 wrap，
 -- 结果也天然落在 `[0, m]` 里。
-genScalarOpW _ st pool (ScalarBitOp "and") ([a, IrInt m]) =
+genScalarOpW bud _ st pool (ScalarBitOp "and") ([a, IrInt m]) =
   if m >= 0 && m <= nativeMaxInt then
-    genScalarBinInto False True st pool a (IrInt m) (\rA, rB => (rA, [IBinReg "and" rA (OpReg rB)]))
+    genScalarBinInto
+      bud
+      False
+      True
+      st
+      pool
+      a
+      (IrInt m)
+      (\rA, rB => (rA, [IBinReg "and" rA (OpReg rB)]))
   else
-    genScalarOpGeneric False st pool (ScalarBitOp "and") [a, IrInt m]
-genScalarOpW wrap st pool op args = genScalarOpGeneric wrap st pool op args
+    genScalarOpGeneric bud False st pool (ScalarBitOp "and") [a, IrInt m]
+genScalarOpW bud wrap st pool op args = genScalarOpGeneric bud wrap st pool op args
 
-genScalarOpGeneric : Bool -> FGen -> List Reg -> ScalarOp -> List Ir -> Maybe (Reg, List Instr, List Reg)
-genScalarOpGeneric _ st pool op [] =
+genScalarOpGeneric : Int -> Bool -> FGen -> List Reg -> ScalarOp -> List Ir -> Maybe (Reg, List Instr, List Reg)
+genScalarOpGeneric _ _ st pool op [] =
   case pool of
     r :: rest =>
       let
         res = scalarInstrs op r r
       in Just (firstOf res, secondOf res, r :: rest)
     [] => Nothing
-genScalarOpGeneric wrap st pool op ([a]) =
+genScalarOpGeneric bud wrap st pool op ([a]) =
   case pool of
     r :: rest =>
-      case genScalarIntoW (childWrap op) st (r :: rest) a of
+      case genScalarIntoW (bud - 1) (childWrap op) st (r :: rest) a of
         Just pa =>
           let
             res = resOf wrap op (firstOf pa) (firstOf pa)
@@ -1299,28 +1313,32 @@ genScalarOpGeneric wrap st pool op ([a]) =
             (firstOf res, append (firstOf (secondOf pa)) (secondOf res), secondOf (secondOf pa))
         Nothing => Nothing
     [] => Nothing
-genScalarOpGeneric wrap st pool op ([a, b]) =
-  case genScalarBinOrdered wrap st pool op a b of
+genScalarOpGeneric bud wrap st pool op ([a, b]) =
+  case genScalarBinOrdered bud wrap st pool op a b of
     Just p => Just p
     Nothing => Nothing
-genScalarOpGeneric _ _ _ _ _ = Nothing
+genScalarOpGeneric _ _ _ _ _ _ = Nothing
 
 -- | 二元算子：先按源码顺序求值；寄存器池不够（通常是右侧的常数除法占住 rax/rdx）
 --   时改试「先右后左」。标量子树无副作用，换序只影响寄存器压力。
-genScalarBinOrdered : Bool -> FGen -> List Reg -> ScalarOp -> Ir -> Ir -> Maybe (Reg, List Instr, List Reg)
-genScalarBinOrdered wrap st pool op a b =
-  case genScalarBinLeftFirst wrap st pool op a b of
+--   改序与溢出都要花预算：预算用尽就只按源码顺序试一次，失败回退通用路径。
+genScalarBinOrdered : Int -> Bool -> FGen -> List Reg -> ScalarOp -> Ir -> Ir -> Maybe (Reg, List Instr, List Reg)
+genScalarBinOrdered bud wrap st pool op a b =
+  case genScalarBinLeftFirst bud wrap st pool op a b of
     Just p => Just p
     Nothing =>
-      case genScalarBinRightFirst wrap st pool op a b of
-        Just p => Just p
-        Nothing => genScalarBinSpill wrap st pool op a b
+      if bud <= 0 then
+        Nothing
+      else
+        case genScalarBinRightFirst bud wrap st pool op a b of
+          Just p => Just p
+          Nothing => genScalarBinSpill bud wrap st pool op a b
 
-genScalarBinLeftFirst : Bool -> FGen -> List Reg -> ScalarOp -> Ir -> Ir -> Maybe (Reg, List Instr, List Reg)
-genScalarBinLeftFirst wrap st pool op a b =
-  case genScalarIntoW (childWrap op) st (pickFirst pool (needsRax b)) a of
+genScalarBinLeftFirst : Int -> Bool -> FGen -> List Reg -> ScalarOp -> Ir -> Ir -> Maybe (Reg, List Instr, List Reg)
+genScalarBinLeftFirst bud wrap st pool op a b =
+  case genScalarIntoW (bud - 1) (childWrap op) st (pickFirst pool (needsRax b)) a of
     Just pa =>
-      case genScalarIntoW (childWrap op) st (secondOf (secondOf pa)) b of
+      case genScalarIntoW (bud - 1) (childWrap op) st (secondOf (secondOf pa)) b of
         Just pb =>
           let
             rA = firstOf pa
@@ -1333,11 +1351,11 @@ genScalarBinLeftFirst wrap st pool op a b =
         Nothing => Nothing
     Nothing => Nothing
 
-genScalarBinRightFirst : Bool -> FGen -> List Reg -> ScalarOp -> Ir -> Ir -> Maybe (Reg, List Instr, List Reg)
-genScalarBinRightFirst wrap st pool op a b =
-  case genScalarIntoW (childWrap op) st (pickFirst pool (needsRax a)) b of
+genScalarBinRightFirst : Int -> Bool -> FGen -> List Reg -> ScalarOp -> Ir -> Ir -> Maybe (Reg, List Instr, List Reg)
+genScalarBinRightFirst bud wrap st pool op a b =
+  case genScalarIntoW (bud - 1) (childWrap op) st (pickFirst pool (needsRax a)) b of
     Just pb =>
-      case genScalarIntoW (childWrap op) st (secondOf (secondOf pb)) a of
+      case genScalarIntoW (bud - 1) (childWrap op) st (secondOf (secondOf pb)) a of
         Just pa =>
           let
             rA = firstOf pa
@@ -1352,16 +1370,16 @@ genScalarBinRightFirst wrap st pool op a b =
 
 -- | 两种求值顺序都放不下时：先把左值压栈，右值用完整寄存器池求值，再弹回一个空闲
 --   寄存器做运算。纯标量子树里没有调用/分配，栈上这个临时值不需要 GC 跟踪。
-genScalarBinSpill : Bool -> FGen -> List Reg -> ScalarOp -> Ir -> Ir -> Maybe (Reg, List Instr, List Reg)
-genScalarBinSpill wrap st pool op a b =
-  case genScalarIntoW (childWrap op) st (pickFirst pool (needsRax b)) a of
+genScalarBinSpill : Int -> Bool -> FGen -> List Reg -> ScalarOp -> Ir -> Ir -> Maybe (Reg, List Instr, List Reg)
+genScalarBinSpill bud wrap st pool op a b =
+  case genScalarIntoW (bud - 1) (childWrap op) st (pickFirst pool (needsRax b)) a of
     Just pa =>
       let
         rA = firstOf pa
         inA = firstOf (secondOf pa)
         poolA = secondOf (secondOf pa)
         poolRight = pickFirst (rA :: poolA) (needsRax a)
-      in case genScalarIntoW (childWrap op) st poolRight b of
+      in case genScalarIntoW (bud - 1) (childWrap op) st poolRight b of
         Just pb =>
           let
             rB = firstOf pb
@@ -1415,11 +1433,11 @@ withElse stAfter outer c =
   { stAfter | fgRanges = append (factsElse outer.fgRanges c) outer.fgRanges }
 
 -- | 二元算子的求值：两个操作数按各自的口径求值，指令拼在一起。
-genScalarBinInto : Bool -> Bool -> FGen -> List Reg -> Ir -> Ir -> (Reg -> Reg -> (Reg, List Instr)) -> Maybe (Reg, List Instr, List Reg)
-genScalarBinInto wrapA wrapB st pool a b mk =
-  case genScalarIntoW wrapA st (pickFirst pool (needsRax b)) a of
+genScalarBinInto : Int -> Bool -> Bool -> FGen -> List Reg -> Ir -> Ir -> (Reg -> Reg -> (Reg, List Instr)) -> Maybe (Reg, List Instr, List Reg)
+genScalarBinInto bud wrapA wrapB st pool a b mk =
+  case genScalarIntoW (bud - 1) wrapA st (pickFirst pool (needsRax b)) a of
     Just pa =>
-      case genScalarIntoW wrapB st (secondOf (secondOf pa)) b of
+      case genScalarIntoW (bud - 1) wrapB st (secondOf (secondOf pa)) b of
         Just pb =>
           let
             rA = firstOf pa
@@ -1440,7 +1458,7 @@ genInlineRt st sym args =
       [a, IrInt d] =>
         case divPlanOf d of
           Just plan =>
-            case genDivInto st scalarRegs a plan of
+            case genDivInto scalarRetryBudget st scalarRegs a plan of
               Just p =>
                 let
                   r = firstOf p
@@ -1456,7 +1474,7 @@ genInlineRt st sym args =
         if length args /= irInlineArity sym then
           Nothing
         else
-          case genScalarOpW (not st.fgAllowDirty) st scalarRegs (firstOf plan) args of
+          case genScalarOpW scalarRetryBudget (not st.fgAllowDirty) st scalarRegs (firstOf plan) args of
             Nothing => Nothing
             Just p =>
               let
