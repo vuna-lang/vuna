@@ -1359,7 +1359,7 @@ evalExprInfoRebuild st program expr =
 -- ---------------------------------------------------------------
 -- 表达式求值
 -- ---------------------------------------------------------------
--- | 按表达式处理一段输入：先精化求值；顶层类型是动作类型（`Eff [] a`）时改走 `evalIO`
+-- | 按表达式处理一段输入：先精化求值；顶层类型是动作类型（`Eff r a`）时改走 `evalIO`
 -- 临时编译运行，否则直接打印求值结果。清空待续输入，并把本次会话与 aux 缓存写回状态。
 evalText : Member nFs FsOp r, Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => ReplState -> String -> Eff r ReplOutcome
 evalText st text =
@@ -1416,8 +1416,9 @@ printTiming st start =
   else
     pure 0
 
--- | 执行动作表达式：server 模式、已有 `main`、或类型含未解元变量时拒绝；否则补 import 后
--- 合成 `main : <类型>` + `main = <表达式>` 临时编译运行，非零退出码会提示并作为返回值。
+-- | 执行动作表达式：server 模式或已有 `main` 时拒绝；签名优先取缓冲里的源码签名
+-- （带行动作的 canonical 类型文本不可回读），Nil 行动作可直接用 canonical 文本；
+-- 合成 `main : <签名>` + `main = <表达式>` 临时编译运行，非零退出码会提示并作为返回值。
 evalIO : Member nFs FsOp r, Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => ReplState -> String -> String -> Eff r Int
 evalIO st text tyText =
   if captureMode st then
@@ -1428,51 +1429,80 @@ evalIO st text tyText =
     do
       _ <- printError st "程序已经定义了 main，无法把表达式当作效果入口（先 :reset 或改名）"
       pure 0
-  else if hasUnsolvedMeta tyText then
-    do
-      _ <- printError st "无法确定动作表达式的完整类型（${tyText}）；先定义成带签名的值再求值（如 `prog : Base.Effect.Core.Eff Base.Effect.Core.Row.Nil Int` + `prog = ...`）"
-      pure 0
   else
-    let
-      source = "${ioTypeImports st tyText}${bufferProgram st}\nmain : ${tyText}\nmain = ${text}\n"
-    in do
-      result <- runEffectProgram st.stateCtx source (ioPrintResult tyText)
-      case result of
-        ErrC e =>
+    case bufferSigTextOf st (trim text) of
+      Just sigText => evalIOWith st text sigText tyText
+      Nothing =>
+        if hasUnsolvedMeta tyText then
           do
-            _ <- printDiag st e
+            _ <- printError st "无法确定动作表达式的完整类型（${tyText}）；先定义成带签名的值再求值（如 `prog : Eff [ConsoleOp] Int` + `prog = …`）"
             pure 0
-        OkC code =>
-          if code == 0 then
+        else if isNilRowIOTypeText tyText then
+          evalIOWith st text tyText tyText
+        else
+          do
+            _ <- printError st "带行动作表达式需要先在 REPL 里定义成带显式签名的值再求值（如 `prog : Eff [ConsoleOp] Int` + `prog = …`），或 `vuna run` 运行程序"
             pure 0
-          else
-            do
-              _ <- replEmit st "${c st "33" "[进程退出码 ${code}]"}\n"
-              pure code
+
+-- | 内部：按源码签名（`sigText`）合成入口并运行（`tyText` 只用于补 import 与结果打印判定）。
+evalIOWith : Member nFs FsOp r, Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => ReplState -> String -> String -> String -> Eff r Int
+evalIOWith st text sigText tyText =
+  let
+    source = "${ioTypeImports st tyText}${bufferProgram st}\nmain : ${sigText}\nmain = ${text}\n"
+  in do
+    result <- runEffectProgram st.stateCtx source (ioPrintResult tyText)
+    case result of
+      ErrC e =>
+        do
+          _ <- printDiag st e
+          pure 0
+      OkC code =>
+        if code == 0 then
+          pure 0
+        else
+          do
+            _ <- replEmit st "${c st "33" "[进程退出码 ${code}]"}\n"
+            pure code
 
 -- | 内部：类型文本里是否含未解元变量（`?`）。
 hasUnsolvedMeta : String -> Bool
 hasUnsolvedMeta tyText = contains "?" tyText
 
--- 动作结果类型可能是 `Base.Data.Nat.Nat` 这类跨模块 canonical 名（`Base.Effect.Console.Print` 在
--- result 族里返回 `Nat`），生成的入口文件必须补对应 `import` 才能解析限定名。
--- | 内部：为生成的入口文件补 `Base.Effect.Core` / `Base.Data.Nat` 的 import（已显式 import 时跳过，
--- 重复 import 是硬错误）。
+-- 动作类型文本里会出现跨模块 canonical 名（`Base.Effect.Core.Eff`、行标签
+-- `Base.Effect.Console.ConsoleOp`、结果族 `Base.Data.Nat.Nat`），生成的入口文件必须补对应
+-- `import` 才能解析限定名。
+ioEffectModules : List String
+ioEffectModules =
+  [
+    "Base.Effect.Core",
+    "Base.Effect.Types",
+    "Base.Effect.Console",
+    "Base.Effect.Fs",
+    "Base.Effect.Env",
+    "Base.Effect.Clock",
+    "Base.Effect.Exit",
+    "Base.Effect.Stdin",
+    "Base.Effect.Args",
+    "Base.Effect.Process",
+    "Base.Effect.Net",
+    "Base.Data.Nat"
+  ]
+
+-- | 内部：生成的入口文件是否需要为该模块补 import（已显式 import 时跳过，重复 import 是硬错误）。
+needsEffectImport : String -> String -> String -> Bool
+needsEffectImport tyText prog m = contains "${m}." tyText && not (contains "import ${m}" prog)
+
+-- | 内部：模块 import 行。
+effectImportLine : String -> String
+effectImportLine m = "import ${m}\n"
+
+-- | 内部：为生成的入口文件补动作类型里引用到的模块 import。
 ioTypeImports : ReplState -> String -> String
 ioTypeImports st tyText =
   let
     prog = bufferProgram st
-    effImp =
-      if contains "Base.Effect.Core." tyText && not (contains "import Base.Effect.Core" prog) then
-        "import Base.Effect.Core\n"
-      else
-        ""
-    natImp =
-      if contains "Base.Data.Nat." tyText && not (contains "import Base.Data.Nat" prog) then
-        "import Base.Data.Nat\n"
-      else
-        ""
-  in effImp ++ natImp
+    needed = filter (needsEffectImport tyText prog) ioEffectModules
+  in join "" (map effectImportLine needed)
 
 -- | 内部：程序里是否已经定义了 `main`（解析失败按没有处理）。
 hasMainDef : String -> Bool
@@ -1481,43 +1511,51 @@ hasMainDef program =
     ErrC e => False
     OkC (SourceFile _ _ _ decls _ _ _) => memName "main" (topNames decls)
 
--- `showTypeSig` 把 `Eff [] a` 渲染成 `((Base.Effect.Core.Eff Base.Effect.Core.Row.Nil) Int)`。
--- | 顶层类型文本是否是 canonical 动作类型（`Eff [] a` 的渲染形式）。
+-- | 内部：缓冲里 `name : <签名>` 的签名文本（单行形式）；没有则 `Nothing`。
+-- 带行动作的 canonical 类型文本（`Row.::` 链）不可回读成源码，合成入口签名时改用这里的源码签名。
+bufferSigTextOf : ReplState -> String -> Maybe String
+bufferSigTextOf st name =
+  if name == "" then Nothing else findSigLine name (lines (bufferProgram st))
+
+findSigLine : String -> List String -> Maybe String
+findSigLine _ [] = Nothing
+findSigLine name (line :: rest) =
+  let
+    t = trim line
+  in if startsWith (name ++ " :") t then
+    Just (trim (substring (byteLength name + 2) (byteLength t - byteLength name - 2) t))
+  else
+    findSigLine name rest
+
+-- `showTypeSig` 把 `Eff [] a` 渲染成 `((Base.Effect.Core.Eff Base.Effect.Core.Row.Nil) Int)`；
+-- 带行的动作同理，只是行参数是 `Named …` / 行拼接。
+-- | 顶层类型文本是否是 canonical 动作类型（`Eff <row> a`，行不必是 Nil）。
 isIOTypeText : String -> Bool
 isIOTypeText tyText =
+  let
+    t = trim tyText
+  in startsWith "((Base.Effect.Core.Eff " t || startsWith "(Base.Effect.Core.Eff " t
+
+-- | 顶层类型文本是否是 **Nil 行** 的 canonical 动作类型（可直接回读成源码签名）。
+isNilRowIOTypeText : String -> Bool
+isNilRowIOTypeText tyText =
   let
     t = trim tyText
   in startsWith "((Base.Effect.Core.Eff Base.Effect.Core.Row.Nil) " t
     || startsWith "(Base.Effect.Core.Eff Base.Effect.Core.Row.Nil) " t
 
 -- | 内部：动作结果类型是否可直接打印（`Int` / `String` / `Bool` / `Nat`）。
+-- 只看类型文本的结果位置后缀：行里出现的标签名不会以这些后缀结尾。
+printableSuffixes : List String
+printableSuffixes =
+  [") Int)", ") Int", ") String)", ") String", ") Bool)", ") Bool", ") Nat)", ") Nat"]
+
+anySuffix : String -> List String -> Bool
+anySuffix _ [] = False
+anySuffix t (s :: rest) = if endsWith s t then True else anySuffix t rest
+
 ioPrintResult : String -> Bool
-ioPrintResult tyText =
-  case ioInnerType (trim tyText) of
-    Nothing => False
-    Just inner =>
-      inner
-        == "Int"
-        || inner == "String" || inner == "Bool" || inner == "Nat" || inner == "Base.Data.Nat.Nat"
-
--- | 内部：从 canonical 动作类型文本里取出结果类型。
-ioInnerType : String -> Maybe String
-ioInnerType t =
-  let
-    effHead = "((Base.Effect.Core.Eff Base.Effect.Core.Row.Nil) "
-    effHeadBare = "(Base.Effect.Core.Eff Base.Effect.Core.Row.Nil) "
-  in if startsWith effHead t then
-    Just
-      (stripTrailingParen (trim (substring (byteLength effHead) (byteLength t - byteLength effHead) t)))
-  else if startsWith effHeadBare t then
-    Just
-      (stripTrailingParen (trim (substring (byteLength effHeadBare) (byteLength t - byteLength effHeadBare) t)))
-  else
-    Nothing
-
--- | 内部：去掉结尾的 `)` 并去空白。
-stripTrailingParen : String -> String
-stripTrailingParen s = if endsWith ")" s then trim (substring 0 (byteLength s - 1) s) else s
+ioPrintResult tyText = anySuffix (trim tyText) printableSuffixes
 
 -- ---------------------------------------------------------------
 -- 类型文本：token 着色 + 隐式参数提取（`:type` / `:typeinfo`）
