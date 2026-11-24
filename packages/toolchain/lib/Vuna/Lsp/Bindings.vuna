@@ -7,7 +7,7 @@
 --
 -- 局部绑定：顶层函数参数、λ 参数、`let` / `where`、`case` 分支、`do` 绑定、`as` 模式、记录模式
 -- 字段，以及 Pi / 类型级 binder。作用域是顺序的（后续绑定可见前面，不互递归），最内层优先；类型只取语法可得的来源
--- （`where` / `let` 签名 `EAnn`、函数参数按签名箭头链），不做类型推断。
+-- （`where` / `let` 的 `Binding.bindSig`、函数参数按签名箭头链），不做类型推断。
 --
 -- hover / definition 的 JSON 组装也在本模块；管线顺序（洞 → 本模块 → Index 符号）由
 -- [Vuna.Lsp] 负责。命中返回 `Just`，未命中返回 `Nothing`，调用方继续走 Index 路径。
@@ -752,31 +752,31 @@ binderNamed name [] = Nothing
 binderNamed name (b :: rest) = if b.lbName == name then Just b else binderNamed name rest
 
 -- | 内部：记录模式里单个字段的模式 binder。
-fieldPatBinders : WalkEnv -> String -> Maybe Expr -> (String, Pat) -> List LocalBind
-fieldPatBinders env kind mval (fname, pat) = patBinders env kind pat mval
+fieldPatBinders : WalkEnv -> String -> Maybe Expr -> Maybe Expr -> (String, Pat) -> List LocalBind
+fieldPatBinders env kind mval mty (fname, pat) = patBinders env kind pat mval mty
 
 -- | 内部：模式 → 它引入的 binder（`PVar`、`PAs`、构造子参数、记录字段；其余模式不绑定名字）。
--- `kind` 是种类标签；`mval` 给出时用作单行值与（`EAnn` 的）语法类型。
-patBinders : WalkEnv -> String -> Pat -> Maybe Expr -> List LocalBind
-patBinders env kind (PVar n sp) mval =
+-- `kind` 是种类标签；`mval` 给出时用作单行值，`mty` 给出时用作语法类型。
+patBinders : WalkEnv -> String -> Pat -> Maybe Expr -> Maybe Expr -> List LocalBind
+patBinders env kind (PVar n sp) mval mty =
   let
     t =
-      case mval of
-        Just (EAnn value ty _) => renderType ty
-        _ => ""
+      case mty of
+        Just ty => renderType ty
+        Nothing => ""
     v =
       case mval of
-        Just (EAnn value ty _) => renderValueText env value
         Just value => renderValueText env value
         Nothing => ""
   in [LocalBind n kind (spanStartLine (nodeRefSpan sp)) (spanStartCol (nodeRefSpan sp)) t v]
-patBinders env kind (PAs n inner sp) mval =
+patBinders env kind (PAs n inner sp) mval mty =
   let
     pos = asNamePos env (nodeRefSpan sp) n
-  in LocalBind n kind (firstOf pos) (secondOf pos) "" "" :: patBinders env kind inner mval
-patBinders env kind (PCon n ps _) mval = concatMap (\p => patBinders env kind p mval) ps
-patBinders env kind (PRecord n fields _) mval = concatMap (fieldPatBinders env kind mval) fields
-patBinders env kind pat mval = []
+  in LocalBind n kind (firstOf pos) (secondOf pos) "" "" :: patBinders env kind inner mval mty
+patBinders env kind (PCon n ps _) mval mty = concatMap (\p => patBinders env kind p mval mty) ps
+patBinders env kind (PRecord n fields _) mval mty =
+  concatMap (fieldPatBinders env kind mval mty) fields
+patBinders env kind pat mval mty = []
 
 -- | 内部：单行值文本（取 `inlineExpr` 的第一行并截断；块结构返回 ""）。
 renderValueText : WalkEnv -> Expr -> String
@@ -864,7 +864,7 @@ patBindersIdx env kind mSig (p :: rest) i =
           case nthExpr i domains of
             Nothing => ""
             Just dom => renderType dom
-    binders = map (\b => withType domType b) (patBinders env kind p Nothing)
+    binders = map (\b => withType domType b) (patBinders env kind p Nothing Nothing)
   in append binders (patBindersIdx env kind mSig rest (i + 1))
 
 -- | 内部：在函数子句的参数列表里找覆盖光标的 binder（`name` 是光标处 token）。
@@ -879,7 +879,7 @@ binderInPatList env line col name kind mSig (p :: rest) i =
           case nthExpr i domains of
             Nothing => ""
             Just dom => renderType dom
-    binders = map (\b => withType domType b) (patBinders env kind p Nothing)
+    binders = map (\b => withType domType b) (patBinders env kind p Nothing Nothing)
   in if patHit env line col p then
     case binderNamed name binders of
       Just hit => Just hit
@@ -974,28 +974,41 @@ walkBinds fuel env scope line col name kind binds =
       [] => Nothing
       b :: rest =>
         let
-          view = bindingValueView b
-          binders = patBinders env kind b.bindPat (Just view)
+          mty =
+            case b.bindSig of
+              Just sig => Just sig.sigType
+              Nothing => Nothing
+          binders = patBinders env kind b.bindPat (Just b.bindValue) mty
         in if patHit env line col b.bindPat then
           case binderNamed name binders of
             Just hit => Just hit
             Nothing => walkBinds (fuel - 1) env (append scope binders) line col name kind rest
         else
-          case walkBindValue (fuel - 1) env scope line col name view of
+          case walkBindValue (fuel - 1) env scope line col name b.bindValue mty of
             Just hit => Just hit
             Nothing => walkBinds (fuel - 1) env (append scope binders) line col name kind rest
 
--- | 内部：遍历一个绑定的值；`EAnn (ELocalFun ...) ty` 时把签名下传给局部函数参数（语法级类型）。
-walkBindValue : Int -> WalkEnv -> List LocalBind -> Int -> Int -> String -> Expr -> Maybe LocalBind
-walkBindValue fuel env scope line col name (EAnn (ELocalFun clauses _) ty _) =
-  case walkClauses fuel env scope line col name (Just (arrowDomains ty)) clauses of
+-- | 内部：遍历一个绑定的值；签名类型给出时同时作为局部函数参数的语法类型。
+walkBindValue : Int -> WalkEnv -> List LocalBind -> Int -> Int -> String -> Expr -> Maybe Expr -> Maybe LocalBind
+walkBindValue fuel env scope line col name (ELocalFun clauses _) mty =
+  let
+    mSig =
+      case mty of
+        Just ty => Just (arrowDomains ty)
+        Nothing => Nothing
+  in case walkClauses fuel env scope line col name mSig clauses of
     Just hit => Just hit
-    Nothing => walkExpr (fuel - 1) env scope line col name ty
-walkBindValue fuel env scope line col name (EAnn inner ty annSp) =
-  walkExpr (fuel - 1) env scope line col name (EAnn inner ty annSp)
-walkBindValue fuel env scope line col name (ELocalFun clauses _) =
-  walkClauses fuel env scope line col name Nothing clauses
-walkBindValue fuel env scope line col name value = walkExpr (fuel - 1) env scope line col name value
+    Nothing =>
+      case mty of
+        Just ty => walkExpr (fuel - 1) env scope line col name ty
+        Nothing => Nothing
+walkBindValue fuel env scope line col name value mty =
+  case mty of
+    Just ty =>
+      case walkExpr (fuel - 1) env scope line col name value of
+        Just hit => Just hit
+        Nothing => walkExpr (fuel - 1) env scope line col name ty
+    Nothing => walkExpr (fuel - 1) env scope line col name value
 
 -- | 内部：遍历 `case` 分支：每个分支的模式 binder 只在该分支 body 里可见。
 walkAlts : Int -> WalkEnv -> List LocalBind -> Int -> Int -> String -> List Alt -> Maybe LocalBind
@@ -1007,7 +1020,7 @@ walkAlts fuel env scope line col name alts =
       [] => Nothing
       alt :: rest =>
         let
-          binders = patBinders env "case" alt.altPat Nothing
+          binders = patBinders env "case" alt.altPat Nothing Nothing
         in if patHit env line col alt.altPat then
           case binderNamed name binders of
             Just hit => Just hit
@@ -1027,7 +1040,7 @@ walkDo fuel env scope line col name stmts =
       [] => Nothing
       (DBind pat value sp) :: rest =>
         let
-          binders = patBinders env "do" pat (Just value)
+          binders = patBinders env "do" pat (Just value) Nothing
         in if patHit env line col pat then
           case binderNamed name binders of
             Just hit => Just hit
@@ -1127,7 +1140,6 @@ piNameStart fuel ln len i acc =
 -- （parser 把链降级成 `EApp (EVar op) [l, r]`，取所有子表达式起点的最小值）。
 exprStartOf : Expr -> (Int, Int)
 exprStartOf (EApp fn args _) = argsStartOf (exprStartOf fn) args
-exprStartOf (EAnn value ty _) = exprStartOf value
 exprStartOf e = (spanStartLine (exprSpan e), spanStartCol (exprSpan e))
 
 -- | 内部：一组表达式里最小的起点。
@@ -1202,15 +1214,17 @@ walkExpr fuel env scope line col name e =
       ESectOp op _ => Nothing
       ESectL op inner _ => walkExpr (fuel - 1) env scope line col name inner
       ESectR inner op _ => walkExpr (fuel - 1) env scope line col name inner
-      EAnn value ty _ =>
-        case walkExpr (fuel - 1) env scope line col name value of
-          Just hit => Just hit
-          Nothing => walkExpr (fuel - 1) env scope line col name ty
       EInterp multi parts _ => walkInterpParts (fuel - 1) env scope line col name parts
 
 -- | 内部：单个绑定引入的 binder（`kind` 标签 + 值作为单行值 / 语法类型来源）。
 bindBinders : WalkEnv -> String -> Binding -> List LocalBind
-bindBinders env kind b = patBinders env kind b.bindPat (Just (bindingValueView b))
+bindBinders env kind b =
+  let
+    mty =
+      case b.bindSig of
+        Just sig => Just sig.sigType
+        Nothing => Nothing
+  in patBinders env kind b.bindPat (Just b.bindValue) mty
 
 -- | 内部：绑定块里全部 binder（顺序拼接；调用方在整块可见处把它追加进 scope）。
 bindersOfBinds : WalkEnv -> String -> List Binding -> List LocalBind

@@ -2169,7 +2169,7 @@ checkEFuelNoRowPlain fuel globals ctx ec expr expected =
 -- 不引入 `TLet`（`let` 是纯记法，不是类型论构造）；`rig` 由绑定值类型经 `binderRig` 决定，
 -- 与函数参数自动一致。后续绑定可见前面（顺序 let），不互递归；构造子模式 let 等价 case。
 -- 统一绑定块：`let` 与 `where` 走同一套顺序作用域；`where` 多一条记法约束
--- （签名行必填，`checkBindingSigs`）。签名绑定在 parser 里已降级成 `EAnn value ty`，
+-- （签名行必填，`checkBindingSigs`）。`Rast.ofBinding` 把签名合成 `EAnn value ty`，
 -- 值一律按签名以 checking 模式精化（`inferEFuel` 的 EAnn 分支），因此这里不再区分来源。
 export checkLetFuel : Int -> List (String, Term) -> Ctx -> Ec -> List (Pat, Expr) -> Expr -> Bool -> Value -> Span -> Check (Term, Ec)
 checkLetFuel fuel globals ctx ec binds body rec_ expected sp =

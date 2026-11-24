@@ -151,7 +151,8 @@ export isTupleUnitSyntax : String -> Bool
 isTupleUnitSyntax name = name == tupleUnitSyntax
 
 -- 表达式类型标注 `(e : T)`：parser 编码成
--- `EApp (EVar "@vuna@ascribe") [e, T]`，Loader 改写成 `EAnn e T`（与 where 签名同一条精化路径）。
+-- `EApp (EVar "@vuna@ascribe") [e, T]`，名字解析后由 `Rast.ofExpr` 合成 `Rast.EAnn`
+-- （与 where 签名同一条精化路径）。
 -- | 类型标注 `(e : T)` 的保留名（parser 产出、Loader 改写）。
 export ascribeSyntax : String
 ascribeSyntax = "@vuna@ascribe"

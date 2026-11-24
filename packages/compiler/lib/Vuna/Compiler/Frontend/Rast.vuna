@@ -507,7 +507,17 @@ ofExpr scope e =
       EInterp multi (map (ofInterpPart scope) parts) (Ast.nodeRefSpan sp)
     Ast.ELam params body sp =>
       ELam params (ofExpr (append (map firstOf params) scope) body) (Ast.nodeRefSpan sp)
-    Ast.EApp fn args sp => EApp (ofExpr scope fn) (map (ofExpr scope) args) (Ast.nodeRefSpan sp)
+    Ast.EApp fn args sp =>
+      case fn of
+        Ast.EVar name _ =>
+          case args of
+            [v, t] =>
+              if isAscribeSyntax name then
+                EAnn (ofExpr scope v) (ofExpr scope t) (Ast.nodeRefSpan sp)
+              else
+                EApp (ofExpr scope fn) (map (ofExpr scope) args) (Ast.nodeRefSpan sp)
+            _ => EApp (ofExpr scope fn) (map (ofExpr scope) args) (Ast.nodeRefSpan sp)
+        _ => EApp (ofExpr scope fn) (map (ofExpr scope) args) (Ast.nodeRefSpan sp)
     Ast.EPi name implicit qty dom cod sp =>
       EPi name implicit qty (ofExpr scope dom) (ofExpr (name :: scope) cod) (Ast.nodeRefSpan sp)
     Ast.ELet binds body rec_ sp =>
@@ -529,7 +539,6 @@ ofExpr scope e =
     Ast.ESectOp op sp => ESectOp op (Ast.nodeRefSpan sp)
     Ast.ESectL op r sp => ESectL op (ofExpr scope r) (Ast.nodeRefSpan sp)
     Ast.ESectR l op sp => ESectR (ofExpr scope l) op (Ast.nodeRefSpan sp)
-    Ast.EAnn value ty sp => EAnn (ofExpr scope value) (ofExpr scope ty) (Ast.nodeRefSpan sp)
 
 ofBinding : List String -> List String -> Ast.Binding -> (Pat, Expr)
 ofBinding bound scope binding =

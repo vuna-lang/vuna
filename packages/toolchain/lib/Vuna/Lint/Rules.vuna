@@ -523,7 +523,6 @@ startExpr fuel e =
       ERecord rn fields sp => minPair (startFromSpan (nodeRefSpan sp)) (startFields (fuel - 1) fields)
       ERecUpdate base fields sp => minPair (startFromSpan (nodeRefSpan sp)) (minPair (startExpr (fuel - 1) base) (startFields (fuel - 1) fields))
       EDo stmts sp => minPair (startFromSpan (nodeRefSpan sp)) (startStmts (fuel - 1) stmts)
-      EAnn value ty sp => minPair (startFromSpan (nodeRefSpan sp)) (minPair (startExpr (fuel - 1) value) (startExpr (fuel - 1) ty))
       ESectOp op sp => startFromSpan (nodeRefSpan sp)
       ESectL op rhs sp => minPair (startFromSpan (nodeRefSpan sp)) (startExpr (fuel - 1) rhs)
       ESectR lhs op sp => minPair (startFromSpan (nodeRefSpan sp)) (startExpr (fuel - 1) lhs)
@@ -548,6 +547,18 @@ startFields fuel fields =
       [] => (1000000000, 1000000000)
       (f, e) :: rest => minPair (startExpr (fuel - 1) e) (startFields (fuel - 1) rest)
 
+-- | 内部：单条绑定的最小起始位置（值 + 可选签名行；签名行自己的位置在签名节点上）。
+bindingStart : Int -> Binding -> (Int, Int)
+bindingStart fuel b =
+  let
+    valueStart = startExpr (fuel - 1) b.bindValue
+    sigStart =
+      case b.bindSig of
+        Just sig =>
+          minPair (startFromSpan (nodeRefSpan sig.sigRef)) (startExpr (fuel - 1) sig.sigType)
+        Nothing => (1000000000, 1000000000)
+  in minPair valueStart sigStart
+
 -- | 内部：let 绑定右值的最小起始位置。
 startBinds : Int -> List Binding -> (Int, Int)
 startBinds fuel binds =
@@ -556,7 +567,7 @@ startBinds fuel binds =
   else
     case binds of
       [] => (1000000000, 1000000000)
-      b :: rest => minPair (startExpr (fuel - 1) (bindingValueView b)) (startBinds (fuel - 1) rest)
+      b :: rest => minPair (bindingStart (fuel - 1) b) (startBinds (fuel - 1) rest)
 
 -- | 内部：case alt 体的最小起始位置。
 startAlts : Int -> List Alt -> (Int, Int)
@@ -969,7 +980,6 @@ mentionsExpr fuel name e =
       ERecord rname fields _ => mentionsFields (fuel - 1) name fields
       ERecUpdate base fields _ => mentionsExpr (fuel - 1) name base || mentionsFields (fuel - 1) name fields
       EDo stmts _ => mentionsStmts (fuel - 1) name stmts
-      EAnn value ty _ => mentionsExpr (fuel - 1) name value || mentionsExpr (fuel - 1) name ty
       -- section 的 op 是值引用，操作数继续递归。
       ESectOp op _ => op == name
       ESectL op rhs _ => op == name || mentionsExpr (fuel - 1) name rhs
@@ -1008,6 +1018,13 @@ mentionsFields fuel name fields =
       [] => False
       (f, e) :: rest => mentionsExpr (fuel - 1) name e || mentionsFields (fuel - 1) name rest
 
+-- | 内部：单条绑定的值或签名类型是否引用该名字。
+bindingMentions : Int -> String -> Binding -> Bool
+bindingMentions fuel name b =
+  mentionsExpr (fuel - 1) name b.bindValue || case b.bindSig of
+      Just sig => mentionsExpr (fuel - 1) name sig.sigType
+      Nothing => False
+
 -- | 内部：let 绑定右值是否引用该名字。
 mentionsBinds : Int -> String -> List Binding -> Bool
 mentionsBinds fuel name binds =
@@ -1016,7 +1033,7 @@ mentionsBinds fuel name binds =
   else
     case binds of
       [] => False
-      b :: rest => mentionsExpr (fuel - 1) name (bindingValueView b) || mentionsBinds (fuel - 1) name rest
+      b :: rest => bindingMentions (fuel - 1) name b || mentionsBinds (fuel - 1) name rest
 
 -- | 内部：任一 case alt 体是否引用该名字。
 mentionsAlts : Int -> String -> List Alt -> Bool
@@ -1532,7 +1549,11 @@ liftFindings src lane (expr@(ECase scrut alts sp)) =
 liftFindings src lane (ELet binds body recFlag sp) =
   if not recFlag then
     case binds of
-      [b] => liftLet src lane (nodeRefSpan sp) b.bindPat (bindingValueView b) body
+      -- 带签名行的绑定保持原形（签名行不是可提升的右值）。
+      [b] =>
+        case b.bindSig of
+          Just _ => []
+          Nothing => liftLet src lane (nodeRefSpan sp) b.bindPat b.bindValue body
       _ => []
   else
     []
@@ -1654,7 +1675,7 @@ caseToClauses src headLine name pats (ECase scrut alts sp) singleClause =
 caseToClauses src headLine name pats _ singleClause = []
 
 -- ---------------------------------------------------------------
--- AST 遍历（覆盖全部 Expr 构造子，含 ELocalFun / EAnn）
+-- AST 遍历（覆盖全部 Expr 构造子，含 ELocalFun）
 --
 -- 相互递归组统一把 fuel 放在第 0 形参并 `if fuel <= 0` 守卫：这是编译器
 -- `tryFuelThread` 判据能接受的形态（每个环至少一条 `fuel - k` 严格下降边）。
@@ -1745,7 +1766,6 @@ walkExprGo allow fuel src e =
       ERecord rname fields _ => walkFields allow (fuel - 1) src fields
       ERecUpdate base fields _ => append (walkExprGo allow (fuel - 1) src base) (walkFields allow (fuel - 1) src fields)
       EDo stmts _ => walkStmts allow (fuel - 1) src stmts
-      EAnn value ty _ => append (walkExprGo allow (fuel - 1) src value) (walkExprGo allow (fuel - 1) src ty)
       -- section（keep 模式下保留原形）：结构递归，不静默丢子树。
       ESectOp op _ => []
       ESectL op rhs _ => walkExprGo allow (fuel - 1) src rhs
@@ -1815,6 +1835,17 @@ walkFields allow fuel src fields =
       [] => []
       (f, e) :: rest => append (walkExprGo allow (fuel - 1) src e) (walkFields allow (fuel - 1) src rest)
 
+-- | 内部：单条绑定的模式 + 值 + 可选签名类型。
+walkBinding : Bool -> Int -> LintSrc -> Binding -> List Finding
+walkBinding allow fuel src b =
+  append (walkPairPat allow (fuel - 1) src b.bindPat) (
+      append (walkExprGo allow (fuel - 1) src b.bindValue) (
+          case b.bindSig of
+            Just sig => walkExprGo allow (fuel - 1) src sig.sigType
+            Nothing => []
+        )
+    )
+
 -- | 内部：遍历 let 绑定右值与绑定模式。
 walkBinds : Bool -> Int -> LintSrc -> List Binding -> List Finding
 walkBinds allow fuel src binds =
@@ -1823,7 +1854,7 @@ walkBinds allow fuel src binds =
   else
     case binds of
       [] => []
-      b :: rest => append (walkPairPat allow (fuel - 1) src b.bindPat) (append (walkExprGo allow (fuel - 1) src (bindingValueView b)) (walkBinds allow (fuel - 1) src rest))
+      b :: rest => append (walkBinding allow (fuel - 1) src b) (walkBinds allow (fuel - 1) src rest)
 
 -- | 内部：逐个 alt 的模式与体按 lane 上下文扫描（最后一个 alt 标记为 isLast）。
 walkAlts : Bool -> Int -> LintSrc -> List Alt -> List Finding
@@ -2318,7 +2349,6 @@ walkTypeSyntax fuel src e =
       ERecord rname fields _ => walkTypeSyntaxFields (fuel - 1) src fields
       ERecUpdate base fields _ => append (walkTypeSyntax (fuel - 1) src base) (walkTypeSyntaxFields (fuel - 1) src fields)
       EDo stmts _ => walkTypeSyntaxStmts (fuel - 1) src stmts
-      EAnn value ty _ => append (walkTypeSyntax (fuel - 1) src value) (walkTypeSyntax (fuel - 1) src ty)
       ESectOp op _ => []
       ESectL op rhs _ => walkTypeSyntax (fuel - 1) src rhs
       ESectR lhs op _ => walkTypeSyntax (fuel - 1) src lhs
@@ -2345,6 +2375,15 @@ walkTypeSyntaxFields fuel src fields =
       [] => []
       (f, e) :: rest => append (walkTypeSyntax (fuel - 1) src e) (walkTypeSyntaxFields (fuel - 1) src rest)
 
+-- | 内部：单条绑定的值 + 可选签名类型（类型位置语法归一）。
+walkTypeSyntaxBinding : Int -> LintSrc -> Binding -> List Finding
+walkTypeSyntaxBinding fuel src b =
+  append (walkTypeSyntax (fuel - 1) src b.bindValue) (
+      case b.bindSig of
+        Just sig => walkTypeSyntax (fuel - 1) src sig.sigType
+        Nothing => []
+    )
+
 -- | 内部：遍历 let 绑定右值的类型位置语法归一。
 walkTypeSyntaxBinds : Int -> LintSrc -> List Binding -> List Finding
 walkTypeSyntaxBinds fuel src binds =
@@ -2353,7 +2392,7 @@ walkTypeSyntaxBinds fuel src binds =
   else
     case binds of
       [] => []
-      b :: rest => append (walkTypeSyntax (fuel - 1) src (bindingValueView b)) (walkTypeSyntaxBinds (fuel - 1) src rest)
+      b :: rest => append (walkTypeSyntaxBinding (fuel - 1) src b) (walkTypeSyntaxBinds (fuel - 1) src rest)
 
 -- | 内部：遍历 case alt 体的类型位置语法归一。
 walkTypeSyntaxAlts : Int -> LintSrc -> List Alt -> List Finding

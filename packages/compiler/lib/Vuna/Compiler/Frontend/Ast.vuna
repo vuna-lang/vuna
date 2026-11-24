@@ -122,12 +122,24 @@ export record Binding(..) where
   bindSig : Maybe BindingSig
   bindRef : NodeRef
 
--- | 绑定在「表达式视图」下的值：带签名行时是 `EAnn value ty sigRef`。
--- 仍按表达式遍历的消费者（Lint / Index / Lsp）用它沿用同一条路径；Fmt 分开渲染签名行。
+-- | 绑定的值 + 可选签名类型。工具侧把值按表达式、签名按类型分别遍历：
+-- 签名行不是 `Expr`，不能塞回表达式树。
+export bindingValueAndSig : Binding -> (Expr, Maybe Expr)
+bindingValueAndSig b =
+  case b.bindSig of
+    Just sig => (b.bindValue, Just sig.sigType)
+    Nothing => (b.bindValue, Nothing)
+
+-- | 绑定在「表达式视图」下的值：带签名行时是 parser 同形的 `@vuna@ascribe` 应用。
+-- 供仍按单棵表达式遍历的消费者使用；需要区分值 / 签名的消费者用 `bindingValueAndSig`。
 export bindingValueView : Binding -> Expr
 bindingValueView b =
   case b.bindSig of
-    Just sig => EAnn b.bindValue sig.sigType sig.sigRef
+    Just sig =>
+      EApp
+        (EVar ascribeSyntax (detachedNodeRef (nodeRefSpan sig.sigRef)))
+        [b.bindValue, sig.sigType]
+        (detachedNodeRef (nodeRefSpan sig.sigRef))
     Nothing => b.bindValue
 
 export data Expr(..) : Type where
@@ -163,12 +175,12 @@ export data Expr(..) : Type where
   ESectOp : String -> NodeRef -> Expr
   ESectL : String -> Expr -> NodeRef -> Expr
   ESectR : Expr -> String -> NodeRef -> Expr
-  -- 表达式类型标注：`(e : T)` 的 ascribe 标记在 `Loader.Resolve` 里降级成它（Elab 据此
-  -- 在 checking 模式精化）。绑定项的签名行不走这里，见 `Binding.bindSig`。
-  EAnn : Expr -> Expr -> NodeRef -> Expr
   -- 模板字符串字面量。`multi` = 是否 `"""` 形式（Fmt 用它保留书写形式；单行
   -- 字面量保持单行转义形式）。`Loader.Resolve` 把它降级成 `Base.Trait.Interp.interp`
   -- 调用 + `++` 链；Fmt / Lint / Index / Doc 在 parse 后处理它。
+  --
+  -- `(e : T)` 不在这里：parser 保持 `@vuna@ascribe` 应用，解析后由 `Rast.ofExpr`
+  -- 合成 `Rast.EAnn`；绑定项的签名行走 `Binding.bindSig`。
   EInterp : Bool -> List InterpPart -> NodeRef -> Expr
   -- `Float` 字面量：原始十进制文本（放末尾以保持既有构造子 tag 顺序）。
   EFloat : String -> NodeRef -> Expr
@@ -405,7 +417,6 @@ withExprRef r (EField base f _) = EField base f r
 withExprRef r (ERecord name fields _) = ERecord name fields r
 withExprRef r (ERecUpdate base fields _) = ERecUpdate base fields r
 withExprRef r (EDo stmts _) = EDo stmts r
-withExprRef r (EAnn inner ty _) = EAnn inner ty r
 withExprRef r (EInterp multi parts _) = EInterp multi parts r
 
 -- | 表达式的节点身份 + 区间（与树节点同源）。
@@ -428,7 +439,6 @@ exprRef (EField base f r) = r
 exprRef (ERecord name fields r) = r
 exprRef (ERecUpdate base fields r) = r
 exprRef (EDo stmts r) = r
-exprRef (EAnn inner ty r) = r
 exprRef (EInterp multi parts r) = r
 
 export doStmtSpan : DoStmt -> Span

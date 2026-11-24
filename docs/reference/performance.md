@@ -803,7 +803,7 @@ index / LSP）都按需建树，纯 AST 消费者不受影响。
 
 结构上还有一个阻碍：注释锚点集合是**渲染器的挂载点**，不是纯语法种类。局部函数的
 后续 clause 在树里同样是 `binding` 节点，但渲染器只给首条子句挂注释（其余子句没有
-`attachAt` 调用点，挂上去就会丢注释）；`EAnn` 签名行在树里也是 `binding`。所以
+`attachAt` 调用点，挂上去就会丢注释）；签名行在树里也是 `binding`。所以
 「按种类从树收集锚点」不能替换渲染器的锚点集合——要等 AST 投影：投影出来的值天然知道
 自己对应哪个树节点，渲染器挂哪些值就用哪些 id，不需要再猜。
 
@@ -812,7 +812,7 @@ index / LSP）都按需建树，纯 AST 消费者不受影响。
 `fmt --check examples` 逐字节不变。
 
 接着把附件槽的键从「条目 span 起点偏移」换成**条目节点 id**（`Expr` / `Pat` / 声明与条目
-节点的 `NodeRef`；`EAnn` 用签名行 `binding` 节点，`ModDecl` / `ExportItem` 也补了
+节点的 `NodeRef`；签名行用 `Binding.bindSig.sigRef` 的 `binding` 节点，`ModDecl` / `ExportItem` 也补了
 `NodeRef`）。渲染挂载点直接拿自己的 `NodeRef` 查表，不再依赖「渲染时能重建与锚点完全
 相同的 span」。同机交替 15 轮（`fmt --check .`，1530 文件）：
 
@@ -855,9 +855,10 @@ fmt golden 与全量 `fmt --check` 逐字节不变。
 `check packages/compiler` 0.121 / 0.121、`check packages/base` 0.048 / 0.047（前 / 后）。
 树的结构不贵，贵的是**同一份信息存在两份**。
 
-因此树的收益只能来自**替换**而不是叠加：把 AST 的表层构造子（括号 / 浮点原文 / 模板标记 /
-`name!` / `[]` / `()` / 元组列表折叠 / 中缀与 section / `EAnn` / `ELocalFun`）交给树，
-让 AST 变成纯投影（`architecture-target.md` D18 的第 2、3 步）。
+因此树的收益只能来自**替换**而不是叠加：把 parser 的表层形式（括号 / 反引号 / 中缀链 /
+section / 模板的 `"""` 标记）交给树，让 AST 变成纯投影（`architecture-target.md` D18 的
+第 2、3 步）。`EFloat raw` 是字面量载荷而不是表层文本；`ELocalFun` 是带身份的子句组，
+降级点在 Elab。
 
 ### 6.3 括号表面形状（`Frontend.Surface`）
 

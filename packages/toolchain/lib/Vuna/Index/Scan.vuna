@@ -473,7 +473,6 @@ refsInExprGo sMod e acc =
     ERecord tn fields _ => refsInFields sMod fields acc
     ERecUpdate r fields _ => refsInExprGo sMod r (refsInFields sMod fields acc)
     EDo stmts _ => refsInDoStmts sMod stmts acc
-    EAnn value ty _ => refsInExprGo sMod value (refsInExprGo sMod ty acc)
     -- section 在 keep 模式下保留原形，显式处理：op 本身也是引用，操作数继续递归，
     -- 不能静默丢整棵子树。
     ESectOp op sp =>

@@ -547,7 +547,13 @@ bindUses fuel ctx b =
   if fuel <= 0 then
     []
   else
-    append (patUses (fuel - 1) ctx b.bindPat) (usesInExpr (fuel - 1) ctx (bindingValueView b))
+    append (patUses (fuel - 1) ctx b.bindPat) (
+        append (usesInExpr (fuel - 1) ctx b.bindValue) (
+            case b.bindSig of
+              Just sig => usesInExpr (fuel - 1) ctx sig.sigType
+              Nothing => []
+          )
+      )
 
 -- | 内部：`do` 语句（绑定或表达式）里的使用位置。
 stmtUses : Int -> UseCtx -> DoStmt -> List (Int, Int)
@@ -662,7 +668,6 @@ usesInExpr fuel ctx e =
           labelUses = if useFieldKind ctx then recordLabelUses ctx start fields else []
         in append labelUses (append (usesInExpr (fuel - 1) ctx base) (concatMap (fieldValueUses (fuel - 1) ctx) fields))
       EDo stmts _ => concatMap (stmtUses (fuel - 1) ctx) stmts
-      EAnn value ty _ => append (usesInExpr (fuel - 1) ctx value) (usesInExpr (fuel - 1) ctx ty)
       ESectOp op _ => []
       ESectL op inner _ => usesInExpr (fuel - 1) ctx inner
       ESectR inner op _ => usesInExpr (fuel - 1) ctx inner

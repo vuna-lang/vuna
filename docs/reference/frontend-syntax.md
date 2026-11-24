@@ -90,7 +90,7 @@
 | 内置宏 | `log! "level" msg` / `mark! name` | `Loader.Expand` 展开成隐藏 runtime 原语 | `Loader.Expand`、[logging.md](logging.md)、[observability.md](observability.md) |
 | 元组 | `(a, b, c)` | 右嵌套成 `Pair a (Pair b c)`；类型 / 值 / 模式同一套语法（要求 `Pair` 可见） | `Frontend.Parser`、`Loader.Resolve` |
 | unit | `()` | 类型位置是 `Unit`，值 / 模式位置是 `MkUnit`（要求可见） | `Frontend.Parser`、`Loader.Resolve` |
-| 类型标注 | `(e : T)` | parser 编码成 `@vuna@ascribe`，Loader 降级成 `EAnn`（按 `T` 检查 `e`） | `Frontend.Parser`、`Loader.Resolve`、`Elab.Term.Impl` |
+| 类型标注 | `(e : T)` | parser 编码成 `@vuna@ascribe`，名字解析后由 `Rast.ofExpr` 合成 `EAnn`（按 `T` 检查 `e`） | `Frontend.Parser`、`Frontend.Rast`、`Elab.Term.Impl` |
 | 低优先级应用 / 管道 | `f $ x` / `x \|> f` | 普通运算符：定义在 `Base.Data.Function`，fixity 在 `Base.Internal.Operator` | `Base.Data.Function`、[operators.md](operators.md) |
 | **不支持** | guard、`\case`、range、comprehension | 见 §11 | — |
 
@@ -231,7 +231,7 @@
 | lambda 参数模式 | ✓ | ✓ | ✓ | 参数只能是名字 | 不做（无签名 lambda 无期望类型） |
 | `\case` | ✓ | — | ✓ | 无 | 不做 |
 | tuple / unit 语法 | ✓ | ✓ | ✓ | `(a, b, c)` 右嵌套到 `Pair`；`()` 按位置展开成 `Unit` / `MkUnit` | 已支持（要求 `Pair` / `Unit` / `MkUnit` 可见） |
-| 表达式类型标注 `(e : T)` | ✓ | ✓ | ✓ | 降级成 `EAnn`（与 where 签名同一路径） | 已支持 |
+| 表达式类型标注 `(e : T)` | ✓ | ✓ | ✓ | 解析后合成 `Rast.EAnn`（与 where 签名同一路径） | 已支持 |
 | `case` 多 scrutinee | — | — | — | 无专用语法 | 不做（写 `case (a, b)`） |
 | 多 binder 重复（非线性模式） | — | ✓ | — | 拒绝 | 不做（需要相等约束） |
 | Sigma `(n ** p)` / 依赖对 | — | ✓ | — | 无 `Sigma`；`**` 只是未知运算符 | 阻塞于**类型层 lambda**（见下） |

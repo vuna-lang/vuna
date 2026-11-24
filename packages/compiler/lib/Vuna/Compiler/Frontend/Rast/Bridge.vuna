@@ -40,7 +40,10 @@ toAstExpr (Rast.ESectOp op sp) = Ast.ESectOp op (Ast.detachedNodeRef sp)
 toAstExpr (Rast.ESectL op r sp) = Ast.ESectL op (toAstExpr r) (Ast.detachedNodeRef sp)
 toAstExpr (Rast.ESectR l op sp) = Ast.ESectR (toAstExpr l) op (Ast.detachedNodeRef sp)
 toAstExpr (Rast.EAnn value ty sp) =
-  Ast.EAnn (toAstExpr value) (toAstExpr ty) (Ast.detachedNodeRef sp)
+  Ast.EApp
+    (Ast.EVar Ast.ascribeSyntax (Ast.detachedNodeRef sp))
+    [toAstExpr value, toAstExpr ty]
+    (Ast.detachedNodeRef sp)
 
 toAstInterpPart : Rast.InterpPart -> Ast.InterpPart
 toAstInterpPart (Rast.IPText s) = Ast.IPText s

@@ -1106,7 +1106,7 @@ parseClause st blockCol name ds =
 -- 绑定块（统一作用域模型）：`where` 与 `let` 共用同一套绑定块解析：
 --   * 每个绑定可先写一行签名 `name : Ty`（必须写在同名子句**之前**）；
 --   * 子句可以是 `pat = expr` 或函数子句 `name pats = expr`（降级成 λ）。
--- 有签名的绑定把签名贴到紧随其后的同名子句值上（`EAnn value ty`，span 指向签名行），
+-- 有签名的绑定把签名行存进 `Binding.bindSig`（`BindingSig` 自带签名行的树节点），
 -- Elab 据此在 checking 模式精化该值。两条记法只差一条：`where` 块**要求**每个绑定都有
 -- 签名行（由 Elab 的 `checkBindingSigs` 用一个诊断收口），`let` 的签名是可选的。
 -- ---------------------------------------------------------------
@@ -1198,7 +1198,7 @@ parseBindingValue fuel stStart st nid pat blockCol =
       (checkBindersAt st [pat])
       (\_ => Vuna.Compiler.Base.Common.bind (expectSym st "=") (\st1 => Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st1 blockCol) (\value, st2 => OkC ((Binding pat value Nothing (NodeRef nid (spanOf stStart st2))), st2))))
 
--- 条目 → ELet 绑定：把签名贴到同名定义的值上（`EAnn value ty`），并校验布局约束：
+-- 条目 → ELet 绑定：把签名行存进同名定义的 `Binding.bindSig`，并校验布局约束：
 -- 签名必须先于同名定义、不能重复、不能悬空。
 bindingItemsToBinds : List BindingItem -> Check (List Binding)
 bindingItemsToBinds items = bindingBindsGo items [] [] []
@@ -1240,7 +1240,7 @@ bindingBindsGo (item :: rest) sigs bound acc =
               bindingBindsGo rest sigs (patBoundName binding.bindPat :: bound) (binding :: acc)
 
 -- 把相邻同名函数子句合并成一个 `ELocalFun` 绑定（where/let 多 clause）。
--- 签名保留在合并后的条目上（`EAnn` 只包裹第一条的 `ELocalFun`）；不连续的同名子句
+-- 签名保留在合并后的条目上（`Binding.bindSig` 挂在第一条的 `ELocalFun` 旁）；不连续的同名子句
 -- 不合并，按 `WhereSigMultiClause` 报错。
 localFunMerge : String -> Expr -> List Binding -> Maybe (List Binding)
 localFunMerge name value (binding :: rest) =

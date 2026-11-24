@@ -195,7 +195,7 @@ fixitiesOk index fx = refsOk index "fixity" (map fixityRefOf fx)
 -- ---------------------------------------------------------------
 -- 表达式 / 模式的身份：parseExpr / parsePatternSingle 的区间出口各建一个节点，
 -- 只有这些「区间根」带 id（更内层的构造子是同一区间的多个视图，没有独立节点）。
--- where/let 签名行（`EAnn`）投影的是该签名行的 `binding` 节点，不是 `expr` 节点。
+-- where/let 签名行投影的是 `Binding.bindSig.sigRef` 的 `binding` 节点，不是 `expr` 节点。
 -- ---------------------------------------------------------------
 -- | AST 节点 → 它投影的树节点：(期望 kind 标签, 统计角色, 引用)。
 -- 角色 `expr` 只要求「终点相同 + 区间落在节点内」；`sig`（签名行）与 `clause`（局部函数
@@ -239,14 +239,10 @@ exprSitesAt fuel e =
           ERecord name fields r => concatMap (fieldValueSites (fuel - 1)) fields
           ERecUpdate base fields r => append (exprSitesAt (fuel - 1) base) (concatMap (fieldValueSites (fuel - 1)) fields)
           EDo stmts r => concatMap (stmtSites (fuel - 1)) stmts
-          EAnn inner ty r => append (exprSitesAt (fuel - 1) inner) (exprSitesAt (fuel - 1) ty)
           ESectOp op r => []
           ESectL op inner r => exprSitesAt (fuel - 1) inner
           ESectR inner op r => exprSitesAt (fuel - 1) inner
-    in case e of
-      -- 签名行投影的是签名行的 `binding` 节点，不是 `expr` 节点。
-      EAnn inner ty r => Site "binding" "sig" r :: rest
-      _ => Site "expr" "expr" (exprRef e) :: rest
+    in Site "expr" "expr" (exprRef e) :: rest
 
 interpSites : Int -> InterpPart -> List Site
 interpSites fuel part =
@@ -455,7 +451,6 @@ bodyPatRefs e =
       append (bodyPatRefs base) (concatMap (\fv => bodyPatRefs (secondOf fv)) fields)
     EDo stmts _ => concatMap stmtPatRefs stmts
     ELocalFun clauses _ => concatMap clausePatRefs clauses
-    EAnn v t _ => append (bodyPatRefs v) (bodyPatRefs t)
     EFloat raw _ => []
     EInt n _ => []
     EStr s _ => []

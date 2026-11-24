@@ -277,10 +277,6 @@ reorderNonChain t (EDo stmts sp) =
   Vuna.Compiler.Base.Common.bind
     (Vuna.Compiler.Base.Common.traverse (\v => reorderDoStmt t v) stmts)
     (\ss => OkC (EDo ss sp))
-reorderNonChain t (EAnn inner ty sp) =
-  Vuna.Compiler.Base.Common.bind
-    (reorderExpr t inner)
-    (\i2 => Vuna.Compiler.Base.Common.bind (reorderExpr t ty) (\t2 => OkC (EAnn i2 t2 sp)))
 -- 模板字面量是 parser 的**保留语法**（fmt/lint/index/doc 要看原形），重排只递归洞内
 -- 表达式；降级为 `interp` 调用发生在 `Loader.Resolve`（rename 之后）。
 reorderNonChain t (EInterp multi parts sp) =

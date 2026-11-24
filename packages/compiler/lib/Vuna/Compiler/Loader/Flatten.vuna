@@ -1308,7 +1308,6 @@ exprRefNamesGo (EDo stmts _) acc = doStmtRefNamesListGo stmts acc
 exprRefNamesGo (ESectOp op _) acc = (::) op acc
 exprRefNamesGo (ESectL op rhs _) acc = (::) op (exprRefNamesGo rhs acc)
 exprRefNamesGo (ESectR lhs op _) acc = (::) op (exprRefNamesGo lhs acc)
-exprRefNamesGo (EAnn value ty _) acc = exprRefNamesGo value (exprRefNamesGo ty acc)
 exprRefNamesGo (EInterp multi parts _) acc = interpPartRefNamesListGo parts acc
 
 exprRefNamesListGo : List Expr -> List String -> List String

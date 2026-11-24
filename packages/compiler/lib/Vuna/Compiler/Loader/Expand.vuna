@@ -144,7 +144,6 @@ expandExpr fuel scope e =
       ESectOp op _ => OkC e
       ESectL op inner sp => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) scope inner) (\inner2 => OkC (ESectL op inner2 sp))
       ESectR inner op sp => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) scope inner) (\inner2 => OkC (ESectR inner2 op sp))
-      EAnn value ty sp => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) scope value) (\value2 => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) scope ty) (\ty2 => OkC (EAnn value2 ty2 sp)))
       EInterp multi parts sp => Vuna.Compiler.Base.Common.bind (expandInterpParts (fuel - 1) scope parts) (\parts2 => OkC (EInterp multi parts2 sp))
 
 -- | 表达式列表项（`ELet` 绑定 / `ECase` 分支）的宏展开。

@@ -963,7 +963,9 @@ isParserSyntaxName name =
     == handleNoRetSyntax
     || name
     == rowAtSyntax
-    || name == appAtSyntax || startsWith "@vuna@list@" name || startsWith "@vuna@handle@" name
+    || name
+    == appAtSyntax
+    || isAscribeSyntax name || startsWith "@vuna@list@" name || startsWith "@vuna@handle@" name
 
 -- 宏展开产生的隐藏原语引用（`!name`）：剥前缀后必须是内建表里的名字（`visible`
 -- 与否都行）；否则是展开器自己拼错，报 internal error 而不是静默透传。
@@ -976,15 +978,14 @@ hiddenRef name sp =
     Just _ => OkC (EVar stripped sp)
     Nothing => icInternal "hidden reference to unknown intrinsic ${stripped}"
 
--- `(e : T)` / `(a, b)` / `()` 的保留名归一：在名字解析前改写成普通表达式，
--- 后续仍走同一条解析与精化路径（ascription 复用 where 签名的 `EAnn`）。
+-- `(a, b)` / `()` 的保留名归一：在名字解析前改写成普通表达式，后续仍走同一条
+-- 解析与精化路径。`(e : T)` 的 `@vuna@ascribe` 不在这里改写：它保持 parser 的应用
+-- 形状，由 `Rast.ofExpr` 在名字解析之后合成 `Rast.EAnn`。
 normalizeSyntaxNames : Expr -> Maybe Expr
 normalizeSyntaxNames (EVar name sp) =
   if isTupleUnitSyntax name then Just (EVar "MkUnit" sp) else Nothing
 normalizeSyntaxNames (EApp (EVar name sp) ([a, b]) asp) =
-  if isAscribeSyntax name then
-    Just (EAnn a b asp)
-  else if isTuplePairSyntax name then Just (EApp (EVar "Pair" sp) [a, b] asp) else Nothing
+  if isTuplePairSyntax name then Just (EApp (EVar "Pair" sp) [a, b] asp) else Nothing
 normalizeSyntaxNames _ = Nothing
 
 resolveExpr : Int -> List Module -> String -> String -> Namespaces -> List Import -> List String -> Expr -> Check Expr
@@ -1037,8 +1038,6 @@ resolveExprRaw fuel modules label prefix ns imports scope expr =
       ERecord name fields sp => Vuna.Compiler.Base.Common.bind (onErrDiag (withFallbackSpan (nodeRefSpan sp)) (resolveCtor modules label prefix ns imports name)) (\name2 => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (\dtv => resolveFieldValue (fuel - 1) modules label prefix ns imports scope dtv) fields) (\fs => OkC (ERecord name2 fs sp)))
       ERecUpdate base fields sp => Vuna.Compiler.Base.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope base) (\b => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (\dtv => resolveFieldValue (fuel - 1) modules label prefix ns imports scope dtv) fields) (\fs => OkC (ERecUpdate b fs sp)))
       EDo stmts sp => resolveDo (fuel - 1) modules label prefix ns imports scope stmts (nodeRefSpan sp)
-      -- where 绑定签名（`g : Int -> Int`）降级成 `EAnn value ty`；值与类型都做名字解析。
-      EAnn value ty sp => Vuna.Compiler.Base.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope value) (\v2 => Vuna.Compiler.Base.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope ty) (\t2 => OkC (EAnn v2 t2 sp)))
 
 -- 模板片段的名字解析（洞内表达式按普通作用域解析；文本块原样）。
 resolveInterpParts : Int -> List Module -> String -> String -> Namespaces -> List Import -> List String -> List InterpPart -> Check (List InterpPart)

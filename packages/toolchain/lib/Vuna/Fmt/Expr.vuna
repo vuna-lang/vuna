@@ -28,7 +28,6 @@ multilineExpr (EIf c t el _) = multilineExpr t || multilineExpr el
 multilineExpr (ELam ps body _) = multilineExpr body
 multilineExpr (EApp fn args _) = multilineExpr fn || anyMultiline args
 multilineExpr (EField base f _) = multilineExpr base
-multilineExpr (EAnn value ty _) = multilineExpr value
 multilineExpr (ERecord name fields _) = anyMultilineFields fields
 multilineExpr (ERecUpdate base fields _) = multilineExpr base || anyMultilineFields fields
 multilineExpr (ESectL op inner _) = multilineExpr inner
@@ -640,9 +639,6 @@ inlineBareGo fuel env at minPrec e =
       EDo stmts _ => Nothing
       -- 局部函数组只作为 let/where 绑定值出现，由 `renderLetBindingGo` 展开成多子句。
       ELocalFun clauses _ => Nothing
-      -- 非 where 位置（例如 `let` 绑定值）的 `EAnn` 透明渲染内部表达式：
-      -- 表达式位置没有 `: Ty` 语法，输出标注会让 fmt 产物无法重新 parse。
-      EAnn value ty _ => inlinePrecGo (fuel - 1) env at minPrec value
       ESectOp op _ => Just "(${op})"
       ESectL op inner _ =>
         case inlinePrecGo (fuel - 1) env at 0 inner of
@@ -934,8 +930,6 @@ exprDocBare fuel env at e =
       EDo stmts _ => appendDoc (text "do") (nest 2 (appendDoc hard (stmtsDoc (fuel - 1) env at stmts)))
       -- 局部函数组只作为 let / where 绑定值出现，由 `bindingBodyDoc` 展开成多子句。
       ELocalFun clauses _ => empty
-      -- 表达式位置的 `EAnn` 没有 `: Ty` 语法，透明渲染内部表达式。
-      EAnn value ty _ => exprDoc (fuel - 1) env at value
       ESectOp op _ => text "(${op})"
       ESectL op inner _ => group (appendDoc (text "(${op} ") (appendDoc (exprDoc (fuel - 1) env at inner) (text ")")))
       ESectR inner op _ => group (appendDoc (text "(") (appendDoc (exprDoc (fuel - 1) env at inner) (text " ${op})")))
