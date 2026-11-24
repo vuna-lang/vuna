@@ -3,8 +3,8 @@
 --   * 包装节点（定义体 / 中缀右操作数 / 括号内层，`(a)` / `((a))`）；
 --   * 原子位置括号（应用实参 / 中缀链左端，`f (a)` / `(f a) b` / `(a + b) * c`）；
 --   * 不该算括号的邻近 token（元组 / ascribe / section / 列表）；
---   * section 写法按区间起点登记（`surfaceSections`），不依赖 AST 构造子；
---   * 模板洞（独立 token 子流，条目由洞的子解析交回主表）。
+--   * section 写法按区间起点登记（`surfaceSections`），右 section 也有自己的原子节点；
+--   * 模板洞（独立 token 子流，事实挂在模板节点上，`surfaceOfCst` 从树派生）。
 import Prelude
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Ast
@@ -186,7 +186,83 @@ parseTree src =
     full = "x = " ++ src ++ "\n"
   in case parseSourceDetailed "<paren>" full of
     ErrC _ => Nothing
-    OkC p => Just (nestToTree (lexTokensOf full p.parsedRawToks p.parsedComments) p.parsedEvents)
+    OkC p => Just p.parsedCst
+
+-- | 树 + 从树派生的表面缓存（`surfaceOfCst` 不需要额外输入）。
+parseTreeSurface : String -> Maybe (Surface, CstNode)
+parseTreeSurface src =
+  case parseTree src of
+    Nothing => Nothing
+    Just tree => Just (surfaceOfCst tree, tree)
+
+-- | 先序找第一个满足谓词的节点。
+findNode : (CstNode -> Bool) -> CstNode -> Maybe CstNode
+findNode pred n = if pred n then Just n else findInKids pred (nodeChildren n)
+
+findInKids : (CstNode -> Bool) -> List CstNode -> Maybe CstNode
+findInKids pred [] = Nothing
+findInKids pred (k :: rest) =
+  case findNode pred k of
+    Just n => Just n
+    Nothing => findInKids pred rest
+
+-- | 右 section 的写法挂在它自己的表达式节点上：节点 span 从运算符起，用这个 span 能查回
+-- 同一条形状（不需要旁路的额外输入）。
+rightSectionNodeOk : Bool
+rightSectionNodeOk =
+  case parseTreeSurface "(1 +)" of
+    Just (surface, tree) =>
+      let
+        isRight : CstNode -> Bool
+        isRight n =
+          let
+            surf = nodeSurface n
+          in case surf.cstSection of
+            Just (SectionRight _) => True
+            _ => False
+      in case findNode isRight tree of
+        Nothing => False
+        Just n =>
+          case sectionShapeOfSpan surface (nodeSpan n) of
+            Just (SectionRight "+") => True
+            _ => False
+    Nothing => False
+
+-- | 模板洞的事实挂在模板节点上：模板节点的 `cstHoleFacts` 非空。
+holeOnTemplateNodeOk : Bool
+holeOnTemplateNodeOk =
+  case parseTreeSurface "\"\"\"\${(a + b) * c}\"\"\"" of
+    Just (_, tree) => hasHoleFacts tree
+    Nothing => False
+
+hasHoleFacts : CstNode -> Bool
+hasHoleFacts n =
+  case n of
+    CstLeaf _ => False
+    CstBranch _ _ _ surface kids => holeParensPresent surface.cstHoleFacts || anyHoleFacts kids
+
+anyHoleFacts : List CstNode -> Bool
+anyHoleFacts [] = False
+anyHoleFacts (k :: rest) = hasHoleFacts k || anyHoleFacts rest
+
+holeParensPresent : CstHoleSurface -> Bool
+holeParensPresent bits =
+  case bits.chsParens of
+    _ :: _ => True
+    [] => False
+
+-- | 只从树派生的表面缓存也知道洞内括号（不需要洞的子解析再交一遍）。
+holeFromTreeOk : Bool
+holeFromTreeOk =
+  case (parseBody "\"\"\"\${(a + b) * c}\"\"\"", parseTreeSurface "\"\"\"\${(a + b) * c}\"\"\"") of
+    (Just (_, body), Just (surface, _)) =>
+      case body of
+        EInterp ((IPHole hole) :: _) _ =>
+          case hole of
+            EApp (EVar "*" _) ([l, r]) _ => depthOf surface l == 1 && depthOf surface r == 0
+            _ => False
+        _ => False
+    _ => False
 
 countExprNodes : CstNode -> Int
 countExprNodes node =
@@ -212,7 +288,7 @@ listOk =
         _ => False
     Nothing => False
 
--- | `"""${(a + b) * c}"""`：洞内表达式的括号由洞的子解析交回主表。
+-- | `"""${(a + b) * c}"""`：洞内表达式的括号由洞的子解析派生，事实挂在模板节点上。
 holeOk : Bool
 holeOk =
   case parseBody "\"\"\"\${(a + b) * c}\"\"\"" of
@@ -242,4 +318,7 @@ main =
     + bit holeOk 512
     + bit infixShapeOk 1024
     + bit backtickOk 2048
-    + bit sectionShapeOk 4096 + bit sectionNodeOk 8192 + bit templateNodeOk 16384
+    + bit sectionShapeOk 4096
+    + bit sectionNodeOk 8192
+    + bit templateNodeOk 16384
+    + bit rightSectionNodeOk 32768 + bit holeOnTemplateNodeOk 65536 + bit holeFromTreeOk 131072

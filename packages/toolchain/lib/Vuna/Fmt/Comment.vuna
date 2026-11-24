@@ -315,10 +315,10 @@ isAnchorKind CstBindingKind = True
 isAnchorKind CstAltKind = True
 isAnchorKind _ = False
 
--- | 整份文件的注释锚点（源码顺序的节点身份）：parser 的事件流里按种类取出区间，不建
--- 整棵树。锚点集合就是渲染器的挂载点；渲染时用同一个 id 查槽。
-export anchorRefs : List CstToken -> List NodeEvent -> List NodeRef
-anchorRefs toks events = map toNodeRef (Cst.anchorRefsOf isAnchorKind toks events)
+-- | 整份文件的注释锚点（节点身份）：树上按种类取出条目节点。锚点集合就是渲染器的
+-- 挂载点；渲染时用同一个 id 查槽。
+export anchorRefs : CstNode -> List NodeRef
+anchorRefs tree = map toNodeRef (Cst.anchorRefsOfTree isAnchorKind tree)
 
 -- | 内部：`(id, span)` → `NodeRef`。
 toNodeRef : (Int, Span) -> NodeRef

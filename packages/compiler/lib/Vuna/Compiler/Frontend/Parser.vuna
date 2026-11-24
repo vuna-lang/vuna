@@ -36,11 +36,13 @@ export record ParsedSource(..) where
   parsedComments : List Comment
   -- | 词法 token 流（token 形态与字节偏移）；按 token 边界切原文的消费者用它。
   parsedRawToks : List PTok
-  -- | 建树事件（按发生顺序）：配合 `parsedRawToks` → `Cst.lexTokensOf` 的 trivia 流，
-  -- 用 `Cst.nestToTree` 得到无损节点树（`fmt` / LSP / 重构的注释归属与 span 来源）。
-  parsedEvents : List NodeEvent
-  -- | 表面形状（括号层数；含模板洞内交回的条目）：AST 不携带「怎么写」的信息，
-  -- 需要它的消费者（Fmt 打印括号、中缀重排判定括号边界）按节点 id 查。
+  -- | parser 发射的无损节点树：kind / id / span / 表面形状 / 有序 children。
+  --
+  -- 表面形状挂在分支节点上，`parsedSurface` 是从这棵树派生的缓存（`surfaceOfCst`）。
+  -- 需要注释归属、原文切片或节点身份的消费者直接用树，不必再自己组装一遍。
+  parsedCst : CstNode
+  -- | 表面形状缓存（见 [Vuna.Compiler.Frontend.Cst.surfaceOfCst]）：AST 不携带「怎么写」的信息，需要它的
+  -- 消费者（Fmt 打印括号、中缀重排判定括号边界）按节点 id / 区间查。
   parsedSurface : Surface
 
 -- | 工具路径的唯一入口：**一次**词法同时给出注释表与 token 流，再做语法分析。
@@ -63,18 +65,13 @@ parseSourceDetailed file source =
               nestToTreeWithSurface
                 (lexTokensOf source toks comments)
                 events
-                (append (parenEntriesOf toks events) fin.holeParens)
-                (append fin.backtickShapes fin.holeBackticks)
-                (append fin.sectionShapes fin.holeSections)
-                (append fin.interpMultis fin.holeInterpMultis)
-            surface =
-              surfaceOfCstWith
-                (append (parenEntriesOf toks events) fin.holeParens)
-                (append fin.backtickShapes fin.holeBackticks)
-                (append fin.sectionShapes fin.holeSections)
-                (append fin.interpMultis fin.holeInterpMultis)
-                cst
-          in OkC (ParsedSource (firstOf (firstOf p)) comments toks events surface)
+                (parenEntriesOf toks events)
+                fin.backtickShapes
+                fin.sectionShapes
+                fin.interpMultis
+                fin.templateHoles
+            surface = surfaceOfCst cst
+          in OkC (ParsedSource (firstOf (firstOf p)) comments toks cst surface)
 
 -- | 只要 AST 与注释表的入口（复用 `parseSourceDetailed` 同一次词法）。
 export parseSourceWithComments : String -> String -> Check (SourceFile, List Comment)
@@ -1701,9 +1698,14 @@ parseInfix fuel nid st blockCol lhs =
       PTok (TSym op) p =>
         if canContinue st blockCol && not (isSyntaxSym op) then
           if closeParenNext st then
-            let
-              sp = spanOf st (advance st)
-            in OkC (sectionRightExpr op lhs sp, addSectionShape (spanStartOffset sp) (SectionRight op) (advance st))
+            withExtent CstExprKind st (
+                \st0 =>
+                  let
+                    -- 右 section 的语法节点只覆盖运算符：操作数 `lhs` 已有自己的子树，`)` 由外层
+                    -- `(` 分支消费。节点 span 从这里开始，与 section 写法的登记键（运算符起点）一致。
+                    sp = spanOf st0 (advance st0)
+                  in OkC (sectionRightExpr op lhs (NodeRef st0.openNodeId sp), addSectionShape (spanStartOffset sp) (SectionRight op) (advance st0))
+              )
           else
             Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) (advance st) blockCol) (\rhs, st2 => parseInfix (fuel - 1) nid st2 blockCol (EApp (EVar op (detachedNodeRef (tokenSpan st))) [lhs, rhs] (detachedNodeRef (spanOf st st2))))
         else
@@ -1883,24 +1885,24 @@ parseTemplateAtom fuel st multi parts endP =
             ps = firstOf parsed
             bits = secondOf parsed
             advanced = advance st
-            st2 = addInterpMulti (posOffset (peekPos st)) multi (addHoleInterpMultis bits.sbInterps (addHoleSections bits.sbSections (addHoleBackticks bits.sbBackticks (addHoleParens bits.sbParens (withLastPos endP advanced)))))
-          in OkC (EInterp ps (detachedNodeRef (spanOf st st2)), st2)
+            st2 = addInterpMulti (posOffset (peekPos st)) multi (addTemplateHoles st.openNodeId bits (withLastPos endP advanced))
+          in OkC (EInterp ps (NodeRef st.openNodeId (spanOf st st2)), st2)
       )
 
--- 洞内解析交回它自己的表面形状条目（洞内 token 不在主 token 流里，主文件的派生看不到）。
-parseTemplateParts : Int -> String -> ParseMode -> Span -> List TmplPart -> Check (List InterpPart, SurfaceBits)
+-- 洞内解析交回它自己的表面事实（洞内 token 不在主 token 流里，主文件的派生看不到）。
+parseTemplateParts : Int -> String -> ParseMode -> Span -> List TmplPart -> Check (List InterpPart, CstHoleSurface)
 parseTemplateParts fuel file mode fallback parts =
   if fuel <= 0 then
     icFuel "parser"
   else
     case parts of
-      [] => OkC ([], emptySurfaceBits)
+      [] => OkC ([], emptyCstHoleSurface)
       (TPText s) :: rest => Vuna.Compiler.Base.Common.bind (parseTemplateParts (fuel - 1) file mode fallback rest) (\tail => OkC ((::) (IPText s) (firstOf tail), secondOf tail))
-      (TPHole toks) :: rest => Vuna.Compiler.Base.Common.bind (parseTemplateHole (toksFuel toks) file mode fallback toks) (\hole => Vuna.Compiler.Base.Common.bind (parseTemplateParts (fuel - 1) file mode fallback rest) (\tail => OkC ((::) (IPHole (firstOf hole)) (firstOf tail), appendSurfaceBits (secondOf hole) (secondOf tail))))
+      (TPHole toks) :: rest => Vuna.Compiler.Base.Common.bind (parseTemplateHole (toksFuel toks) file mode fallback toks) (\hole => Vuna.Compiler.Base.Common.bind (parseTemplateParts (fuel - 1) file mode fallback rest) (\tail => OkC ((::) (IPHole (firstOf hole)) (firstOf tail), appendCstHoleSurface (secondOf hole) (secondOf tail))))
 
 -- 一个插值洞：空 token → `TemplateHoleEmpty`（指向字面量起点的兜底 span）；否则必须
 -- 恰好解析成一个表达式。洞内错误自带精确 span，兜底只为「无位置」的诊断补洞位置。
-parseTemplateHole : Int -> String -> ParseMode -> Span -> List PTok -> Check (Expr, SurfaceBits)
+parseTemplateHole : Int -> String -> ParseMode -> Span -> List PTok -> Check (Expr, CstHoleSurface)
 parseTemplateHole fuel file mode fallback toks =
   if fuel <= 0 then
     icFuel "parser"
@@ -1913,7 +1915,15 @@ parseTemplateHole fuel file mode fallback toks =
           subState = mkStateAt file toks pos (length toks) mode
         in case parseExpr (fuel - 1) subState 0 of
           ErrC e => ErrC (withFallbackSpan (holeSpan file pos) e)
-          OkC (e, st2) => if isEof st2 then OkC (e, SurfaceBits (append st2.holeParens (parenEntriesOf toks (eventsOf subState st2))) (append st2.holeBackticks st2.backtickShapes) (append st2.holeSections st2.sectionShapes) (append st2.holeInterpMultis st2.interpMultis)) else ErrC (withLabel (Label (Just (holeSpan file pos)) "" LabelPrimary Nothing) (psMsg ExpectedEndOfExpr []))
+          OkC (e, st2) => if isEof st2 then OkC (e, subStreamFacts toks subState st2) else ErrC (withLabel (Label (Just (holeSpan file pos)) "" LabelPrimary Nothing) (psMsg ExpectedEndOfExpr []))
+
+-- 一次子解析（模板洞）交回主文件的全部洞内事实：本子流 token 派生的括号 + 它登记的反引号 /
+-- section / 模板标记 + 子流里嵌套模板节点携带的洞内事实（子流不建树，所以逐层摊平）。
+subStreamFacts : List PTok -> PState -> PState -> CstHoleSurface
+subStreamFacts toks start fin =
+  appendCstHoleSurface
+    (CstHoleSurface (parenEntriesOf toks (eventsOf start fin)) fin.backtickShapes fin.sectionShapes fin.interpMultis)
+    (concatCstHoleSurface (map secondOf fin.templateHoles))
 
 -- 插值洞的位置：洞内 token 的首位置（文件在 lexer 侧已知）。
 holeSpan : String -> Pos -> Span
@@ -1965,7 +1975,8 @@ foldPairExprs sp ([e]) = e
 foldPairExprs sp (a :: rest) = EApp (EVar tuplePairSyntax sp) [a, foldPairExprs sp rest] sp
 
 -- section 的 op 值 / 左 section 形态：`(op)` 与 `(op e)`。
--- 进入时已在 `(`，op 已由 sectionOpAt 确认（TSym 且非保留名）。
+-- 进入时已在 `(`，op 已由 sectionOpAt 确认（TSym 且非保留名）。表达式根指向自己的
+-- section 节点（`withExtent` 打开的区间），表面写法记在节点上。
 parseSectionAtom : Int -> PState -> Int -> String -> Check (Expr, PState)
 parseSectionAtom fuel st blockCol op =
   if fuel <= 0 then
@@ -1978,7 +1989,7 @@ parseSectionAtom fuel st blockCol op =
                 if atSym st2 ")" then
                   let
                     sp = spanOf st (advance st2)
-                  in OkC (EVar op (detachedNodeRef sp), addSectionShape (spanStartOffset sp) (SectionOp op) (advance st2))
+                  in OkC (EVar op (NodeRef st.openNodeId sp), addSectionShape (spanStartOffset sp) (SectionOp op) (advance st2))
                 else
                   Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st2 blockCol) (
                       \rhs, st3 =>
@@ -1986,7 +1997,7 @@ parseSectionAtom fuel st blockCol op =
                             \st4 =>
                               let
                                 sp = spanOf st st4
-                              in OkC (sectionLeftExpr op rhs sp, addSectionShape (spanStartOffset sp) (SectionLeft op) st4)
+                              in OkC (sectionLeftExpr op rhs (NodeRef st.openNodeId sp), addSectionShape (spanStartOffset sp) (SectionLeft op) st4)
                           )
                     )
             )
@@ -1994,19 +2005,19 @@ parseSectionAtom fuel st blockCol op =
 
 -- section 的 lambda 降级：binder 名源码写不出（`#section`），Loader.Fixity 会稍后
 -- 按表面形状折叠立即应用，Elab 只会在 section 当值时看到这个 λ。
-sectionLeftExpr : String -> Expr -> Span -> Expr
-sectionLeftExpr op operand sp =
+sectionLeftExpr : String -> Expr -> NodeRef -> Expr
+sectionLeftExpr op operand r =
   ELam
-    [(sectionBinderName, sp)]
-    (EApp (EVar op (detachedNodeRef sp)) [EVar sectionBinderName (detachedNodeRef sp), operand] (detachedNodeRef sp))
-    (detachedNodeRef sp)
+    [(sectionBinderName, nodeRefSpan r)]
+    (EApp (EVar op (detachedNodeRef (nodeRefSpan r))) [EVar sectionBinderName (detachedNodeRef (nodeRefSpan r)), operand] (detachedNodeRef (nodeRefSpan r)))
+    r
 
-sectionRightExpr : String -> Expr -> Span -> Expr
-sectionRightExpr op operand sp =
+sectionRightExpr : String -> Expr -> NodeRef -> Expr
+sectionRightExpr op operand r =
   ELam
-    [(sectionBinderName, sp)]
-    (EApp (EVar op (detachedNodeRef sp)) [operand, EVar sectionBinderName (detachedNodeRef sp)] (detachedNodeRef sp))
-    (detachedNodeRef sp)
+    [(sectionBinderName, nodeRefSpan r)]
+    (EApp (EVar op (detachedNodeRef (nodeRefSpan r))) [operand, EVar sectionBinderName (detachedNodeRef (nodeRefSpan r))] (detachedNodeRef (nodeRefSpan r)))
+    r
 
 -- Pi binder：`(x : A) -> B`、`{x : A} -> B`，以及带 quantity 的 `(0 x : A)` / `(1 x : A)`。
 -- 多参数 trait 探针的 `{a b : Type} -> ...` 支持同一 binder 组写多个名字（展开成嵌套 EPi）。
@@ -2797,6 +2808,6 @@ parseSourceRecoveringTokens file mode toks =
         let
           fin = secondOf (firstOf p)
           events = eventsOf st0 fin
-          surface = surfaceOf toks events fin.holeParens (append fin.backtickShapes fin.holeBackticks) (append fin.sectionShapes fin.holeSections) (append fin.interpMultis fin.holeInterpMultis)
+          surface = surfaceOf toks events fin.backtickShapes fin.sectionShapes fin.interpMultis fin.templateHoles
         in OkC ((firstOf (firstOf p), surface), secondOf p)
     )

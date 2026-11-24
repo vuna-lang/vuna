@@ -132,14 +132,14 @@ parsedTree : String -> Maybe CstNode
 parsedTree src =
   case parseSourceDetailed "<infra-tree>" src of
     ErrC _ => Nothing
-    OkC p => Just (nestToTree (lexTokensOf src p.parsedRawToks p.parsedComments) p.parsedEvents)
+    OkC p => Just p.parsedCst
 
 -- | 建树后逐字节还原源码。
 treeOk : String -> Bool
 treeOk src =
   case parseSourceDetailed "<infra-tree>" src of
     ErrC _ => False
-    OkC p => treeRoundtripOk p.parsedEvents src
+    OkC p => renderCstTree p.parsedCst == src
 
 -- | 节点树结构：根是文件，模块头 + 每条顶层声明各成一个节点（样例 6 条声明）。
 treeShapeSample : Bool

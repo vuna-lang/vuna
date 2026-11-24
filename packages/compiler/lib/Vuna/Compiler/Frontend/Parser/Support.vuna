@@ -43,22 +43,18 @@ export record PState(..) where
   -- 起**递减**，与主文件的正 id、与其它洞的区间都不相交（洞的节点数不超过它的 token 数，
   -- 而 token 数不超过洞的字节长度）。
   subStream : Bool
-  -- | 洞内解析收集到的 `(节点 id, 括号层数)` 表项（逆序）：`parseSourceDetailed` 把它们
-  -- 并进主文件的 `Surface`。主 token 流里没有洞内 token，所以必须由洞自己交回。
-  holeParens : List (Int, Int)
   -- | 本 token 流里登记的**反引号链步**：`(表达式节点 id, True)`。普通符号中缀由降级后的
   -- 形状本身说明（见 `Frontend/Ast`），只有反引号写法需要按 id 记下来。
   backtickShapes : List (Int, Bool)
-  -- | 洞内解析交回的反引号链步（与 `holeParens` 同口径）。
-  holeBackticks : List (Int, Bool)
   -- | 本 token 流里登记的 section 写法：section 区间起点字节偏移 → 形态。
   sectionShapes : List (Int, SectionShape)
-  -- | 洞内解析交回的 section 写法（与 `holeParens` 同口径）。
-  holeSections : List (Int, SectionShape)
   -- | 本 token 流里的模板 `"""` 标记：模板区间起点字节偏移 → 是否多行形式。
   interpMultis : List (Int, Bool)
-  -- | 洞内解析交回的模板 `"""` 标记（与 `holeParens` 同口径）。
-  holeInterpMultis : List (Int, Bool)
+  -- | 模板节点 id → 该字面量内部洞的子解析交回的事实（逆序累积）。
+  --
+  -- 洞是独立 token 子流，洞内节点不在主树里；事实随模板节点携带，`surfaceOfCst`
+  -- 建树后从节点字段派生，不需要另一条额外输入。
+  templateHoles : List (Int, CstHoleSurface)
 
 -- ---------------------------------------------------------------
 -- vuna 源码 parser（offside layout）
@@ -73,14 +69,14 @@ pmodeOf st = st.pmodeOf
 -- | 从文件头开一个状态（`lastPos` 的 `Pos 1 0` 是「尚未消费 token」的哨兵）。
 export mkState : String -> List PTok -> ParseMode -> PState
 mkState file toks mode =
-  PState file toks (Pos 1 0 0 0) (length toks) mode 0 [] 1 0 False [] [] [] [] [] [] []
+  PState file toks (Pos 1 0 0 0) (length toks) mode 0 [] 1 0 False [] [] [] []
 
 -- | 指定 `lastPos` / 剩余数（模板洞、同一行的裸表达式等场景）。
 -- 建树事件在模板洞内单独收集（洞内 token 的绝对下标从 0 起，与外层不相交）；节点 id
 -- 取负、由洞起点的字节偏移错开（见 `subStream`）。
 export mkStateAt : String -> List PTok -> Pos -> Int -> ParseMode -> PState
 mkStateAt file toks last count mode =
-  PState file toks last count mode 0 [] (0 - (2 + posOffset last)) 0 True [] [] [] [] [] [] []
+  PState file toks last count mode 0 [] (0 - (2 + posOffset last)) 0 True [] [] [] []
 
 -- | 从起始状态到结束状态的建树事件（按发生顺序；每次事件一次 cons）。
 export eventsOf : PState -> PState -> List NodeEvent
@@ -104,33 +100,21 @@ withExtent kind st k =
       }
   in Vuna.Compiler.Base.Common.step (k opened) (\v, st1 => OkC (v, closedAt st1))
 
--- | 记下洞内解析交回的括号表项（嵌套模板会逐层累加）。
-export addHoleParens : List (Int, Int) -> PState -> PState
-addHoleParens entries st = { st | holeParens = append entries st.holeParens }
-
--- | 记下洞内解析交回的链步表项。
-export addHoleBackticks : List (Int, Bool) -> PState -> PState
-addHoleBackticks entries st = { st | holeBackticks = append entries st.holeBackticks }
-
 -- | 登记一个**反引号**链步（`parseExpr` 出口，节点 id 已定）。
 export addBacktickShape : Int -> PState -> PState
 addBacktickShape nid st = { st | backtickShapes = (nid, True) :: st.backtickShapes }
 
--- | 记下洞内解析交回的 section 写法（嵌套模板会逐层累加）。
-export addHoleSections : List (Int, SectionShape) -> PState -> PState
-addHoleSections entries st = { st | holeSections = append entries st.holeSections }
-
--- | 登记一个 section 写法（键 = section 区间起点字节偏移；section 可能没有独立节点 id）。
+-- | 登记一个 section 写法（键 = section 区间起点字节偏移）。
 export addSectionShape : Int -> SectionShape -> PState -> PState
 addSectionShape off shape st = { st | sectionShapes = (off, shape) :: st.sectionShapes }
-
--- | 记下洞内解析交回的模板 `"""` 标记。
-export addHoleInterpMultis : List (Int, Bool) -> PState -> PState
-addHoleInterpMultis entries st = { st | holeInterpMultis = append entries st.holeInterpMultis }
 
 -- | 登记模板 `"""` 标记（键 = 模板区间起点字节偏移）。
 export addInterpMulti : Int -> Bool -> PState -> PState
 addInterpMulti off multi st = { st | interpMultis = (off, multi) :: st.interpMultis }
+
+-- | 把模板字面量洞内的事实挂到模板节点上（键 = 模板节点 id）。
+export addTemplateHoles : Int -> CstHoleSurface -> PState -> PState
+addTemplateHoles nid bits st = { st | templateHoles = (nid, bits) :: st.templateHoles }
 
 -- | 区间根换 id 时把链步登记跟着换：括号等外层 `parseExpr` 会用 `withExprId` 把返回表达式的
 -- id 换成自己的，登记在旧 id 上的链步否则就查不到了（括号里的链会被当成普通应用）。
@@ -145,24 +129,6 @@ rekeyInfixGo : Int -> Int -> List (Int, Bool) -> List (Int, Bool)
 rekeyInfixGo from to [] = []
 rekeyInfixGo from to (p :: rest) =
   if firstOf p == from then (to, secondOf p) :: rest else p :: rekeyInfixGo from to rest
-
--- | 一次子解析（模板洞）交回主文件的表面形状条目。
-export record SurfaceBits where
-  sbParens : List (Int, Int)
-  sbBackticks : List (Int, Bool)
-  sbSections : List (Int, SectionShape)
-  sbInterps : List (Int, Bool)
-
-export emptySurfaceBits : SurfaceBits
-emptySurfaceBits = SurfaceBits [] [] [] []
-
-export appendSurfaceBits : SurfaceBits -> SurfaceBits -> SurfaceBits
-appendSurfaceBits a b =
-  SurfaceBits
-    (append a.sbParens b.sbParens)
-    (append a.sbBackticks b.sbBackticks)
-    (append a.sbSections b.sbSections)
-    (append a.sbInterps b.sbInterps)
 
 -- | 关闭最近打开的节点：终点是当前 token 下标（半开区间）。
 closedAt : PState -> PState

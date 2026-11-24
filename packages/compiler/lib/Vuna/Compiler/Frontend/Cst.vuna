@@ -373,6 +373,36 @@ export data CstKind(..) : Type where
   -- | `do` 块里的一条语句。
   CstDoStmtKind : CstKind
 
+-- | 模板字面量**洞内**的表面事实。
+--
+-- 洞是独立 token 子流（`PState.subStream`），洞内节点不在主树里，所以事实随洞所属的
+-- 模板节点携带：`surfaceOfCst` 从模板节点的这个字段把洞内条目并回派生缓存。
+export record CstHoleSurface(..) where
+  -- | 洞内表达式节点 id（负数）→ 括号层数。
+  chsParens : List (Int, Int)
+  -- | 洞内的**反引号写法**链步（节点 id）。
+  chsBackticks : List (Int, Bool)
+  -- | 洞内的 section 写法（section 区间起点字节偏移 → 形态）。
+  chsSections : List (Int, SectionShape)
+  -- | 洞内的模板 `"""` 标记（模板区间起点字节偏移 → 是否多行）。
+  chsInterps : List (Int, Bool)
+
+export emptyCstHoleSurface : CstHoleSurface
+emptyCstHoleSurface = CstHoleSurface [] [] [] []
+
+export appendCstHoleSurface : CstHoleSurface -> CstHoleSurface -> CstHoleSurface
+appendCstHoleSurface a b =
+  CstHoleSurface
+    (append a.chsParens b.chsParens)
+    (append a.chsBackticks b.chsBackticks)
+    (append a.chsSections b.chsSections)
+    (append a.chsInterps b.chsInterps)
+
+-- | 若干模板节点的洞内事实合成一份（嵌套模板逐层累加）。
+export concatCstHoleSurface : List CstHoleSurface -> CstHoleSurface
+concatCstHoleSurface [] = emptyCstHoleSurface
+concatCstHoleSurface (bits :: rest) = appendCstHoleSurface bits (concatCstHoleSurface rest)
+
 -- | 表面形状（「怎么写」而不是「是什么」）。挂在产生它的分支节点上。
 export record CstSurface(..) where
   -- | 源码里包着这个表达式的括号层数（`(e)` = 1，`((e))` = 2）。
@@ -383,9 +413,11 @@ export record CstSurface(..) where
   cstSection : Maybe SectionShape
   -- | 模板字面量是否 `"""` 形式。
   cstInterpMulti : Maybe Bool
+  -- | 模板节点内部洞的子解析交回的事实（其它节点为空）。
+  cstHoleFacts : CstHoleSurface
 
 export emptyCstSurface : CstSurface
-emptyCstSurface = CstSurface 0 False Nothing Nothing
+emptyCstSurface = CstSurface 0 False Nothing Nothing emptyCstHoleSurface
 
 -- | 节点：叶是 token，分支是 kind + id + span + 表面形状 + 有序 children。
 --
@@ -597,18 +629,18 @@ nestToTree toks events =
     sp = tokensSpan toks
   in finishRoot sp frames
 
--- | 把 parser 声明的三类表项（反引号链步 / section / 模板多行）与括号派生结果写进
--- `CstBranch` 的 `CstSurface`。键仍是原来的 id / span 起点；之后 `Surface` 只是从树
--- 抽出的派生缓存。
-export nestToTreeWithSurface : List CstToken -> List NodeEvent -> List (Int, Int) -> List (Int, Bool) -> List (Int, SectionShape) -> List (Int, Bool) -> CstNode
-nestToTreeWithSurface toks events parenEntries backticks sections interps =
+-- | 把 parser 声明的三类表项（反引号链步 / section / 模板多行）、括号派生结果与每个模板
+-- 节点自己的洞内事实写进 `CstBranch` 的 `CstSurface`。键是节点 id / 区间起点；
+-- 之后 `Surface` 只是从树抽出的派生缓存（`surfaceOfCst`）。
+export nestToTreeWithSurface : List CstToken -> List NodeEvent -> List (Int, Int) -> List (Int, Bool) -> List (Int, SectionShape) -> List (Int, Bool) -> List (Int, CstHoleSurface) -> CstNode
+nestToTreeWithSurface toks events parenEntries backticks sections interps holeFacts =
   let
     parens = HashMap.fromList parenEntries
-  in applySurfaceTree parens backticks sections interps (nestToTree toks events)
+  in applySurfaceTree parens backticks sections interps holeFacts (nestToTree toks events)
 
-applySurfaceTree : HashMap Int Int -> List (Int, Bool) -> List (Int, SectionShape) -> List (Int, Bool) -> CstNode -> CstNode
-applySurfaceTree parens backticks sections interps (CstLeaf t) = CstLeaf t
-applySurfaceTree parens backticks sections interps (CstBranch kind nid sp _ kids) =
+applySurfaceTree : HashMap Int Int -> List (Int, Bool) -> List (Int, SectionShape) -> List (Int, Bool) -> List (Int, CstHoleSurface) -> CstNode -> CstNode
+applySurfaceTree parens backticks sections interps holeFacts (CstLeaf t) = CstLeaf t
+applySurfaceTree parens backticks sections interps holeFacts (CstBranch kind nid sp _ kids) =
   let
     parenDepth =
       case HashMap.lookup nid parens of
@@ -620,10 +652,24 @@ applySurfaceTree parens backticks sections interps (CstBranch kind nid sp _ kids
         (lookupBacktick nid backticks == Just True)
         (lookupSection (spanStartOffset sp) sections)
         (if lookupInterp (spanStartOffset sp) interps then Just True else Nothing)
-  in CstBranch kind nid sp surface (map (applySurfaceTree parens backticks sections interps) kids)
+        (
+          case lookupHoleFacts nid holeFacts of
+            Just bits => bits
+            Nothing => emptyCstHoleSurface
+        )
+  in CstBranch
+    kind
+    nid
+    sp
+    surface
+    (map (applySurfaceTree parens backticks sections interps holeFacts) kids)
 
--- | 从 CST 节点抽表面形状缓存。树是源；这份 record 只让仍按 id / span 查表的消费者
--- 不用改签名。
+lookupHoleFacts : Int -> List (Int, CstHoleSurface) -> Maybe CstHoleSurface
+lookupHoleFacts nid [] = Nothing
+lookupHoleFacts nid ((k, bits) :: rest) = if k == nid then Just bits else lookupHoleFacts nid rest
+
+-- | 从 CST 节点抽表面形状缓存。树是唯一的源：主流节点读自己的字段，模板洞的事实读
+-- 模板节点携带的 `cstHoleFacts`。这份 record 只是让仍按 id / span 查表的消费者不改签名。
 record SurfaceEntries where
   seParens : List (Int, Int)
   seBackticks : List (Int, Bool)
@@ -634,19 +680,14 @@ emptySurfaceEntries : SurfaceEntries
 emptySurfaceEntries = SurfaceEntries [] [] [] []
 
 export surfaceOfCst : CstNode -> Surface
-surfaceOfCst root = surfaceOfCstWith [] [] [] [] root
-
--- | 模板洞是独立 token 子流，洞内节点不在主树里；洞的子解析把括号/反引号/section/
--- 模板标记交回主文件，这里并进派生缓存。树仍是主流部分的源。
-export surfaceOfCstWith : List (Int, Int) -> List (Int, Bool) -> List (Int, SectionShape) -> List (Int, Bool) -> CstNode -> Surface
-surfaceOfCstWith holeParens holeBackticks holeSections holeInterps root =
+surfaceOfCst root =
   let
     entries = surfaceEntriesGo root emptySurfaceEntries
   in Surface
-    (HashMap.insertAll holeParens (HashMap.fromList entries.seParens))
-    (append holeBackticks entries.seBackticks)
-    (append holeSections entries.seSections)
-    (append holeInterps entries.seInterps)
+    (HashMap.fromList entries.seParens)
+    entries.seBackticks
+    entries.seSections
+    entries.seInterps
 
 surfaceEntriesGo : CstNode -> SurfaceEntries -> SurfaceEntries
 surfaceEntriesGo (CstLeaf _) acc = acc
@@ -667,7 +708,14 @@ surfaceEntriesGo (CstBranch _ nid sp surface kids) acc =
       case surface.cstInterpMulti of
         Just multi => { acc3 | seInterps = (spanStartOffset sp, multi) :: acc3.seInterps }
         Nothing => acc3
-  in surfaceEntriesGoList kids acc4
+    acc5 =
+      { acc4
+        | seParens = append surface.cstHoleFacts.chsParens acc4.seParens,
+        seBackticks = append surface.cstHoleFacts.chsBackticks acc4.seBackticks,
+        seSections = append surface.cstHoleFacts.chsSections acc4.seSections,
+        seInterps = append surface.cstHoleFacts.chsInterps acc4.seInterps
+      }
+  in surfaceEntriesGoList kids acc5
 
 surfaceEntriesGoList : List CstNode -> SurfaceEntries -> SurfaceEntries
 surfaceEntriesGoList [] acc = acc
@@ -694,60 +742,15 @@ renderCstTree (CstLeaf t) = strConcatMany (renderParts t)
 renderCstTree (CstBranch _ _ _ _ kids) = strConcatMany (map renderCstTree kids)
 
 -- ---------------------------------------------------------------
--- 事件流上的条目锚点（不建树）
+-- 条目锚点（注释归属的挂载点）
 -- ---------------------------------------------------------------
--- | 建树帧的轻量版：只留「是否产出 + 节点 id + 起点」，不收集 children。
-record AnchorFrame where
-  afKeep : Bool
-  afId : Int
-  afStart : Span
-
--- | 从建树事件直接取部分节点的 `NodeRef`（区间口径与 `nestToTree` 一致：起点 = 开区间
--- 处下一个 token 的起点，终点 = 该区间最后一个已消费 token 的末尾）。`keep` 决定哪些
--- 种类产出锚点；每个区间在 close 时产出，顺序是关闭顺序（调用方按起点排序）。
-export anchorRefsOf : (CstKind -> Bool) -> List CstToken -> List NodeEvent -> List (Int, Span)
-anchorRefsOf keep toks events = reverse (anchorWalk keep toks 0 degenerateSpan [] [] events)
-
--- | 消费 `n` 个 token，返回 (最后一个 token 的 span, 剩余 token)；不分配中间列表。
-consumeTokens : Span -> Int -> List CstToken -> (Span, List CstToken)
-consumeTokens last 0 toks = (last, toks)
-consumeTokens last n toks =
-  case toks of
-    [] => (last, [])
-    t :: rest => consumeTokens t.cstSpan (n - 1) rest
-
-anchorWalk : (CstKind -> Bool) -> List CstToken -> Int -> Span -> List (Int, Span) -> List AnchorFrame -> List NodeEvent -> List (Int, Span)
-anchorWalk keep toks cursor lastEnd acc frames [] = acc
-anchorWalk keep toks cursor lastEnd acc frames (ev :: rest) =
-  let
-    at = eventIndex ev
-    consumed = consumeTokens lastEnd (at - cursor) toks
-    lastEnd2 = firstOf consumed
-    live = secondOf consumed
-  in case ev of
-    EvOpen kind _ nid =>
-      anchorWalk
-        keep
-        live
-        at
-        lastEnd2
-        acc
-        (AnchorFrame (keep kind) nid (headSpan degenerateSpan live) :: frames)
-        rest
-    EvClose _ =>
-      case frames of
-        [] => anchorWalk keep live at lastEnd2 acc [] rest
-        f :: outer =>
-          let
-            acc2 = if f.afKeep then (::) (f.afId, spanFrom f.afStart lastEnd2) acc else acc
-          in anchorWalk keep live at lastEnd2 acc2 outer rest
-
--- | `renderCstTree (nestToTree (lexCst s) events) == s`；词法失败时为 `False`。
-export treeRoundtripOk : List NodeEvent -> String -> Bool
-treeRoundtripOk events s =
-  case lexCst s of
-    Nothing => False
-    Just toks => renderCstTree (nestToTree toks events) == s
+-- | 树上 kind 满足 `keep` 的条目节点（先序）：给出 `(id, span)`。
+--
+-- 锚点集合就是渲染器的挂载点；注释归属按节点 id 查槽，顺序无关（调用方会按起点排序）。
+export anchorRefsOfTree : (CstKind -> Bool) -> CstNode -> List (Int, Span)
+anchorRefsOfTree keep (CstLeaf _) = []
+anchorRefsOfTree keep (CstBranch kind nid sp _ kids) =
+  append (if keep kind then [(nid, sp)] else []) (concatMap (anchorRefsOfTree keep) kids)
 
 -- ---------------------------------------------------------------
 -- 表面形状（从建树事件 + 词法 token 派生）
@@ -775,11 +778,12 @@ export record Surface(..) where
   -- 2 参应用」只可能来自中缀降级（前缀写法必须加括号，那是 section）。反引号名字是普通
   -- 标识符，没法从形状上区分，所以只给它们建表——通常一份源码只有个位数条。
   surfaceBackticks : List (Int, Bool)
-  -- | section 写法：section 区间起点字节偏移 → 形态。section 可能出现在没有独立节点 id
-  -- 的原子位置，所以用 span 起点而不是节点 id。
+  -- | section 写法：section 区间起点字节偏移 → 形态。三种写法各自有 CST 原子节点，但
+  -- 查询方拿到的常常是降级后的 λ / 折叠后的应用，它们的区间起点与 section 起点对齐
+  -- （`(+ 1) 2` 的应用 span 从 section 的 `(` 起），所以键用 span 起点。
   surfaceSections : List (Int, SectionShape)
-  -- | 模板字符串是否 `"""` 形式：模板区间起点字节偏移 → `True`。参数位置的模板没有
-  -- 独立表达式节点 id，同样用 span 起点。
+  -- | 模板字符串是否 `"""` 形式：模板区间起点字节偏移 → `True`（与模板节点的 span 起点
+  -- 相同；AST 的 `EInterp` 可能挂着外层区间根的 id，按 span 查不依赖这一点）。
   surfaceInterps : List (Int, Bool)
 
 -- | 空表（没有源码位置的合成表达式、接口解码出来的 AST）。
@@ -939,15 +943,17 @@ parenWalk acc frames cursor lastTok toks ((EvClose at) :: rest) =
             p :: ps => addKid f.pfKind f.pfOpen at structD p :: ps
       in parenWalk acc2 outer2 at last2 live rest
 
--- | 从一次解析的 token 流 + 建树事件派生表面形状（括号），再并上 parser 登记的反引号链步
--- 与 section 写法（主流的 + 模板洞交回的）。
-export surfaceOf : List PTok -> List NodeEvent -> List (Int, Int) -> List (Int, Bool) -> List (Int, SectionShape) -> List (Int, Bool) -> Surface
-surfaceOf toks events extraParens backticks sections interps =
-  Surface
-    (HashMap.fromList (append (parenEntriesOf toks events) extraParens))
-    backticks
-    sections
-    interps
+-- | 从一次解析的 token 流 + 建树事件派生表面形状（括号），再并上 parser 登记的反引号链步 /
+-- section / 模板标记与模板节点的洞内事实。
+--
+-- 这是**不建树**的视图：token 流 + 事件已经够用，省掉树与带 trivia 的 token 流（AST
+-- 缓存命中路径用它）。建了树的地方用 `surfaceOfCst`，两者对同一份解析给出同样的表。
+export surfaceOf : List PTok -> List NodeEvent -> List (Int, Bool) -> List (Int, SectionShape) -> List (Int, Bool) -> List (Int, CstHoleSurface) -> Surface
+surfaceOf toks events backticks sections interps holeFacts =
+  let
+    own = CstHoleSurface (parenEntriesOf toks events) backticks sections interps
+    all = appendCstHoleSurface own (concatCstHoleSurface (map secondOf holeFacts))
+  in Surface (HashMap.fromList all.chsParens) all.chsBackticks all.chsSections all.chsInterps
 
 -- | 只取表项（模板洞把子解析的条目并进主表，避免建两张表再合并）。
 export parenEntriesOf : List PTok -> List NodeEvent -> List (Int, Int)

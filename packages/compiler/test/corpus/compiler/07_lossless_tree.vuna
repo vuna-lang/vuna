@@ -509,8 +509,7 @@ doStmtsOk =
     ErrC _ => False
     OkC p =>
       let
-        toks = lexTokensOf doSample p.parsedRawToks p.parsedComments
-        index = nodeIndex (nestToTree toks p.parsedEvents)
+        index = nodeIndex p.parsedCst
       in case p.parsedFile.sourceFileDecls of
         [DFun _ _ (EDo stmts _) _] => refsOk index "doStmt" (map doStmtRef stmts)
         _ => False
@@ -586,7 +585,7 @@ main =
     OkC p =>
       let
         toks = lexTokensOf sample p.parsedRawToks p.parsedComments
-        tree = nestToTree toks p.parsedEvents
+        tree = p.parsedCst
       in (if renderCstTree tree == sample then 1 else 0)
         + (if List.length (collectLeaves tree) == List.length toks then 2 else 0)
         + (if nestedOk tree then 4 else 0)
