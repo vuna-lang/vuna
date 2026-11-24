@@ -2,7 +2,7 @@
 --
 -- 锁三件事：白名单符号与运行时标签/契约一致；每个算子的寄存器序列形状；
 -- 算术的 63-bit wrap、位运算不 wrap、Nat 饱和/夹取与比较结果寄存器
--- （`rax` + `setcc`/`movzx`）不被改坏；提升后 cleanup 的拷贝折叠不丢仍被读的 `rax`。
+-- （`rax` 先清零再 `setcc`）不被改坏；提升后 cleanup 的拷贝折叠不丢仍被读的 `rax`。
 import Base
 import Base.Data.List as List
 import Base.Data.Pair as Pair
@@ -62,7 +62,7 @@ noWrapProblems =
 cmpProblems : List String
 cmpProblems =
   case scalarInstrs (ScalarCmp "setl") R11 R10 of
-    Pair Rax ([ICmp (OpReg R11) (OpReg R10), ISetcc "setl" Rax, IMovzxAl]) => []
+    Pair Rax ([ICmp (OpReg R11) (OpReg R10), ISetcc "setl" Rax]) => []
     Pair r is => ["cmp setl: reg " ++ regText r ++ ", " ++ strFromInt (length is) ++ " instrs"]
 
 natProblems : List String

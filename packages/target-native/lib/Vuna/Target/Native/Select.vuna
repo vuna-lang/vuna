@@ -84,7 +84,10 @@ scalarInstrs (ScalarWrap op) a b =
   (a, [IBinReg op a (OpReg b), IBinReg "shl" a (OpImm 1), IBinReg "sar" a (OpImm 1)])
 -- | 两个操作数都是规范化（63-bit 符号扩展）值时，按位结果也规范化。
 scalarInstrs (ScalarBitOp op) a b = (a, [IBinReg op a (OpReg b)])
-scalarInstrs (ScalarCmp cond) a b = (Rax, [ICmp (OpReg a) (OpReg b), ISetcc cond Rax, IMovzxAl])
+-- | 比较：结果放在 rax 的低字节，**调用方必须先清零 rax**（`xor rax, rax` 要在
+--   `cmp` 之前发，否则会冲掉比较结果）。清零放在操作数装载之前，`mov scratch, imm;
+--   cmp …` 仍能保持相邻，立即数折叠照常生效。
+scalarInstrs (ScalarCmp cond) a b = (Rax, [ICmp (OpReg a) (OpReg b), ISetcc cond Rax])
 scalarInstrs ScalarBitNot a _ = (a, [IBinReg "xor" a (OpImm (0 - 1))])
 scalarInstrs ScalarNatAdd a b =
   (a,

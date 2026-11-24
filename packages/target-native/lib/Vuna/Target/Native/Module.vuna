@@ -1264,7 +1264,7 @@ genScalarOpW bud _ st pool (ScalarCmp cc) args =
                   inB = firstOf (secondOf pb)
                   rest = secondOf (secondOf pb)
                   res = scalarInstrs (ScalarCmp cc) rA rB
-                in Just (firstOf res, append inA (append inB (secondOf res)), rA :: rB :: rest)
+                in Just (firstOf res, append [IBinReg "xor" Rax (OpReg Rax)] (append inA (append inB (secondOf res))), rA :: rB :: rest)
               Nothing => Nothing
           Nothing => Nothing
       _ => Nothing
