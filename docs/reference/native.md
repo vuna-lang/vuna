@@ -347,6 +347,7 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
 | Float | 支持 | 堆对象 `[f64]`；字面量是 `.rodata` 的 `.double` 常量（`lea`）；比较按 OCaml 语义；展示走 `Base.Data.Float.floatRender` |
 | Effect handler | 支持 | `perform` / `handle` 的一次性续延；§3.4 |
 | extern / 其余宿主原语 | 拒绝 | `native target: ... not supported yet` |
+| 多线程原语 | 拒绝 | `prim_eff_thread*` / `mutex*` / `condvar*` / `atomic*` 登记在 `packages/target-native/test/RuntimeTable.vuna` 的 `runtimeGaps`；线程运行时见 [debt.md](debt.md) D135 |
 
 - 白名单（`Native.Runtime.nativeRtTarget`）：`+ - * /`、六种位运算（`bitAnd` / `bitOr` /
   `bitXor` / `bitNot` / `bitShl` / `bitShr`）、`++`、`bi_eq_int` /

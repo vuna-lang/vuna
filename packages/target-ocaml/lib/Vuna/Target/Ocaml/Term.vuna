@@ -119,20 +119,29 @@ let dtp_effectId (s : string) : int =
 (* bracket 的 abort cleanup 登记表（每纤程一份，LIFO）。
    `prim_effectHandleId` 在安装 handler 时记下当前深度 mark；handler 正常返回 /
    抛异常 / 丢弃续延（abort）时，把 mark 之上仍未弹出的 cleanup 逐个执行——这些
-   正是被丢弃的续延里打开的 bracket。纤程用 `dtp_cleanup_fiber` 区分（调度器在
-   运行某个任务时设置它）；非调度器上下文（-1）有一份独立栈。
+   正是被丢弃的续延里打开的 bracket。纤程用当前纤程 id 区分（调度器在运行某个
+   任务时设置它）；非调度器上下文（-1）有一份独立栈。状态放在 `Domain.DLS` 里：
+   每个 domain（线程）有自己的 cleanup 栈，domain 之间互不干扰。
    注意：cleanup 在 handler 退出点执行，只能访问**外层** handler（当前 handler
    的效应在该点不可用）；执行期异常被吞掉，避免污染 abort 结果。 *)
-let dtp_cleanup_fiber = ref (-1)
-let dtp_cleanup_stacks : (int, (unit -> unit) list ref) Hashtbl.t = Hashtbl.create 8
+type dtp_cleanup_state = {
+  mutable dtp_cs_fiber : int;
+  dtp_cs_stacks : (int, (unit -> unit) list ref) Hashtbl.t;
+}
+let dtp_cleanup_stateK =
+  Domain.DLS.new_key (fun () -> { dtp_cs_fiber = -1; dtp_cs_stacks = Hashtbl.create 8 })
+let dtp_cleanup_state () = Domain.DLS.get dtp_cleanup_stateK
+let dtp_cleanup_fiber_get () = (dtp_cleanup_state ()).dtp_cs_fiber
+let dtp_cleanup_fiber_set (fid : int) = (dtp_cleanup_state ()).dtp_cs_fiber <- fid
 let dtp_cleanup_stack_of (fid : int) =
-  match Hashtbl.find_opt dtp_cleanup_stacks fid with
+  let s = dtp_cleanup_state () in
+  match Hashtbl.find_opt s.dtp_cs_stacks fid with
   | Some r -> r
   | None ->
     let r = ref [] in
-    Hashtbl.replace dtp_cleanup_stacks fid r;
+    Hashtbl.replace s.dtp_cs_stacks fid r;
     r
-let dtp_cleanup_current () = dtp_cleanup_stack_of !dtp_cleanup_fiber
+let dtp_cleanup_current () = dtp_cleanup_stack_of (dtp_cleanup_fiber_get ())
 let dtp_cleanup_mark () = List.length !(dtp_cleanup_current ())
 let dtp_cleanup_push (f : int -> int) : int =
   let r = dtp_cleanup_current () in
@@ -163,10 +172,13 @@ let dtp_cleanup_run_all_for (fid : int) =
       | f :: rest -> r := rest; (try f () with _ -> ()); go (fuel - 1)
   in
   go (List.length !r)
-let dtp_cleanup_forget (fid : int) = Hashtbl.remove dtp_cleanup_stacks fid
+let dtp_cleanup_forget (fid : int) =
+  let s = dtp_cleanup_state () in
+  Hashtbl.remove s.dtp_cs_stacks fid
 let dtp_cleanup_reset () =
-  Hashtbl.reset dtp_cleanup_stacks;
-  dtp_cleanup_fiber := -1
+  let s = dtp_cleanup_state () in
+  Hashtbl.reset s.dtp_cs_stacks;
+  s.dtp_cs_fiber <- -1
 
 (* handler 的运行时壳：与旧内联实现等价，但 handler 退出时清掉其 extent 内残留的
    bracket cleanup（abort = 续延被丢弃，库层 finally 不会再跑）。 *)
@@ -202,21 +214,16 @@ let dtp_effect_self th =
   match !(Domain.DLS.get dtp_selfK) with
   | (kid, nid, key, name, ret, h) :: _ -> dtp_effect_run key name kid nid ret h (fun () -> (Obj.magic th) 0)
   | [] -> failwith \"self outside handler\"
+let dtp_output_mutex = Mutex.create ()
+let dtp_with_output_lock (f : unit -> int) : int =
+  Mutex.lock dtp_output_mutex;
+  Fun.protect ~finally:(fun () -> Mutex.unlock dtp_output_mutex) f
 let dtp_print s =
-  (try print_string s; flush stdout; String.length s
-   with _ -> 0)  (* 写失败（典型 EPIPE：`vuna … | head`）不再是宿主崩溃；输出到此为止 *)
-let dtp_async_tbl : (int, unit -> Obj.t) Hashtbl.t = Hashtbl.create 16
-let dtp_async_next = ref 0
-let dtp_async_fork th =
-  let id = !dtp_async_next in
-  incr dtp_async_next;
-  let d = Domain.spawn (fun () -> th 0) in
-  Hashtbl.replace dtp_async_tbl id (fun () -> Obj.repr (Domain.join d));
-  id
-let dtp_async_await (h : int) : Obj.t =
-  match Hashtbl.find_opt dtp_async_tbl h with
-  | Some join -> join ()
-  | None -> failwith \"async: invalid task handle\"
+  (* 写失败（典型 EPIPE：`vuna … | head`）不再是宿主崩溃；输出到此为止。
+     锁保证多 domain 并发打印时每次调用整体输出、不交错。 *)
+  dtp_with_output_lock (fun () -> try print_string s; flush stdout; String.length s with _ -> 0)
+let dtp_eprint s =
+  dtp_with_output_lock (fun () -> try prerr_string s; flush stderr; String.length s with _ -> 0)
 (* 宿主失败通道：try 变体不抛宿主异常，而是把失败码写进**当前 Domain** 的状态槽，
    返回默认值；base 的宿主 handler 随后读 status 转成 typed error。0 = 成功。
    用 Domain.DLS 而不是全局 ref：异步任务会在别的 Domain 上跑。 *)
@@ -663,7 +670,7 @@ let dtp_try_net_send_within h s micros =
            if k <= 0 then false else go (off + k) in
      if go 0 then n else (dtp_hostSetStatus 7; 0)
    with e -> dtp_netMarkStatus e; 0)
-""") ++ dtSchedRuntime
+""") ++ dtSchedRuntime ++ dtThreadRuntime
 
 -- 单线程协作式 fiber 调度器运行时。
 -- 纤程 = OCaml 5 一次性续延；调度器在纤程外的循环里决定下一步跑谁，
@@ -997,11 +1004,11 @@ let dtp_sched_runnable t =
 let dtp_sched_run_one t =
   if dtp_sched_runnable t then begin
     dtp_sched_current := t.sched_tid;
-    dtp_cleanup_fiber := t.sched_tid;
+    dtp_cleanup_fiber_set t.sched_tid;
     (match dtp_sched_step t with
      | Some st -> dtp_sched_apply t st
      | None -> ());
-    dtp_cleanup_fiber := -1;
+    dtp_cleanup_fiber_set (-1);
     dtp_sched_current := -1
   end
 
@@ -1125,6 +1132,61 @@ let dtp_sched_scope_error (id : int) : string =
 
 let dtp_sched_scope_count (id : int) : int =
   (dtp_sched_scope id).sched_completed
+"""
+
+-- 多线程与同步原语的 OCaml 运行时（OCaml 5 Domain）。
+-- 语言层类型 `Thread` / `Mutex` / `Condvar` / `Atomic` 是内建构造子，IR 侧擦除为
+-- `IrTyOpaque`；运行时值全部用 `Obj.t` 承载（域/锁/原子单元本身是 stdlib 对象）。
+dtThreadRuntime : String
+dtThreadRuntime = """(* ------------------------------------------------------------------ *)
+(* Threads and synchronization primitives (OCaml 5 domains).           *)
+(* ------------------------------------------------------------------ *)
+
+let dtp_thread_spawn (th : int -> Obj.t) : Obj.t =
+  Obj.repr (Domain.spawn (fun () -> th 0))
+
+let dtp_thread_join (t : Obj.t) : Obj.t =
+  let d : Obj.t Domain.t = Obj.obj t in
+  if Domain.get_id d = Domain.self () then failwith \"thread: join self\"
+  else Obj.repr (Domain.join d)
+
+let dtp_thread_yield () : int =
+  (try Unix.sleepf 0.0 with _ -> ());
+  0
+
+let dtp_thread_id () : int = (Domain.self () :> int)
+
+let dtp_thread_parallelism () : int = Domain.recommended_domain_count ()
+
+let dtp_mutex_new () : Obj.t = Obj.repr (Mutex.create ())
+let dtp_mutex_lock (m : Obj.t) : int = Mutex.lock (Obj.obj m); 0
+let dtp_mutex_try_lock (m : Obj.t) : bool = Mutex.try_lock (Obj.obj m)
+let dtp_mutex_unlock (m : Obj.t) : int = Mutex.unlock (Obj.obj m); 0
+
+let dtp_condvar_new () : Obj.t = Obj.repr (Condition.create ())
+let dtp_condvar_wait (c : Obj.t) (m : Obj.t) : int =
+  Condition.wait (Obj.obj c) (Obj.obj m);
+  0
+let dtp_condvar_signal (c : Obj.t) : int = Condition.signal (Obj.obj c); 0
+let dtp_condvar_broadcast (c : Obj.t) : int = Condition.broadcast (Obj.obj c); 0
+
+let dtp_atomic_new (v : int) : Obj.t = Obj.repr (Atomic.make v)
+let dtp_atomic_load (a : Obj.t) : int = Atomic.get (Obj.obj a)
+let dtp_atomic_store (a : Obj.t) (v : int) : int =
+  Atomic.set (Obj.obj a) v;
+  0
+let dtp_atomic_fetch_add (a : Obj.t) (v : int) : int =
+  Atomic.fetch_and_add (Obj.obj a) v
+let dtp_atomic_exchange (a : Obj.t) (v : int) : int = Atomic.exchange (Obj.obj a) v
+let dtp_atomic_compare_exchange (a : Obj.t) (expected : int) (desired : int) : int =
+  let cell : int Atomic.t = Obj.obj a in
+  let rec loop () =
+    let prev = Atomic.get cell in
+    if prev <> expected then prev
+    else if Atomic.compare_and_set cell expected desired then prev
+    else loop ()
+  in
+  loop ()
 """
 
 -- 运行时错误报告器。位置表的键是 `单元.值名`（如 `Main.v_main`）；回栈帧名形如

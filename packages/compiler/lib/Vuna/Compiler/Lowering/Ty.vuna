@@ -80,6 +80,10 @@ renderTyIntrinsicWith render "@vuna@Cell" [a] = Just (IrTyRef (render a))
 renderTyIntrinsicWith render "@vuna@MArray" [a] = Just (IrTyArray (render a))
 renderTyIntrinsicWith render "@vuna@MDynArray" [a] = Just (IrTyRef IrTyOpaque)
 renderTyIntrinsicWith render "@vuna@MBuffer" [] = Just (IrTyRef IrTyOpaque)
+renderTyIntrinsicWith render "Thread" ([a]) = Just IrTyOpaque
+renderTyIntrinsicWith render "Mutex" [] = Just IrTyOpaque
+renderTyIntrinsicWith render "Condvar" [] = Just IrTyOpaque
+renderTyIntrinsicWith render "Atomic" [] = Just IrTyOpaque
 renderTyIntrinsicWith render _ _ = Nothing
 
 renderFamilyArgs : Int -> List Int -> HashMap String (List Int) -> HashMap String DtData -> List Int -> List Value -> List IrTy
@@ -318,7 +322,7 @@ annotHeadTy fuel dflt env binders g args =
           Nothing => Nothing
           Just t => Just (IrTyRef t)
       _ => dflt
-  else if g == "@vuna@MArray" then
+else if g == "@vuna@MArray" then
     case args of
       [a] =>
         case annotTyOfFuel (fuel - 1) dflt env binders a of
@@ -333,6 +337,14 @@ annotHeadTy fuel dflt env binders g args =
     case args of
       [] => Just (IrTyRef IrTyOpaque)
       _ => dflt
+  else if g == "Thread" then
+    Just IrTyOpaque
+  else if g == "Mutex" then
+    Just IrTyOpaque
+  else if g == "Condvar" then
+    Just IrTyOpaque
+  else if g == "Atomic" then
+    Just IrTyOpaque
   else
     case reprTyIr g of
       Just t =>

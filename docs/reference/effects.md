@@ -307,9 +307,10 @@ process 可控 Exit）、`42–44`（通用 bracket abort cleanup、调度器 br
 - **一阶效应核**：普通 send op 不含子计算；`Base.Effect.Exn.Try` 支持携带子计算，
   `bracketExn` 提供 Exn 路径的 cleanup；通用 `Base.Effect.Core.bracket`/`finally` 用运行时
   cleanup 栈覆盖**任意效应 abort**（handler 丢弃续延），见 §8.5 与 effects-layers.md。
-- **并发/async**：单线程调度器见 `Base.EffSched`（§8.5）：协作式
-  `forkTask`/`awaitTask`/`yieldNow`、取消（含清理宽限）、结构化 `withScope`、步数超时；
-  并行/多核（Domain）不是本层目标（[debt.md](debt.md) D41）。
+- **并发/async**：单线程 fiber 调度器属于 §8.5 的协作式机制（库面当前不存在）；**多线程**是
+  另一条轴：`Base.Thread` 用 OS 线程（OCaml 侧 `Domain`）提供 `spawn`/`join`、`Mutex`、
+  `Condvar`、`Atomic`，线程体是 `Eff [] a`、续延不跨线程，见
+  [primitives.md](primitives.md) §6.2。并行/多核不走 fiber 调度器（[debt.md](debt.md) D41）。
 - **未处理效应诊断**：入口在类型层收紧——`runPure : Eff [] a -> a`；
   `load` 处 `joinEff`/`runPure` 要求行 `Nil`，因此入口处的未处理效应是**类型错误**，并报专门的
   `TC_UnhandledEffects`（列出具体标签；负例 `dt_err/82_unhandled_effect_entry`）。

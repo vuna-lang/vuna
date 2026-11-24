@@ -27,7 +27,10 @@ main =
         pure ""
 
 problems : List String
-problems = append (append (concatMap arityProblems irRtNames) missingProblems) extraProblems
+problems =
+  append
+    (append (append (concatMap arityProblems irRtNames) missingProblems) extraProblems)
+    permanentProblems
 
 -- 契约 arity > 0 时，后端表必须给出同一个 arity。
 arityProblems : String -> List String
@@ -46,13 +49,45 @@ missingProblems : List String
 missingProblems =
   map
     (\sym => "not implemented and not listed: " ++ sym)
-    (filter (\sym => not (memName sym runtimeGaps)) gaps)
+    (filter (\sym => not (memName sym runtimeGaps)) (filter (\sym => not (memName sym permanentUnsupported)) gaps))
 
 extraProblems : List String
 extraProblems =
   map
     (\sym => "listed as a gap but implemented: " ++ sym)
     (filter (\sym => not (memName sym gaps)) runtimeGaps)
+
+-- 线程原语是 wasm 的**明确非目标**（没有 OS 线程/共享内存），不是待补缺口。
+-- 每条必须在契约里且仍然 `RtUnsupported`；实现了或拼错名字都在这里显形。
+permanentProblems : List String
+permanentProblems =
+  concatMap
+    (\sym => if not (irRtIsKnown sym) then ["permanent-unsupported symbol missing from contract: " ++ sym] else if isGap sym then [] else ["permanent-unsupported symbol is implemented: " ++ sym])
+    permanentUnsupported
+
+permanentUnsupported : List String
+permanentUnsupported =
+  [
+    "@vuna@prim_eff_threadSpawn",
+    "@vuna@prim_eff_threadJoin",
+    "@vuna@prim_eff_threadYield",
+    "@vuna@prim_eff_threadId",
+    "@vuna@prim_eff_threadParallelism",
+    "@vuna@prim_eff_mutexNew",
+    "@vuna@prim_eff_mutexLock",
+    "@vuna@prim_eff_mutexTryLock",
+    "@vuna@prim_eff_mutexUnlock",
+    "@vuna@prim_eff_condvarNew",
+    "@vuna@prim_eff_condvarWait",
+    "@vuna@prim_eff_condvarSignal",
+    "@vuna@prim_eff_condvarBroadcast",
+    "@vuna@prim_eff_atomicNew",
+    "@vuna@prim_eff_atomicLoad",
+    "@vuna@prim_eff_atomicStore",
+    "@vuna@prim_eff_atomicFetchAdd",
+    "@vuna@prim_eff_atomicExchange",
+    "@vuna@prim_eff_atomicCompareExchange"
+  ]
 
 gaps : List String
 gaps = filter isGap irRtNames

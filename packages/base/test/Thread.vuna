@@ -1,0 +1,91 @@
+-- 多线程原语的宿主行为：线程 spawn/join、原子单元、互斥与条件变量。
+-- 断言值都来自 join 之后或持锁读取，输出与调度顺序无关。
+import Base
+import Base.Effect.Core
+import Base.Thread as Thread
+
+-- 每个线程往共享原子单元里加 `k`，共 `n` 次。
+addMany : Atomic -> Int -> Int -> Eff [] Int
+addMany cell k n =
+  if n <= 0 then
+    pure 0
+  else
+    do
+      _ <- Thread.atomicFetchAdd cell k
+      addMany cell k (n - 1)
+
+bumpOnce : Atomic -> Eff [] Int
+bumpOnce r =
+  do
+    x <- Thread.atomicLoad r
+    _ <- Thread.atomicStore r (x + 1)
+    pure 0
+
+-- 每个线程在互斥保护下把共享引用加一，共 `n` 次。
+bumpLocked : Mutex -> Atomic -> Int -> Eff [] Int
+bumpLocked m r n =
+  if n <= 0 then
+    pure 0
+  else
+    do
+      _ <- Thread.withMutex m (bumpOnce r)
+      bumpLocked m r (n - 1)
+
+-- 持锁等待引用达到 1（fuel 只用于终止性检查；正常一次通知就返回）。
+awaitOne : Nat -> Condvar -> Mutex -> Atomic -> Eff [] Int
+awaitOne fuel c m r =
+  case fuel of
+    0 => pure 0
+    Succ k =>
+      do
+        x <- Thread.atomicLoad r
+        if x >= 1 then
+          pure 0
+        else
+          do
+            _ <- Thread.condWait c m
+            awaitOne k c m r
+
+waitLocked : Condvar -> Mutex -> Atomic -> Eff [] Int
+waitLocked c m r =
+  do
+    _ <- Thread.lockMutex m
+    v <- awaitOne 1024 c m r
+    _ <- Thread.unlockMutex m
+    pure v
+
+setReady : Condvar -> Atomic -> Eff [] Int
+setReady c r =
+  do
+    _ <- Thread.atomicStore r 1
+    Thread.condSignal c
+
+markReady : Condvar -> Mutex -> Atomic -> Eff [] Int
+markReady c m r = Thread.withMutex m (setReady c r)
+
+main : Eff [] String
+main =
+  do
+    cell <- Thread.newAtomic 0
+    m <- Thread.newMutex
+    counter <- Thread.newAtomic 0
+    cond <- Thread.newCondvar
+    ready <- Thread.newAtomic 0
+    t0 <- Thread.spawn (addMany cell 1 100)
+    t1 <- Thread.spawn (addMany cell 2 100)
+    t2 <- Thread.spawn (addMany cell 3 100)
+    _ <- Thread.join t0
+    _ <- Thread.join t1
+    _ <- Thread.join t2
+    atomicTotal <- Thread.atomicLoad cell
+    b0 <- Thread.spawn (bumpLocked m counter 50)
+    b1 <- Thread.spawn (bumpLocked m counter 50)
+    _ <- Thread.join b0
+    _ <- Thread.join b1
+    locked <- Thread.atomicLoad counter
+    waiter <- Thread.spawn (waitLocked cond m ready)
+    _ <- markReady cond m ready
+    signalled <- Thread.join waiter
+    par <- Thread.parallelism
+    pure
+      ("threads atomic=" ++ strFromInt atomicTotal ++ " mutex=" ++ strFromInt locked ++ " cond=" ++ strFromInt signalled ++ " par>=1=" ++ (if par >= 1 then "True" else "False"))

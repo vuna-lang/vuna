@@ -88,6 +88,12 @@ exit: 1
 out-contains: wasm target: extern definition
 file-absent: $TMPDIR/rej-out/main.wasm
 
+# 7b) 多线程原语在 wasm 上是明确非目标：引用点编译期拒绝，文案点明 target 能力。
+run: sh -c 'd="$TMPDIR/rej-thread"; mkdir -p "$d/app"; printf "[package]\nname = \"rejthread\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base\nimport Base.Effect.Core\nimport Base.Thread as Thread\n\nmain : Eff [] Int\nmain =\n  do\n    _ <- Thread.spawn (pure 1)\n    pure 0\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/rej-thread-out" "$d" 2>&1'
+exit: 1
+out-contains: is not supported by this target
+file-absent: $TMPDIR/rej-thread-out/main.wasm
+
 # 8) 运行时错误文本：assert / prim_fail / todo 与 native 逐字一致。
 run: sh -c 'd="$TMPDIR/traps"; mkdir -p "$d/app"; printf "[package]\nname = \"traps\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Int\nmain = assert False \"bad\" 9\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/traps-as" "$d"'
 exit: 0

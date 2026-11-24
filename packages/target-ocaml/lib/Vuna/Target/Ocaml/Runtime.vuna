@@ -142,8 +142,7 @@ ocamlRtTextTable =
     ("@vuna@prim_dynClear", "dtp_dynClear"),
     ("@vuna@prim_eff_print", "dtp_print"),
     ("@vuna@host@print", "dtp_print"),
-    ("@vuna@prim_eff_eprint",
-      "(fun s -> (try prerr_string s; flush stderr; String.length s with _ -> 0))"),
+    ("@vuna@prim_eff_eprint", "dtp_eprint"),
     ("@vuna@prim_eff_readLine", "(dtp_readLine ())"),
     ("@vuna@prim_eff_readBytes", "dtp_readBytes"),
     ("@vuna@prim_eff_getArgs", "(dtp_listOf (dtp_getArgs ()))"),
@@ -209,7 +208,26 @@ ocamlRtTextTable =
     ("@ir@showNat", "string_of_int"),
     ("@ir@showStr", "dt_show_string"),
     ("@ir@showFloat", "string_of_float"),
-    ("@ir@showBool", "dt_show_bool")
+    ("@ir@showBool", "dt_show_bool"),
+    ("@vuna@prim_eff_threadSpawn", "dtp_thread_spawn"),
+    ("@vuna@prim_eff_threadJoin", "dtp_thread_join"),
+    ("@vuna@prim_eff_threadYield", "(dtp_thread_yield ())"),
+    ("@vuna@prim_eff_threadId", "(dtp_thread_id ())"),
+    ("@vuna@prim_eff_threadParallelism", "(dtp_thread_parallelism ())"),
+    ("@vuna@prim_eff_mutexNew", "(dtp_mutex_new ())"),
+    ("@vuna@prim_eff_mutexLock", "dtp_mutex_lock"),
+    ("@vuna@prim_eff_mutexTryLock", "dtp_mutex_try_lock"),
+    ("@vuna@prim_eff_mutexUnlock", "dtp_mutex_unlock"),
+    ("@vuna@prim_eff_condvarNew", "(dtp_condvar_new ())"),
+    ("@vuna@prim_eff_condvarWait", "dtp_condvar_wait"),
+    ("@vuna@prim_eff_condvarSignal", "dtp_condvar_signal"),
+    ("@vuna@prim_eff_condvarBroadcast", "dtp_condvar_broadcast"),
+    ("@vuna@prim_eff_atomicNew", "dtp_atomic_new"),
+    ("@vuna@prim_eff_atomicLoad", "dtp_atomic_load"),
+    ("@vuna@prim_eff_atomicStore", "dtp_atomic_store"),
+    ("@vuna@prim_eff_atomicFetchAdd", "dtp_atomic_fetch_add"),
+    ("@vuna@prim_eff_atomicExchange", "dtp_atomic_exchange"),
+    ("@vuna@prim_eff_atomicCompareExchange", "dtp_atomic_compare_exchange")
   ]
 
 -- | 契约符号在 OCaml 端的运行时表达式（`IrRt` 作为值原样输出）。

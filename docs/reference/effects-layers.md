@@ -48,7 +48,8 @@
   `Base.EffSched` 包装；普通用户经 `Base.EffSched` 的 API）。它们**不是行里的效应**：
   行 `Nil` 的任务也能 fork/yield/await。
 
-API（`packages/base/lib/Base/EffSched.vuna`）：
+API（历史位置 `packages/base/lib/Base/EffSched.vuna`，该库当前不存在；运行时 `dtp_sched_*` 与
+`prim_sched*` 仍在，但没有库面 —— 多线程走 `Base.Thread`，见 [primitives.md](primitives.md) §6.2）：
 
 | 名称 | 签名 | 语义 |
 | --- | --- | --- |

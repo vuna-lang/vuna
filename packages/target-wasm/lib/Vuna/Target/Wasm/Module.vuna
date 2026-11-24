@@ -437,6 +437,15 @@ genGlobalRef fuel st name =
       Nothing => Err "unknown top-level definition in wasm codegen: `${name}`"
 
 -- | 运行时符号作为值：`RtValue` 直接内联；`RtFunc` eta 展开成闭包。
+-- | 运行时符号被拒绝时的文案：线程原语是**明确非目标**（wasm 没有 OS 线程/共享内存），
+-- 其余是当前尚未实现的缺口。
+rtUnsupportedMsg : String -> String
+rtUnsupportedMsg sym =
+  if irRtSupports "wasm" sym then
+    "wasm target: runtime symbol `${sym}` is not supported yet"
+  else
+    "wasm target: runtime symbol `${sym}` is not supported by this target (multithreading is only available on ocaml and native)"
+
 genRtValue : Int -> GenState -> String -> Result (List Instr, GenState)
 genRtValue fuel st sym =
   if fuel <= 0 then
@@ -444,7 +453,7 @@ genRtValue fuel st sym =
   else
     case rtImplOf sym of
       RtValue instrs => Ok (instrs, st)
-      RtUnsupported => Err "wasm target: runtime symbol `${sym}` is not supported yet"
+      RtUnsupported => Err (rtUnsupportedMsg sym)
       RtFunc n _ =>
         let
           bs = Synthetic.etaBinders n
@@ -788,7 +797,7 @@ genRtApp fuel st sym args =
       x :: rest => genExpr (fuel - 1) st (Synthetic.applyAllIr x rest)
   else
     case rtImplOf sym of
-      RtUnsupported => Err "wasm target: runtime symbol `${sym}` is not supported yet"
+      RtUnsupported => Err (rtUnsupportedMsg sym)
       RtValue instrs => if listLengthB args == 0 then Ok (instrs, st) else Err "wasm target: runtime value `${sym}` applied to arguments"
       RtFunc n name =>
         let

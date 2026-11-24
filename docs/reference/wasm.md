@@ -261,7 +261,9 @@ stdout/stderr 大输出不受线性内存大小限制）；读按 `filestat` 的
   也直连真实实现。
 
 **明确拒绝**（`RtUnsupported` → 引用点 `WasmUnsupported`，带符号名）：未列入符号表的
-契约符号，例如 Sched 家族（`prim_sched*`）与网络宿主原语（`@vuna@host@tryNet*`）。
+契约符号，例如 Sched 家族（`prim_sched*`）、多线程原语（`prim_eff_thread*` / `mutex*` /
+`condvar*` / `atomic*`，文案点明是 target 能力而非待补缺口）与网络宿主原语
+（`@vuna@host@tryNet*`）。
 
 **可观测性**（规范见 [observability.md](observability.md)）：`@vuna@obs@level` /
 `log` / `counter` / `mark` / `spanBegin` / `spanEnd` / `sampleStart` / `sampleStop`

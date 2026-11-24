@@ -1,0 +1,127 @@
+-- | 多线程：线程句柄（`Thread a`）、互斥（`Mutex`）、条件变量（`Condvar`）与原子单元（`Atomic`）。
+--
+-- 线程体必须是行已处理干净的 `Eff [] a`：任务内的效应由任务自己的 handler 处理，
+-- 不继承父线程的 handler 栈；续延不跨线程恢复。线程内未捕获的错误按运行时错误报告
+-- 并退出进程（与 `main` 同一口径），`join` 不做 `Result` 包装。
+--
+-- 跨线程共享的可变状态只有这里的句柄；`MutRef` 单元与可变容器（`` / `MArray` / `MDynArray` / `MBuffer`）不是线程安全的（跨线程访问属数据竞争），
+-- 不可变数据（`List` / `String` / record / 不可变 `Array`）共享读是安全的。
+-- 同步语义：`Atomic` 操作是顺序一致的；`lock`/`unlock`、`condWait`/`condSignal`、
+-- `join` 建立 happens-before。
+--
+-- 这些是阻塞的宿主操作：不经过单线程 fiber 调度器，也不让出纤程。
+module Base.Thread where
+
+import Base.Data.Bool
+import Base.Effect.Types
+import Base.Trait.Eq
+import Base.Trait.Monad
+
+-- ---------------------------------------------------------------
+-- 线程
+-- ---------------------------------------------------------------
+
+-- | 在并行执行流里运行一个行已处理的动作；返回可 `join` 的句柄。
+export spawn : {r : Row} -> Eff [] a -> Eff r (Thread a)
+spawn body = raise (@vuna@prim_eff_threadSpawn (\_ => runPure body))
+
+-- | 等待线程结束并取回结果。只允许 join 一次，且不能 join 当前线程。
+export join : {r : Row} -> Thread a -> Eff r a
+join t = raise (@vuna@prim_eff_threadJoin t)
+
+-- | 让出一次执行（调度提示，不保证其它线程立刻运行）。
+export yieldNow : {r : Row} -> Eff r Int
+yieldNow = raise (@vuna@prim_eff_threadYield)
+
+-- | 当前线程的标识（全程序唯一、不复用；主线程为 0）。
+export currentId : {r : Row} -> Eff r Int
+currentId = raise (@vuna@prim_eff_threadId)
+
+-- | 可并行执行的执行流数量（含当前线程）的推荐上界。
+export parallelism : {r : Row} -> Eff r Int
+parallelism = raise (@vuna@prim_eff_threadParallelism)
+
+-- ---------------------------------------------------------------
+-- 互斥
+-- ---------------------------------------------------------------
+
+-- | 新建一把未锁定的互斥（非公平、非递归、无 owner 检查）。
+export newMutex : {r : Row} -> Eff r Mutex
+newMutex = raise (@vuna@prim_eff_mutexNew)
+
+-- | 阻塞加锁。
+export lockMutex : {r : Row} -> Mutex -> Eff r Int
+lockMutex m = raise (@vuna@prim_eff_mutexLock m)
+
+-- | 尝试加锁；成功返回 `True`。
+export tryLockMutex : {r : Row} -> Mutex -> Eff r Bool
+tryLockMutex m = raise (@vuna@prim_eff_mutexTryLock m)
+
+-- | 解锁；调用方必须是锁的持有者。
+export unlockMutex : {r : Row} -> Mutex -> Eff r Int
+unlockMutex m = raise (@vuna@prim_eff_mutexUnlock m)
+
+-- | 持锁运行动作：进入前加锁、动作返回后解锁。
+export withMutex : {r : Row} -> Mutex -> Eff r a -> Eff r a
+withMutex m body =
+  do
+    _ <- lockMutex m
+    x <- body
+    _ <- unlockMutex m
+    pure x
+
+-- ---------------------------------------------------------------
+-- 条件变量
+-- ---------------------------------------------------------------
+
+-- | 新建条件变量。
+export newCondvar : {r : Row} -> Eff r Condvar
+newCondvar = raise (@vuna@prim_eff_condvarNew)
+
+-- | 在已持有的互斥上等待一次通知（可能被虚假唤醒，调用方用谓词循环）。
+export condWait : {r : Row} -> Condvar -> Mutex -> Eff r Int
+condWait c m = raise (@vuna@prim_eff_condvarWait c m)
+
+-- | 唤醒一个等待者。
+export condSignal : {r : Row} -> Condvar -> Eff r Int
+condSignal c = raise (@vuna@prim_eff_condvarSignal c)
+
+-- | 唤醒全部等待者。
+export condBroadcast : {r : Row} -> Condvar -> Eff r Int
+condBroadcast c = raise (@vuna@prim_eff_condvarBroadcast c)
+
+-- ---------------------------------------------------------------
+-- 原子单元（63-bit `Int`，顺序一致）
+-- ---------------------------------------------------------------
+
+-- | 新建初值为 `v` 的原子单元。
+export newAtomic : {r : Row} -> Int -> Eff r Atomic
+newAtomic v = raise (@vuna@prim_eff_atomicNew v)
+
+-- | 原子读。
+export atomicLoad : {r : Row} -> Atomic -> Eff r Int
+atomicLoad a = raise (@vuna@prim_eff_atomicLoad a)
+
+-- | 原子写。
+export atomicStore : {r : Row} -> Atomic -> Int -> Eff r Int
+atomicStore a v = raise (@vuna@prim_eff_atomicStore a v)
+
+-- | 原子加并返回旧值（按 `Int` 的 63-bit 语义回绕）。
+export atomicFetchAdd : {r : Row} -> Atomic -> Int -> Eff r Int
+atomicFetchAdd a v = raise (@vuna@prim_eff_atomicFetchAdd a v)
+
+-- | 原子交换并返回旧值。
+export atomicExchange : {r : Row} -> Atomic -> Int -> Eff r Int
+atomicExchange a v = raise (@vuna@prim_eff_atomicExchange a v)
+
+-- | 比较并交换：返回旧值；旧值等于 `expected` 时写入 `desired`。
+export atomicCompareExchange : {r : Row} -> Atomic -> Int -> Int -> Eff r Int
+atomicCompareExchange a expected desired =
+  raise (@vuna@prim_eff_atomicCompareExchange a expected desired)
+
+-- | 比较并交换的布尔视图（成功即 `True`）。
+export atomicCas : {r : Row} -> Atomic -> Int -> Int -> Eff r Bool
+atomicCas a expected desired =
+  do
+    old <- atomicCompareExchange a expected desired
+    pure (old == expected)

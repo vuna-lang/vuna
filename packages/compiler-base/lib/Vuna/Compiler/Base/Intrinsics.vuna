@@ -53,6 +53,12 @@ export data IType(..) : Type where
   IMDynArray : IType -> IType
   -- `@vuna@MBuffer`：`Base.Effect.MutBuffer` 私有的变长字节缓冲类型（源码写不出）。
   IMBuffer : IType
+  -- 多线程句柄与同步原语的内建类型构造子（`Thread a` / `Mutex` / `Condvar` / `Atomic`）。
+  -- IR 运行时类型统一落 `IrTyOpaque`，OCaml runtime helper 用 `Obj.t` 承载。
+  IThread : IType -> IType
+  IMutex : IType
+  ICondvar : IType
+  IAtomic : IType
   -- 隐式类型参数绑定（`{a : Type} -> ...`）；不进函数 arity。
   IPi : String -> IType -> IType
   -- `Float` primitive 类型的签名形状（保持已有 tag 顺序；新构造子只追加在它之后）。
@@ -96,7 +102,11 @@ typeIntrinsicArities =
     TypeIntrinsic "@vuna@Cell" 1,
     TypeIntrinsic "@vuna@MArray" 1,
     TypeIntrinsic "@vuna@MDynArray" 1,
-    TypeIntrinsic "@vuna@MBuffer" 0
+    TypeIntrinsic "@vuna@MBuffer" 0,
+    TypeIntrinsic "Thread" 1,
+    TypeIntrinsic "Mutex" 0,
+    TypeIntrinsic "Condvar" 0,
+    TypeIntrinsic "Atomic" 0
   ]
 
 -- | 名字对应的内建类型构造子 arity；不是内建类型构造子时返回 `-1`。
@@ -1174,6 +1184,39 @@ effIntrinsics =
     Intrinsic "@vuna@prim_eff_execPath" (IEffHost IStr) OpNone False
   ]
 
+-- | 多线程原语（`Base.Thread` 的宿主层）：线程句柄、互斥、条件变量、原子单元。
+--
+-- 单独成表是为了让每段列表字面量留在 seed 的 fuel 内（同 `floatIntrinsics`）。
+-- 每个原语都有可见名（宿主层逃生口）与 `@vuna@` 隐藏别名（base 库使用）。
+-- 语义见 docs/reference/primitives.md；OCaml/native 实现，wasm 在 IR 符号层拒绝。
+threadIntrinsics : List Intrinsic
+threadIntrinsics =
+  [
+    Intrinsic "@vuna@prim_eff_threadSpawn" (IPi "a" (IFun (IFun IInt (IVar "a")) (IEff (IThread (IVar "a"))))) OpNone False,
+    Intrinsic "@vuna@prim_eff_threadJoin" (IPi "a" (IFun (IThread (IVar "a")) (IEff (IVar "a")))) OpNone False,
+    Intrinsic "@vuna@prim_eff_threadYield" (IEff IInt) OpNone False,
+    Intrinsic "@vuna@prim_eff_threadId" (IEff IInt) OpNone False,
+    Intrinsic "@vuna@prim_eff_threadParallelism" (IEff IInt) OpNone False,
+    Intrinsic "@vuna@prim_eff_mutexNew" (IEff IMutex) OpNone False,
+    Intrinsic "@vuna@prim_eff_mutexLock" (IFun IMutex (IEff IInt)) OpNone False,
+    Intrinsic "@vuna@prim_eff_mutexTryLock" (IFun IMutex (IEff IBool)) OpNone False,
+    Intrinsic "@vuna@prim_eff_mutexUnlock" (IFun IMutex (IEff IInt)) OpNone False,
+    Intrinsic "@vuna@prim_eff_condvarNew" (IEff ICondvar) OpNone False,
+    Intrinsic "@vuna@prim_eff_condvarWait" (IFun ICondvar (IFun IMutex (IEff IInt))) OpNone False,
+    Intrinsic "@vuna@prim_eff_condvarSignal" (IFun ICondvar (IEff IInt)) OpNone False,
+    Intrinsic "@vuna@prim_eff_condvarBroadcast" (IFun ICondvar (IEff IInt)) OpNone False,
+    Intrinsic "@vuna@prim_eff_atomicNew" (IFun IInt (IEff IAtomic)) OpNone False,
+    Intrinsic "@vuna@prim_eff_atomicLoad" (IFun IAtomic (IEff IInt)) OpNone False,
+    Intrinsic "@vuna@prim_eff_atomicStore" (IFun IAtomic (IFun IInt (IEff IInt))) OpNone False,
+    Intrinsic "@vuna@prim_eff_atomicFetchAdd" (IFun IAtomic (IFun IInt (IEff IInt))) OpNone False,
+    Intrinsic "@vuna@prim_eff_atomicExchange" (IFun IAtomic (IFun IInt (IEff IInt))) OpNone False,
+    Intrinsic "@vuna@prim_eff_atomicCompareExchange" (IFun IAtomic (IFun IInt (IFun IInt (IEff IInt)))) OpNone False
+  ]
+
+-- | 线程原语名（全部隐藏；`Base.Thread` 是唯一用户面入口）。
+export threadIntrinsicNames : List String
+threadIntrinsicNames = map intrinsicName threadIntrinsics
+
 -- | 文本日志 / 可观测性的隐藏原语（`visible = False`）：只由内置宏 `log!` / `mark!`
 -- 展开与 `Base.Data.Obs` 引用，用户源码不可写。签名在此表；
 -- `Elab.Prelude` 会把它们补进 prelude globals（不进用户可见名单），`Core.Eval`
@@ -1182,7 +1225,7 @@ export internalIntrinsics : List Intrinsic
 internalIntrinsics =
   append
     [Intrinsic logOnIntrinsicName (IFun IInt (IFun IStr IBool)) OpNone False, Intrinsic logEmitIntrinsicName (IFun IInt (IFun IStr (IFun IStr IInt))) OpNone False, Intrinsic obsLevelIntrinsicName (IFun IInt IInt) OpNone False, Intrinsic obsSpanIntrinsicName (IPi "a" (IFun IStr (IFun IStr (IFun (IFun IInt (IVar "a")) (IVar "a"))))) OpNone False, Intrinsic obsSpanLabIntrinsicName (IPi "a" (IFun IStr (IFun IStr (IFun IStr (IFun (IFun IInt (IVar "a")) (IVar "a")))))) OpNone False, Intrinsic obsCounterIntrinsicName (IFun IStr (IFun IInt IInt)) OpNone False, Intrinsic obsMarkIntrinsicName (IFun IStr IInt) OpNone False, Intrinsic obsSpanBeginIntrinsicName (IFun IStr (IFun IStr IInt)) OpNone False, Intrinsic obsSpanEndIntrinsicName (IFun IInt IInt) OpNone False, Intrinsic obsSampleStartIntrinsicName (IFun IStr (IFun IInt IInt)) OpNone False, Intrinsic obsSampleStopIntrinsicName (IFun IInt IInt) OpNone False]
-    (filter (\i => not (intrinsicVisible i)) effIntrinsics)
+    (append (filter (\i => not (intrinsicVisible i)) effIntrinsics) (filter (\i => not (intrinsicVisible i)) threadIntrinsics))
 
 -- | 文本日志原语名：codegen 据此按需追加文本日志 runtime（`usesTrace`）。
 export logIntrinsicNames : List String
@@ -1212,7 +1255,9 @@ internalIntrinsicNames = map intrinsicName internalIntrinsics
 -- | 所有内建声明：基础表 + 浮点表 + 宿主效应表 + 编译器 tracing 表。
 export allIntrinsics : List Intrinsic
 allIntrinsics =
-  append baseIntrinsics (append floatIntrinsics (append effIntrinsics internalIntrinsics))
+  append
+    baseIntrinsics
+    (append floatIntrinsics (append effIntrinsics internalIntrinsics))
 
 -- | 全部与 Float 有关的内建名（字面量/算术/比较/转换/格式化）：核心求值/REPL 的
 -- 求值 guard 与 codegen 的按需 runtime helper 都按它判定「程序是否使用浮点」。

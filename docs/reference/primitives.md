@@ -230,6 +230,67 @@
   也没有依赖 multiplicity / 线性箭头（多用未禁止，见 [effects.md](effects.md)、
   [debt.md](debt.md) D22）。
 
+## 6.2 多线程原语
+
+**内建类型构造子**（与 `Array` / `IORef` 同层；名字恒可见、不可重定义，参数个数真源是
+`Base.Intrinsics.typeIntrinsicArities`）：
+
+| 类型 | kind | 运行时承载 |
+| --- | --- | --- |
+| `Thread a` | `Type -> Type` | 并行执行流的句柄 |
+| `Mutex` / `Condvar` / `Atomic` | `Type` | 互斥 / 条件变量 / 63-bit 原子单元 |
+
+这些类型在 IR 里统一落 `IrTyOpaque`（擦除值），OCaml runtime helper 用 `Obj.t` 承载；
+语言层类型安全仍由 prelude 类型保证。`Atomic` 只承载 `Int`。
+
+**原语**（全部返回 `Eff []`、`OpNone`；可见名 + `@vuna@` 隐藏别名，基库用隐藏名）：
+
+| 原语 | 签名 |
+| --- | --- |
+| `prim_eff_threadSpawn` | `{a} -> (Int -> a) -> Eff [] (Thread a)` |
+| `prim_eff_threadJoin` | `{a} -> Thread a -> Eff [] a` |
+| `prim_eff_threadYield` / `threadId` / `threadParallelism` | `Eff [] Int` |
+| `prim_eff_mutexNew` | `Eff [] Mutex` |
+| `prim_eff_mutexLock` / `TryLock` / `Unlock` | `Mutex -> Eff [] Int` / `Eff [] Bool` / `Eff [] Int` |
+| `prim_eff_condvarNew` | `Eff [] Condvar` |
+| `prim_eff_condvarWait` | `Condvar -> Mutex -> Eff [] Int` |
+| `prim_eff_condvarSignal` / `Broadcast` | `Condvar -> Eff [] Int` |
+| `prim_eff_atomicNew` | `Int -> Eff [] Atomic` |
+| `prim_eff_atomicLoad` / `Store` | `Atomic -> Eff [] Int` / `Atomic -> Int -> Eff [] Int` |
+| `prim_eff_atomicFetchAdd` / `Exchange` | `Atomic -> Int -> Eff [] Int`（返回旧值） |
+| `prim_eff_atomicCompareExchange` | `Atomic -> Int -> Int -> Eff [] Int`（返回旧值） |
+
+语义：
+
+- **线程体是 `Eff [] a`**：任务内效应必须由任务自己的 handler 处理干净，不继承父线程的
+  handler 栈；续延不跨线程恢复。线程内未捕获错误按运行时错误报告并 exit 2；`join` 不做
+  `Result` 包装。
+- **同步**：`Atomic` 操作顺序一致（63-bit `Int` 回绕）；`Mutex` 非公平、非递归、无 owner 检查；
+  `Condvar` 允许虚假唤醒；`join` / `lock` / `wait` 建立 happens-before。
+- **可共享可变状态**只有这四类句柄。`IORef` 不是线程安全的（跨线程访问属数据竞争）；
+  `List` / `String` / record / 不可变 `Array` 共享读安全。
+- 这些是**阻塞的宿主操作**：不经过单线程 fiber 调度器，也不让出纤程。`join` 只允许一次、
+  不能 join 当前线程；未 join 的线程在进程退出时被一并结束。
+- 没有取消 / 优先级 / 线程本地存储 / 异步 I/O；协作取消用 `Atomic` 标志 + `join` 组合。
+
+**target 能力**：`Ir.Runtime.irRtTargets` 是唯一判据（线程符号为 `["ocaml","native"]`）。
+wasm 在引用点拒绝（文案点明「不是待补缺口」）；native 当前在 `RuntimeTable.runtimeGaps`
+里声明为未实现，缺口见 [debt.md](debt.md) D135 与 [native.md](native.md) §4。
+
+**OCaml 运行时**（`Vuna_runtime.ml` 的 `dtThreadRuntime`）：
+
+| 原语 | 运行时 |
+| --- | --- |
+| `threadSpawn` / `join` | `Domain.spawn` / `Domain.join`（join self 先检查 `Domain.get_id`） |
+| `threadYield` / `Id` / `Parallelism` | `Unix.sleepf 0.0` / `Domain.self ()` / `Domain.recommended_domain_count ()` |
+| `mutex*` | `Mutex.create` / `lock` / `try_lock` / `unlock` |
+| `condvar*` | `Condition.create` / `wait` / `signal` / `broadcast` |
+| `atomic*` | `int Atomic.t`（`fetch_and_add` 按 OCaml int 的 63-bit 回绕；CAS 返回旧值） |
+
+OCaml 端不需要额外链接库（`Domain` / `Mutex` / `Condition` / `Atomic` 都在 5.x stdlib）。
+`bracket` cleanup 栈按 `Domain.DLS` 分域存放；`dtp_print` / `dtp_eprint` 用进程级锁保证整次调用
+不交错。
+
 ## 7. 效果原语、Eff 动作与宿主层
 
 **动作类型**：唯一动作类型是 `Eff r a`（`Base.Effect.Core`，装箱 data；行是擦除索引）。
