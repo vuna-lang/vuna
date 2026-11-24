@@ -3139,6 +3139,7 @@ instrLabelRefs (IMovzx _ src) = operandLabelRefs src
 instrLabelRefs IMovzxAl = []
 instrLabelRefs (ILea _ l) = [l]
 instrLabelRefs (ILeaMem _ _ _) = []
+instrLabelRefs (ILeaScale _ _ _ _) = []
 instrLabelRefs (IBin _ src) = operandLabelRefs src
 instrLabelRefs (IBinReg _ _ src) = operandLabelRefs src
 instrLabelRefs (ICmp a b) = append (operandLabelRefs a) (operandLabelRefs b)

@@ -182,6 +182,8 @@ replaceInstrReg : Reg -> Reg -> Instr -> Instr
 replaceInstrReg s src (IMov a b) = IMov (replaceOperandReg s src a) (replaceOperandReg s src b)
 replaceInstrReg s src (IMovzx d o) = IMovzx d (replaceOperandReg s src o)
 replaceInstrReg s src (ILeaMem d base off) = ILeaMem d (if sameReg s base then src else base) off
+replaceInstrReg s src (ILeaScale d base scale off) =
+  ILeaScale d (if sameReg s base then src else base) scale off
 replaceInstrReg s src (IBin op o) = IBin op (replaceOperandReg s src o)
 replaceInstrReg s src (IBinReg op d o) = IBinReg op d (replaceOperandReg s src o)
 replaceInstrReg s src (ICmp a b) = ICmp (replaceOperandReg s src a) (replaceOperandReg s src b)

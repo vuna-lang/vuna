@@ -211,8 +211,46 @@ selfFoldProblems =
 cleanupTestProblems : List String
 cleanupTestProblems =
   append
-    (append cleanupDropProblems cleanupKeepProblems)
-    (append cleanupTargetProblems (append cleanupOfProblems cleanupLogicProblems))
+    (append (append cleanupDropProblems cleanupKeepProblems) (append cleanupTargetProblems (append cleanupOfProblems cleanupLogicProblems)))
+    leaProblems
+
+-- | `mov d, s; imul d, k` / `imul d, k; add d, c` 折成一条 `lea`；非 2/3/5/9 倍不动。
+leaProblems : List String
+leaProblems =
+  append
+    leaScaleFoldProblems
+    (append leaAddFoldProblems (append leaOtherFactorProblems (append leaKeepNextProblems leaScale8Problems)))
+
+leaScaleFoldProblems : List String
+leaScaleFoldProblems =
+  case cleanup [IMov (OpReg R11) (OpReg Rbx), IBinReg "imul" R11 (OpImm 3), INop] of
+    [ILeaScale R11 Rbx 2 0, INop] => []
+    is => ["lea scale fold: " ++ strFromInt (length is) ++ " instrs"]
+
+leaAddFoldProblems : List String
+leaAddFoldProblems =
+  case cleanup [IBinReg "imul" R12 (OpImm 5), IBinReg "add" R12 (OpImm 7), INop] of
+    [ILeaScale R12 R12 4 7, INop] => []
+    is => ["lea add fold: " ++ strFromInt (length is) ++ " instrs"]
+
+leaOtherFactorProblems : List String
+leaOtherFactorProblems =
+  case cleanup [IBinReg "imul" R12 (OpImm 6), INop] of
+    [IBinReg "imul" R12 (OpImm 6), INop] => []
+    is => ["lea keeps other factors: " ++ strFromInt (length is) ++ " instrs"]
+
+-- | `imul` 后面的指令（例如 wrap 的 `shl`）不能被折掉。
+leaKeepNextProblems : List String
+leaKeepNextProblems =
+  case cleanup [IBinReg "imul" R12 (OpImm 5), IBinReg "shl" R12 (OpImm 1)] of
+    [ILeaScale R12 R12 4 0, IBinReg "shl" R12 (OpImm 1)] => []
+    is => ["lea keeps following instr: " ++ strFromInt (length is) ++ " instrs"]
+
+leaScale8Problems : List String
+leaScale8Problems =
+  case cleanup [IMov (OpReg R11) (OpReg Rbx), IBinReg "imul" R11 (OpImm 9), INop] of
+    [ILeaScale R11 Rbx 8 0, INop] => []
+    is => ["lea scale 8: " ++ strFromInt (length is) ++ " instrs"]
 
 cleanupDropProblems : List String
 cleanupDropProblems =

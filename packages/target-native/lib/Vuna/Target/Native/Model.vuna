@@ -119,6 +119,8 @@ export data Instr(..) : Type where
   ILea : Reg -> String -> Instr
   -- | `lea reg, [base + off]`。
   ILeaMem : Reg -> Reg -> Int -> Instr
+  -- | `lea dst, [base + base*scale + off]`（乘加强度削减用；scale ∈ 1/2/4/8）。
+  ILeaScale : Reg -> Reg -> Int -> Int -> Instr
   -- | `op rax, operand`。
   IBin : String -> Operand -> Instr
   -- | `op reg, operand`。

@@ -411,6 +411,30 @@ cleanupOnce (i :: rest) =
   case rest of
     next :: more =>
       case (i, next) of
+        -- 常量乘加 → `lea`：`mov d, s; imul d, k` 合成 `lea d, [s + s*(k-1)]`，
+        -- 紧跟的 `add d, c` 再并进位移。只对 2/3/5/9 倍（scale 1/2/4/8）动手。
+        (IMov (OpReg d) (OpReg s), IBinReg "imul" dst (OpImm k)) =>
+          if not (sameReg d dst) then
+            i :: cleanupOnce rest
+          else
+            case leaScaleOf k of
+              Just scale =>
+                case more of
+                  (IBinReg "add" dst (OpImm c)) :: tail => if sameReg dst d && immFits32 c then ILeaScale d s scale c :: cleanupOnce tail else ILeaScale d s scale 0 :: cleanupOnce rest
+                  _ => ILeaScale d s scale 0 :: cleanupOnce more
+              Nothing => i :: cleanupOnce rest
+        (IBinReg "imul" dst (OpImm k), IBinReg "add" dst2 (OpImm c)) =>
+          case leaScaleOf k of
+            Just scale =>
+              if sameReg dst dst2 && immFits32 c then
+                ILeaScale dst dst scale c :: cleanupOnce more
+              else
+                i :: cleanupOnce rest
+            Nothing => i :: cleanupOnce rest
+        (IBinReg "imul" d (OpImm k), _) =>
+          case leaScaleOf k of
+            Just scale => ILeaScale d d scale 0 :: cleanupOnce rest
+            Nothing => i :: cleanupOnce rest
         (IMov (OpReg Rax) (OpImm k), IMov (OpReg r) (OpReg Rax)) =>
           if sameReg r Rax then
             i :: cleanupOnce rest
@@ -498,6 +522,14 @@ addJumpTarget _ acc = acc
 immFits32 : Int -> Bool
 immFits32 n = n >= 0 - 2147483648 && n <= 2147483647
 
+-- | `imul d, k` 能折成 `lea` 的倍数：k = scale + 1，scale ∈ {1,2,4,8}。
+leaScaleOf : Int -> Maybe Int
+leaScaleOf 2 = Just 1
+leaScaleOf 3 = Just 2
+leaScaleOf 5 = Just 4
+leaScaleOf 9 = Just 8
+leaScaleOf _ = Nothing
+
 -- | scratch 在后续直线上是否在「先读」之前先被重写。块边界视为自由：`rax` / `r10` /
 --   `r11` 只作块内临时，跨块的值一律走帧槽（生成器不在块之间保留 scratch）。
 export regFreeAhead : Reg -> List Instr -> Bool
@@ -529,6 +561,7 @@ instrReadsReg r (IMov _ src) = operandReadsReg r src
 instrReadsReg r (IMovByteRegOp _ src) = sameReg r src
 instrReadsReg r (IMovzx _ src) = operandReadsReg r src
 instrReadsReg r (ILeaMem _ base _) = sameReg r base
+instrReadsReg r (ILeaScale _ base _ _) = sameReg r base
 instrReadsReg r (IBin _ src) = operandReadsReg r src
 instrReadsReg r (IBinReg _ dst src) = sameReg r dst || operandReadsReg r src
 instrReadsReg r (ICmp a b) = operandReadsReg r a || operandReadsReg r b
@@ -550,6 +583,8 @@ instrReadsReg _ _ = False
 
 export instrWritesReg : Reg -> Instr -> Bool
 instrWritesReg r (IMov (OpReg dst) _) = sameReg r dst
+instrWritesReg r (ILeaMem dst _ _) = sameReg r dst
+instrWritesReg r (ILeaScale dst _ _ _) = sameReg r dst
 instrWritesReg r (IMovzx dst _) = sameReg r dst
 instrWritesReg r (IBinReg _ dst _) = sameReg r dst
 instrWritesReg r (ISetcc _ dst) = sameReg r dst

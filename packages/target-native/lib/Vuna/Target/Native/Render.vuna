@@ -42,6 +42,11 @@ memXText base idx off =
   else
     "[${regText base}+${regText idx}+${strFromInt off}]"
 
+-- | `lea` 的位移后缀：0 省略，负数写 `-n`。
+dispText : Int -> String
+dispText off =
+  if off == 0 then "" else if off < 0 then "-${strFromInt (0 - off)}" else "+${strFromInt off}"
+
 renderOperand : Operand -> String
 renderOperand (OpReg r) = regText r
 renderOperand (OpImm n) = strFromInt n
@@ -85,6 +90,8 @@ renderInstr (IMovzx dst src) = "movzx ${regText dst}, ${renderByteOp src}"
 renderInstr IMovzxAl = "movzx rax, al"
 renderInstr (ILea r label) = "lea ${regText r}, [rip + ${label}]"
 renderInstr (ILeaMem dst base off) = "lea ${regText dst}, ${memText base off}"
+renderInstr (ILeaScale dst base scale off) =
+  "lea ${regText dst}, [${regText base}+${regText base}*${strFromInt scale}${dispText off}]"
 renderInstr (IBin op operand) = "${op} rax, ${renderOperand operand}"
 renderInstr (IBinReg op r operand) = renderBinReg op r operand
 renderInstr (ICmp dst src) =
