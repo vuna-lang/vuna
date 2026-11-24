@@ -59,12 +59,26 @@ if [ -f "$allow" ]; then
   done <"$allow"
 fi
 
-# 宿主原语的**可见名**不得出现在源码里——packages/base/lib、packages/compiler/lib、packages/cli/lib 一律用
-# `@vuna@prim_eff_*` 内部名（`Intrinsics.vuna` 是定义真源；`Codegen/Runtime.vuna`、
-# `Ir/Runtime.vuna` 与各后端的 `Runtime.vuna` 是运行时符号表，字符串里的 `prim_eff_*`
-# 是契约数据/目标符号，不是源码调用，均豁免）。用户源码写不出这些名字（词法只认
-# `@vuna@` 前缀的完整内部名，且隐藏 intrinsic 不进用户可见名单）。
-oldNames=$(cd "$root" && grep -rn "\bprim_eff_" packages/compiler/lib packages/compiler-base/lib packages/ir/lib packages/target-ocaml/lib packages/target-native/lib packages/target-wasm/lib packages/plugin-web/lib packages/dev/lib packages/cli/lib packages/toolchain/lib packages/plugin-kit/lib --include='*.vuna' 2>/dev/null | grep -v '@vuna@' | grep -v 'Vuna/Compiler/Base/Intrinsics.vuna' | grep -v 'Vuna/Ir/Runtime.vuna' | grep -v 'Vuna/Target/Ocaml/Runtime.vuna' | grep -v 'Vuna/Target/Native/Runtime.vuna' | grep -v 'Vuna/Target/Wasm/Runtime.vuna' || true)
+# 宿主原语的**可见名**不得出现在**代码位置**——编译器 / IR / 工具链一律用
+# `@vuna@prim_eff_*` 内部名（`Intrinsics.vuna` 是定义真源）。
+# 内建表、运行时契约（`Ir/Runtime.vuna` 与各后端的 `Runtime.vuna`）和 kind 判据表
+# （`Ir/Kinds.vuna`）里的 `prim_eff_*` 是字符串里的契约数据 / 目标符号，不是源码调用。
+# 判定口径：逐文件剥掉双引号字符串字面量与 `--` 行注释，剩下的代码位置出现裸名即违规；
+# `@vuna@` 内部名不算（源码写不出，见 `Frontend/Lexer.vuna` 的 `@vuna@` 规则）。
+# 近似：不解析模板字面量里的插值，也不跨行跟踪字符串/注释；出现这类形态时再收紧。
+oldNames=$(
+  cd "$root" || exit 1
+  find \
+    packages/compiler/lib packages/compiler-base/lib packages/ir/lib \
+    packages/target-ocaml/lib packages/target-native/lib packages/target-wasm/lib \
+    packages/plugin-web/lib packages/dev/lib packages/cli/lib packages/toolchain/lib \
+    packages/plugin-kit/lib \
+    -name '*.vuna' 2>/dev/null | sort | while read -r f; do
+    sed -E 's/"([^"\\]|\\.)*"//g; s/--.*$//' "$f" |
+      grep -nE '(^|[^@[:alnum:]_])prim_eff_' |
+      sed "s|^|$f:|"
+  done
+)
 if [ -n "$oldNames" ]; then
   echo "eff-boundary: 发现可见宿主原语名（应改成 @vuna@ 内部名）：" >&2
   printf '%s\n' "$oldNames" | head -10 | sed 's/^/  /' >&2
