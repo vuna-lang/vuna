@@ -3660,10 +3660,12 @@ build program printResult =
                       -- 零参别名（`Nat.plus = natAdd`）在应用位置展开成 `IrRtApp`，
                       -- 让标量树与调用点内联看到运行时叶子。
                       cpsAliased = map (resolveDefAliases cpsOrdered) cpsOrdered
+                      -- Float `let` 代进唯一使用点，让浮点表达式树跨过绑定、只装盒一次。
+                      cpsFloatLets = Inline.inlineFloatLetsDefs cpsAliased
                       pools = modulePools cpsOrdered
                       fpools = moduleFloatPools cpsOrdered
                       allocs = allocatingDefNames cpsAliased
-                    in case genDefs cpsAliased pools fpools recNames allocs unit.irUnitTyDecls [] cpsAliased [] [] of
+                    in case genDefs cpsFloatLets pools fpools recNames allocs unit.irUnitTyDecls [] cpsFloatLets [] [] of
                       NFail err => NativeRejected (nativeAuditEnrich err cpsOrdered)
                       NOk pair =>
                         let

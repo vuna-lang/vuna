@@ -193,11 +193,79 @@ bigOut = inlineDefs [] bigDefs
 sameOut : Pair (List IrDef) Bool
 sameOut = inlineDefs [] nonInlinable
 
+-- Float let 消除：立即 lambda 应用 + 纯 Float 实参 + 单次使用 → 代进去；
+-- 两次使用 / 嵌套 lambda 内使用 / 非 Float 实参 → 保留。
+fBinder : IrBinder
+fBinder = mkIrBinderTyped 50 "f" IrTyFloat
+
+floatExpr : Ir
+floatExpr = IrRtApp "bi_mul_float" (IrFloatLit "2.0" :: IrFloatLit "0.5" :: [])
+
+floatOnceDef : IrDef
+floatOnceDef =
+  IrDef
+    "useFloatOnce"
+    0
+    []
+    Nothing
+    (IrApp Nothing (IrLam [fBinder] Nothing (IrTail (IrRtApp "bi_add_float" (IrVar fBinder :: IrFloatLit "1.0" :: [])))) floatExpr)
+    True
+    False
+    Nothing
+
+floatTwiceDef : IrDef
+floatTwiceDef =
+  IrDef
+    "useFloatTwice"
+    0
+    []
+    Nothing
+    (IrApp Nothing (IrLam [fBinder] Nothing (IrTail (IrRtApp "bi_add_float" (IrVar fBinder :: IrVar fBinder :: [])))) floatExpr)
+    True
+    False
+    Nothing
+
+floatNestedDef : IrDef
+floatNestedDef =
+  IrDef
+    "useFloatNested"
+    0
+    []
+    Nothing
+    (IrApp Nothing (IrLam [fBinder] Nothing (IrTail (IrLam [nBinder] Nothing (IrTail (IrVar fBinder))))) floatExpr)
+    True
+    False
+    Nothing
+
+floatIntDef : IrDef
+floatIntDef =
+  IrDef
+    "useIntLet"
+    0
+    []
+    Nothing
+    (IrApp Nothing (IrLam [nBinder] Nothing (IrTail (IrRtApp "+" (IrVar nBinder :: IrInt 1 :: [])))) (IrInt 3))
+    True
+    False
+    Nothing
+
+floatOnceOut : List IrDef
+floatOnceOut = inlineFloatLetsDefs [floatOnceDef]
+
+floatTwiceOut : List IrDef
+floatTwiceOut = inlineFloatLetsDefs [floatTwiceDef]
+
+floatNestedOut : List IrDef
+floatNestedOut = inlineFloatLetsDefs [floatNestedDef]
+
+floatIntOut : List IrDef
+floatIntOut = inlineFloatLetsDefs [floatIntDef]
+
 problems : List String
 problems =
   filter
     (\s => s /= "")
-    [check "small call inlined" False (mentionsGlobal "inc" (bodyOf "useInc" (firstOf smallOut))), check "inlined tail stripped" False (hasTail (belowRoot (lamInner (bodyOf "useInc" (firstOf smallOut))))), check "changed flag" True (secondOf smallOut), check "recursive call kept" True (mentionsGlobal "loop" (bodyOf "useLoop" (firstOf recOut))), check "recursive changed flag" False (secondOf recOut), check "non-trivial arg kept" True (mentionsGlobal "inc" (bodyOf "useHard" (firstOf hardOut))), check "cheap arg inlined" False (mentionsGlobal "inc" (bodyOf "useCheap" (firstOf cheapOut))), check "div arg inlined" False (mentionsGlobal "inc" (bodyOf "useDiv" (firstOf divOut))), check "zero-div arg kept" True (mentionsGlobal "inc" (bodyOf "useZeroDiv" (firstOf zeroDivOut))), check "big body kept" True (mentionsGlobal "big" (bodyOf "useBig" (firstOf bigOut))), check "no inline point unchanged" False (secondOf sameOut)]
+    [check "small call inlined" False (mentionsGlobal "inc" (bodyOf "useInc" (firstOf smallOut))), check "inlined tail stripped" False (hasTail (belowRoot (lamInner (bodyOf "useInc" (firstOf smallOut))))), check "changed flag" True (secondOf smallOut), check "recursive call kept" True (mentionsGlobal "loop" (bodyOf "useLoop" (firstOf recOut))), check "recursive changed flag" False (secondOf recOut), check "non-trivial arg kept" True (mentionsGlobal "inc" (bodyOf "useHard" (firstOf hardOut))), check "cheap arg inlined" False (mentionsGlobal "inc" (bodyOf "useCheap" (firstOf cheapOut))), check "div arg inlined" False (mentionsGlobal "inc" (bodyOf "useDiv" (firstOf divOut))), check "zero-div arg kept" True (mentionsGlobal "inc" (bodyOf "useZeroDiv" (firstOf zeroDivOut))), check "big body kept" True (mentionsGlobal "big" (bodyOf "useBig" (firstOf bigOut))), check "no inline point unchanged" False (secondOf sameOut), check "float let inlined" False (mentionsBinder 50 (bodyOf "useFloatOnce" floatOnceOut)), check "float let expr kept" True (mentionsRtApp "bi_mul_float" (bodyOf "useFloatOnce" floatOnceOut)), check "float twice kept" True (mentionsBinder 50 (bodyOf "useFloatTwice" floatTwiceOut)), check "float nested lambda kept" True (mentionsBinder 50 (bodyOf "useFloatNested" floatNestedOut)), check "int let kept" True (mentionsBinder 11 (bodyOf "useIntLet" floatIntOut))]
 
 bodyOf : String -> List IrDef -> Ir
 bodyOf _ [] = IrInt 0
@@ -219,6 +287,35 @@ mentionsGlobal n ir =
     IrIf c t e => mentionsGlobal n c || mentionsGlobal n t || mentionsGlobal n e
     IrLam _ _ b => mentionsGlobal n b
     _ => False
+
+mentionsBinder : Int -> Ir -> Bool
+mentionsBinder id ir =
+  case ir of
+    IrVar b => b.irBinderId == id
+    IrApp _ f a => mentionsBinder id f || mentionsBinder id a
+    IrTail inner => mentionsBinder id inner
+    IrRtApp _ args => mentionsBinderList id args
+    IrLet _ s b => mentionsBinder id s || mentionsBinder id b
+    IrIf c t e => mentionsBinder id c || mentionsBinder id t || mentionsBinder id e
+    IrLam _ _ b => mentionsBinder id b
+    _ => False
+
+mentionsBinderList : Int -> List Ir -> Bool
+mentionsBinderList id xs = foldl (\acc, x => acc || mentionsBinder id x) False xs
+
+mentionsRtApp : String -> Ir -> Bool
+mentionsRtApp sym ir =
+  case ir of
+    IrRtApp s args => s == sym || mentionsRtAppList sym args
+    IrApp _ f a => mentionsRtApp sym f || mentionsRtApp sym a
+    IrTail inner => mentionsRtApp sym inner
+    IrLet _ s b => mentionsRtApp sym s || mentionsRtApp sym b
+    IrIf c t e => mentionsRtApp sym c || mentionsRtApp sym t || mentionsRtApp sym e
+    IrLam _ _ b => mentionsRtApp sym b
+    _ => False
+
+mentionsRtAppList : String -> List Ir -> Bool
+mentionsRtAppList sym xs = foldl (\acc, x => acc || mentionsRtApp sym x) False xs
 
 lamInner : Ir -> Ir
 lamInner ir =

@@ -21,6 +21,7 @@ import Base.Data.List as List
 import Base.Data.Maybe as Maybe
 import Base.Data.Pair as Pair
 import Vuna.Ir.Analysis as Analysis
+import Vuna.Ir.Kinds as Kinds
 import Vuna.Ir.Model
 import Vuna.Ir.Synthetic as Synthetic
 import Vuna.Ir.Tail as Tail
@@ -650,3 +651,192 @@ sameCond (IrRtApp s1 ([a1, b1])) (IrRtApp s2 ([a2, b2])) =
 sameCond (IrRtApp s1 ([a1])) (IrRtApp s2 ([a2])) = s1 == s2 && sameCond a1 a2
 sameCond (IrRtApp s1 []) (IrRtApp s2 []) = s1 == s2
 sameCond _ _ = False
+
+-- ---------------------------------------------------------------
+-- Float let 消除：把纯 Float 表达式从只使用一次的 `let` 直接代进使用点。
+--
+-- native 的浮点表达式树（`Module.floatTree`）能跨过算术/`sqrt`/`abs`/`intToFloat`
+-- 一路留在 `xmm` 上，但遇到 `let` 会先在绑定处装盒一次，再在树里解引用。把
+-- `let step = <float tree> in ... step ...` 代进唯一使用点后，整棵树只装盒一次。
+-- 只收可判定为 Float、且求值不产生效应/失败的表达式；同一 binder 在嵌套 lambda
+-- 内还有引用时不代（避免把计算搬进可能执行多次的闭包体）。
+-- ---------------------------------------------------------------
+export inlineFloatLetsDefs : List IrDef -> List IrDef
+inlineFloatLetsDefs = map inlineFloatLetsDef
+
+inlineFloatLetsDef : IrDef -> IrDef
+inlineFloatLetsDef (IrExternDef name ty sym span) = IrExternDef name ty sym span
+inlineFloatLetsDef (IrDef nm ar deps ty body recOk guard span) =
+  IrDef nm ar deps ty (floatLetsIr body) recOk guard span
+
+floatLetsIr : Ir -> Ir
+floatLetsIr (IrLet ([b]) scrut body) =
+  let
+    scrut2 = floatLetsIr scrut
+    body2 = floatLetsIr body
+    id = b.irBinderId
+  in if isTotalFloat scrut2 && usesAny id body2 == 1 && usesOutsideLams id body2 == 1 then
+    inlineBody [(id, scrut2)] body2
+  else
+    IrLet [b] scrut2 body2
+floatLetsIr (IrLet bs scrut body) = IrLet bs (floatLetsIr scrut) (floatLetsIr body)
+floatLetsIr (IrCtor f c ty args) = IrCtor f c ty (map floatLetsIr args)
+floatLetsIr (IrRecord f ty fields) =
+  IrRecord f ty (map (\p => (firstOf p, floatLetsIr (secondOf p))) fields)
+floatLetsIr (IrProj base f fld ty) = IrProj (floatLetsIr base) f fld ty
+floatLetsIr (IrRecUpd base f fields ty) =
+  IrRecUpd (floatLetsIr base) f (map (\p => (firstOf p, floatLetsIr (secondOf p))) fields) ty
+floatLetsIr (IrRtApp sym args) = IrRtApp sym (map floatLetsIr args)
+floatLetsIr (IrCast a b inner) = IrCast a b (floatLetsIr inner)
+floatLetsIr (IrLam bs ty inner) = IrLam bs ty (floatLetsIr inner)
+floatLetsIr (IrApp ty (IrLam ([b]) lamTy body) a) =
+  let
+    a2 = floatLetsIr a
+    body2 = floatLetsIr body
+    id = b.irBinderId
+  in if isTotalFloat a2 && usesAny id body2 == 1 && usesOutsideLams id body2 == 1 then
+    Tail.stripTail (inlineBody [(id, a2)] body2)
+  else
+    IrApp ty (IrLam [b] lamTy body2) a2
+floatLetsIr (IrApp ty f a) = IrApp ty (floatLetsIr f) (floatLetsIr a)
+floatLetsIr (IrTail inner) = IrTail (floatLetsIr inner)
+floatLetsIr (IrIf c t e) = IrIf (floatLetsIr c) (floatLetsIr t) (floatLetsIr e)
+floatLetsIr (IrCase ty rt scrut alts) = IrCase ty rt (floatLetsIr scrut) (map floatLetsAlt alts)
+floatLetsIr (IrNatCase scrut fresh z s c) =
+  IrNatCase (floatLetsIr scrut) fresh (floatLetsAltM z) (floatLetsAltM s) (floatLetsAltM c)
+floatLetsIr (IrConcatMany parts) = IrConcatMany (map floatLetsIr parts)
+floatLetsIr (IrEffThunk f c ty ar prim) = IrEffThunk f c ty ar (floatLetsIr prim)
+floatLetsIr ir = ir
+
+floatLetsAlt : IrAlt -> IrAlt
+floatLetsAlt alt = IrAlt alt.irAltCtor alt.irAltBinders (floatLetsIr alt.irAltBody)
+
+floatLetsAltM : Maybe IrAlt -> Maybe IrAlt
+floatLetsAltM Nothing = Nothing
+floatLetsAltM (Just alt) = Just (floatLetsAlt alt)
+
+isFloatBinder : IrBinder -> Bool
+isFloatBinder b =
+  case Kinds.irKindOfTy [] b.irBinderTy of
+    Kinds.KFloat => True
+    _ => False
+
+isIntBinder : IrBinder -> Bool
+isIntBinder b =
+  case Kinds.irKindOfTy [] b.irBinderTy of
+    Kinds.KInt => True
+    _ => False
+
+-- | 只接受纯 Float 表达式：变量 / 字面量 / 浮点二元运算 / sqrt / abs / intToFloat。
+--   这些运算不分配、不产生效应、不失败，搬动求值位置不改变可观察行为。
+isTotalFloat : Ir -> Bool
+isTotalFloat (IrVar b) = isFloatBinder b
+isTotalFloat (IrFloatLit _) = True
+isTotalFloat (IrCast _ _ inner) = isTotalFloat inner
+isTotalFloat (IrRtApp sym args) = isTotalFloatApp sym args
+isTotalFloat (IrApp _ (IrGlobal name) a) = isTotalFloatGlobal name a
+isTotalFloat _ = False
+
+isTotalFloatApp : String -> List Ir -> Bool
+isTotalFloatApp sym args =
+  if isFloatBinSym sym then
+    allTotalFloat args
+  else
+    case args of
+      [a] => isTotalFloatLeaf sym a
+      _ => False
+
+isTotalFloatGlobal : String -> Ir -> Bool
+isTotalFloatGlobal name a =
+  if name == "Base.Data.Float.sqrt" || name == "Base.Data.Float.abs" then
+    isTotalFloat a
+  else if name == "Base.Data.Float.intToFloat" then isIntAtom a else False
+
+isTotalFloatLeaf : String -> Ir -> Bool
+isTotalFloatLeaf sym a =
+  if sym == "floatSqrt" || sym == "floatAbs" then
+    isTotalFloat a
+  else if sym == "floatFromInt" then isIntAtom a else False
+
+allTotalFloat : List Ir -> Bool
+allTotalFloat [] = True
+allTotalFloat (a :: rest) = isTotalFloat a && allTotalFloat rest
+
+isFloatBinSym : String -> Bool
+isFloatBinSym sym =
+  sym == "bi_add_float" || sym == "bi_sub_float" || sym == "bi_mul_float" || sym == "bi_div_float"
+
+isIntAtom : Ir -> Bool
+isIntAtom (IrVar b) = isIntBinder b
+isIntAtom (IrInt _) = True
+isIntAtom (IrCast _ _ inner) = isIntAtom inner
+isIntAtom _ = False
+
+usesAny : Int -> Ir -> Int
+usesAny id (IrVar b) = if b.irBinderId == id then 1 else 0
+usesAny id (IrCtor _ _ _ args) = usesAnyList id args
+usesAny id (IrRecord _ _ fields) = usesAnyList id (map secondOf fields)
+usesAny id (IrProj base _ _ _) = usesAny id base
+usesAny id (IrRecUpd base _ fields _) = usesAny id base + usesAnyList id (map secondOf fields)
+usesAny id (IrRtApp _ args) = usesAnyList id args
+usesAny id (IrCast _ _ inner) = usesAny id inner
+usesAny id (IrLet _ scrut body) = usesAny id scrut + usesAny id body
+usesAny id (IrLam _ _ body) = usesAny id body
+usesAny id (IrApp _ f a) = usesAny id f + usesAny id a
+usesAny id (IrTail inner) = usesAny id inner
+usesAny id (IrIf c t e) = usesAny id c + usesAny id t + usesAny id e
+usesAny id (IrCase _ _ scrut alts) = usesAny id scrut + usesAnyAlts id alts
+usesAny id (IrNatCase scrut _ z s c) =
+  usesAny id scrut + usesAnyAltM id z + usesAnyAltM id s + usesAnyAltM id c
+usesAny id (IrConcatMany parts) = usesAnyList id parts
+usesAny id (IrEffThunk _ _ _ _ prim) = usesAny id prim
+usesAny id _ = 0
+
+usesAnyList : Int -> List Ir -> Int
+usesAnyList id xs = foldl (\acc, x => acc + usesAny id x) 0 xs
+
+usesAnyAlts : Int -> List IrAlt -> Int
+usesAnyAlts id xs = foldl (\acc, a => acc + usesAnyAlt id a) 0 xs
+
+usesAnyAlt : Int -> IrAlt -> Int
+usesAnyAlt id alt = usesAny id alt.irAltBody
+
+usesAnyAltM : Int -> Maybe IrAlt -> Int
+usesAnyAltM _ Nothing = 0
+usesAnyAltM id (Just (IrAlt _ _ body)) = usesAny id body
+
+-- | 只统计不在嵌套 lambda 里的引用；嵌套 lambda 内的引用会随闭包调用次数变化，
+--   不参与单次 `let` 消除。
+usesOutsideLams : Int -> Ir -> Int
+usesOutsideLams id (IrVar b) = if b.irBinderId == id then 1 else 0
+usesOutsideLams id (IrLam _ _ _) = 0
+usesOutsideLams id (IrCtor _ _ _ args) = usesOutsideList id args
+usesOutsideLams id (IrRecord _ _ fields) = usesOutsideList id (map secondOf fields)
+usesOutsideLams id (IrProj base _ _ _) = usesOutsideLams id base
+usesOutsideLams id (IrRecUpd base _ fields _) =
+  usesOutsideLams id base + usesOutsideList id (map secondOf fields)
+usesOutsideLams id (IrRtApp _ args) = usesOutsideList id args
+usesOutsideLams id (IrCast _ _ inner) = usesOutsideLams id inner
+usesOutsideLams id (IrLet _ scrut body) = usesOutsideLams id scrut + usesOutsideLams id body
+usesOutsideLams id (IrApp _ f a) = usesOutsideLams id f + usesOutsideLams id a
+usesOutsideLams id (IrTail inner) = usesOutsideLams id inner
+usesOutsideLams id (IrIf c t e) = usesOutsideLams id c + usesOutsideLams id t + usesOutsideLams id e
+usesOutsideLams id (IrCase _ _ scrut alts) = usesOutsideLams id scrut + usesOutsideAlts id alts
+usesOutsideLams id (IrNatCase scrut _ z s c) =
+  usesOutsideLams id scrut + usesOutsideAltM id z + usesOutsideAltM id s + usesOutsideAltM id c
+usesOutsideLams id (IrConcatMany parts) = usesOutsideList id parts
+usesOutsideLams id (IrEffThunk _ _ _ _ prim) = usesOutsideLams id prim
+usesOutsideLams id _ = 0
+
+usesOutsideList : Int -> List Ir -> Int
+usesOutsideList id xs = foldl (\acc, x => acc + usesOutsideLams id x) 0 xs
+
+usesOutsideAlts : Int -> List IrAlt -> Int
+usesOutsideAlts id xs = foldl (\acc, a => acc + usesOutsideAlt id a) 0 xs
+
+usesOutsideAlt : Int -> IrAlt -> Int
+usesOutsideAlt id alt = usesOutsideLams id alt.irAltBody
+
+usesOutsideAltM : Int -> Maybe IrAlt -> Int
+usesOutsideAltM _ Nothing = 0
+usesOutsideAltM id (Just (IrAlt _ _ body)) = usesOutsideLams id body
