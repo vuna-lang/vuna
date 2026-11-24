@@ -459,7 +459,8 @@ exit: 0
 
 # 9ah) 闭包体的来参区按闭包 ABI 算（`rdi` 占掉一个寄存器）：8 参 lambda 尾调 10 参函数
 #      正好用满 32 字节来参区，仍然发 `jmp`；wide10 自己的递归走本地循环。
-run: sh -c 'd="$TMPDIR/tcolam"; mkdir -p "$d/app"; printf "[package]\nname = \"tcolam\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "wide10 : Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int\nwide10 a b c d e f g h i n =\n  if n <= 0 then a + b + c + d + e + f + g + h + i\n  else wide10 a b c d e f g h i (n - 1)\n\napply8 : (Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int) -> Int\napply8 f = f 1 2 3 4 5 6 7 8\n\nmain : Int\nmain = apply8 (\\\\a, b, c, d, e, f, g, h => wide10 a b c d e f g h 0 100000)\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/tcolam-out" "$d"'
+#      lambda 捕获 `k`，避免高阶参数特化把闭包消掉（特化后按标准 ABI 算来参区，只够回退 call）。
+run: sh -c 'd="$TMPDIR/tcolam"; mkdir -p "$d/app"; printf "[package]\nname = \"tcolam\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "wide10 : Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int\nwide10 a b c d e f g h i n =\n  if n <= 0 then a + b + c + d + e + f + g + h + i\n  else wide10 a b c d e f g h i (n - 1)\n\napply8 : (Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int) -> Int\napply8 f = f 1 2 3 4 5 6 7 8\n\nrun : Int -> Int\nrun k = apply8 (\\\\a, b, c, d, e, f, g, h => wide10 a b c d e f g h k 100000)\n\nmain : Int\nmain = run 0\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/tcolam-out" "$d"'
 exit: 0
 run: "$TMPDIR/tcolam-out/bin/tcolam" 2>&1
 exit: 0
@@ -536,8 +537,9 @@ out-equals: 1
 run: sh -c 'grep -q "jmp rt_str_length" "$TMPDIR/tcort-out/Main.s"'
 exit: 0
 
-# 9al) 顶层函数值闭包静态化：引用点是 `lea`，不是每轮 `rt_alloc`。
-run: sh -c 'd="$TMPDIR/tcostatic"; mkdir -p "$d/app"; printf "[package]\nname = \"tcostatic\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Data.Nat as Nat\n\ndirect : Nat -> Int\ndirect n = case n of\n  Zero => 0\n  Succ k => direct k\n\napply : (Nat -> Int) -> Nat -> Int\napply f n = f n\n\nmain : Int\nmain = apply direct (natFromInt 1000)\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/tcostatic-out" "$d"'
+# 9al) 顶层函数值闭包静态化：函数值经 List 逃逸，调用点解析不到 head，
+#      创建点是 `.rodata` 里的 `lea`，不是每轮 `rt_alloc`。
+run: sh -c 'd="$TMPDIR/tcostatic"; mkdir -p "$d/app"; printf "[package]\nname = \"tcostatic\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Data.List as List\nimport Base.Data.Nat as Nat\n\ndirect : Nat -> Int\ndirect n = case n of\n  Zero => 0\n  Succ k => direct k\n\npick : List (Nat -> Int) -> Nat -> Int\npick fs n = case fs of\n  f :: _ => f n\n  [] => 0\n\nmain : Int\nmain = pick [direct] (natFromInt 1000)\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/tcostatic-out" "$d"'
 exit: 0
 run: "$TMPDIR/tcostatic-out/bin/tcostatic" 2>&1
 exit: 0

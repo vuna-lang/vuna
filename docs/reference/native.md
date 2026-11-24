@@ -620,7 +620,8 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
   `natCase` 三种尾位置各 30 万层，都在默认 8 MiB 栈上跑完；9ae 断言「来参区不够」时
   `Main.s` 里是 `call` 而不是 `jmp`（回退正确）；9af 续延 resume 后的尾递归循环在
   `GC_STRESS` 下输出一致；9ag 带尾调用的产物两次编译逐字节一致；9ah 闭包体按
-  闭包 ABI（`rdi` 占掉一个寄存器）算来参区——8 参 lambda 尾调 10 参函数正好用满 32 字节。
+  闭包 ABI（`rdi` 占掉一个寄存器）算来参区——8 参 lambda 尾调 10 参函数正好用满 32 字节
+  （lambda 捕获一个值，避免被高阶参数特化改按标准 ABI 算来参区）。
 - 宿主层（fs 写读/原子写/目录排序/stat/rename/symlink/递归删除、argv/env/cwd/execPath、
   clock/tty、bracket、runIn/spawn/wait）由 105 的 9o–9s 覆盖；宿主进程的超时收尾由
   9u–9u3（单组 / 不改 pgid）与 9u4（并发 spawn 的两组）覆盖；spawn 的多实参 argv 边界
