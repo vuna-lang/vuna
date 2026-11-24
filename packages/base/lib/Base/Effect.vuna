@@ -15,7 +15,6 @@ export module Base.Effect.Ref as Ref
 export module Base.Effect.MutArray as MutArray
 export module Base.Effect.MutBuffer as MutBuffer
 export module Base.Effect.MutRef as MutRef
-export module Base.Effect.Lazy as Lazy
 export module Base.Effect.Cursor as Cursor
 export module Base.Effect.Fs as Fs
 export module Base.Effect.Console as Console

@@ -88,11 +88,11 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
 `Base.StateT` / `Base.ReaderT` / `Base.ErrorT`，也没有 `Base.EffAsync`。纯表示版本
 `Base.Effect.Pure.State` / `.Reader` / `.Error` 与 handler 版并存，二者不互相派生。
 
-## 4. 没有局部可变 / region 入口
+## 4. 局部可变：命名句柄，没有 region/ST
 
-`Base.ST`（region 隔离的局部可变、`ST r a` / `Ref` / `SArray`）不存在：当前没有安全的
-局部可变入口，重建约束见 [debt.md](debt.md) D63（可变数组 / 缓冲见 D64）。语言保留
-`linear record` / `linear data` 与 QTT 规则。
+`Base.ST`（region 隔离的局部可变、`ST r a` / `Ref` / `SArray`）不存在：局部可变走
+`Base.Effect.{MutableRef,MutArray,MutBuffer}` 的**命名句柄**（编译期名字绑定，
+见 §8.8–§8.10），没有可逃逸的 region 令牌。语言保留 `linear record` / `linear data` 与 QTT 规则。
 
 ## 5. 表示轴：不透明擦除值
 

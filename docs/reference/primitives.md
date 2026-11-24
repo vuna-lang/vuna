@@ -222,9 +222,10 @@
 - **核心求值不归约**全部容器原语（`OpNone`）：夹具关闭 interp 阶段，只 compile + 运行。
 - 越界行为：`arrayGet` 越界是宿主 `Invalid_argument`（不是 `strAt` 的
   -1 哨兵，也没有语言层诊断）；`Array.set` 先 `Array.copy`，原数组不变。
-- 可变数据的安全边界：`IORef` 的公开操作与实现都返回 `Eff []`；没有局部可变入口
-  （region/ST、可变数组、字符串缓冲），重建约束见 [debt.md](debt.md) D63 / D64；也没有
-  依赖 multiplicity / 线性箭头（多用未禁止，见 [effects.md](effects.md)、[debt.md](debt.md) D22）。
+- 可变数据的安全边界：`IORef` 的公开操作与实现都返回 `Eff []`；局部可变走命名句柄
+  （`MutableRef` / `MutArray` / `MutBuffer`，见 [effects.md](effects.md) §8.8–§8.10），
+  没有 region/ST 令牌；也没有依赖 multiplicity / 线性箭头（多用未禁止，见
+  [effects.md](effects.md)、[debt.md](debt.md) D22）。
 
 ## 7. 效果原语、Eff 动作与宿主层
 

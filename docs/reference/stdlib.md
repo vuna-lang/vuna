@@ -254,9 +254,9 @@ packages/base/lib/
   （AVL，`Ord` 键，O(log n)）；只排一次序用 `Base.Data.Sort`。二者都不提供批量
   union / 区间删除；`PriorityQueue` 同优先级元素的出队顺序确定但**不是插入序**；
 - **容器与可变数据**：不可变 `Base.Container.Array`、`Eff []` 内 `IORef`；`Array.get` 越界是
-  宿主 `Invalid_argument`；`Array.set` 返回新数组；可变数据句柄只经 `Eff []` 动作使用
-  （见 [effects.md](effects.md)）。没有局部可变入口（region/ST、可变数组、字符串缓冲），
-  重建约束见 [debt.md](debt.md) D63 / D64；
+  宿主 `Invalid_argument`；`Array.set` 返回新数组；局部可变用 `Base.Effect.MutableRef` /
+  `MutArray` / `MutBuffer` 的命名句柄（见 [effects.md](effects.md) §8.8–§8.10），没有
+  region/ST 式可逃逸令牌；
 - **库级效应**：`State` / `Reader` / `Error` 是带 `Functor`/`Monad` 实例的纯函数
   monad（**不进入 `Prelude` / `Base` 门面**，显式 import）；`do` 可用；语言级 `perform`/`handle`
   语法见 [native-effects.md](native-effects.md)，通用签名索引效应
