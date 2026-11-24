@@ -141,7 +141,7 @@ let v_appAtCallExpr = (fun (mc0 : Frontend_dRast.t_Expr) -> (match mc0 with
 # 565 "Vuna/Compiler/Elab/Term/Impl.vuna"
 let rec v_mrefCellNamesGo = (fun (mc0 : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__57, dtb__58) -> (match dtb__57 with
-  | { B_dData_dPair.f_Pair_first = dtb__59; B_dData_dPair.f_Pair_second = dtb__60 } -> (match (Elab_dMref.v_mrefCellNameOf dtb__59) with
+  | { B_dData_dPair.f_Pair_first = dtb__59; B_dData_dPair.f_Pair_second = dtb__60 } -> (match (Elab_dMutRef.v_mrefCellNameOf dtb__59) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__61) -> (B_dData_dList.C_List__x58__x58_ (dtb__61, (v_mrefCellNamesGo dtb__58)))
   | B_dData_dMaybe.C_Maybe_Nothing -> (v_mrefCellNamesGo dtb__58)
   | _ -> failwith "DT: impossible branch"
@@ -165,7 +165,7 @@ let v_mrefResolveCell = (fun (mc0 : Elab_dTypes.t_Ctx) (mc1 : string B_dData_dMa
 )
   | _ -> failwith "DT: impossible branch"
 ))
-  | B_dData_dMaybe.C_Maybe_Just (dtb__64) -> (match ((Elab_dTypes.v_ctxLookup (Elab_dMref.v_mrefCellBinder dtb__64)) mc0) with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__64) -> (match ((Elab_dTypes.v_ctxLookup (Elab_dMutRef.v_mrefCellBinder dtb__64)) mc0) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__65) -> (Base_dDiag.C_Check_OkC (dtb__64))
   | B_dData_dMaybe.C_Maybe_Nothing -> (((Base_dDiagnostics_dTc.v_tcErr1 mc2) (Base_dDiagnostics_dTc.C_TcErr_CellNotInScope (dtb__64))) dtb__64)
   | _ -> failwith "DT: impossible branch"
@@ -174,14 +174,14 @@ let v_mrefResolveCell = (fun (mc0 : Elab_dTypes.t_Ctx) (mc1 : string B_dData_dMa
 ))
 
 # 630 "Vuna/Compiler/Elab/Term/Impl.vuna"
-let v_mrefWithOf = (fun (head : string) (sp : Base_dSource.t_Span) (nExpr : Frontend_dRast.t_Expr) (init : Frontend_dRast.t_Expr) (body : Frontend_dRast.t_Expr) (n : string) -> (if (head = Elab_dMref.v_mrefWithPureName) then (((((Elab_dMref.v_mrefWithPureExpr sp) nExpr) init) body) n) else (((((Elab_dMref.v_mrefWithExpr sp) nExpr) init) body) n)))
+let v_mrefWithOf = (fun (head : string) (sp : Base_dSource.t_Span) (nExpr : Frontend_dRast.t_Expr) (init : Frontend_dRast.t_Expr) (body : Frontend_dRast.t_Expr) (n : string) -> (if (head = Elab_dMutRef.v_mrefWithPureName) then (((((Elab_dMutRef.v_mrefWithPureExpr sp) nExpr) init) body) n) else (((((Elab_dMutRef.v_mrefWithExpr sp) nExpr) init) body) n)))
 
 # 593 "Vuna/Compiler/Elab/Term/Impl.vuna"
-let v_mrefRewriteCall = (fun (ctx : Elab_dTypes.t_Ctx) (head : string) (args : Frontend_dRast.t_Expr B_dData_dList.t_List) (sp : Base_dSource.t_Span) -> (if (head = Elab_dMref.v_mrefReadName) then (let nd_uscrut4 = args in (match nd_uscrut4 with
+let v_mrefRewriteCall = (fun (ctx : Elab_dTypes.t_Ctx) (head : string) (args : Frontend_dRast.t_Expr B_dData_dList.t_List) (sp : Base_dSource.t_Span) -> (if (head = Elab_dMutRef.v_mrefReadName) then (let nd_uscrut4 = args in (match nd_uscrut4 with
   | B_dData_dList.C_List__x58__x58_ (dtb__66, dtb__67) -> (match dtb__67 with
   | B_dData_dList.C_List_Nil -> (match (v_instArgOperand dtb__66) with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__68) -> (match (Elab_dMref.v_stringLitOf dtb__68) with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__69) -> (B_dData_dMaybe.C_Maybe_Just (((Base_dCommon.v_bind (((v_mrefResolveCell ctx) (B_dData_dMaybe.C_Maybe_Just (dtb__69))) sp)) (fun (n2 : string) -> (Base_dDiag.C_Check_OkC (((Elab_dMref.v_mrefReadExpr sp) n2)))))))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__68) -> (match (Elab_dMutRef.v_stringLitOf dtb__68) with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__69) -> (B_dData_dMaybe.C_Maybe_Just (((Base_dCommon.v_bind (((v_mrefResolveCell ctx) (B_dData_dMaybe.C_Maybe_Just (dtb__69))) sp)) (fun (n2 : string) -> (Base_dDiag.C_Check_OkC (((Elab_dMutRef.v_mrefReadExpr sp) n2)))))))
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
 )
@@ -190,14 +190,14 @@ let v_mrefRewriteCall = (fun (ctx : Elab_dTypes.t_Ctx) (head : string) (args : F
 )
   | _ -> B_dData_dMaybe.C_Maybe_Nothing
 )
-  | B_dData_dList.C_List_Nil -> (B_dData_dMaybe.C_Maybe_Just (((Base_dCommon.v_bind (((v_mrefResolveCell ctx) B_dData_dMaybe.C_Maybe_Nothing) sp)) (fun (n : string) -> (Base_dDiag.C_Check_OkC (((Elab_dMref.v_mrefReadExpr sp) n)))))))
+  | B_dData_dList.C_List_Nil -> (B_dData_dMaybe.C_Maybe_Just (((Base_dCommon.v_bind (((v_mrefResolveCell ctx) B_dData_dMaybe.C_Maybe_Nothing) sp)) (fun (n : string) -> (Base_dDiag.C_Check_OkC (((Elab_dMutRef.v_mrefReadExpr sp) n)))))))
   | _ -> failwith "DT: impossible branch"
-)) else (if (head = Elab_dMref.v_mrefWriteName) then (let nd_uscrut4 = args in (match nd_uscrut4 with
+)) else (if (head = Elab_dMutRef.v_mrefWriteName) then (let nd_uscrut4 = args in (match nd_uscrut4 with
   | B_dData_dList.C_List__x58__x58_ (dtb__70, dtb__71) -> (match dtb__71 with
   | B_dData_dList.C_List__x58__x58_ (dtb__72, dtb__73) -> (match dtb__73 with
   | B_dData_dList.C_List_Nil -> (match (v_instArgOperand dtb__70) with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__74) -> (match (Elab_dMref.v_stringLitOf dtb__74) with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__75) -> (B_dData_dMaybe.C_Maybe_Just (((Base_dCommon.v_bind (((v_mrefResolveCell ctx) (B_dData_dMaybe.C_Maybe_Just (dtb__75))) sp)) (fun (n2 : string) -> (Base_dDiag.C_Check_OkC ((((Elab_dMref.v_mrefWriteExpr sp) n2) dtb__72)))))))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__74) -> (match (Elab_dMutRef.v_stringLitOf dtb__74) with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__75) -> (B_dData_dMaybe.C_Maybe_Just (((Base_dCommon.v_bind (((v_mrefResolveCell ctx) (B_dData_dMaybe.C_Maybe_Just (dtb__75))) sp)) (fun (n2 : string) -> (Base_dDiag.C_Check_OkC ((((Elab_dMutRef.v_mrefWriteExpr sp) n2) dtb__72)))))))
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
 )
@@ -206,17 +206,17 @@ let v_mrefRewriteCall = (fun (ctx : Elab_dTypes.t_Ctx) (head : string) (args : F
 )
   | _ -> B_dData_dMaybe.C_Maybe_Nothing
 )
-  | B_dData_dList.C_List_Nil -> (B_dData_dMaybe.C_Maybe_Just (((Base_dCommon.v_bind (((v_mrefResolveCell ctx) B_dData_dMaybe.C_Maybe_Nothing) sp)) (fun (n : string) -> (Base_dDiag.C_Check_OkC ((((Elab_dMref.v_mrefWriteExpr sp) n) dtb__70)))))))
+  | B_dData_dList.C_List_Nil -> (B_dData_dMaybe.C_Maybe_Just (((Base_dCommon.v_bind (((v_mrefResolveCell ctx) B_dData_dMaybe.C_Maybe_Nothing) sp)) (fun (n : string) -> (Base_dDiag.C_Check_OkC ((((Elab_dMutRef.v_mrefWriteExpr sp) n) dtb__70)))))))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> B_dData_dMaybe.C_Maybe_Nothing
-)) else (if (if (head = Elab_dMref.v_mrefWithName) then true else (head = Elab_dMref.v_mrefWithPureName)) then (let nd_uscrut4 = args in (match nd_uscrut4 with
+)) else (if (if (head = Elab_dMutRef.v_mrefWithName) then true else (head = Elab_dMutRef.v_mrefWithPureName)) then (let nd_uscrut4 = args in (match nd_uscrut4 with
   | B_dData_dList.C_List__x58__x58_ (dtb__76, dtb__77) -> (match dtb__77 with
   | B_dData_dList.C_List__x58__x58_ (dtb__78, dtb__79) -> (match dtb__79 with
   | B_dData_dList.C_List__x58__x58_ (dtb__80, dtb__81) -> (match dtb__81 with
-  | B_dData_dList.C_List_Nil -> (match (Elab_dMref.v_stringLitOf dtb__76) with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__82) -> (match ((Elab_dTypes.v_ctxLookup (Elab_dMref.v_mrefCellBinder dtb__82)) ctx) with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__83) -> (B_dData_dMaybe.C_Maybe_Just ((((Base_dDiagnostics_dTc.v_tcErr1 (Frontend_dRast.v_exprSpan dtb__76)) (Base_dDiagnostics_dTc.C_TcErr_DuplicateInstance ((String.concat "" [Elab_dMref.v_mrefOpName; " "; dtb__82])))) (String.concat "" [Elab_dMref.v_mrefOpName; " "; dtb__82]))))
+  | B_dData_dList.C_List_Nil -> (match (Elab_dMutRef.v_stringLitOf dtb__76) with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__82) -> (match ((Elab_dTypes.v_ctxLookup (Elab_dMutRef.v_mrefCellBinder dtb__82)) ctx) with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__83) -> (B_dData_dMaybe.C_Maybe_Just ((((Base_dDiagnostics_dTc.v_tcErr1 (Frontend_dRast.v_exprSpan dtb__76)) (Base_dDiagnostics_dTc.C_TcErr_DuplicateInstance ((String.concat "" [Elab_dMutRef.v_mrefOpName; " "; dtb__82])))) (String.concat "" [Elab_dMutRef.v_mrefOpName; " "; dtb__82]))))
   | B_dData_dMaybe.C_Maybe_Nothing -> (B_dData_dMaybe.C_Maybe_Just ((Base_dDiag.C_Check_OkC (((((((v_mrefWithOf head) sp) dtb__76) dtb__78) dtb__80) dtb__82)))))
   | _ -> failwith "DT: impossible branch"
 )
