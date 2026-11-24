@@ -1250,6 +1250,14 @@ compare_baseline() {
           basev=$(baseline_abs "$name" "$t" "$metric")
           if [ -n "$basev" ]; then
             read -r delta verdict <<<"$(judge_delta "$curabs" "$basev" "$THRESHOLD" "$FAIL_THRESHOLD")"
+            # wasm 的 net 是「绝对值 - 地板」：net 不到地板两倍时地板噪声主导，只作参考。
+            if [ "$t" = wasm ] && [ "$metric" != rss ]; then
+              local floor=$NODE_STARTUP_MS
+              [ "$metric" = cpu ] && floor=$NODE_STARTUP_CPU_MS
+              if awk -v v="$curabs" -v f="$floor" 'BEGIN { exit !(v + 0 < 2 * (f + 0)) }'; then
+                verdict=info
+              fi
+            fi
             case $verdict in WARN) warns=$((warns + 1)) ;; FAIL) fails=$((fails + 1)) ;; new) news=$((news + 1)) ;; *) ok=$((ok + 1)) ;; esac
             printf '  %-16s %-11s %-8s %10s %10s %10s  %s\n' "$name" "$t" "abs_${metric}" "${curabs}${unit}" "${basev}${unit}" "${delta}%" "$verdict"
           fi
