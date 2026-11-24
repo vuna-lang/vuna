@@ -34,13 +34,13 @@ multilineExpr _ = False
 
 -- | 内部：表达式在源码里被几层括号包着（表面形状来自树，AST 里没有括号构造子）。
 parenDepth : FmtCtx -> Expr -> Int
-parenDepth at e = parenDepthOf at.ctxSurface (nodeRefId (exprRef e))
+parenDepth at e = parenDepthOfIndex at.ctxCst (nodeRefId (exprRef e))
 
 -- | 内部：这一层是不是**中缀链步**。parser 把中缀降级成 `EApp (EVar op) [l, r]`：符号名
 -- 作函数的 2 参应用只可能来自中缀（前缀写法必须加括号），反引号写法由表面形状记。
 isInfixStep : FmtCtx -> Expr -> Bool
 isInfixStep at e =
-  case sectionShapeOfSpan at.ctxSurface (exprSpan e) of
+  case sectionOfIndex at.ctxCst (exprSpan e) of
     Just _ => False
     Nothing =>
       case e of
@@ -52,23 +52,20 @@ isInfixStep at e =
 infixBacktick : FmtCtx -> Expr -> Bool
 infixBacktick at e = backtickMark at e
 
--- | 内部：表面形状里记的反引号链步。
+-- | 内部：树节点字段里记的反引号链步。
 backtickMark : FmtCtx -> Expr -> Bool
-backtickMark at e =
-  case backtickShapeOf at.ctxSurface (nodeRefId (exprRef e)) of
-    Just _ => True
-    Nothing => False
+backtickMark at e = backtickOfIndex at.ctxCst (nodeRefId (exprRef e))
 
 -- | 表面形状里的 section：value（`ELam` / `EVar`）看表达式自己的区间；应用折叠后的
 -- section 看应用头 `EVar` 的区间（parser 把 section λ 的 `EVar` 放在 section 区间上）。
 sectionValueShape : FmtCtx -> Expr -> Maybe SectionShape
 sectionValueShape at (EApp _ _ _) = Nothing
-sectionValueShape at e = sectionShapeOfSpan at.ctxSurface (exprSpan e)
+sectionValueShape at e = sectionOfIndex at.ctxCst (exprSpan e)
 
 -- | 运算符值 `(op)`：作为函数应用时不能还原成中缀（`(::) x xs` 不是 `x :: xs`）。
 isSectionOp : FmtCtx -> Expr -> Bool
 isSectionOp at (EVar _ sp) =
-  case sectionShapeOfSpan at.ctxSurface (nodeRefSpan sp) of
+  case sectionOfIndex at.ctxCst (nodeRefSpan sp) of
     Just (SectionOp _) => True
     _ => False
 isSectionOp at _ = False
@@ -85,7 +82,7 @@ sectionShapeOfExpr at e =
 -- | section 当值：从降级后的 λ 里取出操作数。
 sectionValueParts : FmtCtx -> Expr -> Maybe (SectionShape, Expr)
 sectionValueParts at (ELam _ body sp) =
-  case sectionShapeOfSpan at.ctxSurface (nodeRefSpan sp) of
+  case sectionOfIndex at.ctxCst (nodeRefSpan sp) of
     Just shape =>
       case shape of
         SectionLeft _ =>
@@ -106,7 +103,7 @@ sectionAppParts : FmtCtx -> Expr -> Maybe (SectionShape, Expr, Expr, List Expr)
 sectionAppParts at (EApp fn args _) =
   case fn of
     EVar _ sp =>
-      case sectionShapeOfSpan at.ctxSurface (nodeRefSpan sp) of
+      case sectionOfIndex at.ctxCst (nodeRefSpan sp) of
         Just shape =>
           case shape of
             SectionLeft _ =>
@@ -1500,7 +1497,7 @@ piDoc fuel env at qty implicit name dom cod =
 -- | 内部：模板字面量原文；洞优先单行，块结构按缩进 2 拼进字面量。
 -- | 模板是否 `"""` 形式：书写形态在表面形状里，按模板区间起点查。
 interpMulti : FmtCtx -> Expr -> Bool
-interpMulti at e = interpMultiOfSpan at.ctxSurface (exprSpan e)
+interpMulti at e = interpMultiOfIndex at.ctxCst (exprSpan e)
 
 interpText : Int -> List FixityDecl -> FmtCtx -> Bool -> List InterpPart -> String
 interpText fuel env at multi parts =

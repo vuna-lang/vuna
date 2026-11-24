@@ -722,6 +722,89 @@ nodeTable (n@(CstBranch _ nid _ _ kids)) = (nid, n) :: concatMap nodeTable kids
 export nodeIndex : CstNode -> HashMap Int CstNode
 nodeIndex tree = HashMap.fromList (nodeTable tree)
 
+-- | 树 + 模板洞子树的先序分支节点表（id → 节点）。洞内节点不在主树 `children` 里，
+-- 但和主流节点一样有 id / span / 表面字段。
+nodeTableDeep : CstNode -> List (Int, CstNode)
+nodeTableDeep (CstLeaf _) = []
+nodeTableDeep (n@(CstBranch _ nid _ surface kids)) =
+  (nid, n) :: append (nodeTableDeepList kids) (nodeTableDeepList surface.cstHoleTrees)
+
+nodeTableDeepList : List CstNode -> List (Int, CstNode)
+nodeTableDeepList [] = []
+nodeTableDeepList (n :: rest) = append (nodeTableDeep n) (nodeTableDeepList rest)
+
+-- | 表面事实的查询索引：`id → 节点` 与 `span 起点 → 节点`。只做定位，不复制事实
+-- （事实在节点字段 `CstSurface` 上）；主树与模板洞的子树都进索引。
+export record CstIndex(..) where
+  ciById : HashMap Int CstNode
+  ciBySpan : HashMap Int CstNode
+
+export cstIndexOf : CstNode -> CstIndex
+cstIndexOf root =
+  let
+    nodes = nodeTableDeep root
+  in CstIndex (HashMap.fromList nodes) (HashMap.fromList (map nodeKeyedBySpan nodes))
+
+nodeKeyedBySpan : (Int, CstNode) -> (Int, CstNode)
+nodeKeyedBySpan p =
+  let
+    n = secondOf p
+  in (spanStartOffset (nodeSpan n), n)
+
+-- | 空索引（没有源码位置的位置：接口解码出来的 AST、合成节点）。
+export emptyCstIndex : CstIndex
+emptyCstIndex = CstIndex emptyNodeTable emptyNodeTable
+
+-- 空 HashMap 的字面量在 OCaml 侧会退化成弱类型变量（同 `emptyParenTable`）：用一条 `-1`
+-- 哨兵钉住类型再删掉它。
+emptyNodeTable : HashMap Int CstNode
+emptyNodeTable =
+  HashMap.remove
+    emptyKey
+    (HashMap.fromList [(emptyKey, CstBranch CstFileKind emptyKey spanEmpty emptyCstSurface [])])
+
+-- | 表达式节点的括号层数（没有条目 = 0）。
+export parenDepthOfIndex : CstIndex -> Int -> Int
+parenDepthOfIndex ix nid =
+  case HashMap.lookup nid ix.ciById of
+    Just n =>
+      let
+        s = nodeSurface n
+      in s.cstParenDepth
+    Nothing => 0
+
+-- | 这一层是不是**反引号写法**的中缀链步。
+export backtickOfIndex : CstIndex -> Int -> Bool
+backtickOfIndex ix nid =
+  case HashMap.lookup nid ix.ciById of
+    Just n =>
+      let
+        s = nodeSurface n
+      in s.cstBacktick
+    Nothing => False
+
+-- | 按 span 起点查 section 写法（同一起点上的节点字段一致：建树时按起点统一写入）。
+export sectionOfIndex : CstIndex -> Span -> Maybe SectionShape
+sectionOfIndex ix sp =
+  case HashMap.lookup (spanStartOffset sp) ix.ciBySpan of
+    Just n =>
+      let
+        s = nodeSurface n
+      in s.cstSection
+    Nothing => Nothing
+
+-- | 按 span 起点查模板是否 `"""` 形式；没有条目按单行形式。
+export interpMultiOfIndex : CstIndex -> Span -> Bool
+interpMultiOfIndex ix sp =
+  case HashMap.lookup (spanStartOffset sp) ix.ciBySpan of
+    Just n =>
+      let
+        s = nodeSurface n
+      in case s.cstInterpMulti of
+        Just True => True
+        _ => False
+    Nothing => False
+
 -- | 节点树逐字节还原源码（叶按源码顺序输出前置 trivia + token 原文）。
 export renderCstTree : CstNode -> String
 renderCstTree (CstLeaf t) = strConcatMany (renderParts t)
