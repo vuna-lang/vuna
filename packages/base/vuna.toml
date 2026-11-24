@@ -23,6 +23,7 @@ modules = [
   "Base.Data.Base64",
   "Base.Data.Bits",
   "Base.Data.Bool",
+  "Base.Data.Fin",
   "Base.Data.Float",
   "Base.Data.Function",
   "Base.Data.Int",

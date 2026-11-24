@@ -1,7 +1,8 @@
--- | 长度索引向量：`Vec n a` 的索引 `n : Nat` 在类型层锁定元素个数（索引在前、值类型在末位，与 `Eff r a` 一致），构造子 `Nil` / `VCons` 与索引同构；`a` / `n` 都是 Rig0，运行时擦除，arity 编译期锁定、运行时零开销。索引排除不可能分支（如 [Base.Data.Vec.vhead] 对 `Nil` 不可达），无需运行期空向量检查。
+-- | 长度索引向量：`Vec n a` 的索引 `n : Nat` 在类型层锁定元素个数（索引在前、值类型在末位，与 `Eff r a` 一致），构造子 `Nil` / `VCons` 与索引同构；`a` / `n` 都是 Rig0，运行时擦除，arity 编译期锁定、运行时零开销。索引排除不可能分支（如 [Base.Data.Vec.vhead] 对 `Nil` 不可达），无需运行期空向量检查；[Base.Data.Vec.get] 用 [Base.Data.Fin] 的 `Fin n` 做全安全索引。
 module Base.Data.Vec where
 
 import Base.Data.Nat
+import Base.Data.Fin
 import Base.Data.String
 import Base.Data.Pair
 import Base.Data.Maybe
@@ -33,6 +34,22 @@ vlen xs =
   case xs of
     [] => 0
     VCons y ys => 1 + vlen ys
+
+-- | 按 `Fin n` 取元素：下标类型保证 `0 <= i < n`，`Nil` 分支在类型层被排除，无需运行期越界检查。
+export get : {n : Nat} -> Vec n a -> Fin n -> a
+get (VCons y ys) FZero = y
+get (VCons y ys) (FSucc j) = get ys j
+
+-- | 用 `Nat` 下标取值：越过向量末端返回 `Nothing`，用于外部数字输入这类没有 `Fin` 证明的场景。
+export getMaybe : {n : Nat} -> Vec n a -> Nat -> Maybe a
+getMaybe [] _ = Nothing
+getMaybe (VCons y ys) 0 = Just y
+getMaybe (VCons y ys) (Succ k) = getMaybe ys k
+
+-- | 按位置函数生成向量：`n` 显式传入（长度是运行时值），第 `i` 项是 `f i`。
+export tabulate : (n : Nat) -> (Fin n -> a) -> Vec n a
+tabulate 0 f = []
+tabulate (Succ k) f = VCons (f FZero) (tabulate k (\i => f (FSucc i)))
 
 -- ---------------------------------------------------------------
 -- 模板渲染：占位符 `<0>` `<1>` `<2>`…（序号 = 实参位置）

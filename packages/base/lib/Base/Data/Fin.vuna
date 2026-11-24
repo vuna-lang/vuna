@@ -1,0 +1,34 @@
+-- | 长度索引位置：`Fin n` 恰好有 n 个值（`0` 到 `n - 1`），是 `Vec n a` 的合法下标；`n` 是 Rig0，运行时擦除。`Fin` 是普通归纳族（`FZero` / `FSucc` 与 `Zero` / `Succ` 同构），不引入新的类型层构造。
+module Base.Data.Fin where
+
+import Base.Data.Nat
+import Base.Data.Maybe
+import Base.Trait.Functor
+
+-- | 小于 `n` 的下标：`Fin Zero` 没有构造子（空归纳族），`Fin (Succ n)` 由 `FZero` / `FSucc` 逐个生成。
+export data Fin(..) : Nat -> Type where
+  -- | 下标 0，存在性要求长度至少为 1。
+  FZero : {n : Nat} -> Fin (Succ n)
+  -- | 后继下标。
+  FSucc : {n : Nat} -> Fin n -> Fin (Succ n)
+
+-- | 下标转成 `Nat`（按构造子递归，代价与下标值成正比）。
+export finToNat : {n : Nat} -> Fin n -> Nat
+finToNat FZero = 0
+finToNat (FSucc j) = Succ (finToNat j)
+
+-- | 把 `Fin n` 嵌入 `Fin (Succ n)`：索引上界变大、位置不变，用于把下标用到更长的向量上。
+export finWeaken : {n : Nat} -> Fin n -> Fin (Succ n)
+finWeaken FZero = FZero
+finWeaken (FSucc j) = FSucc (finWeaken j)
+
+-- | 最后一个合法下标（位置 `n`），用于取向量尾元素。
+export finLast : (n : Nat) -> Fin (Succ n)
+finLast 0 = FZero
+finLast (Succ k) = FSucc (finLast k)
+
+-- | 带界转换：`i < n` 时返回 `Just`，否则 `Nothing`；`n` 是运行时值，用于外部数字输入。
+export finFromNat : (n : Nat) -> Nat -> Maybe (Fin n)
+finFromNat 0 _ = Nothing
+finFromNat (Succ k) 0 = Just FZero
+finFromNat (Succ k) (Succ j) = fmap (\x => FSucc x) (finFromNat k j)

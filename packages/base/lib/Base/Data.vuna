@@ -18,6 +18,8 @@ export module Base.Data.String
 export module Base.Data.String as String
 export module Base.Data.Unit
 export module Base.Data.Unit as Unit
+export module Base.Data.Fin
+export module Base.Data.Fin as Fin
 export module Base.Data.Vec
 export module Base.Data.Vec as Vec
 export module Base.Data.Nat

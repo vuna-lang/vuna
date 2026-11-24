@@ -1,0 +1,39 @@
+-- stdlib：长度索引 Fin —— Vec.get 用 Fin 做全安全索引，Fin 提供 finToNat / finWeaken / finLast / finFromNat。
+import Base.Data.Nat as Nat
+import Base.Data.Maybe as Maybe
+import Base.Data.Vec as Vec
+import Base.Data.Fin as Fin
+
+v3 : Vec 3 Int
+v3 = [10, 20, 30]
+
+showM : Maybe Int -> String
+showM m =
+  case m of
+    Nothing => "none"
+    Just x => strFromInt x
+
+index : Fin 3
+index = FSucc (FSucc FZero)
+
+main : String
+main =
+  "get="
+    ++ strFromInt (Vec.get v3 index)
+    ++ " last="
+    ++ strFromInt (Vec.get v3 (finLast 2))
+    ++ " nat="
+    ++ strFromInt (toInt (finToNat index))
+    ++ " weak="
+    ++ strFromInt (toInt (finToNat (finWeaken index)))
+    ++ " lastnat="
+    ++ strFromInt (toInt (finToNat (finLast 4)))
+    ++ " mb="
+    ++ showM (Vec.getMaybe v3 1)
+    ++ " oob="
+    ++ showM (Vec.getMaybe v3 9)
+    ++ " tab="
+    ++ strFromInt (Vec.get (Vec.tabulate 2 (\i => toInt (finToNat i) + 100)) (FSucc FZero))
+    ++ " fn="
+    ++ showM (fmap (\i => toInt (finToNat i)) (finFromNat 5 4))
+    ++ " oobfn=" ++ showM (fmap (\i => toInt (finToNat i)) (finFromNat 5 7))

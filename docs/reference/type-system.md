@@ -63,8 +63,8 @@ quantity / 线性规则见 [qtt.md](qtt.md)（quantity 与擦除口径以该页�
 - 族的类型级应用（`Vec n a`）保持中性（`TGlobal` / `NGlobal` spine），只在 unification
   时按定义性相等比较，不做类型级求值。
 - 没有内置的归纳相等族 `Eq`（DT 用来做证明的 `data Eq`）；`Base.Trait.Eq` 是 trait。`Nat` / `Vec` /
-  `Fin` 也是用户（或 `Base.Data.Nat`、`Base.Data.Vec`）声明的普通族。`Bool` / `List` 的
-  canonical 身份见 [primitives.md](primitives.md)。
+  `Fin` 也是普通族（`Base.Data.Nat` / `Base.Data.Vec` / `Base.Data.Fin`，用户也可以自己声明）。
+  `Bool` / `List` 的 canonical 身份见 [primitives.md](primitives.md)。
 - 索引 binder 的擦除：隐式索引恒擦除（无运行时字段）；显式索引未标注时是 `RigOmega`，
   保留运行时字段（`Vec n a` 的 `(n : Nat)` 可被读回）；要擦除显式索引就写
   `(0 n : Nat)`（quantity 规则见 [qtt.md](qtt.md)），代价是分支体读不到它。擦除只按
