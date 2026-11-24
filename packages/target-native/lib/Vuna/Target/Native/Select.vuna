@@ -284,7 +284,19 @@ export cleanup : List Instr -> List Instr
 cleanup instrs =
   let
     folded = cleanupFix 8 instrs
-  in if hasJumpTable folded then folded else dropUnreachable folded
+    copied = switchCopy folded
+  in if hasJumpTable copied then copied else dropUnreachable copied
+
+-- | 跳转表分派头的 `mov rax, r; cmp rax, k; ... jmp [base+rax*8]` 直接用 r 作
+--   cmp 操作数与索引，省掉一次搬运。只认 `isCalleeSaved` 源，避免和 scratch 冲突。
+switchCopy : List Instr -> List Instr
+switchCopy ((IMov (OpReg Rax) (OpReg r)) :: (ICmp (OpReg Rax) (OpImm k)) :: jcc :: lea :: (IJmpMem (OpMemS base Rax 8)) :: rest) =
+  if isCalleeSaved r then
+    ICmp (OpReg r) (OpImm k) :: jcc :: lea :: IJmpMem (OpMemS base r 8) :: switchCopy rest
+  else
+    IMov (OpReg Rax) (OpReg r) :: switchCopy rest
+switchCopy (i :: rest) = i :: switchCopy rest
+switchCopy [] = []
 
 -- | 跳转表块里先不做不可达删除：`.quad` 的表项引用 arm 标签，块内的控制流不是
 --   普通 `jmp` 图；保留全部 arm 比在这里重新实现一遍标签活跃性更安全。
@@ -308,6 +320,16 @@ cleanupOnce (i :: rest) =
   case rest of
     next :: more =>
       case (i, next) of
+        (IMov (OpReg Rax) (OpImm k), IMov (OpReg r) (OpReg Rax)) =>
+          if sameReg r Rax then
+            i :: cleanupOnce rest
+          else
+            IMov (OpReg r) (OpImm k) :: cleanupOnce more
+        (IMov (OpReg Rax) (OpMem base off), IMov (OpReg r) (OpReg Rax)) =>
+          if sameReg r Rax then
+            i :: cleanupOnce rest
+          else
+            IMov (OpReg r) (OpMem base off) :: cleanupOnce more
         (IMov (OpReg Rax) (OpReg r), ICmp (OpReg Rax) (OpImm k)) =>
           if isCalleeSaved r && raxSafeAfter more then
             ICmp (OpReg r) (OpImm k) :: cleanupOnce more
@@ -448,4 +470,8 @@ instrWritesReg r (IXmmToInt x _) = sameReg r x
 instrWritesReg _ (ICall _) = True
 instrWritesReg _ (ICallReg _) = True
 instrWritesReg r (IMulSigned _) = sameReg r Rax || sameReg r Rdx
+instrWritesReg r (IDiv _) = sameReg r Rax || sameReg r Rdx
+instrWritesReg r (IDivUnsigned _) = sameReg r Rax || sameReg r Rdx
+instrWritesReg r ICqo = sameReg r Rdx
+instrWritesReg _ ISyscall = True
 instrWritesReg _ _ = False

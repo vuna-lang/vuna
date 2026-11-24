@@ -1655,6 +1655,16 @@ boolSelectInstrs BoolInvert r = [IBinReg "xor" r (OpImm 1)]
 --   (装载+`cmp` 指令, 反向 `jcc`)。实参只接受字面量 / 槽变量（求值无副作用，
 --   也不产生新的 GC 点）。
 condBranch : FGen -> Ir -> Maybe (List Instr, String)
+condBranch st (IrRtApp sym ([IrRtApp "-" ([a, IrInt c]), IrInt 0])) =
+  case branchInverse sym of
+    Just inv =>
+      if c >= 0 && firstOf (rangeOf st.fgRanges a) >= c then
+        case atomOperand st a of
+          Just op => Just ([ICmp op (OpImm c)], inv)
+          Nothing => Nothing
+      else
+        Nothing
+    Nothing => Nothing
 condBranch st (IrRtApp sym args) =
   case branchInverse sym of
     Just inv =>

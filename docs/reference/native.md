@@ -169,7 +169,8 @@
   只归一化一次。
 - **有栈实参的槽提升**：prologue 的 callee-saved push 会把来参区整体上移；提升后把
   所有正偏移（栈实参读 / 尾调用来参区写）统一加 `saveBytes`，arity > 6 的循环也能把
-  最热的 5 个标量槽放进寄存器。
+  最热的 5 个标量槽放进寄存器；循环体不写 `r10`/`r11` 时再把最多两个槽放进这两个
+  caller-saved scratch（它们不在来参寄存器里，函数内有 call/div/syscall 会自动放弃）。
 - **稠密 Int 分派**：同一 scrutinee 上连续 4 个以上的 `bi_eq_int` 链改发跳转表
   （`.quad` 表项 + `jmp qword ptr [table + idx*8]`），兜底臂处理越界与缺失 tag。
   产物固定 no-pie 链接，表项可以直接用绝对地址。

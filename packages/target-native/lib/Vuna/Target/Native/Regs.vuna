@@ -11,15 +11,15 @@ module Vuna.Target.Native.Regs where
 --     都在热点上；直线函数保持原来的槽布局（避免为一次调用付 push/pop）；
 --   * 只提升**循环携带**的槽（循环头 `live_in`）：迭代内定义、迭代内用完的临时值
 --     留在槽里更好——提升它们只多出两次寄存器搬运，反而加长关键路径；
---   * 有**栈实参**（`[rbp + 正偏移]`，arity > 6）的函数不提升：prologue 多压的
---     callee-saved 寄存器会把来参区整体上移，`[rbp+16]` 不再指向第一个栈实参；
+--   * 有**栈实参**（`[rbp + 正偏移]`，arity > 6）的函数也提升，正偏移按 prologue
+--     的 saveBytes 平移；
 --   * 按槽在函数体里出现的次数挑前 `maxPromoted` 个（够用即可，不追求全局最优）；
 --   * 被提升的槽在整个函数里都换成寄存器（来参落位、尾调用搬运、返回值都跟着走），
 --     所以循环边界上不需要插入拷贝。
 --
--- 寄存器用 `rbx` / `r12`–`r15`：SysV 的 callee-saved，运行时与生成代码都不用它们
--- （`rt_gc` 只把 r15 存进自己的帧，不写它），由函数自己的 prologue / epilogue 保存。
--- 尾调用（含闭包尾调用 `jmp reg`）在 `pop rbp` 之后、跳转之前恢复。
+-- 寄存器用 `rbx` / `r12`–`r15`（callee-saved，prologue/epilogue 保存）；循环体不写
+-- `r10`/`r11` 时再把最多两个槽放进这两个 caller-saved scratch（它们不在来参寄存器里，
+-- 且函数内没有 call/div/syscall 才会被选中）。
 --
 -- 边界：只 import Base 与 `Native.{Abi,Live,Model,Repr}`；不改 ABI 与帧大小。
 import Base.Data.Bool as Bool
@@ -33,9 +33,19 @@ import Vuna.Target.Native.Model
 import Vuna.Target.Native.Repr
 import Vuna.Target.Native.Select
 
--- | 一个函数最多提升几个槽（寄存器池大小）。
+-- | 一个函数最多提升几个 callee-saved 槽（寄存器池大小）。
 maxPromoted : Int
 maxPromoted = 5
+
+-- | 有回边且循环体不写 r10/r11 时，再把两个细槽放进 caller-saved scratch。
+--   这两个寄存器不会出现在来参寄存器里（x86-64 只用 rdi/rsi/rdx/rcx/r8/r9），
+--   所以 bindArgs 的实参落位不会互相覆盖；函数内若有 call/div/syscall，它们会被
+--   `instrWritesReg` 判为 clobber，自动放弃。
+maxExtraPromoted : Int
+maxExtraPromoted = 2
+
+extraPromotableRegs : List Reg
+extraPromotableRegs = [R10, R11]
 
 -- | 可用的 callee-saved 寄存器（顺序固定：分数高的槽拿前面的）。
 promotableRegs : List Reg
@@ -313,8 +323,11 @@ promoteLoops slotCls instrs =
       scalarOffs = map (\p => nativeSlotOff (firstOf p)) (filter (\p => isScalarCls (secondOf p)) slotCls)
       candidates = filter (\off => memIntList off carried) scalarOffs
       top = pickTop maxPromoted candidates instrs
-      reps = List.zip top promotableRegs
-      saved = map secondOf reps
+      rest = filterInts top candidates
+      extraRegs = take maxExtraPromoted (filter (\r => not (writesRegIn r instrs)) extraPromotableRegs)
+      extra = pickTop (length extraRegs) rest instrs
+      reps = append (List.zip top promotableRegs) (List.zip extra extraRegs)
+      saved = map secondOf (List.zip top promotableRegs)
       saveBytes = 8 * length saved + (if odd (length saved) then 8 else 0)
       body0 = map (\i => mapValueOperands (substOperand reps) i) instrs
       body1 = if saveBytes == 0 then body0 else shiftPositiveOffsets saveBytes body0
@@ -345,3 +358,11 @@ isScalarCls _ = False
 memIntList : Int -> List Int -> Bool
 memIntList _ [] = False
 memIntList x (y :: rest) = if x == y then True else memIntList x rest
+
+filterInts : List Int -> List Int -> List Int
+filterInts _ [] = []
+filterInts drop (x :: rest) =
+  if memIntList x drop then filterInts drop rest else x :: filterInts drop rest
+
+writesRegIn : Reg -> List Instr -> Bool
+writesRegIn r instrs = foldl (\acc, i => acc || instrWritesReg r i) False instrs
