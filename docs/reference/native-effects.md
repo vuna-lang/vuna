@@ -384,4 +384,4 @@ native 与 wasm 都跑 `Base.Effect.Core` 的库机器（`Control` 循环 + hand
 
 wasm 后端与 native 一样用 base 的显式效应机器实现 handler（见 [effect-machine.md](effect-machine.md)）；
 效应语义的三端对拍在 suite `pure-cross` 分类（`packages/compiler/test/corpus/pure_cross/`，`35_eff_*`–`50_eff_*`），native 的
-机制用例在 `105_native_backend.steps`。
+机制用例在 `105*_native_*.steps`（效应机器面是 `105b_native_effects`）。

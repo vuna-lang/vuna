@@ -447,7 +447,7 @@ ume 后按需重装）。下一步：把 `inChain` 改成帧引用/身份比较�
   `console+clock` 复现通过（`mock 0 / real 1 / 0`），wasm 337 / 全量 7209 仍绿。
 - **native 切换的剩余失败**（接线试跑 `--backend native`：448 checks / 3 失败）：
   `30_eff_process`（未接线时也失败，既有）、`41_eff_process_exit`（接线后
-  `impossible branch`）、`105_native_backend`（含为栈拷贝机器写的期望，如
+  `impossible branch`）、`105b_native_effects`（原 105 的效应面；含为栈拷贝机器写的期望，如
   `continuation stack overflow`，需按库机器改写）。下一步：修 41 的 impossible branch、
   改写 105 的栈溢出用例，再删 native 的栈拷贝路径。
 
@@ -480,7 +480,7 @@ wasm：337 checks 全绿
 全量：7206 checks 全绿
 ```
 
-`105_native_backend` 按库机器改写：删掉「续延栈段越界」用例（段已不存在），增量编译
+105 的 native 机制用例按库机器改写（现已按主题拆成 `105a`–`105f`）：删掉「续延栈段越界」用例（段已不存在），增量编译
 计数从 3 改为 8。`30_eff_process` 随 process handler 简化一起通过。
 
 剩余：OCaml 仍用 `Effect.Deep`（差分 oracle）。

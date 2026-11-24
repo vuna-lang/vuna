@@ -1,0 +1,95 @@
+# matrix: effect-native
+# 105a) native 后端：产物形状、确定性、trap、日志原语与栈传参。
+#     汇编产物布局（runtime.s / Main.s / build.sh / 可链接二进制）、模块内 label 编号、
+#     除零 / 断言 / 越界报告文本、64 MiB arena 扩容、文本日志原语、arity > 6 的栈传参。
+#     共享语义（算术 / 字符串 / data / record / List 桥接 / 闭包 / 高阶 API）由
+#     `109_backend_parity.steps` 对拍三端；这里只保留 native 特有的机制性用例。
+#     依赖 PATH 里的 cc（devShell / e2e 的 ocamlTools）。
+#     每个 native 构建带 `timeout`：后端挂死时快速失败，而不是吃满 case 预算。
+
+# 0) 工具链探针：缺 cc 时给出明确失败，而不是让后续链接报 127。
+run: command -v cc
+exit: 0
+
+# 1) 最小可执行：产物形状（runtime.s + Main.s / build.sh / 可链接二进制）与入口打印。
+run: sh -c 'd="$TMPDIR/min"; mkdir -p "$d/app"; printf "[package]\nname = \"min\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Int\nmain = 42\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --out "$TMPDIR/min-out" "$d"'
+exit: 0
+file-exists: $TMPDIR/min-out/Main.s
+file-exists: $TMPDIR/min-out/runtime.s
+file-exists: $TMPDIR/min-out/build.sh
+file-contains: $TMPDIR/min-out/Main.s .intel_syntax noprefix
+file-contains: $TMPDIR/min-out/Main.s .globl _start
+file-contains: $TMPDIR/min-out/runtime.s .section .bss
+run: "$TMPDIR/min-out/bin/min" 2>&1
+exit: 0
+out-equals: 42
+
+# 2) 多个函数各自的内部 label 不得撞名（label 编号在模块内累加；模块文件之间可重号）。
+run: sh -c 'd="$TMPDIR/labels"; mkdir -p "$d/app"; printf "[package]\nname = \"labels\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "f : Int -> Int\nf x = if x > 0 then 1 else 0\n\ng : Int -> Int\ng x = if x > 5 then 2 else 0\n\nmain : Int\nmain = f 1 + g 6\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --out "$TMPDIR/labels-out" "$d"'
+exit: 0
+run: "$TMPDIR/labels-out/bin/labels" 2>&1
+out-equals: 3
+
+# 3) 除零：编译通过，运行 exit 2 并输出运行时错误前缀。
+run: sh -c 'd="$TMPDIR/dz"; mkdir -p "$d/app"; printf "[package]\nname = \"dz\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Int\nmain = 1 / 0\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --out "$TMPDIR/dz-out" "$d"'
+exit: 0
+run: sh -c '"$TMPDIR/dz-out/bin/dz" 2>&1'
+exit: 2
+out-contains: vuna: runtime error: division by zero
+
+# 4) 确定性：同一程序两次 compile 的文件集逐字节一致（含字符串字面量池）。
+run: sh -c 'd="$TMPDIR/det"; mkdir -p "$d/app"; printf "[package]\nname = \"det\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : String\nmain = \"a\" ++ strFromInt 42 ++ \"b\"\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" compile "$d/app/Main.vuna" "$TMPDIR/det-a" --target native; timeout 120 "$VUNA" compile "$d/app/Main.vuna" "$TMPDIR/det-b" --target native; diff -r "$TMPDIR/det-a" "$TMPDIR/det-b"'
+exit: 0
+
+# 5) 可增长 arena：超过初始 1 MiB 时 mmap 新段，不再 OOM。
+run: sh -c 'd="$TMPDIR/oom"; mkdir -p "$d/app"; printf "[package]\nname = \"oom\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Data.Nat as Nat\n\nrep : Nat -> String -> String\nrep n s = case n of\n  Zero => \"\"\n  Succ k => s ++ rep k s\n\nmain : Int\nmain = strLength (rep (natFromInt 5000) \"0123456789abcdef\")\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --out "$TMPDIR/oom-out" "$d"'
+exit: 0
+run: "$TMPDIR/oom-out/bin/oom" 2>&1
+out-equals: 80000
+
+# 6) 运行时错误文本：assert / prim_fail / todo 统一走报告器格式（stderr + exit 2）。
+run: sh -c 'd="$TMPDIR/traps"; mkdir -p "$d/app"; printf "[package]\nname = \"traps\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Int\nmain = assert False \"bad\" 9\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --out "$TMPDIR/traps-as" "$d"'
+exit: 0
+run: sh -c '"$TMPDIR/traps-as/bin/traps" 2>&1'
+exit: 2
+out-equals: vuna: runtime error: assertion failed: bad
+run: sh -c 'printf "main : Int\nmain = prim_fail \"boom\"\n" > "$TMPDIR/traps/app/Main.vuna"; timeout 120 "$VUNA" build --target native --out "$TMPDIR/traps-pf" "$TMPDIR/traps"'
+exit: 0
+run: sh -c '"$TMPDIR/traps-pf/bin/traps" 2>&1'
+exit: 2
+out-equals: vuna: runtime error: boom
+run: sh -c 'printf "main : Int\nmain = todo \"later\"\n" > "$TMPDIR/traps/app/Main.vuna"; timeout 120 "$VUNA" build --target native --out "$TMPDIR/traps-todo" "$TMPDIR/traps"'
+exit: 0
+run: sh -c '"$TMPDIR/traps-todo/bin/traps" 2>&1'
+exit: 2
+out-equals: vuna: runtime error: TODO: later
+
+# 7) 数组越界：trap 文本与 OCaml 报告器首行一致（native 没有位置行），exit 2。
+run: sh -c 'd="$TMPDIR/arr"; mkdir -p "$d/app"; printf "[package]\nname = \"arr\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Container.Array as Array\n\nmain : Int\nmain = arrayGet (fromList [1, 2]) 5\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --out "$TMPDIR/arr-out" "$d"'
+exit: 0
+run: sh -c '"$TMPDIR/arr-out/bin/arr" 2>&1'
+exit: 2
+out-equals: vuna: runtime error: Invalid_argument("index out of bounds")
+
+# 7) 文本日志的运行时原语：关闭时返回 43 且不求值。
+run: sh -c 'd="$TMPDIR/dbg"; mkdir -p "$d/app"; printf "[package]\nname = \"dbg\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Int\nmain = let _ = log! \"debug\" \"x\" in 43\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --out "$TMPDIR/dbg-out" "$d"'
+exit: 0
+run: "$TMPDIR/dbg-out/bin/dbg" 2>&1
+out-equals: 43
+
+# 8) 栈传参（arity > 6）：前 6 个走寄存器，第 7 个起压栈。
+run: sh -c 'd="$TMPDIR/argv"; mkdir -p "$d/app"; printf "[package]\nname = \"argv\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "poly : Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int\npoly a b c d e f g h i = a * 100000000 + b * 10000000 + c * 1000000 + d * 100000 + e * 10000 + f * 1000 + g * 100 + h * 10 + i\n\nmain : Int\nmain = poly 1 2 3 4 5 6 7 8 9\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --out "$TMPDIR/argv-out" "$d"'
+exit: 0
+run: "$TMPDIR/argv-out/bin/argv" 2>&1
+out-equals: 123456789
+# 奇数个栈参数（7 参）走对齐空洞；返回值必须原样。
+run: sh -c 'd="$TMPDIR/argv"; printf "poly : Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int\npoly a b c d e f g = a + b + c + d + e + f + g\n\nmain : Int\nmain = poly 1 2 3 4 5 6 7\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --out "$TMPDIR/argv7-out" "$d"'
+exit: 0
+run: "$TMPDIR/argv7-out/bin/argv" 2>&1
+out-equals: 28
+# 栈传参 + 递归：每层都要读自己栈帧上的第 7 个参数。
+run: sh -c 'd="$TMPDIR/argv"; printf "import Base.Data.Nat as Nat\n\ng : Nat -> Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int\ng a b c d e f h i = case a of\n  Zero => i\n  Succ k => g k b c d e f h (i + 1)\n\nmain : Int\nmain = g (natFromInt 5) 1 2 3 4 5 6 7\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --out "$TMPDIR/argvrec-out" "$d"'
+exit: 0
+run: "$TMPDIR/argvrec-out/bin/argv" 2>&1
+out-equals: 12
+

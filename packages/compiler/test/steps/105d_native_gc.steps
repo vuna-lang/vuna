@@ -1,0 +1,66 @@
+# matrix: effect-native
+# 105d) native 后端：GC 与内存（回收、GC_STRESS、大块、多段、卡片表）。
+#     根集（栈 / handler / 续延记录 / 捕获缓冲）漏项会在这里表现为输出不一致或段错误。
+# 9y) GC 回收：高 churn、低存活集的程序在 1 MiB live 预算下跑完（累计分配约 3.8 MB），
+#     输出与无预算时逐字一致；`VUNA_NATIVE_GC_LOG` 打出的诊断行含次数与 live 字节。
+run: sh -c 'd="$TMPDIR/gcgrow"; mkdir -p "$d/app"; printf "[package]\nname = \"gcgrow\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Data.Nat as Nat\nimport Base.Data.String as String\n\nwork : Int -> Int\nwork x = strLength (\"abcdefghij\" ++ strFromInt x) + strLength (strFromInt (x + 1))\n\ngo : Nat -> Int -> Int\ngo n acc = case n of\n  Zero => acc\n  Succ k => go k (acc + work k)\n\nmain : Int\nmain = go (natFromInt 40000) 0\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --out "$TMPDIR/gcgrow-out" "$d"'
+exit: 0
+run: "$TMPDIR/gcgrow-out/bin/gcgrow" 2>&1
+out-equals: 777784
+run: sh -c 'VUNA_NATIVE_MEM_LIMIT=1048576 "$TMPDIR/gcgrow-out/bin/gcgrow" 2>&1'
+exit: 0
+out-equals: 777784
+run: sh -c 'VUNA_NATIVE_MEM_LIMIT=1048576 VUNA_NATIVE_GC_LOG=1 "$TMPDIR/gcgrow-out/bin/gcgrow" 2>&1'
+out-contains: gc n=
+out-contains: live=
+
+# 9z) `VUNA_NATIVE_GC_STRESS=1`（每次分配都完整 GC）：续延 + List + 字符串的程序
+#     输出与正常模式一致，说明根集（栈 / handler / 续延记录 / 捕获缓冲）没有漏项。
+run: sh -c 'd="$TMPDIR/gcstress"; mkdir -p "$d/app"; printf "[package]\nname = \"gcstress\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Effect.Core as Eff\nimport Base.Data.Nat as Nat\nimport Base.Data.String as String\n\ndata POp : Type -> Type where\n  P : Int -> POp Int\n\npad : String -> Int\npad s = strLength (s ++ \"0123456789\")\n\nmany : Nat -> Eff [POp] Int\nmany n = case n of\n  Zero => pure 0\n  Succ m => do\n    x <- perform (P (pad \"abc\"))\n    y <- many m\n    pure (x + y)\n\nmain : Int\nmain = runPure (handle (many (natFromInt 12)) { P n k -> k n })\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --out "$TMPDIR/gcstress-out" "$d"'
+exit: 0
+run: "$TMPDIR/gcstress-out/bin/gcstress" 2>&1
+out-equals: 156
+run: sh -c 'VUNA_NATIVE_GC_STRESS=1 "$TMPDIR/gcstress-out/bin/gcstress" 2>&1'
+exit: 0
+out-equals: 156
+
+# 9aa) GC 的 env 开关也不进 codegen：`GC_MIN` / `GC_LOG` / `GC_STRESS` 不影响产物。
+run: sh -c 'timeout 120 "$VUNA" compile "$TMPDIR/gcgrow/app/Main.vuna" "$TMPDIR/detgc-a" --target native; VUNA_NATIVE_GC_MIN=4096 VUNA_NATIVE_GC_LOG=1 VUNA_NATIVE_GC_STRESS=1 timeout 120 "$VUNA" compile "$TMPDIR/gcgrow/app/Main.vuna" "$TMPDIR/detgc-b" --target native; diff -r "$TMPDIR/detgc-a" "$TMPDIR/detgc-b"'
+exit: 0
+
+# 9aa1) 超大块（> 64 MiB）走后段 + rt_huge_free：分配后丢掉，下一次 GC 把它挂回
+#       链表；再分配仍能正常结束（回归：清扫曾把链表头当槽地址解引用 → SIGSEGV）。
+run: sh -c 'd="$TMPDIR/gchuge"; mkdir -p "$d/app"; printf "[package]\nname = \"gchuge\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Effect.Core as Eff\nimport Base.Container.Array as Array\nimport Base.Data.Int as Int\nimport Base.Data.Nat as Nat\nimport Base.Data.String as String\n\nmain : Eff [] Int\nmain = do\n  a <- pure (Array.length (Array.make (natFromInt 8400000) 7))\n  n <- pure (strLength (strFromInt 10000000))\n  pure (if a == natFromInt 8400000 && n >= 0 then 1 else 0)\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --out "$TMPDIR/gchuge-out" "$d"'
+exit: 0
+run: "$TMPDIR/gchuge-out/bin/gchuge" 2>&1
+out-equals: 1
+run: sh -c 'VUNA_NATIVE_GC_STRESS=1 "$TMPDIR/gchuge-out/bin/gchuge" 2>&1'
+out-equals: 1
+
+# 9aa15) 多个非初始段：三个 1.6–2.4 MB 的数组各自落新段（bump 扩容路径），中间穿插
+#        64 KB 的短命数组触发回收；段索引必须能让 GC 在任意段里认出根。
+run: sh -c 'd="$TMPDIR/gcseg"; mkdir -p "$d/app"; printf "[package]\nname = \"gcseg\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Effect.Core as Eff\nimport Base.Container.Array as Array\nimport Base.Data.Int as Int\nimport Base.Data.Nat as Nat\n\nmk : Int -> Array Int\nmk n = Array.make (natFromInt n) 7\n\nchurn : Int -> Int -> Int\nchurn n acc = if n <= 0 then acc else churn (n - 1) (acc + Nat.toInt (Array.length (Array.make (natFromInt 8000) 3)))\n\nmain : Eff [] Int\nmain = do\n  a <- pure (mk 200000)\n  b <- pure (mk 250000)\n  c <- pure (mk 300000)\n  n <- pure (churn 150 0)\n  la <- pure (Array.length a)\n  lb <- pure (Array.length b)\n  lc <- pure (Array.length c)\n  pure (if la == natFromInt 200000 && lb == natFromInt 250000 && lc == natFromInt 300000 && n >= 0 then 1 else 0)\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --out "$TMPDIR/gcseg-out" "$d"'
+exit: 0
+run: "$TMPDIR/gcseg-out/bin/gcseg" 2>&1
+out-equals: 1
+run: sh -c 'VUNA_NATIVE_GC_STRESS=1 "$TMPDIR/gcseg-out/bin/gcseg" 2>&1'
+out-equals: 1
+run: sh -c 'VUNA_NATIVE_GC_MIN=4096 "$TMPDIR/gcseg-out/bin/gcseg" 2>&1'
+out-equals: 1
+
+# 9aa2) 分代 GC 的卡片表：老代 IORef 写进年轻代值后，写屏障把所在卡片置脏，年轻代回收
+#       从脏卡片出发扫到这个值。`GC_MIN` 压小让回收密集发生；`cards>=1` 的行证明某次
+#       年轻代回收确实扫了脏卡片（只断言输出区分不出来：值也能经 Eff 闭包链活着）。
+#       分配保持「小步稳定」：一次巨大的分配链会把阈值抬高、让回收几乎全走 full，
+#       而 full 不扫卡片，这条观察就失去意义。
+run: sh -c 'd="$TMPDIR/gcrem"; mkdir -p "$d/app"; printf "[package]\nname = \"gcrem\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Effect.Core as Eff\nimport Base.Effect.Pure.IORef as IORef\nimport Base.Data.Int as Int\nimport Base.Data.String as String\n\nchurn : Int -> Int -> Int\nchurn n acc = if n <= 0 then acc else churn (n - 1) (acc + strLength (strFromInt (10000000 + n)))\n\npad : Int -> String -> String\npad n s = if n <= 0 then s else pad (n - 1) (s ++ \"ab\")\n\nmain : Eff [] Int\nmain = do\n  cell <- newRef \"seed\"\n  n1 <- pure (churn 50000 0)\n  _ <- writeRef cell (pad 5 \"xy\")\n  n2 <- pure (churn 50000 0)\n  v <- readRef cell\n  pure (if n1 >= 0 && n2 >= 0 then strLength v else 0 - 1)\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --out "$TMPDIR/gcrem-out" "$d"'
+exit: 0
+run: "$TMPDIR/gcrem-out/bin/gcrem" 2>&1
+out-equals: 12
+run: sh -c 'VUNA_NATIVE_GC_STRESS=1 "$TMPDIR/gcrem-out/bin/gcrem" 2>&1'
+out-equals: 12
+run: sh -c 'VUNA_NATIVE_GC_MIN=1000 VUNA_NATIVE_GC_LOG=1 "$TMPDIR/gcrem-out/bin/gcrem" >/dev/null 2>"$TMPDIR/gcrem.log"; grep -q "gen=minor" "$TMPDIR/gcrem.log" && grep -q "cards=[1-9]" "$TMPDIR/gcrem.log"'
+exit: 0
+run: sh -c 'grep -q "call rt_write_barrier" "$TMPDIR/gcrem-out/runtime.s"'
+exit: 0
+

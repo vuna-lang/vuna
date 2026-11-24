@@ -491,8 +491,11 @@ pkg_err/packages/test-m30 → `packages/cli`；web → `packages/web-cli`；其�
   `corpus/pure_cross/`（family `pure-cross`）是三端**共享语义**的唯一来源：每份程序配一个
   `.out`，`--backend all` 时对拍 OCaml / wasm / native 的输出；新增共享能力先加夹具，再
   实现两个后端（一侧缺失即失败）。`35_eff_*`–`50_eff_*` 覆盖 resume / abort / 嵌套
-  handler / return 改类型 / 宿主 console / 深递归；`105_native_backend.steps` 只保留 native 机制
-  （产物形状、label 唯一性、确定性、trap 文本、arena、栈传参、拒绝面、`--no-compile`）；
+  handler / return 改类型 / 宿主 console / 深递归；`105*_native_*.steps` 按主题拆成六个 case，
+  只保留 native 机制（`105a_native_shape` 产物形状 / label 唯一性 / 确定性 / trap 文本 / arena /
+  栈传参，`105b_native_effects` 动作入口与库机器，`105c_native_host` 宿主效应与进程边界，
+  `105d_native_gc` GC 与内存，`105e_native_tco` 尾调用 / 闭包 / 标量代码生成，
+  `105f_native_artifacts` 产物文件集 / 增量 / 宿主失败面）；
   `106_wasm_backend.steps` 只保留 wasm 机制（WAT 产物形状、`elem declare`、WAT 确定性 +
   行宽、trap、拒绝面、`--target` 校验、2000 次 perform 与能力拒绝面）；它同时探
   `wasm-opt` 是否存在，并锁 `--wasm-opt 0`（`build.sh` 不含 `wasm-opt`）与默认 `-O3`

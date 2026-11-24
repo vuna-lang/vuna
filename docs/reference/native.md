@@ -624,10 +624,11 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
 
 ## 7. 验证
 
-- `packages/compiler/test/steps/105_native_backend.steps`（`steps_native`，e2e）：
-  native 机制——产物形状（`.s` 文件集 / `build.sh` / 链接）、多函数 label 不撞名、确定性、
-  除零与 `assert` / `todo` / `prim_fail` 的错误文本、可增长 arena、arity > 6 的栈传参、
-  效应入口 / 宿主 handler / 续延恢复 / abort、`--no-compile`。
+- `packages/compiler/test/steps/105*_native_*.steps`（`steps_native`，e2e）：按主题拆成六个 case——
+  `105a_native_shape`（产物形状 / label / 确定性 / trap 文本 / arena / 栈传参）、
+  `105b_native_effects`（动作入口 / 宿主 handler / 续延 / abort / `--no-compile`）、
+  `105c_native_host`（宿主效应 / 进程边界 / 资源限制）、`105d_native_gc`（GC / 大块 / 卡片表）、
+  `105e_native_tco`（尾调用 / 闭包 / 标量 / 浮点）、`105f_native_artifacts`（文件集 / 增量 / 失败面）。
 - GC：9y 高 churn 低存活集在 1 MiB live 预算下跑完（GC 前后输出一致、`GC_LOG` 有诊断行）、
   9z `GC_STRESS` 下续延 + List + 字符串输出不变、9aa GC 的 env 开关不影响产物；
   9t 仍锁「live 超限才 trap」。
