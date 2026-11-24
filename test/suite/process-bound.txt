@@ -99,3 +99,12 @@
 115_wasm_js_host.steps	(indirect)	artifact-exec;build-link
 110_plugin_requires.steps	help,fake	cli-text
 111_target_cache.steps	build	cli-text
+51_import_fix_span.steps	check	cli-text
+66_log.steps	build	artifact-exec;build-link;cli-text
+67_term_size_cap.steps	run	artifact-exec;cli-text
+68_step_timeout_kill.steps	dev suite	runner-process-semantics
+69_cli_timeout.steps	dev suite	runner-process-semantics
+70_run_sweep.steps	dev suite	runner-process-semantics
+71_suite_jobs.steps	dev suite	runner-process-semantics
+116_fixity_global.steps	check	pkg-store;cli-text
+118_derived_bool_literal.steps	compile	cli-text
