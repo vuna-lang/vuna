@@ -701,6 +701,40 @@ O(n²) 已去掉（§1）。门槛脚本的上限已提到 N=8000，因此这一
 门槛：`nix/checks/compiler-growth.sh` 的 `depth=32/64` 探针（每档独立空 store，
 `VUNA_GROWTH_TIMEOUT` 兜超时）。回归时 depth 32 的 2^32 成本会直接超时失败。
 
+### 5.4 效应机器深度（handler 帧 / answer row 的运行墙钟）
+
+两个探针，分别对应两条会被「活续延数」拖垮的路径。口径一致：`vuna build --target …`
+生成产物（**编译时间不计**），一次预热后 best-of-N 只测运行。
+
+**`frames`（OCaml）**：每层装一个 handler、内层返回后在本层非尾 `perform`
+（`effect/perf/51_eff_nested` 的放大版）：
+
+| N（层） | 运行 |
+| --- | --- |
+| 100 000 | 96 ms |
+| 200 000 | 231 ms（2.41×） |
+| 400 000 | 491 ms（2.13×） |
+
+层数翻倍的成本 ≈2.1–2.4×：多出来的部分是活续延与 used 表的内存增长，不是复杂度退化
+（`MSt.msUsed` 是槽 → epoch 表：≤8 条走关联列表，超过阈值升级成 HashMap；`msCtx` 按槽回收）。
+门槛 `checks.vuna-effect-machine-growth` 的 frames 三档是 `100k/200k/400k`、每档 30 s 硬上限、
+相邻档 ≤3.0×。门槛没压到 2.0×，是因为内存增长本身就有约 1.1 的指数；3.0 才是能区分
+n²（≈4×）的下界。
+
+**`answer-row`（native）**：内层 handler 的 clause 先 `perform` 一次外层效应再 resume
+（`bench/programs/t8/eff_host` 的形状），每轮多一次派发：
+
+| N | native 运行 | OCaml 同程序 |
+| --- | --- | --- |
+| 20 000 | 155 ms | ~15 ms |
+| 40 000 | 369 ms | — |
+| 80 000 | 1184 ms | — |
+
+同一程序在 OCaml 上快一个数量级以上，所以这条轴只在 native 上量。native 读数本身随规模
+略超线性（2 万 → 8 万 ≈ 7.6×），比值门槛在这里分不清退化，门槛用 N=40000 单档的
+**10 s 绝对上限**（本机读数的 ~27×）抓这一类：`MSt.msUsed` 退回按活续延线性扫描时，
+同一形状的 native 读数从 0.37 s 级掉到分钟级。
+
 ## 6. `check packages/base` 的阶段构成
 
 一次采样的量级（具体 ms 随版本 / 机器变化，用于定位优先序）：

@@ -117,7 +117,7 @@ nix build .#vuna --out-link result        # 需要固定二进制时才构建（
 sh nix/seed/rotate.sh ./result/bin/vuna   # 仅当需要轮换 seed；上面那条先跑过
 nix run .#vuna -- store gc --dry-run      # 缓存族 GC：先裁剪已消失的项目根，再按 roots+宽限淘汰
                                           # 对象库是单一根（默认 ~/.vuna/store，VUNA_STORE 覆盖）
-nix flake check                           # 3 packages + 30 checks（清单见 testing.md）
+nix flake check                           # 3 packages + 31 checks（清单见 testing.md）
 git config core.hooksPath .githooks       # 启用 pre-commit（devShell/direnv 自动设置）
 nix run .#vuna -- map find <Module.name> # 定位符号；另有 map impact / api
 ```

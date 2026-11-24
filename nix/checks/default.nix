@@ -396,6 +396,20 @@ in
     nativeBuildInputs = e2eTools;
   };
 
+  # 效应机器的**深度**增长率门槛：frames（嵌套 handler 帧 + 非尾 resume，OCaml，
+  # 100k/200k/400k，相邻档 ≤3.0×）与 answer-row（handler 的答案再派发，native，
+  # N=40000 单档 10s 上限）。只测运行墙钟（编译不计），挡 msUsed / 帧链一类按深度退化的
+  # 形状（小尺寸版本是 effect/perf/51_eff_nested）。
+  vuna-effect-machine-growth = vunaCheck {
+    name = "vuna-effect-machine-growth";
+    srcs = [
+      src.base
+      src.manifest
+    ];
+    script = ./effect-machine-growth.sh;
+    nativeBuildInputs = e2eTools;
+  };
+
   vuna-typecheck = vunaCheck {
     name = "vuna-typecheck";
     srcs = workspace;

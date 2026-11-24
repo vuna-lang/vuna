@@ -528,11 +528,11 @@ pkg_err/packages/test-m30 → `packages/cli`；web → `packages/web-cli`；其�
 
 ## Nix checks 清单
 
-`nix flake check` 实测 **33 项**：3 个 package 构建（`vuna` / `vuna-compiler` /
-`vuna-seed`，同时暴露为 checks）+ 30 个 check 语义项（`context-budget`、
+`nix flake check` 实测 **34 项**：3 个 package 构建（`vuna` / `vuna-compiler` /
+`vuna-seed`，同时暴露为 checks）+ 31 个 check 语义项（`context-budget`、
 `seed-selfhost`、`vscode-ext`、`vuna-checks-inventory`、`vuna-compiler-growth`、
 `vuna-compiler-growth-ctor`、`vuna-compiler-growth-incremental`、`vuna-container-growth`、
-`vuna-diag`、`vuna-fmt`、`vuna-frontend-growth`、`vuna-iface-selftest`、
+`vuna-diag`、`vuna-effect-machine-growth`、`vuna-fmt`、`vuna-frontend-growth`、`vuna-iface-selftest`、
 `vuna-lint`、`vuna-metrics`、`vuna-native-artifact`、`vuna-native-codegen-growth`、
 `vuna-native-surface`、
 `vuna-nix-fmt`、`vuna-obs-dwarf`、`vuna-obs-overhead`、
@@ -616,6 +616,13 @@ CI 把它拆成三个 job（`.github/workflows/ci.yml`）：`flake-check` 跑除
 - `vuna-container-growth`：HashMap / Queue / TreeMap / PriorityQueue / Sort 各三档合成探针
   （N / 2N / 4N），先编译成 OCaml 后端产物、只测**运行**墙钟（编译不计），相邻档 ≤3.0×；
   线性路径 ≈2、n² 退化 ≈4。容器契约见 [stdlib.md](stdlib.md)「容器复杂度契约」；
+- `vuna-effect-machine-growth`：效应机器两个深度探针，都只测运行墙钟（编译不计）——
+  ① `frames`（OCaml 后端）：每层装一个 handler、内层返回后在本层非尾 `perform`，层数
+  100k / 200k / 400k，每档 30s 硬上限 + 相邻档 ≤3.0×（本机 2.1–2.4×），挡 `MSt.msUsed` /
+  handler 帧链按活续延数二次退化；② `answer-row`（native 后端）：handler 的 clause 先
+  `perform` 一次外层效应再 resume，N=40000 单档 10s 硬上限（本机约 0.37 s）——这条路径的
+  退化只在 native 上可见，比值门槛分不清，用数量级余量的绝对上限抓。夹具侧的小尺寸版本是
+  `effect/perf/51_eff_nested`，复杂度契约见 [effect-machine.md](effect-machine.md)；
 - `vuna-metrics`：冻结夹具（`corpus/codegen`）的 codegen 产物对
   `nix/checks/data/codegen.baseline` 的精确基线；种子尺寸不设门槛（见 [compiler.md](compiler.md)
   §codegen 夹具基线）；

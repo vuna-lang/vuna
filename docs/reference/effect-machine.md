@@ -513,6 +513,13 @@ wasm 生成代码与 native 一样只驱动 base 机器（`@ir@m@*` → `Control
 旧续延重放仍报 `continuation already resumed`。尾 resume 不分配/压 ctx，非尾 resume 的
 ctx 深度是真正的嵌套 resume 深度。
 
+**复杂度契约**：嵌套 handler 帧数与非尾 resume 次数都必须线性。`Used` 的小表（≤8 条）超过
+阈值升级成 HashMap，正是为了让 answer-row 型的嵌套非尾恢复不再按活续延数线性扫描 / 重建整表。
+`checks.vuna-effect-machine-growth` 的 `frames` 探针按层数 100k / 200k / 400k 卡运行墙钟
+（相邻档 ≤3.0×），`answer-row` 探针在 native 上卡单档绝对上限（answer row 的退化只在 native
+上可见）；夹具侧的固定形状是 `effect/perf/51_eff_nested`，读数见
+[performance.md](performance.md) §5.4。
+
 同机读数（`vuna-perf --target all --runs 3 --warmup 1`）：
 
 - `eff_tick` 20k：native 207→17 ms / 57→4.2 MB；wasm 178→56 ms / 158→63 MB。
