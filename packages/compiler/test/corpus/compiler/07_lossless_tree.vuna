@@ -97,7 +97,7 @@ kidsInside sp (k :: rest) =
 -- | 递归：每个分支的 children 有序、都在自己的区间里，且自身也被父层检查过。
 nestedOk : CstNode -> Bool
 nestedOk (CstLeaf _) = True
-nestedOk (CstBranch _ _ sp kids) =
+nestedOk (CstBranch _ _ sp _ kids) =
   orderedKids kids && kidsInside sp kids && List.length kids > 0 && nestedAll kids
 
 nestedAll : List CstNode -> Bool
@@ -113,7 +113,7 @@ kindTagsAt fuel n =
   else
     case n of
       CstLeaf _ => []
-      CstBranch _ _ _ kids => nodeKindTag n :: concatMap (kindTagsAt (fuel - 1)) kids
+      CstBranch _ _ _ _ kids => nodeKindTag n :: concatMap (kindTagsAt (fuel - 1)) kids
 
 -- | 每层至少 1 个 token，所以 token 数是树高的安全上界。
 kindTags : List CstToken -> CstNode -> List String
@@ -377,7 +377,7 @@ nodesOfKindDeep tag (n :: rest) =
   append (if nodeKindTag n == tag then [n] else []) (
       case n of
         CstLeaf _ => nodesOfKindDeep tag rest
-        CstBranch _ _ _ kids => append (nodesOfKindDeep tag kids) (nodesOfKindDeep tag rest)
+        CstBranch _ _ _ _ kids => append (nodesOfKindDeep tag kids) (nodesOfKindDeep tag rest)
     )
 
 countIdentified : List NodeRef -> Int
@@ -538,7 +538,7 @@ importsAlign (n :: nodes) (i :: imports) =
 -- | 先序的分支 id 序列（含文件根）。
 nodeIds : CstNode -> List Int
 nodeIds (CstLeaf _) = []
-nodeIds (CstBranch _ nid _ kids) = nid :: concatMap nodeIds kids
+nodeIds (CstBranch _ nid _ _ kids) = nid :: concatMap nodeIds kids
 
 -- | `from` 起的连续序列。
 idsFrom : Int -> List Int -> Bool

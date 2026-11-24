@@ -59,14 +59,21 @@ parseSourceDetailed file source =
           let
             fin = secondOf (firstOf p)
             events = eventsOf st0 fin
-            surface =
-              surfaceOf
-                toks
+            cst =
+              nestToTreeWithSurface
+                (lexTokensOf source toks comments)
                 events
-                fin.holeParens
+                (append (parenEntriesOf toks events) fin.holeParens)
                 (append fin.backtickShapes fin.holeBackticks)
                 (append fin.sectionShapes fin.holeSections)
                 (append fin.interpMultis fin.holeInterpMultis)
+            surface =
+              surfaceOfCstWith
+                (append (parenEntriesOf toks events) fin.holeParens)
+                (append fin.backtickShapes fin.holeBackticks)
+                (append fin.sectionShapes fin.holeSections)
+                (append fin.interpMultis fin.holeInterpMultis)
+                cst
           in OkC (ParsedSource (firstOf (firstOf p)) comments toks events surface)
 
 -- | 只要 AST 与注释表的入口（复用 `parseSourceDetailed` 同一次词法）。
