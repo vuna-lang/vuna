@@ -328,6 +328,7 @@ rtKindIsRef "arrayToList" = True
 rtKindIsRef "prim_eff_newRef" = True
 rtKindIsRef "@vuna@prim_mrefNew" = True
 rtKindIsRef "@vuna@prim_marrNew" = True
+rtKindIsRef "@vuna@prim_marrFromList" = True
 rtKindIsRef "@vuna@prim_mbufNew" = True
 rtKindIsRef "@vuna@prim_mbufToString" = True
 rtKindIsRef "prim_eff_getenv" = True

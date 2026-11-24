@@ -55,6 +55,7 @@ modules = [
   "Base.Effect.MutArray",
   "Base.Effect.MutBuffer",
   "Base.Effect.MutRef",
+  "Base.Effect.MutVec",
   "Base.Effect.Net",
   "Base.Effect.Process",
   "Base.Effect.Pure",

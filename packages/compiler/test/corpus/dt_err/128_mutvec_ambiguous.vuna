@@ -1,0 +1,16 @@
+-- MutVec：两个同长度同元素类型的向量省略实例名时按候选报 TC_AmbiguousInstance。
+import Base.Effect.MutVec as MutVec
+import Base.Effect.Core as Eff
+import Base.Data.Vec
+import Base.Data.Fin
+import Base.Trait.Monad
+
+bad : Int
+bad =
+  MutVec.withMutVecPure "a" (VCons 1 Nil) (
+      MutVec.withMutVec "b" (VCons 2 Nil) (
+          do
+            MutVec.set FZero 3
+            MutVec.get FZero
+        )
+    )

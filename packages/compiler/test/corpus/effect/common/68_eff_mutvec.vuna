@@ -1,0 +1,19 @@
+-- MutVec：类型层定长的原地向量；Fin 下标，越界在编译期不可能。
+import Base.Effect.MutVec as MutVec
+import Base.Effect.Core as Eff
+import Base.Data.Vec
+import Base.Data.Fin
+import Base.Data.Nat
+
+main : Int
+main =
+  MutVec.withMutVecPure "xs" (VCons 10 (VCons 20 (VCons 30 Nil))) (
+      do
+        MutVec.set FZero 7
+        MutVec.set (FSucc FZero) 9
+        a <- MutVec.get FZero
+        b <- MutVec.get (FSucc FZero)
+        c <- MutVec.get (FSucc (FSucc FZero))
+        n <- MutVec.size
+        pure (a * 1000 + b * 100 + c * 10 + natToInt n)
+    )

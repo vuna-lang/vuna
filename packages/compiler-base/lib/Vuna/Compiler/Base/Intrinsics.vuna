@@ -1030,6 +1030,11 @@ effIntrinsics =
       OpNone
       False,
     Intrinsic "@vuna@prim_marrLen" (IPi "a" (IFun (IMArray (IVar "a")) IInt)) OpNone False,
+    Intrinsic
+      "@vuna@prim_marrFromList"
+      (IPi "a" (IFun (IList (IVar "a")) (IMArray (IVar "a"))))
+      OpNone
+      False,
     Intrinsic "@vuna@prim_mbufNew" (IFun IInt IMBuffer) OpNone False,
     Intrinsic "@vuna@prim_mbufAppend" (IFun IMBuffer (IFun IStr (IEff IInt))) OpNone False,
     Intrinsic "@vuna@prim_mbufAppendChar" (IFun IMBuffer (IFun IInt (IEff IInt))) OpNone False,

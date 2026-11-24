@@ -60,7 +60,7 @@ tabulate (Succ k) f = VCons (f FZero) (tabulate k (\i => f (FSucc i)))
 export substTemplate : {n : Nat} -> String -> Vec n String -> String
 substTemplate template args = strSubstTemplate template (vecToList args)
 
--- | 内部：把 `Vec n String` 转成 `List String` 交给运行时替换器。
-vecToList : {n : Nat} -> Vec n String -> List String
+-- | 把 `Vec n a` 转成 `List a`。
+export vecToList : {n : Nat} -> Vec n a -> List a
 vecToList [] = []
 vecToList (VCons x rest) = x :: vecToList rest

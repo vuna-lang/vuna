@@ -133,6 +133,7 @@ ocamlRtTextTable =
     ("@vuna@prim_marrNew", "Array.make"),
     ("@vuna@prim_marrGet", "Array.get"),
     ("@vuna@prim_marrLen", "Array.length"),
+    ("@vuna@prim_marrFromList", "(fun xs -> Array.of_list (dtp_ocamlOf xs))"),
     ("@vuna@prim_marrSet", "(fun a i v -> Array.set a i v; 0)"),
     ("@vuna@prim_mbufNew", "Buffer.create"),
     ("@vuna@prim_mbufAppend", "(fun b s -> Buffer.add_string b s; 0)"),

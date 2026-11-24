@@ -492,9 +492,9 @@ withMutArrayPure : (n : String) -> Nat -> a -> Eff [Named n (MutArrayOp a)] b ->
   复用 `arrayMake` / `arrayGet` / `arrayLength`，只有原地写 `@vuna@prim_marrSet` 是新的
   （三端都不复制；native 写后登记写屏障）。
 - 越界是宿主 trap（与 `arrayGet` 一致）；`size` 是容量 = 长度。
-- 需要「容量 + 逻辑长度」时，用 `MutArray` + 一个 `MutRef` 计数器组合；
-  类型层定长的可变量（`MutVec n a`，`Fin n` 索引）与可增长元素容器（`MutDynArray a`）
-  属于后续家族（`Fin` 已落地），见 [debt.md](debt.md)。
+- 需要「容量 + 逻辑长度」时，用 `MutArray` + 一个 `MutRef` 计数器组合；类型层定长用
+  `MutVec n a`（`Fin n` 索引，见 §8.11）；可增长元素容器（`MutDynArray a`）仍是后续，
+  见 [debt.md](debt.md)。
 
 夹具：`effect/common/63..65`（原地读写、双数组 `@` + 跨函数、多态 helper），
 负例 `dt_err/122/123/125`。
@@ -541,6 +541,50 @@ withMutBufferPure : (n : String) -> Eff [Named n MutBufferOp] b -> b
 
 夹具：`effect/common/66..67`（追加/长度/快照/清空、跨函数 + 格式化组合），
 负例 `dt_err/124/126`。
+
+### 8.11 类型层定长：`Base.Effect.MutVec`
+
+`MutVec n a` 是 `Vec n a` 的可变搭档：长度 `n` 在类型层锁定，下标是 `Fin n`，越界在
+编译期不可能，运行时没有边界检查。存储是定长数组，`set` 原地写：
+
+```vuna
+main : Int
+main =
+  MutVec.withMutVecPure "xs" (VCons 10 (VCons 20 (VCons 30 Nil))) (
+      do
+        MutVec.set FZero 7
+        a <- MutVec.get FZero
+        n <- MutVec.size
+        pure (a * 100 + natToInt n)    -- 703
+    )
+```
+
+形状：
+
+```vuna
+data MutVecOp : Nat -> Type -> Type -> Type where
+  Get  : {n : Nat} -> {a : Type} -> Fin n -> MutVecOp n a a
+  Set  : {n : Nat} -> {a : Type} -> Fin n -> a -> MutVecOp n a Unit
+  Size : {n : Nat} -> {a : Type} -> MutVecOp n a Nat
+
+get  : {name : String} -> ... -> Fin n -> Eff r a
+set  : {name : String} -> ... -> Fin n -> a -> Eff r Unit
+size : {name : String} -> ... -> Eff r Nat
+withMutVec     : (name : String) -> Vec n a -> Eff (Named name (MutVecOp n a) :: r) b -> Eff r b
+withMutVecPure : (name : String) -> Vec n a -> Eff [Named name (MutVecOp n a)] b -> b
+```
+
+- 行条目 `Named name (MutVecOp n a)` 同时带长度索引与元素类型；句柄载荷是**第二个**
+  实参 `a`（`MutArrayOp` 的载荷是第一个），由家族表的 `mutFamPayloadIndex` 指定。
+- **引入**：运行时长度来自种子 `Vec n a` 的构造子结构（`vecToList` → 数组），
+  不需要把 Rig0 的长度索引再传一遍。
+- **表示**：复用 ` a`（普通数组）+ `marrGet/Set/Len`，没有新原语；
+  种子转换走 ``（三端映射到 `arrayFromList`）。
+- 下标转换 `Fin n → Nat` 是构造子递归（`finToNat`），代价与下标值成正比；
+  bounds 由类型排除，没有运行时检查。
+
+夹具：`effect/common/68..70`（基本读写、双向量 `@` + 跨函数、多态 helper），
+负例 `dt_err/127..130`。
 
 ## 9. 仍开放的边界
 

@@ -364,6 +364,7 @@ irRtBridgedNames =
     "strConcatMany",
     "strSubstTemplate",
     "arrayFromList",
+    "@vuna@prim_marrFromList",
     "arrayToList",
     "prim_eff_getArgs",
     "@vuna@prim_eff_getArgs",

@@ -1,0 +1,11 @@
+-- MutVec：闭包把写操作捕获进 `Eff []` 行时，向量条目的 `Member` 约束不成立（逃逸被拒）。
+import Base.Effect.MutVec as MutVec
+import Base.Effect.Core as Eff
+import Base.Data.Vec
+import Base.Data.Fin
+import Base.Effect.Types
+import Base.Trait.Monad
+import Base.Data.Unit
+
+leak : Unit -> Eff [] Unit
+leak = MutVec.withMutVecPure "x" (VCons 0 Nil) (pure (\_ => MutVec.set@x FZero 1))

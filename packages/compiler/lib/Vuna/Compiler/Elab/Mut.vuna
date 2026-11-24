@@ -1,7 +1,7 @@
--- | 命名可变家族的编译期部分（`Base.Effect.MutRef` / `MutArray` / `MutBuffer`）：
+-- | 命名可变家族的编译期部分（`Base.Effect.MutRef` / `MutArray` / `MutVec` / `MutBuffer`）：
 -- 名字常量、签名里的隐藏句柄参数合成、用户面声明到内部入口的改写。
 --
--- 三个家族的机制完全相同（名字 → 编译期句柄绑定、跨函数合成隐藏参数、逃逸靠 `Member`
+-- 四个家族的机制完全相同（名字 → 编译期句柄绑定、跨函数合成隐藏参数、逃逸靠 `Member`
 -- 约束），差别只在「族头 / 句柄类型 / 操作表 / 引入入口」——这些差异由 `mutFamilies`
 -- 一张表描述，本模块其余函数都按表工作。
 --
@@ -35,7 +35,9 @@ export record MutFamily(..) where
   mutFamHandleType : String
   -- | 句柄类型的参数个数（决定合成参数是否带行条目的载荷）。
   mutFamHandleArity : Int
-  -- | 编译期句柄 binder 前缀（`@vuna@cell@` / `@vuna@marr@` / `@vuna@mbuf@`）。
+  -- | 行条目实参里哪一项是句柄载荷（`MutArrayOp a i` = 0；`MutVecOp n a i` = 1）。
+  mutFamPayloadIndex : Int
+  -- | 编译期句柄 binder 前缀（`@vuna@cell@` / `@vuna@marr@` / `@vuna@mvec@` / `@vuna@mbuf@`）。
   mutFamBinderPrefix : String
   -- | 用户面引入入口（作用域版 / 纯端点）。
   mutFamWith : String
@@ -43,7 +45,7 @@ export record MutFamily(..) where
   -- | 内部引入入口。
   mutFamWithInternal : String
   mutFamWithPureInternal : String
-  -- | 引入入口除名字与 body 之外的显式参数个数（初值 / 容量）。
+  -- | 引入入口除名字与 body 之外的显式参数个数（初值 / 容量 / 种子向量）。
   mutFamIntroArity : Int
   mutFamOps : List MutOp
 
@@ -57,6 +59,7 @@ mutFamilies =
       "Base.Effect.MutRef.MutRefOp"
       "@vuna@Cell"
       1
+      0
       "@vuna@cell@"
       "Base.Effect.MutRef.withMutRef"
       "Base.Effect.MutRef.withMutRefPure"
@@ -70,6 +73,7 @@ mutFamilies =
       "Base.Effect.MutArray.MutArrayOp"
       "@vuna@MArray"
       1
+      0
       "@vuna@marr@"
       "Base.Effect.MutArray.withMutArray"
       "Base.Effect.MutArray.withMutArrayPure"
@@ -78,10 +82,25 @@ mutFamilies =
       2
       [MutOp "Base.Effect.MutArray.get" "marrGetOp" 1, MutOp "Base.Effect.MutArray.set" "marrSetOp" 2, MutOp "Base.Effect.MutArray.size" "marrLenOp" 0],
     MutFamily
+      "Base.Effect.MutVec"
+      "mutable vector"
+      "Base.Effect.MutVec.MutVecOp"
+      "@vuna@MArray"
+      1
+      1
+      "@vuna@mvec@"
+      "Base.Effect.MutVec.withMutVec"
+      "Base.Effect.MutVec.withMutVecPure"
+      "mvecWith"
+      "mvecWithPure"
+      1
+      [MutOp "Base.Effect.MutVec.get" "mvecGetOp" 1, MutOp "Base.Effect.MutVec.set" "mvecSetOp" 2, MutOp "Base.Effect.MutVec.size" "mvecLenOp" 0],
+    MutFamily
       "Base.Effect.MutBuffer"
       "mutable buffer"
       "Base.Effect.MutBuffer.MutBufferOp"
       "@vuna@MBuffer"
+      0
       0
       "@vuna@mbuf@"
       "Base.Effect.MutBuffer.withMutBuffer"
@@ -155,11 +174,11 @@ stripPrefixString pre s =
 -- ---------------------------------------------------------------
 -- 类型里的行条目
 -- ---------------------------------------------------------------
--- | 类型项 Pi 尾里的 `Eff <row> _` 行条目：实例名 + 族头 + 载荷项。
+-- | 类型项 Pi 尾里的 `Eff <row> _` 行条目：实例名 + 族头 + 操作族实参。
 export record MutRowEntry(..) where
   mutRowEntryName : String
   mutRowEntryFamily : String
-  mutRowEntryPayload : Term
+  mutRowEntryArgs : List Term
 
 -- | 项的（头部全局名, 显式实参）：`TApp` 脊与构造子应用统一展开。
 export mutHeadArgs : Term -> Maybe (String, List Term)
@@ -222,10 +241,7 @@ mutEntryOf e =
             case nameTerm of
               TStr n =>
                 case mutHeadArgs inner of
-                  Just (f, iargs) =>
-                    case iargs of
-                      payload :: _ => Just (MutRowEntry n f payload)
-                      [] => Just (MutRowEntry n f inner)
+                  Just (f, iargs) => Just (MutRowEntry n f iargs)
                   Nothing => Nothing
               _ => Nothing
           _ => Nothing
@@ -243,13 +259,24 @@ mutHandleParamsGo (e :: rest) acc =
   case mutFamilyOfOpFamily e.mutRowEntryFamily of
     Just fam =>
       let
-        hty =
-          if fam.mutFamHandleArity <= 0 then
-            TGlobal fam.mutFamHandleType
-          else
-            TApp (TGlobal fam.mutFamHandleType) e.mutRowEntryPayload Rig0
-      in mutHandleParamsGo rest ((mutBinderName fam e.mutRowEntryName, hty) :: acc)
+        binder = mutBinderName fam e.mutRowEntryName
+      in if fam.mutFamHandleArity <= 0 then
+        mutHandleParamsGo rest ((binder, TGlobal fam.mutFamHandleType) :: acc)
+      else
+        case nthTerm fam.mutFamPayloadIndex e.mutRowEntryArgs of
+          Just payload => mutHandleParamsGo rest ((binder, TApp (TGlobal fam.mutFamHandleType) payload Rig0) :: acc)
+          Nothing => mutHandleParamsGo rest acc
     Nothing => mutHandleParamsGo rest acc
+
+-- | 列表第 `i` 项（越界返回 `Nothing`）。
+nthTerm : Int -> List Term -> Maybe Term
+nthTerm i xs =
+  if i < 0 then
+    Nothing
+  else
+    case xs of
+      [] => Nothing
+      x :: rest => if i == 0 then Just x else nthTerm (i - 1) rest
 
 -- | 把句柄参数合成进签名类型：插在**前导隐式 binder 之后、第一个显式 binder 之前**。
 --
