@@ -13,6 +13,7 @@ vuna-ir = "../ir"
 modules = [
   "Vuna.Target.Native.Abi",
   "Vuna.Target.Native.Audit",
+  "Vuna.Target.Native.Dirty",
   "Vuna.Target.Native.Gc",
   "Vuna.Target.Native.Inline",
   "Vuna.Target.Native.Live",

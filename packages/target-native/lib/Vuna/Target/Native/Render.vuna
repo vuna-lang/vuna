@@ -47,11 +47,13 @@ renderOperand (OpReg r) = regText r
 renderOperand (OpImm n) = strFromInt n
 renderOperand (OpMem base off) = memText base off
 renderOperand (OpMemX base idx off) = memXText base idx off
+renderOperand (OpMemS base idx scale) = "[${regText base}+${regText idx}*${strFromInt scale}]"
 renderOperand (OpRip label) = "[rip + ${label}]"
 
 isMemOperand : Operand -> Bool
 isMemOperand (OpMem _ _) = True
 isMemOperand (OpMemX _ _ _) = True
+isMemOperand (OpMemS _ _ _) = True
 isMemOperand _ = False
 
 renderMov : Operand -> Operand -> String
@@ -102,6 +104,9 @@ renderInstr IRepMovsb = "rep movsb"
 renderInstr IRepeCmpsb = "repe cmpsb"
 renderInstr (ILabel l) = "${l}:"
 renderInstr (IJmp l) = "jmp ${l}"
+renderInstr (IQuadLabel label) = ".quad ${label}"
+renderInstr (IJmpMem op) = "jmp qword ptr ${renderOperand op}"
+renderInstr (IAlign n) = ".p2align ${strFromInt n}"
 renderInstr (IJmpReg r) = "jmp ${regText r}"
 renderInstr (IJcc cond l) = "${cond} ${l}"
 renderInstr (ICall l) = "call ${l}"

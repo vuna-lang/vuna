@@ -402,3 +402,229 @@ findDef n (d :: rest) = if irDefName d == n then Just d else findDef n rest
 memStr : String -> List String -> Bool
 memStr _ [] = False
 memStr s (x :: rest) = if s == x then True else memStr s rest
+
+-- ---------------------------------------------------------------
+-- 尾位置内联：把互递归 SCC 变成自递归
+-- ---------------------------------------------------------------
+-- 只内联**尾位置**、且当前定义在源码顺序上早于被调（每个 SCC 只沿一个方向展开），
+-- 这样 `even -> odd` / `narrow -> wide` 会把对方的体代进来，体里回到自己的调用
+-- 变成自递归 tail call，随后走 native 已有的自循环帧复用。非尾位置与自调用不动。
+export tailInlineSize : Int
+tailInlineSize = 128
+
+tailInlineBudget : Int
+tailInlineBudget = 32
+
+record TInl where
+  tiUsed : Int
+  tiChanged : Bool
+  tiOut : List IrDef
+
+export inlineTailDefs : List String -> List IrDef -> (List IrDef, Bool)
+inlineTailDefs recNames defs =
+  let
+    order = nameOrder defs 0 []
+    st = foldl (\s, d => tailInlineOne recNames order defs s d) (TInl 0 False []) defs
+  in (reverse st.tiOut, st.tiChanged)
+
+tailInlineOne : List String -> List (String, Int) -> List IrDef -> TInl -> IrDef -> TInl
+tailInlineOne _ _ _ st (IrExternDef name ty sym span) =
+  { st | tiOut = IrExternDef name ty sym span :: st.tiOut }
+tailInlineOne recNames order defs st (IrDef nm ar deps ty body recOk guard span) =
+  if not (memStr nm recNames) then
+    { st | tiOut = IrDef nm ar deps ty body recOk guard span :: st.tiOut }
+  else
+    let
+      p = tailRw 4 recNames order defs nm (indexOfName nm order) body st
+      d2 = IrDef nm ar deps ty (firstOf p) recOk guard span
+    in { (secondOf p) | tiOut = d2 :: (secondOf p).tiOut }
+
+-- | 只有尾位置递归；`IrTail` / `IrIf` 两支 / `IrLet` 体 / case 臂是透明位置。
+tailRw : Int -> List String -> List (String, Int) -> List IrDef -> String -> Int -> Ir -> TInl -> (Ir, TInl)
+tailRw fuel recNames order defs current meIdx ir st =
+  if fuel <= 0 then
+    (ir, st)
+  else
+    case ir of
+      IrLam bs rt inner =>
+        let
+          p = tailRw (fuel - 1) recNames order defs current meIdx inner st
+        in (IrLam bs rt (firstOf p), secondOf p)
+      IrTail inner =>
+        let
+          p = tailRw (fuel - 1) recNames order defs current meIdx inner st
+        in (IrTail (firstOf p), secondOf p)
+      IrIf c t e =>
+        let
+          pt = tailRw (fuel - 1) recNames order defs current meIdx t st
+          pe = tailRw (fuel - 1) recNames order defs current meIdx e (secondOf pt)
+        in (IrIf c (firstOf pt) (firstOf pe), secondOf pe)
+      IrLet bs scrut body =>
+        let
+          p = tailRw (fuel - 1) recNames order defs current meIdx body st
+        in (IrLet bs scrut (firstOf p), secondOf p)
+      IrCast from to inner =>
+        let
+          p = tailRw (fuel - 1) recNames order defs current meIdx inner st
+        in (IrCast from to (firstOf p), secondOf p)
+      IrCase ty k scrut alts =>
+        let
+          pa = tailRwAlts (fuel - 1) recNames order defs current meIdx alts st
+        in (IrCase ty k scrut (firstOf pa), secondOf pa)
+      IrNatCase scrut f z s c =>
+        let
+          pz = tailRwAltM (fuel - 1) recNames order defs current meIdx z st
+          ps = tailRwAltM (fuel - 1) recNames order defs current meIdx s (secondOf pz)
+          pc = tailRwAltM (fuel - 1) recNames order defs current meIdx c (secondOf ps)
+        in (IrNatCase scrut f (firstOf pz) (firstOf ps) (firstOf pc), secondOf pc)
+      IrApp _ _ _ =>
+        let
+          flat = Analysis.flattenApp ir
+        in case firstOf flat of
+          IrGlobal g =>
+            if not (memStr g recNames) then
+              (ir, st)
+            else if g == current then
+              (ir, st)
+            else if indexOfName g order <= meIdx then
+              (ir, st)
+            else
+              case tryTailInline defs current g (secondOf flat) st of
+                Just hit => (firstOf hit, secondOf hit)
+                Nothing => (ir, st)
+          _ => (ir, st)
+      _ => (ir, st)
+
+tailRwAltM : Int -> List String -> List (String, Int) -> List IrDef -> String -> Int -> Maybe IrAlt -> TInl -> (Maybe IrAlt, TInl)
+tailRwAltM _ _ _ _ _ _ Nothing st = (Nothing, st)
+tailRwAltM fuel recNames order defs current meIdx (Just alt) st =
+  let
+    p = tailRw fuel recNames order defs current meIdx alt.irAltBody st
+  in (Just (IrAlt alt.irAltCtor alt.irAltBinders (firstOf p)), secondOf p)
+
+tailRwAlts : Int -> List String -> List (String, Int) -> List IrDef -> String -> Int -> List IrAlt -> TInl -> (List IrAlt, TInl)
+tailRwAlts _ _ _ _ _ _ [] st = ([], st)
+tailRwAlts fuel recNames order defs current meIdx (a :: rest) st =
+  let
+    pa = tailRw fuel recNames order defs current meIdx a.irAltBody st
+    pr = tailRwAlts fuel recNames order defs current meIdx rest (secondOf pa)
+  in (IrAlt a.irAltCtor a.irAltBinders (firstOf pa) :: firstOf pr, secondOf pr)
+
+tryTailInline : List IrDef -> String -> String -> List Ir -> TInl -> Maybe (Ir, TInl)
+tryTailInline defs current name args st =
+  if st.tiUsed >= tailInlineBudget then
+    Nothing
+  else
+    case findDef name defs of
+      Nothing => Nothing
+      Just d =>
+        case d of
+          IrExternDef _ _ _ _ => Nothing
+          IrDef _ _ _ _ body _ guard _ =>
+            if guard then
+              Nothing
+            else
+              case body of
+                IrLam bs _ inner =>
+                  let
+                    rbs = runtimeBindersOf bs
+                  in if length rbs /= length args then
+                    Nothing
+                  else if not (allInlinableArg args) then
+                    Nothing
+                  else if irSize inner > tailInlineSize then
+                    Nothing
+                  else if hasLam inner then
+                    Nothing
+                  else
+                    let
+                      body2 = inlineBody (pairBinders rbs args) inner
+                      st2 = { st | tiUsed = st.tiUsed + 1, tiChanged = True }
+                    in Just (body2, st2)
+                _ => Nothing
+
+nameOrder : List IrDef -> Int -> List (String, Int) -> List (String, Int)
+nameOrder [] _ acc = acc
+nameOrder (d :: rest) i acc = nameOrder rest (i + 1) ((irDefName d, i) :: acc)
+
+indexOfName : String -> List (String, Int) -> Int
+indexOfName _ [] = 0 - 1
+indexOfName n (p :: rest) = if firstOf p == n then secondOf p else indexOfName n rest
+
+-- ---------------------------------------------------------------
+-- 纯条件化简：消掉内联后重复的守卫
+-- ---------------------------------------------------------------
+-- `if c then a else if c then b else e` 在 `c` 纯时等价于 `if c then a else e`；
+-- `if c then (if c then a else b) else e` 等价于 `if c then a else e`。
+-- 只认原子条件（变量 / 整数字面量 / 白名单标量比较），不碰带调用或构造子的条件。
+export simplifyDefs : List IrDef -> List IrDef
+simplifyDefs = map simplifyDef
+
+simplifyDef : IrDef -> IrDef
+simplifyDef (IrExternDef name ty sym span) = IrExternDef name ty sym span
+simplifyDef (IrDef nm ar deps ty body recOk guard span) =
+  IrDef nm ar deps ty (simplifyIr body) recOk guard span
+
+simplifyIr : Ir -> Ir
+simplifyIr (IrTail inner) = IrTail (simplifyTail inner)
+simplifyIr (IrLam bs rt inner) = IrLam bs rt (simplifyIr inner)
+simplifyIr (IrLet bs scrut body) = IrLet bs (simplifyIr scrut) (simplifyIr body)
+simplifyIr (IrCast a b inner) = IrCast a b (simplifyIr inner)
+simplifyIr (IrIf c t e) =
+  let
+    c2 = simplifyIr c
+    t2 = simplifyIr t
+    e2 = simplifyIr e
+  in if pureCond c2 then mergeIf c2 t2 e2 else IrIf c2 t2 e2
+simplifyIr (IrCase ty k scrut alts) = IrCase ty k (simplifyIr scrut) (map simplifyAlt alts)
+simplifyIr (IrNatCase scrut f z s c) =
+  IrNatCase (simplifyIr scrut) f (simplifyAltM z) (simplifyAltM s) (simplifyAltM c)
+simplifyIr (IrApp ty f a) = IrApp ty (simplifyIr f) (simplifyIr a)
+simplifyIr (IrRtApp sym args) = IrRtApp sym (map simplifyIr args)
+simplifyIr (IrConcatMany parts) = IrConcatMany (map simplifyIr parts)
+simplifyIr ir = ir
+
+mergeIf : Ir -> Ir -> Ir -> Ir
+mergeIf c t (e@(IrIf c2 _ b)) = if sameCond c c2 then IrIf c t b else mergeThen c t e
+mergeIf c t (e@(IrTail (IrIf c2 _ b))) =
+  if sameCond c c2 then IrIf c t (IrTail b) else mergeThen c t e
+mergeIf c t e = mergeThen c t e
+
+mergeThen : Ir -> Ir -> Ir -> Ir
+mergeThen c (t@(IrIf c1 a _)) e = if sameCond c c1 then IrIf c a e else IrIf c t e
+mergeThen c (t@(IrTail (IrIf c1 a _))) e = if sameCond c c1 then IrIf c (IrTail a) e else IrIf c t e
+mergeThen c t e = IrIf c t e
+
+simplifyTail : Ir -> Ir
+simplifyTail ir =
+  case simplifyIr ir of
+    IrIf c t e => mergeIf c t e
+    other => other
+
+simplifyAlt : IrAlt -> IrAlt
+simplifyAlt alt = IrAlt alt.irAltCtor alt.irAltBinders (simplifyIr alt.irAltBody)
+
+simplifyAltM : Maybe IrAlt -> Maybe IrAlt
+simplifyAltM Nothing = Nothing
+simplifyAltM (Just alt) = Just (simplifyAlt alt)
+
+pureCond : Ir -> Bool
+pureCond (IrVar _) = True
+pureCond (IrInt _) = True
+pureCond (IrBool _) = True
+pureCond (IrRtApp sym args) = memStr sym scalarArgSyms && not (isDivLike sym) && allPure args
+pureCond _ = False
+
+allPure : List Ir -> Bool
+allPure [] = True
+allPure (a :: rest) = pureCond a && allPure rest
+
+sameCond : Ir -> Ir -> Bool
+sameCond (IrVar a) (IrVar b) = sameBinderId a b
+sameCond (IrInt a) (IrInt b) = a == b
+sameCond (IrBool a) (IrBool b) = a == b
+sameCond (IrRtApp s1 ([a1, b1])) (IrRtApp s2 ([a2, b2])) =
+  s1 == s2 && sameCond a1 a2 && sameCond b1 b2
+sameCond (IrRtApp s1 ([a1])) (IrRtApp s2 ([a2])) = s1 == s2 && sameCond a1 a2
+sameCond (IrRtApp s1 []) (IrRtApp s2 []) = s1 == s2
+sameCond _ _ = False

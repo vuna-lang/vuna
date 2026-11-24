@@ -1,0 +1,259 @@
+module Vuna.Target.Native.Dirty where
+
+import Base.Data.Bool as Bool
+import Base.Data.Int as Int
+import Base.Data.List as List
+import Base.Data.Maybe as Maybe
+import Base.Data.Pair as Pair
+import Vuna.Ir.Model
+
+-- 循环携带的 Int 参数：哪些可以带着「未归一化」的值跨迭代。
+--
+-- vuna 的 `Int` 是 63-bit 有符号；native 在每个 `+ - *` 的结果位置发 `shl/sar`
+-- 做归一化。循环累加器的低 63 位在每轮加法里都正确，只有比较 / 除法 / 位移 /
+-- 位运算 / Nat / 调用 / 返回这些「看高位」的消费者需要归一化值。把归一化推迟到
+-- 这些使用点，可以省掉每轮的 wrap。
+--
+-- 判据（保守）：
+--   * 只看 Int 形参；
+--   * 循环守卫条件里出现的形参保持 clean（它们每轮都要比较，推迟反而更贵）；
+--   * 其余形参按自调用实参的不动点判 dirty：只有 `+ - *` 且无法证明不溢出时才
+--     进位；常量 / 除法 / 位运算 / 比较 / Nat / 调用结果都是 clean。
+export dirtyParamIds : String -> List IrBinder -> Ir -> List Int
+dirtyParamIds name params body =
+  let
+    guards = guardIds name body
+    pids = map binderIdOf params
+    calls = selfArgLists name body
+    dirty = dirtyFix guards pids calls [] (length params + 1)
+  in filter (\id => not (memInt id guards)) dirty
+
+dirtyFix : List Int -> List Int -> List (List Ir) -> List Int -> Int -> List Int
+dirtyFix guards pids calls dirty fuel =
+  if fuel <= 0 then
+    dirty
+  else
+    let
+      dirty2 = foldl (\acc, args => extendDirty guards dirty acc pids args) dirty calls
+    in if sameIds dirty2 dirty then dirty else dirtyFix guards pids calls dirty2 (fuel - 1)
+
+extendDirty : List Int -> List Int -> List Int -> List Int -> List Ir -> List Int
+extendDirty _ _ dirty _ [] = dirty
+extendDirty guards dset acc (pid :: pids) (a :: args) =
+  extendDirty guards dset (if mayDirty guards dset a then addId pid acc else acc) pids args
+extendDirty _ _ acc [] _ = acc
+
+addId : Int -> List Int -> List Int
+addId id ids = if memInt id ids then ids else append ids [id]
+
+sameIds : List Int -> List Int -> Bool
+sameIds a b = length a == length b && allIn a b
+
+allIn : List Int -> List Int -> Bool
+allIn [] _ = True
+allIn (x :: rest) ys = memInt x ys && allIn rest ys
+
+-- | 自调用实参是否可能带有未归一化值。
+mayDirty : List Int -> List Int -> Ir -> Bool
+mayDirty guards dirty (IrVar b) = memInt (binderIdOf b) dirty && not (memInt (binderIdOf b) guards)
+mayDirty _ _ (IrInt _) = False
+mayDirty _ _ (IrBool _) = False
+mayDirty _ _ (IrStr _) = False
+mayDirty _ _ (IrFloatLit _) = False
+mayDirty guards dirty (IrCast _ _ inner) = mayDirty guards dirty inner
+mayDirty guards dirty (IrTail inner) = mayDirty guards dirty inner
+mayDirty guards dirty (IrRtApp sym args) =
+  if sym == "-" then
+    mayDirtySub guards dirty args
+  else if sym == "+" || sym == "*" then
+    mayDirtyAdd guards dirty args
+  else if sym == "/" || sym == "bitAnd" || sym == "bitOr" || sym == "bitXor" || sym == "bitNot" then
+    False
+  else if isCmpSym sym then False else if isNatSym sym then False else False
+mayDirty guards dirty (IrIf _ t e) = mayDirty guards dirty t || mayDirty guards dirty e
+mayDirty _ _ (IrLet _ _ _) = True
+mayDirty _ _ _ = False
+
+mayDirtySub : List Int -> List Int -> List Ir -> Bool
+mayDirtySub guards dirty ([a, IrInt 1]) = if isGuardVar guards a then False else True
+mayDirtySub _ _ _ = True
+
+mayDirtyAdd : List Int -> List Int -> List Ir -> Bool
+mayDirtyAdd _ _ ([IrInt _, IrInt _]) = False
+mayDirtyAdd _ _ _ = True
+
+isGuardVar : List Int -> Ir -> Bool
+isGuardVar guards (IrVar b) = memInt (binderIdOf b) guards
+isGuardVar _ _ = False
+
+isCmpSym : String -> Bool
+isCmpSym sym =
+  memStr
+    sym
+    ["bi_eq_int", "bi_neq_int", "bi_lt_int", "bi_le_int", "bi_gt_int", "bi_ge_int", "bi_eq_bool", "bi_neq_bool", "bi_lt_bool", "bi_le_bool", "bi_gt_bool", "bi_ge_bool", "bi_eq_str", "bi_neq_str"]
+
+isNatSym : String -> Bool
+isNatSym sym =
+  sym
+    == "natAdd"
+    || sym
+    == "natSub" || sym == "natMul" || sym == "natDiv" || sym == "natToInt" || sym == "natFromInt"
+
+selfArgLists : String -> Ir -> List (List Ir)
+selfArgLists name (ir@(IrApp _ f a)) =
+  if selfHead name f then [appArgs ir] else append (selfArgLists name f) (selfArgLists name a)
+selfArgLists name (IrTail inner) = selfArgLists name inner
+selfArgLists name (IrLam _ _ inner) = selfArgLists name inner
+selfArgLists name (IrLet _ s b) = append (selfArgLists name s) (selfArgLists name b)
+selfArgLists name (IrCast _ _ inner) = selfArgLists name inner
+selfArgLists name (IrRtApp _ args) = selfArgListMany name args
+selfArgLists name (IrIf c t e) =
+  append (selfArgLists name c) (append (selfArgLists name t) (selfArgLists name e))
+selfArgLists name (IrCase _ _ s alts) = append (selfArgLists name s) (selfArgListAlts name alts)
+selfArgLists name (IrNatCase s _ z a b) =
+  append
+    (selfArgLists name s)
+    (append (selfArgListAltM name z) (append (selfArgListAltM name a) (selfArgListAltM name b)))
+selfArgLists name (IrConcatMany parts) = selfArgListMany name parts
+selfArgLists name (IrCtor _ _ _ args) = selfArgListMany name args
+selfArgLists name (IrRecord _ _ fields) = selfArgListFields name fields
+selfArgLists name (IrProj base _ _ _) = selfArgLists name base
+selfArgLists name (IrRecUpd base _ fields _) =
+  append (selfArgLists name base) (selfArgListFields name fields)
+selfArgLists name _ = []
+
+selfArgListMany : String -> List Ir -> List (List Ir)
+selfArgListMany _ [] = []
+selfArgListMany name (i :: rest) = append (selfArgLists name i) (selfArgListMany name rest)
+
+selfArgListFields : String -> List (String, Ir) -> List (List Ir)
+selfArgListFields _ [] = []
+selfArgListFields name (p :: rest) =
+  append (selfArgLists name (secondOf p)) (selfArgListFields name rest)
+
+selfArgListAlts : String -> List IrAlt -> List (List Ir)
+selfArgListAlts _ [] = []
+selfArgListAlts name ((IrAlt _ _ body) :: rest) =
+  append (selfArgLists name body) (selfArgListAlts name rest)
+
+selfArgListAltM : String -> Maybe IrAlt -> List (List Ir)
+selfArgListAltM _ Nothing = []
+selfArgListAltM name (Just (IrAlt _ _ body)) = selfArgLists name body
+
+selfHead : String -> Ir -> Bool
+selfHead name (IrGlobal g) = g == name
+selfHead name (IrApp _ f _) = selfHead name f
+selfHead _ _ = False
+
+appArgs : Ir -> List Ir
+appArgs (IrApp _ f a) = append (appArgs f) [a]
+appArgs _ = []
+
+binderIdOf : IrBinder -> Int
+binderIdOf b = b.irBinderId
+
+isIntBinder : IrBinder -> Bool
+isIntBinder b =
+  case b.irBinderTy of
+    Just IrTyInt => True
+    _ => False
+
+-- | 尾递归循环的守卫：`if c then ... else <含自调用>` 且两支只有一支含自调用时，
+--   `c` 里出现的 binder 就是每轮都要比较的计数器。
+guardIds : String -> Ir -> List Int
+guardIds name (IrIf c t e) =
+  let
+    st = containsSelf name t
+    se = containsSelf name e
+    here = if st /= se then binderIdsOf c else []
+  in append here (append (guardIds name c) (append (guardIds name t) (guardIds name e)))
+guardIds name (IrTail inner) = guardIds name inner
+guardIds name (IrLam _ _ inner) = guardIds name inner
+guardIds name (IrLet _ scrut b) = append (guardIds name scrut) (guardIds name b)
+guardIds name (IrCast _ _ inner) = guardIds name inner
+guardIds name (IrApp _ f a) = append (guardIds name f) (guardIds name a)
+guardIds name (IrRtApp _ args) = anyGuardIds name args
+guardIds name (IrCase _ _ scrut alts) = append (guardIds name scrut) (anyGuardAlts name alts)
+guardIds name (IrNatCase scrut _ z s c) =
+  append
+    (guardIds name scrut)
+    (append (anyGuardAltM name z) (append (anyGuardAltM name s) (anyGuardAltM name c)))
+guardIds name (IrConcatMany parts) = anyGuardIds name parts
+guardIds name (IrCtor _ _ _ args) = anyGuardIds name args
+guardIds name (IrRecord _ _ fields) = anyGuardFields name fields
+guardIds name (IrProj base _ _ _) = guardIds name base
+guardIds name (IrRecUpd base _ fields _) = append (guardIds name base) (anyGuardFields name fields)
+guardIds name _ = []
+
+anyGuardIds : String -> List Ir -> List Int
+anyGuardIds _ [] = []
+anyGuardIds name (i :: rest) = append (guardIds name i) (anyGuardIds name rest)
+
+anyGuardFields : String -> List (String, Ir) -> List Int
+anyGuardFields _ [] = []
+anyGuardFields name (p :: rest) = append (guardIds name (secondOf p)) (anyGuardFields name rest)
+
+anyGuardAlts : String -> List IrAlt -> List Int
+anyGuardAlts _ [] = []
+anyGuardAlts name ((IrAlt _ _ body) :: rest) = append (guardIds name body) (anyGuardAlts name rest)
+
+anyGuardAltM : String -> Maybe IrAlt -> List Int
+anyGuardAltM _ Nothing = []
+anyGuardAltM name (Just (IrAlt _ _ body)) = guardIds name body
+
+containsSelf : String -> Ir -> Bool
+containsSelf name (IrGlobal g) = g == name
+containsSelf name (IrTail inner) = containsSelf name inner
+containsSelf name (IrLam _ _ inner) = containsSelf name inner
+containsSelf name (IrLet _ s b) = containsSelf name s || containsSelf name b
+containsSelf name (IrCast _ _ inner) = containsSelf name inner
+containsSelf name (IrApp _ f a) = containsSelf name f || containsSelf name a
+containsSelf name (IrRtApp _ args) = anySelf name args
+containsSelf name (IrIf c t e) = containsSelf name c || containsSelf name t || containsSelf name e
+containsSelf name (IrCase _ _ s alts) = containsSelf name s || anySelfAlt name alts
+containsSelf name (IrNatCase s _ z a b) =
+  containsSelf name s || anySelfAltM name z || anySelfAltM name a || anySelfAltM name b
+containsSelf name (IrConcatMany parts) = anySelf name parts
+containsSelf name (IrCtor _ _ _ args) = anySelf name args
+containsSelf name (IrRecord _ _ fields) = anyFieldsSelf name fields
+containsSelf name (IrProj base _ _ _) = containsSelf name base
+containsSelf name (IrRecUpd base _ fields _) = containsSelf name base || anyFieldsSelf name fields
+containsSelf name _ = False
+
+anySelf : String -> List Ir -> Bool
+anySelf _ [] = False
+anySelf name (i :: rest) = containsSelf name i || anySelf name rest
+
+anyFieldsSelf : String -> List (String, Ir) -> Bool
+anyFieldsSelf _ [] = False
+anyFieldsSelf name (p :: rest) = containsSelf name (secondOf p) || anyFieldsSelf name rest
+
+anySelfAlt : String -> List IrAlt -> Bool
+anySelfAlt _ [] = False
+anySelfAlt name ((IrAlt _ _ body) :: rest) = containsSelf name body || anySelfAlt name rest
+
+anySelfAltM : String -> Maybe IrAlt -> Bool
+anySelfAltM _ Nothing = False
+anySelfAltM name (Just (IrAlt _ _ body)) = containsSelf name body
+
+binderIdsOf : Ir -> List Int
+binderIdsOf (IrVar b) = [binderIdOf b]
+binderIdsOf (IrInt _) = []
+binderIdsOf (IrBool _) = []
+binderIdsOf (IrCast _ _ inner) = binderIdsOf inner
+binderIdsOf (IrTail inner) = binderIdsOf inner
+binderIdsOf (IrRtApp _ args) = anyBinderIds args
+binderIdsOf (IrIf c t e) = append (binderIdsOf c) (append (binderIdsOf t) (binderIdsOf e))
+binderIdsOf _ = []
+
+anyBinderIds : List Ir -> List Int
+anyBinderIds [] = []
+anyBinderIds (i :: rest) = append (binderIdsOf i) (anyBinderIds rest)
+
+memInt : Int -> List Int -> Bool
+memInt _ [] = False
+memInt x (y :: rest) = x == y || memInt x rest
+
+memStr : String -> List String -> Bool
+memStr _ [] = False
+memStr s (x :: rest) = s == x || memStr s rest

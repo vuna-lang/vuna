@@ -157,8 +157,22 @@
   5. **runtime 符号**：饱和 `IrRtApp` / `IrRt` / `genRtValueCall` / `nat_succ` 发 `jmp rt_*`。
   源级 `let` 的立即 lambda 在 native codegen 内联成 `IrLet` 形态（单/多 binder 一致），
   值位置的无捕获 lambda 直接静态化，两者都不再分配闭包；`let`
-  循环走普通直调尾跳（或上面的自递归 loop）。仍不回退为尾调用的情况：窄调宽、`rt_apply`
-  慢路径、非尾递归。
+  循环走普通直调尾跳（或上面的自递归 loop）。仍不回退为尾调用的情况：未被尾位置内联
+  消掉的窄调宽、`rt_apply` 慢路径、非尾递归。
+
+- **尾位置内联**：`Native.Inline.inlineTailDefs` 把互递归 SCC 沿定义序单向展开——只在
+  尾位置、只把体代进 SCC 的入口成员。`even -> odd` / `narrow -> wide` 被代进来后，回边
+  变成自调用，走上面的自递归 loop 与槽提升，不再每轮重建对方帧。
+- **延迟 63-bit 归一化**：`Native.Dirty` 对自递归循环的 Int 形参做 may-dirty 不动点；
+  循环守卫里的计数器保持 clean，其余参数允许带未归一化值跨迭代。加法/`band` 直接吃
+  未归一化值，比较 / 除法 / 位运算 / Nat / 调用 / 返回在使用点补 `shl/sar`，循环结束
+  只归一化一次。
+- **有栈实参的槽提升**：prologue 的 callee-saved push 会把来参区整体上移；提升后把
+  所有正偏移（栈实参读 / 尾调用来参区写）统一加 `saveBytes`，arity > 6 的循环也能把
+  最热的 5 个标量槽放进寄存器。
+- **稠密 Int 分派**：同一 scrutinee 上连续 4 个以上的 `bi_eq_int` 链改发跳转表
+  （`.quad` 表项 + `jmp qword ptr [table + idx*8]`），兜底臂处理越界与缺失 tag。
+  产物固定 no-pie 链接，表项可以直接用绝对地址。
 
 ### 3.4 效应 handler 与一次性续延
 

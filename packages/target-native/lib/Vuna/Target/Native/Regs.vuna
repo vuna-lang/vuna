@@ -301,9 +301,11 @@ odd n = n - n / 2 * 2 == 1
 -- 入口
 -- ---------------------------------------------------------------
 -- | 有回边的函数里，把最热的标量槽换成 callee-saved 寄存器。
+--   有栈实参的函数也提升：prologue 的 callee-saved push 会把来参区整体上移，
+--   所以提升后把所有正偏移（栈实参读 / 尾调用来参区写）统一加 `saveBytes`。
 export promoteLoops : List (Int, NCls) -> List Instr -> RegPlan
 promoteLoops slotCls instrs =
-  if not (frameReused False instrs) || hasStackArgs instrs then
+  if not (frameReused False instrs) then
     RegPlan instrs []
   else
     let
@@ -313,31 +315,28 @@ promoteLoops slotCls instrs =
       top = pickTop maxPromoted candidates instrs
       reps = List.zip top promotableRegs
       saved = map secondOf reps
+      saveBytes = 8 * length saved + (if odd (length saved) then 8 else 0)
       body0 = map (\i => mapValueOperands (substOperand reps) i) instrs
-      body = raxChainPass (scratchFoldPass body0)
+      body1 = if saveBytes == 0 then body0 else shiftPositiveOffsets saveBytes body0
+      body = raxChainPass (scratchFoldPass body1)
     in RegPlan (restoreTailJumps saved body) saved
 
--- | 有栈实参（`[rbp + 正偏移]`）：prologue 多压的寄存器会移动来参区，见文件头。
-hasStackArgs : List Instr -> Bool
-hasStackArgs instrs = foldl (\acc, i => acc || instrHasStackArg i) False instrs
+-- | prologue 压了 callee-saved 之后，`[rbp+正偏移]` 的来参区整体上移。
+--   只改正偏移；帧槽是负偏移，不动。
+shiftPositiveOffsets : Int -> List Instr -> List Instr
+shiftPositiveOffsets bytes = map (shiftInstrOff bytes)
 
-instrHasStackArg : Instr -> Bool
-instrHasStackArg i = foldl (\acc, o => acc || positiveRbpOffset o) False (instrOperands i)
+shiftInstrOff : Int -> Instr -> Instr
+shiftInstrOff bytes (IMov a b) = IMov (shiftOperandOff bytes a) (shiftOperandOff bytes b)
+shiftInstrOff bytes (ICmp a b) = ICmp (shiftOperandOff bytes a) (shiftOperandOff bytes b)
+shiftInstrOff bytes (IBin op a) = IBin op (shiftOperandOff bytes a)
+shiftInstrOff bytes (IBinReg op r a) = IBinReg op r (shiftOperandOff bytes a)
+shiftInstrOff bytes (ICmov cc r a) = ICmov cc r (shiftOperandOff bytes a)
+shiftInstrOff _ i = i
 
-positiveRbpOffset : Operand -> Bool
-positiveRbpOffset (OpMem Rbp off) = off > 0
-positiveRbpOffset _ = False
-
--- | 值位置的操作数（与 `mapValueOperands` 的范围一致）。
-instrOperands : Instr -> List Operand
-instrOperands (IMov a b) = [a, b]
-instrOperands (IBin _ src) = [src]
-instrOperands (IBinReg _ _ src) = [src]
-instrOperands (ICmp a b) = [a, b]
-instrOperands (ICmov _ _ src) = [src]
-instrOperands (IXmmLoad _ src) = [src]
-instrOperands (IXmmStore op _) = [op]
-instrOperands _ = []
+shiftOperandOff : Int -> Operand -> Operand
+shiftOperandOff bytes (OpMem Rbp off) = if off > 0 then OpMem Rbp (off + bytes) else OpMem Rbp off
+shiftOperandOff _ o = o
 
 isScalarCls : NCls -> Bool
 isScalarCls NClsScalar = True

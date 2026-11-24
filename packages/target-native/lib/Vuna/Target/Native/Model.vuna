@@ -95,6 +95,8 @@ export data Operand(..) : Type where
   OpImm : Int -> Operand
   OpMem : Reg -> Int -> Operand
   OpMemX : Reg -> Reg -> Int -> Operand
+  -- | `[base + index*scale]`（跳转表用；scale 固定为 8）。
+  OpMemS : Reg -> Reg -> Int -> Operand
   OpRip : String -> Operand
 
 -- ---------------------------------------------------------------
@@ -182,6 +184,12 @@ export data Instr(..) : Type where
   IPop : Reg -> Instr
   -- | 空指令（保留给生成器的占位/调试）。
   INop : Instr
+  -- | 跳转表条目：`.quad label`（native 固定 no-pie 链接，绝对地址可直接用）。
+  IQuadLabel : String -> Instr
+  -- | `jmp qword ptr [operand]`（跳转表）。
+  IJmpMem : Operand -> Instr
+  -- | `.p2align n`。
+  IAlign : Int -> Instr
 
 -- ---------------------------------------------------------------
 -- 程序

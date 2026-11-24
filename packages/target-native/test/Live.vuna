@@ -119,6 +119,7 @@ opKey (OpReg r) = regText r
 opKey (OpImm n) = strFromInt n
 opKey (OpMem base off) = "[${regText base}${strFromInt off}]"
 opKey (OpMemX base idx off) = "[${regText base}+${regText idx}${strFromInt off}]"
+opKey (OpMemS base idx scale) = "[${regText base}+${regText idx}*${strFromInt scale}]"
 opKey (OpRip l) = "[rip+${l}]"
 
 check : String -> Bool -> Bool -> String

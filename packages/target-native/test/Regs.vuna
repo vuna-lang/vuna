@@ -1,8 +1,8 @@
 -- 标量槽提升（`Native.Regs`）的单测。
 --
--- 锁六件事：只有带回边的函数才提升；有栈实参（arity > 6）的函数不提升；只提升循环
--- 携带的标量槽（指针槽与迭代内临时留在帧里）；提升后整个函数都不再引用这些槽；
--- prologue / epilogue / 尾调用都按保存的寄存器恢复（奇数个补对齐）。
+-- 锁六件事：只有带回边的函数才提升；有栈实参（arity > 6）的函数也提升且正偏移
+-- 整体上移；只提升循环携带的标量槽（指针槽与迭代内临时留在帧里）；提升后整个函数
+-- 都不再引用这些槽；prologue / epilogue / 尾调用都按保存的寄存器恢复（奇数个补对齐）。
 import Base
 import Base.Data.List as List
 import Base.Data.Pair as Pair
@@ -23,13 +23,16 @@ main =
         _ <- prim_eff_exit 1
         pure ""
 
--- | 有栈实参的循环（arity > 6）：prologue 多压的寄存器会移动来参区，所以不提升。
+-- | 有栈实参的循环（arity > 6）：提升后 prologue 的 push 会移动来参区，正偏移整体加 8。
 stackArgBody : List Instr
 stackArgBody =
   [
     ILabel ".L",
-    IMov (OpReg Rax) (OpMem Rbp 16),
+    IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 0)),
+    IBinReg "add" Rax (OpImm 1),
     IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rax),
+    IMov (OpReg Rax) (OpMem Rbp 16),
+    IMov (OpMem Rbp (nativeSlotOff 1)) (OpReg Rax),
     IJmp ".L"
   ]
 
@@ -137,7 +140,7 @@ problems : List String
 problems =
   concatMap
     (\s => if s == "" then [] else [s])
-    [check "loop keeps two registers" True (length loopPlan.rpSaved == 2), check "first register is rbx" True (firstSavedIsRbx loopPlan.rpSaved), check "scalar slots promoted" False (mentionsOff (nativeSlotOff 0) loopPlan.rpBody), check "second scalar promoted" False (mentionsOff (nativeSlotOff 1) loopPlan.rpBody), check "pointer slot stays" True (mentionsOff (nativeSlotOff 2) loopPlan.rpBody), check "temp slot stays" True (mentionsOff (nativeSlotOff 3) loopPlan.rpBody), check "tail call restores" True (tailRestored loopPlan.rpBody), check "straight line untouched" True (mentionsOff (nativeSlotOff 0) straightPlan.rpBody), check "straight line saves nothing" True (length straightPlan.rpSaved == 0), check "odd count pads" True (hasPad (prologueOf slimPlan.rpSaved)), check "odd count unpads" True (hasUnpad (epilogueOf slimPlan.rpSaved)), check "even count no pad" False (hasPad (prologueOf loopPlan.rpSaved)), check "epilogue pops both" True (epiloguePops loopPlan.rpSaved), check "five slots promoted" True (length fivePlan.rpSaved == 5), check "r15 used" True (savedHasR15 fivePlan.rpSaved), check "five slots leave frame" True (allSlotsGone fivePlan.rpBody), check "rax chain coalesced" False (usesRax patternPlan.rpBody)]
+    [check "loop keeps two registers" True (length loopPlan.rpSaved == 2), check "first register is rbx" True (firstSavedIsRbx loopPlan.rpSaved), check "scalar slots promoted" False (mentionsOff (nativeSlotOff 0) loopPlan.rpBody), check "second scalar promoted" False (mentionsOff (nativeSlotOff 1) loopPlan.rpBody), check "pointer slot stays" True (mentionsOff (nativeSlotOff 2) loopPlan.rpBody), check "temp slot stays" True (mentionsOff (nativeSlotOff 3) loopPlan.rpBody), check "tail call restores" True (tailRestored loopPlan.rpBody), check "straight line untouched" True (mentionsOff (nativeSlotOff 0) straightPlan.rpBody), check "straight line saves nothing" True (length straightPlan.rpSaved == 0), check "odd count pads" True (hasPad (prologueOf slimPlan.rpSaved)), check "odd count unpads" True (hasUnpad (epilogueOf slimPlan.rpSaved)), check "even count no pad" False (hasPad (prologueOf loopPlan.rpSaved)), check "epilogue pops both" True (epiloguePops loopPlan.rpSaved), check "five slots promoted" True (length fivePlan.rpSaved == 5), check "r15 used" True (savedHasR15 fivePlan.rpSaved), check "five slots leave frame" True (allSlotsGone fivePlan.rpBody), check "stack args promote" True (length stackArgPlan.rpSaved == 1), check "stack arg old offset gone" False (mentionsPos 16 stackArgPlan.rpBody), check "stack arg offset shifted" True (mentionsPos 32 stackArgPlan.rpBody), check "rax chain coalesced" False (usesRax patternPlan.rpBody)]
 
 check : String -> Bool -> Bool -> String
 check label want got = if want == got then "" else label ++ ": drifted"
@@ -203,3 +206,18 @@ instrMentionsOff _ _ = False
 operandIsOff : Int -> Operand -> Bool
 operandIsOff off (OpMem Rbp o) = o == off
 operandIsOff _ _ = False
+
+mentionsPos : Int -> List Instr -> Bool
+mentionsPos off instructions = foldl (\acc, i => acc || instrMentionsPos off i) False instructions
+
+instrMentionsPos : Int -> Instr -> Bool
+instrMentionsPos off (IMov a b) = if operandIsPos off a then True else operandIsPos off b
+instrMentionsPos off (IBin _ src) = operandIsPos off src
+instrMentionsPos off (IBinReg _ _ src) = operandIsPos off src
+instrMentionsPos off (ICmp a b) = if operandIsPos off a then True else operandIsPos off b
+instrMentionsPos off (ICmov _ _ src) = operandIsPos off src
+instrMentionsPos _ _ = False
+
+operandIsPos : Int -> Operand -> Bool
+operandIsPos off (OpMem Rbp o) = o == off
+operandIsPos _ _ = False

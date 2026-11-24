@@ -274,6 +274,115 @@ peephole (i :: rest) =
 isScratchReg : Reg -> Bool
 isScratchReg r = sameReg r R10 || sameReg r R11
 
+-- ---------------------------------------------------------------
+-- 提升之后的清理
+-- ---------------------------------------------------------------
+-- | 在槽提升之后跑：把 `mov rax, r; cmp rax, 0` 折成 `cmp r, 0` / `test r, r`，
+--   并删掉无条件跳转/返回之后直到下一个被引用标签的不可达指令。
+--   只折 callee-saved 源寄存器：`rax` 是生成器的 scratch，折叠会丢掉它的旧值。
+export cleanup : List Instr -> List Instr
+cleanup instrs =
+  let
+    folded = cleanupFix 8 instrs
+  in if hasJumpTable folded then folded else dropUnreachable folded
+
+-- | 跳转表块里先不做不可达删除：`.quad` 的表项引用 arm 标签，块内的控制流不是
+--   普通 `jmp` 图；保留全部 arm 比在这里重新实现一遍标签活跃性更安全。
+hasJumpTable : List Instr -> Bool
+hasJumpTable [] = False
+hasJumpTable ((IQuadLabel _) :: _) = True
+hasJumpTable (_ :: rest) = hasJumpTable rest
+
+cleanupFix : Int -> List Instr -> List Instr
+cleanupFix fuel instrs =
+  if fuel <= 0 then
+    instrs
+  else
+    let
+      once = cleanupOnce instrs
+    in if length once == length instrs then once else cleanupFix (fuel - 1) once
+
+cleanupOnce : List Instr -> List Instr
+cleanupOnce [] = []
+cleanupOnce (i :: rest) =
+  case rest of
+    next :: more =>
+      case (i, next) of
+        (IMov (OpReg Rax) (OpReg r), ICmp (OpReg Rax) (OpImm k)) =>
+          if isCalleeSaved r && raxSafeAfter more then
+            ICmp (OpReg r) (OpImm k) :: cleanupOnce more
+          else
+            i :: cleanupOnce rest
+        (IMov (OpReg Rax) (OpReg r), ITest Rax Rax) =>
+          if isCalleeSaved r && raxSafeAfter more then
+            ITest r r :: cleanupOnce more
+          else
+            i :: cleanupOnce rest
+        (IMov (OpReg r1) (OpReg r2), _) =>
+          if sameReg r1 r2 then cleanupOnce rest else i :: cleanupOnce rest
+        (ICmp (OpReg r) (OpImm 0), _) => ITest r r :: cleanupOnce rest
+        _ => i :: cleanupOnce rest
+    [] => [i]
+
+-- | 折叠 `mov rax, r; cmp rax, …` 后 rax 是否可以丢：后续在写 rax 之前不能读它。
+--   switch 的 `mov rax, [table+rax*8]` 会读 rax，必须拦住。
+raxSafeAfter : List Instr -> Bool
+raxSafeAfter [] = True
+raxSafeAfter (IRet :: _) = False
+raxSafeAfter ((IJcc _ _) :: rest) =
+  case rest of
+    n :: _ => instrWritesReg Rax n && not (instrReadsReg Rax n)
+    [] => False
+raxSafeAfter (i :: rest) =
+  if instrReadsReg Rax i then
+    False
+  else if instrWritesReg Rax i then True else if isBlockBoundary i then False else raxSafeAfter rest
+
+isCalleeSaved : Reg -> Bool
+isCalleeSaved r = sameReg r Rbx || sameReg r R12 || sameReg r R13 || sameReg r R14 || sameReg r R15
+
+-- | 删掉 `jmp` / `ret` / `jmp reg` 之后、下一个被引用标签之前的指令。
+--   未被引用的标签本身也可以删；它们只可能是不可达尾部的 fallthrough。
+dropUnreachable : List Instr -> List Instr
+dropUnreachable instrs =
+  let
+    targets = jumpTargets instrs
+  in dropUnreachableGo False targets instrs
+
+dropUnreachableGo : Bool -> List String -> List Instr -> List Instr
+dropUnreachableGo _ _ [] = []
+dropUnreachableGo dead targets (i :: rest) =
+  case i of
+    ILabel l =>
+      if dead && not (memStr l targets) then
+        dropUnreachableGo True targets rest
+      else
+        i :: dropUnreachableGo False targets rest
+    IAlign _ => i :: dropUnreachableGo dead targets rest
+    _ =>
+      if dead then
+        dropUnreachableGo True targets rest
+      else
+        case i of
+          IJmp _ => i :: dropUnreachableGo True targets rest
+          IJmpReg _ => i :: dropUnreachableGo True targets rest
+          IRet => i :: dropUnreachableGo True targets rest
+          _ => i :: dropUnreachableGo False targets rest
+
+jumpTargets : List Instr -> List String
+jumpTargets [] = []
+jumpTargets (i :: rest) =
+  case i of
+    IJmp l => if memStr l (jumpTargets rest) then jumpTargets rest else l :: jumpTargets rest
+    IJcc _ l => if memStr l (jumpTargets rest) then jumpTargets rest else l :: jumpTargets rest
+    ILea _ l => if memStr l (jumpTargets rest) then jumpTargets rest else l :: jumpTargets rest
+    IQuadLabel l => if memStr l (jumpTargets rest) then jumpTargets rest else l :: jumpTargets rest
+    _ => jumpTargets rest
+
+memStr : String -> List String -> Bool
+memStr _ [] = False
+memStr s (x :: rest) = s == x || memStr s rest
+
 immFits32 : Int -> Bool
 immFits32 n = n >= 0 - 2147483648 && n <= 2147483647
 
@@ -290,6 +399,7 @@ isBlockBoundary : Instr -> Bool
 isBlockBoundary (ILabel _) = True
 isBlockBoundary (IJmp _) = True
 isBlockBoundary (IJmpReg _) = True
+isBlockBoundary (IJmpMem _) = True
 isBlockBoundary (IJcc _ _) = True
 isBlockBoundary IRet = True
 isBlockBoundary _ = False
@@ -298,6 +408,7 @@ operandReadsReg : Reg -> Operand -> Bool
 operandReadsReg r (OpReg x) = sameReg r x
 operandReadsReg r (OpMem base _) = sameReg r base
 operandReadsReg r (OpMemX base idx _) = sameReg r base || sameReg r idx
+operandReadsReg r (OpMemS base idx _) = sameReg r base || sameReg r idx
 operandReadsReg _ (OpImm _) = False
 operandReadsReg _ (OpRip _) = False
 
@@ -316,6 +427,7 @@ instrReadsReg r (IDiv x) = sameReg r x
 instrReadsReg r (IDivUnsigned x) = sameReg r x
 instrReadsReg r (IMulSigned x) = sameReg r x || sameReg r Rax
 instrReadsReg r (IJmpReg x) = sameReg r x
+instrReadsReg r (IJmpMem op) = operandReadsReg r op
 instrReadsReg r (ICallReg x) = sameReg r x
 instrReadsReg r (IPush x) = sameReg r x
 instrReadsReg r (IXmmLoad _ op) = operandReadsReg r op
