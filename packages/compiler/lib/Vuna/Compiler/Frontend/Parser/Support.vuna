@@ -7,6 +7,7 @@ import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Cst
 import Vuna.Compiler.Frontend.Lexer
+import Vuna.Compiler.Frontend.Surface
 import Vuna.Compiler.Base.Diagnostics.Frontend
 
 -- | 解析模式。决定「语义级语法错误」是否致命：
@@ -51,6 +52,10 @@ export record PState(..) where
   backtickShapes : List (Int, Bool)
   -- | 洞内解析交回的反引号链步（与 `holeParens` 同口径）。
   holeBackticks : List (Int, Bool)
+  -- | 本 token 流里登记的 section 写法：section 区间起点字节偏移 → 形态。
+  sectionShapes : List (Int, SectionShape)
+  -- | 洞内解析交回的 section 写法（与 `holeParens` 同口径）。
+  holeSections : List (Int, SectionShape)
 
 -- ---------------------------------------------------------------
 -- vuna 源码 parser（offside layout）
@@ -64,14 +69,15 @@ pmodeOf st = st.pmodeOf
 
 -- | 从文件头开一个状态（`lastPos` 的 `Pos 1 0` 是「尚未消费 token」的哨兵）。
 export mkState : String -> List PTok -> ParseMode -> PState
-mkState file toks mode = PState file toks (Pos 1 0 0 0) (length toks) mode 0 [] 1 0 False [] [] []
+mkState file toks mode =
+  PState file toks (Pos 1 0 0 0) (length toks) mode 0 [] 1 0 False [] [] [] [] []
 
 -- | 指定 `lastPos` / 剩余数（模板洞、同一行的裸表达式等场景）。
 -- 建树事件在模板洞内单独收集（洞内 token 的绝对下标从 0 起，与外层不相交）；节点 id
 -- 取负、由洞起点的字节偏移错开（见 `subStream`）。
 export mkStateAt : String -> List PTok -> Pos -> Int -> ParseMode -> PState
 mkStateAt file toks last count mode =
-  PState file toks last count mode 0 [] (0 - (2 + posOffset last)) 0 True [] [] []
+  PState file toks last count mode 0 [] (0 - (2 + posOffset last)) 0 True [] [] [] [] []
 
 -- | 从起始状态到结束状态的建树事件（按发生顺序；每次事件一次 cons）。
 export eventsOf : PState -> PState -> List NodeEvent
@@ -107,6 +113,14 @@ addHoleBackticks entries st = { st | holeBackticks = append entries st.holeBackt
 export addBacktickShape : Int -> PState -> PState
 addBacktickShape nid st = { st | backtickShapes = (nid, True) :: st.backtickShapes }
 
+-- | 记下洞内解析交回的 section 写法（嵌套模板会逐层累加）。
+export addHoleSections : List (Int, SectionShape) -> PState -> PState
+addHoleSections entries st = { st | holeSections = append entries st.holeSections }
+
+-- | 登记一个 section 写法（键 = section 区间起点字节偏移；section 可能没有独立节点 id）。
+export addSectionShape : Int -> SectionShape -> PState -> PState
+addSectionShape off shape st = { st | sectionShapes = (off, shape) :: st.sectionShapes }
+
 -- | 区间根换 id 时把链步登记跟着换：括号等外层 `parseExpr` 会用 `withExprId` 把返回表达式的
 -- id 换成自己的，登记在旧 id 上的链步否则就查不到了（括号里的链会被当成普通应用）。
 export rekeyInfix : Int -> Int -> PState -> PState
@@ -125,13 +139,17 @@ rekeyInfixGo from to (p :: rest) =
 export record SurfaceBits where
   sbParens : List (Int, Int)
   sbBackticks : List (Int, Bool)
+  sbSections : List (Int, SectionShape)
 
 export emptySurfaceBits : SurfaceBits
-emptySurfaceBits = SurfaceBits [] []
+emptySurfaceBits = SurfaceBits [] [] []
 
 export appendSurfaceBits : SurfaceBits -> SurfaceBits -> SurfaceBits
 appendSurfaceBits a b =
-  SurfaceBits (append a.sbParens b.sbParens) (append a.sbBackticks b.sbBackticks)
+  SurfaceBits
+    (append a.sbParens b.sbParens)
+    (append a.sbBackticks b.sbBackticks)
+    (append a.sbSections b.sbSections)
 
 -- | 关闭最近打开的节点：终点是当前 token 下标（半开区间）。
 closedAt : PState -> PState

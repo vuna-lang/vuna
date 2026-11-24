@@ -42,10 +42,13 @@ parenDepth at e = parenDepthOf at.ctxSurface (nodeRefId (exprRef e))
 -- 作函数的 2 参应用只可能来自中缀（前缀写法必须加括号），反引号写法由表面形状记。
 isInfixStep : FmtCtx -> Expr -> Bool
 isInfixStep at e =
-  case e of
-    EApp (EVar op _) ([_, _]) _ => isSymbolName op || backtickMark at e
-    EApp (EVar _ _) ([_, _]) _ => backtickMark at e
-    _ => False
+  case sectionShapeOfSpan at.ctxSurface (exprSpan e) of
+    Just _ => False
+    Nothing =>
+      case e of
+        EApp (EVar op _) ([_, _]) _ => isSymbolName op || backtickMark at e
+        EApp (EVar _ _) ([_, _]) _ => backtickMark at e
+        _ => False
 
 -- | 内部：链步当时是否反引号写法（``a `f` b``）。
 infixBacktick : FmtCtx -> Expr -> Bool

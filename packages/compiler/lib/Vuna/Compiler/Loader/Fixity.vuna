@@ -127,10 +127,13 @@ infixTerm t c lhs rhs sp =
 -- 来自中缀（前缀写法必须加括号，那是 section）；反引号写法（普通标识符）由表面形状记。
 isChainNode : FixityTable -> Expr -> Bool
 isChainNode t e =
-  case e of
-    EApp (EVar op _) ([_, _]) _ => isSymbolName op || chainBacktick t e
-    EApp (EVar _ _) ([_, _]) _ => chainBacktick t e
-    _ => False
+  case sectionShapeOfSpan t.fixSurface (exprSpan e) of
+    Just _ => False
+    Nothing =>
+      case e of
+        EApp (EVar op _) ([_, _]) _ => isSymbolName op || chainBacktick t e
+        EApp (EVar _ _) ([_, _]) _ => chainBacktick t e
+        _ => False
 
 -- 链步是否反引号写法（表面形状；普通符号中缀不在表里）。
 chainBacktick : FixityTable -> Expr -> Bool

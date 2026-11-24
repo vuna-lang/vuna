@@ -61,7 +61,12 @@ parseSourceDetailed file source =
             fin = secondOf (firstOf p)
             events = eventsOf st0 fin
             surface =
-              surfaceOf toks events fin.holeParens (append fin.backtickShapes fin.holeBackticks)
+              surfaceOf
+                toks
+                events
+                fin.holeParens
+                (append fin.backtickShapes fin.holeBackticks)
+                (append fin.sectionShapes fin.holeSections)
           in OkC (ParsedSource (firstOf (firstOf p)) comments toks events surface)
 
 -- | 只要 AST 与注释表的入口（复用 `parseSourceDetailed` 同一次词法）。
@@ -1686,7 +1691,16 @@ parseInfix fuel nid st blockCol lhs =
       -- 反引号中缀 `` a `f` b ``。名字是普通值名或符号名（expectValueName）；
       -- rhs 用 parseExpr（与普通中缀一致，会继续吞后续中缀），形成右嵌套链交给 Loader 重排。
       PTok (TSym "`") p => if canContinue st blockCol then Vuna.Compiler.Base.Common.step (expectValueName (advance st)) (\name, st1 => Vuna.Compiler.Base.Common.bind (expectSym st1 "`") (\st2 => Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st2 blockCol) (\rhs, st3 => parseInfix (fuel - 1) nid (addBacktickShape nid st3) blockCol (EApp (EVar name (detachedNodeRef (tokenSpan (advance st)))) [lhs, rhs] (detachedNodeRef (spanOf st st3)))))) else OkC (lhs, st)
-      PTok (TSym op) p => if canContinue st blockCol && not (isSyntaxSym op) then if closeParenNext st then OkC (ESectR lhs op (detachedNodeRef (spanOf st (advance st))), advance st) else Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) (advance st) blockCol) (\rhs, st2 => parseInfix (fuel - 1) nid st2 blockCol (EApp (EVar op (detachedNodeRef (tokenSpan st))) [lhs, rhs] (detachedNodeRef (spanOf st st2)))) else OkC (lhs, st)
+      PTok (TSym op) p =>
+        if canContinue st blockCol && not (isSyntaxSym op) then
+          if closeParenNext st then
+            let
+              sp = spanOf st (advance st)
+            in OkC (ESectR lhs op (detachedNodeRef sp), addSectionShape (spanStartOffset sp) (SectionRight op) (advance st))
+          else
+            Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) (advance st) blockCol) (\rhs, st2 => parseInfix (fuel - 1) nid st2 blockCol (EApp (EVar op (detachedNodeRef (tokenSpan st))) [lhs, rhs] (detachedNodeRef (spanOf st st2))))
+        else
+          OkC (lhs, st)
       -- 右 section `(e op)`。只消费 op；`)` 由外层 `(` 分支消费。
       _ => OkC (lhs, st)
 
@@ -1862,7 +1876,7 @@ parseTemplateAtom fuel st multi parts endP =
             ps = firstOf parsed
             bits = secondOf parsed
             advanced = advance st
-            st2 = addHoleBackticks bits.sbBackticks (addHoleParens bits.sbParens (withLastPos endP advanced))
+            st2 = addHoleSections bits.sbSections (addHoleBackticks bits.sbBackticks (addHoleParens bits.sbParens (withLastPos endP advanced)))
           in OkC (EInterp multi ps (detachedNodeRef (spanOf st st2)), st2)
       )
 
@@ -1892,7 +1906,7 @@ parseTemplateHole fuel file mode fallback toks =
           subState = mkStateAt file toks pos (length toks) mode
         in case parseExpr (fuel - 1) subState 0 of
           ErrC e => ErrC (withFallbackSpan (holeSpan file pos) e)
-          OkC (e, st2) => if isEof st2 then OkC (e, SurfaceBits (append st2.holeParens (parenEntriesOf toks (eventsOf subState st2))) (append st2.holeBackticks st2.backtickShapes)) else ErrC (withLabel (Label (Just (holeSpan file pos)) "" LabelPrimary Nothing) (psMsg ExpectedEndOfExpr []))
+          OkC (e, st2) => if isEof st2 then OkC (e, SurfaceBits (append st2.holeParens (parenEntriesOf toks (eventsOf subState st2))) (append st2.holeBackticks st2.backtickShapes) (append st2.holeSections st2.sectionShapes)) else ErrC (withLabel (Label (Just (holeSpan file pos)) "" LabelPrimary Nothing) (psMsg ExpectedEndOfExpr []))
 
 -- 插值洞的位置：洞内 token 的首位置（文件在 lexer 侧已知）。
 holeSpan : String -> Pos -> Span
@@ -1950,9 +1964,26 @@ parseSectionAtom fuel st blockCol op =
   if fuel <= 0 then
     icFuel "parser"
   else
-    Vuna.Compiler.Base.Common.bind
-      (expectSym st "(")
-      (\st1 => Vuna.Compiler.Base.Common.bind (expectSym st1 op) (\st2 => if atSym st2 ")" then OkC (ESectOp op (detachedNodeRef (spanOf st (advance st2))), advance st2) else Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st2 blockCol) (\rhs, st3 => Vuna.Compiler.Base.Common.bind (expectSym st3 ")") (\st4 => OkC (ESectL op rhs (detachedNodeRef (spanOf st st4)), st4)))))
+    Vuna.Compiler.Base.Common.bind (expectSym st "(") (
+        \st1 =>
+          Vuna.Compiler.Base.Common.bind (expectSym st1 op) (
+              \st2 =>
+                if atSym st2 ")" then
+                  let
+                    sp = spanOf st (advance st2)
+                  in OkC (ESectOp op (detachedNodeRef sp), addSectionShape (spanStartOffset sp) (SectionOp op) (advance st2))
+                else
+                  Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st2 blockCol) (
+                      \rhs, st3 =>
+                        Vuna.Compiler.Base.Common.bind (expectSym st3 ")") (
+                            \st4 =>
+                              let
+                                sp = spanOf st st4
+                              in OkC (ESectL op rhs (detachedNodeRef sp), addSectionShape (spanStartOffset sp) (SectionLeft op) st4)
+                          )
+                    )
+            )
+      )
 
 -- Pi binder：`(x : A) -> B`、`{x : A} -> B`，以及带 quantity 的 `(0 x : A)` / `(1 x : A)`。
 -- 多参数 trait 探针的 `{a b : Type} -> ...` 支持同一 binder 组写多个名字（展开成嵌套 EPi）。
@@ -2743,6 +2774,6 @@ parseSourceRecoveringTokens file mode toks =
         let
           fin = secondOf (firstOf p)
           events = eventsOf st0 fin
-          surface = surfaceOf toks events fin.holeParens (append fin.backtickShapes fin.holeBackticks)
+          surface = surfaceOf toks events fin.holeParens (append fin.backtickShapes fin.holeBackticks) (append fin.sectionShapes fin.holeSections)
         in OkC ((firstOf (firstOf p), surface), secondOf p)
     )

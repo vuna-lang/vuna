@@ -3,6 +3,7 @@
 --   * 包装节点（定义体 / 中缀右操作数 / 括号内层，`(a)` / `((a))`）；
 --   * 原子位置括号（应用实参 / 中缀链左端，`f (a)` / `(f a) b` / `(a + b) * c`）；
 --   * 不该算括号的邻近 token（元组 / ascribe / section / 列表）；
+--   * section 写法按区间起点登记（`surfaceSections`），不依赖 AST 构造子；
 --   * 模板洞（独立 token 子流，条目由洞的子解析交回主表）。
 import Prelude
 import Vuna.Compiler.Base.Common
@@ -30,10 +31,13 @@ depthOf s e = parenDepthOf s (nodeRefId (exprRef e))
 -- 来自中缀降级），或表面形状里记下的反引号写法。
 infixStep : Surface -> Expr -> Bool
 infixStep s e =
-  case e of
-    EApp (EVar op _) ([_, _]) _ => isSymbolName op || infixBacktick s e
-    EApp (EVar _ _) ([_, _]) _ => infixBacktick s e
-    _ => False
+  case sectionShapeOfSpan s (exprSpan e) of
+    Just _ => False
+    Nothing =>
+      case e of
+        EApp (EVar op _) ([_, _]) _ => isSymbolName op || infixBacktick s e
+        EApp (EVar _ _) ([_, _]) _ => infixBacktick s e
+        _ => False
 
 -- | 表达式节点是不是反引号写的链步。
 infixBacktick : Surface -> Expr -> Bool
@@ -137,6 +141,33 @@ sectionOk =
         _ => False
     Nothing => False
 
+-- | section 写法按区间起点登记，与 AST 构造子无关：op 值 / 左 / 右三种形态。
+sectionShapeOk : Bool
+sectionShapeOk =
+  let
+    leftOk =
+      case parseBody "(+ 1)" of
+        Just (s, body) =>
+          case sectionShapeOfSpan s (exprSpan body) of
+            Just (SectionLeft "+") => True
+            _ => False
+        Nothing => False
+    rightOk =
+      case parseBody "(1 +)" of
+        Just (s, body) =>
+          case sectionShapeOfSpan s (exprSpan body) of
+            Just (SectionRight "+") => True
+            _ => False
+        Nothing => False
+    opOk =
+      case parseBody "(+)" of
+        Just (s, body) =>
+          case sectionShapeOfSpan s (exprSpan body) of
+            Just (SectionOp "+") => True
+            _ => False
+        Nothing => False
+  in leftOk && rightOk && opOk
+
 -- | `[a]`：方括号不是圆括号。
 listOk : Bool
 listOk =
@@ -173,4 +204,5 @@ main =
     + bit infixRhsOk 32
     + bit infixLhsOk 64
     + bit sectionOk 128
-    + bit listOk 256 + bit holeOk 512 + bit infixShapeOk 1024 + bit backtickOk 2048
+    + bit listOk 256
+    + bit holeOk 512 + bit infixShapeOk 1024 + bit backtickOk 2048 + bit sectionShapeOk 4096
