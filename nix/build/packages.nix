@@ -166,7 +166,7 @@ let
       exec ${pkgs.bash}/bin/bash ${../../bench/run.sh} "$@"
     '')
     // {
-      meta.description = "生成程序与运行时性能基准（ocaml / native 产物 vs 手写 OCaml）";
+      meta.description = "生成程序与运行时性能基准（ocaml / native / wasm 产物 vs 手写 OCaml / 手写 C；wall / CPU / RSS 三口径）";
     };
 
   vuna-run-tests = import ./run-tests.nix {

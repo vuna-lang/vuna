@@ -19,12 +19,14 @@
 #       timeout_ms=N  绝对运行超时
 #       skip=1        不参与默认集合
 #   * `--target` 选择被测后端：ocaml（默认）/ native / wasm / both / all；
-#   * 每项先 warmup 再跑 --runs 次取**中位数**；峰值内存与 GC 采样在计时样本上做
-#     （`--rss-passes`，默认 1，0 = 不采样），不再单独跑一轮；
+#   * 每个样本由 `bench/lib/timestat` 一次运行同时给出三个指标：墙钟（CLOCK_MONOTONIC）、
+#     CPU（wait4 rusage 的 user+sys，微秒级）、峰值 RSS（ru_maxrss）；每项先 warmup 再跑
+#     --runs 个样本，墙钟与 CPU 取中位数、RSS 取最大值；GC 诊断行来自同一样本；
 #   * native 进程由入口自带栈运行（默认 512 MiB 虚拟，独立于 `ulimit -s`）；
 #     `stack_policy` 记进 JSON；
-#   * 跨机器比较只看 `ratio = <backend>_median / ocaml_median` 与
-#     `rss_ratio`；wasm 另给 `net_*`（减掉 node 启动地板）；
+#   * 对照列：手写 OCaml（`ocaml_ref`，每个用例必测）与手写 C（`c_ref`，有 `.c` 就测）。
+#     每个后端对两个对照组各给 `vs_handwritten` / `vs_c` 的墙钟、CPU、RSS 三套比值；
+#     wasm 先减掉固定地板（空 node 进程的墙钟 / CPU / RSS），另记 wasm 线性内存；
 #   * 每个后端另记产物指标：中间文本 `files/bytes/lines/max_file`、最终二进制
 #     `binary_bytes`（wasm 是 `wasm_bytes`）、构建耗时 `build{codegen_ms,toolchain_ms,
 #     postprocess_ms}`（wasm 的 `.wasm` 由 `wasm-tools parse` 汇编后再经 `wasm-opt` 优化）
@@ -36,7 +38,6 @@ set -euo pipefail
 
 RUNS=3
 WARMUP=1
-RSS_PASSES=1
 THRESHOLD=20
 FAIL_THRESHOLD=50
 ARTIFACT_THRESHOLD=20
@@ -68,9 +69,8 @@ usage: vuna-perf [options]
 在仓库根目录运行。默认测量全部基准并打印表格。
 
 options:
-  --runs N               计时样本数（默认 3）
+  --runs N               采样数（每个样本同时给墙钟 / CPU / 峰值 RSS，默认 3）
   --warmup N             计时前预热次数（默认 1；golden 校验那次也计一次）
-  --rss-passes N         RSS / GC 采样数（默认 1；从计时的样本里取，0 = 不采样）
   --target T             被测后端：ocaml / native / wasm / both / all（默认 ocaml）
   --only NAME            只跑一个基准（可重复）
   --tier T               只跑某个机制层（如 t1；可重复）
@@ -113,8 +113,6 @@ while [ $# -gt 0 ]; do
     --runs=*) RUNS=${1#*=}; shift ;;
     --warmup) [ $# -ge 2 ] || die "--warmup needs a value"; WARMUP=$2; shift 2 ;;
     --warmup=*) WARMUP=${1#*=}; shift ;;
-    --rss-passes) [ $# -ge 2 ] || die "--rss-passes needs a value"; RSS_PASSES=$2; shift 2 ;;
-    --rss-passes=*) RSS_PASSES=${1#*=}; shift ;;
     --target) [ $# -ge 2 ] || die "--target needs a value"; TARGET=$2; shift 2 ;;
     --target=*) TARGET=${1#*=}; shift ;;
     --only) [ $# -ge 2 ] || die "--only needs a value"; ONLY="$ONLY $2"; shift 2 ;;
@@ -156,7 +154,6 @@ done
 
 case $RUNS in ''|*[!0-9]*|0) die "--runs must be a positive integer" ;; esac
 case $WARMUP in *[!0-9]*) die "--warmup must be a non-negative integer" ;; esac
-case $RSS_PASSES in *[!0-9]*) die "--rss-passes must be a non-negative integer" ;; esac
 case $THRESHOLD in ''|*[!0-9]*|0) die "--threshold must be a positive integer (percent)" ;; esac
 case $FAIL_THRESHOLD in ''|*[!0-9]*|0) die "--fail-threshold must be a positive integer (percent)" ;; esac
 case $ARTIFACT_THRESHOLD in *[!0-9]*) die "--artifact-threshold must be a non-negative integer (percent)" ;; esac
@@ -165,8 +162,6 @@ case $TIMEOUT_MIN_MS in ''|*[!0-9]*) die "--timeout-min-ms must be a non-negativ
 case $TIMEOUT_MAX_MS in ''|*[!0-9]*) die "--timeout-max-ms must be a non-negative integer" ;; esac
 case $PROBE_TIMEOUT_MS in ''|*[!0-9]*) die "--probe-timeout-ms must be a non-negative integer" ;; esac
 [ "$FAIL_THRESHOLD" -ge "$THRESHOLD" ] || die "--fail-threshold must be >= --threshold"
-# RSS/GC 采样从计时样本里取，至少留一个纯计时样本。
-if [ "$RSS_PASSES" -ge "$RUNS" ]; then RSS_PASSES=$((RUNS - 1)); fi
 case $TARGET in
   ocaml) TARGETS="vuna_ocaml" ;;
   native) TARGETS="native" ;;
@@ -265,6 +260,8 @@ fi
 
 command -v "$VUNA_BIN" >/dev/null 2>&1 || die "vuna not found: $VUNA_BIN"
 command -v "$OCAMLOPT_BIN" >/dev/null 2>&1 || die "ocamlopt not found: $OCAMLOPT_BIN"
+# timestat（三指标采样）与手写 C 对照都要 cc。
+command -v "$CC_BIN" >/dev/null 2>&1 || die "cc not found: $CC_BIN（timestat 与手写 C 对照需要）"
 # wasm 的执行宿主是仓库自带的 Node/V8 宿主：与浏览器同一套 WebAssembly API 和 host 层。
 WASM_RUNNER=${WASM_RUNNER:-$REPO/wasm-host/run.mjs}
 WASM_OPT_BIN=${WASM_OPT_BIN:-wasm-opt}
@@ -273,10 +270,11 @@ WASM_OPT_LEVEL=${WASM_OPT_LEVEL:-3}
 NODE_BIN=${NODE:-node}
 NODE_VERSION=n/a
 NODE_STARTUP_MS=n/a
+NODE_STARTUP_CPU_MS=n/a
+NODE_RSS_KB=n/a
 WASM_ENGINE_VERSION=n/a
 case " $TARGETS " in
   *" native "*)
-    command -v "$CC_BIN" >/dev/null 2>&1 || die "cc not found: $CC_BIN (native 链接需要)"
     STACK_POLICY=self-managed
     ;;
   *) STACK_POLICY=n/a ;;
@@ -288,11 +286,6 @@ case " $TARGETS " in
     command -v "$WASM_OPT_BIN" >/dev/null 2>&1 || die "wasm-opt not found（wasm 产物需要 binaryen）"
     [ -f "$WASM_RUNNER" ] || die "wasm JS host runner not found: $WASM_RUNNER"
     NODE_VERSION=$("$NODE_BIN" --version 2>/dev/null || printf 'unknown')
-    # 宿主启动地板：每项测量都包含 node 启动 + 模块实例化，这里单独记一个只含 node 启动的数。
-    _t0=$(date +%s%N)
-    for _i in 1 2 3 4 5; do "$NODE_BIN" -e '' >/dev/null 2>&1; done
-    _t1=$(date +%s%N)
-    NODE_STARTUP_MS=$(( (_t1 - _t0 + 2500000) / 5000000 ))
     if [ "$STACK_POLICY" = n/a ]; then
       STACK_POLICY="node (V8 wasm stack ~1 MB default; --stack-size scales, browsers fixed)"
     else
@@ -319,6 +312,13 @@ WORK=$(mktemp -d "$TMPROOT/vuna-perf.XXXXXX" 2>/dev/null) || die "cannot create 
 cleanup() { rm -rf "$WORK"; }
 trap cleanup EXIT INT TERM
 
+# 三指标采样器：一次运行同时给出墙钟 / CPU / 峰值 RSS。
+TIMESTAT=$WORK/timestat
+if ! "$CC_BIN" -O2 -o "$TIMESTAT" "$REPO/bench/lib/timestat.c" >"$WORK/timestat.cc.log" 2>&1; then
+  die "cannot build bench/lib/timestat.c (see $WORK/timestat.cc.log)"
+fi
+
+# wasm 的固定地板在 median_of 定义之后测（见 measure_node_floor）。
 TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 ARCH=$(uname -m)
 NPROC=$(getconf _NPROCESSORS_ONLN 2>/dev/null || printf 'unknown')
@@ -360,9 +360,44 @@ ratio_of() {
   awk -v a="$1" -v b="$2" 'BEGIN { if (b + 0 <= 0) print "0"; else printf "%.2f", a / b }'
 }
 
-# GNU time 的 max RSS（KB）；不可用时返回空。`type -P` 跳过 bash 的 time 关键字。
-TIME_BIN=$(type -P time || true)
-if [ -n "$TIME_BIN" ] && ! "$TIME_BIN" -f '%M' true >/dev/null 2>&1; then TIME_BIN=""; fi
+# 一个样本：timestat 一次运行同时给墙钟 / CPU / 峰值 RSS，并按后端打开 GC 诊断。
+# 读全局 MS_TARGET / MS_K / MS_LOG / MS_CMD（调用方 take_sample 填好）。
+# 结果写进 SAMPLE_WALL_MS / SAMPLE_CPU_MS / SAMPLE_RSS_KB / SAMPLE_RC。
+measure_sample() {
+  local -a envs=()
+  case $MS_TARGET in
+    vuna_ocaml) envs+=(--env VN_PERF_STATS=1) ;;
+    native) envs+=(--env VUNA_NATIVE_GC_LOG=1) ;;
+    wasm) envs+=(--env VN_PERF_STATS=1) ;;
+  esac
+  "$TIMESTAT" --timeout-ms "$RUN_TIMEOUT_MS" --repeat "$MS_K" --log "$MS_LOG" \
+    ${envs[@]+"${envs[@]}"} -- "${MS_CMD[@]}" >"$WORK/sample.out" 2>"$WORK/sample.err" || true
+  local w u s r rc
+  w=0; u=0; s=0; r=0; rc=1
+  read -r w u s r rc <"$WORK/sample.out" || true
+  SAMPLE_WALL_MS=$(awk -v v="${w:-0}" -v k="$MS_K" 'BEGIN { printf "%.3f", v / 1000 / k }')
+  SAMPLE_CPU_MS=$(awk -v u="${u:-0}" -v s="${s:-0}" -v k="$MS_K" 'BEGIN { printf "%.3f", (u + s) / 1000 / k }')
+  SAMPLE_RSS_KB=${r:-0}
+  SAMPLE_RC=${rc:-1}
+}
+
+# wasm 的固定地板：空 node 进程的墙钟 / CPU / RSS。三个 net_* = 绝对值 - 地板；
+# 地板只含宿主本身，模块编译与实例化留在被测值里（它们也是 wasm 的真实成本）。
+measure_node_floor() {
+  local i w u s r rc
+  local -a walls=() cpus=() rsses=()
+  for i in 1 2 3 4 5; do
+    "$TIMESTAT" --timeout-ms 10000 -- "$NODE_BIN" -e '' >"$WORK/node.floor" 2>/dev/null || true
+    w=0; u=0; s=0; r=0; rc=1
+    read -r w u s r rc <"$WORK/node.floor" || true
+    walls+=("$(awk -v v="${w:-0}" 'BEGIN { printf "%.3f", v / 1000 }')")
+    cpus+=("$(awk -v u="${u:-0}" -v s="${s:-0}" 'BEGIN { printf "%.3f", (u + s) / 1000 }')")
+    rsses+=("${r:-0}")
+  done
+  NODE_STARTUP_MS=$(median_of "${walls[@]}")
+  NODE_STARTUP_CPU_MS=$(median_of "${cpus[@]}")
+  NODE_RSS_KB=$(median_of "${rsses[@]}" | awk '{ printf "%.0f", $1 }')
+}
 
 # native 产物由入口自带栈运行；wasm 产物由 JS 宿主执行。
 run_target() { vuna_run_target "$1" "$2"; }
@@ -453,7 +488,9 @@ selected() {
   esac
 }
 
-declare -A MED NET RSS RATIO NET_RATIO RSS_RATIO C_RATIO DEFAULT_STACK SKIP CASE_TIMEOUT \
+declare -A MED CPU NET CPU_NET RSS RSS_NET WALLVALS CPUVALS \
+  RATIO CPU_RATIO RSS_RATIO C_RATIO CPU_C_RATIO RSS_C_RATIO \
+  DEFAULT_STACK SKIP CASE_TIMEOUT \
   GC_MINOR_WORDS GC_MAJOR_WORDS GC_MINOR_COLLECTIONS GC_MAJOR_COLLECTIONS GC_TOP_HEAP \
   NATIVE_GC_NATIVE_LIVE NATIVE_GC_NATIVE_ALLOC NATIVE_GC_NATIVE_COLLECTIONS \
   WASM_MEMORY_BYTES ART_BYTES ART_LINES WASM_BYTES SAMPLE_LOG \
@@ -509,49 +546,30 @@ build_target() { # name target dir
   BUILD_POST_CPU_MS["$name:$target"]=$LAST_POST_CPU_MS
 }
 
-# 计时：把一个采样内的 k 次运行合在一起，再除以 k（小项 / 启动成本用）。
-# 任一次超时返回 2，其它非零返回 1（调用方决定记 skip 还是中止）。
-measure_runs() { # target program k
-  local t0 t1 j rc
-  t0=$(now_ns)
-  for ((j = 0; j < $3; j++)); do
-    rc=0
-    run_target "$1" "$2" >/dev/null 2>&1 || rc=$?
-    [ "$rc" -eq 124 ] && return 2
-    [ "$rc" -eq 0 ] || return 1
-  done
-  t1=$(now_ns)
-  awk -v a=$((t1 - t0)) -v k="$3" 'BEGIN { printf "%.3f", (a / 1000000) / k }'
-}
-
-# 采样一次：GNU time 取 maxRSS；按 target 打开 GC / 内存统计。不参与墙钟。
-sample_target() { # name target program
-  local name=$1 target=$2 prog=$3
-  local rf=$WORK/$name.$target.rss log=$WORK/$name.$target.sample
-  : >"$rf"
-  : >"$log"
-  local -a envs=()
-  local -a cmd=()
+# 采样一个数据点并累积三指标；返回 2 = 超时，1 = 其它失败，0 = ok。
+# 手写 C 对照直接以 `n=` 作为 argv 运行（不经 shim，避免多一次 exec 抬高 CPU/RSS）。
+take_sample() { # name target prog repeat [arg...]
+  local name=$1 target=$2 prog=$3 k=$4
+  shift 4
+  MS_TARGET=$target
+  MS_K=$k
+  MS_LOG=$WORK/$name.$target.sample
+  SAMPLE_LOG["$name:$target"]=$MS_LOG
   case $target in
-    ocaml_ref) cmd=("$prog") ;;
-    c_ref) cmd=("$prog") ;;
-    vuna_ocaml) envs+=(VN_PERF_STATS=1); cmd=("$prog") ;;
-    native) envs+=(VUNA_NATIVE_GC_LOG=1); cmd=("$prog") ;;
-    wasm) envs+=(VN_PERF_STATS=1); cmd=("$NODE_BIN" "$WASM_RUNNER" "$prog") ;;
+    wasm) MS_CMD=("$NODE_BIN" "$WASM_RUNNER" "$prog") ;;
+    *) MS_CMD=("$prog" "$@") ;;
   esac
-  local rss
-  if [ -n "$TIME_BIN" ]; then
-    env "${envs[@]}" "$TIME_BIN" -f '%M' -o "$rf" ${cmd[@]+"${cmd[@]}"} >/dev/null 2>"$log" || true
-  else
-    env "${envs[@]}" ${cmd[@]+"${cmd[@]}"} >/dev/null 2>"$log" || true
+  measure_sample
+  local rc=$SAMPLE_RC
+  if [ "$rc" -ne 0 ]; then
+    [ "$rc" -eq 124 ] && return 2
+    return 1
   fi
-  local rss
-  rss=$(tr -dc '0-9' <"$rf" 2>/dev/null | head -c 20)
-  [ -n "$rss" ] || rss=0
+  WALLVALS["$name:$target"]+=" $SAMPLE_WALL_MS"
+  CPUVALS["$name:$target"]+=" $SAMPLE_CPU_MS"
   local cur=${RSS["$name:$target"]:-0}
-  [ "$rss" -lt "$cur" ] && rss=$cur
-  RSS["$name:$target"]=$rss
-  SAMPLE_LOG["$name:$target"]=$log
+  [ "$SAMPLE_RSS_KB" -gt "$cur" ] && RSS["$name:$target"]=$SAMPLE_RSS_KB
+  return 0
 }
 
 # 从采样日志里读 GC / 内存统计。
@@ -678,7 +696,8 @@ run_bench() { # name
   t_ref=$t_ocaml
   if [ -n "$cprog" ]; then
     t_c=$(probe_ref "$name (c)" c_ref "$cprog" "$golden")
-    [ "$t_c" -lt "$t_ref" ] && t_ref=$t_c
+    # 用较慢的参照推导超时：C 对照普遍比手写 OCaml 快，取最快参照会把正常后端判成超时。
+    [ "$t_c" -gt "$t_ref" ] && t_ref=$t_c
   fi
   RUN_TIMEOUT_MS=$(compute_timeout "$name" "$t_ref")
   CASE_TIMEOUT[$name]=$RUN_TIMEOUT_MS
@@ -714,43 +733,35 @@ run_bench() { # name
     done
   done
 
-  # 计时样本：前 (RUNS - RSS_PASSES) 个是纯墙钟，后 RSS_PASSES 个同时采 RSS/GC。
-  # 超时是硬失败（记 timeout），不是慢：它说明实现已经越过该层允许的倍数。
-  local -A VALS=()
-  local plain_runs=$((RUNS - RSS_PASSES))
-  local ms
-  for ((i = 0; i < plain_runs; i++)); do
-    ms=$(measure_runs ocaml_ref "$oprog" 1)
-    VALS[ocaml_ref]+=" $ms"
+  # 采样：每个样本由 timestat 一次给出墙钟 / CPU / 峰值 RSS。超时是硬失败（记 timeout），
+  # 不是慢：它说明实现已经越过该层允许的倍数。
+  local i
+  for ((i = 0; i < RUNS; i++)); do
+    rc=0
+    take_sample "$name" ocaml_ref "$oprog" 1 || rc=$?
+    [ "$rc" -eq 0 ] || die "$name (ocaml_ref): timed sample failed (exit $SAMPLE_RC)"
     if [ -n "$cprog" ]; then
-      ms=$(measure_runs c_ref "$cprog" 1)
-      VALS[c_ref]+=" $ms"
+      # shellcheck disable=SC2086  # n= 可能是多个 argv（如 "5000 10000"）
+      take_sample "$name" c_ref "$creal" 1 $cn || die "$name (c_ref): timed sample failed (exit $SAMPLE_RC)"
     fi
     for t in $active; do
       [ -n "${SKIP["$name:$t"]:-}" ] && continue
       rc=0
-      ms=$(measure_runs "$t" "${PROGS[$t]}" "$repeat") || rc=$?
+      take_sample "$name" "$t" "${PROGS[$t]}" "$repeat" || rc=$?
       if [ "$rc" -eq 2 ]; then
         SKIP["$name:$t"]=timeout
         note "  $t timeout after ${RUN_TIMEOUT_MS}ms"
         continue
       fi
-      [ "$rc" -eq 0 ] || die "$name ($t): timed run failed (exit $rc)"
-      VALS[$t]+=" $ms"
+      [ "$rc" -eq 0 ] || die "$name ($t): timed run failed (exit $SAMPLE_RC)"
     done
   done
-  for ((i = 0; i < RSS_PASSES; i++)); do
-    sample_target "$name" ocaml_ref "$oprog"
-    [ -n "$cprog" ] && sample_target "$name" c_ref "$cprog"
-    for t in $active; do
-      [ -n "${SKIP["$name:$t"]:-}" ] && continue
-      sample_target "$name" "$t" "${PROGS[$t]}"
-    done
-  done
-  MED["$name:ocaml_ref"]=$(median_of ${VALS[ocaml_ref]})
+  MED["$name:ocaml_ref"]=$(median_of ${WALLVALS["$name:ocaml_ref"]})
+  CPU["$name:ocaml_ref"]=$(median_of ${CPUVALS["$name:ocaml_ref"]})
   [ -n "${RSS["$name:ocaml_ref"]:-}" ] || RSS["$name:ocaml_ref"]=0
   if [ -n "$cprog" ]; then
-    MED["$name:c_ref"]=$(median_of ${VALS[c_ref]})
+    MED["$name:c_ref"]=$(median_of ${WALLVALS["$name:c_ref"]})
+    CPU["$name:c_ref"]=$(median_of ${CPUVALS["$name:c_ref"]})
     [ -n "${RSS["$name:c_ref"]:-}" ] || RSS["$name:c_ref"]=0
     BIN_BYTES["$name:c_ref"]=$(wc -c <"$creal" | tr -d ' ')
     ART_BYTES["$name:c_ref"]=$(wc -c <"$csrc_ref" | tr -d ' ')
@@ -759,14 +770,16 @@ run_bench() { # name
   fi
   for t in $TARGETS; do
     [ -n "${SKIP["$name:$t"]:-}" ] && continue
-    MED["$name:$t"]=$(median_of ${VALS[$t]})
+    MED["$name:$t"]=$(median_of ${WALLVALS["$name:$t"]})
+    CPU["$name:$t"]=$(median_of ${CPUVALS["$name:$t"]})
+    [ -n "${RSS["$name:$t"]:-}" ] || RSS["$name:$t"]=0
     if [ "$t" = wasm ]; then
-      NET["$name:$t"]=$(awk -v m="${MED["$name:$t"]}" -v f="$NODE_STARTUP_MS" 'BEGIN { d = m - f; if (d < 0) d = 0; printf "%.0f", d }')
+      NET["$name:$t"]=$(awk -v m="${MED["$name:$t"]}" -v f="$NODE_STARTUP_MS" 'BEGIN { d = m - f; if (d < 0) d = 0; printf "%.3f", d }')
+      CPU_NET["$name:$t"]=$(awk -v m="${CPU["$name:$t"]}" -v f="$NODE_STARTUP_CPU_MS" 'BEGIN { d = m - f; if (d < 0) d = 0; printf "%.3f", d }')
+      RSS_NET["$name:$t"]=$(awk -v m="${RSS["$name:$t"]:-0}" -v f="$NODE_RSS_KB" 'BEGIN { d = m - f; if (d < 0) d = 0; printf "%.0f", d }')
     fi
     gc_measure "$name" "$t"
   done
-  # ocaml_ref 的 RSS 也来自采样；没有采样时保持 0。
-  [ -n "${RSS["$name:ocaml_ref"]:-}" ] || RSS["$name:ocaml_ref"]=0
 
   # native 默认栈探针：只在计时之外记录，崩溃不中断基线。
   if [ -n "${PROGS[native]:-}" ] && [ -z "${SKIP["$name:native"]:-}" ]; then
@@ -778,22 +791,32 @@ run_bench() { # name
   fi
 
   local base_rss=${RSS["$name:ocaml_ref"]:-0}
+  local base_cpu=${CPU["$name:ocaml_ref"]:-0}
+  local c_ref_rss=${RSS["$name:c_ref"]:-0}
+  local c_ref_cpu=${CPU["$name:c_ref"]:-0}
   for t in $TARGETS; do
     [ -n "${SKIP["$name:$t"]:-}" ] && continue
-    RATIO["$name:$t"]=$(ratio_of "${MED["$name:$t"]}" "${MED["$name:ocaml_ref"]}")
-    RSS_RATIO["$name:$t"]=$(ratio_of "${RSS["$name:$t"]:-0}" "$base_rss")
+    # wasm 的比值一律用 net（减掉 node 地板）：宿主启动不是被测代码的成本。
+    local w=${MED["$name:$t"]} c=${CPU["$name:$t"]} r=${RSS["$name:$t"]:-0}
     if [ "$t" = wasm ]; then
-      NET_RATIO["$name:$t"]=$(ratio_of "${NET["$name:$t"]}" "${MED["$name:ocaml_ref"]}")
+      w=${NET["$name:$t"]}
+      c=${CPU_NET["$name:$t"]}
+      r=${RSS_NET["$name:$t"]}
     fi
+    RATIO["$name:$t"]=$(ratio_of "$w" "${MED["$name:ocaml_ref"]}")
+    CPU_RATIO["$name:$t"]=$(ratio_of "$c" "$base_cpu")
+    RSS_RATIO["$name:$t"]=$(ratio_of "$r" "$base_rss")
     if [ -n "${MED["$name:c_ref"]:-}" ]; then
-      C_RATIO["$name:$t"]=$(ratio_of "${MED["$name:$t"]}" "${MED["$name:c_ref"]}")
+      C_RATIO["$name:$t"]=$(ratio_of "$w" "${MED["$name:c_ref"]}")
+      CPU_C_RATIO["$name:$t"]=$(ratio_of "$c" "$c_ref_cpu")
+      RSS_C_RATIO["$name:$t"]=$(ratio_of "$r" "$c_ref_rss")
     fi
   done
   ORDER+=("$name")
 
-  note "  ocaml_ref ${MED["$name:ocaml_ref"]} ms  ${RSS["$name:ocaml_ref"]:-0} KB"
+  note "  ocaml_ref ${MED["$name:ocaml_ref"]} ms / ${CPU["$name:ocaml_ref"]} cpu / ${RSS["$name:ocaml_ref"]:-0} KB"
   if [ -n "$cprog" ]; then
-    note "  c_ref     ${MED["$name:c_ref"]} ms  ${RSS["$name:c_ref"]:-0} KB"
+    note "  c_ref     ${MED["$name:c_ref"]} ms / ${CPU["$name:c_ref"]} cpu / ${RSS["$name:c_ref"]:-0} KB"
   fi
   for t in $TARGETS; do
     if [ -n "${SKIP["$name:$t"]:-}" ]; then
@@ -801,11 +824,11 @@ run_bench() { # name
       continue
     fi
     local csuffix=""
-    [ -n "${C_RATIO["$name:$t"]:-}" ] && csuffix="  vs_c ${C_RATIO["$name:$t"]}x"
+    [ -n "${C_RATIO["$name:$t"]:-}" ] && csuffix="  vs_c ${C_RATIO["$name:$t"]}x/${CPU_C_RATIO["$name:$t"]}x/${RSS_C_RATIO["$name:$t"]}x"
     if [ "$t" = wasm ]; then
-      note "  $t ${MED["$name:$t"]} ms (net ${NET["$name:$t"]})  ${RSS["$name:$t"]:-0} KB  ratio ${RATIO["$name:$t"]}x net ${NET_RATIO["$name:$t"]}x  rss ${RSS_RATIO["$name:$t"]}x$csuffix"
+      note "  $t ${MED["$name:$t"]} ms / ${CPU["$name:$t"]} cpu / ${RSS["$name:$t"]:-0} KB (net ${NET["$name:$t"]} / ${CPU_NET["$name:$t"]} cpu / ${RSS_NET["$name:$t"]} KB)  ratio ${RATIO["$name:$t"]}x/${CPU_RATIO["$name:$t"]}x/${RSS_RATIO["$name:$t"]}x$csuffix"
     else
-      note "  $t ${MED["$name:$t"]} ms  ${RSS["$name:$t"]:-0} KB  ratio ${RATIO["$name:$t"]}x  rss ${RSS_RATIO["$name:$t"]}x$csuffix"
+      note "  $t ${MED["$name:$t"]} ms / ${CPU["$name:$t"]} cpu / ${RSS["$name:$t"]:-0} KB  ratio ${RATIO["$name:$t"]}x/${CPU_RATIO["$name:$t"]}x/${RSS_RATIO["$name:$t"]}x$csuffix"
     fi
   done
   if [ -n "${DEFAULT_STACK["$name:native"]:-}" ]; then
@@ -825,6 +848,8 @@ run_bench() { # name
   fi
 }
 
+if [ "$NODE_VERSION" != n/a ]; then measure_node_floor; fi
+
 for name in $BENCHES; do
   selected "$name" && run_bench "$name"
 done
@@ -838,16 +863,18 @@ emit_backend() {
       "$indent" "$target" "${SKIP["$name:$target"]}"
     return 0
   fi
-  printf '%s"%s": { "run_ok": true, "median_ms": %s, "rss_kb": %s' \
-    "$indent" "$target" "${MED["$name:$target"]}" "${RSS["$name:$target"]:-0}"
-  local ops nsop
+  printf '%s"%s": { "run_ok": true, "median_ms": %s, "cpu_ms": %s, "rss_kb": %s' \
+    "$indent" "$target" "${MED["$name:$target"]}" "${CPU["$name:$target"]:-0}" "${RSS["$name:$target"]:-0}"
+  local ops nsop cpu_nsop
   ops=$(bench_meta "$name" ops 0)
   if [ "$ops" -gt 0 ] 2>/dev/null; then
     nsop=$(awk -v ms="${MED["$name:$target"]}" -v n="$ops" 'BEGIN { printf "%.3f", ms * 1000000 / n }')
-    printf ', "ops": %s, "ns_per_op": %s' "$ops" "$nsop"
+    cpu_nsop=$(awk -v ms="${CPU["$name:$target"]:-0}" -v n="$ops" 'BEGIN { printf "%.3f", ms * 1000000 / n }')
+    printf ', "ops": %s, "ns_per_op": %s, "cpu_ns_per_op": %s' "$ops" "$nsop" "$cpu_nsop"
   fi
   if [ "$target" = wasm ] && [ -n "${NET["$name:$target"]:-}" ]; then
-    printf ', "net_median_ms": %s' "${NET["$name:$target"]}"
+    printf ', "net_median_ms": %s, "net_cpu_ms": %s, "net_rss_kb": %s' \
+      "${NET["$name:$target"]}" "${CPU_NET["$name:$target"]:-0}" "${RSS_NET["$name:$target"]:-0}"
   fi
   if [ "$target" = c_ref ]; then
     printf ', "artifact": { "source_bytes": %s, "source_lines": %s, "binary_bytes": %s }' \
@@ -903,7 +930,7 @@ emit_backend() {
 emit_json() {
   local first=1 name t first_t
   printf '{\n'
-  printf '  "schema": 4,\n'
+  printf '  "schema": 5,\n'
   printf '  "meta": {\n'
   printf '    "timestamp": "%s",\n' "$(json_escape "$TIMESTAMP")"
   printf '    "git_head": "%s",\n' "$(json_escape "$GIT_HEAD")"
@@ -920,9 +947,12 @@ emit_json() {
   printf '    "wasm_host_runner": "%s",\n' "$(json_escape "$WASM_RUNNER")"
   printf '    "wasm_opt": "%s",\n' "$(json_escape "$WASM_OPT_VERSION")"
   printf '    "node": "%s",\n' "$(json_escape "$NODE_VERSION")"
-  printf '    "node_startup_ms": %s,\n' "$(case $NODE_STARTUP_MS in ''|*[!0-9]*) printf 'null' ;; *) printf '%s' "$NODE_STARTUP_MS" ;; esac)"
-  printf '    "rss_samples": %s,\n' "$RSS_PASSES"
-  printf '    "rss_method": "gnu-time max_rss on sampled timed runs"\n'
+  printf '    "node_startup_ms": %s,\n' "$(case $NODE_STARTUP_MS in ''|*[!0-9.]*) printf 'null' ;; *) printf '%s' "$NODE_STARTUP_MS" ;; esac)"
+  printf '    "node_startup_cpu_ms": %s,\n' "$(case $NODE_STARTUP_CPU_MS in ''|*[!0-9.]*) printf 'null' ;; *) printf '%s' "$NODE_STARTUP_CPU_MS" ;; esac)"
+  printf '    "node_rss_kb": %s,\n' "$(case $NODE_RSS_KB in ''|*[!0-9]*) printf 'null' ;; *) printf '%s' "$NODE_RSS_KB" ;; esac)"
+  printf '    "wall_method": "CLOCK_MONOTONIC around fork+wait (bench/lib/timestat)",\n'
+  printf '    "cpu_method": "wait4 rusage user+sys (bench/lib/timestat)",\n'
+  printf '    "rss_method": "wait4 ru_maxrss on every timed sample; max over samples"\n'
   printf '  },\n'
   printf '  "benchmarks": {\n'
   for name in "${ORDER[@]}"; do
@@ -950,17 +980,20 @@ emit_json() {
         printf '"%s": { "run_ok": false }' "$t"
         continue
       fi
-      printf '"%s": { "vs_handwritten": %s, "rss_vs_handwritten": %s' \
-        "$t" "${RATIO["$name:$t"]}" "${RSS_RATIO["$name:$t"]}"
-      if [ "$t" = wasm ] && [ -n "${NET_RATIO["$name:$t"]:-}" ]; then
-        printf ', "net_vs_handwritten": %s' "${NET_RATIO["$name:$t"]}"
+      printf '"%s": { "vs_handwritten": %s, "cpu_vs_handwritten": %s, "rss_vs_handwritten": %s' \
+        "$t" "${RATIO["$name:$t"]}" "${CPU_RATIO["$name:$t"]}" "${RSS_RATIO["$name:$t"]}"
+      if [ "$t" = wasm ] && [ -n "${NET["$name:$t"]:-}" ]; then
+        printf ', "net_median_ms": %s, "net_cpu_ms": %s, "net_rss_kb": %s' \
+          "${NET["$name:$t"]}" "${CPU_NET["$name:$t"]:-0}" "${RSS_NET["$name:$t"]:-0}"
       fi
       if [ -n "${C_RATIO["$name:$t"]:-}" ]; then
-        printf ', "vs_c": %s' "${C_RATIO["$name:$t"]}"
+        printf ', "vs_c": %s, "cpu_vs_c": %s, "rss_vs_c": %s' \
+          "${C_RATIO["$name:$t"]}" "${CPU_C_RATIO["$name:$t"]}" "${RSS_C_RATIO["$name:$t"]}"
       fi
       if [ "$t" != vuna_ocaml ] && [ -n "${MED["$name:vuna_ocaml"]:-}" ]; then
-        printf ', "vs_ocaml_backend": %s, "rss_vs_ocaml_backend": %s' \
+        printf ', "vs_ocaml_backend": %s, "cpu_vs_ocaml_backend": %s, "rss_vs_ocaml_backend": %s' \
           "$(ratio_of "${MED["$name:$t"]}" "${MED["$name:vuna_ocaml"]}")" \
+          "$(ratio_of "${CPU["$name:$t"]}" "${CPU["$name:vuna_ocaml"]}")" \
           "$(ratio_of "${RSS["$name:$t"]:-0}" "${RSS["$name:vuna_ocaml"]:-0}")"
       fi
       printf ' }'
@@ -987,27 +1020,61 @@ ns_per_op() { # name target
 
 print_table() {
   note ""
-  printf '  %-16s %-6s %-10s %10s %8s %12s %10s %10s %8s\n' benchmark tier backend ms ratio rss_kb rss_ratio ns/op vs_c
-  local name t tier vs_c
+  note "-- 时间口径（wall = 墙钟中位数；cpu = rusage user+sys 中位数；ratio 对手写 OCaml）"
+  printf '  %-15s %-5s %-10s %9s %9s %7s %7s %8s %7s %7s\n' \
+    benchmark tier backend wall_ms cpu_ms w_ratio c_ratio ns/op vs_c_w vs_c_c
+  local name t tier vs_c vs_c_cpu
   for name in "${ORDER[@]}"; do
     tier=${BENCH_TIER[$name]}
-    printf '  %-16s %-6s %-10s %10s %8s %12s %10s %10s %8s\n' "$name" "$tier" ocaml_ref \
-      "${MED["$name:ocaml_ref"]}" "1.00x" "${RSS["$name:ocaml_ref"]:-0}" "1.00x" "$(ns_per_op "$name" ocaml_ref)" "-"
+    printf '  %-15s %-5s %-10s %9s %9s %7s %7s %8s %7s %7s\n' "$name" "$tier" ocaml_ref \
+      "${MED["$name:ocaml_ref"]}" "${CPU["$name:ocaml_ref"]}" "1.00x" "1.00x" \
+      "$(ns_per_op "$name" ocaml_ref)" "-" "-"
     if [ -n "${MED["$name:c_ref"]:-}" ]; then
-      printf '  %-16s %-6s %-10s %10s %8s %12s %10s %10s %8s\n' "$name" "$tier" c_ref \
-        "${MED["$name:c_ref"]}" "$(ratio_of "${MED["$name:ocaml_ref"]}" "${MED["$name:c_ref"]}")x" \
-        "${RSS["$name:c_ref"]:-0}" "$(ratio_of "${RSS["$name:c_ref"]:-0}" "${RSS["$name:ocaml_ref"]:-0}")x" \
-        "$(ns_per_op "$name" c_ref)" "1.00x"
+      printf '  %-15s %-5s %-10s %9s %9s %7s %7s %8s %7s %7s\n' "$name" "$tier" c_ref \
+        "${MED["$name:c_ref"]}" "${CPU["$name:c_ref"]}" \
+        "$(ratio_of "${MED["$name:c_ref"]}" "${MED["$name:ocaml_ref"]}")x" \
+        "$(ratio_of "${CPU["$name:c_ref"]}" "${CPU["$name:ocaml_ref"]}")x" \
+        "$(ns_per_op "$name" c_ref)" "1.00x" "1.00x"
     fi
     for t in $TARGETS; do
       if [ -n "${SKIP["$name:$t"]:-}" ]; then
-        printf '  %-16s %-6s %-10s %10s %8s %12s %10s %10s %8s\n' "$name" "$tier" "$t" "-" "skipped" "-" "-" "-" "-"
+        printf '  %-15s %-5s %-10s %9s %9s %7s %7s %8s %7s %7s\n' "$name" "$tier" "$t" "-" "-" "skipped" "-" "-" "-" "-"
         continue
       fi
       vs_c=${C_RATIO["$name:$t"]:-}
-      printf '  %-16s %-6s %-10s %10s %8s %12s %10s %10s %8s\n' "$name" "$tier" "$t" \
-        "${MED["$name:$t"]}" "${RATIO["$name:$t"]}x" "${RSS["$name:$t"]:-0}" "${RSS_RATIO["$name:$t"]}x" \
-        "$(ns_per_op "$name" "$t")" "${vs_c:+${vs_c}x}"
+      vs_c_cpu=${CPU_C_RATIO["$name:$t"]:-}
+      printf '  %-15s %-5s %-10s %9s %9s %7s %7s %8s %7s %7s\n' "$name" "$tier" "$t" \
+        "${MED["$name:$t"]}" "${CPU["$name:$t"]}" "${RATIO["$name:$t"]}x" "${CPU_RATIO["$name:$t"]}x" \
+        "$(ns_per_op "$name" "$t")" "${vs_c:+${vs_c}x}" "${vs_c_cpu:+${vs_c_cpu}x}"
+    done
+  done
+
+  note ""
+  note "-- 内存口径（rss = 样本峰值；wasm 另给 net = 减空 node 地板；ratio 对手写 OCaml）"
+  printf '  %-16s %-6s %-10s %12s %12s %11s %10s\n' benchmark tier backend rss_kb net_rss_kb rss_ratio vs_c_rss
+  local rss_r vs_c_rss
+  for name in "${ORDER[@]}"; do
+    tier=${BENCH_TIER[$name]}
+    printf '  %-16s %-6s %-10s %12s %12s %11s %10s\n' "$name" "$tier" ocaml_ref \
+      "${RSS["$name:ocaml_ref"]:-0}" "-" "1.00x" "-"
+    if [ -n "${MED["$name:c_ref"]:-}" ]; then
+      printf '  %-16s %-6s %-10s %12s %12s %11s %10s\n' "$name" "$tier" c_ref \
+        "${RSS["$name:c_ref"]:-0}" "-" \
+        "$(ratio_of "${RSS["$name:c_ref"]:-0}" "${RSS["$name:ocaml_ref"]:-0}")x" "1.00x"
+    fi
+    for t in $TARGETS; do
+      if [ -n "${SKIP["$name:$t"]:-}" ]; then
+        printf '  %-16s %-6s %-10s %12s %12s %11s %10s\n' "$name" "$tier" "$t" "-" "-" "skipped" "-"
+        continue
+      fi
+      rss_r=${RSS_RATIO["$name:$t"]:-0}
+      vs_c_rss=${RSS_C_RATIO["$name:$t"]:-}
+      local rss_net_disp=-
+      if [ "$t" = wasm ] && [ -n "${RSS_NET["$name:$t"]:-}" ]; then
+        rss_net_disp=${RSS_NET["$name:$t"]}
+      fi
+      printf '  %-16s %-6s %-10s %12s %12s %11s %10s\n' "$name" "$tier" "$t" \
+        "${RSS["$name:$t"]:-0}" "$rss_net_disp" "${rss_r}x" "${vs_c_rss:+${vs_c_rss}x}"
     done
   done
 }
@@ -1021,29 +1088,40 @@ geomean_of() { # 每行一个数
 
 print_tier_table() {
   note ""
-  printf '  %-6s %-10s %10s %10s %10s %6s\n' tier backend 'vs_c(geo)' 'vs_ocaml(geo)' max_vs_c cases
-  local tiers tier t name n vals_c vals_o max_c gc go
+  note "-- 分层汇总：几何平均，格式为「vs 手写 C / vs 手写 OCaml」；wasm 用 net 口径，无 C 对照显示 -"
+  printf '  %-6s %-10s %12s %12s %12s %6s\n' tier backend wall cpu rss cases
+  local tiers tier t name n vals_wc vals_wo vals_cc vals_co vals_rc vals_ro
   tiers=$(for name in "${ORDER[@]}"; do printf '%s\n' "${BENCH_TIER[$name]}"; done | sort -u)
   for tier in $tiers; do
     for t in $TARGETS; do
-      n=0; vals_c=""; vals_o=""; max_c=0
+      n=0; vals_wc=""; vals_wo=""; vals_cc=""; vals_co=""; vals_rc=""; vals_ro=""
       for name in "${ORDER[@]}"; do
         [ "${BENCH_TIER[$name]}" = "$tier" ] || continue
         [ -n "${SKIP["$name:$t"]:-}" ] && continue
         n=$((n + 1))
-        vals_o+="${RATIO["$name:$t"]}"$'\n'
+        vals_wo+="${RATIO["$name:$t"]}"$'\n'
+        vals_co+="${CPU_RATIO["$name:$t"]}"$'\n'
+        vals_ro+="${RSS_RATIO["$name:$t"]}"$'\n'
         if [ -n "${C_RATIO["$name:$t"]:-}" ]; then
-          vals_c+="${C_RATIO["$name:$t"]}"$'\n'
-          max_c=$(awk -v a="$max_c" -v b="${C_RATIO["$name:$t"]}" 'BEGIN { print (b + 0 > a + 0) ? b : a }')
+          vals_wc+="${C_RATIO["$name:$t"]}"$'\n'
+          vals_cc+="${CPU_C_RATIO["$name:$t"]}"$'\n'
+          vals_rc+="${RSS_C_RATIO["$name:$t"]}"$'\n'
         fi
       done
       [ "$n" -gt 0 ] || continue
-      gc=$(printf '%s' "$vals_c" | geomean_of)
-      go=$(printf '%s' "$vals_o" | geomean_of)
-      printf '  %-6s %-10s %10s %10s %10s %6s\n' "$tier" "$t" "${gc}x" "${go}x" \
-        "$( [ -n "$vals_c" ] && printf '%sx' "$max_c" || printf '-' )" "$n"
+      printf '  %-6s %-10s %12s %12s %12s %6s\n' "$tier" "$t" \
+        "$(tier_cell "$vals_wc" "$vals_wo")" "$(tier_cell "$vals_cc" "$vals_co")" \
+        "$(tier_cell "$vals_rc" "$vals_ro")" "$n"
     done
   done
+}
+
+# 一个格子：vs C 的几何平均（无 C 对照为 -）/ vs 手写 OCaml 的几何平均。
+tier_cell() { # vals_c vals_ocaml
+  local gc go
+  gc=$(printf '%s' "$1" | geomean_of)
+  go=$(printf '%s' "$2" | geomean_of)
+  if [ "$gc" = "-" ]; then printf -- '-/%s' "$go"; else printf '%s/%s' "$gc" "$go"; fi
 }
 
 # 产物表：中间文本文件数与最大文件、最终二进制大小、codegen/工具链耗时。
@@ -1064,22 +1142,28 @@ print_artifact_table() {
   done
 }
 
-# 从基线读一个值。
-baseline_ratio() { # name target kind(wall|net|rss)
-  local name=$1 target=$2 kind=$3 v
+# 从基线读一个 ratio：kind = wall|cpu|rss（wasm 的值本身已是 net 口径）。
+baseline_ratio() { # name target kind
+  local name=$1 target=$2 kind=$3 field v
   case $kind in
-    wall) jq -r --arg n "$name" --arg t "$target" '.benchmarks[$n].ratios[$t].vs_handwritten // empty' "$BASELINE" ;;
-    net)
-      v=$(jq -r --arg n "$name" --arg t "$target" '.benchmarks[$n].ratios[$t].net_vs_handwritten // empty' "$BASELINE")
-      [ -n "$v" ] || v=$(jq -r --arg n "$name" --arg t "$target" '.benchmarks[$n].ratios[$t].vs_handwritten // empty' "$BASELINE")
-      printf '%s' "$v"
-      ;;
-    rss) jq -r --arg n "$name" --arg t "$target" '.benchmarks[$n].ratios[$t].rss_vs_handwritten // empty' "$BASELINE" ;;
+    wall) field=vs_handwritten ;;
+    cpu) field=cpu_vs_handwritten ;;
+    rss) field=rss_vs_handwritten ;;
+    *) return 0 ;;
   esac
+  v=$(jq -r --arg n "$name" --arg t "$target" --arg f "$field" \
+    '.benchmarks[$n].ratios[$t][$f] // empty' "$BASELINE")
+  printf '%s' "$v"
 }
 
-baseline_abs() { # name target
-  jq -r --arg n "$1" --arg t "$2" '(.benchmarks[$n][$t].net_median_ms // .benchmarks[$n][$t].median_ms) // empty' "$BASELINE"
+baseline_abs() { # name target kind(wall|cpu|rss)
+  local field=median_ms net_field=net_median_ms
+  case ${3:-wall} in
+    cpu) field=cpu_ms; net_field=net_cpu_ms ;;
+    rss) field=rss_kb; net_field=net_rss_kb ;;
+  esac
+  jq -r --arg n "$1" --arg t "$2" --arg f "$field" --arg nf "$net_field" \
+    'if $t == "wasm" then (.benchmarks[$n][$t][$nf] // .benchmarks[$n][$t][$f]) else .benchmarks[$n][$t][$f] end // empty' "$BASELINE"
 }
 
 baseline_artifact() { # name target
@@ -1124,48 +1208,52 @@ compare_baseline() {
         printf '  %-16s %-11s %-8s %10s %10s %10s  %s\n' "$name" "$t" wall "-" "-" "-" "skipped(${SKIP["$name:$t"]})"
         continue
       fi
-      # 墙钟：wasm 用 net（减 node 地板）。
-      metric=wall
-      cur=${RATIO["$name:$t"]}
-      if [ "$t" = wasm ] && [ -n "${NET_RATIO["$name:$t"]:-}" ]; then
-        cur=${NET_RATIO["$name:$t"]}
-        metric=net
-      fi
-      basev=$(baseline_ratio "$name" "$t" "$([ "$metric" = net ] && printf net || printf wall)")
-      if [ -z "$basev" ]; then
-        printf '  %-16s %-11s %-8s %10s %10s %10s  %s\n' "$name" "$t" "$metric" "${cur}x" "-" "-" "new"
-        news=$((news + 1))
-      else
+      # 三个指标各一行（wasm 的比值本身已是减地板的 net 口径）。
+      local metric cur label basev
+      for metric in wall cpu rss; do
+        case $metric in
+          wall) cur=${RATIO["$name:$t"]} ;;
+          cpu) cur=${CPU_RATIO["$name:$t"]} ;;
+          rss) cur=${RSS_RATIO["$name:$t"]} ;;
+        esac
+        label=$metric
+        basev=$(baseline_ratio "$name" "$t" "$label")
+        if [ -z "$basev" ]; then
+          printf '  %-16s %-11s %-8s %10s %10s %10s  %s\n' "$name" "$t" "$label" "${cur}x" "-" "-" "new"
+          news=$((news + 1))
+          continue
+        fi
         read -r delta verdict <<<"$(judge_delta "$cur" "$basev" "$THRESHOLD" "$FAIL_THRESHOLD")"
-        # 同机器有绝对值基线时，ratio 只作参考：手写 OCaml 分母常常在 1 ms 分辨率上，
-        # ratio 的抖动会被误判成回归；回归判定交给下面的 abs 行。
-        if [ "$same_machine" = 1 ] && [ -n "$(baseline_abs "$name" "$t")" ]; then
+        # 同机器有绝对值基线时，ratio 只作参考：归一化会把整体抬升摊掉，也会把手写
+        # OCaml 分母的量化噪声放大；回归判定交给下面的 abs 行。
+        if [ "$same_machine" = 1 ] && [ -n "$(baseline_abs "$name" "$t" "$metric")" ]; then
           verdict=info
         fi
         case $verdict in WARN) warns=$((warns + 1)) ;; FAIL) fails=$((fails + 1)) ;; new) news=$((news + 1)) ;; ok) ok=$((ok + 1)) ;; esac
-        printf '  %-16s %-11s %-8s %10s %10s %10s  %s\n' "$name" "$t" "$metric" "${cur}x" "${basev}x" "${delta}%" "$verdict"
-      fi
-      # 同机器时再比绝对值（ratio 会归一化掉整体变慢）。
+        printf '  %-16s %-11s %-8s %10s %10s %10s  %s\n' "$name" "$t" "$label" "${cur}x" "${basev}x" "${delta}%" "$verdict"
+      done
+      # 同机器时再比三个指标的绝对值（ratio 会归一化掉整体变慢）。
       if [ "$same_machine" = 1 ]; then
-        local curabs=${MED["$name:$t"]}
-        [ "$t" = wasm ] && [ -n "${NET["$name:$t"]:-}" ] && curabs=${NET["$name:$t"]}
-        basev=$(baseline_abs "$name" "$t")
-        if [ -n "$basev" ]; then
-          read -r delta verdict <<<"$(judge_delta "$curabs" "$basev" "$THRESHOLD" "$FAIL_THRESHOLD")"
-          case $verdict in WARN) warns=$((warns + 1)) ;; FAIL) fails=$((fails + 1)) ;; new) news=$((news + 1)) ;; *) ok=$((ok + 1)) ;; esac
-          printf '  %-16s %-11s %-8s %10s %10s %10s  %s\n' "$name" "$t" abs "${curabs}ms" "${basev}ms" "${delta}%" "$verdict"
-        fi
-      fi
-      # 峰值内存
-      cur=${RSS_RATIO["$name:$t"]}
-      basev=$(baseline_ratio "$name" "$t" rss)
-      if [ -z "$basev" ]; then
-        printf '  %-16s %-11s %-8s %10s %10s %10s  %s\n' "$name" "$t" rss "${cur}x" "-" "-" "new"
-        news=$((news + 1))
-      else
-        read -r delta verdict <<<"$(judge_delta "$cur" "$basev" "$THRESHOLD" "$FAIL_THRESHOLD")"
-        case $verdict in WARN) warns=$((warns + 1)) ;; FAIL) fails=$((fails + 1)) ;; new) news=$((news + 1)) ;; *) ok=$((ok + 1)) ;; esac
-        printf '  %-16s %-11s %-8s %10s %10s %10s  %s\n' "$name" "$t" rss "${cur}x" "${basev}x" "${delta}%" "$verdict"
+        local unit
+        for metric in wall cpu rss; do
+          case $metric in
+            cpu) curabs=${CPU["$name:$t"]}
+                 [ "$t" = wasm ] && [ -n "${CPU_NET["$name:$t"]:-}" ] && curabs=${CPU_NET["$name:$t"]}
+                 unit=ms ;;
+            rss) curabs=${RSS["$name:$t"]:-0}
+                 [ "$t" = wasm ] && [ -n "${RSS_NET["$name:$t"]:-}" ] && curabs=${RSS_NET["$name:$t"]}
+                 unit=KB ;;
+            *)   curabs=${MED["$name:$t"]}
+                 [ "$t" = wasm ] && [ -n "${NET["$name:$t"]:-}" ] && curabs=${NET["$name:$t"]}
+                 unit=ms ;;
+          esac
+          basev=$(baseline_abs "$name" "$t" "$metric")
+          if [ -n "$basev" ]; then
+            read -r delta verdict <<<"$(judge_delta "$curabs" "$basev" "$THRESHOLD" "$FAIL_THRESHOLD")"
+            case $verdict in WARN) warns=$((warns + 1)) ;; FAIL) fails=$((fails + 1)) ;; new) news=$((news + 1)) ;; *) ok=$((ok + 1)) ;; esac
+            printf '  %-16s %-11s %-8s %10s %10s %10s  %s\n' "$name" "$t" "abs_${metric}" "${curabs}${unit}" "${basev}${unit}" "${delta}%" "$verdict"
+          fi
+        done
       fi
       # 产物字节数
       if [ "$ARTIFACT_THRESHOLD" -gt 0 ]; then
