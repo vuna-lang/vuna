@@ -454,7 +454,7 @@ renameExpr oldName newName e =
     EAnn value ty sp => EAnn (renameExpr oldName newName value) (renameExpr oldName newName ty) sp
     -- 模板字面量在 Elab 之前已被 Loader 降级（正常不存在）；保持结构递归，
     -- 不静默丢洞内子表达式。
-    EInterp multi parts sp => EInterp multi (renameInterpParts oldName newName parts) sp
+    EInterp parts sp => EInterp (renameInterpParts oldName newName parts) sp
 
 renameInterpParts : String -> String -> List InterpPart -> List InterpPart
 renameInterpParts oldName newName [] = []

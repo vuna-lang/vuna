@@ -140,7 +140,7 @@ expandExpr fuel scope e =
       ERecord name fields sp => Vuna.Compiler.Base.Common.bind (expandFieldExprs (fuel - 1) scope fields) (\fields2 => OkC (ERecord name fields2 sp))
       ERecUpdate base fields sp => Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) scope base) (\base2 => Vuna.Compiler.Base.Common.bind (expandFieldExprs (fuel - 1) scope fields) (\fields2 => OkC (ERecUpdate base2 fields2 sp)))
       EDo stmts sp => Vuna.Compiler.Base.Common.bind (expandDoStmts (fuel - 1) scope stmts) (\stmts2 => OkC (EDo stmts2 sp))
-      EInterp multi parts sp => Vuna.Compiler.Base.Common.bind (expandInterpParts (fuel - 1) scope parts) (\parts2 => OkC (EInterp multi parts2 sp))
+      EInterp parts sp => Vuna.Compiler.Base.Common.bind (expandInterpParts (fuel - 1) scope parts) (\parts2 => OkC (EInterp parts2 sp))
 
 -- | 表达式列表项（`ELet` 绑定 / `ECase` 分支）的宏展开。
 expandPatExprs : Int -> String -> List Binding -> Check (List Binding)

@@ -270,8 +270,8 @@ reorderNonChain t (EDo stmts sp) =
     (\ss => OkC (EDo ss sp))
 -- 模板字面量是 parser 的**保留语法**（fmt/lint/index/doc 要看原形），重排只递归洞内
 -- 表达式；降级为 `interp` 调用发生在 `Loader.Resolve`（rename 之后）。
-reorderNonChain t (EInterp multi parts sp) =
-  Vuna.Compiler.Base.Common.bind (reorderInterpParts t parts) (\ps => OkC (EInterp multi ps sp))
+reorderNonChain t (EInterp parts sp) =
+  Vuna.Compiler.Base.Common.bind (reorderInterpParts t parts) (\ps => OkC (EInterp ps sp))
 
 reorderApp : FixityTable -> Expr -> List Expr -> NodeRef -> Check Expr
 reorderApp t fn args sp =

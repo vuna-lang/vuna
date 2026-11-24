@@ -184,7 +184,7 @@ holeOk =
   case parseBody "\"\"\"\${(a + b) * c}\"\"\"" of
     Just (s, body) =>
       case body of
-        EInterp _ ((IPHole hole) :: _) _ =>
+        EInterp ((IPHole hole) :: _) _ =>
           case hole of
             EApp (EVar "*" _) ([l, r]) _ => depthOf s l == 1 && depthOf s r == 0
             _ => False

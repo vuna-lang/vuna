@@ -658,8 +658,10 @@ inlineBareCore fuel env at minPrec e =
       EStr s _ => Just (renderStr s)
       EFloat raw _ => Just raw
       -- 模板字面量。文本块转义；洞优先单行内联，洞需要块布局时放弃（交给块渲染）。
-      EInterp multi parts _ =>
-        case interpPiecesInline (fuel - 1) env at multi parts of
+      e@(EInterp parts _) =>
+        let
+          multi = interpMulti at e
+        in case interpPiecesInline (fuel - 1) env at multi parts of
           Nothing => Nothing
           Just pieces =>
             let
@@ -906,7 +908,7 @@ atomFormCore (EVar name _) = True
 atomFormCore (EInt n _) = True
 atomFormCore (EStr s _) = True
 atomFormCore (EFloat raw _) = True
-atomFormCore (EInterp multi parts _) = True
+atomFormCore (EInterp parts _) = True
 atomFormCore (EField base f _) = True
 atomFormCore (ERecord name fields _) = True
 atomFormCore (ERecUpdate base fields _) = True
@@ -1066,7 +1068,7 @@ exprDocCore fuel env at e =
       ERecord name fields _ => recordDoc (fuel - 1) env at name fields
       ERecUpdate base fields _ => recUpdateDoc (fuel - 1) env at base fields
       EDo stmts _ => appendDoc (text "do") (nest 2 (appendDoc hard (stmtsDoc (fuel - 1) env at stmts)))
-      EInterp multi parts _ => verbatim (interpText (fuel - 1) env at multi parts)
+      e@(EInterp parts _) => verbatim (interpText (fuel - 1) env at (interpMulti at e) parts)
       _ => flatDoc env at e
 
 -- | 内部：`case` 分支序列。
@@ -1496,6 +1498,10 @@ piDoc fuel env at qty implicit name dom cod =
     in group (appendDoc (text (openTxt ++ qtyPrefix qty ++ name ++ " : ")) (appendDoc (verbatim (typeText (fuel - 1) env at dom)) (appendDoc (text (closeTxt ++ " ->")) (nest 2 (appendDoc line (verbatim (typeText (fuel - 1) env at cod)))))))
 
 -- | 内部：模板字面量原文；洞优先单行，块结构按缩进 2 拼进字面量。
+-- | 模板是否 `"""` 形式：书写形态在表面形状里，按模板区间起点查。
+interpMulti : FmtCtx -> Expr -> Bool
+interpMulti at e = interpMultiOfSpan at.ctxSurface (exprSpan e)
+
 interpText : Int -> List FixityDecl -> FmtCtx -> Bool -> List InterpPart -> String
 interpText fuel env at multi parts =
   interpOpen multi parts

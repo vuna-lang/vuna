@@ -260,7 +260,7 @@ encExpr (EField base field _) acc = encTag 9 (encExpr base (encStr field acc))
 encExpr (ERecord name fields _) acc = encTag 10 (encStr name (encStrExprList fields acc))
 encExpr (ERecUpdate base fields _) acc = encTag 11 (encExpr base (encStrExprList fields acc))
 encExpr (EDo stmts _) acc = encTag 12 (encStmtList stmts acc)
-encExpr (EInterp multi parts _) acc = encTag 13 (encBool multi (encPartList parts acc))
+encExpr (EInterp parts _) acc = encTag 13 (encPartList parts acc)
 encExpr (EFloat raw _) acc = encTag 14 (encStr raw acc)
 
 -- | `Ctor` 的规范编码：data 构造子：名字 / 类型 / arity；`span` 丢弃。
@@ -538,12 +538,9 @@ decExpr fuel bytes =
               Nothing => Nothing
               Just (v1, b2) => Just (EDo v1 (detachedNodeRef noSpan), b2)
           13 =>
-            case decBool (fuel - 1) b1 of
+            case decList decInterpPart (fuel - 1) b1 of
               Nothing => Nothing
-              Just (v1, b2) =>
-                case decList decInterpPart (fuel - 1) b2 of
-                  Nothing => Nothing
-                  Just (v2, b3) => Just (EInterp v1 v2 (detachedNodeRef noSpan), b3)
+              Just (v1, b2) => Just (EInterp v1 (detachedNodeRef noSpan), b2)
           14 =>
             case decStr (fuel - 1) b1 of
               Nothing => Nothing

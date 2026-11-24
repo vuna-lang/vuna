@@ -1967,7 +1967,7 @@ exprFormName (ERecord _ _ _) = "ERecord"
 exprFormName (ERecUpdate _ _ _) = "ERecUpdate"
 exprFormName (EDo _ _) = "EDo"
 exprFormName (EAnn _ _ _) = "EAnn"
-exprFormName (EInterp _ _ _) = "EInterp"
+exprFormName (EInterp _ _) = "EInterp"
 exprFormName (EFloat _ _) = "EFloat"
 
 checkEFuelNoRow : Int -> List (String, Term) -> Ctx -> Ec -> Expr -> Value -> Check (Term, Ec)

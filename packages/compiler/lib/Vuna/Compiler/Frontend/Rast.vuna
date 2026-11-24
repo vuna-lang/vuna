@@ -76,10 +76,8 @@ export data Expr(..) : Type where
   -- 绑定到随后的 `g ... = ...` 子句），Elab 精化时据此把 where 组按签名递归提升；
   -- 普通表达式位置不产生它，Fmt 在非 where 位置把它当透明括号渲染。
   EAnn : Expr -> Expr -> Span -> Expr
-  -- 模板字符串字面量。`multi` = 是否 `"""` 形式（Fmt 用它保留书写形式；单行
-  -- 字面量保持单行转义形式）。`Loader.Resolve` 把它降级成 `Base.Trait.Interp.interp`
-  -- 调用 + `++` 链；Fmt / Lint / Index / Doc 在 parse 后处理它。
-  EInterp : Bool -> List InterpPart -> Span -> Expr
+  -- 模板字符串字面量。是否 `"""` 形式在 `Frontend.Surface`，AST 只保留语义分段。
+  EInterp : List InterpPart -> Span -> Expr
   -- `Float` 字面量：原始十进制文本（放末尾以保持既有构造子 tag 顺序）。
   EFloat : String -> Span -> Expr
 
@@ -158,7 +156,7 @@ exprSpan (ERecord name fields sp) = sp
 exprSpan (ERecUpdate base fields sp) = sp
 exprSpan (EDo stmts sp) = sp
 exprSpan (EAnn inner ty sp) = sp
-exprSpan (EInterp multi parts sp) = sp
+exprSpan (EInterp parts sp) = sp
 
 -- 节点计数与按规模派生的步数预算。
 --
@@ -201,7 +199,7 @@ exprWeight (ERecord _ fields _) = 1 + exprWeightFields fields
 exprWeight (ERecUpdate base fields _) = 1 + exprWeight base + exprWeightFields fields
 exprWeight (EDo stmts _) = 1 + doStmtWeight stmts
 exprWeight (EAnn value ty _) = 1 + exprWeight value + exprWeight ty
-exprWeight (EInterp _ parts _) = 1 + interpWeight parts
+exprWeight (EInterp parts _) = 1 + interpWeight parts
 
 exprWeightList : List Expr -> Int
 exprWeightList [] = 0
@@ -495,8 +493,7 @@ ofExpr scope e =
     Ast.EInt n sp => EInt n (Ast.nodeRefSpan sp)
     Ast.EStr s sp => EStr s (Ast.nodeRefSpan sp)
     Ast.EFloat raw sp => EFloat raw (Ast.nodeRefSpan sp)
-    Ast.EInterp multi parts sp =>
-      EInterp multi (map (ofInterpPart scope) parts) (Ast.nodeRefSpan sp)
+    Ast.EInterp parts sp => EInterp (map (ofInterpPart scope) parts) (Ast.nodeRefSpan sp)
     Ast.ELam params body sp =>
       ELam params (ofExpr (append (map firstOf params) scope) body) (Ast.nodeRefSpan sp)
     Ast.EApp fn args sp =>

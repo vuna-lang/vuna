@@ -15,8 +15,7 @@ toAstExpr (Rast.EVar n sp) = Ast.EVar (RastName.rnameKey n) (Ast.detachedNodeRef
 toAstExpr (Rast.EInt n sp) = Ast.EInt n (Ast.detachedNodeRef sp)
 toAstExpr (Rast.EStr s sp) = Ast.EStr s (Ast.detachedNodeRef sp)
 toAstExpr (Rast.EFloat raw sp) = Ast.EFloat raw (Ast.detachedNodeRef sp)
-toAstExpr (Rast.EInterp multi parts sp) =
-  Ast.EInterp multi (map toAstInterpPart parts) (Ast.detachedNodeRef sp)
+toAstExpr (Rast.EInterp parts sp) = Ast.EInterp (map toAstInterpPart parts) (Ast.detachedNodeRef sp)
 toAstExpr (Rast.ELam params body sp) = Ast.ELam params (toAstExpr body) (Ast.detachedNodeRef sp)
 toAstExpr (Rast.EApp fn args sp) =
   Ast.EApp (toAstExpr fn) (map toAstExpr args) (Ast.detachedNodeRef sp)

@@ -470,7 +470,7 @@ refsInExprGo sMod e acc =
     EStr s _ => acc
     EFloat raw _ => acc
     -- 模板字面量：洞内表达式的引用照常收集（find-references 需要）。
-    EInterp multi parts _ => refsInInterpParts sMod parts acc
+    EInterp parts _ => refsInInterpParts sMod parts acc
     ELam ps body _ => refsInExprGo sMod body acc
     EApp f args _ => refsInArgs sMod args (refsInExprGo sMod f acc)
     EPi n i _ dom cod _ => refsInExprGo sMod cod (refsInExprGo sMod dom acc)

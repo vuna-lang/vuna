@@ -511,7 +511,7 @@ startExpr fuel e =
       EInt n sp => startFromSpan (nodeRefSpan sp)
       EStr s sp => startFromSpan (nodeRefSpan sp)
       EFloat raw sp => startFromSpan (nodeRefSpan sp)
-      EInterp multi parts sp => startFromSpan (nodeRefSpan sp)
+      EInterp parts sp => startFromSpan (nodeRefSpan sp)
       ELam ps body sp => minPair (startFromSpan (nodeRefSpan sp)) (startExpr (fuel - 1) body)
       EApp fn args sp => minPair (startFromSpan (nodeRefSpan sp)) (minPair (startExpr (fuel - 1) fn) (startExprs (fuel - 1) args))
       EPi n implicit _ dom cod sp => minPair (startFromSpan (nodeRefSpan sp)) (minPair (startExpr (fuel - 1) dom) (startExpr (fuel - 1) cod))
@@ -980,7 +980,7 @@ mentionsExpr fuel name e =
       ERecUpdate base fields _ => mentionsExpr (fuel - 1) name base || mentionsFields (fuel - 1) name fields
       EDo stmts _ => mentionsStmts (fuel - 1) name stmts
       -- 模板字面量：洞内引用照常算 mention（否则 where 变量会被误报未使用）。
-      EInterp multi parts _ => mentionsInterpParts (fuel - 1) name parts
+      EInterp parts _ => mentionsInterpParts (fuel - 1) name parts
 
 -- | 内部：模板字面量各段里的引用（洞内表达式参与扫描）。
 mentionsInterpParts : Int -> String -> List InterpPart -> Bool
@@ -1770,7 +1770,7 @@ walkExprGo allow fuel src e =
       EDo stmts _ => walkStmts allow (fuel - 1) src stmts
       -- section（keep 模式下保留原形）：结构递归，不静默丢子树。
       -- 模板字面量：洞内表达式同样参与规则遍历。
-      EInterp multi parts _ => walkInterpParts allow (fuel - 1) src parts
+      EInterp parts _ => walkInterpParts allow (fuel - 1) src parts
 
 -- | 内部：应用位置的字面量归一检查（nat-literal / list-literal / pair-sugar）；闭合链只产出
 -- 一次并继续遍历元素。
@@ -2353,7 +2353,7 @@ walkTypeSyntax fuel src e =
       ERecUpdate base fields _ => append (walkTypeSyntax (fuel - 1) src base) (walkTypeSyntaxFields (fuel - 1) src fields)
       EDo stmts _ => walkTypeSyntaxStmts (fuel - 1) src stmts
       -- 模板插值洞：token 切片不可靠，跳过（见本段头注释）。
-      EInterp multi parts _ => []
+      EInterp parts _ => []
 
 -- | 内部：遍历一组表达式的类型位置语法归一。
 walkTypeSyntaxExprs : Int -> LintSrc -> List Expr -> List Finding

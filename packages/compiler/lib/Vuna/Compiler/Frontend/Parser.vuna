@@ -67,6 +67,7 @@ parseSourceDetailed file source =
                 fin.holeParens
                 (append fin.backtickShapes fin.holeBackticks)
                 (append fin.sectionShapes fin.holeSections)
+                (append fin.interpMultis fin.holeInterpMultis)
           in OkC (ParsedSource (firstOf (firstOf p)) comments toks events surface)
 
 -- | 只要 AST 与注释表的入口（复用 `parseSourceDetailed` 同一次词法）。
@@ -1876,8 +1877,8 @@ parseTemplateAtom fuel st multi parts endP =
             ps = firstOf parsed
             bits = secondOf parsed
             advanced = advance st
-            st2 = addHoleSections bits.sbSections (addHoleBackticks bits.sbBackticks (addHoleParens bits.sbParens (withLastPos endP advanced)))
-          in OkC (EInterp multi ps (detachedNodeRef (spanOf st st2)), st2)
+            st2 = addInterpMulti (posOffset (peekPos st)) multi (addHoleInterpMultis bits.sbInterps (addHoleSections bits.sbSections (addHoleBackticks bits.sbBackticks (addHoleParens bits.sbParens (withLastPos endP advanced)))))
+          in OkC (EInterp ps (detachedNodeRef (spanOf st st2)), st2)
       )
 
 -- 洞内解析交回它自己的表面形状条目（洞内 token 不在主 token 流里，主文件的派生看不到）。
@@ -1906,7 +1907,7 @@ parseTemplateHole fuel file mode fallback toks =
           subState = mkStateAt file toks pos (length toks) mode
         in case parseExpr (fuel - 1) subState 0 of
           ErrC e => ErrC (withFallbackSpan (holeSpan file pos) e)
-          OkC (e, st2) => if isEof st2 then OkC (e, SurfaceBits (append st2.holeParens (parenEntriesOf toks (eventsOf subState st2))) (append st2.holeBackticks st2.backtickShapes) (append st2.holeSections st2.sectionShapes)) else ErrC (withLabel (Label (Just (holeSpan file pos)) "" LabelPrimary Nothing) (psMsg ExpectedEndOfExpr []))
+          OkC (e, st2) => if isEof st2 then OkC (e, SurfaceBits (append st2.holeParens (parenEntriesOf toks (eventsOf subState st2))) (append st2.holeBackticks st2.backtickShapes) (append st2.holeSections st2.sectionShapes) (append st2.holeInterpMultis st2.interpMultis)) else ErrC (withLabel (Label (Just (holeSpan file pos)) "" LabelPrimary Nothing) (psMsg ExpectedEndOfExpr []))
 
 -- 插值洞的位置：洞内 token 的首位置（文件在 lexer 侧已知）。
 holeSpan : String -> Pos -> Span
@@ -2790,6 +2791,6 @@ parseSourceRecoveringTokens file mode toks =
         let
           fin = secondOf (firstOf p)
           events = eventsOf st0 fin
-          surface = surfaceOf toks events fin.holeParens (append fin.backtickShapes fin.holeBackticks) (append fin.sectionShapes fin.holeSections)
+          surface = surfaceOf toks events fin.holeParens (append fin.backtickShapes fin.holeBackticks) (append fin.sectionShapes fin.holeSections) (append fin.interpMultis fin.holeInterpMultis)
         in OkC ((firstOf (firstOf p), surface), secondOf p)
     )

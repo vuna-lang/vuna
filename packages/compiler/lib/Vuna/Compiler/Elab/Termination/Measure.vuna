@@ -309,7 +309,7 @@ fwExpr fwds (EDo stmts sp) = EDo (fwStmts fwds stmts) sp
 fwExpr fwds (EPi n implicit qty dom cod sp) =
   EPi n implicit qty (fwExpr fwds dom) (fwExpr fwds cod) sp
 fwExpr fwds (EAnn value ty sp) = EAnn (fwExpr fwds value) (fwExpr fwds ty) sp
-fwExpr fwds (EInterp multi parts sp) = EInterp multi (fwParts fwds parts) sp
+fwExpr fwds (EInterp parts sp) = EInterp (fwParts fwds parts) sp
 fwExpr fwds e = e
 
 fwDecl : List Forwarder -> Decl -> Decl

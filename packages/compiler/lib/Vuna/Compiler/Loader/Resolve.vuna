@@ -1026,7 +1026,7 @@ resolveExprRaw fuel modules label prefix ns imports scope expr =
       EFloat raw sp => OkC (EFloat raw sp)
       -- 模板字面量在 rename 之后降级为纯表达式（文本块 → `EStr`，洞 → `interp e`），
       -- 于是 Elab / codegen 永远看不到 `EInterp`；fmt / lint / index / doc 只做 parse，仍看原形。
-      EInterp multi parts sp => Vuna.Compiler.Base.Common.bind (resolveInterpParts (fuel - 1) modules label prefix ns imports scope parts) (\ps => OkC (lowerTemplate sp ps))
+      EInterp parts sp => Vuna.Compiler.Base.Common.bind (resolveInterpParts (fuel - 1) modules label prefix ns imports scope parts) (\ps => OkC (lowerTemplate sp ps))
       ELam params body sp => Vuna.Compiler.Base.Common.bind (onErrDiag (withFallbackSpan (nodeRefSpan sp)) (Vuna.Compiler.Base.Common.traverse (checkBinder label) (map firstOf params))) (\_ => Vuna.Compiler.Base.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports (append (map firstOf params) scope) body) (\b => OkC (ELam params b sp)))
       EApp fn args sp => Vuna.Compiler.Base.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope fn) (\fn2 => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (\a => resolveExpr (fuel - 1) modules label prefix ns imports scope a) args) (\args2 => OkC (EApp fn2 args2 sp)))
       -- `EPi` 只做**结构递归解析**，不在这里判定「是否允许」：依赖类型是 DT 的核心语法，

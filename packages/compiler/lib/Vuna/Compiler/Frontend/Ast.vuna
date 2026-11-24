@@ -152,13 +152,14 @@ export data Expr(..) : Type where
   -- （`Frontend.Surface`：括号层数、链步是否反引号、section 是 op 值 / 左 / 右）。parser 把
   -- `a op b` 降级成普通应用 `EApp (EVar op) [a, b]`，section 降级成 `EVar` / 单 binder λ；
   -- `Loader.Fixity` 按 fixity 表重排并折叠 section 应用，Fmt 按表面形状还原书写。
-  -- 模板字符串字面量。`multi` = 是否 `"""` 形式（Fmt 用它保留书写形式；单行
-  -- 字面量保持单行转义形式）。`Loader.Resolve` 把它降级成 `Base.Trait.Interp.interp`
-  -- 调用 + `++` 链；Fmt / Lint / Index / Doc 在 parse 后处理它。
+  -- 模板字符串字面量。是否 `"""` 形式是书写形态，记在 `Frontend.Surface` 的
+  -- `surfaceInterps`（按模板区间起点字节偏移）；AST 只保留语义分段。
+  -- `Loader.Resolve` 把它降级成 `Base.Trait.Interp.interp` 调用 + `++` 链；
+  -- Fmt / Lint / Index / Doc 在 parse 后处理它。
   --
   -- `(e : T)` 不在这里：parser 保持 `@vuna@ascribe` 应用，解析后由 `Rast.ofExpr`
   -- 合成 `Rast.EAnn`；绑定项的签名行走 `Binding.bindSig`。
-  EInterp : Bool -> List InterpPart -> NodeRef -> Expr
+  EInterp : List InterpPart -> NodeRef -> Expr
   -- `Float` 字面量：原始十进制文本（放末尾以保持既有构造子 tag 顺序）。
   EFloat : String -> NodeRef -> Expr
 
@@ -390,7 +391,7 @@ withExprRef r (EField base f _) = EField base f r
 withExprRef r (ERecord name fields _) = ERecord name fields r
 withExprRef r (ERecUpdate base fields _) = ERecUpdate base fields r
 withExprRef r (EDo stmts _) = EDo stmts r
-withExprRef r (EInterp multi parts _) = EInterp multi parts r
+withExprRef r (EInterp parts _) = EInterp parts r
 
 -- | 表达式的节点身份 + 区间（与树节点同源）。
 export exprRef : Expr -> NodeRef
@@ -408,7 +409,7 @@ exprRef (EField base f r) = r
 exprRef (ERecord name fields r) = r
 exprRef (ERecUpdate base fields r) = r
 exprRef (EDo stmts r) = r
-exprRef (EInterp multi parts r) = r
+exprRef (EInterp parts r) = r
 
 export doStmtSpan : DoStmt -> Span
 doStmtSpan (DBind pat expr r) = nodeRefSpan r

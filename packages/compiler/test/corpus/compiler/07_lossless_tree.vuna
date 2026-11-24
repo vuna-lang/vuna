@@ -227,7 +227,7 @@ exprSitesAt fuel e =
           EInt n r => []
           EStr s r => []
           EFloat raw r => []
-          EInterp multi parts r => concatMap (interpSites (fuel - 1)) parts
+          EInterp parts r => concatMap (interpSites (fuel - 1)) parts
           ELam ps body r => exprSitesAt (fuel - 1) body
           EApp fn args r => append (exprSitesAt (fuel - 1) fn) (concatMap (exprSitesAt (fuel - 1)) args)
           EPi n i q dom cod r => append (exprSitesAt (fuel - 1) dom) (exprSitesAt (fuel - 1) cod)
@@ -450,7 +450,7 @@ bodyPatRefs e =
     EInt n _ => []
     EStr s _ => []
     EVar n _ => []
-    EInterp multi parts _ => []
+    EInterp parts _ => []
 
 -- | 一条绑定 / 一个分支贡献的 pat 引用（分支体 / 绑定值继续递归）。
 bindingPatRefs : Binding -> List NodeRef

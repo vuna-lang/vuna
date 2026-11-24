@@ -1304,7 +1304,7 @@ exprRefNamesGo (EField base fname _) acc = exprRefNamesGo base acc
 exprRefNamesGo (ERecord name fields _) acc = fieldExprsGo fields ((::) name acc)
 exprRefNamesGo (ERecUpdate base fields _) acc = exprRefNamesGo base (fieldExprsGo fields acc)
 exprRefNamesGo (EDo stmts _) acc = doStmtRefNamesListGo stmts acc
-exprRefNamesGo (EInterp multi parts _) acc = interpPartRefNamesListGo parts acc
+exprRefNamesGo (EInterp parts _) acc = interpPartRefNamesListGo parts acc
 
 exprRefNamesListGo : List Expr -> List String -> List String
 exprRefNamesListGo [] acc = acc

@@ -125,9 +125,10 @@ packages/compiler/lib/Vuna/Compiler/   （目录即层：层名 = 模块前缀�
 （`->` 由 `syntaxFixityDecls` 恒可见；未知符号运算符报错）；fmt / LSP / lint 用
 `fixitiesForSource(In)` 取程序级闭包。详见 [operators.md](reference/operators.md)。
 
-**模板字符串**：lexer 产出 `TTmpl`（洞内 token 原位保留），parser 组成 `EInterp`；
-`Loader.Resolve` 在名字解析后**降级**成 `Base.Trait.Interp.interp` 调用 + `++` 链（纯语法糖，
-Elab/codegen 看不到模板）。fmt/lint/index/doc 只 parse，仍按 `EInterp` 处理。详见
+**模板字符串**：lexer 产出 `TTmpl`（洞内 token 原位保留），parser 组成 `EInterp`；`"""` 写法
+记在 `Frontend.Surface.surfaceInterps`，AST 只保留语义分段。`Loader.Resolve` 在名字解析后
+**降级**成 `Base.Trait.Interp.interp` 调用 + `++` 链（纯语法糖，Elab/codegen 看不到模板）。
+fmt/lint/index/doc 只 parse，仍按 `EInterp` 处理。详见
 [templates.md](reference/templates.md)。
 
 **擦除 / 合一 / 定义形式**：擦除只有单一判据链（`Elab.Meta.isTypeDomain` →
