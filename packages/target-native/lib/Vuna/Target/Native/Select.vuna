@@ -13,6 +13,7 @@ module Vuna.Target.Native.Select where
 import Base.Data.Bool as Bool
 import Base.Data.Int as Int
 import Base.Data.List as List
+import Base.Container.HashMap as HashMap
 import Base.Data.Maybe as Maybe
 import Base.Data.Pair as Pair
 import Vuna.Target.Native.Abi
@@ -366,17 +367,14 @@ isCalleeSaved r = sameReg r Rbx || sameReg r R12 || sameReg r R13 || sameReg r R
 -- | 删掉 `jmp` / `ret` / `jmp reg` 之后、下一个被引用标签之前的指令。
 --   未被引用的标签本身也可以删；它们只可能是不可达尾部的 fallthrough。
 dropUnreachable : List Instr -> List Instr
-dropUnreachable instrs =
-  let
-    targets = jumpTargets instrs
-  in dropUnreachableGo False targets instrs
+dropUnreachable instrs = dropUnreachableGo False (jumpTargets instrs) instrs
 
-dropUnreachableGo : Bool -> List String -> List Instr -> List Instr
+dropUnreachableGo : Bool -> HashMap String Bool -> List Instr -> List Instr
 dropUnreachableGo _ _ [] = []
 dropUnreachableGo dead targets (i :: rest) =
   case i of
     ILabel l =>
-      if dead && not (memStr l targets) then
+      if dead && not (HashMap.member l targets) then
         dropUnreachableGo True targets rest
       else
         i :: dropUnreachableGo False targets rest
@@ -391,19 +389,17 @@ dropUnreachableGo dead targets (i :: rest) =
           IRet => i :: dropUnreachableGo True targets rest
           _ => i :: dropUnreachableGo False targets rest
 
-jumpTargets : List Instr -> List String
-jumpTargets [] = []
-jumpTargets (i :: rest) =
-  case i of
-    IJmp l => if memStr l (jumpTargets rest) then jumpTargets rest else l :: jumpTargets rest
-    IJcc _ l => if memStr l (jumpTargets rest) then jumpTargets rest else l :: jumpTargets rest
-    ILea _ l => if memStr l (jumpTargets rest) then jumpTargets rest else l :: jumpTargets rest
-    IQuadLabel l => if memStr l (jumpTargets rest) then jumpTargets rest else l :: jumpTargets rest
-    _ => jumpTargets rest
+-- | 被引用的标签集合（`jmp` / `jcc` / `lea` / 跳转表项）。单趟左折建表：
+--   逐项「先算子结果、再判重、再取一次子结果」会把每层算两遍，标签一多就指数增长。
+jumpTargets : List Instr -> HashMap String Bool
+jumpTargets instrs = foldl (\acc, i => addJumpTarget i acc) (HashMap.ofNames []) instrs
 
-memStr : String -> List String -> Bool
-memStr _ [] = False
-memStr s (x :: rest) = s == x || memStr s rest
+addJumpTarget : Instr -> HashMap String Bool -> HashMap String Bool
+addJumpTarget (IJmp l) acc = HashMap.insert l True acc
+addJumpTarget (IJcc _ l) acc = HashMap.insert l True acc
+addJumpTarget (ILea _ l) acc = HashMap.insert l True acc
+addJumpTarget (IQuadLabel l) acc = HashMap.insert l True acc
+addJumpTarget _ acc = acc
 
 immFits32 : Int -> Bool
 immFits32 n = n >= 0 - 2147483648 && n <= 2147483647
