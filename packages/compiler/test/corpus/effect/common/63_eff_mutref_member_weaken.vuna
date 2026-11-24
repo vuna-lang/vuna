@@ -1,0 +1,22 @@
+-- Member 弱化：在 withMutRef 的作用域里继续使用外层行里的 console 效应。
+import Base.Effect.Core
+import Base.Effect.Types
+import Base.Effect.MutRef as MutRef
+import Base.Effect.Console as EffConsole
+import Base.Trait.Monad
+
+say : Member nConsole ConsoleOp r => String -> Eff r Int
+say s = fmap natToInt (consolePrint s)
+
+prog : Member nConsole ConsoleOp r => Eff r Int
+prog =
+  MutRef.withMutRef "n" 0 (
+      do
+        _ <- MutRef.write 41
+        x <- MutRef.read
+        _ <- say (strFromInt (x + 1) ++ "\n")
+        pure (x + 1)
+    )
+
+main : Eff [ConsoleOp] Int
+main = prog

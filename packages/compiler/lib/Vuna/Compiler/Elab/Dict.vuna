@@ -657,7 +657,15 @@ resolveRowGoalsCtxGo globals ctx sp ((c@(Constraint cid kind m dom cspan cdepth)
               case solveRowMeta ec2 (ctxDepth ctx) m (eval (ctxEnv ctx) proofTerm) of
                 OkC ec3 => resolveRowGoalsCtxGo globals ctx sp rest ec3 kept
                 ErrC e => ErrC e
-            Nothing => tcErr1 sp (NoInstanceFound "row membership") "row membership"
+            Nothing =>
+              case ctxMemberWeaken ctx ec dom of
+                -- 行弱化：目标行是某条假设的行前面套了若干条目（handler / 作用域引入的条目），
+                -- 从假设补 `There` 证明。
+                Just (proofTerm, ec2) =>
+                  case solveRowMeta ec2 (ctxDepth ctx) m (eval (ctxEnv ctx) proofTerm) of
+                    OkC ec3 => resolveRowGoalsCtxGo globals ctx sp rest ec3 kept
+                    ErrC e => ErrC e
+                Nothing => tcErr1 sp (NoInstanceFound "row membership") "row membership"
     False =>
       case dictClassArgs ec dom of
         [] => resolveRowGoalsCtxGo globals ctx sp rest ec (c :: kept)
@@ -1391,3 +1399,57 @@ firstUnsolvedDictGoalMetaGo ec ((Constraint cid kind m dom cspan cdepth) :: rest
       else if anyUnsolvedMetaArg ec (dictClassArgs ec forced) then
         firstUnsolvedDictGoalMetaGo ec rest
       else if isRigidDictArg ec forced then firstUnsolvedDictGoalMetaGo ec rest else Just m
+
+-- ---------------------------------------------------------------
+-- 行弱化（Member 的 There 补证）
+-- ---------------------------------------------------------------
+-- | 目标 `Member e rGoal` 的行是某条上下文假设的行 `r0` 前面套了若干条目时，
+-- 从假设 `Member e r0` 出发补 `There`，得到更强的行上的证明。
+--
+-- 这是 `Member` 的结构性质：`There : Member e r -> Member e (x :: r)`。没有它，
+-- 任何「给行加条目的作用域」（handler、`withMutRef`、`weaken`）内部都会失去外层
+-- 效应的证明。
+export ctxMemberWeaken : Ctx -> Ec -> Value -> Maybe (Term, Ec)
+ctxMemberWeaken ctx ec dom = ctxMemberWeakenGo ctx ctx.ctxItems 0 ec dom
+
+ctxMemberWeakenGo : Ctx -> List (String, Term) -> Int -> Ec -> Value -> Maybe (Term, Ec)
+ctxMemberWeakenGo ctx [] _ _ _ = Nothing
+ctxMemberWeakenGo ctx ((name, ty) :: rest) idx ec dom =
+  let
+    -- 同 `ctxMemberProofUnifyGo`：`ty` 在更老的上下文里合法，用 rest 建环境求值。
+    olderDepth = length rest
+    tyVal = eval (map (refineValue ctx.ctxRefVals defaultFuel) (ctxEnvAt rest 0 olderDepth)) ty
+  in case memberSpine dom of
+    Nothing => Nothing
+    Just (eGoal, rGoal) =>
+      case memberSpine tyVal of
+        Nothing => ctxMemberWeakenGo ctx rest (idx + 1) ec dom
+        Just (eAssump, rAssump) =>
+          case convEc ec (ctxDepth ctx) eGoal eAssump of
+            ErrC _ => ctxMemberWeakenGo ctx rest (idx + 1) ec dom
+            OkC ec1 =>
+              case memberWeakenProof 64 ec1 (ctxDepth ctx) eGoal rGoal rAssump (VNeutral (NVar name idx [])) of
+                Nothing => ctxMemberWeakenGo ctx rest (idx + 1) ec dom
+                Just (proofVal, ec2) => Just (quote (ctxDepth ctx) proofVal, ec2)
+
+-- | 从 `acc : Member e rAssump` 构造 `Member e rGoal`（`rGoal` = 若干条目 :: `rAssump`）。
+memberWeakenProof : Int -> Ec -> Int -> Value -> Value -> Value -> Value -> Maybe (Value, Ec)
+memberWeakenProof fuel ec depth eGoal rGoal rAssump acc =
+  if fuel <= 0 then
+    Nothing
+  else
+    case convEc ec depth rGoal rAssump of
+      OkC ec1 => Just (acc, ec1)
+      ErrC _ =>
+        case forceVal ec rGoal of
+          VCon c args =>
+            if c == effRowConsCtor then
+              case args of
+                x :: tail :: _ =>
+                  case memberWeakenProof (fuel - 1) ec depth eGoal tail rAssump acc of
+                    Just (p, ec1) => Just (ctorValue ec1 thereCtorName [eGoal, x, tail, p], ec1)
+                    Nothing => Nothing
+                _ => Nothing
+            else
+              Nothing
+          _ => Nothing
