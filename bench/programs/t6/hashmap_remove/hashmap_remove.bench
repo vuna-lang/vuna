@@ -1,0 +1,3 @@
+ops=60000
+n=20000
+cc_flags=-fwrapv
