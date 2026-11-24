@@ -64,7 +64,6 @@ modules = [
   "Base.Effect.Pure.Reader",
   "Base.Effect.Pure.State",
   "Base.Effect.Reader",
-  "Base.Effect.Ref",
   "Base.Effect.State",
   "Base.Effect.Stdin",
   "Base.Effect.Types",

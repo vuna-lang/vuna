@@ -11,7 +11,6 @@ export module Base.Effect.State as State
 export module Base.Effect.Reader as Reader
 export module Base.Effect.Error as Error
 export module Base.Effect.Exn as Exn
-export module Base.Effect.Ref as Ref
 export module Base.Effect.MutArray as MutArray
 export module Base.Effect.MutBuffer as MutBuffer
 export module Base.Effect.MutRef as MutRef

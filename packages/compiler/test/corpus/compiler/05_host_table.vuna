@@ -77,12 +77,10 @@ main =
     + bit (preinstallResolves "Base.Effect.Fs.FsOp")
     + bit (preinstallResolves "Base.Effect.Process.ProcessOp")
     + bit (preinstallResolves "Base.Effect.Net.NetOp")
-    + bit (preinstallResolves "Base.Effect.Ref.RefOp")
     + bit
       (I.builtinEffectImplOf "Base.Effect.Console.ConsoleOp" == "Base.Effect.Console.runConsoleHost")
     + bit (I.builtinEffectErrorRunHostOf "Base.Effect.Fs.FsOp" == "Base.Effect.Fs.runFsErrorHost")
     + bit (I.builtinEffectErrorRunHostOf "Base.Effect.Console.ConsoleOp" == "")
-    + bit (I.builtinEffectImplOf "Base.Effect.Ref.RefOp" == "")
     + bit (I.isSendCoreName I.effSendCoreName)
     + bit (I.isSendCoreName I.effSendCoreIdName)
     + bit (not (I.isSendCoreName "Base.Effect.Core.send"))

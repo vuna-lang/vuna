@@ -59,7 +59,7 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
   `Eff []` 只用于确需空行的动作，`main` 写具体行字面量（`Eff [FsOp, ConsoleOp, …] Int`）。
   `forkTask` 行泛化、任务体 `runEff` 执行（Sched 仍是 `Eff []`）。`Base.Effect.Types` 只重导出
   类型面（`Eff` / `Row` / `Named` / `Member` / `EffUnit`，不含 `Row(..)` 构造子），避开与
-  `List` 的 `(::)` 重载；`Base.Effect.Pure.IORef` 是行多态的本地可变存储（调用方不需要 `RefOp`）。
+  `List` 的 `(::)` 重载；`Base.Effect.Pure.IORef` 是行多态的本地可变存储（调用方不需要额外的行约束）。
 - **宿主原语**：`@vuna@prim_eff_*`（隐藏，`visible = False` + Lexer 的 `@vuna@` 内部名规则，
   源码写不出可见名），eff-boundary 守卫检查「可见宿主原语名不得出现在源码」。
 

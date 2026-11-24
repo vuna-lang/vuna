@@ -409,7 +409,7 @@ WASI preview1，宿主侧逐函数实现。下表的「允许」指浏览器平�
 | 纯计算、WasmGC 值、结构化比较 | 支持 | — |
 | `Eff` 的 handler | 全部走显式效应机器（`@ir@m@*`），宿主家族与用户/作用域 handler 同一套帧 | 产物默认引擎可跑；`bracket`/`finally` 的 cleanup 由机器弹帧前按深度执行 |
 | `FsOp` 核心（经 `@vuna@host@try*` + fd 3 preopen） | 支持 | 需 preopen + mutate 权限；失败经 errno 走 `FsOp` 错误通道 |
-| `ConsoleOp` / `ExitOp` / `ArgsOp` / `EnvOp` / `RefOp` | 支持 | `getcwd` 恒 `/`、`execPath` 空串、`isTty` 恒 `False` |
+| `ConsoleOp` / `ExitOp` / `ArgsOp` / `EnvOp` | 支持 | `getcwd` 恒 `/`、`execPath` 空串、`isTty` 恒 `False` |
 | `ClockOp.Now` | 支持 | monotonic clock |
 | `ClockOp.SleepMicros` | 不支持 | 运行期 trap（浏览器不能阻塞事件循环） |
 | `ProcessOp` | 部分 | `Args` / `Exit` 可用；`Spawn` / `Wait` / `RunIn` trap；家族告警 |

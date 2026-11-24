@@ -1,6 +1,6 @@
 -- | 可变引用：内建类型构造子 `IORef`，OCaml 表示 `'a ref`。
 --
--- 本地可变存储位于 `Eff []` 内（后台机制，**不是**行效应）：操作都只是对宿主原语的 `raise`（`modifyRef` 由 `readRef` + `writeRef` 组合），对任意行都可行，因此既能用在纯 `Eff []`，也能出现在 `Eff r` 动作里而不必给调用方加 `RefOp` 约束。
+-- 本地可变存储位于 `Eff []` 内（后台机制，**不是**行效应）：操作都只是对宿主原语的 `raise`（`modifyRef` 由 `readRef` + `writeRef` 组合），对任意行都可行，因此既能用在纯 `Eff []`，也能出现在 `Eff r` 动作里而不必给调用方加行约束。
 module Base.Effect.Pure.IORef where
 
 import Base.Effect.Types
