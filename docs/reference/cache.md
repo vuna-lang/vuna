@@ -148,8 +148,9 @@ import 链的传递单元 key + `pr0|pr1`。闭包扫描已经算好 `cmAddr`，
 **不落盘**（对象库准入规则：中间表示不建域）；只把 IR 的**内容哈希**编进产物键：
 
 - `objects/target-out/<键>`：插件写出的文件表（名 → 内容）+ 诊断编码。键 =
-  `irHash + target + 后端二进制身份 + print`。后端身份取插件文件的 size+mtime
-  （nix store 不可变；开发重建会换 mtime），因此换插件不会复用旧产物；
+  `irHash + target + 后端二进制身份 + print`。后端身份取插件文件的**内容摘要**
+  （store 里 mtime 被归一化、size 又区分不了同尺寸重建；开发重建会换内容）；
+  `VUNA_TARGET_BACKEND_TAG` 非空时直接用它钉住身份（测试 / 排障不碰二进制）。
   `targetOutCodec`（`target-out 1`）是手工 schema 版本，编码语义变化时 bump。
 
 命中时**不启动插件**：解码文件表后按原布局写回 `outDir`（含子目录），诊断（如 wasm 的

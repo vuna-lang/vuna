@@ -2,6 +2,7 @@
 #
 # 第一次构建 miss（起插件），同 store 同目标第二次 hit（不启动插件，只物化文件）；
 # 换目标必须 miss（键里有 target）；hit 的产物与冷构建逐字节一致。
+# 后端身份按插件内容摘要算（不是 size+mtime），`VUNA_TARGET_BACKEND_TAG` 可钉住身份。
 
 run: sh -c 'd="$TMPDIR/tc/min"; mkdir -p "$d/app"; printf "[package]\nname = \"tcmin\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Int\nmain = 42\n" > "$d/app/Main.vuna"'
 exit: 0
@@ -23,3 +24,11 @@ run: sh -c 'VUNA_STORE="$TMPDIR/tc/store" VUNA_LOG=debug "$VUNA" build --target 
 out-contains: target-cache=miss
 run: sh -c 'VUNA_STORE="$TMPDIR/tc/store" VUNA_LOG=debug "$VUNA" build --target native --no-compile --out "$TMPDIR/tc/outn" "$TMPDIR/tc/min" 2>&1'
 out-contains: target-cache=hit
+
+# 111f) 后端身份可钉住：同一插件换身份必须 miss，同身份再跑 hit。
+run: sh -c 'VUNA_STORE="$TMPDIR/tc/store" VUNA_TARGET_BACKEND_TAG=probe-a VUNA_LOG=debug "$VUNA" build --target native --no-compile --out "$TMPDIR/tc/outt" "$TMPDIR/tc/min" 2>&1'
+out-contains: target-cache=miss
+run: sh -c 'VUNA_STORE="$TMPDIR/tc/store" VUNA_TARGET_BACKEND_TAG=probe-a VUNA_LOG=debug "$VUNA" build --target native --no-compile --out "$TMPDIR/tc/outt" "$TMPDIR/tc/min" 2>&1'
+out-contains: target-cache=hit
+run: sh -c 'VUNA_STORE="$TMPDIR/tc/store" VUNA_TARGET_BACKEND_TAG=probe-b VUNA_LOG=debug "$VUNA" build --target native --no-compile --out "$TMPDIR/tc/outt" "$TMPDIR/tc/min" 2>&1'
+out-contains: target-cache=miss

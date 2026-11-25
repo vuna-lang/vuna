@@ -6,8 +6,8 @@
 --                                                 → 产物文件表 + 诊断
 --
 -- 后端产物缓存命中时**不启动插件进程**：把存下的文件表写回 `outDir` 即可。键里带
--- 后端二进制的 stat 身份（nix store 不可变；开发重建会换 mtime），插件换了就不会复用
--- 旧产物；`targetOutCodec` 是手工 schema 版本，编码语义变化时 bump。
+-- 后端二进制的内容摘要（插件换内容就换身份；`VUNA_TARGET_BACKEND_TAG` 可钉住身份）；
+-- `targetOutCodec` 是手工 schema 版本，编码语义变化时 bump。
 --
 -- 边界：本模块不知道任何具体后端，只做「IR 字节 ↔ 文件表」的落盘与物化。
 module Vuna.Compiler.Driver.TargetCache where
@@ -41,21 +41,27 @@ targetOutKind = "target-out"
 export irHashOf : String -> String
 irHashOf irText = Hash.contentAddress irText
 
--- | 后端二进制身份（size + mtime）：nix store 不可变，开发重建会换 mtime。
-export backendVersionEff : Member nFs FsOp r => String -> Eff r String
+-- | 后端二进制身份：**内容摘要**。store 里 mtime 被归一化，size 又区分不了同尺寸重建，
+-- 所以按文件内容算身份；`VUNA_TARGET_BACKEND_TAG` 非空时直接用它（测试 / 排障固定身份，
+-- 不碰二进制）。
+--
+-- 代价：每次 `compileBackend` 读一遍插件并做一次内容地址（几 MB 的静态二进制在毫秒量级），
+-- 远小于未命中时起插件跑一遍的成本。
+export backendVersionEff : Member nFs FsOp r, Member nEnv EnvOp r => String -> Eff r String
 backendVersionEff bin =
   do
-    size <- fsFileSize bin
-    mt <- fsFileMtime bin
-    pure "${sizePart size}-${mtPart mt}"
-
-sizePart : Maybe Nat -> String
-sizePart (Just n) = strFromInt (natToInt n)
-sizePart Nothing = "0"
-
-mtPart : Maybe Int -> String
-mtPart (Just t) = strFromInt t
-mtPart Nothing = "0"
+    tag <- envGetEnv "VUNA_TARGET_BACKEND_TAG"
+    if tag /= "" then
+      pure "env:${tag}"
+    else
+      do
+        exists <- fsFileExists bin
+        if exists then
+          do
+            bytes <- fsReadFile bin
+            pure "sha:${Hash.contentAddress bytes}"
+        else
+          pure "missing"
 
 -- | 产物缓存的键：IR 内容 + 目标 + 后端身份 + 输出模式。
 export outputsKeyOf : String -> String -> String -> Bool -> String
