@@ -79,6 +79,7 @@ renderTyIntrinsicWith render "Array" ([a]) = Just (IrTyArray (render a))
 renderTyIntrinsicWith render "IORef" ([a]) = Just (IrTyRef (render a))
 renderTyIntrinsicWith render "@vuna@Cell" ([a]) = Just (IrTyRef (render a))
 renderTyIntrinsicWith render "@vuna@MArray" ([a]) = Just (IrTyArray (render a))
+renderTyIntrinsicWith render "@vuna@MDynArray" ([a]) = Just (IrTyRef IrTyOpaque)
 renderTyIntrinsicWith render "@vuna@MBuffer" [] = Just (IrTyRef IrTyOpaque)
 renderTyIntrinsicWith render _ _ = Nothing
 
@@ -331,6 +332,10 @@ annotHeadTy fuel dflt env binders g args =
         case annotTyOfFuel (fuel - 1) dflt env binders a of
           Nothing => Nothing
           Just t => Just (IrTyArray t)
+      _ => dflt
+  else if g == "@vuna@MDynArray" then
+    case args of
+      [a] => Just (IrTyRef IrTyOpaque)
       _ => dflt
   else if g == "@vuna@MBuffer" then
     case args of

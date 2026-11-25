@@ -1,0 +1,9 @@
+-- MutDynArray：闭包把 push 捕获进 `Eff []` 行时，容器条目的 `Member` 约束不成立（逃逸被拒）。
+import Base.Effect.MutDynArray as MutDynArray
+import Base.Effect.Core as Eff
+import Base.Effect.Types
+import Base.Trait.Monad
+import Base.Data.Unit
+
+leak : Unit -> Eff [] Unit
+leak = MutDynArray.withMutDynArrayPure "x" (pure (\_ => MutDynArray.push@x 1))

@@ -1,0 +1,38 @@
+-- MutDynArray：push 原地追加（容量按倍数增长）、get/set/size/clear。
+import Base.Effect.MutDynArray as MutDynArray
+import Base.Effect.Core as Eff
+import Base.Data.Nat
+
+main : Int
+main =
+  MutDynArray.withMutDynArrayPure "xs" (
+      do
+        MutDynArray.push 1
+        MutDynArray.push 2
+        MutDynArray.push 3
+        MutDynArray.push 4
+        MutDynArray.push 5
+        MutDynArray.push 6
+        MutDynArray.push 7
+        MutDynArray.push 8
+        MutDynArray.push 9
+        MutDynArray.push 10
+        MutDynArray.push 11
+        MutDynArray.push 12
+        MutDynArray.push 13
+        MutDynArray.push 14
+        MutDynArray.push 15
+        MutDynArray.push 16
+        MutDynArray.push 17
+        MutDynArray.push 18
+        MutDynArray.push 19
+        MutDynArray.push 20
+        n <- MutDynArray.size
+        a <- MutDynArray.get 0
+        b <- MutDynArray.get 19
+        MutDynArray.set 0 100
+        c <- MutDynArray.get 0
+        MutDynArray.clear
+        m <- MutDynArray.size
+        pure (c * 1000 + a * 100 + b + natToInt (n + m) * 10000)
+    )

@@ -1,7 +1,7 @@
--- | 命名可变家族的编译期部分（`Base.Effect.MutRef` / `MutArray` / `MutVec` / `MutBuffer`）：
+-- | 命名可变家族的编译期部分（`Base.Effect.MutRef` / `MutArray` / `MutVec` / `MutDynArray` / `MutBuffer`）：
 -- 名字常量、签名里的隐藏句柄参数合成、用户面声明到内部入口的改写。
 --
--- 四个家族的机制完全相同（名字 → 编译期句柄绑定、跨函数合成隐藏参数、逃逸靠 `Member`
+-- 五个家族的机制完全相同（名字 → 编译期句柄绑定、跨函数合成隐藏参数、逃逸靠 `Member`
 -- 约束），差别只在「族头 / 句柄类型 / 操作表 / 引入入口」——这些差异由 `mutFamilies`
 -- 一张表描述，本模块其余函数都按表工作。
 --
@@ -37,7 +37,7 @@ export record MutFamily(..) where
   mutFamHandleArity : Int
   -- | 行条目实参里哪一项是句柄载荷（`MutArrayOp a i` = 0；`MutVecOp n a i` = 1）。
   mutFamPayloadIndex : Int
-  -- | 编译期句柄 binder 前缀（`@vuna@cell@` / `@vuna@marr@` / `@vuna@mvec@` / `@vuna@mbuf@`）。
+  -- | 编译期句柄 binder 前缀（`@vuna@cell@` / `@vuna@marr@` / `@vuna@mvec@` / `@vuna@mdyn@` / `@vuna@mbuf@`）。
   mutFamBinderPrefix : String
   -- | 用户面引入入口（作用域版 / 纯端点）。
   mutFamWith : String
@@ -95,6 +95,20 @@ mutFamilies =
       "mvecWithPure"
       1
       [MutOp "Base.Effect.MutVec.get" "mvecGetOp" 1, MutOp "Base.Effect.MutVec.set" "mvecSetOp" 2, MutOp "Base.Effect.MutVec.size" "mvecLenOp" 0],
+    MutFamily
+      "Base.Effect.MutDynArray"
+      "mutable dynamic array"
+      "Base.Effect.MutDynArray.MutDynArrayOp"
+      "@vuna@MDynArray"
+      1
+      0
+      "@vuna@mdyn@"
+      "Base.Effect.MutDynArray.withMutDynArray"
+      "Base.Effect.MutDynArray.withMutDynArrayPure"
+      "dynWith"
+      "dynWithPure"
+      0
+      [MutOp "Base.Effect.MutDynArray.get" "dynGetOp" 1, MutOp "Base.Effect.MutDynArray.set" "dynSetOp" 2, MutOp "Base.Effect.MutDynArray.push" "dynPushOp" 1, MutOp "Base.Effect.MutDynArray.size" "dynLenOp" 0, MutOp "Base.Effect.MutDynArray.clear" "dynClearOp" 0],
     MutFamily
       "Base.Effect.MutBuffer"
       "mutable buffer"

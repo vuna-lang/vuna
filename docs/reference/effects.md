@@ -493,7 +493,7 @@ withMutArrayPure : (n : String) -> Nat -> a -> Eff [Named n (MutArrayOp a)] b ->
   （三端都不复制；native 写后登记写屏障）。
 - 越界是宿主 trap（与 `arrayGet` 一致）；`size` 是容量 = 长度。
 - 需要「容量 + 逻辑长度」时，用 `MutArray` + 一个 `MutRef` 计数器组合；类型层定长用
-  `MutVec n a`（`Fin n` 索引，见 §8.11）；可增长元素容器（`MutDynArray a`）仍是后续，
+  `MutVec n a`（`Fin n` 索引，见 §8.11）；可增长元素容器用 `MutDynArray a`（§8.12），
   见 [debt.md](debt.md)。
 
 夹具：`effect/common/63..65`（原地读写、双数组 `@` + 跨函数、多态 helper），
@@ -585,6 +585,49 @@ withMutVecPure : (name : String) -> Vec n a -> Eff [Named name (MutVecOp n a)] b
 
 夹具：`effect/common/68..70`（基本读写、双向量 `@` + 跨函数、多态 helper），
 负例 `dt_err/127..130`。
+
+### 8.12 可变长元素容器：`Base.Effect.MutDynArray`
+
+`MutDynArray a` 是**运行时变长**的元素容器：`push` 原地追加，容量不足时按倍数增长；
+下标是 `Nat`，越界是宿主 trap；`size` 是已用长度。与 `MutVec` 的区别是长度不在类型层。
+
+```vuna
+main : Int
+main =
+  MutDynArray.withMutDynArrayPure "xs" (
+      do
+        MutDynArray.push 1
+        MutDynArray.push 2
+        n <- MutDynArray.size          -- 2
+        a <- MutDynArray.get 0         -- 1
+        pure (a * 10 + natToInt n)     -- 12
+    )
+```
+
+形状：
+
+```vuna
+data MutDynArrayOp : Type -> Type -> Type where
+  Get   : {a : Type} -> Nat -> MutDynArrayOp a a
+  Set   : {a : Type} -> Nat -> a -> MutDynArrayOp a Unit
+  Push  : {a : Type} -> a -> MutDynArrayOp a Unit
+  Size  : {a : Type} -> MutDynArrayOp a Nat
+  Clear : {a : Type} -> MutDynArrayOp a Unit
+
+get / set / push / size / clear : {name : String} -> ...
+withMutDynArray     : (name : String) -> Eff (Named name (MutDynArrayOp a) :: r) b -> Eff r b
+withMutDynArrayPure : (name : String) -> Eff [Named name (MutDynArrayOp a)] b -> b
+```
+
+- 机制同 §8.8：编译期名字绑定、跨函数补 `{@vuna@mdyn@x : @vuna@MDynArray a}`、
+  `Member` 约束挡逃逸、concrete 前缀查重、`@x` 消歧。
+- **表示**：OCaml `(Obj.t array * int) ref`（`dtp_dyn*`）；wasm
+  `$dyn { data: (mut (ref $arr)), len, cap }`；native 稳定句柄 `[data][len][cap]` +
+  独立数组块，增长 = 2× 复制。native 写元素与替换 `data` 都登记写屏障。
+- `get`/`set` 按**已用长度**检查（越界 trap），`clear` 保留容量。
+
+夹具：`effect/common/71..72`（增长到 32 的 push + 读写清空、双容器 `@` + 多态 helper），
+负例 `dt_err/131..133`。
 
 ## 9. 仍开放的边界
 

@@ -1,0 +1,14 @@
+-- MutDynArray：两个同元素类型的容器省略实例名时按候选报 TC_AmbiguousInstance。
+import Base.Effect.MutDynArray as MutDynArray
+import Base.Effect.Core as Eff
+import Base.Trait.Monad
+
+bad : Int
+bad =
+  MutDynArray.withMutDynArrayPure "a" (
+      MutDynArray.withMutDynArray "b" (
+          do
+            MutDynArray.push 1
+            MutDynArray.get 0
+        )
+    )

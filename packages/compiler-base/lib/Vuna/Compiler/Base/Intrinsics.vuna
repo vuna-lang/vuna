@@ -48,6 +48,8 @@ export data IType(..) : Type where
   ICell : IType -> IType
   -- `@vuna@MArray a`：`Base.Effect.MutArray` 私有的定长原地数组类型（源码写不出）。
   IMArray : IType -> IType
+  -- `@vuna@MDynArray a`：`Base.Effect.MutDynArray` 私有的可变长容器类型（源码写不出）。
+  IMDynArray : IType -> IType
   -- `@vuna@MBuffer`：`Base.Effect.MutBuffer` 私有的变长字节缓冲类型（源码写不出）。
   IMBuffer : IType
   -- 隐式类型参数绑定（`{a : Type} -> ...`）；不进函数 arity。
@@ -93,6 +95,7 @@ typeIntrinsicArities =
     TypeIntrinsic "IORef" 1,
     TypeIntrinsic "@vuna@Cell" 1,
     TypeIntrinsic "@vuna@MArray" 1,
+    TypeIntrinsic "@vuna@MDynArray" 1,
     TypeIntrinsic "@vuna@MBuffer" 0
   ]
 
@@ -1032,6 +1035,28 @@ effIntrinsics =
     Intrinsic
       "@vuna@prim_marrFromList"
       (IPi "a" (IFun (IList (IVar "a")) (IMArray (IVar "a"))))
+      OpNone
+      False,
+    Intrinsic "@vuna@prim_dynNew" (IPi "a" (IFun IInt (IMDynArray (IVar "a")))) OpNone False,
+    Intrinsic
+      "@vuna@prim_dynGet"
+      (IPi "a" (IFun (IMDynArray (IVar "a")) (IFun IInt (IEff (IVar "a")))))
+      OpNone
+      False,
+    Intrinsic
+      "@vuna@prim_dynSet"
+      (IPi "a" (IFun (IMDynArray (IVar "a")) (IFun IInt (IFun (IVar "a") (IEff IInt)))))
+      OpNone
+      False,
+    Intrinsic
+      "@vuna@prim_dynPush"
+      (IPi "a" (IFun (IMDynArray (IVar "a")) (IFun (IVar "a") (IEff IInt))))
+      OpNone
+      False,
+    Intrinsic "@vuna@prim_dynLen" (IPi "a" (IFun (IMDynArray (IVar "a")) IInt)) OpNone False,
+    Intrinsic
+      "@vuna@prim_dynClear"
+      (IPi "a" (IFun (IMDynArray (IVar "a")) (IEff IInt)))
       OpNone
       False,
     Intrinsic "@vuna@prim_mbufNew" (IFun IInt IMBuffer) OpNone False,

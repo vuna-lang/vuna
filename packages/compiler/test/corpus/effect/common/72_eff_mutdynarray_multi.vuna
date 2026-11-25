@@ -1,0 +1,22 @@
+-- MutDynArray：两个容器用 `@name` 消歧；跨函数经行条目传隐藏句柄（元素类型在行条目里）。
+import Base.Effect.MutDynArray as MutDynArray
+import Base.Effect.Core as Eff
+import Base.Data.Nat
+
+pushTo : {a : Type} -> {r : Row} -> a -> Eff (Named "acc" (MutDynArrayOp a) :: r) Unit
+pushTo v = MutDynArray.push@acc v
+
+main : Int
+main =
+  MutDynArray.withMutDynArrayPure "other" (
+      MutDynArray.withMutDynArray "acc" (
+          do
+            pushTo 3
+            pushTo 4
+            MutDynArray.push@other 9
+            a <- MutDynArray.get@acc 1
+            b <- MutDynArray.get@other 0
+            n <- MutDynArray.size@acc
+            pure (a * 100 + b * 10 + natToInt n)
+        )
+    )

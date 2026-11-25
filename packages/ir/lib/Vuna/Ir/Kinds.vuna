@@ -305,6 +305,9 @@ rtKindIsUnit "@vuna@prim_marrSet" = True
 rtKindIsUnit "@vuna@prim_mbufAppend" = True
 rtKindIsUnit "@vuna@prim_mbufAppendChar" = True
 rtKindIsUnit "@vuna@prim_mbufClear" = True
+rtKindIsUnit "@vuna@prim_dynSet" = True
+rtKindIsUnit "@vuna@prim_dynPush" = True
+rtKindIsUnit "@vuna@prim_dynClear" = True
 rtKindIsUnit _ = False
 
 -- 结果是堆值。
@@ -329,6 +332,7 @@ rtKindIsRef "prim_eff_newRef" = True
 rtKindIsRef "@vuna@prim_mrefNew" = True
 rtKindIsRef "@vuna@prim_marrNew" = True
 rtKindIsRef "@vuna@prim_marrFromList" = True
+rtKindIsRef "@vuna@prim_dynNew" = True
 rtKindIsRef "@vuna@prim_mbufNew" = True
 rtKindIsRef "@vuna@prim_mbufToString" = True
 rtKindIsRef "prim_eff_getenv" = True
@@ -364,6 +368,7 @@ rtKindIsDependent "arrayGet" = True
 rtKindIsDependent "prim_eff_readRef" = True
 rtKindIsDependent "@vuna@prim_mrefRead" = True
 rtKindIsDependent "@vuna@prim_marrGet" = True
+rtKindIsDependent "@vuna@prim_dynGet" = True
 rtKindIsDependent "@vuna@prim@readRef" = True
 rtKindIsDependent "@vuna@prim@readRef_host" = True
 rtKindIsDependent "@vuna@obs@span" = True

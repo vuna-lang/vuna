@@ -1322,6 +1322,93 @@ rtMBufToString =
         [[ILocalGet "$p0", IRefCast "$buf", ILocalSet "$b"], [ILocalGet "$b", IStructGet "$buf" 1, ILocalSet "$len"], [ILocalGet "$len", IArrayNewDefault "$str", ILocalSet "$out"], [ILocalGet "$out", IConstI32 0, ILocalGet "$b", IStructGet "$buf" 0, IConstI32 0, ILocalGet "$len", IArrayCopy "$str" "$str"], [ILocalGet "$out"]]
   in rtFunc "$rt_mbufToString" [("$p0", WvAnyRef)] [WvAnyRef] locals body
 
+-- ---------------------------------------------------------------
+-- 可变长元素容器（`@vuna@MDynArray a` = `$dyn { data: (ref $arr), len: i32, cap: i32 }`）
+-- ---------------------------------------------------------------
+-- | `@vuna@prim_dynNew`：初始容量（至少 1）。
+rtDynNew : WatFunc
+rtDynNew =
+  let
+    locals = [("$cap", WvI32), ("$ncap", WvI32)]
+    body =
+      cat
+        [unboxInt 0, [IPlain "i32.wrap_i64", ILocalSet "$cap", ILocalGet "$cap", IConstI32 1, IBinop "i32.lt_s", IIf "" [IConstI32 1, ILocalSet "$ncap"] [ILocalGet "$cap", ILocalSet "$ncap"], ILocalGet "$ncap", IArrayNewDefault "$arr", IConstI32 0, ILocalGet "$ncap", IStructNew "$dyn"]]
+  in rtFunc "$rt_dynNew" [("$p0", WvAnyRef)] [WvAnyRef] locals body
+
+-- | 容量不足时扩到 `max(cap*2, need, 8)` 并复制已有元素；`$p1` 是装盒的目标长度。
+rtDynGrow : WatFunc
+rtDynGrow =
+  let
+    locals =
+      [
+        ("$need", WvI32),
+        ("$cap", WvI32),
+        ("$ncap", WvI32),
+        ("$data", WvRef "$arr"),
+        ("$ndata", WvRef "$arr")
+      ]
+    body =
+      cat
+        [unboxInt 1, [IPlain "i32.wrap_i64", ILocalSet "$need", ILocalGet "$p0", IRefCast "$dyn", IStructGet "$dyn" 2, ILocalSet "$cap", ILocalGet "$cap", IConstI32 1, IBinop "i32.shl", ILocalSet "$ncap", ILocalGet "$ncap", ILocalGet "$need", IBinop "i32.lt_s", IIf "" [ILocalGet "$need", ILocalSet "$ncap"] [], ILocalGet "$ncap", IConstI32 8, IBinop "i32.lt_s", IIf "" [IConstI32 8, ILocalSet "$ncap"] [], ILocalGet "$ncap", ILocalGet "$cap", IBinop "i32.gt_s", IIf "" (cat [[ILocalGet "$p0", IRefCast "$dyn", IStructGet "$dyn" 0, ILocalSet "$data"], [ILocalGet "$ncap", IArrayNewDefault "$arr", ILocalSet "$ndata"], [ILocalGet "$ndata", IConstI32 0, ILocalGet "$data", IConstI32 0, ILocalGet "$cap", IArrayCopy "$arr" "$arr"], [ILocalGet "$p0", IRefCast "$dyn", ILocalGet "$ndata", IStructSet "$dyn" 0], [ILocalGet "$p0", IRefCast "$dyn", ILocalGet "$ncap", IStructSet "$dyn" 2]]) []]]
+  in rtFunc "$rt_dynGrow" [("$p0", WvAnyRef), ("$p1", WvAnyRef)] [] locals body
+
+-- | `@vuna@prim_dynPush`：末尾追加元素（必要时增长）。
+rtDynPush : WatFunc
+rtDynPush =
+  let
+    locals = [("$b", WvRef "$dyn"), ("$len", WvI32)]
+    body =
+      cat
+        [[ILocalGet "$p0", IRefCast "$dyn", ILocalSet "$b"], [ILocalGet "$b", IStructGet "$dyn" 1, ILocalSet "$len"], [ILocalGet "$p0", ILocalGet "$len", IConstI32 1, IBinop "i32.add", IPlain "i64.extend_i32_u", IStructNew "$int", ICall "$rt_dynGrow"], [ILocalGet "$b", IStructGet "$dyn" 0, ILocalGet "$len", ILocalGet "$p1", IArraySet "$arr"], [ILocalGet "$b", ILocalGet "$len", IConstI32 1, IBinop "i32.add", IStructSet "$dyn" 1], [IConstI64 0, IStructNew "$int"]]
+  in rtFunc "$rt_dynPush" [("$p0", WvAnyRef), ("$p1", WvAnyRef)] [WvAnyRef] locals body
+
+-- | `@vuna@prim_dynGet`：按下标读；越界走 `$rt_arrayOob`。
+rtDynGet : WatFunc
+rtDynGet =
+  let
+    locals = [("$b", WvRef "$dyn"), ("$ix", WvI32)]
+    oob = [ICall "$rt_arrayOob", IUnreachable]
+    body =
+      cat
+        [[ILocalGet "$p0", IRefCast "$dyn", ILocalSet "$b"], unboxInt 1, [IPlain "i32.wrap_i64", ILocalSet "$ix"], [ILocalGet "$ix", IConstI32 0, IBinop "i32.lt_s", IIf "" oob []], [ILocalGet "$ix", ILocalGet "$b", IStructGet "$dyn" 1, IBinop "i32.ge_s", IIf "" oob []], [ILocalGet "$b", IStructGet "$dyn" 0, ILocalGet "$ix", IArrayGet "$arr"]]
+  in rtFunc "$rt_dynGet" [("$p0", WvAnyRef), ("$p1", WvAnyRef)] [WvAnyRef] locals body
+
+-- | `@vuna@prim_dynSet`：按下标原地写；越界走 `$rt_arrayOob`。
+rtDynSet : WatFunc
+rtDynSet =
+  let
+    locals = [("$b", WvRef "$dyn"), ("$ix", WvI32)]
+    oob = [ICall "$rt_arrayOob", IUnreachable]
+    body =
+      cat
+        [[ILocalGet "$p0", IRefCast "$dyn", ILocalSet "$b"], unboxInt 1, [IPlain "i32.wrap_i64", ILocalSet "$ix"], [ILocalGet "$ix", IConstI32 0, IBinop "i32.lt_s", IIf "" oob []], [ILocalGet "$ix", ILocalGet "$b", IStructGet "$dyn" 1, IBinop "i32.ge_s", IIf "" oob []], [ILocalGet "$b", IStructGet "$dyn" 0, ILocalGet "$ix", ILocalGet "$p2", IArraySet "$arr"], [IConstI64 0, IStructNew "$int"]]
+  in rtFunc
+    "$rt_dynSet"
+    [("$p0", WvAnyRef), ("$p1", WvAnyRef), ("$p2", WvAnyRef)]
+    [WvAnyRef]
+    locals
+    body
+
+-- | `@vuna@prim_dynLen`：已用长度。
+rtDynLen : WatFunc
+rtDynLen =
+  rtFunc
+    "$rt_dynLen"
+    [("$p0", WvAnyRef)]
+    [WvAnyRef]
+    []
+    [ILocalGet "$p0", IRefCast "$dyn", IStructGet "$dyn" 1, IPlain "i64.extend_i32_u", IStructNew "$int"]
+
+-- | `@vuna@prim_dynClear`：清空内容（容量保留）。
+rtDynClear : WatFunc
+rtDynClear =
+  let
+    locals = [("$b", WvRef "$dyn")]
+    body =
+      cat
+        [[ILocalGet "$p0", IRefCast "$dyn", ILocalSet "$b"], [ILocalGet "$b", IConstI32 0, IStructSet "$dyn" 1], [IConstI64 0, IStructNew "$int"]]
+  in rtFunc "$rt_dynClear" [("$p0", WvAnyRef)] [WvAnyRef] locals body
+
 -- | `strFromInt` / `showInt` / `showNat`。
 rtStrFromInt : WatFunc
 rtStrFromInt =
@@ -2101,6 +2188,13 @@ rtFunctions c =
     rtMBufLen,
     rtMBufClear,
     rtMBufToString,
+    rtDynNew,
+    rtDynGrow,
+    rtDynPush,
+    rtDynGet,
+    rtDynSet,
+    rtDynLen,
+    rtDynClear,
     rtStrFromInt,
     rtShowBool c,
     rtShowStr,
@@ -2289,6 +2383,12 @@ rtImplOf "@vuna@prim_mbufAppendChar" = RtFunc 2 "$rt_mbufAppendChar"
 rtImplOf "@vuna@prim_mbufLen" = RtFunc 1 "$rt_mbufLen"
 rtImplOf "@vuna@prim_mbufClear" = RtFunc 1 "$rt_mbufClear"
 rtImplOf "@vuna@prim_mbufToString" = RtFunc 1 "$rt_mbufToString"
+rtImplOf "@vuna@prim_dynNew" = RtFunc 1 "$rt_dynNew"
+rtImplOf "@vuna@prim_dynGet" = RtFunc 2 "$rt_dynGet"
+rtImplOf "@vuna@prim_dynSet" = RtFunc 3 "$rt_dynSet"
+rtImplOf "@vuna@prim_dynPush" = RtFunc 2 "$rt_dynPush"
+rtImplOf "@vuna@prim_dynLen" = RtFunc 1 "$rt_dynLen"
+rtImplOf "@vuna@prim_dynClear" = RtFunc 1 "$rt_dynClear"
 rtImplOf "prim_eff_print" = RtFunc 1 "$rt_effPrint"
 rtImplOf "@vuna@prim_eff_print" = RtFunc 1 "$rt_effPrint"
 rtImplOf "prim_eff_eprint" = RtFunc 1 "$rt_effEprint"

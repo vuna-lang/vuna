@@ -425,6 +425,32 @@ let dtp_execPath () = try Unix.readlink \"/proc/self/exe\" with _ -> Sys.executa
 let dtp_arraySet (a : 'a array) (i : int) (v : 'a) =
   let b = Array.copy a in
   Array.set b i v; b
+let dtp_dynNew cap =
+  ref (Array.make (if cap < 1 then 1 else cap) (Obj.repr 0), 0)
+let dtp_dynLen (r : (Obj.t array * int) ref) = snd !r
+let dtp_dynGet (r : (Obj.t array * int) ref) i =
+  let (a, n) = !r in
+  if i < 0 || i >= n then invalid_arg \"index out of bounds\" else Obj.obj a.(i)
+let dtp_dynSet (r : (Obj.t array * int) ref) i v =
+  let (a, n) = !r in
+  if i < 0 || i >= n then invalid_arg \"index out of bounds\"
+  else begin a.(i) <- Obj.repr v; 0 end
+let dtp_dynPush (r : (Obj.t array * int) ref) v =
+  let (a, n) = !r in
+  if n < Array.length a then begin
+    a.(n) <- Obj.repr v;
+    r := (a, n + 1)
+  end else begin
+    let cap = Array.length a in
+    let ncap = if cap * 2 < 8 then 8 else cap * 2 in
+    let b = Array.make ncap (Obj.repr 0) in
+    Array.blit a 0 b 0 n;
+    b.(n) <- Obj.repr v;
+    r := (b, n + 1)
+  end;
+  0
+let dtp_dynClear (r : (Obj.t array * int) ref) =
+  let (a, _) = !r in r := (a, 0); 0
 let dtp_strHash (s : string) =
   let h = ref 0 in
   String.iter (fun c -> h := ((!h * 33) + Char.code c) land 1023) s;

@@ -15,6 +15,7 @@ export module Base.Effect.MutArray as MutArray
 export module Base.Effect.MutBuffer as MutBuffer
 export module Base.Effect.MutRef as MutRef
 export module Base.Effect.MutVec as MutVec
+export module Base.Effect.MutDynArray as MutDynArray
 export module Base.Effect.Cursor as Cursor
 export module Base.Effect.Fs as Fs
 export module Base.Effect.Console as Console

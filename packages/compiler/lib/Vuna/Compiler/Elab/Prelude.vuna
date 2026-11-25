@@ -106,6 +106,7 @@ ityToTermEnv env (IArray elem) = TApp (TGlobal "Array") (ityToTermEnv env elem) 
 ityToTermEnv env (IRef elem) = TApp (TGlobal "IORef") (ityToTermEnv env elem) Rig0
 ityToTermEnv env (ICell elem) = TApp (TGlobal "@vuna@Cell") (ityToTermEnv env elem) Rig0
 ityToTermEnv env (IMArray elem) = TApp (TGlobal "@vuna@MArray") (ityToTermEnv env elem) Rig0
+ityToTermEnv env (IMDynArray elem) = TApp (TGlobal "@vuna@MDynArray") (ityToTermEnv env elem) Rig0
 ityToTermEnv env IMBuffer = TGlobal "@vuna@MBuffer"
 ityToTermEnv env (IPi name body) =
   TPi name True Rig0 (TType levelZero) (ityToTermEnv (name :: env) body)

@@ -1412,6 +1412,7 @@ ivarBound env (IArray e) = ivarBound env e
 ivarBound env (IRef e) = ivarBound env e
 ivarBound env (ICell e) = ivarBound env e
 ivarBound env (IMArray e) = ivarBound env e
+ivarBound env (IMDynArray e) = ivarBound env e
 ivarBound env IMBuffer = True
 ivarBound env (IEff e) = ivarBound env e
 ivarBound env (IFun a b) = ivarBound env a && ivarBound env b
