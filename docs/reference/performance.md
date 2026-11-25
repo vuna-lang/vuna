@@ -434,7 +434,7 @@ token 一次 `Pair`）的初版实测让 `vuna.parse.lex` 慢 ~20%，已放弃�
 **配置与 fixity 上下文按目录缓存**：lint 的配置链（manifest 的 `[lint]` 与合并结果）与
 `FixityEnv` 同形按目录缓存，一个 manifest 每进程只读/解析一次；LSP 复用调用方已拿到的
 `ParsedSource`，fixity 与规则扫描共用一次词法。单文件 lint 的 `vuna.toml` 打开次数 41 → 39
-（剩余来自包加载的依赖遍历，见 debt D136），每多一个文件不再增加 manifest 读（此前每文件 +2，
+（剩余来自包加载的依赖遍历，见 debt D137），每多一个文件不再增加 manifest 读（此前每文件 +2，
 每个祖先 manifest 一次）。LSP 会话可用时 lint 配置随 `DiagCache` 复用，不再每请求重读；
 无会话的回退路径没有可挂载的缓存，仍在每次请求重建一次。
 
