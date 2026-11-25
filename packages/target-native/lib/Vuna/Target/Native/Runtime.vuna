@@ -138,41 +138,6 @@ pathTooLongMessage = "vuna: runtime error: path too long\n"
 export hostErrnoLabel : String
 hostErrnoLabel = "rt_host_errno"
 
--- | errno → `strerror` 文本（含 `": "` 分隔与结尾换行）。与 OCaml `Sys_error` 在 C locale
---   下的首行一致；不在表里的 errno 走 `strictReasonUnknown`。
-hostReasonTexts : List (Int, String)
-hostReasonTexts =
-  [
-    (errnoEnoent, ": No such file or directory\n"),
-    (errnoEacces, ": Permission denied\n"),
-    (errnoEperm, ": Operation not permitted\n"),
-    (errnoEexist, ": File exists\n"),
-    (errnoEnotdir, ": Not a directory\n"),
-    (errnoEisdir, ": Is a directory\n"),
-    (errnoEnospc, ": No space left on device\n"),
-    (5, ": Input/output error\n"),
-    (12, ": Cannot allocate memory\n"),
-    (22, ": Invalid argument\n"),
-    (23, ": Too many open files in system\n"),
-    (24, ": Too many open files\n"),
-    (30, ": Read-only file system\n"),
-    (36, ": File name too long\n"),
-    (40, ": Too many levels of symbolic links\n")
-  ]
-
-strictReasonUnknown : String
-strictReasonUnknown = ": unknown error\n"
-
--- | `strerror` 文本的只读数据标签（按 errno 编号，文件内唯一）。
-hostReasonLabel : Int -> String
-hostReasonLabel n = nativeDataLabel ("errno_" ++ strFromInt n)
-
-hostReasonRodata : List NativeRodata
-hostReasonRodata =
-  append
-    (map (\p => NativeRodata (hostReasonLabel (firstOf p)) (secondOf p)) hostReasonTexts)
-    [NativeRodata (nativeDataLabel "errno_unknown") strictReasonUnknown, NativeRodata (nativeDataLabel "op_readFile") "readFile: ", NativeRodata (nativeDataLabel "op_readFileRange") "readFileRange: ", NativeRodata (nativeDataLabel "op_writeFile") "writeFile: ", NativeRodata (nativeDataLabel "op_writeFileAtomic") "", NativeRodata (nativeDataLabel "op_readDir") "readDir: ", NativeRodata (nativeDataLabel "op_isDirectory") "isDirectory: ", NativeRodata (nativeDataLabel "op_makeDir") "makeDir: ", NativeRodata (nativeDataLabel "op_removeFile") "removeFile: "]
-
 -- | 目录树太深：`remove_tree` 的递归帧放不进当前栈。
 rmtreeDeepMessage : String
 rmtreeDeepMessage = "vuna: runtime error: directory tree too deep\n"
@@ -181,7 +146,7 @@ export nativeRodata : List NativeRodata
 nativeRodata =
   append
     [NativeRodata (nativeDataLabel "true") "True", NativeRodata (nativeDataLabel "false") "False", NativeRodata (nativeDataLabel "nl") "\n", NativeRodata (nativeDataLabel "divzero") divZeroMessage, NativeRodata (nativeDataLabel "oom") oomMessage, NativeRodata (nativeDataLabel "mem_limit") memLimitMessage, NativeRodata (nativeDataLabel "timeout") timeoutMessage, NativeRodata (nativeDataLabel "err_prefix") errPrefix, NativeRodata (nativeDataLabel "assert_prefix") assertPrefix, NativeRodata (nativeDataLabel "todo_prefix") todoPrefix, NativeRodata (nativeDataLabel "impossible") impossibleMessage, NativeRodata (nativeDataLabel "array_oob") arrayOobMessage, NativeRodata (nativeDataLabel "path_long") pathTooLongMessage, NativeRodata (nativeDataLabel "rmtree_deep") rmtreeDeepMessage, NativeRodata (nativeDataLabel "proc_self_exe") ("/proc/self/exe" ++ strPack [0]), NativeRodata (nativeDataLabel "tmp_suffix") (".tmp" ++ strPack [0]), NativeRodata (nativeDataLabel "sh_path") ("/bin/sh" ++ strPack [0]), NativeRodata (nativeDataLabel "sh_dash_c") ("-c" ++ strPack [0]), NativeRodata (nativeDataLabel "env_mem_limit") memLimitKey, NativeRodata (nativeDataLabel "env_stack") stackKey, NativeRodata (nativeDataLabel "env_timeout") timeoutKey, NativeRodata (nativeDataLabel "env_cpus") cpusKey, NativeRodata (nativeDataLabel "env_inherit") inheritKey, NativeRodata (nativeDataLabel "env_prefix") nativeEnvPrefix, NativeRodata (nativeDataLabel "cg_cpu_max") cgroupCpuMaxPath]
-    (append hostReasonRodata nativeGcRodata)
+    nativeGcRodata
 
 -- | `_start` 从初始栈拷下来的进程入参（`argc` / `argv` / `envp`）。
 export argcLabel : String
@@ -1186,85 +1151,6 @@ fsFailFn =
 -- `try*` 叶子把失败变成默认值 + 状态码；非 try 符号必须**显式失败**：报告
 -- `vuna: runtime error: <op><path>: <reason>` 后 exit 2。首行与 OCaml `dtp_*` 抛出的
 -- `Sys_error` 在 C locale 下逐字一致（native 没有报告器的 `at ...` 行）。
-strictReasonBranch : Int -> String
-strictReasonBranch n = ".Lrt_sf_r" ++ strFromInt n
-
-strictReasonCmpInstrs : List Instr
-strictReasonCmpInstrs =
-  concatMap
-    (\p => [ICmp (OpReg Rdi) (OpImm (firstOf p)), IJcc "je" (strictReasonBranch (firstOf p))])
-    hostReasonTexts
-
-strictReasonBodyInstrs : List Instr
-strictReasonBodyInstrs =
-  concatMap
-    (\p => [ILabel (strictReasonBranch (firstOf p)), ILea R11 (hostReasonLabel (firstOf p)), IMov (OpMem Rbp (nativeSlotOff 3)) (OpReg R11), IMov (OpMem Rbp (nativeSlotOff 4)) (OpImm (strLength (secondOf p))), IJmp ".Lrt_sf_write"])
-    hostReasonTexts
-
--- | 先装载 `rsi`/`rdx`，再 `write(2, ...)`。
-stderrWrite : List Instr -> List Instr
-stderrWrite load =
-  append load [IMov (OpReg Rax) (OpImm (sysNr "write")), IMov (OpReg Rdi) (OpImm 2), ISyscall]
-
--- | `rdi` = errno（正数）、`rsi` = path String、`rdx` = 操作名前缀标签、`rcx` = 前缀字节数。
---   不返回。
-joinInstrs : List (List Instr) -> List Instr
-joinInstrs parts = concatMap (\p => p) parts
-
-strictFailFn : NativeFunc
-strictFailFn =
-  rtFunc
-    "fail_strict"
-    48
-    (joinInstrs [[IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rsi), IMov (OpMem Rbp (nativeSlotOff 1)) (OpReg Rdx), IMov (OpMem Rbp (nativeSlotOff 2)) (OpReg Rcx), ILea R11 (nativeDataLabel "errno_unknown"), IMov (OpMem Rbp (nativeSlotOff 3)) (OpReg R11), IMov (OpMem Rbp (nativeSlotOff 4)) (OpImm (strLength strictReasonUnknown))], strictReasonCmpInstrs, [IJmp ".Lrt_sf_write"], strictReasonBodyInstrs, [ILabel ".Lrt_sf_write"], stderrWrite [ILea Rsi (nativeDataLabel "err_prefix"), IMov (OpReg Rdx) (OpImm (strLength errPrefix))], stderrWrite [IMov (OpReg Rsi) (OpMem Rbp (nativeSlotOff 1)), IMov (OpReg Rdx) (OpMem Rbp (nativeSlotOff 2))], stderrWrite [IMov (OpReg R8) (OpMem Rbp (nativeSlotOff 0)), IMov (OpReg Rdx) (OpMem R8 0), ILeaMem Rsi R8 8], stderrWrite [IMov (OpReg Rsi) (OpMem Rbp (nativeSlotOff 3)), IMov (OpReg Rdx) (OpMem Rbp (nativeSlotOff 4))], [IMov (OpReg Rax) (OpImm (sysNr "exit")), IMov (OpReg Rdi) (OpImm 2), ISyscall]])
-
--- | 非 try 包装：跑 `try*` 叶子，状态槽非 0 就报错退出，否则原样返回结果。
---   参数约定与目标叶子一致（path 在 `rdi`）；只保存第一个实参用于错误文本。
-strictWrapFn : String -> String -> String -> Int -> NativeFunc
-strictWrapFn name target opLabel prefixLen =
-  let
-    okLabel = ".Lrt_" ++ name ++ "_ok"
-  in rtFunc
-    name
-    16
-    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), ICall (nativeRtLabel target), IMov (OpReg R9) (OpRip hostStatusLabel), ITest R9 R9, IJcc "jz" okLabel, IMov (OpReg Rdi) (OpRip hostErrnoLabel), IMov (OpReg Rsi) (OpMem Rbp (nativeSlotOff 0)), ILea Rdx (nativeDataLabel opLabel), IMov (OpReg Rcx) (OpImm prefixLen), ICall (nativeRtLabel "fail_strict"), ILabel okLabel]
-
-strictReadFileFn : NativeFunc
-strictReadFileFn =
-  strictWrapFn "strict_read_file" "try_read_file" "op_readFile" (strLength "readFile: ")
-
-strictReadFileRangeFn : NativeFunc
-strictReadFileRangeFn =
-  strictWrapFn
-    "strict_read_file_range"
-    "try_read_file_range"
-    "op_readFileRange"
-    (strLength "readFileRange: ")
-
-strictWriteFileFn : NativeFunc
-strictWriteFileFn =
-  strictWrapFn "strict_write_file" "try_write_file" "op_writeFile" (strLength "writeFile: ")
-
--- `dtp_writeFileAtomic` 直接重抛 `Sys_error`（无操作名前缀），首行形如 `<tmp>: <reason>`；
--- 这里同样不加前缀，路径取调用方给的目标路径（tmp 名由本运行时生成）。
-strictWriteFileAtomicFn : NativeFunc
-strictWriteFileAtomicFn =
-  strictWrapFn "strict_write_file_atomic" "try_write_file_atomic" "op_writeFileAtomic" 0
-
-strictReadDirFn : NativeFunc
-strictReadDirFn = strictWrapFn "strict_read_dir" "tryReadDir" "op_readDir" (strLength "readDir: ")
-
-strictIsDirFn : NativeFunc
-strictIsDirFn =
-  strictWrapFn "strict_is_dir" "try_is_dir" "op_isDirectory" (strLength "isDirectory: ")
-
-strictMakeDirFn : NativeFunc
-strictMakeDirFn = strictWrapFn "strict_make_dir" "try_make_dir" "op_makeDir" (strLength "makeDir: ")
-
-strictRemoveFileFn : NativeFunc
-strictRemoveFileFn =
-  strictWrapFn "strict_remove_file" "try_remove_file" "op_removeFile" (strLength "removeFile: ")
-
 -- | `rdi` = Vuna String → rax = `rt_path_buf` 里的 NUL 结尾副本。
 strToCFn : NativeFunc
 strToCFn =
@@ -1661,7 +1547,7 @@ envFilterFn =
 export nativeRtFuncs : List NativeFunc
 nativeRtFuncs =
   append
-    [intBinary "add" "add", intBinary "sub" "sub", intBinary "mul" "imul", divFn, intBitBinary "bit_and" "and", intBitBinary "bit_or" "or", intBitBinary "bit_xor" "xor", bitNotFn, bitShlFn, bitShrFn, intCompare "eq_int" "sete", intCompare "neq_int" "setne", intCompare "lt_int" "setl", intCompare "le_int" "setle", intCompare "gt_int" "setg", intCompare "ge_int" "setge", natAddFn, natSubFn, natMulFn, natDivFn, natToIntFn, natFromIntFn, natSuccFn, obsZeroFn "obs_level", obsZero2Fn "obs_counter", obsZeroFn "obs_mark", obsZero2Fn "obs_span_begin", obsZeroFn "obs_span_end", obsZero2Fn "obs_sample_start", obsZeroFn "obs_sample_stop", obsSpanFn, obsSpanLabFn, logOnFn, logEmitFn, strAllocFn, strLengthFn, strConcatFn, bytesEqFn, bytesCmpFn, strEqFn, strNeqFn, strCompareFn, strCompareFnOf "str_lt" "setl", strCompareFnOf "str_le" "setle", strCompareFnOf "str_gt" "setg", strCompareFnOf "str_ge" "setge", strFromIntFn, strAtFn, strSubstringFn, strHashFn, effectIdFn, strShowFn, printIntFn, printBoolFn, printStrFn, assertFn, primFailFn, todoFn, trapMsgFn, trapAssertFn, trapTodoFn, allocFn, allocLeafFn, applyFn, applyExactFn, applyShimFn, strFromBytesFn, strFromCFn, strOneCharFn, strEmptyFn, getenvFn, getcwdFn, execPathFn, nowUsFn, sleepUsFn, isTtyFn, hostStatusFn, cleanupPushFn, cleanupPopFn, fsFailFn, strictFailFn, strictReadFileFn, strictReadFileRangeFn, strictWriteFileFn, strictWriteFileAtomicFn, strictReadDirFn, strictIsDirFn, strictMakeDirFn, strictRemoveFileFn, strToCFn, strToC2Fn, strCopyIntoFn, cStrCpyFn, u64ToDecFn, statPathFn, lstatPathFn, fileExistsFn, fileMtimeFn, fileSizeFn, tryIsDirFn, tryReadFileFn, tryReadFileRangeFn, tryWriteFileFn, tryWriteFileAtomicFn, tryMakeDirFn, tryMakeDirExclusiveFn, tryRemoveFileFn, tryRenameFn, trySymlinkFn, removeTreeFn, tryRemoveTreeFn, dirOpenFn, dirNamesFn, dirCloseFn, childPushFn, childDropFn, sigBlockFn, sigUnblockFn, cmdRunShFn, spawnExecFn, waitPidFn, exitWithFn, trapImpossibleFn, trapDivZeroFn, trapArrayOobFn, trapOomFn, trapPathLongFn, trapMemLimitFn, initStackFn, initMemFn, initCpusFn, initTimeoutFn, envLookupFn, parseU64Fn, cgroupCpusFn, envFilterFn, sigreturnStubFn, sigalrmFn, arrayEmptyFn, arrayLengthFn, arrayGetFn, arraySetFn, arrayMakeFn, marrSetFn, mbufNewFn, mbufGrowFn, mbufAppendFn, mbufAppendCharFn, mbufLenFn, mbufClearFn, mbufToStringFn, dynNewFn, dynGrowFn, dynPushFn, dynGetFn, dynSetFn, dynLenFn, dynClearFn, trapRmtreeDeepFn, mRunEffFn, pow2CeilFn, eraseFn, effNewRefFn, effReadRefFn, effWriteRefFn, effPrintFn "prim_eff_print" 1, effPrintFn "prim_eff_eprint" 2, effExitFn, floatFromIntFn, intFromFloatFn, floatBinFn "float_add" "add", floatBinFn "float_sub" "sub", floatBinFn "float_mul" "mul", floatBinFn "float_div" "div", floatCmpFn "float_eq" (floatOrderedCmp "sete"), floatCmpFn "float_neq" floatNeqCmp, floatCmpFn "float_lt" (floatOrderedCmp "setb"), floatCmpFn "float_le" (floatOrderedCmp "setbe"), floatCmpFn "float_gt" (floatOrderedCmp "seta"), floatCmpFn "float_ge" (floatOrderedCmp "setae"), floatAbsFn, floatSqrtFn]
+    [intBinary "add" "add", intBinary "sub" "sub", intBinary "mul" "imul", divFn, intBitBinary "bit_and" "and", intBitBinary "bit_or" "or", intBitBinary "bit_xor" "xor", bitNotFn, bitShlFn, bitShrFn, intCompare "eq_int" "sete", intCompare "neq_int" "setne", intCompare "lt_int" "setl", intCompare "le_int" "setle", intCompare "gt_int" "setg", intCompare "ge_int" "setge", natAddFn, natSubFn, natMulFn, natDivFn, natToIntFn, natFromIntFn, natSuccFn, obsZeroFn "obs_level", obsZero2Fn "obs_counter", obsZeroFn "obs_mark", obsZero2Fn "obs_span_begin", obsZeroFn "obs_span_end", obsZero2Fn "obs_sample_start", obsZeroFn "obs_sample_stop", obsSpanFn, obsSpanLabFn, logOnFn, logEmitFn, strAllocFn, strLengthFn, strConcatFn, bytesEqFn, bytesCmpFn, strEqFn, strNeqFn, strCompareFn, strCompareFnOf "str_lt" "setl", strCompareFnOf "str_le" "setle", strCompareFnOf "str_gt" "setg", strCompareFnOf "str_ge" "setge", strFromIntFn, strAtFn, strSubstringFn, strHashFn, effectIdFn, strShowFn, printIntFn, printBoolFn, printStrFn, assertFn, primFailFn, todoFn, trapMsgFn, trapAssertFn, trapTodoFn, allocFn, allocLeafFn, applyFn, applyExactFn, applyShimFn, strFromBytesFn, strFromCFn, strOneCharFn, strEmptyFn, getenvFn, getcwdFn, execPathFn, nowUsFn, sleepUsFn, isTtyFn, hostStatusFn, cleanupPushFn, cleanupPopFn, fsFailFn, strToCFn, strToC2Fn, strCopyIntoFn, cStrCpyFn, u64ToDecFn, statPathFn, lstatPathFn, fileExistsFn, fileMtimeFn, fileSizeFn, tryIsDirFn, tryReadFileFn, tryReadFileRangeFn, tryWriteFileFn, tryWriteFileAtomicFn, tryMakeDirFn, tryMakeDirExclusiveFn, tryRemoveFileFn, tryRenameFn, trySymlinkFn, removeTreeFn, tryRemoveTreeFn, dirOpenFn, dirNamesFn, dirCloseFn, childPushFn, childDropFn, sigBlockFn, sigUnblockFn, cmdRunShFn, spawnExecFn, waitPidFn, exitWithFn, trapImpossibleFn, trapDivZeroFn, trapArrayOobFn, trapOomFn, trapPathLongFn, trapMemLimitFn, initStackFn, initMemFn, initCpusFn, initTimeoutFn, envLookupFn, parseU64Fn, cgroupCpusFn, envFilterFn, sigreturnStubFn, sigalrmFn, arrayEmptyFn, arrayLengthFn, arrayGetFn, arraySetFn, arrayMakeFn, marrSetFn, mbufNewFn, mbufGrowFn, mbufAppendFn, mbufAppendCharFn, mbufLenFn, mbufClearFn, mbufToStringFn, dynNewFn, dynGrowFn, dynPushFn, dynGetFn, dynSetFn, dynLenFn, dynClearFn, trapRmtreeDeepFn, mRunEffFn, pow2CeilFn, eraseFn, effNewRefFn, effReadRefFn, effWriteRefFn, effPrintFn "prim_eff_print" 1, effPrintFn "prim_eff_eprint" 2, effExitFn, floatFromIntFn, intFromFloatFn, floatBinFn "float_add" "add", floatBinFn "float_sub" "sub", floatBinFn "float_mul" "mul", floatBinFn "float_div" "div", floatCmpFn "float_eq" (floatOrderedCmp "sete"), floatCmpFn "float_neq" floatNeqCmp, floatCmpFn "float_lt" (floatOrderedCmp "setb"), floatCmpFn "float_le" (floatOrderedCmp "setbe"), floatCmpFn "float_gt" (floatOrderedCmp "seta"), floatCmpFn "float_ge" (floatOrderedCmp "setae"), floatAbsFn, floatSqrtFn]
     nativeGcFuncs
 
 -- | IR 符号 -> 运行时函数标签。白名单之外返回 Nothing（Module 报 NativeUnsupported）。
@@ -1781,45 +1667,26 @@ hostLeafGroups =
     ("exec_path",
       [
         "@vuna@prim_eff_execPath",
-        "@vuna@prim_eff_execPath_host",
         "@vuna@host@execPath"
       ]),
     ("exit_with", ["@vuna@prim_eff_exit_process_host"]),
-    ("file_exists",
-      [
-        "@vuna@host@fileExists",
-        "@vuna@prim_eff_fileExists",
-        "@vuna@prim_eff_fileExists_host"
-      ]),
-    ("file_mtime",
-      [
-        "@vuna@host@fileMtime",
-        "@vuna@prim_eff_fileMtime",
-        "@vuna@prim_eff_fileMtime_host"
-      ]),
-    ("file_size",
-      [
-        "@vuna@host@fileSize",
-        "@vuna@prim_eff_fileSize",
-        "@vuna@prim_eff_fileSize_host"
-      ]),
+    ("file_exists", ["@vuna@host@fileExists"]),
+    ("file_mtime", ["@vuna@host@fileMtime"]),
+    ("file_size", ["@vuna@host@fileSize"]),
     ("getArgs",
       [
         "@vuna@prim_eff_getArgs",
-        "@vuna@prim_eff_getArgs_host",
         "@vuna@host@getArgs",
         "@vuna@prim_eff_getArgs_process_host"
       ]),
     ("getcwd",
       [
         "@vuna@prim_eff_getcwd",
-        "@vuna@prim_eff_getcwd_host",
         "@vuna@host@getcwd"
       ]),
     ("getenv",
       [
         "@vuna@prim_eff_getenv",
-        "@vuna@prim_eff_getenv_host",
         "@vuna@host@getenv"
       ]),
     ("host_status_get", ["@vuna@prim_eff_hostStatus"]),
@@ -1833,7 +1700,6 @@ hostLeafGroups =
     ("prim_eff_exit",
       [
         "@vuna@host@exitOp",
-        "@vuna@prim_eff_exitOp_host",
         "@vuna@prim_eff_exit"
       ]),
     ("prim_eff_new_ref",
@@ -1844,7 +1710,6 @@ hostLeafGroups =
     ("prim_eff_print",
       [
         "@vuna@host@print",
-        "@vuna@prim_eff_print_host",
         "@vuna@prim_eff_print"
       ]),
     ("prim_eff_read_ref",
@@ -1860,65 +1725,14 @@ hostLeafGroups =
     ("sleep_us",
       [
         "@vuna@prim_eff_sleep",
-        "@vuna@prim_eff_sleep_host",
         "@vuna@host@sleep"
       ]),
     ("spawn_self", ["@vuna@prim_eff_spawn"]),
-    ("strict_is_dir",
-      [
-        "@vuna@prim_eff_isDirectory",
-        "@vuna@prim_eff_isDirectory_host",
-        "@vuna@host@isDirectory"
-      ]),
-    ("strict_make_dir",
-      [
-        "@vuna@prim_eff_makeDir",
-        "@vuna@prim_eff_makeDir_host",
-        "@vuna@host@makeDir"
-      ]),
-    ("strict_read_dir",
-      [
-        "@vuna@prim_eff_readDir",
-        "@vuna@prim_eff_readDir_host",
-        "@vuna@host@readDir"
-      ]),
-    ("strict_read_file",
-      [
-        "@vuna@prim_eff_readFile",
-        "@vuna@prim_eff_readFile_host",
-        "@vuna@host@readFile"
-      ]),
-    ("strict_read_file_range",
-      [
-        "@vuna@prim_eff_readFileRange",
-        "@vuna@prim_eff_readFileRange_host",
-        "@vuna@host@readFileRange"
-      ]),
-    ("strict_remove_file",
-      [
-        "@vuna@prim_eff_removeFile",
-        "@vuna@prim_eff_removeFile_host",
-        "@vuna@host@removeFile"
-      ]),
-    ("strict_write_file",
-      [
-        "@vuna@prim_eff_writeFile",
-        "@vuna@prim_eff_writeFile_host",
-        "@vuna@host@writeFile"
-      ]),
-    ("strict_write_file_atomic",
-      [
-        "@vuna@prim_eff_writeFileAtomic",
-        "@vuna@prim_eff_writeFileAtomic_host",
-        "@vuna@host@writeFileAtomic"
-      ]),
     ("tryReadDir", ["@vuna@host@tryReadDir"]),
     ("tryRunIn",
       [
         "@vuna@host@tryRunIn",
-        "@vuna@prim_eff_runIn",
-        "@vuna@prim_eff_runIn_host",
-        "@vuna@host@runIn"
+        "@vuna@prim_eff_runIn"
       ]),
     ("try_is_dir", ["@vuna@host@tryIsDirectory"]),
     ("try_make_dir", ["@vuna@host@tryMakeDir"]),
@@ -2015,9 +1829,7 @@ nativeRtValueArityBase _ = 0
 
 nativeRtValueArityHost : String -> Int
 nativeRtValueArityHost "@vuna@host@print" = 1
-nativeRtValueArityHost "@vuna@prim_eff_print_host" = 1
 nativeRtValueArityHost "@vuna@host@exitOp" = 1
-nativeRtValueArityHost "@vuna@prim_eff_exitOp_host" = 1
 nativeRtValueArityHost "@vuna@prim_eff_newRef" = 1
 nativeRtValueArityHost "@vuna@prim_eff_readRef" = 1
 nativeRtValueArityHost "@vuna@prim_eff_writeRef" = 2
@@ -2029,64 +1841,30 @@ nativeRtValueArityHost "@vuna@prim_eff_eprint" = 1
 nativeRtValueArityHost "@vuna@prim_eff_exit" = 1
 nativeRtValueArityHost "@vuna@host@tryRunIn" = 2
 nativeRtValueArityHost "@vuna@prim_eff_runIn" = 2
-nativeRtValueArityHost "@vuna@prim_eff_runIn_host" = 2
-nativeRtValueArityHost "@vuna@host@runIn" = 2
 nativeRtValueArityHost "@vuna@prim_eff_spawn" = 1
 nativeRtValueArityHost "@vuna@prim_eff_wait" = 1
 nativeRtValueArityHost "@vuna@prim_eff_exit_process_host" = 1
 nativeRtValueArityHost "@vuna@prim_eff_getenv" = 1
-nativeRtValueArityHost "@vuna@prim_eff_getenv_host" = 1
 nativeRtValueArityHost "@vuna@host@getenv" = 1
 nativeRtValueArityHost "@vuna@prim_eff_sleep" = 1
-nativeRtValueArityHost "@vuna@prim_eff_sleep_host" = 1
 nativeRtValueArityHost "@vuna@host@sleep" = 1
 nativeRtValueArityHost "prim_cleanupPush" = 1
 nativeRtValueArityHost "prim_cleanupPop" = 1
 nativeRtValueArityHost "@vuna@host@tryReadFile" = 1
 nativeRtValueArityHost "@vuna@host@tryReadFileRange" = 3
-nativeRtValueArityHost "@vuna@prim_eff_readFile" = 1
-nativeRtValueArityHost "@vuna@prim_eff_readFile_host" = 1
-nativeRtValueArityHost "@vuna@host@readFile" = 1
-nativeRtValueArityHost "@vuna@prim_eff_readFileRange" = 3
-nativeRtValueArityHost "@vuna@prim_eff_readFileRange_host" = 3
-nativeRtValueArityHost "@vuna@host@readFileRange" = 3
 nativeRtValueArityHost "@vuna@host@tryWriteFile" = 2
-nativeRtValueArityHost "@vuna@prim_eff_writeFile" = 2
-nativeRtValueArityHost "@vuna@prim_eff_writeFile_host" = 2
-nativeRtValueArityHost "@vuna@host@writeFile" = 2
 nativeRtValueArityHost "@vuna@host@tryWriteFileAtomic" = 2
-nativeRtValueArityHost "@vuna@prim_eff_writeFileAtomic" = 2
-nativeRtValueArityHost "@vuna@prim_eff_writeFileAtomic_host" = 2
-nativeRtValueArityHost "@vuna@host@writeFileAtomic" = 2
 nativeRtValueArityHost "@vuna@host@tryReadDir" = 1
-nativeRtValueArityHost "@vuna@prim_eff_readDir" = 1
-nativeRtValueArityHost "@vuna@prim_eff_readDir_host" = 1
-nativeRtValueArityHost "@vuna@host@readDir" = 1
 nativeRtValueArityHost "@vuna@host@tryIsDirectory" = 1
-nativeRtValueArityHost "@vuna@prim_eff_isDirectory" = 1
-nativeRtValueArityHost "@vuna@prim_eff_isDirectory_host" = 1
-nativeRtValueArityHost "@vuna@host@isDirectory" = 1
 nativeRtValueArityHost "@vuna@host@tryMakeDir" = 1
-nativeRtValueArityHost "@vuna@prim_eff_makeDir" = 1
-nativeRtValueArityHost "@vuna@prim_eff_makeDir_host" = 1
-nativeRtValueArityHost "@vuna@host@makeDir" = 1
 nativeRtValueArityHost "@vuna@host@tryMakeDirExclusive" = 1
 nativeRtValueArityHost "@vuna@host@tryRemoveFile" = 1
-nativeRtValueArityHost "@vuna@prim_eff_removeFile" = 1
-nativeRtValueArityHost "@vuna@prim_eff_removeFile_host" = 1
-nativeRtValueArityHost "@vuna@host@removeFile" = 1
 nativeRtValueArityHost "@vuna@host@tryRemoveTree" = 1
 nativeRtValueArityHost "@vuna@host@tryRename" = 2
 nativeRtValueArityHost "@vuna@host@trySymlink" = 2
 nativeRtValueArityHost "@vuna@host@fileExists" = 1
-nativeRtValueArityHost "@vuna@prim_eff_fileExists" = 1
-nativeRtValueArityHost "@vuna@prim_eff_fileExists_host" = 1
 nativeRtValueArityHost "@vuna@host@fileMtime" = 1
-nativeRtValueArityHost "@vuna@prim_eff_fileMtime" = 1
-nativeRtValueArityHost "@vuna@prim_eff_fileMtime_host" = 1
 nativeRtValueArityHost "@vuna@host@fileSize" = 1
-nativeRtValueArityHost "@vuna@prim_eff_fileSize" = 1
-nativeRtValueArityHost "@vuna@prim_eff_fileSize_host" = 1
 nativeRtValueArityHost _ = 0
 
 export nativeRtValueArity : String -> Int
