@@ -343,7 +343,7 @@ OCaml 端不需要额外链接库（`Domain` / `Mutex` / `Condition` / `Atomic` 
 不交错。
 
 **GC 参数按 domain 生效**：生成的 `dtRuntime` 前缀用 `Gc.set` 调的是**主 domain**（`minor_heap_size`
-16 MB、`space_overhead` 200）；`Domain.spawn` 出来的 domain 用运行时启动参数
+16 MB = 2M words、`space_overhead` 200）；`Domain.spawn` 出来的 domain 用运行时启动参数
 （`OCAMLRUNPARAM`）或 OCaml 默认值（256k words = 2 MB minor heap），不继承主 domain 的
 `Gc.set`。分配量大的纯函数负载因此在 worker 里做更多次 minor GC：`parMap` 的 user 时间高于
 同工作量的串行路径，wall 收益低于核数。
@@ -432,7 +432,7 @@ writeFileAtomic,readDir,isDirectory,makeDir,removeFile}`、`@vuna@prim_eff_net*`
   `Unix.sleepf`（`@vuna@prim_eff_sleep`）、`Unix.readlink "/proc/self/exe"`
   （`@vuna@prim_eff_execPath`）；`build.sh` 无条件 `-I +unix ... unix.cmxa`。因此任何产物都
   依赖 OCaml 的 unix 库。
-- 启动时设置 GC（`minor_heap_size` 16MB、`space_overhead` 200）。
+- 启动时设置 GC（`minor_heap_size` 16MB = 2M words、`space_overhead` 200）。
 
 契约里的符号都是隐藏名（codegen 包一层 `MkEff`）；下表的「用户面」列给出对应标签：
 
