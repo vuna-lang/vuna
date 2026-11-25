@@ -10,6 +10,8 @@ module Vuna.Repl.Client where
 
 import Vuna.Compiler.Base.Common
 import Vuna.Json.Frame
+import Base.Container.MutBuffer as MutBuffer
+import Base.Effect.Mut
 import Base.Effect.Console as EffConsole
 import Base.Effect.Net as EffNet
 import Base.Effect.Stdin as EffStdin
@@ -25,17 +27,23 @@ clientFuelBound : Int
 clientFuelBound = 1073741824
 
 -- | 内部：读 stdin 全部字节（一次调用的请求 body），每次最多 `clientChunkSize` 字节，
--- 直到 EOF 或 fuel 耗尽。
-readStdinAll : Member nStdin StdinOp r => String -> Int -> Eff r String
-readStdinAll acc fuel =
+-- 直到 EOF 或 fuel 耗尽。分片追加，末尾一次取回（逐次 `acc ++ bytes` 是 O(body²)）。
+readStdinAll : Member nStdin StdinOp r => Eff r String
+readStdinAll = MutBuffer.withMutBuffer (\buf => readStdinAllGo buf clientFuelBound)
+
+readStdinAllGo : Member nStdin StdinOp r, Member MutOp r => MutBuffer -> Int -> Eff r String
+readStdinAllGo buf fuel =
   if fuel <= 0 then
-    pure acc
+    MutBuffer.toString buf
   else
     do
       chunk <- stdinReadBytes (natFromInt clientChunkSize)
       case chunk of
-        Nothing => pure acc
-        Just bytes => readStdinAll (acc ++ bytes) (fuel - 1)
+        Nothing => MutBuffer.toString buf
+        Just bytes =>
+          do
+            _ <- MutBuffer.append buf bytes
+            readStdinAllGo buf (fuel - 1)
 
 -- | 内部：从连接读一帧的 body（只处理一个响应，帧后的多余字节丢弃）；帧头缺失、连接中断
 -- 或 fuel 耗尽给 `Nothing`。
@@ -69,7 +77,7 @@ readOneFrame conn buf fuel =
 export runReplClient : Member nConsole ConsoleOp r, Member nStdin StdinOp r, Member nNet NetOp r => String -> Eff r Int
 runReplClient addr =
   do
-    body <- readStdinAll "" clientFuelBound
+    body <- readStdinAll
     conn <- netConnect addr
     _ <- netSend conn (renderFrameBody body)
     resp <- readOneFrame conn "" clientFuelBound

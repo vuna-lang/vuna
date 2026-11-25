@@ -56,6 +56,7 @@ import Vuna.Search.Query
 import Vuna.Search.Run
 import Vuna.Search.Types
 import Base.Container.MutRef as MutRef
+import Base.Container.MutBuffer as MutBuffer
 import Base.Effect.Mut
 import Base.Data.Pair
 import Base.Effect.Clock as EffClock
@@ -136,7 +137,7 @@ record ReplSettings where
   settingColorOn : Bool
 
 -- | 输出汇模式：`True` 时 `replEmit` / `replEmitErr` 的文本写进请求作用域里的
--- `MutRef` 单元（server 模式，再作为一帧 JSON-RPC 响应的 output / error 回给客户端）；
+-- `MutBuffer`（server 模式，再作为一帧 JSON-RPC 响应的 output / error 回给客户端）；
 -- `False` 时直接写 stdout。`Vuna.Repl` 内除 `replEmit` / `replEmitErr` 外不得直接 `consolePrint`。
 replOutCell : String
 replOutCell = "replOut"
@@ -184,9 +185,9 @@ export record ReplState(..) where
   -- | 输出汇模式（`True` = 写进请求作用域里的单元，供 server 组响应帧）。
   stateCapture : Bool
   -- | 本次请求的普通输出汇（`Nothing` = 直接写 stdout）。
-  stateOut : Maybe (MutRef String)
+  stateOut : Maybe MutBuffer
   -- | 本次请求的错误输出汇（`Nothing` = 直接写 stdout）。
-  stateErr : Maybe (MutRef String)
+  stateErr : Maybe MutBuffer
 
 -- | 一步处理的结果：继续（带新状态）或退出（带退出码）。
 export data ReplOutcome(..) : Type where
@@ -252,7 +253,7 @@ withCtx st ctx =
     st.stateErr
 
 -- | 只替换本次请求的输出汇（server 模式每个请求一份）。
-export withSinks : ReplState -> Maybe (MutRef String) -> Maybe (MutRef String) -> ReplState
+export withSinks : ReplState -> Maybe MutBuffer -> Maybe MutBuffer -> ReplState
 withSinks st out err =
   ReplState
     st.stateCtx
@@ -622,8 +623,7 @@ replEmit st s =
     case st.stateOut of
       Just cell =>
         do
-          cur <- MutRef.read cell
-          _ <- MutRef.write cell (cur ++ s)
+          _ <- MutBuffer.append cell s
           pure (strLength s)
       Nothing => pure 0
   else
@@ -636,8 +636,7 @@ replEmitErr st s =
     case st.stateErr of
       Just cell =>
         do
-          cur <- MutRef.read cell
-          _ <- MutRef.write cell (cur ++ s)
+          _ <- MutBuffer.append cell s
           pure (strLength s)
       Nothing => pure 0
   else
@@ -690,8 +689,8 @@ replSinkDrain st =
         Nothing => pure ("", "")
         Just err =>
           do
-            o <- MutRef.read out
-            e <- MutRef.read err
+            o <- MutBuffer.toString out
+            e <- MutBuffer.toString err
             pure (o, e)
 
 -- | 是否还有未完成的输入（待续 pending 或 `:{` 块未闭合）。

@@ -25,7 +25,7 @@ import Vuna.Json.Frame
 import Vuna.Json.Rpc
 import Vuna.Json.Server
 import Vuna.Repl
-import Base.Container.MutRef as MutRef
+import Base.Container.MutBuffer as MutBuffer
 import Base.Effect.Mut
 import Base.Effect.Console as EffConsole
 import Base.Effect.Fs as EffFs
@@ -136,9 +136,8 @@ pingRequest msg st =
 -- 缺 `method` 回 `-32600`。
 handleRequest : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Json -> ReplState -> Eff r (Bool, ReplState, List Json)
 handleRequest msg st =
-  MutRef.withMutRef
-    ""
-    (\out => MutRef.withMutRef "" (\err => handleRequestCore msg (withSinks st (Just out) (Just err))))
+  MutBuffer.withMutBuffer
+    (\out => MutBuffer.withMutBuffer (\err => handleRequestCore msg (withSinks st (Just out) (Just err))))
 
 -- | 内部：请求本体——在本次请求的两个输出单元作用域里跑（`evalRequest` 收尾时读出）。
 handleRequestCore : Member nFs FsOp r, Member nConsole ConsoleOp r, Member MutOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Json -> ReplState -> Eff r (Bool, ReplState, List Json)
