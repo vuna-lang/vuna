@@ -251,22 +251,73 @@ mutEntryOf e =
 
 -- | 签名里的隐藏句柄参数：`(binder 名, 句柄类型项)`，按行条目的家族从表里取句柄构造子。
 export mutHandleParamsOf : Term -> List (String, Term)
-mutHandleParamsOf ty = mutHandleParamsGo (mutRowEntriesOfTy ty) []
+mutHandleParamsOf ty =
+  mutHandleParamsDedupe
+    (append (mutHandleParamsGo (mutRowEntriesOfTy ty) []) (mutMemberHandleParams 256 ty []))
+    []
 
 mutHandleParamsGo : List MutRowEntry -> List (String, Term) -> List (String, Term)
 mutHandleParamsGo [] acc = reverse acc
 mutHandleParamsGo (e :: rest) acc =
+  case mutRowEntryHandle e of
+    Just p => mutHandleParamsGo rest (p :: acc)
+    Nothing => mutHandleParamsGo rest acc
+
+-- | 行条目 → `(binder 名, 句柄类型项)`；家族不在表里时 `Nothing`。
+mutRowEntryHandle : MutRowEntry -> Maybe (String, Term)
+mutRowEntryHandle e =
   case mutFamilyOfOpFamily e.mutRowEntryFamily of
     Just fam =>
       let
         binder = mutBinderName fam e.mutRowEntryName
       in if fam.mutFamHandleArity <= 0 then
-        mutHandleParamsGo rest ((binder, TGlobal fam.mutFamHandleType) :: acc)
+        Just (binder, TGlobal fam.mutFamHandleType)
       else
         case nthTerm fam.mutFamPayloadIndex e.mutRowEntryArgs of
-          Just payload => mutHandleParamsGo rest ((binder, TApp (TGlobal fam.mutFamHandleType) payload Rig0) :: acc)
-          Nothing => mutHandleParamsGo rest acc
-    Nothing => mutHandleParamsGo rest acc
+          Just payload => Just (binder, TApp (TGlobal fam.mutFamHandleType) payload Rig0)
+          Nothing => Nothing
+    Nothing => Nothing
+
+-- 约束里的句柄：签名写了 `Member (Named n (F a)) r`（行是变量）时同样合成；只看 Pi 的
+-- binder 域（约束就是域），只认字面量实例名。
+mutMemberHandleParams : Int -> Term -> List (String, Term) -> List (String, Term)
+mutMemberHandleParams fuel ty acc =
+  if fuel <= 0 then
+    reverse acc
+  else
+    case ty of
+      TPi _ _ _ dom cod => mutMemberHandleParams (fuel - 1) cod (append (mutMemberHandleParamOf dom) acc)
+      _ => reverse acc
+
+mutMemberHandleParamOf : Term -> List (String, Term)
+mutMemberHandleParamOf dom =
+  case mutHeadArgs dom of
+    Just (g, args) =>
+      if g == "Base.Effect.Core.Member" then
+        case args of
+          elem :: _ =>
+            case mutEntryOf elem of
+              Just e =>
+                case mutRowEntryHandle e of
+                  Just p => [p]
+                  Nothing => []
+              Nothing => []
+          _ => []
+      else
+        []
+    Nothing => []
+
+mutHandleParamsDedupe : List (String, Term) -> List (String, Term) -> List (String, Term)
+mutHandleParamsDedupe [] acc = reverse acc
+mutHandleParamsDedupe ((n, h) :: rest) acc =
+  if mutHasHandleBinder n acc then
+    mutHandleParamsDedupe rest acc
+  else
+    mutHandleParamsDedupe rest ((n, h) :: acc)
+
+mutHasHandleBinder : String -> List (String, Term) -> Bool
+mutHasHandleBinder n [] = False
+mutHasHandleBinder n ((m, _) :: rest) = if n == m then True else mutHasHandleBinder n rest
 
 -- | 列表第 `i` 项（越界返回 `Nothing`）。
 nthTerm : Int -> List Term -> Maybe Term
