@@ -116,22 +116,22 @@ let v_fsOpHIOHost = (fun (op : t_FsOp) k -> (match op with
 # 313 "Base/Effect/Fs.vuna"
 let v_handleFsHostHost = (fun (n : string) comp -> (((((((B_dEffect_dCore.v_handleCoreAtId "fs") n) 371381598) (dtp_effectId n)) (fun a -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) a))) v_fsOpHIOHost) comp))
 
-# 317 "Base/Effect/Fs.vuna"
+# 319 "Base/Effect/Fs.vuna"
 let v_runFsHost = (fun comp -> (B_dEffect_dCore.v_joinEff ((v_handleFsHostHost "default") comp)))
 
-# 321 "Base/Effect/Fs.vuna"
+# 323 "Base/Effect/Fs.vuna"
 let v_fsErrorRet = (fun a -> (B_dData_dResult.C_Result_Ok (a)))
 
-# 325 "Base/Effect/Fs.vuna"
+# 327 "Base/Effect/Fs.vuna"
 let v_fsErrorOpHR = (fun (op : t_FsErrorOp) _u -> (match op with
   | C_FsErrorOp_FsFail (dtb__32) -> (B_dData_dResult.C_Result_Err ((v_fsErrorText dtb__32)))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 331 "Base/Effect/Fs.vuna"
+# 333 "Base/Effect/Fs.vuna"
 let v_runFsError = (fun (n : string) comp -> (((((((B_dEffect_dCore.v_handleCoreAtId "fs-error") n) 1044473165) (dtp_effectId n)) v_fsErrorRet) v_fsErrorOpHR) comp))
 
-# 335 "Base/Effect/Fs.vuna"
+# 337 "Base/Effect/Fs.vuna"
 let v_runFsErrorHost = (fun comp -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((v_runFsError "fs-error") comp)) (fun res -> (match res with
   | B_dData_dResult.C_Result_Ok (dtb__33) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) dtb__33)
   | B_dData_dResult.C_Result_Err (dtb__34) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (B_dEffect_dHost.v_hostSync ((fun dtio_0 -> B_dEffect_dCore.C_Eff_MkEff (fun (_ : B_dEffect_dCore.t_EffUnit) -> dtp_eprint dtio_0)) (String.concat "" ["vuna: "; dtb__34; "\n"])))) (fun _u -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (B_dEffect_dHost.v_hostSync ((fun dtio_0 -> B_dEffect_dCore.C_Eff_MkEff (fun (_ : B_dEffect_dCore.t_EffUnit) -> dtp_exit dtio_0)) 1))) (fun _u -> ((fun msg -> failwith msg) "unreachable: fs error handler")))))

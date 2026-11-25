@@ -137,75 +137,75 @@ let v_lexTokensOfFrom = (fun (source : string) (start : Base_dSource.t_Pos) (tok
 # 325 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_lexCst = (fun (source : string) -> (let nd_uscrut1 = (Frontend_dLexer.v_lexSourceWithComments source) in (match nd_uscrut1 with
   | Base_dDiag.C_Check_OkC (dtb__29) -> (match dtb__29 with
-  | { B_dData_dPair.f_Pair_first = dtb__30; B_dData_dPair.f_Pair_second = dtb__31 } -> (B_dData_dMaybe.C_Maybe_Just ((((B_dData_dObs_dSpan.v_obsSpan "vuna.parse.cst") "vuna.phase") (fun (_u : int) -> (((v_lexTokensOf source) dtb__30) dtb__31)))))
+  | { B_dData_dPair.f_Pair_first = dtb__30; B_dData_dPair.f_Pair_second = dtb__31 } -> (B_dData_dMaybe.C_Maybe_Just (((Base_dObs.v_obsPure "vuna.parse.cst") (fun (_u : int) -> (((v_lexTokensOf source) dtb__30) dtb__31)))))
   | _ -> failwith "DT: impossible branch"
 )
   | Base_dDiag.C_Check_ErrC (dtb__32) -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
 )))
 
-# 333 "Vuna/Compiler/Frontend/Cst.vuna"
+# 332 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_triviaTextOf = (fun (tr : t_Trivia) -> (tr).f_Trivia_triviaText)
 
-# 337 "Vuna/Compiler/Frontend/Cst.vuna"
+# 336 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_renderParts = (fun (t : t_CstToken) -> ((B_dData_dList.v_append ((B_dData_dList.v_map v_triviaTextOf) (t).f_CstToken_cstLeading)) (B_dData_dList.C_List__x58__x58_ ((t).f_CstToken_cstText, B_dData_dList.C_List_Nil))))
 
-# 341 "Vuna/Compiler/Frontend/Cst.vuna"
+# 340 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_renderCst = (fun (toks : t_CstToken B_dData_dList.t_List) -> (B_dData_dList.dtp_concatMany ((B_dData_dList.v_concatMap v_renderParts) toks)))
 
-# 345 "Vuna/Compiler/Frontend/Cst.vuna"
+# 344 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_roundtripOk = (fun (s : string) -> (match (v_lexCst s) with
   | B_dData_dMaybe.C_Maybe_Nothing -> false
   | B_dData_dMaybe.C_Maybe_Just (dtb__33) -> ((v_renderCst dtb__33) = s)
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 404 "Vuna/Compiler/Frontend/Cst.vuna"
+# 403 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_emptyCstSurface = { f_CstSurface_cstParenDepth = 0; f_CstSurface_cstBacktick = false; f_CstSurface_cstSection = B_dData_dMaybe.C_Maybe_Nothing; f_CstSurface_cstInterpMulti = B_dData_dMaybe.C_Maybe_Nothing; f_CstSurface_cstHoleTrees = B_dData_dList.C_List_Nil }
 
-# 419 "Vuna/Compiler/Frontend/Cst.vuna"
+# 418 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_nodeSpan = (fun (mc0 : t_CstNode) -> (match mc0 with
   | C_CstNode_CstBranch (dtb__34, dtb__35, dtb__36, dtb__37, dtb__38) -> dtb__36
   | C_CstNode_CstLeaf (dtb__39) -> (dtb__39).f_CstToken_cstSpan
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 424 "Vuna/Compiler/Frontend/Cst.vuna"
+# 423 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_nodeSurface = (fun (mc0 : t_CstNode) -> (match mc0 with
   | C_CstNode_CstBranch (dtb__40, dtb__41, dtb__42, dtb__43, dtb__44) -> dtb__43
   | C_CstNode_CstLeaf (dtb__45) -> v_emptyCstSurface
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 429 "Vuna/Compiler/Frontend/Cst.vuna"
+# 428 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_nodeId = (fun (mc0 : t_CstNode) -> (match mc0 with
   | C_CstNode_CstBranch (dtb__46, dtb__47, dtb__48, dtb__49, dtb__50) -> (B_dData_dMaybe.C_Maybe_Just (dtb__47))
   | C_CstNode_CstLeaf (dtb__51) -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 434 "Vuna/Compiler/Frontend/Cst.vuna"
+# 433 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_nodeKind = (fun (mc0 : t_CstNode) -> (match mc0 with
   | C_CstNode_CstBranch (dtb__52, dtb__53, dtb__54, dtb__55, dtb__56) -> (B_dData_dMaybe.C_Maybe_Just (dtb__52))
   | C_CstNode_CstLeaf (dtb__57) -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 439 "Vuna/Compiler/Frontend/Cst.vuna"
+# 438 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_nodeChildren = (fun (mc0 : t_CstNode) -> (match mc0 with
   | C_CstNode_CstBranch (dtb__58, dtb__59, dtb__60, dtb__61, dtb__62) -> dtb__62
   | C_CstNode_CstLeaf (dtb__63) -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 444 "Vuna/Compiler/Frontend/Cst.vuna"
+# 443 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_nodeToken = (fun (mc0 : t_CstNode) -> (match mc0 with
   | C_CstNode_CstBranch (dtb__64, dtb__65, dtb__66, dtb__67, dtb__68) -> B_dData_dMaybe.C_Maybe_Nothing
   | C_CstNode_CstLeaf (dtb__69) -> (B_dData_dMaybe.C_Maybe_Just (dtb__69))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 454 "Vuna/Compiler/Frontend/Cst.vuna"
+# 453 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_cstKindTag = (fun (mc0 : t_CstKind) -> (match mc0 with
   | C_CstKind_CstDoStmtKind -> "doStmt"
   | C_CstKind_CstPatKind -> "pat"
@@ -224,57 +224,57 @@ let v_cstKindTag = (fun (mc0 : t_CstKind) -> (match mc0 with
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 450 "Vuna/Compiler/Frontend/Cst.vuna"
+# 449 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_nodeKindTag = (fun (mc0 : t_CstNode) -> (match mc0 with
   | C_CstNode_CstBranch (dtb__70, dtb__71, dtb__72, dtb__73, dtb__74) -> (v_cstKindTag dtb__70)
   | C_CstNode_CstLeaf (dtb__75) -> "leaf"
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 494 "Vuna/Compiler/Frontend/Cst.vuna"
+# 493 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_spanFrom = (fun (a : Base_dSource.t_Span) (b : Base_dSource.t_Span) -> { Base_dSource.f_Span_spanFile = ""; Base_dSource.f_Span_spanStartLine = (Base_dSource.v_spanStartLine a); Base_dSource.f_Span_spanStartCol = (Base_dSource.v_spanStartCol a); Base_dSource.f_Span_spanEndLine = (Base_dSource.v_spanEndLine b); Base_dSource.f_Span_spanEndCol = (Base_dSource.v_spanEndCol b); Base_dSource.f_Span_spanStartOffset = (Base_dSource.v_spanStartOffset a); Base_dSource.f_Span_spanEndOffset = (Base_dSource.v_spanEndOffset b) })
 
-# 506 "Vuna/Compiler/Frontend/Cst.vuna"
+# 505 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_degenerateSpan = { Base_dSource.f_Span_spanFile = ""; Base_dSource.f_Span_spanStartLine = 1; Base_dSource.f_Span_spanStartCol = 1; Base_dSource.f_Span_spanEndLine = 1; Base_dSource.f_Span_spanEndCol = 1; Base_dSource.f_Span_spanStartOffset = 0; Base_dSource.f_Span_spanEndOffset = 0 }
 
-# 510 "Vuna/Compiler/Frontend/Cst.vuna"
+# 509 "Vuna/Compiler/Frontend/Cst.vuna"
 let rec v_lastSpanOfList = (fun (mc0 : Base_dSource.t_Span) (mc1 : Base_dSource.t_Span B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__76, dtb__77) -> ((v_lastSpanOfList dtb__76) dtb__77)
   | B_dData_dList.C_List_Nil -> mc0
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 515 "Vuna/Compiler/Frontend/Cst.vuna"
+# 514 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_lastSpanOf = (fun (d : Base_dSource.t_Span) (kids : t_CstNode B_dData_dList.t_List) -> ((v_lastSpanOfList d) ((B_dData_dList.v_map v_nodeSpan) kids)))
 
-# 519 "Vuna/Compiler/Frontend/Cst.vuna"
+# 518 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_headSpan = (fun (mc0 : Base_dSource.t_Span) (mc1 : t_CstToken B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__78, dtb__79) -> (dtb__78).f_CstToken_cstSpan
   | B_dData_dList.C_List_Nil -> mc0
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 524 "Vuna/Compiler/Frontend/Cst.vuna"
+# 523 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_finishFrame = (fun (f : t_NestFrame) -> (let kids = (B_dData_dList.v_reverse (f).f_NestFrame_nfKids) in (let endSp = ((v_lastSpanOf (f).f_NestFrame_nfStart) kids) in (C_CstNode_CstBranch ((f).f_NestFrame_nfKind, (f).f_NestFrame_nfId, ((v_spanFrom (f).f_NestFrame_nfStart) endSp), v_emptyCstSurface, kids)))))
 
-# 532 "Vuna/Compiler/Frontend/Cst.vuna"
+# 531 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_pushLeaves = (fun (mc0 : t_CstNode B_dData_dList.t_List) (mc1 : t_NestFrame B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__80, dtb__81) -> (B_dData_dList.C_List__x58__x58_ ({ f_NestFrame_nfKind = (dtb__80).f_NestFrame_nfKind; f_NestFrame_nfId = (dtb__80).f_NestFrame_nfId; f_NestFrame_nfStart = (dtb__80).f_NestFrame_nfStart; f_NestFrame_nfKids = ((B_dData_dList.v_append (B_dData_dList.v_reverse mc0)) (dtb__80).f_NestFrame_nfKids) }, dtb__81))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 538 "Vuna/Compiler/Frontend/Cst.vuna"
+# 537 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_pushInto = (fun (node : t_CstNode) (f : t_NestFrame) -> { f_NestFrame_nfKind = (f).f_NestFrame_nfKind; f_NestFrame_nfId = (f).f_NestFrame_nfId; f_NestFrame_nfStart = (f).f_NestFrame_nfStart; f_NestFrame_nfKids = (B_dData_dList.C_List__x58__x58_ (node, (f).f_NestFrame_nfKids)) })
 
-# 542 "Vuna/Compiler/Frontend/Cst.vuna"
+# 541 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_pushNode = (fun (mc0 : t_CstNode) (mc1 : t_NestFrame B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__82, dtb__83) -> (B_dData_dList.C_List__x58__x58_ (((v_pushInto mc0) dtb__82), dtb__83))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 547 "Vuna/Compiler/Frontend/Cst.vuna"
+# 546 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_closeTopFrame = (fun (mc0 : t_NestFrame B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__84, dtb__85) -> (match dtb__85 with
   | B_dData_dList.C_List__x58__x58_ (dtb__86, dtb__87) -> (B_dData_dList.C_List__x58__x58_ (((v_pushInto (v_finishFrame dtb__84)) dtb__86), dtb__87))
@@ -285,14 +285,14 @@ let v_closeTopFrame = (fun (mc0 : t_NestFrame B_dData_dList.t_List) -> (match mc
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 553 "Vuna/Compiler/Frontend/Cst.vuna"
+# 552 "Vuna/Compiler/Frontend/Cst.vuna"
 let rec v_nestFrameCount = (fun (mc0 : t_NestFrame B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__88, dtb__89) -> (1 + (v_nestFrameCount dtb__89))
   | B_dData_dList.C_List_Nil -> 0
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 558 "Vuna/Compiler/Frontend/Cst.vuna"
+# 557 "Vuna/Compiler/Frontend/Cst.vuna"
 let rec v_closeAllFrames = (fun (fuel : int) (frames : t_NestFrame B_dData_dList.t_List) -> (if (fuel <= 0) then frames else (let nd_uscrut2 = frames in (match nd_uscrut2 with
   | B_dData_dList.C_List__x58__x58_ (dtb__90, dtb__91) -> (match dtb__91 with
   | B_dData_dList.C_List__x58__x58_ (dtb__92, dtb__93) -> ((v_closeAllFrames (fuel - 1)) (v_closeTopFrame frames))
@@ -301,14 +301,14 @@ let rec v_closeAllFrames = (fun (fuel : int) (frames : t_NestFrame B_dData_dList
   | _ -> frames
 ))))
 
-# 568 "Vuna/Compiler/Frontend/Cst.vuna"
+# 567 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_eventIndex = (fun (mc0 : t_NodeEvent) -> (match mc0 with
   | C_NodeEvent_EvClose (dtb__94) -> dtb__94
   | C_NodeEvent_EvOpen (dtb__95, dtb__96, dtb__97) -> dtb__96
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 577 "Vuna/Compiler/Frontend/Cst.vuna"
+# 576 "Vuna/Compiler/Frontend/Cst.vuna"
 let rec v_nestEvents = (fun (mc0 : t_CstToken B_dData_dList.t_List) (mc1 : int) (mc2 : t_NestFrame B_dData_dList.t_List) (mc3 : t_NodeEvent B_dData_dList.t_List) -> (match mc3 with
   | B_dData_dList.C_List__x58__x58_ (dtb__98, dtb__99) -> (let at = (v_eventIndex dtb__98) in (let n = (at - mc1) in (let live2 = ((B_dData_dList.v_drop n) mc0) in (let frames1 = ((v_pushLeaves ((B_dData_dList.v_map (fun (t : t_CstToken) -> (C_CstNode_CstLeaf (t)))) ((B_dData_dList.v_take n) mc0))) mc2) in (match dtb__98 with
   | C_NodeEvent_EvOpen (dtb__100, dtb__101, dtb__102) -> ((((v_nestEvents live2) at) (B_dData_dList.C_List__x58__x58_ ({ f_NestFrame_nfKind = dtb__100; f_NestFrame_nfId = dtb__102; f_NestFrame_nfStart = ((v_headSpan v_degenerateSpan) live2); f_NestFrame_nfKids = B_dData_dList.C_List_Nil }, frames1))) dtb__99)
@@ -319,27 +319,27 @@ let rec v_nestEvents = (fun (mc0 : t_CstToken B_dData_dList.t_List) (mc1 : int) 
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 592 "Vuna/Compiler/Frontend/Cst.vuna"
+# 591 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_finishRoot = (fun (mc0 : Base_dSource.t_Span) (mc1 : t_NestFrame B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List_Nil -> (C_CstNode_CstBranch (C_CstKind_CstFileKind, 0, mc0, v_emptyCstSurface, B_dData_dList.C_List_Nil))
   | B_dData_dList.C_List__x58__x58_ (dtb__104, dtb__105) -> (C_CstNode_CstBranch (C_CstKind_CstFileKind, (dtb__104).f_NestFrame_nfId, mc0, v_emptyCstSurface, (B_dData_dList.v_reverse (dtb__104).f_NestFrame_nfKids)))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 597 "Vuna/Compiler/Frontend/Cst.vuna"
+# 596 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_tokenSpanOf = (fun (t : t_CstToken) -> (t).f_CstToken_cstSpan)
 
-# 601 "Vuna/Compiler/Frontend/Cst.vuna"
+# 600 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_tokensSpan = (fun (mc0 : t_CstToken B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__106, dtb__107) -> ((v_spanFrom (dtb__106).f_CstToken_cstSpan) ((v_lastSpanOfList (dtb__106).f_CstToken_cstSpan) ((B_dData_dList.v_map v_tokenSpanOf) dtb__107)))
   | B_dData_dList.C_List_Nil -> v_degenerateSpan
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 609 "Vuna/Compiler/Frontend/Cst.vuna"
+# 608 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_nestToTree = (fun (toks : t_CstToken B_dData_dList.t_List) (events : t_NodeEvent B_dData_dList.t_List) -> (let root = { f_NestFrame_nfKind = C_CstKind_CstFileKind; f_NestFrame_nfId = 0; f_NestFrame_nfStart = ((v_headSpan v_degenerateSpan) toks); f_NestFrame_nfKids = B_dData_dList.C_List_Nil } in (let frames = ((((v_nestEvents toks) 0) (B_dData_dList.C_List__x58__x58_ (root, B_dData_dList.C_List_Nil))) events) in (let sp = (v_tokensSpan toks) in ((v_finishRoot sp) frames)))))
 
-# 619 "Vuna/Compiler/Frontend/Cst.vuna"
+# 618 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_holeRootOf = (fun (node : t_CstNode) -> (let nd_uscrut1 = (v_nodeChildren node) in (match nd_uscrut1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__108, dtb__109) -> (match dtb__109 with
   | B_dData_dList.C_List_Nil -> dtb__108
@@ -348,7 +348,7 @@ let v_holeRootOf = (fun (node : t_CstNode) -> (let nd_uscrut1 = (v_nodeChildren 
   | _ -> node
 )))
 
-# 660 "Vuna/Compiler/Frontend/Cst.vuna"
+# 659 "Vuna/Compiler/Frontend/Cst.vuna"
 let rec v_lookupHoleTrees = (fun (mc0 : int) (mc1 : (int, t_CstNode B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__110, dtb__111) -> (match dtb__110 with
   | { B_dData_dPair.f_Pair_first = dtb__112; B_dData_dPair.f_Pair_second = dtb__113 } -> (if (dtb__112 = mc0) then (B_dData_dMaybe.C_Maybe_Just (dtb__113)) else ((v_lookupHoleTrees mc0) dtb__111))
@@ -358,50 +358,50 @@ let rec v_lookupHoleTrees = (fun (mc0 : int) (mc1 : (int, t_CstNode B_dData_dLis
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 680 "Vuna/Compiler/Frontend/Cst.vuna"
+# 679 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_emptyKey = (0 - 1)
 
-# 677 "Vuna/Compiler/Frontend/Cst.vuna"
+# 676 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_emptyParenTable = ((((B_dContainer_dHashMap.v_remove B_dData_dInt.v_Hashable_ue4b0f10b020a5e82_uInt) B_dData_dInt.v_Eq_u018fc178ff3df1b4_uInt) v_emptyKey) (((B_dContainer_dHashMap.v_fromList B_dData_dInt.v_Hashable_ue4b0f10b020a5e82_uInt) B_dData_dInt.v_Eq_u018fc178ff3df1b4_uInt) (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = v_emptyKey; B_dData_dPair.f_Pair_second = 0 }, B_dData_dList.C_List_Nil))))
 
-# 683 "Vuna/Compiler/Frontend/Cst.vuna"
+# 682 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_emptyFixityFacts = { f_FixityFacts_ffParens = v_emptyParenTable; f_FixityFacts_ffBackticks = B_dData_dList.C_List_Nil; f_FixityFacts_ffSections = B_dData_dList.C_List_Nil }
 
-# 694 "Vuna/Compiler/Frontend/Cst.vuna"
+# 693 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_parenDepthOfFacts = (fun (f : t_FixityFacts) (nid : int) -> (match ((((B_dContainer_dHashMap.v_lookup B_dData_dInt.v_Hashable_ue4b0f10b020a5e82_uInt) B_dData_dInt.v_Eq_u018fc178ff3df1b4_uInt) nid) (f).f_FixityFacts_ffParens) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__114) -> dtb__114
   | B_dData_dMaybe.C_Maybe_Nothing -> 0
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 704 "Vuna/Compiler/Frontend/Cst.vuna"
+# 703 "Vuna/Compiler/Frontend/Cst.vuna"
 let rec v_lookupBacktick = (fun (mc0 : int) (mc1 : (int, bool) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__115, dtb__116) -> (if ((B_dData_dPair.v_firstOf dtb__115) = mc0) then (B_dData_dPair.v_secondOf dtb__115) else ((v_lookupBacktick mc0) dtb__116))
   | B_dData_dList.C_List_Nil -> false
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 701 "Vuna/Compiler/Frontend/Cst.vuna"
+# 700 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_backtickOfFacts = (fun (f : t_FixityFacts) (nid : int) -> ((v_lookupBacktick nid) (f).f_FixityFacts_ffBackticks))
 
-# 712 "Vuna/Compiler/Frontend/Cst.vuna"
+# 711 "Vuna/Compiler/Frontend/Cst.vuna"
 let rec v_lookupSection = (fun (mc0 : int) (mc1 : (int, t_SectionShape) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__117, dtb__118) -> (if ((B_dData_dPair.v_firstOf dtb__117) = mc0) then (B_dData_dMaybe.C_Maybe_Just ((B_dData_dPair.v_secondOf dtb__117))) else ((v_lookupSection mc0) dtb__118))
   | B_dData_dList.C_List_Nil -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 709 "Vuna/Compiler/Frontend/Cst.vuna"
+# 708 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_sectionOfFacts = (fun (f : t_FixityFacts) (sp : Base_dSource.t_Span) -> ((v_lookupSection (Base_dSource.v_spanStartOffset sp)) (f).f_FixityFacts_ffSections))
 
-# 718 "Vuna/Compiler/Frontend/Cst.vuna"
+# 717 "Vuna/Compiler/Frontend/Cst.vuna"
 let rec v_lookupInterp = (fun (mc0 : int) (mc1 : (int, bool) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__119, dtb__120) -> (if ((B_dData_dPair.v_firstOf dtb__119) = mc0) then (B_dData_dPair.v_secondOf dtb__119) else ((v_lookupInterp mc0) dtb__120))
   | B_dData_dList.C_List_Nil -> false
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 634 "Vuna/Compiler/Frontend/Cst.vuna"
+# 633 "Vuna/Compiler/Frontend/Cst.vuna"
 let rec v_applySurfaceTree = (fun (mc0 : (int, int) B_dContainer_dHashMap.t_HashMap) (mc1 : (int, bool) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc2 : (int, t_SectionShape) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc3 : (int, bool) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc4 : (int, t_CstNode B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc5 : t_CstNode) -> (match mc5 with
   | C_CstNode_CstBranch (dtb__121, dtb__122, dtb__123, dtb__124, dtb__125) -> (let parenDepth = (match ((((B_dContainer_dHashMap.v_lookup B_dData_dInt.v_Hashable_ue4b0f10b020a5e82_uInt) B_dData_dInt.v_Eq_u018fc178ff3df1b4_uInt) dtb__122) mc0) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__127) -> dtb__127
@@ -416,13 +416,13 @@ let rec v_applySurfaceTree = (fun (mc0 : (int, int) B_dContainer_dHashMap.t_Hash
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 628 "Vuna/Compiler/Frontend/Cst.vuna"
+# 627 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_nestToTreeWithSurface = (fun (toks : t_CstToken B_dData_dList.t_List) (events : t_NodeEvent B_dData_dList.t_List) (parenEntries : (int, int) B_dData_dPair.t_Pair B_dData_dList.t_List) (backticks : (int, bool) B_dData_dPair.t_Pair B_dData_dList.t_List) (sections : (int, t_SectionShape) B_dData_dPair.t_Pair B_dData_dList.t_List) (interps : (int, bool) B_dData_dPair.t_Pair B_dData_dList.t_List) (holeTrees : (int, t_CstNode B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (let parens = (((B_dContainer_dHashMap.v_fromList B_dData_dInt.v_Hashable_ue4b0f10b020a5e82_uInt) B_dData_dInt.v_Eq_u018fc178ff3df1b4_uInt) parenEntries) in ((((((v_applySurfaceTree parens) backticks) sections) interps) holeTrees) ((v_nestToTree toks) events))))
 
-# 727 "Vuna/Compiler/Frontend/Cst.vuna"
+# 726 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_emptyFactEntries = { f_FactEntries_feParens = B_dData_dList.C_List_Nil; f_FactEntries_feBackticks = B_dData_dList.C_List_Nil; f_FactEntries_feSections = B_dData_dList.C_List_Nil }
 
-# 730 "Vuna/Compiler/Frontend/Cst.vuna"
+# 729 "Vuna/Compiler/Frontend/Cst.vuna"
 let rec v_factsGo = (fun (mc0 : t_CstNode) (mc1 : t_FactEntries) -> (match mc0 with
   | C_CstNode_CstBranch (dtb__129, dtb__130, dtb__131, dtb__132, dtb__133) -> (let acc1 = (if ((dtb__132).f_CstSurface_cstParenDepth > 0) then { mc1 with f_FactEntries_feParens = (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = dtb__130; B_dData_dPair.f_Pair_second = (dtb__132).f_CstSurface_cstParenDepth }, (mc1).f_FactEntries_feParens)) } else mc1) in (let acc2 = (if (dtb__132).f_CstSurface_cstBacktick then { acc1 with f_FactEntries_feBackticks = (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = dtb__130; B_dData_dPair.f_Pair_second = true }, (acc1).f_FactEntries_feBackticks)) } else acc1) in (let acc3 = (match (dtb__132).f_CstSurface_cstSection with
   | B_dData_dMaybe.C_Maybe_Just (dtb__134) -> { acc2 with f_FactEntries_feSections = (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = (Base_dSource.v_spanStartOffset dtb__131); B_dData_dPair.f_Pair_second = dtb__134 }, (acc2).f_FactEntries_feSections)) }
@@ -432,40 +432,40 @@ let rec v_factsGo = (fun (mc0 : t_CstNode) (mc1 : t_FactEntries) -> (match mc0 w
   | C_CstNode_CstLeaf (dtb__135) -> mc1
   | _ -> failwith "DT: impossible branch"
 ))
-# 747 "Vuna/Compiler/Frontend/Cst.vuna"
+# 746 "Vuna/Compiler/Frontend/Cst.vuna"
 and v_factsGoList = (fun (mc0 : t_CstNode B_dData_dList.t_List) (mc1 : t_FactEntries) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__136, dtb__137) -> ((v_factsGoList dtb__137) ((v_factsGo dtb__136) mc1))
   | B_dData_dList.C_List_Nil -> mc1
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 687 "Vuna/Compiler/Frontend/Cst.vuna"
+# 686 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_fixityFactsOf = (fun (root : t_CstNode) -> (let entries = ((v_factsGo root) v_emptyFactEntries) in { f_FixityFacts_ffParens = (((B_dContainer_dHashMap.v_fromList B_dData_dInt.v_Hashable_ue4b0f10b020a5e82_uInt) B_dData_dInt.v_Eq_u018fc178ff3df1b4_uInt) (entries).f_FactEntries_feParens); f_FixityFacts_ffBackticks = (entries).f_FactEntries_feBackticks; f_FixityFacts_ffSections = (entries).f_FactEntries_feSections }))
 
-# 756 "Vuna/Compiler/Frontend/Cst.vuna"
+# 755 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_fixityFactsOfParts = (fun (parens : (int, int) B_dData_dPair.t_Pair B_dData_dList.t_List) (backticks : (int, bool) B_dData_dPair.t_Pair B_dData_dList.t_List) (sections : (int, t_SectionShape) B_dData_dPair.t_Pair B_dData_dList.t_List) (holeRoots : t_CstNode B_dData_dList.t_List) -> (let holes = ((v_factsGoList holeRoots) v_emptyFactEntries) in (let liveParens = ((B_dData_dList.v_filter (fun (p : (int, int) B_dData_dPair.t_Pair) -> ((B_dData_dPair.v_secondOf p) > 0))) parens) in (let liveBackticks = ((B_dData_dList.v_filter (fun (p : (int, bool) B_dData_dPair.t_Pair) -> (B_dData_dPair.v_secondOf p))) backticks) in (let parenEntries = ((B_dData_dList.v_append liveParens) (holes).f_FactEntries_feParens) in (let backtickEntries = ((B_dData_dList.v_append liveBackticks) (holes).f_FactEntries_feBackticks) in (let sectionEntries = ((B_dData_dList.v_append sections) (holes).f_FactEntries_feSections) in { f_FixityFacts_ffParens = (((B_dContainer_dHashMap.v_fromList B_dData_dInt.v_Hashable_ue4b0f10b020a5e82_uInt) B_dData_dInt.v_Eq_u018fc178ff3df1b4_uInt) parenEntries); f_FixityFacts_ffBackticks = backtickEntries; f_FixityFacts_ffSections = sectionEntries })))))))
 
-# 768 "Vuna/Compiler/Frontend/Cst.vuna"
+# 767 "Vuna/Compiler/Frontend/Cst.vuna"
 let rec v_collectLeaves = (fun (mc0 : t_CstNode) -> (match mc0 with
   | C_CstNode_CstBranch (dtb__138, dtb__139, dtb__140, dtb__141, dtb__142) -> ((B_dData_dList.v_concatMap v_collectLeaves) dtb__142)
   | C_CstNode_CstLeaf (dtb__143) -> (B_dData_dList.C_List__x58__x58_ (dtb__143, B_dData_dList.C_List_Nil))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 773 "Vuna/Compiler/Frontend/Cst.vuna"
+# 772 "Vuna/Compiler/Frontend/Cst.vuna"
 let rec v_nodeTable = (fun (mc0 : t_CstNode) -> (match mc0 with
   | C_CstNode_CstBranch (dtb__144, dtb__145, dtb__146, dtb__147, dtb__148) -> (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = dtb__145; B_dData_dPair.f_Pair_second = mc0 }, ((B_dData_dList.v_concatMap v_nodeTable) dtb__148)))
   | C_CstNode_CstLeaf (dtb__149) -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 779 "Vuna/Compiler/Frontend/Cst.vuna"
+# 778 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_nodeIndex = (fun (tree : t_CstNode) -> (((B_dContainer_dHashMap.v_fromList B_dData_dInt.v_Hashable_ue4b0f10b020a5e82_uInt) B_dData_dInt.v_Eq_u018fc178ff3df1b4_uInt) (v_nodeTable tree)))
 
-# 795 "Vuna/Compiler/Frontend/Cst.vuna"
+# 794 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_emptyIndexAcc = { f_IndexAcc_iaById = B_dData_dList.C_List_Nil; f_IndexAcc_iaBySpan = B_dData_dList.C_List_Nil }
 
-# 804 "Vuna/Compiler/Frontend/Cst.vuna"
+# 803 "Vuna/Compiler/Frontend/Cst.vuna"
 let rec v_indexGo = (fun (mc0 : t_CstNode) (mc1 : t_IndexAcc) -> (match mc0 with
   | C_CstNode_CstBranch (dtb__150, dtb__151, dtb__152, dtb__153, dtb__154) -> (let hasIdFact = (if ((dtb__153).f_CstSurface_cstParenDepth > 0) then true else (dtb__153).f_CstSurface_cstBacktick) in (let hasSpanFact = (match (dtb__153).f_CstSurface_cstSection with
   | B_dData_dMaybe.C_Maybe_Just (dtb__155) -> true
@@ -479,44 +479,44 @@ let rec v_indexGo = (fun (mc0 : t_CstNode) (mc1 : t_IndexAcc) -> (match mc0 with
   | C_CstNode_CstLeaf (dtb__157) -> mc1
   | _ -> failwith "DT: impossible branch"
 ))
-# 821 "Vuna/Compiler/Frontend/Cst.vuna"
+# 820 "Vuna/Compiler/Frontend/Cst.vuna"
 and v_indexGoList = (fun (mc0 : t_CstNode B_dData_dList.t_List) (mc1 : t_IndexAcc) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__158, dtb__159) -> ((v_indexGoList dtb__159) ((v_indexGo dtb__158) mc1))
   | B_dData_dList.C_List_Nil -> mc1
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 798 "Vuna/Compiler/Frontend/Cst.vuna"
+# 797 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_cstIndexOf = (fun (root : t_CstNode) -> (let acc = ((v_indexGo root) v_emptyIndexAcc) in { f_CstIndex_ciById = (((B_dContainer_dHashMap.v_fromList B_dData_dInt.v_Hashable_ue4b0f10b020a5e82_uInt) B_dData_dInt.v_Eq_u018fc178ff3df1b4_uInt) (acc).f_IndexAcc_iaById); f_CstIndex_ciBySpan = (((B_dContainer_dHashMap.v_fromList B_dData_dInt.v_Hashable_ue4b0f10b020a5e82_uInt) B_dData_dInt.v_Eq_u018fc178ff3df1b4_uInt) (acc).f_IndexAcc_iaBySpan) }))
 
-# 831 "Vuna/Compiler/Frontend/Cst.vuna"
+# 830 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_emptyNodeTable = ((((B_dContainer_dHashMap.v_remove B_dData_dInt.v_Hashable_ue4b0f10b020a5e82_uInt) B_dData_dInt.v_Eq_u018fc178ff3df1b4_uInt) v_emptyKey) (((B_dContainer_dHashMap.v_fromList B_dData_dInt.v_Hashable_ue4b0f10b020a5e82_uInt) B_dData_dInt.v_Eq_u018fc178ff3df1b4_uInt) (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = v_emptyKey; B_dData_dPair.f_Pair_second = (C_CstNode_CstBranch (C_CstKind_CstFileKind, v_emptyKey, Base_dSource.v_spanEmpty, v_emptyCstSurface, B_dData_dList.C_List_Nil)) }, B_dData_dList.C_List_Nil))))
 
-# 826 "Vuna/Compiler/Frontend/Cst.vuna"
+# 825 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_emptyCstIndex = { f_CstIndex_ciById = v_emptyNodeTable; f_CstIndex_ciBySpan = v_emptyNodeTable }
 
-# 838 "Vuna/Compiler/Frontend/Cst.vuna"
+# 837 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_parenDepthOfIndex = (fun (ix : t_CstIndex) (nid : int) -> (match ((((B_dContainer_dHashMap.v_lookup B_dData_dInt.v_Hashable_ue4b0f10b020a5e82_uInt) B_dData_dInt.v_Eq_u018fc178ff3df1b4_uInt) nid) (ix).f_CstIndex_ciById) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__160) -> (let s = (v_nodeSurface dtb__160) in (s).f_CstSurface_cstParenDepth)
   | B_dData_dMaybe.C_Maybe_Nothing -> 0
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 848 "Vuna/Compiler/Frontend/Cst.vuna"
+# 847 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_backtickOfIndex = (fun (ix : t_CstIndex) (nid : int) -> (match ((((B_dContainer_dHashMap.v_lookup B_dData_dInt.v_Hashable_ue4b0f10b020a5e82_uInt) B_dData_dInt.v_Eq_u018fc178ff3df1b4_uInt) nid) (ix).f_CstIndex_ciById) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__161) -> (let s = (v_nodeSurface dtb__161) in (s).f_CstSurface_cstBacktick)
   | B_dData_dMaybe.C_Maybe_Nothing -> false
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 858 "Vuna/Compiler/Frontend/Cst.vuna"
+# 857 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_sectionOfIndex = (fun (ix : t_CstIndex) (sp : Base_dSource.t_Span) -> (match ((((B_dContainer_dHashMap.v_lookup B_dData_dInt.v_Hashable_ue4b0f10b020a5e82_uInt) B_dData_dInt.v_Eq_u018fc178ff3df1b4_uInt) (Base_dSource.v_spanStartOffset sp)) (ix).f_CstIndex_ciBySpan) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__162) -> (let s = (v_nodeSurface dtb__162) in (s).f_CstSurface_cstSection)
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 868 "Vuna/Compiler/Frontend/Cst.vuna"
+# 867 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_interpMultiOfIndex = (fun (ix : t_CstIndex) (sp : Base_dSource.t_Span) -> (match ((((B_dContainer_dHashMap.v_lookup B_dData_dInt.v_Hashable_ue4b0f10b020a5e82_uInt) B_dData_dInt.v_Eq_u018fc178ff3df1b4_uInt) (Base_dSource.v_spanStartOffset sp)) (ix).f_CstIndex_ciBySpan) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__163) -> (let s = (v_nodeSurface dtb__163) in (let nd_uscrut5 = (s).f_CstSurface_cstInterpMulti in (match nd_uscrut5 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__164) -> (if dtb__164 then true else false)
@@ -526,21 +526,21 @@ let v_interpMultiOfIndex = (fun (ix : t_CstIndex) (sp : Base_dSource.t_Span) -> 
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 880 "Vuna/Compiler/Frontend/Cst.vuna"
+# 879 "Vuna/Compiler/Frontend/Cst.vuna"
 let rec v_renderCstTree = (fun (mc0 : t_CstNode) -> (match mc0 with
   | C_CstNode_CstBranch (dtb__165, dtb__166, dtb__167, dtb__168, dtb__169) -> (B_dData_dList.dtp_concatMany ((B_dData_dList.v_map v_renderCstTree) dtb__169))
   | C_CstNode_CstLeaf (dtb__170) -> (B_dData_dList.dtp_concatMany (v_renderParts dtb__170))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 890 "Vuna/Compiler/Frontend/Cst.vuna"
+# 889 "Vuna/Compiler/Frontend/Cst.vuna"
 let rec v_anchorRefsOfTree = (fun (mc0 : (t_CstKind) -> bool) (mc1 : t_CstNode) -> (match mc1 with
   | C_CstNode_CstBranch (dtb__171, dtb__172, dtb__173, dtb__174, dtb__175) -> ((B_dData_dList.v_append (if (mc0 dtb__171) then (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = dtb__172; B_dData_dPair.f_Pair_second = dtb__173 }, B_dData_dList.C_List_Nil)) else B_dData_dList.C_List_Nil)) ((B_dData_dList.v_concatMap (v_anchorRefsOfTree mc0)) dtb__175))
   | C_CstNode_CstLeaf (dtb__176) -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 906 "Vuna/Compiler/Frontend/Cst.vuna"
+# 905 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_sectionOpOf = (fun (mc0 : t_SectionShape) -> (match mc0 with
   | C_SectionShape_SectionRight (dtb__177) -> dtb__177
   | C_SectionShape_SectionLeft (dtb__178) -> dtb__178
@@ -548,13 +548,13 @@ let v_sectionOpOf = (fun (mc0 : t_SectionShape) -> (match mc0 with
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 937 "Vuna/Compiler/Frontend/Cst.vuna"
+# 936 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_openFrame = (fun (kind : t_CstKind) (nid : int) (at : int) (first : Frontend_dLexer.t_Tok B_dData_dMaybe.t_Maybe) (prev : Frontend_dLexer.t_Tok B_dData_dMaybe.t_Maybe) -> { f_ParenFrame_pfKind = kind; f_ParenFrame_pfId = nid; f_ParenFrame_pfOpen = at; f_ParenFrame_pfFirst = first; f_ParenFrame_pfPrev = prev; f_ParenFrame_pfKids = 0; f_ParenFrame_pfKidKind = B_dData_dMaybe.C_Maybe_Nothing; f_ParenFrame_pfKidOpen = 0; f_ParenFrame_pfKidEnd = 0; f_ParenFrame_pfKidStructDepth = 0 })
 
-# 941 "Vuna/Compiler/Frontend/Cst.vuna"
+# 940 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_addKid = (fun (kind : t_CstKind) (open_ : int) (end_ : int) (structD : int) (f : t_ParenFrame) -> { f_ParenFrame_pfKind = (f).f_ParenFrame_pfKind; f_ParenFrame_pfId = (f).f_ParenFrame_pfId; f_ParenFrame_pfOpen = (f).f_ParenFrame_pfOpen; f_ParenFrame_pfFirst = (f).f_ParenFrame_pfFirst; f_ParenFrame_pfPrev = (f).f_ParenFrame_pfPrev; f_ParenFrame_pfKids = ((f).f_ParenFrame_pfKids + 1); f_ParenFrame_pfKidKind = (B_dData_dMaybe.C_Maybe_Just (kind)); f_ParenFrame_pfKidOpen = open_; f_ParenFrame_pfKidEnd = end_; f_ParenFrame_pfKidStructDepth = structD })
 
-# 961 "Vuna/Compiler/Frontend/Cst.vuna"
+# 960 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_isOpenParen = (fun (mc0 : Frontend_dLexer.t_Tok B_dData_dMaybe.t_Maybe) -> (match mc0 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__180) -> (match dtb__180 with
   | Frontend_dLexer.C_Tok_TSym (dtb__181) -> (if (dtb__181 = "(") then true else false)
@@ -563,7 +563,7 @@ let v_isOpenParen = (fun (mc0 : Frontend_dLexer.t_Tok B_dData_dMaybe.t_Maybe) ->
   | _ -> false
 ))
 
-# 965 "Vuna/Compiler/Frontend/Cst.vuna"
+# 964 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_isCloseParen = (fun (mc0 : Frontend_dLexer.t_Tok B_dData_dMaybe.t_Maybe) -> (match mc0 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__182) -> (match dtb__182 with
   | Frontend_dLexer.C_Tok_TSym (dtb__183) -> (if (dtb__183 = ")") then true else false)
@@ -572,7 +572,7 @@ let v_isCloseParen = (fun (mc0 : Frontend_dLexer.t_Tok B_dData_dMaybe.t_Maybe) -
   | _ -> false
 ))
 
-# 947 "Vuna/Compiler/Frontend/Cst.vuna"
+# 946 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_isParenFrame = (fun (endIdx : int) (lastTok : Frontend_dLexer.t_Tok B_dData_dMaybe.t_Maybe) (f : t_ParenFrame) -> (match (f).f_ParenFrame_pfKind with
   | C_CstKind_CstExprKind -> (if ((f).f_ParenFrame_pfKids = 1) then (let nd_uscrut3 = (f).f_ParenFrame_pfKidKind in (match nd_uscrut3 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__184) -> (match dtb__184 with
@@ -584,30 +584,30 @@ let v_isParenFrame = (fun (endIdx : int) (lastTok : Frontend_dLexer.t_Tok B_dDat
   | _ -> false
 ))
 
-# 969 "Vuna/Compiler/Frontend/Cst.vuna"
+# 968 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_isExprFrame = (fun (mc0 : t_CstKind) -> (match mc0 with
   | C_CstKind_CstExprKind -> true
   | _ -> false
 ))
 
-# 974 "Vuna/Compiler/Frontend/Cst.vuna"
+# 973 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_adjacentParenDepth = (fun (kind : t_CstKind) (prev : Frontend_dLexer.t_Tok B_dData_dMaybe.t_Maybe) (next : Frontend_dLexer.t_Tok B_dData_dMaybe.t_Maybe) -> (if (if (if (v_isExprFrame kind) then (v_isOpenParen prev) else false) then (v_isCloseParen next) else false) then 1 else 0))
 
-# 979 "Vuna/Compiler/Frontend/Cst.vuna"
+# 978 "Vuna/Compiler/Frontend/Cst.vuna"
 let rec v_consumeParen = (fun (n : int) (last : Frontend_dLexer.t_Tok B_dData_dMaybe.t_Maybe) (toks : Frontend_dLexer.t_PTok B_dData_dList.t_List) -> (if (n <= 0) then { B_dData_dPair.f_Pair_first = toks; B_dData_dPair.f_Pair_second = last } else (match toks with
   | B_dData_dList.C_List_Nil -> { B_dData_dPair.f_Pair_first = B_dData_dList.C_List_Nil; B_dData_dPair.f_Pair_second = last }
   | B_dData_dList.C_List__x58__x58_ (dtb__185, dtb__186) -> (((v_consumeParen (n - 1)) (B_dData_dMaybe.C_Maybe_Just ((dtb__185).Frontend_dLexer.f_PTok_ptokTok))) dtb__186)
   | _ -> failwith "DT: impossible branch"
 )))
 
-# 988 "Vuna/Compiler/Frontend/Cst.vuna"
+# 987 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_headTokOf = (fun (mc0 : Frontend_dLexer.t_PTok B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__187, dtb__188) -> (B_dData_dMaybe.C_Maybe_Just ((dtb__187).Frontend_dLexer.f_PTok_ptokTok))
   | B_dData_dList.C_List_Nil -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 993 "Vuna/Compiler/Frontend/Cst.vuna"
+# 992 "Vuna/Compiler/Frontend/Cst.vuna"
 let rec v_parenWalk = (fun (mc0 : (int, int) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc1 : t_ParenFrame B_dData_dList.t_List) (mc2 : int) (mc3 : Frontend_dLexer.t_Tok B_dData_dMaybe.t_Maybe) (mc4 : Frontend_dLexer.t_PTok B_dData_dList.t_List) (mc5 : t_NodeEvent B_dData_dList.t_List) -> (match mc5 with
   | B_dData_dList.C_List__x58__x58_ (dtb__189, dtb__190) -> (match dtb__189 with
   | C_NodeEvent_EvClose (dtb__191) -> (let step = (((v_consumeParen (dtb__191 - mc2)) mc3) mc4) in (let live = (B_dData_dPair.v_firstOf step) in (let last2 = (B_dData_dPair.v_secondOf step) in (match mc1 with
@@ -626,5 +626,5 @@ let rec v_parenWalk = (fun (mc0 : (int, int) B_dData_dPair.t_Pair B_dData_dList.
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1020 "Vuna/Compiler/Frontend/Cst.vuna"
+# 1019 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_parenEntriesOf = (fun (toks : Frontend_dLexer.t_PTok B_dData_dList.t_List) (events : t_NodeEvent B_dData_dList.t_List) -> ((((((v_parenWalk B_dData_dList.C_List_Nil) B_dData_dList.C_List_Nil) 0) B_dData_dMaybe.C_Maybe_Nothing) toks) events))
