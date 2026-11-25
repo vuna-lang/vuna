@@ -147,7 +147,7 @@ let 值里的 if）需要上下文分发（case-of-case），会复制代码与�
 | --- | --- | --- | --- |
 | `LN_LiteralIfChain` | `literal-if-chain` | 是 | if dispatch（`x == lit` 链 / Bool 变量）在可提升位置；字面量链提升失败时改写为 case |
 | `LN_DispatchLift` | `dispatch-lift` | 是 | case / let dispatch 在可提升位置（单 alt 替换、多 alt 拆 clause / alt） |
-| `LN_ListLiteral` | `list-literal` | 是 | 表达式/类型位置的闭合 cons 链（`::` / `Cons` + `[]` / `Nil`）与裸 `Nil`；**模式匹配不动** |
+| `LN_ListLiteral` | `list-literal` | 是 | 表达式/类型位置的闭合 `::` 链（尾部是 `[]` 保留名，右嵌套）；**模式匹配不动** |
 | `LN_PairSugar` | `pair-sugar` | 是 | 表达式/类型/模式位置的显式 `Pair a b` 应用（右嵌套链展平） |
 | `LN_NatLiteral` | `nat-literal` | 是 | 表达式/类型/模式位置的闭合 `Zero` / `Succ` 链（`Succ k` 等开放链不动） |
 | `LN_TodoMarker` | `todo-marker` | 否 | 注释里的 `TODO` / `FIXME` / `XXX`；默认关闭，`--select` / all 预设启用 |
@@ -217,24 +217,24 @@ clause（多 alt 拆分）；外层是嵌套 alt 时该 alt 是父 case 的最�
 
 ### 3.3 `list-literal`
 
-- **触发**：表达式或类型位置的**闭合 cons 链**：
-  - `a :: b :: []`（`::` 走 `Loader.Fixity` 的 alias，lint 看到 `EApp (EVar "::")`）；
-  - `Cons a (Cons b Nil)`（显式构造子）；
-  - 裸 `Nil`（空列表构造）。
-- **不触发**：pattern（`PCon "::"` / `PCon "Cons"` 不在表达式遍历内）、开放链
-  `a :: xs`（无法写成闭合字面量）、已经是列表字面量的保留名、模板插值洞（见 §6）。
+- **触发**：表达式或类型位置的**闭合 `::` 链**：`a :: b :: []`（`::` 走 `Loader.Fixity`
+  的 alias，lint 看到 `EApp (EVar "::")`；尾部必须是列表字面量保留名 `[]`）。
+- **不触发**：pattern（`PCon "::"` 不在表达式遍历内）、开放链 `a :: xs`（无法写成闭合
+  字面量）、裸 `Nil` / `Cons`（普通构造子名，可能是用户 `data` 的构造子或别的族；与 Fmt
+  同一口径，只从 parser 保留名识别语法糖）、已经是列表字面量的保留名、模板插值洞（见 §6）。
 - **可修复判据**：整个表达式单行；被替换行无 `--` / `{-` / tab / CR；每个元素能由
   `exprText` 从源码切出。修复文本是 `[e1, e2, ...]` / `[]`，并剥离**紧邻**表达式的
   成对括号（`f (a :: [])` → `f [a]`；只剥紧邻成对的一层/多层，不跨表达式贪心）。
 - **不可修复形态仍报告**（跨行、含注释 / tab），`--fix` 不写文件并在输出标
   ` (not auto-fixable)`。
-- 语法等价性由「列表字面量按期望族展开」保证：`[..]` 与 `Cons`/`Nil` 链在
-  List / Vec / Row / 用户同形族上落到同一组构造子；模式里的 `::` 保持原样。
+- 语法等价性由「列表字面量按期望族展开」保证：`[..]` 与 `::` 链在 List / Vec / Row /
+  用户同形族上落到同一组构造子。`::` 仍是源码运算符名，规则不做作用域解析：同名自定义
+  `(::)` 由 `vuna check` 裁决。模式里的 `::` 保持原样。
 - 一个已知边界：仓库里 `packages/compiler/lib/Vuna/Compiler/Frontend/Parser.vuna` 的 4 处
   `(name :: [])` 位于模板插值 `${...}` 内，规则跳过；这 4 处已手工改写为 `[name]`。
-- 语料中 `dt/67` / `dt_err/70` 的显式 `Cons`/`Nil` 与 `dt_base/53` 的裸 `Nil`
-  仍保留：它们测试的是构造子名解析 / 同名重载，不是列表语法覆盖；corpus 不在
-  `checks.vuna-lint` 门禁内。
+- 显式 `Cons` / `Nil` 不属于本规则：它们是普通构造子名，`--fix` 在没有期望类型时会按
+  `Base.Data.List` 展开（换族）。语料中 `dt/67` / `dt_err/70` 的显式 `Cons`/`Nil` 与
+  `dt_base/53` 的裸 `Nil` 因此不在 lint 报告范围内；corpus 也不在 `checks.vuna-lint` 门禁内。
 
 ### 3.4 `pair-sugar`
 
@@ -253,7 +253,8 @@ clause（多 alt 拆分）；外层是嵌套 alt 时该 alt 是父 case 的最�
 - **不可修复形态仍报告**（跨行、含注释 / tab），`--fix` 不写文件并在输出标
   ` (not auto-fixable)`。
 - 只按裸名 `Pair` 判定，不做作用域名字解析：同名函数 / 用户自定义 `Pair` 由 `vuna check`
-  裁决（与 `list-literal` 对 `Cons` / `Nil` 的边界一致）。
+  裁决。元组语法没有可对照的显式拼写（`@vuna@tuple@pair` 只由 parser 产生），所以这里
+  保留裸名判定；`list-literal` 反过来只认保留名 `[]`，不认裸 `Nil` / `Cons`。
 
 ### 3.5 `nat-literal`
 
@@ -283,15 +284,15 @@ clause（多 alt 拆分）；外层是嵌套 alt 时该 alt 是父 case 的最�
 
 - `packages/cli/test/corpus/lint/*.vuna` + `.out`：报告 golden 与退出码（01–04 为回归基线，05–14 覆盖
   dispatch 两条规则与「不报」形态；15–18 覆盖 Bool 变量 if 的 clause/alt 报告、不报形态与
-  模板字符串分支；19 覆盖 `list-literal`：`::` / `Cons` / 裸 `Nil` / 类型位置报告，
-  以及 pattern、开放链、注释行、既有字面量不误报；21 覆盖 `pair-sugar`：类型/值/模式、
+  模板字符串分支；19 覆盖 `list-literal`：`::` 闭合链 / 类型位置报告，以及裸 `Nil` / `Cons`、
+  pattern、开放链、注释行、既有字面量不误报；21 覆盖 `pair-sugar`：类型/值/模式、
   右嵌套展平、左嵌套多轮、部分应用与既有元组不报、注释/跨行报告但不可修复；
   22 覆盖 `nat-literal`：构造子结果类型、签名、clause / 嵌套 case 模式、表达式与裸 `Zero`，
   以及开放链、`Nat.Zero`、裸 `Succ`、注释/跨行不误报）。
 - `packages/cli/test/corpus/fix/*.vuna` + `.expected`：`--fix` 产物与二次运行幂等（01–06 回归基线，
   07–15 覆盖 dispatch 两条规则与 let 解构；16–19 覆盖 Bool if 的 clause/alt/链提升、
   as-pattern 与模板字符串分支；20 覆盖 `list-literal`：表达式/类型位置、括号剥离、
-  `Cons` / 裸 `Nil`、注释行不修、幂等；21 覆盖 `pair-sugar`：类型/值/模式、右嵌套展平、
+  裸 `Nil` / `Cons` 与用户同形族不修、注释行不修、幂等；21 覆盖 `pair-sugar`：类型/值/模式、右嵌套展平、
   左嵌套多轮、注释与跨行不修、幂等；22 覆盖 `nat-literal` 的类型/表达式/模式、
   `Zero`、as-pattern 括号剥离、注释与跨行不修、幂等）。
 - `packages/cli/test/steps/39_lint_cli.steps`：`vuna.toml [lint]`、源码抑制、`--format json`
@@ -322,7 +323,7 @@ Bool / 字面量分派同样适用：`keep b = if b then b else b` → `keep b@T
 
 - **dispatch 规则只报告可安全自动修复的形态**：不可安全折叠的情形（非最后 clause、clause
   head 跨行、含注释 / tab / CR、分支体无法安全收束等）**不报告**（语料期望为空输出）。
-  `list-literal` 例外：不可修复的闭合链 / 裸 `Nil` 仍报告（`--fix` 标 not auto-fixable），
+  `list-literal` 例外：不可修复的闭合 `::` 链仍报告（`--fix` 标 not auto-fixable），
   因为「应写成列表字面量」本身是确定的；`pair-sugar` / `nat-literal` 同样把跨行 / 含注释的
   应用 / 链报告为 not auto-fixable。
 - **`list-literal` 的模板插值洞跳过**：lint 只拿到顶层 token 列表，`EInterp` 洞内 token

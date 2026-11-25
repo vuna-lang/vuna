@@ -10,10 +10,10 @@ h : Int -> List Int
 h n = f [n]
 
 i : List Int
-i = [1, 2]
+i = 1 :: 2 :: Nil
 
 j : List Int
-j = []
+j = (Nil)
 
 p : Int -> List Int -> List Int
 p n xs = n :: xs
@@ -26,6 +26,13 @@ r = []
 
 u : Int -> List Int
 u n = n :: [] -- keep (comment)
+
+data Seq : Type where
+  Nil : Seq
+  Cons : Int -> Seq -> Seq
+
+k : Seq
+k = Cons 1 (Cons 2 Nil)
 
 main : Int
 main = q (f 0)

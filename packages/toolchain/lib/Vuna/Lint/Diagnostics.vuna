@@ -24,7 +24,7 @@ export data LintRule(..) : Type where
   LiteralIfChain : LintRule
   -- | case / let 分派可提升进外层模式（单 alt 替换、多 alt 拆分）。
   DispatchLift : LintRule
-  -- | 闭合 cons 链与裸 `Nil` 应写成列表字面量。
+  -- | 闭合 `::` 链应写成列表字面量。
   ListLiteral : LintRule
   -- | 显式 `Pair a b` 应用应写成元组语法 `(a, b)`。
   PairSugar : LintRule
@@ -90,8 +90,7 @@ lintEdit LiteralIfChain =
   "把 if 分派提升进外层 clause/alt 模式；提升不了的字面量链改写为 case"
 lintEdit DispatchLift =
   "把 case / let 分派提升进外层模式（单 alt 替换；多 alt 拆 clause 或拆 alt）"
-lintEdit ListLiteral =
-  "把闭合 `::` / `Cons` 链与裸 `Nil` 改写为 `[a, b]` / `[]`（模式匹配不动）"
+lintEdit ListLiteral = "把闭合 `::` 链改写为 `[a, b]` / `[]`（模式匹配不动）"
 lintEdit PairSugar =
   "把显式 `Pair` 应用改写为元组语法 `(a, b)`（右嵌套链展平为 `(a, b, c)`）"
 lintEdit NatLiteral =
@@ -106,7 +105,7 @@ lintDesc LiteralIfChain =
 lintDesc DispatchLift =
   "case / let 分派可提升进外层 clause/alt 模式（单 alt 替换、多 alt 拆分）。"
 lintDesc ListLiteral =
-  "表达式/类型位置的闭合 cons 链与裸 `Nil` 应写成 `[a, b]` / `[]`；模式匹配里的 `::`/`Cons` 不受影响。"
+  "表达式/类型位置的闭合 `::` 链应写成 `[a, b]` / `[]`；裸 `Nil` / `Cons` 是普通构造子名，不当语法糖。"
 lintDesc PairSugar =
   "表达式/类型/模式位置的显式 `Pair` 应用应写成元组语法 `(a, b)`；右嵌套链展平为 `(a, b, c)`。"
 lintDesc NatLiteral =

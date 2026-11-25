@@ -1,5 +1,10 @@
--- list-literal：表达式/类型位置的闭合 cons 链与裸 Nil 应写成列表字面量。
+-- list-literal：表达式/类型位置的闭合 `::` 链应写成列表字面量。
+-- 裸 `Nil` / `Cons` 是普通构造子名（用户 data 的构造子或别的族），不当语法糖。
 import Base.Data.List as List
+
+data Seq : Type where
+  Nil : Seq
+  Cons : Int -> Seq -> Seq
 
 f : Int -> List Int
 f n = n :: 1 :: 2 :: []
@@ -7,8 +12,8 @@ f n = n :: 1 :: 2 :: []
 g : List Int
 g = 1 :: 2 :: Nil
 
-h : List Int
-h = (Nil)
+h : Seq
+h = Cons 1 (Cons 2 Nil)
 
 p : List Int -> List Int
 p xs = 1 :: xs

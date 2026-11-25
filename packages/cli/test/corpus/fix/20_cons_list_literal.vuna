@@ -27,5 +27,12 @@ r = []
 u : Int -> List Int
 u n = n :: [] -- keep (comment)
 
+data Seq : Type where
+  Nil : Seq
+  Cons : Int -> Seq -> Seq
+
+k : Seq
+k = Cons 1 (Cons 2 Nil)
+
 main : Int
 main = q (f 0)

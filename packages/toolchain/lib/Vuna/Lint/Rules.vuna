@@ -1732,11 +1732,10 @@ walkHandleAlts allow fuel src alts =
       [] => []
       alt :: rest => append (walkPairPat allow (fuel - 1) src alt.altPat) (append (walkExprGo allow (fuel - 1) src alt.altBody) (walkHandleAlts allow (fuel - 1) src rest))
 
--- | 内部：裸 `Zero` / `Nil` 的 finding（表达式与类型位置共用）。
-zeroOrNilFindings : LintSrc -> Expr -> String -> List Finding
-zeroOrNilFindings src e "Zero" = natExprFindings src e 0
-zeroOrNilFindings src e "Nil" = nilFinding src e
-zeroOrNilFindings src e name = []
+-- | 内部：裸 `Zero` 的 Nat 字面量 finding（表达式与类型位置共用）。
+zeroFindings : LintSrc -> Expr -> String -> List Finding
+zeroFindings src e "Zero" = natExprFindings src e 0
+zeroFindings src e name = []
 
 -- | 内部：按构造子遍历表达式，收集各规则的 finding（不静默丢子树）。
 walkExpr : Int -> LintSrc -> Expr -> List Finding
@@ -1748,7 +1747,7 @@ walkExprGo allow fuel src e =
     lintFuelExhausted "traversal"
   else
     case e of
-      EVar name _ => if allow then zeroOrNilFindings src e name else []
+      EVar name _ => if allow then zeroFindings src e name else []
       EInt n _ => []
       EStr s _ => []
       EFloat raw _ => []
@@ -1905,10 +1904,11 @@ walkStmt allow fuel src stmt =
       DLet binds sp => walkBinds allow (fuel - 1) src binds
 
 -- ---------------------------------------------------------------
--- 规则 4：list-literal（闭合 cons 链 / 裸 Nil → 列表字面量）
+-- 规则 4：list-literal（闭合 `::` 链 → 列表字面量）
 --
--- 只遍历表达式与类型表达式，不进入 pattern：模式里的 `::` / `Cons` 是匹配形态，
--- 不在本规则范围。闭链判据：`::` 或显式 `Cons` 的右嵌套链，尾部是 `[]` 或 `Nil`。
+-- 只遍历表达式与类型表达式，不进入 pattern：模式里的 `::` 是匹配形态，不在本规则范围。
+-- 闭链判据：`::` 的右嵌套链，尾部是列表字面量保留名 `[]`。只认 parser 保留名：
+-- 裸 `Nil` / `Cons` 是普通构造子名（可能是用户 data 的构造子，或别的族），不当语法糖。
 -- 模板插值洞（`EInterp` 的 `IPHole`）跳过：lint 的顶层 token 列表不含洞内 token，
 -- 无法用 `exprText` 可靠切片（已知边界，见 docs/reference/lint.md）。
 -- ---------------------------------------------------------------
@@ -1977,15 +1977,14 @@ exprEdit src e replacement =
       stripped = stripParens (strLength line + 1) prefix suffix
     in Just (Edit (exprStartLine e) (exprStartLine e) [firstOf stripped ++ replacement ++ secondOf stripped])
 
--- | 内部：识别 `::` / `Cons` 应用，返回头与尾。
+-- | 内部：识别 `::` 应用，返回头与尾。
 consHeadOf : Expr -> Maybe (Expr, Expr)
-consHeadOf (EApp (EVar name _) [h, t] _) =
-  if name == "::" || name == "Cons" then Just (h, t) else Nothing
+consHeadOf (EApp (EVar name _) [h, t] _) = if name == "::" then Just (h, t) else Nothing
 consHeadOf _ = Nothing
 
--- | 内部：表达式是否为空列表（`Nil` 或 `[]`）。
+-- | 内部：表达式是否为空列表字面量（`[]` 的保留名）。
 isNilExpr : Expr -> Bool
-isNilExpr (EVar name _) = name == "Nil" || isListNilSyntax name
+isNilExpr (EVar name _) = isListNilSyntax name
 isNilExpr _ = False
 
 -- | 内部：闭合 cons 链的元素列表；开放链或非链返回 `Nothing`。
@@ -2021,19 +2020,6 @@ consFindings src e elems =
       ListLiteral
       (lintMsg ListLiteral suggestion)
       edit
-  ]
-
--- | 内部：裸 `Nil` 的 finding 与编辑（改写成 `[]`）。
-nilFinding : LintSrc -> Expr -> List Finding
-nilFinding src e =
-  [
-    mkFindingAt
-      (exprStartLine e)
-      (exprStartCol e)
-      (exprSpan e)
-      ListLiteral
-      (lintMsg ListLiteral "[]")
-      (exprEdit src e "[]")
   ]
 
 -- ---------------------------------------------------------------
@@ -2326,7 +2312,7 @@ walkTypeSyntax fuel src e =
     lintFuelExhausted "type syntax traversal"
   else
     case e of
-      EVar name _ => zeroOrNilFindings src e name
+      EVar name _ => zeroFindings src e name
       EInt n _ => []
       EStr s _ => []
       EFloat raw _ => []

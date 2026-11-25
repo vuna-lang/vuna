@@ -28,6 +28,11 @@ lint 属于 `packages/toolchain`（**不进 seed**）；改它不影响自举链
 语法归一型规则**不改 clause 结构**，因此不受「隐式 Pi 签名的函数跳过 clause 级改写」限制，
 但要注意下面第 3 节的接线缺口。
 
+语法归一型规则只从 parser 保留名（`@vuna@…`）识别语法糖：裸名字是普通构造子名，可能是
+用户 `data` 的构造子或别的族，按名字猜糖会让 `--fix` 换族。`pair-sugar` / `nat-literal`
+例外只存在于「糖本身没有保留名拼写」的形态（`Pair` 应用、`Succ Zero` 链），其边界由
+`vuna check` 兜底，并在 `docs/reference/lint.md` §6 写明。
+
 ## 2. 元数据登记（`Diagnostics.vuna`，一次性改 12 处）
 
 按现有规则的顺序补：
