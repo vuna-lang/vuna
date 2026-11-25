@@ -412,10 +412,12 @@ chunkTargets size xs =
 
 chunkTargetsGo : Int -> Int -> List LintTarget -> List (List LintTarget)
 chunkTargetsGo size fuel xs =
-  if fuel <= 0 || length xs == 0 then
+  if fuel <= 0 then
     []
   else
-    take size xs :: chunkTargetsGo size (fuel - 1) (drop size xs)
+    case xs of
+      [] => []
+      _ => take size xs :: chunkTargetsGo size (fuel - 1) (drop size xs)
 
 -- | 内部：组 → 单元。
 groupUnits : LintGroup -> List LintUnit
