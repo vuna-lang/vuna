@@ -187,7 +187,7 @@ ID 是稳定引用（`层前缀-序号`）：条目关闭即删除该行，ID �
 | --- | --- | --- | --- |
 | D90 · C | 宿主失败通道已完整（fs / process / net 是 typed error 效应 + entry 收口）；已知取舍：(a) 收口文本没有源码位置帧；(b) net 仍阻塞式单连接，无全局 deadline / 异步 / TLS；(c) 事件循环在 accept/recv 上阻塞时无法同时服务其它连接 | `Base/Effect/{Fs,Process,Net}.vuna`、`Target/Ocaml/{Runtime,Term}` | 后续 |
 | D94 · B | 类型定向重载值消歧只覆盖非应用位置；应用头歧义仍报 `TC_AmbiguousName`，没有候选应用回溯 | `Elab/Term/Impl.vuna`（`resolveOverValueTarget`）、`Loader/Resolve.vuna`（`pickValueOrOver`）；夹具 `modules/103`、`104` | 后续 |
-| D101 · ⚠️B | 延迟 answer 的 handler 在机器上不工作（native `impossible branch`、wasm `illegal cast`；OCaml 正常）；`effect` 家族没覆盖到 | `Base/Effect/Core.vuna`（`step` / `unwind` / `finish`）；夹具 `effect/ocaml/07_eff_main.vuna` | 后续 |
+| D101 · ⚠️B | 延迟 answer 的 handler 在机器上不工作（native `impossible branch`、wasm `illegal cast`；OCaml 正常）。这里的 answer 是函数 / 延迟求值，**不是** `b = Eff` 的 answer row（后者由 `effect/common/18`、`98`、`102`–`104` 覆盖）；`effect` 家族没覆盖到 | `Base/Effect/Core.vuna`（`step` / `unwind` / `finish`）；夹具 `effect/ocaml/07_eff_main.vuna` | 后续 |
 | D114 · ⚠️B | answer 类型是函数的库 handler（`handleState`）在三端运行期不一致；`dt_base/17_eff_state` 是 `matrix = pure`，机器路径没有夹具兜住 | `Base/Effect/State.vuna`（`handleState`）；[native-effects.md](native-effects.md) §9 | 后续 |
 
 ## native 后端

@@ -264,7 +264,9 @@
 
 - **线程体是 `Eff [] a`**：任务内效应必须由任务自己的 handler 处理干净，不继承父线程的
   handler 栈；续延不跨线程恢复。线程内未捕获错误按运行时错误报告并 exit 2；`join` 不做
-  `Result` 包装。
+  `Result` 包装。宿主效应要在任务体内显式安装真实 handler，例如
+  `runFsError "fs-error" (runFsHost comp)` 把默认实例 fs 装进 worker（夹具
+  `effect/common/104`）；并行 fs 仍受 native 宿主 scratch 全局的限制（D135）。
 - **同步**：`Atomic` 操作顺序一致（63-bit `Int` 回绕）；`Mutex` 非公平、非递归、无 owner 检查；
   `Condvar` 允许虚假唤醒；`join` / `lock` / `wait` 建立 happens-before。
 - **可共享可变状态**只有这四类句柄。`MutRef` 单元与可变容器（`MArray` / `MDynArray` / `MBuffer`）不是线程安全的（跨线程访问属数据竞争）；

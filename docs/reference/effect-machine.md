@@ -1,8 +1,8 @@
 # 显式效应机器（目标态）
 
-> 状态：**设计已定，wasm 先行**。替代「每个后端各自实现续延运行时」的路线；
-> 选择性 CPS 继续只负责把效应 thunk / handler 降成协议调用，执行语义由本机器的
-> 一组 IR 原语定义，三端实现同一组原语。
+> 状态：**设计已定；wasm 与 native 已落地同一份库机器，OCaml 仍是 `Effect.Deep`
+> 差分 oracle**。替代「每个后端各自实现续延运行时」的路线；选择性 CPS 只负责把效应
+> thunk / handler 降成协议调用，执行语义由本机器的一组构造子 / 原语定义。
 
 ## 1. 目标与非目标
 
@@ -97,27 +97,12 @@ ContFrame    = { k, prompt }   -- prompt = 所属 handler frame（delimited）
 
 ## 5. 迁移阶段
 
-1. **wasm 先行**：
-   - 1a（已落地，休眠）：`Ir.Cps.cpsDefsMachine` 把 handler clause 改成
-     `\o k kDone -> ...`，resumption 调用追加 `kRest`；
-   - 1b（已落地，纯行）：wasm 的 `@ir@m@*` 原语、`Return`/`Resume`、`$g_mctx`
-     续延上下文与 `$rt_mRun` 已接通，纯用户 handler 默认走 mode 6；
-   - 1c（待做）：宿主+用户组合（answer row 的 frame 生命周期）与常量栈
-     （当前 CPS 续延仍在 wasm 调用栈上，2000 次 perform 需 1 MiB）。
-     - 已能工作：Console 宿主行（裸值 `opH`）、`opH` 执行效应后返回 **Eff answer**
-       （answer 里不含 resumption）。
-     - 未通：`opH` 在 answer 里 **resume**（`do { s <- op; k s }`，Fs 语料即此形状）。
-       `@ir@m@resume` 返回的是 resumed 段的 `Control`（Step），而该值周围的 CPS 代码
-       把它当 answer 值（`Eff`）继续 `case`，于是 cast 失败。
-     - 试过并在 `41/42/48`、`26_eff_console` 上验证不可行：resume 用嵌套
-       `@ir@m@run` 驱动到值（每次 resume 一层 wasm 帧 → 栈耗尽）。因此
-       「resume 返回值」与「常量栈」是同一件事：**先把续延做成显式控制栈（trampoline），
-       再让 resume 直接返回 answer 值**，然后再转 Fs 及其余宿主家族。
-2. **native**：实现同一组原语（显式帧 + 条件 trampoline，替代栈拷贝路径的 handler 部分）；
-   用 `effect-common` 三端矩阵验收。
-3. **OCaml**：用同一协议映射到 `Effect.Deep` 或显式 trampoline；验收同矩阵。
-4. **删除旧运行时**：wasm 的 `$rt_cps*` / stack switching、native/OCaml 的旧 handler
-   帧实现；更新 D102/D103/D105 与 seed。
+1. **wasm / native**：都走 `Ir.Cps.cpsDefsMachine` 与 `Base.Effect.Core.Control` /
+   `machineRun`。宿主 + 用户组合、answer row 与答案内 resume 由 `effect-common` 的
+   `18` / `98` / `102`–`104` 覆盖；常量栈与尾 / 非尾 resume 的约定见 §9.2.7。
+2. **OCaml**：仍用 `Effect.Deep`，作为三端差分的独立 oracle；切同一协议见 §9.3 步 4。
+3. **旧运行时**：wasm 的 `$rt_cps*` / stack switching 与 native 的栈拷贝 handler 路径
+   已从产物中删除（§9.2.5、§9.2.6）。
 
 ## 6. 验收
 
