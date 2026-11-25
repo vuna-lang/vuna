@@ -144,6 +144,11 @@ record FGen where
   -- | 拆箱形参的 binder id：这些槽里存的是 raw `f64` 位模式（不是堆上的 leaf 指针）。
   --   读点要么直接 `movsd` 进 xmm（浮点运算），要么先装盒再当指针用（逃逸点）。
   fgFloatBinds : List Int
+  -- | 常驻 xmm 的拆箱形参（binder id → xmm 编号，`xmm8` 起）。浮点运算读点直接
+  --   `movapd`，不再每轮从帧槽 load；槽仍是权威副本（调用前后溢出 / 重载）。
+  fgFloatRegs : List (Int, Int)
+  -- | 常驻 xmm 的拆箱形参槽（槽序号 → xmm 编号）：写点与调用前后的溢出 / 重载用。
+  fgFloatSlotRegs : List (Int, Int)
   -- | 正在求值的 self 尾调用实参是否允许保留未归一化值（只对 dirty 目标置位）。
   fgAllowDirty : Bool
 
@@ -220,6 +225,28 @@ isFloatTy st mty =
 -- | binder 是拆箱形参：它所在的槽存 raw `f64` 位，读它当指针用之前必须先装盒。
 isFloatBindBinder : FGen -> IrBinder -> Bool
 isFloatBindBinder st b = memInt (binderIdOf b) st.fgFloatBinds
+
+-- | 常驻 xmm 的拆箱形参（binder id → xmm）。
+floatRegOf : FGen -> IrBinder -> Maybe Int
+floatRegOf st b = lookupIntPair (binderIdOf b) st.fgFloatRegs
+
+-- | 槽里的拆箱形参常驻在哪个 xmm。
+floatSlotRegOf : FGen -> Int -> Maybe Int
+floatSlotRegOf st slot = lookupIntPair slot st.fgFloatSlotRegs
+
+lookupIntPair : Int -> List (Int, Int) -> Maybe Int
+lookupIntPair _ [] = Nothing
+lookupIntPair k (p :: rest) = if firstOf p == k then Just (secondOf p) else lookupIntPair k rest
+
+-- | 浮点形参的常驻 xmm 分配：`xmm8` 起（树用 0–3、条件用 4/5，生成器与运行时都不碰 8+）。
+--   最多 8 个；多出来的形参只拆箱到槽、不常驻。
+floatParamRegs : FGen -> List IrBinder -> List (Int, Int)
+floatParamRegs st bs = assignFloatRegs 8 (filter (\b => isFloatParamBinder st b) bs)
+
+assignFloatRegs : Int -> List IrBinder -> List (Int, Int)
+assignFloatRegs _ [] = []
+assignFloatRegs n (b :: rest) =
+  if n > 15 then [] else (binderIdOf b, n) :: assignFloatRegs (n + 1) rest
 
 -- | 形参 binder 声明为 `Float`（拆箱候选）。
 isFloatParamBinder : FGen -> IrBinder -> Bool
@@ -647,7 +674,7 @@ genSelfTailCall fuel st args =
   else
     nbind
       (genSelfArgs (fuel - 1) (SelfArgs [] st []) args st.fgSelfParams st.fgSelfBinds)
-      (\q => NOk (append q.saInstrs (append (copyBacks (floatParamSlots st.fgSelfParams st.fgSelfBinds st) q.saPending) [IJmp st.fgSelfLoop]), q.saState))
+      (\q => NOk (append q.saInstrs (append (copyBacks st (floatParamSlots st.fgSelfParams st.fgSelfBinds st) q.saPending) [IJmp st.fgSelfLoop]), q.saState))
 
 -- | 自递归形参里被拆箱成 raw `f64` 位的槽（与 `fgSelfParams` 同源的子集）。
 floatParamSlots : List Int -> List IrBinder -> FGen -> List Int
@@ -660,11 +687,11 @@ floatParamSlots (slot :: ss) (b :: bs) st =
 genSelfFloatArg : Int -> FGen -> Int -> Ir -> NRes (List Instr, FGen)
 genSelfFloatArg fuel st dst a =
   case floatTreeIntoXmm0 st a of
-    Just ins => NOk (append ins (storeFloatSlot dst), st)
+    Just ins => NOk (append ins (storeFloatSlot st dst), st)
     Nothing =>
       nbind
         (genExpr fuel st a)
-        (\q => NOk (append (firstOf q) (storeFloatSlotFromRax dst), secondOf q))
+        (\q => NOk (append (firstOf q) (storeFloatSlotFromRax st dst), secondOf q))
 
 genSelfArgs : Int -> SelfArgs -> List Ir -> List Int -> List IrBinder -> NRes SelfArgs
 genSelfArgs _ acc [] _ _ = NOk acc
@@ -693,21 +720,21 @@ restoreDirty st base = { st | fgAllowDirty = base.fgAllowDirty }
 anyArgRefs : IrBinder -> List Ir -> Bool
 anyArgRefs b args = foldl (\acc, a => acc || memBinderId b.irBinderId (binderRefsOf a)) False args
 
-copyBacks : List Int -> List (Int, Int) -> List Instr
-copyBacks _ [] = []
-copyBacks floats (p :: rest) =
+copyBacks : FGen -> List Int -> List (Int, Int) -> List Instr
+copyBacks _ _ [] = []
+copyBacks st floats (p :: rest) =
   let
     from = firstOf p
     to = secondOf p
     moves =
       if memInt to floats then
-        append [IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff from))] (storeFloatSlotFromRax to)
+        append [IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff from))] (storeFloatSlotFromRax st to)
       else
         [
           IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff from)),
           IMov (OpMem Rbp (nativeSlotOff to)) (OpReg Rax)
         ]
-  in append moves (copyBacks floats rest)
+  in append moves (copyBacks st floats rest)
 
 -- | 沿零参定义解析别名链（`f = rt:add` / `f = g`）：判据与链解析在 `Ir.Alias`。
 --   不是别名的零参 CAF（真实计算/分配）返回 Nothing，调用方回退 `rt_apply`。
@@ -1013,7 +1040,7 @@ floatTree st (x :: rest) ir =
       case lookupBinder b st.fgSlots of
         Just slot =>
           if isFloatBindBinder st b then
-            Just (x, [IXmmLoad x (OpMem Rbp (nativeSlotOff slot))], rest)
+            Just (x, floatSlotRead st x slot, rest)
           else
             Just
               (x, [IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff slot)), IXmmLoad x (OpMem Rax 0)], rest)
@@ -1129,22 +1156,58 @@ allocLeafToR11 : List Instr
 allocLeafToR11 =
   [IMov (OpReg Rdi) (OpImm 8), ICall (nativeRtLabel "alloc_leaf"), IMov (OpReg R11) (OpReg Rax)]
 
--- | 拆箱形参的**逃逸读点**：槽里是 raw `f64` 位，按指针用之前装盒成一个新 leaf。
---   分配在前（可能触发 GC；槽里的位模式不是根），之后不再有 call。
-boxFloatSlot : Int -> List Instr
-boxFloatSlot slot =
-  append
-    allocLeafToR11
-    [IXmmLoad 0 (OpMem Rbp (nativeSlotOff slot)), IXmmStore (OpMem R11 0) 0, IMov (OpReg Rax) (OpReg R11)]
+-- | 拆箱形参的**浮点读点**：常驻 xmm 时直接 `movapd`（不再每轮回读帧槽），
+--   否则从槽里 `movsd`。
+floatSlotRead : FGen -> Int -> Int -> List Instr
+floatSlotRead st x slot =
+  case floatSlotRegOf st slot of
+    Just reg => [IXmmMov x reg]
+    Nothing => [IXmmLoad x (OpMem Rbp (nativeSlotOff slot))]
 
--- | 拆箱形参的**写点**：把 xmm0 里的值写成槽里的 raw 位（不分配）。
-storeFloatSlot : Int -> List Instr
-storeFloatSlot slot = [IXmmStore (OpMem Rbp (nativeSlotOff slot)) 0]
+-- | 拆箱形参的**逃逸读点**：raw `f64` 位按指针用之前装盒成一个新 leaf。
+--   分配在前（可能触发 GC；位模式不是根），之后不再有 call。
+boxFloatSlot : FGen -> Int -> List Instr
+boxFloatSlot st slot =
+  case floatSlotRegOf st slot of
+    Just reg => append allocLeafToR11 [IXmmStore (OpMem R11 0) reg, IMov (OpReg Rax) (OpReg R11)]
+    Nothing =>
+      append
+        allocLeafToR11
+        [IXmmLoad 0 (OpMem Rbp (nativeSlotOff slot)), IXmmStore (OpMem R11 0) 0, IMov (OpReg Rax) (OpReg R11)]
 
--- | 从 rax 里的装箱 Float 拆出 raw 位写进拆箱槽。
-storeFloatSlotFromRax : Int -> List Instr
-storeFloatSlotFromRax slot =
-  [IXmmLoad 0 (OpMem Rax 0), IXmmStore (OpMem Rbp (nativeSlotOff slot)) 0]
+-- | 拆箱形参的**写点**：把 xmm0 里的值写成槽里的 raw 位（不分配），常驻寄存器同步。
+storeFloatSlot : FGen -> Int -> List Instr
+storeFloatSlot st slot =
+  case floatSlotRegOf st slot of
+    Just reg => [IXmmMov reg 0, IXmmStore (OpMem Rbp (nativeSlotOff slot)) 0]
+    Nothing => [IXmmStore (OpMem Rbp (nativeSlotOff slot)) 0]
+
+-- | 从 rax 里的装箱 Float 拆出 raw 位写进拆箱槽（常驻寄存器同步）。
+storeFloatSlotFromRax : FGen -> Int -> List Instr
+storeFloatSlotFromRax st slot =
+  case floatSlotRegOf st slot of
+    Just reg => [IXmmLoad reg (OpMem Rax 0), IXmmStore (OpMem Rbp (nativeSlotOff slot)) reg]
+    Nothing => [IXmmLoad 0 (OpMem Rax 0), IXmmStore (OpMem Rbp (nativeSlotOff slot)) 0]
+
+-- | 常驻 xmm 的浮点形参在**调用前后**溢出 / 重载：SysV 里 xmm 全是 caller-saved，
+--   被调方（含运行时与另一个带浮点形参的函数）可以随手清掉它们；帧槽是权威副本。
+--   必须在 `clearDeadSlots` 之前跑：有了这里的 store，槽在调用点才算活的，不会被清零。
+spillReloadFloatRegs : List (Int, Int) -> List Instr -> List Instr
+spillReloadFloatRegs pairs instrs = concatMap (spillReloadOne pairs) instrs
+
+spillReloadOne : List (Int, Int) -> Instr -> List Instr
+spillReloadOne pairs i =
+  if isCallInstr i then
+    append
+      (map (\p => IXmmStore (OpMem Rbp (nativeSlotOff (firstOf p))) (secondOf p)) pairs)
+      (i :: map (\p => IXmmLoad (secondOf p) (OpMem Rbp (nativeSlotOff (firstOf p)))) pairs)
+  else
+    [i]
+
+isCallInstr : Instr -> Bool
+isCallInstr (ICall _) = True
+isCallInstr (ICallReg _) = True
+isCallInstr _ = False
 
 -- | 把浮点表达式算进 `xmm0`（不装盒）；不是浮点树时返回 `Nothing`。
 floatTreeIntoXmm0 : FGen -> Ir -> Maybe (List Instr)
@@ -1843,7 +1906,7 @@ floatAtomToXmm st x (IrVar b) =
   case lookupBinder b st.fgSlots of
     Just slot =>
       if isFloatBindBinder st b then
-        Just [IXmmLoad x (OpMem Rbp (nativeSlotOff slot))]
+        Just (floatSlotRead st x slot)
       else
         Just [IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff slot)), IXmmLoad x (OpMem Rax 0)]
     Nothing => Nothing
@@ -1888,8 +1951,9 @@ floatAtomToPtr _ _ _ = Nothing
 -- | 浮点树里的条件选择：`if <浮点比较> then <浮点原子> else <浮点原子>`。
 --   比较在 xmm4/xmm5 上做（不占树的 xmm0..3），结果用 `cmov` 选指针后再解引用；
 --   没有分支、没有调用，整棵树仍然只装箱一次。
---   实测掩码（`cmpltsd` + `andpd`/`orpd`）版本虽然指令更少、关键路径更短，但在这台
---   机器上把树内的标量指令挤到同一条 FP 端口链上反而慢 ~25%，所以保留 `cmov`。
+--   掩码写法（`cmpltsd` + `andpd`/`andnpd`/`orpd`）指令更少、关键路径也更短，但在
+--   Zen 4 上它把树的标量运算挤到已经饱和的 FP 端口上，实测慢 40%+（xmm 常驻前后都试过）；
+--   `cmov` + 指针解引用走整数 / 访存端口，能和 `sqrt`/`divsd` 并行，所以保留它。
 floatTreeCond : FGen -> List Int -> Ir -> Ir -> Ir -> Maybe (Int, List Instr, List Int)
 floatTreeCond st (x :: rest) c t e =
   case c of
@@ -1924,7 +1988,7 @@ genExprAt fuel st isTail ir =
         case lookupBinder b st.fgSlots of
           Just slot =>
             if isFloatBindBinder st b then
-              NOk (boxFloatSlot slot, st)
+              NOk (boxFloatSlot st slot, st)
             else
               let
                 instrs = loadSlot slot
@@ -2372,7 +2436,7 @@ genLamValue fuel st bs body =
       st1 = { st | fgNextLabel = idx + 1 }
       -- 闭包体自己的来参区由闭包 ABI 决定（`rdi` 是闭包自身，实参从 `rsi` 起）。
       lamRoom = nativeTailRoomBytes (nativeStackArgCount arity (length closureArgRegs))
-      stBody = FGen st1.fgDefs st1.fgPool st1.fgFloats [] [] st1.fgFams 0 st1.fgNextLabel [] lamRoom st1.fgModule st1.fgOwner "" "" [] [] [] [] (filterKnown caps st.fgKnown) st1.fgReenter [] [] False
+      stBody = FGen st1.fgDefs st1.fgPool st1.fgFloats [] [] st1.fgFams 0 st1.fgNextLabel [] lamRoom st1.fgModule st1.fgOwner "" "" [] [] [] [] (filterKnown caps st.fgKnown) st1.fgReenter [] [] [] [] False
     in nbind (bindCaptures stBody st.fgSlotCls caps 0) (
         \cp =>
           nbind (bindArgsGo rbs 1 (secondOf cp)) (
@@ -2845,13 +2909,20 @@ bindArgsGo (b :: rest) i st =
     slotP = freshSlot st
     slot = firstOf slotP
     st1 = secondOf slotP
-    store =
-      if isFloatBindBinder st b then
-        append src [IXmmLoad 0 (OpMem Rax 0), IXmmStore (OpMem Rbp (nativeSlotOff slot)) 0]
-      else
-        append src [IMov (OpMem Rbp (nativeSlotOff slot)) (OpReg Rax)]
+    -- 捆箱形参：来参是 pointer-to-double，就地解引用一次；有常驻 xmm 时直接落进去。
+    (store, st2) =
+      case floatRegOf st b of
+        Just reg =>
+          (append src [IXmmLoad reg (OpMem Rax 0), IXmmStore (OpMem Rbp (nativeSlotOff slot)) reg],
+            { st1 | fgFloatSlotRegs = (slot, reg) :: st1.fgFloatSlotRegs })
+        Nothing =>
+          if isFloatBindBinder st b then
+            (append src [IXmmLoad 0 (OpMem Rax 0), IXmmStore (OpMem Rbp (nativeSlotOff slot)) 0],
+              st1)
+          else
+            (append src [IMov (OpMem Rbp (nativeSlotOff slot)) (OpReg Rax)], st1)
   in nbind
-    (bindArgsGo rest (i + 1) (pushBinderCls b slot (binderCls st Nothing b) st1))
+    (bindArgsGo rest (i + 1) (pushBinderCls b slot (binderCls st Nothing b) st2))
     (\q => NOk (append store (firstOf q), secondOf q))
 
 -- ---------------------------------------------------------------
@@ -3034,6 +3105,8 @@ genDefFunc defs pools floats recNames allocs fams nextLabel (IrDef name arity _ 
         (memStr name recNames)
         []
         []
+        []
+        []
         False
   in if arity == 0 then
     nbind (genExpr (nativeFuelOfBody body) st0 body) (
@@ -3054,7 +3127,7 @@ genDefFunc defs pools floats recNames allocs fams nextLabel (IrDef name arity _ 
           rbs = runtimeBinders bs
           -- 浮点形参拆箱：槽里存 raw `f64` 位。浮点运算读点直接 `movsd` 进 xmm，
           -- 逃逸读点先装盒；写点只有来参落位与自递归尾调用写回。
-          stB0 = { st0 | fgFloatBinds = concatMap (\b => if isFloatParamBinder st0 b then [binderIdOf b] else []) rbs }
+          stB0 = { st0 | fgFloatBinds = concatMap (\b => if isFloatParamBinder st0 b then [binderIdOf b] else []) rbs, fgFloatRegs = floatParamRegs st0 rbs }
         in if length rbs /= arity then
           internal "function body lambda arity mismatch: ${name}"
         else
@@ -3071,7 +3144,9 @@ genDefFunc defs pools floats recNames allocs fams nextLabel (IrDef name arity _ 
                         st1 = secondOf q
                         frame = nativeFrameBytes st1.fgNextSlot
                         body0 = append (firstOf bp) (append [ILabel loopLabel] (firstOf q))
-                        promo = Regs.promoteLoops st1.fgSlotCls (clearDeadSlots st1.fgReenter st1.fgSlotCls (peephole body0))
+                        -- 常驻 xmm 的浮点形参在调用前后溢出/重载（槽是权威副本）；要在死槽清零之前。
+                        bodySpill = spillReloadFloatRegs st1.fgFloatSlotRegs body0
+                        promo = Regs.promoteLoops st1.fgSlotCls (clearDeadSlots st1.fgReenter st1.fgSlotCls (peephole bodySpill))
                         instrs = append (cleanup promo.rpBody) (Regs.epilogueOf promo.rpSaved)
                         holes = if memStr name allocs && frameReused st1.fgReenter instrs then unwrittenSlots frame instrs else []
                         mainF = NativeFunc (nativeFuncLabel name) frame (append (Regs.prologueOf promo.rpSaved) (append (nativePrologueOf frame holes) instrs)) modPath
@@ -3307,6 +3382,7 @@ instrLabelRefs (IXmmToInt _ _) = []
 instrLabelRefs (IXmmBin _ _ _) = []
 instrLabelRefs (IXmmUnop _ _) = []
 instrLabelRefs (IXmmCmp _ _) = []
+instrLabelRefs (IXmmMov _ _) = []
 instrLabelRefs (IXmmToReg _ _) = []
 instrLabelRefs (IXmmFromReg _ _) = []
 instrLabelRefs IRet = []

@@ -192,6 +192,8 @@ export data Instr(..) : Type where
   IXmmUnop : String -> Int -> Instr
   -- | `ucomisd xmm<a>, xmm<b>`。
   IXmmCmp : Int -> Int -> Instr
+  -- | `movapd xmm<dst>, xmm<src>`（寄存器间搬 128 位；只关心低 64 位时也够用）。
+  IXmmMov : Int -> Int -> Instr
   -- | `<op>sd xmm<dst>, qword ptr <op>`：右操作数直接取自 `.rodata` 常量，省掉一次装填。
   IXmmBinMem : String -> Int -> Operand -> Instr
   -- | `mov r32, r32`：写低 32 位并零扩展，等价于 `and r, 0xFFFF_FFFF`。

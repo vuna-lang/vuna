@@ -103,6 +103,8 @@ run: sh -c '"$TMPDIR/floop-out/bin/floop"'
 out-equals: 5
 run: sh -c 'test "$(grep -c "call rt_alloc_leaf" "$TMPDIR/floop-out/Main.s")" -eq 1'
 exit: 0
+run: sh -c 'grep -q "xmm8" "$TMPDIR/floop-out/Main.s"'
+exit: 0
 
 # 9s3) 物化 Bool 选择不发分支：`if b then 1 else 0` 直接复用 0/1 槽，累加回到内联 `add`。
 run: sh -c 'd="$TMPDIR/bselect"; mkdir -p "$d/app"; printf "[package]\nname = \"bselect\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "loop : Int -> Bool -> Int -> Int\nloop acc b n = if n <= 0 then acc else loop (acc + (if b then 1 else 0)) (n < 5) (n - 1)\n\nmain : Int\nmain = loop 0 True 100\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --out "$TMPDIR/bselect-n" "$d"'

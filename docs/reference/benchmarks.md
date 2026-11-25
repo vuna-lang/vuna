@@ -524,7 +524,8 @@ T0 仍是 0.36x c / 0.23x ml（§1.6.2 的裁剪不改变地板读数）。
     复用 0/1 槽（`if b then 0 else 1` 只发 `xor 1`），比较只发 `setcc` + `movzx`，
     累加回到内联 `add`。
   - `float_math` native 1.69x c：浮点比较在 `floatTree` 里用 `ucomisd` + `cmov` 选分支
-    指针，整棵树仍只装箱一次；剩余差距在 `sqrt` 与装盒 / 搬运。
+    指针，整棵树仍只装箱一次；当时的剩余差距是 `sqrt` 与装盒 / 搬运（后续两档把它们
+    收掉了，见 §1.6.3）。
 - **常量除法与 Nat 库调用已收口**：
   - `scalar_idiv` native 1.39x c：非 2 幂常量除法改走 magic 乘法（`imul` 高半）+
     符号修正，不再 `cqo` + `idiv`；`d = 3` / 负常量仍回退 `idiv` / 运行时。
@@ -605,8 +606,11 @@ exec（~200 µs）主导，init 只剩 10–20 µs。裁剪的收益在产物（
 | `scalar_ilp` | 1.54x | **0.99x** | `d = d*5+7` 折成 `lea d, [d+d*4+7]`（1 拍替 3 拍 `imul`），`a += n*3` 也走 `lea` |
 | `scalar_muladd` | 1.24x | **0.96x** | `& 0xFFFF_FFFF` 折成 `mov r32, r32`（零扩展），省掉一次 scratch 装掩码 |
 | `scalar_divsigned` | 1.72x | **~1.4x** | 负被除数的符号修正改 `test` + `lea d-1` + `cmovns` + `sar`（原 `sar 63` + `and` + `add`） |
-| `float_math` | 2.5x | **1.8x** | 浮点形参拆箱：循环参数槽存 raw `f64` 位，循环内不再每轮 `alloc_leaf` |
+| `float_math` | 2.5x | **1.15x** | 浮点形参拆箱后**常驻 xmm8**：循环里不再每轮存槽再读回（`abs` 消除已是前一档） |
 
 读数在同一台机器（Ryzen 7 7840HS）同一会话内交替测得，loadavg 3–5，绝对 ms 只作方向
-参考；「默认 C」= GCC 16 `-O2`。`float_math` 剩余差距在 `sqrt` / `divsd` 吞吐、`abs`
-的位运算与三次常量装填（C 侧因为 `n > 0` 直接省掉了 `fabs`）。
+参考；「默认 C」= GCC 16 `-O2`。`float_math` 剩下的差距只有浮点比较的物化与
+`sqrt`/`divsd` 吞吐：试过把选择改成 `cmpltsd` + `andpd` 掩码（指令更少、关键路径更短），
+在 xmm 常驻前后都慢 40%+——树里的标量运算被挤到已饱和的 FP 端口上，所以保留
+`ucomisd` + `cmov` 选指针。`scalar_divsigned` 的 `test` 复用与结果写回前移也试过：
+各能省一条指令 / 一拍链，但实测在噪声内（该循环不卡在这条链上），没有落地。
