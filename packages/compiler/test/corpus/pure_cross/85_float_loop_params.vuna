@@ -1,0 +1,14 @@
+-- 浮点循环参数：native 把形参拆箱成槽里的 raw `f64` 位（循环内不装盒），
+-- 退出循环或作为实参传给别的函数时再装盒。三端（ocaml / wasm / native）逐字一致。
+step : Float -> Float
+step x = sqrt (abs x) * 0.25 - 0.5
+
+loop : Float -> Int -> Float
+loop acc n =
+  if n <= 0 then
+    acc
+  else
+    loop (acc + step (intToFloat n) / 3.0 + (if acc < 20.0 then 1.0 else 0.0)) (n - 1)
+
+main : Int
+main = floatToInt (loop 0.0 60) + floatToInt (step 16.0)

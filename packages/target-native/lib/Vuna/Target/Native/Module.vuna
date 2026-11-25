@@ -26,6 +26,7 @@ import Base.Data.Maybe as Maybe
 import Base.Data.Pair as Pair
 import Base.Data.String as String
 import Vuna.Ir.Model
+import Vuna.Ir.Kinds as Kinds
 import Vuna.Ir.Cps
 import Vuna.Ir.Analysis
 import Vuna.Ir.Runtime
@@ -140,6 +141,9 @@ record FGen where
   fgReenter : Bool
   -- | 允许携带未归一化 63-bit 值的循环参数槽（`Native.Dirty` 的结论）。
   fgDirtySlots : List Int
+  -- | 拆箱形参的 binder id：这些槽里存的是 raw `f64` 位模式（不是堆上的 leaf 指针）。
+  --   读点要么直接 `movsd` 进 xmm（浮点运算），要么先装盒再当指针用（逃逸点）。
+  fgFloatBinds : List Int
   -- | 正在求值的 self 尾调用实参是否允许保留未归一化值（只对 dirty 目标置位）。
   fgAllowDirty : Bool
 
@@ -205,6 +209,21 @@ slotClsAt slot (p :: rest) = if firstOf p == slot then secondOf p else slotClsAt
 isScalarCls : NCls -> Bool
 isScalarCls NClsScalar = True
 isScalarCls _ = False
+
+-- | 绑定点声明的类型是 `Float`（拆箱候选）。
+isFloatTy : FGen -> Maybe IrTy -> Bool
+isFloatTy st mty =
+  case Kinds.irKindOfTy st.fgFams mty of
+    Kinds.KFloat => True
+    _ => False
+
+-- | binder 是拆箱形参：它所在的槽存 raw `f64` 位，读它当指针用之前必须先装盒。
+isFloatBindBinder : FGen -> IrBinder -> Bool
+isFloatBindBinder st b = memInt (binderIdOf b) st.fgFloatBinds
+
+-- | 形参 binder 声明为 `Float`（拆箱候选）。
+isFloatParamBinder : FGen -> IrBinder -> Bool
+isFloatParamBinder st b = isFloatTy st b.irBinderTy
 
 clsOfTy : FGen -> Maybe IrTy -> NCls
 clsOfTy st mty = nKindOfTy st.fgFams mty
@@ -628,7 +647,24 @@ genSelfTailCall fuel st args =
   else
     nbind
       (genSelfArgs (fuel - 1) (SelfArgs [] st []) args st.fgSelfParams st.fgSelfBinds)
-      (\q => NOk (append q.saInstrs (append (copyBacks q.saPending) [IJmp st.fgSelfLoop]), q.saState))
+      (\q => NOk (append q.saInstrs (append (copyBacks (floatParamSlots st.fgSelfParams st.fgSelfBinds st) q.saPending) [IJmp st.fgSelfLoop]), q.saState))
+
+-- | 自递归形参里被拆箱成 raw `f64` 位的槽（与 `fgSelfParams` 同源的子集）。
+floatParamSlots : List Int -> List IrBinder -> FGen -> List Int
+floatParamSlots [] _ _ = []
+floatParamSlots _ [] _ = []
+floatParamSlots (slot :: ss) (b :: bs) st =
+  if isFloatBindBinder st b then slot :: floatParamSlots ss bs st else floatParamSlots ss bs st
+
+-- | 单个自递归实参写回：目标是拆箱浮点槽时，优先把浮点树直接算进 xmm（不装盒）。
+genSelfFloatArg : Int -> FGen -> Int -> Ir -> NRes (List Instr, FGen)
+genSelfFloatArg fuel st dst a =
+  case floatTreeIntoXmm0 st a of
+    Just ins => NOk (append ins (storeFloatSlot dst), st)
+    Nothing =>
+      nbind
+        (genExpr fuel st a)
+        (\q => NOk (append (firstOf q) (storeFloatSlotFromRax dst), secondOf q))
 
 genSelfArgs : Int -> SelfArgs -> List Ir -> List Int -> List IrBinder -> NRes SelfArgs
 genSelfArgs _ acc [] _ _ = NOk acc
@@ -643,8 +679,7 @@ genSelfArgs fuel acc (a :: rest) (dst :: dsts) (b :: binds) =
       tmp = firstOf p
       st1 = secondOf p
     in nbind (genExpr (fuel - 1) (dirtyArgState st1 dst a) a) (\q => genSelfArgs (fuel - 1) (SelfArgs (append acc.saInstrs (append (firstOf q) (storeSlot tmp))) (restoreDirty (secondOf q) acc.saState) (append acc.saPending [(tmp, dst)])) rest dsts binds)
-  else
-    nbind (genExpr (fuel - 1) (dirtyArgState acc.saState dst a) a) (\q => genSelfArgs (fuel - 1) (SelfArgs (append acc.saInstrs (append (firstOf q) (storeSlot dst))) (restoreDirty (secondOf q) acc.saState) acc.saPending) rest dsts binds)
+  else if isFloatBindBinder acc.saState b then nbind (genSelfFloatArg (fuel - 1) (dirtyArgState acc.saState dst a) dst a) (\q => genSelfArgs (fuel - 1) (SelfArgs (append acc.saInstrs (firstOf q)) (restoreDirty (secondOf q) acc.saState) acc.saPending) rest dsts binds) else nbind (genExpr (fuel - 1) (dirtyArgState acc.saState dst a) a) (\q => genSelfArgs (fuel - 1) (SelfArgs (append acc.saInstrs (append (firstOf q) (storeSlot dst))) (restoreDirty (secondOf q) acc.saState) acc.saPending) rest dsts binds)
 
 -- | 目标是 dirty 参数、且实参是纯标量链时，求值可以保留未归一化值；其它实参照常
 --   按归一化值生成（调用边界另有 `genArgs` 兜底）。
@@ -658,12 +693,21 @@ restoreDirty st base = { st | fgAllowDirty = base.fgAllowDirty }
 anyArgRefs : IrBinder -> List Ir -> Bool
 anyArgRefs b args = foldl (\acc, a => acc || memBinderId b.irBinderId (binderRefsOf a)) False args
 
-copyBacks : List (Int, Int) -> List Instr
-copyBacks [] = []
-copyBacks (p :: rest) =
-  append
-    [IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff (firstOf p))), IMov (OpMem Rbp (nativeSlotOff (secondOf p))) (OpReg Rax)]
-    (copyBacks rest)
+copyBacks : List Int -> List (Int, Int) -> List Instr
+copyBacks _ [] = []
+copyBacks floats (p :: rest) =
+  let
+    from = firstOf p
+    to = secondOf p
+    moves =
+      if memInt to floats then
+        append [IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff from))] (storeFloatSlotFromRax to)
+      else
+        [
+          IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff from)),
+          IMov (OpMem Rbp (nativeSlotOff to)) (OpReg Rax)
+        ]
+  in append moves (copyBacks floats rest)
 
 -- | 沿零参定义解析别名链（`f = rt:add` / `f = g`）：判据与链解析在 `Ir.Alias`。
 --   不是别名的零参 CAF（真实计算/分配）返回 Nothing，调用方回退 `rt_apply`。
@@ -887,9 +931,12 @@ needsRax _ = False
 -- | 把一个原子实参装进寄存器：槽变量 / 整数字面量 / 字符串字面量（`.rodata` 地址）。
 atomToReg : FGen -> Reg -> Ir -> Maybe (List Instr)
 atomToReg st r (IrVar b) =
-  case lookupBinder b st.fgSlots of
-    Just slot => Just [IMov (OpReg r) (OpMem Rbp (nativeSlotOff slot))]
-    Nothing => Nothing
+  if isFloatBindBinder st b then
+    Nothing
+  else
+    case lookupBinder b st.fgSlots of
+      Just slot => Just [IMov (OpReg r) (OpMem Rbp (nativeSlotOff slot))]
+      Nothing => Nothing
 atomToReg _ r (IrInt n) = Just [IMov (OpReg r) (OpImm n)]
 atomToReg st r (IrStr s) =
   case poolLabelOf s st.fgPool of
@@ -965,8 +1012,11 @@ floatTree st (x :: rest) ir =
     IrVar b =>
       case lookupBinder b st.fgSlots of
         Just slot =>
-          Just
-            (x, [IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff slot)), IXmmLoad x (OpMem Rax 0)], rest)
+          if isFloatBindBinder st b then
+            Just (x, [IXmmLoad x (OpMem Rbp (nativeSlotOff slot))], rest)
+          else
+            Just
+              (x, [IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff slot)), IXmmLoad x (OpMem Rax 0)], rest)
         Nothing => Nothing
     IrFloatLit raw =>
       case poolLabelOf raw st.fgFloats of
@@ -981,18 +1031,30 @@ floatTreeBin : FGen -> List Int -> String -> List Ir -> Maybe (Int, List Instr, 
 floatTreeBin st pool sym ([a, b]) =
   case floatTree st pool a of
     Just pa =>
-      case floatTree st (secondOf (secondOf pa)) b of
-        Just pb =>
-          let
-            da = firstOf pa
-            ia = firstOf (secondOf pa)
-            db = firstOf pb
-            ib = firstOf (secondOf pb)
-            rest = secondOf (secondOf pb)
-          in Just (da, append ia (append ib [IXmmBin (floatBinOf sym) da db]), db :: rest)
-        Nothing => Nothing
+      let
+        da = firstOf pa
+        ia = firstOf (secondOf pa)
+        restA = secondOf (secondOf pa)
+      in case floatLitLabel st b of
+        -- 右操作数是字面量：直接当内存操作数，省掉一次 `movsd` 装填。
+        Just label => Just (da, append ia [IXmmBinMem (floatBinOf sym) da (OpRip label)], restA)
+        Nothing =>
+          case floatTree st restA b of
+            Just pb =>
+              let
+                db = firstOf pb
+                ib = firstOf (secondOf pb)
+                rest = secondOf (secondOf pb)
+              in Just (da, append ia (append ib [IXmmBin (floatBinOf sym) da db]), db :: rest)
+            Nothing => Nothing
     Nothing => Nothing
 floatTreeBin _ _ _ _ = Nothing
+
+-- | 浮点字面量在这次生成里的 `.rodata` 标签。
+floatLitLabel : FGen -> Ir -> Maybe String
+floatLitLabel st (IrCast _ _ inner) = floatLitLabel st inner
+floatLitLabel st (IrFloatLit raw) = poolLabelOf raw st.fgFloats
+floatLitLabel _ _ = Nothing
 
 floatTreeApp : FGen -> List Int -> Ir -> Ir -> Maybe (Int, List Instr, List Int)
 floatTreeApp st pool f a =
@@ -1040,6 +1102,30 @@ allocLeafToR11 : List Instr
 allocLeafToR11 =
   [IMov (OpReg Rdi) (OpImm 8), ICall (nativeRtLabel "alloc_leaf"), IMov (OpReg R11) (OpReg Rax)]
 
+-- | 拆箱形参的**逃逸读点**：槽里是 raw `f64` 位，按指针用之前装盒成一个新 leaf。
+--   分配在前（可能触发 GC；槽里的位模式不是根），之后不再有 call。
+boxFloatSlot : Int -> List Instr
+boxFloatSlot slot =
+  append
+    allocLeafToR11
+    [IXmmLoad 0 (OpMem Rbp (nativeSlotOff slot)), IXmmStore (OpMem R11 0) 0, IMov (OpReg Rax) (OpReg R11)]
+
+-- | 拆箱形参的**写点**：把 xmm0 里的值写成槽里的 raw 位（不分配）。
+storeFloatSlot : Int -> List Instr
+storeFloatSlot slot = [IXmmStore (OpMem Rbp (nativeSlotOff slot)) 0]
+
+-- | 从 rax 里的装箱 Float 拆出 raw 位写进拆箱槽。
+storeFloatSlotFromRax : Int -> List Instr
+storeFloatSlotFromRax slot =
+  [IXmmLoad 0 (OpMem Rax 0), IXmmStore (OpMem Rbp (nativeSlotOff slot)) 0]
+
+-- | 把浮点表达式算进 `xmm0`（不装盒）；不是浮点树时返回 `Nothing`。
+floatTreeIntoXmm0 : FGen -> Ir -> Maybe (List Instr)
+floatTreeIntoXmm0 st ir =
+  case floatTree st [0, 1, 2, 3] ir of
+    Just pa => Just (firstOf (secondOf pa))
+    Nothing => Nothing
+
 floatTreeInline : FGen -> Ir -> Maybe (List Instr)
 floatTreeInline st ir =
   case floatTree st [0, 1, 2, 3] ir of
@@ -1062,15 +1148,15 @@ floatInline st sym args =
   else if sym == "floatSqrt" then
     case args of
       [a] =>
-        case atomToReg st Rax a of
-          Just la => Just (catInstrs [allocLeafToR10, la, [IXmmLoad 0 (OpMem Rax 0), IXmmUnop "sqrt" 0, IXmmStore (OpMem R10 0) 0, IMov (OpReg Rax) (OpReg R10)]])
+        case floatAtomToXmm st 0 a of
+          Just la => Just (catInstrs [allocLeafToR10, la, [IXmmUnop "sqrt" 0, IXmmStore (OpMem R10 0) 0, IMov (OpReg Rax) (OpReg R10)]])
           Nothing => Nothing
       _ => Nothing
   else if sym == "floatAbs" then
     case args of
       [a] =>
-        case atomToReg st Rax a of
-          Just la => Just (catInstrs [allocLeafToR10, la, [IMov (OpReg Rax) (OpMem Rax 0), IBinReg "shl" Rax (OpImm 1), IBinReg "shr" Rax (OpImm 1), IMov (OpMem R10 0) (OpReg Rax), IMov (OpReg Rax) (OpReg R10)]])
+        case floatAtomToXmm st 0 a of
+          Just la => Just (catInstrs [allocLeafToR10, la, [IXmmToReg Rax 0, IBinReg "shl" Rax (OpImm 1), IBinReg "shr" Rax (OpImm 1), IXmmFromReg 0 Rax, IXmmStore (OpMem R10 0) 0, IMov (OpReg Rax) (OpReg R10)]])
           Nothing => Nothing
       _ => Nothing
   else if sym == "floatFromInt" then
@@ -1083,8 +1169,8 @@ floatInline st sym args =
   else if sym == "intFromFloat" then
     case args of
       [a] =>
-        case atomToReg st Rax a of
-          Just la => Just (catInstrs [la, [IXmmLoad 0 (OpMem Rax 0), IXmmToInt Rax 0]])
+        case floatAtomToXmm st 0 a of
+          Just la => Just (catInstrs [la, [IXmmToInt Rax 0]])
           Nothing => Nothing
       _ => Nothing
   else
@@ -1092,10 +1178,10 @@ floatInline st sym args =
 
 floatBinInline : FGen -> String -> List Ir -> Maybe (List Instr)
 floatBinInline st sym ([a, b]) =
-  case (atomToReg st Rax a, atomToReg st R11 b) of
+  case (floatAtomToXmm st 0 a, floatAtomToXmm st 1 b) of
     (Just la, Just lb) =>
       Just
-        (catInstrs [allocLeafToR10, la, [IXmmLoad 0 (OpMem Rax 0)], lb, [IXmmLoad 1 (OpMem R11 0), IXmmBin (floatBinOf sym) 0 1, IXmmStore (OpMem R10 0) 0, IMov (OpReg Rax) (OpReg R10)]])
+        (catInstrs [allocLeafToR10, la, lb, [IXmmBin (floatBinOf sym) 0 1, IXmmStore (OpMem R10 0) 0, IMov (OpReg Rax) (OpReg R10)]])
     _ => Nothing
 floatBinInline _ _ _ = Nothing
 
@@ -1713,9 +1799,12 @@ condBranch _ _ = Nothing
 atomOperand : FGen -> Ir -> Maybe Operand
 atomOperand _ (IrInt n) = Just (OpImm n)
 atomOperand st (IrVar b) =
-  case lookupBinder b st.fgSlots of
-    Just slot => Just (OpMem Rbp (nativeSlotOff slot))
-    Nothing => Nothing
+  if isFloatBindBinder st b then
+    Nothing
+  else
+    case lookupBinder b st.fgSlots of
+      Just slot => Just (OpMem Rbp (nativeSlotOff slot))
+      Nothing => Nothing
 atomOperand _ _ = Nothing
 
 -- | 浮点原子 → `xmm<reg>`：槽里的装箱 Float（解引用）或浮点字面量（`.rodata`）。
@@ -1723,7 +1812,11 @@ floatAtomToXmm : FGen -> Int -> Ir -> Maybe (List Instr)
 floatAtomToXmm st x (IrCast _ _ inner) = floatAtomToXmm st x inner
 floatAtomToXmm st x (IrVar b) =
   case lookupBinder b st.fgSlots of
-    Just slot => Just [IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff slot)), IXmmLoad x (OpMem Rax 0)]
+    Just slot =>
+      if isFloatBindBinder st b then
+        Just [IXmmLoad x (OpMem Rbp (nativeSlotOff slot))]
+      else
+        Just [IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff slot)), IXmmLoad x (OpMem Rax 0)]
     Nothing => Nothing
 floatAtomToXmm st x (IrFloatLit raw) =
   case poolLabelOf raw st.fgFloats of
@@ -1746,13 +1839,17 @@ floatCmpInline st sym args =
         _ => Nothing
 
 -- | 浮点原子 → 指针寄存器（槽里的装箱对象或 `.rodata` 地址），供 floatTree 的
---   无分支选择（`cmov` 指针）使用。
+--   无分支选择（`cmov` 指针）使用。拆箱形参的槽不是指针，返回 `Nothing`（选择回退到
+--   逐运算内联的装箱路径）。
 floatAtomToPtr : FGen -> Reg -> Ir -> Maybe (List Instr)
 floatAtomToPtr st r (IrCast _ _ inner) = floatAtomToPtr st r inner
 floatAtomToPtr st r (IrVar b) =
-  case lookupBinder b st.fgSlots of
-    Just slot => Just [IMov (OpReg r) (OpMem Rbp (nativeSlotOff slot))]
-    Nothing => Nothing
+  if isFloatBindBinder st b then
+    Nothing
+  else
+    case lookupBinder b st.fgSlots of
+      Just slot => Just [IMov (OpReg r) (OpMem Rbp (nativeSlotOff slot))]
+      Nothing => Nothing
 floatAtomToPtr st r (IrFloatLit raw) =
   case poolLabelOf raw st.fgFloats of
     Just label => Just [ILea r label]
@@ -1762,6 +1859,8 @@ floatAtomToPtr _ _ _ = Nothing
 -- | 浮点树里的条件选择：`if <浮点比较> then <浮点原子> else <浮点原子>`。
 --   比较在 xmm4/xmm5 上做（不占树的 xmm0..3），结果用 `cmov` 选指针后再解引用；
 --   没有分支、没有调用，整棵树仍然只装箱一次。
+--   实测掩码（`cmpltsd` + `andpd`/`orpd`）版本虽然指令更少、关键路径更短，但在这台
+--   机器上把树内的标量指令挤到同一条 FP 端口链上反而慢 ~25%，所以保留 `cmov`。
 floatTreeCond : FGen -> List Int -> Ir -> Ir -> Ir -> Maybe (Int, List Instr, List Int)
 floatTreeCond st (x :: rest) c t e =
   case c of
@@ -1795,9 +1894,12 @@ genExprAt fuel st isTail ir =
       IrVar b =>
         case lookupBinder b st.fgSlots of
           Just slot =>
-            let
-              instrs = loadSlot slot
-            in if memInt slot st.fgDirtySlots && not st.fgAllowDirty then NOk (append instrs [IBinReg "shl" Rax (OpImm 1), IBinReg "sar" Rax (OpImm 1)], st) else NOk (instrs, st)
+            if isFloatBindBinder st b then
+              NOk (boxFloatSlot slot, st)
+            else
+              let
+                instrs = loadSlot slot
+              in if memInt slot st.fgDirtySlots && not st.fgAllowDirty then NOk (append instrs [IBinReg "shl" Rax (OpImm 1), IBinReg "sar" Rax (OpImm 1)], st) else NOk (instrs, st)
           Nothing => internal "unbound runtime binder in native codegen"
       IrGlobal name =>
         case findDef name st.fgDefs of
@@ -2241,7 +2343,7 @@ genLamValue fuel st bs body =
       st1 = { st | fgNextLabel = idx + 1 }
       -- 闭包体自己的来参区由闭包 ABI 决定（`rdi` 是闭包自身，实参从 `rsi` 起）。
       lamRoom = nativeTailRoomBytes (nativeStackArgCount arity (length closureArgRegs))
-      stBody = FGen st1.fgDefs st1.fgPool st1.fgFloats [] [] st1.fgFams 0 st1.fgNextLabel [] lamRoom st1.fgModule st1.fgOwner "" "" [] [] [] [] (filterKnown caps st.fgKnown) st1.fgReenter [] False
+      stBody = FGen st1.fgDefs st1.fgPool st1.fgFloats [] [] st1.fgFams 0 st1.fgNextLabel [] lamRoom st1.fgModule st1.fgOwner "" "" [] [] [] [] (filterKnown caps st.fgKnown) st1.fgReenter [] [] False
     in nbind (bindCaptures stBody st.fgSlotCls caps 0) (
         \cp =>
           nbind (bindArgsGo rbs 1 (secondOf cp)) (
@@ -2714,7 +2816,11 @@ bindArgsGo (b :: rest) i st =
     slotP = freshSlot st
     slot = firstOf slotP
     st1 = secondOf slotP
-    store = append src [IMov (OpMem Rbp (nativeSlotOff slot)) (OpReg Rax)]
+    store =
+      if isFloatBindBinder st b then
+        append src [IXmmLoad 0 (OpMem Rax 0), IXmmStore (OpMem Rbp (nativeSlotOff slot)) 0]
+      else
+        append src [IMov (OpMem Rbp (nativeSlotOff slot)) (OpReg Rax)]
   in nbind
     (bindArgsGo rest (i + 1) (pushBinderCls b slot (binderCls st Nothing b) st1))
     (\q => NOk (append store (firstOf q), secondOf q))
@@ -2898,6 +3004,7 @@ genDefFunc defs pools floats recNames allocs fams nextLabel (IrDef name arity _ 
         []
         (memStr name recNames)
         []
+        []
         False
   in if arity == 0 then
     nbind (genExpr (nativeFuelOfBody body) st0 body) (
@@ -2916,16 +3023,19 @@ genDefFunc defs pools floats recNames allocs fams nextLabel (IrDef name arity _ 
       IrLam bs _ inner =>
         let
           rbs = runtimeBinders bs
+          -- 浮点形参拆箱：槽里存 raw `f64` 位。浮点运算读点直接 `movsd` 进 xmm，
+          -- 逃逸读点先装盒；写点只有来参落位与自递归尾调用写回。
+          stB0 = { st0 | fgFloatBinds = concatMap (\b => if isFloatParamBinder st0 b then [binderIdOf b] else []) rbs }
         in if length rbs /= arity then
           internal "function body lambda arity mismatch: ${name}"
         else
-          nbind (bindArgs rbs st0) (
+          nbind (bindArgs rbs stB0) (
               \bp =>
                 let
                   stB = secondOf bp
                   loopP = freshLabel stB
                   loopLabel = firstOf loopP
-                  stLoop = { (secondOf loopP) | fgSelfLabel = nativeFuncLabel name, fgSelfLoop = loopLabel, fgSelfParams = slotsOfBinders rbs stB.fgSlots, fgSelfBinds = rbs, fgDirtySlots = slotsOfBinders (filter (\b => memInt (binderIdOf b) (Dirty.dirtyParamIds name rbs inner)) rbs) stB.fgSlots }
+                  stLoop = { (secondOf loopP) | fgSelfLabel = nativeFuncLabel name, fgSelfLoop = loopLabel, fgSelfParams = slotsOfBinders rbs stB.fgSlots, fgSelfBinds = rbs, fgDirtySlots = slotsOfBinders (filter (\b => memInt (binderIdOf b) (Dirty.dirtyParamIds name rbs inner) && not (isFloatBindBinder stB b)) rbs) stB.fgSlots }
                 in nbind (genLoopBody (nativeFuelOfBody inner) stLoop inner name loopLabel) (
                     \q =>
                       let
@@ -3160,6 +3270,7 @@ instrLabelRefs (IJcc _ l) = [l]
 instrLabelRefs (ICall l) = [l]
 instrLabelRefs (ICallReg _) = []
 instrLabelRefs (IXmmLoad _ op) = operandLabelRefs op
+instrLabelRefs (IXmmBinMem _ _ op) = operandLabelRefs op
 instrLabelRefs (IXmmStore op _) = operandLabelRefs op
 instrLabelRefs (IXmmFromInt _ _) = []
 instrLabelRefs (IXmmToInt _ _) = []

@@ -173,6 +173,8 @@ export data Instr(..) : Type where
   IXmmUnop : String -> Int -> Instr
   -- | `ucomisd xmm<a>, xmm<b>`。
   IXmmCmp : Int -> Int -> Instr
+  -- | `<op>sd xmm<dst>, qword ptr <op>`：右操作数直接取自 `.rodata` 常量，省掉一次装填。
+  IXmmBinMem : String -> Int -> Operand -> Instr
   -- | `movq <reg>, xmm<n>`（按位搬 64 位）。
   IXmmToReg : Reg -> Int -> Instr
   -- | `movq xmm<n>, <reg>`（按位搬 64 位）。
