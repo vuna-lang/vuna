@@ -23,8 +23,8 @@ C 对照的存在让「vuna 相对最优手写实现」有了第二条参照；`
 与 `bench/bootstrap.sh` 的分工：后者测构建 / 编译墙钟与产物尺寸，本设施测运行期。
 
 三口径读数（`--target all --runs 5 --warmup 2`，x86_64 / 16 核 / 生成时 `meta.loadavg ≈ 2.8`；
-ratio 对手写 OCaml，wasm 用 net；`bench/baselines/programs.json` 里的全部用例（本次重标
-54 项）、native / wasm 列与对手写 C 的对照见该文件）：
+ratio 对手写 OCaml，wasm 用 net；`bench/baselines/programs.json` 里的全部用例（55 项）、
+native / wasm 列与对手写 C 的对照见该文件）：
 
 | benchmark | 场景 | wall | cpu | rss | vs_c (w/c/r) |
 | --- | --- | --- | --- | --- | --- |
@@ -84,7 +84,7 @@ ratio 对手写 OCaml，wasm 用 net；`bench/baselines/programs.json` 里的全
 
 
 场景覆盖：数值 / 字符串 / 容器 / 分配 / 数组 / 记录与变体 / 高阶函数 / 算法 / 浮点 /
-逐字节文本 / Nat 与位运算 / 尾调用与分支链 / GC。新增场景按机制归入 `bench/programs/t<N>/`，
+逐字节文本 / Nat 与位运算 / 尾调用与分支链 / GC / 线程与同步。新增场景按机制归入 `bench/programs/t<N>/`，
 清单见 [`bench/programs/TIERS.md`](../../bench/programs/TIERS.md)。
 
 关键设计决策与改动（`packages/target-ocaml/lib/Vuna/Target/Ocaml/Term.vuna`、`Base.Intrinsics` / `Elab.Prelude` / `Target.Ocaml.Decl` 与
@@ -484,7 +484,7 @@ wasm 删掉 wat 机器后连纯程序也小了 ~4%。上表 native 两列是「�
 复杂度契约见 [stdlib.md](stdlib.md)「容器复杂度契约」；增长形状由
 `checks.vuna-container-growth` 在 CI 里守（每翻倍 ≤3.0×）。
 
-### 1.6 机制分层（T0–T9）
+### 1.6 机制分层（T0–T10）
 
 用例按机制归到 `bench/programs/t<N>/`，清单与新增规则见
 [`bench/programs/TIERS.md`](../../bench/programs/TIERS.md)。tier 是累积的：诊断从 T0 往上走，
@@ -619,3 +619,38 @@ C ~3.1ms）：剩下的差别只有 `movapd` 往返与常量装填。掩码选�
 我们多两条 `mov` 搬运（`mov rax, r12` / `mov r12, r11`）。把除法链直接写进槽提升的
 目标寄存器还能再省 1–2 条（实测 10.3ms → 9.6ms，与 C 同档），但那要做一次链式目标
 改写，留作单独一档。
+
+### 1.7 T10 线程 / 同步
+
+t10 的五个用例各开 4 个线程：`thread_atomic_counter`（atomic fetchAdd）、
+`thread_mutex_counter`（mutex + atomic load/store）、`thread_parallel_sum`（4 段纯累加）、
+`thread_par_map`（`Base.Thread.Par.parMap` 按输入分块）、`thread_spawn_join`（2000 次
+spawn/join）。手写 OCaml 对照用 `Domain`，C 对照用 `pthread`；四个用例的 sidecar 只开
+`ocaml,native`（wasm 的 `Base.Thread` 顺序退化），`thread_par_map` 另跑 wasm。
+
+本机一档（`--target all --runs 5 --warmup 2`，x86_64 / 16 核，loadavg ≈ 3–5；`ns/op` 与完整
+三指标见 `programs.json`；ratio 对手写 OCaml，wasm 用 net）：
+
+| 用例 | ml ms | vuna_ocaml ms | native ms | native ns/op | native vs ml (w/c/r) | native vs c (w/c) | wasm net ms |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| thread_atomic_counter | 2.97 | 5.13 | 125.7 | 628.5 | 42.34/54.70/0.31 | 42.28/51.54 | skipped |
+| thread_mutex_counter | 8.35 | 31.9 | 347.5 | 1737 | 41.63/27.98/0.31 | 84.58/60.84 | skipped |
+| thread_parallel_sum | 2.84 | 3.67 | 3.38 | 0.56 | 1.19/1.70/0.31 | 1.96/3.02 | skipped |
+| thread_par_map | 3.34 | 4.00 | 2.99 | 0.50 | 0.89/1.32/0.30 | 1.86/2.77 | 15.5 |
+| thread_spawn_join | 98.50 | 101.4 | 52.9 | 26462 | 0.54/0.39/0.28 | 1.45/1.49 | skipped |
+
+读法：
+
+- **同步计数器是唯一不在同一量级的一档**：native 的 `thread_atomic_counter` 与
+  `thread_mutex_counter` 墙钟都是 42x（CPU 55x / 28x）。成本不在同步原语本身，而在
+  **分配**：每轮 `atomicFetchAdd` / `withMutex` 都要分配 Eff 帧，native 在有子线程时每次
+  `alloc` 拿 futex 堆锁（[primitives.md](primitives.md) §6.2、[debt.md](debt.md) D135），
+  4 个线程争用同一把锁把 20 万次操作推到 0.42–0.75 s CPU。C 对照只做 `atomic_fetch_add` /
+  `pthread_mutex_lock`，没有分配。
+- **纯计算并行与手写对照同档**：`thread_parallel_sum` 1.19x、`thread_par_map` 0.89x 墙钟；
+  循环体不分配，`clone` + 固定栈没有额外成本。`thread_spawn_join` native 0.54x
+  （`clone` 比 `Domain.spawn` 便宜），vuna_ocaml 与手写 Domain 持平（1.03x）。
+- **RSS 侧 native 是 0.96 MiB（0.28–0.31x）**：固定 64 MiB 线程栈只提交触碰的页；
+  OCaml 侧每个 Domain 的堆 / 栈是 3 MiB 量级。
+- **wasm 只有 par_map**：`Par.parMap` 在 wasm 上顺序执行（单线程），net 15.5 ms 对手写
+  4×Domain 的 3.34 ms（4.63x）；差距主要是少了 4 路并行，不是同步开销。
