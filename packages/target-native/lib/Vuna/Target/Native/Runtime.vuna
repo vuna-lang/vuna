@@ -1664,76 +1664,28 @@ hostLeafGroups =
   [
     ("cleanup_pop", ["prim_cleanupPop"]),
     ("cleanup_push", ["prim_cleanupPush"]),
-    ("exec_path",
-      [
-        "@vuna@prim_eff_execPath",
-        "@vuna@host@execPath"
-      ]),
+    ("exec_path", ["@vuna@prim_eff_execPath", "@vuna@host@execPath"]),
     ("exit_with", ["@vuna@prim_eff_exit_process_host"]),
     ("file_exists", ["@vuna@host@fileExists"]),
     ("file_mtime", ["@vuna@host@fileMtime"]),
     ("file_size", ["@vuna@host@fileSize"]),
     ("getArgs",
-      [
-        "@vuna@prim_eff_getArgs",
-        "@vuna@host@getArgs",
-        "@vuna@prim_eff_getArgs_process_host"
-      ]),
-    ("getcwd",
-      [
-        "@vuna@prim_eff_getcwd",
-        "@vuna@host@getcwd"
-      ]),
-    ("getenv",
-      [
-        "@vuna@prim_eff_getenv",
-        "@vuna@host@getenv"
-      ]),
+      ["@vuna@prim_eff_getArgs", "@vuna@host@getArgs", "@vuna@prim_eff_getArgs_process_host"]),
+    ("getcwd", ["@vuna@prim_eff_getcwd", "@vuna@host@getcwd"]),
+    ("getenv", ["@vuna@prim_eff_getenv", "@vuna@host@getenv"]),
     ("host_status_get", ["@vuna@prim_eff_hostStatus"]),
     ("is_tty", ["@vuna@host@isTty"]),
-    ("now_us",
-      [
-        "effTimeUs",
-        "effTimeUs_host"
-      ]),
+    ("now_us", ["effTimeUs", "effTimeUs_host"]),
     ("prim_eff_eprint", ["@vuna@prim_eff_eprint"]),
-    ("prim_eff_exit",
-      [
-        "@vuna@host@exitOp",
-        "@vuna@prim_eff_exit"
-      ]),
-    ("prim_eff_new_ref",
-      [
-        "@vuna@prim_eff_newRef",
-        "@vuna@prim_mrefNew"
-      ]),
-    ("prim_eff_print",
-      [
-        "@vuna@host@print",
-        "@vuna@prim_eff_print"
-      ]),
-    ("prim_eff_read_ref",
-      [
-        "@vuna@prim_eff_readRef",
-        "@vuna@prim_mrefRead"
-      ]),
-    ("prim_eff_write_ref",
-      [
-        "@vuna@prim_eff_writeRef",
-        "@vuna@prim_mrefWrite"
-      ]),
-    ("sleep_us",
-      [
-        "@vuna@prim_eff_sleep",
-        "@vuna@host@sleep"
-      ]),
+    ("prim_eff_exit", ["@vuna@host@exitOp", "@vuna@prim_eff_exit"]),
+    ("prim_eff_new_ref", ["@vuna@prim_eff_newRef", "@vuna@prim_mrefNew"]),
+    ("prim_eff_print", ["@vuna@host@print", "@vuna@prim_eff_print"]),
+    ("prim_eff_read_ref", ["@vuna@prim_eff_readRef", "@vuna@prim_mrefRead"]),
+    ("prim_eff_write_ref", ["@vuna@prim_eff_writeRef", "@vuna@prim_mrefWrite"]),
+    ("sleep_us", ["@vuna@prim_eff_sleep", "@vuna@host@sleep"]),
     ("spawn_self", ["@vuna@prim_eff_spawn"]),
     ("tryReadDir", ["@vuna@host@tryReadDir"]),
-    ("tryRunIn",
-      [
-        "@vuna@host@tryRunIn",
-        "@vuna@prim_eff_runIn"
-      ]),
+    ("tryRunIn", ["@vuna@host@tryRunIn", "@vuna@prim_eff_runIn"]),
     ("try_is_dir", ["@vuna@host@tryIsDirectory"]),
     ("try_make_dir", ["@vuna@host@tryMakeDir"]),
     ("try_make_dir_excl", ["@vuna@host@tryMakeDirExclusive"]),
@@ -1747,6 +1699,7 @@ hostLeafGroups =
     ("try_write_file_atomic", ["@vuna@host@tryWriteFileAtomic"]),
     ("wait_pid", ["@vuna@prim_eff_wait"])
   ]
+
 nameInGroup : String -> List String -> Bool
 nameInGroup _ [] = False
 nameInGroup name (n :: rest) = if n == name then True else nameInGroup name rest
