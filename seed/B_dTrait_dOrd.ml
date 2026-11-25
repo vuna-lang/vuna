@@ -30,7 +30,7 @@ let v_Show_u0077d73cf424e521_uBase_x36_46_x36_Trait_x36_46_x36_Ord_x36_46_x36_Or
   | _ -> failwith "DT: impossible branch"
 ))))
 
-# 89 "Base/Trait/Ord.vuna"
+# 93 "Base/Trait/Ord.vuna"
 let v_Hashable_ue4b0f10b020a5e82_uBase_x36_46_x36_Trait_x36_46_x36_Ord_x36_46_x36_Ordering = (B_dTrait_dHashable.C_Hashable_Hashable ((fun o -> (match o with
   | C_Ordering_LT -> 0
   | C_Ordering_EQ -> 1
@@ -88,3 +88,6 @@ let v_min = (fun _uctx0 x y -> (if (((v__x60__x61_ _uctx0) x) y) then x else y))
 
 # 87 "Base/Trait/Ord.vuna"
 let v_max = (fun _uctx0 x y -> (if (((v__x60__x61_ _uctx0) x) y) then y else x))
+
+# 91 "Base/Trait/Ord.vuna"
+let v_clamp = (fun _uctx0 lo hi x -> (((v_max _uctx0) lo) (((v_min _uctx0) hi) x)))

@@ -36,10 +36,10 @@ let v_Hashable_ue4b0f10b020a5e82_uBase_x36_46_x36_Data_x36_46_x36_Nat_x36_46_x36
 let v_Convert_ue2bc7263cfa9794d_uBase_x36_46_x36_Data_x36_46_x36_Nat_x36_46_x36_Nat_uInt = (B_dTrait_dConvert.C_Convert_Convert (v_toInt))
 
 # 41 "Base/Data/Nat.vuna"
-let v_fromInt = bi_natFromInt
+let v_fromIntClamp = bi_natFromInt
 
 # 45 "Base/Data/Nat.vuna"
-let v_fromIntMaybe = (fun (n : int) -> (if (n < 0) then B_dData_dMaybe.C_Maybe_Nothing else (B_dData_dMaybe.C_Maybe_Just ((v_fromInt n)))))
+let v_fromIntMaybe = (fun (n : int) -> (if (n < 0) then B_dData_dMaybe.C_Maybe_Nothing else (B_dData_dMaybe.C_Maybe_Just ((v_fromIntClamp n)))))
 
 # 88 "Base/Data/Nat.vuna"
 let v_ConvertMaybe_ud297f329ba596d0d_uInt_uBase_x36_46_x36_Data_x36_46_x36_Nat_x36_46_x36_Nat = (B_dTrait_dConvert.C_ConvertMaybe_ConvertMaybe (v_fromIntMaybe))

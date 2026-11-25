@@ -432,7 +432,7 @@ let v_lastTwo = (fun (mc0 : Frontend_dRast.t_Expr B_dData_dList.t_List) -> (matc
   | _ -> B_dData_dMaybe.C_Maybe_Nothing
 ))
 
-# 500 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 499 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let v_isNatCoerceName = (fun (name : string) -> (let b = (v_opBaseName name) in (if (if (b = "natToInt") then true else (b = "natFromInt")) then true else (b = "toInt"))))
 
 # 493 "Vuna/Compiler/Elab/Termination/Measure.vuna"
@@ -499,7 +499,7 @@ let v_guardPosVar = (fun (e : Frontend_dRast.t_Expr) -> (let nd_uscrut1 = e in (
   | _ -> B_dData_dMaybe.C_Maybe_Nothing
 )))
 
-# 508 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 507 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let rec v_localClauseBinds = (fun (mc0 : (Frontend_dRast.t_Pat B_dData_dList.t_List, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__192, dtb__193) -> (match dtb__192 with
   | { B_dData_dPair.f_Pair_first = dtb__194; B_dData_dPair.f_Pair_second = dtb__195 } -> (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = (Frontend_dRast.C_Pat_PWild ((Frontend_dRast.v_exprSpan dtb__195))); B_dData_dPair.f_Pair_second = dtb__195 }, (v_localClauseBinds dtb__193)))
@@ -509,17 +509,17 @@ let rec v_localClauseBinds = (fun (mc0 : (Frontend_dRast.t_Pat B_dData_dList.t_L
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 514 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 513 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let v_guardUnion = (fun (a : string B_dData_dList.t_List) (b : string B_dData_dList.t_List) -> (v_dedup ((B_dData_dList.v_append a) b)))
 
-# 517 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 516 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let rec v_guardInter = (fun (mc0 : string B_dData_dList.t_List) (mc1 : string B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__196, dtb__197) -> (if ((B_dData_dList.v_memName dtb__196) mc1) then (B_dData_dList.C_List__x58__x58_ (dtb__196, ((v_guardInter dtb__197) mc1))) else ((v_guardInter dtb__197) mc1))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 522 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 521 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let v_guardThenPosAtom = (fun (op : string) (args : Frontend_dRast.t_Expr B_dData_dList.t_List) -> (let nd_uscrut2 = (v_lastTwo args) in (match nd_uscrut2 with
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
   | B_dData_dMaybe.C_Maybe_Just (dtb__198) -> (match dtb__198 with
@@ -535,7 +535,7 @@ let v_guardThenPosAtom = (fun (op : string) (args : Frontend_dRast.t_Expr B_dDat
   | _ -> failwith "DT: impossible branch"
 )))
 
-# 548 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 547 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let v_guardElsePosAtom = (fun (op : string) (args : Frontend_dRast.t_Expr B_dData_dList.t_List) -> (let nd_uscrut2 = (v_lastTwo args) in (match nd_uscrut2 with
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
   | B_dData_dMaybe.C_Maybe_Just (dtb__205) -> (match dtb__205 with
@@ -551,13 +551,13 @@ let v_guardElsePosAtom = (fun (op : string) (args : Frontend_dRast.t_Expr B_dDat
   | _ -> failwith "DT: impossible branch"
 )))
 
-# 618 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 617 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let v_isTrueLit = (fun (mc0 : Frontend_dRast.t_Expr) -> (match mc0 with
   | Frontend_dRast.C_Expr_EInt (dtb__212, dtb__213) -> (dtb__212 <> 0)
   | _ -> false
 ))
 
-# 598 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 597 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let rec v_guardElsePosVars = (fun (mc0 : Frontend_dRast.t_Expr) -> (match mc0 with
   | Frontend_dRast.C_Expr_EApp (dtb__214, dtb__215, dtb__216) -> (match dtb__214 with
   | Frontend_dRast.C_Expr_EVar (dtb__217, dtb__218) -> (let opn = (v_cmpOpOf (v_opBaseName (Frontend_dRast_dName.v_rnameKey dtb__217))) in (if (opn = "&&") then (let nd_uscrut7 = dtb__215 in (match nd_uscrut7 with
@@ -589,13 +589,13 @@ let rec v_guardElsePosVars = (fun (mc0 : Frontend_dRast.t_Expr) -> (match mc0 wi
   | _ -> B_dData_dList.C_List_Nil
 ))
 
-# 622 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 621 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let v_isFalseLit = (fun (mc0 : Frontend_dRast.t_Expr) -> (match mc0 with
   | Frontend_dRast.C_Expr_EInt (dtb__232, dtb__233) -> (dtb__232 = 0)
   | _ -> false
 ))
 
-# 575 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 574 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let rec v_guardThenPosVars = (fun (mc0 : Frontend_dRast.t_Expr) -> (match mc0 with
   | Frontend_dRast.C_Expr_EApp (dtb__234, dtb__235, dtb__236) -> (match dtb__234 with
   | Frontend_dRast.C_Expr_EVar (dtb__237, dtb__238) -> (let opn = (v_cmpOpOf (v_opBaseName (Frontend_dRast_dName.v_rnameKey dtb__237))) in (if (opn = "&&") then (let nd_uscrut7 = dtb__235 in (match nd_uscrut7 with
@@ -627,32 +627,32 @@ let rec v_guardThenPosVars = (fun (mc0 : Frontend_dRast.t_Expr) -> (match mc0 wi
   | _ -> B_dData_dList.C_List_Nil
 ))
 
-# 649 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 648 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let v_posMarkPos = (fun (f : string) (i : int) (st : ((string, int) B_dData_dPair.t_Pair B_dData_dList.t_List, (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dData_dPair.t_Pair) -> { B_dData_dPair.f_Pair_first = (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = f; B_dData_dPair.f_Pair_second = i }, (B_dData_dPair.v_firstOf st))); B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf st) })
 
-# 652 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 651 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let v_posMarkNeg = (fun (f : string) (i : int) (st : ((string, int) B_dData_dPair.t_Pair B_dData_dList.t_List, (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dData_dPair.t_Pair) -> { B_dData_dPair.f_Pair_first = (B_dData_dPair.v_firstOf st); B_dData_dPair.f_Pair_second = (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = f; B_dData_dPair.f_Pair_second = i }, (B_dData_dPair.v_secondOf st))) })
 
-# 665 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 664 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let rec v_dedupInts = (fun (mc0 : int B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__252, dtb__253) -> (if ((v_memInt dtb__252) dtb__253) then (v_dedupInts dtb__253) else (B_dData_dList.C_List__x58__x58_ (dtb__252, (v_dedupInts dtb__253))))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 662 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 661 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let v_posEntryPairs = (fun (mc0 : (string, int B_dData_dList.t_List) B_dData_dPair.t_Pair) -> (match mc0 with
   | { B_dData_dPair.f_Pair_first = dtb__254; B_dData_dPair.f_Pair_second = dtb__255 } -> ((B_dData_dList.v_map (fun (i : int) -> { B_dData_dPair.f_Pair_first = dtb__254; B_dData_dPair.f_Pair_second = i })) (v_dedupInts dtb__255))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 659 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 658 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let v_posTblPairs = (fun (tbl : (string, int B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) -> ((B_dData_dList.v_concatMap v_posEntryPairs) (B_dContainer_dHashMap.v_toList tbl)))
 
-# 656 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 655 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let v_posNormalize = (fun (xs : (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (v_posTblPairs (v_posTblOf xs)))
 
-# 920 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 919 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let rec v_pathInPats = (fun (mc0 : string) (mc1 : Frontend_dRast.t_Pat B_dData_dList.t_List) (mc2 : int B_dData_dList.t_List) (mc3 : int) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__256, dtb__257) -> (match (((v_pathInPat mc0) dtb__256) ((B_dData_dList.v_append mc2) (B_dData_dList.C_List__x58__x58_ (mc3, B_dData_dList.C_List_Nil)))) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__258) -> (B_dData_dMaybe.C_Maybe_Just (dtb__258))
@@ -662,7 +662,7 @@ let rec v_pathInPats = (fun (mc0 : string) (mc1 : Frontend_dRast.t_Pat B_dData_d
   | B_dData_dList.C_List_Nil -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
 ))
-# 927 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 926 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 and v_pathInFields = (fun (mc0 : string) (mc1 : (string, Frontend_dRast.t_Pat) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc2 : int B_dData_dList.t_List) (mc3 : int) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__259, dtb__260) -> (match dtb__259 with
   | { B_dData_dPair.f_Pair_first = dtb__261; B_dData_dPair.f_Pair_second = dtb__262 } -> (match (((v_pathInPat mc0) dtb__262) ((B_dData_dList.v_append mc2) (B_dData_dList.C_List__x58__x58_ (mc3, B_dData_dList.C_List_Nil)))) with
@@ -675,7 +675,7 @@ and v_pathInFields = (fun (mc0 : string) (mc1 : (string, Frontend_dRast.t_Pat) B
   | B_dData_dList.C_List_Nil -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
 ))
-# 934 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 933 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 and v_pathInPat = (fun (mc0 : string) (mc1 : Frontend_dRast.t_Pat) (mc2 : int B_dData_dList.t_List) -> (match mc1 with
   | Frontend_dRast.C_Pat_PRecord (dtb__264, dtb__265, dtb__266) -> ((((v_pathInFields mc0) dtb__265) mc2) 0)
   | Frontend_dRast.C_Pat_PCon (dtb__267, dtb__268, dtb__269) -> ((((v_pathInPats mc0) dtb__268) mc2) 0)
@@ -684,7 +684,7 @@ and v_pathInPat = (fun (mc0 : string) (mc1 : Frontend_dRast.t_Pat) (mc2 : int B_
   | _ -> B_dData_dMaybe.C_Maybe_Nothing
 ))
 
-# 941 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 940 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let v_projectionOfDef = (fun (d : (string, (Frontend_dRast.t_Pat B_dData_dList.t_List, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dData_dPair.t_Pair) -> (let nd_uscrut1 = (B_dData_dPair.v_secondOf d) in (match nd_uscrut1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__273, dtb__274) -> (match dtb__274 with
   | B_dData_dList.C_List_Nil -> (let nd_uscrut6 = (B_dData_dPair.v_firstOf dtb__273) in (match nd_uscrut6 with
@@ -735,7 +735,7 @@ let v_projectionOfDef = (fun (d : (string, (Frontend_dRast.t_Pat B_dData_dList.t
   | _ -> B_dData_dMaybe.C_Maybe_Nothing
 )))
 
-# 969 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 968 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let rec v_projectionsOf = (fun (mc0 : (string, (Frontend_dRast.t_Pat B_dData_dList.t_List, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__298, dtb__299) -> (match (v_projectionOfDef dtb__298) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__300) -> (B_dData_dList.C_List__x58__x58_ (dtb__300, (v_projectionsOf dtb__299)))
@@ -746,32 +746,32 @@ let rec v_projectionsOf = (fun (mc0 : (string, (Frontend_dRast.t_Pat B_dData_dLi
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 981 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 980 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let v_fieldProjPrefix = "$field."
 
-# 984 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 983 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let v_fieldEntryName = (fun (p : (string, int) B_dData_dPair.t_Pair) -> (B_dData_dPair.v_firstOf p))
 
-# 987 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 986 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let v_fieldEntryIndex = (fun (p : (string, int) B_dData_dPair.t_Pair) -> (B_dData_dPair.v_secondOf p))
 
-# 990 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 989 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let v_fieldNameOfField = (fun (f : Frontend_dRast.t_Field) -> (f).Frontend_dRast.f_Field_fieldName)
 
-# 993 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 992 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let rec v_numberedFieldNames = (fun (mc0 : Frontend_dRast.t_Field B_dData_dList.t_List) (mc1 : int) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__301, dtb__302) -> (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = (v_fieldNameOfField dtb__301); B_dData_dPair.f_Pair_second = mc1 }, ((v_numberedFieldNames dtb__302) (mc1 + 1))))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1010 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 1009 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let v_reprAlias = (fun (mc0 : Frontend_dAst.t_ReprTier) -> (match mc0 with
   | Frontend_dAst.C_ReprTier_ReprAlias -> true
   | _ -> false
 ))
 
-# 997 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 996 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let rec v_recordFieldEntries = (fun (mc0 : Frontend_dRast.t_Decl B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__303, dtb__304) -> (let prev = (v_recordFieldEntries dtb__304) in (match dtb__303 with
   | Frontend_dRast.C_Decl_DRecord (dtb__305, dtb__306, dtb__307, dtb__308, dtb__309, dtb__310, dtb__311, dtb__312) -> (if (v_reprAlias dtb__310) then { B_dData_dPair.f_Pair_first = (B_dData_dPair.v_firstOf prev); B_dData_dPair.f_Pair_second = ((B_dData_dList.v_append ((B_dData_dList.v_map v_fieldNameOfField) dtb__307)) (B_dData_dPair.v_secondOf prev)) } else { B_dData_dPair.f_Pair_first = ((B_dData_dList.v_append ((v_numberedFieldNames dtb__307) 0)) (B_dData_dPair.v_firstOf prev)); B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf prev) })
@@ -781,7 +781,7 @@ let rec v_recordFieldEntries = (fun (mc0 : Frontend_dRast.t_Decl B_dData_dList.t
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1014 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 1013 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let v_fieldIndexOfEntries = (fun (name : string) (entries : (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (let nd_uscrut2 = (v_dedupInts ((B_dData_dList.v_map v_fieldEntryIndex) ((B_dData_dList.v_filter (fun (p : (string, int) B_dData_dPair.t_Pair) -> ((v_fieldEntryName p) = name))) entries))) in (match nd_uscrut2 with
   | B_dData_dList.C_List__x58__x58_ (dtb__313, dtb__314) -> (match dtb__314 with
   | B_dData_dList.C_List_Nil -> (B_dData_dMaybe.C_Maybe_Just (dtb__313))
@@ -790,7 +790,7 @@ let v_fieldIndexOfEntries = (fun (name : string) (entries : (string, int) B_dDat
   | _ -> B_dData_dMaybe.C_Maybe_Nothing
 )))
 
-# 1028 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 1027 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let rec v_fieldProjectionsGo = (fun (mc0 : string B_dData_dList.t_List) (mc1 : (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc2 : string B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__315, dtb__316) -> (if ((B_dData_dList.v_memName dtb__315) mc2) then (((v_fieldProjectionsGo dtb__316) mc1) mc2) else (match ((v_fieldIndexOfEntries dtb__315) mc1) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__317) -> (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = (v_fieldProjPrefix ^ dtb__315); B_dData_dPair.f_Pair_second = (B_dData_dList.C_List__x58__x58_ (dtb__317, B_dData_dList.C_List_Nil)) }, (((v_fieldProjectionsGo dtb__316) mc1) mc2)))
@@ -801,10 +801,10 @@ let rec v_fieldProjectionsGo = (fun (mc0 : string B_dData_dList.t_List) (mc1 : (
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1020 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 1019 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let v_fieldProjectionsOf = (fun (decls : Frontend_dRast.t_Decl B_dData_dList.t_List) -> (let collected = (v_recordFieldEntries decls) in (let entries = (B_dData_dPair.v_firstOf collected) in (let poisoned = (B_dData_dPair.v_secondOf collected) in (((v_fieldProjectionsGo (v_dedup ((B_dData_dList.v_map v_fieldEntryName) entries))) entries) poisoned)))))
 
-# 1048 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 1047 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let rec v_fieldProjPath = (fun (mc0 : string) (mc1 : (string, int B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__318, dtb__319) -> (match dtb__318 with
   | { B_dData_dPair.f_Pair_first = dtb__320; B_dData_dPair.f_Pair_second = dtb__321 } -> (if (mc0 = dtb__320) then (B_dData_dMaybe.C_Maybe_Just (dtb__321)) else ((v_fieldProjPath mc0) dtb__319))
@@ -814,7 +814,7 @@ let rec v_fieldProjPath = (fun (mc0 : string) (mc1 : (string, int B_dData_dList.
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1039 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 1038 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let v_fieldIndexOf = (fun (f : string) (projs : (string, int B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match ((v_fieldProjPath (v_fieldProjPrefix ^ f)) projs) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__322) -> (let nd_uscrut4 = dtb__322 in (match nd_uscrut4 with
   | B_dData_dList.C_List__x58__x58_ (dtb__323, dtb__324) -> (match dtb__324 with
@@ -877,13 +877,13 @@ let rec v_extendByBinds = (fun (mc0 : (string, int B_dData_dList.t_List) B_dData
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 708 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 707 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let v_extendSizesVarOnly = (fun (mc0 : (string, (int, (int, int B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc1 : Frontend_dRast.t_Expr) (mc2 : Frontend_dRast.t_Pat) -> (match mc1 with
   | Frontend_dRast.C_Expr_EVar (dtb__356, dtb__357) -> ((((v_extendSizesStrict B_dData_dList.C_List_Nil) mc0) mc1) mc2)
   | _ -> mc0
 ))
 
-# 1052 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 1051 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let rec v_projHas = (fun (mc0 : string) (mc1 : (string, int B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__358, dtb__359) -> (match dtb__358 with
   | { B_dData_dPair.f_Pair_first = dtb__360; B_dData_dPair.f_Pair_second = dtb__361 } -> (if (mc0 = dtb__360) then true else ((v_projHas mc0) dtb__359))
@@ -893,7 +893,7 @@ let rec v_projHas = (fun (mc0 : string) (mc1 : (string, int B_dData_dList.t_List
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1061 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 1060 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let rec v_sameCtorGo = (fun (mc0 : int) (mc1 : Frontend_dRast.t_Expr B_dData_dList.t_List) (mc2 : (string, (int, (int, int B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc3 : int) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__362, dtb__363) -> (match dtb__362 with
   | Frontend_dRast.C_Expr_EVar (dtb__364, dtb__365) -> (match ((v_sizeOfVarStrict (Frontend_dRast_dName.v_rnameKey dtb__364)) mc2) with
@@ -912,7 +912,7 @@ let rec v_sameCtorGo = (fun (mc0 : int) (mc1 : Frontend_dRast.t_Expr B_dData_dLi
   | B_dData_dList.C_List_Nil -> (mc3 > 0)
   | _ -> failwith "DT: impossible branch"
 ))
-# 1073 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 1072 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 and v_sameCtorField = (fun (base : int) (depth : int) (path : int B_dData_dList.t_List) (p : int) (rest : Frontend_dRast.t_Expr B_dData_dList.t_List) (sizes : (string, (int, (int, int B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (k : int) -> (if (base = p) then (if (depth = 1) then (match path with
   | B_dData_dList.C_List__x58__x58_ (dtb__371, dtb__372) -> (match dtb__372 with
   | B_dData_dList.C_List_Nil -> (if (dtb__371 = k) then ((((v_sameCtorGo p) rest) sizes) (k + 1)) else false)
@@ -922,10 +922,10 @@ and v_sameCtorField = (fun (base : int) (depth : int) (path : int B_dData_dList.
   | _ -> failwith "DT: impossible branch"
 ) else false) else false))
 
-# 1058 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 1057 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let v_sameCtorApp = (fun (p : int) (args : Frontend_dRast.t_Expr B_dData_dList.t_List) (sizes : (string, (int, (int, int B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) -> ((((v_sameCtorGo p) args) sizes) 0))
 
-# 1088 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 1087 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let rec v_findWrapField = (fun (mc0 : int) (mc1 : Frontend_dRast.t_Expr B_dData_dList.t_List) (mc2 : (string, (int, (int, int B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc3 : int) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__373, dtb__374) -> (match dtb__373 with
   | Frontend_dRast.C_Expr_EVar (dtb__375, dtb__376) -> (match ((v_sizeOfVarStrict (Frontend_dRast_dName.v_rnameKey dtb__375)) mc2) with
@@ -944,23 +944,23 @@ let rec v_findWrapField = (fun (mc0 : int) (mc1 : Frontend_dRast.t_Expr B_dData_
   | B_dData_dList.C_List_Nil -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
 ))
-# 1106 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 1105 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 and v_wrapCheck = (fun (p : int) (rest : Frontend_dRast.t_Expr B_dData_dList.t_List) (sizes : (string, (int, (int, int B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (k : int) (depth : int) (path : int B_dData_dList.t_List) -> (if (depth > 0) then (match path with
   | B_dData_dList.C_List__x58__x58_ (dtb__382, dtb__383) -> (if (dtb__382 = k) then (if (v_notEmpty dtb__383) then (B_dData_dMaybe.C_Maybe_Just ((k + 2))) else ((((v_findWrapField p) rest) sizes) (k + 1))) else ((((v_findWrapField p) rest) sizes) (k + 1)))
   | B_dData_dList.C_List_Nil -> ((((v_findWrapField p) rest) sizes) (k + 1))
   | _ -> failwith "DT: impossible branch"
 ) else ((((v_findWrapField p) rest) sizes) (k + 1))))
 
-# 1119 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 1118 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let v_posVarIn = (fun (x : string) (p : int) (caller : string) (facts : (string, int B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) (region : string B_dData_dList.t_List) -> (if ((B_dData_dList.v_memName x) region) then true else (((v_posHasTbl caller) p) facts)))
 
-# 1130 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 1129 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let v_isSubOpName = (fun (op : string) -> (if (if (if (op = "-") then true else (op = "Base.Trait.Num.sub")) then true else (op = "Base.Trait.Num.-")) then true else ((v_opBaseName op) = "natSub")))
 
-# 1135 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 1134 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let v_isAddOpName = (fun (op : string) -> (if (if (op = "+") then true else (op = "Base.Trait.Num.add")) then true else (op = "Base.Trait.Num.+")))
 
-# 1148 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 1147 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let rec v_natLitOf = (fun (mc0 : Frontend_dRast.t_Expr) -> (match mc0 with
   | Frontend_dRast.C_Expr_EApp (dtb__384, dtb__385, dtb__386) -> (match dtb__384 with
   | Frontend_dRast.C_Expr_EVar (dtb__387, dtb__388) -> (match dtb__385 with
@@ -981,7 +981,7 @@ let rec v_natLitOf = (fun (mc0 : Frontend_dRast.t_Expr) -> (match mc0 with
   | _ -> B_dData_dMaybe.C_Maybe_Nothing
 ))
 
-# 1165 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 1164 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let v_arithMinusBase = (fun (mc0 : int) (mc1 : Frontend_dRast.t_Expr) (mc2 : int) (mc3 : (string, (int, (int, int B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc4 : string) (mc5 : (string, int B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) (mc6 : string B_dData_dList.t_List) -> (match mc1 with
   | Frontend_dRast.C_Expr_EVar (dtb__396, dtb__397) -> (match ((v_sizeOfVarStrict (Frontend_dRast_dName.v_rnameKey dtb__396)) mc3) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__398) -> (let nd_uscrut11 = dtb__398 in (match nd_uscrut11 with
@@ -997,7 +997,7 @@ let v_arithMinusBase = (fun (mc0 : int) (mc1 : Frontend_dRast.t_Expr) (mc2 : int
   | _ -> B_dData_dMaybe.C_Maybe_Nothing
 ))
 
-# 1138 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 1137 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let v_arithMinus = (fun (p : int) (args : Frontend_dRast.t_Expr B_dData_dList.t_List) (sizes : (string, (int, (int, int B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (caller : string) (facts : (string, int B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) (region : string B_dData_dList.t_List) -> (let nd_uscrut6 = (v_lastTwo args) in (match nd_uscrut6 with
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
   | B_dData_dMaybe.C_Maybe_Just (dtb__403) -> (match dtb__403 with
@@ -1011,7 +1011,7 @@ let v_arithMinus = (fun (p : int) (args : Frontend_dRast.t_Expr B_dData_dList.t_
   | _ -> failwith "DT: impossible branch"
 )))
 
-# 1122 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 1121 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let v_arithRel = (fun (mc0 : int) (mc1 : Frontend_dRast.t_Expr) (mc2 : (string, (int, (int, int B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc3 : string) (mc4 : (string, int B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) (mc5 : string B_dData_dList.t_List) -> (match mc1 with
   | Frontend_dRast.C_Expr_EApp (dtb__407, dtb__408, dtb__409) -> (match dtb__407 with
   | Frontend_dRast.C_Expr_EVar (dtb__410, dtb__411) -> (if (v_isSubOpName (Frontend_dRast_dName.v_rnameKey dtb__410)) then ((((((v_arithMinus mc0) dtb__408) mc2) mc3) mc4) mc5) else B_dData_dMaybe.C_Maybe_Nothing)
@@ -1020,7 +1020,7 @@ let v_arithRel = (fun (mc0 : int) (mc1 : Frontend_dRast.t_Expr) (mc2 : (string, 
   | _ -> B_dData_dMaybe.C_Maybe_Nothing
 ))
 
-# 1196 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 1195 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let rec v_lastOf = (fun mc0 -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__412, dtb__413) -> (match dtb__413 with
   | B_dData_dList.C_List_Nil -> (B_dData_dMaybe.C_Maybe_Just (dtb__412))
@@ -1030,7 +1030,7 @@ let rec v_lastOf = (fun mc0 -> (match mc0 with
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1182 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 1181 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let v_projRel = (fun (p : int) (args : Frontend_dRast.t_Expr B_dData_dList.t_List) (sizes : (string, (int, (int, int B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match (v_lastOf args) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__414) -> (match dtb__414 with
   | Frontend_dRast.C_Expr_EVar (dtb__415, dtb__416) -> (match ((v_sizeOfVarStrict (Frontend_dRast_dName.v_rnameKey dtb__415)) sizes) with
@@ -1050,19 +1050,19 @@ let v_projRel = (fun (p : int) (args : Frontend_dRast.t_Expr B_dData_dList.t_Lis
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1269 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 1268 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let v_markInvalid = (fun (acc : (bool, (((string, string) B_dData_dPair.t_Pair, int) B_dData_dPair.t_Pair, Base_dSource.t_Span) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dData_dPair.t_Pair) -> { B_dData_dPair.f_Pair_first = false; B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf acc) })
 
-# 1272 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 1271 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let v_addEdgeMode = (fun (caller : string) (callee : string) (m : int) (sp : Base_dSource.t_Span) (acc : (bool, (((string, string) B_dData_dPair.t_Pair, int) B_dData_dPair.t_Pair, Base_dSource.t_Span) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dData_dPair.t_Pair) -> { B_dData_dPair.f_Pair_first = (B_dData_dPair.v_firstOf acc); B_dData_dPair.f_Pair_second = (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = { B_dData_dPair.f_Pair_first = { B_dData_dPair.f_Pair_first = caller; B_dData_dPair.f_Pair_second = callee }; B_dData_dPair.f_Pair_second = m }; B_dData_dPair.f_Pair_second = sp }, (B_dData_dPair.v_secondOf acc))) })
 
-# 1275 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 1274 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let v_groupHead = (fun (mc0 : string B_dData_dList.t_List) (mc1 : Frontend_dRast.t_Expr) -> (match mc1 with
   | Frontend_dRast.C_Expr_EVar (dtb__422, dtb__423) -> (if ((B_dData_dList.v_memName (Frontend_dRast_dName.v_rnameKey dtb__422)) mc0) then (B_dData_dMaybe.C_Maybe_Just ((Frontend_dRast_dName.v_rnameKey dtb__422))) else B_dData_dMaybe.C_Maybe_Nothing)
   | _ -> B_dData_dMaybe.C_Maybe_Nothing
 ))
 
-# 1279 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 1278 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let rec v_nthExpr = (fun (mc0 : Frontend_dRast.t_Expr B_dData_dList.t_List) (mc1 : int) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__424, dtb__425) -> (if (mc1 <= 0) then (B_dData_dMaybe.C_Maybe_Just (dtb__424)) else ((v_nthExpr dtb__425) (mc1 - 1)))
   | B_dData_dList.C_List_Nil -> B_dData_dMaybe.C_Maybe_Nothing
@@ -1195,7 +1195,7 @@ let v_expandForwarders = (fun (decls : Frontend_dRast.t_Decl B_dData_dList.t_Lis
   | dtb__517 -> ((B_dData_dList.v_map (v_fwDecl dtb__517)) decls)
 ))
 
-# 627 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 626 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let v_argPositive = (fun (args : Frontend_dRast.t_Expr B_dData_dList.t_List) (i : int) (sizes : (string, (int, (int, int B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (caller : string) (facts : (string, int B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) (region : string B_dData_dList.t_List) -> (match ((v_nthExpr args) i) with
   | B_dData_dMaybe.C_Maybe_Nothing -> false
   | B_dData_dMaybe.C_Maybe_Just (dtb__518) -> (match dtb__518 with
@@ -1216,19 +1216,19 @@ let v_argPositive = (fun (args : Frontend_dRast.t_Expr B_dData_dList.t_List) (i 
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 861 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 860 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let rec v_posWalkCalleeGo = (fun (namesTbl : (string, bool) B_dContainer_dHashMap.t_HashMap) (caller : string) (sizes : (string, (int, (int, int B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (facts : (string, int B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) (region : string B_dData_dList.t_List) (g : string) (remaining : int) (args : Frontend_dRast.t_Expr B_dData_dList.t_List) (st : ((string, int) B_dData_dPair.t_Pair B_dData_dList.t_List, (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dData_dPair.t_Pair) -> (if (remaining <= 0) then st else (let i = ((B_dData_dList.v_length args) - remaining) in (let st1 = (if ((((((v_argPositive args) i) sizes) caller) facts) region) then (((v_posMarkPos g) i) st) else (((v_posMarkNeg g) i) st)) in (((((((((v_posWalkCalleeGo namesTbl) caller) sizes) facts) region) g) (remaining - 1)) args) st1)))))
 
-# 857 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 856 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let v_posWalkCallee = (fun (namesTbl : (string, bool) B_dContainer_dHashMap.t_HashMap) (caller : string) (sizes : (string, (int, (int, int B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (facts : (string, int B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) (region : string B_dData_dList.t_List) (g : string) (i : int) (args : Frontend_dRast.t_Expr B_dData_dList.t_List) (st : ((string, int) B_dData_dPair.t_Pair B_dData_dList.t_List, (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dData_dPair.t_Pair) -> (((((((((v_posWalkCalleeGo namesTbl) caller) sizes) facts) region) g) ((B_dData_dList.v_length args) - i)) args) st))
 
-# 669 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 668 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let rec v_posWalkArgs = (fun (mc0 : (string, bool) B_dContainer_dHashMap.t_HashMap) (mc1 : string) (mc2 : (string, (int, (int, int B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc3 : (string, int B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) (mc4 : string B_dData_dList.t_List) (mc5 : Frontend_dRast.t_Expr B_dData_dList.t_List) (mc6 : ((string, int) B_dData_dPair.t_Pair B_dData_dList.t_List, (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dData_dPair.t_Pair) -> (match mc5 with
   | B_dData_dList.C_List__x58__x58_ (dtb__528, dtb__529) -> (((((((v_posWalkArgs mc0) mc1) mc2) mc3) mc4) dtb__529) (((((((v_posWalk mc0) mc1) mc2) mc3) mc4) dtb__528) mc6))
   | B_dData_dList.C_List_Nil -> mc6
   | _ -> failwith "DT: impossible branch"
 ))
-# 681 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 680 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 and v_posWalkFields = (fun (mc0 : (string, bool) B_dContainer_dHashMap.t_HashMap) (mc1 : string) (mc2 : (string, (int, (int, int B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc3 : (string, int B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) (mc4 : string B_dData_dList.t_List) (mc5 : (string, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc6 : ((string, int) B_dData_dPair.t_Pair B_dData_dList.t_List, (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dData_dPair.t_Pair) -> (match mc5 with
   | B_dData_dList.C_List__x58__x58_ (dtb__530, dtb__531) -> (match dtb__530 with
   | { B_dData_dPair.f_Pair_first = dtb__532; B_dData_dPair.f_Pair_second = dtb__533 } -> (((((((v_posWalkFields mc0) mc1) mc2) mc3) mc4) dtb__531) (((((((v_posWalk mc0) mc1) mc2) mc3) mc4) dtb__533) mc6))
@@ -1237,7 +1237,7 @@ and v_posWalkFields = (fun (mc0 : (string, bool) B_dContainer_dHashMap.t_HashMap
   | B_dData_dList.C_List_Nil -> mc6
   | _ -> failwith "DT: impossible branch"
 ))
-# 693 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 692 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 and v_posWalkAlts = (fun (mc0 : (string, bool) B_dContainer_dHashMap.t_HashMap) (mc1 : string) (mc2 : (string, (int, (int, int B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc3 : (string, int B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) (mc4 : string B_dData_dList.t_List) (mc5 : Frontend_dRast.t_Expr) (mc6 : (Frontend_dRast.t_Pat, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc7 : ((string, int) B_dData_dPair.t_Pair B_dData_dList.t_List, (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dData_dPair.t_Pair) -> (match mc6 with
   | B_dData_dList.C_List__x58__x58_ (dtb__534, dtb__535) -> (match dtb__534 with
   | { B_dData_dPair.f_Pair_first = dtb__536; B_dData_dPair.f_Pair_second = dtb__537 } -> ((((((((v_posWalkAlts mc0) mc1) mc2) mc3) mc4) mc5) dtb__535) (((((((v_posWalk mc0) mc1) (((v_extendSizesVarOnly mc2) mc5) dtb__536)) mc3) mc4) dtb__537) mc7))
@@ -1246,7 +1246,7 @@ and v_posWalkAlts = (fun (mc0 : (string, bool) B_dContainer_dHashMap.t_HashMap) 
   | B_dData_dList.C_List_Nil -> mc7
   | _ -> failwith "DT: impossible branch"
 ))
-# 713 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 712 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 and v_posWalkClauses = (fun (mc0 : (string, bool) B_dContainer_dHashMap.t_HashMap) (mc1 : string) (mc2 : (string, (int, (int, int B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc3 : (string, int B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) (mc4 : string B_dData_dList.t_List) (mc5 : (Frontend_dRast.t_Pat B_dData_dList.t_List, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc6 : ((string, int) B_dData_dPair.t_Pair B_dData_dList.t_List, (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dData_dPair.t_Pair) -> (match mc5 with
   | B_dData_dList.C_List__x58__x58_ (dtb__538, dtb__539) -> (match dtb__538 with
   | { B_dData_dPair.f_Pair_first = dtb__540; B_dData_dPair.f_Pair_second = dtb__541 } -> (((((((v_posWalkClauses mc0) mc1) mc2) mc3) mc4) dtb__539) (((((((v_posWalk mc0) mc1) mc2) mc3) mc4) dtb__541) mc6))
@@ -1255,7 +1255,7 @@ and v_posWalkClauses = (fun (mc0 : (string, bool) B_dContainer_dHashMap.t_HashMa
   | B_dData_dList.C_List_Nil -> mc6
   | _ -> failwith "DT: impossible branch"
 ))
-# 725 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 724 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 and v_posWalkBinds = (fun (mc0 : (string, bool) B_dContainer_dHashMap.t_HashMap) (mc1 : string) (mc2 : (string, (int, (int, int B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc3 : (string, int B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) (mc4 : string B_dData_dList.t_List) (mc5 : (Frontend_dRast.t_Pat, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc6 : ((string, int) B_dData_dPair.t_Pair B_dData_dList.t_List, (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dData_dPair.t_Pair) -> (match mc5 with
   | B_dData_dList.C_List__x58__x58_ (dtb__542, dtb__543) -> (match dtb__542 with
   | { B_dData_dPair.f_Pair_first = dtb__544; B_dData_dPair.f_Pair_second = dtb__545 } -> (((((((v_posWalkBinds mc0) mc1) mc2) mc3) mc4) dtb__543) (((((((v_posWalk mc0) mc1) mc2) mc3) mc4) dtb__545) mc6))
@@ -1264,7 +1264,7 @@ and v_posWalkBinds = (fun (mc0 : (string, bool) B_dContainer_dHashMap.t_HashMap)
   | B_dData_dList.C_List_Nil -> mc6
   | _ -> failwith "DT: impossible branch"
 ))
-# 737 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 736 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 and v_posWalkStmts = (fun (mc0 : (string, bool) B_dContainer_dHashMap.t_HashMap) (mc1 : string) (mc2 : (string, (int, (int, int B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc3 : (string, int B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) (mc4 : string B_dData_dList.t_List) (mc5 : Frontend_dRast.t_DoStmt B_dData_dList.t_List) (mc6 : ((string, int) B_dData_dPair.t_Pair B_dData_dList.t_List, (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dData_dPair.t_Pair) -> (match mc5 with
   | B_dData_dList.C_List__x58__x58_ (dtb__546, dtb__547) -> (match dtb__546 with
   | Frontend_dRast.C_DoStmt_DBind (dtb__548, dtb__549, dtb__550) -> (((((((v_posWalkStmts mc0) mc1) mc2) mc3) mc4) dtb__547) (((((((v_posWalk mc0) mc1) mc2) mc3) mc4) dtb__549) mc6))
@@ -1275,7 +1275,7 @@ and v_posWalkStmts = (fun (mc0 : (string, bool) B_dContainer_dHashMap.t_HashMap)
   | B_dData_dList.C_List_Nil -> mc6
   | _ -> failwith "DT: impossible branch"
 ))
-# 769 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 768 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 and v_posWalk = (fun (mc0 : (string, bool) B_dContainer_dHashMap.t_HashMap) (mc1 : string) (mc2 : (string, (int, (int, int B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc3 : (string, int B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) (mc4 : string B_dData_dList.t_List) (mc5 : Frontend_dRast.t_Expr) (mc6 : ((string, int) B_dData_dPair.t_Pair B_dData_dList.t_List, (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dData_dPair.t_Pair) -> (match mc5 with
   | Frontend_dRast.C_Expr_EVar (dtb__555, dtb__556) -> mc6
   | Frontend_dRast.C_Expr_EAnn (dtb__557, dtb__558, dtb__559) -> (((((((v_posWalk mc0) mc1) mc2) mc3) mc4) dtb__558) (((((((v_posWalk mc0) mc1) mc2) mc3) mc4) dtb__557) mc6))
@@ -1296,58 +1296,58 @@ and v_posWalk = (fun (mc0 : (string, bool) B_dContainer_dHashMap.t_HashMap) (mc1
   | _ -> mc6
 ))
 
-# 871 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 870 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let rec v_posScanClauses = (fun (mc0 : (string, bool) B_dContainer_dHashMap.t_HashMap) (mc1 : (string, (Frontend_dRast.t_Pat B_dData_dList.t_List, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc2 : (string, int B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) (mc3 : string) (mc4 : (Frontend_dRast.t_Pat B_dData_dList.t_List, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc5 : ((string, int) B_dData_dPair.t_Pair B_dData_dList.t_List, (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dData_dPair.t_Pair) -> (match mc4 with
   | B_dData_dList.C_List__x58__x58_ (dtb__598, dtb__599) -> (let sizes = (v_strSizeEntries (B_dData_dPair.v_firstOf dtb__598)) in (let st2 = (((((((v_posWalk mc0) mc3) sizes) mc2) B_dData_dList.C_List_Nil) (B_dData_dPair.v_secondOf dtb__598)) mc5) in ((((((v_posScanClauses mc0) mc1) mc2) mc3) dtb__599) st2)))
   | B_dData_dList.C_List_Nil -> mc5
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 879 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 878 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let rec v_posScanDefs = (fun (mc0 : (string, bool) B_dContainer_dHashMap.t_HashMap) (mc1 : (string, (Frontend_dRast.t_Pat B_dData_dList.t_List, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc2 : (string, int B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) (mc3 : (string, (Frontend_dRast.t_Pat B_dData_dList.t_List, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc4 : ((string, int) B_dData_dPair.t_Pair B_dData_dList.t_List, (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dData_dPair.t_Pair) -> (match mc3 with
   | B_dData_dList.C_List__x58__x58_ (dtb__600, dtb__601) -> (((((v_posScanDefs mc0) mc1) mc2) dtb__601) ((((((v_posScanClauses mc0) mc1) mc2) (B_dData_dPair.v_firstOf dtb__600)) (B_dData_dPair.v_secondOf dtb__600)) mc4))
   | B_dData_dList.C_List_Nil -> mc4
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 896 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 895 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let rec v_posScanNamesGo = (fun (mc0 : (string, bool) B_dContainer_dHashMap.t_HashMap) (mc1 : (string, (Frontend_dRast.t_Pat B_dData_dList.t_List, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) (mc2 : (string, int B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) (mc3 : string B_dData_dList.t_List) (mc4 : ((string, int) B_dData_dPair.t_Pair B_dData_dList.t_List, (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dData_dPair.t_Pair) -> (match mc3 with
   | B_dData_dList.C_List__x58__x58_ (dtb__602, dtb__603) -> (((((v_posScanNamesGo mc0) mc1) mc2) dtb__603) ((((((v_posScanClauses mc0) B_dData_dList.C_List_Nil) mc2) dtb__602) ((v_clausesOfDefTbl dtb__602) mc1)) mc4))
   | B_dData_dList.C_List_Nil -> mc4
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 890 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 889 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let v_posScanNames = (fun (namesTbl : (string, bool) B_dContainer_dHashMap.t_HashMap) (defTbl : (string, (Frontend_dRast.t_Pat B_dData_dList.t_List, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) (factsTbl : (string, int B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) (work : string B_dData_dList.t_List) (st : ((string, int) B_dData_dPair.t_Pair B_dData_dList.t_List, (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dData_dPair.t_Pair) -> (let scanned = (((((v_posScanNamesGo namesTbl) defTbl) factsTbl) work) st) in { B_dData_dPair.f_Pair_first = (v_posNormalize (B_dData_dPair.v_firstOf scanned)); B_dData_dPair.f_Pair_second = (v_posNormalize (B_dData_dPair.v_secondOf scanned)) }))
 
-# 907 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 906 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let rec v_computePosFacts = (fun (defs : (string, (Frontend_dRast.t_Pat B_dData_dList.t_List, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) (fuel : int) (facts : (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (if (fuel <= 0) then facts else (((v_computePosFactsStep defs) fuel) facts)))
-# 910 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 909 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 and v_computePosFactsStep = (fun (defs : (string, (Frontend_dRast.t_Pat B_dData_dList.t_List, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) (fuel : int) (facts : (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (let namesTbl = (B_dContainer_dHashMap.v_ofNames (v_defNames defs)) in (let scanned = (((((v_posScanDefs namesTbl) defs) (v_posTblOf facts)) defs) { B_dData_dPair.f_Pair_first = B_dData_dList.C_List_Nil; B_dData_dPair.f_Pair_second = B_dData_dList.C_List_Nil }) in (let scan = { B_dData_dPair.f_Pair_first = (v_posNormalize (B_dData_dPair.v_firstOf scanned)); B_dData_dPair.f_Pair_second = (v_posNormalize (B_dData_dPair.v_secondOf scanned)) } in (let fresh = ((v_posFilterTbl (B_dData_dPair.v_firstOf scan)) (v_posTblOf (B_dData_dPair.v_secondOf scan))) in (let merged = ((v_posUnionTbl facts) fresh) in (if ((v_posSetEqTbl facts) merged) then merged else (((v_computePosFacts defs) (fuel - 1)) merged))))))))
 
-# 1299 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 1298 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let v_unaryHofSpec = { f_HofSpec_hofLambdaArity = 1; f_HofSpec_hofElemParam = 0; f_HofSpec_hofListArg = 1 }
 
-# 1302 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 1301 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let v_foldLHofSpec = { f_HofSpec_hofLambdaArity = 2; f_HofSpec_hofElemParam = 1; f_HofSpec_hofListArg = 2 }
 
-# 1305 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 1304 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let v_foldRHofSpec = { f_HofSpec_hofLambdaArity = 2; f_HofSpec_hofElemParam = 0; f_HofSpec_hofListArg = 2 }
 
-# 1308 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 1307 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let v_hofSpecOf = (fun (mc0 : Frontend_dRast_dName.t_RName) -> (match mc0 with
   | Frontend_dRast_dName.C_RName_RGlobal (dtb__604, dtb__605) -> (if (dtb__604 = "Base.Data.List") then (if (if (if (if (dtb__605 = "map") then true else (dtb__605 = "filter")) then true else (dtb__605 = "concatMap")) then true else (dtb__605 = "mapMaybe")) then (B_dData_dMaybe.C_Maybe_Just (v_unaryHofSpec)) else (if (dtb__605 = "foldl") then (B_dData_dMaybe.C_Maybe_Just (v_foldLHofSpec)) else (if (dtb__605 = "foldr") then (B_dData_dMaybe.C_Maybe_Just (v_foldRHofSpec)) else B_dData_dMaybe.C_Maybe_Nothing))) else (if (if (dtb__604 = "Base.Data.Result") then true else (dtb__604 = "Vuna.Compiler.Base.Common")) then (if (dtb__605 = "traverse") then (B_dData_dMaybe.C_Maybe_Just (v_unaryHofSpec)) else B_dData_dMaybe.C_Maybe_Nothing) else B_dData_dMaybe.C_Maybe_Nothing))
   | _ -> B_dData_dMaybe.C_Maybe_Nothing
 ))
 
-# 1321 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 1320 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let rec v_nthName = (fun (mc0 : string B_dData_dList.t_List) (mc1 : int) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__606, dtb__607) -> (if (mc1 <= 0) then (B_dData_dMaybe.C_Maybe_Just (dtb__606)) else ((v_nthName dtb__607) (mc1 - 1)))
   | B_dData_dList.C_List_Nil -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1326 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 1325 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let rec v_peelLam = (fun (n : int) (e : Frontend_dRast.t_Expr) -> (if (n <= 0) then (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = B_dData_dList.C_List_Nil; B_dData_dPair.f_Pair_second = e })) else (match e with
   | Frontend_dRast.C_Expr_ELam (dtb__608, dtb__609, dtb__610) -> (if ((B_dData_dList.v_length dtb__608) > n) then B_dData_dMaybe.C_Maybe_Nothing else (let nd_uscrut5 = ((v_peelLam (n - (B_dData_dList.v_length dtb__608))) dtb__609) in (match nd_uscrut5 with
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
@@ -1360,7 +1360,7 @@ let rec v_peelLam = (fun (n : int) (e : Frontend_dRast.t_Expr) -> (if (n <= 0) t
   | _ -> B_dData_dMaybe.C_Maybe_Nothing
 )))
 
-# 1343 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 1342 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let v_hofLambdaCall = (fun (mc0 : t_HofSpec) (mc1 : Frontend_dRast.t_Expr B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__614, dtb__615) -> (let nd_uscrut5 = ((v_peelLam (mc0).f_HofSpec_hofLambdaArity) dtb__614) in (match nd_uscrut5 with
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
@@ -1381,7 +1381,7 @@ let v_hofLambdaCall = (fun (mc0 : t_HofSpec) (mc1 : Frontend_dRast.t_Expr B_dDat
   | _ -> B_dData_dMaybe.C_Maybe_Nothing
 ))
 
-# 1359 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 1358 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let v_extendElemSizes = (fun (mc0 : (string, (int, (int, int B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc1 : Frontend_dRast.t_Expr) (mc2 : string) -> (match mc1 with
   | Frontend_dRast.C_Expr_EVar (dtb__621, dtb__622) -> (match ((v_sizeOfVarStrict (Frontend_dRast_dName.v_rnameKey dtb__621)) mc0) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__623) -> (let nd_uscrut7 = dtb__623 in (match nd_uscrut7 with
@@ -1397,7 +1397,7 @@ let v_extendElemSizes = (fun (mc0 : (string, (int, (int, int B_dData_dList.t_Lis
   | _ -> mc0
 ))
 
-# 1371 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 1370 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let rec v_edgeStrictGo = (fun (mc0 : string) (mc1 : string) (mc2 : (((string, string) B_dData_dPair.t_Pair, int) B_dData_dPair.t_Pair, Base_dSource.t_Span) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc3 : bool) (mc4 : bool) -> (match mc2 with
   | B_dData_dList.C_List__x58__x58_ (dtb__628, dtb__629) -> (match dtb__628 with
   | { B_dData_dPair.f_Pair_first = dtb__630; B_dData_dPair.f_Pair_second = dtb__631 } -> (match dtb__630 with
@@ -1413,10 +1413,10 @@ let rec v_edgeStrictGo = (fun (mc0 : string) (mc1 : string) (mc2 : (((string, st
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1368 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 1367 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let v_edgeStrict = (fun (f : string) (g : string) (edges : (((string, string) B_dData_dPair.t_Pair, int) B_dData_dPair.t_Pair, Base_dSource.t_Span) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (((((v_edgeStrictGo f) g) edges) false) true))
 
-# 1385 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 1384 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let rec v_edgeTargetsGo = (fun (mc0 : string) (mc1 : (((string, string) B_dData_dPair.t_Pair, int) B_dData_dPair.t_Pair, Base_dSource.t_Span) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__636, dtb__637) -> (match dtb__636 with
   | { B_dData_dPair.f_Pair_first = dtb__638; B_dData_dPair.f_Pair_second = dtb__639 } -> (match dtb__638 with
@@ -1432,43 +1432,43 @@ let rec v_edgeTargetsGo = (fun (mc0 : string) (mc1 : (((string, string) B_dData_
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1382 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 1381 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let v_edgeTargets = (fun (f : string) (edges : (((string, string) B_dData_dPair.t_Pair, int) B_dData_dPair.t_Pair, Base_dSource.t_Span) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (v_dedup ((v_edgeTargetsGo f) edges)))
 
-# 1394 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 1393 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let rec v_weakAdjGo = (fun (mc0 : string B_dData_dList.t_List) (mc1 : (((string, string) B_dData_dPair.t_Pair, int) B_dData_dPair.t_Pair, Base_dSource.t_Span) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc2 : string) (mc3 : string B_dData_dList.t_List) -> (match mc3 with
   | B_dData_dList.C_List__x58__x58_ (dtb__644, dtb__645) -> (if (((v_edgeStrict mc2) dtb__644) mc1) then ((((v_weakAdjGo mc0) mc1) mc2) dtb__645) else (B_dData_dList.C_List__x58__x58_ (dtb__644, ((((v_weakAdjGo mc0) mc1) mc2) dtb__645))))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1391 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 1390 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let v_weakAdj = (fun (comp : string B_dData_dList.t_List) (edges : (((string, string) B_dData_dPair.t_Pair, int) B_dData_dPair.t_Pair, Base_dSource.t_Span) B_dData_dPair.t_Pair B_dData_dList.t_List) (f : string) -> ((((v_weakAdjGo comp) edges) f) ((v_edgeTargets f) edges)))
 
-# 1402 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 1401 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let rec v_weakReachFuel = (fun (fuel : int) (comp : string B_dData_dList.t_List) (edges : (((string, string) B_dData_dPair.t_Pair, int) B_dData_dPair.t_Pair, Base_dSource.t_Span) B_dData_dPair.t_Pair B_dData_dList.t_List) (start : string) (frontier : string B_dData_dList.t_List) (visited : string B_dData_dList.t_List) -> (if (fuel <= 0) then true else (match frontier with
   | B_dData_dList.C_List_Nil -> false
   | B_dData_dList.C_List__x58__x58_ (dtb__646, dtb__647) -> (if (dtb__646 = start) then true else (if ((B_dData_dList.v_memName dtb__646) visited) then ((((((v_weakReachFuel (fuel - 1)) comp) edges) start) dtb__647) visited) else ((((((v_weakReachFuel (fuel - 1)) comp) edges) start) ((B_dData_dList.v_append dtb__647) (((v_weakAdj comp) edges) dtb__646))) (B_dData_dList.C_List__x58__x58_ (dtb__646, visited)))))
   | _ -> failwith "DT: impossible branch"
 )))
 
-# 1399 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 1398 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let v_weakReach = (fun (comp : string B_dData_dList.t_List) (edges : (((string, string) B_dData_dPair.t_Pair, int) B_dData_dPair.t_Pair, Base_dSource.t_Span) B_dData_dPair.t_Pair B_dData_dList.t_List) (start : string) (frontier : string B_dData_dList.t_List) (visited : string B_dData_dList.t_List) -> ((((((v_weakReachFuel 100000) comp) edges) start) frontier) visited))
 
-# 1415 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 1414 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let rec v_hasWeakCycleGo = (fun (mc0 : string B_dData_dList.t_List) (mc1 : (((string, string) B_dData_dPair.t_Pair, int) B_dData_dPair.t_Pair, Base_dSource.t_Span) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc2 : string B_dData_dList.t_List) -> (match mc2 with
   | B_dData_dList.C_List__x58__x58_ (dtb__648, dtb__649) -> (if (((((v_weakReach mc0) mc1) dtb__648) (((v_weakAdj mc0) mc1) dtb__648)) (B_dData_dList.C_List__x58__x58_ (dtb__648, B_dData_dList.C_List_Nil))) then true else (((v_hasWeakCycleGo mc0) mc1) dtb__649))
   | B_dData_dList.C_List_Nil -> false
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1412 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 1411 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let v_hasWeakCycle = (fun (comp : string B_dData_dList.t_List) (edges : (((string, string) B_dData_dPair.t_Pair, int) B_dData_dPair.t_Pair, Base_dSource.t_Span) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (((v_hasWeakCycleGo comp) edges) comp))
 
-# 1422 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 1421 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let v_relEqual = 0
 
-# 1203 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 1202 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let v_relOfArg = (fun (mc0 : int) (mc1 : Frontend_dRast.t_Expr) (mc2 : (string, (int, (int, int B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc3 : string B_dData_dList.t_List) (mc4 : (string, int B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc5 : string) (mc6 : (string, int B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) (mc7 : string B_dData_dList.t_List) -> (match mc1 with
   | Frontend_dRast.C_Expr_EApp (dtb__650, dtb__651, dtb__652) -> (match dtb__650 with
   | Frontend_dRast.C_Expr_EVar (dtb__653, dtb__654) -> (if ((B_dData_dList.v_memName (Frontend_dRast_dName.v_rnameKey dtb__653)) mc3) then (match ((((v_findWrapField mc0) dtb__651) mc2) 0) with
@@ -1503,32 +1503,32 @@ let v_relOfArg = (fun (mc0 : int) (mc1 : Frontend_dRast.t_Expr) (mc2 : (string, 
   | _ -> B_dData_dMaybe.C_Maybe_Nothing
 ))
 
-# 1225 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 1224 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let v_argRel = (fun (p : int) (args : Frontend_dRast.t_Expr B_dData_dList.t_List) (sizes : (string, (int, (int, int B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (ctors : string B_dData_dList.t_List) (projs : (string, int B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) (caller : string) (facts : (string, int B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) (region : string B_dData_dList.t_List) -> (match ((v_nthExpr args) p) with
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
   | B_dData_dMaybe.C_Maybe_Just (dtb__671) -> ((((((((v_relOfArg p) dtb__671) sizes) ctors) projs) caller) facts) region)
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1425 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 1424 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let v_relStrictSub = 1
 
-# 1428 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 1427 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let v_relStrictMinus = 4
 
-# 1431 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 1430 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let v_relUnknownSize = (-1)
 
-# 1434 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 1433 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let v_relMissingGuard = (-2)
 
-# 1437 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 1436 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let v_relNoRelation = (-3)
 
-# 1440 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 1439 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let v_relOtherPosition = (-4)
 
-# 1257 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 1256 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let v_hintArith = (fun (mc0 : int) (mc1 : Frontend_dRast.t_Expr B_dData_dList.t_List) (mc2 : (string, (int, (int, int B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc3 : int) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__672, dtb__673) -> (match dtb__672 with
   | Frontend_dRast.C_Expr_EVar (dtb__674, dtb__675) -> (match dtb__673 with
@@ -1556,10 +1556,10 @@ let v_hintArith = (fun (mc0 : int) (mc1 : Frontend_dRast.t_Expr B_dData_dList.t_
   | _ -> (B_dData_dMaybe.C_Maybe_Just (v_relNoRelation))
 ))
 
-# 1443 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 1442 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let v_relAscending = (-5)
 
-# 1233 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 1232 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let v_argRelHint = (fun (p : int) (args : Frontend_dRast.t_Expr B_dData_dList.t_List) (sizes : (string, (int, (int, int B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (ctors : string B_dData_dList.t_List) -> (match ((v_nthExpr args) p) with
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
   | B_dData_dMaybe.C_Maybe_Just (dtb__685) -> (let nd_uscrut6 = dtb__685 in (match nd_uscrut6 with
@@ -1583,13 +1583,13 @@ let v_argRelHint = (fun (p : int) (args : Frontend_dRast.t_Expr B_dData_dList.t_
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1447 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 1446 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let v_relText = (fun (m : int) -> (if (m = v_relStrictSub) then "strict subterm" else (if (m = v_relStrictMinus) then "decreases by a constant, with the non-negativity guard proven" else (if (m = v_relMissingGuard) then "decreases by a constant, but the non-negativity guard is missing" else (if (m = v_relUnknownSize) then "no known size (not a subterm of a parameter)" else (if (m = v_relOtherPosition) then "decreases a different parameter" else (if (m = v_relEqual) then "unchanged" else (if (m = v_relAscending) then "increases instead of decreasing (ascending counters are not supported)" else "no size relation"))))))))
 
-# 1466 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 1465 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let v_isDescent = (fun (m : int) -> (m > 0))
 
-# 1469 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+# 1468 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let rec v_filterModes = (fun (mc0 : int B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__698, dtb__699) -> (if (v_isDescent dtb__698) then (B_dData_dList.C_List__x58__x58_ (dtb__698, (v_filterModes dtb__699))) else (v_filterModes dtb__699))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil

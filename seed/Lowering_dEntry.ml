@@ -75,14 +75,20 @@ let v_mainShowIr = (fun (defTbl : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pa
   | _ -> (Vuna_dIr_dModel.C_Ir_IrGlobal (Base_dIntrinsics.v_mainShowDefName))
 ))
 
-# 110 "Vuna/Compiler/Lowering/Entry.vuna"
+# 112 "Vuna/Compiler/Lowering/Entry.vuna"
+let v_mainRunNameOf = (fun (mc0 : string B_dData_dList.t_List) -> (match mc0 with
+  | B_dData_dList.C_List_Nil -> Base_dIntrinsics.v_effRunName
+  | _ -> Base_dIntrinsics.v_effMainRunName
+))
+
+# 117 "Vuna/Compiler/Lowering/Entry.vuna"
 let rec v_filterMapRunHost = (fun (mc0 : string B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__32, dtb__33) -> (let host = (Base_dIntrinsics.v_builtinEffectImplOf dtb__32) in (if (host = "") then (v_filterMapRunHost dtb__33) else (B_dData_dList.C_List__x58__x58_ (host, (v_filterMapRunHost dtb__33)))))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 119 "Vuna/Compiler/Lowering/Entry.vuna"
+# 126 "Vuna/Compiler/Lowering/Entry.vuna"
 let rec v_filterMapErrorRunHost = (fun (mc0 : string B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__34, dtb__35) -> (let host = (Base_dIntrinsics.v_builtinEffectErrorRunHostOf dtb__34) in (if (host = "") then (v_filterMapErrorRunHost dtb__35) else (B_dData_dList.C_List__x58__x58_ (host, (v_filterMapErrorRunHost dtb__35)))))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
@@ -93,7 +99,7 @@ let rec v_filterMapErrorRunHost = (fun (mc0 : string B_dData_dList.t_List) -> (m
 let v_lowerEntryOf = (fun (defs : Elab_dTypes.t_DtDef B_dData_dList.t_List) -> (let defTbl = (Lowering_dChecks.v_defTable defs) in (match ((Lowering_dChecks.v_findDtDef "main") defs) with
   | B_dData_dMaybe.C_Maybe_Nothing -> (Base_dDiag.C_Check_OkC (B_dData_dMaybe.C_Maybe_Nothing))
   | B_dData_dMaybe.C_Maybe_Just (dtb__36) -> (match (v_actionResultTyIn (Elab_dTypes.v_dtDefType dtb__36)) with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__37) -> (let innerTy = (B_dData_dPair.v_secondOf dtb__37) in (let tags = (v_mainRowTags (Elab_dTypes.v_dtDefType dtb__36)) in (let handlers = ((B_dData_dList.v_append (v_filterMapRunHost tags)) (v_filterMapErrorRunHost tags)) in (Base_dDiag.C_Check_OkC ((B_dData_dMaybe.C_Maybe_Just ({ Vuna_dIr_dModel.f_IrEntry_irEntryShow = ((v_mainShowIr defTbl) innerTy); Vuna_dIr_dModel.f_IrEntry_irEntryMain = "main"; Vuna_dIr_dModel.f_IrEntry_irEntryIsAction = true; Vuna_dIr_dModel.f_IrEntry_irEntryRunMain = (B_dData_dMaybe.C_Maybe_Just (Base_dIntrinsics.v_effMainRunName)); Vuna_dIr_dModel.f_IrEntry_irEntryHandlers = handlers; Vuna_dIr_dModel.f_IrEntry_irEntryRowTags = tags })))))))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__37) -> (let innerTy = (B_dData_dPair.v_secondOf dtb__37) in (let tags = (v_mainRowTags (Elab_dTypes.v_dtDefType dtb__36)) in (let handlers = ((B_dData_dList.v_append (v_filterMapRunHost tags)) (v_filterMapErrorRunHost tags)) in (let runName = (v_mainRunNameOf tags) in (Base_dDiag.C_Check_OkC ((B_dData_dMaybe.C_Maybe_Just ({ Vuna_dIr_dModel.f_IrEntry_irEntryShow = ((v_mainShowIr defTbl) innerTy); Vuna_dIr_dModel.f_IrEntry_irEntryMain = "main"; Vuna_dIr_dModel.f_IrEntry_irEntryIsAction = true; Vuna_dIr_dModel.f_IrEntry_irEntryRunMain = (B_dData_dMaybe.C_Maybe_Just (runName)); Vuna_dIr_dModel.f_IrEntry_irEntryHandlers = handlers; Vuna_dIr_dModel.f_IrEntry_irEntryRowTags = tags }))))))))
   | B_dData_dMaybe.C_Maybe_Nothing -> (Base_dDiag.C_Check_OkC ((B_dData_dMaybe.C_Maybe_Just ({ Vuna_dIr_dModel.f_IrEntry_irEntryShow = ((v_mainShowIr defTbl) (Elab_dTypes.v_dtDefType dtb__36)); Vuna_dIr_dModel.f_IrEntry_irEntryMain = "main"; Vuna_dIr_dModel.f_IrEntry_irEntryIsAction = false; Vuna_dIr_dModel.f_IrEntry_irEntryRunMain = B_dData_dMaybe.C_Maybe_Nothing; Vuna_dIr_dModel.f_IrEntry_irEntryHandlers = B_dData_dList.C_List_Nil; Vuna_dIr_dModel.f_IrEntry_irEntryRowTags = B_dData_dList.C_List_Nil }))))
   | _ -> failwith "DT: impossible branch"
 )
