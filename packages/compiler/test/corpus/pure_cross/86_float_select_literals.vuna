@@ -1,0 +1,20 @@
+-- 浮点条件选择的两支都是字面量：native 用 `cmp…sd` + `andpd` 掩码选择（不再物化
+-- 0/1 再选指针）。NaN 参与时有序比较为假（取 else），与 OCaml / wasm 一致；
+-- `then` 为 `+0.0` 时走反向谓词，两侧零常量都要保持按位一致。
+pick : Float -> Int
+pick x =
+  let
+    lt = if x < 1.0 then 1.0 else 0.0
+    le = if x <= 1.0 then 2.0 else 0.0
+    gt = if x > 1.0 then 0.0 else 3.0
+    ge = if x >= 1.0 then 4.0 else 0.0
+    eq = if x == 1.0 then 5.0 else 0.0
+    ne = if x < 1.0 then 6.0 else 7.0
+  in floatToIntTrunc (lt + le + gt + ge + eq + ne)
+
+-- 运行时造 NaN（`0.0 / 0.0`），避免常量折叠成字面量。
+nanOf : Int -> Float
+nanOf n = 0.0 / intToFloat n
+
+main : Int
+main = pick 0.5 + pick 1.0 + pick 2.0 + pick (nanOf 0) + pick (0.0 - 0.0)

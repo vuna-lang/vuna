@@ -84,14 +84,15 @@ exit: 0
 run: sh -c '"$TMPDIR/ftree-o/bin/ftree"'
 out-equals: "1.5"
 
-# 9ao4) 浮点比较与条件选择并进 floatTree：`ucomisd` + `cmov` 选指针，整棵树仍只
+# 9ao4) 浮点比较与条件选择并进 floatTree：两支都是字面量时用 `cmp…sd` 得到掩码、
+#       再用按位指令选值（`andpd`；两侧都非零时补 `andnpd` + `orpd`），整棵树仍只
 #       装箱一次，不再调用 `rt_float_lt` / `rt_float_add`。
 run: sh -c 'd="$TMPDIR/ftreecmp"; mkdir -p "$d/app"; printf "[package]\nname = \"ftreecmp\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base\nimport Base.Data.Float as Float\nimport Base.Data.String as String\n\nmain : String\nmain =\n  let\n    x = 1.0 + 0.5\n  in show (x + (if x < 2.0 then 3.0 else 4.0))\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --out "$TMPDIR/ftreecmp-n" "$d"'
 exit: 0
 run: sh -c '"$TMPDIR/ftreecmp-n/bin/ftreecmp"'
 out-equals: "4.5"
-file-contains: $TMPDIR/ftreecmp-n/Main.s ucomisd
-file-contains: $TMPDIR/ftreecmp-n/Main.s cmovz
+file-contains: $TMPDIR/ftreecmp-n/Main.s cmpltsd
+file-contains: $TMPDIR/ftreecmp-n/Main.s andnpd
 run: sh -c '! grep -q "call rt_float_" "$TMPDIR/ftreecmp-n/Main.s"'
 exit: 0
 

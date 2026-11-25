@@ -1949,31 +1949,114 @@ floatAtomToPtr st r (IrFloatLit raw) =
 floatAtomToPtr _ _ _ = Nothing
 
 -- | 浮点树里的条件选择：`if <浮点比较> then <浮点原子> else <浮点原子>`。
---   比较在 xmm4/xmm5 上做（不占树的 xmm0..3），结果用 `cmov` 选指针后再解引用；
---   没有分支、没有调用，整棵树仍然只装箱一次。
---   掩码写法（`cmpltsd` + `andpd`/`andnpd`/`orpd`）指令更少、关键路径也更短，但在
---   Zen 4 上它把树的标量运算挤到已经饱和的 FP 端口上，实测慢 40%+（xmm 常驻前后都试过）；
---   `cmov` + 指针解引用走整数 / 访存端口，能和 `sqrt`/`divsd` 并行，所以保留它。
+--   两支都是字面量时走掩码写法 [floatCondMasked]（`cmp…sd` / `cmpn…sd` + 1~2 条按位
+--   指令，关键路径只有 `movapd` + `cmp` + 按位）；否则用 `cmov` 选指针再解引用。
+--   掩码写法对**一般原子**要 `andpd`/`andnpd`/`orpd` 三条，会把树的标量运算挤到
+--   已经饱和的 FP 端口上（实测慢 40%+，xmm 常驻前后都试过）；`cmov` + 指针解引用
+--   走整数 / 访存端口，能和 `sqrt`/`divsd` 并行，所以那种形态保留无分支选择。
+--   一条代码路径只有一个选择，两者都不分配、不调用，整棵树仍然只装箱一次。
 floatTreeCond : FGen -> List Int -> Ir -> Ir -> Ir -> Maybe (Int, List Instr, List Int)
 floatTreeCond st (x :: rest) c t e =
   case c of
     IrRtApp sym args =>
-      case floatCompareInstrsAt 4 5 sym of
-        Just tail =>
-          case args of
-            [a, b] =>
-              case (floatAtomToXmm st 4 a, floatAtomToXmm st 5 b) of
-                (Just la, Just lb) =>
-                  case (floatAtomToPtr st Rcx t, floatAtomToPtr st Rdx e) of
-                    (Just lt, Just le) =>
-                      Just
-                        (x, cat [la, lb, tail, [ITest Rax Rax], lt, le, [ICmov "cmovz" Rcx (OpReg Rdx), IXmmLoad x (OpMem Rcx 0)]], rest)
+      case floatCondMasked st x sym args t e of
+        Just instrs => Just (x, instrs, rest)
+        Nothing =>
+          case floatCompareInstrsAt 4 5 sym of
+            Just tail =>
+              case args of
+                [a, b] =>
+                  case (floatAtomToXmm st 4 a, floatAtomToXmm st 5 b) of
+                    (Just la, Just lb) =>
+                      case (floatAtomToPtr st Rcx t, floatAtomToPtr st Rdx e) of
+                        (Just lt, Just le) =>
+                          Just
+                            (x, cat [la, lb, tail, [ITest Rax Rax], lt, le, [ICmov "cmovz" Rcx (OpReg Rdx), IXmmLoad x (OpMem Rcx 0)]], rest)
+                        _ => Nothing
                     _ => Nothing
                 _ => Nothing
-            _ => Nothing
-        Nothing => Nothing
+            Nothing => Nothing
     _ => Nothing
 floatTreeCond _ _ _ _ _ = Nothing
+
+-- | 字面量两支之间的掩码选择：`cmp…sd` 给出「条件成立」的全 1 掩码，`andpd` 选出
+--   `t`；`t` 是 `+0.0` 时改用反向谓词（`cmpn…sd`）的掩码选 `e`——两个方向都只用
+--   `andpd`，因为 `andnpd` 在 Zen 4 上慢得多（实测同一循环 4.7ms vs 3.0ms）。
+--   条件为 NaN 时有序谓词为假（取 `e`），与 IEEE 比较一致。非字面量两支返回 `Nothing`。
+floatCondMasked : FGen -> Int -> String -> List Ir -> Ir -> Ir -> Maybe (List Instr)
+floatCondMasked st x sym [a, b] t e =
+  case (floatLitLabel st t, floatLitLabel st e) of
+    (Just lt, Just le) =>
+      if floatLitIsPlusZero t && floatLitIsPlusZero e then
+        Just [IXmmLoad x (OpRip lt)]
+      else if floatLitIsPlusZero e then
+        case cmpMaskOp sym of
+          Nothing => Nothing
+          Just op => maskAnd st x op a b lt
+      else if floatLitIsPlusZero t then
+        case cmpFalseMaskOp sym of
+          Nothing => Nothing
+          Just op => maskAnd st x op a b le
+      else
+        case cmpMaskOp sym of
+          Nothing => Nothing
+          Just op =>
+            case maskInstrs st x op a b of
+              Nothing => Nothing
+              Just mask => Just (append mask [IXmmMov 6 x, IXmmLoad 7 (OpRip lt), IXmmMaskBin "andpd" x 7, IXmmLoad 7 (OpRip le), IXmmMaskBin "andnpd" 6 7, IXmmMaskBin "orpd" x 6])
+    _ => Nothing
+floatCondMasked st x sym _ t e = Nothing
+
+-- | `mask & <常量>`：掩码已在 `x` 里，结果留在 `x`。
+maskAnd : FGen -> Int -> String -> Ir -> Ir -> String -> Maybe (List Instr)
+maskAnd st x op a b lit =
+  case maskInstrs st x op a b of
+    Nothing => Nothing
+    Just mask => Just (append mask [IXmmLoad 6 (OpRip lit), IXmmMaskBin "andpd" x 6])
+
+-- | 有序浮点比较 → 「条件成立」的掩码指令（`cmp…sd`，全 1 表示取 then 分支）。
+cmpMaskOp : String -> Maybe String
+cmpMaskOp "bi_lt_float" = Just "cmpltsd"
+cmpMaskOp "bi_le_float" = Just "cmplesd"
+cmpMaskOp "bi_gt_float" = Just "cmpgtsd"
+cmpMaskOp "bi_ge_float" = Just "cmpgesd"
+cmpMaskOp "bi_eq_float" = Just "cmpeqsd"
+cmpMaskOp _ = Nothing
+
+-- | 有序浮点比较 → 「条件不成立」的掩码指令（`cmpn…sd`，全 1 表示取 else 分支）。
+--   `!=` 在 NaN 时为真（OCaml 语义），没有单条 `cmpn…sd` 对应，仍走指针选择。
+cmpFalseMaskOp : String -> Maybe String
+cmpFalseMaskOp "bi_lt_float" = Just "cmpnltsd"
+cmpFalseMaskOp "bi_le_float" = Just "cmpnlesd"
+cmpFalseMaskOp "bi_gt_float" = Just "cmpngtsd"
+cmpFalseMaskOp "bi_ge_float" = Just "cmpngesd"
+cmpFalseMaskOp "bi_eq_float" = Just "cmpneqsd"
+cmpFalseMaskOp _ = Nothing
+
+-- | 把「条件不成立」掩码算进 `xmm<x>`：`a` 装进 `x`，`b` 是字面量时直接当内存操作数。
+maskInstrs : FGen -> Int -> String -> Ir -> Ir -> Maybe (List Instr)
+maskInstrs st x op a b =
+  case floatAtomToXmm st x a of
+    Nothing => Nothing
+    Just loadA =>
+      case floatLitLabel st b of
+        Just lb => Just (append loadA [IXmmCmpMaskMem op x (OpRip lb)])
+        Nothing =>
+          case floatAtomToXmm st 5 b of
+            Just loadB => Just (append loadA (append loadB [IXmmCmpMask op x 5]))
+            Nothing => Nothing
+
+-- | 浮点字面量数值上是 `+0.0`（`0` / `0.0` / `00.000`）。`-0.0` 不算：掩码写法只能产出
+--   `+0.0`，两者按位不同。
+floatLitIsPlusZero : Ir -> Bool
+floatLitIsPlusZero (IrCast _ _ inner) = floatLitIsPlusZero inner
+floatLitIsPlusZero (IrFloatLit raw) =
+  if irFloatLitNegative raw then False else onlyZeroDigits (strUnpack raw)
+floatLitIsPlusZero _ = False
+
+onlyZeroDigits : List Int -> Bool
+onlyZeroDigits [] = True
+onlyZeroDigits (c :: rest) = if c == 48 || c == 46 then onlyZeroDigits rest else False
 
 -- | `isTail` 表示结果位置。只有「结果就是本函数返回值」的位置才允许尾调用：
 --   `IrLet` 的 body、`IrIf` 两支、`IrCase` / `IrNatCase` 各臂、`IrCast` 内层与
@@ -3382,6 +3465,9 @@ instrLabelRefs (IXmmToInt _ _) = []
 instrLabelRefs (IXmmBin _ _ _) = []
 instrLabelRefs (IXmmUnop _ _) = []
 instrLabelRefs (IXmmCmp _ _) = []
+instrLabelRefs (IXmmCmpMaskMem _ _ op) = operandLabelRefs op
+instrLabelRefs (IXmmCmpMask _ _ _) = []
+instrLabelRefs (IXmmMaskBin _ _ _) = []
 instrLabelRefs (IXmmMov _ _) = []
 instrLabelRefs (IXmmToReg _ _) = []
 instrLabelRefs (IXmmFromReg _ _) = []

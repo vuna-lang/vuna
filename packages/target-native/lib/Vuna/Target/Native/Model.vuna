@@ -192,6 +192,14 @@ export data Instr(..) : Type where
   IXmmUnop : String -> Int -> Instr
   -- | `ucomisd xmm<a>, xmm<b>`。
   IXmmCmp : Int -> Int -> Instr
+  -- | 浮点比较的**掩码**形式：`<op> xmm<dst>, xmm<src>`，低 64 位写成全 1 / 全 0。
+  --   正向谓词（`cmpltsd` / `cmplesd` / `cmpgtsd` / `cmpgesd` / `cmpeqsd`）表示
+  --   「条件成立」，反向谓词（`cmpnlt…` 等）表示「条件不成立」。
+  IXmmCmpMask : String -> Int -> Int -> Instr
+  -- | 同上，右操作数直接取自 `.rodata`（`<op> xmm<dst>, qword ptr <op>`）。
+  IXmmCmpMaskMem : String -> Int -> Operand -> Instr
+  -- | 128 位按位二元指令：`andpd` / `andnpd` / `orpd`（掩码选择用）。
+  IXmmMaskBin : String -> Int -> Int -> Instr
   -- | `movapd xmm<dst>, xmm<src>`（寄存器间搬 128 位；只关心低 64 位时也够用）。
   IXmmMov : Int -> Int -> Instr
   -- | `<op>sd xmm<dst>, qword ptr <op>`：右操作数直接取自 `.rodata` 常量，省掉一次装填。

@@ -250,7 +250,13 @@ scratch 的链>; mov rD, rax` 直接以 `rD` 为目标（`rS == rD` 时连首条
 链改向会丢掉首条 `mov`，所以还要求链之后 `rax` 在同一块内不被先读（块边界视为死，
 生成器不在块之间保留 scratch）。
 
-槽提升之后 `Native.Select.cleanup` 接着折纯拷贝：`mov rax, r; cmp rax, k` 直接比较 `r`，
+槽提升之后 `Native.Select.cleanup` 先跑一趟复制传播：`mov d, s` 紧跟的那条指令只读 `d`
+（不写 `d` 也不写 `s`）、且 `d` 在这条之后到被重写前不再被读时，读点改成 `s` 并删掉搬运。
+只对生成器的 scratch（`rax` / `r10` / `r11`）动手——跨块携带的值一律走帧槽，所以
+`jmp` / `ret` / 标签处即可当作死；**`jcc` 不算**：跳转表分派
+`mov rax, r; cmp rax, k; jcc; lea r11, [table]; jmp [r11+rax*8]` 的索引仍读 `rax`。
+
+接着折纯拷贝：`mov rax, r; cmp rax, k` 直接比较 `r`，
 `mov rax, <立即数|槽>; mov rD, rax` 直接写 `rD`。后一种会丢 `rax` 的旧值，所以先按
 `raxSafeAfter` 确认后续没有再读它（常数除法的符号修正就是 `add rax, s`）；不满足时保留装载。
 同一段还会删 `test r, r`（前一条 `add`/`sub`/逻辑运算已按结果设了标志位），前提是中间
@@ -404,9 +410,21 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
     `xmm0..3` 上算完，**只有根装盒一次**（装盒放在树计算之前：`alloc_leaf` 可能触发 GC，
     此时实参指针还只在槽里；之后树内没有 `call`，`xmm` 与装盒对象都不需要是根）。
     右操作数是字面量时直接发内存操作数（`mulsd xmm1, qword ptr [rip + .Lflt_n]`），
-    不再单独 `movsd` 装填。条件选择在 `xmm4` / `xmm5` 上比较，用 `cmov` 选分支指针后再
-    `movsd`，没有分支与调用（试过的 `cmpltsd` + `andpd` 掩码写法指令更少，但掩码运算和
-    `sqrt` / `divsd` 抢同一条 FP 端口链，实测反而慢 ~25%，所以保留 `cmov`）。`sqrt` /
+    不再单独 `movsd` 装填。条件选择分两种形态：
+
+    * **两支都是字面量** → 掩码选择：`cmpltsd` / `cmplesd` / `cmpgtsd` / `cmpgesd` /
+      `cmpneqsd` 给出「条件成立」的全 1 掩码（`then` 是 `+0.0` 时改用反向谓词
+      `cmpn…sd` 选 `else`），再用一条 `andpd` 与常量取交集——`else` 为 `+0.0` 时这正是
+      `cond ? t : 0.0`。临界路径只有 `movapd` + `cmp` + `andpd`，`float_math` 里那段
+      0/1 选择从 14 条降到 4 条。两侧都不是零时补 `andpd` + `andnpd` + `orpd`。
+      NaN 参与时有序谓词为假（取 `else`），与 IEEE 一致。
+    * **一般原子** → `cmov` 选分支指针后再 `movsd`，没有分支与调用：一般原子要
+      `andpd`/`andnpd`/`orpd` 三条按位指令才拼得出 `(m & t) | (~m & e)`，把树的标量运算
+      挤到已经饱和的 FP 端口上（实测慢 25–40%），而 `cmov` + 指针解引用走整数 / 访存
+      端口，能和 `sqrt`/`divsd` 并行。另外按位那一侧只用 `andpd`：`andnpd` 在 Zen 4 上
+      明显更慢（同一循环 4.7ms vs 3.0ms），所以能换反向谓词的都换。
+
+    `sqrt` /
     `abs` / `intToFloat` 是 η-收缩的零参别名，调用点上先解析到运行时叶子。`abs` 的操作数
     是 `intToFloat e` 且 `e` 的区间下界 ≥ 0（守卫推出）时，`abs` 是恒等，整条省掉——
     `sqrt (abs (intToFloat n))` 只剩一次 `cvtsi2sd`。外形超出这几类

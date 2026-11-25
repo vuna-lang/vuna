@@ -320,9 +320,91 @@ export cleanup : List Instr -> List Instr
 cleanup instrs =
   let
     folded = cleanupFix 8 instrs
-    copied = switchCopy folded
-    tested = dropRedundantTests (jumpTargets copied) copied
+    copied = copyProp folded
+    switched = switchCopy copied
+    tested = dropRedundantTests (jumpTargets switched) switched
   in if hasJumpTable tested then tested else dropUnreachable tested
+
+-- | 复制传播：`mov d, s` 后面紧跟的指令只读 `d`（不写 `d`、不写 `s`）、且 `d` 在那条
+--   指令之后不再被读时，把读点换成 `s` 并删掉搬运。槽提升会留下
+--   `mov rax, r13; test rax, rax` / `mov rax, rbx; cvtsi2sd xmm1, rax` 这类直读，
+--   一条都不该留。
+--   只对生成器的 scratch（`rax` / r10 / r11）动手：跨块携带的值一律走帧槽，
+--   所以 `jmp` / `ret` / 标签处即可当作「此后不再读」（`jcc` 仍按线性流继续看）。
+copyProp : List Instr -> List Instr
+copyProp [] = []
+copyProp (i :: rest) =
+  case i of
+    IMov (OpReg d) (OpReg s) =>
+      if isCopyScratch d && not (sameReg d s) then
+        case rest of
+          usei :: more => if instrReadsReg d usei && not (instrWritesReg d usei) && not (instrWritesReg s usei) && not (isBlockBoundary usei) && regDeadAfter d more then replaceReadReg d s usei :: copyProp more else i :: copyProp rest
+          [] => [i]
+      else
+        i :: copyProp rest
+    _ => i :: copyProp rest
+
+isCopyScratch : Reg -> Bool
+isCopyScratch r = sameReg r Rax || sameReg r R10 || sameReg r R11
+
+-- | `d` 在后续直到被写 / 块真正结束之前都不再被读。
+--   注意 `jcc` **不是**块尾：fall-through 接着用 `d` 是常见形态（跳转表分派就是
+--   `mov rax, r; cmp rax, k; jcc; lea r11, [table]; jmp [r11+rax*8]`）。
+regDeadAfter : Reg -> List Instr -> Bool
+regDeadAfter _ [] = True
+regDeadAfter d (i :: rest) =
+  if instrReadsReg d i then
+    False
+  else if instrWritesReg d i then True else if scratchKilled i then True else regDeadAfter d rest
+
+-- | 之后不再有线性执行流的指令：块入口与另一条路径都从帧槽取值，不读 scratch
+--   （`switchCopy` / `raxSafeAfter` 依赖同一份生成器不变量）。
+scratchKilled : Instr -> Bool
+scratchKilled (ILabel _) = True
+scratchKilled (IJmp _) = True
+scratchKilled (IJmpReg _) = True
+scratchKilled (IJmpMem _) = True
+scratchKilled IRet = True
+scratchKilled _ = False
+
+-- | 把一条指令里对 `d` 的**读**换成 `s`（写点不动：`copyProp` 只在 `usei` 不写 `d`
+--   时调用）。
+replaceReadReg : Reg -> Reg -> Instr -> Instr
+replaceReadReg d s (ITest a b) = ITest (substReadReg d s a) (substReadReg d s b)
+replaceReadReg d s (ICmp a b) = ICmp (substOpRead d s a) (substOpRead d s b)
+replaceReadReg d s (IBin op src) = IBin op (substOpRead d s src)
+replaceReadReg d s (IBinReg op dst src) = IBinReg op dst (substOpRead d s src)
+replaceReadReg d s (IMov dst src) = IMov (substOpRead d s dst) (substOpRead d s src)
+replaceReadReg d s (IMovzx dst src) = IMovzx dst (substOpRead d s src)
+replaceReadReg d s (ICmov cc dst src) = ICmov cc dst (substOpRead d s src)
+replaceReadReg d s (ILeaMem dst base off) = ILeaMem dst (substReadReg d s base) off
+replaceReadReg d s (ILeaScale dst base scale off) = ILeaScale dst (substReadReg d s base) scale off
+replaceReadReg d s (ITrunc32 x) = ITrunc32 (substReadReg d s x)
+replaceReadReg d s (INeg x) = INeg (substReadReg d s x)
+replaceReadReg d s (IPush x) = IPush (substReadReg d s x)
+replaceReadReg d s (IXmmLoad n src) = IXmmLoad n (substOpRead d s src)
+replaceReadReg d s (IXmmStore dst n) = IXmmStore (substOpRead d s dst) n
+replaceReadReg d s (IXmmFromInt n x) = IXmmFromInt n (substReadReg d s x)
+replaceReadReg d s (IXmmToInt x n) = IXmmToInt (substReadReg d s x) n
+replaceReadReg d s (IXmmFromReg n x) = IXmmFromReg n (substReadReg d s x)
+replaceReadReg d s (IXmmToReg x n) = IXmmToReg (substReadReg d s x) n
+replaceReadReg d s (IXmmBinMem op n src) = IXmmBinMem op n (substOpRead d s src)
+replaceReadReg d s (IXmmCmpMaskMem op n src) = IXmmCmpMaskMem op n (substOpRead d s src)
+replaceReadReg d s (IJmpReg x) = IJmpReg (substReadReg d s x)
+replaceReadReg d s (ICallReg x) = ICallReg (substReadReg d s x)
+replaceReadReg d s (IJmpMem src) = IJmpMem (substOpRead d s src)
+replaceReadReg d s i = i
+
+substOpRead : Reg -> Reg -> Operand -> Operand
+substOpRead d s (OpReg x) = OpReg (substReadReg d s x)
+substOpRead d s (OpMem base off) = OpMem (substReadReg d s base) off
+substOpRead d s (OpMemX base idx off) = OpMemX (substReadReg d s base) (substReadReg d s idx) off
+substOpRead d s (OpMemS base idx scale) =
+  OpMemS (substReadReg d s base) (substReadReg d s idx) scale
+substOpRead d s op = op
+
+substReadReg : Reg -> Reg -> Reg -> Reg
+substReadReg d s x = if sameReg d x then s else x
 
 -- | `sub r, 1; test r, r; jg` 里的 `test` 是冗余的：上一条 `add`/`sub`/逻辑运算
 --   已经按结果 r 设置了 ZF/SF。两个例外：
@@ -587,6 +669,7 @@ instrReadsReg r (ICallReg x) = sameReg r x
 instrReadsReg r (IPush x) = sameReg r x
 instrReadsReg r (IXmmLoad _ op) = operandReadsReg r op
 instrReadsReg r (IXmmBinMem _ _ op) = operandReadsReg r op
+instrReadsReg r (IXmmCmpMaskMem _ _ op) = operandReadsReg r op
 instrReadsReg r (ITrunc32 x) = sameReg r x
 instrReadsReg r (IXmmStore op _) = operandReadsReg r op
 instrReadsReg r (IXmmFromInt _ x) = sameReg r x
