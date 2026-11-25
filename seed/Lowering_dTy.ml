@@ -16,7 +16,7 @@ let v_renderTyIntrinsicWith = (fun (mc0 : (Core_dTerm.t_Value) -> Vuna_dIr_dMode
   | _ -> B_dData_dMaybe.C_Maybe_Nothing
 )
   | _ -> B_dData_dMaybe.C_Maybe_Nothing
-) else (if (mc1 = "IORef") then (match mc2 with
+) else (if (mc1 = "@vuna@Ref") then (match mc2 with
   | B_dData_dList.C_List__x58__x58_ (dtb__3, dtb__4) -> (match dtb__4 with
   | B_dData_dList.C_List_Nil -> (B_dData_dMaybe.C_Maybe_Just ((Vuna_dIr_dModel.C_IrTy_IrTyRef ((mc0 dtb__3)))))
   | _ -> B_dData_dMaybe.C_Maybe_Nothing
@@ -328,7 +328,7 @@ and v_annotHeadTy = (fun (fuel : int) (dflt : Vuna_dIr_dModel.t_IrTy B_dData_dMa
   | _ -> dflt
 )
   | _ -> dflt
-)) else (if (g = "IORef") then (let nd_uscrut6 = args in (match nd_uscrut6 with
+)) else (if (g = "@vuna@Ref") then (let nd_uscrut6 = args in (match nd_uscrut6 with
   | B_dData_dList.C_List__x58__x58_ (dtb__145, dtb__146) -> (match dtb__146 with
   | B_dData_dList.C_List_Nil -> (match (((((v_annotTyOfFuel (fuel - 1)) dflt) env) binders) dtb__145) with
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing

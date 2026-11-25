@@ -49,7 +49,7 @@ let rec v_ityToTermEnv = (fun (mc0 : string B_dData_dList.t_List) (mc1 : Base_dI
   | Base_dIntrinsics.C_IType_IMDynArray (dtb__7) -> (Core_dTerm.C_Term_TApp ((Core_dTerm.C_Term_TGlobal ("@vuna@MDynArray")), ((v_ityToTermEnv mc0) dtb__7), Core_dTerm.C_Rig_Rig0))
   | Base_dIntrinsics.C_IType_IMArray (dtb__8) -> (Core_dTerm.C_Term_TApp ((Core_dTerm.C_Term_TGlobal ("@vuna@MArray")), ((v_ityToTermEnv mc0) dtb__8), Core_dTerm.C_Rig_Rig0))
   | Base_dIntrinsics.C_IType_ICell (dtb__9) -> (Core_dTerm.C_Term_TApp ((Core_dTerm.C_Term_TGlobal ("@vuna@Cell")), ((v_ityToTermEnv mc0) dtb__9), Core_dTerm.C_Rig_Rig0))
-  | Base_dIntrinsics.C_IType_IRef (dtb__10) -> (Core_dTerm.C_Term_TApp ((Core_dTerm.C_Term_TGlobal ("IORef")), ((v_ityToTermEnv mc0) dtb__10), Core_dTerm.C_Rig_Rig0))
+  | Base_dIntrinsics.C_IType_IRef (dtb__10) -> (Core_dTerm.C_Term_TApp ((Core_dTerm.C_Term_TGlobal ("@vuna@Ref")), ((v_ityToTermEnv mc0) dtb__10), Core_dTerm.C_Rig_Rig0))
   | Base_dIntrinsics.C_IType_IArray (dtb__11) -> (Core_dTerm.C_Term_TApp ((Core_dTerm.C_Term_TGlobal ("Array")), ((v_ityToTermEnv mc0) dtb__11), Core_dTerm.C_Rig_Rig0))
   | Base_dIntrinsics.C_IType_IVar (dtb__12) -> (match ((v_indexOfName dtb__12) mc0) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__13) -> (Core_dTerm.C_Term_TVar (dtb__12, dtb__13, { Base_dSource.f_Span_spanFile = ""; Base_dSource.f_Span_spanStartLine = 0; Base_dSource.f_Span_spanStartCol = 0; Base_dSource.f_Span_spanEndLine = 0; Base_dSource.f_Span_spanEndCol = 0; Base_dSource.f_Span_spanStartOffset = 0; Base_dSource.f_Span_spanEndOffset = 0 }))

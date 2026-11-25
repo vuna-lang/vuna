@@ -230,7 +230,7 @@ let rec v_headTypeNamesOf = (fun (mc0 : Frontend_dRast.t_Expr B_dData_dList.t_Li
 ))
 
 # 310 "Vuna/Compiler/Elab/Trait.vuna"
-let v_isGlobalHeadType = (fun (n : string) -> (if (if (if (if (n = "Int") then true else (n = "String")) then true else (n = "Float")) then true else (n = "Array")) then true else (n = "IORef")))
+let v_isGlobalHeadType = (fun (n : string) -> (if (if (if (if (n = "Int") then true else (n = "String")) then true else (n = "Float")) then true else (n = "Array")) then true else (n = "@vuna@Ref")))
 
 # 319 "Vuna/Compiler/Elab/Trait.vuna"
 let rec v_anyDeclInFile = (fun (mc0 : (Frontend_dRast.t_Decl, Base_dSource.t_Span) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc1 : string B_dData_dList.t_List) (mc2 : string) -> (match mc1 with

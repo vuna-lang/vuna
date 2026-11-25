@@ -36,6 +36,7 @@ B_dEffect_dStdin.ml
 B_dEffect_dTypes.ml
 B_dInternal_dOperator.ml
 B_dTrait_dApplicative.ml
+B_dTrait_dConvert.ml
 B_dTrait_dEq.ml
 B_dTrait_dFoldable.ml
 B_dTrait_dFromInt.ml
