@@ -102,7 +102,7 @@ ratio 对手写 OCaml，wasm 用 net；完整的 50 个用例、native / wasm �
       minor/major words、collections、top_heap_words），`bench/run.sh` 采集进 JSON。
 2. **字符串与可变数据**：`strSubstring` 原语（runtime `String.sub` + clamp 语义；核心求值也
    归约 `OpStrSubstring`），`Base.Data.String.substring` 不走 List 桥接；`Base.Data.String.repeat` 改一次
-   `strConcatMany`；可变数据（`MutRef` 单元）保持 `Eff []` 隔离，不引入线性
+   `strConcatMany`；可变数据（`MutRef` 等值句柄）经 `MutOp` 标记隔离，不引入线性
    类型（见 [qtt.md](qtt.md) / [effects.md](effects.md) 与 debt D22）。
 3. **容器与表示**：
    1. **内建类型构造子** `Array`（类型层，恒可见；OCaml 表示 `'a array`），

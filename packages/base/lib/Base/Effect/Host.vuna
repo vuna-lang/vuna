@@ -7,8 +7,9 @@
 -- `hostSync` 把原语放回自己的错误行。`rowRem` 不对宿主标记归约，所以源码层没有第二条
 -- 移除路径；`main` 的族 handler 折叠后由入口的 `runMain` 关闭。
 --
--- 判据：`Eff [] a` 表示求值不观察也不改变外部世界（发散与不变式破坏不计）；确定性、
--- 不可逃逸的内部状态（`MutRef` / `MutArray` / `MutBuffer` / 调度器原语）不占用这个行。
+-- 判据：`Eff [] a` 表示求值不观察也不改变外部世界（发散与不变式破坏不计）；确定性的
+-- 内部可变状态经 `Base.Effect.Mut.MutOp` 标记行表达（无操作 / 无 handler，`with*` 在
+-- 作用域结束时关闭标记），所以 `Eff []` 里读不到任何可变句柄。调度器原语不占行。
 module Base.Effect.Host where
 
 import Base.Effect.Core

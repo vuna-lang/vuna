@@ -52,8 +52,9 @@
    entry 预装 handler；自定义效应必须在入口前 handle 成 `Nil`，未处理效应是类型错误）。
    执行入口两个：`Base.Effect.Core.runPure : Eff [] a -> a`（纯动作）与不导出的 `runMain`
    （entry 折完 handler、行里带 `HostOp` 的动作）。
-   **`Eff []` 就是纯**（不观察也不改变外部世界；发散与不变式破坏不计；`MutRef`/`MutArray`/
-   `MutBuffer`/调度器原语的确定性内部状态不算）。
+   **`Eff []` 就是纯**（不观察也不改变外部世界；发散与不变式破坏不计）。确定性的内部可变状态经
+   `Base.Effect.Mut.MutOp` 标记行表达（空 data、无操作 / 无 handler，`with*` 在作用域结束时
+   关闭），所以 `Eff []` 里读不到任何可变句柄；调度器原语不占行。
    宿主层原语是隐藏的 `@vuna@prim_eff_*` / `@vuna@host@*`（源码写不出，只由 base 的 handler 与
    编译器/工具链内部使用），类型固定为 `Eff [HostOp] a`；关闭它的只有 `Base.Effect.Host` 的
    `runHost` / `hostSync`，`rowRem` 不对 `HostOp` 归约。用户面只有 `Base.Effect.Core.*`

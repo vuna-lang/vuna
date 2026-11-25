@@ -1416,7 +1416,7 @@ firstUnsolvedDictGoalMetaGo ec ((Constraint cid kind m dom cspan cdepth) :: rest
 -- 从假设 `Member e r0` 出发补 `There`，得到更强的行上的证明。
 --
 -- 这是 `Member` 的结构性质：`There : Member e r -> Member e (x :: r)`。没有它，
--- 任何「给行加条目的作用域」（handler、`withMutRef`、`weaken`）内部都会失去外层
+-- 任何「给行加条目的作用域」（handler、`with*` 的 `MutOp` 标记、`weaken`）内部都会失去外层
 -- 效应的证明。
 export ctxMemberWeaken : Ctx -> Ec -> Value -> Maybe (Term, Ec)
 ctxMemberWeaken ctx ec dom = ctxMemberWeakenGo ctx ctx.ctxItems 0 ec dom

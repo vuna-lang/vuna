@@ -88,7 +88,7 @@ fixture 与 steps 的相对路径以**所属包的 `test/`** 为根（见 `[fami
 | `tool`（缺省） | 前端 / 工具 | ocaml | lint / fix / type_* / term / 诊断；不产生目标代码 |
 | `pure` | L1 纯 | ocaml（全量门禁） | 纯函数与纯代数效应 |
 | `pure-cross` | L1 纯 | ocaml + wasm + native | 三端差分精选集 |
-| `effect-common` | L2 副作用 | ocaml + wasm + native | Console / MutRef / getenv / getArgs / exit / 经标签的相对路径 FS |
+| `effect-common` | L2 副作用 | ocaml + wasm + native | Console / 值句柄可变容器（`MutOp`）/ getenv / getArgs / exit / 经标签的相对路径 FS |
 | `effect-native` | L2 副作用 | ocaml + native | process / sleep / mtime / 真实 cwd |
 | `effect-wasm` | L2 副作用 | ocaml + wasm | preopen 根、cwd=`/`、execPath=`""`、mtime=`Nothing` |
 | `effect-ocaml` | L2 副作用 | ocaml | stdin / raw net（另两端没有宿主实现） |

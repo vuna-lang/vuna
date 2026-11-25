@@ -195,8 +195,8 @@ joinEffNilInner m =
               MkEff g => g u
     )
 
--- | 内部：丢掉行首条目（运行时恒等）。只供精化器合成的降级使用
--- （`withMutRef` 把只存在于类型里的能力条目收掉）。
+-- | 内部：丢掉行首条目（运行时恒等）。供 `Host.hostSync` 与可变作用域的标记关闭使用
+-- （`MutOp` 没有操作，关掉它是标记消除，不是 handler 解释）。
 export dropEffHead : {e : Type} -> {r : Row} -> {a : Type} -> Eff (e :: r) a -> Eff r a
 dropEffHead comp =
   case comp of

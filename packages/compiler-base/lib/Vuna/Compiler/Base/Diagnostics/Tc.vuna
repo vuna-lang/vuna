@@ -110,10 +110,6 @@ export data TcErr(..) : Nat -> Type where
   -- `perform` / `handle` 的 op 族不满足降级协议：必须以结果类型为最后索引
   -- （`<Op> : params… -> Type -> Type`），且显式参数都是类型。
   HandleFamilyUnsupported : String -> TcErr 1
-  -- 命名可变家族的句柄名字在作用域里找不到（操作调用 / 跨函数传参）。
-  CellNotInScope : String -> TcErr 1
-  -- 引入入口（`withMutRef` / `withMutArray` / `withMutBuffer`）的名字不是字符串字面量。
-  CellNameNotLiteral : String -> TcErr 1
   -- arity 2
   AmbiguousCtor : String -> String -> TcErr 2
   AmbiguousName : String -> String -> TcErr 2
@@ -235,8 +231,6 @@ tcCode (UnsolvedHole _) = "TC_UnsolvedHole"
 tcCode (UnsolvedMetavarInfer _) = "TC_UnsolvedMetavarInfer"
 tcCode (EffResFamilyMissing _) = "TC_EffResFamilyMissing"
 tcCode (HandleFamilyUnsupported _) = "TC_HandleFamilyUnsupported"
-tcCode (CellNotInScope _) = "TC_CellNotInScope"
-tcCode (CellNameNotLiteral _) = "TC_CellNameNotLiteral"
 tcCode (AmbiguousCtor _ _) = "TC_AmbiguousCtor"
 tcCode (AmbiguousName _ _) = "TC_AmbiguousName"
 tcCode (AmbiguousInstance _ _) = "TC_AmbiguousInstance"
@@ -353,9 +347,6 @@ tcTemplate (EffResFamilyMissing _) =
   "cannot find the op family for <0> (expected <Op> : params -> Type -> Type)"
 tcTemplate (HandleFamilyUnsupported _) =
   "effect syntax (perform / handle) supports only op families indexed by their result type (<Op> : params -> Type -> Type with type-valued params); got <0>"
-tcTemplate (CellNotInScope _) =
-  "named mutable <0> is not in scope (introduce it with withMutRef / withMutArray / withMutBuffer, or pass the same name through the row)"
-tcTemplate (CellNameNotLiteral _) = "a mutable introduction requires a string literal name"
 tcTemplate (AmbiguousCtor _ _) = "ambiguous constructor <0> (candidates: <1>)"
 tcTemplate (AmbiguousName _ _) = "ambiguous name <0> (candidates: <1>)"
 tcTemplate (AmbiguousInstance _ _) = "ambiguous instance for <0> (candidates: <1>)"
@@ -842,15 +833,7 @@ tcChunk12 =
     TcEntry
       (tcCode (EntryInstanceNotDefault ""))
       (tcTemplate (EntryInstanceNotDefault ""))
-      "入口行里的内建宿主效应用了非 default 的实例名（entry 只预装默认实例）",
-    TcEntry
-      (tcCode (CellNotInScope ""))
-      (tcTemplate (CellNotInScope ""))
-      "MutRef 的单元不在作用域里",
-    TcEntry
-      (tcCode (CellNameNotLiteral ""))
-      (tcTemplate (CellNameNotLiteral ""))
-      "withMutRef 的名字不是字符串字面量"
+      "入口行里的内建宿主效应用了非 default 的实例名（entry 只预装默认实例）"
   ]
 
 export tcAll : List TcEntry

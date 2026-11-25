@@ -10,7 +10,7 @@
 > 堆是段链表 + 尺寸类复用 + **两代标记-清扫 GC**（非移动；沿 `rbp` 链逐帧保守扫根，
 > 老代靠写屏障标记的卡片）；对象布局见 §2，回收契约见 [native-runtime.md](native-runtime.md) §1.2。
 > `main : Eff r a`（含带行的宿主效应，
-> 入口自动预装 `runXHost`）与命名可变单元（`MutRef` / `MutArray` / `MutBuffer`）可用；`perform` / `handle` 走**库机器**
+> 入口自动预装 `runXHost`）与值句柄可变容器（`Base.Container.Mut*`）可用；`perform` / `handle` 走**库机器**
 > （`Control` 循环 + trampoline）实现一次性续延（§3.4）。FFI / extern 仍被明确拒绝（`NativeUnsupported`）。
 > 实现入口：`Vuna.Target.Native.{Model,Abi,Pal,Gc,Runtime,Module,Render}`，
 > 插件入口 `Vuna.Target.Native.Plugin`。运行时符号、GC 与边界见 [native-runtime.md](native-runtime.md)。

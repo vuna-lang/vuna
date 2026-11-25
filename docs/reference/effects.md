@@ -10,9 +10,10 @@
 `Eff [HostOp]` 行里跑原语（错误收口族用 `hostSync` 放回带 typed-error 的行），入口组合是
 `runX = joinEff (handleXHost …)`，结果行尾接宿主行。
 
-**`Eff []` 就是纯**：求值不观察也不改变外部世界（发散与不变式破坏不计）。确定性、不可逃逸的
-内部状态（`MutRef` / `MutArray` / `MutBuffer` / 调度器原语）仍在 `Eff []` 里，它们不改变
-可观察结果。唯一能拿到 `Eff [HostOp]` 值的入口是隐藏宿主原语；关闭它的只有
+**`Eff []` 就是纯**：求值不观察也不改变外部世界（发散与不变式破坏不计）。确定性的内部可变
+状态经 `Base.Effect.Mut.MutOp` 标记行表达（空 data、无操作 / 无 handler，`with*` 在作用域
+结束时关闭它），所以 `Eff []` 里读不到任何可变句柄；调度器原语不占行。唯一能拿到
+`Eff [HostOp]` 值的入口是隐藏宿主原语；关闭它的只有
 `Base.Effect.Host.runHost`（裸值，供直连 opH）与 `hostSync`（放回任意行），`rowRem` 不对
 `HostOp` 归约，所以源码层没有第二条移除路径。
 
@@ -53,8 +54,8 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
   `dt_err/112_entry_instance_not_default`、`dt_base/93_eff_named_row_handled`）。
 - `Eff []` 表示**纯**：求值不观察也不改变外部世界（发散与不变式破坏不计）。宿主交互只能出现在
   `HostOp` 行里（`Base.Effect.Host`），宿主原语的类型固定为 `Eff [HostOp] a`，`rowRem` 不对
-  `HostOp` 归约；确定性、不可逃逸的内部状态（`MutRef` / `MutArray` / `MutBuffer` / 调度器原语）
-  不占用这个行。宿主副作用没有 manifest 能力/特权门控；用户面应经
+  `HostOp` 归约；确定性的内部可变状态经 `MutOp` 标记行表达（`with*` 关闭），所以 `Eff []`
+  里读不到任何可变句柄；调度器原语不占行。宿主副作用没有 manifest 能力/特权门控；用户面应经
   `Base.Effect.Core.*` 标签 + handler 使用效果（纪律/文档约定，见 §8.6）。
 - **动作入口**：`IEffRow`/`IRowCons`/`IGlobal` 行 IType、`IEffHost`（宿主原语类型 =
   `Eff [HostOp] a`）、隐藏
@@ -70,7 +71,7 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
   `Eff []` 只用于确需空行的动作，`main` 写具体行字面量（`Eff [FsOp, ConsoleOp, …] Int`）。
   `forkTask` 行泛化、任务体 `runEff` 执行（Sched 仍是 `Eff []`）。`Base.Effect.Types` 只重导出
   类型面（`Eff` / `Row` / `Named` / `Member` / `EffUnit`，不含 `Row(..)` 构造子），避开与
-`List` 的 `(::)` 重载；局部可变走 `Base.Effect.MutRef`（命名单元 + 编译期名字绑定，见 §8.8）。
+`List` 的 `(::)` 重载；局部可变走 `Base.Container.Mut*` 的值句柄 + `MutOp` 标记（见 §8.8）。
 - **宿主原语**：`@vuna@prim_eff_*` / `@vuna@host@*`（隐藏，源码写不出；见 `Frontend/Lexer` 的
   `@vuna@` 规则），用户面经 `Base.Effect.*` 标签 + handler 使用；eff-boundary 守卫检查
   「可见宿主原语名不得出现在源码」。
@@ -98,11 +99,13 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
 `Base.StateT` / `Base.ReaderT` / `Base.ErrorT`，也没有 `Base.EffAsync`。纯表示版本
 `Base.Effect.Pure.State` / `.Reader` / `.Error` 与 handler 版并存，二者不互相派生。
 
-## 4. 局部可变：命名句柄，没有 region/ST
+## 4. 局部可变：值句柄，没有 region/ST
 
-`Base.ST`（region 隔离的局部可变、`ST r a` / `Ref` / `SArray`）不存在：局部可变走
-`Base.Effect.{MutRef,MutArray,MutBuffer}` 的**命名单元**（编译期名字绑定，
-见 §8.8–§8.10），没有可逃逸的 region 令牌。语言保留 `linear record` / `linear data` 与 QTT 规则。
+`Base.ST`（region 隔离的局部可变、`ST r a` / `Ref` / `SArray`）不存在：局部可变是
+`Base.Container.Mut*` 的**值句柄**（`MutRef` / `MutArray` / `MutVec` / `MutDynArray` /
+`MutBuffer`，见 §8.8）；分配与读写要求 `MutOp` 标记，作用域入口 `with*` 关闭它。
+没有 region 令牌；句柄本身是普通值，可以逃逸（GC 所有权）。语言保留 `linear record` /
+`linear data` 与 QTT 规则，线性句柄是将来收紧逃逸的路径（[debt.md](debt.md) D63）。
 
 ## 5. 表示轴：不透明擦除值
 
@@ -160,9 +163,10 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
 2. **handler 是解释器**：`runPure` 是唯一的执行入口；`runConsole` / `runFs` 等是
    handler（answer 为 `Eff []`，由 `joinEff` 组装），本身不执行动作；没有「隐式生效的
    handler 栈」。
-3. **可变数据边界**：用户面可变只有命名单元——局部 `Base.Effect.MutRef`（不可逃逸，§8.8）
-   与定长/变长容器（§8.9/§8.10）。单元没有句柄值：`@vuna@Cell` 等隐藏类型只出现在精化器
-   合成的参数里，任何可逃逸的引用都不在用户面上。没有 region 形式（见 [debt.md](debt.md) D63）。
+3. **可变数据边界**：用户面可变是 `Base.Container.Mut*` 的值句柄（`MutRef` / `MutArray` /
+   `MutVec` / `MutDynArray` / `MutBuffer`，§8.8）；单元身份在值上，分配与读写要求 `MutOp`
+   标记，`with*` 关闭。句柄可以逃逸（GC 所有权）；没有 region 形式，线性句柄是收紧路径
+   （见 [debt.md](debt.md) D63）。
 4. **宿主层是底层原语面，不是类型豁免**：`prim_effectPerformId` / `prim_effectHandleId` /
    cleanup/sched 是宿主层原语，常规用户面经 `Base.Effect.Core.*` 标签 + handler 使用效果；没有
    `unsafe` 能力位或 `[trust]` 定义级清单（[debt.md](debt.md) D62）。
@@ -246,7 +250,8 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
 | `Base.Effect.Host` | 宿主行标记 `HostOp : Type -> Type`（空 data，无操作/无 handler）与两个关闭器：`runHost : Eff [HostOp] a -> a`（直连 opH 的裸值答案）、`hostSync : Eff [HostOp] a -> Eff r a`（错误收口族把原语放回带 typed-error 的行；**必须留在动作里求值**，零参封装才不会被顶层 `let` 缓存） |
 | `Base.Effect.Reader` | `ReaderOp s` + `Ask`；`ask`/`handleReader`；实例名并进标签（`Named "counter" (ReaderOp Int)`） |
 | `Base.Effect.State` | `StateOp s` + `Get`/`Put`；`get`/`put`/`handleState`（answer `s -> Pair a s` 线程状态） |
-| `Base.Effect.MutRef` | 命名可变单元（原地读写，不是状态线程化）：行条目 `Named n (MutRefOp a)` 是唯一语言级表示；`withMutRef n init body` 引入单元、`withMutRefPure` 是纯端点；`read`/`write` 的实例名是隐式 `String`（`read@x` 消歧）。没有句柄值，单元只在编译期名字→运行时参数绑定里存在：精化器把调用改写成 `Base.Effect.MutRef.cellReadOp`/`cellWriteOp`，签名里出现具体 `MutRefOp` 条目时自动补 `{@vuna@cell@n : Cell a}` 参数（跨函数传递）。逃逸由 `Member` 约束挡住（闭包进更窄行 → 无实例），`withMutRef` 结果行删掉条目。见 §8.8 |
+| `Base.Effect.Mut` | 内部可变状态标记 `MutOp : Type`（空 data，无操作 / 无实例名 / 无 handler，与 `HostOp` 同构）；`with*` 在作用域结束时用 `dropEffHead` 关闭它 |
+| `Base.Container.Mut*` | 值句柄可变容器（`MutRef` / `MutArray` / `MutVec` / `MutDynArray` / `MutBuffer`）：句柄是普通值，分配与读写要求 `Member MutOp r`；`with*` / `with*Pure` 打开并关闭标记。见 §8.8 |
 | `Base.Effect.Fs` | 宿主-backed Fs 效应（完整 fs 面；标签 `FsOp`，实例名并进标签，如 `Named "real" FsOp`）：`ReadFile`/`ReadFileRange`/`WriteFile`/`WriteFileAtomic`/`ReadDir`/`IsDirectory`/`MakeDir`/`RemoveFile`/`FileExists`/`FileMtime`/`FileSize`（结果索引在构造子上）；`fsReadFile n`/`fsReadFileRange n`/`fsWriteFile n`/…/`fsFileCursor`（按块读文件，配 `Base.Effect.Cursor`）/`handleFs n`（泛型）/`handleFsHost n`（answer `Eff []`，`runFs = joinEff ∘ handleFsHost`）；真实 handler 用 `@vuna@host@try*` 原语（`WriteFile` 的结果索引是 `Nat`），宿主失败抛 `FsErrorOp`，`runFsError` 可局部收成 `Result`；`fsFileSize`/`fsFileMtime` 返回 `Maybe`（取不到 = 无值，不是 0）；mock/real 可并存（`dt_base/40`） |
 | `Base.Effect.Console` | console 标签 `ConsoleOp`（实例名并进标签，如 `ConsoleOp@mock`/`ConsoleOp@real`）：`Print`/`EPrint`；`consolePrint`/`consoleEprint`/`handleConsole`/`handleConsoleHost`（真实 handler 用 `@vuna@prim_eff_print`/`@vuna@prim_eff_eprint`，`Print` 的结果索引是 `Nat`）；写失败（EPIPE 等）返回 0、不崩进程 |
 | `Base.Effect.Tty` | 终端元数据标签 `TtyOp`：`IsTty`（stdout 是否连接终端，结果索引 `Bool`）；`ttyIsTty`/`handleTty`/`handleTtyHost`（真实 handler 用 `@vuna@host@isTty`；wasm 的 WASI preview1 没有 isatty，恒 `False`）。诊断格式的默认值依赖它，所以它必须是正常效应——工具链不再用 `hostSync` 就地关闭宿主行 |
@@ -410,239 +415,63 @@ net 的阻塞操作有对应的超时变体：`netAcceptWithin` / `netRecvWithin
 剩余边界：没有异步/多连接/TLS（非目标）；超时只覆盖单次 accept/read/write，
 没有全局 deadline——见 [debt.md](debt.md) D90。
 
-### 8.8 局部可变：`Base.Effect.MutRef`
+### 8.8 可变数据：值句柄 + `MutOp` 标记
 
-`Eff []` 不是「无副作用」的许可证，但也不是局部可变的唯一落点。`MutRef` 提供
-**命名单元的原地读写**，外部签名仍然纯：
+局部可变是**值**，不是行条目：`Base.Container.Mut{Ref,Array,Vec,DynArray,Buffer}` 提供
+可逃逸的句柄；分配与读写要求行里有 `Base.Effect.Mut.MutOp`，`with*` 打开标记并在作用域
+结束时关闭，`with*Pure` 是 `runPure` 端点。
 
 ```vuna
 count : Eff [] Int
 count =
-  MutRef.withMutRefPure "acc" 0 (
+  MutRef.withMutRefPure 0 (\acc =>
       do
-        MutRef.write 41
-        x <- MutRef.read
-        MutRef.write (x + 1)
-        MutRef.read
-    )                                  -- 42
+        MutRef.write acc 41
+        x <- MutRef.read acc
+        MutRef.write acc (x + 1)
+        MutRef.read acc
+  )                                  -- 42
 ```
 
-形状：
+形状（以 `MutRef` 为例；其余四族同构）：
 
 ```vuna
-data MutRefOp : Type -> Type -> Type where
-  Read  : {a : Type} -> MutRefOp a a
-  Write : {a : Type} -> a -> MutRefOp a Unit     -- 结果索引 Unit
+export alias record MutRef a where
+  cell : @vuna@Cell a
 
-read  : {n : String} -> ... -> Eff r a
-write : {n : String} -> ... -> a -> Eff r Unit
-withMutRef     : (n : String) -> a -> Eff (Named n (MutRefOp a) :: r) b -> Eff r b
-withMutRefPure : (n : String) -> a -> Eff [Named n (MutRefOp a)] b -> b
+new   : Member MutOp r => a -> Eff r (MutRef a)
+read  : Member MutOp r => MutRef a -> Eff r a
+write : Member MutOp r => MutRef a -> a -> Eff r Unit
+withMutRef     : a -> (MutRef a -> Eff (MutOp :: r) b) -> Eff r b
+withMutRefPure : a -> (MutRef a -> Eff (MutOp :: Nil) b) -> b
 ```
 
-- **行条目就是表示**：`Named n (MutRefOp a)` 同时带实例名与载荷类型；没有
-  `Cell a` 这样的句柄值，所以没有东西能带着单元逃出作用域。
-- **单元是编译期绑定**：`withMutRef "x" init body` 在精化期展开成
-  `cellWith "x" init (\@vuna@cell@x => body)`；`read`/`write` 的调用点改写成
-  `cellReadOp @x @vuna@cell@x` / `cellWriteOp @x @vuna@cell@x v`，
-  运行时只剩三个隐藏原语（OCaml `ref` / wasm `$rt_cell*` / native heap cell），
-  **没有 handler 派发、没有名字查找**。
-- **跨函数**：签名里出现具体 `MutRefOp` 条目的函数，精化器自动补
-  `{@vuna@cell@x : @vuna@Cell a}` 参数（RigOmega 运行时值）；调用点按 binder 名从
-  作用域取单元传进去。名字不匹配 → `TC_CellNotInScope`。
-- **逃逸**：`read`/`write` 的改写仍带 `Member (Named n (MutRefOp a)) r` 约束，
-  所以把写操作捕获进 `Eff []` 的闭包会因「找不到实例」被拒；`withMutRef` 的
-  结果类型也不含该条目（`dropEffHead`）。
-- **唯一性**：签名里的 concrete 行前缀按 `(族头, 实例名)` 查重
-  （`TC_DuplicateInstance`）；`withMutRef` 嵌套同名也走同一条错误。
-- **消歧**：同一作用域两个同载荷单元时，省略名字报 `TC_AmbiguousInstance`，
-  用 `read@a` / `write@a` 指定。
-- **依赖载荷**：句柄参数插在**前导隐式 binder 之后、第一个显式 binder 之前**（非擦除
-  隐式保持前缀；插入点之后整体上移索引，载荷按后缀 binder 数下移）。因此
-  `{a : Type} -> … Named "xs" (MutArrayOp a) …` 这类多态 helper 可以直接写。
-- 名称必须是字符串字面量（`TC_CellNameNotLiteral`）。
+- **身份在值上**：句柄是普通值（`alias record` 包住隐藏表示，构造/投影是定义性恒等；
+  `MutVec n a` 是单构造子 data，用显式 kind 把 `n` 固定在类型层）。句柄可以存进 record、
+  从函数返回、被闭包捕获。
+- **`MutOp` 是标记**：空 data，无操作 / 无实例名 / 无 handler，与 `HostOp` 同构；`with*`
+  用 `dropEffHead` 消掉它（标记消除，不是 handler 解释）。`Eff []` 里因此读不到任何句柄，
+  §顶层与 §1 的纯度判据不变。
+- **没有派发**：操作直接走隐藏原语（`@vuna@prim_mref*` / `marr*` / `dyn*` / `mbuf*`），
+  没有名字查找、没有精化期句柄合成、没有 `Member (Named …)` 约束。
+- **嵌套作用域**：重复的 `MutOp` 条目是同一标记，`Member` 取最近的头部（具体候选取头部
+  规则，见 `Elab/Dict`）；不需要名字消歧。
+- **逃逸**：允许（GC 所有权）。句柄离开 `with*` 后仍然存在，但任何读写都要求某个 `MutOp`
+  作用域；要严格禁止逃逸需要线性句柄（[debt.md](debt.md) D63）。
+- **表示与操作**：
 
-夹具：`effect/common/60..62`（单单元、双单元 `@` + 跨函数、循环累加），
-负例 `dt_err/117..121`。剩余限制（重复藏在行变量里、`Member` 诊断不够专用）
-见 [debt.md](debt.md) D63。
+| 类型 | 表示 | 操作 |
+| --- | --- | --- |
+| `MutRef a` | `@vuna@Cell a`（OCaml `ref`） | `new` / `read` / `write` / `modify` |
+| `MutArray a` | `@vuna@MArray a`（普通数组） | `new` / `get` / `set` / `size` |
+| `MutVec n a` | 单构造子 data，字段 `@vuna@MArray a`；`Fin n` 下标 | `new` / `get` / `set` / `size` |
+| `MutDynArray a` | `@vuna@MDynArray a`（`Obj.t ref`） | `new` / `get` / `set` / `push` / `size` / `clear` |
+| `MutBuffer` | `@vuna@MBuffer`（`Obj.t ref`，OCaml `Buffer.t` 装箱） | `new` / `append` / `appendChar` / `size` / `clear` / `toString` |
 
-### 8.9 定长原地数组：`Base.Effect.MutArray`
-
-`MutArray a` 是**运行时定长**的原地数组：长度在引入时确定，`set` 写穿同一块存储，
-不返回新数组（与不可变 `Array` 的 copy-on-write `set` 不同）：
-
-```vuna
-main : Int
-main =
-  MutArray.withMutArrayPure "xs" 3 0 (
-      do
-        MutArray.set 0 7
-        MutArray.set 1 35
-        v <- MutArray.get 1
-        n <- MutArray.size
-        pure (v * 100 + n)             -- 3503
-    )
-```
-
-形状：
-
-```vuna
-data MutArrayOp : Type -> Type -> Type where
-  Get  : {a : Type} -> Nat -> MutArrayOp a a
-  Set  : {a : Type} -> Nat -> a -> MutArrayOp a Unit
-  Size : {a : Type} -> MutArrayOp a Nat
-
-get  : {n : String} -> ... -> Nat -> Eff r a
-set  : {n : String} -> ... -> Nat -> a -> Eff r Unit
-size : {n : String} -> ... -> Eff r Nat
-withMutArray     : (n : String) -> Nat -> a -> Eff (Named n (MutArrayOp a) :: r) b -> Eff r b
-withMutArrayPure : (n : String) -> Nat -> a -> Eff [Named n (MutArrayOp a)] b -> b
-```
-
-- **元素类型在行条目里**：`Named n (MutArrayOp a)` 同时带实例名与元素类型，因此
-  `set` 与存储的元素类型绑定，不同元素类型的数组不是同一条目。
-- 机制与 §8.8 完全同构：编译期名字绑定、跨函数补 `{@vuna@marr@x : @vuna@MArray a}`、
-  `Member` 约束挡逃逸、concrete 前缀查重、`@x` 消歧、名字必须是字面量。
-- **表示**：`@vuna@MArray a` 编译到普通数组（IR `IrTyArray a`）；`new/get/len` 直接
-  复用 `arrayMake` / `arrayGet` / `arrayLength`，只有原地写 `@vuna@prim_marrSet` 是新的
-  （三端都不复制；native 写后登记写屏障）。
-- 越界是宿主 trap（与 `arrayGet` 一致）；`size` 是容量 = 长度。
-- 需要「容量 + 逻辑长度」时，用 `MutArray` + 一个 `MutRef` 计数器组合；类型层定长用
-  `MutVec n a`（`Fin n` 索引，见 §8.11）；可增长元素容器用 `MutDynArray a`（§8.12），
-  见 [debt.md](debt.md)。
-
-夹具：`effect/common/63..65`（原地读写、双数组 `@` + 跨函数、多态 helper），
-负例 `dt_err/122/123/125`。
-
-### 8.10 变长字节缓冲：`Base.Effect.MutBuffer`
-
-`MutBuffer` 是**变长字节**缓冲（对标 OCaml `Buffer.t` / `StringBuilder`）：元素固定
-为字节，所以操作族没有元素类型参数；追加原地进行，容量不足时按倍数增长，
-`toString` 取一次快照：
-
-```vuna
-main : Int
-main =
-  MutBuffer.withMutBufferPure "out" (
-      do
-        MutBuffer.append "abc"
-        MutBuffer.appendChar 100       -- 'd'
-        n <- MutBuffer.length          -- 4
-        s <- MutBuffer.toString        -- "abcd"
-        pure (n * 100 + strAt s 3)     -- 500
-    )
-```
-
-形状：
-
-```vuna
-data MutBufferOp : Type -> Type where
-  Append     : String -> MutBufferOp Unit
-  AppendChar : Int -> MutBufferOp Unit     -- 低 8 位
-  Length     : MutBufferOp Nat
-  Clear      : MutBufferOp Unit
-  ToString   : MutBufferOp String
-
-append / appendChar / length / clear / toString : {n : String} -> ...
-withMutBuffer     : (n : String) -> Eff (Named n MutBufferOp :: r) b -> Eff r b
-withMutBufferPure : (n : String) -> Eff [Named n MutBufferOp] b -> b
-```
-
-- 机制同 §8.8/§8.9，句柄是 `{@vuna@mbuf@x : @vuna@MBuffer}`（无载荷参数）。
-- **表示**：OCaml `Buffer.t`；wasm `$buf { data: (mut (ref $str)), len, cap }`；native 句柄
-  `[data][len][cap]`（地址稳定）+ 单独的 leaf 字节块，增长 = 2× 重分配 + 复制。
-- `toString` 复制成新字符串，之后继续追加不影响已取出的串；`clear` 保留容量。
-- `appendChar` 取低 8 位，不做 UTF-8 校验（按字节语义）。
-
-夹具：`effect/common/66..67`（追加/长度/快照/清空、跨函数 + 格式化组合），
-负例 `dt_err/124/126`。
-
-### 8.11 类型层定长：`Base.Effect.MutVec`
-
-`MutVec n a` 是 `Vec n a` 的可变搭档：长度 `n` 在类型层锁定，下标是 `Fin n`，越界在
-编译期不可能，运行时没有边界检查。存储是定长数组，`set` 原地写：
-
-```vuna
-main : Int
-main =
-  MutVec.withMutVecPure "xs" (VCons 10 (VCons 20 (VCons 30 Nil))) (
-      do
-        MutVec.set FZero 7
-        a <- MutVec.get FZero
-        n <- MutVec.size
-        pure (a * 100 + natToInt n)    -- 703
-    )
-```
-
-形状：
-
-```vuna
-data MutVecOp : Nat -> Type -> Type -> Type where
-  Get  : {n : Nat} -> {a : Type} -> Fin n -> MutVecOp n a a
-  Set  : {n : Nat} -> {a : Type} -> Fin n -> a -> MutVecOp n a Unit
-  Size : {n : Nat} -> {a : Type} -> MutVecOp n a Nat
-
-get  : {name : String} -> ... -> Fin n -> Eff r a
-set  : {name : String} -> ... -> Fin n -> a -> Eff r Unit
-size : {name : String} -> ... -> Eff r Nat
-withMutVec     : (name : String) -> Vec n a -> Eff (Named name (MutVecOp n a) :: r) b -> Eff r b
-withMutVecPure : (name : String) -> Vec n a -> Eff [Named name (MutVecOp n a)] b -> b
-```
-
-- 行条目 `Named name (MutVecOp n a)` 同时带长度索引与元素类型；句柄载荷是**第二个**
-  实参 `a`（`MutArrayOp` 的载荷是第一个），由家族表的 `mutFamPayloadIndex` 指定。
-- **引入**：运行时长度来自种子 `Vec n a` 的构造子结构（`vecToList` → 数组），
-  不需要把 Rig0 的长度索引再传一遍。
-- **表示**：复用 ` a`（普通数组）+ `marrGet/Set/Len`，没有新原语；
-  种子转换走 ``（三端映射到 `arrayFromList`）。
-- 下标转换 `Fin n → Nat` 是构造子递归（`finToNat`），代价与下标值成正比；
-  bounds 由类型排除，没有运行时检查。
-
-夹具：`effect/common/68..70`（基本读写、双向量 `@` + 跨函数、多态 helper），
-负例 `dt_err/127..130`。
-
-### 8.12 可变长元素容器：`Base.Effect.MutDynArray`
-
-`MutDynArray a` 是**运行时变长**的元素容器：`push` 原地追加，容量不足时按倍数增长；
-下标是 `Nat`，越界是宿主 trap；`size` 是已用长度。与 `MutVec` 的区别是长度不在类型层。
-
-```vuna
-main : Int
-main =
-  MutDynArray.withMutDynArrayPure "xs" (
-      do
-        MutDynArray.push 1
-        MutDynArray.push 2
-        n <- MutDynArray.size          -- 2
-        a <- MutDynArray.get 0         -- 1
-        pure (a * 10 + natToInt n)     -- 12
-    )
-```
-
-形状：
-
-```vuna
-data MutDynArrayOp : Type -> Type -> Type where
-  Get   : {a : Type} -> Nat -> MutDynArrayOp a a
-  Set   : {a : Type} -> Nat -> a -> MutDynArrayOp a Unit
-  Push  : {a : Type} -> a -> MutDynArrayOp a Unit
-  Size  : {a : Type} -> MutDynArrayOp a Nat
-  Clear : {a : Type} -> MutDynArrayOp a Unit
-
-get / set / push / size / clear : {name : String} -> ...
-withMutDynArray     : (name : String) -> Eff (Named name (MutDynArrayOp a) :: r) b -> Eff r b
-withMutDynArrayPure : (name : String) -> Eff [Named name (MutDynArrayOp a)] b -> b
-```
-
-- 机制同 §8.8：编译期名字绑定、跨函数补 `{@vuna@mdyn@x : @vuna@MDynArray a}`、
-  `Member` 约束挡逃逸、concrete 前缀查重、`@x` 消歧。
-- **表示**：OCaml `(Obj.t array * int) ref`（`dtp_dyn*`）；wasm
-  `$dyn { data: (mut (ref $arr)), len, cap }`；native 稳定句柄 `[data][len][cap]` +
-  独立数组块，增长 = 2× 复制。native 写元素与替换 `data` 都登记写屏障。
-- `get`/`set` 按**已用长度**检查（越界 trap），`clear` 保留容量。
-
-夹具：`effect/common/71..72`（增长到 32 的 push + 读写清空、双容器 `@` + 多态 helper），
-负例 `dt_err/131..133`。
+夹具：`effect/common/61`（双单元 + 跨函数）、`62`（循环）、`65`（多态 helper）、
+`66`（缓冲快照）、`68`（`Fin` 下标）、`71`（增长）、`91`（`Eff []` 里的单元）、`100`
+（五族嵌套）、`101`（一等值：record / List / 跨函数）；负例 `dt_err/136`（缺 `MutOp`
+→ 无行成员）。
 
 ## 9. 仍开放的边界
 

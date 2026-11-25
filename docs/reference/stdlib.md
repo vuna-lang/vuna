@@ -57,11 +57,12 @@
 | `Base.Effect.Core` | 通用运行时效应核心（Layer 1）：开放行 `Row`（`Nil` / `(::)`）、`Named` 命名标签、抽象动作 `Eff`（无世界令牌）、`Member` 行成员证明/`rowRem`、`weaken`、线性 `Cont`/`resumeCont`/`handleCoreLin`、内建 `Functor`/`Applicative`/`Monad (Eff r)`（`do`/`>>=`；不提供 `bindEff`/`pureEff`）、`sendCore`/`handleCore`、`runPure`/`joinEff`/`raise`（`runPure`/`joinEff` 要求行已处理干净，入口处未处理效应是类型错误）；OCaml 5 一次性续延；见 [effects.md](effects.md) §8 |
 | `Base.Effect.Reader` | 标签 `ReaderOp s` + `Ask`（实例名并进标签，如 `Named "counter" (ReaderOp Int)`）：`ask`/`handleReader`/`handleReaderLin`/`local`（作用域问答） |
 | `Base.Effect.State` | 标签 `StateOp s` + `Get`/`Put`（实例名并进标签，如 `Named "counter" (StateOp Nat)`）：`get`/`put`/`handleState`（answer `s -> Pair a s` 线程状态） |
-| `Base.Effect.MutRef` | 命名可变单元的原地读写：`MutRefOp a i`（`Read`/`Write`）、`read`/`write`（实例名隐式，`read@x` 消歧）、`withMutRef` / `withMutRefPure`。单元没有句柄值，由精化器做「名字 → 运行时参数」的编译期绑定（跨函数自动补 `{@vuna@cell@n : Cell a}` 参数）；逃逸由 `Member` 约束挡住。见 [effects.md](effects.md) §8.8 |
-| `Base.Effect.MutArray` | 定长原地可变数组：`MutArrayOp a i`（`Get`/`Set`/`Size`）、`get`/`set`/`size`（实例名隐式，`get@x` 消歧）、`withMutArray` / `withMutArrayPure`（引入时给容量与初值）。元素类型在行条目 `Named n (MutArrayOp a)` 里；机制同 `MutRef`（跨函数补 `{@vuna@marr@n : MArray a}`）。表示就是普通数组，只有原地写是新的原语；越界 trap。见 [effects.md](effects.md) §8.9 |
-| `Base.Effect.MutBuffer` | 变长字节缓冲：`MutBufferOp i`（`Append`/`AppendChar`/`Length`/`Clear`/`ToString`）、`append`/`appendChar`/`length`/`clear`/`toString`（实例名隐式）、`withMutBuffer` / `withMutBufferPure`。追加原地进行、容量按倍数增长，`toString` 取快照；机制同 `MutRef`（跨函数补 `{@vuna@mbuf@n : MBuffer}`）。见 [effects.md](effects.md) §8.10 |
-| `Base.Effect.MutVec` | 类型层定长的原地向量：`MutVecOp n a i`（`Get`/`Set`/`Size`）、`get`/`set`/`size`（`Fin n` 下标，越界在类型层排除）、`withMutVec` / `withMutVecPure`（用 `Vec n a` 种子引入）。行条目 `Named name (MutVecOp n a)` 同时带长度索引与元素类型；句柄复用 `MArray a`，种子转换走 `@vuna@prim_marrFromList`。见 [effects.md](effects.md) §8.11 |
-| `Base.Effect.MutDynArray` | 运行时变长元素容器：`MutDynArrayOp a i`（`Get`/`Set`/`Push`/`Size`/`Clear`）、`get`/`set`/`push`/`size`/`clear`、`withMutDynArray` / `withMutDynArrayPure`（空容器引入）。`push` 原地追加、容量按倍数增长，`get`/`set` 按已用长度 trap；机制同 `MutRef`（跨函数补 `{@vuna@mdyn@n : MDynArray a}`）。见 [effects.md](effects.md) §8.12 |
+| `Base.Effect.Mut` | 内部可变状态标记 `MutOp`（空 data，无操作 / 无实例名 / 无 handler）；`with*` 在作用域结束时关闭它。见 [effects.md](effects.md) §8.8 |
+| `Base.Container.MutRef` | 可变单元的值句柄：`new` / `read` / `write` / `modify`、`withMutRef` / `withMutRefPure`；句柄是 `alias record` 包住 `@vuna@Cell a`，可以逃逸；读写要求 `Member MutOp r`。见 [effects.md](effects.md) §8.8 |
+| `Base.Container.MutArray` | 定长原地数组的值句柄：`new` / `get` / `set` / `size`、`withMutArray` / `withMutArrayPure`；表示是普通数组（只有原地写是新的原语），越界 trap。 |
+| `Base.Container.MutBuffer` | 变长字节缓冲的值句柄：`new` / `append` / `appendChar` / `size` / `clear` / `toString`、`withMutBuffer` / `withMutBufferPure`；追加原地进行、容量按倍数增长，`toString` 取快照。 |
+| `Base.Container.MutVec` | 类型层定长的原地向量：`new` / `get` / `set` / `size`（`Fin n` 下标，越界在类型层排除）、`withMutVec` / `withMutVecPure`（用 `Vec n a` 种子引入）；句柄是单构造子 data，字段复用 `MArray a`。 |
+| `Base.Container.MutDynArray` | 运行时变长元素容器：`new` / `get` / `set` / `push` / `size` / `clear`、`withMutDynArray` / `withMutDynArrayPure`；`push` 原地追加、容量按倍数增长，`get` / `set` 按已用长度 trap。 |
 | `Base.Effect.Fs` | 宿主-backed Fs 效应（完整 fs 面；标签 `FsOp`（实例名并进标签，如 `FsOp@mock`/`FsOp@real`，即 `Named "mock" FsOp`））：`ReadFile`/`ReadFileRange`/`WriteFile`/`WriteFileAtomic`/`ReadDir`/`IsDirectory`/`MakeDir`/`RemoveFile`/`FileExists`/`FileMtime`/`FileSize` + `fsReadFile`/`fsReadFileRange`（按偏移读片段）/`fsFileCursor`（按块读文件，配 `Base.Effect.Cursor`）/`fsWriteFile`/…（默认名；显式 `@name`；`handleFs n`/`handleFsHost n` 的 handler 仍显式 n）；`WriteFile` 的结果是 `Nat`（`WriteFileAtomic` 仍 `Int`）；`fsFileSize`/`fsFileMtime` 返回 `Maybe`（取不到 = 无值）；真实 handler 用 `@vuna@host@try*` 原语，宿主失败抛 `FsErrorOp`（`FsError`：missing/denied/no-space/not-dir/is-dir/exists/io，`fsErrorText` 渲染）；`runFsError n` 把失败收成 `Result`，entry 预装的 `runFsErrorHost` 打印 `vuna: fs: …` 并 exit 1；mock（纯 answer）与 real handler 可并存（`dt_base/37`、`dt_base/85`） |
 | `Base.Effect.Error` | 一阶 Error 效应 + 作用域 `catch`：`throw`/`handleError`/`runError`/`catch` |
 | `Base.Effect.Exn` | 高阶/作用域 Error：`Try` 操作携带 `Eff` 子计算，`handleExn`/`runExn`/`catchExn`/`bracketExn`；scoped handler |
@@ -261,7 +262,7 @@ packages/base/lib/
   （AVL，`Ord` 键，O(log n)）；只排一次序用 `Base.Data.Sort`。二者都不提供批量
   union / 区间删除；`PriorityQueue` 同优先级元素的出队顺序确定但**不是插入序**；
 - **容器与可变数据**：不可变 `Base.Container.Array`；局部可变是 `Eff []` 内的
-  `Base.Effect.MutRef` / `MutArray` / `MutBuffer` 命名单元；`Array.get` 越界是
+  `Base.Container.Mut*` 的值句柄；`Array.get` 越界是
   宿主 `Invalid_argument`；`Array.set` 返回新数组；命名单元见 [effects.md](effects.md) §8.8–§8.10，
   没有 region/ST 式可逃逸令牌；
 - **库级效应**：`State` / `Reader` / `Error` 是带 `Functor`/`Monad` 实例的纯函数

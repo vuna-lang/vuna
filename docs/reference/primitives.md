@@ -194,9 +194,9 @@
 | --- | --- | --- |
 | `Array a` | `Type -> Type` | `'a array`（不可变语义：不暴露原地写） |
 
-隐藏的可变单元类型（`@vuna@Cell a` / `@vuna@MArray a` / `@vuna@MDynArray a` /
-`@vuna@MBuffer`）同样在这张表里：它们只由精化器在 `withMut*` 作用域内合成，任何模块都
-写不出可用的句柄值（见 [effects.md](effects.md) §8.8–§8.10）。
+隐藏的可变容器类型（`@vuna@Cell a` / `@vuna@MArray a` / `@vuna@MDynArray a` /
+`@vuna@MBuffer`）同样在这张表里：它们是 `Base.Container.Mut*` 句柄的内部表示，
+由 `alias record` / 单构造子 data 包住（[effects.md](effects.md) §8.8）。
 
 这些是**类型层构造子**，不是 `data` 声明：没有构造子可模式匹配，只能经原语 / 库 API 使用。
 类型参数在签名里用隐式 `{a : Type}` 绑定（`Elab.Prelude.ityToTerm` 生成 de Bruijn）。
@@ -212,11 +212,11 @@
 | `arrayFromList` | `List a -> Array a` | `Array.of_list`（经 List 桥接 `dtp_ocamlOf`） |
 | `arrayToList` | `Array a -> List a` | `Array.to_list`（经 `dtp_listOf`） |
 
-**可变数据原语**（`Eff []`；不触碰外部世界）：用户面只有命名单元（`Base.Effect.MutRef` /
-`MutArray` / `MutBuffer`），精化器把调用改写成隐藏原语 `@vuna@prim_mrefNew` /
-`@vuna@prim_mrefRead` / `@vuna@prim_mrefWrite`（数组 / 缓冲同族：`@vuna@prim_marr*` /
-`@vuna@prim_dyn*` / `@vuna@prim_mbuf*`）。没有可逃逸的引用原语：单元参数由精化器按
-`@vuna@Cell` 参数合成，只在 `withMut*` 作用域内有值（[effects.md](effects.md) §8.8–§8.10）。
+**可变数据原语**（`Eff []`；不触碰外部世界）：用户面是 `Base.Container.Mut*` 的值句柄，
+库函数直接调用隐藏原语 `@vuna@prim_mrefNew` / `@vuna@prim_mrefRead` /
+`@vuna@prim_mrefWrite`（数组 / 缓冲同族：`@vuna@prim_marr*` / `@vuna@prim_dyn*` /
+`@vuna@prim_mbuf*`）。句柄类型是 `alias record` 包住 `@vuna@Cell` 等隐藏表示；分配与读写
+要求 `MutOp` 标记（[effects.md](effects.md) §8.8）。
 
 - 效果原语的 runtime 表达仍是「立即算完的 OCaml 表达式」，由 `effThunkText` 按 arity
   包成 `MkEff` thunk（`fun args -> fun (_ : int) -> rt args`；零参 `fun (_ : int) -> rt`）。
@@ -225,10 +225,10 @@
 - **核心求值不归约**全部容器原语（`OpNone`）：夹具关闭 interp 阶段，只 compile + 运行。
 - 越界行为：`arrayGet` 越界是宿主 `Invalid_argument`（不是 `strAt` 的
   -1 哨兵，也没有语言层诊断）；`Array.set` 先 `Array.copy`，原数组不变。
-- 可变数据的安全边界：可变单元的公开操作与实现都返回 `Eff []`；局部可变走命名单元
-  （`MutRef` / `MutArray` / `MutBuffer`，见 [effects.md](effects.md) §8.8–§8.10），
-  没有 region/ST 令牌；也没有依赖 multiplicity / 线性箭头（多用未禁止，见
-  [effects.md](effects.md)、[debt.md](debt.md) D22）。
+- 可变数据的安全边界：可变容器操作返回 `Eff []`，但要求 `MutOp` 标记；句柄是普通值，
+  可以逃逸（GC 所有权，见 [effects.md](effects.md) §8.8）。没有 region/ST 令牌；
+  也没有依赖 multiplicity / 线性箭头（多用未禁止，见 [effects.md](effects.md)、
+  [debt.md](debt.md) D22）。
 
 ## 7. 效果原语、Eff 动作与宿主层
 
@@ -254,7 +254,7 @@
 | `Base.Effect.Tty` | `TtyOp` | `ttyIsTty`（结果 `Bool`） | `@vuna@host@isTty`（wasm 恒 `False`） |
 | `Base.Effect.Exit` | `ExitOp` | `exitWith` | `@vuna@prim_eff_exit`（库路径）/ `@vuna@host@exitOp`（宿主行） |
 | `Base.Effect.Net` | `NetOp` | `netListen` / `netPort` / `netAccept` / `netRecv` / `netSend` / `netClose` / `netConnect`（含 `Within` 变体） | `@vuna@host@tryNet*` + `@vuna@prim_eff_hostStatus` |
-| （隐藏）`@vuna@Cell` | `Base.Effect.MutRef` 的私有单元 | — | `@vuna@prim_mrefNew` / `read` / `write`（句柄由精化器在 `withMutRef` 作用域里合成） |
+| （隐藏）`@vuna@Cell` | `Base.Container.MutRef` 句柄的内部表示 | — | `@vuna@prim_mrefNew` / `read` / `write`（由 `Base.Container.MutRef` 的 `alias record` 包住） |
 
 **执行与求值**：宿主原语是 `Eff [HostOp]` 动作叶子（`Base.Effect.Host` 的 `runHost` /
 `hostSync` 是唯一关闭器）；codegen 按 arity 包成 `MkEff`（零参原语是动作
