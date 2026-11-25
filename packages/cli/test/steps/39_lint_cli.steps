@@ -128,3 +128,13 @@ run: "$VUNA" lint --select todo-marker --max-warnings 0 "$TMPDIR/ignore-patterns
 exit: 1
 out-contains: Keep.gen.vuna
 out-contains: LN_TodoMarker
+# `max-warnings` 是整次运行的阈值：取运行根（cwd）的 manifest 链，不随首个文件所在包变化。
+# 成员包各自声明 `-1` 时，从 workspace 根 lint 两个包仍按根配置的 0 失败；在成员包目录内
+# 运行才用该包的 `-1`。
+run: sh -c 'p="$TMPDIR/lint-ws"; mkdir -p "$p/a/lib" "$p/b/lib"; printf "[workspace]\nmembers = [\"a\", \"b\"]\n\n[lint]\npreset = \"recommended\"\nmax-warnings = 0\n" > "$p/vuna.toml"; printf "[package]\nname = \"a\"\n\n[dependencies]\nvuna-base = \"%s\"\n\n[lint]\nmax-warnings = -1\n" "$VUNA_BASE" > "$p/a/vuna.toml"; printf "[package]\nname = \"b\"\n\n[dependencies]\nvuna-base = \"%s\"\n\n[lint]\nmax-warnings = -1\n" "$VUNA_BASE" > "$p/b/vuna.toml"; printf "%s\n" "module A where" "" "a : Int -> Int" "a x = if x == 1 then 1 else if x == 2 then 2 else 3" > "$p/a/lib/A.vuna"; printf "%s\n" "module B where" "" "b : Int -> Int" "b x = if x == 1 then 1 else if x == 2 then 2 else 3" > "$p/b/lib/B.vuna"'
+exit: 0
+run: sh -c 'cd "$TMPDIR/lint-ws" && "$VUNA" lint a/lib/A.vuna b/lib/B.vuna 2>&1'
+exit: 1
+out-contains: A.vuna:4:7: [LN_LiteralIfChain]
+run: sh -c 'cd "$TMPDIR/lint-ws/a" && "$VUNA" lint lib/A.vuna 2>&1'
+exit: 0

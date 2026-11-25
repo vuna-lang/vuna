@@ -78,6 +78,14 @@ record FileOutcome where
   fileOutcomeFixed : Int
   fileOutcomeError : Maybe String
 
+-- | 一次 lint 运行内跨文件复用的上下文：fixity 模块图与配置缓存。
+record LintRunEnv where
+  lintRunFixity : FixityEnv
+  lintRunConfig : LintConfigEnv
+
+emptyLintRunEnv : LintRunEnv
+emptyLintRunEnv = LintRunEnv emptyFixityEnv emptyLintConfigEnv
+
 -- ---------------------------------------------------------------
 -- finding 渲染 / 打印
 -- ---------------------------------------------------------------
@@ -217,13 +225,34 @@ existingDirs (path :: rest) acc =
 -- ---------------------------------------------------------------
 -- 配置
 -- ---------------------------------------------------------------
--- | 内部：配置的来源（显式文件 / 默认 / 就近 manifest）。
-configForFile : Member nFs FsOp r => LintOpts -> String -> Eff r (Check LintConfig)
-configForFile opts path =
+-- | 内部：配置的来源（显式文件 / 默认 / 就近 manifest），走目录级缓存。
+configForFile : Member nFs FsOp r => LintOpts -> LintConfigEnv -> String -> Eff r (LintConfigEnv, Check LintConfig)
+configForFile opts cfgEnv path =
   case opts.lintOptConfigPath of
-    Just p => loadLintConfigAt p
+    Just p =>
+      do
+        cfg <- loadLintConfigAt p
+        pure (cfgEnv, cfg)
     Nothing =>
-      if opts.lintOptNoConfig then pure (OkC defaultLintConfig) else loadLintConfigForFile path
+      if opts.lintOptNoConfig then
+        pure (cfgEnv, OkC defaultLintConfig)
+      else
+        lintConfigForFileCached cfgEnv path
+
+-- | 内部：整次运行的配置（`max-warnings` 的阈值来源）。取运行根（cwd）的 manifest 链；
+-- 每个文件的配置只决定该文件的规则严重度与 exclude。
+configForRun : Member nFs FsOp r => LintOpts -> LintConfigEnv -> Eff r (LintConfigEnv, Check LintConfig)
+configForRun opts cfgEnv =
+  case opts.lintOptConfigPath of
+    Just p =>
+      do
+        cfg <- loadLintConfigAt p
+        pure (cfgEnv, cfg)
+    Nothing =>
+      if opts.lintOptNoConfig then
+        pure (cfgEnv, OkC defaultLintConfig)
+      else
+        lintConfigForDirCached cfgEnv "."
 
 -- | 内部：命令行覆盖（select / ignore / max-warnings）。
 applyOpts : LintOpts -> LintConfig -> Check LintConfig
@@ -265,45 +294,42 @@ readStdinGo fuel acc =
 -- 单文件
 -- ---------------------------------------------------------------
 -- | 内部：对一份已知源码做 lint（配置/fixity 上下文按 configPath 解析）。
-lintText : Member nConsole ConsoleOp r, Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => LintOpts -> FixityEnv -> String -> String -> String -> Eff r (FixityEnv, FileOutcome)
+lintText : Member nConsole ConsoleOp r, Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => LintOpts -> LintRunEnv -> String -> String -> String -> Eff r (LintRunEnv, FileOutcome)
 lintText opts env displayPath configPath source =
   do
-    cfgR <- configForFile opts configPath
-    case cfgR of
-      ErrC e => pure (env, FileOutcome displayPath [] 0 (Just (diagText e)))
+    cfgR <- configForFile opts env.lintRunConfig configPath
+    let env1 = { env | lintRunConfig = firstOf cfgR }
+    case secondOf cfgR of
+      ErrC e => pure (env1, FileOutcome displayPath [] 0 (Just (diagText e)))
       OkC cfg0 =>
         case applyOpts opts cfg0 of
-          ErrC e => pure (env, FileOutcome displayPath [] 0 (Just (diagText e)))
+          ErrC e => pure (env1, FileOutcome displayPath [] 0 (Just (diagText e)))
           OkC cfg =>
             if lintExcluded displayPath cfg then
-              pure (env, FileOutcome displayPath [] 0 Nothing)
+              pure (env1, FileOutcome displayPath [] 0 Nothing)
             else
-              do
-                parsedR <- pure (parseSourceDetailed configPath source)
-                case parsedR of
-                  ErrC e => pure (env, FileOutcome displayPath [] 0 (Just (diagText e)))
-                  OkC parsed =>
-                    do
-                      looked <- fixitiesForParsed env configPath parsed.parsedFile
-                      env2 <- pure (firstOf looked)
-                      case secondOf looked of
-                        ErrC e => pure (env2, FileOutcome displayPath [] 0 (Just (diagText e)))
-                        OkC programFixities =>
-                          do
-                            linted <- pure (lintParsedWithConfig cfg programFixities source parsed)
-                            case linted of
-                              ErrC e => pure (env2, FileOutcome displayPath [] 0 (Just (diagText e)))
-                              OkC findings =>
-                                do
-                                  fixedR <- if opts.lintOptFix then fixFileWith opts cfg displayPath programFixities source findings else pure (OkC (findings, 0))
-                                  pure (
-                                      case fixedR of
-                                        ErrC e => (env2, FileOutcome displayPath [] 0 (Just (diagText e)))
-                                        OkC (remaining, fixed) => (env2, FileOutcome displayPath remaining fixed Nothing)
-                                    )
+              case parseSourceDetailed configPath source of
+                ErrC e => pure (env1, FileOutcome displayPath [] 0 (Just (diagText e)))
+                OkC parsed =>
+                  do
+                    looked <- fixitiesForParsed env1.lintRunFixity configPath parsed.parsedFile
+                    let env2 = { env1 | lintRunFixity = firstOf looked }
+                    case secondOf looked of
+                      ErrC e => pure (env2, FileOutcome displayPath [] 0 (Just (diagText e)))
+                      OkC programFixities =>
+                        case lintParsedWithConfig cfg programFixities source parsed of
+                          ErrC e => pure (env2, FileOutcome displayPath [] 0 (Just (diagText e)))
+                          OkC findings =>
+                            do
+                              fixedR <- if opts.lintOptFix then fixFileWith opts cfg displayPath programFixities source findings else pure (OkC (findings, 0))
+                              pure (
+                                  case fixedR of
+                                    ErrC e => (env2, FileOutcome displayPath [] 0 (Just (diagText e)))
+                                    OkC (remaining, fixed) => (env2, FileOutcome displayPath remaining fixed Nothing)
+                                )
 
 -- | 内部：lint 单个目标（文件或 `-` stdin），错误也作为结果。
-lintOne : Member nConsole ConsoleOp r, Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nStdin StdinOp r => LintOpts -> FixityEnv -> String -> Eff r (FixityEnv, FileOutcome)
+lintOne : Member nConsole ConsoleOp r, Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nStdin StdinOp r => LintOpts -> LintRunEnv -> String -> Eff r (LintRunEnv, FileOutcome)
 lintOne opts env path =
   if path == "-" then
     if opts.lintOptFix then
@@ -369,7 +395,7 @@ fixFileWith opts cfg path programFixities source findings =
 -- 多文件 / 输出
 -- ---------------------------------------------------------------
 -- | 内部：逐文件 lint，返回全部结果（错误文件也保留）。
-lintFiles : Member nConsole ConsoleOp r, Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nStdin StdinOp r => LintOpts -> FixityEnv -> List String -> List FileOutcome -> Eff r (FixityEnv, List FileOutcome)
+lintFiles : Member nConsole ConsoleOp r, Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nStdin StdinOp r => LintOpts -> LintRunEnv -> List String -> List FileOutcome -> Eff r (LintRunEnv, List FileOutcome)
 lintFiles opts env [] acc = pure (env, reverse acc)
 lintFiles opts env (path :: rest) acc =
   do
@@ -519,9 +545,10 @@ warningLimitCode opts outcomes =
 anyError : List FileOutcome -> Bool
 anyError outcomes = length (filter (\o => fileError o /= Nothing) outcomes) > 0
 
--- | 内部：输出全部结果并给出退出码。
-finishLint : Member nConsole ConsoleOp r, Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => LintOpts -> List FileOutcome -> Eff r Int
-finishLint opts outcomes =
+-- | 内部：输出全部结果并给出退出码。阈值取整次运行的配置（`configForRun`），不随
+-- 第一个文件所在包变化。
+finishLint : Member nConsole ConsoleOp r, Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => LintOpts -> LintRunEnv -> List FileOutcome -> Eff r Int
+finishLint opts env outcomes =
   do
     _ <-
       case opts.lintOptFormat of
@@ -530,14 +557,20 @@ finishLint opts outcomes =
         _ => printOutcomes opts outcomes
     case outcomes of
       [] => pure 0
-      o :: _ =>
+      _ =>
         do
-          cfgR <- configForFile opts o.fileOutcomePath
-          case cfgR of
-            ErrC _ => pure (if anyError outcomes then 2 else 1)
+          cfgR <- configForRun opts env.lintRunConfig
+          case secondOf cfgR of
+            ErrC e =>
+              do
+                _ <- consoleEprint "error: ${diagText e}\n"
+                pure 2
             OkC cfg0 =>
               case applyOpts opts cfg0 of
-                ErrC _ => pure (if anyError outcomes then 2 else if countErrors outcomes > 0 then 1 else 0)
+                ErrC e =>
+                  do
+                    _ <- consoleEprint "error: ${diagText e}\n"
+                    pure 2
                 OkC cfg => pure (outcomeCode opts cfg outcomes)
 
 -- ---------------------------------------------------------------
@@ -683,5 +716,5 @@ runLint args =
                           pure 2
                       else
                         do
-                          ran <- lintFiles opts emptyFixityEnv (dedupePaths targets) []
-                          finishLint opts (secondOf ran)
+                          ran <- lintFiles opts emptyLintRunEnv (dedupePaths targets) []
+                          finishLint opts (firstOf ran) (secondOf ran)

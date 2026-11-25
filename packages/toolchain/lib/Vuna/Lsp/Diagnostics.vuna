@@ -36,6 +36,7 @@ import Vuna.Compiler.Frontend.Packages.Pkg
 import Vuna.Files
 import Vuna.FixityEnv
 import Vuna.Compiler.Loader.Fixity
+import Vuna.Compiler.Loader.Flatten as Flatten
 import Vuna.Json
 import Vuna.Tool.Session
 import Vuna.Lint.Config
@@ -294,6 +295,8 @@ export record DiagCache where
   dcAux : Maybe AuxCache
   -- | 程序级 fixity 环境（lint 重排复用）。
   dcFix : FixityEnv
+  -- | 目录级 lint 配置缓存（lint 复用；manifest 每会话只读/解析一次）。
+  dcLintCfg : LintConfigEnv
 
 -- | 内部：缓存 key = 编译器二进制指纹 + 包名（包上下文与依赖图的变化由 `dcStats` 面兜住）。
 ctxKeyOf : Member nFs FsOp r, Member nEnv EnvOp r => PackageContext -> Eff r Int
@@ -416,7 +419,7 @@ buildSession ctx label text modName =
             key <- ctxKeyOf ctx
             base <- pure (toolSessionNewMemory "tool")
             db <- toolCommitValue base (lspNodeKey ctx) (sessionStatDeps (append tool.tcStats [manifestInfo]))
-            pure (Just (DiagCache label key ctx db (Just tool) clean builtSec (append tool.tcStats [manifestInfo]) Nothing emptyFixityEnv))
+            pure (Just (DiagCache label key ctx db (Just tool) clean builtSec (append tool.tcStats [manifestInfo]) Nothing emptyFixityEnv emptyLintConfigEnv))
 
 -- | 内部：会话里的工具接口可用且闭包未扩大 ⇒ 直接复用；否则（一次）重建。
 usableSession : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Maybe DiagCache -> PackageContext -> String -> String -> Maybe String -> List Import -> Eff r (Maybe DiagCache)
@@ -539,7 +542,7 @@ checkIncremental session label text modName imports =
           OkC (applied, warns, maybePkg, maybeAux) =>
             if applied then
               let
-                session2 = DiagCache session.dcLabel session.dcKey session.dcCtx session.dcDb session.dcTool session.dcClean session.dcBuiltSec session.dcStats maybeAux session.dcFix
+                session2 = DiagCache session.dcLabel session.dcKey session.dcCtx session.dcDb session.dcTool session.dcClean session.dcBuiltSec session.dcStats maybeAux session.dcFix session.dcLintCfg
               in case maybePkg of
                 Nothing => pure (Just session2, [], warns)
                 Just checkedPkg =>
@@ -557,7 +560,8 @@ sessionForFull Nothing ctx label =
     builtSec <- toolNowSec
     key <- ctxKeyOf ctx
     base <- pure (toolSessionNewMemory "tool")
-    pure (DiagCache label key ctx base Nothing [] builtSec [] Nothing emptyFixityEnv)
+    pure
+      (DiagCache label key ctx base Nothing [] builtSec [] Nothing emptyFixityEnv emptyLintConfigEnv)
 
 -- | 内部：全量精化的精简入口（`dtCheckSourceChecked` 需要包上下文），成功后写回当前模块接口。
 -- 返回（会话,（错误, 警告））；原来没有缓存时仍返回 `Nothing`，避免把无接口会话带进后续请求。
@@ -581,29 +585,29 @@ checkFullWith cache ctx label text modName =
 -- ---------------------------------------------------------------
 -- lint（会话复用 fixity 模块图；外部文件变化会随会话重建清空）
 -- ---------------------------------------------------------------
--- | 内部：对一份源码跑语法级 lint，返回（更新后的 fixity 环境, finding 转成的诊断）。
--- fixity 解析失败或 lint 失败时退化为空 finding；外部文件变化会随会话重建清空。
-lintWithEnv : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => FixityEnv -> String -> String -> Eff r (FixityEnv, List Diagnostic)
-lintWithEnv env label text =
+-- | 内部：对一份源码跑语法级 lint，返回（更新后的会话, finding 转成的诊断）。
+-- 复用调用方已经拿到的 `ParsedSource`（fixity 与规则扫描共用一次词法）；配置与 fixity
+-- 缓存随会话推进。fixity 解析失败或 lint 失败时退化为空 finding。
+lintWithEnv : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => DiagCache -> String -> String -> ParsedSource -> Eff r (DiagCache, List Diagnostic)
+lintWithEnv c label text parsed =
   do
-    cfgR <- loadLintConfigForFile label
-    cfg <-
-      pure (
-          case cfgR of
-            OkC c => c
-            ErrC _ => defaultLintConfig
-        )
-    looked <- fixitiesForFile env label text
-    case looked of
-      (env2, ErrC _) => pure (env2, [])
-      (env2, OkC fx) =>
-        do
-          linted <- pure (lintSourceWithConfig cfg fx text)
-          pure (
-              (env2, case linted of
-                  ErrC _ => []
-                  OkC findings => map findingToDiagnostic findings)
-            )
+    cfgR <- lintConfigForFileCached c.dcLintCfg label
+    let
+      c1 = { c | dcLintCfg = firstOf cfgR }
+      cfg =
+        case secondOf cfgR of
+          OkC x => x
+          ErrC _ => defaultLintConfig
+    looked <- fixitiesForParsed c.dcFix label parsed.parsedFile
+    let c2 = { c1 | dcFix = firstOf looked }
+    case secondOf looked of
+      ErrC _ => pure (c2, [])
+      OkC fx =>
+        pure (
+            (c2, case lintParsedWithConfig cfg fx text parsed of
+                ErrC _ => []
+                OkC findings => map findingToDiagnostic findings)
+          )
 
 -- | 内部：lint 严重度映射到编译器严重度。
 lintSeverityOf : LintSeverity -> Severity
@@ -673,29 +677,32 @@ diagnosticsForCachedWith includeUnused cache uri text =
     case ctxR of
       ErrC e => pure (cache, "", [e])
       OkC (label, ctx) =>
-        case parseSource label text of
+        case parseSourceDetailed label text of
           ErrC e => pure (cache, label, [e])
-          OkC (SourceFile hdr imports fixities decls _ _ _) =>
-            let
-              modName =
-                case hdr of
-                  Just (ModDecl n hasList items _ _ _ sp) => Just n
-                  Nothing => Nothing
-            in do
-              checked <- checkDiagnostics cache label ctx text modName imports
-              let
-                cache2 = firstOf checked
-              in do
-                linted <-
-                  case cache2 of
-                    Just c => lintWithEnv c.dcFix label text
-                    Nothing => lintWithEnv emptyFixityEnv label text
+          OkC parsed =>
+            case parsed.parsedFile of
+              SourceFile hdr imports _ _ _ _ _ =>
                 let
-                  cache3 =
-                    case cache2 of
-                      Just c => Just (DiagCache c.dcLabel c.dcKey c.dcCtx c.dcDb c.dcTool c.dcClean c.dcBuiltSec c.dcStats c.dcAux (firstOf linted))
+                  modName =
+                    case hdr of
+                      Just (ModDecl n hasList items _ _ _ sp) => Just n
                       Nothing => Nothing
-                in pure (cache3, label, append (firstOf (secondOf checked)) (append (secondOf linted) (filter (diagOwns label) (filter (warnAllowed includeUnused) (dedupeWarnings (secondOf (secondOf checked)))))))
+                in do
+                  checked <- checkDiagnostics cache label ctx text modName imports
+                  let
+                    cache2 = firstOf checked
+                  in do
+                    lintBase <-
+                      case cache2 of
+                        Just c => pure c
+                        Nothing => sessionForFull Nothing ctx label
+                    linted <- lintWithEnv lintBase label text parsed
+                    let
+                      cache3 =
+                        case cache2 of
+                          Just _ => Just (firstOf linted)
+                          Nothing => Nothing
+                    in pure (cache3, label, append (firstOf (secondOf checked)) (append (secondOf linted) (filter (diagOwns label) (filter (warnAllowed includeUnused) (dedupeWarnings (secondOf (secondOf checked)))))))
 
 -- | 洞目标（hover / case split）：URI + buffer 文本 → （新缓存,（是否依赖完整, 目标列表））。
 -- 三级来源：1) 增量装配（依赖包接口 + 本包干净模块预置，import 闭包不再逐个从磁盘 parse +
@@ -765,7 +772,18 @@ isJustCache (Just c) = True
 -- | 内部：替换会话里的 termAux 缓存，其余字段保持不变。
 setAuxCache : DiagCache -> Maybe AuxCache -> DiagCache
 setAuxCache c aux =
-  DiagCache c.dcLabel c.dcKey c.dcCtx c.dcDb c.dcTool c.dcClean c.dcBuiltSec c.dcStats aux c.dcFix
+  DiagCache
+    c.dcLabel
+    c.dcKey
+    c.dcCtx
+    c.dcDb
+    c.dcTool
+    c.dcClean
+    c.dcBuiltSec
+    c.dcStats
+    aux
+    c.dcFix
+    c.dcLintCfg
 
 -- | 内部：回退路径（会话不可用 / 增量装配不适用）——只精化当前 buffer（与 `vuna goal` 同一条
 -- 路径：程序级 fixity → reorder → 容错精化）；import 闭包不展开，跨模块名字按源文本解析，
@@ -776,24 +794,8 @@ goalsLocalOrFull : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess Proce
 goalsLocalOrFull allowFull cache ctx label text =
   do
     _ <- pure (obsMark "vuna.lsp.goals.local")
-    looked <- fixitiesForFile emptyFixityEnv label text
-    let
-      localGoals =
-        case secondOf looked of
-          ErrC e => []
-          OkC programFixities =>
-            case parseSourceDetailed label text of
-              ErrC e => []
-              OkC parsed =>
-                case parsed.parsedFile of
-                  SourceFile _ _ fx decls0 _ _ _ =>
-                    case reorderProgram (tableOfKeepOpsCst parsed.parsedCst (append programFixities fx)) decls0 of
-                      ErrC e => []
-                      OkC decls =>
-                        case goalsOfProgramTolerant (toRastDecls decls) of
-                          ErrC e => []
-                          OkC gs => gs
-    in if allowFull then
+    localGoals <- localGoalsAt ctx label text
+    if allowFull then
       do
         _ <- pure (obsMark "vuna.lsp.goals.full")
         gsR <- dtGoalsSourceTolerant ctx label text
@@ -804,6 +806,28 @@ goalsLocalOrFull allowFull cache ctx label text =
           )
     else
       pure (cache, False, localGoals)
+
+-- | 内部：只精化当前 buffer 的洞目标（一次解析同时供 fixity 与 tolerant 精化）。
+localGoalsAt : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> String -> Eff r (List DtGoalInfo)
+localGoalsAt ctx label text =
+  case parseSourceDetailed label text of
+    ErrC e => pure []
+    OkC parsed =>
+      case parsed.parsedFile of
+        SourceFile _ _ fx decls0 _ _ _ =>
+          do
+            looked <- Flatten.fixitiesFromParsed ctx [] label parsed.parsedFile
+            pure (
+                case looked of
+                  ErrC e => []
+                  OkC (_, programFixities) =>
+                    case reorderProgram (tableOfKeepOpsCst parsed.parsedCst (append programFixities fx)) decls0 of
+                      ErrC e => []
+                      OkC decls =>
+                        case goalsOfProgramTolerant (toRastDecls decls) of
+                          ErrC e => []
+                          OkC gs => gs
+              )
 
 -- | 内部：把诊断列表渲染成 `textDocument/publishDiagnostics` 通知（带 version）。
 publishDiagnostics : String -> Int -> String -> List Diagnostic -> Json
@@ -865,7 +889,7 @@ writeBackModule session label text checked (Just name) =
         case attempt of
           Nothing => pure session
           Just (ErrC _) => pure session
-          Just (OkC mi) => pure (DiagCache session.dcLabel session.dcKey session.dcCtx session.dcDb session.dcTool (mi :: session.dcClean) session.dcBuiltSec session.dcStats session.dcAux session.dcFix)
+          Just (OkC mi) => pure (DiagCache session.dcLabel session.dcKey session.dcCtx session.dcDb session.dcTool (mi :: session.dcClean) session.dcBuiltSec session.dcStats session.dcAux session.dcFix session.dcLintCfg)
     else
       pure session
 

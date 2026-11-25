@@ -307,20 +307,6 @@ arrayStrings (_ :: rest) = Nothing
 -- ---------------------------------------------------------------
 -- 向上收集 manifest 并合并
 -- ---------------------------------------------------------------
--- | 读一个 manifest 的 `[lint]`；文件不存在给 `Nothing`。
-readManifestLint : Member nFs FsOp r => String -> Eff r (Check (Maybe LintConfig))
-readManifestLint dir =
-  let
-    path = "${dir}/vuna.toml"
-  in do
-    exists <- fsFileExists path
-    if not exists then
-      pure (OkC Nothing)
-    else
-      do
-        text <- fsReadFile path
-        pure (parseLintConfig path text)
-
 -- | 从文件所在目录向上收集 manifest 目录（内层在前）。
 manifestDirsUp : Member nFs FsOp r => Int -> String -> List String -> Eff r (List String)
 manifestDirsUp fuel dir seen =
@@ -363,22 +349,87 @@ loadLintConfigAt path =
 -- | 读一个文件的有效 lint 配置：外层 manifest 先应用，内层覆盖；没有配置时用默认。
 export loadLintConfigForFile : Member nFs FsOp r => String -> Eff r (Check LintConfig)
 loadLintConfigForFile path =
-  let
-    start = parentOf path
-  in do
-    dirs <- manifestDirsUp (strLength path + 8) start []
-    mergeManifests (reverse dirs) defaultLintConfig
-
--- | 内部：按外层→内层顺序合并 manifest 配置。
-mergeManifests : Member nFs FsOp r => List String -> LintConfig -> Eff r (Check LintConfig)
-mergeManifests [] cfg = pure (OkC cfg)
-mergeManifests (dir :: rest) cfg =
   do
-    loaded <- readManifestLint dir
-    case loaded of
-      ErrC e => pure (ErrC e)
-      OkC Nothing => mergeManifests rest cfg
-      OkC (Just inner) => mergeManifests rest (mergeConfig cfg inner)
+    ran <- lintConfigForFileCached emptyLintConfigEnv path
+    pure (secondOf ran)
+
+-- ---------------------------------------------------------------
+-- 目录级缓存
+-- ---------------------------------------------------------------
+-- | 一次工具运行内的配置缓存：manifest 的 `[lint]`（按 manifest 路径）与合并后的有效
+-- 配置（按文件所在目录）。同一目录的文件共享一次合并结果；一个 manifest 只读/解析一次。
+export record LintConfigEnv where
+  lintCfgEnvManifests : List (String, Maybe LintConfig)
+  lintCfgEnvDirs : List (String, LintConfig)
+
+-- | 空缓存。
+export emptyLintConfigEnv : LintConfigEnv
+emptyLintConfigEnv = LintConfigEnv [] []
+
+-- | 内部：按键查缓存（同名键取最近写入的一条）。
+cfgCacheLookup : String -> List (String, a) -> Maybe a
+cfgCacheLookup key [] = Nothing
+cfgCacheLookup key ((k, v) :: rest) = if k == key then Just v else cfgCacheLookup key rest
+
+-- | 内部：删掉某个键的全部条目（写入前先清重复，保证一键一条）。
+cfgCacheForget : String -> List (String, a) -> List (String, a)
+cfgCacheForget key [] = []
+cfgCacheForget key ((k, v) :: rest) =
+  if k == key then cfgCacheForget key rest else (k, v) :: cfgCacheForget key rest
+
+-- | 内部：写入缓存，同名键只保留最新一条（新条目置顶）。
+cfgCachePut : String -> a -> List (String, a) -> List (String, a)
+cfgCachePut key value entries = (key, value) :: cfgCacheForget key entries
+
+-- | 带缓存地取一个文件的有效配置；返回推进后的缓存（读取失败也保留已解析的 manifest）。
+export lintConfigForFileCached : Member nFs FsOp r => LintConfigEnv -> String -> Eff r (LintConfigEnv, Check LintConfig)
+lintConfigForFileCached env path = lintConfigForDirCached env (parentOf path)
+
+-- | 带缓存地取一个目录的有效配置（`max-warnings` 的整次运行阈值也从这里取）。
+export lintConfigForDirCached : Member nFs FsOp r => LintConfigEnv -> String -> Eff r (LintConfigEnv, Check LintConfig)
+lintConfigForDirCached env dir =
+  case cfgCacheLookup dir env.lintCfgEnvDirs of
+    Just cfg => pure (env, OkC cfg)
+    Nothing =>
+      do
+        dirs <- manifestDirsUp (strLength dir + 8) dir []
+        merged <- mergeManifestsCached env (reverse dirs) defaultLintConfig
+        case secondOf merged of
+          ErrC e => pure (firstOf merged, ErrC e)
+          OkC cfg =>
+            let
+              env2 = firstOf merged
+            in pure ({ env2 | lintCfgEnvDirs = cfgCachePut dir cfg env2.lintCfgEnvDirs }, OkC cfg)
+
+-- | 内部：按外层→内层顺序合并 manifest 配置（manifest 读取走缓存）。
+mergeManifestsCached : Member nFs FsOp r => LintConfigEnv -> List String -> LintConfig -> Eff r (LintConfigEnv, Check LintConfig)
+mergeManifestsCached env [] cfg = pure (env, OkC cfg)
+mergeManifestsCached env (dir :: rest) cfg =
+  do
+    loaded <- readManifestLintCached env dir
+    case secondOf loaded of
+      ErrC e => pure (firstOf loaded, ErrC e)
+      OkC Nothing => mergeManifestsCached (firstOf loaded) rest cfg
+      OkC (Just inner) => mergeManifestsCached (firstOf loaded) rest (mergeConfig cfg inner)
+
+-- | 内部：读一个 manifest 的 `[lint]`（按路径缓存）；文件不存在给 `Nothing`。
+readManifestLintCached : Member nFs FsOp r => LintConfigEnv -> String -> Eff r (LintConfigEnv, Check (Maybe LintConfig))
+readManifestLintCached env dir =
+  let
+    path = "${dir}/vuna.toml"
+  in case cfgCacheLookup path env.lintCfgEnvManifests of
+    Just cached => pure (env, OkC cached)
+    Nothing =>
+      do
+        exists <- fsFileExists path
+        if not exists then
+          pure ({ env | lintCfgEnvManifests = cfgCachePut path Nothing env.lintCfgEnvManifests }, OkC Nothing)
+        else
+          do
+            text <- fsReadFile path
+            case parseLintConfig path text of
+              ErrC e => pure (env, ErrC e)
+              OkC cfg => pure ({ env | lintCfgEnvManifests = cfgCachePut path cfg env.lintCfgEnvManifests }, OkC cfg)
 
 -- | 合并两份配置：`inner` 的规则/上限/排除覆盖 `base`。
 export mergeConfig : LintConfig -> LintConfig -> LintConfig

@@ -75,7 +75,7 @@ ID 是稳定引用（`层前缀-序号`）：条目关闭即删除该行，ID �
 | LD-15 · C | `Addr.vuna` 的模块摘要：无条件并入 Prelude 摘要（过近似） | `Loader/Addr.vuna` | 后续 |
 | LD-16 · C | `Fingerprint.vuna`：无 build-id 时身份退化为「路径+大小+mtime」 | `Loader/Fingerprint.vuna` | 后续 |
 | LD-17 · B | `Expand.vuna` 的宏入口：只在表达式位置、只认裸 `EVar` 应用头 | `Loader/Expand.vuna` | 后续 |
-| LD-19 · D | fixity 有两套可见性真源：重排吃 `dedupeFixitiesOf` 汇总的**全部已加载模块**声明，unused-import 判据只看**直接 import** 并宣称 import 是唯一手段；`Module.moduleFixitiesOf` 的注释与实现相反 | `Loader/Fixity.vuna`、`Loader/Flatten.vuna`（`dedupeFixitiesOf` / `importProvidesUsedFixity`）、`Loader/Modules.vuna` | 后续 |
+| LD-19 · D | fixity 有两套可见性真源：重排吃 `dedupeFixitiesOf` 汇总的**全部已加载模块**声明，unused-import 判据只看**直接 import** 并宣称 import 是唯一手段；`Module.moduleFixitiesOf` 的注释与实现相反。工具链的 `FixityEnv` 又把**已加载 union** 跨文件推进，同一文件单独 lint 与在目录里 lint 可能看到不同的可见表（重复声明 / unknown fixity 随文件顺序变化） | `Loader/Fixity.vuna`、`Loader/Flatten.vuna`（`dedupeFixitiesOf` / `importProvidesUsedFixity`）、`Loader/Modules.vuna`、`Vuna/FixityEnv.vuna` | 后续 |
 | LD-20 · D | 同一 AST 形状有四份手写遍历（Fixity / Expand / Resolve / Flatten）：Fixity 用 catch-all `icInternal`，新增节点只在这条链「编译期不报错」；Flatten 的 `declRefNames` 漏节点会静默影响 unused-import | `Loader/{Fixity,Expand,Resolve,Flatten}.vuna` | 后续 |
 | LD-21 · D | Loader 的 prelude 名单与 `Elab.Sig` 不同：`Resolve.dtPreludeNames` 含内建类型构造子，`Sig.topPreludeNames` 不含；值位置的裸 `Array` / `@vuna@Cell` 在两层得到不同结论 | `Loader/Resolve.vuna`、`Elab/Sig.vuna`、`Base/Intrinsics.vuna` | 后续 |
 | LD-22 · ⚠️C | `Layers.vuna` 的层闭包靠手算上界，`closureGo` 耗尽**返回部分闭包不报错** ⇒ 越层 import 可被静默放过；`LayerViolation` 的字段先塞空串再由 `ldErr4` 另带参数；`checkProjectLayers` 的计数被调用方丢弃 | `Loader/Layers.vuna`、`Loader/Flatten.vuna` | 后续 |
@@ -174,6 +174,7 @@ ID 是稳定引用（`层前缀-序号`）：条目关闭即删除该行，ID �
 | D84 · C | `examples/multi` 的包管理冒烟没有 CI 门禁：原 `checks.vuna-package` 未登记，现有 gate/e2e/tools tier 与 steps 都不覆盖它的 build/test | `nix/checks/default.nix`、`nix/checks/vuna-package.sh`、`cli/test/steps/28_packages.steps` | 后续 |
 | D87 · C | 词法扫描器的 fuel 初值仍是 `4*len+64` 的估算上界；字符游标已改成「原串 + 偏移」 | `Frontend/Lexer.vuna`（`sourceFuel`、`collect*` / `skip*`）；[performance-hotspots.md](performance-hotspots.md) §2.1 | 后续（低优先） |
 | D88 · C | 同一模块在一次 `check` 里仍被语法分析约 2 次：加载一次 + `ifaceModsEff` 的 header 解析一次 | `Loader/Flatten.parseFileWithPath`、`Driver/Compile.loadHeaderEff`；[performance.md](performance.md) §6.1 | 后续（低优先） |
+| D136 · C | 包加载没有 memo：一次 `contextForFile` 的 `loadPackage` 沿依赖 DAG 重复 `loadManifestAt`（单文件 lint 实测 39 次 `vuna.toml` 打开，`packages/base/vuna.toml` 18 次）；同一个依赖被多个父包各读一遍 | `Frontend/Packages/Pkg.vuna`（`loadPackageWalk` / `loadDependencyList`）、`Vuna/FixityEnv.contextForFile`；[performance.md](performance.md) §6.1 | 后续（按目录 memo；需显式包图或线程化缓存） |
 | D91 · C | 互递归组的调用出现在 `let` / `case` 位置时，实参个数推断曾在部分形状上误报 `TC_TooManyArgs`；当前编译器上已知形状都走正确路径，原始触发用例未保留 | `compiler/test/corpus/term/12_let_case_call.vuna`、`Elab/Term/Impl.vuna`（应用脊椎的 `inferArgsGo`） | 后续（需要原始用例） |
 | D92 · C | 模式矩阵降级在个别嵌套模式 alt 上报无位置的假错 `TC_BranchTooFewArgs`（`:0:0`）；改写成层层 `case` 即通过 | `Elab/Match`（`ctorAltList` / `clausesForCtor`）、`Elab/Sig.kindDomains` | 后续 |
 | D93 · C | `Elab` 的选择性重导出门面已删除：子模块即公开面，没有「门面只重导出部分公开名」的封装 | `Elab/*.vuna`、`packages/compiler/vuna.toml` 的 `[export]`；[compiler.md](compiler.md) | 后续 |

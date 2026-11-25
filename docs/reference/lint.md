@@ -53,9 +53,11 @@ redundant-if = "off"             # 默认关闭；all 预设可开
 ```
 
 配置从文件所在目录向上收集 manifest：外层（workspace 根）先应用，内层覆盖；命令行
-`--select` / `--ignore` / `--max-warnings` 最后覆盖。`--config PATH` 读显式文件的 `[lint]`，
-`--no-config` 使用默认（recommended、全部 error）。改 `[lint]` 不改变 check/build 缓存
-（`manifestSemanticText` 不含它）。
+`--select` / `--ignore` / `--max-warnings` 最后覆盖。每个文件的配置只决定该文件的规则严重度
+与 `exclude`；`max-warnings` 是**整次运行**的阈值，取运行根（cwd）的 manifest 链，不随文件
+顺序或首个文件所在包变化。`--config PATH` 读显式文件的 `[lint]`，`--no-config` 使用默认
+（recommended、全部 error）。改 `[lint]` 不改变 check/build 缓存（`manifestSemanticText`
+不含它）。
 
 ## 1.2 源码抑制
 
