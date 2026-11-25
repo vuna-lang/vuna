@@ -569,12 +569,14 @@ T0 仍是 0.36x c / 0.23x ml（§1.6.2 的裁剪不改变地板读数）。
 
 - **`IrNatCase` 的 0 / 后继事实**：给 `nat_bits` 这类结构递归补范围；
 - **未引用 `.bss` 缓冲**：可达性裁剪只裁了函数，8 MiB 的 `rt_read_buf` 等仍进产物。
-- **循环代数化（未做）**：默认 C 会做周期展开 + 归纳变量消去（`tco_mutual` 的 C 把 2 步
-  折成 `subq $2; jne`；`tco_wide` / `tco_arity6` 的常量累加 / 旋转被折成闭环），这一档
-  还没做——同形 C（关掉这些 loop pass）下 native 与 C 已在同一量级。§1.6.4 的回边直连 /
-  守卫复用只收掉了每轮的分派与守卫测试。
-- **分支选择（未做）**：`tco_unrotated` 的 `flag` 分派已由常量守卫判定直连，但两侧尾调用
-  仍是两条分支；C 用 `cmov` 把 `flag ? n : -n` 合成一条。这属于控制流 if-conversion。
+- **周期展开（未做）**：默认 C 会把确定性状态循环/k 步递推整段展开（`tco_mutual` 的 C
+  折成 `subq $2; jne`）。§1.6.4 的仿射累加折叠已经把退出表达式仿射的循环收成累加器
+  （`tco_wide` / `tco_arity6`），但周期展开与二阶归纳仍没有做；同形 C（关掉这些 loop
+  pass）下 native 与 C 已在同一量级。
+- **通用 if-conversion（未做）**：`tco_unrotated` 的 guard 循环已用「尾位置 if 合并 +
+  `BoolStep`」变成 `acc + select(1, 2)` 的无分支更新，但 `step` 两臂仍是 `acc+n` /
+  `acc-n` 的两条尾调用；C 用 `cmov` 把 `flag ? n : -n` 合成一条。把任意标量选择落成
+  `cmov` 需要值位置的 if-conversion，不在当前 pass 的覆盖内。
 
 #### 1.6.2 入口初始化裁剪
 
@@ -606,7 +608,7 @@ exec（~200 µs）主导，init 只剩 10–20 µs。裁剪的收益在产物（
 | `scalar_cmp` | 1.98x | **1.00x** | 比较改 `xor rax, rax; cmp; setcc`，切断 `setcc al` 对上一轮 `rax` 的部分寄存器依赖 |
 | `scalar_ilp` | 1.54x | **0.99x** | `d = d*5+7` 折成 `lea d, [d+d*4+7]`（1 拍替 3 拍 `imul`），`a += n*3` 也走 `lea` |
 | `scalar_muladd` | 1.24x | **0.96x** | `& 0xFFFF_FFFF` 折成 `mov r32, r32`（零扩展），省掉一次 scratch 装掩码 |
-| `scalar_divsigned` | 1.72x | **1.19x** | 负被除数的 63-bit wrap + `/ 2^k` 融成 `lea x+x+c` + `shl` + `cmovns` + `sar k+1`（原 `sar 63` + `and` + `add`；上一档的 `test`+`lea`+`cmovns` 仍留 6 拍链） |
+| `scalar_divsigned` | 1.72x | **1.00x** | 负被除数的 63-bit wrap + `/ 2^k` 先融成 `lea x+x+c` + `shl` + `cmovns` + `sar k+1`；§1.6.4 的形参区间证明被除数已归一化后省掉 `shl`，`cmovs` 直接吃 `sub` 留下的符号位（3 跳链） |
 | `float_math` | 2.5x | **~1.0x** | 浮点形参常驻 xmm8（前一档）＋ `if <浮点比较> then <字面量> else <字面量>` 改掩码选择（`cmpltsd` + `andpd`，14 条降到 4 条） |
 
 读数在同一台机器（Ryzen 7 7840HS）同一会话内交替测得，loadavg 3–5，绝对 ms 只作方向
@@ -621,36 +623,52 @@ C ~3.1ms）：剩下的差别只有 `movapd` 往返与常量装填。掩码选�
 目标寄存器还能再省 1–2 条（实测 10.3ms → 9.6ms，与 C 同档），但那要做一次链式目标
 改写，留作单独一档。
 
-#### 1.6.4 T2 回边直连与守卫复用（2026-11-25）
+#### 1.6.4 T2 回边直连、循环代数化与守卫复用（2026-11-25/26）
 
-T2 的控制流 / 尾调用差距里，一部分来自「每轮重新分派 + 重复守卫测试」，不是调用约定
-本身。`Native.Regs.optimizeDispatch`（[native.md](native.md) §3.13）与标量槽提升落地
-六件事：
+T2 的控制流 / 尾调用 / 循环体差距里，大部分来自「每轮重新分派、重复守卫测试、把整组
+形参都留在循环里」，不是调用约定本身。`Native.Regs.optimizeDispatch`
+（[native.md](native.md) §3.13）、`Native.Affine`（§3.14）、`Native.Inline.mergeTailIfs`
+（§3.15）与 `Native.Params`（§3.16）落地这些机制：
 
 1. **稠密分派回边直连**：臂在回边前把 scrutinee 写成常量时，回边直接接到目标臂；臂尾的
    `sub n, 1` 同时给守卫提供标志位。`state_machine` 每步从「间接跳转 + 守卫测试」降到
    `add` / `sub` / `jle`（臂尾不再有 `jmp`）。
-2. **常量守卫**：回边处守卫测的寄存器是常量时直接判方向——`tco_unrotated` 的 `flag` 分派
-   不再每轮测试，`= 0` / `= 1` 两个臂直接落到下一个臂。
-3. **两级守卫旋转**：`tco_mutual` 内联后的 `if n <= 0 then a else if n <= 1 then b else
-   loop (n - 2)` 先测内层守卫，快路径每轮只剩 `sub` / `cmp` / `jg`。
-4. **自递归循环的守卫标志复用**：`micro_tco` / `tco_arity6` / `tco_args` / `tco_wide` 的
-   体尾 `sub` 直接给回边 `jg` 提供标志位，每轮少一条 `test`。
-5. **标量三元选择与帧槽中转折叠**：`tco_nat` 的饱和加法把两端的 `mov d, rax` 收成直接
-   写 `d`、常量提升到循环外；`tco_arity6` 的中转槽往返换成寄存器搬运。
-6. **循环形参留在来参寄存器**：`tco_wide` 的 `a`–`f` 不再每轮 `[rbp-…]` load / store，
-   `state_machine` 的 `s` / `acc` / `n` 也省掉 push/pop（[native.md](native.md) §3.7）。
+2. **0/1 状态回边**：`s = xor(setcc, 1)` 的 default 臂走 `test s, s; je 臂0; jmp 臂1`，
+   不再回跳转表。
+3. **常量守卫**：回边处守卫测的寄存器是常量时直接判方向（`tco_unrotated` 的 `flag`）。
+4. **两级守卫旋转**：`tco_mutual` 内联后的 `if n <= 0 … else if n <= 1 … else loop (n-2)`
+   先测内层守卫，快路径每轮只剩 `sub` / `cmp` / `jg`。
+5. **自递归循环的守卫标志复用**：体尾 `sub` 直接给回边 `jg` 提供标志位，每轮少一条
+   `test`（`micro_tco` / `tco_arity6` / `tco_args` / `tco_wide`）。
+6. **标量三元选择与帧槽中转折叠**：饱和加法两端的 `mov d, rax` 收成直接写 `d`；只出现
+   两次的帧槽往返换成寄存器搬运。
+7. **循环形参留在来参寄存器**：`tco_wide` 的 `a`–`f` 不再逐轮 load / store，
+   `state_machine` 的 `s` / `acc` / `n` 省掉 push/pop（[native.md](native.md) §3.7）。
+8. **仿射累加折叠 + 常量项移位**：`tco_wide` 的 8 个常量累加与 `tco_arity6` 的参数旋转
+   折叠成一个累加器（`s += n; n -= 1`），常量项再挪进 wrapper 初值（§3.14）。
+9. **饱和求和拆分**：`tco_nat` 的入口计数有界时走普通 `+` 的快循环，越界才走保留饱和的
+   慢循环（§3.14）。
+10. **尾位置 if 合并 + `BoolStep` 选择**：`tco_unrotated` 的 guard 循环把 `acc + 1` /
+    `acc + 2` 合成 `acc + select(1, 2)`，选择落成 `xor` + `add`，不再每轮条件分支（§3.15）。
+11. **提升后的短循环对齐**：槽提升 / 折叠之后按最终指令数再补 `.p2align 4`（T1 的
+    `scalar_bit` / `scalar_divsigned` 与各 T2 环都受益）。
+12. **形参区间不动点 + 归一化被除数除法**：`Native.Params`（§3.16）给循环形参补上整程序
+    区间（入口调用的常量实参 + 守卫下的自调用实参），于是 `acc - n` 可证明不溢出，
+    `Native.Module.normOf` 认定被除数已归一化，常量的有符号除法不再需要 `shl` 回罩：
+    `sub S, B; lea T, [S+C]; cmovs S, T; sar S, k`。`scalar_divsigned` 的循环体从 8 条
+    指令、4 跳关键路径（`sub → shl → cmov → sar`）降到 7 条、3 跳（`sub → cmovs → sar`），
+    与手写 C 同形。`Range.divRange` 同时补上负被除数的对称幅值界，不动点才能收敛。
 
-同一窗口（`--target native --tier t2 --runs 15`，loadavg 1.7；绝对值不可与旧基线直接
-比，CPU 比值仍按同窗口自洽）：t2 cpu 几何平均 **1.70x → 1.26x C**。其中
-`tco_mutual` 2.2x → 0.98x、`state_machine` 2.8x → 1.26x、`tco_args` 1.1x、
-`micro_tco` 0.93x、`tco_wide` 2.1x → 1.59x、`tco_arity6` 1.37x、`tco_unrotated` 1.34x。
-`tco_wide` / `tco_arity6` / `tco_nat`（1.66x）的剩余差距是默认 C 的归纳变量消去 / 周期
-展开与 `cmov` if-conversion（见上一节「下一步」）；`tco_nat` 还多付每轮一次 Nat 饱和
-检查（C 对照没有饱和语义）。
-
-基线尚未重标：`bench/baselines/programs.json` 仍是旧口径，重标用
-`sh bench/update-baselines.sh --only programs`。
+同窗口（`--target native --runs 15`，loadavg 2–6；绝对值不可与旧基线直接比，CPU 比值
+按同窗口自洽）：**t0 0.89x / t1 0.99x / t2 0.95x C**（t2 基线 1.70x），T0 一档全部
+< 0.9x，T1 最大 1.13x（`nat_bits`）、T2 最大 1.16x（`state_machine`）。逐项：
+`state_machine` 2.8x → 1.16x、`tco_nat` 1.66x → 0.96x、`tco_wide` 2.1x → 0.84x、
+`tco_arity6` 1.37x → 0.69x、`tco_mutual` 2.2x → 0.92x、`tco_args` 1.14x、
+`tco_unrotated` 2.0x → 1.07x、`micro_tco` 0.93x、`tco_narrow_wide` 0.96x；T1 的
+`scalar_bit` 1.94x → 1.12x、`scalar_divsigned` 1.72x → 1.00x。剩余差距集中在默认 C 的
+**周期展开**：`state_machine` 的 9 状态链被 C 直接串成直线、`tco_mutual` / `tco_wide`
+的闭环被折成 `subq $2; jne`；vuna 侧只有「回边直连 + 仿射折叠」，还没做周期展开与
+二阶归纳。
 
 基线尚未重标：`bench/baselines/programs.json` 仍是旧口径，重标用
 `sh bench/update-baselines.sh --only programs`。

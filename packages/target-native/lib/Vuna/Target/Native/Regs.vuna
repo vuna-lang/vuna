@@ -450,8 +450,9 @@ foldSlotFuel fuel instrs =
       Just ys => foldSlotFuel (fuel - 1) ys
 
 -- | 找第一处可折叠的 `mov [slot], rS … mov rD, [slot]`；返回 Nothing 表示没有。
+--   标量槽（`NClsScalar`）的值不会是 GC 根，所以来源可以是任意寄存器；指针槽不折。
 foldSlotOnce : List Instr -> List Instr -> Maybe (List Instr)
-foldSlotOnce whole [] = Nothing
+foldSlotOnce _ [] = Nothing
 foldSlotOnce whole (i :: rest) =
   case i of
     IMov (OpMem Rbp off) (OpReg src) =>
@@ -958,7 +959,10 @@ threadBlock disps tables guards safeArms safeDisps deadRegs block rest =
                               if memReg d.tdReg deadRegs then dropConstWrite d.tdReg pre else pre
                           in append pre2 (append (append tests [IJcc inv fall]) tail)
                         Nothing => block
-                    Nothing => block
+                    Nothing =>
+                      case zeroOneEdge d guard pre tables rest of
+                        Just out => out
+                        Nothing => block
                 Nothing => block
             Nothing => block
         _ => block
@@ -983,10 +987,15 @@ safeArmLabels instrs tables =
 --   跳转引用）才成立。
 fastGuardEdge : ThrGuard -> List Instr -> String -> List String -> List String -> Bool
 fastGuardEdge guard pre arm safeArms safeDisps =
+  fastGuardOnTest guard pre && memStr arm safeArms && memStr guard.tgTarget safeDisps
+
+-- | 体尾的 `sub n, k`（k ≥ 1）之后 `jg` 与 `test n, n; jg` 等价：臂只在守卫通过后
+--   执行，n > 0 时减 1 不溢出。
+fastGuardOnTest : ThrGuard -> List Instr -> Bool
+fastGuardOnTest guard pre =
   case guard.tgTest of
     ITest r1 r2 =>
-      sameReg r1 r2
-        && guard.tgCc == "jg" && memStr arm safeArms && memStr guard.tgTarget safeDisps && (
+      sameReg r1 r2 && guard.tgCc == "jg" && (
           case lastInstr pre of
             Just (IBinReg "sub" rr (OpImm kk)) => sameReg rr r1 && kk >= 1
             _ => False
@@ -1048,7 +1057,7 @@ optimizeDispatch raw =
       blocks = map (addFallLabelToBlock guards) (splitBlocks instrs)
       deadRegs = deadStateRegs disps guards instrs
       threaded = threadBlocks disps tables guards safeArms safeDisps deadRegs blocks
-    in rotateSelfLoops (rotateGuardBlocks guards (splitBlocks threaded))
+    in alignSmallLoops (foldDivSignChains (foldDivChains (dropDeadFlagWrites (rotateSelfLoops (rotateGuardBlocks guards (splitBlocks threaded))))))
 
 -- ---------------------------------------------------------------
 -- 标量三元选择（cmov）
@@ -1329,7 +1338,8 @@ selfBodySub : List Instr -> Maybe (Reg, Int)
 selfBodySub ((ILabel _) :: rest) =
   if straightBetween rest then
     case lastInstr rest of
-      Just (IBinReg "sub" r (OpImm k)) => Just (r, k)
+      Just (IBinReg "sub" r (OpImm k)) => if k >= 1 then Just (r, k) else Nothing
+      Just (IBinReg "add" r (OpImm k)) => if k <= 0 - 1 then Just (r, 0 - k) else Nothing
       _ => Nothing
   else
     Nothing
@@ -1340,3 +1350,271 @@ selfGuard : List Instr -> Maybe (Reg, String, String)
 selfGuard [ILabel _, ITest r1 r2, IJcc cc target] =
   if sameReg r1 r2 then Just (r1, cc, target) else Nothing
 selfGuard _ = Nothing
+
+-- ---------------------------------------------------------------
+-- 只被入口守卫读一次的标志寄存器：循环体里的常量写是死的
+-- ---------------------------------------------------------------
+-- `if flag then … else …` 的常量分支在直连之后不再读 `flag`；入口守卫仍读一次。
+-- 判据：整个函数里该寄存器只有这一处读、读点在它自己的守卫块里、且所有指向该守卫
+-- 标签的跳转都来自读点之前（不会有回边在写之后重新读）。函数无 call / syscall 时，
+-- 读点之后对它的 `mov reg, imm|reg` 写就是死写。
+export dropDeadFlagWrites : List Instr -> List Instr
+dropDeadFlagWrites instrs =
+  if hasCallLike instrs then
+    instrs
+  else
+    let
+      dead = filter (\r => flagRegDead instrs r) flagCandidateRegs
+    in if length dead == 0 then
+      instrs
+    else
+      let
+        drop = concatMap (\r => writesAfterRead instrs r) dead
+      in map secondOf (filter (\p => not (memIndex (firstOf p) drop)) (indexInstrs instrs))
+
+flagCandidateRegs : List Reg
+flagCandidateRegs = [Rbx, R12, R13, R14, R15, Rdi, Rsi, Rdx, Rcx, R8, R9, R10, R11]
+
+hasCallLike : List Instr -> Bool
+hasCallLike instrs = foldl (\acc, i => acc || isCallLike i) False instrs
+
+isCallLike : Instr -> Bool
+isCallLike (ICall _) = True
+isCallLike (ICallReg _) = True
+isCallLike ISyscall = True
+isCallLike _ = False
+
+flagRegDead : List Instr -> Reg -> Bool
+flagRegDead instrs r =
+  let
+    reads = filter (\p => instrReadsReg r (secondOf p)) (indexInstrs instrs)
+  in case reads of
+    [p] =>
+      let
+        idx = firstOf p
+      in if guardTestAt r (secondOf p) then
+        case labelBefore idx instrs of
+          Just g =>
+            let
+              refs = filter (\q => refsLabel g (secondOf q)) (indexInstrs instrs)
+            in allBefore (idx - 1) refs
+          Nothing => False
+      else
+        False
+    _ => False
+
+guardTestAt : Reg -> Instr -> Bool
+guardTestAt r (ITest a b) = sameReg a r && sameReg b r
+guardTestAt r (ICmp (OpReg a) _) = sameReg a r
+guardTestAt _ _ = False
+
+labelBefore : Int -> List Instr -> Maybe String
+labelBefore idx instrs =
+  case nthInstr (idx - 1) instrs of
+    Just (ILabel g) => Just g
+    _ => Nothing
+
+refsLabel : String -> Instr -> Bool
+refsLabel g (IJmp l) = l == g
+refsLabel g (IJcc _ l) = l == g
+refsLabel _ _ = False
+
+allBefore : Int -> List (Int, Instr) -> Bool
+allBefore _ [] = True
+allBefore limit ((i, _) :: rest) = i < limit && allBefore limit rest
+
+nthInstr : Int -> List Instr -> Maybe Instr
+nthInstr n xs =
+  if n < 0 then
+    Nothing
+  else
+    case xs of
+      [] => Nothing
+      x :: rest => if n == 0 then Just x else nthInstr (n - 1) rest
+
+writesAfterRead : List Instr -> Reg -> List Int
+writesAfterRead instrs r =
+  let
+    idx =
+      case filter (\p => instrReadsReg r (secondOf p)) (indexInstrs instrs) of
+        [p] => firstOf p
+        _ => 0 - 1
+  in if idx < 0 then
+    []
+  else
+    map
+      firstOf
+      (filter (\p => firstOf p > idx && droppableWrite r (secondOf p)) (indexInstrs instrs))
+
+droppableWrite : Reg -> Instr -> Bool
+droppableWrite r (IMov (OpReg d) (OpImm _)) = sameReg d r
+droppableWrite r (IMov (OpReg d) (OpReg _)) = sameReg d r
+droppableWrite _ _ = False
+
+-- ---------------------------------------------------------------
+-- 提升后的短循环对齐
+-- ---------------------------------------------------------------
+-- `alignSmallLoop` 在生成期按**提升前**的指令数决定是否补 `.p2align`；槽提升与折叠
+-- 常把循环体压到 16 条以内，循环起址跨取指块时读数差 ~25%。这里按最终指令重判一次：
+-- 回边目标（向后 `jcc` 的标签）所在的块 ≤ 16 条时，块前补 `.p2align 4`。
+export alignSmallLoops : List Instr -> List Instr
+alignSmallLoops instrs =
+  let
+    targets = backwardJccTargets instrs
+  in alignGo False targets instrs
+
+backwardJccTargets : List Instr -> List String
+backwardJccTargets instrs = targetGo [] [] instrs
+
+targetGo : List String -> List String -> List Instr -> List String
+targetGo seen acc [] = acc
+targetGo seen acc (i :: rest) =
+  case i of
+    ILabel l => targetGo (l :: seen) acc rest
+    IJcc _ l =>
+      if memStr l seen && not (memStr l acc) then
+        targetGo seen (l :: acc) rest
+      else
+        targetGo seen acc rest
+    _ => targetGo seen acc rest
+
+alignGo : Bool -> List String -> List Instr -> List Instr
+alignGo _ _ [] = []
+alignGo aligned targets (i :: rest) =
+  case i of
+    IAlign _ => i :: alignGo True targets rest
+    ILabel l =>
+      if memStr l targets && not aligned && blockLength rest <= 16 && blockLength rest > 0 then
+        IAlign 4 :: i :: alignGo True targets rest
+      else
+        i :: alignGo False targets rest
+    _ => i :: alignGo False targets rest
+
+blockLength : List Instr -> Int
+blockLength [] = 0
+blockLength (i :: rest) =
+  case i of
+    ILabel _ => 0
+    _ => 1 + blockLength rest
+
+-- ---------------------------------------------------------------
+-- 0/1 状态回边：两路分派替代跳转表
+-- ---------------------------------------------------------------
+-- `s = if c then 0 else 1` 的臂（`xor rax, rax; setcc al; xor rax, 1; mov s, rax`）
+-- 值域只有 {0,1}，回边再走 `cmp s, hi; ja; lea; jmp [table]` 不划算：直接
+-- `test s, s; je 臂0; jmp 臂1`。守卫测试按 `fastGuardEdge` 同一前提复用体尾 `sub`
+-- 的标志位。
+zeroOneEdge : ThrDisp -> ThrGuard -> List Instr -> List (String, List String) -> List (List Instr) -> Maybe (List Instr)
+zeroOneEdge d guard pre tables rest =
+  if not (zeroOneWrite d.tdReg pre) then
+    Nothing
+  else if d.tdHi < 1 then
+    Nothing
+  else
+    case zeroOneArms d tables of
+      Nothing => Nothing
+      Just p =>
+        case invertJcc guard.tgCc of
+          Nothing => Nothing
+          Just inv =>
+            let
+              arm0 = firstOf p
+              arm1 = secondOf p
+              fall = fallLabelOf guard
+              tests = if fastGuardOnTest guard pre then [] else [guard.tgTest]
+              tail = if nextBlockLabel rest == Just arm0 then [IJmp arm1] else [ITest d.tdReg d.tdReg, IJcc "je" arm0, IJmp arm1]
+            in Just (append pre (append (append tests [IJcc inv fall]) tail))
+
+zeroOneArms : ThrDisp -> List (String, List String) -> Maybe (String, String)
+zeroOneArms d tables =
+  case lookupArms d.tdTable tables of
+    Just arms =>
+      case arms of
+        a0 :: a1 :: rest => Just (a0, a1)
+        _ => Nothing
+    Nothing => Nothing
+
+-- | 体尾把状态写成 0/1：`...; setcc al; xor rax, 1; mov s, rax`。
+zeroOneWrite : Reg -> List Instr -> Bool
+zeroOneWrite r pre =
+  case lastWriteTo r (indexInstrs pre) of
+    Just p =>
+      let
+        i = firstOf p
+      in case secondOf p of
+        IMov (OpReg d) (OpReg Rax) => sameReg d r && producer01 i pre
+        _ => False
+    Nothing => False
+
+producer01 : Int -> List Instr -> Bool
+producer01 i pre =
+  case nthInstr (i - 1) pre of
+    Just (IBinReg "xor" Rax (OpImm 1)) =>
+      case nthInstr (i - 2) pre of
+        Just (ISetcc _ Rax) => True
+        _ => False
+    _ => False
+
+-- ---------------------------------------------------------------
+-- 有符号常量除法链落到目标寄存器
+-- ---------------------------------------------------------------
+-- 生成器把 `(x - b) / 2^k` 的符号修正算进 rax 与一个 scratch：
+--   `mov rax, S; sub rax, B; lea T, [rax+rax+C]; shl rax, 1; cmovns T, rax;
+--    sar T, k; mov S, T`
+-- 结果最后又拷回 `S`。把前半段重定向到 `S`、后半段把 `T` 换成 `S`，并翻转 cmov 的
+-- 条件（`cmovs S, T`），整条链少两条 `mov`。
+export foldDivChains : List Instr -> List Instr
+foldDivChains [] = []
+foldDivChains (i :: rest) =
+  case i of
+    IMov (OpReg Rax) (OpReg s) =>
+      case rest of
+        (IBinReg "sub" Rax (OpReg bb)) :: (ILeaScale t sc off cst) :: (IBinReg "shl" Rax (OpImm 1)) :: (ICmov "cmovns" t2 (OpReg rax2)) :: (IBinReg "sar" t3 (OpImm k)) :: (IMov (OpReg s2) (OpReg t4)) :: more =>
+          if sameReg sc Rax && sameReg rax2 Rax && sameReg t t2 && sameReg t2 t3 && sameReg t3 t4 && sameReg s2 s && isScratchReg t && not (sameReg s t) && not (sameReg bb t) then
+            (IBinReg "sub" s (OpReg bb))
+              :: (ILeaScale t s off cst)
+              :: (IBinReg "shl" s (OpImm 1))
+              :: (ICmov "cmovs" s (OpReg t)) :: (IBinReg "sar" s (OpImm k)) :: foldDivChains more
+          else
+            i :: foldDivChains rest
+        _ => i :: foldDivChains rest
+    _ => i :: foldDivChains rest
+
+-- ---------------------------------------------------------------
+-- 归一化被除数的符号修正链落到目标寄存器
+-- ---------------------------------------------------------------
+-- 生成器把归一化的被除数算在 `rax` 上，再把结果从 scratch 拷回槽寄存器：
+--   `mov rax, S; sub rax, B; lea T, [rax+C]; cmovns T, rax; sar T, k; mov S, T`
+-- 重定向到 `S` 并把 `cmovns T, rax` 翻成 `cmovs S, T`，整条链少两条 `mov`，
+-- 关键路径也从 4 跳到 3 跳（`lea` 与 `cmovs` 都只等 `sub`）。
+export foldDivSignChains : List Instr -> List Instr
+foldDivSignChains [] = []
+foldDivSignChains (i :: rest) =
+  case i of
+    IMov (OpReg Rax) (OpReg s) =>
+      case rest of
+        (IBinReg op Rax src) :: (ILeaMem t base off) :: (ICmov "cmovns" t2 (OpReg rax2)) :: (IBinReg "sar" t3 (OpImm k)) :: (IMov (OpReg s2) (OpReg t4)) :: more =>
+          if sameReg base Rax && sameReg rax2 Rax && sameReg t t2 && sameReg t2 t3 && sameReg t3 t4 && sameReg s2 s && isScratchReg t && not (sameReg s t) && setsFlagsOp op && not (operandReads s src) then
+            (IBinReg op s src)
+              :: (ILeaMem t s off)
+              :: (ICmov "cmovs" s (OpReg t))
+              :: (IBinReg "sar" s (OpImm k)) :: foldDivSignChains more
+          else
+            i :: foldDivSignChains rest
+        _ => i :: foldDivSignChains rest
+    _ => i :: foldDivSignChains rest
+
+setsFlagsOp : String -> Bool
+setsFlagsOp op =
+  op
+    == "add"
+    || op
+    == "sub"
+    || op
+    == "imul"
+    || op == "and" || op == "or" || op == "xor" || op == "shl" || op == "shr" || op == "sar"
+
+operandReads : Reg -> Operand -> Bool
+operandReads s (OpReg r) = sameReg s r
+operandReads s (OpMem b off) = sameReg s b
+operandReads _ _ = False

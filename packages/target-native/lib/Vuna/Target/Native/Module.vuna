@@ -40,6 +40,7 @@ import Vuna.Target.Native.Audit
 import Vuna.Target.Native.Dirty
 import Vuna.Target.Native.Model
 import Vuna.Target.Native.Live
+import Vuna.Target.Native.Params
 import Vuna.Target.Native.Range
 import Vuna.Target.Native.Regs
 import Vuna.Target.Native.Repr
@@ -47,6 +48,7 @@ import Vuna.Target.Native.Runtime
 import Vuna.Target.Native.Select
 import Vuna.Target.Native.Specialize
 import Vuna.Target.Native.Inline
+import Vuna.Target.Native.Affine
 
 -- ---------------------------------------------------------------
 -- 结果类型：区分「目标不支持」与「生成器不变式破坏」
@@ -1287,6 +1289,67 @@ allocLeafToR10 : List Instr
 allocLeafToR10 =
   [IMov (OpReg Rdi) (OpImm 8), ICall (nativeRtLabel "alloc_leaf"), IMov (OpReg R10) (OpReg Rax)]
 
+-- ---------------------------------------------------------------
+-- 有符号常量除法：归一化被除数可以省掉 `shl` 回罩
+-- ---------------------------------------------------------------
+-- | 值是否已归一化（bit 63 就是 63-bit 值的符号位）。只有归一化的被除数能省掉
+--   `shl` 回罩：`cmovs` 直接吃上一条指令留下的符号标志，链少一跳。
+--   `+ - *` 的结果要「操作数归一化 + 可证明不溢出」才归一化；除法 / 位运算 / 比较
+--   的结果天然归一化；其它（调用 / 构造 / 未知算子）一律保守判否。
+normOf : FGen -> Ir -> Bool
+normOf st (IrInt _) = True
+normOf st (IrBool _) = True
+normOf st (IrCast _ _ inner) = normOf st inner
+normOf st (IrTail inner) = normOf st inner
+normOf st (IrIf _ t e) = normOf st t && normOf st e
+normOf st (IrVar b) =
+  case lookupBinder b st.fgSlots of
+    Just slot => not (memInt slot st.fgDirtySlots)
+    Nothing => False
+normOf st (IrRtApp sym args) =
+  if sym == "+" || sym == "-" || sym == "*" then
+    case args of
+      [x, y] => overflowFree sym (rangeOf st.fgRanges x) (rangeOf st.fgRanges y) && normOf st x && normOf st y
+      _ => False
+  else if sym == "/" || sym == "bitAnd" || sym == "bitOr" || sym == "bitXor" || sym == "bitNot" then True else False
+normOf _ _ = False
+
+lastInstrOf : List Instr -> Maybe Instr
+lastInstrOf [] = Nothing
+lastInstrOf [i] = Just i
+lastInstrOf (_ :: rest) = lastInstrOf rest
+
+flagSetterOp : String -> Bool
+flagSetterOp op =
+  op
+    == "add"
+    || op
+    == "sub"
+    || op
+    == "imul"
+    || op
+    == "and"
+    || op
+    == "or"
+    || op == "xor" || op == "shl" || op == "shr" || op == "sar" || op == "inc" || op == "dec"
+
+-- | 求值被除数的那串指令的最后一条是否写了 `r` 并把符号位留给 `cmovs`。
+setsSignOf : List Instr -> Reg -> Bool
+setsSignOf ins r =
+  case lastInstrOf ins of
+    Just (IBinReg op d _) => sameReg d r && flagSetterOp op
+    Just (IBin op _) => sameReg r Rax && flagSetterOp op
+    Just (ITest a _) => sameReg a r
+    _ => False
+
+-- | 归一化被除数的符号修正序列：`lea` 偏置 + `cmovns` + `sar`。上一条指令已给出
+--   符号标志时不再补 `test`。
+normSignInstrs : List Instr -> Reg -> Reg -> Int -> List Instr
+normSignInstrs ins s r k =
+  let
+    fix = [ILeaMem s r (ipow2 k - 1), ICmov "cmovns" s (OpReg r), IBinReg "sar" s (OpImm k)]
+  in if setsSignOf ins r then fix else ITest r r :: fix
+
 -- | 常数除法：先选被除数，再从剩余池里取 scratch。
 -- | 有符号常量除法：先选被除数，再从剩余池里取 scratch。
 genDivInto : Int -> FGen -> List Reg -> Ir -> DivPlan -> Maybe (Reg, List Instr, List Reg)
@@ -1316,7 +1379,7 @@ genDivInto bud st pool a (DivShift k) =
             in Just (r, instrs, s :: rest)
           else if fused then
             let
-              instrs = append ins [ILeaScale s r 1 (ipow2 (k + 1) - 2), IBinReg "shl" r (OpImm 1), ICmov "cmovns" s (OpReg r), IBinReg "sar" s (OpImm (k + 1))]
+              instrs = if normOf st a then append ins (normSignInstrs ins s r k) else append ins [ILeaScale s r 1 (ipow2 (k + 1) - 2), IBinReg "shl" r (OpImm 1), ICmov "cmovns" s (OpReg r), IBinReg "sar" s (OpImm (k + 1))]
             in Just (s, instrs, r :: rest)
           else
             let
@@ -1656,11 +1719,14 @@ resOf : Bool -> ScalarOp -> Reg -> Reg -> (Reg, List Instr)
 resOf True op a b = scalarInstrs op a b
 resOf False op a b = scalarInstrsNoWrap op a b
 
--- | 可证明结果落在 `Int` 域内时，63-bit wrap 是 no-op（值仍然规范化，任何消费者都安全）。
+-- | 可证明结果落在 `Int` 域内、且两个操作数都已归一化时，63-bit wrap 是 no-op
+--   （结果仍然规范化，任何消费者都安全）。操作数没归一化时必须照常 wrap：
+--   否则 bit 63 会带着未规范化的符号位流到比较 / 除法这些看高位的消费者。
 rangeSkips : FGen -> ScalarOp -> Ir -> Ir -> Bool
 rangeSkips st (ScalarWrap name) a b =
   case wrapSym name of
-    Just sym => overflowFree sym (rangeOf st.fgRanges a) (rangeOf st.fgRanges b)
+    Just sym =>
+      overflowFree sym (rangeOf st.fgRanges a) (rangeOf st.fgRanges b) && normOf st a && normOf st b
     Nothing => False
 rangeSkips _ _ _ _ = False
 
@@ -1937,17 +2003,21 @@ genExpr fuel st ir = genExprAt fuel st False ir
 export data BoolSelect(..) : Type where
   BoolAsIs : BoolSelect
   BoolInvert : BoolSelect
+  -- | `if b then a else a+1`：结果 = a + (1 - b)，两条指令。
+  BoolStep : Int -> BoolSelect
 
 export boolSelectModeOf : Ir -> Ir -> Maybe BoolSelect
 boolSelectModeOf (IrInt 1) (IrInt 0) = Just BoolAsIs
 boolSelectModeOf (IrBool True) (IrBool False) = Just BoolAsIs
 boolSelectModeOf (IrInt 0) (IrInt 1) = Just BoolInvert
 boolSelectModeOf (IrBool False) (IrBool True) = Just BoolInvert
+boolSelectModeOf (IrInt a) (IrInt b) = if b == a + 1 then Just (BoolStep a) else Nothing
 boolSelectModeOf _ _ = Nothing
 
 boolSelectInstrs : BoolSelect -> Reg -> List Instr
 boolSelectInstrs BoolAsIs _ = []
 boolSelectInstrs BoolInvert r = [IBinReg "xor" r (OpImm 1)]
+boolSelectInstrs (BoolStep a) r = [IBinReg "xor" r (OpImm 1), IBinReg "add" r (OpImm a)]
 
 -- | 条件在 `IrIf` 里直接当分支用：`IrRtApp` 的标量比较 + 原子实参 →
 --   (装载+`cmp` 指令, 反向 `jcc`)。实参只接受字面量 / 槽变量（求值无副作用，
@@ -3231,10 +3301,19 @@ record LoopRot where
   lrBodyIsElse : Bool
 
 selfTailOf : String -> Ir -> Bool
-selfTailOf name ir =
-  case flattenApp (stripTail ir) of
-    (IrGlobal n, _) => n == name
-    _ => False
+selfTailOf name ir = selfTailFuel (irSize ir + 1) name ir
+
+selfTailFuel : Int -> String -> Ir -> Bool
+selfTailFuel fuel name ir =
+  if fuel <= 0 then
+    False
+  else
+    case stripTail ir of
+      IrLet _ _ body => selfTailFuel (fuel - 1) name body
+      other =>
+        case flattenApp other of
+          (IrGlobal n, _) => n == name
+          _ => False
 
 loopRotateOf : String -> Ir -> Maybe LoopRot
 loopRotateOf name (IrIf c t e) =
@@ -3310,10 +3389,10 @@ defsUseThread defs = foldl (\a, d => a || defUsesThread d) False defs
 
 -- | 生成一个定义；返回函数与该定义之后**模块内** label/slot 计数（`.L` 是文件局部
 --   符号，计数按模块保存；重编号不会跨模块扩散）。
-genDefFunc : List IrDef -> List (String, List (String, String)) -> List (String, List (String, String)) -> List String -> List String -> List IrTyDecl -> Int -> Bool -> IrDef -> NRes (List NativeFunc, Int, List NativeClosure)
-genDefFunc _defs _pools _floats _recNames _allocs _fams _nextLabel _threaded (IrExternDef name _ _ _) =
+genDefFunc : List IrDef -> List (String, List (String, String)) -> List (String, List (String, String)) -> List String -> List String -> List IrTyDecl -> Int -> Bool -> List (Int, Int, Int) -> IrDef -> NRes (List NativeFunc, Int, List NativeClosure)
+genDefFunc _defs _pools _floats _recNames _allocs _fams _nextLabel _threaded _pfacts (IrExternDef name _ _ _) =
   unsupported "native target: extern definition `${name}` is not supported yet"
-genDefFunc defs pools floats recNames allocs fams nextLabel threaded (IrDef name arity _ _ body _ _ _) =
+genDefFunc defs pools floats recNames allocs fams nextLabel threaded pfacts (IrDef name arity _ _ body _ _ _) =
   let
     -- 本函数来参区：零参定义没有调用者压的栈实参，其余按标准 ABI 推算。
     room = nativeTailRoomBytes (nativeStackArgCount arity nativeMaxArgs)
@@ -3338,7 +3417,7 @@ genDefFunc defs pools floats recNames allocs fams nextLabel threaded (IrDef name
         ""
         []
         []
-        []
+        pfacts
         []
         []
         (memStr name recNames)
@@ -3356,7 +3435,7 @@ genDefFunc defs pools floats recNames allocs fams nextLabel threaded (IrDef name
             st1 = secondOf p
             frame = nativeFrameBytes st1.fgNextSlot
             promo = Regs.promoteLoops st1.fgSlotCls (clearDeadSlots st1.fgReenter st1.fgSlotCls (peephole (firstOf p)))
-            instrs = Regs.optimizeDispatch (cleanup (append (Regs.retargetSetccPass (Regs.foldSlotRoundTrips (cleanup promo.rpBody))) (Regs.epilogueOf promo.rpSaved)))
+            instrs = Regs.optimizeDispatch (cleanup (append (Regs.retargetSetccPass (Regs.foldSlotRoundTrips (Regs.hoistLoopConsts (cleanup promo.rpBody)))) (Regs.epilogueOf promo.rpSaved)))
             holes = if memStr name allocs && frameReused st1.fgReenter instrs then unwrittenSlots frame instrs else []
             mainF = NativeFunc (nativeFuncLabel name) frame (append (Regs.prologueOf promo.rpSaved) (append (nativePrologueOf frame holes) instrs)) modPath
           in NOk (append st1.fgLams [mainF], st1.fgNextLabel, st1.fgStatics)
@@ -3388,7 +3467,7 @@ genDefFunc defs pools floats recNames allocs fams nextLabel threaded (IrDef name
                         -- 常驻 xmm 的浮点形参在调用前后溢出/重载（槽是权威副本）；要在死槽清零之前。
                         bodySpill = spillReloadFloatRegs st1.fgFloatSlotRegs body0
                         promo = Regs.promoteLoops st1.fgSlotCls (clearDeadSlots st1.fgReenter st1.fgSlotCls (peephole bodySpill))
-                        instrs = Regs.optimizeDispatch (cleanup (append (Regs.retargetSetccPass (Regs.foldSlotRoundTrips (cleanup promo.rpBody))) (Regs.epilogueOf promo.rpSaved)))
+                        instrs = Regs.optimizeDispatch (cleanup (append (Regs.retargetSetccPass (Regs.foldSlotRoundTrips (Regs.hoistLoopConsts (cleanup promo.rpBody)))) (Regs.epilogueOf promo.rpSaved)))
                         holes = if memStr name allocs && frameReused st1.fgReenter instrs then unwrittenSlots frame instrs else []
                         mainF = NativeFunc (nativeFuncLabel name) frame (append (Regs.prologueOf promo.rpSaved) (append (nativePrologueOf frame holes) instrs)) modPath
                       in NOk (append st1.fgLams [mainF], st1.fgNextLabel, st1.fgStatics)
@@ -3407,19 +3486,27 @@ putLabelCount key n [] = [(key, n)]
 putLabelCount key n (p :: rest) =
   if firstOf p == key then (key, n) :: rest else p :: putLabelCount key n rest
 
-genDefs : List IrDef -> List (String, List (String, String)) -> List (String, List (String, String)) -> List String -> List String -> List IrTyDecl -> List (String, Int) -> Bool -> List IrDef -> List (List NativeFunc) -> List NativeClosure -> NRes (List NativeFunc, Int, List NativeClosure)
-genDefs _all _pools _floats _recNames _allocs _fams _labels _threaded [] acc statAcc =
+genDefs : List IrDef -> List (String, List (String, String)) -> List (String, List (String, String)) -> List String -> List String -> List IrTyDecl -> List (String, Int) -> Bool -> List (List (Int, Int, Int)) -> List IrDef -> List (List NativeFunc) -> List NativeClosure -> NRes (List NativeFunc, Int, List NativeClosure)
+genDefs _all _pools _floats _recNames _allocs _fams _labels _threaded _pfacts [] acc statAcc =
   NOk (concatMap (\x => x) (reverse acc), 0, statAcc)
-genDefs all pools floats recNames allocs fams labels threaded (d :: rest) acc statAcc =
+genDefs all pools floats recNames allocs fams labels threaded pfacts (d :: rest) acc statAcc =
   let
     key = moduleKeyOf (irDefName d)
     start = labelCountOf key labels
-  in nbind (genDefFunc all pools floats recNames allocs fams start threaded d) (
+    defFacts =
+      case pfacts of
+        pf :: _ => pf
+        [] => []
+  in nbind (genDefFunc all pools floats recNames allocs fams start threaded defFacts d) (
       \p =>
         let
           next = firstOf (secondOf p)
           statics = secondOf (secondOf p)
-        in genDefs all pools floats recNames allocs fams (putLabelCount key next labels) threaded rest (firstOf p :: acc) (append statics statAcc)
+          restFacts =
+            case pfacts of
+              _ :: more => more
+              [] => []
+        in genDefs all pools floats recNames allocs fams (putLabelCount key next labels) threaded restFacts rest (firstOf p :: acc) (append statics statAcc)
     )
 
 -- | 不会分配堆的运行时符号（整数 / 位运算 / 比较 / 字符串只读 / obs / 打印 / 陷阱）。
@@ -4161,13 +4248,26 @@ build program printResult =
                       -- 尾位置内联：把互递归 SCC 沿定义序单向展开成自递归。
                       tailInlined = Inline.inlineTailDefs recNames (firstOf inlined)
                       cps1 = Inline.simplifyDefs (firstOf tailInlined)
-                      changed = secondOf inlined || secondOf tailInlined
+                      -- 尾位置 if 合并：同目标的两个尾调用只差标量常量的实参，合成一次
+                      -- 调用 + 值选择（`tco_unrotated` 的 flag 分派不再每轮条件分支）。
+                      cpsMerged = Inline.mergeTailIfs cps1
+                      -- 零参别名（`Nat.plus = natAdd`）先展开成 `IrRtApp`：循环变换要看到
+                      -- 运行时叶子（饱和求和识别 `natAdd`）。
+                      cpsAlias0 = map (resolveDefAliases cpsMerged) cpsMerged
+                      -- 循环仿射累加折叠：退出表达式是形参的仿射式时，用一个累加器
+                      -- 替掉其余形参（`tco_wide` / `tco_arity6`）。
+                      -- 饱和求和循环：入口计数有界时用普通 `+`（`tco_nat`）；快路径
+                      -- 写成 Int 仿射循环，交给紧跟着的仿射折叠。
+                      sumP = Affine.foldNatSums cpsAlias0
+                      accP = Affine.foldAffineDefs (firstOf sumP)
+                      cpsAcc = firstOf accP
+                      accNames = append (secondOf accP) (secondOf sumP)
+                      recNamesAll = append accNames recNames
+                      changed = secondOf inlined || secondOf tailInlined || length accNames > 0
                       -- 内联后会留下一批没人引用的定义：按「体里真正出现的 `IrGlobal`」重算
                       -- 可达性再丢掉（不跟 `irDefDeps`：那是源码级 term-use 依赖，含已擦除
                       -- 的引用，会把刚内联掉的被调重新钉住）。
-                      cpsOrdered = if changed then reachableDefsByRefs (\_ => False) 0 seeds cps1 else cps1
-                      -- 零参别名（`Nat.plus = natAdd`）在应用位置展开成 `IrRtApp`，
-                      -- 让标量树与调用点内联看到运行时叶子。
+                      cpsOrdered = if changed then reachableDefsByRefs (\_ => False) 0 (append accNames seeds) cpsAcc else cpsAcc
                       cpsAliased = map (resolveDefAliases cpsOrdered) cpsOrdered
                       -- Float `let` 代进唯一使用点，让浮点表达式树跨过绑定、只装盒一次。
                       cpsFloatLets = Inline.inlineFloatLetsDefs cpsAliased
@@ -4175,7 +4275,10 @@ build program printResult =
                       fpools = moduleFloatPools cpsOrdered
                       allocs = allocatingDefNames cpsAliased
                       threaded = defsUseThread cpsFloatLets
-                    in case genDefs cpsFloatLets pools fpools recNames allocs unit.irUnitTyDecls [] threaded cpsFloatLets [] [] of
+                      -- 形参区间：整程序不动点（调用点常量 + 自调用实参），给
+                      -- `Module` 的溢出 / 归一化判据补上循环形参的事实。
+                      pfacts = Params.paramFactsOf cpsFloatLets
+                    in case genDefs cpsFloatLets pools fpools recNamesAll allocs unit.irUnitTyDecls [] threaded pfacts cpsFloatLets [] [] of
                       NFail err => NativeRejected (nativeAuditEnrich err cpsOrdered)
                       NOk pair =>
                         let

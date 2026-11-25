@@ -131,9 +131,18 @@ mulRanges (al, ah) (bl, bh) =
 clampNonNeg : (Int, Int) -> (Int, Int)
 clampNonNeg (lo, hi) = (maxInt2 0 lo, maxInt2 0 hi)
 
--- | 常量除数：只在对被除数非负时给出精确区间（负数域留全域，保守）。
+-- | 常量除数：正除数用「下界向下取整 / 上界向上取整」夹住（除法对除数 > 0 单调）；
+--   负数域只给对称幅值界，幅值靠饱和除法，越出 `Int` 域就退回全域。
 divRange : (Int, Int) -> Int -> (Int, Int)
-divRange (al, ah) d = if d > 0 && al >= 0 then (al / d, ah / d) else fullRange
+divRange (al, ah) d =
+  if d <= 0 then
+    fullRange
+  else if al >= 0 then
+    (al / d, ah / d)
+  else
+    let
+      b = maxInt2 (magOf al) (magOf ah) / d
+    in if b >= nativeMaxInt - 1 then fullRange else (0 - (b + 1), b + 1)
 
 -- | `IrRtApp` 的区间传播；白名单之外一律全域。
 rangeOfRt : List (Int, Int, Int) -> String -> List Ir -> (Int, Int)

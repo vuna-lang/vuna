@@ -530,6 +530,37 @@ irAltBindersOf (IrAlt ctor bs body) = bs
 export irAltBodyOf : IrAlt -> Ir
 irAltBodyOf (IrAlt ctor bs body) = body
 
+-- | 结构子节点（不含作用域）：作用域内的 binder 不在结果里，分析要自己按
+-- 节点类型补（`IrLet` / `IrLam` / case 臂的 binder 表）。
+export irChildren : Ir -> List Ir
+irChildren (IrCtor family ctor _ args) = args
+irChildren (IrRecord family _ fields) = map secondOf fields
+irChildren (IrProj base family field _) = [base]
+irChildren (IrRecUpd base family fields _) = base :: map secondOf fields
+irChildren (IrRtApp sym args) = args
+irChildren (IrCast cFrom cTo inner) = [inner]
+irChildren (IrLet bs scrut body) = [scrut, body]
+irChildren (IrLam bs _ body) = [body]
+irChildren (IrApp _ f a) = [f, a]
+irChildren (IrIf c th el) = [c, th, el]
+irChildren (IrCase _ _ scrut alts) = scrut :: altBodies alts
+irChildren (IrNatCase scrut fresh zero succ catch) =
+  append
+    [scrut]
+    (append (maybeAltBodies zero) (append (maybeAltBodies succ) (maybeAltBodies catch)))
+irChildren (IrConcatMany parts) = parts
+irChildren (IrEffThunk family ctor unitTy arity prim) = [prim]
+irChildren (IrTail inner) = [inner]
+irChildren _ = []
+
+altBodies : List IrAlt -> List Ir
+altBodies [] = []
+altBodies (alt :: rest) = irAltBodyOf alt :: altBodies rest
+
+maybeAltBodies : Maybe IrAlt -> List Ir
+maybeAltBodies Nothing = []
+maybeAltBodies (Just alt) = [irAltBodyOf alt]
+
 -- | 入口展示函数节点。
 export irEntryShowOf : IrEntry -> Ir
 irEntryShowOf (IrEntry show main isAction runMain handlers rowTags) = show

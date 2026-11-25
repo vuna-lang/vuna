@@ -267,7 +267,7 @@ problems : List String
 problems =
   filter
     (\s => s /= "")
-    [check "small call inlined" False (mentionsGlobal "inc" (bodyOf "useInc" (firstOf smallOut))), check "inlined tail stripped" False (hasTail (belowRoot (lamInner (bodyOf "useInc" (firstOf smallOut))))), check "changed flag" True (secondOf smallOut), check "recursive call kept" True (mentionsGlobal "loop" (bodyOf "useLoop" (firstOf recOut))), check "recursive changed flag" False (secondOf recOut), check "non-trivial arg kept" True (mentionsGlobal "inc" (bodyOf "useHard" (firstOf hardOut))), check "cheap arg inlined" False (mentionsGlobal "inc" (bodyOf "useCheap" (firstOf cheapOut))), check "div arg inlined" False (mentionsGlobal "inc" (bodyOf "useDiv" (firstOf divOut))), check "zero-div arg kept" True (mentionsGlobal "inc" (bodyOf "useZeroDiv" (firstOf zeroDivOut))), check "big body kept" True (mentionsGlobal "big" (bodyOf "useBig" (firstOf bigOut))), check "no inline point unchanged" False (secondOf sameOut), check "float let inlined" False (mentionsBinder 50 (bodyOf "useFloatOnce" floatOnceOut)), check "float let expr kept" True (mentionsRtApp "bi_mul_float" (bodyOf "useFloatOnce" floatOnceOut)), check "float twice kept" True (mentionsBinder 50 (bodyOf "useFloatTwice" floatTwiceOut)), check "float nested lambda kept" True (mentionsBinder 50 (bodyOf "useFloatNested" floatNestedOut)), check "int let kept" True (mentionsBinder 11 (bodyOf "useIntLet" floatIntOut))]
+    [check "small call inlined" False (mentionsGlobal "inc" (bodyOf "useInc" (firstOf smallOut))), check "inlined tail stripped" False (hasTail (belowRoot (lamInner (bodyOf "useInc" (firstOf smallOut))))), check "changed flag" True (secondOf smallOut), check "recursive call kept" True (mentionsGlobal "loop" (bodyOf "useLoop" (firstOf recOut))), check "recursive changed flag" False (secondOf recOut), check "non-trivial arg kept" True (mentionsGlobal "inc" (bodyOf "useHard" (firstOf hardOut))), check "cheap arg inlined" False (mentionsGlobal "inc" (bodyOf "useCheap" (firstOf cheapOut))), check "div arg inlined" False (mentionsGlobal "inc" (bodyOf "useDiv" (firstOf divOut))), check "zero-div arg kept" True (mentionsGlobal "inc" (bodyOf "useZeroDiv" (firstOf zeroDivOut))), check "big body kept" True (mentionsGlobal "big" (bodyOf "useBig" (firstOf bigOut))), check "no inline point unchanged" False (secondOf sameOut), check "float let inlined" False (mentionsBinder 50 (bodyOf "useFloatOnce" floatOnceOut)), check "float let expr kept" True (mentionsRtApp "bi_mul_float" (bodyOf "useFloatOnce" floatOnceOut)), check "float twice kept" True (mentionsBinder 50 (bodyOf "useFloatTwice" floatTwiceOut)), check "float nested lambda kept" True (mentionsBinder 50 (bodyOf "useFloatNested" floatNestedOut)), check "int let kept" True (mentionsBinder 11 (bodyOf "useIntLet" floatIntOut)), check "tail if merged" True mergeOk]
 
 bodyOf : String -> List IrDef -> Ir
 bodyOf _ [] = IrInt 0
@@ -340,3 +340,48 @@ hasTail ir =
 
 check : String -> Bool -> Bool -> String
 check label want got = if want == got then "" else label ++ ": drifted"
+
+-- ---------------------------------------------------------------
+-- mergeTailIfs：同目标、实参只差标量常量的两个尾调用合成一次调用 + 值选择
+-- ---------------------------------------------------------------
+mergeCond : Ir
+mergeCond = IrRtApp "bi_gt_int" [IrVar nBinder, IrInt 0]
+
+mergeStep : Ir
+mergeStep = IrRtApp "-" [IrVar nBinder, IrInt 1]
+
+mergeCall : Ir -> Ir
+mergeCall a = IrTail (IrApp Nothing (IrApp Nothing (IrGlobal "guard") a) mergeStep)
+
+mergeDef : IrDef
+mergeDef =
+  IrDef
+    "guard"
+    2
+    []
+    Nothing
+    (IrLam [xBinder, nBinder] Nothing (IrIf (IrRtApp "bi_le_int" [IrVar nBinder, IrInt 0]) (IrVar xBinder) (IrIf mergeCond (mergeCall (IrRtApp "+" [IrVar xBinder, IrInt 1])) (mergeCall (IrRtApp "+" [IrVar xBinder, IrInt 2])))))
+    True
+    False
+    Nothing
+
+mergeBody : Ir
+mergeBody = bodyOf "guard" (mergeTailIfs [mergeDef])
+
+containsIf : Ir -> Bool
+containsIf ir =
+  case ir of
+    IrIf _ _ _ => True
+    IrRtApp _ args => foldl (\acc, a => acc || containsIf a) False args
+    IrApp _ f a => containsIf f || containsIf a
+    IrCast _ _ inner => containsIf inner
+    _ => False
+
+mergeOk : Bool
+mergeOk =
+  case mergeBody of
+    IrLam _ _ (IrIf _ _ e) =>
+      case e of
+        IrLet _ scrut _ => containsIf scrut
+        _ => False
+    _ => False

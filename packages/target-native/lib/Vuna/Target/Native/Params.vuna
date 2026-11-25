@@ -1,0 +1,366 @@
+module Vuna.Target.Native.Params where
+
+-- 每个定义 Int 形参的取值区间：整程序不动点。
+--
+-- 目的只有一个：让「形参落在什么区间」这类事实进到循环体里（`Native.Range` 原来只有
+-- 分支守卫推导的局部事实，形参一律全域）。区间只用来**多证明**几条 no-op
+-- （63-bit wrap / 除法符号修正的顺序），不改变任何语义；所以判错方向一律是少优化：
+-- 起始值只取调用点上的常量实参，其余全域；每轮在**调用点当时的守卫事实**下求实参
+-- 区间并进被调形参，必要时按「端点幅值翻倍」向外加宽，收敛（`F(R) ⊆ R`）后才交给
+-- `Native.Module`。守卫事实必须算进去：`loop ... (n - 1)` 这种自调用只有在 `n > 0`
+-- 的守卫下才有下界，否则不动点永远在漂移。
+--
+-- 边界：只 import Base、`Vuna.Ir` 与 `Native.*`；不改 ABI / 运行时。
+import Base.Data.Bool as Bool
+import Base.Data.Int as Int
+import Base.Data.List as List
+import Base.Data.Maybe as Maybe
+import Base.Data.Pair as Pair
+import Vuna.Ir.Model
+import Vuna.Target.Native.Abi
+import Vuna.Target.Native.Range
+
+-- ---------------------------------------------------------------
+-- 调用点扫描（不带守卫事实：常量实参 + 静态未知被调）
+-- ---------------------------------------------------------------
+flattenCall : Ir -> (Ir, List Ir)
+flattenCall (IrApp _ f a) =
+  let
+    p = flattenCall f
+  in (firstOf p, append (secondOf p) [a])
+flattenCall x = (x, [])
+
+scanCalls : Int -> Ir -> (List (String, List Ir), Bool)
+scanCalls fuel ir =
+  if fuel <= 0 then
+    ([], True)
+  else
+    case ir of
+      IrApp _ _ _ =>
+        let
+          flat = flattenCall ir
+          args = secondOf flat
+          inner = scanList (fuel - 1) args
+        in case firstOf flat of
+          IrGlobal g => (append [(g, args)] (firstOf inner), secondOf inner)
+          _ => (firstOf inner, True)
+      _ => scanList (fuel - 1) (irChildren ir)
+
+scanList : Int -> List Ir -> (List (String, List Ir), Bool)
+scanList fuel [] = ([], False)
+scanList fuel (x :: rest) =
+  let
+    p = scanCalls (fuel - 1) x
+    q = scanList (fuel - 1) rest
+  in (append (firstOf p) (firstOf q), secondOf p || secondOf q)
+
+scanBodies : Int -> List (Maybe Ir) -> (List (String, List Ir), Bool)
+scanBodies fuel [] = ([], False)
+scanBodies fuel (Nothing :: rest) = scanBodies (fuel - 1) rest
+scanBodies fuel ((Just b) :: rest) =
+  let
+    p = scanCalls (fuel - 1) b
+    q = scanBodies (fuel - 1) rest
+  in (append (firstOf p) (firstOf q), secondOf p || secondOf q)
+
+scanDefs : List IrDef -> (List (String, List Ir), Bool)
+scanDefs defs = scanBodies (defsFuel defs) (map bodyOfDef defs)
+
+defsFuel : List IrDef -> Int
+defsFuel [] = 1
+defsFuel (d :: rest) =
+  let
+    n = fuelOfDef d
+  in if n > 1000000 then 1000000 else n + defsFuel rest
+
+fuelOfDef : IrDef -> Int
+fuelOfDef (IrExternDef _ _ _ _) = 1
+fuelOfDef (IrDef _ _ _ _ body _ _ _) = irSize body + 1
+
+bodyOfDef : IrDef -> Maybe Ir
+bodyOfDef (IrExternDef _ _ _ _) = Nothing
+bodyOfDef (IrDef _ _ _ _ body _ _ _) = Just body
+
+-- ---------------------------------------------------------------
+-- 一轮：带守卫事实收集调用点实参区间
+-- ---------------------------------------------------------------
+walkBodies : Int -> List (Maybe Ir) -> List (Int, Int, Int) -> (List (String, List (Int, Int)), Bool)
+walkBodies fuel [] env = ([], False)
+walkBodies fuel (Nothing :: rest) env = walkBodies (fuel - 1) rest env
+walkBodies fuel ((Just b) :: rest) env =
+  let
+    p = walkIr (fuel - 1) env b
+    q = walkBodies (fuel - 1) rest env
+  in (append (firstOf p) (firstOf q), secondOf p || secondOf q)
+
+walkDefs : List IrDef -> List (Int, Int, Int) -> (List (String, List (Int, Int)), Bool)
+walkDefs defs env = walkBodies (defsFuel defs) (map bodyOfDef defs) env
+
+walkIr : Int -> List (Int, Int, Int) -> Ir -> (List (String, List (Int, Int)), Bool)
+walkIr fuel env ir =
+  if fuel <= 0 then
+    ([], True)
+  else
+    case ir of
+      IrApp _ _ _ =>
+        let
+          flat = flattenCall ir
+          args = secondOf flat
+          ranges = map (rangeOf env) args
+          inner = walkList (fuel - 1) env args
+        in case firstOf flat of
+          IrGlobal g => (append [(g, ranges)] (firstOf inner), secondOf inner)
+          _ => (firstOf inner, True)
+      IrIf c t e =>
+        let
+          pc = walkIr (fuel - 1) env c
+          pt = walkIr (fuel - 1) (append (factsThen env c) env) t
+          pe = walkIr (fuel - 1) (append (factsElse env c) env) e
+        in (append (firstOf pc) (append (firstOf pt) (firstOf pe)), secondOf pc || secondOf pt || secondOf pe)
+      _ => walkList (fuel - 1) env (irChildren ir)
+
+walkList : Int -> List (Int, Int, Int) -> List Ir -> (List (String, List (Int, Int)), Bool)
+walkList fuel env [] = ([], False)
+walkList fuel env (x :: rest) =
+  let
+    p = walkIr (fuel - 1) env x
+    q = walkList (fuel - 1) env rest
+  in (append (firstOf p) (firstOf q), secondOf p || secondOf q)
+
+-- ---------------------------------------------------------------
+-- 形参表 / 区间运算
+-- ---------------------------------------------------------------
+isIntParam : IrBinder -> Bool
+isIntParam b =
+  if b.irBinderErased then
+    False
+  else
+    case b.irBinderTy of
+      Just IrTyInt => True
+      _ => False
+
+isRuntime : IrBinder -> Bool
+isRuntime b = not b.irBinderErased
+
+runtimeParams : List IrBinder -> List IrBinder
+runtimeParams bs = filter isRuntime bs
+
+declOf : IrDef -> (String, List IrBinder)
+declOf (IrExternDef name _ _ _) = (name, [])
+declOf (IrDef name _ _ _ body _ _ _) =
+  case body of
+    IrLam bs _ _ => (name, runtimeParams bs)
+    _ => (name, [])
+
+minI : Int -> Int -> Int
+minI a b = if a <= b then a else b
+
+maxI : Int -> Int -> Int
+maxI a b = if a >= b then a else b
+
+unionRange : (Int, Int) -> (Int, Int) -> (Int, Int)
+unionRange (al, ah) (bl, bh) = (minI al bl, maxI ah bh)
+
+loOf : (Int, Int, Int) -> Int
+loOf f = firstOf (secondOf f)
+
+hiOf : (Int, Int, Int) -> Int
+hiOf f = secondOf (secondOf f)
+
+rangeOfFact : (Int, Int, Int) -> (Int, Int)
+rangeOfFact f = (loOf f, hiOf f)
+
+mkFact : Int -> (Int, Int) -> (Int, Int, Int)
+mkFact id r = (id, firstOf r, secondOf r)
+
+lookupFact : Int -> List (Int, Int, Int) -> Maybe (Int, Int)
+lookupFact id [] = Nothing
+lookupFact id (f :: rest) = if firstOf f == id then Just (rangeOfFact f) else lookupFact id rest
+
+nthArg : Int -> List Ir -> Maybe Ir
+nthArg _ [] = Nothing
+nthArg n (x :: rest) = if n <= 0 then Just x else nthArg (n - 1) rest
+
+nthRange : Int -> List (Int, Int) -> Maybe (Int, Int)
+nthRange _ [] = Nothing
+nthRange n (x :: rest) = if n <= 0 then Just x else nthRange (n - 1) rest
+
+argsAt : String -> Int -> List (String, List Ir) -> List (Maybe Ir)
+argsAt name i [] = []
+argsAt name i ((callee, args) :: rest) =
+  if callee == name then nthArg i args :: argsAt name i rest else argsAt name i rest
+
+-- | 起始值：只看常量实参（自调用里的表达式先忽略，后续轮次再并进来）。
+constRanges : List (Maybe Ir) -> List (Int, Int)
+constRanges [] = []
+constRanges ((Just (IrInt k)) :: rest) = (k, k) :: constRanges rest
+constRanges (_ :: rest) = constRanges rest
+
+initRange : List (Maybe Ir) -> (Int, Int)
+initRange xs =
+  case constRanges xs of
+    [] => fullRange
+    r :: rest => foldl unionRange r rest
+
+-- | 某个定义的调用点上第 i 个实参的区间并集。
+rangesOf : String -> Int -> List (String, List (Int, Int)) -> List (Int, Int)
+rangesOf name i [] = []
+rangesOf name i ((callee, rs) :: rest) =
+  if callee == name then append (oneRange i rs) (rangesOf name i rest) else rangesOf name i rest
+
+oneRange : Int -> List (Int, Int) -> List (Int, Int)
+oneRange i rs =
+  case nthRange i rs of
+    Nothing => [fullRange]
+    Just r => [r]
+
+unionAt : String -> Int -> List (String, List (Int, Int)) -> (Int, Int)
+unionAt name i contribs =
+  case rangesOf name i contribs of
+    [] => fullRange
+    r :: rest => foldl unionRange r rest
+
+-- ---------------------------------------------------------------
+-- 不动点
+-- ---------------------------------------------------------------
+factRounds : Int
+factRounds = 6
+
+-- | 与定义列表同序的每定义事实表（只含 Int 形参，按参数顺序）。
+export paramFactsOf : List IrDef -> List (List (Int, Int, Int))
+paramFactsOf defs =
+  let
+    scan = scanDefs defs
+    decls = map declOf defs
+  in if secondOf scan then
+    map (\d => []) decls
+  else
+    solve defs decls (firstOf scan) (initFacts decls (firstOf scan)) factRounds
+
+solve : List IrDef -> List (String, List IrBinder) -> List (String, List Ir) -> List (List (Int, Int, Int)) -> Int -> List (List (Int, Int, Int))
+solve defs decls calls facts fuel = go defs decls facts [] fuel
+
+go : List IrDef -> List (String, List IrBinder) -> List (List (Int, Int, Int)) -> List (Int, Int) -> Int -> List (List (Int, Int, Int))
+go defs decls facts counts fuel =
+  let
+    walked = walkDefs defs (flatFacts facts)
+    step = stepFacts decls (firstOf walked)
+    merged = mergeAll facts step
+  in if secondOf walked then
+    emptyGroups facts
+  else if sameFacts merged facts then
+    facts
+  else if fuel <= 0 then
+    emptyGroups facts
+  else
+    let
+      widened = widenAll counts facts merged
+    in go defs decls (firstOf widened) (secondOf widened) (fuel - 1)
+
+emptyGroups : List (List (Int, Int, Int)) -> List (List (Int, Int, Int))
+emptyGroups facts = map (\g => []) facts
+
+initFacts : List (String, List IrBinder) -> List (String, List Ir) -> List (List (Int, Int, Int))
+initFacts [] calls = []
+initFacts ((name, bs) :: rest) calls = initParams name 0 bs calls :: initFacts rest calls
+
+initParams : String -> Int -> List IrBinder -> List (String, List Ir) -> List (Int, Int, Int)
+initParams name i [] calls = []
+initParams name i (b :: rest) calls =
+  let
+    tailFacts = initParams name (i + 1) rest calls
+  in if isIntParam b then
+    mkFact b.irBinderId (initRange (argsAt name i calls)) :: tailFacts
+  else
+    tailFacts
+
+stepFacts : List (String, List IrBinder) -> List (String, List (Int, Int)) -> List (List (Int, Int, Int))
+stepFacts [] contribs = []
+stepFacts ((name, bs) :: rest) contribs = stepParams name 0 bs contribs :: stepFacts rest contribs
+
+stepParams : String -> Int -> List IrBinder -> List (String, List (Int, Int)) -> List (Int, Int, Int)
+stepParams name i [] contribs = []
+stepParams name i (b :: rest) contribs =
+  let
+    tailFacts = stepParams name (i + 1) rest contribs
+  in if isIntParam b then mkFact b.irBinderId (unionAt name i contribs) :: tailFacts else tailFacts
+
+flatFacts : List (List (Int, Int, Int)) -> List (Int, Int, Int)
+flatFacts [] = []
+flatFacts (g :: rest) = append g (flatFacts rest)
+
+mergeAll : List (List (Int, Int, Int)) -> List (List (Int, Int, Int)) -> List (List (Int, Int, Int))
+mergeAll [] _ = []
+mergeAll _ [] = []
+mergeAll (a :: moreA) (b :: moreB) = mergeGroup a b :: mergeAll moreA moreB
+
+mergeGroup : List (Int, Int, Int) -> List (Int, Int, Int) -> List (Int, Int, Int)
+mergeGroup old new = map (mergeFact old) new
+
+mergeFact : List (Int, Int, Int) -> (Int, Int, Int) -> (Int, Int, Int)
+mergeFact old f =
+  case lookupFact (firstOf f) old of
+    Nothing => f
+    Just r => mkFact (firstOf f) (unionRange r (rangeOfFact f))
+
+widenAll : List (Int, Int) -> List (List (Int, Int, Int)) -> List (List (Int, Int, Int)) -> (List (List (Int, Int, Int)), List (Int, Int))
+widenAll counts old new = widenGroups counts old new []
+
+widenGroups : List (Int, Int) -> List (List (Int, Int, Int)) -> List (List (Int, Int, Int)) -> List (List (Int, Int, Int)) -> (List (List (Int, Int, Int)), List (Int, Int))
+widenGroups counts (a :: moreA) (b :: moreB) acc =
+  let
+    p = widenGroup counts a b
+  in widenGroups (secondOf p) moreA moreB (firstOf p :: acc)
+widenGroups counts _ _ acc = (reverse acc, counts)
+
+widenGroup : List (Int, Int) -> List (Int, Int, Int) -> List (Int, Int, Int) -> (List (Int, Int, Int), List (Int, Int))
+widenGroup counts old new = widenParams counts old new []
+
+widenParams : List (Int, Int) -> List (Int, Int, Int) -> List (Int, Int, Int) -> List (Int, Int, Int) -> (List (Int, Int, Int), List (Int, Int))
+widenParams counts (a :: moreA) (b :: moreB) acc =
+  let
+    p = widenFact counts a b
+  in widenParams (secondOf p) moreA moreB (firstOf p :: acc)
+widenParams counts _ _ acc = (reverse acc, counts)
+
+-- | 端点变了就把它的幅值翻倍（只放大）。同一个形参只加宽一次，第二次还漂移就直接
+--   给全域：`sum += acc` 这类真累加器的区间本来就无界，不该连累同一循环的其它形参。
+widenFact : List (Int, Int) -> (Int, Int, Int) -> (Int, Int, Int) -> ((Int, Int, Int), List (Int, Int))
+widenFact counts old f =
+  let
+    plo = loOf old
+    phi = hiOf old
+  in if loOf f >= plo && hiOf f <= phi then
+    (f, counts)
+  else
+    let
+      n = countOf (firstOf f) counts
+      counts2 = putCount (firstOf f) (n + 1) counts
+    in if n >= 1 then ((firstOf f, nativeMinInt, nativeMaxInt), counts2) else (mkFact (firstOf f) (widenLo (loOf f) plo, widenHi (hiOf f) phi), counts2)
+
+countOf : Int -> List (Int, Int) -> Int
+countOf id [] = 0
+countOf id (p :: rest) = if firstOf p == id then secondOf p else countOf id rest
+
+putCount : Int -> Int -> List (Int, Int) -> List (Int, Int)
+putCount id n [] = [(id, n)]
+putCount id n (p :: rest) = if firstOf p == id then (id, n) :: rest else p :: putCount id n rest
+
+widenLo : Int -> Int -> Int
+widenLo lo prev =
+  if lo >= prev then prev else if lo >= 0 then satSub (satMul (0 - 2) lo) 1 else satMul 2 lo
+
+widenHi : Int -> Int -> Int
+widenHi hi prev =
+  if hi <= prev then prev else if hi <= 0 then satSub (satMul 2 hi) 1 else satMul 2 hi
+
+sameFacts : List (List (Int, Int, Int)) -> List (List (Int, Int, Int)) -> Bool
+sameFacts [] [] = True
+sameFacts (a :: moreA) (b :: moreB) = sameGroup a b && sameFacts moreA moreB
+sameFacts _ _ = False
+
+sameGroup : List (Int, Int, Int) -> List (Int, Int, Int) -> Bool
+sameGroup [] [] = True
+sameGroup (a :: moreA) (b :: moreB) =
+  firstOf a == firstOf b && loOf a == loOf b && hiOf a == hiOf b && sameGroup moreA moreB
+sameGroup _ _ = False

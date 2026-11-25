@@ -1,0 +1,105 @@
+-- 形参区间不动点（`Native.Params`）的单测：自减计数器在守卫下取到下界，
+-- 循环累加器的区间收敛到「有界」，于是 `acc - n` 可以证明不溢出；
+-- 无界累加器（`sum + acc`）单独落到全域，不连累同循环的其它形参。
+import Base
+import Base.Data.List as List
+import Base.Data.Maybe as Maybe
+import Base.Data.Pair as Pair
+import Base.Effect.Core
+import Base.Effect.Console
+import Base.Effect.Exit
+import Vuna.Ir.Model
+import Vuna.Ir.Synthetic as Synthetic
+import Vuna.Target.Native.Params
+import Vuna.Target.Native.Range as Range
+
+main : Eff [ConsoleOp, ExitOp] String
+main =
+  case problems of
+    [] => pure ""
+    ps =>
+      do
+        _ <- consolePrint ("native params drifted:\n" ++ join "\n" ps ++ "\n")
+        _ <- exitWith 1
+        pure ""
+
+sumB : IrBinder
+sumB = mkIrBinderTyped 60 "sum" IrTyInt
+
+accB : IrBinder
+accB = mkIrBinderTyped 61 "acc" IrTyInt
+
+nB : IrBinder
+nB = mkIrBinderTyped 62 "n" IrTyInt
+
+loopArgs : List Ir
+loopArgs =
+  [
+    IrRtApp "+" [IrVar sumB, IrVar accB],
+    IrRtApp "/" [IrRtApp "-" [IrVar accB, IrVar nB], IrInt 8],
+    IrRtApp "-" [IrVar nB, IrInt 1]
+  ]
+
+guard : Ir
+guard = IrRtApp "bi_le_int" [IrVar nB, IrInt 0]
+
+loopDef : IrDef
+loopDef =
+  IrDef
+    "loop"
+    3
+    []
+    Nothing
+    (IrLam [sumB, accB, nB] Nothing (IrIf guard (IrTail (IrVar sumB)) (IrTail (Synthetic.applyAllIr (IrGlobal "loop") loopArgs))))
+    True
+    False
+    Nothing
+
+mainDef : IrDef
+mainDef =
+  IrDef
+    "main"
+    0
+    []
+    (Just IrTyInt)
+    (Synthetic.applyAllIr (IrGlobal "loop") [IrInt 0, IrInt 0, IrInt 10000000])
+    True
+    False
+    Nothing
+
+defs : List IrDef
+defs = [mainDef, loopDef]
+
+loopFacts : List (Int, Int, Int)
+loopFacts =
+  case paramFactsOf defs of
+    _ :: f :: _ => f
+    [] => []
+    _ => []
+
+env : List (Int, Int, Int)
+env = loopFacts
+
+nRange : (Int, Int)
+nRange = Range.rangeOf env (IrVar nB)
+
+accRange : (Int, Int)
+accRange = Range.rangeOf env (IrVar accB)
+
+diffRange : (Int, Int)
+diffRange = Range.rangeOf env (IrRtApp "-" [IrVar accB, IrVar nB])
+
+problems : List String
+problems =
+  filter
+    (\s => s /= "")
+    [checkInt "loop has three facts" 3 (lengthInt loopFacts), check "n bounded above" True (secondOf nRange <= 10000000), check "n bounded below" True (firstOf nRange >= 0 - 20000000), check "acc bounded" True (firstOf accRange >= 0 - 10000000 && secondOf accRange <= 10000000), check "acc-n has no overflow" True (Range.overflowFree "-" accRange nRange), check "acc-n bounded" True (firstOf diffRange > 0 - 1000000000 && secondOf diffRange < 1000000000)]
+
+lengthInt : List (Int, Int, Int) -> Int
+lengthInt xs = natToInt (length xs)
+
+checkInt : String -> Int -> Int -> String
+checkInt label want got = if want == got then "" else label ++ ": drifted"
+
+check : String -> Bool -> Bool -> String
+check label want got = if want == got then "" else label ++ ": drifted"

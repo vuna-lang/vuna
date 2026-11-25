@@ -1268,3 +1268,121 @@ usesOutsideAlt id alt = usesOutsideLams id alt.irAltBody
 usesOutsideAltM : Int -> Maybe IrAlt -> Int
 usesOutsideAltM _ Nothing = 0
 usesOutsideAltM id (Just (IrAlt _ _ body)) = usesOutsideLams id body
+
+-- ---------------------------------------------------------------
+-- 尾位置 if 合并（同目标、标量实参差常量）
+-- ---------------------------------------------------------------
+-- `if c then f (x + a) … else f (x + b) …` 的两个尾调用目标相同、其余实参相同：
+-- 合成一次调用，把差异实参写成值选择的 `if c then a else b`。控制流从「两个分支 +
+-- 回边」变成一条直线（后续的选择在 `Native.Module` 里落到 `xor` / `add`，不再分支）。
+-- ---------------------------------------------------------------
+-- 尾位置 if 合并（同目标、标量实参差常量）
+-- ---------------------------------------------------------------
+-- `if c then f (x + a) … else f (x + b) …` 的两个尾调用目标相同、其余实参相同：
+-- 合成一次调用，把差异实参写成值选择 `x + select(c, a, b)`。差异值先用 `let`
+-- 绑成变量，累加那一步仍是原子的 `+`（能走内联标量算术，而不是 `call rt_add`）；
+-- 选择本身由 `Native.Module` 的 `BoolStep` 落成 `xor` / `add`，不再分支。
+-- 条件与实参都只求值一次，合并不改变可观察顺序。
+export mergeTailIfs : List IrDef -> List IrDef
+mergeTailIfs defs = firstOf (mergeDefsGo defs 0)
+
+mergeDefsGo : List IrDef -> Int -> (List IrDef, Int)
+mergeDefsGo [] n = ([], n)
+mergeDefsGo (d :: rest) n =
+  let
+    p = mergeTailDef d n
+    q = mergeDefsGo rest (secondOf p)
+  in (firstOf p :: firstOf q, secondOf q)
+
+mergeTailDef : IrDef -> Int -> (IrDef, Int)
+mergeTailDef (IrExternDef n t s sp) k = (IrExternDef n t s sp, k)
+mergeTailDef (IrDef n a deps ty body recOk guard span) k =
+  let
+    p = mergeTailIr body k
+  in (IrDef n a deps ty (firstOf p) recOk guard span, secondOf p)
+
+mergeTailIr : Ir -> Int -> (Ir, Int)
+mergeTailIr (IrLam bs rt inner) k =
+  let
+    p = mergeTailIr inner k
+  in (IrLam bs rt (firstOf p), secondOf p)
+mergeTailIr (IrTail inner) k =
+  let
+    p = mergeTailIr inner k
+  in (IrTail (firstOf p), secondOf p)
+mergeTailIr (IrIf c t e) k =
+  case tryMergeTail c t e k of
+    Just p => p
+    Nothing =>
+      let
+        p = mergeTailIr t k
+        q = mergeTailIr e (secondOf p)
+      in (IrIf c (firstOf p) (firstOf q), secondOf q)
+mergeTailIr ir k = (ir, k)
+
+tryMergeTail : Ir -> Ir -> Ir -> Int -> Maybe (Ir, Int)
+tryMergeTail c (IrTail t) (IrTail e) k =
+  case Analysis.flattenApp t of
+    (IrGlobal g1, a1) =>
+      case Analysis.flattenApp e of
+        (IrGlobal g2, a2) =>
+          if g1 == g2 && length a1 == length a2 then
+            case mergeArgs c a1 a2 Nothing k of
+              Just p =>
+                let
+                  call = Synthetic.applyAllIr (IrGlobal g1) (firstOf p)
+                in case firstOf (secondOf p) of
+                  Nothing => Just (IrTail call, secondOf (secondOf p))
+                  Just b => Just (IrLet [firstOf b] (secondOf b) (IrTail call), secondOf (secondOf p))
+              Nothing => Nothing
+          else
+            Nothing
+        _ => Nothing
+    _ => Nothing
+tryMergeTail _ _ _ _ = Nothing
+
+mergeArgs : Ir -> List Ir -> List Ir -> Maybe (IrBinder, Ir) -> Int -> Maybe (List Ir, Maybe (IrBinder, Ir), Int)
+mergeArgs c xs ys bind k = mergeArgsGo c xs ys bind [] k
+
+mergeArgsGo : Ir -> List Ir -> List Ir -> Maybe (IrBinder, Ir) -> List Ir -> Int -> Maybe (List Ir, Maybe (IrBinder, Ir), Int)
+mergeArgsGo _ [] [] bind acc k = Just (reverse acc, bind, k)
+mergeArgsGo c (a :: moreA) (b :: moreB) bind acc k =
+  if sameArg a b then
+    mergeArgsGo c moreA moreB bind (a :: acc) k
+  else
+    case bind of
+      Just _ => Nothing
+      Nothing =>
+        case factorArg c a b k of
+          Just p => mergeArgsGo c moreA moreB (Just (firstOf p)) (firstOf (secondOf p) :: acc) (secondOf (secondOf p))
+          Nothing => Nothing
+mergeArgsGo _ _ _ _ _ _ = Nothing
+
+-- | 差异实参：`x op a` vs `x op b`（op ∈ {+,-}），生成 `x op sel` 与 `sel` 的绑定。
+factorArg : Ir -> Ir -> Ir -> Int -> Maybe ((IrBinder, Ir), Ir, Int)
+factorArg c (IrRtApp op [x, IrInt ka]) (IrRtApp op2 [y, IrInt kb]) k =
+  if op == op2 && (op == "+" || op == "-") && sameArg x y then
+    let
+      sel = IrBinder (Synthetic.backendBinderId (700 + k)) (IrBUser "sel") False (Just IrTyInt)
+    in Just ((sel, IrIf c (IrInt ka) (IrInt kb)), IrRtApp op [x, IrVar sel], k + 1)
+  else
+    Nothing
+factorArg _ _ _ _ = Nothing
+
+sameArg : Ir -> Ir -> Bool
+sameArg (IrVar a) (IrVar b) = a.irBinderId == b.irBinderId
+sameArg (IrInt a) (IrInt b) = a == b
+sameArg (IrBool a) (IrBool b) = a == b
+sameArg (IrStr a) (IrStr b) = a == b
+sameArg (IrFloatLit a) (IrFloatLit b) = a == b
+sameArg (IrRt a) (IrRt b) = a == b
+sameArg (IrGlobal a) (IrGlobal b) = a == b
+sameArg (IrRtApp s1 a1) (IrRtApp s2 a2) = s1 == s2 && sameArgs a1 a2
+sameArg (IrCast _ _ a) (IrCast _ _ b) = sameArg a b
+sameArg (IrIf c1 t1 e1) (IrIf c2 t2 e2) = sameArg c1 c2 && sameArg t1 t2 && sameArg e1 e2
+sameArg _ _ = False
+
+sameArgs : List Ir -> List Ir -> Bool
+sameArgs [] [] = True
+sameArgs (a :: moreA) (b :: moreB) = sameArg a b && sameArgs moreA moreB
+sameArgs _ _ = False

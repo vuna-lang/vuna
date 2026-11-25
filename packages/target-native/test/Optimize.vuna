@@ -70,32 +70,27 @@ dispatchProblems : List String
 dispatchProblems =
   append
     (if countInstr isLoopTest dispatchOut == 2 then [] else ["dispatch: arm guard tests not merged (left " ++ strFromInt (countInstr isLoopTest dispatchOut) ++ ")"])
-    (append (if countInstr isStateWrite dispatchOut == 0 then [] else ["dispatch: state constant writes not dropped"]) (if blockEndsWith ".L3" (IJcc "jle" ".L0x") dispatchOut then [] else ["dispatch: arm does not fall through"]))
+    (append (if countInstr isStateWrite dispatchOut == 0 then [] else ["dispatch: state constant writes not dropped"]) (if blockHas ".L3" (IJcc "jle" ".L0x") dispatchOut then [] else ["dispatch: arm does not fall through"]))
 
 -- | 标签 `lbl` 到下一个标签之间的最后一条指令。
-blockEndsWith : String -> Instr -> List Instr -> Bool
-blockEndsWith lbl target instrs =
+-- | 标签 `lbl` 到下一个标签之间的块里是否出现给定指令（对齐指令可能留在块尾）。
+blockHas : String -> Instr -> List Instr -> Bool
+blockHas lbl target instrs =
   case dropUntil lbl instrs of
-    Just rest =>
-      case blockTail rest of
-        Just last => sameInstr target last
-        Nothing => False
+    Just rest => inBlock target rest
     Nothing => False
+
+inBlock : Instr -> List Instr -> Bool
+inBlock _ [] = False
+inBlock target (i :: rest) =
+  case i of
+    ILabel _ => False
+    _ => sameInstr target i || inBlock target rest
 
 dropUntil : String -> List Instr -> Maybe (List Instr)
 dropUntil _ [] = Nothing
 dropUntil lbl ((ILabel l) :: rest) = if l == lbl then Just rest else dropUntil lbl rest
 dropUntil lbl (i :: rest) = dropUntil lbl rest
-
-blockTail : List Instr -> Maybe Instr
-blockTail instrs =
-  case instrs of
-    [] => Nothing
-    i :: rest =>
-      case rest of
-        [] => Just i
-        (ILabel _) :: _ => Just i
-        _ => blockTail rest
 
 isLoopTest : Instr -> Bool
 isLoopTest (ITest R12 R12) = True

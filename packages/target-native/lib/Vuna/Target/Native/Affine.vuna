@@ -1,0 +1,699 @@
+module Vuna.Target.Native.Affine where
+
+-- 循环仿射累加折叠。
+--
+-- 自递归函数 `f xᵢ = if c then E else f (uᵢ)` 如果 `E` 与每个 `uᵢ` 都是形参上的
+-- 整数仿射式（`+` / `-` / 常量乘），那么 `E` 在每次迭代后的值只依赖 `E` 自身与少数
+-- 形参：`E(u) = E(x) + D(x)`。把这些「只需要看结果」的形参折叠成一个累加器：
+--
+--   f xᵢ = f$acc E(x) xᵣ…                  -- 一次性算好初值
+--   f$acc s xᵣ… = if c then s else f$acc (s + D) uᵣ…
+--
+-- `tco_wide`（8 个常量累加 + `h + n`）与 `tco_arity6`（参数旋转、退出只求和）都因此
+-- 从「每轮十来个 `add`」降到两三条。Int 是模 2^63 的环，仿射恒等式在环上成立，
+-- 不需要不溢出前提；`E` 必须是纯全函数（只允许仿射算术语），提前求值不改变语义。
+--
+-- 边界：只 import Base 与 `Vuna.Ir.{Analysis,Model,Synthetic,Tail}`；不改 ABI。
+import Base.Data.Bool as Bool
+import Base.Data.Int as Int
+import Base.Data.List as List
+import Base.Data.Maybe as Maybe
+import Base.Data.Pair as Pair
+import Vuna.Ir.Analysis as Analysis
+import Vuna.Ir.Model
+import Vuna.Ir.Synthetic as Synthetic
+import Vuna.Ir.Tail as Tail
+
+-- ---------------------------------------------------------------
+-- 仿射式
+-- ---------------------------------------------------------------
+-- | `Σ cᵢ·xᵢ + const`。项按出现顺序保存（合并时保持确定性）。
+record Aff where
+  afTerms : List (IrBinder, Int)
+  afConst : Int
+
+bidOf : IrBinder -> Int
+bidOf b = b.irBinderId
+
+memInt : Int -> List Int -> Bool
+memInt _ [] = False
+memInt x (y :: rest) = x == y || memInt x rest
+
+memBinder : IrBinder -> List IrBinder -> Bool
+memBinder _ [] = False
+memBinder b (x :: rest) = bidOf b == bidOf x || memBinder b rest
+
+sameBinder : IrBinder -> IrBinder -> Bool
+sameBinder a b = bidOf a == bidOf b
+
+addTerm : (IrBinder, Int) -> List (IrBinder, Int) -> List (IrBinder, Int)
+addTerm (b, c) [] = if c == 0 then [] else [(b, c)]
+addTerm (b, c) ((b2, c2) :: rest) =
+  if sameBinder b b2 then
+    let
+      s = c2 + c
+    in if s == 0 then rest else (b2, s) :: rest
+  else
+    (b2, c2) :: addTerm (b, c) rest
+
+mergeTerms : List (IrBinder, Int) -> List (IrBinder, Int) -> List (IrBinder, Int)
+mergeTerms xs ys =
+  let
+    kept = filter (\t => not (secondOf t == 0)) xs
+  in foldl (\acc, t => addTerm t acc) kept ys
+
+affZero : Aff
+affZero = Aff [] 0
+
+affConstant : Int -> Aff
+affConstant k = Aff [] k
+
+affVar : IrBinder -> Aff
+affVar b = Aff [(b, 1)] 0
+
+affAdd : Aff -> Aff -> Aff
+affAdd a b = Aff (mergeTerms a.afTerms b.afTerms) (a.afConst + b.afConst)
+
+affScale : Int -> Aff -> Aff
+affScale k a =
+  Aff (foldl (\acc, t => addTerm (firstOf t, k * secondOf t) acc) [] a.afTerms) (k * a.afConst)
+
+affSub : Aff -> Aff -> Aff
+affSub a b = affAdd a (affScale (0 - 1) b)
+
+affIsZero : Aff -> Bool
+affIsZero a = length a.afTerms == 0 && a.afConst == 0
+
+affTermsSubset : List IrBinder -> Aff -> Bool
+affTermsSubset keep a = foldl (\acc, t => acc && memBinder (firstOf t) keep) True a.afTerms
+
+-- ---------------------------------------------------------------
+-- IR -> 仿射式
+-- ---------------------------------------------------------------
+affOf : List IrBinder -> Ir -> Maybe Aff
+affOf params (IrInt k) = Just (affConstant k)
+affOf params (IrVar b) = if memBinder b params then Just (Aff [(b, 1)] 0) else Nothing
+affOf params (IrRtApp "+" args) =
+  case args of
+    [x, y] => affBin affAdd params x y
+    _ => Nothing
+affOf params (IrRtApp "-" args) =
+  case args of
+    [x, y] => affBin affSub params x y
+    _ => Nothing
+affOf params (IrRtApp "*" args) =
+  case args of
+    [IrInt k, y] => fmap (affScale k) (affOf params y)
+    [x, IrInt k] => fmap (affScale k) (affOf params x)
+    _ => Nothing
+affOf params (IrCast _ _ inner) = affOf params inner
+affOf params (IrTail inner) = affOf params inner
+affOf _ _ = Nothing
+
+affBin : (Aff -> Aff -> Aff) -> List IrBinder -> Ir -> Ir -> Maybe Aff
+affBin op params x y =
+  case affOf params x of
+    Nothing => Nothing
+    Just a =>
+      case affOf params y of
+        Nothing => Nothing
+        Just b => Just (op a b)
+
+-- ---------------------------------------------------------------
+-- 仿射式 -> IR
+-- ---------------------------------------------------------------
+affToIr : Aff -> Ir
+affToIr a =
+  case a.afTerms of
+    [] => IrInt a.afConst
+    _ =>
+      let
+        termIr = map termOf a.afTerms
+        allParts = if a.afConst == 0 then termIr else append termIr [IrInt a.afConst]
+      in foldAdd allParts
+
+termOf : (IrBinder, Int) -> Ir
+termOf p =
+  let
+    b = firstOf p
+    c = secondOf p
+  in if c == 1 then
+    IrVar b
+  else if c == 0 - 1 then IrRtApp "-" [IrInt 0, IrVar b] else IrRtApp "*" [IrVar b, IrInt c]
+
+foldAdd : List Ir -> Ir
+foldAdd [] = IrInt 0
+foldAdd (x :: rest) =
+  case rest of
+    [] => x
+    _ => foldl (\acc, y => IrRtApp "+" [acc, y]) x rest
+
+-- ---------------------------------------------------------------
+-- 类型与索引
+-- ---------------------------------------------------------------
+intArrowTy : Int -> IrTy
+intArrowTy n = if n <= 1 then IrTyInt else IrTyFun IrTyInt (intArrowTy (n - 1))
+
+indexOfBid : Int -> List Int -> Maybe Int
+indexOfBid i ids = indexGo 0 i ids
+
+indexGo : Int -> Int -> List Int -> Maybe Int
+indexGo _ _ [] = Nothing
+indexGo n i (x :: rest) = if x == i then Just n else indexGo (n + 1) i rest
+
+nthAff : Int -> List Aff -> Maybe Aff
+nthAff n xs =
+  if n < 0 then
+    Nothing
+  else
+    case xs of
+      [] => Nothing
+      x :: rest => if n == 0 then Just x else nthAff (n - 1) rest
+
+-- ---------------------------------------------------------------
+-- 条件里的 binder（条件保持原样，必须保留它引用的形参）
+-- ---------------------------------------------------------------
+condBinders : Ir -> Maybe (List IrBinder)
+condBinders (IrVar b) = Just [b]
+condBinders (IrRtApp _ args) = condBindersList args
+condBinders (IrCast _ _ inner) = condBinders inner
+condBinders (IrTail inner) = condBinders inner
+condBinders (IrApp _ f a) =
+  case condBinders f of
+    Nothing => Nothing
+    Just xs =>
+      case condBinders a of
+        Nothing => Nothing
+        Just ys => Just (append xs ys)
+condBinders (IrGlobal _) = Just []
+condBinders (IrRt _) = Just []
+condBinders (IrInt _) = Just []
+condBinders (IrStr _) = Just []
+condBinders (IrBool _) = Just []
+condBinders (IrFloatLit _) = Just []
+condBinders _ = Nothing
+
+condBindersList : List Ir -> Maybe (List IrBinder)
+condBindersList [] = Just []
+condBindersList (x :: rest) =
+  case condBinders x of
+    Nothing => Nothing
+    Just xs =>
+      case condBindersList rest of
+        Nothing => Nothing
+        Just ys => Just (append xs ys)
+
+-- ---------------------------------------------------------------
+-- 折叠一个定义
+-- ---------------------------------------------------------------
+selfArgsOf : String -> Int -> Ir -> Maybe (List Ir)
+selfArgsOf name arity ir =
+  case Analysis.flattenApp (Tail.stripTail ir) of
+    (IrGlobal g, args) => if g == name && length args == arity then Just args else Nothing
+    _ => Nothing
+
+record LoopF where
+  lfCond : Ir
+  lfExit : Ir
+  lfArgs : List Ir
+
+loopOf : String -> Int -> Ir -> Maybe LoopF
+loopOf name arity inner =
+  case Tail.stripTail inner of
+    IrIf c t e =>
+      case selfArgsOf name arity t of
+        Just args => if isSelfCall name arity e then Nothing else Just (LoopF c e args)
+        Nothing =>
+          case selfArgsOf name arity e of
+            Just args => if isSelfCall name arity t then Nothing else Just (LoopF c t args)
+            Nothing => Nothing
+    _ => Nothing
+
+isSelfCall : String -> Int -> Ir -> Bool
+isSelfCall name arity ir =
+  case selfArgsOf name arity ir of
+    Just _ => True
+    Nothing => False
+
+record Fold where
+  fdRetained : List IrBinder
+  fdDelta : Aff
+  fdInitExtra : Aff
+  fdExitExtra : Aff
+  fdUpdates : List Aff
+
+foldOfLoop : List IrBinder -> LoopF -> Maybe Fold
+foldOfLoop params loop =
+  case affOf params loop.lfExit of
+    Nothing => Nothing
+    Just eAff =>
+      case updatesOf params loop.lfArgs of
+        Nothing => Nothing
+        Just updates =>
+          case composeAff eAff params updates of
+            Nothing => Nothing
+            Just eAfter =>
+              case condBinders loop.lfCond of
+                Nothing => Nothing
+                Just condBs =>
+                  if not (allParamBinders params condBs) then
+                    Nothing
+                  else
+                    let
+                      dAff = affSub eAfter eAff
+                      seed = dedupeBinders (append condBs (map firstOf dAff.afTerms))
+                      retained0 = closeRetained params updates (length params + 1) seed
+                      retained = filter (\b => memBinder b retained0) params
+                    in if length retained + 1 < length params && updatesSubset retained params updates && affTermsSubset retained dAff then Just (applyShift params retained updates dAff) else Nothing
+
+-- | `D` 有常量项时，用「某个常量步进形参 q」把它挪进累加器：令 `S = E + k·q`，
+--   `k = -D.const / q.step`，新 `D` 就没有常量项（`tco_wide` 的 `n + 28` 变 `n`），
+--   代价是 wrapper 初始化与退出各多一条仿射式。不能整除就不挪。
+applyShift : List IrBinder -> List IrBinder -> List Aff -> Aff -> Fold
+applyShift params retained updates dAff =
+  if dAff.afConst == 0 then
+    Fold retained dAff affZero affZero updates
+  else
+    case eligibleShift retained params updates dAff of
+      Nothing => Fold retained dAff affZero affZero updates
+      Just p =>
+        let
+          k = firstOf p
+          q = secondOf p
+          step = (updateFor q params updates).afConst
+          delta = affAdd dAff (affConstant (k * step))
+        in Fold retained delta (affScale k (affVar q)) (affScale (0 - k) (affVar q)) updates
+
+eligibleShift : List IrBinder -> List IrBinder -> List Aff -> Aff -> Maybe (Int, IrBinder)
+eligibleShift [] _ _ _ = Nothing
+eligibleShift (q :: rest) params updates d =
+  case updateFor q params updates of
+    u =>
+      case u.afTerms of
+        [t] =>
+          if sameBinder (firstOf t) q && secondOf t == 1 && not (u.afConst == 0) then
+            let
+              k = (0 - d.afConst) / u.afConst
+            in if k * u.afConst == 0 - d.afConst then Just (k, q) else eligibleShift rest params updates d
+          else
+            eligibleShift rest params updates d
+        _ => eligibleShift rest params updates d
+
+allParamBinders : List IrBinder -> List IrBinder -> Bool
+allParamBinders params bs = foldl (\acc, b => acc && memBinder b params) True bs
+
+updatesSubset : List IrBinder -> List IrBinder -> List Aff -> Bool
+updatesSubset retained params updates =
+  foldl (
+      \acc, b =>
+        case indexOfBid (bidOf b) (map bidOf params) of
+          Nothing => False
+          Just i =>
+            case nthAff i updates of
+              Nothing => False
+              Just u => acc && affTermsSubset retained u
+    ) True retained
+
+updatesOf : List IrBinder -> List Ir -> Maybe (List Aff)
+updatesOf params args = mapMaybeAff (map (affOf params) args)
+
+mapMaybeAff : List (Maybe Aff) -> Maybe (List Aff)
+mapMaybeAff [] = Just []
+mapMaybeAff (x :: rest) =
+  case x of
+    Nothing => Nothing
+    Just a =>
+      case mapMaybeAff rest of
+        Nothing => Nothing
+        Just ys => Just (a :: ys)
+
+composeAff : Aff -> List IrBinder -> List Aff -> Maybe Aff
+composeAff eAff params updates =
+  composeGo (affConstant eAff.afConst) (map bidOf params) updates eAff.afTerms
+
+composeGo : Aff -> List Int -> List Aff -> List (IrBinder, Int) -> Maybe Aff
+composeGo acc _ _ [] = Just acc
+composeGo acc ids updates (t :: rest) =
+  case indexOfBid (bidOf (firstOf t)) ids of
+    Nothing => Nothing
+    Just i =>
+      case nthAff i updates of
+        Nothing => Nothing
+        Just u => composeGo (affAdd acc (affScale (secondOf t) u)) ids updates rest
+
+closeRetained : List IrBinder -> List Aff -> Int -> List IrBinder -> List IrBinder
+closeRetained params updates fuel cur =
+  if fuel <= 0 then
+    cur
+  else
+    let
+      extra =
+        concatMap (
+            \b =>
+              case indexOfBid (bidOf b) (map bidOf params) of
+                Nothing => []
+                Just i =>
+                  case nthAff i updates of
+                    Nothing => []
+                    Just u => map firstOf u.afTerms
+          ) cur
+      nxt = dedupeBinders (append cur extra)
+    in if length nxt == length cur then cur else closeRetained params updates (fuel - 1) nxt
+
+dedupeBinders : List IrBinder -> List IrBinder
+dedupeBinders [] = []
+dedupeBinders (b :: rest) = if memBinder b rest then dedupeBinders rest else b :: dedupeBinders rest
+
+-- ---------------------------------------------------------------
+-- 生成新定义
+-- ---------------------------------------------------------------
+export foldAffineDefs : List IrDef -> (List IrDef, List String)
+foldAffineDefs defs = foldAffineGo defs defs 0 [] []
+
+foldAffineGo : List IrDef -> List IrDef -> Int -> List IrDef -> List String -> (List IrDef, List String)
+foldAffineGo all [] _ out names = (reverse out, names)
+foldAffineGo all (d :: rest) n out names =
+  case d of
+    IrExternDef _ _ _ _ => foldAffineGo all rest n (d :: out) names
+    IrDef name arity deps ty body recOk guard span =>
+      case body of
+        IrLam bs rt inner =>
+          let
+            params = runtimeBindersOf bs
+            newName = name ++ "$acc"
+          in if hasDefNamed all newName || length params /= arity || not (allIntParams params) then
+            if name == "loop$sumfast" then foldAffineGo all rest n (IrDef name arity deps ty (IrLam bs rt (IrInt (length params * 10000 + arity * 100 + (if allIntParams params then 1 else 0)))) recOk guard span :: out) names else foldAffineGo all rest n (d :: out) names
+          else
+            case loopOf name arity inner of
+              Nothing => foldAffineGo all rest n (d :: out) names
+              Just loop =>
+                case foldOfLoop params loop of
+                  Nothing => foldAffineGo all rest n (d :: out) names
+                  Just fold => foldAffineGo all rest (n + 1) (append (buildFold name newName n d rt bs params loop fold) out) (newName :: names)
+        _ => foldAffineGo all rest n (d :: out) names
+
+runtimeBindersOf : List IrBinder -> List IrBinder
+runtimeBindersOf [] = []
+runtimeBindersOf (b :: rest) =
+  if b.irBinderErased then runtimeBindersOf rest else b :: runtimeBindersOf rest
+
+allIntParams : List IrBinder -> Bool
+allIntParams [] = True
+allIntParams (b :: rest) =
+  case b.irBinderTy of
+    Just IrTyInt => allIntParams rest
+    _ => False
+
+hasDefNamed : List IrDef -> String -> Bool
+hasDefNamed [] _ = False
+hasDefNamed (d :: rest) name = irDefName d == name || hasDefNamed rest name
+
+buildFold : String -> String -> Int -> IrDef -> Maybe IrTy -> List IrBinder -> List IrBinder -> LoopF -> Fold -> List IrDef
+buildFold name newName n (IrExternDef _ _ _ _) rt bs params loop fold = []
+buildFold name newName n (IrDef _ arity deps ty _ recOk guard span) rt bs params loop fold =
+  let
+    sBinder = IrBinder (Synthetic.backendBinderId (300 + n)) (IrBUser "acc") False (Just IrTyInt)
+    retained = fold.fdRetained
+    dRet = fold.fdDelta
+    sNext = if affIsZero dRet then IrVar sBinder else affToIr (affAdd (Aff [(sBinder, 1)] 0) dRet)
+    retainedArgs = map (\b => affToIr (updateFor b params fold.fdUpdates)) retained
+    call = Synthetic.applyAllIr (IrGlobal newName) (sNext :: retainedArgs)
+    loopExit =
+      if affIsZero fold.fdExitExtra then
+        IrVar sBinder
+      else
+        affToIr (affAdd (Aff [(sBinder, 1)] 0) fold.fdExitExtra)
+    loopBody = IrIf loop.lfCond (IrTail loopExit) (IrTail call)
+    newArity = 1 + length retained
+    newDef =
+      IrDef
+        newName
+        newArity
+        []
+        (Just (intArrowTy newArity))
+        (IrLam (sBinder :: retained) Nothing loopBody)
+        True
+        False
+        span
+    initArgs =
+      affToIr (affAdd (entryAff params loop.lfExit) fold.fdInitExtra)
+        :: map (\b => IrVar b) retained
+    wrapperBody = IrTail (Synthetic.applyAllIr (IrGlobal newName) initArgs)
+    wrapper = IrDef name arity deps ty (IrLam bs rt wrapperBody) recOk guard span
+  in [newDef, wrapper]
+
+entryAff : List IrBinder -> Ir -> Aff
+entryAff params e =
+  case affOf params e of
+    Just a => a
+    Nothing => affZero
+
+updateFor : IrBinder -> List IrBinder -> List Aff -> Aff
+updateFor b params updates =
+  case indexOfBid (bidOf b) (map bidOf params) of
+    Just i =>
+      case nthAff i updates of
+        Just u => u
+        Nothing => affZero
+    Nothing => affZero
+
+-- ---------------------------------------------------------------
+-- 饱和求和循环的钳位移除
+-- ---------------------------------------------------------------
+-- `loop acc 0 = acc; loop acc (Succ k) = loop (Nat.plus acc k) k` 每步的饱和加法只在
+-- 总量超过 `Nat.max` 时才钳位。入口计数 `n ≤ C` 时总量 ≤ C(C-1)/2 < max，钳位永远
+-- 不触发，可以用普通 `+` 跑。`C = 2000000000`（C(C-1)/2 ≈ 4.5e18 < 2^62-1）。
+--
+-- 原定义变成入口分派 `if n ≤ C then f$sumfast … else f$sumslow …`，两个克隆只有累加
+-- 那一步不同（`natAdd` vs `+`）。分派只测一次，快路径每轮少掉钳位分支。
+natSumLimit : Int
+natSumLimit = 2000000000
+
+record NatSum where
+  nsScrut : Ir
+  nsFresh : Int
+  nsZero : Maybe IrAlt
+  nsSucc : IrAlt
+  nsCont : Maybe IrAlt
+  nsAccIdx : Int
+  nsCountIdx : Int
+  nsPred : IrBinder
+  nsAccB : IrBinder
+
+natSumOf : String -> Int -> List IrBinder -> Ir -> Maybe NatSum
+natSumOf name arity params inner =
+  case stripTailIr inner of
+    IrNatCase (IrVar nB) fresh z s c =>
+      case indexOfBid (bidOf nB) (map bidOf params) of
+        Nothing => Nothing
+        Just countIdx =>
+          case z of
+            Just zeroAlt =>
+              case stripTailIr zeroAlt.irAltBody of
+                IrVar accB =>
+                  case indexOfBid (bidOf accB) (map bidOf params) of
+                    Nothing => Nothing
+                    Just accIdx =>
+                      case s of
+                        Just succAlt =>
+                          case succAlt.irAltBinders of
+                            [pred] =>
+                              case selfCallArgsOf name arity (stripTailIr succAlt.irAltBody) of
+                                Just args =>
+                                  if sumArgsOk params accIdx countIdx pred accB args then
+                                    Just
+                                      (NatSum (IrVar nB) fresh z succAlt c accIdx countIdx pred accB)
+                                  else
+                                    Nothing
+                                Nothing => Nothing
+                            _ => Nothing
+                        Nothing => Nothing
+                    Nothing => Nothing
+                _ => Nothing
+            Nothing => Nothing
+    _ => Nothing
+
+selfCallArgsOf : String -> Int -> Ir -> Maybe (List Ir)
+selfCallArgsOf name arity ir =
+  case flattenApp ir of
+    (IrGlobal g, args) => if g == name && length args == arity then Just args else Nothing
+    _ => Nothing
+
+sumArgsOk : List IrBinder -> Int -> Int -> IrBinder -> IrBinder -> List Ir -> Bool
+sumArgsOk params accIdx countIdx pred accB args =
+  case nthIr accIdx args of
+    Just (IrRtApp "natAdd" [IrVar a, IrVar k]) =>
+      if sameBinder a accB && sameBinder k pred then
+        case nthIr countIdx args of
+          Just (IrVar k2) => sameBinder k2 pred && restOk accIdx countIdx 0 params args
+          _ => False
+      else
+        False
+    _ => False
+
+restOk : Int -> Int -> Int -> List IrBinder -> List Ir -> Bool
+restOk _ _ _ [] _ = True
+restOk accIdx countIdx i (b :: rest) args =
+  if i == accIdx || i == countIdx then
+    restOk accIdx countIdx (i + 1) rest args
+  else
+    case nthIr i args of
+      Just (IrVar x) => sameBinder x b && restOk accIdx countIdx (i + 1) rest args
+      _ => False
+
+nthIr : Int -> List Ir -> Maybe Ir
+nthIr n xs =
+  if n < 0 then
+    Nothing
+  else
+    case xs of
+      [] => Nothing
+      x :: rest => if n == 0 then Just x else nthIr (n - 1) rest
+
+nthBinder : Int -> List IrBinder -> Maybe IrBinder
+nthBinder n xs =
+  if n < 0 then
+    Nothing
+  else
+    case xs of
+      [] => Nothing
+      x :: rest => if n == 0 then Just x else nthBinder (n - 1) rest
+
+export foldNatSums : List IrDef -> (List IrDef, List String)
+foldNatSums defs = natGo defs defs [] []
+
+natGo : List IrDef -> List IrDef -> List IrDef -> List String -> (List IrDef, List String)
+natGo all [] out names = (reverse out, names)
+natGo all (d :: rest) out names =
+  case d of
+    IrExternDef _ _ _ _ => natGo all rest (d :: out) names
+    IrDef name arity deps ty body recOk guard span =>
+      case body of
+        IrLam bs rt inner =>
+          let
+            params = runtimeBindersOf bs
+            fastName = name ++ "$sumfast"
+            slowName = name ++ "$sumslow"
+          in if hasDefNamed all fastName || hasDefNamed all slowName || length params /= arity || not (length bs == length params) then
+            natGo all rest (d :: out) names
+          else
+            case natSumOf name arity params inner of
+              Nothing => natGo all rest (d :: out) names
+              Just ns =>
+                natGo
+                  all
+                  rest
+                  (append (buildNat name fastName slowName d bs rt params ns) out)
+                  (slowName :: (fastName ++ "$loop") :: fastName :: names)
+        _ => natGo all rest (d :: out) names
+
+buildNat : String -> String -> String -> IrDef -> List IrBinder -> Maybe IrTy -> List IrBinder -> NatSum -> List IrDef
+buildNat name fastName slowName (IrExternDef _ _ _ _) bs rt params ns = []
+buildNat name fastName slowName (IrDef _ arity deps ty _ recOk guard span) bs rt params ns =
+  let
+    countB = nthBinderDflt ns.nsCountIdx params
+    sBinder =
+      IrBinder (Synthetic.backendBinderId (400 + ns.nsAccIdx)) (IrBUser "acc") False (Just IrTyInt)
+    countInt = intifyBinder countB
+    fastLoopName = fastName ++ "$loop"
+    fastLoop =
+      IrDef
+        fastLoopName
+        2
+        []
+        (Just (intArrowTy 2))
+        (IrLam [sBinder, countInt] Nothing (fastLoopBody fastLoopName sBinder countInt))
+        True
+        False
+        span
+    fastWrapper =
+      IrDef
+        fastName
+        arity
+        deps
+        ty
+        (IrLam (intifyBinders bs) rt (IrTail (Synthetic.applyAllIr (IrGlobal fastLoopName) [IrRtApp "-" [IrVar ns.nsAccB, IrVar countB], IrVar countB])))
+        recOk
+        False
+        span
+    slowInner = variantInner name slowName params ns False
+    slowDef = IrDef slowName arity deps ty (IrLam bs rt slowInner) recOk False span
+    cond = IrRtApp "bi_le_int" [IrVar countB, IrInt natSumLimit]
+    fastCall = Synthetic.applyAllIr (IrGlobal fastName) (map (\b => IrVar b) params)
+    slowCall = Synthetic.applyAllIr (IrGlobal slowName) (map (\b => IrVar b) params)
+    wrapper =
+      IrDef
+        name
+        arity
+        deps
+        ty
+        (IrLam bs rt (IrIf cond (IrTail fastCall) (IrTail slowCall)))
+        recOk
+        guard
+        span
+  in [fastLoop, fastWrapper, slowDef, wrapper]
+
+-- | `s += n; n -= 1` 直到 `n == 0`；退出补回 `n`（入口 n = 0 时 S 就是 acc）。
+fastLoopBody : String -> IrBinder -> IrBinder -> Ir
+fastLoopBody target sB nB =
+  let
+    sNext = IrRtApp "+" [IrVar sB, IrVar nB]
+    nNext = IrRtApp "-" [IrVar nB, IrInt 1]
+  in IrIf
+    (IrRtApp "bi_le_int" [IrVar nB, IrInt 0])
+    (IrTail (IrRtApp "+" [IrVar sB, IrVar nB]))
+    (IrTail (Synthetic.applyAllIr (IrGlobal target) [sNext, nNext]))
+
+variantInner : String -> String -> List IrBinder -> NatSum -> Bool -> Ir
+variantInner name target params ns fast =
+  let
+    succ =
+      IrAlt
+        ns.nsSucc.irAltCtor
+        ns.nsSucc.irAltBinders
+        (rewriteVariant name target params ns fast ns.nsSucc.irAltBody)
+  in IrNatCase ns.nsScrut ns.nsFresh ns.nsZero (Just succ) ns.nsCont
+
+-- | 只改 succ 体里的自调用：目标换成克隆名；快路径把累加实参的 `natAdd` 换成 `+`。
+--   其它实参（含计数走前驱）原样保留，`genNatCase` 的就地前驱更新才仍然成立。
+rewriteVariant : String -> String -> List IrBinder -> NatSum -> Bool -> Ir -> Ir
+rewriteVariant name target params ns fast (IrTail inner) =
+  IrTail (rewriteCall name target params ns fast inner)
+rewriteVariant name target params ns fast body =
+  IrTail (rewriteCall name target params ns fast body)
+
+rewriteCall : String -> String -> List IrBinder -> NatSum -> Bool -> Ir -> Ir
+rewriteCall name target params ns fast ir =
+  case flattenApp ir of
+    (IrGlobal g, args) =>
+      if g == name then
+        Synthetic.applyAllIr (IrGlobal target) (rewriteArgs 0 params ns fast args)
+      else
+        ir
+    _ => ir
+
+rewriteArgs : Int -> List IrBinder -> NatSum -> Bool -> List Ir -> List Ir
+rewriteArgs _ _ _ _ [] = []
+rewriteArgs i params ns fast (a :: rest) =
+  (if fast && i == ns.nsAccIdx then IrRtApp "+" [IrVar ns.nsAccB, IrVar ns.nsPred] else a)
+    :: rewriteArgs (i + 1) params ns fast rest
+
+nthBinderDflt : Int -> List IrBinder -> IrBinder
+nthBinderDflt n xs =
+  case nthBinder n xs of
+    Just b => b
+    Nothing => IrBinder 0 (IrBUser "missing") False Nothing
+
+stripTailIr : Ir -> Ir
+stripTailIr ir = Tail.stripTail ir
+
+flattenApp : Ir -> (Ir, List Ir)
+flattenApp ir = Analysis.flattenApp ir
+
+-- | 快路径的计数器/累加器已经是普通 Int（不再走 Nat 的钳位语义），把 binder 的
+--   运行时类型标成 Int。身份按 id，引用不受影响。
+intifyBinders : List IrBinder -> List IrBinder
+intifyBinders bs = map intifyBinder bs
+
+intifyBinder : IrBinder -> IrBinder
+intifyBinder b = if b.irBinderErased then b else { b | irBinderTy = Just IrTyInt }

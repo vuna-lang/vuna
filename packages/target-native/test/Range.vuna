@@ -105,7 +105,14 @@ rangeProblems =
       "div nonneg"
       (rangeOf [Pair 10 (Pair 4 40)] (IrRtApp "/" [varX, IrInt 2]))
       (Pair 2 20),
-    rangeCheck "div unknown" (rangeOf [] (IrRtApp "/" [varX, IrInt 2])) fullRange,
+    rangeCheck
+      "div unknown"
+      (rangeOf [] (IrRtApp "/" [varX, IrInt 2]))
+      (Pair (0 - 2305843009213693952) 2305843009213693952),
+    rangeCheck
+      "div negative side"
+      (rangeOf [Pair 10 (Pair (0 - 40) 40)] (IrRtApp "/" [varX, IrInt 8]))
+      (Pair (0 - 6) 6),
     rangeCheck "natFromInt clamps" (rangeOf [] (IrRtApp "natFromInt" [IrInt (0 - 5)])) (Pair 0 0),
     rangeCheck "natSub floors" (rangeOf [] (IrRtApp "natSub" [IrInt 3, IrInt 10])) (Pair 0 0)
   ]

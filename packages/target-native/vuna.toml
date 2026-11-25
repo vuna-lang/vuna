@@ -13,6 +13,7 @@ vuna-ir = "../ir"
 [export]
 modules = [
   "Vuna.Target.Native.Abi",
+  "Vuna.Target.Native.Affine",
   "Vuna.Target.Native.Audit",
   "Vuna.Target.Native.Dirty",
   "Vuna.Target.Native.Gc",
@@ -21,6 +22,7 @@ modules = [
   "Vuna.Target.Native.Model",
   "Vuna.Target.Native.Module",
   "Vuna.Target.Native.Pal",
+  "Vuna.Target.Native.Params",
   "Vuna.Target.Native.Plugin",
   "Vuna.Target.Native.Range",
   "Vuna.Target.Native.Regs",

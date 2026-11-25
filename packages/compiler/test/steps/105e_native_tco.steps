@@ -18,7 +18,7 @@ run: "$TMPDIR/tcowide-out/bin/tcowide" 2>&1
 exit: 0
 out-equals: 1000001
 file-contains: $TMPDIR/tcowide-out/Main.s jmp .L
-run: sh -c '! grep -q "jmp vuna_step" "$TMPDIR/tcowide-out/Main.s"'
+run: sh -c '! grep -q "jmp vuna_step$" "$TMPDIR/tcowide-out/Main.s"'
 
 # 9ad) 尾位置穿透 `if` / `case` / `natCase`：三种形状的深递归都在常量栈上跑完。
 run: sh -c 'd="$TMPDIR/tcopos"; mkdir -p "$d/app"; printf "[package]\nname = \"tcopos\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Data.Nat as Nat\n\ndata Chain : Type where\n  Nil2 : Chain\n  Cons2 : Chain -> Chain\n\nbuild : Int -> Chain -> Chain\nbuild n acc = if n <= 0 then acc else build (n - 1) (Cons2 acc)\n\nifTail : Int -> Int\nifTail n = if n <= 0 then 0 else ifTail (n - 1)\n\nchainTail : Chain -> Int\nchainTail c = case c of\n  Nil2 => 0\n  Cons2 k => chainTail k\n\nnatTail : Nat -> Int\nnatTail n = case n of\n  Zero => 0\n  Succ k => natTail k\n\nmain : Int\nmain = ifTail 300000 + chainTail (build 300000 Nil2) + natTail (natFromInt 300000)\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --out "$TMPDIR/tcopos-out" "$d"'
@@ -48,7 +48,7 @@ exit: 0
 run: "$TMPDIR/natloop-out/bin/natloop" 2>&1
 exit: 0
 out-equals: 4999950000
-run: sh -c '! sed -n "/^  \.L0:/,/jmp \.L0/p" "$TMPDIR/natloop-out/Main.s" | grep -q "\[rbp"'
+run: sh -c '! awk '"'"'/vuna_loop_x36_sumfast_x36_loop:/"{f=1;next} f&&/^  \.L/{g=1} f&&/^\.globl/{exit} g{print}'"'"' "$TMPDIR/natloop-out/Main.s" | grep -q "\[rbp"'
 exit: 0
 run: sh -c '! grep -q "call rt_nat_add" "$TMPDIR/natloop-out/Main.s"'
 exit: 0
@@ -98,7 +98,7 @@ exit: 0
 run: "$TMPDIR/tcolam-out/bin/tcolam" 2>&1
 exit: 0
 out-equals: 36
-run: sh -c 'grep -c "jmp vuna_wide10" "$TMPDIR/tcolam-out/Main.s"'
+run: sh -c 'grep -c "jmp vuna_wide10$" "$TMPDIR/tcolam-out/Main.s"'
 out-equals: 1
 
 # 9aj) 范围信息：守卫支配的计数器递减不再 wrap，非负常量除法走一条 `shr`。

@@ -1,0 +1,325 @@
+-- 仿射累加折叠（`Native.Affine`）的单测：宽尾递归的 8 个常量累加 + `h+n` 折叠成
+-- `s += n + 28; n -= 1`；参数旋转的求和折叠成 `s += n`；非仿射（饱和 Nat）不动。
+import Base
+import Base.Data.List as List
+import Base.Effect.Core
+import Vuna.Ir.Model
+import Vuna.Ir.Synthetic as Synthetic
+import Vuna.Target.Native.Affine
+import Base.Effect.Console
+import Base.Effect.Exit
+
+main : Eff [ConsoleOp, ExitOp] String
+main =
+  case problems of
+    [] => pure ""
+    ps =>
+      do
+        _ <- consolePrint ("native affine drifted:\n" ++ join "\n" ps ++ "\n")
+        _ <- exitWith 1
+        pure ""
+
+problems : List String
+problems = append wideProblems rotateProblems
+
+binderOf : Int -> String -> IrBinder
+binderOf n nm = IrBinder n (IrBUser nm) False (Just IrTyInt)
+
+add : Ir -> Ir -> Ir
+add a b = IrRtApp "+" [a, b]
+
+sub : Ir -> Ir -> Ir
+sub a b = IrRtApp "-" [a, b]
+
+-- ---------------------------------------------------------------
+-- wide 形状：step a b c ... n = if n<=0 then a+…+h else step (a+1) … (h+n) (n-1)
+-- ---------------------------------------------------------------
+wideParams : List IrBinder
+wideParams = map (\i => binderOf (i + 1) ("p" ++ strFromInt i)) (range 0 9)
+
+wideExit : Ir
+wideExit =
+  foldl
+    add
+    (IrVar (nthBinder 0 wideParams))
+    (map (\i => IrVar (nthBinder i wideParams)) (range 1 8))
+
+nthBinder : Int -> List IrBinder -> IrBinder
+nthBinder n xs =
+  case xs of
+    [] => binderOf 999 "missing"
+    b :: rest => if n <= 0 then b else nthBinder (n - 1) rest
+
+wideArgs : List Ir
+wideArgs =
+  append
+    (map (\i => add (IrVar (nthBinder i wideParams)) (IrInt (i + 1))) (range 0 7))
+    [add (IrVar (nthBinder 7 wideParams)) (IrVar (nthBinder 8 wideParams)), sub (IrVar (nthBinder 8 wideParams)) (IrInt 1)]
+
+wideCond : Ir
+wideCond = IrRtApp "bi_le_int" [IrVar (nthBinder 8 wideParams), IrInt 0]
+
+wideDef : IrDef
+wideDef =
+  IrDef
+    "step"
+    9
+    []
+    Nothing
+    (IrLam wideParams Nothing (IrIf wideCond (IrTail wideExit) (IrTail (Synthetic.applyAllIr (IrGlobal "step") wideArgs))))
+    True
+    False
+    Nothing
+
+wideOut : List IrDef
+wideOut = firstOf (foldAffineDefs [wideDef])
+
+wideNames : List String
+wideNames = map nameOfDef wideOut
+
+nameOfDef : IrDef -> String
+nameOfDef (IrDef nm _ _ _ _ _ _ _) = nm
+nameOfDef (IrExternDef nm _ _ _) = nm
+
+wideProblems : List String
+wideProblems =
+  if memName "step$acc" wideNames then
+    if length (paramsOfDef "step$acc" wideOut) /= 2 then
+      ["wide: folded loop should have 2 params"]
+    else if not (deltaHasBinder wideOut "step$acc" (nthBinder 8 wideParams)) then
+      ["wide: accumulator delta should carry n"]
+    else if not (bodyHasInt wideOut "step" (0 - 28) || bodyHasInt wideOut "step" 28) then
+      ["wide: constant 28 should move into the wrapper init / exit shift"]
+    else
+      []
+  else
+    ["wide: did not fold"]
+
+-- | 新循环（或 wrapper）的 lambda 体里应出现给定字面量（常量偏移）。
+bodyHasInt : List IrDef -> String -> Int -> Bool
+bodyHasInt defs nm k =
+  case defs of
+    [] => False
+    d :: rest =>
+      case d of
+        IrDef n _ _ _ body _ _ _ => if n == nm then irHasInt k body else bodyHasInt rest nm k
+        _ => bodyHasInt rest nm k
+
+irHasInt : Int -> Ir -> Bool
+irHasInt k ir =
+  case ir of
+    IrInt j => k == j
+    IrTail inner => irHasInt k inner
+    IrIf c t e => irHasInt k c || irHasInt k t || irHasInt k e
+    IrLam _ _ inner => irHasInt k inner
+    IrRtApp _ args => foldl (\acc, x => acc || irHasInt k x) False args
+    IrApp _ f a => irHasInt k f || irHasInt k a
+    _ => False
+
+bidOf : IrBinder -> Int
+bidOf b = b.irBinderId
+
+selfCallArgs : List IrDef -> String -> Maybe (List Ir)
+selfCallArgs defs nm =
+  case defs of
+    [] => Nothing
+    d :: rest =>
+      case d of
+        IrDef n _ _ _ body _ _ _ =>
+          if n == nm then
+            case body of
+              IrLam _ _ inner =>
+                case inner of
+                  IrIf _ _ selfSide =>
+                    case flattenApp (stripTailIr selfSide) of
+                      (IrGlobal g, args) => if g == nm then Just args else Nothing
+                      _ => Nothing
+                  _ => Nothing
+              _ => Nothing
+          else
+            selfCallArgs rest nm
+        _ => selfCallArgs rest nm
+
+stripTailIr : Ir -> Ir
+stripTailIr (IrTail inner) = stripTailIr inner
+stripTailIr ir = ir
+
+flattenApp : Ir -> (Ir, List Ir)
+flattenApp (IrApp _ f a) =
+  let
+    p = flattenApp f
+  in (firstOf p, append (secondOf p) [a])
+flattenApp x = (x, [])
+
+containsBinder : Int -> Ir -> Bool
+containsBinder id ir =
+  case ir of
+    IrVar b => b.irBinderId == id
+    IrRtApp _ args => foldl (\acc, x => acc || containsBinder id x) False args
+    _ => False
+
+paramsOfDef : String -> List IrDef -> List IrBinder
+paramsOfDef nm defs =
+  case defs of
+    [] => []
+    d :: rest =>
+      case d of
+        IrDef n _ _ _ (IrLam bs _ _) _ _ _ => if n == nm then bs else paramsOfDef nm rest
+        _ => paramsOfDef nm rest
+
+memName : String -> List String -> Bool
+memName _ [] = False
+memName x (y :: rest) = x == y || memName x rest
+
+-- ---------------------------------------------------------------
+-- 参数旋转：step a b c n = if n<=0 then a+b+c else step b c (a+n) (n-1)
+-- ---------------------------------------------------------------
+rotParams : List IrBinder
+rotParams = [binderOf 11 "a", binderOf 12 "b", binderOf 13 "c", binderOf 14 "n"]
+
+rotExit : Ir
+rotExit =
+  add
+    (add (IrVar (nthBinder 0 rotParams)) (IrVar (nthBinder 1 rotParams)))
+    (IrVar (nthBinder 2 rotParams))
+
+rotArgs : List Ir
+rotArgs =
+  [
+    IrVar (nthBinder 1 rotParams),
+    IrVar (nthBinder 2 rotParams),
+    add (IrVar (nthBinder 0 rotParams)) (IrVar (nthBinder 3 rotParams)),
+    sub (IrVar (nthBinder 3 rotParams)) (IrInt 1)
+  ]
+
+rotDef : IrDef
+rotDef =
+  IrDef
+    "rot"
+    4
+    []
+    Nothing
+    (IrLam rotParams Nothing (IrIf (IrRtApp "bi_le_int" [IrVar (nthBinder 3 rotParams), IrInt 0]) (IrTail rotExit) (IrTail (Synthetic.applyAllIr (IrGlobal "rot") rotArgs))))
+    True
+    False
+    Nothing
+
+rotOut : List IrDef
+rotOut = firstOf (foldAffineDefs [rotDef])
+
+rotateProblems : List String
+rotateProblems =
+  if memName "rot$acc" (map nameOfDef rotOut) then
+    if length (paramsOfDef "rot$acc" rotOut) /= 2 then
+      ["rotate: folded loop should have 2 params"]
+    else if not (deltaHasBinder rotOut "rot$acc" (nthBinder 3 rotParams)) then
+      ["rotate: accumulator delta should carry n"]
+    else
+      []
+  else
+    ["rotate: did not fold"]
+
+deltaHasBinder : List IrDef -> String -> IrBinder -> Bool
+deltaHasBinder defs nm b =
+  case selfCallArgs defs nm of
+    Just args =>
+      case args of
+        d :: _ => containsBinder (bidOf b) d
+        [] => False
+    Nothing => False
+
+-- ---------------------------------------------------------------
+-- 常量步进的 2 参循环：`s += n-1; n -= 1` 应该挪成 `s += n`（D 无常量）
+-- ---------------------------------------------------------------
+sumParams : List IrBinder
+sumParams = [binderOf 21 "acc", binderOf 22 "n"]
+
+sumDef : IrDef
+sumDef =
+  IrDef
+    "sum"
+    2
+    []
+    Nothing
+    (IrLam sumParams Nothing (IrIf (IrRtApp "bi_le_int" [IrVar (nthBinder 1 sumParams), IrInt 0]) (IrTail (IrVar (nthBinder 0 sumParams))) (IrTail (Synthetic.applyAllIr (IrGlobal "sum") [add (IrVar (nthBinder 0 sumParams)) (sub (IrVar (nthBinder 1 sumParams)) (IrInt 1)), sub (IrVar (nthBinder 1 sumParams)) (IrInt 1)]))))
+    True
+    False
+    Nothing
+
+sumOut : List IrDef
+sumOut = firstOf (foldAffineDefs [sumDef])
+
+shiftProblems : List String
+shiftProblems =
+  if memName "sum$acc" (map nameOfDef sumOut) then
+    if length (paramsOfDef "sum$acc" sumOut) /= 2 then
+      ["shift: folded loop should keep 2 params"]
+    else if not (deltaIsVariable "sum$acc" sumOut) then
+      ["shift: delta should lose its constant term"]
+    else
+      []
+  else
+    ["shift: did not fold"]
+
+deltaIsVariable : String -> List IrDef -> Bool
+deltaIsVariable nm defs =
+  case selfCallArgs defs nm of
+    Just args =>
+      case args of
+        d :: _ => containsBinder (bidOf (nthBinder 1 sumParams)) d && not (irHasInt 1 d)
+        [] => False
+    Nothing => False
+
+-- ---------------------------------------------------------------
+-- 饱和求和：`loop acc 0 = acc; loop acc (Succ k) = loop (natAdd acc k) k`
+-- 应拆成入口分派 + `$sumfast` / `$sumslow`，快路径是普通 `+` 的累加循环。
+-- ---------------------------------------------------------------
+natTy : Maybe IrTy
+natTy = Just (IrTyData "Nat" [])
+
+natAccB : IrBinder
+natAccB = IrBinder 31 (IrBUser "acc") False natTy
+
+natNB : IrBinder
+natNB = IrBinder 32 (IrBUser "n") False natTy
+
+natKB : IrBinder
+natKB = IrBinder 33 (IrBUser "k") False natTy
+
+natSuccAlt : IrAlt
+natSuccAlt =
+  IrAlt
+    Nothing
+    [natKB]
+    (IrTail (Synthetic.applyAllIr (IrGlobal "nloop") [IrRtApp "natAdd" [IrVar natAccB, IrVar natKB], IrVar natKB]))
+
+natZeroAlt : IrAlt
+natZeroAlt = IrAlt Nothing [] (IrTail (IrVar natAccB))
+
+natDef : IrDef
+natDef =
+  IrDef
+    "nloop"
+    2
+    []
+    Nothing
+    (IrLam [natAccB, natNB] Nothing (IrNatCase (IrVar natNB) 0 (Just natZeroAlt) (Just natSuccAlt) Nothing))
+    True
+    False
+    Nothing
+
+natOut : List IrDef
+natOut = firstOf (foldNatSums [natDef])
+
+natProblems : List String
+natProblems =
+  if memName "nloop$sumfast" (map nameOfDef natOut) && memName "nloop$sumslow" (map nameOfDef natOut) then
+    if memName "nloop$sumfast$loop" (map nameOfDef natOut) then
+      if length (paramsOfDef "nloop$sumfast$loop" natOut) == 2 then
+        []
+      else
+        ["nat: fast loop should have 2 params"]
+    else
+      ["nat: fast loop missing"]
+  else
+    ["nat: saturating sum not split into fast/slow"]
