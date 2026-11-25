@@ -54,6 +54,8 @@ export data ProcessError(..) : Type where
   ProcessNoDir : String -> ProcessError
   -- | 启动被系统拒绝（权限 / 资源）。
   ProcessLaunchDenied : String -> ProcessError
+  -- | 宿主侧的并发子进程数超过运行时的跟踪上限（native 运行时 + 总超时才可能出现）。
+  ProcessTooManyChildren : String -> ProcessError
   -- | 其它宿主启动错误。
   ProcessHostIo : String -> ProcessError
 
@@ -70,12 +72,14 @@ processFail e = sendCore (Named n ProcessErrorOp) "process-error" n (ProcessFail
 export processErrorOfCode : String -> Int -> ProcessError
 processErrorOfCode path 1 = ProcessNoDir path
 processErrorOfCode path 2 = ProcessLaunchDenied path
+processErrorOfCode path 10 = ProcessTooManyChildren path
 processErrorOfCode path _ = ProcessHostIo path
 
 -- | 失败种类的人类可读文本（诊断输出用）。
 export processErrorText : ProcessError -> String
 processErrorText (ProcessNoDir p) = "process: ${p}: no such directory"
 processErrorText (ProcessLaunchDenied p) = "process: ${p}: permission denied"
+processErrorText (ProcessTooManyChildren p) = "process: ${p}: too many concurrent child processes"
 processErrorText (ProcessHostIo p) = "process: ${p}: host I/O error"
 
 -- | 一阶 handler：`ret` / `opH` 由调用方给出，结果行删除 `ProcessOp`。
@@ -98,11 +102,13 @@ processOpHIOWith i op k =
     Spawn args =>
       do
         h <- @vuna@prim_eff_spawn args
-        k h
+        ok <- hostSync @vuna@prim_eff_hostStatus
+        if ok /= 0 then prim_fail (processErrorText (processErrorOfCode "spawn" ok)) else k h
     Wait h =>
       do
         c <- @vuna@prim_eff_wait h
-        k c
+        ok <- hostSync @vuna@prim_eff_hostStatus
+        if ok /= 0 then prim_fail (processErrorText (processErrorOfCode "wait" ok)) else k c
 
 -- | 宿主 handler：由调用方传入 `onExit`，结果行删除 `ProcessOp`，answer 是宿主行动作。
 export handleProcessHostWith : {a : Type} -> {r : Row} -> (n : String) -> Eff (Named n ProcessOp :: r) a -> Eff r (Eff [HostOp] a)
@@ -133,11 +139,13 @@ processOpHIOWithHost i op k =
     Spawn args =>
       do
         h <- hostSync (@vuna@prim_eff_spawn args)
-        k h
+        ok <- processHostStatus
+        if ok /= 0 then processFail (processErrorOfCode "spawn" ok) else k h
     Wait h =>
       do
         c <- hostSync (@vuna@prim_eff_wait h)
-        k c
+        ok <- processHostStatus
+        if ok /= 0 then processFail (processErrorOfCode "wait" ok) else k c
 
 -- | 带行的宿主 handler（`onExit` 由调用方给出）：删掉 `ProcessOp`，answer 是 `Eff [ProcessErrorOp]`（不导出）。
 handleProcessHostWithHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Named n ProcessOp :: r) a -> Eff r (Eff [ProcessErrorOp@"process-error"] a)

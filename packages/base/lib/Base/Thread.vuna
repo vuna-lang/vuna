@@ -22,6 +22,7 @@ import Base.Trait.Monad
 -- ---------------------------------------------------------------
 
 -- | 在并行执行流里运行一个行已处理的动作；返回可 `join` 的句柄。
+--   句柄**必须** `join`：没有 detach，未 join 的线程一直占着运行时槽，栈与 scratch 也不回收。
 export spawn : {r : Row} -> Eff [] a -> Eff r (Thread a)
 spawn body = raise (@vuna@prim_eff_threadSpawn (\_ => runPure body))
 

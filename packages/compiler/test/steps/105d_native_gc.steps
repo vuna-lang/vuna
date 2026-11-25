@@ -98,3 +98,22 @@ run: sh -c 'VUNA_NATIVE_GC_MIN=4096 timeout 120 "$TMPDIR/gcspin-out/bin/gcspin" 
 out-equals: 1
 run: sh -c 'grep -rq "call rt_safepoint" "$TMPDIR/gcspin-out"'
 exit: 0
+
+# 9ae) 线程表槽复用：2000 次串行 spawn/join 必须在同一批槽上来回用（表 4096 槽，
+#      不复用的话第 2001 次就撞上限 trap）；顺带验证高水位单调推进后 GC 仍扫得对。
+run: sh -c 'd="$TMPDIR/gcreuse"; mkdir -p "$d/app"; printf "[package]\nname = \"gcreuse\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Effect.Core\nimport Base.Thread as Thread\n\nround : Int -> Eff [] Int\nround k =\n  if k <= 0 then pure 0\n  else do\n    t <- Thread.spawn (pure k)\n    v <- Thread.join t\n    if v == k then round (k - 1) else pure 1\n\nmain : Eff [] Int\nmain = do\n  n <- round 2000\n  pure (if n == 0 then 1 else 0)\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --out "$TMPDIR/gcreuse-out" "$d"'
+exit: 0
+run: sh -c 'timeout 120 "$TMPDIR/gcreuse-out/bin/gcreuse" 2>&1'
+out-equals: 1
+run: sh -c 'VUNA_NATIVE_GC_MIN=2048 timeout 120 "$TMPDIR/gcreuse-out/bin/gcreuse" 2>&1'
+out-equals: 1
+
+# 9af) 多线程的扫描上界按高水位：64 个并发子线程（容量 4096，并发只有 65）各自分配，
+#      主线程在它们活着时反复触发回收。槽号 ≥ 64 的扫描必须仍然覆盖到每个 live 线程的
+#      栈根（表容量/上界接错会漏扫或越界）。
+run: sh -c 'd="$TMPDIR/gcmany"; mkdir -p "$d/app"; printf "[package]\nname = \"gcmany\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Data.Int as Int\nimport Base.Data.List as List\nimport Base.Data.String as String\nimport Base.Effect.Core\nimport Base.Thread as Thread\n\nwork : Int -> Int\nwork n = if n <= 0 then 0 else strLength (strFromInt n) + work (n - 1)\n\nbody : Int -> Eff [] Int\nbody k = pure (work 2000 + k)\n\nspawnAll : Int -> Eff [] (List (Thread Int))\nspawnAll k =\n  if k <= 0 then pure []\n  else do\n    t <- Thread.spawn (body k)\n    ts <- spawnAll (k - 1)\n    pure (t :: ts)\n\njoinAll : List (Thread Int) -> Eff [] Int\njoinAll ts =\n  case ts of\n    [] => pure 1\n    t :: rest => do\n      v <- Thread.join t\n      r <- joinAll rest\n      pure (if v >= 1 && r == 1 then 1 else 0)\n\nmain : Eff [] Int\nmain = do\n  ts <- spawnAll 64\n  ok <- joinAll ts\n  n <- pure (work 20000)\n  pure (if ok == 1 && n > 0 then 1 else 0)\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --out "$TMPDIR/gcmany-out" "$d"'
+exit: 0
+run: sh -c 'timeout 120 "$TMPDIR/gcmany-out/bin/gcmany" 2>&1'
+out-equals: 1
+run: sh -c 'VUNA_NATIVE_GC_MIN=2048 timeout 120 "$TMPDIR/gcmany-out/bin/gcmany" 2>&1'
+out-equals: 1

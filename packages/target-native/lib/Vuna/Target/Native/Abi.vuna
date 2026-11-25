@@ -256,6 +256,15 @@ nativeTcbCleanupOff = 48
 export nativeTcbIdOff : Int
 nativeTcbIdOff = 56
 
+-- | TCB 的 magic：线程在登记进线程表**之前**写入。GC 沿线程表扫 `saved_rsp` / cleanup
+--   链前核对它——表里出现非 TCB 指针（越界扫描、写坏的槽）时要显式失败，而不是把任意
+--   内存当 TCB 解引用。值必须放进 `cmp mem, imm32`。
+export nativeTcbMagicOff : Int
+nativeTcbMagicOff = 64
+
+export nativeTcbMagic : Int
+nativeTcbMagic = 1413697057
+
 -- ---------------------------------------------------------------
 -- 线程私有宿主 scratch 块
 -- ---------------------------------------------------------------
@@ -327,7 +336,13 @@ scratchBytes = scratchEnvChildOff + 8192
 export nativeMainTcbLabel : String
 nativeMainTcbLabel = "rt_main_tcb"
 
--- | 线程表：固定 1024 项，每项一个 TCB 指针（0 = 空槽）。
+-- | 线程表槽数。`thread_register` 的登记上界与 GC 的扫描循环引用它；`.bss` 尺寸在
+--   `Runtime.nativeBss` 里写字面量（`checks.vuna-native-surface` 把那张表逐行摊平），
+--   两者的耦合由 `test/RuntimeSlots.vuna` 锁定（漏改一处会让扫描越界或漏扫根）。
+export threadSlots : Int
+threadSlots = 4096
+
+-- | 线程表：`threadSlots` 项，每项一个 TCB 指针（0 = 空槽）。
 export nativeThreadTabLabel : String
 nativeThreadTabLabel = "rt_thread_tab"
 
@@ -338,6 +353,12 @@ nativeLiveThreadsLabel = "rt_live_threads"
 -- | 已 blocked / parked 的线程数（collector 等它等于 `live-1`）。
 export nativeParkedLabel : String
 nativeParkedLabel = "rt_parked_threads"
+
+-- | 已用过的最高槽 + 1（单调）。GC 的三个扫描循环（停车轮询 / 栈根 / cleanup 链）按它
+--   收上界：容量 4096 但并发通常只有几十，扫满容量会在 `VUNA_NATIVE_GC_STRESS` 下变成
+--   可测开销。单调意味着只会多扫，不会漏扫。
+export nativeThreadHiLabel : String
+nativeThreadHiLabel = "rt_thread_hi"
 
 -- | 线程状态变化的条件字：每次 live/parked 改变都递增并 futex 唤醒，collector 据此重查。
 export nativeThreadEventLabel : String

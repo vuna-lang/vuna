@@ -53,8 +53,8 @@ IR 支持面；这里讲生成物**跑起来**依赖的那一层——运行时�
 - **失败面只有 try 家族**：契约里没有 strict 非 try 叶子——`@vuna@prim_eff_readFile` /
   `readFileRange` / `writeFile` / `writeFileAtomic` / `readDir` / `isDirectory` / `makeDir` /
   `removeFile` 这组名字（连同它们的 `@vuna@host@*` 形式）已删除，源码也没有入口。`try_*` 叶子
-  跑同一批 syscall，失败时把 errno 映射成状态码写进 线程 TCB 的宿主状态槽并返回默认值（原始 errno
-  另记在 `rt_host_errno`）；库层 `Base.Effect.Fs` 读 `@vuna@prim_eff_hostStatus`，把失败收成
+  跑同一批 syscall，失败时把 errno 直接映射成状态码写进 线程 TCB 的宿主状态槽并返回默认值
+  （原始 errno 不保留，失败文本由状态码决定）；库层 `Base.Effect.Fs` 读 `@vuna@prim_eff_hostStatus`，把失败收成
   typed `FsError`，entry 打印 `vuna: fs: <op> …` 并以退出码 1 结束。
 - 进程：`@vuna@prim_eff_runIn` / `@vuna@host@tryRunIn`（`chdir` + `fork` + `execve("/bin/sh", ["-c", cmd])` + `wait4`
   + 恢复 cwd；实参按 shell 单引号转义）、`@vuna@prim_eff_spawn`（`fork` + `execve("/proc/self/exe", argv)`，

@@ -3,7 +3,7 @@ allocFn                          "mmap" "mmap" "mmap" "mmap"
 blockBeginFn                     "futex"
 blockEndFn                       "futex" "futex" "futex" "futex"
 cgroupCpusFn                     "openat" "read" "close"
-cmdRunShFn                       "getcwd" "chdir" "fork" "setpgid" "wait4" "chdir" "setpgid" "execve" "exit" "chdir"
+cmdRunShFn                       "getcwd" "chdir" "fork" "setpgid" "wait4" "wait4" "chdir" "setpgid" "execve" "exit" "chdir"
 condvarBroadcastFn               "futex"
 condvarSignalFn                  "futex"
 condvarWaitFn                    "futex"
@@ -20,9 +20,11 @@ futexReleaseFn                   "futex"
 getcwdFn                         "getcwd"
 initCpusFn                       "sched_getaffinity" "sched_setaffinity"
 initStackFn                      "mmap" "mprotect"
-initTcbFn                        "arch_prctl" "mmap"
+initTcbBase                      "arch_prctl"
+initTcbScratchFn                 "mmap"
 initTimeoutFn                    "rt_sigaction" "setitimer"
 isTtyFn                          "ioctl"
+killChildTreeFn                  "getpgid" "kill" "kill"
 lstatPathFn                      "newfstatat"
 mutexLockFn                      "futex"
 mutexUnlockFn                    "futex"
@@ -34,14 +36,14 @@ removeTreeFn                     "openat" "getdents64" "close" "close" "rmdir" "
 safepointFn                      "futex" "futex" "futex"
 sigBlockFn                       "rt_sigprocmask"
 sigUnblockFn                     "rt_sigprocmask"
-sigalrmFn                        "getpgid" "kill" "kill" "write" "exit"
+sigalrmFn                        "write" "exit"
 sigreturnStubFn                  "rt_sigreturn"
 sleepUsFn                        "nanosleep"
-spawnExecFn                      "fork" "setpgid" "setpgid" "execve" "exit"
+spawnExecFn                      "fork" "setpgid" "wait4" "setpgid" "execve" "exit"
 statPathFn                       "newfstatat"
 threadJoinFn                     "futex" "munmap" "munmap"
 threadParallelismFn              "sched_getaffinity"
-threadSpawnFn                    "mmap" "mprotect" "mmap" "futex" "clone" "futex" "futex" "futex" "futex" "exit"
+threadSpawnFn                    "mmap" "mprotect" "mmap" "futex" "clone" "futex" "futex" "futex" "futex" "exit" "munmap" "munmap"
 threadYieldFn                    "sched_yield"
 trapArrayOobFn                   "write" "exit"
 trapDivZeroFn                    "write" "exit"
@@ -50,6 +52,8 @@ trapMemLimitFn                   "write" "exit"
 trapOomFn                        "write" "exit"
 trapPathLongFn                   "write" "exit"
 trapRmtreeDeepFn                 "write" "exit"
+trapThreadLimitFn                "write" "exit"
+trapThreadTableFn                "write" "exit"
 tryMakeDirExclusiveFn            "mkdirat"
 tryMakeDirFn                     "mkdirat"
 tryReadFileFn                    "openat" "read" "close" "close"
@@ -68,11 +72,10 @@ argvLabel 8
 cgBufLabel 64
 childCountLabel 8
 childLockLabel 8
-childPidsLabel 64
+childPidsLabel 512
 cpuCountLabel 8
 envpLabel 8
 heapLockLabel 8
-hostErrnoLabel 8
 memLimitLabel 8
 nativeArenaEndLabel 8
 nativeCurSegLabel 8
@@ -86,8 +89,10 @@ nativeParkedLabel 8
 nativeSegsLabel 8
 nativeThreadCountLabel 8
 nativeThreadEventLabel 8
-nativeThreadTabLabel 8192
+nativeThreadHiLabel 8
+nativeThreadTabLabel 32768
 nativeThreadedLabel 8
+scratchNeededLabel 8
 sigalrmSetLabel 8
 stackTopLabel 8
 threadStackBytesLabel 8

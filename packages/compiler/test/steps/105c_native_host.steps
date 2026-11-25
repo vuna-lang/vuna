@@ -98,6 +98,28 @@ run: sh -c 'SLOTS_SLEEP=0 "$TMPDIR/spawnslots-out/bin/spawnslots" 2>&1'
 exit: 0
 out-contains: done
 
+# 9u4b) 子进程表容量：32 个并发 spawn（超过旧实现的 8 槽）在超时时必须**全部**被收掉。
+#      每个 worker 在 `runIn` 里起 `/bin/sh`，sh 再起后台 `sleep` 并写下它的 pid：
+#      漏记的组会作为孤儿活到 `sleep` 结束（这里 300s），检查会读到 S 状态。
+#      anchor 让父进程停在 wait 里，超时才有意义。
+run: sh -c 'd="$TMPDIR/spawnmany"; mkdir -p "$d/app"; printf "[package]\nname = \"spawnmany\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Data.Int as Int\nimport Base.Data.List as List\nimport Base.Data.String as String\nimport Base.Effect.Args as EffArgs\nimport Base.Effect.Core as Eff\nimport Base.Effect.Env as EffEnv\nimport Base.Effect.Process as EffProcess\n\nworker : String -> Eff [ProcessOp] Int\nworker c = do\n  _ <- processRunIn \".\" [\"sh\", \"-c\", c]\n  pure 0\n\ncmd : String -> Int -> String\ncmd tmp k = \"sleep 300 & echo \$! > \" ++ tmp ++ \"/m\" ++ strFromInt k ++ \".pid; wait\"\n\nspawnLoop : Int -> String -> Eff [ProcessOp] Int\nspawnLoop k tmp =\n  if k <= 0 then pure 0\n  else do\n    _ <- processSpawn [cmd tmp k]\n    spawnLoop (k - 1) tmp\n\nmain : Eff [ArgsOp, EnvOp, ProcessOp] Int\nmain = do\n  args <- argsGetArgs\n  case args of\n    c :: _ => worker c\n    [] => do\n      tmp <- envGetEnv \"TMPDIR\"\n      anchor <- processSpawn [cmd tmp 0]\n      _ <- spawnLoop 32 tmp\n      _ <- processWait anchor\n      pure 0\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --out "$TMPDIR/spawnmany-out" "$d"'
+exit: 0
+run: sh -c 'VUNA_NATIVE_TIMEOUT_MS=800 "$TMPDIR/spawnmany-out/bin/spawnmany" 2>&1'
+exit: 2
+out-equals: vuna: runtime error: timeout exceeded
+run: sh -c 'n=0; for k in $(seq 0 32); do pid=$(cat "$TMPDIR/m$k.pid" 2>/dev/null); [ -n "$pid" ] || { echo "no m$k pid"; exit 1; }; st=$(awk "{print \$3}" "/proc/$pid/stat" 2>/dev/null || echo gone); [ "$st" != S ] || { echo "m$k $pid still running"; exit 1; }; n=$((n + 1)); done; echo "swept $n"'
+out-equals: swept 33
+
+# 9u4c) 子进程表溢出：装了总超时又并发 spawn 出比槽数更多的子进程时，超时机制跟踪不到
+#      新子进程，必须**收掉它并报启动失败**（不能静默丢弃——那会让总超时失效）。
+#      64 个槽：第 65 个 spawn 走溢出分支，typed error 收口 exit 1。
+run: sh -c 'd="$TMPDIR/spawnfull"; mkdir -p "$d/app"; printf "[package]\nname = \"spawnfull\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Data.Int as Int\nimport Base.Effect.Args as EffArgs\nimport Base.Effect.Core as Eff\nimport Base.Effect.Process as EffProcess\n\nspawnLoop : Int -> Eff [ProcessOp] Int\nspawnLoop k =\n  if k <= 0 then pure 0\n  else do\n    _ <- processSpawn [\"child\"]\n    spawnLoop (k - 1)\n\nmain : Eff [ArgsOp, ProcessOp] Int\nmain = do\n  args <- argsGetArgs\n  case args of\n    [] => spawnLoop 65\n    _ => pure 0\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --out "$TMPDIR/spawnfull-out" "$d"'
+exit: 0
+run: sh -c 'VUNA_NATIVE_TIMEOUT_MS=5000 "$TMPDIR/spawnfull-out/bin/spawnfull" 2>"$TMPDIR/spawnfull.err" >/dev/null'
+exit: 1
+run: sh -c 'cat "$TMPDIR/spawnfull.err"'
+out-equals: vuna: process: spawn: too many concurrent child processes
+
 # 9u5) spawn 的多实参按 argv 边界逐项 NUL 分隔：子进程必须看到三个独立实参，
 #      而不是一个拼接串。粘连时子进程走 fallback 并 exit 3，父进程报 spawn-argv-fail。
 run: sh -c 'd="$TMPDIR/spawnargv"; mkdir -p "$d/app"; printf "[package]\nname = \"spawnargv\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Effect.Core as Eff\nimport Base.Effect.Args as EffArgs\nimport Base.Effect.Exit as EffExit\nimport Base.Effect.Process as EffProcess\nimport Base.Data.Int as Int\n\nmain : Eff [ArgsOp, ExitOp, ProcessOp] String\nmain = do\n  args <- argsGetArgs\n  case args of\n    \"alpha\" :: \"beta\" :: \"gamma\" :: _ => pure \"child-argv-ok\"\n    [] => do\n      pid <- processSpawn [\"alpha\", \"beta\", \"gamma\"]\n      code <- processWait pid\n      pure (if code == 0 then \"spawn-argv-ok\" else \"spawn-argv-fail\")\n    _ => do\n      _ <- exitWith 3\n      pure \"unreachable\"\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --out "$TMPDIR/spawnargv-out" "$d"'

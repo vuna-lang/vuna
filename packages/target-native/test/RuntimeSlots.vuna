@@ -1,0 +1,177 @@
+-- 线程表 / 子进程表的容量在运行时里有多处读者：`.bss` 尺寸、`thread_register` 的
+-- 登记上界、GC 的三个扫描循环（poll / 栈根 / cleanup 链）、`child_push` 的槽上限。
+-- 漏改一处会让扫描越界（把别的 `.bss` 当 TCB）或漏扫根（少回收栈根），两者都是静默的。
+-- 本测试把它们锁在同一个常量上：容量只有 `Abi.threadSlots` / `Runtime.childSlots` 两个源。
+import Base
+import Base.Data.Int
+import Base.Data.List as List
+import Base.Data.Maybe as Maybe
+import Base.Effect.Core
+import Base.Effect.Console
+import Base.Effect.Exit
+import Vuna.Target.Native.Abi
+import Vuna.Target.Native.Gc
+import Vuna.Target.Native.Model
+import Vuna.Target.Native.Runtime
+
+main : Eff [ConsoleOp, ExitOp] String
+main =
+  case problems of
+    [] => pure ""
+    ps =>
+      do
+        _ <- consolePrint ("native runtime slot tables drifted:\n" ++ join "\n" ps ++ "\n")
+        _ <- exitWith 1
+        pure ""
+
+problem : String -> Bool -> List String
+problem label ok = if ok then [] else [label ++ ": drifted"]
+
+problems : List String
+problems = concatMap (\p => problem (firstOf p) (secondOf p)) checks
+
+checks : List (String, Bool)
+checks =
+  [
+    ("rt_thread_tab 的 .bss 尺寸", bssSize nativeThreadTabLabel == Just (threadSlots * 8)),
+    ("rt_child_pids 的 .bss 尺寸", bssSize childPidsLabel == Just (childSlots * 8)),
+    ("thread_register 的登记上界", onlyBound threadRegisterFn threadSlots),
+    ("gc_collect 的三处扫描上界读高水位", scanBoundsOk gcCollectFn),
+    ("gc_collect 的三处 TCB magic 校验", magicChecks gcCollectFn),
+    ("rt_thread_hi 的 .bss 槽", bssSize nativeThreadHiLabel == Just 8),
+    ("child_push 的槽上限", onlyBound childPushFn childSlots)
+  ]
+
+-- | 运行时函数按标签取函数体（缺标签 = 空体，交给上面对应的问题项报错）。
+funcBody : String -> List NativeFunc -> List Instr
+funcBody lbl fs = concatMap (\f => if hasLabel lbl f then bodyOf f else []) fs
+
+hasLabel : String -> NativeFunc -> Bool
+hasLabel lbl f = f.nfLabel == lbl
+
+bodyOf : NativeFunc -> List Instr
+bodyOf f = f.nfBody
+
+bssSize : String -> Maybe Int
+bssSize lbl =
+  maybe
+    Nothing
+    (\e => Just (bssEntrySize e))
+    (List.firstJust (map (\e => if bssEntryLabel e == lbl then Just e else Nothing) nativeBss))
+
+bssEntryLabel : NativeBss -> String
+bssEntryLabel e = e.nbLabel
+
+bssEntrySize : NativeBss -> Int
+bssEntrySize e = e.nbSize
+
+threadRegisterFn : List Instr
+threadRegisterFn = funcBody (nativeRtLabel "thread_register") nativeRtFuncs
+
+gcCollectFn : List Instr
+gcCollectFn = funcBody (nativeRtLabel "gc_collect") nativeGcFuncs
+
+childPushFn : List Instr
+childPushFn = funcBody (nativeRtLabel "child_push") nativeRtFuncs
+
+-- | `ICmp (OpReg <r>) (OpImm n)` 形式的立即数（寄存器与常量的比较形态）。
+boundImms : Reg -> List Instr -> List Int
+boundImms want body = mapMaybe (boundOne want) body
+
+boundOne : Reg -> Instr -> Maybe Int
+boundOne want i =
+  case i of
+    ICmp dst src =>
+      case immValue src of
+        Just n => if sameReg want dst then Just n else Nothing
+        Nothing => Nothing
+    _ => Nothing
+
+immValue : Operand -> Maybe Int
+immValue op =
+  case op of
+    OpImm n => Just n
+    _ => Nothing
+
+sameReg : Reg -> Operand -> Bool
+sameReg want op =
+  case op of
+    OpReg r => regEq want r
+    _ => False
+
+regEq : Reg -> Reg -> Bool
+regEq a b =
+  case a of
+    R9 =>
+      case b of
+        R9 => True
+        _ => False
+    Rax =>
+      case b of
+        Rax => True
+        _ => False
+    _ => False
+
+slotBoundImms : List Instr -> List Int
+slotBoundImms body = boundImms R9 body
+
+countBoundImms : List Instr -> List Int
+countBoundImms body = boundImms Rax body
+
+-- | `thread_register` / `child_push`：容量比较有且只有一处，且等于给定常量。
+onlyBound : List Instr -> Int -> Bool
+onlyBound body want =
+  let
+    imms = append (slotBoundImms body) (countBoundImms body)
+  in length imms == 1 && length (List.filter (\n => n /= want) imms) == 0
+
+-- | GC 的扫描上界：三处槽下标比较都读 `rt_thread_hi`，且不再有 `threadSlots` 字面量
+--   （读满容量的扫描会在并发低、容量大时白跑）。
+scanBoundsOk : List Instr -> Bool
+scanBoundsOk body = length (hiBoundImms body) == 3 && length (slotBoundImms body) == 0
+
+hiBoundImms : List Instr -> List Int
+hiBoundImms body = mapMaybe hiBoundOne body
+
+hiBoundOne : Instr -> Maybe Int
+hiBoundOne i =
+  case i of
+    ICmp dst src =>
+      case ripLabel src of
+        Just lbl => if lbl == nativeThreadHiLabel && sameReg R9 dst then Just 0 else Nothing
+        Nothing => Nothing
+    _ => Nothing
+
+ripLabel : Operand -> Maybe String
+ripLabel op =
+  case op of
+    OpRip lbl => Just lbl
+    _ => Nothing
+
+-- | GC 沿线程表解引用 TCB 的三处都要先核对 magic（否则越界扫描会把任意内存当 TCB）。
+magicChecks : List Instr -> Bool
+magicChecks body = length (List.filter magicCheck body) == 3
+
+magicCheck : Instr -> Bool
+magicCheck i =
+  case i of
+    ICmp dst src => magicDst dst && immIs src nativeTcbMagic
+    _ => False
+
+magicDst : Operand -> Bool
+magicDst op =
+  case op of
+    OpMem base off => regIsR10 base && off == nativeTcbMagicOff
+    _ => False
+
+regIsR10 : Reg -> Bool
+regIsR10 r =
+  case r of
+    R10 => True
+    _ => False
+
+immIs : Operand -> Int -> Bool
+immIs op want =
+  case op of
+    OpImm n => n == want
+    _ => False

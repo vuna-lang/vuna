@@ -54,6 +54,7 @@ sysNr "sched_setaffinity" = 203
 sysNr "sched_getaffinity" = 204
 sysNr "getdents64" = 217
 sysNr "clock_gettime" = 228
+sysNr "pipe2" = 293
 sysNr "openat" = 257
 sysNr "mkdirat" = 258
 sysNr "newfstatat" = 262
@@ -71,6 +72,10 @@ atFdCwd = -100
 -- | `openat` flags：写 + 不存在则建 + 截断（`O_WRONLY|O_CREAT|O_TRUNC`）。
 export openWriteCreateTrunc : Int
 openWriteCreateTrunc = 577
+
+-- | `O_CLOEXEC`（02000000）：`runIn` 的 errno 回传管道在 `execve` 时自动关掉写端。
+export oCloexec : Int
+oCloexec = 524288
 
 -- | `lseek` 的 whence：绝对偏移（`SEEK_SET`）。
 export seekSet : Int
@@ -205,3 +210,9 @@ hostCodeOfErrno =
 
 export hostCodeOther : Int
 hostCodeOther = 9
+
+-- | 子进程表满（装了总超时又并发 fork 出 `childSlots` 个以上子进程）：超时机制跟踪不到
+--   的子进程会让总超时静默失效，所以调用点收掉这个子进程并报启动失败。7 = net 超时、
+--   8 = net 句柄无效，这里取 10。
+export hostCodeTooMany : Int
+hostCodeTooMany = 10
