@@ -639,30 +639,30 @@ let v_isStringImplicitDomain = (fun (ec : Elab_dTypes.t_Ec) (dom : Core_dTerm.t_
 # 846 "Vuna/Compiler/Elab/Meta.vuna"
 let v_isHandleDomain = (fun (ec : Elab_dTypes.t_Ec) (dom : Core_dTerm.t_Value) -> (let nd_uscrut2 = ((Elab_dTypes.v_forceVal ec) dom) in (match nd_uscrut2 with
   | Core_dTerm.C_Value_VNeutral (dtb__371) -> (match dtb__371 with
-  | Core_dTerm.C_Neutral_NGlobal (dtb__372, dtb__373) -> (if (if (dtb__372 = "@vuna@Cell") then true else (dtb__372 = "@vuna@MArray")) then true else (dtb__372 = "@vuna@MBuffer"))
+  | Core_dTerm.C_Neutral_NGlobal (dtb__372, dtb__373) -> (if (if (if (dtb__372 = "@vuna@Cell") then true else (dtb__372 = "@vuna@MArray")) then true else (dtb__372 = "@vuna@MDynArray")) then true else (dtb__372 = "@vuna@MBuffer"))
   | _ -> false
 )
   | _ -> false
 )))
 
-# 852 "Vuna/Compiler/Elab/Meta.vuna"
+# 853 "Vuna/Compiler/Elab/Meta.vuna"
 let v_implicitBinderRig = (fun (ec : Elab_dTypes.t_Ec) (dom : Core_dTerm.t_Value) -> (if ((v_isStringImplicitDomain ec) dom) then Core_dTerm.C_Rig_RigOmega else (if ((v_isHandleDomain ec) dom) then Core_dTerm.C_Rig_RigOmega else Core_dTerm.C_Rig_Rig0)))
 
-# 918 "Vuna/Compiler/Elab/Meta.vuna"
+# 919 "Vuna/Compiler/Elab/Meta.vuna"
 let rec v_ctxItemAt = (fun (mc0 : int) (mc1 : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__374, dtb__375) -> (if (mc0 <= 0) then (B_dData_dMaybe.C_Maybe_Just (dtb__374)) else ((v_ctxItemAt (mc0 - 1)) dtb__375))
   | B_dData_dList.C_List_Nil -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 867 "Vuna/Compiler/Elab/Meta.vuna"
+# 868 "Vuna/Compiler/Elab/Meta.vuna"
 let v_neutralBinderType = (fun (ctx : Elab_dTypes.t_Ctx) (ec : Elab_dTypes.t_Ec) (lvl : int) -> (let d = (Elab_dTypes.v_ctxDepth ctx) in (let idx = ((d - lvl) - 1) in (if (lvl < 0) then B_dData_dMaybe.C_Maybe_Nothing else (if (idx < 0) then B_dData_dMaybe.C_Maybe_Nothing else (match ((v_ctxItemAt idx) (ctx).Elab_dTypes.f_Ctx_ctxItems) with
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
   | B_dData_dMaybe.C_Maybe_Just (dtb__376) -> (B_dData_dMaybe.C_Maybe_Just ((((Elab_dTypes.v_varTypeValue ctx) idx) (B_dData_dPair.v_secondOf dtb__376))))
   | _ -> failwith "DT: impossible branch"
 ))))))
 
-# 944 "Vuna/Compiler/Elab/Meta.vuna"
+# 945 "Vuna/Compiler/Elab/Meta.vuna"
 let v_rigOfQty = (fun (implicit : bool) (isTypeDom : bool) (qty : Frontend_dAst.t_Qty B_dData_dMaybe.t_Maybe) -> (if (if implicit then true else isTypeDom) then Core_dTerm.C_Rig_Rig0 else (let nd_uscrut3 = qty in (match nd_uscrut3 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__377) -> (match dtb__377 with
   | Frontend_dAst.C_Qty_Q1 -> Core_dTerm.C_Rig_Rig1
@@ -673,34 +673,34 @@ let v_rigOfQty = (fun (implicit : bool) (isTypeDom : bool) (qty : Frontend_dAst.
   | _ -> failwith "DT: impossible branch"
 ))))
 
-# 967 "Vuna/Compiler/Elab/Meta.vuna"
+# 968 "Vuna/Compiler/Elab/Meta.vuna"
 let v_isTypeHeadOpaqueEc = (fun (ec : Elab_dTypes.t_Ec) (name : string) -> (if (B_dData_dBool.v_not ((v_isDataFamilyName ec) name)) then (B_dData_dBool.v_not (Base_dIntrinsics.v_isTypeConstructorName name)) else false))
 
-# 983 "Vuna/Compiler/Elab/Meta.vuna"
+# 984 "Vuna/Compiler/Elab/Meta.vuna"
 let v_isUniverseValue = (fun (mc0 : Core_dTerm.t_Value) -> (match mc0 with
   | Core_dTerm.C_Value_VType (dtb__378) -> true
   | _ -> false
 ))
 
-# 974 "Vuna/Compiler/Elab/Meta.vuna"
+# 975 "Vuna/Compiler/Elab/Meta.vuna"
 let rec v_isFamilyKindFuel = (fun (fuel : int) (v : Core_dTerm.t_Value) -> (if (fuel <= 0) then false else (match v with
   | Core_dTerm.C_Value_VPi (dtb__379, dtb__380, dtb__381, dtb__382, dtb__383) -> (if (B_dData_dBool.v_not (v_isUniverseValue dtb__382)) then true else ((v_isFamilyKindFuel (fuel - 1)) ((Core_dEval.v_applyClosure dtb__383) (Core_dTerm.C_Value_VNeutral ((Core_dTerm.C_Neutral_NVar (dtb__379, 0, B_dData_dList.C_List_Nil)))))))
   | _ -> false
 )))
 
-# 971 "Vuna/Compiler/Elab/Meta.vuna"
+# 972 "Vuna/Compiler/Elab/Meta.vuna"
 let v_isFamilyKindValue = (fun (v : Core_dTerm.t_Value) -> ((v_isFamilyKindFuel 64) v))
 
-# 1000 "Vuna/Compiler/Elab/Meta.vuna"
+# 1001 "Vuna/Compiler/Elab/Meta.vuna"
 let rec v_valueHasImplicitPiFuel = (fun (fuel : int) (v : Core_dTerm.t_Value) -> (if (fuel <= 0) then false else (match v with
   | Core_dTerm.C_Value_VPi (dtb__384, dtb__385, dtb__386, dtb__387, dtb__388) -> (if dtb__385 then true else ((v_valueHasImplicitPiFuel (fuel - 1)) ((Core_dEval.v_applyClosure dtb__388) (Core_dTerm.C_Value_VNeutral ((Core_dTerm.C_Neutral_NVar (dtb__384, 0, B_dData_dList.C_List_Nil)))))))
   | _ -> false
 )))
 
-# 997 "Vuna/Compiler/Elab/Meta.vuna"
+# 998 "Vuna/Compiler/Elab/Meta.vuna"
 let v_valueHasImplicitPi = (fun (v : Core_dTerm.t_Value) -> ((v_valueHasImplicitPiFuel 64) v))
 
-# 1042 "Vuna/Compiler/Elab/Meta.vuna"
+# 1043 "Vuna/Compiler/Elab/Meta.vuna"
 let v_isTypeishValue = (fun (mc0 : Core_dTerm.t_Value) -> (match mc0 with
   | Core_dTerm.C_Value_VMeta (dtb__389, dtb__390) -> true
   | Core_dTerm.C_Value_VNeutral (dtb__391) -> true
@@ -709,14 +709,14 @@ let v_isTypeishValue = (fun (mc0 : Core_dTerm.t_Value) -> (match mc0 with
   | _ -> false
 ))
 
-# 1049 "Vuna/Compiler/Elab/Meta.vuna"
+# 1050 "Vuna/Compiler/Elab/Meta.vuna"
 let rec v_memLevel = (fun (mc0 : int) (mc1 : int B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__398, dtb__399) -> (if (dtb__398 = mc0) then true else ((v_memLevel mc0) dtb__399))
   | B_dData_dList.C_List_Nil -> false
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1009 "Vuna/Compiler/Elab/Meta.vuna"
+# 1010 "Vuna/Compiler/Elab/Meta.vuna"
 let rec v_valueOpaqueGo = (fun (fuel : int) (outerNVar : (int) -> bool) (headOpaque : (string) -> bool) (depth : int) (famLevels : int B_dData_dList.t_List) (v : Core_dTerm.t_Value) -> (if (fuel <= 0) then true else (match v with
   | Core_dTerm.C_Value_VType (dtb__400) -> false
   | Core_dTerm.C_Value_VMeta (dtb__401, dtb__402) -> false
@@ -728,17 +728,17 @@ let rec v_valueOpaqueGo = (fun (fuel : int) (outerNVar : (int) -> bool) (headOpa
   | Core_dTerm.C_Value_VPi (dtb__409, dtb__410, dtb__411, dtb__412, dtb__413) -> (let fam2 = (if (v_isFamilyKindValue dtb__412) then (B_dData_dList.C_List__x58__x58_ (depth, famLevels)) else famLevels) in (if ((((((v_valueOpaqueGo (fuel - 1)) outerNVar) headOpaque) depth) famLevels) dtb__412) then true else ((((((v_valueOpaqueGo (fuel - 1)) outerNVar) headOpaque) (depth + 1)) fam2) ((Core_dEval.v_applyClosure dtb__413) (Core_dTerm.C_Value_VNeutral ((Core_dTerm.C_Neutral_NVar (dtb__409, depth, B_dData_dList.C_List_Nil))))))))
   | _ -> true
 )))
-# 1031 "Vuna/Compiler/Elab/Meta.vuna"
+# 1032 "Vuna/Compiler/Elab/Meta.vuna"
 and v_valueOpaqueTypeSpine = (fun (fuel : int) (outerNVar : (int) -> bool) (headOpaque : (string) -> bool) (depth : int) (famLevels : int B_dData_dList.t_List) (sp : Core_dTerm.t_Value B_dData_dList.t_List) -> (if (fuel <= 0) then true else (match sp with
   | B_dData_dList.C_List_Nil -> false
   | B_dData_dList.C_List__x58__x58_ (dtb__414, dtb__415) -> (if (if (v_isTypeishValue dtb__414) then ((((((v_valueOpaqueGo (fuel - 1)) outerNVar) headOpaque) depth) famLevels) dtb__414) else false) then true else ((((((v_valueOpaqueTypeSpine (fuel - 1)) outerNVar) headOpaque) depth) famLevels) dtb__415))
   | _ -> failwith "DT: impossible branch"
 )))
 
-# 991 "Vuna/Compiler/Elab/Meta.vuna"
+# 992 "Vuna/Compiler/Elab/Meta.vuna"
 let v_valueOpaqueScoped = (fun (outerNVar : (int) -> bool) (headOpaque : (string) -> bool) (depth : int) (famLevels : int B_dData_dList.t_List) (v : Core_dTerm.t_Value) -> ((((((v_valueOpaqueGo 128) outerNVar) headOpaque) depth) famLevels) v))
 
-# 1054 "Vuna/Compiler/Elab/Meta.vuna"
+# 1055 "Vuna/Compiler/Elab/Meta.vuna"
 let v_nvarOpaqueCtx = (fun (ctx : Elab_dTypes.t_Ctx) (lvl : int) -> (let idx = (((Elab_dTypes.v_ctxDepth ctx) - 1) - lvl) in (if (idx < 0) then false else (let nd_uscrut3 = ((v_ctxItemAt idx) (ctx).Elab_dTypes.f_Ctx_ctxItems) in (match nd_uscrut3 with
   | B_dData_dMaybe.C_Maybe_Nothing -> false
   | B_dData_dMaybe.C_Maybe_Just (dtb__416) -> (match dtb__416 with
@@ -748,19 +748,19 @@ let v_nvarOpaqueCtx = (fun (ctx : Elab_dTypes.t_Ctx) (lvl : int) -> (let idx = (
   | _ -> failwith "DT: impossible branch"
 )))))
 
-# 1067 "Vuna/Compiler/Elab/Meta.vuna"
+# 1068 "Vuna/Compiler/Elab/Meta.vuna"
 let v_zonkValueOnly = (fun (ec : Elab_dTypes.t_Ec) (v : Core_dTerm.t_Value) -> ((((Core_dEval.v_force (((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) B_dData_dList.C_List_Nil)) (Elab_dTypes.v_ecSolsP ec)) Core_dTerm.v_defaultFuel) v))
 
-# 1070 "Vuna/Compiler/Elab/Meta.vuna"
+# 1071 "Vuna/Compiler/Elab/Meta.vuna"
 let v_isOpaqueRuntimeTyIn = (fun (ec : Elab_dTypes.t_Ec) (ctx : Elab_dTypes.t_Ctx) (v : Core_dTerm.t_Value) -> (((((v_valueOpaqueScoped (v_nvarOpaqueCtx ctx)) (v_isTypeHeadOpaqueEc ec)) (Elab_dTypes.v_ctxDepth ctx)) B_dData_dList.C_List_Nil) ((v_zonkValueOnly ec) v)))
 
-# 1079 "Vuna/Compiler/Elab/Meta.vuna"
+# 1080 "Vuna/Compiler/Elab/Meta.vuna"
 let v_castErased = (fun (t : Core_dTerm.t_Term) -> (Core_dTerm.C_Term_TApp ((Core_dTerm.C_Term_TGlobal (Base_dIntrinsics.v_primEraseName)), t, Core_dTerm.C_Rig_Rig1)))
 
-# 1129 "Vuna/Compiler/Elab/Meta.vuna"
+# 1130 "Vuna/Compiler/Elab/Meta.vuna"
 let v_wrapOpaqueVar = (fun (depth : int) (idxs : int B_dData_dList.t_List) (name : string) (i : int) -> (if (i < depth) then (Core_dTerm.C_Term_TVar (name, i, { Base_dSource.f_Span_spanFile = ""; Base_dSource.f_Span_spanStartLine = 0; Base_dSource.f_Span_spanStartCol = 0; Base_dSource.f_Span_spanEndLine = 0; Base_dSource.f_Span_spanEndCol = 0; Base_dSource.f_Span_spanStartOffset = 0; Base_dSource.f_Span_spanEndOffset = 0 })) else (if ((v_memLevel (i - depth)) idxs) then (v_castErased (Core_dTerm.C_Term_TVar (name, i, { Base_dSource.f_Span_spanFile = ""; Base_dSource.f_Span_spanStartLine = 0; Base_dSource.f_Span_spanStartCol = 0; Base_dSource.f_Span_spanEndLine = 0; Base_dSource.f_Span_spanEndCol = 0; Base_dSource.f_Span_spanStartOffset = 0; Base_dSource.f_Span_spanEndOffset = 0 }))) else (Core_dTerm.C_Term_TVar (name, i, { Base_dSource.f_Span_spanFile = ""; Base_dSource.f_Span_spanStartLine = 0; Base_dSource.f_Span_spanStartCol = 0; Base_dSource.f_Span_spanEndLine = 0; Base_dSource.f_Span_spanEndCol = 0; Base_dSource.f_Span_spanStartOffset = 0; Base_dSource.f_Span_spanEndOffset = 0 })))))
 
-# 1088 "Vuna/Compiler/Elab/Meta.vuna"
+# 1089 "Vuna/Compiler/Elab/Meta.vuna"
 let rec v_wrapOpaqueUsesFuel = (fun (fuel : int) (depth : int) (idxs : int B_dData_dList.t_List) (t : Core_dTerm.t_Term) -> (if (fuel <= 0) then t else (match t with
   | Core_dTerm.C_Term_TVar (dtb__419, dtb__420, dtb__421) -> ((((v_wrapOpaqueVar depth) idxs) dtb__419) dtb__420)
   | Core_dTerm.C_Term_TGlobal (dtb__422) -> (Core_dTerm.C_Term_TGlobal (dtb__422))
@@ -800,30 +800,30 @@ let rec v_wrapOpaqueUsesFuel = (fun (fuel : int) (depth : int) (idxs : int B_dDa
   | Core_dTerm.C_Term_TIf (dtb__467, dtb__468, dtb__469) -> (Core_dTerm.C_Term_TIf (((((v_wrapOpaqueUsesFuel (fuel - 1)) depth) idxs) dtb__467), ((((v_wrapOpaqueUsesFuel (fuel - 1)) depth) idxs) dtb__468), ((((v_wrapOpaqueUsesFuel (fuel - 1)) depth) idxs) dtb__469)))
   | _ -> failwith "DT: impossible branch"
 )))
-# 1138 "Vuna/Compiler/Elab/Meta.vuna"
+# 1139 "Vuna/Compiler/Elab/Meta.vuna"
 and v_wrapOpaqueAltFuel = (fun (mc0 : int) (mc1 : int) (mc2 : int B_dData_dList.t_List) (mc3 : Core_dTerm.t_CaseAlt) -> (match mc3 with
   | { Core_dTerm.f_CaseAlt_caseAltName = dtb__470; Core_dTerm.f_CaseAlt_caseAltBinders = dtb__471; Core_dTerm.f_CaseAlt_caseAltBody = dtb__472 } -> { Core_dTerm.f_CaseAlt_caseAltName = dtb__470; Core_dTerm.f_CaseAlt_caseAltBinders = dtb__471; Core_dTerm.f_CaseAlt_caseAltBody = ((((v_wrapOpaqueUsesFuel (mc0 - 1)) (mc1 + (B_dData_dList.v_length dtb__471))) mc2) dtb__472) }
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1085 "Vuna/Compiler/Elab/Meta.vuna"
+# 1086 "Vuna/Compiler/Elab/Meta.vuna"
 let v_wrapOpaqueUses = (fun (idxs : int B_dData_dList.t_List) (t : Core_dTerm.t_Term) -> ((((v_wrapOpaqueUsesFuel 512) 0) idxs) t))
 
-# 1163 "Vuna/Compiler/Elab/Meta.vuna"
+# 1164 "Vuna/Compiler/Elab/Meta.vuna"
 let v_dataLinearName = (fun (ec : Elab_dTypes.t_Ec) (g : string) -> (match ((v_dtDataLookup g) (Elab_dTypes.v_ecDatas ec)) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__473) -> (Elab_dTypes.v_dtDataLinear dtb__473)
   | B_dData_dMaybe.C_Maybe_Nothing -> false
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1169 "Vuna/Compiler/Elab/Meta.vuna"
+# 1170 "Vuna/Compiler/Elab/Meta.vuna"
 let v_ctorLinearName = (fun (ec : Elab_dTypes.t_Ec) (c : string) -> (match ((v_dtCtorLookupEc ec) c) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__474) -> ((v_dataLinearName ec) (Elab_dTypes.v_dtCtorFamily dtb__474))
   | B_dData_dMaybe.C_Maybe_Nothing -> false
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1146 "Vuna/Compiler/Elab/Meta.vuna"
+# 1147 "Vuna/Compiler/Elab/Meta.vuna"
 let v_isLinearTypeFuel = (fun (fuel : int) (ec : Elab_dTypes.t_Ec) (v : Core_dTerm.t_Value) -> (if (fuel <= 0) then false else (match ((Elab_dTypes.v_forceVal ec) v) with
   | Core_dTerm.C_Value_VNeutral (dtb__475) -> (match dtb__475 with
   | Core_dTerm.C_Neutral_NGlobal (dtb__476, dtb__477) -> ((v_dataLinearName ec) dtb__476)
@@ -834,29 +834,29 @@ let v_isLinearTypeFuel = (fun (fuel : int) (ec : Elab_dTypes.t_Ec) (v : Core_dTe
   | _ -> false
 )))
 
-# 1143 "Vuna/Compiler/Elab/Meta.vuna"
+# 1144 "Vuna/Compiler/Elab/Meta.vuna"
 let v_isLinearType = (fun (ec : Elab_dTypes.t_Ec) (v : Core_dTerm.t_Value) -> (if (Elab_dTypes.v_ecHasLinear ec) then (((v_isLinearTypeFuel 64) ec) v) else false))
 
-# 1159 "Vuna/Compiler/Elab/Meta.vuna"
+# 1160 "Vuna/Compiler/Elab/Meta.vuna"
 let rec v_anyLinearVals = (fun (mc0 : int) (mc1 : Elab_dTypes.t_Ec) (mc2 : Core_dTerm.t_Value B_dData_dList.t_List) -> (match mc2 with
   | B_dData_dList.C_List__x58__x58_ (dtb__483, dtb__484) -> (if (((v_isLinearTypeFuel mc0) mc1) dtb__483) then true else (((v_anyLinearVals mc0) mc1) dtb__484))
   | B_dData_dList.C_List_Nil -> false
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1176 "Vuna/Compiler/Elab/Meta.vuna"
+# 1177 "Vuna/Compiler/Elab/Meta.vuna"
 let v_rigForLinearDomain = (fun (ec : Elab_dTypes.t_Ec) (sp : Base_dSource.t_Span) (name : string) (rig : Core_dTerm.t_Rig) (dom : Core_dTerm.t_Value) -> (if ((v_isLinearType ec) dom) then (match rig with
   | Core_dTerm.C_Rig_Rig1 -> (Base_dDiag.C_Check_OkC (Core_dTerm.C_Rig_Rig1))
   | _ -> (((Base_dDiagnostics_dTc.v_tcErr1 sp) (Base_dDiagnostics_dTc.C_TcErr_LinearValueNeedsLinearBinder (name))) name)
 ) else (Base_dDiag.C_Check_OkC (rig))))
 
-# 1186 "Vuna/Compiler/Elab/Meta.vuna"
+# 1187 "Vuna/Compiler/Elab/Meta.vuna"
 let v_rigCaseField = (fun (ec : Elab_dTypes.t_Ec) (dom : Core_dTerm.t_Value) (rig : Core_dTerm.t_Rig) -> (if ((v_isLinearType ec) dom) then Core_dTerm.C_Rig_Rig1 else rig))
 
-# 1190 "Vuna/Compiler/Elab/Meta.vuna"
+# 1191 "Vuna/Compiler/Elab/Meta.vuna"
 let v_rigOfLinearValue = (fun (ec : Elab_dTypes.t_Ec) (dom : Core_dTerm.t_Value) -> (if ((v_isLinearType ec) dom) then Core_dTerm.C_Rig_Rig1 else Core_dTerm.C_Rig_RigOmega))
 
-# 1197 "Vuna/Compiler/Elab/Meta.vuna"
+# 1198 "Vuna/Compiler/Elab/Meta.vuna"
 let rec v_ctxHasLinearItems = (fun (mc0 : Elab_dTypes.t_Ec) (mc1 : Elab_dTypes.t_Ctx) (mc2 : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc3 : int) -> (match mc2 with
   | B_dData_dList.C_List__x58__x58_ (dtb__485, dtb__486) -> (match dtb__485 with
   | { B_dData_dPair.f_Pair_first = dtb__487; B_dData_dPair.f_Pair_second = dtb__488 } -> (if ((v_isLinearType mc0) (((Elab_dTypes.v_varTypeValue mc1) mc3) dtb__488)) then true else ((((v_ctxHasLinearItems mc0) mc1) dtb__486) (mc3 + 1)))
@@ -866,10 +866,10 @@ let rec v_ctxHasLinearItems = (fun (mc0 : Elab_dTypes.t_Ec) (mc1 : Elab_dTypes.t
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1194 "Vuna/Compiler/Elab/Meta.vuna"
+# 1195 "Vuna/Compiler/Elab/Meta.vuna"
 let v_ctxHasLinear = (fun (ec : Elab_dTypes.t_Ec) (ctx : Elab_dTypes.t_Ctx) -> ((((v_ctxHasLinearItems ec) ctx) (ctx).Elab_dTypes.f_Ctx_ctxItems) 0))
 
-# 1207 "Vuna/Compiler/Elab/Meta.vuna"
+# 1208 "Vuna/Compiler/Elab/Meta.vuna"
 let rec v_outerScan = (fun (mc0 : Elab_dTypes.t_Ec) (mc1 : Elab_dTypes.t_Ctx) (mc2 : int) (mc3 : Core_dTerm.t_Term) -> (match mc3 with
   | Core_dTerm.C_Term_TIf (dtb__489, dtb__490, dtb__491) -> (if (if ((((v_outerScan mc0) mc1) mc2) dtb__489) then true else ((((v_outerScan mc0) mc1) mc2) dtb__490)) then true else ((((v_outerScan mc0) mc1) mc2) dtb__491))
   | Core_dTerm.C_Term_TCase (dtb__492, dtb__493) -> (if ((((v_outerScan mc0) mc1) mc2) dtb__492) then true else ((((v_outerScanAlts mc0) mc1) mc2) dtb__493))
@@ -891,7 +891,7 @@ let rec v_outerScan = (fun (mc0 : Elab_dTypes.t_Ec) (mc1 : Elab_dTypes.t_Ctx) (m
 )) else false)
   | _ -> false
 ))
-# 1229 "Vuna/Compiler/Elab/Meta.vuna"
+# 1230 "Vuna/Compiler/Elab/Meta.vuna"
 and v_outerScanArgs = (fun (mc0 : Elab_dTypes.t_Ec) (mc1 : Elab_dTypes.t_Ctx) (mc2 : int) (mc3 : (Core_dTerm.t_Term, Core_dTerm.t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc3 with
   | B_dData_dList.C_List__x58__x58_ (dtb__529, dtb__530) -> (match dtb__529 with
   | { B_dData_dPair.f_Pair_first = dtb__531; B_dData_dPair.f_Pair_second = dtb__532 } -> (if ((((v_outerScan mc0) mc1) mc2) dtb__531) then true else ((((v_outerScanArgs mc0) mc1) mc2) dtb__530))
@@ -900,7 +900,7 @@ and v_outerScanArgs = (fun (mc0 : Elab_dTypes.t_Ec) (mc1 : Elab_dTypes.t_Ctx) (m
   | B_dData_dList.C_List_Nil -> false
   | _ -> failwith "DT: impossible branch"
 ))
-# 1234 "Vuna/Compiler/Elab/Meta.vuna"
+# 1235 "Vuna/Compiler/Elab/Meta.vuna"
 and v_outerScanAlts = (fun (mc0 : Elab_dTypes.t_Ec) (mc1 : Elab_dTypes.t_Ctx) (mc2 : int) (mc3 : Core_dTerm.t_CaseAlt B_dData_dList.t_List) -> (match mc3 with
   | B_dData_dList.C_List__x58__x58_ (dtb__533, dtb__534) -> (match dtb__533 with
   | { Core_dTerm.f_CaseAlt_caseAltName = dtb__535; Core_dTerm.f_CaseAlt_caseAltBinders = dtb__536; Core_dTerm.f_CaseAlt_caseAltBody = dtb__537 } -> (if ((((v_outerScan mc0) mc1) (mc2 + (B_dData_dList.v_length dtb__536))) dtb__537) then true else ((((v_outerScanAlts mc0) mc1) mc2) dtb__534))
@@ -910,26 +910,26 @@ and v_outerScanAlts = (fun (mc0 : Elab_dTypes.t_Ec) (mc1 : Elab_dTypes.t_Ctx) (m
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1204 "Vuna/Compiler/Elab/Meta.vuna"
+# 1205 "Vuna/Compiler/Elab/Meta.vuna"
 let v_termHasOuterLinear = (fun (ec : Elab_dTypes.t_Ec) (ctx : Elab_dTypes.t_Ctx) (t : Core_dTerm.t_Term) -> ((((v_outerScan ec) ctx) 0) t))
 
-# 1242 "Vuna/Compiler/Elab/Meta.vuna"
+# 1243 "Vuna/Compiler/Elab/Meta.vuna"
 let rec v_isTypeLayerValueFuel = (fun (fuel : int) (v : Core_dTerm.t_Value) -> (if (fuel <= 0) then false else (match v with
   | Core_dTerm.C_Value_VType (dtb__538) -> true
   | Core_dTerm.C_Value_VPi (dtb__539, dtb__540, dtb__541, dtb__542, dtb__543) -> (if ((v_isTypeLayerValueFuel (fuel - 1)) dtb__542) then ((v_isTypeLayerValueFuel (fuel - 1)) ((Core_dEval.v_applyClosure dtb__543) (Core_dTerm.C_Value_VNeutral ((Core_dTerm.C_Neutral_NVar (dtb__539, 0, B_dData_dList.C_List_Nil)))))) else false)
   | _ -> false
 )))
 
-# 1239 "Vuna/Compiler/Elab/Meta.vuna"
+# 1240 "Vuna/Compiler/Elab/Meta.vuna"
 let v_isTypeLayerValue = (fun (v : Core_dTerm.t_Value) -> ((v_isTypeLayerValueFuel 128) v))
 
-# 937 "Vuna/Compiler/Elab/Meta.vuna"
+# 938 "Vuna/Compiler/Elab/Meta.vuna"
 let v_isTypeDomain = (fun (v : Core_dTerm.t_Value) -> (v_isTypeLayerValue v))
 
-# 940 "Vuna/Compiler/Elab/Meta.vuna"
+# 941 "Vuna/Compiler/Elab/Meta.vuna"
 let v_binderRig = (fun (implicit : bool) (dom : Core_dTerm.t_Value) -> ((Core_dTerm.v_rigOfBinder implicit) (v_isTypeDomain dom)))
 
-# 1252 "Vuna/Compiler/Elab/Meta.vuna"
+# 1253 "Vuna/Compiler/Elab/Meta.vuna"
 let v_isDataHead = (fun (mc0 : Elab_dTypes.t_DtData B_dData_dList.t_List) (mc1 : Core_dTerm.t_Value) -> (match mc1 with
   | Core_dTerm.C_Value_VNeutral (dtb__544) -> (match dtb__544 with
   | Core_dTerm.C_Neutral_NGlobal (dtb__545, dtb__546) -> (match ((v_dtDataLookup dtb__545) mc0) with
@@ -945,14 +945,14 @@ let v_isDataHead = (fun (mc0 : Elab_dTypes.t_DtData B_dData_dList.t_List) (mc1 :
 # 800 "Vuna/Compiler/Elab/Meta.vuna"
 let v_isIndexDomain = (fun (ec : Elab_dTypes.t_Ec) (dom : Core_dTerm.t_Value) -> (if (v_isTypeDomain dom) then true else ((v_isDataHead (Elab_dTypes.v_ecDatas ec)) ((Elab_dTypes.v_forceVal ec) dom))))
 
-# 860 "Vuna/Compiler/Elab/Meta.vuna"
+# 861 "Vuna/Compiler/Elab/Meta.vuna"
 let v_neutralBinderIndexDomain = (fun (ctx : Elab_dTypes.t_Ctx) (ec : Elab_dTypes.t_Ec) (lvl : int) -> (match (((v_neutralBinderType ctx) ec) lvl) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__548) -> ((v_isIndexDomain ec) dtb__548)
   | B_dData_dMaybe.C_Maybe_Nothing -> false
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 899 "Vuna/Compiler/Elab/Meta.vuna"
+# 900 "Vuna/Compiler/Elab/Meta.vuna"
 let rec v_isTypeLikeWithCtx = (fun (fuel : int) (ctx : Elab_dTypes.t_Ctx) (ec : Elab_dTypes.t_Ec) (v : Core_dTerm.t_Value) -> (if (fuel <= 0) then false else (match ((Elab_dTypes.v_forceVal ec) v) with
   | Core_dTerm.C_Value_VType (dtb__549) -> true
   | Core_dTerm.C_Value_VPi (dtb__550, dtb__551, dtb__552, dtb__553, dtb__554) -> ((((v_isTypeLikeWithCtx (fuel - 1)) ctx) ec) ((Core_dEval.v_applyClosure dtb__554) (Core_dTerm.C_Value_VNeutral ((Core_dTerm.C_Neutral_NVar ("ty", 0, B_dData_dList.C_List_Nil))))))
@@ -969,14 +969,14 @@ let rec v_isTypeLikeWithCtx = (fun (fuel : int) (ctx : Elab_dTypes.t_Ctx) (ec : 
   | _ -> false
 )))
 
-# 886 "Vuna/Compiler/Elab/Meta.vuna"
+# 887 "Vuna/Compiler/Elab/Meta.vuna"
 let rec v_isKindWithCtxFuel = (fun (fuel : int) (ctx : Elab_dTypes.t_Ctx) (ec : Elab_dTypes.t_Ec) (v : Core_dTerm.t_Value) -> (if (fuel <= 0) then false else (match ((Elab_dTypes.v_forceVal ec) v) with
   | Core_dTerm.C_Value_VType (dtb__564) -> true
   | Core_dTerm.C_Value_VPi (dtb__565, dtb__566, dtb__567, dtb__568, dtb__569) -> (if ((((v_isTypeLikeWithCtx fuel) ctx) ec) dtb__568) then ((((v_isKindWithCtxFuel (fuel - 1)) ctx) ec) ((Core_dEval.v_applyClosure dtb__569) (Core_dTerm.C_Value_VNeutral ((Core_dTerm.C_Neutral_NVar ("kind", 0, B_dData_dList.C_List_Nil)))))) else false)
   | _ -> false
 )))
 
-# 883 "Vuna/Compiler/Elab/Meta.vuna"
+# 884 "Vuna/Compiler/Elab/Meta.vuna"
 let v_isKindWithCtx = (fun (ctx : Elab_dTypes.t_Ctx) (ec : Elab_dTypes.t_Ec) (v : Core_dTerm.t_Value) -> ((((v_isKindWithCtxFuel 64) ctx) ec) v))
 
 # 815 "Vuna/Compiler/Elab/Meta.vuna"
@@ -1017,26 +1017,26 @@ let rec v_instantiateNullaryCtorFuel = (fun (fuel : int) (ec : Elab_dTypes.t_Ec)
 # 46 "Vuna/Compiler/Elab/Meta.vuna"
 let v_instantiateNullaryCtor = (fun (ec : Elab_dTypes.t_Ec) (ctx : Elab_dTypes.t_Ctx) (v : Core_dTerm.t_Value) -> ((((v_instantiateNullaryCtorFuel 64) ec) ctx) v))
 
-# 1262 "Vuna/Compiler/Elab/Meta.vuna"
+# 1263 "Vuna/Compiler/Elab/Meta.vuna"
 let v_freshVarValue = (fun (name : string) (level : int) -> (Core_dTerm.C_Value_VNeutral ((Core_dTerm.C_Neutral_NVar (name, level, B_dData_dList.C_List_Nil)))))
 
-# 1273 "Vuna/Compiler/Elab/Meta.vuna"
+# 1274 "Vuna/Compiler/Elab/Meta.vuna"
 let v_neutralHeadName = (fun (mc0 : Core_dTerm.t_Neutral) -> (match mc0 with
   | Core_dTerm.C_Neutral_NGlobal (dtb__597, dtb__598) -> dtb__597
   | Core_dTerm.C_Neutral_NVar (dtb__599, dtb__600, dtb__601) -> dtb__599
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1277 "Vuna/Compiler/Elab/Meta.vuna"
+# 1278 "Vuna/Compiler/Elab/Meta.vuna"
 let v_isBoolGlobal = (fun (name : string) -> (Base_dIntrinsics.v_isBoolCanonical name))
 
-# 1269 "Vuna/Compiler/Elab/Meta.vuna"
+# 1270 "Vuna/Compiler/Elab/Meta.vuna"
 let v_isBoolType = (fun (mc0 : Core_dTerm.t_Value) -> (match mc0 with
   | Core_dTerm.C_Value_VNeutral (dtb__602) -> (v_isBoolGlobal (v_neutralHeadName dtb__602))
   | _ -> false
 ))
 
-# 1282 "Vuna/Compiler/Elab/Meta.vuna"
+# 1283 "Vuna/Compiler/Elab/Meta.vuna"
 let v_isSortVal = (fun (ec : Elab_dTypes.t_Ec) (v : Core_dTerm.t_Value) -> (match ((Elab_dTypes.v_forceVal ec) v) with
   | Core_dTerm.C_Value_VType (dtb__603) -> true
   | _ -> false
@@ -1053,14 +1053,14 @@ let v_resolveOverCtor = (fun (mc0 : Elab_dTypes.t_Ec) (mc1 : Base_dSource.t_Span
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1347 "Vuna/Compiler/Elab/Meta.vuna"
+# 1348 "Vuna/Compiler/Elab/Meta.vuna"
 let v_mkCtorTerm = (fun (datas : Elab_dTypes.t_DtData B_dData_dList.t_List) (ctor : Elab_dTypes.t_DtCtor) (g : string) (args : (Core_dTerm.t_Term, Core_dTerm.t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match ((Elab_dRepresentation.v_findDtData (Elab_dTypes.v_dtCtorFamily ctor)) datas) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__606) -> (if (Elab_dTypes.v_dtDataIsRecord dtb__606) then (Core_dTerm.C_Term_TMk (g, args)) else (Core_dTerm.C_Term_TCon (g, args)))
   | B_dData_dMaybe.C_Maybe_Nothing -> (Core_dTerm.C_Term_TCon (g, args))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1370 "Vuna/Compiler/Elab/Meta.vuna"
+# 1371 "Vuna/Compiler/Elab/Meta.vuna"
 let rec v_shiftCtorArgs = (fun (mc0 : int) (mc1 : (Core_dTerm.t_Term, Core_dTerm.t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__607, dtb__608) -> (match dtb__607 with
   | { B_dData_dPair.f_Pair_first = dtb__609; B_dData_dPair.f_Pair_second = dtb__610 } -> (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = (((Core_dTerm.v_shift 0) mc0) dtb__609); B_dData_dPair.f_Pair_second = dtb__610 }, ((v_shiftCtorArgs mc0) dtb__608)))
@@ -1070,7 +1070,7 @@ let rec v_shiftCtorArgs = (fun (mc0 : int) (mc1 : (Core_dTerm.t_Term, Core_dTerm
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1379 "Vuna/Compiler/Elab/Meta.vuna"
+# 1380 "Vuna/Compiler/Elab/Meta.vuna"
 let rec v_etaCtorLa = (fun (mc0 : string) (mc1 : int) (mc2 : (string, Core_dTerm.t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc3 : (Core_dTerm.t_Term, Core_dTerm.t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc2 with
   | B_dData_dList.C_List__x58__x58_ (dtb__611, dtb__612) -> (match dtb__611 with
   | { B_dData_dPair.f_Pair_first = dtb__613; B_dData_dPair.f_Pair_second = dtb__614 } -> (let binder = (Frontend_dReserved.v_etaBinderName mc1) in (Core_dTerm.C_Term_TLam (binder, dtb__614, B_dData_dMaybe.C_Maybe_Nothing, Base_dSource.v_spanEmpty, ((((v_etaCtorLa mc0) (mc1 + 1)) dtb__612) ((B_dData_dList.v_append mc3) (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = (Core_dTerm.C_Term_TVar (binder, (B_dData_dList.v_length dtb__612), { Base_dSource.f_Span_spanFile = ""; Base_dSource.f_Span_spanStartLine = 0; Base_dSource.f_Span_spanStartCol = 0; Base_dSource.f_Span_spanEndLine = 0; Base_dSource.f_Span_spanEndCol = 0; Base_dSource.f_Span_spanStartOffset = 0; Base_dSource.f_Span_spanEndOffset = 0 })); B_dData_dPair.f_Pair_second = dtb__614 }, B_dData_dList.C_List_Nil)))))))
@@ -1080,17 +1080,17 @@ let rec v_etaCtorLa = (fun (mc0 : string) (mc1 : int) (mc2 : (string, Core_dTerm
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1392 "Vuna/Compiler/Elab/Meta.vuna"
+# 1393 "Vuna/Compiler/Elab/Meta.vuna"
 let rec v_dropCount = (fun (n : int) xs -> (if (n <= 0) then xs else (match xs with
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | B_dData_dList.C_List__x58__x58_ (dtb__615, dtb__616) -> ((v_dropCount (n - 1)) dtb__616)
   | _ -> failwith "DT: impossible branch"
 )))
 
-# 1362 "Vuna/Compiler/Elab/Meta.vuna"
+# 1363 "Vuna/Compiler/Elab/Meta.vuna"
 let v_etaCtorTerm = (fun (ctor : Elab_dTypes.t_DtCtor) (args : (Core_dTerm.t_Term, Core_dTerm.t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (let rest = ((v_dropCount (B_dData_dList.v_length args)) (Elab_dTypes.v_dtCtorTelescope ctor)) in (let k = (B_dData_dList.v_length rest) in ((((v_etaCtorLa (Elab_dTypes.v_dtCtorName ctor)) 0) rest) ((v_shiftCtorArgs k) args)))))
 
-# 1295 "Vuna/Compiler/Elab/Meta.vuna"
+# 1296 "Vuna/Compiler/Elab/Meta.vuna"
 let v_ctorRefTermEc = (fun (ec : Elab_dTypes.t_Ec) (name : string) -> (match ((v_dtCtorLookupEc ec) name) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__617) -> (if (Base_dIntrinsics.v_isBoolCanonical (Elab_dTypes.v_dtCtorFamily dtb__617)) then (v_boolCtorTerm (Elab_dTypes.v_dtCtorName dtb__617)) else (if ((B_dData_dList.v_length (Elab_dTypes.v_dtCtorTelescope dtb__617)) = 0) then (Core_dTerm.C_Term_TCon (name, B_dData_dList.C_List_Nil)) else ((v_etaCtorTerm dtb__617) B_dData_dList.C_List_Nil)))
   | B_dData_dMaybe.C_Maybe_Nothing -> (Core_dTerm.C_Term_TGlobal (name))
@@ -1114,14 +1114,14 @@ let v_inferCtorRef = (fun (ec : Elab_dTypes.t_Ec) (ctx : Elab_dTypes.t_Ctx) (nam
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1304 "Vuna/Compiler/Elab/Meta.vuna"
+# 1305 "Vuna/Compiler/Elab/Meta.vuna"
 let v_ctorRefTerm = (fun (datas : Elab_dTypes.t_DtData B_dData_dList.t_List) (name : string) -> (match ((v_dtCtorLookup name) datas) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__625) -> (if (Base_dIntrinsics.v_isBoolCanonical (Elab_dTypes.v_dtCtorFamily dtb__625)) then (v_boolCtorTerm (Elab_dTypes.v_dtCtorName dtb__625)) else (if ((B_dData_dList.v_length (Elab_dTypes.v_dtCtorTelescope dtb__625)) = 0) then (Core_dTerm.C_Term_TCon (name, B_dData_dList.C_List_Nil)) else ((v_etaCtorTerm dtb__625) B_dData_dList.C_List_Nil)))
   | B_dData_dMaybe.C_Maybe_Nothing -> (Core_dTerm.C_Term_TGlobal (name))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1401 "Vuna/Compiler/Elab/Meta.vuna"
+# 1402 "Vuna/Compiler/Elab/Meta.vuna"
 let rec v_foldAppTerms = (fun (mc0 : Core_dTerm.t_Term) (mc1 : (Core_dTerm.t_Term, Core_dTerm.t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__626, dtb__627) -> (match dtb__626 with
   | { B_dData_dPair.f_Pair_first = dtb__628; B_dData_dPair.f_Pair_second = dtb__629 } -> ((v_foldAppTerms (Core_dTerm.C_Term_TApp (mc0, dtb__628, dtb__629))) dtb__627)
@@ -1131,7 +1131,7 @@ let rec v_foldAppTerms = (fun (mc0 : Core_dTerm.t_Term) (mc1 : (Core_dTerm.t_Ter
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1318 "Vuna/Compiler/Elab/Meta.vuna"
+# 1319 "Vuna/Compiler/Elab/Meta.vuna"
 let v_ctorAppTermEc = (fun (mc0 : Elab_dTypes.t_Ec) (mc1 : Core_dTerm.t_Term) (mc2 : (Core_dTerm.t_Term, Core_dTerm.t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc1 with
   | Core_dTerm.C_Term_TGlobal (dtb__630) -> (match ((v_dtCtorLookupEc mc0) dtb__630) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__631) -> (if (Base_dIntrinsics.v_isBoolCanonical (Elab_dTypes.v_dtCtorFamily dtb__631)) then (v_boolCtorTerm dtb__630) else (if ((B_dData_dList.v_length mc2) >= (B_dData_dList.v_length (Elab_dTypes.v_dtCtorTelescope dtb__631))) then ((((v_mkCtorTerm (Elab_dTypes.v_ecDatas mc0)) dtb__631) dtb__630) mc2) else ((v_etaCtorTerm dtb__631) mc2)))
@@ -1141,7 +1141,7 @@ let v_ctorAppTermEc = (fun (mc0 : Elab_dTypes.t_Ec) (mc1 : Core_dTerm.t_Term) (m
   | _ -> ((v_foldAppTerms mc1) mc2)
 ))
 
-# 1331 "Vuna/Compiler/Elab/Meta.vuna"
+# 1332 "Vuna/Compiler/Elab/Meta.vuna"
 let v_ctorAppTerm = (fun (mc0 : Elab_dTypes.t_DtData B_dData_dList.t_List) (mc1 : Core_dTerm.t_Term) (mc2 : (Core_dTerm.t_Term, Core_dTerm.t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc1 with
   | Core_dTerm.C_Term_TGlobal (dtb__632) -> (match ((v_dtCtorLookup dtb__632) mc0) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__633) -> (if (Base_dIntrinsics.v_isBoolCanonical (Elab_dTypes.v_dtCtorFamily dtb__633)) then (v_boolCtorTerm dtb__632) else (if ((B_dData_dList.v_length mc2) >= (B_dData_dList.v_length (Elab_dTypes.v_dtCtorTelescope dtb__633))) then ((((v_mkCtorTerm mc0) dtb__633) dtb__632) mc2) else ((v_etaCtorTerm dtb__633) mc2)))
@@ -1151,7 +1151,7 @@ let v_ctorAppTerm = (fun (mc0 : Elab_dTypes.t_DtData B_dData_dList.t_List) (mc1 
   | _ -> ((v_foldAppTerms mc1) mc2)
 ))
 
-# 1417 "Vuna/Compiler/Elab/Meta.vuna"
+# 1418 "Vuna/Compiler/Elab/Meta.vuna"
 let v_isSortExpr = (fun (mc0 : Frontend_dRast.t_Expr) -> (match mc0 with
   | Frontend_dRast.C_Expr_EApp (dtb__634, dtb__635, dtb__636) -> (match dtb__634 with
   | Frontend_dRast.C_Expr_EVar (dtb__637, dtb__638) -> (match dtb__637 with
@@ -1167,28 +1167,28 @@ let v_isSortExpr = (fun (mc0 : Frontend_dRast.t_Expr) -> (match mc0 with
   | _ -> false
 ))
 
-# 1412 "Vuna/Compiler/Elab/Meta.vuna"
+# 1413 "Vuna/Compiler/Elab/Meta.vuna"
 let v_hasFamParams = (fun (mc0 : Frontend_dRast.t_Expr) -> (match mc0 with
   | Frontend_dRast.C_Expr_EPi (dtb__643, dtb__644, dtb__645, dtb__646, dtb__647, dtb__648) -> (if (dtb__643 <> "_") then (v_isSortExpr dtb__646) else false)
   | _ -> false
 ))
 
-# 1423 "Vuna/Compiler/Elab/Meta.vuna"
+# 1424 "Vuna/Compiler/Elab/Meta.vuna"
 let v_baseNameOf = (fun (name : string) -> (Base_dSource.v_lastSeg name))
 
-# 1430 "Vuna/Compiler/Elab/Meta.vuna"
+# 1431 "Vuna/Compiler/Elab/Meta.vuna"
 let rec v_explicitPiArity = (fun (mc0 : Core_dTerm.t_Term) -> (match mc0 with
   | Core_dTerm.C_Term_TPi (dtb__649, dtb__650, dtb__651, dtb__652, dtb__653) -> (if dtb__650 then (v_explicitPiArity dtb__653) else (1 + (v_explicitPiArity dtb__653)))
   | _ -> 0
 ))
 
-# 1458 "Vuna/Compiler/Elab/Meta.vuna"
+# 1459 "Vuna/Compiler/Elab/Meta.vuna"
 let rec v_dropPis = (fun (mc0 : Core_dTerm.t_Term) -> (match mc0 with
   | Core_dTerm.C_Term_TPi (dtb__654, dtb__655, dtb__656, dtb__657, dtb__658) -> (v_dropPis dtb__658)
   | _ -> mc0
 ))
 
-# 1462 "Vuna/Compiler/Elab/Meta.vuna"
+# 1463 "Vuna/Compiler/Elab/Meta.vuna"
 let rec v_anyNonVarArg = (fun (mc0 : Core_dTerm.t_Term B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__659, dtb__660) -> (match dtb__659 with
   | Core_dTerm.C_Term_TVar (dtb__661, dtb__662, dtb__663) -> (v_anyNonVarArg dtb__660)
@@ -1198,26 +1198,26 @@ let rec v_anyNonVarArg = (fun (mc0 : Core_dTerm.t_Term B_dData_dList.t_List) -> 
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1453 "Vuna/Compiler/Elab/Meta.vuna"
+# 1454 "Vuna/Compiler/Elab/Meta.vuna"
 let v_ctorResultIndexed = (fun (c : Elab_dTypes.t_DtCtor) -> (match (v_resultSpine (v_dropPis (Elab_dTypes.v_dtCtorType c))) with
   | { B_dData_dPair.f_Pair_first = dtb__664; B_dData_dPair.f_Pair_second = dtb__665 } -> (v_anyNonVarArg dtb__665)
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1449 "Vuna/Compiler/Elab/Meta.vuna"
+# 1450 "Vuna/Compiler/Elab/Meta.vuna"
 let rec v_anyCtorIndexed = (fun (mc0 : Elab_dTypes.t_DtCtor B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__666, dtb__667) -> (if (v_ctorResultIndexed dtb__666) then true else (v_anyCtorIndexed dtb__667))
   | B_dData_dList.C_List_Nil -> false
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1446 "Vuna/Compiler/Elab/Meta.vuna"
+# 1447 "Vuna/Compiler/Elab/Meta.vuna"
 let v_familyIndexed = (fun (d : Elab_dTypes.t_DtData) -> (v_anyCtorIndexed (Elab_dTypes.v_dtDataCtors d)))
 
-# 1437 "Vuna/Compiler/Elab/Meta.vuna"
+# 1438 "Vuna/Compiler/Elab/Meta.vuna"
 let v_ctorFamilyTable = (fun (ec : Elab_dTypes.t_Ec) -> ((B_dData_dList.v_map (fun (d : Elab_dTypes.t_DtData) -> { B_dData_dPair.f_Pair_first = (Elab_dTypes.v_dtDataName d); B_dData_dPair.f_Pair_second = { B_dData_dPair.f_Pair_first = (B_dData_dBool.v_not (v_familyIndexed d)); B_dData_dPair.f_Pair_second = ((B_dData_dList.v_map (fun (c : Elab_dTypes.t_DtCtor) -> { B_dData_dPair.f_Pair_first = (Elab_dTypes.v_dtCtorName c); B_dData_dPair.f_Pair_second = (v_explicitPiArity (Elab_dTypes.v_dtCtorType c)) })) (Elab_dTypes.v_dtDataCtors d)) } })) (Elab_dTypes.v_ecDatas ec)))
 
-# 1470 "Vuna/Compiler/Elab/Meta.vuna"
+# 1471 "Vuna/Compiler/Elab/Meta.vuna"
 let rec v_findCatchAllBody = (fun (mc0 : (Frontend_dRast.t_Pat, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__668, dtb__669) -> (match dtb__668 with
   | { B_dData_dPair.f_Pair_first = dtb__670; B_dData_dPair.f_Pair_second = dtb__671 } -> (match dtb__670 with
