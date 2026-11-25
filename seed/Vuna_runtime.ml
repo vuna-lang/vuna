@@ -79,20 +79,29 @@ let dtp_effectId (s : string) : int =
 (* bracket 的 abort cleanup 登记表（每纤程一份，LIFO）。
    `prim_effectHandleId` 在安装 handler 时记下当前深度 mark；handler 正常返回 /
    抛异常 / 丢弃续延（abort）时，把 mark 之上仍未弹出的 cleanup 逐个执行——这些
-   正是被丢弃的续延里打开的 bracket。纤程用 `dtp_cleanup_fiber` 区分（调度器在
-   运行某个任务时设置它）；非调度器上下文（-1）有一份独立栈。
+   正是被丢弃的续延里打开的 bracket。纤程用当前纤程 id 区分（调度器在运行某个
+   任务时设置它）；非调度器上下文（-1）有一份独立栈。状态放在 `Domain.DLS` 里：
+   每个 domain（线程）有自己的 cleanup 栈，domain 之间互不干扰。
    注意：cleanup 在 handler 退出点执行，只能访问**外层** handler（当前 handler
    的效应在该点不可用）；执行期异常被吞掉，避免污染 abort 结果。 *)
-let dtp_cleanup_fiber = ref (-1)
-let dtp_cleanup_stacks : (int, (unit -> unit) list ref) Hashtbl.t = Hashtbl.create 8
+type dtp_cleanup_state = {
+  mutable dtp_cs_fiber : int;
+  dtp_cs_stacks : (int, (unit -> unit) list ref) Hashtbl.t;
+}
+let dtp_cleanup_stateK =
+  Domain.DLS.new_key (fun () -> { dtp_cs_fiber = -1; dtp_cs_stacks = Hashtbl.create 8 })
+let dtp_cleanup_state () = Domain.DLS.get dtp_cleanup_stateK
+let dtp_cleanup_fiber_get () = (dtp_cleanup_state ()).dtp_cs_fiber
+let dtp_cleanup_fiber_set (fid : int) = (dtp_cleanup_state ()).dtp_cs_fiber <- fid
 let dtp_cleanup_stack_of (fid : int) =
-  match Hashtbl.find_opt dtp_cleanup_stacks fid with
+  let s = dtp_cleanup_state () in
+  match Hashtbl.find_opt s.dtp_cs_stacks fid with
   | Some r -> r
   | None ->
     let r = ref [] in
-    Hashtbl.replace dtp_cleanup_stacks fid r;
+    Hashtbl.replace s.dtp_cs_stacks fid r;
     r
-let dtp_cleanup_current () = dtp_cleanup_stack_of !dtp_cleanup_fiber
+let dtp_cleanup_current () = dtp_cleanup_stack_of (dtp_cleanup_fiber_get ())
 let dtp_cleanup_mark () = List.length !(dtp_cleanup_current ())
 let dtp_cleanup_push (f : int -> int) : int =
   let r = dtp_cleanup_current () in
@@ -123,10 +132,13 @@ let dtp_cleanup_run_all_for (fid : int) =
       | f :: rest -> r := rest; (try f () with _ -> ()); go (fuel - 1)
   in
   go (List.length !r)
-let dtp_cleanup_forget (fid : int) = Hashtbl.remove dtp_cleanup_stacks fid
+let dtp_cleanup_forget (fid : int) =
+  let s = dtp_cleanup_state () in
+  Hashtbl.remove s.dtp_cs_stacks fid
 let dtp_cleanup_reset () =
-  Hashtbl.reset dtp_cleanup_stacks;
-  dtp_cleanup_fiber := -1
+  let s = dtp_cleanup_state () in
+  Hashtbl.reset s.dtp_cs_stacks;
+  s.dtp_cs_fiber <- -1
 
 (* handler 的运行时壳：与旧内联实现等价，但 handler 退出时清掉其 extent 内残留的
    bracket cleanup（abort = 续延被丢弃，库层 finally 不会再跑）。 *)
@@ -162,21 +174,16 @@ let dtp_effect_self th =
   match !(Domain.DLS.get dtp_selfK) with
   | (kid, nid, key, name, ret, h) :: _ -> dtp_effect_run key name kid nid ret h (fun () -> (Obj.magic th) 0)
   | [] -> failwith "self outside handler"
+let dtp_output_mutex = Mutex.create ()
+let dtp_with_output_lock (f : unit -> int) : int =
+  Mutex.lock dtp_output_mutex;
+  Fun.protect ~finally:(fun () -> Mutex.unlock dtp_output_mutex) f
 let dtp_print s =
-  (try print_string s; flush stdout; String.length s
-   with _ -> 0)  (* 写失败（典型 EPIPE：`vuna … | head`）不再是宿主崩溃；输出到此为止 *)
-let dtp_async_tbl : (int, unit -> Obj.t) Hashtbl.t = Hashtbl.create 16
-let dtp_async_next = ref 0
-let dtp_async_fork th =
-  let id = !dtp_async_next in
-  incr dtp_async_next;
-  let d = Domain.spawn (fun () -> th 0) in
-  Hashtbl.replace dtp_async_tbl id (fun () -> Obj.repr (Domain.join d));
-  id
-let dtp_async_await (h : int) : Obj.t =
-  match Hashtbl.find_opt dtp_async_tbl h with
-  | Some join -> join ()
-  | None -> failwith "async: invalid task handle"
+  (* 写失败（典型 EPIPE：`vuna … | head`）不再是宿主崩溃；输出到此为止。
+     锁保证多 domain 并发打印时每次调用整体输出、不交错。 *)
+  dtp_with_output_lock (fun () -> try print_string s; flush stdout; String.length s with _ -> 0)
+let dtp_eprint s =
+  dtp_with_output_lock (fun () -> try prerr_string s; flush stderr; String.length s with _ -> 0)
 (* 宿主失败通道：try 变体不抛宿主异常，而是把失败码写进**当前 Domain** 的状态槽，
    返回默认值；base 的宿主 handler 随后读 status 转成 typed error。0 = 成功。
    用 Domain.DLS 而不是全局 ref：异步任务会在别的 Domain 上跑。 *)
@@ -950,11 +957,11 @@ let dtp_sched_runnable t =
 let dtp_sched_run_one t =
   if dtp_sched_runnable t then begin
     dtp_sched_current := t.sched_tid;
-    dtp_cleanup_fiber := t.sched_tid;
+    dtp_cleanup_fiber_set t.sched_tid;
     (match dtp_sched_step t with
      | Some st -> dtp_sched_apply t st
      | None -> ());
-    dtp_cleanup_fiber := -1;
+    dtp_cleanup_fiber_set (-1);
     dtp_sched_current := -1
   end
 
@@ -1078,6 +1085,68 @@ let dtp_sched_scope_error (id : int) : string =
 
 let dtp_sched_scope_count (id : int) : int =
   (dtp_sched_scope id).sched_completed
+(* ------------------------------------------------------------------ *)
+(* Threads and synchronization primitives (OCaml 5 domains).           *)
+(* ------------------------------------------------------------------ *)
+
+type dtp_thread_handle = {
+  mutable dtp_th_done : bool;
+  mutable dtp_th_value : Obj.t;
+  dtp_th_domain : Obj.t Domain.t;
+}
+
+let dtp_thread_spawn (th : int -> 'a) : Obj.t =
+  let d = Domain.spawn (fun () -> Obj.repr (th 0)) in
+  Obj.repr { dtp_th_done = false; dtp_th_value = Obj.repr (); dtp_th_domain = d }
+
+let dtp_thread_join (t : Obj.t) : 'a =
+  let h : dtp_thread_handle = Obj.obj t in
+  if h.dtp_th_done then Obj.obj h.dtp_th_value
+  else if Domain.get_id h.dtp_th_domain = Domain.self () then failwith "thread: join self"
+  else begin
+    let v = Domain.join h.dtp_th_domain in
+    h.dtp_th_value <- v;
+    h.dtp_th_done <- true;
+    Obj.obj v
+  end
+
+let dtp_thread_yield () : int =
+  (try Unix.sleepf 0.0 with _ -> ());
+  0
+
+let dtp_thread_id () : int = (Domain.self () :> int)
+
+let dtp_thread_parallelism () : int = Domain.recommended_domain_count ()
+
+let dtp_mutex_new () : Obj.t = Obj.repr (Mutex.create ())
+let dtp_mutex_lock (m : Obj.t) : int = Mutex.lock (Obj.obj m); 0
+let dtp_mutex_try_lock (m : Obj.t) : bool = Mutex.try_lock (Obj.obj m)
+let dtp_mutex_unlock (m : Obj.t) : int = Mutex.unlock (Obj.obj m); 0
+
+let dtp_condvar_new () : Obj.t = Obj.repr (Condition.create ())
+let dtp_condvar_wait (c : Obj.t) (m : Obj.t) : int =
+  Condition.wait (Obj.obj c) (Obj.obj m);
+  0
+let dtp_condvar_signal (c : Obj.t) : int = Condition.signal (Obj.obj c); 0
+let dtp_condvar_broadcast (c : Obj.t) : int = Condition.broadcast (Obj.obj c); 0
+
+let dtp_atomic_new (v : int) : Obj.t = Obj.repr (Atomic.make v)
+let dtp_atomic_load (a : Obj.t) : int = Atomic.get (Obj.obj a)
+let dtp_atomic_store (a : Obj.t) (v : int) : int =
+  Atomic.set (Obj.obj a) v;
+  0
+let dtp_atomic_fetch_add (a : Obj.t) (v : int) : int =
+  Atomic.fetch_and_add (Obj.obj a) v
+let dtp_atomic_exchange (a : Obj.t) (v : int) : int = Atomic.exchange (Obj.obj a) v
+let dtp_atomic_compare_exchange (a : Obj.t) (expected : int) (desired : int) : int =
+  let cell : int Atomic.t = Obj.obj a in
+  let rec loop () =
+    let prev = Atomic.get cell in
+    if prev <> expected then prev
+    else if Atomic.compare_and_set cell expected desired then prev
+    else loop ()
+  in
+  loop ()
 let bi_add_float (a : float) (b : float) = a +. b
 let bi_sub_float (a : float) (b : float) = a -. b
 let bi_mul_float (a : float) (b : float) = a *. b
@@ -1979,134 +2048,136 @@ let dt_def_locs = [
   ("Base_dIgnore.v_ruleMatches", ("Vuna.Compiler.Base.Ignore.ruleMatches", "Vuna/Compiler/Base/Ignore.vuna:185"));
   ("Base_dIgnore.v_stripBase", ("Vuna.Compiler.Base.Ignore.stripBase", "Vuna/Compiler/Base/Ignore.vuna:195"));
   ("Base_dIgnore.v_trimTrailingSlash", ("Vuna.Compiler.Base.Ignore.trimTrailingSlash", "Vuna/Compiler/Base/Ignore.vuna:97"));
-  ("Base_dIntrinsics.v_allIntrinsics", ("Vuna.Compiler.Base.Intrinsics.allIntrinsics", "Vuna/Compiler/Base/Intrinsics.vuna:1214"));
-  ("Base_dIntrinsics.v_arityOfType", ("Vuna.Compiler.Base.Intrinsics.arityOfType", "Vuna/Compiler/Base/Intrinsics.vuna:65"));
-  ("Base_dIntrinsics.v_assertIntrinsicName", ("Vuna.Compiler.Base.Intrinsics.assertIntrinsicName", "Vuna/Compiler/Base/Intrinsics.vuna:448"));
-  ("Base_dIntrinsics.v_baseIntrinsics", ("Vuna.Compiler.Base.Intrinsics.baseIntrinsics", "Vuna/Compiler/Base/Intrinsics.vuna:896"));
-  ("Base_dIntrinsics.v_boolFalseCtor", ("Vuna.Compiler.Base.Intrinsics.boolFalseCtor", "Vuna/Compiler/Base/Intrinsics.vuna:686"));
-  ("Base_dIntrinsics.v_boolTrueCtor", ("Vuna.Compiler.Base.Intrinsics.boolTrueCtor", "Vuna/Compiler/Base/Intrinsics.vuna:682"));
-  ("Base_dIntrinsics.v_boolTypeName", ("Vuna.Compiler.Base.Intrinsics.boolTypeName", "Vuna/Compiler/Base/Intrinsics.vuna:678"));
-  ("Base_dIntrinsics.v_builtinEffectErrorRunHostOf", ("Vuna.Compiler.Base.Intrinsics.builtinEffectErrorRunHostOf", "Vuna/Compiler/Base/Intrinsics.vuna:221"));
-  ("Base_dIntrinsics.v_builtinEffectErrorRunHostOfRest", ("Vuna.Compiler.Base.Intrinsics.builtinEffectErrorRunHostOfRest", "Vuna/Compiler/Base/Intrinsics.vuna:224"));
-  ("Base_dIntrinsics.v_builtinEffectExistsRest", ("Vuna.Compiler.Base.Intrinsics.builtinEffectExistsRest", "Vuna/Compiler/Base/Intrinsics.vuna:267"));
-  ("Base_dIntrinsics.v_builtinEffectImplOf", ("Vuna.Compiler.Base.Intrinsics.builtinEffectImplOf", "Vuna/Compiler/Base/Intrinsics.vuna:212"));
-  ("Base_dIntrinsics.v_builtinEffectImplOfRest", ("Vuna.Compiler.Base.Intrinsics.builtinEffectImplOfRest", "Vuna/Compiler/Base/Intrinsics.vuna:215"));
-  ("Base_dIntrinsics.v_builtinEffects", ("Vuna.Compiler.Base.Intrinsics.builtinEffects", "Vuna/Compiler/Base/Intrinsics.vuna:151"));
-  ("Base_dIntrinsics.v_canonicalCtorsFor", ("Vuna.Compiler.Base.Intrinsics.canonicalCtorsFor", "Vuna/Compiler/Base/Intrinsics.vuna:636"));
-  ("Base_dIntrinsics.v_canonicalFamilies", ("Vuna.Compiler.Base.Intrinsics.canonicalFamilies", "Vuna/Compiler/Base/Intrinsics.vuna:765"));
-  ("Base_dIntrinsics.v_canonicalReprOf", ("Vuna.Compiler.Base.Intrinsics.canonicalReprOf", "Vuna/Compiler/Base/Intrinsics.vuna:799"));
-  ("Base_dIntrinsics.v_cfCtors", ("Vuna.Compiler.Base.Intrinsics.cfCtors", "Vuna/Compiler/Base/Intrinsics.vuna:757"));
-  ("Base_dIntrinsics.v_cfName", ("Vuna.Compiler.Base.Intrinsics.cfName", "Vuna/Compiler/Base/Intrinsics.vuna:753"));
-  ("Base_dIntrinsics.v_cfRepr", ("Vuna.Compiler.Base.Intrinsics.cfRepr", "Vuna/Compiler/Base/Intrinsics.vuna:761"));
-  ("Base_dIntrinsics.v_cmpSpecializedTyNames", ("Vuna.Compiler.Base.Intrinsics.cmpSpecializedTyNames", "Vuna/Compiler/Base/Intrinsics.vuna:821"));
-  ("Base_dIntrinsics.v_ctorSpellingKey", ("Vuna.Compiler.Base.Intrinsics.ctorSpellingKey", "Vuna/Compiler/Base/Intrinsics.vuna:776"));
-  ("Base_dIntrinsics.v_directClassForKey", ("Vuna.Compiler.Base.Intrinsics.directClassForKey", "Vuna/Compiler/Base/Intrinsics.vuna:258"));
-  ("Base_dIntrinsics.v_dispatchIdChars", ("Vuna.Compiler.Base.Intrinsics.dispatchIdChars", "Vuna/Compiler/Base/Intrinsics.vuna:1274"));
-  ("Base_dIntrinsics.v_dispatchIdIntrinsicName", ("Vuna.Compiler.Base.Intrinsics.dispatchIdIntrinsicName", "Vuna/Compiler/Base/Intrinsics.vuna:1265"));
-  ("Base_dIntrinsics.v_dispatchIdOf", ("Vuna.Compiler.Base.Intrinsics.dispatchIdOf", "Vuna/Compiler/Base/Intrinsics.vuna:1271"));
-  ("Base_dIntrinsics.v_dropLastSegment", ("Vuna.Compiler.Base.Intrinsics.dropLastSegment", "Vuna/Compiler/Base/Intrinsics.vuna:784"));
-  ("Base_dIntrinsics.v_effDefaultInstance", ("Vuna.Compiler.Base.Intrinsics.effDefaultInstance", "Vuna/Compiler/Base/Intrinsics.vuna:524"));
-  ("Base_dIntrinsics.v_effHostOpName", ("Vuna.Compiler.Base.Intrinsics.effHostOpName", "Vuna/Compiler/Base/Intrinsics.vuna:510"));
-  ("Base_dIntrinsics.v_effIntrinsics", ("Vuna.Compiler.Base.Intrinsics.effIntrinsics", "Vuna/Compiler/Base/Intrinsics.vuna:1032"));
-  ("Base_dIntrinsics.v_effMainRunName", ("Vuna.Compiler.Base.Intrinsics.effMainRunName", "Vuna/Compiler/Base/Intrinsics.vuna:367"));
-  ("Base_dIntrinsics.v_effMemberFamilyName", ("Vuna.Compiler.Base.Intrinsics.effMemberFamilyName", "Vuna/Compiler/Base/Intrinsics.vuna:493"));
-  ("Base_dIntrinsics.v_effMemberHereCtor", ("Vuna.Compiler.Base.Intrinsics.effMemberHereCtor", "Vuna/Compiler/Base/Intrinsics.vuna:497"));
-  ("Base_dIntrinsics.v_effMemberThereCtor", ("Vuna.Compiler.Base.Intrinsics.effMemberThereCtor", "Vuna/Compiler/Base/Intrinsics.vuna:501"));
-  ("Base_dIntrinsics.v_effMkCtor", ("Vuna.Compiler.Base.Intrinsics.effMkCtor", "Vuna/Compiler/Base/Intrinsics.vuna:519"));
-  ("Base_dIntrinsics.v_effNamedName", ("Vuna.Compiler.Base.Intrinsics.effNamedName", "Vuna/Compiler/Base/Intrinsics.vuna:481"));
-  ("Base_dIntrinsics.v_effRowAppendName", ("Vuna.Compiler.Base.Intrinsics.effRowAppendName", "Vuna/Compiler/Base/Intrinsics.vuna:489"));
-  ("Base_dIntrinsics.v_effRowConsCtor", ("Vuna.Compiler.Base.Intrinsics.effRowConsCtor", "Vuna/Compiler/Base/Intrinsics.vuna:477"));
-  ("Base_dIntrinsics.v_effRowFamilyName", ("Vuna.Compiler.Base.Intrinsics.effRowFamilyName", "Vuna/Compiler/Base/Intrinsics.vuna:469"));
-  ("Base_dIntrinsics.v_effRowNilCtor", ("Vuna.Compiler.Base.Intrinsics.effRowNilCtor", "Vuna/Compiler/Base/Intrinsics.vuna:473"));
-  ("Base_dIntrinsics.v_effRowRemName", ("Vuna.Compiler.Base.Intrinsics.effRowRemName", "Vuna/Compiler/Base/Intrinsics.vuna:485"));
-  ("Base_dIntrinsics.v_effRunName", ("Vuna.Compiler.Base.Intrinsics.effRunName", "Vuna/Compiler/Base/Intrinsics.vuna:362"));
-  ("Base_dIntrinsics.v_effSendCoreIdName", ("Vuna.Compiler.Base.Intrinsics.effSendCoreIdName", "Vuna/Compiler/Base/Intrinsics.vuna:337"));
-  ("Base_dIntrinsics.v_effSendCoreName", ("Vuna.Compiler.Base.Intrinsics.effSendCoreName", "Vuna/Compiler/Base/Intrinsics.vuna:334"));
-  ("Base_dIntrinsics.v_effTypeName", ("Vuna.Compiler.Base.Intrinsics.effTypeName", "Vuna/Compiler/Base/Intrinsics.vuna:505"));
-  ("Base_dIntrinsics.v_effUnitTypeName", ("Vuna.Compiler.Base.Intrinsics.effUnitTypeName", "Vuna/Compiler/Base/Intrinsics.vuna:515"));
-  ("Base_dIntrinsics.v_ffiScalarNames", ("Vuna.Compiler.Base.Intrinsics.ffiScalarNames", "Vuna/Compiler/Base/Intrinsics.vuna:825"));
-  ("Base_dIntrinsics.v_findCanonicalFamily", ("Vuna.Compiler.Base.Intrinsics.findCanonicalFamily", "Vuna/Compiler/Base/Intrinsics.vuna:790"));
-  ("Base_dIntrinsics.v_findCanonicalFamilyGo", ("Vuna.Compiler.Base.Intrinsics.findCanonicalFamilyGo", "Vuna/Compiler/Base/Intrinsics.vuna:793"));
-  ("Base_dIntrinsics.v_findHostSupport", ("Vuna.Compiler.Base.Intrinsics.findHostSupport", "Vuna/Compiler/Base/Intrinsics.vuna:322"));
-  ("Base_dIntrinsics.v_findIntrinsic", ("Vuna.Compiler.Base.Intrinsics.findIntrinsic", "Vuna/Compiler/Base/Intrinsics.vuna:1246"));
-  ("Base_dIntrinsics.v_floatIntrinsicNames", ("Vuna.Compiler.Base.Intrinsics.floatIntrinsicNames", "Vuna/Compiler/Base/Intrinsics.vuna:1220"));
-  ("Base_dIntrinsics.v_floatIntrinsics", ("Vuna.Compiler.Base.Intrinsics.floatIntrinsics", "Vuna/Compiler/Base/Intrinsics.vuna:998"));
-  ("Base_dIntrinsics.v_floatTypeName", ("Vuna.Compiler.Base.Intrinsics.floatTypeName", "Vuna/Compiler/Base/Intrinsics.vuna:674"));
-  ("Base_dIntrinsics.v_fromFloatMethodName", ("Vuna.Compiler.Base.Intrinsics.fromFloatMethodName", "Vuna/Compiler/Base/Intrinsics.vuna:863"));
-  ("Base_dIntrinsics.v_fromFloatTypeName", ("Vuna.Compiler.Base.Intrinsics.fromFloatTypeName", "Vuna/Compiler/Base/Intrinsics.vuna:859"));
-  ("Base_dIntrinsics.v_fromIntMethodName", ("Vuna.Compiler.Base.Intrinsics.fromIntMethodName", "Vuna/Compiler/Base/Intrinsics.vuna:855"));
-  ("Base_dIntrinsics.v_fromIntTypeName", ("Vuna.Compiler.Base.Intrinsics.fromIntTypeName", "Vuna/Compiler/Base/Intrinsics.vuna:851"));
-  ("Base_dIntrinsics.v_fromStringMethodName", ("Vuna.Compiler.Base.Intrinsics.fromStringMethodName", "Vuna/Compiler/Base/Intrinsics.vuna:847"));
-  ("Base_dIntrinsics.v_fromStringTypeName", ("Vuna.Compiler.Base.Intrinsics.fromStringTypeName", "Vuna/Compiler/Base/Intrinsics.vuna:843"));
-  ("Base_dIntrinsics.v_hasFieldGetFieldName", ("Vuna.Compiler.Base.Intrinsics.hasFieldGetFieldName", "Vuna/Compiler/Base/Intrinsics.vuna:727"));
-  ("Base_dIntrinsics.v_hasFieldLabelName", ("Vuna.Compiler.Base.Intrinsics.hasFieldLabelName", "Vuna/Compiler/Base/Intrinsics.vuna:719"));
-  ("Base_dIntrinsics.v_hasFieldMethodName", ("Vuna.Compiler.Base.Intrinsics.hasFieldMethodName", "Vuna/Compiler/Base/Intrinsics.vuna:731"));
-  ("Base_dIntrinsics.v_hasFieldTraitName", ("Vuna.Compiler.Base.Intrinsics.hasFieldTraitName", "Vuna/Compiler/Base/Intrinsics.vuna:723"));
-  ("Base_dIntrinsics.v_hostClassOf", ("Vuna.Compiler.Base.Intrinsics.hostClassOf", "Vuna/Compiler/Base/Intrinsics.vuna:230"));
-  ("Base_dIntrinsics.v_hostClassOfRest", ("Vuna.Compiler.Base.Intrinsics.hostClassOfRest", "Vuna/Compiler/Base/Intrinsics.vuna:233"));
-  ("Base_dIntrinsics.v_hostClassOfSendKey", ("Vuna.Compiler.Base.Intrinsics.hostClassOfSendKey", "Vuna/Compiler/Base/Intrinsics.vuna:245"));
-  ("Base_dIntrinsics.v_hostClassOfSendKeyRest", ("Vuna.Compiler.Base.Intrinsics.hostClassOfSendKeyRest", "Vuna/Compiler/Base/Intrinsics.vuna:248"));
-  ("Base_dIntrinsics.v_hostSupportOf", ("Vuna.Compiler.Base.Intrinsics.hostSupportOf", "Vuna/Compiler/Base/Intrinsics.vuna:290"));
-  ("Base_dIntrinsics.v_hostSupportTable", ("Vuna.Compiler.Base.Intrinsics.hostSupportTable", "Vuna/Compiler/Base/Intrinsics.vuna:307"));
-  ("Base_dIntrinsics.v_hostTargetNames", ("Vuna.Compiler.Base.Intrinsics.hostTargetNames", "Vuna/Compiler/Base/Intrinsics.vuna:276"));
-  ("Base_dIntrinsics.v_intTypeName", ("Vuna.Compiler.Base.Intrinsics.intTypeName", "Vuna/Compiler/Base/Intrinsics.vuna:666"));
-  ("Base_dIntrinsics.v_internalIntrinsicNames", ("Vuna.Compiler.Base.Intrinsics.internalIntrinsicNames", "Vuna/Compiler/Base/Intrinsics.vuna:1210"));
-  ("Base_dIntrinsics.v_internalIntrinsics", ("Vuna.Compiler.Base.Intrinsics.internalIntrinsics", "Vuna/Compiler/Base/Intrinsics.vuna:1182"));
-  ("Base_dIntrinsics.v_interpMethodName", ("Vuna.Compiler.Base.Intrinsics.interpMethodName", "Vuna/Compiler/Base/Intrinsics.vuna:838"));
-  ("Base_dIntrinsics.v_interpTypeName", ("Vuna.Compiler.Base.Intrinsics.interpTypeName", "Vuna/Compiler/Base/Intrinsics.vuna:834"));
-  ("Base_dIntrinsics.v_intrinsicArity", ("Vuna.Compiler.Base.Intrinsics.intrinsicArity", "Vuna/Compiler/Base/Intrinsics.vuna:643"));
-  ("Base_dIntrinsics.v_intrinsicName", ("Vuna.Compiler.Base.Intrinsics.intrinsicName", "Vuna/Compiler/Base/Intrinsics.vuna:623"));
-  ("Base_dIntrinsics.v_intrinsicReturnsEff", ("Vuna.Compiler.Base.Intrinsics.intrinsicReturnsEff", "Vuna/Compiler/Base/Intrinsics.vuna:649"));
-  ("Base_dIntrinsics.v_intrinsicSignature", ("Vuna.Compiler.Base.Intrinsics.intrinsicSignature", "Vuna/Compiler/Base/Intrinsics.vuna:627"));
-  ("Base_dIntrinsics.v_intrinsicTbl", ("Vuna.Compiler.Base.Intrinsics.intrinsicTbl", "Vuna/Compiler/Base/Intrinsics.vuna:1241"));
-  ("Base_dIntrinsics.v_intrinsicVisible", ("Vuna.Compiler.Base.Intrinsics.intrinsicVisible", "Vuna/Compiler/Base/Intrinsics.vuna:631"));
-  ("Base_dIntrinsics.v_isBoolCanonical", ("Vuna.Compiler.Base.Intrinsics.isBoolCanonical", "Vuna/Compiler/Base/Intrinsics.vuna:814"));
-  ("Base_dIntrinsics.v_isBuiltinEffectTag", ("Vuna.Compiler.Base.Intrinsics.isBuiltinEffectTag", "Vuna/Compiler/Base/Intrinsics.vuna:264"));
-  ("Base_dIntrinsics.v_isDebugOnlyName", ("Vuna.Compiler.Base.Intrinsics.isDebugOnlyName", "Vuna/Compiler/Base/Intrinsics.vuna:456"));
-  ("Base_dIntrinsics.v_isFfiScalarName", ("Vuna.Compiler.Base.Intrinsics.isFfiScalarName", "Vuna/Compiler/Base/Intrinsics.vuna:829"));
-  ("Base_dIntrinsics.v_isIntrinsicName", ("Vuna.Compiler.Base.Intrinsics.isIntrinsicName", "Vuna/Compiler/Base/Intrinsics.vuna:1250"));
-  ("Base_dIntrinsics.v_isIntrinsicTypeName", ("Vuna.Compiler.Base.Intrinsics.isIntrinsicTypeName", "Vuna/Compiler/Base/Intrinsics.vuna:703"));
-  ("Base_dIntrinsics.v_isSendCoreName", ("Vuna.Compiler.Base.Intrinsics.isSendCoreName", "Vuna/Compiler/Base/Intrinsics.vuna:341"));
-  ("Base_dIntrinsics.v_isTypeConstructorName", ("Vuna.Compiler.Base.Intrinsics.isTypeConstructorName", "Vuna/Compiler/Base/Intrinsics.vuna:122"));
-  ("Base_dIntrinsics.v_isUnboxedCanonical", ("Vuna.Compiler.Base.Intrinsics.isUnboxedCanonical", "Vuna/Compiler/Base/Intrinsics.vuna:806"));
-  ("Base_dIntrinsics.v_listConsCtor", ("Vuna.Compiler.Base.Intrinsics.listConsCtor", "Vuna/Compiler/Base/Intrinsics.vuna:715"));
-  ("Base_dIntrinsics.v_listFamilyName", ("Vuna.Compiler.Base.Intrinsics.listFamilyName", "Vuna/Compiler/Base/Intrinsics.vuna:707"));
-  ("Base_dIntrinsics.v_listNilCtor", ("Vuna.Compiler.Base.Intrinsics.listNilCtor", "Vuna/Compiler/Base/Intrinsics.vuna:711"));
-  ("Base_dIntrinsics.v_logEmitIntrinsicName", ("Vuna.Compiler.Base.Intrinsics.logEmitIntrinsicName", "Vuna/Compiler/Base/Intrinsics.vuna:394"));
-  ("Base_dIntrinsics.v_logIntrinsicNames", ("Vuna.Compiler.Base.Intrinsics.logIntrinsicNames", "Vuna/Compiler/Base/Intrinsics.vuna:1189"));
-  ("Base_dIntrinsics.v_logOnIntrinsicName", ("Vuna.Compiler.Base.Intrinsics.logOnIntrinsicName", "Vuna/Compiler/Base/Intrinsics.vuna:390"));
-  ("Base_dIntrinsics.v_mainShowDefName", ("Vuna.Compiler.Base.Intrinsics.mainShowDefName", "Vuna/Compiler/Base/Intrinsics.vuna:358"));
-  ("Base_dIntrinsics.v_natSuccCtor", ("Vuna.Compiler.Base.Intrinsics.natSuccCtor", "Vuna/Compiler/Base/Intrinsics.vuna:699"));
-  ("Base_dIntrinsics.v_natTypeName", ("Vuna.Compiler.Base.Intrinsics.natTypeName", "Vuna/Compiler/Base/Intrinsics.vuna:691"));
-  ("Base_dIntrinsics.v_natZeroCtor", ("Vuna.Compiler.Base.Intrinsics.natZeroCtor", "Vuna/Compiler/Base/Intrinsics.vuna:695"));
-  ("Base_dIntrinsics.v_obsCounterIntrinsicName", ("Vuna.Compiler.Base.Intrinsics.obsCounterIntrinsicName", "Vuna/Compiler/Base/Intrinsics.vuna:424"));
-  ("Base_dIntrinsics.v_obsIntrinsicNames", ("Vuna.Compiler.Base.Intrinsics.obsIntrinsicNames", "Vuna/Compiler/Base/Intrinsics.vuna:1195"));
-  ("Base_dIntrinsics.v_obsLevelIntrinsicName", ("Vuna.Compiler.Base.Intrinsics.obsLevelIntrinsicName", "Vuna/Compiler/Base/Intrinsics.vuna:409"));
-  ("Base_dIntrinsics.v_obsMarkIntrinsicName", ("Vuna.Compiler.Base.Intrinsics.obsMarkIntrinsicName", "Vuna/Compiler/Base/Intrinsics.vuna:428"));
-  ("Base_dIntrinsics.v_obsSampleStartIntrinsicName", ("Vuna.Compiler.Base.Intrinsics.obsSampleStartIntrinsicName", "Vuna/Compiler/Base/Intrinsics.vuna:440"));
-  ("Base_dIntrinsics.v_obsSampleStopIntrinsicName", ("Vuna.Compiler.Base.Intrinsics.obsSampleStopIntrinsicName", "Vuna/Compiler/Base/Intrinsics.vuna:444"));
-  ("Base_dIntrinsics.v_obsSpanBeginIntrinsicName", ("Vuna.Compiler.Base.Intrinsics.obsSpanBeginIntrinsicName", "Vuna/Compiler/Base/Intrinsics.vuna:432"));
-  ("Base_dIntrinsics.v_obsSpanEndIntrinsicName", ("Vuna.Compiler.Base.Intrinsics.obsSpanEndIntrinsicName", "Vuna/Compiler/Base/Intrinsics.vuna:436"));
-  ("Base_dIntrinsics.v_obsSpanIntrinsicName", ("Vuna.Compiler.Base.Intrinsics.obsSpanIntrinsicName", "Vuna/Compiler/Base/Intrinsics.vuna:413"));
-  ("Base_dIntrinsics.v_obsSpanLabIntrinsicName", ("Vuna.Compiler.Base.Intrinsics.obsSpanLabIntrinsicName", "Vuna/Compiler/Base/Intrinsics.vuna:420"));
-  ("Base_dIntrinsics.v_pickHostSupport", ("Vuna.Compiler.Base.Intrinsics.pickHostSupport", "Vuna/Compiler/Base/Intrinsics.vuna:326"));
-  ("Base_dIntrinsics.v_preludeTypeNames", ("Vuna.Compiler.Base.Intrinsics.preludeTypeNames", "Vuna/Compiler/Base/Intrinsics.vuna:528"));
-  ("Base_dIntrinsics.v_preludeValueNames", ("Vuna.Compiler.Base.Intrinsics.preludeValueNames", "Vuna/Compiler/Base/Intrinsics.vuna:1261"));
-  ("Base_dIntrinsics.v_primEffBind1Name", ("Vuna.Compiler.Base.Intrinsics.primEffBind1Name", "Vuna/Compiler/Base/Intrinsics.vuna:346"));
-  ("Base_dIntrinsics.v_primEraseName", ("Vuna.Compiler.Base.Intrinsics.primEraseName", "Vuna/Compiler/Base/Intrinsics.vuna:352"));
-  ("Base_dIntrinsics.v_strTypeName", ("Vuna.Compiler.Base.Intrinsics.strTypeName", "Vuna/Compiler/Base/Intrinsics.vuna:670"));
-  ("Base_dIntrinsics.v_todoIntrinsicName", ("Vuna.Compiler.Base.Intrinsics.todoIntrinsicName", "Vuna/Compiler/Base/Intrinsics.vuna:452"));
-  ("Base_dIntrinsics.v_typeIntrinsicArities", ("Vuna.Compiler.Base.Intrinsics.typeIntrinsicArities", "Vuna/Compiler/Base/Intrinsics.vuna:93"));
-  ("Base_dIntrinsics.v_typeIntrinsicArityOf", ("Vuna.Compiler.Base.Intrinsics.typeIntrinsicArityOf", "Vuna/Compiler/Base/Intrinsics.vuna:104"));
-  ("Base_dIntrinsics.v_typeIntrinsicArityOfRest", ("Vuna.Compiler.Base.Intrinsics.typeIntrinsicArityOfRest", "Vuna/Compiler/Base/Intrinsics.vuna:108"));
-  ("Base_dIntrinsics.v_typeIntrinsicCtorArity", ("Vuna.Compiler.Base.Intrinsics.typeIntrinsicCtorArity", "Vuna/Compiler/Base/Intrinsics.vuna:89"));
-  ("Base_dIntrinsics.v_typeIntrinsicCtorName", ("Vuna.Compiler.Base.Intrinsics.typeIntrinsicCtorName", "Vuna/Compiler/Base/Intrinsics.vuna:85"));
-  ("Base_dIntrinsics.v_typeIntrinsicCtorNames", ("Vuna.Compiler.Base.Intrinsics.typeIntrinsicCtorNames", "Vuna/Compiler/Base/Intrinsics.vuna:117"));
-  ("Base_dIntrinsics.v_typeIntrinsicNames", ("Vuna.Compiler.Base.Intrinsics.typeIntrinsicNames", "Vuna/Compiler/Base/Intrinsics.vuna:662"));
-  ("Base_dIntrinsics.v_typeReturnsEff", ("Vuna.Compiler.Base.Intrinsics.typeReturnsEff", "Vuna/Compiler/Base/Intrinsics.vuna:653"));
-  ("Base_dIntrinsics.v_unknownHostSupport", ("Vuna.Compiler.Base.Intrinsics.unknownHostSupport", "Vuna/Compiler/Base/Intrinsics.vuna:303"));
-  ("Base_dIntrinsics.v_unsupportedHostTags", ("Vuna.Compiler.Base.Intrinsics.unsupportedHostTags", "Vuna/Compiler/Base/Intrinsics.vuna:294"));
-  ("Base_dIntrinsics.v_userIntrinsics", ("Vuna.Compiler.Base.Intrinsics.userIntrinsics", "Vuna/Compiler/Base/Intrinsics.vuna:1257"));
+  ("Base_dIntrinsics.v_allIntrinsics", ("Vuna.Compiler.Base.Intrinsics.allIntrinsics", "Vuna/Compiler/Base/Intrinsics.vuna:1269"));
+  ("Base_dIntrinsics.v_arityOfType", ("Vuna.Compiler.Base.Intrinsics.arityOfType", "Vuna/Compiler/Base/Intrinsics.vuna:71"));
+  ("Base_dIntrinsics.v_assertIntrinsicName", ("Vuna.Compiler.Base.Intrinsics.assertIntrinsicName", "Vuna/Compiler/Base/Intrinsics.vuna:458"));
+  ("Base_dIntrinsics.v_baseIntrinsics", ("Vuna.Compiler.Base.Intrinsics.baseIntrinsics", "Vuna/Compiler/Base/Intrinsics.vuna:906"));
+  ("Base_dIntrinsics.v_boolFalseCtor", ("Vuna.Compiler.Base.Intrinsics.boolFalseCtor", "Vuna/Compiler/Base/Intrinsics.vuna:696"));
+  ("Base_dIntrinsics.v_boolTrueCtor", ("Vuna.Compiler.Base.Intrinsics.boolTrueCtor", "Vuna/Compiler/Base/Intrinsics.vuna:692"));
+  ("Base_dIntrinsics.v_boolTypeName", ("Vuna.Compiler.Base.Intrinsics.boolTypeName", "Vuna/Compiler/Base/Intrinsics.vuna:688"));
+  ("Base_dIntrinsics.v_builtinEffectErrorRunHostOf", ("Vuna.Compiler.Base.Intrinsics.builtinEffectErrorRunHostOf", "Vuna/Compiler/Base/Intrinsics.vuna:231"));
+  ("Base_dIntrinsics.v_builtinEffectErrorRunHostOfRest", ("Vuna.Compiler.Base.Intrinsics.builtinEffectErrorRunHostOfRest", "Vuna/Compiler/Base/Intrinsics.vuna:234"));
+  ("Base_dIntrinsics.v_builtinEffectExistsRest", ("Vuna.Compiler.Base.Intrinsics.builtinEffectExistsRest", "Vuna/Compiler/Base/Intrinsics.vuna:277"));
+  ("Base_dIntrinsics.v_builtinEffectImplOf", ("Vuna.Compiler.Base.Intrinsics.builtinEffectImplOf", "Vuna/Compiler/Base/Intrinsics.vuna:222"));
+  ("Base_dIntrinsics.v_builtinEffectImplOfRest", ("Vuna.Compiler.Base.Intrinsics.builtinEffectImplOfRest", "Vuna/Compiler/Base/Intrinsics.vuna:225"));
+  ("Base_dIntrinsics.v_builtinEffects", ("Vuna.Compiler.Base.Intrinsics.builtinEffects", "Vuna/Compiler/Base/Intrinsics.vuna:161"));
+  ("Base_dIntrinsics.v_canonicalCtorsFor", ("Vuna.Compiler.Base.Intrinsics.canonicalCtorsFor", "Vuna/Compiler/Base/Intrinsics.vuna:646"));
+  ("Base_dIntrinsics.v_canonicalFamilies", ("Vuna.Compiler.Base.Intrinsics.canonicalFamilies", "Vuna/Compiler/Base/Intrinsics.vuna:775"));
+  ("Base_dIntrinsics.v_canonicalReprOf", ("Vuna.Compiler.Base.Intrinsics.canonicalReprOf", "Vuna/Compiler/Base/Intrinsics.vuna:809"));
+  ("Base_dIntrinsics.v_cfCtors", ("Vuna.Compiler.Base.Intrinsics.cfCtors", "Vuna/Compiler/Base/Intrinsics.vuna:767"));
+  ("Base_dIntrinsics.v_cfName", ("Vuna.Compiler.Base.Intrinsics.cfName", "Vuna/Compiler/Base/Intrinsics.vuna:763"));
+  ("Base_dIntrinsics.v_cfRepr", ("Vuna.Compiler.Base.Intrinsics.cfRepr", "Vuna/Compiler/Base/Intrinsics.vuna:771"));
+  ("Base_dIntrinsics.v_cmpSpecializedTyNames", ("Vuna.Compiler.Base.Intrinsics.cmpSpecializedTyNames", "Vuna/Compiler/Base/Intrinsics.vuna:831"));
+  ("Base_dIntrinsics.v_ctorSpellingKey", ("Vuna.Compiler.Base.Intrinsics.ctorSpellingKey", "Vuna/Compiler/Base/Intrinsics.vuna:786"));
+  ("Base_dIntrinsics.v_directClassForKey", ("Vuna.Compiler.Base.Intrinsics.directClassForKey", "Vuna/Compiler/Base/Intrinsics.vuna:268"));
+  ("Base_dIntrinsics.v_dispatchIdChars", ("Vuna.Compiler.Base.Intrinsics.dispatchIdChars", "Vuna/Compiler/Base/Intrinsics.vuna:1329"));
+  ("Base_dIntrinsics.v_dispatchIdIntrinsicName", ("Vuna.Compiler.Base.Intrinsics.dispatchIdIntrinsicName", "Vuna/Compiler/Base/Intrinsics.vuna:1320"));
+  ("Base_dIntrinsics.v_dispatchIdOf", ("Vuna.Compiler.Base.Intrinsics.dispatchIdOf", "Vuna/Compiler/Base/Intrinsics.vuna:1326"));
+  ("Base_dIntrinsics.v_dropLastSegment", ("Vuna.Compiler.Base.Intrinsics.dropLastSegment", "Vuna/Compiler/Base/Intrinsics.vuna:794"));
+  ("Base_dIntrinsics.v_effDefaultInstance", ("Vuna.Compiler.Base.Intrinsics.effDefaultInstance", "Vuna/Compiler/Base/Intrinsics.vuna:534"));
+  ("Base_dIntrinsics.v_effHostOpName", ("Vuna.Compiler.Base.Intrinsics.effHostOpName", "Vuna/Compiler/Base/Intrinsics.vuna:520"));
+  ("Base_dIntrinsics.v_effIntrinsics", ("Vuna.Compiler.Base.Intrinsics.effIntrinsics", "Vuna/Compiler/Base/Intrinsics.vuna:1042"));
+  ("Base_dIntrinsics.v_effMainRunName", ("Vuna.Compiler.Base.Intrinsics.effMainRunName", "Vuna/Compiler/Base/Intrinsics.vuna:377"));
+  ("Base_dIntrinsics.v_effMemberFamilyName", ("Vuna.Compiler.Base.Intrinsics.effMemberFamilyName", "Vuna/Compiler/Base/Intrinsics.vuna:503"));
+  ("Base_dIntrinsics.v_effMemberHereCtor", ("Vuna.Compiler.Base.Intrinsics.effMemberHereCtor", "Vuna/Compiler/Base/Intrinsics.vuna:507"));
+  ("Base_dIntrinsics.v_effMemberThereCtor", ("Vuna.Compiler.Base.Intrinsics.effMemberThereCtor", "Vuna/Compiler/Base/Intrinsics.vuna:511"));
+  ("Base_dIntrinsics.v_effMkCtor", ("Vuna.Compiler.Base.Intrinsics.effMkCtor", "Vuna/Compiler/Base/Intrinsics.vuna:529"));
+  ("Base_dIntrinsics.v_effNamedName", ("Vuna.Compiler.Base.Intrinsics.effNamedName", "Vuna/Compiler/Base/Intrinsics.vuna:491"));
+  ("Base_dIntrinsics.v_effRowAppendName", ("Vuna.Compiler.Base.Intrinsics.effRowAppendName", "Vuna/Compiler/Base/Intrinsics.vuna:499"));
+  ("Base_dIntrinsics.v_effRowConsCtor", ("Vuna.Compiler.Base.Intrinsics.effRowConsCtor", "Vuna/Compiler/Base/Intrinsics.vuna:487"));
+  ("Base_dIntrinsics.v_effRowFamilyName", ("Vuna.Compiler.Base.Intrinsics.effRowFamilyName", "Vuna/Compiler/Base/Intrinsics.vuna:479"));
+  ("Base_dIntrinsics.v_effRowNilCtor", ("Vuna.Compiler.Base.Intrinsics.effRowNilCtor", "Vuna/Compiler/Base/Intrinsics.vuna:483"));
+  ("Base_dIntrinsics.v_effRowRemName", ("Vuna.Compiler.Base.Intrinsics.effRowRemName", "Vuna/Compiler/Base/Intrinsics.vuna:495"));
+  ("Base_dIntrinsics.v_effRunName", ("Vuna.Compiler.Base.Intrinsics.effRunName", "Vuna/Compiler/Base/Intrinsics.vuna:372"));
+  ("Base_dIntrinsics.v_effSendCoreIdName", ("Vuna.Compiler.Base.Intrinsics.effSendCoreIdName", "Vuna/Compiler/Base/Intrinsics.vuna:347"));
+  ("Base_dIntrinsics.v_effSendCoreName", ("Vuna.Compiler.Base.Intrinsics.effSendCoreName", "Vuna/Compiler/Base/Intrinsics.vuna:344"));
+  ("Base_dIntrinsics.v_effTypeName", ("Vuna.Compiler.Base.Intrinsics.effTypeName", "Vuna/Compiler/Base/Intrinsics.vuna:515"));
+  ("Base_dIntrinsics.v_effUnitTypeName", ("Vuna.Compiler.Base.Intrinsics.effUnitTypeName", "Vuna/Compiler/Base/Intrinsics.vuna:525"));
+  ("Base_dIntrinsics.v_ffiScalarNames", ("Vuna.Compiler.Base.Intrinsics.ffiScalarNames", "Vuna/Compiler/Base/Intrinsics.vuna:835"));
+  ("Base_dIntrinsics.v_findCanonicalFamily", ("Vuna.Compiler.Base.Intrinsics.findCanonicalFamily", "Vuna/Compiler/Base/Intrinsics.vuna:800"));
+  ("Base_dIntrinsics.v_findCanonicalFamilyGo", ("Vuna.Compiler.Base.Intrinsics.findCanonicalFamilyGo", "Vuna/Compiler/Base/Intrinsics.vuna:803"));
+  ("Base_dIntrinsics.v_findHostSupport", ("Vuna.Compiler.Base.Intrinsics.findHostSupport", "Vuna/Compiler/Base/Intrinsics.vuna:332"));
+  ("Base_dIntrinsics.v_findIntrinsic", ("Vuna.Compiler.Base.Intrinsics.findIntrinsic", "Vuna/Compiler/Base/Intrinsics.vuna:1301"));
+  ("Base_dIntrinsics.v_floatIntrinsicNames", ("Vuna.Compiler.Base.Intrinsics.floatIntrinsicNames", "Vuna/Compiler/Base/Intrinsics.vuna:1275"));
+  ("Base_dIntrinsics.v_floatIntrinsics", ("Vuna.Compiler.Base.Intrinsics.floatIntrinsics", "Vuna/Compiler/Base/Intrinsics.vuna:1008"));
+  ("Base_dIntrinsics.v_floatTypeName", ("Vuna.Compiler.Base.Intrinsics.floatTypeName", "Vuna/Compiler/Base/Intrinsics.vuna:684"));
+  ("Base_dIntrinsics.v_fromFloatMethodName", ("Vuna.Compiler.Base.Intrinsics.fromFloatMethodName", "Vuna/Compiler/Base/Intrinsics.vuna:873"));
+  ("Base_dIntrinsics.v_fromFloatTypeName", ("Vuna.Compiler.Base.Intrinsics.fromFloatTypeName", "Vuna/Compiler/Base/Intrinsics.vuna:869"));
+  ("Base_dIntrinsics.v_fromIntMethodName", ("Vuna.Compiler.Base.Intrinsics.fromIntMethodName", "Vuna/Compiler/Base/Intrinsics.vuna:865"));
+  ("Base_dIntrinsics.v_fromIntTypeName", ("Vuna.Compiler.Base.Intrinsics.fromIntTypeName", "Vuna/Compiler/Base/Intrinsics.vuna:861"));
+  ("Base_dIntrinsics.v_fromStringMethodName", ("Vuna.Compiler.Base.Intrinsics.fromStringMethodName", "Vuna/Compiler/Base/Intrinsics.vuna:857"));
+  ("Base_dIntrinsics.v_fromStringTypeName", ("Vuna.Compiler.Base.Intrinsics.fromStringTypeName", "Vuna/Compiler/Base/Intrinsics.vuna:853"));
+  ("Base_dIntrinsics.v_hasFieldGetFieldName", ("Vuna.Compiler.Base.Intrinsics.hasFieldGetFieldName", "Vuna/Compiler/Base/Intrinsics.vuna:737"));
+  ("Base_dIntrinsics.v_hasFieldLabelName", ("Vuna.Compiler.Base.Intrinsics.hasFieldLabelName", "Vuna/Compiler/Base/Intrinsics.vuna:729"));
+  ("Base_dIntrinsics.v_hasFieldMethodName", ("Vuna.Compiler.Base.Intrinsics.hasFieldMethodName", "Vuna/Compiler/Base/Intrinsics.vuna:741"));
+  ("Base_dIntrinsics.v_hasFieldTraitName", ("Vuna.Compiler.Base.Intrinsics.hasFieldTraitName", "Vuna/Compiler/Base/Intrinsics.vuna:733"));
+  ("Base_dIntrinsics.v_hostClassOf", ("Vuna.Compiler.Base.Intrinsics.hostClassOf", "Vuna/Compiler/Base/Intrinsics.vuna:240"));
+  ("Base_dIntrinsics.v_hostClassOfRest", ("Vuna.Compiler.Base.Intrinsics.hostClassOfRest", "Vuna/Compiler/Base/Intrinsics.vuna:243"));
+  ("Base_dIntrinsics.v_hostClassOfSendKey", ("Vuna.Compiler.Base.Intrinsics.hostClassOfSendKey", "Vuna/Compiler/Base/Intrinsics.vuna:255"));
+  ("Base_dIntrinsics.v_hostClassOfSendKeyRest", ("Vuna.Compiler.Base.Intrinsics.hostClassOfSendKeyRest", "Vuna/Compiler/Base/Intrinsics.vuna:258"));
+  ("Base_dIntrinsics.v_hostSupportOf", ("Vuna.Compiler.Base.Intrinsics.hostSupportOf", "Vuna/Compiler/Base/Intrinsics.vuna:300"));
+  ("Base_dIntrinsics.v_hostSupportTable", ("Vuna.Compiler.Base.Intrinsics.hostSupportTable", "Vuna/Compiler/Base/Intrinsics.vuna:317"));
+  ("Base_dIntrinsics.v_hostTargetNames", ("Vuna.Compiler.Base.Intrinsics.hostTargetNames", "Vuna/Compiler/Base/Intrinsics.vuna:286"));
+  ("Base_dIntrinsics.v_intTypeName", ("Vuna.Compiler.Base.Intrinsics.intTypeName", "Vuna/Compiler/Base/Intrinsics.vuna:676"));
+  ("Base_dIntrinsics.v_internalIntrinsicNames", ("Vuna.Compiler.Base.Intrinsics.internalIntrinsicNames", "Vuna/Compiler/Base/Intrinsics.vuna:1265"));
+  ("Base_dIntrinsics.v_internalIntrinsics", ("Vuna.Compiler.Base.Intrinsics.internalIntrinsics", "Vuna/Compiler/Base/Intrinsics.vuna:1237"));
+  ("Base_dIntrinsics.v_interpMethodName", ("Vuna.Compiler.Base.Intrinsics.interpMethodName", "Vuna/Compiler/Base/Intrinsics.vuna:848"));
+  ("Base_dIntrinsics.v_interpTypeName", ("Vuna.Compiler.Base.Intrinsics.interpTypeName", "Vuna/Compiler/Base/Intrinsics.vuna:844"));
+  ("Base_dIntrinsics.v_intrinsicArity", ("Vuna.Compiler.Base.Intrinsics.intrinsicArity", "Vuna/Compiler/Base/Intrinsics.vuna:653"));
+  ("Base_dIntrinsics.v_intrinsicName", ("Vuna.Compiler.Base.Intrinsics.intrinsicName", "Vuna/Compiler/Base/Intrinsics.vuna:633"));
+  ("Base_dIntrinsics.v_intrinsicReturnsEff", ("Vuna.Compiler.Base.Intrinsics.intrinsicReturnsEff", "Vuna/Compiler/Base/Intrinsics.vuna:659"));
+  ("Base_dIntrinsics.v_intrinsicSignature", ("Vuna.Compiler.Base.Intrinsics.intrinsicSignature", "Vuna/Compiler/Base/Intrinsics.vuna:637"));
+  ("Base_dIntrinsics.v_intrinsicTbl", ("Vuna.Compiler.Base.Intrinsics.intrinsicTbl", "Vuna/Compiler/Base/Intrinsics.vuna:1296"));
+  ("Base_dIntrinsics.v_intrinsicVisible", ("Vuna.Compiler.Base.Intrinsics.intrinsicVisible", "Vuna/Compiler/Base/Intrinsics.vuna:641"));
+  ("Base_dIntrinsics.v_isBoolCanonical", ("Vuna.Compiler.Base.Intrinsics.isBoolCanonical", "Vuna/Compiler/Base/Intrinsics.vuna:824"));
+  ("Base_dIntrinsics.v_isBuiltinEffectTag", ("Vuna.Compiler.Base.Intrinsics.isBuiltinEffectTag", "Vuna/Compiler/Base/Intrinsics.vuna:274"));
+  ("Base_dIntrinsics.v_isDebugOnlyName", ("Vuna.Compiler.Base.Intrinsics.isDebugOnlyName", "Vuna/Compiler/Base/Intrinsics.vuna:466"));
+  ("Base_dIntrinsics.v_isFfiScalarName", ("Vuna.Compiler.Base.Intrinsics.isFfiScalarName", "Vuna/Compiler/Base/Intrinsics.vuna:839"));
+  ("Base_dIntrinsics.v_isIntrinsicName", ("Vuna.Compiler.Base.Intrinsics.isIntrinsicName", "Vuna/Compiler/Base/Intrinsics.vuna:1305"));
+  ("Base_dIntrinsics.v_isIntrinsicTypeName", ("Vuna.Compiler.Base.Intrinsics.isIntrinsicTypeName", "Vuna/Compiler/Base/Intrinsics.vuna:713"));
+  ("Base_dIntrinsics.v_isSendCoreName", ("Vuna.Compiler.Base.Intrinsics.isSendCoreName", "Vuna/Compiler/Base/Intrinsics.vuna:351"));
+  ("Base_dIntrinsics.v_isTypeConstructorName", ("Vuna.Compiler.Base.Intrinsics.isTypeConstructorName", "Vuna/Compiler/Base/Intrinsics.vuna:132"));
+  ("Base_dIntrinsics.v_isUnboxedCanonical", ("Vuna.Compiler.Base.Intrinsics.isUnboxedCanonical", "Vuna/Compiler/Base/Intrinsics.vuna:816"));
+  ("Base_dIntrinsics.v_listConsCtor", ("Vuna.Compiler.Base.Intrinsics.listConsCtor", "Vuna/Compiler/Base/Intrinsics.vuna:725"));
+  ("Base_dIntrinsics.v_listFamilyName", ("Vuna.Compiler.Base.Intrinsics.listFamilyName", "Vuna/Compiler/Base/Intrinsics.vuna:717"));
+  ("Base_dIntrinsics.v_listNilCtor", ("Vuna.Compiler.Base.Intrinsics.listNilCtor", "Vuna/Compiler/Base/Intrinsics.vuna:721"));
+  ("Base_dIntrinsics.v_logEmitIntrinsicName", ("Vuna.Compiler.Base.Intrinsics.logEmitIntrinsicName", "Vuna/Compiler/Base/Intrinsics.vuna:404"));
+  ("Base_dIntrinsics.v_logIntrinsicNames", ("Vuna.Compiler.Base.Intrinsics.logIntrinsicNames", "Vuna/Compiler/Base/Intrinsics.vuna:1244"));
+  ("Base_dIntrinsics.v_logOnIntrinsicName", ("Vuna.Compiler.Base.Intrinsics.logOnIntrinsicName", "Vuna/Compiler/Base/Intrinsics.vuna:400"));
+  ("Base_dIntrinsics.v_mainShowDefName", ("Vuna.Compiler.Base.Intrinsics.mainShowDefName", "Vuna/Compiler/Base/Intrinsics.vuna:368"));
+  ("Base_dIntrinsics.v_natSuccCtor", ("Vuna.Compiler.Base.Intrinsics.natSuccCtor", "Vuna/Compiler/Base/Intrinsics.vuna:709"));
+  ("Base_dIntrinsics.v_natTypeName", ("Vuna.Compiler.Base.Intrinsics.natTypeName", "Vuna/Compiler/Base/Intrinsics.vuna:701"));
+  ("Base_dIntrinsics.v_natZeroCtor", ("Vuna.Compiler.Base.Intrinsics.natZeroCtor", "Vuna/Compiler/Base/Intrinsics.vuna:705"));
+  ("Base_dIntrinsics.v_obsCounterIntrinsicName", ("Vuna.Compiler.Base.Intrinsics.obsCounterIntrinsicName", "Vuna/Compiler/Base/Intrinsics.vuna:434"));
+  ("Base_dIntrinsics.v_obsIntrinsicNames", ("Vuna.Compiler.Base.Intrinsics.obsIntrinsicNames", "Vuna/Compiler/Base/Intrinsics.vuna:1250"));
+  ("Base_dIntrinsics.v_obsLevelIntrinsicName", ("Vuna.Compiler.Base.Intrinsics.obsLevelIntrinsicName", "Vuna/Compiler/Base/Intrinsics.vuna:419"));
+  ("Base_dIntrinsics.v_obsMarkIntrinsicName", ("Vuna.Compiler.Base.Intrinsics.obsMarkIntrinsicName", "Vuna/Compiler/Base/Intrinsics.vuna:438"));
+  ("Base_dIntrinsics.v_obsSampleStartIntrinsicName", ("Vuna.Compiler.Base.Intrinsics.obsSampleStartIntrinsicName", "Vuna/Compiler/Base/Intrinsics.vuna:450"));
+  ("Base_dIntrinsics.v_obsSampleStopIntrinsicName", ("Vuna.Compiler.Base.Intrinsics.obsSampleStopIntrinsicName", "Vuna/Compiler/Base/Intrinsics.vuna:454"));
+  ("Base_dIntrinsics.v_obsSpanBeginIntrinsicName", ("Vuna.Compiler.Base.Intrinsics.obsSpanBeginIntrinsicName", "Vuna/Compiler/Base/Intrinsics.vuna:442"));
+  ("Base_dIntrinsics.v_obsSpanEndIntrinsicName", ("Vuna.Compiler.Base.Intrinsics.obsSpanEndIntrinsicName", "Vuna/Compiler/Base/Intrinsics.vuna:446"));
+  ("Base_dIntrinsics.v_obsSpanIntrinsicName", ("Vuna.Compiler.Base.Intrinsics.obsSpanIntrinsicName", "Vuna/Compiler/Base/Intrinsics.vuna:423"));
+  ("Base_dIntrinsics.v_obsSpanLabIntrinsicName", ("Vuna.Compiler.Base.Intrinsics.obsSpanLabIntrinsicName", "Vuna/Compiler/Base/Intrinsics.vuna:430"));
+  ("Base_dIntrinsics.v_pickHostSupport", ("Vuna.Compiler.Base.Intrinsics.pickHostSupport", "Vuna/Compiler/Base/Intrinsics.vuna:336"));
+  ("Base_dIntrinsics.v_preludeTypeNames", ("Vuna.Compiler.Base.Intrinsics.preludeTypeNames", "Vuna/Compiler/Base/Intrinsics.vuna:538"));
+  ("Base_dIntrinsics.v_preludeValueNames", ("Vuna.Compiler.Base.Intrinsics.preludeValueNames", "Vuna/Compiler/Base/Intrinsics.vuna:1316"));
+  ("Base_dIntrinsics.v_primEffBind1Name", ("Vuna.Compiler.Base.Intrinsics.primEffBind1Name", "Vuna/Compiler/Base/Intrinsics.vuna:356"));
+  ("Base_dIntrinsics.v_primEraseName", ("Vuna.Compiler.Base.Intrinsics.primEraseName", "Vuna/Compiler/Base/Intrinsics.vuna:362"));
+  ("Base_dIntrinsics.v_strTypeName", ("Vuna.Compiler.Base.Intrinsics.strTypeName", "Vuna/Compiler/Base/Intrinsics.vuna:680"));
+  ("Base_dIntrinsics.v_threadIntrinsicNames", ("Vuna.Compiler.Base.Intrinsics.threadIntrinsicNames", "Vuna/Compiler/Base/Intrinsics.vuna:1230"));
+  ("Base_dIntrinsics.v_threadIntrinsics", ("Vuna.Compiler.Base.Intrinsics.threadIntrinsics", "Vuna/Compiler/Base/Intrinsics.vuna:1193"));
+  ("Base_dIntrinsics.v_todoIntrinsicName", ("Vuna.Compiler.Base.Intrinsics.todoIntrinsicName", "Vuna/Compiler/Base/Intrinsics.vuna:462"));
+  ("Base_dIntrinsics.v_typeIntrinsicArities", ("Vuna.Compiler.Base.Intrinsics.typeIntrinsicArities", "Vuna/Compiler/Base/Intrinsics.vuna:99"));
+  ("Base_dIntrinsics.v_typeIntrinsicArityOf", ("Vuna.Compiler.Base.Intrinsics.typeIntrinsicArityOf", "Vuna/Compiler/Base/Intrinsics.vuna:114"));
+  ("Base_dIntrinsics.v_typeIntrinsicArityOfRest", ("Vuna.Compiler.Base.Intrinsics.typeIntrinsicArityOfRest", "Vuna/Compiler/Base/Intrinsics.vuna:118"));
+  ("Base_dIntrinsics.v_typeIntrinsicCtorArity", ("Vuna.Compiler.Base.Intrinsics.typeIntrinsicCtorArity", "Vuna/Compiler/Base/Intrinsics.vuna:95"));
+  ("Base_dIntrinsics.v_typeIntrinsicCtorName", ("Vuna.Compiler.Base.Intrinsics.typeIntrinsicCtorName", "Vuna/Compiler/Base/Intrinsics.vuna:91"));
+  ("Base_dIntrinsics.v_typeIntrinsicCtorNames", ("Vuna.Compiler.Base.Intrinsics.typeIntrinsicCtorNames", "Vuna/Compiler/Base/Intrinsics.vuna:127"));
+  ("Base_dIntrinsics.v_typeIntrinsicNames", ("Vuna.Compiler.Base.Intrinsics.typeIntrinsicNames", "Vuna/Compiler/Base/Intrinsics.vuna:672"));
+  ("Base_dIntrinsics.v_typeReturnsEff", ("Vuna.Compiler.Base.Intrinsics.typeReturnsEff", "Vuna/Compiler/Base/Intrinsics.vuna:663"));
+  ("Base_dIntrinsics.v_unknownHostSupport", ("Vuna.Compiler.Base.Intrinsics.unknownHostSupport", "Vuna/Compiler/Base/Intrinsics.vuna:313"));
+  ("Base_dIntrinsics.v_unsupportedHostTags", ("Vuna.Compiler.Base.Intrinsics.unsupportedHostTags", "Vuna/Compiler/Base/Intrinsics.vuna:304"));
+  ("Base_dIntrinsics.v_userIntrinsics", ("Vuna.Compiler.Base.Intrinsics.userIntrinsics", "Vuna/Compiler/Base/Intrinsics.vuna:1312"));
   ("Base_dObs.v_obsCheck", ("Vuna.Compiler.Base.Obs.obsCheck", "Vuna/Compiler/Base/Obs.vuna:27"));
   ("Base_dObs.v_obsCountAt", ("Vuna.Compiler.Base.Obs.obsCountAt", "Vuna/Compiler/Base/Obs.vuna:38"));
   ("Base_dObs.v_obsCountEff", ("Vuna.Compiler.Base.Obs.obsCountEff", "Vuna/Compiler/Base/Obs.vuna:59"));
@@ -3452,24 +3523,32 @@ let dt_def_locs = [
   ("Driver_dSplitGen.v_unitOfLocName", ("Vuna.Compiler.Driver.SplitGen.unitOfLocName", "Vuna/Compiler/Driver/SplitGen.vuna:57"));
   ("Driver_dSplitGen.v_unitPathOf", ("Vuna.Compiler.Driver.SplitGen.unitPathOf", "Vuna/Compiler/Driver/SplitGen.vuna:46"));
   ("Driver_dTarget.v_backendBinaryName", ("Vuna.Compiler.Driver.Target.backendBinaryName", "Vuna/Compiler/Driver/Target.vuna:33"));
-  ("Driver_dTarget.v_backendPath", ("Vuna.Compiler.Driver.Target.backendPath", "Vuna/Compiler/Driver/Target.vuna:172"));
+  ("Driver_dTarget.v_backendPath", ("Vuna.Compiler.Driver.Target.backendPath", "Vuna/Compiler/Driver/Target.vuna:235"));
   ("Driver_dTarget.v_compileBackend", ("Vuna.Compiler.Driver.Target.compileBackend", "Vuna/Compiler/Driver/Target.vuna:73"));
-  ("Driver_dTarget.v_decodedDiags", ("Vuna.Compiler.Driver.Target.decodedDiags", "Vuna/Compiler/Driver/Target.vuna:143"));
-  ("Driver_dTarget.v_diagPathOf", ("Vuna.Compiler.Driver.Target.diagPathOf", "Vuna/Compiler/Driver/Target.vuna:178"));
+  ("Driver_dTarget.v_decodedDiags", ("Vuna.Compiler.Driver.Target.decodedDiags", "Vuna/Compiler/Driver/Target.vuna:206"));
+  ("Driver_dTarget.v_diagPathOf", ("Vuna.Compiler.Driver.Target.diagPathOf", "Vuna/Compiler/Driver/Target.vuna:241"));
   ("Driver_dTarget.v_dirOf", ("Vuna.Compiler.Driver.Target.dirOf", "Vuna/Compiler/Driver/Target.vuna:37"));
   ("Driver_dTarget.v_dispatch", ("Vuna.Compiler.Driver.Target.dispatch", "Vuna/Compiler/Driver/Target.vuna:87"));
   ("Driver_dTarget.v_dispatchWith", ("Vuna.Compiler.Driver.Target.dispatchWith", "Vuna/Compiler/Driver/Target.vuna:96"));
   ("Driver_dTarget.v_dropLast", ("Vuna.Compiler.Driver.Target.dropLast", "Vuna/Compiler/Driver/Target.vuna:43"));
   ("Driver_dTarget.v_execDirs", ("Vuna.Compiler.Driver.Target.execDirs", "Vuna/Compiler/Driver/Target.vuna:59"));
-  ("Driver_dTarget.v_filesPathOf", ("Vuna.Compiler.Driver.Target.filesPathOf", "Vuna/Compiler/Driver/Target.vuna:181"));
+  ("Driver_dTarget.v_filesPathOf", ("Vuna.Compiler.Driver.Target.filesPathOf", "Vuna/Compiler/Driver/Target.vuna:244"));
   ("Driver_dTarget.v_findBackend", ("Vuna.Compiler.Driver.Target.findBackend", "Vuna/Compiler/Driver/Target.vuna:52"));
-  ("Driver_dTarget.v_firstDiagOr", ("Vuna.Compiler.Driver.Target.firstDiagOr", "Vuna/Compiler/Driver/Target.vuna:149"));
-  ("Driver_dTarget.v_irPathOf", ("Vuna.Compiler.Driver.Target.irPathOf", "Vuna/Compiler/Driver/Target.vuna:175"));
+  ("Driver_dTarget.v_firstDiagOr", ("Vuna.Compiler.Driver.Target.firstDiagOr", "Vuna/Compiler/Driver/Target.vuna:212"));
+  ("Driver_dTarget.v_hasTimeoutCmd", ("Vuna.Compiler.Driver.Target.hasTimeoutCmd", "Vuna/Compiler/Driver/Target.vuna:135"));
+  ("Driver_dTarget.v_irPathOf", ("Vuna.Compiler.Driver.Target.irPathOf", "Vuna/Compiler/Driver/Target.vuna:238"));
+  ("Driver_dTarget.v_isDurationText", ("Vuna.Compiler.Driver.Target.isDurationText", "Vuna/Compiler/Driver/Target.vuna:124"));
+  ("Driver_dTarget.v_isDurationTextGo", ("Vuna.Compiler.Driver.Target.isDurationTextGo", "Vuna/Compiler/Driver/Target.vuna:127"));
   ("Driver_dTarget.v_joinPathSlash", ("Vuna.Compiler.Driver.Target.joinPathSlash", "Vuna/Compiler/Driver/Target.vuna:47"));
-  ("Driver_dTarget.v_missingBackendDiag", ("Vuna.Compiler.Driver.Target.missingBackendDiag", "Vuna/Compiler/Driver/Target.vuna:159"));
-  ("Driver_dTarget.v_runBackend", ("Vuna.Compiler.Driver.Target.runBackend", "Vuna/Compiler/Driver/Target.vuna:116"));
+  ("Driver_dTarget.v_missingBackendDiag", ("Vuna.Compiler.Driver.Target.missingBackendDiag", "Vuna/Compiler/Driver/Target.vuna:222"));
+  ("Driver_dTarget.v_pluginArgv", ("Vuna.Compiler.Driver.Target.pluginArgv", "Vuna/Compiler/Driver/Target.vuna:150"));
+  ("Driver_dTarget.v_pluginRunArgv", ("Vuna.Compiler.Driver.Target.pluginRunArgv", "Vuna/Compiler/Driver/Target.vuna:162"));
+  ("Driver_dTarget.v_pluginTimedOutDiag", ("Vuna.Compiler.Driver.Target.pluginTimedOutDiag", "Vuna/Compiler/Driver/Target.vuna:141"));
+  ("Driver_dTarget.v_pluginTimedOutPath", ("Vuna.Compiler.Driver.Target.pluginTimedOutPath", "Vuna/Compiler/Driver/Target.vuna:156"));
+  ("Driver_dTarget.v_pluginTimeoutEff", ("Vuna.Compiler.Driver.Target.pluginTimeoutEff", "Vuna/Compiler/Driver/Target.vuna:117"));
+  ("Driver_dTarget.v_runBackend", ("Vuna.Compiler.Driver.Target.runBackend", "Vuna/Compiler/Driver/Target.vuna:169"));
   ("Driver_dTarget.v_searchBackend", ("Vuna.Compiler.Driver.Target.searchBackend", "Vuna/Compiler/Driver/Target.vuna:62"));
-  ("Driver_dTarget.v_splitNames", ("Vuna.Compiler.Driver.Target.splitNames", "Vuna/Compiler/Driver/Target.vuna:169"));
+  ("Driver_dTarget.v_splitNames", ("Vuna.Compiler.Driver.Target.splitNames", "Vuna/Compiler/Driver/Target.vuna:232"));
   ("Driver_dTargetBuild.v_buildNativeToDir", ("Vuna.Compiler.Driver.TargetBuild.buildNativeToDir", "Vuna/Compiler/Driver/TargetBuild.vuna:28"));
   ("Driver_dTargetBuild.v_nativeBuildScript", ("Vuna.Compiler.Driver.TargetBuild.nativeBuildScript", "Vuna/Compiler/Driver/TargetBuild.vuna:20"));
   ("Driver_dTargetCache.v_backendVersionEff", ("Vuna.Compiler.Driver.TargetCache.backendVersionEff", "Vuna/Compiler/Driver/TargetCache.vuna:51"));
@@ -4267,31 +4346,31 @@ let dt_def_locs = [
   ("Elab_dMetaSpans.v_newHoleMeta", ("Vuna.Compiler.Elab.MetaSpans.newHoleMeta", "Vuna/Compiler/Elab/MetaSpans.vuna:42"));
   ("Elab_dMetaSpans.v_newMetaAt", ("Vuna.Compiler.Elab.MetaSpans.newMetaAt", "Vuna/Compiler/Elab/MetaSpans.vuna:34"));
   ("Elab_dMetaSpans.v_recordMetaSpan", ("Vuna.Compiler.Elab.MetaSpans.recordMetaSpan", "Vuna/Compiler/Elab/MetaSpans.vuna:21"));
-  ("Elab_dPrelude.v_baseNameOf", ("Vuna.Compiler.Elab.Prelude.baseNameOf", "Vuna/Compiler/Elab/Prelude.vuna:185"));
+  ("Elab_dPrelude.v_baseNameOf", ("Vuna.Compiler.Elab.Prelude.baseNameOf", "Vuna/Compiler/Elab/Prelude.vuna:189"));
   ("Elab_dPrelude.v_boolTy", ("Vuna.Compiler.Elab.Prelude.boolTy", "Vuna/Compiler/Elab/Prelude.vuna:33"));
   ("Elab_dPrelude.v_boolTyValue", ("Vuna.Compiler.Elab.Prelude.boolTyValue", "Vuna/Compiler/Elab/Prelude.vuna:37"));
-  ("Elab_dPrelude.v_builtinEqTyName", ("Vuna.Compiler.Elab.Prelude.builtinEqTyName", "Vuna/Compiler/Elab/Prelude.vuna:156"));
+  ("Elab_dPrelude.v_builtinEqTyName", ("Vuna.Compiler.Elab.Prelude.builtinEqTyName", "Vuna/Compiler/Elab/Prelude.vuna:160"));
   ("Elab_dPrelude.v_builtinTyName", ("Vuna.Compiler.Elab.Prelude.builtinTyName", "Vuna/Compiler/Elab/Prelude.vuna:50"));
-  ("Elab_dPrelude.v_classMethodProjection", ("Vuna.Compiler.Elab.Prelude.classMethodProjection", "Vuna/Compiler/Elab/Prelude.vuna:189"));
-  ("Elab_dPrelude.v_classMethodProjectionGo", ("Vuna.Compiler.Elab.Prelude.classMethodProjectionGo", "Vuna/Compiler/Elab/Prelude.vuna:192"));
-  ("Elab_dPrelude.v_cmpBuiltinTyName", ("Vuna.Compiler.Elab.Prelude.cmpBuiltinTyName", "Vuna/Compiler/Elab/Prelude.vuna:169"));
+  ("Elab_dPrelude.v_classMethodProjection", ("Vuna.Compiler.Elab.Prelude.classMethodProjection", "Vuna/Compiler/Elab/Prelude.vuna:193"));
+  ("Elab_dPrelude.v_classMethodProjectionGo", ("Vuna.Compiler.Elab.Prelude.classMethodProjectionGo", "Vuna/Compiler/Elab/Prelude.vuna:196"));
+  ("Elab_dPrelude.v_cmpBuiltinTyName", ("Vuna.Compiler.Elab.Prelude.cmpBuiltinTyName", "Vuna/Compiler/Elab/Prelude.vuna:173"));
   ("Elab_dPrelude.v_eqRuntimeName", ("Vuna.Compiler.Elab.Prelude.eqRuntimeName", "Vuna/Compiler/Elab/Prelude.vuna:65"));
   ("Elab_dPrelude.v_floatTy", ("Vuna.Compiler.Elab.Prelude.floatTy", "Vuna/Compiler/Elab/Prelude.vuna:29"));
   ("Elab_dPrelude.v_fun2", ("Vuna.Compiler.Elab.Prelude.fun2", "Vuna/Compiler/Elab/Prelude.vuna:41"));
   ("Elab_dPrelude.v_indexOfName", ("Vuna.Compiler.Elab.Prelude.indexOfName", "Vuna/Compiler/Elab/Prelude.vuna:80"));
   ("Elab_dPrelude.v_indexOfNameGo", ("Vuna.Compiler.Elab.Prelude.indexOfNameGo", "Vuna/Compiler/Elab/Prelude.vuna:76"));
   ("Elab_dPrelude.v_intTy", ("Vuna.Compiler.Elab.Prelude.intTy", "Vuna/Compiler/Elab/Prelude.vuna:22"));
-  ("Elab_dPrelude.v_internalValueGlobals", ("Vuna.Compiler.Elab.Prelude.internalValueGlobals", "Vuna/Compiler/Elab/Prelude.vuna:143"));
+  ("Elab_dPrelude.v_internalValueGlobals", ("Vuna.Compiler.Elab.Prelude.internalValueGlobals", "Vuna/Compiler/Elab/Prelude.vuna:147"));
   ("Elab_dPrelude.v_isEqShort", ("Vuna.Compiler.Elab.Prelude.isEqShort", "Vuna/Compiler/Elab/Prelude.vuna:60"));
   ("Elab_dPrelude.v_ityToTerm", ("Vuna.Compiler.Elab.Prelude.ityToTerm", "Vuna/Compiler/Elab/Prelude.vuna:83"));
   ("Elab_dPrelude.v_ityToTermEnv", ("Vuna.Compiler.Elab.Prelude.ityToTermEnv", "Vuna/Compiler/Elab/Prelude.vuna:86"));
-  ("Elab_dPrelude.v_preludeGlobals", ("Vuna.Compiler.Elab.Prelude.preludeGlobals", "Vuna/Compiler/Elab/Prelude.vuna:147"));
-  ("Elab_dPrelude.v_preludeNames", ("Vuna.Compiler.Elab.Prelude.preludeNames", "Vuna/Compiler/Elab/Prelude.vuna:152"));
-  ("Elab_dPrelude.v_preludeTypeGlobals", ("Vuna.Compiler.Elab.Prelude.preludeTypeGlobals", "Vuna/Compiler/Elab/Prelude.vuna:132"));
-  ("Elab_dPrelude.v_preludeValueGlobals", ("Vuna.Compiler.Elab.Prelude.preludeValueGlobals", "Vuna/Compiler/Elab/Prelude.vuna:138"));
-  ("Elab_dPrelude.v_prependParams", ("Vuna.Compiler.Elab.Prelude.prependParams", "Vuna/Compiler/Elab/Prelude.vuna:177"));
+  ("Elab_dPrelude.v_preludeGlobals", ("Vuna.Compiler.Elab.Prelude.preludeGlobals", "Vuna/Compiler/Elab/Prelude.vuna:151"));
+  ("Elab_dPrelude.v_preludeNames", ("Vuna.Compiler.Elab.Prelude.preludeNames", "Vuna/Compiler/Elab/Prelude.vuna:156"));
+  ("Elab_dPrelude.v_preludeTypeGlobals", ("Vuna.Compiler.Elab.Prelude.preludeTypeGlobals", "Vuna/Compiler/Elab/Prelude.vuna:136"));
+  ("Elab_dPrelude.v_preludeValueGlobals", ("Vuna.Compiler.Elab.Prelude.preludeValueGlobals", "Vuna/Compiler/Elab/Prelude.vuna:142"));
+  ("Elab_dPrelude.v_prependParams", ("Vuna.Compiler.Elab.Prelude.prependParams", "Vuna/Compiler/Elab/Prelude.vuna:181"));
   ("Elab_dPrelude.v_strTy", ("Vuna.Compiler.Elab.Prelude.strTy", "Vuna/Compiler/Elab/Prelude.vuna:25"));
-  ("Elab_dPrelude.v_typeCtorKindTerm", ("Vuna.Compiler.Elab.Prelude.typeCtorKindTerm", "Vuna/Compiler/Elab/Prelude.vuna:124"));
+  ("Elab_dPrelude.v_typeCtorKindTerm", ("Vuna.Compiler.Elab.Prelude.typeCtorKindTerm", "Vuna/Compiler/Elab/Prelude.vuna:128"));
   ("Elab_dRecords.v_ctorName", ("Vuna.Compiler.Elab.Records.ctorName", "Vuna/Compiler/Elab/Records.vuna:359"));
   ("Elab_dRecords.v_desugarAltFuel", ("Vuna.Compiler.Elab.Records.desugarAltFuel", "Vuna/Compiler/Elab/Records.vuna:270"));
   ("Elab_dRecords.v_desugarBindFuel", ("Vuna.Compiler.Elab.Records.desugarBindFuel", "Vuna/Compiler/Elab/Records.vuna:251"));
@@ -7181,7 +7260,7 @@ let dt_def_locs = [
   ("Lowering_dErased.v_validateErasedAlts", ("Vuna.Compiler.Lowering.Erased.validateErasedAlts", "Vuna/Compiler/Lowering/Erased.vuna:193"));
   ("Lowering_dErased.v_validateErasedArgs", ("Vuna.Compiler.Lowering.Erased.validateErasedArgs", "Vuna/Compiler/Lowering/Erased.vuna:183"));
   ("Lowering_dErased.v_validateErasedIn", ("Vuna.Compiler.Lowering.Erased.validateErasedIn", "Vuna/Compiler/Lowering/Erased.vuna:147"));
-  ("Lowering_dProgram.v_adjOfDef", ("Vuna.Compiler.Lowering.Program.adjOfDef", "Vuna/Compiler/Lowering/Program.vuna:1512"));
+  ("Lowering_dProgram.v_adjOfDef", ("Vuna.Compiler.Lowering.Program.adjOfDef", "Vuna/Compiler/Lowering/Program.vuna:1516"));
   ("Lowering_dProgram.v_aeEnvOf", ("Vuna.Compiler.Lowering.Program.aeEnvOf", "Vuna/Compiler/Lowering/Program.vuna:692"));
   ("Lowering_dProgram.v_aePatsOf", ("Vuna.Compiler.Lowering.Program.aePatsOf", "Vuna/Compiler/Lowering/Program.vuna:695"));
   ("Lowering_dProgram.v_aeStOf", ("Vuna.Compiler.Lowering.Program.aeStOf", "Vuna/Compiler/Lowering/Program.vuna:698"));
@@ -7207,7 +7286,7 @@ let dt_def_locs = [
   ("Lowering_dProgram.v_checkNoDupOcamlNames", ("Vuna.Compiler.Lowering.Program.checkNoDupOcamlNames", "Vuna/Compiler/Lowering/Program.vuna:1271"));
   ("Lowering_dProgram.v_checkNoDupOcamlNamesGo", ("Vuna.Compiler.Lowering.Program.checkNoDupOcamlNamesGo", "Vuna/Compiler/Lowering/Program.vuna:1274"));
   ("Lowering_dProgram.v_checkProgramOf", ("Vuna.Compiler.Lowering.Program.checkProgramOf", "Vuna/Compiler/Lowering/Program.vuna:1395"));
-  ("Lowering_dProgram.v_checkRuntimeContract", ("Vuna.Compiler.Lowering.Program.checkRuntimeContract", "Vuna/Compiler/Lowering/Program.vuna:1431"));
+  ("Lowering_dProgram.v_checkRuntimeContract", ("Vuna.Compiler.Lowering.Program.checkRuntimeContract", "Vuna/Compiler/Lowering/Program.vuna:1435"));
   ("Lowering_dProgram.v_collectLamChainIn", ("Vuna.Compiler.Lowering.Program.collectLamChainIn", "Vuna/Compiler/Lowering/Program.vuna:234"));
   ("Lowering_dProgram.v_concatLeavesGo", ("Vuna.Compiler.Lowering.Program.concatLeavesGo", "Vuna/Compiler/Lowering/Program.vuna:513"));
   ("Lowering_dProgram.v_concatLeavesIn", ("Vuna.Compiler.Lowering.Program.concatLeavesIn", "Vuna/Compiler/Lowering/Program.vuna:510"));
@@ -7224,16 +7303,16 @@ let dt_def_locs = [
   ("Lowering_dProgram.v_externTyIr", ("Vuna.Compiler.Lowering.Program.externTyIr", "Vuna/Compiler/Lowering/Program.vuna:1220"));
   ("Lowering_dProgram.v_findAltBy", ("Vuna.Compiler.Lowering.Program.findAltBy", "Vuna/Compiler/Lowering/Program.vuna:971"));
   ("Lowering_dProgram.v_findCatchAllAlt", ("Vuna.Compiler.Lowering.Program.findCatchAllAlt", "Vuna/Compiler/Lowering/Program.vuna:975"));
-  ("Lowering_dProgram.v_firstOfList", ("Vuna.Compiler.Lowering.Program.firstOfList", "Vuna/Compiler/Lowering/Program.vuna:1458"));
+  ("Lowering_dProgram.v_firstOfList", ("Vuna.Compiler.Lowering.Program.firstOfList", "Vuna/Compiler/Lowering/Program.vuna:1462"));
   ("Lowering_dProgram.v_flattenConcatChainIn", ("Vuna.Compiler.Lowering.Program.flattenConcatChainIn", "Vuna/Compiler/Lowering/Program.vuna:500"));
   ("Lowering_dProgram.v_flattenIntrinsicAppIn", ("Vuna.Compiler.Lowering.Program.flattenIntrinsicAppIn", "Vuna/Compiler/Lowering/Program.vuna:527"));
   ("Lowering_dProgram.v_groupDefs", ("Vuna.Compiler.Lowering.Program.groupDefs", "Vuna/Compiler/Lowering/Program.vuna:1324"));
-  ("Lowering_dProgram.v_groupOfPair", ("Vuna.Compiler.Lowering.Program.groupOfPair", "Vuna/Compiler/Lowering/Program.vuna:1515"));
+  ("Lowering_dProgram.v_groupOfPair", ("Vuna.Compiler.Lowering.Program.groupOfPair", "Vuna/Compiler/Lowering/Program.vuna:1519"));
   ("Lowering_dProgram.v_hasFallbackAlt", ("Vuna.Compiler.Lowering.Program.hasFallbackAlt", "Vuna/Compiler/Lowering/Program.vuna:819"));
   ("Lowering_dProgram.v_headGlobalOf", ("Vuna.Compiler.Lowering.Program.headGlobalOf", "Vuna/Compiler/Lowering/Program.vuna:336"));
   ("Lowering_dProgram.v_initGuardOf", ("Vuna.Compiler.Lowering.Program.initGuardOf", "Vuna/Compiler/Lowering/Program.vuna:1185"));
   ("Lowering_dProgram.v_inlineArityMatchesIn", ("Vuna.Compiler.Lowering.Program.inlineArityMatchesIn", "Vuna/Compiler/Lowering/Program.vuna:542"));
-  ("Lowering_dProgram.v_intrinsicWithUnboundIvar", ("Vuna.Compiler.Lowering.Program.intrinsicWithUnboundIvar", "Vuna/Compiler/Lowering/Program.vuna:1424"));
+  ("Lowering_dProgram.v_intrinsicWithUnboundIvar", ("Vuna.Compiler.Lowering.Program.intrinsicWithUnboundIvar", "Vuna/Compiler/Lowering/Program.vuna:1428"));
   ("Lowering_dProgram.v_isNatCtorName", ("Vuna.Compiler.Lowering.Program.isNatCtorName", "Vuna/Compiler/Lowering/Program.vuna:950"));
   ("Lowering_dProgram.v_ivarBound", ("Vuna.Compiler.Lowering.Program.ivarBound", "Vuna/Compiler/Lowering/Program.vuna:1403"));
   ("Lowering_dProgram.v_justAppTy", ("Vuna.Compiler.Lowering.Program.justAppTy", "Vuna/Compiler/Lowering/Program.vuna:437"));
@@ -7265,8 +7344,8 @@ let dt_def_locs = [
   ("Lowering_dProgram.v_lowerNatAltFuel", ("Vuna.Compiler.Lowering.Program.lowerNatAltFuel", "Vuna/Compiler/Lowering/Program.vuna:980"));
   ("Lowering_dProgram.v_lowerNatCaseFuel", ("Vuna.Compiler.Lowering.Program.lowerNatCaseFuel", "Vuna/Compiler/Lowering/Program.vuna:996"));
   ("Lowering_dProgram.v_lowerPlainAppFuel", ("Vuna.Compiler.Lowering.Program.lowerPlainAppFuel", "Vuna/Compiler/Lowering/Program.vuna:404"));
-  ("Lowering_dProgram.v_lowerProgramCheckedOf", ("Vuna.Compiler.Lowering.Program.lowerProgramCheckedOf", "Vuna/Compiler/Lowering/Program.vuna:1530"));
-  ("Lowering_dProgram.v_lowerProgramOf", ("Vuna.Compiler.Lowering.Program.lowerProgramOf", "Vuna/Compiler/Lowering/Program.vuna:1523"));
+  ("Lowering_dProgram.v_lowerProgramCheckedOf", ("Vuna.Compiler.Lowering.Program.lowerProgramCheckedOf", "Vuna/Compiler/Lowering/Program.vuna:1534"));
+  ("Lowering_dProgram.v_lowerProgramOf", ("Vuna.Compiler.Lowering.Program.lowerProgramOf", "Vuna/Compiler/Lowering/Program.vuna:1527"));
   ("Lowering_dProgram.v_lowerProjAsCaseFuel", ("Vuna.Compiler.Lowering.Program.lowerProjAsCaseFuel", "Vuna/Compiler/Lowering/Program.vuna:1052"));
   ("Lowering_dProgram.v_lowerRecordUpdateArgsFuel", ("Vuna.Compiler.Lowering.Program.lowerRecordUpdateArgsFuel", "Vuna/Compiler/Lowering/Program.vuna:1122"));
   ("Lowering_dProgram.v_lowerRecordUpdateFuel", ("Vuna.Compiler.Lowering.Program.lowerRecordUpdateFuel", "Vuna/Compiler/Lowering/Program.vuna:1105"));
@@ -7275,10 +7354,10 @@ let dt_def_locs = [
   ("Lowering_dProgram.v_lowerTermsFuel", ("Vuna.Compiler.Lowering.Program.lowerTermsFuel", "Vuna/Compiler/Lowering/Program.vuna:482"));
   ("Lowering_dProgram.v_lowerUnboxedCaseAlt", ("Vuna.Compiler.Lowering.Program.lowerUnboxedCaseAlt", "Vuna/Compiler/Lowering/Program.vuna:828"));
   ("Lowering_dProgram.v_lowerUnboxedCaseFuel", ("Vuna.Compiler.Lowering.Program.lowerUnboxedCaseFuel", "Vuna/Compiler/Lowering/Program.vuna:842"));
-  ("Lowering_dProgram.v_lowerUnitAfterChecks", ("Vuna.Compiler.Lowering.Program.lowerUnitAfterChecks", "Vuna/Compiler/Lowering/Program.vuna:1485"));
-  ("Lowering_dProgram.v_lowerUnitCheckedFrom", ("Vuna.Compiler.Lowering.Program.lowerUnitCheckedFrom", "Vuna/Compiler/Lowering/Program.vuna:1473"));
-  ("Lowering_dProgram.v_lowerUnitOf", ("Vuna.Compiler.Lowering.Program.lowerUnitOf", "Vuna/Compiler/Lowering/Program.vuna:1465"));
-  ("Lowering_dProgram.v_lowerUnitPrepared", ("Vuna.Compiler.Lowering.Program.lowerUnitPrepared", "Vuna/Compiler/Lowering/Program.vuna:1496"));
+  ("Lowering_dProgram.v_lowerUnitAfterChecks", ("Vuna.Compiler.Lowering.Program.lowerUnitAfterChecks", "Vuna/Compiler/Lowering/Program.vuna:1489"));
+  ("Lowering_dProgram.v_lowerUnitCheckedFrom", ("Vuna.Compiler.Lowering.Program.lowerUnitCheckedFrom", "Vuna/Compiler/Lowering/Program.vuna:1477"));
+  ("Lowering_dProgram.v_lowerUnitOf", ("Vuna.Compiler.Lowering.Program.lowerUnitOf", "Vuna/Compiler/Lowering/Program.vuna:1469"));
+  ("Lowering_dProgram.v_lowerUnitPrepared", ("Vuna.Compiler.Lowering.Program.lowerUnitPrepared", "Vuna/Compiler/Lowering/Program.vuna:1500"));
   ("Lowering_dProgram.v_lowerUpdFieldsFuel", ("Vuna.Compiler.Lowering.Program.lowerUpdFieldsFuel", "Vuna/Compiler/Lowering/Program.vuna:1145"));
   ("Lowering_dProgram.v_mapMaybeDef", ("Vuna.Compiler.Lowering.Program.mapMaybeDef", "Vuna/Compiler/Lowering/Program.vuna:1384"));
   ("Lowering_dProgram.v_nameKey", ("Vuna.Compiler.Lowering.Program.nameKey", "Vuna/Compiler/Lowering/Program.vuna:1268"));
@@ -7286,7 +7365,7 @@ let dt_def_locs = [
   ("Lowering_dProgram.v_natCaseApplies", ("Vuna.Compiler.Lowering.Program.natCaseApplies", "Vuna/Compiler/Lowering/Program.vuna:953"));
   ("Lowering_dProgram.v_natCaseHasCtor", ("Vuna.Compiler.Lowering.Program.natCaseHasCtor", "Vuna/Compiler/Lowering/Program.vuna:964"));
   ("Lowering_dProgram.v_nthOpqArgIn", ("Vuna.Compiler.Lowering.Program.nthOpqArgIn", "Vuna/Compiler/Lowering/Program.vuna:1091"));
-  ("Lowering_dProgram.v_partitionRuntimeDefs", ("Vuna.Compiler.Lowering.Program.partitionRuntimeDefs", "Vuna/Compiler/Lowering/Program.vuna:1538"));
+  ("Lowering_dProgram.v_partitionRuntimeDefs", ("Vuna.Compiler.Lowering.Program.partitionRuntimeDefs", "Vuna/Compiler/Lowering/Program.vuna:1542"));
   ("Lowering_dProgram.v_prepareProgram", ("Vuna.Compiler.Lowering.Program.prepareProgram", "Vuna/Compiler/Lowering/Program.vuna:1301"));
   ("Lowering_dProgram.v_projBindersIn", ("Vuna.Compiler.Lowering.Program.projBindersIn", "Vuna/Compiler/Lowering/Program.vuna:1067"));
   ("Lowering_dProgram.v_recOkOfTbl", ("Vuna.Compiler.Lowering.Program.recOkOfTbl", "Vuna/Compiler/Lowering/Program.vuna:1346"));
@@ -7308,54 +7387,54 @@ let dt_def_locs = [
   ("Lowering_dProgram.v_typedPats", ("Vuna.Compiler.Lowering.Program.typedPats", "Vuna/Compiler/Lowering/Program.vuna:773"));
   ("Lowering_dProgram.v_typedPatsAll", ("Vuna.Compiler.Lowering.Program.typedPatsAll", "Vuna/Compiler/Lowering/Program.vuna:778"));
   ("Lowering_dProgram.v_zipFieldNames", ("Vuna.Compiler.Lowering.Program.zipFieldNames", "Vuna/Compiler/Lowering/Program.vuna:673"));
-  ("Lowering_dTy.v_annotCalleeTy", ("Vuna.Compiler.Lowering.Ty.annotCalleeTy", "Vuna/Compiler/Lowering/Ty.vuna:387"));
-  ("Lowering_dTy.v_annotConTy", ("Vuna.Compiler.Lowering.Ty.annotConTy", "Vuna/Compiler/Lowering/Ty.vuna:273"));
-  ("Lowering_dTy.v_annotFamilyArgs", ("Vuna.Compiler.Lowering.Ty.annotFamilyArgs", "Vuna/Compiler/Lowering/Ty.vuna:464"));
-  ("Lowering_dTy.v_annotGlobalTy", ("Vuna.Compiler.Lowering.Ty.annotGlobalTy", "Vuna/Compiler/Lowering/Ty.vuna:410"));
-  ("Lowering_dTy.v_annotHeadTy", ("Vuna.Compiler.Lowering.Ty.annotHeadTy", "Vuna/Compiler/Lowering/Ty.vuna:304"));
-  ("Lowering_dTy.v_annotRunCalleeTy", ("Vuna.Compiler.Lowering.Ty.annotRunCalleeTy", "Vuna/Compiler/Lowering/Ty.vuna:373"));
-  ("Lowering_dTy.v_annotRunTyOf", ("Vuna.Compiler.Lowering.Ty.annotRunTyOf", "Vuna/Compiler/Lowering/Ty.vuna:359"));
-  ("Lowering_dTy.v_annotRunTyOfTotal", ("Vuna.Compiler.Lowering.Ty.annotRunTyOfTotal", "Vuna/Compiler/Lowering/Ty.vuna:381"));
-  ("Lowering_dTy.v_annotTyOf", ("Vuna.Compiler.Lowering.Ty.annotTyOf", "Vuna/Compiler/Lowering/Ty.vuna:221"));
-  ("Lowering_dTy.v_annotTyOfFuel", ("Vuna.Compiler.Lowering.Ty.annotTyOfFuel", "Vuna/Compiler/Lowering/Ty.vuna:236"));
-  ("Lowering_dTy.v_annotTyOfTotal", ("Vuna.Compiler.Lowering.Ty.annotTyOfTotal", "Vuna/Compiler/Lowering/Ty.vuna:228"));
-  ("Lowering_dTy.v_binderTyAtIn", ("Vuna.Compiler.Lowering.Ty.binderTyAtIn", "Vuna/Compiler/Lowering/Ty.vuna:290"));
-  ("Lowering_dTy.v_binderTyAtRuntime", ("Vuna.Compiler.Lowering.Ty.binderTyAtRuntime", "Vuna/Compiler/Lowering/Ty.vuna:365"));
-  ("Lowering_dTy.v_countRuntimeArgs", ("Vuna.Compiler.Lowering.Ty.countRuntimeArgs", "Vuna/Compiler/Lowering/Ty.vuna:428"));
-  ("Lowering_dTy.v_ctorArityNeed", ("Vuna.Compiler.Lowering.Ty.ctorArityNeed", "Vuna/Compiler/Lowering/Ty.vuna:193"));
-  ("Lowering_dTy.v_ctorFieldTys", ("Vuna.Compiler.Lowering.Ty.ctorFieldTys", "Vuna/Compiler/Lowering/Ty.vuna:154"));
-  ("Lowering_dTy.v_ctorKeptFieldTys", ("Vuna.Compiler.Lowering.Ty.ctorKeptFieldTys", "Vuna/Compiler/Lowering/Ty.vuna:509"));
-  ("Lowering_dTy.v_ctorTypeArgsOf", ("Vuna.Compiler.Lowering.Ty.ctorTypeArgsOf", "Vuna/Compiler/Lowering/Ty.vuna:487"));
-  ("Lowering_dTy.v_dataArityNeed", ("Vuna.Compiler.Lowering.Ty.dataArityNeed", "Vuna/Compiler/Lowering/Ty.vuna:199"));
-  ("Lowering_dTy.v_findCtorInLocal", ("Vuna.Compiler.Lowering.Ty.findCtorInLocal", "Vuna/Compiler/Lowering/Ty.vuna:503"));
-  ("Lowering_dTy.v_flagMatchesRigIn", ("Vuna.Compiler.Lowering.Ty.flagMatchesRigIn", "Vuna/Compiler/Lowering/Ty.vuna:149"));
-  ("Lowering_dTy.v_flattenAnnotApp", ("Vuna.Compiler.Lowering.Ty.flattenAnnotApp", "Vuna/Compiler/Lowering/Ty.vuna:296"));
-  ("Lowering_dTy.v_flattenAnnotAppGo", ("Vuna.Compiler.Lowering.Ty.flattenAnnotAppGo", "Vuna/Compiler/Lowering/Ty.vuna:299"));
-  ("Lowering_dTy.v_flattenAnnotAppRig", ("Vuna.Compiler.Lowering.Ty.flattenAnnotAppRig", "Vuna/Compiler/Lowering/Ty.vuna:420"));
-  ("Lowering_dTy.v_flattenAnnotAppRigGo", ("Vuna.Compiler.Lowering.Ty.flattenAnnotAppRigGo", "Vuna/Compiler/Lowering/Ty.vuna:423"));
-  ("Lowering_dTy.v_foldlTyNames", ("Vuna.Compiler.Lowering.Ty.foldlTyNames", "Vuna/Compiler/Lowering/Ty.vuna:586"));
-  ("Lowering_dTy.v_globalTyTermOf", ("Vuna.Compiler.Lowering.Ty.globalTyTermOf", "Vuna/Compiler/Lowering/Ty.vuna:403"));
-  ("Lowering_dTy.v_maxIntListIn", ("Vuna.Compiler.Lowering.Ty.maxIntListIn", "Vuna/Compiler/Lowering/Ty.vuna:205"));
-  ("Lowering_dTy.v_nthTermIn", ("Vuna.Compiler.Lowering.Ty.nthTermIn", "Vuna/Compiler/Lowering/Ty.vuna:482"));
-  ("Lowering_dTy.v_peelIrFuns", ("Vuna.Compiler.Lowering.Ty.peelIrFuns", "Vuna/Compiler/Lowering/Ty.vuna:433"));
-  ("Lowering_dTy.v_peelPiArgsTy", ("Vuna.Compiler.Lowering.Ty.peelPiArgsTy", "Vuna/Compiler/Lowering/Ty.vuna:445"));
-  ("Lowering_dTy.v_renderFamilyArgs", ("Vuna.Compiler.Lowering.Ty.renderFamilyArgs", "Vuna/Compiler/Lowering/Ty.vuna:86"));
-  ("Lowering_dTy.v_renderFieldTy", ("Vuna.Compiler.Lowering.Ty.renderFieldTy", "Vuna/Compiler/Lowering/Ty.vuna:120"));
-  ("Lowering_dTy.v_renderPiTy", ("Vuna.Compiler.Lowering.Ty.renderPiTy", "Vuna/Compiler/Lowering/Ty.vuna:102"));
-  ("Lowering_dTy.v_renderPiTyFuel", ("Vuna.Compiler.Lowering.Ty.renderPiTyFuel", "Vuna/Compiler/Lowering/Ty.vuna:105"));
+  ("Lowering_dTy.v_annotCalleeTy", ("Vuna.Compiler.Lowering.Ty.annotCalleeTy", "Vuna/Compiler/Lowering/Ty.vuna:399"));
+  ("Lowering_dTy.v_annotConTy", ("Vuna.Compiler.Lowering.Ty.annotConTy", "Vuna/Compiler/Lowering/Ty.vuna:277"));
+  ("Lowering_dTy.v_annotFamilyArgs", ("Vuna.Compiler.Lowering.Ty.annotFamilyArgs", "Vuna/Compiler/Lowering/Ty.vuna:476"));
+  ("Lowering_dTy.v_annotGlobalTy", ("Vuna.Compiler.Lowering.Ty.annotGlobalTy", "Vuna/Compiler/Lowering/Ty.vuna:422"));
+  ("Lowering_dTy.v_annotHeadTy", ("Vuna.Compiler.Lowering.Ty.annotHeadTy", "Vuna/Compiler/Lowering/Ty.vuna:308"));
+  ("Lowering_dTy.v_annotRunCalleeTy", ("Vuna.Compiler.Lowering.Ty.annotRunCalleeTy", "Vuna/Compiler/Lowering/Ty.vuna:385"));
+  ("Lowering_dTy.v_annotRunTyOf", ("Vuna.Compiler.Lowering.Ty.annotRunTyOf", "Vuna/Compiler/Lowering/Ty.vuna:371"));
+  ("Lowering_dTy.v_annotRunTyOfTotal", ("Vuna.Compiler.Lowering.Ty.annotRunTyOfTotal", "Vuna/Compiler/Lowering/Ty.vuna:393"));
+  ("Lowering_dTy.v_annotTyOf", ("Vuna.Compiler.Lowering.Ty.annotTyOf", "Vuna/Compiler/Lowering/Ty.vuna:225"));
+  ("Lowering_dTy.v_annotTyOfFuel", ("Vuna.Compiler.Lowering.Ty.annotTyOfFuel", "Vuna/Compiler/Lowering/Ty.vuna:240"));
+  ("Lowering_dTy.v_annotTyOfTotal", ("Vuna.Compiler.Lowering.Ty.annotTyOfTotal", "Vuna/Compiler/Lowering/Ty.vuna:232"));
+  ("Lowering_dTy.v_binderTyAtIn", ("Vuna.Compiler.Lowering.Ty.binderTyAtIn", "Vuna/Compiler/Lowering/Ty.vuna:294"));
+  ("Lowering_dTy.v_binderTyAtRuntime", ("Vuna.Compiler.Lowering.Ty.binderTyAtRuntime", "Vuna/Compiler/Lowering/Ty.vuna:377"));
+  ("Lowering_dTy.v_countRuntimeArgs", ("Vuna.Compiler.Lowering.Ty.countRuntimeArgs", "Vuna/Compiler/Lowering/Ty.vuna:440"));
+  ("Lowering_dTy.v_ctorArityNeed", ("Vuna.Compiler.Lowering.Ty.ctorArityNeed", "Vuna/Compiler/Lowering/Ty.vuna:197"));
+  ("Lowering_dTy.v_ctorFieldTys", ("Vuna.Compiler.Lowering.Ty.ctorFieldTys", "Vuna/Compiler/Lowering/Ty.vuna:158"));
+  ("Lowering_dTy.v_ctorKeptFieldTys", ("Vuna.Compiler.Lowering.Ty.ctorKeptFieldTys", "Vuna/Compiler/Lowering/Ty.vuna:521"));
+  ("Lowering_dTy.v_ctorTypeArgsOf", ("Vuna.Compiler.Lowering.Ty.ctorTypeArgsOf", "Vuna/Compiler/Lowering/Ty.vuna:499"));
+  ("Lowering_dTy.v_dataArityNeed", ("Vuna.Compiler.Lowering.Ty.dataArityNeed", "Vuna/Compiler/Lowering/Ty.vuna:203"));
+  ("Lowering_dTy.v_findCtorInLocal", ("Vuna.Compiler.Lowering.Ty.findCtorInLocal", "Vuna/Compiler/Lowering/Ty.vuna:515"));
+  ("Lowering_dTy.v_flagMatchesRigIn", ("Vuna.Compiler.Lowering.Ty.flagMatchesRigIn", "Vuna/Compiler/Lowering/Ty.vuna:153"));
+  ("Lowering_dTy.v_flattenAnnotApp", ("Vuna.Compiler.Lowering.Ty.flattenAnnotApp", "Vuna/Compiler/Lowering/Ty.vuna:300"));
+  ("Lowering_dTy.v_flattenAnnotAppGo", ("Vuna.Compiler.Lowering.Ty.flattenAnnotAppGo", "Vuna/Compiler/Lowering/Ty.vuna:303"));
+  ("Lowering_dTy.v_flattenAnnotAppRig", ("Vuna.Compiler.Lowering.Ty.flattenAnnotAppRig", "Vuna/Compiler/Lowering/Ty.vuna:432"));
+  ("Lowering_dTy.v_flattenAnnotAppRigGo", ("Vuna.Compiler.Lowering.Ty.flattenAnnotAppRigGo", "Vuna/Compiler/Lowering/Ty.vuna:435"));
+  ("Lowering_dTy.v_foldlTyNames", ("Vuna.Compiler.Lowering.Ty.foldlTyNames", "Vuna/Compiler/Lowering/Ty.vuna:598"));
+  ("Lowering_dTy.v_globalTyTermOf", ("Vuna.Compiler.Lowering.Ty.globalTyTermOf", "Vuna/Compiler/Lowering/Ty.vuna:415"));
+  ("Lowering_dTy.v_maxIntListIn", ("Vuna.Compiler.Lowering.Ty.maxIntListIn", "Vuna/Compiler/Lowering/Ty.vuna:209"));
+  ("Lowering_dTy.v_nthTermIn", ("Vuna.Compiler.Lowering.Ty.nthTermIn", "Vuna/Compiler/Lowering/Ty.vuna:494"));
+  ("Lowering_dTy.v_peelIrFuns", ("Vuna.Compiler.Lowering.Ty.peelIrFuns", "Vuna/Compiler/Lowering/Ty.vuna:445"));
+  ("Lowering_dTy.v_peelPiArgsTy", ("Vuna.Compiler.Lowering.Ty.peelPiArgsTy", "Vuna/Compiler/Lowering/Ty.vuna:457"));
+  ("Lowering_dTy.v_renderFamilyArgs", ("Vuna.Compiler.Lowering.Ty.renderFamilyArgs", "Vuna/Compiler/Lowering/Ty.vuna:90"));
+  ("Lowering_dTy.v_renderFieldTy", ("Vuna.Compiler.Lowering.Ty.renderFieldTy", "Vuna/Compiler/Lowering/Ty.vuna:124"));
+  ("Lowering_dTy.v_renderPiTy", ("Vuna.Compiler.Lowering.Ty.renderPiTy", "Vuna/Compiler/Lowering/Ty.vuna:106"));
+  ("Lowering_dTy.v_renderPiTyFuel", ("Vuna.Compiler.Lowering.Ty.renderPiTyFuel", "Vuna/Compiler/Lowering/Ty.vuna:109"));
   ("Lowering_dTy.v_renderTyFuel", ("Vuna.Compiler.Lowering.Ty.renderTyFuel", "Vuna/Compiler/Lowering/Ty.vuna:29"));
   ("Lowering_dTy.v_renderTyGlobal", ("Vuna.Compiler.Lowering.Ty.renderTyGlobal", "Vuna/Compiler/Lowering/Ty.vuna:60"));
   ("Lowering_dTy.v_renderTyIntrinsicWith", ("Vuna.Compiler.Lowering.Ty.renderTyIntrinsicWith", "Vuna/Compiler/Lowering/Ty.vuna:78"));
   ("Lowering_dTy.v_renderTyOf", ("Vuna.Compiler.Lowering.Ty.renderTyOf", "Vuna/Compiler/Lowering/Ty.vuna:26"));
   ("Lowering_dTy.v_reprTyIr", ("Vuna.Compiler.Lowering.Ty.reprTyIr", "Vuna/Compiler/Lowering/Ty.vuna:46"));
-  ("Lowering_dTy.v_tempAnnotBinderId", ("Vuna.Compiler.Lowering.Ty.tempAnnotBinderId", "Vuna/Compiler/Lowering/Ty.vuna:225"));
-  ("Lowering_dTy.v_tyDeclOf", ("Vuna.Compiler.Lowering.Ty.tyDeclOf", "Vuna/Compiler/Lowering/Ty.vuna:543"));
-  ("Lowering_dTy.v_tyDeclRefs", ("Vuna.Compiler.Lowering.Ty.tyDeclRefs", "Vuna/Compiler/Lowering/Ty.vuna:574"));
-  ("Lowering_dTy.v_tyDeclRefsGo", ("Vuna.Compiler.Lowering.Ty.tyDeclRefsGo", "Vuna/Compiler/Lowering/Ty.vuna:582"));
-  ("Lowering_dTy.v_tyDeclTys", ("Vuna.Compiler.Lowering.Ty.tyDeclTys", "Vuna/Compiler/Lowering/Ty.vuna:577"));
-  ("Lowering_dTy.v_tyDeclsGo", ("Vuna.Compiler.Lowering.Ty.tyDeclsGo", "Vuna/Compiler/Lowering/Ty.vuna:536"));
-  ("Lowering_dTy.v_tyDeclsOf", ("Vuna.Compiler.Lowering.Ty.tyDeclsOf", "Vuna/Compiler/Lowering/Ty.vuna:532"));
-  ("Lowering_dTy.v_tyNamesInto", ("Vuna.Compiler.Lowering.Ty.tyNamesInto", "Vuna/Compiler/Lowering/Ty.vuna:590"));
+  ("Lowering_dTy.v_tempAnnotBinderId", ("Vuna.Compiler.Lowering.Ty.tempAnnotBinderId", "Vuna/Compiler/Lowering/Ty.vuna:229"));
+  ("Lowering_dTy.v_tyDeclOf", ("Vuna.Compiler.Lowering.Ty.tyDeclOf", "Vuna/Compiler/Lowering/Ty.vuna:555"));
+  ("Lowering_dTy.v_tyDeclRefs", ("Vuna.Compiler.Lowering.Ty.tyDeclRefs", "Vuna/Compiler/Lowering/Ty.vuna:586"));
+  ("Lowering_dTy.v_tyDeclRefsGo", ("Vuna.Compiler.Lowering.Ty.tyDeclRefsGo", "Vuna/Compiler/Lowering/Ty.vuna:594"));
+  ("Lowering_dTy.v_tyDeclTys", ("Vuna.Compiler.Lowering.Ty.tyDeclTys", "Vuna/Compiler/Lowering/Ty.vuna:589"));
+  ("Lowering_dTy.v_tyDeclsGo", ("Vuna.Compiler.Lowering.Ty.tyDeclsGo", "Vuna/Compiler/Lowering/Ty.vuna:548"));
+  ("Lowering_dTy.v_tyDeclsOf", ("Vuna.Compiler.Lowering.Ty.tyDeclsOf", "Vuna/Compiler/Lowering/Ty.vuna:544"));
+  ("Lowering_dTy.v_tyNamesInto", ("Vuna.Compiler.Lowering.Ty.tyNamesInto", "Vuna/Compiler/Lowering/Ty.vuna:602"));
   ("Main.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Data_x36_46_x36_List_x36_46_x36_List", ("Applicative_19070277251d295b_Base$46$Data$46$List$46$List", "Base/Data/List.vuna:179"));
   ("Main.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Data_x36_46_x36_Maybe_x36_46_x36_Maybe", ("Applicative_19070277251d295b_Base$46$Data$46$Maybe$46$Maybe", "Base/Data/Maybe.vuna:55"));
   ("Main.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Data_x36_46_x36_Result_x36_46_x36_Result", ("Applicative_19070277251d295b_Base$46$Data$46$Result$46$Result", "Base/Data/Result.vuna:32"));
@@ -7800,14 +7879,15 @@ let dt_def_locs = [
   ("Vuna_dIr_dRepresent.v_representGroup", ("Vuna.Ir.Represent.representGroup", "Vuna/Ir/Represent.vuna:24"));
   ("Vuna_dIr_dRepresent.v_representIr", ("Vuna.Ir.Represent.representIr", "Vuna/Ir/Represent.vuna:32"));
   ("Vuna_dIr_dRepresent.v_representUnit", ("Vuna.Ir.Represent.representUnit", "Vuna/Ir/Represent.vuna:15"));
-  ("Vuna_dIr_dRuntime.v_irListLength", ("Vuna.Ir.Runtime.irListLength", "Vuna/Ir/Runtime.vuna:301"));
+  ("Vuna_dIr_dRuntime.v_irListLength", ("Vuna.Ir.Runtime.irListLength", "Vuna/Ir/Runtime.vuna:339"));
+  ("Vuna_dIr_dRuntime.v_irRtAllTargets", ("Vuna.Ir.Runtime.irRtAllTargets", "Vuna/Ir/Runtime.vuna:287"));
   ("Vuna_dIr_dRuntime.v_irRtBridgedNames", ("Vuna.Ir.Runtime.irRtBridgedNames", "Vuna/Ir/Runtime.vuna:242"));
-  ("Vuna_dIr_dRuntime.v_irRtBridgesList", ("Vuna.Ir.Runtime.irRtBridgesList", "Vuna/Ir/Runtime.vuna:288"));
-  ("Vuna_dIr_dRuntime.v_irRtContract", ("Vuna.Ir.Runtime.irRtContract", "Vuna/Ir/Runtime.vuna:266"));
-  ("Vuna_dIr_dRuntime.v_irRtIsKnown", ("Vuna.Ir.Runtime.irRtIsKnown", "Vuna/Ir/Runtime.vuna:281"));
-  ("Vuna_dIr_dRuntime.v_irRtLookup", ("Vuna.Ir.Runtime.irRtLookup", "Vuna/Ir/Runtime.vuna:277"));
-  ("Vuna_dIr_dRuntime.v_irRtLookupGo", ("Vuna.Ir.Runtime.irRtLookupGo", "Vuna/Ir/Runtime.vuna:272"));
-  ("Vuna_dIr_dRuntime.v_irRtNames", ("Vuna.Ir.Runtime.irRtNames", "Vuna/Ir/Runtime.vuna:262"));
+  ("Vuna_dIr_dRuntime.v_irRtBridgesList", ("Vuna.Ir.Runtime.irRtBridgesList", "Vuna/Ir/Runtime.vuna:326"));
+  ("Vuna_dIr_dRuntime.v_irRtContract", ("Vuna.Ir.Runtime.irRtContract", "Vuna/Ir/Runtime.vuna:304"));
+  ("Vuna_dIr_dRuntime.v_irRtIsKnown", ("Vuna.Ir.Runtime.irRtIsKnown", "Vuna/Ir/Runtime.vuna:319"));
+  ("Vuna_dIr_dRuntime.v_irRtLookup", ("Vuna.Ir.Runtime.irRtLookup", "Vuna/Ir/Runtime.vuna:315"));
+  ("Vuna_dIr_dRuntime.v_irRtLookupGo", ("Vuna.Ir.Runtime.irRtLookupGo", "Vuna/Ir/Runtime.vuna:310"));
+  ("Vuna_dIr_dRuntime.v_irRtNames", ("Vuna.Ir.Runtime.irRtNames", "Vuna/Ir/Runtime.vuna:299"));
   ("Vuna_dIr_dRuntime.v_irRtNatSucc", ("Vuna.Ir.Runtime.irRtNatSucc", "Vuna/Ir/Runtime.vuna:49"));
   ("Vuna_dIr_dRuntime.v_irRtPlainNames", ("Vuna.Ir.Runtime.irRtPlainNames", "Vuna/Ir/Runtime.vuna:73"));
   ("Vuna_dIr_dRuntime.v_irRtShowBool", ("Vuna.Ir.Runtime.irRtShowBool", "Vuna/Ir/Runtime.vuna:64"));
@@ -7815,16 +7895,19 @@ let dt_def_locs = [
   ("Vuna_dIr_dRuntime.v_irRtShowInt", ("Vuna.Ir.Runtime.irRtShowInt", "Vuna/Ir/Runtime.vuna:52"));
   ("Vuna_dIr_dRuntime.v_irRtShowNat", ("Vuna.Ir.Runtime.irRtShowNat", "Vuna/Ir/Runtime.vuna:55"));
   ("Vuna_dIr_dRuntime.v_irRtShowStr", ("Vuna.Ir.Runtime.irRtShowStr", "Vuna/Ir/Runtime.vuna:58"));
+  ("Vuna_dIr_dRuntime.v_irRtSupports", ("Vuna.Ir.Runtime.irRtSupports", "Vuna/Ir/Runtime.vuna:295"));
   ("Vuna_dIr_dRuntime.v_irRtSymBridgesOf", ("Vuna.Ir.Runtime.irRtSymBridgesOf", "Vuna/Ir/Runtime.vuna:44"));
   ("Vuna_dIr_dRuntime.v_irRtSymNameOf", ("Vuna.Ir.Runtime.irRtSymNameOf", "Vuna/Ir/Runtime.vuna:40"));
   ("Vuna_dIr_dRuntime.v_irRtSyntheticNames", ("Vuna.Ir.Runtime.irRtSyntheticNames", "Vuna/Ir/Runtime.vuna:68"));
-  ("Vuna_dIr_dRuntime.v_irSymbolsOf", ("Vuna.Ir.Runtime.irSymbolsOf", "Vuna/Ir/Runtime.vuna:306"));
-  ("Vuna_dIr_dRuntime.v_irSymbolsOfAlt", ("Vuna.Ir.Runtime.irSymbolsOfAlt", "Vuna/Ir/Runtime.vuna:339"));
-  ("Vuna_dIr_dRuntime.v_irSymbolsOfAltMaybe", ("Vuna.Ir.Runtime.irSymbolsOfAltMaybe", "Vuna/Ir/Runtime.vuna:342"));
-  ("Vuna_dIr_dRuntime.v_irSymbolsOfDef", ("Vuna.Ir.Runtime.irSymbolsOfDef", "Vuna/Ir/Runtime.vuna:346"));
-  ("Vuna_dIr_dRuntime.v_irSymbolsOfEntry", ("Vuna.Ir.Runtime.irSymbolsOfEntry", "Vuna/Ir/Runtime.vuna:359"));
-  ("Vuna_dIr_dRuntime.v_irSymbolsOfField", ("Vuna.Ir.Runtime.irSymbolsOfField", "Vuna/Ir/Runtime.vuna:336"));
-  ("Vuna_dIr_dRuntime.v_irSymbolsOfUnit", ("Vuna.Ir.Runtime.irSymbolsOfUnit", "Vuna/Ir/Runtime.vuna:353"));
+  ("Vuna_dIr_dRuntime.v_irRtTargets", ("Vuna.Ir.Runtime.irRtTargets", "Vuna/Ir/Runtime.vuna:291"));
+  ("Vuna_dIr_dRuntime.v_irRtThreadNames", ("Vuna.Ir.Runtime.irRtThreadNames", "Vuna/Ir/Runtime.vuna:262"));
+  ("Vuna_dIr_dRuntime.v_irSymbolsOf", ("Vuna.Ir.Runtime.irSymbolsOf", "Vuna/Ir/Runtime.vuna:344"));
+  ("Vuna_dIr_dRuntime.v_irSymbolsOfAlt", ("Vuna.Ir.Runtime.irSymbolsOfAlt", "Vuna/Ir/Runtime.vuna:377"));
+  ("Vuna_dIr_dRuntime.v_irSymbolsOfAltMaybe", ("Vuna.Ir.Runtime.irSymbolsOfAltMaybe", "Vuna/Ir/Runtime.vuna:380"));
+  ("Vuna_dIr_dRuntime.v_irSymbolsOfDef", ("Vuna.Ir.Runtime.irSymbolsOfDef", "Vuna/Ir/Runtime.vuna:384"));
+  ("Vuna_dIr_dRuntime.v_irSymbolsOfEntry", ("Vuna.Ir.Runtime.irSymbolsOfEntry", "Vuna/Ir/Runtime.vuna:397"));
+  ("Vuna_dIr_dRuntime.v_irSymbolsOfField", ("Vuna.Ir.Runtime.irSymbolsOfField", "Vuna/Ir/Runtime.vuna:374"));
+  ("Vuna_dIr_dRuntime.v_irSymbolsOfUnit", ("Vuna.Ir.Runtime.irSymbolsOfUnit", "Vuna/Ir/Runtime.vuna:391"));
   ("Vuna_dIr_dValidate.v_altBodies", ("Vuna.Ir.Validate.altBodies", "Vuna/Ir/Validate.vuna:460"));
   ("Vuna_dIr_dValidate.v_altWork", ("Vuna.Ir.Validate.altWork", "Vuna/Ir/Validate.vuna:432"));
   ("Vuna_dIr_dValidate.v_anyErasedBinder", ("Vuna.Ir.Validate.anyErasedBinder", "Vuna/Ir/Validate.vuna:242"));
@@ -7940,73 +8023,74 @@ let dt_def_locs = [
   ("Vuna_dTarget_dOcaml_dRender.v_renderTy", ("Vuna.Target.Ocaml.Render.renderTy", "Vuna/Target/Ocaml/Render.vuna:37"));
   ("Vuna_dTarget_dOcaml_dRender.v_typeParamDecl", ("Vuna.Target.Ocaml.Render.typeParamDecl", "Vuna/Target/Ocaml/Render.vuna:24"));
   ("Vuna_dTarget_dOcaml_dRender.v_typeParamName", ("Vuna.Target.Ocaml.Render.typeParamName", "Vuna/Target/Ocaml/Render.vuna:21"));
-  ("Vuna_dTarget_dOcaml_dRuntime.v_ocamlRtHelperNames", ("Vuna.Target.Ocaml.Runtime.ocamlRtHelperNames", "Vuna/Target/Ocaml/Runtime.vuna:221"));
-  ("Vuna_dTarget_dOcaml_dRuntime.v_ocamlRtText", ("Vuna.Target.Ocaml.Runtime.ocamlRtText", "Vuna/Target/Ocaml/Runtime.vuna:217"));
+  ("Vuna_dTarget_dOcaml_dRuntime.v_ocamlRtHelperNames", ("Vuna.Target.Ocaml.Runtime.ocamlRtHelperNames", "Vuna/Target/Ocaml/Runtime.vuna:239"));
+  ("Vuna_dTarget_dOcaml_dRuntime.v_ocamlRtText", ("Vuna.Target.Ocaml.Runtime.ocamlRtText", "Vuna/Target/Ocaml/Runtime.vuna:235"));
   ("Vuna_dTarget_dOcaml_dRuntime.v_ocamlRtTextTable", ("Vuna.Target.Ocaml.Runtime.ocamlRtTextTable", "Vuna/Target/Ocaml/Runtime.vuna:26"));
-  ("Vuna_dTarget_dOcaml_dRuntime.v_rtTextExtra", ("Vuna.Target.Ocaml.Runtime.rtTextExtra", "Vuna/Target/Ocaml/Runtime.vuna:235"));
-  ("Vuna_dTarget_dOcaml_dRuntime.v_rtTextExtras", ("Vuna.Target.Ocaml.Runtime.rtTextExtras", "Vuna/Target/Ocaml/Runtime.vuna:242"));
-  ("Vuna_dTarget_dOcaml_dRuntime.v_rtTextGaps", ("Vuna.Target.Ocaml.Runtime.rtTextGaps", "Vuna/Target/Ocaml/Runtime.vuna:232"));
-  ("Vuna_dTarget_dOcaml_dRuntime.v_rtTextMissing", ("Vuna.Target.Ocaml.Runtime.rtTextMissing", "Vuna/Target/Ocaml/Runtime.vuna:225"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_bindAndOf", ("Vuna.Target.Ocaml.Term.bindAndOf", "Vuna/Target/Ocaml/Term.vuna:2512"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_bindFirstOf", ("Vuna.Target.Ocaml.Term.bindFirstOf", "Vuna/Target/Ocaml/Term.vuna:2509"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_bindGroupOf", ("Vuna.Target.Ocaml.Term.bindGroupOf", "Vuna/Target/Ocaml/Term.vuna:2504"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_bindKeywordOf", ("Vuna.Target.Ocaml.Term.bindKeywordOf", "Vuna/Target/Ocaml/Term.vuna:2515"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_bridgeUnitOf", ("Vuna.Target.Ocaml.Term.bridgeUnitOf", "Vuna/Target/Ocaml/Term.vuna:2008"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_dtDefLocTable", ("Vuna.Target.Ocaml.Term.dtDefLocTable", "Vuna/Target/Ocaml/Term.vuna:1932"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_dtFloatRuntime", ("Vuna.Target.Ocaml.Term.dtFloatRuntime", "Vuna/Target/Ocaml/Term.vuna:1176"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_dtListBridge", ("Vuna.Target.Ocaml.Term.dtListBridge", "Vuna/Target/Ocaml/Term.vuna:1879"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_dtLogRuntime", ("Vuna.Target.Ocaml.Term.dtLogRuntime", "Vuna/Target/Ocaml/Term.vuna:1196"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_dtObsRuntime", ("Vuna.Target.Ocaml.Term.dtObsRuntime", "Vuna/Target/Ocaml/Term.vuna:1376"));
+  ("Vuna_dTarget_dOcaml_dRuntime.v_rtTextExtra", ("Vuna.Target.Ocaml.Runtime.rtTextExtra", "Vuna/Target/Ocaml/Runtime.vuna:253"));
+  ("Vuna_dTarget_dOcaml_dRuntime.v_rtTextExtras", ("Vuna.Target.Ocaml.Runtime.rtTextExtras", "Vuna/Target/Ocaml/Runtime.vuna:260"));
+  ("Vuna_dTarget_dOcaml_dRuntime.v_rtTextGaps", ("Vuna.Target.Ocaml.Runtime.rtTextGaps", "Vuna/Target/Ocaml/Runtime.vuna:250"));
+  ("Vuna_dTarget_dOcaml_dRuntime.v_rtTextMissing", ("Vuna.Target.Ocaml.Runtime.rtTextMissing", "Vuna/Target/Ocaml/Runtime.vuna:243"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_bindAndOf", ("Vuna.Target.Ocaml.Term.bindAndOf", "Vuna/Target/Ocaml/Term.vuna:2587"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_bindFirstOf", ("Vuna.Target.Ocaml.Term.bindFirstOf", "Vuna/Target/Ocaml/Term.vuna:2584"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_bindGroupOf", ("Vuna.Target.Ocaml.Term.bindGroupOf", "Vuna/Target/Ocaml/Term.vuna:2579"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_bindKeywordOf", ("Vuna.Target.Ocaml.Term.bindKeywordOf", "Vuna/Target/Ocaml/Term.vuna:2590"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_bridgeUnitOf", ("Vuna.Target.Ocaml.Term.bridgeUnitOf", "Vuna/Target/Ocaml/Term.vuna:2083"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_dtDefLocTable", ("Vuna.Target.Ocaml.Term.dtDefLocTable", "Vuna/Target/Ocaml/Term.vuna:2007"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_dtFloatRuntime", ("Vuna.Target.Ocaml.Term.dtFloatRuntime", "Vuna/Target/Ocaml/Term.vuna:1251"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_dtListBridge", ("Vuna.Target.Ocaml.Term.dtListBridge", "Vuna/Target/Ocaml/Term.vuna:1954"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_dtLogRuntime", ("Vuna.Target.Ocaml.Term.dtLogRuntime", "Vuna/Target/Ocaml/Term.vuna:1271"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_dtObsRuntime", ("Vuna.Target.Ocaml.Term.dtObsRuntime", "Vuna/Target/Ocaml/Term.vuna:1451"));
   ("Vuna_dTarget_dOcaml_dTerm.v_dtPrimRuntime", ("Vuna.Target.Ocaml.Term.dtPrimRuntime", "Vuna/Target/Ocaml/Term.vuna:108"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_dtReporterRuntime", ("Vuna.Target.Ocaml.Term.dtReporterRuntime", "Vuna/Target/Ocaml/Term.vuna:1135"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_dtReporterRuntime", ("Vuna.Target.Ocaml.Term.dtReporterRuntime", "Vuna/Target/Ocaml/Term.vuna:1210"));
   ("Vuna_dTarget_dOcaml_dTerm.v_dtRuntime", ("Vuna.Target.Ocaml.Term.dtRuntime", "Vuna/Target/Ocaml/Term.vuna:32"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_dtRuntimeWith", ("Vuna.Target.Ocaml.Term.dtRuntimeWith", "Vuna/Target/Ocaml/Term.vuna:1867"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_dtSchedRuntime", ("Vuna.Target.Ocaml.Term.dtSchedRuntime", "Vuna/Target/Ocaml/Term.vuna:673"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_effThunkText", ("Vuna.Target.Ocaml.Term.effThunkText", "Vuna/Target/Ocaml/Term.vuna:2254"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_effUnitTyPair", ("Vuna.Target.Ocaml.Term.effUnitTyPair", "Vuna/Target/Ocaml/Term.vuna:2033"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_effUnitTypeNameIr", ("Vuna.Target.Ocaml.Term.effUnitTypeNameIr", "Vuna/Target/Ocaml/Term.vuna:2039"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_foldHandlers", ("Vuna.Target.Ocaml.Term.foldHandlers", "Vuna/Target/Ocaml/Term.vuna:2608"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_genAppNode", ("Vuna.Target.Ocaml.Term.genAppNode", "Vuna/Target/Ocaml/Term.vuna:2049"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_genArm", ("Vuna.Target.Ocaml.Term.genArm", "Vuna/Target/Ocaml/Term.vuna:2371"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_genArms", ("Vuna.Target.Ocaml.Term.genArms", "Vuna/Target/Ocaml/Term.vuna:2357"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_genAssignedFields", ("Vuna.Target.Ocaml.Term.genAssignedFields", "Vuna/Target/Ocaml/Term.vuna:2292"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_genBridgeRef", ("Vuna.Target.Ocaml.Term.genBridgeRef", "Vuna/Target/Ocaml/Term.vuna:2026"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_genCtorRef", ("Vuna.Target.Ocaml.Term.genCtorRef", "Vuna/Target/Ocaml/Term.vuna:1987"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_genDef", ("Vuna.Target.Ocaml.Term.genDef", "Vuna/Target/Ocaml/Term.vuna:2548"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_genEntryHook", ("Vuna.Target.Ocaml.Term.genEntryHook", "Vuna/Target/Ocaml/Term.vuna:2580"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_genGroup", ("Vuna.Target.Ocaml.Term.genGroup", "Vuna/Target/Ocaml/Term.vuna:2487"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_genGroupDefs", ("Vuna.Target.Ocaml.Term.genGroupDefs", "Vuna/Target/Ocaml/Term.vuna:2534"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_genGroups", ("Vuna.Target.Ocaml.Term.genGroups", "Vuna/Target/Ocaml/Term.vuna:2473"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_genIr", ("Vuna.Target.Ocaml.Term.genIr", "Vuna/Target/Ocaml/Term.vuna:2045"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_genIrArgs", ("Vuna.Target.Ocaml.Term.genIrArgs", "Vuna/Target/Ocaml/Term.vuna:2277"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_genIrNode", ("Vuna.Target.Ocaml.Term.genIrNode", "Vuna/Target/Ocaml/Term.vuna:2066"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_genLamParams", ("Vuna.Target.Ocaml.Term.genLamParams", "Vuna/Target/Ocaml/Term.vuna:2317"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_genLamParamsUnannotated", ("Vuna.Target.Ocaml.Term.genLamParamsUnannotated", "Vuna/Target/Ocaml/Term.vuna:2338"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_genNatAlt", ("Vuna.Target.Ocaml.Term.genNatAlt", "Vuna/Target/Ocaml/Term.vuna:2451"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_genNatBranches", ("Vuna.Target.Ocaml.Term.genNatBranches", "Vuna/Target/Ocaml/Term.vuna:2409"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_genValueRef", ("Vuna.Target.Ocaml.Term.genValueRef", "Vuna/Target/Ocaml/Term.vuna:1980"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_gsAddDep", ("Vuna.Target.Ocaml.Term.gsAddDep", "Vuna/Target/Ocaml/Term.vuna:1972"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_gsDepOfFamily", ("Vuna.Target.Ocaml.Term.gsDepOfFamily", "Vuna/Target/Ocaml/Term.vuna:1994"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_gsWithTyDeps", ("Vuna.Target.Ocaml.Term.gsWithTyDeps", "Vuna/Target/Ocaml/Term.vuna:2347"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_hasCatchAll", ("Vuna.Target.Ocaml.Term.hasCatchAll", "Vuna/Target/Ocaml/Term.vuna:2350"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_hookText", ("Vuna.Target.Ocaml.Term.hookText", "Vuna/Target/Ocaml/Term.vuna:2615"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_inlineText", ("Vuna.Target.Ocaml.Term.inlineText", "Vuna/Target/Ocaml/Term.vuna:1809"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_ioParamNames", ("Vuna.Target.Ocaml.Term.ioParamNames", "Vuna/Target/Ocaml/Term.vuna:2265"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_lineDirectiveOf", ("Vuna.Target.Ocaml.Term.lineDirectiveOf", "Vuna/Target/Ocaml/Term.vuna:2525"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_locRowOf", ("Vuna.Target.Ocaml.Term.locRowOf", "Vuna/Target/Ocaml/Term.vuna:1938"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_mkGenSt", ("Vuna.Target.Ocaml.Term.mkGenSt", "Vuna/Target/Ocaml/Term.vuna:1965"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_mkGenStWith", ("Vuna.Target.Ocaml.Term.mkGenStWith", "Vuna/Target/Ocaml/Term.vuna:1968"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_nonErasedBinderText", ("Vuna.Target.Ocaml.Term.nonErasedBinderText", "Vuna/Target/Ocaml/Term.vuna:2310"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_ocamlLitText", ("Vuna.Target.Ocaml.Term.ocamlLitText", "Vuna/Target/Ocaml/Term.vuna:2063"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_qualifyBridgeNames", ("Vuna.Target.Ocaml.Term.qualifyBridgeNames", "Vuna/Target/Ocaml/Term.vuna:2017"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_qualifyBridgeText", ("Vuna.Target.Ocaml.Term.qualifyBridgeText", "Vuna/Target/Ocaml/Term.vuna:2022"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_recordLabelOf", ("Vuna.Target.Ocaml.Term.recordLabelOf", "Vuna/Target/Ocaml/Term.vuna:2000"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_recordPatFields", ("Vuna.Target.Ocaml.Term.recordPatFields", "Vuna/Target/Ocaml/Term.vuna:2397"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_renderDefOf", ("Vuna.Target.Ocaml.Term.renderDefOf", "Vuna/Target/Ocaml/Term.vuna:2568"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_replaceAll", ("Vuna.Target.Ocaml.Term.replaceAll", "Vuna/Target/Ocaml/Term.vuna:2014"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_sortLocRows", ("Vuna.Target.Ocaml.Term.sortLocRows", "Vuna/Target/Ocaml/Term.vuna:1935"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_takeNames", ("Vuna.Target.Ocaml.Term.takeNames", "Vuna/Target/Ocaml/Term.vuna:2268"));
-  ("Vuna_dTarget_dOcaml_dTerm.v_termOrImpossible", ("Vuna.Target.Ocaml.Term.termOrImpossible", "Vuna/Target/Ocaml/Term.vuna:2447"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_dtRuntimeWith", ("Vuna.Target.Ocaml.Term.dtRuntimeWith", "Vuna/Target/Ocaml/Term.vuna:1942"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_dtSchedRuntime", ("Vuna.Target.Ocaml.Term.dtSchedRuntime", "Vuna/Target/Ocaml/Term.vuna:680"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_dtThreadRuntime", ("Vuna.Target.Ocaml.Term.dtThreadRuntime", "Vuna/Target/Ocaml/Term.vuna:1141"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_effThunkText", ("Vuna.Target.Ocaml.Term.effThunkText", "Vuna/Target/Ocaml/Term.vuna:2329"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_effUnitTyPair", ("Vuna.Target.Ocaml.Term.effUnitTyPair", "Vuna/Target/Ocaml/Term.vuna:2108"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_effUnitTypeNameIr", ("Vuna.Target.Ocaml.Term.effUnitTypeNameIr", "Vuna/Target/Ocaml/Term.vuna:2114"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_foldHandlers", ("Vuna.Target.Ocaml.Term.foldHandlers", "Vuna/Target/Ocaml/Term.vuna:2683"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_genAppNode", ("Vuna.Target.Ocaml.Term.genAppNode", "Vuna/Target/Ocaml/Term.vuna:2124"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_genArm", ("Vuna.Target.Ocaml.Term.genArm", "Vuna/Target/Ocaml/Term.vuna:2446"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_genArms", ("Vuna.Target.Ocaml.Term.genArms", "Vuna/Target/Ocaml/Term.vuna:2432"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_genAssignedFields", ("Vuna.Target.Ocaml.Term.genAssignedFields", "Vuna/Target/Ocaml/Term.vuna:2367"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_genBridgeRef", ("Vuna.Target.Ocaml.Term.genBridgeRef", "Vuna/Target/Ocaml/Term.vuna:2101"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_genCtorRef", ("Vuna.Target.Ocaml.Term.genCtorRef", "Vuna/Target/Ocaml/Term.vuna:2062"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_genDef", ("Vuna.Target.Ocaml.Term.genDef", "Vuna/Target/Ocaml/Term.vuna:2623"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_genEntryHook", ("Vuna.Target.Ocaml.Term.genEntryHook", "Vuna/Target/Ocaml/Term.vuna:2655"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_genGroup", ("Vuna.Target.Ocaml.Term.genGroup", "Vuna/Target/Ocaml/Term.vuna:2562"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_genGroupDefs", ("Vuna.Target.Ocaml.Term.genGroupDefs", "Vuna/Target/Ocaml/Term.vuna:2609"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_genGroups", ("Vuna.Target.Ocaml.Term.genGroups", "Vuna/Target/Ocaml/Term.vuna:2548"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_genIr", ("Vuna.Target.Ocaml.Term.genIr", "Vuna/Target/Ocaml/Term.vuna:2120"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_genIrArgs", ("Vuna.Target.Ocaml.Term.genIrArgs", "Vuna/Target/Ocaml/Term.vuna:2352"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_genIrNode", ("Vuna.Target.Ocaml.Term.genIrNode", "Vuna/Target/Ocaml/Term.vuna:2141"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_genLamParams", ("Vuna.Target.Ocaml.Term.genLamParams", "Vuna/Target/Ocaml/Term.vuna:2392"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_genLamParamsUnannotated", ("Vuna.Target.Ocaml.Term.genLamParamsUnannotated", "Vuna/Target/Ocaml/Term.vuna:2413"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_genNatAlt", ("Vuna.Target.Ocaml.Term.genNatAlt", "Vuna/Target/Ocaml/Term.vuna:2526"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_genNatBranches", ("Vuna.Target.Ocaml.Term.genNatBranches", "Vuna/Target/Ocaml/Term.vuna:2484"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_genValueRef", ("Vuna.Target.Ocaml.Term.genValueRef", "Vuna/Target/Ocaml/Term.vuna:2055"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_gsAddDep", ("Vuna.Target.Ocaml.Term.gsAddDep", "Vuna/Target/Ocaml/Term.vuna:2047"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_gsDepOfFamily", ("Vuna.Target.Ocaml.Term.gsDepOfFamily", "Vuna/Target/Ocaml/Term.vuna:2069"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_gsWithTyDeps", ("Vuna.Target.Ocaml.Term.gsWithTyDeps", "Vuna/Target/Ocaml/Term.vuna:2422"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_hasCatchAll", ("Vuna.Target.Ocaml.Term.hasCatchAll", "Vuna/Target/Ocaml/Term.vuna:2425"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_hookText", ("Vuna.Target.Ocaml.Term.hookText", "Vuna/Target/Ocaml/Term.vuna:2690"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_inlineText", ("Vuna.Target.Ocaml.Term.inlineText", "Vuna/Target/Ocaml/Term.vuna:1884"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_ioParamNames", ("Vuna.Target.Ocaml.Term.ioParamNames", "Vuna/Target/Ocaml/Term.vuna:2340"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_lineDirectiveOf", ("Vuna.Target.Ocaml.Term.lineDirectiveOf", "Vuna/Target/Ocaml/Term.vuna:2600"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_locRowOf", ("Vuna.Target.Ocaml.Term.locRowOf", "Vuna/Target/Ocaml/Term.vuna:2013"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_mkGenSt", ("Vuna.Target.Ocaml.Term.mkGenSt", "Vuna/Target/Ocaml/Term.vuna:2040"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_mkGenStWith", ("Vuna.Target.Ocaml.Term.mkGenStWith", "Vuna/Target/Ocaml/Term.vuna:2043"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_nonErasedBinderText", ("Vuna.Target.Ocaml.Term.nonErasedBinderText", "Vuna/Target/Ocaml/Term.vuna:2385"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_ocamlLitText", ("Vuna.Target.Ocaml.Term.ocamlLitText", "Vuna/Target/Ocaml/Term.vuna:2138"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_qualifyBridgeNames", ("Vuna.Target.Ocaml.Term.qualifyBridgeNames", "Vuna/Target/Ocaml/Term.vuna:2092"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_qualifyBridgeText", ("Vuna.Target.Ocaml.Term.qualifyBridgeText", "Vuna/Target/Ocaml/Term.vuna:2097"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_recordLabelOf", ("Vuna.Target.Ocaml.Term.recordLabelOf", "Vuna/Target/Ocaml/Term.vuna:2075"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_recordPatFields", ("Vuna.Target.Ocaml.Term.recordPatFields", "Vuna/Target/Ocaml/Term.vuna:2472"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_renderDefOf", ("Vuna.Target.Ocaml.Term.renderDefOf", "Vuna/Target/Ocaml/Term.vuna:2643"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_replaceAll", ("Vuna.Target.Ocaml.Term.replaceAll", "Vuna/Target/Ocaml/Term.vuna:2089"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_sortLocRows", ("Vuna.Target.Ocaml.Term.sortLocRows", "Vuna/Target/Ocaml/Term.vuna:2010"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_takeNames", ("Vuna.Target.Ocaml.Term.takeNames", "Vuna/Target/Ocaml/Term.vuna:2343"));
+  ("Vuna_dTarget_dOcaml_dTerm.v_termOrImpossible", ("Vuna.Target.Ocaml.Term.termOrImpossible", "Vuna/Target/Ocaml/Term.vuna:2522"));
 ]
 let rec dt_frame_parts parts =
   match parts with
