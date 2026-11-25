@@ -402,3 +402,8 @@ import 调 `exportIndexOfModule` → `resolvedName` → `resolveModuleName` → 
     - 残留：`store gc` 的根集查找是 `Clean.gcCandidates` 对每个对象在全部 roots 里线性
       `memName`（46 GB store ≈ 31,682 条 roots × 28 万对象），`sizesOf` 还对同一批文件再
       stat 一次；`store gc --dry-run` 实测 **116 s user**（`sortByAge` 的插入排序另在处置）。
+    - 试过又撤掉：**Index 依赖表 / Obs 逐行解析的并行**。两处都被 IO 或串行聚合段主导，墙钟
+      不变而 user 上升：热 `map`（1676 个源文件读 + 双哈希）0.32–0.36 s → 0.35–0.36 s
+      （user 0.25–0.29 → 0.32–0.34）；17 MB / 12 万行 trace 的 `dev obs summarize --json`
+      1.08–1.15 s → 1.08–1.15 s（user 0.82–0.91 → 2.64–2.93，每 Domain 2 MB minor heap 的
+      并行 GC 代价）。要降这两处得先降单线程成本（避免逐文件双哈希 / 换 JSON 解析），不是并行。
