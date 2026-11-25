@@ -1,0 +1,4 @@
+-- 普通包写不出内部标记：`@vuna@ctor@…` 能指定任意 canonical target，必须被
+-- `Loader.Resolve` 按 `isParserSurface` 白名单拒绝（不是所有 `@vuna@` 名字都放行）。
+main : Int
+main = @vuna@ctor@X@Nil
