@@ -49,7 +49,6 @@ TC_TypeMismatchCaseCount	精化/Core 内部不变量防御（Conv/Meta/Index/Pat
 TC_TypeMismatchCaseVars	精化/Core 内部不变量防御（Conv/Meta/Index/Pattern fuel 等）；合法源码不可构造
 TC_TypeMismatchCtorArity	精化/Core 内部不变量防御（Conv/Meta/Index/Pattern fuel 等）；合法源码不可构造
 TC_UniverseLevelNonNegative	精化/Core 内部不变量防御（Conv/Meta/Index/Pattern fuel 等）；合法源码不可构造
-TC_UnknownName	精化/Core 内部不变量防御（Conv/Meta/Index/Pattern fuel 等）；合法源码不可构造
 TC_UnknownRecord	精化/Core 内部不变量防御（Conv/Meta/Index/Pattern fuel 等）；合法源码不可构造
 TC_UnsolvedMetavar	精化/Core 内部不变量防御（Conv/Meta/Index/Pattern fuel 等）；合法源码不可构造
 TC_UnsolvedMetavarInfer	精化/Core 内部不变量防御（Conv/Meta/Index/Pattern fuel 等）；合法源码不可构造

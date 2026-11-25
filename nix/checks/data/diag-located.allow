@@ -12,6 +12,9 @@
 
 # --- 无用户书写点 / 外部输入 ---
 RN_AmbiguousPrelude
+# 模块头导出列表的跨模块同名歧义（多个 import 提供不同 target）没有单一用户书写行；
+# 夹具 `pkg_err/65_ambiguous_reexport` 的 expected.diag.json 带 `absent: synthetic`。
+RN_AmbiguousName
 PKG_NotMaterialized
 PKG_Invalid
 # 同名包是跨多个 manifest 的图级冲突，没有单一的“用户书写行”；错误消息带两个目录。

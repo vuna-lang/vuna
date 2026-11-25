@@ -46,7 +46,6 @@ TC_TypeMismatchCaseCount
 TC_TypeMismatchCaseVars
 TC_TypeMismatchCtorArity
 TC_UniverseLevelNonNegative
-TC_UnknownName
 TC_UnknownRecord
 TC_UnsolvedMetavar
 TC_UnsolvedMetavarInfer

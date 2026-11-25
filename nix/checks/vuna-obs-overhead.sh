@@ -9,8 +9,9 @@
 #   2. 运行时文本里，`VUNA_OBS=0` 的程序仍然**包含** obs runtime 代码（按需追加：
 #      只有引用 obs 原语的程序才追加），但关闭时事件缓冲不分配、不写文件
 #      （用「跑一个 obs 程序：不设 / 设 0 → 都无 trace 文件」断言）；
-#   3. 一条静态纪律：生成运行时里所有 obs 入口都以 `if not (dtp_obs_on ()) then <快速路径>`
-#      开头（`nix/checks/vuna-obs-overhead.sh` 用 grep 抽 `let dtp_obs_*` 块检查），
+#   3. 一条静态纪律：生成运行时必须带 obs 写入端（`dtp_obs_emit`）与公开探针
+#      （`dtp_obs_counter` / `dtp_obs_mark` / `dtp_obs_span`），且 `span` 的函数体以关闭
+#      快速路径 `if not (dtp_obs_on ()) then f 0` 开头；用 grep/sed 抽生成文本检查，
 #      防止有人在关闭路径上加时钟读/分配。
 #
 # 本 check 不测墙钟（那是 benchmark 的事，见 bench/bootstrap.sh 与 performance.md §5）。
@@ -96,9 +97,9 @@ VUNA_OBS=1 VUNA_OBS_DIR="$OUT/trace-on" "$bin" >"$OUT/run-on.out" 2>&1 || fail "
 runtime_ml=$OUT/app-out/Vuna_runtime.ml
 [ -f "$runtime_ml" ] || fail "missing generated Vuna_runtime.ml"
 
-# 每个公开 obs 入口都必须先判 `dtp_obs_on ()`：`dtp_obs_log` / `dtp_obs_counter` /
-# `dtp_obs_mark` / `dtp_obs_span`（`dtp_obs_level` 是开关本体的读，不在此列）。
-for fn in dtp_obs_log dtp_obs_counter dtp_obs_mark dtp_obs_span; do
+# 生成运行时必须带写入端与公开探针：`dtp_obs_emit`（所有事件的写入端）/
+# `dtp_obs_counter` / `dtp_obs_mark` / `dtp_obs_span`（`dtp_obs_level` 是开关本体的读，不在此列）。
+for fn in dtp_obs_emit dtp_obs_counter dtp_obs_mark dtp_obs_span; do
   if ! grep -q "let ${fn} " "$runtime_ml"; then
     grep -n 'dtp_obs_' "$runtime_ml" | head -20 >&2
     fail "generated runtime misses ${fn} (obs text must be appended when an obs primitive is used)"
