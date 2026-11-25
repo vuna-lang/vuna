@@ -36,6 +36,8 @@ import Base.Effect.Env as EffEnv
 import Base.Effect.Fs as EffFs
 import Base.Effect.Types as EffTypes
 import Base.Effect.Process as EffProcess
+import Base.Data.Sort
+import Base.Thread.Par as Par
 
 -- ---------------------------------------------------------------
 -- 小型 helper（本模块自用，避免污染 Base）
@@ -501,23 +503,23 @@ record Built where
   -- | 该文件的引用。
   builtRefs : List Ref
 
--- | 索引一个文件。
+-- | 索引一个文件。上下文由调用方（父线程）按包预解析，worker 只读文件。
 --
 -- parse/fixity 失败返回 `ErrC`（调用方转成 warning），不中断整体；返回值带推进后的
--- `FixityEnv`——按目录复用包上下文与已加载模块图（见 [Vuna.FixityEnv]）。
-indexOne : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => FixityEnv -> String -> String -> String -> Eff r (FixityEnv, Check Built)
-indexOne env dir pkgName path =
+-- `FixityEnv`——按包目录复用已加载模块图（见 [Vuna.FixityEnv]）。
+indexOne : Member nFs FsOp r => FixityEnv -> String -> String -> String -> Check PackageContext -> Eff r (FixityEnv, Check Built)
+indexOne env dir pkgName path ctxR =
   do
     exists <- fsFileExists path
     if exists then
-      indexOneExisting env dir pkgName path
+      indexOneExisting env dir pkgName path ctxR
     else
       pure (env, err "${path}: no such file")
 
--- | 内部：`indexOne` 的文件存在分支——读源码、取包 fixity 上下文、按程序级 fixity 重排，
+-- | 内部：`indexOne` 的文件存在分支——读源码、按已解析上下文取程序级 fixity 并重排，
 -- 再抽模块名、模块 doc、符号与引用。
-indexOneExisting : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => FixityEnv -> String -> String -> String -> Eff r (FixityEnv, Check Built)
-indexOneExisting env dir pkgName path =
+indexOneExisting : Member nFs FsOp r => FixityEnv -> String -> String -> String -> Check PackageContext -> Eff r (FixityEnv, Check Built)
+indexOneExisting env dir pkgName path ctxR =
   do
     source <- fsReadFile path
     let
@@ -525,28 +527,31 @@ indexOneExisting env dir pkgName path =
     in case parseSourceDetailed path source of
       ErrC e => pure (env, err "${path}: ${diagText e}")
       OkC parsed =>
-        do
-          looked <- fixitiesForParsed env path parsed.parsedFile
-          let
-            env2 = firstOf looked
-          in case secondOf looked of
-            ErrC e => pure (env2, err "${path}: cannot load package fixity context: ${diagText e}")
-            OkC programFixities =>
-              case parsed.parsedFile of
-                -- 必须按**程序级** fixity 重排（本文件声明 ++ import 闭包，
-                -- 本地优先）。只用本地声明会让用到 `+`/`==`/`::` 的文件报 unknown fixity，
-                -- 然后被当错误跳过 → `vuna map` 静默漏模块。
-                SourceFile srcHdr imports fx decls0 _ _ _ =>
-                  case reorderProgram (tableOfKeepOpsCst parsed.parsedCst (append programFixities fx)) decls0 of
-                    ErrC e => pure (env2, err "${path}: ${diagText e}")
-                    OkC decls =>
-                      let
-                        sMod = moduleNameOf dir path srcHdr
-                        table = docTableOf srcHdr decls parsed.parsedComments
-                        info = ModuleInfo sMod pkgName path bytes (length decls) (docTableModuleDoc table)
-                        syms = symbolsOfModule sMod decls table
-                        refs = refsInDecls sMod decls
-                      in pure (env2, OkC (Built [info] syms refs))
+        case ctxR of
+          ErrC e => pure (env, err "${path}: cannot load package fixity context: ${diagText e}")
+          OkC ctx =>
+            do
+              looked <- fixitiesForCtx env ctx path parsed.parsedFile
+              let
+                env2 = firstOf looked
+              in case secondOf looked of
+                ErrC e => pure (env2, err "${path}: cannot load package fixity context: ${diagText e}")
+                OkC programFixities =>
+                  case parsed.parsedFile of
+                    -- 必须按**程序级** fixity 重排（本文件声明 ++ import 闭包，
+                    -- 本地优先）。只用本地声明会让用到 `+`/`==`/`::` 的文件报 unknown fixity，
+                    -- 然后被当错误跳过 → `vuna map` 静默漏模块。
+                    SourceFile srcHdr imports fx decls0 _ _ _ =>
+                      case reorderProgram (tableOfKeepOpsCst parsed.parsedCst (append programFixities fx)) decls0 of
+                        ErrC e => pure (env2, err "${path}: ${diagText e}")
+                        OkC decls =>
+                          let
+                            sMod = moduleNameOf dir path srcHdr
+                            table = docTableOf srcHdr decls parsed.parsedComments
+                            info = ModuleInfo sMod pkgName path bytes (length decls) (docTableModuleDoc table)
+                            syms = symbolsOfModule sMod decls table
+                            refs = refsInDecls sMod decls
+                          in pure (env2, OkC (Built [info] syms refs))
 
 -- | 跨文件的累积器：模块表、符号表、引用表都倒序累积，最后统一 `reverse`。
 record Acc where
@@ -565,49 +570,223 @@ prependRev : List a -> List a -> List a
 prependRev [] ys = ys
 prependRev (x :: rest) ys = prependRev rest (x :: ys)
 
--- | 内部：按文件顺序索引一个包，返回推进后的 `FixityEnv` 与累积器。
-indexPackage : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => FixityEnv -> String -> String -> List String -> Acc -> Eff r (FixityEnv, Acc)
-indexPackage env dir pkgName files acc = foldFiles env dir pkgName files acc
+-- | 内部：一个索引单元（同一包的连续文件）；上下文在父线程解析，worker 只读文件。
+record IndexUnit where
+  indexUnitPackage : Int
+  indexUnitStart : Int
+  indexUnitDir : String
+  indexUnitName : String
+  indexUnitFiles : List String
+  indexUnitCtx : Check PackageContext
+  indexUnitWeight : Int
+
+-- | 内部：一个 worker 的装载（若干单元，环境在单元与文件之间串接）。
+record IndexBin where
+  indexBinWeight : Int
+  indexBinUnits : List IndexUnit
+
+-- | 内部：每单元文件数上限。单包过大时切开，避免一个包钉住一个 worker；切块各自加载
+-- 一次模块图，所以上限远大于常见包大小（与 lint / doc 同口径）。
+indexChunkSize : Int
+indexChunkSize = 128
+
+-- | 内部：worker 数上限。并行度再高时每个 worker 重载自己的模块图、GC 并行开销会抵消
+-- 收益（与 lint / doc 同口径）。
+indexMaxWorkers : Int
+indexMaxWorkers = 8
+
+-- | 内部：每个单元加载一次模块图的固定开销（折算成字节，参与装箱）。
+indexContextWeight : Int
+indexContextWeight = 200000
+
+-- | 内部：仓库 → 待索引的单元（跳过没有源文件的包）；单元顺序保持包顺序 + 文件顺序。
+resolveIndexUnits : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Eff r (List IndexUnit)
+resolveIndexUnits repo =
+  do
+    dirs <- packageDirs repo
+    resolveIndexUnitsGo 0 dirs []
+
+resolveIndexUnitsGo : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Int -> List (String, String) -> List IndexUnit -> Eff r (List IndexUnit)
+resolveIndexUnitsGo _ [] acc = pure (reverse acc)
+resolveIndexUnitsGo pkgIndex (pair :: rest) acc =
+  do
+    let
+      dir = firstOf pair
+      pkgName = secondOf pair
+    files <- packageSources dir
+    case files of
+      [] => resolveIndexUnitsGo (pkgIndex + 1) rest acc
+      first :: _ =>
+        do
+          ctxR <- contextForFile first
+          units <- mapEff (indexUnitOf pkgIndex dir pkgName ctxR) (chunkIndexFiles indexChunkSize files 0)
+          resolveIndexUnitsGo (pkgIndex + 1) rest (append acc units)
+
+-- | 内部：把文件切成 `(起始下标, 块)`；`fuel` 是剩余块数上界。
+chunkIndexFiles : Int -> List String -> Int -> List (Int, List String)
+chunkIndexFiles size xs start =
+  let
+    width = if size < 1 then 1 else size
+  in chunkIndexFilesGo width (natToInt (length xs)) xs start
+
+chunkIndexFilesGo : Int -> Int -> List String -> Int -> List (Int, List String)
+chunkIndexFilesGo size fuel xs start =
+  if fuel <= 0 || length xs == 0 then
+    []
+  else
+    (start, take size xs) :: chunkIndexFilesGo size (fuel - 1) (drop size xs) (start + size)
+
+-- | 内部：一个块 → 单元；权重 = 块内源字节数（缺失按 0 计）。
+indexUnitOf : Member nFs FsOp r => Int -> String -> String -> Check PackageContext -> (Int, List String) -> Eff r IndexUnit
+indexUnitOf pkgIndex dir pkgName ctxR chunk =
+  do
+    weight <- sumFileSizes (secondOf chunk)
+    pure (IndexUnit pkgIndex (firstOf chunk) dir pkgName (secondOf chunk) ctxR weight)
+
+-- | 内部：一组源文件的字节数之和（只影响装箱权重）。
+sumFileSizes : Member nFs FsOp r => List String -> Eff r Int
+sumFileSizes [] = pure 0
+sumFileSizes (path :: rest) =
+  do
+    more <- sumFileSizes rest
+    sizeR <- fsFileSize path
+    let
+      size =
+        case sizeR of
+          Just n => natToInt n
+          Nothing => 0
+    in pure (size + more)
+
+emptyIndexBins : Int -> List IndexBin
+emptyIndexBins n = if n <= 0 then [] else IndexBin 0 [] :: emptyIndexBins (n - 1)
+
+minIndexBinWeight : List IndexBin -> Int
+minIndexBinWeight [] = 0
+minIndexBinWeight (b :: rest) = minIndexBinWeightGo b.indexBinWeight rest
+
+minIndexBinWeightGo : Int -> List IndexBin -> Int
+minIndexBinWeightGo m [] = m
+minIndexBinWeightGo m (b :: rest) =
+  minIndexBinWeightGo (if b.indexBinWeight < m then b.indexBinWeight else m) rest
+
+placeIndexUnitAt : Int -> Int -> IndexUnit -> List IndexBin -> List IndexBin
+placeIndexUnitAt _ _ _ [] = []
+placeIndexUnitAt target weight u (b :: rest) =
+  if b.indexBinWeight == target then
+    IndexBin (b.indexBinWeight + weight) (append b.indexBinUnits [u]) :: rest
+  else
+    b :: placeIndexUnitAt target weight u rest
+
+placeIndexUnit : IndexUnit -> List IndexBin -> List IndexBin
+placeIndexUnit u bins = placeIndexUnitAt (minIndexBinWeight bins) (indexUnitCost u) u bins
+
+indexUnitCost : IndexUnit -> Int
+indexUnitCost u = u.indexUnitWeight + indexContextWeight
+
+indexBinHasUnits : IndexBin -> Bool
+indexBinHasUnits b =
+  case b.indexBinUnits of
+    [] => False
+    _ => True
+
+-- | 内部：LPT 装箱：大块优先，放进当前最轻的 bin。
+assignIndexBins : Int -> List IndexUnit -> List IndexBin
+assignIndexBins jobs units =
+  let
+    sorted = Sort.sortBy (\a, b => indexUnitCost a >= indexUnitCost b) units
+    bins = foldl (\bs, u => placeIndexUnit u bs) (emptyIndexBins jobs) sorted
+  in filter indexBinHasUnits bins
+
+-- | 内部：一个 worker——单元与文件都顺序索引，`FixityEnv` 在单元与文件之间串接
+-- （同包模块图只加载一次）。
+indexBin : IndexBin -> Eff [FsOp] (List ((Int, Int), Acc))
+indexBin b = indexBinGo b.indexBinUnits emptyFixityEnv []
+
+indexBinGo : List IndexUnit -> FixityEnv -> List ((Int, Int), Acc) -> Eff [FsOp] (List ((Int, Int), Acc))
+indexBinGo [] _ acc = pure (reverse acc)
+indexBinGo (u :: rest) env acc =
+  do
+    stepped <- indexUnitRun u env
+    indexBinGo
+      rest
+      (firstOf stepped)
+      (((u.indexUnitPackage, u.indexUnitStart), secondOf stepped) :: acc)
+
+-- | 内部：按文件顺序索引一个单元（上下文已解析），返回推进后的 `FixityEnv` 与累积器。
+indexUnitRun : IndexUnit -> FixityEnv -> Eff [FsOp] (FixityEnv, Acc)
+indexUnitRun u env =
+  foldFilesCtx u.indexUnitCtx env u.indexUnitDir u.indexUnitName u.indexUnitFiles (Acc [] [] [] [])
 
 -- | 内部：逐文件索引的折叠——`FixityEnv` 与累积器在文件之间传递。
-foldFiles : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => FixityEnv -> String -> String -> List String -> Acc -> Eff r (FixityEnv, Acc)
-foldFiles env dir pkgName [] acc = pure (env, acc)
-foldFiles env dir pkgName (path :: rest) acc =
+foldFilesCtx : Check PackageContext -> FixityEnv -> String -> String -> List String -> Acc -> Eff [FsOp] (FixityEnv, Acc)
+foldFilesCtx _ env _ _ [] acc = pure (env, acc)
+foldFilesCtx ctxR env dir pkgName (path :: rest) acc =
   do
-    stepped <- indexFileInto env dir pkgName path acc
-    foldFiles (firstOf stepped) dir pkgName rest (secondOf stepped)
+    stepped <- indexFileInto ctxR env dir pkgName path acc
+    foldFilesCtx ctxR (firstOf stepped) dir pkgName rest (secondOf stepped)
 
 -- | 内部：索引单个文件并把结果并入累积器；失败时只追加一条警告。
-indexFileInto : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => FixityEnv -> String -> String -> String -> Acc -> Eff r (FixityEnv, Acc)
-indexFileInto env dir pkgName path acc =
+indexFileInto : Check PackageContext -> FixityEnv -> String -> String -> String -> Acc -> Eff [FsOp] (FixityEnv, Acc)
+indexFileInto ctxR env dir pkgName path acc =
   do
-    stepped <- indexOne env dir pkgName path
+    stepped <- indexOne env dir pkgName path ctxR
     case secondOf stepped of
       ErrC e => pure (firstOf stepped, Acc acc.accModules acc.accSymbols acc.accRefs (e :: acc.accWarns))
       OkC b => pure (firstOf stepped, Acc (prependRev b.builtModules acc.accModules) (prependRev b.builtSymbols acc.accSymbols) (prependRev b.builtRefs acc.accRefs) acc.accWarns)
 
--- | 内部：遍历所有 `(目录, 包名)`，包内先展开源码文件再依次索引。
-collectAll : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => FixityEnv -> List (String, String) -> Acc -> Eff r (FixityEnv, Acc)
-collectAll env [] acc = pure (env, acc)
-collectAll env (root :: rest) acc =
-  do
-    let
-      dir = firstOf root
-      pkgName = secondOf root
-    in do
-      files <- packageSources dir
-      stepped <- indexPackage env dir pkgName files acc
-      collectAll (firstOf stepped) rest (secondOf stepped)
+-- | 内部：worker 级失败（host 读写）按 bin 顺序取第一个。
+joinIndexBins : List (Result (List ((Int, Int), Acc))) -> Check (List ((Int, Int), Acc))
+joinIndexBins [] = OkC []
+joinIndexBins (r :: rest) =
+  case r of
+    Err msg => err msg
+    Ok rows =>
+      case joinIndexBins rest of
+        ErrC e => ErrC e
+        OkC more => OkC (append rows more)
 
--- | 全量构建：解析所有源码，不读写缓存；符号表按全名合并多子句。
+-- | 内部：单元键（包下标, 起始文件下标）升序。
+indexKeyLe : (Int, Int) -> (Int, Int) -> Bool
+indexKeyLe a b =
+  let
+    pa = firstOf a
+    pb = firstOf b
+  in if pa < pb then True else if pa > pb then False else secondOf a <= secondOf b
+
+indexRowLe : ((Int, Int), Acc) -> ((Int, Int), Acc) -> Bool
+indexRowLe a b = indexKeyLe (firstOf a) (firstOf b)
+
+-- | 内部：按单元键升序合并各单元的反序累积器。
+--
+-- 全局累积器是「文件逆序」（每个单元内部已是逆序），所以按单元顺序前插：
+-- `acc' = unitAcc ++ acc`。
+mergeIndexAccs : List ((Int, Int), Acc) -> Acc
+mergeIndexAccs rows = mergeIndexAccsGo rows (Acc [] [] [] [])
+
+mergeIndexAccsGo : List ((Int, Int), Acc) -> Acc -> Acc
+mergeIndexAccsGo [] acc = acc
+mergeIndexAccsGo ((_, unitAcc) :: rest) acc =
+  mergeIndexAccsGo
+    rest
+    (Acc (append unitAcc.accModules acc.accModules) (append unitAcc.accSymbols acc.accSymbols) (append unitAcc.accRefs acc.accRefs) (append unitAcc.accWarns acc.accWarns))
+
+-- | 全量构建：解析所有源码，不读写缓存；符号表按全名合并多子句。单元按权重装箱并行。
 export buildIndex : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Eff r (Check Index)
 buildIndex repo =
   do
-    dirs <- packageDirs repo
-    stepped <- collectAll emptyFixityEnv dirs (Acc [] [] [] [])
-    let
-      acc = secondOf stepped
-    in pure (OkC (Index (reverse acc.accModules) (dedupeSymbols (reverse acc.accSymbols)) (reverse acc.accRefs)))
+    units <- resolveIndexUnits repo
+    let bins = assignIndexBins indexMaxWorkers units
+    if length bins == 0 then
+      pure (OkC (Index [] [] []))
+    else
+      do
+        ran <- Par.parMapEff runFsResult indexBin bins
+        case joinIndexBins ran of
+          ErrC e => pure (ErrC e)
+          OkC rows =>
+            let
+              acc = mergeIndexAccs (Sort.sortBy indexRowLe rows)
+            in pure (OkC (Index (reverse acc.accModules) (dedupeSymbols (reverse acc.accSymbols)) (reverse acc.accRefs)))
 
 -- ---------------------------------------------------------------
 -- 缓存：工具会话对象 + 输入寻址载荷
