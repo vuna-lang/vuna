@@ -228,11 +228,31 @@ recordTypeExpr r =
     [] => EVar r.srName r.srRef
     params => EApp (EVar r.srName r.srRef) (map (\p => EVar p r.srRef) params) r.srRef
 
--- 生成的函数体：`f p = p.field`（字段类型由签名钉住，精化期直接产出投影）。
+-- 生成的函数体：`f p = case p of R s0 .. sn => si`。用构造子 case（而不是 `p.f`）
+-- 与手写访问器同形：终止性/尺寸分析按「构造子字段是结构子项」直接下降。
 selectorFunDecl : SelectorRecord -> Field -> Decl
 selectorFunDecl r f =
   DFun
     f.fieldName
     [PVar "p" f.fieldRef]
-    (EField (EVar "p" f.fieldRef) f.fieldName f.fieldRef)
+    (ECase (EVar "p" f.fieldRef) [Alt { altPat = PCon r.srName (selectorArgPats (length r.srFields) f.fieldRef) f.fieldRef, altBody = EVar (selectorArgName (fieldIndexOf f.fieldName r.srFields)) f.fieldRef, altRef = f.fieldRef }] f.fieldRef)
     f.fieldRef
+
+-- case 分支的逐字段 binder：`s0` / `s1` …（局部名，de Bruijn 决定身份）。
+selectorArgPats : Int -> NodeRef -> List Pat
+selectorArgPats n ref = reverse (selectorArgPatsRev n ref)
+
+selectorArgPatsRev : Int -> NodeRef -> List Pat
+selectorArgPatsRev n ref =
+  if n <= 0 then [] else PVar (selectorArgName (n - 1)) ref :: selectorArgPatsRev (n - 1) ref
+
+selectorArgName : Int -> String
+selectorArgName i = "s${strFromInt i}"
+
+fieldIndexOf : String -> List Field -> Int
+fieldIndexOf name fields = fieldIndexOfGo name fields 0
+
+fieldIndexOfGo : String -> List Field -> Int -> Int
+fieldIndexOfGo name [] i = 0
+fieldIndexOfGo name (f :: rest) i =
+  if f.fieldName == name then i else fieldIndexOfGo name rest (i + 1)
