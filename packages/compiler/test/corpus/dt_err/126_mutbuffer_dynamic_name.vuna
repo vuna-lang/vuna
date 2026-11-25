@@ -1,7 +1,0 @@
--- MutBuffer：引入入口的名字必须是字符串字面量。
-import Base.Effect.MutBuffer as MutBuffer
-import Base.Effect.Core as Eff
-import Base.Data.Int
-
-bad : Int
-bad = MutBuffer.withMutBufferPure (strFromInt 1) (pure 0)

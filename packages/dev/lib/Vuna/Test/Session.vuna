@@ -13,12 +13,13 @@
 -- 精化器的 `TC_UnknownConstructorInCase` 误报。因此改用普通记录 `CheckSample` /
 -- `EvalSample`，`Check` 的构造与解构只发生在 [Vuna.Test.InProc]。
 --
--- 会话本身存在 runner 入口用 `MutRef.withMutRef "session"` 引入的命名单元里：状态跨
--- case 复用、生命周期与一次 `runSuite` 相同，外部签名（`Eff r` 的行）显式带上
--- `Named "session" (MutRefOp Session)`，不能逃出该作用域。
+-- 会话本身是 `runSuite` 用 `MutRef.withMutRef` 分配的句柄，作为普通值传给进程内
+-- 探针：状态跨 case 复用、生命周期与一次 `runSuite` 相同；句柄本身可以继续传递或
+-- 存进记录，读写要求行里有 `MutOp` 标记。
 module Vuna.Test.Session where
 
-import Base.Effect.MutRef as MutRef
+import Base.Container.MutRef as MutRef
+import Base.Effect.Mut
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Base.Diag
 import Vuna.Compiler.Driver.Compile
@@ -97,10 +98,10 @@ readBaseIfaces baseDir =
 
 -- | 内部：会话可用性——缓存目录命中就直接用，否则读一次接口并写回（读失败或为空
 -- 给 `Nothing`）。
-ensureSession : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member (Named "session" (MutRefOp Session)) r => String -> Eff r (Maybe (List ModuleIface))
-ensureSession baseDir =
+ensureSession : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member MutOp r => MutRef Session -> String -> Eff r (Maybe (List ModuleIface))
+ensureSession sess baseDir =
   do
-    s <- MutRef.read
+    s <- MutRef.read sess
     if sesDirOf s == baseDir && listLength (sesIfacesOf s) > 0 then
       pure (Just (sesIfacesOf s))
     else
@@ -113,14 +114,14 @@ ensureSession baseDir =
               pure Nothing
             else
               do
-                MutRef.write (Session (sesRootOf s) baseDir ifaces (sesAuxOf s) (sesEvalAuxOf s))
+                MutRef.write sess (Session (sesRootOf s) baseDir ifaces (sesAuxOf s) (sesEvalAuxOf s))
                 pure (Just ifaces)
 
 -- | check 样本：会话不可用返回 `Nothing`（调用方改走全量 `checkFile`）。
-export sessionCheckSample : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r, Member (Named "session" (MutRefOp Session)) r => String -> String -> Eff r (Maybe CheckSample)
-sessionCheckSample baseDir source =
+export sessionCheckSample : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r, Member MutOp r => MutRef Session -> String -> String -> Eff r (Maybe CheckSample)
+sessionCheckSample sess baseDir source =
   do
-    ses <- ensureSession baseDir
+    ses <- ensureSession sess baseDir
     case ses of
       Nothing => pure Nothing
       Just ifaces =>
@@ -131,14 +132,14 @@ sessionCheckSample baseDir source =
             OkC ctx =>
               do
                 text <- fsReadFile source
-                s <- MutRef.read
+                s <- MutRef.read sess
                 result <- dtCheckSourceIncremental ctx source text ifaces [] (sesAuxOf s) False
-                applyCheckResult s baseDir ifaces result
+                applyCheckResult sess s baseDir ifaces result
 
 -- | 内部：把增量 check 结果写回会话并包装成样本；`applied = False` 视为会话不可用
 -- （`Nothing`）。
-applyCheckResult : {r : Row} -> {w : Member (Named "session" (MutRefOp Session)) r} -> Session -> String -> List ModuleIface -> Check (Bool, List Diagnostic, Maybe CheckedPackage, Maybe AuxCache) -> Eff r (Maybe CheckSample)
-applyCheckResult s baseDir ifaces result =
+applyCheckResult : {r : Row} -> {w : Member MutOp r} -> MutRef Session -> Session -> String -> List ModuleIface -> Check (Bool, List Diagnostic, Maybe CheckedPackage, Maybe AuxCache) -> Eff r (Maybe CheckSample)
+applyCheckResult sess s baseDir ifaces result =
   case result of
     ErrC e => pure (Just (CheckSample (Just e) []))
     OkC p =>
@@ -146,14 +147,14 @@ applyCheckResult s baseDir ifaces result =
         pure Nothing
       else
         do
-          MutRef.write (Session (sesRootOf s) baseDir ifaces (secondOf (secondOf (secondOf p))) (sesEvalAuxOf s))
+          MutRef.write sess (Session (sesRootOf s) baseDir ifaces (secondOf (secondOf (secondOf p))) (sesEvalAuxOf s))
           pure (Just (CheckSample Nothing (firstOf (secondOf p))))
 
 -- | interp 样本：会话不可用返回 `Nothing`（调用方改走全量 `dtEvalFile`）。
-export sessionEvalSample : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r, Member (Named "session" (MutRefOp Session)) r => String -> String -> Eff r (Maybe EvalSample)
-sessionEvalSample baseDir source =
+export sessionEvalSample : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r, Member MutOp r => MutRef Session -> String -> String -> Eff r (Maybe EvalSample)
+sessionEvalSample sess baseDir source =
   do
-    ses <- ensureSession baseDir
+    ses <- ensureSession sess baseDir
     case ses of
       Nothing => pure Nothing
       Just ifaces =>
@@ -164,14 +165,14 @@ sessionEvalSample baseDir source =
             OkC ctx =>
               do
                 text <- fsReadFile source
-                s <- MutRef.read
+                s <- MutRef.read sess
                 result <- dtEvalSourceIncremental ctx source text ifaces (sesEvalAuxOf s)
-                applyEvalResult s baseDir ifaces result
+                applyEvalResult sess s baseDir ifaces result
 
 -- | 内部：把增量求值结果写回会话并包装成样本；`applied = False` 视为会话不可用
 -- （`Nothing`）。
-applyEvalResult : {r : Row} -> {w : Member (Named "session" (MutRefOp Session)) r} -> Session -> String -> List ModuleIface -> Check (Bool, String, Maybe AuxCache) -> Eff r (Maybe EvalSample)
-applyEvalResult s baseDir ifaces result =
+applyEvalResult : {r : Row} -> {w : Member MutOp r} -> MutRef Session -> Session -> String -> List ModuleIface -> Check (Bool, String, Maybe AuxCache) -> Eff r (Maybe EvalSample)
+applyEvalResult sess s baseDir ifaces result =
   case result of
     ErrC e => pure (Just (EvalSample (Just e) ""))
     OkC p =>
@@ -179,7 +180,7 @@ applyEvalResult s baseDir ifaces result =
         pure Nothing
       else
         do
-          MutRef.write (Session (sesRootOf s) baseDir ifaces (sesAuxOf s) (secondOf (secondOf p)))
+          MutRef.write sess (Session (sesRootOf s) baseDir ifaces (sesAuxOf s) (secondOf (secondOf p)))
           pure (Just (EvalSample Nothing (firstOf (secondOf p))))
 
 -- | 内部：列表长度。

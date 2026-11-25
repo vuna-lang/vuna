@@ -1,7 +1,8 @@
 -- 回环 e2e：客户端渲染请求 → 内存 duplex → 服务循环 → 客户端读响应。
 import Base
 import Base.Effect.Core
-import Base.Effect.MutRef as MutRef
+import Base.Effect.Mut
+import Base.Container.MutRef as MutRef
 import Http.Client as C
 import Http.Connection as Conn
 import Http.Request as Req
@@ -12,60 +13,46 @@ import Base.Effect.Exit
 
 main : Eff [ConsoleOp, ExitOp] String
 main =
-  MutRef.withMutRef "toServer" "" (
-      MutRef.withMutRef "toClient" "" (
-          do
-            _ <- Conn.writeAllOf clientSide (R.renderRequest (Req.request "GET" "/x"))
-            served <- Conn.serveWith serverSide 1 (handlerOf "got ")
-            exchange <- C.readResponse clientSide ""
-            case failuresOf served exchange of
-              [] => pure ""
-              bad =>
-                do
-                  _ <- consolePrint ("http client failed: " ++ join "; " bad ++ "\n")
-                  _ <- exitWith 1
-                  pure ""
-        )
+  MutRef.withMutRef "" (
+      \toServer =>
+        MutRef.withMutRef "" (
+            \toClient =>
+              do
+                _ <- Conn.writeAllOf (clientSide toServer toClient) (R.renderRequest (Req.request "GET" "/x"))
+                served <- Conn.serveWith (serverSide toServer toClient) 1 (handlerOf "got ")
+                exchange <- C.readResponse (clientSide toServer toClient) ""
+                case failuresOf served exchange of
+                  [] => pure ""
+                  bad =>
+                    do
+                      _ <- consolePrint ("http client failed: " ++ join "; " bad ++ "\n")
+                      _ <- exitWith 1
+                      pure ""
+          )
     )
 
 -- | 写 `toServer`、读 `toClient`；反向的 duplex 见 `serverSide`。
-clientSide : {r : Row} -> {rc : Member (Named "toClient" (MutRefOp String)) r} -> {rs : Member (Named "toServer" (MutRefOp String)) r} -> Conn.Duplex r
-clientSide = Conn.Dup readSomeFromClient writeAllToServer (pure 0)
+clientSide : {r : Row} -> {w : Member MutOp r} -> MutRef String -> MutRef String -> Conn.Duplex r
+clientSide toServer toClient = Conn.Dup (readSome toClient) (writeAll toServer) (pure 0)
 
 -- | 写 `toClient`、读 `toServer`。
-serverSide : {r : Row} -> {rc : Member (Named "toClient" (MutRefOp String)) r} -> {rs : Member (Named "toServer" (MutRefOp String)) r} -> Conn.Duplex r
-serverSide = Conn.Dup readSomeFromServer writeAllToClient (pure 0)
+serverSide : {r : Row} -> {w : Member MutOp r} -> MutRef String -> MutRef String -> Conn.Duplex r
+serverSide toServer toClient = Conn.Dup (readSome toServer) (writeAll toClient) (pure 0)
 
--- | 从 `toClient` 取至多 `n` 字节，余量写回。
-readSomeFromClient : {r : Row} -> {w : Member (Named "toClient" (MutRefOp String)) r} -> Int -> Eff r String
-readSomeFromClient n =
+-- | 从单元取至多 `n` 字节，余量写回。
+readSome : {r : Row} -> {w : Member MutOp r} -> MutRef String -> Int -> Eff r String
+readSome cell n =
   do
-    s <- MutRef.read@toClient
-    MutRef.write@toClient (dropBytes n s)
+    s <- MutRef.read cell
+    MutRef.write cell (dropBytes n s)
     pure (takeBytes n s)
 
--- | 从 `toServer` 取至多 `n` 字节，余量写回。
-readSomeFromServer : {r : Row} -> {w : Member (Named "toServer" (MutRefOp String)) r} -> Int -> Eff r String
-readSomeFromServer n =
+-- | 把整段字节追加到单元。
+writeAll : {r : Row} -> {w : Member MutOp r} -> MutRef String -> String -> Eff r Int
+writeAll cell s =
   do
-    s <- MutRef.read@toServer
-    MutRef.write@toServer (dropBytes n s)
-    pure (takeBytes n s)
-
--- | 把整段字节追加到 `toServer`。
-writeAllToServer : {r : Row} -> {w : Member (Named "toServer" (MutRefOp String)) r} -> String -> Eff r Int
-writeAllToServer s =
-  do
-    cur <- MutRef.read@toServer
-    MutRef.write@toServer (cur ++ s)
-    pure (strLength s)
-
--- | 把整段字节追加到 `toClient`。
-writeAllToClient : {r : Row} -> {w : Member (Named "toClient" (MutRefOp String)) r} -> String -> Eff r Int
-writeAllToClient s =
-  do
-    cur <- MutRef.read@toClient
-    MutRef.write@toClient (cur ++ s)
+    cur <- MutRef.read cell
+    MutRef.write cell (cur ++ s)
     pure (strLength s)
 
 -- | 取前 `n` 字节（不足则整串）。

@@ -1,0 +1,13 @@
+import Base.Effect.Core as Eff
+import Base.Effect.Mut
+import Base.Container.MutRef as MutRef
+import Base.Trait.Monad
+
+main : Eff [] Int
+main =
+  MutRef.withMutRef 10 (\r =>
+      do
+        MutRef.write r 32
+        v <- MutRef.read r
+        pure (v + 1)
+  )

@@ -1,0 +1,14 @@
+-- 局部可变单元（MutRef）：withMutRef 打开标记、write/read 原地读写。
+import Base.Effect.Core as Eff
+import Base.Effect.Mut
+import Base.Container.MutRef as MutRef
+import Base.Trait.Monad
+
+main : Eff [] Int
+main =
+  MutRef.withMutRef 10 (\r =>
+      do
+        MutRef.write r 32
+        x <- MutRef.read r
+        pure (x + 1)
+  )

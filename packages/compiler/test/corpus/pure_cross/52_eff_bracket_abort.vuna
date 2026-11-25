@@ -1,21 +1,21 @@
 -- `bracket` 的 abort 路径：use 里抛异常时 release 仍执行（cleanup 由机器帧的退出钩子跑）。
 import Base.Effect.Core as Eff
-import Base.Effect.Types
+import Base.Effect.Mut
+import Base.Container.MutRef as MutRef
 import Base.Effect.Exn as EffExn
-import Base.Effect.MutRef as MutRef
 import Base.Data.Result as Result
 import Base.Trait.Monad
 
 prog : Int
 prog =
-  MutRef.withMutRefPure "n" 0 (
+  MutRef.withMutRefPure 0 (\counter =>
       do
-        r <- runExn "boom" (bracket (pure 0) (\_ => fmap (\_ => 0) (MutRef.write@n 7)) (\_ => throwExn "boom" "x"))
-        v <- MutRef.read
+        r <- runExn "boom" (bracket (pure 0) (\_ => fmap (\_ => 0) (MutRef.write counter 7)) (\_ => throwExn "boom" "x"))
+        v <- MutRef.read counter
         case r of
           Err _ => pure (v * 10 + 1)
           Ok _ => pure v
-    )
+  )
 
 main : Int
 main = prog

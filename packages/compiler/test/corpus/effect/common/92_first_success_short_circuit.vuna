@@ -1,44 +1,44 @@
 -- `firstSuccess` 命中即停：命中之后的候选动作只构造、不执行；
--- 全部失败时才会逐个执行。用 MutRef 单元记录「候选是否跑过」。
+-- 全部失败时才会逐个执行。用值句柄记录「候选是否跑过」。
 import Prelude
 import Base.Effect.Core as Eff
-import Base.Effect.Types
-import Base.Effect.MutRef as MutRef
+import Base.Effect.Mut
+import Base.Container.MutRef as MutRef
 import Base.Trait.Monad
 
-afterHit : {r : Row} -> {w : Member (Named "hit" (MutRefOp Int)) r} -> Eff r (Maybe Int)
-afterHit =
+afterHit : {r : Row} -> {w : Member MutOp r} -> MutRef Int -> Eff r (Maybe Int)
+afterHit hit =
   do
-    MutRef.write@hit 1
+    MutRef.write hit 1
     pure (Just 8)
 
-failAfter : {r : Row} -> {w : Member (Named "miss" (MutRefOp Int)) r} -> Eff r (Maybe Int)
-failAfter =
+failAfter : {r : Row} -> {w : Member MutOp r} -> MutRef Int -> Eff r (Maybe Int)
+failAfter miss =
   do
-    MutRef.write@miss 1
+    MutRef.write miss 1
     pure Nothing
 
 main : Int
 main =
   runPure (
-      MutRef.withMutRef "hit" 0 (
-          MutRef.withMutRef "miss" 0 (
+      MutRef.withMutRef 0 (\hit =>
+          MutRef.withMutRef 0 (\missCell =>
               do
-                hit <- firstSuccess [pure Nothing, pure (Just 7), afterHit]
-                hitRan <- MutRef.read@hit
-                miss <- firstSuccess [pure Nothing, failAfter]
-                missRan <- MutRef.read@miss
+                found <- firstSuccess [pure Nothing, pure (Just 7), afterHit hit]
+                hitRan <- MutRef.read hit
+                missRes <- firstSuccess [pure Nothing, failAfter missCell]
+                missRan <- MutRef.read missCell
                 pure (
                     (
                       (
                         (
                           (
-                            case hit of
+                            case found of
                               Just n => n
                               Nothing => 0
                           ) * 1000
                         ) + hitRan * 100
-                      ) + (if isNothing miss then 10 else 0)
+                      ) + (if isNothing missRes then 10 else 0)
                     ) + missRan
                   )
             )

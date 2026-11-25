@@ -1,7 +1,0 @@
--- MutVec：作用域里没有向量句柄时，操作调用报 TC_CellNotInScope。
-import Base.Effect.MutVec as MutVec
-import Base.Effect.Core as Eff
-import Base.Data.Fin
-
-bad : Fin 1 -> Eff [] Int
-bad i = MutVec.get i

@@ -1,26 +1,26 @@
 -- 效应基准：每轮 bracket 的 use 都 abort，release（cleanup）恰好执行一次。
 -- 手写 OCaml 对照见 eff_abort.ml（异常 + Fun.protect，同算法）。
--- 计数器用 MutRef 单元（作用域在整轮循环外，cleanup 写它）。
+-- 计数器是值句柄（作用域在整轮循环外，cleanup 写它）。
 import Base.Effect.Core as Eff
-import Base.Effect.Types
+import Base.Effect.Mut
+import Base.Container.MutRef as MutRef
 import Base.Effect.Exn as EffExn
-import Base.Effect.MutRef as MutRef
 import Base.Data.Nat as Nat
 import Base.Data.Result as Result
 
-bump : {r : Row} -> {w : Member (Named "n" (MutRefOp Int)) r} -> Int -> Eff r Int
-bump k =
+bump : {r : Row} -> {w : Member MutOp r} -> MutRef Int -> Int -> Eff r Int
+bump counter k =
   do
-    v <- MutRef.read@n
-    MutRef.write@n (v + 1)
+    v <- MutRef.read counter
+    MutRef.write counter (v + 1)
     pure k
 
-abortOnce : {r : Row} -> {w : Member (Named "n" (MutRefOp Int)) r} -> Int -> Eff r Int
-abortOnce k =
+abortOnce : {r : Row} -> {w : Member MutOp r} -> MutRef Int -> Int -> Eff r Int
+abortOnce counter k =
   do
     _ <-
       runExn "boom" (
-          bracket (pure 0) (\_ => bump 0) (
+          bracket (pure 0) (\_ => bump counter 0) (
               \_ =>
                 do
                   _ <- throwExn "boom" "x"
@@ -29,17 +29,17 @@ abortOnce k =
         )
     pure k
 
-loop : Nat -> Eff [Named "n" (MutRefOp Int)] Int
-loop 0 = pure 0
-loop (Succ m) =
+loop : {r : Row} -> {w : Member MutOp r} -> MutRef Int -> Nat -> Eff r Int
+loop counter 0 = pure 0
+loop counter (Succ m) =
   do
-    _ <- abortOnce m
-    loop m
+    _ <- abortOnce counter m
+    loop counter m
 
 main : Int
 main =
-  MutRef.withMutRefPure "n" 0 (
+  MutRef.withMutRefPure 0 (\counter =>
       do
-        _ <- loop (natFromInt 2000)
-        MutRef.read
-    )
+        _ <- loop counter (natFromInt 2000)
+        MutRef.read counter
+  )

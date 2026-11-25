@@ -55,7 +55,8 @@ import Vuna.Repl.Term
 import Vuna.Search.Query
 import Vuna.Search.Run
 import Vuna.Search.Types
-import Base.Effect.MutRef as MutRef
+import Base.Container.MutRef as MutRef
+import Base.Effect.Mut
 import Base.Data.Pair
 import Base.Effect.Clock as EffClock
 import Base.Effect.Console as EffConsole
@@ -182,6 +183,10 @@ export record ReplState(..) where
   stateToolSession : Maybe ReplToolSession
   -- | 输出汇模式（`True` = 写进请求作用域里的单元，供 server 组响应帧）。
   stateCapture : Bool
+  -- | 本次请求的普通输出汇（`Nothing` = 直接写 stdout）。
+  stateOut : Maybe (MutRef String)
+  -- | 本次请求的错误输出汇（`Nothing` = 直接写 stdout）。
+  stateErr : Maybe (MutRef String)
 
 -- | 一步处理的结果：继续（带新状态）或退出（带退出码）。
 export data ReplOutcome(..) : Type where
@@ -207,7 +212,23 @@ data ReadResult : Type where
 -- | 初始状态：空缓冲、无加载目标与缓存，附带给定的设置、历史、历史文件与输出汇模式。
 initialState : PackageContext -> ReplSettings -> List String -> String -> Bool -> ReplState
 initialState ctx settings history histFile capture =
-  ReplState ctx "" [] "" Nothing 0 "" Nothing settings history histFile Nothing Nothing capture
+  ReplState
+    ctx
+    ""
+    []
+    ""
+    Nothing
+    0
+    ""
+    Nothing
+    settings
+    history
+    histFile
+    Nothing
+    Nothing
+    capture
+    Nothing
+    Nothing
 
 -- | 只替换包上下文。
 withCtx : ReplState -> PackageContext -> ReplState
@@ -227,6 +248,29 @@ withCtx st ctx =
     st.stateAuxCache
     st.stateToolSession
     st.stateCapture
+    st.stateOut
+    st.stateErr
+
+-- | 只替换本次请求的输出汇（server 模式每个请求一份）。
+export withSinks : ReplState -> Maybe (MutRef String) -> Maybe (MutRef String) -> ReplState
+withSinks st out err =
+  ReplState
+    st.stateCtx
+    st.stateImports
+    st.stateDefs
+    st.statePending
+    st.stateBlock
+    st.stateLoadKind
+    st.stateLoadTarget
+    st.stateBrowseIndex
+    st.stateSettings
+    st.stateHistory
+    st.stateHistoryFile
+    st.stateAuxCache
+    st.stateToolSession
+    st.stateCapture
+    out
+    err
 
 -- | 只替换待续输入缓冲。
 withPending : ReplState -> String -> ReplState
@@ -246,6 +290,8 @@ withPending st p =
     st.stateAuxCache
     st.stateToolSession
     st.stateCapture
+    st.stateOut
+    st.stateErr
 
 -- | 只替换 `:{ ... :}` 块缓冲。
 withBlock : ReplState -> Maybe String -> ReplState
@@ -265,6 +311,8 @@ withBlock st b =
     st.stateAuxCache
     st.stateToolSession
     st.stateCapture
+    st.stateOut
+    st.stateErr
 
 -- | 替换定义块列表；定义变化会清掉 termAux 缓存（求值上下文已变）。
 withDefs : ReplState -> List ReplBlock -> ReplState
@@ -284,6 +332,8 @@ withDefs st blocks =
     Nothing
     st.stateToolSession
     st.stateCapture
+    st.stateOut
+    st.stateErr
 
 -- | 替换 import 缓冲；同样清掉 termAux 缓存。
 withImports : ReplState -> String -> ReplState
@@ -303,6 +353,8 @@ withImports st imports =
     Nothing
     st.stateToolSession
     st.stateCapture
+    st.stateOut
+    st.stateErr
 
 -- | 替换上次加载的类型与目标（`:reload` 用）。
 withLoad : ReplState -> Int -> String -> ReplState
@@ -322,6 +374,8 @@ withLoad st kind target =
     st.stateAuxCache
     st.stateToolSession
     st.stateCapture
+    st.stateOut
+    st.stateErr
 
 -- | 只替换设置。
 withSettings : ReplState -> ReplSettings -> ReplState
@@ -341,6 +395,8 @@ withSettings st s =
     st.stateAuxCache
     st.stateToolSession
     st.stateCapture
+    st.stateOut
+    st.stateErr
 
 -- | 只替换 termAux 缓存。
 withAuxCache : ReplState -> Maybe AuxCache -> ReplState
@@ -360,6 +416,8 @@ withAuxCache st a =
     a
     st.stateToolSession
     st.stateCapture
+    st.stateOut
+    st.stateErr
 
 -- | 换工具接口会话（求值路径按需重建 / 复用）。
 withToolSession : ReplState -> Maybe ReplToolSession -> ReplState
@@ -379,6 +437,8 @@ withToolSession st s =
     st.stateAuxCache
     s
     st.stateCapture
+    st.stateOut
+    st.stateErr
 
 -- | 记下会话内索引（只做内存复用；索引本身的跨进程缓存由 `index:<dir>` 节点承担）。
 withBrowseIndex : ReplState -> Index -> ReplState
@@ -398,6 +458,8 @@ withBrowseIndex st idx =
     st.stateAuxCache
     st.stateToolSession
     st.stateCapture
+    st.stateOut
+    st.stateErr
 
 -- | `:load DIR` 的落点：换上下文，清空缓冲 / 加载目标 / 索引 / aux / 会话缓存，保留设置与历史。
 switchedContext : ReplState -> PackageContext -> ReplState
@@ -417,6 +479,8 @@ switchedContext st ctx =
     Nothing
     Nothing
     st.stateCapture
+    st.stateOut
+    st.stateErr
 
 -- | `:load FILE` 的落点：整段源码作为唯一文件块进缓冲，加载目标记为文件。
 loadedFileState : ReplState -> String -> String -> ReplState
@@ -436,6 +500,8 @@ loadedFileState st path source =
     Nothing
     st.stateToolSession
     st.stateCapture
+    st.stateOut
+    st.stateErr
 
 -- | 只替换 `+t`（打印类型）。
 settingsSetPrintTypes : ReplSettings -> Bool -> ReplSettings
@@ -550,24 +616,30 @@ defaultSettings tty =
 -- | 唯一输出出口：交互式写 stdout；server 模式追加到请求作用域里的 `replOut` 单元。
 -- 返回写入长度（stdout 汇取 `consolePrint` 的返回值，capture 汇取字符串长度），
 -- 供 `printImplicitParts` 这类累加用法。
-replEmit : Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r => ReplState -> String -> Eff r Int
+replEmit : Member nConsole ConsoleOp r, Member MutOp r => ReplState -> String -> Eff r Int
 replEmit st s =
   if st.stateCapture then
-    do
-      cur <- MutRef.read@replOut
-      _ <- MutRef.write@replOut (cur ++ s)
-      pure (strLength s)
+    case st.stateOut of
+      Just cell =>
+        do
+          cur <- MutRef.read cell
+          _ <- MutRef.write cell (cur ++ s)
+          pure (strLength s)
+      Nothing => pure 0
   else
     fmap natToInt (consolePrint s)
 
 -- | 错误通道：交互式与 `replEmit` 一样直接写出；server 模式收集到 `replErr` 单元。
-replEmitErr : Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r => ReplState -> String -> Eff r Int
+replEmitErr : Member nConsole ConsoleOp r, Member MutOp r => ReplState -> String -> Eff r Int
 replEmitErr st s =
   if st.stateCapture then
-    do
-      cur <- MutRef.read@replErr
-      _ <- MutRef.write@replErr (cur ++ s)
-      pure (strLength s)
+    case st.stateErr of
+      Just cell =>
+        do
+          cur <- MutRef.read cell
+          _ <- MutRef.write cell (cur ++ s)
+          pure (strLength s)
+      Nothing => pure 0
   else
     fmap natToInt (consolePrint s)
 
@@ -576,19 +648,19 @@ captureMode : ReplState -> Bool
 captureMode st = st.stateCapture
 
 -- | 把一条诊断渲染到错误通道。
-printDiag : Member nFs FsOp r, Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r => ReplState -> Diagnostic -> Eff r Int
+printDiag : Member nFs FsOp r, Member nConsole ConsoleOp r, Member MutOp r => ReplState -> Diagnostic -> Eff r Int
 printDiag st d = printError st (diagText d)
 
 -- | 打印一条红色 `错误: ` 前缀的消息到错误通道。
-printError : Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r => ReplState -> String -> Eff r Int
+printError : Member nConsole ConsoleOp r, Member MutOp r => ReplState -> String -> Eff r Int
 printError st msg = replEmitErr st "${c st "31" "错误: "}${msg}\n"
 
 -- | 打印一条黄色提示到普通输出。
-printHint : Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r => ReplState -> String -> Eff r Int
+printHint : Member nConsole ConsoleOp r, Member MutOp r => ReplState -> String -> Eff r Int
 printHint st msg = replEmit st "${c st "33" msg}\n"
 
 -- | 打印一行普通消息并继续（状态不变）。
-printOk : Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r => ReplState -> String -> Eff r ReplOutcome
+printOk : Member nConsole ConsoleOp r, Member MutOp r => ReplState -> String -> Eff r ReplOutcome
 printOk st msg =
   do
     _ <- replEmit st "${msg}\n"
@@ -608,13 +680,19 @@ startReplSession ctx start capture =
       st0 = initialState ctx settings [] "" capture
     in applyStart st0 start
 
--- | 读出请求作用域里的两个输出单元（普通输出, 错误输出）；交互式模式恒为空串。
-export replSinkDrain : {r : Row} -> {wOut : Member (Named "replOut" (MutRefOp String)) r} -> {wErr : Member (Named "replErr" (MutRefOp String)) r} -> Eff r (String, String)
-replSinkDrain =
-  do
-    out <- MutRef.read@replOut
-    err <- MutRef.read@replErr
-    pure (out, err)
+-- | 读出本次请求的两个输出汇（普通输出, 错误输出）；没有汇时恒为空串。
+export replSinkDrain : {r : Row} -> {w : Member MutOp r} -> ReplState -> Eff r (String, String)
+replSinkDrain st =
+  case st.stateOut of
+    Nothing => pure ("", "")
+    Just out =>
+      case st.stateErr of
+        Nothing => pure ("", "")
+        Just err =>
+          do
+            o <- MutRef.read out
+            e <- MutRef.read err
+            pure (o, e)
 
 -- | 是否还有未完成的输入（待续 pending 或 `:{` 块未闭合）。
 export replPendingOpen : ReplState -> Bool
@@ -625,7 +703,7 @@ replPendingOpen st =
 
 -- | 「输入结束」收尾：pending 完整则提交（等价交互式空行 / Ctrl-D 的补交），
 -- `:{` 块未闭合或仍 `needsMore` 则保持 pending。
-export finishInput : Member nFs FsOp r, Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => ReplState -> Eff r ReplOutcome
+export finishInput : Member nFs FsOp r, Member nConsole ConsoleOp r, Member MutOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => ReplState -> Eff r ReplOutcome
 finishInput st =
   if st.statePending == "" then
     pure (ReplContinue st)
@@ -815,7 +893,7 @@ remember st unit =
     else
       do
         _ <- persistHistory st u
-        pure (ReplState st.stateCtx st.stateImports st.stateDefs st.statePending st.stateBlock st.stateLoadKind st.stateLoadTarget st.stateBrowseIndex st.stateSettings (trimHistory (appendLast st.stateHistory u)) st.stateHistoryFile st.stateAuxCache st.stateToolSession st.stateCapture)
+        pure (ReplState st.stateCtx st.stateImports st.stateDefs st.statePending st.stateBlock st.stateLoadKind st.stateLoadTarget st.stateBrowseIndex st.stateSettings (trimHistory (appendLast st.stateHistory u)) st.stateHistoryFile st.stateAuxCache st.stateToolSession st.stateCapture st.stateOut st.stateErr)
 
 -- | 内部：内存历史最后一条是否等于 `u`（用于连续重复去重）。
 lastHistoryIs : List String -> String -> Bool
@@ -846,7 +924,7 @@ promptRendered st =
 
 -- | 内部：非 tty 路径读输入——先写提示符再读一行；读到空行时多读一行交给 `blankStep`，
 -- 读到 EOF 返回 `ReadEof`。
-readInputPlain : Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r, Member nStdin StdinOp r => ReplState -> Eff r ReadResult
+readInputPlain : Member nConsole ConsoleOp r, Member MutOp r, Member nStdin StdinOp r => ReplState -> Eff r ReadResult
 readInputPlain st =
   do
     _ <- replEmit st (promptRendered st)
@@ -865,7 +943,7 @@ readInputPlain st =
 
 -- | 读一次输入：行编辑启用时走 `editLine`（行编辑不可用则退回 `readInputPlain`），否则
 -- 走 `readInputPlain`。
-readInput : Member nFs FsOp r, Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nStdin StdinOp r => ReplState -> Eff r ReadResult
+readInput : Member nFs FsOp r, Member nConsole ConsoleOp r, Member MutOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nStdin StdinOp r => ReplState -> Eff r ReadResult
 readInput st =
   if editingEnabled st then
     do
@@ -908,11 +986,15 @@ runRepl ctx start =
     let
       st0 = initialState ctx settings history histFile False
     in do
-      withMutRef "replOut" "" (withMutRef "replErr" "" (replStartAndLoop st0 start))
+      replStartAndLoop st0 start
 
--- | 内部：打印 banner、按 `ReplStart` 预加载，再进入主循环（在输出单元的作用域里跑）。
-replStartAndLoop : Member nFs FsOp r, Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nStdin StdinOp r, Member nArgs ArgsOp r => ReplState -> ReplStart -> Eff r Int
-replStartAndLoop st0 start =
+-- | 内部：在 `MutOp` 作用域里跑启动与主循环。
+replStartAndLoop : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nStdin StdinOp r, Member nArgs ArgsOp r => ReplState -> ReplStart -> Eff r Int
+replStartAndLoop st0 start = MutRef.withMutRef "" (\_ => replStartAndLoopIn st0 start)
+
+-- | 内部：打印 banner、按 `ReplStart` 预加载，再进入主循环。
+replStartAndLoopIn : Member nFs FsOp r, Member nConsole ConsoleOp r, Member MutOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nStdin StdinOp r, Member nArgs ArgsOp r => ReplState -> ReplStart -> Eff r Int
+replStartAndLoopIn st0 start =
   do
     _ <- replEmit st0 (bannerText st0)
     started <- applyStart st0 start
@@ -968,7 +1050,7 @@ applyStart st (StartModule m) =
 
 -- | 内部：主循环（每次读入消耗一格 fuel）；EOF 走 `finishAtEof`，Ctrl-C 清空待续与块输入，
 -- 其余行交给 `inputStep` / `blankStep`。
-replLoop : Member nFs FsOp r, Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nStdin StdinOp r, Member nArgs ArgsOp r => Int -> ReplState -> Eff r Int
+replLoop : Member nFs FsOp r, Member nConsole ConsoleOp r, Member MutOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nStdin StdinOp r, Member nArgs ArgsOp r => Int -> ReplState -> Eff r Int
 replLoop fuel st =
   if fuel <= 0 then
     pure 0
@@ -996,7 +1078,7 @@ replLoop fuel st =
 
 -- | 一行输入按当前模式分派：块模式走 `blockStep`，有待续输入走 `pendingStep`，否则走
 -- `lineStep`。
-export inputStep : Member nFs FsOp r, Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => ReplState -> String -> Eff r ReplOutcome
+export inputStep : Member nFs FsOp r, Member nConsole ConsoleOp r, Member MutOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => ReplState -> String -> Eff r ReplOutcome
 inputStep st raw =
   case st.stateBlock of
     Just block => blockStep st block raw
@@ -1005,7 +1087,7 @@ inputStep st raw =
 -- 命令保留行尾空白（`:set prompt X> ` 的尾空格有意义）；历史里存 trim 后的文本。
 -- | 普通行处理：`:{` 进块模式；冒号命令交 `commandStep`；尚未结束的行进续行；
 -- `import ` 追加 import；其余按定义 / 表达式提交。
-lineStep : Member nFs FsOp r, Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => ReplState -> String -> Eff r ReplOutcome
+lineStep : Member nFs FsOp r, Member nConsole ConsoleOp r, Member MutOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => ReplState -> String -> Eff r ReplOutcome
 lineStep st raw =
   let
     line = trim raw
@@ -1027,7 +1109,7 @@ lineStep st raw =
       submitText st2 line
 
 -- | `:{ ... :}` 块收集：原样累积；`:}` 去公共缩进后提交；`:abandon` 放弃；`:q` / `:quit` 退出。
-blockStep : Member nFs FsOp r, Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => ReplState -> String -> String -> Eff r ReplOutcome
+blockStep : Member nFs FsOp r, Member nConsole ConsoleOp r, Member MutOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => ReplState -> String -> String -> Eff r ReplOutcome
 blockStep st block raw =
   if trim raw == ":}" then
     let
@@ -1046,7 +1128,7 @@ blockStep st block raw =
 
 -- | 续行处理：`raw` 原样追加（保留缩进）；`:q` 退出、`:abandon` 放弃；超过
 -- `replMaxPendingLines` 行则报错丢弃；仍不完整或下一行以缩进开头时继续收集，否则提交整段。
-pendingStep : Member nFs FsOp r, Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => ReplState -> String -> Eff r ReplOutcome
+pendingStep : Member nFs FsOp r, Member nConsole ConsoleOp r, Member MutOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => ReplState -> String -> Eff r ReplOutcome
 pendingStep st raw =
   if trim raw == ":q" || trim raw == ":quit" then
     pure (ReplExit 0)
@@ -1074,7 +1156,7 @@ pendingStep st raw =
 
 -- | 空行处理：块内补一个空行继续收集；无 pending 时直接处理 `next`；pending 不完整则保留
 -- 并提示；完整则先提交再处理 `next`。
-blankStep : Member nFs FsOp r, Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => ReplState -> String -> Eff r ReplOutcome
+blankStep : Member nFs FsOp r, Member nConsole ConsoleOp r, Member MutOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => ReplState -> String -> Eff r ReplOutcome
 blankStep st next =
   case st.stateBlock of
     Just block => inputStep (withBlock st (Just "${block}\n")) next
@@ -1096,7 +1178,7 @@ blankStep st next =
             ReplContinue st2 => inputStep st2 next
 
 -- | 内部：EOF 收尾——调用 `finishInput`；仍有未完成输入时报错丢弃并返回 0。
-finishAtEof : Member nFs FsOp r, Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => ReplState -> Eff r Int
+finishAtEof : Member nFs FsOp r, Member nConsole ConsoleOp r, Member MutOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => ReplState -> Eff r Int
 finishAtEof st =
   do
     outcome <- finishInput st
@@ -1114,7 +1196,7 @@ finishAtEof st =
 -- import / 定义
 -- ---------------------------------------------------------------
 -- | 追加一行 `import`：用新缓冲试解析，失败只报 parse error 且不改状态。
-addImport : Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r => ReplState -> String -> Eff r ReplOutcome
+addImport : Member nConsole ConsoleOp r, Member MutOp r => ReplState -> String -> Eff r ReplOutcome
 addImport st line =
   let
     imports2 = "${st.stateImports}${line}\n"
@@ -1127,7 +1209,7 @@ addImport st line =
 
 -- | 定义还是表达式：`bufferProgram + text` 能解析成无模块头的顶层块就追加定义，否则按表达式
 -- 求值。缺签名的 DFun 在追加路径里走自动签名（写回后复查，失败回滚）。
-submitText : Member nFs FsOp r, Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => ReplState -> String -> Eff r ReplOutcome
+submitText : Member nFs FsOp r, Member nConsole ConsoleOp r, Member MutOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => ReplState -> String -> Eff r ReplOutcome
 submitText st text =
   case parseSource replTempFile "${bufferProgram st}${text}\n" of
     OkC (SourceFile hdr imp fx decls _ _ _) =>
@@ -1138,7 +1220,7 @@ submitText st text =
 
 -- | 内部：追加定义块——先做重定义清理，缺签名的 DFun 交给 `inferAndAppend`；
 -- 解析不出顶层声明时退回表达式求值。
-appendDecls : Member nFs FsOp r, Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => ReplState -> String -> Eff r ReplOutcome
+appendDecls : Member nFs FsOp r, Member nConsole ConsoleOp r, Member MutOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => ReplState -> String -> Eff r ReplOutcome
 appendDecls st text =
   case parseSource replTempFile text of
     OkC (SourceFile Nothing _ _ newDecls _ _ _) =>
@@ -1198,7 +1280,7 @@ missingTargets decls existing =
 
 -- | 内部：对缺签名的定义跑自动推断，把签名插到**对应定义**之前后复查；推断或复查失败都
 -- 回到 `stOrig` 并提示手写签名。
-inferAndAppend : Member nFs FsOp r, Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r, Member nEnv EnvOp r, Member nProcess ProcessOp r => ReplState -> ReplState -> String -> List String -> Eff r ReplOutcome
+inferAndAppend : Member nFs FsOp r, Member nConsole ConsoleOp r, Member MutOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => ReplState -> ReplState -> String -> List String -> Eff r ReplOutcome
 inferAndAppend stOrig stRemoved text targets =
   let
     ctx = stRemoved.stateCtx
@@ -1362,7 +1444,7 @@ evalExprInfoRebuild st program expr =
 -- ---------------------------------------------------------------
 -- | 按表达式处理一段输入：先精化求值；顶层类型是动作类型（`Eff r a`）时改走 `evalIO`
 -- 临时编译运行，否则直接打印求值结果。清空待续输入，并把本次会话与 aux 缓存写回状态。
-evalText : Member nFs FsOp r, Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => ReplState -> String -> Eff r ReplOutcome
+evalText : Member nFs FsOp r, Member nConsole ConsoleOp r, Member MutOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => ReplState -> String -> Eff r ReplOutcome
 evalText st text =
   do
     start <- clockNow
@@ -1399,12 +1481,12 @@ evalText st text =
                       pure (ReplContinue (withPending st2 ""))
 
 -- | 内部：`+t` 打开时按 `  :: <类型>` 压暗打印一行类型。
-printTypeLine : Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r => ReplState -> String -> Eff r Int
+printTypeLine : Member nConsole ConsoleOp r, Member MutOp r => ReplState -> String -> Eff r Int
 printTypeLine st ty =
   if st.stateSettings.settingPrintTypes then replEmit st "${c st "2" "  :: ${ty}"}\n" else pure 0
 
 -- | 内部：`+s` 打开时打印自 `start` 起的耗时（微秒换算成毫秒，不足 1 ms 显示 `<1 ms`）。
-printTiming : Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r, Member nClock ClockOp r => ReplState -> Int -> Eff r Int
+printTiming : Member nConsole ConsoleOp r, Member MutOp r, Member nClock ClockOp r => ReplState -> Int -> Eff r Int
 printTiming st start =
   if st.stateSettings.settingTiming then
     do
@@ -1420,7 +1502,7 @@ printTiming st start =
 -- | 执行动作表达式：server 模式或已有 `main` 时拒绝；签名优先取缓冲里的源码签名
 -- （带行动作的 canonical 类型文本不可回读），Nil 行动作可直接用 canonical 文本；
 -- 合成 `main : <签名>` + `main = <表达式>` 临时编译运行，非零退出码会提示并作为返回值。
-evalIO : Member nFs FsOp r, Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => ReplState -> String -> String -> Eff r Int
+evalIO : Member nFs FsOp r, Member nConsole ConsoleOp r, Member MutOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => ReplState -> String -> String -> Eff r Int
 evalIO st text tyText =
   if captureMode st then
     do
@@ -1446,7 +1528,7 @@ evalIO st text tyText =
             pure 0
 
 -- | 内部：按源码签名（`sigText`）合成入口并运行（`tyText` 只用于补 import 与结果打印判定）。
-evalIOWith : Member nFs FsOp r, Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => ReplState -> String -> String -> String -> Eff r Int
+evalIOWith : Member nFs FsOp r, Member nConsole ConsoleOp r, Member MutOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => ReplState -> String -> String -> String -> Eff r Int
 evalIOWith st text sigText tyText =
   let
     source = "${ioTypeImports st tyText}${bufferProgram st}\nmain : ${sigText}\nmain = ${text}\n"
@@ -1712,7 +1794,7 @@ typeOpHint text =
         "运算符不能直接作前缀表达式；加括号当值用：`:type (${op})`"
 
 -- | 内部：有提示时打印一行黄色 `提示: ...`。
-printTypeOpHint : Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r => ReplState -> String -> Eff r Int
+printTypeOpHint : Member nConsole ConsoleOp r, Member MutOp r => ReplState -> String -> Eff r Int
 printTypeOpHint st text =
   let
     hint = typeOpHint text
@@ -1742,7 +1824,7 @@ inReplBuffer st name =
 -- | `:typeinfo` 的文档部分：简单名字且不在 REPL 缓冲时按需构建索引（与 `:info` 同一路径），
 -- 打印首个非空 docstring；base-only 上下文、索引失败或找不到符号时静默跳过。
 -- 返回可能已写入索引缓存的状态。
-printTypeDoc : Member nFs FsOp r, Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => ReplState -> String -> Eff r ReplState
+printTypeDoc : Member nFs FsOp r, Member nConsole ConsoleOp r, Member MutOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => ReplState -> String -> Eff r ReplState
 printTypeDoc st text =
   let
     name = trim text
@@ -1769,13 +1851,13 @@ printTypeDoc st text =
                       pure st2
 
 -- | 内部：打印符号列表里第一个带 docstring 的符号文档。
-printFirstDoc : Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r => ReplState -> List Sym -> Eff r Int
+printFirstDoc : Member nConsole ConsoleOp r, Member MutOp r => ReplState -> List Sym -> Eff r Int
 printFirstDoc st [] = pure 0
 printFirstDoc st (sym :: rest) =
   if symDoc sym == "" then printFirstDoc st rest else printDocText st (symDoc sym)
 
 -- | 内部：按 docstring 版式打印（首行 `-- | `，其余行缩进对齐）。
-printDocText : Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r => ReplState -> String -> Eff r Int
+printDocText : Member nConsole ConsoleOp r, Member MutOp r => ReplState -> String -> Eff r Int
 printDocText st doc =
   case lines doc of
     [] => pure 0
@@ -1785,7 +1867,7 @@ printDocText st doc =
         printDocRest st rest
 
 -- | 内部：打印 docstring 的续行。
-printDocRest : Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r => ReplState -> List String -> Eff r Int
+printDocRest : Member nConsole ConsoleOp r, Member MutOp r => ReplState -> List String -> Eff r Int
 printDocRest st [] = pure 0
 printDocRest st (line :: rest) =
   do
@@ -1793,7 +1875,7 @@ printDocRest st (line :: rest) =
     printDocRest st rest
 
 -- | 内部：打印 `隐式参数：` 段落；没有隐式参数时打印 `（无隐式参数）`。
-printImplicitParts : Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r => ReplState -> List String -> Eff r Int
+printImplicitParts : Member nConsole ConsoleOp r, Member MutOp r => ReplState -> List String -> Eff r Int
 printImplicitParts st [] = replEmit st "${c st "2" "  （无隐式参数）"}\n"
 printImplicitParts st segs =
   do
@@ -1802,7 +1884,7 @@ printImplicitParts st segs =
     pure (header + rest)
 
 -- | 内部：逐行着色打印隐式参数段。
-printImplicitSegs : Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r => ReplState -> List String -> Eff r Int
+printImplicitSegs : Member nConsole ConsoleOp r, Member MutOp r => ReplState -> List String -> Eff r Int
 printImplicitSegs st [] = pure 0
 printImplicitSegs st (seg :: rest) =
   do
@@ -1811,7 +1893,7 @@ printImplicitSegs st (seg :: rest) =
 
 -- | `:type EXPR`：只打印 zonk 后的类型（不求值、不执行效果）。类型构造子（`Maybe`）作为项
 -- 参与表达式精化，因此输出的是它的 kind；限定名同理（需先 import）。参数为空时给用法。
-typeStep : Member nFs FsOp r, Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => ReplState -> String -> Eff r ReplOutcome
+typeStep : Member nFs FsOp r, Member nConsole ConsoleOp r, Member MutOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => ReplState -> String -> Eff r ReplOutcome
 typeStep st exprText =
   if exprText == "" then
     commandUsage st ":type"
@@ -1842,7 +1924,7 @@ typeStep st exprText =
 
 -- | `:typeinfo`（别名 `:ti`）：主行只显示显式部分，隐式 binder 单独列出；简单名字在工作区内
 -- 再附 docstring（索引不可用时静默跳过）。
-typeInfoStep : Member nFs FsOp r, Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => ReplState -> String -> Eff r ReplOutcome
+typeInfoStep : Member nFs FsOp r, Member nConsole ConsoleOp r, Member MutOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => ReplState -> String -> Eff r ReplOutcome
 typeInfoStep st exprText =
   if exprText == "" then
     commandUsage st ":typeinfo"
@@ -1880,11 +1962,11 @@ typeInfoStep st exprText =
 -- 命令分发
 -- ---------------------------------------------------------------
 -- | 命令入口：展开别名并分派；给 `commandStepFuel` 16 步 fuel（`:again` 会重入）。
-commandStep : Member nFs FsOp r, Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => ReplState -> String -> Eff r ReplOutcome
+commandStep : Member nFs FsOp r, Member nConsole ConsoleOp r, Member MutOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => ReplState -> String -> Eff r ReplOutcome
 commandStep st cmd = commandStepFuel 16 st cmd
 
 -- | 内部：展开别名后按命令名分派；fuel 用尽时静默继续（不改状态）。
-commandStepFuel : Member nFs FsOp r, Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Int -> ReplState -> String -> Eff r ReplOutcome
+commandStepFuel : Member nFs FsOp r, Member nConsole ConsoleOp r, Member MutOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Int -> ReplState -> String -> Eff r ReplOutcome
 commandStepFuel fuel st cmd =
   if fuel <= 0 then
     pure (ReplContinue st)
@@ -1938,7 +2020,7 @@ commandStepFuel fuel st cmd =
         unknownCommand st cmd
 
 -- | 内部：未知命令报错，并附上 `suggestCommand` 的前缀提示。
-unknownCommand : Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r => ReplState -> String -> Eff r ReplOutcome
+unknownCommand : Member nConsole ConsoleOp r, Member MutOp r => ReplState -> String -> Eff r ReplOutcome
 unknownCommand st cmd =
   let
     (name, rest) = splitFirst cmd
@@ -2012,11 +2094,11 @@ usageOf name =
     Nothing => "${name} …"
 
 -- | 打印某命令的用法行并继续。
-commandUsage : Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r => ReplState -> String -> Eff r ReplOutcome
+commandUsage : Member nConsole ConsoleOp r, Member MutOp r => ReplState -> String -> Eff r ReplOutcome
 commandUsage st name = printOk st "用法: ${usageOf name}"
 
 -- | `:help`：无参数打印总帮助，有参数打印该命令用法（参数可省略前导 `:`）。
-helpStep : Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r => ReplState -> String -> Eff r ReplOutcome
+helpStep : Member nConsole ConsoleOp r, Member MutOp r => ReplState -> String -> Eff r ReplOutcome
 helpStep st arg =
   if arg == "" then
     printOk st replHelp
@@ -2057,7 +2139,7 @@ replHelp = """命令：
 -- :reset / :abandon
 -- ---------------------------------------------------------------
 -- | `:reset`：只清缓冲（定义 / import / 加载目标 / aux），保留包上下文、索引与会话缓存。
-resetStep : Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r => ReplState -> Eff r ReplOutcome
+resetStep : Member nConsole ConsoleOp r, Member MutOp r => ReplState -> Eff r ReplOutcome
 resetStep st =
   let
     st2 =
@@ -2076,12 +2158,14 @@ resetStep st =
         Nothing
         st.stateToolSession
         st.stateCapture
+        st.stateOut
+        st.stateErr
   in do
     _ <- printOk st2 "已清空"
     pure (ReplContinue st2)
 
 -- | `:abandon`：放弃当前待续输入或 `:{` 块；两者都没有时只提示。
-abandonStep : Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r => ReplState -> Eff r ReplOutcome
+abandonStep : Member nConsole ConsoleOp r, Member MutOp r => ReplState -> Eff r ReplOutcome
 abandonStep st =
   case st.stateBlock of
     Nothing =>
@@ -2094,7 +2178,7 @@ abandonStep st =
     Just block => abandonNow st
 
 -- | 内部：清空待续与块输入并提示已放弃。
-abandonNow : Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r => ReplState -> Eff r ReplOutcome
+abandonNow : Member nConsole ConsoleOp r, Member MutOp r => ReplState -> Eff r ReplOutcome
 abandonNow st =
   do
     _ <- printHint st "已放弃当前输入"
@@ -2105,7 +2189,7 @@ abandonNow st =
 -- ---------------------------------------------------------------
 -- | `:load`：先按路径存在性判断——目录切换包上下文、文件整段载入；不存在且形如模块名时
 -- 按模块 import；都不是则报错。
-loadStep : Member nFs FsOp r, Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r, Member nEnv EnvOp r, Member nProcess ProcessOp r => ReplState -> String -> Eff r ReplOutcome
+loadStep : Member nFs FsOp r, Member nConsole ConsoleOp r, Member MutOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => ReplState -> String -> Eff r ReplOutcome
 loadStep st arg =
   if arg == "" then
     commandUsage st ":load"
@@ -2124,7 +2208,7 @@ loadStep st arg =
           pure (ReplContinue st)
 
 -- | 内部：载入文件并打印 `<verb> <path>（N 个定义）`；失败只打印诊断。
-loadFileStep : Member nFs FsOp r, Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r => ReplState -> String -> String -> Eff r ReplOutcome
+loadFileStep : Member nFs FsOp r, Member nConsole ConsoleOp r, Member MutOp r => ReplState -> String -> String -> Eff r ReplOutcome
 loadFileStep st verb path =
   do
     loaded <- doLoadFile st path
@@ -2154,7 +2238,7 @@ doLoadFile st path =
       )
 
 -- | 内部：导入模块并打印 `<verb> <模块名>`；失败只打印诊断。
-loadModuleStep : Member nFs FsOp r, Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r, Member nEnv EnvOp r, Member nProcess ProcessOp r => ReplState -> String -> String -> Eff r ReplOutcome
+loadModuleStep : Member nFs FsOp r, Member nConsole ConsoleOp r, Member MutOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => ReplState -> String -> String -> Eff r ReplOutcome
 loadModuleStep st m verb =
   do
     loaded <- doLoadModule st m
@@ -2179,7 +2263,7 @@ doLoadModule st m =
           OkC _ =>
             let
               imports2 = if importAlready st.stateImports m then st.stateImports else "${st.stateImports}\nimport ${m}\n"
-              st2 = ReplState st.stateCtx imports2 st.stateDefs st.statePending st.stateBlock 2 m st.stateBrowseIndex st.stateSettings st.stateHistory st.stateHistoryFile Nothing st.stateToolSession st.stateCapture
+              st2 = ReplState st.stateCtx imports2 st.stateDefs st.statePending st.stateBlock 2 m st.stateBrowseIndex st.stateSettings st.stateHistory st.stateHistoryFile Nothing st.stateToolSession st.stateCapture st.stateOut st.stateErr
             in OkC st2
       )
 
@@ -2188,7 +2272,7 @@ importAlready : String -> String -> Bool
 importAlready imports m = memName "import ${m}" (map (\l => trim l) (lines imports))
 
 -- | 内部：切换包上下文并提示；失败只打印诊断。
-loadDirStep : Member nFs FsOp r, Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r, Member nEnv EnvOp r => ReplState -> String -> Eff r ReplOutcome
+loadDirStep : Member nFs FsOp r, Member nConsole ConsoleOp r, Member MutOp r, Member nEnv EnvOp r => ReplState -> String -> Eff r ReplOutcome
 loadDirStep st dir =
   do
     loaded <- doLoadDir st dir
@@ -2211,7 +2295,7 @@ doLoadDir st dir =
       )
 
 -- | `:reload`：按上次加载类型重新读文件或重新校验模块；还没 `:load` 过时报错。
-reloadStep : Member nFs FsOp r, Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r, Member nEnv EnvOp r, Member nProcess ProcessOp r => ReplState -> String -> Eff r ReplOutcome
+reloadStep : Member nFs FsOp r, Member nConsole ConsoleOp r, Member MutOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => ReplState -> String -> Eff r ReplOutcome
 reloadStep st arg =
   if trim arg /= "" then
     commandUsage st ":reload"
@@ -2245,7 +2329,7 @@ isWordChar c = c >= 48 && c <= 57 || c >= 65 && c <= 90 || c >= 97 && c <= 122 |
 -- ---------------------------------------------------------------
 -- | `:browse` / `:info` / `:search` 的索引来源：优先复用会话缓存；否则经 `loadOrBuildCheap`
 -- 构建（索引节点命中就从 blob 解码、未命中才扫描重建并写回），不在任何 vuna workspace 内时报错。
-ensureIndex : Member nFs FsOp r, Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => ReplState -> Eff r (Check (Index, ReplState))
+ensureIndex : Member nFs FsOp r, Member nConsole ConsoleOp r, Member MutOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => ReplState -> Eff r (Check (Index, ReplState))
 ensureIndex st =
   case st.stateBrowseIndex of
     Just idx => pure (OkC (idx, st))
@@ -2265,7 +2349,7 @@ ensureIndex st =
                 OkC idx => pure (OkC (idx, withBrowseIndex st idx))
 
 -- | `:browse`：不带参数列出模块，带参数打印该模块的接口。
-browseStep : Member nFs FsOp r, Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => ReplState -> String -> Eff r ReplOutcome
+browseStep : Member nFs FsOp r, Member nConsole ConsoleOp r, Member MutOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => ReplState -> String -> Eff r ReplOutcome
 browseStep st arg =
   do
     ensured <- ensureIndex st
@@ -2286,7 +2370,7 @@ browseStep st arg =
             OkC text => printOk st2 text
 
 -- | `:info`：先查 REPL 缓冲的绑定类型，命中就标 `-- REPL`；否则查源码索引。
-infoStep : Member nFs FsOp r, Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => ReplState -> String -> Eff r ReplOutcome
+infoStep : Member nFs FsOp r, Member nConsole ConsoleOp r, Member MutOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => ReplState -> String -> Eff r ReplOutcome
 infoStep st name =
   if name == "" then
     commandUsage st ":info"
@@ -2304,7 +2388,7 @@ infoStep st name =
         ErrC e => infoFromIndex st name
 
 -- | 内部：`:info` 的索引进路——按名字查符号并逐条打印类型 / 文档 / 位置。
-infoFromIndex : Member nFs FsOp r, Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => ReplState -> String -> Eff r ReplOutcome
+infoFromIndex : Member nFs FsOp r, Member nConsole ConsoleOp r, Member MutOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => ReplState -> String -> Eff r ReplOutcome
 infoFromIndex st name =
   do
     ensured <- ensureIndex st
@@ -2325,7 +2409,7 @@ infoFromIndex st name =
               pure (ReplContinue st2)
 
 -- | 内部：逐个打印符号信息（每个符号一个多行块）。
-printSymInfos : Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r => ReplState -> Index -> List Sym -> Eff r Int
+printSymInfos : Member nConsole ConsoleOp r, Member MutOp r => ReplState -> Index -> List Sym -> Eff r Int
 printSymInfos st idx [] = pure 0
 printSymInfos st idx (s :: rest) =
   do
@@ -2351,7 +2435,7 @@ modulePathOf idx m =
     [] => "?"
 
 -- | `:search`：解析可选模式后检索，最多打印 20 条；无结果时给提示。
-searchStep : Member nFs FsOp r, Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => ReplState -> String -> Eff r ReplOutcome
+searchStep : Member nFs FsOp r, Member nConsole ConsoleOp r, Member MutOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => ReplState -> String -> Eff r ReplOutcome
 searchStep st arg =
   if arg == "" then
     commandUsage st ":search"
@@ -2406,7 +2490,7 @@ runSearchHits idx mode query =
     OkC (searchNameDoc idx query False False)
 
 -- | 内部：逐条打印检索命中。
-printHits : Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r => ReplState -> List SearchHit -> Eff r Int
+printHits : Member nConsole ConsoleOp r, Member MutOp r => ReplState -> List SearchHit -> Eff r Int
 printHits st [] = pure 0
 printHits st (h :: rest) =
   do
@@ -2417,7 +2501,7 @@ printHits st (h :: rest) =
 -- :defs / :imports / :delete
 -- ---------------------------------------------------------------
 -- | `:defs`：列出缓冲里每个定义块的姓名与类型；类型解析失败时退化为只列名字。
-defsStep : Member nFs FsOp r, Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r, Member nEnv EnvOp r, Member nProcess ProcessOp r => ReplState -> Eff r ReplOutcome
+defsStep : Member nFs FsOp r, Member nConsole ConsoleOp r, Member MutOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => ReplState -> Eff r ReplOutcome
 defsStep st =
   do
     typesR <- bindingTypes st.stateCtx (bufferProgram st)
@@ -2440,7 +2524,7 @@ defsStep st =
             pure (ReplContinue st)
 
 -- | 内部：逐个定义块打印名字，返回打印总数（0 表示缓冲为空）。
-printBlockNames : Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r => ReplState -> List (String, String) -> List ReplBlock -> Eff r Int
+printBlockNames : Member nConsole ConsoleOp r, Member MutOp r => ReplState -> List (String, String) -> List ReplBlock -> Eff r Int
 printBlockNames st types [] = pure 0
 printBlockNames st types (b :: rest) =
   let
@@ -2451,7 +2535,7 @@ printBlockNames st types (b :: rest) =
     pure (n1 + n2)
 
 -- | 内部：打印一个块内的一批名字（查不到类型给 `?`，文件块标 `(文件)`），返回条数。
-printNames : Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r => ReplState -> List (String, String) -> ReplBlock -> List String -> Eff r Int
+printNames : Member nConsole ConsoleOp r, Member MutOp r => ReplState -> List (String, String) -> ReplBlock -> List String -> Eff r Int
 printNames st types b [] = pure 0
 printNames st types b (name :: rest) =
   let
@@ -2486,7 +2570,7 @@ implicitImportNames st =
           )
 
 -- | `:imports`：列出显式 import 与隐式自动导入的 Prelude；都没有时给提示。
-importsStep : Member nFs FsOp r, Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r => ReplState -> Eff r ReplOutcome
+importsStep : Member nFs FsOp r, Member nConsole ConsoleOp r, Member MutOp r => ReplState -> Eff r ReplOutcome
 importsStep st =
   do
     imps <- implicitImportNames st
@@ -2504,7 +2588,7 @@ importsStep st =
         pure (ReplContinue st)
 
 -- | `:delete`：移除含该名字的定义块；文件来源的块拒绝删除，找不到时报错。
-deleteStep : Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r => ReplState -> String -> Eff r ReplOutcome
+deleteStep : Member nConsole ConsoleOp r, Member MutOp r => ReplState -> String -> Eff r ReplOutcome
 deleteStep st name =
   if name == "" then
     commandUsage st ":delete"
@@ -2529,7 +2613,7 @@ deleteStep st name =
 -- ---------------------------------------------------------------
 -- | `:set`：无参数打印当前设置；`+t` / `-t`、`+s` / `-s` 开关打印类型与耗时；`color` /
 -- `editing` / `prompt` 走各自子处理。
-setStep : Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r, Member nEnv EnvOp r => ReplState -> String -> Eff r ReplOutcome
+setStep : Member nConsole ConsoleOp r, Member MutOp r, Member nEnv EnvOp r => ReplState -> String -> Eff r ReplOutcome
 setStep st argRaw =
   let
     arg = trimLeftSpaces argRaw
@@ -2562,21 +2646,21 @@ setStep st argRaw =
         pure (ReplContinue st)
 
 -- | 内部：设置 `+t` 并回报。
-setPrintTypes : Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r => ReplState -> Bool -> Eff r ReplOutcome
+setPrintTypes : Member nConsole ConsoleOp r, Member MutOp r => ReplState -> Bool -> Eff r ReplOutcome
 setPrintTypes st v =
   do
     _ <- printOk st "+t ${onOff v}"
     pure (ReplContinue (withSettings st (settingsSetPrintTypes st.stateSettings v)))
 
 -- | 内部：设置 `+s` 并回报。
-setTiming : Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r => ReplState -> Bool -> Eff r ReplOutcome
+setTiming : Member nConsole ConsoleOp r, Member MutOp r => ReplState -> Bool -> Eff r ReplOutcome
 setTiming st v =
   do
     _ <- printOk st "+s ${onOff v}"
     pure (ReplContinue (withSettings st (settingsSetTiming st.stateSettings v)))
 
 -- | 内部：设置 `color` 模式（auto / on / off），按新模式重算实际着色开关。
-setColorOpt : Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r, Member nEnv EnvOp r => ReplState -> String -> Eff r ReplOutcome
+setColorOpt : Member nConsole ConsoleOp r, Member MutOp r, Member nEnv EnvOp r => ReplState -> String -> Eff r ReplOutcome
 setColorOpt st modeText =
   case parseMode modeText of
     Nothing =>
@@ -2590,7 +2674,7 @@ setColorOpt st modeText =
         pure (ReplContinue (withSettings st (settingsSetColor st.stateSettings mode on)))
 
 -- | 内部：设置 `editing` 模式；非 tty 下选 on 时额外提示不会生效。
-setEditingOpt : Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r => ReplState -> String -> Eff r ReplOutcome
+setEditingOpt : Member nConsole ConsoleOp r, Member MutOp r => ReplState -> String -> Eff r ReplOutcome
 setEditingOpt st modeText =
   case parseMode modeText of
     Nothing =>
@@ -2626,7 +2710,7 @@ onOff True = "on"
 onOff False = "off"
 
 -- | 内部：打印当前设置清单（`+t` / `+s` / `editing` / `color` / `prompt`）。
-printSettings : Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r => ReplState -> Eff r ReplOutcome
+printSettings : Member nConsole ConsoleOp r, Member MutOp r => ReplState -> Eff r ReplOutcome
 printSettings st =
   let
     s = st.stateSettings
@@ -2646,7 +2730,7 @@ printSettings st =
 -- :history / :again / :!
 -- ---------------------------------------------------------------
 -- | `:history`：按从 1 开始的编号列出历史单元；空历史给提示。
-historyStep : Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r => ReplState -> Eff r ReplOutcome
+historyStep : Member nConsole ConsoleOp r, Member MutOp r => ReplState -> Eff r ReplOutcome
 historyStep st =
   if lenInt st.stateHistory == 0 then
     printOk st (c st "2" "（历史为空）")
@@ -2656,7 +2740,7 @@ historyStep st =
       pure (ReplContinue st)
 
 -- | 内部：从编号 `i` 起逐条打印历史。
-printHistory : Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r => ReplState -> Int -> List String -> Eff r Int
+printHistory : Member nConsole ConsoleOp r, Member MutOp r => ReplState -> Int -> List String -> Eff r Int
 printHistory st i [] = pure 0
 printHistory st i (unit :: rest) =
   do
@@ -2671,7 +2755,7 @@ historyLine unit =
     first :: rest => if lenInt rest == 0 then first else "${first} …"
 
 -- | `:again N`：按编号取出历史单元重新执行（命令走命令分派，其余按定义 / 表达式提交）。
-againStep : Member nFs FsOp r, Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Int -> ReplState -> String -> Eff r ReplOutcome
+againStep : Member nFs FsOp r, Member nConsole ConsoleOp r, Member MutOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Int -> ReplState -> String -> Eff r ReplOutcome
 againStep fuel st arg =
   if arg == "" then
     commandUsage st ":again"
@@ -2699,7 +2783,7 @@ nthHistoryGo i n [] = Nothing
 nthHistoryGo i n (x :: rest) = if i == n then Just x else nthHistoryGo (i + 1) n rest
 
 -- | 内部：执行一个历史单元：冒号命令交给命令分派，其余按定义 / 表达式提交；fuel 用尽即停下。
-processUnit : Member nFs FsOp r, Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Int -> ReplState -> String -> Eff r ReplOutcome
+processUnit : Member nFs FsOp r, Member nConsole ConsoleOp r, Member MutOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Int -> ReplState -> String -> Eff r ReplOutcome
 processUnit fuel st unit =
   if fuel <= 0 then
     pure (ReplContinue st)
@@ -2720,7 +2804,7 @@ parseDigits (c :: rest) acc =
 
 -- | `:! CMD`：通过 `sh -c` 执行 shell 命令；server 模式拒绝（子进程会污染协议 stdout），
 -- 非零退出码只提示不退出。
-shellStep : Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r, Member nProcess ProcessOp r => ReplState -> String -> Eff r ReplOutcome
+shellStep : Member nConsole ConsoleOp r, Member MutOp r, Member nProcess ProcessOp r => ReplState -> String -> Eff r ReplOutcome
 shellStep st cmd =
   if cmd == "" then
     commandUsage st ":!"

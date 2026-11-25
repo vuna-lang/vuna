@@ -1,6 +1,0 @@
--- MutRef：作用域里没有引入单元时 `read` 报 TC_CellNotInScope。
-import Base.Effect.MutRef as MutRef
-import Base.Effect.Types
-
-bad : Eff [] Int
-bad = MutRef.read

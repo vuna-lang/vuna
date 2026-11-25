@@ -1,22 +1,24 @@
--- MutRef：两个同类型单元用 `@name` 消歧；跨函数经行条目传递。
-import Base.Effect.MutRef as MutRef
+-- MutRef：两个单元是普通值；跨函数传句柄，读写要求 `MutOp` 标记。
 import Base.Effect.Core as Eff
+import Base.Effect.Mut
+import Base.Container.MutRef as MutRef
+import Base.Trait.Monad
 
-bumpRight : {r : Row} -> Int -> Eff (Named "right" (MutRefOp Int) :: r) Int
-bumpRight k =
+bumpRight : {r : Row} -> {w : Member MutOp r} -> MutRef Int -> Int -> Eff r Int
+bumpRight right k =
   do
-    v <- MutRef.read@right
-    MutRef.write@right (v + k)
-    MutRef.read@right
+    v <- MutRef.read right
+    MutRef.write right (v + k)
+    MutRef.read right
 
 main : Int
 main =
-  MutRef.withMutRefPure "left" 1 (
-      MutRef.withMutRef "right" 2 (
+  MutRef.withMutRefPure 1 (\left =>
+      MutRef.withMutRef 2 (\right =>
           do
-            _ <- bumpRight 10
-            l <- MutRef.read@left
-            r <- MutRef.read@right
+            _ <- bumpRight right 10
+            l <- MutRef.read left
+            r <- MutRef.read right
             pure (l * 100 + r)
         )
-    )
+  )

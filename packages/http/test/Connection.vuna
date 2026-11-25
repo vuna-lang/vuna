@@ -1,7 +1,8 @@
 -- 单连接服务循环的包内测试：内存 duplex 喂一段流水线输入，检查响应与计数。
 import Base
 import Base.Effect.Core
-import Base.Effect.MutRef as MutRef
+import Base.Effect.Mut
+import Base.Container.MutRef as MutRef
 import Http.Connection as C
 import Http.Request as Req
 import Http.Response as Res
@@ -12,21 +13,22 @@ import Base.Effect.Exit
 main : Eff [ConsoleOp, ExitOp] String
 main =
   MutRef.withMutRef
-    "input"
     (R.renderRequest (Req.request "GET" "/a") ++ R.renderRequest (Req.request "GET" "/b"))
     (
-      MutRef.withMutRef "out" "" (
-          do
-            n <- C.serveWith (C.Dup readSomeInput writeAllOut (pure 0)) 10 (handlerOf "body:")
-            written <- MutRef.read@out
-            case failuresOf n written of
-              [] => pure ""
-              bad =>
-                do
-                  _ <- consolePrint ("http connection failed: " ++ join "; " bad ++ "\n")
-                  _ <- exitWith 1
-                  pure ""
-        )
+      \input =>
+        MutRef.withMutRef "" (
+            \out =>
+              do
+                n <- C.serveWith (C.Dup (readSomeInput input) (writeAllOut out) (pure 0)) 10 (handlerOf "body:")
+                written <- MutRef.read out
+                case failuresOf n written of
+                  [] => pure ""
+                  bad =>
+                    do
+                      _ <- consolePrint ("http connection failed: " ++ join "; " bad ++ "\n")
+                      _ <- exitWith 1
+                      pure ""
+          )
     )
 
 -- | 断言：两条请求都被服务、输出里两条响应体都在。
@@ -40,12 +42,12 @@ failuresOf n written =
 handlerOf : {r : Row} -> String -> Req.Request -> Eff r Res.Response
 handlerOf prefix req = pure (Res.response 200 (prefix ++ req.target))
 
--- | 从 `input` 取至多 `n` 字节，余量写回。
-readSomeInput : {r : Row} -> {w : Member (Named "input" (MutRefOp String)) r} -> Int -> Eff r String
-readSomeInput n =
+-- | 从输入单元取至多 `n` 字节，余量写回。
+readSomeInput : {r : Row} -> {w : Member MutOp r} -> MutRef String -> Int -> Eff r String
+readSomeInput input n =
   do
-    s <- MutRef.read@input
-    MutRef.write@input (dropBytes n s)
+    s <- MutRef.read input
+    MutRef.write input (dropBytes n s)
     pure (takeBytes n s)
 
 -- | 取前 `n` 字节（不足则整串）。
@@ -59,12 +61,12 @@ dropBytes n s =
     k = if strLength s > n then n else strLength s
   in strSubstring k (strLength s - k) s
 
--- | 把整段字节追加到 `out`。
-writeAllOut : {r : Row} -> {w : Member (Named "out" (MutRefOp String)) r} -> String -> Eff r Int
-writeAllOut s =
+-- | 把整段字节追加到输出单元。
+writeAllOut : {r : Row} -> {w : Member MutOp r} -> MutRef String -> String -> Eff r Int
+writeAllOut out s =
   do
-    cur <- MutRef.read@out
-    MutRef.write@out (cur ++ s)
+    cur <- MutRef.read out
+    MutRef.write out (cur ++ s)
     pure (strLength s)
 
 -- | 一条命名检查。

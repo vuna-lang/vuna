@@ -34,7 +34,8 @@ import Vuna.Test.Suite
 import Vuna.Files
 import Vuna.Json
 import Vuna.Lint
-import Base.Effect.MutRef as MutRef
+import Base.Container.MutRef as MutRef
+import Base.Effect.Mut
 import Base.Effect.Types as EffTypes
 import Base.Effect.Fs as EffFs
 import Base.Effect.Console as EffConsole
@@ -81,6 +82,8 @@ record Env where
   envBuildDir : String
   -- | 本次 run 选中的后端（`--backend`；空 = 只跑 ocaml）。
   envBackends : List String
+  -- | 本次 run 的进程内精化会话句柄（`runSuite` 分配，跨 case 复用）。
+  envSession : MutRef Session
 
 -- | 一次子进程调用：退出码、分离的 stdout/stderr、是否被判为超时。
 record CmdResult where
@@ -613,12 +616,12 @@ syncBuildDir staging dir =
 -- ---------------------------------------------------------------
 -- | 内部：进程内 check 一个源文件：会话（依赖接口 + termAux 缓存）优先，不可用时在同一
 -- 进程内退回全量精化。绝不 spawn `vuna`。
-probeCheckIn : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r, Member (Named "session" (MutRefOp Session)) r => Env -> String -> Eff r (Check (List Diagnostic))
-probeCheckIn env source = checkFileSessioned env.envBase source
+probeCheckIn : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r, Member MutOp r => Env -> String -> Eff r (Check (List Diagnostic))
+probeCheckIn env source = checkFileSessioned env.envSession env.envBase source
 
 -- | 内部：进程内 interp 一个源文件，路径选择同 `probeCheckIn`。
-probeInterpIn : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r, Member (Named "session" (MutRefOp Session)) r => Env -> String -> Eff r (Check String)
-probeInterpIn env source = interpFileSessioned env.envBase source
+probeInterpIn : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r, Member MutOp r => Env -> String -> Eff r (Check String)
+probeInterpIn env source = interpFileSessioned env.envSession env.envBase source
 
 -- 负例的 check 必须走**全量**路径：`warnUnusedDefsIn` 只在全量尾部跑，未使用/遮蔽类
 -- warning 只在它那里产生，增量会话不产这些。
@@ -777,7 +780,7 @@ syncStaging env staging =
 -- | 执行一个 golden case：读期望文本，按开关依次 interp / check / compile / 同步构建桶 /
 -- 跑 `build.sh` / 跑产物，再汇总断言。`env.envBless` 且失败时把期望文件回写成实际输出，
 -- 结果状态记成 `blessed`（断言全算通过）。
-goldenCase : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r, Member (Named "session" (MutRefOp Session)) r => Env -> Case -> String -> String -> Bool -> Bool -> Bool -> Bool -> Bool -> Eff r CaseResult
+goldenCase : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r, Member MutOp r => Env -> Case -> String -> String -> Bool -> Bool -> Bool -> Bool -> Bool -> Eff r CaseResult
 goldenCase env c source expected wantInterp wantCheck wantCompile wantRun wantCompare =
   do
     start <- clockNow
@@ -1171,7 +1174,7 @@ resIdOf : CaseResult -> String
 resIdOf r = r.resId
 
 -- | 单个 case 的执行入口。每次运行都真正执行；结果不落对象库。
-runCase : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r, Member (Named "session" (MutRefOp Session)) r => Env -> Case -> Eff r CaseResult
+runCase : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r, Member MutOp r => Env -> Case -> Eff r CaseResult
 runCase env c = runCaseGo env c
 
 -- ---------------------------------------------------------------
@@ -1974,7 +1977,7 @@ seedCase env c source expected =
     finishCase c.caseId start buildA
 
 -- | 内部：按 `caseKind` 分派到具体执行函数；`CBroken` 直接产出一条失败断言。
-runCaseGo : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r, Member (Named "session" (MutRefOp Session)) r => Env -> Case -> Eff r CaseResult
+runCaseGo : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r, Member MutOp r => Env -> Case -> Eff r CaseResult
 runCaseGo env c =
   case c.caseKind of
     CGolden source expected wantInterp wantCheck wantCompile wantRun wantCompare =>
@@ -2177,13 +2180,13 @@ writeResultFile dir index r =
   in fmap natToInt (fsWriteFile path line)
 
 -- | 顺序执行一组带全局下标的 case（每跑完一个就写 TSV），返回按传入顺序排列的结果。
-runCasesIndexed : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r, Member (Named "session" (MutRefOp Session)) r => Env -> Bool -> Bool -> Bool -> String -> List (Int, Case) -> Eff r (List CaseResult)
+runCasesIndexed : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r, Member MutOp r => Env -> Bool -> Bool -> Bool -> String -> List (Int, Case) -> Eff r (List CaseResult)
 runCasesIndexed env verbose failFast quiet resultsDir indexed =
   runCasesIndexedGo env verbose failFast quiet resultsDir indexed [] False
 
 -- | 内部：顺序执行的递归体。`stopped`（`--fail-fast` 且已出现失败）之后每个 case 都记
 -- `skip` 并照样写 TSV，保证父进程能按序收齐。
-runCasesIndexedGo : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r, Member (Named "session" (MutRefOp Session)) r => Env -> Bool -> Bool -> Bool -> String -> List (Int, Case) -> List CaseResult -> Bool -> Eff r (List CaseResult)
+runCasesIndexedGo : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r, Member MutOp r => Env -> Bool -> Bool -> Bool -> String -> List (Int, Case) -> List CaseResult -> Bool -> Eff r (List CaseResult)
 runCasesIndexedGo env verbose failFast quiet resultsDir [] acc stopped = pure (reverse acc)
 runCasesIndexedGo env verbose failFast quiet resultsDir ((index, c) :: rest) acc stopped =
   if stopped then
@@ -2351,7 +2354,7 @@ recordCosts env results =
 
 -- | 一个 worker 的入口：按 LPT（非 e2e tier）或静态分片取自己那份 case，顺序执行并把结果
 -- 写成 TSV。返回 0（无失败）/ 1。
-runWorker : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r, Member (Named "session" (MutRefOp Session)) r => Env -> SuiteOpts -> List Case -> Int -> Int -> Eff r Int
+runWorker : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r, Member MutOp r => Env -> SuiteOpts -> List Case -> Int -> Int -> Eff r Int
 runWorker env opts cases index count =
   do
     indexed <-
@@ -2593,7 +2596,7 @@ finishResults env opts rawResults =
 
 -- | 父进程主路径：解析并发数（不超过 case 数）；单 worker 时顺序执行，否则 spawn worker、
 -- 等它们退出后按全局下标收集结果，最后交给 `finishResults`。
-runParent : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r, Member (Named "session" (MutRefOp Session)) r => Env -> SuiteOpts -> Suite -> List Case -> Eff r Int
+runParent : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r, Member MutOp r => Env -> SuiteOpts -> Suite -> List Case -> Eff r Int
 runParent env opts suite cases =
   do
     jobs <- resolveJobs env opts suite
@@ -2980,8 +2983,8 @@ watchSnapshot suite =
       (append corpusFiles (append suiteFiles (append cliFiles (append toolchainFiles (append pluginKitFiles (append compilerFiles (append baseFiles extra)))))))
 
 -- | 内部：`--watch` 的轮询体：每 500ms 取一次快照，变化就重跑整个 suite。
-watchLoop : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r, Member (Named "session" (MutRefOp Session)) r => Int -> SuiteOpts -> Suite -> Int -> Int -> Eff r Int
-watchLoop fuel opts suite last rc =
+watchLoop : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r, Member MutOp r => Int -> MutRef Session -> SuiteOpts -> Suite -> Int -> Int -> Eff r Int
+watchLoop fuel sess opts suite last rc =
   if fuel <= 0 then
     pure rc
   else
@@ -2991,32 +2994,31 @@ watchLoop fuel opts suite last rc =
       if now /= last then
         do
           _ <- printLine "watch: change detected, rerunning"
-          rc2 <- runSuiteOnce opts suite
-          watchLoop (fuel - 1) opts suite now rc2
+          rc2 <- runSuiteOnce sess opts suite
+          watchLoop (fuel - 1) sess opts suite now rc2
       else
-        watchLoop (fuel - 1) opts suite last rc
+        watchLoop (fuel - 1) sess opts suite last rc
 
 -- | `--watch`：先跑一次 suite，再持续轮询重跑。
-watchSuite : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r, Member (Named "session" (MutRefOp Session)) r => SuiteOpts -> Suite -> Eff r Int
-watchSuite opts suite =
+watchSuite : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r, Member MutOp r => MutRef Session -> SuiteOpts -> Suite -> Eff r Int
+watchSuite sess opts suite =
   do
-    rc <- runSuiteOnce opts suite
+    rc <- runSuiteOnce sess opts suite
     snapshot <- watchSnapshot suite
-    watchLoop 100000000 opts suite snapshot rc
+    watchLoop 100000000 sess opts suite snapshot rc
 
 -- | `vuna test` 的入口：`--audit`、`--watch`、正常跑一次三选一。
 export runSuite : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => SuiteOpts -> Suite -> Eff r Int
 runSuite opts suite =
   MutRef.withMutRef
-    "session"
     (sessionNew "")
-    (if opts.suiteAudit then auditSuite opts suite else if opts.suiteWatch then watchSuite opts suite else runSuiteOnce opts suite)
+    (\sess => if opts.suiteAudit then auditSuite opts suite else if opts.suiteWatch then watchSuite sess opts suite else runSuiteOnce sess opts suite)
 
 -- | 跑一次 suite：建临时根与捕获 helper，解析 base / store / 编译器路径，构造 `Env`，
 -- 发现用例并注入默认护栏 case（family 孤儿、case 总数下限），再按 `--list` / worker /
 -- 父进程三条出口执行，最后删掉临时根。
-runSuiteOnce : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r, Member (Named "session" (MutRefOp Session)) r => SuiteOpts -> Suite -> Eff r Int
-runSuiteOnce opts suite =
+runSuiteOnce : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r, Member MutOp r => MutRef Session -> SuiteOpts -> Suite -> Eff r Int
+runSuiteOnce sess opts suite =
   let
     root = suite.suiteRepoRoot
     testRoot = suite.suiteRoot
@@ -3063,12 +3065,12 @@ runSuiteOnce opts suite =
     buildFp <- toolCompilerFingerprint
     buildDir <- pure "${cacheDir}/build/${scope}-${strOfInt buildFp}-${strOfInt baseHash}"
     -- 每次 run 换一份新会话：单元本身是进程级的（`runSuite` 引入），内容按 run 重置。
-    MutRef.write (sessionNew "${tmp}/iface-session")
+    MutRef.write sess (sessionNew "${tmp}/iface-session")
     discovered0 <- discoverCases suite
     orphans <- familyOrphans suite
     let
       discovered = applyTimeoutOverride opts.suiteTimeout discovered0
-      env = Env root root testRoot tmp vuna vunaSeed baseDir ocamlopt helper cacheDir baseHash opts.suiteBless opts.suiteBlessDiag workerMode store buildDir opts.suiteBackends
+      env = Env root root testRoot tmp vuna vunaSeed baseDir ocamlopt helper cacheDir baseHash opts.suiteBless opts.suiteBlessDiag workerMode store buildDir opts.suiteBackends sess
       -- 两层默认护栏（局部 --only/--filter 时被过滤掉，符合预期）：
       --   ① 已声明 family 目录里的孤儿夹具（精确 source 认领）；
       --   ② case 总数下限——整族从 suite.toml 消失时，①会连目录一起看不到。
