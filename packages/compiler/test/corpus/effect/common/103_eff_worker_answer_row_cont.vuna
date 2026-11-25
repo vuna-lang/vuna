@@ -1,0 +1,50 @@
+-- 与 102 同形，但答案里的 resume 不是尾位置：`k` 的结果再参与计算。
+-- 锁住 worker 内机器 run 的 `MkRestCont` 路径（尾位置才走共享尾槽）。
+import Base.Effect.Core as Eff
+import Base.Effect.Console as EffConsole
+import Base.Effect.Fs as EffFs
+import Base.Thread as Thread
+
+prog : Eff [FsOp@inner] String
+prog =
+  do
+    _ <- fsWriteFile@inner "worker.txt" "hello"
+    fsReadFile@inner "worker.txt"
+
+retInner : String -> Eff [FsOp@outer] String
+retInner a = pure a
+
+opHInner : (i : Type) -> (o : FsOp i) -> (Eff.resIdx i o -> Eff [FsOp@outer] String) -> Eff [FsOp@outer] String
+opHInner i op k =
+  case op of
+    ReadFile p =>
+      do
+        s <- fsReadFile@outer p
+        r <- k ("read:" ++ s)
+        pure (r ++ ":cont")
+    WriteFile p s =>
+      do
+        _ <- fsWriteFile@outer p s
+        k 5
+    _ => prim_fail "unexpected inner fs op"
+
+retOuter : String -> String
+retOuter a = a
+
+opHOuter : (i : Type) -> (o : FsOp i) -> (Eff.resIdx i o -> String) -> String
+opHOuter i op k =
+  case op of
+    ReadFile p => k "outer"
+    WriteFile p s => k 5
+    _ => prim_fail "unexpected outer fs op"
+
+worker : Eff [] String
+worker = handleFs "outer" retOuter opHOuter (joinEff (handleFs "inner" retInner opHInner prog))
+
+main : Eff [ConsoleOp] Int
+main =
+  do
+    t <- Thread.spawn worker
+    s <- Thread.join t
+    _ <- consolePrint (s ++ "\n")
+    pure 0

@@ -1,0 +1,50 @@
+-- worker 内装两层 mock handler：内层 handler 的 answer 是 `Eff`，并在答案里 resume。
+-- 线程体是 `Eff []`，handler 帧只活在这个 worker 自己的机器 run 里（不继承父线程）。
+import Base.Effect.Core as Eff
+import Base.Effect.Console as EffConsole
+import Base.Effect.Fs as EffFs
+import Base.Thread as Thread
+
+prog : Eff [FsOp@inner] String
+prog =
+  do
+    _ <- fsWriteFile@inner "worker.txt" "hello"
+    fsReadFile@inner "worker.txt"
+
+retInner : String -> Eff [FsOp@outer] String
+retInner a = pure a
+
+opHInner : (i : Type) -> (o : FsOp i) -> (Eff.resIdx i o -> Eff [FsOp@outer] String) -> Eff [FsOp@outer] String
+opHInner i op k =
+  case op of
+    ReadFile p =>
+      do
+        _ <- fsWriteFile@outer p "mock"
+        s <- fsReadFile@outer p
+        k ("read:" ++ s)
+    WriteFile p s =>
+      do
+        _ <- fsWriteFile@outer p s
+        k 5
+    _ => prim_fail "unexpected inner fs op"
+
+retOuter : String -> String
+retOuter a = a
+
+opHOuter : (i : Type) -> (o : FsOp i) -> (Eff.resIdx i o -> String) -> String
+opHOuter i op k =
+  case op of
+    ReadFile p => k "outer"
+    WriteFile p s => k 5
+    _ => prim_fail "unexpected outer fs op"
+
+worker : Eff [] String
+worker = handleFs "outer" retOuter opHOuter (joinEff (handleFs "inner" retInner opHInner prog))
+
+main : Eff [ConsoleOp] Int
+main =
+  do
+    t <- Thread.spawn worker
+    s <- Thread.join t
+    _ <- consolePrint (s ++ "\n")
+    pure 0
