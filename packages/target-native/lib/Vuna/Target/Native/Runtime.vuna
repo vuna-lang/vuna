@@ -1578,8 +1578,9 @@ envFilterFn =
 -- ---------------------------------------------------------------
 -- 线程 = 共享地址空间的内核线程（`clone(CLONE_VM|…|CLONE_THREAD)`）；每线程一条
 -- 64 MiB 虚拟栈（低页护栏），Thread 对象在堆上，join 用 32-bit futex 等 state。
--- 并行区照常回收：回收器置 `rt_gc_requested`，等所有 live 线程停车（`rt_parked_threads`），
--- 再按线程表的 `saved_rsp` 逐条扫子线程栈（见 `Gc.gc_collect`）。
+-- 并行区照常回收：回收器置 `rt_gc_requested`，轮询线程表直到非自身 live 线程都离开
+-- running，再按各线程的 `saved_rsp` 扫栈（见 `Gc.gc_collect`）；`rt_parked_threads` /
+-- `rt_live_threads` 只是计数。
 -- 堆分配在有子线程时走一把 futex 锁（`rt_heap_lock`），单线程路径不加锁。
 -- | futex 互斥（0 空闲 / 1 锁定 / 2 有等待者）。`sfx` 用来给局部标签去重
 --   （同一份模板会实例化多把锁）。
@@ -1674,6 +1675,9 @@ blockEndFn =
 -- | 阻塞的宿主 syscall（read / write / wait4 / nanosleep / getdents64）前后发布 / 收回
 --   停车状态：只在有活着的子线程时做（`rt_thread_count > 0`）。没有并行区就没有 STW
 --   等待，省掉每次 fs 调用的两次 futex 唤醒。
+--   begin / end 的判据必须配对：begin 看进入时的子线程数，end 看本线程 TCB 的 state。
+--   `rt_thread_count` 在阻塞期间可能被最后一个子线程的退出降到 0，end 若再看计数就会
+--   跳过 `block_end`，留下 blocked 状态、陈旧的 saved_rsp 和多计的 parked。
 --   调用点必须把活值落在帧槽里、并在 `block_begin` **之后**重载系统调用实参
 --   （`block_begin` 会清掉 rdi / rsi / rdx / r10）。
 blockBeginIfThreadedFn : NativeFunc
@@ -1686,7 +1690,7 @@ blockEndIfThreadedFn : NativeFunc
 blockEndIfThreadedFn =
   rtRawFunc
     "block_end_if_parallel"
-    [IMov (OpReg Rax) (OpRip nativeThreadCountLabel), ITest Rax Rax, IJcc "jz" ".Lrt_bt2_skip", ICall (nativeRtLabel "block_end"), ILabel ".Lrt_bt2_skip", IRet]
+    [IMovFsLoad Rax nativeTcbStateOff, ITest Rax Rax, IJcc "jz" ".Lrt_bt2_skip", ICall (nativeRtLabel "block_end"), ILabel ".Lrt_bt2_skip", IRet]
 
 threadRegisterFn : NativeFunc
 threadRegisterFn =

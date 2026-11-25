@@ -7,6 +7,7 @@ import Base.Effect.Core
 import Base.Effect.Console
 import Base.Effect.Exit
 import Vuna.Ir.Runtime
+import Vuna.Target.Native.Abi
 import Vuna.Target.Native.Model
 import Vuna.Target.Native.Runtime
 
@@ -32,7 +33,7 @@ gatingProblems : List String
 gatingProblems =
   append
     (checkFunc "init_tcb keeps scratch unmapped" "rt_init_tcb" (\f => not (hasFlagWrite f)))
-    (append (checkFunc "init_tcb_scratch sets flag" "rt_init_tcb_scratch" hasFlagWrite) (append (checkFunc "thread_spawn reads flag" "rt_thread_spawn" hasFlagRead) (checkFunc "thread_join skips unmapped scratch" "rt_thread_join" hasJoinSkip)))
+    (append (checkFunc "init_tcb_scratch sets flag" "rt_init_tcb_scratch" hasFlagWrite) (append (checkFunc "thread_spawn reads flag" "rt_thread_spawn" hasFlagRead) (append (checkFunc "thread_join skips unmapped scratch" "rt_thread_join" hasJoinSkip) (checkFunc "block_end guard is per-thread" "rt_block_end_if_parallel" hasBlockEndStateGuard))))
 
 checkFunc : String -> String -> (NativeFunc -> Bool) -> List String
 checkFunc label fnLabel p =
@@ -68,6 +69,20 @@ hasJoinSkip f = hasInstr isJoinSkip f.nfBody
 isJoinSkip : Instr -> Bool
 isJoinSkip (IJcc "jz" ".Lrt_tj_noscratch") = True
 isJoinSkip _ = False
+
+-- `block_end` 必须按本线程是否真的进入过 block（TCB state）收尾；不能用阻塞期间会变的
+-- `rt_thread_count`：最后一个子线程退出会让计数归零。
+hasBlockEndStateGuard : NativeFunc -> Bool
+hasBlockEndStateGuard f =
+  hasInstr isTcbStateLoad f.nfBody && not (hasInstr isThreadCountLoad f.nfBody)
+
+isTcbStateLoad : Instr -> Bool
+isTcbStateLoad (IMovFsLoad Rax off) = off == nativeTcbStateOff
+isTcbStateLoad _ = False
+
+isThreadCountLoad : Instr -> Bool
+isThreadCountLoad (IMov (OpReg Rax) (OpRip l)) = l == nativeThreadCountLabel
+isThreadCountLoad _ = False
 
 -- (隐藏原语名, 值形态 arity, native 标签)
 expectations : List (String, Int, String)
