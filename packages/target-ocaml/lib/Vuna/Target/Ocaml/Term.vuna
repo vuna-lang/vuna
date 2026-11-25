@@ -481,10 +481,13 @@ let dtp_substring start len s =
   String.sub s st ln
 let dtp_exit n = exit n
 let dtp_runIn dir args =
+  dtp_hostReset ();
   let quote s = Filename.quote s in
   let cmd = String.concat \" \" (List.map quote args) in
-  let old = Sys.getcwd () in
-  Fun.protect ~finally:(fun () -> Sys.chdir old) (fun () -> Sys.chdir dir; Sys.command cmd)
+  (* `cd` 在 shell 里做：进程级 cwd 不动（多 domain 下不能改进程 cwd）。
+     125 是「目录进不去」的保留哨兵（与命令自己的退出码区分）。 *)
+  let code = Sys.command (\"cd \" ^ quote dir ^ \" || exit 125; \" ^ cmd) in
+  if code = 125 then (dtp_hostSetStatus 1; -1) else code
 let dtp_spawn (args : string list) : int =
   let prog = Sys.executable_name in
   Unix.create_process prog (Array.of_list (prog :: args)) Unix.stdin Unix.stdout Unix.stderr

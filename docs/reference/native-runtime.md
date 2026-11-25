@@ -56,9 +56,11 @@ IR 支持面；这里讲生成物**跑起来**依赖的那一层——运行时�
   跑同一批 syscall，失败时把 errno 直接映射成状态码写进 线程 TCB 的宿主状态槽并返回默认值
   （原始 errno 不保留，失败文本由状态码决定）；库层 `Base.Effect.Fs` 读 `@vuna@prim_eff_hostStatus`，把失败收成
   typed `FsError`，entry 打印 `vuna: fs: <op> …` 并以退出码 1 结束。
-- 进程：`@vuna@prim_eff_runIn` / `@vuna@host@tryRunIn`（`chdir` + `fork` + `execve("/bin/sh", ["-c", cmd])` + `wait4`
-  + 恢复 cwd；实参按 shell 单引号转义）、`@vuna@prim_eff_spawn`（`fork` + `execve("/proc/self/exe", argv)`，
-  argv[0] 是本进程路径）、`@vuna@prim_eff_wait`（`wait4` 取退出码，被信号杀死按 1）、`@vuna@host@exitOp`。
+- 进程：`@vuna@prim_eff_runIn` / `@vuna@host@tryRunIn`（父进程**不动 cwd**：子进程在 `execve`
+  前自己 `chdir(dir)`，失败经 `pipe2(O_CLOEXEC)` 把负 errno 回传，父进程据此报启动失败；
+  `fork` + `execve("/bin/sh", ["-c", cmd])` + `wait4`；实参按 shell 单引号转义）、
+  `@vuna@prim_eff_spawn`（`fork` + `execve("/proc/self/exe", argv)`，argv[0] 是本进程路径）、
+  `@vuna@prim_eff_wait`（`wait4` 取退出码，被信号杀死按 1）、`@vuna@host@exitOp`。
 - 未实现的宿主面：stdin 的 `@vuna@host@readLine` / `readBytes`（编译器闭包不可达）与 net。
 - 续延：`perform` / `handle` 由库机器（`Base.Effect.Core` 的 `Control` 循环）执行，见
   [native.md](native.md) §3.4；宿主原语（`@vuna@prim_eff_*` / `@vuna@host@*`）的实现面以 `Native.Runtime` 的符号映射为准，未列出的符号由

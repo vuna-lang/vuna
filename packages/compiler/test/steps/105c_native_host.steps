@@ -82,6 +82,21 @@ exit: 0
 run: sh -c 'out=$("$TMPDIR/pgid-out/bin/pgid" | head -n 1 | tr -d " "); me=$(ps -o pgid= -p $$ | tr -d " "); [ "$out" = "$me" ] || { echo "pgid $out != $me"; exit 1; }; echo same-group'
 out-equals: same-group
 
+# 9u3b) runIn 不改进程级 cwd：`cd` 在子进程里做，父进程前后的 `envGetCwd` 必须一致
+#       （多线程下父进程 cwd 被改会让别的线程的相对路径落到别人的目录）。
+run: sh -c 'd="$TMPDIR/runincwd"; mkdir -p "$d/app"; printf "[package]\nname = \"runincwd\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Effect.Core as Eff\nimport Base.Effect.Env as EffEnv\nimport Base.Effect.Process as EffProcess\n\nmain : Eff [EnvOp, ProcessOp] Int\nmain = do\n  before <- envGetCwd\n  _ <- processRunIn \"/tmp\" [\"pwd\"]\n  after <- envGetCwd\n  pure (if before == after then 1 else 0)\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --out "$TMPDIR/runincwd-out" "$d"'
+exit: 0
+run: sh -c '"$TMPDIR/runincwd-out/bin/runincwd" 2>&1 | tail -n 1'
+out-equals: 1
+
+# 9u3c) runIn 的目录进不去：子进程把 errno 经管道回传，父进程报 `ProcessNoDir`
+#       （typed error 收口，exit 1），不是静默返回 shell 的失败码。
+run: sh -c 'd="$TMPDIR/runinmiss"; mkdir -p "$d/app"; printf "[package]\nname = \"runinmiss\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Effect.Core as Eff\nimport Base.Effect.Process as EffProcess\n\nmain : Eff [ProcessOp] Int\nmain = processRunIn \"$TMPDIR/no-such-runin-dir\" [\"true\"]\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --out "$TMPDIR/runinmiss-out" "$d"'
+exit: 0
+run: "$TMPDIR/runinmiss-out/bin/runinmiss" 2>&1
+exit: 1
+out-contains: no such directory
+
 # 9u4) 并发 spawn：两个 `processSpawn` 各自成组，只 `processWait` 第一个；超时 handler 必须
 #      遍历 pid 槽把**两组**都收掉（先返回的 wait 不能清掉另一组的槽）。native 的 `spawn` 是
 #      `execve(/proc/self/exe, args)`，所以子进程按 argv 变成 worker，再从 worker 里起
