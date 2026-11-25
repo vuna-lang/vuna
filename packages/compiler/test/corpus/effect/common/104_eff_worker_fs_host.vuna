@@ -1,0 +1,32 @@
+-- worker 自己安装真实 fs handler：`runFsHost` 只处理 worker 体内的默认实例行，
+-- 失败行由 `runFsError` 收口成 `Result`，所以线程体是 `Eff []`。
+-- 单 worker（native 的 fs 宿主 scratch 仍是全局的，并行 fs 由 D135 管）。
+import Base.Effect.Core as Eff
+import Base.Effect.Console as EffConsole
+import Base.Effect.Fs as EffFs
+import Base.Data.Result
+import Base.Thread as Thread
+
+prog : Eff [FsOp] String
+prog =
+  do
+    _ <- fsWriteFile "worker-host.txt" "hello"
+    fsReadFile "worker-host.txt"
+
+worker : Eff [] (Result String)
+worker = runFsError "fs-error" (runFsHost prog)
+
+main : Eff [ConsoleOp] Int
+main =
+  do
+    t <- Thread.spawn worker
+    res <- Thread.join t
+    case res of
+      Ok s =>
+        do
+          _ <- consolePrint (s ++ "\n")
+          pure 0
+      Err e =>
+        do
+          _ <- consolePrint ("err:" ++ e ++ "\n")
+          pure 1

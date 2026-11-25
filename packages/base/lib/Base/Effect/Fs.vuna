@@ -312,8 +312,10 @@ fsOpHIOHost i op k =
 handleFsHostHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Named n FsOp :: r) a -> Eff r (Eff [FsErrorOp@"fs-error"] a)
 handleFsHostHost n comp = handleCoreAt (Named n FsOp) "fs" n (\a => pure a) fsOpHIOHost comp
 
--- | entry 自动预装用（泛化 r）：把行头 `FsOp` 的 send 翻译成宿主 intrinsic，并把失败收口行 `FsErrorOp` 接到行尾。
-runFsHost : {r : Row} -> {a : Type} -> Eff (Named "default" FsOp :: r) a -> Eff (rowAppend r [FsErrorOp@"fs-error"]) a
+-- | 默认实例的真实 fs handler：把行头 `FsOp` 的 send 翻译成宿主 intrinsic，并把失败收口行
+-- `FsErrorOp` 接到行尾。entry 预装与 `Eff []` 的 worker / 子计算显式安装共用；后者用
+-- `runFsError` 把失败行收口成 `Result`。
+export runFsHost : {r : Row} -> {a : Type} -> Eff (Named "default" FsOp :: r) a -> Eff (rowAppend r [FsErrorOp@"fs-error"]) a
 runFsHost comp = joinEff (handleFsHostHost "default" comp)
 
 -- | 内部：`runFsError` 的成功侧 `ret`——值包装成 `Ok`。
