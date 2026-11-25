@@ -71,7 +71,8 @@ exit: 0
 run: "$TMPDIR/lsr-out/bin/lsr" 2>&1
 exit: 0
 out-equals: -4499500000
-file-contains: $TMPDIR/lsr-out/Main.s cmp rbx, -5000000
+run: sh -c 'grep -Eq "  cmp r[a-z0-9]+, -5000000" "$TMPDIR/lsr-out/Main.s"'
+exit: 0
 run: sh -c '! grep -q "sub rax, 5000000" "$TMPDIR/lsr-out/Main.s"'
 exit: 0
 

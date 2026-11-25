@@ -189,7 +189,8 @@
   caller-saved scratch（它们不在来参寄存器里，函数内有 call/div/syscall 会自动放弃）。
 - **稠密 Int 分派**：同一 scrutinee 上连续 4 个以上的 `bi_eq_int` 链改发跳转表
   （`.quad` 表项 + `jmp qword ptr [table + idx*8]`），兜底臂处理越界与缺失 tag。
-  产物固定 no-pie 链接，表项可以直接用绝对地址。
+  产物固定 no-pie 链接，表项可以直接用绝对地址。臂把 scrutinee 写成常量时，
+  回边由 `optimizeDispatch` 直接接到目标臂（§3.13），不再每轮重新分派。
 
 ### 3.4 效应 handler 与一次性续延
 
@@ -243,9 +244,13 @@ lambda 的定义不内联：把闭包体拖进调用者既复制代码，也放�
 ### 3.7 标量槽提升
 
 有回边的函数（尾递归循环 / 普通循环）里，`Native.Regs` 把访问次数最多的标量槽
-（`NClsScalar`：`Int` / `Bool`）提到 callee-saved 寄存器（`rbx` / `r12`–`r15`，最多 5 个），
+（`NClsScalar`：`Int` / `Bool`）提到 `rbx` / `r12`–`r15`（最多 5 个），循环体不写
+`r10` / `r11` 时再放两个槽进去；入口来自参数寄存器（arity ≤ 6）的标量槽优先留在
+**原寄存器**——bind 变成自搬运、不付 push/pop，函数里再没有写该寄存器才这么做
+（call / div / syscall / 尾调用实参搬运由 `instrWritesReg` 判为写）。
 整个函数都不再碰这些槽的内存位置——来参落位、循环回边、尾调用搬运、返回值都跟着走，所以
-循环边界上不需要插入拷贝。指针槽必须留在帧里：GC 只扫栈帧，寄存器里的指针会被漏扫。
+循环边界上不需要插入拷贝。指针槽必须留在帧里：GC 只扫栈帧，寄存器里的指针会被漏扫
+（身份提升只收标量槽）。
 
 提升后 `Native.Regs` 再做一次直线段内的寄存器合并：`mov rax, rS; <只操作 rax / 有限
 scratch 的链>; mov rD, rax` 直接以 `rD` 为目标（`rS == rD` 时连首条 `mov` 一起删），
@@ -352,6 +357,31 @@ prologue 保存用到的寄存器（奇数个补 8 字节，保持 `call` 前 16
 - **Nat 常量折叠与乘常数**：`natFromInt <literal>` 直接折成 clamp 后的字面量；`Nat.mult` 的
   一个实参是 `0..4` 的常量时，`a*c < 2^64` 且 `a` 是 Nat，用 `imul` + 无符号 `cmova` 夹取，
   不再走通用的 `imul` OF + 二次夹取。
+
+### 3.13 回边直连与守卫复用
+
+`Native.Regs.optimizeDispatch` 在槽提升与 `cleanup` 之后按基本块重写函数体；没有守卫
+（`test` / `cmp` 后跟 `jcc` 的块）时原样返回。
+
+- **稠密分派回边直连**：`cmp r, hi; ja fb; lea t, [table]; jmp [t + r*8]` 的分派块，臂在
+  回边前把 scrutinee 写成常量（`mov r, imm`）时，回边直接落到该常量对应的臂，分派不再
+  每轮走一次间接跳转。臂标签只被表项引用、分派标签只被守卫引用时，臂尾的 `sub n, k`
+  也给复制过来的守卫提供标志位：`n > 0` 且 `k ≥ 1` 时 64 位不溢出，`jg` 与
+  `test n, n; jg` 等价，于是臂尾只剩 `add` / `sub` / `jle`。
+- **常量守卫**：回边处守卫测的寄存器是常量（`test r, r` / `cmp r, imm`）时直接判定走
+  目标还是兜底，不复制测试；只有真的判定过至少一个守卫才替换。
+- **两级守卫旋转**：互递归尾调用内联后常见
+  `if n <= 0 then a else if n <= 1 then b else loop (n - 2)`。外层与内层守卫同向（`jg`）
+  且外层阈值更小时，回边先测内层、失败再走外层，快路径每轮只剩一次测试。
+- **自递归循环的守卫标志复用**：`Lb: <体>; Lg: test r, r; jg Lb` 且体尾是
+  `sub r, k`（`k ≥ 1`）时，把 `jg Lb` 挂到体尾：63-bit 计数器上 `sub` 的 ZF/OF 与
+  `test` 等价，每轮少一条 `test`。入口仍走原守卫。
+- **标量三元选择**：`mov rax, A; <rax 上的标量链>; cmp rax, B; jcc L; mov rax, C;
+  L: mov d, rax` 直接以 `d` 为目标——快路径的链重定向到 `d`、慢路径写 `d`；`C` 是
+  寄存器 / 内存时再折成 `cmov`，立即数保留分支（`cmov` 不收立即数）。
+- **帧槽中转折叠**：`mov [slot], rS … mov rD, [slot]` 且该槽在函数里只出现这两次、区间
+  是直线段、`rS` 是提升后的标量寄存器时，换成空闲 scratch（`r11` / `r10` / `rax`）上的
+  两次寄存器搬运；call / div / syscall 的 scratch clobber 由 `instrWritesReg` 兜住。
 
 ## 4. IR 支持面
 

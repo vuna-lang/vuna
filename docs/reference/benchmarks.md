@@ -77,7 +77,7 @@ native / wasm 列与对手写 C 的对照见该文件）：
 | tco_arity6 | 6 参尾递归（全走寄存器） | 5 个热标量槽提升 |
 | tco_narrow_wide | 2 参 ↔ 10 参窄调宽 | 尾位置内联折叠成自循环（见 §1.2） |
 | tco_nat | Nat 结构递归尾调用 | `IrNatCase` 尾位置传播 + 前驱就地更新；饱和加法分支化 |
-| state_machine | 9 状态 Int 分支链 | 线性比较链 + `_` 兜底臂 |
+| state_machine | 9 状态 Int 分支链 | 跳转表 + 回边直连（臂尾只剩 `add` / `sub` / `jle`） |
 | gc_low_live | 低存活集、大累计分配 | OCaml GC 回收；vuna 侧只有 bump 分配 |
 | gc_array_churn | 大对象 churn（Array COW） | `Array.set` COW 与手写 `Array.copy` 对齐 |
 | gc_retain | 高存活集（live ~19 MB）+ 等量 churn | 整堆回收要重扫整个存活集；整堆触发策略的测量项 |
@@ -215,7 +215,7 @@ native 的 TCO / GC 验证项。**GC 与 TCO 均已落地**；下表「前」列
   | `tco_arity6` | 6 参全部循环携带 | 5 个热标量槽提升的上限 |
   | `tco_narrow_wide` | 2 参 ↔ 10 参互递归 | 尾位置内联折叠成自循环；不再覆盖回退路径 |
   | `tco_nat` | Nat `zero` / `Succ` | `IrNatCase` 尾位置传播 + 前驱就地更新；饱和加法分支化 |
-  | `state_machine` | 9 状态 Int 分派 | 线性比较链 + `_` 兜底臂 |
+  | `state_machine` | 9 状态 Int 分派 | 跳转表 + 回边直连（§1.6.4） |
 - **GC**：主判据是 RSS 落在存活集量级，四项都满足——`gc_low_live` 247 ms / 2.8 MiB、
   `gc_array_churn` 161 ms / 3.1 MiB、`gc_pressure` 32.8 MiB、`gc_retain` 55.4 MiB。
   `gc_low_live` / `gc_array_churn` 此前的不满足来自逐帧保守扫根把陈旧栈槽里的死对象一并留住；
@@ -569,11 +569,12 @@ T0 仍是 0.36x c / 0.23x ml（§1.6.2 的裁剪不改变地板读数）。
 
 - **`IrNatCase` 的 0 / 后继事实**：给 `nat_bits` 这类结构递归补范围；
 - **未引用 `.bss` 缓冲**：可达性裁剪只裁了函数，8 MiB 的 `rt_read_buf` 等仍进产物。
-- **循环代数化**：`state_machine` / `tco_wide` / `tco_mutual` 的默认 C 会做周期展开 +
-  归纳变量消去（`tco_mutual` 的 C 把 2 步折成 `subq $2; jne`），这一档还没做——同形 C
-  （关掉这些 loop pass）下 native 与 C 已在同一量级。
-- **分支选择**：`tco_unrotated` 的 C 用 `?:` 把两侧尾调用写成 `cmov`（`step = flag ? n :
-  -n`），native 仍是两条自调用分支。这属于控制流 if-conversion，不是 peephole。
+- **循环代数化（未做）**：默认 C 会做周期展开 + 归纳变量消去（`tco_mutual` 的 C 把 2 步
+  折成 `subq $2; jne`；`tco_wide` / `tco_arity6` 的常量累加 / 旋转被折成闭环），这一档
+  还没做——同形 C（关掉这些 loop pass）下 native 与 C 已在同一量级。§1.6.4 的回边直连 /
+  守卫复用只收掉了每轮的分派与守卫测试。
+- **分支选择（未做）**：`tco_unrotated` 的 `flag` 分派已由常量守卫判定直连，但两侧尾调用
+  仍是两条分支；C 用 `cmov` 把 `flag ? n : -n` 合成一条。这属于控制流 if-conversion。
 
 #### 1.6.2 入口初始化裁剪
 
@@ -619,6 +620,40 @@ C ~3.1ms）：剩下的差别只有 `movapd` 往返与常量装填。掩码选�
 我们多两条 `mov` 搬运（`mov rax, r12` / `mov r12, r11`）。把除法链直接写进槽提升的
 目标寄存器还能再省 1–2 条（实测 10.3ms → 9.6ms，与 C 同档），但那要做一次链式目标
 改写，留作单独一档。
+
+#### 1.6.4 T2 回边直连与守卫复用（2026-11-25）
+
+T2 的控制流 / 尾调用差距里，一部分来自「每轮重新分派 + 重复守卫测试」，不是调用约定
+本身。`Native.Regs.optimizeDispatch`（[native.md](native.md) §3.13）与标量槽提升落地
+六件事：
+
+1. **稠密分派回边直连**：臂在回边前把 scrutinee 写成常量时，回边直接接到目标臂；臂尾的
+   `sub n, 1` 同时给守卫提供标志位。`state_machine` 每步从「间接跳转 + 守卫测试」降到
+   `add` / `sub` / `jle`（臂尾不再有 `jmp`）。
+2. **常量守卫**：回边处守卫测的寄存器是常量时直接判方向——`tco_unrotated` 的 `flag` 分派
+   不再每轮测试，`= 0` / `= 1` 两个臂直接落到下一个臂。
+3. **两级守卫旋转**：`tco_mutual` 内联后的 `if n <= 0 then a else if n <= 1 then b else
+   loop (n - 2)` 先测内层守卫，快路径每轮只剩 `sub` / `cmp` / `jg`。
+4. **自递归循环的守卫标志复用**：`micro_tco` / `tco_arity6` / `tco_args` / `tco_wide` 的
+   体尾 `sub` 直接给回边 `jg` 提供标志位，每轮少一条 `test`。
+5. **标量三元选择与帧槽中转折叠**：`tco_nat` 的饱和加法把两端的 `mov d, rax` 收成直接
+   写 `d`、常量提升到循环外；`tco_arity6` 的中转槽往返换成寄存器搬运。
+6. **循环形参留在来参寄存器**：`tco_wide` 的 `a`–`f` 不再每轮 `[rbp-…]` load / store，
+   `state_machine` 的 `s` / `acc` / `n` 也省掉 push/pop（[native.md](native.md) §3.7）。
+
+同一窗口（`--target native --tier t2 --runs 15`，loadavg 1.7；绝对值不可与旧基线直接
+比，CPU 比值仍按同窗口自洽）：t2 cpu 几何平均 **1.70x → 1.26x C**。其中
+`tco_mutual` 2.2x → 0.98x、`state_machine` 2.8x → 1.26x、`tco_args` 1.1x、
+`micro_tco` 0.93x、`tco_wide` 2.1x → 1.59x、`tco_arity6` 1.37x、`tco_unrotated` 1.34x。
+`tco_wide` / `tco_arity6` / `tco_nat`（1.66x）的剩余差距是默认 C 的归纳变量消去 / 周期
+展开与 `cmov` if-conversion（见上一节「下一步」）；`tco_nat` 还多付每轮一次 Nat 饱和
+检查（C 对照没有饱和语义）。
+
+基线尚未重标：`bench/baselines/programs.json` 仍是旧口径，重标用
+`sh bench/update-baselines.sh --only programs`。
+
+基线尚未重标：`bench/baselines/programs.json` 仍是旧口径，重标用
+`sh bench/update-baselines.sh --only programs`。
 
 ### 1.7 T10 线程 / 同步
 

@@ -1,0 +1,232 @@
+-- 回边直连 / 守卫旋转 / 帧槽中转折叠（`Native.Regs`）的单测。
+--
+-- 锁四件事：稠密分派臂的回边直接落到目标臂（不给守卫测重复的循环计数，也不留
+-- 状态常量写）；两级同向守卫旋转后快路径只测内层；守卫测的寄存器在回边处是常量
+-- 时直接判方向；单次中转的帧槽换成寄存器搬运。
+import Base
+import Base.Data.List as List
+import Base.Data.Pair as Pair
+import Base.Effect.Core
+import Vuna.Target.Native.Abi
+import Vuna.Target.Native.Model
+import Vuna.Target.Native.Regs
+import Vuna.Target.Native.Repr
+import Base.Effect.Console
+import Base.Effect.Exit
+
+main : Eff [ConsoleOp, ExitOp] String
+main =
+  case problems of
+    [] => pure ""
+    ps =>
+      do
+        _ <- consolePrint ("native regs passes drifted:\n" ++ join "\n" ps ++ "\n")
+        _ <- exitWith 1
+        pure ""
+
+problems : List String
+problems = append dispatchProblems (append rotateProblems (append spillProblems argProblems))
+
+-- ---------------------------------------------------------------
+-- 稠密分派回边直连
+-- ---------------------------------------------------------------
+dispatchBody : List Instr
+dispatchBody =
+  [
+    ILabel ".L0",
+    ITest R12 R12,
+    IJcc "jg" ".L1",
+    IMov (OpReg Rax) (OpReg Rbx),
+    IJmp ".L2",
+    ILabel ".L1",
+    ICmp (OpReg R13) (OpImm 1),
+    IJcc "ja" ".L12",
+    ILea R11 ".L11",
+    IJmpMem (OpMemS R11 R13 8),
+    ILabel ".L11",
+    IQuadLabel ".L3",
+    IQuadLabel ".L4",
+    ILabel ".L3",
+    IMov (OpReg R13) (OpImm 1),
+    IBinReg "add" Rbx (OpImm 1),
+    IBinReg "sub" R12 (OpImm 1),
+    IJmp ".L0",
+    ILabel ".L4",
+    IMov (OpReg R13) (OpImm 0),
+    IBinReg "add" Rbx (OpImm 2),
+    IBinReg "sub" R12 (OpImm 1),
+    IJmp ".L0",
+    ILabel ".L12",
+    IMov (OpReg R13) (OpImm 1),
+    IJmp ".L0",
+    ILabel ".L2",
+    IMov (OpReg Rax) (OpReg Rbx)
+  ]
+
+dispatchOut : List Instr
+dispatchOut = Regs.optimizeDispatch dispatchBody
+
+dispatchProblems : List String
+dispatchProblems =
+  append
+    (if countInstr isLoopTest dispatchOut == 2 then [] else ["dispatch: arm guard tests not merged (left " ++ strFromInt (countInstr isLoopTest dispatchOut) ++ ")"])
+    (append (if countInstr isStateWrite dispatchOut == 0 then [] else ["dispatch: state constant writes not dropped"]) (if blockEndsWith ".L3" (IJcc "jle" ".L0x") dispatchOut then [] else ["dispatch: arm does not fall through"]))
+
+-- | 标签 `lbl` 到下一个标签之间的最后一条指令。
+blockEndsWith : String -> Instr -> List Instr -> Bool
+blockEndsWith lbl target instrs =
+  case dropUntil lbl instrs of
+    Just rest =>
+      case blockTail rest of
+        Just last => sameInstr target last
+        Nothing => False
+    Nothing => False
+
+dropUntil : String -> List Instr -> Maybe (List Instr)
+dropUntil _ [] = Nothing
+dropUntil lbl ((ILabel l) :: rest) = if l == lbl then Just rest else dropUntil lbl rest
+dropUntil lbl (i :: rest) = dropUntil lbl rest
+
+blockTail : List Instr -> Maybe Instr
+blockTail instrs =
+  case instrs of
+    [] => Nothing
+    i :: rest =>
+      case rest of
+        [] => Just i
+        (ILabel _) :: _ => Just i
+        _ => blockTail rest
+
+isLoopTest : Instr -> Bool
+isLoopTest (ITest R12 R12) = True
+isLoopTest _ = False
+
+isStateWrite : Instr -> Bool
+isStateWrite (IMov (OpReg R13) (OpImm _)) = True
+isStateWrite _ = False
+
+-- ---------------------------------------------------------------
+-- 两级守卫旋转
+-- ---------------------------------------------------------------
+rotateBody : List Instr
+rotateBody =
+  [
+    ILabel ".L0",
+    ITest Rbx Rbx,
+    IJcc "jg" ".L1",
+    IMov (OpReg Rax) (OpImm 1),
+    IJmp ".L2",
+    ILabel ".L1",
+    ICmp (OpReg Rbx) (OpImm 1),
+    IJcc "jg" ".L3",
+    IMov (OpReg Rax) (OpImm 0),
+    IJmp ".L2",
+    ILabel ".L3",
+    IBinReg "sub" Rbx (OpImm 2),
+    IJmp ".L0",
+    ILabel ".L2",
+    IRet
+  ]
+
+rotateOut : List Instr
+rotateOut = Regs.optimizeDispatch rotateBody
+
+rotateProblems : List String
+rotateProblems =
+  if hasInstr (IJcc "jg" ".L3") rotateOut && hasInstr (ITest Rbx Rbx) rotateOut then
+    if countInstr isInnerGuard rotateOut == 2 then
+      []
+    else
+      ["rotate: fast path checks the outer guard"]
+  else
+    ["rotate: two-level guard not rotated"]
+
+isInnerGuard : Instr -> Bool
+isInnerGuard (ICmp (OpReg Rbx) (OpImm 1)) = True
+isInnerGuard _ = False
+
+-- ---------------------------------------------------------------
+-- 帧槽中转折叠
+-- ---------------------------------------------------------------
+spillBody : List Instr
+spillBody =
+  [
+    ILabel ".L0",
+    IMov (OpMem Rbp (nativeSlotOff 7)) (OpReg R15),
+    IMov (OpReg R15) (OpReg R14),
+    IMov (OpReg R14) (OpReg R13),
+    IMov (OpReg R13) (OpReg R12),
+    IMov (OpReg R12) (OpReg R10),
+    IBinReg "add" R12 (OpReg Rbx),
+    IBinReg "sub" Rbx (OpImm 1),
+    IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 7)),
+    IMov (OpReg R10) (OpReg Rax),
+    IJmp ".L0"
+  ]
+
+spillOut : List Instr
+spillOut = Regs.foldSlotRoundTrips spillBody
+
+spillProblems : List String
+spillProblems =
+  if hasInstr (IMov (OpMem Rbp (nativeSlotOff 7)) (OpReg R15)) spillOut then
+    ["spill: single-use slot round trip kept"]
+  else if hasInstr (IMov (OpReg R11) (OpReg R15)) spillOut then
+    []
+  else
+    ["spill: round trip not folded into a register"]
+
+-- ---------------------------------------------------------------
+-- 判定小工具
+-- ---------------------------------------------------------------
+countInstr : (Instr -> Bool) -> List Instr -> Int
+countInstr _ [] = 0
+countInstr p (i :: rest) = (if p i then 1 else 0) + countInstr p rest
+
+hasInstr : Instr -> List Instr -> Bool
+hasInstr _ [] = False
+hasInstr target (i :: rest) = sameInstr target i || hasInstr target rest
+
+-- | 只比较本测试用到的形状；其余指令一律不相等（避免给所有构造子写 Eq）。
+sameInstr : Instr -> Instr -> Bool
+sameInstr (IJmp a) (IJmp b) = a == b
+sameInstr (IJcc a l) (IJcc b m) = a == b && l == m
+sameInstr (IMov a b) (IMov c d) = sameOp a c && sameOp b d
+sameInstr (IBinReg op a o) (IBinReg op2 b o2) = op == op2 && sameReg a b && sameOp o o2
+sameInstr (ICmp a b) (ICmp c d) = sameOp a c && sameOp b d
+sameInstr (ITest a b) (ITest c d) = sameReg a c && sameReg b d
+sameInstr a b = False
+
+sameOp : Operand -> Operand -> Bool
+sameOp (OpReg a) (OpReg b) = sameReg a b
+sameOp (OpImm a) (OpImm b) = a == b
+sameOp (OpMem r o) (OpMem r2 o2) = sameReg r r2 && o == o2
+sameOp (OpMemS b i s) (OpMemS b2 i2 s2) = sameReg b b2 && sameReg i i2 && s == s2
+sameOp a b = False
+
+-- ---------------------------------------------------------------
+-- 来参寄存器身份提升
+-- ---------------------------------------------------------------
+argBody : List Instr
+argBody =
+  [
+    IMov (OpReg Rax) (OpReg Rdi),
+    IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rax),
+    IMov (OpReg Rax) (OpReg Rsi),
+    IMov (OpMem Rbp (nativeSlotOff 1)) (OpReg Rax),
+    ILabel ".L0",
+    IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 0)),
+    IBinReg "add" Rax (OpMem Rbp (nativeSlotOff 1)),
+    IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rax),
+    IJmp ".L0"
+  ]
+
+argReps : List Instr
+argReps = (Regs.promoteLoops [(0, NClsScalar), (1, NClsScalar)] argBody).rpBody
+
+argProblems : List String
+argProblems =
+  if not (hasInstr (IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 0))) argReps) then
+    []
+  else
+    ["args: loop-carried params did not stay in their incoming registers"]

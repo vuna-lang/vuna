@@ -3356,7 +3356,7 @@ genDefFunc defs pools floats recNames allocs fams nextLabel threaded (IrDef name
             st1 = secondOf p
             frame = nativeFrameBytes st1.fgNextSlot
             promo = Regs.promoteLoops st1.fgSlotCls (clearDeadSlots st1.fgReenter st1.fgSlotCls (peephole (firstOf p)))
-            instrs = append (Regs.retargetSetccPass (cleanup promo.rpBody)) (Regs.epilogueOf promo.rpSaved)
+            instrs = Regs.optimizeDispatch (cleanup (append (Regs.retargetSetccPass (Regs.foldSlotRoundTrips (cleanup promo.rpBody))) (Regs.epilogueOf promo.rpSaved)))
             holes = if memStr name allocs && frameReused st1.fgReenter instrs then unwrittenSlots frame instrs else []
             mainF = NativeFunc (nativeFuncLabel name) frame (append (Regs.prologueOf promo.rpSaved) (append (nativePrologueOf frame holes) instrs)) modPath
           in NOk (append st1.fgLams [mainF], st1.fgNextLabel, st1.fgStatics)
@@ -3388,7 +3388,7 @@ genDefFunc defs pools floats recNames allocs fams nextLabel threaded (IrDef name
                         -- 常驻 xmm 的浮点形参在调用前后溢出/重载（槽是权威副本）；要在死槽清零之前。
                         bodySpill = spillReloadFloatRegs st1.fgFloatSlotRegs body0
                         promo = Regs.promoteLoops st1.fgSlotCls (clearDeadSlots st1.fgReenter st1.fgSlotCls (peephole bodySpill))
-                        instrs = append (Regs.retargetSetccPass (cleanup promo.rpBody)) (Regs.epilogueOf promo.rpSaved)
+                        instrs = Regs.optimizeDispatch (cleanup (append (Regs.retargetSetccPass (Regs.foldSlotRoundTrips (cleanup promo.rpBody))) (Regs.epilogueOf promo.rpSaved)))
                         holes = if memStr name allocs && frameReused st1.fgReenter instrs then unwrittenSlots frame instrs else []
                         mainF = NativeFunc (nativeFuncLabel name) frame (append (Regs.prologueOf promo.rpSaved) (append (nativePrologueOf frame holes) instrs)) modPath
                       in NOk (append st1.fgLams [mainF], st1.fgNextLabel, st1.fgStatics)

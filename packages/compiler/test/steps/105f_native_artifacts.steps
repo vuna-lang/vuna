@@ -112,7 +112,8 @@ run: sh -c 'd="$TMPDIR/bselect"; mkdir -p "$d/app"; printf "[package]\nname = \"
 exit: 0
 run: sh -c '"$TMPDIR/bselect-n/bin/bselect"'
 out-equals: 4
-file-contains: $TMPDIR/bselect-n/Main.s setl r
+run: sh -c 'grep -Eq "  setl [a-z0-9]+" "$TMPDIR/bselect-n/Main.s"'
+exit: 0
 run: sh -c '! grep -q "call rt_add" "$TMPDIR/bselect-n/Main.s"'
 exit: 0
 

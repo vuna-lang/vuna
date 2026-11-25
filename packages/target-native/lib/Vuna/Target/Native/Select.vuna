@@ -462,15 +462,17 @@ flagOp : String -> Bool
 flagOp op = op == "add" || op == "sub" || op == "and" || op == "or" || op == "xor"
 
 -- | 跳转表分派头的 `mov rax, r; cmp rax, k; ... jmp [base+rax*8]` 直接用 r 作
---   cmp 操作数与索引，省掉一次搬运。只认 `isCalleeSaved` 源，避免和 scratch 冲突；
---   臂与兜底块从各自标签进入，生成器保证块入口不读 `rax`（跨块的值一律走帧槽），
---   所以丢掉这条 `mov` 不需要再做活跃性检查。
+--   cmp 操作数与索引，省掉一次搬运。r 只要不是 `lea` 会覆盖的 r11 / 栈指针就行
+--   （提升过的形参寄存器也算，臂写同一个寄存器时才接得上直连）；臂与兜底块从各自
+--   标签进入，生成器保证块入口不读 `rax`（跨块的值一律走帧槽），所以丢掉这条 `mov`
+--   不需要再做活跃性检查。
 switchCopy : List Instr -> List Instr
 switchCopy ((IMov (OpReg Rax) (OpReg r)) :: (ICmp (OpReg Rax) (OpImm k)) :: jcc :: lea :: (IJmpMem (OpMemS base Rax 8)) :: rest) =
-  if isCalleeSaved r then
+  if switchIndexOk r then
     ICmp (OpReg r) (OpImm k) :: jcc :: lea :: IJmpMem (OpMemS base r 8) :: switchCopy rest
   else
-    IMov (OpReg Rax) (OpReg r) :: switchCopy rest
+    IMov (OpReg Rax) (OpReg r)
+      :: ICmp (OpReg Rax) (OpImm k) :: jcc :: lea :: IJmpMem (OpMemS base Rax 8) :: switchCopy rest
 switchCopy (i :: rest) = i :: switchCopy rest
 switchCopy [] = []
 
@@ -564,15 +566,29 @@ raxSafeAfter [] = True
 raxSafeAfter (IRet :: _) = False
 raxSafeAfter ((IJcc _ _) :: rest) =
   case rest of
-    n :: _ => instrWritesReg Rax n && not (instrReadsReg Rax n)
+    n :: _ => (instrWritesReg Rax n && not (instrReadsReg Rax n)) || isSelfXor n
     [] => False
 raxSafeAfter (i :: rest) =
-  if instrReadsReg Rax i then
-    False
-  else if instrWritesReg Rax i then True else if isBlockBoundary i then False else raxSafeAfter rest
+  case i of
+    IBinReg "xor" Rax (OpReg Rax) => True
+    _ =>
+      if instrReadsReg Rax i then
+        False
+      else if instrWritesReg Rax i then
+        True
+      else if isBlockBoundary i then False else raxSafeAfter rest
+
+isSelfXor : Instr -> Bool
+isSelfXor (IBinReg "xor" Rax (OpReg Rax)) = True
+isSelfXor _ = False
 
 isCalleeSaved : Reg -> Bool
 isCalleeSaved r = sameReg r Rbx || sameReg r R12 || sameReg r R13 || sameReg r R14 || sameReg r R15
+
+-- | 跳转表索引用寄存器本身：`lea` 会覆盖 r11，rsp/rbp 不是值寄存器，其余都行
+--   （提升过的形参寄存器也算，臂写同一个寄存器时才接得上直连）。
+switchIndexOk : Reg -> Bool
+switchIndexOk r = not (sameReg r R11) && not (sameReg r Rsp) && not (sameReg r Rbp)
 
 -- | 删掉 `jmp` / `ret` / `jmp reg` 之后、下一个被引用标签之前的指令。
 --   未被引用的标签本身也可以删；它们只可能是不可达尾部的 fallthrough。
